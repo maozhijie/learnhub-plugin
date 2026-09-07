@@ -38,6 +38,7 @@
   "scripts": {
     "build": "node build.mjs",
     "check": "node --check lib/index.js && node --check lib/client.js",
+    "prepare": "node scripts/link-peers.mjs",
     "test": "node --test tests/*.test.ts"
   },
   "peerDependencies": {

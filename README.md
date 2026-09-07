@@ -15,6 +15,12 @@ XP 是**时间账本**（1 XP ≈ 1 分钟有效专注）：节点定价 = 内�
 - **引擎**（`lib/engine.js`）：独立构建产物，脚本（smoke/e2e/dev-server）与 UI 复用同一入口
 - **面板 UI**（`ui/`）：Vite + React 18 + Arco Design + React Flow（@xyflow/react + dagre），组件移植自 allo learning 模块
 
+开发环境注意：`@deepseek-ai/dsh-llm` / `@deepseek-ai/dsh-tools` 是宿主私有 peer（未发布
+公共 npm），`npm install` 的 prepare 钩子会把它们从 dsh monorepo（默认
+`C:/Users/test/Desktop/deepseek-harness/packages`，可用 `DSH_MONOREPO` 覆盖）junction 进本仓库
+`node_modules`——插件以 `link:` 装入 dsh profile，Node 按 realpath 解析 peer，缺了会报
+`Cannot find package '@deepseek-ai/dsh-llm'`。
+
 ## 数据主权（v3）
 
 vault `学习中心/` 是唯一事实源，没有数据库：
