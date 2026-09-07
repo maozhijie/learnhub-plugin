@@ -14,7 +14,8 @@ import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
 import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList } from './graph.ts'
-import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm } from './notes.ts'
+import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './notes.ts'
+import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm } from './srs.ts'
 import { runAudit, effectiveStage } from './audit.ts'
 import { analyzeGraph } from './analysis.ts'
@@ -25,7 +26,7 @@ import { GraphProposals } from './gengraph.ts'
 import type { ApplyAudit } from './gengraph.ts'
 import { QuestionBank } from './question-bank.ts'
 import { YAML } from './yaml.ts'
-import { Sessions } from './sessions.ts'
+import { Sessions, assertNoBrokenNotes } from './sessions.ts'
 import type { NodeStat } from './sessions.ts'
 import { todayStr, nowIso } from './dates.ts'
 import { atomicWrite } from './store.ts'
@@ -91,7 +92,7 @@ export class LearnhubEngine {
   // ---- 加载与解析 ----
 
   /** 单课完整视图：图 + frontmatter 状态（每次现读，文件量小，天然最新）。 */
-  async loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: string[] }> {
+  async loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }> {
     const store = new GraphStore(this.paths, this.paths.courseRoot(course.root))
     const regions = await store.load()
     const graph = new Graph(regions)
@@ -125,10 +126,29 @@ export class LearnhubEngine {
     return { course: hits[0], node: nodeSpec }
   }
 
-  /** 无笔记节点补占位文件（保证 frontmatter 始终可查）。 */
+  /** Broken 笔记的路径定位（按规范路径精确匹配，不按 node 名猜）。 */
+  private findBrokenNote(root: string, graph: Graph, node: string, broken: BrokenNote[]): BrokenNote | undefined {
+    const expected = this.paths.courseNotePath(root, graph.blockOf[node]?.[1], node)
+    const key = expected.replace(/\\/g, '/').toLowerCase()
+    return broken.find(b => b.path.replace(/\\/g, '/').toLowerCase() === key)
+  }
+
+  /** 定向节点操作的前置门：目标笔记 Broken 时携带位置与原因抛错。 */
+  private assertNoteOk(course: { root: string }, graph: Graph, broken: BrokenNote[], node: string, tool: string): void {
+    const hit = this.findBrokenNote(course.root, graph, node, broken)
+    if (hit) throw new Error(`[${tool}] 节点笔记 Broken（位置：${hit.path}）\n  ✗ ${hit.reason}`)
+  }
+
+  /** 无笔记节点补占位文件（保证 frontmatter 始终可查）。文件已存在但状态不可用时不覆盖。 */
   private async ensureNote(root: string, graph: Graph, node: string): Promise<Fm> {
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
+    if (existsSync(path)) {
+      const { fm: rawFm } = await loadNote(path)
+      const checked = validateNoteFrontmatter(rawFm)
+      const detail = checked.errors.length ? checked.errors.join('；') : '状态未通过 frontmatter 契约（可运行 learnhub_data_check 定位）'
+      throw new Error(`[learnhub] 笔记文件已存在但 Broken，拒绝覆盖（位置：${path}）\n  ✗ ${detail}`)
+    }
     const fm = defaultFrontmatter(node)
     await saveNote(path, fm as unknown as Record<string, unknown>, '> 内容待生成。\n')
     return fm
@@ -201,7 +221,14 @@ export class LearnhubEngine {
       const { graph, state, broken } = await this.loadView(c)
       const missing = graph.names.filter(n => !state[n])
       const unknown = Object.keys(state).filter(n => !graph.nset.has(n))
-      courses.push({ course: c.name, total: graph.names.length, notes: Object.keys(state).length, broken, missing, unknown })
+      courses.push({
+        course: c.name,
+        total: graph.names.length,
+        notes: Object.keys(state).length,
+        broken: broken.map(b => ({ path: b.path, ...(b.node ? { node: b.node } : {}), reason: b.reason })),
+        missing,
+        unknown,
+      })
     }
     return { generated_at: nowIso(), courses }
   }
@@ -242,8 +269,9 @@ export class LearnhubEngine {
   /** 单节点图详情：schema 字段值 + 直接邻域（succ）+ enc 边（含 note）+ 前置传递闭包。 */
   async graphNode(courseKey: string | undefined, node: string): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[graph-node] 节点「${node}」不在课程「${c.name}」的图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'graph-node')
     let gnode: GNode | undefined
     for (const r of graph.regions) for (const b of r.blocks) {
       const hit = b.nodes.find(n => n.name === node)
@@ -284,7 +312,7 @@ export class LearnhubEngine {
   /** 区/块浏览：按区名/块名过滤的节点清单（探索某区域的结构与内容状态）。 */
   async graphBrowse(courseKey: string | undefined, region?: string, block?: string): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (region && !graph.regions.some(r => r.name === region)) {
       throw new Error(`[graph-browse] 区「${region}」不存在（可用：${graph.regions.map(r => r.name).join('、')}）`)
     }
@@ -308,7 +336,17 @@ export class LearnhubEngine {
           })),
       }))
     const total = regions.reduce((s, r) => s + r.blocks.reduce((t, b) => t + b.nodes.length, 0), 0)
-    return { course: c.name, total, regions }
+    return {
+      course: c.name,
+      total,
+      regions,
+      // 纯结构浏览继续可用，但 Broken 状态必须显式暴露，不伪装成 unseen/draft
+      broken_notes: broken.map(b => ({
+        path: b.path,
+        ...(b.node ? { node: b.node } : {}),
+        reason: b.reason,
+      })),
+    }
   }
 
   /** 前置路径查询：from 是否（以及经哪条链）是 to 的前置。 */
@@ -375,7 +413,9 @@ export class LearnhubEngine {
 
   async contentPack(courseKey: string | undefined, node: string): Promise<string> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[pack] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'pack')
     return this.content.contextPack(graph, state, node, c.name)
   }
 
@@ -391,15 +431,18 @@ export class LearnhubEngine {
   /** 节点内容版本（frontmatter content.version；面板增量刷新依据）。 */
   async contentVersion(courseKey: string | undefined, node: string): Promise<number> {
     const c = await this.registry.resolve(courseKey)
-    const { state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[version] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'version')
     return state[node]?.content.version ?? 0
   }
 
   /** 对现有课程笔记跑质检门（agent 手改正文后的校验入口；只读，不落盘不改状态）。 */
   async contentCheck(courseKey: string | undefined, node: string): Promise<{ passed: boolean; findings: string[]; warns: string[] }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph } = await this.loadView(c)
+    const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[check] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'check')
     const [, regionName] = graph.blockOf[node]
     const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
     return this.content.gateReport(graph, c.root, node, body)
@@ -411,8 +454,9 @@ export class LearnhubEngine {
    * 门禁检查「interactive 引用文件存在」时文件必须已就位。 */
   async contentApply(courseKey: string | undefined, node: string, body: string): Promise<{ version: number; message: string; hints: string[] }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[apply] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'apply')
     if (!state[node]) await this.ensureNote(c.root, graph, node)
     const split = Content.extractInteractive(body, c.root)
     if (split.invalid.length) {
@@ -446,8 +490,9 @@ export class LearnhubEngine {
    * 骨架节点先建占位文件（allo on-demand：大纲即时）。 */
   async contentOutline(courseKey: string | undefined, node: string, yamlText: string): Promise<SectionManifest[]> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[outline] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'outline')
     if (!state[node]) await this.ensureNote(c.root, graph, node)
     return this.content.outlineApply(c.root, graph, node, yamlText, rec => this.store.appendJournal({ ...rec, course: c.name }))
   }
@@ -458,7 +503,10 @@ export class LearnhubEngine {
    * 提示词快照、生成队列.md 均不动；重新生成由调用方按拓扑序串行跑生成管线。 */
   async contentReset(courseKey: string | undefined): Promise<{ course: string; nodes: string[]; trashed: string[] }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
+    if (broken.length) {
+      throw new Error(`[reset] 课程存在 Broken 笔记，拒绝整课重置（先修复或确认）:\n${broken.map(b => `  ✗ ${b.path} — ${b.reason}`).join('\n')}`)
+    }
     const stamp = new Date().toISOString().replace(/[:.]/g, '-')
     const trashBase = `${this.paths.trashDir}/regenerate-${stamp}`
     const nodes: string[] = []
@@ -494,8 +542,9 @@ export class LearnhubEngine {
   /** 单节正文落盘：门禁通过后按清单重组正文，该节置 ready/version+1；hints = enc 候选反哺提醒。 */
   async contentSection(courseKey: string | undefined, node: string, sectionId: string, md: string): Promise<{ version: number; title: string; hints: string[] }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph } = await this.loadView(c)
+    const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[section] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'section')
     return this.content.sectionApply(c.root, graph, node, sectionId, md, rec => this.store.appendJournal({ ...rec, course: c.name }))
   }
 
@@ -503,8 +552,9 @@ export class LearnhubEngine {
    * 无清单旧节点回退为整篇重导出，全部 ready）。 */
   async contentSectionsView(courseKey: string | undefined, node: string): Promise<Array<SectionManifest & { md: string | null }>> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[sections] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'sections')
     const [, regionName] = graph.blockOf[node]
     const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
     const mdByTitle = new Map<string, string>()
@@ -519,7 +569,9 @@ export class LearnhubEngine {
 
   async contentFeedback(courseKey: string | undefined, node: string): Promise<string> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[feedback] 未知节点: ${node}`)
+    this.assertNoteOk(c, graph, broken, node, 'feedback')
     return this.content.feedback(c.root, graph, node, n => state[n], async (n, fm) => {
       const path = this.paths.courseNotePath(c.root, graph.blockOf[n][1], n)
       await this.updateNoteFm(path, fm)
@@ -528,7 +580,9 @@ export class LearnhubEngine {
 
   async contentReview(courseKey: string | undefined, node: string): Promise<string> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[review] 未知节点: ${node}`)
+    this.assertNoteOk(c, graph, broken, node, 'review')
     return this.content.review(c.root, graph, node, n => state[n], async (n, fm) => {
       const path = this.paths.courseNotePath(c.root, graph.blockOf[n][1], n)
       await this.updateNoteFm(path, fm)
@@ -552,7 +606,9 @@ export class LearnhubEngine {
 
   async lesson(courseKey: string | undefined, node: string): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[lesson] 课程「${c.name}」中没有节点「${node}」。`)
+    this.assertNoteOk(c, graph, broken, node, 'lesson')
     const lesson = await this.sessions.lesson(c.name, c.root, graph, state, node)
     const view = lesson as Record<string, unknown>
     // 刷卡模型：mastery 由题库作答数据派生（节点 frontmatter 的旧字段不再使用）
@@ -671,8 +727,9 @@ export class LearnhubEngine {
     elapsedS?: number | null,
   ): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
-    const { graph } = await this.loadView(c)
+    const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[question] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'question')
     const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
     const idx = bank.questions.findIndex(q => q.id === qid)
     if (idx < 0) throw new Error(`[question] ${node} 的题库没有 ${qid}。`)
@@ -782,8 +839,9 @@ export class LearnhubEngine {
   /** 跳过（已有基础）：stage 置 skipped，调度视同已通过；取消跳过回 ready。 */
   async nodeSkip(courseKey: string | undefined, node: string, skipped: boolean): Promise<{ course: string; node: string; stage: Stage }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[skip] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'skip')
     if (!state[node]) await this.ensureNote(c.root, graph, node)
     const stage: Stage = skipped ? 'skipped' : 'ready'
     const [, regionName] = graph.blockOf[node]
@@ -807,8 +865,9 @@ export class LearnhubEngine {
     stage?: Stage; initialized?: number; due?: string | null; reason?: string
   }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[complete] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'complete')
     if (!state[node]) await this.ensureNote(c.root, graph, node)
     const courseRoot = this.paths.courseRoot(c.root)
     const bank = await this.bank.load(courseRoot, node)
@@ -903,7 +962,8 @@ export class LearnhubEngine {
     ])
     const eta: Array<{ course: string; remaining: number; done: number; per_node: number; days: number }> = []
     for (const c of await this.enabledCourses()) {
-      const { graph, state } = await this.loadView(c)
+      const { graph, state, broken } = await this.loadView(c)
+      assertNoBrokenNotes('eta', broken)
       const counts = { unseen: 0, ready: 0, learning: 0, review: 0, mastered: 0, skipped: 0 } as Record<Stage, number>
       for (const n of graph.names) counts[effectiveStage(state, n)]++
       const remaining = counts.unseen + counts.ready + counts.learning
@@ -950,8 +1010,9 @@ export class LearnhubEngine {
   /** 「与 AI 讨论本课」上下文包：节点元信息 + 正文 + 题库摘要 + 图位置（面板 → dsh 会话的首条消息原料）。 */
   async discussionPack(courseKey: string | undefined, node: string): Promise<string> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[discuss] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'discuss')
     const fm = state[node]
     const mastery = await this.nodeMastery(this.paths.courseRoot(c.root), node)
     const lines: string[] = []
@@ -1046,8 +1107,9 @@ export class LearnhubEngine {
     opts?: { sections?: Array<{ id: string; title: string }>; generic?: boolean },
   ): Promise<{ course: string; node: string; added: number; skipped: number; total: number }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph } = await this.loadView(c)
+    const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'quiz')
     const [, regionName] = graph.blockOf[node]
     const note = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
     const body = note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
@@ -1087,8 +1149,9 @@ export class LearnhubEngine {
     llm: (prompt: string) => Promise<string>,
   ): Promise<{ course: string; node: string; added: number; sections: number }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph, state } = await this.loadView(c)
+    const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'quiz')
     const manifest = state[node]?.content.sections
     if (!manifest?.length) throw new Error(`[quiz] 「${node}」没有节清单——先运行大纲。`)
     const [, regionName] = graph.blockOf[node]
@@ -1140,8 +1203,9 @@ export class LearnhubEngine {
     courseKey: string | undefined, node: string, sectionId: string, score: number, detail?: string,
   ): Promise<{ settled: boolean; mastery: number }> {
     const c = await this.registry.resolve(courseKey)
-    const { graph } = await this.loadView(c)
+    const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[interactive] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'interactive')
     if (!Number.isFinite(score)) throw new Error('[interactive] score 必须是数字。')
     const clamped = Math.min(1, Math.max(0, score))
     const qid = `interactive:${sectionId}`

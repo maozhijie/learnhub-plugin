@@ -9,8 +9,8 @@ import { join, resolve } from 'node:path'
 import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
+import { validateNoteFrontmatter } from './notes.ts'
 import { YAML } from './yaml.ts'
-import { STAGES } from './types.ts'
 import type { CourseEntry } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
@@ -68,12 +68,6 @@ interface GraphNodeLike {
   region: string
 }
 
-const CONTENT_STATUS_VALUES = ['draft', 'reviewed', 'flagged']
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -87,88 +81,6 @@ function push(
   detail?: string,
 ): void {
   findings.push({ area, level, reason, location, ...(detail ? { detail } : {}) })
-}
-
-function validateNoteContract(fm: unknown): string[] {
-  const errors: string[] = []
-  if (!isRecord(fm)) return ['frontmatter 必须是映射']
-  if (typeof fm.node !== 'string' || !fm.node.trim()) errors.push('node: 不能为空')
-  if (fm.stage !== undefined && !(STAGES as readonly string[]).includes(String(fm.stage))) {
-    errors.push(`stage: 非法状态（允许 ${STAGES.join('/')}）`)
-  }
-  if (fm.mastery !== undefined && (typeof fm.mastery !== 'number' || !Number.isFinite(fm.mastery))) {
-    errors.push('mastery: 必须是数')
-  }
-  if (fm.practice_ema !== undefined && (typeof fm.practice_ema !== 'number' || !Number.isFinite(fm.practice_ema))) {
-    errors.push('practice_ema: 必须是数')
-  }
-  if (fm.fsrs !== undefined && fm.fsrs !== null) {
-    const fsrs = fm.fsrs
-    if (!isRecord(fsrs)) {
-      errors.push('fsrs: 必须是映射或 null')
-    } else {
-      for (const key of ['stability', 'difficulty'] as const) {
-        if (typeof fsrs[key] !== 'number' || !Number.isFinite(fsrs[key])) errors.push(`fsrs.${key}: 必须是数`)
-      }
-      for (const key of ['due', 'last_review'] as const) {
-        if (typeof fsrs[key] !== 'string' || !fsrs[key]) errors.push(`fsrs.${key}: 必须是日期文本`)
-      }
-      for (const key of ['reps', 'lapses'] as const) {
-        if (typeof fsrs[key] !== 'number' || !Number.isInteger(fsrs[key]) || fsrs[key] < 0) {
-          errors.push(`fsrs.${key}: 必须是非负整数`)
-        }
-      }
-    }
-  }
-  if (fm.content !== undefined) {
-    const content = fm.content
-    if (!isRecord(content)) {
-      errors.push('content: 必须是映射')
-    } else {
-      if (typeof content.version !== 'number' || !Number.isInteger(content.version) || content.version < 0) {
-        errors.push('content.version: 必须是非负整数')
-      }
-      if (content.generated_at !== undefined && content.generated_at !== null && typeof content.generated_at !== 'string') {
-        errors.push('content.generated_at: 必须是时间文本或 null')
-      }
-      if (!CONTENT_STATUS_VALUES.includes(String(content.status))) {
-        errors.push(`content.status: 非法状态（允许 ${CONTENT_STATUS_VALUES.join('/')}）`)
-      }
-      if (content.sections !== undefined) {
-        if (!Array.isArray(content.sections)) {
-          errors.push('content.sections: 必须是列表')
-        } else {
-          content.sections.forEach((section, index) => {
-            const where = `content.sections.${index + 1}`
-            if (!isRecord(section)) {
-              errors.push(`${where}: 必须是映射`)
-              return
-            }
-            for (const key of ['id', 'title', 'type'] as const) {
-              if (typeof section[key] !== 'string' || !section[key]) errors.push(`${where}.${key}: 不能为空`)
-            }
-            if (!['pending', 'ready'].includes(String(section.status))) errors.push(`${where}.status: 只允许 pending/ready`)
-            if (typeof section.version !== 'number' || !Number.isInteger(section.version) || section.version < 0) {
-              errors.push(`${where}.version: 必须是非负整数`)
-            }
-          })
-        }
-      }
-    }
-  }
-  if (fm.practice !== undefined) {
-    const practice = fm.practice
-    if (!isRecord(practice)) {
-      errors.push('practice: 必须是映射')
-    } else {
-      for (const key of ['attempts', 'correct'] as const) {
-        if (typeof practice[key] !== 'number' || !Number.isInteger(practice[key]) || practice[key] < 0) {
-          errors.push(`practice.${key}: 必须是非负整数`)
-        }
-      }
-    }
-  }
-  return errors
 }
 
 function splitFrontmatterForCheck(text: string): { raw: string | null; malformed: boolean } {
@@ -252,7 +164,8 @@ async function scanNotes(
       push(findings, 'note', 'broken', 'note_yaml_parse', where, errorText(err))
       continue
     }
-    const errors = validateNoteContract(doc)
+    const checked = validateNoteFrontmatter(doc)
+    const errors = checked.errors
     if (errors.length) push(findings, 'note', 'broken', 'note_schema', where, errors.join('；'))
   }
   return files
