@@ -20,7 +20,7 @@ const ACTION_WORDS = [
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 /** est 分布压缩提示的输入最小形状（Graph 兼容）。 */
-interface EstSpreadSource {
+export interface EstSpreadSource {
   names: string[]
   estOf: Record<string, number>
 }
