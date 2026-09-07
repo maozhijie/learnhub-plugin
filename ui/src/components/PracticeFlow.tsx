@@ -1,6 +1,6 @@
 /** mastery 练习会话（Math Academy active learning loop），节序列驱动：
- * 节清单（manifest）存在时按节类型装配轮次——内容节 = 读节→做该节题（连对 2 过、
- * 至多 5 题）；练习节 = 一等练习轮（无阅读，直接做题）；交互节 = 交互件轮
+ * 节清单（manifest）存在时按节类型装配轮次——内容节 = 读节→做该节题（连对目标随
+ * 组内题量收缩，基准 2、上限 5 题）；练习节 = 一等练习轮（无阅读，直接做题）；交互节 = 交互件轮
  * （沙箱 iframe 运行，达成目标上报成绩结算）。旧节点（无清单）回退标题匹配。
  * 题目按 section 绑定节 id（旧题回退节标题），未落节的题进通用收尾轮。
  * 顶部节进度 stepper（MathAcademy 式细条分段）：已过蓝条可点回跳、当前高亮、未到置灰。
@@ -13,12 +13,10 @@ import MdView from './MdView'
 import QuestionCard, { type AnswerOutcome } from './QuestionCard'
 import { SettleContext } from './settle-context'
 import { parseSectionTitle } from '../../../shared/content-renderers'
+import { MAX_ASK_PER_ROUND, passStreakFor } from './quiz-rules'
 import type { LessonSection, QuestionItem, SectionManifestItem } from '../types'
 
 const { Text, Title } = Typography
-
-const PASS_STREAK = 2        // 连对即过该节（MA）
-const MAX_ASK_PER_ROUND = 5  // 每节至多 5 题（MA），超过未连对 2 → struggle
 
 interface Round {
   key: string
@@ -234,12 +232,12 @@ export default function PracticeFlow(props: {
     props.onSettled()
   }
 
-  /** 「下一题」：连对 2 → 过节（整组标记完成）；未答题用尽/超上限 → struggle；
-   * 否则跳到组内下一个未作答题（已答过的题不重复出现）。 */
+  /** 「下一题」：连对达标（目标随组内题量收缩）→ 过节（整组标记完成）；
+   * 未答题用尽/超上限 → struggle；否则跳到组内下一个未作答题（已答过的题不重复出现）。 */
   const advance = () => {
     const wasCorrect = answered?.correct === true
     const newStreak = wasCorrect ? streak + 1 : 0
-    if (newStreak >= PASS_STREAK) {
+    if (newStreak >= passStreakFor(qs.length)) {
       if (round) setDoneRounds(d => new Set(d).add(round.key))
       nextRound()
       return
@@ -355,7 +353,7 @@ export default function PracticeFlow(props: {
           <Space direction='vertical' size={10} style={{ width: '100%' }}>
             <Alert
               type='warning'
-              content={`「${round.title}」这一节还没过关（${PASS_STREAK} 题连对才通过，本节最多 ${MAX_ASK_PER_ROUND} 题）。可以先重读一遍，或让 AI 再出几道同类题。`}
+              content={`「${round.title}」这一节还没过关（需连对 ${passStreakFor(qs.length)} 题，本节最多 ${MAX_ASK_PER_ROUND} 题）。可以先重读一遍，或让 AI 再出几道同类题。`}
             />
             <Space size={8} wrap>
               <Button size='small' onClick={() => {
@@ -381,7 +379,7 @@ export default function PracticeFlow(props: {
             <Tag color='arcoblue'>{round.typeLabel}</Tag>
             <Title heading={6} style={{ margin: 0 }}>{round.title}</Title>
             <Text type='secondary' style={{ fontSize: 12 }}>
-              第 {qIdx + 1}/{qs.length} 题 · 连对 {streak}/{PASS_STREAK}
+              第 {qIdx + 1}/{qs.length} 题 · 连对 {streak}/{passStreakFor(qs.length)}
             </Text>
           </Space>
           {current && (
@@ -392,7 +390,7 @@ export default function PracticeFlow(props: {
               {roundIdx > 0 && <Button size='small' onClick={prevRound}>上一步</Button>}
               {answered && (
                 <Button type='primary' size='small' onClick={advance}>
-                  {answered.correct === true && streak + 1 >= PASS_STREAK ? '连对达标，下一节' : '下一题'}
+                  {answered.correct === true && streak + 1 >= passStreakFor(qs.length) ? '连对达标，下一节' : '下一题'}
                 </Button>
               )}
             </Space>
