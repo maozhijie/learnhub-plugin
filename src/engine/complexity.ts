@@ -163,16 +163,18 @@ export interface TierAnchors {
   sections: [number, number]
   /** 单节辅助文字上限（可视化为主、文字为辅的篇幅预算）。 */
   sectionWordBudget: number
-  /** 每内容节段目标题量（无练习节时；有练习节 -1，练习/交互节段 0）。 */
+  /** 每内容节段目标题量（无练习节时；有练习节 -1，练习/交互节段 0）。
+   * 地板 2：题量随档位增（复杂多、简单少），但简单课程不压到 1——节段数才是档位的主伸缩轴，
+   * 且面板过关规则（连对基准 2）在 1 题的节上不可达。 */
   perSectionQuestions: number
   /** 综合题数（替换原固定 3）。 */
   genericQuizCount: number
 }
 
 export const TIER_ANCHORS: Record<ComplexityTier, TierAnchors> = {
-  1: { sections: [1, 3], sectionWordBudget: 150, perSectionQuestions: 1, genericQuizCount: 2 },
-  2: { sections: [3, 5], sectionWordBudget: 250, perSectionQuestions: 2, genericQuizCount: 3 },
-  3: { sections: [4, 6], sectionWordBudget: 400, perSectionQuestions: 3, genericQuizCount: 4 },
+  1: { sections: [1, 3], sectionWordBudget: 150, perSectionQuestions: 2, genericQuizCount: 2 },
+  2: { sections: [3, 5], sectionWordBudget: 250, perSectionQuestions: 3, genericQuizCount: 3 },
+  3: { sections: [4, 6], sectionWordBudget: 400, perSectionQuestions: 4, genericQuizCount: 4 },
 }
 
 /** 节段数总上限（任意档 >8 即拦；与旧"通常 3–8 节"口径一致）。 */

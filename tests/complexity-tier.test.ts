@@ -104,15 +104,15 @@ test('P0: 三档锚点齐备且单调递增', () => {
   assert.ok(TIER_ANCHORS[3].genericQuizCount > TIER_ANCHORS[1].genericQuizCount)
 })
 
-test('P0: 锚点初值符合收敛记录（低 1-3/中 3-5/高 4-6，题量随档位）', () => {
+test('P0: 锚点初值符合收敛记录（低 1-3/中 3-5/高 4-6，题量随档位、地板 2）', () => {
   assert.deepEqual(TIER_ANCHORS[1].sections, [1, 3])
   assert.deepEqual(TIER_ANCHORS[2].sections, [3, 5])
   assert.deepEqual(TIER_ANCHORS[3].sections, [4, 6])
   assert.equal(TIER_ANCHORS[1].genericQuizCount, 2)
   assert.equal(TIER_ANCHORS[2].genericQuizCount, 3)
   assert.equal(TIER_ANCHORS[3].genericQuizCount, 4)
-  assert.equal(TIER_ANCHORS[1].perSectionQuestions, 1)
-  assert.equal(TIER_ANCHORS[3].perSectionQuestions, 3)
+  assert.equal(TIER_ANCHORS[1].perSectionQuestions, 2)
+  assert.equal(TIER_ANCHORS[3].perSectionQuestions, 4)
 })
 
 // ---- 图谱侧派生（pre 闭包规模 / p75 / 节点档位 / 节点护栏） ----
@@ -182,13 +182,13 @@ test('P0: preClosureSizes 同一 graph 对象缓存、跨调用稳定', () => {
 
 // ---- 出题量分发（P3：validateBank 只管形状，档位只在调度层决定要多少道） ----
 
-test('P3: 内容节题量随档位（低1/中2/高3）；含练习节时 −1', () => {
-  assert.equal(perSectionQuizTarget(1, false), 1)
-  assert.equal(perSectionQuizTarget(2, false), 2)
-  assert.equal(perSectionQuizTarget(3, false), 3)
-  assert.equal(perSectionQuizTarget(1, true), 0)
-  assert.equal(perSectionQuizTarget(2, true), 1)
-  assert.equal(perSectionQuizTarget(3, true), 2)
+test('P3: 内容节题量随档位（低2/中3/高4，地板 2）；含练习节时 −1', () => {
+  assert.equal(perSectionQuizTarget(1, false), 2)
+  assert.equal(perSectionQuizTarget(2, false), 3)
+  assert.equal(perSectionQuizTarget(3, false), 4)
+  assert.equal(perSectionQuizTarget(1, true), 1)
+  assert.equal(perSectionQuizTarget(2, true), 2)
+  assert.equal(perSectionQuizTarget(3, true), 3)
 })
 
 test('P3: 综合题数随档位（低2/中3/高4）', () => {
@@ -198,7 +198,7 @@ test('P3: 综合题数随档位（低2/中3/高4）', () => {
 })
 
 test('P3: 出题量随档位只降不增总盘子（低档总量低于中档）', () => {
-  // 低档 3 内容节 ×1 + 2 = 5 < 中档 5 ×2 + 3 = 13
+  // 低档 3 内容节 ×2 + 2 = 8 < 中档 5 内容节 ×3 + 3 = 18
   assert.ok(perSectionQuizTarget(1, false) * 3 + genericQuizTarget(1) < perSectionQuizTarget(2, false) * 5 + genericQuizTarget(2))
 })
 
