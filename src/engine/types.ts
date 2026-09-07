@@ -132,5 +132,5 @@ export interface CourseView {
   course: CourseEntry
   graph: import('./graph').Graph
   state: Record<string, Fm>
-  broken: string[]
+  broken: import('./notes').BrokenNote[]
 }

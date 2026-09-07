@@ -57,6 +57,15 @@ const KINDS: AlloKind[] = [
   'multi_choice', 'numeric', 'ordering', 'matching', 'open_question',
 ]
 
+/** question_update 允许修订的作者字段（白名单）；其余键（身份/调度/统计/归档）必须走独立操作。 */
+const QUESTION_AUTHORING_FIELDS = new Set([
+  'q', 'answer', 'options', 'explanation', 'difficulty', 'uses', 'tags', 'section', 'tol',
+])
+
+function bankError(op: string, path: string, detail: string): Error {
+  return new Error(`[${op}] 题库 Broken（位置：${path}）\n  ✗ ${detail}`)
+}
+
 /** 题库 schema 校验（手写，错误行风格与引擎其余门禁一致）。 */
 export function validateBank(doc: unknown, expectedNode?: string): { errors?: string[]; spec?: BankDoc } {
   const errors: string[] = []
@@ -185,17 +194,38 @@ export class QuestionBank {
     return `${courseRoot}/题库/${safeFilename(node)}.yaml`
   }
 
-  /** 读某节点题库；文件缺失返回空题库。 */
+  /** 读某节点题库；文件缺失返回空题库（合法 Missing）；存在但 YAML/契约坏则抛 Broken。 */
   async load(courseRoot: string, node: string): Promise<BankDoc> {
     const p = this.bankPath(courseRoot, node)
     if (!existsSync(p)) return { node, questions: [] }
+    const text = await this.readBankText(p)
+    const doc = this.parseBankDoc(p, text)
+    const v = validateBank(doc, node)
+    if (v.errors) throw bankError('question-load', p, v.errors.join('；'))
+    return v.spec!
+  }
+
+  private async readBankText(p: string): Promise<string> {
     try {
-      const doc = YAML.parse(await import('node:fs/promises').then(m => m.readFile(p, 'utf8')))
-      const v = validateBank(doc)
-      return v.spec ?? { node, questions: [] }
-    } catch {
-      return { node, questions: [] }
+      return await readFile(p, 'utf8')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw bankError('question-load', p, `无法读取: ${message}`)
     }
+  }
+
+  private parseBankDoc(p: string, text: string): Record<string, unknown> {
+    let doc: unknown
+    try {
+      doc = YAML.parse(text)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      throw bankError('question-load', p, `YAML 无法解析: ${message}`)
+    }
+    if (typeof doc !== 'object' || doc === null) {
+      throw bankError('question-load', p, '顶层必须是映射（node/questions）')
+    }
+    return doc as Record<string, unknown>
   }
 
   /** 校验并写入题库 YAML（LLM 产出过门禁后落盘）。 */
@@ -212,16 +242,14 @@ export class QuestionBank {
 
   // ---- 单题操作（题目管理面板用；每次写回前全量过 validateBank 门禁）----
 
-  /** 读题库原始 YAML 文档（缺失/损坏返回 null）。 */
+  /** 读并校验已有题库原始 YAML 文档（缺失返回 null；存在但 Broken 抛错，绝不静默当空库）。 */
   private async loadDoc(courseRoot: string, node: string): Promise<Record<string, unknown> | null> {
     const p = this.bankPath(courseRoot, node)
     if (!existsSync(p)) return null
-    try {
-      const doc = YAML.parse(await readFile(p, 'utf8'))
-      return typeof doc === 'object' && doc !== null ? doc as Record<string, unknown> : null
-    } catch {
-      return null
-    }
+    const doc = this.parseBankDoc(p, await this.readBankText(p))
+    const v = validateBank(doc, node)
+    if (v.errors) throw bankError('question-load', p, v.errors.join('；'))
+    return doc
   }
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
@@ -245,8 +273,15 @@ export class QuestionBank {
     return { id, count: next.length }
   }
 
-  /** 更新单题字段（patch 合并；id 不可改）。 */
+  /** 更新单题作者字段（patch 白名单合并；id 不可改）。
+   * 空 patch、未知字段、身份/调度/统计/归档字段一律拒绝——归档走 archiveQuestion 独立操作。 */
   async updateQuestion(courseRoot: string, node: string, qid: string, patch: Record<string, unknown>): Promise<void> {
+    const keys = Object.keys(patch)
+    if (!keys.length) throw new Error(`[question-update] ${node} 的题库：patch 不能为空（空 patch 是 no-op，拒绝）。`)
+    const unknown = keys.filter(k => !QUESTION_AUTHORING_FIELDS.has(k))
+    if (unknown.length) {
+      throw new Error(`[question-update] ${node} 的题库：patch 含不允许的字段 ${JSON.stringify(unknown)}（只允许 ${[...QUESTION_AUTHORING_FIELDS].join('/')}；id/kind/node/fsrs/stats/archived 是身份或派生块，不能经内容修订改动）`)
+    }
     const doc = await this.loadDoc(courseRoot, node)
     if (!doc) throw new Error(`[question-update] ${node} 没有题库文件。`)
     const list = Array.isArray(doc.questions) ? doc.questions as Array<Record<string, unknown>> : []
@@ -257,6 +292,33 @@ export class QuestionBank {
     next[idx] = merged
     const v = validateBank({ ...doc, questions: next }, node)
     if (v.errors) throw new Error(`[question-update] 校验失败，未写入。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    await this.writeDoc(courseRoot, node, { ...doc, questions: next })
+  }
+
+  /** 引擎内部作答侧写回：题目级 FSRS/作答统计是派生证据，只能整体替换，不经作者白名单。 */
+  async updateQuestionEvidence(
+    courseRoot: string,
+    node: string,
+    qid: string,
+    patch: { fsrs?: FsrsBlock | null; stats?: BankQuestion['stats'] },
+  ): Promise<void> {
+    const doc = await this.loadDoc(courseRoot, node)
+    if (!doc) throw new Error(`[question-evidence] ${node} 没有题库文件。`)
+    const list = Array.isArray(doc.questions) ? doc.questions as Array<Record<string, unknown>> : []
+    const idx = list.findIndex(q => (q as { id?: unknown }).id === qid)
+    if (idx < 0) throw new Error(`[question-evidence] ${node} 的题库没有 ${qid}。`)
+    const next = [...list]
+    const current = { ...list[idx] }
+    if (patch.fsrs !== undefined) {
+      if (patch.fsrs === null) delete current.fsrs
+      else current.fsrs = patch.fsrs
+    }
+    if (patch.stats !== undefined) {
+      current.stats = patch.stats
+    }
+    next[idx] = current
+    const v = validateBank({ ...doc, questions: next }, node)
+    if (v.errors) throw new Error(`[question-evidence] 校验失败，未写入。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     await this.writeDoc(courseRoot, node, { ...doc, questions: next })
   }
 

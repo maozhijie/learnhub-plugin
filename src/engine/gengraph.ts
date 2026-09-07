@@ -9,7 +9,7 @@ import { readFile, writeFile, rename, mkdir, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './store.ts'
-import { Graph, GraphStore, structureCheck, loadRegionDoc, snapshotDoc } from './graph.ts'
+import { Graph, GraphStore, structureCheck, loadRegionDoc, parseNode, snapshotDoc } from './graph.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge } from './types.ts'
 import { BLOOM_LEVELS } from './types.ts'
@@ -23,7 +23,7 @@ export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
 export interface GenProposalSpec {
   course: string
   mode: 'new' | 'append'
-  regions: Array<{ region: string; color?: string; blocks: Array<{ name: string; nodes: Array<Record<string, unknown>> }> }>
+  regions: Array<{ region: string; color?: string; blocks: Array<{ name: string; nodes: GNode[] }> }>
 }
 
 export interface EditOp {
@@ -100,23 +100,25 @@ export function validateGenProposal(doc: unknown): { errors?: string[]; spec?: G
             errors.push(`${where}.blocks.${bi}: 块 name 不能为空`)
             return
           }
-          const nodes = Array.isArray(b.nodes) ? b.nodes : []
-          if (!nodes.length) {
+          if (!Array.isArray(b.nodes)) {
+            errors.push(`${where}.blocks.${bi}: 块[${b.name}] nodes 必须是列表`)
+            return
+          }
+          const rawNodes = b.nodes
+          const nodes: GNode[] = []
+          if (!rawNodes.length) {
             errors.push(`${where}.blocks.${bi}: 块[${b.name}] 没有节点`)
             return
           }
-          // 认知维度可选字段（schema 从严；gen 路径节点是 raw 记录，在此逐节点校验）
-          nodes.forEach((rawNode: unknown, ni: number) => {
-            const nd = (rawNode ?? {}) as Record<string, unknown>
-            const nwhere = `${where}.blocks.${bi}.nodes.${String(nd.name ?? ni)}`
-            if (nd.bloom !== undefined && !(BLOOM_LEVELS as readonly string[]).includes(String(nd.bloom))) {
-              errors.push(`${nwhere}.bloom: 非法认知层级 ${String(nd.bloom)}（允许 ${BLOOM_LEVELS.join('/')}）`)
-            }
-            if (nd.difficulty !== undefined && ![1, 2, 3, 4, 5].includes(Number(nd.difficulty))) {
-              errors.push(`${nwhere}.difficulty: 非法难度 ${String(nd.difficulty)}（允许 1-5）`)
+          // 受理前复用持久图节点解析，避免 gen 专用宽松解析把坏数据留到 apply 时才暴露。
+          rawNodes.forEach((rawNode: unknown, ni: number) => {
+            try {
+              nodes.push(parseNode(rawNode, '生成提案', `${where}.blocks.${bi}.nodes.${ni}`))
+            } catch (e) {
+              errors.push((e as Error).message)
             }
           })
-          blocks.push({ name: b.name.trim(), nodes: nodes as Array<Record<string, unknown>> })
+          blocks.push({ name: b.name.trim(), nodes })
         })
       }
       regions.push({ region: typeof r.region === 'string' ? r.region.trim() : '', color: typeof r.color === 'string' ? r.color : '', blocks })
@@ -297,6 +299,19 @@ export class GraphProposals {
     const store = new GraphStore(this.paths, this.paths.courseRoot(root))
 
     const existingFiles = await store.regionFiles()
+    // 记录本次会新建的块（append 到已存在区时只算真正新增的块名；mode=new 全算）
+    const existingRegionBlocks = new Map<string, Set<string>>()
+    for (const [regionName, path] of Object.entries(existingFiles)) {
+      const current = loadRegionDoc(YAML.parse(await readFile(path, 'utf8')), path)
+      existingRegionBlocks.set(regionName, new Set(current.blocks.map(b => b.name)))
+    }
+    const createdBlocks = new Set<string>()
+    for (const region of newRegions) {
+      const currentBlocks = existingRegionBlocks.get(region.name)
+      for (const block of region.blocks) {
+        if (!currentBlocks?.has(block.name)) createdBlocks.add(block.name)
+      }
+    }
     const written: string[] = []
     for (const region of newRegions) {
       if (region.name in existingFiles) {
@@ -323,7 +338,14 @@ export class GraphProposals {
     await this.ensureNotesFor(root, regions)
     await this.store.appendJournal({ course: course.name, node: '*', rating: null, kind: 'graph_gen', elapsed_days: 0, session: String(prop.id), detail: `新增区: ${written.join('、')}` })
     await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
-    return { course: course.name, regions: written, snapshot: version, nodes: new Graph(regions).names.length, findings: applyFindings(audit) }
+    return {
+      course: course.name,
+      regions: written,
+      snapshot: version,
+      nodes: new Graph(regions).names.length,
+      created_blocks: [...createdBlocks],
+      findings: applyFindings(audit),
+    }
   }
 
   /** mode=new：注册表条目 + data/课程/state 脚手架。 */
@@ -371,6 +393,13 @@ export class GraphProposals {
     const errors = simulateOps(regions, graph, spec.ops) // 二次校验
     if (errors.length) throw new Error('[apply-edit] 提案已不适用当前图（被拒绝，可重提）。')
 
+    const createdBlocks = new Set<string>()
+    for (const op of spec.ops) {
+      if (op.op !== 'add_node') continue
+      const region = regions.find(r => r.name === op.region)
+      if (region && !region.blocks.some(b => b.name === op.block)) createdBlocks.add(op.block!)
+    }
+
     const renames: Record<string, string> = {}
     const moves: Array<[string, string, string]> = []
     const dels: string[] = []
@@ -402,7 +431,15 @@ export class GraphProposals {
       session: String(prop.id), detail: spec.ops.map(o => `${o.op}(${o.node})`).join('；'),
     })
     await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
-    return { course: course.name, ops: spec.ops.length, snapshot: version, renames, deleted: dels, findings: applyFindings(audit) }
+    return {
+      course: course.name,
+      ops: spec.ops.length,
+      snapshot: version,
+      created_blocks: [...createdBlocks],
+      renames,
+      deleted: dels,
+      findings: applyFindings(audit),
+    }
   }
 
   /** 改名/移动联动课程笔记：搬文件 + 更新 fm.node + 题库随迁；无笔记静默跳过。 */
@@ -456,6 +493,9 @@ export class GraphProposals {
 
   /** graph reject。 */
   async reject(pid: number, note = ''): Promise<Record<string, unknown>> {
+    if (!Number.isInteger(pid) || pid <= 0) {
+      throw new Error(`[reject] 提案 id 必须是正整数（收到 ${String(pid)}）；拒绝不能省略 id。`)
+    }
     const list = await this.store.loadProposals()
     const prop = list.find(p => p.id === pid)
     if (!prop || prop.status !== 'pending') throw new Error(`[reject] 提案 #${pid} 不存在或已决。`)
@@ -485,36 +525,9 @@ export function specToRegions(specRegions: GenProposalSpec['regions']): GRegion[
     color: r.color ?? '',
     blocks: r.blocks.map(b => ({
       name: b.name,
-      nodes: b.nodes.map(n => parseProposalNode(n)),
+      nodes: b.nodes,
     })),
   }))
-}
-
-function parseProposalNode(raw: Record<string, unknown>): GNode {
-  const enc = Array.isArray(raw.enc)
-    ? raw.enc.map((e: unknown) => typeof e === 'string'
-        ? { node: e, w: 1.0 }
-        : { node: String((e as Record<string, unknown>).node), w: Number((e as Record<string, unknown>).w ?? 1) })
-    : []
-  const node: GNode = {
-    name: String(raw.name ?? '').trim(),
-    pre: Array.isArray(raw.pre) ? raw.pre.map(String) : [],
-    opt: Boolean(raw.opt),
-    note: typeof raw.note === 'string' ? raw.note : '',
-    enc,
-  }
-  if (raw.est !== undefined) {
-    const est = Number(raw.est)
-    if (Number.isFinite(est) && est > 0) node.est = Math.round(est)
-  }
-  if (raw.type === 'practice') node.type = 'practice'
-  if (typeof raw.bloom === 'string' && (BLOOM_LEVELS as readonly string[]).includes(raw.bloom)) {
-    node.bloom = raw.bloom as BloomLevel
-  }
-  if ([1, 2, 3, 4, 5].includes(Number(raw.difficulty))) {
-    node.difficulty = Number(raw.difficulty) as GNode['difficulty']
-  }
-  return node
 }
 
 /** 在 regions 副本上模拟全部操作 → 错误列表（gen._simulate_ops 同语义）。 */
@@ -560,7 +573,11 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
       }
     } else if (op.op === 'move') {
       if (!names.has(op.node!)) { errors.push(`move 节点不存在: ${op.node}`); continue }
-      if (!regionOf(op.region!)) errors.push(`move 目标区不存在: ${op.region}`)
+      const dstRegion = regionOf(op.region!)
+      if (!dstRegion) errors.push(`move 目标区不存在: ${op.region}`)
+      else if (!dstRegion.blocks.some(b => b.name === op.block)) {
+        errors.push(`move 目标块不存在（不允许静默建块）: ${op.region}/${op.block}`)
+      }
     } else if (op.op === 'set_pre') {
       if (!names.has(op.node!)) { errors.push(`set_pre 节点不存在: ${op.node}`); continue }
       for (const r of sim) for (const b of r.blocks) for (const n of b.nodes) {
@@ -637,8 +654,7 @@ export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
       const dstR = regionOf(op.region!)!
       let dstBlk = dstR.blocks.find(b => b.name === op.block)
       if (!dstBlk) {
-        dstBlk = { name: op.block!, nodes: [] }
-        dstR.blocks.push(dstBlk)
+        throw new Error(`[apply-edit] move 目标块不存在（不允许静默建块）: ${op.region}/${op.block}`)
       }
       dstBlk.nodes.push(hit.n)
     } else if (op.op === 'set_pre') {

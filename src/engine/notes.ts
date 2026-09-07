@@ -8,7 +8,8 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { YAML } from './yaml.ts'
-import type { Fm, Stage } from './types.ts'
+import type { Fm, FsrsBlock, Stage } from './types.ts'
+import { STAGES } from './types.ts'
 
 export const CONTENT_STATUS = ['draft', 'reviewed', 'flagged'] as const
 
@@ -63,21 +64,234 @@ export async function loadNote(path: string): Promise<{ fm: Record<string, unkno
   return splitFrontmatter(raw)
 }
 
-/** 校验 frontmatter 是否为合法 Fm（宽容读侧的收窄）。 */
-export function asFm(fm: Record<string, unknown> | null): Fm | null {
-  if (!fm || typeof fm.node !== 'string') return null
-  const stage = (fm.stage as Stage) ?? 'unseen'
-  const content = (fm.content as Fm['content']) ?? { version: 0, generated_at: null, status: 'draft' }
-  const practice = (fm.practice as Fm['practice']) ?? { attempts: 0, correct: 0 }
-  return {
-    node: fm.node,
-    stage,
-    fsrs: (fm.fsrs as Fm['fsrs']) ?? null,
-    mastery: typeof fm.mastery === 'number' ? fm.mastery : 0,
-    practice_ema: typeof fm.practice_ema === 'number' ? fm.practice_ema : undefined,
-    content,
-    practice,
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function isNonNegativeInt(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+/** 课程笔记 frontmatter 的核心契约校验（#7；Data Check 与 stateMap 共用）。
+ *
+ * 合法输入只收核心调度状态；未知顶层键是用户元数据，不在校验范围。
+ * practice_ema 与 fsrs 允许缺省归一（无练习证据 / 无调度记录）；一旦给出
+ * 值就必须合法。缺省默认对象（content/practice）不算非法——但它们实际由
+ * defaultFrontmatter 写入，读侧不据此伪造进度。 */
+export function validateNoteFrontmatter(doc: unknown): { errors: string[]; fm?: Fm } {
+  const errors: string[] = []
+  if (!isRecord(doc)) return { errors: ['frontmatter 必须是映射'] }
+
+  if (!isNonEmptyString(doc.node)) errors.push('node: 不能为空')
+  const stage = doc.stage
+  if (typeof stage !== 'string' || !(STAGES as readonly string[]).includes(stage)) {
+    errors.push(`stage: 非法状态（允许 ${STAGES.join('/')}）`)
   }
+  const mastery = doc.mastery
+  if (typeof mastery !== 'number' || !Number.isFinite(mastery) || mastery < 0 || mastery > 1) {
+    errors.push('mastery: 必须是 0–1 的数')
+  }
+  if (doc.practice_ema !== undefined) {
+    const ema = doc.practice_ema
+    if (typeof ema !== 'number' || !Number.isFinite(ema) || ema < 0 || ema > 1) {
+      errors.push('practice_ema: 必须是 0–1 的数')
+    }
+  }
+
+  let fsrs: FsrsBlock | null = null
+  if (doc.fsrs !== undefined && doc.fsrs !== null) {
+    if (!isRecord(doc.fsrs)) {
+      errors.push('fsrs: 必须是映射或 null')
+    } else {
+      const f = doc.fsrs as Record<string, unknown>
+      for (const key of ['stability', 'difficulty'] as const) {
+        if (typeof f[key] !== 'number' || !Number.isFinite(f[key])) errors.push(`fsrs.${key}: 必须是数`)
+      }
+      for (const key of ['due', 'last_review'] as const) {
+        if (!isNonEmptyString(f[key])) errors.push(`fsrs.${key}: 必须是日期文本`)
+      }
+      for (const key of ['reps', 'lapses'] as const) {
+        if (!isNonNegativeInt(f[key])) errors.push(`fsrs.${key}: 必须是非负整数`)
+      }
+      if (!errors.some(e => e.startsWith('fsrs.'))) {
+        fsrs = {
+          stability: f.stability as number,
+          difficulty: f.difficulty as number,
+          due: f.due as string,
+          last_review: f.last_review as string,
+          reps: f.reps as number,
+          lapses: f.lapses as number,
+        }
+      }
+    }
+  }
+
+  const content = doc.content
+  if (!isRecord(content)) {
+    errors.push('content: 必须是映射')
+  } else {
+    const version = content.version
+    if (!isNonNegativeInt(version)) errors.push('content.version: 必须是非负整数')
+    if (content.generated_at !== null && !isNonEmptyString(content.generated_at)) {
+      errors.push('content.generated_at: 必须是时间文本或 null')
+    }
+    if (typeof content.status !== 'string' || !CONTENT_STATUS.includes(content.status as never)) {
+      errors.push(`content.status: 非法状态（允许 ${CONTENT_STATUS.join('/')}）`)
+    }
+    if (content.sections !== undefined) {
+      if (!Array.isArray(content.sections)) {
+        errors.push('content.sections: 必须是列表')
+      } else {
+        content.sections.forEach((section, index) => {
+          const where = `content.sections.${index + 1}`
+          if (!isRecord(section)) {
+            errors.push(`${where}: 必须是映射`)
+            return
+          }
+          for (const key of ['id', 'title', 'type'] as const) {
+            if (!isNonEmptyString(section[key])) errors.push(`${where}.${key}: 不能为空`)
+          }
+          if (section.status !== 'pending' && section.status !== 'ready') {
+            errors.push(`${where}.status: 只允许 pending/ready`)
+          }
+          if (!isNonNegativeInt(section.version)) errors.push(`${where}.version: 必须是非负整数`)
+        })
+      }
+    }
+  }
+
+  const practice = doc.practice
+  if (!isRecord(practice)) {
+    errors.push('practice: 必须是映射')
+  } else {
+    for (const key of ['attempts', 'correct'] as const) {
+      if (!isNonNegativeInt(practice[key])) errors.push(`practice.${key}: 必须是非负整数`)
+    }
+  }
+
+  if (errors.length) return { errors }
+
+  // 返回规范化核心状态，并保留全部未知顶层键（用户元数据，写回不丢失）
+  const out: Record<string, unknown> = {
+    node: String(doc.node).trim(),
+    stage: stage as Stage,
+    fsrs,
+    mastery: mastery as number,
+    ...(doc.practice_ema !== undefined ? { practice_ema: doc.practice_ema } : {}),
+    content: {
+      version: (content as Record<string, unknown>).version,
+      generated_at: (content as Record<string, unknown>).generated_at ?? null,
+      status: (content as Record<string, unknown>).status,
+      ...((content as Record<string, unknown>).sections !== undefined
+        ? { sections: (content as Record<string, unknown>).sections } : {}),
+    },
+    practice: {
+      attempts: (practice as Record<string, unknown>).attempts,
+      correct: (practice as Record<string, unknown>).correct,
+    },
+  }
+  for (const [key, value] of Object.entries(doc)) {
+    if (!(key in out)) out[key] = value
+  }
+  return { errors, fm: out as unknown as Fm }
+}
+
+/** 兼容轻量读取：校验不过返回 null（调用方负责 fail loud；契约细节看 validateNoteFrontmatter）。 */
+export function asFm(fm: Record<string, unknown> | null): Fm | null {
+  if (!fm) return null
+  return validateNoteFrontmatter(fm).fm ?? null
+}
+
+/** 损坏课程文件（Broken）：位置 + 可识别节点 + 稳定人类可读原因。 */
+export interface BrokenNote {
+  path: string
+  node?: string
+  reason: string
+}
+
+/** 单个 Markdown 文件 frontmatter 解析结果（Data Check / stateMap 共用）。 */
+function parseFmBlock(text: string): { ok: true; doc: unknown; raw: string } | { ok: false; reason: string } {
+  if (!text.startsWith('---')) return { ok: false, reason: 'Markdown 开头没有 frontmatter。' }
+  const end = text.indexOf('\n---', 3)
+  if (end < 0) return { ok: false, reason: 'frontmatter 没有闭合的 ---。' }
+  const raw = text.slice(3, end).replace(/^[\r\n]+|[\r\n]+$/g, '').replace(/\r/g, '')
+  try {
+    return { ok: true, doc: YAML.parse(raw), raw }
+  } catch (err) {
+    return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** 遍历 课程/ 目录，把每个 Markdown 分类为合法状态 / Broken（带原因）。
+ * 无 node 字段的非课程文件也按 Broken 暴露，避免状态扫描静默忽略。 */
+export async function scanCourseNotes(courseDir: string): Promise<{
+  state: Record<string, Fm>
+  raw: Record<string, { path: string; fm: Record<string, unknown> }>
+  broken: BrokenNote[]
+}> {
+  const state: Record<string, Fm> = {}
+  const raw: Record<string, { path: string; fm: Record<string, unknown> }> = {}
+  const broken: BrokenNote[] = []
+
+  async function walk(dir: string): Promise<void> {
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        await walk(path)
+        continue
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+      let text: string
+      try {
+        text = await readFile(path, 'utf8')
+      } catch (err) {
+        broken.push({ path, reason: `无法读取: ${err instanceof Error ? err.message : String(err)}` })
+        continue
+      }
+      const parsed = parseFmBlock(text)
+      if (!parsed.ok) {
+        broken.push({ path, reason: parsed.reason })
+        continue
+      }
+      if (!isRecord(parsed.doc)) {
+        broken.push({ path, reason: 'frontmatter 必须是映射。' })
+        continue
+      }
+      const node = isNonEmptyString(parsed.doc.node) ? String(parsed.doc.node).trim() : undefined
+      if (!node) {
+        broken.push({ path, reason: 'node: 不能为空（不是可纳管课程文件）' })
+        continue
+      }
+      const checked = validateNoteFrontmatter(parsed.doc)
+      if (!checked.fm) {
+        broken.push({ path, node, reason: checked.errors.join('；') })
+        continue
+      }
+      state[node] = checked.fm
+      raw[node] = { path, fm: parsed.doc as Record<string, unknown> }
+    }
+  }
+  await walk(courseDir)
+  return { state, raw, broken }
+}
+
+/** 旧签名兼容包装：合法 raw 映射 + BrokenNote 列表（audit 等调用方已按此结构读取）。 */
+export async function scanAll(courseDir: string): Promise<{
+  found: Record<string, { path: string; fm: Record<string, unknown> }>
+  broken: BrokenNote[]
+}> {
+  const scan = await scanCourseNotes(courseDir)
+  return { found: scan.raw, broken: scan.broken }
 }
 
 /** 写课程文件（frontmatter + 正文），自动建目录。 */
@@ -96,46 +310,8 @@ export async function updateNote(path: string, patch: Record<string, unknown>): 
   return next
 }
 
-/** 遍历 课程/ 目录 → { found: {节点名: {path, fm}}, broken: [路径] }（scan_all 同语义）。 */
-export async function scanAll(courseDir: string): Promise<{
-  found: Record<string, { path: string; fm: Record<string, unknown> }>
-  broken: string[]
-}> {
-  const found: Record<string, { path: string; fm: Record<string, unknown> }> = {}
-  const broken: string[] = []
-  async function walk(dir: string): Promise<void> {
-    let entries
-    try {
-      entries = await readdir(dir, { withFileTypes: true })
-    } catch {
-      return
-    }
-    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-      const p = join(dir, e.name)
-      if (e.isDirectory()) {
-        await walk(p)
-      } else if (e.name.endsWith('.md')) {
-        const { fm } = await loadNote(p)
-        const node = fm && typeof fm.node === 'string' ? fm.node : null
-        if (!node) {
-          broken.push(p)
-          continue
-        }
-        found[node] = { path: p, fm: fm! }
-      }
-    }
-  }
-  await walk(courseDir)
-  return { found, broken }
-}
-
-/** frontmatter 状态视图：{节点名: fm} + 损坏文件列表。 */
-export async function stateMap(courseDir: string): Promise<{ state: Record<string, Fm>; broken: string[] }> {
-  const { found, broken } = await scanAll(courseDir)
-  const state: Record<string, Fm> = {}
-  for (const [node, { fm }] of Object.entries(found)) {
-    const f = asFm(fm)
-    if (f) state[node] = f
-  }
-  return { state, broken }
+/** frontmatter 状态视图：{节点名: Fm} + BrokenNote（带位置与原因）。 */
+export async function stateMap(courseDir: string): Promise<{ state: Record<string, Fm>; broken: BrokenNote[] }> {
+  const scan = await scanCourseNotes(courseDir)
+  return { state: scan.state, broken: scan.broken }
 }

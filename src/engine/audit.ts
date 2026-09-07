@@ -122,8 +122,8 @@ export async function runAudit(
   // E4 课程文件 ↔ 图同步 + E5 frontmatter schema
   const { found, broken } = await scanAll(paths.courseDir(root))
   const fsErrors = new Set<string>()
-  for (const p of broken) {
-    errors.push(`E4 课程文件 frontmatter 不可解析: ${p.replace(/\\/g, '/').split(`${root}/`)[1] ?? p}`)
+  for (const b of broken) {
+    errors.push(`E4 课程文件 Broken（${b.path.replace(/\\/g, '/').split(`${root}/`)[1] ?? b.path}）: ${b.reason}`)
   }
   for (const [nodeName, { path, fm: rawFm }] of Object.entries(found).sort()) {
     const rel = path.replace(/\\/g, '/').split(`${root}/`)[1] ?? path

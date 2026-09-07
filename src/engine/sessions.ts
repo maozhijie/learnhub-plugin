@@ -10,14 +10,21 @@ import { existsSync } from 'node:fs'
 import { todayStr, parseDay, daysBetween } from './dates.ts'
 import { effectiveStage } from './audit.ts'
 import { retrievability, getScheduler, masteryOfFm } from './srs.ts'
-import { loadNote, asFm } from './notes.ts'
+import { loadNote, asFm, validateNoteFrontmatter } from './notes.ts'
+import type { BrokenNote } from './notes.ts'
 import type { Graph } from './graph.ts'
 import type { Fm, Stage } from './types.ts'
 import type { Paths } from './paths.ts'
 
 /** 单课调度素材的统一视图参数。 */
 export interface ViewSource {
-  (course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: string[] }>
+  (course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
+}
+
+/** 聚合学习态（status/recommend/ETA）前置门：任一必需笔记 Broken 即 fail loud。 */
+export function assertNoBrokenNotes(where: string, broken: BrokenNote[]): void {
+  if (!broken.length) return
+  throw new Error(`[${where}] 课程状态 Broken，不能生成可能掩盖损坏的学习汇总：\n${broken.map(b => `  ✗ ${b.path} — ${b.reason}`).join('\n')}`)
 }
 
 export function doneSet(graph: Graph, state: Record<string, Fm>): Set<string> {
@@ -151,7 +158,8 @@ export class Sessions {
   ): Promise<Record<string, unknown>> {
     const courses: Array<Record<string, unknown>> = []
     for (const c of enabled) {
-      const { graph, state } = await this.viewOf(c)
+      const { graph, state, broken } = await this.viewOf(c)
+      assertNoBrokenNotes('status', broken)
       const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
       const rValue = (n: string) => retrievability(sched, state[n], today)
       const st = courseStats(graph, state, rValue, today)
@@ -185,7 +193,8 @@ export class Sessions {
     const events: Array<Record<string, unknown>> = []
     const seen = new Set<string>()
     for (const c of enabled) {
-      const { graph, state } = await this.viewOf(c)
+      const { graph, state, broken } = await this.viewOf(c)
+      assertNoBrokenNotes('recommend', broken)
       const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
       const rValue = (n: string) => retrievability(sched, state[n], today)
       const st = courseStats(graph, state, rValue, today)
@@ -284,7 +293,13 @@ export class Sessions {
     const path = this.paths.courseNotePath(root, regionName, node)
     const { fm: rawFm, body } = await loadNote(path)
     const fm = asFm(rawFm)
-    if (!fm) throw new Error(`[lesson] 课程文件不存在（内容未生成？）：${node}`)
+    if (!fm) {
+      if (rawFm) {
+        const checked = validateNoteFrontmatter(rawFm)
+        throw new Error(`[lesson] 课程文件 Broken（${path}）— ${checked.errors.join('；')}`)
+      }
+      throw new Error(`[lesson] 课程文件不存在（内容未生成？）：${node}`)
+    }
     const sections = Sessions.lessonSections(body)
     const sched = await getScheduler(this.paths, this.paths.courseRoot(root))
     const rValue = (n: string) => retrievability(sched, state[n], todayStr())

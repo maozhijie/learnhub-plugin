@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：25 个 defineTool 直调 engine（学习/图谱/生成/题库四面）
+ * - agent 工具面：26 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库四面）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -25,6 +25,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
+import { applyId, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
+import {
+  contentFailureStatus,
+  generationJobRetentionMs,
+  quizFailureOutcome,
+  quizSuccessOutcome,
+  type GenJobStatus,
+} from './generation-jobs.ts'
 
 export const name = 'dsh-learnhub'
 export const inject = ['tools', 'webServer', 'llm']
@@ -53,7 +61,7 @@ interface GenJob {
   course: string
   node: string
   startedAt: string
-  status: 'running' | 'cancelling' | 'done' | 'failed' | 'cancelled'
+  status: GenJobStatus
   /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）。 */
   phase?: 'outline' | 'sections' | 'quiz'
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
@@ -230,7 +238,7 @@ async function applySectionWithRepair(
  * → 逐节正文（每节一次模型调用；已 ready 节跳过 = 断点续跑）
  * → 逐节出题 + 综合出题。style 只替换节生成模板（课程节生成-<style>），
  * 大纲、断点续跑与门禁与默认管线同一路径；未知 style 在 loadPrompt fail loud。
- * 出题失败不回滚正文：任务标记 done 并在 message 里说明，练习页可单独重试出题。 */
+ * 出题失败不回滚正文：任务标记 partial 并在 message 里说明，练习页可单独重试出题。 */
 async function generateContent(ctx: Context, course: string, node: string, style?: string): Promise<string> {
   const key = `${course}/${node}`
   const existing = genJobs.get(key)
@@ -270,13 +278,13 @@ async function generateContent(ctx: Context, course: string, node: string, style
     }
     return await finishWithQuiz(ctx, job, `「${node}」正文完成（${job.progress!.total} 节）`)
   } catch (err) {
-    job.status = job.status === 'cancelling' ? 'cancelled' : 'failed'
+    job.status = contentFailureStatus(job.status)
     job.message = err instanceof Error ? err.message : String(err)
     persistGenJobs()
     throw err
   } finally {
-    // 终态保留：失败/取消留 24h 供排查与重试，成功留 30 分钟；之后清出注册表
-    const keep = job.status === 'failed' || job.status === 'cancelled' ? 24 * 60 * 60_000 : 30 * 60_000
+    // 终态保留：失败/取消/部分完成留 24h 供排查与重试，成功留 30 分钟；之后清出注册表
+    const keep = generationJobRetentionMs(job.status)
     setTimeout(() => {
       const cur = genJobs.get(key)
       if (cur && cur.status !== 'running' && cur.status !== 'cancelling') genJobs.delete(key)
@@ -296,11 +304,13 @@ async function finishWithQuiz(ctx: Context, job: GenJob, contentMsg: string): Pr
   try {
     const per = await engine.questionGenerateSections(job.course, job.node, async prompt => stripFences(await llmComplete(ctx, prompt)))
     const quiz = await generateQuiz(ctx, job.course, job.node, GENERIC_QUIZ_COUNT, { generic: true })
-    job.status = 'done'
-    job.message = `${contentMsg}；出题 ${per.added + quiz.added} 道（节绑 ${per.added} + 综合 ${quiz.added}，题库共 ${quiz.total}）`
+    const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
+    job.status = outcome.status
+    job.message = outcome.message
   } catch (quizErr) {
-    job.status = 'done'
-    job.message = `${contentMsg}；自动出题失败（${quizErr instanceof Error ? quizErr.message : String(quizErr)}）——可在练习页单独重试`
+    const outcome = quizFailureOutcome(contentMsg, quizErr)
+    job.status = outcome.status
+    job.message = outcome.message
   }
   persistGenJobs()
   return job.message
@@ -585,7 +595,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       }
       if (route === '/node/skip') {
         sendJson(res, 200, await apiRun('api/node/skip', () =>
-          engine.nodeSkip(need(body, 'course'), need(body, 'node'), body.skipped !== false)))
+          engine.nodeSkip(need(body, 'course'), need(body, 'node'), requireSkipDirection(body.skipped))))
         return
       }
       if (route === '/node/complete') {
@@ -599,12 +609,11 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       }
       if (route === '/proposals/apply') {
         const kind = need(body, 'kind') === 'edit' ? 'edit' : 'gen'
-        sendJson(res, 200, await engine.graphApply(kind, body.id !== undefined ? Number(body.id) : undefined))
+        sendJson(res, 200, await engine.graphApply(kind, applyId(body.id)))
         return
       }
       if (route === '/proposals/reject') {
-        const id = Number(body.id)
-        if (!Number.isInteger(id)) throw new Error('missing required field: id')
+        const id = rejectId(body.id)
         await engine.graphReject(id, typeof body.note === 'string' ? body.note.trim() : '')
         sendJson(res, 200, { message: `[reject] 提案 #${id} 已拒绝留痕。` })
         return
@@ -649,9 +658,8 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/question-generate') {
-        const count = Number(body.count)
         sendJson(res, 200, await apiRun('api/question-generate', () =>
-          generateQuiz(ctx, need(body, 'course'), need(body, 'node'), Number.isInteger(count) && count > 0 ? count : 6)))
+          generateQuiz(ctx, need(body, 'course'), need(body, 'node'), questionCount(body.count))))
         return
       }
       if (route === '/review') {
@@ -769,15 +777,18 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   tool('learnhub_status',
     'Return the learning center status (center summary + per-course detail) as JSON.',
     {}, () => run('learnhub_status', async () => JSON.stringify(await engine.statusJson())))
+  tool('learnhub_data_check',
+    'Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.',
+    {}, () => run('learnhub_data_check', async () => JSON.stringify(await engine.dataCheck())))
   tool('learnhub_skip',
     'Mark a node as skipped (learner already knows it) or un-skip. Skipped nodes count as passed: they leave the recommendation queue and no longer block successors.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name' },
-      skipped: { type: 'boolean', description: 'true to skip (default), false to un-skip' },
+      skipped: { type: 'boolean', required: true, description: 'Explicit direction: true to skip, false to un-skip (omission is an argument error)' },
     },
     (args: { course: string; node: string; skipped?: boolean }) => run('learnhub_skip', async () =>
-      JSON.stringify(await engine.nodeSkip(args.course, args.node, args.skipped !== false))))
+      JSON.stringify(await engine.nodeSkip(args.course, args.node, requireSkipDirection(args.skipped)))))
   tool('learnhub_complete',
     'Confirm a node has been learned this round. Accuracy below the passing line (0.6, with enough attempts) is rejected with accepted=false — review prerequisites or retry with force. On acceptance: unanswered bank questions get their FSRS card initialized (due tomorrow), the node stage moves to review, and a perfect-score completion earns bonus XP.',
     {
@@ -840,7 +851,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; node: string }) => run('learnhub_graph_node', async () =>
       JSON.stringify(await engine.graphNode(args.course, args.node))))
   tool('learnhub_graph_browse',
-    'Browse a course graph by region and/or block: node listings with depth/stage/est/difficulty/type/content status. Omit both filters to list every region (structure overview); give region (and optionally block) to explore one area. Unknown region names fail loud with the valid list.',
+    'Browse a course graph by region and/or block: node listings with depth/stage/est/difficulty/type/content status. Omit both filters to list every region (structure overview); give region (and optionally block) to explore one area. A block without a region succeeds only when exactly one block with that name exists; zero matches or ambiguity across regions fails with the matching region list so you can add the region filter. Unknown regions/blocks fail loud with valid names.',
     {
       course: { type: 'string', description: 'Course name; omit when only one course is enabled' },
       region: { type: 'string', description: 'Region name filter' },
@@ -877,18 +888,18 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
     {
       kind: { type: 'string', required: true, description: '"gen" or "edit"' },
-      id: { type: 'number', description: 'Proposal id; omit for the latest pending of this kind' },
+      id: { type: 'number', description: 'Proposal id as a positive integer; omit only for the latest pending of this kind' },
       reject: { type: 'boolean', description: 'true to reject instead of apply' },
       note: { type: 'string', description: 'Rejection reason (recorded)' },
     },
     async (args: { kind: string; id?: number; reject?: boolean; note?: string }) =>
       run('learnhub_graph_apply', async () => {
         if (args.reject) {
-          if (!args.id) throw new Error('reject requires the proposal id')
-          await engine.graphReject(args.id, args.note ?? '')
-          return `[reject] 提案 #${args.id} 已拒绝留痕。`
+          const id = rejectId(args.id)
+          await engine.graphReject(id, args.note ?? '')
+          return `[reject] 提案 #${id} 已拒绝留痕。`
         }
-        return JSON.stringify(await engine.graphApply(args.kind === 'edit' ? 'edit' : 'gen', args.id))
+        return JSON.stringify(await engine.graphApply(args.kind === 'edit' ? 'edit' : 'gen', applyId(args.id)))
       }))
   tool('learnhub_generate',
     'Generate one course note via the model: outline first (the model decides section split, order, and types from the content, topic, and style — no fixed structure), then one model call per section through the quality gates as a draft (ready sections are skipped, so retrying resumes the pipeline), then per-section + synthesis quiz questions. The context pack (prereqs, domain boundary, forbidden concepts) and user-editable prompt templates (state/提示词/课程大纲.md, 课程节生成.md) drive the calls. Missing notes are scaffolded first (on-demand lesson semantics). style selects a per-section prompt variant (课程节生成-<style>, e.g. 苏格拉底/费曼) applied to every section call; the outline and gates stay on the default path.',
@@ -919,22 +930,27 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       count: { type: 'number', description: 'Question count cap (default 6)' },
     },
     (args: { course: string; node: string; count?: number }) => run('learnhub_question_generate', async () => {
-      const n = Number.isInteger(args.count) && (args.count as number) > 0 ? args.count as number : 6
+      const n = questionCount(args.count)
       return JSON.stringify(await generateQuiz(ctx, args.course, args.node, n))
     }))
   tool('learnhub_question_update',
-    'Update one bank question: patch merges into the stored question (q/options/answer/explanation/difficulty/section/uses) and the bank re-validates before writing; patch {archived:true|false} hides/restores it instead. learnhub_question_list omits answers — take corrections from the user or the note content, not from thin air.',
+    'Update one bank question: patch merges into the stored question with a strict authoring whitelist (q/options/answer/explanation/difficulty/section/uses/tags/tol) and the whole bank re-validates before writing. Empty patches, unknown fields, and id/kind/node/fsrs/stats/archived keys are rejected. Archiving is a separate operation: send the patch {archived:true|false} as the only key to route to the archive endpoint; mixing archive with content edits fails instead of partially applying. learnhub_question_list omits answers — take corrections from the user or the note content, not from thin air.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name' },
       qid: { type: 'string', required: true, description: 'Question id inside the bank, e.g. "q1"' },
-      patch: { type: 'object', additionalProperties: true, required: true, description: 'Fields to merge, e.g. {"answer":"A","explanation":"…"} or {"archived":true}' },
+      patch: { type: 'object', additionalProperties: true, required: true, description: 'Authoring fields to merge ({"answer":"A",...}), or {"archived":true} alone for archive' },
     },
     (args: { course: string; node: string; qid: string; patch: Record<string, unknown> }) => run('learnhub_question_update', async () => {
-      if (typeof args.patch.archived === 'boolean') {
+      if ('archived' in args.patch) {
+        const archived = args.patch.archived
+        if (typeof archived !== 'boolean') {
+          throw new Error('[question-update] archived 必须是布尔值（archive/restore 独立操作）')
+        }
+        if (Object.keys(args.patch).length !== 1) {
+          throw new Error('[question-update] 归档与内容修订是两条独立操作，混合 patch 会被整体拒绝（先归档，或先改内容再单独归档）')
+        }
         await engine.questionArchive(args.course, args.node, args.qid, args.patch.archived)
-        const { archived: _a, ...rest } = args.patch
-        if (Object.keys(rest).length) await engine.questionUpdate(args.course, args.node, args.qid, rest)
         return JSON.stringify({ course: args.course, node: args.node, qid: args.qid, archived: args.patch.archived })
       }
       return JSON.stringify(await engine.questionUpdate(args.course, args.node, args.qid, args.patch))
@@ -1033,7 +1049,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 25 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 26 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

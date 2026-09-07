@@ -133,7 +133,7 @@ export interface GenJobItem {
   course: string
   node: string
   startedAt: string
-  status: 'running' | 'cancelling' | 'done' | 'failed' | 'cancelled'
+  status: 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
   /** 组合管线阶段：outline（大纲）→ sections（逐节正文）→ quiz（自动出题）。 */
   phase?: 'outline' | 'sections' | 'quiz'
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
