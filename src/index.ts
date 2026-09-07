@@ -25,6 +25,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
+import {
+  contentFailureStatus,
+  generationJobRetentionMs,
+  quizFailureOutcome,
+  quizSuccessOutcome,
+  type GenJobStatus,
+} from './generation-jobs.ts'
 
 export const name = 'dsh-learnhub'
 export const inject = ['tools', 'webServer', 'llm']
@@ -53,7 +60,7 @@ interface GenJob {
   course: string
   node: string
   startedAt: string
-  status: 'running' | 'cancelling' | 'done' | 'failed' | 'cancelled'
+  status: GenJobStatus
   /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）。 */
   phase?: 'outline' | 'sections' | 'quiz'
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
@@ -230,7 +237,7 @@ async function applySectionWithRepair(
  * → 逐节正文（每节一次模型调用；已 ready 节跳过 = 断点续跑）
  * → 逐节出题 + 综合出题。style 只替换节生成模板（课程节生成-<style>），
  * 大纲、断点续跑与门禁与默认管线同一路径；未知 style 在 loadPrompt fail loud。
- * 出题失败不回滚正文：任务标记 done 并在 message 里说明，练习页可单独重试出题。 */
+ * 出题失败不回滚正文：任务标记 partial 并在 message 里说明，练习页可单独重试出题。 */
 async function generateContent(ctx: Context, course: string, node: string, style?: string): Promise<string> {
   const key = `${course}/${node}`
   const existing = genJobs.get(key)
@@ -270,13 +277,13 @@ async function generateContent(ctx: Context, course: string, node: string, style
     }
     return await finishWithQuiz(ctx, job, `「${node}」正文完成（${job.progress!.total} 节）`)
   } catch (err) {
-    job.status = job.status === 'cancelling' ? 'cancelled' : 'failed'
+    job.status = contentFailureStatus(job.status)
     job.message = err instanceof Error ? err.message : String(err)
     persistGenJobs()
     throw err
   } finally {
-    // 终态保留：失败/取消留 24h 供排查与重试，成功留 30 分钟；之后清出注册表
-    const keep = job.status === 'failed' || job.status === 'cancelled' ? 24 * 60 * 60_000 : 30 * 60_000
+    // 终态保留：失败/取消/部分完成留 24h 供排查与重试，成功留 30 分钟；之后清出注册表
+    const keep = generationJobRetentionMs(job.status)
     setTimeout(() => {
       const cur = genJobs.get(key)
       if (cur && cur.status !== 'running' && cur.status !== 'cancelling') genJobs.delete(key)
@@ -293,11 +300,13 @@ async function finishWithQuiz(ctx: Context, job: GenJob, contentMsg: string): Pr
   try {
     const per = await engine.questionGenerateSections(job.course, job.node, async prompt => stripFences(await llmComplete(ctx, prompt)))
     const quiz = await generateQuiz(ctx, job.course, job.node, 3, { generic: true })
-    job.status = 'done'
-    job.message = `${contentMsg}；出题 ${per.added + quiz.added} 道（节绑 ${per.added} + 综合 ${quiz.added}，题库共 ${quiz.total}）`
+    const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
+    job.status = outcome.status
+    job.message = outcome.message
   } catch (quizErr) {
-    job.status = 'done'
-    job.message = `${contentMsg}；自动出题失败（${quizErr instanceof Error ? quizErr.message : String(quizErr)}）——可在练习页单独重试`
+    const outcome = quizFailureOutcome(contentMsg, quizErr)
+    job.status = outcome.status
+    job.message = outcome.message
   }
   persistGenJobs()
   return job.message
