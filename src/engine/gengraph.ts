@@ -149,6 +149,9 @@ export function validateEditProposal(doc: unknown): { errors?: string[]; spec?: 
         errors.push(`${where}.op: 非法操作 ${String(op)}`)
         return
       }
+      // 历史口径：gen 提案节点键是 name（对齐图 YAML），edit 的 add_node 用 node——刻意不统一
+      // （统一是 breaking 改动，影响技能文档/校验/存量提案），由速查表 + 报错键名对照兜底。
+      // 统一计划与影响面：https://github.com/maozhijie/learnhub-plugin/issues/1
       if (!(o.node && String(o.node).trim())) {
         const hint = op === 'add_node' && typeof o.name === 'string' && o.name.trim()
           ? `（add_node 的节点字段名是 node，不是 name——你写了 name: ${o.name.trim()}）`
