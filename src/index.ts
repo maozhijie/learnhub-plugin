@@ -818,12 +818,16 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       targetMin: { type: 'number', description: 'Scale-floor target node count min (declared in scope analysis); provide together with targetMax, omit both when not declared' },
       targetMax: { type: 'number', description: 'Scale-floor target node count max (advisory upper bound, never blocking); provide together with targetMin' },
     },
-    (args: { course?: string; elementsOnly?: boolean; targetMin?: number; targetMax?: number }) => run('learnhub_graph_analyze', async () =>
-      JSON.stringify(await engine.graphAnalyze(
+    (args: { course?: string; elementsOnly?: boolean; targetMin?: number; targetMax?: number }) => run('learnhub_graph_analyze', async () => {
+      if ((args.targetMin !== undefined) !== (args.targetMax !== undefined)) {
+        throw new Error('[graph-analyze] targetMin 与 targetMax 必须成对提供（只给一个会被忽略）')
+      }
+      return JSON.stringify(await engine.graphAnalyze(
         args.course,
         args.elementsOnly,
         args.targetMin !== undefined && args.targetMax !== undefined ? { min: args.targetMin, max: args.targetMax } : null,
-      ))))
+      ))
+    }))
   tool('learnhub_graph_node',
     'Inspect one graph node in depth: schema field values (pre/est/type/bloom/difficulty/note), direct successors, enc component-skill edges with weights and notes, block placement, learning stage/content status, and the full transitive prerequisite closure (sorted deepest-first). Use to drill into a single node without pulling the whole graph.',
     {
@@ -851,7 +855,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; from: string; to: string }) => run('learnhub_graph_path', async () =>
       JSON.stringify(await engine.graphPath(args.course, args.from, args.to))))
   tool('learnhub_graph_propose',
-    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen (skeleton, once) top-level keys: course; mode (only "new" or "append"); regions[] where each region entry is {region: 区名, color?, blocks: [{name: 块名, nodes: [...]}]} — the region-entry key is `region`, NOT name; each gen node is {name: 节点名, pre: [前置], opt?, note?, enc?, est?, bloom?, difficulty?} — gen nodes use key `name`. kind=edit (per batch) top-level keys: course; reason?; ops[] — every op targets its node via key `node` (NOT name, opposite of gen nodes): add_node{node, region, block, pre, est?, bloom?, difficulty?, type?: practice, note?, enc?}; set_pre{node, pre} replaces the whole pre set; set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges). In graph-generation batches apply immediately after gates pass (anchor-review model, ADR-0003); revision changes stay pending for human review.',
+    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen (skeleton, once) top-level keys: course; mode (REQUIRED; only "new" or "append" — new course vs append-to-existing); regions[] where each region entry is {region: 区名, color?, blocks: [{name: 块名, nodes: [...]}]} — the region-entry key is `region`, NOT name; each gen node is {name: 节点名, pre: [前置], opt?, note?, enc?, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5)} — gen nodes use key `name`. kind=edit (per batch) top-level keys: course; reason?; ops[] — every op targets its node via key `node` (NOT name, opposite of gen nodes): add_node{node, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?}; set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges). In graph-generation batches apply immediately after gates pass (anchor-review model, ADR-0003); revision changes stay pending for human review.',
     {
       kind: { type: 'string', required: true, description: '"gen" (new/append course graph) or "edit" (change ops)' },
       yaml: { type: 'string', required: true, description: 'Full proposal YAML text (GenProposal or EditProposal schema)' },

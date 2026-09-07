@@ -71,7 +71,8 @@ export function validateGenProposal(doc: unknown): { errors?: string[]; spec?: G
   try {
     nonempty(d.course, 'course')
   } catch (e) { errors.push((e as Error).message) }
-  if (d.mode !== undefined && d.mode !== 'new' && d.mode !== 'append') errors.push('mode: 只允许 new/append（新增课程写 new；向已有课程追加写 append）')
+  if (d.mode === undefined) errors.push('mode: 缺失（必填，只允许 new/append：新增课程写 new，向已有课程追加写 append）')
+  else if (d.mode !== 'new' && d.mode !== 'append') errors.push('mode: 只允许 new/append（新增课程写 new；向已有课程追加写 append）')
   const regions: GenProposalSpec['regions'] = []
   if (!Array.isArray(d.regions) || !d.regions.length) {
     errors.push('regions: 不能为空')
@@ -146,7 +147,7 @@ export function validateEditProposal(doc: unknown): { errors?: string[]; spec?: 
       }
       const op = o.op
       if (typeof op !== 'string' || !(EDIT_OPS as readonly string[]).includes(op)) {
-        errors.push(`${where}.op: 非法操作 ${String(op)}`)
+        errors.push(`${where}.op: 非法操作 ${String(op)}（允许 ${EDIT_OPS.join('/')}）`)
         return
       }
       // 历史口径：gen 提案节点键是 name（对齐图 YAML），edit 的 add_node 用 node——刻意不统一
@@ -158,8 +159,11 @@ export function validateEditProposal(doc: unknown): { errors?: string[]; spec?: 
           : ''
         errors.push(`${where}: op=${op} 需要 node${hint}`)
       }
-      if (op === 'rename' && !(o.new && String(o.new).trim())) errors.push(`${where}: rename 需要 new`)
-      if ((op === 'add_node' || op === 'move') && !(o.region && o.block)) errors.push(`${where}: op=${op} 需要 region 与 block`)
+      if (op === 'rename' && !(o.new && String(o.new).trim())) errors.push(`${where}: rename 需要 new（rename 成对字段：node=旧名，new=新名）`)
+      if ((op === 'add_node' || op === 'move') && !(o.region && o.block)) errors.push(`${where}: op=${op} 需要 region 与 block（分区定位：区名 + 块名）`)
+      // 整体替换语义防呆：缺 pre/enc 数组会被当成空集静默清掉已有边，这里直接拒绝（显式清空写 pre: [] / enc: []）
+      if (op === 'set_pre' && !Array.isArray(o.pre)) errors.push(`${where}: set_pre 需要 pre 列表（整体替换语义，缺省会被当成清空全部前置；显式清空写 pre: []）`)
+      if (op === 'set_enc' && !Array.isArray(o.enc)) errors.push(`${where}: set_enc 需要 enc 列表（整体替换语义，缺省会被当成清空全部成分技能边；显式清空写 enc: []）`)
       // 认知维度可选字段（schema 从严：给了就必合法）
       if (o.bloom !== undefined && o.bloom !== '' && !(BLOOM_LEVELS as readonly string[]).includes(String(o.bloom))) {
         errors.push(`${where}.bloom: 非法认知层级 ${String(o.bloom)}（允许 ${BLOOM_LEVELS.join('/')}）`)
@@ -462,8 +466,14 @@ export class GraphProposals {
   /** 提案清单（status/kind 过滤可选）。 */
   async list(status?: string, kind?: string, limit = 100): Promise<Record<string, unknown>[]> {
     let list = await this.store.loadProposals()
-    if (status) list = list.filter(p => p.status === status)
-    if (kind) list = list.filter(p => p.kind === kind)
+    if (status) {
+      if (!['pending', 'applied', 'rejected'].includes(status)) throw new Error(`[proposals] 非法 status: ${status}（允许 pending/applied/rejected）`)
+      list = list.filter(p => p.status === status)
+    }
+    if (kind) {
+      if (kind !== 'gen' && kind !== 'edit') throw new Error(`[proposals] 非法 kind: ${kind}（允许 gen/edit）`)
+      list = list.filter(p => p.kind === kind)
+    }
     return list.slice(-limit).reverse() as unknown as Record<string, unknown>[]
   }
 }

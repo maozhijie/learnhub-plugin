@@ -338,10 +338,12 @@ export class LearnhubEngine {
   // ---- 提案门禁包装（apply 前 audit 拦截） ----
 
   async graphPropose(kind: 'gen' | 'edit', yamlText: string): Promise<Record<string, unknown>> {
+    if (kind !== 'gen' && kind !== 'edit') throw new Error(`[propose] 非法 kind: ${String(kind)}（只允许 gen/edit——拼错会被静默当成 gen 处理，已加防呆）`)
     return kind === 'edit' ? this.proposals.proposeEdit(yamlText) : this.proposals.proposeGen(yamlText)
   }
 
   async graphApply(kind: 'gen' | 'edit', pid?: number): Promise<Record<string, unknown>> {
+    if (kind !== 'gen' && kind !== 'edit') throw new Error(`[apply] 非法 kind: ${String(kind)}（只允许 gen/edit）`)
     // audit 门禁：目标课程存在 ERROR 时拒绝 apply；warns 摘要 + 健康分随 findings 返回
     const pending = await this.store.takePending(kind, pid)
     const course = await this.registry.get(pending.course)
