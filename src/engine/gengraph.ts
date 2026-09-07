@@ -71,7 +71,7 @@ export function validateGenProposal(doc: unknown): { errors?: string[]; spec?: G
   try {
     nonempty(d.course, 'course')
   } catch (e) { errors.push((e as Error).message) }
-  if (d.mode !== undefined && d.mode !== 'new' && d.mode !== 'append') errors.push('mode: 只允许 new/append')
+  if (d.mode !== undefined && d.mode !== 'new' && d.mode !== 'append') errors.push('mode: 只允许 new/append（新增课程写 new；向已有课程追加写 append）')
   const regions: GenProposalSpec['regions'] = []
   if (!Array.isArray(d.regions) || !d.regions.length) {
     errors.push('regions: 不能为空')
@@ -83,9 +83,12 @@ export function validateGenProposal(doc: unknown): { errors?: string[]; spec?: G
         errors.push(`${where}: 必须是映射`)
         return
       }
-      try {
-        nonempty(r.region, `${where}.region`)
-      } catch (e) { errors.push((e as Error).message); return }
+      if (typeof r.region !== 'string' || !r.region.trim()) {
+        const hint = typeof r.name === 'string' && r.name.trim()
+          ? `（区条目的键是 region，不是 name——你写了 name: ${r.name.trim()}）`
+          : ''
+        errors.push(`${where}.region 不能为空${hint}`)
+      }
       const blocks: GenProposalSpec['regions'][number]['blocks'] = []
       if (!Array.isArray(r.blocks) || !r.blocks.length) {
         errors.push(`${where}.blocks: 块[${String(r.region)}] 没有节点`)
@@ -115,7 +118,7 @@ export function validateGenProposal(doc: unknown): { errors?: string[]; spec?: G
           blocks.push({ name: b.name.trim(), nodes: nodes as Array<Record<string, unknown>> })
         })
       }
-      regions.push({ region: (r.region as string).trim(), color: typeof r.color === 'string' ? r.color : '', blocks })
+      regions.push({ region: typeof r.region === 'string' ? r.region.trim() : '', color: typeof r.color === 'string' ? r.color : '', blocks })
     })
   }
   if (errors.length) return { errors }
@@ -146,7 +149,12 @@ export function validateEditProposal(doc: unknown): { errors?: string[]; spec?: 
         errors.push(`${where}.op: 非法操作 ${String(op)}`)
         return
       }
-      if (!(o.node && String(o.node).trim())) errors.push(`${where}: op=${op} 需要 node`)
+      if (!(o.node && String(o.node).trim())) {
+        const hint = op === 'add_node' && typeof o.name === 'string' && o.name.trim()
+          ? `（add_node 的节点字段名是 node，不是 name——你写了 name: ${o.name.trim()}）`
+          : ''
+        errors.push(`${where}: op=${op} 需要 node${hint}`)
+      }
       if (op === 'rename' && !(o.new && String(o.new).trim())) errors.push(`${where}: rename 需要 new`)
       if ((op === 'add_node' || op === 'move') && !(o.region && o.block)) errors.push(`${where}: op=${op} 需要 region 与 block`)
       // 认知维度可选字段（schema 从严：给了就必合法）

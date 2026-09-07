@@ -13,6 +13,50 @@ description: 为 learnhub 生成新课程知识图谱：范围分析 → 骨架�
 批次规模分档：常规每批 ≤35 个操作；图超过约 150 节点且连续多批零 ERROR 后可放宽到 ≤50
 ——数百节点的课程宁可每批稍大，也不要让批数与委派轮次失控。
 
+## 提案 schema 速查（写 YAML 前先读这节，不要翻源码）
+
+```yaml
+# kind: "gen"（骨架，一次）
+course: 课程名
+mode: new            # 只允许 new / append
+regions:
+  - region: 区名      # 区条目的键是 region，不是 name
+    blocks:
+      - name: 块名
+        nodes:
+          - name: 节点名    # gen 路径节点键是 name
+            pre: [前置]
+            est: 15
+            bloom: 理解
+            difficulty: 2
+```
+
+```yaml
+# kind: "edit"（每批）
+course: 课程名
+reason: 一句话
+ops:
+  - op: add_node
+    node: 节点名       # ⚠️ edit 路径节点键是 node，不是 name（与 gen 相反）
+    region: 区名
+    block: 块名
+    pre: [已有节点或本批更早创建的节点]
+    est: 15
+    bloom: 理解
+    difficulty: 2
+  - op: set_pre       # 整体替换前置全集
+    node: 节点名
+    pre: [完整清单]
+  - op: set_enc
+    node: 节点名
+    enc: [技能名, {node: 技能名, w: 0.5}]
+# 其余 op：del_node{node} / rename{node,new} / move{node,region,block} / set_note{node,note}
+```
+
+高频坑三连：① `mode` 只允许 new/append；② 区条目键是 `region`（写成 name 会被拒并提示）；
+③ `add_node` 用 `node` 字段（写成 name 会被拒并提示）。批内 `pre` 只能引用图中已有节点
+或本批更早创建的节点。
+
 ## 第 0 阶段：范围分析（先想清楚，一轮纯思考，可向用户确认）
 
 动手前先从用户输入里提炼三件事，写进你的构建计划：
