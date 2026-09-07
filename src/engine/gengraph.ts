@@ -9,7 +9,7 @@ import { readFile, writeFile, rename, mkdir, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './store.ts'
-import { Graph, GraphStore, structureCheck, loadRegionDoc, snapshotDoc } from './graph.ts'
+import { Graph, GraphStore, structureCheck, loadRegionDoc, parseNode, snapshotDoc } from './graph.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge } from './types.ts'
 import { BLOOM_LEVELS } from './types.ts'
@@ -23,7 +23,7 @@ export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
 export interface GenProposalSpec {
   course: string
   mode: 'new' | 'append'
-  regions: Array<{ region: string; color?: string; blocks: Array<{ name: string; nodes: Array<Record<string, unknown>> }> }>
+  regions: Array<{ region: string; color?: string; blocks: Array<{ name: string; nodes: GNode[] }> }>
 }
 
 export interface EditOp {
@@ -100,23 +100,25 @@ export function validateGenProposal(doc: unknown): { errors?: string[]; spec?: G
             errors.push(`${where}.blocks.${bi}: 块 name 不能为空`)
             return
           }
-          const nodes = Array.isArray(b.nodes) ? b.nodes : []
-          if (!nodes.length) {
+          if (!Array.isArray(b.nodes)) {
+            errors.push(`${where}.blocks.${bi}: 块[${b.name}] nodes 必须是列表`)
+            return
+          }
+          const rawNodes = b.nodes
+          const nodes: GNode[] = []
+          if (!rawNodes.length) {
             errors.push(`${where}.blocks.${bi}: 块[${b.name}] 没有节点`)
             return
           }
-          // 认知维度可选字段（schema 从严；gen 路径节点是 raw 记录，在此逐节点校验）
-          nodes.forEach((rawNode: unknown, ni: number) => {
-            const nd = (rawNode ?? {}) as Record<string, unknown>
-            const nwhere = `${where}.blocks.${bi}.nodes.${String(nd.name ?? ni)}`
-            if (nd.bloom !== undefined && !(BLOOM_LEVELS as readonly string[]).includes(String(nd.bloom))) {
-              errors.push(`${nwhere}.bloom: 非法认知层级 ${String(nd.bloom)}（允许 ${BLOOM_LEVELS.join('/')}）`)
-            }
-            if (nd.difficulty !== undefined && ![1, 2, 3, 4, 5].includes(Number(nd.difficulty))) {
-              errors.push(`${nwhere}.difficulty: 非法难度 ${String(nd.difficulty)}（允许 1-5）`)
+          // 受理前复用持久图节点解析，避免 gen 专用宽松解析把坏数据留到 apply 时才暴露。
+          rawNodes.forEach((rawNode: unknown, ni: number) => {
+            try {
+              nodes.push(parseNode(rawNode, '生成提案', `${where}.blocks.${bi}.nodes.${ni}`))
+            } catch (e) {
+              errors.push((e as Error).message)
             }
           })
-          blocks.push({ name: b.name.trim(), nodes: nodes as Array<Record<string, unknown>> })
+          blocks.push({ name: b.name.trim(), nodes })
         })
       }
       regions.push({ region: typeof r.region === 'string' ? r.region.trim() : '', color: typeof r.color === 'string' ? r.color : '', blocks })
@@ -485,36 +487,9 @@ export function specToRegions(specRegions: GenProposalSpec['regions']): GRegion[
     color: r.color ?? '',
     blocks: r.blocks.map(b => ({
       name: b.name,
-      nodes: b.nodes.map(n => parseProposalNode(n)),
+      nodes: b.nodes,
     })),
   }))
-}
-
-function parseProposalNode(raw: Record<string, unknown>): GNode {
-  const enc = Array.isArray(raw.enc)
-    ? raw.enc.map((e: unknown) => typeof e === 'string'
-        ? { node: e, w: 1.0 }
-        : { node: String((e as Record<string, unknown>).node), w: Number((e as Record<string, unknown>).w ?? 1) })
-    : []
-  const node: GNode = {
-    name: String(raw.name ?? '').trim(),
-    pre: Array.isArray(raw.pre) ? raw.pre.map(String) : [],
-    opt: Boolean(raw.opt),
-    note: typeof raw.note === 'string' ? raw.note : '',
-    enc,
-  }
-  if (raw.est !== undefined) {
-    const est = Number(raw.est)
-    if (Number.isFinite(est) && est > 0) node.est = Math.round(est)
-  }
-  if (raw.type === 'practice') node.type = 'practice'
-  if (typeof raw.bloom === 'string' && (BLOOM_LEVELS as readonly string[]).includes(raw.bloom)) {
-    node.bloom = raw.bloom as BloomLevel
-  }
-  if ([1, 2, 3, 4, 5].includes(Number(raw.difficulty))) {
-    node.difficulty = Number(raw.difficulty) as GNode['difficulty']
-  }
-  return node
 }
 
 /** 在 regions 副本上模拟全部操作 → 错误列表（gen._simulate_ops 同语义）。 */

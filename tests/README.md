@@ -1,6 +1,6 @@
 # 测试
 
-`npm test`（Node >=24 原生 TS + `--experimental-transform-types`，零测试框架依赖；引擎门面测试直接实例化 `LearnhubEngine`）。
+`node --experimental-transform-types --test tests/`（Node >=24 原生 TS + `--experimental-transform-types`，零测试框架依赖；facade 测试需要 transform 模式处理注入类的 constructor parameter properties，引擎门面测试直接实例化 `LearnhubEngine`）。
 
 接缝（2026-09-07 与用户确认）：
 
