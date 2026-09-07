@@ -25,6 +25,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
+import { applyId, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
 import {
   contentFailureStatus,
   generationJobRetentionMs,
@@ -591,7 +592,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       }
       if (route === '/node/skip') {
         sendJson(res, 200, await apiRun('api/node/skip', () =>
-          engine.nodeSkip(need(body, 'course'), need(body, 'node'), body.skipped !== false)))
+          engine.nodeSkip(need(body, 'course'), need(body, 'node'), requireSkipDirection(body.skipped))))
         return
       }
       if (route === '/node/complete') {
@@ -605,12 +606,11 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       }
       if (route === '/proposals/apply') {
         const kind = need(body, 'kind') === 'edit' ? 'edit' : 'gen'
-        sendJson(res, 200, await engine.graphApply(kind, body.id !== undefined ? Number(body.id) : undefined))
+        sendJson(res, 200, await engine.graphApply(kind, applyId(body.id)))
         return
       }
       if (route === '/proposals/reject') {
-        const id = Number(body.id)
-        if (!Number.isInteger(id)) throw new Error('missing required field: id')
+        const id = rejectId(body.id)
         await engine.graphReject(id, typeof body.note === 'string' ? body.note.trim() : '')
         sendJson(res, 200, { message: `[reject] 提案 #${id} 已拒绝留痕。` })
         return
@@ -655,9 +655,8 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/question-generate') {
-        const count = Number(body.count)
         sendJson(res, 200, await apiRun('api/question-generate', () =>
-          generateQuiz(ctx, need(body, 'course'), need(body, 'node'), Number.isInteger(count) && count > 0 ? count : 6)))
+          generateQuiz(ctx, need(body, 'course'), need(body, 'node'), questionCount(body.count))))
         return
       }
       if (route === '/review') {
@@ -783,10 +782,10 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name' },
-      skipped: { type: 'boolean', description: 'true to skip (default), false to un-skip' },
+      skipped: { type: 'boolean', required: true, description: 'Explicit direction: true to skip, false to un-skip (omission is an argument error)' },
     },
     (args: { course: string; node: string; skipped?: boolean }) => run('learnhub_skip', async () =>
-      JSON.stringify(await engine.nodeSkip(args.course, args.node, args.skipped !== false))))
+      JSON.stringify(await engine.nodeSkip(args.course, args.node, requireSkipDirection(args.skipped)))))
   tool('learnhub_complete',
     'Confirm a node has been learned this round. Accuracy below the passing line (0.6, with enough attempts) is rejected with accepted=false — review prerequisites or retry with force. On acceptance: unanswered bank questions get their FSRS card initialized (due tomorrow), the node stage moves to review, and a perfect-score completion earns bonus XP.',
     {
@@ -849,7 +848,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; node: string }) => run('learnhub_graph_node', async () =>
       JSON.stringify(await engine.graphNode(args.course, args.node))))
   tool('learnhub_graph_browse',
-    'Browse a course graph by region and/or block: node listings with depth/stage/est/difficulty/type/content status. Omit both filters to list every region (structure overview); give region (and optionally block) to explore one area. Unknown region names fail loud with the valid list.',
+    'Browse a course graph by region and/or block: node listings with depth/stage/est/difficulty/type/content status. Omit both filters to list every region (structure overview); give region (and optionally block) to explore one area. A block without a region succeeds only when exactly one block with that name exists; zero matches or ambiguity across regions fails with the matching region list so you can add the region filter. Unknown regions/blocks fail loud with valid names.',
     {
       course: { type: 'string', description: 'Course name; omit when only one course is enabled' },
       region: { type: 'string', description: 'Region name filter' },
@@ -886,18 +885,18 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
     {
       kind: { type: 'string', required: true, description: '"gen" or "edit"' },
-      id: { type: 'number', description: 'Proposal id; omit for the latest pending of this kind' },
+      id: { type: 'number', description: 'Proposal id as a positive integer; omit only for the latest pending of this kind' },
       reject: { type: 'boolean', description: 'true to reject instead of apply' },
       note: { type: 'string', description: 'Rejection reason (recorded)' },
     },
     async (args: { kind: string; id?: number; reject?: boolean; note?: string }) =>
       run('learnhub_graph_apply', async () => {
         if (args.reject) {
-          if (!args.id) throw new Error('reject requires the proposal id')
-          await engine.graphReject(args.id, args.note ?? '')
-          return `[reject] 提案 #${args.id} 已拒绝留痕。`
+          const id = rejectId(args.id)
+          await engine.graphReject(id, args.note ?? '')
+          return `[reject] 提案 #${id} 已拒绝留痕。`
         }
-        return JSON.stringify(await engine.graphApply(args.kind === 'edit' ? 'edit' : 'gen', args.id))
+        return JSON.stringify(await engine.graphApply(args.kind === 'edit' ? 'edit' : 'gen', applyId(args.id)))
       }))
   tool('learnhub_generate',
     'Generate one course note via the model: outline first (the model decides section split, order, and types from the content, topic, and style — no fixed structure), then one model call per section through the quality gates as a draft (ready sections are skipped, so retrying resumes the pipeline), then per-section + synthesis quiz questions. The context pack (prereqs, domain boundary, forbidden concepts) and user-editable prompt templates (state/提示词/课程大纲.md, 课程节生成.md) drive the calls. Missing notes are scaffolded first (on-demand lesson semantics). style selects a per-section prompt variant (课程节生成-<style>, e.g. 苏格拉底/费曼) applied to every section call; the outline and gates stay on the default path.',
@@ -928,7 +927,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       count: { type: 'number', description: 'Question count cap (default 6)' },
     },
     (args: { course: string; node: string; count?: number }) => run('learnhub_question_generate', async () => {
-      const n = Number.isInteger(args.count) && (args.count as number) > 0 ? args.count as number : 6
+      const n = questionCount(args.count)
       return JSON.stringify(await generateQuiz(ctx, args.course, args.node, n))
     }))
   tool('learnhub_question_update',

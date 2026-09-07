@@ -313,11 +313,31 @@ export class LearnhubEngine {
   async graphBrowse(courseKey: string | undefined, region?: string, block?: string): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
-    if (region && !graph.regions.some(r => r.name === region)) {
-      throw new Error(`[graph-browse] 区「${region}」不存在（可用：${graph.regions.map(r => r.name).join('、')}）`)
+    const blockNames = [...new Set(graph.regions.flatMap(r => r.blocks.map(b => b.name)))]
+    let regionName = region
+    if (!regionName && block) {
+      const hits = graph.regions.map(r => ({
+        region: r.name,
+        count: r.blocks.filter(b => b.name === block).length,
+      })).filter(h => h.count > 0)
+      if (!hits.length) {
+        throw new Error(`[graph-browse] 只按块浏览时块「${block}」不存在（可用块：${blockNames.join('、') || '（无）'}）`)
+      }
+      if (hits.length > 1 || hits[0]!.count > 1) {
+        const where = hits.map(h => `${h.region}（${h.count} 处）`).join('、')
+        throw new Error(`[graph-browse] 块「${block}」不唯一（${where}）——请加 region 限定后再浏览。`)
+      }
+      regionName = hits[0]!.region
+    }
+    if (regionName && !graph.regions.some(r => r.name === regionName)) {
+      throw new Error(`[graph-browse] 区「${regionName}」不存在（可用：${graph.regions.map(r => r.name).join('、')}）`)
+    }
+    if (regionName && block && !graph.regions.find(r => r.name === regionName)?.blocks.some(b => b.name === block)) {
+      const regionBlocks = [...new Set(graph.regions.find(r => r.name === regionName)!.blocks.map(b => b.name))]
+      throw new Error(`[graph-browse] 区「${regionName}」中没有块「${block}」（可用：${regionBlocks.join('、') || '（空）'}）`)
     }
     const regions = graph.regions
-      .filter(r => !region || r.name === region)
+      .filter(r => !regionName || r.name === regionName)
       .map(r => ({
         name: r.name,
         blocks: r.blocks
@@ -1100,13 +1120,18 @@ export class LearnhubEngine {
 
   /** AI 出题：节点正文 → 出题提示词 + llm → 产出的题库 YAML 逐题过 validateBank 门禁追加落盘。
    * llm 由 host 注入（输出可能带 markdown 围栏，解析侧 parseModel 统一剥离）。骨架节点（无正文）直接报错。
+   * count 缺省 = 既有默认 6；一旦给出必须是正整数，非法值不改写成默认（#12）。
    * opts.sections = 节标注清单（逐节管线）：模型照抄清单节 id 进 section 字段；
    * opts.generic = 只出跨节综合题（section 强制「通用」，逐节管线收尾用）。 */
   async questionGenerate(
-    courseKey: string | undefined, node: string, count: number,
+    courseKey: string | undefined, node: string, count?: number,
     llm: (prompt: string) => Promise<string>,
     opts?: { sections?: Array<{ id: string; title: string }>; generic?: boolean },
   ): Promise<{ course: string; node: string; added: number; skipped: number; total: number }> {
+    if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
+      throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认 6。`)
+    }
+    const requested = count ?? 6
     const c = await this.registry.resolve(courseKey)
     const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -1119,7 +1144,7 @@ export class LearnhubEngine {
     const listing = opts?.sections?.length
       ? `\n\n## 节标注清单\n\nsection 字段必须精确取自下列节 id（跨节综合题写「通用」）：\n${opts.sections.map(s => `- ${s.id} ｜ ${s.title}`).join('\n')}`
       : ''
-    const raw = await llm(`${tpl}${listing}\n\n## 题目数量\n\n${count} 道\n\n---\n\n${body}`)
+    const raw = await llm(`${tpl}${listing}\n\n## 题目数量\n\n${requested} 道\n\n---\n\n${body}`)
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
@@ -1127,7 +1152,7 @@ export class LearnhubEngine {
     // doc.node 只是模型对节点的复述（常自创短名），落盘位置由入参决定，不作硬校验
     let added = 0
     let skipped = 0
-    for (const raw of doc.questions.slice(0, Math.max(1, count))) {
+    for (const raw of doc.questions.slice(0, requested)) {
       const q = { ...(raw as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有题数自动编号，避免与既有 q1 冲突
       if (opts?.generic) q.section = '通用' // 综合题不绑节（轮装配时统一收尾）
