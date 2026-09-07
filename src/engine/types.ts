@@ -48,6 +48,8 @@ export interface Fm {
     status: ContentStatus
     /** 节清单（可选；逐节生成管线的节点才有。旧节点缺省 = 标题切分回退）。 */
     sections?: SectionManifest[]
+    /** 生成时的复杂度档位记录（低/中/高；可选项，供弹性评估——不驱动调度）。 */
+    tier?: '低' | '中' | '高'
   }
   practice: { attempts: number; correct: number }
 }

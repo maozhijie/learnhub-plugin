@@ -9,6 +9,9 @@ import {
   preClosureP75,
   nodeTierOf,
   outlineBudgetForNode,
+  perSectionQuizTarget,
+  genericQuizTarget,
+  profileBlockLines,
   type TierSignals,
   type GraphSignalsSource,
 } from '../src/engine/complexity.ts'
@@ -175,4 +178,37 @@ test('P0: outlineBudgetForNode 按节点档位拦方向性极端', () => {
 test('P0: preClosureSizes 同一 graph 对象缓存、跨调用稳定', () => {
   const g = chainGraph()
   assert.deepEqual(preClosureSizes(g), preClosureSizes(g))
+})
+
+// ---- 出题量分发（P3：validateBank 只管形状，档位只在调度层决定要多少道） ----
+
+test('P3: 内容节题量随档位（低1/中2/高3）；含练习节时 −1', () => {
+  assert.equal(perSectionQuizTarget(1, false), 1)
+  assert.equal(perSectionQuizTarget(2, false), 2)
+  assert.equal(perSectionQuizTarget(3, false), 3)
+  assert.equal(perSectionQuizTarget(1, true), 0)
+  assert.equal(perSectionQuizTarget(2, true), 1)
+  assert.equal(perSectionQuizTarget(3, true), 2)
+})
+
+test('P3: 综合题数随档位（低2/中3/高4）', () => {
+  assert.equal(genericQuizTarget(1), 2)
+  assert.equal(genericQuizTarget(2), 3)
+  assert.equal(genericQuizTarget(3), 4)
+})
+
+test('P3: 出题量随档位只降不增总盘子（低档总量低于中档）', () => {
+  // 低档 3 内容节 ×1 + 2 = 5 < 中档 5 ×2 + 3 = 13
+  assert.ok(perSectionQuizTarget(1, false) * 3 + genericQuizTarget(1) < perSectionQuizTarget(2, false) * 5 + genericQuizTarget(2))
+})
+
+// ---- 复杂度档案文本（上下文包注入锚点） ----
+
+test('档位档案文本含节段数区间、篇幅与出题锚点', () => {
+  const lines = profileBlockLines(3)
+  const joined = lines.join('\n')
+  assert.match(joined, /档位[：:]\s*高/)
+  assert.match(joined, /节段数/)
+  assert.match(joined, /出题目标/)
+  assert.match(joined, /综合题 4 道/)
 })

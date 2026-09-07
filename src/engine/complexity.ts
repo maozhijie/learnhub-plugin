@@ -13,6 +13,12 @@ export type ComplexityTier = 1 | 2 | 3
 /** 档位标签（CONTEXT.md Complexity Tier；prompt/日志/面板展示用）。 */
 export const TIER_LABELS: Record<ComplexityTier, string> = { 1: '低', 2: '中', 3: '高' }
 
+/** 档位标签 → 序号（GenJob/manifest 存中文标签时转回）；未知回退中档。 */
+export const TIER_LABEL_TO_IDX: Record<string, ComplexityTier> = { 低: 1, 中: 2, 高: 3 }
+export function tierIdxOf(label: string | undefined): ComplexityTier {
+  return (label !== undefined && TIER_LABEL_TO_IDX[label] !== undefined) ? TIER_LABEL_TO_IDX[label]! : 2
+}
+
 /** 折叠输入：全部可选，函数对缺省做兜底（bloom 缺失不提档；est 仅 difficulty 缺失时回退）。 */
 export interface TierSignals {
   difficulty?: number
@@ -121,6 +127,34 @@ export function nodeTierOf(g: GraphSignalsSource, node: string): ComplexityTier 
 /** 节点大纲护栏：按节点档位查节段数是否方向性极端。空 = 放行。 */
 export function outlineBudgetForNode(g: GraphSignalsSource, node: string, sectionCount: number): string[] {
   return checkOutlineBudget(nodeTierOf(g, node), sectionCount)
+}
+
+/** 每内容节段目标题量（validateBank 只管形状；有练习节时内容节减 1 题，练习集中在练习节）。 */
+export function perSectionQuizTarget(tier: ComplexityTier, hasPracticeSection: boolean): number {
+  const base = TIER_ANCHORS[tier].perSectionQuestions
+  return Math.max(0, base - (hasPracticeSection ? 1 : 0))
+}
+
+/** 综合题数（随档位，替换原固定 3）。 */
+export function genericQuizTarget(tier: ComplexityTier): number {
+  return TIER_ANCHORS[tier].genericQuizCount
+}
+
+/** 复杂度档案注入文本（上下文包新区块：档位 + 节段数区间 + 篇幅 + 题量锚点）。 */
+export function profileBlockLines(tier: ComplexityTier): string[] {
+  const a = TIER_ANCHORS[tier]
+  const [lo, hi] = a.sections
+  return [
+    `- 复杂度档位：${TIER_LABELS[tier]}（difficulty/bloom/前置规模折叠，est 只作容量上界）`,
+    `- 目标节段数：${lo}-${hi} 节（按内容自然增减，方向性极端会被拦截重跑）`,
+    `- 篇幅预算：单节辅助文字 ≤${a.sectionWordBudget} 字，可视化为主、文字为辅`,
+    `- 出题目标：每内容节段约 ${a.perSectionQuestions} 道（含练习节时减 1），综合题 ${a.genericQuizCount} 道`,
+  ]
+}
+
+/** 节点复杂度档案文本（上下文包注入用：给定图与节点直接得整块）。 */
+export function nodeProfileLines(g: GraphSignalsSource, node: string): string[] {
+  return profileBlockLines(nodeTierOf(g, node))
 }
 
 /** 单档锚点（收敛记录 2026-09-07；初值实现时可按实测校准，测试只锁方向与上下限形状）。 */

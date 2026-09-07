@@ -22,6 +22,8 @@ import { analyzeGraph } from './analysis.ts'
 import type { ScaleTarget } from './quality.ts'
 import { graphHealthScore } from './health.ts'
 import { Content } from './content.ts'
+import { nodeTierOf, perSectionQuizTarget, genericQuizTarget } from './complexity.ts'
+import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals } from './gengraph.ts'
 import type { ApplyAudit } from './gengraph.ts'
 import { QuestionBank } from './question-bank.ts'
@@ -455,6 +457,15 @@ export class LearnhubEngine {
     if (!graph.nset.has(node)) throw new Error(`[version] 节点「${node}」不在图内。`)
     this.assertNoteOk(c, graph, broken, node, 'version')
     return state[node]?.content.version ?? 0
+  }
+
+  /** 节点复杂度档位（difficulty/bloom/pre 闭包折叠；生成管线与面板共用，见 complexity.ts）。 */
+  async contentTierOf(courseKey: string | undefined, node: string): Promise<ComplexityTier> {
+    const c = await this.registry.resolve(courseKey)
+    const { graph, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[tier] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'tier')
+    return nodeTierOf(graph, node)
   }
 
   /** 对现有课程笔记跑质检门（agent 手改正文后的校验入口；只读，不落盘不改状态）。 */
@@ -1142,10 +1153,16 @@ export class LearnhubEngine {
     const body = note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
     if (!body) throw new Error(`[quiz] 「${node}」还没有正文——先「生成正文」再出题。`)
     const tpl = await this.loadPrompt('题目生成')
+    const tier = nodeTierOf(graph, node)
     const listing = opts?.sections?.length
       ? `\n\n## 节标注清单\n\nsection 字段必须精确取自下列节 id（跨节综合题写「通用」）：\n${opts.sections.map(s => `- ${s.id} ｜ ${s.title}`).join('\n')}`
       : ''
-    const raw = await llm(`${tpl}${listing}\n\n## 题目数量\n\n${requested} 道\n\n---\n\n${body}`)
+    const difficultyAnchor = tier === 1
+      ? '本节点为低复杂度：题目难度集中在 1-2，不出 difficulty: 3 的收尾难题。'
+      : tier === 3
+        ? '本节点为高复杂度：收尾可出 1-2 道 difficulty: 3 的综合/易错题。'
+        : '本节点为中复杂度：难度递进到 2，收尾至多 1 道 difficulty: 3。'
+    const raw = await llm(`${tpl}${listing}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n${body}`)
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
@@ -1190,17 +1207,25 @@ export class LearnhubEngine {
       if (title) mdByTitle.set(title, (nl >= 0 ? part.slice(nl + 1) : '').trim())
     }
     const tpl = await this.loadPrompt('题目生成')
-    // 出题量自适应：大纲含练习节时内容节只出 1 道轻量题（集中练习模式：读读读→集中练），
-    // 无练习节时每节 2 道（每节自带练习）；综合轮 3 道不变（generateQuiz 调用方决定）
-    const perSection = manifest.some(s => s.type === '练习') ? 1 : 2
+    const tier = nodeTierOf(graph, node)
+    // 出题量弹性（P3，复杂度档案锚点）：每档给内容节目标题量；大纲含练习节时内容节 −1
+    // （集中练习模式：读读读→集中练，综合题数随档位而非恒定 3）。
+    const hasPracticeSection = manifest.some(s => s.type === '练习')
+    const perSection = perSectionQuizTarget(tier, hasPracticeSection)
     let added = 0
     let sections = 0
     for (const s of manifest) {
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
       if (!sectionMd) continue
+      if (perSection <= 0) continue // 该档位不要求本内容节单独出题（综合题兼底）
       sections++
-      const raw = await llm(`${tpl}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n---\n\n## ${s.title}\n\n${sectionMd}`)
+      const difficultyAnchor = tier === 1
+        ? '本节属低复杂度节点：题目难度 1 为主（至多 1 道 2），不出 difficulty: 3。'
+        : tier === 3
+          ? '本节属高复杂度节点：允许 1-2 道 difficulty: 3 的易错/综合题。'
+          : '本节属中复杂度节点：难度递进到 2 即可。'
+      const raw = await llm(`${tpl}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n## ${s.title}\n\n${sectionMd}`)
       let doc: { questions?: unknown } | null = null
       try {
         doc = YAML.parseModel(raw) as { questions?: unknown } | null

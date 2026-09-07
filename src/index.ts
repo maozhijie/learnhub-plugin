@@ -26,6 +26,7 @@ import { join, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
 import { Content } from './engine/content.ts'
+import { TIER_LABELS, tierIdxOf, genericQuizTarget } from './engine/complexity.ts'
 import { applyId, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
 import {
   contentFailureStatus,
@@ -70,6 +71,8 @@ interface GenJob {
   message?: string
   /** 节生成提示词风格变体（缺省默认「课程节生成」）。 */
   style?: string
+  /** 节点复杂度档位（低/中/高；生成入口算好写入，面板进度与弹性评估可读）。 */
+  tier?: '低' | '中' | '高'
 }
 const genJobs = new Map<string, GenJob>()
 
@@ -251,6 +254,12 @@ async function generateContent(ctx: Context, course: string, node: string, style
   persistGenJobs()
   try {
     const pack = await engine.contentPack(course, node)
+    // 档位元数据（GenJob 记录；quiz 量分发与后续弹性评估用）
+    try {
+      job.tier = TIER_LABELS[await engine.contentTierOf(course, node)]
+    } catch {
+      // 档位缺失不阻塞生成（difficulty/bloom 全缺时折叠兜底中档，引擎侧不抛）
+    }
     // 节模板提前 load：风格名写错在这里 fail loud，不浪费大纲调用
     const sectionTpl = await engine.loadPrompt(style ? `课程节生成-${style}` : '课程节生成')
 
@@ -258,9 +267,17 @@ async function generateContent(ctx: Context, course: string, node: string, style
     let views = await engine.contentSectionsView(course, node)
     if (!views.some(s => s.status === 'ready')) {
       const outlineTpl = await engine.loadPrompt('课程大纲')
-      const outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: llmCfg.fastEffort }))
+      // 大纲护栏未过（OUTLINE_BUDGET）时重跑一次并回灌节数与预期区间，仍失败才置 failed
+      let outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: llmCfg.fastEffort }))
       if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
-      await engine.contentOutline(course, node, outlineYaml)
+      try {
+        await engine.contentOutline(course, node, outlineYaml)
+      } catch (err) {
+        if (job.status === 'cancelling' || (err instanceof Error && (err as Error & { code?: string }).code !== 'OUTLINE_BUDGET')) throw err
+        outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: llmCfg.fastEffort }))
+        if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
+        await engine.contentOutline(course, node, outlineYaml)
+      }
       views = await engine.contentSectionsView(course, node)
       if (!views.length) throw new Error('[generate] 大纲没有产出任何节。')
     }
@@ -294,17 +311,14 @@ async function generateContent(ctx: Context, course: string, node: string, style
   }
 }
 
-/** 综合测验题数（当前固定；随节点复杂度伸缩是既定方向，见 docs/research/2026-09-node-content-quality.md P3）。 */
-const GENERIC_QUIZ_COUNT = 3
-
-/** 管线收尾：逐节出题（每内容节 2 道，绑节 id）+ 综合题（通用），汇总任务终态。 */
+/** 管线收尾：逐节出题（每内容节按档位目标题量，绑节 id）+ 综合题（通用随档位），汇总任务终态。 */
 async function finishWithQuiz(ctx: Context, job: GenJob, contentMsg: string): Promise<string> {
   job.phase = 'quiz'
   job.message = `${contentMsg}；自动出题中…`
   persistGenJobs()
   try {
     const per = await engine.questionGenerateSections(job.course, job.node, async prompt => stripFences(await llmComplete(ctx, prompt)))
-    const quiz = await generateQuiz(ctx, job.course, job.node, GENERIC_QUIZ_COUNT, { generic: true })
+    const quiz = await generateQuiz(ctx, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status
     job.message = outcome.message
