@@ -25,6 +25,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
+import { Content } from './engine/content.ts'
 import { applyId, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
 import {
   contentFailureStatus,
@@ -222,7 +223,7 @@ async function applySectionWithRepair(
   }
   const repaired = stripFences(await llmComplete(
     ctx,
-    `${sectionPrompt(tpl, pack, s)}\n\n## 上一次输出未过质检门（修正下列全部 ✗ 项后重新输出本节正文）\n\n上次输出：\n\n${first}\n\n质检门清单：\n\n${gateReport}\n`,
+    Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s), first, gateReport),
     undefined, { effort: llmCfg.fastEffort },
   ))
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')

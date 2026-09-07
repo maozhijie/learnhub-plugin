@@ -488,12 +488,13 @@ export class LearnhubEngine {
       await mkdir(target.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
       await writeFile(target, f.html, 'utf8')
     }
-    const gate = await this.content.gateReport(graph, c.root, node, split.body)
+    const fixed = Content.fixRichBlocks(split.body)
+    const gate = await this.content.gateReport(graph, c.root, node, fixed)
     const html = Content.checkInteractiveHtml(split.files)
     if (!gate.passed || html.findings.length) {
       throw new Error(`[apply] 质检门未过：\n${[...gate.findings, ...html.findings].map(e => `  ✗ ${e}`).join('\n')}\n${[...gate.warns, ...html.warns].map(w => `  ⚠ ${w}`).join('\n')}`)
     }
-    const normalized = this.content.normalizePractice(split.body)
+    const normalized = this.content.normalizePractice(fixed)
     const version = await this.content.applyGeneration(
       c.root, graph, node, normalized.body,
       n => state[n],

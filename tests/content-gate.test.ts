@@ -5,11 +5,11 @@ import { validateBank } from '../src/engine/question-bank.ts'
 
 // ---- S5 checkSectionShape:节形状门 ----
 
-test('S5: 节内 ### 子标题是 finding', () => {
+test('S5: 节内 ### 子标题降为 warn（门禁改革：不可程序修复的格式类不硬拦）', () => {
   const r = Content.checkSectionShape('## 概念：向量\n\n正文一句。\n\n### 小标题\n\n更多正文。\n')
-  assert.equal(r.findings.length, 1)
-  assert.match(r.findings[0]!, /### 子标题/)
-  assert.equal(r.warns.length, 0)
+  assert.equal(r.findings.length, 0)
+  assert.equal(r.warns.length, 1)
+  assert.match(r.warns[0]!, /###/)
 })
 
 test('S5: 正文 600-2000 字是 warn,超 2000 是 finding', () => {
@@ -66,6 +66,68 @@ test('S6: svg 必须以 <svg 开头', () => {
   const r = Content.checkVisualBlocks('```svg\nnot svg\n```\n')
   assert.equal(r.length, 1)
   assert.match(r[0]!, /<svg/)
+})
+
+// ---- S6.5 fixRichBlocks:程序性自动修复（落盘前清洗，不再只是门禁容忍） ----
+
+test('S6.5: plot 尾随逗号在落盘前被改写为合法 JSON', () => {
+  const body = '```plot\n{"type":"function", "expr": "x^2",}\n```\n'
+  const fixed = Content.fixRichBlocks(body)
+  assert.notEqual(fixed, body)
+  const m = fixed.match(/```plot\n([\s\S]*?)\n```/)
+  assert.ok(m, '修复后 plot 块仍在')
+  assert.doesNotThrow(() => JSON.parse(m![1]!))
+})
+
+test('S6.5: plot JSON 带行注释脏输入被清洗（注释不属 JSON，面板无法渲染）', () => {
+  const body = '```chart\n// 示意：本周数据\n{"series": [1, 2, 3],}\n```\n'
+  const fixed = Content.fixRichBlocks(body)
+  const m = fixed.match(/```chart\n([\s\S]*?)\n```/)
+  assert.ok(m, '修复后 chart 块仍在')
+  const parsed = JSON.parse(m![1]!) as { series?: number[] }
+  assert.deepEqual(parsed.series, [1, 2, 3])
+})
+
+test('S6.5: 合法 plot JSON 原样保留（不画蛇添足）', () => {
+  const body = '```plot\n{"type":"function", "expr": "x^2"}\n```\n'
+  assert.equal(Content.fixRichBlocks(body), body)
+})
+
+test('S6.5: svg 块前导杂质裁剪至首个 <svg', () => {
+  const body = '```svg\n这是一张示意图：\n<svg viewBox="0 0 1 1"><circle/></svg>\n```\n'
+  const fixed = Content.fixRichBlocks(body)
+  const m = fixed.match(/```svg\n([\s\S]*?)\n```/)
+  assert.ok(m, '修复后 svg 块仍在')
+  assert.match(m![1]!, /^<svg/)
+  assert.doesNotMatch(m![1]!, /示意图/)
+})
+
+test('S6.5: mermaid 节点文本含 | 未引号 → 自动补双引号', () => {
+  const body = '```mermaid\ngraph LR\nB[模 |v| = 3] --> C\n```\n'
+  const fixed = Content.fixRichBlocks(body)
+  assert.match(fixed, /B\["模 \|v\| = 3"\]/)
+  // 修复后不应再有 mermaid 引号 warn
+  assert.deepEqual(Content.checkMermaidQuotes(fixed), [])
+})
+
+// ---- 修复回路：findings 带定位、repair prompt 要求局部重写 ----
+
+test('repair: plot finding 附带违规定位（块号 + 行摘录）', () => {
+  const body = '## 概念：图\n\n一段说明。\n\n```plot\n{"a": 1,}\n```\n'
+  const located = Content.locateFinding(body, '```plot 第 1 块不是合法 JSON 对象（面板会降级为源码显示）')
+  assert.match(located, /第 1 块/)
+  assert.match(located, /\{"a": 1,\}/)
+})
+
+test('repair: 修复 prompt 是「局部重写」指令并带定位，而非整节重写', () => {
+  const first = '## 概念：图\n\n一段说明。\n\n```plot\n{"a": 1,}\n```\n'
+  const gateText = '✗ ```plot 第 1 块不是合法 JSON 对象（面板会降级为源码显示）\n⚠ 节「概念：图」正文偏长'
+  const prompt = Content.sectionRepairPrompt('## 任务模板', first, gateText)
+  assert.match(prompt, /只重写/)
+  assert.match(prompt, /第 1 块/)
+  assert.doesNotMatch(prompt, /重新输出本节正文/)
+  // 门禁行不丢
+  assert.match(prompt, /正文偏长/)
 })
 
 // ---- mermaid 引号 / 渲染语言 ----

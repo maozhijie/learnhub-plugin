@@ -472,7 +472,7 @@ questions:
       if (!title || title.startsWith('<!--')) continue // 机器区不参与节形状
       const md = nl >= 0 ? part.slice(nl + 1) : ''
       if (/^### /m.test(md)) {
-        findings.push(`节「${title}」内出现 ### 子标题（破坏节的原子性：一节只讲一个知识点，需要分层就拆成多个节）`)
+        warns.push(`节「${title}」内出现 ### 子标题（破坏节的原子性——一节只讲一个知识点；请并入正文或拆成多个节）`)
       }
       const prose = md
         .replace(/```[\s\S]*?```/g, '')
@@ -562,6 +562,92 @@ questions:
         return clean(JSON.parse(text.replace(/,(\s*[}\]])/g, '$1')))
       } catch {
         return false
+      }
+    }
+  }
+
+  /** 程序性修复后的富内容块改写结果（落盘前调用；不改语义，只修机器可判的脏输入）。 */
+  static fixRichBlocks(body: string): string {
+    // plot/chart：JSON 尾随逗号/行注释是 fast 档模型高频失误；面板解析失败会降级源码，
+    // 单靠门禁容忍不够——落盘前把可解析的脏 JSON 改写为规范 JSON.stringify 产物。
+    // 合法 JSON 原样保留（不重排，避免与模型产出逐字 diff）。
+    body = body.replace(/^```(plot|chart)[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm, (whole, lang: string, code: string) => {
+      // 严格 JSON.parse 成功 → 合法产出，原样保留（不重排，避免与模型产出逐字 diff）
+      if (Content.strictJsonObject(code)) return whole
+      const parsed = Content.parseLooseJsonObject(code) // 脏输入：尾随逗号/行注释
+      if (!parsed) return whole // 仍不可解析:留给门禁 finding,回灌模型定向修复
+      return `\`\`\`${lang}\n${JSON.stringify(parsed, null, 2)}\n\`\`\``
+    })
+    // svg：前导杂质裁剪至首个 <svg（门禁要求块以 <svg 开头）
+    body = body.replace(/^```svg[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm, (whole, code: string) => {
+      const idx = code.indexOf('<svg')
+      if (idx <= 0) return whole
+      return '```svg\n' + code.slice(idx) + '```'
+    })
+    // mermaid：节点文本含 | 等特殊字符且未整体双引号包裹时自动补引号（渲染降级的高频根因）
+    body = body.replace(/^```mermaid[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm, (whole, code: string) => {
+      const fixed = code.split('\n').map(line =>
+        line.replace(/(\w[\w\u4e00-\u9fff]*)\[([^\]"\n]*\|[^\]"\n]*)\]/g, (m, id: string, label: string) => `${id}["${label.replace(/"/g, '\\"')}"]`),
+      ).join('\n')
+      return fixed === code ? whole : '```mermaid\n' + fixed + '```'
+    })
+    return body
+  }
+
+  /** 严格解析为 JSON 对象才为真（不容忍尾随逗号——fixRichBlocks 用它区分脏输入）。 */
+  private static strictJsonObject(text: string): boolean {
+    try {
+      const v: unknown = JSON.parse(text)
+      return typeof v === 'object' && v !== null && !Array.isArray(v)
+    } catch {
+      return false
+    }
+  }
+
+  /** 视觉块序号 → 该块正文首行摘录（≤60 字；修复回灌时给模型定位用）。 */
+  static visualBlockExcerpt(body: string, n: number): string | null {
+    let i = 0
+    for (const m of body.matchAll(/^```(plot|chart|svg)[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm)) {
+      i++
+      if (i === n) {
+        const firstLine = m[2]!.trim().split('\n').find(ln => ln.trim()) ?? ''
+        return firstLine.slice(0, 60) || null
+      }
+    }
+    return null
+  }
+
+  /** 把一条门禁 finding/warn 文本按违规位置定位：视觉块 findings 附块内首行摘录。 */
+  static locateFinding(body: string, finding: string): string {
+    const m = /第 (\d+) 块/.exec(finding)
+    if (!m) return finding
+    const excerpt = Content.visualBlockExcerpt(body, Number(m[1]))
+    return excerpt ? `${finding}\n       （违规定位：该块内容以 "${excerpt}" 开头）` : finding
+  }
+
+  /** 修复轮 prompt：把上一次输出 + 质检清单（附定位）回灌，只要求局部重写违规块。 */
+  static sectionRepairPrompt(basePrompt: string, previousOutput: string, gateReport: string): string {
+    const locatedLines = gateReport.split('\n')
+      .map(ln => Content.locateFinding(previousOutput, ln))
+      .join('\n')
+    return `${basePrompt}\n\n## 上一次输出未过质检门（只重写下列 ✗ 项定位到的违规局部，其余内容原样保留；不要整节重新发挥）\n\n上次输出：\n\n${previousOutput}\n\n质检清单：\n\n${locatedLines}\n`
+  }
+
+  /** JSON 尾随逗号 + 行注释容忍解析（`// …` 到行尾，不拆字符串；仍非对象返回 null）。 */
+  private static parseLooseJsonObject(code: string): Record<string, unknown> | null {
+    const isObj = (v: unknown): v is Record<string, unknown> =>
+      typeof v === 'object' && v !== null && !Array.isArray(v)
+    try {
+      const v: unknown = JSON.parse(code)
+      return isObj(v) ? v : null
+    } catch {
+      // 逐行剥 // 注释（不触碰字符串内的 //，如 https://——先剥引号外安全区域再回退整体剥尾随逗号）
+      const stripped = code.split('\n').map(ln => ln.replace(/^(\s*)\/\/.*$/, '$1')).join('\n')
+      try {
+        const v: unknown = JSON.parse(stripped.replace(/,(\s*[}\]])/g, '$1'))
+        return isObj(v) ? v : null
+      } catch {
+        return null
       }
     }
   }
@@ -698,7 +784,7 @@ questions:
       await writeFile(target, f.html, 'utf8')
     }
     // 提示词要求模型输出以 `## 标题` 开头，本方法按清单再包一层同名标题——先剥掉，避免正文标题重复
-    const sectionMd = Content.stripLeadingSectionTitle(split.body, entry.title)
+    const sectionMd = Content.fixRichBlocks(Content.stripLeadingSectionTitle(split.body, entry.title))
     const gate = await this.gateReport(graph, root, node, `## ${entry.title}\n\n${sectionMd}`)
     const html = Content.checkInteractiveHtml(split.files)
     if (gate.findings.length || html.findings.length) {
