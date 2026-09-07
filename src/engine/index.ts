@@ -513,7 +513,7 @@ export class LearnhubEngine {
     )
     await this.content.queueDone(c.root, node)
     const interactiveNote = split.files.length ? `；交互件 ${split.files.length} 个落盘 交互/` : ''
-    const hints = Content.encBackfeedHints(graph, node, split.body)
+    const hints = Content.encBackfeedHints(graph, node, fixed)
     const hintNote = hints.length ? `；图依赖提醒 ${hints.length} 条` : ''
     return { version, message: `[apply] ${node} 正文 v${version} 落盘（status=draft，待人审）${interactiveNote}${hintNote}`, hints }
   }
@@ -1186,8 +1186,9 @@ export class LearnhubEngine {
     return { course: c.name, node, added, skipped, total: bank.questions.length }
   }
 
-  /** 逐节出题（逐节管线第 2 段）：每个内容节一次模型调用（出题量自适应：大纲含练习节 1 道，否则 2 道），
-   * section 服务端强制为该节 id；练习/交互节跳过，正文未生成的节（断点续跑）跳过。 */
+  /** 逐节出题（逐节管线第 2 段）：每个内容节一次模型调用（出题量随档位锚点：
+   * 低/中/高档内容节目标 1/2/3 道，含练习节时 -1），section 服务端强制为该节 id；
+   * 练习/交互节跳过，正文未生成的节（断点续跑）跳过。 */
   async questionGenerateSections(
     courseKey: string | undefined, node: string,
     llm: (prompt: string) => Promise<string>,
