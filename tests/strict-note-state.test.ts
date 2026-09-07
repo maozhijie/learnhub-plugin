@@ -131,3 +131,21 @@ test('#7 malformed fsrs, content, practice and unknown notes are all classified 
     })
   }
 })
+
+test('#7 content.tier 只接受 低/中/高：非法值 Broken，合法值往返保留', async () => {
+  const noteWith = (tier: string) => [
+    '---', 'node: 入门', 'stage: ready', 'fsrs: null', 'mastery: 0',
+    'content:', '  version: 0', '  generated_at: null', '  status: draft', `  tier: ${tier}`,
+    'practice:', '  attempts: 0', '  correct: 0', '---', '', '# 入门',
+  ].join('\n')
+  await withVault(noteWith('超'), async engine => {
+    const view = await engine.loadView({ name: '数学', root: 'math' })
+    assert.equal(view.broken.length, 1)
+    assert.ok(view.broken[0].reason.includes('tier'), view.broken[0].reason)
+  })
+  await withVault(noteWith('高'), async engine => {
+    const view = await engine.loadView({ name: '数学', root: 'math' })
+    assert.equal(view.broken.length, 0)
+    assert.equal(view.state['入门']?.content.tier, '高')
+  })
+})
