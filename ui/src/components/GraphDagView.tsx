@@ -68,6 +68,12 @@ interface DagNodeData extends Record<string, unknown> {
   focused: boolean
   mastery: number
   practice: boolean
+  /** 已生成可读正文（「文」角标；点开有东西读）。 */
+  hasContent: boolean
+  /** 生成队列阶段（「生」角标 + 工具条隐藏；queued「队」）。 */
+  gen?: 'queued' | 'running'
+  /** hover 工具条的入队动作（父级闭包，已含课程与重生成确认）。 */
+  onGenerate?: () => void
 }
 type DagNode = Node<DagNodeData, 'dagNode'>
 
@@ -113,6 +119,27 @@ const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
           background: 'var(--color-teal-6, #14c9c9)', color: '#fff',
         }}>练</span>
       )}
+      {/* 内容三态角标（右上，与「跳」叠放时下移）：生成中 > 排队 > 已生成 */}
+      {(data.gen || data.hasContent) && (
+        <span style={{
+          position: 'absolute', top: data.stage === 'skipped' ? 13 : 0, right: 0, fontSize: 9,
+          lineHeight: '13px', padding: '0 4px', borderBottomLeftRadius: 6,
+          background: data.gen === 'running' ? 'var(--color-arcoblue-6, #165dff)'
+            : data.gen === 'queued' ? 'var(--color-text-3, #86909c)'
+              : 'var(--color-success-6, #00b42a)',
+          color: '#fff',
+        }}>{data.gen === 'running' ? '生' : data.gen === 'queued' ? '队' : '文'}</span>
+      )}
+      {/* hover 便捷生成：未生成「生成」/已生成「重新生成」；排队/生成中不出（角标已表达） */}
+      {data.onGenerate && !data.gen && (
+        <span className='dag-toolbar' style={{ position: 'absolute', right: 3, bottom: 3, gap: 4 }}>
+          <button type='button' onClick={e => { e.stopPropagation(); data.onGenerate?.() }}
+            style={{
+              fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4, border: 'none',
+              cursor: 'pointer', background: 'var(--color-primary-6, #165dff)', color: '#fff',
+            }}>{data.hasContent ? '重新生成' : '生成'}</button>
+        </span>
+      )}
       <span style={{ width: 3, flexShrink: 0, backgroundColor: accent }} />
       <div style={{
         display: 'flex', minWidth: 0, flex: 1, flexDirection: 'column',
@@ -148,7 +175,10 @@ const NODE_TYPES = { dagNode: DagNodeInner }
 
 /** dagre BT 分层：前置沉底、目标升至顶层。节点必须显式携带 width/height，
  * 否则 0×0 不可见、边端点错位、MiniMap 无矩形。 */
-function layoutDag(doc: GraphDoc, lockedIds: Set<string>, recommendedSet: Set<string>, bankSet: Set<string>, focusNode: string | null) {
+function layoutDag(
+  doc: GraphDoc, lockedIds: Set<string>, recommendedSet: Set<string>, bankSet: Set<string>,
+  focusNode: string | null, genStates: Record<string, 'queued' | 'running'>, onGenerate?: (id: string) => void,
+) {
   const g = new Graph()
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: 'BT', nodesep: 16, ranksep: 40, marginx: 24, marginy: 24 })
@@ -170,6 +200,9 @@ function layoutDag(doc: GraphDoc, lockedIds: Set<string>, recommendedSet: Set<st
         hasBank: bankSet.has(n.data.id), focused: n.data.id === focusNode,
         mastery: n.data.mastery ?? 0,
         practice: (n.data as { type?: string }).type === 'practice',
+        hasContent: n.data.hasContent ?? false,
+        gen: genStates[n.data.id],
+        ...(onGenerate ? { onGenerate: () => onGenerate(n.data.id) } : {}),
       },
     }
   })
@@ -199,20 +232,24 @@ interface GraphDagViewProps {
   lockedIds: Set<string>
   /** 有题库的节点（元信息行显示「题」）。 */
   bankSet: Set<string>
+  /** 排队/生成中的节点（「生」/「队」角标；hover 工具条隐藏）。 */
+  genStates?: Record<string, 'queued' | 'running'>
   /** 定位目标：红描边高亮并把画布居中到该节点（「在图中查看」跳转）。 */
   focusNode?: string | null
   onSelect: (nodeId: string) => void
+  /** hover 便捷生成入口（缺省不渲染工具条）。 */
+  onGenerate?: (nodeId: string) => void
 }
 
 /** ≤300 节点全量渲染（视口裁剪会把「一端在视口外」的整条边裁掉，平移时结构断裂）；
  * >300 开启裁剪保 500 节点级流畅。key 绑节点数：图结构变化时重挂载重新 fitView。 */
 const VIEWPORT_CULL_THRESHOLD = 300
 
-const GraphDagViewInner: React.FC<GraphDagViewProps> = ({ doc, recommended, lockedIds, bankSet, focusNode, onSelect }) => {
+const GraphDagViewInner: React.FC<GraphDagViewProps> = ({ doc, recommended, lockedIds, bankSet, genStates, focusNode, onSelect, onGenerate }) => {
   const recommendedSet = useMemo(() => new Set(recommended), [recommended])
   const { flowNodes, flowEdges } = useMemo(
-    () => layoutDag(doc, lockedIds, recommendedSet, bankSet, focusNode ?? null),
-    [doc, lockedIds, recommendedSet, bankSet, focusNode],
+    () => layoutDag(doc, lockedIds, recommendedSet, bankSet, focusNode ?? null, genStates ?? {}, onGenerate),
+    [doc, lockedIds, recommendedSet, bankSet, focusNode, genStates, onGenerate],
   )
   // 定位：React Flow init 完成（含 fitView）之前调用 setCenter 会被初始视口覆盖，
   // 因此挂载路径走 onInit，已就绪路径走 effect，都指到 focusNode 中心。

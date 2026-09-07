@@ -1,8 +1,8 @@
 /** 图页 = 全局总览（低频）：DAG 纵览 + 区过滤/搜索/只看就绪 + 推荐星标。
  * 点节点直接进学习视图（LessonView）；从学习视图「在图中查看」跳入时
  * focusNode 红描边定位。图本身不承载学习操作。 */
-import { Button, Card, Input, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Button, Card, Input, Message, Modal, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import GraphDagView from '../components/GraphDagView'
 import { api } from '../api'
 import type { AppFrame } from '../App'
@@ -41,6 +41,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   const [banks, setBanks] = useState<BankEntry[] | null>(null)
   const [rec, setRec] = useState<RecommendDoc | null>(null)
   const [loading, setLoading] = useState(false)
+  /** 排队/生成中的节点（节点名 → 阶段；角标与 hover 工具条消费）。 */
+  const [genStates, setGenStates] = useState<Record<string, 'queued' | 'running'>>({})
   // 总览过滤
   const [region, setRegion] = useState<string>('')
   const [search, setSearch] = useState('')
@@ -64,6 +66,32 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   }, [course])
 
   useEffect(() => { void load() }, [load])
+
+  // 生成队列轮询：角标随排队/生成点亮；活动任务出现终态边沿 → 重拉图（hasContent 点亮）
+  const activeKeysRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const st = await api.generateStatus()
+        const gen: Record<string, 'queued' | 'running'> = {}
+        const active = new Set<string>()
+        for (const j of st.jobs) {
+          if (j.course !== course) continue
+          if (j.status === 'running' || j.status === 'cancelling') { gen[j.node] = 'running'; active.add(j.key) }
+          else if (j.status === 'queued') gen[j.node] = 'queued'
+        }
+        const edge = [...activeKeysRef.current].some(k => !active.has(k))
+        activeKeysRef.current = active
+        setGenStates(gen)
+        if (edge) void load()
+      } catch {
+        setGenStates({})
+      }
+    }
+    void poll()
+    const timer = setInterval(() => void poll(), 5000)
+    return () => clearInterval(timer)
+  }, [course, load])
 
   // 过滤：裁出子图（端点不在集合内的边一并裁掉）
   const filtered = useMemo(() => {
@@ -117,6 +145,28 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   const onSelect = (nodeId: string) => {
     if (!course) return
     frame.openLesson(course, nodeId)
+  }
+
+  // 图上便捷生成：未生成直接入队；已生成（重新生成）先确认——覆盖现有正文与题库不清，仅重写正文管线
+  const onGenerate = (nodeId: string) => {
+    if (!course) return
+    const has = doc?.nodes.find(n => n.data.id === nodeId)?.data.hasContent
+    const run = () => {
+      void api.generate(course, nodeId)
+        .then(r => { Message.success(r.message); void load() })
+        .catch(err => Message.error(err instanceof Error ? err.message : String(err)))
+    }
+    if (has) {
+      Modal.confirm({
+        title: `重新生成「${nodeId}」？`,
+        content: '将重跑该节点的生成管线（大纲沿用断点续跑），现有正文会被逐节重写；题库保留。',
+        okText: '重新生成',
+        cancelText: '取消',
+        onOk: run,
+      })
+    } else {
+      run()
+    }
   }
 
   if (!course) {
@@ -178,7 +228,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
       <div className='dag-wrap'>
         <GraphDagView
           key={course} doc={filtered} recommended={recommended} lockedIds={lockedIds}
-          bankSet={bankSet} focusNode={frame.focusNode} onSelect={onSelect} />
+          bankSet={bankSet} genStates={genStates} focusNode={frame.focusNode}
+          onSelect={onSelect} onGenerate={onGenerate} />
       </div>
 
       <Legend />

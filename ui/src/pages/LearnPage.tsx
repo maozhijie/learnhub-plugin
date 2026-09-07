@@ -68,22 +68,42 @@ function ReviewBanner({ dueCount, onStart }: { dueCount: number; onStart: () => 
   )
 }
 
-/** 推荐流大卡片：点开直接进 LessonView——主界面的核心动作；内联跳过（已有基础免学）。 */
-function RecCard({ e, onOpen, onSkip }: { e: RecEvent; onOpen: () => void; onSkip: () => void }) {
+/** 推荐流大卡片：点开直接进 LessonView——主界面的核心动作；内联跳过（已有基础免学）。
+ * 内容三态标识：已生成（点开有东西读）/ 生成中 / 排队中；未生成节点主按钮让给「生成内容」。 */
+function RecCard({ e, gen, onOpen, onSkip, onGenerate }: {
+  e: RecEvent
+  gen?: 'queued' | 'running'
+  onOpen: () => void
+  onSkip: () => void
+  onGenerate: () => void
+}) {
   const t = REC_TYPE[e.type] ?? { label: e.type, color: 'gray', order: 9 }
+  const generating = gen === 'running' || gen === 'queued'
   return (
     <Card size='small' hoverable style={{ borderRadius: 10, cursor: 'pointer', borderLeft: `3px solid var(--color-${t.color === 'red' ? 'danger' : t.color === 'green' ? 'success' : t.color === 'arcoblue' ? 'arcoblue' : 'primary'}-6,#165dff)` }}>
       <div onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <Tag color={t.color}>{t.label}</Tag>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <Title heading={6} style={{ margin: 0 }}>{e.node}</Title>
+          <Title heading={6} style={{ margin: 0 }}>
+            {e.node}
+            {gen === 'running' && <Tag size='small' color='arcoblue' style={{ marginLeft: 8 }}>生成中</Tag>}
+            {gen === 'queued' && <Tag size='small' color='gray' style={{ marginLeft: 8 }}>排队中</Tag>}
+            {!generating && e.hasContent && <Tag size='small' color='green' style={{ marginLeft: 8 }}>已生成</Tag>}
+          </Title>
           <Text type='secondary' style={{ fontSize: 12 }}>
             {e.course}{e.region ? ` · ${e.region}` : ''}{e.why ? ` · ${e.why}` : ''}
           </Text>
         </div>
-        <Button size='mini' type='primary' onClick={ev => { ev.stopPropagation(); onOpen() }}>
-          {e.type === 'review' || e.type === 'overdue' ? '去复习' : '去学习'}
-        </Button>
+        {!e.hasContent && !generating ? (
+          <Button size='mini' type='primary' status='warning' onClick={ev => { ev.stopPropagation(); onGenerate() }}>
+            生成内容
+          </Button>
+        ) : (
+          <Button size='mini' type='primary' loading={gen === 'running'} disabled={gen === 'queued'}
+            onClick={ev => { ev.stopPropagation(); onOpen() }}>
+            {gen === 'running' ? '生成中' : gen === 'queued' ? '排队中' : e.type === 'review' || e.type === 'overdue' ? '去复习' : '去学习'}
+          </Button>
+        )}
         {/* span 拦截冒泡：卡片本体点击是打开学习，Popconfirm 触发不应进学习视图 */}
         <span onClick={ev => ev.stopPropagation()}>
           <Popconfirm
@@ -221,6 +241,9 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [session, setSession] = useState<RecEvent[] | null>(null)
   const [createVisible, setCreateVisible] = useState(false)
   const [runningJobs, setRunningJobs] = useState(0)
+  const [queuedJobs, setQueuedJobs] = useState(0)
+  /** 排队/生成中的节点（course/node → 阶段），推荐卡三态标识消费。 */
+  const [genMap, setGenMap] = useState<Record<string, 'queued' | 'running'>>({})
 
   const load = useCallback(async () => {
     setRec(await api.recommend(12).catch(() => null))
@@ -235,20 +258,36 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     if (prevLessonRef.current && !frame.lesson) void load()
     prevLessonRef.current = frame.lesson
   }, [frame.lesson, load])
-  // 后台生成悬浮指示条（allo CourseGenerationPill 同语义）
+  // 后台生成悬浮指示条（allo CourseGenerationPill 同语义）+ 队列状态。
+  // 活动任务集合出现终态边沿 → 重拉推荐流（对应节点的「已生成」标识随之点亮）。
+  const activeKeysRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     const poll = async () => {
       try {
-        const jobs = await api.generateStatus()
-        setRunningJobs(jobs.filter(j => j.status === 'running' || j.status === 'cancelling').length)
+        const st = await api.generateStatus()
+        const active = st.jobs.filter(j => j.status === 'running' || j.status === 'cancelling')
+        const gen: Record<string, 'queued' | 'running'> = {}
+        for (const j of st.jobs) {
+          if (j.status === 'running' || j.status === 'cancelling') gen[`${j.course}/${j.node}`] = 'running'
+          else if (j.status === 'queued') gen[`${j.course}/${j.node}`] = 'queued'
+        }
+        const keys = new Set(active.map(j => j.key))
+        const edge = [...activeKeysRef.current].some(k => !keys.has(k))
+        activeKeysRef.current = keys
+        setRunningJobs(active.length)
+        setQueuedJobs(st.queuedCount)
+        setGenMap(gen)
+        if (edge) void load()
       } catch {
         setRunningJobs(0)
+        setQueuedJobs(0)
+        setGenMap({})
       }
     }
     void poll()
     const timer = setInterval(() => void poll(), 5000)
     return () => clearInterval(timer)
-  }, [])
+  }, [load])
   useEffect(() => {
     const h = () => { void frame.reload(); void load() }
     window.addEventListener('learnhub:reload', h)
@@ -272,6 +311,16 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
         }
       },
     })
+  }
+
+  // 推荐卡便捷生成：入队全局队列（后台按序执行），卡片随轮询转为「排队中/生成中」
+  const generateNode = async (e: RecEvent) => {
+    try {
+      const r = await api.generate(e.course, e.node)
+      Message.success(r.message)
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
   }
 
   // 推荐卡内联跳过：与节点学习页同一 nodeSkip 语义（可逆，可在节点页取消）
@@ -336,8 +385,10 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
           <Space direction='vertical' style={{ width: '100%' }} size={10}>
             {[...reviewQueue, ...learnEvents].sort((a, b) =>
               (REC_TYPE[a.type]?.order ?? 9) - (REC_TYPE[b.type]?.order ?? 9)).map((e, i) => (
-                <RecCard key={i} e={e} onOpen={() => frame.openLesson(e.course, e.node)}
-                  onSkip={() => void skipNode(e)} />
+                <RecCard key={i} e={e} gen={genMap[`${e.course}/${e.node}`]}
+                  onOpen={() => frame.openLesson(e.course, e.node)}
+                  onSkip={() => void skipNode(e)}
+                  onGenerate={() => void generateNode(e)} />
               ))}
           </Space>
         </Card>
@@ -387,7 +438,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
             padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8,
           }}>
           <span style={{ color: 'var(--color-primary-6,#165dff)' }}>◌</span>
-          <Text>{runningJobs} 个正文生成中</Text>
+          <Text>{runningJobs} 个正文生成中{queuedJobs > 0 ? ` · ${queuedJobs} 个排队` : ''}</Text>
           <Text type='secondary' style={{ fontSize: 12 }}>点击查看</Text>
         </div>
       )}

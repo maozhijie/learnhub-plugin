@@ -44,6 +44,8 @@ export interface GraphNodeData {
   mastery?: number
   /** practice = 交互实践节点（「练」角标）。 */
   type?: string
+  /** 已生成可读正文（点开有东西读；列表/图三态标识数据源）。 */
+  hasContent?: boolean
 }
 export interface GraphEdgeData { id: string; source: string; target: string; kind: string }
 export interface GraphDoc {
@@ -64,6 +66,8 @@ export interface RecEvent {
   score: number
   why: string
   path?: string | null
+  /** 已生成可读正文（点开有东西读；列表三态标识数据源）。 */
+  hasContent?: boolean
 }
 export interface RecommendDoc { date: string; events: RecEvent[] }
 
@@ -133,8 +137,8 @@ export interface GenJobItem {
   course: string
   node: string
   startedAt: string
-  status: 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
-  /** 组合管线阶段：outline（大纲）→ sections（逐节正文）→ quiz（自动出题）。 */
+  status: 'queued' | 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
+  /** 组合管线阶段：outline（大纲）→ sections（逐节正文）→ quiz（自动出题）；queued 无阶段。 */
   phase?: 'outline' | 'sections' | 'quiz'
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
   progress?: { done: number; total: number; current?: string }
@@ -143,6 +147,13 @@ export interface GenJobItem {
   style?: string
   /** 该任务节点的内容版本（增量刷新依据；旧引擎响应无此字段）。 */
   contentVersion?: number
+}
+
+/** /generate/status 响应：任务注册表 + 全局队列状态（重启恢复后暂停待恢复）。 */
+export interface GenStatusDoc {
+  jobs: GenJobItem[]
+  queuePaused: boolean
+  queuedCount: number
 }
 
 export interface QueueItem { course: string; node: string; kind: string; reason: string; priority: string }

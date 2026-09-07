@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs'
 import { todayStr, parseDay, daysBetween } from './dates.ts'
 import { effectiveStage } from './audit.ts'
 import { retrievability, getScheduler, masteryOfFm } from './srs.ts'
-import { loadNote, asFm, validateNoteFrontmatter } from './notes.ts'
+import { loadNote, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import type { Graph } from './graph.ts'
 import type { Fm, Stage } from './types.ts'
@@ -206,6 +206,7 @@ export class Sessions {
         events.push({
           type: etype, course: c.name, node, region: graph.blockOf[node]?.[1] ?? '',
           score: Math.round(score * 10) / 10, why, path: this.notePath(c.root, graph, node),
+          hasContent: hasReadyContent(state[node]),
         })
       }
       // 复习/逾期：题库聚合（节点有到期题目）

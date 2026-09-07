@@ -31,6 +31,7 @@ import { applyId, questionCount, rejectId, requireSkipDirection } from './tool-c
 import {
   contentFailureStatus,
   generationJobRetentionMs,
+  nextQueuedJob,
   quizFailureOutcome,
   quizSuccessOutcome,
   type GenJobStatus,
@@ -251,18 +252,64 @@ async function applySectionWithRepair(
   }
 }
 
+// ---- 全局生成队列：任意入口入队（面板/agent/整课链），同一时刻只执行一个节点管线 ----
+
+/** 重启恢复后暂停旗标：遗留排队任务不自动开跑（避免静默烧 token），生成页一键恢复。 */
+let genQueuePaused = false
+/** 队列执行器是否正占有一个管线槽位（全局单并发闸）。 */
+let genPumping = false
+
+/** 入队一个节点的生成任务（FIFO；重复入队幂等）。同一节点 running/cancelling 时拒绝。 */
+function enqueueGeneration(ctx: Context, course: string, node: string, style?: string): { message: string; queued: boolean } {
+  const key = `${course}/${node}`
+  const existing = genJobs.get(key)
+  if (existing && (existing.status === 'running' || existing.status === 'cancelling')) {
+    throw new Error(`「${node}」正在生成中，请稍候。`)
+  }
+  if (existing?.status === 'queued') {
+    const ahead = [...genJobs.values()].filter(j => j.status === 'queued' && j.startedAt < existing.startedAt).length
+    return { message: `「${node}」已在队列中（前面还有 ${ahead} 个任务）。`, queued: true }
+  }
+  genJobs.set(key, {
+    course, node, startedAt: new Date().toISOString(), status: 'queued',
+    ...(style ? { style } : {}),
+    message: '排队等待生成…',
+  })
+  persistGenJobs()
+  pumpGeneration(ctx)
+  return { message: `「${node}」已入队，将在后台按序生成（进度见生成页）。`, queued: true }
+}
+
+/** 队列执行泵：空闲且未暂停时取队首排队任务跑管线；跑完（含失败）继续泵下一个。 */
+function pumpGeneration(ctx: Context): void {
+  if (genPumping || genQueuePaused) return
+  const next = nextQueuedJob([...genJobs.values()])
+  if (!next) return
+  genPumping = true
+  void generateContent(ctx, next.course, next.node, next.style)
+    .catch(() => { /* generateContent 已置 failed 留注册表可重试 */ })
+    .finally(() => {
+      genPumping = false
+      pumpGeneration(ctx)
+    })
+}
+
 /** 课程生成管线（逐节）：大纲（AI 自行判断节的划分/顺序/类型，不设固定结构）
  * → 逐节正文（每节一次模型调用；已 ready 节跳过 = 断点续跑）
  * → 逐节出题 + 综合出题。style 只替换节生成模板（课程节生成-<style>），
  * 大纲、断点续跑与门禁与默认管线同一路径；未知 style 在 loadPrompt fail loud。
- * 出题失败不回滚正文：任务标记 partial 并在 message 里说明，练习页可单独重试出题。 */
+ * 出题失败不回滚正文：任务标记 partial 并在 message 里说明，练习页可单独重试出题。
+ * 由队列执行泵驱动（pumpGeneration）；直接调用仅限已有 running 归属的路径。 */
 async function generateContent(ctx: Context, course: string, node: string, style?: string): Promise<string> {
   const key = `${course}/${node}`
   const existing = genJobs.get(key)
   if (existing && (existing.status === 'running' || existing.status === 'cancelling')) {
     throw new Error(`「${node}」正在生成中，请稍候。`)
   }
-  const job: GenJob = { course, node, startedAt: new Date().toISOString(), status: 'running', phase: 'outline', ...(style ? { style } : {}) }
+  // 排队任务出队执行：沿用入队时间（FIFO 序与面板展示），覆盖为 running
+  const job: GenJob = existing?.status === 'queued'
+    ? { ...existing, status: 'running', phase: 'outline' }
+    : { course, node, startedAt: new Date().toISOString(), status: 'running', phase: 'outline', ...(style ? { style } : {}) }
   genJobs.set(key, job)
   persistGenJobs()
   try {
@@ -360,8 +407,8 @@ async function generateSection(ctx: Context, course: string, node: string, secti
 }
 
 /** 整课重置 + 拓扑序串行重跑生成链（HTTP 与 agent 工具共用）：
- * contentReset 备份旧产物并重写 draft → 清掉该课程遗留任务 → 后台链逐节点 generateContent。
- * 立即返回 { reset, queued }；进度由任务注册表展示。运行中有任务时拒绝。 */
+ * contentReset 备份旧产物并重写 draft → 清掉该课程遗留任务（含排队）→ 按拓扑序逐节点入队全局队列。
+ * 立即返回 { reset, queued }；进度由任务注册表展示。课程有 running 任务时拒绝。 */
 async function resetCourseChain(ctx: Context, courseKey: string): Promise<{ reset: Awaited<ReturnType<LearnhubEngine['contentReset']>>; queued: number }> {
   const running = [...genJobs.values()].filter(j => j.course === courseKey && (j.status === 'running' || j.status === 'cancelling'))
   if (running.length) throw new Error(`课程「${courseKey}」有 ${running.length} 个生成任务进行中，先取消或等完成再重生成。`)
@@ -370,21 +417,23 @@ async function resetCourseChain(ctx: Context, courseKey: string): Promise<{ rese
   const reset = await engine.contentReset(c.name)
   for (const [key, j] of genJobs.entries()) if (j.course === c.name) genJobs.delete(key)
   persistGenJobs()
-  let chain: Promise<unknown> = Promise.resolve()
+  // 整课重生成是显式意图：解除重启暂停，让链条立即开跑
+  genQueuePaused = false
   let queued = 0
   for (const node of graph.order.length ? graph.order : graph.names) {
+    enqueueGeneration(ctx, c.name, node)
     queued++
-    chain = chain.then(() => generateContent(ctx, c.name, node).catch(() => {
-      // 单节点失败不阻塞后续（generateContent 已置 failed 留注册表可重试）
-    }))
   }
-  void chain
   return { reset, queued }
 }
 
-/** 任务注册表视图（附各任务节点的内容版本：面板据此做增量刷新）。 */
-async function generationStatus(): Promise<Array<GenJob & { key: string; contentVersion?: number }>> {
-  const out: Array<GenJob & { key: string; contentVersion?: number }> = []
+/** 任务注册表视图（附各任务节点的内容版本：面板据此做增量刷新）+ 全局队列状态。 */
+async function generationStatus(): Promise<{
+  jobs: Array<GenJob & { key: string; contentVersion?: number }>
+  queuePaused: boolean
+  queuedCount: number
+}> {
+  const jobs: Array<GenJob & { key: string; contentVersion?: number }> = []
   for (const [key, j] of genJobs.entries()) {
     let contentVersion: number | undefined
     try {
@@ -392,14 +441,24 @@ async function generationStatus(): Promise<Array<GenJob & { key: string; content
     } catch {
       // 节点/课程缺失等：版本缺省，面板走全量刷新
     }
-    out.push({ key, ...j, contentVersion })
+    jobs.push({ key, ...j, contentVersion })
   }
-  return out
+  return {
+    jobs,
+    queuePaused: genQueuePaused,
+    queuedCount: jobs.filter(j => j.status === 'queued').length,
+  }
 }
 
 function cancelGeneration(course: string, node: string): { cancelled: boolean; status?: string } {
   const job = genJobs.get(`${course}/${node}`)
   if (!job) return { cancelled: false }
+  // 排队任务取消 = 直接移出队列（还没开跑，无需取消旗标）
+  if (job.status === 'queued') {
+    genJobs.delete(`${course}/${node}`)
+    persistGenJobs()
+    return { cancelled: true, status: 'queued' }
+  }
   if (job.status === 'running') job.status = 'cancelling'
   return { cancelled: true, status: job.status }
 }
@@ -651,11 +710,20 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/generate') {
-        // 单次非流式：大纲 → 逐节正文 → 自动出题（数分钟），请求挂起直到完成；style = 节生成风格变体（如 苏格拉底）
+        // 入队即返回：全局串行队列后台按序执行（大纲 → 逐节正文 → 自动出题，数分钟/节点）
         const style = typeof body.style === 'string' && body.style.trim() ? body.style.trim() : undefined
-        sendJson(res, 200, await apiRun('api/generate', async () => ({
-          message: await generateContent(ctx, need(body, 'course'), need(body, 'node'), style),
-        })))
+        sendJson(res, 200, await apiRun('api/generate', async () =>
+          enqueueGeneration(ctx, need(body, 'course'), need(body, 'node'), style)))
+        return
+      }
+      if (route === '/generate/resume') {
+        // 恢复重启后暂停的队列（遗留排队任务不自动开跑，防静默烧 token）
+        sendJson(res, 200, await apiRun('api/generate/resume', async () => {
+          const resumed = [...genJobs.values()].filter(j => j.status === 'queued').length
+          genQueuePaused = false
+          pumpGeneration(ctx)
+          return { paused: false, resumed }
+        }))
         return
       }
       if (route === '/generate/section') {
@@ -768,13 +836,16 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   VAULT = vault
   engine = new LearnhubEngine({ vault, centerRel: CENTER_REL })
 
-  // 生成任务注册表恢复：上次进程遗留的 running/cancelling 标为失败（LLM 调用随进程消失）
+  // 生成任务注册表恢复：running/cancelling 随进程消失标失败；queued 保留但队列置为
+  // 暂停（不自动开跑——重启后静默烧 token 是惊吓，生成页一键恢复）
   void engine.loadGenJobs().then(stale => {
+    let restoredQueued = 0
     for (const raw of stale) {
       const j = raw as Partial<GenJob>
       if (typeof j.course !== 'string' || typeof j.node !== 'string') continue
       const key = `${j.course}/${j.node}`
       const interrupted = j.status === 'running' || j.status === 'cancelling'
+      if (j.status === 'queued') restoredQueued++
       genJobs.set(key, {
         course: j.course, node: j.node,
         startedAt: typeof j.startedAt === 'string' ? j.startedAt : new Date().toISOString(),
@@ -785,8 +856,11 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         message: interrupted ? '进程重启，任务中断——可重试' : (typeof j.message === 'string' ? j.message : undefined),
       })
     }
+    if (restoredQueued > 0) genQueuePaused = true
     persistGenJobs()
-    if (stale.length) console.log(`[learnhub] gen-jobs restored: ${stale.length} (interrupted marked failed)`)
+    if (stale.length) {
+      console.log(`[learnhub] gen-jobs restored: ${stale.length} (interrupted marked failed${restoredQueued ? `, ${restoredQueued} queued paused` : ''})`)
+    }
   })
 
   // provider/model/快速档来自行 config（缺省用当前默认模型与 off 快速档）
@@ -935,14 +1009,14 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         return JSON.stringify(await engine.graphApply(args.kind === 'edit' ? 'edit' : 'gen', applyId(args.id)))
       }))
   tool('learnhub_generate',
-    'Generate one course note via the model: outline first (the model decides section split, order, and types from the content, topic, and style — no fixed structure), then one model call per section through the quality gates as a draft (ready sections are skipped, so retrying resumes the pipeline), then per-section + synthesis quiz questions. The context pack (prereqs, domain boundary, forbidden concepts) and user-editable prompt templates (state/提示词/课程大纲.md, 课程节生成.md) drive the calls. Missing notes are scaffolded first (on-demand lesson semantics). style selects a per-section prompt variant (课程节生成-<style>, e.g. 苏格拉底/费曼) applied to every section call; the outline and gates stay on the default path.',
+    'Queue one course note for generation via the global serial queue: outline first (the model decides section split, order, and types from the content, topic, and style — no fixed structure), then one model call per section through the quality gates as a draft (ready sections are skipped, so retrying resumes the pipeline), then per-section + synthesis quiz questions. Returns immediately with a queue position; at most one node pipeline runs at a time (check the gen-jobs registry tool or panel generate tab for progress). The context pack (prereqs, domain boundary, forbidden concepts) and user-editable prompt templates (state/提示词/课程大纲.md, 课程节生成.md) drive the calls. Missing notes are scaffolded first (on-demand lesson semantics). style selects a per-section prompt variant (课程节生成-<style>, e.g. 苏格拉底/费曼) applied to every section call; the outline and gates stay on the default path.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name to generate' },
       style: { type: 'string', description: 'Prompt style variant; omit for the default template' },
     },
     (args: { course: string; node: string; style?: string }) => run('learnhub_generate', () =>
-      generateContent(ctx, args.course, args.node, args.style)))
+      enqueueGeneration(ctx, args.course, args.node, args.style)))
   tool('learnhub_course_reset',
     'Reset one course for full regeneration: all node notes are backed up into .trash/regenerate-<ts>/ and rewritten as ungenerated skeletons; the question bank, interactive artifacts, and generated-image dirs move into the same backup. The graph, learning progress, and prompt snapshots are kept. Regeneration then runs as a background chain over all nodes in graph topological order (each node: outline → sections → quiz) and this call returns immediately with the queued count; progress shows in the panel generate tab. Refuses while generation tasks are running. Destructive but recoverable — confirm with the user before calling.',
     { course: { type: 'string', required: true, description: 'Course name' } },

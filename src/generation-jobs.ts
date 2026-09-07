@@ -1,7 +1,18 @@
 /** 生成任务状态与保留期的单一契约：host 状态机与测试共用，避免字面量散落。 */
 
-/** 生成任务状态：running/cancelling 为活动态，其余为终态。 */
-export type GenJobStatus = 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
+/** 生成任务状态：queued 为排队待跑（非活动、非终态）；running/cancelling 为活动态，其余为终态。 */
+export type GenJobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
+
+/** 全局生成队列的 FIFO 选取：startedAt（入队时间）最早者先跑；无排队任务返回 null。
+ * 纯函数——host 队列执行器与测试共用，保证「同时只跑一个」的选取语义单一。 */
+export function nextQueuedJob<J extends { status: GenJobStatus; startedAt: string }>(jobs: J[]): J | null {
+  let hit: J | null = null
+  for (const j of jobs) {
+    if (j.status !== 'queued') continue
+    if (!hit || j.startedAt < hit.startedAt) hit = j
+  }
+  return hit
+}
 
 /** 排查/重试类终态（含 partial）与 failed/cancelled 一样保留 24h。 */
 const DEBUG_KEEP_MS = 24 * 60 * 60_000
@@ -13,8 +24,9 @@ export function generationJobRetentionMs(status: GenJobStatus): number {
   return status === 'done' ? SUCCESS_KEEP_MS : DEBUG_KEEP_MS
 }
 
-/** 内容管线异常 → 终态；取消旗标优先，其余正文失败不掩盖为 partial/done。 */
-export function contentFailureStatus(jobStatus: GenJobStatus): Exclude<GenJobStatus, 'running' | 'cancelling'> {
+/** 内容管线异常 → 终态；取消旗标优先，其余正文失败不掩盖为 partial/done。
+ * queued 不是可失败态：排队任务尚未开始执行。 */
+export function contentFailureStatus(jobStatus: GenJobStatus): Exclude<GenJobStatus, 'running' | 'cancelling' | 'queued'> {
   return jobStatus === 'cancelling' ? 'cancelled' : 'failed'
 }
 

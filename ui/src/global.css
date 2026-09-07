@@ -32,6 +32,10 @@ html, body, #root {
   min-height: 420px;
 }
 
+/* 图节点 hover 便捷生成工具条：默认隐藏，悬停节点时浮出（GraphDagView dag-toolbar） */
+.react-flow__node .dag-toolbar { display: none; }
+.react-flow__node:hover .dag-toolbar { display: flex; }
+
 /* Markdown 正文阅读排版（lesson 片段）：正文 16px/1.8，限宽 680px（≈40 字/行），
  * 媒体/代码块/独立公式不限宽、可横向滚动；标题层级 20/18/17/16 与正文 16 拉开；
  * blockquote 为结论框观感（MathAcademy 式浅灰圆角；并列的误区/注意块由生成约定产出：首行加粗标签） */

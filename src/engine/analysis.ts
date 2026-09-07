@@ -12,6 +12,7 @@ import { floatNodes, jumpCandidates, scaleReport } from './quality.ts'
 import type { JumpCandidate, ScaleReport, ScaleTarget } from './quality.ts'
 import { parseDay, todayStr, daysBetween } from './dates.ts'
 import { masteryOfFm } from './srs.ts'
+import { hasReadyContent } from './notes.ts'
 
 export interface GraphAnalysis {
   stats: {
@@ -117,6 +118,8 @@ export async function analyzeGraph(
         stage: effectiveStage(state, n),
         opt: graph.opt.has(n),
         mastery: masteryOfFm(fm),
+        /** 已生成可读正文（列表/图三态标识：点开有东西读）。 */
+        hasContent: hasReadyContent(fm),
         ...(graph.typeOf[n] ? { type: graph.typeOf[n] } : {}),
       },
     }

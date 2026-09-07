@@ -67,7 +67,7 @@ export default function LessonView(props: { course: string; node: string; frame:
   // 生成/出题进行中：轮询本节点任务（running 时 3s，空闲 15s）
   const poll = useCallback(async () => {
     try {
-      const jobs = await api.generateStatus()
+      const jobs = (await api.generateStatus()).jobs
       const mine = jobs.find(j =>
         j.course === course && j.node === node && (j.status === 'running' || j.status === 'cancelling'))
         ?? jobs.find(j => j.course === course && j.node === node) ?? null

@@ -54,16 +54,20 @@ export const api = {
     http<{ course: string; node: string; stage: string }>('POST', '/node/skip', { course, node, skipped }),
   nodeComplete: (course: string, node: string, force = false) =>
     http<{ accepted: boolean; accuracy: number | null; course: string; node: string; stage?: string; initialized?: number; due?: string | null; reason?: string }>('POST', '/node/complete', { course, node, force }),
+  /** 入队即返回：全局串行队列后台按序生成（同一时刻只跑一个节点管线）。 */
   generate: (course: string, node: string, style?: string) =>
-    http<{ message: string }>('POST', '/generate', { course, node, ...(style ? { style } : {}) }),
+    http<{ message: string; queued: boolean }>('POST', '/generate', { course, node, ...(style ? { style } : {}) }),
   prompts: () => http<string[]>('GET', '/prompts'),
   tutor: (course: string, node: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>) =>
     http<{ answer: string }>('POST', '/tutor', { course, node, messages }),
   questionGenerate: (course: string, node: string, count = 6) =>
     http<{ course: string; node: string; added: number; skipped: number; total: number }>('POST', '/question-generate', { course, node, count }),
-  generateStatus: () => http<import('./types').GenJobItem[]>('GET', '/generate/status'),
+  generateStatus: () => http<import('./types').GenStatusDoc>('GET', '/generate/status'),
   generateCancel: (course: string, node: string) =>
     http<{ cancelled: boolean; status?: string }>('POST', '/generate/cancel', { course, node }),
+  /** 恢复重启后暂停的生成队列（遗留排队任务不自动开跑）。 */
+  generateResume: () =>
+    http<{ paused: boolean; resumed: number }>('POST', '/generate/resume'),
   /** 单节重写（LessonView 节重写入口；请求挂起至该节生成完成）。 */
   sectionRewrite: (course: string, node: string, section: string) =>
     http<{ message: string }>('POST', '/generate/section', { course, node, section }),

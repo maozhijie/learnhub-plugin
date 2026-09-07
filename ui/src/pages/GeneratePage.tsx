@@ -1,7 +1,7 @@
 /** 生成页：待生成队列（生成队列.md 人审产物）+ 进行中/近期生成任务（服务端任务注册表）。
  * 页面刷新后状态从这里恢复（服务端注册表是事实来源，allo 同语义）。
  * 生成支持提示词风格变体（课程节生成-<style>，作用于逐节生成）；失败任务可一键转 dsh 会话讨论。 */
-import { Button, Card, Empty, Message, Modal, Progress, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
+import { Alert, Button, Card, Empty, Message, Modal, Progress, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api, discussInHost } from '../api'
 import type { AppFrame } from '../App'
@@ -10,6 +10,7 @@ import type { GenJobItem, QueueItem } from '../types'
 const { Text } = Typography
 
 const STATUS_TAG: Record<GenJobItem['status'], { label: string; color: string }> = {
+  queued: { label: '排队中', color: 'gray' },
   running: { label: '生成中', color: 'arcoblue' },
   cancelling: { label: '取消中', color: 'orange' },
   done: { label: '已完成', color: 'green' },
@@ -20,6 +21,8 @@ const STATUS_TAG: Record<GenJobItem['status'], { label: string; color: string }>
 
 export default function GeneratePage({ frame }: { frame?: AppFrame }) {
   const [jobs, setJobs] = useState<GenJobItem[] | null>(null)
+  const [queuePaused, setQueuePaused] = useState(false)
+  const [queuedCount, setQueuedCount] = useState(0)
   const [queue, setQueue] = useState<QueueItem[] | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [styles, setStyles] = useState<string[]>([])
@@ -62,16 +65,32 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
 
   const load = useCallback(async () => {
     try {
-      const [j, q] = await Promise.all([
+      const [st, q] = await Promise.all([
         api.generateStatus(),
         api.queue().catch(() => [] as QueueItem[]),
       ])
-      setJobs(j)
+      setJobs([...st.jobs].sort((a, b) => {
+        const rank = (x: GenJobItem) => (x.status === 'running' || x.status === 'cancelling' ? 0 : x.status === 'queued' ? 1 : 2)
+        return rank(a) - rank(b) || a.startedAt.localeCompare(b.startedAt)
+      }))
+      setQueuePaused(st.queuePaused)
+      setQueuedCount(st.queuedCount)
       setQueue(q)
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
     }
   }, [])
+
+  // 恢复重启后暂停的队列（遗留排队任务不自动开跑，防静默烧 token）
+  const resumeQueue = async () => {
+    try {
+      const r = await api.generateResume()
+      Message.success(`队列已恢复（${r.resumed} 个排队任务将按序执行）`)
+      await load()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   useEffect(() => {
     void load()
@@ -92,7 +111,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
   const cancel = async (j: GenJobItem) => {
     try {
       await api.generateCancel(j.course, j.node)
-      Message.success('已请求取消（结果会被丢弃）')
+      Message.success(j.status === 'queued' ? '已移出队列' : '已请求取消（结果会被丢弃）')
       await load()
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
@@ -163,8 +182,16 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
           )}
         </Space>
       } style={{ borderRadius: 10 }}>
+        {queuePaused && queuedCount > 0 && (
+          <Alert
+            type='warning' style={{ marginBottom: 8 }}
+            content={<Space size={8}>
+              <Text>进程重启后有 {queuedCount} 个排队任务已暂停（不自动开跑）。</Text>
+              <Button size='mini' type='primary' onClick={() => void resumeQueue()}>恢复队列</Button>
+            </Space>} />
+        )}
         <Text type='secondary' style={{ display: 'block', marginBottom: 8 }}>
-          生成中/近期任务在这里；刷新页面不丢失。课程图的多轮生成在 dsh 对话里进行（agent 侧）。
+          全局串行队列：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。课程图的多轮生成在 dsh 对话里进行（agent 侧）。
         </Text>
         {jobs === null ? null : jobs.length === 0 ? (
           <Empty description='当前没有生成任务' />
@@ -180,6 +207,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
               } },
               { title: '进度', width: 190, render: (_, j) => {
                 const p = j.progress
+                if (j.status === 'queued') return <Text type='secondary'>排队等待…</Text>
                 if (!p || j.status !== 'running') return <Text type='secondary'>—</Text>
                 return (
                   <Space size={8}>
@@ -193,8 +221,10 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
               { title: '信息', dataIndex: 'message', ellipsis: true },
               { title: '操作', width: 170, render: (_, j) => (
                 <Space size={4}>
-                  {j.status === 'running'
-                    ? <Button size='mini' type='text' status='danger' onClick={() => void cancel(j)}>取消</Button>
+                  {(j.status === 'running' || j.status === 'queued')
+                    ? <Button size='mini' type='text' status='danger' onClick={() => void cancel(j)}>
+                      {j.status === 'queued' ? '移出队列' : '取消'}
+                    </Button>
                     : null}
                   {(j.status === 'failed' || j.status === 'partial') && (
                     <Button size='mini' type='text' onClick={() =>

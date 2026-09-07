@@ -25,6 +25,13 @@ export function defaultFrontmatter(nodeName: string): Fm {
   }
 }
 
+/** 节点是否已生成可读正文：节清单里至少一节 ready（部分完成的中断产物也算——
+ * 「点开有东西读」的列表/图三态标识数据源；Missing 无节 = 合法空状态）。 */
+export function hasReadyContent(fm: Fm | undefined | null): boolean {
+  const sections = fm?.content?.sections
+  return Array.isArray(sections) && sections.some(s => s?.status === 'ready')
+}
+
 /** 拆分 Markdown 为 (frontmatter | null, 正文)。读侧宽容（与 split_frontmatter 同语义）。
  * CRLF 兼容：frontmatter 部分剥掉 \r（yaml 会把「0\r」当字符串而非数字）；正文统一为 LF。 */
 export function splitFrontmatter(text: string): { fm: Record<string, unknown> | null; body: string } {
