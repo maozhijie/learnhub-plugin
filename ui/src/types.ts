@@ -104,6 +104,9 @@ export interface BankEntry {
   tags: string[]
   archived: boolean
   hasExplanation: boolean
+  /** 题目级 FSRS 调度（未进调度 = null）。lastReview 供到期列 hover 展示。 */
+  due: string | null
+  lastReview?: string | null
   options?: string[]
 }
 
@@ -159,20 +162,33 @@ export interface GenStatusDoc {
 export interface QueueItem { course: string; node: string; kind: string; reason: string; priority: string }
 export interface DoctorDoc { problems: Array<{ level: string; message: string }> }
 
-/** 作答判卷结果（question-answer；含该题新到期日与节点聚合掌握度）。
+/** 作答判卷结果（question-answer / question-forget；含该题新到期日与节点聚合掌握度）。
  * scheduled=false 表示该题今日已推进过调度，本次仅记录练习统计。
+ * pendingRating=true（复习刷卡流答对挂起）时 previews 给出三档自评的下次到期预览。
  * xp/xp_reason = XP 时间账本结算（对=+权重×难度、乱猜=-1、同日重复=0）。 */
 export interface AnswerResult {
   correct?: boolean | null
   judge: string
   feedback?: string
   message?: string
-  due?: string
+  answer?: string
+  explanation?: string
+  kind?: QuestionKind
+  due?: string | null
   mastery?: number
   scheduled?: boolean
+  pendingRating?: boolean
+  previews?: { hard: string; good: string; easy: string }
   xp?: number
   xp_reason?: 'correct' | 'wrong' | 'guess' | 'repeat'
 }
+
+/** 复习刷卡队列条目（跨课程到期题扁平队列；QuestionItem 的超集）。 */
+export interface ReviewCard extends QuestionItem {
+  course: string
+  node: string
+}
+export interface ReviewQueueDoc { date: string; total: number; cards: ReviewCard[] }
 
 /** 每课程 ETA（剩余节点 × 每节点 XP ÷ 每日目标）。 */
 export interface EtaItem { course: string; remaining: number; done: number; per_node: number; days: number }

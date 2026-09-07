@@ -659,6 +659,12 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/questions-all', () => engine.questionsAll(course)))
       return
     }
+    if (req.method === 'GET' && route === '/review-queue') {
+      // 复习刷卡队列：跨课程到期题扁平队列（面板复习会话消费）
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/review-queue', () => engine.reviewQueue(course)))
+      return
+    }
     if (req.method === 'GET' && route === '/xp') {
       sendJson(res, 200, await apiRun('api/xp', () => engine.xpStatus()))
       return
@@ -775,6 +781,20 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
           prompt => llmComplete(ctx, prompt),
           need(body, 'course'), need(body, 'node'), need(body, 'qid'),
           typeof body.answer === 'string' ? body.answer : '',
+          typeof body.elapsed_s === 'number' && Number.isFinite(body.elapsed_s) ? body.elapsed_s : null,
+          body.defer_schedule === true ? { deferSchedule: true } : undefined)))
+        return
+      }
+      if (route === '/question-rate') {
+        // 复习刷卡流：答对后的自评难度结算（2/3/4 → FSRS Hard/Good/Easy）
+        sendJson(res, 200, await apiRun('api/question-rate', () => engine.questionRate(
+          need(body, 'course'), need(body, 'node'), need(body, 'qid'), Number(body.rating))))
+        return
+      }
+      if (route === '/question-forget') {
+        // 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）
+        sendJson(res, 200, await apiRun('api/question-forget', () => engine.questionForget(
+          need(body, 'course'), need(body, 'node'), need(body, 'qid'),
           typeof body.elapsed_s === 'number' && Number.isFinite(body.elapsed_s) ? body.elapsed_s : null)))
         return
       }

@@ -4,14 +4,21 @@
  * AI 判卷——reflection（评分要点）与 open_question（10 分制综合批改）。
  * 题干/选项/排序项/配对项/判卷反馈经 InlineMd 渲染（Markdown+公式，与课程正文同一条链）。
  * 全部提交引擎判卷，结果内联展示判卷反馈；作答即驱动该题 FSRS 调度（对=Good、错=Again）。
- * 计时随提交上报（XP 时间账本的乱猜判定原料）；结算 XP 徽标展示（+N / 乱猜 -1 / 重复 0）。 */
+ * 计时随提交上报（XP 时间账本的乱猜判定原料）；结算 XP 徽标展示（+N / 乱猜 -1 / 重复 0）。
+ * 复习刷卡变体（variant='review'）：提交改走 submitter（deferSchedule 挂起调度，背面自评）、
+ * 正面「忘记」申报受 5 秒主动回忆门控（展示起算倒计时）、背面追加正确答案块；
+ * 自评难度按钮等复习专属背面件由 footer 注入。 */
 import { Button, Input, Message, Radio, Select, Tag, Typography } from '@arco-design/web-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { InlineMd } from './MdView'
 import { api } from '../api'
 import type { QuestionItem } from '../types'
 
 const { Text } = Typography
+
+/** 「忘记」门控秒数：卡面展示满 5 秒才允许申报，防止以申报代替主动回忆。 */
+const FORGET_AFTER_SECONDS = 5
 
 export interface AnswerOutcome {
   correct: boolean | null
@@ -20,6 +27,21 @@ export interface AnswerOutcome {
   /** 本次作答 XP 结算（answer 响应的 xp/xp_reason 透传）。 */
   xp?: number
   xp_reason?: 'correct' | 'wrong' | 'guess' | 'repeat'
+  /** 复习刷卡流附加件：翻面答案/解析回显、自评挂起与三档到期预览。 */
+  answer?: string
+  explanation?: string
+  pendingRating?: boolean
+  previews?: { hard: string; good: string; easy: string }
+}
+
+/** 引擎作答/忘记响应 → 卡面结果（AnswerResult 的可选字段收窄为 Outcome 语义）。 */
+export function toOutcome(r: import('../types').AnswerResult): AnswerOutcome {
+  return {
+    correct: r.correct ?? null, judge: r.judge, feedback: r.feedback,
+    xp: r.xp, xp_reason: r.xp_reason,
+    answer: r.answer, explanation: r.explanation,
+    pendingRating: r.pendingRating, previews: r.previews,
+  }
 }
 
 const KIND_LABEL: Record<QuestionItem['kind'], string> = {
@@ -75,6 +97,14 @@ export default function QuestionCard(props: {
   onDone?: (outcome: AnswerOutcome) => void
   /** mastery 会话内隐藏「再做一次」（重复作答不推进调度，换题/重读更有价值）。 */
   noRedo?: boolean
+  /** review = 复习刷卡变体：一卡一票（无重做）、5 秒门控忘记、背面正确答案块。 */
+  variant?: 'practice' | 'review'
+  /** 复习刷卡流的提交器（deferSchedule 挂起调度）；缺省走练习流 api.questionAnswer。 */
+  submitter?: (payload: string, elapsedS: number) => Promise<AnswerOutcome>
+  /** 「忘记」申报（复习变体；引擎按答错记证据、0 XP）。入参 = 卡面展示到申报的秒数。 */
+  onForget?: (elapsedS: number) => Promise<AnswerOutcome>
+  /** 背面附加件（自评难度按钮、下一张等），渲染在判卷反馈之下。 */
+  footer?: (outcome: AnswerOutcome) => ReactNode
 }) {
   const { question: q } = props
   const [choice, setChoice] = useState<string>('')
@@ -84,8 +114,17 @@ export default function QuestionCard(props: {
   const [pairs, setPairs] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<AnswerOutcome | null>(null)
+  const [forgetting, setForgetting] = useState(false)
+  // 「忘记」门控倒计时：卡面展示起算（复习变体专属）
+  const [forgetIn, setForgetIn] = useState(props.variant === 'review' ? FORGET_AFTER_SECONDS : 0)
   // 计时起点：题目渲染 / 重做时重置（乱猜判定 = 耗时过短且答错）
   const startRef = useRef(Date.now())
+
+  useEffect(() => {
+    if (forgetIn <= 0) return
+    const timer = setTimeout(() => setForgetIn(s => s - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [forgetIn])
 
   const isChoice = q.kind === 'single_choice' || q.kind === 'true_false'
   const isMulti = q.kind === 'multi_choice'
@@ -119,20 +158,38 @@ export default function QuestionCard(props: {
     setBusy(true)
     const elapsedS = Math.round(((Date.now() - startRef.current) / 1000) * 10) / 10
     try {
-      const res = await api.questionAnswer(props.course, props.node, q.id, payload(), elapsedS)
-      if (res.scheduled === false) {
-        Message.info('该题今日已推进过复习调度，本次仅记录练习统计')
+      let res: AnswerOutcome
+      if (props.submitter) {
+        res = await props.submitter(payload(), elapsedS)
+      } else {
+        const r = await api.questionAnswer(props.course, props.node, q.id, payload(), elapsedS)
+        if (r.scheduled === false) {
+          Message.info('该题今日已推进过复习调度，本次仅记录练习统计')
+        }
+        res = toOutcome(r)
       }
-      const oc: AnswerOutcome = {
-        correct: res.correct ?? null, judge: res.judge, feedback: res.feedback,
-        xp: res.xp, xp_reason: res.xp_reason,
-      }
+      setOutcome(res)
+      props.onDone?.(res)
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** 「忘记」申报：不作答直接翻面，调度与统计按答错记（引擎侧 0 XP）。 */
+  const doForget = async () => {
+    if (!props.onForget || outcome) return
+    setForgetting(true)
+    try {
+      const elapsedS = Math.round(((Date.now() - startRef.current) / 1000) * 10) / 10
+      const oc = await props.onForget(elapsedS)
       setOutcome(oc)
       props.onDone?.(oc)
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
     } finally {
-      setBusy(false)
+      setForgetting(false)
     }
   }
 
@@ -230,17 +287,29 @@ export default function QuestionCard(props: {
       )}
 
       {!outcome ? (
-        <Button type='primary' size='small' loading={busy} disabled={!canSubmit} onClick={() => void submit()}
-          style={{ alignSelf: 'flex-end' }}>提交</Button>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+          {props.variant === 'review' && props.onForget && (
+            <Button size='small' status='danger' disabled={forgetIn > 0 || busy}
+              loading={forgetting} onClick={() => void doForget()}>
+              {forgetIn > 0 ? `忘记（${forgetIn}s 后可用）` : '忘记'}
+            </Button>
+          )}
+          <Button type='primary' size='small' loading={busy} disabled={!canSubmit}
+            onClick={() => void submit()}>提交</Button>
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             {outcome.correct === true && <Tag color='green'>答对了</Tag>}
-            {outcome.correct === false && <Tag color='red'>答错了</Tag>}
+            {outcome.correct === false && (outcome.judge === 'forget'
+              ? <Tag color='orange'>忘记了</Tag>
+              : <Tag color='red'>答错了</Tag>)}
             {outcome.correct === null && <Tag>已记录</Tag>}
             <XpBadge xp={outcome.xp} reason={outcome.xp_reason} />
             <Text type='secondary' style={{ fontSize: 12 }}>判卷：{outcome.judge}</Text>
-            {!props.noRedo && <Button size='mini' type='text' onClick={redo}>再做一次</Button>}
+            {!props.noRedo && props.variant !== 'review' && (
+              <Button size='mini' type='text' onClick={redo}>再做一次</Button>
+            )}
           </div>
           {outcome.feedback && (
             <div style={{
@@ -250,6 +319,13 @@ export default function QuestionCard(props: {
               fontSize: 14, lineHeight: 1.7,
             }}><InlineMd text={outcome.feedback} /></div>
           )}
+          {props.variant === 'review' && outcome.answer && (
+            <div style={{ fontSize: 13 }}>
+              <Text type='secondary'>正确答案：</Text>
+              <Text bold>{outcome.answer}</Text>
+            </div>
+          )}
+          {props.footer?.(outcome)}
         </div>
       )}
     </div>

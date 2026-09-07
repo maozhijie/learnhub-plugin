@@ -126,6 +126,15 @@ export function applyRatingBlock(
   return { fs, kind: meta.kind }
 }
 
+/** 预览某评分后的下次到期日（不落盘）：复习自评按钮的到期预览。 */
+export function previewDue(sched: FSRS, fsOld: FsrsBlock | null, ratingNum: number, today: string): string {
+  const card = cardFromFm({ fsrs: fsOld } as unknown as Fm)
+  const rating = RATING_BY_NUM[Math.round(ratingNum)] ?? Rating.Good
+  const now = parseDay(today) ?? new Date()
+  const { card: next } = sched.next(card, now, rating)
+  return fmtDay(next.due)
+}
+
 /** 派生展示值 mastery = 0.7·稳定度完成度 + 0.3·练习证据；调度不读它。
  * 稳定度项 = min(1, S/(2·S_MASTER))：复习把 S 推向 2·S_MASTER 才渐近满分，
  * 一次全对的会话只到三成左右；无卡（未完成学习）时稳定度项为 0，只剩练习证据。 */

@@ -48,8 +48,19 @@ export const api = {
     http<{ course: string; node: string; region: string; stage: string; mastery: number; sections: import('./types').LessonSection[]; manifest: import('./types').SectionManifestItem[] | null; prereqs: string[]; suggest_next: string[] }>('GET', `/lesson${q({ node, course })}`),
   questions: (course: string, node: string) =>
     http<{ course: string; node: string; mastery: number; questions: import('./types').QuestionItem[] }>('GET', `/questions${q({ course, node })}`),
-  questionAnswer: (course: string, node: string, qid: string, answer: string, elapsedS?: number) =>
-    http<import('./types').AnswerResult>('POST', '/question-answer', { course, node, qid, answer, elapsed_s: elapsedS }),
+  questionAnswer: (course: string, node: string, qid: string, answer: string, elapsedS?: number,
+    opts?: { deferSchedule?: boolean }) =>
+    http<import('./types').AnswerResult>('POST', '/question-answer',
+      { course, node, qid, answer, elapsed_s: elapsedS, ...(opts?.deferSchedule ? { defer_schedule: true } : {}) }),
+  /** 复习刷卡流：答对后的自评结算（2=Hard 3=Good 4=Easy）。 */
+  questionRate: (course: string, node: string, qid: string, rating: 2 | 3 | 4) =>
+    http<import('./types').AnswerResult>('POST', '/question-rate', { course, node, qid, rating }),
+  /** 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）。 */
+  questionForget: (course: string, node: string, qid: string, elapsedS?: number) =>
+    http<import('./types').AnswerResult>('POST', '/question-forget', { course, node, qid, elapsed_s: elapsedS }),
+  /** 复习刷卡队列：跨课程到期题扁平队列，按到期日升序。 */
+  reviewQueue: (course?: string) =>
+    http<import('./types').ReviewQueueDoc>('GET', `/review-queue${q({ course })}`),
   nodeSkip: (course: string, node: string, skipped = true) =>
     http<{ course: string; node: string; stage: string }>('POST', '/node/skip', { course, node, skipped }),
   nodeComplete: (course: string, node: string, force = false) =>

@@ -7,6 +7,12 @@ import type { BankEntry } from '../types'
 
 const { Text } = Typography
 
+/** 本地今日串（YYYY-MM-DD；到期列红/橙/灰着色用）。 */
+const todayStr = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 const KIND_LABEL: Record<string, string> = {
   single_choice: '单选', multi_choice: '多选', fill_in_blank: '填空', true_false: '判断',
   numeric: '数值', ordering: '排序', matching: '配对', reflection: '反思', open_question: '开放',
@@ -102,6 +108,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
   const [showArchived, setShowArchived] = useState(false)
   const [editing, setEditing] = useState<BankEntry | null>(null)
   const [creating, setCreating] = useState(false)
+  const today = todayStr()
 
   const load = useCallback(async () => {
     try {
@@ -154,6 +161,13 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
             { title: '#', dataIndex: 'qid', width: 54 },
             { title: '题型', width: 70, render: (_, e) => <Tag size='small'>{KIND_LABEL[e.kind] ?? e.kind}</Tag> },
             { title: '题干', dataIndex: 'q', ellipsis: true },
+            { title: '到期', width: 112, render: (_, e) => e.due ? (
+              <Tag size='small'
+                color={e.due < today ? 'red' : e.due === today ? 'orange' : 'gray'}
+                title={e.lastReview ? `上次复习 ${e.lastReview}` : undefined}>
+                {e.due}
+              </Tag>
+            ) : <Text type='secondary' style={{ fontSize: 12 }}>未调度</Text> },
             { title: '状态', width: 80, render: (_, e) => e.archived
               ? <Tag size='small' color='gray'>已归档</Tag>
               : <Tag size='small' color='green'>在库</Tag> },

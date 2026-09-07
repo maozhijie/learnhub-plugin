@@ -16,7 +16,7 @@ import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
-import { getScheduler, applyRatingBlock, masteryOfFm } from './srs.ts'
+import { getScheduler, applyRatingBlock, masteryOfFm, previewDue } from './srs.ts'
 import { runAudit, effectiveStage } from './audit.ts'
 import { analyzeGraph } from './analysis.ts'
 import type { ScaleTarget } from './quality.ts'
@@ -27,6 +27,7 @@ import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals } from './gengraph.ts'
 import type { ApplyAudit } from './gengraph.ts'
 import { QuestionBank } from './question-bank.ts'
+import type { BankQuestion } from './question-bank.ts'
 import { YAML } from './yaml.ts'
 import { Sessions, assertNoBrokenNotes } from './sessions.ts'
 import type { NodeStat } from './sessions.ts'
@@ -722,6 +723,22 @@ export class LearnhubEngine {
     return { courses }
   }
 
+  /** 题目 → 作答视图（questions 与 reviewQueue 共用；matching 右列打乱防泄题）。 */
+  private questionView(q: BankQuestion, i: number): Record<string, unknown> {
+    return {
+      id: q.id, kind: q.kind, q: q.q, no: i + 1,
+      difficulty: q.difficulty ?? 1,
+      section: q.section ?? null,
+      ...(q.options?.length ? { options: q.options } : {}),
+      ...(q.kind === 'matching' && Array.isArray(q.answer)
+        ? { pairOptions: shuffled([...new Set(q.answer as string[])]) } : {}),
+      hasExplanation: Boolean(q.explanation),
+      due: q.fsrs?.reps ? q.fsrs.due : null,
+      attempts: q.stats?.attempts ?? 0,
+      lastCorrect: q.stats?.attempts ? (q.stats.correct / q.stats.attempts) >= 0.6 : null,
+    }
+  }
+
   /** 某节点题库题目列表（不含答案/评分要点；带到期日与作答统计——刷卡视图）。 */
   async questions(courseKey: string | undefined, node: string): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
@@ -729,19 +746,43 @@ export class LearnhubEngine {
     return {
       course: c.name, node,
       mastery: await this.nodeMastery(this.paths.courseRoot(c.root), node),
-      questions: bank.questions.filter(q => q.archived !== true).map((q, i) => ({
-        id: q.id, kind: q.kind, q: q.q, no: i + 1,
-        difficulty: q.difficulty ?? 1,
-        section: q.section ?? null,
-        ...(q.options?.length ? { options: q.options } : {}),
-        ...(q.kind === 'matching' && Array.isArray(q.answer)
-          ? { pairOptions: shuffled([...new Set(q.answer as string[])]) } : {}),
-        hasExplanation: Boolean(q.explanation),
-        due: q.fsrs?.reps ? q.fsrs.due : null,
-        attempts: q.stats?.attempts ?? 0,
-        lastCorrect: q.stats?.attempts ? (q.stats.correct / q.stats.attempts) >= 0.6 : null,
-      })),
+      questions: bank.questions.filter(q => q.archived !== true)
+        .map((q, i) => this.questionView(q, i)),
     }
+  }
+
+  /** 复习刷卡队列（Anki 式）：全部启用课程中「到期未刷」的未归档题，扁平按 due 升序
+   * （同日按节点名、题序稳定排序）；不含从未调度的新题（due=null，入口在学习流）。
+   * Broken 笔记 fail loud——与 status/recommend 同一门前置。 */
+  async reviewQueue(courseKey?: string, today = todayStr()): Promise<Record<string, unknown>> {
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const cards: Array<Record<string, unknown>> = []
+    for (const c of courses) {
+      const { broken } = await this.loadView(c)
+      assertNoBrokenNotes('review-queue', broken)
+      const courseRoot = this.paths.courseRoot(c.root)
+      let files: string[] = []
+      try {
+        files = await readdir(this.paths.bankDir(c.root))
+      } catch {
+        continue
+      }
+      for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
+        const node = f.replace(/\.yaml$/, '')
+        const bank = await this.bank.load(courseRoot, node)
+        bank.questions.forEach((q, i) => {
+          if (q.archived) return
+          const card = this.questionView(q, i)
+          if (!card.due || String(card.due) > today) return
+          cards.push({ course: c.name, node, ...card })
+        })
+      }
+    }
+    cards.sort((a, b) =>
+      String(a.due).localeCompare(String(b.due))
+      || String(a.node).localeCompare(String(b.node))
+      || String(a.id).localeCompare(String(b.id)))
+    return { date: today, total: cards.length, cards }
   }
 
   /** 题库写入（LLM 产出过 schema 门禁后落盘）。 */
@@ -752,11 +793,14 @@ export class LearnhubEngine {
 
   /** allo 作答流：答题 → 自动判卷（reflection 走 AI）→ practice 流水 + 计数/EMA。
    * 调度不在此触碰（D15：评分仍经工作单 settle / grade 通道）。
-   * elapsedS = 前端计时（题目渲染到提交的秒数）：记入流水并用于乱猜判定。 */
+   * elapsedS = 前端计时（题目渲染到提交的秒数）：记入流水并用于乱猜判定。
+   * opts.deferSchedule = 复习刷卡流的答对路径：调度挂起（不推卡），背面自评
+   * Hard/Good/Easy 后经 questionRate 结算；答错/乱猜/当日已推进不受其影响。 */
   async questionAnswer(
     llmComplete: (prompt: string, system?: string) => Promise<string>,
     courseKey: string | undefined, node: string, qid: string, answer: string,
     elapsedS?: number | null,
+    opts?: { deferSchedule?: boolean },
   ): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
     const { graph, broken } = await this.loadView(c)
@@ -823,8 +867,21 @@ export class LearnhubEngine {
     // 每题每天至多推进一次：同日重复作答（「再做一次」）只记练习统计，
     // 不再碰调度卡——避免反复刷同一题把 reps/stability/due 推到失真位置。
     // 乱猜作答同样不碰卡（含首答）：难度证据（XP 预算的 k 校准）只由认真作答驱动。
-    let fs: FsrsBlock
+    // 复习刷卡流（deferSchedule）答对时调度挂起：背面自评档位经 questionRate 落盘，
+    // 挂起以 stats.pending_rating 标记（rate 的前置、forget 的互斥条件）。
+    let fs: FsrsBlock | null
+    let pendingRating = false
+    let previews: { hard: string; good: string; easy: string } | undefined
     if (guessed || (repeated && q.fsrs)) {
+      fs = q.fsrs ?? null
+    } else if (opts?.deferSchedule === true && correct) {
+      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+      pendingRating = true
+      previews = {
+        hard: previewDue(sched, q.fsrs ?? null, 2, today),
+        good: previewDue(sched, q.fsrs ?? null, 3, today),
+        easy: previewDue(sched, q.fsrs ?? null, 4, today),
+      }
       fs = q.fsrs ?? null
     } else {
       const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
@@ -834,6 +891,7 @@ export class LearnhubEngine {
       attempts: (q.stats?.attempts ?? 0) + 1,
       correct: (q.stats?.correct ?? 0) + (correct ? 1 : 0),
       last: today,
+      ...(pendingRating ? { pending_rating: true } : {}),
     }
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
     const mastery = await this.nodeMastery(this.paths.courseRoot(c.root), node)
@@ -843,13 +901,107 @@ export class LearnhubEngine {
       // 错题公布答案（allo answer_review 语义；reflection 的 rubric 与开放题的参考要点也回显供对照）
       answer: revealAnswer(q),
       kind: q.kind,
-      due: fs.due,
+      due: fs?.due ?? null,
       mastery,
-      // 本次作答是否推进了该题 FSRS 调度（每题每天至多一次）
-      scheduled: fs !== q.fsrs,
+      // 本次作答是否推进了该题 FSRS 调度（每题每天至多一次；自评挂起视为未推进）
+      scheduled: fs !== (q.fsrs ?? null),
+      pendingRating,
+      ...(previews ? { previews } : {}),
       // XP 时间账本：本次作答的结算结果
       xp: settle.xp,
       xp_reason: settle.reason,
+    }
+  }
+
+  /** 作答 / 忘记 / 自评共用的前置：课程解析、笔记体检、题库定位。 */
+  private async questionContext(courseKey: string | undefined, node: string, qid: string, op: string) {
+    const c = await this.registry.resolve(courseKey)
+    const { graph, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[${op}] 节点「${node}」不在图内。`)
+    this.assertNoteOk(c, graph, broken, node, op)
+    const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
+    const idx = bank.questions.findIndex(q => q.id === qid)
+    if (idx < 0) throw new Error(`[${op}] ${node} 的题库没有 ${qid}。`)
+    return { c, graph, q: bank.questions[idx], idx }
+  }
+
+  /** 复习刷卡流：答对后的自评结算（Hard/Good/Easy → FSRS 2/3/4）。
+   * 前置 = 该题今天已由 deferSchedule 作答记账且调度仍挂起（stats.pending_rating）。
+   * 只推卡：不记流水、不动 stats 计数、不给 XP（XP 在作答时已结算）。 */
+  async questionRate(
+    courseKey: string | undefined, node: string, qid: string, rating: number,
+  ): Promise<Record<string, unknown>> {
+    const r = Math.round(rating)
+    if (r < 2 || r > 4) throw new Error(`[question-rate] 自评档位只能是 2/3/4（收到 ${String(rating)}）。`)
+    const { c, q } = await this.questionContext(courseKey, node, qid, 'question-rate')
+    const today = todayStr()
+    if (q.stats?.last !== today || !q.stats?.pending_rating) {
+      // 挂起标记是唯一准入：练习流作答与「完成学习」当日初始化（last_review=今天）都不产生挂起
+      throw new Error(`[question-rate] ${node}/${qid} 今天没有待结算的自评（未作答或非挂起路径）。`)
+    }
+    const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+    const fs = applyRatingBlock(q.fsrs ?? null, r, today, sched).fs
+    const { pending_rating: _drop, ...statsRest } = q.stats
+    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats: { ...statsRest } })
+    return {
+      course: c.name, node, qid, rating: r,
+      due: fs.due,
+      mastery: await this.nodeMastery(this.paths.courseRoot(c.root), node),
+      scheduled: true,
+    }
+  }
+
+  /** 复习刷卡流：「忘记」申报——不作答直接翻面，调度与统计均按答错记，0 XP。
+   * 5 秒主动回忆门控是前端交互；引擎只负责如实记账。当日已作答（含挂起自评）
+   * 的题拒绝重复申报；「完成学习」当日初始化的卡允许覆推 Again（与练习流同日首答一致）。 */
+  async questionForget(
+    courseKey: string | undefined, node: string, qid: string,
+    elapsedS?: number | null,
+  ): Promise<Record<string, unknown>> {
+    const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question-forget')
+    const today = todayStr()
+    if (q.stats?.last === today) {
+      throw new Error(`[question-forget] ${node}/${qid} 今天已有作答记录，忘记只用于本日首次刷卡。`)
+    }
+    const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+    const fs = applyRatingBlock(q.fsrs ?? null, 1, today, sched).fs
+    await this.store.appendPractice({
+      course: c.name, node, ex: idx + 1, answer: '',
+      correct: false, judge: 'forget', qid,
+      elapsed_s: elapsedS ?? undefined,
+      xp: 0,
+    })
+    // 节点侧证据：忘记 = 0 分（EMA 衰减 + 计一次未过），stage 推进与作答路径一致
+    const [, regionName] = graph.blockOf[node]
+    const path = this.paths.courseNotePath(c.root, regionName, node)
+    const { fm: rawFm, body } = await loadNote(path)
+    const fm = asFm(rawFm)
+    if (fm) {
+      const next = applyPracticeEvidence(fm, 0.0)
+      if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
+      await saveNote(path, next as unknown as Record<string, unknown>, body)
+      if (next.stage !== fm.stage) {
+        const { state: stateNow } = await this.loadView(c)
+        await this.content.onStageChange(c.root, graph, stateNow, node, next.stage)
+      }
+    }
+    const stats = {
+      attempts: (q.stats?.attempts ?? 0) + 1,
+      correct: q.stats?.correct ?? 0,
+      last: today,
+    }
+    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
+    return {
+      correct: false,
+      judge: 'forget',
+      feedback: q.explanation ?? '',
+      answer: revealAnswer(q),
+      explanation: q.explanation ?? '',
+      kind: q.kind,
+      due: fs.due,
+      mastery: await this.nodeMastery(this.paths.courseRoot(c.root), node),
+      scheduled: true,
+      xp: 0,
     }
   }
 
@@ -1093,6 +1245,9 @@ export class LearnhubEngine {
             course: c.name, node, qid: q.id, no: i + 1, kind: q.kind, q: q.q,
             difficulty: q.difficulty ?? 1, tags: q.tags ?? [],
             archived: q.archived === true, hasExplanation: Boolean(q.explanation),
+            // 调度字段（题目管理页「到期」列消费；未进调度的题为 null）
+            due: q.fsrs?.reps ? q.fsrs.due : null,
+            lastReview: q.fsrs?.reps ? q.fsrs.last_review : null,
             ...(q.options?.length ? { options: q.options } : {}),
             ...(q.kind === 'matching' && Array.isArray(q.answer)
               ? { pairOptions: [...new Set(q.answer as string[])] } : {}),

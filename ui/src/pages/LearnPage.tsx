@@ -1,17 +1,18 @@
 /** 学习页（主界面）：XP 时间账本条 + 复习横幅 + 「接下来学/复习」推荐流
  * （点开直接进 LessonView）+ 课程卡（次要区）。二级视图 LessonView 承载
- * 正文/mastery 会话/完成。复习会话 = 刷卡：只列到期题，作答即驱动该题 FSRS
- * 调度；无题节点提示出题。 */
+ * 正文/mastery 会话/完成。复习会话 = Anki 式刷卡队列：跨课程到期题扁平排队，
+ * 一卡一票（作答或满 5 秒申报忘记），背面自评 Hard/Good/Easy 推进调度。 */
 import {
   Alert, Button, Card, Empty, Input, Message, Modal, Popconfirm, Progress, Space,
   Tag, Typography,
 } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import LessonView from '../components/LessonView'
-import QuestionCard from '../components/QuestionCard'
+import QuestionCard, { type AnswerOutcome, toOutcome } from '../components/QuestionCard'
 import { api } from '../api'
 import type { AppFrame } from '../App'
-import type { QuestionItem, RecEvent, RecommendDoc, XpStatus } from '../types'
+import type { RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, XpStatus } from '../types'
 
 const { Text, Title } = Typography
 
@@ -20,11 +21,6 @@ const REC_TYPE: Record<string, { label: string; color: string; order: number }> 
   review: { label: '复习', color: 'green', order: 1 },
   learning: { label: '继续学', color: 'arcoblue', order: 2 },
   new: { label: '新学', color: 'cyan', order: 3 },
-}
-
-const todayStr = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /** XP 时间账本条：今日 XP / 每日目标环 + 连续学习天数（Math Academy 的进度货币）。 */
@@ -50,7 +46,7 @@ function XpBar({ xp, onEditGoal }: { xp: XpStatus; onEditGoal: () => void }) {
   )
 }
 
-/** 复习横幅：到期题驱动（有到期题的节点数 + 开始复习）。 */
+/** 复习横幅：到期卡驱动（复习队列张数 + 开始复习）。 */
 function ReviewBanner({ dueCount, onStart }: { dueCount: number; onStart: () => void }) {
   return (
     <Card size='small' style={{ borderRadius: 10 }}>
@@ -58,7 +54,7 @@ function ReviewBanner({ dueCount, onStart }: { dueCount: number; onStart: () => 
         <div>
           <Text type='secondary' style={{ display: 'block', fontSize: 12 }}>待复习</Text>
           <Text style={{ fontSize: 20, fontWeight: 600 }}>{dueCount}</Text>
-          <Text type='secondary' style={{ fontSize: 12 }}> 个节点有到期题目</Text>
+          <Text type='secondary' style={{ fontSize: 12 }}> 张卡到期</Text>
         </div>
         <Button type='primary' onClick={onStart} disabled={dueCount === 0} style={{ marginLeft: 'auto' }}>
           开始复习（{dueCount}）
@@ -156,62 +152,154 @@ function CourseCard(props: {
   )
 }
 
-/** 复习会话：逐节点刷卡（只列到期/未做过题），作答即驱动该题 FSRS；无题节点提示完成/出题。 */
+/** 复习刷卡会话（Anki 式扁平队列）：一卡一票——正面作答或满 5 秒申报忘记
+ * （按答错记证据、0 XP），背面自评 Hard/Good/Easy（带到期预览，键盘 2/3/4）即翻
+ * 下一张；答错/忘记自动 Again 明天再见，当次队列不回头。出完给小结（纯展示，
+ * 逐题流水已实时入账）。 */
 function ReviewSession(props: {
-  queue: RecEvent[]
+  queue: ReviewCard[]
   onClose: () => void
   onFinish: () => Promise<void>
-  /** 每题作答后刷新推荐流/XP（主界面数据随作答实时更新）。 */
+  /** 每张卡结算后刷新主界面数据（XP/推荐流/到期数随作答实时更新）。 */
   onSettled: () => void
 }) {
   const [idx, setIdx] = useState(0)
-  const [questions, setQuestions] = useState<QuestionItem[] | null>(null)
-  const today = todayStr()
-  const item = props.queue[idx]
+  const [tally, setTally] = useState({ right: 0, wrong: 0, forgot: 0, hard: 0, good: 0, easy: 0 })
+  /** 当前卡背面的作答结果（自评键盘快捷键与 footer 的依据）。 */
+  const [outcome, setOutcome] = useState<AnswerOutcome | null>(null)
+  const card = props.queue[idx]
+  const done = !card
 
-  const loadQuestions = useCallback(async () => {
-    setQuestions(null)
-    if (!item) return
+  const next = () => {
+    setOutcome(null)
+    setIdx(i => i + 1)
+  }
+
+  const handleDone = (oc: AnswerOutcome) => {
+    setOutcome(oc)
+    if (oc.correct === true) setTally(t => ({ ...t, right: t.right + 1 }))
+    else if (oc.judge === 'forget') setTally(t => ({ ...t, forgot: t.forgot + 1 }))
+    else if (oc.correct === false) setTally(t => ({ ...t, wrong: t.wrong + 1 }))
+    props.onSettled()
+  }
+
+  /** 自评结算：挂起调度按选中档位落盘，选完即翻下一张。 */
+  const rate = async (r: 2 | 3 | 4) => {
+    if (!card) return
     try {
-      const bank = await api.questions(item.course, item.node)
-      // 刷卡语义：到期题优先；无任何题 → 提示出题
-      const due = bank.questions.filter(q => q.due !== null && q.due <= today)
-      const fresh = bank.questions.filter(q => q.due === null)
-      setQuestions([...due, ...fresh])
-    } catch {
-      setQuestions([])
+      await api.questionRate(card.course, card.node, card.id, r)
+      setTally(t => ({
+        ...t,
+        hard: r === 2 ? t.hard + 1 : t.hard,
+        good: r === 3 ? t.good + 1 : t.good,
+        easy: r === 4 ? t.easy + 1 : t.easy,
+      }))
+      next()
+      props.onSettled()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
     }
-  }, [item, today])
+  }
 
-  useEffect(() => { void loadQuestions() }, [loadQuestions])
+  const forget = (elapsedS: number): Promise<AnswerOutcome> => {
+    if (!card) return Promise.reject(new Error('没有当前卡'))
+    return api.questionForget(card.course, card.node, card.id, elapsedS).then(toOutcome)
+  }
 
-  if (!item) return null
+  // 自评键盘快捷键（决议 3）：背面挂起时 2/3/4 = Hard/Good/Easy
+  useEffect(() => {
+    if (!outcome?.pendingRating) return
+    const h = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return
+      if (e.key === '2') void rate(2)
+      else if (e.key === '3') void rate(3)
+      else if (e.key === '4') void rate(4)
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [outcome])
+
+  /** 背面附加件：自评三按钮（挂起）/ 已推进说明 / Again 明天再见。 */
+  const footer = (oc: AnswerOutcome): ReactNode => {
+    if (oc.pendingRating && oc.previews) {
+      return (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Text type='secondary' style={{ fontSize: 12 }}>记得多牢？自评推进调度（快捷键 2/3/4）</Text>
+          <Button size='small' onClick={() => void rate(2)}>Hard · {oc.previews!.hard}</Button>
+          <Button size='small' type='primary' onClick={() => void rate(3)}>Good · {oc.previews!.good}</Button>
+          <Button size='small' status='success' onClick={() => void rate(4)}>Easy · {oc.previews!.easy}</Button>
+        </div>
+      )
+    }
+    if (oc.correct === true) {
+      // 队列快照后该题被练习流答过（当日调度已推进）：无自评可出，仅记录并继续
+      return (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+          <Text type='secondary' style={{ fontSize: 12 }}>今日已在学习中推进过调度，本次仅记录</Text>
+          <Button size='small' type='primary' onClick={next}>下一张</Button>
+        </div>
+      )
+    }
+    if (oc.correct === false) {
+      return (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            {oc.judge === 'forget' ? '已按忘记调度，明天再见' : '已按答错调度（Again），明天再见'}
+          </Text>
+          <Button size='small' type='primary' onClick={next}>下一张</Button>
+        </div>
+      )
+    }
+    return null
+  }
 
   const finish = async () => {
     await props.onFinish()
     props.onClose()
   }
 
+  if (done) {
+    return (
+      <Modal title='复习完成' visible footer={null} unmountOnExit style={{ width: 480 }}
+        onCancel={() => { void finish() }}>
+        <Space direction='vertical' style={{ width: '100%' }} size={14}>
+          <Card size='small' style={{ borderRadius: 10 }}>
+            <Space direction='vertical' size={6}>
+              <Title heading={6} style={{ margin: 0 }}>本轮复习 {props.queue.length} 张</Title>
+              <Text type='secondary'>
+                答对 {tally.right}（Hard {tally.hard} / Good {tally.good} / Easy {tally.easy}）
+                · 忘记 {tally.forgot} · 答错 {tally.wrong}
+              </Text>
+              <Text type='secondary' style={{ fontSize: 12 }}>
+                忘记与答错的卡明天到期再见；逐题流水与 XP 已实时入账。
+              </Text>
+            </Space>
+          </Card>
+          <Button type='primary' long onClick={() => { void finish() }}>完成</Button>
+        </Space>
+      </Modal>
+    )
+  }
+
   return (
-    <Modal
-      title={`复习 ${idx + 1}/${props.queue.length}`} visible footer={null} unmountOnExit
-      onCancel={() => { void finish() }} style={{ width: 620 }}>
+    <Modal title={`复习 ${idx + 1}/${props.queue.length}`} visible footer={null} unmountOnExit
+      onCancel={() => { void finish() }} style={{ width: 680 }}>
       <Space direction='vertical' style={{ width: '100%' }} size={12}>
-        <div>
-          <Text type='secondary'>{item.course} · </Text>
-          <Text bold>{item.node}</Text>
-          {item.why && <Text type='secondary' style={{ display: 'block', fontSize: 12 }}>{item.why}</Text>}
-        </div>
-        {questions === null ? <Text type='secondary'>加载题库…</Text>
-          : questions.length > 0 ? (
-            questions.map(q => (
-              <QuestionCard key={q.id} course={item.course} node={item.node} question={q}
-                onDone={() => { void loadQuestions(); props.onSettled() }} />
-            ))
-          ) : (
-            <Alert type='info' content='该节点还没有题目：在学习视图里「AI 出题」，或直接「完成学习」。' />
-          )}
-        <Button size='small' type='text' onClick={() => setIdx(i => i + 1)}>跳过此节点</Button>
+        <Space size={8} wrap>
+          <Text type='secondary'>{card.course} · </Text>
+          <Text bold>{card.node}</Text>
+          <Tag size='small' color='green'>到期 {card.due}</Tag>
+          <Tag size='small'>做过 {card.attempts} 次</Tag>
+        </Space>
+        <QuestionCard key={card.id} course={card.course} node={card.node} question={card}
+          variant='review' noRedo
+          submitter={(payload, elapsedS) => api.questionAnswer(
+            card.course, card.node, card.id, payload, elapsedS, { deferSchedule: true },
+          ).then(toOutcome)}
+          onForget={forget}
+          footer={footer}
+          onDone={handleDone} />
       </Space>
     </Modal>
   )
@@ -238,7 +326,8 @@ function CreateDialog(props: { visible: boolean; onClose: () => void }) {
 export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [rec, setRec] = useState<RecommendDoc | null>(null)
   const [xp, setXp] = useState<XpStatus | null>(null)
-  const [session, setSession] = useState<RecEvent[] | null>(null)
+  const [reviewQ, setReviewQ] = useState<ReviewQueueDoc | null>(null)
+  const [session, setSession] = useState<ReviewCard[] | null>(null)
   const [createVisible, setCreateVisible] = useState(false)
   const [runningJobs, setRunningJobs] = useState(0)
   const [queuedJobs, setQueuedJobs] = useState(0)
@@ -248,6 +337,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const load = useCallback(async () => {
     setRec(await api.recommend(12).catch(() => null))
     setXp(await api.xp().catch(() => null))
+    setReviewQ(await api.reviewQueue().catch(() => null))
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -294,8 +384,9 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     return () => window.removeEventListener('learnhub:reload', h)
   }, [frame, load])
 
-  const reviewQueue = (rec?.events ?? []).filter(e => e.type === 'review' || e.type === 'overdue')
+  const reviewEvents = (rec?.events ?? []).filter(e => e.type === 'review' || e.type === 'overdue')
   const learnEvents = (rec?.events ?? []).filter(e => e.type !== 'review' && e.type !== 'overdue')
+  const dueCards = reviewQ?.cards ?? []
 
   const deleteCourse = (name: string) => {
     Modal.confirm({
@@ -375,15 +466,15 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       </div>
       <XpBar xp={xp ?? { date: '', today_xp: 0, goal: 30, streak: 0, eta: [] }}
         onEditGoal={() => frame.goto('stats')} />
-      <ReviewBanner dueCount={reviewQueue.length} onStart={() => setSession(reviewQueue)} />
+      <ReviewBanner dueCount={reviewQ?.total ?? 0} onStart={() => setSession(dueCards)} />
 
       {/* 核心区：「接下来学/复习」推荐流——点开直接进学习视图 */}
       {frame.tree && frame.tree.courses.length === 0 ? (
         <Empty description='还没有课程。点右上角「生成新课程」看引导，然后在 dsh 对话里让 agent 按技能建课。' />
-      ) : (rec && (reviewQueue.length + learnEvents.length) > 0 ? (
+      ) : (rec && (reviewEvents.length + learnEvents.length) > 0 ? (
         <Card size='small' title='接下来' style={{ borderRadius: 10 }}>
           <Space direction='vertical' style={{ width: '100%' }} size={10}>
-            {[...reviewQueue, ...learnEvents].sort((a, b) =>
+            {[...reviewEvents, ...learnEvents].sort((a, b) =>
               (REC_TYPE[a.type]?.order ?? 9) - (REC_TYPE[b.type]?.order ?? 9)).map((e, i) => (
                 <RecCard key={i} e={e} gen={genMap[`${e.course}/${e.node}`]}
                   onOpen={() => frame.openLesson(e.course, e.node)}
@@ -408,7 +499,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
                 onOpen={() => { frame.setCourse(c.name); frame.goto('graph') }}
                 onRegenerate={() => regenerateCourse(c.name)}
                 onReview={() => {
-                  const q = reviewQueue.filter(e => e.course === c.name)
+                  const q = dueCards.filter(card => card.course === c.name)
                   if (!q.length) { Message.info('该课程暂无到期复习'); return }
                   setSession(q)
                 }}
