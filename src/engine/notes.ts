@@ -162,6 +162,9 @@ export function validateNoteFrontmatter(doc: unknown): { errors: string[]; fm?: 
         })
       }
     }
+    if (content.tier !== undefined && !['低', '中', '高'].includes(content.tier as string)) {
+      errors.push('content.tier: 只允许 低/中/高（复杂度档位记录）')
+    }
   }
 
   const practice = doc.practice
@@ -188,6 +191,8 @@ export function validateNoteFrontmatter(doc: unknown): { errors: string[]; fm?: 
       status: (content as Record<string, unknown>).status,
       ...((content as Record<string, unknown>).sections !== undefined
         ? { sections: (content as Record<string, unknown>).sections } : {}),
+      ...((content as Record<string, unknown>).tier !== undefined
+        ? { tier: (content as Record<string, unknown>).tier } : {}),
     },
     practice: {
       attempts: (practice as Record<string, unknown>).attempts,

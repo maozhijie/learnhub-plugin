@@ -7,7 +7,7 @@ import type { Graph } from './graph.ts'
 import type { Fm } from './types.ts'
 import type { Store } from './store.ts'
 import { effectiveStage } from './audit.ts'
-import { graphHealthScore } from './health.ts'
+import { graphHealthScore, estSpreadNote } from './health.ts'
 import { floatNodes, jumpCandidates, scaleReport } from './quality.ts'
 import type { JumpCandidate, ScaleReport, ScaleTarget } from './quality.ts'
 import { parseDay, todayStr, daysBetween } from './dates.ts'
@@ -27,8 +27,9 @@ export interface GraphAnalysis {
   unreachable: string[]
   bottlenecks: Array<{ node: string; successors: number; unlocks: number }>
   lapse_hotspots: Array<{ node: string; lapses: number }>
-  /** 图谱健康分（0-100；结束条件锚点，公式与语义见 health.ts）。 */
-  health: { score: number; breakdown: Record<string, number> }
+  /** 图谱健康分（0-100；结束条件锚点，公式与语义见 health.ts）。
+   * est_note：est 分布压缩的 advisor 提示（null = 无；不改分，est 重标注属图生成专题）。 */
+  health: { score: number; breakdown: Record<string, number>; est_note: string | null }
   /** 分批构建建议（图谱 designer 逐批展开时规划下一批的输入，全部可行动）。 */
   suggestions: {
     /** 节点数 <5 的块（浅块优先，最多 8 个）——往哪扩。 */
@@ -183,7 +184,7 @@ export async function analyzeGraph(
     unreachable,
     bottlenecks,
     lapse_hotspots: lapseHotspots,
-    health: graphHealthScore(graph),
+    health: { ...graphHealthScore(graph), est_note: estSpreadNote(graph) },
     suggestions: {
       expand_blocks: expandBlocks,
       missing_pre: missingPre,

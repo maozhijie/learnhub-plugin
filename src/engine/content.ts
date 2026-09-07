@@ -11,6 +11,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
+import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, TIER_LABELS } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { normChoice } from './grading.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock } from '../../shared/content-renderers.ts'
@@ -184,6 +185,13 @@ export class Content {
       out.push('- 题型优先 single_choice / true_false / fill_in_blank（可机器判卷）；开放性问答题用 reflection 并在 answer 写评分要点')
       out.push('- 末尾机器块：`<!-- enc_candidates: [本课练习真实调用的前置技能] -->`')
     }
+    out.push('')
+    out.push('## 9. 复杂度档案（本节点内容规模的锚点；别注水也别压扁）')
+    if (isPractice) {
+      out.push('- 实践节点：核心交付物是交互模拟，节段/题量预算不适用，按 §8 规范走')
+    } else {
+      out.push(...nodeProfileLines(graph, node))
+    }
     return out.join('\n') + '\n'
   }
 
@@ -239,7 +247,7 @@ export class Content {
     // 风格变体作用于「课程节生成」（课程节生成-<风格>）；整课版「课程生成*」已随
     // 大纲→逐节管线退役——旧 vault 快照文件不再被读取，可手工清理。
     课程大纲: `\
-<!-- learnhub:prompt/v5 -->
+<!-- learnhub:prompt/v6 -->
 # 课程大纲提示词（用户可编辑；生成时上下文包自动附在本模板之后）
 
 你是 learnhub 学习系统的课程设计师。根据附后的上下文包，把目标节点的一课拆成依次学习的「节」清单；每节之后会单独生成正文。
@@ -247,9 +255,9 @@ export class Content {
 ## 设计原则
 
 1. 节的划分、数量、顺序与类型配比完全由你根据课程内容、主题与讲解风格判断，选择最自然的讲解骨架：不套固定栏目，不设固定收尾段（无强制的过渡节/总结节）。
-2. 一节 = 一个可完成的学习单元（一个概念、一道例题、一次演示、一次动手练习或一个交互模拟）；标题描述本节具体内容，不用栏目化通名；一节 = 学习页 1–2 屏——一个知识点需要 公式+推导+例题+图 才能讲完时拆成多个节；节内不允许再分小节（### 子标题会被质检门拒绝）。
+2. 一节 = 一个可完成的学习单元（一个概念、一道例题、一次演示、一次动手练习或一个交互模拟）；标题描述本节具体内容，不用栏目化通名；一节 = 学习页 1–2 屏——一个知识点需要 公式+推导+例题+图 才能讲完时拆成多个节；节内不允许再分小节（### 子标题会被质检门提示，建议并入正文或拆成独立节）。
 3. type 从节类型菜单选（概念/例题/演示/小结/练习/交互）；练习节可选（整课可以没有练习节）；节类型配比按内容选组合模式，例如：连续 2–3 个概念节后跟一个练习节集中练、概念-演示穿插、全概念无练习节——不要机械地一节内容跟一节练习。
-4. 通常 3–8 节，可按内容增减；相邻节之间要有学习上的递进关系（逐节生成时会注入前节已生成正文保证连贯）。
+4. 节数按上下文包 §9 复杂度档案锚定：目标节段数区间内的自然划分（简单节点不注水拆长课，复杂节点留够展开空间）；相邻节之间要有学习上的递进关系（逐节生成时会注入前节已生成正文保证连贯）。
 
 ## 输出
 
@@ -264,7 +272,7 @@ sections:
     visual: 公式|mermaid|图片|交互|示意图|函数图|图表 之一（本节的讲解主体可视化——学习页文字宜少、公式/图/交互宜多，几乎每节都有，确无才写「无」；示意图=\`\`\`svg、函数图=\`\`\`plot、图表=\`\`\`chart）
 `,
     课程节生成: `\
-<!-- learnhub:prompt/v5 -->
+<!-- learnhub:prompt/v6 -->
 # 课程节生成提示词（用户可编辑；系统附上：节清单、本节任务、前节已生成正文、上下文包）
 
 你是 learnhub 学习系统的课程写手。根据附后的材料，只写「本节任务」指定的这一节正文。
@@ -274,7 +282,7 @@ sections:
 1. 只输出一节：以 \`## 类型：标题\` 开头（标题与类型精确照抄本节任务），后接本节正文；不写其他节、不写 frontmatter。
 2. 只用前置已教概念与常识；「禁止使用的概念」一节列出的名称不得出现，也不得引用其结论。
 3. 不超出「领域边界」声明的区块范围；后继内容至多在自然收尾处一句话带过。
-4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（≤150 字），不写大段解说；每节至少一个可视化（交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
+4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
 5. 与「前一节已生成正文」自然衔接：不重复它讲过的内容，开头不复述前节结论。
 6. 排版约定：并列的误区/注意/要点块用 blockquote（> 首行加粗标签）；关键结论用独立公式（$$…$$）；mermaid 节点/边文本含 | { } " # 等特殊字符时必须整体双引号包裹（如 \`A["文本"]\`），否则渲染降级为源码。
 7. 别名按「规范约束」统一；图片用 \`![[<课程根>/课程图/xx.png]]\`。
@@ -286,7 +294,7 @@ sections:
 只输出本节正文（## 标题 + 内容），不要附加解释。
 `,
     '课程节生成-苏格拉底': `\
-<!-- learnhub:prompt/v5 -->
+<!-- learnhub:prompt/v6 -->
 # 课程节生成提示词——苏格拉底风格（用户可编辑；系统附上：节清单、本节任务、前节已生成正文、上下文包）
 
 你是 learnhub 学习系统的苏格拉底式导师。根据附后的材料，只写「本节任务」指定的这一节正文：少给结论，多给「好问题 + 逐步逼近的思路」，让学习者在回答问题中自己建构知识。
@@ -296,7 +304,7 @@ sections:
 1. 只输出一节：以 \`## 类型：标题\` 开头（标题与类型精确照抄本节任务），后接本节正文；不写其他节、不写 frontmatter。
 2. 只用前置已教概念与常识；「禁止使用的概念」一节列出的名称不得出现，也不得引用其结论。
 3. 不超出「领域边界」声明的区块范围；后继内容至多在自然收尾处一句话带过。
-4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（≤150 字），不写大段解说；每节至少一个可视化（交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
+4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
 5. 风格约束：以引导问题推进——先给观察/反例式好问题，再一小步逼近，问题后紧跟「锚点」（一两句最低限度的正确方向提示，不是答案）；结论只在问题链走完后给出。
 6. 与「前一节已生成正文」自然衔接：不重复它讲过的内容，开头不复述前节结论。
 7. 排版约定：并列的误区/注意/要点块用 blockquote（> 首行加粗标签）；关键结论用独立公式（$$…$$）；mermaid 节点/边文本含 | { } " # 等特殊字符时必须整体双引号包裹（如 \`A["文本"]\`），否则渲染降级为源码。
@@ -309,7 +317,7 @@ sections:
 只输出本节正文（## 标题 + 内容），不要附加解释。
 `,
     '课程节生成-费曼': `\
-<!-- learnhub:prompt/v5 -->
+<!-- learnhub:prompt/v6 -->
 # 课程节生成提示词——费曼风格（用户可编辑；系统附上：节清单、本节任务、前节已生成正文、上下文包）
 
 你是 learnhub 学习系统的费曼式讲解员。根据附后的材料，只写「本节任务」指定的这一节正文：假设学习者要把这节课讲给一个聪明的十二岁孩子听，用最朴素的类比和日常语言把概念讲透，再逐步引入正式记号。
@@ -319,7 +327,7 @@ sections:
 1. 只输出一节：以 \`## 类型：标题\` 开头（标题与类型精确照抄本节任务），后接本节正文；不写其他节、不写 frontmatter。
 2. 只用前置已教概念与常识；「禁止使用的概念」一节列出的名称不得出现，也不得引用其结论。
 3. 不超出「领域边界」声明的区块范围；后继内容至多在自然收尾处一句话带过。
-4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（≤150 字），不写大段解说；每节至少一个可视化（交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
+4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
 5. 风格约束：每个核心概念按「生活类比（并明确说类比在哪里失效）→ 朴素语言解释 → 正式定义/记号」推进；节末收一个「讲给别人听」的自测问题。
 6. 与「前一节已生成正文」自然衔接：不重复它讲过的内容，开头不复述前节结论。
 7. 排版约定：并列的误区/注意/要点块用 blockquote（> 首行加粗标签）；关键结论用独立公式（$$…$$）；mermaid 节点/边文本含 | { } " # 等特殊字符时必须整体双引号包裹（如 \`A["文本"]\`），否则渲染降级为源码。
@@ -332,7 +340,7 @@ sections:
 只输出本节正文（## 标题 + 内容），不要附加解释。
 `,
     题目生成: `\
-<!-- learnhub:prompt/v4 -->
+<!-- learnhub:prompt/v6 -->
 # 题目生成提示词（用户可编辑；节点正文由系统附在本模板之后）
 
 你是 learnhub 学习系统的出题老师。根据附后的节点正文出一组练习题，覆盖正文的核心概念、易错点与典型应用。
@@ -459,7 +467,7 @@ questions:
     return [...hits].sort()
   }
 
-  /** 节形状门禁：节内 ### 子标题破坏原子性（finding）；节 prose 过长
+  /** 节形状门禁：节内 ### 子标题降 warn（破坏原子性，但不可程序修复——不硬拦）；节 prose 过长
    * （warn >600 / finding >2000；长度剥离代码块/行内代码/公式/机器注释后计数——
    * 公式与图表不占文字预算，可视化为辅的文字纪律才有硬约束）。 */
   static checkSectionShape(body: string): { findings: string[]; warns: string[] } {
@@ -471,7 +479,7 @@ questions:
       if (!title || title.startsWith('<!--')) continue // 机器区不参与节形状
       const md = nl >= 0 ? part.slice(nl + 1) : ''
       if (/^### /m.test(md)) {
-        findings.push(`节「${title}」内出现 ### 子标题（破坏节的原子性：一节只讲一个知识点，需要分层就拆成多个节）`)
+        warns.push(`节「${title}」内出现 ### 子标题（破坏节的原子性——一节只讲一个知识点；请并入正文或拆成多个节）`)
       }
       const prose = md
         .replace(/```[\s\S]*?```/g, '')
@@ -561,6 +569,92 @@ questions:
         return clean(JSON.parse(text.replace(/,(\s*[}\]])/g, '$1')))
       } catch {
         return false
+      }
+    }
+  }
+
+  /** 程序性修复后的富内容块改写结果（落盘前调用；不改语义，只修机器可判的脏输入）。 */
+  static fixRichBlocks(body: string): string {
+    // plot/chart：JSON 尾随逗号/行注释是 fast 档模型高频失误；面板解析失败会降级源码，
+    // 单靠门禁容忍不够——落盘前把可解析的脏 JSON 改写为规范 JSON.stringify 产物。
+    // 合法 JSON 原样保留（不重排，避免与模型产出逐字 diff）。
+    body = body.replace(/^```(plot|chart)[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm, (whole, lang: string, code: string) => {
+      // 严格 JSON.parse 成功 → 合法产出，原样保留（不重排，避免与模型产出逐字 diff）
+      if (Content.strictJsonObject(code)) return whole
+      const parsed = Content.parseLooseJsonObject(code) // 脏输入：尾随逗号/行注释
+      if (!parsed) return whole // 仍不可解析:留给门禁 finding,回灌模型定向修复
+      return `\`\`\`${lang}\n${JSON.stringify(parsed, null, 2)}\n\`\`\``
+    })
+    // svg：前导杂质裁剪至首个 <svg（门禁要求块以 <svg 开头）
+    body = body.replace(/^```svg[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm, (whole, code: string) => {
+      const idx = code.indexOf('<svg')
+      if (idx <= 0) return whole
+      return '```svg\n' + code.slice(idx) + '```'
+    })
+    // mermaid：节点文本含 | 等特殊字符且未整体双引号包裹时自动补引号（渲染降级的高频根因）
+    body = body.replace(/^```mermaid[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm, (whole, code: string) => {
+      const fixed = code.split('\n').map(line =>
+        line.replace(/(\w[\w\u4e00-\u9fff]*)\[([^\]"\n]*\|[^\]"\n]*)\]/g, (m, id: string, label: string) => `${id}["${label.replace(/"/g, '\\"')}"]`),
+      ).join('\n')
+      return fixed === code ? whole : '```mermaid\n' + fixed + '```'
+    })
+    return body
+  }
+
+  /** 严格解析为 JSON 对象才为真（不容忍尾随逗号——fixRichBlocks 用它区分脏输入）。 */
+  private static strictJsonObject(text: string): boolean {
+    try {
+      const v: unknown = JSON.parse(text)
+      return typeof v === 'object' && v !== null && !Array.isArray(v)
+    } catch {
+      return false
+    }
+  }
+
+  /** 视觉块序号 → 该块正文首行摘录（≤60 字；修复回灌时给模型定位用）。 */
+  static visualBlockExcerpt(body: string, n: number): string | null {
+    let i = 0
+    for (const m of body.matchAll(/^```(plot|chart|svg)[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm)) {
+      i++
+      if (i === n) {
+        const firstLine = m[2]!.trim().split('\n').find(ln => ln.trim()) ?? ''
+        return firstLine.slice(0, 60) || null
+      }
+    }
+    return null
+  }
+
+  /** 把一条门禁 finding/warn 文本按违规位置定位：视觉块 findings 附块内首行摘录。 */
+  static locateFinding(body: string, finding: string): string {
+    const m = /第 (\d+) 块/.exec(finding)
+    if (!m) return finding
+    const excerpt = Content.visualBlockExcerpt(body, Number(m[1]))
+    return excerpt ? `${finding}\n       （违规定位：该块内容以 "${excerpt}" 开头）` : finding
+  }
+
+  /** 修复轮 prompt：把上一次输出 + 质检清单（附定位）回灌，只要求局部重写违规块。 */
+  static sectionRepairPrompt(basePrompt: string, previousOutput: string, gateReport: string): string {
+    const locatedLines = gateReport.split('\n')
+      .map(ln => Content.locateFinding(previousOutput, ln))
+      .join('\n')
+    return `${basePrompt}\n\n## 上一次输出未过质检门（只重写下列 ✗ 项定位到的违规局部，其余内容原样保留；不要整节重新发挥）\n\n上次输出：\n\n${previousOutput}\n\n质检清单：\n\n${locatedLines}\n`
+  }
+
+  /** JSON 尾随逗号 + 行注释容忍解析（`// …` 到行尾，不拆字符串；仍非对象返回 null）。 */
+  private static parseLooseJsonObject(code: string): Record<string, unknown> | null {
+    const isObj = (v: unknown): v is Record<string, unknown> =>
+      typeof v === 'object' && v !== null && !Array.isArray(v)
+    try {
+      const v: unknown = JSON.parse(code)
+      return isObj(v) ? v : null
+    } catch {
+      // 逐行剥 // 注释（不触碰字符串内的 //，如 https://——先剥引号外安全区域再回退整体剥尾随逗号）
+      const stripped = code.split('\n').map(ln => ln.replace(/^(\s*)\/\/.*$/, '$1')).join('\n')
+      try {
+        const v: unknown = JSON.parse(stripped.replace(/,(\s*[}\]])/g, '$1'))
+        return isObj(v) ? v : null
+      } catch {
+        return null
       }
     }
   }
@@ -658,12 +752,20 @@ questions:
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
   ): Promise<SectionManifest[]> {
     const manifest = Content.parseOutline(yamlText)
+    const budget = outlineBudgetForNode(graph, node, manifest.length)
+    if (budget.length) {
+      const e: Error & { code?: string } = new Error(`[outline] 大纲护栏未过：\n${budget.map(f => `  ✗ ${f}`).join('\n')}`)
+      e.code = 'OUTLINE_BUDGET'
+      throw e
+    }
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
     const { fm, body } = await loadNote(path)
     if (!fm || typeof fm.node !== 'string') throw new Error(`[outline] 课程文件不存在（先为节点生成内容骨架）: ${node}`)
-    await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: manifest } }, body)
-    await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending）` })
+    // 档位随大纲记录（预留接入点：弹性评估读 content.tier；不驱动调度）
+    const tier = TIER_LABELS[nodeTierOf(graph, node)]
+    await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: manifest, tier } }, body)
+    await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending；档位 ${tier}）` })
     return manifest
   }
 
@@ -691,7 +793,7 @@ questions:
       await writeFile(target, f.html, 'utf8')
     }
     // 提示词要求模型输出以 `## 标题` 开头，本方法按清单再包一层同名标题——先剥掉，避免正文标题重复
-    const sectionMd = Content.stripLeadingSectionTitle(split.body, entry.title)
+    const sectionMd = Content.fixRichBlocks(Content.stripLeadingSectionTitle(split.body, entry.title))
     const gate = await this.gateReport(graph, root, node, `## ${entry.title}\n\n${sectionMd}`)
     const html = Content.checkInteractiveHtml(split.files)
     if (gate.findings.length || html.findings.length) {
