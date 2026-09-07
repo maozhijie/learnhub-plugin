@@ -51,11 +51,12 @@ function parseEnc(raw: unknown, path: string, where: string, name: string): EncE
   return out
 }
 
-function parseNode(raw: unknown, path: string, where: string): GNode {
+/** 持久图与 gen 提案共用的节点 schema 解析：gen 在受理前收集同一套错误。 */
+export function parseNode(raw: unknown, path: string, where: string): GNode {
   if (typeof raw !== 'object' || raw === null) fail(path, `${where} 节点必须是映射`)
   const r = raw as Record<string, unknown>
   const unknown = Object.keys(r).filter(k => !NODE_KEYS.has(k))
-  if (unknown.length) fail(path, `${where} 含未知字段 ${JSON.stringify(unknown)}（只允许 name/pre/opt/note/enc/est/type）`)
+  if (unknown.length) fail(path, `${where} 含未知字段 ${JSON.stringify(unknown)}（只允许 ${[...NODE_KEYS].join('/')}）`)
   const name = r.name
   if (typeof name !== 'string' || !name.trim()) fail(path, `${where} 节点 name 缺失或为空`)
   const pre = r.pre ?? []

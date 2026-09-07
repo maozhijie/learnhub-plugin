@@ -1,6 +1,7 @@
 # 测试
 
-`node --test tests/`（Node >=24 原生 TS，零依赖；被测模块只做 `import type` 引图类型）。
+`node --experimental-transform-types --test tests/`（Node >=24 原生 TS；facade 测试需要
+transform 模式处理注入类的 constructor parameter properties。纯模块测试仍零运行时依赖）。
 
 接缝（2026-09-07 与用户确认）：
 
