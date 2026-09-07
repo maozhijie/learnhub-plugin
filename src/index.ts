@@ -51,10 +51,22 @@ export interface LearnhubConfig {
   model?: string
   /** 大纲/节正文等机械调用的思考档（缺省 off 提速；路由不支持该档位时自动降级为部署默认）。 */
   fastEffort?: 'off' | 'low'
+  /** 高复杂度节点（难度≥4/深节点）的大纲与修复轮的思考档（缺省 low；P4 分层 effort）。 */
+  deepEffort?: 'off' | 'low'
 }
 
-/** AI 调用的 provider/model/快速档（cordis 行 config 可覆盖，apply 时写入）。 */
-const llmCfg = { provider: 'deepseek-official', model: 'deepseek-v4-flash', fastEffort: 'off' as 'off' | 'low' }
+/** AI 调用的 provider/model/快速档/高档（cordis 行 config 可覆盖，apply 时写入）。 */
+const llmCfg = {
+  provider: 'deepseek-official', model: 'deepseek-v4-flash',
+  fastEffort: 'off' as 'off' | 'low',
+  deepEffort: 'low' as 'off' | 'low',
+}
+
+/** P4 分层 effort：机械调用统一走 fastEffort；高复杂度节点的大纲/修复轮升 deepEffort。
+ * 调用点以此替代散落的 { effort: llmCfg.fastEffort }，档位只在任务级决定。 */
+function contentEffort(highTier: boolean): 'off' | 'low' {
+  return highTier ? llmCfg.deepEffort : llmCfg.fastEffort
+}
 
 /** 课程生成任务注册表（course/node 键）：面板「生成」页签的状态源，
  * 页面刷新后从这里恢复（allo 同语义：服务端注册表是事实来源）；
@@ -207,13 +219,14 @@ function sectionPrompt(tpl: string, pack: string, s: { id: string; title: string
 /** 逐节生成共用出口：模型产出 → sectionApply；质检门未过时把门禁清单回灌模型修复一轮
  * （仅一轮，防循环；修复轮仍未过则带说明抛出）。fast 档模型偶发违反硬约束
  * （### 子标题/超长正文/非 JSON plot），一次盲跑定生死会让管线反复卡在同一节。
+ * P4：正文初跑恒 fastEffort；修复轮按 highTier 升 deepEffort（复杂节点值得多思考一轮）。
  * isCancelled 在每次模型产出后检查，取消即丢结果。 */
 async function applySectionWithRepair(
   ctx: Context, course: string, node: string,
   s: { id: string; title: string; type: string }, tpl: string, pack: string,
-  isCancelled?: () => boolean,
+  opts?: { isCancelled?: () => boolean; highTier?: boolean },
 ): Promise<{ version: number; title: string; hints: string[] }> {
-  const cancelled = () => isCancelled?.() ?? false
+  const cancelled = () => opts?.isCancelled?.() ?? false
   const first = stripFences(await llmComplete(ctx, sectionPrompt(tpl, pack, s), undefined, { effort: llmCfg.fastEffort }))
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   let gateReport = ''
@@ -227,7 +240,7 @@ async function applySectionWithRepair(
   const repaired = stripFences(await llmComplete(
     ctx,
     Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s), first, gateReport),
-    undefined, { effort: llmCfg.fastEffort },
+    undefined, { effort: contentEffort(opts?.highTier === true) },
   ))
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   try {
@@ -262,19 +275,22 @@ async function generateContent(ctx: Context, course: string, node: string, style
     }
     // 节模板提前 load：风格名写错在这里 fail loud，不浪费大纲调用
     const sectionTpl = await engine.loadPrompt(style ? `课程节生成-${style}` : '课程节生成')
+    const highTier = job.tier === '高'
 
     // —— 大纲：节清单落盘。已有 ready 节（断点续跑）沿用既有清单，否则重跑覆盖 ——
     let views = await engine.contentSectionsView(course, node)
     if (!views.some(s => s.status === 'ready')) {
       const outlineTpl = await engine.loadPrompt('课程大纲')
+      // P4：高复杂度节点的大纲轮升思考档（deepEffort）
+      const outlineEffort = contentEffort(highTier)
       // 大纲护栏未过（OUTLINE_BUDGET）时重跑一次并回灌节数与预期区间，仍失败才置 failed
-      let outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: llmCfg.fastEffort }))
+      let outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: outlineEffort }))
       if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
       try {
         await engine.contentOutline(course, node, outlineYaml)
       } catch (err) {
         if (job.status === 'cancelling' || (err instanceof Error && (err as Error & { code?: string }).code !== 'OUTLINE_BUDGET')) throw err
-        outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: llmCfg.fastEffort }))
+        outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: outlineEffort }))
         if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
         await engine.contentOutline(course, node, outlineYaml)
       }
@@ -290,7 +306,7 @@ async function generateContent(ctx: Context, course: string, node: string, style
       if (s.status === 'ready') continue
       job.progress = { ...job.progress!, current: s.title }
       persistGenJobs()
-      await applySectionWithRepair(ctx, course, node, s, sectionTpl, pack, () => job.status === 'cancelling')
+      await applySectionWithRepair(ctx, course, node, s, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier })
       job.progress = { done: job.progress!.done + 1, total: job.progress!.total }
       persistGenJobs()
     }
@@ -338,7 +354,8 @@ async function generateSection(ctx: Context, course: string, node: string, secti
   const s = views.find(v => v.id === sectionId)
   if (!s) throw new Error(`「${node}」没有节「${sectionId}」——先运行大纲。`)
   const sectionTpl = await engine.loadPrompt('课程节生成')
-  const r = await applySectionWithRepair(ctx, course, node, s, sectionTpl, pack)
+  const highTier = TIER_LABELS[await engine.contentTierOf(course, node)] === '高'
+  const r = await applySectionWithRepair(ctx, course, node, s, sectionTpl, pack, { highTier })
   return `[section] 「${r.title}」v${r.version} 落盘。`
 }
 
@@ -776,6 +793,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   if (config?.provider) llmCfg.provider = config.provider
   if (config?.model) llmCfg.model = config.model
   if (config?.fastEffort) llmCfg.fastEffort = config.fastEffort
+  if (config?.deepEffort) llmCfg.deepEffort = config.deepEffort
 
   // —— agent 工具面 ——
   const textOutput = {
