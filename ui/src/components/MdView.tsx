@@ -1,22 +1,18 @@
 /** 课程正文 Markdown 渲染：react-markdown + remark-gfm（表格/删除线/任务列表）
  * + remark-math/rehype-katex（公式）。代码块经 renderers.tsx 注册表按 lang 分发
  * （mermaid/media），未注册语言降级源码；Obsidian 图片嵌入 ![[path]] 预处理为
- * 面板文件路由 URL。不渲染裸 HTML（生成内容无注入面）。
+ * 面板文件路由 URL。不渲染裸 HTML（skipHtml，见 md-chain.ts——机器注释等 html
+ * 节点直接丢弃，而非默认的转义文本显示）。
  * InlineMd 为同一条链的行内变体：题干/选项/判卷反馈等短文本复用。 */
 import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkMath from 'remark-math'
-import rehypeKatex from 'rehype-katex'
 import 'katex/contrib/mhchem' // \ce 等化学宏注册进 rehype-katex 共享的 katex 实例
 import 'katex/dist/katex.min.css'
+import { MD_HTML_POLICY, REHYPE_PLUGINS, REMARK_PLUGINS } from './md-chain'
 import { renderBlock, verifyRendererCoverage } from './renderers'
 
 void verifyRendererCoverage()
-
-const REMARK_PLUGINS = [remarkGfm, remarkMath]
-const REHYPE_PLUGINS = [rehypeKatex]
 
 /** 行内场景段落降为 span：<p> 的块级默认会撑断 Radio/Text 的行内布局。 */
 function pToSpan(props: { children?: ReactNode }) {
@@ -48,6 +44,7 @@ export default function MdView(props: { md: string; className?: string }) {
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}
+        {...MD_HTML_POLICY}
         components={{ code: MdCode }}
       >
         {md}
@@ -66,6 +63,7 @@ export function InlineMd(props: { text: string }) {
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}
+        {...MD_HTML_POLICY}
         components={{ p: pToSpan, code: MdCode }}
       >{props.text}</ReactMarkdown>
     </span>
