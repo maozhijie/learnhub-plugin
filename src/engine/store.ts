@@ -149,6 +149,9 @@ export class Store {
 
   /** 取 pending 提案（缺省 = 该 kind 最新一条）。 */
   async takePending(kind: ProposalRec['kind'], pid?: number): Promise<ProposalRec> {
+    if (pid !== undefined && (!Number.isInteger(pid) || pid <= 0)) {
+      throw new Error(`[apply] 提案 id 必须是正整数（收到 ${String(pid)}）；省略 id 才表示该 kind 最新 pending。`)
+    }
     const list = await this.loadProposals()
     let prop: ProposalRec | undefined
     if (pid) {
