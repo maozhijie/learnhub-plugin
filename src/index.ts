@@ -285,6 +285,9 @@ async function generateContent(ctx: Context, course: string, node: string, style
   }
 }
 
+/** 综合测验题数（当前固定；随节点复杂度伸缩是既定方向，见 docs/research/2026-09-node-content-quality.md P3）。 */
+const GENERIC_QUIZ_COUNT = 3
+
 /** 管线收尾：逐节出题（每内容节 2 道，绑节 id）+ 综合题（通用），汇总任务终态。 */
 async function finishWithQuiz(ctx: Context, job: GenJob, contentMsg: string): Promise<string> {
   job.phase = 'quiz'
@@ -292,7 +295,7 @@ async function finishWithQuiz(ctx: Context, job: GenJob, contentMsg: string): Pr
   persistGenJobs()
   try {
     const per = await engine.questionGenerateSections(job.course, job.node, async prompt => stripFences(await llmComplete(ctx, prompt)))
-    const quiz = await generateQuiz(ctx, job.course, job.node, 3, { generic: true })
+    const quiz = await generateQuiz(ctx, job.course, job.node, GENERIC_QUIZ_COUNT, { generic: true })
     job.status = 'done'
     job.message = `${contentMsg}；出题 ${per.added + quiz.added} 道（节绑 ${per.added} + 综合 ${quiz.added}，题库共 ${quiz.total}）`
   } catch (quizErr) {

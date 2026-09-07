@@ -18,7 +18,11 @@ export function safeFilename(name: string): string {
 }
 
 export class Paths {
-  constructor(readonly centerRoot: string) {}
+  // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
+  readonly centerRoot: string
+  constructor(centerRoot: string) {
+    this.centerRoot = centerRoot
+  }
 
   // ---- 中心级 ----
   get registryPath(): string { return `${this.centerRoot}/课程注册表.yaml` }

@@ -35,7 +35,11 @@ export interface ExerciseMeta {
 }
 
 export class Content {
-  constructor(private paths: Paths) {}
+  // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
+  private paths: Paths
+  constructor(paths: Paths) {
+    this.paths = paths
+  }
 
   // ---- 生成队列 ----
 
@@ -165,7 +169,7 @@ export class Content {
     out.push('- 风格：成人自学者；直觉先于严格、具体先于抽象、技能先于形式化')
     out.push(isPractice
       ? '- 篇幅：说明文字 ≤ 400 字；核心交付物是交互模拟（规范见 §8）'
-      : '- 篇幅：正文 ≤ 2500 字；练习 基础 2–4 / 变式 2–3 / 挑战 0–2')
+      : '- 篇幅：正文 ≤ 2500 字')
     out.push('- 小节：类型前缀 + 实际标题（类型菜单见提示词）；节的划分、顺序与类型配比完全由你按内容与风格判断，不设固定栏目与固定收尾段（可选保留 ## 内容反馈 区收集学习者建议）')
     out.push('')
     out.push('## 7. 既有 enc 边（练习必须真实调用它们）')
@@ -546,11 +550,18 @@ questions:
   }
 
   private static isPlainJsonObject(text: string): boolean {
+    const clean = (v: unknown): v is Record<string, unknown> =>
+      typeof v === 'object' && v !== null && !Array.isArray(v)
     try {
-      const v: unknown = JSON.parse(text)
-      return typeof v === 'object' && v !== null && !Array.isArray(v)
+      return clean(JSON.parse(text))
     } catch {
-      return false
+      // fast 档模型高频失误是尾随逗号:仅当原始解析失败时清洗重试,不改语义。
+      // 误报面仅剩「字符串字面量内含 `,}` 且恰好是唯一语法错误」,可接受。
+      try {
+        return clean(JSON.parse(text.replace(/,(\s*[}\]])/g, '$1')))
+      } catch {
+        return false
+      }
     }
   }
 

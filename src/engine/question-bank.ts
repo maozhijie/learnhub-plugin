@@ -175,7 +175,11 @@ export function validateBank(doc: unknown, expectedNode?: string): { errors?: st
 }
 
 export class QuestionBank {
-  constructor(private paths: Paths) {}
+  // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
+  private paths: Paths
+  constructor(paths: Paths) {
+    this.paths = paths
+  }
 
   bankPath(courseRoot: string, node: string): string {
     return `${courseRoot}/题库/${safeFilename(node)}.yaml`
