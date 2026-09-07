@@ -8,6 +8,7 @@
 import DOMPurify from 'dompurify'
 import { compile } from 'mathjs/number'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { SVG_URI } from './svg-uri'
 import 'mafs/core.css'
 
 /** 渲染失败/校验不过时的源码降级块。 */
@@ -16,9 +17,6 @@ function Fallback(props: { cls: string; code: string }) {
 }
 
 // ---- svg ----
-
-/** svg 内 URI 白名单：仅文档内锚点与 data:，掐断外链与 javascript:。 */
-const SVG_URI = /^(?:data:|#)/i
 
 /** SVG 示意图：白名单清洗（svg profile，天然剔 <script>/事件处理器）→ 内联渲染。 */
 export function SvgBlock(props: { code: string }) {
