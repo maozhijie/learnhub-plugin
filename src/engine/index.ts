@@ -34,6 +34,8 @@ import { xpForAnswer, readDailyGoal, writeDailyGoal, sumXp, streakFrom, nominalB
 import { XP_GUESS_SECONDS, XP_PERFECT_BONUS } from './params.ts'
 import type { CourseEntry, Fm, FsrsBlock, GNode, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
+import { dataCheck } from './data-check.ts'
+import type { DataCheckReport } from './data-check.ts'
 
 /** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
 function shuffled<T>(items: T[]): T[] {
@@ -133,6 +135,11 @@ export class LearnhubEngine {
   }
 
   // ---- status / recommend ----
+
+  /** 只读数据体检：盘点 Missing/Broken，不做任何修复或清理。 */
+  async dataCheck(): Promise<DataCheckReport> {
+    return dataCheck(this.paths)
+  }
 
   async statusJson(): Promise<Record<string, unknown>> {
     const stats = await this.bankSnapshot()
