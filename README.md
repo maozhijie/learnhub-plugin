@@ -184,6 +184,20 @@ npm run check
 `lib/`、`web/`（dist + vendor）均为构建中间结果，不入 git（`.gitignore` 忽略）；
 克隆后先 `npm install && npm run build` 再使用；修改 `src/` 或 `ui/` 后重新 build 即生效。
 
+## 部署更新（拉取新代码后）
+
+宿主经 profile 的 `link:` junction 直读本仓库（`~/.dsh/profiles/<profile>/node_modules/dsh-learnhub → <本仓库>`），
+没有第二份安装副本。代码更新后只需：
+
+1. `npm install`（依赖有变化时）+ `npm run build`——重出 lib 三产物，skills 随构建同步到 `<dshHome>/skills/`；
+2. **重启 dsh 宿主**——lib 是宿主启动时加载的，重建不会热生效。
+
+preset 存根（`~/.dsh/.agent-presets/learnhub/agent.cordis.yml`）的 Include `path` 指向本机
+clone 的 `preset/learnhub/agent.cordis.yml`（file:// URL，安装见文末「用户根安装」）。
+正常更新不需要动它（改仓库文件即生效）；clone 位置或盘符变化时改存根里的 URL，改完重启宿主。
+
+验证（只读，不写 vault）：`node scripts/smoke.mjs <vault 根目录>`，全绿即新版引擎可用。
+
 ## 脚本
 
 ```sh
@@ -195,6 +209,8 @@ node scripts/smoke-panel.mjs [port]  # 面板伺服冒烟：301/资产/API 形�
 ```
 
 e2e 在系统临时目录复制最小 vault 子集并重置笔记 frontmatter，绝不触碰真实 vault。
+各脚本的 `<vault>` 都是 **vault 根目录**（引擎在其下找 `学习中心/`），
+传 `学习中心` 本身会得到合法的空注册表（Missing），课程相关步骤全部落空。
 
 ## 目录
 
