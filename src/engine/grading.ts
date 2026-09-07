@@ -3,7 +3,8 @@
  *
  * 评分语义抄自 allo（nomifun-learning service/progress.rs 的 evaluate / answer_review）：
  * 四题型（single_choice / true_false / fill_in_blank / reflection），对=1.0 错=0.0，
- * 及格线 0.6；reflection 由 AI 按 {score, feedback} 严格 JSON 判卷，解析失败降级规则判卷。
+ * 及格线 0.6；reflection/open_question 必须由 AI 按 {score, feedback} 严格 JSON 判卷，
+ * 输出缺失/非法时作答事务失败（#9：不降级给分，不伪造证据）。
  * 兼容旧课程笔记练习区的 sympy|choice|ai|human 元数据（sympy 题降级为
  * 「归一相等 → 数值容差 → 逗号列表集合相等」三段规则判卷，符号等价交由 ai 通道）。
  *
@@ -108,9 +109,7 @@ export function evaluateAllo(q: AlloQuestion, response: unknown): { score: numbe
     case 'reflection': {
       const s = typeof response === 'string' ? response.trim() : ''
       if (!s) throw new Error('reflection 作答不能为空')
-      // 到达这里说明 AI 判卷已失败或未启用：降级「非空即对」（allo 同语义）
-      correct = true
-      break
+      throw new Error('reflection 必须经 AI 判卷通道评分；规则判卷不得降级为“非空即对”')
     }
     case 'multi_choice': {
       const s = typeof response === 'string' ? response : ''
@@ -149,9 +148,7 @@ export function evaluateAllo(q: AlloQuestion, response: unknown): { score: numbe
     case 'open_question': {
       const s = typeof response === 'string' ? response.trim() : ''
       if (!s) throw new Error('open_question 作答不能为空')
-      // AI 判卷失败的降级：非空记 0.5（见 questionAnswer），此处仅类型完备兜底
-      correct = true
-      break
+      throw new Error('open_question 必须经 AI 判卷通道评分（0–10 分制）')
     }
   }
   const score = correct ? 1.0 : 0.0
@@ -193,7 +190,10 @@ export function parseReflectionGrading(raw: string): { score: number; feedback: 
   if (typeof doc.score !== 'number' || typeof doc.feedback !== 'string') {
     throw new Error('reflection grading reply missing score/feedback')
   }
-  return { score: Math.min(1, Math.max(0, doc.score)), feedback: doc.feedback }
+  if (!(doc.score >= 0 && doc.score <= 1)) {
+    throw new Error(`reflection grading score 越界（${doc.score}，允许 0.0–1.0）`)
+  }
+  return { score: doc.score, feedback: doc.feedback }
 }
 
 /** 开放题 AI 判卷系统提示词：0–10 分制，≥6 及格；批改 + 改进建议两段缺一不可。 */
@@ -223,7 +223,10 @@ export function parseOpenGrading(raw: string): { score: number; feedback: string
   if (typeof doc.score !== 'number' || typeof doc.feedback !== 'string') {
     throw new Error('open-question grading reply missing score/feedback')
   }
-  return { score: Math.min(10, Math.max(0, Math.round(doc.score))), feedback: doc.feedback }
+  if (!Number.isInteger(doc.score) || doc.score < 0 || doc.score > 10) {
+    throw new Error(`open-question grading score 越界（${doc.score}，允许整数 0–10）`)
+  }
+  return { score: doc.score, feedback: doc.feedback }
 }
 
 // ---------------------------------------------------------------- 作答记录与 EMA

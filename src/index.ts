@@ -932,18 +932,23 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       return JSON.stringify(await generateQuiz(ctx, args.course, args.node, n))
     }))
   tool('learnhub_question_update',
-    'Update one bank question: patch merges into the stored question (q/options/answer/explanation/difficulty/section/uses) and the bank re-validates before writing; patch {archived:true|false} hides/restores it instead. learnhub_question_list omits answers — take corrections from the user or the note content, not from thin air.',
+    'Update one bank question: patch merges into the stored question with a strict authoring whitelist (q/options/answer/explanation/difficulty/section/uses/tags/tol) and the whole bank re-validates before writing. Empty patches, unknown fields, and id/kind/node/fsrs/stats/archived keys are rejected. Archiving is a separate operation: send the patch {archived:true|false} as the only key to route to the archive endpoint; mixing archive with content edits fails instead of partially applying. learnhub_question_list omits answers — take corrections from the user or the note content, not from thin air.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name' },
       qid: { type: 'string', required: true, description: 'Question id inside the bank, e.g. "q1"' },
-      patch: { type: 'object', additionalProperties: true, required: true, description: 'Fields to merge, e.g. {"answer":"A","explanation":"…"} or {"archived":true}' },
+      patch: { type: 'object', additionalProperties: true, required: true, description: 'Authoring fields to merge ({"answer":"A",...}), or {"archived":true} alone for archive' },
     },
     (args: { course: string; node: string; qid: string; patch: Record<string, unknown> }) => run('learnhub_question_update', async () => {
-      if (typeof args.patch.archived === 'boolean') {
+      if ('archived' in args.patch) {
+        const archived = args.patch.archived
+        if (typeof archived !== 'boolean') {
+          throw new Error('[question-update] archived 必须是布尔值（archive/restore 独立操作）')
+        }
+        if (Object.keys(args.patch).length !== 1) {
+          throw new Error('[question-update] 归档与内容修订是两条独立操作，混合 patch 会被整体拒绝（先归档，或先改内容再单独归档）')
+        }
         await engine.questionArchive(args.course, args.node, args.qid, args.patch.archived)
-        const { archived: _a, ...rest } = args.patch
-        if (Object.keys(rest).length) await engine.questionUpdate(args.course, args.node, args.qid, rest)
         return JSON.stringify({ course: args.course, node: args.node, qid: args.qid, archived: args.patch.archived })
       }
       return JSON.stringify(await engine.questionUpdate(args.course, args.node, args.qid, args.patch))

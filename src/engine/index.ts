@@ -748,9 +748,10 @@ export class LearnhubEngine {
         const v = isOpen ? parseOpenGrading(raw) : parseReflectionGrading(raw)
         score = isOpen ? v.score / 10 : v.score
         feedback = v.feedback
-      } catch {
-        score = answer.trim() ? 0.5 : 0
-        feedback = raw.slice(0, 500)
+      } catch (err) {
+        // #9：AI 判卷输出缺失/非法/不可解析 → 作答在边界失败，不写任何分数/卡/证据。
+        const message = err instanceof Error ? err.message : String(err)
+        throw new Error(`[question] AI 判卷输出不可用，本次作答未记录（请重试，或核对题目/模型输出）：${message}`)
       }
     } else {
       const r = evaluateAllo(q, answer)
@@ -802,7 +803,7 @@ export class LearnhubEngine {
       correct: (q.stats?.correct ?? 0) + (correct ? 1 : 0),
       last: today,
     }
-    await this.bank.updateQuestion(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
+    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
     const mastery = await this.nodeMastery(this.paths.courseRoot(c.root), node)
     return {
       correct, score: Math.round(score * 100), feedback,
@@ -901,7 +902,7 @@ export class LearnhubEngine {
         continue
       }
       const { fs } = applyRatingBlock(null, 3, today, sched)
-      await this.bank.updateQuestion(courseRoot, node, q.id, { fsrs: fs })
+      await this.bank.updateQuestionEvidence(courseRoot, node, q.id, { fsrs: fs })
       initialized++
       if (!due || fs.due < due) { due = fs.due; repCard = fs }
     }
