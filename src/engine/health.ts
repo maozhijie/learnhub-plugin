@@ -19,6 +19,30 @@ const ACTION_WORDS = [
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
+/** est 分布压缩提示的输入最小形状（Graph 兼容）。 */
+interface EstSpreadSource {
+  names: string[]
+  estOf: Record<string, number>
+}
+
+/**
+ * est 分布压缩提示：est 取值挤在窄区间（p10-p90 ≤ 10 分钟）说明标注失去区分度
+ * （"档位感常数"，audit 实证 280 节点挤 20-25）。仅提示不改健康分：est 全图重标注
+ * 属图生成专题（#14 out-of-scope），提示给图作者下次标注时留意即可。
+ * 覆盖率过低（欠标注）或样本过少不判压缩。返回 null = 无提示。
+ */
+export function estSpreadNote(g: EstSpreadSource): string | null {
+  const total = g.names.length
+  if (!total) return null
+  const values = Object.values(g.estOf)
+  if (values.length / total < 0.6 || values.length < 30) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const p10 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.1))]
+  const p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))]
+  if (p90 - p10 > 10) return null
+  return `⚠ est 分布压缩（p10-p90 = ${p10}-${p90} 分钟，仅差 ${p90 - p10} 分钟）：est 已成"档位感常数"，对内容规模无区分度——下次图标注让 est 跨更宽取值（见 ADR-0005）`
+}
+
 /** 图谱健康分：score ∈ [0,100]；breakdown 各项均为 0-20 的原始得分。 */
 export function graphHealthScore(graph: Graph): { score: number; breakdown: Record<string, number> } {
   const names = graph.names

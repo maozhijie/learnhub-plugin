@@ -11,6 +11,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
+import { outlineBudgetForNode } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { normChoice } from './grading.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock } from '../../shared/content-renderers.ts'
@@ -658,6 +659,12 @@ questions:
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
   ): Promise<SectionManifest[]> {
     const manifest = Content.parseOutline(yamlText)
+    const budget = outlineBudgetForNode(graph, node, manifest.length)
+    if (budget.length) {
+      const e: Error & { code?: string } = new Error(`[outline] 大纲护栏未过：\n${budget.map(f => `  ✗ ${f}`).join('\n')}`)
+      e.code = 'OUTLINE_BUDGET'
+      throw e
+    }
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
     const { fm, body } = await loadNote(path)
