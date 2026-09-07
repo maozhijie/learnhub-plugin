@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：25 个 defineTool 直调 engine（学习/图谱/生成/题库四面）
+ * - agent 工具面：26 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库四面）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -766,6 +766,9 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   tool('learnhub_status',
     'Return the learning center status (center summary + per-course detail) as JSON.',
     {}, () => run('learnhub_status', async () => JSON.stringify(await engine.statusJson())))
+  tool('learnhub_data_check',
+    'Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.',
+    {}, () => run('learnhub_data_check', async () => JSON.stringify(await engine.dataCheck())))
   tool('learnhub_skip',
     'Mark a node as skipped (learner already knows it) or un-skip. Skipped nodes count as passed: they leave the recommendation queue and no longer block successors.',
     {
@@ -1030,7 +1033,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 25 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 26 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

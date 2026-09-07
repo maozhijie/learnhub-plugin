@@ -1,6 +1,6 @@
 # 测试
 
-`node --test tests/`（Node >=24 原生 TS，零依赖；被测模块只做 `import type` 引图类型）。
+`npm test`（Node >=24 原生 TS + `--experimental-transform-types`，零测试框架依赖；引擎门面测试直接实例化 `LearnhubEngine`）。
 
 接缝（2026-09-07 与用户确认）：
 
@@ -8,5 +8,6 @@
 - S2 `quality.ts::floatNodes` —— 空降节点（region 序后 3/4 且 pre 空）
 - S3 `health.ts::graphHealthScore` —— 前置完备项基于 S2
 - S4 `quality.ts::scaleReport` —— 规模底线对照
+- Data Check `engine.index.ts::dataCheck` —— Missing/Broken 只读盘点（临时 Vault fixtures）
 
 `analyzeGraph`/`runAudit` 只做薄接线，不在接缝清单内。
