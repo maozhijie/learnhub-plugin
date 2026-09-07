@@ -11,6 +11,14 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
 
+## Sandboxed execution and gh authentication
+
+`gh` normally reads its GitHub token from the OS credential store. On Windows this is the Credential Manager. A sandboxed command may be unable to read that store, so `gh auth status` can incorrectly report that the saved token is invalid even though the same command succeeds outside the sandbox.
+
+If `gh` fails with `HTTP 401: Requires authentication`, first retry the specific `gh` command with elevated/non-sandboxed execution. Prefer narrowly scoped approval prefixes such as `gh issue view`, `gh issue create`, `gh label list`, and `gh auth status`. Avoid granting a blanket `gh` prefix for all operations: `gh` can also perform destructive or high-risk repository actions.
+
+Do not work around this by putting a GitHub token in an environment variable or using `gh auth login --insecure-storage` unless the user explicitly accepts that trade-off. Keeping the token in the OS credential store is the default.
+
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
 ## Pull requests as a triage surface
