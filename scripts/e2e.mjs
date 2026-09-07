@@ -226,7 +226,8 @@ async function run() {
     const earned = practice.filter(r => r.node === noteName).reduce((s, r) => s + (r.xp ?? 0), 0)
       + journal.filter(r => r.node === noteName).reduce((s, r) => s + (r.xp ?? 0), 0)
     const bank = await engine.bank.load(engine.paths.courseRoot(courseRoot), noteName)
-    // 与 engine 同公式重算预算：无 est → N₀ = Σ(权重×难度)；k = FSRS difficulty 加权
+    // 与 engine 同公式重算预算：est 优先（图 YAML 内容定价），无 est → N₀ = Σ(权重×难度)；
+    // k = FSRS difficulty 加权
     const W = { single_choice: 1, true_false: 1, fill_in_blank: 2, multi_choice: 1, numeric: 2, ordering: 2, matching: 2, reflection: 3, open_question: 3 }
     const qs = bank.questions.filter(q => !q.archived)
     let weights = 0
@@ -237,7 +238,9 @@ async function run() {
       weighted += w * (q.fsrs?.difficulty ? q.fsrs.difficulty / 5 : 1)
     }
     const k = Math.min(3, Math.max(0.5, weighted / weights))
-    const budget = Math.round(3 * k) // active = q1(1×1) + q2(2×1) = 3（q3 已归档；settle 时 q3 尚未创建，两时刻题集相同）
+    const nodeEst = (await engine.graphNode(courseName, noteName)).est
+    const contentBudget = typeof nodeEst === 'number' && nodeEst > 0 ? nodeEst : 3
+    const budget = Math.round(contentBudget * k) // q3 已归档；settle 时 q3 尚未创建，两时刻题集相同
     assert(earned === budget, `net xp ${earned} != budget ${budget} (k=${k.toFixed(3)})`)
     // 难度修订放在对账之后：完成时定价已锁定，事后改难度不得动摇已结算账目
     await engine.questionUpdate(courseName, noteName, 'q2', { difficulty: 3 })
@@ -499,7 +502,7 @@ async function run() {
     assert(check.passed, `gate should pass: ${check.findings.join('；')}`)
     assert(check.warns.some(w => w.includes('未用双引号包裹')), `mermaid warn missing: ${JSON.stringify(check.warns)}`)
   })
-  await step('图谱健康分/建议 + gen/edit 认知维度字段 + R11 + enc 反哺 hints', async () => {
+  await step('图谱健康分/建议 + gen/edit 认知维度字段 + R13 跳步候选 + enc 反哺 hints', async () => {
     // gen 提案（含 est/type/bloom/difficulty）→ apply → findings + 字段落盘 + analyze health/suggestions
     const prop = await engine.graphPropose('gen', [
       `course: ${courseName}`,
@@ -539,11 +542,11 @@ async function run() {
     await engine.graphApply('edit', prop2.id)
     const regionText2 = readFileSync(join(dataDir, regionFile), 'utf8')
     assert(regionText2.includes('type: practice') && regionText2.includes('est: 15'), `edit node fields not persisted`)
-    // audit：baseline 健康分行 + R11 难度跳跃（难度3→5 故意埋的跳跃）
+    // audit：baseline 健康分行 + R13 认知跨步候选（难度3→5 故意埋的跳跃；R11 口径已并入 R13）
     await engine.rebuild()
     const report = readFileSync(join(dstCenter, courseRoot, '审计报告.md'), 'utf8')
     assert(report.includes('图谱健康分'), 'baseline missing health score')
-    assert(report.includes('R11 难度跳跃'), 'R11 jump missing in audit')
+    assert(report.includes('R13 认知跨步候选'), 'R13 jump-candidate warning missing in audit')
     // 非法 bloom 拒（schema 从严）
     let threw = ''
     try {
