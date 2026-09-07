@@ -8,8 +8,10 @@ import { readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
+import { validateRegistry } from './registry.ts'
 import { YAML } from './yaml.ts'
 import { STAGES } from './types.ts'
+import type { CourseEntry } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
@@ -61,14 +63,6 @@ export interface DataCheckReport {
   findings: DataCheckFinding[]
 }
 
-interface CourseEntryLike {
-  id?: unknown
-  name?: unknown
-  root?: unknown
-  enabled?: unknown
-  tags?: unknown
-}
-
 interface GraphNodeLike {
   name: string
   region: string
@@ -93,51 +87,6 @@ function push(
   detail?: string,
 ): void {
   findings.push({ area, level, reason, location, ...(detail ? { detail } : {}) })
-}
-
-function validateRegistryContract(raw: unknown): { errors: string[]; courses: CourseEntryLike[] } {
-  const errors: string[] = []
-  if (!isRecord(raw)) return { errors: ['顶层必须是映射（courses）'], courses: [] }
-  if (!Array.isArray(raw.courses)) return { errors: ['courses: 必须是列表'], courses: [] }
-
-  const courses: CourseEntryLike[] = []
-  const names = new Set<string>()
-  const roots = new Set<string>()
-  const ids = new Set<string>()
-  raw.courses.forEach((item, index) => {
-    const where = `courses.${index + 1}`
-    if (!isRecord(item)) {
-      errors.push(`${where}: 必须是映射`)
-      return
-    }
-    const name = item.name
-    const root = item.root
-    if (typeof name !== 'string' || !name.trim()) errors.push(`${where}.name: 不能为空`)
-    if (typeof root !== 'string' || !root.trim()) errors.push(`${where}.root: 不能为空`)
-    if (item.enabled !== undefined && typeof item.enabled !== 'boolean') errors.push(`${where}.enabled: 必须是布尔值`)
-    if (item.tags !== undefined && (!Array.isArray(item.tags) || item.tags.some(tag => typeof tag !== 'string'))) {
-      errors.push(`${where}.tags: 必须是字符串列表`)
-    }
-    if (typeof name === 'string' && name.trim()) {
-      if (names.has(name)) errors.push(`${where}.name: 与其他课程重复`)
-      names.add(name)
-    }
-    if (typeof root === 'string' && root.trim()) {
-      if (roots.has(root)) errors.push(`${where}.root: 与其他课程重复`)
-      roots.add(root)
-    }
-    if (item.id !== undefined) {
-      if (typeof item.id !== 'string' || !item.id.trim()) {
-        errors.push(`${where}.id: 不能为空`)
-      } else if (ids.has(item.id)) {
-        errors.push(`${where}.id: 与其他课程重复`)
-      } else {
-        ids.add(item.id)
-      }
-    }
-    courses.push(item)
-  })
-  return { errors, courses }
 }
 
 function validateNoteContract(fm: unknown): string[] {
@@ -459,9 +408,9 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     }
   }
 
-  let courses: CourseEntryLike[] = []
+  let courses: CourseEntry[] = []
   if (inventory.registryPresent && registryRaw !== undefined) {
-    const checked = validateRegistryContract(registryRaw)
+    const checked = validateRegistry(registryRaw)
     if (checked.errors.length) {
       push(findings, 'registry', 'broken', 'registry_schema', registryWhere, checked.errors.join('；'))
     } else {
