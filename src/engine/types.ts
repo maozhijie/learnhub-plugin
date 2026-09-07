@@ -55,12 +55,12 @@ export interface Fm {
 /** 成分技能边（graphstore enc）。 */
 export interface EncEdge { node: string; w: number; note?: string }
 
-/** Bloom 认知层级（节点可选字段；审计 R11/R12 与未来调度消费）。 */
+/** Bloom 认知层级（节点可选字段；生成提示与未来调度消费）。 */
 export const BLOOM_LEVELS = ['记忆', '理解', '应用', '分析', '评价', '创造'] as const
 export type BloomLevel = (typeof BLOOM_LEVELS)[number]
 
 /** 图节点（graphstore.Node）。est = 标称学习时长（分钟，XP 内容定价）；type = practice 交互实践节点；
- * bloom/difficulty = 认知维度（可选，渐进采纳；难度跳跃门禁 R11 消费）。 */
+ * bloom/difficulty = 认知维度（可选，渐进采纳；认知跨步检测 R13 消费）。 */
 export interface GNode {
   name: string
   pre: string[]

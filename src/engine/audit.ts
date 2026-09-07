@@ -2,8 +2,8 @@
  * 结构性审计（吸收自 Python audit.py）。
  *
  * ERROR: E1 重名 / E2 未定义前置 / E3 环 / E4 课程文件↔图失同步 / E5 frontmatter schema / E6 enc 断边 / E7 enc 非祖先
- * WARN : R1 浅叶子 / R2 单浅前置叶子 / R4 深度异常 / R8 多连通分量 / R10 状态异常
- * INFO : R5 跨区引用 / R6 传递冗余 / R9 疑似别名
+ * WARN : R1 浅叶子 / R2 单浅前置叶子 / R4 深度异常 / R6 传递冗余 / R8 多连通分量 / R10 状态异常 / R13 认知跨步候选
+ * INFO : R5 跨区引用 / R9 疑似别名
  * ERROR 存在时返回 failed=true（生成/结算门禁）。
  */
 import { existsSync } from 'node:fs'
@@ -14,6 +14,7 @@ import type { Graph } from './graph.ts'
 import type { Paths } from './paths.ts'
 import { parseDay, todayStr, daysBetween } from './dates.ts'
 import { graphHealthScore } from './health.ts'
+import { jumpCandidates } from './quality.ts'
 
 export interface AuditResult {
   failed: boolean
@@ -80,7 +81,7 @@ export async function runAudit(
       if (mean > 0 && d < mean / 2) warns.push(`R4 深度异常: [${region} · ${block}] ${n} depth=${d}，块均值=${mean.toFixed(1)}`)
     }
   }
-  // R5 / R6
+  // R5 / R6（R6 升 WARN：冗余边是「连接不准」的机械可检面，交付前须逐条 verdict 清零）
   for (const n of names) {
     for (const p of preOf[n]) {
       if (nset.has(p) && name2region[p] !== name2region[n]) {
@@ -93,7 +94,7 @@ export async function runAudit(
       const ps = preOf[n].filter(p => nset.has(p))
       for (const p of ps) {
         if (ps.some(q => q !== p && (reach[q]?.has(p)))) {
-          infos.push(`R6 冗余前置: ${n} 的 pre 中 ${p} 可经其它前置传递到达`)
+          warns.push(`R6 冗余前置: ${n} 的 pre 中 ${p} 可经其它前置传递到达`)
         }
       }
     }
@@ -194,8 +195,7 @@ export async function runAudit(
     }
   }
 
-  // R11/R12 认知维度（可选字段，两端都标注才查；渐进采纳不强制存量补齐）
-  const jumps = new Set<string>()
+  // R12 认知-时长失配（可选字段；渐进采纳不强制存量补齐）
   for (const n of names) {
     const d = graph.difficultyOf[n]
     if (d === undefined) continue
@@ -203,16 +203,15 @@ export async function runAudit(
     if (est !== undefined && ((d >= 4 && est < 15) || (d <= 2 && est > 40))) {
       infos.push(`R12 认知-时长失配: ${n}（难度${d}，est=${est}分钟）`)
     }
-    for (const p of preOf[n]) {
-      if (!nset.has(p)) continue
-      const dp = graph.difficultyOf[p]
-      if (dp !== undefined && Math.abs(d - dp) >= 2) jumps.add(`${p}（难度${dp}）-> ${n}（难度${d}）`)
-    }
   }
-  for (const j of [...jumps].sort().slice(0, 15)) {
-    warns.push(`R11 难度跳跃（疑似缺中间台阶）: ${j}`)
+
+  // R13 认知跨步候选（合成口径：难度差 / 铺垫断层，见 quality.ts；唯一跳步检测器，
+  // 已吸收旧 R11 的难度差口径以免同一跳重复 WARN；WARN 只列前 15，全量走 analyze）
+  const jumpAll = jumpCandidates(graph)
+  for (const j of jumpAll.slice(0, 15)) {
+    warns.push(`R13 认知跨步候选（需 verdict）: ${j.pre} -> ${j.node}（难度差 ${j.difficultyGap ?? '—'}，depth 跨 ${j.depthSpan}，${j.reasons.join('+')}）`)
   }
-  if (jumps.size > 15) warns.push(`R11 难度跳跃另有多 ${jumps.size - 15} 处未列出`)
+  if (jumpAll.length > 15) warns.push(`R13 认知跨步候选另有多 ${jumpAll.length - 15} 处未列出`)
 
   const exempt = names.filter(n => !found[n])
   const baseline: Record<string, number | string> = {
@@ -254,7 +253,7 @@ export async function runAudit(
     lines.push('（无）')
   }
   lines.push('')
-  section('INFO · R5/R6/R9 提示项', infos)
+  section('INFO · R5/R9 提示项', infos)
   await import('./store.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n')))
 
   return { failed: errors.length > 0, errors, warns, infos, baseline, exempt }

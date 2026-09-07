@@ -8,6 +8,8 @@ import type { Fm } from './types.ts'
 import type { Store } from './store.ts'
 import { effectiveStage } from './audit.ts'
 import { graphHealthScore } from './health.ts'
+import { floatNodes, jumpCandidates, scaleReport } from './quality.ts'
+import type { JumpCandidate, ScaleReport, ScaleTarget } from './quality.ts'
 import { parseDay, todayStr, daysBetween } from './dates.ts'
 import { masteryOfFm } from './srs.ts'
 
@@ -31,11 +33,19 @@ export interface GraphAnalysis {
   suggestions: {
     /** 节点数 <5 的块（浅块优先，最多 8 个）——往哪扩。 */
     expand_blocks: Array<{ region: string; block: string; nodes: number }>
-    /** depth>1 且 pre 为空的空降节点（最多 10 个）——先补谁。 */
+    /** 空降节点（region 序靠后且 pre 为空，最多 sugCap 个）——先补谁。 */
     missing_pre: string[]
     /** 平均 pre 数 <1.5 的块（最多 8 个）——哪里连接过少。 */
     unconverged: Array<{ region: string; block: string; avg_pre: number }>
+    /** 认知跨步候选（合成口径见 quality.ts；最多 sugCap 条）——每条必须 verdict：认可或修。 */
+    jump_candidates: JumpCandidate[]
+    /** 跨步候选总数（截断前）——结束条件要求清零。 */
+    jump_total: number
+    /** 节点数 <3 的块（合并比展开更划算时）。 */
+    merge_blocks: Array<{ region: string; block: string; nodes: number }>
   }
+  /** 规模底线对照（ADR-0002：绝对规模走独立门槛，不进健康分）。 */
+  scale: ScaleReport
   nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: string; opt: boolean; mastery: number; type?: string } }>
   edges: Array<{ data: { id: string; source: string; target: string; kind: string; w?: number } }>
   /** 节点 schema 全量（pre/enc/est/bloom/difficulty/note…）——编辑规划与边级自查的数据依据；
@@ -54,6 +64,7 @@ export interface GraphAnalysis {
 
 export async function analyzeGraph(
   courseName: string, graph: Graph, state: Record<string, Fm>, store: Store,
+  scaleTarget?: ScaleTarget | null,
 ): Promise<GraphAnalysis> {
   const today = todayStr()
   const t = parseDay(today)!
@@ -140,14 +151,17 @@ export async function analyzeGraph(
   const blocks = [...blockStats.values()]
   // 建议条目上限随图规模伸缩：数百节点的大图浅块/空降节点成倍出现，固定 top-N 看不全
   const sugCap = Math.min(16, Math.max(8, Math.ceil(graph.names.length / 25)))
-  const expandBlocks = blocks
-    .filter(b => b.nodes < 5)
+  const topBlocks = (
+    items: typeof blocks, keep: (b: { nodes: number }) => boolean, cap: number,
+  ) => items
+    .filter(keep)
     .sort((a, b) => a.nodes - b.nodes || a.region.localeCompare(b.region))
-    .slice(0, sugCap)
+    .slice(0, cap)
     .map(({ region, block, nodes }) => ({ region, block, nodes }))
-  const missingPre = graph.names
-    .filter(n => (graph.depth[n] ?? 0) > 1 && graph.preOf[n].length === 0)
-    .slice(0, sugCap)
+  const expandBlocks = topBlocks(blocks, b => b.nodes < 5, sugCap)
+  const missingPre = floatNodes(graph).slice(0, sugCap)
+  const jumps = jumpCandidates(graph)
+  const mergeBlocks = topBlocks(blocks, b => b.nodes < 3, sugCap)
   const unconverged = blocks
     .map(b => ({ ...b, avg_pre: Math.round((b.preSum / b.nodes) * 100) / 100 }))
     .filter(b => b.avg_pre < 1.5)
@@ -170,7 +184,15 @@ export async function analyzeGraph(
     bottlenecks,
     lapse_hotspots: lapseHotspots,
     health: graphHealthScore(graph),
-    suggestions: { expand_blocks: expandBlocks, missing_pre: missingPre, unconverged },
+    suggestions: {
+      expand_blocks: expandBlocks,
+      missing_pre: missingPre,
+      unconverged,
+      jump_candidates: jumps.slice(0, sugCap),
+      jump_total: jumps.length,
+      merge_blocks: mergeBlocks,
+    },
+    scale: scaleReport(graph.names.length, scaleTarget),
     schema,
     nodes,
     edges,

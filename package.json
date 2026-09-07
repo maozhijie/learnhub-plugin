@@ -37,7 +37,8 @@
   },
   "scripts": {
     "build": "node build.mjs",
-    "check": "node --check lib/index.js && node --check lib/client.js"
+    "check": "node --check lib/index.js && node --check lib/client.js",
+    "test": "node --test tests/*.test.ts"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "*",

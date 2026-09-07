@@ -18,6 +18,7 @@ import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm } from './notes.
 import { getScheduler, applyRatingBlock, masteryOfFm } from './srs.ts'
 import { runAudit, effectiveStage } from './audit.ts'
 import { analyzeGraph } from './analysis.ts'
+import type { ScaleTarget } from './quality.ts'
 import { graphHealthScore } from './health.ts'
 import { Content } from './content.ts'
 import { GraphProposals } from './gengraph.ts'
@@ -219,10 +220,12 @@ export class LearnhubEngine {
 
   // ---- graph analyze ----
 
-  async graphAnalyze(courseKey?: string, elementsOnly = false): Promise<Record<string, unknown>> {
+  async graphAnalyze(
+    courseKey?: string, elementsOnly = false, scaleTarget?: ScaleTarget | null,
+  ): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state } = await this.loadView(c)
-    const doc = await analyzeGraph(c.name, graph, state, this.store)
+    const doc = await analyzeGraph(c.name, graph, state, this.store, scaleTarget)
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
     return doc
   }

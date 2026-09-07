@@ -7,6 +7,7 @@
  * 全部指标从图派生结构即可计算，不依赖学习状态。
  */
 import type { Graph } from './graph.ts'
+import { floatNodes } from './quality.ts'
 
 /** 动作词表（learnhub-graph-generate 技能「单元命名」节的机械化版本）。 */
 const ACTION_WORDS = [
@@ -29,8 +30,9 @@ export function graphHealthScore(graph: Graph): { score: number; breakdown: Reco
   // b) est 覆盖率 ×20
   const estCoverage = names.length ? (Object.keys(graph.estOf).length / names.length) * 20 : 0
 
-  // c) 前置完备 ×20：depth>1 且 pre 为空 = 空降节点，越少越好
-  const floats = names.filter(n => (graph.depth[n] ?? 0) > 1 && graph.preOf[n].length === 0).length
+  // c) 前置完备 ×20：空降节点（region 序靠后且 pre 为空）越少越好
+  //    （旧口径 depth>1 && pre 为空是死条件——pre 派生深度下无 pre 必为 0，见 quality.ts floatNodes）
+  const floats = floatNodes(graph).length
   const preCompleteness = names.length ? (1 - floats / names.length) * 20 : 0
 
   // d) 收敛度 ×20：非根节点平均 pre 数（≥2 满分、=1 零分线性插值；环/无内点 = 0）

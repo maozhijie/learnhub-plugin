@@ -811,13 +811,19 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { path: string }) => run('learnhub_note_resolve', async () =>
       JSON.stringify(await engine.resolveNote(VAULT, args.path, CENTER_REL))))
   tool('learnhub_graph_analyze',
-    'Analyze a course knowledge graph: structural stats, unreachable nodes, bottlenecks, lapse hotspots, graph health score (0-100, see health), next-batch suggestions (suggestions.expand_blocks/missing_pre/unconverged), the full per-node schema (schema: pre/enc/est/bloom/difficulty/note per node — the data basis for edge-level self-checks), plus cytoscape render elements. Returns JSON. Run before planning each batch of graph edits; the next-batch plan must cite concrete entries from health/suggestions.',
+    'Analyze a course knowledge graph: structural stats, unreachable nodes, bottlenecks, lapse hotspots, graph health score (0-100, see health), next-batch suggestions (suggestions.expand_blocks/missing_pre/unconverged, plus jump_candidates + jump_total — cognitive-jump edges needing a verdict each — and merge_blocks), the scale-floor report (scale; pass targetMin/targetMax declared in scope analysis), the full per-node schema (schema: pre/enc/est/bloom/difficulty/note per node — the data basis for edge-level self-checks), plus cytoscape render elements. Returns JSON. Run before planning each batch of graph edits; the next-batch plan must cite concrete entries from health/suggestions/scale.',
     {
       course: { type: 'string', description: 'Course name; omit when only one course is enabled' },
       elementsOnly: { type: 'boolean', description: 'Only output cytoscape render elements (nodes/edges)' },
+      targetMin: { type: 'number', description: 'Scale-floor target node count min (declared in scope analysis); provide together with targetMax, omit both when not declared' },
+      targetMax: { type: 'number', description: 'Scale-floor target node count max (advisory upper bound, never blocking); provide together with targetMin' },
     },
-    (args: { course?: string; elementsOnly?: boolean }) => run('learnhub_graph_analyze', async () =>
-      JSON.stringify(await engine.graphAnalyze(args.course, args.elementsOnly))))
+    (args: { course?: string; elementsOnly?: boolean; targetMin?: number; targetMax?: number }) => run('learnhub_graph_analyze', async () =>
+      JSON.stringify(await engine.graphAnalyze(
+        args.course,
+        args.elementsOnly,
+        args.targetMin !== undefined && args.targetMax !== undefined ? { min: args.targetMin, max: args.targetMax } : null,
+      ))))
   tool('learnhub_graph_node',
     'Inspect one graph node in depth: schema field values (pre/est/type/bloom/difficulty/note), direct successors, enc component-skill edges with weights and notes, block placement, learning stage/content status, and the full transitive prerequisite closure (sorted deepest-first). Use to drill into a single node without pulling the whole graph.',
     {
@@ -845,7 +851,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; from: string; to: string }) => run('learnhub_graph_path', async () =>
       JSON.stringify(await engine.graphPath(args.course, args.from, args.to))))
   tool('learnhub_graph_propose',
-    'Submit a graph proposal for human review. kind=gen: full course graph YAML (course/mode/regions/blocks/nodes/pre); kind=edit: change ops (add_node/del_node/set_pre/set_enc/rename/move/set_note). add_node may carry optional per-node fields: est (minutes), type: practice, bloom (记忆/理解/应用/分析/评价/创造), difficulty (1-5), enc (component-skill edges, same shape as the graph YAML) — keep difficulty jumps across pre edges under 2 or the audit flags R11. set_enc replaces a node\'s whole enc edge list (string item = weight 1, or {node,w,note}). Schema + structure gates reject bad YAML (including dangling enc edges); accepted proposals become pending until applied.',
+    'Submit a graph proposal. kind=gen: full course graph YAML (course/mode/regions/blocks/nodes/pre); kind=edit: change ops (add_node/del_node/set_pre/set_enc/rename/move/set_note). add_node may carry optional per-node fields: est (minutes), type: practice, bloom (记忆/理解/应用/分析/评价/创造), difficulty (1-5), enc (component-skill edges, same shape as the graph YAML) — keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. set_enc replaces a node\'s whole enc edge list (string item = weight 1, or {node,w,note}). Schema + structure gates reject bad YAML (including dangling enc edges). In graph-generation batches apply immediately after gates pass (anchor-review model, ADR-0003); revision changes stay pending for human review.',
     {
       kind: { type: 'string', required: true, description: '"gen" (new/append course graph) or "edit" (change ops)' },
       yaml: { type: 'string', required: true, description: 'Full proposal YAML text (GenProposal or EditProposal schema)' },
@@ -861,7 +867,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { status?: string; kind?: string }) => run('learnhub_graph_proposals', async () =>
       JSON.stringify(await engine.graphProposals(args.status, args.kind))))
   tool('learnhub_graph_apply',
-    'Decide a pending graph proposal after human review: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
+    'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
     {
       kind: { type: 'string', required: true, description: '"gen" or "edit"' },
       id: { type: 'number', description: 'Proposal id; omit for the latest pending of this kind' },

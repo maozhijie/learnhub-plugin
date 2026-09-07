@@ -22,7 +22,7 @@ description: learnhub 课程构建与修订 SOP：与学习者讨论课程、修
 | 出题 / 补题 | `learnhub_question_generate`（模型管线，与自动出题同门禁）或 `learnhub_question_save`（整份手写题库） |
 | 查题 / 改题 | `learnhub_question_list`（不含答案）/ `learnhub_question_get`（单题全量含答案，改题前先看原题）/ `learnhub_question_update`（patch 合并后重新校验，`{archived:true}` 隐藏题） |
 | 调度/状态/进度 | `learnhub_status` / `learnhub_recommend` / `learnhub_rebuild` |
-| 图探索 / 图结构增删改 | 逐步查询：`learnhub_graph_node`（单节点详情+前置闭包）/ `learnhub_graph_browse`（区/块浏览）/ `learnhub_graph_path`（前置路径链）；增删改 `learnhub_graph_propose`（人审后 `learnhub_graph_apply`）——**禁止直接改 data/*.yaml** |
+| 图探索 / 图结构增删改 | 逐步查询：`learnhub_graph_node`（单节点详情+前置闭包）/ `learnhub_graph_browse`（区/块浏览）/ `learnhub_graph_path`（前置路径链）；增删改 `learnhub_graph_propose`（图谱生成批次门禁过后自动 apply，见 learnhub-graph-generate；修订类变更人审后 `learnhub_graph_apply`）——**禁止直接改 data/*.yaml** |
 | 节点跳过/完成 | `learnhub_skip` / `learnhub_complete` |
 | 重新生成内容 | 单节点 `learnhub_generate`；整课重来 `learnhub_course_reset`（备份到 .trash 后台重跑，先向用户确认） |
 

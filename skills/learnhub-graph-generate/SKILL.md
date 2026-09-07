@@ -1,15 +1,17 @@
 ---
 name: learnhub-graph-generate
-description: 为 learnhub 生成新课程知识图谱：范围分析 → 骨架提案 → 分批多轮展开（常规每批 ≤25 操作，大图可放宽到 ≤40）→ 审计修复，直至覆盖完整。复杂主题产出数百节点属正常。用于用户要求新建课程、规划学习路线时。
+description: 为 learnhub 生成新课程知识图谱：范围分析 → 骨架提案 → 分批多轮展开（常规每批 ≤35 操作，大图可放宽到 ≤50）→ 审计修复，直至覆盖完整。复杂主题产出数百节点属正常。用于用户要求新建课程、规划学习路线时。
 ---
 
 # learnhub 图谱生成（多轮分批构建）
 
-铁律：LLM 只产 YAML，一切入库必须过门禁（schema + 结构检查 + audit）→ 提案 → 人审 → apply。
+铁律：LLM 只产 YAML，一切入库必须过门禁（schema + 结构检查 + audit）→ 提案落盘 → 自动 apply。
+批次不需要人审：人审只保留两个锚点——骨架提案与最终交付（ADR-0003）；批质量由门禁 +
+检察官 + 结束条件的机械清零（jump 候选 / R6 冗余边）共同把守。
 **绝不一次产全图**：一张像样的课程图有一百到数百个节点，一轮生成必然偷工减料。
 正确姿势是像搭积木一样分批多轮构建，每批一个 edit 提案，apply 后看清全图再规划下一批。
-批次规模分档：常规每批 ≤25 个操作；图超过约 150 节点且连续多批零 ERROR 后可放宽到 ≤40
-——数百节点的课程宁可每批稍大，也不要让批数与人审/委派轮次失控。
+批次规模分档：常规每批 ≤35 个操作；图超过约 150 节点且连续多批零 ERROR 后可放宽到 ≤50
+——数百节点的课程宁可每批稍大，也不要让批数与委派轮次失控。
 
 ## 第 0 阶段：范围分析（先想清楚，一轮纯思考，可向用户确认）
 
@@ -20,6 +22,8 @@ description: 为 learnhub 生成新课程知识图谱：范围分析 → 骨架�
   baseline 是零基时，起点必须从最原始、最日常可及的概念起步，不得凭空拔高入口难度。
 - **覆盖清单（scope）**：主题下必须出现的子领域 / 大块概念清单。**它是下限不是上限**：
   目标隐含的子领域、必备的常识性概念即使清单没列也要补上，不要只局限于此清单。
+- **规模底线（Scale Floor）**：宣布目标节点数区间（如 250-400）。它是交付门禁（analyze
+  的 `scale.ok`），后续每批 analyze 带 `targetMin/targetMax` 对照；宁多勿少，超上限不拦。
 
 ## 第 1 阶段：骨架提案（1 轮 gen）
 
@@ -30,17 +34,22 @@ description: 为 learnhub 生成新课程知识图谱：范围分析 → 骨架�
 ## 第 2 阶段：分批展开（多轮 edit，核心）
 
 逐块推进，每批一个 edit 提案（`learnhub_graph_propose` kind=edit，ops 全部 `add_node`，
-**批次规模分档：常规 ≤25 ops；图超约 150 节点且连续多批零 ERROR 后可 ≤40**），apply 后立即 `learnhub_graph_analyze`
-读取 `health.score`、`suggestions`（expand_blocks = 往哪扩 / missing_pre = 先补谁 /
-unconverged = 哪里连接过少）与 `schema`（每节点的 pre/enc/est/bloom/difficulty/note 字段值——
+**批次规模分档：常规 ≤35 ops；图超约 150 节点且连续多批零 ERROR 后可 ≤50**）。
+**门禁通过（无 ERROR）即自动 apply，不等用户**；apply 后立即 `learnhub_graph_analyze`
+（带 targetMin/targetMax）读取 `health.score`、`scale`（规模对照，缺口多大）、
+`suggestions`（expand_blocks = 往哪扩 / missing_pre = 空降节点先补谁 /
+unconverged = 哪里连接过少 / jump_candidates + jump_total = 认知跨步候选逐条 verdict /
+merge_blocks = 过小块该合并了）与 `schema`（每节点的 pre/enc/est/bloom/difficulty/note 字段值——
 边级自查的数据依据），**下一批计划必须引用建议清单里的具体块名/节点名**再规划。
+**熔断线：连续 2 批出现 ERROR，或健康分环比下降 ≥10 → 停下向用户汇报再继续**（ADR-0003）。
 
 - 批内 `pre` 只能引用图中已存在的节点名或本批**更早**创建的节点；引用名必须与图中完全一致。
 - 连接两个已有节点 = 对下游节点 `set_pre`（整体替换它的前置全集），没有单独的加边操作；
   成分技能边同理用 `set_enc`（整体替换，条目为节点名或 {node, w, note}）。
 - 顺序建议：先把当前块的节点补齐，再进下一块；块间衔接在后面批次用 set_pre 补边。
 - add_node 可携带可选字段：`est`（分钟）、`type: practice`、`bloom`（记忆/理解/应用/分析/评价/创造）、
-  `difficulty`（1-5）。**建议每批都给 est 与 difficulty**——难度字段让审计能自动检出认知跳跃（R11）。
+  `difficulty`（1-5）。**建议每批都给 est 与 difficulty**——难度字段让审计能自动检出认知跳跃
+  （R13 认知跨步候选的难度差口径）。
 
 ### 边级自查表（每批提交前必做）
 
@@ -54,6 +63,8 @@ unconverged = 哪里连接过少）与 `schema`（每节点的 pre/enc/est/bloom
 
 有「冗余」结论的边直接从 pre 集合移除；有「缺失中间层」结论的边必须先把中间节点
 加进本批（或下一批）再提交本边。**批次质量由边级 verdict 聚合，不做模糊的批级自查**。
+除新 pre 边外，本批 analyze 的 `jump_candidates` 与审计的 R6/R13 条目同样逐条进 verdict 表：
+认可（留下理由）或修（补台阶节点 / 删冗余边）；未清零的候选会阻塞交付锚点（见第 3 阶段）。
 
 ## 构建规范（每一批都要遵守）
 
@@ -104,10 +115,11 @@ unconverged = 哪里连接过少）与 `schema`（每节点的 pre/enc/est/bloom
 全部构建完成后：
 1. `learnhub_rebuild`（course 参数指定本课程）跑审计门禁，读 `审计报告.md`。
 2. 按 findings 逐条提 edit 修复提案（缺失覆盖 → 把概念改写为动作句 add_node；
-   断开组件 → set_pre 接入主结构；孤环/断边 → 修正 pre；R11 难度跳跃 → 补中间台阶节点）。
+  断开组件 → set_pre 接入主结构；孤环/断边 → 修正 pre；R13 认知跨步候选 → 补中间台阶节点）。
 3. 重新审计直至无 ERROR。
-4. **结束条件：audit 无 ERROR 且图谱健康分 ≥ 80**（`learnhub_graph_analyze` 的 `health.score`；
-   apply 返回值 findings 低于 80 会显式提醒）。二者都满足才向用户交付；否则继续构建或修复。
+4. **结束条件（全绿才交付）**：audit 无 ERROR；图谱健康分 ≥ 80（`learnhub_graph_analyze` 的
+   `health.score`）；规模达标（`scale.ok = true`，缺多少补多少）；jump 候选与 R6 冗余边全部
+   处置（每条 verdict：认可留下理由，或修复）；检察官全图终审通过。任一不满足继续构建或修复。
 
 ## 检察官委派（对抗性审查）
 
@@ -117,6 +129,8 @@ unconverged = 哪里连接过少）与 `schema`（每节点的 pre/enc/est/bloom
 - 反驳 → 给出具体理由（为什么该边必要/粒度合理）并在交付说明中记录。
 未回应完 findings 不得提交下一批。委派时给他图 analyze 的 JSON 与本批 ops 原文，**不要附你的自查结论**
 （他的价值在于独立视角）。
+交付前（结束门禁检查时）**再强制一次全图终审**：把完整 analyze JSON 与 R6/R13 候选清单交给他，
+专抓跨批次的系统性问题（整条链缺铺垫、系统性伪依赖）；未回应完 findings 不得交付。
 
 ## 流程备忘
 
@@ -124,4 +138,4 @@ unconverged = 哪里连接过少）与 `schema`（每节点的 pre/enc/est/bloom
   （已建节点数 / 当前区 / 当前健康分）；结束时给审计结论 + 健康分 + 全图统计。
 - 大型课程可委派 `subagent_graph_designer` 子代理执行分批展开，父 agent 负责范围分析与交付；
   检察官委派（`subagent_graph_prosecutor`）由执行构建的一方负责发起。
-- 用户否决某批提案时按反馈调整后重提，不要跳过人审直接 apply。
+- 人审只有骨架与交付两个锚点（ADR-0003）；用户否决锚点产物时按反馈调整后重跑对应阶段。
