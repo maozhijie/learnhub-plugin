@@ -13,6 +13,7 @@ const STATUS_TAG: Record<GenJobItem['status'], { label: string; color: string }>
   running: { label: '生成中', color: 'arcoblue' },
   cancelling: { label: '取消中', color: 'orange' },
   done: { label: '已完成', color: 'green' },
+  partial: { label: '部分完成', color: 'purple' },
   failed: { label: '失败', color: 'red' },
   cancelled: { label: '已取消', color: 'gray' },
 }
@@ -195,9 +196,9 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
                   {j.status === 'running'
                     ? <Button size='mini' type='text' status='danger' onClick={() => void cancel(j)}>取消</Button>
                     : null}
-                  {j.status === 'failed' && (
+                  {(j.status === 'failed' || j.status === 'partial') && (
                     <Button size='mini' type='text' onClick={() =>
-                      discussInHost(j.course, j.node, `上次生成失败：${j.message ?? '（无错误信息）'}。请分析原因并帮我修复，然后重试生成。`)
+                      discussInHost(j.course, j.node, `上次生成${j.status === 'partial' ? '部分完成，自动出题失败' : '失败'}：${j.message ?? '（无错误信息）'}。请分析原因并帮我修复，然后重试。`)
                     }>与 AI 讨论</Button>
                   )}
                 </Space>
