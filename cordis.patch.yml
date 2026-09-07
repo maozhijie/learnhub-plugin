@@ -1,0 +1,13 @@
+# dsh-learnhub 组合包 patch：host 引擎插件 + 定时提醒能力。
+# 机器级部署路径（config.vault）不写在这里——由各机器 profile 的
+# cordis.patch.yml 按 id 覆盖本行的 config（patch 按行整体替换 config）。
+- insert:
+    # host：18 个 agent 工具 + /learnhub/api/* + /learnhub 面板页
+    - id: dsh-learnhub
+      name: dsh-learnhub
+    # 定时提醒（会话级工具 schedule_create/list/delete）+ 时区上下文。
+    # 三条学习任务（每日工作单/逾期巡检/周复盘）由 agent 在会话内 schedule_create 注册。
+    - id: time-context
+      name: '@deepseek-ai/dsh-time-context'
+    - id: schedule
+      name: '@deepseek-ai/dsh-schedule'

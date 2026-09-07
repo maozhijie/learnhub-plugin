@@ -1,0 +1,204 @@
+/**
+ * 明文运行态存储（替代 Python db.py 的 SQLite 权威层）。
+ *
+ * - journal/practice：JSONL 逐行追加（与旧 复习日志.jsonl 惯例一致）
+ * - proposals：state/proposals.json 单文件（pending/applied/rejected 全留痕）
+ * - snapshots：state/snapshots/<课程>-v<N>.json 整图 YAML 文档序列
+ * 全部写入走临时文件 + rename 原子替换（追加除外——追加用 open 'a' 一次写整行）。
+ */
+import { mkdir, readFile, rename, appendFile, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { nowIso } from './dates.ts'
+import type { JournalRec, PracticeRec, ProposalRec } from './types.ts'
+import type { Paths } from './paths.ts'
+
+/** 临时文件 + rename 原子写。 */
+export async function atomicWrite(path: string, data: string): Promise<void> {
+  await mkdir(path.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}`
+  await writeFile(tmp, data, 'utf8')
+  await rename(tmp, path)
+}
+
+export class Store {
+  constructor(private paths: Paths) {}
+
+  // ---- journal ----
+
+  /** 写一条 journal（JSONL 追加）→ 条目。 */
+  async appendJournal(rec: Omit<JournalRec, 'ts'> & { ts?: string }): Promise<JournalRec> {
+    const full: JournalRec = {
+      ts: rec.ts ?? nowIso(),
+      course: rec.course, node: rec.node, rating: rec.rating ?? null,
+      kind: rec.kind, elapsed_days: Math.round(rec.elapsed_days ?? 0),
+      session: rec.session ?? null, duration_s: rec.duration_s ?? null,
+      ...(rec.xp !== undefined ? { xp: rec.xp } : {}),
+      ...(rec.detail ? { detail: rec.detail } : {}),
+    }
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await appendFile(this.paths.journalPath, JSON.stringify(full) + '\n', 'utf8')
+    return full
+  }
+
+  /** 最近 N 条 journal（course 过滤可选）。 */
+  async journalTail(course: string | null = null, limit = 50): Promise<JournalRec[]> {
+    const lines = await this.readJsonl<JournalRec>(this.paths.journalPath)
+    const hit = course ? lines.filter(r => r.course === course) : lines
+    return hit.slice(-limit).reverse()
+  }
+
+  async journalCount(course?: string): Promise<number> {
+    const lines = await this.readJsonl<JournalRec>(this.paths.journalPath)
+    return course ? lines.filter(r => r.course === course).length : lines.length
+  }
+
+  /** 学习行为按日聚合（journal + practice；ts 为本地时间 ISO，slice(0,10) 即本地日）。
+   * 打卡/日历热力图的数据源——行为流水即事实，零新增文件。 */
+  async activityCounts(): Promise<Record<string, { journal: number; practice: number; total: number }>> {
+    const [journal, practice] = await Promise.all([
+      this.readJsonl<JournalRec>(this.paths.journalPath),
+      this.readJsonl<PracticeRec>(this.paths.practicePath),
+    ])
+    const byDay: Record<string, { journal: number; practice: number; total: number }> = {}
+    const bump = (ts: string | undefined, key: 'journal' | 'practice') => {
+      if (!ts) return
+      const day = ts.slice(0, 10)
+      const slot = byDay[day] ?? (byDay[day] = { journal: 0, practice: 0, total: 0 })
+      slot[key] += 1
+      slot.total += 1
+    }
+    for (const r of journal) bump(r.ts, 'journal')
+    for (const r of practice) bump(r.ts, 'practice')
+    return byDay
+  }
+
+  // ---- practice ----
+
+  /** 追加一条作答记录。 */
+  async appendPractice(rec: Omit<PracticeRec, 'ts'> & { ts?: string }): Promise<PracticeRec> {
+    const full: PracticeRec = {
+      ts: rec.ts ?? nowIso(),
+      course: rec.course, node: rec.node, ex: rec.ex, answer: rec.answer,
+      correct: rec.correct === undefined ? null : rec.correct,
+      judge: rec.judge,
+      ...(rec.qid ? { qid: rec.qid } : {}),
+      ...(rec.feedback ? { feedback: rec.feedback } : {}),
+      ...(rec.elapsed_s !== undefined ? { elapsed_s: Math.round(rec.elapsed_s * 10) / 10 } : {}),
+      ...(rec.xp !== undefined ? { xp: rec.xp } : {}),
+    }
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await appendFile(this.paths.practicePath, JSON.stringify(full) + '\n', 'utf8')
+    return full
+  }
+
+  /** 全部作答记录（节点/课程过滤由调用方做；量级小，全读可接受）。 */
+  async practiceAll(): Promise<PracticeRec[]> {
+    return this.readJsonl<PracticeRec>(this.paths.practicePath)
+  }
+
+  /** 节点作答统计（attempts/judged/correct/accuracy + 正确率）。 */
+  async attemptStats(course: string, node: string): Promise<{
+    attempts: number; judged: number; correct: number; accuracy: number | null
+  }> {
+    const all = await this.practiceAll()
+    const hit = all.filter(r => r.course === course && r.node === node)
+    const judged = hit.filter(r => r.correct !== null)
+    const right = judged.filter(r => r.correct === true).length
+    return {
+      attempts: hit.length, judged: judged.length, correct: right,
+      accuracy: judged.length ? Math.round((right / judged.length) * 1000) / 1000 : null,
+    }
+  }
+
+  // ---- proposals ----
+
+  async loadProposals(): Promise<ProposalRec[]> {
+    try {
+      const raw = await readFile(this.paths.proposalsPath, 'utf8')
+      const doc = JSON.parse(raw)
+      return Array.isArray(doc) ? doc as ProposalRec[] : []
+    } catch {
+      return []
+    }
+  }
+
+  async saveProposals(list: ProposalRec[]): Promise<void> {
+    await atomicWrite(this.paths.proposalsPath, JSON.stringify(list, null, 1) + '\n')
+  }
+
+  /** 新建提案 → id（自增）。 */
+  async createProposal(kind: ProposalRec['kind'], course: string, summary: string, artifact: string): Promise<number> {
+    const list = await this.loadProposals()
+    const id = list.reduce((m, p) => Math.max(m, p.id), 0) + 1
+    list.push({
+      id, kind, course, status: 'pending', summary, artifact,
+      created: nowIso(), decided: null, decision_note: '',
+    })
+    await this.saveProposals(list)
+    return id
+  }
+
+  async updateProposal(id: number, patch: Partial<ProposalRec>): Promise<ProposalRec | null> {
+    const list = await this.loadProposals()
+    const hit = list.find(p => p.id === id)
+    if (!hit) return null
+    Object.assign(hit, patch)
+    await this.saveProposals(list)
+    return hit
+  }
+
+  /** 取 pending 提案（缺省 = 该 kind 最新一条）。 */
+  async takePending(kind: ProposalRec['kind'], pid?: number): Promise<ProposalRec> {
+    const list = await this.loadProposals()
+    let prop: ProposalRec | undefined
+    if (pid) {
+      prop = list.find(p => p.id === pid)
+      if (!prop) throw new Error(`[apply] 提案 #${pid} 不存在。`)
+    } else {
+      prop = [...list].reverse().find(p => p.status === 'pending' && p.kind === kind)
+      if (!prop) throw new Error(`[apply] 没有 pending 的 ${kind} 提案（先 propose）。`)
+    }
+    if (prop.status !== 'pending') throw new Error(`[apply] 提案 #${prop.id} 已 ${prop.status}。`)
+    return prop
+  }
+
+  // ---- snapshots ----
+
+  async latestSnapshotVersion(course: string): Promise<number> {
+    const dir = this.paths.snapshotDir
+    if (!existsSync(dir)) return 0
+    const { readdir } = await import('node:fs/promises')
+    let max = 0
+    for (const f of await readdir(dir)) {
+      const m = f.match(new RegExp(`^${course}-v(\\d+)\\.json$`))
+      if (m) max = Math.max(max, Number(m[1]))
+    }
+    return max
+  }
+
+  async saveSnapshot(course: string, version: number, doc: unknown): Promise<void> {
+    await atomicWrite(this.paths.snapshotPath(course, version), JSON.stringify(doc, null, 1) + '\n')
+  }
+
+  // ---- utils ----
+
+  private async readJsonl<T>(path: string): Promise<T[]> {
+    let raw: string
+    try {
+      raw = await readFile(path, 'utf8')
+    } catch {
+      return []
+    }
+    const out: T[] = []
+    for (const line of raw.split('\n')) {
+      const s = line.trim()
+      if (!s) continue
+      try {
+        out.push(JSON.parse(s) as T)
+      } catch {
+        // 跳过半行损坏（进程中断可能留下未写完的尾行）
+      }
+    }
+    return out
+  }
+}

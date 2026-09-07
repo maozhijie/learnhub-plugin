@@ -1,0 +1,8 @@
+# 用户根占位 preset：真实 composition 在仓库内维护，这里只做 Include 引用，
+# 保持单一事实来源（改仓库文件即生效，无需同步拷贝）。
+# 安装方式：复制到 ~/.dsh/.agent-presets/learnhub/agent.cordis.yml，
+# 并把下面 path 改成本机仓库的真实位置（各机器路径不同）。
+- name: '@deepseek-ai/cordis-plugin-include'
+  config:
+    # 必填：改为本仓库 clone 的绝对 file:// URL；未替换时插件加载会失败。
+    # path: file:///absolute/path/to/learnhub-plugin/preset/learnhub/agent.cordis.yml

@@ -1,0 +1,67 @@
+/**
+ * 学习中心统一定位（吸收自 Python paths.py）。
+ *
+ * 两级路径：中心级（学习中心/：注册表、会话工作单、state 流水、提案、日志）与
+ * 课程级（学习中心/<root>/：data/ 课程/ state/、审计报告、就绪清单）。
+ * 全部由构造注入的 centerRoot 派生，无全局可变状态。
+ */
+
+/** Windows 非法字符与正斜杠 → 全角替换（节点改名必须走 graph apply-edit 的 rename op）。 */
+const FW_MAP: Record<string, string> = {
+  '\\': '＼', '/': '／', ':': '：', '*': '＊', '?': '？',
+  '"': '＂', '<': '＜', '>': '＞', '|': '｜',
+}
+
+/** 节点名 → 安全文件名（不含扩展名）。 */
+export function safeFilename(name: string): string {
+  return [...name].map(c => FW_MAP[c] ?? c).join('')
+}
+
+export class Paths {
+  constructor(readonly centerRoot: string) {}
+
+  // ---- 中心级 ----
+  get registryPath(): string { return `${this.centerRoot}/课程注册表.yaml` }
+  get sessionDir(): string { return `${this.centerRoot}/会话` }
+  get centerStateDir(): string { return `${this.centerRoot}/state` }
+  get journalPath(): string { return `${this.centerStateDir}/journal.jsonl` }
+  get practicePath(): string { return `${this.centerStateDir}/practice.jsonl` }
+  get proposalsPath(): string { return `${this.centerStateDir}/proposals.json` }
+  get proposalDir(): string { return `${this.centerStateDir}/proposals` }
+  get snapshotDir(): string { return `${this.centerStateDir}/snapshots` }
+  get dashboardPath(): string { return `${this.centerRoot}/学习仪表盘.md` }
+  get recoveryStatePath(): string { return `${this.centerStateDir}/recovery_state.json` }
+  get runLogPath(): string { return `${this.centerStateDir}/运行日志.md` }
+  get promptDir(): string { return `${this.centerStateDir}/提示词` }
+  get learnhubConfigPath(): string { return `${this.centerStateDir}/learnhub.json` }
+  get genJobsPath(): string { return `${this.centerStateDir}/生成任务.json` }
+  get trashDir(): string { return `${this.centerRoot}/.trash` }
+
+  sessionPath(dateStr: string): string { return `${this.sessionDir}/${dateStr}.md` }
+
+  proposalArtifactPath(pid: number, kind: string, course: string): string {
+    return `${this.proposalDir}/${pid}-${kind}-${course}.yaml`
+  }
+
+  snapshotPath(course: string, version: number): string {
+    return `${this.snapshotDir}/${course}-v${version}.json`
+  }
+
+  // ---- 课程级 ----
+  courseRoot(root: string): string { return `${this.centerRoot}/${root}` }
+  /** 题库目录（question-bank 的 <课程根>/题库/<节点>.yaml）。 */
+  bankDir(root: string): string { return `${this.courseRoot(root)}/题库` }
+  dataDir(root: string): string { return `${this.courseRoot(root)}/data` }
+  courseDir(root: string): string { return `${this.courseRoot(root)}/课程` }
+  statusPath(root: string): string { return `${this.courseRoot(root)}/进度.md` }
+  readyPath(root: string): string { return `${this.courseRoot(root)}/就绪清单.md` }
+  reportPath(root: string): string { return `${this.courseRoot(root)}/审计报告.md` }
+  courseStateDir(root: string): string { return `${this.courseRoot(root)}/state` }
+  queuePath(root: string): string { return `${this.courseStateDir(root)}/生成队列.md` }
+  fsrsParamsPath(root: string): string { return `${this.courseStateDir(root)}/fsrs参数.json` }
+
+  /** 课程文件规范路径：课程/<区名>/<节点名>.md。 */
+  courseNotePath(root: string, regionName: string, nodeName: string): string {
+    return `${this.courseDir(root)}/${safeFilename(regionName)}/${safeFilename(nodeName)}.md`
+  }
+}
