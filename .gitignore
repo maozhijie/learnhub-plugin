@@ -3,3 +3,4 @@ lib/
 web/
 *.log
 .DS_Store
+.worktrees/
