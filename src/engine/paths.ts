@@ -30,6 +30,7 @@ export class Paths {
   get centerStateDir(): string { return `${this.centerRoot}/state` }
   get journalPath(): string { return `${this.centerStateDir}/journal.jsonl` }
   get practicePath(): string { return `${this.centerStateDir}/practice.jsonl` }
+  get reviewLogPath(): string { return `${this.centerStateDir}/review-log.jsonl` }
   get proposalsPath(): string { return `${this.centerStateDir}/proposals.json` }
   get proposalDir(): string { return `${this.centerStateDir}/proposals` }
   get snapshotDir(): string { return `${this.centerStateDir}/snapshots` }

@@ -114,16 +114,17 @@ export function stageAfter(newFs: FsrsBlock, rating: number, firstLearn: boolean
   return 'review'
 }
 
-/** 题目级（刷卡模型）一次评分 → 新 fsrs 块。题卡没有节点 stage，只有 fsrs 块本身。 */
+/** 题目级（刷卡模型）一次评分 → 新 fsrs 块。题卡没有节点 stage，只有 fsrs 块本身。
+ * elapsed_days = 距上次复习天数（复习日志 #60 的快照字段；此前算完即丢）。 */
 export function applyRatingBlock(
   fsOld: FsrsBlock | null, ratingNum: number, today: string, sched: FSRS,
-): { fs: FsrsBlock; kind: 'learn' | 'review' | 'relearn' } {
+): { fs: FsrsBlock; kind: 'learn' | 'review' | 'relearn'; elapsed_days: number } {
   const pseudo = {
     node: '', stage: fsOld?.reps ? 'review' : 'ready', fsrs: fsOld,
     content: { version: 0, generated_at: null, status: 'draft' }, practice: { attempts: 0, correct: 0 },
   } as unknown as Fm
   const { fs, meta } = applyRating(pseudo, ratingNum, today, sched)
-  return { fs, kind: meta.kind }
+  return { fs, kind: meta.kind, elapsed_days: meta.elapsed_days }
 }
 
 /** 预览某评分后的下次到期日（不落盘）：复习自评按钮的到期预览。 */

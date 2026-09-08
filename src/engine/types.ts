@@ -119,6 +119,27 @@ export interface PracticeRec {
   xp?: number
 }
 
+/** 逐次复习日志条目（state/review-log.jsonl，ADR-0012）：调度事件流——只在真实
+ * 推进 FSRS 卡时落一条，与 practice 流水（作答证据）和 journal（XP/内容账目）
+ * 刻意分开；消费方 = 记忆健康仪表盘与 FSRS 参数优化器（#61/#62）。 */
+export interface ReviewRec {
+  ts: string
+  course: string
+  node: string
+  qid: string
+  /** 本次推进的 FSRS 评分（1=Again 2=Hard 3=Good 4=Easy）。 */
+  rating: 1 | 2 | 3 | 4
+  /** auto = 练习流自动映射 / 忘记申报；self = 复习流答对后自评；synthetic = 完成学习时的调度初始化（非真实作答，诚实度统计须过滤）。 */
+  rating_source: 'auto' | 'self' | 'synthetic'
+  /** 距该卡上次复习的天数（首学 0；synthetic 恒 0）。 */
+  elapsed_days: number
+  /** 复习前快照。synthetic 无「复习前」状态 → 三字段全 null；首学无旧卡 →
+   * 前 2 字段 null、r_pred 取 FSRS 对新卡的自预测 1.0（仅 FSRS 自预测，学习者 JOL 属 E4）。 */
+  stability_before?: number | null
+  difficulty_before?: number | null
+  r_pred?: number | null
+}
+
 /** 提案记录（db.proposals 行同构；产物 YAML 另存 state/proposals/）。 */
 export interface ProposalRec {
   id: number

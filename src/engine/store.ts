@@ -1,7 +1,7 @@
 /**
  * 明文运行态存储（替代 Python db.py 的 SQLite 权威层）。
  *
- * - journal/practice：JSONL 逐行追加（与旧 复习日志.jsonl 惯例一致）
+ * - journal/practice/review-log：JSONL 逐行追加（与旧 复习日志.jsonl 惯例一致）
  * - proposals：state/proposals.json 单文件（pending/applied/rejected 全留痕）
  * - snapshots：state/snapshots/<课程>-v<N>.json 整图 YAML 文档序列
  * 全部写入走临时文件 + rename 原子替换（追加除外——追加用 open 'a' 一次写整行）。
@@ -9,7 +9,7 @@
 import { mkdir, readFile, rename, appendFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { nowIso } from './dates.ts'
-import type { JournalRec, PracticeRec, ProposalRec } from './types.ts'
+import type { JournalRec, PracticeRec, ProposalRec, ReviewRec } from './types.ts'
 import type { Paths } from './paths.ts'
 
 /** 临时文件 + rename 原子写。 */
@@ -94,6 +94,46 @@ export class Store {
   /** 全部作答记录（节点/课程过滤由调用方做；量级小，全读可接受）。 */
   async practiceAll(): Promise<PracticeRec[]> {
     return this.readJsonl<PracticeRec>(this.paths.practicePath)
+  }
+
+  // ---- review-log（ADR-0012 逐次复习日志）----
+
+  /** 追加一条复习日志（只在真实推进 FSRS 卡的落点调用，见 engine 各写点）。 */
+  async appendReview(rec: Omit<ReviewRec, 'ts'> & { ts?: string }): Promise<ReviewRec> {
+    const full: ReviewRec = {
+      ts: rec.ts ?? nowIso(),
+      course: rec.course, node: rec.node, qid: rec.qid,
+      rating: rec.rating, rating_source: rec.rating_source,
+      elapsed_days: Math.round(rec.elapsed_days ?? 0),
+      stability_before: rec.stability_before ?? null,
+      difficulty_before: rec.difficulty_before ?? null,
+      r_pred: rec.r_pred === null || rec.r_pred === undefined ? null : Math.round(rec.r_pred * 1000) / 1000,
+    }
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await appendFile(this.paths.reviewLogPath, JSON.stringify(full) + '\n', 'utf8')
+    return full
+  }
+
+  /** 全部复习日志。消费契约：文件缺失 = Missing 合法空态（返回 []）；
+   * 逐行损坏 = Broken 报出（不静默吞——仪表盘/优化器的统计口径不能带病数据）。 */
+  async reviewLogAll(): Promise<ReviewRec[]> {
+    let raw: string
+    try {
+      raw = await readFile(this.paths.reviewLogPath, 'utf8')
+    } catch {
+      return []
+    }
+    const out: ReviewRec[] = []
+    for (const [i, line] of raw.split('\n').entries()) {
+      const s = line.trim()
+      if (!s) continue
+      try {
+        out.push(JSON.parse(s) as ReviewRec)
+      } catch {
+        throw new Error(`[review-log] ${this.paths.reviewLogPath} 第 ${i + 1} 行不是合法 JSON（Broken）：修复或删除该行后再试。`)
+      }
+    }
+    return out
   }
 
   /** 节点作答统计（attempts/judged/correct/accuracy + 正确率）。 */
