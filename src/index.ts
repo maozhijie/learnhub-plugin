@@ -660,9 +660,11 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       return
     }
     if (req.method === 'GET' && route === '/review-queue') {
-      // 复习刷卡队列：跨课程到期题扁平队列，按预测遗忘风险 R 升序为主（r 字段随卡带出，#56）
+      // 复习刷卡队列：跨课程到期题扁平队列，按预测遗忘风险 R 升序为主（r 字段随卡带出，#56）；
+      // node 过滤 = 定向复习直达入口（A3 软闸/enc 回退建议项指向的目标节点，#54/#55）
       const course = url.searchParams.get('course') ?? undefined
-      sendJson(res, 200, await apiRun('api/review-queue', () => engine.reviewQueue(course)))
+      const node = url.searchParams.get('node') ?? undefined
+      sendJson(res, 200, await apiRun('api/review-queue', () => engine.reviewQueue(course, node)))
       return
     }
     if (req.method === 'GET' && route === '/xp') {
@@ -902,7 +904,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     }) as never)
 
   tool('learnhub_status',
-    'Return the learning center status (center summary + per-course detail) as JSON.',
+    'Return the learning center status (center summary + per-course detail) as JSON. blocked entries are executable soft-gate advice: a candidate blocked only by a decayed prerequisite carries {pre, r, due, entry} — review the prerequisite\'s due questions first (direct entry) or still learn the candidate directly.',
     {}, () => run('learnhub_status', async () => JSON.stringify(await engine.statusJson())))
   tool('learnhub_data_check',
     'Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.',
@@ -933,10 +935,18 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { node: string; course: string }) => run('learnhub_lesson', async () => JSON.stringify(await engine.lesson(args.course, args.node))))
   tool('learnhub_recommend',
-    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new lesson) ranked by the priority rule (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Fetch the next batch after finishing one.',
+    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Fetch the next batch after finishing one.',
     { limit: { type: 'number', description: 'Max events to return (default 5)' } },
     (args: { limit?: number }) => run('learnhub_recommend', async () =>
       JSON.stringify(await engine.recommend(args.limit === undefined ? 5 : args.limit))))
+  tool('learnhub_review_queue',
+    'List the cross-course due review cards as JSON (Anki-style; sorted by predicted recall risk R ascending, r carried per card; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue. Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. Unknown node names fail loud.',
+    {
+      course: { type: 'string', description: 'Course name; omit for all enabled courses' },
+      node: { type: 'string', description: 'Node name filter — targeted review of this node\'s due questions (A3 advice direct entry)' },
+    },
+    (args: { course?: string; node?: string }) => run('learnhub_review_queue', async () =>
+      JSON.stringify(await engine.reviewQueue(args.course, args.node))))
   tool('learnhub_rebuild',
     'Run audit gate + ready-list regeneration for all enabled courses, or one course.',
     { course: { type: 'string', description: 'Course name; omit to rebuild all enabled courses' } },
@@ -1181,7 +1191,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 27 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 28 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

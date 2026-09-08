@@ -29,8 +29,8 @@ import type { ApplyAudit, EditOp } from './gengraph.ts'
 import { QuestionBank } from './question-bank.ts'
 import type { BankQuestion } from './question-bank.ts'
 import { YAML } from './yaml.ts'
-import { Sessions, assertNoBrokenNotes } from './sessions.ts'
-import type { NodeStat } from './sessions.ts'
+import { Sessions, assertNoBrokenNotes, withinStruggleWindow } from './sessions.ts'
+import type { NodeStat, WindowStat } from './sessions.ts'
 import { todayStr, nowIso } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
@@ -170,9 +170,27 @@ export class LearnhubEngine {
   }
 
   async recommend(limit = 5): Promise<Record<string, unknown>> {
-    const stats = await this.bankSnapshot()
-    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, todayStr(), limit)
+    const [stats, window] = await Promise.all([this.bankSnapshot(), this.struggleWindow()])
+    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, todayStr(), limit, window)
     return { date: todayStr(), events }
+  }
+
+  /** struggle 近期窗口统计（#55 F 半）：作答流水按 (course,node) 聚合，只留窗口内的
+   * 真实作答证据（含交互件结算与忘记申报）。recommendEvents 消费；与累计的题库
+   * stats 分开——复习中节点的 struggle 只看近期窗口，老账不翻。 */
+  private async struggleWindow(): Promise<Map<string, Map<string, WindowStat>>> {
+    const today = todayStr()
+    const out = new Map<string, Map<string, WindowStat>>()
+    for (const r of await this.store.practiceAll()) {
+      if (typeof r.correct !== 'boolean' || !withinStruggleWindow(r.ts, today)) continue
+      const byNode = out.get(r.course) ?? new Map<string, WindowStat>()
+      const agg = byNode.get(r.node) ?? { attempts: 0, correct: 0 }
+      agg.attempts++
+      if (r.correct) agg.correct++
+      byNode.set(r.node, agg)
+      out.set(r.course, byNode)
+    }
+    return out
   }
 
   /** 全部启用课程的题库聚合（一次遍历）：每节点 due/count/accuracy/attempts。
@@ -807,13 +825,21 @@ export class LearnhubEngine {
    * 内难度由易到难渐进，再按 due/节点/题序稳定排序；不含从未调度的新题
    * （due=null，入口在学习流）。R 在各课程自己的调度器参数下现算并随卡带出
    * （r 字段，供面板显示预测回忆率）。Broken 笔记 fail loud——与
-   * status/recommend 同一门前置。 */
-  async reviewQueue(courseKey?: string, today = todayStr()): Promise<Record<string, unknown>> {
+   * status/recommend 同一门前置。
+   * node 过滤（#54 A3 R 半）= 定向复习直达入口：软闸/enc 回退建议项携带的目标
+   * 节点，用它拉出「该节点到期题」子队列（作答复用 questionAnswer/自评流）。
+   * 节点不在范围内任何课程的图内时 fail loud——拼错的直达入口不该静默空队列。 */
+  async reviewQueue(courseKey?: string, node?: string, today = todayStr()): Promise<Record<string, unknown>> {
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
+    let nodeFound = false
     for (const c of courses) {
-      const { broken } = await this.loadView(c)
+      const { graph, broken } = await this.loadView(c)
       assertNoBrokenNotes('review-queue', broken)
+      if (node !== undefined) {
+        if (!graph.nset.has(node)) continue // 该课程没有此节点：跨课程口径下属正常，最后统一判空
+        nodeFound = true
+      }
       const courseRoot = this.paths.courseRoot(c.root)
       const sched = await getScheduler(this.paths, courseRoot)
       let files: string[] = []
@@ -823,16 +849,21 @@ export class LearnhubEngine {
         continue
       }
       for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
-        const node = f.replace(/\.yaml$/, '')
-        const bank = await this.bank.load(courseRoot, node)
+        const qNode = f.replace(/\.yaml$/, '')
+        if (node !== undefined && qNode !== node) continue
+        const bank = await this.bank.load(courseRoot, qNode)
         bank.questions.forEach((q, i) => {
           if (q.archived) return
           const card = this.questionView(q, i)
           if (!card.due || String(card.due) > today) return
           const r = retrievabilityBlock(sched, q.fsrs, today)
-          cards.push({ course: c.name, node, r: Math.round(r * 1000) / 1000, ...card })
+          cards.push({ course: c.name, node: qNode, r: Math.round(r * 1000) / 1000, ...card })
         })
       }
+    }
+    if (node !== undefined && !nodeFound) {
+      const scope = courseKey ? `课程「${courses[0]!.name}」` : '任何启用课程'
+      throw new Error(`[review-queue] 节点「${node}」不在${scope}的图内。`)
     }
     // 组合排序：主键 = R 分档升序，档宽 5 个百分点——到期卡 R 集中在 (0, 0.9]，
     // 档太窄则难度几乎永远排不上号，太宽则风险明显不同的卡被难度插队；档内

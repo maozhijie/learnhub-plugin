@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs'
 import { todayStr, parseDay, daysBetween } from './dates.ts'
 import { effectiveStage } from './audit.ts'
 import { retrievability, getScheduler, masteryOfFm } from './srs.ts'
+import { R_GATE } from './params.ts'
 import { loadNote, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import type { Graph } from './graph.ts'
@@ -74,6 +75,66 @@ export function gateBlockers(graph: Graph, state: Record<string, Fm>, rValue: (n
   return blockers
 }
 
+// ---- A3 成分技能补救与前置再激活（决议 #37 / ADR-0008；实施 #54 R 半、#55 F 半）----
+
+/** 推荐事件/状态暴露的可执行复习建议项（#54/#55 共用形状）：node = 直达复习目标
+ * （review-queue 的 node 过滤入口），due = 其当前到期题数，r = 该目标当前可提取性
+ * R；w 仅 enc 回退带（成分技能调用强度）。 */
+export interface AdviceItem { node: string; w?: number; r: number; due: number }
+
+/** struggle 近期窗口的 (course,node) 聚合作答量（facade 从作答流水注入）。 */
+export interface WindowStat { attempts: number; correct: number }
+
+/** struggle 判据（#55）：作答正确率阈值、作答量下限（低数据静默）与近期窗口宽度。 */
+export const STRUGGLE_ACCURACY = 0.6
+export const STRUGGLE_MIN_ATTEMPTS = 3
+export const STRUGGLE_WINDOW_DAYS = 14
+/** enc 回退建议项截取的头部数量（「取头部若干」）。 */
+export const REMEDIAL_LIMIT = 3
+
+const round3 = (r: number) => Math.round(r * 1000) / 1000
+
+/** A3 R 半（#54）：gateBlockers 的可执行化投影——弱前置结构不变，每项补
+ * 「当前到期题数」（题库聚合注入；无题库数据按 0，仍给建议、入口自然为空队列）。 */
+export function gateAdvice(
+  graph: Graph, state: Record<string, Fm>, rValue: (n: string) => number, rGate: number,
+  dueCount: (n: string) => number,
+): Record<string, AdviceItem[]> {
+  const out: Record<string, AdviceItem[]> = {}
+  for (const [n, weak] of Object.entries(gateBlockers(graph, state, rValue, rGate))) {
+    out[n] = weak.map(([p, r]) => ({ node: p, r: round3(r), due: dueCount(p) }))
+  }
+  return out
+}
+
+/** struggle 判定（#55）：作答量达下限且作答正确率低于阈值才算；低数据自动静默。 */
+export function isStruggle(attempts: number, correct: number): boolean {
+  return attempts >= STRUGGLE_MIN_ATTEMPTS && correct / attempts < STRUGGLE_ACCURACY
+}
+
+/** 作答流水 ts（ISO，本地时）是否落在 struggle 近期窗口内（按本地日；未来时间戳不算）。 */
+export function withinStruggleWindow(ts: string, today: string, days = STRUGGLE_WINDOW_DAYS): boolean {
+  const t = parseDay(ts)
+  const now = parseDay(today)
+  if (!t || !now) return false
+  const back = daysBetween(now, t)
+  return back >= 0 && back < days
+}
+
+/** A3 F 半（#55）：struggle 节点 → enc 成分技能按 w×(1−R) 降序的定向复习建议
+ * （rank = 调用强度 × 遗忘程度；同 rank 按名字稳定排序）。调用方先判 struggle；
+ * enc 为空在此静默返回 []；图外技能边防御性跳过。 */
+export function encRemedialAdvice(
+  graph: Graph, node: string, rValue: (n: string) => number,
+  dueCount: (n: string) => number, limit = REMEDIAL_LIMIT,
+): AdviceItem[] {
+  return (graph.encOf[node] ?? [])
+    .filter(([skill]) => graph.nset.has(skill))
+    .map(([skill, w]) => ({ node: skill, w, r: round3(rValue(skill)), due: dueCount(skill) }))
+    .sort((a, b) => ((b.w ?? 0) * (1 - b.r)) - ((a.w ?? 0) * (1 - a.r)) || a.node.localeCompare(b.node))
+    .slice(0, limit)
+}
+
 /** 各区「最久未学习」排序（轮转）：从未学过的区最优先。 */
 export function regionLru(graph: Graph, state: Record<string, Fm>): string[] {
   const last: Record<string, string> = {}
@@ -100,9 +161,14 @@ export interface CourseStats {
   due: Array<{ d: string; n: string; r: number }>
   overdue: Array<{ d: string; n: string; r: number }>
   blocked: Record<string, Array<[string, number]>>
+  /** 被 R-gate 拦下候选的可执行复习建议（#54 R 半）：候选 → 衰减前置清单（含到期题数）。 */
+  advice: Record<string, AdviceItem[]>
 }
 
-export function courseStats(graph: Graph, state: Record<string, Fm>, rValue: (n: string) => number, today: string, rGate = 0.85): CourseStats {
+export function courseStats(
+  graph: Graph, state: Record<string, Fm>, rValue: (n: string) => number, today: string,
+  rGate = R_GATE, dueCount: (n: string) => number = () => 0,
+): CourseStats {
   const counts = { unseen: 0, ready: 0, learning: 0, review: 0, mastered: 0, skipped: 0 } as Record<Stage, number>
   const t = parseDay(today)!
   for (const n of graph.names) {
@@ -115,6 +181,7 @@ export function courseStats(graph: Graph, state: Record<string, Fm>, rValue: (n:
     gated: readySet(graph, state, rValue, rGate),
     due: [], overdue: [], // 复习到期改由题库聚合驱动（bankDue 注入），不再读节点 frontmatter
     blocked: gateBlockers(graph, state, rValue, rGate),
+    advice: gateAdvice(graph, state, rValue, rGate, dueCount),
   }
 }
 
@@ -162,10 +229,10 @@ export class Sessions {
       assertNoBrokenNotes('status', broken)
       const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
       const rValue = (n: string) => retrievability(sched, state[n], today)
-      const st = courseStats(graph, state, rValue, today)
-      const stats = statsByCourse.get(c.name) ?? []
+      const statByNode = new Map((statsByCourse.get(c.name) ?? []).map(s => [s.node, s]))
+      const st = courseStats(graph, state, rValue, today, R_GATE, n => statByNode.get(n)?.count ?? 0)
       const t = parseDay(today)!
-      const withDue = stats.filter(s => s.due !== null)
+      const withDue = [...statByNode.values()].filter(s => s.due !== null)
       const overdueNodes = withDue.filter(s => (parseDay(s.due ?? '')?.getTime() ?? t.getTime()) < t.getTime())
       const dueNodes = withDue.filter(s => s.due === today)
       courses.push({
@@ -175,8 +242,12 @@ export class Sessions {
         overdue: overdueNodes.map(o => ({ node: o.node, since: o.due, count: o.count, path: this.notePath(c.root, graph, o.node) })),
         ready: st.ready.map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
         gated: st.gated.map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
-        blocked: Object.fromEntries(Object.entries(st.blocked).map(([n, weak]) =>
-          [n, weak.map(([p, r]) => ({ pre: p, r: Math.round(r * 1000) / 1000 }))])),
+        // 软闸建议项（#54 R 半）：被 R-gate 拦下的候选 → {前置, R, 前置到期题数, 直达入口}
+        blocked: Object.fromEntries(Object.entries(st.advice).map(([n, items]) =>
+          [n, items.map(a => ({
+            pre: a.node, r: a.r, due: a.due,
+            entry: { course: c.name, node: a.node },
+          }))])),
       })
     }
     return { date: today, courses }
@@ -189,6 +260,8 @@ export class Sessions {
     statsByCourse: Map<string, NodeStat[]>,
     today: string,
     limit: number,
+    /** struggle 近期窗口统计（#55 F 半；缺省 = 无窗口数据，复习中节点不判 struggle）。 */
+    windowStats?: Map<string, Map<string, WindowStat>>,
   ): Promise<Array<Record<string, unknown>>> {
     const events: Array<Record<string, unknown>> = []
     const seen = new Set<string>()
@@ -197,41 +270,81 @@ export class Sessions {
       assertNoBrokenNotes('recommend', broken)
       const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
       const rValue = (n: string) => retrievability(sched, state[n], today)
-      const st = courseStats(graph, state, rValue, today)
       const stats = statsByCourse.get(c.name) ?? []
+      const statByNode = new Map(stats.map(s => [s.node, s]))
+      const dueCountOf = (n: string) => statByNode.get(n)?.count ?? 0
+      const st = courseStats(graph, state, rValue, today, R_GATE, dueCountOf)
+      const winByNode = windowStats?.get(c.name)
+      const windowStruggle = (n: string): boolean => {
+        const w = winByNode?.get(n)
+        return w !== undefined && isStruggle(w.attempts, w.correct)
+      }
+      // A3 F 半（#55）：节点当前的 enc 回退建议——struggle 且有 enc 边时非空，否则 null 静默。
+      // 学习中节点沿用累计作答正确率判定并叠加窗口；复习中节点只看近期窗口（低数据静默）。
+      // 建议触发统一带作答量下限（spec #55）：累计路径不足 3 次同样静默。
+      const remedial = (n: string): AdviceItem[] | null => {
+        const stat = statByNode.get(n)
+        const cumStruggle = stat !== undefined && stat.accuracy !== null
+          && stat.attempts >= STRUGGLE_MIN_ATTEMPTS && stat.accuracy < STRUGGLE_ACCURACY
+        const struggling = effectiveStage(state, n) === 'learning'
+          ? (cumStruggle || windowStruggle(n))
+          : windowStruggle(n)
+        if (!struggling) return null
+        const items = encRemedialAdvice(graph, n, rValue, dueCountOf)
+        return items.length ? items : null
+      }
       const t = parseDay(today)!
-      const add = (etype: string, node: string, score: number, why: string) => {
+      const add = (etype: string, node: string, score: number, why: string, advice?: AdviceItem[]) => {
         if (seen.has(node)) return
         seen.add(node)
         events.push({
           type: etype, course: c.name, node, region: graph.blockOf[node]?.[1] ?? '',
           score: Math.round(score * 10) / 10, why, path: this.notePath(c.root, graph, node),
           hasContent: hasReadyContent(state[node]),
+          ...(advice?.length ? { advice } : {}),
         })
       }
-      // 复习/逾期：题库聚合（节点有到期题目）
+      // 复习/逾期：题库聚合（节点有到期题目）；节点近期 struggle 时把 enc 回退建议附在事件上
       for (const s of [...stats].sort((a, b) => (a.due ?? '').localeCompare(b.due ?? ''))) {
         const d = parseDay(s.due ?? '')
         if (!d) continue
+        const advice = remedial(s.node)
+        const struggleNote = advice ? `；近期练习反复出错，建议先回补成分技能 ${advice[0]!.node}` : ''
         if (d.getTime() < t.getTime()) {
           const days = daysBetween(t, d)
           add('overdue', s.node, 60 + Math.min(days, 10) * 3 + s.count * 2,
-            `逾期 ${days} 天，${s.count} 道题到期`)
+            `逾期 ${days} 天，${s.count} 道题到期${struggleNote}`, advice ?? undefined)
         } else if (d.getTime() === t.getTime()) {
-          add('review', s.node, 55, `今日 ${s.count} 道题到期`)
+          add('review', s.node, 55, `今日 ${s.count} 道题到期${struggleNote}`, advice ?? undefined)
         }
       }
-      // 学习中：保持率低或正确率低（struggle）时改写引导文案
+      // A3 F 半（#55）：复习中的节点近期窗口 struggle 但今日无到期事件 → 独立
+      // struggle 事件（enc 为空或作答量不足时 remedial 为 null，静默）。
+      // skipped 是用户自报已会，不打扰。
+      for (const n of graph.names.filter(x => ['review', 'mastered'].includes(effectiveStage(state, x))).sort()) {
+        if (seen.has(n)) continue
+        const advice = remedial(n)
+        if (!advice) continue
+        add('struggle', n, 50,
+          `近期练习反复出错，先回补成分技能 ${advice[0]!.node}（${advice[0]!.due} 道到期题）再重刷本节`, advice)
+      }
+      // 学习中：保持率低或作答正确率低（struggle）时改写引导文案；有 enc 边则给出定向回补建议
       for (const n of graph.names.filter(x => effectiveStage(state, x) === 'learning').sort()) {
         const r = state[n] ? rValue(n) : 0.9
-        const stat = stats.find(s => s.node === n)
-        const struggling = stat?.accuracy !== null && stat !== undefined && stat.accuracy < 0.6
+        const stat = statByNode.get(n)
+        const struggling = (stat !== undefined && stat.accuracy !== null && stat.accuracy < STRUGGLE_ACCURACY)
+          || windowStruggle(n)
+        const advice = struggling ? (remedial(n) ?? []) : []
         const why = struggling
-          ? `正确率仅 ${Math.round((stat?.accuracy ?? 0) * 100)}%，建议先复习前置概念再继续`
+          ? advice.length
+            ? `作答正确率仅 ${Math.round((stat?.accuracy ?? 0) * 100)}%，先回补成分技能 ${advice[0]!.node}（${advice[0]!.due} 道到期题）再继续`
+            : `作答正确率仅 ${Math.round((stat?.accuracy ?? 0) * 100)}%，建议先复习前置概念再继续`
           : `学到一半，继续完成它（保持率约 ${Math.round(r * 100)}%）`
-        add('learning', n, 52 + (1 - r) * 10 + (struggling ? 6 : 0), why)
+        add('learning', n, 52 + (1 - r) * 10 + (struggling ? 6 : 0), why, advice.length ? advice : undefined)
       }
-      // 新课：解锁后继数 + 分区轮转
+      // 新课：解锁后继数 + 分区轮转；被 R-gate 拦下的候选（#54 R 半）在 new 事件上
+      // 前置展示软闸建议项——文案引导「先复习 P 的 n 道到期题」，评分抬一档排在
+      // 普通新课之前，但不阻止直接学 N（软闸语义，无新增拦截）
       const lru = regionLru(graph, state)
       const lruBonus = new Map(lru.map((r0, i) => [r0, Math.max(0, 8 - i * 2)]))
       const ready = readySet(graph, state, rValue)
@@ -242,6 +355,14 @@ export class Sessions {
       for (const n of ready) {
         const region = graph.blockOf[n][1]
         const unlocks = unlockedCount[n] ?? 0
+        const gate = st.advice[n]
+        if (gate?.length) {
+          const top = gate[0]!
+          add('new', n, 40 + Math.min(unlocks * 4, 16) + (lruBonus.get(region) ?? 0),
+            `前置 ${top.node} 保持率已衰减（R=${top.r}），建议先复习它的 ${top.due} 道到期题再学本节（仍可直接学）`,
+            gate)
+          continue
+        }
         const parts: string[] = []
         if (unlocks) parts.push(`学好可解锁 ${unlocks} 个后继`)
         parts.push(`「${region}」区${lru.length && lru[0] === region ? '最久未学，轮转优先' : '按轮转排序'}`)
