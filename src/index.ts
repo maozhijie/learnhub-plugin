@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：38 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出四面）
+ * - agent 工具面：49 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -26,6 +26,7 @@ import { join, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
 import { Content } from './engine/content.ts'
+import { ANKI_ENDPOINT, AnkiConnectClient } from './engine/anki.ts'
 import { TIER_LABELS, tierIdxOf, genericQuizTarget } from './engine/complexity.ts'
 import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
 import {
@@ -897,6 +898,23 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
           need(body, 'course'), need(body, 'node'), need(body, 'card'))))
         return
       }
+      if (route === '/learner-add') {
+        // E1「加我的理解」（#70）：写注当下 AI 对照该节要点给是非+定位反馈；判词入 E 档案
+        sendJson(res, 200, await apiRun('api/learner-add', () => engine.learnerNoteAdd(
+          need(body, 'course'), need(body, 'node'), {
+            content: typeof body.content === 'string' ? body.content : '',
+            ...(typeof body.kind === 'string' && body.kind.trim() ? { kind: body.kind as never } : {}),
+            ...(typeof body.prompt === 'string' && body.prompt.trim() ? { prompt: body.prompt } : {}),
+            ...(typeof body.section === 'string' && body.section.trim() ? { section: body.section } : {}),
+          }, (prompt, system) => llmComplete(ctx, prompt, system, { effort: llmCfg.fastEffort }))))
+        return
+      }
+      if (route === '/learner-archive') {
+        if (typeof body.archived !== 'boolean') throw new Error('missing required field: archived')
+        sendJson(res, 200, await apiRun('api/learner-archive', () => engine.learnerCardArchive(
+          need(body, 'course'), need(body, 'node'), need(body, 'card'), body.archived)))
+        return
+      }
       if (route === '/question-generate') {
         sendJson(res, 200, await apiRun('api/question-generate', () =>
           generateQuiz(ctx, need(body, 'course'), need(body, 'node'), questionCount(body.count))))
@@ -1364,6 +1382,21 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       const n = questionCount(args.count)
       return JSON.stringify(await engine.noteSourceGenerate(args.id, n, async prompt => stripFences(await llmComplete(ctx, prompt))))
     }))
+  tool('learnhub_anki_export',
+    'Push today\'s due cards to desktop Anki over AnkiConnect (C2 #63, ADR-0011 — Anki is a pure ANSWERING conduit, the vault stays the ONLY scheduler): recalibrates the mirror deck(s) learnhub::<课程> on every call — adds missing due cards (model「learnhub」, fields 题目/答案/来源, the 来源 field carries 课程/节点/题id for write-back attribution), updates reworded ones, and DELETES mirror cards that are archived, regenerated, or no longer due in the vault (the deck is a disposable mirror — never judged Broken, vault wins on any mismatch; Anki-side scheduling output is discarded). Requires Anki running with the AnkiConnect add-on. After the learner answers in Anki (Again/Hard/Good/Easy), bring the answers home with learnhub_anki_import — import BEFORE the next export so freshly answered cards are not re-pushed.',
+    { endpoint: { type: 'string', description: 'AnkiConnect endpoint; default http://127.0.0.1:8765' } },
+    (args: { endpoint?: string }) => run('learnhub_anki_export', async () =>
+      JSON.stringify(await engine.ankiExportPush(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))))
+  tool('learnhub_anki_import',
+    'Pull Anki review events since the last import and write them back as RAW ANSWERING EVIDENCE — the vault re-schedules every affected card with its own ts-fsrs, so the conclusion is identical no matter where the learner answered (ADR-0011: vault is the only scheduler). Mapping: Again → 答错 (rating 1, auto), Hard/Good/Easy → 复习自评档 (2/3/4, self, counted as recalled). The「one push per card per day」invariant holds across devices: a card the vault already advanced that day keeps its schedule untouched — the event is archived in the practice stream only. Imported events land in the practice stream (judge=review, timestamped at the Anki answer time, zero XP) and real advances also land in the review log, so memory-health stats and the FSRS parameter optimizer see Anki answers. Events that cannot be attributed (mirror lost → recovered via the 来源 field; question archived/regenerated) are counted and skipped, never guessed.',
+    { endpoint: { type: 'string', description: 'AnkiConnect endpoint; default http://127.0.0.1:8765' } },
+    (args: { endpoint?: string }) => run('learnhub_anki_import', async () =>
+      JSON.stringify(await engine.ankiImportEvents(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))))
+  tool('learnhub_anki_status',
+    'Show the Anki channel status (C2): mirror size and deck names, last push/import timestamps, the current vault due-card distribution the next export would push, and AnkiConnect reachability. Use it to check the channel before exporting or importing.',
+    { endpoint: { type: 'string', description: 'AnkiConnect endpoint; default http://127.0.0.1:8765' } },
+    (args: { endpoint?: string }) => run('learnhub_anki_status', async () =>
+      JSON.stringify(await engine.ankiStatus(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))))
   tool('learnhub_explain_back_pack',
     'Open the「讲给我听」Feynman session for a node (E2, learner output — the learner explains to YOU): returns the session pack = section-by-section content points + graph position + your role instructions. Your role in this and following turns: a COMPLETE NOVICE who knows nothing about the topic — ask questions ONLY from the content points, one question at a time, probing ambiguity/vagueness, skipped steps, and wrong statements in the learner\'s words; never grade, never praise, never go beyond the points, never give answers; if the learner says「换一种问」re-ask the unclear point from a different angle; wrap up briefly in-character once everything is covered. After the session ends, call learnhub_explain_feedback with the full transcript.',
     {
@@ -1399,6 +1432,61 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         ...(args.prompt !== undefined && args.prompt.trim() ? { prompt: args.prompt } : {}),
         ...(args.section !== undefined && args.section.trim() ? { section: args.section } : {}),
       }))
+    }))
+  tool('learnhub_understanding_add',
+    'Add the learner\'s「我的理解」as a section-anchored self-note (E1「加我的理解」entry): the learner writes ONE explanation/example/mnemonic in their OWN words for a section they just learned; the model compares it against that section\'s taught points and returns verdict (对/部分对/错) + located deviations (含糊/跳跃/说错) + a "how to fill the gap" advice + the full markdown feedback. The verdict is archived ONLY in the E archive and the wording becomes a LearnerCard in the isolated「我的卡」domain (own schedule; review via learnhub_learner_queue) — Learner Output boundary: zero XP, zero mastery/FSRS/canonical writes. Unparseable model feedback fails loud with zero side effects (nothing is archived, no card is created). kind: recall_cue 提示重述 (default) / cloze_rewrite 挖空重述 (content must contain a non-empty {{…}} cloze) / self_explain 自注讲解.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node name' },
+      content: { type: 'string', required: true, description: 'The learner\'s own wording (their understanding, in their words)' },
+      section: { type: 'string', description: 'Section id or title to anchor the note to (the feedback then compares against that section only)' },
+      kind: { type: 'string', description: 'Card face: recall_cue (default) / cloze_rewrite / self_explain' },
+      prompt: { type: 'string', description: 'Front prompt; a default is generated per kind when omitted' },
+    },
+    (args: { course: string; node: string; content: string; section?: string; kind?: string; prompt?: string }) => run('learnhub_understanding_add', async () => {
+      if (!args.content?.trim()) throw new Error('[understanding] content 必填——存的是学习者自己的话。')
+      return JSON.stringify(await engine.learnerNoteAdd(args.course, args.node, {
+        content: args.content,
+        ...(args.section !== undefined && args.section.trim() ? { section: args.section } : {}),
+        ...(args.kind !== undefined ? { kind: args.kind as never } : {}),
+        ...(args.prompt !== undefined && args.prompt.trim() ? { prompt: args.prompt } : {}),
+      }, (prompt, system) => llmComplete(ctx, prompt, system, { effort: llmCfg.fastEffort })))
+    }))
+  tool('learnhub_learner_queue',
+    'List the「我的卡」E-domain queue (E1): the learner\'s own self-note cards — due cards first (due ascending), never-scheduled cards after (their first review is the first push). Each card carries prompt (front: what to restate) and content (back: the learner\'s own wording), source_node/source_section anchors, and attempts. Review = have the learner restate from the prompt in their own words, flip to compare with their content, then settle via learnhub_learner_rate (Hard/Good/Easy 2/3/4) or learnhub_learner_forget — one push per card per day. Isolated schedule: zero XP, zero canonical writes; never mixed into the course review queue.',
+    { course: { type: 'string', description: 'Course name; omit for all enabled courses' } },
+    (args: { course?: string }) => run('learnhub_learner_queue', async () =>
+      JSON.stringify(await engine.learnerQueue(args.course))))
+  tool('learnhub_learner_rate',
+    'Settle one「我的卡」self-note card with the learner\'s self-rating after they restated and compared (2=Hard 3=Good 4=Easy). One push per card per day (a second same-day rating is rejected). Only the card\'s own isolated FSRS block moves — zero XP, zero canonical/scheduling side effects.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node the card belongs to (source_node)' },
+      card: { type: 'string', required: true, description: 'Card id, e.g. "c1"' },
+      rating: { type: 'number', required: true, description: 'Self-rating: 2 Hard / 3 Good / 4 Easy' },
+    },
+    (args: { course: string; node: string; card: string; rating: number }) => run('learnhub_learner_rate', async () =>
+      JSON.stringify(await engine.learnerCardRate(args.course, args.node, args.card, args.rating))))
+  tool('learnhub_learner_forget',
+    'Declare「忘记」on a「我的卡」self-note card — the learner could not restate it, so the card is pushed with rating 1 (again tomorrow). One push per card per day; zero XP, zero canonical writes.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node the card belongs to (source_node)' },
+      card: { type: 'string', required: true, description: 'Card id, e.g. "c1"' },
+    },
+    (args: { course: string; node: string; card: string }) => run('learnhub_learner_forget', async () =>
+      JSON.stringify(await engine.learnerCardForget(args.course, args.node, args.card))))
+  tool('learnhub_learner_card_archive',
+    'Archive or restore one「我的卡」self-note card (E1 management). Archived cards leave the learner queue but keep their history in the card file. E-domain internal action: zero canonical writes.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node the card belongs to (source_node)' },
+      card: { type: 'string', required: true, description: 'Card id, e.g. "c1"' },
+      archived: { type: 'boolean', required: true, description: 'true to archive, false to restore' },
+    },
+    (args: { course: string; node: string; card: string; archived?: boolean }) => run('learnhub_learner_card_archive', async () => {
+      if (typeof args.archived !== 'boolean') throw new Error('[learner-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
+      return JSON.stringify(await engine.learnerCardArchive(args.course, args.node, args.card, args.archived))
     }))
 
   // —— 客户端面板 HTTP 路由 ——
@@ -1450,7 +1538,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 38 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 49 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

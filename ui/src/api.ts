@@ -96,6 +96,22 @@ export const api = {
   explainArchive: (course: string, node: string, content: string, opts?: { kind?: 'recall_cue' | 'cloze_rewrite'; prompt?: string; section?: string }) =>
     http<{ course: string; node: string; id: string; kind: string; count: number }>('POST', '/explain-archive',
       { course, node, content, ...(opts?.kind ? { kind: opts.kind } : {}), ...(opts?.prompt ? { prompt: opts.prompt } : {}), ...(opts?.section ? { section: opts.section } : {}) }),
+  /** 「我的卡」E 池队列（E1 #70）：到期在前、新卡随后，隔离自调度。 */
+  learnerQueue: (course?: string) =>
+    http<import('./types').LearnerQueueDoc>('GET', `/learner-queue${q({ course })}`),
+  /** 「我的卡」自评结算（E1 #70）：一卡一天一次推进，隔离自调度。 */
+  learnerRate: (course: string, node: string, card: string, rating: 2 | 3 | 4) =>
+    http<Record<string, unknown>>('POST', '/learner-rate', { course, node, card, rating }),
+  /** 「我的卡」忘记申报（E1 #70）：rating=1 推卡，0 XP。 */
+  learnerForget: (course: string, node: string, card: string) =>
+    http<Record<string, unknown>>('POST', '/learner-forget', { course, node, card }),
+  /** 「加我的理解」（E1 #70）：写注当下 AI 对照该节要点给是非+定位反馈；判词入 E 档案 + 成卡。 */
+  understandingAdd: (course: string, node: string, content: string, opts?: { kind?: string; prompt?: string; section?: string }) =>
+    http<import('./types').UnderstandingResult>('POST', '/learner-add',
+      { course, node, content, ...(opts?.kind ? { kind: opts.kind } : {}), ...(opts?.prompt ? { prompt: opts.prompt } : {}), ...(opts?.section ? { section: opts.section } : {}) }),
+  /** 「我的卡」归档/恢复（E1 管理面）。 */
+  learnerArchive: (course: string, node: string, card: string, archived: boolean) =>
+    http<Record<string, unknown>>('POST', '/learner-archive', { course, node, card, archived }),
   questionGenerate: (course: string, node: string, count = 6) =>
     http<{ course: string; node: string; added: number; skipped: number; total: number }>('POST', '/question-generate', { course, node, count }),
   generateStatus: () => http<import('./types').GenStatusDoc>('GET', '/generate/status'),

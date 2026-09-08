@@ -257,3 +257,36 @@ export interface JolConfig { enabled: boolean; rate: number }
 
 /** 可用的困难教练（GET /coach，#65 E5）：只读信息性反馈。 */
 export interface CoachDoc { messages: string[]; due_hard: number }
+
+/** 「我的卡」卡面（E1 #70）：提示重述 / 挖空重述 / 自注讲解。 */
+export type LearnerCardKind = 'recall_cue' | 'cloze_rewrite' | 'self_explain'
+
+/** 「我的卡」条目（E1 独立域）：prompt = 正面提示，content = 学习者自己的表述（翻面对照）。 */
+export interface LearnerCardItem {
+  course: string
+  node: string
+  id: string
+  kind: LearnerCardKind
+  prompt: string
+  content: string
+  source_section: string | null
+  due: string | null
+  attempts: number
+}
+
+/** 「我的卡」E 池队列（到期在前、新卡随后；隔离自调度，一卡一天一次推进）。 */
+export interface LearnerQueueDoc {
+  date: string
+  total: number
+  due_count: number
+  cards: LearnerCardItem[]
+}
+
+/** 「加我的理解」（E1 #70）：写注当下的 AI 定位反馈结果（判词入 E 档案，零 canonical）。 */
+export interface UnderstandingResult {
+  course: string
+  node: string
+  card: { id: string; kind: LearnerCardKind; count: number }
+  verdict: { verdict: '对' | '部分对' | '错'; tags: string[]; advice?: string }
+  reply: string
+}

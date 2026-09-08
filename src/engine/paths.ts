@@ -51,6 +51,9 @@ export class Paths {
   get noteSourceManifestPath(): string { return `${this.noteSourceDir}/源清单.yaml` }
   /** 学习者产出卡域（E1 #45/#68）：课程根/我的卡/<节点>.yaml，独立门禁独立调度。 */
   learnerCardsDir(root: string): string { return `${this.courseRoot(root)}/我的卡` }
+  /** Anki 镜象（C2 #63 / ADR-0011）：中心级 anki/镜象.json——可丢弃派生状态，
+   * 记录 key↔noteId 归属与导入水位，坏档静默重建不判 Broken。 */
+  get ankiMirrorPath(): string { return `${this.centerRoot}/anki/镜象.json` }
   get trashDir(): string { return `${this.centerRoot}/.trash` }
 
   sessionPath(dateStr: string): string { return `${this.sessionDir}/${dateStr}.md` }

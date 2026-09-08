@@ -43,8 +43,11 @@ import { QuestionBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
 import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, normalizeSourcePath, sourceHint, stripFrontmatter, titleOfBody } from './note-source.ts'
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
-import { LearnerCards } from './learner-cards.ts'
+import { LearnerCards, LEARNER_CARD_KINDS } from './learner-cards.ts'
 import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
+import { selfNoteFeedbackPrompt, selfNoteFeedbackSystem, selfNotePromptOf } from './self-note.ts'
+import { AnkiMirror, ankiAddNote, ankiCardPayload, ankiCardReviews, ankiCardsInfo, ankiCreateDeck, ankiCreateModel, ankiDeckNames, ankiDeleteNotes, ankiFindNotes, ankiModelNames, ankiNotesInfo, ankiUpdateNoteFields, deckNameOf, isAnkiNoteMissing, isoFromMs, mapAnkiEase, parseSourceKey, planMirrorSync, sameDayAdvanced, ANKI_MODEL, ANKI_TAG } from './anki.ts'
+import type { AnkiMirrorEntry, AnkiNotePayload, AnkiTransport } from './anki.ts'
 import { explainBackPack, explainFeedbackSystem, explainFeedbackPrompt, parseExplainVerdict } from './explain.ts'
 import type { ExplainPoint, ExplainTag, ExplainVerdict } from './explain.ts'
 import { YAML } from './yaml.ts'
@@ -76,7 +79,7 @@ function round4(x: number): number {
 }
 
 /** 错题公布答案的题型化展示（多选字母并排、排序箭头链、匹配左→右）。 */
-function revealAnswer(q: { kind: AlloKind; answer: string | boolean | string[]; options?: string[] }): string {
+export function revealAnswer(q: { kind: AlloKind; answer: string | boolean | string[]; options?: string[] }): string {
   switch (q.kind) {
     case 'multi_choice': return Array.isArray(q.answer) ? q.answer.join('') : String(q.answer)
     case 'ordering': return Array.isArray(q.answer) ? q.answer.join(' → ') : String(q.answer)
@@ -121,6 +124,7 @@ export class LearnhubEngine {
     this.bank = new QuestionBank(this.paths)
     this.learnerCards = new LearnerCards(this.paths)
     this.noteManifest = new NoteSourceManifest(this.paths)
+    this.ankiMirror = new AnkiMirror(this.paths)
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course))
   }
@@ -1729,6 +1733,220 @@ export class LearnhubEngine {
     }
   }
 
+  // ---- C2 Anki 通道（#63 / ADR-0011：Anki 纯作答通道，vault 唯一调度者）----
+
+  private ankiMirror: AnkiMirror
+
+  /** 到期卡导出负载：全部启用课程「未归档且 due ≤ 今日」的已调度题（复用
+   * reviewQueue 的到期语义与 questionView 的题面视图；答案/解析上背面）。
+   * 来源字段 = 课程/节点/题id，回写归属与清单丢失自愈的依据。 */
+  private async collectAnkiDuePayloads(today: string): Promise<AnkiNotePayload[]> {
+    const out: AnkiNotePayload[] = []
+    for (const c of await this.enabledCourses()) {
+      await this.scanCourseBanks(c, async (node, bank) => {
+        for (const q of bank.questions) {
+          if (q.archived || !q.fsrs?.reps || q.fsrs.due > today) continue
+          const back = revealAnswer(q) + (q.explanation ? `\n\n解析：${q.explanation}` : '')
+          out.push(ankiCardPayload(c.name, node, q, back))
+        }
+      })
+    }
+    return out
+  }
+
+  /** 导出推送：按 vault 到期集校准/重建镜象卡组——新增缺卡、更新改题（fp 变化）、
+   * 移除已归档/已重生成/已被 vault 消费的旧卡；镜象与 vault 不一致时以 vault 为
+   * 准，Anki 侧排期输出不作数（ADR-0011）。Anki 侧手动删过的笔记自动重建。 */
+  async ankiExportPush(transport: AnkiTransport, today = todayStr()): Promise<{
+    date: string; added: number; updated: number; removed: number; total: number; decks: string[]
+  }> {
+    const payloads = await this.collectAnkiDuePayloads(today)
+    const mirror = await this.ankiMirror.load()
+    const plan = planMirrorSync(payloads, mirror.notes)
+    const decks = [...new Set(payloads.map(p => p.deckName))]
+    if (payloads.length) {
+      const models = await ankiModelNames(transport)
+      if (!models.includes(ANKI_MODEL)) await ankiCreateModel(transport)
+      const have = new Set(await ankiDeckNames(transport))
+      for (const d of decks) {
+        if (!have.has(d)) await ankiCreateDeck(transport, d)
+      }
+    }
+    const kept = new Map<string, AnkiMirrorEntry>()
+    for (const e of mirror.notes) {
+      if (!plan.removeNoteIds.includes(e.note_id)) kept.set(e.key, e)
+    }
+    for (const u of plan.update) {
+      let noteId = u.noteId
+      try {
+        await ankiUpdateNoteFields(transport, noteId, u.payload.fields)
+      } catch (err) {
+        if (!isAnkiNoteMissing(err)) throw err
+        noteId = await this.ankiUpsert(transport, u.payload) // Anki 侧笔记被手动删：重建
+      }
+      kept.set(u.payload.key, { key: u.payload.key, note_id: noteId, fp: u.payload.fp, deck: u.payload.deckName })
+    }
+    for (const p of plan.add) {
+      const noteId = await this.ankiUpsert(transport, p)
+      kept.set(p.key, { key: p.key, note_id: noteId, fp: p.fp, deck: p.deckName })
+    }
+    await ankiDeleteNotes(transport, plan.removeNoteIds)
+    await this.ankiMirror.save({ last_push: nowIso(), last_import_ms: mirror.last_import_ms, notes: [...kept.values()] })
+    return { date: today, added: plan.add.length, updated: plan.update.length, removed: plan.removeNoteIds.length, total: payloads.length, decks }
+  }
+
+  /** addNote，重复拒绝时按来源字段检索回补归属（清单丢失自愈；Anki 侧旧卡内容
+   * 就地校准到 vault 当前版本）。找不到同源旧卡才抛错。 */
+  private async ankiUpsert(transport: AnkiTransport, p: AnkiNotePayload): Promise<number> {
+    const noteId = await ankiAddNote(transport, { deckName: p.deckName, fields: p.fields, tags: [ANKI_TAG] })
+    if (noteId !== null) return noteId
+    const found = await ankiFindNotes(transport, `deck:"${p.deckName}" tag:${ANKI_TAG}`)
+    const infos = await ankiNotesInfo(transport, found)
+    const hit = infos.find(n => (n.fields['来源'] ?? '').trim() === p.key)
+    if (!hit) throw new Error(`[anki] 卡写入 Anki 失败且找不到同源旧卡：${p.key}`)
+    await ankiUpdateNoteFields(transport, hit.noteId, p.fields)
+    return hit.noteId
+  }
+
+  /** 导入回写：拉 Anki 复习日志事件（自上次导入水位起），逐事件映射为原始作答
+   * 证据并按 vault 自己的 ts-fsrs 重算——Again → 答错（rating 1/auto）、
+   * Hard/Good/Easy → 复习自评档（2/3/4/self，答对）；Anki 侧排期输出不作数
+   * （ADR-0011）。「一题一天只推进一次」跨端守住：vault 当日已推进的题，其当日
+   * Anki 事件跳过调度只留档（practice 流水）。事件落 practice 流水（judge=review，
+   * ts 回溯到 Anki 作答时刻），真实推进另落复习日志（A2 数据回流）。归属 =
+   * 镜象清单 noteId→key，清单丢失时按 Anki 来源字段回补；无法归属/题目已归档
+   * 重生成的事件只计数不落盘（旧卡下次推送按 vault 校准移除）。nowMs 可注入
+   * （测试播种；水位上界 = 调用时刻）。 */
+  async ankiImportEvents(transport: AnkiTransport, opts?: { nowMs?: number }): Promise<{
+    imported: number; advanced: number; skipped_same_day: number; skipped_unknown: number; unknown: string[]
+  }> {
+    const mirror = await this.ankiMirror.load()
+    const rows = await ankiCardReviews(transport, mirror.last_import_ms, (opts?.nowMs ?? Date.now()) + 60_000)
+    const events = rows
+      .map(r => ({ ts: Number(r[0]), cardId: Number(r[1]), button: Number(r[3]), timeMs: Number(r[7]) }))
+      .filter(e => Number.isFinite(e.ts) && Number.isFinite(e.cardId) && Number.isFinite(e.button))
+      .sort((a, b) => a.ts - b.ts)
+    const result = { imported: events.length, advanced: 0, skipped_same_day: 0, skipped_unknown: 0, unknown: [] as string[] }
+    if (!events.length) return result
+    // cardId → noteId（一次批量）；noteId → 来源键（清单优先，缺的按来源字段回补）
+    const noteOfCard = new Map<number, number>()
+    for (const c of await ankiCardsInfo(transport, [...new Set(events.map(e => e.cardId))])) {
+      noteOfCard.set(c.cardId, c.noteId)
+    }
+    const keyOfNote = new Map(mirror.notes.map(n => [n.note_id, n.key]))
+    const missing = [...new Set([...noteOfCard.values()].filter(id => !keyOfNote.has(id)))]
+    for (const info of await ankiNotesInfo(transport, missing)) {
+      const key = (info.fields['来源'] ?? '').trim()
+      const loc = parseSourceKey(key)
+      if (loc) {
+        keyOfNote.set(info.noteId, key)
+        mirror.notes.push({ key, note_id: info.noteId, fp: '', deck: deckNameOf(loc.course) })
+      }
+    }
+    // 课程上下文缓存：registry/loadView/scheduler 每课程一次
+    type AnkiCourseCtx = { c: CourseEntry; graph: Graph; sched: Awaited<ReturnType<typeof getScheduler>> } | null
+    const ctxCache = new Map<string, AnkiCourseCtx>()
+    let lastMs = mirror.last_import_ms
+    for (const ev of events) {
+      lastMs = Math.max(lastMs, ev.ts)
+      const noteId = noteOfCard.get(ev.cardId)
+      const key = noteId !== undefined ? keyOfNote.get(noteId) : undefined
+      const loc = key ? parseSourceKey(key) : null
+      const noteUnknown = (why: string) => {
+        result.skipped_unknown++
+        if (result.unknown.length < 5) result.unknown.push(`${key ?? `card#${ev.cardId}`}（${why}）`)
+      }
+      if (!loc) { noteUnknown('来源无法归属'); continue }
+      let ctx = ctxCache.get(loc.course)
+      if (ctx === undefined) {
+        const c = await this.registry.get(loc.course)
+        if (!c) ctx = null
+        else {
+          const { graph } = await this.loadView(c)
+          ctx = { c, graph, sched: await getScheduler(this.paths, this.paths.courseRoot(c.root)) }
+        }
+        ctxCache.set(loc.course, ctx)
+      }
+      if (!ctx) { noteUnknown('课程不在注册表'); continue }
+      const courseRoot = this.paths.courseRoot(ctx.c.root)
+      const bank = await this.bank.load(courseRoot, loc.node)
+      const idx = bank.questions.findIndex(x => x.id === loc.qid)
+      const q = idx >= 0 ? bank.questions[idx] : undefined
+      if (!q || q.archived) { noteUnknown('题目已归档或重生成'); continue }
+      let map: ReturnType<typeof mapAnkiEase>
+      try {
+        map = mapAnkiEase(ev.button)
+      } catch {
+        result.skipped_unknown++
+        continue
+      }
+      const iso = isoFromMs(ev.ts)
+      const day = iso.slice(0, 10)
+      const practiceBase = {
+        course: ctx.c.name, node: loc.node, ex: idx + 1, answer: '',
+        correct: map.correct, judge: 'review', qid: loc.qid,
+        ...(ev.timeMs > 0 ? { elapsed_s: ev.timeMs / 1000 } : {}),
+        xp: 0,
+      }
+      if (sameDayAdvanced(q, day)) {
+        // 当日已推进：跳过调度只留档（fsrs/stats/复习日志零写入）
+        await this.store.appendPractice({ ...practiceBase, ts: iso })
+        result.skipped_same_day++
+        continue
+      }
+      const rPred = retrievabilityBlock(ctx.sched, q.fsrs, day)
+      const pushed = applyRatingBlock(q.fsrs ?? null, map.rating, day, ctx.sched)
+      const stats = {
+        attempts: (q.stats?.attempts ?? 0) + 1,
+        correct: (q.stats?.correct ?? 0) + (map.correct ? 1 : 0),
+        last: day,
+      }
+      await this.bank.updateQuestionEvidence(courseRoot, loc.node, loc.qid, { fsrs: pushed.fs, stats })
+      await this.store.appendPractice({ ...practiceBase, ts: iso })
+      await this.store.appendReview({
+        course: ctx.c.name, node: loc.node, qid: loc.qid,
+        rating: map.rating, rating_source: map.ratingSource, elapsed_days: pushed.elapsed_days,
+        stability_before: q.fsrs?.stability ?? null, difficulty_before: q.fsrs?.difficulty ?? null, r_pred: rPred,
+      })
+      // 代表卡随真实推进回刷（口径 B 稳定度分量随复习前进；与站内复习同一语义）
+      await this.refreshRepCard(ctx.c, ctx.graph, loc.node)
+      q.fsrs = pushed.fs // 后续同日事件在内存里立即可见（不变量判定不重读盘）
+      q.stats = stats
+      result.advanced++
+    }
+    mirror.last_import_ms = lastMs
+    await this.ankiMirror.save(mirror)
+    return result
+  }
+
+  /** Anki 通道状态：镜象规模/最近推送与导入/当前到期分布 + AnkiConnect 可达性。 */
+  async ankiStatus(transport?: AnkiTransport, today = todayStr()): Promise<Record<string, unknown>> {
+    const mirror = await this.ankiMirror.load()
+    const payloads = await this.collectAnkiDuePayloads(today)
+    const byDeck = new Map<string, number>()
+    for (const p of payloads) byDeck.set(p.deckName, (byDeck.get(p.deckName) ?? 0) + 1)
+    let anki: Record<string, unknown> | undefined
+    if (transport) {
+      try {
+        await transport.invoke('version')
+        anki = { connected: true }
+      } catch (err) {
+        anki = { connected: false, error: err instanceof Error ? err.message.split('\n')[0] : String(err) }
+      }
+    }
+    return {
+      date: today,
+      mirror: {
+        entries: mirror.notes.length,
+        last_push: mirror.last_push,
+        last_import: mirror.last_import_ms > 0 ? isoFromMs(mirror.last_import_ms) : null,
+        decks: [...new Set(mirror.notes.map(n => n.deck))].filter(Boolean),
+      },
+      due: { total: payloads.length, by_deck: [...byDeck].map(([deck, count]) => ({ deck, count })) },
+      ...(anki ? { anki } : {}),
+    }
+  }
+
   // ---- 节点跳过 / 完成确认 ----
 
   /** 跳过（已有基础）：stage 置 skipped，调度视同已通过；取消跳过回 ready。 */
@@ -2183,6 +2401,65 @@ export class LearnhubEngine {
     }
     await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats })
     return { course: c.name, node, id: cardId, rating: 1, due: pushed.fs.due, scheduled: true, xp: 0 }
+  }
+
+  /** E1「加我的理解」节级入口（#70）：学习者用自己的话写一句解释/例子/助记
+   * （锚点 = 节 id/标题），AI 对照该节已教要点给 是非 + 定位（含糊/跳跃/说错）
+   * + 可怎么补——判词入 E 档案（kind=self_note），产出成独立域 LearnerCard。
+   * ADR-0009 边界：零 XP、不写掌握度/FSRS/canonical；AI 判词不可解析时抛错，
+   * 卡与判词零落盘（ADR-0004 事务性）。 */
+  async learnerNoteAdd(
+    courseKey: string | undefined, node: string,
+    opts: { content: string; kind?: LearnerCard['kind']; prompt?: string; section?: string },
+    llm: (prompt: string, system?: string) => Promise<string>,
+  ): Promise<{
+    course: string; node: string
+    card: { id: string; kind: LearnerCard['kind']; count: number }
+    verdict: EArchiveRec; reply: string
+  }> {
+    const content = opts.content?.trim()
+    if (!content) throw new Error('[understanding] 自注内容为空——「加我的理解」存的是学习者自己的话。')
+    const kind = opts.kind ?? 'recall_cue'
+    if (!LEARNER_CARD_KINDS.includes(kind)) {
+      throw new Error(`[understanding] 卡面只能是 ${LEARNER_CARD_KINDS.join('/')}（收到 ${String(opts.kind)}）。`)
+    }
+    const c = await this.registry.resolve(courseKey)
+    const { graph, state, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[understanding] 节点「${node}」不在课程「${c.name}」的图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'understanding')
+    // 对照面 = 节锚点（清单 id/标题 → 该节正文）；锚点给了但该节还没有正文时，
+    // 对照面为空并随反馈明示——不静默退化为全节要点（锚点语义必须可预期）
+    const sections = await this.explainPoints(c, graph, node)
+    let sectionTitle: string | undefined
+    if (opts.section?.trim()) {
+      const raw = opts.section.trim()
+      sectionTitle = state[node]?.content.sections?.find(s => s.id === raw || s.title === raw)?.title ?? raw
+    }
+    const points = sectionTitle ? sections.filter(s => s.title === sectionTitle) : sections
+    const raw = await llm(selfNoteFeedbackPrompt(points, sectionTitle, content), selfNoteFeedbackSystem())
+    const v = parseExplainVerdict(raw) // 不可解析抛错 → 卡与判词零落盘
+    const card = await this.learnerCards.addCard(c.root, node, {
+      kind,
+      prompt: opts.prompt?.trim() || selfNotePromptOf(kind, sectionTitle ?? node),
+      content,
+      ...(sectionTitle ? { source_section: sectionTitle } : {}),
+    })
+    const verdict = await this.store.appendEArchive({
+      course: c.name, node, kind: 'self_note',
+      verdict: v.verdict, tags: [...v.tags] as ExplainTag[],
+      ...(v.advice ? { advice: v.advice } : {}),
+      excerpt: content.slice(-800),
+    })
+    return { course: c.name, node, card: { id: card.id, kind, count: card.count }, verdict, reply: v.reply }
+  }
+
+  /** 归档/恢复一张我的卡（管理面）：E 池内部动作，canonical 零写入。 */
+  async learnerCardArchive(
+    courseKey: string | undefined, node: string, cardId: string, archived: boolean,
+  ): Promise<{ course: string; node: string; id: string; archived: boolean }> {
+    const c = await this.registry.resolve(courseKey)
+    await this.learnerCards.archiveCard(c.root, node, cardId, archived)
+    return { course: c.name, node, id: cardId, archived }
   }
 
   // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----

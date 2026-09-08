@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { validateLearnerCards, LEARNER_PROMPT_MAX, LEARNER_CONTENT_MAX } from '../src/engine/learner-cards.ts'
 import { parseExplainVerdict, explainBackPack, EXPLAIN_VERDICTS, EXPLAIN_TAGS } from '../src/engine/explain.ts'
+import { selfNoteFeedbackSystem, selfNoteFeedbackPrompt, selfNotePromptOf } from '../src/engine/self-note.ts'
 import { todayStr } from '../src/engine/dates.ts'
 
 const REGISTRY = [
@@ -253,6 +254,116 @@ test('存成我的卡：默认再讲一遍；挖空重述需带 {{}}；同内容
 async function cardFile(engine: LearnhubEngine): Promise<string> {
   return readFile(join(engine.paths.learnerCardsDir('math'), '入门.yaml'), 'utf8')
 }
+
+// ---- 门面：E1「加我的理解」节级入口（#70）----
+
+test('纯函数缝：自注反馈指令与默认卡面提示（对照要点、不超纲、不评分）', () => {
+  const sys = selfNoteFeedbackSystem()
+  assert.match(sys, /定位反馈/)
+  assert.match(sys, /含糊.*跳跃.*说错|含糊=|说错=/s)
+  assert.match(sys, /不打分数/)
+  assert.match(sys, /严格 JSON/)
+  const prompt = selfNoteFeedbackPrompt([{ title: '概念：定义', md: 'S1 等差数列 = 相邻两项之差恒定' }], '概念：定义',
+    '等差数列就是每次加一样的数。')
+  assert.match(prompt, /「概念：定义」/)
+  assert.match(prompt, /S1 等差数列/)
+  assert.match(prompt, /每次加一样的数/)
+
+  assert.equal(selfNotePromptOf('recall_cue', '例题：应用'), '再讲一遍：用你的话讲清「例题：应用」')
+  assert.equal(selfNotePromptOf('cloze_rewrite', '例题：应用'), '补全你自己的表述：例题：应用')
+  assert.equal(selfNotePromptOf('self_explain', '例题：应用'), '这个节你理解成了什么：例题：应用')
+})
+
+test('加我的理解：AI 对照该节要点给定位反馈 → 判词入 E 档案 + 成卡（节锚点）', async () => {
+  await withVault(async engine => {
+    const r = await engine.learnerNoteAdd('数学', '入门', {
+      content: '等差数列就是每一步加固定的数，比如 2、4、6。',
+      kind: 'recall_cue',
+      section: 's1',
+    }, async (prompt, system) => {
+      assert.match(system ?? '', /定位反馈/)
+      assert.match(prompt, /「概念：定义」/, '节锚点 → 对照面收窄到该节')
+      assert.match(prompt, /S1 等差数列/)
+      assert.ok(!/S2 已知/.test(prompt), '对照面不含其他节')
+      assert.match(prompt, /每一步加固定的数/)
+      return VALID_JSON
+    })
+    // 卡：独立域成卡（默认提示带节标题）
+    assert.equal(r.card.kind, 'recall_cue')
+    assert.equal(r.card.id, 'c1')
+    const file = await cardFile(engine)
+    assert.match(file, /再讲一遍：用你的话讲清「概念：定义」/)
+    assert.match(file, /source_section: 概念：定义/)
+    assert.match(file, /每一步加固定的数/)
+    // 判词：只入 E 档案（kind=self_note）
+    assert.equal(r.verdict.verdict, '部分对')
+    assert.deepEqual(r.verdict.tags, ['含糊', '跳跃'])
+    assert.match(r.reply, /除以二/)
+    const archive = await engine.store.eArchiveAll()
+    assert.equal(archive.length, 1)
+    assert.equal(archive[0]!.kind, 'self_note')
+    assert.match(archive[0]!.excerpt ?? '', /每一步加固定的数/)
+
+    // 三种卡面至少一种可建已证；挖空卡与自注讲解卡同通道可建
+    await engine.learnerNoteAdd('数学', '入门', {
+      content: '求和公式 {{(a₁+aₙ)×n÷2}} 是核心', kind: 'cloze_rewrite',
+    }, async () => VALID_JSON)
+    await engine.learnerNoteAdd('数学', '入门', {
+      content: '我理解这一节在讲把加法转成乘法。', kind: 'self_explain',
+    }, async () => VALID_JSON)
+
+    // 节锚点映射不上（坏节 id）：对照面为空并随 prompt 明示——不静默退化为全节要点
+    await engine.learnerNoteAdd('数学', '入门', {
+      content: '锚点测试。', section: 's99',
+    }, async (prompt) => {
+      assert.match(prompt, /「s99」/)
+      assert.match(prompt, /本节还没有可对照的正文要点/)
+      return VALID_JSON
+    })
+    const q = await engine.learnerQueue('数学')
+    assert.equal(q.total, 4)
+    assert.ok(q.cards.every(c => c.due === null), '新卡未调度，从「我的卡」队列首推')
+
+    // #33 边界回归：题库/掌握度/XP/作答流水零新增写入
+    assert.ok(!existsSync(engine.paths.practicePath))
+    assert.ok(!existsSync(engine.paths.reviewLogPath))
+    assert.ok(!existsSync(engine.paths.journalPath))
+    assert.ok(!existsSync(engine.paths.courseRoot('math') + '/题库/入门.yaml'))
+    assert.equal(await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8'), `${NOTE}\n`)
+  })
+})
+
+test('加我的理解：AI 判词不可解析 → 卡与判词零落盘（ADR-0004 事务性）；非法卡面拒绝', async () => {
+  await withVault(async engine => {
+    await assert.rejects(
+      () => engine.learnerNoteAdd('数学', '入门', { content: '我的理解' }, async () => '模型抽风'),
+      /未存档/)
+    assert.ok(!existsSync(join(engine.paths.learnerCardsDir('math'), '入门.yaml')), '卡未落盘')
+    assert.equal((await engine.store.eArchiveAll()).length, 0)
+
+    await assert.rejects(
+      () => engine.learnerNoteAdd('数学', '入门', { content: 'x', kind: 'bad_kind' as never }, async () => VALID_JSON),
+      /卡面只能是/)
+    await assert.rejects(
+      () => engine.learnerNoteAdd('数学', '入门', { content: '   ' }, async () => VALID_JSON),
+      /内容为空|为空/)
+    assert.equal((await engine.store.eArchiveAll()).length, 0)
+  })
+})
+
+test('我的卡管理面：归档/恢复（E 池内部动作，canonical 零写入）', async () => {
+  await withVault(async engine => {
+    const r = await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A。' })
+    await engine.learnerCardArchive('数学', '入门', r.id, true)
+    let q = await engine.learnerQueue('数学')
+    assert.equal(q.total, 0, '归档卡出队')
+    await engine.learnerCardArchive('数学', '入门', r.id, false)
+    q = await engine.learnerQueue('数学')
+    assert.equal(q.total, 1)
+    assert.ok(!existsSync(engine.paths.practicePath))
+    assert.ok(!existsSync(engine.paths.journalPath))
+  })
+})
 
 // ---- 门面：E1「我的卡」隔离调度 ----
 
