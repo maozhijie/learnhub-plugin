@@ -1,9 +1,12 @@
-/** 题目管理：全库浏览 / 筛选 / 编辑 / 自建 / 归档 + 题目标签。 */
-import { Button, Drawer, Empty, Input, Message, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
+/** 题目管理：全库浏览 / 筛选 / 编辑 / 自建 / 归档 + 题目标签。
+ * #72 B2 挂接：页顶难度建议区（引擎 difficultyAdvice 只读检测）——失衡 → 「校准重出」
+ * （走既有单节出题端点，validateBank 门禁落库）；全对过于简单 → 逐题「归档」。
+ * 建议先行：全部 Popconfirm 确认后才触发，不自动改库。 */
+import { Button, Card, Drawer, Empty, Input, Message, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import type { AppFrame } from '../App'
-import type { BankEntry } from '../types'
+import type { BankEntry, DifficultyAdviceNode } from '../types'
 
 const { Text } = Typography
 
@@ -108,6 +111,9 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
   const [showArchived, setShowArchived] = useState(false)
   const [editing, setEditing] = useState<BankEntry | null>(null)
   const [creating, setCreating] = useState(false)
+  /** B2 难度建议（#72）：失衡/过于简单只读建议，页顶建议区消费；null = 加载中。 */
+  const [advice, setAdvice] = useState<DifficultyAdviceNode[] | null>(null)
+  const [recalibrating, setRecalibrating] = useState<string | null>(null)
   const today = todayStr()
 
   const load = useCallback(async () => {
@@ -119,7 +125,12 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     }
   }, [filterCourse])
 
+  const loadAdvice = useCallback(async () => {
+    setAdvice(await api.difficultyAdvice().then(r => r.nodes).catch(() => []))
+  }, [])
+
   useEffect(() => { void load() }, [load])
+  useEffect(() => { void loadAdvice() }, [loadAdvice])
 
   const nodesForCourse = filterCourse
     ? (frame.tree?.courses.find(c => c.name === filterCourse)?.regions ?? [])
@@ -139,8 +150,78 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     }
   }
 
+  /** B2 校准重出（#72）：走既有单节出题端点（模型 → validateBank 门禁落库）。
+   * 难度/bloom 目标带指令无法随该端点下发（引擎无指令通道），只在确认框原文展示
+   * 供学习者知晓；要按指令定向调制，仍可在 dsh 会话让 agent 走 learnhub_question_generate。 */
+  const doRecalibrate = async (n: DifficultyAdviceNode) => {
+    const key = `${n.course}/${n.node}`
+    setRecalibrating(key)
+    try {
+      const r = await api.questionGenerate(n.course, n.node)
+      Message.success(`「${n.node}」已校准重出：新增 ${r.added} 题（库内共 ${r.total} 题）`)
+      await Promise.all([load(), loadAdvice()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRecalibrating(null)
+    }
+  }
+
+  /** B2 过于简单归档（#72）：逐题归档（题目管理既有动作，恢复随时可逆）。 */
+  const doArchiveAdvice = async (n: DifficultyAdviceNode, qid: string) => {
+    try {
+      await api.questionArchive(n.course, n.node, qid, true)
+      Message.success(`已归档 ${qid}`)
+      await Promise.all([load(), loadAdvice()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={12}>
+      {/* B2 难度建议区（#72）：只读检测有产出才显示，低数据静默 */}
+      {advice !== null && advice.length > 0 && (
+        <Card size='small' title='难度建议（引擎检测，确认后才执行）' style={{ borderRadius: 10 }}>
+          <Space direction='vertical' style={{ width: '100%' }} size={8}>
+            {advice.map(n => (
+              <div key={`${n.course}/${n.node}`} style={{
+                display: 'flex', flexDirection: 'column', gap: 4,
+                background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '8px 10px',
+              }}>
+                <Space size={8} wrap>
+                  <Tag size='small' color='orange'>{n.course} · {n.node}</Tag>
+                  {n.calibration && (
+                    <>
+                      <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 220 }}>{n.calibration.reason}</Text>
+                      <Popconfirm
+                        title={`校准重出「${n.node}」的题目？`}
+                        content={n.calibration.instruction}
+                        onOk={() => void doRecalibrate(n)}>
+                        <Button size='mini' type='primary' status='warning' loading={recalibrating === `${n.course}/${n.node}`}>
+                          校准重出
+                        </Button>
+                      </Popconfirm>
+                    </>
+                  )}
+                </Space>
+                {(n.too_easy ?? []).map(t => (
+                  <Space key={t.qid} size={8} wrap style={{ paddingLeft: 0 }}>
+                    <Tag size='small' color='gray'>过于简单 · {t.qid}</Tag>
+                    <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 220 }}>{t.reason}</Text>
+                    <Popconfirm title={`归档「${t.qid}」？`}
+                      content='归档后不再进复习队列；可在本题库列表「显示已归档」里恢复。'
+                      onOk={() => void doArchiveAdvice(n, t.qid)}>
+                      <Button size='mini' type='text' status='warning'>归档</Button>
+                    </Popconfirm>
+                  </Space>
+                ))}
+              </div>
+            ))}
+          </Space>
+        </Card>
+      )}
+
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <Select value={filterCourse} onChange={v => setFilterCourse(v)} placeholder='全部课程' style={{ width: 180 }} allowClear>
           {frame.tree?.courses.map(c => <Select.Option key={c.name} value={c.name}>{c.name}</Select.Option>)}

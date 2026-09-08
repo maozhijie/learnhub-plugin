@@ -3,9 +3,11 @@
  * 正文/mastery 会话/完成。复习会话 = Anki 式刷卡队列：跨课程到期题扁平排队，
  * 一卡一票（作答或满 5 秒申报忘记），背面自评 Hard/Good/Easy 推进调度。
  * 「我的卡」会话（E1 #70）：学习者自注卡的独立队列，复用复习自评语义——
- * 重述 → 翻面对照 → 自评；隔离自调度，零 XP 零 canonical。 */
+ * 重述 → 翻面对照 → 自评；隔离自调度，零 XP 零 canonical。
+ * #72 UI 入口补全：横幅区挂 C1 笔记源抽屉 / C2 导出到 Anki / E1 我的卡管理，
+ * 推荐卡渲染 A3 定向复习建议项（一键进目标节点刷卡），复习卡头部带 A1 可回忆度读数。 */
 import {
-  Alert, Button, Card, Empty, Input, Message, Modal, Popconfirm, Progress, Space,
+  Alert, Button, Card, Drawer, Empty, Input, Message, Modal, Popconfirm, Progress, Space,
   Tag, Tooltip, Typography,
 } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -16,7 +18,10 @@ import LearnerCardCard from '../components/LearnerCardCard'
 import { nextBand, pickNext } from '../../../src/engine/adaptive'
 import { api } from '../api'
 import type { AppFrame } from '../App'
-import type { DiagnosticEntry, LearnerCardItem, LearnerQueueDoc, RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, XpStatus } from '../types'
+import type {
+  AdviceItem, AnkiStatusDoc, DiagnosticEntry, LearnerCardItem, LearnerQueueDoc,
+  NoteSourceDoc, QuestionItem, RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, XpStatus,
+} from '../types'
 
 const { Text, Title } = Typography
 
@@ -53,12 +58,25 @@ function XpBar({ xp, onEditGoal }: { xp: XpStatus; onEditGoal: () => void }) {
 }
 
 /** 复习横幅：到期卡驱动（复习队列张数 + 开始复习）。
- * 笔记源状态行（C1 #59）：漂移 = 可重出/归档提示（卡照常刷）；挂起 = 源缺失/镜像
- * Broken（卡不进队列）——提示先行，动作在 dsh 里对 agent 说即可。 */
-function ReviewBanner({ reviewQ, onStart }: { reviewQ: ReviewQueueDoc | null; onStart: () => void }) {
+ * C2（#63/#72）：「导出到 Anki」按钮——把 vault 到期卡推送进桌面 Anki 的镜象卡组
+ * （AnkiConnect 未达也可点，引擎 fail loud 带指引）；按钮计数 = Anki 通道当前到期分布。
+ * 笔记源状态行（C1 #59/#72）：漂移 = 重新出题/归档旧题直达；挂起 = 重新注册——
+ * 动作全部面板内完成，不再只提示「去 dsh 里对 agent 说」。 */
+function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenSources, onRegenerateSource, onReregister }: {
+  reviewQ: ReviewQueueDoc | null
+  anki: AnkiStatusDoc | null
+  onStart: () => void
+  onExportAnki: () => void
+  exporting: boolean
+  onOpenSources: (focusId?: string) => void
+  onRegenerateSource: (id: string) => void
+  onReregister: (path: string) => void
+}) {
   const dueCount = reviewQ?.total ?? 0
   const drifted = reviewQ?.note_drifted ?? []
   const suspended = reviewQ?.note_suspended ?? []
+  const ankiDue = anki?.due.total
+  const ankiOffline = anki?.anki != null && !anki.anki.connected
   return (
     <Card size='small' style={{ borderRadius: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -67,21 +85,46 @@ function ReviewBanner({ reviewQ, onStart }: { reviewQ: ReviewQueueDoc | null; on
           <Text style={{ fontSize: 20, fontWeight: 600 }}>{dueCount}</Text>
           <Text type='secondary' style={{ fontSize: 12 }}> 张卡到期</Text>
         </div>
-        <Button type='primary' onClick={onStart} disabled={dueCount === 0} style={{ marginLeft: 'auto' }}>
-          开始复习（{dueCount}）
-        </Button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Button type='primary' onClick={onStart} disabled={dueCount === 0}>
+            开始复习（{dueCount}）
+          </Button>
+          <Tooltip content={ankiOffline
+            ? `未连上 AnkiConnect：${anki?.anki?.error ?? '桌面 Anki 未打开'}`
+            : '把到期卡推送到桌面 Anki 的 learnhub 卡组（Anki 纯作答通道，调度仍在 vault）'}>
+            <Button onClick={onExportAnki} loading={exporting} status={ankiOffline ? 'warning' : 'default'}>
+              导出到 Anki{typeof ankiDue === 'number' ? `（${ankiDue}）` : ''}
+            </Button>
+          </Tooltip>
+          <Button onClick={() => onOpenSources()}>笔记源</Button>
+        </div>
       </div>
       {(drifted.length > 0 || suspended.length > 0) && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {drifted.map(d => (
-            <Text key={d.id} type='warning' style={{ fontSize: 12 }}>
-              笔记源「{d.title || d.id}」{d.hint}
-            </Text>
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text type='warning' style={{ fontSize: 12, flex: 1, minWidth: 220 }}>
+                笔记源「{d.id}」{d.hint}
+              </Text>
+              <Popconfirm
+                title='按笔记当前内容重新出题？'
+                content='出题即确认当前内容（漂移清除）；旧题保留，可在笔记源抽屉里逐题归档。'
+                onOk={() => onRegenerateSource(d.id)}>
+                <Button size='mini' type='text'>重新出题</Button>
+              </Popconfirm>
+              <Button size='mini' type='text' onClick={() => onOpenSources(d.id)}>归档旧题</Button>
+            </div>
           ))}
           {suspended.map(s => (
-            <Text key={s.id} type='danger' style={{ fontSize: 12 }}>
-              笔记源「{s.id}」{s.reason}
-            </Text>
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text type='error' style={{ fontSize: 12, flex: 1, minWidth: 220 }}>
+                笔记源「{s.id}」{s.reason}
+              </Text>
+              <Tooltip content={`按原路径重新注册：${s.path}`}>
+                <Button size='mini' type='text' onClick={() => onReregister(s.path)}>重新注册</Button>
+              </Tooltip>
+              <Button size='mini' type='text' status='danger' onClick={() => onOpenSources(s.id)}>管理笔记源</Button>
+            </div>
           ))}
         </div>
       )}
@@ -94,14 +137,17 @@ function ReviewBanner({ reviewQ, onStart }: { reviewQ: ReviewQueueDoc | null; on
  * 「今天学它」pin（E3 #67）：未 pin 事件给 pin 入口（当日置顶、次日失效）；已 pin
  * 事件带「你选了它」标识并给取消入口。
  * 事件携带 diagnostics（B1 #69）时内联「重写此节」直达动作——Popconfirm 确认后才走
- * 单节重写管线（诊断建议先行，不自动动库）。 */
-function RecCard({ e, gen, onOpen, onSkip, onGenerate, onPin }: {
+ * 单节重写管线（诊断建议先行，不自动动库）。
+ * 事件携带 advice（A3 #54/#55，#72 UI 挂接）时内联「定向复习」直达——软闸弱前置 /
+ * enc 成分技能的到期题一键进目标节点刷卡会话（建议先行，不拦直接学）。 */
+function RecCard({ e, gen, onOpen, onSkip, onGenerate, onPin, onAdvice }: {
   e: RecEvent
   gen?: 'queued' | 'running'
   onOpen: () => void
   onSkip: () => void
   onGenerate: () => void
   onPin: () => void
+  onAdvice: (a: AdviceItem) => void
 }) {
   const t = REC_TYPE[e.type] ?? { label: e.type, color: 'gray', order: 9 }
   const generating = gen === 'running' || gen === 'queued'
@@ -177,6 +223,24 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate, onPin }: {
                   <Button size='mini' type='text' loading={rewriting === d.rewrite.section}>重写此节</Button>
                 </Popconfirm>
               )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {e.advice?.length ? (
+        <div onClick={ev => ev.stopPropagation()} style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {e.advice.map(a => (
+            <div key={a.node} style={{
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '6px 10px',
+            }}>
+              <Tag size='small' color='orange'>建议先复习</Tag>
+              <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 200 }}>
+                先复习「{a.node}」的 {a.due} 道到期题（当前可回忆度 {Math.round(a.r * 100)}%）再回来继续
+              </Text>
+              <Tooltip content='一键进入该节点的定向复习会话（单节点自适应排序）'>
+                <Button size='mini' type='text' onClick={() => onAdvice(a)}>定向复习</Button>
+              </Tooltip>
             </div>
           ))}
         </div>
@@ -439,6 +503,14 @@ function ReviewSession(props: {
         <Space size={8} wrap>
           <Text type='secondary'>{card.course} · </Text>
           <Text bold>{card.node}</Text>
+          {/* A1（#56/#72）：随卡下发的 FSRS 预测可回忆度 R——用词遵守 CONTEXT（可回忆度，不是掌握度） */}
+          {typeof card.r === 'number' && (
+            <Tooltip content='FSRS 预测的当前可回忆度（不是掌握度）'>
+              <Tag size='small' color={card.r >= 0.8 ? 'green' : card.r >= 0.5 ? 'orange' : 'red'}>
+                可回忆度 {Math.round(card.r * 100)}%
+              </Tag>
+            </Tooltip>
+          )}
           <Tag size='small' color='green'>到期 {card.due}</Tag>
           <Tag size='small'>做过 {card.attempts} 次</Tag>
         </Space>
@@ -480,8 +552,9 @@ function ReviewSession(props: {
 }
 
 /** 「我的卡」横幅（E1 #70）：学习者自注卡的独立队列入口——到期在前、新卡（首推）
- * 随后；隔离自调度，与课程复习队列分开（Learner Output，零 XP）。 */
-function LearnerBanner({ q, onStart }: { q: LearnerQueueDoc | null; onStart: () => void }) {
+ * 随后；隔离自调度，与课程复习队列分开（Learner Output，零 XP）。
+ * #72：加「管理」入口（归档/恢复自注卡）——恒可点：队列清零后仍要能进管理面恢复。 */
+function LearnerBanner({ q, onStart, onManage }: { q: LearnerQueueDoc | null; onStart: () => void; onManage: () => void }) {
   const total = q?.total ?? 0
   const due = q?.due_count ?? 0
   return (
@@ -492,9 +565,12 @@ function LearnerBanner({ q, onStart }: { q: LearnerQueueDoc | null; onStart: () 
           <Text style={{ fontSize: 20, fontWeight: 600 }}>{due}</Text>
           <Text type='secondary' style={{ fontSize: 12 }}> 张到期 · 共 {total} 张</Text>
         </div>
-        <Button type='primary' status='success' onClick={onStart} disabled={total === 0} style={{ marginLeft: 'auto' }}>
-          刷我的卡{due > 0 ? `（到期 ${due}）` : ''}
-        </Button>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <Button type='primary' status='success' onClick={onStart} disabled={total === 0}>
+            刷我的卡{due > 0 ? `（到期 ${due}）` : ''}
+          </Button>
+          <Button onClick={onManage}>管理</Button>
+        </div>
       </div>
     </Card>
   )
@@ -597,6 +673,267 @@ function CreateDialog(props: { visible: boolean; onClose: () => void }) {
   )
 }
 
+/** 笔记源抽屉（C1 #59，#72 UI 挂接）：源清单 + 注册/解除注册/出题 + 旧题逐题归档。
+ * 从学习页复习横幅区进入；漂移提示的「归档旧题」跳进来并展开对应源的旧题清单。 */
+function NoteSourceDrawer(props: { open: boolean; focusId: string | null; onClose: () => void; onChanged: () => void }) {
+  const [doc, setDoc] = useState<NoteSourceDoc | null>(null)
+  const [path, setPath] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [oldQs, setOldQs] = useState<QuestionItem[] | null>(null)
+
+  const load = useCallback(async () => {
+    setDoc(await api.noteSources().catch(() => null))
+  }, [])
+  useEffect(() => {
+    if (props.open) {
+      setExpanded(props.focusId)
+      setOldQs(null)
+      void load()
+      if (props.focusId) void expandQuestions(props.focusId)
+    }
+  // focusId 变化（横幅「归档旧题」直达）时重新定位；load 稳定
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.open, props.focusId])
+
+  /** 拉某源的旧题清单（笔记源伪课程走 /questions 同通道，不含答案）。 */
+  const expandQuestions = async (id: string) => {
+    try {
+      const r = await api.questions('笔记源', id)
+      setOldQs(r.questions)
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const toggleExpand = (id: string) => {
+    if (expanded === id) {
+      setExpanded(null)
+      setOldQs(null)
+      return
+    }
+    setExpanded(id)
+    setOldQs(null)
+    void expandQuestions(id)
+  }
+
+  const register = async () => {
+    if (!path.trim()) { Message.warning('填写笔记或文件夹路径（vault 相对或绝对）'); return }
+    setBusy(true)
+    try {
+      const r = await api.noteSourceRegister(path.trim())
+      Message.success(r.registered === 0 && r.updated > 0
+        ? `已恢复注册（${r.updated} 篇，路径未变）`
+        : `已注册 ${r.registered} 篇${r.updated ? `、恢复 ${r.updated} 篇` : ''}${r.skipped ? `、跳过 ${r.skipped} 篇（学习中心内部）` : ''}`)
+      setPath('')
+      await Promise.all([load(), props.onChanged()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const generate = async (id: string) => {
+    setBusy(true)
+    try {
+      const r = await api.noteSourceGenerate(id)
+      Message.success(`「${id}」出题完成：新增 ${r.added} 题（旧题保留，可展开逐题归档），新卡明天起进复习队列`)
+      await Promise.all([load(), props.onChanged()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const unregister = async (id: string) => {
+    try {
+      const r = await api.noteSourceUnregister(id)
+      Message.success(`已解除「${r.removed}」的注册（你的笔记文件未动）`)
+      if (expanded === id) { setExpanded(null); setOldQs(null) }
+      await Promise.all([load(), props.onChanged()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const archiveOne = async (id: string, qid: string) => {
+    try {
+      await api.questionArchive('笔记源', id, qid, true)
+      Message.success(`已归档 ${qid}（不再进复习队列）`)
+      if (expanded === id) await expandQuestions(id)
+      await Promise.all([load(), props.onChanged()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const STATUS: Record<string, { label: string; color: string }> = {
+    ok: { label: '正常', color: 'green' },
+    drifted: { label: '漂移', color: 'orange' },
+    missing: { label: '缺失', color: 'red' },
+    inconsistent: { label: '镜象不一致', color: 'purple' },
+  }
+
+  return (
+    <Drawer width={560} visible={props.open} footer={null} unmountOnExit
+      title='笔记源（个人笔记 → 复习题）' onCancel={props.onClose}>
+      <Space direction='vertical' style={{ width: '100%' }} size={12}>
+        <Alert type='info' style={{ fontSize: 12 }}
+          content='注册 vault 里的笔记（单篇 .md 或整个文件夹）：引擎只读笔记来出复习题，永不改动笔记本身；到期卡进复习队列（课程列显示「笔记源」）。' />
+        <Space size={8} style={{ width: '100%' }}>
+          <Input value={path} onChange={setPath} placeholder='笔记或文件夹路径（vault 相对/绝对）' style={{ flex: 1 }}
+            onPressEnter={() => void register()} />
+          <Button type='primary' loading={busy} onClick={() => void register()}>注册</Button>
+        </Space>
+        {doc === null ? (
+          <Text type='secondary'>加载中…</Text>
+        ) : doc.sources.length === 0 ? (
+          <Empty description='还没有笔记源：填上方路径注册一篇笔记试试' />
+        ) : (
+          doc.sources.map(s => {
+            const st = STATUS[s.status] ?? { label: s.status, color: 'gray' }
+            return (
+              <Card size='small' key={s.id} style={{ borderRadius: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Tag size='small' color={st.color}>{st.label}</Tag>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <Text style={{ fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.title || s.path}
+                    </Text>
+                    <Text type='secondary' style={{ fontSize: 12 }}>
+                      {s.id} · {s.cards} 张卡{s.due > 0 ? `（到期 ${s.due}）` : ''}
+                    </Text>
+                  </div>
+                  <Popconfirm title='按笔记当前内容出题？'
+                    content='出题即确认当前内容（漂移清除）；旧题保留，可展开逐题归档。'
+                    onOk={() => void generate(s.id)}>
+                    <Button size='mini' type='primary' loading={busy}>出题</Button>
+                  </Popconfirm>
+                  {s.cards > 0 && (
+                    <Button size='mini' onClick={() => toggleExpand(s.id)}>{expanded === s.id ? '收起旧题' : '旧题管理'}</Button>
+                  )}
+                  <Popconfirm title={`解除注册「${s.title || s.id}」？`}
+                    content='移除注册与镜象题库；你的笔记文件不受影响。'
+                    onOk={() => void unregister(s.id)}>
+                    <Button size='mini' type='text' status='danger'>解除注册</Button>
+                  </Popconfirm>
+                </div>
+                {s.hint && (
+                  <Text type={s.status === 'missing' ? 'error' : 'warning'} style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                    {s.hint}
+                  </Text>
+                )}
+                {expanded === s.id && (
+                  <div style={{ marginTop: 8, borderTop: '1px solid var(--color-border-2,#e5e6eb)', paddingTop: 8 }}>
+                    {oldQs === null ? <Text type='secondary' style={{ fontSize: 12 }}>加载中…</Text>
+                      : oldQs.length === 0 ? <Text type='secondary' style={{ fontSize: 12 }}>没有在库旧题（都已归档；出题可补充新卡）</Text>
+                        : oldQs.map(q => (
+                          <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                            <Tag size='small' color='gray'>{q.id}</Tag>
+                            <Text style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.q}</Text>
+                            <Popconfirm title={`归档「${q.id}」？`}
+                              content='归档后不再进复习队列（笔记内容更新后重出题即可替换）。'
+                              onOk={() => void archiveOne(s.id, q.id)}>
+                              <Button size='mini' type='text' status='warning'>归档</Button>
+                            </Popconfirm>
+                          </div>
+                        ))}
+                  </div>
+                )}
+              </Card>
+            )
+          })
+        )}
+      </Space>
+    </Drawer>
+  )
+}
+
+/** 「我的卡」管理抽屉（E1 #70，#72 UI 挂接）：自注卡清单 + 归档/恢复。
+ * 队列只回在库卡：「本次已归档」清单挂在学习页会话级（关闭抽屉再开仍可恢复，
+ * 页面刷新后归档历史在卡文件里留档，恢复走引擎侧）。 */
+function LearnerCardManager(props: {
+  open: boolean
+  onClose: () => void
+  onChanged: () => void
+  /** 本次学习页会话里刚归档的卡（恢复入口的清单）。 */
+  archived: LearnerCardItem[]
+  onArchivedChange: (list: LearnerCardItem[]) => void
+}) {
+  const [q, setQ] = useState<LearnerQueueDoc | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    setQ(await api.learnerQueue().catch(() => null))
+  }, [])
+  useEffect(() => {
+    if (props.open) void load()
+  }, [props.open, load])
+
+  const toggleArchive = async (card: LearnerCardItem, flag: boolean) => {
+    setBusy(true)
+    try {
+      await api.learnerArchive(card.course, card.node, card.id, flag)
+      if (flag) {
+        props.onArchivedChange([...props.archived, card])
+        Message.success(`已归档「${card.id}」（不再进我的卡队列）`)
+      } else {
+        props.onArchivedChange(props.archived.filter(c => !(c.course === card.course && c.node === card.node && c.id === card.id)))
+        Message.success(`已恢复「${card.id}」`)
+      }
+      await Promise.all([load(), props.onChanged()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const kindLabel = (k: string) => ({ recall_cue: '再讲一遍', cloze_rewrite: '挖空重述', self_explain: '自注讲解' })[k] ?? k
+
+  return (
+    <Drawer width={560} visible={props.open} footer={null} unmountOnExit
+      title='我的卡管理（你自己的理解卡）' onCancel={props.onClose}>
+      <Space direction='vertical' style={{ width: '100%' }} size={10}>
+        <Alert type='info' style={{ fontSize: 12 }}
+          content='归档后卡片不再进「我的卡」队列，历史保留在卡文件里；本次学习页会话里归档的卡可在此恢复。' />
+        {q === null ? <Text type='secondary'>加载中…</Text>
+          : q.cards.length === 0 ? <Empty description='没有在库卡：在节学习页「加我的理解」，或把「讲给我听」的讲稿存档' />
+            : q.cards.map(c => (
+              <div key={`${c.course}/${c.node}/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Tag size='small' color='arcoblue'>{kindLabel(c.kind)}</Tag>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <Text style={{ fontSize: 13, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.prompt}</Text>
+                  <Text type='secondary' style={{ fontSize: 12 }}>
+                    {c.node} · {c.due ? `到期 ${c.due}` : '未调度'} · 做过 {c.attempts} 次
+                  </Text>
+                </div>
+                <Popconfirm title='归档这张卡？'
+                  content='归档后不再进「我的卡」队列；可在本抽屉立即恢复。'
+                  onOk={() => void toggleArchive(c, true)}>
+                  <Button size='mini' type='text' status='warning' disabled={busy}>归档</Button>
+                </Popconfirm>
+              </div>
+            ))}
+        {props.archived.length > 0 && (
+          <>
+            <Text type='secondary' style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>本次已归档（可恢复）</Text>
+            {props.archived.map(c => (
+              <div key={`archived-${c.course}/${c.node}/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.7 }}>
+                <Tag size='small'>{kindLabel(c.kind)}</Tag>
+                <Text type='secondary' style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.prompt}</Text>
+                <Button size='mini' type='text' disabled={busy} onClick={() => void toggleArchive(c, false)}>恢复</Button>
+              </div>
+            ))}
+          </>
+        )}
+      </Space>
+    </Drawer>
+  )
+}
+
 export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [rec, setRec] = useState<RecommendDoc | null>(null)
   const [xp, setXp] = useState<XpStatus | null>(null)
@@ -607,6 +944,14 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [createVisible, setCreateVisible] = useState(false)
   const [runningJobs, setRunningJobs] = useState(0)
   const [queuedJobs, setQueuedJobs] = useState(0)
+  /** #72 C2：Anki 通道状态（横幅导出按钮的到期计数与可达性提示）。 */
+  const [anki, setAnki] = useState<AnkiStatusDoc | null>(null)
+  const [exportingAnki, setExportingAnki] = useState(false)
+  /** #72 C1/E1：笔记源抽屉（focusId = 横幅「归档旧题」直达定位）与我的卡管理抽屉。
+   * recentArchived = 会话级「本次已归档」清单（E1 恢复入口；关抽屉再开不清空）。 */
+  const [sourceDrawer, setSourceDrawer] = useState<{ open: boolean; focusId: string | null }>({ open: false, focusId: null })
+  const [cardMgrOpen, setCardMgrOpen] = useState(false)
+  const [recentArchived, setRecentArchived] = useState<LearnerCardItem[]>([])
   /** 排队/生成中的节点（course/node → 阶段），推荐卡三态标识消费。 */
   const [genMap, setGenMap] = useState<Record<string, 'queued' | 'running'>>({})
 
@@ -615,6 +960,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     setXp(await api.xp().catch(() => null))
     setReviewQ(await api.reviewQueue().catch(() => null))
     setLearnerQ(await api.learnerQueue().catch(() => null))
+    setAnki(await api.ankiStatus().catch(() => null))
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -713,6 +1059,52 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     }
   }
 
+  // C2 导出到 Anki（#63/#72）：横幅按钮直推到期卡（Anki 未开时引擎报错带指引）
+  const exportAnki = async () => {
+    setExportingAnki(true)
+    try {
+      const r = await api.ankiExport()
+      Message.success(`已推送到 Anki：新增 ${r.added} · 更新 ${r.updated} · 移除 ${r.removed}（到期 ${r.total} 张）`)
+      await load()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setExportingAnki(false)
+    }
+  }
+
+  // C1 笔记源动作（#59/#72）：横幅提示行直达——漂移重新出题 / 缺失重新注册
+  const regenerateSource = async (id: string) => {
+    try {
+      const r = await api.noteSourceGenerate(id)
+      Message.success(`「${id}」已按当前内容出题：新增 ${r.added} 题（旧题保留，可在笔记源抽屉里归档）`)
+      await load()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+  const reregisterSource = async (path: string) => {
+    try {
+      await api.noteSourceRegister(path)
+      Message.success(`已恢复「${path}」的注册，卡池重新可用`)
+      await load()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  // A3 建议项直达（#54/#55/#72）：拉目标节点的定向复习队列，直接进刷卡会话
+  //（单节点会话自动启用 A1 难度带自适应）
+  const startAdviceReview = async (e: RecEvent, a: AdviceItem) => {
+    try {
+      const doc = await api.reviewQueue(e.course, a.node)
+      if (!doc.cards.length) { Message.info(`「${a.node}」暂无到期题：可直接点开节点学习`); return }
+      setSession(doc.cards)
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   // 课程卡入口的整课重生成（与生成页同一 /course/reset 通道，进度在生成页看）
   const regenerateCourse = (name: string) => {
     Modal.confirm({
@@ -754,8 +1146,13 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       </div>
       <XpBar xp={xp ?? { date: '', today_xp: 0, goal: 30, streak: 0, eta: [] }}
         onEditGoal={() => frame.goto('stats')} />
-      <ReviewBanner reviewQ={reviewQ} onStart={() => setSession(dueCards)} />
-      <LearnerBanner q={learnerQ} onStart={() => setLearnerSession(learnerQ?.cards ?? [])} />
+      <ReviewBanner reviewQ={reviewQ} anki={anki} onStart={() => setSession(dueCards)}
+        onExportAnki={() => void exportAnki()} exporting={exportingAnki}
+        onOpenSources={focusId => setSourceDrawer({ open: true, focusId: focusId ?? null })}
+        onRegenerateSource={id => void regenerateSource(id)}
+        onReregister={path => void reregisterSource(path)} />
+      <LearnerBanner q={learnerQ} onStart={() => setLearnerSession(learnerQ?.cards ?? [])}
+        onManage={() => setCardMgrOpen(true)} />
 
       {/* 核心区：「接下来学/复习」推荐流——点开直接进学习视图 */}
       {frame.tree && frame.tree.courses.length === 0 ? (
@@ -770,7 +1167,8 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
                   onOpen={() => frame.openLesson(e.course, e.node)}
                   onSkip={() => void skipNode(e)}
                   onGenerate={() => void generateNode(e)}
-                  onPin={() => void togglePin(e)} />
+                  onPin={() => void togglePin(e)}
+                  onAdvice={a => void startAdviceReview(e, a)} />
               ))}
           </Space>
         </Card>
@@ -811,6 +1209,10 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
           onSettled={load} />
       )}
       {createVisible && <CreateDialog visible={createVisible} onClose={() => setCreateVisible(false)} />}
+      <NoteSourceDrawer open={sourceDrawer.open} focusId={sourceDrawer.focusId}
+        onClose={() => setSourceDrawer({ open: false, focusId: null })} onChanged={load} />
+      <LearnerCardManager open={cardMgrOpen} onClose={() => setCardMgrOpen(false)} onChanged={load}
+        archived={recentArchived} onArchivedChange={setRecentArchived} />
 
       {/* 后台生成悬浮指示条 */}
       {runningJobs > 0 && !frame.lesson && (

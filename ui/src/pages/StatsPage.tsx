@@ -3,14 +3,20 @@
  * （剩余节点 × 每节点 XP ÷ 每日目标，Math Academy 语义）
  * + 记忆健康仪表盘（#61 A2 四面板：每日负载预报 / 记忆状态分布 / 真实保留率 /
  * 遗忘曲线；随复习日志积累填充，无数据给空态引导，不造假数据）
- * + 预测校准（#66 E4：学习者 JOL 预测 vs 实际，抽查样本口径）与抽查全局开关
+ * + FSRS 参数优化（#62 A2，#72 UI 挂接：手动触发 + 门禁状态展示）
+ * + 预测校准（#66 E4：学习者 JOL 预测 vs 实际）与抽查全局开关/抽样率
+ * + Anki 通道区块（#63 C2，#72 UI 挂接：上次导出/回写、镜象卡组概况、
+ *   AnkiConnect 可达性；导出/回写动作面板内直达。用词遵守 CONTEXT：不叫「同步」）
  * + 可用的困难教练（#65 E5：只读信息性反馈，低数据静默）。 */
-import { Alert, Button, Card, InputNumber, Message, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
+import { Alert, Button, Card, InputNumber, Message, Space, Switch, Table, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { toastError } from '../App'
 import type { AppFrame } from '../App'
-import type { CoachDoc, HistogramBin, JolConfig, MemoryHealth, XpStatus } from '../types'
+import type {
+  AnkiExportResult, AnkiImportResult, AnkiStatusDoc, CoachDoc, HistogramBin,
+  JolConfig, MemoryHealth, OptimizeResult, XpStatus,
+} from '../types'
 
 const { Text } = Typography
 
@@ -78,12 +84,159 @@ function RateBars({ rows }: { rows: Array<{ label: string; n: number; rate: numb
   )
 }
 
+/** FSRS 参数优化（A2 #62，#72 UI 挂接）：像 Anki 一样只手动触发——从真实复习日志
+ * 重训个人参数；门禁（真实推进 ≥400 条且评估更优）不满足时不写回，
+ * status/skip 原因/评估指标就地展示（门禁状态透明）。 */
+function OptimizerSection() {
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<OptimizeResult | null>(null)
+  const run = async () => {
+    setBusy(true)
+    try {
+      setResult(await api.optimizeParams())
+    } catch (err) {
+      toastError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div>
+      <Space size={8} wrap style={{ marginBottom: result ? 6 : 0 }}>
+        <Text style={{ fontWeight: 600 }}>FSRS 参数优化（A2）</Text>
+        <Button size='mini' type='primary' loading={busy} onClick={() => void run()}
+          title='从真实复习日志重训 21 个调度参数（评估更优才写回）'>
+          优化参数
+        </Button>
+        <Text type='secondary' style={{ fontSize: 12 }}>
+          从你的真实复习记录重训个人调度参数；点击时检测门禁——真实推进不足 400 条或评估未更优则不写回并明示原因，绝不自动触发
+        </Text>
+      </Space>
+      {result && (
+        <div style={{ background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '8px 10px' }}>
+          {result.status === 'written' ? (
+            <>
+              <Space size={8} wrap>
+                <Tag size='small' color='green'>已写回</Tag>
+                <Text type='secondary' style={{ fontSize: 12 }}>{(result.written ?? []).join('、')}</Text>
+              </Space>
+              {result.meta && (
+                <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                  门禁通过：真实复习 {result.meta.reviews} 条（{result.meta.cards} 张卡）·
+                  {' '}logLoss {result.meta.baseline_log_loss} → {result.meta.log_loss}
+                  （RMSE(bins) {result.meta.rmse_bins}）
+                  {result.meta.split_log_loss !== null && <>· 时序切分 logLoss {result.meta.split_log_loss}</>}
+                </Text>
+              )}
+            </>
+          ) : (
+            <Space size={8} wrap>
+              <Tag size='small' color='gray'>未写回</Tag>
+              <Text type='secondary' style={{ fontSize: 12 }}>{result.reason}</Text>
+            </Space>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Anki 通道区块（C2 #63，#72 UI 挂接）：通道状态（镜象规模/上次导出与回写/到期
+ * 分布/AnkiConnect 可达性）+ 导出/回写按钮——C2 全流程面板内可达，无需进 dsh 会话。
+ * 用词遵守 CONTEXT 词条 Anki Mirror（镜象）：这是单向推送 + 作答回写，不是「同步」。 */
+function AnkiChannelCard() {
+  const [st, setSt] = useState<AnkiStatusDoc | null>(null)
+  const [busy, setBusy] = useState<'export' | 'import' | null>(null)
+  const [lastImport, setLastImport] = useState<AnkiImportResult | null>(null)
+
+  const load = useCallback(async () => {
+    setSt(await api.ankiStatus().catch(() => null))
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const doExport = async () => {
+    setBusy('export')
+    try {
+      const r: AnkiExportResult = await api.ankiExport()
+      Message.success(`已推送到 Anki：新增 ${r.added} · 更新 ${r.updated} · 移除 ${r.removed}（到期 ${r.total} 张）`)
+      await load()
+    } catch (err) {
+      toastError(err)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const doImport = async () => {
+    setBusy('import')
+    try {
+      const r = await api.ankiImport()
+      setLastImport(r)
+      Message.success(`回写完成：导入 ${r.imported} 条事件，推进调度 ${r.advanced} 题（同日已推进跳过 ${r.skipped_same_day} · 无法归属 ${r.skipped_unknown}）`)
+      await load()
+    } catch (err) {
+      toastError(err)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <Card size='small' title='Anki 通道' style={{ borderRadius: 10 }}
+      extra={st?.anki && (
+        <Tooltip content={st.anki.connected ? 'AnkiConnect 已连通（桌面 Anki 在线）' : st.anki.error}>
+          <Tag size='small' color={st.anki.connected ? 'green' : 'red'}>
+            {st.anki.connected ? 'Anki 已连接' : 'Anki 未连接'}
+          </Tag>
+        </Tooltip>
+      )}>
+      {st === null ? <Text type='secondary'>加载中…</Text> : (
+        <Space direction='vertical' style={{ width: '100%' }} size={10}>
+          <Space size={24} wrap>
+            <div>
+              <Text style={{ fontWeight: 600, fontSize: 18 }}>{st.mirror.entries}</Text>
+              <Text type='secondary' style={{ fontSize: 12 }}> 张镜象卡（Anki 侧 learnhub 卡组）</Text>
+            </div>
+            <div>
+              <Text style={{ fontWeight: 600, fontSize: 18 }}>{st.due.total}</Text>
+              <Text type='secondary' style={{ fontSize: 12 }}> 张 vault 到期卡待推送</Text>
+            </div>
+          </Space>
+          <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
+            上次导出：{st.mirror.last_push ?? '从未'} · 上次回写：{st.mirror.last_import ?? '从未'}
+            {st.mirror.decks.length > 0 && <> · 镜象卡组：{st.mirror.decks.join('、')}</>}
+          </Text>
+          {st.due.by_deck.length > 0 && (
+            <Space size={4} wrap>
+              {st.due.by_deck.map(d => <Tag key={d.deck} size='small' color='orange'>{d.deck} · 到期 {d.count}</Tag>)}
+            </Space>
+          )}
+          <Space size={8} wrap>
+            <Button type='primary' size='small' loading={busy === 'export'} onClick={() => void doExport()}>导出到 Anki</Button>
+            <Button size='small' loading={busy === 'import'} onClick={() => void doImport()}>导入回写</Button>
+            <Button size='small' type='text' onClick={() => void load()}>刷新</Button>
+          </Space>
+          {lastImport && lastImport.unknown.length > 0 && (
+            <Alert type='warning' style={{ fontSize: 12 }}
+              content={`有 ${lastImport.skipped_unknown} 条事件无法归属（已跳过不猜）：${lastImport.unknown.join('；')}`} />
+          )}
+          <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
+            Anki 是纯作答通道：先「导出到 Anki」把到期卡推进镜象卡组，在 Anki 里作答后再「导入回写」——vault 按自己的调度器重算（回写先于下次导出，刚答过的卡不会被重复推送）。
+          </Text>
+        </Space>
+      )}
+    </Card>
+  )
+}
+
 /** 记忆健康仪表盘（面板；数据源 GET /memory，聚合口径见 engine/memory.ts）。
- * jol 全局开关（#66 E4）与面板同区：关闭后复习流完全不弹预测，已攒的校准数据保留。 */
-function MemoryHealthCard({ mem, jol, onToggleJol }: {
+ * jol 全局开关 + 抽样率（#66 E4，#72 补 rate 输入）与面板同区：关闭后复习流
+ * 完全不弹预测，已攒的校准数据保留。 */
+function MemoryHealthCard({ mem, jol, onToggleJol, onRateJol }: {
   mem: MemoryHealth | null
   jol: JolConfig | null
   onToggleJol: (enabled: boolean) => void
+  onRateJol: (rate: number) => void
 }) {
   if (mem === null) {
     return (
@@ -97,10 +250,10 @@ function MemoryHealthCard({ mem, jol, onToggleJol }: {
   return (
     <Card size='small' title='记忆健康' style={{ borderRadius: 10 }}
       extra={<Text type='secondary' style={{ fontSize: 12 }}>真实作答口径——合成首复习不计入</Text>}>
-      {noCards ? (
-        <Text type='secondary'>{EMPTY_HINT}</Text>
-      ) : (
-        <Space direction='vertical' style={{ width: '100%' }} size={16}>
+      <Space direction='vertical' style={{ width: '100%' }} size={16}>
+        {noCards ? (
+          <Text type='secondary'>{EMPTY_HINT}</Text>
+        ) : (<>
           {/* 1 · 每日负载预报 */}
           <div>
             <Space size={8} style={{ marginBottom: 6 }}>
@@ -195,6 +348,13 @@ function MemoryHealthCard({ mem, jol, onToggleJol }: {
                 <Space size={6}>
                   <Text type='secondary' style={{ fontSize: 12 }}>翻面前抽查预测</Text>
                   <Switch size='small' checked={jol.enabled} onChange={onToggleJol} />
+                  {/* E4 抽样率（#72）：每次复习被抽中弹预测的概率（0.05–1），即时保存 */}
+                  <Tooltip content='抽查抽样率：每次复习被抽中弹预测的概率（0.05–1）'>
+                    <InputNumber size='mini' mode='button' min={0.05} max={1} step={0.05}
+                      value={jol.rate} onChange={v => onRateJol(Number(v))} style={{ width: 100 }}
+                      disabled={!jol.enabled} />
+                  </Tooltip>
+                  <Text type='secondary' style={{ fontSize: 12 }}>约每 {Math.round(1 / Math.max(0.01, jol.rate))} 张 1 张</Text>
                 </Space>
               )}
             </Space>
@@ -227,8 +387,10 @@ function MemoryHealthCard({ mem, jol, onToggleJol }: {
               </Text>
             )}
           </div>
-        </Space>
-      )}
+        </>)}
+        {/* A2 FSRS 参数优化（#62，#72 UI 挂接）：手动触发 + 门禁状态就地展示 */}
+        <OptimizerSection />
+      </Space>
     </Card>
   )
 }
@@ -270,6 +432,16 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
     }
   }
 
+  // E4 抽样率（#72）：0<r≤1，即时保存（InputNumber 步进点击逐次触发）
+  const rateJol = async (rate: number) => {
+    if (!Number.isFinite(rate) || rate <= 0) return
+    try {
+      setJol(await api.setJol({ rate }))
+    } catch (err) {
+      toastError(err)
+    }
+  }
+
   const saveGoal = async () => {
     setSaving(true)
     try {
@@ -289,7 +461,9 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
       {coach && coach.messages.length > 0 && (
         <Alert type='info' content={coach.messages.map(m => <div key={m}>{m}</div>)} />
       )}
-      <MemoryHealthCard mem={mem} jol={jol} onToggleJol={enabled => void toggleJol(enabled)} />
+      <MemoryHealthCard mem={mem} jol={jol} onToggleJol={enabled => void toggleJol(enabled)}
+        onRateJol={rate => void rateJol(rate)} />
+      <AnkiChannelCard />
 
       <Card size='small' title='XP 时间账本' style={{ borderRadius: 10 }}
         extra={xp && (

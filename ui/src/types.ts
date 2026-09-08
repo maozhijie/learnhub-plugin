@@ -58,6 +58,9 @@ export interface GraphDoc {
 }
 
 export type RecEventType = 'new' | 'ready' | 'review' | 'overdue' | 'learning' | string
+/** A3 建议项（#54/#55）：软闸弱前置 / enc 成分技能的定向复习建议——
+ * node 同课程内目标节点，r = 其当前可回忆度，due = 到期题数（w = enc 边权，可缺省）。 */
+export interface AdviceItem { node: string; w?: number; r: number; due: number }
 /** 内容诊断建议项（B1 #69：节级答错集中/单题反复失败的信号 + 重写直达动作）。 */
 export interface DiagnosticEntry {
   section: string
@@ -82,6 +85,8 @@ export interface RecEvent {
   pinned?: boolean
   /** 内容诊断建议项（附着在学习事件上，或独立 diagnostic 事件）。 */
   diagnostics?: DiagnosticEntry[]
+  /** A3 定向复习建议项（#54/#55）：软闸/enc 回退——先复习建议节点的到期题。 */
+  advice?: AdviceItem[]
 }
 export interface RecommendDoc { date: string; events: RecEvent[] }
 
@@ -290,3 +295,67 @@ export interface UnderstandingResult {
   verdict: { verdict: '对' | '部分对' | '错'; tags: string[]; advice?: string }
   reply: string
 }
+
+/** 笔记源清单条目（C1 #59）：注册身份 × 指纹状态 × 卡池概况。 */
+export interface NoteSourceItem {
+  id: string
+  path: string
+  title?: string
+  enabled: boolean
+  created: string
+  /** ok 正常 / drifted 漂移（可重出或归档旧题）/ missing 缺失（重注册或解除）/ inconsistent 镜象不一致。 */
+  status: 'ok' | 'drifted' | 'missing' | 'inconsistent'
+  cards: number
+  due: number
+  hint?: string
+  broken?: boolean
+}
+export interface NoteSourceDoc { date: string; total: number; sources: NoteSourceItem[] }
+export interface NoteSourceRegisterResult {
+  date: string
+  registered: number
+  updated: number
+  skipped: number
+  sources: NoteSourceItem[]
+}
+
+/** Anki 通道状态（C2 #63，GET /anki/status）。 */
+export interface AnkiStatusDoc {
+  date: string
+  mirror: { entries: number; last_push: string | null; last_import: string | null; decks: string[] }
+  due: { total: number; by_deck: Array<{ deck: string; count: number }> }
+  anki?: { connected: boolean; error?: string }
+}
+/** 导出到 Anki（POST /anki/export）：vault 到期集校准/重建镜象卡组的结果。 */
+export interface AnkiExportResult { date: string; added: number; updated: number; removed: number; total: number; decks: string[] }
+/** Anki 回写导入（POST /anki/import）：原始作答证据按 vault 调度重算的结果。 */
+export interface AnkiImportResult { imported: number; advanced: number; skipped_same_day: number; skipped_unknown: number; unknown: string[] }
+
+/** FSRS 参数优化器（A2 #62，POST /optimize-params）：门禁不满足/评估未更优时不写回。 */
+export interface OptimizeResult {
+  status: 'written' | 'skipped'
+  reason?: string
+  written?: string[]
+  meta?: {
+    trained_at: string
+    reviews: number
+    cards: number
+    baseline_source: 'previous' | 'default'
+    baseline_log_loss: number
+    log_loss: number
+    rmse_bins: number
+    split_log_loss: number | null
+    split_rmse_bins: number | null
+  }
+}
+
+/** B2 难度建议（#58，GET /difficulty-advice）：节点级失衡/过于简单只读建议。 */
+export interface CalibrationAdvice { kind: 'difficulty_calibration'; reason: string; instruction: string }
+export interface TooEasyAdvice { kind: 'too_easy'; qid: string; attempts: number; reason: string }
+export interface DifficultyAdviceNode {
+  course: string
+  node: string
+  calibration?: CalibrationAdvice
+  too_easy?: TooEasyAdvice[]
+}
+export interface DifficultyAdviceDoc { date: string; nodes: DifficultyAdviceNode[] }

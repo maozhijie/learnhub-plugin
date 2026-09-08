@@ -47,7 +47,7 @@ export const api = {
   lesson: (node: string, course?: string) =>
     http<{ course: string; node: string; region: string; stage: string; mastery: number; sections: import('./types').LessonSection[]; manifest: import('./types').SectionManifestItem[] | null; prereqs: string[]; suggest_next: string[] }>('GET', `/lesson${q({ node, course })}`),
   questions: (course: string, node: string) =>
-    http<{ course: string; node: string; mastery: number; questions: import('./types').QuestionItem[] }>('GET', `/questions${q({ course, node })}`),
+    http<{ course: string; node: string; mastery?: number; questions: import('./types').QuestionItem[] }>('GET', `/questions${q({ course, node })}`),
   questionAnswer: (course: string, node: string, qid: string, answer: string, elapsedS?: number,
     opts?: { deferSchedule?: boolean; predicted?: string }) =>
     http<import('./types').AnswerResult>('POST', '/question-answer',
@@ -112,6 +112,31 @@ export const api = {
   /** 「我的卡」归档/恢复（E1 管理面）。 */
   learnerArchive: (course: string, node: string, card: string, archived: boolean) =>
     http<Record<string, unknown>>('POST', '/learner-archive', { course, node, card, archived }),
+  /** 笔记源清单（C1 #59）：注册身份 × Missing/漂移状态 × 卡池概况。 */
+  noteSources: () => http<import('./types').NoteSourceDoc>('GET', '/note-sources'),
+  /** 笔记源注册（C1 #59）：单篇 .md 或文件夹（批量登记其下全部 .md）。 */
+  noteSourceRegister: (path: string) =>
+    http<import('./types').NoteSourceRegisterResult>('POST', '/note-source/register', { path }),
+  /** 解除注册（C1 #59）：注册表 + 镜象清单 + 镜象题库一并清除，用户笔记不动。 */
+  noteSourceUnregister: (id: string) =>
+    http<{ removed: string; path: string }>('POST', '/note-source/unregister', { id }),
+  /** 笔记源出题（C1 #59）：读笔记正文 → 模型 → validateBank 门禁落镜象题库。 */
+  noteSourceGenerate: (id: string, count = 6) =>
+    http<{ id: string; added: number; skipped: number; total: number }>('POST', '/note-source/generate', { id, count }),
+  /** Anki 通道状态（C2 #63）：镜象/最近推送与回写/到期分布 + AnkiConnect 可达性。 */
+  ankiStatus: () => http<import('./types').AnkiStatusDoc>('GET', '/anki/status'),
+  /** 导出到 Anki（C2 #63）：按 vault 到期集校准/重建镜象卡组。 */
+  ankiExport: () =>
+    http<import('./types').AnkiExportResult>('POST', '/anki/export'),
+  /** Anki 作答回写（C2 #63）：拉上次导入水位以来的事件按 vault 调度重算。 */
+  ankiImport: () =>
+    http<import('./types').AnkiImportResult>('POST', '/anki/import'),
+  /** FSRS 参数优化器手动触发（A2 #62）：门禁不满足时 skipped + 原因。 */
+  optimizeParams: () =>
+    http<import('./types').OptimizeResult>('POST', '/optimize-params'),
+  /** B2 难度失衡/过于简单只读建议（#58）：题目管理页建议区消费。 */
+  difficultyAdvice: (course?: string) =>
+    http<import('./types').DifficultyAdviceDoc>('GET', `/difficulty-advice${q({ course })}`),
   questionGenerate: (course: string, node: string, count = 6) =>
     http<{ course: string; node: string; added: number; skipped: number; total: number }>('POST', '/question-generate', { course, node, count }),
   generateStatus: () => http<import('./types').GenStatusDoc>('GET', '/generate/status'),

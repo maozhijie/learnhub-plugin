@@ -947,8 +947,19 @@ export class LearnhubEngine {
   }
 
   /** 某节点题库题目列表（不含答案/评分要点；带到期日与作答统计——刷卡视图）。
-   * mastery 与学习页/图/树同口径（masteryOfFm 派生），前端头部读数即此。 */
+   * mastery 与学习页/图/树同口径（masteryOfFm 派生），前端头部读数即此。
+   * 笔记源卡（course=「笔记源」伪课程）同通道只读列出：漂移提示的「归档旧题」
+   * 管理动作需要逐题清单（questionGet/questionArchive 同一伪课程路由约定）；
+   * ADR-0010 v1 不套掌握度模型，响应不带 mastery。 */
   async questions(courseKey: string | undefined, node: string): Promise<Record<string, unknown>> {
+    if (await this.isNoteSourceCourse(courseKey)) {
+      const bank = await this.bank.load(this.paths.noteSourceDir, node)
+      return {
+        course: NOTE_SOURCE_COURSE, node,
+        questions: bank.questions.filter(q => q.archived !== true)
+          .map((q, i) => this.questionView(q, i)),
+      }
+    }
     const c = await this.registry.resolve(courseKey)
     const { state } = await this.loadView(c)
     const bank = await this.bank.load(this.paths.courseRoot(c.root), node)

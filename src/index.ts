@@ -747,6 +747,19 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/note-sources', () => engine.noteSourceList()))
       return
     }
+    if (req.method === 'GET' && route === '/anki/status') {
+      // Anki 通道状态（C2 #63，#72 UI 挂接）：镜象/最近推送与回写/当前到期分布
+      // + AnkiConnect 可达性（连接失败不抛，status.anki.connected=false 带原因）
+      sendJson(res, 200, await apiRun('api/anki/status', () =>
+        engine.ankiStatus(new AnkiConnectClient(ANKI_ENDPOINT))))
+      return
+    }
+    if (req.method === 'GET' && route === '/difficulty-advice') {
+      // B2 难度失衡/过于简单只读建议（#58，#72 UI 挂接）：题目管理页建议区消费
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/difficulty-advice', () => engine.difficultyAdvice(course)))
+      return
+    }
     if (req.method === 'GET' && route === '/learner-queue') {
       // 「我的卡」E 池队列（E1/#68）：到期在前、新卡随后，隔离自调度
       const course = url.searchParams.get('course') ?? undefined
@@ -885,6 +898,26 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         sendJson(res, 200, await apiRun('api/note-source/generate', () => engine.noteSourceGenerate(
           need(body, 'id'), questionCount(body.count),
           async prompt => stripFences(await llmComplete(ctx, prompt)))))
+        return
+      }
+      if (route === '/anki/export') {
+        // 导出到 Anki（C2 #63，#72 UI 挂接）：与 learnhub_anki_export 同一引擎通道
+        // ——按 vault 到期集校准/重建镜象卡组（Anki 未开时 fail loud 带指引）
+        sendJson(res, 200, await apiRun('api/anki/export', () =>
+          engine.ankiExportPush(new AnkiConnectClient(ANKI_ENDPOINT))))
+        return
+      }
+      if (route === '/anki/import') {
+        // Anki 作答回写（C2 #63，#72 UI 挂接）：拉上次导入水位以来的复习事件，
+        // 按 vault 自己的 ts-fsrs 重算调度（Anki 侧排期输出不作数）
+        sendJson(res, 200, await apiRun('api/anki/import', () =>
+          engine.ankiImportEvents(new AnkiConnectClient(ANKI_ENDPOINT))))
+        return
+      }
+      if (route === '/optimize-params') {
+        // FSRS 参数优化器手动触发（A2 #62，#72 UI 挂接）：门禁不满足/评估未更优
+        // 时不写回，status=skipped + 原因随响应带出（统计页面板展示）
+        sendJson(res, 200, await apiRun('api/optimize-params', () => engine.optimizeFsrsParams()))
         return
       }
       if (route === '/learner-rate') {
