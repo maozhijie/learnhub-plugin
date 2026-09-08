@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROTOTYPE — E2「讲给我听」交互剧本</title>
+<style>
+  :root{
+    --bg:#f7f5f0; --card:#fff; --line:#e3ded2; --ink:#2b2a26; --sub:#7a756a;
+    --ai:#eef3fb; --me:#fff6e0; --tag:#d9e6d3; --warn:#f7e2dd; --ok:#e2f0e4;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+  header{max-width:860px;margin:0 auto;padding:26px 20px 6px}
+  h1{font-size:22px;margin:0 0 4px}
+  .ribbon{display:inline-block;background:#3b3a37;color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;letter-spacing:.05em}
+  .sub{color:var(--sub);font-size:13px;margin-top:6px}
+  main{max-width:860px;margin:0 auto;padding:12px 20px 60px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:14px 0}
+  .steptitle{font-weight:700;font-size:15px;margin-bottom:4px}
+  .steptag{font-size:11px;color:var(--sub);float:right}
+  .nav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+  button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+  button.active{background:#2b2a26;color:#fff;border-color:#2b2a26}
+  button.primary{background:#2b5bd7;color:#fff;border-color:#2b5bd7}
+  .bubble{border-radius:10px;padding:10px 13px;margin:8px 0;font-size:14px;white-space:pre-wrap}
+  .bubble.ai{background:var(--ai)}
+  .bubble.me{background:var(--me);margin-left:26px}
+  .bubble.cap{background:#f1f0ea;color:var(--sub);font-size:12px;margin-right:26px;border-left:3px solid #ccc}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;margin-right:6px;vertical-align:1px}
+  .tag.mo{background:#f3e8d8}.tag.yue{background:#e6e0f5}.tag.cuo{background:var(--warn)}
+  .kv{font-size:13px;margin:4px 0}
+  .kv b{color:#4a463d}
+  .note{font-size:12.5px;color:var(--sub)}
+  .cardline{border:1px dashed var(--line);border-radius:8px;padding:10px 12px;margin:8px 0;background:#fbfaf6}
+  .opt{display:block;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:13.5px;cursor:pointer;text-align:left;width:100%}
+  .opt:hover{border-color:#2b5bd7}
+  .opt .ai-reply{display:none;background:var(--ai);border-radius:6px;padding:8px 10px;margin-top:8px;font-size:13px;white-space:pre-wrap}
+  .opt.open{border-color:#2b5bd7}
+  .opt.open .ai-reply{display:block}
+  code{background:#efece4;padding:0 4px;border-radius:4px;font-size:12.5px}
+  .verdict{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+  @media(max-width:640px){.verdict{grid-template-columns:1fr}}
+  .vcard{border:1px solid var(--line);border-radius:10px;padding:12px}
+  .vcard.bad{border-left:4px solid #c2513f}
+  .vcard.good{border-left:4px solid #3d8b4f}
+  .small{font-size:12px;color:var(--sub)}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<header>
+  <span class="ribbon">PROTOTYPE · 用完即弃</span>
+  <h1>E2「讲给我听」——把概念讲给 AI 的交互剧本</h1>
+  <div class="sub">回答原型问题：学完节点后「用自己的话讲」，AI 扮不懂初学者追问并抓含糊/跳跃/说错——<b>真实用起来像不像在学？产物落 E1 自注卡顺不顺手？</b><br>（注：AI 回合为按正文要点手写的示范剧本，非实时生成；下方附实现提示词骨架）</div>
+</header>
+
+<main>
+  <div class="nav" id="nav"></div>
+
+  <!-- 步骤0 场景 -->
+  <section class="panel" data-step="0">
+    <span class="steptag">STEP 0 · 触发</span>
+    <div class="steptitle">场景：刚学完一个节点，出现「讲给我听」入口</div>
+    <p class="note">节点完成（进入复习态）后，学习页出现动作：「讲给我听——用你的话把这个讲明白，我来当完全不懂的人」。（入口是自愿的，随时可关；与 Arc D 的「AI 讲给你」方向相反，这一弧是你说 AI 听。）</p>
+    <div class="kv"><b>本节点</b>：等差数列求和（基础）</div>
+    <div class="kv"><b>正文三节要点</b>（AI 追问与反馈只对照这些，不超纲）：</div>
+    <ul class="note">
+      <li><b>s1 概念</b>：等差数列 = 任意相邻两项之差恒定（公差 d）；首项 a₁、末项 aₙ、项数 n。</li>
+      <li><b>s2 推导</b>：求和 Sₙ = (a₁+aₙ)×n÷2 —— 倒序相加，每一对（首+末、次首+次末…）和相等，共 n 对，每对出现两次故 ÷2。</li>
+      <li><b>s3 应用</b>：末项 aₙ = a₁ + (n−1)d；已知 a₁、d、n 先求 aₙ 再套求和。</li>
+    </ul>
+    <p class="note">实现形态（原型假设）：面板输入框（打字）或语音转文字；上下文包 = 该节点正文要点 + 图位置 + 本次讲稿，走既有 discuss 宿主通道。此处演示以打字讲稿进行。</p>
+  </section>
+
+  <!-- 步骤1 讲稿 -->
+  <section class="panel hidden" data-step="1">
+    <span class="steptag">STEP 1 · 学习者开讲</span>
+    <div class="steptitle">选择一份「真实感讲稿」看看 AI 怎么接</div>
+    <div class="nav" id="var"></div>
+    <div id="scriptA" class="bubble me">等差数列嘛，就是每一项都差一样的数列。求和就是首项加末项，乘上项数，再除以二。末项…就是首项加上…嗯，项数减一倍的公差？反正我们套公式求就行。为什么要除以二我有点忘了，好像是倒过来加。</div>
+    <div id="scriptB" class="bubble me hidden">等差求和很简单：首项加末项乘以项数除以二。末项等于首项加项数乘以公差。背下这两条公式，题都会做。</div>
+  </section>
+
+  <!-- 步骤2 AI 追问 -->
+  <section class="panel hidden" data-step="2">
+    <span class="steptag">STEP 2 · 不懂的初学者</span>
+    <div class="steptitle">AI 扮演完全不懂的人，只追问、不评判</div>
+    <div id="qA">
+      <div class="bubble ai">哦哦，我一点都没学过。你说「每一项都差一样」——那 3、6、12 这样的数列，是等差吗？</div>
+      <div class="bubble me">不是吧？6−3=3，12−6=6，不一样，不是等差。</div>
+      <div class="bubble ai">啊对！所以你刚才说的「差一样」，是要每两个相邻的都一样对吗？那要是相邻差都一样，第一个是 3，每次差 2，到第 5 个是多少？</div>
+      <div class="bubble me">3,5,7,9,11，第 5 个是 11。</div>
+      <div class="bubble ai">第 5 个是 11，可是你刚才说的公式里乘的是项数减一还是项数？3 + 4×2 = 11，这里的 4 是什么？</div>
+      <div class="bubble me">4 是 5−1……哦！是项数减一！</div>
+      <div class="bubble ai">好，那你再说说求和为什么要「乘项数再除以二」？我一个个加不行吗？</div>
+      <div class="bubble me">……倒过来加，每对加起来一样，这样快。</div>
+      <div class="bubble ai">每对加起来一样？首项加末项是 a₁+aₙ，那第二项加倒数第二项为什么也等于 a₁+aₙ？你说说看。</div>
+      <div class="bubble me">因为第二项比 a₁ 多 d，倒数第二项比 aₙ 少 d，多的少的抵消了，所以还是一样！然后一共 n 个，能配成 n 对，但每一对其实算了两次，所以除以二。</div>
+    </div>
+    <div id="qB" class="hidden">
+      <div class="bubble ai">我没学过。你说末项等于「首项加项数乘公差」。那从 3 开始每次加 2，我数到第 5 个给你看：3,5,7,9,11——按你的公式，第 5 个是 3+5×2=13？可我们刚数出来是 11 呀？</div>
+      <div class="bubble me">哎？3+（5−1）×2=11……那应该是项数减一。</div>
+      <div class="bubble ai">那为什么是减一？你要是能让我这个不懂的人也明白「为什么是减一」，我才敢用你的公式。</div>
+      <div class="bubble me">从 3 到第 1 个没加（0 次公差），到第 n 个要加 n−1 次公差，所以是 a₁+(n−1)d。</div>
+      <div class="bubble ai">明白了——到第 1 个不用加。那求和公式「首加末乘 n 除以二」，你能像这样也给我讲明白吗？</div>
+      <div class="bubble me">倒序写一遍，上下每对和都是 a₁+aₙ，n 个数配成 n 对，但是每一对被算了两次，所以除以二。</div>
+    </div>
+    <p class="note">这轮想看的：AI 是不是在「真不懂」地追问（protégé effect 的机制 = 被要求讲清楚逼出检索与重组），而不是夸「讲得不错」。上面两版里，追问逼出了 <b>n−1</b> 与 <b>÷2 的配对来源</b>——这正是学习者原讲稿里含糊/跳跃/说错的地方。</p>
+  </section>
+
+  <!-- 步骤3 定位反馈 -->
+  <section class="panel hidden" data-step="3">
+    <span class="steptag">STEP 3 · 对照要点定位反馈</span>
+    <div class="steptitle">讲解告一段落：给「哪里含糊 / 哪里跳了 / 哪里说错」的定位，不是打分</div>
+    <div id="fA">
+      <div class="bubble cap">【A 版讲稿的定位反馈（对照 s1–s3 要点）】</div>
+      <div class="bubble ai">
+<span class="tag mo">含糊</span>「差一样的数列」→ 精确说是「<b>任意相邻两项之差恒定</b>」；你也用反例自纠了 3,6,12，很好，把这句话补进你的讲稿。
+<span class="tag yue">跳跃</span>你提到求和「倒过来加」，但没说出「<b>第二项比 a₁ 多 d、倒数第二项比 aₙ 少 d → 每对和都等于 a₁+aₙ</b>」这一步——追问后半段你自己补上了，值得留一句在讲稿里。
+<span class="tag cuo">说错</span>末项公式中途说成「乘项数」→ 应是 <b>a₁+(n−1)d</b>（到第 1 个不加，到第 n 个加 n−1 次）。你已改对。
+总评（非评分）：这版讲稿缺的正是求和公式「÷2」的<b>为什么</b>；把它讲清楚，这节才算真的归你。</div>
+    </div>
+    <div id="fB" class="hidden">
+      <div class="bubble cap">【B 版讲稿的定位反馈（对照 s1–s3 要点）】</div>
+      <div class="bubble ai">
+<span class="tag cuo">说错</span>末项公式写成了「首项+项数×公差」→ 应为 <b>a₁+(n−1)d</b>；以 3 开头公差 2 数到第 5 个是 11（=3+4×2）可自验。
+<span class="tag yue">跳跃</span>求和公式你只报了结论；没讲「为什么 ÷2」。建议补一句：倒序相加，每对和都等于 a₁+aₙ、n 个配 n 对但每对算两次。
+这版讲稿「背公式」味很重——公式没错但原理是空的；原理不讲，换个样子你就认不出了。</div>
+    </div>
+    <p class="note">反馈原则（#33 边界内）：给对/错/部分对 + 定位 + 「可怎么补」，<b>不判分、不入账</b>；判词存档进 E1 档案。</p>
+  </section>
+
+  <!-- 步骤4 修正稿 + E1 存档 -->
+  <section class="panel hidden" data-step="4">
+    <span class="steptag">STEP 4 · 存档为 E1 自注卡</span>
+    <div class="steptitle">「把这版讲稿存成我的卡」——看存档这步顺不顺手</div>
+    <div id="fixA" class="bubble me">等差数列：相邻两项差恒定，这个差叫公差 d。末项 aₙ = a₁+(n−1)d（到第 1 个不加，到第 n 个加 n−1 次）。求和 Sₙ=(a₁+aₙ)×n÷2：把数列倒序写一遍，每一对（第 i 个 + 倒数第 i 个）的和都等于 a₁+aₙ，因为一头多 d、一头少 d 抵消了；n 个数配成 n 对，但每对算了两次所以 ÷2。像 1,3,5,7,9 首加末=10，5 对=50，÷2=25。</div>
+    <div id="fixB" class="bubble me hidden">末项公式：a₁+(n−1)d——到第 1 个不加公差，到第 n 个要加 n−1 次，别背错成 n 次。求和：倒序相加每对都是 a₁+aₙ，n 对但每对算两次所以 ÷2。我的口头禅：忘记公式就从 1,3,5,7 数一遍。</div>
+    <div class="cardline">
+      <div class="kv"><b>E1 自注卡预览（存入「我的产出」复习池）</b></div>
+      <div class="kv">卡面（挖空重述你的讲稿）：「等差数列求和为什么是 (a₁+aₙ)×n÷2？____」</div>
+      <div class="kv">备选卡面：「用自己的话讲：为什么末项是 a₁+(n−1)d 而不是 +n·d？」</div>
+      <div class="kv small">带独立复习调度 · 作答走复习自评 · <b>不碰掌握度 / XP / FSRS（canonical）</b>（#33）</div>
+      <div class="kv small">同步存入：本讲稿 + AI 定位反馈判词（哪里含糊/跳/错）</div>
+    </div>
+    <p class="note">想感受的：<b>「存成卡」这个动作是不是自然</b>——它是讲解的自然收尾（讲明白了→把「自己的版本」留下来复习），还是多余的一步？卡面用「挖空重述自己的话」还是「要求再讲一遍」更想复习？</p>
+  </section>
+
+  <!-- 步骤5 评估 -->
+  <section class="panel hidden" data-step="5">
+    <span class="steptag">STEP 5 · 像不像在学？</span>
+    <div class="steptitle">你看完整条交互，判断两件事</div>
+    <div class="verdict">
+      <div class="vcard bad">
+        <b>判据 A：像不像在学？</b>
+        <p class="small">真正的学习时刻出现在哪？是「被追问到 n−1」「被逼着讲 ÷2 的来源」那几轮吗？还是 AI 的追问在绕圈子/在演？有没有哪些回合是纯浪费时间（如无意义的寒暄、AI 假装不懂但问题太蠢）？</p>
+      </div>
+      <div class="vcard good">
+        <b>判据 B：E1 存档顺不顺手？</b>
+        <p class="small">讲解完「存成我的卡」这个收尾自不自然？卡面形态（挖空重述自己的话 vs 要求再讲）哪种更像你会愿意复习的？会不会觉得存档是打断？</p>
+      </div>
+    </div>
+    <div class="bubble cap">你可以直接在下面回我：<b>1)</b> 哪一轮让你觉得「啊这确实是在逼我想清楚」；<b>2)</b> 哪一轮让你觉得假/尬/浪费时间；<b>3)</b> 存档步骤改法建议（或「很顺手」）。若整体成立 → 决议转正并拆 E2 实施子票；若不像 → 指出方向回炉。</div>
+  </section>
+
+  <div class="note">实现骨架（转正后接 tutor/discuss-pack，不在此实现）：<code>讲解启动 → 上下文包{节点要点 s1–s3 + 图位置 + 讲稿} → system: 你是完全不懂该主题的初学者，只许用正文要点追问，抓含糊/跳跃/说错，不许评分不许超纲 → N 轮追问（可点「换一种问」）→ 讲解结束 → 定位反馈（#33：是非+定位+怎么补，不入账）→ 可选「存为 E1 卡」→ 挖空/再讲两种卡面</code></div>
+</main>
+
+<script>
+  const steps = document.querySelectorAll('[data-step]');
+  const nav = document.getElementById('nav');
+  const labels = ['① 场景与要点','② 开讲','③ AI 追问','④ 定位反馈','⑤ 存卡','⑥ 像不像在学'];
+  let cur = 0;
+  steps.forEach((s,i)=>{
+    const b=document.createElement('button');
+    b.textContent=labels[i];
+    b.onclick=()=>show(i);
+    nav.appendChild(b);
+  });
+  const btns=[...nav.children];
+  function show(i){cur=i;steps.forEach((s,j)=>s.classList.toggle('hidden',j!==i));btns.forEach((b,j)=>b.classList.toggle('active',j===i));window.scrollTo({top:0,behavior:'smooth'});}
+
+  // 讲稿变体 A/B 切换
+  const varBox=document.getElementById('var');
+  [['A · 含糊+跳跃','A'],['B · 说错+自信','B']].forEach(([t,k],i)=>{
+    const b=document.createElement('button');
+    b.textContent=t;
+    if(i===0)b.classList.add('active');
+    b.onclick=()=>{setVar(k);document.querySelectorAll('#var button').forEach(x=>x.classList.remove('active'));b.classList.add('active');};
+    varBox.appendChild(b);
+  });
+  function setVar(k){
+    document.getElementById('scriptA').classList.toggle('hidden',k!=='A');
+    document.getElementById('scriptB').classList.toggle('hidden',k!=='B');
+    document.getElementById('qA').classList.toggle('hidden',k!=='A');
+    document.getElementById('qB').classList.toggle('hidden',k!=='B');
+    document.getElementById('fA').classList.toggle('hidden',k!=='A');
+    document.getElementById('fB').classList.toggle('hidden',k!=='B');
+    document.getElementById('fixA').classList.toggle('hidden',k!=='A');
+    document.getElementById('fixB').classList.toggle('hidden',k!=='B');
+  }
+  show(0);
+</script>
+</body>
+</html>
