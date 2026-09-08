@@ -873,6 +873,7 @@ export class LearnhubEngine {
     // 挂起以 stats.pending_rating 标记（rate 的前置、forget 的互斥条件）。
     let fs: FsrsBlock | null
     let pendingRating = false
+    let advanced = false
     let previews: { hard: string; good: string; easy: string } | undefined
     if (guessed || (repeated && q.fsrs)) {
       fs = q.fsrs ?? null
@@ -888,6 +889,7 @@ export class LearnhubEngine {
     } else {
       const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
       fs = applyRatingBlock(q.fsrs ?? null, correct ? 3 : 1, today, sched).fs
+      advanced = true
     }
     const stats = {
       attempts: (q.stats?.attempts ?? 0) + 1,
@@ -896,7 +898,10 @@ export class LearnhubEngine {
       ...(pendingRating ? { pending_rating: true } : {}),
     }
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
-    const mastery = masteryOfFm(next)
+    // 代表卡回刷（ADR-0007 前提）：只有真实推进才重算——挂起/同日重复没动卡，代表卡不变。
+    // mastery 从回刷后的 frontmatter 派生，稳定度分量才随复习前进。
+    const fmNow = advanced ? await this.refreshRepCard(c, graph, node) : next
+    const mastery = masteryOfFm(fmNow)
     return {
       correct, score: Math.round(score * 100), feedback,
       explanation: q.explanation ?? '',
@@ -906,7 +911,7 @@ export class LearnhubEngine {
       due: fs?.due ?? null,
       mastery,
       // 本次作答是否推进了该题 FSRS 调度（每题每天至多一次；自评挂起视为未推进）
-      scheduled: fs !== (q.fsrs ?? null),
+      scheduled: advanced,
       pendingRating,
       ...(previews ? { previews } : {}),
       // XP 时间账本：本次作答的结算结果
@@ -929,7 +934,8 @@ export class LearnhubEngine {
 
   /** 复习刷卡流：答对后的自评结算（Hard/Good/Easy → FSRS 2/3/4）。
    * 前置 = 该题今天已由 deferSchedule 作答记账且调度仍挂起（stats.pending_rating）。
-   * 只推卡：不记流水、不动 stats 计数、不给 XP（XP 在作答时已结算）。 */
+   * 只推卡：不记流水、不动 stats 计数、不给 XP（XP 在作答时已结算）；
+   * 推完回刷节点聚合代表卡（refreshRepCard）。 */
   async questionRate(
     courseKey: string | undefined, node: string, qid: string, rating: number,
   ): Promise<Record<string, unknown>> {
@@ -945,13 +951,12 @@ export class LearnhubEngine {
     const fs = applyRatingBlock(q.fsrs ?? null, r, today, sched).fs
     const { pending_rating: _drop, ...statsRest } = q.stats
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats: { ...statsRest } })
-    // mastery 与全端同口径：读落盘 frontmatter 派生（口径 B），自评不额外改证据
-    const [, regionName] = graph.blockOf[node]
-    const { fm: rawFm } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
+    // 自评落盘后回刷代表卡；mastery 与全端同口径（口径 B 派生），自评本身不额外改证据
+    const fmNow = await this.refreshRepCard(c, graph, node)
     return {
       course: c.name, node, qid, rating: r,
       due: fs.due,
-      mastery: masteryOfFm(asFm(rawFm)),
+      mastery: masteryOfFm(fmNow),
       scheduled: true,
     }
   }
@@ -997,6 +1002,8 @@ export class LearnhubEngine {
       last: today,
     }
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
+    // 忘记把被忘卡的 due 拉到最近 → 代表卡拉回（最早 due 换成它）→ mastery 回落
+    const fmNow = await this.refreshRepCard(c, graph, node)
     return {
       correct: false,
       judge: 'forget',
@@ -1005,10 +1012,36 @@ export class LearnhubEngine {
       explanation: q.explanation ?? '',
       kind: q.kind,
       due: fs.due,
-      mastery: masteryOfFm(next),
+      mastery: masteryOfFm(fmNow),
       scheduled: true,
       xp: 0,
     }
+  }
+
+  /** 复习推进后回刷节点聚合代表卡：fm.fsrs = 全部未归档题里 due 最早那张的快照。
+   * 口径 B 的稳定度分量（权重 0.7）从 fm.fsrs 读，不回刷则掌握度停在完成时刻
+   * （ADR-0007 成立的前提）。节点文件仍是调度状态事实源——coursesTree / graphNode /
+   * 图着色继续只读 fm；这只是快照回写，不是新的调度入口，「每题每天一次推进」
+   * 不变量仍由题卡侧把守。代表卡没变（推的不是代表题）时不重写文件。 */
+  private async refreshRepCard(c: CourseEntry, graph: Graph, node: string): Promise<Fm | null> {
+    const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
+    let rep: FsrsBlock | null = null
+    for (const q of bank.questions) {
+      if (q.archived || !q.fsrs?.reps || !q.fsrs.due) continue
+      if (!rep || q.fsrs.due < rep.due) rep = q.fsrs
+    }
+    const [, regionName] = graph.blockOf[node]
+    const path = this.paths.courseNotePath(c.root, regionName, node)
+    const { fm: rawFm, body } = await loadNote(path)
+    const fm = asFm(rawFm)
+    if (!fm) return null
+    if (!rep) return fm
+    const cur = fm.fsrs
+    if (cur && cur.stability === rep.stability && cur.difficulty === rep.difficulty && cur.due === rep.due
+      && cur.last_review === rep.last_review && cur.reps === rep.reps && cur.lapses === rep.lapses) return fm
+    const next: Fm = { ...fm, fsrs: rep }
+    await saveNote(path, next as unknown as Record<string, unknown>, body)
+    return next
   }
 
   // ---- 节点跳过 / 完成确认 ----

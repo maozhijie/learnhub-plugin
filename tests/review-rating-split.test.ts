@@ -198,11 +198,11 @@ test('忘记与作答互斥：当天已作答（含挂起自评）再忘记 → 
 test('错误降低掌握度（口径 B）：答对推高练习证据 EMA，忘记后回落', async () => {
   await withVault([tfQuestion('a1'), tfQuestion('a2')], async engine => {
     const ok = await answer(engine, 'a1', 'true') as Record<string, unknown>
-    // 无节点卡（未完成学习）→ 稳定度项为 0；mastery = 0.3 × EMA(1.0) = 0.3
-    assert.equal(ok.mastery, 0.3)
+    // 代表卡回刷后（#52）：首答即落节点卡，mastery = 0.7×稳定度项 + 0.3×EMA(1.0)，
+    // 首学稳定度很小 → 只在三成附近（防饱和语义），但已高于纯 EMA 的 0.3
+    assert.ok((ok.mastery as number) > 0.3 && (ok.mastery as number) < 0.5, `得到 ${ok.mastery}`)
     const forgot = await engine.questionForget('数学', '入门', 'a2', 7) as Record<string, unknown>
-    // 忘记后 EMA = 1.0×0.7 = 0.7 → mastery = 0.3 × 0.7 = 0.21
-    assert.equal(forgot.mastery, 0.21)
+    // 忘记：EMA 回落（1.0×0.7=0.7）且代表卡被拉回稳定度更小的忘记卡 → mastery 整体回落
     assert.ok((forgot.mastery as number) < (ok.mastery as number))
   })
 })
