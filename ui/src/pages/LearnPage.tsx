@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import LessonView from '../components/LessonView'
 import QuestionCard, { type AnswerOutcome, toOutcome } from '../components/QuestionCard'
+import { nextBand, pickNext } from '../../../src/engine/adaptive'
 import { api } from '../api'
 import type { AppFrame } from '../App'
 import type { RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, XpStatus } from '../types'
@@ -155,7 +156,10 @@ function CourseCard(props: {
 /** 复习刷卡会话（Anki 式扁平队列）：一卡一票——正面作答或满 5 秒申报忘记
  * （按答错记证据、0 XP），背面自评 Hard/Good/Easy（带到期预览，键盘 2/3/4）即翻
  * 下一张；答错/忘记自动 Again 明天再见，当次队列不回头。出完给小结（纯展示，
- * 逐题流水已实时入账）。 */
+ * 逐题流水已实时入账）。
+ * 单节点「已调度题」会话（#57 A1）：按目标难度带流式选题——起点先验取引擎在
+ * 定向队列响应里给出的节点 Mastery 先验带，连续答对 ≥2 次升一档、答错/忘记
+ * 降回基础题；多节点/全局会话维持快照序不变。 */
 function ReviewSession(props: {
   queue: ReviewCard[]
   onClose: () => void
@@ -167,19 +171,56 @@ function ReviewSession(props: {
   const [tally, setTally] = useState({ right: 0, wrong: 0, forgot: 0, hard: 0, good: 0, easy: 0 })
   /** 当前卡背面的作答结果（自评键盘快捷键与 footer 的依据）。 */
   const [outcome, setOutcome] = useState<AnswerOutcome | null>(null)
-  const card = props.queue[idx]
+  // A1 会话内自适应（#57）：仅单节点会话启用；pending 为剩余卡，band/streak 为目标带与连对数，
+  // base 为起点先验带（答错/忘记的降档回落点），total 为会话卡数（自适应模式下取重拉队列）。
+  const singleNode = new Set(props.queue.map(c => `${c.course}/${c.node}`)).size === 1
+  const [adaptive, setAdaptive] = useState(false)
+  const [pending, setPending] = useState<ReviewCard[]>(props.queue)
+  const [total, setTotal] = useState(props.queue.length)
+  const [band, setBand] = useState(0.5)
+  const [streak, setStreak] = useState(0)
+  const [base, setBase] = useState(0)
+  useEffect(() => {
+    if (!singleNode) return
+    const head = props.queue[0]
+    if (!head) return
+    api.reviewQueue(head.course, head.node).then(doc => {
+      if (!doc.cards.length || doc.band === undefined) return
+      setAdaptive(true)
+      setPending(doc.cards)
+      setTotal(doc.cards.length)
+      setBand(doc.band)
+      setBase(doc.band)
+    }).catch(() => { /* 拉不到先验：按快照序走 */ })
+  // 会话挂载时取一次起点先验即可；后续由本组件内作答驱动
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const card = adaptive ? pickNext(pending, band) : props.queue[idx]
   const done = !card
 
   const next = () => {
     setOutcome(null)
-    setIdx(i => i + 1)
+    if (adaptive && card) setPending(list => list.filter(c => c.id !== card.id))
+    else setIdx(i => i + 1)
+  }
+
+  /** A1 选档：作答结果即时改写目标带（连对 ≥2 升一档、答错/忘记降回基础带）。 */
+  const applyBand = (ok: boolean) => {
+    const ns = nextBand(band, ok, streak, base)
+    setBand(ns.band)
+    setStreak(ns.streak)
   }
 
   const handleDone = (oc: AnswerOutcome) => {
     setOutcome(oc)
-    if (oc.correct === true) setTally(t => ({ ...t, right: t.right + 1 }))
-    else if (oc.judge === 'forget') setTally(t => ({ ...t, forgot: t.forgot + 1 }))
-    else if (oc.correct === false) setTally(t => ({ ...t, wrong: t.wrong + 1 }))
+    if (oc.correct === true) {
+      setTally(t => ({ ...t, right: t.right + 1 }))
+      if (adaptive) applyBand(true)
+    } else if (oc.judge === 'forget' || oc.correct === false) {
+      if (oc.judge === 'forget') setTally(t => ({ ...t, forgot: t.forgot + 1 }))
+      else setTally(t => ({ ...t, wrong: t.wrong + 1 }))
+      if (adaptive) applyBand(false)
+    }
     props.onSettled()
   }
 
@@ -266,7 +307,7 @@ function ReviewSession(props: {
         <Space direction='vertical' style={{ width: '100%' }} size={14}>
           <Card size='small' style={{ borderRadius: 10 }}>
             <Space direction='vertical' size={6}>
-              <Title heading={6} style={{ margin: 0 }}>本轮复习 {props.queue.length} 张</Title>
+              <Title heading={6} style={{ margin: 0 }}>本轮复习 {total} 张</Title>
               <Text type='secondary'>
                 答对 {tally.right}（Hard {tally.hard} / Good {tally.good} / Easy {tally.easy}）
                 · 忘记 {tally.forgot} · 答错 {tally.wrong}
@@ -283,7 +324,7 @@ function ReviewSession(props: {
   }
 
   return (
-    <Modal title={`复习 ${idx + 1}/${props.queue.length}`} visible footer={null} unmountOnExit
+    <Modal title={`复习 ${(adaptive ? total - pending.length : idx) + 1}/${total}`} visible footer={null} unmountOnExit
       onCancel={() => { void finish() }} style={{ width: 680 }}>
       <Space direction='vertical' style={{ width: '100%' }} size={12}>
         <Space size={8} wrap>

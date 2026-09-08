@@ -17,6 +17,9 @@ import { GraphStore, Graph, writeReadyList } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
+import { combinedDifficulty, startBand, sessionOrder } from './adaptive.ts'
+import { calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
+import { FORECAST_DAYS, calibrationBins, dueReviewFirstPushes, forecast, forgettingCurve, stateHistograms, trueRetention } from './memory.ts'
 import { runAudit, effectiveStage } from './audit.ts'
 import { analyzeGraph } from './analysis.ts'
 import type { ScaleTarget } from './quality.ts'
@@ -27,7 +30,7 @@ import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals } from './gengraph.ts'
 import type { ApplyAudit, EditOp } from './gengraph.ts'
 import { QuestionBank } from './question-bank.ts'
-import type { BankQuestion } from './question-bank.ts'
+import type { BankDoc, BankQuestion } from './question-bank.ts'
 import { YAML } from './yaml.ts'
 import { Sessions, assertNoBrokenNotes, withinStruggleWindow } from './sessions.ts'
 import type { NodeStat, WindowStat } from './sessions.ts'
@@ -193,6 +196,22 @@ export class LearnhubEngine {
     return out
   }
 
+  /** 单课程题库文件的共用遍历（bankSnapshot / difficultyAdvice / memoryHealth 消费）：
+   * 对课程根题库目录下每个 <节点>.yaml 回调 (node, bank)；无题库目录的课程静默跳过。 */
+  private async scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void> {
+    let files: string[] = []
+    try {
+      files = await readdir(this.paths.bankDir(c.root))
+    } catch {
+      return
+    }
+    const courseRoot = this.paths.courseRoot(c.root)
+    for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
+      const node = f.replace(/\.yaml$/, '')
+      await fn(node, await this.bank.load(courseRoot, node))
+    }
+  }
+
   /** 全部启用课程的题库聚合（一次遍历）：每节点 due/count/accuracy/attempts。
    * 复习队列（due/count）与 struggle 提示（accuracy）共用；未做题节点也入表
    * （accuracy=null），供推荐流判定 struggle 与面板通用轮组装。 */
@@ -201,18 +220,10 @@ export class LearnhubEngine {
     const today = todayStr()
     for (const c of await this.enabledCourses()) {
       const items: NodeStat[] = []
-      let files: string[] = []
-      try {
-        files = await readdir(this.paths.bankDir(c.root))
-      } catch {
-        out.set(c.name, items)
-        continue
-      }
-      for (const f of files.filter(f => f.endsWith('.yaml'))) {
-        const node = f.replace(/\.yaml$/, '')
-        const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
+      out.set(c.name, items)
+      await this.scanCourseBanks(c, async (node, bank) => {
         const qs = bank.questions.filter(q => !q.archived)
-        if (!qs.length) continue
+        if (!qs.length) return
         let attempts = 0
         let correct = 0
         const dues: string[] = []
@@ -228,8 +239,7 @@ export class LearnhubEngine {
           accuracy: attempts ? Math.round((correct / attempts) * 100) / 100 : null,
           attempts,
         })
-      }
-      out.set(c.name, items)
+      })
     }
     return out
   }
@@ -828,16 +838,22 @@ export class LearnhubEngine {
    * status/recommend 同一门前置。
    * node 过滤（#54 A3 R 半）= 定向复习直达入口：软闸/enc 回退建议项携带的目标
    * 节点，用它拉出「该节点到期题」子队列（作答复用 questionAnswer/自评流）。
+   * 单节点会话改走 A1 作答期难度微调（#57）：不走全局 R 排序，按节点 Mastery
+   * 先验带（band 字段随响应带出）摆开场顺序，卡片带合用难度标量 d——会话方
+   * 按即时表现以 adaptive.pickNext/nextBand 流式选下一题（连续对升档、错/忘降档）。
    * 节点不在范围内任何课程的图内时 fail loud——拼错的直达入口不该静默空队列。 */
   async reviewQueue(courseKey?: string, node?: string, today = todayStr()): Promise<Record<string, unknown>> {
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
     let nodeFound = false
+    let mastery = 0
     for (const c of courses) {
-      const { graph, broken } = await this.loadView(c)
+      const { graph, state, broken } = await this.loadView(c)
       assertNoBrokenNotes('review-queue', broken)
       if (node !== undefined) {
         if (!graph.nset.has(node)) continue // 该课程没有此节点：跨课程口径下属正常，最后统一判空
+        // 跨课程重名节点取首个命中课程的 Mastery 作先验（定向入口正常都携带 course）
+        if (!nodeFound) mastery = masteryOfFm(state[node])
         nodeFound = true
       }
       const courseRoot = this.paths.courseRoot(c.root)
@@ -857,13 +873,22 @@ export class LearnhubEngine {
           const card = this.questionView(q, i)
           if (!card.due || String(card.due) > today) return
           const r = retrievabilityBlock(sched, q.fsrs, today)
-          cards.push({ course: c.name, node: qNode, r: Math.round(r * 1000) / 1000, ...card })
+          // 合用难度标量 d（#57）：静态题面难度 + FSRS difficulty，会话内选档消费
+          cards.push({ course: c.name, node: qNode, r: Math.round(r * 1000) / 1000,
+            d: Math.round(combinedDifficulty(q.difficulty, q.fsrs) * 1000) / 1000, ...card })
         })
       }
     }
     if (node !== undefined && !nodeFound) {
       const scope = courseKey ? `课程「${courses[0]!.name}」` : '任何启用课程'
       throw new Error(`[review-queue] 节点「${node}」不在${scope}的图内。`)
+    }
+    // 单节点「已调度题」会话（#57 A1）：起点先验 = 节点 Mastery → 目标难度带，
+    // 初始顺序按距先验带距离升序（会话内流式调整由会话方以纯规则驱动）。
+    if (node !== undefined) {
+      const band = startBand(mastery)
+      return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
+        cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band) }
     }
     // 组合排序：主键 = R 分档升序，档宽 5 个百分点——到期卡 R 集中在 (0, 0.9]，
     // 档太窄则难度几乎永远排不上号，太宽则风险明显不同的卡被难度插队；档内
@@ -1324,6 +1349,41 @@ export class LearnhubEngine {
     return { goal: await writeDailyGoal(this.paths, goal) }
   }
 
+  // ---- 记忆健康仪表盘（#61 A2 / ADR-0012）----
+
+  /** 统计页四面板聚合（xpStatus 的姊妹方法，只读）：每日负载预报（扫全部启用课程
+   * 题库 q.fsrs.due，Anki Forecast 语义）、记忆状态分布（Stability/Difficulty/当前
+   * 可回忆度直方图；R 复用 reviewQueue 的 retrievabilityBlock 口径按各课程参数现算）、
+   * 真实保留率 + 预测对照 + 遗忘曲线（#60 review-log：只计 auto+self 的到期复习，
+   * synthetic 与首学推进不计入）。无数据给空态（rate=null / 计数 0），不造假数据。 */
+  async memoryHealth(today = todayStr()): Promise<Record<string, unknown>> {
+    const dues: string[] = []
+    const samples: Array<{ stability: number | null; difficulty: number | null; r: number }> = []
+    for (const c of await this.enabledCourses()) {
+      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+      await this.scanCourseBanks(c, async (_node, bank) => {
+        for (const q of bank.questions) {
+          if (q.archived || !q.fsrs?.reps || !q.fsrs.due) continue
+          dues.push(q.fsrs.due)
+          samples.push({
+            stability: q.fsrs.stability,
+            difficulty: q.fsrs.difficulty,
+            r: retrievabilityBlock(sched, q.fsrs, today),
+          })
+        }
+      })
+    }
+    const dueReviews = dueReviewFirstPushes(await this.store.reviewLogAll())
+    return {
+      date: today,
+      forecast: { horizon_days: FORECAST_DAYS, ...forecast(dues, today) },
+      state: { scheduled: samples.length, ...stateHistograms(samples) },
+      retention: trueRetention(dueReviews),
+      calibration: calibrationBins(dueReviews),
+      forgetting: forgettingCurve(dueReviews),
+    }
+  }
+
   // ---- 生成任务持久化（host 的 genJobs 内存态落盘出口；D14：文件读写收口 engine）----
 
   /** 全量写入生成任务注册表（host 在每次任务状态变更时调用）。 */
@@ -1405,6 +1465,48 @@ export class LearnhubEngine {
       }
     }
     return { total: out.length, questions: out }
+  }
+
+  // ---- B2 难度感知回流（决议 #41 / #58）----
+
+  /** 节点级只读检测：扫题库 stats（bank per-qid）+ masteryOfFm + 作答量门槛 →
+   * {低掌握校准建议, 全对归档建议} 清单，供 orchestrator/harness 在出题与题目管理
+   * 动作前消费。建议先行不自动改库——再生成走既有 question_generate/question_save
+   * 与单节重写通道，归档走题目管理的独立归档操作；practice 节点无题库天然静默；
+   * Broken 笔记 fail loud（与 status/recommend 同一门前置）。 */
+  async difficultyAdvice(courseKey?: string): Promise<{ date: string; nodes: Array<Record<string, unknown>> }> {
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const nodes: Array<Record<string, unknown>> = []
+    for (const c of courses) {
+      const { graph, state, broken } = await this.loadView(c)
+      assertNoBrokenNotes('difficulty-advice', broken)
+      await this.scanCourseBanks(c, async (node, bank) => {
+        const fm = state[node]
+        if (!fm || graph.typeOf[node] === 'practice') return // practice 节点无题库，合法空态
+        const qs = bank.questions.filter(q => !q.archived)
+        let attempts = 0
+        let correct = 0
+        for (const q of qs) {
+          attempts += q.stats?.attempts ?? 0
+          correct += q.stats?.correct ?? 0
+        }
+        const calibration = calibrationAdvice({
+          stage: effectiveStage(state, node),
+          attempts,
+          accuracy: attempts ? correct / attempts : null,
+          mastery: masteryOfFm(fm),
+          bloom: graph.bloomOf[node],
+        })
+        const tooEasy = tooEasyAdvice(qs)
+        if (!calibration && !tooEasy.length) return
+        nodes.push({
+          course: c.name, node,
+          ...(calibration ? { calibration } : {}),
+          ...(tooEasy.length ? { too_easy: tooEasy } : {}),
+        })
+      })
+    }
+    return { date: todayStr(), nodes }
   }
 
   async questionAdd(courseKey: string, node: string, question: Record<string, unknown>): Promise<{ course: string; node: string; id: string; count: number }> {

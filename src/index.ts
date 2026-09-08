@@ -661,7 +661,8 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
     }
     if (req.method === 'GET' && route === '/review-queue') {
       // 复习刷卡队列：跨课程到期题扁平队列，按预测遗忘风险 R 升序为主（r 字段随卡带出，#56）；
-      // node 过滤 = 定向复习直达入口（A3 软闸/enc 回退建议项指向的目标节点，#54/#55）
+      // node 过滤 = 定向复习直达入口（A3 软闸/enc 回退建议项指向的目标节点，#54/#55），
+      // 单节点会话按 Mastery 先验带自适应排序（band + 每卡 d，#57 A1）
       const course = url.searchParams.get('course') ?? undefined
       const node = url.searchParams.get('node') ?? undefined
       sendJson(res, 200, await apiRun('api/review-queue', () => engine.reviewQueue(course, node)))
@@ -669,6 +670,11 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
     }
     if (req.method === 'GET' && route === '/xp') {
       sendJson(res, 200, await apiRun('api/xp', () => engine.xpStatus()))
+      return
+    }
+    if (req.method === 'GET' && route === '/memory') {
+      // 记忆健康仪表盘（#61）：负载预报/状态分布/真实保留率/遗忘曲线四面板聚合
+      sendJson(res, 200, await apiRun('api/memory', () => engine.memoryHealth()))
       return
     }
     if (req.method === 'GET' && route === '/generate/status') {
@@ -940,10 +946,10 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { limit?: number }) => run('learnhub_recommend', async () =>
       JSON.stringify(await engine.recommend(args.limit === undefined ? 5 : args.limit))))
   tool('learnhub_review_queue',
-    'List the cross-course due review cards as JSON (Anki-style; sorted by predicted recall risk R ascending, r carried per card; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue. Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. Unknown node names fail loud.',
+    'List the cross-course due review cards as JSON (Anki-style; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue: cards sort by predicted recall risk R ascending (r carried per card). Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. A single-node session is ADAPTIVELY ordered (A1 difficulty tuning): cards carry a combined difficulty scalar d and the response carries the node-mastery start band — present cards nearest that band first; during the session shift the band up one step after every second consecutive correct answer and drop it back toward the base after a wrong/forgot, re-picking the nearest-d remaining card each time. Unknown node names fail loud.',
     {
       course: { type: 'string', description: 'Course name; omit for all enabled courses' },
-      node: { type: 'string', description: 'Node name filter — targeted review of this node\'s due questions (A3 advice direct entry)' },
+      node: { type: 'string', description: 'Node name filter — targeted review of this node\'s due questions (A3 advice direct entry; adaptive difficulty order)' },
     },
     (args: { course?: string; node?: string }) => run('learnhub_review_queue', async () =>
       JSON.stringify(await engine.reviewQueue(args.course, args.node))))
@@ -1064,6 +1070,11 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { course: { type: 'string', required: true, description: 'Course name' } },
     (args: { course: string }) => run('learnhub_course_delete', async () =>
       JSON.stringify(await engine.courseDelete(args.course))))
+  tool('learnhub_difficulty_advice',
+    'Detect difficulty-mismatch advice across question banks (B2, read-only, advice-first — nothing is written): nodes in review/mastered with low derived mastery + struggling answer accuracy + enough answer volume get a "difficulty band miscalibrated, regenerate" suggestion carrying a difficulty/bloom target-band instruction (feed it to learnhub_question_generate or the section-rewrite flow, validateBank gate applies); individual questions answered 100% correctly enough times get a "too easy, archivable" annotation suggestion (archiving is the author/panel decision via learnhub_question_update archived patch — never silent removal). Low data stays silent.',
+    { course: { type: 'string', description: 'Course name; omit to scan all enabled courses' } },
+    (args: { course?: string }) => run('learnhub_difficulty_advice', async () =>
+      JSON.stringify(await engine.difficultyAdvice(args.course))))
   tool('learnhub_question_generate',
     'Generate quiz questions for a node via the model — the same pipeline as the auto-quiz: node body → question prompt → llm → validateBank gate appends every question to the bank. Use when a node has no/too few questions.',
     {
@@ -1191,7 +1202,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 28 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 29 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

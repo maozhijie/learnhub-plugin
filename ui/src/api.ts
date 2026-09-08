@@ -58,9 +58,9 @@ export const api = {
   /** 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）。 */
   questionForget: (course: string, node: string, qid: string, elapsedS?: number) =>
     http<import('./types').AnswerResult>('POST', '/question-forget', { course, node, qid, elapsed_s: elapsedS }),
-  /** 复习刷卡队列：跨课程到期题扁平队列，按到期日升序。 */
-  reviewQueue: (course?: string) =>
-    http<import('./types').ReviewQueueDoc>('GET', `/review-queue${q({ course })}`),
+  /** 复习刷卡队列：跨课程到期题扁平队列；node 过滤 = 单节点定向复习（响应带 Mastery 先验带 band，#57）。 */
+  reviewQueue: (course?: string, node?: string) =>
+    http<import('./types').ReviewQueueDoc>('GET', `/review-queue${q({ course, node })}`),
   nodeSkip: (course: string, node: string, skipped = true) =>
     http<{ course: string; node: string; stage: string }>('POST', '/node/skip', { course, node, skipped }),
   nodeComplete: (course: string, node: string, force = false) =>
@@ -86,6 +86,8 @@ export const api = {
   interactiveSettle: (course: string, node: string, section: string, score: number, detail?: string) =>
     http<{ settled: boolean; mastery: number }>('POST', '/interactive/settle', { course, node, section, score, detail }),
   xp: () => http<import('./types').XpStatus>('GET', '/xp'),
+  /** 记忆健康仪表盘（#61）：负载预报/状态分布/真实保留率/遗忘曲线四面板。 */
+  memory: () => http<import('./types').MemoryHealth>('GET', '/memory'),
   setDailyGoal: (goal: number) => http<{ goal: number }>('PUT', '/daily-goal', { goal }),
   review: (course: string, node: string) => http<{ message: string }>('POST', '/review', { course, node }),
   feedback: (path: string) => http<{ message: string }>('POST', '/feedback', { path }),

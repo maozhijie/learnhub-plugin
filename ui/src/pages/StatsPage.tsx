@@ -1,17 +1,194 @@
 /** 统计页：各课程阶段统计（未学 = unseen+ready；复习到期 = 有到期题目的节点）
  * + XP 时间账本（今日 XP / streak / 每日目标编辑）+ 每课程预计完成天数
- * （剩余节点 × 每节点 XP ÷ 每日目标，Math Academy 语义）。 */
+ * （剩余节点 × 每节点 XP ÷ 每日目标，Math Academy 语义）
+ * + 记忆健康仪表盘（#61 A2 四面板：每日负载预报 / 记忆状态分布 / 真实保留率 /
+ * 遗忘曲线；随复习日志积累填充，无数据给空态引导，不造假数据）。 */
 import { Button, Card, InputNumber, Message, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { toastError } from '../App'
 import type { AppFrame } from '../App'
-import type { XpStatus } from '../types'
+import type { HistogramBin, MemoryHealth, XpStatus } from '../types'
 
 const { Text } = Typography
 
+const EMPTY_HINT = '暂无足够复习数据，继续学习将自动填充'
+
+/** 横向直方图（纯 div 条形，无图表库依赖）：label + 比例条 + 计数。 */
+function HBars({ bins }: { bins: HistogramBin[] }) {
+  const max = Math.max(1, ...bins.map(b => b.count))
+  return (
+    <div style={{ display: 'grid', gap: 3 }}>
+      {bins.map(b => (
+        <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Text type='secondary' style={{ fontSize: 11, width: 58, flexShrink: 0 }}>{b.label}</Text>
+          <div style={{ flex: 1, height: 8, background: 'var(--color-fill-2,#f2f3f5)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ width: `${(b.count / max) * 100}%`, height: '100%', background: 'var(--color-primary-light-3,#bedaff)' }} />
+          </div>
+          <Text style={{ fontSize: 11, width: 28, textAlign: 'right' }}>{b.count}</Text>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** 逐日负载条形（Anki Forecast 式竖条，hover 看日期）。 */
+function DayBars({ perDay }: { perDay: Array<{ d: string; count: number }> }) {
+  const max = Math.max(1, ...perDay.map(p => p.count))
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 84 }}>
+      {perDay.map(p => (
+        <div key={p.d} title={`${p.d}：${p.count} 道到期`}
+          style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'flex-end', minWidth: 3 }}>
+          <div style={{
+            width: '100%', height: `${Math.max(p.count ? 4 : 1, (p.count / max) * 100)}%`,
+            background: p.count ? 'var(--color-primary-4,#4080ff)' : 'var(--color-fill-2,#f2f3f5)',
+            borderRadius: 2,
+          }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** 保留率曲线（横向条形，按保留率比例着色）。 */
+function RateBars({ rows }: { rows: Array<{ label: string; n: number; rate: number | null }> }) {
+  const hasData = rows.some(r => r.rate !== null)
+  if (!hasData) return <Text type='secondary' style={{ fontSize: 12 }}>{EMPTY_HINT}</Text>
+  return (
+    <div style={{ display: 'grid', gap: 3 }}>
+      {rows.map(r => (
+        <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Text type='secondary' style={{ fontSize: 11, width: 64, flexShrink: 0 }}>{r.label}</Text>
+          <div style={{ flex: 1, height: 8, background: 'var(--color-fill-2,#f2f3f5)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{
+              width: `${(r.rate ?? 0) * 100}%`, height: '100%',
+              background: (r.rate ?? 0) >= 0.8 ? 'var(--color-success-3,#00b42a)'
+                : (r.rate ?? 0) >= 0.6 ? 'var(--color-warning-3,#ff7d00)' : 'var(--color-danger-3,#f53f3f)',
+            }} />
+          </div>
+          <Text style={{ fontSize: 11, width: 64, textAlign: 'right' }}>
+            {r.rate === null ? '—' : `${Math.round(r.rate * 100)}%（${r.n} 次）`}
+          </Text>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** 记忆健康仪表盘（四面板；数据源 GET /memory，聚合口径见 engine/memory.ts）。 */
+function MemoryHealthCard({ mem }: { mem: MemoryHealth | null }) {
+  if (mem === null) {
+    return (
+      <Card size='small' title='记忆健康' style={{ borderRadius: 10 }}>
+        <Text type='secondary'>加载中…</Text>
+      </Card>
+    )
+  }
+  const noCards = mem.state.scheduled === 0
+  const calibration = mem.calibration.filter(b => b.n > 0)
+  return (
+    <Card size='small' title='记忆健康' style={{ borderRadius: 10 }}
+      extra={<Text type='secondary' style={{ fontSize: 12 }}>真实作答口径——合成首复习不计入</Text>}>
+      {noCards ? (
+        <Text type='secondary'>{EMPTY_HINT}</Text>
+      ) : (
+        <Space direction='vertical' style={{ width: '100%' }} size={16}>
+          {/* 1 · 每日负载预报 */}
+          <div>
+            <Space size={8} style={{ marginBottom: 6 }}>
+              <Text style={{ fontWeight: 600 }}>每日负载预报</Text>
+              <Text type='secondary' style={{ fontSize: 12 }}>
+                未来 {mem.forecast.horizon_days} 天（假设不再学新卡且不遗忘）
+              </Text>
+              {mem.forecast.overdue > 0 && <Tag size='small' color='red'>逾期 {mem.forecast.overdue}</Tag>}
+            </Space>
+            <DayBars perDay={mem.forecast.per_day} />
+          </div>
+          {/* 2 · 记忆状态分布 */}
+          <div>
+            <Text style={{ fontWeight: 600 }}>记忆状态分布</Text>
+            <Text type='secondary' style={{ fontSize: 12 }}>（{mem.state.scheduled} 张已调度题卡，跨课程聚合）</Text>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16, marginTop: 8 }}>
+              <div>
+                <Text type='secondary' style={{ fontSize: 12 }}>记忆强度（Stability，天）</Text>
+                <HBars bins={mem.state.stability} />
+              </div>
+              <div>
+                <Text type='secondary' style={{ fontSize: 12 }}>题目难度（FSRS Difficulty）</Text>
+                <HBars bins={mem.state.difficulty} />
+              </div>
+              <div>
+                <Text type='secondary' style={{ fontSize: 12 }}>当前可回忆度（R）</Text>
+                <HBars bins={mem.state.retrievability} />
+              </div>
+            </div>
+          </div>
+          {/* 3 · 真实保留率 + 预测 vs 真实 */}
+          <div>
+            <Space size={8} style={{ marginBottom: 6 }}>
+              <Text style={{ fontWeight: 600 }}>真实保留率</Text>
+              <Text type='secondary' style={{ fontSize: 12 }}>
+                到期复习（每卡每天取第一次推进）实际答对的比例；只统计真实作答
+              </Text>
+            </Space>
+            {mem.retention.real === 0 ? (
+              <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>{EMPTY_HINT}</Text>
+            ) : (
+              <Space size={24} wrap style={{ marginBottom: 8 }}>
+                <div>
+                  <Text style={{ fontWeight: 600, fontSize: 18 }}>{Math.round((mem.retention.rate ?? 0) * 100)}%</Text>
+                  <Text type='secondary' style={{ fontSize: 12 }}> 真实保留率</Text>
+                </div>
+                <div>
+                  <Text style={{ fontWeight: 600, fontSize: 18 }}>{mem.retention.pass}</Text>
+                  <Text type='secondary' style={{ fontSize: 12 }}> 答对</Text>
+                </div>
+                <div>
+                  <Text style={{ fontWeight: 600, fontSize: 18 }}>{mem.retention.fail}</Text>
+                  <Text type='secondary' style={{ fontSize: 12 }}> 答错/忘记</Text>
+                </div>
+              </Space>
+            )}
+            {calibration.length > 0 && (
+              <div>
+                <Text type='secondary' style={{ fontSize: 12 }}>预测 vs 真实（按 FSRS 自预测保留率分箱）</Text>
+                <div style={{ display: 'grid', gap: 3, marginTop: 4 }}>
+                  {calibration.map(b => (
+                    <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Text type='secondary' style={{ fontSize: 11, width: 70, flexShrink: 0 }}>预测 {b.label}</Text>
+                      <div style={{ flex: 1, height: 8, background: 'var(--color-fill-2,#f2f3f5)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${(b.actual ?? 0) * 100}%`, height: '100%',
+                          background: 'var(--color-primary-4,#4080ff)',
+                        }} />
+                      </div>
+                      <Text style={{ fontSize: 11, width: 64, textAlign: 'right' }}>
+                        实际 {Math.round((b.actual ?? 0) * 100)}%（{b.n} 次）
+                      </Text>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* 4 · 按时点遗忘曲线 */}
+          <div>
+            <Text style={{ fontWeight: 600 }}>按时点遗忘曲线</Text>
+            <Text type='secondary' style={{ fontSize: 12 }}>（到期复习按间隔分桶的实际保留率）</Text>
+            <div style={{ marginTop: 8 }}>
+              <RateBars rows={mem.forgetting} />
+            </div>
+          </div>
+        </Space>
+      )}
+    </Card>
+  )
+}
+
 export default function StatsPage({ frame }: { frame: AppFrame }) {
   const [xp, setXp] = useState<XpStatus | null>(null)
+  const [mem, setMem] = useState<MemoryHealth | null>(null)
   const [goal, setGoal] = useState<number>(30)
   const [saving, setSaving] = useState(false)
 
@@ -19,6 +196,7 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
     const doc = await api.xp().catch(() => null)
     setXp(doc)
     if (doc) setGoal(doc.goal)
+    setMem(await api.memory().catch(() => null))
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -44,6 +222,8 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
 
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
+      <MemoryHealthCard mem={mem} />
+
       <Card size='small' title='XP 时间账本' style={{ borderRadius: 10 }}
         extra={xp && (
           <Space size={8}>

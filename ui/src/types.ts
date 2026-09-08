@@ -183,12 +183,21 @@ export interface AnswerResult {
   xp_reason?: 'correct' | 'wrong' | 'guess' | 'repeat'
 }
 
-/** 复习刷卡队列条目（跨课程到期题扁平队列；QuestionItem 的超集）。 */
+/** 复习刷卡队列条目（跨课程到期题扁平队列；QuestionItem 的超集）。
+ * d = 合用难度标量（静态题面难度 + FSRS difficulty，0-1；#57 会话内选档消费）。 */
 export interface ReviewCard extends QuestionItem {
   course: string
   node: string
+  r?: number
+  d: number
 }
-export interface ReviewQueueDoc { date: string; total: number; cards: ReviewCard[] }
+export interface ReviewQueueDoc {
+  date: string
+  total: number
+  cards: ReviewCard[]
+  /** 单节点定向复习会话的起点难度带（节点 Mastery 先验；#57 A1）。 */
+  band?: number
+}
 
 /** 每课程 ETA（剩余节点 × 每节点 XP ÷ 每日目标）。 */
 export interface EtaItem { course: string; remaining: number; done: number; per_node: number; days: number }
@@ -200,4 +209,21 @@ export interface XpStatus {
   goal: number
   streak: number
   eta: EtaItem[]
+}
+
+/** 记忆健康仪表盘（GET /memory，#61 A2）。 */
+export interface HistogramBin { label: string; count: number }
+export interface MemoryHealth {
+  date: string
+  forecast: { horizon_days: number; overdue: number; per_day: Array<{ d: string; count: number }> }
+  state: {
+    scheduled: number
+    stability: HistogramBin[]
+    difficulty: HistogramBin[]
+    retrievability: HistogramBin[]
+  }
+  /** 真实保留率（True Retention）：只计 auto+self 的到期复习；real=0 时 rate 为 null（空态）。 */
+  retention: { pass: number; fail: number; rate: number | null; real: number }
+  calibration: Array<{ label: string; pred: number; actual: number | null; n: number }>
+  forgetting: Array<{ label: string; n: number; rate: number | null }>
 }
