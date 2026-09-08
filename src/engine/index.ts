@@ -16,7 +16,7 @@ import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
-import { getScheduler, applyRatingBlock, masteryOfFm, previewDue } from './srs.ts'
+import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievability } from './srs.ts'
 import { runAudit, effectiveStage } from './audit.ts'
 import { analyzeGraph } from './analysis.ts'
 import type { ScaleTarget } from './quality.ts'
@@ -752,9 +752,12 @@ export class LearnhubEngine {
     }
   }
 
-  /** 复习刷卡队列（Anki 式）：全部启用课程中「到期未刷」的未归档题，扁平按 due 升序
-   * （同日按节点名、题序稳定排序）；不含从未调度的新题（due=null，入口在学习流）。
-   * Broken 笔记 fail loud——与 status/recommend 同一门前置。 */
+  /** 复习刷卡队列（Anki 式）：全部启用课程中「到期未刷」的未归档题，扁平按
+   * 「预测遗忘风险 R 升序」为主排序（R 最低 = 最可能忘，先刷；#56 A1），同 R 档
+   * 内难度由易到难渐进，再按 due/节点/题序稳定排序；不含从未调度的新题
+   * （due=null，入口在学习流）。R 在各课程自己的调度器参数下现算并随卡带出
+   * （r 字段，供面板显示预测回忆率）。Broken 笔记 fail loud——与
+   * status/recommend 同一门前置。 */
   async reviewQueue(courseKey?: string, today = todayStr()): Promise<Record<string, unknown>> {
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
@@ -762,6 +765,7 @@ export class LearnhubEngine {
       const { broken } = await this.loadView(c)
       assertNoBrokenNotes('review-queue', broken)
       const courseRoot = this.paths.courseRoot(c.root)
+      const sched = await getScheduler(this.paths, courseRoot)
       let files: string[] = []
       try {
         files = await readdir(this.paths.bankDir(c.root))
@@ -775,12 +779,19 @@ export class LearnhubEngine {
           if (q.archived) return
           const card = this.questionView(q, i)
           if (!card.due || String(card.due) > today) return
-          cards.push({ course: c.name, node, ...card })
+          const r = retrievability(sched, { fsrs: q.fsrs } as unknown as Fm, today)
+          cards.push({ course: c.name, node, r: Math.round(r * 1000) / 1000, ...card })
         })
       }
     }
+    // 组合排序：主键 = R 分档升序，档宽 5 个百分点——到期卡 R 集中在 (0, 0.9]，
+    // 档太窄则难度几乎永远排不上号，太宽则风险明显不同的卡被难度插队；档内
+    // 难度由易到难（同风险下先易后难热身），再 due/节点/题序兜底保证稳定。
+    const band = (r: number) => Math.floor(r / 0.05)
     cards.sort((a, b) =>
-      String(a.due).localeCompare(String(b.due))
+      band(a.r as number) - band(b.r as number)
+      || (a.difficulty as number) - (b.difficulty as number)
+      || String(a.due).localeCompare(String(b.due))
       || String(a.node).localeCompare(String(b.node))
       || String(a.id).localeCompare(String(b.id)))
     return { date: today, total: cards.length, cards }

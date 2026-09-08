@@ -207,7 +207,7 @@ test('错误降低掌握度（口径 B）：答对推高练习证据 EMA，忘�
   })
 })
 
-test('reviewQueue：只含到期未归档卡，按 due 升序、同日按题序稳定排序', async () => {
+test('reviewQueue：只含到期未归档卡，同稳定度同 due 仍按题序稳定排序', async () => {
   await withVault([
     tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 3, lapses: 0 } }),
     tfQuestion('a2', { fsrs: { stability: 5, difficulty: 5, due: FUTURE, last_review: PAST, reps: 1, lapses: 0 } }),
@@ -224,6 +224,23 @@ test('reviewQueue：只含到期未归档卡，按 due 升序、同日按题序�
     assert.equal(cards[0].kind, 'true_false')
     const all = await engine.reviewQueue() as Record<string, unknown>
     assert.equal(all.total, 2, '全课程口径一致')
+  })
+})
+
+test('reviewQueue：主排序 = 预测遗忘风险 R 升序（同 due 短稳定度先刷），同档内难度渐进', async () => {
+  await withVault([
+    tfQuestion('long', { fsrs: { stability: 30, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
+    tfQuestion('fragile', { fsrs: { stability: 1, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
+    tfQuestion('easy', { fsrs: { stability: 1, difficulty: 1, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
+  ], async engine => {
+    const r = await engine.reviewQueue('数学') as Record<string, unknown>
+    assert.equal(r.total, 3, '全部到期卡都在队列')
+    const cards = r.cards as Array<Record<string, unknown>>
+    // fragile 与 long 同 due 同难度：短稳定度 R 更低 → 先刷；easy 与 fragile 同 R 档 → 难度低的先
+    assert.deepEqual(cards.map(c => c.id), ['easy', 'fragile', 'long'])
+    const rs = cards.map(c => c.r) as number[]
+    assert.ok(rs.every(x => typeof x === 'number' && x >= 0 && x <= 1), 'r 随卡带出')
+    assert.ok((cards[2].r as number) > (cards[1].r as number), 'long 的预测回忆率更高')
   })
 })
 

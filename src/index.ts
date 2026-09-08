@@ -660,7 +660,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       return
     }
     if (req.method === 'GET' && route === '/review-queue') {
-      // 复习刷卡队列：跨课程到期题扁平队列（面板复习会话消费）
+      // 复习刷卡队列：跨课程到期题扁平队列，按预测遗忘风险 R 升序为主（r 字段随卡带出，#56）
       const course = url.searchParams.get('course') ?? undefined
       sendJson(res, 200, await apiRun('api/review-queue', () => engine.reviewQueue(course)))
       return
