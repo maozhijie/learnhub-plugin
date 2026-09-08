@@ -31,6 +31,20 @@ export function startBand(mastery: number): number {
   return 0.2 + 0.6 * clamp01(mastery)
 }
 
+/** 显式难度带偏好（E5 #65）：学习者在会话开始时选的带，作为 A1 自动选题的带权
+ * 偏好——选挑战抬高当次目标带、选简单放宽、标准/不选 = 纯 A1 自动（偏移 0）。 */
+export type BandPref = 'easy' | 'standard' | 'hard'
+
+/** 带权偏移量：作用于起点先验带（它同时也是答错/忘记的防挫回落点）——合意困难
+ * 仍可成功完成；A1 的连对升档 / 错忘降档语义在偏移后的带上原样生效。 */
+export const BAND_PREF_OFFSET = 0.2
+
+export function bandOffset(pref?: BandPref): number {
+  if (pref === 'easy') return -BAND_PREF_OFFSET
+  if (pref === 'hard') return BAND_PREF_OFFSET
+  return 0
+}
+
 /** 连对升档的台阶（0–1 刻度）。 */
 export const BAND_STEP_UP = 0.2
 

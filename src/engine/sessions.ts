@@ -18,6 +18,8 @@ import type { Fm, Stage } from './types.ts'
 import type { Paths } from './paths.ts'
 import { DIAGNOSTIC_SCORE, diagnosticView } from './attribution.ts'
 import type { DiagnosticItem } from './attribution.ts'
+import { newLessonRationale, pinHeadScore, todayPins } from './goals.ts'
+import type { PinRec } from './goals.ts'
 
 /** 单课调度素材的统一视图参数。 */
 export interface ViewSource {
@@ -277,6 +279,8 @@ export class Sessions {
     windowStats?: Map<string, Map<string, WindowStat>>,
     /** 内容诊断建议项（#69 B1；门面 diagnosticsAdvice 的产出，per course 过滤后消费）。 */
     diagnostics?: DiagnosticItem[],
+    /** 「今天学它」pin 清单（#67 E3；全量，函数内只取当日有效条目）。 */
+    pins?: PinRec[],
   ): Promise<Array<Record<string, unknown>>> {
     const events: Array<Record<string, unknown>> = []
     const seen = new Set<string>()
@@ -363,13 +367,16 @@ export class Sessions {
       const lru = regionLru(graph, state)
       const lruBonus = new Map(lru.map((r0, i) => [r0, Math.max(0, 8 - i * 2)]))
       const ready = readySet(graph, state, rValue)
-      const unlockedCount: Record<string, number> = {}
-      for (const n of ready) {
-        for (const p of graph.preOf[n]) unlockedCount[p] = (unlockedCount[p] ?? 0) + 1
-      }
+      const done = doneSet(graph, state)
+      const started = new Set([...done, ...learningSet(graph, state)])
+      // 「学好可解锁 N 个后继」的真实语义：学会本节后，那些唯一卡在本节的未开始
+      // 节点（其余非 opt 前置均已通过）会进入可学集合。opt 前置不算门槛。
+      const unlocksOf = (n: string): number => graph.names.filter(m =>
+        !started.has(m) && graph.preOf[m].includes(n)
+        && graph.preOf[m].every(p => p === n || graph.opt.has(p) || done.has(p))).length
       for (const n of ready) {
         const region = graph.blockOf[n][1]
-        const unlocks = unlockedCount[n] ?? 0
+        const unlocks = unlocksOf(n)
         const gate = st.advice[n]
         if (gate?.length) {
           const top = gate[0]!
@@ -378,10 +385,9 @@ export class Sessions {
             gate)
           continue
         }
-        const parts: string[] = []
-        if (unlocks) parts.push(`学好可解锁 ${unlocks} 个后继`)
-        parts.push(`「${region}」区${lru.length && lru[0] === region ? '最久未学，轮转优先' : '按轮转排序'}`)
-        add('new', n, 30 + Math.min(unlocks * 4, 16) + (lruBonus.get(region) ?? 0), parts.join('；'))
+        // rationale（#67 E3）：既有信号（解锁数/区轮转）升级为一句自然语句
+        add('new', n, 30 + Math.min(unlocks * 4, 16) + (lruBonus.get(region) ?? 0),
+          newLessonRationale(unlocks, region, lru.length > 0 && lru[0] === region))
       }
       // B1（#69）：本课程的内容诊断建议项——节点已有事件则附着，否则独立 diagnostic
       // 事件（score 介于 new 与 review 之间）。每节点合一条，diagnostics 数组内联
@@ -400,6 +406,43 @@ export class Sessions {
           path: this.notePath(c.root, graph, node),
           hasContent: hasReadyContent(state[node]),
           diagnostics: view,
+        })
+      }
+      // E3（#67）：本课程当日 pin 的目标覆盖层——置顶到课程内榜首（分数 = 课程内
+      // 最高分 + 1，跨课程仍按全局排序语义），附「你选了它」标识与正常理由。pin
+      // 只作用当日（过期条目 todayPins 已滤掉）。未就绪节点照常可 pin：软闸建议
+      // 随事件带出（提示前置未完成但保留照开自由，无硬拦）；无事件的节点合成
+      // pin 事件（已学/学中/未开始按 stage 给理由）。
+      for (const pin of todayPins(pins ?? [], today).filter(p => p.course === c.name)) {
+        const head = pinHeadScore(events as Array<{ course: string; score: number }>, c.name)
+        const hit = events.find(e => e.course === c.name && e.node === pin.node)
+        if (hit) {
+          hit.score = head
+          hit.pinned = true
+          const gate = (hit as { advice?: AdviceItem[] }).advice
+          // 未就绪 pin 保留照开自由：榜首带字面「前置未完成」提示（#54 软闸语义）
+          hit.why = gate?.length
+            ? `你选了它 · 前置未完成：${gate[0]!.node}（可先复习，仍可直接学）· ${hit.why}`
+            : `你选了它 · ${hit.why}`
+          continue
+        }
+        const gate = st.advice[pin.node]
+        const stage = effectiveStage(state, pin.node)
+        const due = dueCountOf(pin.node)
+        const why = gate?.length
+          ? `你选了它 · 前置未完成：${gate[0]!.node}（可先复习它的 ${gate[0]!.due} 道到期题，仍可直接学）`
+          : stage === 'learning'
+            ? '你选了它 · 学到一半，继续完成它'
+            : ['review', 'mastered'].includes(stage)
+              ? `你选了它 · 巩固已学${due ? `（${due} 道题到期）` : ''}`
+              : '你选了它 · 今天学它'
+        events.push({
+          type: 'pin', course: c.name, node: pin.node,
+          region: graph.blockOf[pin.node]?.[1] ?? '', score: head, why,
+          path: this.notePath(c.root, graph, pin.node),
+          hasContent: hasReadyContent(state[pin.node]),
+          pinned: true,
+          ...(gate?.length ? { advice: gate } : {}),
         })
       }
     }

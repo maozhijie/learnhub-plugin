@@ -17,7 +17,12 @@ import { GraphStore, Graph, writeReadyList } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
-import { combinedDifficulty, startBand, sessionOrder } from './adaptive.ts'
+import { bandOffset, combinedDifficulty, startBand, sessionOrder } from './adaptive.ts'
+import type { BandPref } from './adaptive.ts'
+import { JOL_PREDICTIONS, JOL_SAMPLE_RATE, jolCalibration, jolDeviatedKeys, pickJolTargets } from './jol.ts'
+import type { JolPrediction } from './jol.ts'
+import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, withinCoachWindow } from './coach.ts'
+import type { BandRec } from './coach.ts'
 import { calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
 import { bindingImpl, defaultParams, OPTIMIZE_MIN_REVIEWS, FSRS6_PARAM_COUNT, sequenceReviews, trainingSequences } from './optimize.ts'
 import type { OptimizerImpl } from './optimize.ts'
@@ -92,6 +97,8 @@ export class LearnhubEngine {
   readonly proposals: GraphProposals
   readonly bank: QuestionBank
   readonly sessions: Sessions
+  /** JOL 抽查的随机源（#66 E4）：可注入播种（测试确定性；运行时 Math.random）。 */
+  jolRng: () => number = Math.random
 
   constructor(config: EngineConfig) {
     const centerRel = (config.centerRel ?? '学习中心').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
@@ -189,9 +196,37 @@ export class LearnhubEngine {
   }
 
   async recommend(limit = 5): Promise<Record<string, unknown>> {
-    const [stats, window, diagnostics] = await Promise.all([this.bankSnapshot(), this.struggleWindow(), this.diagnosticsAdvice()])
-    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, todayStr(), limit, window, diagnostics)
+    const [stats, window, diagnostics, pins] = await Promise.all([
+      this.bankSnapshot(), this.struggleWindow(), this.diagnosticsAdvice(), this.store.loadPins(),
+    ])
+    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, todayStr(), limit, window, diagnostics, pins)
     return { date: todayStr(), events }
+  }
+
+  // ---- 「今天学它」pin（E3 #67 / ADR-0009 Learner Output）----
+
+  /** pin 节点为今日推荐榜首：只改推荐读侧排序（课程内置顶、跨课按全局语义），
+   * 保留就绪提示——未就绪节点不拒绝，软闸建议随事件带出。仅作用当日，次日自动
+   * 失效；同一课程可叠加多个 pin（按 pin 序依次置顶）。节点不在图内 fail loud；
+   * 写入时顺带清理过期条目。零调度副作用（不碰 canonical/XP/掌握度）。 */
+  async pinToday(courseKey: string | undefined, node: string, today = todayStr()): Promise<{ course: string; node: string; date: string }> {
+    const c = await this.registry.resolve(courseKey)
+    const { graph, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[pin] 节点「${node}」不在课程「${c.name}」的图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'pin')
+    const rest = (await this.store.loadPins())
+      .filter(p => p.date === today && !(p.course === c.name && p.node === node))
+    await this.store.savePins([...rest, { course: c.name, node, date: today }])
+    return { course: c.name, node, date: today }
+  }
+
+  /** 取消 pin：移除该课程+节点的全部 pin（含过期条目），写入时顺带清理过期清单。 */
+  async unpinToday(courseKey: string | undefined, node: string, today = todayStr()): Promise<{ course: string; node: string; pinned: false }> {
+    const c = await this.registry.resolve(courseKey)
+    const rest = (await this.store.loadPins())
+      .filter(p => p.date === today && !(p.course === c.name && p.node === node))
+    await this.store.savePins(rest)
+    return { course: c.name, node, pinned: false }
   }
 
   /** B1 内容诊断（#69，信号层建议先行）：逐启用课程逐节评估 R1（单题 lapses≥3）/
@@ -919,8 +954,16 @@ export class LearnhubEngine {
    * 单节点会话改走 A1 作答期难度微调（#57）：不走全局 R 排序，按节点 Mastery
    * 先验带（band 字段随响应带出）摆开场顺序，卡片带合用难度标量 d——会话方
    * 按即时表现以 adaptive.pickNext/nextBand 流式选下一题（连续对升档、错/忘降档）。
+   * bandPref（#65 E5）：显式难度带选择作为 A1 的带权偏好——挑战抬高当次目标带、
+   * 简单放宽、标准/不选与 #57 默认完全一致；偏移作用于起点先验带（防挫回落点），
+   * 连对升档/错忘降档语义不变。只对单节点会话生效（A1 边界）。
+   * JOL 抽查（#66 E4）：按抽样率（默认约 1/3，可全局关闭）标记本批应弹预测的卡
+   * （jol 字段）——选卡优先到期边界/难度中段/曾有预测偏差，UI 据此只在选中卡上
+   * 问一档三点；预测本身随作答/忘记经 questionAnswer/questionForget 落流水。
    * 节点不在范围内任何课程的图内时 fail loud——拼错的直达入口不该静默空队列。 */
-  async reviewQueue(courseKey?: string, node?: string, today = todayStr()): Promise<Record<string, unknown>> {
+  async reviewQueue(
+    courseKey?: string, node?: string, today = todayStr(), bandPref?: BandPref,
+  ): Promise<Record<string, unknown>> {
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
     let nodeFound = false
@@ -961,10 +1004,27 @@ export class LearnhubEngine {
       const scope = courseKey ? `课程「${courses[0]!.name}」` : '任何启用课程'
       throw new Error(`[review-queue] 节点「${node}」不在${scope}的图内。`)
     }
-    // 单节点「已调度题」会话（#57 A1）：起点先验 = 节点 Mastery → 目标难度带，
-    // 初始顺序按距先验带距离升序（会话内流式调整由会话方以纯规则驱动）。
+    // JOL 抽查标记（#66 E4）：全局开关关闭或空队列时静默；否则按抽样率选卡、
+    // 随卡带 jol 标记（UI 只在选中卡的翻面前弹一档三点，可忽略）。偏差重探按
+    // 「课程/节点/题id」复合键对齐（qid 只在节点题库内唯一）。
+    const jol = await this.jolConfig()
+    if (jol.enabled && cards.length) {
+      const deviated = jolDeviatedKeys(await this.store.practiceAll())
+      const candidates = cards.map(c => ({
+        key: `${c.course}/${c.node}/${String(c.id)}`,
+        r: c.r as number,
+        difficulty: c.difficulty as number | undefined,
+      }))
+      const marks = pickJolTargets(candidates, this.jolRng, { rate: jol.rate, deviated })
+      cards.forEach((c, i) => {
+        if (marks.has(candidates[i]!.key)) c.jol = true
+      })
+    }
+    // 单节点「已调度题」会话（#57 A1 + #65 E5 带权偏好）：起点先验 = 节点 Mastery
+    // → 目标难度带，再叠加显式带偏移（挑战抬高/简单放宽）；初始顺序按距先验带
+    // 距离升序（会话内流式调整由会话方以纯规则驱动）。
     if (node !== undefined) {
-      const band = startBand(mastery)
+      const band = Math.min(1, Math.max(0, startBand(mastery) + bandOffset(bandPref)))
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
         cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band) }
     }
@@ -991,13 +1051,16 @@ export class LearnhubEngine {
    * 调度不在此触碰（D15：评分仍经工作单 settle / grade 通道）。
    * elapsedS = 前端计时（题目渲染到提交的秒数）：记入流水并用于乱猜判定。
    * opts.deferSchedule = 复习刷卡流的答对路径：调度挂起（不推卡），背面自评
-   * Hard/Good/Easy 后经 questionRate 结算；答错/乱猜/当日已推进不受其影响。 */
+   * Hard/Good/Easy 后经 questionRate 结算；答错/乱猜/当日已推进不受其影响。
+   * opts.predicted = 翻面前的一档 JOL 预测（#66 E4，Learner Output 元标注）：
+   * 只随作答落流水供校准配对，非法值显式拒绝、null/缺省不落字段。 */
   async questionAnswer(
     llmComplete: (prompt: string, system?: string) => Promise<string>,
     courseKey: string | undefined, node: string, qid: string, answer: string,
     elapsedS?: number | null,
-    opts?: { deferSchedule?: boolean },
+    opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null },
   ): Promise<Record<string, unknown>> {
+    const predicted = this.jolPredicted(opts?.predicted)
     const c = await this.registry.resolve(courseKey)
     const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[question] 节点「${node}」不在图内。`)
@@ -1043,6 +1106,7 @@ export class LearnhubEngine {
       feedback: feedback || undefined,
       elapsed_s: elapsedS ?? undefined,
       xp: settle.xp,
+      ...(predicted ? { predicted } : {}),
     })
     // frontmatter 计数 + 练习证据 EMA（口径 B 的练习项；mastery 本身纯派生不落盘）
     const [, regionName] = graph.blockOf[node]
@@ -1177,12 +1241,14 @@ export class LearnhubEngine {
 
   /** 复习刷卡流：「忘记」申报——不作答直接翻面，调度与统计均按答错记，0 XP。
    * 5 秒主动回忆门控是前端交互；引擎只负责如实记账。当日已作答（含挂起自评）
-   * 的题拒绝重复申报；「完成学习」当日初始化的卡允许覆推 Again（与练习流同日首答一致）。 */
+   * 的题拒绝重复申报；「完成学习」当日初始化的卡允许覆推 Again（与练习流同日首答一致）。
+   * predicted = 翻面前的 JOL 预测（#66 E4）：忘记也是翻面，预测同样落流水配对。 */
   async questionForget(
     courseKey: string | undefined, node: string, qid: string,
-    elapsedS?: number | null,
+    elapsedS?: number | null, predicted?: JolPrediction | null,
   ): Promise<Record<string, unknown>> {
     const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question-forget')
+    const pred = this.jolPredicted(predicted)
     const today = todayStr()
     if (q.stats?.last === today) {
       throw new Error(`[question-forget] ${node}/${qid} 今天已有作答记录，忘记只用于本日首次刷卡。`)
@@ -1196,6 +1262,7 @@ export class LearnhubEngine {
       correct: false, judge: 'forget', qid,
       elapsed_s: elapsedS ?? undefined,
       xp: 0,
+      ...(pred ? { predicted: pred } : {}),
     })
     // 节点侧证据：忘记 = 0 分（EMA 衰减 + 计一次未过），stage 推进与作答路径一致
     const [, regionName] = graph.blockOf[node]
@@ -1459,7 +1526,85 @@ export class LearnhubEngine {
       retention: trueRetention(dueReviews),
       calibration: calibrationBins(dueReviews),
       forgetting: forgettingCurve(dueReviews),
+      // 预测-校准（#66 E4）：学习者 JOL vs 实际——与 FSRS 自预测校准（calibration）正交；
+      // 配对数不足门槛时为 null（不显示）。只展示，不喂 canonical。
+      jol: jolCalibration(await this.store.practiceAll()),
     }
+  }
+
+  // ---- E4 JOL 抽查配置（state/learnhub.json 的 jol 字段；默认开、约 1/3）----
+
+  /** 读 JOL 抽查配置：enabled=false 全局关闭（复习流完全不弹预测）；rate 抽样率。 */
+  async jolConfig(): Promise<{ enabled: boolean; rate: number }> {
+    try {
+      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
+        jol?: { enabled?: boolean; rate?: number }
+      }
+      const enabled = doc.jol?.enabled !== false
+      const rate = typeof doc.jol?.rate === 'number' && doc.jol.rate > 0 && doc.jol.rate <= 1
+        ? doc.jol.rate : JOL_SAMPLE_RATE
+      return { enabled, rate }
+    } catch {
+      return { enabled: true, rate: JOL_SAMPLE_RATE }
+    }
+  }
+
+  /** 写 JOL 抽查配置（原子替换，保留配置文件其他字段）。 */
+  async setJolConfig(patch: { enabled?: boolean; rate?: number }): Promise<{ enabled: boolean; rate: number }> {
+    let prev: Record<string, unknown> = {}
+    try {
+      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
+    } catch {
+      // 无配置文件/损坏 → 全新写入
+    }
+    const cur = await this.jolConfig()
+    const next = { enabled: patch.enabled ?? cur.enabled, rate: patch.rate ?? cur.rate }
+    await atomicWrite(this.paths.learnhubConfigPath, JSON.stringify({ ...prev, jol: next }, null, 1) + '\n')
+    return next
+  }
+
+  /** JOL 预测值的显式契约：三档之外拒绝（参数错误），null/undefined 放行为无预测。 */
+  private jolPredicted(p: JolPrediction | null | undefined): JolPrediction | null {
+    if (p === null || p === undefined) return null
+    if (!JOL_PREDICTIONS.includes(p)) {
+      throw new Error(`[jol] 预测只能是「${JOL_PREDICTIONS.join('」「')}」之一（收到 ${String(p)}）。`)
+    }
+    return p
+  }
+
+  // ---- E5 可用的困难教练（#65；只读信息性反馈，无门禁无判分）----
+
+  /** 难度带会话记录（会话结束反馈点调用，ReviewSession 收尾时带上当次带选择与
+   * 作答结算）：append-only 落 state/难度带.jsonl。零调度副作用——只是教练的
+   * 长期选择分布数据源（Learner Output）。 */
+  async logBandSession(rec: { course: string; node: string; band: BandPref; answered: number; correct: number }, today = todayStr()): Promise<BandRec> {
+    if (!['easy', 'standard', 'hard'].includes(rec.band)) {
+      throw new Error(`[band] band 只能是 easy/standard/hard（收到 ${String(rec.band)}）。`)
+    }
+    const full: BandRec = { date: today, ...rec }
+    await this.store.appendBandRec(full)
+    return full
+  }
+
+  /** 教练反馈（低打扰）：7 天窗口内按选择分布与带内表现生成温和提示（0–2 条），
+   * 到期难题数 = 全部启用课程中 due ≤ today、R ≥ COACH_DUE_HARD_R（按状态该会）
+   * 且合用难度 ≥ COACH_HARD_D（难）的到期题。无触发返回空数组；低数据静默。 */
+  async coachAdvice(today = todayStr()): Promise<{ messages: string[]; due_hard: number }> {
+    const courses = await this.enabledCourses()
+    let dueHard = 0
+    for (const c of courses) {
+      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+      await this.scanCourseBanks(c, async (_node, bank) => {
+        for (const q of bank.questions) {
+          if (q.archived || !q.fsrs?.reps || !q.fsrs.due || q.fsrs.due > today) continue
+          if (retrievabilityBlock(sched, q.fsrs, today) < COACH_DUE_HARD_R) continue
+          if (combinedDifficulty(q.difficulty, q.fsrs) < COACH_HARD_D) continue
+          dueHard++
+        }
+      })
+    }
+    const recs = (await this.store.bandRecsAll()).filter(r => withinCoachWindow(r.date, today))
+    return { messages: coachFeedback(recs, dueHard, today), due_hard: dueHard }
   }
 
   // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----

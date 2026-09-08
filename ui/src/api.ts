@@ -49,20 +49,35 @@ export const api = {
   questions: (course: string, node: string) =>
     http<{ course: string; node: string; mastery: number; questions: import('./types').QuestionItem[] }>('GET', `/questions${q({ course, node })}`),
   questionAnswer: (course: string, node: string, qid: string, answer: string, elapsedS?: number,
-    opts?: { deferSchedule?: boolean }) =>
+    opts?: { deferSchedule?: boolean; predicted?: string }) =>
     http<import('./types').AnswerResult>('POST', '/question-answer',
-      { course, node, qid, answer, elapsed_s: elapsedS, ...(opts?.deferSchedule ? { defer_schedule: true } : {}) }),
+      { course, node, qid, answer, elapsed_s: elapsedS,
+        ...(opts?.deferSchedule ? { defer_schedule: true } : {}),
+        ...(opts?.predicted ? { predicted: opts.predicted } : {}) }),
   /** 复习刷卡流：答对后的自评结算（2=Hard 3=Good 4=Easy）。 */
   questionRate: (course: string, node: string, qid: string, rating: 2 | 3 | 4) =>
     http<import('./types').AnswerResult>('POST', '/question-rate', { course, node, qid, rating }),
-  /** 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）。 */
-  questionForget: (course: string, node: string, qid: string, elapsedS?: number) =>
-    http<import('./types').AnswerResult>('POST', '/question-forget', { course, node, qid, elapsed_s: elapsedS }),
-  /** 复习刷卡队列：跨课程到期题扁平队列；node 过滤 = 单节点定向复习（响应带 Mastery 先验带 band，#57）。 */
-  reviewQueue: (course?: string, node?: string) =>
-    http<import('./types').ReviewQueueDoc>('GET', `/review-queue${q({ course, node })}`),
+  /** 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）。predicted = 翻面前的 JOL 预测。 */
+  questionForget: (course: string, node: string, qid: string, elapsedS?: number, predicted?: string) =>
+    http<import('./types').AnswerResult>('POST', '/question-forget', { course, node, qid, elapsed_s: elapsedS, ...(predicted ? { predicted } : {}) }),
+  /** 复习刷卡队列：跨课程到期题扁平队列；node 过滤 = 单节点定向复习（响应带 Mastery 先验带 band，#57）；
+   * band = 显式难度带偏好（#65 E5）；卡片带 jol 抽查标记（#66 E4）。 */
+  reviewQueue: (course?: string, node?: string, band?: 'easy' | 'standard' | 'hard') =>
+    http<import('./types').ReviewQueueDoc>('GET', `/review-queue${q({ course, node, band })}`),
+  /** JOL 抽查配置（#66 E4）：全局开关 + 抽样率。 */
+  jol: () => http<import('./types').JolConfig>('GET', '/jol'),
+  setJol: (patch: { enabled?: boolean; rate?: number }) =>
+    http<import('./types').JolConfig>('PUT', '/jol', patch),
+  /** 难度带会话日志（#65 E5）：会话结束落一条带选择与作答结算（教练数据源）。 */
+  bandSession: (course: string, node: string, band: 'easy' | 'standard' | 'hard', answered: number, correct: number) =>
+    http<{ course: string; node: string; band: string; date: string }>('POST', '/band-session', { course, node, band, answered, correct }),
+  /** 可用的困难教练（#65 E5）：只读信息性反馈，无触发为空数组。 */
+  coach: () => http<import('./types').CoachDoc>('GET', '/coach'),
   nodeSkip: (course: string, node: string, skipped = true) =>
     http<{ course: string; node: string; stage: string }>('POST', '/node/skip', { course, node, skipped }),
+  /** 「今天学它」pin（E3 #67）：pinned=true 置顶当日推荐榜首（次日自动失效），false 取消。 */
+  pinNode: (course: string, node: string, pinned = true) =>
+    http<{ course: string; node: string; date?: string }>('POST', '/node/pin', { course, node, pinned }),
   nodeComplete: (course: string, node: string, force = false) =>
     http<{ accepted: boolean; accuracy: number | null; course: string; node: string; stage?: string; initialized?: number; due?: string | null; reason?: string }>('POST', '/node/complete', { course, node, force }),
   /** 入队即返回：全局串行队列后台按序生成（同一时刻只跑一个节点管线）。 */

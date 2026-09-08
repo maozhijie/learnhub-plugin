@@ -9,7 +9,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import LessonView from '../components/LessonView'
-import QuestionCard, { type AnswerOutcome, toOutcome } from '../components/QuestionCard'
+import QuestionCard, { type AnswerOutcome, type JolPick, toOutcome } from '../components/QuestionCard'
 import { nextBand, pickNext } from '../../../src/engine/adaptive'
 import { api } from '../api'
 import type { AppFrame } from '../App'
@@ -18,11 +18,12 @@ import type { DiagnosticEntry, RecEvent, RecommendDoc, ReviewCard, ReviewQueueDo
 const { Text, Title } = Typography
 
 const REC_TYPE: Record<string, { label: string; color: string; order: number }> = {
-  overdue: { label: '逾期', color: 'red', order: 0 },
-  review: { label: '复习', color: 'green', order: 1 },
-  diagnostic: { label: '内容诊断', color: 'magenta', order: 2 },
-  learning: { label: '继续学', color: 'arcoblue', order: 3 },
-  new: { label: '新学', color: 'cyan', order: 4 },
+  pin: { label: '今天学它', color: 'gold', order: 0 },
+  overdue: { label: '逾期', color: 'red', order: 1 },
+  review: { label: '复习', color: 'green', order: 2 },
+  diagnostic: { label: '内容诊断', color: 'magenta', order: 3 },
+  learning: { label: '继续学', color: 'arcoblue', order: 4 },
+  new: { label: '新学', color: 'cyan', order: 5 },
 }
 
 /** XP 时间账本条：今日 XP / 每日目标环 + 连续学习天数（Math Academy 的进度货币）。 */
@@ -68,14 +69,17 @@ function ReviewBanner({ dueCount, onStart }: { dueCount: number; onStart: () => 
 
 /** 推荐流大卡片：点开直接进 LessonView——主界面的核心动作；内联跳过（已有基础免学）。
  * 内容三态标识：已生成（点开有东西读）/ 生成中 / 排队中；未生成节点主按钮让给「生成内容」。
+ * 「今天学它」pin（E3 #67）：未 pin 事件给 pin 入口（当日置顶、次日失效）；已 pin
+ * 事件带「你选了它」标识并给取消入口。
  * 事件携带 diagnostics（B1 #69）时内联「重写此节」直达动作——Popconfirm 确认后才走
  * 单节重写管线（诊断建议先行，不自动动库）。 */
-function RecCard({ e, gen, onOpen, onSkip, onGenerate }: {
+function RecCard({ e, gen, onOpen, onSkip, onGenerate, onPin }: {
   e: RecEvent
   gen?: 'queued' | 'running'
   onOpen: () => void
   onSkip: () => void
   onGenerate: () => void
+  onPin: () => void
 }) {
   const t = REC_TYPE[e.type] ?? { label: e.type, color: 'gray', order: 9 }
   const generating = gen === 'running' || gen === 'queued'
@@ -93,9 +97,10 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate }: {
   }
   return (
     <Card size='small' hoverable style={{ borderRadius: 10, cursor: 'pointer', borderLeft: `3px solid var(--color-${t.color === 'red' ? 'danger' : t.color === 'green' ? 'success' : t.color === 'arcoblue' ? 'arcoblue' : 'primary'}-6,#165dff)` }}>
-      <div onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Tag color={t.color}>{t.label}</Tag>
-        <div style={{ minWidth: 0, flex: 1 }}>
+        <div onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <Tag color={t.color}>{t.label}</Tag>
+          {e.pinned && <Tag size='small' color='gold'>你选了它</Tag>}
+          <div style={{ minWidth: 0, flex: 1 }}>
           <Title heading={6} style={{ margin: 0 }}>
             {e.node}
             {gen === 'running' && <Tag size='small' color='arcoblue' style={{ marginLeft: 8 }}>生成中</Tag>}
@@ -116,7 +121,7 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate }: {
             {gen === 'running' ? '生成中' : gen === 'queued' ? '排队中' : e.type === 'review' || e.type === 'overdue' ? '去复习' : '去学习'}
           </Button>
         )}
-        {/* span 拦截冒泡：卡片本体点击是打开学习，Popconfirm 触发不应进学习视图 */}
+        {/* span 拦截冒泡：卡片本体点击是打开学习，Popconfirm/置顶触发不应进学习视图 */}
         <span onClick={ev => ev.stopPropagation()}>
           <Popconfirm
             title={`跳过「${e.node}」？`}
@@ -124,6 +129,9 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate }: {
             onOk={onSkip}>
             <Button size='mini' type='text' status='warning'>跳过</Button>
           </Popconfirm>
+          <Tooltip content={e.pinned ? '取消「今天学它」：回落默认排序' : '设为今日推荐榜首（只作用今天，次日自动失效）'}>
+            <Button size='mini' type='text' onClick={onPin}>{e.pinned ? '取消今天学它' : '今天学它'}</Button>
+          </Tooltip>
         </span>
       </div>
       {e.diagnostics?.length ? (
@@ -199,7 +207,11 @@ function CourseCard(props: {
  * 逐题流水已实时入账）。
  * 单节点「已调度题」会话（#57 A1）：按目标难度带流式选题——起点先验取引擎在
  * 定向队列响应里给出的节点 Mastery 先验带，连续答对 ≥2 次升一档、答错/忘记
- * 降回基础题；多节点/全局会话维持快照序不变。 */
+ * 降回基础题；多节点/全局会话维持快照序不变。
+ * E5 难度带（#65）：会话开始时可选 简单/标准/挑战（参与式、可忽略、默认标准 =
+ * 纯 A1），作为带权偏好随定向队列请求下发；会话结束把带选择与作答结算落日志
+ * （困难教练数据源），并拉一次教练反馈附在小结里（只读信息性，无门禁）。
+ * E4 JOL（#66）：抽查命中的卡（jol 标记）在翻面前弹一档预测，随作答/忘记上报。 */
 function ReviewSession(props: {
   queue: ReviewCard[]
   onClose: () => void
@@ -220,11 +232,20 @@ function ReviewSession(props: {
   const [band, setBand] = useState(0.5)
   const [streak, setStreak] = useState(0)
   const [base, setBase] = useState(0)
+  // E5 难度带（#65）：会话开始的显式选择（默认标准 = 纯 A1）；参与式可关闭——
+  // 收起即视为标准、不再打扰，首答后锁定为会话带
+  const [bandPref, setBandPref] = useState<'easy' | 'standard' | 'hard'>('standard')
+  const [bandRowOpen, setBandRowOpen] = useState(true)
+  const [answeredOnce, setAnsweredOnce] = useState(false)
+  // 按课程/节点的作答结算（会话结束落难度带日志的原料）
+  const groupTally = useRef(new Map<string, { answered: number; correct: number }>())
+  // 会话结束反馈点：教练的只读信息性反馈（低数据为空）
+  const [coachMsgs, setCoachMsgs] = useState<string[]>([])
   useEffect(() => {
-    if (!singleNode) return
+    if (!singleNode || answeredOnce) return
     const head = props.queue[0]
     if (!head) return
-    api.reviewQueue(head.course, head.node).then(doc => {
+    api.reviewQueue(head.course, head.node, bandPref).then(doc => {
       if (!doc.cards.length || doc.band === undefined) return
       setAdaptive(true)
       setPending(doc.cards)
@@ -232,9 +253,9 @@ function ReviewSession(props: {
       setBand(doc.band)
       setBase(doc.band)
     }).catch(() => { /* 拉不到先验：按快照序走 */ })
-  // 会话挂载时取一次起点先验即可；后续由本组件内作答驱动
+  // 难度带改变 / 首答前重取先验即可；首答后由本组件内作答驱动
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [bandPref, answeredOnce])
   const card = adaptive ? pickNext(pending, band) : props.queue[idx]
   const done = !card
 
@@ -253,6 +274,14 @@ function ReviewSession(props: {
 
   const handleDone = (oc: AnswerOutcome) => {
     setOutcome(oc)
+    setAnsweredOnce(true)
+    if (card) {
+      const key = `${card.course}/${card.node}`
+      const g = groupTally.current.get(key) ?? { answered: 0, correct: 0 }
+      g.answered++
+      if (oc.correct === true) g.correct++
+      groupTally.current.set(key, g)
+    }
     if (oc.correct === true) {
       setTally(t => ({ ...t, right: t.right + 1 }))
       if (adaptive) applyBand(true)
@@ -282,9 +311,9 @@ function ReviewSession(props: {
     }
   }
 
-  const forget = (elapsedS: number): Promise<AnswerOutcome> => {
+  const forget = (elapsedS: number, predicted?: JolPick): Promise<AnswerOutcome> => {
     if (!card) return Promise.reject(new Error('没有当前卡'))
-    return api.questionForget(card.course, card.node, card.id, elapsedS).then(toOutcome)
+    return api.questionForget(card.course, card.node, card.id, elapsedS, predicted).then(toOutcome)
   }
 
   // 自评键盘快捷键（决议 3）：背面挂起时 2/3/4 = Hard/Good/Easy
@@ -340,6 +369,19 @@ function ReviewSession(props: {
     props.onClose()
   }
 
+  // 会话结束反馈点（#65/#66）：落难度带会话日志（按课程/节点分组）+ 拉一次教练反馈
+  useEffect(() => {
+    if (!done) return
+    for (const [key, g] of groupTally.current) {
+      if (g.answered <= 0) continue
+      const [course, node] = key.split('/')
+      api.bandSession(course!, node!, bandPref, g.answered, g.correct).catch(() => { /* 日志失败不打扰 */ })
+    }
+    api.coach().then(r => setCoachMsgs(r.messages)).catch(() => {})
+  // 收尾只跑一次（done 边沿）；bandPref 是收尾时的会话带
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done])
+
   if (done) {
     return (
       <Modal title='复习完成' visible footer={null} unmountOnExit style={{ width: 480 }}
@@ -357,11 +399,16 @@ function ReviewSession(props: {
               </Text>
             </Space>
           </Card>
+          {coachMsgs.length > 0 && (
+            <Alert type='info' content={coachMsgs.map(m => <div key={m}>{m}</div>)} />
+          )}
           <Button type='primary' long onClick={() => { void finish() }}>完成</Button>
         </Space>
       </Modal>
     )
   }
+
+  const BAND_LABEL: Record<'easy' | 'standard' | 'hard', string> = { easy: '简单', standard: '标准', hard: '挑战' }
 
   return (
     <Modal title={`复习 ${(adaptive ? total - pending.length : idx) + 1}/${total}`} visible footer={null} unmountOnExit
@@ -373,11 +420,35 @@ function ReviewSession(props: {
           <Tag size='small' color='green'>到期 {card.due}</Tag>
           <Tag size='small'>做过 {card.attempts} 次</Tag>
         </Space>
+        {/* E5 难度带（#65）：会话开始的选择入口——参与式、可关闭（收起 = 标准纯 A1）；
+        首答后锁定为会话带（A1 带权偏好只在会话起点生效） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {answeredOnce || !bandRowOpen ? (
+            <>
+              <Tag size='small' color='gold'>难度带：{BAND_LABEL[bandPref]}</Tag>
+              {!answeredOnce && (
+                <Button size='mini' type='text' onClick={() => setBandRowOpen(true)}>调整</Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Text type='secondary' style={{ fontSize: 12 }}>难度带</Text>
+              <Space size={4}>
+                {(['easy', 'standard', 'hard'] as const).map(b => (
+                  <Button key={b} size='mini' type={bandPref === b ? 'primary' : 'outline'}
+                    onClick={() => setBandPref(b)}>{BAND_LABEL[b]}</Button>
+                ))}
+                <Text type='secondary' style={{ fontSize: 12 }}>挑战抬高目标带、简单放宽；答错仍会自动降回</Text>
+                <Button size='mini' type='text' onClick={() => setBandRowOpen(false)}>收起</Button>
+              </Space>
+            </>
+          )}
+        </div>
         <QuestionCard key={card.id} course={card.course} node={card.node} question={card}
-          variant='review' noRedo
-          submitter={(payload, elapsedS) => api.questionAnswer(
-            card.course, card.node, card.id, payload, elapsedS, { deferSchedule: true },
-          ).then(toOutcome)}
+          variant='review' noRedo jolAsk={card.jol === true}
+          submitter={(payload, elapsedS, predicted) => api.questionAnswer(
+            card.course, card.node, card.id, payload, elapsedS,
+            { deferSchedule: true, predicted }).then(toOutcome)}
           onForget={forget}
           footer={footer}
           onDone={handleDone} />
@@ -506,6 +577,17 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     }
   }
 
+  // 「今天学它」pin（E3 #67）：显式方向切换，置顶/取消后重拉推荐流看新排序
+  const togglePin = async (e: RecEvent) => {
+    try {
+      await api.pinNode(e.course, e.node, !e.pinned)
+      Message.success(e.pinned ? `已取消「${e.node}」的「今天学它」` : `「${e.node}」已设为今日榜首（次日自动失效）`)
+      await load()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   // 课程卡入口的整课重生成（与生成页同一 /course/reset 通道，进度在生成页看）
   const regenerateCourse = (name: string) => {
     Modal.confirm({
@@ -556,11 +638,13 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
         <Card size='small' title='接下来' style={{ borderRadius: 10 }}>
           <Space direction='vertical' style={{ width: '100%' }} size={10}>
             {[...reviewEvents, ...learnEvents].sort((a, b) =>
-              (REC_TYPE[a.type]?.order ?? 9) - (REC_TYPE[b.type]?.order ?? 9)).map((e, i) => (
+              ((a.pinned ? 0 : 1) - (b.pinned ? 0 : 1))
+              || ((REC_TYPE[a.type]?.order ?? 9) - (REC_TYPE[b.type]?.order ?? 9))).map((e, i) => (
                 <RecCard key={i} e={e} gen={genMap[`${e.course}/${e.node}`]}
                   onOpen={() => frame.openLesson(e.course, e.node)}
                   onSkip={() => void skipNode(e)}
-                  onGenerate={() => void generateNode(e)} />
+                  onGenerate={() => void generateNode(e)}
+                  onPin={() => void togglePin(e)} />
               ))}
           </Space>
         </Card>

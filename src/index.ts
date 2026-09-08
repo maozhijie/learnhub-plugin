@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
 import { Content } from './engine/content.ts'
 import { TIER_LABELS, tierIdxOf, genericQuizTarget } from './engine/complexity.ts'
-import { applyId, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
+import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
 import {
   contentFailureStatus,
   generationJobRetentionMs,
@@ -662,10 +662,13 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
     if (req.method === 'GET' && route === '/review-queue') {
       // 复习刷卡队列：跨课程到期题扁平队列，按预测遗忘风险 R 升序为主（r 字段随卡带出，#56）；
       // node 过滤 = 定向复习直达入口（A3 软闸/enc 回退建议项指向的目标节点，#54/#55），
-      // 单节点会话按 Mastery 先验带自适应排序（band + 每卡 d，#57 A1）
+      // 单节点会话按 Mastery 先验带自适应排序（band + 每卡 d，#57 A1）；
+      // band 查询参数 = 显式难度带偏好（#65 E5：easy/hard 偏移目标带，standard/缺省 = 纯 A1）；
+      // 卡片带 jol 标记（#66 E4）：抽查命中翻面前弹一档预测，可忽略
       const course = url.searchParams.get('course') ?? undefined
       const node = url.searchParams.get('node') ?? undefined
-      sendJson(res, 200, await apiRun('api/review-queue', () => engine.reviewQueue(course, node)))
+      sendJson(res, 200, await apiRun('api/review-queue', () =>
+        engine.reviewQueue(course, node, undefined, bandPref(url.searchParams.get('band')))))
       return
     }
     if (req.method === 'GET' && route === '/xp') {
@@ -674,7 +677,18 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
     }
     if (req.method === 'GET' && route === '/memory') {
       // 记忆健康仪表盘（#61）：负载预报/状态分布/真实保留率/遗忘曲线四面板聚合
+      // （jol 字段 = 预测-校准曲线 #66 E4，配对数足门槛才有值）
       sendJson(res, 200, await apiRun('api/memory', () => engine.memoryHealth()))
+      return
+    }
+    if (req.method === 'GET' && route === '/jol') {
+      // JOL 抽查配置（#66 E4）：默认开、约 1/3；全局开关关闭后复习流完全不弹预测
+      sendJson(res, 200, await apiRun('api/jol', () => engine.jolConfig()))
+      return
+    }
+    if (req.method === 'GET' && route === '/coach') {
+      // 可用的困难教练（#65 E5）：只读信息性反馈，无触发为空数组
+      sendJson(res, 200, await apiRun('api/coach', () => engine.coachAdvice()))
       return
     }
     if (req.method === 'GET' && route === '/generate/status') {
@@ -710,6 +724,16 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       if (route === '/node/skip') {
         sendJson(res, 200, await apiRun('api/node/skip', () =>
           engine.nodeSkip(need(body, 'course'), need(body, 'node'), requireSkipDirection(body.skipped))))
+        return
+      }
+      if (route === '/node/pin') {
+        // 「今天学它」pin（E3 #67）：显式方向——pinned=true 置顶当日推荐榜首（只改
+        // 排序、保留就绪提示、次日自动失效），false 取消。
+        if (typeof body.pinned !== 'boolean') throw new Error('missing required field: pinned')
+        sendJson(res, 200, await apiRun('api/node/pin', () =>
+          body.pinned
+            ? engine.pinToday(need(body, 'course'), need(body, 'node'))
+            : engine.unpinToday(need(body, 'course'), need(body, 'node'))))
         return
       }
       if (route === '/node/complete') {
@@ -799,7 +823,11 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
           need(body, 'course'), need(body, 'node'), need(body, 'qid'),
           typeof body.answer === 'string' ? body.answer : '',
           typeof body.elapsed_s === 'number' && Number.isFinite(body.elapsed_s) ? body.elapsed_s : null,
-          body.defer_schedule === true ? { deferSchedule: true } : undefined)))
+          {
+            ...(body.defer_schedule === true ? { deferSchedule: true } : {}),
+            // 翻面前的 JOL 预测（#66 E4）：缺省/非法由引擎显式契约拒绝
+            ...(typeof body.predicted === 'string' ? { predicted: body.predicted as never } : {}),
+          })))
         return
       }
       if (route === '/question-rate') {
@@ -812,7 +840,17 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         // 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）
         sendJson(res, 200, await apiRun('api/question-forget', () => engine.questionForget(
           need(body, 'course'), need(body, 'node'), need(body, 'qid'),
-          typeof body.elapsed_s === 'number' && Number.isFinite(body.elapsed_s) ? body.elapsed_s : null)))
+          typeof body.elapsed_s === 'number' && Number.isFinite(body.elapsed_s) ? body.elapsed_s : null,
+          typeof body.predicted === 'string' ? body.predicted as never : null)))
+        return
+      }
+      if (route === '/band-session') {
+        // 难度带会话日志（E5 #65）：会话结束反馈点落一条带选择与作答结算（教练数据源）
+        sendJson(res, 200, await apiRun('api/band-session', () => engine.logBandSession({
+          course: need(body, 'course'), node: need(body, 'node'),
+          band: typeof body.band === 'string' ? body.band as never : 'standard',
+          answered: Number(body.answered ?? 0), correct: Number(body.correct ?? 0),
+        })))
         return
       }
       if (route === '/question-add') {
@@ -843,6 +881,14 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         const goal = Number(body.goal)
         if (!Number.isFinite(goal)) throw new Error('missing required field: goal')
         sendJson(res, 200, await apiRun('api/daily-goal', () => engine.setDailyGoal(goal)))
+        return
+      }
+      if (route === '/jol') {
+        // JOL 抽查配置（#66 E4）：enabled 全局开关 + rate 抽样率（0<r≤1）
+        sendJson(res, 200, await apiRun('api/jol', () => engine.setJolConfig({
+          ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+          ...(typeof body.rate === 'number' && Number.isFinite(body.rate) ? { rate: body.rate } : {}),
+        })))
         return
       }
       if (route === '/question-update') {
@@ -950,18 +996,39 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { node: string; course: string }) => run('learnhub_lesson', async () => JSON.stringify(await engine.lesson(args.course, args.node))))
   tool('learnhub_recommend',
-    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle/diagnostic) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Events may also carry a `diagnostics` array (B1 content diagnostics, standalone events typed diagnostic): a section whose content keeps failing the learner (R1 single-question repeated lapses, or R2 answer accuracy <0.5 over ≥4 deduped answers since the section was last rewritten) with reason, evidence, and a rewrite direct action {course, node, section} — after the learner confirms, execute it with learnhub_section_rewrite (gated single-section rewrite; the question bank is untouched); the Arc D per-question explain entry lives in the panel\'s error state. Fetch the next batch after finishing one.',
+    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle/diagnostic/pin) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events the learner pinned as「今天学它」carry pinned=true and lead their course for today only (tomorrow they fall back to the default order); a pinned node with no other event appears as a standalone pin event — a not-ready pinned node keeps its soft-gate hint but stays openable. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Events may also carry a `diagnostics` array (B1 content diagnostics, standalone events typed diagnostic): a section whose content keeps failing the learner (R1 single-question repeated lapses, or R2 answer accuracy <0.5 over ≥4 deduped answers since the section was last rewritten) with reason, evidence, and a rewrite direct action {course, node, section} — after the learner confirms, execute it with learnhub_section_rewrite (gated single-section rewrite; the question bank is untouched); the Arc D per-question explain entry lives in the panel\'s error state. Fetch the next batch after finishing one.',
     { limit: { type: 'number', description: 'Max events to return (default 5)' } },
     (args: { limit?: number }) => run('learnhub_recommend', async () =>
       JSON.stringify(await engine.recommend(args.limit === undefined ? 5 : args.limit))))
+  tool('learnhub_pin_today',
+    'Pin a node as「今天学它」(E3 goal ownership): for TODAY only it is raised to the top of its course in learnhub_recommend with a「你选了它」marker and its normal reason — a read-side ordering overlay, never a gate; pinning a not-ready node keeps the prerequisite soft-gate hint and the node stays openable. Pins expire automatically tomorrow. Learner Output: zero effect on scheduling, mastery, or XP.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node name (must exist in the course graph)' },
+    },
+    (args: { course: string; node: string }) => run('learnhub_pin_today', async () =>
+      JSON.stringify(await engine.pinToday(args.course, args.node))))
+  tool('learnhub_unpin',
+    'Cancel a「今天学它」pin: the node returns to the default recommendation order immediately.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node name' },
+    },
+    (args: { course: string; node: string }) => run('learnhub_unpin', async () =>
+      JSON.stringify(await engine.unpinToday(args.course, args.node))))
   tool('learnhub_review_queue',
-    'List the cross-course due review cards as JSON (Anki-style; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue: cards sort by predicted recall risk R ascending (r carried per card). Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. A single-node session is ADAPTIVELY ordered (A1 difficulty tuning): cards carry a combined difficulty scalar d and the response carries the node-mastery start band — present cards nearest that band first; during the session shift the band up one step after every second consecutive correct answer and drop it back toward the base after a wrong/forgot, re-picking the nearest-d remaining card each time. Unknown node names fail loud.',
+    'List the cross-course due review cards as JSON (Anki-style; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue: cards sort by predicted recall risk R ascending (r carried per card). Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. A single-node session is ADAPTIVELY ordered (A1 difficulty tuning): cards carry a combined difficulty scalar d and the response carries the node-mastery start band — present cards nearest that band first; during the session shift the band up one step after every second consecutive correct answer and drop it back toward the base after a wrong/forgot, re-picking the nearest-d remaining card each time. band_pref (E5) is the learner\'s explicit difficulty choice as a weighted preference on that start band: hard raises it, easy relaxes it, omit for pure A1 — the anti-frustration drop-back still applies. Cards flagged jol=true are the sampled JOL probe (E4): before revealing the answer you may ask the learner for a one-tap prediction (会/不会/没把握) and pass it back as the predicted field on learnhub_question_answer / learnhub_question_forget — skippable, never blocking. Unknown node names fail loud.',
     {
       course: { type: 'string', description: 'Course name; omit for all enabled courses' },
       node: { type: 'string', description: 'Node name filter — targeted review of this node\'s due questions (A3 advice direct entry; adaptive difficulty order)' },
+      band_pref: { type: 'string', description: 'Learner\'s explicit difficulty band (E5): easy/standard/hard as a weighted preference on the A1 start band' },
     },
-    (args: { course?: string; node?: string }) => run('learnhub_review_queue', async () =>
-      JSON.stringify(await engine.reviewQueue(args.course, args.node))))
+    (args: { course?: string; node?: string; band_pref?: string }) => run('learnhub_review_queue', async () =>
+      JSON.stringify(await engine.reviewQueue(args.course, args.node, undefined, bandPref(args.band_pref)))))
+  tool('learnhub_coach',
+    'Get the「可用的困难」coach feedback (E5, read-only informational, no gates or scoring): checks the last 7 days of the learner\'s difficulty-band session choices and in-band performance. All-easy streak with due questions their FSRS state says they should know → a gentle nudge to try the standard band; consistent challenge-band struggle (accuracy below 0.6) → a pointer back to prerequisite/component-skill review. Low data stays silent. Surface messages verbatim when present; never force anything.',
+    {},
+    () => run('learnhub_coach', async () => JSON.stringify(await engine.coachAdvice())))
   tool('learnhub_rebuild',
     'Run audit gate + ready-list regeneration for all enabled courses, or one course.',
     { course: { type: 'string', description: 'Course name; omit to rebuild all enabled courses' } },
@@ -1166,15 +1233,18 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string; yaml: string }) => run('learnhub_question_save', async () =>
       JSON.stringify(await engine.questionSave(args.course, args.node, args.yaml))))
   tool('learnhub_question_answer',
-    'Answer one bank question (flashcard model): auto-judged 1.0/0.0 (reflection graded by AI against its rubric); the result drives THAT question\'s FSRS schedule (correct=Good, wrong=Again). Node mastery is purely derived (masteryOfFm: 0.7 x memory-stability progress + 0.3 x practice-evidence EMA); per-question answer stats only feed the completion gate, not mastery.',
+    'Answer one bank question (flashcard model): auto-judged 1.0/0.0 (reflection graded by AI against its rubric); the result drives THAT question\'s FSRS schedule (correct=Good, wrong=Again). Node mastery is purely derived (masteryOfFm: 0.7 x memory-stability progress + 0.3 x practice-evidence EMA); per-question answer stats only feed the completion gate, not mastery. predicted (E4 JOL) records the learner\'s pre-answer one-tap prediction (会/不会/没把握) from a jol-flagged probe card — omit when not asked.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name' },
       qid: { type: 'string', required: true, description: 'Question id inside the bank, e.g. "q1"' },
       answer: { type: 'string', required: true, description: 'User answer (choice: letter, multi_choice: comma-joined letters; true_false: 对/错; fill_in_blank: text; numeric: number; ordering/matching: newline-joined item texts in submitted order; reflection/open_question: free text)' },
+      predicted: { type: 'string', description: 'Learner\'s pre-answer JOL prediction (E4): 会 / 不会 / 没把握' },
     },
-    (args: { course: string; node: string; qid: string; answer: string }) => run('learnhub_question_answer', async () =>
-      JSON.stringify(await engine.questionAnswer(prompt => llmComplete(ctx, prompt), args.course, args.node, args.qid, args.answer))))
+    (args: { course: string; node: string; qid: string; answer: string; predicted?: string }) => run('learnhub_question_answer', async () =>
+      JSON.stringify(await engine.questionAnswer(
+        prompt => llmComplete(ctx, prompt), args.course, args.node, args.qid, args.answer,
+        null, { ...(args.predicted !== undefined ? { predicted: args.predicted as never } : {}) }))))
 
   // —— 客户端面板 HTTP 路由 ——
   ctx.effect(

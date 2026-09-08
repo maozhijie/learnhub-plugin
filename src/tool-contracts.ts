@@ -40,3 +40,9 @@ export function rejectId(value: unknown): number {
   }
   return value
 }
+
+/** E5 难度带偏好（#65）：easy/standard/hard；缺省/非法 = undefined（纯 A1，不偏移）。 */
+export function bandPref(value: unknown): 'easy' | 'standard' | 'hard' | undefined {
+  if (value === 'easy' || value === 'standard' || value === 'hard') return value
+  return undefined
+}

@@ -40,6 +40,10 @@ export class Paths {
   get promptDir(): string { return `${this.centerStateDir}/提示词` }
   get learnhubConfigPath(): string { return `${this.centerStateDir}/learnhub.json` }
   get genJobsPath(): string { return `${this.centerStateDir}/生成任务.json` }
+  /** 「今天学它」pin 清单（E3 #67）：中心级 [{course,node,date}]，过期自动失效。 */
+  get pinPath(): string { return `${this.centerStateDir}/今日pin.json` }
+  /** 难度带会话日志（E5 #65）：JSONL 追加，困难教练的长期选择分布数据源。 */
+  get bandLogPath(): string { return `${this.centerStateDir}/难度带.jsonl` }
   get trashDir(): string { return `${this.centerRoot}/.trash` }
 
   sessionPath(dateStr: string): string { return `${this.sessionDir}/${dateStr}.md` }

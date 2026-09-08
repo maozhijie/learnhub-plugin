@@ -117,6 +117,10 @@ export interface PracticeRec {
   elapsed_s?: number
   /** 本次作答结算的 XP（同日重复作答为 0；乱猜为负）。 */
   xp?: number
+  /** 作答前的一档三点预测（E4 #66 JOL，Learner Output 元标注）：题面出示后、
+   * 翻面前抽查命中时由学习者作答。老记录缺省（读侧视同 null，不报旧流水）；
+   * 只作校准展示原料，不喂 canonical。 */
+  predicted?: '会' | '不会' | '没把握' | null
 }
 
 /** 逐次复习日志条目（state/review-log.jsonl，ADR-0012）：调度事件流——只在真实

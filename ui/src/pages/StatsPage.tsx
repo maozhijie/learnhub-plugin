@@ -2,13 +2,15 @@
  * + XP 时间账本（今日 XP / streak / 每日目标编辑）+ 每课程预计完成天数
  * （剩余节点 × 每节点 XP ÷ 每日目标，Math Academy 语义）
  * + 记忆健康仪表盘（#61 A2 四面板：每日负载预报 / 记忆状态分布 / 真实保留率 /
- * 遗忘曲线；随复习日志积累填充，无数据给空态引导，不造假数据）。 */
-import { Button, Card, InputNumber, Message, Space, Table, Tag, Typography } from '@arco-design/web-react'
+ * 遗忘曲线；随复习日志积累填充，无数据给空态引导，不造假数据）
+ * + 预测校准（#66 E4：学习者 JOL 预测 vs 实际，抽查样本口径）与抽查全局开关
+ * + 可用的困难教练（#65 E5：只读信息性反馈，低数据静默）。 */
+import { Alert, Button, Card, InputNumber, Message, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { toastError } from '../App'
 import type { AppFrame } from '../App'
-import type { HistogramBin, MemoryHealth, XpStatus } from '../types'
+import type { CoachDoc, HistogramBin, JolConfig, MemoryHealth, XpStatus } from '../types'
 
 const { Text } = Typography
 
@@ -76,8 +78,13 @@ function RateBars({ rows }: { rows: Array<{ label: string; n: number; rate: numb
   )
 }
 
-/** 记忆健康仪表盘（四面板；数据源 GET /memory，聚合口径见 engine/memory.ts）。 */
-function MemoryHealthCard({ mem }: { mem: MemoryHealth | null }) {
+/** 记忆健康仪表盘（面板；数据源 GET /memory，聚合口径见 engine/memory.ts）。
+ * jol 全局开关（#66 E4）与面板同区：关闭后复习流完全不弹预测，已攒的校准数据保留。 */
+function MemoryHealthCard({ mem, jol, onToggleJol }: {
+  mem: MemoryHealth | null
+  jol: JolConfig | null
+  onToggleJol: (enabled: boolean) => void
+}) {
   if (mem === null) {
     return (
       <Card size='small' title='记忆健康' style={{ borderRadius: 10 }}>
@@ -180,6 +187,46 @@ function MemoryHealthCard({ mem }: { mem: MemoryHealth | null }) {
               <RateBars rows={mem.forgetting} />
             </div>
           </div>
+          {/* 5 · 预测校准（#66 E4）：学习者 JOL vs 实际——抽查样本口径，只展示不喂任何度量 */}
+          <div>
+            <Space size={8} style={{ marginBottom: 4 }}>
+              <Text style={{ fontWeight: 600 }}>预测校准（你的直觉 vs 实际）</Text>
+              {jol && (
+                <Space size={6}>
+                  <Text type='secondary' style={{ fontSize: 12 }}>翻面前抽查预测</Text>
+                  <Switch size='small' checked={jol.enabled} onChange={onToggleJol} />
+                </Space>
+              )}
+            </Space>
+            {mem.jol ? (
+              <>
+                <Text type='secondary' style={{ fontSize: 12 }}>
+                  （复习翻面前抽查预测「会/不会/没把握」与实际对错的对照，共 {mem.jol.pairs} 条；
+                  只统计被抽到的卡——约 1/3 复习卡、优先将忘未忘与难度中段，不代表全部复习）
+                </Text>
+                <div style={{ display: 'grid', gap: 3, marginTop: 6 }}>
+                  {mem.jol.bins.filter(b => b.n > 0).map(b => (
+                    <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Text type='secondary' style={{ fontSize: 11, width: 70, flexShrink: 0 }}>预测 {b.label}</Text>
+                      <div style={{ flex: 1, height: 8, background: 'var(--color-fill-2,#f2f3f5)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${(b.accuracy ?? 0) * 100}%`, height: '100%',
+                          background: 'var(--color-warning-4,#ffb65d)',
+                        }} />
+                      </div>
+                      <Text style={{ fontSize: 11, width: 84, textAlign: 'right' }}>
+                        实际 {b.accuracy === null ? '—' : `${Math.round(b.accuracy * 100)}%`}（{b.n} 条{b.forgot ? ` · 忘 ${b.forgot}` : ''}）
+                      </Text>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                {EMPTY_HINT}（预测配对攒够后显示）
+              </Text>
+            )}
+          </div>
         </Space>
       )}
     </Card>
@@ -191,12 +238,16 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
   const [mem, setMem] = useState<MemoryHealth | null>(null)
   const [goal, setGoal] = useState<number>(30)
   const [saving, setSaving] = useState(false)
+  const [jol, setJol] = useState<JolConfig | null>(null)
+  const [coach, setCoach] = useState<CoachDoc | null>(null)
 
   const load = useCallback(async () => {
     const doc = await api.xp().catch(() => null)
     setXp(doc)
     if (doc) setGoal(doc.goal)
     setMem(await api.memory().catch(() => null))
+    setJol(await api.jol().catch(() => null))
+    setCoach(await api.coach().catch(() => null))
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -206,6 +257,18 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
     window.addEventListener('learnhub:reload', h)
     return () => window.removeEventListener('learnhub:reload', h)
   }, [load])
+
+  const toggleJol = async (enabled: boolean) => {
+    try {
+      const r = await api.setJol({ enabled })
+      setJol(r)
+      Message.success(enabled
+        ? `预测抽查已开启（约每 ${Math.round(1 / Math.max(0.01, r.rate))} 张复习卡 1 张）`
+        : '预测抽查已关闭：复习流不再弹预测')
+    } catch (err) {
+      toastError(err)
+    }
+  }
 
   const saveGoal = async () => {
     setSaving(true)
@@ -222,7 +285,11 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
 
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
-      <MemoryHealthCard mem={mem} />
+      {/* 可用的困难教练（#65 E5）：只读信息性反馈——低数据静默，触发才显示 */}
+      {coach && coach.messages.length > 0 && (
+        <Alert type='info' content={coach.messages.map(m => <div key={m}>{m}</div>)} />
+      )}
+      <MemoryHealthCard mem={mem} jol={jol} onToggleJol={enabled => void toggleJol(enabled)} />
 
       <Card size='small' title='XP 时间账本' style={{ borderRadius: 10 }}
         extra={xp && (

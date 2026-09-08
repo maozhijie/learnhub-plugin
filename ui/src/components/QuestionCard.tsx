@@ -7,7 +7,9 @@
  * 计时随提交上报（XP 时间账本的乱猜判定原料）；结算 XP 徽标展示（+N / 乱猜 -1 / 重复 0）。
  * 复习刷卡变体（variant='review'）：提交改走 submitter（deferSchedule 挂起调度，背面自评）、
  * 正面「忘记」申报受 5 秒主动回忆门控（展示起算倒计时）、背面追加正确答案块；
- * 自评难度按钮等复习专属背面件由 footer 注入。 */
+ * 自评难度按钮等复习专属背面件由 footer 注入。
+ * JOL 抽查（#66 E4）：jolAsk=true 时在题面出示后、翻面前弹一档三点预测
+ * （会/不会/没把握）——单点即过、可忽略不卡流程，预测随提交/忘记上报落流水。 */
 import { Button, Input, Message, Radio, Select, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -19,6 +21,9 @@ const { Text } = Typography
 
 /** 「忘记」门控秒数：卡面展示满 5 秒才允许申报，防止以申报代替主动回忆。 */
 const FORGET_AFTER_SECONDS = 5
+
+/** 一档三点预测（E4 JOL）。 */
+export type JolPick = '会' | '不会' | '没把握'
 
 export interface AnswerOutcome {
   correct: boolean | null
@@ -99,10 +104,14 @@ export default function QuestionCard(props: {
   noRedo?: boolean
   /** review = 复习刷卡变体：一卡一票（无重做）、5 秒门控忘记、背面正确答案块。 */
   variant?: 'practice' | 'review'
-  /** 复习刷卡流的提交器（deferSchedule 挂起调度）；缺省走练习流 api.questionAnswer。 */
-  submitter?: (payload: string, elapsedS: number) => Promise<AnswerOutcome>
-  /** 「忘记」申报（复习变体；引擎按答错记证据、0 XP）。入参 = 卡面展示到申报的秒数。 */
-  onForget?: (elapsedS: number) => Promise<AnswerOutcome>
+  /** JOL 抽查命中（#66 E4）：翻面前弹一档三点预测；单点即过、可忽略。 */
+  jolAsk?: boolean
+  /** 复习刷卡流的提交器（deferSchedule 挂起调度）；缺省走练习流 api.questionAnswer。
+   * 第三参 = 翻面前的 JOL 预测（jolAsk 命中且学习者点选时携带）。 */
+  submitter?: (payload: string, elapsedS: number, predicted?: JolPick) => Promise<AnswerOutcome>
+  /** 「忘记」申报（复习变体；引擎按答错记证据、0 XP）。入参 = 卡面展示到申报的秒数
+   * 与翻面前的 JOL 预测。 */
+  onForget?: (elapsedS: number, predicted?: JolPick) => Promise<AnswerOutcome>
   /** 背面附加件（自评难度按钮、下一张等），渲染在判卷反馈之下。 */
   footer?: (outcome: AnswerOutcome) => ReactNode
 }) {
@@ -115,6 +124,8 @@ export default function QuestionCard(props: {
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<AnswerOutcome | null>(null)
   const [forgetting, setForgetting] = useState(false)
+  // JOL 抽查（#66 E4）：翻面前的一档预测；单点即过（点完收起为一枚标识），可忽略
+  const [predicted, setPredicted] = useState<JolPick | null>(null)
   // 「忘记」门控倒计时：卡面展示起算（复习变体专属）
   const [forgetIn, setForgetIn] = useState(props.variant === 'review' ? FORGET_AFTER_SECONDS : 0)
   // 计时起点：题目渲染 / 重做时重置（乱猜判定 = 耗时过短且答错）
@@ -160,7 +171,7 @@ export default function QuestionCard(props: {
     try {
       let res: AnswerOutcome
       if (props.submitter) {
-        res = await props.submitter(payload(), elapsedS)
+        res = await props.submitter(payload(), elapsedS, predicted ?? undefined)
       } else {
         const r = await api.questionAnswer(props.course, props.node, q.id, payload(), elapsedS)
         if (r.scheduled === false) {
@@ -183,7 +194,7 @@ export default function QuestionCard(props: {
     setForgetting(true)
     try {
       const elapsedS = Math.round(((Date.now() - startRef.current) / 1000) * 10) / 10
-      const oc = await props.onForget(elapsedS)
+      const oc = await props.onForget(elapsedS, predicted ?? undefined)
       setOutcome(oc)
       props.onDone?.(oc)
     } catch (err) {
@@ -284,6 +295,27 @@ export default function QuestionCard(props: {
           value={text} onChange={setText}
           placeholder={openPlaceholder}
           autoSize={{ minRows: q.kind === 'open_question' ? 4 : 1, maxRows: 10 }} disabled={!!outcome} />
+      )}
+
+      {props.jolAsk && !outcome && (
+        predicted ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Tag size='small' color='gold'>你预测「{predicted}」</Tag>
+            <Button size='mini' type='text' onClick={() => setPredicted(null)}>改</Button>
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '6px 10px',
+          }}>
+            <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 160 }}>
+              先预测一下：这题你会吗？（凭直觉点一下即可，可跳过）
+            </Text>
+            {(['会', '不会', '没把握'] as const).map(p => (
+              <Button key={p} size='mini' onClick={() => setPredicted(p)}>{p}</Button>
+            ))}
+          </div>
+        )
       )}
 
       {!outcome ? (

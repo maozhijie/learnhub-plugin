@@ -10,6 +10,8 @@ import { mkdir, readFile, rename, appendFile, writeFile } from 'node:fs/promises
 import { existsSync } from 'node:fs'
 import { nowIso } from './dates.ts'
 import type { JournalRec, PracticeRec, ProposalRec, ReviewRec } from './types.ts'
+import type { PinRec } from './goals.ts'
+import type { BandRec } from './coach.ts'
 import type { Paths } from './paths.ts'
 
 /** 临时文件 + rename 原子写。 */
@@ -85,6 +87,7 @@ export class Store {
       ...(rec.feedback ? { feedback: rec.feedback } : {}),
       ...(rec.elapsed_s !== undefined ? { elapsed_s: Math.round(rec.elapsed_s * 10) / 10 } : {}),
       ...(rec.xp !== undefined ? { xp: rec.xp } : {}),
+      ...(rec.predicted ? { predicted: rec.predicted } : {}),
     }
     await mkdir(this.paths.centerStateDir, { recursive: true })
     await appendFile(this.paths.practicePath, JSON.stringify(full) + '\n', 'utf8')
@@ -221,6 +224,48 @@ export class Store {
 
   async saveSnapshot(course: string, version: number, doc: unknown): Promise<void> {
     await atomicWrite(this.paths.snapshotPath(course, version), JSON.stringify(doc, null, 1) + '\n')
+  }
+
+  // ---- 今日 pin（E3 #67）----
+
+  /** pin 清单；文件缺失 = Missing 合法空态（[]）；文件存在但损坏 = Broken 报出
+   * （不静默吞——静默回空会被下一次 pin 写入覆盖，学习者数据不得无声降级）。 */
+  async loadPins(): Promise<PinRec[]> {
+    let raw: string
+    try {
+      raw = await readFile(this.paths.pinPath, 'utf8')
+    } catch {
+      return []
+    }
+    let doc: unknown
+    try {
+      doc = JSON.parse(raw)
+    } catch (err) {
+      throw new Error(`[pin] ${this.paths.pinPath} 不是合法 JSON（Broken）：修复或删除该文件后再试。${err instanceof Error ? ` ${err.message}` : ''}`)
+    }
+    if (!Array.isArray(doc)) {
+      throw new Error(`[pin] ${this.paths.pinPath} 不是清单数组（Broken）：修复或删除该文件后再试。`)
+    }
+    return doc as PinRec[]
+  }
+
+  /** 全量替换 pin 清单（原子写；调用方负责只保留当日有效条目）。 */
+  async savePins(list: PinRec[]): Promise<void> {
+    await atomicWrite(this.paths.pinPath, JSON.stringify(list, null, 1) + '\n')
+  }
+
+  // ---- 难度带会话日志（E5 #65）----
+
+  /** 追加一条难度带会话记录（JSONL；会话结束反馈点调用）。 */
+  async appendBandRec(rec: BandRec): Promise<BandRec> {
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await appendFile(this.paths.bandLogPath, JSON.stringify(rec) + '\n', 'utf8')
+    return rec
+  }
+
+  /** 全部难度带会话记录（文件缺失 = Missing 合法空态）。 */
+  async bandRecsAll(): Promise<BandRec[]> {
+    return this.readJsonl<BandRec>(this.paths.bandLogPath)
   }
 
   // ---- utils ----

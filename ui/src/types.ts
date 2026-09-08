@@ -78,6 +78,8 @@ export interface RecEvent {
   path?: string | null
   /** 已生成可读正文（点开有东西读；列表三态标识数据源）。 */
   hasContent?: boolean
+  /** 「今天学它」pin 标识（E3 #67）：当日课程内置顶，次日自动失效。 */
+  pinned?: boolean
   /** 内容诊断建议项（附着在学习事件上，或独立 diagnostic 事件）。 */
   diagnostics?: DiagnosticEntry[]
 }
@@ -196,18 +198,20 @@ export interface AnswerResult {
 }
 
 /** 复习刷卡队列条目（跨课程到期题扁平队列；QuestionItem 的超集）。
- * d = 合用难度标量（静态题面难度 + FSRS difficulty，0-1；#57 会话内选档消费）。 */
+ * d = 合用难度标量（静态题面难度 + FSRS difficulty，0-1；#57 会话内选档消费）。
+ * jol = JOL 抽查命中（#66 E4）：翻面前弹一档三点预测，可忽略。 */
 export interface ReviewCard extends QuestionItem {
   course: string
   node: string
   r?: number
   d: number
+  jol?: boolean
 }
 export interface ReviewQueueDoc {
   date: string
   total: number
   cards: ReviewCard[]
-  /** 单节点定向复习会话的起点难度带（节点 Mastery 先验；#57 A1）。 */
+  /** 单节点定向复习会话的起点难度带（节点 Mastery 先验 + 显式带偏移，#57/#65）。 */
   band?: number
 }
 
@@ -238,4 +242,12 @@ export interface MemoryHealth {
   retention: { pass: number; fail: number; rate: number | null; real: number }
   calibration: Array<{ label: string; pred: number; actual: number | null; n: number }>
   forgetting: Array<{ label: string; n: number; rate: number | null }>
+  /** 预测-校准（#66 E4）：学习者 JOL 预测 vs 实际——配对数足门槛才有值，null = 不显示。 */
+  jol?: { pairs: number; bins: Array<{ label: string; n: number; accuracy: number | null; forgot: number }> } | null
 }
+
+/** JOL 抽查配置（GET/PUT /jol）。 */
+export interface JolConfig { enabled: boolean; rate: number }
+
+/** 可用的困难教练（GET /coach，#65 E5）：只读信息性反馈。 */
+export interface CoachDoc { messages: string[]; due_hard: number }
