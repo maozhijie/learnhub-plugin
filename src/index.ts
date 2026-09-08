@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：26 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库四面）
+ * - agent 工具面：38 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出四面）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -481,6 +481,24 @@ async function tutorChat(ctx: Context, course: string, node: string, history: un
   return llmComplete(ctx, `${transcript}\n\n（请回答上面最后一条学习者的提问。）`, system)
 }
 
+/** E2「讲给我听」（#68）：初学者人设讲解会话——explainBackPack（要点+图位置+人设
+ * 指令）做 system，前端携带多轮对话历史（学习者的讲稿/回答 + AI 追问）。与 /tutor
+ * 同层：只对话不落盘，判词存档只在显式的 /explain-feedback 收尾回合发生。 */
+async function explainBackTurn(ctx: Context, course: string, node: string, history: unknown[]): Promise<string> {
+  const system = await engine.explainBackPack(course, node)
+  const turns = history
+    .map(h => h as { role?: unknown; content?: unknown })
+    .filter(h => (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string' && h.content.trim())
+    .slice(-16)
+  if (!turns.length || turns[turns.length - 1].role !== 'user') {
+    throw new Error('讲解对话历史必须以学习者的讲稿/回答结尾。')
+  }
+  const transcript = turns
+    .map(h => `${h.role === 'assistant' ? '[初学者]' : '[学习者]'} ${h.content}`)
+    .join('\n\n')
+  return llmComplete(ctx, `${transcript}\n\n（继续按你的角色追问或收尾。）`, system)
+}
+
 /** 发送 JSON 响应（no-store：状态类接口禁止浏览器缓存，保证评分后即时刷新）。 */
 function sendJson(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, {
@@ -715,6 +733,25 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/explain-pack', () => engine.errorExplainPack(course, node, qid)))
       return
     }
+    if (req.method === 'GET' && route === '/explain-back-pack') {
+      // E2「讲给我听」会话包（#68）：初学者人设指令 + 正文要点 + 图位置（面板会话 system）
+      const node = url.searchParams.get('node')
+      if (!node) throw new Error('missing required field: node')
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/explain-back-pack', () => engine.explainBackPack(course, node)))
+      return
+    }
+    if (req.method === 'GET' && route === '/note-sources') {
+      // 笔记源清单（C1 #59）：注册身份 × Missing/漂移状态 × 卡池概况
+      sendJson(res, 200, await apiRun('api/note-sources', () => engine.noteSourceList()))
+      return
+    }
+    if (req.method === 'GET' && route === '/learner-queue') {
+      // 「我的卡」E 池队列（E1/#68）：到期在前、新卡随后，隔离自调度
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/learner-queue', () => engine.learnerQueue(course)))
+      return
+    }
     if (req.method === 'POST') {
       const body = await readJson(req)
       if (route === '/rebuild') {
@@ -802,6 +839,62 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         sendJson(res, 200, await apiRun('api/tutor', async () => ({
           answer: await tutorChat(ctx, need(body, 'course'), need(body, 'node'), history),
         })))
+        return
+      }
+      if (route === '/explain-back') {
+        // E2「讲给我听」（#68）：初学者人设追问会话——包做 system，前端全量携带对话历史
+        const history = Array.isArray(body.messages) ? body.messages : []
+        sendJson(res, 200, await apiRun('api/explain-back', async () => ({
+          answer: await explainBackTurn(ctx, need(body, 'course'), need(body, 'node'), history),
+        })))
+        return
+      }
+      if (route === '/explain-feedback') {
+        // E2 定位反馈回合（#68）：对照要点给是非+定位+怎么补；判词只入 E 档案
+        sendJson(res, 200, await apiRun('api/explain-feedback', () => engine.explainBackFeedback(
+          need(body, 'course'), need(body, 'node'),
+          typeof body.transcript === 'string' ? body.transcript : '',
+          (prompt, system) => llmComplete(ctx, prompt, system))))
+        return
+      }
+      if (route === '/explain-archive') {
+        // E2 存档（#68）：把这版讲稿存成 E1 自注卡（再讲一遍/挖空重述两档）
+        sendJson(res, 200, await apiRun('api/explain-archive', () => engine.explainArchiveCard(
+          need(body, 'course'), need(body, 'node'), {
+            content: typeof body.content === 'string' ? body.content : '',
+            ...(typeof body.kind === 'string' ? { kind: body.kind as 'recall_cue' | 'cloze_rewrite' } : {}),
+            ...(typeof body.prompt === 'string' && body.prompt.trim() ? { prompt: body.prompt } : {}),
+            ...(typeof body.section === 'string' && body.section.trim() ? { section: body.section } : {}),
+          })))
+        return
+      }
+      if (route === '/note-source/register') {
+        // C1 笔记源注册（#59）：单篇 .md 或文件夹（批量登记其下全部 .md）；用户笔记零写入
+        sendJson(res, 200, await apiRun('api/note-source/register', () =>
+          engine.noteSourceRegister(need(body, 'path'))))
+        return
+      }
+      if (route === '/note-source/unregister') {
+        sendJson(res, 200, await apiRun('api/note-source/unregister', () =>
+          engine.noteSourceUnregister(need(body, 'id'))))
+        return
+      }
+      if (route === '/note-source/generate') {
+        // 笔记源出题（#59）：读笔记正文 → 笔记出题 prompt → validateBank 门禁落镜像
+        sendJson(res, 200, await apiRun('api/note-source/generate', () => engine.noteSourceGenerate(
+          need(body, 'id'), questionCount(body.count),
+          async prompt => stripFences(await llmComplete(ctx, prompt)))))
+        return
+      }
+      if (route === '/learner-rate') {
+        // 「我的卡」自评结算（E1/#68）：一卡一天一次推进，隔离自调度
+        sendJson(res, 200, await apiRun('api/learner-rate', () => engine.learnerCardRate(
+          need(body, 'course'), need(body, 'node'), need(body, 'card'), Number(body.rating))))
+        return
+      }
+      if (route === '/learner-forget') {
+        sendJson(res, 200, await apiRun('api/learner-forget', () => engine.learnerCardForget(
+          need(body, 'course'), need(body, 'node'), need(body, 'card'))))
         return
       }
       if (route === '/question-generate') {
@@ -1017,7 +1110,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string }) => run('learnhub_unpin', async () =>
       JSON.stringify(await engine.unpinToday(args.course, args.node))))
   tool('learnhub_review_queue',
-    'List the cross-course due review cards as JSON (Anki-style; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue: cards sort by predicted recall risk R ascending (r carried per card). Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. A single-node session is ADAPTIVELY ordered (A1 difficulty tuning): cards carry a combined difficulty scalar d and the response carries the node-mastery start band — present cards nearest that band first; during the session shift the band up one step after every second consecutive correct answer and drop it back toward the base after a wrong/forgot, re-picking the nearest-d remaining card each time. band_pref (E5) is the learner\'s explicit difficulty choice as a weighted preference on that start band: hard raises it, easy relaxes it, omit for pure A1 — the anti-frustration drop-back still applies. Cards flagged jol=true are the sampled JOL probe (E4): before revealing the answer you may ask the learner for a one-tap prediction (会/不会/没把握) and pass it back as the predicted field on learnhub_question_answer / learnhub_question_forget — skippable, never blocking. Unknown node names fail loud.',
+    'List the cross-course due review cards as JSON (Anki-style; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue: cards sort by predicted recall risk R ascending (r carried per card). Note-source cards (C1) ride the same queue with source:"note" and course=笔记源 (node = source id) — answer/rate/forget them through the SAME learnhub_question_answer / learnhub_question_rate / learnhub_question_forget calls; note_drifted (content changed — offer regenerate/archival) and note_suspended (missing source or broken mirror) summaries ride the response; suspended cards never block course cards. Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. A single-node session is ADAPTIVELY ordered (A1 difficulty tuning): cards carry a combined difficulty scalar d and the response carries the node-mastery start band — present cards nearest that band first; during the session shift the band up one step after every second consecutive correct answer and drop it back toward the base after a wrong/forgot, re-picking the nearest-d remaining card each time. band_pref (E5) is the learner\'s explicit difficulty choice as a weighted preference on that start band: hard raises it, easy relaxes it, omit for pure A1 — the anti-frustration drop-back still applies. Cards flagged jol=true are the sampled JOL probe (E4): before revealing the answer you may ask the learner for a one-tap prediction (会/不会/没把握) and pass it back as the predicted field on learnhub_question_answer / learnhub_question_forget — skippable, never blocking. Unknown node names fail loud.',
     {
       course: { type: 'string', description: 'Course name; omit for all enabled courses' },
       node: { type: 'string', description: 'Node name filter — targeted review of this node\'s due questions (A3 advice direct entry; adaptive difficulty order)' },
@@ -1246,6 +1339,68 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         prompt => llmComplete(ctx, prompt), args.course, args.node, args.qid, args.answer,
         null, { ...(args.predicted !== undefined ? { predicted: args.predicted as never } : {}) }))))
 
+  tool('learnhub_note_source_register',
+    'Register a personal vault note (or a folder — batch-registers every .md under it, recursively, dot-dirs skipped) as a Note Source (C1): the engine reads it ONLY to generate review questions; the note file is never written (zero bytes change, never judged Broken). Derivatives (fingerprint manifest + per-source question bank) live in the 学习中心/笔记源 mirror. Re-registering a missing source by the same path restores it. Question generation is a separate explicit step (learnhub_note_source_generate).',
+    { path: { type: 'string', required: true, description: 'Note or folder path, vault-relative or absolute; must be outside the learning center' } },
+    (args: { path: string }) => run('learnhub_note_source_register', async () =>
+      JSON.stringify(await engine.noteSourceRegister(args.path))))
+  tool('learnhub_note_source_list',
+    'List registered Note Sources (C1) with pool status: ok / missing (note deleted or renamed — pool suspended, re-register or unregister) / drifted (note edited since question generation — regenerate or archive old questions, never automatic). Cards enter the global review queue automatically when due (course field = 笔记源).',
+    {},
+    () => run('learnhub_note_source_list', async () =>
+      JSON.stringify(await engine.noteSourceList())))
+  tool('learnhub_note_source_unregister',
+    'Unregister a Note Source (C1): removes the registry entry, the mirror manifest item, and the mirror question bank. The user\'s note file is untouched. Use the id from learnhub_note_source_list.',
+    { id: { type: 'string', required: true, description: 'Note-source id, e.g. "note-1"' } },
+    (args: { id: string }) => run('learnhub_note_source_unregister', async () =>
+      JSON.stringify(await engine.noteSourceUnregister(args.id))))
+  tool('learnhub_note_source_generate',
+    'Generate review questions for a Note Source (C1): reads the note body (read-only) → 笔记出题 prompt → model → validateBank gate appends each question to the mirror bank (学习中心/笔记源/题库/<id>.yaml) → new cards get their FSRS card initialized (due tomorrow, synthetic init like course completion). The manifest fingerprint refreshes to the current content (drift acknowledged); old questions are NOT auto-archived — offer the learner to archive them explicitly. Fails loud when the source file is missing (re-register first).',
+    {
+      id: { type: 'string', required: true, description: 'Note-source id, e.g. "note-1"' },
+      count: { type: 'number', description: 'Question count cap (default 6)' },
+    },
+    (args: { id: string; count?: number }) => run('learnhub_note_source_generate', async () => {
+      const n = questionCount(args.count)
+      return JSON.stringify(await engine.noteSourceGenerate(args.id, n, async prompt => stripFences(await llmComplete(ctx, prompt))))
+    }))
+  tool('learnhub_explain_back_pack',
+    'Open the「讲给我听」Feynman session for a node (E2, learner output — the learner explains to YOU): returns the session pack = section-by-section content points + graph position + your role instructions. Your role in this and following turns: a COMPLETE NOVICE who knows nothing about the topic — ask questions ONLY from the content points, one question at a time, probing ambiguity/vagueness, skipped steps, and wrong statements in the learner\'s words; never grade, never praise, never go beyond the points, never give answers; if the learner says「换一种问」re-ask the unclear point from a different angle; wrap up briefly in-character once everything is covered. After the session ends, call learnhub_explain_feedback with the full transcript.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node name' },
+    },
+    (args: { course: string; node: string }) => run('learnhub_explain_back_pack', () =>
+      engine.explainBackPack(args.course, args.node)))
+  tool('learnhub_explain_feedback',
+    'Close a「讲给我听」session (E2) with located feedback: sends the full transcript to the grading model against the node\'s content points and returns verdict (对/部分对/错) + deviation tags (含糊/跳跃/说错) + a "how to fill the gap" advice + the full markdown feedback for the learner. The verdict is archived ONLY in the E archive — zero XP, zero canonical writes (Learner Output boundary); fails loud with zero side effects if the model output is unparseable.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node name' },
+      transcript: { type: 'string', required: true, description: 'Full explain-back dialogue (learner explanations + your novice questions)' },
+    },
+    (args: { course: string; node: string; transcript: string }) => run('learnhub_explain_feedback', async () =>
+      JSON.stringify(await engine.explainBackFeedback(args.course, args.node, args.transcript, (prompt, system) => llmComplete(ctx, prompt, system)))))
+  tool('learnhub_learner_card_add',
+    'Archive the learner\'s own wording as a LearnerCard (E1「我的卡」, the archive target of E2 explain-back): kind recall_cue (再讲一遍 — default; front asks them to re-explain in their own words) or cloze_rewrite (挖空重述; content must contain at least one non-empty {{…}} cloze). The card lives in the isolated E domain with its own schedule (learnerQueue / learner-rate / learner-forget; one push per card per day) — zero XP, zero canonical writes. Duplicate content on the same node is rejected.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Source node the card attaches to' },
+      content: { type: 'string', required: true, description: 'The learner\'s own wording (the archived explanation/note)' },
+      kind: { type: 'string', description: 'recall_cue (default) or cloze_rewrite' },
+      prompt: { type: 'string', description: 'Front prompt; a default is generated per kind when omitted' },
+      section: { type: 'string', description: 'Section id to anchor the card to a specific section' },
+    },
+    (args: { course: string; node: string; content: string; kind?: string; prompt?: string; section?: string }) => run('learnhub_learner_card_add', async () => {
+      if (!args.content?.trim()) throw new Error('[learner-card-add] content 必填——存的是学习者自己的话。')
+      return JSON.stringify(await engine.explainArchiveCard(args.course, args.node, {
+        content: args.content,
+        ...(args.kind !== undefined ? { kind: args.kind as 'recall_cue' | 'cloze_rewrite' } : {}),
+        ...(args.prompt !== undefined && args.prompt.trim() ? { prompt: args.prompt } : {}),
+        ...(args.section !== undefined && args.section.trim() ? { section: args.section } : {}),
+      }))
+    }))
+
   // —— 客户端面板 HTTP 路由 ——
   ctx.effect(
     () => ctx.webServer.register({ kind: 'prefix', path: API, handler: (req, res) => handleApi(ctx, req, res) }),
@@ -1295,7 +1450,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 31 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 38 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

@@ -86,6 +86,16 @@ export const api = {
   prompts: () => http<string[]>('GET', '/prompts'),
   tutor: (course: string, node: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>) =>
     http<{ answer: string }>('POST', '/tutor', { course, node, messages }),
+  /** E2「讲给我听」（#68）：初学者人设追问会话——前端全量携带多轮对话历史。 */
+  explainBack: (course: string, node: string, messages: Array<{ role: 'user' | 'assistant'; content: string }>) =>
+    http<{ answer: string }>('POST', '/explain-back', { course, node, messages }),
+  /** E2 定位反馈回合（#68）：对照要点给是非+定位+怎么补；判词只入 E 档案。 */
+  explainFeedback: (course: string, node: string, transcript: string) =>
+    http<{ verdict: string; tags: string[]; advice: string; reply: string }>('POST', '/explain-feedback', { course, node, transcript }),
+  /** E2 存档（#68）：把这版讲稿存成 E1 自注卡（recall_cue 再讲一遍 / cloze_rewrite 挖空重述）。 */
+  explainArchive: (course: string, node: string, content: string, opts?: { kind?: 'recall_cue' | 'cloze_rewrite'; prompt?: string; section?: string }) =>
+    http<{ course: string; node: string; id: string; kind: string; count: number }>('POST', '/explain-archive',
+      { course, node, content, ...(opts?.kind ? { kind: opts.kind } : {}), ...(opts?.prompt ? { prompt: opts.prompt } : {}), ...(opts?.section ? { section: opts.section } : {}) }),
   questionGenerate: (course: string, node: string, count = 6) =>
     http<{ course: string; node: string; added: number; skipped: number; total: number }>('POST', '/question-generate', { course, node, count }),
   generateStatus: () => http<import('./types').GenStatusDoc>('GET', '/generate/status'),

@@ -49,8 +49,13 @@ function XpBar({ xp, onEditGoal }: { xp: XpStatus; onEditGoal: () => void }) {
   )
 }
 
-/** 复习横幅：到期卡驱动（复习队列张数 + 开始复习）。 */
-function ReviewBanner({ dueCount, onStart }: { dueCount: number; onStart: () => void }) {
+/** 复习横幅：到期卡驱动（复习队列张数 + 开始复习）。
+ * 笔记源状态行（C1 #59）：漂移 = 可重出/归档提示（卡照常刷）；挂起 = 源缺失/镜像
+ * Broken（卡不进队列）——提示先行，动作在 dsh 里对 agent 说即可。 */
+function ReviewBanner({ reviewQ, onStart }: { reviewQ: ReviewQueueDoc | null; onStart: () => void }) {
+  const dueCount = reviewQ?.total ?? 0
+  const drifted = reviewQ?.note_drifted ?? []
+  const suspended = reviewQ?.note_suspended ?? []
   return (
     <Card size='small' style={{ borderRadius: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -63,6 +68,20 @@ function ReviewBanner({ dueCount, onStart }: { dueCount: number; onStart: () => 
           开始复习（{dueCount}）
         </Button>
       </div>
+      {(drifted.length > 0 || suspended.length > 0) && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {drifted.map(d => (
+            <Text key={d.id} type='warning' style={{ fontSize: 12 }}>
+              笔记源「{d.title || d.id}」{d.hint}
+            </Text>
+          ))}
+          {suspended.map(s => (
+            <Text key={s.id} type='danger' style={{ fontSize: 12 }}>
+              笔记源「{s.id}」{s.reason}
+            </Text>
+          ))}
+        </div>
+      )}
     </Card>
   )
 }
@@ -629,7 +648,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       </div>
       <XpBar xp={xp ?? { date: '', today_xp: 0, goal: 30, streak: 0, eta: [] }}
         onEditGoal={() => frame.goto('stats')} />
-      <ReviewBanner dueCount={reviewQ?.total ?? 0} onStart={() => setSession(dueCards)} />
+      <ReviewBanner reviewQ={reviewQ} onStart={() => setSession(dueCards)} />
 
       {/* 核心区：「接下来学/复习」推荐流——点开直接进学习视图 */}
       {frame.tree && frame.tree.courses.length === 0 ? (

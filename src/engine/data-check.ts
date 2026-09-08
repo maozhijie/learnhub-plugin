@@ -5,17 +5,20 @@
  * 未通过契约；本模块只读文件并汇总分类，不修复、不清理、不写入 Vault。
  */
 import { readdir, readFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
+import { validateNoteSourceManifest } from './note-source.ts'
+import { validateLearnerCards } from './learner-cards.ts'
 import { validateNoteFrontmatter } from './notes.ts'
 import { YAML } from './yaml.ts'
 import type { CourseEntry } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards'
 
 export type DataCheckFindingLevel = 'missing' | 'broken'
 
@@ -37,6 +40,14 @@ export type DataCheckReason =
   | 'question_bank_yaml_parse'
   | 'question_bank_schema'
   | 'question_bank_missing'
+  | 'note_source_manifest_unreadable'
+  | 'note_source_manifest_yaml_parse'
+  | 'note_source_manifest_schema'
+  | 'note_source_mirror_inconsistent'
+  | 'note_source_bank_yaml_parse'
+  | 'note_source_bank_schema'
+  | 'learner_card_yaml_parse'
+  | 'learner_card_schema'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -297,10 +308,117 @@ async function scanCourse(
   return { graphFiles: graphFiles.length, notes: noteFilesList.length, banks: bankCount, nodes }
 }
 
+/** 笔记源体检（C1 #59 / ADR-0010）：镜像区契约文件（源清单/题库）按 Missing/Broken
+ * 纪律盘点；用户笔记本身**不是**体检对象（永不判 Broken）。注册表条目 × 源清单
+ * 条目双向对账——单边缺失 = 镜像不一致（Broken 级，说明有人手改了镜像区）。 */
+async function scanNoteSources(
+  findings: DataCheckFinding[],
+  paths: Paths,
+  noteSources: Array<{ id: string; path: string }>,
+): Promise<number> {
+  let banks = 0
+  const manifestPath = paths.noteSourceManifestPath
+  let manifestIds: string[] = []
+  if (existsSync(manifestPath)) {
+    const where = `笔记源清单 ${manifestPath}`
+    let text: string
+    try {
+      text = await readFile(manifestPath, 'utf8')
+    } catch (err) {
+      push(findings, 'note_source', 'broken', 'note_source_manifest_unreadable', where, errorText(err))
+      return banks
+    }
+    let doc: unknown
+    try {
+      doc = YAML.parse(text)
+    } catch (err) {
+      push(findings, 'note_source', 'broken', 'note_source_manifest_yaml_parse', where, errorText(err))
+      return banks
+    }
+    const v = validateNoteSourceManifest(doc)
+    if (v.errors) {
+      push(findings, 'note_source', 'broken', 'note_source_manifest_schema', where, v.errors.join('；'))
+      return banks
+    }
+    manifestIds = v.spec!.sources.map(s => s.id)
+    const entryIds = new Set(noteSources.map(e => e.id))
+    for (const id of manifestIds) {
+      if (!entryIds.has(id)) {
+        push(findings, 'note_source', 'broken', 'note_source_mirror_inconsistent', where,
+          `源清单条目「${id}」在注册表 note_sources 域没有对应条目（镜像不一致）`)
+      }
+    }
+  } else if (noteSources.length) {
+    push(findings, 'note_source', 'broken', 'note_source_mirror_inconsistent', `笔记源清单 ${manifestPath}`,
+      `注册表有 ${noteSources.length} 个笔记源但源清单缺失（镜像不一致）`)
+    return banks
+  }
+  const entryIdSet = new Set(manifestIds)
+  for (const e of noteSources) {
+    if (!entryIdSet.has(e.id)) {
+      push(findings, 'note_source', 'broken', 'note_source_mirror_inconsistent',
+        `笔记源「${e.id}」（${e.path}）`, '注册表条目在源清单中没有对应条目（镜像不一致）')
+    }
+    const bankPath = join(paths.noteSourceDir, '题库', `${safeFilename(e.id)}.yaml`)
+    if (!existsSync(bankPath)) continue // 未出题 = 合法空卡池
+    banks++
+    const where = `笔记源题库 ${bankPath}`
+    const result = await readYamlDoc(bankPath)
+    if (result.readError) {
+      push(findings, 'note_source', 'broken', 'note_source_bank_yaml_parse', where, result.readError)
+      continue
+    }
+    if (result.parseError) {
+      push(findings, 'note_source', 'broken', 'note_source_bank_yaml_parse', where, result.parseError)
+      continue
+    }
+    const v = validateBank(result.doc, e.id)
+    if (v.errors) {
+      push(findings, 'note_source', 'broken', 'note_source_bank_schema', where, v.errors.join('；'))
+    }
+  }
+  return banks
+}
+
+/** 我的卡域体检（E1/#68）：课程根/我的卡/<节点>.yaml 存在但坏 = Broken（队列侧
+ * 跳过不阻塞刷卡，这里负责把损坏显式报出——学习者数据不得无声降级）。 */
+async function scanLearnerCards(
+  findings: DataCheckFinding[],
+  paths: Paths,
+  courses: Array<{ name: string; root: string }>,
+): Promise<void> {
+  for (const course of courses) {
+    const dir = paths.learnerCardsDir(String(course.root))
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      continue // 该课程还没有任何我的卡：合法空态
+    }
+    for (const entry of entries.filter(e => e.isFile() && e.name.endsWith('.yaml')).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(dir, entry.name)
+      const where = `课程「${String(course.name)}」我的卡 ${path}`
+      const result = await readYamlDoc(path)
+      if (result.readError) {
+        push(findings, 'learner_cards', 'broken', 'learner_card_yaml_parse', where, result.readError)
+        continue
+      }
+      if (result.parseError) {
+        push(findings, 'learner_cards', 'broken', 'learner_card_yaml_parse', where, result.parseError)
+        continue
+      }
+      const v = validateLearnerCards(result.doc)
+      if (v.errors) {
+        push(findings, 'learner_cards', 'broken', 'learner_card_schema', where, v.errors.join('；'))
+      }
+    }
+  }
+}
+
 /** 一次只读体检。注册表损坏时无法安全展开课程，因此只报告注册表本身。 */
 export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
   const findings: DataCheckFinding[] = []
-  const inventory = { registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0 }
+  const inventory = { registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0, noteSourceBanks: 0 }
   const registryWhere = `课程注册表 ${paths.registryPath}`
 
   let registryRaw: unknown
@@ -322,12 +440,14 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
   }
 
   let courses: CourseEntry[] = []
+  let noteSources: Array<{ id: string; path: string }> = []
   if (inventory.registryPresent && registryRaw !== undefined) {
     const checked = validateRegistry(registryRaw)
     if (checked.errors.length) {
       push(findings, 'registry', 'broken', 'registry_schema', registryWhere, checked.errors.join('；'))
     } else {
       courses = checked.courses
+      noteSources = checked.noteSources
       inventory.courses = courses.length
     }
   }
@@ -348,11 +468,16 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     inventory.questionBanks += result.banks
   }
 
+  inventory.noteSourceBanks = await scanNoteSources(findings, paths, noteSources)
+  await scanLearnerCards(findings, paths, courses)
+
   const byArea: DataCheckReport['byArea'] = {
     registry: { missing: 0, broken: 0 },
     graph: { missing: 0, broken: 0 },
     note: { missing: 0, broken: 0 },
     question_bank: { missing: 0, broken: 0 },
+    note_source: { missing: 0, broken: 0 },
+    learner_cards: { missing: 0, broken: 0 },
   }
   for (const finding of findings) {
     byArea[finding.area][finding.level]++

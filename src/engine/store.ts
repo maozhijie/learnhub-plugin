@@ -9,7 +9,7 @@
 import { mkdir, readFile, rename, appendFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { nowIso } from './dates.ts'
-import type { JournalRec, PracticeRec, ProposalRec, ReviewRec } from './types.ts'
+import type { JournalRec, PracticeRec, ProposalRec, ReviewRec, EArchiveRec } from './types.ts'
 import type { PinRec } from './goals.ts'
 import type { BandRec } from './coach.ts'
 import type { Paths } from './paths.ts'
@@ -266,6 +266,43 @@ export class Store {
   /** 全部难度带会话记录（文件缺失 = Missing 合法空态）。 */
   async bandRecsAll(): Promise<BandRec[]> {
     return this.readJsonl<BandRec>(this.paths.bandLogPath)
+  }
+
+  // ---- E 档案（ADR-0009 Learner Output 判词存档；#68 E2）----
+
+  /** 追加一条 E 判词档案（JSONL）。判词只入档案：调用方不产生 XP、不写 canonical。 */
+  async appendEArchive(rec: Omit<EArchiveRec, 'ts'> & { ts?: string }): Promise<EArchiveRec> {
+    const full: EArchiveRec = {
+      ts: rec.ts ?? nowIso(),
+      course: rec.course, node: rec.node, kind: rec.kind,
+      verdict: rec.verdict, tags: [...(rec.tags ?? [])],
+      ...(rec.advice ? { advice: rec.advice } : {}),
+      ...(rec.excerpt ? { excerpt: rec.excerpt } : {}),
+    }
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await appendFile(this.paths.eArchivePath, JSON.stringify(full) + '\n', 'utf8')
+    return full
+  }
+
+  /** 全部 E 判词档案（文件缺失 = Missing 合法空态；损坏行 = Broken 报出，学习者数据不得无声降级）。 */
+  async eArchiveAll(): Promise<EArchiveRec[]> {
+    let raw: string
+    try {
+      raw = await readFile(this.paths.eArchivePath, 'utf8')
+    } catch {
+      return []
+    }
+    const out: EArchiveRec[] = []
+    for (const [i, line] of raw.split('\n').entries()) {
+      const s = line.trim()
+      if (!s) continue
+      try {
+        out.push(JSON.parse(s) as EArchiveRec)
+      } catch {
+        throw new Error(`[e-archive] ${this.paths.eArchivePath} 第 ${i + 1} 行不是合法 JSON（Broken）：修复或删除该行后再试。`)
+      }
+    }
+    return out
   }
 
   // ---- utils ----

@@ -9,7 +9,7 @@
  * 人审产物（proposals.json / snapshots/）。无 SQLite，无投影回写。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
 import { Store } from './store.ts'
@@ -41,6 +41,12 @@ import { GraphProposals } from './gengraph.ts'
 import type { ApplyAudit, EditOp } from './gengraph.ts'
 import { QuestionBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
+import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, normalizeSourcePath, sourceHint, stripFrontmatter, titleOfBody } from './note-source.ts'
+import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
+import { LearnerCards } from './learner-cards.ts'
+import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
+import { explainBackPack, explainFeedbackSystem, explainFeedbackPrompt, parseExplainVerdict } from './explain.ts'
+import type { ExplainPoint, ExplainTag, ExplainVerdict } from './explain.ts'
 import { YAML } from './yaml.ts'
 import { Sessions, assertNoBrokenNotes, withinStruggleWindow } from './sessions.ts'
 import type { NodeStat, WindowStat } from './sessions.ts'
@@ -49,7 +55,7 @@ import { atomicWrite } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, sumXp, streakFrom, nominalBudget, difficultyCalibration } from './xp.ts'
 import { XP_GUESS_SECONDS, XP_PERFECT_BONUS } from './params.ts'
-import type { CourseEntry, Fm, FsrsBlock, GNode, ReviewRec, SectionManifest, Stage } from './types.ts'
+import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
 import type { DataCheckReport } from './data-check.ts'
@@ -96,18 +102,25 @@ export class LearnhubEngine {
   readonly content: Content
   readonly proposals: GraphProposals
   readonly bank: QuestionBank
+  readonly learnerCards: LearnerCards
   readonly sessions: Sessions
+  /** vault 根目录（笔记源注册路径归一用；posix 规范形态）。 */
+  readonly vaultRoot: string
   /** JOL 抽查的随机源（#66 E4）：可注入播种（测试确定性；运行时 Math.random）。 */
   jolRng: () => number = Math.random
 
   constructor(config: EngineConfig) {
     const centerRel = (config.centerRel ?? '学习中心').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
-    const centerRoot = `${config.vault}/${centerRel}`
+    const vault = config.vault.replace(/\\/g, '/').replace(/\/+$/, '')
+    const centerRoot = `${vault}/${centerRel}`
+    this.vaultRoot = vault
     this.paths = new Paths(centerRoot)
     this.registry = new Registry(this.paths)
     this.store = new Store(this.paths)
     this.content = new Content(this.paths)
     this.bank = new QuestionBank(this.paths)
+    this.learnerCards = new LearnerCards(this.paths)
+    this.noteManifest = new NoteSourceManifest(this.paths)
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course))
   }
@@ -1028,6 +1041,12 @@ export class LearnhubEngine {
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
         cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band) }
     }
+    // 笔记源卡池（C1 #59）：并入全局队列（带 source:'note' 标记，course=「笔记源」
+    // 伪课程）。不参与 JOL 抽查（E4 预测落点按课程卡设计，笔记源 v1 不抽查）；
+    // Missing/镜像 Broken 的源卡池挂起并随响应带出，不阻塞其他源；漂移不挂起
+    // （旧卡继续复习，随响应提示可重出/归档）。
+    const noteSources = await this.collectNoteSourceCards(today)
+    cards.push(...noteSources.cards)
     // 组合排序：主键 = R 分档升序，档宽 5 个百分点——到期卡 R 集中在 (0, 0.9]，
     // 档太窄则难度几乎永远排不上号，太宽则风险明显不同的卡被难度插队；档内
     // 难度由易到难（同风险下先易后难热身），再 due/节点/题序兜底保证稳定。
@@ -1038,7 +1057,9 @@ export class LearnhubEngine {
       || String(a.due).localeCompare(String(b.due))
       || String(a.node).localeCompare(String(b.node))
       || String(a.id).localeCompare(String(b.id)))
-    return { date: today, total: cards.length, cards }
+    return { date: today, total: cards.length, cards,
+      ...(noteSources.drifted.length ? { note_drifted: noteSources.drifted } : {}),
+      ...(noteSources.suspended.length ? { note_suspended: noteSources.suspended } : {}) }
   }
 
   /** 题库写入（LLM 产出过 schema 门禁后落盘）。 */
@@ -1060,6 +1081,11 @@ export class LearnhubEngine {
     elapsedS?: number | null,
     opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null },
   ): Promise<Record<string, unknown>> {
+    // 笔记源卡路由（C1 #59）：course=「笔记源」伪课程（与真实课程重名时课程优先），
+    // node = 源 id——同复习自评语义，但无节点证据/XP/practice 流水。
+    if (await this.isNoteSourceCourse(courseKey)) {
+      return this.noteSourceAnswer(llmComplete, node, qid, answer, opts)
+    }
     const predicted = this.jolPredicted(opts?.predicted)
     const c = await this.registry.resolve(courseKey)
     const { graph, broken } = await this.loadView(c)
@@ -1069,30 +1095,7 @@ export class LearnhubEngine {
     const idx = bank.questions.findIndex(q => q.id === qid)
     if (idx < 0) throw new Error(`[question] ${node} 的题库没有 ${qid}。`)
     const q = bank.questions[idx]
-
-    let score = 0
-    let feedback = ''
-    if (q.kind === 'reflection' || q.kind === 'open_question') {
-      const isOpen = q.kind === 'open_question'
-      const prompt = isOpen
-        ? `Lesson question (综合应用):\n${q.q}\n\nLearner's answer:\n${answer}`
-          + (String(q.answer).trim() ? `\n\nReference points (参考要点):\n${String(q.answer)}` : '')
-        : `Exercise prompt:\n${q.q}\n\nLearner's answer:\n${answer}\n\nGrading rubric (评分要点):\n${String(q.answer)}`
-      const raw = await llmComplete(prompt, isOpen ? OPEN_QUESTION_GRADING_SYSTEM : REFLECTION_GRADING_SYSTEM)
-      try {
-        const v = isOpen ? parseOpenGrading(raw) : parseReflectionGrading(raw)
-        score = isOpen ? v.score / 10 : v.score
-        feedback = v.feedback
-      } catch (err) {
-        // #9：AI 判卷输出缺失/非法/不可解析 → 作答在边界失败，不写任何分数/卡/证据。
-        const message = err instanceof Error ? err.message : String(err)
-        throw new Error(`[question] AI 判卷输出不可用，本次作答未记录（请重试，或核对题目/模型输出）：${message}`)
-      }
-    } else {
-      const r = evaluateAllo(q, answer)
-      score = r.score
-      feedback = r.feedback
-    }
+    const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer)
     const correct = score >= PASS_SCORE
     // XP 时间账本：同日重复作答不记账（防刷）；乱猜（耗时过短且答错）负 XP。
     // 乱猜作答同时不推进 FSRS——难度证据（k 校准）只由认真作答驱动，防乱猜推高节点定价。
@@ -1191,6 +1194,32 @@ export class LearnhubEngine {
     }
   }
 
+  /** 题库题判卷（题库作答与笔记源作答共用）：reflection/open_question 走 AI 判卷
+   * 通道（显式禁止规则判卷降级），其余 evaluateAllo 规则判卷。AI 输出不可解析时
+   * 抛错——本次作答在边界失败，不写任何分数/卡/证据（#9 / ADR-0004 事务性）。 */
+  private async judgeBankAnswer(
+    llmComplete: (prompt: string, system?: string) => Promise<string>,
+    q: BankQuestion, answer: string, op = 'question',
+  ): Promise<{ score: number; feedback: string }> {
+    if (q.kind === 'reflection' || q.kind === 'open_question') {
+      const isOpen = q.kind === 'open_question'
+      const prompt = isOpen
+        ? `Lesson question (综合应用):\n${q.q}\n\nLearner's answer:\n${answer}`
+          + (String(q.answer).trim() ? `\n\nReference points (参考要点):\n${String(q.answer)}` : '')
+        : `Exercise prompt:\n${q.q}\n\nLearner's answer:\n${answer}\n\nGrading rubric (评分要点):\n${String(q.answer)}`
+      const raw = await llmComplete(prompt, isOpen ? OPEN_QUESTION_GRADING_SYSTEM : REFLECTION_GRADING_SYSTEM)
+      try {
+        const v = isOpen ? parseOpenGrading(raw) : parseReflectionGrading(raw)
+        return { score: isOpen ? v.score / 10 : v.score, feedback: v.feedback }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        throw new Error(`[${op}] AI 判卷输出不可用，本次作答未记录（请重试，或核对题目/模型输出）：${message}`)
+      }
+    }
+    const r = evaluateAllo(q, answer)
+    return { score: r.score, feedback: r.feedback }
+  }
+
   /** 作答 / 忘记 / 自评共用的前置：课程解析、笔记体检、题库定位。 */
   private async questionContext(courseKey: string | undefined, node: string, qid: string, op: string) {
     const c = await this.registry.resolve(courseKey)
@@ -1212,6 +1241,8 @@ export class LearnhubEngine {
   ): Promise<Record<string, unknown>> {
     const r = Math.round(rating)
     if (r < 2 || r > 4) throw new Error(`[question-rate] 自评档位只能是 2/3/4（收到 ${String(rating)}）。`)
+    // 笔记源卡路由（C1 #59）：自评结算进镜像题库，无代表卡回刷（笔记源无节点）。
+    if (await this.isNoteSourceCourse(courseKey)) return this.noteSourceRate(node, qid, r)
     const { c, graph, q } = await this.questionContext(courseKey, node, qid, 'question-rate')
     const today = todayStr()
     if (q.stats?.last !== today || !q.stats?.pending_rating) {
@@ -1247,6 +1278,8 @@ export class LearnhubEngine {
     courseKey: string | undefined, node: string, qid: string,
     elapsedS?: number | null, predicted?: JolPrediction | null,
   ): Promise<Record<string, unknown>> {
+    // 笔记源卡路由（C1 #59）：忘记申报进镜像题库，无节点证据（笔记源无 frontmatter）。
+    if (await this.isNoteSourceCourse(courseKey)) return this.noteSourceForget(node, qid)
     const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question-forget')
     const pred = this.jolPredicted(predicted)
     const today = todayStr()
@@ -1330,6 +1363,370 @@ export class LearnhubEngine {
     const next: Fm = { ...fm, fsrs: rep }
     await saveNote(path, next as unknown as Record<string, unknown>, body)
     return next
+  }
+
+  // ---- C1 笔记复习源（#59 / ADR-0010：只出题不动文，派生物落镜像区）----
+
+  private noteManifest: NoteSourceManifest
+
+  /** 笔记源路由判定：course=「笔记源」伪课程（真实课程同名时课程优先，不触发路由）。 */
+  private async isNoteSourceCourse(courseKey: string | undefined): Promise<boolean> {
+    if (courseKey !== NOTE_SOURCE_COURSE) return false
+    return (await this.registry.get(NOTE_SOURCE_COURSE)) === null
+  }
+
+  /** 笔记源注册：路径（vault 相对/绝对）为文件时单篇、为文件夹时批量登记其下全部
+   * .md（递归，跳过点目录）。每次注册重算指纹并启用——对已注册路径是恢复语义
+   * （Missing 后重注册）；学习中心内部路径拒绝（引擎管理区不收编）。用户笔记零写入
+   * ——只读文件算指纹与标题。 */
+  /** 注册身份落盘带显式 enabled（#59 契约：{id, 路径, enabled, created}），
+   * 文件夹批量登记时逐文件归一；学习中心内部的 .md（如注册 vault 根）跳过不失败。 */
+  async noteSourceRegister(
+    input: string, today = todayStr(),
+  ): Promise<{ date: string; registered: number; updated: number; skipped: number; sources: Array<Record<string, unknown>> }> {
+    const rel0 = normalizeSourcePath(this.vaultRoot, this.paths.centerRoot, input)
+    const files = await collectNoteFiles(`${this.vaultRoot}/${rel0}`)
+    if (!files.length) throw new Error('[note-source] 该路径下没有 .md 笔记。')
+    const entries = await this.registry.loadNoteSources()
+    const manifest = await this.noteManifest.load()
+    const byPath = new Map(entries.map(e => [e.path, e]))
+    let registered = 0
+    let updated = 0
+    let skipped = 0
+    for (const f of files) {
+      let rel: string
+      try {
+        rel = normalizeSourcePath(this.vaultRoot, this.paths.centerRoot, f.abs)
+      } catch (err) {
+        if (!(err instanceof Error) || !/学习中心内部/.test(err.message)) throw err
+        skipped++ // 文件夹批量登记扫到引擎管理区文件：跳过（不收编、不让整批失败）
+        continue
+      }
+      const raw = await readFile(f.abs, 'utf8')
+      let entry = byPath.get(rel)
+      if (entry) {
+        entry.enabled = true
+        updated++
+      } else {
+        const n = entries.reduce((m, e) => Math.max(m, Number(/^note-(\d+)$/.exec(e.id)?.[1] ?? 0)), 0) + 1
+        entry = { id: `note-${n}`, path: rel, enabled: true, created: today }
+        entries.push(entry)
+        registered++
+      }
+      const item: NoteSourceManifestItem = {
+        id: entry.id, path: rel, fingerprint: fingerprintOf(raw),
+        title: titleOfBody(stripFrontmatter(raw), f.filename), enabled: true,
+      }
+      const idx = manifest.sources.findIndex(s => s.id === item.id)
+      if (idx >= 0) manifest.sources[idx] = item
+      else manifest.sources.push(item)
+    }
+    await this.registry.save(await this.registry.load(), entries)
+    await this.noteManifest.save(manifest)
+    const view = await this.noteSourceList(today)
+    return { date: today, registered, updated, skipped, sources: view.sources }
+  }
+
+  /** 笔记源清单：注册身份（注册表）× 指纹状态（源清单 + 现读文件）× 卡池概况。
+   * 用户笔记永不判 Broken：文件缺失 = missing、指纹不符 = drifted、清单条目缺失 =
+   * inconsistent（镜像不一致，data-check 同步报出），状态与提示随条目带出。 */
+  async noteSourceList(today = todayStr()): Promise<{ date: string; total: number; sources: Array<Record<string, unknown>> }> {
+    const entries = await this.registry.loadNoteSources()
+    const manifest = await this.noteManifest.load()
+    const itemById = new Map(manifest.sources.map(s => [s.id, s]))
+    const out: Array<Record<string, unknown>> = []
+    for (const e of entries) {
+      const { status, title } = await this.sourceStatusOf(e, itemById.get(e.id))
+      let cards = 0
+      let due = 0
+      let bankBroken: string | undefined
+      if (existsSync(this.bank.bankPath(this.paths.noteSourceDir, e.id))) {
+        try {
+          const bank = await this.bank.load(this.paths.noteSourceDir, e.id)
+          for (const q of bank.questions) {
+            if (q.archived) continue
+            cards++
+            if (q.fsrs?.reps && q.fsrs.due <= today) due++
+          }
+        } catch (err) {
+          bankBroken = err instanceof Error ? err.message.split('\n')[0] : String(err)
+        }
+      }
+      const hint = bankBroken ? `题库镜像 Broken：${bankBroken}` : sourceHint(status)
+      out.push({
+        id: e.id, path: e.path, title, enabled: e.enabled !== false, created: e.created,
+        status, cards, due,
+        ...(hint ? { hint } : {}),
+        ...(bankBroken ? { broken: true } : {}),
+      })
+    }
+    return { date: today, total: out.length, sources: out }
+  }
+
+  /** 解除注册：注册表条目 + 源清单条目 + 镜像题库一并清除；用户笔记文件不动。 */
+  async noteSourceUnregister(id: string): Promise<{ removed: string; path: string }> {
+    const { entry } = await this.requireSource(id)
+    await this.registry.save(await this.registry.load(), (await this.registry.loadNoteSources()).filter(e => e.id !== id))
+    const manifest = await this.noteManifest.load()
+    await this.noteManifest.save({ sources: manifest.sources.filter(s => s.id !== id) })
+    const bankPath = this.bank.bankPath(this.paths.noteSourceDir, id)
+    if (existsSync(bankPath)) await unlink(bankPath)
+    return { removed: id, path: entry.path }
+  }
+
+  /** 笔记源定位（注册身份 + 源清单条目齐备才合法；单边缺失是镜像不一致，fail loud）。 */
+  private async requireSource(id: string): Promise<{ entry: NoteSourceEntry; item: NoteSourceManifestItem }> {
+    const entries = await this.registry.loadNoteSources()
+    const entry = entries.find(e => e.id === id)
+    if (!entry) throw new Error(`[note-source] 没有笔记源「${id}」（learnhub_note_source_list 查看已注册源）。`)
+    const manifest = await this.noteManifest.load()
+    const item = manifest.sources.find(s => s.id === id)
+    if (!item) {
+      throw new Error(`[note-source] 笔记源「${id}」缺源清单条目（镜像不一致）——跑 learnhub_data_check 定位，或解除后重新注册。`)
+    }
+    return { entry, item }
+  }
+
+  /** 单源现读状态（列表与复习队列共用）：文件存在性 → Missing、清单指纹比对 → 漂移；
+   * 清单条目缺失 → inconsistent（无法核对指纹，卡不挂起，data-check 报镜像不一致）。 */
+  private async sourceStatusOf(
+    e: NoteSourceEntry, item: NoteSourceManifestItem | undefined,
+  ): Promise<{ status: NoteSourceStatus; title: string }> {
+    const abs = `${this.vaultRoot}/${e.path}`
+    const fallbackTitle = e.path.split('/').pop() ?? e.path
+    if (!existsSync(abs)) return { status: 'missing', title: item?.title ?? fallbackTitle }
+    const raw = await readFile(abs, 'utf8')
+    const title = titleOfBody(stripFrontmatter(raw), fallbackTitle)
+    if (!item) return { status: 'inconsistent', title }
+    return { status: classifySource(true, item.fingerprint === fingerprintOf(raw)), title }
+  }
+
+  /** 笔记源出题：读笔记正文（只读）→ 笔记出题 prompt + llm → validateBank 门禁逐题
+   * 落镜像题库（学习中心/笔记源/题库/<源id>.yaml）→ 新卡初始化 FSRS（同完成学习的
+   * 合成首复习语义，明天起刷，rating_source=synthetic 落复习日志）→ 源清单指纹刷新
+   * （出题读的是当前内容，漂移就此确认；旧卡不自动归档，归档是独立动作）。 */
+  async noteSourceGenerate(
+    id: string, count: number | undefined,
+    llm: (prompt: string) => Promise<string>,
+    today = todayStr(),
+  ): Promise<{ id: string; added: number; skipped: number; total: number }> {
+    if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
+      throw new Error(`[note-quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认 6。`)
+    }
+    const requested = count ?? 6
+    const { entry } = await this.requireSource(id)
+    const abs = `${this.vaultRoot}/${entry.path}`
+    if (!existsSync(abs)) {
+      throw new Error(`[note-quiz] 源文件缺失（Missing）：${entry.path}——重新注册（同路径）可恢复后再生题。`)
+    }
+    const raw = await readFile(abs, 'utf8')
+    const body = stripFrontmatter(raw)
+    if (!body) throw new Error(`[note-quiz] 笔记正文为空，无可出题内容：${entry.path}`)
+    const tpl = await this.loadPrompt('笔记出题')
+    const rawOut = await llm(`${tpl}\n\n## 题目数量\n\n${requested} 道\n\n---\n\n${body}`)
+    const doc = YAML.parseModel(rawOut) as { questions?: unknown } | null
+    if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
+      throw new Error('[note-quiz] 模型没有产出可用题目（questions 为空）。')
+    }
+    let added = 0
+    let skipped = 0
+    for (const rawQ of doc.questions.slice(0, requested)) {
+      const q = { ...((rawQ ?? {}) as Record<string, unknown>) }
+      delete q.id // id 由 addQuestion 按现有卡数自动编号
+      try {
+        await this.bank.addQuestion(this.paths.noteSourceDir, id, q)
+        added++
+      } catch {
+        skipped++ // 单题非法（如超纲题型）不毁整批
+      }
+    }
+    if (!added) throw new Error('[note-quiz] 模型产出的题目全部未过校验门（题型/答案格式不符），一道都没入库。')
+    // 新卡合成首复习初始化（同 nodeComplete 语义：明天起刷）
+    const sched = await getScheduler(this.paths, null)
+    const bank = await this.bank.load(this.paths.noteSourceDir, id)
+    for (const q of bank.questions) {
+      if (q.archived || q.fsrs?.reps) continue
+      const { fs } = applyRatingBlock(null, 3, today, sched)
+      await this.bank.updateQuestionEvidence(this.paths.noteSourceDir, id, q.id, { fsrs: fs })
+      await this.store.appendReview({
+        course: NOTE_SOURCE_COURSE, node: id, qid: q.id,
+        rating: 3, rating_source: 'synthetic', elapsed_days: 0,
+        stability_before: null, difficulty_before: null, r_pred: null,
+      })
+    }
+    // 指纹刷新 + 标题同步（出题即确认当前内容；重出/归档建议就此清除）
+    const manifest = await this.noteManifest.load()
+    const idx = manifest.sources.findIndex(s => s.id === id)
+    if (idx >= 0) {
+      manifest.sources[idx] = {
+        ...manifest.sources[idx]!,
+        fingerprint: fingerprintOf(raw),
+        title: titleOfBody(body, entry.path.split('/').pop() ?? id),
+      }
+      await this.noteManifest.save(manifest)
+    }
+    return { id, added, skipped, total: bank.questions.length }
+  }
+
+  /** 笔记源卡池合并进全局复习队列（reviewQueue 专用）：Missing → 卡池挂起（不出卡，
+   * 状态随响应带出）；题库镜像 Broken → 该源卡挂起并带原因（镜像契约文件才 fail
+   * loud，且不阻塞其他源）；漂移不挂起（旧卡继续复习，提示可重出/归档）。
+   * inconsistent（清单条目缺失）无法核对指纹：卡照常出，状态随响应带出。 */
+  private async collectNoteSourceCards(
+    today: string,
+  ): Promise<{ cards: Array<Record<string, unknown>>; drifted: Array<Record<string, unknown>>; suspended: Array<Record<string, unknown>> }> {
+    const cards: Array<Record<string, unknown>> = []
+    const drifted: Array<Record<string, unknown>> = []
+    const suspended: Array<Record<string, unknown>> = []
+    const entries = await this.registry.loadNoteSources()
+    if (!entries.length) return { cards, drifted, suspended }
+    const manifest = await this.noteManifest.load()
+    const itemById = new Map(manifest.sources.map(s => [s.id, s]))
+    const sched = await getScheduler(this.paths, null)
+    for (const e of entries) {
+      if (e.enabled === false) continue
+      const item = itemById.get(e.id)
+      const { status, title } = await this.sourceStatusOf(e, item)
+      if (status === 'missing') {
+        suspended.push({ id: e.id, path: e.path, reason: sourceHint('missing') })
+        continue
+      }
+      if (status === 'drifted') {
+        drifted.push({ id: e.id, path: e.path, hint: sourceHint('drifted') })
+      }
+      if (status === 'inconsistent') {
+        drifted.push({ id: e.id, path: e.path, hint: sourceHint('inconsistent') })
+      }
+      const bankPath = this.bank.bankPath(this.paths.noteSourceDir, e.id)
+      if (!existsSync(bankPath)) continue // 尚未出题：合法空卡池
+      let bank: BankDoc
+      try {
+        bank = await this.bank.load(this.paths.noteSourceDir, e.id)
+      } catch (err) {
+        suspended.push({ id: e.id, path: e.path, reason: `题库镜像 Broken：${err instanceof Error ? err.message.split('\n')[0] : String(err)}` })
+        continue
+      }
+      bank.questions.forEach((q, i) => {
+        if (q.archived) return
+        const card = this.questionView(q, i)
+        if (!card.due || String(card.due) > today) return
+        const r = retrievabilityBlock(sched, q.fsrs, today)
+        cards.push({
+          course: NOTE_SOURCE_COURSE, node: e.id, source: 'note',
+          title: item?.title ?? title, r: Math.round(r * 1000) / 1000,
+          d: Math.round(combinedDifficulty(q.difficulty, q.fsrs) * 1000) / 1000,
+          ...card,
+        })
+      })
+    }
+    return { cards, drifted, suspended }
+  }
+
+  /** 笔记源卡一次评分推进（作答/自评/忘记三通道共用）：推镜像题库卡 + 落复习日志
+   * （course=笔记源；调度器用默认参数——笔记源不挂课程个人参数）。返回新 fsrs 块。 */
+  private async pushNoteCard(
+    sourceId: string, q: BankQuestion, fsOld: FsrsBlock | null,
+    rating: 1 | 2 | 3 | 4, ratingSource: 'auto' | 'self', today: string,
+    stats: BankQuestion['stats'],
+  ): Promise<FsrsBlock> {
+    const sched = await getScheduler(this.paths, null)
+    const rPred = retrievabilityBlock(sched, fsOld, today)
+    const pushed = applyRatingBlock(fsOld, rating, today, sched)
+    await this.bank.updateQuestionEvidence(this.paths.noteSourceDir, sourceId, q.id, { fsrs: pushed.fs, stats })
+    await this.store.appendReview({
+      course: NOTE_SOURCE_COURSE, node: sourceId, qid: q.id,
+      rating, rating_source: ratingSource, elapsed_days: pushed.elapsed_days,
+      stability_before: fsOld?.stability ?? null, difficulty_before: fsOld?.difficulty ?? null, r_pred: rPred,
+    })
+    return pushed.fs
+  }
+
+  /** 笔记源作答（C1 #59）：判卷同题库通道；推进只有题目级 FSRS + 复习日志
+   * （course=笔记源）——无节点证据、无 practice 流水、无节点定价/settle（同复习
+   * 自评语义，ADR-0010）、无代表卡（笔记源没有节点）。 */
+  private async noteSourceAnswer(
+    llmComplete: (prompt: string, system?: string) => Promise<string>,
+    sourceId: string, qid: string, answer: string,
+    opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null },
+  ): Promise<Record<string, unknown>> {
+    const bank = await this.bank.load(this.paths.noteSourceDir, sourceId)
+    const q = bank.questions.find(x => x.id === qid)
+    if (!q) throw new Error(`[question] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
+    const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer)
+    const correct = score >= PASS_SCORE
+    const today = todayStr()
+    const repeated = q.stats?.last === today && Boolean(q.fsrs?.reps)
+    let fs: FsrsBlock | null
+    let pendingRating = false
+    let advanced = false
+    let previews: { hard: string; good: string; easy: string } | undefined
+    const stats = {
+      attempts: (q.stats?.attempts ?? 0) + 1,
+      correct: (q.stats?.correct ?? 0) + (correct ? 1 : 0),
+      last: today,
+    }
+    if (repeated) {
+      fs = q.fsrs ?? null
+      await this.bank.updateQuestionEvidence(this.paths.noteSourceDir, sourceId, qid, { fsrs: fs, stats })
+    } else if (opts?.deferSchedule === true && correct) {
+      const sched = await getScheduler(this.paths, null)
+      pendingRating = true
+      previews = {
+        hard: previewDue(sched, q.fsrs ?? null, 2, today),
+        good: previewDue(sched, q.fsrs ?? null, 3, today),
+        easy: previewDue(sched, q.fsrs ?? null, 4, today),
+      }
+      fs = q.fsrs ?? null
+      await this.bank.updateQuestionEvidence(this.paths.noteSourceDir, sourceId, qid, {
+        fsrs: fs, stats: { ...stats, pending_rating: true },
+      })
+    } else {
+      fs = await this.pushNoteCard(sourceId, q, q.fsrs ?? null, correct ? 3 : 1, 'auto', today, stats)
+      advanced = true
+    }
+    return {
+      correct, score: Math.round(score * 100), feedback,
+      answer: revealAnswer(q), kind: q.kind,
+      due: fs?.due ?? null,
+      scheduled: advanced, pendingRating,
+      ...(previews ? { previews } : {}),
+      xp: 0, // 复习自评语义不含 XP（笔记源无节点定价与 settle）
+    }
+  }
+
+  /** 笔记源自评结算：挂起标记唯一准入，推卡 + 复习日志（self），无代表卡回刷。 */
+  private async noteSourceRate(sourceId: string, qid: string, r: number): Promise<Record<string, unknown>> {
+    const bank = await this.bank.load(this.paths.noteSourceDir, sourceId)
+    const q = bank.questions.find(x => x.id === qid)
+    if (!q) throw new Error(`[question-rate] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
+    const today = todayStr()
+    if (q.stats?.last !== today || !q.stats?.pending_rating) {
+      throw new Error(`[question-rate] 笔记源 ${sourceId}/${qid} 今天没有待结算的自评（未作答或非挂起路径）。`)
+    }
+    const { pending_rating: _drop, ...statsRest } = q.stats
+    const fs = await this.pushNoteCard(sourceId, q, q.fsrs ?? null, r as 1 | 2 | 3 | 4, 'self', today, { ...statsRest })
+    return { course: NOTE_SOURCE_COURSE, node: sourceId, qid, rating: r, due: fs.due, scheduled: true }
+  }
+
+  /** 笔记源忘记申报：rating=1 推卡 + 复习日志（auto），当日已推进拒绝。 */
+  private async noteSourceForget(sourceId: string, qid: string): Promise<Record<string, unknown>> {
+    const bank = await this.bank.load(this.paths.noteSourceDir, sourceId)
+    const q = bank.questions.find(x => x.id === qid)
+    if (!q) throw new Error(`[question-forget] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
+    const today = todayStr()
+    if (q.stats?.last === today) {
+      throw new Error(`[question-forget] 笔记源 ${sourceId}/${qid} 今天已有推进记录，忘记只用于本日首次。`)
+    }
+    const fs = await this.pushNoteCard(sourceId, q, q.fsrs ?? null, 1, 'auto', today, {
+      attempts: (q.stats?.attempts ?? 0) + 1,
+      correct: q.stats?.correct ?? 0,
+      last: today,
+    })
+    return {
+      correct: false, judge: 'forget',
+      feedback: q.explanation ?? '', answer: revealAnswer(q), explanation: q.explanation ?? '',
+      kind: q.kind, due: fs.due, scheduled: true, xp: 0,
+    }
   }
 
   // ---- 节点跳过 / 完成确认 ----
@@ -1607,6 +2004,187 @@ export class LearnhubEngine {
     return { messages: coachFeedback(recs, dueHard, today), due_hard: dueHard }
   }
 
+  // ---- E2「讲给我听」（#68 / ADR-0009 Learner Output：判词只入 E 档案，零 XP）----
+
+  /** 讲解会话的正文要点（s1–s3 型）：lessonSections 切分（练习/反馈排除），
+   * 封顶 8 节防包体失控（讲解包是会话 system，不是全文导出）。 */
+  private async explainPoints(c: CourseEntry, graph: Graph, node: string): Promise<ExplainPoint[]> {
+    const [, regionName] = graph.blockOf[node]
+    const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
+    return Sessions.lessonSections(body).slice(0, 8)
+  }
+
+  /** 讲解会话包：{正文要点 + 图位置 + 初学者人设指令}——面板「讲给我听」会话的
+   * system / 宿主会话的首条消息（同 Arc D 上下文包通道）。自愿入口：本方法只读，
+   * 会话存续与否、何时收尾全由学习者掌握。 */
+  async explainBackPack(courseKey: string | undefined, node: string): Promise<string> {
+    const c = await this.registry.resolve(courseKey)
+    const { graph, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[explain-back] 节点「${node}」不在课程「${c.name}」的图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'explain-back')
+    const sections = await this.explainPoints(c, graph, node)
+    return explainBackPack(c.name, node, sections, graph.preOf[node], graph.succ[node] ?? [])
+  }
+
+  /** 定位反馈回合：对照该节点要点给 对/错/部分对 + 定位标签（含糊/跳跃/说错）+
+   * 「可怎么补」。判词解析失败时抛错（零副作用，不入档案）；成功只写 E 档案
+   * （appendEArchive）——不产生 XP、不写 canonical 任何字段（#33 三不进）。 */
+  async explainBackFeedback(
+    courseKey: string | undefined, node: string, transcript: string,
+    llm: (prompt: string, system?: string) => Promise<string>,
+  ): Promise<EArchiveRec & { reply: string }> {
+    if (!transcript.trim()) throw new Error('[explain-feedback] 讲解对话记录为空，无从反馈。')
+    const c = await this.registry.resolve(courseKey)
+    const { graph, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[explain-feedback] 节点「${node}」不在课程「${c.name}」的图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'explain-feedback')
+    const sections = await this.explainPoints(c, graph, node)
+    const raw = await llm(explainFeedbackPrompt(sections, transcript), explainFeedbackSystem())
+    const v = parseExplainVerdict(raw)
+    const rec = await this.store.appendEArchive({
+      course: c.name, node, kind: 'explain_back',
+      verdict: v.verdict, tags: [...v.tags] as ExplainTag[],
+      ...(v.advice ? { advice: v.advice } : {}),
+      excerpt: transcript.trim().slice(-800),
+    })
+    return { ...rec, reply: v.reply }
+  }
+
+  /** 把一版讲解存档为 E1 自注卡（#68 存档目标）：卡面两档——再讲一遍（recall_cue，
+   * 默认）与挖空重述（cloze_rewrite，content 须带 {{…}} 挖空）。入「我的卡」独立
+   * 域隔离自调度；判词与卡都属 Learner Output，canonical 零写入。 */
+  async explainArchiveCard(
+    courseKey: string | undefined, node: string,
+    opts: { content: string; kind?: 'recall_cue' | 'cloze_rewrite'; prompt?: string; section?: string },
+  ): Promise<{ course: string; node: string; id: string; kind: LearnerCard['kind']; count: number }> {
+    const c = await this.registry.resolve(courseKey)
+    const { graph, state, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[explain-archive] 节点「${node}」不在课程「${c.name}」的图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'explain-archive')
+    const kind = opts.kind ?? 'recall_cue'
+    if (kind !== 'recall_cue' && kind !== 'cloze_rewrite') {
+      throw new Error(`[explain-archive] 讲解存档卡面只能是 recall_cue（再讲一遍）/ cloze_rewrite（挖空重述）之一（收到 ${String(kind)}）。`)
+    }
+    const content = opts.content?.trim()
+    if (!content) throw new Error('[explain-archive] 讲稿内容为空，无可存档。')
+    const sectionTitle = opts.section
+      ? state[node]?.content.sections?.find(s => s.id === opts.section)?.title ?? opts.section
+      : undefined
+    const prompt = opts.prompt?.trim()
+      || (kind === 'cloze_rewrite'
+        ? `补全你自己的讲法：${sectionTitle ?? node}`
+        : `再讲一遍：用你的话讲清「${sectionTitle ?? node}」`)
+    const r = await this.learnerCards.addCard(c.root, node, {
+      kind, prompt, content, ...(sectionTitle ? { source_section: sectionTitle } : {}),
+    })
+    return { course: c.name, node, id: r.id, kind, count: r.count }
+  }
+
+  // ---- E1「我的卡」复习（#45 schema / #68 存档目标；#70 落节级入口与管理面）----
+
+  /** E 池到期队列：全部启用课程的「我的卡」，到期卡按 due 升序在前，从未调度的新卡
+   * 随后（首推入口）。自评语义 = 先重述再翻面对照（Hard/Good/Easy + 忘记）；
+   * 隔离自调度——不进全局复习队列、不产生 XP、不写复习日志（canonical 零掺入）。 */
+  async learnerQueue(courseKey?: string, today = todayStr()): Promise<{
+    date: string; total: number; due_count: number
+    cards: Array<Record<string, unknown>>
+  }> {
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const cards: Array<Record<string, unknown>> = []
+    for (const c of courses) {
+      const dir = this.paths.learnerCardsDir(c.root)
+      let files: string[] = []
+      try {
+        files = await readdir(dir)
+      } catch {
+        continue // 该课程还没有任何我的卡：合法空态
+      }
+      for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
+        const node = f.replace(/\.yaml$/, '')
+        let doc: LearnerCardDoc
+        try {
+          doc = await this.learnerCards.load(c.root, node)
+        } catch {
+          continue // Broken 卡组不阻塞 E 池其他卡（data-check 体检面报出）
+        }
+        for (const card of doc.cards) {
+          if (card.archived) continue
+          cards.push(this.learnerCardView(c.name, node, card))
+        }
+      }
+    }
+    const due = cards.filter(c => c.due !== null && String(c.due) <= today)
+      .sort((a, b) => String(a.due).localeCompare(String(b.due)) || String(a.id).localeCompare(String(b.id)))
+    const fresh = cards.filter(c => c.due === null)
+      .sort((a, b) => String(a.node).localeCompare(String(b.node)) || String(a.id).localeCompare(String(b.id)))
+    return { date: today, total: cards.length, due_count: due.length, cards: [...due, ...fresh] }
+  }
+
+  /** E 卡的作答视图：正面 = prompt（提示重述/挖空/自注主题），背面 = content（学习者
+   * 自己的话）。content 随卡带出但 UI 在翻面前不展示——泄露面是学习者自己，且无判分。 */
+  private learnerCardView(course: string, node: string, card: LearnerCard): Record<string, unknown> {
+    return {
+      course, node, id: card.id, kind: card.kind,
+      prompt: card.prompt, content: card.content,
+      source_section: card.source_section ?? null,
+      due: card.fsrs?.reps ? card.fsrs.due : null,
+      attempts: card.stats?.attempts ?? 0,
+    }
+  }
+
+  private async learnerCardContext(courseKey: string | undefined, node: string, cardId: string, op: string): Promise<{
+    c: CourseEntry; card: LearnerCard
+  }> {
+    const c = await this.registry.resolve(courseKey)
+    const doc = await this.learnerCards.load(c.root, node)
+    const card = doc.cards.find(x => x.id === cardId)
+    if (!card) throw new Error(`[${op}] 「${node}」的我的卡没有 ${cardId}。`)
+    return { c, card }
+  }
+
+  /** E 卡自评结算（2/3/4）：新卡在此首推，老卡按档推进；一卡一天一次推进
+   * （stats.last 把守）。只动卡自身的隔离调度块，canonical/日志/XP 零写入。 */
+  async learnerCardRate(
+    courseKey: string | undefined, node: string, cardId: string, rating: number,
+  ): Promise<Record<string, unknown>> {
+    const r = Math.round(rating)
+    if (r < 2 || r > 4) throw new Error(`[learner-rate] 自评档位只能是 2/3/4（收到 ${String(rating)}）；忘记走 learner-forget。`)
+    const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-rate')
+    const today = todayStr()
+    if (card.stats?.last === today) {
+      throw new Error(`[learner-rate] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
+    }
+    const sched = await getScheduler(this.paths, null)
+    const pushed = applyRatingBlock(card.fsrs ?? null, r, today, sched)
+    const stats = {
+      attempts: (card.stats?.attempts ?? 0) + 1,
+      correct: (card.stats?.correct ?? 0) + 1,
+      last: today,
+    }
+    await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats })
+    return { course: c.name, node, id: cardId, rating: r, due: pushed.fs.due, scheduled: true }
+  }
+
+  /** E 卡忘记申报（rating=1）：不作答直接翻面，一卡一天一次，0 XP 零 canonical。 */
+  async learnerCardForget(
+    courseKey: string | undefined, node: string, cardId: string,
+  ): Promise<Record<string, unknown>> {
+    const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-forget')
+    const today = todayStr()
+    if (card.stats?.last === today) {
+      throw new Error(`[learner-forget] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
+    }
+    const sched = await getScheduler(this.paths, null)
+    const pushed = applyRatingBlock(card.fsrs ?? null, 1, today, sched)
+    const stats = {
+      attempts: (card.stats?.attempts ?? 0) + 1,
+      correct: card.stats?.correct ?? 0,
+      last: today,
+    }
+    await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats })
+    return { course: c.name, node, id: cardId, rating: 1, due: pushed.fs.due, scheduled: true, xp: 0 }
+  }
+
   // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----
 
   /** 手动触发 FSRS-6 个人参数重训：数据 = 中心级跨课程复习日志的真实推进（排除
@@ -1861,8 +2439,15 @@ export class LearnhubEngine {
     return { course: c.name, node, ...r }
   }
 
-  /** 单题全量读取（含 answer/explanation）：修订/审题用——questionList 不带答案（作答流防泄题），改题前用这个看原题。 */
+  /** 单题全量读取（含 answer/explanation）：修订/审题用——questionList 不带答案（作答流防泄题），改题前用这个看原题。
+   * 笔记源卡（course=「笔记源」伪课程）同通道可读：漂移后审旧题用。 */
   async questionGet(courseKey: string | undefined, node: string, qid: string): Promise<Record<string, unknown>> {
+    if (await this.isNoteSourceCourse(courseKey)) {
+      const bank = await this.bank.load(this.paths.noteSourceDir, node)
+      const q = bank.questions.find(x => x.id === qid)
+      if (!q) throw new Error(`[question-get] 笔记源「${node}」的题库没有 ${qid}（共 ${bank.questions.length} 题）。`)
+      return { course: NOTE_SOURCE_COURSE, node, question: q }
+    }
     const c = await this.registry.resolve(courseKey)
     const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
     const q = bank.questions.find(x => x.id === qid)
@@ -1876,7 +2461,13 @@ export class LearnhubEngine {
     return { course: c.name, node, qid }
   }
 
+  /** 归档/取消归档单题。笔记源卡（course=「笔记源」伪课程）同通道：漂移提示的
+   * 「归档旧题」直达动作走这里（学习中心/笔记源 镜像题库）。 */
   async questionArchive(courseKey: string, node: string, qid: string, archived: boolean): Promise<{ course: string; node: string; qid: string; archived: boolean }> {
+    if (await this.isNoteSourceCourse(courseKey)) {
+      await this.bank.archiveQuestion(this.paths.noteSourceDir, node, qid, archived)
+      return { course: NOTE_SOURCE_COURSE, node, qid, archived }
+    }
     const c = await this.registry.resolve(courseKey)
     await this.bank.archiveQuestion(this.paths.courseRoot(c.root), node, qid, archived)
     return { course: c.name, node, qid, archived }

@@ -44,6 +44,13 @@ export class Paths {
   get pinPath(): string { return `${this.centerStateDir}/今日pin.json` }
   /** 难度带会话日志（E5 #65）：JSONL 追加，困难教练的长期选择分布数据源。 */
   get bandLogPath(): string { return `${this.centerStateDir}/难度带.jsonl` }
+  /** E 档案（ADR-0009 Learner Output 判词存档；#68 E2）：JSONL 追加，判词只入档案不 canonical。 */
+  get eArchivePath(): string { return `${this.centerStateDir}/e档案.jsonl` }
+  /** 笔记源自料区（C1 #59 / ADR-0010）：镜像区，用户笔记零写入。 */
+  get noteSourceDir(): string { return `${this.centerRoot}/笔记源` }
+  get noteSourceManifestPath(): string { return `${this.noteSourceDir}/源清单.yaml` }
+  /** 学习者产出卡域（E1 #45/#68）：课程根/我的卡/<节点>.yaml，独立门禁独立调度。 */
+  learnerCardsDir(root: string): string { return `${this.courseRoot(root)}/我的卡` }
   get trashDir(): string { return `${this.centerRoot}/.trash` }
 
   sessionPath(dateStr: string): string { return `${this.sessionDir}/${dateStr}.md` }

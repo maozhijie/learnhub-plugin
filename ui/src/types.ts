@@ -206,6 +206,9 @@ export interface ReviewCard extends QuestionItem {
   r?: number
   d: number
   jol?: boolean
+  /** 笔记源卡（C1 #59）：source='note'，title=笔记标题；course 恒为「笔记源」伪课程。 */
+  source?: 'note'
+  title?: string
 }
 export interface ReviewQueueDoc {
   date: string
@@ -213,6 +216,9 @@ export interface ReviewQueueDoc {
   cards: ReviewCard[]
   /** 单节点定向复习会话的起点难度带（节点 Mastery 先验 + 显式带偏移，#57/#65）。 */
   band?: number
+  /** 笔记源状态（C1 #59）：漂移提示 / 挂起原因随全局队列带出。 */
+  note_drifted?: Array<{ id: string; path: string; hint: string }>
+  note_suspended?: Array<{ id: string; path: string; reason: string }>
 }
 
 /** 每课程 ETA（剩余节点 × 每节点 XP ÷ 每日目标）。 */

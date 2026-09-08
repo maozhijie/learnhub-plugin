@@ -87,6 +87,26 @@ export interface GRegion { name: string; color: string; blocks: GBlock[] }
 /** 课程注册表条目（registry.load 同构）。 */
 export interface CourseEntry { id?: string; name: string; root: string; enabled?: boolean; tags?: string[] }
 
+/** 笔记源注册条目（课程注册表 note_sources 域；C1 #59 / ADR-0010）。
+ * path 为 vault 相对路径；引擎对它只读，派生物落 学习中心/笔记源/ 镜像区。 */
+export interface NoteSourceEntry { id: string; path: string; enabled?: boolean; created: string }
+
+/** E 档案条目（ADR-0009 Learner Output 判词存档；#68 E2 讲解反馈，#70 E1 自注反馈复用）。
+ * 判词只入档案：不产生 XP、不写掌握度/题库/FSRS canonical。 */
+export interface EArchiveRec {
+  ts: string
+  course: string
+  node: string
+  kind: 'explain_back' | 'self_note'
+  verdict: '对' | '部分对' | '错'
+  /** 偏离定位标签（含糊/跳跃/说错的子集）。 */
+  tags: string[]
+  /** 「可怎么补」一句。 */
+  advice?: string
+  /** 学习者产出摘录（讲稿/自注，截断存储）。 */
+  excerpt?: string
+}
+
 /** journal 流水条目（journal.append 同构）。 */
 export interface JournalRec {
   ts: string

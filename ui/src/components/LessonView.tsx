@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import MdView from './MdView'
 import PracticeFlow from './PracticeFlow'
 import TutorDrawer from './TutorDrawer'
+import ExplainDrawer from './ExplainDrawer'
 import { WidgetBusProvider } from './widget-bus'
 import { api, discussInHost } from '../api'
 import type { AppFrame } from '../App'
@@ -38,6 +39,7 @@ export default function LessonView(props: { course: string; node: string; frame:
   /** mastery 会话是否走完全部节（走完才放行「完成学习」）。 */
   const [sessionPassed, setSessionPassed] = useState(false)
   const [tutorOpen, setTutorOpen] = useState(false)
+  const [explainOpen, setExplainOpen] = useState(false)
   const [discussOpen, setDiscussOpen] = useState(false)
   const [discussIntent, setDiscussIntent] = useState('')
   const jobRef = useRef<GenJobItem | null>(null)
@@ -218,6 +220,10 @@ export default function LessonView(props: { course: string; node: string; frame:
             </Button>
           )}
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            {/* E2「讲给我听」（#68）：学完出现（复习/已掌握态）、自愿可关——学习者讲、AI 听 */}
+            {hasContent && (stage === 'review' || stage === 'mastered') && (
+              <Button size='small' type='text' status='success' onClick={() => setExplainOpen(true)}>讲给我听</Button>
+            )}
             <Button size='small' type='text' onClick={() => setTutorOpen(true)}>问 AI 老师</Button>
             <Button size='small' type='text' onClick={() => { setDiscussIntent(''); setDiscussOpen(true) }}>与 AI 讨论</Button>
             <Button size='small' type='text' onClick={() => frame.locateInGraph(node)}>在图中查看</Button>
@@ -253,6 +259,8 @@ export default function LessonView(props: { course: string; node: string; frame:
       </Modal>
 
       <TutorDrawer course={course} node={node} visible={tutorOpen} onClose={() => setTutorOpen(false)} />
+
+      <ExplainDrawer course={course} node={node} visible={explainOpen} onClose={() => setExplainOpen(false)} />
 
       {/* 生成/出题进行中：阶段 + 逐节进度 + 耗时 + 取消 */}
       {active && job && (
