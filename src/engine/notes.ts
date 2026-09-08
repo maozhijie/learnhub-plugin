@@ -3,7 +3,8 @@
  *
  * TS 引擎的数据主权升级：frontmatter 不再是「SQLite 的投影」，而是调度状态唯一
  * 事实源——state_map 直接扫 课程/ 目录得到；每次状态变更就地回写同一份 frontmatter。
- * 键序固定 node/stage/fsrs/mastery/practice_ema/content/practice，其余键保序追加。
+ * 键序固定 node/stage/fsrs/mastery/practice_ema/content/practice，其余键保序追加；
+ * mastery 位仅为旧文件键序稳定保留，新文件不再写入该键（ADR-0007）。
  */
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -13,13 +14,13 @@ import { STAGES } from './types.ts'
 
 export const CONTENT_STATUS = ['draft', 'reviewed', 'flagged'] as const
 
-/** 新课程文件的初始 frontmatter（内容尚未生成时 version=0）。 */
+/** 新课程文件的初始 frontmatter（内容尚未生成时 version=0）。
+ * mastery 不再写入（ADR-0007：掌握度纯派生，不落盘）。 */
 export function defaultFrontmatter(nodeName: string): Fm {
   return {
     node: nodeName,
     stage: 'ready',
     fsrs: null,
-    mastery: 0.0,
     content: { version: 0, generated_at: null, status: 'draft' },
     practice: { attempts: 0, correct: 0 },
   }
@@ -87,7 +88,9 @@ function isNonNegativeInt(value: unknown): boolean {
  *
  * 合法输入只收核心调度状态；未知顶层键是用户元数据，不在校验范围。
  * practice_ema 与 fsrs 允许缺省归一（无练习证据 / 无调度记录）；一旦给出
- * 值就必须合法。缺省默认对象（content/practice）不算非法——但它们实际由
+ * 值就必须合法。mastery 已退役（ADR-0007）：缺省合法，给出仍须 0–1
+ * （存量文件不报 Broken）；掌握度一律由 masteryOfFm 派生，不再落盘。
+ * 缺省默认对象（content/practice）不算非法——但它们实际由
  * defaultFrontmatter 写入，读侧不据此伪造进度。 */
 export function validateNoteFrontmatter(doc: unknown): { errors: string[]; fm?: Fm } {
   const errors: string[] = []
@@ -98,9 +101,11 @@ export function validateNoteFrontmatter(doc: unknown): { errors: string[]; fm?: 
   if (typeof stage !== 'string' || !(STAGES as readonly string[]).includes(stage)) {
     errors.push(`stage: 非法状态（允许 ${STAGES.join('/')}）`)
   }
-  const mastery = doc.mastery
-  if (typeof mastery !== 'number' || !Number.isFinite(mastery) || mastery < 0 || mastery > 1) {
-    errors.push('mastery: 必须是 0–1 的数')
+  if (doc.mastery !== undefined) {
+    const mastery = doc.mastery
+    if (typeof mastery !== 'number' || !Number.isFinite(mastery) || mastery < 0 || mastery > 1) {
+      errors.push('mastery: 必须是 0–1 的数')
+    }
   }
   if (doc.practice_ema !== undefined) {
     const ema = doc.practice_ema
@@ -190,7 +195,7 @@ export function validateNoteFrontmatter(doc: unknown): { errors: string[]; fm?: 
     node: String(doc.node).trim(),
     stage: stage as Stage,
     fsrs,
-    mastery: mastery as number,
+    ...(doc.mastery !== undefined ? { mastery: doc.mastery } : {}),
     ...(doc.practice_ema !== undefined ? { practice_ema: doc.practice_ema } : {}),
     content: {
       version: (content as Record<string, unknown>).version,

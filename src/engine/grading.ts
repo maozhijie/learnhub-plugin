@@ -231,14 +231,14 @@ export function parseOpenGrading(raw: string): { score: number; feedback: string
 
 // ---------------------------------------------------------------- 作答记录与 EMA
 
-/** 练习证据 EMA（allo update_mastery 语义）：首证取分，之后 mastery*0.7 + score*0.3。 */
+/** 练习证据 EMA（allo 判卷流）：首证取分，之后旧值×0.7 + 本次分×0.3；是口径 B Mastery 的练习项。 */
 export function nextEma(current: number | undefined, score: number): number {
   const prev = current && current > 0 ? current : null
   const next = prev === null ? score : prev * 0.7 + score * 0.3
   return Math.round(Math.min(1, Math.max(0, next)) * 1000) / 1000
 }
 
-/** recordAttempt 的 frontmatter 侧更新：practice 计数 + EMA + mastery 派生。 */
+/** recordAttempt 的 frontmatter 侧更新：practice 计数 + 练习证据 EMA（mastery 纯派生，此处不落盘）。 */
 export function applyPracticeEvidence(fm: Fm, score: number): Fm {
   const practice = {
     attempts: fm.practice.attempts + 1,

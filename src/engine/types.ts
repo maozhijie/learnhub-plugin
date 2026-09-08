@@ -39,8 +39,11 @@ export interface Fm {
   node: string
   stage: Stage
   fsrs: FsrsBlock | null
-  mastery: number
-  /** 练习证据的 EMA（allo 判卷流：首证取分，之后 mastery*0.7+score*0.3）；无证据为 0。 */
+  /** 已退役的旧掌握度键（ADR-0007）：只作存量兼容保留，不再写入；
+   * 掌握度唯一 canonical = srs.masteryOfFm 纯派生（口径 B），不落盘。 */
+  mastery?: number
+  /** 练习证据的 EMA（allo 判卷流：首证取分，之后旧值×0.7 + 本次分×0.3）；无证据为 0。
+   * 是口径 B Mastery 的练习项（约 30% 权重），本身不是 Mastery。 */
   practice_ema?: number
   content: {
     version: number

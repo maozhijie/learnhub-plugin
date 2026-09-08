@@ -644,8 +644,7 @@ export class LearnhubEngine {
     this.assertNoteOk(c, graph, broken, node, 'lesson')
     const lesson = await this.sessions.lesson(c.name, c.root, graph, state, node)
     const view = lesson as Record<string, unknown>
-    // 刷卡模型：mastery 由题库作答数据派生（节点 frontmatter 的旧字段不再使用）
-    view.mastery = await this.nodeMastery(this.paths.courseRoot(c.root), node)
+    // mastery 由 sessions.lesson 按口径 B 派生（masteryOfFm），此处不再覆盖。
     // 节清单（逐节生成）：manifest 原样下发（前端按节 id 绑题、按 type 装配轮次），
     // 并给同名 sections 补 id/type；旧节点无清单，前端回退标题匹配。
     const manifest = state[node]?.content.sections ?? null
@@ -739,13 +738,15 @@ export class LearnhubEngine {
     }
   }
 
-  /** 某节点题库题目列表（不含答案/评分要点；带到期日与作答统计——刷卡视图）。 */
+  /** 某节点题库题目列表（不含答案/评分要点；带到期日与作答统计——刷卡视图）。
+   * mastery 与学习页/图/树同口径（masteryOfFm 派生），前端头部读数即此。 */
   async questions(courseKey: string | undefined, node: string): Promise<Record<string, unknown>> {
     const c = await this.registry.resolve(courseKey)
+    const { state } = await this.loadView(c)
     const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
     return {
       course: c.name, node,
-      mastery: await this.nodeMastery(this.paths.courseRoot(c.root), node),
+      mastery: masteryOfFm(state[node]),
       questions: bank.questions.filter(q => q.archived !== true)
         .map((q, i) => this.questionView(q, i)),
     }
@@ -848,13 +849,14 @@ export class LearnhubEngine {
       elapsed_s: elapsedS ?? undefined,
       xp: settle.xp,
     })
-    // frontmatter 计数 + EMA（allo mastery 语义）
+    // frontmatter 计数 + 练习证据 EMA（口径 B 的练习项；mastery 本身纯派生不落盘）
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(c.root, regionName, node)
     const { fm: rawFm, body } = await loadNote(path)
     const fm = asFm(rawFm)
+    let next: Fm | null = null
     if (fm) {
-      const next = applyPracticeEvidence(fm, correct ? 1.0 : 0.0)
+      next = applyPracticeEvidence(fm, correct ? 1.0 : 0.0)
       // 刷卡模型：首答把节点从 ready/unseen 推进 learning（后续调度由题目聚合驱动）
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
       await saveNote(path, next as unknown as Record<string, unknown>, body)
@@ -894,7 +896,7 @@ export class LearnhubEngine {
       ...(pendingRating ? { pending_rating: true } : {}),
     }
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
-    const mastery = await this.nodeMastery(this.paths.courseRoot(c.root), node)
+    const mastery = masteryOfFm(next)
     return {
       correct, score: Math.round(score * 100), feedback,
       explanation: q.explanation ?? '',
@@ -933,7 +935,7 @@ export class LearnhubEngine {
   ): Promise<Record<string, unknown>> {
     const r = Math.round(rating)
     if (r < 2 || r > 4) throw new Error(`[question-rate] 自评档位只能是 2/3/4（收到 ${String(rating)}）。`)
-    const { c, q } = await this.questionContext(courseKey, node, qid, 'question-rate')
+    const { c, graph, q } = await this.questionContext(courseKey, node, qid, 'question-rate')
     const today = todayStr()
     if (q.stats?.last !== today || !q.stats?.pending_rating) {
       // 挂起标记是唯一准入：练习流作答与「完成学习」当日初始化（last_review=今天）都不产生挂起
@@ -943,10 +945,13 @@ export class LearnhubEngine {
     const fs = applyRatingBlock(q.fsrs ?? null, r, today, sched).fs
     const { pending_rating: _drop, ...statsRest } = q.stats
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats: { ...statsRest } })
+    // mastery 与全端同口径：读落盘 frontmatter 派生（口径 B），自评不额外改证据
+    const [, regionName] = graph.blockOf[node]
+    const { fm: rawFm } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
     return {
       course: c.name, node, qid, rating: r,
       due: fs.due,
-      mastery: await this.nodeMastery(this.paths.courseRoot(c.root), node),
+      mastery: masteryOfFm(asFm(rawFm)),
       scheduled: true,
     }
   }
@@ -976,8 +981,9 @@ export class LearnhubEngine {
     const path = this.paths.courseNotePath(c.root, regionName, node)
     const { fm: rawFm, body } = await loadNote(path)
     const fm = asFm(rawFm)
+    let next: Fm | null = null
     if (fm) {
-      const next = applyPracticeEvidence(fm, 0.0)
+      next = applyPracticeEvidence(fm, 0.0)
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
       await saveNote(path, next as unknown as Record<string, unknown>, body)
       if (next.stage !== fm.stage) {
@@ -999,24 +1005,10 @@ export class LearnhubEngine {
       explanation: q.explanation ?? '',
       kind: q.kind,
       due: fs.due,
-      mastery: await this.nodeMastery(this.paths.courseRoot(c.root), node),
+      mastery: masteryOfFm(next),
       scheduled: true,
       xp: 0,
     }
-  }
-
-  /** 节点掌握度 = 该节点全部题目的作答正确率汇总（Σcorrect/Σattempts；无作答 → 0）。 */
-  private async nodeMastery(courseRoot: string, node: string): Promise<number> {
-    const bank = await this.bank.load(courseRoot, node)
-    let attempts = 0
-    let correct = 0
-    for (const q of bank.questions) {
-      if (q.archived) continue
-      attempts += q.stats?.attempts ?? 0
-      correct += q.stats?.correct ?? 0
-    }
-    if (!attempts) return 0
-    return Math.round((correct / attempts) * 100) / 100
   }
 
   // ---- 节点跳过 / 完成确认 ----
@@ -1105,7 +1097,6 @@ export class LearnhubEngine {
     if (fm && fm.stage !== 'review') {
       const next: Fm = { ...fm, stage: 'review' }
       if (repCard) next.fsrs = repCard
-      next.mastery = await this.nodeMastery(courseRoot, node)
       await saveNote(path, next as unknown as Record<string, unknown>, body)
       const { state: stateNow } = await this.loadView(c)
       await this.content.onStageChange(c.root, graph, stateNow, node, 'review')
@@ -1199,7 +1190,7 @@ export class LearnhubEngine {
     if (!graph.nset.has(node)) throw new Error(`[discuss] 节点「${node}」不在图内。`)
     this.assertNoteOk(c, graph, broken, node, 'discuss')
     const fm = state[node]
-    const mastery = await this.nodeMastery(this.paths.courseRoot(c.root), node)
+    const mastery = masteryOfFm(fm)
     const lines: string[] = []
     lines.push(`# 课程上下文：${c.name} / ${node}`)
     lines.push(`- 区/块：${graph.blockOf[node][1]} · ${graph.blockOf[node][2]}；深度 L${(graph.depth[node] ?? 0) + 1}；阶段：${fm?.stage ?? 'unknown'}；掌握度：${Math.round(mastery * 100)}%`)
@@ -1406,7 +1397,7 @@ export class LearnhubEngine {
   /** 交互件成绩结算：面板 sandbox iframe 上报 LEARNHUB_COMPLETE → practice 流水 +
    * 练习证据 EMA（复用题库作答链路；judge='interactive'、qid='interactive:<节id>'）。
    * 同一节同日只记一次（防刷）；不碰题目 FSRS（交互件不是题库题），
-   * 节点掌握度仍是题库作答正确率，不随交互件成绩变化。 */
+   * 节点掌握度为口径 B 派生值（masteryOfFm），随练习证据 EMA 变化并即时回传。 */
   async interactiveSettle(
     courseKey: string | undefined, node: string, sectionId: string, score: number, detail?: string,
   ): Promise<{ settled: boolean; mastery: number }> {
@@ -1421,23 +1412,23 @@ export class LearnhubEngine {
     const played = (await this.store.practiceAll()).some(r =>
       r.course === c.name && r.node === node && r.judge === 'interactive' && r.qid === qid
       && r.ts.startsWith(today))
-    const mastery = await this.nodeMastery(this.paths.courseRoot(c.root), node)
-    if (played) return { settled: false, mastery }
+    const [, regionName] = graph.blockOf[node]
+    const path = this.paths.courseNotePath(c.root, regionName, node)
+    const { fm: rawFm, body } = await loadNote(path)
+    const fm = asFm(rawFm)
+    if (played) return { settled: false, mastery: masteryOfFm(fm) }
     await this.store.appendPractice({
       course: c.name, node, ex: 0, answer: detail ?? '',
       correct: clamped >= PASS_SCORE, judge: 'interactive', qid,
       ...(detail ? { feedback: detail } : {}),
     })
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
-    const fm = asFm(rawFm)
+    let next: Fm | null = null
     if (fm) {
-      const next = applyPracticeEvidence(fm, clamped)
+      next = applyPracticeEvidence(fm, clamped)
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
       await saveNote(path, next as unknown as Record<string, unknown>, body)
     }
-    return { settled: true, mastery }
+    return { settled: true, mastery: masteryOfFm(next) }
   }
 
   /** 删除课程：注册表移除 + 课程目录移入 学习中心/.trash/（不真删，可手工找回）。 */

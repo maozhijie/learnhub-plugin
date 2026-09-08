@@ -1117,7 +1117,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string; yaml: string }) => run('learnhub_question_save', async () =>
       JSON.stringify(await engine.questionSave(args.course, args.node, args.yaml))))
   tool('learnhub_question_answer',
-    'Answer one bank question (flashcard model): auto-judged 1.0/0.0 (reflection graded by AI against its rubric); the result drives THAT question\'s FSRS schedule (correct=Good, wrong=Again) and the node mastery aggregates per-question stats.',
+    'Answer one bank question (flashcard model): auto-judged 1.0/0.0 (reflection graded by AI against its rubric); the result drives THAT question\'s FSRS schedule (correct=Good, wrong=Again). Node mastery is purely derived (masteryOfFm: 0.7 x memory-stability progress + 0.3 x practice-evidence EMA); per-question answer stats only feed the completion gate, not mastery.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name' },

@@ -3,7 +3,7 @@
  * 供自由回看与加练出题；完成确认（正确率门禁：低于及格线默认拒绝，可 force）
  * + 跳过（已有基础）；按状态引导下一步（无正文→生成正文自动出题；有正文无题→
  * AI 出题）；生成/出题进行中轮询任务状态；「在图中查看」低频跳转。
- * 掌握度 = 该节点题目的作答正确率汇总（无自评）。 */
+ * 掌握度 = 口径 B 纯派生（masteryOfFm：0.7·记忆稳定度完成度 + 0.3·练习证据 EMA）。 */
 import { Button, Card, Collapse, Empty, Input, Message, Modal, Space, Spin, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import MdView from './MdView'
@@ -207,7 +207,7 @@ export default function LessonView(props: { course: string; node: string; frame:
           <Button size='small' type='text' onClick={frame.closeLesson}>← 返回</Button>
           <Title heading={4} style={{ margin: 0, fontSize: 20 }}>{node}</Title>
           {stageInfo && <Tag color={stageInfo.color}>{stageInfo.label}</Tag>}
-          <Tooltip content='掌握度 = 本节点题目作答正确率汇总。点「完成学习」后全部题目进入复习循环：做过的按各自到期复习，没做过的明天开始。'>
+          <Tooltip content='掌握度 = 0.7×记忆稳定度完成度 + 0.3×练习证据 EMA（作答对错累积，复习推高稳定度）；题目作答正确率只用于完成门禁。点「完成学习」后全部题目进入复习循环：做过的按各自到期复习，没做过的明天开始。'>
             <Text type='secondary' style={{ fontSize: 13, cursor: 'help' }}>掌握度 {(mastery * 100).toFixed(0)}% ⓘ</Text>
           </Tooltip>
         </div>

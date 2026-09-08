@@ -119,7 +119,7 @@ export function applyRatingBlock(
   fsOld: FsrsBlock | null, ratingNum: number, today: string, sched: FSRS,
 ): { fs: FsrsBlock; kind: 'learn' | 'review' | 'relearn' } {
   const pseudo = {
-    node: '', stage: fsOld?.reps ? 'review' : 'ready', fsrs: fsOld, mastery: 0,
+    node: '', stage: fsOld?.reps ? 'review' : 'ready', fsrs: fsOld,
     content: { version: 0, generated_at: null, status: 'draft' }, practice: { attempts: 0, correct: 0 },
   } as unknown as Fm
   const { fs, meta } = applyRating(pseudo, ratingNum, today, sched)

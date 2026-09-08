@@ -27,7 +27,8 @@ function frontmatter(overrides: Record<string, unknown> = {}, extra?: string): s
   lines.push(`node: ${String(overrides.node ?? '入门')}`)
   lines.push(`stage: ${String(overrides.stage ?? 'ready')}`)
   lines.push(`fsrs: ${String(overrides.fsrs ?? 'null')}`)
-  lines.push(`mastery: ${String(overrides.mastery ?? '0')}`)
+  // mastery 已退役（ADR-0007）：新式文件不含该键；显式提供时模拟存量文件
+  if ('mastery' in overrides) lines.push(`mastery: ${String(overrides.mastery)}`)
   if ('content' in overrides) {
     lines.push(`content: ${String(overrides.content)}`)
   } else {
@@ -70,12 +71,22 @@ test('#7 valid core state loads, unknown metadata is preserved on write, missing
     const { state, broken } = await engine.loadView({ name: '数学', root: 'math' })
     assert.equal(broken.length, 0)
     assert.equal(state['入门']?.practice_ema, undefined)
+    assert.equal(state['入门']?.mastery, undefined, 'mastery 已退役：无键合法且不入规范化状态')
     assert.equal(state['入门']?.stage, 'ready')
 
     await engine.nodeSkip('数学', '入门', true)
     const raw = await readFile(join(await engine.paths.courseDir('math'), '基础', '入门.md'), 'utf8')
     assert.ok(raw.includes('custom_user_field: 我的元数据'), 'unknown metadata was dropped by a state write')
     assert.ok(raw.includes('stage: skipped'), 'stage update missing')
+    assert.ok(!raw.includes('mastery:'), '新式文件的回写不得引入 mastery 键')
+  })
+})
+
+test('#7 mastery 键退役但存量兼容：给出 0–1 合法值不报 Broken', async () => {
+  await withVault(frontmatter({ mastery: 0 }), async engine => {
+    const view = await engine.loadView({ name: '数学', root: 'math' })
+    assert.equal(view.broken.length, 0)
+    assert.equal(view.state['入门']?.mastery, 0)
   })
 })
 
