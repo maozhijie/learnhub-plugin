@@ -4,7 +4,7 @@
  * 一卡一票（作答或满 5 秒申报忘记），背面自评 Hard/Good/Easy 推进调度。 */
 import {
   Alert, Button, Card, Empty, Input, Message, Modal, Popconfirm, Progress, Space,
-  Tag, Typography,
+  Tag, Tooltip, Typography,
 } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -13,15 +13,16 @@ import QuestionCard, { type AnswerOutcome, toOutcome } from '../components/Quest
 import { nextBand, pickNext } from '../../../src/engine/adaptive'
 import { api } from '../api'
 import type { AppFrame } from '../App'
-import type { RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, XpStatus } from '../types'
+import type { DiagnosticEntry, RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, XpStatus } from '../types'
 
 const { Text, Title } = Typography
 
 const REC_TYPE: Record<string, { label: string; color: string; order: number }> = {
   overdue: { label: '逾期', color: 'red', order: 0 },
   review: { label: '复习', color: 'green', order: 1 },
-  learning: { label: '继续学', color: 'arcoblue', order: 2 },
-  new: { label: '新学', color: 'cyan', order: 3 },
+  diagnostic: { label: '内容诊断', color: 'magenta', order: 2 },
+  learning: { label: '继续学', color: 'arcoblue', order: 3 },
+  new: { label: '新学', color: 'cyan', order: 4 },
 }
 
 /** XP 时间账本条：今日 XP / 每日目标环 + 连续学习天数（Math Academy 的进度货币）。 */
@@ -66,7 +67,9 @@ function ReviewBanner({ dueCount, onStart }: { dueCount: number; onStart: () => 
 }
 
 /** 推荐流大卡片：点开直接进 LessonView——主界面的核心动作；内联跳过（已有基础免学）。
- * 内容三态标识：已生成（点开有东西读）/ 生成中 / 排队中；未生成节点主按钮让给「生成内容」。 */
+ * 内容三态标识：已生成（点开有东西读）/ 生成中 / 排队中；未生成节点主按钮让给「生成内容」。
+ * 事件携带 diagnostics（B1 #69）时内联「重写此节」直达动作——Popconfirm 确认后才走
+ * 单节重写管线（诊断建议先行，不自动动库）。 */
 function RecCard({ e, gen, onOpen, onSkip, onGenerate }: {
   e: RecEvent
   gen?: 'queued' | 'running'
@@ -76,6 +79,18 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate }: {
 }) {
   const t = REC_TYPE[e.type] ?? { label: e.type, color: 'gray', order: 9 }
   const generating = gen === 'running' || gen === 'queued'
+  const [rewriting, setRewriting] = useState<string | null>(null)
+  const rewriteSection = async (d: DiagnosticEntry) => {
+    setRewriting(d.rewrite.section)
+    try {
+      const r = await api.sectionRewrite(d.rewrite.course, d.rewrite.node, d.rewrite.section)
+      Message.success(r.message)
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRewriting(null)
+    }
+  }
   return (
     <Card size='small' hoverable style={{ borderRadius: 10, cursor: 'pointer', borderLeft: `3px solid var(--color-${t.color === 'red' ? 'danger' : t.color === 'green' ? 'success' : t.color === 'arcoblue' ? 'arcoblue' : 'primary'}-6,#165dff)` }}>
       <div onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -111,6 +126,31 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate }: {
           </Popconfirm>
         </span>
       </div>
+      {e.diagnostics?.length ? (
+        <div onClick={ev => ev.stopPropagation()} style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {e.diagnostics.map(d => (
+            <div key={d.section} style={{
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+              background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '6px 10px',
+            }}>
+              <Tag size='small' color={d.signal === 'R1' ? 'red' : 'orange'}>{d.signal}</Tag>
+              <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 200 }}>「{d.sectionTitle}」{d.reason}</Text>
+              {d.escalate ? (
+                <Tooltip content='重写后仍反复失败：问题可能不在正文——请人工审题、归档坏题或检查前置'>
+                  <Tag size='small' color='purple'>转人工处理</Tag>
+                </Tooltip>
+              ) : (
+                <Popconfirm
+                  title={`重写「${d.sectionTitle}」这一节？`}
+                  content='走单节重写管线（过质检门 + 一轮修复）：只手术这一节正文（版本 +1），题库与复习计划不动。'
+                  onOk={() => void rewriteSection(d)}>
+                  <Button size='mini' type='text' loading={rewriting === d.rewrite.section}>重写此节</Button>
+                </Popconfirm>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </Card>
   )
 }

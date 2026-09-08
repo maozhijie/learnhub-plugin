@@ -89,6 +89,10 @@ const nodeBanner = {
   js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
 }
 
+/** native 模块（napi .node 二进制按平台包分发）不可打包：运行时从 node_modules 动态
+ * import。优化器（#62）是唯一消费方，调用点隔离在 src/engine/optimize.ts。 */
+const NODE_EXTERNALS = ['@deepseek-ai/*', 'node:*', '@open-spaced-repetition/*']
+
 const clientBanner = {
   js: "window.__ModuleLoader__.load({ id: 'dsh-learnhub', factory: (require) => { var module = { exports: {} }; var exports = module.exports;",
 }
@@ -103,7 +107,7 @@ await build({
   platform: 'node',
   format: 'esm',
   target: ['node22'],
-  external: ['@deepseek-ai/*', 'node:*'],
+  external: NODE_EXTERNALS,
   banner: nodeBanner,
 })
 
@@ -117,7 +121,7 @@ await build({
   platform: 'node',
   format: 'esm',
   target: ['node22'],
-  external: ['@deepseek-ai/*', 'node:*'],
+  external: NODE_EXTERNALS,
   banner: nodeBanner,
 })
 

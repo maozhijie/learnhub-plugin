@@ -117,3 +117,11 @@ export function discussInHost(course: string, node: string, intent: string): voi
   if (window.parent !== window) window.parent.postMessage(message, '*')
   else window.opener?.postMessage(message, '*')
 }
+
+/** 错误当下的「讲解这道题」（Arc D）：答错/忘记错误态动作——逐题错误上下文包
+ * 注入宿主新会话的首条消息（learnhub:explain 桥消费）。 */
+export function explainInHost(course: string, node: string, qid: string): void {
+  const message = { type: 'learnhub:explain', course, node, qid }
+  if (window.parent !== window) window.parent.postMessage(message, '*')
+  else window.opener?.postMessage(message, '*')
+}

@@ -8,11 +8,11 @@
  * 复习刷卡变体（variant='review'）：提交改走 submitter（deferSchedule 挂起调度，背面自评）、
  * 正面「忘记」申报受 5 秒主动回忆门控（展示起算倒计时）、背面追加正确答案块；
  * 自评难度按钮等复习专属背面件由 footer 注入。 */
-import { Button, Input, Message, Radio, Select, Tag, Typography } from '@arco-design/web-react'
+import { Button, Input, Message, Radio, Select, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { InlineMd } from './MdView'
-import { api } from '../api'
+import { api, explainInHost } from '../api'
 import type { QuestionItem } from '../types'
 
 const { Text } = Typography
@@ -307,6 +307,13 @@ export default function QuestionCard(props: {
             {outcome.correct === null && <Tag>已记录</Tag>}
             <XpBadge xp={outcome.xp} reason={outcome.xp_reason} />
             <Text type='secondary' style={{ fontSize: 12 }}>判卷：{outcome.judge}</Text>
+            {outcome.correct === false && (
+              <Tooltip content='新开一个 AI 会话，围绕这道题按「完整解法 → 半成品变式 → 独立重做」渐退讲解'>
+                <Button size='mini' type='text' onClick={() => explainInHost(props.course, props.node, q.id)}>
+                  讲解这道题
+                </Button>
+              </Tooltip>
+            )}
             {!props.noRedo && props.variant !== 'review' && (
               <Button size='mini' type='text' onClick={redo}>再做一次</Button>
             )}

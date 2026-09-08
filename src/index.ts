@@ -692,6 +692,15 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/discuss-pack', () => engine.discussionPack(course, node)))
       return
     }
+    if (req.method === 'GET' && route === '/explain-pack') {
+      // 错误当下「讲解这道题」逐题包（Arc D #64）：客户端桥注入宿主会话的首条消息原料
+      const node = url.searchParams.get('node')
+      const qid = url.searchParams.get('qid')
+      if (!node || !qid) throw new Error('missing required field: node/qid')
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/explain-pack', () => engine.errorExplainPack(course, node, qid)))
+      return
+    }
     if (req.method === 'POST') {
       const body = await readJson(req)
       if (route === '/rebuild') {
@@ -910,7 +919,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     }) as never)
 
   tool('learnhub_status',
-    'Return the learning center status (center summary + per-course detail) as JSON. blocked entries are executable soft-gate advice: a candidate blocked only by a decayed prerequisite carries {pre, r, due, entry} — review the prerequisite\'s due questions first (direct entry) or still learn the candidate directly.',
+    'Return the learning center status (center summary + per-course detail) as JSON. blocked entries are executable soft-gate advice: a candidate blocked only by a decayed prerequisite carries {pre, r, due, entry} — review the prerequisite\'s due questions first (direct entry) or still learn the candidate directly. Courses may also carry diagnostics (B1 content-diagnostic suggestions): a section with concentrated wrong answers (R1 single-question lapses or R2 section accuracy <0.5 over ≥4 deduped answers) with reason, evidence, and a rewrite direct action — surface it to the learner and rewrite via learnhub_section_rewrite ONLY after they confirm (advice-first, never automatic). Evaluating diagnostics appends a trigger record to the journal when a signal fires fresh (that ledger drives the 7-day cooldown and R1 escalation); nothing else is written.',
     {}, () => run('learnhub_status', async () => JSON.stringify(await engine.statusJson())))
   tool('learnhub_data_check',
     'Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.',
@@ -941,7 +950,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { node: string; course: string }) => run('learnhub_lesson', async () => JSON.stringify(await engine.lesson(args.course, args.node))))
   tool('learnhub_recommend',
-    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Fetch the next batch after finishing one.',
+    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle/diagnostic) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Events may also carry a `diagnostics` array (B1 content diagnostics, standalone events typed diagnostic): a section whose content keeps failing the learner (R1 single-question repeated lapses, or R2 answer accuracy <0.5 over ≥4 deduped answers since the section was last rewritten) with reason, evidence, and a rewrite direct action {course, node, section} — after the learner confirms, execute it with learnhub_section_rewrite (gated single-section rewrite; the question bank is untouched); the Arc D per-question explain entry lives in the panel\'s error state. Fetch the next batch after finishing one.',
     { limit: { type: 'number', description: 'Max events to return (default 5)' } },
     (args: { limit?: number }) => run('learnhub_recommend', async () =>
       JSON.stringify(await engine.recommend(args.limit === undefined ? 5 : args.limit))))
@@ -1058,6 +1067,15 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { course: string; node: string; style?: string }) => run('learnhub_generate', () =>
       enqueueGeneration(ctx, args.course, args.node, args.style)))
+  tool('learnhub_section_rewrite',
+    'Rewrite ONE section of a node through the model — the same gated pipeline as the panel section-rewrite: section task context → model → quality gates → one repair round on gate failure → surgical reassembly of that section (section version +1, node content back to draft; the question bank, FSRS cards, and schedules are untouched). This is the direct action for B1 content-diagnostic suggestions (learnhub_recommend/status diagnostics: R1 single-question repeated failure, R2 section answer-accuracy collapse). Diagnostics are advisory — confirm with the learner before calling; never rewrite a section nobody asked about. Synchronous: a section typically takes tens of seconds.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node name' },
+      section: { type: 'string', required: true, description: 'Section id from the node manifest (e.g. "s2") — exactly what diagnostics[].rewrite.section carries' },
+    },
+    (args: { course: string; node: string; section: string }) => run('learnhub_section_rewrite', async () =>
+      generateSection(ctx, args.course, args.node, args.section)))
   tool('learnhub_course_reset',
     'Reset one course for full regeneration: all node notes are backed up into .trash/regenerate-<ts>/ and rewritten as ungenerated skeletons; the question bank, interactive artifacts, and generated-image dirs move into the same backup. The graph, learning progress, and prompt snapshots are kept. Regeneration then runs as a background chain over all nodes in graph topological order (each node: outline → sections → quiz) and this call returns immediately with the queued count; progress shows in the panel generate tab. Refuses while generation tasks are running. Destructive but recoverable — confirm with the user before calling.',
     { course: { type: 'string', required: true, description: 'Course name' } },
@@ -1075,6 +1093,11 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { course: { type: 'string', description: 'Course name; omit to scan all enabled courses' } },
     (args: { course?: string }) => run('learnhub_difficulty_advice', async () =>
       JSON.stringify(await engine.difficultyAdvice(args.course))))
+  tool('learnhub_optimize_params',
+    'Manually trigger FSRS-6 personal parameter optimization (A2, never automatic — like Anki): retrains the 21 scheduling parameters from the learner\'s real review log (synthetic initializations excluded, first push per card per day) across all enabled courses. Gates: at least 400 real review pushes are required, and the trained parameters must evaluate strictly better than the current/default parameters (same-protocol logLoss comparison) — otherwise nothing is written and the skip reason is returned with the metrics. On success the one learner-level parameter set is written to every enabled course\'s fsrs参数.json with full training metadata (count/date/metrics); the scheduler picks it up with zero changes. Expect ~a few seconds of training.',
+    {},
+    () => run('learnhub_optimize_params', async () =>
+      JSON.stringify(await engine.optimizeFsrsParams())))
   tool('learnhub_question_generate',
     'Generate quiz questions for a node via the model — the same pipeline as the auto-quiz: node body → question prompt → llm → validateBank gate appends every question to the bank. Use when a node has no/too few questions.',
     {
@@ -1202,7 +1225,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 29 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 31 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

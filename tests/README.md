@@ -35,6 +35,8 @@
 - S24 `adaptive.ts::combinedDifficulty / startBand / nextBand / pickNext / sessionOrder` —— A1 会话内选档（静态+FSRS 合用难度、Mastery 起点先验单调、连对升档/错忘降档；`tests/adaptive-session.test.ts`）
 - S25 `bank-advice.ts::calibrationAdvice / tooEasyAdvice` —— B2 难度带校准与全对归档建议（stage/作答量/Mastery/答错证据四道守门、低数据静默；`tests/bank-advice.test.ts`）
 - S26 `memory.ts::forecast / stateHistograms / dueReviewFirstPushes / trueRetention / calibrationBins / forgettingCurve` —— 记忆健康四面板聚合（synthetic 与首学推进排除、每卡每天第一条；`tests/memory-health.test.ts`）
+- S27 `optimize.ts::trainingSequences` —— FSRS 优化器训练序列构建（synthetic 排除、每卡每天第一条、delta_t 链；`tests/fsrs-optimize.test.ts`；门禁/写回走 facade + 假优化器注入）
+- S28 `attribution.ts::evaluateSectionSignals / sectionEntryOf` —— B1 节级归因触发（R1/R2 阈值、（题,日）去重、节重写锚点、冷却 fresh/met 分层、R1 二次升级；`tests/b1-attribution.test.ts`；facade 集成同文件）
 
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 

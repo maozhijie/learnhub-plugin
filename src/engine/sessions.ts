@@ -16,6 +16,8 @@ import type { BrokenNote } from './notes.ts'
 import type { Graph } from './graph.ts'
 import type { Fm, Stage } from './types.ts'
 import type { Paths } from './paths.ts'
+import { DIAGNOSTIC_SCORE, diagnosticView } from './attribution.ts'
+import type { DiagnosticItem } from './attribution.ts'
 
 /** 单课调度素材的统一视图参数。 */
 export interface ViewSource {
@@ -93,6 +95,17 @@ export const STRUGGLE_WINDOW_DAYS = 14
 export const REMEDIAL_LIMIT = 3
 
 const round3 = (r: number) => Math.round(r * 1000) / 1000
+
+/** 按 node 分组（B1 诊断事件合流用；同插入序）。 */
+function groupByNode(items: DiagnosticItem[]): Map<string, DiagnosticItem[]> {
+  const out = new Map<string, DiagnosticItem[]>()
+  for (const d of items) {
+    const list = out.get(d.node) ?? []
+    list.push(d)
+    out.set(d.node, list)
+  }
+  return out
+}
 
 /** A3 R 半（#54）：gateBlockers 的可执行化投影——弱前置结构不变，每项补
  * 「当前到期题数」（题库聚合注入；无题库数据按 0，仍给建议、入口自然为空队列）。 */
@@ -262,6 +275,8 @@ export class Sessions {
     limit: number,
     /** struggle 近期窗口统计（#55 F 半；缺省 = 无窗口数据，复习中节点不判 struggle）。 */
     windowStats?: Map<string, Map<string, WindowStat>>,
+    /** 内容诊断建议项（#69 B1；门面 diagnosticsAdvice 的产出，per course 过滤后消费）。 */
+    diagnostics?: DiagnosticItem[],
   ): Promise<Array<Record<string, unknown>>> {
     const events: Array<Record<string, unknown>> = []
     const seen = new Set<string>()
@@ -367,6 +382,25 @@ export class Sessions {
         if (unlocks) parts.push(`学好可解锁 ${unlocks} 个后继`)
         parts.push(`「${region}」区${lru.length && lru[0] === region ? '最久未学，轮转优先' : '按轮转排序'}`)
         add('new', n, 30 + Math.min(unlocks * 4, 16) + (lruBonus.get(region) ?? 0), parts.join('；'))
+      }
+      // B1（#69）：本课程的内容诊断建议项——节点已有事件则附着，否则独立 diagnostic
+      // 事件（score 介于 new 与 review 之间）。每节点合一条，diagnostics 数组内联
+      // 理由与证据，并带「重写此节」直达动作（确认后才走单节重写管线）。
+      for (const [node, list] of groupByNode(diagnostics?.filter(d => d.course === c.name) ?? [])) {
+        const view = list.map(d => diagnosticView(d))
+        const hit = events.find(e => e.course === c.name && e.node === node)
+        if (hit) {
+          hit.diagnostics = view
+          continue
+        }
+        events.push({
+          type: 'diagnostic', course: c.name, node,
+          region: graph.blockOf[node]?.[1] ?? '', score: DIAGNOSTIC_SCORE,
+          why: list[0]!.reason + (list.length > 1 ? `（另有 ${list.length - 1} 节待诊断）` : ''),
+          path: this.notePath(c.root, graph, node),
+          hasContent: hasReadyContent(state[node]),
+          diagnostics: view,
+        })
       }
     }
     events.sort((a, b) => (b.score as number) - (a.score as number))

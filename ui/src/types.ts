@@ -58,6 +58,16 @@ export interface GraphDoc {
 }
 
 export type RecEventType = 'new' | 'ready' | 'review' | 'overdue' | 'learning' | string
+/** 内容诊断建议项（B1 #69：节级答错集中/单题反复失败的信号 + 重写直达动作）。 */
+export interface DiagnosticEntry {
+  section: string
+  sectionTitle: string
+  signal: 'R1' | 'R2'
+  escalate: boolean
+  reason: string
+  rewrite: { course: string; node: string; section: string }
+  explain: { course: string; node: string }
+}
 export interface RecEvent {
   type: RecEventType
   course: string
@@ -68,6 +78,8 @@ export interface RecEvent {
   path?: string | null
   /** 已生成可读正文（点开有东西读；列表三态标识数据源）。 */
   hasContent?: boolean
+  /** 内容诊断建议项（附着在学习事件上，或独立 diagnostic 事件）。 */
+  diagnostics?: DiagnosticEntry[]
 }
 export interface RecommendDoc { date: string; events: RecEvent[] }
 

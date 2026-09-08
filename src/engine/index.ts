@@ -19,6 +19,11 @@ import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
 import { combinedDifficulty, startBand, sessionOrder } from './adaptive.ts'
 import { calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
+import { bindingImpl, defaultParams, OPTIMIZE_MIN_REVIEWS, FSRS6_PARAM_COUNT, sequenceReviews, trainingSequences } from './optimize.ts'
+import type { OptimizerImpl } from './optimize.ts'
+import { sectionEntryOf } from './attribution.ts'
+import { DIAGNOSTIC_SCORE, diagnosticView, evaluateSectionSignals, formatSignalDetail, parseRewriteDetail, parseSignalDetail } from './attribution.ts'
+import type { DiagnosticItem, RewriteFact, SignalSnapshot } from './attribution.ts'
 import { FORECAST_DAYS, calibrationBins, dueReviewFirstPushes, forecast, forgettingCurve, stateHistograms, trueRetention } from './memory.ts'
 import { runAudit, effectiveStage } from './audit.ts'
 import { analyzeGraph } from './analysis.ts'
@@ -52,6 +57,11 @@ function shuffled<T>(items: T[]): T[] {
     ;[out[i], out[j]] = [out[j], out[i]]
   }
   return out
+}
+
+/** 评估指标等小数的 4 位舍入（落盘元数据与文案共用）。 */
+function round4(x: number): number {
+  return Math.round(x * 10000) / 10000
 }
 
 /** 错题公布答案的题型化展示（多选字母并排、排序箭头链、匹配左→右）。 */
@@ -168,14 +178,82 @@ export class LearnhubEngine {
   }
 
   async statusJson(): Promise<Record<string, unknown>> {
-    const stats = await this.bankSnapshot()
-    return this.sessions.statusJson(await this.enabledCourses(), stats)
+    const [stats, diagnostics] = await Promise.all([this.bankSnapshot(), this.diagnosticsAdvice()])
+    const doc = await this.sessions.statusJson(await this.enabledCourses(), stats)
+    // 内容诊断建议项（#69 B1）：每课程附 diagnostics（信号/理由/证据 + 重写与讲解直达入口）
+    for (const course of doc.courses as Array<Record<string, unknown>>) {
+      const items = diagnostics.filter(d => d.course === course.name)
+      if (items.length) course.diagnostics = items.map(d => diagnosticView(d))
+    }
+    return doc
   }
 
   async recommend(limit = 5): Promise<Record<string, unknown>> {
-    const [stats, window] = await Promise.all([this.bankSnapshot(), this.struggleWindow()])
-    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, todayStr(), limit, window)
+    const [stats, window, diagnostics] = await Promise.all([this.bankSnapshot(), this.struggleWindow(), this.diagnosticsAdvice()])
+    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, todayStr(), limit, window, diagnostics)
     return { date: todayStr(), events }
+  }
+
+  /** B1 内容诊断（#69，信号层建议先行）：逐启用课程逐节评估 R1（单题 lapses≥3）/
+   * R2（自节 version 锚点以来按（题,日）去重 ≥4 次且正确率 <0.5）。零新增文件——
+   * 触发留痕写 journal（kind=section_regen_signal，detail 人类可读且机器可回读），
+   * 它同时是 7 天冷却与 R1 二次升级的判定依据；条件命中期间建议项保持可见（met），
+   * 冷却与快照守门只约束新触发（fresh）。v1 只重写既有节、确认后才触发（不自动动库）。 */
+  async diagnosticsAdvice(today = todayStr()): Promise<DiagnosticItem[]> {
+    const out: DiagnosticItem[] = []
+    const practice = await this.store.practiceAll()
+    for (const c of await this.enabledCourses()) {
+      const { state, broken } = await this.loadView(c)
+      assertNoBrokenNotes('diagnostics', broken)
+      const journal = await this.store.journalTail(c.name, Number.MAX_SAFE_INTEGER)
+      const signalsByNode = new Map<string, Array<SignalSnapshot & { day: string }>>()
+      const rewritesByNode = new Map<string, RewriteFact[]>()
+      for (const r of journal) {
+        if (r.kind === 'section_regen_signal') {
+          const snap = parseSignalDetail(r.detail)
+          if (!snap) continue
+          const list = signalsByNode.get(r.node) ?? []
+          list.push({ ...snap, day: r.ts.slice(0, 10) })
+          signalsByNode.set(r.node, list)
+        } else if (r.kind === 'content_section') {
+          // detail 历史上只有节标题没有节 id（content.ts 契约）——按清单标题回退对齐
+          const title = parseRewriteDetail(r.detail)
+          if (!title) continue
+          const list = rewritesByNode.get(r.node) ?? []
+          list.push({ title, day: r.ts.slice(0, 10) })
+          rewritesByNode.set(r.node, list)
+        }
+      }
+      await this.scanCourseBanks(c, async (node, bank) => {
+        const manifest = state[node]?.content.sections
+        if (!manifest?.length) return // 无清单旧节点：节归因不适用（标题匹配不出的节不产建议）
+        const attempts = practice
+          .filter(r => r.course === c.name && r.node === node)
+          .map(r => ({ qid: r.qid ?? '', day: r.ts.slice(0, 10), correct: r.correct }))
+        for (const v of evaluateSectionSignals({
+          manifest,
+          questions: bank.questions.filter(q => !q.archived).map(q => ({ id: q.id, section: q.section, fsrs: q.fsrs })),
+          attempts,
+          prevSignals: signalsByNode.get(node) ?? [],
+          rewrites: rewritesByNode.get(node) ?? [],
+          today,
+        })) {
+          if (v.fresh) {
+            const ev = v.signal === 'R1'
+              ? `qid=${v.evidence.qid} lapses=${v.evidence.lapses}`
+              : `attempts=${v.evidence.attempts} correct=${v.evidence.correct} acc=${v.evidence.accuracy}`
+            await this.store.appendJournal({
+              course: c.name, node, rating: null, kind: 'section_regen_signal', elapsed_days: 0,
+              detail: formatSignalDetail(
+                { sectionId: v.sectionId, signal: v.signal, base: Number(v.signal === 'R1' ? v.evidence.lapses : v.evidence.attempts) },
+                v.sectionTitle, ev),
+            })
+          }
+          out.push({ course: c.name, node, ...v })
+        }
+      })
+    }
+    return out
   }
 
   /** struggle 近期窗口统计（#55 F 半）：作答流水按 (course,node) 聚合，只留窗口内的
@@ -1384,6 +1462,75 @@ export class LearnhubEngine {
     }
   }
 
+  // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----
+
+  /** 手动触发 FSRS-6 个人参数重训：数据 = 中心级跨课程复习日志的真实推进（排除
+   * synthetic、每卡每天第一条）；门禁 = 真实条数 ≥400（官方口径）且训练后评估
+   * （in-sample logLoss，新参/基线同协议对照）优于现参或默认参数，否则不写并返回
+   * 跳过原因。参数是学习者级一套：写回每个启用课程的 fsrs参数.json（含元数据可
+   * 追溯），getScheduler 读法零改动。impl 接缝供测试注入假优化器。 */
+  async optimizeFsrsParams(
+    impl: OptimizerImpl = bindingImpl,
+  ): Promise<{
+    status: 'written' | 'skipped'
+    reason?: string
+    written?: string[]
+    meta?: Record<string, unknown>
+  }> {
+    const seqs = trainingSequences(await this.store.reviewLogAll())
+    const count = sequenceReviews(seqs)
+    if (count < OPTIMIZE_MIN_REVIEWS) {
+      return { status: 'skipped', reason: `真实复习日志 ${count} 条，不足 ${OPTIMIZE_MIN_REVIEWS} 条——保持现参不训练（synthetic 已排除，每卡每天只计第一条）` }
+    }
+    const courses = await this.enabledCourses()
+    if (!courses.length) return { status: 'skipped', reason: '没有启用课程，参数无处写回' }
+    // 基线 = 现参（学习者级一套，任一启用课程文件里的就是同一套）；无文件 → 官方默认。
+    // 参数文件损坏时与 getScheduler 同语义：忽略坏文件按默认参数对照（调度此刻实际生效
+    // 的就是默认参数，对照基线必须与之同一），不因基线读取阻塞训练。
+    let baselineParams = defaultParams()
+    let baselineSource: 'previous' | 'default' = 'default'
+    for (const c of courses) {
+      try {
+        const doc = JSON.parse(await readFile(this.paths.fsrsParamsPath(c.root), 'utf8')) as { parameters?: number[] }
+        if (Array.isArray(doc.parameters) && doc.parameters.length === FSRS6_PARAM_COUNT) {
+          baselineParams = doc.parameters
+          baselineSource = 'previous'
+          break
+        }
+      } catch {
+        // 该课程无参数文件：继续找下一门（同为学习者级一套，任一命中即可）
+      }
+    }
+    const baselineEval = await impl.evaluate(baselineParams, seqs)
+    const { parameters, splitEval } = await impl.train(seqs)
+    if (parameters.length !== FSRS6_PARAM_COUNT) {
+      return { status: 'skipped', reason: `训练产出 ${parameters.length} 个参数，不是 FSRS-6 的 ${FSRS6_PARAM_COUNT} 个——拒绝写回` }
+    }
+    const newEval = await impl.evaluate(parameters, seqs)
+    const meta = {
+      trained_at: todayStr(),
+      params_version: 'FSRS-6',
+      source: 'review-log',
+      reviews: count,
+      cards: seqs.length,
+      baseline_source: baselineSource,
+      baseline_log_loss: round4(baselineEval.logLoss),
+      log_loss: round4(newEval.logLoss),
+      rmse_bins: round4(newEval.rmseBins),
+      split_log_loss: splitEval ? round4(splitEval.logLoss) : null,
+      split_rmse_bins: splitEval ? round4(splitEval.rmseBins) : null,
+    }
+    if (!(newEval.logLoss < baselineEval.logLoss)) {
+      return { status: 'skipped', reason: `评估未优于${baselineSource === 'previous' ? '现' : '默认'}参数（logLoss ${round4(newEval.logLoss)} ≥ 基线 ${round4(baselineEval.logLoss)}）——不写回`, meta }
+    }
+    const written: string[] = []
+    for (const c of courses) {
+      await atomicWrite(this.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n')
+      written.push(c.name)
+    }
+    return { status: 'written', written, meta }
+  }
+
   // ---- 生成任务持久化（host 的 genJobs 内存态落盘出口；D14：文件读写收口 engine）----
 
   /** 全量写入生成任务注册表（host 在每次任务状态变更时调用）。 */
@@ -1430,6 +1577,60 @@ export class LearnhubEngine {
     lines.push('', '## 图位置',
       `- 前置：${graph.preOf[node].join('、') || '无'}`,
       `- 后继：${(graph.succ[node] ?? []).join('、') || '无'}`)
+    return lines.join('\n')
+  }
+
+  /** 错误当下的「讲解这道题」逐题上下文包（Arc D #64；区别于整节点讨论包）：
+   * {题面/选项/答案/解析、对应节正文、本次作答 answer+judge+feedback、忘记标记、
+   * 图位置最小上下文} + 渐退教法引导指令（完整解法 → 同概念半成品/变式 → 独立
+   * 重做；不泛泛重讲整课）。节定位 = q.section（清单 id → 标题 → 归一化标题）；
+   * 映射失败退化为整课节选并明示，不崩。宿主会话首条消息 = 本包（面板答错/忘记
+   * 错误态的「讲解这道题」动作经 explain-pack 路由取用）。 */
+  async errorExplainPack(courseKey: string | undefined, node: string, qid: string): Promise<string> {
+    const { c, graph, q } = await this.questionContext(courseKey, node, qid, 'explain')
+    const [, regionName] = graph.blockOf[node]
+    const { fm: rawFm, body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
+    const fm = asFm(rawFm)
+    // 本次作答 = practice 流水里该题最近一条（答错作答或忘记申报；动作只从错误态进入）
+    const rec = (await this.store.practiceAll())
+      .filter(r => r.course === c.name && r.node === node && r.qid === qid)
+      .sort((a, b) => a.ts.localeCompare(b.ts))
+      .at(-1)
+    const forgot = rec?.judge === 'forget'
+    const entry = sectionEntryOf(q.section, fm?.content.sections)
+    const sectionMd = entry
+      ? Sessions.lessonSections(body).find(s => s.title === entry.title)?.md ?? null
+      : null
+    const lines: string[] = []
+    lines.push(`# 讲解这道题：${c.name} / ${node}`)
+    lines.push('', '## 题目', q.q)
+    if (q.options?.length) lines.push(...q.options.map((o, i) => `- ${String.fromCharCode(65 + i)}. ${o}`))
+    lines.push('', `**正确答案**：${revealAnswer(q)}`)
+    if (q.explanation) lines.push('', `**解析**：${q.explanation}`)
+    lines.push('', '## 本次作答')
+    if (!rec) lines.push('（流水里没有本次作答记录——按学习者主动求助理解）')
+    else if (forgot) lines.push('- 学习者申报了**忘记**（未作答直接翻面）：这条记忆没建立起来，讲解要从头建立，不要假设「只差一点」')
+    else {
+      lines.push(`- 学习者的作答：${rec.answer || '（空）'}`)
+      lines.push(`- 判卷：${rec.correct ? '答对' : '答错'}（${rec.judge}）`)
+      if (rec.feedback) lines.push(`- 判卷反馈：${rec.feedback}`)
+    }
+    lines.push('', '## 对应节正文')
+    if (entry && sectionMd) {
+      lines.push(`（来自节「${entry.title}」）`, '', sectionMd.slice(0, 4000))
+    } else {
+      lines.push(`（${entry ? '该节还没有正文' : '未能把这道题精确定位到某一节（题面陈旧或节已调整）'}——以下为整课节选）`, '', body.replace(/^>\s*内容待生成。\s*$/m, '').trim().slice(0, 2500))
+    }
+    lines.push('', '## 图位置',
+      `- 前置：${graph.preOf[node].join('、') || '无'}`,
+      `- 后继：${(graph.succ[node] ?? []).join('、') || '无'}`)
+    lines.push('', '## 讲解要求（渐退教法）',
+      '请围绕这一题组织讲解，不要泛泛重讲整课：',
+      '1. 先给**完整解法**：把这一题彻底讲清（只依据上面「对应节正文」讲过的方法，不引入超纲概念）。',
+      '2. 再出一道**同概念的半成品/变式**（保留大部分步骤、挖掉关键一步）让学习者补全。',
+      '3. 最后让学习者**独立重做**原题（或极近似题），确认能独立完成。',
+      '',
+      '讲解用 Markdown，公式用 KaTeX（$...$）。现在从第 1 步开始。')
     return lines.join('\n')
   }
 

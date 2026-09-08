@@ -28,14 +28,28 @@ function LearnhubSection() {
   )
 }
 
-/** 「与 AI 讨论本课」：取课程上下文 → 新开 dsh 会话注入首条消息 → 应用窗口尽力切回前台。
+/** 新开 dsh 会话并注入首条消息（discuss/explain 共用）→ 应用窗口尽力切回前台。
  * 学习中心标签页保持打开（不打断学习者当前进度，讨论完自行切回或关掉）。 */
-async function discussInDsh(sessions: {
+async function promptInNewSession(sessions: {
   list: { getSnapshot(): { current?: string; byId: Record<string, { cwd?: string }> } }
   create(opts?: { cwd?: string }): Promise<string>
   open(id: string): void
   binding(id: string): { session: { prompt(content: Array<{ type: 'text'; text: string }>, mode: 'queue'): Promise<unknown> } } | undefined
-}, course: string, node: string, intent: string): Promise<void> {
+}, text: string): Promise<void> {
+  let cwd: string | undefined
+  try {
+    const snap = sessions.list.getSnapshot()
+    cwd = snap.current ? snap.byId[snap.current]?.cwd : undefined
+  } catch { /* 无当前会话时让 host 自行解析目录 */ }
+  const sessionId = await sessions.create(cwd ? { cwd } : {})
+  sessions.open(sessionId)
+  const binding = sessions.binding(sessionId)
+  await binding?.session.prompt([{ type: 'text', text }], 'queue')
+  window.focus()
+}
+
+/** 「与 AI 讨论本课」：取课程上下文 → 新开会话注入首条消息。 */
+async function discussInDsh(sessions: Parameters<typeof promptInNewSession>[0], course: string, node: string, intent: string): Promise<void> {
   let pack = ''
   try {
     const res = await fetch(`/learnhub/api/discuss-pack?course=${encodeURIComponent(course)}&node=${encodeURIComponent(node)}`)
@@ -44,22 +58,32 @@ async function discussInDsh(sessions: {
       if (typeof doc === 'string') pack = doc
     }
   } catch { /* 上下文拿不到也能讨论（agent 可用 learnhub 工具自取） */ }
-  let cwd: string | undefined
-  try {
-    const snap = sessions.list.getSnapshot()
-    cwd = snap.current ? snap.byId[snap.current]?.cwd : undefined
-  } catch { /* 无当前会话时让 host 自行解析目录 */ }
-  const sessionId = await sessions.create(cwd ? { cwd } : {})
-  sessions.open(sessionId)
   const text = [
     '（本条消息来自学习中心「与 AI 讨论本课」。请先读课程上下文，再回应学习者的请求；'
     + '涉及数据修改时遵守 learnhub 技能 SOP：题库/图/状态走 learnhub_* 工具，正文修订后跑 learnhub_content_check。）',
     pack,
     `[学习者的请求] ${intent}`,
   ].filter(Boolean).join('\n\n---\n\n')
-  const binding = sessions.binding(sessionId)
-  await binding?.session.prompt([{ type: 'text', text }], 'queue')
-  window.focus()
+  await promptInNewSession(sessions, text)
+}
+
+/** 错误当下的「讲解这道题」（Arc D）：取逐题错误上下文包（题面/答案/对应节正文/
+ * 本次作答判语/渐退教法指令）→ 新开会话注入为首条消息。 */
+async function explainInDsh(sessions: Parameters<typeof promptInNewSession>[0], course: string, node: string, qid: string): Promise<void> {
+  let pack = ''
+  try {
+    const res = await fetch(`/learnhub/api/explain-pack?course=${encodeURIComponent(course)}&node=${encodeURIComponent(node)}&qid=${encodeURIComponent(qid)}`)
+    if (res.ok) {
+      const doc: unknown = await res.json()
+      if (typeof doc === 'string') pack = doc
+    }
+  } catch { /* 包拿不到时让会话里 agent 用 learnhub_* 工具自取 */ }
+  const text = [
+    '（本条消息来自学习中心「讲解这道题」。学习者刚答错或忘记了这道题：请按包内「讲解要求（渐退教法）」组织讲解；'
+    + '涉及数据修改时遵守 learnhub 技能 SOP。）',
+    pack,
+  ].filter(Boolean).join('\n\n---\n\n')
+  await promptInNewSession(sessions, text)
 }
 
 const css = `
@@ -104,19 +128,26 @@ export function apply(ctx: any) {
     order: 30,
   }, LearnhubSection), 'dsh-learnhub: sidebar entry')
 
-  // 学习中心 tab → 宿主桥：独立 tab 经 window.opener.postMessage 发讨论请求 →
+  // 学习中心 tab → 宿主桥：独立 tab 经 window.opener.postMessage 发讨论/讲解请求 →
   // 新开 dsh 会话注入首条消息。必须常驻监听——旧面板形态下请求只可能来自
   // 开着的 iframe，新形态下学习中心 tab 随时会发。
   ctx.effect(() => {
     const onMessage = (e: MessageEvent) => {
-      const data = e.data as { type?: string; course?: unknown; node?: unknown; intent?: unknown } | null
-      if (!data || typeof data !== 'object' || data.type !== 'learnhub:discuss') return
+      const data = e.data as { type?: string; course?: unknown; node?: unknown; intent?: unknown; qid?: unknown } | null
+      if (!data || typeof data !== 'object') return
       const course = typeof data.course === 'string' ? data.course : ''
       const node = typeof data.node === 'string' ? data.node : ''
-      const intent = typeof data.intent === 'string' && data.intent.trim() ? data.intent.trim() : '请带我过一遍本节内容，指出我可能卡住的地方。'
-      if (!node) return
-      void discussInDsh(ctx.sessions, course, node, intent)
-        .catch(err => console.error('[dsh-learnhub] discuss failed:', err))
+      if (data.type === 'learnhub:discuss') {
+        const intent = typeof data.intent === 'string' && data.intent.trim() ? data.intent.trim() : '请带我过一遍本节内容，指出我可能卡住的地方。'
+        if (!node) return
+        void discussInDsh(ctx.sessions, course, node, intent)
+          .catch(err => console.error('[dsh-learnhub] discuss failed:', err))
+      } else if (data.type === 'learnhub:explain') {
+        const qid = typeof data.qid === 'string' ? data.qid : ''
+        if (!node || !qid) return
+        void explainInDsh(ctx.sessions, course, node, qid)
+          .catch(err => console.error('[dsh-learnhub] explain failed:', err))
+      }
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
