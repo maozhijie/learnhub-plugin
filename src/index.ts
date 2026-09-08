@@ -1011,6 +1011,11 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { status?: string; kind?: string }) => run('learnhub_graph_proposals', async () =>
       JSON.stringify(await engine.graphProposals(args.status, args.kind))))
+  tool('learnhub_graph_enc_backfill',
+    'Backfill enc (component-skill) edges for a course from existing ready content (ADR-0008): every non-practice node whose note body / exercise metadata declares enc_candidates or uses inside its prereq closure that are not yet declared as enc becomes one set_enc whole-replace op, queued as a SINGLE pending edit proposal. Nothing changed returns ops=0. Re-runnable — already-covered nodes produce no ops; practice nodes keep legal empty enc. Use for the A3 pilot when enabling that course, then review/apply with learnhub_graph_apply(kind=edit).',
+    { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
+    (args: { course?: string }) => run('learnhub_graph_enc_backfill', async () =>
+      JSON.stringify(await engine.graphEncBackfill(args.course))))
   tool('learnhub_graph_apply',
     'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
     {
@@ -1176,7 +1181,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 26 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 27 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

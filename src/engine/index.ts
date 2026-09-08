@@ -14,7 +14,7 @@ import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
 import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList } from './graph.ts'
-import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './notes.ts'
+import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievability } from './srs.ts'
 import { runAudit, effectiveStage } from './audit.ts'
@@ -25,7 +25,7 @@ import { Content } from './content.ts'
 import { nodeTierOf, perSectionQuizTarget, genericQuizTarget } from './complexity.ts'
 import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals } from './gengraph.ts'
-import type { ApplyAudit } from './gengraph.ts'
+import type { ApplyAudit, EditOp } from './gengraph.ts'
 import { QuestionBank } from './question-bank.ts'
 import type { BankQuestion } from './question-bank.ts'
 import { YAML } from './yaml.ts'
@@ -428,6 +428,53 @@ export class LearnhubEngine {
     return this.proposals.reject(pid, note)
   }
 
+  // ---- enc 存量回填（ADR-0008 / #53；A3 启用试点课程时跑）----
+
+  /** enc 存量回填入口：对试点课程里已有 Ready 内容、正文反哺候选非空、且候选尚未全落
+   * enc 的非 practice 节点，批量生成一个 pending edit 提案（每节点一条 set_enc 整体替换：
+   * 既有声明 enc 原样保留 + 补闭包内提升边，权重取调用强度）。可重入——已全覆盖节点不产生
+   * op，重跑不会重复膨胀、不与已声明 enc 冲突；practice 节点维持合法空 enc 不动。
+   * 提案走人审（ADR-0003 修订变更语义）：过审计后由 graphApply 生效，留痕可回溯。 */
+  async graphEncBackfill(courseKey?: string): Promise<Record<string, unknown>> {
+    const c = await this.registry.resolve(courseKey)
+    const { graph, state, broken } = await this.loadView(c)
+    assertNoBrokenNotes('enc-backfill', broken)
+    const regionNodes = graph.regions.flatMap(r => r.blocks.flatMap(b => b.nodes))
+    const ops: EditOp[] = []
+    let scanned = 0
+    for (const node of graph.order) {
+      const fm = state[node]
+      if (!fm || !hasReadyContent(fm)) continue
+      if (graph.typeOf[node] === 'practice') continue // practice 节点无题，enc: [] 合法空态
+      const [, regionName] = graph.blockOf[node]
+      const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
+      if (!Content.candidateCallSites(body).size) continue
+      scanned++
+      const declared = regionNodes.find(n => n.name === node)?.enc ?? []
+      const declaredName = new Set(declared.map(e => e.node))
+      const target = [...declared]
+      for (const p of Content.encPromotion(graph, node, body)) {
+        if (declaredName.has(p.node)) continue
+        target.push(p)
+      }
+      if (target.length === declared.length) continue // 候选已全落 enc → 无变更
+      ops.push({ op: 'set_enc', node, enc: target })
+    }
+    if (!ops.length) {
+      return { course: c.name, scanned, ops: 0, proposal: null, message: '没有需要回填的节点：候选已全落 enc，或没有可提升的反哺候选。' }
+    }
+    const yamlText = YAML.stringify({
+      course: c.name,
+      reason: `enc 反哺回填（ADR-0008 / #53）：${ops.length} 个节点按既有 Ready 内容补成分技能边`,
+      ops,
+    })
+    const prop = await this.graphPropose('edit', yamlText)
+    return {
+      course: c.name, scanned, ops: ops.length, proposal: prop,
+      message: `已为 ${ops.length} 个节点生成 pending edit 提案 #${String((prop as { id?: unknown }).id)}——过审后 learnhub_graph_apply(kind=edit) 生效（可重入，无遗漏则返回 ops=0）`,
+    }
+  }
+
   async graphProposals(status?: string, kind?: string): Promise<Record<string, unknown>[]> {
     return this.proposals.list(status, kind)
   }
@@ -515,7 +562,7 @@ export class LearnhubEngine {
     await this.content.queueDone(c.root, node)
     const interactiveNote = split.files.length ? `；交互件 ${split.files.length} 个落盘 交互/` : ''
     const hints = Content.encBackfeedHints(graph, node, fixed)
-    const hintNote = hints.length ? `；图依赖提醒 ${hints.length} 条` : ''
+    const hintNote = hints.length ? `；图/enc 反哺提醒 ${hints.length} 条` : ''
     return { version, message: `[apply] ${node} 正文 v${version} 落盘（status=draft，待人审）${interactiveNote}${hintNote}`, hints }
   }
 

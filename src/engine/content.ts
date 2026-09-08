@@ -16,7 +16,7 @@ import { loadNote, saveNote } from './notes.ts'
 import { normChoice } from './grading.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock } from '../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../shared/content-renderers.ts'
-import type { GRegion, GNode, SectionManifest } from './types.ts'
+import type { GRegion, GNode, SectionManifest, EncEdge } from './types.ts'
 import type { Graph } from './graph.ts'
 import type { Paths } from './paths.ts'
 import type { Fm, CourseEntry, JournalRec } from './types.ts'
@@ -175,6 +175,8 @@ export class Content {
     out.push('')
     out.push('## 7. 既有 enc 边（练习必须真实调用它们）')
     out.push(enc.length ? enc.map(([t, w]) => `${t}(w=${w.toFixed(1)})`).join('、') : '（暂无）')
+    out.push('- enc = 本课练习真实调用、且位于本节点 pre 闭包内的成分技能（ADR-0008）。')
+    out.push('- 练习调用的前置技能请在练习元数据 `uses:` 里如实标注——引擎会把闭包内候选提升为 enc 边，供将来失败回退路由；不存在的候选宁缺毋滥。')
     out.push('')
     out.push('## 8. 交付要求')
     if (isPractice) {
@@ -183,7 +185,7 @@ export class Content {
     } else {
       out.push('- 练习题以题组 YAML 经 learnhub_exercises_gen 写入（不再直接写进正文练习区）；数值题给 tol 容差')
       out.push('- 题型优先 single_choice / true_false / fill_in_blank（可机器判卷）；开放性问答题用 reflection 并在 answer 写评分要点')
-      out.push('- 末尾机器块：`<!-- enc_candidates: [本课练习真实调用的前置技能] -->`')
+      out.push('- 末尾机器块：`<!-- enc_candidates: [本课练习真实调用的前置技能（须在本节点 pre 闭包内；落盘后据此提升为 enc 边）] -->`')
     }
     out.push('')
     out.push('## 9. 复杂度档案（本节点内容规模的锚点；别注水也别压扁）')
@@ -815,7 +817,9 @@ questions:
       },
     }, newBody)
     await journal({ course: '', node, rating: null, kind: 'content_section', elapsed_days: 0, detail: `节「${entry.title}」v${entry.version + 1} 落盘` })
-    return { version, title: entry.title, hints: Content.encBackfeedHints(graph, node, sectionMd) }
+    // 反哺候选取自落盘后的整篇正文（enc_candidates 机器块可能在其它节末尾），
+    // 这样单节落盘后也能对全文候选给出 enc/set_pre 反哺提醒
+    return { version, title: entry.title, hints: Content.encBackfeedHints(graph, node, newBody) }
   }
 
   /** 模型按提示词自带 `## 标题` 首行，落盘时由 sectionApply 按清单统一包标题——
@@ -934,16 +938,95 @@ questions:
     return m ? m[1].split(',').map(x => x.trim()).filter(Boolean) : []
   }
 
-  /** enc 反哺 hints：enc_candidates 引用的图内节点不在本节点 pre 传递闭包 → 建议补边。
-   * E7（audit）管已写入图的 enc 边；本检查把纠正时机提前到内容落盘时（内容反哺图）。 */
+  /** 反哺候选的完整调用站点（ADR-0008 / #53 的数据源）：enc_candidates 机器块（整节 1 站）
+   * + 练习级 `<!-- ex:N | uses:[...] -->`（每题 1 站）。返回 候选名 → 调用站数。 */
+  static candidateCallSites(body: string): Map<string, number> {
+    const sites = new Map<string, number>()
+    for (const cand of new Set(Content.encCandidates(body))) sites.set(cand, (sites.get(cand) ?? 0) + 1)
+    for (const ex of Content.practiceMeta(body)) {
+      if (!ex.uses?.length) continue
+      for (const u of new Set(ex.uses)) sites.set(u, (sites.get(u) ?? 0) + 1)
+    }
+    return sites
+  }
+
+  /** 调用强度 → enc 权重（供 A3 作相关度）。阶梯：1 站 0.6（保底可路由）、2 站 0.8、
+   * ≥3 站 1.0——随频次单调不减，跨节/跨练习多站归一。全同权重无区分度由审计 R16 管。 */
+  static encWeightOf(sites: number): number {
+    return sites >= 3 ? 1.0 : sites === 2 ? 0.8 : 0.6
+  }
+
+  /** 本节点反哺候选 → 可提升的 enc 边：候选名解析回图节点（graph.nset）、只接受在本节点
+   * pre 传递闭包内（isAncestor，与 E7 一致）的候选；权重取调用强度。目标形态走 set_enc
+   * 整体替换（gengraph 已支持）；practice 型节点无候选块，保持 enc: [] 合法空态。 */
+  static encPromotion(graph: Graph, node: string, body: string): EncEdge[] {
+    const out: EncEdge[] = []
+    for (const [cand, sites] of Content.candidateCallSites(body)) {
+      if (!graph.nset.has(cand) || cand === node || !graph.isAncestor(cand, node)) continue
+      out.push({ node: cand, w: Content.encWeightOf(sites) })
+    }
+    out.sort((a, b) => a.node.localeCompare(b.node))
+    return out
+  }
+
+  /** enc 反哺 hints：把反哺候选的图依赖缺口在内容落盘时（修正时机最早）指出来——
+   * 候选在图内但不在本节点 pre 闭包 → 建议 set_pre 补边；在闭包内但未声明为 enc →
+   * 建议 set_enc 提升（不再静默，ADR-0008 的内容契约通道）；候选不在图内 → 提示别名/拼写。
+   * E7（audit）管已写入图的 enc 边；结构审计验不了语义真假，内容级背书见 encContentHints。 */
   static encBackfeedHints(graph: Graph, node: string, body: string): string[] {
     const out: string[] = []
-    for (const cand of Content.encCandidates(body)) {
-      if (graph.nset.has(cand) && !graph.isAncestor(cand, node)) {
+    const declared = new Set((graph.encOf[node] ?? []).map(([t]) => t))
+    const sites = Content.candidateCallSites(body)
+    for (const [cand, count] of [...sites.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      if (!graph.nset.has(cand)) {
+        out.push(`enc_candidates 引用「${cand}」不在图内（别名/拼写核对，或用 add_node/set_pre 补节点后再谈 enc）`)
+      } else if (graph.isAncestor(cand, node)) {
+        if (!declared.has(cand)) {
+          const w = Content.encWeightOf(count)
+          out.push(`enc_candidates 引用「${cand}」在本节点 pre 闭包内但未声明为 enc——用 learnhub_graph_propose(kind=edit) 的 set_enc 补/改成分技能边（建议 w=${w}，整体替换写 enc: [{node: ${cand}, w: ${w}}]）`)
+        }
+      } else {
         out.push(`「${cand}」被 enc_candidates 引用但不在本节点 pre 闭包——确认依赖后用 learnhub_graph_propose(kind=edit) 的 set_pre 补边`)
       }
     }
     return out
+  }
+
+  /** 内容级 enc 背书（#53 审计强化，E6/E7 之外的另一层）：Ready 内容与已声明 enc 的
+   * 对照检查——(a) 覆盖缺口：非 practice 节点有闭包内反哺候选但没落成 enc（warn R14）；
+   * (b) 一致性：已声明 enc 与当前候选零交集或存在声明边不在候选中（warn/info R15）；
+   * (c) 权重合理性：≥2 条 enc 全同权重无区分度（warn R16；越界已由 parse 挡）。 */
+  static encContentHints(graph: Graph, node: string, body: string, hasReady: boolean): { warns: string[]; infos: string[] } {
+    const warns: string[] = []
+    const infos: string[] = []
+    const declared = graph.encOf[node] ?? []
+    const declaredNames = new Set(declared.map(([t]) => t))
+    const region = graph.blockOf[node]?.[1] ?? ''
+    const sites = Content.candidateCallSites(body)
+    // (a) 覆盖缺口：只对已有 Ready 内容的节点背书；practice 节点合法空 enc 不报
+    if (hasReady && graph.typeOf[node] !== 'practice' && sites.size) {
+      const missing = [...sites.keys()].filter(c =>
+        graph.nset.has(c) && c !== node && graph.isAncestor(c, node) && !declaredNames.has(c))
+      if (missing.length) {
+        warns.push(`R14 enc 覆盖缺口: [${region}] ${node}：反哺候选已引用但未落 enc — ${missing.slice(0, 8).join('、')}${missing.length > 8 ? ` 等 ${missing.length} 个` : ''}（set_enc 提升，见 ADR-0008）`)
+      }
+    }
+    // (b) 一致性
+    if (hasReady && sites.size && declared.length) {
+      const covered = [...declaredNames].filter(n => sites.has(n)).length
+      if (covered === 0) {
+        warns.push(`R15 enc 与反哺候选不一致: [${region}] ${node}：已声明 enc（${[...declaredNames].join('、')}）与反哺候选（${[...sites.keys()].join('、')}）零交集——内容或候选漂移，核对后 set_enc 重建`)
+      }
+      const stale = [...declaredNames].filter(n => !sites.has(n))
+      if (stale.length) {
+        infos.push(`R15 enc 边未见当前反哺候选: [${region}] ${node}：${stale.join('、')}${stale.length === declared.length ? '（全部声明边都不在当前候选）' : ''}`)
+      }
+    }
+    // (c) 权重合理性：全部同权 = 调度路由无区分度（全 0 无路由价值、全 1 等于无权重）
+    if (declared.length >= 2 && new Set(declared.map(([, w]) => w)).size === 1) {
+      warns.push(`R16 enc 权重无区分度: [${region}] ${node}：${declared.length} 条边全为 w=${declared[0][1]}——按调用强度校准权重后再启用调度路由`)
+    }
+    return { warns, infos }
   }
 
   /** 题干下方选项行（A. … / A) …）→ ["A. …"]；不足 2 项视为无选项。 */

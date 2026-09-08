@@ -3,11 +3,12 @@
  *
  * ERROR: E1 重名 / E2 未定义前置 / E3 环 / E4 课程文件↔图失同步 / E5 frontmatter schema / E6 enc 断边 / E7 enc 非祖先
  * WARN : R1 浅叶子 / R2 单浅前置叶子 / R4 深度异常 / R6 传递冗余 / R8 多连通分量 / R10 状态异常 / R13 认知跨步候选
+ *         R14 enc 覆盖缺口 / R15 enc 与反哺候选不一致 / R16 enc 权重无区分度（内容级背书，#53）
  * INFO : R5 跨区引用 / R9 疑似别名
  * ERROR 存在时返回 failed=true（生成/结算门禁）。
  */
 import { existsSync } from 'node:fs'
-import { scanAll } from './notes.ts'
+import { scanAll, loadNote, hasReadyContent } from './notes.ts'
 import { STAGES } from './types.ts'
 import type { GRegion, Fm } from './types.ts'
 import type { Graph } from './graph.ts'
@@ -15,6 +16,7 @@ import type { Paths } from './paths.ts'
 import { parseDay, todayStr, daysBetween } from './dates.ts'
 import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
+import { Content } from './content.ts'
 
 export interface AuditResult {
   failed: boolean
@@ -183,6 +185,15 @@ export async function runAudit(
     const content = fm.content as Record<string, unknown> | undefined
     if (content && typeof content === 'object' && !['draft', 'reviewed', 'flagged'].includes(String(content.status))) {
       fsErrors.add(`E5 content.status 非法（${JSON.stringify(content.status)}）: ${rel}`)
+    }
+    // 内容级 enc 背书（#53 / ADR-0008）：已声明 enc 或已有 Ready 内容时读正文，对照
+    // 反哺候选与已声明 enc 报覆盖缺口/一致性/权重合理性（warn/info，不阻断——补覆盖渐进）。
+    const hasReady = hasReadyContent(fm as unknown as Fm)
+    if ((graph.encOf[nodeName] ?? []).length || hasReady) {
+      const { body } = await loadNote(path)
+      const encHints = Content.encContentHints(graph, nodeName, body, hasReady)
+      warns.push(...encHints.warns)
+      infos.push(...encHints.infos)
     }
   }
   errors.push(...fsErrors)
