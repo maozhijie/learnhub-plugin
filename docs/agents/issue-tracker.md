@@ -10,6 +10,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
+- **Close an issue when its work lands**: once your implementation commit is on the pushed branch, close the issue you implemented in the same session — `gh issue close <number> --comment "<what shipped, acceptance result, commit sha>"`. Commit messages here reference issues as `(#123)` without `Closes` keywords, so GitHub never auto-closes; the explicit close is the only close. Closing is scoped: only the issue your session implemented — prerequisites and other tickets stay with their own sessions.
 
 ## Sandboxed execution and gh authentication
 

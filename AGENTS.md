@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues live in GitHub Issues (`maozhijie/learnhub-plugin`). See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues (`maozhijie/learnhub-plugin`); an issue whose implementation has landed is closed by the implementing agent in the same session. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
