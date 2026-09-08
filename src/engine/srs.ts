@@ -78,6 +78,11 @@ export function retrievability(sched: FSRS, fm: Fm | null | undefined, today: st
   return sched.get_retrievability(cardFromFm(fm ?? null), now, false)
 }
 
+/** 题卡级可提取性（复习队列 #56 与复习日志 #60 共用的 R）：fsrs 块直算，省去伪 Fm 包装。 */
+export function retrievabilityBlock(sched: FSRS, fs: FsrsBlock | null | undefined, today: string): number {
+  return retrievability(sched, { fsrs: fs ?? null } as unknown as Fm, today)
+}
+
 /** 一次评分 → (新 fsrs 块, 日志元信息)。不写存储，由 settleRating 落盘。 */
 export function applyRating(
   fm: Fm, ratingNum: number, today: string, sched: FSRS,

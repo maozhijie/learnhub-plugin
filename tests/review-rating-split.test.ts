@@ -40,13 +40,14 @@ const NOTE = [
   '# 入门',
 ].join('\n')
 
-/** 单个 true_false 题目的 YAML 行（可选种子 fsrs 块 / 归档标记）。 */
-function tfQuestion(id: string, opts: { fsrs?: Record<string, string | number>; archived?: boolean } = {}): string[] {
+/** 单个 true_false 题目的 YAML 行（可选种子 fsrs 块 / 归档标记 / 出题难度）。 */
+function tfQuestion(id: string, opts: { fsrs?: Record<string, string | number>; archived?: boolean; difficulty?: number } = {}): string[] {
   return [
     `  - id: ${id}`,
     '    kind: true_false',
     `    q: ${id} 题干：说法是否成立。`,
     '    answer: true',
+    ...(opts.difficulty !== undefined ? [`    difficulty: ${opts.difficulty}`] : []),
     ...(opts.fsrs ? ['    fsrs:', ...Object.entries(opts.fsrs).map(([k, v]) => `      ${k}: ${v}`)] : []),
     ...(opts.archived ? ['    archived: true'] : []),
   ]
@@ -229,14 +230,16 @@ test('reviewQueue：只含到期未归档卡，同稳定度同 due 仍按题序�
 
 test('reviewQueue：主排序 = 预测遗忘风险 R 升序（同 due 短稳定度先刷），同档内难度渐进', async () => {
   await withVault([
+    // long：稳定度高 → R 高 → 排最后；fragile/easy 同 due 同稳定度 → 同 R 档，
+    // 但出题难度 5 vs 1 → 难度渐进由易到难（easy 先刷）真正由比较器决定
     tfQuestion('long', { fsrs: { stability: 30, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
-    tfQuestion('fragile', { fsrs: { stability: 1, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
-    tfQuestion('easy', { fsrs: { stability: 1, difficulty: 1, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
+    tfQuestion('fragile', { difficulty: 5, fsrs: { stability: 1, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
+    tfQuestion('easy', { difficulty: 1, fsrs: { stability: 1, difficulty: 1, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
   ], async engine => {
     const r = await engine.reviewQueue('数学') as Record<string, unknown>
     assert.equal(r.total, 3, '全部到期卡都在队列')
     const cards = r.cards as Array<Record<string, unknown>>
-    // fragile 与 long 同 due 同难度：短稳定度 R 更低 → 先刷；easy 与 fragile 同 R 档 → 难度低的先
+    // fragile 与 long 同 due：短稳定度 R 更低 → 先刷；easy 与 fragile 同 R 档 → 出题难度低的先
     assert.deepEqual(cards.map(c => c.id), ['easy', 'fragile', 'long'])
     const rs = cards.map(c => c.r) as number[]
     assert.ok(rs.every(x => typeof x === 'number' && x >= 0 && x <= 1), 'r 随卡带出')

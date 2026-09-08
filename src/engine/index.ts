@@ -16,7 +16,7 @@ import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
-import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievability } from './srs.ts'
+import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
 import { runAudit, effectiveStage } from './audit.ts'
 import { analyzeGraph } from './analysis.ts'
 import type { ScaleTarget } from './quality.ts'
@@ -439,7 +439,10 @@ export class LearnhubEngine {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     assertNoBrokenNotes('enc-backfill', broken)
-    const regionNodes = graph.regions.flatMap(r => r.blocks.flatMap(b => b.nodes))
+    // 既有声明 enc 的原始形态在 region 节点上（图视图 encOf 丢 note）；一次性建表避免每节点线性扫
+    const encOfNode = new Map(
+      graph.regions.flatMap(r => r.blocks.flatMap(b => b.nodes)).map(n => [n.name, n.enc]),
+    )
     const ops: EditOp[] = []
     let scanned = 0
     for (const node of graph.order) {
@@ -450,7 +453,7 @@ export class LearnhubEngine {
       const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
       if (!Content.candidateCallSites(body).size) continue
       scanned++
-      const declared = regionNodes.find(n => n.name === node)?.enc ?? []
+      const declared = encOfNode.get(node) ?? []
       const declaredName = new Set(declared.map(e => e.node))
       const target = [...declared]
       for (const p of Content.encPromotion(graph, node, body)) {
@@ -826,7 +829,7 @@ export class LearnhubEngine {
           if (q.archived) return
           const card = this.questionView(q, i)
           if (!card.due || String(card.due) > today) return
-          const r = retrievability(sched, { fsrs: q.fsrs } as unknown as Fm, today)
+          const r = retrievabilityBlock(sched, q.fsrs, today)
           cards.push({ course: c.name, node, r: Math.round(r * 1000) / 1000, ...card })
         })
       }
@@ -949,7 +952,7 @@ export class LearnhubEngine {
     } else {
       const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
       const rating = correct ? 3 : 1
-      const rPred = retrievability(sched, { fsrs: q.fsrs } as unknown as Fm, today)
+      const rPred = retrievabilityBlock(sched, q.fsrs, today)
       const pushed = applyRatingBlock(q.fsrs ?? null, rating, today, sched)
       fs = pushed.fs
       advanced = true
@@ -1018,7 +1021,7 @@ export class LearnhubEngine {
       throw new Error(`[question-rate] ${node}/${qid} 今天没有待结算的自评（未作答或非挂起路径）。`)
     }
     const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
-    const rPred = retrievability(sched, { fsrs: q.fsrs } as unknown as Fm, today)
+    const rPred = retrievabilityBlock(sched, q.fsrs, today)
     const pushed = applyRatingBlock(q.fsrs ?? null, r, today, sched)
     const fs = pushed.fs
     const { pending_rating: _drop, ...statsRest } = q.stats
@@ -1051,7 +1054,7 @@ export class LearnhubEngine {
       throw new Error(`[question-forget] ${node}/${qid} 今天已有作答记录，忘记只用于本日首次刷卡。`)
     }
     const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
-    const rPred = retrievability(sched, { fsrs: q.fsrs } as unknown as Fm, today)
+    const rPred = retrievabilityBlock(sched, q.fsrs, today)
     const pushed = applyRatingBlock(q.fsrs ?? null, 1, today, sched)
     const fs = pushed.fs
     await this.store.appendPractice({

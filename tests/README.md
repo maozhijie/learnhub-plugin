@@ -28,5 +28,7 @@
 - S17 `ui/src/components/md-chain.ts::MD_HTML_POLICY` —— markdown 链 skipHtml 策略（机器注释不显示；`tests/md-chain.test.ts`）
 - S18 `generation-jobs.ts::nextQueuedJob` —— 全局生成队列 FIFO 选取（queued 非终态不清理；`tests/generation-jobs.test.ts`）
 - S19 `notes.ts::hasReadyContent` —— 「已生成」三态标识数据源（任一节 ready；`tests/has-ready-content.test.ts`）
+- S20 `content.ts::candidateCallSites / encWeightOf / encPromotion` —— enc 反哺候选收集与闭包内提升（权重取调用强度；`tests/enc-backfill-audit.test.ts`）
+- S21 `content.ts::encBackfeedHints / encContentHints` —— enc 反哺写回建议 + 内容级背书 R14–R16（覆盖缺口/一致性/权重区分度；`tests/enc-backfill-audit.test.ts`）
 
 `analyzeGraph`/`runAudit` 只做薄接线，不在接缝清单内。

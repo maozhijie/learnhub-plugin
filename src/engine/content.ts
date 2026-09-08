@@ -970,20 +970,24 @@ questions:
   }
 
   /** enc 反哺 hints：把反哺候选的图依赖缺口在内容落盘时（修正时机最早）指出来——
-   * 候选在图内但不在本节点 pre 闭包 → 建议 set_pre 补边；在闭包内但未声明为 enc →
-   * 建议 set_enc 提升（不再静默，ADR-0008 的内容契约通道）；候选不在图内 → 提示别名/拼写。
-   * E7（audit）管已写入图的 enc 边；结构审计验不了语义真假，内容级背书见 encContentHints。 */
+   * 候选在图内但不在本节点 pre 闭包 → 建议 set_pre 补边；在闭包内但未声明为 enc → 建议
+   * set_enc 补边，已声明但权重偏离当前调用强度 → 建议 set_enc 改权重（都整体替换、保留
+   * 既有边，ADR-0008）；候选不在图内 → 提示别名/拼写。E7（audit）管已写入图的 enc 边；
+   * 结构审计验不了语义真假，内容级背书见 encContentHints。 */
   static encBackfeedHints(graph: Graph, node: string, body: string): string[] {
     const out: string[] = []
-    const declared = new Set((graph.encOf[node] ?? []).map(([t]) => t))
+    const declared = new Map((graph.encOf[node] ?? []).map(([t, w]) => [t, w]))
     const sites = Content.candidateCallSites(body)
     for (const [cand, count] of [...sites.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const w = Content.encWeightOf(count)
       if (!graph.nset.has(cand)) {
         out.push(`enc_candidates 引用「${cand}」不在图内（别名/拼写核对，或用 add_node/set_pre 补节点后再谈 enc）`)
       } else if (graph.isAncestor(cand, node)) {
-        if (!declared.has(cand)) {
-          const w = Content.encWeightOf(count)
-          out.push(`enc_candidates 引用「${cand}」在本节点 pre 闭包内但未声明为 enc——用 learnhub_graph_propose(kind=edit) 的 set_enc 补/改成分技能边（建议 w=${w}，整体替换写 enc: [{node: ${cand}, w: ${w}}]）`)
+        const cur = declared.get(cand)
+        if (cur === undefined) {
+          out.push(`enc_candidates 引用「${cand}」在本节点 pre 闭包内但未声明为 enc——用 learnhub_graph_propose(kind=edit) 的 set_enc 补边（整体替换、保留既有 enc，建议追加 {node: ${cand}, w: ${w}}）`)
+        } else if (cur !== w) {
+          out.push(`「${cand}」已声明为 enc 但权重（${cur}）偏离当前调用强度（建议 ${w}）——用 set_enc 改权重（整体替换、保留既有 enc 其它边）`)
         }
       } else {
         out.push(`「${cand}」被 enc_candidates 引用但不在本节点 pre 闭包——确认依赖后用 learnhub_graph_propose(kind=edit) 的 set_pre 补边`)
@@ -1011,15 +1015,15 @@ questions:
         warns.push(`R14 enc 覆盖缺口: [${region}] ${node}：反哺候选已引用但未落 enc — ${missing.slice(0, 8).join('、')}${missing.length > 8 ? ` 等 ${missing.length} 个` : ''}（set_enc 提升，见 ADR-0008）`)
       }
     }
-    // (b) 一致性
-    if (hasReady && sites.size && declared.length) {
+    // (b) 一致性：候选可空——正文候选被删光时「声明边全不在候选」正是最极端的漂移
+    if (hasReady && declared.length) {
+      const stale = [...declaredNames].filter(n => !sites.has(n))
       const covered = [...declaredNames].filter(n => sites.has(n)).length
-      if (covered === 0) {
+      if (sites.size && covered === 0) {
         warns.push(`R15 enc 与反哺候选不一致: [${region}] ${node}：已声明 enc（${[...declaredNames].join('、')}）与反哺候选（${[...sites.keys()].join('、')}）零交集——内容或候选漂移，核对后 set_enc 重建`)
       }
-      const stale = [...declaredNames].filter(n => !sites.has(n))
       if (stale.length) {
-        infos.push(`R15 enc 边未见当前反哺候选: [${region}] ${node}：${stale.join('、')}${stale.length === declared.length ? '（全部声明边都不在当前候选）' : ''}`)
+        infos.push(`R15 enc 边未见当前反哺候选: [${region}] ${node}：${stale.join('、')}${sites.size ? '' : '（正文当前无任何反哺候选——机器块被删或内容已重写？）'}${stale.length === declared.length ? '（全部声明边都不在当前候选）' : ''}`)
       }
     }
     // (c) 权重合理性：全部同权 = 调度路由无区分度（全 0 无路由价值、全 1 等于无权重）
