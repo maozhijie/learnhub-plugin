@@ -179,6 +179,9 @@ function todayNoonMs(): number {
   return d.getTime()
 }
 
+/** 导入窗口上限：固定在事件之后（默认 Date.now() 会在 10 点前跑测试时漏掉全部事件）。 */
+const IMPORT_AT = { nowMs: todayNoonMs() + 600_000 }
+
 // ---- 纯函数缝 ----
 
 test('纯函数缝：Anki 事件映射（Again→答错 auto；Hard/Good/Easy→自评 self）、非法按钮拒绝', () => {
@@ -276,7 +279,7 @@ test('导入回写：Again/Hard/Good/Easy 按 vault ts-fsrs 重算 + 流水/复�
     // 学习者在 Anki 作答：q1 Good（自评 3）、q2 Again（答错 1）
     anki.answer('数学/入门/q1', 3, todayNoonMs())
     anki.answer('数学/入门/q2', 1, todayNoonMs() + 60_000)
-    const r = await engine.ankiImportEvents(anki)
+    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.imported, 2)
     assert.equal(r.advanced, 2)
     assert.equal(r.skipped_same_day, 0)
@@ -329,7 +332,7 @@ test('导入回写：同日已在 vault 推进的题，其当日 Anki 事件跳�
 
     // 同日 Anki 事件（q1 Good）：不产生第二次调度推进
     anki.answer('数学/入门/q1', 3, todayNoonMs() + 120_000)
-    const r = await engine.ankiImportEvents(anki)
+    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.imported, 1)
     assert.equal(r.skipped_same_day, 1)
     assert.equal(r.advanced, 0)
@@ -354,7 +357,7 @@ test('导入回写：题目已归档/重生成的事件不落库只计数；未�
     // 未知卡（清单/来源都对不上）：只计数
     anki.cards.set(999_999, 888_888)
     anki.reviews.push([todayNoonMs() + 300_000, 999_999, 0, 3, 0, 0, 3, 4000, 1])
-    const r = await engine.ankiImportEvents(anki)
+    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.skipped_unknown, 2)
     assert.equal(r.advanced, 0)
     assert.ok(!existsSync(engine.paths.practicePath), '无事件落库')
@@ -370,7 +373,7 @@ test('导入回写：镜象清单丢失自愈（Anki 来源字段回补归属）
     const { unlink } = await import('node:fs/promises')
     await unlink(engine.paths.ankiMirrorPath)
     anki.answer('数学/入门/q1', 4, todayNoonMs())
-    const r = await engine.ankiImportEvents(anki)
+    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.advanced, 1, '来源字段回补归属后照常重算')
     // 清单重建：本事件涉及的那张卡回补归属（fp 空 → 下次推送按内容校准；
     // 无事件的卡要等下次导出推送补全清单）
