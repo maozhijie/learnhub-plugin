@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：65 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/Anki 互通）
+ * - agent 工具面：66 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -1286,6 +1286,19 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { suggestion: { type: 'string', required: true, description: 'Suggestion id exactly as offered by learnhub_thermostat (e.g. band_default:standard)' } },
     (args: { suggestion: string }) => run('learnhub_thermostat_apply', async () =>
       JSON.stringify(await engine.thermostatApply(args.suggestion))))
+  tool('learnhub_sandbox',
+    'Run the plan sandbox (D-3, ADR-0025): Monte-Carlo projection of the learner's study plan using the SAME FSRS+mastery models as the scheduler (~200 seeded runs). Input = daily minutes goal x horizon in weeks (default 6) x intended course/nodes. Output = end-of-horizon mastery map (per node p50/p80) + total-mastery curve with 50/80 percentile bands + the honest assumption list (1 min per review, practice evidence frozen, new nodes introduced in course order). READ-ONLY: zero canonical writes, no gating, no scheduling side effects. The wording is locked to「模型推演，非承诺」— present the distribution as a distribution, never as a promise, and never as a feasibility verdict; the learner negotiates their own plan with it.',
+    {
+      minutes_per_day: { type: 'number', required: true, description: 'Daily learning-minutes goal of the plan' },
+      weeks: { type: 'number', description: 'Horizon in weeks (default 6, max 26)' },
+      course: { type: 'string', description: 'Scope to one course; omit for all enabled courses' },
+      nodes: { type: 'array', items: { type: 'string' }, description: 'Intended node subset; omit for whole course(s)' },
+    },
+    (args: { minutes_per_day: number; weeks?: number; course?: string; nodes?: string[] }) =>
+      run('learnhub_sandbox', async () =>
+        JSON.stringify(await engine.sandboxRun({
+          minutesPerDay: args.minutes_per_day, weeks: args.weeks, course: args.course, nodes: args.nodes,
+        }))))
   tool('learnhub_rebuild',
     'Run audit gate + ready-list regeneration for all enabled courses, or one course.',
     { course: { type: 'string', description: 'Course name; omit to rebuild all enabled courses' } },
@@ -1741,7 +1754,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 65 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 66 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

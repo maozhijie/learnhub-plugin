@@ -28,6 +28,8 @@ import { NOF1_TEMPLATES, NOF1_PER_ARM_MIN, NOF1_VARIABLE_WHITELIST, nof1Template
 import type { Nof1Template, Nof1Variable, ExperimentDef, Nof1Analysis } from './nof1.ts'
 import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from './thermostat.ts'
 import type { ThermostatDoc, ThermostatSuggestion } from './thermostat.ts'
+import { SANDBOX_RUNS, SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING, simulateRun, aggregateRuns } from './sandbox.ts'
+import type { SandboxDoc, SandboxCard, SandboxNode, SandboxPlan } from './sandbox.ts'
 import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, withinCoachWindow } from './coach.ts'
 import type { BandRec } from './coach.ts'
 import { calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
@@ -2653,6 +2655,87 @@ export class LearnhubEngine {
     }
     await this.setBandDefault(hit.apply.value)
     return { applied: hit.id, band_default: hit.apply.value }
+  }
+
+  // ---- D3 沙盘（#112 / ADR-0025：现有模型的蒙特卡洛计划推演，只读、零写侧）----
+
+  /** 按计划推演：现有 FSRS 的 R 作伯努利抽样推进 + mastery 派生原样复用，
+   * SANDBOX_RUNS 次蒙特卡洛。输出分布（50/80% 分位带）；措辞锁「模型推演，
+   * 非承诺」。零写侧——不进门禁、不进调度、不改账本，不给可行性判定。 */
+  async sandboxRun(input: {
+    minutesPerDay: number
+    weeks?: number
+    course?: string
+    nodes?: string[]
+  }): Promise<SandboxDoc> {
+    if (!Number.isFinite(input.minutesPerDay) || input.minutesPerDay <= 0) {
+      throw new Error(`[sandbox] minutesPerDay 必须是正数（收到 ${String(input.minutesPerDay)}）。`)
+    }
+    const weeks = Math.min(26, Math.max(1, Math.round(input.weeks ?? SANDBOX_DEFAULT_WEEKS)))
+    const plan: SandboxPlan = { minutesPerDay: Math.round(input.minutesPerDay), weeks }
+    const { today } = await this.learningDay()
+    const courses = input.course ? [await this.registry.resolve(input.course)] : await this.enabledCourses()
+    const nodeFilter = input.nodes?.length ? new Set(input.nodes) : null
+    const cards: SandboxCard[] = []
+    const nodes: SandboxNode[] = []
+    for (const c of courses) {
+      const { graph, state } = await this.loadView(c)
+      for (const name of graph.order) {
+        if (nodeFilter && !nodeFilter.has(name)) continue
+        const fm = state[name]
+        // skipped = 学习者自报已会：不在推演范围（与推荐口径一致）
+        if (effectiveStage(state, name) === 'skipped') continue
+        const started = Boolean(fm?.fsrs?.reps)
+        nodes.push({
+          course: c.name, node: name,
+          est: graph.estOf[name] ?? 15,
+          practice: fm?.practice ?? { attempts: 0, correct: 0 },
+          ema: fm?.practice_ema,
+          started, skipped: false,
+        })
+        // 节点代表卡（有起点状态带 fs；未开始 = null，随引入学成创建）
+        cards.push({
+          key: `node:${c.name}/${name}`, course: c.name, node: name, kind: 'node',
+          fs: started ? fm!.fsrs! : null,
+        })
+        try {
+          const bank = await this.bank.load(this.paths.courseRoot(c.root), name)
+          for (const q of bank.questions) {
+            if (q.archived) continue
+            cards.push({ key: `${c.name}/${name}/${q.id}`, course: c.name, node: name, kind: 'question', fs: q.fsrs ?? null })
+          }
+        } catch {
+          // 该节点还没有题库：合法空态（practice 节点常态）
+        }
+      }
+    }
+    // 蒙特卡洛：播种确定（同输入同分布）；单课程范围用该课个人参数（与调度同源），
+    // 跨课程 v1 统一默认参数（与笔记源/我的卡同通道），差异如实标注在 assumptions。
+    const firstCourse = courses[0]
+    const sched = courses.length === 1
+      ? await this.sched(this.paths.courseRoot(firstCourse!.root))
+      : await this.sched(null)
+    const runs: Array<{ endByNode: number[]; curve: number[] }> = []
+    for (let i = 0; i < SANDBOX_RUNS; i++) {
+      runs.push(simulateRun(plan, cards, nodes, today, { sched, rng: mulberry32(7000 + i * 7919) }))
+    }
+    const { curve, map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
+    return {
+      wording: SANDBOX_WORDING,
+      date: today,
+      plan,
+      runs: SANDBOX_RUNS,
+      scope: { courses: courses.map(c => c.name), nodes: nodes.length },
+      curve,
+      map,
+      assumptions: [
+        `每次复习计 1 分钟；每日预算 ${plan.minutesPerDay} 分钟，耗尽后剩余到期卡顺延（与真实欠账一致）。`,
+        '复习通过率 = 当前 FSRS 模型的可提取性 R 伯努利抽样：过记 Good、败记 Again；推进与调度同一套函数。',
+        '新节点按课程图序在预算内引入（est 分钟摊日），学成记一次合成 Good；未调度题随学成入场。',
+        '练习证据（EMA/正确率）冻结为当前值——沙盘只模拟「记」的维持，不模拟「练」的进步。',
+        courses.length > 1 ? '多课程范围 v1 统一用默认 FSRS 参数推演（个人参数推演请按单课程运行）。' : '使用该课程的 FSRS 参数（与调度同源）。',
+      ],
+    }
   }
 
   /** JOL 预测值的显式契约：三档之外拒绝（参数错误），null/undefined 放行为无预测。 */

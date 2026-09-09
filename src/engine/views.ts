@@ -477,6 +477,7 @@ export interface ReviewQueueDoc {
 // ---- D 区个人实验室（#85/#110/#111/#112；nof1.ts 为零依赖纯函数模块，视图层直接复用其类型）----
 
 export type { Nof1Template, ExperimentDef, Nof1Analysis, Nof1ArmStats } from './nof1.ts'
+export type { SandboxDoc } from './sandbox.ts'
 
 /** 实验提案受理结果（experimentPropose：提案-确认制第一步）。 */
 export interface ExperimentProposeResult {
