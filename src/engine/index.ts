@@ -46,6 +46,8 @@ import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem }
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
 import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
+import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
+import type { ProjectExecRec } from './project-exec.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
 import { QuestionBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
@@ -71,7 +73,7 @@ import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration, milestonePrice } from './xp.ts'
-import { XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID } from './params.ts'
+import { XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID, CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
 import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
@@ -85,7 +87,7 @@ import type {
   LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
   NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
-  XpStatus, HabitsListDoc, HabitShowDoc,
+  XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, ProjectExecBackflow,
 } from './views.ts'
 
 /** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
@@ -902,6 +904,132 @@ export class LearnhubEngine {
   async projectRecallLog(id: string): Promise<RecallRec[]> {
     await this.projects.load(id)
     return recallRecsAll(this.paths, id)
+  }
+
+  // ---- 执行事件流 / Mastery 交叉 2×2（P-7 / #98 / ADR-0015 §3/§4/§8）----
+
+  /** 记一条项目执行事件（P-7 #98）：项目自己的事件流（projects/<id>/exec.jsonl，与
+   * 节点练习证据通道是两条流，ADR-0015 §4）。评级 1-4 整数 + 来源 auto/self/ai——
+   * auto 必须带可观测证据走确定性映射（ratingFromEvidence，skills 先例）；自评/ai
+   * 照收（ADR-0016 自报即可信）。nodes 给出本次行使的关联节点时，被行使的既有 enc
+   * 边（= 图上实际存在的边，两端都在 nodes 内）两端节点各回流一次练习证据
+   * （applyPracticeEvidence，单向复制零新存储形态；判定机制精细化归 P-6 后续）。
+   * 零 XP、零 journal、零 review-log、零 sessions/srs（ADR-0015 §7）。 */
+  async projectExecLog(
+    id: string,
+    input: { source: string; rating?: number; evidence?: ExecutionEvidence; nodes?: string[]; note?: string },
+  ): Promise<ProjectExecResult> {
+    const fm = await this.projects.load(id)
+    const source = input.source
+    if (!(source === 'auto' || source === 'self' || source === 'ai')) {
+      throw new Error(`[project-exec] source 只能是 auto/self/ai（收到 ${String(source)}）。`)
+    }
+    let rating: unknown = input.rating
+    if (source === 'auto') {
+      if (!input.evidence) {
+        throw new Error("[project-exec] source='auto' 需要可观测证据（evidence.accuracy/self_help）——确定性映射是自动来源的唯一入口；无可观测判据时改用自评档（source='self' + rating）。")
+      }
+      rating = ratingFromEvidence(input.evidence)
+    }
+    const v = validateExecEvent(rating, source, input.nodes ?? [], input.note, 'project-exec')
+    const { today } = await this.learningDay()
+    const score = execRatingScore(v.rating)
+
+    // 行使判定与回流：逐课程载图（enc 边归节点域、不可跨图），每条被行使边两端各记一次
+    const linked = v.nodes.length ? await this.resolveProjectNodes(v.nodes) : []
+    const byCourse = new Map<string, string[]>()
+    for (const { course, node } of linked) {
+      const list = byCourse.get(course.name) ?? []
+      list.push(node)
+      byCourse.set(course.name, list)
+    }
+    const backflow: ProjectExecBackflow[] = []
+    const skipped: Array<{ course: string; node: string; reason: string }> = []
+    let edges = 0
+    for (const [courseName, nodes] of byCourse) {
+      const c = await this.registry.get(courseName)
+      if (!c) continue
+      const { graph } = await this.loadView(c)
+      const exercised = exercisedEncEdges(nodes, holder => (graph.encOf[holder] ?? []).map(e => e[0]))
+      edges += exercised.length
+      for (const pair of exercised) {
+        for (const endpoint of [pair.holder, pair.skill]) {
+          const note = await this.nodeNote(c, graph, endpoint)
+          if (!note.fm) {
+            skipped.push({
+              course: courseName, node: endpoint,
+              reason: '节点笔记缺失或 frontmatter 不可用——练习证据无处落，跳过（Missing 合法空态）',
+            })
+            continue
+          }
+          const before = note.fm.practice_ema ?? 0
+          const next = applyPracticeEvidence(note.fm, score)
+          await this.saveNodeNote(note.path, next, note.body)
+          backflow.push({
+            course: courseName, node: endpoint, edge: [pair.holder, pair.skill],
+            ema_before: before, ema_after: next.practice_ema ?? 0, mastery_after: masteryOfFm(next),
+          })
+        }
+      }
+    }
+
+    await appendExecRec(this.paths, id, {
+      ts: nowIso(), day: today, rating: v.rating, source: v.source,
+      nodes: v.nodes, tier: fm.tier, ...(v.note ? { note: v.note } : {}),
+    })
+    backflow.sort((a, b) => a.course.localeCompare(b.course) || a.node.localeCompare(b.node))
+    return {
+      project: id, day: today, rating: v.rating, source: v.source, score,
+      nodes: v.nodes, edges, backflow, skipped,
+    }
+  }
+
+  /** 项目 2×2 交叉视图（P-7 #98；项目面板核心视图，只读）：X = 关联节点 masteryOfFm
+   * 均值（陈述性掌握），Y = 执行事件分 EMA 0.7/0.3（项目执行证据），阈值统一
+   * CROSS_AXIS_THRESHOLD；四象限 = 会而不会用 / 会用而不牢 / 健康 / 补底。附只读
+   * 入档推荐（challenge point：升档判据 = 档内表现 + 知识底座；引擎提议学习者经
+   * projectSetTier 改档——不写任何状态、不参与 gateMilestone/passMilestone/门禁）。 */
+  async projectCrossView(id: string): Promise<ProjectCrossDoc> {
+    const fm = await this.projects.load(id)
+    const specs = [...new Set(fm.plan.flatMap(m => m.nodes ?? []))]
+    const linked = specs.length ? await this.resolveProjectNodes(specs) : []
+    const linkedNodes: Array<{ course: string; node: string; mastery: number }> = []
+    const masteryList: number[] = []
+    const viewCache = new Map<string, Awaited<ReturnType<LearnhubEngine['loadView']>>>()
+    for (const { course, node } of linked) {
+      let v = viewCache.get(course.name)
+      if (!v) {
+        v = await this.loadView(course)
+        viewCache.set(course.name, v)
+      }
+      const m = masteryOfFm(v.state[node] ?? null)
+      linkedNodes.push({ course: course.name, node, mastery: m })
+      masteryList.push(m)
+    }
+    const x = masteryAggregate(masteryList)
+    const recs = await execRecsAll(this.paths, id)
+    const y = execEvidenceScore(recs)
+    const avg = (list: ProjectExecRec[]) => list.length
+      ? Math.round(list.reduce((a, r) => a + execRatingScore(r.rating), 0) / list.length * 1000) / 1000
+      : null
+    // 档内表现：事件带的 tier 快照 = 当前档才计入（改档后旧档事件不冒充新档表现）
+    const inTierRecs = recs.filter(r => r.tier === fm.tier)
+    return {
+      project: fm.id, name: fm.name, lifecycle: fm.lifecycle, tier: fm.tier,
+      x: { value: x, caliber: `关联节点 masteryOfFm 均值（${masteryList.length} 个${specs.length ? '' : '；计划未关联节点'}）` },
+      y: { value: y, caliber: `执行事件分（评级映射 0-1）EMA 0.7/0.3（${recs.length} 条事件）` },
+      quadrant: classifyCross(x, y),
+      linked_nodes: linkedNodes,
+      exec: { count: recs.length, ema: y, avg: avg(recs) },
+      recommendation: recommendTier(fm.tier, { count: inTierRecs.length, avg: avg(inTierRecs) }, x),
+      events: recs.slice(-20).reverse(),
+      thresholds: {
+        axis: CROSS_AXIS_THRESHOLD,
+        promote_min_events: TIER_REC_MIN_EVENTS,
+        promote_score: TIER_REC_PROMOTE_SCORE,
+        demote_score: TIER_REC_DEMOTE_SCORE,
+      },
+    }
   }
 
   /** 行为推断 enc 候选边（#96 / ADR-0015 裁决 3/6）：项目窗口内的翻卡/回看共现 →

@@ -104,4 +104,7 @@ export class Paths {
   projectSnapshotPath(pid: number, what: string): string { return `${this.snapshotDir}/project-${pid}-${what}` }
   /** 检索点会话流水（#93：抽题+自述 JSONL 追加；项目域自有数据，零 journal/FSRS 写入）。 */
   projectRecallPath(id: string): string { return `${this.projectDir(id)}/recall.jsonl` }
+  /** 项目执行事件流（P-7 #98 / ADR-0015 §4：项目自己的事件=真实执行+表现评级，喂
+   * 渐退档提议与 2×2 诊断；与节点练习证据通道是两条流——回流单向复制，零共享存储）。 */
+  projectExecPath(id: string): string { return `${this.projectDir(id)}/exec.jsonl` }
 }

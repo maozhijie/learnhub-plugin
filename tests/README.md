@@ -50,6 +50,7 @@
 - S34 `explain.ts::explainBackPack / explainFeedbackSystem / parseExplainVerdict` —— E2 讲解包拼装（要点+图位置+初学者人设指令）与定位反馈判词解析（不可解析抛错零副作用；`tests/learner-cards.test.ts`；反馈入 E 档案与 canonical 零写入走 facade）
 - S35 `anki.ts::mapAnkiEase / sameDayAdvanced / planMirrorSync / sourceKeyOf·parseSourceKey / ankiCardPayload` —— C2 Anki 通道纯规则层（Again/Hard/Good/Easy→答错/自评档映射、同日已推进双门判定、镜象 diff 以 vault 为准、来源键编解码（兼容含 / 节点名）、导出负载排版与内容指纹；`tests/anki.test.ts`；导出推送/导入回写重算/同日跳过只留档/归档移除/清单丢失自愈走 facade + 假 AnkiConnect transport）
 - S36 `self-note.ts::selfNoteFeedbackSystem / selfNoteFeedbackPrompt / selfNotePromptOf` —— E1「加我的理解」自注反馈指令拼装（节锚点收窄对照面、不超纲不评分）与默认卡面提示（`tests/learner-cards.test.ts`；判词入 E 档案 kind=self_note、AI 失败零副作用、#33 边界回归走 facade）
+- S37 `project-exec.ts::execRatingScore / exercisedEncEdges / classifyCross / masteryAggregate / execEvidenceScore / recommendTier` —— P-7 项目执行事件流纯函数层（评级→0-1 带中点映射、被行使 enc 边判定 v1=两端都在事件 nodes 内、2×2 象限分类（null 归该轴低侧）、入档推荐纯函数（档内表现+底座，永不做门禁）；`tests/project-exec.test.ts`；回流→mastery→2×2 主链与零 canonical 红线走 facade）
 
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 
