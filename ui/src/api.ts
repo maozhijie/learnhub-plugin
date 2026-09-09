@@ -158,7 +158,7 @@ export const api = {
   review: (course: string, node: string) => http<{ message: string }>('POST', '/review', { course, node }),
   feedback: (path: string) => http<{ message: string }>('POST', '/feedback', { path }),
   proposals: () => http<import('./types').PropItem[]>('GET', '/proposals'),
-  proposalApply: (kind: 'gen' | 'edit', id?: number) =>
+  proposalApply: (kind: 'gen' | 'edit' | 'project_plan' | 'project_milestone' | 'experiment', id?: number) =>
     http<import('./types').GraphApplyResult>('POST', '/proposals/apply', { kind, id }),
   proposalReject: (id: number, note = '') => http<{ message: string }>('POST', '/proposals/reject', { id, note }),
   doctor: () => http<import('./types').DoctorDoc>('GET', '/doctor'),
@@ -174,6 +174,26 @@ export const api = {
   /** 整课重新生成：旧正文/题目/交互件/生成图片备份进 .trash 后按拓扑序串行重跑生成管线（后台执行）。 */
   resetCourse: (course: string) =>
     http<{ reset: { course: string; nodes: string[]; trashed: string[] }; queued: number }>('POST', '/course/reset', { course }),
+  /** D-4 睡眠耦合建议层开关（#85）：默认开，关后推荐零睡眠建议。 */
+  sleep: () => http<import('./types').SleepConfig>('GET', '/sleep'),
+  setSleep: (patch: { enabled?: boolean }) =>
+    http<import('./types').SleepConfig>('PUT', '/sleep', patch),
+  /** D-2 挑战点恒温器（#111 ADR-0024）：跨区仪表 + 只读建议；建议逐条显式确认后生效。 */
+  thermostat: () => http<import('./types').ThermostatDoc>('GET', '/thermostat'),
+  thermostatApply: (suggestion: string) =>
+    http<{ applied: string }>('POST', '/thermostat/apply', { suggestion }),
+  /** D-1 N-of-1 实验（#110 ADR-0023）：模板库 + 实验清单 + 报告。 */
+  experiments: () => http<import('./types').ExperimentsDoc>('GET', '/experiments'),
+  experimentPropose: (template: string, course?: string) =>
+    http<{ proposal: number; title: string; pool: number }>('POST', '/experiments/propose', { template, ...(course ? { course } : {}) }),
+  experimentApply: (id?: number) =>
+    http<{ id: number; title: string; arm_today: string }>('POST', '/experiments/apply', { ...(id !== undefined ? { id } : {}) }),
+  experimentStop: (id?: number) =>
+    http<import('./types').ExperimentDef>('POST', '/experiments/stop', { ...(id !== undefined ? { id } : {}) }),
+  /** D-3 沙盘（#112 ADR-0025）：只读蒙特卡洛推演（模型推演，非承诺）。 */
+  sandboxRun: (minutesPerDay: number, weeks?: number, course?: string, nodes?: string[]) =>
+    http<import('./types').SandboxDoc>('POST', '/sandbox/run',
+      { minutes_per_day: minutesPerDay, ...(weeks !== undefined ? { weeks } : {}), ...(course ? { course } : {}), ...(nodes?.length ? { nodes } : {}) }),
 }
 
 /** 请求宿主新开 dsh 会话讨论本课（client 侧 learnhub:discuss 桥消费）。

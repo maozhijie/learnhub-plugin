@@ -91,7 +91,6 @@ export function simulateRun(
     list.push(c)
     cardsByNode.set(`${c.course}/${c.node}`, list)
   }
-  const nodeKey = (n: SandboxNode) => `node:${n.course}/${n.node}`
   // 节点代表卡（调用方保证每个非 skipped 节点一张：有起点状态带 fs，否则 null 随引入创建）
   const nodeCards = new Map<string, SandboxCard>()
   for (const n of nodes) {

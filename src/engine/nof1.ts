@@ -261,7 +261,7 @@ export function analyzeNof1(
   const pool = [...va.map(v => ({ v, arm: 0 })), ...vb.map(v => ({ v, arm: 1 }))]
   const rng = mulberry32(seed)
   const permDiff = (): number => {
-    const tags = pool.map(e => (rng() < 0.5 ? 0 : 1))
+    const tags = pool.map(() => (rng() < 0.5 ? 0 : 1))
     let sa = 0
     let sb = 0
     let na = 0

@@ -20,14 +20,14 @@ export default function ProposalsPage() {
 
   const apply = (p: PropItem) => {
     Modal.confirm({
-      title: `应用提案 #${p.id}（${p.kind === 'gen' ? '建课' : '编辑'}）？`,
+      title: `应用提案 #${p.id}（${p.kind === 'gen' ? '建课' : p.kind === 'edit' ? '编辑' : p.kind === 'experiment' ? '实验开跑' : '项目域'}）？`,
       content: p.summary,
       style: { width: 620 },
       onOk: async () => {
         setBusy(true)
         try {
           await api.proposalApply(p.kind, p.id)
-          Message.success(`提案 #${p.id} 已应用（rename/del/题库随迁联动完成）`)
+          Message.success(`提案 #${p.id} 已应用`)
           await load()
         } catch (err) {
           Message.error(err instanceof Error ? err.message : String(err))

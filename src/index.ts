@@ -742,6 +742,32 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/coach', () => engine.coachAdvice()))
       return
     }
+    if (req.method === 'GET' && route === '/sleep') {
+      // D-4 睡眠耦合建议层开关（#85）：默认开
+      sendJson(res, 200, await apiRun('api/sleep', () => engine.sleepAdviceConfig()))
+      return
+    }
+    if (req.method === 'GET' && route === '/thermostat') {
+      // D-2 挑战点恒温器（#111 ADR-0024）：跨区观测聚合 + 只读建议（非自动控制器）
+      sendJson(res, 200, await apiRun('api/thermostat', () => engine.thermostatView()))
+      return
+    }
+    if (req.method === 'GET' && route === '/experiments') {
+      // D-1 N-of-1 实验（#110 ADR-0023）：模板库 + 实验清单 + 报告（无实验时 report=null）
+      sendJson(res, 200, await apiRun('api/experiments', async () => {
+        const experiments = await engine.experimentList()
+        let report = null
+        if (experiments.length) {
+          try {
+            report = await engine.experimentReport()
+          } catch {
+            report = null
+          }
+        }
+        return { templates: await engine.experimentTemplates(), experiments, report }
+      }))
+      return
+    }
     if (req.method === 'GET' && route === '/generate/status') {
       sendJson(res, 200, await apiRun('api/generate/status', () => generationStatus()))
       return
@@ -838,6 +864,42 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         const id = rejectId(body.id)
         await engine.graphReject(id, typeof body.note === 'string' ? body.note.trim() : '')
         sendJson(res, 200, { message: `[reject] 提案 #${id} 已拒绝留痕。` })
+        return
+      }
+      if (route === '/thermostat/apply') {
+        // D-2 恒温器建议的逐条显式确认（#111 ADR-0024）：只受理当前清单内 id
+        sendJson(res, 200, await apiRun('api/thermostat/apply', () =>
+          engine.thermostatApply(need(body, 'suggestion'))))
+        return
+      }
+      if (route === '/experiments/propose') {
+        // D-1 实验提案（#110）：模板发起 → pending 提案
+        const course = typeof body.course === 'string' && body.course.trim() ? body.course.trim() : undefined
+        sendJson(res, 200, await apiRun('api/experiments/propose', () =>
+          engine.experimentPropose(need(body, 'template'), course)))
+        return
+      }
+      if (route === '/experiments/apply') {
+        // D-1 实验确认开跑（#110 提案-确认制第二步）
+        sendJson(res, 200, await apiRun('api/experiments/apply', () =>
+          engine.experimentApply(applyId(body.id))))
+        return
+      }
+      if (route === '/experiments/stop') {
+        // D-1 实验手动停止（开停手动，ADR-0023）
+        const id = body.id === undefined || body.id === null ? undefined : applyId(body.id)
+        sendJson(res, 200, await apiRun('api/experiments/stop', () => engine.experimentStop(id)))
+        return
+      }
+      if (route === '/sandbox/run') {
+        // D-3 沙盘（#112 ADR-0025）：只读蒙特卡洛推演，零写侧
+        const minutes = Number(body.minutes_per_day)
+        if (!Number.isFinite(minutes)) throw new Error('missing required field: minutes_per_day')
+        const weeks = body.weeks === undefined ? undefined : Number(body.weeks)
+        const course = typeof body.course === 'string' && body.course.trim() ? body.course.trim() : undefined
+        const nodes = Array.isArray(body.nodes) ? body.nodes.filter((n): n is string => typeof n === 'string') : undefined
+        sendJson(res, 200, await apiRun('api/sandbox/run', () =>
+          engine.sandboxRun({ minutesPerDay: minutes, ...(weeks !== undefined && Number.isFinite(weeks) ? { weeks } : {}), ...(course ? { course } : {}), ...(nodes?.length ? { nodes } : {}) })))
         return
       }
       if (route === '/generate') {
@@ -1105,6 +1167,13 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         })))
         return
       }
+      if (route === '/sleep') {
+        // D-4 睡眠耦合建议层开关（#85）：enabled=false 全层静默
+        sendJson(res, 200, await apiRun('api/sleep', () => engine.setSleepAdviceConfig({
+          ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+        })))
+        return
+      }
       if (route === '/question-update') {
         const patch = typeof body.patch === 'object' && body.patch !== null
           ? body.patch as Record<string, unknown> : {}
@@ -1287,7 +1356,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { suggestion: string }) => run('learnhub_thermostat_apply', async () =>
       JSON.stringify(await engine.thermostatApply(args.suggestion))))
   tool('learnhub_sandbox',
-    'Run the plan sandbox (D-3, ADR-0025): Monte-Carlo projection of the learner's study plan using the SAME FSRS+mastery models as the scheduler (~200 seeded runs). Input = daily minutes goal x horizon in weeks (default 6) x intended course/nodes. Output = end-of-horizon mastery map (per node p50/p80) + total-mastery curve with 50/80 percentile bands + the honest assumption list (1 min per review, practice evidence frozen, new nodes introduced in course order). READ-ONLY: zero canonical writes, no gating, no scheduling side effects. The wording is locked to「模型推演，非承诺」— present the distribution as a distribution, never as a promise, and never as a feasibility verdict; the learner negotiates their own plan with it.',
+    'Run the plan sandbox (D-3, ADR-0025): Monte-Carlo projection of the learner\'s study plan using the SAME FSRS+mastery models as the scheduler (~200 seeded runs). Input = daily minutes goal x horizon in weeks (default 6) x intended course/nodes. Output = end-of-horizon mastery map (per node p50/p80) + total-mastery curve with 50/80 percentile bands + the honest assumption list (1 min per review, practice evidence frozen, new nodes introduced in course order). READ-ONLY: zero canonical writes, no gating, no scheduling side effects. The wording is locked to「模型推演，非承诺」— present the distribution as a distribution, never as a promise, and never as a feasibility verdict; the learner negotiates their own plan with it.',
     {
       minutes_per_day: { type: 'number', required: true, description: 'Daily learning-minutes goal of the plan' },
       weeks: { type: 'number', description: 'Horizon in weeks (default 6, max 26)' },
