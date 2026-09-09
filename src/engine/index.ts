@@ -49,7 +49,7 @@ import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
 import { QuestionBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
-import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, normalizeSourcePath, sourceHint, stripFrontmatter, titleOfBody } from './note-source.ts'
+import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, isExcludedPath, normalizeSourcePath, readNoteSourceExcludes, sourceHint, stripFrontmatter, titleOfBody, writeNoteSourceExcludes } from './note-source.ts'
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
 import { LearnerCards, LEARNER_CARD_KINDS } from './learner-cards.ts'
 import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
@@ -1817,20 +1817,37 @@ export class LearnhubEngine {
    * （Missing 后重注册）；学习中心内部路径拒绝（引擎管理区不收编）。用户笔记零写入
    * ——只读文件算指纹与标题。 */
   /** 注册身份落盘带显式 enabled（#59 契约：{id, 路径, enabled, created}），
-   * 文件夹批量登记时逐文件归一；学习中心内部的 .md（如注册 vault 根）跳过不失败。 */
+   * 文件夹批量登记时逐文件归一；学习中心内部的 .md（如注册 vault 根）跳过不失败。
+   * 用户排除清单（V-1 #86）在注册入口强制执行：输入路径命中清单 fail loud（先
+   * unexclude 再注册），批量登记扫到清单内子树跳过（skipped 计数 + skipped_paths）。 */
   async noteSourceRegister(
     input: string, today?: string,
-  ): Promise<{ date: string; registered: number; updated: number; skipped: number; sources: NoteSourceItem[] }> {
+  ): Promise<NoteSourceRegisterResult> {
     today ??= (await this.learningDay()).today
     const rel0 = normalizeSourcePath(this.vaultRoot, this.paths.centerRoot, input)
-    const files = await collectNoteFiles(`${this.vaultRoot}/${rel0}`)
-    if (!files.length) throw new Error('[note-source] 该路径下没有 .md 笔记。')
+    const relOf = (abs: string): string => abs.slice(this.vaultRoot.length + 1)
+    const excludes = await readNoteSourceExcludes(this.paths)
+    if (isExcludedPath(rel0, excludes)) {
+      throw new Error(`[note-source] 路径在用户排除清单内，不注册（先 learnhub_note_source_unexclude 解除）：${rel0}`)
+    }
+    const skippedPaths: string[] = []
+    const files = await collectNoteFiles(`${this.vaultRoot}/${rel0}`, abs => {
+      if (!isExcludedPath(relOf(abs), excludes)) return false
+      skippedPaths.push(relOf(abs))
+      return true
+    })
+    if (!files.length) {
+      if (skippedPaths.length) {
+        throw new Error(`[note-source] 该路径下的 .md 全部命中排除清单，没有可注册的笔记（learnhub_note_source_unexclude 可解除）：${skippedPaths.join('、')}`)
+      }
+      throw new Error('[note-source] 该路径下没有 .md 笔记。')
+    }
     const entries = await this.registry.loadNoteSources()
     const manifest = await this.noteManifest.load()
     const byPath = new Map(entries.map(e => [e.path, e]))
     let registered = 0
     let updated = 0
-    let skipped = 0
+    let skipped = skippedPaths.length
     for (const f of files) {
       let rel: string
       try {
@@ -1838,6 +1855,7 @@ export class LearnhubEngine {
       } catch (err) {
         if (!(err instanceof Error) || !/学习中心内部/.test(err.message)) throw err
         skipped++ // 文件夹批量登记扫到引擎管理区文件：跳过（不收编、不让整批失败）
+        skippedPaths.push(relOf(f.abs))
         continue
       }
       const raw = await readFile(f.abs, 'utf8')
@@ -1862,14 +1880,19 @@ export class LearnhubEngine {
     await this.registry.save(await this.registry.load(), entries)
     await this.noteManifest.save(manifest)
     const view = await this.noteSourceList(today)
-    return { date: today, registered, updated, skipped, sources: view.sources }
+    return {
+      date: today, registered, updated, skipped, sources: view.sources,
+      ...(skippedPaths.length ? { skipped_paths: skippedPaths } : {}),
+    }
   }
 
   /** 笔记源清单：注册身份（注册表）× 指纹状态（源清单 + 现读文件）× 卡池概况。
    * 用户笔记永不判 Broken：文件缺失 = missing、指纹不符 = drifted、清单条目缺失 =
-   * inconsistent（镜像不一致，data-check 同步报出），状态与提示随条目带出。 */
+   * inconsistent（镜像不一致，data-check 同步报出），状态与提示随条目带出。
+   * excludes = 用户排除清单（V-1 #86），只影响未来的注册入口，不挂起已注册源。 */
   async noteSourceList(today?: string): Promise<NoteSourceDoc> {
     today ??= (await this.learningDay()).today
+    const excludes = await readNoteSourceExcludes(this.paths)
     const entries = await this.registry.loadNoteSources()
     const manifest = await this.noteManifest.load()
     const itemById = new Map(manifest.sources.map(s => [s.id, s]))
@@ -1899,7 +1922,7 @@ export class LearnhubEngine {
         ...(bankBroken ? { broken: true } : {}),
       })
     }
-    return { date: today, total: out.length, sources: out }
+    return { date: today, total: out.length, excludes, sources: out }
   }
 
   /** 解除注册：注册表条目 + 源清单条目 + 镜像题库一并清除；用户笔记文件不动。 */
@@ -1911,6 +1934,35 @@ export class LearnhubEngine {
     const bankPath = this.bank.bankPath(this.paths.noteSourceDir, id)
     if (existsSync(bankPath)) await unlink(bankPath)
     return { removed: id, path: entry.path }
+  }
+
+  // ---- 用户排除清单（V-1 #86：state/learnhub.json 的 note_source_excludes）----
+
+  /** 读排除清单（noteSourceList 同款视图；只影响未来注册，不摘除已注册源）。 */
+  async noteSourceExcludes(): Promise<{ excludes: string[] }> {
+    return { excludes: await readNoteSourceExcludes(this.paths) }
+  }
+
+  /** 加一条排除（vault 相对/绝对路径，文件或文件夹均可；归一去重排序落盘）。
+   * 已在清单 = 幂等返回；路径不要求现存（可先排除后建文件）。 */
+  async noteSourceExclude(input: string): Promise<{ excludes: string[] }> {
+    const cur = await readNoteSourceExcludes(this.paths)
+    const rel = normalizeSourcePath(this.vaultRoot, this.paths.centerRoot, input)
+    const next = [...new Set([...cur, rel])].sort()
+    await writeNoteSourceExcludes(this.paths, next)
+    return { excludes: next }
+  }
+
+  /** 解除一条排除：不在清单 fail loud（提示现清单——显式动作要对得上号）。 */
+  async noteSourceUnexclude(input: string): Promise<{ excludes: string[] }> {
+    const cur = await readNoteSourceExcludes(this.paths)
+    const rel = normalizeSourcePath(this.vaultRoot, this.paths.centerRoot, input)
+    if (!cur.includes(rel)) {
+      throw new Error(`[note-source] 排除清单没有「${rel}」（noteSourceList 的 excludes 查看现清单）。`)
+    }
+    const next = cur.filter(e => e !== rel)
+    await writeNoteSourceExcludes(this.paths, next)
+    return { excludes: next }
   }
 
   /** 笔记源定位（注册身份 + 源清单条目齐备才合法；单边缺失是镜像不一致，fail loud）。 */
