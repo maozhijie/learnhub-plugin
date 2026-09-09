@@ -1234,6 +1234,12 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
           engine.noteSourceUnexclude(need(body, 'path'))))
         return
       }
+      if (route === '/note-source/relink') {
+        // 漂移治理 relink（V-6 #109）：改名/移动后把既有源重连到新路径（卡池与调度保留）
+        sendJson(res, 200, await apiRun('api/note-source/relink', () =>
+          engine.noteSourceRelink(need(body, 'id'), need(body, 'path'))))
+        return
+      }
       if (route === '/note-source/generate') {
         // 笔记源出题（#59）：读笔记正文 → 笔记出题 prompt → validateBank 门禁落镜像
         sendJson(res, 200, await apiRun('api/note-source/generate', () => engine.noteSourceGenerate(
@@ -1871,6 +1877,16 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
     (args: { course?: string }) => run('learnhub_graph_enc_backfill', async () =>
       JSON.stringify(await engine.graphEncBackfill(args.course))))
+  tool('learnhub_vault_links_scan',
+    'Scan the WHOLE vault (outside the learning center; dot-dirs, built-in attachment/archive dirs 99附件/05ob自定义/00类型/03属性/过时*, and the user note-source exclusion list skipped — the built-in list can be replaced via vault_link_excludes in learnhub.json) for [[wikilinks]] between personal notes and produce de-noised UNDIRECTED association pairs with confidence w∈[0,1] (enc-edge weight convention): embeds ![[…]], non-.md targets (.base/.png/…), diary date targets, unresolved targets, self-links and code-fence examples are filtered, each with a hit-count audit (nothing silently dropped). READ-ONLY on personal notes — the cache lands in the engine state dir (state/vault链接.json with per-file fingerprints for drift/rescan); pure file scanning, no host search API. Pair confidence tiers: w≥0.7 proposal-ready (learnhub_graph_link_backfill), 0.4–0.7 shown in learnhub_graph_analyze suggestions.vault_link_candidates for human adjudication, <0.4 report-only. Run before graph analysis to surface vault link priors.',
+    {},
+    () => run('learnhub_vault_links_scan', async () =>
+      JSON.stringify(await engine.vaultLinksScan())))
+  tool('learnhub_graph_link_backfill',
+    'Turn vault link priors into enc candidate edges (V-2 #91): mapped pairs with w ≥ 0.7 whose direction resolves INSIDE the pre-transitive-closure become set_enc whole-replace ops (declared enc preserved, new edges noted with the source link evidence for traceability), queued as a SINGLE pending edit proposal per course — the enc_backfill single-proposal human-review channel. Pairs without a pre relation are NOT forced (enc contract/E7: enc target must sit in the holder\'s prereq closure) — they come back as blocked_no_pre with a why, for you to add pre edges explicitly or drop. Re-runnable; already-declared edges are skipped. Requires learnhub_vault_links_scan to have run (fails loud with a pointer otherwise). Review/apply with learnhub_graph_apply(kind=edit).',
+    { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
+    (args: { course?: string }) => run('learnhub_graph_link_backfill', async () =>
+      JSON.stringify(await engine.graphLinkBackfill(args.course))))
   tool('learnhub_graph_apply',
     'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
     {
@@ -2032,10 +2048,18 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     () => run('learnhub_note_source_list', async () =>
       JSON.stringify(await engine.noteSourceList())))
   tool('learnhub_note_source_unregister',
-    'Unregister a Note Source (C1): removes the registry entry, the mirror manifest item, and the mirror question bank. The user\'s note file is untouched. Use the id from learnhub_note_source_list.',
+    'Unregister a Note Source (C1): removes the registry entry, the mirror manifest item, the mirror question bank, and the pool-mirror md. The user\'s note file is untouched. Use the id from learnhub_note_source_list.',
     { id: { type: 'string', required: true, description: 'Note-source id, e.g. "note-1"' } },
     (args: { id: string }) => run('learnhub_note_source_unregister', async () =>
       JSON.stringify(await engine.noteSourceUnregister(args.id))))
+  tool('learnhub_note_source_relink',
+    'Relink a Note Source to a new path (V-6 drift governance): when a registered note was RENAMED or MOVED, the source reads Missing and its card pool suspends — relink re-attaches the SAME source id to the new path, keeping the mirror bank and every card\'s FSRS schedule (unlike unregister+re-register, which orphans the old cards). Fingerprint and title refresh from the new file; the pool-mirror md backlink follows. The new path passes the same hygiene as registration (outside the learning center, not on the user exclusion list, not already taken by another source) and must EXIST — relink is a recovery action. Fails loud on every conflict.',
+    {
+      id: { type: 'string', required: true, description: 'Note-source id, e.g. "note-1"' },
+      path: { type: 'string', required: true, description: 'New note path (after the rename/move), vault-relative or absolute' },
+    },
+    (args: { id: string; path: string }) => run('learnhub_note_source_relink', async () =>
+      JSON.stringify(await engine.noteSourceRelink(args.id, args.path))))
   tool('learnhub_note_source_exclude',
     'Add a path to the user exclusion list (V-1): a note/folder that batch registrations must never absorb (e.g. private journals, sync-noise folders). Vault-relative or absolute, file or folder (folder = the whole subtree), need not exist yet. Governs FUTURE registrations only — already-registered sources stay until learnhub_note_source_unregister. Current list rides learnhub_note_source_list.',
     { path: { type: 'string', required: true, description: 'Note or folder path to exclude, vault-relative or absolute; must be outside the learning center' } },

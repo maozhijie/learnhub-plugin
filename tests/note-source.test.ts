@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { LearnhubEngine } from '../src/engine/index.ts'
@@ -490,5 +490,132 @@ test('排除清单只管未来注册：先注册后排除不摘源、卡照常�
 
     // 排除动作全程不碰笔记文件（ADR-0010 零写入纪律）
     assert.equal(await readFile(p.noteAbs, 'utf8'), before)
+  })
+})
+
+test('卡池镜像（V-4 #108）：出题落 [[个人笔记]] backlink 镜像、解除随删、个人笔记字节不变', async () => {
+  await withVault(async (engine, p) => {
+    const before = await readFile(p.noteAbs, 'utf8')
+    const today = todayStr()
+    await engine.noteSourceRegister(p.noteAbs)
+    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+
+    const poolPath = engine.paths.noteSourcePoolPath('note-1')
+    assert.ok(existsSync(poolPath), '出题后卡池镜像存在')
+    const pool = await readFile(poolPath, 'utf8')
+    assert.match(pool, /\[\[我的笔记\/费曼技巧\|费曼技巧\]\]/, '镜像带指向个人笔记的 wikilink')
+    assert.match(pool, /卡片 2 张/, '卡数快照')
+    assert.match(pool, new RegExp(`截至 ${today}`))
+    assert.match(pool, /零写入/)
+
+    // 到期卡计数：把一题 due 改到今天后重连（relink 刷镜像）应显示到期 1
+    await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
+      fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
+    })
+
+    // 解除注册：镜像随删；个人笔记全程字节不变
+    await engine.noteSourceUnregister('note-1')
+    assert.ok(!existsSync(poolPath), '解除注册后卡池镜像清除')
+    assert.equal(await readFile(p.noteAbs, 'utf8'), before)
+  })
+})
+
+test('relink（V-6 #109）：改名后 Missing → 重连带卡池与调度恢复，指纹/标题/镜像跟随新路径', async () => {
+  await withVault(async (engine, p) => {
+    await engine.noteSourceRegister(p.noteAbs)
+    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    const today = todayStr()
+    await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
+      fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
+    })
+
+    // 改名 → Missing 挂起
+    const moved = join(p.folderAbs, '费曼技巧-v2.md')
+    await rename(p.noteAbs, moved)
+    assert.equal((await engine.noteSourceList()).sources[0]!.status, 'missing')
+
+    // relink 到新路径：id 不变（卡池与调度保留）、状态回 ok、到期卡回队列
+    const rel = await engine.noteSourceRelink('note-1', moved)
+    assert.equal(rel.id, 'note-1')
+    assert.equal(rel.from, '我的笔记/费曼技巧.md')
+    assert.equal(rel.to, '我的笔记/费曼技巧-v2.md')
+    const src = (await engine.noteSourceList()).sources[0] as Record<string, unknown>
+    assert.equal(src.status, 'ok')
+    assert.equal(src.path, '我的笔记/费曼技巧-v2.md')
+    const entries = await engine.registry.loadNoteSources()
+    assert.equal(entries.length, 1)
+    assert.equal(entries[0]!.id, 'note-1')
+    // 新路径内容与旧一致 → 指纹与源清单同步（不被判漂移）
+    const q = await engine.reviewQueue()
+    assert.equal(q.cards.filter(c => c.source === 'note').length, 1)
+    assert.equal((q as Record<string, unknown>).note_suspended, undefined)
+    // V-4 #108：队列卡带来源笔记标题与路径（面板显示 + obsidian:// 跳转的数据源）
+    const nc = q.cards.find(c => c.source === 'note') as Record<string, unknown>
+    assert.equal(nc.title, '费曼技巧')
+    assert.equal(nc.source_path, '我的笔记/费曼技巧-v2.md')
+    assert.match(String(nc.source_abs), /费曼技巧-v2\.md$/)
+    // 卡池镜像的 [[链接]] 跟到新路径
+    const pool = await readFile(engine.paths.noteSourcePoolPath('note-1'), 'utf8')
+    assert.match(pool, /\[\[我的笔记\/费曼技巧-v2\|/)
+    assert.match(pool, /到期 1/)
+
+    // relink 后源文件依旧零写入
+    assert.equal(await readFile(moved, 'utf8'), `${PERSONAL_NOTE}\n`)
+  })
+})
+
+test('relink fail loud：同路径、目标不存在、路径被他源占用、目标在排除清单、中心内路径', async () => {
+  await withVault(async (engine, p) => {
+    await engine.noteSourceRegister(p.noteAbs)
+    await engine.noteSourceRegister(join(p.folderAbs, '另一篇.md'))
+    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+
+    await assert.rejects(() => engine.noteSourceRelink('note-1', p.noteAbs), /已注册在路径/)
+    await assert.rejects(() => engine.noteSourceRelink('note-1', join(p.folderAbs, '不存在.md')), /目标文件不存在/)
+    await assert.rejects(() => engine.noteSourceRelink('note-1', join(p.folderAbs, '另一篇.md')), /已是笔记源「note-2」/)
+    // 排除清单目标拒绝
+    await engine.noteSourceExclude(join(p.folderAbs, '私密.md'))
+    await writeFile(join(p.folderAbs, '私密.md'), '# 私密\n', 'utf8')
+    await assert.rejects(() => engine.noteSourceRelink('note-1', join(p.folderAbs, '私密.md')), /排除清单内/)
+    // 中心内路径过不了注册同款卫生
+    await assert.rejects(() => engine.noteSourceRelink('note-1', '学习中心/math/课程/入门.md'), /学习中心内部/)
+    // 不存在的 id
+    await assert.rejects(() => engine.noteSourceRelink('note-99', p.noteAbs), /没有笔记源/)
+  })
+})
+
+test('Data Check 全库注册源盘点（V-6 #109）：逐源存在性+指纹计数、缺失报 Missing 级 finding', async () => {
+  await withVault(async (engine, p) => {
+    // 源1 出题后编辑 → 漂移；源2 注册后删除 → 缺失（清单条目在，不算镜像不一致）
+    await engine.noteSourceRegister(p.noteAbs)
+    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await writeFile(p.noteAbs, `${PERSONAL_NOTE}\n\n补充要点。\n`, 'utf8')
+    const gone = join(p.folderAbs, '将删除.md')
+    await writeFile(gone, '# 将删除\n\n内容。\n', 'utf8')
+    await engine.noteSourceRegister(gone)
+    await rm(gone)
+
+    const report = await engine.dataCheck()
+    const inv = report.inventory.noteSourceFiles
+    assert.equal(inv.total, 2)
+    assert.equal(inv.ok, 0)
+    assert.equal(inv.drifted, 1)
+    assert.equal(inv.missing, 1)
+    assert.equal(inv.inconsistent, 0)
+
+    const missingFinding = report.findings.find(f => f.reason === 'note_source_file_missing')
+    assert.ok(missingFinding, '缺失源报 finding')
+    assert.equal(missingFinding!.level, 'missing')
+    assert.match(missingFinding!.detail ?? '', /relink/)
+
+    // 全恢复基线：note-2 relink 到另一现存文件（缺失清零）；note-1 仍是漂移（编辑没确认）
+    const restored = join(p.folderAbs, '恢复.md')
+    await writeFile(restored, '# 恢复\n\n内容。\n', 'utf8')
+    await engine.noteSourceRelink('note-2', restored)
+    const report2 = await engine.dataCheck()
+    assert.equal(report2.inventory.noteSourceFiles.ok, 1)
+    assert.equal(report2.inventory.noteSourceFiles.drifted, 1)
+    assert.equal(report2.inventory.noteSourceFiles.missing, 0)
+    assert.ok(!report2.findings.some(f => f.reason === 'note_source_file_missing'))
   })
 })
