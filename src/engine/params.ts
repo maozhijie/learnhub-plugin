@@ -28,3 +28,7 @@ export const XP_PER_NODE_DEFAULT = 12    // 无课程历史时每节点 XP 估�
 export const XP_PER_MILESTONE_DEFAULT = 120 // 里程碑无 est 申报时的过点定价缺省（1–2 周粒度的保守投入，#94）
 export const DAILY_XP_GOAL_DEFAULT = 30  // 每日 XP 目标缺省（state/learnhub.json 可覆盖）
 export const DAY_CUTOFF_DEFAULT = '02:00' // 日界缺省（ADR-0020；state/learnhub.json 的 day_cutoff 可覆盖）
+
+// ---- Self-Calibration 自评校准画像（ADR-0022 #104；呈现层参数，零 canonical）----
+export const CALIBRATION_OVERCONF_THRESHOLD = 0.6 // 「会」档系统性过信显著阈值：该档 ≥JOL_CALIBRATION_MIN 条配对且实际正确率低于此值即检出（宣称「会」≈接近确知；真伪题瞎猜基线 0.5，持续低于 0.6 = 预测几乎不带信息）
+export const CALIBRATION_BOOST_SAMPLE_RATE = 1 / 2 // 过信检出且提示开时的 JOL 抽查加强密度（默认 1/3 → 1/2；只影响抽查频率，不改任何 canonical 写入）

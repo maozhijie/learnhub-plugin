@@ -18,7 +18,7 @@ import type {
   ContentStatus, EncEdge, FsrsBlock, SectionManifest, Stage,
 } from './types'
 import type { AlloKind } from './grading'
-import type { JolBin } from './jol'
+import type { JolBin, JolPrediction } from './jol'
 
 /** 提案记录（store/proposals 持久化条目）与节清单（frontmatter content.sections）
  * 的转发导出：graphReject/graphProposals 的返回与 LessonDoc.manifest 引用，
@@ -459,6 +459,35 @@ export interface ReviewQueueDoc {
   note_drifted?: Array<{ id: string; path: string; hint: string }>
   /** 笔记源挂起原因（Missing / 镜像 Broken）；挂起卡的源不出卡。 */
   note_suspended?: Array<{ id: string; path: string; reason: string }>
+  /** Self-Calibration 过信轻提示（ADR-0022 #104）：源内「会」档系统性过信且提示开时
+   * 携带——呈现层文案（UI 在 JOL 预测出口非阻断展示），可全局关（calibration.hints）；
+   * 关闭或未检出时不带。 */
+  calibration_hint?: string
+}
+
+// ---- 自评校准画像（calibrationProfile；ADR-0022 #104 分源自省面）----
+// 类型在本文件内联定义（照 MemoryHealthDoc 先例：视图形状就地声明，不 import 运行时
+// 模块——calibration.ts 带 .ts 扩展的 value import，进 ui tsc 程序会 TS5097）。
+
+/** 单源自省切片：校准聚合（复用 jol 口径：档位 × 实际正确率）+ 源内系统性过信判定。
+ * 配对不足门槛时 calibration 为 null（静默不显示）。source 枚举 = calibration.ts
+ * 的 CalibrationSource（v1 恒 'jol'；#88/#89 扩展）。 */
+export interface CalibrationSourceProfile {
+  source: 'jol'
+  calibration: { pairs: number; bins: JolBin[] } | null
+  overconfidence: {
+    overconfident: boolean
+    /** 数据足门槛时的证据快照（该档 n / 实际正确率 / 阈值）；不足门槛为 null。 */
+    evidence: { source: 'jol'; self: JolPrediction; n: number; accuracy: number; threshold: number } | null
+  }
+}
+
+/** 自评校准画像（ADR-0022 #104）：分源切片为主视图（构念效度：域特异成分显著），
+ * global 只是各源合并的参考视图、必须连同 warning 域特异警戒一起展示。
+ * 只读派生（practice 流水配对），零落盘、零 canonical 写入。 */
+export interface CalibrationProfileDoc {
+  sources: CalibrationSourceProfile[]
+  global: { calibration: { pairs: number; bins: JolBin[] } | null; warning: string }
 }
 
 /** 作答结算（questionAnswer）。课程题库通道与笔记源卡通道共用：
