@@ -44,7 +44,11 @@ test('纯函数缝：wikilink 解析（嵌入/别名/锚点/.md 剥离/围栏排
   assert.equal(isNonMdTarget('日记.base'), true)
   assert.equal(isNonMdTarget('截图.png'), true)
   assert.equal(isNonMdTarget('笔记.md'), false)
+  assert.equal(isNonMdTarget('笔记.MD'), false)
   assert.equal(isNonMdTarget('无扩展名'), false)
+  // 含点标题是正经笔记名（资产白名单制，不见点就滤）
+  assert.equal(isNonMdTarget('Node.js 入门'), false)
+  assert.equal(isNonMdTarget('笔记/v2.1 变更'), false)
 })
 
 test('纯函数缝：名字归一与 basename 索引（全半角折叠、撞车取最短）', () => {
@@ -157,6 +161,7 @@ test('扫描：去噪管线全绿、审计带命中计数、缓存落 state、�
     const r = await engine.vaultLinksScan()
 
     assert.equal(r.scanned_files, 5, '学习中心排除；根目录 5 篇个人笔记全扫')
+    assert.equal(r.truncated, false, '未触文件数上限')
     assert.equal(r.tiers.proposal, 2, '入门↔进阶、进阶↔未关联 两对强链接')
     assert.equal(r.tiers.review, 1, '平行→入门 ×3 单源无反向 = 0.4 待裁决')
     const top = r.edges[0]!

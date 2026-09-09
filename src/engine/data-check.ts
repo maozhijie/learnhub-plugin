@@ -48,7 +48,6 @@ export type DataCheckReason =
   | 'note_source_manifest_schema'
   | 'note_source_mirror_inconsistent'
   | 'note_source_file_missing'
-  | 'note_source_file_unreadable'
   | 'note_source_bank_yaml_parse'
   | 'note_source_bank_schema'
   | 'learner_card_yaml_parse'
@@ -322,8 +321,9 @@ async function scanCourse(
  * 纪律盘点；用户笔记本身**不是** Broken 对象（永不判 Broken——漂移是状态不是损坏）。
  * 注册表条目 × 源清单条目双向对账——单边缺失 = 镜像不一致（Broken 级，说明有人手改
  * 了镜像区）。V-6（#109）起对全库注册源逐源盘点：存在性 + 指纹比对（与引擎读路径
- * classifySource 同口径），计数进 inventory；源文件缺失另报 Missing 级 finding
- * （合法状态、卡池挂起，但盘点必须显式可见——ADR-0004 不静默）。 */
+ * classifySource 同口径），计数进 inventory（inconsistent = 指纹无法核对：清单缺条目
+ * 或文件不可读）；源文件缺失另报 Missing 级 finding（合法状态、卡池挂起，但盘点必须
+ * 显式可见——ADR-0004 不静默）。 */
 async function scanNoteSources(
   findings: DataCheckFinding[],
   paths: Paths,
@@ -393,13 +393,15 @@ async function scanNoteSources(
     let raw: string
     try {
       raw = await readFile(abs, 'utf8')
-    } catch (err) {
+    } catch {
+      // 用户笔记不可读（权限/同步锁）不是 Broken（它不是引擎契约对象，永不判
+      // Broken）；按「指纹无法核对」归 inconsistent 计数——不静默，读路径
+      // （noteSourceList）会以异常显式浮出
       files.inconsistent++
-      push(findings, 'note_source', 'broken', 'note_source_file_unreadable',
-        `笔记源「${e.id}」源文件 ${abs}`, errorText(err))
       continue
     }
-    files[classifySource(true, itemsById.get(e.id)!.fingerprint === fingerprintOf(raw))]++
+    const status = classifySource(true, itemsById.get(e.id)!.fingerprint === fingerprintOf(raw))
+    files[status]++
     const bankPath = join(paths.noteSourceDir, '题库', `${safeFilename(e.id)}.yaml`)
     if (!existsSync(bankPath)) continue // 未出题 = 合法空卡池
     banks++

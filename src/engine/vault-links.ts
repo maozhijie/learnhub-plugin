@@ -11,6 +11,12 @@
  * pre/enc 归类与方向由人审裁决（backfill 只在 pre 闭包内成 enc 边，
  * 其余降级为 blocked_no_pre 信号）。
  *
+ * v1 打分与映射口径（调研 §4.4/§5 降级格的收窄子集，升级项显式留白）：
+ * 置信度 = 次数 + 独立源文件 + 双向加成（源区类型权重留待宿主升级——目录
+ * 分区高度个人化，硬编码反成噪声）；节点映射 = 归一化精确匹配（别名表与
+ * 包含关系随宿主嵌入能力一并升级——短 CJK 名的包含匹配假边率不可接受）。
+ * alias 解析后留显示（§4.2），不参与匹配。
+ *
  * ADR-0010 只读纪律：个人笔记零写入——产物只落引擎 state 区；缓存带源文件
  * 指纹（与笔记源指纹同法），漂移可见、可重扫。纯文件扫描，不依赖宿主检索 API。
  */
@@ -38,6 +44,8 @@ export interface VaultLinksDoc {
   version: 1
   generated_at: string
   scanned_files: number
+  /** 文件数达上限被截断（maxFiles）——ADR-0004：截断必须显式可见，不静默。 */
+  truncated: boolean
   /** 全部 wikilink 命中数（含被过滤的——审计分母）。 */
   links_seen: number
   edges: VaultLinkEdge[]
@@ -118,11 +126,22 @@ export function isDateTarget(target: string): boolean {
   return /^\d{4}-\d{2}-\d{2}/.test(target)
 }
 
-/** 非知识资产目标（.base/.canvas/.png/…）：带扩展名且不是 .md。 */
+/** 已知非 md 资产扩展名（实测 .base/.canvas/图片/音视频等——Obsidian 里资产链接
+ * 永远带扩展名）。白名单制而非「见点就当扩展名」：`[[Node.js 入门]]` 这类含点
+ * 标题是正经常的笔记名，不能静默滤进 non_md 桶。 */
+const ASSET_EXTENSIONS = new Set([
+  'base', 'canvas', 'excalidraw', 'drawio',
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic',
+  'pdf', 'mp4', 'mov', 'avi', 'mkv', 'webm',
+  'mp3', 'wav', 'm4a', 'ogg', 'flac',
+])
+
+/** 非知识资产目标：basename 扩展名命中资产白名单（大小写不敏感）。 */
 export function isNonMdTarget(target: string): boolean {
   const base = target.split('/').pop() ?? target
   const dot = base.lastIndexOf('.')
-  return dot > 0 && !base.slice(dot + 1).toLowerCase().startsWith('md')
+  if (dot <= 0) return false
+  return ASSET_EXTENSIONS.has(base.slice(dot + 1).toLowerCase())
 }
 
 /** 名字归一（节点映射用）：NFKC 折叠全半角、去空白、小写——「入门 Node」与
@@ -197,7 +216,7 @@ export interface VaultLinkScanOptions {
   dirExcludes: string[]
   /** 用户排除清单（注册排除同源；路径前缀语义，永远生效）。 */
   pathExcludes: string[]
-  now?: () => string
+  /** 最多扫描文件数（超大 vault 防护；触顶即显式标记 truncated，不静默截断）。 */
   maxFiles?: number
 }
 
@@ -237,8 +256,9 @@ export async function scanVaultLinks(opts: VaultLinkScanOptions): Promise<VaultL
 
   const doc: VaultLinksDoc = {
     version: 1,
-    generated_at: (opts.now ?? (() => new Date().toISOString()))(),
+    generated_at: new Date().toISOString(),
     scanned_files: files.length,
+    truncated: files.length >= maxFiles,
     links_seen: 0,
     edges: [],
     unresolved: 0,

@@ -648,20 +648,23 @@ export class LearnhubEngine {
       cache.edges.filter(e => e.w >= 0.4),
       graph.names,
     )
-    const candidates: VaultLinkCandidateView[] = mapped.map(({ edge, aNode, bNode }) => ({
-      a: aNode,
-      b: bNode,
-      a_note: edge.a,
-      b_note: edge.b,
-      w: edge.w,
-      count: edge.count,
-      files: edge.files,
-      bidirectional: edge.bidirectional,
-      tier: scoreTier(edge.w) === 'proposal' ? 'proposal' : 'review',
-      suggestion: scoreTier(edge.w) === 'proposal'
-        ? 'learnhub_graph_link_backfill 可生成 set_enc 提案（单提案人审）'
-        : '置信度居中——人工裁决后 learnhub_graph_propose 显式主张（pre 从严）',
-    }))
+    const candidates: VaultLinkCandidateView[] = mapped.map(({ edge, aNode, bNode }) => {
+      const tier = scoreTier(edge.w) === 'proposal' ? 'proposal' as const : 'review' as const
+      return {
+        a: aNode,
+        b: bNode,
+        a_note: edge.a,
+        b_note: edge.b,
+        w: edge.w,
+        count: edge.count,
+        files: edge.files,
+        bidirectional: edge.bidirectional,
+        tier,
+        suggestion: tier === 'proposal'
+          ? 'learnhub_graph_link_backfill 可生成 set_enc 提案（单提案人审）'
+          : '置信度居中——人工裁决后 learnhub_graph_propose 显式主张（pre 从严）',
+      }
+    })
     return { scanned_at: cache.generated_at, mapped_total: candidates.length, candidates }
   }
 
@@ -671,6 +674,7 @@ export class LearnhubEngine {
   async vaultLinksScan(): Promise<{
     generated_at: string
     scanned_files: number
+    truncated: boolean
     links_seen: number
     unresolved: number
     audit: VaultLinksDoc['audit']
@@ -692,6 +696,7 @@ export class LearnhubEngine {
     return {
       generated_at: doc.generated_at,
       scanned_files: doc.scanned_files,
+      truncated: doc.truncated,
       links_seen: doc.links_seen,
       unresolved: doc.unresolved,
       audit: doc.audit,
@@ -766,7 +771,7 @@ export class LearnhubEngine {
       course: c.name, scanned_edges: cache.edges.length, mapped: proposalTier.length, ops: ops.length,
       proposal: { id: (prop as { id: number }).id }, blocked_no_pre: blockedNoPre,
       skipped_declared: skippedDeclared,
-      message: `已生成 pending edit 提案 #${String((prop as { id?: unknown }).id)}——过审后 learnhub_graph_apply(kind=edit) 生效（可重入，已声明边不重复提名）`,
+      message: `已生成 pending edit 提案 #${(prop as { id: number }).id}——过审后 learnhub_graph_apply(kind=edit) 生效（可重入，已声明边不重复提名）`,
     }
   }
 
@@ -2536,6 +2541,27 @@ export class LearnhubEngine {
     }
   }
 
+  /** 源卡池计数（列表与卡池镜像共用）：未归档卡数 + 当期到期数；镜像 Broken 时
+   * 带原因（列表据此挂起该源、镜像据此写状态行）。未出题 = 合法空池零计数。 */
+  private async noteSourcePoolStats(
+    id: string, today: string,
+  ): Promise<{ cards: number; due: number; broken?: string }> {
+    if (!existsSync(this.bank.bankPath(this.paths.noteSourceDir, id))) return { cards: 0, due: 0 }
+    try {
+      const bank = await this.bank.load(this.paths.noteSourceDir, id)
+      let cards = 0
+      let due = 0
+      for (const q of bank.questions) {
+        if (q.archived) continue
+        cards++
+        if (q.fsrs?.reps && q.fsrs.due <= today) due++
+      }
+      return { cards, due }
+    } catch (err) {
+      return { cards: 0, due: 0, broken: err instanceof Error ? err.message.split('\n')[0] : String(err) }
+    }
+  }
+
   /** 笔记源清单：注册身份（注册表）× 指纹状态（源清单 + 现读文件）× 卡池概况。
    * 用户笔记永不判 Broken：文件缺失 = missing、指纹不符 = drifted、清单条目缺失 =
    * inconsistent（镜像不一致，data-check 同步报出），状态与提示随条目带出。
@@ -2549,27 +2575,13 @@ export class LearnhubEngine {
     const out: Array<Record<string, unknown>> = []
     for (const e of entries) {
       const { status, title } = await this.sourceStatusOf(e, itemById.get(e.id))
-      let cards = 0
-      let due = 0
-      let bankBroken: string | undefined
-      if (existsSync(this.bank.bankPath(this.paths.noteSourceDir, e.id))) {
-        try {
-          const bank = await this.bank.load(this.paths.noteSourceDir, e.id)
-          for (const q of bank.questions) {
-            if (q.archived) continue
-            cards++
-            if (q.fsrs?.reps && q.fsrs.due <= today) due++
-          }
-        } catch (err) {
-          bankBroken = err instanceof Error ? err.message.split('\n')[0] : String(err)
-        }
-      }
-      const hint = bankBroken ? `题库镜像 Broken：${bankBroken}` : sourceHint(status)
+      const pool = await this.noteSourcePoolStats(e.id, today)
+      const hint = pool.broken ? `题库镜像 Broken：${pool.broken}` : sourceHint(status)
       out.push({
         id: e.id, path: e.path, title, enabled: e.enabled !== false, created: e.created,
-        status, cards, due,
+        status, cards: pool.cards, due: pool.due,
         ...(hint ? { hint } : {}),
-        ...(bankBroken ? { broken: true } : {}),
+        ...(pool.broken ? { broken: true } : {}),
       })
     }
     return { date: today, total: out.length, excludes, sources: out }
@@ -2596,25 +2608,13 @@ export class LearnhubEngine {
   private async writePoolMirror(id: string, today: string): Promise<void> {
     const { entry, item } = await this.requireSource(id)
     const { status, title } = await this.sourceStatusOf(entry, item)
-    let cards = 0
-    let due = 0
-    let bankBroken: string | undefined
-    if (existsSync(this.bank.bankPath(this.paths.noteSourceDir, id))) {
-      try {
-        const bank = await this.bank.load(this.paths.noteSourceDir, id)
-        for (const q of bank.questions) {
-          if (q.archived) continue
-          cards++
-          if (q.fsrs?.reps && q.fsrs.due <= today) due++
-        }
-      } catch (err) {
-        bankBroken = `题库镜像异常：${err instanceof Error ? err.message.split('\n')[0] : String(err)}`
-      }
-    }
+    const pool = await this.noteSourcePoolStats(id, today)
     await mkdir(this.paths.noteSourcePoolDir, { recursive: true })
     await atomicWrite(this.paths.noteSourcePoolPath(id), poolMirrorBody({
-      notePath: entry.path, title, cards, due, today,
-      ...(sourceHint(status) || bankBroken ? { statusHint: sourceHint(status) ?? bankBroken } : {}),
+      notePath: entry.path, title, cards: pool.cards, due: pool.due, today,
+      ...(sourceHint(status) || pool.broken
+        ? { statusHint: sourceHint(status) ?? `题库镜像异常：${pool.broken}` }
+        : {}),
     }))
   }
 
