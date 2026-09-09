@@ -474,6 +474,10 @@ export interface ReviewQueueDoc {
  * 的 CalibrationSource（v1 恒 'jol'；#88/#89 扩展）。 */
 export interface CalibrationSourceProfile {
   source: 'jol'
+  /** 配对区间时间戳（ADR-0022 配对契约的 ts 元素）：该源配对集合最早/最晚一条的
+   * PracticeRec.ts（单条配对 ts 底数在 practice 流水，画像只透出聚合区间）；零配对为 null。 */
+  first_ts: string | null
+  last_pair_ts: string | null
   calibration: { pairs: number; bins: JolBin[] } | null
   overconfidence: {
     overconfident: boolean

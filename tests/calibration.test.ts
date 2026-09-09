@@ -58,15 +58,20 @@ test('overconfidenceOf:「会」档 ≥10 条且实际正确率低于阈值 → 
 
 test('calibrationProfileView:分源可读(jol bins+正确率),全局参考视图带域特异警戒;非配对记录不混入', () => {
   const recs = [
-    ...huiRecs(12), // 「会」12 条、0.25
-    ...Array.from({ length: 4 }, (_, i) => rec({ qid: `n${i}`, predicted: '不会' as const, correct: true })),
-    rec({ predicted: null, correct: true }), // 无自评档:不落配对
+    ...huiRecs(12).map((r, i) => (i === 0 ? { ...r, ts: '2026-08-01T08:00:00+08:00' } : r)), // 「会」12 条、0.25,首条配对最早
+    ...Array.from({ length: 4 }, (_, i) => rec({
+      qid: `n${i}`, predicted: '不会' as const, correct: true,
+      ...(i === 3 ? { ts: '2026-09-10T09:00:00+08:00' } : {}), // 末条配对最晚
+    })),
+    rec({ predicted: null, correct: true, ts: '2026-09-11T09:00:00+08:00' }), // 无自评档:不落配对(ts 更晚也不掺入)
     rec({ predicted: '会', correct: null }), // 无客观判分:不落配对
   ]
   const doc = calibrationProfileView(recs)
   assert.equal(doc.sources.length, 1, 'v1 只有 jol 源')
   const jol = doc.sources[0]!
   assert.equal(jol.source, 'jol')
+  assert.equal(jol.first_ts, '2026-08-01T08:00:00+08:00', '配对区间起点 = 最早一条配对')
+  assert.equal(jol.last_pair_ts, '2026-09-10T09:00:00+08:00', '配对区间终点 = 最晚一条配对(非配对记录不掺入)')
   assert.equal(jol.calibration?.pairs, 16)
   const hui = jol.calibration?.bins.find(b => b.label === '会')
   assert.equal(hui?.n, 12)
@@ -85,8 +90,13 @@ test('calibrationProfileView:配对不足门槛 → 该源 calibration 为 null(
   const doc = calibrationProfileView(huiRecs(9))
   assert.equal(doc.sources[0]!.calibration, null)
   assert.deepEqual(doc.sources[0]!.overconfidence, { overconfident: false, evidence: null })
+  assert.ok(doc.sources[0]!.first_ts && doc.sources[0]!.last_pair_ts, '有配对即透出区间 ts(门槛只管展示)')
   assert.equal(doc.global.calibration, null)
   assert.ok(doc.global.warning, '警戒标注仍随参考视图带出')
+
+  const zero = calibrationProfileView([])
+  assert.equal(zero.sources[0]!.first_ts, null, '零配对区间 ts 为 null')
+  assert.equal(zero.sources[0]!.last_pair_ts, null)
 })
 
 test('calibrationHintText:检出才给文案(预期管理语气);未检出/数据不足为 null', () => {
@@ -121,6 +131,8 @@ test('calibrationProfile 门面:过信流水 → 分源可读、全局带警戒;
   await withVault(SIX_DUE, async ({ engine }) => {
     const empty = await engine.calibrationProfile()
     assert.equal(empty.sources[0]!.calibration, null, '无配对不显示')
+    assert.equal(empty.sources[0]!.first_ts, null, '零配对区间 ts 为 null')
+    assert.equal(empty.sources[0]!.last_pair_ts, null)
     assert.equal(empty.global.calibration, null)
 
     await seedOverconfident(engine)
@@ -131,6 +143,8 @@ test('calibrationProfile 门面:过信流水 → 分源可读、全局带警戒;
     assert.equal(jol.calibration?.bins.find(b => b.label === '会')?.accuracy, 0.25)
     assert.equal(jol.overconfidence.overconfident, true)
     assert.equal(jol.overconfidence.evidence?.n, 12)
+    assert.ok(jol.first_ts && jol.last_pair_ts && jol.first_ts <= jol.last_pair_ts,
+      '分源透出配对区间 ts(schema 时间戳元素)')
     assert.match(doc.global.warning, /域特异/)
   })
 })

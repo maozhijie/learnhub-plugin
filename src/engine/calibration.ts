@@ -4,7 +4,10 @@
  * 警戒（ADR-0022 裁决 2）。
  *
  * 配对契约（裁决 1）：凡同一事件同时携带自评档与客观判分，即落一条配对（附源枚举
- * 与时间戳）。v1 吸收侧只有 jol（JOL 预测 × 实际作答）：机械上就是 practice 流水里
+ * 与时间戳）。v1 单条配对不另落盘——自评档/客观分/时间戳的底数就是 practice 流水的
+ * predicted/correct/ts 字段，源枚举在画像层标注；画像 v1 以聚合视图按源透出配对
+ * 区间（first_ts/last_pair_ts），单条 ts 不在画像层展开。v1 吸收侧只有 jol（JOL 预测
+ * × 实际作答）：机械上就是 practice 流水里
  * predicted != null 且有对错判分的记录——聚合直接调用 jol.ts 的 jolCalibration
  * （不 fork 数学），JOL_CALIBRATION_MIN 数据门槛静默沿用；后续源（执行事件随 #89、
  * 回执候选随 #88）按契约在此登记新源枚举与各自切片。
@@ -64,17 +67,35 @@ export function overconfidenceOf(recs: PracticeRec[]): OverconfidenceVerdict {
 }
 
 /** 画像聚合（分源切片 + 全局参考；只读派生，零落盘零 canonical 写入）。
- * v1 全局 = 单源合并的平凡情形；后续源接入后在此按 source 过滤各自配对再合并。 */
+ * 每源透出配对区间时间戳（first_ts/last_pair_ts = 该源配对集合最早/最晚一条的
+ * PracticeRec.ts，ISO 字符串序取极值；零配对为 null）——schema 的时间戳元素在
+ * 聚合层成立，单条配对 ts 不在此展开。v1 全局 = 单源合并的平凡情形；后续源接入后
+ * 在此按 source 过滤各自配对再合并。 */
 export function calibrationProfileView(recs: PracticeRec[]): {
-  sources: Array<{ source: CalibrationSource; calibration: { pairs: number; bins: JolBin[] } | null; overconfidence: OverconfidenceVerdict }>
+  sources: Array<{
+    source: CalibrationSource
+    first_ts: string | null
+    last_pair_ts: string | null
+    calibration: { pairs: number; bins: JolBin[] } | null
+    overconfidence: OverconfidenceVerdict
+  }>
   global: { calibration: { pairs: number; bins: JolBin[] } | null; warning: string }
 } {
-  const sources = CALIBRATION_SOURCES.map(source => ({
-    source,
-    // 机械复用 jol.ts 口径（配对元标注、聚合、JOL_CALIBRATION_MIN 门槛静默），不 fork 数学
-    calibration: jolCalibration(recs),
-    overconfidence: overconfidenceOf(recs),
-  }))
+  const sources = CALIBRATION_SOURCES.map(source => {
+    // 配对集合的 ts 极值（只认同时携带自评档与客观判分的记录；字符串序即时间序，
+    // practice 流水 ts 为同一 nowIso 产出）
+    const tss = recs
+      .filter(r => r.predicted != null && typeof r.correct === 'boolean')
+      .map(r => r.ts)
+    return {
+      source,
+      first_ts: tss.length ? tss.reduce((a, b) => (b < a ? b : a)) : null,
+      last_pair_ts: tss.length ? tss.reduce((a, b) => (b > a ? b : a)) : null,
+      // 机械复用 jol.ts 口径（配对元标注、聚合、JOL_CALIBRATION_MIN 门槛静默），不 fork 数学
+      calibration: jolCalibration(recs),
+      overconfidence: overconfidenceOf(recs),
+    }
+  })
   return {
     sources,
     global: { calibration: jolCalibration(recs), warning: CALIBRATION_GLOBAL_WARNING },
