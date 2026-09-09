@@ -165,10 +165,15 @@ export interface ReviewRec {
   r_pred: number | null
 }
 
-/** 提案记录（db.proposals 行同构；产物 YAML 另存 state/proposals/）。 */
+/** 提案 kind 全集（P-2 泛化：图谱域 gen/edit + 项目域 project_plan/project_milestone）。 */
+export const PROPOSAL_KINDS = ['gen', 'edit', 'project_plan', 'project_milestone'] as const
+export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
+
+/** 提案记录（db.proposals 行同构；产物 YAML 另存 state/proposals/）。
+ * course 语义随 kind：图谱域 = 课程名；项目域 = 项目 id。 */
 export interface ProposalRec {
   id: number
-  kind: 'gen' | 'edit'
+  kind: ProposalKind
   course: string
   status: 'pending' | 'applied' | 'rejected'
   summary: string

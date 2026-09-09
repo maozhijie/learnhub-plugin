@@ -12,7 +12,7 @@ import { atomicWrite } from './store.ts'
 import { Graph, GraphStore, structureCheck, loadRegionDoc, parseNode, snapshotDoc } from './graph.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge } from './types.ts'
-import { BLOOM_LEVELS } from './types.ts'
+import { BLOOM_LEVELS, PROPOSAL_KINDS } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { Store } from './store.ts'
 import type { CourseEntry } from './types.ts'
@@ -503,7 +503,7 @@ export class GraphProposals {
     return prop
   }
 
-  /** 提案清单（status/kind 过滤可选）。 */
+  /** 提案清单（status/kind 过滤可选）。kind 全集见 types PROPOSAL_KINDS（图谱域 + 项目域）。 */
   async list(status?: string, kind?: string, limit = 100): Promise<Record<string, unknown>[]> {
     let list = await this.store.loadProposals()
     if (status) {
@@ -511,7 +511,9 @@ export class GraphProposals {
       list = list.filter(p => p.status === status)
     }
     if (kind) {
-      if (kind !== 'gen' && kind !== 'edit') throw new Error(`[proposals] 非法 kind: ${kind}（允许 gen/edit）`)
+      if (!(PROPOSAL_KINDS as readonly string[]).includes(kind)) {
+        throw new Error(`[proposals] 非法 kind: ${kind}（允许 ${PROPOSAL_KINDS.join('/')}）`)
+      }
       list = list.filter(p => p.kind === kind)
     }
     return list.slice(-limit).reverse() as unknown as Record<string, unknown>[]

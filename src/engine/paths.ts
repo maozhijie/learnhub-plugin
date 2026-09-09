@@ -83,4 +83,13 @@ export class Paths {
   courseNotePath(root: string, regionName: string, nodeName: string): string {
     return `${this.courseDir(root)}/${safeFilename(regionName)}/${safeFilename(nodeName)}.md`
   }
+
+  // ---- 项目区（P 区 / ADR-0015：Project 是 Course 姊妹实体，工作区按 #92 设计文档布局） ----
+  get projectsDir(): string { return `${this.centerRoot}/projects` }
+  projectDir(id: string): string { return `${this.projectsDir}/${safeFilename(id)}` }
+  projectNotePath(id: string): string { return `${this.projectDir(id)}/项目.md` }
+  projectMilestoneDir(id: string): string { return `${this.projectDir(id)}/milestones` }
+  projectMilestonePath(id: string, file: string): string { return `${this.projectMilestoneDir(id)}/${file}` }
+  /** 项目域提案快照（被替换的计划 YAML / 里程碑产物旧文；state/snapshots/ 全留痕）。 */
+  projectSnapshotPath(pid: number, what: string): string { return `${this.snapshotDir}/project-${pid}-${what}` }
 }

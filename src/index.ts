@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：49 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/Anki 互通）
+ * - agent 工具面：57 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -407,6 +407,38 @@ async function generateSection(ctx: Context, course: string, node: string, secti
   return `[section] 「${r.title}」v${r.version} 落盘。`
 }
 
+/** 项目里程碑计划生成（P 区 #92）：计划提示词包 → 模型 → 提案受理（人审后 apply 带快照生效）。 */
+async function generateProjectPlan(ctx: Context, id: string): Promise<string> {
+  const prompt = await engine.projectPlanPack(id)
+  const yaml = stripFences(await llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }))
+  const prop = await engine.projectPlanPropose(id, yaml)
+  return `[project-plan] 提案 #${prop.id} 已受理（${prop.initial ? '初次规划' : '计划修订'}：${prop.milestones} 个里程碑）——人审后 learnhub_project_apply 生效（apply 带旧计划快照）。`
+}
+
+/** 项目里程碑产物生成：任务卡提示词包 → 模型 → 轻量结构门（未过回灌修复一轮）
+ * → 首生直落 / 已生成自动转重生成提案（带快照，不静默覆盖）。 */
+async function generateProjectMilestone(ctx: Context, id: string, milestoneId: string): Promise<string> {
+  const prompt = await engine.projectMilestonePack(id, milestoneId)
+  const write = (md: string) => engine.projectMilestoneWrite(id, milestoneId, md)
+  let md = stripFences(await llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }))
+  let out: Awaited<ReturnType<typeof write>>
+  try {
+    out = await write(md)
+  } catch (err) {
+    const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
+    if (code !== 'MILESTONE_GATE_FAILED') throw err
+    md = stripFences(await llmComplete(
+      ctx,
+      Content.sectionRepairPrompt(prompt, md, err instanceof Error ? err.message : String(err)),
+      undefined, { effort: llmCfg.deepEffort },
+    ))
+    out = await write(md)
+  }
+  return 'written' in out
+    ? `[project-milestone] 「${out.written}」已落盘（档位 ${out.tier}）。`
+    : `[project-milestone] 「${out.file}」已生成过——按档重生成走提案 #${out.proposed}，人审后 learnhub_project_apply 生效（旧文带快照）。`
+}
+
 /** 整课重置 + 拓扑序串行重跑生成链（HTTP 与 agent 工具共用）：
  * contentReset 备份旧产物并重写 draft → 清掉该课程遗留任务（含排队）→ 按拓扑序逐节点入队全局队列。
  * 立即返回 { reset, queued }；进度由任务注册表展示。课程有 running 任务时拒绝。 */
@@ -797,8 +829,9 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/proposals/apply') {
-        const kind = need(body, 'kind') === 'edit' ? 'edit' : 'gen'
-        sendJson(res, 200, await engine.graphApply(kind, applyId(body.id)))
+        // 提案统一 apply（图谱域 gen/edit + 项目域 project_plan/project_milestone）：
+        // kind 必须显式照抄提案记录，未知 kind 引擎报错——不再静默归一成 gen
+        sendJson(res, 200, await engine.proposalApply(need(body, 'kind'), applyId(body.id)))
         return
       }
       if (route === '/proposals/reject') {
@@ -1016,6 +1049,37 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       }
       if (route === '/generate/cancel') {
         sendJson(res, 200, cancelGeneration(need(body, 'course'), need(body, 'node')))
+        return
+      }
+      if (route === '/project/create') {
+        // 项目创建（P 区 #92）：Project 是 Course 姊妹实体，零调度零 XP
+        sendJson(res, 200, await apiRun('api/project/create', () => engine.projectCreate({
+          name: need(body, 'name'),
+          goal: need(body, 'goal'),
+          ...(typeof body.tier === 'string' && body.tier.trim() ? { tier: body.tier.trim() as never } : {}),
+        })))
+        return
+      }
+      if (route === '/project/lifecycle') {
+        sendJson(res, 200, await apiRun('api/project/lifecycle', () =>
+          engine.projectSetLifecycle(need(body, 'id'), need(body, 'lifecycle'))))
+        return
+      }
+      if (route === '/project/tier') {
+        sendJson(res, 200, await apiRun('api/project/tier', () =>
+          engine.projectSetTier(need(body, 'id'), need(body, 'tier'))))
+        return
+      }
+      if (route === '/project/plan/generate') {
+        sendJson(res, 200, await apiRun('api/project/plan/generate', async () => ({
+          message: await generateProjectPlan(ctx, need(body, 'id')),
+        })))
+        return
+      }
+      if (route === '/project/milestone/generate') {
+        sendJson(res, 200, await apiRun('api/project/milestone/generate', async () => ({
+          message: await generateProjectMilestone(ctx, need(body, 'id'), need(body, 'milestone')),
+        })))
         return
       }
     }
@@ -1528,6 +1592,63 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       return JSON.stringify(await engine.learnerCardArchive(args.course, args.node, args.card, args.archived))
     }))
 
+  // —— 项目域（P 区 / ADR-0015；#92）：Project 是 Course 姊妹实体，零 XP、零 FSRS、不进 sessions/srs ——
+
+  tool('learnhub_project_create',
+    'Create a project (P-area first-class entity, Course\'s SISTER not a node): a real-world practice the learner is actually doing, measured in weeks/months. Writes 学习中心/projects/<id>/项目.md (frontmatter: lifecycle=active, fading tier 骨架/补全/独立 default 补全, goal prose, empty plan). Projects carry ZERO XP, ZERO FSRS, never enter sessions/srs/review queue — node consumers are untouched. After creating, draft the milestone plan with learnhub_project_plan_generate.',
+    {
+      name: { type: 'string', required: true, description: 'Project name (also becomes the workspace id)' },
+      goal: { type: 'string', required: true, description: 'Learner\'s goal description prose (plan drafting input)' },
+      tier: { type: 'string', description: 'Fading tier: 骨架/补全/独立 (default 补全)' },
+    },
+    (args: { name: string; goal: string; tier?: string }) => run('learnhub_project_create', async () =>
+      JSON.stringify(await engine.projectCreate({
+        name: args.name, goal: args.goal,
+        ...(args.tier !== undefined ? { tier: args.tier as never } : {}),
+      }))))
+  tool('learnhub_project_list',
+    'List all projects as JSON (id/name/lifecycle/tier/plan size). Projects are the bounded project area: real practice with milestone plans, separate from course nodes.',
+    {},
+    () => run('learnhub_project_list', async () => JSON.stringify(await engine.projectList())))
+  tool('learnhub_project_show',
+    'Show one project in full: frontmatter (lifecycle/tier/goal/plan) plus per-milestone artifact status (generated or not, file name) and orphan files left by past plan revisions.',
+    { id: { type: 'string', required: true, description: 'Project id' } },
+    (args: { id: string }) => run('learnhub_project_show', async () =>
+      JSON.stringify(await engine.projectShow(args.id))))
+  tool('learnhub_project_lifecycle',
+    'Set a project\'s lifecycle: active/paused/delivered/archived. No irreversible transitions (ADR-0015) — delivered/archived projects can reopen to active; a no-deadline project may legally stay active forever. Pure status change: no XP settle, no scheduling effect.',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      lifecycle: { type: 'string', required: true, description: 'active/paused/delivered/archived' },
+    },
+    (args: { id: string; lifecycle: string }) => run('learnhub_project_lifecycle', async () =>
+      JSON.stringify(await engine.projectSetLifecycle(args.id, args.lifecycle))))
+  tool('learnhub_project_tier',
+    'Set a project\'s fading tier (骨架/补全/独立): how much support NEW milestone artifacts get (near-complete demonstration → partial product with gaps → situation only). Already-generated artifacts keep their tier (no retroactive rewrite — regenerating them at the new tier goes through the proposal channel). Tier movement criteria (performance within tier) belong to the execution-event stream; v1 sets it explicitly with the learner.',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      tier: { type: 'string', required: true, description: '骨架/补全/独立' },
+    },
+    (args: { id: string; tier: string }) => run('learnhub_project_tier', async () =>
+      JSON.stringify(await engine.projectSetTier(args.id, args.tier))))
+  tool('learnhub_project_plan_generate',
+    'Draft the milestone plan for a project through the model and file it as a PENDING project_plan proposal (human review in the panel; apply with learnhub_project_apply): an ordered 3–8 item plan of 1–2-week deliverable checkpoints, simple→complex task classes, each with acceptance hints. Revising an existing plan is the same channel — applying the proposal snapshots the replaced plan YAML (no silent overwrite). The plan lands in the project\'s 项目.md frontmatter; milestone ARTIFACTS are generated separately per milestone.',
+    { id: { type: 'string', required: true, description: 'Project id' } },
+    (args: { id: string }) => run('learnhub_project_plan_generate', () => generateProjectPlan(ctx, args.id)))
+  tool('learnhub_project_milestone_generate',
+    'Generate ONE milestone artifact (a four-block task card 给定/待办/验收清单/支持) through the model at the project\'s current fading tier: 骨架 = near-complete demonstration, 补全 = partial product with【待补全】gaps, 独立 = situation and starting point only. Output passes a lightweight structural gate (one repair round on failure). FIRST generation lands directly; if the artifact already exists the same call files a PENDING project_milestone REGENERATION proposal instead — apply with learnhub_project_apply (old text is snapshotted, never silently overwritten). Zero XP, zero FSRS.',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      milestone: { type: 'string', required: true, description: 'Milestone id from the plan (e.g. m1)' },
+    },
+    (args: { id: string; milestone: string }) => run('learnhub_project_milestone_generate', () =>
+      generateProjectMilestone(ctx, args.id, args.milestone)))
+  tool('learnhub_project_apply',
+    'Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted; project_milestone = overwrite the milestone artifact with the old text snapshotted). Graph proposals (gen/edit) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.',
+    { id: { type: 'number', required: true, description: 'Pending proposal id' } },
+    (args: { id: number }) => run('learnhub_project_apply', async () =>
+      JSON.stringify(await engine.projectApply(args.id))))
+
   // —— 客户端面板 HTTP 路由 ——
   ctx.effect(
     () => ctx.webServer.register({ kind: 'prefix', path: API, handler: (req, res) => handleApi(ctx, req, res) }),
@@ -1577,7 +1698,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 49 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 57 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

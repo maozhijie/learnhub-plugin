@@ -41,6 +41,8 @@ import { nodeTierOf, perSectionQuizTarget, genericQuizTarget } from './complexit
 import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals } from './gengraph.ts'
 import type { ApplyAudit, EditOp } from './gengraph.ts'
+import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
+import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult } from './projects.ts'
 import { QuestionBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
 import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, normalizeSourcePath, sourceHint, stripFrontmatter, titleOfBody } from './note-source.ts'
@@ -65,6 +67,7 @@ import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
 import type { DataCheckReport } from './data-check.ts'
 import type { ProposalRec } from './types.ts'
+import { PROPOSAL_KINDS } from './types.ts'
 import type {
   AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DoctorDoc, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
@@ -116,6 +119,7 @@ export class LearnhubEngine {
   readonly store: Store
   readonly content: Content
   readonly proposals: GraphProposals
+  readonly projects: Projects
   readonly bank: QuestionBank
   readonly learnerCards: LearnerCards
   readonly sessions: Sessions
@@ -152,6 +156,7 @@ export class LearnhubEngine {
     this.noteManifest = new NoteSourceManifest(this.paths)
     this.ankiMirror = new AnkiMirror(this.paths)
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot)
+    this.projects = new Projects(this.paths, this.store)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course))
   }
 
@@ -677,6 +682,100 @@ export class LearnhubEngine {
 
   async graphProposals(status?: string, kind?: string): Promise<ProposalRec[]> {
     return this.proposals.list(status, kind)
+  }
+
+  /** 提案统一 apply 入口（图谱域 + 项目域；面板 /proposals/apply 消费）。
+   * kind 显式照抄提案记录——未知 kind 报错，绝不静默归一成 gen。图谱域走 audit 门禁，
+   * 项目域无图审计（takePending 各自在 apply 内做）。 */
+  async proposalApply(kind: string, pid?: number): Promise<GraphApplyResult | ProjectApplyResult> {
+    if (kind === 'project_plan' || kind === 'project_milestone') {
+      return kind === 'project_plan' ? this.projects.applyPlan(pid) : this.projects.applyMilestone(pid)
+    }
+    if (kind === 'gen' || kind === 'edit') return this.graphApply(kind, pid)
+    throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 ${PROPOSAL_KINDS.join('/')}）`)
+  }
+
+  /** 提案按 id apply（项目域工具入口）：记录自证 kind，pending 项目提案才受理。 */
+  async projectApply(pid: number): Promise<ProjectApplyResult> {
+    const list = await this.store.loadProposals()
+    const prop = list.find(p => p.id === pid)
+    if (!prop || prop.status !== 'pending') throw new Error(`[project-apply] 提案 #${pid} 不存在或已决。`)
+    if (prop.kind === 'project_plan') return this.projects.applyPlan(pid)
+    if (prop.kind === 'project_milestone') return this.projects.applyMilestone(pid)
+    throw new Error(`[project-apply] 提案 #${pid} 是 ${prop.kind} 提案——图谱域走 learnhub_graph_apply。`)
+  }
+
+  // ---- 项目域（P 区 / ADR-0015；#92）----
+
+  async projectCreate(input: { name: string; goal: string; tier?: FadingTier; id?: string }): Promise<ProjectFm> {
+    return this.projects.create(input)
+  }
+
+  async projectList(): Promise<ProjectFm[]> {
+    return this.projects.list()
+  }
+
+  async projectShow(id: string): Promise<ProjectView> {
+    return this.projects.view(id)
+  }
+
+  /** 生命周期变更（ADR-0015：无不可逆转移，任意状态可重开回 active）。 */
+  async projectSetLifecycle(id: string, lifecycle: string): Promise<ProjectFm> {
+    if (!isProjectLifecycle(lifecycle)) {
+      throw new Error(`[project-lifecycle] 非法生命周期: ${lifecycle}（允许 ${PROJECT_LIFECYCLES.join('/')}）`)
+    }
+    const fm = await this.projects.load(id)
+    const next = { ...fm, lifecycle }
+    await this.projects.saveFm(id, next)
+    return next
+  }
+
+  /** 渐退档变更（ADR-0015：档位移动判据归执行事件流，v1 学习者/agent 显式设定；
+   * 已生成产物不回溯——新档只作用于后续生成）。 */
+  async projectSetTier(id: string, tier: string): Promise<ProjectFm> {
+    if (!isFadingTier(tier)) {
+      throw new Error(`[project-tier] 非法档位: ${tier}（允许 ${FADING_TIERS.join('/')}）`)
+    }
+    const fm = await this.projects.load(id)
+    const next = { ...fm, tier }
+    await this.projects.saveFm(id, next)
+    return next
+  }
+
+  /** 计划生成提示词：模板 + 项目档案 + 现状计划（修订时对照）。 */
+  async projectPlanPack(id: string): Promise<string> {
+    const fm = await this.projects.load(id)
+    const tpl = await this.loadPrompt('项目里程碑计划')
+    const current = fm.plan.length
+      ? YAML.stringify({ plan: fm.plan })
+      : '（空——本项目还没有里程碑计划，本次为初次规划）'
+    return `${tpl}\n\n---\n\n## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 渐退档：${fm.tier}\n- 目标描述：\n\n${fm.goal}\n\n## 现状计划（修订时给出完整新版本，不保守微调）\n\n${current}`
+  }
+
+  async projectPlanPropose(id: string, yamlText: string) {
+    return this.projects.proposePlan(id, yamlText)
+  }
+
+  /** 里程碑产物生成提示词：模板 + 项目档案 + 计划全景 + 本里程碑任务与档位。 */
+  async projectMilestonePack(id: string, milestoneId: string): Promise<string> {
+    const view = await this.projects.view(id)
+    const fm = view.fm
+    const hit = view.milestones.find(m => m.id === milestoneId)
+    if (!hit) {
+      throw new Error(`[project-milestone-pack] 项目「${id}」的计划里没有里程碑「${milestoneId}」。`)
+    }
+    const tpl = await this.loadPrompt('项目里程碑产物')
+    const planTable = view.milestones
+      .map((m, i) => `${i + 1}. ${m.id}｜${m.name}｜任务类：${m.task_class}${m.generated ? '｜已生成' : ''}`)
+      .join('\n')
+    return `${tpl}\n\n---\n\n## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 目标描述：\n\n${fm.goal}\n\n## 里程碑计划（本里程碑的位置）\n\n${planTable}\n\n## 本里程碑任务\n\n- 里程碑 id：${hit.id}\n- 名称：${hit.name}\n- 任务类：${hit.task_class}\n- 验收要点草案：${hit.acceptance_hints}\n- 当前档位：${fm.tier}（产物按此档生成，只写这一档）\n${hit.generated ? `- 注意：该里程碑已有产物，本次是按档重生成——将走提案通道，apply 前旧文有快照。\n` : ''}`
+  }
+
+  /** 里程碑产物落盘分发：未生成 = 直落（首生）；已生成 = 自动转重生成提案（带快照覆盖）。 */
+  async projectMilestoneWrite(id: string, milestoneId: string, md: string): Promise<
+    { written: string; tier: FadingTier } | { proposed: number; kind: 'project_milestone'; file: string }
+  > {
+    return this.projects.writeMilestone(id, milestoneId, md)
   }
 
   // ---- 内容管线 ----

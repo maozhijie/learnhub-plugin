@@ -10,7 +10,7 @@ Python 引擎已退役：原 `spawn python -m learnhub` 的全部逻辑吸收进
 XP 是**时间账本**（1 XP ≈ 1 分钟有效专注）：节点定价 = 内容标称 est × FSRS 难度
 客观校准 k，完成时 settle 对账锁定；课程不变则总账有序稳定（见「XP 预算制」）。
 
-- **host**（`lib/index.js`）：16 个 agent 工具直调 engine、`/learnhub/api/*` 面板后端、`/learnhub` SPA 伺服（`web/dist/`，改 UI 重跑 build 即生效）
+- **host**（`lib/index.js`）：57 个 agent 工具直调 engine、`/learnhub/api/*` 面板后端、`/learnhub` SPA 伺服（`web/dist/`，改 UI 重跑 build 即生效）
 - **client**（`lib/client.js`）：侧边栏底栏「学习中心」入口（新标签页打开 `/learnhub`，命名窗口复用）+ `learnhub:discuss` 宿主桥（学习中心 tab 经 `window.opener` 请求宿主开 dsh 会话）
 - **引擎**（`lib/engine.js`）：独立构建产物，脚本（smoke/e2e/dev-server）与 UI 复用同一入口
 - **面板 UI**（`ui/`）：Vite + React 18 + Arco Design + React Flow（@xyflow/react + dagre），组件移植自 allo learning 模块
@@ -41,7 +41,7 @@ vault `学习中心/` 是唯一事实源，没有数据库：
 XP 例外：完成节点时有一次 `xp_settle` 对账（见「XP 预算制」），属于账本层不碰调度；
 `config.vault` 缺失/目录不存在加载即报错（fail loud，不做静默兜底）。
 
-## 工具面（16 个）
+## 工具面（57 个）
 
 - 调度与学习：`learnhub_status / recommend / lesson / rebuild / feedback / note_resolve`
 - 节点操作：`learnhub_skip`（跳过/取消跳过，已有基础的节点）、`learnhub_complete`（完成确认，未答题入复习循环）
@@ -50,6 +50,7 @@ XP 例外：完成节点时有一次 `xp_settle` 对账（见「XP 预算制」�
 - 题库（刷卡作答流）：`learnhub_question_list / question_save / question_answer`，`learnhub_question_generate`（模型出题管线，与自动出题同门禁）、`learnhub_question_get`（单题全量含答案，修订用——list 不带答案防作答流泄题）、`learnhub_question_update`（patch 合并重新校验，`{archived:true}` 隐藏题）
 - 生成：`learnhub_generate`（大纲 → 逐节正文 → 自动出题三段管线，断点续跑；缺笔记先补骨架，on-demand 课时语义；可选 `style` 节级风格变体作用于每节生成）、`learnhub_course_reset`（整课重置后台重跑，HTTP 与工具同通道）与 `learnhub_course_delete`（删课移入 .trash，可手工恢复）
 - 质检：`learnhub_content_check`（对现有课程笔记跑质检门——超纲引用/别名一致性/未注册代码块语言/interactive 引用文件存在；agent 手改正文后必须跑一遍并修掉全部 findings）
+- 项目域（P 区，Project 是 Course 姊妹实体非节点）：`learnhub_project_create / project_list / project_show / project_lifecycle / project_tier`（生命周期 active/paused/delivered/archived 无不可逆转移；渐退档 骨架/补全/独立 只影响后续产物形态）、`learnhub_project_plan_generate`（里程碑计划草案 → pending 提案，apply 带旧计划快照）、`learnhub_project_milestone_generate`（四块任务卡：给定/待办/验收清单/支持，首生直落、重生成自动转提案）、`learnhub_project_apply`。项目域零 XP、零 FSRS、不进复习队列与 sessions/srs
 
 ## 面板（Vite SPA，移植自 allo learning）
 
