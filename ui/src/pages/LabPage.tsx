@@ -42,6 +42,7 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
   const [thermo, setThermo] = useState<ThermostatDoc | null>(null)
   const [sandbox, setSandbox] = useState<SandboxDoc | null>(null)
   const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<{ proposal: number; title: string; pool: number } | null>(null)
   const [minutes, setMinutes] = useState(45)
   const [weeks, setWeeks] = useState(6)
   const [course, setCourse] = useState<string | undefined>(undefined)
@@ -143,7 +144,7 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
                 <div style={{ display: 'grid', gap: 2 }}>
                   {exp.report.analysis.per_arm.map(a => (
                     <Text key={a.arm} style={{ fontSize: 12 }}>
-                      {a.label}：{a.n} 次真实推进 · 保留率 {Math.round(a.rate * 100)}%
+                      {a.label}：{a.n} 次真实推进 · 真实保留率 {Math.round(a.rate * 100)}%
                     </Text>
                   ))}
                 </div>
@@ -162,6 +163,23 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
             style={{ marginBottom: 12 }}
             type='success'
             content={`最近实验 #${exp.report.experiment.id}（${exp.report.experiment.title}，已停止）：${exp.report.analysis.message}`}
+          />
+        ) : null}
+        {pending ? (
+          <Alert
+            style={{ marginBottom: 12 }}
+            type='warning'
+            content={`提案 #${pending.proposal}「${pending.title}」已发起：合格卡池 ${pending.pool} 张、按学习日轮臂、主结局=真实保留率。确认后立即开跑。`}
+            action={
+              <Space>
+                <Button size='mini' type='primary' disabled={busy}
+                  onClick={() => { void act(async () => {
+                    await api.experimentApply(pending.proposal)
+                    setPending(null)
+                  }, '实验已开跑（今天已按当日臂生效）') }}>确认开跑</Button>
+                <Button size='mini' disabled={busy} onClick={() => setPending(null)}>先不开</Button>
+              </Space>
+            }
           />
         ) : null}
         <Table
@@ -184,13 +202,12 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
               title: '操作', width: 110,
               render: (_, row) => row.unlocked ? (
                 <Popconfirm
-                  title={`发起提案「${row.title}」？发起后还需确认才会开跑。`}
+                  title={`从模板发起实验提案？发起后这里会给出卡池与参数，确认后才开跑。`}
                   onOk={() => { void act(async () => {
-                    const p = await api.experimentPropose(row.id, course)
-                    await api.experimentApply(p.proposal)
-                  }, '实验已开跑（今天已按当日臂生效）') }}
+                    setPending(await api.experimentPropose(row.id, course))
+                  }) }}
                 >
-                  <Button size='mini' disabled={busy || Boolean(running)}>{running ? '有实验在跑' : '发起并开跑'}</Button>
+                  <Button size='mini' disabled={busy || Boolean(running) || Boolean(pending)}>{running ? '有实验在跑' : '发起提案'}</Button>
                 </Popconfirm>
               ) : null,
             },

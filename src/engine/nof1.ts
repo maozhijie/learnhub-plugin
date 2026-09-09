@@ -1,5 +1,5 @@
 /**
- * D-1 N-of-1 实验引擎（#110 / ADR-0023）：单主体内随机化的自我实验通道——把同一批
+ * D-1 N-of-1 实验通道（#110 / ADR-0023）：单主体内随机化的自我实验——把同一批
  * 合格对象随机分臂，用其真实学习结果测干预效应。人群效应对个体不可信，这正是本
  * 通道存在的理由；仪器已备（逐次复习日志 ADR-0012 + 真实保留率）。
  *
@@ -45,8 +45,9 @@ export interface Nof1Template {
   arm_labels: Record<string, string>
   /** card = 卡级随机化；batch = 会话级参数按学习日交替（ADR-0023 裁决 2）。 */
   unit: 'card' | 'batch'
-  /** 预登记主结局（ADR-0023 裁决 3；v1 全部调度侧）。 */
-  outcome: 'true_retention'
+  /** 预登记主结局（ADR-0023 裁决 3）：调度侧 = 真实保留率（v1 模板全部此项）；
+   * 练习侧 = EMA（随 #88/#89 练习证据通道解锁，模板登记后生效）。 */
+  outcome: 'true_retention' | 'practice_ema'
   description: string
   unlocked: boolean
   unlock_note?: string
@@ -120,7 +121,7 @@ export interface ExperimentDef {
   variable: Nof1Variable
   title: string
   question: string
-  outcome: 'true_retention'
+  outcome: 'true_retention' | 'practice_ema'
   arms: [string, string]
   arm_labels: Record<string, string>
   unit: 'card' | 'batch'
@@ -300,8 +301,9 @@ export function analyzeNof1(
   return { ...base, diff: round4(obsDiff), ci95, p: round4(p), message }
 }
 
-/** 从复习日志提实验结局（预登记口径 = 真实保留率）：只取 auto/self 的到期首次推进，
- * 按 exp 标注归属臂；synthetic（合成初始化）永不入局。 */
+/** 从复习日志提实验结局（预登记口径 = 真实保留率）：只取 auto/self 的「有旧卡」
+ * 首次推进（真实保留率口径——与 memory.dueReviewFirstPushes 同一过滤：到期复习 =
+ * 非 synthetic 且 stability_before 非空），按 exp 标注归属臂。 */
 export function nof1Outcomes(logs: ReviewRec[], expId: number): Nof1OutcomeRec[] {
   const seen = new Set<string>()
   const out: Nof1OutcomeRec[] = []

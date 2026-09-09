@@ -267,3 +267,21 @@ test('会组成实验：混排臂在全局队列带出 exp 标注；报告从预
     assert.match(report.analysis.message, /低 50 个百分点/)
   })
 })
+
+test('存储契约：实验文件条目不满足定义形状 → Broken 报出不静默；练习侧结局登记后报告如实说未解锁', async () => {
+  await withVault({}, async ({ engine }) => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    await mkdir(engine.paths.centerStateDir, { recursive: true })
+    await writeFile(engine.paths.experimentsPath, JSON.stringify([{ id: 'oops' }]), 'utf8')
+    await assert.rejects(() => engine.experimentList(), /不满足实验定义契约|Broken/, '形状损坏不是合法空态')
+
+    // 练习侧结局（EMA）：预登记在案，分析通道随 #88/#89 解锁——报告不假装能算
+    await writeFile(engine.paths.experimentsPath, JSON.stringify([{
+      ...BATCH_DEF, outcome: 'practice_ema', status: 'stopped', stopped_day: '2026-09-09',
+    }]), 'utf8')
+    const report = await engine.experimentReport(1)
+    assert.equal(report.experiment.outcome, 'practice_ema')
+    assert.equal(report.analysis.ready, false)
+    assert.match(report.analysis.message, /练习侧结局（EMA）|#88\/#89/)
+  })
+})

@@ -2519,7 +2519,8 @@ export class LearnhubEngine {
     }
     const tpl = doc.template ? nof1Template(doc.template) : null
     if (!tpl || tpl.variable !== doc.variable || !NOF1_VARIABLE_WHITELIST.includes(doc.variable as Nof1Variable)
-      || doc.outcome !== 'true_retention' || doc.unit !== tpl.unit
+      || (doc.outcome !== 'true_retention' && doc.outcome !== 'practice_ema')
+      || doc.unit !== tpl.unit
       || !Array.isArray(doc.arms) || doc.arms.length !== 2 || doc.arms[0] !== tpl.arms[0] || doc.arms[1] !== tpl.arms[1]
       || !doc.title) {
       throw new Error(`[nof1-apply] 提案产物与模板不一致或白名单校验失败（template=${String(doc.template)} variable=${String(doc.variable)}）。`)
@@ -2562,13 +2563,24 @@ export class LearnhubEngine {
   }
 
   /** 直白话报告（臂间比较+置换检验+效应量区间；ADR-0023 裁决 3）。未达最短观察窗
-   * 只报进度不做效应判断；running = 期中读数，stopped = 定稿。 */
+   * 只报进度不做效应判断；running = 期中读数，stopped = 定稿。练习侧结局（EMA）
+   * 随 #88/#89 练习证据通道解锁，登记在案但 v1 分析器只支持调度侧二元结局。 */
   async experimentReport(id?: number): Promise<{ experiment: ExperimentDef; analysis: Nof1Analysis }> {
     const list = await this.store.loadExperiments()
     const hit = id !== undefined
       ? list.find(e => e.id === id)
       : list.find(e => e.status === 'running') ?? list[list.length - 1]
     if (!hit) throw new Error('[nof1-report] 还没有实验——先从模板库发起（learnhub_experiment_propose）。')
+    if (hit.outcome !== 'true_retention') {
+      return {
+        experiment: hit,
+        analysis: {
+          ready: false, per_arm: [], need_per_arm: hit.per_arm_min,
+          diff: null, ci95: null, p: null,
+          message: '该实验预登记的练习侧结局（EMA）随回执/执行事件通道（#88/#89）解锁后才能分析；臂标注已在积累。',
+        },
+      }
+    }
     const recs = nof1Outcomes(await this.store.reviewLogAll(), hit.id)
     const analysis = analyzeNof1(recs, hit, 9000 + hit.id)
     return { experiment: hit, analysis }
@@ -2639,7 +2651,7 @@ export class LearnhubEngine {
       knobs: [
         { knob: 'band_default', title: 'A1 目标难度带默认值', status: '可确认生效（既有配置入口）', current: defaultBand },
         { knob: 'retrieval_density', title: '检索点密度', status: '未上线（随 #93 检索点会话落地解锁）' },
-        { knob: 'fading_tier', title: '渐退档移动提议', status: '聚合展示（档位移动提议走项目域既有入口）', current: projects.map(p => `${p.name}:${p.tier}`).join('、') || null },
+        { knob: 'fading_tier', title: '渐退档移动提议', status: '聚合展示：档位移动走项目域显式入口（projectSetTier），v1 无待决移动提议对象，此处只汇总各项目当前档', current: projects.map(p => `${p.name}:${p.tier}`).join('、') || null },
       ],
       suggestions,
     }
@@ -2678,7 +2690,9 @@ export class LearnhubEngine {
     const nodeFilter = input.nodes?.length ? new Set(input.nodes) : null
     const cards: SandboxCard[] = []
     const nodes: SandboxNode[] = []
+    const scheds = new Map<string, FSRS>()
     for (const c of courses) {
+      scheds.set(c.name, await this.sched(this.paths.courseRoot(c.root)))
       const { graph, state } = await this.loadView(c)
       for (const name of graph.order) {
         if (nodeFilter && !nodeFilter.has(name)) continue
@@ -2709,15 +2723,14 @@ export class LearnhubEngine {
         }
       }
     }
-    // 蒙特卡洛：播种确定（同输入同分布）；单课程范围用该课个人参数（与调度同源），
-    // 跨课程 v1 统一默认参数（与笔记源/我的卡同通道），差异如实标注在 assumptions。
-    const firstCourse = courses[0]
-    const sched = courses.length === 1
-      ? await this.sched(this.paths.courseRoot(firstCourse!.root))
-      : await this.sched(null)
+    // 蒙特卡洛：播种确定（同输入同分布）；每门课注入自己的调度器实例（与调度同源，
+    // R 参数跟课走——与 reviewQueue/memoryHealth 同一 sched 通道）。
     const runs: Array<{ endByNode: number[]; curve: number[] }> = []
     for (let i = 0; i < SANDBOX_RUNS; i++) {
-      runs.push(simulateRun(plan, cards, nodes, today, { sched, rng: mulberry32(7000 + i * 7919) }))
+      runs.push(simulateRun(plan, cards, nodes, today, {
+        schedFor: course => scheds.get(course) ?? scheds.get(courses[0]!.name)!,
+        rng: mulberry32(7000 + i * 7919),
+      }))
     }
     const { curve, map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
     return {
@@ -2730,10 +2743,9 @@ export class LearnhubEngine {
       map,
       assumptions: [
         `每次复习计 1 分钟；每日预算 ${plan.minutesPerDay} 分钟，耗尽后剩余到期卡顺延（与真实欠账一致）。`,
-        '复习通过率 = 当前 FSRS 模型的可提取性 R 伯努利抽样：过记 Good、败记 Again；推进与调度同一套函数。',
+        '复习通过率 = 当前 FSRS 模型的可提取性 R 伯努利抽样：过记 Good、败记 Again；推进与调度同一套函数（各课程用自己的调度器参数）。',
         '新节点按课程图序在预算内引入（est 分钟摊日），学成记一次合成 Good；未调度题随学成入场。',
         '练习证据（EMA/正确率）冻结为当前值——沙盘只模拟「记」的维持，不模拟「练」的进步。',
-        courses.length > 1 ? '多课程范围 v1 统一用默认 FSRS 参数推演（个人参数推演请按单课程运行）。' : '使用该课程的 FSRS 参数（与调度同源）。',
       ],
     }
   }

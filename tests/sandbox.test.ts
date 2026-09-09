@@ -47,20 +47,20 @@ test('纯函数：推演确定性——同种子同结果；曲线长度 = 周�
   const nodes = mkNodes(3, true)
   const cards = mkCards(nodes, false)
   const plan = { minutesPerDay: 60, weeks: 2 }
-  const a = simulateRun(plan, cards, nodes, TODAY, { sched: SCHED, rng: mulberry32(1) })
-  const b = simulateRun(plan, cards, nodes, TODAY, { sched: SCHED, rng: mulberry32(1) })
+  const a = simulateRun(plan, cards, nodes, TODAY, { schedFor: () => SCHED, rng: mulberry32(1) })
+  const b = simulateRun(plan, cards, nodes, TODAY, { schedFor: () => SCHED, rng: mulberry32(1) })
   assert.deepEqual(a, b, '播种确定')
   assert.equal(a.curve.length, 2)
-  const c = simulateRun(plan, cards, nodes, TODAY, { sched: SCHED, rng: mulberry32(2) })
+  const c = simulateRun(plan, cards, nodes, TODAY, { schedFor: () => SCHED, rng: mulberry32(2) })
   assert.notDeepEqual(a, c, '不同种子是不同抽样')
 })
 
 test('纯函数：预算决定引入——预算充足学到手（mastery > 0），预算枯竭停在原地（= 0）', () => {
   const nodes = mkNodes(2, false)
   const cards = mkCards(nodes, true)
-  const rich = simulateRun({ minutesPerDay: 120, weeks: 1 }, cards, nodes, TODAY, { sched: SCHED, rng: mulberry32(5) })
+  const rich = simulateRun({ minutesPerDay: 120, weeks: 1 }, cards, nodes, TODAY, { schedFor: () => SCHED, rng: mulberry32(5) })
   assert.ok(rich.endByNode.every(m => m > 0), `预算充足应全部引入（${rich.endByNode}）`)
-  const poor = simulateRun({ minutesPerDay: 1, weeks: 1 }, cards, nodes, TODAY, { sched: SCHED, rng: mulberry32(5) })
+  const poor = simulateRun({ minutesPerDay: 1, weeks: 1 }, cards, nodes, TODAY, { schedFor: () => SCHED, rng: mulberry32(5) })
   assert.ok(poor.endByNode.every(m => m === 0), `每分钟预算连一个节点都学不完（${poor.endByNode}）`)
 })
 
@@ -68,7 +68,7 @@ test('纯函数：到期卡在预算内被复习推进；跳过节点不计入�
   const nodes = mkNodes(1, true)
   nodes[0]!.skipped = true
   const cards = mkCards(nodes, false)
-  const r = simulateRun({ minutesPerDay: 60, weeks: 1 }, cards, nodes, TODAY, { sched: SCHED, rng: mulberry32(3) })
+  const r = simulateRun({ minutesPerDay: 60, weeks: 1 }, cards, nodes, TODAY, { schedFor: () => SCHED, rng: mulberry32(3) })
   assert.equal(r.curve[0], 0, '唯一节点被跳过 → 总掌握均值 0（skipped 不在推演范围）')
   assert.equal(r.endByNode[0], 0)
 })

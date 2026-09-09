@@ -327,6 +327,14 @@ export class Store {
     if (!Array.isArray(doc)) {
       throw new Error(`[nof1] ${this.paths.experimentsPath} 不是清单数组（Broken）：修复或删除该文件后再试。`)
     }
+    // 最小形状契约（Broken 判据：未通过数据契约，不静默降级——分臂与结局登记是预注册事实）
+    for (const [i, e] of doc.entries()) {
+      const rec = e as Partial<ExperimentDef>
+      if (typeof rec?.id !== 'number' || (rec.status !== 'running' && rec.status !== 'stopped')
+        || !Array.isArray(rec.arms) || !rec.assignment) {
+        throw new Error(`[nof1] ${this.paths.experimentsPath} 第 ${i} 条不满足实验定义契约（Broken）：修复或删除该条目后再试。`)
+      }
+    }
     return doc as ExperimentDef[]
   }
 

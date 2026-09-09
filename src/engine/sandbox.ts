@@ -72,15 +72,16 @@ const dayShift = (today: string, days: number): string => {
 }
 
 /** 单次推演（纯函数）：返回各节点终局 mastery 与逐周总掌握值。
- * totalMastery = 范围内全部节点 mastery 的均值（每周记一个点）。 */
+ * totalMastery = 范围内全部节点 mastery 的均值（每周记一个点）。
+ * deps.schedFor 按课程注入各课自己的调度器实例（与调度同源：R 参数跟课走）。 */
 export function simulateRun(
   plan: SandboxPlan,
   cards: SandboxCard[],
   nodes: SandboxNode[],
   today: string,
-  deps: { sched: FSRS; rng: () => number },
+  deps: { schedFor: (course: string) => FSRS; rng: () => number },
 ): { endByNode: number[]; curve: number[] } {
-  const { sched, rng } = deps
+  const { schedFor, rng } = deps
   const totalDays = plan.weeks * 7
   // 卡状态工作副本；节点代表卡 key = `node:${course}/${node}`
   const fs = new Map<string, FsrsBlock | null>()
@@ -128,9 +129,9 @@ export function simulateRun(
       budget -= take
       if (spent + take >= n.est) {
         const rep = nodeCards.get(nk)
-        if (rep && !fs.get(rep.key)) fs.set(rep.key, applyRatingBlock(null, 3, day, sched).fs)
+        if (rep && !fs.get(rep.key)) fs.set(rep.key, applyRatingBlock(null, 3, day, schedFor(n.course)).fs)
         for (const c of cardsByNode.get(nk) ?? []) {
-          if (c.kind === 'question' && !fs.get(c.key)) fs.set(c.key, applyRatingBlock(null, 3, day, sched).fs)
+          if (c.kind === 'question' && !fs.get(c.key)) fs.set(c.key, applyRatingBlock(null, 3, day, schedFor(n.course)).fs)
         }
       }
     }
@@ -143,9 +144,9 @@ export function simulateRun(
     due.sort((a, b) => a.fs.due.localeCompare(b.fs.due) || a.card.key.localeCompare(b.card.key))
     for (const { card, fs: cur } of due) {
       if (budget < REVIEW_MIN) break
-      const r = retrievabilityBlock(sched, cur, day)
+      const r = retrievabilityBlock(schedFor(card.course), cur, day)
       const pass = rng() < r
-      const next = applyRatingBlock(cur, pass ? 3 : 1, day, sched).fs
+      const next = applyRatingBlock(cur, pass ? 3 : 1, day, schedFor(card.course)).fs
       fs.set(card.key, next)
       budget -= REVIEW_MIN
       // 节点代表卡跟随本节点当日首次推进结果（同过同败）
@@ -153,7 +154,7 @@ export function simulateRun(
         const rep = nodeCards.get(`${card.course}/${card.node}`)
         if (rep) {
           const repFs = fs.get(rep.key)
-          if (repFs && repFs.reps) fs.set(rep.key, applyRatingBlock(repFs, pass ? 3 : 1, day, sched).fs)
+          if (repFs && repFs.reps) fs.set(rep.key, applyRatingBlock(repFs, pass ? 3 : 1, day, schedFor(card.course)).fs)
         }
       }
     }
