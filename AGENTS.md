@@ -27,3 +27,7 @@ npx @deepseek-ai/dsh web
 ```sh
 DSH_MONOREPO="C:/Users/Administrator/Desktop/deepseek-harness/packages" node scripts/link-peers.mjs
 ```
+
+## 并行会话用 worktree 隔离
+
+ZCode 没有会话级分支/worktree 隔离：同目录开多个会话共享同一 checkout 和当前分支，未提交改动与 switch/rebase 会互相踩。并行做多个任务时，每个任务建一个 git worktree、每个 worktree 开一个会话；同一会话内的并行 subagent 共享工作目录，配置隔离不了，只能按文件范围拆分或改走多 worktree。命令与注意事项见 `docs/agents/parallel-sessions.md`。
