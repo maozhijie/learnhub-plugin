@@ -143,8 +143,16 @@ export const api = {
   /** B2 难度失衡/过于简单只读建议（#58）：题目管理页建议区消费。 */
   difficultyAdvice: (course?: string) =>
     http<import('./types').DifficultyAdviceDoc>('GET', `/difficulty-advice${q({ course })}`),
-  questionGenerate: (course: string, node: string, count = 6) =>
-    http<{ course: string; node: string; added: number; skipped: number; total: number }>('POST', '/question-generate', { course, node, count }),
+  /** 出题任务化（#118）：入队即返回（phase=quiz 全局队列），可取消、进度在生成页；
+   * opts.section = 定向补节（#117，服务端缺省 3 题），opts.instruction = 学习者意见
+   * 生成指令（#120 提意见重生成，建议 count=1）。 */
+  questionGenerate: (course: string, node: string, count?: number,
+    opts?: { section?: { id: string; title: string }; instruction?: string }) =>
+    http<{ key: string; message: string; queued: boolean }>('POST', '/question-generate',
+      { course, node,
+        ...(count !== undefined ? { count } : {}),
+        ...(opts?.section ? { section: opts.section } : {}),
+        ...(opts?.instruction ? { instruction: opts.instruction } : {}) }),
   generateStatus: () => http<import('./types').GenStatusDoc>('GET', '/generate/status'),
   generateCancel: (course: string, node: string) =>
     http<{ cancelled: boolean; status?: string }>('POST', '/generate/cancel', { course, node }),

@@ -123,6 +123,11 @@ export default function QuestionCard(props: {
   onForget?: (elapsedS: number, predicted?: JolPick) => Promise<AnswerOutcome>
   /** 背面附加件（自评难度按钮、下一张等），渲染在判卷反馈之下。 */
   footer?: (outcome: AnswerOutcome) => ReactNode
+  /** 会话内单题「…」菜单（#120 编辑/归档/提意见重生成），渲染在题头右侧；缺省不出现。 */
+  menu?: ReactNode
+  /** 判卷逃生门（#116）：同一题判卷累计失败 ≥2 次后出现「跳过此题」——纯前端动作
+   * （本次作答零落盘，该题按直通卡口径翻面），由父级（练习会话）提供。 */
+  onEscape?: () => void
 }) {
   const { question: q } = props
   const [choice, setChoice] = useState<string>('')
@@ -133,6 +138,8 @@ export default function QuestionCard(props: {
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<AnswerOutcome | null>(null)
   const [forgetting, setForgetting] = useState(false)
+  /** 判卷失败计数（#116 逃生门）：AI 判卷输出不可用的提交次数，成功判卷清零。 */
+  const [gradingFails, setGradingFails] = useState(0)
   // JOL 抽查（#66 E4）：翻面前的一档预测；单点即过（点完收起为一枚标识），可忽略
   const [predicted, setPredicted] = useState<JolPick | null>(null)
   // 「忘记」门控倒计时：卡面展示起算（复习变体专属）
@@ -188,10 +195,13 @@ export default function QuestionCard(props: {
         }
         res = toOutcome(r)
       }
+      setGradingFails(0) // 成功判卷清零逃生门计数（#116）
       setOutcome(res)
       props.onDone?.(res)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes('AI 判卷输出不可用')) setGradingFails(f => f + 1)
+      Message.error(msg)
     } finally {
       setBusy(false)
     }
@@ -235,6 +245,7 @@ export default function QuestionCard(props: {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Tag size='small' color='arcoblue'>{KIND_LABEL[q.kind]}</Tag>
         <Text type='secondary' style={{ fontSize: 12 }}>难度 {q.difficulty} · #{q.no}</Text>
+        <span style={{ marginLeft: 'auto' }}>{props.menu}</span>
       </div>
       <div style={{ fontSize: 16, lineHeight: 1.75 }}><InlineMd text={q.q} /></div>
 
@@ -333,7 +344,13 @@ export default function QuestionCard(props: {
       )}
 
       {!outcome ? (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* 判卷逃生门（#116）：累计失败 2 次后放行——零落盘、按直通卡口径翻面 */}
+          {props.onEscape && gradingFails >= 2 && (
+            <Button size='small' status='warning' onClick={props.onEscape}>
+              跳过此题（判卷多次失败，按已见翻面）
+            </Button>
+          )}
           {props.variant === 'review' && props.onForget && (
             <Button size='small' status='danger' disabled={forgetIn > 0 || busy}
               loading={forgetting} onClick={() => void doForget()}>
@@ -388,10 +405,12 @@ export default function QuestionCard(props: {
 /** 直通卡（ADR-0027）：本学习日已推进过的题——题面、最近一次作答对错、正确答案与
  * 解析直接可见，无作答控件、仅「下一题」（设计口径锁死，不设其他按钮）。
  * 对错中性：不计连对、不入练习证据、零 XP，也不落作答流水（无提交）；
- * 答案/解析由 questions 通道按已推进披露。 */
+ * 答案/解析由 questions 通道按已推进披露。题头右侧可带单题「…」菜单（#120：
+ * 编辑/归档对已推进题依然有意义；无作答语义，不违反无控件口径）。 */
 export function RevealCard(props: {
   question: QuestionItem
   onNext: () => void
+  menu?: ReactNode
 }) {
   const q = props.question
   return (
@@ -403,6 +422,7 @@ export function RevealCard(props: {
         <Tag size='small' color='arcoblue'>{KIND_LABEL[q.kind]}</Tag>
         <Tag size='small' color='gray'>本学习日已推进 · 直通</Tag>
         <Text type='secondary' style={{ fontSize: 12 }}>难度 {q.difficulty} · #{q.no}</Text>
+        <span style={{ marginLeft: 'auto' }}>{props.menu}</span>
       </div>
       <div style={{ fontSize: 16, lineHeight: 1.75 }}><InlineMd text={q.q} /></div>
       {q.lastCorrect != null && (

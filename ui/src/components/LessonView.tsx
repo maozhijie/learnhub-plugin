@@ -6,13 +6,14 @@
  * 每节正文后「加我的理解」入口（E1 #70）：用自己的话写解释/例子/助记 → AI 对照
  * 该节要点给是非+定位反馈 → 存为「我的卡」（Learner Output：零 XP 零 canonical）。
  * 掌握度 = 口径 B 纯派生（masteryOfFm：0.7·记忆稳定度完成度 + 0.3·练习证据 EMA）。 */
-import { Button, Card, Collapse, Empty, Input, Message, Modal, Select, Space, Spin, Tag, Tooltip, Typography } from '@arco-design/web-react'
+import { Button, Card, Collapse, Empty, Input, Message, Modal, Popconfirm, Select, Space, Spin, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import MdView from './MdView'
 import PracticeFlow from './PracticeFlow'
 import TutorDrawer from './TutorDrawer'
 import ExplainDrawer from './ExplainDrawer'
 import { WidgetBusProvider } from './widget-bus'
+import { QUIZ_SOFT_CAP } from './quiz-rules'
 import { api, discussInHost } from '../api'
 import { isActiveTab } from '../active-tab'
 import type { AppFrame } from '../App'
@@ -215,13 +216,14 @@ export default function LessonView(props: { course: string; node: string; frame:
       const mine = await poll()
       if (stopped) return
       const active = !!mine && (mine.status === 'running' || mine.status === 'cancelling')
-      // 任务完成边沿（running→终态）：/generate 挂起请求若在出题阶段断开，
-      // 出题仍会在服务端后台落盘，这里兜底刷新，避免「重开页面才见题目」。
-      // 会话存续中冻结（ADR-0027）：不打断作答，只留轻提示，本课结束后重进生效。
+      // 任务完成边沿（running→终态）：出题任务（phase=quiz）的新题增量并入当前会话
+      // （ADR-0027 增量并入语义，静默刷新不打断作答）；内容管线的正文/结构变化仍冻结
+      // 到本课结束后重进生效，只留轻提示。
       if (wasActive && !active) {
         wasActive = false
         void frame.reload()
-        if (sessionActiveRef.current) setStaleNotice(true)
+        if (mine?.phase === 'quiz') void refresh({ silent: true })
+        else if (sessionActiveRef.current) setStaleNotice(true)
         else void refresh()
       } else if (active) wasActive = true
       // 增量刷新：正文版本变化（dsh 会话里 agent 修订了正文）→ 静默刷新当前视图
@@ -261,12 +263,30 @@ export default function LessonView(props: { course: string; node: string; frame:
     }
   }
 
+  /** AI 出题（#118 任务化）：入队即返回，进度经任务轮询显示（横幅「正在出题」），
+   * 完成边沿静默刷新 questions 并入轮次。定向补题（struggle，#117）只补当前节、
+   * 每次 3 道，由 PracticeFlow 触发后同样走任务队列。 */
   const makeQuestions = async (): Promise<void> => {
     setBusy('quiz')
     try {
       const r = await api.questionGenerate(course, node, 6)
-      Message.success(`已出题 ${r.added} 道（题库共 ${r.total}）`)
-      await refresh()
+      Message.info(r.message)
+      await poll()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** struggle 定向补题（#117）：只补当前卡住的节，每次 3 道（服务端缺省），
+   * 任务化入队后经完成边沿静默刷新并入本题组。 */
+  const makeSectionQuestions = async (section: { id: string; title: string }): Promise<void> => {
+    setBusy(`quiz:${section.id}`)
+    try {
+      const r = await api.questionGenerate(course, node, undefined, { section })
+      Message.info(r.message)
+      await poll()
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
     } finally {
@@ -333,7 +353,10 @@ export default function LessonView(props: { course: string; node: string; frame:
 
   const hasContent = !!sections?.length
   const hasQuestions = !!questions?.length
+  // 未归档题软上限（#117）：questions 视图只含未归档题，length 即未归档数
+  const quizSoftCapReached = (questions?.length ?? 0) >= QUIZ_SOFT_CAP
   const active = job && (job.status === 'running' || job.status === 'cancelling')
+  const quizPending = !!active && job?.phase === 'quiz'
   const elapsed = job ? Math.round((Date.now() - new Date(job.startedAt).getTime()) / 1000) : 0
   const stageInfo = stage ? STAGE_LABEL[stage] ?? STAGE_LABEL.unseen : null
 
@@ -465,18 +488,28 @@ export default function LessonView(props: { course: string; node: string; frame:
             <PracticeFlow key={`${course}/${node}`} course={course} node={node}
               sections={sections ?? []} manifest={manifest} questions={questions}
               onSettled={() => void refresh({ silent: true })}
-              onNeedMore={() => makeQuestions()}
+              onNeedMore={s => makeSectionQuestions(s)}
+              quizPending={quizPending}
+              quizSoftCap={quizSoftCapReached}
+              onQuestionsMutated={() => void refresh({ silent: true })}
               onPassChange={setSessionPassed} />
           )}
 
       {/* 整课正文（折叠）：会话内已按节推进阅读；这里留给自由回看与单节重写 */}
       {hasContent && (
         <Card title='整课正文（自由阅读）' size='small' style={{ borderRadius: 10 }}
-          extra={!active && (
+          extra={!active && (quizSoftCapReached ? (
+            <Popconfirm
+              title={`本节点未归档题已达 ${QUIZ_SOFT_CAP} 道软上限`}
+              content='确认仍要再出一组（6 道）混合题型题吗？'
+              onOk={() => void makeQuestions()}>
+              <Button size='mini' type='text' loading={busy === 'quiz'}>AI 再出题</Button>
+            </Popconfirm>
+          ) : (
             <Button size='mini' type='text' loading={busy === 'quiz'} onClick={() => void makeQuestions()}>
               AI 再出题
             </Button>
-          )}>
+          ))}>
           <Collapse>
             <Collapse.Item name='full' header='展开完整正文'>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8 }}>

@@ -5,6 +5,7 @@
 import { Button, Card, Drawer, Empty, Input, Message, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
+import QuestionEditDrawer from '../components/QuestionEditDrawer'
 import type { AppFrame } from '../App'
 import type { BankEntry, DifficultyAdviceNode } from '../types'
 
@@ -154,7 +155,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     }
   }
 
-  /** B2 校准重出（#72）：走既有单节出题端点（模型 → validateBank 门禁落库）。
+  /** B2 校准重出（#72，#118 任务化）：入队 quiz 任务并轮询到终态后刷新题库与建议。
    * 难度/bloom 目标带指令无法随该端点下发（引擎无指令通道），只在确认框原文展示
    * 供学习者知晓；要按指令定向调制，仍可在 dsh 会话让 agent 走 learnhub_question_generate。 */
   const doRecalibrate = async (n: DifficultyAdviceNode) => {
@@ -162,7 +163,19 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     setRecalibrating(key)
     try {
       const r = await api.questionGenerate(n.course, n.node)
-      Message.success(`「${n.node}」已校准重出：新增 ${r.added} 题（库内共 ${r.total} 题）`)
+      Message.info(r.message)
+      // 轮询任务终态（生成页同样可见/可取消）；终态后刷新题库与建议
+      const deadline = Date.now() + 15 * 60_000
+      while (Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 3000))
+        const st = await api.generateStatus()
+        const mine = st.jobs.find(j => j.course === n.course && j.node === n.node)
+        if (!mine || !['queued', 'running', 'cancelling'].includes(mine.status)) {
+          if (mine?.status === 'done') Message.success(`「${n.node}」${mine.message ?? '出题完成'}`)
+          else if (mine) Message.error(`「${n.node}」出题失败：${mine.message ?? '（无错误信息）'}`)
+          break
+        }
+      }
       await Promise.all([load(), loadAdvice()])
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
@@ -275,80 +288,14 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
         )}
       </Drawer>
 
-      <EditDrawer entry={editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void load() }} />
+      {/* 编辑抽屉（共享组件，#120）：会话内「…」菜单复用同一编辑面 */}
+      <QuestionEditDrawer
+        target={editing ? {
+          course: editing.course, node: editing.node, qid: editing.qid, kind: editing.kind,
+          q: editing.q, difficulty: editing.difficulty, options: editing.options,
+        } : null}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); void load() }} />
     </Space>
-  )
-}
-
-/** 编辑抽屉：题干/答案/解析/难度。 */
-function EditDrawer(props: { entry: BankEntry | null; onClose: () => void; onSaved: () => void }) {
-  const [q, setQ] = useState('')
-  const [answer, setAnswer] = useState('')
-  const [explanation, setExplanation] = useState('')
-  const [difficulty, setDifficulty] = useState(1)
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (props.entry) {
-      const e = props.entry
-      setQ(e.q)
-      setAnswer('')
-      setExplanation('')
-      setDifficulty(e.difficulty)
-    }
-  }, [props.entry])
-
-  const save = async () => {
-    if (!props.entry) return
-    setBusy(true)
-    try {
-      // 题目列表接口不含答案（防泄漏）；答案留空 = 不修改，填写才覆盖
-      const patch: Record<string, unknown> = { q: q.trim(), difficulty }
-      if (explanation.trim()) patch.explanation = explanation.trim()
-      if (answer.trim()) {
-        const k = props.entry.kind
-        if (k === 'true_false') patch.answer = answer.trim() === 'true'
-        else if (k === 'fill_in_blank' || k === 'multi_choice' || k === 'ordering' || k === 'matching') {
-          patch.answer = answer.split('|').map(s => s.trim()).filter(Boolean)
-        } else patch.answer = answer.trim()
-      }
-      await api.questionUpdate(props.entry.course, props.entry.node, props.entry.qid, patch)
-      Message.success('已保存（validateBank 门禁通过）')
-      props.onSaved()
-    } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Drawer width={480} visible={!!props.entry} footer={null} unmountOnExit
-      title={`编辑 ${props.entry?.qid ?? ''} · ${props.entry?.node ?? ''}`} onCancel={props.onClose}>
-      {props.entry && (
-        <Space direction='vertical' style={{ width: '100%' }} size={10}>
-          <Text type='secondary'>
-            {props.entry.kind === 'true_false' ? '答案 true/false'
-              : props.entry.kind === 'numeric' ? '数值答案（tol 保留原值）'
-                : props.entry.kind === 'ordering' ? '正确顺序项，用 | 分隔'
-                  : props.entry.kind === 'matching' ? '右列配对文本，用 | 分隔（对应左列顺序）'
-                    : props.entry.kind === 'open_question' ? '参考要点（可留空不改）'
-                      : '答案请与选项字母/可接受值一致（门禁会校验）'}
-          </Text>
-          {props.entry.options && (
-            <Space size={4} wrap>{props.entry.options.map((o, i) => (
-              <Tag key={i} size='small'>
-                {props.entry?.kind === 'single_choice' || props.entry?.kind === 'multi_choice'
-                  ? `${String.fromCharCode(65 + i)}. ${o}` : o}
-              </Tag>
-            ))}</Space>
-          )}
-          <Input.TextArea value={q} onChange={setQ} autoSize={{ minRows: 2, maxRows: 6 }} />
-          <Input value={answer} onChange={setAnswer} placeholder='答案（留空则不修改）' />
-          <Input value={explanation} onChange={setExplanation} placeholder='解析（可选，留空不修改）' />
-          <Button type='primary' loading={busy} onClick={() => void save()}>保存</Button>
-        </Space>
-      )}
-    </Drawer>
   )
 }

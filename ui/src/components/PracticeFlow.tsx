@@ -6,14 +6,15 @@
  * 顶部节进度 stepper（MathAcademy 式细条分段）：已过蓝条可点回跳、当前高亮、未到置灰。
  * 「上一步」按轮回看：一组问题视为一步，已过关的题组回看只展示小结；
  * 同一次学习里每道题只作答一次（重进题组自动定位到第一个未作答题）。 */
-import { Alert, Button, Card, Space, Tag, Typography } from '@arco-design/web-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Alert, Button, Card, Popconfirm, Space, Tag, Typography } from '@arco-design/web-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import MdView from './MdView'
 import QuestionCard, { RevealCard, type AnswerOutcome } from './QuestionCard'
+import QuestionMenu from './QuestionMenu'
 import { SettleContext } from './settle-context'
 import { parseSectionTitle } from '../../../shared/content-renderers'
-import { MAX_ASK_PER_ROUND, passStreakFor } from './quiz-rules'
+import { MAX_ASK_PER_ROUND, passStreakFor, QUIZ_SOFT_CAP } from './quiz-rules'
 import type { LessonSection, QuestionItem, SectionManifestItem } from '../types'
 
 const { Text, Title } = Typography
@@ -27,6 +28,10 @@ interface Round {
   questions?: QuestionItem[]
   /** 交互节轮的节 id（SettleContext 上报结算用）。 */
   sectionId?: string
+  /** 轮次所属节的类型（struggle 分支按轮类型隐藏「AI 再出题」，#117）。 */
+  sectionType?: string
+  /** 轮次所属节的定位（提意见重生成的定向节，#120）。 */
+  sectionRef?: { id: string; title: string }
 }
 
 /** stepper 一步 = 一个节（read+quiz 成对并入）或通用收尾轮。 */
@@ -69,19 +74,20 @@ function buildRounds(
         || (q.section != null && q.section !== '通用' && normSection(q.section) === normSection(m.title)))
       qs.forEach(q => used.add(q.id))
       const start = rounds.length
+      const ref = { id: m.id, title: m.title }
       if (m.type === '交互') {
-        if (md) rounds.push({ key: `ix:${m.id}`, type: 'interactive', title: cleanTitle(m.title), typeLabel: m.type, md, sectionId: m.id })
+        if (md) rounds.push({ key: `ix:${m.id}`, type: 'interactive', title: cleanTitle(m.title), typeLabel: m.type, md, sectionId: m.id, sectionType: m.type, sectionRef: ref })
         pushStep(m.id, cleanTitle(m.title), start, null)
       } else if (m.type === '练习') {
         // 一等练习节：无阅读轮，直接做题；无题不出轮（出题后 questions 刷新重建轮次）
         if (qs.length) {
-          rounds.push({ key: `quiz:${m.id}`, type: 'quiz', title: cleanTitle(m.title), typeLabel: m.type, questions: qs })
+          rounds.push({ key: `quiz:${m.id}`, type: 'quiz', title: cleanTitle(m.title), typeLabel: m.type, questions: qs, sectionType: m.type, sectionRef: ref })
           pushStep(m.id, cleanTitle(m.title), start, `quiz:${m.id}`)
         }
       } else {
-        if (md) rounds.push({ key: `read:${m.id}`, type: 'read', title: cleanTitle(m.title), typeLabel: m.type, md })
+        if (md) rounds.push({ key: `read:${m.id}`, type: 'read', title: cleanTitle(m.title), typeLabel: m.type, md, sectionType: m.type, sectionRef: ref })
         if (qs.length) {
-          rounds.push({ key: `quiz:${m.id}`, type: 'quiz', title: cleanTitle(m.title), typeLabel: m.type, questions: qs })
+          rounds.push({ key: `quiz:${m.id}`, type: 'quiz', title: cleanTitle(m.title), typeLabel: m.type, questions: qs, sectionType: m.type, sectionRef: ref })
           pushStep(m.id, cleanTitle(m.title), start, `quiz:${m.id}`)
         } else if (md) {
           pushStep(m.id, cleanTitle(m.title), start, null)
@@ -95,8 +101,9 @@ function buildRounds(
       const qs = questions.filter(q => q.section === s.title || (q.section != null && normSection(q.section) === key))
       qs.forEach(q => used.add(q.id))
       const start = rounds.length
-      rounds.push({ key: `read:${s.title}`, type: 'read', title: parsed.clean, typeLabel: parsed.type.label, md: s.md })
-      if (qs.length) rounds.push({ key: `quiz:${s.title}`, type: 'quiz', title: parsed.clean, typeLabel: parsed.type.label, questions: qs })
+      const ref = { id: s.title, title: s.title }
+      rounds.push({ key: `read:${s.title}`, type: 'read', title: parsed.clean, typeLabel: parsed.type.label, md: s.md, sectionRef: ref })
+      if (qs.length) rounds.push({ key: `quiz:${s.title}`, type: 'quiz', title: parsed.clean, typeLabel: parsed.type.label, questions: qs, sectionRef: ref })
       pushStep(s.title, parsed.clean, start, qs.length ? `quiz:${s.title}` : null)
     }
   }
@@ -147,8 +154,15 @@ export default function PracticeFlow(props: {
   questions: QuestionItem[]
   /** 每题作答后父级刷新统计（silent）。 */
   onSettled: () => void
-  /** struggle 时请求 AI 追加出题（父级出题并刷新 questions）。 */
-  onNeedMore: () => Promise<void>
+  /** struggle 时请求 AI 定向补题（#117：父级任务化入队后即返回，新题经 questions
+   * 刷新自动并入，quizPending 表示任务进行中；入参 = 定向节）。 */
+  onNeedMore: (section: { id: string; title: string }) => Promise<void> | void
+  /** 出题任务进行中（父级轮询 GenJob；按钮转入「出题中」态）。 */
+  quizPending?: boolean
+  /** 节点未归档题已达软上限（40，#117）：补题按钮需 Popconfirm 显式确认。 */
+  quizSoftCap?: boolean
+  /** 会话内单题被编辑/归档/重生成（#120 菜单落地）后的父级刷新。 */
+  onQuestionsMutated?: () => void
   /** 会话通过状态变化（全部节过关）→ 父级放行「完成学习」。 */
   onPassChange?: (passed: boolean) => void
 }) {
@@ -162,7 +176,6 @@ export default function PracticeFlow(props: {
   const [asked, setAsked] = useState(0)
   const [answered, setAnswered] = useState<AnswerOutcome | null>(null)
   const [struggling, setStruggling] = useState(false)
-  const [needMoreBusy, setNeedMoreBusy] = useState(false)
   /** 本会话作答记录：已答题集合（回看不重答）与每题对错（连对/进度恢复用）。 */
   const [answeredIds, setAnsweredIds] = useState<ReadonlySet<string>>(new Set())
   const [outcomes, setOutcomes] = useState<Record<string, boolean>>({})
@@ -184,6 +197,38 @@ export default function PracticeFlow(props: {
   const revealPending = !!current?.advancedToday && !answeredIds.has(current.id)
 
   useEffect(() => { props.onPassChange?.(allDone) }, [allDone, props])
+
+  // ---- 题目集外部变化（定向补题并入 / 会话内归档·重生成，#117/#120）----
+  // 题目 id 签名没变（纯统计静默刷新）→ 零动作，不打断正在进行的作答；
+  // 变了 → 归位（原轮次键还在就回原轮次并重定位到第一个未作答题，轮次整个
+  // 消失就近落位），struggle/走完态下有新未作答题则自动重进本题组。
+  const questionsSigRef = useRef(props.questions)
+  const roundsSigRef = useRef(rounds)
+  useEffect(() => {
+    if (questionsSigRef.current === props.questions) return
+    questionsSigRef.current = props.questions
+    const prevRounds = roundsSigRef.current
+    roundsSigRef.current = rounds
+    const sig = (rs: typeof rounds) => rs.map(r => (r.questions ?? []).map(q => q.id).join('|')).join('#')
+    if (sig(prevRounds) === sig(rounds)) return
+    const prevRound = prevRounds[roundIdx]
+    const found = rounds.findIndex(r => r.key === (prevRound?.key ?? ''))
+    const target = found >= 0 ? found : Math.min(roundIdx, Math.max(rounds.length - 1, 0))
+    const prevCurrentId = prevRound?.type === 'quiz' ? prevRound.questions?.[qIdx]?.id : undefined
+    const cur = rounds[target]?.type === 'quiz' ? (rounds[target].questions ?? [])[qIdx] : undefined
+    const exhausted = rounds[target]?.type === 'quiz' && !cur
+    const relocated = prevCurrentId !== undefined && !rounds.some(r => (r.questions ?? []).some(q => q.id === prevCurrentId))
+    if (relocated || exhausted || target !== roundIdx) {
+      setStruggling(false)
+      gotoRound(target)
+    } else if (struggling) {
+      const hasNew = (rounds[target].questions ?? []).some(q => !answeredIds.has(q.id))
+      if (hasNew) {
+        setStruggling(false)
+        gotoRound(target)
+      }
+    }
+  }, [props.questions])
 
   /** step 是否已过：有 quiz 轮看过关集合；纯阅读步以读完（maxReached 越过本步末轮）为准。 */
   const isStepDone = (st: Step): boolean => {
@@ -272,18 +317,24 @@ export default function PracticeFlow(props: {
     else setStruggling(true)
   }
 
-  /** struggle → AI 再出题：出完回到本步开头重读/重做（新题经 questions 刷新进轮，
-   * 旧题已答过不再重复，重进题组时自动定位到新题）。 */
-  const needMore = async () => {
-    setNeedMoreBusy(true)
-    try {
-      await props.onNeedMore()
-      const st = steps.find(s => s.quizKey === round?.key)
-      gotoRound(st ? st.start : roundIdx)
-    } finally {
-      setNeedMoreBusy(false)
-    }
+  /** struggle → AI 定向补题（#117）：只为当前卡住的节补 3 道同类题。任务化入队后即返回
+   * （进行中态由父级经 quizPending 轮询驱动），新题经 questions 刷新自动并入本题组
+   * （外部题目集变化效果会把会话重定位到第一个未作答题）。 */
+  const needMore = () => {
+    if (!round?.sectionRef) return
+    void props.onNeedMore(round.sectionRef)
   }
+
+  /** 单题「…」菜单（#120）：编辑/归档/提意见重生成——定向节取本节轮的 sectionRef。 */
+  const questionMenu = (q: QuestionItem) => props.onQuestionsMutated ? (
+    <QuestionMenu
+      target={{
+        course: props.course, node: props.node, qid: q.id, kind: q.kind,
+        q: q.q, difficulty: q.difficulty, options: q.options,
+        section: round?.sectionRef,
+      }}
+      onMutated={() => props.onQuestionsMutated?.()} />
+  ) : null
 
   const stepperEl = steps.length > 1 && (
     <Stepper steps={steps} currentIdx={currentStepIdx} isDone={isStepDone} goto={gotoRound} />
@@ -368,12 +419,22 @@ export default function PracticeFlow(props: {
 
     // ---- 练习轮：struggle 分支（组内已无可作答的题） ----
     if (struggling || (!current && qs.length > 0)) {
+      // 练习/交互节不出题库补题（#117）：这类节 struggle 只留重读与跳过
+      const practiceLike = round.sectionType === '练习' || round.sectionType === '交互'
+      const moreButton = (
+        <Button size='small' type='primary' loading={props.quizPending} disabled={props.quizPending}
+          onClick={needMore}>
+          {props.quizPending ? 'AI 出题中…' : 'AI 再出题'}
+        </Button>
+      )
       return (
         <Card size='small' style={{ borderRadius: 10 }}>
           <Space direction='vertical' size={10} style={{ width: '100%' }}>
             <Alert
               type='warning'
-              content={`「${round.title}」这一节还没过关（需连对 ${passTarget} 题，本节最多 ${MAX_ASK_PER_ROUND} 题）。可以先重读一遍，或让 AI 再出几道同类题。`}
+              content={props.quizPending
+                ? `正在为「${round.title}」补题，完成后新题会自动出现在本题组。`
+                : `「${round.title}」这一节还没过关（需连对 ${passTarget} 题，本节最多 ${MAX_ASK_PER_ROUND} 题）。可以先重读一遍，或让 AI 再出几道同类题。`}
             />
             <Space size={8} wrap>
               <Button size='small' onClick={() => {
@@ -381,9 +442,16 @@ export default function PracticeFlow(props: {
                 if (st && st.start < roundIdx) gotoRound(st.start)
                 else if (roundIdx > 0) prevRound()
               }}>重读本节</Button>
-              <Button size='small' type='primary' loading={needMoreBusy} onClick={() => void needMore()}>
-                AI 再出题
-              </Button>
+              {!practiceLike && (
+                props.quizSoftCap ? (
+                  <Popconfirm
+                    title={`本节点未归档题已达 ${QUIZ_SOFT_CAP} 道软上限`}
+                    content='继续补题会让题库更难维护，确认仍要为这一节再补 3 道同类题吗？'
+                    onOk={needMore}>
+                    {moreButton}
+                  </Popconfirm>
+                ) : moreButton
+              )}
               <Button size='small' type='text' onClick={nextRound}>跳过本节，继续后面的</Button>
             </Space>
           </Space>
@@ -403,9 +471,10 @@ export default function PracticeFlow(props: {
             </Text>
           </Space>
           {current && (revealPending ? (
-            <RevealCard key={current.id} question={current} onNext={revealNext} />
+            <RevealCard key={current.id} question={current} onNext={revealNext} menu={questionMenu(current)} />
           ) : (
-            <QuestionCard key={current.id} course={props.course} node={props.node} question={current} noRedo onDone={handleDone} />
+            <QuestionCard key={current.id} course={props.course} node={props.node} question={current} noRedo
+              onDone={handleDone} menu={questionMenu(current)} onEscape={revealNext} />
           ))}
           {!revealPending && (answered || roundIdx > 0) && (
             <Space size={8} style={{ alignSelf: 'flex-end' }}>

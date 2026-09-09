@@ -51,6 +51,8 @@ export class Paths {
   get experimentsPath(): string { return `${this.centerStateDir}/实验.json` }
   /** 回执流水（U-1 #88 / ADR-0016）：JSONL 追加，学习者证据账本——只增不回滚。 */
   get receiptLogPath(): string { return `${this.centerStateDir}/回执.jsonl` }
+  /** 判卷失败留痕（#116）：AI 判卷解析失败时原始模型输出的专项留档（JSONL 追加）。 */
+  get gradingFailurePath(): string { return `${this.centerStateDir}/判卷失败.jsonl` }
   /** 习惯重复流（U-3 #90 / ADR-0017）：JSONL 追加，自报重复即事实；曲线/streak 派生。 */
   get habitRepeatLogPath(): string { return `${this.centerStateDir}/习惯重复.jsonl` }
   /** 技能条目（U-2 #89 / ADR-0018）：学习中心/技能/<id>.yaml，lane 载体（不复用题目卡）。 */

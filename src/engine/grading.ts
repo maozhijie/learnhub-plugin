@@ -182,18 +182,37 @@ Rules:
 - Write the feedback in the same language as the learner's answer.
 - Output JSON only, without Markdown fences or commentary.`
 
-/** 从模型回复中提取 {score, feedback}：容错（markdown 围栏、尾逗号、外层散文）。 */
+/** 剥掉判卷回复可能包住的整段 markdown 代码围栏（与出题路径 stripFences 同款）。 */
+function stripGradingFences(body: string): string {
+  const m = body.match(/```(?:json|markdown|md)?\s*\n([\s\S]*?)\n```/)
+  return m ? m[1] : body
+}
+
+/** 判卷 JSON 提取的公共容错：剥围栏 → 取 {...} → 去尾逗号 → JSON.parse。 */
+function parseGradingDoc(raw: string): { score?: unknown; feedback?: unknown } {
+  const m = stripGradingFences(raw).match(/\{[\s\S]*\}/)
+  if (!m) throw new Error('reply 中找不到 JSON 对象')
+  return JSON.parse(m[0].replace(/,\s*([}\]])/g, '$1')) as { score?: unknown; feedback?: unknown }
+}
+
+/** score 数值化：模型常把分数写成字符串（"0.75"/"7"），可安全转数字的放行。 */
+function numericScore(v: unknown): number | null {
+  if (typeof v === 'number') return v
+  if (typeof v === 'string' && v.trim() && Number.isFinite(Number(v))) return Number(v)
+  return null
+}
+
+/** 从模型回复中提取 {score, feedback}：容错（markdown 围栏、尾逗号、外层散文、字符串分数）。 */
 export function parseReflectionGrading(raw: string): { score: number; feedback: string } {
-  const m = raw.match(/\{[\s\S]*\}/)
-  if (!m) throw new Error('unparseable reflection grading reply')
-  const doc = JSON.parse(m[0].replace(/,\s*([}\]])/g, '$1')) as { score?: unknown; feedback?: unknown }
-  if (typeof doc.score !== 'number' || typeof doc.feedback !== 'string') {
+  const doc = parseGradingDoc(raw)
+  const score = numericScore(doc.score)
+  if (score === null || typeof doc.feedback !== 'string') {
     throw new Error('reflection grading reply missing score/feedback')
   }
-  if (!(doc.score >= 0 && doc.score <= 1)) {
-    throw new Error(`reflection grading score 越界（${doc.score}，允许 0.0–1.0）`)
+  if (!(score >= 0 && score <= 1)) {
+    throw new Error(`reflection grading score 越界（${score}，允许 0.0–1.0）`)
   }
-  return { score: doc.score, feedback: doc.feedback }
+  return { score, feedback: doc.feedback }
 }
 
 /** 开放题 AI 判卷系统提示词：0–10 分制，≥6 及格；批改 + 改进建议两段缺一不可。 */
@@ -217,16 +236,15 @@ Rules:
 
 /** 从模型回复中提取开放题 {score 0-10, feedback}：容错同 reflection。 */
 export function parseOpenGrading(raw: string): { score: number; feedback: string } {
-  const m = raw.match(/\{[\s\S]*\}/)
-  if (!m) throw new Error('unparseable open-question grading reply')
-  const doc = JSON.parse(m[0].replace(/,\s*([}\]])/g, '$1')) as { score?: unknown; feedback?: unknown }
-  if (typeof doc.score !== 'number' || typeof doc.feedback !== 'string') {
+  const doc = parseGradingDoc(raw)
+  const score = numericScore(doc.score)
+  if (score === null || typeof doc.feedback !== 'string') {
     throw new Error('open-question grading reply missing score/feedback')
   }
-  if (!Number.isInteger(doc.score) || doc.score < 0 || doc.score > 10) {
-    throw new Error(`open-question grading score 越界（${doc.score}，允许整数 0–10）`)
+  if (!Number.isInteger(score) || score < 0 || score > 10) {
+    throw new Error(`open-question grading score 越界（${score}，允许整数 0–10）`)
   }
-  return { score: doc.score, feedback: doc.feedback }
+  return { score, feedback: doc.feedback }
 }
 
 // ---------------------------------------------------------------- 作答记录与 EMA

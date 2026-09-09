@@ -9,7 +9,7 @@
  * 人审产物（proposals.json / snapshots/）。无 SQLite，无投影回写。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, unlink, writeFile, appendFile } from 'node:fs/promises'
 import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
 import { Store } from './store.ts'
@@ -82,6 +82,8 @@ import type { NodeStat, WindowStat } from './sessions.ts'
 import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
+import { findDuplicateStem, existingStemsPromptBlock, bankStemList } from './question-dedup.ts'
+import { parseSectionTitle } from '../../shared/content-renderers.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration, milestonePrice } from './xp.ts'
 import { XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID, CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
 import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
@@ -114,6 +116,30 @@ function shuffled<T>(items: T[]): T[] {
 /** 评估指标等小数的 4 位舍入（落盘元数据与文案共用）。 */
 function round4(x: number): number {
   return Math.round(x * 10000) / 10000
+}
+
+/** 节标题归一化（#117 定向补题的归类口径，与前端会话 normSection 同款）：
+ * 剥「类型：」前缀 + 去全部空白——模型 section 标注与前缀/空白差异据此吸收。 */
+function normSectionKey(s: string): string {
+  return parseSectionTitle(s).clean.replace(/\s+/g, '')
+}
+
+/** 从节点正文提取一节的 markdown：先精确标题匹配，再按归一化标题回退；
+ * 找不到返回 null（定向补题时 fail loud，不静默附全文）。 */
+function sectionMdOf(body: string, title: string): string | null {
+  const parts = body.split(/^## /m).slice(1)
+  const wanted = normSectionKey(title)
+  for (const part of parts) {
+    const nl = part.indexOf('\n')
+    const t = (nl >= 0 ? part.slice(0, nl) : part).trim()
+    if (t === title) return (nl >= 0 ? part.slice(nl + 1) : '').trim()
+  }
+  for (const part of parts) {
+    const nl = part.indexOf('\n')
+    const t = (nl >= 0 ? part.slice(0, nl) : part).trim()
+    if (t && normSectionKey(t) === wanted) return (nl >= 0 ? part.slice(nl + 1) : '').trim()
+  }
+  return null
 }
 
 /** 错题公布答案的题型化展示（多选字母并排、排序箭头链、匹配左→右）。 */
@@ -1844,7 +1870,8 @@ export class LearnhubEngine {
     }
     const predicted = this.jolPredicted(opts?.predicted)
     const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question')
-    const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer)
+    const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer, 'question',
+      { course: c.name, node, qid })
     const correct = score >= PASS_SCORE
     // XP 时间账本：同日重复作答不记账（防刷）；乱猜（耗时过短且答错）负 XP。
     // 乱猜作答同时不推进 FSRS——难度证据（k 校准）只由认真作答驱动，防乱猜推高节点定价。
@@ -1941,28 +1968,54 @@ export class LearnhubEngine {
 
   /** 题库题判卷（题库作答与笔记源作答共用）：reflection/open_question 走 AI 判卷
    * 通道（显式禁止规则判卷降级），其余 evaluateAllo 规则判卷。AI 输出不可解析时
-   * 抛错——本次作答在边界失败，不写任何分数/卡/证据（#9 / ADR-0004 事务性）。 */
+   * 自动重问一次（纠偏提示「只输出 JSON」；max-tokens 截断的提额重试在 host 侧
+   * llmComplete 内），仍失败则抛错——本次作答在边界失败，不写任何分数/卡/证据
+   * （#9 / ADR-0004 事务性）。每次解析失败把原始模型输出截断留痕到
+   * state/判卷失败.jsonl（#116），ref 提供课程/节点/题目定位。 */
   private async judgeBankAnswer(
     llmComplete: (prompt: string, system?: string) => Promise<string>,
     q: BankQuestion, answer: string, op = 'question',
+    ref: { course: string; node: string; qid: string },
   ): Promise<{ score: number; feedback: string }> {
     if (q.kind === 'reflection' || q.kind === 'open_question') {
       const isOpen = q.kind === 'open_question'
+      const system = isOpen ? OPEN_QUESTION_GRADING_SYSTEM : REFLECTION_GRADING_SYSTEM
       const prompt = isOpen
         ? `Lesson question (综合应用):\n${q.q}\n\nLearner's answer:\n${answer}`
           + (String(q.answer).trim() ? `\n\nReference points (参考要点):\n${String(q.answer)}` : '')
         : `Exercise prompt:\n${q.q}\n\nLearner's answer:\n${answer}\n\nGrading rubric (评分要点):\n${String(q.answer)}`
-      const raw = await llmComplete(prompt, isOpen ? OPEN_QUESTION_GRADING_SYSTEM : REFLECTION_GRADING_SYSTEM)
-      try {
-        const v = isOpen ? parseOpenGrading(raw) : parseReflectionGrading(raw)
-        return { score: isOpen ? v.score / 10 : v.score, feedback: v.feedback }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err)
-        throw new Error(`[${op}] AI 判卷输出不可用，本次作答未记录（请重试，或核对题目/模型输出）：${message}`)
+      let lastError = ''
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const ask = attempt === 1
+          ? prompt
+          : `${prompt}\n\n[重判要求] 上一次输出无法解析为判卷结果。这一次只输出一个 JSON 对象（shape 见系统提示），不要任何其他文字、解释或代码围栏。`
+        const raw = await llmComplete(ask, system)
+        try {
+          const v = isOpen ? parseOpenGrading(raw) : parseReflectionGrading(raw)
+          return { score: isOpen ? v.score / 10 : v.score, feedback: v.feedback }
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : String(err)
+          await this.logGradingFailure({ ...ref, kind: q.kind, attempt, error: lastError, raw })
+        }
       }
+      throw new Error(`[${op}] AI 判卷输出不可用，本次作答未记录（请重试，或核对题目/模型输出）：${lastError}`)
     }
     const r = evaluateAllo(q, answer)
     return { score: r.score, feedback: r.feedback }
+  }
+
+  /** 判卷失败留痕（#116）：原始模型输出截断到 2000 字符附题目定位落 JSONL；
+   * 留痕失败静默——debug 通道不能反过来弄垮作答主流程。 */
+  private async logGradingFailure(rec: {
+    course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string
+  }): Promise<void> {
+    try {
+      await mkdir(this.paths.centerStateDir, { recursive: true })
+      const line = JSON.stringify({ ts: new Date().toISOString(), ...rec, raw: rec.raw.slice(0, 2000) })
+      await appendFile(this.paths.gradingFailurePath, `${line}\n`, 'utf8')
+    } catch {
+      // 留痕失败不影响主流程
+    }
   }
 
   /** 作答 / 忘记 / 自评共用的前置：课程解析、笔记体检、题库定位。 */
@@ -2306,12 +2359,13 @@ export class LearnhubEngine {
   /** 笔记源出题：读笔记正文（只读）→ 笔记出题 prompt + llm → validateBank 门禁逐题
    * 落镜像题库（学习中心/笔记源/题库/<源id>.yaml）→ 新卡初始化 FSRS（同完成学习的
    * 合成首复习语义，明天起刷，rating_source=synthetic 落复习日志）→ 源清单指纹刷新
-   * （出题读的是当前内容，漂移就此确认；旧卡不自动归档，归档是独立动作）。 */
+   * （出题读的是当前内容，漂移就此确认；旧卡不自动归档，归档是独立动作）。
+   * 防相似（#119）：提示词注入镜像题库已有题面 ≤15 条，生成后逐题查重，命中的丢弃。 */
   async noteSourceGenerate(
     id: string, count: number | undefined,
     llm: (prompt: string) => Promise<string>,
     today?: string,
-  ): Promise<{ id: string; added: number; skipped: number; total: number }> {
+  ): Promise<{ id: string; added: number; skipped: number; total: number; duplicates: Array<{ q: string; against: string }> }> {
     today ??= (await this.learningDay()).today
     if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
       throw new Error(`[note-quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认 6。`)
@@ -2326,24 +2380,34 @@ export class LearnhubEngine {
     const body = stripFrontmatter(raw)
     if (!body) throw new Error(`[note-quiz] 笔记正文为空，无可出题内容：${entry.path}`)
     const tpl = await this.loadPrompt('笔记出题')
-    const rawOut = await llm(`${tpl}\n\n## 题目数量\n\n${requested} 道\n\n---\n\n${body}`)
+    const bankBefore = await this.bank.load(this.paths.noteSourceDir, id)
+    const existingStems = bankStemList(bankBefore)
+    const rawOut = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}\n\n## 题目数量\n\n${requested} 道\n\n---\n\n${body}`)
     const doc = YAML.parseModel(rawOut) as { questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[note-quiz] 模型没有产出可用题目（questions 为空）。')
     }
     let added = 0
     let skipped = 0
+    const duplicates: Array<{ q: string; against: string }> = []
     for (const rawQ of doc.questions.slice(0, requested)) {
       const q = { ...((rawQ ?? {}) as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有卡数自动编号
+      const stem = typeof q.q === 'string' ? q.q : ''
+      const dup = findDuplicateStem(stem, existingStems)
+      if (dup) {
+        duplicates.push({ q: stem.slice(0, 80), against: dup.slice(0, 80) })
+        continue
+      }
       try {
         await this.bank.addQuestion(this.paths.noteSourceDir, id, q)
+        existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
         added++
       } catch {
         skipped++ // 单题非法（如超纲题型）不毁整批
       }
     }
-    if (!added) throw new Error('[note-quiz] 模型产出的题目全部未过校验门（题型/答案格式不符），一道都没入库。')
+    if (!added) throw new Error('[note-quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/重复），一道都没入库。')
     // 新卡合成首复习初始化（同 nodeComplete 语义：明天起刷）
     const sched = await this.sched(null)
     const bank = await this.bank.load(this.paths.noteSourceDir, id)
@@ -2368,7 +2432,7 @@ export class LearnhubEngine {
       }
       await this.noteManifest.save(manifest)
     }
-    return { id, added, skipped, total: bank.questions.length }
+    return { id, added, skipped, total: bank.questions.length, duplicates }
   }
 
   /** 笔记源卡池合并进全局复习队列（reviewQueue 专用）：Missing → 卡池挂起（不出卡，
@@ -2455,7 +2519,8 @@ export class LearnhubEngine {
     const bank = await this.bank.load(this.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
     if (!q) throw new Error(`[question] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
-    const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer)
+    const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer, 'question',
+      { course: NOTE_SOURCE_COURSE, node: sourceId, qid })
     const correct = score >= PASS_SCORE
     const { today } = await this.learningDay()
     const repeated = alreadyAdvanced(q, today)
@@ -4208,18 +4273,35 @@ export class LearnhubEngine {
 
   /** AI 出题：节点正文 → 出题提示词 + llm → 产出的题库 YAML 逐题过 validateBank 门禁追加落盘。
    * llm 由 host 注入（输出可能带 markdown 围栏，解析侧 parseModel 统一剥离）。骨架节点（无正文）直接报错。
-   * count 缺省 = 既有默认 6；一旦给出必须是正整数，非法值不改写成默认（#12）。
+   * count 缺省 = 既有默认 6（定向补生成 = 3）；一旦给出必须是正整数，非法值不改写成默认（#12）。
    * opts.sections = 节标注清单（逐节管线）：模型照抄清单节 id 进 section 字段；
-   * opts.generic = 只出跨节综合题（section 强制「通用」，逐节管线收尾用）。 */
+   * opts.generic = 只出跨节综合题（section 强制「通用」，逐节管线收尾用）；
+   * opts.section = 定向补生成（#117）：只为本节补题——提示词只附该节正文、产物强制
+   *   section: s.id，与清单不符的先按标题归一化（剥「类型：」前缀+去空白，同会话口径）
+   *   回填，仍无法归类的题拒收并在返回结果中报告（fail loud，不兜底挂「通用」）；
+   * opts.instruction = 生成指令（#120 提意见重生成的学习者意见），原样注入提示词；
+   * 防相似（#119）：提示词注入题库已有题面 ≤15 条（只题面/题型/难度），生成后逐题
+   *   程序化查重（归一化精确 + trigram ≥0.8），命中的丢弃不入库并在 duplicates 报告。
+   * opts.isCancelled = 逐题检查的取消旗标（GenJob 取消语义，#118）。 */
   async questionGenerate(
     courseKey: string | undefined, node: string, count?: number,
     llm: (prompt: string) => Promise<string>,
-    opts?: { sections?: Array<{ id: string; title: string }>; generic?: boolean },
-  ): Promise<{ course: string; node: string; added: number; skipped: number; total: number }> {
+    opts?: {
+      sections?: Array<{ id: string; title: string }>
+      generic?: boolean
+      section?: { id: string; title: string }
+      instruction?: string
+      isCancelled?: () => boolean
+    },
+  ): Promise<{
+    course: string; node: string; added: number; skipped: number; total: number
+    duplicates: Array<{ q: string; against: string }>
+    rejected: Array<{ q: string; reason: string }>
+  }> {
     if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
-      throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认 6。`)
+      throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认。`)
     }
-    const requested = count ?? 6
+    const requested = count ?? (opts?.section ? 3 : 6)
     const c = await this.registry.resolve(courseKey)
     const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -4230,16 +4312,34 @@ export class LearnhubEngine {
     if (!body) throw new Error(`[quiz] 「${node}」还没有正文——先「生成正文」再出题。`)
     const tpl = await this.loadPrompt('题目生成')
     const tier = nodeTierOf(graph, node)
-    const listing = opts?.sections?.length
-      ? `\n\n## 节标注清单\n\nsection 字段必须精确取自下列节 id（跨节综合题写「通用」）：\n${opts.sections.map(s => `- ${s.id} ｜ ${s.title}`).join('\n')}`
+    const prior = await this.vaultPriorFor(graph, node)
+    // 已有题面（#119）：注入提示词 + 查重基线（归档题不参与——归档旧题后按意见重出同题面是合法意图）
+    const bankBefore = await this.bank.load(this.paths.courseRoot(c.root), node)
+    const existingStems = bankStemList(bankBefore)
+
+    // 定向补生成：只附该节正文（找不到该节 fail loud），节标注 = 单节强绑指令
+    let contentBody = body
+    let listing: string
+    if (opts?.section) {
+      const s = opts.section
+      const md = sectionMdOf(body, s.title)
+      if (md === null) throw new Error(`[quiz] 正文里找不到节「${s.title}」——定向补题需要该节正文，请先确认节标题。`)
+      contentBody = `## ${s.title}\n\n${md}`
+      listing = `\n\n## 节标注清单\n\n本批全部题目都属于这一节：section 字段必须精确写「${s.id}」（节标题：${s.title}），不要写「通用」或其他节。`
+    } else if (opts?.sections?.length) {
+      listing = `\n\n## 节标注清单\n\nsection 字段必须精确取自下列节 id（跨节综合题写「通用」）：\n${opts.sections.map(s => `- ${s.id} ｜ ${s.title}`).join('\n')}`
+    } else {
+      listing = ''
+    }
+    const instruction = opts?.instruction?.trim()
+      ? `\n\n## 生成指令（学习者意见，优先遵循）\n\n${opts.instruction.trim()}`
       : ''
     const difficultyAnchor = tier === 1
       ? '本节点为低复杂度：题目难度集中在 1-2，不出 difficulty: 3 的收尾难题。'
       : tier === 3
         ? '本节点为高复杂度：收尾可出 1-2 道 difficulty: 3 的综合/易错题。'
         : '本节点为中复杂度：难度递进到 2，收尾至多 1 道 difficulty: 3。'
-    const prior = await this.vaultPriorFor(graph, node)
-    const raw = await llm(`${tpl}${listing}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n${body}${prior ? `\n\n---\n\n${prior}` : ''}`)
+    const raw = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`)
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
@@ -4247,29 +4347,53 @@ export class LearnhubEngine {
     // doc.node 只是模型对节点的复述（常自创短名），落盘位置由入参决定，不作硬校验
     let added = 0
     let skipped = 0
-    for (const raw of doc.questions.slice(0, requested)) {
-      const q = { ...(raw as Record<string, unknown>) }
+    const duplicates: Array<{ q: string; against: string }> = []
+    const rejected: Array<{ q: string; reason: string }> = []
+    for (const item of doc.questions.slice(0, requested)) {
+      if (opts?.isCancelled?.()) throw new Error('生成已取消，结果已丢弃。')
+      const q = { ...(item as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有题数自动编号，避免与既有 q1 冲突
       if (opts?.generic) q.section = '通用' // 综合题不绑节（轮装配时统一收尾）
+      const stem = typeof q.q === 'string' ? q.q : ''
+      // 定向补生成强校验（#117）：不符先按标题归一化回填，仍无法归类拒收并报告
+      if (opts?.section) {
+        const sec = typeof q.section === 'string' ? q.section : ''
+        if (sec !== opts.section.id) {
+          if (sec && normSectionKey(sec) === normSectionKey(opts.section.title)) {
+            q.section = opts.section.id
+          } else {
+            rejected.push({ q: stem.slice(0, 80), reason: sec ? `section「${sec}」无法归类到节「${opts.section.title}」` : '缺少 section 标注' })
+            continue
+          }
+        }
+      }
+      // 程序化查重（#119）：与已有题、本批已收题比对，命中丢弃并报告
+      const dup = findDuplicateStem(stem, existingStems)
+      if (dup) {
+        duplicates.push({ q: stem.slice(0, 80), against: dup.slice(0, 80) })
+        continue
+      }
       try {
         await this.bank.addQuestion(this.paths.courseRoot(c.root), node, q)
+        existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
         added++
       } catch {
         skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
       }
     }
-    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符），一道都没入库。')
+    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/重复/无法归节），一道都没入库。')
     const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-    return { course: c.name, node, added, skipped, total: bank.questions.length }
+    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected }
   }
 
   /** 逐节出题（逐节管线第 2 段）：每个内容节一次模型调用（出题量随档位锚点：
    * 低/中/高档内容节目标 1/2/3 道，含练习节时 -1），section 服务端强制为该节 id；
-   * 练习/交互节跳过，正文未生成的节（断点续跑）跳过。 */
+   * 练习/交互节跳过，正文未生成的节（断点续跑）跳过。防相似（#119）：提示词注入
+   * 节点已有题面 ≤15 条，生成后逐题查重，命中的丢弃并计入 duplicates。 */
   async questionGenerateSections(
     courseKey: string | undefined, node: string,
     llm: (prompt: string) => Promise<string>,
-  ): Promise<{ course: string; node: string; added: number; sections: number }> {
+  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number }> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -4288,12 +4412,17 @@ export class LearnhubEngine {
     const tier = nodeTierOf(graph, node)
     const prior = await this.vaultPriorFor(graph, node)
     const priorBlock = prior ? `\n\n---\n\n${prior}` : ''
+    // 已有题面（#119）：注入 + 查重基线（本批新收题也进基线，批内互查）
+    const bankBefore = await this.bank.load(this.paths.courseRoot(c.root), node)
+    const existingStems = bankStemList(bankBefore)
+    const stemBlock = existingStemsPromptBlock(existingStems)
     // 出题量弹性（P3，复杂度档案锚点）：每档给内容节目标题量；大纲含练习节时内容节 −1
     // （集中练习模式：读读读→集中练，综合题数随档位而非恒定 3）。
     const hasPracticeSection = manifest.some(s => s.type === '练习')
     const perSection = perSectionQuizTarget(tier, hasPracticeSection)
     let added = 0
     let sections = 0
+    let duplicates = 0
     for (const s of manifest) {
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
@@ -4305,7 +4434,7 @@ export class LearnhubEngine {
         : tier === 3
           ? '本节属高复杂度节点：允许 1-2 道 difficulty: 3 的易错/综合题。'
           : '本节属中复杂度节点：难度递进到 2 即可。'
-      const raw = await llm(`${tpl}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
+      const raw = await llm(`${tpl}${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
       let doc: { questions?: unknown } | null = null
       try {
         doc = YAML.parseModel(raw) as { questions?: unknown } | null
@@ -4314,17 +4443,20 @@ export class LearnhubEngine {
       }
       if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions)) continue
       for (const rawQ of doc.questions) {
-        const q = { ...((rawQ ?? {}) as Record<string, unknown>), section: s.id }
+        const q: Record<string, unknown> = { ...((rawQ ?? {}) as Record<string, unknown>), section: s.id }
         delete q.id
+        const stem = typeof q.q === 'string' ? q.q : ''
+        if (findDuplicateStem(stem, existingStems)) { duplicates++; continue }
         try {
           await this.bank.addQuestion(this.paths.courseRoot(c.root), node, q)
+          existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
           added++
         } catch {
           // 单题非法不毁整批
         }
       }
     }
-    return { course: c.name, node, added, sections }
+    return { course: c.name, node, added, sections, duplicates }
   }
 
   /** 交互件成绩结算：面板 sandbox iframe 上报 LEARNHUB_COMPLETE → practice 流水 +

@@ -78,7 +78,8 @@ interface GenJob {
   node: string
   startedAt: string
   status: GenJobStatus
-  /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）。 */
+  /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）。
+   * phase=quiz 且直接入队 = 纯出题任务（#118 补生成任务化：/question-generate）。 */
   phase?: 'outline' | 'sections' | 'quiz'
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
   progress?: { done: number; total: number; current?: string }
@@ -87,6 +88,10 @@ interface GenJob {
   style?: string
   /** 节点复杂度档位（低/中/高；生成入口算好写入，面板进度与弹性评估可读）。 */
   tier?: '低' | '中' | '高'
+  /** 纯出题任务的参数（#118）：题量上限 / 定向补节（#117）/ 学习者生成指令（#120）。 */
+  count?: number
+  section?: { id: string; title: string }
+  instruction?: string
 }
 const genJobs = new Map<string, GenJob>()
 
@@ -149,55 +154,98 @@ async function run(tool: string, fn: () => Promise<string>): Promise<string> {
 }
 
 /** 面板路由出口：引擎返回对象原样透传（sendJson 统一序列化一次），
- * 日志记录序列化摘要。绝不在路由里手动 stringify 对象——会双编码。 */
+ * 日志记录序列化摘要；调用失败也留痕（#116：运行日志支持失败记录），随后原样抛出。
+ * 绝不在路由里手动 stringify 对象——会双编码。 */
 async function apiRun<T>(tool: string, fn: () => Promise<T>): Promise<T> {
-  const out = await fn()
+  let out: T
+  try {
+    out = await fn()
+  } catch (err) {
+    await runLog(tool, `调用失败：${err instanceof Error ? err.message : String(err)}`)
+    throw err
+  }
   await runLog(tool, typeof out === 'string' ? out : JSON.stringify(out))
   return out
 }
+
+/** LLM 空闲超时（#118）：连续无新输出 chunk 超过该时长即 abort 本次调用——
+ * 流挂起不再永久等待（占死单并发闸）。判卷、出题、生成管线全部调用受益。 */
+const LLM_IDLE_TIMEOUT_MS = 120_000
+/** max-tokens 截断重试（#116）的显式输出上限：截断是断尾 JSON/YAML 的常见诱因，
+ * 原题提高输出上限重试一次（与引擎侧判卷重问相互独立、各限一次）。 */
+const LLM_TRUNCATION_RETRY_TOKENS = 8192
 
 /** dsh llm 一次性调用：收集 text-delta；终止块非 success 即抛错。
  * opts.effort 指定思考档（如 'off' 快速路径）；路由不支持该档位时
  * （UNSUPPORTED_REASONING_EFFORT）自动降级为部署默认重试一次。 */
 async function llmComplete(ctx: Context, prompt: string, system?: string, opts?: { effort?: 'off' | 'low' }): Promise<string> {
-  if (opts?.effort === undefined) return llmStreamOnce(ctx, prompt, system)
+  const attempt = async (effort?: 'off' | 'low', maxTokens?: number): Promise<string> => {
+    const r = await llmStreamOnce(ctx, prompt, system, effort, maxTokens)
+    if (!r.truncated) return r.text
+    console.warn('[learnhub] 模型输出被 max-tokens 截断，提高输出上限原题重试一次')
+    return (await llmStreamOnce(ctx, prompt, system, effort, LLM_TRUNCATION_RETRY_TOKENS)).text
+  }
+  if (opts?.effort === undefined) return attempt()
   try {
-    return await llmStreamOnce(ctx, prompt, system, opts.effort)
+    return await attempt(opts.effort)
   } catch (err) {
     if (!(err instanceof Error && (err as { code?: string }).code === 'UNSUPPORTED_REASONING_EFFORT')) throw err
-    return llmStreamOnce(ctx, prompt, system)
+    return attempt()
   }
 }
 
-/** llmComplete 的单次流式执行；effort 非空时显式指定思考档。 */
-async function llmStreamOnce(ctx: Context, prompt: string, system?: string, effort?: 'off' | 'low'): Promise<string> {
+/** llmComplete 的单次流式执行；effort 非空时显式指定思考档。
+ * 空闲超时：每收到一个 chunk 重置计时，LLM_IDLE_TIMEOUT_MS 内无新输出即 abort（#118）。
+ * 返回 truncated 标记（finish reason = max-tokens），截断重试由 llmComplete 处理。 */
+async function llmStreamOnce(ctx: Context, prompt: string, system?: string, effort?: 'off' | 'low', maxTokens?: number): Promise<{ text: string; truncated: boolean }> {
   const msg = createUserMessage({
     source: { kind: 'user' },
     content: [{ type: 'text', text: prompt }],
   })
   let text = ''
   let truncated = false
-  const stream = ctx.llm.stream({
-    provider: llmCfg.provider, model: llmCfg.model, messages: [msg],
-    ...system === undefined ? {} : { system },
-    ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
-  })
-  for await (const chunk of stream) {
-    if (chunk.type === 'text-delta') text += chunk.text
-    if (chunk.type === 'finish' && (chunk.reason.kind === 'aborted' || chunk.reason.kind === 'error')) {
-      if (chunk.reason.kind === 'aborted') throw new Error('模型调用被取消')
-      // failure.code 是稳定错误码（NO_ADAPTER/MISSING_CREDENTIAL/AUTH/RATE_LIMIT/...），一眼定位配置问题
-      const f = chunk.reason.failure
-      const status = f.status ? `/${f.status}` : ''
-      const e: Error & { code?: string } = new Error(`模型调用失败[${f.code}${status}]：${String(f.message)}`)
-      e.code = f.code
-      throw e
+  let timedOut = false
+  const controller = new AbortController()
+  let idle: ReturnType<typeof setTimeout> | undefined
+  const armIdle = () => {
+    clearTimeout(idle)
+    idle = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, LLM_IDLE_TIMEOUT_MS)
+  }
+  armIdle()
+  try {
+    const stream = ctx.llm.stream({
+      provider: llmCfg.provider, model: llmCfg.model, messages: [msg],
+      ...system === undefined ? {} : { system },
+      ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
+      ...maxTokens === undefined ? {} : { maxTokens },
+      signal: controller.signal,
+    })
+    for await (const chunk of stream) {
+      armIdle()
+      if (chunk.type === 'text-delta') text += chunk.text
+      if (chunk.type === 'finish' && (chunk.reason.kind === 'aborted' || chunk.reason.kind === 'error')) {
+        if (chunk.reason.kind === 'aborted') {
+          throw new Error(timedOut
+            ? `模型输出空闲超时（${Math.round(LLM_IDLE_TIMEOUT_MS / 1000)}s 无新输出），已中止本次调用`
+            : '模型调用被取消')
+        }
+        // failure.code 是稳定错误码（NO_ADAPTER/MISSING_CREDENTIAL/AUTH/RATE_LIMIT/...），一眼定位配置问题
+        const f = chunk.reason.failure
+        const status = f.status ? `/${f.status}` : ''
+        const e: Error & { code?: string } = new Error(`模型调用失败[${f.code}${status}]：${String(f.message)}`)
+        e.code = f.code
+        throw e
+      }
+      if (chunk.type === 'finish' && chunk.reason.kind === 'max-tokens') truncated = true
     }
-    if (chunk.type === 'finish' && chunk.reason.kind === 'max-tokens') truncated = true
+  } finally {
+    clearTimeout(idle)
   }
   if (!text.trim()) throw new Error('模型没有返回内容')
-  if (truncated) console.warn('[learnhub] 警告：模型输出被 max-tokens 截断，正文可能不完整')
-  return text.trim()
+  return { text: text.trim(), truncated }
 }
 
 /** 剥掉模型可能包住的整段 markdown 代码围栏：限 markdown/yaml/json 等数据类标签——
@@ -208,8 +256,14 @@ function stripFences(body: string): string {
 }
 
 /** AI 出题管线：节点正文 → 出题提示词 → llm → validateBank 门禁逐题落盘。
- * opts 透传节标注清单/综合题模式（逐节管线的出题段）。 */
-async function generateQuiz(ctx: Context, course: string, node: string, count: number, opts?: { sections?: Array<{ id: string; title: string }>; generic?: boolean }) {
+ * opts 透传节标注清单/综合题模式（逐节管线的出题段）、定向补节与生成指令（#117/#120）。 */
+async function generateQuiz(ctx: Context, course: string, node: string, count: number | undefined, opts?: {
+  sections?: Array<{ id: string; title: string }>
+  generic?: boolean
+  section?: { id: string; title: string }
+  instruction?: string
+  isCancelled?: () => boolean
+}) {
   return engine.questionGenerate(course, node, count, async prompt => stripFences(await llmComplete(ctx, prompt)), opts)
 }
 
@@ -281,18 +335,118 @@ function enqueueGeneration(ctx: Context, course: string, node: string, style?: s
   return { message: `「${node}」已入队，将在后台按序生成（进度见生成页）。`, queued: true }
 }
 
-/** 队列执行泵：空闲且未暂停时取队首排队任务跑管线；跑完（含失败）继续泵下一个。 */
+/** 入队一个纯出题任务（#118 补生成任务化）：复用全局队列与 GenJob 记录（phase=quiz），
+ * 与节点管线互斥（同节点已有 queued/running 任务一律 fail loud 拒绝——题库写互斥）。 */
+function enqueueQuizGeneration(
+  ctx: Context, course: string, node: string,
+  opts?: { count?: number; section?: { id: string; title: string }; instruction?: string },
+): { key: string; message: string; queued: boolean } {
+  const key = `${course}/${node}`
+  const existing = genJobs.get(key)
+  if (existing && (existing.status === 'running' || existing.status === 'cancelling')) {
+    throw new Error(`「${node}」已有生成任务进行中（${existing.phase === 'quiz' ? '出题' : '生成正文'}），请等它完成后再出题。`)
+  }
+  if (existing?.status === 'queued') {
+    throw new Error(`「${node}」已在生成队列中，请等当前任务完成后再出题。`)
+  }
+  genJobs.set(key, {
+    course, node, startedAt: new Date().toISOString(), status: 'queued', phase: 'quiz',
+    ...(opts?.count !== undefined ? { count: opts.count } : {}),
+    ...(opts?.section ? { section: opts.section } : {}),
+    ...(opts?.instruction ? { instruction: opts.instruction } : {}),
+    message: '排队等待出题…',
+  })
+  persistGenJobs()
+  pumpGeneration(ctx)
+  return { key, message: `「${node}」出题任务已入队，将在后台按序生成（进度见生成页）。`, queued: true }
+}
+
+/** 纯出题任务的完整结果（内存暂存，agent 工具等待完成后读取；不进持久化注册表）。 */
+const quizJobResults = new Map<string, Awaited<ReturnType<LearnhubEngine['questionGenerate']>>>()
+
+/** 等待一个出题任务到终态（agent 工具同步语义：入队 + 等完成 + 返回结果）。 */
+function waitForQuizJob(key: string, timeoutMs = 15 * 60_000): Promise<GenJob> {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now()
+    const tick = () => {
+      const job = genJobs.get(key)
+      if (!job) {
+        reject(new Error('出题任务已从注册表消失（可能刚被清理），请重试。'))
+        return
+      }
+      if (job.status === 'queued' || job.status === 'running' || job.status === 'cancelling') {
+        if (Date.now() - startedAt > timeoutMs) {
+          reject(new Error('等待出题任务超时——任务仍在后台执行，可稍后在生成页查看结果。'))
+          return
+        }
+        setTimeout(tick, 1000)
+        return
+      }
+      resolve(job)
+    }
+    tick()
+  })
+}
+
+/** 任务终态保留期满后清出注册表（失败/取消留 24h 供排查与重试，成功留 30 分钟）。 */
+function scheduleJobRetention(key: string, status: GenJobStatus): void {
+  setTimeout(() => {
+    const cur = genJobs.get(key)
+    if (cur && cur.status !== 'running' && cur.status !== 'cancelling') genJobs.delete(key)
+    persistGenJobs()
+  }, generationJobRetentionMs(status)).unref()
+}
+
+/** 队列执行泵：空闲且未暂停时取队首排队任务跑管线；跑完（含失败）继续泵下一个。
+ * phase=quiz 的纯出题任务走 generateQuizJob，其余按节点管线执行（#118）。 */
 function pumpGeneration(ctx: Context): void {
   if (genPumping || genQueuePaused) return
   const next = nextQueuedJob([...genJobs.values()])
   if (!next) return
   genPumping = true
-  void generateContent(ctx, next.course, next.node, next.style)
-    .catch(() => { /* generateContent 已置 failed 留注册表可重试 */ })
+  const task = next.phase === 'quiz'
+    ? generateQuizJob(ctx, next)
+    : generateContent(ctx, next.course, next.node, next.style)
+  void task
+    .catch(() => { /* 执行器已置 failed 留注册表可重试 */ })
     .finally(() => {
       genPumping = false
       pumpGeneration(ctx)
     })
+}
+
+/** 纯出题任务执行（#118）：单次 questionGenerate（定向补节/指令/题量随任务携带），
+ * 取消旗标逐题生效；终态与保留期与节点管线同语义。 */
+async function generateQuizJob(ctx: Context, job: GenJob): Promise<void> {
+  const key = `${job.course}/${job.node}`
+  job.status = 'running'
+  job.message = job.section
+    ? `正在为节「${job.section.title}」定向补题…`
+    : job.instruction
+      ? '正在按学习者意见重出新题…'
+      : '正在出题…'
+  persistGenJobs()
+  try {
+    const r = await generateQuiz(ctx, job.course, job.node, job.count, {
+      ...(job.section ? { section: job.section } : {}),
+      ...(job.instruction ? { instruction: job.instruction } : {}),
+      isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
+    })
+    if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
+    quizJobResults.set(key, r)
+    const dupNote = r.duplicates.length ? `；判重丢弃 ${r.duplicates.length} 道` : ''
+    const rejNote = r.rejected.length ? `；无法归节拒收 ${r.rejected.length} 道` : ''
+    job.status = 'done'
+    job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}`
+  } catch (err) {
+    job.status = contentFailureStatus(job.status)
+    job.message = err instanceof Error ? err.message : String(err)
+  } finally {
+    persistGenJobs()
+    scheduleJobRetention(key, job.status)
+    // 结果暂存（agent 工具读取用）随终态保留期一并清理
+    setTimeout(() => quizJobResults.delete(key), generationJobRetentionMs(job.status)).unref()
+  }
 }
 
 /** 课程生成管线（逐节）：大纲（AI 自行判断节的划分/顺序/类型，不设固定结构）
@@ -366,12 +520,7 @@ async function generateContent(ctx: Context, course: string, node: string, style
     throw err
   } finally {
     // 终态保留：失败/取消/部分完成留 24h 供排查与重试，成功留 30 分钟；之后清出注册表
-    const keep = generationJobRetentionMs(job.status)
-    setTimeout(() => {
-      const cur = genJobs.get(key)
-      if (cur && cur.status !== 'running' && cur.status !== 'cancelling') genJobs.delete(key)
-      persistGenJobs()
-    }, keep).unref()
+    scheduleJobRetention(key, job.status)
   }
 }
 
@@ -1128,8 +1277,31 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/question-generate') {
-        sendJson(res, 200, await apiRun('api/question-generate', () =>
-          generateQuiz(ctx, need(body, 'course'), need(body, 'node'), questionCount(body.count))))
+        // 出题任务化（#118）：入队即返回（phase=quiz 走全局队列），可取消、重启可恢复、
+        // 与节点管线互斥；section = 定向补节（#117，count 缺省 3），instruction = 学习者
+        // 意见生成指令（#120 提意见重生成）。
+        sendJson(res, 200, await apiRun('api/question-generate', async () => {
+          const course = need(body, 'course')
+          const node = need(body, 'node')
+          const rawSection = body.section as { id?: unknown; title?: unknown } | undefined
+          let section: { id: string; title: string } | undefined
+          if (rawSection !== undefined) {
+            if (typeof rawSection !== 'object' || rawSection === null
+              || typeof rawSection.id !== 'string' || !rawSection.id.trim()
+              || typeof rawSection.title !== 'string' || !rawSection.title.trim()) {
+              throw new Error('[question-generate] section 必须是 { id, title }（节 id 与标题均非空字符串）。')
+            }
+            section = { id: rawSection.id.trim(), title: rawSection.title.trim() }
+          }
+          const instruction = typeof body.instruction === 'string' && body.instruction.trim()
+            ? body.instruction.trim() : undefined
+          return enqueueQuizGeneration(ctx, course, node, {
+            // count 缺省由引擎按模式取（定向补节 3、整节点 6）；给出时只做合法值校验
+            ...(body.count !== undefined ? { count: questionCount(body.count) } : {}),
+            ...(section ? { section } : {}),
+            ...(instruction ? { instruction } : {}),
+          })
+        }))
         return
       }
       if (route === '/review') {
@@ -1343,6 +1515,13 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         ...(j.phase ? { phase: j.phase } : {}),
         ...(j.progress ? { progress: j.progress } : {}),
         ...(j.style ? { style: j.style } : {}),
+        // 纯出题任务参数随注册表持久化，恢复后按原样重跑/继续（#118）
+        ...(typeof j.count === 'number' ? { count: j.count } : {}),
+        ...(j.section && typeof j.section === 'object'
+          && typeof (j.section as { id?: unknown }).id === 'string'
+          && typeof (j.section as { title?: unknown }).title === 'string'
+          ? { section: { id: (j.section as { id: string }).id, title: (j.section as { title: string }).title } } : {}),
+        ...(typeof j.instruction === 'string' ? { instruction: j.instruction } : {}),
         message: interrupted ? '进程重启，任务中断——可重试' : (typeof j.message === 'string' ? j.message : undefined),
       })
     }
@@ -1633,7 +1812,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     () => run('learnhub_optimize_params', async () =>
       JSON.stringify(await engine.optimizeFsrsParams())))
   tool('learnhub_question_generate',
-    'Generate quiz questions for a node via the model — the same pipeline as the auto-quiz: node body → question prompt → llm → validateBank gate appends every question to the bank. Use when a node has no/too few questions.',
+    'Generate quiz questions for a node via the model — queued as a quiz job on the global serial generation queue (mutually exclusive with the node content pipeline, so bank writes never interleave) and this call WAITS for the job to finish, then returns the result: node body → question prompt → llm → validateBank gate appends every question to the bank. The prompt lists the node\'s existing question stems and the engine drops generated questions that duplicate or closely resemble them (reported as duplicates). Use when a node has no/too few questions. Progress is visible in the gen-jobs registry / panel generate tab while it waits.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name (must have generated content)' },
@@ -1641,7 +1820,19 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { course: string; node: string; count?: number }) => run('learnhub_question_generate', async () => {
       const n = questionCount(args.count)
-      return JSON.stringify(await generateQuiz(ctx, args.course, args.node, n))
+      const { key } = enqueueQuizGeneration(ctx, args.course, args.node, { count: n })
+      const job = await waitForQuizJob(key)
+      if (job.status === 'cancelled') return JSON.stringify({ status: 'cancelled', message: job.message })
+      if (job.status !== 'done') throw new Error(job.message || `出题任务终态 ${job.status}`)
+      const r = quizJobResults.get(key)
+      quizJobResults.delete(key)
+      return JSON.stringify({
+        status: job.status, message: job.message,
+        ...(r ? {
+          course: r.course, node: r.node, added: r.added, skipped: r.skipped, total: r.total,
+          duplicates: r.duplicates, rejected: r.rejected,
+        } : {}),
+      })
     }))
   tool('learnhub_question_update',
     'Update one bank question: patch merges into the stored question with a strict authoring whitelist (q/options/answer/explanation/difficulty/section/uses/tags/tol) and the whole bank re-validates before writing. Empty patches, unknown fields, and id/kind/node/fsrs/stats/archived keys are rejected. Archiving is a separate operation: send the patch {archived:true|false} as the only key to route to the archive endpoint; mixing archive with content edits fails instead of partially applying. learnhub_question_list omits answers — take corrections from the user or the note content, not from thin air.',
@@ -1978,7 +2169,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       id: { type: 'string', required: true, description: 'Project id' },
       source: { type: 'string', required: true, description: 'auto (requires evidence) / self / ai' },
       rating: { type: 'number', description: 'Performance rating 1-4 integer (required for self/ai; ignored for auto)' },
-      evidence: { type: 'object', description: 'Observable evidence for source=auto: { accuracy: 0-1, self_help?: number }' },
+      evidence: { type: 'object', additionalProperties: true, description: 'Observable evidence for source=auto: { accuracy: 0-1, self_help?: number }' },
       nodes: { type: 'array', items: { type: 'string' }, description: 'Linked course nodes exercised this session (node name or 课程/节点); empty = stream-only, no backflow' },
       note: { type: 'string', description: 'One-line note about this execution' },
     },

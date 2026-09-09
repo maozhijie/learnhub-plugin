@@ -172,7 +172,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
       </Card>
       <Card size='small' title={
         <Space size={10}>
-          <span>正文生成任务</span>
+          <span>生成任务</span>
           {courses.length > 0 && (
             <>
               <Select value={resetTarget} onChange={v => setResetSel(v)} size='mini' style={{ width: 170 }}>
@@ -199,7 +199,12 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
         ) : (
           <Table size='small' data={jobs} rowKey={j => j.key} pagination={false}
             columns={[
-              { title: '节点', dataIndex: 'node', ellipsis: true },
+              { title: '节点', dataIndex: 'node', ellipsis: true, render: (_, j) => (
+                <Space size={6}>
+                  <span>{j.node}</span>
+                  {j.phase === 'quiz' && <Tag size='small' color='cyan'>出题</Tag>}
+                </Space>
+              ) },
               { title: '课程', dataIndex: 'course', width: 130 },
               { title: '开始时间', dataIndex: 'startedAt', width: 170, render: v => new Date(v).toLocaleTimeString() },
               { title: '状态', width: 90, render: (_, j) => {

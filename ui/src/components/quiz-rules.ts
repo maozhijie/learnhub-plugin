@@ -12,3 +12,7 @@ export const MAX_ASK_PER_ROUND = 5
 export function passStreakFor(roundLen: number): number {
   return Math.max(1, Math.min(PASS_STREAK, roundLen))
 }
+
+/** 节点未归档题软上限（#117）：到达后出题入口需显式确认才能继续（按钮级确认，
+ * 非服务端硬闸——BankPage 校准重出与 agent 工具不受限）。 */
+export const QUIZ_SOFT_CAP = 40
