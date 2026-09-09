@@ -737,6 +737,17 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/jol', () => engine.jolConfig()))
       return
     }
+    if (req.method === 'GET' && route === '/calibration/profile') {
+      // 自评校准画像（ADR-0022 #104）：分源切片为主视图 + 全局参考视图（带域特异
+      // 警戒）。practice 流水配对的只读派生——零落盘、零 canonical 写入。
+      sendJson(res, 200, await apiRun('api/calibration/profile', () => engine.calibrationProfile()))
+      return
+    }
+    if (req.method === 'GET' && route === '/calibration/hints') {
+      // 过信轻提示全局开关（ADR-0022 #104）：缺省开，可全局关
+      sendJson(res, 200, await apiRun('api/calibration/hints', () => engine.calibrationHintsConfig()))
+      return
+    }
     if (req.method === 'GET' && route === '/coach') {
       // 可用的困难教练（#65 E5）：只读信息性反馈，无触发为空数组
       sendJson(res, 200, await apiRun('api/coach', () => engine.coachAdvice()))
@@ -1166,6 +1177,12 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         })))
         return
       }
+      if (route === '/calibration/hints') {
+        // 过信轻提示全局开关（ADR-0022 #104）：显式布尔，缺省报错（fail loud）
+        if (typeof body.hints_enabled !== 'boolean') throw new Error('missing required field: hints_enabled')
+        sendJson(res, 200, await apiRun('api/calibration/hints', () => engine.setCalibrationHints(body.hints_enabled)))
+        return
+      }
       if (route === '/question-update') {
         const patch = typeof body.patch === 'object' && body.patch !== null
           ? body.patch as Record<string, unknown> : {}
@@ -1292,7 +1309,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string }) => run('learnhub_unpin', async () =>
       JSON.stringify(await engine.unpinToday(args.course, args.node))))
   tool('learnhub_review_queue',
-    'List the cross-course due review cards as JSON (Anki-style; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue: cards sort by predicted recall risk R ascending (r carried per card). Note-source cards (C1) ride the same queue with source:"note" and course=笔记源 (node = source id) — answer/rate/forget them through the SAME learnhub_question_answer / learnhub_question_rate / learnhub_question_forget calls; note_drifted (content changed — offer regenerate/archival) and note_suspended (missing source or broken mirror) summaries ride the response; suspended cards never block course cards. Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. A single-node session is ADAPTIVELY ordered (A1 difficulty tuning): cards carry a combined difficulty scalar d and the response carries the node-mastery start band — present cards nearest that band first; during the session shift the band up one step after every second consecutive correct answer and drop it back toward the base after a wrong/forgot, re-picking the nearest-d remaining card each time. band_pref (E5) is the learner\'s explicit difficulty choice as a weighted preference on that start band: hard raises it, easy relaxes it, omit for pure A1 — the anti-frustration drop-back still applies. Cards flagged jol=true are the sampled JOL probe (E4): before revealing the answer you may ask the learner for a one-tap prediction (会/不会/没把握) and pass it back as the predicted field on learnhub_question_answer / learnhub_question_forget — skippable, never blocking. Unknown node names fail loud.',
+    'List the cross-course due review cards as JSON (Anki-style; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue: cards sort by predicted recall risk R ascending (r carried per card). Note-source cards (C1) ride the same queue with source:"note" and course=笔记源 (node = source id) — answer/rate/forget them through the SAME learnhub_question_answer / learnhub_question_rate / learnhub_question_forget calls; note_drifted (content changed — offer regenerate/archival) and note_suspended (missing source or broken mirror) summaries ride the response; suspended cards never block course cards. Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node\'s due questions. A single-node session is ADAPTIVELY ordered (A1 difficulty tuning): cards carry a combined difficulty scalar d and the response carries the node-mastery start band — present cards nearest that band first; during the session shift the band up one step after every second consecutive correct answer and drop it back toward the base after a wrong/forgot, re-picking the nearest-d remaining card each time. band_pref (E5) is the learner\'s explicit difficulty choice as a weighted preference on that start band: hard raises it, easy relaxes it, omit for pure A1 — the anti-frustration drop-back still applies. Cards flagged jol=true are the sampled JOL probe (E4): before revealing the answer you may ask the learner for a one-tap prediction (会/不会/没把握) and pass it back as the predicted field on learnhub_question_answer / learnhub_question_forget — skippable, never blocking. A `calibration_hint` string riding the response (Self-Calibration, ADR-0022) means the learner\'s「会」predictions have run systematically low on actual accuracy: surface it verbatim next to the JOL probe as a gentle, non-blocking expectation-management nudge — never turn it into a score or a gate (the learner can disable it globally). Unknown node names fail loud.',
     {
       course: { type: 'string', description: 'Course name; omit for all enabled courses' },
       node: { type: 'string', description: 'Node name filter — targeted review of this node\'s due questions (A3 advice direct entry; adaptive difficulty order)' },
@@ -1304,6 +1321,10 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'Get the「可用的困难」coach feedback (E5, read-only informational, no gates or scoring): checks the last 7 days of the learner\'s difficulty-band session choices and in-band performance. All-easy streak with due questions their FSRS state says they should know → a gentle nudge to try the standard band; consistent challenge-band struggle (accuracy below 0.6) → a pointer back to prerequisite/component-skill review. Low data stays silent. Surface messages verbatim when present; never force anything.',
     {},
     () => run('learnhub_coach', async () => JSON.stringify(await engine.coachAdvice())))
+  tool('learnhub_calibration_profile',
+    'Get the Self-Calibration profile (ADR-0022, #104) as JSON: per-source slices of learner self-assessment × objective outcome pairs (v1 source "jol" = JOL prediction × actual answer; more sources land via the pairing contract). Each source carries calibration bins (per-prediction actual accuracy, shown only at >=10 sampled pairs — below the gate it is null, never fabricated) and an overconfidence verdict with evidence (the「会」bin\'s n / actual accuracy / threshold). `global` merges sources as a REFERENCE view only — domain-specific components are significant, so always present it together with its warning and treat the per-source slices as authoritative. When a source is overconfident and hints are enabled, review-queue responses ride a `calibration_hint` string: surface it verbatim at the self-assessment exit as a gentle nudge (see learnhub_review_queue); JOL probe density is then boosted (1/3 → 1/2) automatically. Read-only derivation: this NEVER discounts learner self-assessment driving canonical state — FSRS ratings pass through untouched and nothing feeds Mastery/XP. Never present it as a personality trait or a score.',
+    {},
+    () => run('learnhub_calibration_profile', async () => JSON.stringify(await engine.calibrationProfile())))
   tool('learnhub_rebuild',
     'Run audit gate + ready-list regeneration for all enabled courses, or one course.',
     { course: { type: 'string', description: 'Course name; omit to rebuild all enabled courses' } },
