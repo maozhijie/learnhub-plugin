@@ -71,6 +71,8 @@ import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFile
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
 import { LearnerCards, LEARNER_CARD_KINDS } from './learner-cards.ts'
 import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
+import { ErrorCards, mineErrorPatterns, validateErrorCards, ERROR_CARD_BATCH_MAX } from './error-cards.ts'
+import type { ErrorCard, ErrorCardDoc, ErrorPatternCandidate } from './error-cards.ts'
 import { Skills, laneDue, laneEventKind, ratingFromEvidence, clampMaintenanceDays, executionRowIdentity, executionXpDetail } from './skills.ts'
 import type { SkillDoc, ExecutionSource, ExecutionEventKind, ExecutionEvidence, ExecutionLogResult } from './skills.ts'
 import { Habits, habitStreak, automationCurve } from './habits.ts'
@@ -109,6 +111,7 @@ import type {
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
   GraphProposeResult, CalibrationProfileDoc, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
   LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
+  ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc, ErrorAnswerResult,
   NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
   XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, ProjectExecBackflow,
@@ -191,6 +194,7 @@ export class LearnhubEngine {
   readonly projects: Projects
   readonly bank: QuestionBank
   readonly learnerCards: LearnerCards
+  readonly errorCards: ErrorCards
   readonly skills: Skills
   readonly habits: Habits
   readonly sessions: Sessions
@@ -224,6 +228,7 @@ export class LearnhubEngine {
     this.content = new Content(this.paths)
     this.bank = new QuestionBank(this.paths)
     this.learnerCards = new LearnerCards(this.paths)
+    this.errorCards = new ErrorCards(this.paths)
     this.skills = new Skills(this.paths)
     this.habits = new Habits(this.paths)
     this.noteManifest = new NoteSourceManifest(this.paths)
@@ -1879,6 +1884,45 @@ export class LearnhubEngine {
           })
         }
       }
+      // 错误对比卡（C-3 #82）：并入本队列（source='error'，id 加 err: 前缀防与
+      // 我的卡/题号撞键）。同我的卡 ADR-0021 同款隔离调度（sched(null)，优化器不训），
+      // 只进队列与无绑定 XP——节点证据/门禁/复习日志零掺入；自动判分（三选一答案
+      // 唯一，选对=3/选错=1，走 errorCardAnswer）。Broken 卡组不阻塞队列。
+      const errorSched = await this.sched(null)
+      let errorFiles: string[] = []
+      try {
+        errorFiles = await readdir(this.paths.errorCardsDir(c.root))
+      } catch {
+        errorFiles = [] // 该课程还没有任何错误卡：合法空态
+      }
+      for (const f of errorFiles.filter(f => f.endsWith('.yaml')).sort()) {
+        const eNode = f.replace(/\.yaml$/, '')
+        if (node !== undefined && eNode !== node) continue
+        let edoc: ErrorCardDoc
+        try {
+          edoc = await this.errorCards.load(c.root, eNode)
+        } catch {
+          continue
+        }
+        for (const card of edoc.cards) {
+          if (card.archived) continue
+          const due = card.fsrs?.reps ? card.fsrs.due : null
+          if (due && String(due) > today) continue
+          const r = retrievabilityBlock(errorSched, card.fsrs ?? null, today)
+          const diff = card.fsrs?.difficulty && card.fsrs.difficulty > 0 ? card.fsrs.difficulty : FSRS_DIFFICULTY_MID
+          cards.push({
+            course: c.name, node: eNode, source: 'error',
+            id: `err:${card.id}`, due,
+            r: Math.round(r * 1000) / 1000, d: diff, difficulty: diff,
+            attempts: card.stats?.attempts ?? 0,
+            // 队列卡面只带题面与选项——answer/mine/explanation 是作答后揭晓面，
+            // 经 errorCardAnswer 随判分返回（同 questionView 不带答案的泄露纪律）。
+            error: { course: c.name, node: eNode, id: card.id, q: card.q, options: card.options,
+              source_q: card.source_q, source_section: card.source_section ?? null, due,
+              attempts: card.stats?.attempts ?? 0 },
+          })
+        }
+      }
       let files: string[] = []
       try {
         files = await readdir(this.paths.bankDir(c.root))
@@ -1912,7 +1956,9 @@ export class LearnhubEngine {
     // → JOL 抽查密度加强（1/3→1/2）+ 队列载荷带轻提示（UI 在预测出口非阻断展示，
     // 可全局关 calibration.hints）。呈现层参数——canonical 零改动（红线）。
     const jol = await this.jolConfig()
-    const jolEligible = cards.filter(c => c.source !== 'learner')
+    // 我的卡/错误对比卡不参与（测量面不扩：自评卡无作答判分可配对；对比卡的
+    // 判分已随推进落自身 stats，不再叠 JOL 抽查）。
+    const jolEligible = cards.filter(c => c.source !== 'learner' && c.source !== 'error')
     let calibrationHint: string | null = null
     if (jol.enabled && jolEligible.length) {
       const practice = await this.store.practiceAll()
@@ -4047,6 +4093,234 @@ export class LearnhubEngine {
   ): Promise<LearnerArchiveResult> {
     const c = await this.registry.resolve(courseKey)
     await this.learnerCards.archiveCard(c.root, node, cardId, archived)
+    return { course: c.name, node, id: cardId, archived }
+  }
+
+  // ---- C-3 错误对比卡（#82：错误库→对比案例卡）----
+
+  /** 挖矿预览（只读）：当前流水中的高频错误模式候选（同一题 ≥MIN_ERROR_LAPSES 次
+   * 实质答错；忘记申报不是错法证据）。人工抽查入口——生成走 errorCardGenerate，
+   * 本方法零写入。 */
+  async errorCardMine(courseKey: string | undefined, node?: string): Promise<ErrorMineDoc> {
+    const c = await this.registry.resolve(courseKey)
+    const candidates = mineErrorPatterns(await this.store.practiceAll(),
+      { course: c.name, ...(node ? { node } : {}) })
+    return { course: c.name, candidates }
+  }
+
+  /** 全课程活跃错误卡已覆盖的 (node,qid) 集合（生成去重；Broken 文件跳过不阻塞）。 */
+  private async errorCardCovered(root: string): Promise<Set<string>> {
+    const covered = new Set<string>()
+    let files: string[] = []
+    try {
+      files = await readdir(this.paths.errorCardsDir(root))
+    } catch {
+      return covered
+    }
+    for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
+      const node = f.replace(/\.yaml$/, '')
+      try {
+        const doc = await this.errorCards.load(root, node)
+        for (const card of doc.cards) if (!card.archived) covered.add(`${node}\n${card.source_q}`)
+      } catch {
+        continue
+      }
+    }
+    return covered
+  }
+
+  /** 生成错误对比卡（C-3）：挖矿 → 取前 ERROR_CARD_BATCH_MAX 个未覆盖候选 →
+   * 原题材料（题干/答案/解析/学习者错答/节正文节选）喂「错误对比卡」提示词 →
+   * 模型 YAML 过 schema 门禁（含 (node,source_q) 必须命中候选）逐节点落盘。
+   * 归 learner-cards 同款事务性：模型产出不可解析/未过门禁时抛错零落盘。
+   * 创建零 XP、零 canonical 写入——卡入错误 deck，复习时才走无绑定 XP。 */
+  async errorCardGenerate(
+    courseKey: string | undefined, opts: { node?: string; max?: number } | undefined,
+    llm: (prompt: string, system?: string) => Promise<string>,
+  ): Promise<ErrorGenerateResult> {
+    const c = await this.registry.resolve(courseKey)
+    const candidates = mineErrorPatterns(await this.store.practiceAll(),
+      { course: c.name, ...(opts?.node ? { node: opts.node } : {}) })
+    const covered = await this.errorCardCovered(c.root)
+    const fresh = candidates.filter(x => !covered.has(`${x.node}\n${x.qid}`))
+    if (!fresh.length) {
+      throw new Error('[error-card-generate] 没有可挖的新错误模式（判定线：同一题 ≥2 次实质答错且尚未建卡）；候选已被覆盖或证据不足。')
+    }
+    const max = Math.max(1, Math.min(opts?.max ?? ERROR_CARD_BATCH_MAX, fresh.length))
+    const skipped: string[] = []
+    interface Mat { node: string; qid: string; section: string | null; sectionBody: string | null }
+    const mats: Array<Mat & { material: string }> = []
+    for (const x of fresh.slice(0, max)) {
+      let q: BankQuestion | undefined
+      try {
+        const bank = await this.bank.load(this.paths.courseRoot(c.root), x.node)
+        q = bank.questions.find(q => q.id === x.qid && !q.archived)
+      } catch {
+        q = undefined
+      }
+      if (!q) {
+        skipped.push(`${x.node}/${x.qid}（原题缺失或已归档，无法对照出卡）`)
+        continue
+      }
+      // 节正文节选（答案对照面）：来源节命中该节正文，否则整课节选兜底（同 errorExplainPack 定位语义）
+      let sectionTitle: string | null = null
+      let sectionBody: string | null = null
+      try {
+        const { graph, state, broken } = await this.loadView(c)
+        const manifest = state[x.node]?.content.sections
+        const entry = sectionEntryOf(q.section, manifest)
+        const sections = await this.explainPoints(c, graph, x.node)
+        const hit = entry ? sections.find(s => s.title === entry.title) : null
+        const point = hit ?? sections[0]
+        if (point) {
+          sectionTitle = entry?.title ?? point.title
+          sectionBody = point.md.slice(0, 800)
+        }
+        void broken
+      } catch {
+        // 正文缺失不阻塞生成：原题解析已足够对照
+      }
+      const wrongs = x.wrongs.map(w => `「${w}」`).join('、')
+      mats.push({
+        node: x.node, qid: x.qid, section: q.section ?? sectionTitle,
+        sectionBody,
+        material: [
+          `### 候选：节点「${x.node}」 qid=${x.qid}（实质答错 ${x.lapses} 次）`,
+          `- 题型：${q.kind}`,
+          `- 原题题干：${q.q}`,
+          ...(q.options?.length ? [`- 原题选项：${q.options.join(' | ')}`] : []),
+          `- 原题正确答案：${typeof q.answer === 'boolean' ? (q.answer ? '对' : '错') : String(q.answer)}`,
+          ...(q.explanation ? [`- 原题解析：${q.explanation}`] : []),
+          `- 学习者的错答（去重，最近在前）：${wrongs}`,
+          ...(sectionBody ? [`- 来源节「${sectionTitle}」正文节选：${sectionBody}`] : []),
+        ].join('\n'),
+      })
+    }
+    if (!mats.length) {
+      throw new Error(`[error-card-generate] 候选的原题全部缺失/归档，无法生成：${skipped.join('；')}`)
+    }
+    const tpl = await this.loadPrompt('错误对比卡')
+    const prompt = `${tpl}\n\n## 挖出的错误模式（${mats.length} 个候选，每个候选出一张卡）\n\n${mats.map(m => m.material).join('\n\n')}`
+    const raw = await llm(prompt)
+    const doc = YAML.parseModel(raw) as { cards?: unknown } | null
+    if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.cards) || !doc.cards.length) {
+      throw new Error('[error-card-generate] 模型没有产出可用卡清单（cards 为空或不可解析），零落盘。')
+    }
+    const offered = new Set(mats.map(m => `${m.node}\n${m.qid}`))
+    const byNode = new Map<string, Array<Record<string, unknown>>>()
+    const errors: string[] = []
+    const cardsRaw = doc.cards as Array<Record<string, unknown>>
+    cardsRaw.forEach((e, i) => {
+      const n = i + 1
+      const node = typeof e.node === 'string' ? e.node.trim() : ''
+      const qid = typeof e.source_q === 'string' ? e.source_q.trim() : ''
+      if (!offered.has(`${node}\n${qid}`)) {
+        errors.push(`cards.${n}: (node, source_q)=(${node || '空'}, ${qid || '空'}) 不在候选清单内（必须照抄系统给出的候选）`)
+        return
+      }
+      const list = byNode.get(node) ?? []
+      list.push({ ...e, kind: 'contrast', source_node: node, source_q: qid })
+      byNode.set(node, list)
+    })
+    if (errors.length) {
+      throw new Error(`[error-card-generate] 模型产出未过候选对照门，零落盘。\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    const generated: Array<{ node: string; ids: string[]; count: number }> = []
+    for (const [node, cards] of byNode) {
+      const v = validateErrorCards({ node, cards })
+      if (v.errors) {
+        throw new Error(`[error-card-generate] 「${node}」的卡未过 schema 门禁，零落盘。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+      }
+      const r = await this.errorCards.addCards(c.root, node,
+        v.spec!.cards.map(({ kind: _kind, id: _id, source_node: _sn, archived: _a, fsrs: _f, stats: _st, ...rest }) => rest))
+      generated.push({ node, ids: r.ids, count: r.count })
+    }
+    return { course: c.name, generated, ...(skipped.length ? { skipped } : {}) }
+  }
+
+  /** 错误卡作答结算（自动判分）：三选一答案唯一——选对=rating 3、选错=rating 1，
+   * 一卡一学习日一次推进（stats.last 把守）。只推卡自身 FSRS（sched(null) 默认参数）；
+   * 选对入无绑定 XP（xp_error 行，只计总账/目标/streak），选错 0 XP 同样留净行；
+   * 复习日志/practice/节点调度面零写入。 */
+  async errorCardAnswer(
+    courseKey: string | undefined, node: string, cardId: string, choice: string,
+  ): Promise<ErrorAnswerResult> {
+    const pick = String(choice ?? '').trim()
+    const c = await this.registry.resolve(courseKey)
+    const doc = await this.errorCards.load(c.root, node)
+    const card = doc.cards.find(x => x.id === cardId && !x.archived)
+    if (!card) throw new Error(`[error-answer] 「${node}」的错误卡没有 ${cardId}（或已归档）。`)
+    if (!card.options.includes(pick)) {
+      throw new Error(`[error-answer] 所选选项不在本题三个选项内（收到「${pick.slice(0, 60)}」）。`)
+    }
+    const correct = pick === card.answer
+    const rating = correct ? 3 : 1
+    const { today } = await this.learningDay()
+    // ADR-0014 advanceStrict：守门即原 stats.last 检查（一卡一天一次），文案是测试契约
+    const pushed = advanceStrict(await this.sched(null), card, rating, today,
+      `[error-answer] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
+    await this.errorCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats: pushed.stats })
+    const diff = card.fsrs?.difficulty && card.fsrs.difficulty > 0 ? card.fsrs.difficulty : FSRS_DIFFICULTY_MID
+    const xp = correct ? xpForAnswer(card.kind, diff, true, null, true).xp : 0
+    await this.store.appendJournal({
+      course: '*', node: '*', rating, kind: 'xp_error', elapsed_days: 0, xp,
+      detail: `错误对比卡 ${c.name}/${node}#${cardId}（${correct ? 'correct 3' : 'wrong 1'}）`,
+    })
+    return {
+      course: c.name, node, id: cardId, correct, rating,
+      answer: card.answer, mine: card.mine, explanation: card.explanation,
+      due: pushed.fs.due, scheduled: true, xp,
+    }
+  }
+
+  /** 「错误卡」全量清单（管理面/agent 清点用）：到期卡按 due 升序在前，从未调度的
+   * 新卡随后。复习呈现已并入 reviewQueue（C-3）——本清单只做全量盘点（含答案与
+   * 错法标注，供人工抽查「错误模式合理」验收）。 */
+  async errorCardQueue(courseKey?: string, today?: string): Promise<ErrorQueueDoc> {
+    today ??= (await this.learningDay()).today
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const cards: ErrorCardItem[] = []
+    for (const c of courses) {
+      const dir = this.paths.errorCardsDir(c.root)
+      let files: string[] = []
+      try {
+        files = await readdir(dir)
+      } catch {
+        continue // 该课程还没有任何错误卡：合法空态
+      }
+      for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
+        const node = f.replace(/\.yaml$/, '')
+        let doc: ErrorCardDoc
+        try {
+          doc = await this.errorCards.load(c.root, node)
+        } catch {
+          continue // Broken 卡组不阻塞其他卡（data-check 体检面报出）
+        }
+        for (const card of doc.cards) {
+          if (card.archived) continue
+          cards.push({
+            course: c.name, node, id: card.id, q: card.q, options: card.options,
+            answer: card.answer, mine: card.mine, explanation: card.explanation,
+            source_q: card.source_q, source_section: card.source_section ?? null,
+            due: card.fsrs?.reps ? card.fsrs.due : null,
+            attempts: card.stats?.attempts ?? 0,
+          })
+        }
+      }
+    }
+    const due = cards.filter(c => c.due !== null && String(c.due) <= today)
+      .sort((a, b) => String(a.due).localeCompare(String(b.due)) || `${a.node}/${a.id}`.localeCompare(`${b.node}/${b.id}`))
+    const fresh = cards.filter(c => c.due === null)
+      .sort((a, b) => `${a.node}/${a.id}`.localeCompare(`${b.node}/${b.id}`))
+    return { date: today, total: cards.length, due_count: due.length, cards: [...due, ...fresh] }
+  }
+
+  /** 归档/恢复一张错误卡（管理面）：错误 deck 内部动作，canonical 零写入。 */
+  async errorCardArchive(
+    courseKey: string | undefined, node: string, cardId: string, archived: boolean,
+  ): Promise<ErrorArchiveResult> {
+    const c = await this.registry.resolve(courseKey)
+    await this.errorCards.archiveCard(c.root, node, cardId, archived)
     return { course: c.name, node, id: cardId, archived }
   }
 

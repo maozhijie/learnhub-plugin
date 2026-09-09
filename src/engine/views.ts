@@ -460,11 +460,28 @@ export interface ReviewCard extends QuestionItem {
   /** JOL 抽查命中（#66 E4）：翻面前弹一档三点预测，可忽略。 */
   jol?: boolean
   /** 笔记源卡（C1 #59）：source='note'，title=笔记标题；course 恒为「笔记源」伪课程。 */
-  source?: 'note' | 'learner'
+  source?: 'note' | 'learner' | 'error'
   title?: string
   /** 我的卡（E1，ADR-0021 汇入）：source='learner' 时携带——卡面渲染与
    * learner-rate/learner-forget 结算走此通道；调度/入账语义见 ADR-0021。 */
   learner?: LearnerCardItem
+  /** 错误对比卡（C-3 #82 汇入）：source='error' 时携带（id 为 err: 前缀的队列键，
+   * error.id 才是结算用的卡 id）——三选一卡面渲染与 errorCardAnswer 判分走此通道；
+   * 卡面只带题面与选项，答案/错法/解析随判分揭晓。 */
+  error?: ErrorCardFace
+}
+
+/** 错误对比卡的复习队列卡面（C-3 #82）：只带题面与选项的泄露纪律子集。 */
+export interface ErrorCardFace {
+  course: string
+  node: string
+  id: string
+  q: string
+  options: string[]
+  source_q: string
+  source_section: string | null
+  due: string | null
+  attempts: number
 }
 
 /** 复习刷卡队列（reviewQueue）：全局跨课程队列（可带笔记源状态）；node 过滤时为
@@ -708,6 +725,87 @@ export interface LearnerQueueDoc {
   total: number
   due_count: number
   cards: LearnerCardItem[]
+}
+
+// ---- C-3「错误对比卡」（#82；errorCardMine / errorCardGenerate / errorCardQueue / errorCardAnswer）----
+
+/** 高频错误模式候选（errorCardMine，只读挖矿预览——「错误模式人工抽查合理」的验收面）。 */
+export interface ErrorPatternItem {
+  course: string
+  node: string
+  qid: string
+  /** 实质答错次数（忘记申报不计）。 */
+  lapses: number
+  /** 学习者的错答样本（去重，最近在前）。 */
+  wrongs: string[]
+  last_wrong: string
+}
+
+/** 挖矿预览（errorCardMine）。 */
+export interface ErrorMineDoc {
+  course: string
+  candidates: ErrorPatternItem[]
+}
+
+/** 错误对比卡条目（管理面清单/复习队列卡面共用形状）。队列卡面（reviewQueue 的
+ * error 字段）只带 q/options——answer/mine/explanation 是作答后揭晓面，随
+ * errorCardAnswer 判分返回；本条目（errorCardQueue 管理面）全量带出供人工抽查。 */
+export interface ErrorCardItem {
+  course: string
+  node: string
+  id: string
+  q: string
+  options: string[]
+  answer: string
+  /** 学习者的错法项（options 之一）。 */
+  mine: string
+  explanation: string
+  source_q: string
+  source_section: string | null
+  due: string | null
+  attempts: number
+}
+
+/** 错误卡全量清单（errorCardQueue）：到期在前、新卡随后；管理面/agent 清点用。 */
+export interface ErrorQueueDoc {
+  date: string
+  total: number
+  due_count: number
+  cards: ErrorCardItem[]
+}
+
+/** 生成结果（errorCardGenerate）：按节点分组的新卡 id。 */
+export interface ErrorGenerateResult {
+  course: string
+  generated: Array<{ node: string; ids: string[]; count: number }>
+  /** 因原题缺失/归档被跳过的候选（node/qid + 原因）。 */
+  skipped?: string[]
+}
+
+/** 错误卡作答结算（errorCardAnswer，自动判分）：选对=3、选错=1；揭晓面随判分返回。 */
+export interface ErrorAnswerResult {
+  course: string
+  node: string
+  id: string
+  correct: boolean
+  rating: 3 | 1
+  /** 正确做法项（= options 之一）。 */
+  answer: string
+  /** 学习者的错法项（= options 之一）。 */
+  mine: string
+  explanation: string
+  due: string
+  scheduled: true
+  /** 选对的无绑定 XP（xp_error 行）；选错 0。 */
+  xp: number
+}
+
+/** 归档/恢复一张错误卡（errorCardArchive；管理面，canonical 零写入）。 */
+export interface ErrorArchiveResult {
+  course: string
+  node: string
+  id: string
+  archived: boolean
 }
 
 /** E 卡自评结算（learnerCardRate）：XP 走无绑定行已落 journal，这里带回执（ADR-0021）。 */

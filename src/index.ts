@@ -984,6 +984,12 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/learner-queue', () => engine.learnerQueue(course)))
       return
     }
+    if (req.method === 'GET' && route === '/error-queue') {
+      // 「错误对比卡」清单（C-3/#82）：到期在前、新卡随后（全卡面，管理/抽查用）
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/error-queue', () => engine.errorCardQueue(course)))
+      return
+    }
     if (req.method === 'GET' && route === '/skills') {
       // 技能条目 lane（#89）：生效到期已折算维持节拍帽（读侧）
       sendJson(res, 200, await apiRun('api/skills', () => engine.skillList()))
@@ -1270,6 +1276,28 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       if (route === '/learner-forget') {
         sendJson(res, 200, await apiRun('api/learner-forget', () => engine.learnerCardForget(
           need(body, 'course'), need(body, 'node'), need(body, 'card'))))
+        return
+      }
+      if (route === '/error-answer') {
+        // 「错误对比卡」作答（C-3/#82）：三选一自动判分，一卡一天一次，无绑定 XP
+        sendJson(res, 200, await apiRun('api/error-answer', () => engine.errorCardAnswer(
+          need(body, 'course'), need(body, 'node'), need(body, 'card'), String(body.choice ?? ''))))
+        return
+      }
+      if (route === '/error-generate') {
+        // 「错误对比卡」生成（C-3/#82）：挖矿 → 模型出卡 → schema 门禁落盘
+        sendJson(res, 200, await apiRun('api/error-generate', () => engine.errorCardGenerate(
+          need(body, 'course'),
+          {
+            ...(typeof body.node === 'string' && body.node.trim() ? { node: body.node } : {}),
+            ...(body.max !== undefined ? { max: Number(body.max) } : {}),
+          },
+          async prompt => stripFences(await llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort })))))
+        return
+      }
+      if (route === '/error-archive') {
+        sendJson(res, 200, await apiRun('api/error-archive', () => engine.errorCardArchive(
+          need(body, 'course'), need(body, 'node'), need(body, 'card'), Boolean(body.archived))))
         return
       }
       if (route === '/learner-add') {
@@ -2161,6 +2189,56 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string; card: string; archived?: boolean }) => run('learnhub_learner_card_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[learner-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
       return JSON.stringify(await engine.learnerCardArchive(args.course, args.node, args.card, args.archived))
+    }))
+
+  // —— C-3 错误对比卡（#82）：错法挖矿 → 三选一辨别卡 → 错误 deck 走 FSRS ——
+
+  tool('learnhub_error_card_mine',
+    'Mine the answer-attempt stream for high-frequency error patterns (C-3 #82, read-only preview): groups substantive wrong answers (correct=false with an actual wrong answer; forget declarations do not count) by course/node/question and returns candidates with >=2 lapses, each carrying the learner\'s distinct wrong answers (most recent first). This is the human-audit surface for "error patterns are reasonable" — generation is learnhub_error_card_generate; nothing is written here.',
+    {
+      course: { type: 'string', description: 'Course name; omit for all enabled courses' },
+      node: { type: 'string', description: 'Node name to scope the mining' },
+    },
+    (args: { course?: string; node?: string }) => run('learnhub_error_card_mine', async () =>
+      JSON.stringify(await engine.errorCardMine(args.course, args.node))))
+  tool('learnhub_error_card_generate',
+    'Generate 错误对比卡 discrimination cards from mined error patterns (C-3 #82): picks the top uncovered candidates (same question failed substantively >=2 times, no active card yet, batch cap 5), feeds the model the original question/answer/explanation + the learner\'s own wrong answers + the bound section excerpt, and the model returns three-option cards where ONE option is the learner\'s own wrong approach. Cards pass a schema gate (exactly 3 distinct options; answer and mine must both be among them and differ; (node,source_q) must match an offered candidate) and land in the per-node 错误卡 deck (课程根/错误卡/<节点>.yaml). Creation is zero XP and writes nothing canonical — the deck joins the review queue (source=error) and reviews earn unbound XP via learnhub_error_card_answer. Zero-disk-write on any model/gate failure.',
+    {
+      course: { type: 'string', description: 'Course name' },
+      node: { type: 'string', description: 'Node name to scope mining/generation' },
+      max: { type: 'number', description: 'Max cards this run (default 5, cap 5)' },
+    },
+    (args: { course: string; node?: string; max?: number }) => run('learnhub_error_card_generate', async () =>
+      JSON.stringify(await engine.errorCardGenerate(args.course, {
+        ...(args.node ? { node: args.node } : {}),
+        ...(args.max !== undefined ? { max: args.max } : {}),
+      }, async prompt => stripFences(await llmComplete(ctx, prompt))))))
+  tool('learnhub_error_card_queue',
+    'List ALL 错误对比卡 (C-3 #82) for inventory/audit: due cards first (due ascending), never-scheduled cards after. Each card carries the full face (q/options/answer/mine/explanation) plus source_q provenance — use this to spot-check that mined error patterns are faithful to what the learner actually did. Review happens in the merged cross-course review queue (source=error) or directly via learnhub_error_card_answer (auto-graded: pick the correct approach = 3, pick wrong = 1; one push per card per day). Correct picks earn unbound XP (totals/daily goal/streak only).',
+    { course: { type: 'string', description: 'Course name; omit for all enabled courses' } },
+    (args: { course?: string }) => run('learnhub_error_card_queue', async () =>
+      JSON.stringify(await engine.errorCardQueue(args.course))))
+  tool('learnhub_error_card_answer',
+    'Settle one 错误对比卡 (C-3 #82) with the learner\'s three-way choice: the choice must be one of the card\'s option texts verbatim. Auto-graded — picking the correct approach pushes the card with rating 3, picking wrong with rating 1 (one push per card per day, second same-day answer rejected). Only the card\'s own FSRS block moves (default params, optimizer never trains it); a correct pick earns unbound XP (xp_error journal row — totals/daily goal/streak only, never per-course/per-node ledgers or mastery); wrong picks leave a 0-XP unbound row. The reveal (answer / the learner\'s mine option / explanation) rides the response for the learner to compare.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node the card belongs to' },
+      card: { type: 'string', required: true, description: 'Card id, e.g. "c1"' },
+      choice: { type: 'string', required: true, description: 'The chosen option text (verbatim one of options)' },
+    },
+    (args: { course: string; node: string; card: string; choice: string }) => run('learnhub_error_card_answer', async () =>
+      JSON.stringify(await engine.errorCardAnswer(args.course, args.node, args.card, args.choice))))
+  tool('learnhub_error_card_archive',
+    'Archive or restore one 错误对比卡 (C-3 #82 management): archived cards leave the review queue but keep their history in the card file; a question with only an archived card becomes minable again on the next generate run. Error-deck internal action: zero canonical writes.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node the card belongs to' },
+      card: { type: 'string', required: true, description: 'Card id, e.g. "c1"' },
+      archived: { type: 'boolean', required: true, description: 'true to archive, false to restore' },
+    },
+    (args: { course: string; node: string; card: string; archived?: boolean }) => run('learnhub_error_card_archive', async () => {
+      if (typeof args.archived !== 'boolean') throw new Error('[error-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
+      return JSON.stringify(await engine.errorCardArchive(args.course, args.node, args.card, args.archived))
     }))
 
   // —— 项目域（P 区 / ADR-0015；#92）：Project 是 Course 姊妹实体，零 XP、零 FSRS、不进 sessions/srs ——

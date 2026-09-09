@@ -62,3 +62,24 @@ test('P2: 题目生成/笔记出题模板升到 v9 并携带新契约锚点', ()
   assert.match(quiz, /数字与代数式一律不进填空/, '数字与代数式不进填空')
   assert.match(quiz, /必须用单选/, '表达式答案走单选')
 })
+
+// ---- v8 课程大纲契约（P-8 #97 专家思维轨迹 + C-3 #82 同期）：思维节类型 + §10/§11 指针 ----
+
+test('P8: 课程大纲模板升到 v8 并携带思维节类型与 §10/§11 硬性要求指针', () => {
+  const tpl = Content.PROMPT_KINDS['课程大纲']!
+  assert.ok(Content.promptVersionOf(tpl) >= 8, '课程大纲 应升到 v8')
+  assert.match(tpl, /概念\/例题\/演示\/小结\/练习\/交互\/思维/, '节类型菜单含思维')
+  assert.match(tpl, /§10（先做后教）与 §11（专家思维轨迹）出现时是硬性要求/, '上下文包硬性要求指针')
+})
+
+// ---- 错误对比卡模板（C-3 #82）：三选一辨别卡契约 ----
+
+test('C3: 错误对比卡模板——三选一、mine 忠实错法、候选照抄契约', () => {
+  const tpl = Content.PROMPT_KINDS['错误对比卡']!
+  assert.ok(Content.promptVersionOf(tpl) >= 6, '错误对比卡 应升到 v6+')
+  assert.match(tpl, /answer/, '正确项字段')
+  assert.match(tpl, /mine/, '学习者错法项字段')
+  assert.match(tpl, /source_q/, '候选来源照抄字段')
+  assert.match(tpl, /恰好 3 个选项/, '三选一结构锚点')
+  assert.match(tpl, /忠实还原学习者的真实思路/, '错法忠实性锚点')
+})

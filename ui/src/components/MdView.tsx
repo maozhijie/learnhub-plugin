@@ -3,6 +3,9 @@
  * （mermaid/media），未注册语言降级源码；Obsidian 图片嵌入 ![[path]] 预处理为
  * 面板文件路由 URL。不渲染裸 HTML（skipHtml，见 md-chain.ts——机器注释等 html
  * 节点直接丢弃，而非默认的转义文本显示）。
+ * learnhub-predict 预测门块（P-8 #97）由 splitPredictSegments 切出渲染为
+ * PredictGate「先预测再揭晓」阅读门：门未过不渲染块后正文，揭晓后递归放行
+ * （一节多门自然嵌套）；不合法块（人工改坏）降级源码显示。
  * InlineMd 为同一条链的行内变体：题干/选项/判卷反馈等短文本复用。 */
 import type { ReactNode } from 'react'
 import { useMemo } from 'react'
@@ -11,6 +14,9 @@ import 'katex/contrib/mhchem' // \ce 等化学宏注册进 rehype-katex 共享�
 import 'katex/dist/katex.min.css'
 import { MD_HTML_POLICY, REHYPE_PLUGINS, REMARK_PLUGINS } from './md-chain'
 import { renderBlock, verifyRendererCoverage } from './renderers'
+import { splitPredictSegments } from '../../../shared/content-renderers'
+import type { PredictBlock } from '../../../shared/content-renderers'
+import PredictGate from './PredictGate'
 
 void verifyRendererCoverage()
 
@@ -37,18 +43,43 @@ function preprocessWikilinks(md: string): string {
   })
 }
 
+/** 纯 markdown 主体（无预测门分界时的完整渲染）。 */
+function MdBody(props: { md: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={REMARK_PLUGINS}
+      rehypePlugins={REHYPE_PLUGINS}
+      {...MD_HTML_POLICY}
+      components={{ code: MdCode }}
+    >
+      {props.md}
+    </ReactMarkdown>
+  )
+}
+
 export default function MdView(props: { md: string; className?: string }) {
   const md = useMemo(() => preprocessWikilinks(props.md), [props.md])
+  const segments = useMemo(() => splitPredictSegments(md), [md])
+  // 无预测门：与既有渲染路径完全一致
+  if (segments.length <= 1 && (segments.length === 0 || segments[0]!.type === 'md')) {
+    return (
+      <div className={`md-body ${props.className ?? ''}`}>
+        <MdBody md={md} />
+      </div>
+    )
+  }
   return (
     <div className={`md-body ${props.className ?? ''}`}>
-      <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={REHYPE_PLUGINS}
-        {...MD_HTML_POLICY}
-        components={{ code: MdCode }}
-      >
-        {md}
-      </ReactMarkdown>
+      {segments.map((seg, i) => {
+        if (seg.type === 'md') return <MdBody key={i} md={seg.md} />
+        if ('error' in seg.parsed) {
+          // 人工改坏的块：质检门会拦新生成；这里降级源码显示不让页面崩
+          return <pre key={i} className='md-predict-invalid'><code>{seg.raw}</code></pre>
+        }
+        const parsed: PredictBlock = seg.parsed
+        // after 走递归 MdView：一节多门时内层门保持各自的「先预测再放行」
+        return <PredictGate key={i} parsed={parsed} after={<MdView md={seg.after} />} />
+      })}
     </div>
   )
 }

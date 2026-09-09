@@ -130,6 +130,19 @@ export const api = {
   /** 「我的卡」归档/恢复（E1 管理面）。 */
   learnerArchive: (course: string, node: string, card: string, archived: boolean) =>
     http<import('./types').LearnerArchiveResult>('POST', '/learner-archive', { course, node, card, archived }),
+  /** 「错误对比卡」清单（C-3 #82）：到期在前、新卡随后（全卡面，管理/抽查用）。 */
+  errorQueue: (course?: string) =>
+    http<import('./types').ErrorQueueDoc>('GET', `/error-queue${q({ course })}`),
+  /** 「错误对比卡」生成（C-3 #82）：挖矿 → 模型出卡 → schema 门禁落盘。 */
+  errorGenerate: (course?: string, opts?: { node?: string; max?: number }) =>
+    http<import('./types').ErrorGenerateResult>('POST', '/error-generate',
+      { course, ...(opts?.node ? { node: opts.node } : {}), ...(opts?.max !== undefined ? { max: opts.max } : {}) }),
+  /** 「错误对比卡」作答（C-3 #82）：三选一自动判分（选对=3/选错=1），揭晓面随判分返回。 */
+  errorAnswer: (course: string, node: string, card: string, choice: string) =>
+    http<import('./types').ErrorAnswerResult>('POST', '/error-answer', { course, node, card, choice }),
+  /** 「错误对比卡」归档/恢复（C-3 管理面）。 */
+  errorArchive: (course: string, node: string, card: string, archived: boolean) =>
+    http<import('./types').ErrorArchiveResult>('POST', '/error-archive', { course, node, card, archived }),
   /** 笔记源清单（C1 #59）：注册身份 × Missing/漂移状态 × 卡池概况。 */
   noteSources: () => http<import('./types').NoteSourceDoc>('GET', '/note-sources'),
   /** 笔记源注册（C1 #59）：单篇 .md 或文件夹（批量登记其下全部 .md）。 */
