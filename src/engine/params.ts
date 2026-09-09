@@ -25,5 +25,6 @@ export const XP_GUESS_SECONDS = 5        // 作答耗时低于该值且答错 �
 export const XP_GUESS_PENALTY = -1       // 乱猜负 XP（保持时间账本诚实）
 export const XP_PERFECT_BONUS = 2        // 节点满分完成的 bonus XP
 export const XP_PER_NODE_DEFAULT = 12    // 无课程历史时每节点 XP 估算
+export const XP_PER_MILESTONE_DEFAULT = 120 // 里程碑无 est 申报时的过点定价缺省（1–2 周粒度的保守投入，#94）
 export const DAILY_XP_GOAL_DEFAULT = 30  // 每日 XP 目标缺省（state/learnhub.json 可覆盖）
 export const DAY_CUTOFF_DEFAULT = '02:00' // 日界缺省（ADR-0020；state/learnhub.json 的 day_cutoff 可覆盖）

@@ -42,7 +42,11 @@ import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals } from './gengraph.ts'
 import type { ApplyAudit, EditOp } from './gengraph.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
-import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult } from './projects.ts'
+import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
+import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
+import type { RecallPool, RecallQuestion, RecallRec } from './project-recall.ts'
+import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
+import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
 import { QuestionBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
 import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, normalizeSourcePath, sourceHint, stripFrontmatter, titleOfBody } from './note-source.ts'
@@ -60,8 +64,8 @@ import type { NodeStat, WindowStat } from './sessions.ts'
 import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
-import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration } from './xp.ts'
-import { XP_GUESS_SECONDS, XP_PERFECT_BONUS, FSRS_DIFFICULTY_MID } from './params.ts'
+import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration, milestonePrice } from './xp.ts'
+import { XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID } from './params.ts'
 import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
@@ -778,14 +782,247 @@ export class LearnhubEngine {
     return this.projects.writeMilestone(id, milestoneId, md)
   }
 
+  // ---- 过点对账 / 检索点 / 行为推断 enc（P-3/P-4/P-6；#94/#93/#96）----
+
+  /** 项目关联节点解析（计划声明 ∪ 调用补充；ADR-0015 裁决 6：关联可显式声明，永不门禁）。
+   * 定位失败 fail loud 并点名——悬空关联先修计划，不在消费面静默降级。 */
+  private async resolveProjectNodes(specs: string[]): Promise<Array<{ course: CourseEntry; node: string }>> {
+    const out: Array<{ course: CourseEntry; node: string }> = []
+    const seen = new Set<string>()
+    for (const spec of specs) {
+      const hit = await this.locateNode(spec)
+      const key = `${hit.course.name}/${hit.node}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(hit)
+    }
+    return out
+  }
+
+  private planItemOf(fm: ProjectFm, milestoneId: string, tool: string): PlanItem {
+    const item = fm.plan.find(m => m.id === milestoneId)
+    if (!item) {
+      throw new Error(`[${tool}] 项目「${fm.id}」的计划里没有里程碑「${milestoneId}」（先修订计划）。`)
+    }
+    return item
+  }
+
+  /** 显式过点（#94 / 设计 §5）：里程碑完成 = 学习者显式动作，无清单门禁、无题目门禁。
+   * 定价 = milestonePrice（est 申报 × 关联节点题池 FSRS 难度校准；无关联证据 k=1），
+   * 对账流水 journal kind='milestone_settle' 一次性入账并锁定（重复过点被守卫拒绝）。
+   * 这是项目域唯一获准写 journal 的动作：真实投入的显式陈述，进账本汇总与 streak 口径
+   * （ADR-0015 裁决 5 的 Settle 新粒度；计划/产物/检索点仍零 journal 写入）。 */
+  async projectMilestonePass(
+    id: string, milestoneId: string, extraNodes?: string[],
+  ): Promise<{ project: string; milestone: string; name: string; xp: number; detail: string }> {
+    const fm = await this.projects.load(id)
+    const item = this.planItemOf(fm, milestoneId, 'project-pass')
+    const linked = await this.resolveProjectNodes([...(item.nodes ?? []), ...(extraNodes ?? [])])
+    const pool: Array<{ kind: string; difficulty?: number; fsrs?: { difficulty: number } | null }> = []
+    for (const { course, node } of linked) {
+      const bank = await this.bank.load(this.paths.courseRoot(course.root), node)
+      for (const q of bank.questions) if (!q.archived) pool.push(q)
+    }
+    const calibration = pool.length ? difficultyCalibration(pool) : 1
+    const price = milestonePrice(item.est, calibration)
+    const detail = `N₀=${item.est ?? XP_PER_MILESTONE_DEFAULT}${item.est ? '（est 申报）' : '（缺省，无 est 申报）'}`
+      + ` × k=${calibration.toFixed(2)}（${pool.length ? `${linked.length} 个关联节点题池校准` : '无关联题池证据，取中性'}）= ${price}，定价锁定`
+    const r = await this.projects.passMilestone(id, milestoneId, { xp: price, detail })
+    return { project: r.project, milestone: r.milestone, name: r.name, xp: r.xp, detail }
+  }
+
+  /** 发起里程碑检索点会话（#93）：产物已生成（交付物在手）才受理；从关联节点题池
+   * 抽题（跨池轮转、未作答优先、due 最早优先），抽题流水落 projects/<id>/recall.jsonl。
+   * 零 XP、零 FSRS、零 journal——检索点只服务知识底座，不作项目验收标准。 */
+  async projectMilestoneRecall(
+    id: string, milestoneId: string, opts: { nodes?: string[]; limit?: number } = {},
+  ): Promise<{ project: string; milestone: string; file: string; questions: Array<RecallQuestion & { answer: BankQuestion['answer']; options?: string[]; explanation?: string }> }> {
+    const delivered = await this.projects.isMilestoneDelivered(id, milestoneId)
+    if (!delivered.delivered) {
+      throw new Error(`[project-recall] 里程碑「${milestoneId}」的产物尚未生成——检索点在交付物在手时发起（先 learnhub_project_milestone_generate）。`)
+    }
+    const fm = await this.projects.load(id)
+    const item = this.planItemOf(fm, milestoneId, 'project-recall')
+    const specs = [...new Set([...(item.nodes ?? []), ...(opts.nodes ?? [])])]
+    if (!specs.length) {
+      throw new Error('[project-recall] 该里程碑没有关联节点：计划条目 nodes 或调用参数 nodes 至少给一个（节点名或「课程/节点」）。')
+    }
+    const linked = await this.resolveProjectNodes(specs)
+    const pools: RecallPool[] = []
+    const byKey = new Map<string, BankQuestion>()
+    for (const { course, node } of linked) {
+      const bank = await this.bank.load(this.paths.courseRoot(course.root), node)
+      const active = bank.questions.filter(q => !q.archived)
+      if (!active.length) continue
+      pools.push({ course: course.name, node, questions: active })
+      for (const q of active) byKey.set(`${course.name}\u0000${node}\u0000${q.id}`, q)
+    }
+    if (!pools.length) {
+      throw new Error('[project-recall] 关联节点都没有可用题目（题库为空或全归档）——先出题，或修订计划的 nodes 关联。')
+    }
+    const drawn = drawRecallQuestions(pools, opts.limit ?? 5, this.jolRng)
+    await appendRecallRec(this.paths, id, {
+      ts: nowIso(), kind: 'draw', milestone: milestoneId, file: delivered.file,
+      nodes: specs, questions: drawn,
+    })
+    const questions = drawn.map(d => {
+      const q = byKey.get(`${d.course}\u0000${d.node}\u0000${d.qid}`)!
+      return { ...d, answer: q.answer, ...(q.options ? { options: q.options } : {}), ...(q.explanation ? { explanation: q.explanation } : {}) }
+    })
+    return { project: id, milestone: milestoneId, file: delivered.file, questions }
+  }
+
+  /** 检索点自述落档（#93）：学习者口述「到目前为止的关键决策」，追加进 recall.jsonl。
+   * 判词不评、canonical 不碰——自述是给复盘看的，不是给调度喂的。 */
+  async projectRecallReflect(id: string, milestoneId: string, narration: string): Promise<{ project: string; milestone: string; recorded: true }> {
+    const trimmed = narration?.trim()
+    if (!trimmed) throw new Error('[project-recall] 自述不能为空（关键决策口述原文）。')
+    const fm = await this.projects.load(id)
+    this.planItemOf(fm, milestoneId, 'project-recall')
+    await appendRecallRec(this.paths, id, { ts: nowIso(), kind: 'reflect', milestone: milestoneId, narration: trimmed })
+    return { project: id, milestone: milestoneId, recorded: true }
+  }
+
+  /** 检索点流水读取（#93；面板/复盘消费）。 */
+  async projectRecallLog(id: string): Promise<RecallRec[]> {
+    await this.projects.load(id)
+    return recallRecsAll(this.paths, id)
+  }
+
+  /** 行为推断 enc 候选边（#96 / ADR-0015 裁决 3/6）：项目窗口内的翻卡/回看共现 →
+   * 带置信度候选边 → 每课程单个 pending edit 提案走人审（enc_backfill「单提案人审」
+   * 先例；set_enc 整体替换、既有声明 enc 原样保留，零 schema 破坏）。窗口终点 =
+   * 指定里程碑的过点时刻（省略则现在）；事件源 = review-log（synthetic 除外）+ practice，
+   * 只取关联节点。跨课程对不成边（enc 边不可跨图）；已声明边不重复提名。 */
+  async projectEncCandidates(
+    id: string, opts: { milestone?: string; nodes?: string[]; window_days?: number; min_co?: number } = {},
+  ): Promise<{
+    project: string; window: { start: string; end: string; days: number }
+    events: number; candidates: Array<{ course: string; holder: string; skill: string; co: number; w: number; why: string }>
+    proposals: Array<{ course: string; id: number; ops: number }>; skipped_declared: number
+  }> {
+    const fm = await this.projects.load(id)
+    const days = Math.min(90, Math.max(1, Math.round(opts.window_days ?? 14)))
+    const minCo = Math.max(1, Math.round(opts.min_co ?? 2))
+    let endMs = Date.now()
+    if (opts.milestone !== undefined) {
+      const rec = (await this.store.journalTail(fm.id, Number.MAX_SAFE_INTEGER))
+        .find(r => r.kind === 'milestone_settle' && r.node === opts.milestone)
+      if (!rec) {
+        throw new Error(`[project-enc] 里程碑「${opts.milestone}」没有过点记录——共现窗口没有锚点（先过点，或省略 milestone 以现在为终点）。`)
+      }
+      endMs = Date.parse(rec.ts)
+    }
+    const startMs = endMs - days * 86_400_000
+    const specs = [...new Set([...fm.plan.flatMap(m => m.nodes ?? []), ...(opts.nodes ?? [])])]
+    if (!specs.length) {
+      throw new Error('[project-enc] 项目没有关联节点：计划条目 nodes 或调用参数 nodes 至少给一个（行为扫描只在关联节点间成对）。')
+    }
+    const linked = await this.resolveProjectNodes(specs)
+    const byCourse = new Map<string, Set<string>>()
+    for (const { course, node } of linked) {
+      let set = byCourse.get(course.name)
+      if (!set) byCourse.set(course.name, set = new Set())
+      set.add(node)
+    }
+    const { cutoff } = await this.learningDay()
+    const inWindow = (ts: string) => {
+      const ms = Date.parse(ts)
+      return ms >= startMs && ms <= endMs
+    }
+    const [reviews, practices] = await Promise.all([
+      this.store.reviewLogAll(), this.store.practiceAll(),
+    ])
+    let events = 0
+    const firstDayByCourse = new Map<string, Map<string, string>>()
+    const eventsByCourse = new Map<string, Array<{ node: string; day: string }>>()
+    const bump = (course: string, node: string, ts: string) => {
+      if (!byCourse.get(course)?.has(node)) return
+      if (!inWindow(ts)) return
+      const day = dayOfTs(ts, cutoff)
+      events++
+      const list = eventsByCourse.get(course) ?? []
+      list.push({ node, day })
+      eventsByCourse.set(course, list)
+      const days1 = firstDayByCourse.get(course) ?? new Map<string, string>()
+      const prev = days1.get(node)
+      if (prev === undefined || day < prev) days1.set(node, day)
+      firstDayByCourse.set(course, days1)
+    }
+    for (const r of reviews) if (r.rating_source !== 'synthetic') bump(r.course, r.node, r.ts)
+    for (const r of practices) bump(r.course, r.node, r.ts)
+
+    const candidates: Array<{ course: string; holder: string; skill: string; co: number; w: number; why: string }> = []
+    const proposals: Array<{ course: string; id: number; ops: number }> = []
+    let skippedDeclared = 0
+    for (const [courseName, nodes] of byCourse) {
+      const pairs = cooccurrencePairs(eventsByCourse.get(courseName) ?? [], minCo)
+      if (!pairs.length) continue
+      const c = await this.registry.get(courseName)
+      if (!c) continue
+      const { graph } = await this.loadView(c)
+      // 既有声明 enc 原样保留（图视图 encOf 丢 note，一次性建表取原始形态）
+      const declared = new Map(
+        graph.regions.flatMap(rg => rg.blocks.flatMap(b => b.nodes)).map(n => [n.name, n.enc]),
+      )
+      const ops: EditOp[] = []
+      for (const pair of pairs.slice(0, 12)) {
+        const dir = orientCandidate(
+          pair.a, pair.b,
+          (from, to) => graph.nset.has(from) && graph.nset.has(to) && graph.isAncestor(from, to),
+          node => firstDayByCourse.get(courseName)?.get(node),
+        )
+        if (!nodes.has(dir.holder) || !nodes.has(dir.skill)) continue
+        const existing = declared.get(dir.holder) ?? []
+        if (existing.some(e => e.node === dir.skill)) {
+          skippedDeclared++
+          continue
+        }
+        const w = coWeight(pair.co)
+        ops.push({
+          op: 'set_enc', node: dir.holder,
+          enc: [...existing, { node: dir.skill, w, note: `行为推断（P-6 #96）：${days} 天窗口内共现 ${pair.co} 天（${dir.why}）` }],
+        })
+        candidates.push({ course: courseName, holder: dir.holder, skill: dir.skill, co: pair.co, w, why: dir.why })
+      }
+      if (!ops.length) continue
+      const yamlText = YAML.stringify({
+        course: courseName,
+        reason: `行为推断 enc 边（P-6 #96）：项目「${fm.name}」${days} 天窗口内翻卡/回看共现 ≥${minCo} 天的关联节点对`,
+        ops,
+      })
+      const prop = await this.graphPropose('edit', yamlText)
+      proposals.push({ course: courseName, id: (prop as { id: number }).id, ops: ops.length })
+    }
+    return {
+      project: id,
+      window: { start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(), days },
+      events, candidates, proposals, skipped_declared: skippedDeclared,
+    }
+  }
+
   // ---- 内容管线 ----
+
+  /** Vault 先验注入段（V-2 / #106；生成面共用，零命中返回 ''）：检索词 = 节点名 +
+   * 直接前置名，纯扫描 vault 个人笔记（排除学习中心；ADR-0010 只读纪律——检索
+   * 永不写个人笔记）。宿主无检索/嵌入 API（探测结论见 vault-prior.ts 头注），走
+   * #78 推荐的纯扫描降级路径。 */
+  private async vaultPriorFor(graph: Graph, node: string): Promise<string> {
+    const terms = priorTerms([node, ...(graph.preOf[node] ?? [])])
+    if (!terms.length) return ''
+    const centerRel = this.paths.centerRoot.slice(this.vaultRoot.length + 1)
+    const hits = await searchVaultPrior(this.vaultRoot, centerRel, terms)
+    return priorSection(hits)
+  }
 
   async contentPack(courseKey: string | undefined, node: string): Promise<string> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[pack] 节点「${node}」不在图内。`)
     this.assertNoteOk(c, graph, broken, node, 'pack')
-    return this.content.contextPack(graph, state, node, c.name)
+    const prior = await this.vaultPriorFor(graph, node)
+    const pack = this.content.contextPack(graph, state, node, c.name)
+    return prior ? `${pack}\n\n---\n\n${prior}` : pack
   }
 
   async loadPrompt(kind: string): Promise<string> {
@@ -2981,7 +3218,8 @@ export class LearnhubEngine {
       : tier === 3
         ? '本节点为高复杂度：收尾可出 1-2 道 difficulty: 3 的综合/易错题。'
         : '本节点为中复杂度：难度递进到 2，收尾至多 1 道 difficulty: 3。'
-    const raw = await llm(`${tpl}${listing}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n${body}`)
+    const prior = await this.vaultPriorFor(graph, node)
+    const raw = await llm(`${tpl}${listing}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n${body}${prior ? `\n\n---\n\n${prior}` : ''}`)
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
@@ -3028,6 +3266,8 @@ export class LearnhubEngine {
     }
     const tpl = await this.loadPrompt('题目生成')
     const tier = nodeTierOf(graph, node)
+    const prior = await this.vaultPriorFor(graph, node)
+    const priorBlock = prior ? `\n\n---\n\n${prior}` : ''
     // 出题量弹性（P3，复杂度档案锚点）：每档给内容节目标题量；大纲含练习节时内容节 −1
     // （集中练习模式：读读读→集中练，综合题数随档位而非恒定 3）。
     const hasPracticeSection = manifest.some(s => s.type === '练习')
@@ -3045,7 +3285,7 @@ export class LearnhubEngine {
         : tier === 3
           ? '本节属高复杂度节点：允许 1-2 道 difficulty: 3 的易错/综合题。'
           : '本节属中复杂度节点：难度递进到 2 即可。'
-      const raw = await llm(`${tpl}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n## ${s.title}\n\n${sectionMd}`)
+      const raw = await llm(`${tpl}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
       let doc: { questions?: unknown } | null = null
       try {
         doc = YAML.parseModel(raw) as { questions?: unknown } | null

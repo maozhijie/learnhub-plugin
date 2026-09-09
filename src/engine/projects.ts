@@ -36,12 +36,18 @@ export function isFadingTier(v: unknown): v is FadingTier {
   return (FADING_TIERS as string[]).includes(v as string)
 }
 
-/** 里程碑计划条目（设计 §3 关键接口：#92 提案修订与 #95 目标反编译的共同产出形态）。 */
+/** 里程碑计划条目（设计 §3 关键接口：#92 提案修订与 #95 目标反编译的共同产出形态）。
+ * est/nodes 可选（#93/#94 落地）：est = 过点定价申报（分钟）；nodes = 关联课程节点
+ * （检索点抽题与行为推断 enc 的挂靠点，ADR-0015 裁决 6——关联永不构成门禁）。 */
 export interface PlanItem {
   id: string
   name: string
   task_class: string
   acceptance_hints: string
+  /** 过点定价申报（分钟，正数；缺省回落 XP_PER_MILESTONE_DEFAULT）。 */
+  est?: number
+  /** 关联课程节点（节点名或「课程/节点」；抽题/行为扫描按此解析，空 = 未关联）。 */
+  nodes?: string[]
 }
 
 /** 项目 frontmatter（项目.md；设计 §1 schema）。 */
@@ -85,7 +91,42 @@ export function validatePlanItems(raw: unknown, where = 'plan'): { errors: strin
     if (!name) errors.push(`${where}.${n}.name: 不能为空`)
     if (!taskClass) errors.push(`${where}.${n}.task_class: 不能为空（任务类由简到繁的梯度描述）`)
     if (!hints) errors.push(`${where}.${n}.acceptance_hints: 不能为空（验收要点草案）`)
-    plan.push({ id, name, task_class: taskClass, acceptance_hints: hints })
+    // 可选域（#93/#94）：est 正数申报；nodes 非空字符串列表（去重保序）
+    let est: number | undefined
+    if (e.est !== undefined) {
+      if (typeof e.est !== 'number' || !Number.isFinite(e.est) || e.est <= 0) {
+        errors.push(`${where}.${n}.est: 必须是正数（分钟）`)
+      } else {
+        est = Math.round(e.est)
+      }
+    }
+    let nodes: string[] | undefined
+    if (e.nodes !== undefined) {
+      if (!Array.isArray(e.nodes)) {
+        errors.push(`${where}.${n}.nodes: 必须是列表`)
+      } else {
+        const seen = new Set<string>()
+        nodes = []
+        for (const v of e.nodes) {
+          if (typeof v !== 'string' || !v.trim()) {
+            errors.push(`${where}.${n}.nodes: 条目必须是非空字符串`)
+            nodes = undefined
+            break
+          }
+          const t = v.trim()
+          if (!seen.has(t)) {
+            seen.add(t)
+            nodes.push(t)
+          }
+        }
+        if (nodes && !nodes.length) nodes = undefined
+      }
+    }
+    plan.push({
+      id, name, task_class: taskClass, acceptance_hints: hints,
+      ...(est !== undefined ? { est } : {}),
+      ...(nodes ? { nodes } : {}),
+    })
   })
   return { errors, plan }
 }
@@ -412,6 +453,42 @@ export class Projects {
       return { proposed: prop.id, kind: 'project_milestone', file }
     }
     return this.generateMilestone(projectId, milestoneId, md)
+  }
+
+  // ---- 过点与对账（#94 / 设计 §5：过点是显式动作，无清单门禁、无题目门禁） ----
+
+  /** 显式过点：触发里程碑对账流水（journal 新 kind='milestone_settle'，对齐 xp_settle
+   * 先例——这是项目域唯一获准写 journal 的动作：过点是真实项目投入的显式陈述，进
+   * streak 口径与账本汇总，ADR-0015 裁决 5 的 Settle 新粒度）。定价由引擎层计算传入
+   * （校准要读关联节点题池，属课程域）；这里只锁语义：定位里程碑、查重守卫、落一行。
+   * 验收清单勾选不参与（勾选是自报，允许带未勾条目过点，Kulik 1990）。 */
+  async passMilestone(projectId: string, milestoneId: string, settle: { xp: number; detail: string }): Promise<{
+    project: string; milestone: string; name: string; file: string; xp: number
+  }> {
+    const { project, item, file } = await this.locateMilestone(projectId, milestoneId)
+    const settled = (await this.store.journalTail(project.id, Number.MAX_SAFE_INTEGER))
+      .some(r => r.kind === 'milestone_settle' && r.node === milestoneId)
+    if (settled) {
+      throw new Error(`[project-pass] 里程碑「${milestoneId}」已过点对账（定价锁定，重复过点不入账）；计划换了内容请用新的里程碑 id。`)
+    }
+    await this.store.appendJournal({
+      course: project.id, node: milestoneId, rating: null,
+      kind: 'milestone_settle', elapsed_days: 0,
+      xp: settle.xp, detail: `里程碑「${item.name}」过点：${settle.detail}`,
+    })
+    return { project: project.id, milestone: milestoneId, name: item.name, file, xp: settle.xp }
+  }
+
+  /** 里程碑已过点？（对账流水即事实，零新增状态文件。） */
+  async isMilestonePassed(projectId: string, milestoneId: string): Promise<boolean> {
+    return (await this.store.journalTail(projectId, Number.MAX_SAFE_INTEGER))
+      .some(r => r.kind === 'milestone_settle' && r.node === milestoneId)
+  }
+
+  /** 里程碑产物落盘状态（#93 检索点门槛：交付物 = 任务卡已生成）。 */
+  async isMilestoneDelivered(projectId: string, milestoneId: string): Promise<{ delivered: boolean; file: string }> {
+    const { file } = await this.locateMilestone(projectId, milestoneId)
+    return { delivered: existsSync(this.paths.projectMilestonePath(projectId, file)), file }
   }
 
   /** 轻量结构门未过 → 抛 code=MILESTONE_GATE_FAILED（修复回路据此识别）。 */
