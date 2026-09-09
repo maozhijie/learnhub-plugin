@@ -4306,9 +4306,14 @@ export class LearnhubEngine {
   // ---- 瑕疵题勘误与判罚冲正（ADR-0031）----
 
   /** 被申诉作答的定位与准入：该题最近一条判错的 practice 记录，未被冲正过。
-   * 目标 = 最近一条（练习会话的即时申诉与直通卡/复习流的「最近一次答错」一致）。 */
+   * 目标 = 最近一条（练习会话的即时申诉与直通卡/复习流的「最近一次答错」一致）。
+   * AI 判卷题型（reflection/open_question）不在申诉范围（Q8 裁定）：评分异议走
+   * 既有「讲解这道题」通道，判卷故障已有 #116 逃生门。 */
   private async disputeTarget(courseKey: string | undefined, node: string, qid: string, op: string) {
     const { c, graph, q } = await this.questionContext(courseKey, node, qid, op)
+    if (q.kind === 'reflection' || q.kind === 'open_question') {
+      throw new Error(`[${op}] AI 判卷题型（reflection/open_question）不走申诉：评分异议用「讲解这道题」，判卷故障有逃生门。`)
+    }
     const rec = (await this.store.practiceAll())
       .filter(r => r.course === c.name && r.node === node && r.qid === qid && r.correct === false)
       .sort((a, b) => a.ts.localeCompare(b.ts))
@@ -4383,11 +4388,12 @@ export class LearnhubEngine {
    *   用新键重判原作答——原作答符合新键则改判为对（XP 按对题补记、frontmatter
    *   correct+1、EMA 补 0.3 步）；不符合则只修键，判罚维持。
    * - void / overridden：本次作答作废（判卷逃生门口径）——XP 净值归零（乱猜罚随减）、
-   *   attempts−1、EMA 逆向一步；void 语义 = 题是瑕疵题（UI 链路归档重出），
-   *   overridden = 复核判题没问题但学习者坚持豁免（题保留在调度里）。
+   *   attempts−1、EMA 逆向一步；void 语义 = 题是瑕疵题，归档随结算原子落盘（重出走
+   *   生成队列、可重试）；overridden = 复核判题没问题但学习者坚持豁免（题保留在调度里）。
    * 共同边界（ADR-0031）：FSRS 不回滚、review-log 不抹；冲正走 勘误.jsonl 追加 +
    * 聚合账净额重算（practice.jsonl 永不改写）。EMA/frontmatter 计数是增量聚合，
-   * 逆向调整在「争议条为该节点最新证据」时精确，否则为可接受的近似（派生读侧）。 */
+   * 逆向调整在「争议条为该节点最新证据」时精确，否则为可接受的近似（派生读侧）；
+   * rekey 且原作答与新键仍不符 = 净零变动（只修键，证据不动）。 */
   async questionDisputeApply(
     courseKey: string | undefined, node: string, qid: string,
     resolution: 'rekey' | 'void' | 'overridden',
@@ -4422,7 +4428,7 @@ export class LearnhubEngine {
         ? (() => { try { return evaluateAllo(fresh, rec.answer) } catch { return { score: 0 } } })()
         : { score: 0 }
       correctNow = r.score >= PASS_SCORE
-      verdict = 'key-error'
+      verdict = 'key_error'
       if (correctNow) {
         // 改判对：对题 XP 补记（豁免永不产生得分，改判只来自键修改后的重判）；乱猜罚随键纠正一并消失
         xpNet = xpForAnswer(fresh.kind, fresh.difficulty ?? 1, true, null, true).xp
@@ -4432,7 +4438,8 @@ export class LearnhubEngine {
       xpNet = 0 // 作废：本次作答 XP 净值归零（乱猜 −1 罚随之返还）
     }
 
-    // 题目 stats 从净流水重算（作废剔除该条；改判按新对错计）；FSRS 块不动
+    // 题目 stats 从净流水重算（作废剔除该条；改判按新对错计；rekey 维持 = 原样重写）；
+    // FSRS 块不动
     const errata = await this.store.erratumAll()
     const pending: ErratumRec = {
       ts: nowIso(), course: c.name, node, qid, target_ts: rec.ts,
@@ -4453,17 +4460,18 @@ export class LearnhubEngine {
     }
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { stats })
 
-    // 节点 frontmatter 逆向调整（EMA 0.7/0.3 的逆步；attempts/correct 计数修正）
+    // 节点 frontmatter 逆向调整：作废 = 撤 0 分步（attempts−1、EMA ÷0.7）；改判对 =
+    // 撤 0 分步再补 1 分步（净 +0.3）；rekey 且判罚维持 = 净零变动（证据不动，只修键）。
+    const evidenceChange = resolution !== 'rekey' || correctNow === true
     const note = await this.nodeNote(c, graph, node)
     let fmAfter = note.fm
-    if (note.fm) {
+    if (note.fm && evidenceChange) {
       const round3 = (x: number) => Math.round(Math.min(1, Math.max(0, x)) * 1000) / 1000
       const practice = {
         attempts: Math.max(0, note.fm.practice.attempts + (resolution === 'rekey' ? 0 : -1)),
         correct: Math.max(0, note.fm.practice.correct + (correctNow ? 1 : 0)),
       }
       const ema = note.fm.practice_ema
-      // 改判对 = 撤销 0 分步再补 1 分步（净效果 +0.3）；作废 = 撤销 0 分步（÷0.7）
       const practice_ema = correctNow
         ? (ema === undefined ? 1 : round3(ema + 0.3))
         : (ema === undefined ? undefined : round3(ema / 0.7))
@@ -4473,18 +4481,18 @@ export class LearnhubEngine {
       }
       await this.saveNodeNote(note.path, fmAfter, note.body)
     }
-    await this.store.appendErratum({
-      course: c.name, node, qid, target_ts: rec.ts,
-      verdict, xp: xpNet,
-      ...(correctNow === true ? { correct: true } : {}),
-      ...(resolution === 'rekey' ? { revision: opts?.revision ?? {} } : {}),
-      ...(opts?.reason?.trim() ? { reason: opts.reason.trim().slice(0, 500) } : {}),
-    })
+    await this.store.appendErratum(pending)
+    if (resolution === 'void') {
+      // 瑕疵题的归档随作废结算原子落盘（ADR-0031）：重出走生成队列（可重试），
+      // 不再由 UI 两段拼接留下「已作废未归档」的悬空态。
+      await this.bank.archiveQuestion(this.paths.courseRoot(c.root), node, qid, true)
+    }
     return {
       course: c.name, node, qid, resolution,
       verdict,
       correct_now: resolution === 'rekey' ? correctNow : null,
       xp: xpNet,
+      ...(resolution === 'void' ? { archived: true } : {}),
       ...(fmAfter ? { mastery: masteryOfFm(fmAfter) } : {}),
     }
   }

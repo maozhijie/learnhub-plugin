@@ -25,7 +25,7 @@ export async function atomicWrite(path: string, data: string): Promise<void> {
   await rename(tmp, path)
 }
 
-/** 勘误冲正的读侧净值（ADR-0031）：key-error 的作答按勘误记录替换 xp/对错；
+/** 勘误冲正的读侧净值（ADR-0031）：key_error 的作答按勘误记录替换 xp/对错；
  * defective/overridden 的作答整体剔除。原始流水不动，聚合账（XP、作答统计）
  * 一律先过本函数再算——「行为流水即事实」包含冲正凭证本身。 */
 export function netPracticeRecs<T extends PracticeRec>(recs: readonly T[], errata: readonly ErratumRec[]): T[] {
@@ -35,7 +35,7 @@ export function netPracticeRecs<T extends PracticeRec>(recs: readonly T[], errat
     const e = r.ts ? byKey.get(`${r.ts}|${r.qid ?? ''}`) : undefined
     if (!e) {
       out.push(r as T)
-    } else if (e.verdict === 'key-error') {
+    } else if (e.verdict === 'key_error') {
       out.push({ ...(r as T), xp: e.xp, correct: e.correct ?? r.correct })
     }
     // defective/overridden：本次作答作废，不出现在净流里

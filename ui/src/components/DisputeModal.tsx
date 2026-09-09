@@ -29,7 +29,7 @@ export interface DisputeSettled {
 
 const VERDICT_TAG: Record<string, { color: string; text: string }> = {
   key_error: { color: 'red', text: '复核结论：答案键错了' },
-  defective: { color: 'orange', text: '复核结论：题面有毛病' },
+  defective: { color: 'orange', text: '复核结论：题面有缺陷' },
   ok: { color: 'green', text: '复核结论：题与答案都没问题' },
 }
 
@@ -95,7 +95,7 @@ export default function DisputeModal(props: {
           ? `已改键并改判为对（补记 ${r.xp} XP）`
           : '已改键；原作答与新键仍不符，判罚维持')
       } else if (resolution === 'void') {
-        Message.success('本次判罚已作废（不入对错、XP 归零）；旧题将归档并按你的理由重出一题')
+        Message.success('本次判罚已作废（不入对错、XP 归零），旧题已归档；重出任务已入队')
       } else {
         Message.info('已豁免本题（不计对错、零 XP）；题目保留在复习调度里')
       }
@@ -181,8 +181,8 @@ export default function DisputeModal(props: {
             {review.verdict === 'defective' && (
               <Space size={8}>
                 <Popconfirm
-                  title='作废本题并重出？'
-                  content='本次判罚作废（不入对错、XP 归零）；旧题归档（可逆），AI 按你的理由为本节重出一道新题。'
+                  title='作废本题并归档重出？'
+                  content='本次判罚作废（不入对错、XP 归零），旧题立即归档（可逆）；AI 按你的理由为本节重出一道新题（入队生成）。'
                   onOk={() => void apply('void')}>
                   <Button type='primary' size='small' loading={applying}>作废本次判罚并归档重出</Button>
                 </Popconfirm>

@@ -591,12 +591,14 @@ export interface DisputeApplyResult {
   node: string
   qid: string
   resolution: 'rekey' | 'void' | 'overridden'
-  /** 落盘的冲正裁定（勘误流水 verdict）。 */
-  verdict: 'key-error' | 'defective' | 'overridden'
+  /** 落盘的冲正裁定（勘误流水 verdict，与复核三态同拼写）。 */
+  verdict: 'key_error' | 'defective' | 'overridden'
   /** rekey 时 = 原作答按新键重判的结果；void/overridden = null（作答作废，无对错）。 */
   correct_now: boolean | null
   /** 该作答冲正后的 XP 净值（读侧按此替换原记录）。 */
   xp: number
+  /** void 时 = 瑕疵题已随结算原子归档（重出走生成队列）。 */
+  archived?: boolean
   /** 冲正后的节点掌握度（口径 B 派生；无 frontmatter 时缺省）。 */
   mastery?: number
 }

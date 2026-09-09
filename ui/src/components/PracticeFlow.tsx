@@ -373,9 +373,10 @@ export default function PracticeFlow(props: {
     } : prev)
     props.onSettled()
     if (r.resolution === 'void') {
+      // 归档已随引擎结算原子落盘（ADR-0031）；这里只补重出：按申诉理由为本节定向出一道新题
+      // （入全局队列，可取消可重试；新题经外部题目集变化自动并入本题组）
       void (async () => {
         try {
-          await api.questionArchive(props.course, props.node, qid, true)
           await api.questionGenerate(props.course, props.node, 1, {
             ...(round?.sectionRef ? { section: round.sectionRef } : {}),
             ...(r.reason ? { instruction: `原题已因瑕疵被申诉作废，理由：${r.reason}。请避开该问题重出一道同类题` } : {}),

@@ -9,7 +9,7 @@
 import { Button, Dropdown, Input, Menu, Message, Modal, Space, Tag, Typography } from '@arco-design/web-react'
 import { useState } from 'react'
 import { api } from '../api'
-import DisputeModal from './DisputeModal'
+import DisputeModal, { isRuleKind } from './DisputeModal'
 import type { DisputeSettled } from './DisputeModal'
 import QuestionEditDrawer from './QuestionEditDrawer'
 
@@ -95,7 +95,9 @@ export default function QuestionMenu(props: {
         droplist={
           <Menu style={{ minWidth: 148 }}>
             <Menu.Item key='edit' onClick={() => setEditing(true)}>编辑本题</Menu.Item>
-            <Menu.Item key='dispute' onClick={() => setDisputeTarget(true)}>题目有误（申诉）</Menu.Item>
+            {isRuleKind(props.target.kind) && (
+              <Menu.Item key='dispute' onClick={() => setDisputeTarget(true)}>题目有误（申诉）</Menu.Item>
+            )}
             <Menu.Item key='regen' disabled={!props.target.section} onClick={() => setFeedbackOpen(true)}>
               提意见，重出一题
             </Menu.Item>

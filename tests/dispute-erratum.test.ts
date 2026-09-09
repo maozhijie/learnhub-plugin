@@ -74,7 +74,7 @@ test('rekey：新键重判原作答 → 改判对，XP 补记、对错/EMA 修�
     // 勘误流水留痕；原 practice 流水不改写（仍含原判错行）
     const errata = await engine.store.erratumAll()
     assert.equal(errata.length, 1)
-    assert.equal(errata[0].verdict, 'key-error')
+    assert.equal(errata[0].verdict, 'key_error')
     assert.equal(errata[0].correct, true)
     const practiceRaw = await readFile(engine.paths.practicePath, 'utf8')
     assert.match(practiceRaw, /"correct":false/)
@@ -87,9 +87,9 @@ test('rekey：新键重判原作答 → 改判对，XP 补记、对错/EMA 修�
   })
 })
 
-test('rekey：原作答也不符合新键 → 只修键，判罚维持', async () => {
+test('rekey：原作答也不符合新键 → 只修键，判罚与证据净零变动', async () => {
   await withVault({
-    notes: { 入门: { stage: 'ready' } },
+    notes: { 入门: { stage: 'ready', practice: { attempts: 0, correct: 0, ema: 0.7 } } },
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
     await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
@@ -102,6 +102,10 @@ test('rekey：原作答也不符合新键 → 只修键，判罚维持', async (
     assert.deepEqual(q.answer, ['B', 'C'])
     assert.equal(q.stats?.correct, 0, '新键下原作答仍不符，对错维持')
     assert.equal(q.stats?.attempts, 1)
+    // 证据净零：判罚维持时 EMA/attempts 不得被逆向调整（审查修复：只修键）
+    const note = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    assert.match(note, /attempts: 1/)
+    assert.match(note, /practice_ema: 0\.49/, 'EMA 维持答错后的 0.7×0.7，不撤步')
   })
 })
 
@@ -121,6 +125,7 @@ test('void：作答作废——XP 净值归零（乱猜罚返还）、attempts�
 
     const q = (await engine.bank.load(engine.paths.courseRoot('math'), '入门')).questions[0]
     assert.deepEqual(q.stats, { attempts: 0, correct: 0 }, '作废条从题目统计剔除')
+    assert.equal(q.archived, true, '瑕疵题归档随作废结算原子落盘（ADR-0031）')
     assert.deepEqual(q.fsrs, fsBefore, 'FSRS 不回滚（ADR-0031：调度误差自愈，review-log 不抹）')
 
     const note = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
@@ -194,6 +199,37 @@ test('没有判错记录的题不可申诉', async () => {
     )
   })
 })
+
+test('AI 判卷题型不走申诉（Q8 裁定：评分异议走讲解通道）', async () => {
+  await withVault({
+    notes: { 入门: { stage: 'ready' } },
+    banks: { 入门: `${bankTextReflection()}\n` },
+  }, async ({ engine }) => {
+    // reflection 判错（AI 判卷 0.2 分 < 0.6 及格线）
+    await engine.questionAnswer(async () => JSON.stringify({ score: 0.2, feedback: '不完整' }), '数学', '入门', 'a1', '我的回答', 30)
+    await assert.rejects(
+      () => engine.questionDisputeReview(async () => reviewReply('ok'), '数学', '入门', 'a1'),
+      /不走申诉/,
+    )
+    await assert.rejects(
+      () => engine.questionDisputeApply('数学', '入门', 'a1', 'void', {}),
+      /不走申诉/,
+    )
+    assert.equal((await engine.store.erratumAll()).length, 0)
+  })
+})
+
+/** reflection 题的题库 YAML（评分要点型 answer）。 */
+function bankTextReflection(): string {
+  return [
+    'node: 入门',
+    'questions:',
+    '  - id: a1',
+    '    kind: reflection',
+    '    q: 用自己的话解释这个概念。',
+    '    answer: 评分要点：概念准确、举例恰当。',
+  ].join('\n')
+}
 
 test('写入侧多选 ≥2 正确项门禁：addQuestion 拒收；生成路径拒收并报告；存量库照常可读', async () => {
   await withVault({
