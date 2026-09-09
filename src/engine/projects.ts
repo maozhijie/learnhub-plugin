@@ -11,7 +11,7 @@
  * 存在但坏 = Broken 抛出。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile, appendFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
 import { atomicWrite } from './store.ts'
@@ -20,6 +20,10 @@ import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 import type { Store } from './store.ts'
 import type { ProposalRec, JournalRec } from './types.ts'
+
+/** 项目日志文件头（V-5 #113：首次追加时落一次；说明口径与注册语义）。 */
+export const PROJECT_LOG_HEADER
+  = '# 项目日志\n\n> 学习者的自由项目记录：做了什么、卡在哪、学到了什么。引擎只提供落盘与注册，\n> 不替你写；经笔记源注册通道注册后可从这份日志出复习题（引擎对它只读+出题）。\n\n'
 
 export type ProjectLifecycle = 'active' | 'paused' | 'delivered' | 'archived'
 export const PROJECT_LIFECYCLES: ProjectLifecycle[] = ['active', 'paused', 'delivered', 'archived']
@@ -453,6 +457,29 @@ export class Projects {
       return { proposed: prop.id, kind: 'project_milestone', file }
     }
     return this.generateMilestone(projectId, milestoneId, md)
+  }
+
+  // ---- 项目日志（V-5 #113：学习者的自由项目记录，无界项目的「家」） ----
+
+  /** 追加一条日志（learner-authored：引擎事件不进日志——它是潜在的复习源素材，
+ * 机器流水各归各的文件）。文件缺失先落文件头。返回日志绝对路径。 */
+  async appendLog(projectId: string, text: string, day: string): Promise<string> {
+    await this.load(projectId) // Missing fail loud（日志挂在项目下，项目不存在就不能写）
+    const body = text.trim()
+    if (!body) throw new Error('[project-log] 日志内容不能为空。')
+    const p = this.paths.projectLogPath(projectId)
+    await mkdir(this.paths.projectDir(projectId), { recursive: true })
+    const header = existsSync(p) ? '' : PROJECT_LOG_HEADER
+    await appendFile(p, `${header}## ${day}\n\n${body}\n\n`, 'utf8')
+    return p
+  }
+
+  /** 读日志全文；未写过 = 合法空态（null，不建空文件——设计文档「预留位置，不强制建」）。 */
+  async readLog(projectId: string): Promise<string | null> {
+    await this.load(projectId)
+    const p = this.paths.projectLogPath(projectId)
+    if (!existsSync(p)) return null
+    return readFile(p, 'utf8')
   }
 
   // ---- 过点与对账（#94 / 设计 §5：过点是显式动作，无清单门禁、无题目门禁） ----

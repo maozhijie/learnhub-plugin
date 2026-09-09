@@ -9,19 +9,22 @@
  *   过信轻提示全局开关在记忆健康卡的 JOL 开关旁）
  * + Anki 通道区块（#63 C2，#72 UI 挂接：上次导出/回写、镜象卡组概况、
  *   AnkiConnect 可达性；导出/回写动作面板内直达。用词遵守 CONTEXT：不叫「同步」）
- * + 可用的困难教练（#65 E5：只读信息性反馈，低数据静默）。 */
-import { Alert, Button, Card, Collapse, InputNumber, Message, Space, Switch, Table, Tag, Tooltip, Typography } from '@arco-design/web-react'
+ * + 可用的困难教练（#65 E5：只读信息性反馈，低数据静默）
+ * + 周复盘 Weekly Kata（#114 U4 / ADR-0026：入口常驻、无推送、缺勤不罚——
+ *   现状引擎自动填，四问学习者作答；「下一实验」一键转 N-of-1 提案或执行意图）。 */
+import { Alert, Button, Card, Collapse, Input, InputNumber, Message, Modal, Select, Space, Switch, Table, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { toastError } from '../App'
 import type { AppFrame } from '../App'
 import type {
   AnkiExportResult, AnkiImportResult, AnkiStatusDoc, CalibrationHintsConfig, CalibrationProfileDoc,
-  CoachDoc, HistogramBin, JolConfig,
+  CoachDoc, ExperimentsDoc, HistogramBin, JolConfig, KataDoc,
   MemoryHealth, OptimizeResult, XpStatus,
 } from '../types'
 
 const { Text } = Typography
+const KATA_QUESTIONS = ['目标条件', '障碍', '下一实验', '预期所学'] as const
 
 const EMPTY_HINT = '暂无足够复习数据，继续学习将自动填充'
 
@@ -506,6 +509,160 @@ function CalibrationProfileCard({ profile }: { profile: CalibrationProfileDoc | 
   )
 }
 
+/** 周复盘 Weekly Kata（#114 U4 / ADR-0026）：全局每周一张的五问复盘。入口常驻
+ * （统计页 = 周视图家），无推送、缺勤不罚；现状引擎自动填（只读渲染），四问
+ * 学习者作答；「下一实验」一键转 N-of-1 提案（提案-确认制）或执行意图挂今日偏好。
+ * Learner Output 域：零 XP、不进掌握度、不做 FSRS 卡。 */
+function KataCard({ courseNames }: { courseNames: string[] }) {
+  const [kata, setKata] = useState<KataDoc | null>(null)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [exp, setExp] = useState<ExperimentsDoc | null>(null)
+  const [expTpl, setExpTpl] = useState<string | undefined>()
+  const [expCourse, setExpCourse] = useState<string | undefined>()
+  const [expModal, setExpModal] = useState(false)
+  const [intModal, setIntModal] = useState(false)
+  const [iCourse, setICourse] = useState<string | undefined>()
+  const [iNode, setINode] = useState('')
+  const [iCue, setICue] = useState('')
+  const [iAct, setIAct] = useState('')
+
+  const load = useCallback(async (week?: string) => {
+    try {
+      const doc = await api.kataOpen(week)
+      setKata(doc)
+      setAnswers(Object.fromEntries(KATA_QUESTIONS.map(q => [q, doc.sections[q] === '（待答）' ? '' : doc.sections[q] ?? ''])))
+    } catch (err) {
+      toastError(err)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const save = async () => {
+    if (!kata) return
+    setSaving(true)
+    try {
+      const doc = await api.kataSave(kata.week_start, answers)
+      setKata(doc)
+      Message.success(doc.answered ? '四问已齐——本周复盘完成' : '已保存（还有未答的问）')
+    } catch (err) {
+      toastError(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const convertExperiment = async () => {
+    if (!kata || !expTpl) return
+    try {
+      const r = await api.kataConvertExperiment(kata.week_start, expTpl, expCourse)
+      Message.success(`实验提案 #${r.proposal} 已发起——到实验室页确认后开跑`)
+      setExpModal(false)
+      await load(kata.week_start)
+    } catch (err) {
+      toastError(err)
+    }
+  }
+
+  const convertIntention = async () => {
+    if (!kata || !iCourse || !iNode.trim() || !iCue.trim() || !iAct.trim()) return
+    try {
+      await api.kataConvertIntention(kata.week_start, iCourse, iNode.trim(), iCue.trim(), iAct.trim())
+      Message.success('执行意图已挂上今天的目标偏好（随今日过期）')
+      setIntModal(false)
+      await load(kata.week_start)
+    } catch (err) {
+      toastError(err)
+    }
+  }
+
+  return (
+    <Card
+      size='small' title='周复盘 · 五问' style={{ borderRadius: 10 }}
+      extra={kata && (
+        <Space size={8}>
+          <Select size='mini' value={kata.week_start} onChange={v => void load(v)} style={{ width: 130 }}
+            placeholder='选择周'>
+            {(kata.list.map(x => x.week_start).includes(kata.week_start)
+              ? kata.list.map(x => x.week_start)
+              : [kata.week_start, ...kata.list.map(x => x.week_start)]
+            ).map(w => <Select.Option key={w} value={w}>{w} 那周</Select.Option>)}
+          </Select>
+          <Tag color={kata.answered ? 'green' : 'gray'} size='small'>{kata.answered ? '四问已齐' : '待作答'}</Tag>
+        </Space>
+      )}>
+      {kata === null ? <Text type='secondary'>加载中…</Text> : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            复盘对象：{kata.week_start} ~ {kata.week_end}（上一完整学习周，凌晨学习日按日界归属）·
+            记录落「我的产出/周复盘」，零 XP、可注册为复习源；无推送、缺勤不罚。
+          </Text>
+          <Collapse bordered={false} defaultActiveKey={['status']}>
+            <Collapse.Item name='status' header='现状（引擎自动填）'>
+              <pre style={{ margin: 0, fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{kata.reality}</pre>
+            </Collapse.Item>
+          </Collapse>
+          {KATA_QUESTIONS.map(q => (
+            <div key={q} style={{ display: 'grid', gap: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: 600 }}>
+                {q}{q === '下一实验' && <Text type='secondary' style={{ fontSize: 11 }}>（自由文本；可一键转实验提案或执行意图）</Text>}
+              </Text>
+              <Input.TextArea
+                value={answers[q] ?? ''}
+                placeholder={q === '目标条件' ? '上一周你想要达成什么？' : q === '障碍' ? '什么挡住了你？' : q === '下一实验' ? '下周试一个小改变' : '如果实验有效，你会看到什么？'}
+                onChange={v => setAnswers(a => ({ ...a, [q]: v }))}
+                autoSize={{ minRows: 2, maxRows: 6 }}
+              />
+            </div>
+          ))}
+          <Space size={8} wrap>
+            <Button size='small' type='primary' loading={saving} onClick={() => void save()}>保存四问</Button>
+            <Button size='small' disabled={!answers['下一实验']?.trim()} onClick={() => { void api.experiments().then(setExp).catch(() => setExp(null)); setExpModal(true) }}>转 N-of-1 提案</Button>
+            <Button size='small' disabled={!answers['下一实验']?.trim()} onClick={() => setIntModal(true)}>转执行意图</Button>
+          </Space>
+        </div>
+      )}
+      <Modal
+        title='「下一实验」转 N-of-1 实验提案' visible={expModal}
+        onCancel={() => setExpModal(false)}
+        footer={null}>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            发起的是待确认提案（提案-确认制）：到实验室页确认后才开跑。实验变量只允许引擎可控的内容参数。
+          </Text>
+          <Select placeholder='选择实验模板' value={expTpl} onChange={setExpTpl} style={{ width: '100%' }}>
+            {(exp?.templates ?? []).filter(t => t.unlocked).map(t => (
+              <Select.Option key={t.id} value={t.id}>{t.title}</Select.Option>
+            ))}
+          </Select>
+          <Select placeholder='范围：全部课程' value={expCourse} onChange={setExpCourse} allowClear style={{ width: '100%' }}>
+            {courseNames.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
+          </Select>
+          <Button type='primary' disabled={!expTpl} onClick={() => void convertExperiment()}>发起提案</Button>
+        </div>
+      </Modal>
+      <Modal
+        title='「下一实验」转执行意图' visible={intModal}
+        onCancel={() => setIntModal(false)}
+        footer={null}>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            「在【稳定线索】之后做【单一具体行动】」——挂上今天的目标偏好（推荐榜首），随今日过期。
+          </Text>
+          <Select placeholder='课程' value={iCourse} onChange={setICourse} style={{ width: '100%' }}>
+            {courseNames.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
+          </Select>
+          <Input placeholder='节点名（如：入门）' value={iNode} onChange={setINode} />
+          <Input placeholder='线索（时间/地点锚，如：早上刷完牙后）' value={iCue} onChange={setICue} />
+          <Input placeholder='单一具体行动（如：做 5 道到期复习）' value={iAct} onChange={setIAct} />
+          <Button type='primary' disabled={!iCourse || !iNode.trim() || !iCue.trim() || !iAct.trim()} onClick={() => void convertIntention()}>挂今日执行意图</Button>
+        </div>
+      </Modal>
+    </Card>
+  )
+}
+
 export default function StatsPage({ frame }: { frame: AppFrame }) {
   const [xp, setXp] = useState<XpStatus | null>(null)
   const [mem, setMem] = useState<MemoryHealth | null>(null)
@@ -586,6 +743,7 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
       {coach && coach.messages.length > 0 && (
         <Alert type='info' content={coach.messages.map(m => <div key={m}>{m}</div>)} />
       )}
+      <KataCard courseNames={frame.tree?.courses.map(c => c.name) ?? []} />
       <MemoryHealthCard mem={mem} jol={jol} hints={hints}
         onToggleJol={enabled => void toggleJol(enabled)}
         onRateJol={rate => void rateJol(rate)}

@@ -17,7 +17,7 @@
 import { Alert, Button, Input, Message, Radio, Select, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { InlineMd } from './MdView'
+import MdView, { InlineMd } from './MdView'
 import { api, explainInHost } from '../api'
 import DisputeModal, { isRuleKind } from './DisputeModal'
 import type { DisputeSettled } from './DisputeModal'
@@ -246,9 +246,12 @@ export default function QuestionCard(props: {
     startRef.current = Date.now()
   }
 
-  const openPlaceholder = q.kind === 'reflection'
-    ? '写下你的回答（AI 按评分要点判卷）'
-    : '写下你的综合应用回答（AI 按 10 分制批改，≥6 及格）'
+  // 文本作答占位符按题型分流：填空是代码判卷的唯一答案（ADR-0029），不复用开放题的 AI 批改文案
+  const textPlaceholder = q.kind === 'fill_in_blank'
+    ? '输入答案'
+    : q.kind === 'reflection'
+      ? '写下你的回答（AI 按评分要点判卷）'
+      : '写下你的综合应用回答（AI 按 10 分制批改，≥6 及格）'
 
   return (
     <div style={{
@@ -326,7 +329,7 @@ export default function QuestionCard(props: {
       {isText && (
         <Input.TextArea
           value={text} onChange={setText}
-          placeholder={openPlaceholder}
+          placeholder={textPlaceholder}
           autoSize={{ minRows: q.kind === 'open_question' ? 4 : 1, maxRows: 10 }} disabled={!!outcome} />
       )}
 
@@ -404,8 +407,10 @@ export default function QuestionCard(props: {
               borderLeft: `3px solid ${outcome.correct === true ? 'var(--color-success-6,#00b42a)' : outcome.correct === false ? 'var(--color-danger-6,#f53f3f)' : 'var(--color-border-2,#e5e6eb)'}`,
               background: outcome.correct === true ? 'var(--color-success-light-1,#e8ffea)' : outcome.correct === false ? 'var(--color-danger-light-1,#ffece8)' : 'var(--color-fill-1,#f7f8fa)',
               borderRadius: '0 6px 6px 0', padding: '8px 12px',
-              fontSize: 14, lineHeight: 1.7,
-            }}><InlineMd text={outcome.feedback} /></div>
+            }}>
+              {/* 解析是分点/短段的三段结构（含块级公式），走块级 markdown 渲染而非行内 */}
+              <MdView md={outcome.feedback} className='quiz-feedback' />
+            </div>
           )}
           {/* 正确答案 + 差异点名（ADR-0031）：判错必须让学习者对上自己的作答——
             * 只给静态解析、不公布键，学习者只能反推键是什么（q13 误诊的根源） */}
@@ -475,10 +480,10 @@ export function RevealCard(props: {
       {q.explanation && (
         <div style={{
           borderLeft: '3px solid var(--color-border-3,#c9cdd4)', background: 'var(--color-fill-1,#f7f8fa)',
-          borderRadius: '0 6px 6px 0', padding: '8px 12px', fontSize: 13, lineHeight: 1.7,
+          borderRadius: '0 6px 6px 0', padding: '8px 12px',
         }}>
           <Text type='secondary'>解析：</Text>
-          <InlineMd text={q.explanation} />
+          <MdView md={q.explanation} className='quiz-feedback' />
         </div>
       )}
       <Space size={8} style={{ alignSelf: 'flex-end' }}>

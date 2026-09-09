@@ -988,3 +988,25 @@ export interface ProjectCrossDoc {
   events: ProjectExecRec[]
   thresholds: { axis: number; promote_min_events: number; promote_score: number; demote_score: number }
 }
+
+// ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）----
+
+/** 周复盘打开/保存的返回（五问结构 + 已有记录清单；sections 含引擎填的现状）。 */
+export interface KataDoc {
+  date: string
+  /** 复盘对象学习周（周一–周日，学习日折叠口径）。 */
+  week_start: string
+  week_end: string
+  /** 记录文件绝对路径（我的产出/周复盘/<周一>.md）。 */
+  path: string
+  /** 本次是否新建（false = 打开已有记录，四问保留）。 */
+  created: boolean
+  /** 引擎现算的现状段正文（渲染后的 markdown）。 */
+  reality: string
+  /** 五问各问正文（含占位）。 */
+  sections: Record<string, string>
+  /** 四问是否都已作答。 */
+  answered: boolean
+  /** 已有复盘清单（常驻入口面）。 */
+  list: Array<{ week_start: string; answered: boolean }>
+}

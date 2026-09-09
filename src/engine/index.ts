@@ -32,6 +32,12 @@ import { retentionBand, bandDistribution, execRatingDistribution, thermostatSugg
 import type { ThermostatDoc, ThermostatSuggestion } from './thermostat.ts'
 import { SANDBOX_RUNS, SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING, simulateRun, aggregateRuns } from './sandbox.ts'
 import type { SandboxDoc, SandboxCard, SandboxNode, SandboxPlan } from './sandbox.ts'
+import {
+  KATA_KIND, KATA_EMPTY, KATA_LEARNER_QUESTIONS, weekStartOf, weekEndOf, prevWeekStartOf,
+  buildKataReality, renderKataReality, assembleKataDoc, parseKataBody, kataAnswered,
+} from './kata.ts'
+import type { KataAnswer, KataQuestion } from './kata.ts'
+import { writeOutputArtifact, obsidianLink } from './output.ts'
 import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, withinCoachWindow } from './coach.ts'
 import type { BandRec } from './coach.ts'
 import { calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
@@ -59,7 +65,7 @@ import { decompileGoalOf, decompileRepairPrompt, decompileTerms, splitDecompileD
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
-import { QuestionBank, questionAnswerShapeError } from './question-bank.ts'
+import { QuestionBank, questionAnswerShapeError, validateBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
 import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, isExcludedPath, normalizeSourcePath, readNoteSourceExcludes, sourceHint, stripFrontmatter, titleOfBody, writeNoteSourceExcludes } from './note-source.ts'
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
@@ -86,6 +92,8 @@ import { atomicWrite, netPracticeRecs } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence, answerDiff, DISPUTE_REVIEW_SYSTEM, parseDisputeReview } from './grading.ts'
 import type { DisputeVerdict } from './grading.ts'
 import { findDuplicateStem, existingStemsPromptBlock, bankStemList } from './question-dedup.ts'
+import { repairQuestionStrings, questionViolation, auditQuestion } from './question-hygiene.ts'
+import type { QuestionAuditReport } from './question-hygiene.ts'
 import { parseSectionTitle } from '../../shared/content-renderers.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration, milestonePrice } from './xp.ts'
 import { XP_STREAK_GRACE_DAYS, XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID, CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
@@ -104,6 +112,7 @@ import type {
   NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
   XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, ProjectExecBackflow,
+  KataDoc,
 } from './views.ts'
 
 /** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
@@ -119,6 +128,14 @@ function shuffled<T>(items: T[]): T[] {
 /** 评估指标等小数的 4 位舍入（落盘元数据与文案共用）。 */
 function round4(x: number): number {
   return Math.round(x * 10000) / 10000
+}
+
+/** 周复盘的周参数校验（周一锚定；非法 fail loud）。 */
+function kataMonday(weekStart: string): string {
+  if (typeof weekStart !== 'string' || weekStartOf(weekStart) !== weekStart) {
+    throw new Error(`[kata] weekStart 必须是某周的周一 'YYYY-MM-DD'（收到 ${String(weekStart)}）。`)
+  }
+  return weekStart
 }
 
 /** 节标题归一化（#117 定向补题的归类口径，与前端会话 normSection 同款）：
@@ -294,6 +311,57 @@ export class LearnhubEngine {
   /** 只读数据体检：盘点 Missing/Broken，不做任何修复或清理。 */
   async dataCheck(): Promise<DataCheckReport> {
     return dataCheck(this.paths)
+  }
+
+  /** 题库内容体检（ADR-0029/0030 存量盘点）：只读扫描全部课程题库与笔记源镜像题库，
+   * 按现行契约标出违规存量题——表达式/数字填空、记法违规（裸 ^/_/LaTeX 命令）、
+   * 转义损坏、超长解析。零写入零修复，清单供人工决定走归档重生成/定向补题。 */
+  async questionAudit(): Promise<QuestionAuditReport> {
+    const report: QuestionAuditReport = { banks: 0, questions: 0, flagged: 0, findings: [] }
+    const scanBankFile = async (courseName: string, path: string): Promise<void> => {
+      let text: string
+      try {
+        text = await readFile(path, 'utf8')
+      } catch {
+        return // 读不到的损坏档归 dataCheck 管，这里只盘点可解析题库
+      }
+      let doc: unknown
+      try {
+        doc = YAML.parse(text)
+      } catch {
+        return
+      }
+      const v = validateBank(doc)
+      if (v.errors || !v.spec) return
+      report.banks++
+      for (const q of v.spec.questions) {
+        report.questions++
+        const issues = auditQuestion(q)
+        if (issues.length) {
+          report.flagged++
+          report.findings.push({ course: courseName, node: v.spec.node, id: q.id, kind: q.kind, q: q.q.slice(0, 80), issues })
+        }
+      }
+    }
+    for (const entry of await this.registry.load()) {
+      const dir = `${this.paths.courseRoot(entry.root)}/题库`
+      let files: string[] = []
+      try {
+        files = (await readdir(dir)).filter(f => f.endsWith('.yaml'))
+      } catch {
+        continue // 课程还没有题库 = 合法空
+      }
+      for (const f of files) await scanBankFile(entry.name, `${dir}/${f}`)
+    }
+    const nsDir = `${this.paths.noteSourceDir}/题库`
+    try {
+      for (const f of (await readdir(nsDir)).filter(f => f.endsWith('.yaml'))) {
+        await scanBankFile('（笔记源镜像）', `${nsDir}/${f}`)
+      }
+    } catch {
+      // 无笔记源镜像 = 合法空
+    }
+    return report
   }
 
   async statusJson(): Promise<StatusDoc> {
@@ -798,6 +866,42 @@ export class LearnhubEngine {
 
   async projectShow(id: string): Promise<ProjectView> {
     return this.projects.view(id)
+  }
+
+  /** 追加一条项目日志（V-5 #113）：学习者自由记录；日志可经笔记源注册通道注册为
+   * 复习源，引擎写入后顺带刷新已注册指纹（自己的写不算漂移）。 */
+  async projectLogAppend(id: string, text: string, today?: string): Promise<{ project: string; path: string; day: string }> {
+    const { today: day } = await this.learningDay()
+    today ??= day
+    const p = await this.projects.appendLog(id, text, today)
+    await this.refreshSourceFingerprints([p])
+    return { project: id, path: p, day: today }
+  }
+
+  /** 读项目日志全文（未写过 = null 合法空态，不建空文件）。 */
+  async projectLog(id: string): Promise<{ project: string; path: string; log: string | null }> {
+    return { project: id, path: this.paths.projectLogPath(id), log: await this.projects.readLog(id) }
+  }
+
+  /** 引擎写「注册豁免区」文件（我的产出/、项目日志）后刷新已注册源指纹（#107/#113）：
+   * 引擎自己的写不算内容漂移——漂移语义只留给引擎之外的手改。该路径未注册或文件
+   * 缺失时静默跳过（刷新是写侧卫生步骤，不是独立动作）。 */
+  private async refreshSourceFingerprints(absPaths: string[]): Promise<void> {
+    if (!absPaths.length) return
+    const rels = absPaths.map(p => p.replace(/\\/g, '/').slice(this.vaultRoot.length + 1))
+    const manifest = await this.noteManifest.load()
+    let changed = false
+    for (const item of manifest.sources) {
+      if (!rels.includes(item.path)) continue
+      const abs = `${this.vaultRoot}/${item.path}`
+      if (!existsSync(abs)) continue
+      const fp = fingerprintOf(await readFile(abs, 'utf8'))
+      if (fp !== item.fingerprint) {
+        item.fingerprint = fp
+        changed = true
+      }
+    }
+    if (changed) await this.noteManifest.save(manifest)
   }
 
   /** 生命周期变更（ADR-0015：无不可逆转移，任意状态可重开回 active）。 */
@@ -3270,6 +3374,162 @@ export class LearnhubEngine {
     return { experiment: hit, analysis }
   }
 
+  // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）----
+
+  /** 周复盘记录定位（<输出区>/周复盘/<周一>.md）。 */
+  private kataPath(weekStart: string): string {
+    return `${this.paths.outputKindDir('周复盘')}/${weekStart}.md`
+  }
+
+  /** 打开/发起周复盘：复盘对象 = 上一完整学习周（可显式指定更早的完整周补记）。
+   * 现状 = 引擎用该学习周真实数据现算重填（引擎段）；四问保留学习者已写内容。
+   * 文件缺失即建（入口常驻、无推送、缺勤不罚）。weekStart 必须是周一且不晚于
+   * 上一完整周——复盘只向后看，不预填未来。零 XP、零 canonical 写入。 */
+  async kataOpen(weekStart?: string): Promise<KataDoc> {
+    const { today, cutoff } = await this.learningDay()
+    const target = kataMonday(weekStart ?? prevWeekStartOf(today) ?? '')
+    const prev = prevWeekStartOf(today)!
+    if (target > prev) {
+      throw new Error(`[kata] 复盘对象是已完整结束的学习周：${prev} 起的那一周是最近的完整周。`)
+    }
+    const weekEnd = weekEndOf(target)!
+    const reality = renderKataReality(await this.kataRealityFor(target, weekEnd, cutoff))
+    const path = this.kataPath(target)
+    let sections: Record<KataQuestion, string>
+    let created: boolean
+    if (existsSync(path)) {
+      const { fm, body } = await loadNote(path)
+      sections = parseKataBody(body)
+      sections['现状'] = reality // 引擎段随开随新；四问原样保留
+      created = false
+      await this.kataWriteDoc(path, target, weekEnd, reality, sections, String(fm.created ?? today))
+    } else {
+      sections = parseKataBody(assembleKataDoc({ weekStart: target, weekEnd, created: today, reality, answers: {} }))
+      created = true
+      await this.kataWriteDoc(path, target, weekEnd, reality, sections, today)
+    }
+    await this.refreshSourceFingerprints([path])
+    return {
+      date: today, week_start: target, week_end: weekEnd, path, created,
+      reality, sections, answered: kataAnswered(sections),
+      list: await this.kataList(),
+    }
+  }
+
+  /** 保存四问作答（patch 语义：给出的键才写；值 trim 后空 = 退回占位）。「现状」是
+   * 引擎段，不接受学习者改写——要改数据事实，去补做学习行为。 */
+  async kataSave(weekStart: string, answers: Partial<Record<KataAnswer, string>>): Promise<KataDoc> {
+    const { today } = await this.learningDay()
+    const target = kataMonday(weekStart)
+    const path = this.kataPath(target)
+    if (!existsSync(path)) {
+      throw new Error(`[kata] 该周还没有复盘记录（${path}）——先 learnhub_kata_open 发起。`)
+    }
+    const { body } = await loadNote(path)
+    const sections = parseKataBody(body)
+    const reality = sections['现状']
+    for (const q of KATA_LEARNER_QUESTIONS) {
+      if (answers[q] === undefined) continue
+      sections[q] = answers[q]!.trim() || KATA_EMPTY
+    }
+    await this.kataWriteDoc(path, target, weekEndOf(target)!, reality, sections, today)
+    await this.refreshSourceFingerprints([path])
+    return {
+      date: today, week_start: target, week_end: weekEndOf(target)!, path, created: false,
+      reality, sections, answered: kataAnswered(sections), list: await this.kataList(),
+    }
+  }
+
+  /** 「下一实验」一键转 N-of-1 实验提案（ADR-0023 的自然入口）：走 experimentPropose
+   * 提案-确认制（确认仍要显式 apply）；提案号留痕写回复盘记录。 */
+  async kataToExperiment(weekStart: string, templateId: string, course?: string): Promise<{ proposal: number; title: string; week_start: string }> {
+    const target = kataMonday(weekStart)
+    const path = this.kataPath(target)
+    if (!existsSync(path)) throw new Error('[kata] 该周还没有复盘记录——先 learnhub_kata_open 发起。')
+    const prop = await this.experimentPropose(templateId, course)
+    await this.stampKata(path, target, `- 已转 N-of-1 实验提案 #${prop.proposal}（${prop.title}）——确认开跑走实验 apply 通道。`)
+    return { proposal: prop.proposal, title: prop.title, week_start: target }
+  }
+
+  /** 「下一实验」一键转执行意图挂今日目标偏好（C-5 既有机制）：pin 节点为今日榜首
+   * 并挂 if-then 意图（随 pin 当日过期）；留痕写回复盘记录。零 XP 零 canonical。 */
+  async kataToIntention(
+    weekStart: string, input: { course: string; node: string; cue: string; action: string },
+  ): Promise<{ course: string; node: string; week_start: string }> {
+    const target = kataMonday(weekStart)
+    const path = this.kataPath(target)
+    if (!existsSync(path)) throw new Error('[kata] 该周还没有复盘记录——先 learnhub_kata_open 发起。')
+    await this.pinToday(input.course, input.node, undefined, { cue: input.cue, action: input.action })
+    await this.stampKata(path, target, `- 已挂今日执行意图（${input.node}：「${input.cue.trim()}」之后 ${input.action.trim()}）。`)
+    return { course: input.course, node: input.node, week_start: target }
+  }
+
+  /** 已有复盘清单（周一起排序；answered 现读现判——入口常驻的清单面）。 */
+  async kataList(): Promise<Array<{ week_start: string; answered: boolean }>> {
+    const dir = this.paths.outputKindDir('周复盘')
+    if (!existsSync(dir)) return []
+    const out: Array<{ week_start: string; answered: boolean }> = []
+    for (const f of (await readdir(dir)).filter(f => f.endsWith('.md')).sort()) {
+      try {
+        const { body } = await loadNote(`${dir}/${f}`)
+        const sections = parseKataBody(body)
+        const fmWeek = /^#\s*周复盘\s+(\d{4}-\d{2}-\d{2})/.exec(body)?.[1]
+        out.push({ week_start: fmWeek ?? f.replace(/\.md$/, ''), answered: kataAnswered(sections) })
+      } catch {
+        // 坏记录不阻塞清单（它是文档不是契约文件）；open 单独打开时会 fail loud
+      }
+    }
+    return out
+  }
+
+  /** 上一学习周的真实数据聚合（现状引擎段的原料；全部只读）。 */
+  private async kataRealityFor(weekStart: string, weekEnd: string, cutoff: number) {
+    const [practice, journal, reviewLog, habitRepeats] = await Promise.all([
+      this.store.practiceAll(),
+      this.store.journalTail(null, Number.MAX_SAFE_INTEGER),
+      this.store.reviewLogAll(),
+      this.store.habitRepeatsAll(),
+    ])
+    const projects = (await this.projects.list()).filter(p => p.lifecycle === 'active')
+    const projectExec: Record<string, ProjectExecRec[]> = {}
+    for (const p of projects) projectExec[p.id] = await execRecsAll(this.paths, p.id)
+    const noteSources: Record<string, { path: string; title?: string }> = {}
+    for (const s of (await this.noteManifest.load()).sources) {
+      noteSources[s.id] = { path: s.path, ...(s.title ? { title: s.title } : {}) }
+    }
+    const habitNames: Record<string, string> = {}
+    for (const h of (await this.habits.list()).habits) habitNames[h.habit] = h.name
+    const skillNames: Record<string, string> = {}
+    for (const s of (await this.skills.list()).skills) skillNames[s.skill] = s.name
+    return buildKataReality({
+      weekStart, weekEnd, cutoffMin: cutoff,
+      practice, journal, reviewLog, habitRepeats, projects, projectExec, noteSources, habitNames, skillNames,
+    })
+  }
+
+  /** 落盘一份五问记录（我的产出/周复盘/<周一>.md；created/updated 出处戳用日历日）。 */
+  private async kataWriteDoc(
+    path: string, weekStart: string, weekEnd: string,
+    reality: string, sections: Record<KataQuestion, string>, created: string,
+  ): Promise<void> {
+    const body = assembleKataDoc({ weekStart, weekEnd, created, reality, answers: sections })
+    await writeOutputArtifact(this.paths, {
+      kind: '周复盘', file: `${weekStart}.md`,
+      fm: { kind: KATA_KIND, week_start: weekStart, week_end: weekEnd, created, updated: todayStr() },
+      body,
+    })
+  }
+
+  /** 「下一实验」出口留痕：目标小节追加一行转换记录（其余内容不动）。 */
+  private async stampKata(path: string, weekStart: string, line: string): Promise<void> {
+    const { fm, body } = await loadNote(path)
+    const sections = parseKataBody(body)
+    const reality = sections['现状']
+    sections['下一实验'] = `${sections['下一实验'].trim()}\n\n${line}`.trim()
+    await this.kataWriteDoc(path, weekStart, weekEndOf(weekStart)!, reality, sections, String(fm.created ?? todayStr()))
+    await this.refreshSourceFingerprints([path])
+  }
+
   // ---- D2 挑战点恒温器（#111 / ADR-0024：跨区观测聚合 + 只读建议，非自动控制器）----
 
   /** A1 目标难度带默认值（state/learnhub.json 的 band_default；null = 纯 A1 自动）。
@@ -3913,7 +4173,7 @@ export class LearnhubEngine {
     if (!note.fm) throw new Error('[receipt-submit] 节点笔记缺 frontmatter，无法入练习证据 EMA。')
     const points = await this.explainPoints(c, graph, node)
     const { today } = await this.learningDay()
-    return submitReceipt({
+    const result = await submitReceipt({
       store: this.store,
       course: c.name, node,
       kind, material,
@@ -3925,6 +4185,49 @@ export class LearnhubEngine {
       llm,
       template: await this.loadPrompt('回执评审'),
     })
+    // 回执的项目工作区镜像（V-5 #113）：里程碑计划关联了本节点（nodes 命中节点名
+    // 或「课程/节点」）的项目各得一份可读副本；canonical 流水仍是中心回执.jsonl，
+    // 镜像只是「无界项目也有家」的文档面。零 XP/EMA 语义不受影响。
+    const mirrored = await this.mirrorReceiptToProjects(c.name, node, result.receipt, material)
+    return { ...result, ...(mirrored.length ? { mirrored_projects: mirrored } : {}) }
+  }
+
+  /** 关联节点回执 → 项目工作区可读副本（V-5 #113）：返回镜像到的项目 id 列表。 */
+  private async mirrorReceiptToProjects(
+    courseName: string, node: string, rec: ReceiptLogRec, material: string,
+  ): Promise<string[]> {
+    const specs = new Set([node, `${courseName}/${node}`])
+    const out: string[] = []
+    for (const p of await this.projects.list()) {
+      if (!p.plan.some(m => (m.nodes ?? []).some(n => specs.has(n)))) continue
+      const dir = this.paths.projectReceiptDir(p.id)
+      await mkdir(dir, { recursive: true })
+      const file = `${safeFilename(courseName)}-${safeFilename(node)}-${safeFilename(rec.id)}.md`
+      const lines = [
+        '---',
+        `kind: receipt`,
+        `subject: ${courseName}/${node}`,
+        `receipt: ${rec.id}`,
+        `day: ${rec.day}`,
+        `score: ${rec.score}`,
+        `review_mode: ${rec.review_mode}`,
+        '---',
+        '',
+        '## 回执材料',
+        '',
+        material,
+        '',
+        '## 评审',
+        '',
+        rec.verdict,
+      ]
+      for (const e of rec.errors ?? []) {
+        lines.push(`- **${e.point}**：${e.issue} → ${e.advice}`)
+      }
+      await writeFile(`${dir}/${file}`, lines.join('\n').trimEnd() + '\n', 'utf8')
+      out.push(p.id)
+    }
+    return out
   }
 
   /** 回执历史 + 渐退计划状态（per 实践主体）。 */
@@ -4523,6 +4826,8 @@ export class LearnhubEngine {
     course: string; node: string; added: number; skipped: number; total: number
     duplicates: Array<{ q: string; against: string }>
     rejected: Array<{ q: string; reason: string }>
+    /** 转义损坏修复处数（ADR-0030：确定性修复留痕，不静默）。 */
+    escapesRepaired: number
   }> {
     if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
       throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认。`)
@@ -4573,6 +4878,7 @@ export class LearnhubEngine {
     // doc.node 只是模型对节点的复述（常自创短名），落盘位置由入参决定，不作硬校验
     let added = 0
     let skipped = 0
+    let escapesRepaired = 0
     const duplicates: Array<{ q: string; against: string }> = []
     const rejected: Array<{ q: string; reason: string }> = []
     for (const item of doc.questions.slice(0, requested)) {
@@ -4580,7 +4886,17 @@ export class LearnhubEngine {
       const q = { ...(item as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有题数自动编号，避免与既有 q1 冲突
       if (opts?.generic) q.section = '通用' // 综合题不绑节（轮装配时统一收尾）
+      // 题目卫生（ADR-0029/0030）：先确定性修复转义损坏（计数留痕），修不好或记法/边界违规的题拒收
+      const hygiene = repairQuestionStrings(q)
+      escapesRepaired += hygiene.repaired
       const stem = typeof q.q === 'string' ? q.q : ''
+      const violation = hygiene.unrepairable
+        ? '题面含无法修复的转义损坏（控制字符）——YAML 双引号吃掉了 LaTeX 转义'
+        : questionViolation(q)
+      if (violation) {
+        rejected.push({ q: stem.slice(0, 80), reason: violation })
+        continue
+      }
       // 定向补生成强校验（#117）：不符先按标题归一化回填，仍无法归类拒收并报告
       if (opts?.section) {
         const sec = typeof q.section === 'string' ? q.section : ''
@@ -4614,9 +4930,9 @@ export class LearnhubEngine {
         skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
       }
     }
-    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/重复/无法归节），一道都没入库。')
+    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/记法违规/重复/无法归节），一道都没入库。')
     const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected }
+    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected, escapesRepaired }
   }
 
   /** 逐节出题（逐节管线第 2 段）：每个内容节一次模型调用（出题量随档位锚点：
@@ -4626,7 +4942,7 @@ export class LearnhubEngine {
   async questionGenerateSections(
     courseKey: string | undefined, node: string,
     llm: (prompt: string) => Promise<string>,
-  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number }> {
+  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number }> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -4656,6 +4972,7 @@ export class LearnhubEngine {
     let added = 0
     let sections = 0
     let duplicates = 0
+    let escapesRepaired = 0
     for (const s of manifest) {
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
@@ -4678,7 +4995,11 @@ export class LearnhubEngine {
       for (const rawQ of doc.questions) {
         const q: Record<string, unknown> = { ...((rawQ ?? {}) as Record<string, unknown>), section: s.id }
         delete q.id
+        // 题目卫生（ADR-0029/0030）：转义修复留痕，修不好或记法/边界违规的题丢弃
+        const hygiene = repairQuestionStrings(q)
+        escapesRepaired += hygiene.repaired
         const stem = typeof q.q === 'string' ? q.q : ''
+        if (hygiene.unrepairable || questionViolation(q)) continue
         if (findDuplicateStem(stem, existingStems)) { duplicates++; continue }
         try {
           await this.bank.addQuestion(this.paths.courseRoot(c.root), node, q)
@@ -4689,7 +5010,7 @@ export class LearnhubEngine {
         }
       }
     }
-    return { course: c.name, node, added, sections, duplicates }
+    return { course: c.name, node, added, sections, duplicates, escapesRepaired }
   }
 
   /** 交互件成绩结算：面板 sandbox iframe 上报 LEARNHUB_COMPLETE → practice 流水 +

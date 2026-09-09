@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：89 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
+ * - agent 工具面：97 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -1013,6 +1013,19 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/project/cross', () => engine.projectCrossView(id)))
       return
     }
+    if (req.method === 'GET' && route === '/project/log') {
+      // 项目日志读面（V-5 #113）：未写过 = null 合法空态
+      const id = url.searchParams.get('id')
+      if (!id) throw new Error('missing required field: id')
+      sendJson(res, 200, await apiRun('api/project/log', () => engine.projectLog(id)))
+      return
+    }
+    if (req.method === 'GET' && route === '/kata') {
+      // 周复盘打开/发起（U-4 #114）：缺省 = 上一完整学习周；现状引擎现算重填，四问保留
+      const week = url.searchParams.get('week_start') ?? undefined
+      sendJson(res, 200, await apiRun('api/kata', () => engine.kataOpen(week)))
+      return
+    }
     if (req.method === 'POST') {
       const body = await readJson(req)
       if (route === '/habits/create') {
@@ -1459,6 +1472,36 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         })))
         return
       }
+      if (route === '/project/log') {
+        // 项目日志追加（V-5 #113）：学习者自由条目，学习日归属引擎定
+        sendJson(res, 200, await apiRun('api/project/log', () =>
+          engine.projectLogAppend(need(body, 'id'), need(body, 'text'))))
+        return
+      }
+      if (route === '/kata/save') {
+        // 周复盘四问保存（U-4 #114）：patch 语义，现状引擎段不可写
+        const answers = typeof body.answers === 'object' && body.answers !== null
+          ? body.answers as Record<string, string> : {}
+        sendJson(res, 200, await apiRun('api/kata/save', () =>
+          engine.kataSave(need(body, 'week_start'), answers as never)))
+        return
+      }
+      if (route === '/kata/convert/experiment') {
+        // 「下一实验」一键转 N-of-1 提案（U-4↔D-1）
+        const course = typeof body.course === 'string' && body.course.trim() ? body.course.trim() : undefined
+        sendJson(res, 200, await apiRun('api/kata/convert/experiment', () =>
+          engine.kataToExperiment(need(body, 'week_start'), need(body, 'template'), course)))
+        return
+      }
+      if (route === '/kata/convert/intention') {
+        // 「下一实验」一键转执行意图挂今日目标偏好（U-4↔C-5）
+        sendJson(res, 200, await apiRun('api/kata/convert/intention', () =>
+          engine.kataToIntention(need(body, 'week_start'), {
+            course: need(body, 'course'), node: need(body, 'node'),
+            cue: need(body, 'cue'), action: need(body, 'action'),
+          })))
+        return
+      }
     }
     if (req.method === 'PUT') {
       const body = await readJson(req)
@@ -1581,6 +1624,9 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   tool('learnhub_data_check',
     'Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.',
     {}, () => run('learnhub_data_check', async () => JSON.stringify(await engine.dataCheck())))
+  tool('learnhub_question_audit',
+    'Read-only content audit of all question banks (course banks + note-source mirror). Flags legacy questions that violate current contracts: fill_in_blank answers that look numeric or algebraic (ADR-0029 unique-answer blanks), notation violations in stem/options/explanation (bare ^ or _ outside $...$, LaTeX commands without $ delimiters), YAML double-quote escape corruption (control characters), and over-long explanations. Returns a JSON findings list; never repairs or writes.',
+    {}, () => run('learnhub_question_audit', async () => JSON.stringify(await engine.questionAudit())))
   tool('learnhub_skip',
     'Mark a node as skipped (learner already knows it) or un-skip. Skipped nodes count as passed: they leave the recommendation queue and no longer block successors.',
     {
@@ -1690,6 +1736,40 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { id: { type: 'number', description: 'Experiment id; omit for the running (or latest) one' } },
     (args: { id?: number }) => run('learnhub_experiment_report', async () =>
       JSON.stringify(await engine.experimentReport(args.id))))
+  tool('learnhub_kata_open',
+    'Open the Weekly Kata (U-4, ADR-0026 — the global once-per-week five-question debrief where the bounded area [course overview + one section per active project] meets the unbounded area [habits + skill entries]): the review target is the LAST COMPLETE learning week (calendar week folded by learning days; early-morning sessions roll back over the day cutoff). The「现状」section is auto-filled by the engine from that week\'s REAL data (XP, answers/accuracy, true retention, per-project milestone passes and exec events, habit repeats, skill executions, note-source reviews with [[links]] back to the personal notes); the other four questions (目标条件/障碍/下一实验/预期所学) are the LEARNER\'S to answer — ask them, never answer for them. The record lands in 学习中心/我的产出/周复盘/<Monday>.md (V-3 output zone; registrable as a Note Source). Learner Output domain: zero XP, no Mastery, no FSRS card, zero canonical writes; no reminders, missing a week is never penalized.',
+    { week_start: { type: 'string', description: 'Monday YYYY-MM-DD of the week to review; omit for the most recent complete week' } },
+    (args: { week_start?: string }) => run('learnhub_kata_open', async () =>
+      JSON.stringify(await engine.kataOpen(args.week_start))))
+  tool('learnhub_kata_save',
+    'Save the learner\'s answers to the four learner questions of a Weekly Kata record (现状 is engine-owned and cannot be written here — facts come from behavior). Patch semantics: only provided keys are written; empty string resets a question to unanswered. Use this after the learner answers out loud, or point them at the panel/obsidian file to write directly.',
+    {
+      week_start: { type: 'string', required: true, description: 'Monday YYYY-MM-DD of the record' },
+      answers: { type: 'object', required: true, description: 'Partial map: 目标条件/障碍/下一实验/预期所学 → learner\'s own words' },
+    },
+    (args: { week_start: string; answers: Record<string, string> }) => run('learnhub_kata_save', async () =>
+      JSON.stringify(await engine.kataSave(args.week_start, args.answers as never))))
+  tool('learnhub_kata_convert_experiment',
+    'One-click exit from the Kata\'s「下一实验」to an N-of-1 experiment proposal (U-4↔D-1 interface): files the SAME proposal-confirm flow as learnhub_experiment_propose (nothing starts by itself) and stamps the proposal number into the Kata record. Requires the week\'s record to exist (learnhub_kata_open first).',
+    {
+      week_start: { type: 'string', required: true, description: 'Monday YYYY-MM-DD of the record' },
+      template: { type: 'string', required: true, description: 'Template id from learnhub_experiment_templates' },
+      course: { type: 'string', description: 'Scope to one course; omit for all enabled courses' },
+    },
+    (args: { week_start: string; template: string; course?: string }) => run('learnhub_kata_convert_experiment', async () =>
+      JSON.stringify(await engine.kataToExperiment(args.week_start, args.template, args.course))))
+  tool('learnhub_kata_convert_intention',
+    'One-click exit from the Kata\'s「下一实验」to an Execution Intention pinned to TODAY\'S goal preference (U-4↔C-5 interface): pins the chosen node to the top of today\'s recommendations carrying the if-then plan (cue = stable time/place anchor, action = ONE concrete act; format is locked and validated) and stamps the record. The pin expires with the day — the intention lives on today\'s read-side only.',
+    {
+      week_start: { type: 'string', required: true, description: 'Monday YYYY-MM-DD of the record' },
+      course: { type: 'string', required: true, description: 'Course name of the target node' },
+      node: { type: 'string', required: true, description: 'Node to pin today' },
+      cue: { type: 'string', required: true, description: 'Stable cue (time/place anchor), e.g. 早上刷完牙后' },
+      action: { type: 'string', required: true, description: 'Single concrete action, e.g. 做 5 道到期复习' },
+    },
+    (args: { week_start: string; course: string; node: string; cue: string; action: string }) => run('learnhub_kata_convert_intention', async () =>
+      JSON.stringify(await engine.kataToIntention(args.week_start,
+        { course: args.course, node: args.node, cue: args.cue, action: args.action }))))
   tool('learnhub_thermostat',
     'Get the challenge-point thermostat dashboard (D-2, ADR-0024): cross-region observation aggregate + READ-ONLY suggestions — the thermostat is NOT an auto-controller. Course region: true-retention band + long-term difficulty-band choice distribution. Unbounded region: execution-event rating distribution (empty until the U-area execution channel lands). Project region: deferred to P-7, tier list only. Three knobs max (A1 target difficulty-band default, retrieval-point density [not yet available], fading-tier move aggregation); at most three suggestions, low-data-silent. To ACT on a suggestion, show it to the learner and after their explicit confirmation call learnhub_thermostat_apply with the suggestion id — never apply without confirmation; there is no engine-side auto adjustment.',
     {},
@@ -1942,8 +2022,8 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         null, { ...(args.predicted !== undefined ? { predicted: args.predicted as never } : {}) }))))
 
   tool('learnhub_note_source_register',
-    'Register a personal vault note (or a folder — batch-registers every .md under it, recursively, dot-dirs skipped) as a Note Source (C1): the engine reads it ONLY to generate review questions; the note file is never written (zero bytes change, never judged Broken). Derivatives (fingerprint manifest + per-source question bank) live in the 学习中心/笔记源 mirror. Re-registering a missing source by the same path restores it. The user exclusion list (learnhub_note_source_exclude) is enforced at this entry: an excluded input fails loud, and excluded subtrees are batch-skipped — skipped/skipped_paths report everything skipped (excluded entries and any learning-center files; when every .md under the input is skipped the error says so). Question generation is a separate explicit step (learnhub_note_source_generate).',
-    { path: { type: 'string', required: true, description: 'Note or folder path, vault-relative or absolute; must be outside the learning center and the user exclusion list' } },
+    'Register a personal vault note (or a folder — batch-registers every .md under it, recursively, dot-dirs skipped) as a Note Source (C1): the engine reads it ONLY to generate review questions; the note file is never written (zero bytes change, never judged Broken). Derivatives (fingerprint manifest + per-source question bank) live in the 学习中心/笔记源 mirror. Re-registering a missing source by the same path restores it. Registrable zones: everything OUTSIDE the learning center, PLUS two learner-document zones inside it (V-3/V-5) — 学习中心/我的产出/** (weekly kata, scripts, error cards) and 学习中心/projects/<id>/日志.md — so learner output can become reviewable too; every other learning-center path is rejected. The user exclusion list (learnhub_note_source_exclude) is enforced at this entry: an excluded input fails loud, and excluded subtrees are batch-skipped — skipped/skipped_paths report everything skipped (excluded entries and any learning-center files; when every .md under the input is skipped the error says so). Question generation is a separate explicit step (learnhub_note_source_generate).',
+    { path: { type: 'string', required: true, description: 'Note or folder path, vault-relative or absolute; must be outside the learning center (except the two learner-document zones), not on the user exclusion list, and must exist' } },
     (args: { path: string }) => run('learnhub_note_source_register', async () =>
       JSON.stringify(await engine.noteSourceRegister(args.path))))
   tool('learnhub_note_source_list',
@@ -2106,6 +2186,19 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { id: { type: 'string', required: true, description: 'Project id' } },
     (args: { id: string }) => run('learnhub_project_show', async () =>
       JSON.stringify(await engine.projectShow(args.id))))
+  tool('learnhub_project_log',
+    'Read a project\'s log (V-5): the learner\'s free-form working journal at 学习中心/projects/<id>/日志.md — dated entries of what they did, where they got stuck, what they learned. Null when never written (legal empty state, no file is created by reading). The log may be REGISTERED as a Note Source (learnhub_note_source_register with the log path) so its content becomes reviewable — the engine only ever reads it.',
+    { id: { type: 'string', required: true, description: 'Project id' } },
+    (args: { id: string }) => run('learnhub_project_log', async () =>
+      JSON.stringify(await engine.projectLog(args.id))))
+  tool('learnhub_project_log_append',
+    'Append one dated entry to a project\'s log (V-5): the learner\'s own record of real project work — progress, blockers, decisions, learnings. Entries are learner-authored prose; engine bookkeeping (plan revisions, receipts mirror, exec events) lives in its own files and never pollutes the log. The engine refreshes the registered fingerprint after writing (its own writes are not content drift).',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      text: { type: 'string', required: true, description: 'Entry body (non-empty prose; multiple paragraphs/lines fine)' },
+    },
+    (args: { id: string; text: string }) => run('learnhub_project_log_append', async () =>
+      JSON.stringify(await engine.projectLogAppend(args.id, args.text))))
   tool('learnhub_project_lifecycle',
     'Set a project\'s lifecycle: active/paused/delivered/archived. No irreversible transitions (ADR-0015) — delivered/archived projects can reopen to active; a no-deadline project may legally stay active forever. Pure status change: no XP settle, no scheduling effect.',
     {
@@ -2395,7 +2488,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 85 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 97 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

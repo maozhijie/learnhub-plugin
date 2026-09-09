@@ -130,8 +130,8 @@ test('#119 questionGenerateSections：逐节路径同款查重', async () => {
       '    q: 大三度有 4 个半音。', // 精确重复 → 丢弃
       '    answer: true',
       '  - kind: fill_in_blank',
-      '    q: 大三度 = ____ 个半音。',
-      '    answer: ["4"]', // 新题 → 入库
+      '    q: 大三度和小三度由____数区分。',
+      '    answer: ["半音"]', // 新题 → 入库（答案为唯一写法术语，ADR-0029）
     ].join('\n'))
     assert.equal(r.added, 1)
     assert.equal(r.duplicates, 1)
