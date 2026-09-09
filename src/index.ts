@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：76 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/Anki 互通）
+ * - agent 工具面：77 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -1143,6 +1143,23 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         })))
         return
       }
+      if (route === '/project/decompile') {
+        // 目标反编译（P-5 #95）：目标描述+注册笔记 → 计划草案+知识子图双提案（人审通道）
+        sendJson(res, 200, await apiRun('api/project/decompile', async () => ({
+          result: await engine.projectDecompile(
+            need(body, 'id'),
+            {
+              ...(typeof body.goal === 'string' && body.goal.trim() ? { goal: body.goal } : {}),
+              ...(typeof body.course === 'string' && body.course.trim() ? { course: body.course } : {}),
+              ...(Array.isArray(body.notes)
+                ? { notes: body.notes.filter((n: unknown): n is string => typeof n === 'string' && !!n.trim()) }
+                : {}),
+            },
+            prompt => llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }),
+          ),
+        })))
+        return
+      }
     }
     if (req.method === 'PUT') {
       const body = await readJson(req)
@@ -1762,6 +1779,24 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { id: string; milestone?: string; nodes?: string[]; window_days?: number; min_co?: number }) => run('learnhub_project_enc_candidates', async () =>
       JSON.stringify(await engine.projectEncCandidates(args.id, { milestone: args.milestone, nodes: args.nodes, window_days: args.window_days, min_co: args.min_co }))))
+  tool('learnhub_project_decompile',
+    'DECOMPILE a goal into a milestone-plan draft + a knowledge-subgraph proposal (P-5, reverse design = 4C/ID task analysis + PjBL): input is the goal description (+ registered vault notes for prior context; V-2 read-only retrieval injects「学习者已有理解」excerpts) and ONE model call produces TWO artifacts, both filed as PENDING proposals for human review — ① a project_plan proposal on the target project (same PlanArtifact contract and apply/reject path as learnhub_project_plan_generate) and ② ONE pending graph gen proposal: with an explicit `course` the subgraph APPENDS to that course (mode=append); without one it becomes a NEW course skeleton (mode=new). Zero canonical writes before apply — nothing touches the course graph, the project frontmatter, or personal notes; review both in the panel, then learnhub_project_apply + learnhub_graph_apply (or reject). A failed output gate auto-repairs one round before giving up.',
+    {
+      id: { type: 'string', required: true, description: 'Project id (the plan-draft proposal targets it)' },
+      goal: { type: 'string', description: 'Goal description prose; defaults to the project\'s goal field (empty goal is rejected)' },
+      course: { type: 'string', description: 'Target course name: the subgraph appends to it; omit → subgraph becomes a NEW course skeleton proposal' },
+      notes: { type: 'array', items: { type: 'string' }, description: 'Registered note-source ids or vault-relative paths to mine for prior context; omit → all registered sources' },
+    },
+    (args: { id: string; goal?: string; course?: string; notes?: string[] }) => run('learnhub_project_decompile', async () =>
+      JSON.stringify(await engine.projectDecompile(
+        args.id,
+        {
+          ...(args.goal !== undefined ? { goal: args.goal } : {}),
+          ...(args.course !== undefined ? { course: args.course } : {}),
+          ...(args.notes !== undefined ? { notes: args.notes } : {}),
+        },
+        prompt => llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }),
+      ))))
 
   // —— U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）：lane 与题目 FSRS 并行，不复用题目卡、不进复习队列 ——
 
