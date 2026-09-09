@@ -22,6 +22,17 @@ Do not work around this by putting a GitHub token in an environment variable or 
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Claim a ticket before working on it
+
+Never start work on an issue before claiming it. Claiming is two steps, both completed before any other action on the ticket:
+
+1. **Assign**: `gh issue edit <n> --add-assignee maozhijie`
+2. **Comment immediately**: a one-line claim note ("已认领，开工：<内容> — <UTC 时间>"). The comment is not ceremony: every parallel session on this machine shares the single `maozhijie` account, so the assignee field cannot tell "claimed by this session" from "claimed by another session". The claim comment is the only cross-session visible occupancy marker.
+
+**Re-check right before the work starts, not just when claiming.** Loading context, researching, or grilling can burn an hour between claim and first edit. If a claim comment that isn't yours has appeared on your ticket, drop it untouched and take the next ticket — a re-pick is always cheaper than duplicate work.
+
+This rule is written in an incident's blood: 2026-09-09, two wayfinder sessions on map #73 both ran as `maozhijie`; one claimed by assignment only, the other had no way to see that claim and took an overlapping ticket.
+
 ## Transient gh failures: retry once before diagnosing
 
 `gh` calls can fail transiently on this machine: a `gh issue view <n> --comments` may return empty output while the same view succeeds on retry, and GraphQL calls can die with `TLS handshake timeout`. Both observed 2026-09-09, both fine on immediate retry. Retry the same command once before concluding anything about auth, sandboxing, or the issue's existence.
