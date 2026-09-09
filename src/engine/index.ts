@@ -23,6 +23,8 @@ import { bandOffset, combinedDifficulty, startBand, sessionOrder } from './adapt
 import type { BandPref } from './adaptive.ts'
 import { JOL_PREDICTIONS, JOL_SAMPLE_RATE, jolCalibration, jolDeviatedKeys, pickJolTargets } from './jol.ts'
 import type { JolPrediction } from './jol.ts'
+import { CALIBRATION_BOOST_SAMPLE_RATE } from './params.ts'
+import { calibrationHintText, calibrationProfileView, overconfidenceOf } from './calibration.ts'
 import { DEFAULT_SLEEP_ADVICE, normalizeSleepAdvice } from './sleep.ts'
 import { NOF1_TEMPLATES, NOF1_PER_ARM_MIN, NOF1_VARIABLE_WHITELIST, nof1Template, nof1ArmForDay, nof1Outcomes, analyzeNof1, shuffleAssign, interleaveBySource, mulberry32 } from './nof1.ts'
 import type { Nof1Template, Nof1Variable, ExperimentDef, Nof1Analysis } from './nof1.ts'
@@ -92,7 +94,7 @@ import type {
   AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DoctorDoc, ExperimentProposeResult,
   ExperimentStartResult, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
-  GraphProposeResult, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
+  GraphProposeResult, CalibrationProfileDoc, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
   LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
   NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
@@ -1750,16 +1752,28 @@ export class LearnhubEngine {
     // 随卡带 jol 标记（UI 只在选中卡的翻面前弹一档三点，可忽略）。偏差重探按
     // 「课程/节点/题id」复合键对齐（qid 只在节点题库内唯一）。我的卡不参与
     // （ADR-0021：测量面不扩；自评卡无作答判分可配对）。
+    // Self-Calibration 显式提示（ADR-0022 #104）：源内「会」档系统性过信且提示开
+    // → JOL 抽查密度加强（1/3→1/2）+ 队列载荷带轻提示（UI 在预测出口非阻断展示，
+    // 可全局关 calibration.hints）。呈现层参数——canonical 零改动（红线）。
     const jol = await this.jolConfig()
     const jolEligible = cards.filter(c => c.source !== 'learner')
+    let calibrationHint: string | null = null
     if (jol.enabled && jolEligible.length) {
-      const deviated = jolDeviatedKeys(await this.store.practiceAll())
+      const practice = await this.store.practiceAll()
+      const verdict = overconfidenceOf(practice)
+      const hints = await this.calibrationHintsConfig()
+      const hintOn = hints.hints_enabled && verdict.overconfident
+      if (hintOn) calibrationHint = calibrationHintText(verdict)
+      const deviated = jolDeviatedKeys(practice)
       const candidates = jolEligible.map(c => ({
         key: `${c.course}/${c.node}/${String(c.id)}`,
         r: c.r as number,
         difficulty: c.difficulty as number | undefined,
       }))
-      const marks = pickJolTargets(candidates, this.jolRng, { rate: jol.rate, deviated })
+      const marks = pickJolTargets(candidates, this.jolRng, {
+        rate: hintOn ? Math.max(jol.rate, CALIBRATION_BOOST_SAMPLE_RATE) : jol.rate,
+        deviated,
+      })
       jolEligible.forEach((c, i) => {
         if (marks.has(candidates[i]!.key)) c.jol = true
       })
@@ -1773,7 +1787,8 @@ export class LearnhubEngine {
           ?? (expEffect?.variable === 'band_default' ? expEffect.arm as BandPref : undefined)
           ?? defaultBand)))
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
-        cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band) }
+        cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band),
+        ...(calibrationHint ? { calibration_hint: calibrationHint } : {}) }
     }
     // 笔记源卡池（C1 #59）：并入全局队列（带 source:'note' 标记，course=「笔记源」
     // 伪课程）。不参与 JOL 抽查（E4 预测落点按课程卡设计，笔记源 v1 不抽查）；
@@ -1798,6 +1813,7 @@ export class LearnhubEngine {
       : cards
     return { date: today, total: cards.length, cards: ordered,
       ...(expEffect ? { exp: { id: expEffect.id, arm: expEffect.arm } } : {}),
+      ...(calibrationHint ? { calibration_hint: calibrationHint } : {}),
       ...(noteSources.drifted.length ? { note_drifted: noteSources.drifted } : {}),
       ...(noteSources.suspended.length ? { note_suspended: noteSources.suspended } : {}) }
   }
@@ -3328,6 +3344,42 @@ export class LearnhubEngine {
       throw new Error(`[jol] 预测只能是「${JOL_PREDICTIONS.join('」「')}」之一（收到 ${String(p)}）。`)
     }
     return p
+  }
+
+  // ---- Self-Calibration 自评校准画像（ADR-0022 #104；分源自省面 + 显式呈现层提示）----
+
+  /** 自评校准画像：分源切片（主视图）+ 全局参考视图（带域特异警戒）。
+   * practice 流水配对的只读派生——零落盘、零 canonical 写入（ADR-0022 红线）；
+   * 与 memory.ts 的 FSRS 自校准（calibrationBins，模型体检）正交，永不混入。 */
+  async calibrationProfile(): Promise<CalibrationProfileDoc> {
+    return calibrationProfileView(await this.store.practiceAll())
+  }
+
+  /** 读显式过信提示开关（state/learnhub.json 的 calibration.hints 字段；缺省开——
+   * 「可全局关」）。关闭后复习队列不带轻提示、抽查密度不再加强（JOL 抽查本身
+   * 仍由 jol.enabled 独立控制）。 */
+  async calibrationHintsConfig(): Promise<{ hints_enabled: boolean }> {
+    try {
+      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
+        calibration?: { hints_enabled?: boolean }
+      }
+      return { hints_enabled: doc.calibration?.hints_enabled !== false }
+    } catch {
+      return { hints_enabled: true }
+    }
+  }
+
+  /** 写显式过信提示开关（原子替换，保留配置文件其他字段；照 jolConfig 先例）。 */
+  async setCalibrationHints(hints_enabled: boolean): Promise<{ hints_enabled: boolean }> {
+    let prev: Record<string, unknown> = {}
+    try {
+      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
+    } catch {
+      // 无配置文件/损坏 → 全新写入
+    }
+    await atomicWrite(this.paths.learnhubConfigPath,
+      JSON.stringify({ ...prev, calibration: { hints_enabled } }, null, 1) + '\n')
+    return { hints_enabled }
   }
 
   // ---- D4 睡眠耦合建议配置（state/learnhub.json 的 sleep 字段；#85，默认开）----

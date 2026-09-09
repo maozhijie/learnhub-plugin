@@ -34,3 +34,7 @@ export const CROSS_AXIS_THRESHOLD = 0.6   // 2×2 两轴高低分界（与练习
 export const TIER_REC_MIN_EVENTS = 3      // 入档推荐的档内样本下限（攒够前提议，低于静默维持）
 export const TIER_REC_PROMOTE_SCORE = 0.8 // 档内均分 ≥ 该值 → 提议升档（当前档吃得过饱）
 export const TIER_REC_DEMOTE_SCORE = 0.4  // 档内均分 < 该值 → 提议降档（支持不足；challenge point 双向）
+
+// ---- Self-Calibration 自评校准画像（ADR-0022 #104；呈现层参数，零 canonical）----
+export const CALIBRATION_OVERCONF_THRESHOLD = 0.6 // 「会」档系统性过信显著阈值：该档 ≥JOL_CALIBRATION_MIN 条配对且实际正确率低于此值即检出（宣称「会」≈接近确知；真伪题瞎猜基线 0.5，持续低于 0.6 = 预测几乎不带信息）
+export const CALIBRATION_BOOST_SAMPLE_RATE = 1 / 2 // 过信检出且提示开时的 JOL 抽查加强密度（默认 1/3 → 1/2；只影响抽查频率，不改任何 canonical 写入）

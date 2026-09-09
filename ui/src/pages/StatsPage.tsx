@@ -5,17 +5,20 @@
  * 遗忘曲线；随复习日志积累填充，无数据给空态引导，不造假数据）
  * + FSRS 参数优化（#62 A2，#72 UI 挂接：手动触发 + 门禁状态展示）
  * + 预测校准（#66 E4：学习者 JOL 预测 vs 实际）与抽查全局开关/抽样率
+ * + 自评校准画像（ADR-0022 #104：分源自省面为主视图、全局聚合折叠为参考视图，
+ *   过信轻提示全局开关在记忆健康卡的 JOL 开关旁）
  * + Anki 通道区块（#63 C2，#72 UI 挂接：上次导出/回写、镜象卡组概况、
  *   AnkiConnect 可达性；导出/回写动作面板内直达。用词遵守 CONTEXT：不叫「同步」）
  * + 可用的困难教练（#65 E5：只读信息性反馈，低数据静默）。 */
-import { Alert, Button, Card, InputNumber, Message, Space, Switch, Table, Tag, Tooltip, Typography } from '@arco-design/web-react'
+import { Alert, Button, Card, Collapse, InputNumber, Message, Space, Switch, Table, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { toastError } from '../App'
 import type { AppFrame } from '../App'
 import type {
-  AnkiExportResult, AnkiImportResult, AnkiStatusDoc, CoachDoc, HistogramBin,
-  JolConfig, MemoryHealth, OptimizeResult, XpStatus,
+  AnkiExportResult, AnkiImportResult, AnkiStatusDoc, CalibrationHintsConfig, CalibrationProfileDoc,
+  CoachDoc, HistogramBin, JolConfig,
+  MemoryHealth, OptimizeResult, XpStatus,
 } from '../types'
 
 const { Text } = Typography
@@ -231,12 +234,15 @@ function AnkiChannelCard() {
 
 /** 记忆健康仪表盘（面板；数据源 GET /memory，聚合口径见 engine/memory.ts）。
  * jol 全局开关 + 抽样率（#66 E4，#72 补 rate 输入）与面板同区：关闭后复习流
- * 完全不弹预测，已攒的校准数据保留。 */
-function MemoryHealthCard({ mem, jol, onToggleJol, onRateJol }: {
+ * 完全不弹预测，已攒的校准数据保留。hints = 过信轻提示全局开关（ADR-0022 #104），
+ * 放 JOL 开关旁：关闭后队列不再带轻提示、抽查密度不再加强。 */
+function MemoryHealthCard({ mem, jol, hints, onToggleJol, onRateJol, onToggleHints }: {
   mem: MemoryHealth | null
   jol: JolConfig | null
+  hints: CalibrationHintsConfig | null
   onToggleJol: (enabled: boolean) => void
   onRateJol: (rate: number) => void
+  onToggleHints: (enabled: boolean) => void
 }) {
   if (mem === null) {
     return (
@@ -355,6 +361,16 @@ function MemoryHealthCard({ mem, jol, onToggleJol, onRateJol }: {
                       disabled={!jol.enabled} />
                   </Tooltip>
                   <Text type='secondary' style={{ fontSize: 12 }}>约每 {Math.round(1 / Math.max(0.01, jol.rate))} 张 1 张</Text>
+                  {/* 过信轻提示全局开关（ADR-0022 #104）：检出系统性过信时在预测出口
+                      轻提醒 + 抽查密度自动加强（1/3→1/2）；关掉后两者都消失 */}
+                  {hints && (
+                    <Tooltip content='过信轻提示：「会」预测的实际正确率持续偏低时，在预测出口给一句保守预测提醒，并自动加强抽查密度（可全局关）'>
+                      <Space size={4} style={{ marginLeft: 8 }}>
+                        <Text type='secondary' style={{ fontSize: 12 }}>过信提示</Text>
+                        <Switch size='small' checked={hints.hints_enabled} onChange={onToggleHints} />
+                      </Space>
+                    </Tooltip>
+                  )}
                 </Space>
               )}
             </Space>
@@ -395,12 +411,109 @@ function MemoryHealthCard({ mem, jol, onToggleJol, onRateJol }: {
   )
 }
 
+/** 自评校准画像卡（ADR-0022 #104；数据源 GET /calibration/profile）：
+ * 分源视图为主（v1 源 = JOL 预测 × 实际作答；构念效度：域特异成分显著），
+ * 全局聚合折叠为参考视图并带「域特异」警戒标注；过信检出时给证据说明。
+ * 画像只展示给学习者——不进 Mastery/XP，永不折扣自评对调度的驱动（红线）。 */
+function CalibrationProfileCard({ profile }: { profile: CalibrationProfileDoc | null }) {
+  if (profile === null) {
+    return (
+      <Card size='small' title='自评校准画像' style={{ borderRadius: 10 }}>
+        <Text type='secondary'>加载中…</Text>
+      </Card>
+    )
+  }
+  const SOURCE_LABEL: Record<string, string> = { jol: '源：JOL 预测 × 实际作答' }
+  return (
+    <Card size='small' title='自评校准画像' style={{ borderRadius: 10 }}
+      extra={<Text type='secondary' style={{ fontSize: 12 }}>分源自省面——只展示给你的画像，不进任何成绩度量</Text>}>
+      <Space direction='vertical' style={{ width: '100%' }} size={14}>
+        {profile.sources.map(s => (
+          <div key={s.source}>
+            <Space size={8} style={{ marginBottom: 4 }}>
+              <Text style={{ fontWeight: 600 }}>{SOURCE_LABEL[s.source] ?? `源：${s.source}`}</Text>
+              {s.overconfidence.overconfident && s.overconfidence.evidence && (
+                <Tag size='small' color='orange'>系统性过信</Tag>
+              )}
+            </Space>
+            {s.calibration ? (
+              <>
+                <Text type='secondary' style={{ fontSize: 12 }}>
+                  （翻面前抽查预测「会/不会/没把握」与实际对错的对照，共 {s.calibration.pairs} 条配对；
+                  只统计被抽到的卡，不代表全部复习）
+                </Text>
+                <div style={{ display: 'grid', gap: 3, marginTop: 6 }}>
+                  {s.calibration.bins.filter(b => b.n > 0).map(b => (
+                    <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Text type='secondary' style={{ fontSize: 11, width: 70, flexShrink: 0 }}>预测 {b.label}</Text>
+                      <div style={{ flex: 1, height: 8, background: 'var(--color-fill-2,#f2f3f5)', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${(b.accuracy ?? 0) * 100}%`, height: '100%',
+                          background: 'var(--color-warning-4,#ffb65d)',
+                        }} />
+                      </div>
+                      <Text style={{ fontSize: 11, width: 84, textAlign: 'right' }}>
+                        实际 {b.accuracy === null ? '—' : `${Math.round(b.accuracy * 100)}%`}（{b.n} 条{b.forgot ? ` · 忘 ${b.forgot}` : ''}）
+                      </Text>
+                    </div>
+                  ))}
+                </div>
+                {s.overconfidence.overconfident && s.overconfidence.evidence && (
+                  <Alert type='warning' style={{ fontSize: 12, marginTop: 6 }}
+                    content={`「会」档实际正确率 ${Math.round(s.overconfidence.evidence.accuracy * 100)}%（${s.overconfidence.evidence.n} 条抽查），低于显著阈值 ${Math.round(s.overconfidence.evidence.threshold * 100)}%——预测偏乐观：复习时不妨按「没把握」处理这些卡，预测出口也会轻提醒你。`} />
+                )}
+              </>
+            ) : (
+              <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
+                {EMPTY_HINT}（该源的预测配对攒够 10 条后显示，低数据不造假曲线）
+              </Text>
+            )}
+          </div>
+        ))}
+        {/* 全局聚合 = 参考视图：折叠次要展示，警戒标注必须随视图带出（ADR-0022 裁决 2） */}
+        <Collapse bordered={false}>
+          <Collapse.Item name='global' header={
+            <Space size={6}>
+              <Text type='secondary' style={{ fontSize: 12 }}>全局聚合（参考视图）</Text>
+              <Tag size='small' color='gray'>域特异，仅供参考</Tag>
+            </Space>
+          }>
+            <Text type='secondary' style={{ fontSize: 12, display: 'block', marginBottom: 6 }}>{profile.global.warning}</Text>
+            {profile.global.calibration ? (
+              <div style={{ display: 'grid', gap: 3 }}>
+                {profile.global.calibration.bins.filter(b => b.n > 0).map(b => (
+                  <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Text type='secondary' style={{ fontSize: 11, width: 70, flexShrink: 0 }}>预测 {b.label}</Text>
+                    <div style={{ flex: 1, height: 8, background: 'var(--color-fill-2,#f2f3f5)', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${(b.accuracy ?? 0) * 100}%`, height: '100%',
+                        background: 'var(--color-fill-3,#e5e6eb)',
+                      }} />
+                    </div>
+                    <Text style={{ fontSize: 11, width: 84, textAlign: 'right' }}>
+                      实际 {b.accuracy === null ? '—' : `${Math.round(b.accuracy * 100)}%`}（{b.n} 条）
+                    </Text>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Text type='secondary' style={{ fontSize: 12 }}>{EMPTY_HINT}</Text>
+            )}
+          </Collapse.Item>
+        </Collapse>
+      </Space>
+    </Card>
+  )
+}
+
 export default function StatsPage({ frame }: { frame: AppFrame }) {
   const [xp, setXp] = useState<XpStatus | null>(null)
   const [mem, setMem] = useState<MemoryHealth | null>(null)
   const [goal, setGoal] = useState<number>(30)
   const [saving, setSaving] = useState(false)
   const [jol, setJol] = useState<JolConfig | null>(null)
+  const [hints, setHints] = useState<CalibrationHintsConfig | null>(null)
+  const [profile, setProfile] = useState<CalibrationProfileDoc | null>(null)
   const [coach, setCoach] = useState<CoachDoc | null>(null)
 
   const load = useCallback(async () => {
@@ -409,6 +522,8 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
     if (doc) setGoal(doc.goal)
     setMem(await api.memory().catch(() => null))
     setJol(await api.jol().catch(() => null))
+    setHints(await api.calibrationHints().catch(() => null))
+    setProfile(await api.calibrationProfile().catch(() => null))
     setCoach(await api.coach().catch(() => null))
   }, [])
 
@@ -442,6 +557,16 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
     }
   }
 
+  // 过信轻提示全局开关（ADR-0022 #104）：关掉后预测出口不再轻提醒、抽查密度不再加强
+  const toggleHints = async (enabled: boolean) => {
+    try {
+      setHints(await api.setCalibrationHints(enabled))
+      Message.success(enabled ? '过信轻提示已开启' : '过信轻提示已关闭：预测出口不再提醒，抽查密度恢复默认')
+    } catch (err) {
+      toastError(err)
+    }
+  }
+
   const saveGoal = async () => {
     setSaving(true)
     try {
@@ -461,8 +586,11 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
       {coach && coach.messages.length > 0 && (
         <Alert type='info' content={coach.messages.map(m => <div key={m}>{m}</div>)} />
       )}
-      <MemoryHealthCard mem={mem} jol={jol} onToggleJol={enabled => void toggleJol(enabled)}
-        onRateJol={rate => void rateJol(rate)} />
+      <MemoryHealthCard mem={mem} jol={jol} hints={hints}
+        onToggleJol={enabled => void toggleJol(enabled)}
+        onRateJol={rate => void rateJol(rate)}
+        onToggleHints={enabled => void toggleHints(enabled)} />
+      <CalibrationProfileCard profile={profile} />
       <AnkiChannelCard />
 
       <Card size='small' title='XP 时间账本' style={{ borderRadius: 10 }}

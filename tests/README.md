@@ -56,6 +56,7 @@
 - S40 `sandbox.ts::simulateRun / aggregateRuns / quantile` —— D-3 沙盘蒙特卡洛纯函数（播种确定、schedFor 按课程注入与调度同源、预算决定引入、跳过节点不计、p50/p80 聚合；`tests/sandbox.test.ts`；全链路零 canonical 写入逐字节比对走 facade）
 - S41 `project-decompile.ts::decompileGoalOf / decompileTerms / splitDecompileDoc / subgraphSpecOf / decompileRepairPrompt` —— P-5 目标反编译纯函数层（空目标拒绝、检索词派生同 priorTerms 口径、双产物拆分校验 = validatePlanArtifact + validateGenProposal 同门、子图落点裁决 append/new、修复轮提示词；`tests/project-decompile.test.ts`；双提案受理/apply/红线零写入走 facade）
 - S42 `project-exec.ts::execRatingScore / exercisedEncEdges / classifyCross / masteryAggregate / execEvidenceScore / recommendTier` —— P-7 项目执行事件流纯函数层（评级→0-1 带中点映射、被行使 enc 边判定 v1=两端都在事件 nodes 内、2×2 象限分类（null 归该轴低侧）、入档推荐纯函数（档内表现+底座，永不做门禁）；`tests/project-exec.test.ts`；回流→mastery→2×2 主链与零 canonical 红线走 facade）
+- S43 `calibration.ts::overconfidenceOf / calibrationProfileView / calibrationHintText` —— Self-Calibration 自评校准画像（ADR-0022 #104）：「会」档系统性过信判定（≥JOL_CALIBRATION_MIN 条配对且实际正确率低于显著阈值；数据不足静默）、分源画像聚合（jol 源直调 jolCalibration 不 fork 数学；配对区间 first_ts/last_pair_ts 透出；全局参考视图带域特异警戒）与轻提示文案决策（`tests/calibration.test.ts`；画像入口/抽查密度加强 1/3→1/2/队列 calibration_hint/提示全局关/零 canonical 红线走 facade；编号 S43 = 让位 d-lab S37–S40，S41/S42 预留 p5/p7）
 
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 

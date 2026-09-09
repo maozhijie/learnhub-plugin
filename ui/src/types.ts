@@ -9,7 +9,8 @@ export type ContentStatus = 'draft' | 'reviewed' | 'flagged'
 // ---- 引擎读视图（src/engine/views.ts 命名导出）----
 
 export type {
-  AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, DiagnosticEntry,
+  AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, CalibrationProfileDoc,
+  CalibrationSourceProfile, DiagnosticEntry,
   DifficultyAdviceDoc, DifficultyAdviceNode, DoctorDoc, EtaItem, FadingTier, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphPathResult, GraphProposeResult,
   HabitCurvePoint, HabitListItem, HabitShowDoc, HabitsListDoc, HistogramBin, LearnerArchiveResult,
@@ -79,6 +80,9 @@ export interface GenStatusDoc {
 
 /** JOL 抽查配置（GET/PUT /jol）。 */
 export interface JolConfig { enabled: boolean; rate: number }
+
+/** 过信轻提示配置（GET/PUT /calibration/hints，ADR-0022 #104）。 */
+export interface CalibrationHintsConfig { hints_enabled: boolean }
 
 /** 可用的困难教练（GET /coach，#65 E5）：只读信息性反馈。 */
 export interface CoachDoc { messages: string[]; due_hard: number }
