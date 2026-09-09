@@ -309,6 +309,9 @@ function CourseCard(props: {
  * E4 JOL（#66）：抽查命中的题卡（jol 标记）在翻面前弹一档预测，随作答/忘记上报。 */
 function ReviewSession(props: {
   queue: ReviewCard[]
+  /** Self-Calibration 过信轻提示（ADR-0022 #104）：队列载荷 calibration_hint 透传，
+   * 在 JOL 预测出口非阻断展示一句；提示全局关或未检出时为空。 */
+  calibrationHint?: string
   onClose: () => void
   onFinish: () => Promise<void>
   /** 每张卡结算后刷新主界面数据（XP/推荐流/到期数随作答实时更新）。 */
@@ -573,6 +576,7 @@ function ReviewSession(props: {
         ) : (
           <QuestionCard key={card.id} course={card.course} node={card.node} question={card}
             variant='review' noRedo jolAsk={card.jol === true}
+            calibrationHint={props.calibrationHint}
             submitter={(payload, elapsedS, predicted) => api.questionAnswer(
               card.course, card.node, card.id, payload, elapsedS,
               { deferSchedule: true, predicted }).then(toOutcome)}
@@ -869,6 +873,8 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [xp, setXp] = useState<XpStatus | null>(null)
   const [reviewQ, setReviewQ] = useState<ReviewQueueDoc | null>(null)
   const [session, setSession] = useState<ReviewCard[] | null>(null)
+  // Self-Calibration 过信轻提示（ADR-0022 #104）：随会话启动的队列载荷带出
+  const [calibrationHint, setCalibrationHint] = useState<string | undefined>(undefined)
   const [createVisible, setCreateVisible] = useState(false)
   const [runningJobs, setRunningJobs] = useState(0)
   const [queuedJobs, setQueuedJobs] = useState(0)
@@ -1015,6 +1021,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     try {
       const doc = await api.reviewQueue(e.course, a.node)
       if (!doc.cards.length) { Message.info(`「${a.node}」暂无到期题：可直接点开节点学习`); return }
+      setCalibrationHint(doc.calibration_hint)
       setSession(doc.cards)
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
@@ -1062,7 +1069,8 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       </div>
       <XpBar xp={xp ?? { date: '', day_cutoff: '', today_xp: 0, goal: 30, streak: 0, eta: [] }}
         onEditGoal={() => frame.goto('stats')} />
-      <ReviewBanner reviewQ={reviewQ} anki={anki} onStart={() => setSession(dueCards)}
+      <ReviewBanner reviewQ={reviewQ} anki={anki}
+        onStart={() => { setCalibrationHint(reviewQ?.calibration_hint); setSession(dueCards) }}
         onExportAnki={() => void exportAnki()} exporting={exportingAnki}
         onOpenSources={focusId => setSourceDrawer({ open: true, focusId: focusId ?? null })}
         onRegenerateSource={id => void regenerateSource(id)}
@@ -1104,6 +1112,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
                 onReview={() => {
                   const q = dueCards.filter(card => card.course === c.name)
                   if (!q.length) { Message.info('该课程暂无到期复习'); return }
+                  setCalibrationHint(reviewQ?.calibration_hint)
                   setSession(q)
                 }}
                 onDelete={() => deleteCourse(c.name)} />
@@ -1113,7 +1122,8 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       </Card>
 
       {session && session.length > 0 && (
-        <ReviewSession queue={session} onClose={() => setSession(null)}
+        <ReviewSession queue={session} calibrationHint={calibrationHint}
+          onClose={() => setSession(null)}
           onFinish={async () => { await Promise.all([frame.reload(), load()]) }}
           onSettled={load} />
       )}
