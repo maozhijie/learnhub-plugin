@@ -46,6 +46,16 @@ export class Paths {
   get bandLogPath(): string { return `${this.centerStateDir}/难度带.jsonl` }
   /** E 档案（ADR-0009 Learner Output 判词存档；#68 E2）：JSONL 追加，判词只入档案不 canonical。 */
   get eArchivePath(): string { return `${this.centerStateDir}/e档案.jsonl` }
+  /** 回执流水（U-1 #88 / ADR-0016）：JSONL 追加，学习者证据账本——只增不回滚。 */
+  get receiptLogPath(): string { return `${this.centerStateDir}/回执.jsonl` }
+  /** 习惯重复流（U-3 #90 / ADR-0017）：JSONL 追加，自报重复即事实；曲线/streak 派生。 */
+  get habitRepeatLogPath(): string { return `${this.centerStateDir}/习惯重复.jsonl` }
+  /** 技能条目（U-2 #89 / ADR-0018）：学习中心/技能/<id>.yaml，lane 载体（不复用题目卡）。 */
+  get skillsDir(): string { return `${this.centerRoot}/技能` }
+  skillPath(id: string): string { return `${this.skillsDir}/${safeFilename(id)}.yaml` }
+  /** 习惯（U-3 #90 / ADR-0017）：学习中心/习惯/<id>.yaml，一等实体（零 FSRS 语义）。 */
+  get habitsDir(): string { return `${this.centerRoot}/习惯` }
+  habitPath(id: string): string { return `${this.habitsDir}/${safeFilename(id)}.yaml` }
   /** 笔记源自料区（C1 #59 / ADR-0010）：镜像区，用户笔记零写入。 */
   get noteSourceDir(): string { return `${this.centerRoot}/笔记源` }
   get noteSourceManifestPath(): string { return `${this.noteSourceDir}/源清单.yaml` }

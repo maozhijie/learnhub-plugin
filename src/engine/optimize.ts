@@ -23,6 +23,10 @@ import type { ReviewRec } from './types.ts'
 
 /** 写回门禁：真实复习日志条数下限（官方口径：Anki 24.04 要求 ≥400，月频重训足够）。 */
 export const OPTIMIZE_MIN_REVIEWS = 400
+/** 执行事件混训门（ADR-0018 裁决 4）：review-log 里 rating_source='execution' 的条数
+ * 达到该门后，执行事件放行进训练序列与题目事件混训；此前保持排除——两套数据起步
+ * 各自都难过门禁，起步即混训等于让题目侧小样本被异质事件稀释（冷启动双盲）。 */
+export const EXECUTION_TRAINING_GATE = 400
 /** FSRS-6 参数向量长度；binding 返回非此长度视为契约破裂，拒绝写回。 */
 export const FSRS6_PARAM_COUNT = 21
 
@@ -36,12 +40,18 @@ export interface TrainingSequence {
 /** 评估指标（binding ModelEvaluation 的同形快照）。 */
 export interface OptimizerMetrics { logLoss: number; rmseBins: number }
 
-/** 真实推进 → 每卡训练序列（纯函数，接缝 S27）：排除 synthetic、每卡每天取第一条、
- * delta_t 链首条 0；序列按 key 排序保证确定序。「天」= 学习日（ADR-0020）。 */
+/** 真实推进 → 每卡训练序列（纯函数，接缝 S27）：排除 synthetic 与未过混训门的
+ * execution、每卡每天取第一条、delta_t 链首条 0；序列按 key 排序保证确定序。
+ * 「天」= 学习日（ADR-0020）。 */
 export function trainingSequences(logs: ReviewRec[], cutoffMin = 0): TrainingSequence[] {
+  let executionRows = 0
+  for (const rec of logs) if (rec.rating_source === 'execution') executionRows++
+  const allowExecution = executionRows >= EXECUTION_TRAINING_GATE
   const byCard = new Map<string, ReviewRec[]>()
   for (const rec of logs) {
-    if (rec.rating_source !== 'auto' && rec.rating_source !== 'self') continue
+    const ok = rec.rating_source === 'auto' || rec.rating_source === 'self'
+      || (allowExecution && rec.rating_source === 'execution')
+    if (!ok) continue
     const key = `${rec.course}/${rec.node}/${rec.qid}`
     const list = byCard.get(key) ?? []
     list.push(rec)

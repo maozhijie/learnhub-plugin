@@ -798,8 +798,58 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/learner-queue', () => engine.learnerQueue(course)))
       return
     }
+    if (req.method === 'GET' && route === '/skills') {
+      // 技能条目 lane（#89）：生效到期已折算维持节拍帽（读侧）
+      sendJson(res, 200, await apiRun('api/skills', () => engine.skillList()))
+      return
+    }
+    if (req.method === 'GET' && route === '/habits') {
+      // 习惯（#90）：清单 + 宽容 streak + 自动化曲线摘要（只展示给学习者）
+      sendJson(res, 200, await apiRun('api/habits', () => engine.habitList()))
+      return
+    }
+    if (req.method === 'GET' && route === '/habit') {
+      // 单个习惯详情（#90）：意图 + 完整自动化曲线 + 近期重复
+      const habit = url.searchParams.get('habit')
+      if (!habit) throw new Error('missing required field: habit')
+      sendJson(res, 200, await apiRun('api/habit', () => engine.habitShow(habit)))
+      return
+    }
     if (req.method === 'POST') {
       const body = await readJson(req)
+      if (route === '/habits/create') {
+        // 习惯创建（#90）：意图两字段（线索/行动）由引擎 fail loud 校验
+        sendJson(res, 200, await apiRun('api/habits/create', () => engine.habitCreate({
+          name: need(body, 'name'), cue: need(body, 'cue'), action: need(body, 'action'),
+        })))
+        return
+      }
+      if (route === '/habits/repeat') {
+        // 自报重复（#90）：唯一计数来源，无门禁；可选自动化自评 1-5
+        sendJson(res, 200, await apiRun('api/habits/repeat', () => engine.habitRepeat(need(body, 'habit'), {
+          ...(typeof body.auto_rating === 'number' ? { auto_rating: body.auto_rating } : {}),
+          ...(typeof body.note === 'string' && body.note.trim() ? { note: body.note } : {}),
+        })))
+        return
+      }
+      if (route === '/habits/archive') {
+        if (typeof body.archived !== 'boolean') throw new Error('missing required field: archived')
+        sendJson(res, 200, await apiRun('api/habits/archive', () =>
+          engine.habitArchive(need(body, 'habit'), body.archived)))
+        return
+      }
+      if (route === '/skills/archive') {
+        if (typeof body.archived !== 'boolean') throw new Error('missing required field: archived')
+        sendJson(res, 200, await apiRun('api/skills/archive', () =>
+          engine.skillArchive(need(body, 'skill'), body.archived)))
+        return
+      }
+      if (route === '/skills/maintenance') {
+        // 维持节拍帽（#89）：天数或 null（关闭）
+        sendJson(res, 200, await apiRun('api/skills/maintenance', () =>
+          engine.skillSetMaintenance(need(body, 'skill'), body.days ?? null)))
+        return
+      }
       if (route === '/rebuild') {
         sendJson(res, 200, { message: (await engine.rebuild()).message })
         return
@@ -1649,6 +1699,128 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { id: number }) => run('learnhub_project_apply', async () =>
       JSON.stringify(await engine.projectApply(args.id))))
 
+  // —— U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）：lane 与题目 FSRS 并行，不复用题目卡、不进复习队列 ——
+
+  tool('learnhub_skill_create',
+    'Create a skill entry (U-area schedulable practice subject, e.g. guitar/swimming/coding): the carrier of the execution-event scheduling lane. The lane runs PARALLEL to question FSRS (same kernel math, own isolated state) — it never reuses question cards, never enters the review queue, and has no mastery. Optional maintenance beat cap (days, default 30, null = off) guarantees long-dormant skills resurface at low frequency (mini-redo + replay).',
+    {
+      name: { type: 'string', required: true, description: 'Skill name (also becomes the id)' },
+      maintenance_days: { type: 'number', description: 'Maintenance beat cap in days: 7-365, or 0/null to disable (default 30)' },
+    },
+    (args: { name: string; maintenance_days?: number | null }) => run('learnhub_skill_create', async () =>
+      JSON.stringify(await engine.skillCreate(args.name, {
+        ...(args.maintenance_days !== undefined ? { maintenance_days: args.maintenance_days } : {}),
+      }))))
+  tool('learnhub_skill_list',
+    'List skill entries with their lane due dates (maintenance cap folded in). due_kind marks what a due lane wants: acquisition (FSRS due drove it) or maintenance (the beat cap brought it back — mini-redo + replay). Fresh skills (never executed) have due=null: no due semantics until the first execution.',
+    {}, () => run('learnhub_skill_list', async () => JSON.stringify(await engine.skillList())))
+  tool('learnhub_skill_maintenance',
+    'Set a skill\'s maintenance beat cap (days 7-365, or null to disable): the lane comes due at most this many days after the last execution, so interval growth can never drown the skill (Arthur 1998: disused motor skills decay hard — low-frequency contact itself has value). Pure entity property: the existing FSRS state is untouched.',
+    {
+      skill: { type: 'string', required: true, description: 'Skill id' },
+      days: { type: 'number', description: 'Cap in days (7-365); omit/null disables the cap' },
+    },
+    (args: { skill: string; days?: number | null }) => run('learnhub_skill_maintenance', async () =>
+      JSON.stringify(await engine.skillSetMaintenance(args.skill, args.days ?? null))))
+  tool('learnhub_skill_archive',
+    'Archive or restore a skill entry (reversible; archived is a shelving label). Archived skills refuse new execution events until restored.',
+    {
+      skill: { type: 'string', required: true, description: 'Skill id' },
+      archived: { type: 'boolean', required: true, description: 'true to archive, false to restore' },
+    },
+    (args: { skill: string; archived?: boolean }) => run('learnhub_skill_archive', async () => {
+      if (typeof args.archived !== 'boolean') throw new Error('[skill-archive] archived 必须显式给出（true 归档 / false 恢复）。')
+      return JSON.stringify(await engine.skillArchive(args.skill, args.archived))
+    }))
+  tool('learnhub_execution_log',
+    'Log one execution event on a skill (the lane\'s core input): a real practice + a performance rating (1-4 integer; 4 = strong, 1 = poor) that pushes the skill\'s lane via the same advance kernel (one push per lane per learning day). Source honesty: source=\'auto\' REQUIRES observable evidence (evidence.accuracy 0-1, optional evidence.self_help) mapped deterministically — raw scores are never fed to FSRS; source=\'self\'/\'ai\' take an explicit rating. XP = native focused minutes (minutes 1-1440, 1 XP ≈ 1 min), same ledger and streak as study time (ADR-0019); the event row lands in the review log with rating_source=execution and an event kind (acquisition/maintenance) distinguishing the two flows.',
+    {
+      skill: { type: 'string', required: true, description: 'Skill id' },
+      source: { type: 'string', required: true, description: 'auto (evidence-mapped) / self / ai' },
+      minutes: { type: 'number', required: true, description: 'Focused minutes of this execution (1-1440); credited as XP 1:1' },
+      rating: { type: 'number', description: 'Performance rating 1-4 (required unless source=auto)' },
+      evidence: { type: 'object', description: 'source=auto only: {accuracy: 0-1, self_help?: count}' },
+      note: { type: 'string', description: 'Free note (e.g. what was practiced, receipt reference)' },
+    },
+    (args: { skill: string; source: string; minutes: number; rating?: number; evidence?: { accuracy?: number; self_help?: number }; note?: string }) =>
+      run('learnhub_execution_log', async () =>
+        JSON.stringify(await engine.executionLog(args.skill, {
+          source: args.source as never, minutes: args.minutes,
+          ...(args.rating !== undefined ? { rating: args.rating } : {}),
+          ...(args.evidence ? { evidence: args.evidence } : {}),
+          ...(args.note ? { note: args.note } : {}),
+        }))))
+
+  // —— U 区·回执反馈环（#88 / ADR-0016）：回执 → AI 量表评审 → EMA + 渐退反馈 ——
+
+  tool('learnhub_receipt_submit',
+    'File an external-practice receipt on a PRACTICE node (v1 carrier) and run the full loop: receipt → AI rubric review (rubric source = the node\'s content points; free-form questions are NOT answered) → the score enters the node\'s practice EMA (same weight, old 0.7/new 0.3). Self-reported = trusted (no anti-cheat gate); material is free-form (text description / image path / export / coach signoff). Receipts never earn XP, never push any FSRS card, and are never Broken. Feedback fades: full error-specific reviews follow a decreasing-frequency curve (receipt #1,2,4,7,11,16,… capped at every 5th); other receipts get score + one-line verdict only. The learner can always force a full review (force_full).',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Practice node name (type=practice)' },
+      kind: { type: 'string', required: true, description: 'text / image / export / signoff' },
+      material: { type: 'string', required: true, description: 'Receipt material: description, image path, export data, or signoff reference' },
+      force_full: { type: 'boolean', description: 'Learner explicitly asks for a full error-specific review now' },
+    },
+    (args: { course?: string; node: string; kind: string; material: string; force_full?: boolean }) =>
+      run('learnhub_receipt_submit', async () => {
+        return JSON.stringify(await engine.receiptSubmit(
+          args.course, args.node,
+          { kind: args.kind as never, material: args.material, ...(args.force_full !== undefined ? { force_full: args.force_full } : {}) },
+          async (prompt, system) => llmComplete(ctx, prompt, system, { effort: llmCfg.deepEffort }),
+        ))
+      }))
+  tool('learnhub_receipt_list',
+    'List a practice node\'s receipt history with the fading-feedback state: each receipt\'s material kind, review depth (full/brief), rubric score, and verdict; total count and how many receipts until the next full review. Read-only.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Practice node name' },
+    },
+    (args: { course?: string; node: string }) => run('learnhub_receipt_list', async () =>
+      JSON.stringify(await engine.receiptList(args.course, args.node))))
+
+  // —— U 区·习惯一等公民（#90 / ADR-0017）：零 FSRS 语义、零 canonical 写入 ——
+
+  tool('learnhub_habit_create',
+    'Create a habit (U-area first-class object): an execution intention (cue + action, format locked to "stable time/place cue → ONE concrete action") + an automation curve + a forgiving streak. Habits have NO FSRS semantics, no mastery, NO due dates — the scheduler is context and calendar, the engine never reminds. Repetitions are self-reported (no gate, no anti-cheat — self-measurement is not an exam).',
+    {
+      name: { type: 'string', required: true, description: 'Habit name' },
+      cue: { type: 'string', required: true, description: 'Stable cue: time/place anchor (e.g. "after brushing teeth in the morning")' },
+      action: { type: 'string', required: true, description: 'ONE concrete action (verb-first); multi-behavior chains fall outside the evidence format' },
+    },
+    (args: { name: string; cue: string; action: string }) => run('learnhub_habit_create', async () =>
+      JSON.stringify(await engine.habitCreate(args))))
+  tool('learnhub_habit_list',
+    'List habits with their derived surfaces: total self-reported repeats, forgiving streak (small gaps ≤2 days don\'t break it), and latest automation self-rating. Curve and streak are shown to the learner only — they never enter mastery, XP, or any canonical measure.',
+    {}, () => run('learnhub_habit_list', async () => JSON.stringify(await engine.habitList())))
+  tool('learnhub_habit_show',
+    'Show one habit in full: execution intention (cue + action), full automation curve (x = cumulative repeats, y = self-rating 1-5; no decay — interruptions don\'t erode it), streak, and recent repeat log.',
+    { habit: { type: 'string', required: true, description: 'Habit id' } },
+    (args: { habit: string }) => run('learnhub_habit_show', async () =>
+      JSON.stringify(await engine.habitShow(args.habit))))
+  tool('learnhub_habit_repeat',
+    'Self-report one repetition of a habit (the ONLY counting source; unlimited, no gate). Optionally carry an automation self-rating 1-5 (SRBAI-style, event-level, not required every time). Zero XP, zero scheduling writes — habit repeats never enter the execution-event lane or any ledger.',
+    {
+      habit: { type: 'string', required: true, description: 'Habit id' },
+      auto_rating: { type: 'number', description: 'Optional automation self-rating 1-5 (how automatic did it feel?)' },
+      note: { type: 'string', description: 'Free note' },
+    },
+    (args: { habit: string; auto_rating?: number; note?: string }) => run('learnhub_habit_repeat', async () =>
+      JSON.stringify(await engine.habitRepeat(args.habit, {
+        ...(args.auto_rating !== undefined ? { auto_rating: args.auto_rating } : {}),
+        ...(args.note ? { note: args.note } : {}),
+      }))))
+  tool('learnhub_habit_archive',
+    'Archive or restore a habit (reversible; archived is a shelving label). Habits have no deadlines — staying active forever is legal.',
+    {
+      habit: { type: 'string', required: true, description: 'Habit id' },
+      archived: { type: 'boolean', required: true, description: 'true to archive, false to restore' },
+    },
+    (args: { habit: string; archived?: boolean }) => run('learnhub_habit_archive', async () => {
+      if (typeof args.archived !== 'boolean') throw new Error('[habit-archive] archived 必须显式给出（true 归档 / false 恢复）。')
+      return JSON.stringify(await engine.habitArchive(args.habit, args.archived))
+    }))
+
   // —— 客户端面板 HTTP 路由 ——
   ctx.effect(
     () => ctx.webServer.register({ kind: 'prefix', path: API, handler: (req, res) => handleApi(ctx, req, res) }),
@@ -1698,7 +1870,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 57 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 69 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

@@ -153,8 +153,16 @@ export interface ReviewRec {
   qid: string
   /** 本次推进的 FSRS 评分（1=Again 2=Hard 3=Good 4=Easy）。 */
   rating: 1 | 2 | 3 | 4
-  /** auto = 练习流自动映射 / 忘记申报；self = 复习流答对后自评；synthetic = 完成学习时的调度初始化（非真实作答，诚实度统计须过滤）。 */
-  rating_source: 'auto' | 'self' | 'synthetic'
+  /** auto = 练习流自动映射 / 忘记申报；self = 复习流答对后自评；synthetic = 完成学习时的调度初始化（非真实作答，诚实度统计须过滤）；
+   * execution = 执行事件（技能条目 lane，ADR-0018：与题目 FSRS 并行、不复用题目卡、不进复习队列；
+   * 保留率/优化器等题目侧统计按 auto/self 过滤天然排除，优化器 ≥400 条混训门见 optimize.ts）。 */
+  rating_source: 'auto' | 'self' | 'synthetic' | 'execution'
+  /** 执行事件种类（仅 rating_source='execution' 时落，ADR-0018 裁决 6 #89 验收项）：
+   * acquisition 习得（FSRS due 驱动）/ maintenance 维持（维持节拍帽到期的迷你重做+回放）。 */
+  event_kind?: 'acquisition' | 'maintenance'
+  /** 执行事件的评级来源枚举（仅 rating_source='execution' 时落，ADR-0018 入口契约：
+   * 事件须携带来源；auto=可观测证据确定性映射 / self=学习者自评档 / ai=AI 评级）。 */
+  exec_source?: 'auto' | 'self' | 'ai'
   /** 距该卡上次复习的天数（首学 0；synthetic 恒 0）。 */
   elapsed_days: number
   /** 复习前快照。synthetic 无「复习前」状态 → 三字段全 null；首学无旧卡 →

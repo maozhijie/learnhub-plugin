@@ -10,6 +10,8 @@ import { mkdir, readFile, rename, appendFile, writeFile } from 'node:fs/promises
 import { existsSync } from 'node:fs'
 import { nowIso, dayOfTs } from './dates.ts'
 import type { JournalRec, PracticeRec, ProposalRec, ReviewRec, EArchiveRec } from './types.ts'
+import type { ReceiptLogRec } from './receipts.ts'
+import type { HabitRepeatRec } from './habits.ts'
 import type { PinRec } from './goals.ts'
 import type { BandRec } from './coach.ts'
 import type { Paths } from './paths.ts'
@@ -101,7 +103,8 @@ export class Store {
 
   // ---- review-log（ADR-0012 逐次复习日志）----
 
-  /** 追加一条复习日志（只在真实推进 FSRS 卡的落点调用，见 engine 各写点）。 */
+  /** 追加一条复习日志（只在真实推进 FSRS 卡的落点调用，见 engine 各写点）。
+   * event_kind/exec_source 仅执行事件行携带（rating_source='execution'，ADR-0018）。 */
   async appendReview(rec: Omit<ReviewRec, 'ts'> & { ts?: string }): Promise<ReviewRec> {
     const full: ReviewRec = {
       ts: rec.ts ?? nowIso(),
@@ -111,6 +114,8 @@ export class Store {
       stability_before: rec.stability_before ?? null,
       difficulty_before: rec.difficulty_before ?? null,
       r_pred: rec.r_pred === null || rec.r_pred === undefined ? null : Math.round(rec.r_pred * 1000) / 1000,
+      ...(rec.event_kind ? { event_kind: rec.event_kind } : {}),
+      ...(rec.exec_source ? { exec_source: rec.exec_source } : {}),
     }
     await mkdir(this.paths.centerStateDir, { recursive: true })
     await appendFile(this.paths.reviewLogPath, JSON.stringify(full) + '\n', 'utf8')
@@ -303,6 +308,50 @@ export class Store {
       }
     }
     return out
+  }
+
+  // ---- 回执流水（U-1 #88 / ADR-0016）与习惯重复流（U-3 #90 / ADR-0017）----
+
+  /** 追加一条回执（含评审结果）。账本只增：已入 EMA 的历史分值永不回滚（ADR-0016）。 */
+  async appendReceipt(rec: ReceiptLogRec): Promise<ReceiptLogRec> {
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await appendFile(this.paths.receiptLogPath, JSON.stringify(rec) + '\n', 'utf8')
+    return rec
+  }
+
+  /** 全部回执（调用方按主体过滤）。损坏行 = Broken 报出（同 review-log：证据流水
+   * 不能带病读——静默吞行会让「渐退曲线数错了第几份」）。 */
+  async receiptsAll(): Promise<ReceiptLogRec[]> {
+    let raw: string
+    try {
+      raw = await readFile(this.paths.receiptLogPath, 'utf8')
+    } catch {
+      return []
+    }
+    const out: ReceiptLogRec[] = []
+    for (const [i, line] of raw.split('\n').entries()) {
+      const s = line.trim()
+      if (!s) continue
+      try {
+        out.push(JSON.parse(s) as ReceiptLogRec)
+      } catch {
+        throw new Error(`[receipts] ${this.paths.receiptLogPath} 第 ${i + 1} 行不是合法 JSON（Broken）：修复或删除该行后再试。`)
+      }
+    }
+    return out
+  }
+
+  /** 追加一条习惯重复（自报即事实，无门禁；引擎侧零派生写入）。 */
+  async appendHabitRepeat(rec: HabitRepeatRec): Promise<HabitRepeatRec> {
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await appendFile(this.paths.habitRepeatLogPath, JSON.stringify(rec) + '\n', 'utf8')
+    return rec
+  }
+
+  /** 全部习惯重复（文件缺失 = Missing 合法空态；损坏行跳过同 journal——重复流是
+   * 展示原料，坏一行不值得一档Broken 拦住全部曲线）。 */
+  async habitRepeatsAll(): Promise<HabitRepeatRec[]> {
+    return this.readJsonl<HabitRepeatRec>(this.paths.habitRepeatLogPath)
   }
 
   // ---- utils ----

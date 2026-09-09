@@ -10,7 +10,7 @@ Python 引擎已退役：原 `spawn python -m learnhub` 的全部逻辑吸收进
 XP 是**时间账本**（1 XP ≈ 1 分钟有效专注）：节点定价 = 内容标称 est × FSRS 难度
 客观校准 k，完成时 settle 对账锁定；课程不变则总账有序稳定（见「XP 预算制」）。
 
-- **host**（`lib/index.js`）：57 个 agent 工具直调 engine、`/learnhub/api/*` 面板后端、`/learnhub` SPA 伺服（`web/dist/`，改 UI 重跑 build 即生效）
+- **host**（`lib/index.js`）：69 个 agent 工具直调 engine、`/learnhub/api/*` 面板后端、`/learnhub` SPA 伺服（`web/dist/`，改 UI 重跑 build 即生效）
 - **client**（`lib/client.js`）：侧边栏底栏「学习中心」入口（新标签页打开 `/learnhub`，命名窗口复用）+ `learnhub:discuss` 宿主桥（学习中心 tab 经 `window.opener` 请求宿主开 dsh 会话）
 - **引擎**（`lib/engine.js`）：独立构建产物，脚本（smoke/e2e/dev-server）与 UI 复用同一入口
 - **面板 UI**（`ui/`）：Vite + React 18 + Arco Design + React Flow（@xyflow/react + dagre），组件移植自 allo learning 模块

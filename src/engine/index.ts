@@ -49,6 +49,12 @@ import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFile
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
 import { LearnerCards, LEARNER_CARD_KINDS } from './learner-cards.ts'
 import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
+import { Skills, laneDue, laneEventKind, ratingFromEvidence, clampMaintenanceDays, executionRowIdentity, executionXpDetail } from './skills.ts'
+import type { SkillDoc, ExecutionSource, ExecutionEventKind, ExecutionEvidence, ExecutionLogResult } from './skills.ts'
+import { Habits, habitStreak, automationCurve } from './habits.ts'
+import type { HabitDoc, HabitRepeatRec } from './habits.ts'
+import { submitReceipt, receiptsUntilNextFull, RECEIPT_KIND_LABEL } from './receipts.ts'
+import type { ReceiptLogRec, ReceiptKind, ReceiptSubmitResult } from './receipts.ts'
 import { selfNoteFeedbackPrompt, selfNoteFeedbackSystem, selfNotePromptOf } from './self-note.ts'
 import { AnkiMirror, ankiAddNote, ankiCardPayload, ankiCardReviews, ankiCardsInfo, ankiCreateDeck, ankiCreateModel, ankiDeckNames, ankiDeleteNotes, ankiFindNotes, ankiModelNames, ankiNotesInfo, ankiUpdateNoteFields, deckNameOf, isAnkiNoteMissing, isoFromMs, mapAnkiEase, parseSourceKey, planMirrorSync, ANKI_MODEL, ANKI_TAG } from './anki.ts'
 import type { AnkiMirrorEntry, AnkiNotePayload, AnkiTransport } from './anki.ts'
@@ -74,8 +80,8 @@ import type {
   GraphProposeResult, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
   LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
   NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
-  QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, StatusDoc, TreeDoc,
-  XpStatus,
+  QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
+  XpStatus, HabitsListDoc, HabitShowDoc,
 } from './views.ts'
 
 /** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
@@ -122,6 +128,8 @@ export class LearnhubEngine {
   readonly projects: Projects
   readonly bank: QuestionBank
   readonly learnerCards: LearnerCards
+  readonly skills: Skills
+  readonly habits: Habits
   readonly sessions: Sessions
   /** vault 根目录（笔记源注册路径归一用；posix 规范形态）。 */
   readonly vaultRoot: string
@@ -153,6 +161,8 @@ export class LearnhubEngine {
     this.content = new Content(this.paths)
     this.bank = new QuestionBank(this.paths)
     this.learnerCards = new LearnerCards(this.paths)
+    this.skills = new Skills(this.paths)
+    this.habits = new Habits(this.paths)
     this.noteManifest = new NoteSourceManifest(this.paths)
     this.ankiMirror = new AnkiMirror(this.paths)
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot)
@@ -2657,6 +2667,239 @@ export class LearnhubEngine {
     const c = await this.registry.resolve(courseKey)
     await this.learnerCards.archiveCard(c.root, node, cardId, archived)
     return { course: c.name, node, id: cardId, archived }
+  }
+
+  // ---- U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）----
+
+  /** 建技能条目（执行事件调度 lane 的载体）：与题目 FSRS 并行，不复用题目卡、
+   * 不进复习队列、无 mastery。 */
+  async skillCreate(name: string, opts?: { id?: string; maintenance_days?: number | null }): Promise<SkillDoc> {
+    return this.skills.create({ name, ...opts })
+  }
+
+  /** 技能清单 + lane 生效到期（维持节拍帽已折算）：可排期视图——due ≤ 今日即到期，
+   * due_kind 标明这次是习得（acquisition）还是维持复活（maintenance/迷你重做+回放）。 */
+  async skillList(today?: string): Promise<SkillsListDoc> {
+    today ??= (await this.learningDay()).today
+    const { skills, broken } = await this.skills.list()
+    return {
+      date: today,
+      skills: skills.map(s => {
+        const due = laneDue(s.fsrs ?? null, s.maintenance_days)
+        return {
+          id: s.skill, name: s.name, status: s.status,
+          maintenance_days: s.maintenance_days,
+          due,
+          /** 到期种类（仅在已到期时有意义；fresh = null 表示从未执行、无到期语义）。 */
+          due_kind: due !== null && due <= today ? laneEventKind(s.fsrs ?? null, s.maintenance_days, today) : null,
+          attempts: s.stats?.attempts ?? 0,
+        }
+      }),
+      broken,
+    }
+  }
+
+  /** 调维持节拍上限（天；null 关）。纯实体属性：不影响既有 FSRS 状态。 */
+  async skillSetMaintenance(id: string, days: number | null): Promise<SkillDoc> {
+    const doc = await this.skills.load(id)
+    doc.maintenance_days = clampMaintenanceDays(days, 'skill-maintenance')
+    await this.skills.save(id, doc)
+    return doc
+  }
+
+  /** 归档/恢复技能条目（可逆）。archived 只是收纳标签：归档后拒绝再记执行事件。 */
+  async skillArchive(id: string, archived: boolean): Promise<SkillDoc> {
+    if (typeof archived !== 'boolean') throw new Error('[skill-archive] archived 必须显式给出（true 归档 / false 恢复）。')
+    return this.skills.setStatus(id, archived ? 'archived' : 'active')
+  }
+
+  /** 执行事件落账（通道核心）：表现评级（1-4 整数 + 来源 auto/self/ai）推进技能条目
+   * 的 lane（复用推进内核，一 lane 一学习日一次）；事件行进复习日志
+   * （rating_source='execution' + event_kind 维持/习得区分，不复用题目卡）；
+   * XP 按原生专注时长入账（journal kind='xp_execution'，1 XP ≈ 1 分钟，进 streak
+   * 口径；时长来源 = 学习者申报，不设反作弊门，ADR-0019）。auto 来源必须携带可观测
+   * 证据走确定性映射；self/ai 走显式评级。 */
+  async executionLog(
+    skillId: string,
+    input: { source: ExecutionSource; minutes: number; rating?: number; evidence?: ExecutionEvidence; note?: string },
+  ): Promise<ExecutionLogResult> {
+    const doc = await this.skills.load(skillId)
+    if (doc.status !== 'active') {
+      throw new Error(`[execution-log] 技能「${skillId}」已归档——先 learnhub_skill_archive 恢复，再记执行事件。`)
+    }
+    const source = input.source
+    if (!(source === 'auto' || source === 'self' || source === 'ai')) {
+      throw new Error(`[execution-log] source 只能是 auto/self/ai（收到 ${String(source)}）。`)
+    }
+    let rating: 1 | 2 | 3 | 4
+    if (source === 'auto') {
+      if (!input.evidence) throw new Error("[execution-log] source='auto' 需要可观测证据（evidence.accuracy/self_help）——确定性映射是自动来源的唯一入口；无可观测判据时改用自评档（source='self' + rating）。")
+      rating = ratingFromEvidence(input.evidence)
+    } else {
+      // 1-4 整数硬校验（ADR-0018 入口契约）：小数静默取整会让 FSRS 丢乘子，不收
+      const r = input.rating
+      if (typeof r !== 'number' || !Number.isInteger(r) || r < 1 || r > 4) {
+        throw new Error(`[execution-log] ${source === 'self' ? '自评' : 'AI'} 评级必须是 1-4 的整数（收到 ${String(r)}）。`)
+      }
+      rating = r
+    }
+    const minutes = input.minutes
+    if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
+      throw new Error(`[execution-log] minutes 必须是 1–1440 的整数（本次专注分钟数，收到 ${String(minutes)}）。`)
+    }
+    const { today } = await this.learningDay()
+    // 事件种类在推进前判定（帽/因判定读的是旧状态）
+    const kind = laneEventKind(doc.fsrs ?? null, doc.maintenance_days, today)
+    const pushed = advanceStrict(await this.sched(null), doc, rating, today,
+      `[execution-log] 技能「${skillId}」今天已记过执行事件（一 lane 一学习日一次）。`)
+    await this.skills.updateEvidence(skillId, { fsrs: pushed.fs, stats: pushed.stats })
+    await this.store.appendReview({
+      ...executionRowIdentity(doc.skill),
+      rating, rating_source: 'execution', event_kind: kind, exec_source: source,
+      elapsed_days: pushed.log.elapsed_days,
+      stability_before: pushed.log.stability_before,
+      difficulty_before: pushed.log.difficulty_before,
+      r_pred: pushed.log.r_pred,
+    })
+    // XP：原生专注时长直入（1 XP ≈ 1 分钟），无绑定行进总账/每日目标/streak（ADR-0019）
+    await this.store.appendJournal({
+      course: '*', node: '*', rating, kind: 'xp_execution', elapsed_days: 0,
+      xp: minutes, duration_s: minutes * 60,
+      detail: executionXpDetail({ skill: doc.skill, source, kind, rating, minutes })
+        + (input.note?.trim() ? `；${input.note.trim()}` : ''),
+    })
+    return {
+      skill: doc.skill, rating, source, kind,
+      due: laneDue(pushed.fs, doc.maintenance_days) ?? pushed.fs.due,
+      xp: minutes, minutes, attempts: pushed.stats.attempts,
+    }
+  }
+
+  // ---- U 区·回执反馈环（#88 / ADR-0016）----
+
+  /** 回执提交全链：材料 → AI 量表评审（rubric = 实践节点内容要点）→ 评审分同权进
+   * practice_ema；渐退反馈 per 主体（完整评审位置 = wantsFullReview 曲线，学习者可
+   * force_full 越过）。零 XP、不推进任何 FSRS 卡；v1 只挂实践节点（type=practice）。 */
+  async receiptSubmit(
+    courseKey: string | undefined, node: string,
+    input: { kind: ReceiptKind; material: string; force_full?: boolean },
+    llm: (prompt: string, system?: string) => Promise<string>,
+  ): Promise<ReceiptSubmitResult> {
+    const kind = input.kind
+    if (!RECEIPT_KIND_LABEL[kind]) {
+      throw new Error(`[receipt-submit] kind 只能是 ${Object.keys(RECEIPT_KIND_LABEL).join('/')}（收到 ${String(kind)}）；其它形态用 text 一句话描述（链接/路径写进 material）。`)
+    }
+    const material = input.material?.trim()
+    if (!material) throw new Error('[receipt-submit] material 不能为空——回执是练习证据（描述/图片路径/导出/签核皆可）。')
+    const c = await this.registry.resolve(courseKey)
+    const { graph, state, broken } = await this.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[receipt-submit] 节点「${node}」不在课程「${c.name}」的图内。`)
+    this.assertNoteOk(c, graph, broken, node, 'receipt-submit')
+    if (graph.typeOf[node] !== 'practice') {
+      throw new Error(`[receipt-submit] 「${node}」不是实践节点（type=practice）——v1 回执只挂实践节点（ADR-0016：机制按通用实践主体建模，项目/技能条目载体后续接入）。`)
+    }
+    const note = await this.nodeNote(c, graph, node)
+    if (!note.fm) throw new Error('[receipt-submit] 节点笔记缺 frontmatter，无法入练习证据 EMA。')
+    const points = await this.explainPoints(c, graph, node)
+    const { today } = await this.learningDay()
+    return submitReceipt({
+      store: this.store,
+      course: c.name, node,
+      kind, material,
+      points,
+      today,
+      forceFull: input.force_full === true,
+      fm: note.fm,
+      saveFm: async fm => { await this.saveNodeNote(note.path, fm, note.body) },
+      llm,
+      template: await this.loadPrompt('回执评审'),
+    })
+  }
+
+  /** 回执历史 + 渐退计划状态（per 实践主体）。 */
+  async receiptList(courseKey: string | undefined, node: string): Promise<{
+    course: string; node: string
+    receipts: ReceiptLogRec[]
+    total: number
+    next_full_in: number | null
+  }> {
+    const c = await this.registry.resolve(courseKey)
+    const all = await this.store.receiptsAll()
+    const receipts = all.filter(r => r.course === c.name && r.node === node)
+    return {
+      course: c.name, node, receipts,
+      total: receipts.length,
+      // 空态 = 1：首份回执即完整评审（与纯函数 receiptsUntilNextFull 同一口径）
+      next_full_in: receiptsUntilNextFull(receipts.length),
+    }
+  }
+
+  // ---- U 区·习惯一等公民（#90 / ADR-0017：零 FSRS 语义、零 canonical 写入）----
+
+  /** 建习惯（执行意图 = 稳定线索 + 单一具体行动，格式锁死）。 */
+  async habitCreate(input: { name: string; cue: string; action: string; id?: string }): Promise<HabitDoc> {
+    return this.habits.create(input)
+  }
+
+  /** 习惯清单 + 派生面（累计重复 / 宽容 streak / 自动化曲线摘要）。曲线与 streak 只
+   * 展示给学习者：这里返回的数字永不进 Mastery/XP/任何 canonical 度量。 */
+  async habitList(today?: string): Promise<HabitsListDoc> {
+    today ??= (await this.learningDay()).today
+    const { habits, broken } = await this.habits.list()
+    const repeats = await this.store.habitRepeatsAll()
+    return {
+      date: today,
+      habits: habits.map(h => {
+        const mine = repeats.filter(r => r.habit === h.habit)
+        const curve = automationCurve(mine)
+        return {
+          id: h.habit, name: h.name, status: h.status,
+          intention: h.intention,
+          total_repeats: mine.length,
+          streak: habitStreak([...new Set(mine.map(r => r.day))], today),
+          latest_rating: curve.length ? curve[curve.length - 1].rating : null,
+        }
+      }),
+      broken,
+    }
+  }
+
+  /** 单个习惯详情：意图 + 完整自动化曲线（x=累计重复次数，y=自评 1-5）+ 近期重复。 */
+  async habitShow(habitId: string, today?: string): Promise<HabitShowDoc> {
+    today ??= (await this.learningDay()).today
+    const doc = await this.habits.load(habitId)
+    const mine = (await this.store.habitRepeatsAll()).filter(r => r.habit === habitId)
+    return {
+      ...doc,
+      total_repeats: mine.length,
+      streak: habitStreak([...new Set(mine.map(r => r.day))], today),
+      curve: automationCurve(mine),
+      recent: [...mine].sort((a, b) => b.ts.localeCompare(a.ts)).slice(0, 10),
+    }
+  }
+
+  /** 自报一次重复（唯一入账来源；无门禁不防作弊）。可选携带自动化自评 1-5
+   * （SRBAI 语义的事件级自评，不强制每次）。习惯域零 XP：不写 journal/practice。 */
+  async habitRepeat(habitId: string, input: { auto_rating?: number; note?: string }): Promise<HabitRepeatRec> {
+    const doc = await this.habits.load(habitId)
+    const rating = input.auto_rating
+    if (rating !== undefined && (typeof rating !== 'number' || !Number.isInteger(rating) || rating < 1 || rating > 5)) {
+      throw new Error(`[habit-repeat] auto_rating 必须是 1-5 的整数（自动化自评，收到 ${String(rating)}）；省略则只记重复。`)
+    }
+    const { today } = await this.learningDay()
+    return this.store.appendHabitRepeat({
+      ts: nowIso(),
+      habit: doc.habit,
+      day: today,
+      ...(rating !== undefined ? { auto_rating: rating } : {}),
+      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+    })
+  }
+
+  /** 归档/恢复习惯（可逆；archived 只是收纳标签，无到期无截止）。 */
+  async habitArchive(habitId: string, archived: boolean): Promise<HabitDoc> {
+    if (typeof archived !== 'boolean') throw new Error('[habit-archive] archived 必须显式给出（true 归档 / false 恢复）。')
+    return this.habits.setStatus(habitId, archived ? 'archived' : 'active')
   }
 
   // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----
