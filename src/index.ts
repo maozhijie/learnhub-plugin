@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：49 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/Anki 互通）
+ * - agent 工具面：51 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -893,6 +893,17 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
           engine.noteSourceUnregister(need(body, 'id'))))
         return
       }
+      if (route === '/note-source/exclude') {
+        // 用户排除清单（V-1 #86）：面板/agent 同一引擎通道；清单随 GET /note-sources 带出
+        sendJson(res, 200, await apiRun('api/note-source/exclude', () =>
+          engine.noteSourceExclude(need(body, 'path'))))
+        return
+      }
+      if (route === '/note-source/unexclude') {
+        sendJson(res, 200, await apiRun('api/note-source/unexclude', () =>
+          engine.noteSourceUnexclude(need(body, 'path'))))
+        return
+      }
       if (route === '/note-source/generate') {
         // 笔记源出题（#59）：读笔记正文 → 笔记出题 prompt → validateBank 门禁落镜像
         sendJson(res, 200, await apiRun('api/note-source/generate', () => engine.noteSourceGenerate(
@@ -1397,12 +1408,12 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         null, { ...(args.predicted !== undefined ? { predicted: args.predicted as never } : {}) }))))
 
   tool('learnhub_note_source_register',
-    'Register a personal vault note (or a folder — batch-registers every .md under it, recursively, dot-dirs skipped) as a Note Source (C1): the engine reads it ONLY to generate review questions; the note file is never written (zero bytes change, never judged Broken). Derivatives (fingerprint manifest + per-source question bank) live in the 学习中心/笔记源 mirror. Re-registering a missing source by the same path restores it. Question generation is a separate explicit step (learnhub_note_source_generate).',
-    { path: { type: 'string', required: true, description: 'Note or folder path, vault-relative or absolute; must be outside the learning center' } },
+    'Register a personal vault note (or a folder — batch-registers every .md under it, recursively, dot-dirs skipped) as a Note Source (C1): the engine reads it ONLY to generate review questions; the note file is never written (zero bytes change, never judged Broken). Derivatives (fingerprint manifest + per-source question bank) live in the 学习中心/笔记源 mirror. Re-registering a missing source by the same path restores it. The user exclusion list (learnhub_note_source_exclude) is enforced at this entry: an excluded input fails loud, and excluded subtrees are batch-skipped — skipped/skipped_paths report everything skipped (excluded entries and any learning-center files; when every .md under the input is skipped the error says so). Question generation is a separate explicit step (learnhub_note_source_generate).',
+    { path: { type: 'string', required: true, description: 'Note or folder path, vault-relative or absolute; must be outside the learning center and the user exclusion list' } },
     (args: { path: string }) => run('learnhub_note_source_register', async () =>
       JSON.stringify(await engine.noteSourceRegister(args.path))))
   tool('learnhub_note_source_list',
-    'List registered Note Sources (C1) with pool status: ok / missing (note deleted or renamed — pool suspended, re-register or unregister) / drifted (note edited since question generation — regenerate or archive old questions, never automatic). Cards enter the global review queue automatically when due (course field = 笔记源).',
+    'List registered Note Sources (C1) with pool status: ok / missing (note deleted or renamed — pool suspended, re-register or unregister) / drifted (note edited since question generation — regenerate or archive old questions, never automatic). Cards enter the global review queue automatically when due (course field = 笔记源). The response also carries excludes — the user exclusion list (paths never auto-registered; governs future registrations only, existing sources stay).',
     {},
     () => run('learnhub_note_source_list', async () =>
       JSON.stringify(await engine.noteSourceList())))
@@ -1411,6 +1422,16 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { id: { type: 'string', required: true, description: 'Note-source id, e.g. "note-1"' } },
     (args: { id: string }) => run('learnhub_note_source_unregister', async () =>
       JSON.stringify(await engine.noteSourceUnregister(args.id))))
+  tool('learnhub_note_source_exclude',
+    'Add a path to the user exclusion list (V-1): a note/folder that batch registrations must never absorb (e.g. private journals, sync-noise folders). Vault-relative or absolute, file or folder (folder = the whole subtree), need not exist yet. Governs FUTURE registrations only — already-registered sources stay until learnhub_note_source_unregister. Current list rides learnhub_note_source_list.',
+    { path: { type: 'string', required: true, description: 'Note or folder path to exclude, vault-relative or absolute; must be outside the learning center' } },
+    (args: { path: string }) => run('learnhub_note_source_exclude', async () =>
+      JSON.stringify(await engine.noteSourceExclude(args.path))))
+  tool('learnhub_note_source_unexclude',
+    'Remove a path from the user exclusion list (must be on it — fails loud otherwise), making it registrable again via learnhub_note_source_register. Does not auto-register.',
+    { path: { type: 'string', required: true, description: 'Excluded path to release, vault-relative or absolute' } },
+    (args: { path: string }) => run('learnhub_note_source_unexclude', async () =>
+      JSON.stringify(await engine.noteSourceUnexclude(args.path))))
   tool('learnhub_note_source_generate',
     'Generate review questions for a Note Source (C1): reads the note body (read-only) → 笔记出题 prompt → model → validateBank gate appends each question to the mirror bank (学习中心/笔记源/题库/<id>.yaml) → new cards get their FSRS card initialized (due tomorrow, synthetic init like course completion). The manifest fingerprint refreshes to the current content (drift acknowledged); old questions are NOT auto-archived — offer the learner to archive them explicitly. Fails loud when the source file is missing (re-register first).',
     {

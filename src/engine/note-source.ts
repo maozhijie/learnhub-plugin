@@ -11,11 +11,14 @@
  *
  * 注册身份落在课程注册表 note_sources 域（{id, path, enabled, created}）；镜像区
  * 源清单.yaml 持 {id, path, fingerprint, title}（指纹每读比较 → Missing/漂移）。
+ * 用户排除清单（V-1 #86）的配置 IO 也归本模块：learnhub.json 的 note_source_excludes，
+ * 注册入口强制执行（清单内路径不收编），只管未来注册、不摘已注册源。
  */
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
+import { atomicWrite } from './store.ts'
 import type { NoteSourceEntry } from './types.ts'
 import type { Paths } from './paths.ts'
 
@@ -150,7 +153,7 @@ export function normalizeSourcePath(vaultRoot: string, centerRoot: string, input
       : `${vaultRoot}/${p}`
   const norm = abs.replace(/\/{2,}/g, '/')
   if (!norm.startsWith(`${vaultRoot}/`)) throw new Error(`[note-source] 路径不在 vault 内：${input}`)
-  const rel = norm.slice(vaultRoot.length + 1)
+  const rel = norm.slice(vaultRoot.length + 1).replace(/\/+$/, '')
   if (rel.split('/').some(seg => seg === '..')) throw new Error(`[note-source] 路径不允许 ..（越界拒绝）：${input}`)
   if (`${vaultRoot}/${rel}`.replace(/\/{2,}/g, '/') === centerRoot
     || rel === centerRoot.slice(vaultRoot.length + 1)
@@ -160,8 +163,11 @@ export function normalizeSourcePath(vaultRoot: string, centerRoot: string, input
   return rel
 }
 
-/** 递归收集目录下全部 .md（跳过点开头目录）；文件输入原样返回。 */
-export async function collectNoteFiles(absPath: string): Promise<Array<{ abs: string; filename: string }>> {
+/** 递归收集目录下全部 .md（跳过点开头目录）；文件输入原样返回。
+ * skip 谓词（收 abs 路径）命中时：目录不下钻、文件不收（V-1 #86 用户排除清单用）。 */
+export async function collectNoteFiles(
+  absPath: string, skip?: (abs: string) => boolean,
+): Promise<Array<{ abs: string; filename: string }>> {
   let st
   try {
     st = await stat(absPath)
@@ -169,6 +175,7 @@ export async function collectNoteFiles(absPath: string): Promise<Array<{ abs: st
     throw new Error(`[note-source] 路径不存在：${absPath}`)
   }
   if (st.isFile()) {
+    if (skip?.(absPath)) return []
     if (!absPath.toLowerCase().endsWith('.md')) {
       throw new Error(`[note-source] 只支持 .md 笔记（收到：${absPath}）`)
     }
@@ -179,6 +186,7 @@ export async function collectNoteFiles(absPath: string): Promise<Array<{ abs: st
     const entries = await readdir(dir, { withFileTypes: true })
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const child = `${dir}/${entry.name}`
+      if (skip?.(child)) continue
       if (entry.isDirectory()) {
         if (!entry.name.startsWith('.')) await walk(child)
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
@@ -188,6 +196,45 @@ export async function collectNoteFiles(absPath: string): Promise<Array<{ abs: st
   }
   await walk(absPath)
   return out
+}
+
+// ---- 用户排除清单（V-1 #86：state/learnhub.json 的 note_source_excludes）----
+
+/** 排除命中判定（纯函数）：精确（文件条目）或目录前缀（文件夹条目含其后代）。 */
+export function isExcludedPath(rel: string, excludes: string[]): boolean {
+  return excludes.some(e => rel === e || rel.startsWith(`${e}/`))
+}
+
+/** 读排除清单。条目做形状归一（反斜杠→posix、剥尾斜杠、滤空）——手编配置的常见
+ * 写法不得静默失效（防收编是本清单的存在理由）；缺失/顶层形态不符回落空列表
+ * ——learnhub.json 配置同款：ADR-0004 的 fail loud 针对学习者数据损坏，不是配置笔误。 */
+export async function readNoteSourceExcludes(paths: Paths): Promise<string[]> {
+  try {
+    const doc = JSON.parse(await readFile(paths.learnhubConfigPath, 'utf8')) as {
+      note_source_excludes?: unknown
+    }
+    if (!Array.isArray(doc.note_source_excludes)) return []
+    return doc.note_source_excludes
+      .filter((e): e is string => typeof e === 'string')
+      .map(e => e.replace(/\\/g, '/').replace(/\/+$/, '').trim())
+      .filter(e => !!e)
+  } catch {
+    return []
+  }
+}
+
+/** 写排除清单（原子替换，保留 learnhub.json 其他字段）。入参须是已归一形态。 */
+export async function writeNoteSourceExcludes(paths: Paths, excludes: string[]): Promise<void> {
+  let prev: Record<string, unknown> = {}
+  try {
+    prev = JSON.parse(await readFile(paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
+  } catch {
+    // 无配置文件/损坏 → 全新写入
+  }
+  await atomicWrite(
+    paths.learnhubConfigPath,
+    JSON.stringify({ ...prev, note_source_excludes: excludes }, null, 1) + '\n',
+  )
 }
 
 /** 镜像区源清单 IO（Missing = 合法空；Broken fail loud——它是镜像区契约文件）。 */

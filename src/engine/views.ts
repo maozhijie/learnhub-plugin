@@ -723,14 +723,22 @@ export interface NoteSourceItem {
   broken?: true
 }
 
-/** 笔记源清单（noteSourceList）。 */
-export interface NoteSourceDoc { date: string; total: number; sources: NoteSourceItem[] }
+/** 笔记源清单（noteSourceList）。excludes = 用户排除清单（V-1 #86，只管未来注册）。 */
+export interface NoteSourceDoc {
+  date: string
+  total: number
+  excludes: string[]
+  sources: NoteSourceItem[]
+}
 
-/** 笔记源注册（noteSourceRegister）：单篇 .md 或文件夹批量登记；随响应带回最新清单。 */
+/** 笔记源注册（noteSourceRegister）：单篇 .md 或文件夹批量登记；随响应带回最新清单。
+ * skipped = 被跳过条目数（排除清单命中 + 学习中心内部文件）；skipped_paths 仅在有
+ * 跳过时带回（vault 相对，混合两类）。 */
 export interface NoteSourceRegisterResult {
   date: string
   registered: number
   updated: number
   skipped: number
   sources: NoteSourceItem[]
+  skipped_paths?: string[]
 }
