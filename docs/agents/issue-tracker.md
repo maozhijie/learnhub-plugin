@@ -22,6 +22,10 @@ Do not work around this by putting a GitHub token in an environment variable or 
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Transient gh failures: retry once before diagnosing
+
+`gh` calls can fail transiently on this machine: a `gh issue view <n> --comments` may return empty output while the same view succeeds on retry, and GraphQL calls can die with `TLS handshake timeout`. Both observed 2026-09-09, both fine on immediate retry. Retry the same command once before concluding anything about auth, sandboxing, or the issue's existence.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.**
