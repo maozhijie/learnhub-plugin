@@ -7,7 +7,7 @@
  * 节点的 stage 推进发生在作答（首答→learning）与完成确认（→review）两处，见 engine。
  */
 import { existsSync } from 'node:fs'
-import { todayStr, parseDay, daysBetween } from './dates.ts'
+import { parseDay, daysBetween, dayOfTs } from './dates.ts'
 import { effectiveStage } from './audit.ts'
 import { retrievability, getScheduler, masteryOfFm } from './srs.ts'
 import { R_GATE } from './params.ts'
@@ -127,9 +127,9 @@ export function isStruggle(attempts: number, correct: number): boolean {
   return attempts >= STRUGGLE_MIN_ATTEMPTS && correct / attempts < STRUGGLE_ACCURACY
 }
 
-/** 作答流水 ts（ISO，本地时）是否落在 struggle 近期窗口内（按本地日；未来时间戳不算）。 */
-export function withinStruggleWindow(ts: string, today: string, days = STRUGGLE_WINDOW_DAYS): boolean {
-  const t = parseDay(ts)
+/** 作答流水 ts（ISO，本地时）是否落在 struggle 近期窗口内（按学习日，ADR-0020；未来时间戳不算）。 */
+export function withinStruggleWindow(ts: string, today: string, days = STRUGGLE_WINDOW_DAYS, cutoffMin = 0): boolean {
+  const t = parseDay(dayOfTs(ts, cutoffMin))
   const now = parseDay(today)
   if (!t || !now) return false
   const back = daysBetween(now, t)
@@ -236,7 +236,8 @@ export class Sessions {
   async statusJson(
     enabled: Array<{ name: string; root: string; id?: string }>,
     statsByCourse: Map<string, NodeStat[]>,
-    today = todayStr(),
+    today: string,
+    dayCutoff: string,
   ): Promise<Record<string, unknown>> {
     const courses: Array<Record<string, unknown>> = []
     for (const c of enabled) {
@@ -265,7 +266,7 @@ export class Sessions {
           }))])),
       })
     }
-    return { date: today, courses }
+    return { date: today, day_cutoff: dayCutoff, courses }
   }
 
   // ---- 动态推荐 ----
@@ -485,8 +486,8 @@ export class Sessions {
     return sections
   }
 
-  /** 单节点课程学习包：分节正文 + 前置 + 推荐下一步。 */
-  async lesson(courseName: string, root: string, graph: Graph, state: Record<string, Fm>, node: string): Promise<Record<string, unknown>> {
+  /** 单节点课程学习包：分节正文 + 前置 + 推荐下一步。today = 学习日（ADR-0020），facade 注入。 */
+  async lesson(courseName: string, root: string, graph: Graph, state: Record<string, Fm>, node: string, today: string): Promise<Record<string, unknown>> {
     if (!graph.nset.has(node)) throw new Error(`[lesson] 课程「${courseName}」中没有节点「${node}」。`)
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
@@ -501,7 +502,7 @@ export class Sessions {
     }
     const sections = Sessions.lessonSections(body)
     const sched = await getScheduler(this.paths, this.paths.courseRoot(root))
-    const rValue = (n: string) => retrievability(sched, state[n], todayStr())
+    const rValue = (n: string) => retrievability(sched, state[n], today)
     const candidates = readySet(graph, state, rValue).filter(n => n !== node)
     const unlocks = candidates.filter(n => graph.preOf[n].includes(node))
     return {

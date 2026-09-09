@@ -10,11 +10,6 @@ import { dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from '../lib/engine.js'
 
-const todayStr = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 const vault = process.argv[2]
 if (!vault) {
   console.error('usage: node scripts/e2e.mjs <vault>')
@@ -125,6 +120,8 @@ const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'assertion fai
 
 async function run() {
   const engine = new LearnhubEngine({ vault: scratch })
+  // 学习日从引擎取（ADR-0020）：日界可配置（默认 02:00），UI/脚本不得自算日历日
+  const learningToday = (await engine.xpStatus()).date
   await step('questionSave', async () => {
     const r = await engine.questionSave(courseName, noteName, [
       'node: ' + noteName,
@@ -151,7 +148,7 @@ async function run() {
     const r = await engine.questionAnswer(async () => { throw new Error('should not call llm') }, courseName, noteName, 'q1', 'A')
     assert(r.correct === true && r.score === 100, `expected correct, got ${JSON.stringify(r)}`)
     assert(r.explanation.includes('0 是自然数'), 'explanation missing')
-    assert(typeof r.due === 'string' && r.due > todayStr(), `fsrs due missing: ${r.due}`)
+    assert(typeof r.due === 'string' && r.due > learningToday, `fsrs due missing: ${r.due}`)
     assert(r.mastery > 0, `mastery=${r.mastery}`)
     const bank = await engine.bank.load(engine.paths.courseRoot(courseRoot), noteName)
     const q1 = bank.questions.find(q => q.id === 'q1')

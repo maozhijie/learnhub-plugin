@@ -8,6 +8,7 @@
  * （True Retention = 到期复习中实际答对的比例）。零依赖纯函数（接缝 S26）。
  */
 import type { ReviewRec } from './types.ts'
+import { dayOfTs } from './dates.ts'
 
 /** 负载预报的时间窗（未来 N 日，Anki Forecast 语义；假设不再学新卡且不遗忘）。 */
 export const FORECAST_DAYS = 30
@@ -57,14 +58,14 @@ export function stateHistograms(samples: Array<{ stability: number | null; diffi
 
 /** 保留率口径的复习日志过滤：只计真实作答（auto/self，排除 synthetic）且确有旧卡
  * （到期复习；首学推进排除）的记录，且每卡每天只取第一次推进（Anki 口径，防御性
- * 归一——引擎不变量本就一题一天至多推进一次）。 */
-export function dueReviewFirstPushes(logs: ReviewRec[]): ReviewRec[] {
+ * 归一——引擎不变量本就一题一天至多推进一次）。「天」= 学习日（ADR-0020）。 */
+export function dueReviewFirstPushes(logs: ReviewRec[], cutoffMin = 0): ReviewRec[] {
   const seen = new Set<string>()
   const out: ReviewRec[] = []
   for (const rec of logs) {
     if (rec.rating_source !== 'auto' && rec.rating_source !== 'self') continue
     if (rec.stability_before === null || rec.stability_before === undefined) continue
-    const day = typeof rec.ts === 'string' ? rec.ts.slice(0, 10) : ''
+    const day = typeof rec.ts === 'string' ? dayOfTs(rec.ts, cutoffMin) : ''
     if (!day) continue
     const key = `${rec.course}/${rec.node}/${rec.qid}/${day}`
     if (seen.has(key)) continue

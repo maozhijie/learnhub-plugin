@@ -1027,6 +1027,12 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         sendJson(res, 200, await apiRun('api/daily-goal', () => engine.setDailyGoal(goal)))
         return
       }
+      if (route === '/day-cutoff') {
+        // 日界（ADR-0020）：学习日切换的本地时刻 'HH:mm'（非法值引擎 fail loud）
+        if (typeof body.value !== 'string') throw new Error('missing required field: value')
+        sendJson(res, 200, await apiRun('api/day-cutoff', () => engine.setDayCutoff(body.value)))
+        return
+      }
       if (route === '/jol') {
         // JOL 抽查配置（#66 E4）：enabled 全局开关 + rate 抽样率（0<r≤1）
         sendJson(res, 200, await apiRun('api/jol', () => engine.setJolConfig({

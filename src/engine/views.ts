@@ -75,7 +75,13 @@ export interface StatusCourse {
   diagnostics?: DiagnosticEntry[]
 }
 
-export interface StatusDoc { date: string; courses: StatusCourse[] }
+export interface StatusDoc {
+  /** 当前学习日（ADR-0020；日界可配置，非必为日历日）。 */
+  date: string
+  /** 生效日界 'HH:mm'（配置三件套静默回落时的可见性补偿）。 */
+  day_cutoff: string
+  courses: StatusCourse[]
+}
 
 // ---- recommend（GET /api/recommend、learnhub_recommend；recommend → sessions.recommendEvents）----
 
@@ -522,7 +528,10 @@ export interface AnkiStatusDoc {
 export interface EtaItem { course: string; remaining: number; done: number; per_node: number; days: number }
 
 export interface XpStatus {
+  /** 当前学习日（ADR-0020）。 */
   date: string
+  /** 生效日界 'HH:mm'（ADR-0020 配置三件套静默回落时的可见性补偿）。 */
+  day_cutoff: string
   today_xp: number
   goal: number
   streak: number

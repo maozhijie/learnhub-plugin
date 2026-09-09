@@ -18,7 +18,7 @@
  * 估计随元数据落盘（小数据下 binding 会 NotEnoughData，缺失时记 null）。
  */
 import { generatorParameters } from 'ts-fsrs'
-import { daysBetween, parseDay } from './dates.ts'
+import { daysBetween, parseDay, dayOfTs } from './dates.ts'
 import type { ReviewRec } from './types.ts'
 
 /** 写回门禁：真实复习日志条数下限（官方口径：Anki 24.04 要求 ≥400，月频重训足够）。 */
@@ -37,8 +37,8 @@ export interface TrainingSequence {
 export interface OptimizerMetrics { logLoss: number; rmseBins: number }
 
 /** 真实推进 → 每卡训练序列（纯函数，接缝 S27）：排除 synthetic、每卡每天取第一条、
- * delta_t 链首条 0；序列按 key 排序保证确定序。 */
-export function trainingSequences(logs: ReviewRec[]): TrainingSequence[] {
+ * delta_t 链首条 0；序列按 key 排序保证确定序。「天」= 学习日（ADR-0020）。 */
+export function trainingSequences(logs: ReviewRec[], cutoffMin = 0): TrainingSequence[] {
   const byCard = new Map<string, ReviewRec[]>()
   for (const rec of logs) {
     if (rec.rating_source !== 'auto' && rec.rating_source !== 'self') continue
@@ -53,7 +53,7 @@ export function trainingSequences(logs: ReviewRec[]): TrainingSequence[] {
     const reviews: Array<{ rating: number; delta_t: number }> = []
     let lastDay: string | null = null
     for (const rec of list) {
-      const day = rec.ts.slice(0, 10)
+      const day = dayOfTs(rec.ts, cutoffMin)
       if (!day) continue
       if (day === lastDay) continue // 每卡每天只算第一条（防御性归一；引擎不变量本就至多一次）
       const delta = lastDay === null ? 0

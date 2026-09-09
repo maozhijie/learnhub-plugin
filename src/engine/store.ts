@@ -8,7 +8,7 @@
  */
 import { mkdir, readFile, rename, appendFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { nowIso } from './dates.ts'
+import { nowIso, dayOfTs } from './dates.ts'
 import type { JournalRec, PracticeRec, ProposalRec, ReviewRec, EArchiveRec } from './types.ts'
 import type { PinRec } from './goals.ts'
 import type { BandRec } from './coach.ts'
@@ -54,9 +54,9 @@ export class Store {
     return course ? lines.filter(r => r.course === course).length : lines.length
   }
 
-  /** 学习行为按日聚合（journal + practice；ts 为本地时间 ISO，slice(0,10) 即本地日）。
-   * 打卡/日历热力图的数据源——行为流水即事实，零新增文件。 */
-  async activityCounts(): Promise<Record<string, { journal: number; practice: number; total: number }>> {
+  /** 学习行为按日聚合（journal + practice；ts 为本地时间 ISO，过日界推学习日，ADR-0020）。
+   * 打卡/日历热力图与 streak 的数据源——行为流水即事实，零新增文件。 */
+  async activityCounts(cutoffMin = 0): Promise<Record<string, { journal: number; practice: number; total: number }>> {
     const [journal, practice] = await Promise.all([
       this.readJsonl<JournalRec>(this.paths.journalPath),
       this.readJsonl<PracticeRec>(this.paths.practicePath),
@@ -64,7 +64,7 @@ export class Store {
     const byDay: Record<string, { journal: number; practice: number; total: number }> = {}
     const bump = (ts: string | undefined, key: 'journal' | 'practice') => {
       if (!ts) return
-      const day = ts.slice(0, 10)
+      const day = dayOfTs(ts, cutoffMin)
       const slot = byDay[day] ?? (byDay[day] = { journal: 0, practice: 0, total: 0 })
       slot[key] += 1
       slot.total += 1

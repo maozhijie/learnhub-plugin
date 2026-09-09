@@ -66,9 +66,8 @@ export interface GraphAnalysis {
 
 export async function analyzeGraph(
   courseName: string, graph: Graph, state: Record<string, Fm>, store: Store,
-  scaleTarget?: ScaleTarget | null,
+  scaleTarget?: ScaleTarget | null, today: string = todayStr(),
 ): Promise<GraphAnalysis> {
-  const today = todayStr()
   const t = parseDay(today)!
 
   // 不可达 = 从任一根出发 BFS 达不到的节点（有环时跳过）

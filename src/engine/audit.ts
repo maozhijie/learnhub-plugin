@@ -29,6 +29,7 @@ export interface AuditResult {
 
 export async function runAudit(
   paths: Paths, root: string, courseName: string, graph: Graph, regions: GRegion[],
+  today: string = todayStr(),
 ): Promise<AuditResult> {
   const errors: string[] = []
   const warns: string[] = []
@@ -36,7 +37,6 @@ export async function runAudit(
   const { names, nset, preOf, depth, reach, hasCycle, blockOf } = graph
   const name2region = Object.fromEntries(names.map(n => [n, blockOf[n][1]]))
   const name2block = Object.fromEntries(names.map(n => [n, blockOf[n][2]]))
-  const today = todayStr()
 
   // E1/E2
   for (const [n, c] of Object.entries(graph.count)) {

@@ -10,12 +10,6 @@ import type { BankEntry, DifficultyAdviceNode } from '../types'
 
 const { Text } = Typography
 
-/** 本地今日串（YYYY-MM-DD；到期列红/橙/灰着色用）。 */
-const todayStr = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 const KIND_LABEL: Record<string, string> = {
   single_choice: '单选', multi_choice: '多选', fill_in_blank: '填空', true_false: '判断',
   numeric: '数值', ordering: '排序', matching: '配对', reflection: '反思', open_question: '开放',
@@ -114,7 +108,8 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
   /** B2 难度建议（#72）：失衡/过于简单只读建议，页顶建议区消费；null = 加载中。 */
   const [advice, setAdvice] = useState<DifficultyAdviceNode[] | null>(null)
   const [recalibrating, setRecalibrating] = useState<string | null>(null)
-  const today = todayStr()
+  /** 当前学习日（ADR-0020）：随难度建议载荷带出，UI 不自算日界；null = 建议未取到。 */
+  const [today, setToday] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -126,7 +121,13 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
   }, [filterCourse])
 
   const loadAdvice = useCallback(async () => {
-    setAdvice(await api.difficultyAdvice().then(r => r.nodes).catch(() => []))
+    try {
+      const doc = await api.difficultyAdvice()
+      setAdvice(doc.nodes)
+      setToday(doc.date) // 学习日（ADR-0020）：到期列着色与引擎同口径
+    } catch {
+      setAdvice([])
+    }
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -136,6 +137,9 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     ? (frame.tree?.courses.find(c => c.name === filterCourse)?.regions ?? [])
       .flatMap(r => r.blocks.flatMap(b => b.nodes.map(n => n.node)))
     : []
+  /** 到期列着色：以引擎学习日为基准（ADR-0020）；学习日未取到时不着色。 */
+  const dueColor = (due: string) =>
+    today === null ? 'gray' : due < today ? 'red' : due === today ? 'orange' : 'gray'
 
   const visible = (entries ?? []).filter(e =>
     (showArchived || !e.archived)
@@ -243,8 +247,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
             { title: '题型', width: 70, render: (_, e) => <Tag size='small'>{KIND_LABEL[e.kind] ?? e.kind}</Tag> },
             { title: '题干', dataIndex: 'q', ellipsis: true },
             { title: '到期', width: 112, render: (_, e) => e.due ? (
-              <Tag size='small'
-                color={e.due < today ? 'red' : e.due === today ? 'orange' : 'gray'}
+              <Tag size='small' color={dueColor(e.due)}
                 title={e.lastReview ? `上次复习 ${e.lastReview}` : undefined}>
                 {e.due}
               </Tag>

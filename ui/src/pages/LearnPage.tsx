@@ -1144,7 +1144,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
           <Button onClick={() => setCreateVisible(true)}>生成新课程</Button>
         </div>
       </div>
-      <XpBar xp={xp ?? { date: '', today_xp: 0, goal: 30, streak: 0, eta: [] }}
+      <XpBar xp={xp ?? { date: '', day_cutoff: '', today_xp: 0, goal: 30, streak: 0, eta: [] }}
         onEditGoal={() => frame.goto('stats')} />
       <ReviewBanner reviewQ={reviewQ} anki={anki} onStart={() => setSession(dueCards)}
         onExportAnki={() => void exportAnki()} exporting={exportingAnki}

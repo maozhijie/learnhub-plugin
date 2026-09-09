@@ -53,12 +53,12 @@ import type { AnkiMirrorEntry, AnkiNotePayload, AnkiTransport } from './anki.ts'
 import { explainBackPack, explainFeedbackSystem, explainFeedbackPrompt, parseExplainVerdict } from './explain.ts'
 import type { ExplainPoint, ExplainTag, ExplainVerdict } from './explain.ts'
 import { YAML } from './yaml.ts'
-import { Sessions, assertNoBrokenNotes, withinStruggleWindow } from './sessions.ts'
+import { Sessions, assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from './sessions.ts'
 import type { NodeStat, WindowStat } from './sessions.ts'
-import { todayStr, nowIso } from './dates.ts'
+import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
-import { xpForAnswer, readDailyGoal, writeDailyGoal, sumXp, streakFrom, nominalBudget, difficultyCalibration } from './xp.ts'
+import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration } from './xp.ts'
 import { XP_GUESS_SECONDS, XP_PERFECT_BONUS } from './params.ts'
 import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
@@ -155,6 +155,14 @@ export class LearnhubEngine {
     this.sessions = new Sessions(this.paths, async course => this.loadView(course))
   }
 
+  /** 当前学习日与生效日界（ADR-0020）：learnhub.json 现读（与 jol 同款每次现读），
+   * 一切调度/结算/「今日」视图的学习日单点——出处戳（generated_at/trained_at 等）
+   * 不属于学习口径，不经这里。 */
+  private async learningDay(): Promise<{ today: string; cutoff: number }> {
+    const cutoff = await readDayCutoff(this.paths)
+    return { today: todayStr(new Date(), cutoff), cutoff }
+  }
+
   // ---- 加载与解析 ----
 
   /** 单课完整视图：图 + frontmatter 状态（每次现读，文件量小，天然最新）。 */
@@ -228,8 +236,9 @@ export class LearnhubEngine {
   }
 
   async statusJson(): Promise<StatusDoc> {
-    const [stats, diagnostics] = await Promise.all([this.bankSnapshot(), this.diagnosticsAdvice()])
-    const doc = await this.sessions.statusJson(await this.enabledCourses(), stats)
+    const { today, cutoff } = await this.learningDay()
+    const [stats, diagnostics] = await Promise.all([this.bankSnapshot(today), this.diagnosticsAdvice(today)])
+    const doc = await this.sessions.statusJson(await this.enabledCourses(), stats, today, fmtCutoff(cutoff))
     // 内容诊断建议项（#69 B1）：每课程附 diagnostics（信号/理由/证据 + 重写与讲解直达入口）
     for (const course of doc.courses as Array<Record<string, unknown>>) {
       const items = diagnostics.filter(d => d.course === course.name)
@@ -239,11 +248,12 @@ export class LearnhubEngine {
   }
 
   async recommend(limit = 5): Promise<RecommendDoc> {
+    const { today } = await this.learningDay()
     const [stats, window, diagnostics, pins] = await Promise.all([
-      this.bankSnapshot(), this.struggleWindow(), this.diagnosticsAdvice(), this.store.loadPins(),
+      this.bankSnapshot(today), this.struggleWindow(today), this.diagnosticsAdvice(today), this.store.loadPins(),
     ])
-    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, todayStr(), limit, window, diagnostics, pins)
-    return { date: todayStr(), events }
+    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, today, limit, window, diagnostics, pins)
+    return { date: today, events }
   }
 
   // ---- 「今天学它」pin（E3 #67 / ADR-0009 Learner Output）----
@@ -252,7 +262,8 @@ export class LearnhubEngine {
    * 保留就绪提示——未就绪节点不拒绝，软闸建议随事件带出。仅作用当日，次日自动
    * 失效；同一课程可叠加多个 pin（按 pin 序依次置顶）。节点不在图内 fail loud；
    * 写入时顺带清理过期条目。零调度副作用（不碰 canonical/XP/掌握度）。 */
-  async pinToday(courseKey: string | undefined, node: string, today = todayStr()): Promise<{ course: string; node: string; date: string }> {
+  async pinToday(courseKey: string | undefined, node: string, today?: string): Promise<{ course: string; node: string; date: string }> {
+    today ??= (await this.learningDay()).today
     const c = await this.registry.resolve(courseKey)
     const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[pin] 节点「${node}」不在课程「${c.name}」的图内。`)
@@ -264,7 +275,8 @@ export class LearnhubEngine {
   }
 
   /** 取消 pin：移除该课程+节点的全部 pin（含过期条目），写入时顺带清理过期清单。 */
-  async unpinToday(courseKey: string | undefined, node: string, today = todayStr()): Promise<{ course: string; node: string; pinned: false }> {
+  async unpinToday(courseKey: string | undefined, node: string, today?: string): Promise<{ course: string; node: string; pinned: false }> {
+    today ??= (await this.learningDay()).today
     const c = await this.registry.resolve(courseKey)
     const rest = (await this.store.loadPins())
       .filter(p => p.date === today && !(p.course === c.name && p.node === node))
@@ -277,7 +289,9 @@ export class LearnhubEngine {
    * 触发留痕写 journal（kind=section_regen_signal，detail 人类可读且机器可回读），
    * 它同时是 7 天冷却与 R1 二次升级的判定依据；条件命中期间建议项保持可见（met），
    * 冷却与快照守门只约束新触发（fresh）。v1 只重写既有节、确认后才触发（不自动动库）。 */
-  async diagnosticsAdvice(today = todayStr()): Promise<DiagnosticItem[]> {
+  async diagnosticsAdvice(today?: string): Promise<DiagnosticItem[]> {
+    const { today: learningToday, cutoff } = await this.learningDay()
+    today ??= learningToday
     const out: DiagnosticItem[] = []
     const practice = await this.store.practiceAll()
     for (const c of await this.enabledCourses()) {
@@ -291,14 +305,14 @@ export class LearnhubEngine {
           const snap = parseSignalDetail(r.detail)
           if (!snap) continue
           const list = signalsByNode.get(r.node) ?? []
-          list.push({ ...snap, day: r.ts.slice(0, 10) })
+          list.push({ ...snap, day: dayOfTs(r.ts, cutoff) })
           signalsByNode.set(r.node, list)
         } else if (r.kind === 'content_section') {
           // detail 历史上只有节标题没有节 id（content.ts 契约）——按清单标题回退对齐
           const title = parseRewriteDetail(r.detail)
           if (!title) continue
           const list = rewritesByNode.get(r.node) ?? []
-          list.push({ title, day: r.ts.slice(0, 10) })
+          list.push({ title, day: dayOfTs(r.ts, cutoff) })
           rewritesByNode.set(r.node, list)
         }
       }
@@ -307,7 +321,7 @@ export class LearnhubEngine {
         if (!manifest?.length) return // 无清单旧节点：节归因不适用（标题匹配不出的节不产建议）
         const attempts = practice
           .filter(r => r.course === c.name && r.node === node)
-          .map(r => ({ qid: r.qid ?? '', day: r.ts.slice(0, 10), correct: r.correct }))
+          .map(r => ({ qid: r.qid ?? '', day: dayOfTs(r.ts, cutoff), correct: r.correct }))
         for (const v of evaluateSectionSignals({
           manifest,
           questions: bank.questions.filter(q => !q.archived).map(q => ({ id: q.id, section: q.section, fsrs: q.fsrs })),
@@ -337,11 +351,11 @@ export class LearnhubEngine {
   /** struggle 近期窗口统计（#55 F 半）：作答流水按 (course,node) 聚合，只留窗口内的
    * 真实作答证据（含交互件结算与忘记申报）。recommendEvents 消费；与累计的题库
    * stats 分开——复习中节点的 struggle 只看近期窗口，老账不翻。 */
-  private async struggleWindow(): Promise<Map<string, Map<string, WindowStat>>> {
-    const today = todayStr()
+  private async struggleWindow(today: string): Promise<Map<string, Map<string, WindowStat>>> {
     const out = new Map<string, Map<string, WindowStat>>()
+    const cutoff = await readDayCutoff(this.paths)
     for (const r of await this.store.practiceAll()) {
-      if (typeof r.correct !== 'boolean' || !withinStruggleWindow(r.ts, today)) continue
+      if (typeof r.correct !== 'boolean' || !withinStruggleWindow(r.ts, today, STRUGGLE_WINDOW_DAYS, cutoff)) continue
       const byNode = out.get(r.course) ?? new Map<string, WindowStat>()
       const agg = byNode.get(r.node) ?? { attempts: 0, correct: 0 }
       agg.attempts++
@@ -371,9 +385,8 @@ export class LearnhubEngine {
   /** 全部启用课程的题库聚合（一次遍历）：每节点 due/count/accuracy/attempts。
    * 复习队列（due/count）与 struggle 提示（accuracy）共用；未做题节点也入表
    * （accuracy=null），供推荐流判定 struggle 与面板通用轮组装。 */
-  private async bankSnapshot(): Promise<Map<string, NodeStat[]>> {
+  private async bankSnapshot(today: string): Promise<Map<string, NodeStat[]>> {
     const out = new Map<string, NodeStat[]>()
-    const today = todayStr()
     for (const c of await this.enabledCourses()) {
       const items: NodeStat[] = []
       out.set(c.name, items)
@@ -429,7 +442,7 @@ export class LearnhubEngine {
     for (const c of targets) {
       const { graph, state } = await this.loadView(c)
       const regions = graph.regions
-      const audit = await runAudit(this.paths, c.root, c.name, graph, regions)
+      const audit = await runAudit(this.paths, c.root, c.name, graph, regions, (await this.learningDay()).today)
       if (audit.failed) failed = true
       lines.push(`[${c.name}] 审计：ERROR ${audit.errors.length} | WARN ${audit.warns.length} | INFO ${audit.infos.length}${audit.failed ? '（阻断）' : ''}`)
       const done = new Set(Object.entries(state).filter(([, f]) => ['review', 'mastered', 'skipped'].includes(f.stage)).map(([n]) => n))
@@ -446,7 +459,7 @@ export class LearnhubEngine {
   ): Promise<GraphDoc | GraphElementsDoc> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state } = await this.loadView(c)
-    const doc = await analyzeGraph(c.name, graph, state, this.store, scaleTarget)
+    const doc = await analyzeGraph(c.name, graph, state, this.store, scaleTarget, (await this.learningDay()).today)
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
     return doc
   }
@@ -602,7 +615,7 @@ export class LearnhubEngine {
     let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
     if (course) {
       const { graph } = await this.loadView(course)
-      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions)
+      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, (await this.learningDay()).today)
       audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
     }
     return kind === 'edit' ? this.proposals.applyEdit(pid, audit) : this.proposals.applyGen(pid, audit)
@@ -876,7 +889,8 @@ export class LearnhubEngine {
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[lesson] 课程「${c.name}」中没有节点「${node}」。`)
     this.assertNoteOk(c, graph, broken, node, 'lesson')
-    const lesson = await this.sessions.lesson(c.name, c.root, graph, state, node)
+    const { today } = await this.learningDay()
+    const lesson = await this.sessions.lesson(c.name, c.root, graph, state, node, today)
     const view = lesson as Record<string, unknown>
     // mastery 由 sessions.lesson 按口径 B 派生（masteryOfFm），此处不再覆盖。
     // 节清单（逐节生成）：manifest 原样下发（前端按节 id 绑题、按 type 装配轮次），
@@ -1016,8 +1030,9 @@ export class LearnhubEngine {
    * 问一档三点；预测本身随作答/忘记经 questionAnswer/questionForget 落流水。
    * 节点不在范围内任何课程的图内时 fail loud——拼错的直达入口不该静默空队列。 */
   async reviewQueue(
-    courseKey?: string, node?: string, today = todayStr(), bandPref?: BandPref,
+    courseKey?: string, node?: string, today?: string, bandPref?: BandPref,
   ): Promise<ReviewQueueDoc> {
+    today ??= (await this.learningDay()).today
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
     let nodeFound = false
@@ -1133,7 +1148,7 @@ export class LearnhubEngine {
     const correct = score >= PASS_SCORE
     // XP 时间账本：同日重复作答不记账（防刷）；乱猜（耗时过短且答错）负 XP。
     // 乱猜作答同时不推进 FSRS——难度证据（k 校准）只由认真作答驱动，防乱猜推高节点定价。
-    const today = todayStr()
+    const { today } = await this.learningDay()
     const guessed = !correct && elapsedS !== null && elapsedS < XP_GUESS_SECONDS
     // 同日重复判定（ADR-0014 真实推进口径）：挂起作答（deferSchedule 只记账不推卡）
     // 之后的当日再作答也算重复——旧口径会绕过重复判定再推卡并静默丢弃 pending 标记。
@@ -1282,7 +1297,7 @@ export class LearnhubEngine {
     // 笔记源卡路由（C1 #59）：自评结算进镜像题库，无代表卡回刷（笔记源无节点）。
     if (await this.isNoteSourceCourse(courseKey)) return this.noteSourceRate(node, qid, r)
     const { c, graph, q } = await this.questionContext(courseKey, node, qid, 'question-rate')
-    const today = todayStr()
+    const { today } = await this.learningDay()
     if (q.stats?.last !== today || !q.stats?.pending_rating) {
       // 挂起标记是唯一准入：练习流作答与「完成学习」当日初始化（last_review=今天）都不产生挂起
       throw new Error(`[question-rate] ${node}/${qid} 今天没有待结算的自评（未作答或非挂起路径）。`)
@@ -1319,7 +1334,7 @@ export class LearnhubEngine {
     if (await this.isNoteSourceCourse(courseKey)) return this.noteSourceForget(node, qid)
     const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question-forget')
     const pred = this.jolPredicted(predicted)
-    const today = todayStr()
+    const { today } = await this.learningDay()
     // 推进与守门一体（ADR-0014 advanceStrict）：同日已真实推进（stats.last）即拒绝，
     // 合成初始化（只写 fsrs 不占当日额度）后的覆推 Again 照旧允许。
     const sched = await this.sched(this.paths.courseRoot(c.root))
@@ -1406,8 +1421,9 @@ export class LearnhubEngine {
   /** 注册身份落盘带显式 enabled（#59 契约：{id, 路径, enabled, created}），
    * 文件夹批量登记时逐文件归一；学习中心内部的 .md（如注册 vault 根）跳过不失败。 */
   async noteSourceRegister(
-    input: string, today = todayStr(),
+    input: string, today?: string,
   ): Promise<{ date: string; registered: number; updated: number; skipped: number; sources: NoteSourceItem[] }> {
+    today ??= (await this.learningDay()).today
     const rel0 = normalizeSourcePath(this.vaultRoot, this.paths.centerRoot, input)
     const files = await collectNoteFiles(`${this.vaultRoot}/${rel0}`)
     if (!files.length) throw new Error('[note-source] 该路径下没有 .md 笔记。')
@@ -1454,7 +1470,8 @@ export class LearnhubEngine {
   /** 笔记源清单：注册身份（注册表）× 指纹状态（源清单 + 现读文件）× 卡池概况。
    * 用户笔记永不判 Broken：文件缺失 = missing、指纹不符 = drifted、清单条目缺失 =
    * inconsistent（镜像不一致，data-check 同步报出），状态与提示随条目带出。 */
-  async noteSourceList(today = todayStr()): Promise<NoteSourceDoc> {
+  async noteSourceList(today?: string): Promise<NoteSourceDoc> {
+    today ??= (await this.learningDay()).today
     const entries = await this.registry.loadNoteSources()
     const manifest = await this.noteManifest.load()
     const itemById = new Map(manifest.sources.map(s => [s.id, s]))
@@ -1532,8 +1549,9 @@ export class LearnhubEngine {
   async noteSourceGenerate(
     id: string, count: number | undefined,
     llm: (prompt: string) => Promise<string>,
-    today = todayStr(),
+    today?: string,
   ): Promise<{ id: string; added: number; skipped: number; total: number }> {
+    today ??= (await this.learningDay()).today
     if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
       throw new Error(`[note-quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认 6。`)
     }
@@ -1677,7 +1695,7 @@ export class LearnhubEngine {
     if (!q) throw new Error(`[question] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
     const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer)
     const correct = score >= PASS_SCORE
-    const today = todayStr()
+    const { today } = await this.learningDay()
     const repeated = alreadyAdvanced(q, today)
     let fs: FsrsBlock | null
     let pendingRating = false
@@ -1724,7 +1742,7 @@ export class LearnhubEngine {
     const bank = await this.bank.load(this.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
     if (!q) throw new Error(`[question-rate] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
-    const today = todayStr()
+    const { today } = await this.learningDay()
     if (q.stats?.last !== today || !q.stats?.pending_rating) {
       throw new Error(`[question-rate] 笔记源 ${sourceId}/${qid} 今天没有待结算的自评（未作答或非挂起路径）。`)
     }
@@ -1738,7 +1756,7 @@ export class LearnhubEngine {
     const bank = await this.bank.load(this.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
     if (!q) throw new Error(`[question-forget] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
-    const today = todayStr()
+    const { today } = await this.learningDay()
     if (q.stats?.last === today) {
       throw new Error(`[question-forget] 笔记源 ${sourceId}/${qid} 今天已有推进记录，忘记只用于本日首次。`)
     }
@@ -1778,9 +1796,10 @@ export class LearnhubEngine {
   /** 导出推送：按 vault 到期集校准/重建镜象卡组——新增缺卡、更新改题（fp 变化）、
    * 移除已归档/已重生成/已被 vault 消费的旧卡；镜象与 vault 不一致时以 vault 为
    * 准，Anki 侧排期输出不作数（ADR-0011）。Anki 侧手动删过的笔记自动重建。 */
-  async ankiExportPush(transport: AnkiTransport, today = todayStr()): Promise<{
+  async ankiExportPush(transport: AnkiTransport, today?: string): Promise<{
     date: string; added: number; updated: number; removed: number; total: number; decks: string[]
   }> {
+    today ??= (await this.learningDay()).today
     const payloads = await this.collectAnkiDuePayloads(today)
     const mirror = await this.ankiMirror.load()
     const plan = planMirrorSync(payloads, mirror.notes)
@@ -1842,6 +1861,8 @@ export class LearnhubEngine {
     imported: number; advanced: number; skipped_same_day: number; skipped_unknown: number; unknown: string[]
   }> {
     const mirror = await this.ankiMirror.load()
+    // 事件的学习日按 vault 自己的日界推（ADR-0020 裁决 5：不对齐 Anki rollover）
+    const cutoff = await readDayCutoff(this.paths)
     const rows = await ankiCardReviews(transport, mirror.last_import_ms, (opts?.nowMs ?? Date.now()) + 60_000)
     const events = rows
       .map(r => ({ ts: Number(r[0]), cardId: Number(r[1]), button: Number(r[3]), timeMs: Number(r[7]) }))
@@ -1902,7 +1923,7 @@ export class LearnhubEngine {
         continue
       }
       const iso = isoFromMs(ev.ts)
-      const day = iso.slice(0, 10)
+      const day = dayOfTs(iso, cutoff)
       const practiceBase = {
         course: ctx.c.name, node: loc.node, ex: idx + 1, answer: '',
         correct: map.correct, judge: 'review', qid: loc.qid,
@@ -1934,7 +1955,8 @@ export class LearnhubEngine {
   }
 
   /** Anki 通道状态：镜象规模/最近推送与导入/当前到期分布 + AnkiConnect 可达性。 */
-  async ankiStatus(transport?: AnkiTransport, today = todayStr()): Promise<AnkiStatusDoc> {
+  async ankiStatus(transport?: AnkiTransport, today?: string): Promise<AnkiStatusDoc> {
+    today ??= (await this.learningDay()).today
     const mirror = await this.ankiMirror.load()
     const payloads = await this.collectAnkiDuePayloads(today)
     const byDeck = new Map<string, number>()
@@ -2016,7 +2038,7 @@ export class LearnhubEngine {
       }
     }
     const sched = await this.sched(courseRoot)
-    const today = todayStr()
+    const { today } = await this.learningDay()
     let initialized = 0
     let due: string | null = null
     let repCard: FsrsBlock | null = null
@@ -2086,11 +2108,11 @@ export class LearnhubEngine {
    * ETA 预算制：剩余工作量 = Σ(未完成节点 N₀×k)——est 内容定价 × FSRS 难度校准，
    * 随作答证据积累自动校准；days = 剩余预算 ÷ 每日目标。 */
   async xpStatus(): Promise<XpStatus> {
-    const today = todayStr()
+    const { today, cutoff } = await this.learningDay()
     const [practice, journal, activity, goal] = await Promise.all([
       this.store.practiceAll(),
       this.store.journalTail(null, Number.MAX_SAFE_INTEGER),
-      this.store.activityCounts(),
+      this.store.activityCounts(cutoff),
       readDailyGoal(this.paths),
     ])
     const eta: Array<{ course: string; remaining: number; done: number; per_node: number; days: number }> = []
@@ -2115,12 +2137,17 @@ export class LearnhubEngine {
         days: remainingXp > 0 ? Math.ceil(remainingXp / Math.max(1, goal)) : 0,
       })
     }
-    return { date: today, today_xp: sumXp(practice, journal, today), goal, streak: streakFrom(activity, today), eta }
+    return { date: today, day_cutoff: fmtCutoff(cutoff), today_xp: sumXp(practice, journal, today, cutoff), goal, streak: streakFrom(activity, today), eta }
   }
 
   /** 调整每日 XP 目标（state/learnhub.json）。 */
   async setDailyGoal(goal: number): Promise<{ goal: number }> {
     return { goal: await writeDailyGoal(this.paths, goal) }
+  }
+
+  /** 调整日界（state/learnhub.json 的 day_cutoff；ADR-0020）→ 生效 'HH:mm'。 */
+  async setDayCutoff(value: string): Promise<{ day_cutoff: string }> {
+    return { day_cutoff: await writeDayCutoff(this.paths, value) }
   }
 
   // ---- 记忆健康仪表盘（#61 A2 / ADR-0012）----
@@ -2130,7 +2157,9 @@ export class LearnhubEngine {
    * 可回忆度直方图；R 复用 reviewQueue 的 retrievabilityBlock 口径按各课程参数现算）、
    * 真实保留率 + 预测对照 + 遗忘曲线（#60 review-log：只计 auto+self 的到期复习，
    * synthetic 与首学推进不计入）。无数据给空态（rate=null / 计数 0），不造假数据。 */
-  async memoryHealth(today = todayStr()): Promise<MemoryHealthDoc> {
+  async memoryHealth(today?: string): Promise<MemoryHealthDoc> {
+    const { today: learningToday, cutoff } = await this.learningDay()
+    today ??= learningToday
     const dues: string[] = []
     const samples: Array<{ stability: number | null; difficulty: number | null; r: number }> = []
     for (const c of await this.enabledCourses()) {
@@ -2147,7 +2176,7 @@ export class LearnhubEngine {
         }
       })
     }
-    const dueReviews = dueReviewFirstPushes(await this.store.reviewLogAll())
+    const dueReviews = dueReviewFirstPushes(await this.store.reviewLogAll(), cutoff)
     return {
       date: today,
       forecast: { horizon_days: FORECAST_DAYS, ...forecast(dues, today) },
@@ -2206,7 +2235,8 @@ export class LearnhubEngine {
   /** 难度带会话记录（会话结束反馈点调用，ReviewSession 收尾时带上当次带选择与
    * 作答结算）：append-only 落 state/难度带.jsonl。零调度副作用——只是教练的
    * 长期选择分布数据源（Learner Output）。 */
-  async logBandSession(rec: { course: string; node: string; band: BandPref; answered: number; correct: number }, today = todayStr()): Promise<BandRec> {
+  async logBandSession(rec: { course: string; node: string; band: BandPref; answered: number; correct: number }, today?: string): Promise<BandRec> {
+    today ??= (await this.learningDay()).today
     if (!['easy', 'standard', 'hard'].includes(rec.band)) {
       throw new Error(`[band] band 只能是 easy/standard/hard（收到 ${String(rec.band)}）。`)
     }
@@ -2218,7 +2248,8 @@ export class LearnhubEngine {
   /** 教练反馈（低打扰）：7 天窗口内按选择分布与带内表现生成温和提示（0–2 条），
    * 到期难题数 = 全部启用课程中 due ≤ today、R ≥ COACH_DUE_HARD_R（按状态该会）
    * 且合用难度 ≥ COACH_HARD_D（难）的到期题。无触发返回空数组；低数据静默。 */
-  async coachAdvice(today = todayStr()): Promise<{ messages: string[]; due_hard: number }> {
+  async coachAdvice(today?: string): Promise<{ messages: string[]; due_hard: number }> {
+    today ??= (await this.learningDay()).today
     const courses = await this.enabledCourses()
     let dueHard = 0
     for (const c of courses) {
@@ -2317,7 +2348,8 @@ export class LearnhubEngine {
   /** E 池到期队列：全部启用课程的「我的卡」，到期卡按 due 升序在前，从未调度的新卡
    * 随后（首推入口）。自评语义 = 先重述再翻面对照（Hard/Good/Easy + 忘记）；
    * 隔离自调度——不进全局复习队列、不产生 XP、不写复习日志（canonical 零掺入）。 */
-  async learnerQueue(courseKey?: string, today = todayStr()): Promise<LearnerQueueDoc> {
+  async learnerQueue(courseKey?: string, today?: string): Promise<LearnerQueueDoc> {
+    today ??= (await this.learningDay()).today
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
     for (const c of courses) {
@@ -2379,7 +2411,7 @@ export class LearnhubEngine {
     const r = Math.round(rating)
     if (r < 2 || r > 4) throw new Error(`[learner-rate] 自评档位只能是 2/3/4（收到 ${String(rating)}）；忘记走 learner-forget。`)
     const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-rate')
-    const today = todayStr()
+    const { today } = await this.learningDay()
     // ADR-0014 advanceStrict：守门即原 stats.last 检查（一卡一天一次），文案是测试契约
     const pushed = advanceStrict(await this.sched(null), card, r, today,
       `[learner-rate] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
@@ -2392,7 +2424,7 @@ export class LearnhubEngine {
     courseKey: string | undefined, node: string, cardId: string,
   ): Promise<LearnerForgetResult> {
     const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-forget')
-    const today = todayStr()
+    const { today } = await this.learningDay()
     const pushed = advanceStrict(await this.sched(null), card, 1, today,
       `[learner-forget] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
     await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats: pushed.stats })
@@ -2473,7 +2505,7 @@ export class LearnhubEngine {
     written?: string[]
     meta?: Record<string, unknown>
   }> {
-    const seqs = trainingSequences(await this.store.reviewLogAll())
+    const seqs = trainingSequences(await this.store.reviewLogAll(), await readDayCutoff(this.paths))
     const count = sequenceReviews(seqs)
     if (count < OPTIMIZE_MIN_REVIEWS) {
       return { status: 'skipped', reason: `真实复习日志 ${count} 条，不足 ${OPTIMIZE_MIN_REVIEWS} 条——保持现参不训练（synthetic 已排除，每卡每天只计第一条）` }
@@ -2673,6 +2705,7 @@ export class LearnhubEngine {
    * 与单节重写通道，归档走题目管理的独立归档操作；practice 节点无题库天然静默；
    * Broken 笔记 fail loud（与 status/recommend 同一门前置）。 */
   async difficultyAdvice(courseKey?: string): Promise<DifficultyAdviceDoc> {
+    const { today } = await this.learningDay()
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const nodes: Array<Record<string, unknown>> = []
     for (const c of courses) {
@@ -2704,7 +2737,7 @@ export class LearnhubEngine {
         })
       })
     }
-    return { date: todayStr(), nodes }
+    return { date: today, nodes }
   }
 
   async questionAdd(courseKey: string, node: string, question: Record<string, unknown>): Promise<{ course: string; node: string; id: string; count: number }> {
@@ -2879,10 +2912,10 @@ export class LearnhubEngine {
     if (!Number.isFinite(score)) throw new Error('[interactive] score 必须是数字。')
     const clamped = Math.min(1, Math.max(0, score))
     const qid = `interactive:${sectionId}`
-    const today = todayStr()
+    const { today, cutoff } = await this.learningDay()
     const played = (await this.store.practiceAll()).some(r =>
       r.course === c.name && r.node === node && r.judge === 'interactive' && r.qid === qid
-      && r.ts.startsWith(today))
+      && dayOfTs(r.ts, cutoff) === today)
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(c.root, regionName, node)
     const { fm: rawFm, body } = await loadNote(path)

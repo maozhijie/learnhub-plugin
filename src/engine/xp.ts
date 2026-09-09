@@ -11,8 +11,8 @@
  *   （FSRS difficulty 加权，无人工干预）；完成时 settle 对账锁定定价。
  */
 import { readFile } from 'node:fs/promises'
-import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, DAILY_XP_GOAL_DEFAULT, FSRS_DIFFICULTY_MID } from './params.ts'
-import { parseDay, fmtDay } from './dates.ts'
+import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, DAILY_XP_GOAL_DEFAULT, DAY_CUTOFF_DEFAULT, FSRS_DIFFICULTY_MID } from './params.ts'
+import { parseDay, fmtDay, dayOfTs, parseCutoff, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import type { PracticeRec, JournalRec } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -69,7 +69,7 @@ export function difficultyCalibration(questions: BudgetQuestion[]): number {
 
 // ---- 每日目标（state/learnhub.json） ----
 
-interface LearnhubConfigFile { daily_xp_goal?: number }
+interface LearnhubConfigFile { daily_xp_goal?: number; day_cutoff?: string }
 
 /** 读每日 XP 目标（缺失/非法回落默认）。 */
 export async function readDailyGoal(paths: Paths): Promise<number> {
@@ -98,14 +98,43 @@ function clampGoal(n: number): number {
   return Number.isFinite(n) ? Math.min(1000, Math.max(5, Math.round(n))) : DAILY_XP_GOAL_DEFAULT
 }
 
+// ---- 日界（state/learnhub.json 的 day_cutoff；ADR-0020）----
+
+/** 读日界 → 当日分钟数。缺失/非法静默回落默认（learnhub.json 配置三件套同款；
+ * ADR-0004 的 fail loud 针对用户数据损坏，不是配置笔误），生效值由 views 暴露可见。 */
+export async function readDayCutoff(paths: Paths): Promise<number> {
+  try {
+    const doc = JSON.parse(await readFile(paths.learnhubConfigPath, 'utf8')) as LearnhubConfigFile
+    return parseCutoff(doc.day_cutoff ?? DAY_CUTOFF_DEFAULT) ?? parseCutoff(DAY_CUTOFF_DEFAULT)!
+  } catch {
+    return parseCutoff(DAY_CUTOFF_DEFAULT)!
+  }
+}
+
+/** 写日界（原子替换，保留其他字段）→ 归一化 'HH:mm'；非法值 fail loud（显式设置动作）。 */
+export async function writeDayCutoff(paths: Paths, value: string): Promise<string> {
+  const minutes = parseCutoff(value)
+  if (minutes === null) throw new Error(`[config] day_cutoff 必须是 00:00–23:59 的 'HH:mm'（收到 ${String(value)}）。`)
+  let prev: LearnhubConfigFile = {}
+  try {
+    prev = JSON.parse(await readFile(paths.learnhubConfigPath, 'utf8')) as LearnhubConfigFile
+  } catch {
+    // 无配置文件/损坏 → 全新写入
+  }
+  const normalized = fmtCutoff(minutes)
+  await atomicWrite(paths.learnhubConfigPath, JSON.stringify({ ...prev, day_cutoff: normalized }, null, 1) + '\n')
+  return normalized
+}
+
 // ---- 流水派生 ----
 
-/** 流水的 XP 计：作答（practice.xp）+ 非作答入账（journal.xp，如满分 bonus）。 */
+/** 流水的 XP 计：作答（practice.xp）+ 非作答入账（journal.xp，如满分 bonus）。
+ * day 给定时只计该学习日（ts 过日界推学习日，ADR-0020）。 */
 function recXp(r: { xp?: number }): number { return r.xp ?? 0 }
 
 /** 流水总 XP；day 给定时只计该本地日（ts 的前 10 位）。 */
-export function sumXp(practice: PracticeRec[], journal: JournalRec[], day?: string): number {
-  const hit = (ts: string) => !day || ts.slice(0, 10) === day
+export function sumXp(practice: PracticeRec[], journal: JournalRec[], day?: string, cutoffMin = 0): number {
+  const hit = (ts: string) => !day || dayOfTs(ts, cutoffMin) === day
   return practice.filter(r => hit(r.ts)).reduce((s, r) => s + recXp(r), 0)
     + journal.filter(r => hit(r.ts)).reduce((s, r) => s + recXp(r), 0)
 }

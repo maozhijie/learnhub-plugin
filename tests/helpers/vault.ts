@@ -110,8 +110,12 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
 
     const engine = new LearnhubEngine(centerRel === '学习中心' ? { vault: root } : { vault: root, centerRel })
 
+    // 测试基线固定日界 00:00（ADR-0020 回归基线 = 旧午夜口径）：引擎默认 02:00 会让
+    // 真实时钟测试在 0-2 点窗口内不确定；日界专项测试用 files 覆盖此文件。
+    await mkdir(engine.paths.centerStateDir, { recursive: true })
+    await writeFile(engine.paths.learnhubConfigPath, JSON.stringify({ day_cutoff: '00:00' }, null, 1) + '\n', 'utf8')
+
     if (options.reviewLog?.length) {
-      await mkdir(engine.paths.centerStateDir, { recursive: true })
       await writeFile(engine.paths.reviewLogPath, options.reviewLog.join('\n') + '\n', 'utf8')
     }
 
