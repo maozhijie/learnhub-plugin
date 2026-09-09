@@ -20,6 +20,8 @@ import { DIAGNOSTIC_SCORE, diagnosticView } from './attribution.ts'
 import type { DiagnosticItem } from './attribution.ts'
 import { newLessonRationale, pinHeadScore, todayPins } from './goals.ts'
 import type { PinRec } from './goals.ts'
+import { reconsolidationAdvice, SLEEP_SCORE, SLEEP_STANDALONE_MAX } from './sleep.ts'
+import type { SleepSuggestion } from './sleep.ts'
 
 /** 单课调度素材的统一视图参数。 */
 export interface ViewSource {
@@ -282,6 +284,8 @@ export class Sessions {
     diagnostics?: DiagnosticItem[],
     /** 「今天学它」pin 清单（#67 E3；全量，函数内只取当日有效条目）。 */
     pins?: PinRec[],
+    /** D-4 睡眠耦合建议层开关（#85；state/learnhub.json 的 sleep.enabled）。 */
+    sleepAdvice?: boolean,
   ): Promise<Array<Record<string, unknown>>> {
     const events: Array<Record<string, unknown>> = []
     const seen = new Set<string>()
@@ -445,6 +449,32 @@ export class Sessions {
           pinned: true,
           ...(gate?.length ? { advice: gate } : {}),
         })
+      }
+      // D-4（#85）睡眠耦合排程建议：重巩固型节点（practice 交互实践节点）在推荐里
+      // 附「睡前练、醒后验」时段建议——纯读侧信息层，不改调度语义、不产生到期；
+      // 已有事件的节点就地附着（不新占推荐位），已开始但今日无事件的节点至多补
+      // SLEEP_STANDALONE_MAX 条独立 sleep 事件（分数低于新课带）。全局可关。
+      if (sleepAdvice) {
+        let standalone = 0
+        for (const n of graph.names.filter(x => graph.typeOf[x] === 'practice').sort()) {
+          const started = ['learning', 'review', 'mastered'].includes(effectiveStage(state, n))
+          if (!started && !seen.has(n)) continue
+          const sug: SleepSuggestion = reconsolidationAdvice(n)
+          const hit = events.find(e => e.course === c.name && e.node === n)
+          if (hit) {
+            hit.sleep = sug
+            continue
+          }
+          if (standalone >= SLEEP_STANDALONE_MAX) continue
+          standalone++
+          events.push({
+            type: 'sleep', course: c.name, node: n,
+            region: graph.blockOf[n]?.[1] ?? '', score: SLEEP_SCORE,
+            why: sug.text, path: this.notePath(c.root, graph, n),
+            hasContent: hasReadyContent(state[n]),
+            sleep: sug,
+          })
+        }
       }
     }
     events.sort((a, b) => (b.score as number) - (a.score as number))

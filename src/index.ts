@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：57 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/Anki 互通）
+ * - agent 工具面：63 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -1210,7 +1210,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { node: string; course: string }) => run('learnhub_lesson', async () => JSON.stringify(await engine.lesson(args.course, args.node))))
   tool('learnhub_recommend',
-    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle/diagnostic/pin) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events the learner pinned as「今天学它」carry pinned=true and lead their course for today only (tomorrow they fall back to the default order); a pinned node with no other event appears as a standalone pin event — a not-ready pinned node keeps its soft-gate hint but stays openable. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Events may also carry a `diagnostics` array (B1 content diagnostics, standalone events typed diagnostic): a section whose content keeps failing the learner (R1 single-question repeated lapses, or R2 answer accuracy <0.5 over ≥4 deduped answers since the section was last rewritten) with reason, evidence, and a rewrite direct action {course, node, section} — after the learner confirms, execute it with learnhub_section_rewrite (gated single-section rewrite; the question bank is untouched); the Arc D per-question explain entry lives in the panel\'s error state. Fetch the next batch after finishing one.',
+    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle/diagnostic/pin) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events the learner pinned as「今天学它」carry pinned=true and lead their course for today only (tomorrow they fall back to the default order); a pinned node with no other event appears as a standalone pin event — a not-ready pinned node keeps its soft-gate hint but stays openable. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Events may also carry a `diagnostics` array (B1 content diagnostics, standalone events typed diagnostic): a section whose content keeps failing the learner (R1 single-question repeated lapses, or R2 answer accuracy <0.5 over ≥4 deduped answers since the section was last rewritten) with reason, evidence, and a rewrite direct action {course, node, section} — after the learner confirms, execute it with learnhub_section_rewrite (gated single-section rewrite; the question bank is untouched); the Arc D per-question explain entry lives in the panel\'s error state. Practice/interaction nodes (reconsolidation-typed, D-4) may appear as type:"sleep" events or carry a sleep field {text, rehearsal}: a「睡前练、醒后验」timing suggestion with an optional mental-rehearsal note (evidence-weighted wording) — surface it with the node, never treat it as a due change; the whole layer is switchable via learnhub_sleep_config. Fetch the next batch after finishing one.',
     { limit: { type: 'number', description: 'Max events to return (default 5)' } },
     (args: { limit?: number }) => run('learnhub_recommend', async () =>
       JSON.stringify(await engine.recommend(args.limit === undefined ? 5 : args.limit))))
@@ -1243,6 +1243,40 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'Get the「可用的困难」coach feedback (E5, read-only informational, no gates or scoring): checks the last 7 days of the learner\'s difficulty-band session choices and in-band performance. All-easy streak with due questions their FSRS state says they should know → a gentle nudge to try the standard band; consistent challenge-band struggle (accuracy below 0.6) → a pointer back to prerequisite/component-skill review. Low data stays silent. Surface messages verbatim when present; never force anything.',
     {},
     () => run('learnhub_coach', async () => JSON.stringify(await engine.coachAdvice())))
+  tool('learnhub_sleep_config',
+    'Get or set the sleep-coupled scheduling advice layer (D-4). When enabled (default), recommendations for reconsolidation-type nodes (practice/interaction nodes, e.g. instrument or sport practice) carry a「睡前练、醒后验」timing suggestion — practice briefly before sleep, verify retention right after waking (Walker 2002/2005) — plus an optional mental-rehearsal note (small effect r≈0.13, expectation-managed wording). Read-side advice only: it never changes scheduling semantics, due dates, mastery, or XP. Omit enabled to read the current config.',
+    { enabled: { type: 'boolean', description: 'true/false to turn the sleep advice layer on/off; omit to read current config' } },
+    (args: { enabled?: boolean }) => run('learnhub_sleep_config', async () =>
+      JSON.stringify(args.enabled === undefined
+        ? await engine.sleepAdviceConfig()
+        : await engine.setSleepAdviceConfig({ enabled: args.enabled }))))
+  tool('learnhub_experiment_templates',
+    'List the N-of-1 experiment template library (D-1, ADR-0023): preset self-experiments on engine-controlled content/design parameters only (scheduling core is NEVER an experiment variable). Each template carries id/title/question/arms/unit/description and an unlocked flag — unlocked=false templates are visible but cannot be started yet. Zero XP, never touches Mastery; arm labels go into the review log for attribution. Propose with learnhub_experiment_propose, the learner confirms, then learnhub_experiment_apply.',
+    {}, () => run('learnhub_experiment_templates', async () =>
+      JSON.stringify(await engine.experimentTemplates())))
+  tool('learnhub_experiment_propose',
+    'Propose an N-of-1 experiment from a preset template (D-1, proposal-confirmation flow, step 1): validates the template is unlocked and no experiment is running (v1 runs one at a time), previews the eligible card pool (scheduled, non-archived bank questions), and files a pending experiment proposal for the learner to confirm. Whitelist enforcement is structural: only template ids resolve; unknown ids and non-whitelist parameters fail loud. Never starts anything by itself.',
+    {
+      template: { type: 'string', required: true, description: 'Template id from learnhub_experiment_templates' },
+      course: { type: 'string', description: 'Scope the experiment to one course; omit for all enabled courses' },
+    },
+    (args: { template: string; course?: string }) => run('learnhub_experiment_propose', async () =>
+      JSON.stringify(await engine.experimentPropose(args.template, args.course))))
+  tool('learnhub_experiment_apply',
+    'Confirm and start a pending N-of-1 experiment proposal (D-1, proposal-confirmation flow, step 2): re-validates the artifact against the template whitelist, builds the assignment (batch templates alternate arms by learning day starting today; card-level templates get a seeded deterministic split), writes the experiment definition, and reports today\'s arm. Fails loud if another experiment is already running or the artifact fails re-validation.',
+    { id: { type: 'number', description: 'Proposal id; omit for the newest pending experiment proposal' } },
+    (args: { id?: number }) => run('learnhub_experiment_apply', async () =>
+      JSON.stringify(await engine.experimentApply(applyId(args.id)))))
+  tool('learnhub_experiment_stop',
+    'Stop a running N-of-1 experiment (start/stop is always manual, ADR-0023): annotations cease, the report becomes final. Omit id to stop the currently running experiment.',
+    { id: { type: 'number', description: 'Experiment id; omit for the running one' } },
+    (args: { id?: number }) => run('learnhub_experiment_stop', async () =>
+      JSON.stringify(await engine.experimentStop(args.id))))
+  tool('learnhub_experiment_report',
+    'Get the plain-language N-of-1 report (D-1, ADR-0023): arm-by-arm true retention, arm difference, 95% bootstrap interval, and a permutation test — phrased as an individual effect, never a population claim. Below the minimum observation window (per-arm real-advance minimum) it reports progress only and refuses to judge. running = interim reading; stopped = final.',
+    { id: { type: 'number', description: 'Experiment id; omit for the running (or latest) one' } },
+    (args: { id?: number }) => run('learnhub_experiment_report', async () =>
+      JSON.stringify(await engine.experimentReport(args.id))))
   tool('learnhub_rebuild',
     'Run audit gate + ready-list regeneration for all enabled courses, or one course.',
     { course: { type: 'string', description: 'Course name; omit to rebuild all enabled courses' } },
@@ -1698,7 +1732,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 57 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 63 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()
