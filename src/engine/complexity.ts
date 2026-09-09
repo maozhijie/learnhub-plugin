@@ -124,6 +124,25 @@ export function nodeTierOf(g: GraphSignalsSource, node: string): ComplexityTier 
   })
 }
 
+// ---- PS-I 先做后教路由（#81 C-2） ----
+
+/**
+ * PS-I（先挑战题→再正文）适用判据：bloom 高阶层（分析/评价/创造）或 difficulty ≥ 4
+ * 的节点，生成大纲按「先挑战题→再正文」顺序规划（Sinha & Kapur 2021 元分析 g=0.36；
+ * 幼龄反向效应 → 成人自学是适用区）。与样例效应按节点难度分流：中低难节点照旧
+ * 「先教后练」，非全局反转。刻意不沿用复杂度档位折叠做判据——pre 闭包规模是内容
+ * 规模信号，不是认知挑战信号。
+ */
+export function problemFirstOf(s: Pick<TierSignals, 'difficulty' | 'bloom'>): boolean {
+  if (s.bloom !== undefined && BLOOM_PROMOTE.has(s.bloom)) return true
+  return s.difficulty !== undefined && s.difficulty >= 4
+}
+
+/** 节点 PS-I 适用判据（图派生；difficulty/bloom 缺省 = 不启用，与折叠缺省语义一致）。 */
+export function nodeProblemFirstOf(g: GraphSignalsSource, node: string): boolean {
+  return problemFirstOf({ difficulty: g.difficultyOf[node], bloom: g.bloomOf[node] })
+}
+
 /** 节点大纲护栏：按节点档位查节段数是否方向性极端。空 = 放行。 */
 export function outlineBudgetForNode(g: GraphSignalsSource, node: string, sectionCount: number): string[] {
   return checkOutlineBudget(nodeTierOf(g, node), sectionCount)

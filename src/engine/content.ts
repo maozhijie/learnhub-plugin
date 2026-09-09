@@ -11,7 +11,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
-import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, TIER_LABELS } from './complexity.ts'
+import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { normChoice } from './grading.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock } from '../../shared/content-renderers.ts'
@@ -193,6 +193,13 @@ export class Content {
       out.push('- 实践节点：核心交付物是交互模拟，节段/题量预算不适用，按 §8 规范走')
     } else {
       out.push(...nodeProfileLines(graph, node))
+    }
+    if (!isPractice && nodeProblemFirstOf(graph, node)) {
+      out.push('')
+      out.push('## 10. 先做后教（PS-I 顺序变体；本节点 difficulty/bloom 达到高难阈值）')
+      out.push('- 第一节必须是挑战节：类型「例题」、标题以「挑战：」开头，只给题面与尝试引导（明确请学习者先自己尝试、带着缺口往下读），本节不给解答步骤与答案。')
+      out.push('- 随后的讲解节围绕挑战题展开；讲解收尾处（或紧随其后的独立节）完整解答挑战题，回扣学习者在第一节的尝试与缺口。')
+      out.push('- 其余硬约束、节类型菜单与质检门不变；节清单按挑战节在前的顺序给出，生成与学习顺序都照此走。')
     }
     return out.join('\n') + '\n'
   }
@@ -799,8 +806,10 @@ questions:
     if (!fm || typeof fm.node !== 'string') throw new Error(`[outline] 课程文件不存在（先为节点生成内容骨架）: ${node}`)
     // 档位随大纲记录（预留接入点：弹性评估读 content.tier；不驱动调度）
     const tier = TIER_LABELS[nodeTierOf(graph, node)]
+    // PS-I 顺序变体随大纲留痕（#81：只改生成顺序，调度/门禁不读它）
+    const psi = graph.typeOf[node] !== 'practice' && nodeProblemFirstOf(graph, node)
     await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: manifest, tier } }, body)
-    await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending；档位 ${tier}）` })
+    await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending；档位 ${tier}${psi ? '；PS-I 先做后教' : ''}）` })
     return manifest
   }
 
