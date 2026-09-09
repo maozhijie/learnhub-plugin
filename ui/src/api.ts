@@ -138,6 +138,9 @@ export const api = {
   /** 解除注册（C1 #59）：注册表 + 镜象清单 + 镜象题库一并清除，用户笔记不动。 */
   noteSourceUnregister: (id: string) =>
     http<{ removed: string; path: string }>('POST', '/note-source/unregister', { id }),
+  /** 改路径重连（V-6 #109）：改名/移动后把既有源重连到新路径（卡池与调度保留）。 */
+  noteSourceRelink: (id: string, path: string) =>
+    http<{ id: string; from: string; to: string }>('POST', '/note-source/relink', { id, path }),
   /** 笔记源出题（C1 #59）：读笔记正文 → 模型 → validateBank 门禁落镜象题库。 */
   noteSourceGenerate: (id: string, count = 6) =>
     http<{ id: string; added: number; skipped: number; total: number }>('POST', '/note-source/generate', { id, count }),

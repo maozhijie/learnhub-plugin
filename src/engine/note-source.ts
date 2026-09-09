@@ -143,6 +143,39 @@ export function validateNoteSourceManifest(doc: unknown): { errors?: string[]; s
   return { spec: { sources: items } }
 }
 
+// ---- 卡池镜像（V-4 #108：Obsidian backlink 通道）----
+
+/** 卡池镜像 md 正文（纯函数）：镜像文件落在 学习中心/笔记源/卡池/<源id>.md（vault 内），
+ * 正文带指向个人笔记的 [[wikilink]]——Obsidian 的 backlink 面板让个人笔记侧直接看到
+ * 关联卡池的存在与状态（V-4「双向链接」首版）；个人笔记本体零写入（ADR-0010）。
+ * 镜像是出题/重连时的快照（计数截至标注日），实时状态以 learnhub_note_source_list 为准。 */
+export function poolMirrorBody(input: {
+  /** 源笔记 vault 相对路径（.md 后缀可带可不带，链接目标剥掉）。 */
+  notePath: string
+  title: string
+  cards: number
+  due: number
+  /** 状态提示文案（sourceHint 产出；ok 为 undefined）。 */
+  statusHint?: string
+  today: string
+}): string {
+  const linkTarget = input.notePath.replace(/\.md$/i, '')
+  const lines = [
+    `# 卡池：${input.title}`,
+    '',
+    `[[${linkTarget}|${input.title}]] 的复习卡池（learnhub 镜像）。`,
+    '',
+    `- 卡片 ${input.cards} 张（到期 ${input.due}，截至 ${input.today}）`,
+    ...(input.statusHint ? [`- 状态：${input.statusHint}`] : []),
+    '- 引擎侧：learnhub_note_source_list 看实时状态；learnhub_note_source_generate 重出题。',
+    '',
+    '> 本文件由 learnhub 维护（学习中心/笔记源/ 镜像区），手编会在下次出题时被覆盖；',
+    '> 你的笔记本体零写入（ADR-0010）。',
+    '',
+  ]
+  return lines.join('\n')
+}
+
 /** vault 输入路径 → vault 相对 posix 路径。拒绝学习中心内部与越界（..）路径——
  * 引擎管理区不收编为笔记源（课程文件另有通道），用户笔记在中心外。
  * 豁免区（V-3 #107 / V-5 #113）：学习中心内的 我的产出/ 整区与 projects/<id>/日志.md

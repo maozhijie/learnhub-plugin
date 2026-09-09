@@ -13,6 +13,15 @@ import type { JumpCandidate, ScaleReport, ScaleTarget } from './quality.ts'
 import { parseDay, todayStr, daysBetween } from './dates.ts'
 import { masteryOfFm } from './srs.ts'
 import { hasReadyContent } from './notes.ts'
+import type { VaultLinkCandidateView } from './vault-links.ts'
+
+/** analyze 进来的 Vault 链接先验段（engine 侧从 state/vault链接.json 映射，analysis 保持无 IO）。 */
+export interface VaultLinkPrior {
+  scanned_at: string | null
+  /** 映射到本课程图的候选总数（截断前）。 */
+  mapped_total: number
+  candidates: VaultLinkCandidateView[]
+}
 
 export interface GraphAnalysis {
   stats: {
@@ -45,7 +54,13 @@ export interface GraphAnalysis {
     jump_total: number
     /** 节点数 <3 的块（合并比展开更划算时）。 */
     merge_blocks: Array<{ region: string; block: string; nodes: number }>
+    /** Vault 链接先验候选（V-2 #91）：个人笔记 wikilink 映射到本课程图的无向关联对
+     * （w ≥ 0.4；tier=proposal 的走 learnhub_graph_link_backfill 单提案人审、review 的
+     * 逐条人工裁决）。自由 JSON 段——suggestions 非校验 schema，加段零 schema 破坏。 */
+    vault_link_candidates: VaultLinkCandidateView[]
   }
+  /** Vault 链接扫描元信息：未扫描时 scanned_at=null（带 hint 指路扫描工具）。 */
+  vault_links: { scanned_at: string | null; mapped_total: number; hint?: string }
   /** 规模底线对照（ADR-0002：绝对规模走独立门槛，不进健康分）。 */
   scale: ScaleReport
   nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: string; opt: boolean; mastery: number; type?: string } }>
@@ -67,6 +82,7 @@ export interface GraphAnalysis {
 export async function analyzeGraph(
   courseName: string, graph: Graph, state: Record<string, Fm>, store: Store,
   scaleTarget?: ScaleTarget | null, today: string = todayStr(),
+  vaultLinks: VaultLinkPrior = { scanned_at: null, mapped_total: 0, candidates: [] },
 ): Promise<GraphAnalysis> {
   const t = parseDay(today)!
 
@@ -194,6 +210,14 @@ export async function analyzeGraph(
       jump_candidates: jumps.slice(0, sugCap),
       jump_total: jumps.length,
       merge_blocks: mergeBlocks,
+      vault_link_candidates: vaultLinks.candidates.slice(0, sugCap),
+    },
+    vault_links: {
+      scanned_at: vaultLinks.scanned_at,
+      mapped_total: vaultLinks.mapped_total,
+      ...(vaultLinks.scanned_at === null
+        ? { hint: '还没有 Vault 链接扫描缓存——跑 learnhub_vault_links_scan 后这里出现个人笔记的关联候选' }
+        : {}),
     },
     scale: scaleReport(graph.names.length, scaleTarget),
     schema,

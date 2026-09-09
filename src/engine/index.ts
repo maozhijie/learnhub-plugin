@@ -61,13 +61,16 @@ import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem }
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
 import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
+import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLinks, scoreTier } from './vault-links.ts'
+import type { VaultLinksDoc, VaultLinkCandidateView } from './vault-links.ts'
+import type { VaultLinkPrior } from './analysis.ts'
 import { decompileGoalOf, decompileRepairPrompt, decompileTerms, splitDecompileDoc, subgraphSpecOf } from './project-decompile.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
 import { QuestionBank, questionAnswerShapeError, validateBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
-import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, isExcludedPath, normalizeSourcePath, readNoteSourceExcludes, sourceHint, stripFrontmatter, titleOfBody, writeNoteSourceExcludes } from './note-source.ts'
+import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, isExcludedPath, normalizeSourcePath, poolMirrorBody, readNoteSourceExcludes, sourceHint, stripFrontmatter, titleOfBody, writeNoteSourceExcludes } from './note-source.ts'
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
 import { LearnerCards, LEARNER_CARD_KINDS } from './learner-cards.ts'
 import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
@@ -612,9 +615,164 @@ export class LearnhubEngine {
   ): Promise<GraphDoc | GraphElementsDoc> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state } = await this.loadView(c)
-    const doc = await analyzeGraph(c.name, graph, state, this.store, scaleTarget, (await this.learningDay()).today)
+    const vaultLinks = await this.loadVaultLinkPrior(graph)
+    const doc = await analyzeGraph(c.name, graph, state, this.store, scaleTarget, (await this.learningDay()).today, vaultLinks)
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
     return doc
+  }
+
+  // ---- Vault 链接先验（V-2 #91：wikilink → 无向关联对 → analyze 展示 + 单提案人审）----
+
+  /** 读链接先验缓存（Missing = null 合法空态；坏档 fail loud——它是引擎 state 契约文件）。 */
+  private async readVaultLinksCache(): Promise<VaultLinksDoc | null> {
+    if (!existsSync(this.paths.vaultLinksPath)) return null
+    let doc: unknown
+    try {
+      doc = JSON.parse(await readFile(this.paths.vaultLinksPath, 'utf8'))
+    } catch (err) {
+      throw new Error(`[vault-links] 链接缓存 Broken（JSON 无法解析，位置：${this.paths.vaultLinksPath}）——重跑 learnhub_vault_links_scan 覆盖。\n  ✗ ${err instanceof Error ? err.message : String(err)}`)
+    }
+    const d = doc as Partial<VaultLinksDoc> | null
+    if (typeof d !== 'object' || d === null || d.version !== 1 || !Array.isArray(d.edges)) {
+      throw new Error(`[vault-links] 链接缓存 Broken（契约形状不符，位置：${this.paths.vaultLinksPath}）——重跑 learnhub_vault_links_scan 覆盖。`)
+    }
+    return d as VaultLinksDoc
+  }
+
+  /** analyze 的先验段：缓存映射到本课程图的候选（w ≥ 0.4，proposal/review 分层 +
+     行动指引）；未扫描返回空段（带 hint）。 */
+  private async loadVaultLinkPrior(graph: Graph): Promise<VaultLinkPrior> {
+    const cache = await this.readVaultLinksCache()
+    if (!cache) return { scanned_at: null, mapped_total: 0, candidates: [] }
+    const mapped = mapEdgesToNodes(
+      cache.edges.filter(e => e.w >= 0.4),
+      graph.names,
+    )
+    const candidates: VaultLinkCandidateView[] = mapped.map(({ edge, aNode, bNode }) => {
+      const tier = scoreTier(edge.w) === 'proposal' ? 'proposal' as const : 'review' as const
+      return {
+        a: aNode,
+        b: bNode,
+        a_note: edge.a,
+        b_note: edge.b,
+        w: edge.w,
+        count: edge.count,
+        files: edge.files,
+        bidirectional: edge.bidirectional,
+        tier,
+        suggestion: tier === 'proposal'
+          ? 'learnhub_graph_link_backfill 可生成 set_enc 提案（单提案人审）'
+          : '置信度居中——人工裁决后 learnhub_graph_propose 显式主张（pre 从严）',
+      }
+    })
+    return { scanned_at: cache.generated_at, mapped_total: candidates.length, candidates }
+  }
+
+  /** 全库 wikilink 扫描（learnhub_vault_links_scan）：学习中心/点目录/内置目录排除/
+   * 用户排除清单之外的全部 .md → 解析 → 过滤（带命中率审计）→ 无向关联对。
+   * 产物落 state/vault链接.json（引擎 state 区），个人笔记零写入（ADR-0010）。 */
+  async vaultLinksScan(): Promise<{
+    generated_at: string
+    scanned_files: number
+    truncated: boolean
+    links_seen: number
+    unresolved: number
+    audit: VaultLinksDoc['audit']
+    tiers: { proposal: number; review: number; report: number }
+    edges: Array<{ a: string; b: string; count: number; files: number; w: number; tier: string }>
+    cache: string
+  }> {
+    const dirExcludes = await readVaultLinkDirExcludes(this.paths.learnhubConfigPath)
+    const doc = await scanVaultLinks({
+      vaultRoot: this.vaultRoot,
+      centerRel: this.paths.centerRoot.slice(this.vaultRoot.length + 1),
+      dirExcludes,
+      pathExcludes: await readNoteSourceExcludes(this.paths),
+    })
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await atomicWrite(this.paths.vaultLinksPath, JSON.stringify(doc, null, 1) + '\n')
+    const tiers = { proposal: 0, review: 0, report: 0 }
+    for (const e of doc.edges) tiers[scoreTier(e.w)]++
+    return {
+      generated_at: doc.generated_at,
+      scanned_files: doc.scanned_files,
+      truncated: doc.truncated,
+      links_seen: doc.links_seen,
+      unresolved: doc.unresolved,
+      audit: doc.audit,
+      tiers,
+      edges: doc.edges.slice(0, 50).map(e => ({
+        a: e.a, b: e.b, count: e.count, files: e.files, w: e.w, tier: scoreTier(e.w),
+      })),
+      cache: this.paths.vaultLinksPath,
+    }
+  }
+
+  /** 链接先验回填（learnhub_graph_link_backfill）：映射到本课程图、w ≥ 0.7 的候选对，
+   * pre 闭包内定向成 set_enc op（既有声明 enc 原样保留——整体替换语义），汇总为
+   * 单个 pending edit 提案走人审（enc_backfill 先例）；无 pre 关系的对不硬提，降级
+   * blocked_no_pre 信号（带 why，供人审/补 pre 参考）。可重入：已声明边不重复提名。 */
+  async graphLinkBackfill(courseKey?: string): Promise<{
+    course: string
+    scanned_edges: number
+    mapped: number
+    ops: number
+    proposal: { id: number } | null
+    blocked_no_pre: Array<{ a: string; b: string; w: number; why: string }>
+    skipped_declared: number
+    message: string
+  }> {
+    const c = await this.registry.resolve(courseKey)
+    const cache = await this.readVaultLinksCache()
+    if (!cache) {
+      throw new Error('[link-backfill] 没有链接先验缓存——先跑 learnhub_vault_links_scan。')
+    }
+    const { graph } = await this.loadView(c)
+    const proposalTier = mapEdgesToNodes(cache.edges.filter(e => scoreTier(e.w) === 'proposal'), graph.names)
+    const declared = declaredEncOf(graph)
+    const ops: EditOp[] = []
+    const candidates: Array<{ holder: string; skill: string; w: number }> = []
+    const blockedNoPre: Array<{ a: string; b: string; w: number; why: string }> = []
+    let skippedDeclared = 0
+    for (const { edge, aNode, bNode } of proposalTier) {
+      const dir = orientLinkPair(aNode, bNode, (from, to) => graph.nset.has(from) && graph.nset.has(to) && graph.isAncestor(from, to))
+      if (!dir.ok) {
+        blockedNoPre.push({ a: aNode, b: bNode, w: edge.w, why: dir.why })
+        continue
+      }
+      const existing = declared.get(dir.holder) ?? []
+      if (existing.some(e => e.node === dir.skill)) {
+        skippedDeclared++
+        continue
+      }
+      ops.push({
+        op: 'set_enc', node: dir.holder,
+        enc: [...existing, {
+          node: dir.skill, w: edge.w,
+          note: `vault 链接先验（#91）：${edge.a.split('/').pop()} ↔ ${edge.b.split('/').pop()}（${edge.count} 次/${edge.files} 源${edge.bidirectional ? '/双向' : ''}）`,
+        }],
+      })
+      candidates.push({ holder: dir.holder, skill: dir.skill, w: edge.w })
+    }
+    if (!ops.length) {
+      return {
+        course: c.name, scanned_edges: cache.edges.length, mapped: proposalTier.length, ops: 0,
+        proposal: null, blocked_no_pre: blockedNoPre, skipped_declared: skippedDeclared,
+        message: '没有可回填的边：映射候选为空、已在 pre 闭包外（见 blocked_no_pre）或已声明。',
+      }
+    }
+    const yamlText = YAML.stringify({
+      course: c.name,
+      reason: `Vault 链接先验回填（V-2 #91）：${ops.length} 个节点的个人笔记关联对成 enc 边（w ≥ 0.7、pre 闭包内）`,
+      ops,
+    })
+    const prop = await this.graphPropose('edit', yamlText)
+    return {
+      course: c.name, scanned_edges: cache.edges.length, mapped: proposalTier.length, ops: ops.length,
+      proposal: { id: (prop as { id: number }).id }, blocked_no_pre: blockedNoPre,
+      skipped_declared: skippedDeclared,
+      message: `已生成 pending edit 提案 #${(prop as { id: number }).id}——过审后 learnhub_graph_apply(kind=edit) 生效（可重入，已声明边不重复提名）`,
+    }
   }
 
   // ---- 图探索（agent 逐步查询，不拉全图）----
@@ -2383,6 +2541,27 @@ export class LearnhubEngine {
     }
   }
 
+  /** 源卡池计数（列表与卡池镜像共用）：未归档卡数 + 当期到期数；镜像 Broken 时
+   * 带原因（列表据此挂起该源、镜像据此写状态行）。未出题 = 合法空池零计数。 */
+  private async noteSourcePoolStats(
+    id: string, today: string,
+  ): Promise<{ cards: number; due: number; broken?: string }> {
+    if (!existsSync(this.bank.bankPath(this.paths.noteSourceDir, id))) return { cards: 0, due: 0 }
+    try {
+      const bank = await this.bank.load(this.paths.noteSourceDir, id)
+      let cards = 0
+      let due = 0
+      for (const q of bank.questions) {
+        if (q.archived) continue
+        cards++
+        if (q.fsrs?.reps && q.fsrs.due <= today) due++
+      }
+      return { cards, due }
+    } catch (err) {
+      return { cards: 0, due: 0, broken: err instanceof Error ? err.message.split('\n')[0] : String(err) }
+    }
+  }
+
   /** 笔记源清单：注册身份（注册表）× 指纹状态（源清单 + 现读文件）× 卡池概况。
    * 用户笔记永不判 Broken：文件缺失 = missing、指纹不符 = drifted、清单条目缺失 =
    * inconsistent（镜像不一致，data-check 同步报出），状态与提示随条目带出。
@@ -2396,27 +2575,13 @@ export class LearnhubEngine {
     const out: Array<Record<string, unknown>> = []
     for (const e of entries) {
       const { status, title } = await this.sourceStatusOf(e, itemById.get(e.id))
-      let cards = 0
-      let due = 0
-      let bankBroken: string | undefined
-      if (existsSync(this.bank.bankPath(this.paths.noteSourceDir, e.id))) {
-        try {
-          const bank = await this.bank.load(this.paths.noteSourceDir, e.id)
-          for (const q of bank.questions) {
-            if (q.archived) continue
-            cards++
-            if (q.fsrs?.reps && q.fsrs.due <= today) due++
-          }
-        } catch (err) {
-          bankBroken = err instanceof Error ? err.message.split('\n')[0] : String(err)
-        }
-      }
-      const hint = bankBroken ? `题库镜像 Broken：${bankBroken}` : sourceHint(status)
+      const pool = await this.noteSourcePoolStats(e.id, today)
+      const hint = pool.broken ? `题库镜像 Broken：${pool.broken}` : sourceHint(status)
       out.push({
         id: e.id, path: e.path, title, enabled: e.enabled !== false, created: e.created,
-        status, cards, due,
+        status, cards: pool.cards, due: pool.due,
         ...(hint ? { hint } : {}),
-        ...(bankBroken ? { broken: true } : {}),
+        ...(pool.broken ? { broken: true } : {}),
       })
     }
     return { date: today, total: out.length, excludes, sources: out }
@@ -2430,7 +2595,77 @@ export class LearnhubEngine {
     await this.noteManifest.save({ sources: manifest.sources.filter(s => s.id !== id) })
     const bankPath = this.bank.bankPath(this.paths.noteSourceDir, id)
     if (existsSync(bankPath)) await unlink(bankPath)
+    const poolPath = this.paths.noteSourcePoolPath(id)
+    if (existsSync(poolPath)) await unlink(poolPath) // 卡池镜像随源清除（V-4 #108）
     return { removed: id, path: entry.path }
+  }
+
+  // ---- 卡池镜像（V-4 #108：Obsidian backlink 通道）----
+
+  /** 写卡池镜像（出题/重连后调用）：带 [[个人笔记]] 链接的 md 落镜像区（引擎地盘，
+   * 个人笔记零写入）——Obsidian 的 backlink 面板让个人笔记侧看到关联卡池状态。
+   * 计数与状态是写入时刻的快照（截至日标注在文内），实时状态以 noteSourceList 为准。 */
+  private async writePoolMirror(id: string, today: string): Promise<void> {
+    const { entry, item } = await this.requireSource(id)
+    const { status, title } = await this.sourceStatusOf(entry, item)
+    const pool = await this.noteSourcePoolStats(id, today)
+    await mkdir(this.paths.noteSourcePoolDir, { recursive: true })
+    await atomicWrite(this.paths.noteSourcePoolPath(id), poolMirrorBody({
+      notePath: entry.path, title, cards: pool.cards, due: pool.due, today,
+      ...(sourceHint(status) || pool.broken
+        ? { statusHint: sourceHint(status) ?? `题库镜像异常：${pool.broken}` }
+        : {}),
+    }))
+  }
+
+  // ---- 漂移治理全量化（V-6 #109：改名/移动 → relink 或 Missing）----
+
+  /** 笔记源 relink：把既有源重连到新路径——注册身份（id）与镜像题库/卡池原样保留
+   * （这正是它与「解除后重注册」的区别：旧卡调度不丢）。四类漂移的确定行为收口：
+   * 改名/移动 → Missing（既有语义）+ 本动作重连；删除 → 卡池挂起；编辑 → 提示重出。
+   * 新路径过注册同款卫生（normalizeSourcePath + 用户排除清单），目标文件必须现存
+   * （relink 是恢复动作，目标不可读即 fail loud），已被其他源占用的路径拒绝；
+   * 原路径缺失不阻塞——那正是 relink 的使用场景。 */
+  async noteSourceRelink(id: string, input: string, today?: string): Promise<{ id: string; from: string; to: string }> {
+    today ??= (await this.learningDay()).today
+    const rel = normalizeSourcePath(this.vaultRoot, this.paths.centerRoot, input)
+    const { entry } = await this.requireSource(id)
+    if (entry.path === rel) {
+      throw new Error(`[note-source] 「${id}」已注册在路径 ${rel}（relink 请给改名/移动后的新路径）。`)
+    }
+    const excludes = await readNoteSourceExcludes(this.paths)
+    if (isExcludedPath(rel, excludes)) {
+      throw new Error(`[note-source] 目标路径在用户排除清单内，不重连（先 learnhub_note_source_unexclude 解除）：${rel}`)
+    }
+    const others = (await this.registry.loadNoteSources()).filter(e => e.id !== id)
+    const taken = others.find(e => e.path === rel)
+    if (taken) {
+      throw new Error(`[note-source] 目标路径已是笔记源「${taken.id}」的注册路径：${rel}（先解除它再重连）。`)
+    }
+    const abs = `${this.vaultRoot}/${rel}`
+    if (!existsSync(abs)) {
+      throw new Error(`[note-source] relink 目标文件不存在：${rel}（重连的是现存文件；整体挪走目录后给出新路径）。`)
+    }
+    const raw = await readFile(abs, 'utf8')
+    const from = entry.path
+    const entries = await this.registry.loadNoteSources()
+    const target = entries.find(e => e.id === id)!
+    target.path = rel
+    await this.registry.save(await this.registry.load(), entries)
+    const manifest = await this.noteManifest.load()
+    const idx = manifest.sources.findIndex(s => s.id === id)
+    if (idx >= 0) {
+      manifest.sources[idx] = {
+        ...manifest.sources[idx]!,
+        path: rel,
+        fingerprint: fingerprintOf(raw),
+        title: titleOfBody(stripFrontmatter(raw), rel.split('/').pop() ?? id),
+        enabled: true,
+      }
+      await this.noteManifest.save(manifest)
+    }
+    await this.writePoolMirror(id, today) // 卡池镜像的 [[链接]] 跟到新路径
+    return { id, from, to: rel }
   }
 
   // ---- 用户排除清单（V-1 #86：state/learnhub.json 的 note_source_excludes）----
@@ -2565,6 +2800,7 @@ export class LearnhubEngine {
       }
       await this.noteManifest.save(manifest)
     }
+    await this.writePoolMirror(id, today) // 卡池镜像（V-4 #108）：[[个人笔记]] backlink + 池概况
     return { id, added, skipped, total: bank.questions.length, duplicates }
   }
 
@@ -2613,7 +2849,10 @@ export class LearnhubEngine {
         const r = retrievabilityBlock(sched, q.fsrs, today)
         cards.push({
           course: NOTE_SOURCE_COURSE, node: e.id, source: 'note',
-          title: item?.title ?? title, r: Math.round(r * 1000) / 1000,
+          title: item?.title ?? title,
+          // 来源笔记可跳转（V-4 #108）：vault 相对路径 + 绝对路径（面板拼 obsidian:// 用）
+          source_path: e.path, source_abs: `${this.vaultRoot}/${e.path}`,
+          r: Math.round(r * 1000) / 1000,
           d: Math.round(combinedDifficulty(q.difficulty, q.fsrs) * 1000) / 1000,
           ...card,
         })
@@ -2752,7 +2991,10 @@ export class LearnhubEngine {
 
   /** 到期卡导出负载：全部启用课程「未归档且 due ≤ 今日」的已调度题（复用
    * reviewQueue 的到期语义与 questionView 的题面视图；答案/解析上背面）。
-   * 来源字段 = 课程/节点/题id，回写归属与清单丢失自愈的依据。 */
+   * 来源字段 = 课程/节点/题id，回写归属与清单丢失自愈的依据。
+   * 笔记源到期卡并入（V-4 #108 / ADR-0011 衔接）：deck learnhub::笔记源，来源键
+   * 笔记源/<源id>/题id——Missing/镜像 Broken 的源与复习队列同口径挂起不导出、
+   * 不阻塞其他源；导入侧按同一来源键路由回镜像题库。 */
   private async collectAnkiDuePayloads(today: string): Promise<AnkiNotePayload[]> {
     const out: AnkiNotePayload[] = []
     for (const c of await this.enabledCourses()) {
@@ -2763,6 +3005,23 @@ export class LearnhubEngine {
           out.push(ankiCardPayload(c.name, node, q, back))
         }
       })
+    }
+    for (const e of await this.registry.loadNoteSources()) {
+      if (e.enabled === false) continue
+      if (!existsSync(`${this.vaultRoot}/${e.path}`)) continue // Missing：卡池挂起
+      const bankPath = this.bank.bankPath(this.paths.noteSourceDir, e.id)
+      if (!existsSync(bankPath)) continue // 尚未出题：合法空卡池
+      let bank: BankDoc
+      try {
+        bank = await this.bank.load(this.paths.noteSourceDir, e.id)
+      } catch {
+        continue // 镜像 Broken：该源挂起（data-check 显式报出），不阻塞其他源
+      }
+      for (const q of bank.questions) {
+        if (q.archived || !q.fsrs?.reps || q.fsrs.due > today) continue
+        const back = revealAnswer(q) + (q.explanation ? `\n\n解析：${q.explanation}` : '')
+        out.push(ankiCardPayload(NOTE_SOURCE_COURSE, e.id, q, back))
+      }
     }
     return out
   }
@@ -2859,9 +3118,18 @@ export class LearnhubEngine {
         mirror.notes.push({ key, note_id: info.noteId, fp: '', deck: deckNameOf(loc.course) })
       }
     }
-    // 课程上下文缓存：registry/loadView/scheduler 每课程一次
+    // 课程上下文缓存：registry/loadView/scheduler 每课程一次；笔记源伪课程判定同样缓存
     type AnkiCourseCtx = { c: CourseEntry; graph: Graph; sched: Awaited<ReturnType<typeof getScheduler>> } | null
     const ctxCache = new Map<string, AnkiCourseCtx>()
+    const noteCourseCache = new Map<string, boolean>()
+    const isNoteCourse = async (name: string): Promise<boolean> => {
+      let v = noteCourseCache.get(name)
+      if (v === undefined) {
+        v = await this.isNoteSourceCourse(name)
+        noteCourseCache.set(name, v)
+      }
+      return v
+    }
     let lastMs = mirror.last_import_ms
     for (const ev of events) {
       lastMs = Math.max(lastMs, ev.ts)
@@ -2873,6 +3141,46 @@ export class LearnhubEngine {
         if (result.unknown.length < 5) result.unknown.push(`${key ?? `card#${ev.cardId}`}（${why}）`)
       }
       if (!loc) { noteUnknown('来源无法归属'); continue }
+      let map: ReturnType<typeof mapAnkiEase>
+      try {
+        map = mapAnkiEase(ev.button)
+      } catch {
+        result.skipped_unknown++
+        continue
+      }
+      const iso = isoFromMs(ev.ts)
+      const day = dayOfTs(iso, cutoff)
+      if (await isNoteCourse(loc.course)) {
+        // 笔记源伪课程通道（V-4 #108 / ADR-0011 衔接）：回写镜像题库 + 默认参数
+        // 调度器（与复习自评 pushNoteCard 同语义）——无节点证据、无代表卡、无课程参数
+        let bank: BankDoc
+        try {
+          bank = await this.bank.load(this.paths.noteSourceDir, loc.node)
+        } catch {
+          noteUnknown('笔记源镜像题库不可读')
+          continue
+        }
+        const idx = bank.questions.findIndex(x => x.id === loc.qid)
+        const q = idx >= 0 ? bank.questions[idx] : undefined
+        if (!q || q.archived) { noteUnknown('题目已归档或重生成'); continue }
+        const r = advance(await this.sched(null), q, map.rating, day, 'anki')
+        await this.store.appendPractice({
+          course: NOTE_SOURCE_COURSE, node: loc.node, ex: idx + 1, answer: '',
+          correct: map.correct, judge: 'review', qid: loc.qid,
+          ...(ev.timeMs > 0 ? { elapsed_s: ev.timeMs / 1000 } : {}),
+          xp: 0, ts: iso,
+        })
+        if (!r.advanced) { result.skipped_same_day++; continue }
+        await this.bank.updateQuestionEvidence(this.paths.noteSourceDir, loc.node, loc.qid, { fsrs: r.fs, stats: r.stats })
+        await this.store.appendReview({
+          course: NOTE_SOURCE_COURSE, node: loc.node, qid: loc.qid,
+          rating: map.rating, rating_source: map.ratingSource, ...r.log,
+        })
+        q.fsrs = r.fs
+        q.stats = r.stats
+        result.advanced++
+        continue
+      }
       let ctx = ctxCache.get(loc.course)
       if (ctx === undefined) {
         const c = await this.registry.get(loc.course)
@@ -2889,15 +3197,6 @@ export class LearnhubEngine {
       const idx = bank.questions.findIndex(x => x.id === loc.qid)
       const q = idx >= 0 ? bank.questions[idx] : undefined
       if (!q || q.archived) { noteUnknown('题目已归档或重生成'); continue }
-      let map: ReturnType<typeof mapAnkiEase>
-      try {
-        map = mapAnkiEase(ev.button)
-      } catch {
-        result.skipped_unknown++
-        continue
-      }
-      const iso = isoFromMs(ev.ts)
-      const day = dayOfTs(iso, cutoff)
       const practiceBase = {
         course: ctx.c.name, node: loc.node, ex: idx + 1, answer: '',
         correct: map.correct, judge: 'review', qid: loc.qid,
