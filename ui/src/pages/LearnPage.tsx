@@ -1,9 +1,11 @@
-/** 学习页（主界面）：XP 时间账本条 + 复习横幅 + 「我的卡」横幅 + 「接下来学/复习」
+/** 学习页（主界面）：XP 时间账本条 + 复习横幅 + 「接下来学/复习」
  * 推荐流（点开直接进 LessonView）+ 课程卡（次要区）。二级视图 LessonView 承载
- * 正文/mastery 会话/完成。复习会话 = Anki 式刷卡队列：跨课程到期题扁平排队，
- * 一卡一票（作答或满 5 秒申报忘记），背面自评 Hard/Good/Easy 推进调度。
- * 「我的卡」会话（E1 #70）：学习者自注卡的独立队列，复用复习自评语义——
- * 重述 → 翻面对照 → 自评；隔离自调度，零 XP 零 canonical。
+ * 正文/mastery 会话/完成。复习会话 = Anki 式刷卡队列：跨课程到期卡扁平排队，
+ * 一卡一票（作答或满 5 秒申报忘记），背面自评 Hard/Good/Easy 推进调度；
+ * 我的卡（E1）按 ADR-0021 汇入同一队列——按卡种分面：题卡走作答+AI 判卷，
+ * 自注卡走 重述 → 翻面对照 → 自评（无绑定 XP，只计总账不进课程/节点账）。
+ * 「今天学它」pin 不设界面入口（对话经 agent 工具 learnhub_pin_today 设置，
+ * pinned 行仍显「你选了它」置顶标识）。
  * #72 UI 入口补全：横幅区挂 C1 笔记源抽屉 / C2 导出到 Anki / E1 我的卡管理，
  * 推荐卡渲染 A3 定向复习建议项（一键进目标节点刷卡），复习卡头部带 A1 可回忆度读数。 */
 import {
@@ -24,6 +26,11 @@ import type {
 } from '../types'
 
 const { Text, Title } = Typography
+
+/** 我的卡卡面标签（与 LearnerCardCard 的 KIND_LABEL 同源；会话头部消费）。 */
+const LEARNER_KIND_LABEL: Record<string, string> = {
+  recall_cue: '提示重述', cloze_rewrite: '挖空重述', self_explain: '自注讲解',
+}
 
 const REC_TYPE: Record<string, { label: string; color: string; order: number }> = {
   pin: { label: '今天学它', color: 'gold', order: 0 },
@@ -57,12 +64,13 @@ function XpBar({ xp, onEditGoal }: { xp: XpStatus; onEditGoal: () => void }) {
   )
 }
 
-/** 复习横幅：到期卡驱动（复习队列张数 + 开始复习）。
- * C2（#63/#72）：「导出到 Anki」按钮——把 vault 到期卡推送进桌面 Anki 的镜象卡组
- * （AnkiConnect 未达也可点，引擎 fail loud 带指引）；按钮计数 = Anki 通道当前到期分布。
- * 笔记源状态行（C1 #59/#72）：漂移 = 重新出题/归档旧题直达；挂起 = 重新注册——
+/** 复习横幅：到期卡驱动（复习队列张数 + 开始复习）——队列已并入我的卡（ADR-0021），
+ * 张数为题卡+自注卡合计。C2（#63/#72）：「导出到 Anki」按钮——把 vault 到期卡推送进
+ * 桌面 Anki 的镜象卡组（AnkiConnect 未达也可点，引擎 fail loud 带指引）；按钮计数 =
+ * Anki 通道当前到期分布（不含我的卡，ADR-0021 测量面不扩）。笔记源状态行（C1 #59/#72）：
+ * 漂移 = 重新出题/归档旧题直达；挂起 = 重新注册。「我的卡管理」入口常驻（E1 #70）。
  * 动作全部面板内完成，不再只提示「去 dsh 里对 agent 说」。 */
-function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenSources, onRegenerateSource, onReregister }: {
+function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenSources, onRegenerateSource, onReregister, onManage }: {
   reviewQ: ReviewQueueDoc | null
   anki: AnkiStatusDoc | null
   onStart: () => void
@@ -71,6 +79,7 @@ function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenS
   onOpenSources: (focusId?: string) => void
   onRegenerateSource: (id: string) => void
   onReregister: (path: string) => void
+  onManage: () => void
 }) {
   const dueCount = reviewQ?.total ?? 0
   const drifted = reviewQ?.note_drifted ?? []
@@ -97,6 +106,7 @@ function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenS
             </Button>
           </Tooltip>
           <Button onClick={() => onOpenSources()}>笔记源</Button>
+          <Button onClick={onManage}>我的卡管理</Button>
         </div>
       </div>
       {(drifted.length > 0 || suspended.length > 0) && (
@@ -134,19 +144,18 @@ function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenS
 
 /** 推荐流大卡片：点开直接进 LessonView——主界面的核心动作；内联跳过（已有基础免学）。
  * 内容三态标识：已生成（点开有东西读）/ 生成中 / 排队中；未生成节点主按钮让给「生成内容」。
- * 「今天学它」pin（E3 #67）：未 pin 事件给 pin 入口（当日置顶、次日失效）；已 pin
- * 事件带「你选了它」标识并给取消入口。
+ * 「今天学它」pin 无界面入口（对话走 agent 工具设置）：pinned 事件只带「你选了它」
+ * 置顶标识，不给取消按钮（取消 = 对 agent 说，或次日自动失效）。
  * 事件携带 diagnostics（B1 #69）时内联「重写此节」直达动作——Popconfirm 确认后才走
  * 单节重写管线（诊断建议先行，不自动动库）。
  * 事件携带 advice（A3 #54/#55，#72 UI 挂接）时内联「定向复习」直达——软闸弱前置 /
  * enc 成分技能的到期题一键进目标节点刷卡会话（建议先行，不拦直接学）。 */
-function RecCard({ e, gen, onOpen, onSkip, onGenerate, onPin, onAdvice }: {
+function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
   e: RecEvent
   gen?: 'queued' | 'running'
   onOpen: () => void
   onSkip: () => void
   onGenerate: () => void
-  onPin: () => void
   onAdvice: (a: AdviceItem) => void
 }) {
   const t = REC_TYPE[e.type] ?? { label: e.type, color: 'gray', order: 9 }
@@ -189,7 +198,7 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate, onPin, onAdvice }: {
             {gen === 'running' ? '生成中' : gen === 'queued' ? '排队中' : e.type === 'review' || e.type === 'overdue' ? '去复习' : '去学习'}
           </Button>
         )}
-        {/* span 拦截冒泡：卡片本体点击是打开学习，Popconfirm/置顶触发不应进学习视图 */}
+        {/* span 拦截冒泡：卡片本体点击是打开学习，Popconfirm 触发不应进学习视图 */}
         <span onClick={ev => ev.stopPropagation()}>
           <Popconfirm
             title={`跳过「${e.node}」？`}
@@ -197,9 +206,6 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate, onPin, onAdvice }: {
             onOk={onSkip}>
             <Button size='mini' type='text' status='warning'>跳过</Button>
           </Popconfirm>
-          <Tooltip content={e.pinned ? '取消「今天学它」：回落默认排序' : '设为今日推荐榜首（只作用今天，次日自动失效）'}>
-            <Button size='mini' type='text' onClick={onPin}>{e.pinned ? '取消今天学它' : '今天学它'}</Button>
-          </Tooltip>
         </span>
       </div>
       {e.diagnostics?.length ? (
@@ -291,13 +297,16 @@ function CourseCard(props: {
  * （按答错记证据、0 XP），背面自评 Hard/Good/Easy（带到期预览，键盘 2/3/4）即翻
  * 下一张；答错/忘记自动 Again 明天再见，当次队列不回头。出完给小结（纯展示，
  * 逐题流水已实时入账）。
+ * 我的卡（E1，ADR-0021）同队列同会话，按卡种分面：自注卡走 重述 → 翻面对照 →
+ * 自评（LearnerCardCard，卡面自带 5 秒忘记门控与 2/3/4 快捷键），结算走
+ * learner-rate/learner-forget——无绑定 XP（只计总账，不进课程/节点账）。
  * 单节点「已调度题」会话（#57 A1）：按目标难度带流式选题——起点先验取引擎在
  * 定向队列响应里给出的节点 Mastery 先验带，连续答对 ≥2 次升一档、答错/忘记
  * 降回基础题；多节点/全局会话维持快照序不变。
  * E5 难度带（#65）：会话开始时可选 简单/标准/挑战（参与式、可忽略、默认标准 =
  * 纯 A1），作为带权偏好随定向队列请求下发；会话结束把带选择与作答结算落日志
  * （困难教练数据源），并拉一次教练反馈附在小结里（只读信息性，无门禁）。
- * E4 JOL（#66）：抽查命中的卡（jol 标记）在翻面前弹一档预测，随作答/忘记上报。 */
+ * E4 JOL（#66）：抽查命中的题卡（jol 标记）在翻面前弹一档预测，随作答/忘记上报。 */
 function ReviewSession(props: {
   queue: ReviewCard[]
   onClose: () => void
@@ -379,17 +388,32 @@ function ReviewSession(props: {
     props.onSettled()
   }
 
-  /** 自评结算：挂起调度按选中档位落盘，选完即翻下一张。 */
+  /** 自评结算：挂起调度按选中档位落盘，选完即翻下一张。我的卡走 learner-rate
+   * （无绑定 XP 在引擎侧落 journal 行，ADR-0021），题卡走 question-rate。 */
   const rate = async (r: 2 | 3 | 4) => {
     if (!card) return
     try {
-      await api.questionRate(card.course, card.node, card.id, r)
+      if (card.learner) await api.learnerRate(card.learner.course, card.learner.node, card.learner.id, r)
+      else await api.questionRate(card.course, card.node, card.id, r)
       setTally(t => ({
         ...t,
         hard: r === 2 ? t.hard + 1 : t.hard,
         good: r === 3 ? t.good + 1 : t.good,
         easy: r === 4 ? t.easy + 1 : t.easy,
       }))
+      next()
+      props.onSettled()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  /** 我的卡忘记申报（rating 1 推进，0 XP；5 秒门控在 LearnerCardCard 卡面内）。 */
+  const learnerForget = async () => {
+    if (!card?.learner) return
+    try {
+      await api.learnerForget(card.learner.course, card.learner.node, card.learner.id)
+      setTally(t => ({ ...t, forgot: t.forgot + 1 }))
       next()
       props.onSettled()
     } catch (err) {
@@ -481,7 +505,8 @@ function ReviewSession(props: {
                 · 忘记 {tally.forgot} · 答错 {tally.wrong}
               </Text>
               <Text type='secondary' style={{ fontSize: 12 }}>
-                忘记与答错的卡明天到期再见；逐题流水与 XP 已实时入账。
+                忘记与答错的卡明天到期再见；逐题流水与 XP 已实时入账——我的卡走无绑定
+                XP（只计总账，不进课程/节点账）。
               </Text>
             </Space>
           </Card>
@@ -503,15 +528,19 @@ function ReviewSession(props: {
         <Space size={8} wrap>
           <Text type='secondary'>{card.course} · </Text>
           <Text bold>{card.node}</Text>
-          {/* A1（#56/#72）：随卡下发的 FSRS 预测可回忆度 R——用词遵守 CONTEXT（可回忆度，不是掌握度） */}
-          {typeof card.r === 'number' && (
+          {card.learner && <Tag size='small' color='purple'>{LEARNER_KIND_LABEL[card.learner.kind] ?? card.learner.kind}</Tag>}
+          {/* A1（#56/#72）：随卡下发的 FSRS 预测可回忆度 R——用词遵守 CONTEXT（可回忆度，不是掌握度）；
+          未调度新卡（我的卡首刷）无 due 无 R，不显示 */}
+          {card.due && typeof card.r === 'number' && (
             <Tooltip content='FSRS 预测的当前可回忆度（不是掌握度）'>
               <Tag size='small' color={card.r >= 0.8 ? 'green' : card.r >= 0.5 ? 'orange' : 'red'}>
                 可回忆度 {Math.round(card.r * 100)}%
               </Tag>
             </Tooltip>
           )}
-          <Tag size='small' color='green'>到期 {card.due}</Tag>
+          {card.due
+            ? <Tag size='small' color='green'>到期 {card.due}</Tag>
+            : <Tag size='small' color='orange'>未调度 · 首刷</Tag>}
           <Tag size='small'>做过 {card.attempts} 次</Tag>
         </Space>
         {/* E5 难度带（#65）：会话开始的选择入口——参与式、可关闭（收起 = 标准纯 A1）；
@@ -538,118 +567,19 @@ function ReviewSession(props: {
             </>
           )}
         </div>
-        <QuestionCard key={card.id} course={card.course} node={card.node} question={card}
-          variant='review' noRedo jolAsk={card.jol === true}
-          submitter={(payload, elapsedS, predicted) => api.questionAnswer(
-            card.course, card.node, card.id, payload, elapsedS,
-            { deferSchedule: true, predicted }).then(toOutcome)}
-          onForget={forget}
-          footer={footer}
-          onDone={handleDone} />
-      </Space>
-    </Modal>
-  )
-}
-
-/** 「我的卡」横幅（E1 #70）：学习者自注卡的独立队列入口——到期在前、新卡（首推）
- * 随后；隔离自调度，与课程复习队列分开（Learner Output，零 XP）。
- * #72：加「管理」入口（归档/恢复自注卡）——恒可点：队列清零后仍要能进管理面恢复。 */
-function LearnerBanner({ q, onStart, onManage }: { q: LearnerQueueDoc | null; onStart: () => void; onManage: () => void }) {
-  const total = q?.total ?? 0
-  const due = q?.due_count ?? 0
-  return (
-    <Card size='small' style={{ borderRadius: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-        <div>
-          <Text type='secondary' style={{ display: 'block', fontSize: 12 }}>我的卡 · 你自己的理解（E1）</Text>
-          <Text style={{ fontSize: 20, fontWeight: 600 }}>{due}</Text>
-          <Text type='secondary' style={{ fontSize: 12 }}> 张到期 · 共 {total} 张</Text>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <Button type='primary' status='success' onClick={onStart} disabled={total === 0}>
-            刷我的卡{due > 0 ? `（到期 ${due}）` : ''}
-          </Button>
-          <Button onClick={onManage}>管理</Button>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
-/** 「我的卡」刷卡会话（E1 #70）：重述 → 翻面对照 → 自评 Hard/Good/Easy（忘记 =
- * 5 秒门控申报，rating 1）。一卡一天一次推进（引擎把守）；零 XP 零 canonical。 */
-function LearnerSession(props: {
-  queue: LearnerCardItem[]
-  onClose: () => void
-  onFinish: () => Promise<void>
-  onSettled: () => void
-}) {
-  const [idx, setIdx] = useState(0)
-  const [tally, setTally] = useState({ hard: 0, good: 0, easy: 0, forgot: 0 })
-  const card = props.queue[idx]
-  const done = !card
-
-  const next = () => setIdx(i => i + 1)
-
-  const rate = async (r: 2 | 3 | 4) => {
-    if (!card) return
-    try {
-      await api.learnerRate(card.course, card.node, card.id, r)
-      setTally(t => ({ ...t, hard: r === 2 ? t.hard + 1 : t.hard, good: r === 3 ? t.good + 1 : t.good, easy: r === 4 ? t.easy + 1 : t.easy }))
-      next()
-      props.onSettled()
-    } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const forget = async () => {
-    if (!card) return
-    try {
-      await api.learnerForget(card.course, card.node, card.id)
-      setTally(t => ({ ...t, forgot: t.forgot + 1 }))
-      next()
-      props.onSettled()
-    } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const finish = async () => {
-    await props.onFinish()
-    props.onClose()
-  }
-
-  if (done) {
-    const total = props.queue.length
-    return (
-      <Modal title='我的卡 · 本轮完成' visible footer={null} unmountOnExit style={{ width: 460 }}
-        onCancel={() => { void finish() }}>
-        <Space direction='vertical' style={{ width: '100%' }} size={14}>
-          <Card size='small' style={{ borderRadius: 10 }}>
-            <Space direction='vertical' size={6}>
-              <Title heading={6} style={{ margin: 0 }}>本轮推进 {total} 张自注卡</Title>
-              <Text type='secondary'>
-                Hard {tally.hard} · Good {tally.good} · Easy {tally.easy} · 忘记 {tally.forgot}
-              </Text>
-              <Text type='secondary' style={{ fontSize: 12 }}>
-                「我的卡」走隔离调度：不产生 XP、不影响掌握度；忘记与 Hard 的卡明天再见。
-              </Text>
-            </Space>
-          </Card>
-          <Button type='primary' long onClick={() => { void finish() }}>完成</Button>
-        </Space>
-      </Modal>
-    )
-  }
-
-  return (
-    <Modal title={`我的卡 ${idx + 1}/${props.queue.length}`} visible footer={null} unmountOnExit
-      onCancel={() => { void finish() }} style={{ width: 640 }}>
-      <Space direction='vertical' style={{ width: '100%' }} size={12}>
-        <Alert type='info' style={{ fontSize: 12 }}
-          content='先在心里用自己的话重述，再翻面对照你当初的表述并自评——这是你自己的产出，不计 XP、不影响掌握度。' />
-        <LearnerCardCard key={`${idx}`} card={card} onRate={rate} onForget={forget} />
+        {card.learner ? (
+          <LearnerCardCard key={`${card.course}/${card.learner.node}/${card.learner.id}`}
+            card={card.learner} onRate={rate} onForget={learnerForget} />
+        ) : (
+          <QuestionCard key={card.id} course={card.course} node={card.node} question={card}
+            variant='review' noRedo jolAsk={card.jol === true}
+            submitter={(payload, elapsedS, predicted) => api.questionAnswer(
+              card.course, card.node, card.id, payload, elapsedS,
+              { deferSchedule: true, predicted }).then(toOutcome)}
+            onForget={forget}
+            footer={footer}
+            onDone={handleDone} />
+        )}
       </Space>
     </Modal>
   )
@@ -939,8 +869,6 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [xp, setXp] = useState<XpStatus | null>(null)
   const [reviewQ, setReviewQ] = useState<ReviewQueueDoc | null>(null)
   const [session, setSession] = useState<ReviewCard[] | null>(null)
-  const [learnerQ, setLearnerQ] = useState<LearnerQueueDoc | null>(null)
-  const [learnerSession, setLearnerSession] = useState<LearnerCardItem[] | null>(null)
   const [createVisible, setCreateVisible] = useState(false)
   const [runningJobs, setRunningJobs] = useState(0)
   const [queuedJobs, setQueuedJobs] = useState(0)
@@ -959,7 +887,6 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     setRec(await api.recommend(12).catch(() => null))
     setXp(await api.xp().catch(() => null))
     setReviewQ(await api.reviewQueue().catch(() => null))
-    setLearnerQ(await api.learnerQueue().catch(() => null))
     setAnki(await api.ankiStatus().catch(() => null))
   }, [])
 
@@ -1043,17 +970,6 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       await api.nodeSkip(e.course, e.node, true)
       Message.success(`已跳过「${e.node}」：视同已通过，不再出现在推荐与阻塞判定`)
       await Promise.all([frame.reload(), load()])
-    } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  // 「今天学它」pin（E3 #67）：显式方向切换，置顶/取消后重拉推荐流看新排序
-  const togglePin = async (e: RecEvent) => {
-    try {
-      await api.pinNode(e.course, e.node, !e.pinned)
-      Message.success(e.pinned ? `已取消「${e.node}」的「今天学它」` : `「${e.node}」已设为今日榜首（次日自动失效）`)
-      await load()
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
     }
@@ -1150,8 +1066,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
         onExportAnki={() => void exportAnki()} exporting={exportingAnki}
         onOpenSources={focusId => setSourceDrawer({ open: true, focusId: focusId ?? null })}
         onRegenerateSource={id => void regenerateSource(id)}
-        onReregister={path => void reregisterSource(path)} />
-      <LearnerBanner q={learnerQ} onStart={() => setLearnerSession(learnerQ?.cards ?? [])}
+        onReregister={path => void reregisterSource(path)}
         onManage={() => setCardMgrOpen(true)} />
 
       {/* 核心区：「接下来学/复习」推荐流——点开直接进学习视图 */}
@@ -1167,7 +1082,6 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
                   onOpen={() => frame.openLesson(e.course, e.node)}
                   onSkip={() => void skipNode(e)}
                   onGenerate={() => void generateNode(e)}
-                  onPin={() => void togglePin(e)}
                   onAdvice={a => void startAdviceReview(e, a)} />
               ))}
           </Space>
@@ -1201,11 +1115,6 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       {session && session.length > 0 && (
         <ReviewSession queue={session} onClose={() => setSession(null)}
           onFinish={async () => { await Promise.all([frame.reload(), load()]) }}
-          onSettled={load} />
-      )}
-      {learnerSession && learnerSession.length > 0 && (
-        <LearnerSession queue={learnerSession} onClose={() => setLearnerSession(null)}
-          onFinish={async () => { await load() }}
           onSettled={load} />
       )}
       {createVisible && <CreateDialog visible={createVisible} onClose={() => setCreateVisible(false)} />}
