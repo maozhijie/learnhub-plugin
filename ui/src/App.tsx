@@ -7,11 +7,12 @@ import GraphPage from './pages/GraphPage'
 import LabPage from './pages/LabPage'
 import LearnPage from './pages/LearnPage'
 import PracticePage from './pages/PracticePage'
+import ProjectsPage from './pages/ProjectsPage'
 import ProposalsPage from './pages/ProposalsPage'
 import StatsPage from './pages/StatsPage'
 import type { StatusDoc, TreeDoc } from './types'
 
-export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'lab' | 'generate' | 'proposals' | 'practice'
+export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'generate' | 'proposals' | 'practice' | 'projects' | 'lab'
 
 /** 打开中的节点学习视图（学习页二级视图）；focusNode = 图页定位高亮目标。 */
 export interface LessonRef { course: string; node: string }
@@ -112,6 +113,7 @@ export default function App() {
           <Tabs.TabPane key='generate' title='生成' />
           <Tabs.TabPane key='proposals' title='提案' />
           <Tabs.TabPane key='practice' title='实践' />
+          <Tabs.TabPane key='projects' title='项目' />
         </Tabs>
         <Button size='mini' type='text' style={{ margin: '10px 12px 0 0', flexShrink: 0 }}
           onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
@@ -120,7 +122,7 @@ export default function App() {
         </Button>
       </div>
       <div className={`app-body${tab === 'graph' ? ' no-pad' : ''}`}>
-        {tab !== 'learn' && tab !== 'practice' && noCourse ? (
+        {tab !== 'learn' && tab !== 'practice' && tab !== 'projects' && noCourse ? (
           <div style={{ paddingTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
             <Empty description='还没有课程：先在 dsh 里让 agent 按 learnhub-graph-generate 技能多轮生成课程图' />
             <Button type='primary' onClick={() => setTab('learn')}>回到学习页</Button>
@@ -143,6 +145,7 @@ function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
     case 'generate': return <GeneratePage frame={frame} />
     case 'proposals': return <ProposalsPage />
     case 'practice': return <PracticePage />
+    case 'projects': return <ProjectsPage />
     default: return null
   }
 }

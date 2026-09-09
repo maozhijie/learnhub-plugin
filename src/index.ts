@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：86 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
+ * - agent 工具面：88 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -841,6 +841,18 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/habit', () => engine.habitShow(habit)))
       return
     }
+    if (req.method === 'GET' && route === '/projects') {
+      // 项目清单（P 区 #92）：Project 是 Course 姊妹实体（面板尚无项目页签前的读面）
+      sendJson(res, 200, await apiRun('api/projects', () => engine.projectList()))
+      return
+    }
+    if (req.method === 'GET' && route === '/project/cross') {
+      // 项目 2×2 交叉视图（P-7 #98）：面板核心视图（只读，含入档推荐）
+      const id = url.searchParams.get('id')
+      if (!id) throw new Error('missing required field: id')
+      sendJson(res, 200, await apiRun('api/project/cross', () => engine.projectCrossView(id)))
+      return
+    }
     if (req.method === 'POST') {
       const body = await readJson(req)
       if (route === '/habits/create') {
@@ -1219,6 +1231,23 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
             },
             prompt => llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }),
           ),
+        })))
+        return
+      }
+      if (route === '/project/exec') {
+        // 项目执行事件落流（P-7 #98）：评级 1-4 + 来源；nodes = 本次行使的关联节点
+        // （被行使 enc 边两端节点各回流一次练习证据）。零 XP、零调度写入。
+        // evidence（auto 来源的可观测证据）与 nodes 原样透传——校验收口在门面
+        // validateExecEvent/ratingFromEvidence（fail loud），路由不做静默变形。
+        const evidence = typeof body.evidence === 'object' && body.evidence !== null
+          ? body.evidence as Record<string, unknown>
+          : undefined
+        sendJson(res, 200, await apiRun('api/project/exec', () => engine.projectExecLog(need(body, 'id'), {
+          source: need(body, 'source'),
+          ...(typeof body.rating === 'number' ? { rating: body.rating } : {}),
+          ...(evidence !== undefined ? { evidence } : {}),
+          ...(Array.isArray(body.nodes) ? { nodes: body.nodes } : {}),
+          ...(typeof body.note === 'string' && body.note.trim() ? { note: body.note.trim() } : {}),
         })))
         return
       }
@@ -1922,6 +1951,29 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         },
         prompt => llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }),
       ))))
+  tool('learnhub_project_exec_log',
+    'Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project\'s OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. When nodes names linked course nodes, every EXISTING enc edge whose BOTH ends are among them counts as exercised: practice evidence flows ONE-WAY into each endpoint node\'s practice channel (existing applyPracticeEvidence EMA; the two streams stay separate). Zero XP, zero journal, zero FSRS/scheduling writes.',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      source: { type: 'string', required: true, description: 'auto (requires evidence) / self / ai' },
+      rating: { type: 'number', description: 'Performance rating 1-4 integer (required for self/ai; ignored for auto)' },
+      evidence: { type: 'object', description: 'Observable evidence for source=auto: { accuracy: 0-1, self_help?: number }' },
+      nodes: { type: 'array', items: { type: 'string' }, description: 'Linked course nodes exercised this session (node name or 课程/节点); empty = stream-only, no backflow' },
+      note: { type: 'string', description: 'One-line note about this execution' },
+    },
+    (args: { id: string; source: string; rating?: number; evidence?: { accuracy?: number; self_help?: number }; nodes?: string[]; note?: string }) => run('learnhub_project_exec_log', async () =>
+      JSON.stringify(await engine.projectExecLog(args.id, {
+        source: args.source,
+        ...(args.rating !== undefined ? { rating: args.rating } : {}),
+        ...(args.evidence !== undefined ? { evidence: args.evidence } : {}),
+        ...(args.nodes !== undefined ? { nodes: args.nodes } : {}),
+        ...(args.note !== undefined ? { note: args.note } : {}),
+      }))))
+  tool('learnhub_project_cross_view',
+    'Read a project\'s 2×2 MASTERY CROSS diagnostic (P-7, the project panel\'s core view): X = declarative mastery (mean masteryOfFm over the plan\'s linked nodes), Y = project execution evidence (EMA 0.7/0.3 of event scores; both axes threshold 0.6, missing evidence counts as low). Quadrants: 会而不会用 (high mastery × low execution — apply it), 会用而不牢 (low × high — shore up the knowledge base), 健康 (high × high), 补底 (low × low). Also returns the READ-ONLY fading-tier recommendation (challenge point): promotion criteria = performance within the current tier (≥3 events averaging ≥0.8) AND the linked-node mastery holding — the engine only proposes, the learner changes tier explicitly via learnhub_project_tier, and the recommendation NEVER gates milestones or anything else.',
+    { id: { type: 'string', required: true, description: 'Project id' } },
+    (args: { id: string }) => run('learnhub_project_cross_view', async () =>
+      JSON.stringify(await engine.projectCrossView(args.id))))
 
   // —— U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）：lane 与题目 FSRS 并行，不复用题目卡、不进复习队列 ——
 
