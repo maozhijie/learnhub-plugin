@@ -28,6 +28,7 @@ export const XP_PER_NODE_DEFAULT = 12    // 无课程历史时每节点 XP 估�
 export const XP_PER_MILESTONE_DEFAULT = 120 // 里程碑无 est 申报时的过点定价缺省（1–2 周粒度的保守投入，#94）
 export const DAILY_XP_GOAL_DEFAULT = 30  // 每日 XP 目标缺省（state/learnhub.json 可覆盖）
 export const DAY_CUTOFF_DEFAULT = '02:00' // 日界缺省（ADR-0020；state/learnhub.json 的 day_cutoff 可覆盖）
+export const XP_STREAK_GRACE_DAYS = 1    // XP streak 宽容天数（C-4 #83）：≤该天数的连续漏天不断链（Lally 漏一天无碍）
 
 // ---- Mastery 交叉 2×2 与入档推荐（P-7 #98 / ADR-0015 §4/§8；阈值唯一出处）----
 export const CROSS_AXIS_THRESHOLD = 0.6   // 2×2 两轴高低分界（与练习证据及格线 PASS_SCORE 同口径 0.6）

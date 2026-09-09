@@ -424,6 +424,8 @@ export class Sessions {
         if (hit) {
           hit.score = head
           hit.pinned = true
+          // C-5 #84：pin 挂载的执行意图随事件带出（只读侧展示，无调度语义）
+          if (pin.intention) hit.intention = pin.intention
           const gate = (hit as { advice?: AdviceItem[] }).advice
           // 未就绪 pin 保留照开自由：榜首带字面「前置未完成」提示（#54 软闸语义）
           hit.why = gate?.length
@@ -447,6 +449,7 @@ export class Sessions {
           path: this.notePath(c.root, graph, pin.node),
           hasContent: hasReadyContent(state[pin.node]),
           pinned: true,
+          ...(pin.intention ? { intention: pin.intention } : {}),
           ...(gate?.length ? { advice: gate } : {}),
         })
       }

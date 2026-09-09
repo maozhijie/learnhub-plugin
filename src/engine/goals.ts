@@ -4,9 +4,24 @@
  * canonical 调度、不设门禁；仅作用当日（date 过期自动失效）。未就绪节点照常
  * 可 pin——就绪提示随事件带出，引擎提议非指令。零依赖纯函数（接缝 S29）。
  */
+import type { ExecutionIntention } from './habits.ts'
 
-/** 一条 pin 记录（state/今日pin.json；中心级、跨课程/节点皆可）。 */
-export interface PinRec { course: string; node: string; date: string }
+/** 一条 pin 记录（state/今日pin.json；中心级、跨课程/节点皆可）。
+ * intention（C-5 #84）：挂载的执行意图（if-then 计划）——共享 ExecutionIntention
+ * 类型、各归其主（ADR-0017 裁决 6）：只覆盖推荐读侧，随 pin 当日过期，无独立生命周期。 */
+export interface PinRec { course: string; node: string; date: string; intention?: ExecutionIntention }
+
+/** 执行意图录入校验（C-5 #84；格式锁死与习惯同款）：cue/action 必须成对出现且都
+ * 非空，trim 后返回归一化意图；两者都缺 = undefined（不挂载/清除）。只给其一时
+ * fail loud——半条 if-then 是模糊线索或悬空行动，掉出证据范围。 */
+export function normalizeGoalIntention(cue: string | undefined, action: string | undefined): ExecutionIntention | undefined {
+  const c = (cue ?? '').trim()
+  const a = (action ?? '').trim()
+  if (!c && !a) return undefined
+  if (!c) throw new Error('[goal-intention] cue 不能为空——执行意图要挂在稳定线索上（时间/地点锚，如「早上刷完牙后」）。')
+  if (!a) throw new Error('[goal-intention] action 不能为空——执行意图是单一具体行动（多行为链掉出证据范围）。')
+  return { cue: c, action: a }
+}
 
 /** 当日有效的 pin：date 精确匹配当天，过期条目自动失效（不删除、只不生效）。 */
 export function todayPins(pins: PinRec[], today: string): PinRec[] {

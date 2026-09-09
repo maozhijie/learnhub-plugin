@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { newLessonRationale, pinHeadScore, todayPins } from '../src/engine/goals.ts'
+import { newLessonRationale, normalizeGoalIntention, pinHeadScore, todayPins } from '../src/engine/goals.ts'
 import type { PinRec } from '../src/engine/goals.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 import type { NoteSeed } from './helpers/vault.ts'
@@ -153,5 +153,70 @@ test('rationale：未 pin 的榜首新课 why 是一句自然语句（解锁数 
     assert.ok(why.includes('轮转'), why)
     const gated = rec.events.find(e => e.node === '导数') as Ev | undefined
     assert.ok(gated && String(gated.why).includes('保持率已衰减'), '被软闸拦下的新课保留就绪提示原文（rationale 并入语义不变）')
+  })
+})
+
+// ---- 执行意图挂载目标偏好（C-5 #84 / ADR-0017 裁决 6：共享类型、各归其主）----
+
+test('normalizeGoalIntention：成对必填、trim 归一、都缺 = 清除', () => {
+  assert.deepEqual(normalizeGoalIntention(' 早上刷完牙后 ', '打开吉他弹一段音阶 '), { cue: '早上刷完牙后', action: '打开吉他弹一段音阶' })
+  assert.equal(normalizeGoalIntention(undefined, undefined), undefined)
+  assert.equal(normalizeGoalIntention('', '  '), undefined)
+  assert.throws(() => normalizeGoalIntention(undefined, '行动'), /cue/)
+  assert.throws(() => normalizeGoalIntention('线索', undefined), /action/)
+})
+
+test('pin 携带执行意图：可录入、持久化、推荐事件带出（验收三条）', async () => {
+  await withVault(goalsVault(), async ({ engine }) => {
+    // today 缺省 = 当前学习日，与 recommend 的「今日」口径一致（意图随 pin 当日有效）
+    const r = await engine.pinToday('数学', '导数', undefined, { cue: '早上刷完牙后', action: '学一节导数' }) as Ev
+    assert.deepEqual(r.intention, { cue: '早上刷完牙后', action: '学一节导数' })
+    // 持久化：意图落在 pin 清单里（无独立文件/无独立生命周期）
+    assert.deepEqual((await engine.store.loadPins())[0]!.intention, { cue: '早上刷完牙后', action: '学一节导数' })
+    // 面板可见：推荐榜首事件带意图，供面板渲染
+    const rec = await engine.recommend(20) as { events: Ev[] }
+    const head = rec.events[0] as Ev
+    assert.equal(head.node, '导数')
+    assert.deepEqual(head.intention, { cue: '早上刷完牙后', action: '学一节导数' })
+  })
+})
+
+test('setGoalIntention：已 pin 节点写入/清除；当日无 pin = Missing fail loud', async () => {
+  await withVault(goalsVault(), async ({ engine }) => {
+    await engine.pinToday('数学', '几何', '2026-09-08')
+    const set = await engine.setGoalIntention('数学', '几何', { cue: '到工位坐下后', action: '先做一道几何题' }, '2026-09-08') as Ev
+    assert.deepEqual(set.intention, { cue: '到工位坐下后', action: '先做一道几何题' })
+    // 只给其一半条意图 → fail loud（格式锁死）
+    await assert.rejects(() => engine.setGoalIntention('数学', '几何', { cue: '到工位坐下后' }, '2026-09-08'), /action/)
+    // 清除（都不传）→ 事件不再带意图
+    const cleared = await engine.setGoalIntention('数学', '几何', null, '2026-09-08') as Ev
+    assert.equal(cleared.intention, null)
+    assert.equal((await engine.store.loadPins()).find(p => p.node === '几何')!.intention, undefined)
+    // 载体缺失不能悬空写：当日无 pin 的节点 fail loud
+    await assert.rejects(() => engine.setGoalIntention('数学', '导数', { cue: 'c', action: 'a' }, '2026-09-08'), /没有 pin/)
+  })
+})
+
+test('意图随 pin 的读侧语义走：重 pin 无意图 = 覆盖清除；过期 = 失效不泄漏', async () => {
+  await withVault(goalsVault(), async ({ engine }) => {
+    await engine.pinToday('数学', '导数', '2026-09-08', { cue: 'c', action: 'a' })
+    // 同节点重 pin 不带意图 → 旧意图被覆盖清除（pinToday 去重替换语义）
+    await engine.pinToday('数学', '导数', '2026-09-08')
+    assert.equal((await engine.store.loadPins())[0]!.intention, undefined)
+    // 次日：过期 pin（带意图）整体失效，意图不泄漏到任何事件
+    await engine.store.savePins([{ course: '数学', node: '导数', date: '2020-01-01', intention: { cue: 'c', action: 'a' } }])
+    const rec = await engine.recommend(20) as { events: Ev[] }
+    assert.ok(rec.events.every(e => !e.intention), '过期 pin 的意图不出现在任何事件')
+  })
+})
+
+test('红线：pin/意图写入零 canonical 触碰（Learner Output，ADR-0009）', async () => {
+  await withVault(goalsVault(), async ({ engine }) => {
+    await engine.pinToday('数学', '导数', '2026-09-08', { cue: 'c', action: 'a' })
+    await engine.setGoalIntention('数学', '导数', { cue: 'c2', action: 'a2' }, '2026-09-08')
+    await engine.setGoalIntention('数学', '导数', null, '2026-09-08')
+    assert.equal((await engine.store.journalTail()).length, 0)
+    assert.equal((await engine.store.practiceAll()).length, 0)
+    assert.equal((await engine.xpStatus()).today_xp, 0)
   })
 })

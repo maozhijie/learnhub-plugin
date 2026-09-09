@@ -1587,13 +1587,25 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { limit?: number }) => run('learnhub_recommend', async () =>
       JSON.stringify(await engine.recommend(args.limit === undefined ? 5 : args.limit))))
   tool('learnhub_pin_today',
-    'Pin a node as「今天学它」(E3 goal ownership): for TODAY only it is raised to the top of its course in learnhub_recommend with a「你选了它」marker and its normal reason — a read-side ordering overlay, never a gate; pinning a not-ready node keeps the prerequisite soft-gate hint and the node stays openable. Pins expire automatically tomorrow. Learner Output: zero effect on scheduling, mastery, or XP.',
+    'Pin a node as「今天学它」(E3 goal ownership): for TODAY only it is raised to the top of its course in learnhub_recommend with a「你选了它」marker and its normal reason — a read-side ordering overlay, never a gate; pinning a not-ready node keeps the prerequisite soft-gate hint and the node stays openable. Pins expire automatically tomorrow. Optionally mount an execution intention (C-5): pass cue AND action to attach an if-then plan「在【时间/地点锚】之后【单一具体行动】」— the format is locked to a stable cue + ONE concrete action (multi-step chains and vague cues fall outside the evidence; Gollwitzer & Sheeran 2006). The intention rides the pinned recommend event and the panel, and expires with the pin. Learner Output: zero effect on scheduling, mastery, or XP.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name (must exist in the course graph)' },
+      cue: { type: 'string', description: 'Execution-intention cue (stable time/place anchor, e.g. 早上刷完牙后) — required together with action' },
+      action: { type: 'string', description: 'Execution-intention action (ONE concrete action, verb-first) — required together with cue' },
     },
-    (args: { course: string; node: string }) => run('learnhub_pin_today', async () =>
-      JSON.stringify(await engine.pinToday(args.course, args.node))))
+    (args: { course: string; node: string; cue?: string; action?: string }) => run('learnhub_pin_today', async () =>
+      JSON.stringify(await engine.pinToday(args.course, args.node, undefined, { cue: args.cue, action: args.action }))))
+  tool('learnhub_goal_intention',
+    'Set or clear an execution intention (C-5 if-then plan) on TODAY\'s「今天学它」pin for a node: pass cue AND action to write「在【时间/地点锚】之后【单一具体行动】」— format locked to a stable time/place cue + ONE concrete action (multi-step chains and vague cues fall outside the evidence); pass neither to clear it. The intention lives on the pin (goal preference), covers the recommendation read side only, and expires with the pin tomorrow — it has no life of its own. Surface it from learnhub_recommend events (pinned events carry an intention {cue, action}). Fails loud if the node has no pin today. Learner Output: zero effect on scheduling, mastery, or XP.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node name (must have a pin today)' },
+      cue: { type: 'string', description: 'Execution-intention cue (stable time/place anchor) — omit cue AND action to clear' },
+      action: { type: 'string', description: 'Execution-intention action (ONE concrete action, verb-first) — omit cue AND action to clear' },
+    },
+    (args: { course: string; node: string; cue?: string; action?: string }) => run('learnhub_goal_intention', async () =>
+      JSON.stringify(await engine.setGoalIntention(args.course, args.node, { cue: args.cue, action: args.action }))))
   tool('learnhub_unpin',
     'Cancel a「今天学它」pin: the node returns to the default recommendation order immediately.',
     {

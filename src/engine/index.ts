@@ -68,7 +68,9 @@ import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
 import { Skills, laneDue, laneEventKind, ratingFromEvidence, clampMaintenanceDays, executionRowIdentity, executionXpDetail } from './skills.ts'
 import type { SkillDoc, ExecutionSource, ExecutionEventKind, ExecutionEvidence, ExecutionLogResult } from './skills.ts'
 import { Habits, habitStreak, automationCurve } from './habits.ts'
-import type { HabitDoc, HabitRepeatRec } from './habits.ts'
+import type { HabitDoc, HabitRepeatRec, ExecutionIntention } from './habits.ts'
+import { normalizeGoalIntention } from './goals.ts'
+import type { PinRec } from './goals.ts'
 import { submitReceipt, receiptsUntilNextFull, RECEIPT_KIND_LABEL } from './receipts.ts'
 import type { ReceiptLogRec, ReceiptKind, ReceiptSubmitResult } from './receipts.ts'
 import { selfNoteFeedbackPrompt, selfNoteFeedbackSystem, selfNotePromptOf } from './self-note.ts'
@@ -85,7 +87,7 @@ import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADIN
 import { findDuplicateStem, existingStemsPromptBlock, bankStemList } from './question-dedup.ts'
 import { parseSectionTitle } from '../../shared/content-renderers.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration, milestonePrice } from './xp.ts'
-import { XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID, CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
+import { XP_STREAK_GRACE_DAYS, XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID, CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
 import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
@@ -320,17 +322,40 @@ export class LearnhubEngine {
   /** pin 节点为今日推荐榜首：只改推荐读侧排序（课程内置顶、跨课按全局语义），
    * 保留就绪提示——未就绪节点不拒绝，软闸建议随事件带出。仅作用当日，次日自动
    * 失效；同一课程可叠加多个 pin（按 pin 序依次置顶）。节点不在图内 fail loud；
-   * 写入时顺带清理过期条目。零调度副作用（不碰 canonical/XP/掌握度）。 */
-  async pinToday(courseKey: string | undefined, node: string, today?: string): Promise<{ course: string; node: string; date: string }> {
+   * 写入时顺带清理过期条目。零调度副作用（不碰 canonical/XP/掌握度）。
+   * intention（C-5 #84）：可选挂载执行意图（if-then 计划），随 pin 当日过期
+   * （ADR-0017 裁决 6），格式锁死校验走 normalizeGoalIntention。 */
+  async pinToday(courseKey: string | undefined, node: string, today?: string, intention?: { cue?: string; action?: string }): Promise<{ course: string; node: string; date: string; intention?: ExecutionIntention }> {
     today ??= (await this.learningDay()).today
+    const plan = normalizeGoalIntention(intention?.cue, intention?.action)
     const c = await this.registry.resolve(courseKey)
     const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[pin] 节点「${node}」不在课程「${c.name}」的图内。`)
     this.assertNoteOk(c, graph, broken, node, 'pin')
     const rest = (await this.store.loadPins())
       .filter(p => p.date === today && !(p.course === c.name && p.node === node))
-    await this.store.savePins([...rest, { course: c.name, node, date: today }])
-    return { course: c.name, node, date: today }
+    const rec: PinRec = { course: c.name, node, date: today, ...(plan ? { intention: plan } : {}) }
+    await this.store.savePins([...rest, rec])
+    return { course: c.name, node, date: today, ...(plan ? { intention: plan } : {}) }
+  }
+
+  /** 在今日 pin 上写入/清除执行意图（C-5 #84）：if-then 计划挂载在「今天学它」的
+   * 目标偏好上，只覆盖推荐读侧（随 pin 当日过期，ADR-0017 裁决 6）。cue/action
+   * 都传 = 写入（格式锁死：稳定线索 + 单一具体行动），都不传 = 清除；当日无该
+   * 节点的 pin = Missing fail loud——意图没有独立生命周期，载体缺失就不能悬空写。
+   * Learner Output：零调度副作用。 */
+  async setGoalIntention(courseKey: string | undefined, node: string, intention: { cue?: string; action?: string } | null, today?: string): Promise<{ course: string; node: string; intention: ExecutionIntention | null }> {
+    today ??= (await this.learningDay()).today
+    const plan = intention ? normalizeGoalIntention(intention.cue, intention.action) : undefined
+    const c = await this.registry.resolve(courseKey)
+    const pins = await this.store.loadPins()
+    const hit = pins.find(p => p.date === today && p.course === c.name && p.node === node)
+    if (!hit) throw new Error(`[goal-intention] 「${c.name}/${node}」今天没有 pin：执行意图挂在「今天学它」的目标偏好上，先 learnhub_pin_today。`)
+    const next = pins.map(p => p === hit
+      ? (plan ? { ...p, intention: plan } : { course: p.course, node: p.node, date: p.date })
+      : p)
+    await this.store.savePins(next)
+    return { course: c.name, node, intention: plan ?? null }
   }
 
   /** 取消 pin：移除该课程+节点的全部 pin（含过期条目），写入时顺带清理过期清单。 */
@@ -2978,7 +3003,7 @@ export class LearnhubEngine {
         days: remainingXp > 0 ? Math.ceil(remainingXp / Math.max(1, goal)) : 0,
       })
     }
-    return { date: today, day_cutoff: fmtCutoff(cutoff), today_xp: sumXp(practice, journal, today, cutoff), goal, streak: streakFrom(activity, today), eta }
+    return { date: today, day_cutoff: fmtCutoff(cutoff), today_xp: sumXp(practice, journal, today, cutoff), goal, streak: streakFrom(activity, today), streak_grace_days: XP_STREAK_GRACE_DAYS, eta }
   }
 
   /** 调整每日 XP 目标（state/learnhub.json）。 */

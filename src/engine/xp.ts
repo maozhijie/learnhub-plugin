@@ -11,7 +11,7 @@
  *   （FSRS difficulty 加权，无人工干预）；完成时 settle 对账锁定定价。
  */
 import { readFile } from 'node:fs/promises'
-import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, XP_PER_MILESTONE_DEFAULT, DAILY_XP_GOAL_DEFAULT, DAY_CUTOFF_DEFAULT, FSRS_DIFFICULTY_MID } from './params.ts'
+import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, XP_PER_MILESTONE_DEFAULT, DAILY_XP_GOAL_DEFAULT, DAY_CUTOFF_DEFAULT, XP_STREAK_GRACE_DAYS, FSRS_DIFFICULTY_MID } from './params.ts'
 import { parseDay, fmtDay, dayOfTs, parseCutoff, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import type { PracticeRec, JournalRec } from './types.ts'
@@ -162,15 +162,26 @@ export function sumXpByCourse(practice: PracticeRec[], journal: JournalRec[]): R
   return out
 }
 
-/** streak：按日行为聚合（total>0 的天），从 today（无行为则从昨天）往回数连续天数。 */
-export function streakFrom(byDay: Record<string, { total: number }>, today: string): number {
+/** streak：按日行为聚合（total>0 的天）从 today 往回数，宽容口径（C-4 #83）：
+ * ≤ graceDays 的连续漏天跳过（不计数也不断链——Lally「漏一天无碍」、Duolingo
+ * streak freeze 同型），空窗超过容忍度截断（历史不抹除，恢复后重新累积）。
+ * today 当天没学不罚也不耗宽容（起点回退到昨天）。仍是纯派生：行为流水即事实，
+ * 账本口径零改动，变的只是 streak 这一个读法。 */
+export function streakFrom(byDay: Record<string, { total: number }>, today: string, graceDays = XP_STREAK_GRACE_DAYS): number {
   const cursor = parseDay(today)
   if (!cursor) return 0
   // 今天还没学不打断 streak：起点回退到昨天
   if (!(byDay[fmtDay(cursor)]?.total > 0)) cursor.setUTCDate(cursor.getUTCDate() - 1)
   let streak = 0
-  while (byDay[fmtDay(cursor)]?.total > 0) {
-    streak++
+  let gap = 0
+  for (let i = 0; i < 3650; i++) {
+    if (byDay[fmtDay(cursor)]?.total > 0) {
+      streak++
+      gap = 0
+    } else {
+      gap++
+      if (gap > graceDays) break
+    }
     cursor.setUTCDate(cursor.getUTCDate() - 1)
   }
   return streak

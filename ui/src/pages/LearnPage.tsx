@@ -188,6 +188,11 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
           <Text type='secondary' style={{ fontSize: 12 }}>
             {e.course}{e.region ? ` · ${e.region}` : ''}{e.why ? ` · ${e.why}` : ''}
           </Text>
+          {e.intention && (
+            <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 2, color: 'var(--color-gold-6, #d48806)' }}>
+              计划：在「{e.intention.cue}」之后，{e.intention.action}
+            </Text>
+          )}
         </div>
         {!e.hasContent && !generating ? (
           <Button size='mini' type='primary' status='warning' onClick={ev => { ev.stopPropagation(); onGenerate() }}>
@@ -1074,7 +1079,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
           <Button onClick={() => setCreateVisible(true)}>生成新课程</Button>
         </div>
       </div>
-      <XpBar xp={xp ?? { date: '', day_cutoff: '', today_xp: 0, goal: 30, streak: 0, eta: [] }}
+      <XpBar xp={xp ?? { date: '', day_cutoff: '', today_xp: 0, goal: 30, streak: 0, streak_grace_days: 1, eta: [] }}
         onEditGoal={() => frame.goto('stats')} />
       <ReviewBanner reviewQ={reviewQ} anki={anki}
         onStart={() => { setCalibrationHint(reviewQ?.calibration_hint); setSession(dueCards) }}

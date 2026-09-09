@@ -610,7 +610,7 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
             </div>
             <div>
               <Text style={{ fontWeight: 600, fontSize: 18 }}>{xp.streak}</Text>
-              <Text type='secondary' style={{ fontSize: 12 }}>连续学习天数</Text>
+              <Text type='secondary' style={{ fontSize: 12 }}>连续学习天数（漏 {xp.streak_grace_days} 天不断）</Text>
             </div>
             <div>
               <Text style={{ fontWeight: 600, fontSize: 18 }}>{xp.goal}</Text>
