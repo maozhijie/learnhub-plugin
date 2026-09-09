@@ -9,8 +9,10 @@
  * 正面「忘记」申报受 5 秒主动回忆门控（展示起算倒计时）、背面追加正确答案块；
  * 自评难度按钮等复习专属背面件由 footer 注入。
  * JOL 抽查（#66 E4）：jolAsk=true 时在题面出示后、翻面前弹一档三点预测
- * （会/不会/没把握）——单点即过、可忽略不卡流程，预测随提交/忘记上报落流水。 */
-import { Button, Input, Message, Radio, Select, Tag, Tooltip, Typography } from '@arco-design/web-react'
+ * （会/不会/没把握）——单点即过、可忽略不卡流程，预测随提交/忘记上报落流水。
+ * Self-Calibration 过信轻提示（ADR-0022 #104）：calibrationHint 有值时（源内「会」
+ * 档系统性过信且提示开）在预测出口附一句非阻断的预期管理提醒，可全局关。 */
+import { Alert, Button, Input, Message, Radio, Select, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { InlineMd } from './MdView'
@@ -110,6 +112,9 @@ export default function QuestionCard(props: {
   variant?: 'practice' | 'review'
   /** JOL 抽查命中（#66 E4）：翻面前弹一档三点预测；单点即过、可忽略。 */
   jolAsk?: boolean
+  /** Self-Calibration 过信轻提示（ADR-0022 #104）：队列载荷 calibration_hint 透传——
+   * 只在预测出口随 jolAsk 展示一句，非阻断、不参与判卷；提示全局关时引擎不带。 */
+  calibrationHint?: string
   /** 复习刷卡流的提交器（deferSchedule 挂起调度）；缺省走练习流 api.questionAnswer。
    * 第三参 = 翻面前的 JOL 预测（jolAsk 命中且学习者点选时携带）。 */
   submitter?: (payload: string, elapsedS: number, predicted?: JolPick) => Promise<AnswerOutcome>
@@ -320,6 +325,11 @@ export default function QuestionCard(props: {
             ))}
           </div>
         )
+      )}
+
+      {/* 过信轻提示（ADR-0022 #104）：只随预测出口出现，非阻断、可全局关 */}
+      {props.jolAsk && !outcome && props.calibrationHint && (
+        <Alert type='warning' style={{ fontSize: 12, padding: '4px 10px' }} content={props.calibrationHint} />
       )}
 
       {!outcome ? (

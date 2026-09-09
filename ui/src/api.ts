@@ -68,6 +68,12 @@ export const api = {
   jol: () => http<import('./types').JolConfig>('GET', '/jol'),
   setJol: (patch: { enabled?: boolean; rate?: number }) =>
     http<import('./types').JolConfig>('PUT', '/jol', patch),
+  /** 自评校准画像（ADR-0022 #104）：分源切片为主视图 + 全局参考视图（带域特异警戒）。 */
+  calibrationProfile: () => http<import('./types').CalibrationProfileDoc>('GET', '/calibration/profile'),
+  /** 过信轻提示开关（ADR-0022 #104）：缺省开，可全局关。 */
+  calibrationHints: () => http<import('./types').CalibrationHintsConfig>('GET', '/calibration/hints'),
+  setCalibrationHints: (hints_enabled: boolean) =>
+    http<import('./types').CalibrationHintsConfig>('PUT', '/calibration/hints', { hints_enabled }),
   /** 难度带会话日志（#65 E5）：会话结束落一条带选择与作答结算（教练数据源）。 */
   bandSession: (course: string, node: string, band: 'easy' | 'standard' | 'hard', answered: number, correct: number) =>
     http<{ course: string; node: string; band: string; date: string }>('POST', '/band-session', { course, node, band, answered, correct }),
