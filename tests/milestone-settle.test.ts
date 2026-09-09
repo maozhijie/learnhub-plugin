@@ -80,15 +80,15 @@ test('过点对账：显式动作落 journal kind=milestone_settle，定价=est�
     const p1 = await engine.projectPlanPropose('练耳日记', PLAN_WITH_NODES('练耳日记'))
     await engine.projectApply(p1.id)
 
-    // 过点前无 milestone_settle
-    assert.equal(await engine.projects.isMilestonePassed('练耳日记', 'm1'), false)
+    // 过点前无 milestone_settle（对账流水即事实，经 store 缝断言）
+    assert.equal(await engine.projects.milestoneSettleRec('练耳日记', 'm1'), null)
 
     const r = await engine.projectMilestonePass('练耳日记', 'm1')
     // k = fsrs difficulty 9 / 5 = 1.8（题池校准）；est=100 → 180
     assert.equal(r.xp, 180)
     assert.match(r.detail, /N₀=100（est 申报）/)
     assert.match(r.detail, /k=1\.80/)
-    assert.equal(await engine.projects.isMilestonePassed('练耳日记', 'm1'), true)
+    assert.ok(await engine.projects.milestoneSettleRec('练耳日记', 'm1'))
 
     const rows = await store.journalTail('练耳日记', 100)
     assert.equal(rows.length, 1)

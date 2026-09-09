@@ -13,7 +13,7 @@ import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/pro
 import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
 import { Store } from './store.ts'
-import { GraphStore, Graph, writeReadyList } from './graph.ts'
+import { GraphStore, Graph, writeReadyList, declaredEncOf } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
@@ -44,7 +44,7 @@ import type { ApplyAudit, EditOp } from './gengraph.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
-import type { RecallPool, RecallQuestion, RecallRec } from './project-recall.ts'
+import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
 import { QuestionBank } from './question-bank.ts'
@@ -645,10 +645,8 @@ export class LearnhubEngine {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     assertNoBrokenNotes('enc-backfill', broken)
-    // 既有声明 enc 的原始形态在 region 节点上（图视图 encOf 丢 note）；一次性建表避免每节点线性扫
-    const encOfNode = new Map(
-      graph.regions.flatMap(r => r.blocks.flatMap(b => b.nodes)).map(n => [n.name, n.enc]),
-    )
+    // 既有声明 enc 的原始形态在 region 节点上（图视图 encOf 丢 note）；declaredEncOf 一次建表
+    const encOfNode = declaredEncOf(graph)
     const ops: EditOp[] = []
     let scanned = 0
     for (const node of graph.order) {
@@ -807,22 +805,33 @@ export class LearnhubEngine {
     return item
   }
 
+  /** 关联节点的活跃题池（pass 定价校准与检索点抽题共用）：逐节点读题库、滤归档。
+   * course/node 与题目一起返回，消费方各取所需。 */
+  private async loadActivePools(linked: Array<{ course: CourseEntry; node: string }>): Promise<Array<{ course: CourseEntry; node: string; questions: BankQuestion[] }>> {
+    const pools: Array<{ course: CourseEntry; node: string; questions: BankQuestion[] }> = []
+    for (const { course, node } of linked) {
+      const bank = await this.bank.load(this.paths.courseRoot(course.root), node)
+      const active = bank.questions.filter(q => !q.archived)
+      if (active.length) pools.push({ course, node, questions: active })
+    }
+    return pools
+  }
+
   /** 显式过点（#94 / 设计 §5）：里程碑完成 = 学习者显式动作，无清单门禁、无题目门禁。
-   * 定价 = milestonePrice（est 申报 × 关联节点题池 FSRS 难度校准；无关联证据 k=1），
-   * 对账流水 journal kind='milestone_settle' 一次性入账并锁定（重复过点被守卫拒绝）。
-   * 这是项目域唯一获准写 journal 的动作：真实投入的显式陈述，进账本汇总与 streak 口径
-   * （ADR-0015 裁决 5 的 Settle 新粒度；计划/产物/检索点仍零 journal 写入）。 */
+   * 定价 = milestonePrice（计划 est 申报 × 关联节点题池 FSRS 难度校准；无申报/无证据
+   * 回落缺省/中性）——校准池锁定为计划条目 nodes 声明，调用方不能临时加池（过点即
+   * 锁定，事后注水＝账本不诚实）。对账流水 journal kind='milestone_settle' 一次性入账
+   * 并锁定（重复过点被守卫拒绝）。这是项目域唯一获准写 journal 的动作：真实投入的
+   * 显式陈述，进账本汇总与 streak 口径（ADR-0015 裁决 5 的 Settle 新粒度；
+   * 计划/产物/检索点仍零 journal 写入）。 */
   async projectMilestonePass(
-    id: string, milestoneId: string, extraNodes?: string[],
+    id: string, milestoneId: string,
   ): Promise<{ project: string; milestone: string; name: string; xp: number; detail: string }> {
     const fm = await this.projects.load(id)
     const item = this.planItemOf(fm, milestoneId, 'project-pass')
-    const linked = await this.resolveProjectNodes([...(item.nodes ?? []), ...(extraNodes ?? [])])
-    const pool: Array<{ kind: string; difficulty?: number; fsrs?: { difficulty: number } | null }> = []
-    for (const { course, node } of linked) {
-      const bank = await this.bank.load(this.paths.courseRoot(course.root), node)
-      for (const q of bank.questions) if (!q.archived) pool.push(q)
-    }
+    const linked = await this.resolveProjectNodes(item.nodes ?? [])
+    const pools = await this.loadActivePools(linked)
+    const pool = pools.flatMap(p => p.questions)
     const calibration = pool.length ? difficultyCalibration(pool) : 1
     const price = milestonePrice(item.est, calibration)
     const detail = `N₀=${item.est ?? XP_PER_MILESTONE_DEFAULT}${item.est ? '（est 申报）' : '（缺省，无 est 申报）'}`
@@ -848,19 +857,15 @@ export class LearnhubEngine {
       throw new Error('[project-recall] 该里程碑没有关联节点：计划条目 nodes 或调用参数 nodes 至少给一个（节点名或「课程/节点」）。')
     }
     const linked = await this.resolveProjectNodes(specs)
-    const pools: RecallPool[] = []
+    const pools = await this.loadActivePools(linked)
     const byKey = new Map<string, BankQuestion>()
-    for (const { course, node } of linked) {
-      const bank = await this.bank.load(this.paths.courseRoot(course.root), node)
-      const active = bank.questions.filter(q => !q.archived)
-      if (!active.length) continue
-      pools.push({ course: course.name, node, questions: active })
-      for (const q of active) byKey.set(`${course.name}\u0000${node}\u0000${q.id}`, q)
+    for (const p of pools) {
+      for (const q of p.questions) byKey.set(`${p.course.name}\u0000${p.node}\u0000${q.id}`, q)
     }
     if (!pools.length) {
       throw new Error('[project-recall] 关联节点都没有可用题目（题库为空或全归档）——先出题，或修订计划的 nodes 关联。')
     }
-    const drawn = drawRecallQuestions(pools, opts.limit ?? 5, this.jolRng)
+    const drawn = drawRecallQuestions(pools.map(p => ({ course: p.course.name, node: p.node, questions: p.questions })), opts.limit ?? 5, this.jolRng)
     await appendRecallRec(this.paths, id, {
       ts: nowIso(), kind: 'draw', milestone: milestoneId, file: delivered.file,
       nodes: specs, questions: drawn,
@@ -893,12 +898,15 @@ export class LearnhubEngine {
    * 带置信度候选边 → 每课程单个 pending edit 提案走人审（enc_backfill「单提案人审」
    * 先例；set_enc 整体替换、既有声明 enc 原样保留，零 schema 破坏）。窗口终点 =
    * 指定里程碑的过点时刻（省略则现在）；事件源 = review-log（synthetic 除外）+ practice，
-   * 只取关联节点。跨课程对不成边（enc 边不可跨图）；已声明边不重复提名。 */
+   * 只取关联节点。边只在 pre 闭包内落（CONTEXT Enc 契约 / 审计 E7）——跨无关节点对
+   * 不硬提边，降级为 blocked_no_pre 信号（带方向提示，供未来补 pre 边参考）；
+   * 已声明边不重复提名。 */
   async projectEncCandidates(
     id: string, opts: { milestone?: string; nodes?: string[]; window_days?: number; min_co?: number } = {},
   ): Promise<{
     project: string; window: { start: string; end: string; days: number }
-    events: number; candidates: Array<{ course: string; holder: string; skill: string; co: number; w: number; why: string }>
+    events: number; candidates: Array<{ course: string; holder: string; skill: string; co: number; w: number }>
+    blocked_no_pre: Array<{ course: string; a: string; b: string; co: number; hint_skill: string; why: string }>
     proposals: Array<{ course: string; id: number; ops: number }>; skipped_declared: number
   }> {
     const fm = await this.projects.load(id)
@@ -906,8 +914,7 @@ export class LearnhubEngine {
     const minCo = Math.max(1, Math.round(opts.min_co ?? 2))
     let endMs = Date.now()
     if (opts.milestone !== undefined) {
-      const rec = (await this.store.journalTail(fm.id, Number.MAX_SAFE_INTEGER))
-        .find(r => r.kind === 'milestone_settle' && r.node === opts.milestone)
+      const rec = await this.projects.milestoneSettleRec(id, opts.milestone)
       if (!rec) {
         throw new Error(`[project-enc] 里程碑「${opts.milestone}」没有过点记录——共现窗口没有锚点（先过点，或省略 milestone 以现在为终点）。`)
       }
@@ -952,7 +959,8 @@ export class LearnhubEngine {
     for (const r of reviews) if (r.rating_source !== 'synthetic') bump(r.course, r.node, r.ts)
     for (const r of practices) bump(r.course, r.node, r.ts)
 
-    const candidates: Array<{ course: string; holder: string; skill: string; co: number; w: number; why: string }> = []
+    const candidates: Array<{ course: string; holder: string; skill: string; co: number; w: number }> = []
+    const blockedNoPre: Array<{ course: string; a: string; b: string; co: number; hint_skill: string; why: string }> = []
     const proposals: Array<{ course: string; id: number; ops: number }> = []
     let skippedDeclared = 0
     for (const [courseName, nodes] of byCourse) {
@@ -961,10 +969,7 @@ export class LearnhubEngine {
       const c = await this.registry.get(courseName)
       if (!c) continue
       const { graph } = await this.loadView(c)
-      // 既有声明 enc 原样保留（图视图 encOf 丢 note，一次性建表取原始形态）
-      const declared = new Map(
-        graph.regions.flatMap(rg => rg.blocks.flatMap(b => b.nodes)).map(n => [n.name, n.enc]),
-      )
+      const declared = declaredEncOf(graph)
       const ops: EditOp[] = []
       for (const pair of pairs.slice(0, 12)) {
         const dir = orientCandidate(
@@ -972,6 +977,10 @@ export class LearnhubEngine {
           (from, to) => graph.nset.has(from) && graph.nset.has(to) && graph.isAncestor(from, to),
           node => firstDayByCourse.get(courseName)?.get(node),
         )
+        if (!dir.ok) {
+          blockedNoPre.push({ course: courseName, a: pair.a, b: pair.b, co: pair.co, hint_skill: dir.hint_skill, why: dir.why })
+          continue
+        }
         if (!nodes.has(dir.holder) || !nodes.has(dir.skill)) continue
         const existing = declared.get(dir.holder) ?? []
         if (existing.some(e => e.node === dir.skill)) {
@@ -981,9 +990,9 @@ export class LearnhubEngine {
         const w = coWeight(pair.co)
         ops.push({
           op: 'set_enc', node: dir.holder,
-          enc: [...existing, { node: dir.skill, w, note: `行为推断（P-6 #96）：${days} 天窗口内共现 ${pair.co} 天（${dir.why}）` }],
+          enc: [...existing, { node: dir.skill, w, note: `行为推断（P-6 #96）：${days} 天窗口内共现 ${pair.co} 天（pre 闭包方向）` }],
         })
-        candidates.push({ course: courseName, holder: dir.holder, skill: dir.skill, co: pair.co, w, why: dir.why })
+        candidates.push({ course: courseName, holder: dir.holder, skill: dir.skill, co: pair.co, w })
       }
       if (!ops.length) continue
       const yamlText = YAML.stringify({
@@ -997,7 +1006,7 @@ export class LearnhubEngine {
     return {
       project: id,
       window: { start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(), days },
-      events, candidates, proposals, skipped_declared: skippedDeclared,
+      events, candidates, blocked_no_pre: blockedNoPre, proposals, skipped_declared: skippedDeclared,
     }
   }
 

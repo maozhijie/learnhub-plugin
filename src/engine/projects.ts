@@ -19,7 +19,7 @@ import { loadNote, saveNote } from './notes.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 import type { Store } from './store.ts'
-import type { ProposalRec } from './types.ts'
+import type { ProposalRec, JournalRec } from './types.ts'
 
 export type ProjectLifecycle = 'active' | 'paused' | 'delivered' | 'archived'
 export const PROJECT_LIFECYCLES: ProjectLifecycle[] = ['active', 'paused', 'delivered', 'archived']
@@ -466,9 +466,7 @@ export class Projects {
     project: string; milestone: string; name: string; file: string; xp: number
   }> {
     const { project, item, file } = await this.locateMilestone(projectId, milestoneId)
-    const settled = (await this.store.journalTail(project.id, Number.MAX_SAFE_INTEGER))
-      .some(r => r.kind === 'milestone_settle' && r.node === milestoneId)
-    if (settled) {
+    if (await this.milestoneSettleRec(project.id, milestoneId)) {
       throw new Error(`[project-pass] 里程碑「${milestoneId}」已过点对账（定价锁定，重复过点不入账）；计划换了内容请用新的里程碑 id。`)
     }
     await this.store.appendJournal({
@@ -479,10 +477,12 @@ export class Projects {
     return { project: project.id, milestone: milestoneId, name: item.name, file, xp: settle.xp }
   }
 
-  /** 里程碑已过点？（对账流水即事实，零新增状态文件。） */
-  async isMilestonePassed(projectId: string, milestoneId: string): Promise<boolean> {
+  /** 过点对账流水行（无则 null；对账流水即事实，零新增状态文件）。
+   * journal 的 course 维度按名过滤——项目 id 与课程名撞名时本查询只认 kind+node
+   * （课程域 journal 行不会有 kind='milestone_settle'），不会误配。 */
+  async milestoneSettleRec(projectId: string, milestoneId: string): Promise<JournalRec | null> {
     return (await this.store.journalTail(projectId, Number.MAX_SAFE_INTEGER))
-      .some(r => r.kind === 'milestone_settle' && r.node === milestoneId)
+      .find(r => r.kind === 'milestone_settle' && r.node === milestoneId) ?? null
   }
 
   /** 里程碑产物落盘状态（#93 检索点门槛：交付物 = 任务卡已生成）。 */

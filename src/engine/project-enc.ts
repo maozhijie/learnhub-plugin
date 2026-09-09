@@ -48,23 +48,21 @@ export function cooccurrencePairs(events: CoEvent[], minCo: number): CoCandidate
 }
 
 /** 方向裁决（纯函数）：enc 边方向 = skill 挂在 holder 上（holder 的 enc 列表指向 skill）。
- * pre 闭包可判方向时从图结构（a 是 b 的祖先 → skill=a, holder=b）；无结构关系时取
- * 窗口内首事件更晚者为 holder（先被练的更像被依赖的底座）——启发式，人审可改。 */
+ * CONTEXT Enc 契约（审计 E7）：enc 目标必须在 holder 的 pre 传递闭包内——所以只有
+ * pre 关系能定方向：a 是 b 的祖先 → skill=a, holder=b（反之亦然）；两向都无 pre 关系
+ * 时**没有可落的边**（硬提必被审计 E7 拒），降级为 no_pre 信号，方向提示取窗口内首
+ * 事件更晚者为 holder（先被练的更像底座）——供未来补 pre 边参考，不进提案。 */
 export function orientCandidate(
   a: string, b: string,
   isAncestor: (from: string, to: string) => boolean,
   firstDayOf: (node: string) => string | undefined,
-): { skill: string; holder: string; why: string } {
-  if (isAncestor(a, b)) return { skill: a, holder: b, why: 'pre 闭包方向' }
-  if (isAncestor(b, a)) return { skill: b, holder: a, why: 'pre 闭包方向' }
+): { ok: true; skill: string; holder: string } | { ok: false; hint_skill: string; why: string } {
+  if (isAncestor(a, b)) return { ok: true, skill: a, holder: b }
+  if (isAncestor(b, a)) return { ok: true, skill: b, holder: a }
   const da = firstDayOf(a) ?? ''
   const db = firstDayOf(b) ?? ''
-  if (da !== db) {
-    return da < db
-      ? { skill: a, holder: b, why: '首事件更晚者为 holder（启发式，人审可改）' }
-      : { skill: b, holder: a, why: '首事件更晚者为 holder（启发式，人审可改）' }
-  }
-  return { skill: a, holder: b, why: '首日相同，按字典序定方向（启发式，人审可改）' }
+  const hint = da !== db && da < db ? a : b
+  return { ok: false, hint_skill: hint, why: `无 pre 关系（enc 契约/E7 要求闭包内）；首事件启发式倾向 ${hint} 为底座` }
 }
 
 /** 共现 → enc 权重（对齐 encWeightOf 标尺：≥3 天 1.0 / 2 天 0.8 / 1 天 0.6）。 */

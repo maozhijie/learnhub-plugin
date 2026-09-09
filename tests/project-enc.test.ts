@@ -41,16 +41,17 @@ test('cooccurrencePairs：同日多事件去重、minCo 过滤、co 降序同数
   assert.equal(cooccurrencePairs(events, 4).length, 0)
 })
 
-test('orientCandidate：pre 闭包定方向；无结构关系用首事件启发式；首日相同字典序兜底', () => {
+test('orientCandidate：pre 闭包定方向；无 pre 关系不硬提边（降级 no_pre 信号＋方向提示）', () => {
   const isAncestor = (from: string, to: string) => from === '底座' && to === '上层'
   const firstDayOf = (n: string) => (n === '早' ? '2026-09-01' : n === '晚' ? '2026-09-05' : undefined)
-  assert.deepEqual(orientCandidate('上层', '底座', isAncestor, firstDayOf), { skill: '底座', holder: '上层', why: 'pre 闭包方向' })
-  assert.deepEqual(orientCandidate('晚', '早', () => false, firstDayOf).skill, '早', '先被练的为 skill')
-  // 首日相同：对内字典序（共现对提取时已按码位排序 a<b），skill 取小者
-  const tie = orientCandidate('同1', '同2', () => false, () => '2026-09-03')
-  assert.equal(tie.skill, '同1')
-  assert.equal(tie.holder, '同2')
-  assert.match(tie.why, /字典序/)
+  assert.deepEqual(orientCandidate('上层', '底座', isAncestor, firstDayOf), { ok: true, skill: '底座', holder: '上层' })
+  assert.deepEqual(orientCandidate('底座', '上层', isAncestor, firstDayOf), { ok: true, skill: '底座', holder: '上层' })
+  // 无 pre 关系：ok=false——enc 契约（审计 E7）要求闭包内，硬提必被 apply 拒；
+  // 方向提示 = 首事件更早者为底座（供未来补 pre 边参考，不进提案）
+  assert.deepEqual(orientCandidate('晚', '早', () => false, firstDayOf), {
+    ok: false, hint_skill: '早', why: '无 pre 关系（enc 契约/E7 要求闭包内）；首事件启发式倾向 早 为底座',
+  })
+  assert.equal(orientCandidate('甲', '乙', () => false, () => '2026-09-03').hint_skill, '乙', '首日相同取后者为提示')
 })
 
 test('coWeight：对齐 encWeightOf 标尺（≥3 天 1.0 / 2 天 0.8 / 1 天 0.6）', () => {
@@ -217,6 +218,40 @@ test('行为推断 enc 红线：synthetic 复习推进不算行为证据', async
     const r = await engine.projectEncCandidates('练琴计划', { min_co: 1 })
     assert.equal(r.events, 0, 'synthetic 初始化不是真实翻卡')
     assert.equal(r.proposals.length, 0)
+  })
+})
+
+test('行为推断 enc 闭包契约：无 pre 关系的共现对不硬提边（E7 会拒），降级 no_pre 信号', async () => {
+  const THREE_NODE_GRAPH = [
+    'region: 基础',
+    'color: blue',
+    'blocks:',
+    '  - name: 入门块',
+    '    nodes:',
+    '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+    '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
+    '      - { name: 平行, pre: [], opt: false, note: "", est: 20 }',
+  ].join('\n')
+  await withVault({
+    graph: THREE_NODE_GRAPH,
+    notes: { 入门: {}, 进阶: {}, 平行: {} },
+  }, async ({ engine }) => {
+    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    const plan = ENC_PLAN('练琴计划').replace('nodes: [入门, 进阶]', 'nodes: [入门, 平行]')
+    const p1 = await engine.projectPlanPropose('练琴计划', plan)
+    await engine.projectApply(p1.id)
+    for (const d of [1, 2, 3]) {
+      const ts = recentTs(d)
+      await engine.store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: 'a', correct: true, judge: 'allo', ts })
+      await engine.store.appendPractice({ course: '数学', node: '平行', ex: 1, answer: 'a', correct: true, judge: 'allo', ts })
+    }
+    const r = await engine.projectEncCandidates('练琴计划', { min_co: 2 })
+    assert.equal(r.candidates.length, 0, '闭包外不成边')
+    assert.equal(r.proposals.length, 0)
+    assert.equal(r.blocked_no_pre.length, 1)
+    assert.equal(r.blocked_no_pre[0].a, '入门')
+    assert.equal(r.blocked_no_pre[0].b, '平行')
+    assert.match(r.blocked_no_pre[0].why, /E7/)
   })
 })
 

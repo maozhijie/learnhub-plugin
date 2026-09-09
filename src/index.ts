@@ -1649,14 +1649,13 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { id: number }) => run('learnhub_project_apply', async () =>
       JSON.stringify(await engine.projectApply(args.id))))
   tool('learnhub_project_milestone_pass',
-    'Record the learner\'s EXPLICIT milestone pass (P-4 settlement): the learner declares a milestone checkpoint reached — no checklist gate and no question gate (Kulik 1990: strict gates hurt completion). One journal settlement row lands (kind=milestone_settle, aligned with the node xp_settle precedent): XP price = plan est declaration × FSRS difficulty calibration over the milestone\'s linked nodes\' question pools (k=1 without linked evidence), locked once — a second pass of the same milestone id is rejected, so revising a plan must use fresh milestone ids. This is the ONLY journal write the project domain ever makes; it counts toward the ledger and streak like real focused work does.',
+    'Record the learner\'s EXPLICIT milestone pass (P-4 settlement): the learner declares a milestone checkpoint reached — no checklist gate and no question gate (Kulik 1990: strict gates hurt completion). One journal settlement row lands (kind=milestone_settle, aligned with the node xp_settle precedent): XP price = the plan\'s est declaration × FSRS difficulty calibration over the DECLARED linked nodes\' question pools (defaults when undeclared; the calibration basis is locked to the plan — it cannot be extended at pass time), locked once — a second pass of the same milestone id is rejected, so revising a plan must use fresh milestone ids. This is the ONLY journal write the project domain ever makes; it counts toward the ledger and streak like real focused work does.',
     {
       id: { type: 'string', required: true, description: 'Project id' },
       milestone: { type: 'string', required: true, description: 'Milestone id from the plan' },
-      nodes: { type: 'array', items: { type: 'string' }, description: 'Extra linked course nodes for price calibration (merged with the plan\'s declared nodes); omit when the plan already declares nodes' },
     },
-    (args: { id: string; milestone: string; nodes?: string[] }) => run('learnhub_project_milestone_pass', async () =>
-      JSON.stringify(await engine.projectMilestonePass(args.id, args.milestone, args.nodes))))
+    (args: { id: string; milestone: string }) => run('learnhub_project_milestone_pass', async () =>
+      JSON.stringify(await engine.projectMilestonePass(args.id, args.milestone))))
   tool('learnhub_project_milestone_recall',
     'Start a MILESTONE RECALL session (P-3): draw a few questions from the linked course nodes\' question banks so the knowledge base stays connected to the real project — retrieval points serve the knowledge base only, they are NOT project acceptance criteria (the gate is only that the milestone artifact exists). Zero XP, zero FSRS, zero scheduling writes: the drawn questions are archived to projects/<id>/recall.jsonl and returned WITH answers for you to run verbally — ask, hear the learner out, compare; never call learnhub_question_answer for these. Then archive the learner\'s spoken key-decision narration with learnhub_project_recall_reflect.',
     {
