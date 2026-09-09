@@ -16,7 +16,8 @@ import {
 } from '../src/engine/skills.ts'
 import { EXECUTION_TRAINING_GATE, trainingSequences } from '../src/engine/optimize.ts'
 import type { FsrsBlock, ReviewRec } from '../src/engine/types.ts'
-import { withVault } from './helpers/vault.ts'
+import { localDay, withVault } from './helpers/vault.ts'
+import { addDays } from '../src/engine/dates.ts'
 
 // ---- 纯函数：维持节拍帽 ----
 
@@ -40,7 +41,7 @@ function fsBlock(over: Partial<FsrsBlock>): FsrsBlock {
     reps: 5, lapses: 0, ...over,
   }
 }
-const TODAY = '2026-09-09'
+const TODAY = localDay()
 
 test('laneDue：fresh=null；FSRS due 与「上次事件+维持帽」取较早；帽关则纯 due', () => {
   assert.equal(laneDue(null, 30), null)
@@ -185,9 +186,9 @@ test('维持复活：帽到期事件记 maintenance，推完后生效到期 = �
     await h.engine.skillCreate('吉他', { maintenance_days: 7 })
     // 手工摆 lane 状态：上次事件 10 天前、FSRS due 还远（间隔增长淹没不了维持帽）
     const doc = await h.engine.skills.load('吉他')
-    await h.engine.skills.save('吉他', { ...doc, fsrs: fsBlock({ due: '2026-12-01', last_review: '2026-08-30' }) })
+    await h.engine.skills.save('吉他', { ...doc, fsrs: fsBlock({ due: addDays(TODAY, 90)!, last_review: addDays(TODAY, -10)! }) })
     const list = await h.engine.skillList()
-    assert.equal(list.skills[0].due, '2026-09-06') // 08-30 + 7
+    assert.equal(list.skills[0].due, addDays(TODAY, -3)) // (今天-10) + 7 维持帽
     assert.equal(list.skills[0].due_kind, 'maintenance')
 
     const r = await h.engine.executionLog('吉他', { source: 'self', rating: 2, minutes: 15 })
@@ -195,7 +196,7 @@ test('维持复活：帽到期事件记 maintenance，推完后生效到期 = �
     const log = await h.store.reviewLogAll()
     assert.equal(log[0].event_kind, 'maintenance')
     // 推完后新帽日 = 今天 + 7 ≤ 新 FSRS due（帽不被间隔增长淹没）
-    assert.equal(r.due, new Date(Date.parse(`${TODAY}T00:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10))
+    assert.equal(r.due, addDays(TODAY, 7))
   })
 })
 

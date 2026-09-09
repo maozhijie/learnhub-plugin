@@ -8,6 +8,7 @@ import {
 } from '../src/engine/nof1.ts'
 import type { ExperimentDef, Nof1OutcomeRec } from '../src/engine/nof1.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
+import { addDays } from '../src/engine/dates.ts'
 
 const BATCH_DEF: ExperimentDef = {
   id: 1, template: 'band_default_std_vs_hard', variable: 'band_default',
@@ -223,11 +224,12 @@ test('批次生效：band_default 实验决定未显式选带时的会话默认�
 
     const prop = await engine.experimentPropose('band_default_std_vs_hard')
     await engine.experimentApply(prop.proposal)
-    // 把批次起点拨回昨天 → 今日轮到第二臂（hard）
-    const list = await engine.store.loadExperiments()
-    list[0]!.assignment = { kind: 'batch', start_day: '2024-01-02', order: ['standard', 'hard'] }
-    await engine.store.saveExperiments(list)
+    // 批次起点拨回昨天 → 今日轮到第二臂（hard）；起点必须从引擎学习日现推，
+    // 硬编码日期会让臂序随真实日历奇偶隔天翻面
     const today = (await engine.reviewQueue('数学', '入门')).date
+    const list = await engine.store.loadExperiments()
+    list[0]!.assignment = { kind: 'batch', start_day: addDays(today, -1)!, order: ['standard', 'hard'] }
+    await engine.store.saveExperiments(list)
     const q = await engine.reviewQueue('数学', '入门')
     assert.equal(nof1ArmForDay(list[0]!, today), 'hard')
     assert.ok(Math.abs((q.band ?? 0) - 0.4) < 1e-6, `实验默认挑战带生效（band=${q.band}）`)
@@ -255,8 +257,9 @@ test('会组成实验：混排臂在全局队列带出 exp 标注；报告从预
   }, async ({ engine }) => {
     const prop = await engine.experimentPropose('session_composition_facet_vs_mixed')
     await engine.experimentApply(prop.proposal)
+    const today = (await engine.reviewQueue()).date
     const list = await engine.store.loadExperiments()
-    list[0]!.assignment = { kind: 'batch', start_day: '2024-01-02', order: ['faceted', 'mixed'] }
+    list[0]!.assignment = { kind: 'batch', start_day: addDays(today, -1)!, order: ['faceted', 'mixed'] }
     await engine.store.saveExperiments(list)
     const q = await engine.reviewQueue()
     assert.deepEqual(q.exp, { id: 1, arm: 'mixed' }, '队列如实标注当日实验臂')

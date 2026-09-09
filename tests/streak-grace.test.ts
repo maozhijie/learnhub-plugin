@@ -11,13 +11,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { streakFrom } from '../src/engine/xp.ts'
 import { XP_STREAK_GRACE_DAYS } from '../src/engine/params.ts'
-import { withVault } from './helpers/vault.ts'
+import { localDay, withVault } from './helpers/vault.ts'
 
-const T = (offset: number): string => {
-  const d = new Date()
-  d.setUTCDate(d.getUTCDate() + offset)
-  return d.toISOString().slice(0, 10)
-}
+// 学习日种子走本地日历日（helpers.localDay）：UTC 日在本地 0 点后与引擎「今天」错位一天
+const T = localDay
 
 const byDayOf = (days: string[]): Record<string, { total: number }> =>
   Object.fromEntries(days.map(d => [d, { total: 1 }]))

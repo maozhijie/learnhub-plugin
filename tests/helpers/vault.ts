@@ -181,6 +181,19 @@ export function tfQuestion(id: string, opts: {
   ]
 }
 
+/** 本地日历日偏移助手（学习日口径）：引擎的学习日按本地时区折算（ADR-0020），
+ * 测试种子不得用 toISOString/setUTCDate 做「今天±n」——那是 UTC 日，本地 0 点到
+ * 日界之间与引擎的「今天」错位一天（streak-grace/skills-lane 隔夜翻车即此因）。
+ * 纯日期字符串整日偏移（memory-health/thermostat 的 day()）不受此累。 */
+export function localDay(offsetDays = 0): string {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 /** 练习流作答包装：不调模型、默认课程「数学」/节点「入门」/耗时 30s。 */
 export function answer(
   engine: LearnhubEngine,

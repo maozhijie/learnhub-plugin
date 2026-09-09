@@ -4,12 +4,12 @@ import { bandOffset, BAND_PREF_OFFSET } from '../src/engine/adaptive.ts'
 import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, COACH_MIN_ANSWERED, COACH_MIN_SESSIONS, withinCoachWindow } from '../src/engine/coach.ts'
 import type { BandRec } from '../src/engine/coach.ts'
 import { todayStr } from '../src/engine/dates.ts'
-import { tfQuestion, withVault } from './helpers/vault.ts'
+import { tfQuestion, withVault, localDay } from './helpers/vault.ts'
 
 // E5 自选难度 + 可用的困难教练（决议 #50 / 实施工单 #65）：显式带选择作为 A1 的
 // 带权偏好（防挫回落保留）；教练 = 只读信息性反馈，低数据静默，无门禁无判分。
 
-const YESTERDAY = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+const YESTERDAY = localDay(-1)
 
 const HIGH_MASTERY_FSRS = { stability: 40, difficulty: 5, due: '2024-01-01', last_review: '2024-01-01', reps: 6, lapses: 0 }
 

@@ -12,13 +12,10 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { habitStreak, automationCurve, validateHabitDoc } from '../src/engine/habits.ts'
-import { withVault } from './helpers/vault.ts'
+import { localDay, withVault } from './helpers/vault.ts'
 
-const T = (offset: number): string => {
-  const d = new Date()
-  d.setUTCDate(d.getUTCDate() + offset)
-  return d.toISOString().slice(0, 10)
-}
+// 学习日口径 = 本地日历日（helpers.localDay），不用 UTC 日算术
+const T = localDay
 
 // ---- 纯函数：宽容 streak ----
 
