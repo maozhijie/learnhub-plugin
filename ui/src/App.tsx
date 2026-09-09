@@ -4,13 +4,14 @@ import { api } from './api'
 import BankPage from './pages/BankPage'
 import GeneratePage from './pages/GeneratePage'
 import GraphPage from './pages/GraphPage'
+import LabPage from './pages/LabPage'
 import LearnPage from './pages/LearnPage'
 import PracticePage from './pages/PracticePage'
 import ProposalsPage from './pages/ProposalsPage'
 import StatsPage from './pages/StatsPage'
 import type { StatusDoc, TreeDoc } from './types'
 
-export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'generate' | 'proposals' | 'practice'
+export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'lab' | 'generate' | 'proposals' | 'practice'
 
 /** 打开中的节点学习视图（学习页二级视图）；focusNode = 图页定位高亮目标。 */
 export interface LessonRef { course: string; node: string }
@@ -107,6 +108,7 @@ export default function App() {
           <Tabs.TabPane key='graph' title='学习图' />
           <Tabs.TabPane key='bank' title='题目管理' />
           <Tabs.TabPane key='stats' title='统计' />
+          <Tabs.TabPane key='lab' title='实验室' />
           <Tabs.TabPane key='generate' title='生成' />
           <Tabs.TabPane key='proposals' title='提案' />
           <Tabs.TabPane key='practice' title='实践' />
@@ -137,6 +139,7 @@ function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
     case 'graph': return <GraphPage frame={frame} />
     case 'bank': return <BankPage frame={frame} />
     case 'stats': return <StatsPage frame={frame} />
+    case 'lab': return <LabPage frame={frame} />
     case 'generate': return <GeneratePage frame={frame} />
     case 'proposals': return <ProposalsPage />
     case 'practice': return <PracticePage />

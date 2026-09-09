@@ -90,3 +90,96 @@ export interface UnderstandingResult {
   verdict: { verdict: '对' | '部分对' | '错'; tags: string[]; advice?: string }
   reply: string
 }
+
+// ---- D 区个人实验室（#85/#110/#111/#112；引擎 views.ts/nof1.ts/sandbox.ts/thermostat.ts 形状镜像）----
+
+export interface SleepConfig { enabled: boolean }
+
+export interface ThermostatSuggestion {
+  id: string
+  knob: string
+  title: string
+  text: string
+  apply: { config: string; value: string }
+}
+
+export interface ThermostatDoc {
+  date: string
+  course_region: {
+    retention: { pass: number; fail: number; rate: number | null; real: number }
+    retention_band: { label: string; level: string }
+    band_choices: { sessions: number; answered: number; shares: Record<string, number> }
+  }
+  unbounded_region: {
+    execution_ratings: { count: number; by_rating: Record<string, number> }
+    note: string
+  }
+  project_region: {
+    status: string
+    note: string
+    projects: Array<{ id: string; name: string; tier: string }>
+  }
+  knobs: Array<{ knob: string; title: string; status: string; current?: string | null }>
+  suggestions: ThermostatSuggestion[]
+}
+
+export interface Nof1Template {
+  id: string
+  variable: string
+  title: string
+  question: string
+  arms: string[]
+  arm_labels: Record<string, string>
+  unit: 'card' | 'batch'
+  outcome: string
+  description: string
+  unlocked: boolean
+  unlock_note?: string
+}
+
+export interface ExperimentDef {
+  id: number
+  template: string
+  variable: string
+  title: string
+  question: string
+  outcome: string
+  arms: string[]
+  arm_labels: Record<string, string>
+  unit: 'card' | 'batch'
+  scope_course: string | null
+  assignment: { kind: 'card'; map: Record<string, string> } | { kind: 'batch'; start_day: string; order: string[] }
+  per_arm_min: number
+  started_day: string
+  started_ts: string
+  status: 'running' | 'stopped'
+  stopped_day?: string
+  proposal: number
+}
+
+export interface Nof1Analysis {
+  ready: boolean
+  per_arm: Array<{ arm: string; label: string; n: number; rate: number }>
+  need_per_arm: number
+  diff: number | null
+  ci95: [number, number] | null
+  p: number | null
+  message: string
+}
+
+export interface ExperimentsDoc {
+  templates: Nof1Template[]
+  experiments: ExperimentDef[]
+  report: { experiment: ExperimentDef; analysis: Nof1Analysis } | null
+}
+
+export interface SandboxDoc {
+  wording: string
+  date: string
+  plan: { minutesPerDay: number; weeks: number }
+  runs: number
+  scope: { courses: string[]; nodes: number }
+  curve: Array<{ week: number; p50: number; p80: number }>
+  map: Array<{ node: string; p50: number; p80: number }>
+  assumptions: string[]
+}

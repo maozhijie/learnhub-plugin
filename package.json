@@ -1,6 +1,6 @@
 {
   "name": "dsh-learnhub",
-  "description": "学习中心 Learnhub：DeepSeek Harness 的学习引擎插件（77 个 agent 工具 + /learnhub 面板 + 侧边栏入口）",
+  "description": "学习中心 Learnhub：DeepSeek Harness 的学习引擎插件（86 个 agent 工具 + /learnhub 面板 + 侧边栏入口）",
   "version": "0.3.0",
   "license": "MIT",
   "type": "module",
