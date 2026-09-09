@@ -1158,13 +1158,16 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       if (route === '/project/exec') {
         // 项目执行事件落流（P-7 #98）：评级 1-4 + 来源；nodes = 本次行使的关联节点
         // （被行使 enc 边两端节点各回流一次练习证据）。零 XP、零调度写入。
-        const nodes = Array.isArray(body.nodes)
-          ? body.nodes.map((v: unknown) => String(v)).filter((s: string) => s.trim())
+        // evidence（auto 来源的可观测证据）与 nodes 原样透传——校验收口在门面
+        // validateExecEvent/ratingFromEvidence（fail loud），路由不做静默变形。
+        const evidence = typeof body.evidence === 'object' && body.evidence !== null
+          ? body.evidence as Record<string, unknown>
           : undefined
         sendJson(res, 200, await apiRun('api/project/exec', () => engine.projectExecLog(need(body, 'id'), {
           source: need(body, 'source'),
           ...(typeof body.rating === 'number' ? { rating: body.rating } : {}),
-          ...(nodes?.length ? { nodes } : {}),
+          ...(evidence !== undefined ? { evidence } : {}),
+          ...(Array.isArray(body.nodes) ? { nodes: body.nodes } : {}),
           ...(typeof body.note === 'string' && body.note.trim() ? { note: body.note.trim() } : {}),
         })))
         return
