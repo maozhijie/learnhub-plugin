@@ -13,7 +13,7 @@ import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/pro
 import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
 import { Store } from './store.ts'
-import { GraphStore, Graph, writeReadyList, declaredEncOf } from './graph.ts'
+import { GraphStore, Graph, writeReadyList, declaredEncOf, structureCheck } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
@@ -39,13 +39,14 @@ import { graphHealthScore } from './health.ts'
 import { Content } from './content.ts'
 import { nodeTierOf, perSectionQuizTarget, genericQuizTarget } from './complexity.ts'
 import type { ComplexityTier } from './complexity.ts'
-import { GraphProposals } from './gengraph.ts'
+import { GraphProposals, specToRegions } from './gengraph.ts'
 import type { ApplyAudit, EditOp } from './gengraph.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
 import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
+import { decompileGoalOf, decompileRepairPrompt, decompileTerms, splitDecompileDoc, subgraphSpecOf } from './project-decompile.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
 import { QuestionBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
@@ -1017,6 +1018,127 @@ export class LearnhubEngine {
       project: id,
       window: { start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(), days },
       events, candidates, blocked_no_pre: blockedNoPre, proposals, skipped_declared: skippedDeclared,
+    }
+  }
+
+  // ---- 目标反编译（P-5 / #95：逆向设计 + PjBL）----
+
+  /** 目标反编译：输入「目标项目描述 + Vault 笔记」→ 反推里程碑计划草案 + 知识子图提案
+   * 各一份，双产物都走既有 Proposal 人审通道、零新 proposal kind——
+   * ① 计划草案 = project_plan 提案（#92 的 PlanArtifact 同构，proposePlan 受理、
+   *    projectApply 生效、graphReject 拒绝，同一 apply/reject 路径）；
+   * ② 知识子图 = 图谱域单 pending gen 提案（regions 形态两用：显式目标课程 → mode=append
+   *    追加进该课程；无课程 → mode=new 独立成「新课程骨架」；P-6 单提案人审先例）。
+   *
+   * 检索面（V-2 依赖）：检索词 = 目标描述经 priorTerms 派生 + 注册笔记标题/名（显式 notes
+   * 按 id/path 从 note-source manifest 解析，缺省 = 全部注册源），searchVaultPrior 只读
+   * 扫描 vault 个人笔记，priorSection 摘录注入反编译上下文（ADR-0010 永不写个人笔记）。
+   *
+   * 红线（ADR-0015 裁决 6）：apply 前零 canonical 写入——本方法只落提案产物
+   * （state/proposals/），不动课程图、不写项目.md 的 plan、不碰注册笔记。双提案
+   * **同进同退**：双产物校验门与 gen 结构检查（proposeGen 同门，提前跑）都过了才受理
+   * 第一个提案，不留半挂状态。模型产出未过门禁回灌修复一轮（DECOMPILE_GATE_FAILED）。
+   * llm 为注入 seam（questionGenerate 先例），宿主工具/路由接 ctx.llm。 */
+  async projectDecompile(
+    id: string,
+    opts: { goal?: string; course?: string; notes?: string[] } = {},
+    llm: (prompt: string) => Promise<string>,
+  ): Promise<{
+    project: string
+    prior_hits: number
+    notes: string[]
+    repaired: boolean
+    plan_proposal: { id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }
+    subgraph_proposal: { id: number; kind: 'gen'; course: string; mode: 'new' | 'append'; nodes: number }
+  }> {
+    const fm = await this.projects.load(id)
+    const goal = decompileGoalOf(opts.goal, fm.goal)
+    // 注册笔记（V-1 manifest 只读）：显式 notes 按 id/path 解析，缺省 = 全部注册源
+    const manifest = await this.noteManifest.load()
+    const baseOf = (path: string): string => path.split('/').pop()!.replace(/\.md$/i, '')
+    const picked: Array<{ id: string; path: string; title: string }> = []
+    if (opts.notes?.length) {
+      const byKey = new Map(manifest.sources.flatMap(s => [[s.id, s], [s.path.replace(/\\/g, '/'), s]] as const))
+      for (const spec of opts.notes) {
+        const hit = byKey.get(spec.replace(/\\/g, '/'))
+        if (!hit) {
+          throw new Error(`[project-decompile] 笔记「${spec}」不在注册清单（先 learnhub_note_source_register，或省略 notes 取全部注册源）。`)
+        }
+        picked.push({ id: hit.id, path: hit.path, title: hit.title ?? baseOf(hit.path) })
+      }
+    } else {
+      for (const s of manifest.sources) {
+        picked.push({ id: s.id, path: s.path, title: s.title ?? baseOf(s.path) })
+      }
+    }
+    // Vault 先验（只读检索）注入反编译上下文
+    const terms = decompileTerms(goal, picked.map(p => p.title))
+    const centerRel = this.paths.centerRoot.slice(this.vaultRoot.length + 1)
+    const hits = terms.length ? await searchVaultPrior(this.vaultRoot, centerRel, terms) : []
+    const prior = priorSection(hits)
+    // 子图落点上下文：显式课程给出现有结构（重名避让 + pre 引用面）；无课程 → 新课程骨架
+    let courseBlock = ''
+    if (opts.course?.trim()) {
+      const c = await this.registry.get(opts.course.trim())
+      if (!c) throw new Error(`[project-decompile] 注册表中没有课程「${opts.course.trim()}」。`)
+      const { graph } = await this.loadView(c)
+      const lines = graph.regions.map(r =>
+        `  - 区「${r.name}」：${r.blocks.map(b => `块「${b.name}」→ ${b.nodes.map(n => n.name).join('、') || '（空）'}`).join('；') || '（空区）'}`)
+      courseBlock = `- 目标课程：${c.name}（subgraph.course 照抄这个名字，子图节点将追加进该课程）\n- 现有结构（节点名不得与其重复，pre 可引用其中的节点名）：\n${lines.join('\n')}`
+    } else {
+      courseBlock = '- 未指定目标课程：自拟一个新课程名写进 subgraph.course，子图作为该新课程的骨架（自身 pre/enc 自洽，不悬空）。'
+    }
+    const tpl = await this.loadPrompt('项目目标反编译')
+    const notesList = picked.length ? picked.map(p => `- 《${p.title}》（${p.path}）`).join('\n') : '-（无注册笔记）'
+    const current = fm.plan.length
+      ? YAML.stringify({ plan: fm.plan })
+      : '（空——本项目还没有里程碑计划，本次为初次规划）'
+    const pack = `${tpl}\n\n---\n\n## 目标项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 渐退档：${fm.tier}\n- 目标描述（目标项目描述原文）：\n\n${goal}\n\n## 现状计划（给出完整新版本，不保守微调）\n\n${current}\n\n## 注册笔记（Vault 先验的检索来源）\n\n${notesList}\n\n## 知识子图落点\n\n${courseBlock}${prior ? `\n\n---\n\n${prior}` : ''}`
+    // 模型产出 → 双产物校验门（未过回灌修复一轮，对齐「生成→门禁→修复一轮」机械）
+    let raw = await llm(pack)
+    let gate = splitDecompileDoc(YAML.parseModel(raw), fm.id)
+    let repaired = false
+    if (gate.errors.length) {
+      repaired = true
+      raw = await llm(decompileRepairPrompt(pack, raw, gate.errors.map(e => `  ✗ ${e}`)))
+      gate = splitDecompileDoc(YAML.parseModel(raw), fm.id)
+    }
+    if (gate.errors.length || !gate.plan || !gate.subgraph) {
+      const e: Error & { code?: string } = new Error(
+        `[project-decompile] 模型产出未过双产物校验门（已自动修复重试一轮，提案未受理）：\n${gate.errors.map(x => `  ✗ ${x}`).join('\n')}`)
+      e.code = 'DECOMPILE_GATE_FAILED'
+      throw e
+    }
+    // 受理前预检（双提案同进同退）：子图落点与结构检查同 proposeGen 校验门
+    const { course: courseName, mode } = subgraphSpecOf(gate.subgraph, opts.course)
+    const target = await this.registry.get(courseName)
+    if (mode === 'append' && !target) {
+      throw new Error(`[project-decompile] 注册表中没有课程「${courseName}」（显式目标课程须先建课；省略 course 参数可产新课程骨架提案）。`)
+    }
+    if (mode === 'new' && target) {
+      throw new Error(`[project-decompile] 课程「${courseName}」已在注册表而子图按 mode=new 提案（显式 course 参数走追加）。`)
+    }
+    const existingGraph = mode === 'append' && target ? (await this.loadView(target)).graph : null
+    const structErrors = structureCheck(existingGraph, specToRegions(gate.subgraph.regions), '反编译子图')
+    if (structErrors.length) {
+      throw new Error(`[project-decompile] 子图结构检查失败，提案未受理（修正后重试）。\n${structErrors.map(x => `  ✗ ${x}`).join('\n')}`)
+    }
+    // ① 里程碑计划草案 → project_plan 提案（与 #92 同一 apply/reject 通道）
+    const planProp = await this.projects.proposePlan(fm.id, YAML.stringify({ project: fm.id, plan: gate.plan }))
+    // ② 知识子图 → 图谱域单 pending gen 提案（人审后 graphApply(kind=gen) 生效）
+    const subProp = await this.graphPropose('gen', YAML.stringify({
+      course: courseName,
+      mode,
+      reason: `目标反编译（P-5 #95）：项目「${fm.name}」的知识子图${mode === 'append' ? '追加' : '骨架'}`,
+      regions: gate.subgraph.regions,
+    })) as { id: number; kind: 'gen'; course: string; mode: string; nodes: number }
+    return {
+      project: fm.id,
+      prior_hits: hits.length,
+      notes: picked.map(p => p.path),
+      repaired,
+      plan_proposal: planProp,
+      subgraph_proposal: { id: subProp.id, kind: 'gen', course: courseName, mode, nodes: subProp.nodes },
     }
   }
 
