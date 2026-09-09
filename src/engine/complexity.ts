@@ -163,10 +163,12 @@ export function genericQuizTarget(tier: ComplexityTier): number {
 export function profileBlockLines(tier: ComplexityTier): string[] {
   const a = TIER_ANCHORS[tier]
   const [lo, hi] = a.sections
+  const th = sectionLengthThresholds(a.sectionWordBudget)
   return [
     `- 复杂度档位：${TIER_LABELS[tier]}（difficulty/bloom/前置规模折叠，est 只作容量上界）`,
     `- 目标节段数：${lo}-${hi} 节（按内容自然增减，方向性极端会被拦截重跑）`,
-    `- 篇幅预算：单节辅助文字 ≤${a.sectionWordBudget} 字，可视化为主、文字为辅`,
+    `- 篇幅预算：单节辅助文字 ≤${a.sectionWordBudget} 字（硬约束：超 ${th.warn} 字警告、超 ${th.block} 字拒收落盘），可视化为主、文字为辅`,
+    `- 可视化预算：单节可视化块（mermaid/svg/plot/chart/交互件合计）≤${SECTION_VISUAL_CAP} 个，超出拒收——装不下的内容拆成新节`,
     `- 出题目标：每内容节段约 ${a.perSectionQuestions} 道（含练习节时减 1），综合题 ${a.genericQuizCount} 道`,
   ]
 }
@@ -198,6 +200,16 @@ export const TIER_ANCHORS: Record<ComplexityTier, TierAnchors> = {
 
 /** 节段数总上限（任意档 >8 即拦；与旧"通常 3–8 节"口径一致）。 */
 export const MAX_SECTIONS = 8
+
+/** 单节可视化块上限（mermaid/svg/plot/chart/交互件合计；「1–2 屏」的屏占主要由
+ * 可视化撑起来，只看文字预算管不住）。超出的节被质检门拒收——拆新节，不注水。 */
+export const SECTION_VISUAL_CAP = 2
+
+/** 节长度门禁阈值（从档位锚点派生，不再另设全局固定阈值）：
+ * warn = 预算×1.3（压缩或拆节），block = 预算×2（拒收落盘）。 */
+export function sectionLengthThresholds(budget: number): { warn: number; block: number } {
+  return { warn: Math.ceil(budget * 1.3), block: budget * 2 }
+}
 
 /**
  * 大纲护栏：只拦方向性极端（低档 >7 节、高档 ≤2 节、任意 >8 节），

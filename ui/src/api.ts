@@ -39,7 +39,8 @@ const q = (params: Record<string, string | number | undefined>) => {
 }
 
 export const api = {
-  status: () => http<import('./types').StatusDoc>('GET', '/status'),
+  /** 模型透明：响应 = 引擎 StatusDoc + 宿主 llm 配置（provider/model/思考档）。 */
+  status: () => http<import('./types').StatusWithLlm>('GET', '/status'),
   coursesTree: () => http<import('./types').TreeDoc>('GET', '/courses/tree'),
   graph: (course?: string) => http<import('./types').GraphDoc>('GET', `/graph${q({ course })}`),
   recommend: (limit = 8) => http<import('./types').RecommendDoc>('GET', `/recommend?limit=${limit}`),
@@ -91,8 +92,10 @@ export const api = {
     http<{ course: string; node: string; band: string; date: string }>('POST', '/band-session', { course, node, band, answered, correct }),
   /** 可用的困难教练（#65 E5）：只读信息性反馈，无触发为空数组。 */
   coach: () => http<import('./types').CoachDoc>('GET', '/coach'),
+  /** 节点跳过/取消（ADR-0032）：跳过时该节点未归档题自动归档（reason=skip，可逆），
+   * archived = 本次归档题数；取消跳过不自动恢复。 */
   nodeSkip: (course: string, node: string, skipped = true) =>
-    http<{ course: string; node: string; stage: string }>('POST', '/node/skip', { course, node, skipped }),
+    http<{ course: string; node: string; stage: string; archived?: number }>('POST', '/node/skip', { course, node, skipped }),
   /** 「今天学它」pin（E3 #67）：pinned=true 置顶当日推荐榜首（次日自动失效），false 取消。 */
   pinNode: (course: string, node: string, pinned = true) =>
     http<{ course: string; node: string; date?: string }>('POST', '/node/pin', { course, node, pinned }),
@@ -152,9 +155,23 @@ export const api = {
   /** FSRS 参数优化器手动触发（A2 #62）：门禁不满足时 skipped + 原因。 */
   optimizeParams: () =>
     http<import('./types').OptimizeResult>('POST', '/optimize-params'),
-  /** B2 难度失衡/过于简单只读建议（#58）：题目管理页建议区消费。 */
+  /** B2 难度失衡/过于简单只读建议（#58）：题目管理页建议区消费；被忽略的建议已过滤（dismissed 计数带出）。 */
   difficultyAdvice: (course?: string) =>
     http<import('./types').DifficultyAdviceDoc>('GET', `/difficulty-advice${q({ course })}`),
+  /** B2 建议忽略/恢复：误判的持久忽略（undo 恢复单条，all 清空）。 */
+  adviceDismiss: (course: string, node: string, qid?: string, opts?: { undo?: boolean; all?: boolean }) =>
+    http<{ dismissed: Array<{ course: string; node: string; qid: string; date: string }> }>('POST', '/difficulty-advice-dismiss',
+      { course, node, ...(qid !== undefined ? { qid } : {}), ...(opts?.undo ? { undo: true } : {}), ...(opts?.all ? { all: true } : {}) }),
+  /** 题库契约只读体检（ADR-0029/0030）：题库维护区消费。 */
+  questionAudit: () => http<import('./types').QuestionAuditReport>('GET', '/question-audit'),
+  /** 题库一键清理（ADR-0032）预览：跳过节点全部未归档题 + 已完成节点休眠题，按节点分组。 */
+  bankCleanupPreview: (course?: string) =>
+    http<import('./types').CleanupPreviewDoc>('GET', `/bank-cleanup${q({ course })}`),
+  /** 题库一键清理应用：候选全部归档（reason=cleanup，可逆）。 */
+  bankCleanupApply: (course?: string) =>
+    http<{ applied: Array<{ course: string; node: string; archived: number }> }>('POST', '/bank-cleanup/apply', { ...(course ? { course } : {}) }),
+  /** 能力指南（agent 独有工具的面板说明，单一事实源在宿主 AGENT_GUIDE）。 */
+  agentGuide: () => http<import('./types').AgentGuideItem[]>('GET', '/agent-guide'),
   /** 出题任务化（#118）：入队即返回（phase=quiz 全局队列），可取消、进度在生成页；
    * opts.section = 定向补节（#117，服务端缺省 3 题），opts.instruction = 学习者意见
    * 生成指令（#120 提意见重生成，建议 count=1）。 */
@@ -194,8 +211,9 @@ export const api = {
     http<{ course: string; node: string; id: string; count: number }>('POST', '/question-add', { course, node, question }),
   questionUpdate: (course: string, node: string, qid: string, patch: Record<string, unknown>) =>
     http<{ course: string; node: string; qid: string }>('PUT', '/question-update', { course, node, qid, patch }),
-  questionArchive: (course: string, node: string, qid: string, archived: boolean) =>
-    http<{ course: string; node: string; qid: string; archived: boolean }>('POST', '/question-archive', { course, node, qid, archived }),
+  questionArchive: (course: string, node: string, qid: string, archived: boolean, reason?: string) =>
+    http<{ course: string; node: string; qid: string; archived: boolean }>('POST', '/question-archive',
+      { course, node, qid, archived, ...(reason ? { reason } : {}) }),
   courseDelete: (course: string) => http<{ removed: string; trash: string }>('POST', '/course/delete', { course }),
   /** 整课重新生成：旧正文/题目/交互件/生成图片备份进 .trash 后按拓扑序串行重跑生成管线（后台执行）。 */
   resetCourse: (course: string) =>

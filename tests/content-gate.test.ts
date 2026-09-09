@@ -3,36 +3,50 @@ import assert from 'node:assert/strict'
 import { Content } from '../src/engine/content.ts'
 import { validateBank } from '../src/engine/question-bank.ts'
 
-// ---- S5 checkSectionShape:节形状门 ----
+// ---- S5 checkSectionShape:节形状门（阈值从档位预算派生：warn=×1.3 / finding=×2）----
 
 test('S5: 节内 ### 子标题降为 warn（门禁改革：不可程序修复的格式类不硬拦）', () => {
-  const r = Content.checkSectionShape('## 概念：向量\n\n正文一句。\n\n### 小标题\n\n更多正文。\n')
+  const r = Content.checkSectionShape('## 概念：向量\n\n正文一句。\n\n### 小标题\n\n更多正文。\n', 250)
   assert.equal(r.findings.length, 0)
   assert.equal(r.warns.length, 1)
   assert.match(r.warns[0]!, /###/)
 })
 
-test('S5: 正文 600-2000 字是 warn,超 2000 是 finding', () => {
+test('S5: 正文超预算×1.3 是 warn,超预算×2 是 finding（预算 400 → 520/800）', () => {
   const warnBody = `## 概念：A\n\n${'字'.repeat(650)}\n`
-  const r1 = Content.checkSectionShape(warnBody)
+  const r1 = Content.checkSectionShape(warnBody, 400)
   assert.equal(r1.findings.length, 0)
   assert.equal(r1.warns.length, 1)
-  const failBody = `## 概念：B\n\n${'字'.repeat(2001)}\n`
-  const r2 = Content.checkSectionShape(failBody)
+  assert.match(r1.warns[0]!, /×1\.3/)
+  const failBody = `## 概念：B\n\n${'字'.repeat(801)}\n`
+  const r2 = Content.checkSectionShape(failBody, 400)
   assert.equal(r2.findings.length, 1)
   assert.match(r2.findings[0]!, /正文过长/)
 })
 
+test('S5: 可视化块超 SECTION_VISUAL_CAP 是 finding,合计口径含 mermaid/svg/interactive', () => {
+  const ok = '## 演示：图\n\n说明。\n\n```mermaid\ngraph LR\nA-->B\n```\n\n```svg\n<svg viewBox="0 0 1 1"></svg>\n```\n'
+  assert.equal(Content.checkSectionShape(ok, 250).findings.length, 0, '恰好 2 块放行')
+  const over = ok + '\n```chart\n{"series":[1]}\n```\n'
+  const r = Content.checkSectionShape(over, 250)
+  assert.equal(r.findings.length, 1)
+  assert.match(r.findings[0]!, /可视化块 3 个超过上限 2/)
+  const gen = '## 交互：玩\n\n玩。\n\n```learnhub-interactive:交互/a.html\n<!DOCTYPE html>\n```\n\n```mermaid\ngraph LR\nA-->B\n```\n\n```plot\n{"a":1}\n```\n'
+  const rg = Content.checkSectionShape(gen, 250)
+  assert.equal(rg.findings.length, 1, '生成时态的 learnhub-interactive 标记块同样计入')
+  assert.match(rg.findings[0]!, /可视化块 3 个超过上限 2/)
+})
+
 test('S5: 代码块/公式/行内代码不占文字预算', () => {
   const long = `## 概念：D\n\n短句。\n\n\`\`\`python\n${'#'.repeat(2500)}\n\`\`\`\n\n$$${'x'.repeat(2500)}$$\n\n行内 \`code\` 不算字数。\n`
-  const r = Content.checkSectionShape(long)
+  const r = Content.checkSectionShape(long, 250)
   assert.equal(r.findings.length, 0)
   assert.equal(r.warns.length, 0)
 })
 
 test('S5: 机器区(### 注释标题后)不参与节形状', () => {
   const md = '## 概念：C\n\n正文。\n\n<!-- enc_candidates: [] -->\n\n## <!--机器区-->\n\n### 不算子标题\n'
-  const r = Content.checkSectionShape(md)
+  const r = Content.checkSectionShape(md, 250)
   assert.equal(r.findings.length, 0)
   assert.equal(r.warns.length, 0)
 })

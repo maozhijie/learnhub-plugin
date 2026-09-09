@@ -265,8 +265,19 @@ export default function LessonView(props: { course: string; node: string; frame:
 
   /** AI 出题（#118 任务化）：入队即返回，进度经任务轮询显示（横幅「正在出题」），
    * 完成边沿静默刷新 questions 并入轮次。定向补题（struggle，#117）只补当前节、
-   * 每次 3 道，由 PracticeFlow 触发后同样走任务队列。 */
-  const makeQuestions = async (): Promise<void> => {
+   * 每次 3 道，由 PracticeFlow 触发后同样走任务队列。
+   * skipped 节点出题需显式确认（Q13）：跳过视同已通过、原题已归档，再出题通常用不上。 */
+  const confirmSkippedThen = (run: () => Promise<void>): void => {
+    if (stage !== 'skipped') { void run(); return }
+    Modal.confirm({
+      title: '该节点已跳过',
+      content: '跳过的节点视同已通过（原有题目已在跳过时归档，可在题库恢复）。为它新出的题大概率不会被用到——确认仍要出题吗？',
+      okText: '仍要出题',
+      cancelText: '算了',
+      onOk: () => run(),
+    })
+  }
+  const makeQuestions = (): void => confirmSkippedThen(async (): Promise<void> => {
     setBusy('quiz')
     try {
       const r = await api.questionGenerate(course, node, 6)
@@ -277,11 +288,10 @@ export default function LessonView(props: { course: string; node: string; frame:
     } finally {
       setBusy(null)
     }
-  }
-
+  })
   /** struggle 定向补题（#117）：只补当前卡住的节，每次 3 道（服务端缺省），
    * 任务化入队后经完成边沿静默刷新并入本题组。 */
-  const makeSectionQuestions = async (section: { id: string; title: string }): Promise<void> => {
+  const makeSectionQuestions = (section: { id: string; title: string }): void => confirmSkippedThen(async (): Promise<void> => {
     setBusy(`quiz:${section.id}`)
     try {
       const r = await api.questionGenerate(course, node, undefined, { section })
@@ -292,7 +302,7 @@ export default function LessonView(props: { course: string; node: string; frame:
     } finally {
       setBusy(null)
     }
-  }
+  })
 
   /** 完成确认：直接结算（引擎正确率门禁：低于及格线默认拒绝并提示，可 force 旁路）。
    * 成功后回学习中心页（推荐流已刷新，刚完成的节点不再出现）。 */
@@ -325,8 +335,10 @@ export default function LessonView(props: { course: string; node: string; frame:
     setBusy('skip')
     try {
       const skipping = stage !== 'skipped'
-      await api.nodeSkip(course, node, skipping)
-      Message.success(skipping ? '已跳过：该节点视同已通过，不再出现在推荐与阻塞判定' : '已取消跳过')
+      const r = await api.nodeSkip(course, node, skipping)
+      Message.success(skipping
+        ? `已跳过：该节点视同已通过，不再出现在推荐与阻塞判定${r.archived ? `；${r.archived} 道未归档题已一并归档（题库「显示已归档」可恢复）` : ''}`
+        : '已取消跳过（此前跳过时归档的题不会自动恢复，可在题库按原因 skip 筛出恢复）')
       await Promise.all([refresh(), frame.reload()])
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))

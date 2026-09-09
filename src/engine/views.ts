@@ -784,6 +784,8 @@ export interface BankEntry {
   difficulty: number
   tags: string[]
   archived: boolean
+  /** 归档原因（ADR-0032：skip/cleanup/too_easy/erratum/manual）；未归档为 undefined。 */
+  archivedReason?: string
   hasExplanation: boolean
   /** 题目级 FSRS 调度（未进调度 = null）。lastReview 供到期列 hover 展示。 */
   due: string | null
@@ -804,11 +806,14 @@ export interface CalibrationAdvice {
   instruction: string
 }
 
-/** 「过于简单」归档标注建议（bank-advice.TooEasyAdvice 的视图镜像；归档由管理面确认）。 */
+/** 「过于简单」归档标注建议（bank-advice.TooEasyAdvice 的视图镜像；归档由管理面确认）。
+ * 调度证据口径：≥门槛次数推进零遗忘 + 间隔拉长到门槛天数；stem 供面板条目直接认题。 */
 export interface TooEasyAdvice {
   kind: 'too_easy'
   qid: string
-  attempts: number
+  stem: string
+  reps: number
+  interval_days: number
   reason: string
 }
 
@@ -819,7 +824,35 @@ export interface DifficultyAdviceNode {
   too_easy?: TooEasyAdvice[]
 }
 
-export interface DifficultyAdviceDoc { date: string; nodes: DifficultyAdviceNode[] }
+export interface DifficultyAdviceDoc {
+  date: string
+  nodes: DifficultyAdviceNode[]
+  /** 被持久忽略的建议条数（清理忽略清单后过滤的就是这些；「恢复」入口消费）。 */
+  dismissed: number
+}
+
+// ---- 题库一键清理（ADR-0032；bankCleanupPreview / bankCleanupApply）----
+
+/** 清理规则标签（bank-cleanup.CleanupReason 的视图镜像）。 */
+export type CleanupReason = 'skipped_node' | 'dormant_after_complete'
+
+/** 预览分组：一个节点的候选集（确认前只读，零写入）。 */
+export interface CleanupGroup {
+  course: string
+  node: string
+  stage: string
+  count: number
+  reasons: Record<CleanupReason, number>
+  /** 题面摘录样本（至多 3 条，供确认前辨认）。 */
+  stems: string[]
+}
+
+export interface CleanupPreviewDoc {
+  date: string
+  /** 候选总数（= 各组 count 之和）。 */
+  total: number
+  groups: CleanupGroup[]
+}
 
 // ---- C1 笔记复习源（#59 / ADR-0010；noteSourceList / noteSourceRegister）----
 

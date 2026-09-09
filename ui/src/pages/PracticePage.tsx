@@ -8,6 +8,7 @@ import { Alert, Badge, Button, Card, Empty, Input, Message, Modal, Space, Table,
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import type { HabitCurvePoint, HabitListItem, SkillLaneItem } from '../types'
+import AgentHints from '../components/AgentHints'
 
 /** 自动化自评 1-5 的文案（SRBAI 语义：这个行为有多「自动」）。 */
 const RATING_LABEL: Record<number, string> = {
@@ -229,6 +230,7 @@ export default function PracticePage() {
           </div>
         )}
       </Modal>
+      <AgentHints page='practice' />
     </Space>
   )
 }

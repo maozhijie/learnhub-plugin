@@ -40,7 +40,10 @@ import type { KataAnswer, KataQuestion } from './kata.ts'
 import { writeOutputArtifact, obsidianLink } from './output.ts'
 import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, withinCoachWindow } from './coach.ts'
 import type { BandRec } from './coach.ts'
-import { calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
+import { calibrationAdvice, tooEasyAdvice, adviceDismissKey } from './bank-advice.ts'
+import type { AdviceDismissRec } from './bank-advice.ts'
+import { cleanupCandidatesForNode } from './bank-cleanup.ts'
+import type { CleanupReason } from './bank-cleanup.ts'
 import { bindingImpl, defaultParams, OPTIMIZE_MIN_REVIEWS, FSRS6_PARAM_COUNT, sequenceReviews, trainingSequences } from './optimize.ts'
 import type { OptimizerImpl } from './optimize.ts'
 import { sectionEntryOf } from './attribution.ts'
@@ -112,7 +115,7 @@ import type {
   NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
   XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, ProjectExecBackflow,
-  KataDoc,
+  KataDoc, CleanupGroup, CleanupPreviewDoc,
 } from './views.ts'
 
 /** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
@@ -2959,8 +2962,12 @@ export class LearnhubEngine {
 
   // ---- 节点跳过 / 完成确认 ----
 
-  /** 跳过（已有基础）：stage 置 skipped，调度视同已通过；取消跳过回 ready。 */
-  async nodeSkip(courseKey: string | undefined, node: string, skipped: boolean): Promise<{ course: string; node: string; stage: Stage }> {
+  /** 跳过（已有基础）：stage 置 skipped，调度视同已通过；取消跳过回 ready。
+   * 跳过即归档（ADR-0032）：该节点全部未归档题记原因 skip 后归档——跳过的语义是
+   * 「视同已通过、退出推荐与阻塞」，其题库随之整体退场（休眠题不再占软上限额度、
+   * 已调度题不再制造题库噪音）；取消跳过不自动恢复，恢复是显式动作
+   * （题库管理面按原因 skip 筛出恢复）。 */
+  async nodeSkip(courseKey: string | undefined, node: string, skipped: boolean): Promise<{ course: string; node: string; stage: Stage; archived?: number }> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[skip] 节点「${node}」不在图内。`)
@@ -2972,7 +2979,17 @@ export class LearnhubEngine {
     const { fm: rawFm, body } = await loadNote(path)
     const fm = asFm(rawFm)
     if (fm) await saveNote(path, { ...fm, stage } as unknown as Record<string, unknown>, body)
-    return { course: c.name, node, stage }
+    let archived: number | undefined
+    if (skipped) {
+      const courseRoot = this.paths.courseRoot(c.root)
+      const bank = await this.bank.load(courseRoot, node)
+      const n = await this.bank.archiveQuestions(
+        courseRoot, node,
+        bank.questions.filter(q => !q.archived).map(q => q.id),
+        true, 'skip')
+      archived = n || undefined
+    }
+    return { course: c.name, node, stage, ...(archived !== undefined ? { archived } : {}) }
   }
 
   /** 完成确认（Math Academy 语义的 lesson 通过判定）：
@@ -4519,7 +4536,9 @@ export class LearnhubEngine {
           out.push({
             course: c.name, node, qid: q.id, no: i + 1, kind: q.kind, q: q.q,
             difficulty: q.difficulty ?? 1, tags: q.tags ?? [],
-            archived: q.archived === true, hasExplanation: Boolean(q.explanation),
+            archived: q.archived === true,
+            ...(q.archived_reason ? { archivedReason: q.archived_reason } : {}),
+            hasExplanation: Boolean(q.explanation),
             // 调度字段（题目管理页「到期」列消费；未进调度的题为 null）
             due: q.fsrs?.reps ? q.fsrs.due : null,
             lastReview: q.fsrs?.reps ? q.fsrs.last_review : null,
@@ -4535,14 +4554,17 @@ export class LearnhubEngine {
 
   // ---- B2 难度感知回流（决议 #41 / #58）----
 
-  /** 节点级只读检测：扫题库 stats（bank per-qid）+ masteryOfFm + 作答量门槛 →
+  /** 节点级只读检测：扫题库 stats/fsrs（bank per-qid）+ masteryOfFm + 门槛 →
    * {低掌握校准建议, 全对归档建议} 清单，供 orchestrator/harness 在出题与题目管理
    * 动作前消费。建议先行不自动改库——再生成走既有 question_generate/question_save
    * 与单节重写通道，归档走题目管理的独立归档操作；practice 节点无题库天然静默；
-   * Broken 笔记 fail loud（与 status/recommend 同一门前置）。 */
+   * Broken 笔记 fail loud（与 status/recommend 同一门前置）。
+   * 被忽略的建议（adviceDismiss）不进 nodes，只以 dismissed 计数带出（恢复入口消费）。 */
   async difficultyAdvice(courseKey?: string): Promise<DifficultyAdviceDoc> {
     const { today } = await this.learningDay()
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const dismissedKeys = new Set((await this.store.loadAdviceDismissals()).map(d => adviceDismissKey(d.course, d.node, d.qid)))
+    let dismissed = 0
     const nodes: Array<Record<string, unknown>> = []
     for (const c of courses) {
       const { graph, state, broken } = await this.loadView(c)
@@ -4564,7 +4586,13 @@ export class LearnhubEngine {
           mastery: masteryOfFm(fm),
           bloom: graph.bloomOf[node],
         })
-        const tooEasy = tooEasyAdvice(qs)
+        const tooEasy = tooEasyAdvice(qs).filter(t => {
+          if (dismissedKeys.has(adviceDismissKey(c.name, node, t.qid))) {
+            dismissed++
+            return false
+          }
+          return true
+        })
         if (!calibration && !tooEasy.length) return
         nodes.push({
           course: c.name, node,
@@ -4573,7 +4601,27 @@ export class LearnhubEngine {
         })
       })
     }
-    return { date: today, nodes }
+    return { date: today, nodes, dismissed }
+  }
+
+  /** 忽略/恢复一条「过于简单」建议（持久忽略清单，学习中心 state/难度建议忽略.json）：
+   * undo=false 追加（幂等），true 移除；all=true 清空恢复。误判的恢复成本为零——
+   * 与「建议先行、不自动移除」同一立场（ADR-0032 同期）。 */
+  async adviceDismiss(course: string, node: string, qid: string | undefined, undo = false, all = false): Promise<{ dismissed: AdviceDismissRec[] }> {
+    let list = await this.store.loadAdviceDismissals()
+    if (all) {
+      list = []
+    } else if (undo) {
+      list = list.filter(d => !(d.course === course && d.node === node && d.qid === qid))
+    } else {
+      if (!qid) throw new Error('[advice-dismiss] 忽略必须带 qid（恢复可用 all=true 清空）。')
+      const key = adviceDismissKey(course, node, qid)
+      if (!list.some(d => adviceDismissKey(d.course, d.node, d.qid) === key)) {
+        list = [...list, { course, node, qid, date: (await this.learningDay()).today }]
+      }
+    }
+    await this.store.saveAdviceDismissals(list)
+    return { dismissed: list }
   }
 
   async questionAdd(courseKey: string, node: string, question: Record<string, unknown>): Promise<{ course: string; node: string; id: string; count: number }> {
@@ -4605,15 +4653,63 @@ export class LearnhubEngine {
   }
 
   /** 归档/取消归档单题。笔记源卡（course=「笔记源」伪课程）同通道：漂移提示的
-   * 「归档旧题」直达动作走这里（学习中心/笔记源 镜像题库）。 */
-  async questionArchive(courseKey: string, node: string, qid: string, archived: boolean): Promise<{ course: string; node: string; qid: string; archived: boolean }> {
+   * 「归档旧题」直达动作走这里（学习中心/笔记源 镜像题库）。reason 记入
+   * archived_reason（ADR-0032：too_easy=建议确认、manual=人工等），恢复时清除。 */
+  async questionArchive(courseKey: string, node: string, qid: string, archived: boolean, reason?: string): Promise<{ course: string; node: string; qid: string; archived: boolean }> {
     if (await this.isNoteSourceCourse(courseKey)) {
-      await this.bank.archiveQuestion(this.paths.noteSourceDir, node, qid, archived)
+      await this.bank.archiveQuestion(this.paths.noteSourceDir, node, qid, archived, reason)
       return { course: NOTE_SOURCE_COURSE, node, qid, archived }
     }
     const c = await this.registry.resolve(courseKey)
-    await this.bank.archiveQuestion(this.paths.courseRoot(c.root), node, qid, archived)
+    await this.bank.archiveQuestion(this.paths.courseRoot(c.root), node, qid, archived, reason)
     return { course: c.name, node, qid, archived }
+  }
+
+  // ---- 题库一键清理（ADR-0032）----
+
+  /** 清理预览（只读）：两条规则扫全部启用课程——跳过节点全部未归档题 +
+   * 已完成节点的休眠题。按课程/节点分组带题面样本，确认后才 apply。 */
+  async bankCleanupPreview(courseKey?: string): Promise<CleanupPreviewDoc> {
+    const { today } = await this.learningDay()
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const groups: CleanupGroup[] = []
+    let total = 0
+    for (const c of courses) {
+      const { state } = await this.loadView(c)
+      await this.scanCourseBanks(c, async (node, bank) => {
+        const stage = state[node]?.stage
+        const cands = cleanupCandidatesForNode(stage, bank.questions)
+        if (!cands.length) return
+        const reasons: Record<CleanupReason, number> = { skipped_node: 0, dormant_after_complete: 0 }
+        for (const x of cands) reasons[x.reason]++
+        const byId = new Map(bank.questions.map(q => [q.id, q]))
+        total += cands.length
+        groups.push({
+          course: c.name, node, stage: stage ?? 'ready', count: cands.length, reasons,
+          stems: cands.slice(0, 3).map(x => (byId.get(x.qid)?.q ?? '').slice(0, 80)),
+        })
+      })
+    }
+    return { date: today, total, groups }
+  }
+
+  /** 清理应用：按当前预览逐题归档（reason=cleanup，可逆；恢复走题库管理面）。
+   * 预览与应用之间库可能变化——apply 现算一遍候选，不做两阶段锁。 */
+  async bankCleanupApply(courseKey?: string): Promise<{ course: string; node: string; archived: number }[]> {
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const done: Array<{ course: string; node: string; archived: number }> = []
+    for (const c of courses) {
+      const { state } = await this.loadView(c)
+      const courseRoot = this.paths.courseRoot(c.root)
+      await this.scanCourseBanks(c, async (node, bank) => {
+        const cands = cleanupCandidatesForNode(state[node]?.stage, bank.questions)
+        if (cands.length) {
+          await this.bank.archiveQuestions(courseRoot, node, cands.map(x => x.qid), true, 'cleanup')
+          done.push({ course: c.name, node, archived: cands.length })
+        }
+      })
+    }
+    return done
   }
 
   // ---- 瑕疵题勘误与判罚冲正（ADR-0031）----
@@ -4797,8 +4893,8 @@ export class LearnhubEngine {
     await this.store.appendErratum(pending)
     if (resolution === 'void') {
       // 瑕疵题的归档随作废结算原子落盘（ADR-0031）：重出走生成队列（可重试），
-      // 不再由 UI 两段拼接留下「已作废未归档」的悬空态。
-      await this.bank.archiveQuestion(this.paths.courseRoot(c.root), node, qid, true)
+      // 不再由 UI 两段拼接留下「已作废未归档」的悬空态。归档原因 erratum（ADR-0032）。
+      await this.bank.archiveQuestion(this.paths.courseRoot(c.root), node, qid, true, 'erratum')
     }
     return {
       course: c.name, node, qid, resolution,

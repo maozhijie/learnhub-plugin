@@ -12,6 +12,8 @@ import {
   perSectionQuizTarget,
   genericQuizTarget,
   profileBlockLines,
+  sectionLengthThresholds,
+  SECTION_VISUAL_CAP,
   type TierSignals,
   type GraphSignalsSource,
 } from '../src/engine/complexity.ts'
@@ -113,6 +115,20 @@ test('P0: 锚点初值符合收敛记录（低 1-3/中 3-5/高 4-6，题量随�
   assert.equal(TIER_ANCHORS[3].genericQuizCount, 4)
   assert.equal(TIER_ANCHORS[1].perSectionQuestions, 2)
   assert.equal(TIER_ANCHORS[3].perSectionQuestions, 4)
+})
+
+// ---- 节长度门禁（阈值从锚点派生 + 可视化上限） ----
+
+test('P0: 长度阈值从预算派生（warn=×1.3 上取整 / block=×2），可视化上限为全局常量', () => {
+  assert.deepEqual(sectionLengthThresholds(250), { warn: 325, block: 500 })
+  assert.deepEqual(sectionLengthThresholds(400), { warn: 520, block: 800 })
+  assert.equal(SECTION_VISUAL_CAP, 2)
+})
+
+test('P0: 复杂度档案注入篇幅硬约束与可视化预算', () => {
+  const lines = profileBlockLines(2).join('\n')
+  assert.match(lines, /超 325 字警告、超 500 字拒收/)
+  assert.match(lines, /可视化块（mermaid\/svg\/plot\/chart\/交互件合计）≤2 个/)
 })
 
 // ---- 图谱侧派生（pre 闭包规模 / p75 / 节点档位 / 节点护栏） ----

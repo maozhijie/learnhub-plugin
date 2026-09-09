@@ -45,6 +45,8 @@ export class Paths {
   get genJobsPath(): string { return `${this.centerStateDir}/生成任务.json` }
   /** 「今天学它」pin 清单（E3 #67）：中心级 [{course,node,date}]，过期自动失效。 */
   get pinPath(): string { return `${this.centerStateDir}/今日pin.json` }
+  /** 「过于简单」建议忽略清单（B2 / ADR-0032 同期）：被持久忽略的建议定位。 */
+  get adviceDismissPath(): string { return `${this.centerStateDir}/难度建议忽略.json` }
   /** 难度带会话日志（E5 #65）：JSONL 追加，困难教练的长期选择分布数据源。 */
   get bandLogPath(): string { return `${this.centerStateDir}/难度带.jsonl` }
   /** E 档案（ADR-0009 Learner Output 判词存档；#68 E2）：JSONL 追加，判词只入档案不 canonical。 */

@@ -280,6 +280,33 @@ export class Store {
     await atomicWrite(this.paths.pinPath, JSON.stringify(list, null, 1) + '\n')
   }
 
+  // ---- 「过于简单」建议忽略清单（B2；bank-advice.AdviceDismissRec）----
+
+  /** 忽略清单；文件缺失 = Missing 合法空态（[]），坏档 = Broken 报出（与 pin 同纪律）。 */
+  async loadAdviceDismissals(): Promise<import('./bank-advice.ts').AdviceDismissRec[]> {
+    let raw: string
+    try {
+      raw = await readFile(this.paths.adviceDismissPath, 'utf8')
+    } catch {
+      return []
+    }
+    let doc: unknown
+    try {
+      doc = JSON.parse(raw)
+    } catch (err) {
+      throw new Error(`[advice-dismiss] ${this.paths.adviceDismissPath} 不是合法 JSON（Broken）：修复或删除该文件后再试。${err instanceof Error ? ` ${err.message}` : ''}`)
+    }
+    if (!Array.isArray(doc)) {
+      throw new Error(`[advice-dismiss] ${this.paths.adviceDismissPath} 不是清单数组（Broken）：修复或删除该文件后再试。`)
+    }
+    return doc as import('./bank-advice.ts').AdviceDismissRec[]
+  }
+
+  /** 全量替换忽略清单（原子写）。 */
+  async saveAdviceDismissals(list: import('./bank-advice.ts').AdviceDismissRec[]): Promise<void> {
+    await atomicWrite(this.paths.adviceDismissPath, JSON.stringify(list, null, 1) + '\n')
+  }
+
   // ---- 难度带会话日志（E5 #65）----
 
   /** 追加一条难度带会话记录（JSONL；会话结束反馈点调用）。 */

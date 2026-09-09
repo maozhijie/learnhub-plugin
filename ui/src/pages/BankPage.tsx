@@ -1,13 +1,16 @@
 /** 题目管理：全库浏览 / 筛选 / 编辑 / 自建 / 归档 + 题目标签。
  * #72 B2 挂接：页顶难度建议区（引擎 difficultyAdvice 只读检测）——失衡 → 「校准重出」
- * （走既有单节出题端点，validateBank 门禁落库）；全对过于简单 → 逐题「归档」。
+ * （走既有单节出题端点，validateBank 门禁落库）；全对过于简单 → 逐题「归档」或「忽略」
+ * （误判持久忽略，恢复成本为零）。建议条目带题面摘录，点击定位到表格行——qid 是节点内
+ * 编号，光看它认不出是哪道题。题库维护区（ADR-0032）：存量体检 + 一键清理休眠题
+ * （跳过节点全部未归档题 + 已完成节点从未调度的题），预览确认后归档、可逆、不删除。
  * 建议先行：全部 Popconfirm 确认后才触发，不自动改库。 */
-import { Button, Card, Drawer, Empty, Input, Message, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
+import { Button, Card, Drawer, Empty, Input, Message, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import QuestionEditDrawer from '../components/QuestionEditDrawer'
 import type { AppFrame } from '../App'
-import type { BankEntry, DifficultyAdviceNode } from '../types'
+import type { BankEntry, CleanupPreviewDoc, DifficultyAdviceNode, QuestionAuditReport } from '../types'
 
 const { Text } = Typography
 
@@ -111,6 +114,15 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
   const [recalibrating, setRecalibrating] = useState<string | null>(null)
   /** 当前学习日（ADR-0020）：随难度建议载荷带出，UI 不自算日界；null = 建议未取到。 */
   const [today, setToday] = useState<string | null>(null)
+  /** 被忽略的建议条数（引擎持久忽略清单过滤后的计数；「恢复全部」入口消费）。 */
+  const [dismissed, setDismissed] = useState(0)
+  /** 从建议条目定位的题目（表格过滤到该节点并高亮 qid 列）。 */
+  const [focus, setFocus] = useState<{ course: string; node: string; qid: string } | null>(null)
+  /** 题库维护区（ADR-0032）：存量体检报告与一键清理预览。 */
+  const [audit, setAudit] = useState<QuestionAuditReport | null>(null)
+  const [auditBusy, setAuditBusy] = useState(false)
+  const [cleanup, setCleanup] = useState<CleanupPreviewDoc | null>(null)
+  const [cleanupBusy, setCleanupBusy] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -126,6 +138,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
       const doc = await api.difficultyAdvice()
       setAdvice(doc.nodes)
       setToday(doc.date) // 学习日（ADR-0020）：到期列着色与引擎同口径
+      setDismissed(doc.dismissed ?? 0)
     } catch {
       setAdvice([])
     }
@@ -184,10 +197,10 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     }
   }
 
-  /** B2 过于简单归档（#72）：逐题归档（题目管理既有动作，恢复随时可逆）。 */
+  /** B2 过于简单归档（#72）：逐题归档并记录原因 too_easy（ADR-0032，可逆）。 */
   const doArchiveAdvice = async (n: DifficultyAdviceNode, qid: string) => {
     try {
-      await api.questionArchive(n.course, n.node, qid, true)
+      await api.questionArchive(n.course, n.node, qid, true, 'too_easy')
       Message.success(`已归档 ${qid}`)
       await Promise.all([load(), loadAdvice()])
     } catch (err) {
@@ -195,10 +208,75 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     }
   }
 
+  /** 误判的持久忽略（引擎侧难度建议忽略清单；恢复全部一键清空）。 */
+  const doDismiss = async (n: DifficultyAdviceNode, qid: string) => {
+    try {
+      await api.adviceDismiss(n.course, n.node, qid)
+      await loadAdvice()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+  const doRestoreDismissed = async () => {
+    try {
+      await api.adviceDismiss('', '', undefined, { all: true })
+      await loadAdvice()
+      Message.success('已恢复全部被忽略的建议')
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  /** 建议条目定位：表格过滤到该节点并高亮目标行（含已归档——建议的题可能已被归档）。 */
+  const locate = (n: DifficultyAdviceNode, qid: string) => {
+    setFocus({ course: n.course, node: n.node, qid })
+    setShowArchived(true)
+    setSearch(n.node)
+  }
+
+  /** 题库存量体检（ADR-0029/0030 只读盘点）。 */
+  const doAudit = async () => {
+    setAuditBusy(true)
+    try {
+      setAudit(await api.questionAudit())
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAuditBusy(false)
+    }
+  }
+
+  /** 一键清理（ADR-0032）：预览分组确认后归档（可逆、不删除）。 */
+  const doCleanupPreview = async () => {
+    setCleanupBusy(true)
+    try {
+      setCleanup(await api.bankCleanupPreview(filterCourse))
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
+  const doCleanupApply = async () => {
+    setCleanupBusy(true)
+    try {
+      const r = await api.bankCleanupApply(filterCourse)
+      const n = r.applied.reduce((s, g) => s + g.archived, 0)
+      Message.success(`已归档 ${n} 道题（可在列表「显示已归档」里按原因恢复）`)
+      setCleanup(null)
+      await Promise.all([load(), loadAdvice()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCleanupBusy(false)
+    }
+  }
+
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={12}>
-      {/* B2 难度建议区（#72）：只读检测有产出才显示，低数据静默 */}
-      {advice !== null && advice.length > 0 && (
+      {/* B2 难度建议区（#72）：只读检测有产出才显示，低数据静默；条目带题面摘录，
+          点击定位表格行；误判走「忽略」（持久，可一键恢复） */}
+      {advice !== null && (advice.length > 0 || dismissed > 0) && (
         <Card size='small' title='难度建议（引擎检测，确认后才执行）' style={{ borderRadius: 10 }}>
           <Space direction='vertical' style={{ width: '100%' }} size={8}>
             {advice.map(n => (
@@ -225,19 +303,105 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
                 {(n.too_easy ?? []).map(t => (
                   <Space key={t.qid} size={8} wrap style={{ paddingLeft: 0 }}>
                     <Tag size='small' color='gray'>过于简单 · {t.qid}</Tag>
-                    <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 220 }}>{t.reason}</Text>
+                    <Text style={{ fontSize: 12, cursor: 'pointer', maxWidth: 360 }} ellipsis
+                      onClick={() => locate(n, t.qid)}
+                      title='点击在下方列表中定位这道题'>{t.stem || t.qid}</Text>
+                    <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 200 }}>{t.reason}</Text>
                     <Popconfirm title={`归档「${t.qid}」？`}
                       content='归档后不再进复习队列；可在本题库列表「显示已归档」里恢复。'
                       onOk={() => void doArchiveAdvice(n, t.qid)}>
                       <Button size='mini' type='text' status='warning'>归档</Button>
                     </Popconfirm>
+                    <Button size='mini' type='text' onClick={() => void doDismiss(n, t.qid)}
+                      title='误判？持久忽略这条建议（可一键恢复）'>忽略</Button>
                   </Space>
                 ))}
               </div>
             ))}
+            {dismissed > 0 && (
+              <Space size={8}>
+                <Text type='secondary' style={{ fontSize: 12 }}>已忽略 {dismissed} 条建议（误判不再打扰）</Text>
+                <Button size='mini' type='text' onClick={() => void doRestoreDismissed()}>恢复全部</Button>
+              </Space>
+            )}
           </Space>
         </Card>
       )}
+
+      {/* 题库维护区（ADR-0032）：存量体检只读盘点 + 一键清理（归档式、可逆、不删除） */}
+      <Card size='small' title='题库维护（盘点只读，清理归档可逆）' style={{ borderRadius: 10 }}>
+        <Space size={10} wrap>
+          <Button size='small' loading={auditBusy} onClick={() => void doAudit()}>运行体检</Button>
+          <Button size='small' status='warning' loading={cleanupBusy} onClick={() => void doCleanupPreview()}>一键清理休眠题</Button>
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            清理范围：跳过节点的未归档题 + 学完后从未调度（休眠）的题——预览确认后才归档，随时可恢复
+          </Text>
+        </Space>
+        {audit && (
+          <div style={{ paddingTop: 8 }}>
+            {audit.flagged === 0 ? (
+              <Text type='secondary' style={{ fontSize: 12 }}>
+                体检通过：{audit.banks} 个题库、{audit.questions} 道题未发现契约违规。
+              </Text>
+            ) : (
+              <>
+                <Text type='secondary' style={{ fontSize: 12 }}>
+                  体检发现 {audit.flagged}/{audit.questions} 道题违规（{audit.banks} 个题库），可逐题归档或让 agent 校准重出：
+                </Text>
+                <div style={{ paddingTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {audit.findings.slice(0, 10).map(f => (
+                    <Text key={`${f.course}/${f.node}/${f.id}`} style={{ fontSize: 12 }}>
+                      <Tag size='small' color='orange'>{f.course} · {f.node} · {f.id}</Tag>
+                      {f.issues.join('；')}
+                    </Text>
+                  ))}
+                  {audit.findings.length > 10 && (
+                    <Text type='secondary' style={{ fontSize: 12 }}>…其余 {audit.findings.length - 10} 条略（agent 工具 learnhub_question_audit 可看全量）</Text>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Card>
+
+      {/* 一键清理预览（确认对话框）：按课程/节点分组，确认后才落归档 */}
+      <Modal
+        title={`清理预览 · ${cleanup?.total ?? 0} 道题将归档`}
+        visible={cleanup !== null}
+        onCancel={() => setCleanup(null)}
+        footer={cleanup && cleanup.total > 0 ? [
+          <Button key='cancel' onClick={() => setCleanup(null)}>取消</Button>,
+          <Button key='ok' type='primary' status='warning' loading={cleanupBusy} onClick={() => void doCleanupApply()}>
+            确认归档（可逆）
+          </Button>,
+        ] : [<Button key='close' onClick={() => setCleanup(null)}>关闭</Button>]}
+      >
+        {cleanup && (cleanup.total === 0
+          ? <Empty description='没有可清理的题目：没有跳过节点的残留题，也没有学完后从未调度的休眠题。' />
+          : (
+            <Space direction='vertical' style={{ width: '100%' }} size={8}>
+              <Text type='secondary' style={{ fontSize: 12 }}>
+                归档不删除：归档题退出复习队列与统计，随时可在题库列表「显示已归档」里按原因恢复。
+              </Text>
+              {cleanup.groups.map(g => (
+                <div key={`${g.course}/${g.node}`} style={{
+                  background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '8px 10px',
+                }}>
+                  <Space size={8} wrap>
+                    <Tag size='small' color='orange'>{g.course} · {g.node}</Tag>
+                    <Tag size='small'>{g.count} 道</Tag>
+                    {g.reasons.skipped_node > 0 && <Tag size='small' color='gray'>跳过节点 {g.reasons.skipped_node}</Tag>}
+                    {g.reasons.dormant_after_complete > 0 && <Tag size='small' color='gray'>学完后从未调度 {g.reasons.dormant_after_complete}</Tag>}
+                  </Space>
+                  {g.stems.map((s, i) => (
+                    <Text key={i} type='secondary' style={{ fontSize: 12, display: 'block', paddingLeft: 8 }}>· {s}</Text>
+                  ))}
+                </div>
+              ))}
+            </Space>
+          ))}
+      </Modal>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <Select value={filterCourse} onChange={v => setFilterCourse(v)} placeholder='全部课程' style={{ width: 180 }} allowClear>
@@ -256,7 +420,9 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
           columns={[
             { title: '课程', dataIndex: 'course', width: 110 },
             { title: '节点', dataIndex: 'node', width: 170, ellipsis: true },
-            { title: '#', dataIndex: 'qid', width: 54 },
+            { title: '#', width: 54, render: (_, e) => (focus && e.course === focus.course && e.node === focus.node && e.qid === focus.qid
+              ? <Tag size='small' color='orange' title='来自难度建议的定位'>{e.qid}</Tag>
+              : e.qid) },
             { title: '题型', width: 70, render: (_, e) => <Tag size='small'>{KIND_LABEL[e.kind] ?? e.kind}</Tag> },
             { title: '题干', dataIndex: 'q', ellipsis: true },
             { title: '到期', width: 112, render: (_, e) => e.due ? (
@@ -266,7 +432,8 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
               </Tag>
             ) : <Text type='secondary' style={{ fontSize: 12 }}>未调度</Text> },
             { title: '状态', width: 80, render: (_, e) => e.archived
-              ? <Tag size='small' color='gray'>已归档</Tag>
+              ? <Tag size='small' color='gray'
+                  title={e.archivedReason ? `归档原因：${e.archivedReason}（恢复时清除）` : undefined}>已归档{e.archivedReason ? '·' + e.archivedReason : ''}</Tag>
               : <Tag size='small' color='green'>在库</Tag> },
             { title: '操作', width: 150, render: (_, e) => (
               <Space size={4}>

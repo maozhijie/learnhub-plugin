@@ -89,6 +89,22 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
 
   return (
     <div style={{ display: 'grid', gap: 12, padding: 12 }}>
+      {/* ---- 运行环境（模型透明）：当前 LLM 配置只读展示；切换走宿主机器级配置 ---- */}
+      <Card size='small' title='运行环境'>
+        {frame.status?.llm ? (
+          <Space size={8} wrap>
+            <Tag size='small' color='arcoblue'>{frame.status.llm.provider} / {frame.status.llm.model}</Tag>
+            <Text type='secondary' style={{ fontSize: 12 }}>
+              思考档：常规 {frame.status.llm.fast_effort} · 高难 {frame.status.llm.deep_effort}；生成任务注册表逐条记录所用模型
+            </Text>
+            <Text type='secondary' style={{ fontSize: 12 }}>
+              切换模型：编辑 ~/.dsh/profiles/web/cordis.patch.yml 的 dsh-learnhub 行（provider/model/fastEffort/deepEffort）后重启宿主生效
+            </Text>
+          </Space>
+        ) : (
+          <Text type='secondary' style={{ fontSize: 12 }}>运行环境信息随状态加载后展示。</Text>
+        )}
+      </Card>
       <Alert type='info' content='实验室是「提议非指令」区：沙盘是模型推演非承诺；实验与恒温器的建议都要你逐条确认才生效；这里发生的一切零 XP、不进掌握度、不碰调度语义。' />
 
       {/* ---- D-3 沙盘 ---- */}

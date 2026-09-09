@@ -3,14 +3,27 @@
 
 // ---- UI 本地词汇 ----
 
+import type { StatusDoc } from '../../src/engine/views'
+import type { QuestionAuditReport } from '../../src/engine/question-hygiene'
+
+export type { QuestionAuditReport }
+
 export type Stage = 'unseen' | 'ready' | 'learning' | 'review' | 'mastered' | 'skipped'
 export type ContentStatus = 'draft' | 'reviewed' | 'flagged'
+
+/** 当前 LLM 配置（宿主路由层附加在 /status 上；模型透明只读展示）。 */
+export interface LlmView { provider: string; model: string; fast_effort: string; deep_effort: string }
+/** /status 响应 = 引擎 StatusDoc + 宿主侧 llm 配置。 */
+export type StatusWithLlm = StatusDoc & { llm?: LlmView }
+
+/** 能力指南条目（GET /agent-guide；src/index.ts AGENT_GUIDE 单一事实源）。 */
+export interface AgentGuideItem { tool: string; page: string; text: string; prompt?: string }
 
 // ---- 引擎读视图（src/engine/views.ts 命名导出）----
 
 export type {
   AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, CalibrationProfileDoc,
-  CalibrationSourceProfile, DiagnosticEntry,
+  CalibrationSourceProfile, CleanupGroup, CleanupPreviewDoc, DiagnosticEntry,
   DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult, DoctorDoc, EtaItem, FadingTier, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphPathResult, GraphProposeResult,
   HabitCurvePoint, HabitListItem, HabitShowDoc, HabitsListDoc, HistogramBin, LearnerArchiveResult,
