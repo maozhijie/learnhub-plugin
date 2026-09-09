@@ -5,22 +5,23 @@ import { setActiveTab } from './active-tab'
 import BankPage from './pages/BankPage'
 import GeneratePage from './pages/GeneratePage'
 import GraphPage from './pages/GraphPage'
+import GuidePage from './pages/GuidePage'
 import LabPage from './pages/LabPage'
 import LearnPage from './pages/LearnPage'
 import PracticePage from './pages/PracticePage'
 import ProjectsPage from './pages/ProjectsPage'
 import ProposalsPage from './pages/ProposalsPage'
 import StatsPage from './pages/StatsPage'
-import type { StatusDoc, TreeDoc } from './types'
+import type { StatusWithLlm, TreeDoc } from './types'
 
-export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'generate' | 'proposals' | 'practice' | 'projects' | 'lab'
+export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'generate' | 'proposals' | 'practice' | 'projects' | 'lab' | 'guide'
 
 /** 打开中的节点学习视图（学习页二级视图）；focusNode = 图页定位高亮目标。 */
 export interface LessonRef { course: string; node: string }
 
 /** 全局共享态：状态总览 + 课程树 + 当前课程 + 页签/学习视图跳转。 */
 export interface AppFrame {
-  status: StatusDoc | null
+  status: StatusWithLlm | null
   tree: TreeDoc | null
   course: string | null
   lesson: LessonRef | null
@@ -37,7 +38,7 @@ export interface AppFrame {
 
 export default function App() {
   const [tab, setTab] = useState<TabKey>('learn')
-  const [status, setStatus] = useState<StatusDoc | null>(null)
+  const [status, setStatus] = useState<StatusWithLlm | null>(null)
   const [tree, setTree] = useState<TreeDoc | null>(null)
   const [course, setCourse] = useState<string | null>(null)
   const [lesson, setLesson] = useState<LessonRef | null>(null)
@@ -118,6 +119,7 @@ export default function App() {
           <Tabs.TabPane key='proposals' title='提案' />
           <Tabs.TabPane key='practice' title='实践' />
           <Tabs.TabPane key='projects' title='项目' />
+          <Tabs.TabPane key='guide' title='指南' />
         </Tabs>
         <Button size='mini' type='text' style={{ margin: '10px 12px 0 0', flexShrink: 0 }}
           onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
@@ -141,7 +143,7 @@ export default function App() {
 
 /** 页签保活（ADR-0027）：首访后常驻、非激活隐藏——练习会话等页内状态跨页签存续；
  * 隐藏页签的后台轮询由 active-tab 信号自行跳过。 */
-const TAB_KEYS: TabKey[] = ['learn', 'graph', 'bank', 'stats', 'lab', 'generate', 'proposals', 'practice']
+const TAB_KEYS: TabKey[] = ['learn', 'graph', 'bank', 'stats', 'lab', 'generate', 'proposals', 'practice', 'guide']
 
 function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
   const [visited, setVisited] = useState<Set<TabKey>>(() => new Set([tab]))
@@ -161,6 +163,7 @@ function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
           {k === 'proposals' && <ProposalsPage />}
           {k === 'practice' && <PracticePage />}
           {k === 'projects' && <ProjectsPage />}
+          {k === 'guide' && <GuidePage />}
         </div>
       ))}
     </>

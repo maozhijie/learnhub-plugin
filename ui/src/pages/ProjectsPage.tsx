@@ -10,6 +10,7 @@ import { Alert, Button, Card, Empty, Input, Message, Select, Space, Table, Tag, 
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import type { FadingTier, ProjectCrossDoc, ProjectFm } from '../types'
+import AgentHints from '../components/AgentHints'
 
 const LIFECYCLE_LABEL: Record<string, string> = {
   active: '进行中', paused: '暂停', delivered: '已交付', archived: '已归档',
@@ -116,6 +117,7 @@ export default function ProjectsPage() {
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
       <Alert type='info' content='项目区（Course 的姊妹实体，以周/月计的真实实践）：这里看每个项目的 2×2 掌握交叉诊断——左边陈述性掌握（关联节点），下边项目执行证据。执行事件零 XP、零调度写入；入档推荐只是提议，改档是你的显式动作，推荐永不参与任何门禁。' />
+      <AgentHints page='projects' />
 
       <Card size='small' title='项目' style={{ borderRadius: 10 }}>
         {projects === null ? null : projects.length === 0 ? (

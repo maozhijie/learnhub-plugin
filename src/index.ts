@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：97 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
+ * - agent 工具面：106 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -70,6 +70,74 @@ function contentEffort(highTier: boolean): 'off' | 'low' {
   return highTier ? llmCfg.deepEffort : llmCfg.fastEffort
 }
 
+/** 当前 LLM 配置视图（模型透明，#? 与 /status、learnhub_status 一同带出，面板只读展示；
+ * 切换模型 = 编辑 profile patch（cordis.patch.yml 的 dsh-learnhub 行 provider/model/
+ * fastEffort/deepEffort）后重启宿主——插件不写宿主机器级配置）。 */
+function llmView() {
+  return {
+    provider: llmCfg.provider, model: llmCfg.model,
+    fast_effort: llmCfg.fastEffort, deep_effort: llmCfg.deepEffort,
+  }
+}
+
+/** Agent 独有能力在面板的说明锚点（能指南，ADR 面无此决议；与工具注册同文件维护，
+ * 指南页与各页「这些事可以找 agent」提示都从这里渲染——单一事实源防文案漂移）。
+ * page = 面板页签（learn/graph/bank/stats/lab/generate/practice/projects/global）；
+ * prompt = 可直接粘进 dsh 会话的示例指令。 */
+const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prompt?: string }> = [
+  { tool: 'learnhub_pin_today', page: 'learn', text: '「今天学它」：把节点置顶为今日推荐榜首（可挂执行意图），只影响今天、次日自动失效。',
+    prompt: '用 learnhub_pin_today 把「<节点>」设为今天的学习目标' },
+  { tool: 'learnhub_unpin', page: 'learn', text: '取消今天的「今天学它」置顶。', prompt: '取消「<节点>」的今日置顶' },
+  { tool: 'learnhub_goal_intention', page: 'learn', text: '在今日 pin 上写/清「在【线索】之后就【行动】」的执行意图（随 pin 当日过期）。',
+    prompt: '给今天「<节点>」的 pin 挂一个执行意图：晚饭后就在书桌前学完它' },
+  { tool: 'learnhub_note_source_exclude', page: 'learn', text: '把个人笔记文件/目录加入排除清单（未来不再被自动注册为复习源）。',
+    prompt: '把「<笔记路径>」加入笔记源排除清单' },
+  { tool: 'learnhub_note_source_unexclude', page: 'learn', text: '从笔记源排除清单移除（恢复可注册资格）。',
+    prompt: '把「<笔记路径>」移出笔记源排除清单' },
+  { tool: 'learnhub_graph_node', page: 'graph', text: '单节点深查：前置/后继/enc 边/生成状态/健康问题一次看全。',
+    prompt: '用 learnhub_graph_node 深查「<节点>」' },
+  { tool: 'learnhub_graph_browse', page: 'graph', text: '按区/块浏览课程图结构。', prompt: '按区块浏览「<课程>」的图结构' },
+  { tool: 'learnhub_graph_path', page: 'graph', text: '查询两节点之间的先修链（学 B 之前要过哪些节点）。',
+    prompt: '查一下从「<节点A>」到「<节点B>」的先修链' },
+  { tool: 'learnhub_graph_enc_backfill', page: 'graph', text: '依据真实作答记录推断缺失的成分技能边，生成待人审的图提案。',
+    prompt: '回填「<课程>」的成分技能边候选' },
+  { tool: 'learnhub_question_audit', page: 'bank', text: '题库契约只读体检：表达式/数字填空、记法违规、转义损坏、超长解析——只盘点不修复。',
+    prompt: '跑一次题库体检，把违规存量题列给我' },
+  { tool: 'learnhub_question_get', page: 'bank', text: '读单题全文（含答案与解析）——改题/审题前先看原题。',
+    prompt: '把「<节点>」题库里 q1 的完整题目读给我看' },
+  { tool: 'learnhub_bank_cleanup', page: 'bank', text: '一键清理题库：跳过节点的全部未归档题 + 已完成节点的休眠题（从未调度），预览确认后归档（可逆，不删除）。',
+    prompt: '预览一下题库清理会归档哪些题，我确认后再执行' },
+  { tool: 'learnhub_content_check', page: 'generate', text: '只跑正文质检门不落盘——在 vault 手改笔记后自检违规。',
+    prompt: '对「<节点>」跑一次正文质检' },
+  { tool: 'learnhub_data_check', page: 'global', text: '只读数据体检：盘点注册表/图/笔记/题库的 Missing 与 Broken，不修复不写入。',
+    prompt: '跑一次数据体检，告诉我有没有 Broken' },
+  { tool: 'learnhub_rebuild', page: 'global', text: '重建就绪清单等派生文件（过审计门；数据文件坏了后的修复入口）。',
+    prompt: '重建一遍就绪清单' },
+  { tool: 'learnhub_note_resolve', page: 'global', text: '把 vault 笔记路径解析到所属课程/节点（查归属用）。',
+    prompt: '「<笔记路径>」属于哪个课程节点？' },
+  { tool: 'learnhub_skill_create', page: 'practice', text: '创建技能条目（乐器/运动/编程等持续技能的调度 lane 载体）。',
+    prompt: '创建技能条目「<技能名>」' },
+  { tool: 'learnhub_execution_log', page: 'practice', text: '记一条技能执行事件（表现评级 1-4 + 真实专注时长；入 XP 账本与 streak）。',
+    prompt: '记一条执行事件：今天练了「<技能>」40 分钟，自评 3 分' },
+  { tool: 'learnhub_receipt_submit', page: 'practice', text: '提交外部练习回执（描述/图片/导出皆可；AI 量表评审，零 XP、不推调度）。',
+    prompt: '提交一份回执：<练习内容描述>' },
+  { tool: 'learnhub_receipt_list', page: 'practice', text: '查看已提交的回执清单。', prompt: '列出我提交过的回执' },
+  { tool: 'learnhub_project_create', page: 'projects', text: '创建项目实体（有界项目区的载体；面板只读清单与诊断，创建走 agent）。',
+    prompt: '创建项目「<项目名>」：<一句话目标>' },
+  { tool: 'learnhub_project_plan_generate', page: 'projects', text: 'AI 起草里程碑计划提案（提案-人审通道，不直接落盘）。',
+    prompt: '为「<项目>」起草一份里程碑计划提案' },
+  { tool: 'learnhub_project_milestone_generate', page: 'projects', text: '按当前渐退档生成里程碑任务卡（部分完成 + 验收清单）。',
+    prompt: '给「<项目>」的里程碑 m1 生成任务卡' },
+  { tool: 'learnhub_project_decompile', page: 'projects', text: '目标反编译：从项目目标描述反推「里程碑计划 + 知识子图」双提案（人审后生效）。',
+    prompt: '对目标「<项目描述>」做一次目标反编译' },
+  { tool: 'learnhub_project_milestone_pass', page: 'projects', text: '里程碑显式通过结算：按 est 定价锁定 XP（对账动作，不是删除）。',
+    prompt: '「<项目>」的里程碑 m1 通过了，帮我结算' },
+  { tool: 'learnhub_project_milestone_recall', page: 'projects', text: '里程碑回溯会话：过点前对关联节点抽题+自述（检索点练习）。',
+    prompt: '为「<项目>」的里程碑 m1 发起回溯会话' },
+  { tool: 'learnhub_project_enc_candidates', page: 'projects', text: '从项目执行行为推断成分技能边候选，生成待人审图提案。',
+    prompt: '从「<项目>」的执行记录里找成分技能边候选' },
+]
+
 /** 课程生成任务注册表（course/node 键）：面板「生成」页签的状态源，
  * 页面刷新后从这里恢复（allo 同语义：服务端注册表是事实来源）；
  * 状态每次变更全量落盘 state/生成任务.json，host 重启后读入并把遗留 running 标为失败。 */
@@ -92,6 +160,8 @@ interface GenJob {
   count?: number
   section?: { id: string; title: string }
   instruction?: string
+  /** 入队时实际使用的模型名（模型透明：任务注册表与面板可审计每次生成用的是什么）。 */
+  model?: string
 }
 const genJobs = new Map<string, GenJob>()
 
@@ -182,7 +252,7 @@ async function llmComplete(ctx: Context, prompt: string, system?: string, opts?:
   const attempt = async (effort?: 'off' | 'low', maxTokens?: number): Promise<string> => {
     const r = await llmStreamOnce(ctx, prompt, system, effort, maxTokens)
     if (!r.truncated) return r.text
-    console.warn('[learnhub] 模型输出被 max-tokens 截断，提高输出上限原题重试一次')
+    console.warn(`[learnhub] 模型输出被 max-tokens 截断（model=${llmCfg.model}），提高输出上限原题重试一次`)
     return (await llmStreamOnce(ctx, prompt, system, effort, LLM_TRUNCATION_RETRY_TOKENS)).text
   }
   if (opts?.effort === undefined) return attempt()
@@ -235,7 +305,7 @@ async function llmStreamOnce(ctx: Context, prompt: string, system?: string, effo
         // failure.code 是稳定错误码（NO_ADAPTER/MISSING_CREDENTIAL/AUTH/RATE_LIMIT/...），一眼定位配置问题
         const f = chunk.reason.failure
         const status = f.status ? `/${f.status}` : ''
-        const e: Error & { code?: string } = new Error(`模型调用失败[${f.code}${status}]：${String(f.message)}`)
+        const e: Error & { code?: string } = new Error(`模型调用失败[${f.code}${status}]（provider=${llmCfg.provider} model=${llmCfg.model}）：${String(f.message)}`)
         e.code = f.code
         throw e
       }
@@ -328,6 +398,7 @@ function enqueueGeneration(ctx: Context, course: string, node: string, style?: s
   genJobs.set(key, {
     course, node, startedAt: new Date().toISOString(), status: 'queued',
     ...(style ? { style } : {}),
+    model: llmCfg.model,
     message: '排队等待生成…',
   })
   persistGenJobs()
@@ -354,6 +425,7 @@ function enqueueQuizGeneration(
     ...(opts?.count !== undefined ? { count: opts.count } : {}),
     ...(opts?.section ? { section: opts.section } : {}),
     ...(opts?.instruction ? { instruction: opts.instruction } : {}),
+    model: llmCfg.model,
     message: '排队等待出题…',
   })
   persistGenJobs()
@@ -725,7 +797,8 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
   const route = url.pathname.slice(API.length)
   try {
     if (req.method === 'GET' && route === '/status') {
-      sendJson(res, 200, await apiRun('api/status', () => engine.statusJson()))
+      // 模型透明：status 附带当前 LLM 配置（provider/model/思考档，面板只读展示）
+      sendJson(res, 200, await apiRun('api/status', async () => ({ ...(await engine.statusJson()), llm: llmView() })))
       return
     }
     if (req.method === 'GET' && route === '/courses') {
@@ -976,6 +1049,22 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       // B2 难度失衡/过于简单只读建议（#58，#72 UI 挂接）：题目管理页建议区消费
       const course = url.searchParams.get('course') ?? undefined
       sendJson(res, 200, await apiRun('api/difficulty-advice', () => engine.difficultyAdvice(course)))
+      return
+    }
+    if (req.method === 'GET' && route === '/agent-guide') {
+      // 能力指南：agent 独有工具的面板说明锚点（AGENT_GUIDE 单一事实源）
+      sendJson(res, 200, AGENT_GUIDE)
+      return
+    }
+    if (req.method === 'GET' && route === '/question-audit') {
+      // 题库契约只读体检（ADR-0029/0030）：题库维护区消费
+      sendJson(res, 200, await apiRun('api/question-audit', () => engine.questionAudit()))
+      return
+    }
+    if (req.method === 'GET' && route === '/bank-cleanup') {
+      // 题库一键清理预览（ADR-0032，只读）：跳过节点全部未归档题 + 已完成节点休眠题
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/bank-cleanup', () => engine.bankCleanupPreview(course)))
       return
     }
     if (req.method === 'GET' && route === '/learner-queue') {
@@ -1428,9 +1517,27 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/question-archive') {
+        // reason = 归档原因（ADR-0032：too_easy=建议确认 / manual=人工等），可逆恢复时清除
         sendJson(res, 200, await engine.questionArchive(
           need(body, 'course'), need(body, 'node'), need(body, 'qid'),
-          body.archived === true))
+          body.archived === true, typeof body.reason === 'string' ? body.reason : undefined))
+        return
+      }
+      if (route === '/difficulty-advice-dismiss') {
+        // B2 建议忽略/恢复：误判的持久忽略（undo 恢复单条，all 清空全部；
+        // all=true 时 course/node/qid 均不需要）
+        sendJson(res, 200, await apiRun('api/difficulty-advice-dismiss', () =>
+          engine.adviceDismiss(
+            typeof body.course === 'string' ? body.course : '',
+            typeof body.node === 'string' ? body.node : '',
+            typeof body.qid === 'string' ? body.qid : undefined,
+            body.undo === true, body.all === true)))
+        return
+      }
+      if (route === '/bank-cleanup/apply') {
+        // 题库一键清理应用（ADR-0032）：按当前预览规则现算候选并归档（reason=cleanup，可逆）
+        sendJson(res, 200, await apiRun('api/bank-cleanup/apply', () =>
+          engine.bankCleanupApply(typeof body.course === 'string' ? body.course : undefined)))
         return
       }
       if (route === '/course/delete') {
@@ -1624,6 +1731,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
           && typeof (j.section as { title?: unknown }).title === 'string'
           ? { section: { id: (j.section as { id: string }).id, title: (j.section as { title: string }).title } } : {}),
         ...(typeof j.instruction === 'string' ? { instruction: j.instruction } : {}),
+        ...(typeof j.model === 'string' ? { model: j.model } : {}),
         message: interrupted ? '进程重启，任务中断——可重试' : (typeof j.message === 'string' ? j.message : undefined),
       })
     }
@@ -1654,7 +1762,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
 
   tool('learnhub_status',
     'Return the learning center status (center summary + per-course detail) as JSON. blocked entries are executable soft-gate advice: a candidate blocked only by a decayed prerequisite carries {pre, r, due, entry} — review the prerequisite\'s due questions first (direct entry) or still learn the candidate directly. Courses may also carry diagnostics (B1 content-diagnostic suggestions): a section with concentrated wrong answers (R1 single-question lapses or R2 section accuracy <0.5 over ≥4 deduped answers) with reason, evidence, and a rewrite direct action — surface it to the learner and rewrite via learnhub_section_rewrite ONLY after they confirm (advice-first, never automatic). Evaluating diagnostics appends a trigger record to the journal when a signal fires fresh (that ledger drives the 7-day cooldown and R1 escalation); nothing else is written.',
-    {}, () => run('learnhub_status', async () => JSON.stringify(await engine.statusJson())))
+    {}, () => run('learnhub_status', async () => JSON.stringify({ ...(await engine.statusJson()), llm: llmView() })))
   tool('learnhub_data_check',
     'Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.',
     {}, () => run('learnhub_data_check', async () => JSON.stringify(await engine.dataCheck())))
@@ -1662,7 +1770,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'Read-only content audit of all question banks (course banks + note-source mirror). Flags legacy questions that violate current contracts: fill_in_blank answers that look numeric or algebraic (ADR-0029 unique-answer blanks), notation violations in stem/options/explanation (bare ^ or _ outside $...$, LaTeX commands without $ delimiters), YAML double-quote escape corruption (control characters), and over-long explanations. Returns a JSON findings list; never repairs or writes.',
     {}, () => run('learnhub_question_audit', async () => JSON.stringify(await engine.questionAudit())))
   tool('learnhub_skip',
-    'Mark a node as skipped (learner already knows it) or un-skip. Skipped nodes count as passed: they leave the recommendation queue and no longer block successors.',
+    'Mark a node as skipped (learner already knows it) or un-skip. Skipped nodes count as passed: they leave the recommendation queue and no longer block successors. Skipping also archives every non-archived question of the node (reason=skip, ADR-0032) — reversible per question from the bank panel; un-skipping does NOT auto-restore them (restoring is the learner\'s explicit action).',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name' },
@@ -1963,10 +2071,20 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string }) => run('learnhub_course_delete', async () =>
       JSON.stringify(await engine.courseDelete(args.course))))
   tool('learnhub_difficulty_advice',
-    'Detect difficulty-mismatch advice across question banks (B2, read-only, advice-first — nothing is written): nodes in review/mastered with low derived mastery + struggling answer accuracy + enough answer volume get a "difficulty band miscalibrated, regenerate" suggestion carrying a difficulty/bloom target-band instruction (feed it to learnhub_question_generate or the section-rewrite flow, validateBank gate applies); individual questions answered 100% correctly enough times get a "too easy, archivable" annotation suggestion (archiving is the author/panel decision via learnhub_question_update archived patch — never silent removal). Low data stays silent.',
+    'Detect difficulty-mismatch advice across question banks (B2, read-only, advice-first — nothing is written): nodes in review/mastered with low derived mastery + struggling answer accuracy + enough answer volume get a "difficulty band miscalibrated, regenerate" suggestion carrying a difficulty/bloom target-band instruction (feed it to learnhub_question_generate or the section-rewrite flow, validateBank gate applies); individual questions whose scheduling evidence says "too easy" (enough FSRS advances with zero lapses and an interval grown past the threshold — same-day repeats never count) get a "too easy, archivable" annotation (archiving is the author/panel decision via learnhub_question_update archived patch — never silent removal). Responses already dismissed by the learner are filtered out (dismissed count returned). Low data stays silent.',
     { course: { type: 'string', description: 'Course name; omit to scan all enabled courses' } },
     (args: { course?: string }) => run('learnhub_difficulty_advice', async () =>
       JSON.stringify(await engine.difficultyAdvice(args.course))))
+  tool('learnhub_bank_cleanup',
+    'One-click question-bank housekeeping (ADR-0032, archive-only — never deletes). Preview (default): per node, every non-archived question of skipped nodes plus every dormant question (in bank, never scheduled) of completed review/mastered nodes, grouped with counts and stem excerpts. With apply=true: archives exactly those candidates with reason=cleanup — reversible from the bank panel (restore filter). Always run the preview first and tell the learner what will be archived before applying.',
+    {
+      course: { type: 'string', description: 'Course name; omit to scan all enabled courses' },
+      apply: { type: 'boolean', description: 'omit/false = read-only preview; true = archive the candidates (reason=cleanup)' },
+    },
+    (args: { course?: string; apply?: boolean }) => run('learnhub_bank_cleanup', async () =>
+      JSON.stringify(args.apply === true
+        ? { applied: await engine.bankCleanupApply(args.course) }
+        : await engine.bankCleanupPreview(args.course))))
   tool('learnhub_optimize_params',
     'Manually trigger FSRS-6 personal parameter optimization (A2, never automatic — like Anki): retrains the 21 scheduling parameters from the learner\'s real review log (synthetic initializations excluded, first push per card per day) across all enabled courses. Gates: at least 400 real review pushes are required, and the trained parameters must evaluate strictly better than the current/default parameters (same-protocol logLoss comparison) — otherwise nothing is written and the skip reason is returned with the metrics. On success the one learner-level parameter set is written to every enabled course\'s fsrs参数.json with full training metadata (count/date/metrics); the scheduler picks it up with zero changes. Expect ~a few seconds of training.',
     {},
@@ -2009,11 +2127,13 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         if (typeof archived !== 'boolean') {
           throw new Error('[question-update] archived 必须是布尔值（archive/restore 独立操作）')
         }
-        if (Object.keys(args.patch).length !== 1) {
+        const rest = Object.keys(args.patch).filter(k => k !== 'archived')
+        if (rest.some(k => k !== 'reason')) {
           throw new Error('[question-update] 归档与内容修订是两条独立操作，混合 patch 会被整体拒绝（先归档，或先改内容再单独归档）')
         }
-        await engine.questionArchive(args.course, args.node, args.qid, args.patch.archived)
-        return JSON.stringify({ course: args.course, node: args.node, qid: args.qid, archived: args.patch.archived })
+        const reason = typeof args.patch.reason === 'string' ? args.patch.reason : undefined
+        await engine.questionArchive(args.course, args.node, args.qid, archived, reason)
+        return JSON.stringify({ course: args.course, node: args.node, qid: args.qid, archived })
       }
       return JSON.stringify(await engine.questionUpdate(args.course, args.node, args.qid, args.patch))
     }))
@@ -2590,7 +2710,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 97 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 106 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

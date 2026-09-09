@@ -11,7 +11,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
-import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS } from './complexity.ts'
+import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { normChoice } from './grading.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
@@ -23,6 +23,9 @@ import type { Fm, CourseEntry, JournalRec } from './types.ts'
 
 export const QUEUE_GENERATE = '生成'
 export const QUEUE_REGEN = '重生成'
+
+/** 可视化块围栏语言（单节合计受 SECTION_VISUAL_CAP 约束；interactive 为落盘后的引用块）。 */
+const SECTION_VISUAL_LANGS: ReadonlySet<string> = new Set(['mermaid', 'svg', 'plot', 'chart', 'interactive'])
 
 export interface ExerciseMeta {
   ex: number
@@ -279,9 +282,9 @@ export class Content {
 ## 设计原则
 
 1. 节的划分、数量、顺序与类型配比完全由你根据课程内容、主题与讲解风格判断，选择最自然的讲解骨架：不套固定栏目，不设固定收尾段（无强制的过渡节/总结节）。
-2. 一节 = 一个可完成的学习单元（一个概念、一道例题、一次演示、一次动手练习、一个交互模拟或一段专家思维轨迹）；标题描述本节具体内容，不用栏目化通名；一节 = 学习页 1–2 屏——一个知识点需要 公式+推导+例题+图 才能讲完时拆成多个节；节内不允许再分小节（### 子标题会被质检门提示，建议并入正文或拆成独立节）。
+2. 一节 = 一个可完成的学习单元（一个概念、一道例题、一次演示、一次动手练习、一个交互模拟或一段专家思维轨迹）；标题描述本节具体内容，不用栏目化通名；一节 = 学习页 1–2 屏，上下文包 §9 的篇幅与可视化预算是**硬约束**（单节文字超预算 1.3 倍警告、2 倍拒收；可视化块 ≤2 个）——一个知识点需要 公式+推导+例题+图 才能讲完时拆成多个节，预算装不下的内容进新节；节内不允许再分小节（### 子标题会被质检门提示，建议并入正文或拆成独立节）。
 3. type 从节类型菜单选（概念/例题/演示/小结/练习/交互/思维）；练习节可选（整课可以没有练习节）；节类型配比按内容选组合模式，例如：连续 2–3 个概念节后跟一个练习节集中练、概念-演示穿插、全概念无练习节——不要机械地一节内容跟一节练习。
-4. 节数按上下文包 §9 复杂度档案锚定：目标节段数区间内的自然划分（简单节点不注水拆长课，复杂节点留够展开空间）；相邻节之间要有学习上的递进关系（逐节生成时会注入前节已生成正文保证连贯）。
+4. 节数按上下文包 §9 复杂度档案锚定：目标节段数区间内的自然划分（简单节点不注水拆长课，复杂节点留够展开空间；拿不准时偏向多一节——单节塞满两倍预算会被拒收返工，拆开讲更从容）；相邻节之间要有学习上的递进关系（逐节生成时会注入前节已生成正文保证连贯）。
 5. 若上下文包附有「学习者已有理解（Vault 先验）」段：划分与措辞尊重学习者已有的理解与记法——已会内容不重复铺陈，记法沿用其笔记写法。
 6. 上下文包 §10（先做后教）与 §11（专家思维轨迹）出现时是硬性要求：按其指令纳入挑战节与/或「思维」节，位置与写法照指令执行。
 
@@ -298,7 +301,7 @@ sections:
     visual: 公式|mermaid|图片|交互|示意图|函数图|图表 之一（本节的讲解主体可视化——学习页文字宜少、公式/图/交互宜多，几乎每节都有，确无才写「无」；示意图=\`\`\`svg、函数图=\`\`\`plot、图表=\`\`\`chart）
 `,
     课程节生成: `\
-<!-- learnhub:prompt/v7 -->
+<!-- learnhub:prompt/v8 -->
 # 课程节生成提示词（用户可编辑；系统附上：节清单、本节任务、前节已生成正文、上下文包）
 
 你是 learnhub 学习系统的课程写手。根据附后的材料，只写「本节任务」指定的这一节正文。
@@ -308,7 +311,7 @@ sections:
 1. 只输出一节：以 \`## 类型：标题\` 开头（标题与类型精确照抄本节任务），后接本节正文；不写其他节、不写 frontmatter。
 2. 只用前置已教概念与常识；「禁止使用的概念」一节列出的名称不得出现，也不得引用其结论。
 3. 不超出「领域边界」声明的区块范围；后继内容至多在自然收尾处一句话带过。
-4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
+4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案，超预算 1.3 倍警告、2 倍拒收），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；单节可视化块（mermaid/svg/plot/chart/交互件合计）≤2 个，超出质检门拒收；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
 5. 与「前一节已生成正文」自然衔接：不重复它讲过的内容，开头不复述前节结论。
 6. 排版约定：并列的误区/注意/要点块用 blockquote（> 首行加粗标签）；关键结论用独立公式（$$…$$）；mermaid 节点/边文本含 | { } " # 等特殊字符时必须整体双引号包裹（如 \`A["文本"]\`），否则渲染降级为源码。
 7. 别名按「规范约束」统一；图片用 \`![[<课程根>/课程图/xx.png]]\`。
@@ -321,7 +324,7 @@ sections:
 只输出本节正文（## 标题 + 内容），不要附加解释。
 `,
     '课程节生成-苏格拉底': `\
-<!-- learnhub:prompt/v7 -->
+<!-- learnhub:prompt/v8 -->
 # 课程节生成提示词——苏格拉底风格（用户可编辑；系统附上：节清单、本节任务、前节已生成正文、上下文包）
 
 你是 learnhub 学习系统的苏格拉底式导师。根据附后的材料，只写「本节任务」指定的这一节正文：少给结论，多给「好问题 + 逐步逼近的思路」，让学习者在回答问题中自己建构知识。
@@ -331,7 +334,7 @@ sections:
 1. 只输出一节：以 \`## 类型：标题\` 开头（标题与类型精确照抄本节任务），后接本节正文；不写其他节、不写 frontmatter。
 2. 只用前置已教概念与常识；「禁止使用的概念」一节列出的名称不得出现，也不得引用其结论。
 3. 不超出「领域边界」声明的区块范围；后继内容至多在自然收尾处一句话带过。
-4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
+4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案，超预算 1.3 倍警告、2 倍拒收），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；单节可视化块（mermaid/svg/plot/chart/交互件合计）≤2 个，超出质检门拒收；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
 5. 风格约束：以引导问题推进——先给观察/反例式好问题，再一小步逼近，问题后紧跟「锚点」（一两句最低限度的正确方向提示，不是答案）；结论只在问题链走完后给出。
 6. 与「前一节已生成正文」自然衔接：不重复它讲过的内容，开头不复述前节结论。
 7. 排版约定：并列的误区/注意/要点块用 blockquote（> 首行加粗标签）；关键结论用独立公式（$$…$$）；mermaid 节点/边文本含 | { } " # 等特殊字符时必须整体双引号包裹（如 \`A["文本"]\`），否则渲染降级为源码。
@@ -345,7 +348,7 @@ sections:
 只输出本节正文（## 标题 + 内容），不要附加解释。
 `,
     '课程节生成-费曼': `\
-<!-- learnhub:prompt/v7 -->
+<!-- learnhub:prompt/v8 -->
 # 课程节生成提示词——费曼风格（用户可编辑；系统附上：节清单、本节任务、前节已生成正文、上下文包）
 
 你是 learnhub 学习系统的费曼式讲解员。根据附后的材料，只写「本节任务」指定的这一节正文：假设学习者要把这节课讲给一个聪明的十二岁孩子听，用最朴素的类比和日常语言把概念讲透，再逐步引入正式记号。
@@ -355,7 +358,7 @@ sections:
 1. 只输出一节：以 \`## 类型：标题\` 开头（标题与类型精确照抄本节任务），后接本节正文；不写其他节、不写 frontmatter。
 2. 只用前置已教概念与常识；「禁止使用的概念」一节列出的名称不得出现，也不得引用其结论。
 3. 不超出「领域边界」声明的区块范围；后继内容至多在自然收尾处一句话带过。
-4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
+4. 可视化为主、文字为辅：讲解本体用公式/mermaid 图/svg 示意图/plot 函数图/chart 图表/交互件承载，文字只做引导与衔接（字数额度见上下文包 §9 复杂度档案，超预算 1.3 倍警告、2 倍拒收），不写大段解说；大多数节段配一个主体可视化（纯推理/衔接节可无；交互节为交互件本身）；单节可视化块（mermaid/svg/plot/chart/交互件合计）≤2 个，超出质检门拒收；节内不写 ### 子标题；不在正文自设练习/趁热练习环节——练习由题库与练习节承载。
 5. 风格约束：每个核心概念按「生活类比（并明确说类比在哪里失效）→ 朴素语言解释 → 正式定义/记号」推进；节末收一个「讲给别人听」的自测问题。
 6. 与「前一节已生成正文」自然衔接：不重复它讲过的内容，开头不复述前节结论。
 7. 排版约定：并列的误区/注意/要点块用 blockquote（> 首行加粗标签）；关键结论用独立公式（$$…$$）；mermaid 节点/边文本含 | { } " # 等特殊字符时必须整体双引号包裹（如 \`A["文本"]\`），否则渲染降级为源码。
@@ -683,12 +686,16 @@ cards:
     return [...hits].sort()
   }
 
-  /** 节形状门禁：节内 ### 子标题降 warn（破坏原子性，但不可程序修复——不硬拦）；节 prose 过长
-   * （warn >600 / finding >2000；长度剥离代码块/行内代码/公式/机器注释后计数——
-   * 公式与图表不占文字预算，可视化为辅的文字纪律才有硬约束）。 */
-  static checkSectionShape(body: string): { findings: string[]; warns: string[] } {
+  /** 节形状门禁：节内 ### 子标题降 warn（破坏原子性，但不可程序修复——不硬拦）；
+   * 节 prose 过长按档位锚点派生阈值（warn=预算×1.3 / finding=预算×2，见
+   * sectionLengthThresholds）；可视化块（mermaid/svg/plot/chart/交互件引用）超
+   * SECTION_VISUAL_CAP 即 finding——「1–2 屏」的屏占由文字与可视化共同构成，
+   * 长度治理两头都管（长度口径派生自复杂度档案，不另设全局阈值）。长度剥离
+   * 代码块/行内代码/公式/机器注释后计数——公式与图表不占文字预算。 */
+  static checkSectionShape(body: string, sectionWordBudget: number): { findings: string[]; warns: string[] } {
     const findings: string[] = []
     const warns: string[] = []
+    const { warn, block } = sectionLengthThresholds(sectionWordBudget)
     for (const part of body.split(/^## /m).slice(1)) {
       const nl = part.indexOf('\n')
       const title = (nl >= 0 ? part.slice(0, nl) : part).trim()
@@ -697,6 +704,13 @@ cards:
       if (/^### /m.test(md)) {
         warns.push(`节「${title}」内出现 ### 子标题（破坏节的原子性——一节只讲一个知识点；请并入正文或拆成多个节）`)
       }
+      // 交互件两种时态都算一块：落盘后的 ```interactive 引用块与生成时的 ```learnhub-interactive: 标记块
+      const visuals = [...md.matchAll(/^```([A-Za-z0-9_-]+)/gm)]
+        .map(m => (m[1]!.toLowerCase().startsWith('learnhub-interactive') ? 'interactive' : m[1]!.toLowerCase()))
+        .filter(l => SECTION_VISUAL_LANGS.has(l)).length
+      if (visuals > SECTION_VISUAL_CAP) {
+        findings.push(`节「${title}」可视化块 ${visuals} 个超过上限 ${SECTION_VISUAL_CAP}（mermaid/svg/plot/chart/交互件合计）：合并或精简可视化，或把内容拆成多个节`)
+      }
       const prose = md
         .replace(/```[\s\S]*?```/g, '')
         .replace(/`[^`\n]*`/g, '')
@@ -704,10 +718,10 @@ cards:
         .replace(/\$[^$\n]+\$/g, '')
         .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/\s+/g, '')
-      if (prose.length > 2000) {
-        findings.push(`节「${title}」正文过长（约 ${prose.length} 字）：一节 = 学习页 1–2 屏，把内容拆成多个节`)
-      } else if (prose.length > 600) {
-        warns.push(`节「${title}」正文偏长（约 ${prose.length} 字）：可视化为主、文字为辅，超过 600 字建议压缩或拆节`)
+      if (prose.length > block) {
+        findings.push(`节「${title}」正文过长（约 ${prose.length} 字 > 拒收线 ${block} 字 = 单节预算 ${sectionWordBudget}×2）：一节 = 学习页 1–2 屏，把内容拆成多个节`)
+      } else if (prose.length > warn) {
+        warns.push(`节「${title}」正文偏长（约 ${prose.length} 字 > 警告线 ${warn} 字 = 单节预算 ${sectionWordBudget}×1.3）：可视化为主、文字为辅，建议压缩或拆节`)
       }
     }
     return { findings, warns }
@@ -912,7 +926,7 @@ cards:
     findings.push(...Content.checkPredictBlocks(body))
     findings.push(...Content.checkVisualBlocks(body))
     const checkedBody = this.stripRoadmapSections(body)
-    const shape = Content.checkSectionShape(checkedBody)
+    const shape = Content.checkSectionShape(checkedBody, TIER_ANCHORS[nodeTierOf(graph, node)].sectionWordBudget)
     findings.push(...shape.findings)
     warns.push(...shape.warns)
     warns.push(...Content.checkMermaidQuotes(checkedBody))

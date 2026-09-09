@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
-import { B2_EASY_MIN_ATTEMPTS, B2_MASTERY_LOW, B2_NODE_MIN_ATTEMPTS, calibrationAdvice, tooEasyAdvice } from '../src/engine/bank-advice.ts'
+import {
+  B2_EASY_MIN_INTERVAL_DAYS, B2_EASY_MIN_REPS, B2_MASTERY_LOW, B2_NODE_MIN_ATTEMPTS,
+  adviceDismissKey, calibrationAdvice, tooEasyAdvice,
+} from '../src/engine/bank-advice.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 本文件课程图带 `bloom: 理解`（bloom 目标带断言的原料），与工厂默认图不同。 */
@@ -16,7 +19,7 @@ const GRAPH = [
   '      - { name: 入门, pre: [], opt: false, note: "", est: 20, bloom: 理解 }',
 ].join('\n')
 
-/** 题目行：stats 可播种（作答统计是检测的证据源）。
+/** 题目行：stats 可播种（作答统计是检测的证据源之一）。
  * stats 用多行块式落盘，与工厂 tfQuestion 的 flow 式不同字节 → 保留本地实现。 */
 function tfQuestion(id: string, opts: { attempts?: number; correct?: number } = {}): string[] {
   return [
@@ -28,6 +31,16 @@ function tfQuestion(id: string, opts: { attempts?: number; correct?: number } = 
       ? ['    stats:', `      attempts: ${opts.attempts}`, `      correct: ${opts.correct ?? 0}`]
       : []),
   ]
+}
+
+/** 「过于简单」门槛证据的 FSRS 块：零遗忘 + 间隔拉满。 */
+function easyFsrs(opts: { reps?: number; lapses?: number; interval?: number } = {}): Record<string, string | number> {
+  const interval = opts.interval ?? B2_EASY_MIN_INTERVAL_DAYS
+  return {
+    stability: 30, difficulty: 4,
+    last_review: '2026-08-01', due: `2026-08-${String(1 + interval).padStart(2, '0')}`,
+    reps: opts.reps ?? B2_EASY_MIN_REPS, lapses: opts.lapses ?? 0,
+  }
 }
 
 // ---- 纯规则（接缝 S25）----
@@ -50,27 +63,49 @@ test('calibrationAdvice：四道守门（stage/作答量/Mastery/答错证据）
   assert.match(calibrationAdvice({ ...base, bloom: undefined })!.instruction, /「理解」/, 'bloom 缺省回退理解层')
 })
 
-test('tooEasyAdvice：单题全对且作答量达门槛才标注，已归档跳过', () => {
-  const hit = tooEasyAdvice([
-    { id: 'a1', stats: { attempts: B2_EASY_MIN_ATTEMPTS, correct: B2_EASY_MIN_ATTEMPTS } },
-    { id: 'a2', stats: { attempts: B2_EASY_MIN_ATTEMPTS - 1, correct: B2_EASY_MIN_ATTEMPTS - 1 } },
-    { id: 'a3', stats: { attempts: 5, correct: 4 } },
-    { id: 'a4', archived: true, stats: { attempts: 9, correct: 9 } },
-  ])
-  assert.deepEqual(hit.map(h => h.qid), ['a1'], '只有全对且量足的未归档题出建议')
-  assert.equal(hit[0].kind, 'too_easy')
-  assert.match(hit[0].reason, /不自动移除/)
+test('tooEasyAdvice：调度证据口径——次数×零遗忘×间隔三关，任一不满足静默', () => {
+  const q = (overrides: Record<string, unknown> = {}) => ({
+    id: 'a1', q: 'a1 题干', ...overrides,
+  })
+  const hit = tooEasyAdvice([q({ fsrs: easyFsrs(), stats: { attempts: 9, correct: 9 } })])
+  assert.equal(hit.length, 1, '全部条件满足 → 出建议')
+  assert.equal(hit[0]!.kind, 'too_easy')
+  assert.equal(hit[0]!.reps, B2_EASY_MIN_REPS)
+  assert.equal(hit[0]!.interval_days, B2_EASY_MIN_INTERVAL_DAYS)
+  assert.match(hit[0]!.reason, /不自动移除/)
+  assert.match(hit[0]!.stem, /a1 题干/, '带题面摘录（面板条目可直接认题）')
+
+  assert.equal(tooEasyAdvice([q({ fsrs: easyFsrs({ reps: B2_EASY_MIN_REPS - 1 }), stats: { attempts: 9, correct: 9 } })]).length, 0,
+    '推进次数不足（含合成初始化的 reps）→ 静默')
+  assert.equal(tooEasyAdvice([q({ fsrs: easyFsrs({ lapses: 1 }), stats: { attempts: 9, correct: 8 } })]).length, 0,
+    '有遗忘记录 → 静默')
+  assert.equal(tooEasyAdvice([q({ fsrs: easyFsrs({ interval: B2_EASY_MIN_INTERVAL_DAYS - 1 }), stats: { attempts: 9, correct: 9 } })]).length, 0,
+    '间隔未拉长（如同日连刷堆出来的次数）→ 静默')
+  assert.equal(tooEasyAdvice([q({ fsrs: easyFsrs(), stats: { attempts: 9, correct: 8 } })]).length, 0,
+    '终身统计有答错（同日重复不推 FSRS 但记 stats）→ 静默')
+  assert.equal(tooEasyAdvice([q({ fsrs: easyFsrs() })]).length, 0,
+    '无作答统计兜底 → 静默（合成建卡的卡不该只凭 reps 标注）')
+  assert.equal(tooEasyAdvice([q({ archived: true, fsrs: easyFsrs(), stats: { attempts: 9, correct: 9 } })]).length, 0,
+    '已归档跳过')
+  assert.equal(tooEasyAdvice([q()]).length, 0, '未调度（无 fsrs）静默')
 })
 
-// ---- 门面：只读检测、建议先行、新节点不误报 ----
+test('adviceDismissKey：course/node/qid 三元定位', () => {
+  assert.equal(adviceDismissKey('数学', '入门', 'q1'), '数学/入门/q1')
+})
 
-test('review 期低掌握 + 答错证据 → 校准建议；全对题 → 归档标注；零写入', async () => {
+// ---- 门面：只读检测、建议先行、忽略清单、新节点不误报 ----
+
+test('review 期低掌握 + 答错证据 → 校准建议；调度证据全对的题 → 归档标注；零写入', async () => {
   await withVault({
     graph: GRAPH,
     notes: { 入门: { stage: 'review' } },
     banks: { 入门: [
       ...[1, 2, 3, 4, 5, 6].map(i => tfQuestion(`w${i}`, { attempts: 1, correct: 0 })),
-      tfQuestion('easy', { attempts: 4, correct: 4 }),
+      ['  - id: easy', '    kind: true_false', '    q: easy 题干：说法是否成立。', '    answer: true',
+        '    stats: { attempts: 4, correct: 4 }',
+        '    fsrs:',
+        ...Object.entries(easyFsrs()).map(([k, v]) => `      ${k}: ${v}`)],
     ] },
   }, async ({ engine, root }) => {
     const snapshot = async () => {
@@ -90,18 +125,52 @@ test('review 期低掌握 + 答错证据 → 校准建议；全对题 → 归档
       return out
     }
     const before = await snapshot()
-    const r = await engine.difficultyAdvice('数学') as { nodes: Array<Record<string, unknown>> }
+    const r = await engine.difficultyAdvice('数学') as { nodes: Array<Record<string, unknown>>; dismissed: number }
     const after = await snapshot()
     assert.deepEqual(after, before, '只读检测：建议先行，库与笔记零写入')
 
     assert.equal(r.nodes.length, 1)
     const entry = r.nodes[0]
     assert.equal(entry.node, '入门')
+    assert.equal(r.dismissed, 0, '无忽略条目')
     const calibration = entry.calibration as { reason: string; instruction: string }
     assert.match(calibration.reason, /题面难度与目标带失衡/)
     assert.match(calibration.instruction, /bloom 对准「理解」/)
-    const tooEasy = entry.too_easy as Array<{ qid: string }>
-    assert.deepEqual(tooEasy.map(t => t.qid), ['easy'], '全对题归档标注建议')
+    const tooEasy = entry.too_easy as Array<{ qid: string; stem: string }>
+    assert.deepEqual(tooEasy.map(t => t.qid), ['easy'], '调度证据全对的题出归档标注建议')
+    assert.match(tooEasy[0]!.stem, /easy 题干/, '建议带题面摘录')
+  })
+})
+
+test('忽略清单：dismiss 后建议不再出现（dismissed 计数带出），undo 恢复', async () => {
+  await withVault({
+    graph: GRAPH,
+    notes: { 入门: { stage: 'review' } },
+    banks: { 入门: [
+      ['  - id: easy', '    kind: true_false', '    q: easy 题干。', '    answer: true',
+        '    stats: { attempts: 9, correct: 9 }',
+        '    fsrs:',
+        ...Object.entries(easyFsrs()).map(([k, v]) => `      ${k}: ${v}`)],
+    ] },
+  }, async ({ engine }) => {
+    const r1 = await engine.difficultyAdvice('数学') as { nodes: unknown[]; dismissed: number }
+    assert.equal(r1.nodes.length, 1, '先出建议')
+
+    await engine.adviceDismiss('数学', '入门', 'easy')
+    const r2 = await engine.difficultyAdvice('数学') as { nodes: Array<Record<string, unknown>>; dismissed: number }
+    assert.deepEqual(r2.nodes, [], '被忽略的建议不再出现')
+    assert.equal(r2.dismissed, 1, 'dismissed 计数带出')
+
+    await engine.adviceDismiss('数学', '入门', 'easy', true) // undo
+    const r3 = await engine.difficultyAdvice('数学') as { nodes: unknown[]; dismissed: number }
+    assert.equal(r3.nodes.length, 1, 'undo 后建议恢复')
+    assert.equal(r3.dismissed, 0)
+
+    // 同条幂等
+    await engine.adviceDismiss('数学', '入门', 'easy')
+    await engine.adviceDismiss('数学', '入门', 'easy')
+    const r4 = await engine.difficultyAdvice('数学') as { dismissed: number }
+    assert.equal(r4.dismissed, 1, '重复忽略不叠加')
   })
 })
 

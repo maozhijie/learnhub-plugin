@@ -44,6 +44,9 @@ export interface BankQuestion {
   /** 来源正文节标题（mastery 会话按节轮转出题；缺省归入「通用」收尾轮）。 */
   section?: string
   archived?: boolean
+  /** 归档原因（skip=节点跳过自动归档 / cleanup=一键清理 / too_easy=过于简单建议
+   * 确认 / erratum=瑕疵题作废 / manual=人工）。恢复归档时一并清除（ADR-0032）。 */
+  archived_reason?: string
   /** 题目级 FSRS 调度（刷卡模型：每题一张卡，作答对错驱动推进）。 */
   fsrs?: FsrsBlock
   /** 作答统计（节点掌握度 = 各题该数据的汇总）。pending_rating = 复习刷卡流答对后
@@ -183,6 +186,7 @@ export function validateBank(doc: unknown, expectedNode?: string): { errors?: st
         ...(kind === 'numeric' && Number(e.tol) > 0 ? { tol: Number(e.tol) } : {}),
         ...(typeof e.section === 'string' && e.section.trim() ? { section: e.section.trim() } : {}),
         ...(e.archived === true ? { archived: true } : {}),
+        ...(typeof e.archived_reason === 'string' && e.archived_reason ? { archived_reason: e.archived_reason } : {}),
         // 调度/统计块由作答侧写入，schema 只透传不做内部校验
         ...(e.fsrs && typeof e.fsrs === 'object' ? { fsrs: e.fsrs as FsrsBlock } : {}),
         ...(e.stats && typeof e.stats === 'object' ? { stats: e.stats as BankQuestion['stats'] } : {}),
@@ -340,17 +344,52 @@ export class QuestionBank {
     await this.writeDoc(courseRoot, node, { ...doc, questions: next })
   }
 
-  /** 归档/取消归档单题（归档题在 questionsAll 里仍可见并带标记，作答侧过滤）。 */
-  async archiveQuestion(courseRoot: string, node: string, qid: string, archived: boolean): Promise<void> {
+  /** 归档/取消归档单题（归档题在 questionsAll 里仍可见并带标记，作答侧过滤）。
+   * reason 记入 archived_reason（ADR-0032：skip/cleanup/too_easy/erratum/manual），
+   * 恢复时与 flag 一并清除。 */
+  async archiveQuestion(courseRoot: string, node: string, qid: string, archived: boolean, reason?: string): Promise<void> {
     const doc = await this.loadDoc(courseRoot, node)
     if (!doc) throw new Error(`[question-archive] ${node} 没有题库文件。`)
     const list = Array.isArray(doc.questions) ? doc.questions as Array<Record<string, unknown>> : []
     const hit = list.find(q => (q as { id?: unknown }).id === qid)
     if (!hit) throw new Error(`[question-archive] ${node} 的题库没有 ${qid}。`)
-    if (archived) (hit as { archived?: boolean }).archived = true
-    else delete (hit as { archived?: boolean }).archived
+    const rec = hit as { archived?: boolean; archived_reason?: string }
+    if (archived) {
+      rec.archived = true
+      rec.archived_reason = reason?.trim() || 'manual'
+    } else {
+      delete rec.archived
+      delete rec.archived_reason
+    }
     const v = validateBank({ ...doc, questions: list }, node)
     if (v.errors) throw new Error(`[question-archive] 校验失败，未写入。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     await this.writeDoc(courseRoot, node, { ...doc, questions: list })
+  }
+
+  /** 批量归档/恢复（skip 扫描与一键清理消费）：一次 load-validate-write 落盘，
+   * 避免逐题整文件重写；返回实际改动的题数。reason 语义同 archiveQuestion。 */
+  async archiveQuestions(courseRoot: string, node: string, qids: string[], archived: boolean, reason?: string): Promise<number> {
+    if (!qids.length) return 0
+    const doc = await this.loadDoc(courseRoot, node)
+    if (!doc) throw new Error(`[question-archive] ${node} 没有题库文件。`)
+    const list = Array.isArray(doc.questions) ? doc.questions as Array<Record<string, unknown>> : []
+    const want = new Set(qids)
+    let changed = 0
+    for (const raw of list) {
+      const q = raw as { id?: unknown; archived?: boolean; archived_reason?: string }
+      if (!want.has(String(q.id))) continue
+      if (archived) {
+        q.archived = true
+        q.archived_reason = reason?.trim() || 'manual'
+      } else {
+        delete q.archived
+        delete q.archived_reason
+      }
+      changed++
+    }
+    const v = validateBank({ ...doc, questions: list }, node)
+    if (v.errors) throw new Error(`[question-archive] 校验失败，未写入。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    await this.writeDoc(courseRoot, node, { ...doc, questions: list })
+    return changed
   }
 }
