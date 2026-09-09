@@ -1928,7 +1928,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       source: { type: 'string', required: true, description: 'auto (evidence-mapped) / self / ai' },
       minutes: { type: 'number', required: true, description: 'Focused minutes of this execution (1-1440); credited as XP 1:1' },
       rating: { type: 'number', description: 'Performance rating 1-4 (required unless source=auto)' },
-      evidence: { type: 'object', description: 'source=auto only: {accuracy: 0-1, self_help?: count}' },
+      evidence: { type: 'object', additionalProperties: true, description: 'source=auto only: {accuracy: 0-1, self_help?: count}' },
       note: { type: 'string', description: 'Free note (e.g. what was practiced, receipt reference)' },
     },
     (args: { skill: string; source: string; minutes: number; rating?: number; evidence?: { accuracy?: number; self_help?: number }; note?: string }) =>
