@@ -19,6 +19,12 @@ export function normAnswer(s: string): string {
   return String(s).trim().replace(/\s+/g, '')
 }
 
+/** 填空答案归一（唯一答案填空口径，ADR-0029）：NFKC 折叠全角/半角 → 去全部空白 → 小写。
+ * 唯一性由出题契约保证（术语/名称/符号），判卷只吸收书写差异（空格、全半角、大小写）。 */
+export function normBlank(s: string): string {
+  return normAnswer(s.normalize('NFKC')).toLowerCase()
+}
+
 /** 数值解析（容差判卷用）；解析失败返回 null。 */
 export function numericOf(s: string): number | null {
   const t = normAnswer(s)
@@ -32,6 +38,11 @@ export function numericOf(s: string): number | null {
   if (pct) return Number(pct[1]) / 100
   return null
 }
+
+/** numeric 缺省容差：极小相对容差（1e-9×|答案|，下限 1e-12），只吸收浮点表示毛刺；
+ * 有业务意义的容差必须由出题显式给 tol（prompt 硬约束）。 */
+const NUMERIC_DEFAULT_REL_TOL = 1e-9
+const NUMERIC_MIN_TOL = 1e-12
 
 /** 三段规则判卷：归一相等 → 数值容差 → 逗号列表集合相等（全角逗号兼容）。 */
 export function answersEqual(user: string, expected: string, tol?: number): boolean {
@@ -82,7 +93,7 @@ export interface AlloQuestion {
   answer: string | boolean | string[]
   options?: string[]
   explanation?: string
-  /** numeric 题的容差（差值 ≤ tol 判对；缺省 0）。 */
+  /** numeric 题的容差（差值 ≤ tol 判对；缺省极小相对容差 1e-9×|答案|，只防浮点毛刺）。 */
   tol?: number
 }
 
@@ -102,8 +113,9 @@ export function evaluateAllo(q: AlloQuestion, response: unknown): { score: numbe
     case 'fill_in_blank': {
       const s = typeof response === 'string' ? response.trim() : ''
       if (!s) throw new Error('fill_in_blank 作答不能为空')
+      // 唯一答案填空（ADR-0029）：书写差异归一（空白/全半角/大小写），不做代数等价
       correct = Array.isArray(q.answer) && q.answer.some(c =>
-        typeof c === 'string' && c.trim().toLowerCase() === s.toLowerCase())
+        typeof c === 'string' && normBlank(c) === normBlank(s))
       break
     }
     case 'reflection': {
@@ -124,7 +136,9 @@ export function evaluateAllo(q: AlloQuestion, response: unknown): { score: numbe
       if (!s) throw new Error('numeric 作答不能为空')
       const nu = numericOf(s)
       const ne = numericOf(String(q.answer))
-      correct = nu !== null && ne !== null && Math.abs(nu - ne) <= (q.tol ?? 0)
+      // tol 缺省给极小相对容差：只吸收浮点表示毛刺，有意义的容差仍须显式给 tol
+      correct = nu !== null && ne !== null
+        && Math.abs(nu - ne) <= (q.tol ?? Math.max(Math.abs(ne) * NUMERIC_DEFAULT_REL_TOL, NUMERIC_MIN_TOL))
       break
     }
     case 'ordering': {

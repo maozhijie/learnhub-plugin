@@ -77,3 +77,11 @@ html, body, #root {
 
 /* 日历热力图 */
 .heat-cell { width: 100%; aspect-ratio: 1; border-radius: 3px; }
+
+/* 判卷反馈/直通卡解析块（quiz-feedback）：解析走块级 markdown（三段分点+块级公式），
+ * 字号与段距比正文收一档，读起来不挤 */
+.md-body.quiz-feedback { font-size: 14px; line-height: 1.75; }
+.md-body.quiz-feedback p { margin: 0.45em 0; }
+.md-body.quiz-feedback ul, .md-body.quiz-feedback ol { margin: 0.45em 0; padding-left: 1.5em; }
+.md-body.quiz-feedback li { margin: 0.2em 0; }
+.md-body.quiz-feedback .katex-display { margin: 0.5em 0; }

@@ -1599,6 +1599,9 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   tool('learnhub_data_check',
     'Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.',
     {}, () => run('learnhub_data_check', async () => JSON.stringify(await engine.dataCheck())))
+  tool('learnhub_question_audit',
+    'Read-only content audit of all question banks (course banks + note-source mirror). Flags legacy questions that violate current contracts: fill_in_blank answers that look numeric or algebraic (ADR-0029 unique-answer blanks), notation violations in stem/options/explanation (bare ^ or _ outside $...$, LaTeX commands without $ delimiters), YAML double-quote escape corruption (control characters), and over-long explanations. Returns a JSON findings list; never repairs or writes.',
+    {}, () => run('learnhub_question_audit', async () => JSON.stringify(await engine.questionAudit())))
   tool('learnhub_skip',
     'Mark a node as skipped (learner already knows it) or un-skip. Skipped nodes count as passed: they leave the recommendation queue and no longer block successors.',
     {

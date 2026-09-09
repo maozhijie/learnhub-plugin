@@ -31,7 +31,7 @@ export const RENDERERS: RendererSpec[] = [
   {
     lang: 'math',
     label: '数学公式',
-    hint: 'KaTeX 排版；行内 $...$、独立成行 $$...$$，直接写在正文里，不用代码块',
+    hint: '一切数学一律用它：行内 $...$、独立成行 $$...$$，直接写在正文里，不用代码块；禁止 ASCII 记号（x^2、a_1）与不带 $ 定界符的裸 LaTeX 命令',
     example: '行内 $E = mc^2$；独立公式 $$\\int_0^1 x^2\\,dx = \\tfrac{1}{3}$$',
   },
   {

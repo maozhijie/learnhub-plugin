@@ -44,3 +44,21 @@ test('P5: 项目目标反编译模板——版本标记、plan/subgraph 双产�
   assert.match(tpl, /学习者已有理解（Vault 先验）/, '先验段注入指令（尊重已有理解，不从零铺已会节点）')
   assert.match(tpl, /提案/, '双产物走人审提案通道（apply 前零 canonical 写入）')
 })
+
+// ---- v9 题目生成契约（ADR-0029/0030）：唯一答案填空 + 记法契约 + YAML 单引号规则 ----
+
+test('P2: 题目生成/笔记出题模板升到 v9 并携带新契约锚点', () => {
+  for (const kind of ['题目生成', '笔记出题'] as const) {
+    const tpl = Content.PROMPT_KINDS[kind]!
+    assert.ok(Content.promptVersionOf(tpl) >= 9, `${kind} 应升到 v9`)
+    assert.match(tpl, /只考唯一写法的术语/, `${kind} 填空唯一答案锚点`)
+    assert.match(tpl, /数学记法契约/, `${kind} 记法契约锚点`)
+    assert.match(tpl, /单引号/, `${kind} YAML 单引号规则锚点`)
+    assert.match(tpl, /禁用双引号/, `${kind} YAML 双引号禁令锚点`)
+    assert.match(tpl, /≤4 句/, `${kind} 解析限长锚点`)
+    assert.match(tpl, /最易错点/, `${kind} 解析三段结构锚点`)
+  }
+  const quiz = Content.PROMPT_KINDS['题目生成']!
+  assert.match(quiz, /数字与代数式一律不进填空/, '数字与代数式不进填空')
+  assert.match(quiz, /必须用单选/, '表达式答案走单选')
+})

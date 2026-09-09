@@ -39,7 +39,7 @@ export interface BankQuestion {
   difficulty?: number
   uses?: string[]
   tags?: string[]
-  /** numeric 题的数值容差（缺省 0）。 */
+  /** numeric 题的数值容差（缺省极小相对容差，判卷侧兜底浮点毛刺）。 */
   tol?: number
   /** 来源正文节标题（mastery 会话按节轮转出题；缺省归入「通用」收尾轮）。 */
   section?: string

@@ -65,7 +65,7 @@ import { decompileGoalOf, decompileRepairPrompt, decompileTerms, splitDecompileD
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
-import { QuestionBank } from './question-bank.ts'
+import { QuestionBank, validateBank } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
 import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, isExcludedPath, normalizeSourcePath, readNoteSourceExcludes, sourceHint, stripFrontmatter, titleOfBody, writeNoteSourceExcludes } from './note-source.ts'
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
@@ -91,6 +91,8 @@ import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
 import { findDuplicateStem, existingStemsPromptBlock, bankStemList } from './question-dedup.ts'
+import { repairQuestionStrings, questionViolation, auditQuestion } from './question-hygiene.ts'
+import type { QuestionAuditReport } from './question-hygiene.ts'
 import { parseSectionTitle } from '../../shared/content-renderers.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration, milestonePrice } from './xp.ts'
 import { XP_STREAK_GRACE_DAYS, XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID, CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
@@ -308,6 +310,57 @@ export class LearnhubEngine {
   /** 只读数据体检：盘点 Missing/Broken，不做任何修复或清理。 */
   async dataCheck(): Promise<DataCheckReport> {
     return dataCheck(this.paths)
+  }
+
+  /** 题库内容体检（ADR-0029/0030 存量盘点）：只读扫描全部课程题库与笔记源镜像题库，
+   * 按现行契约标出违规存量题——表达式/数字填空、记法违规（裸 ^/_/LaTeX 命令）、
+   * 转义损坏、超长解析。零写入零修复，清单供人工决定走归档重生成/定向补题。 */
+  async questionAudit(): Promise<QuestionAuditReport> {
+    const report: QuestionAuditReport = { banks: 0, questions: 0, flagged: 0, findings: [] }
+    const scanBankFile = async (courseName: string, path: string): Promise<void> => {
+      let text: string
+      try {
+        text = await readFile(path, 'utf8')
+      } catch {
+        return // 读不到的损坏档归 dataCheck 管，这里只盘点可解析题库
+      }
+      let doc: unknown
+      try {
+        doc = YAML.parse(text)
+      } catch {
+        return
+      }
+      const v = validateBank(doc)
+      if (v.errors || !v.spec) return
+      report.banks++
+      for (const q of v.spec.questions) {
+        report.questions++
+        const issues = auditQuestion(q)
+        if (issues.length) {
+          report.flagged++
+          report.findings.push({ course: courseName, node: v.spec.node, id: q.id, kind: q.kind, q: q.q.slice(0, 80), issues })
+        }
+      }
+    }
+    for (const entry of await this.registry.load()) {
+      const dir = `${this.paths.courseRoot(entry.root)}/题库`
+      let files: string[] = []
+      try {
+        files = (await readdir(dir)).filter(f => f.endsWith('.yaml'))
+      } catch {
+        continue // 课程还没有题库 = 合法空
+      }
+      for (const f of files) await scanBankFile(entry.name, `${dir}/${f}`)
+    }
+    const nsDir = `${this.paths.noteSourceDir}/题库`
+    try {
+      for (const f of (await readdir(nsDir)).filter(f => f.endsWith('.yaml'))) {
+        await scanBankFile('（笔记源镜像）', `${nsDir}/${f}`)
+      }
+    } catch {
+      // 无笔记源镜像 = 合法空
+    }
+    return report
   }
 
   async statusJson(): Promise<StatusDoc> {
@@ -4572,6 +4625,8 @@ export class LearnhubEngine {
     course: string; node: string; added: number; skipped: number; total: number
     duplicates: Array<{ q: string; against: string }>
     rejected: Array<{ q: string; reason: string }>
+    /** 转义损坏修复处数（ADR-0030：确定性修复留痕，不静默）。 */
+    escapesRepaired: number
   }> {
     if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
       throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认。`)
@@ -4622,6 +4677,7 @@ export class LearnhubEngine {
     // doc.node 只是模型对节点的复述（常自创短名），落盘位置由入参决定，不作硬校验
     let added = 0
     let skipped = 0
+    let escapesRepaired = 0
     const duplicates: Array<{ q: string; against: string }> = []
     const rejected: Array<{ q: string; reason: string }> = []
     for (const item of doc.questions.slice(0, requested)) {
@@ -4629,7 +4685,17 @@ export class LearnhubEngine {
       const q = { ...(item as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有题数自动编号，避免与既有 q1 冲突
       if (opts?.generic) q.section = '通用' // 综合题不绑节（轮装配时统一收尾）
+      // 题目卫生（ADR-0029/0030）：先确定性修复转义损坏（计数留痕），修不好或记法/边界违规的题拒收
+      const hygiene = repairQuestionStrings(q)
+      escapesRepaired += hygiene.repaired
       const stem = typeof q.q === 'string' ? q.q : ''
+      const violation = hygiene.unrepairable
+        ? '题面含无法修复的转义损坏（控制字符）——YAML 双引号吃掉了 LaTeX 转义'
+        : questionViolation(q)
+      if (violation) {
+        rejected.push({ q: stem.slice(0, 80), reason: violation })
+        continue
+      }
       // 定向补生成强校验（#117）：不符先按标题归一化回填，仍无法归类拒收并报告
       if (opts?.section) {
         const sec = typeof q.section === 'string' ? q.section : ''
@@ -4656,9 +4722,9 @@ export class LearnhubEngine {
         skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
       }
     }
-    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/重复/无法归节），一道都没入库。')
+    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/记法违规/重复/无法归节），一道都没入库。')
     const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected }
+    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected, escapesRepaired }
   }
 
   /** 逐节出题（逐节管线第 2 段）：每个内容节一次模型调用（出题量随档位锚点：
@@ -4668,7 +4734,7 @@ export class LearnhubEngine {
   async questionGenerateSections(
     courseKey: string | undefined, node: string,
     llm: (prompt: string) => Promise<string>,
-  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number }> {
+  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number }> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -4698,6 +4764,7 @@ export class LearnhubEngine {
     let added = 0
     let sections = 0
     let duplicates = 0
+    let escapesRepaired = 0
     for (const s of manifest) {
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
@@ -4720,7 +4787,11 @@ export class LearnhubEngine {
       for (const rawQ of doc.questions) {
         const q: Record<string, unknown> = { ...((rawQ ?? {}) as Record<string, unknown>), section: s.id }
         delete q.id
+        // 题目卫生（ADR-0029/0030）：转义修复留痕，修不好或记法/边界违规的题丢弃
+        const hygiene = repairQuestionStrings(q)
+        escapesRepaired += hygiene.repaired
         const stem = typeof q.q === 'string' ? q.q : ''
+        if (hygiene.unrepairable || questionViolation(q)) continue
         if (findDuplicateStem(stem, existingStems)) { duplicates++; continue }
         try {
           await this.bank.addQuestion(this.paths.courseRoot(c.root), node, q)
@@ -4731,7 +4802,7 @@ export class LearnhubEngine {
         }
       }
     }
-    return { course: c.name, node, added, sections, duplicates }
+    return { course: c.name, node, added, sections, duplicates, escapesRepaired }
   }
 
   /** 交互件成绩结算：面板 sandbox iframe 上报 LEARNHUB_COMPLETE → practice 流水 +
