@@ -40,7 +40,7 @@ export interface AdvanceLog {
 
 interface PushedResult {
   fs: FsrsBlock
-  stats: { attempts: number; correct: number; last: string }
+  stats: { attempts: number; correct: number; last: string; last_correct: boolean }
   log: AdvanceLog
 }
 

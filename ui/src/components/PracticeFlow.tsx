@@ -175,9 +175,13 @@ export default function PracticeFlow(props: {
   const round = roundIdx < rounds.length ? rounds[roundIdx] : null
   const qs = round?.type === 'quiz' ? round.questions ?? [] : []
   const current = qs[qIdx]
-  // 可作答题数（直通题不计，ADR-0027）：连对目标按它算，全直通轮为 0（翻完即过）
-  const answerableLen = qs.filter(q => !q.advancedToday).length
+  // 可作答题数（直通题不计，ADR-0027）：连对目标按它算，全直通轮为 0（翻完即过）。
+  // 本会话已真实作答的题即便刷新后带上 advancedToday 也仍算可作答——否则静默刷新会
+  // 把刚答的题逐出目标分母，连对机制被架空（审查 #115 修复）。
+  const answerableLen = qs.filter(q => !q.advancedToday || answeredIds.has(q.id)).length
   const passTarget = passStreakFor(answerableLen)
+  /** 直通卡只给「本会话还没碰过」的已推进题；会话内作答过的一律按普通作答卡走完结果态。 */
+  const revealPending = !!current?.advancedToday && !answeredIds.has(current.id)
 
   useEffect(() => { props.onPassChange?.(allDone) }, [allDone, props])
 
@@ -257,7 +261,7 @@ export default function PracticeFlow(props: {
 
   /** 直通卡「下一题」（ADR-0027）：对错中性——计入本会话已看集合即可，不产连对、
    * 不记 outcomes。组内再无可看的题时收轮：全直通轮翻完直接过关；混合轮（可作答
-   * 题已用尽仍未达标）落 struggle，与既有口径一致。 */
+   * 题已用尽仍未达标）留在本轮落 struggle，与既有口径一致。 */
   const revealNext = () => {
     if (!current) return
     const seen = new Set(answeredIds).add(current.id)
@@ -266,7 +270,6 @@ export default function PracticeFlow(props: {
     if (next) { setQIdx(qs.indexOf(next)); setAnswered(null); return }
     if (answerableLen === 0 && round) setDoneRounds(d => new Set(d).add(round.key))
     else setStruggling(true)
-    nextRound()
   }
 
   /** struggle → AI 再出题：出完回到本步开头重读/重做（新题经 questions 刷新进轮，
@@ -399,13 +402,12 @@ export default function PracticeFlow(props: {
               第 {qIdx + 1}/{qs.length} 题 · 连对 {streak}/{passTarget}
             </Text>
           </Space>
-          {current && (current.advancedToday ? (
-            <RevealCard key={current.id} question={current} onNext={revealNext}
-              onPrev={roundIdx > 0 ? prevRound : undefined} />
+          {current && (revealPending ? (
+            <RevealCard key={current.id} question={current} onNext={revealNext} />
           ) : (
             <QuestionCard key={current.id} course={props.course} node={props.node} question={current} noRedo onDone={handleDone} />
           ))}
-          {!current?.advancedToday && (answered || roundIdx > 0) && (
+          {!revealPending && (answered || roundIdx > 0) && (
             <Space size={8} style={{ alignSelf: 'flex-end' }}>
               {roundIdx > 0 && <Button size='small' onClick={prevRound}>上一步</Button>}
               {answered && (

@@ -926,9 +926,14 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       }
     }
     void poll()
-    // 页签保活（ADR-0027）：非激活页签跳过取数，定时器只保留节拍
+    // 页签保活（ADR-0027）：非激活页签跳过取数，定时器只保留节拍；切回即补一次取数
+    const onTabActive = (e: Event) => { if ((e as CustomEvent).detail === 'learn') void poll() }
+    window.addEventListener('learnhub:tab', onTabActive)
     const timer = setInterval(() => { if (isActiveTab('learn')) void poll() }, 5000)
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('learnhub:tab', onTabActive)
+    }
   }, [load])
   useEffect(() => {
     const h = () => { void frame.reload(); void load() }

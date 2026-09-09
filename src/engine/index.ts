@@ -1326,10 +1326,10 @@ export class LearnhubEngine {
   }
 
   /** 题目 → 作答视图（questions 与 reviewQueue 共用；matching 右列打乱防泄题）。
-   * opts.reveal（questions 通道专属）：本学习日已推进的题带出答案/解析——直通卡
-   * 披露与作答响应同一披露边界（都发生在「当日额度已用掉」之后）；复习队列是
-   * 主动回忆面，永不带答案。 */
-  private questionView(q: BankQuestion, i: number, opts?: { today?: string; reveal?: boolean }): Record<string, unknown> {
+   * opts.today（questions 通道专属）= 当前学习日：本学习日已推进的题带出答案/解析
+   * ——直通卡披露与作答响应同一披露边界（都发生在「当日额度已用掉」之后）；
+   * 复习队列是主动回忆面，不传 today，永不带答案。 */
+  private questionView(q: BankQuestion, i: number, opts?: { today?: string }): Record<string, unknown> {
     const advancedToday = opts?.today !== undefined && alreadyAdvanced(q, opts.today)
     return {
       id: q.id, kind: q.kind, q: q.q, no: i + 1,
@@ -1343,7 +1343,7 @@ export class LearnhubEngine {
       attempts: q.stats?.attempts ?? 0,
       // 最近一次作答对错（stats.last_correct；旧数据无此字段 = null）
       lastCorrect: q.stats?.last_correct ?? null,
-      ...(opts?.reveal && advancedToday
+      ...(advancedToday
         ? { advancedToday: true, answer: revealAnswer(q), explanation: q.explanation ?? '' }
         : {}),
     }
@@ -1361,7 +1361,7 @@ export class LearnhubEngine {
       return {
         course: NOTE_SOURCE_COURSE, node,
         questions: bank.questions.filter(q => q.archived !== true)
-          .map((q, i) => this.questionView(q, i, { today, reveal: true })),
+          .map((q, i) => this.questionView(q, i, { today })),
       }
     }
     const c = await this.registry.resolve(courseKey)
@@ -1371,7 +1371,7 @@ export class LearnhubEngine {
       course: c.name, node,
       mastery: masteryOfFm(state[node]),
       questions: bank.questions.filter(q => q.archived !== true)
-        .map((q, i) => this.questionView(q, i, { today, reveal: true })),
+        .map((q, i) => this.questionView(q, i, { today })),
     }
   }
 

@@ -209,6 +209,7 @@ export default function LessonView(props: { course: string; node: string; frame:
     let timer: ReturnType<typeof setTimeout>
     let wasActive = false
     const tick = async () => {
+      clearTimeout(timer)
       // 页签保活：非激活页签跳过取数（组件常驻，定时器只保留节拍）
       if (!isActiveTab('learn')) { timer = setTimeout(() => void tick(), 15000); return }
       const mine = await poll()
@@ -232,8 +233,17 @@ export default function LessonView(props: { course: string; node: string; frame:
       if (v !== undefined) lastVersionRef.current = v
       timer = setTimeout(() => void tick(), active ? 3000 : 15000)
     }
+    // 切回学习页签即补一次 tick：隐藏期间错过的完成边沿在这里补判（ADR-0027）
+    const onTabActive = (e: Event) => {
+      if ((e as CustomEvent).detail === 'learn') void tick()
+    }
+    window.addEventListener('learnhub:tab', onTabActive)
     void tick()
-    return () => { stopped = true; clearTimeout(timer) }
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+      window.removeEventListener('learnhub:tab', onTabActive)
+    }
   }, [poll, refresh, frame.reload, reloadTick])
 
   const generate = async () => {

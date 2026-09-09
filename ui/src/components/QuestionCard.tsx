@@ -376,12 +376,12 @@ export default function QuestionCard(props: {
 }
 
 /** 直通卡（ADR-0027）：本学习日已推进过的题——题面、最近一次作答对错、正确答案与
- * 解析直接可见，无作答控件，仅可前往下一题。对错中性：不计连对、不入练习证据、
- * 零 XP，也不落作答流水（无提交）；答案/解析由 questions 通道按已推进披露。 */
+ * 解析直接可见，无作答控件、仅「下一题」（设计口径锁死，不设其他按钮）。
+ * 对错中性：不计连对、不入练习证据、零 XP，也不落作答流水（无提交）；
+ * 答案/解析由 questions 通道按已推进披露。 */
 export function RevealCard(props: {
   question: QuestionItem
   onNext: () => void
-  onPrev?: () => void
 }) {
   const q = props.question
   return (
@@ -416,7 +416,6 @@ export function RevealCard(props: {
         </div>
       )}
       <Space size={8} style={{ alignSelf: 'flex-end' }}>
-        {props.onPrev && <Button size='small' onClick={props.onPrev}>上一步</Button>}
         <Button type='primary' size='small' onClick={props.onNext}>下一题</Button>
       </Space>
     </div>
