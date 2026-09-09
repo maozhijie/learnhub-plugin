@@ -9,7 +9,7 @@
 import { mkdir, readFile, rename, appendFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { nowIso, dayOfTs } from './dates.ts'
-import type { JournalRec, PracticeRec, ProposalRec, ReviewRec, EArchiveRec } from './types.ts'
+import type { JournalRec, PracticeRec, ProposalRec, ReviewRec, EArchiveRec, ErratumRec } from './types.ts'
 import type { ReceiptLogRec } from './receipts.ts'
 import type { HabitRepeatRec } from './habits.ts'
 import type { PinRec } from './goals.ts'
@@ -23,6 +23,24 @@ export async function atomicWrite(path: string, data: string): Promise<void> {
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}`
   await writeFile(tmp, data, 'utf8')
   await rename(tmp, path)
+}
+
+/** 勘误冲正的读侧净值（ADR-0031）：key-error 的作答按勘误记录替换 xp/对错；
+ * defective/overridden 的作答整体剔除。原始流水不动，聚合账（XP、作答统计）
+ * 一律先过本函数再算——「行为流水即事实」包含冲正凭证本身。 */
+export function netPracticeRecs<T extends PracticeRec>(recs: readonly T[], errata: readonly ErratumRec[]): T[] {
+  const byKey = new Map(errata.map(e => [`${e.target_ts}|${e.qid}`, e]))
+  const out: T[] = []
+  for (const r of recs) {
+    const e = r.ts ? byKey.get(`${r.ts}|${r.qid ?? ''}`) : undefined
+    if (!e) {
+      out.push(r as T)
+    } else if (e.verdict === 'key-error') {
+      out.push({ ...(r as T), xp: e.xp, correct: e.correct ?? r.correct })
+    }
+    // defective/overridden：本次作答作废，不出现在净流里
+  }
+  return out
 }
 
 export class Store {
@@ -146,12 +164,13 @@ export class Store {
     return out
   }
 
-  /** 节点作答统计（attempts/judged/correct/accuracy + 正确率）。 */
+  /** 节点作答统计（attempts/judged/correct/accuracy + 正确率）。勘误冲正按净值计
+   * （ADR-0031）：被作废的作答剔除，改判对的对错以勘误记录为准。 */
   async attemptStats(course: string, node: string): Promise<{
     attempts: number; judged: number; correct: number; accuracy: number | null
   }> {
-    const all = await this.practiceAll()
-    const hit = all.filter(r => r.course === course && r.node === node)
+    const [all, errata] = await Promise.all([this.practiceAll(), this.erratumAll()])
+    const hit = netPracticeRecs(all, errata).filter(r => r.course === course && r.node === node)
     const judged = hit.filter(r => r.correct !== null)
     const right = judged.filter(r => r.correct === true).length
     return {
@@ -390,6 +409,29 @@ export class Store {
    * 展示原料，坏一行不值得一档Broken 拦住全部曲线）。 */
   async habitRepeatsAll(): Promise<HabitRepeatRec[]> {
     return this.readJsonl<HabitRepeatRec>(this.paths.habitRepeatLogPath)
+  }
+
+  // ---- 勘误冲正流水（ADR-0031）----
+
+  /** 追加一条勘误冲正记录（JSONL 追加，只增）。原始 practice 流水永不改写：
+   * 冲正是显式的抵消凭证，聚合账读侧按净值读。 */
+  async appendErratum(rec: Omit<ErratumRec, 'ts'> & { ts?: string }): Promise<ErratumRec> {
+    const full: ErratumRec = {
+      ts: rec.ts ?? nowIso(),
+      course: rec.course, node: rec.node, qid: rec.qid,
+      target_ts: rec.target_ts, verdict: rec.verdict, xp: rec.xp,
+      ...(rec.correct !== undefined ? { correct: rec.correct } : {}),
+      ...(rec.revision !== undefined ? { revision: rec.revision } : {}),
+      ...(rec.reason ? { reason: rec.reason } : {}),
+    }
+    await mkdir(this.paths.centerStateDir, { recursive: true })
+    await appendFile(this.paths.erratumLogPath, JSON.stringify(full) + '\n', 'utf8')
+    return full
+  }
+
+  /** 全部勘误冲正记录（文件缺失 = Missing 合法空态）。 */
+  async erratumAll(): Promise<ErratumRec[]> {
+    return this.readJsonl<ErratumRec>(this.paths.erratumLogPath)
   }
 
   // ---- utils ----

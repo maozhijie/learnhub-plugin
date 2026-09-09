@@ -59,7 +59,7 @@ import { decompileGoalOf, decompileRepairPrompt, decompileTerms, splitDecompileD
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
-import { QuestionBank } from './question-bank.ts'
+import { QuestionBank, questionAnswerShapeError } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
 import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, isExcludedPath, normalizeSourcePath, readNoteSourceExcludes, sourceHint, stripFrontmatter, titleOfBody, writeNoteSourceExcludes } from './note-source.ts'
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
@@ -82,20 +82,21 @@ import { YAML } from './yaml.ts'
 import { Sessions, assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from './sessions.ts'
 import type { NodeStat, WindowStat } from './sessions.ts'
 import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
-import { atomicWrite } from './store.ts'
-import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
+import { atomicWrite, netPracticeRecs } from './store.ts'
+import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence, answerDiff, DISPUTE_REVIEW_SYSTEM, parseDisputeReview } from './grading.ts'
+import type { DisputeVerdict } from './grading.ts'
 import { findDuplicateStem, existingStemsPromptBlock, bankStemList } from './question-dedup.ts'
 import { parseSectionTitle } from '../../shared/content-renderers.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration, milestonePrice } from './xp.ts'
 import { XP_STREAK_GRACE_DAYS, XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID, CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
-import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
+import type { CourseEntry, EArchiveRec, ErratumRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
 import type { DataCheckReport } from './data-check.ts'
 import type { ProposalRec } from './types.ts'
 import { PROPOSAL_KINDS } from './types.ts'
 import type {
-  AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DoctorDoc, ExperimentProposeResult,
+  AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DisputeApplyResult, DisputeReviewResult, DoctorDoc, ExperimentProposeResult,
   ExperimentStartResult, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
   GraphProposeResult, CalibrationProfileDoc, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
@@ -1985,6 +1986,9 @@ export class LearnhubEngine {
       scheduled: advanced,
       pendingRating,
       ...(previews ? { previews } : {}),
+      // 判错差异摘要（勘误申诉前置）：规则题点名「漏选/多选/第几项」——判错反馈
+      // 必须让学习者能对上自己的作答，否则只能从解析反推键（ADR-0031 的误诊根源）
+      ...(correct ? {} : { diff: answerDiff(q, answer) ?? undefined }),
       // XP 时间账本：本次作答的结算结果
       xp: settle.xp,
       xp_reason: settle.reason,
@@ -2975,12 +2979,15 @@ export class LearnhubEngine {
    * 随作答证据积累自动校准；days = 剩余预算 ÷ 每日目标。 */
   async xpStatus(): Promise<XpStatus> {
     const { today, cutoff } = await this.learningDay()
-    const [practice, journal, activity, goal] = await Promise.all([
+    const [rawPractice, journal, activity, goal] = await Promise.all([
       this.store.practiceAll(),
       this.store.journalTail(null, Number.MAX_SAFE_INTEGER),
       this.store.activityCounts(cutoff),
       readDailyGoal(this.paths),
     ])
+    // 勘误冲正按净值入 XP 账（ADR-0031）：streak 口径不变（行为条数，原流水仍在），
+    // XP 值按冲正后的净值替换（作废归零、改判按对题补记）
+    const practice = netPracticeRecs(rawPractice, await this.store.erratumAll())
     const eta: Array<{ course: string; remaining: number; done: number; per_node: number; days: number }> = []
     for (const c of await this.enabledCourses()) {
       const { graph, state, broken } = await this.loadView(c)
@@ -4296,6 +4303,192 @@ export class LearnhubEngine {
     return { course: c.name, node, qid, archived }
   }
 
+  // ---- 瑕疵题勘误与判罚冲正（ADR-0031）----
+
+  /** 被申诉作答的定位与准入：该题最近一条判错的 practice 记录，未被冲正过。
+   * 目标 = 最近一条（练习会话的即时申诉与直通卡/复习流的「最近一次答错」一致）。 */
+  private async disputeTarget(courseKey: string | undefined, node: string, qid: string, op: string) {
+    const { c, graph, q } = await this.questionContext(courseKey, node, qid, op)
+    const rec = (await this.store.practiceAll())
+      .filter(r => r.course === c.name && r.node === node && r.qid === qid && r.correct === false)
+      .sort((a, b) => a.ts.localeCompare(b.ts))
+      .at(-1)
+    if (!rec) throw new Error(`[${op}] ${node}/${qid} 没有可申诉的判错作答记录（申诉只针对判错的作答）。`)
+    const errata = await this.store.erratumAll()
+    if (errata.some(e => e.target_ts === rec.ts && e.qid === qid)) {
+      throw new Error(`[${op}] ${node}/${qid} 最近一条判错作答（${rec.ts}）已被冲正过，同一条作答至多申诉一次。`)
+    }
+    return { c, graph, q, rec }
+  }
+
+  /** 申诉复核（只读，不落盘）：LLM 两阶段复核——先独立解题再对账，三态裁定。
+   * 解析失败自动重问一次，仍失败抛「AI 复核输出不可用」（UI 据此放行跳过复核的
+   * 直接豁免降级入口）；原始输出照 #116 惯例留痕判卷失败.jsonl。 */
+  async questionDisputeReview(
+    llmComplete: (prompt: string, system?: string) => Promise<string>,
+    courseKey: string | undefined, node: string, qid: string,
+  ): Promise<DisputeReviewResult> {
+    const { c, graph, q, rec } = await this.disputeTarget(courseKey, node, qid, 'dispute')
+    const note = await this.nodeNote(c, graph, node)
+    const entry = sectionEntryOf(q.section, note.fm?.content.sections)
+    const sectionMd = entry
+      ? Sessions.lessonSections(note.body).find(s => s.title === entry.title)?.md ?? null
+      : null
+    const forgot = rec.judge === 'forget'
+    const prompt = [
+      '# 复核一道练习题的申诉', '',
+      '学习者作答被判错并申诉「题目错了」。请严格按两阶段复核：',
+      '1. **独立解题**：只看题面自己完整解一遍（此阶段忽略下面给出的存储答案键），写出过程与你的答案；',
+      '2. **对账**：把你的独立结果与存储答案键/解析、以及学习者作答逐一比对；',
+      '3. 按系统提示的三态规则给出裁定。', '',
+      '## 题目', q.q,
+      ...(q.options?.length ? q.options.map((o, i) => `- ${String.fromCharCode(65 + i)}. ${o}`) : []),
+      '', `存储的答案键：${revealAnswer(q)}`,
+      ...(q.explanation ? ['', `存储的解析：${q.explanation}`] : []),
+      '', '## 学习者的作答',
+      forgot ? '（空——学习者按「忘记」翻面，未作答）' : (rec.answer || '（空作答）'),
+      '', '## 对应节正文（超纲判定依据）',
+      ...(entry && sectionMd
+        ? [`（来自节「${entry.title}」）`, '', sectionMd.slice(0, 4000)]
+        : ['（未能定位到具体节——以下为整课节选）', '', note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim().slice(0, 2500)]),
+    ].join('\n')
+    let lastError = ''
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const ask = attempt === 1
+        ? prompt
+        : `${prompt}\n\n[重判要求] 上一次输出无法解析为复核结果。这一次只输出一个 JSON 对象（shape 见系统提示），不要任何其他文字、解释或代码围栏。`
+      const raw = await llmComplete(ask, DISPUTE_REVIEW_SYSTEM)
+      try {
+        const v = parseDisputeReview(raw)
+        return {
+          course: c.name, node, qid,
+          target_ts: rec.ts,
+          verdict: v.verdict,
+          reasoning: v.reasoning,
+          current_answer: revealAnswer(q),
+          ...(v.suggested_answer !== undefined
+            ? { suggested_answer: v.suggested_answer as DisputeReviewResult['suggested_answer'] } : {}),
+          ...(v.suggested_explanation ? { suggested_explanation: v.suggested_explanation } : {}),
+        }
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err)
+        await this.logGradingFailure({ course: c.name, node, qid, kind: 'dispute-review', attempt, error: lastError, raw })
+      }
+    }
+    throw new Error(`[dispute] AI 复核输出不可用，未做任何改动（可重试，或跳过复核直接豁免本题）：${lastError}`)
+  }
+
+  /** 申诉结算（落盘）：resolution 三选一。
+   * - rekey：按 revision 修订题目（改键/解析，questionUpdate 作者门禁+形态门禁），
+   *   用新键重判原作答——原作答符合新键则改判为对（XP 按对题补记、frontmatter
+   *   correct+1、EMA 补 0.3 步）；不符合则只修键，判罚维持。
+   * - void / overridden：本次作答作废（判卷逃生门口径）——XP 净值归零（乱猜罚随减）、
+   *   attempts−1、EMA 逆向一步；void 语义 = 题是瑕疵题（UI 链路归档重出），
+   *   overridden = 复核判题没问题但学习者坚持豁免（题保留在调度里）。
+   * 共同边界（ADR-0031）：FSRS 不回滚、review-log 不抹；冲正走 勘误.jsonl 追加 +
+   * 聚合账净额重算（practice.jsonl 永不改写）。EMA/frontmatter 计数是增量聚合，
+   * 逆向调整在「争议条为该节点最新证据」时精确，否则为可接受的近似（派生读侧）。 */
+  async questionDisputeApply(
+    courseKey: string | undefined, node: string, qid: string,
+    resolution: 'rekey' | 'void' | 'overridden',
+    opts?: { targetTs?: string; revision?: { answer?: unknown; explanation?: string }; reason?: string },
+  ): Promise<DisputeApplyResult> {
+    if (resolution !== 'rekey' && resolution !== 'void' && resolution !== 'overridden') {
+      throw new Error(`[dispute-apply] resolution 必须是 rekey/void/overridden（收到 ${String(resolution)}）。`)
+    }
+    const { c, graph, rec } = await this.disputeTarget(courseKey, node, qid, 'dispute-apply')
+    if (opts?.targetTs && opts.targetTs !== rec.ts) {
+      throw new Error(`[dispute-apply] targetTs 与该题最近判错记录不一致（${opts.targetTs} ≠ ${rec.ts}）——复核后题目状态可能已变化，请重新申诉。`)
+    }
+    const { cutoff } = await this.learningDay()
+    let verdict: ErratumRec['verdict']
+    let xpNet = rec.xp ?? 0
+    let correctNow: boolean | null = false
+
+    if (resolution === 'rekey') {
+      const answer = opts?.revision?.answer
+      if (answer === undefined || answer === null || (typeof answer === 'string' && !answer.trim())) {
+        throw new Error('[dispute-apply] rekey 需要 revision.answer（新答案键）。')
+      }
+      const patch: Record<string, unknown> = { answer }
+      if (typeof opts?.revision?.explanation === 'string' && opts.revision.explanation.trim()) {
+        patch.explanation = opts.revision.explanation
+      }
+      await this.bank.updateQuestion(this.paths.courseRoot(c.root), node, qid, patch)
+      const fresh = (await this.bank.load(this.paths.courseRoot(c.root), node)).questions.find(x => x.id === qid)
+      if (!fresh) throw new Error(`[dispute-apply] ${node}/${qid} 改键后读取失败。`)
+      // 重判原作答：空作答（忘记翻面）必然不符，且 evaluateAllo 对空作答按题型抛错——直接判不符
+      const r = rec.answer && rec.judge !== 'forget'
+        ? (() => { try { return evaluateAllo(fresh, rec.answer) } catch { return { score: 0 } } })()
+        : { score: 0 }
+      correctNow = r.score >= PASS_SCORE
+      verdict = 'key-error'
+      if (correctNow) {
+        // 改判对：对题 XP 补记（豁免永不产生得分，改判只来自键修改后的重判）；乱猜罚随键纠正一并消失
+        xpNet = xpForAnswer(fresh.kind, fresh.difficulty ?? 1, true, null, true).xp
+      }
+    } else {
+      verdict = resolution === 'void' ? 'defective' : 'overridden'
+      xpNet = 0 // 作废：本次作答 XP 净值归零（乱猜 −1 罚随之返还）
+    }
+
+    // 题目 stats 从净流水重算（作废剔除该条；改判按新对错计）；FSRS 块不动
+    const errata = await this.store.erratumAll()
+    const pending: ErratumRec = {
+      ts: nowIso(), course: c.name, node, qid, target_ts: rec.ts,
+      verdict, xp: xpNet,
+      ...(correctNow === true ? { correct: true } : {}),
+      ...(resolution === 'rekey' ? { revision: opts?.revision ?? {} } : {}),
+      ...(opts?.reason?.trim() ? { reason: opts.reason.trim().slice(0, 500) } : {}),
+    }
+    const net = netPracticeRecs(
+      (await this.store.practiceAll()).filter(r => r.course === c.name && r.node === node && r.qid === qid),
+      [...errata, pending],
+    )
+    const latest = [...net].sort((a, b) => a.ts.localeCompare(b.ts)).at(-1)
+    const stats = {
+      attempts: net.length,
+      correct: net.filter(r => r.correct === true).length,
+      ...(latest ? { last: dayOfTs(latest.ts, cutoff), last_correct: latest.correct === true } : {}),
+    }
+    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { stats })
+
+    // 节点 frontmatter 逆向调整（EMA 0.7/0.3 的逆步；attempts/correct 计数修正）
+    const note = await this.nodeNote(c, graph, node)
+    let fmAfter = note.fm
+    if (note.fm) {
+      const round3 = (x: number) => Math.round(Math.min(1, Math.max(0, x)) * 1000) / 1000
+      const practice = {
+        attempts: Math.max(0, note.fm.practice.attempts + (resolution === 'rekey' ? 0 : -1)),
+        correct: Math.max(0, note.fm.practice.correct + (correctNow ? 1 : 0)),
+      }
+      const ema = note.fm.practice_ema
+      // 改判对 = 撤销 0 分步再补 1 分步（净效果 +0.3）；作废 = 撤销 0 分步（÷0.7）
+      const practice_ema = correctNow
+        ? (ema === undefined ? 1 : round3(ema + 0.3))
+        : (ema === undefined ? undefined : round3(ema / 0.7))
+      fmAfter = {
+        ...note.fm, practice,
+        ...(practice_ema !== undefined ? { practice_ema } : {}),
+      }
+      await this.saveNodeNote(note.path, fmAfter, note.body)
+    }
+    await this.store.appendErratum({
+      course: c.name, node, qid, target_ts: rec.ts,
+      verdict, xp: xpNet,
+      ...(correctNow === true ? { correct: true } : {}),
+      ...(resolution === 'rekey' ? { revision: opts?.revision ?? {} } : {}),
+      ...(opts?.reason?.trim() ? { reason: opts.reason.trim().slice(0, 500) } : {}),
+    })
+    return {
+      course: c.name, node, qid, resolution,
+      verdict,
+      correct_now: resolution === 'rekey' ? correctNow : null,
+      xp: xpNet,
+      ...(fmAfter ? { mastery: masteryOfFm(fmAfter) } : {}),
+    }
+  }
+
   /** AI 出题：节点正文 → 出题提示词 + llm → 产出的题库 YAML 逐题过 validateBank 门禁追加落盘。
    * llm 由 host 注入（输出可能带 markdown 围栏，解析侧 parseModel 统一剥离）。骨架节点（无正文）直接报错。
    * count 缺省 = 既有默认 6（定向补生成 = 3）；一旦给出必须是正整数，非法值不改写成默认（#12）。
@@ -4391,6 +4584,13 @@ export class LearnhubEngine {
             continue
           }
         }
+      }
+      // 写入侧答案形态门禁（多选 ≥2 正确项，prompt 约束 9 的服务端兜底）：
+      // 拒收并报告（与 #117 同款 fail loud），不静默降级成 skipped
+      const shapeErr = questionAnswerShapeError(q)
+      if (shapeErr) {
+        rejected.push({ q: stem.slice(0, 80), reason: shapeErr })
+        continue
       }
       // 程序化查重（#119）：与已有题、本批已收题比对，命中丢弃并报告
       const dup = findDuplicateStem(stem, existingStems)

@@ -11,12 +11,16 @@
  * JOL 抽查（#66 E4）：jolAsk=true 时在题面出示后、翻面前弹一档三点预测
  * （会/不会/没把握）——单点即过、可忽略不卡流程，预测随提交/忘记上报落流水。
  * Self-Calibration 过信轻提示（ADR-0022 #104）：calibrationHint 有值时（源内「会」
- * 档系统性过信且提示开）在预测出口附一句非阻断的预期管理提醒，可全局关。 */
+ * 档系统性过信且提示开）在预测出口附一句非阻断的预期管理提醒，可全局关。
+ * 瑕疵题申诉（ADR-0031）：规则题判错后结果态展示「正确答案 + 作答差异」（点名漏选/
+ * 多选/第几项），并提供「题目有误？」申诉入口——LLM 复核三态裁定，改判/作废/豁免。 */
 import { Alert, Button, Input, Message, Radio, Select, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { InlineMd } from './MdView'
 import { api, explainInHost } from '../api'
+import DisputeModal, { isRuleKind } from './DisputeModal'
+import type { DisputeSettled } from './DisputeModal'
 import type { QuestionItem } from '../types'
 
 const { Text } = Typography
@@ -40,6 +44,10 @@ export interface AnswerOutcome {
   explanation?: string
   pendingRating?: boolean
   previews?: { hard: string; good: string; easy: string }
+  /** 判错差异摘要（ADR-0031）：「漏选了 A / 从第 2 项起顺序不对」，规则题判错时携带。 */
+  diff?: string
+  /** 申诉冲正后的中性态（void/overridden）：本题判罚已作废，推进时连对不奖不罚。 */
+  voided?: boolean
 }
 
 /** 引擎作答/忘记响应 → 卡面结果（判卷字段仅忘记申报携带；可选字段收窄为 Outcome 语义）。 */
@@ -50,6 +58,7 @@ export function toOutcome(r: import('../types').AnswerResult | import('../types'
     feedback: r.feedback,
     xp: r.xp, xp_reason: 'xp_reason' in r ? r.xp_reason : undefined,
     answer: r.answer, explanation: r.explanation,
+    diff: 'diff' in r ? r.diff : undefined,
     pendingRating: 'pendingRating' in r ? r.pendingRating : undefined,
     previews: 'previews' in r ? r.previews : undefined,
   }
@@ -128,6 +137,8 @@ export default function QuestionCard(props: {
   /** 判卷逃生门（#116）：同一题判卷累计失败 ≥2 次后出现「跳过此题」——纯前端动作
    * （本次作答零落盘，该题按直通卡口径翻面），由父级（练习会话）提供。 */
   onEscape?: () => void
+  /** 瑕疵题申诉结算（ADR-0031）：改判/作废/豁免落盘后回调父级恢复会话判罚状态。 */
+  onDisputeSettled?: (qid: string, r: DisputeSettled) => void
 }) {
   const { question: q } = props
   const [choice, setChoice] = useState<string>('')
@@ -140,6 +151,8 @@ export default function QuestionCard(props: {
   const [forgetting, setForgetting] = useState(false)
   /** 判卷失败计数（#116 逃生门）：AI 判卷输出不可用的提交次数，成功判卷清零。 */
   const [gradingFails, setGradingFails] = useState(0)
+  /** 瑕疵题申诉模态（ADR-0031）。 */
+  const [disputeOpen, setDisputeOpen] = useState(false)
   // JOL 抽查（#66 E4）：翻面前的一档预测；单点即过（点完收起为一枚标识），可忽略
   const [predicted, setPredicted] = useState<JolPick | null>(null)
   // 「忘记」门控倒计时：卡面展示起算（复习变体专属）
@@ -377,6 +390,11 @@ export default function QuestionCard(props: {
                 </Button>
               </Tooltip>
             )}
+            {outcome.correct === false && isRuleKind(q.kind) && props.onDisputeSettled && (
+              <Tooltip content='认为题目或答案键本身有误？AI 独立解题复核后改判、作废或豁免'>
+                <Button size='mini' type='text' onClick={() => setDisputeOpen(true)}>题目有误？</Button>
+              </Tooltip>
+            )}
             {!props.noRedo && props.variant !== 'review' && (
               <Button size='mini' type='text' onClick={redo}>再做一次</Button>
             )}
@@ -389,15 +407,33 @@ export default function QuestionCard(props: {
               fontSize: 14, lineHeight: 1.7,
             }}><InlineMd text={outcome.feedback} /></div>
           )}
-          {props.variant === 'review' && outcome.answer && (
-            <div style={{ fontSize: 13 }}>
+          {/* 正确答案 + 差异点名（ADR-0031）：判错必须让学习者对上自己的作答——
+            * 只给静态解析、不公布键，学习者只能反推键是什么（q13 误诊的根源） */}
+          {outcome.answer && (props.variant === 'review' || outcome.correct === false) && (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap', fontSize: 13 }}>
               <Text type='secondary'>正确答案：</Text>
               <Text bold>{outcome.answer}</Text>
+              {outcome.diff && <Text type='secondary' style={{ fontSize: 12 }}>({outcome.diff})</Text>}
             </div>
           )}
           {props.footer?.(outcome)}
         </div>
       )}
+      <DisputeModal
+        target={disputeOpen && isRuleKind(q.kind) ? { course: props.course, node: props.node, qid: q.id, kind: q.kind } : null}
+        onClose={() => setDisputeOpen(false)}
+        onSettled={r => {
+          // 卡面结果同步冲正后的净值：改判对翻绿并显示补记 XP，作废翻中性零 XP（父级同步会话连对状态）
+          const corrected = r.resolution === 'rekey' && r.correctNow === true
+          setOutcome(o => o ? {
+            ...o,
+            correct: corrected ? true : null,
+            xp: corrected ? r.xp : 0,
+            xp_reason: corrected ? 'correct' : undefined,
+            voided: !corrected,
+          } : o)
+          props.onDisputeSettled?.(q.id, r)
+        }} />
     </div>
   )
 }

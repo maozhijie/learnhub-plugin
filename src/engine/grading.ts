@@ -247,6 +247,115 @@ export function parseOpenGrading(raw: string): { score: number; feedback: string
   return { score, feedback: doc.feedback }
 }
 
+// ---------------------------------------------------------------- 判错差异摘要与申诉复核
+
+/** 判错差异摘要（瑕疵题勘误前置：判错结果态展示「正确答案 + 差异」，规则判卷题型专用）。
+ * 返回 null = 没有可点名的差异（判对、AI 题型、或提不出结构化差异）。 */
+export function answerDiff(q: AlloQuestion, response: unknown): string | null {
+  if (q.kind === 'reflection' || q.kind === 'open_question') return null
+  const s = typeof response === 'string' ? response : ''
+  switch (q.kind) {
+    case 'multi_choice': {
+      const picked = new Set(s.split(/[,，]/).map(normChoice).filter(Boolean))
+      if (!picked.size) return null
+      const expected = (Array.isArray(q.answer) ? q.answer : []).map(normChoice)
+      const missed = expected.filter(x => !picked.has(x))
+      const extra = [...picked].filter(x => !expected.includes(x))
+      const parts = [
+        ...(missed.length ? [`漏选了 ${missed.join('、')}`] : []),
+        ...(extra.length ? [`多选了 ${extra.join('、')}`] : []),
+      ]
+      return parts.length ? parts.join('，') : null
+    }
+    case 'single_choice': {
+      const picked = normChoice(s)
+      return picked ? `你选了 ${picked}` : null
+    }
+    case 'true_false': {
+      if (!s) return null
+      return `你的判断：${normalizeBool(s) ? '正确' : '错误'}`
+    }
+    case 'fill_in_blank':
+      return s ? '你的作答不在可接受答案之列' : null
+    case 'numeric': {
+      if (!s) return null
+      return `你的作答 ${normAnswer(s)} 不在容差（±${q.tol ?? 0}）内`
+    }
+    case 'ordering': {
+      const seq = s.split(/\n/).map(normAnswer).filter(Boolean)
+      const expected = (Array.isArray(q.answer) ? q.answer : []).map(normAnswer)
+      if (seq.length !== expected.length) return '项数与题目不符'
+      const i = seq.findIndex((x, j) => x !== expected[j])
+      return i < 0 ? null : `从第 ${i + 1} 项起顺序不对`
+    }
+    case 'matching': {
+      const seq = s.split(/\n/).map(normAnswer)
+      const expected = (Array.isArray(q.answer) ? q.answer : []).map(normAnswer)
+      const wrong = expected.filter((x, j) => seq[j] !== x).length
+      return wrong > 0 ? `${wrong} 处配对不对` : null
+    }
+    default:
+      return null
+  }
+}
+
+/** 申诉复核三态裁定（瑕疵题勘误）：key_error = 答案键/解析与题面矛盾；defective = 题面
+ * 含糊/自相矛盾/超纲；ok = 题与键都对、学习者确实答错。 */
+export type DisputeVerdict = 'key_error' | 'defective' | 'ok'
+
+export interface DisputeReviewDoc {
+  verdict: DisputeVerdict
+  reasoning: string
+  /** key_error 时的建议新答案（与题目 answer 字段同构，形态由调用方按题型过门禁）。 */
+  suggested_answer?: unknown
+  suggested_explanation?: string
+}
+
+/** 申诉复核系统提示词：两阶段（先独立解题再对账）防锚定，三态裁定输出严格 JSON。 */
+export const DISPUTE_REVIEW_SYSTEM = `You are a meticulous examiner auditing a disputed practice question for a learning system.
+
+The learner's answer was marked wrong and they dispute it. Audit in two phases:
+- Phase 1: solve the question YOURSELF from the stem alone (ignore the stored answer key while solving). Show the full work.
+- Phase 2: compare your independent answer with the stored answer key and explanation, and the learner's submitted answer.
+
+Reply with ONLY one JSON object matching this shape:
+{
+  "verdict": "key_error" | "defective" | "ok",
+  "reasoning": "markdown text",
+  "suggested_answer": "<same shape as the question's answer field, only for key_error>",
+  "suggested_explanation": "markdown or null"
+}
+Verdict rules:
+- "key_error": the stem is self-consistent and within the lesson content, but the stored answer key or explanation contradicts your independent solution. Must provide suggested_answer (same shape as the stored answer: e.g. an array of option letters for multi_choice) and ideally suggested_explanation.
+- "defective": the stem itself is ambiguous, self-contradictory, or tests content the lesson never taught. Suggest voiding and regenerating.
+- "ok": both the stem and the answer key are correct; the learner's submission genuinely does not match.
+- Write reasoning in Chinese, Markdown: the phase 1 solution first, then the phase 2 reconciliation.
+- Output JSON only, without Markdown fences or commentary.`
+
+/** 从模型回复中提取申诉复核结果（容错同判卷：围栏/尾逗号/外层散文）。 */
+export function parseDisputeReview(raw: string): DisputeReviewDoc {
+  const m = stripGradingFences(raw).match(/\{[\s\S]*\}/)
+  if (!m) throw new Error('reply 中找不到 JSON 对象')
+  const doc = JSON.parse(m[0].replace(/,\s*([}\]])/g, '$1')) as Record<string, unknown>
+  const verdict = doc.verdict
+  if (verdict !== 'key_error' && verdict !== 'defective' && verdict !== 'ok') {
+    throw new Error(`dispute review verdict 非法：${String(verdict)}（允许 key_error/defective/ok）`)
+  }
+  if (typeof doc.reasoning !== 'string' || !doc.reasoning.trim()) {
+    throw new Error('dispute review reply missing reasoning')
+  }
+  if (verdict === 'key_error' && doc.suggested_answer === undefined) {
+    throw new Error('dispute review verdict=key_error 缺 suggested_answer')
+  }
+  return {
+    verdict,
+    reasoning: doc.reasoning,
+    ...(doc.suggested_answer !== undefined ? { suggested_answer: doc.suggested_answer } : {}),
+    ...(typeof doc.suggested_explanation === 'string' && doc.suggested_explanation.trim()
+      ? { suggested_explanation: doc.suggested_explanation } : {}),
+  }
+}
+
 // ---------------------------------------------------------------- 作答记录与 EMA
 
 /** 练习证据 EMA（allo 判卷流）：首证取分，之后旧值×0.7 + 本次分×0.3；是口径 B Mastery 的练习项。 */

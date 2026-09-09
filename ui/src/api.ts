@@ -60,6 +60,18 @@ export const api = {
   /** 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）。predicted = 翻面前的 JOL 预测。 */
   questionForget: (course: string, node: string, qid: string, elapsedS?: number, predicted?: string) =>
     http<import('./types').QuestionForgetResult>('POST', '/question-forget', { course, node, qid, elapsed_s: elapsedS, ...(predicted ? { predicted } : {}) }),
+  /** 瑕疵题申诉复核（ADR-0031）：LLM 两阶段复核三态裁定，只读不落盘。 */
+  questionDisputeReview: (course: string, node: string, qid: string) =>
+    http<import('./types').DisputeReviewResult>('POST', '/question-dispute/review', { course, node, qid }),
+  /** 申诉结算：rekey（改键并用新键重判，可改判对）/ void（瑕疵题作废）/ overridden（强制豁免，不得分）。 */
+  questionDisputeApply: (course: string, node: string, qid: string,
+    resolution: 'rekey' | 'void' | 'overridden',
+    opts?: { targetTs?: string; revision?: { answer?: unknown; explanation?: string }; reason?: string }) =>
+    http<import('./types').DisputeApplyResult>('POST', '/question-dispute/apply',
+      { course, node, qid, resolution,
+        ...(opts?.targetTs ? { target_ts: opts.targetTs } : {}),
+        ...(opts?.revision ? { revision: opts.revision } : {}),
+        ...(opts?.reason ? { reason: opts.reason } : {}) }),
   /** 复习刷卡队列：跨课程到期题扁平队列；node 过滤 = 单节点定向复习（响应带 Mastery 先验带 band，#57）；
    * band = 显式难度带偏好（#65 E5）；卡片带 jol 抽查标记（#66 E4）。 */
   reviewQueue: (course?: string, node?: string, band?: 'easy' | 'standard' | 'hard') =>

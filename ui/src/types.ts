@@ -11,7 +11,7 @@ export type ContentStatus = 'draft' | 'reviewed' | 'flagged'
 export type {
   AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, CalibrationProfileDoc,
   CalibrationSourceProfile, DiagnosticEntry,
-  DifficultyAdviceDoc, DifficultyAdviceNode, DoctorDoc, EtaItem, FadingTier, GraphApplyResult, GraphBrowseDoc,
+  DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult, DoctorDoc, EtaItem, FadingTier, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphPathResult, GraphProposeResult,
   HabitCurvePoint, HabitListItem, HabitShowDoc, HabitsListDoc, HistogramBin, LearnerArchiveResult,
   LearnerCardItem, LearnerCardKind, LearnerForgetResult,

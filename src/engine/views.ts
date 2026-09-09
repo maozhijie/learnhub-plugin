@@ -563,6 +563,42 @@ export interface AnswerResult {
   /** 节点聚合掌握度（口径 B；笔记源无节点，缺省）。 */
   mastery?: number
   xp_reason?: 'correct' | 'wrong' | 'guess' | 'repeat'
+  /** 判错差异摘要（规则题判错时携带）：点名「漏选了 A / 多选了 C / 从第 2 项起顺序不对」，
+   * 让判错反馈能对上学习者的作答（ADR-0031）。 */
+  diff?: string
+}
+
+/** 申诉复核结论（questionDisputeReview，只读不落盘）。 */
+export interface DisputeReviewResult {
+  course: string
+  node: string
+  qid: string
+  /** 被复核的判错作答流水 ts（结算时回传校验）。 */
+  target_ts: string
+  verdict: 'key_error' | 'defective' | 'ok'
+  /** 复核论证（先独立解题、再对账），Markdown。 */
+  reasoning: string
+  /** 当前答案键的展示形态。 */
+  current_answer: string
+  /** verdict=key_error 时的建议新答案（与题目 answer 字段同构）。 */
+  suggested_answer?: string | number | boolean | string[]
+  suggested_explanation?: string
+}
+
+/** 申诉结算结果（questionDisputeApply）。 */
+export interface DisputeApplyResult {
+  course: string
+  node: string
+  qid: string
+  resolution: 'rekey' | 'void' | 'overridden'
+  /** 落盘的冲正裁定（勘误流水 verdict）。 */
+  verdict: 'key-error' | 'defective' | 'overridden'
+  /** rekey 时 = 原作答按新键重判的结果；void/overridden = null（作答作废，无对错）。 */
+  correct_now: boolean | null
+  /** 该作答冲正后的 XP 净值（读侧按此替换原记录）。 */
+  xp: number
+  /** 冲正后的节点掌握度（口径 B 派生；无 frontmatter 时缺省）。 */
+  mastery?: number
 }
 
 /** 自评结算（questionRate）：复习刷卡流答对后的 Hard/Good/Easy 推卡。 */

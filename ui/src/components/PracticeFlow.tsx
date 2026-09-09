@@ -5,15 +5,20 @@
  * 题目按 section 绑定节 id（旧题回退节标题），未落节的题进通用收尾轮。
  * 顶部节进度 stepper（MathAcademy 式细条分段）：已过蓝条可点回跳、当前高亮、未到置灰。
  * 「上一步」按轮回看：一组问题视为一步，已过关的题组回看只展示小结；
- * 同一次学习里每道题只作答一次（重进题组自动定位到第一个未作答题）。 */
-import { Alert, Button, Card, Popconfirm, Space, Tag, Typography } from '@arco-design/web-react'
+ * 同一次学习里每道题只作答一次（重进题组自动定位到第一个未作答题）。
+ * 瑕疵题申诉（ADR-0031）：判错结果态与单题菜单都可发起申诉；复核成立后的会话内
+ * 判罚恢复——改判对恢复连对推进、作废/豁免按中性处理（连对不奖不罚、不占出题预算），
+ * 作废链路顺带归档旧题并按申诉理由定向重出一题。 */
+import { Alert, Button, Card, Message, Popconfirm, Space, Tag, Typography } from '@arco-design/web-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import MdView from './MdView'
 import QuestionCard, { RevealCard, type AnswerOutcome } from './QuestionCard'
 import QuestionMenu from './QuestionMenu'
+import type { DisputeSettled } from './DisputeModal'
 import { SettleContext } from './settle-context'
 import { parseSectionTitle } from '../../../shared/content-renderers'
+import { api } from '../api'
 import { MAX_ASK_PER_ROUND, passStreakFor, QUIZ_SOFT_CAP } from './quiz-rules'
 import type { LessonSection, QuestionItem, SectionManifestItem } from '../types'
 
@@ -179,6 +184,8 @@ export default function PracticeFlow(props: {
   /** 本会话作答记录：已答题集合（回看不重答）与每题对错（连对/进度恢复用）。 */
   const [answeredIds, setAnsweredIds] = useState<ReadonlySet<string>>(new Set())
   const [outcomes, setOutcomes] = useState<Record<string, boolean>>({})
+  /** 申诉冲正作废的题（ADR-0031）：判罚中性——退出可作答预算、连对不奖不罚。 */
+  const [voidedIds, setVoidedIds] = useState<ReadonlySet<string>>(new Set())
   /** 已过关的题组（连对达标）：回看时整组只展示小结。 */
   const [doneRounds, setDoneRounds] = useState<ReadonlySet<string>>(new Set())
   /** 走到过的最远轮次：回看早前步骤不掉「会话已走完」。 */
@@ -188,10 +195,11 @@ export default function PracticeFlow(props: {
   const round = roundIdx < rounds.length ? rounds[roundIdx] : null
   const qs = round?.type === 'quiz' ? round.questions ?? [] : []
   const current = qs[qIdx]
-  // 可作答题数（直通题不计，ADR-0027）：连对目标按它算，全直通轮为 0（翻完即过）。
-  // 本会话已真实作答的题即便刷新后带上 advancedToday 也仍算可作答——否则静默刷新会
-  // 把刚答的题逐出目标分母，连对机制被架空（审查 #115 修复）。
-  const answerableLen = qs.filter(q => !q.advancedToday || answeredIds.has(q.id)).length
+  // 可作答题数（直通题不计，ADR-0027；申诉作废题退出预算，ADR-0031）：连对目标按它算，
+  // 全直通轮为 0（翻完即过）。本会话已真实作答的题即便刷新后带上 advancedToday 也仍算
+  // 可作答——否则静默刷新会把刚答的题逐出目标分母，连对机制被架空（审查 #115 修复）。
+  const answerableLen = qs.filter(q =>
+    (!q.advancedToday || answeredIds.has(q.id)) && !voidedIds.has(q.id)).length
   const passTarget = passStreakFor(answerableLen)
   /** 直通卡只给「本会话还没碰过」的已推进题；会话内作答过的一律按普通作答卡走完结果态。 */
   const revealPending = !!current?.advancedToday && !answeredIds.has(current.id)
@@ -260,7 +268,7 @@ export default function PracticeFlow(props: {
     if (r?.type !== 'quiz') { setQIdx(0); setStreak(0); setAsked(0); return }
     const list = r.questions ?? []
     setQIdx(firstUnanswered(list))
-    setAsked(list.filter(q => answeredIds.has(q.id)).length)
+    setAsked(list.filter(q => answeredIds.has(q.id) && !voidedIds.has(q.id)).length)
     let s = 0
     for (let i = list.length - 1; i >= 0; i--) {
       const oc = outcomes[list[i].id]
@@ -284,12 +292,14 @@ export default function PracticeFlow(props: {
     props.onSettled()
   }
 
-  /** 「下一题」：连对达标（目标随组内可作答题量收缩）→ 过节（整组标记完成）；
-   * 未答题用尽/超上限 → struggle；否则跳到组内下一个未作答题（已答过的题不重复出现）。 */
+  /** 「下一题」：连对达标（目标随组内可作答题量收缩，申诉作废的题退出分母）→
+   * 过节（整组标记完成）；未答题用尽/超上限 → struggle；否则跳到组内下一个未作答题
+   * （已答过的题不重复出现）。申诉作废的中性态（ADR-0031）：连对不奖不罚。 */
   const advance = () => {
+    const voided = answered?.voided === true
     const wasCorrect = answered?.correct === true
-    const newStreak = wasCorrect ? streak + 1 : 0
-    if (newStreak >= passTarget) {
+    const newStreak = voided ? streak : wasCorrect ? streak + 1 : 0
+    if (!voided && newStreak >= passTarget) {
       if (round) setDoneRounds(d => new Set(d).add(round.key))
       nextRound()
       return
@@ -333,8 +343,50 @@ export default function PracticeFlow(props: {
         q: q.q, difficulty: q.difficulty, options: q.options,
         section: round?.sectionRef,
       }}
-      onMutated={() => props.onQuestionsMutated?.()} />
+      onMutated={() => props.onQuestionsMutated?.()}
+      onDisputed={r => handleDisputeSettled(q.id, r)} />
   ) : null
+
+  /** 申诉结算后的会话内判罚恢复（ADR-0031）：
+   * - 改判对 → 本会话该题按对计，连对恢复推进；
+   * - 作废/豁免 → 中性（outcomes 除名、退出出题预算、推进时连对不奖不罚）；
+   * - 作废（void）→ 链路归档旧题并按申诉理由为本节定向重出一题（新题经外部题目集
+   *   变化自动并入本题组）。直通卡菜单发起的历史申诉：本会话没答过的题自然零动作。 */
+  const handleDisputeSettled = (qid: string, r: DisputeSettled) => {
+    const corrected = r.resolution === 'rekey' && r.correctNow === true
+    setOutcomes(o => {
+      const next = { ...o }
+      if (corrected) next[qid] = true
+      else delete next[qid]
+      return next
+    })
+    if (!corrected) {
+      setVoidedIds(s => new Set(s).add(qid))
+      setAsked(a => Math.max(0, a - 1))
+    }
+    setAnswered(prev => prev ? {
+      ...prev,
+      correct: corrected ? true : null,
+      xp: corrected ? r.xp : 0,
+      xp_reason: corrected ? 'correct' : undefined,
+      voided: !corrected,
+    } : prev)
+    props.onSettled()
+    if (r.resolution === 'void') {
+      void (async () => {
+        try {
+          await api.questionArchive(props.course, props.node, qid, true)
+          await api.questionGenerate(props.course, props.node, 1, {
+            ...(round?.sectionRef ? { section: round.sectionRef } : {}),
+            ...(r.reason ? { instruction: `原题已因瑕疵被申诉作废，理由：${r.reason}。请避开该问题重出一道同类题` } : {}),
+          })
+          props.onQuestionsMutated?.()
+        } catch (err) {
+          Message.error(err instanceof Error ? err.message : String(err))
+        }
+      })()
+    }
+  }
 
   const stepperEl = steps.length > 1 && (
     <Stepper steps={steps} currentIdx={currentStepIdx} isDone={isStepDone} goto={gotoRound} />
@@ -474,7 +526,8 @@ export default function PracticeFlow(props: {
             <RevealCard key={current.id} question={current} onNext={revealNext} menu={questionMenu(current)} />
           ) : (
             <QuestionCard key={current.id} course={props.course} node={props.node} question={current} noRedo
-              onDone={handleDone} menu={questionMenu(current)} onEscape={revealNext} />
+              onDone={handleDone} menu={questionMenu(current)} onEscape={revealNext}
+              onDisputeSettled={handleDisputeSettled} />
           ))}
           {!revealPending && (answered || roundIdx > 0) && (
             <Space size={8} style={{ alignSelf: 'flex-end' }}>

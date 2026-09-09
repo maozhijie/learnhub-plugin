@@ -1339,6 +1339,31 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
           typeof body.predicted === 'string' ? body.predicted as never : null)))
         return
       }
+      if (route === '/question-dispute/review') {
+        // 瑕疵题申诉复核（ADR-0031）：LLM 两阶段复核三态裁定，只读不落盘
+        sendJson(res, 200, await apiRun('api/question-dispute/review', () => engine.questionDisputeReview(
+          (prompt, system) => llmComplete(ctx, prompt, system),
+          need(body, 'course'), need(body, 'node'), need(body, 'qid'))))
+        return
+      }
+      if (route === '/question-dispute/apply') {
+        // 申诉结算：rekey（改键重判可改判对）/ void（瑕疵题作废）/ overridden（强制豁免，不得分）
+        sendJson(res, 200, await apiRun('api/question-dispute/apply', () => {
+          const resolution = body.resolution
+          if (resolution !== 'rekey' && resolution !== 'void' && resolution !== 'overridden') {
+            throw new Error('missing/invalid required field: resolution（rekey|void|overridden）')
+          }
+          const rawRevision = body.revision as { answer?: unknown; explanation?: unknown } | undefined
+          return engine.questionDisputeApply(
+            need(body, 'course'), need(body, 'node'), need(body, 'qid'), resolution, {
+              ...(typeof body.target_ts === 'string' ? { targetTs: body.target_ts } : {}),
+              ...(typeof rawRevision === 'object' && rawRevision !== null
+                ? { revision: { answer: rawRevision.answer, ...(typeof rawRevision.explanation === 'string' ? { explanation: rawRevision.explanation } : {}) } } : {}),
+              ...(typeof body.reason === 'string' ? { reason: body.reason } : {}),
+            })
+        }))
+        return
+      }
       if (route === '/band-session') {
         // 难度带会话日志（E5 #65）：会话结束反馈点落一条带选择与作答结算（教练数据源）
         sendJson(res, 200, await apiRun('api/band-session', () => engine.logBandSession({

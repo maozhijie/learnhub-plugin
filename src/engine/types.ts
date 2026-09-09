@@ -195,3 +195,25 @@ export interface ProposalRec {
   decided?: string | null
   decision_note?: string
 }
+
+/** 勘误冲正流水条目（state/勘误.jsonl，ADR-0031）：对一条已落盘作答判罚的抵消记录。
+ * 聚合账读侧按净值读（netPracticeRecs）；FSRS 调度不冲正、review-log 不抹除。
+ * verdict：key-error = 键错已改并按新键重判 / defective = 瑕疵题作废 /
+ * overridden = 复核判题没问题但学习者坚持豁免（最终解释权在用户，永不得分）。 */
+export interface ErratumRec {
+  ts: string
+  course: string
+  node: string
+  qid: string
+  /** 被冲正作答的 practice 流水 ts（精确到条；同一条作答至多冲正一次）。 */
+  target_ts: string
+  verdict: 'key-error' | 'defective' | 'overridden'
+  /** 净值替换：该作答记录冲正后的 XP（读侧以此替换原记录的 xp）。 */
+  xp: number
+  /** 净值替换：冲正后的对错（key-error 改判对时为 true；缺省 = 维持原判）。 */
+  correct?: boolean
+  /** key-error 时的题目修订内容（已写入题库，此处留痕）。 */
+  revision?: { answer?: unknown; explanation?: string }
+  /** 复核结论/申诉理由摘要。 */
+  reason?: string
+}

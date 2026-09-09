@@ -68,6 +68,18 @@ function bankError(op: string, path: string, detail: string): Error {
   return new Error(`[${op}] 题库 Broken（位置：${path}）\n  ✗ ${detail}`)
 }
 
+/** 写入侧答案形态门禁（prompt 约束的服务端兜底）：multi_choice 至少 2 个正确项。
+ * 只拦写入（生成入库/修订），不做进 validateBank 的读取门禁——存量题库里
+ * 历史生成的单正确项多选不该让整个题库读成 Broken（显式盘点修复，ADR-0004）。 */
+export function questionAnswerShapeError(q: { kind?: unknown; answer?: unknown; options?: unknown }): string | null {
+  if (q.kind !== 'multi_choice') return null
+  const options = Array.isArray(q.options) ? q.options : []
+  const picks = Array.isArray(q.answer) ? q.answer : []
+  if (options.length >= 2 && picks.length >= 2
+    && picks.every(p => typeof p === 'string' && p.trim())) return null
+  return 'multi_choice 需要 options（≥2）且 answer 为**至少 2 个**合法选项字母数组（出题约束 1 的服务端兜底）'
+}
+
 /** 题库 schema 校验（手写，错误行风格与引擎其余门禁一致）。 */
 export function validateBank(doc: unknown, expectedNode?: string): { errors?: string[]; spec?: BankDoc } {
   const errors: string[] = []
@@ -268,6 +280,8 @@ export class QuestionBank {
     if (list.some(q => (q as { id?: unknown }).id === id)) {
       throw new Error(`[question-add] 题目 id「${id}」已存在。`)
     }
+    const shapeErr = questionAnswerShapeError(question)
+    if (shapeErr) throw new Error(`[question-add] ${shapeErr}`)
     const next = [...list, { ...question, id }]
     const v = validateBank({ ...doc, questions: next }, node)
     if (v.errors) throw new Error(`[question-add] 校验失败，未写入。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
@@ -290,6 +304,8 @@ export class QuestionBank {
     const idx = list.findIndex(q => (q as { id?: unknown }).id === qid)
     if (idx < 0) throw new Error(`[question-update] ${node} 的题库没有 ${qid}。`)
     const merged = { ...list[idx], ...patch, id: qid }
+    const shapeErr = questionAnswerShapeError(merged)
+    if (shapeErr) throw new Error(`[question-update] ${qid}：${shapeErr}`)
     const next = [...list]
     next[idx] = merged
     const v = validateBank({ ...doc, questions: next }, node)
