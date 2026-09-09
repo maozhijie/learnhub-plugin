@@ -1,7 +1,7 @@
 /** 「错误对比卡」卡面（C-3 #82，独立于判卷型 QuestionCard 与自评型 LearnerCardCard）：
  * 三选一辨别卡——一项是正确做法、一项是学习者自己的错法、一项是干扰做法。选一项即
  * 判分推进（自动判分：选对=3/选错=1，一卡一天一次，引擎侧结算）；选后揭晓对照——
- * 正确项高亮、错法项标「你的错法」、展示解析。预测即作答，无忘记申报、无自评档。 */
+ * 正确项高亮、错法项标「你的错法」、展示解析。作答即判分，无忘记申报、无自评档。 */
 import { Alert, Button, Tag, Typography } from '@arco-design/web-react'
 import { useState } from 'react'
 import { InlineMd } from './MdView'
@@ -61,7 +61,7 @@ export default function ErrorCardCard(props: {
       {!reveal ? (
         <>
           <Text type='secondary' style={{ fontSize: 12 }}>
-            三个做法里只有一个是错的——而且它就是你当初的错法。凭直觉选，答错不加罚。
+            三个做法里只有一个是正确的——其中另一个正是你上次的错法。凭直觉选，选错不加罚。
           </Text>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {card.options.map((opt, i) => (

@@ -71,6 +71,7 @@ const GRAPH = [
   '  - name: 入门块',
   '    nodes:',
   '      - { name: 高难节点, pre: [], opt: false, note: "", difficulty: 4 }',
+  '      - { name: 高bloom节点, pre: [], opt: false, note: "", bloom: 评价 }',
   '      - { name: 平易节点, pre: [], opt: false, note: "", difficulty: 2 }',
 ].join('\n')
 
@@ -82,6 +83,10 @@ test('上下文包：高难节点注入 §11 专家思维轨迹（含预测门�
     assert.match(high, /learnhub-predict/)
     assert.match(high, /故意踩一次坑/)
     assert.match(high, /元策略/)
+
+    // bloom 高阶层单独即触发（#97 验收口径「高 bloom 节点可生成」）
+    const bloom = await engine.contentPack('数学', '高bloom节点')
+    assert.match(bloom, /## 11\. 专家思维轨迹/)
 
     const easy = await engine.contentPack('数学', '平易节点')
     assert.doesNotMatch(easy, /专家思维轨迹/)

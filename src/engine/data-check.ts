@@ -12,13 +12,14 @@ import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
 import { validateNoteSourceManifest } from './note-source.ts'
 import { validateLearnerCards } from './learner-cards.ts'
+import { validateErrorCards } from './error-cards.ts'
 import { validateNoteFrontmatter } from './notes.ts'
 import { YAML } from './yaml.ts'
 import type { CourseEntry } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards'
 
 export type DataCheckFindingLevel = 'missing' | 'broken'
 
@@ -48,6 +49,8 @@ export type DataCheckReason =
   | 'note_source_bank_schema'
   | 'learner_card_yaml_parse'
   | 'learner_card_schema'
+  | 'error_card_yaml_parse'
+  | 'error_card_schema'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -415,6 +418,42 @@ async function scanLearnerCards(
   }
 }
 
+/** 错误对比卡域体检（C-3/#82）：课程根/错误卡/<节点>.yaml 存在但坏 = Broken
+ * （队列/生成/清单侧跳过不阻塞其他卡，这里负责把损坏显式报出——学习者数据
+ * 不得无声降级）。 */
+async function scanErrorCards(
+  findings: DataCheckFinding[],
+  paths: Paths,
+  courses: Array<{ name: string; root: string }>,
+): Promise<void> {
+  for (const course of courses) {
+    const dir = paths.errorCardsDir(String(course.root))
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      continue // 该课程还没有任何错误卡：合法空态
+    }
+    for (const entry of entries.filter(e => e.isFile() && e.name.endsWith('.yaml')).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(dir, entry.name)
+      const where = `课程「${String(course.name)}」错误卡 ${path}`
+      const result = await readYamlDoc(path)
+      if (result.readError) {
+        push(findings, 'error_cards', 'broken', 'error_card_yaml_parse', where, result.readError)
+        continue
+      }
+      if (result.parseError) {
+        push(findings, 'error_cards', 'broken', 'error_card_yaml_parse', where, result.parseError)
+        continue
+      }
+      const v = validateErrorCards(result.doc)
+      if (v.errors) {
+        push(findings, 'error_cards', 'broken', 'error_card_schema', where, v.errors.join('；'))
+      }
+    }
+  }
+}
+
 /** 一次只读体检。注册表损坏时无法安全展开课程，因此只报告注册表本身。 */
 export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
   const findings: DataCheckFinding[] = []
@@ -470,6 +509,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
 
   inventory.noteSourceBanks = await scanNoteSources(findings, paths, noteSources)
   await scanLearnerCards(findings, paths, courses)
+  await scanErrorCards(findings, paths, courses)
 
   const byArea: DataCheckReport['byArea'] = {
     registry: { missing: 0, broken: 0 },
@@ -478,6 +518,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     question_bank: { missing: 0, broken: 0 },
     note_source: { missing: 0, broken: 0 },
     learner_cards: { missing: 0, broken: 0 },
+    error_cards: { missing: 0, broken: 0 },
   }
   for (const finding of findings) {
     byArea[finding.area][finding.level]++

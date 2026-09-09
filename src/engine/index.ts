@@ -1821,7 +1821,10 @@ export class LearnhubEngine {
    * 节点不在范围内任何课程的图内时 fail loud——拼错的直达入口不该静默空队列。
    * 我的卡（E1，ADR-0021）：汇入本队列（source='learner'，卡面数据在 learner 字段），
    * 同一 R 风险排序与单节点定向入口；测量面不扩——JOL 抽查、复习日志、Anki 导出
-   * 均不含我卡，复习入账走无绑定 XP（learnerCardRate/Forget）。 */
+   * 均不含我卡，复习入账走无绑定 XP（learnerCardRate/Forget）。
+   * 错误对比卡（C-3 #82，ADR-0032）：同款汇入（source='error'，卡面在 error 字段，
+   * 自动判分走 errorCardAnswer）；JOL 抽查与复习日志同样零掺入，复习入账走无绑定
+   * XP（xp_error 行）。 */
   async reviewQueue(
     courseKey?: string, node?: string, today?: string, bandPref?: BandPref,
   ): Promise<ReviewQueueDoc> {
@@ -4146,7 +4149,8 @@ export class LearnhubEngine {
     if (!fresh.length) {
       throw new Error('[error-card-generate] 没有可挖的新错误模式（判定线：同一题 ≥2 次实质答错且尚未建卡）；候选已被覆盖或证据不足。')
     }
-    const max = Math.max(1, Math.min(opts?.max ?? ERROR_CARD_BATCH_MAX, fresh.length))
+    // max 只是下调旋钮（批上限硬帽 ERROR_CARD_BATCH_MAX 防注水；工具面宣称的 cap 在此强制）
+    const max = Math.max(1, Math.min(opts?.max ?? ERROR_CARD_BATCH_MAX, ERROR_CARD_BATCH_MAX, fresh.length))
     const skipped: string[] = []
     interface Mat { node: string; qid: string; section: string | null; sectionBody: string | null }
     const mats: Array<Mat & { material: string }> = []
@@ -4166,7 +4170,7 @@ export class LearnhubEngine {
       let sectionTitle: string | null = null
       let sectionBody: string | null = null
       try {
-        const { graph, state, broken } = await this.loadView(c)
+        const { graph, state } = await this.loadView(c)
         const manifest = state[x.node]?.content.sections
         const entry = sectionEntryOf(q.section, manifest)
         const sections = await this.explainPoints(c, graph, x.node)
@@ -4176,7 +4180,6 @@ export class LearnhubEngine {
           sectionTitle = entry?.title ?? point.title
           sectionBody = point.md.slice(0, 800)
         }
-        void broken
       } catch {
         // 正文缺失不阻塞生成：原题解析已足够对照
       }
