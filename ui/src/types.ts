@@ -24,7 +24,9 @@ export interface AgentGuideItem { tool: string; page: string; text: string; prom
 export type {
   AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, CalibrationProfileDoc,
   CalibrationSourceProfile, CleanupGroup, CleanupPreviewDoc, DiagnosticEntry,
-  DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult, DoctorDoc, EtaItem, FadingTier, GraphApplyResult, GraphBrowseDoc,
+  DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult, DoctorDoc, ErrorAnswerResult,
+  ErrorArchiveResult, ErrorCardFace, ErrorCardItem, ErrorGenerateResult, ErrorQueueDoc,
+  EtaItem, FadingTier, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphPathResult, GraphProposeResult,
   HabitCurvePoint, HabitListItem, HabitShowDoc, HabitsListDoc, HistogramBin, LearnerArchiveResult,
   LearnerCardItem, LearnerCardKind, LearnerForgetResult,

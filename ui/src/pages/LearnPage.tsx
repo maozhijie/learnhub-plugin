@@ -18,6 +18,7 @@ import LessonView from '../components/LessonView'
 import { isActiveTab } from '../active-tab'
 import QuestionCard, { type AnswerOutcome, type JolPick, toOutcome } from '../components/QuestionCard'
 import LearnerCardCard from '../components/LearnerCardCard'
+import ErrorCardCard from '../components/ErrorCardCard'
 import { nextBand, pickNext } from '../../../src/engine/adaptive'
 import { api } from '../api'
 import type { AppFrame } from '../App'
@@ -71,7 +72,7 @@ function XpBar({ xp, onEditGoal }: { xp: XpStatus; onEditGoal: () => void }) {
  * Anki 通道当前到期分布（不含我的卡，ADR-0021 测量面不扩）。笔记源状态行（C1 #59/#72）：
  * 漂移 = 重新出题/归档旧题直达；挂起 = 重新注册。「我的卡管理」入口常驻（E1 #70）。
  * 动作全部面板内完成，不再只提示「去 dsh 里对 agent 说」。 */
-function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenSources, onRegenerateSource, onReregister, onManage }: {
+function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenSources, onRegenerateSource, onReregister, onManage, onMineErrors, mining }: {
   reviewQ: ReviewQueueDoc | null
   anki: AnkiStatusDoc | null
   onStart: () => void
@@ -81,6 +82,8 @@ function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenS
   onRegenerateSource: (id: string) => void
   onReregister: (path: string) => void
   onManage: () => void
+  onMineErrors: () => void
+  mining: boolean
 }) {
   const dueCount = reviewQ?.total ?? 0
   const drifted = reviewQ?.note_drifted ?? []
@@ -107,6 +110,9 @@ function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenS
             </Button>
           </Tooltip>
           <Button onClick={() => onOpenSources()}>笔记源</Button>
+          <Tooltip content='从你的错答流水挖高频错误模式，生成「三选一，其中一项是你的错法」辨别卡进复习队列（C-3）'>
+            <Button onClick={onMineErrors} loading={mining}>挖错误卡</Button>
+          </Tooltip>
           <Button onClick={onManage}>我的卡管理</Button>
         </div>
       </div>
@@ -417,6 +423,18 @@ function ReviewSession(props: {
     }
   }
 
+  /** 错误对比卡三选一作答（C-3 #82）：引擎自动判分结算（选对=3/选错=1，一卡一天
+   * 一次，无绑定 XP）；揭晓面（答案/错法/解析）随响应返回给卡面对照展示。 */
+  const answerError = async (choice: string) => {
+    if (!card?.error) throw new Error('没有当前卡')
+    const r = await api.errorAnswer(card.error.course, card.error.node, card.error.id, choice)
+    setAnsweredOnce(true)
+    setTally(t => r.correct ? { ...t, right: t.right + 1 } : { ...t, wrong: t.wrong + 1 })
+    setOutcome({ correct: r.correct, judge: 'error', answer: r.answer, explanation: r.explanation })
+    props.onSettled()
+    return { correct: r.correct, answer: r.answer, mine: r.mine, explanation: r.explanation }
+  }
+
   /** 我的卡忘记申报（rating 1 推进，0 XP；5 秒门控在 LearnerCardCard 卡面内）。 */
   const learnerForget = async () => {
     if (!card?.learner) return
@@ -536,8 +554,17 @@ function ReviewSession(props: {
       <Space direction='vertical' style={{ width: '100%' }} size={12}>
         <Space size={8} wrap>
           <Text type='secondary'>{card.course} · </Text>
-          <Text bold>{card.node}</Text>
+          {/* V-4（#108）：笔记源卡显示来源笔记标题（node 是机器 id，对学习者无意义），
+          并给 obsidian:// 跳转——绝对路径由 Obsidian 自解析所属 vault */}
+          <Text bold>{card.source === 'note' ? (card.title ?? card.node) : card.node}</Text>
+          {card.source === 'note' && card.source_abs && (
+            <Tooltip content={`在 Obsidian 中打开来源笔记：${card.source_path ?? ''}`}>
+              <a href={`obsidian://open?path=${encodeURIComponent(card.source_abs)}`}
+                style={{ fontSize: 12, textDecoration: 'none' }}>↗ 来源笔记</a>
+            </Tooltip>
+          )}
           {card.learner && <Tag size='small' color='purple'>{LEARNER_KIND_LABEL[card.learner.kind] ?? card.learner.kind}</Tag>}
+          {card.error && <Tag size='small' color='orange'>错误对比卡</Tag>}
           {/* A1（#56/#72）：随卡下发的 FSRS 预测可回忆度 R——用词遵守 CONTEXT（可回忆度，不是掌握度）；
           未调度新卡（我的卡首刷）无 due 无 R，不显示 */}
           {card.due && typeof card.r === 'number' && (
@@ -576,7 +603,17 @@ function ReviewSession(props: {
             </>
           )}
         </div>
-        {card.learner ? (
+        {card.error ? (
+          <>
+            <ErrorCardCard key={`${card.course}/${card.error.node}/${card.error.id}`}
+              card={card.error} onAnswer={answerError} />
+            {outcome && (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button type='primary' size='small' onClick={next}>下一张</Button>
+              </div>
+            )}
+          </>
+        ) : card.learner ? (
           <LearnerCardCard key={`${card.course}/${card.learner.node}/${card.learner.id}`}
             card={card.learner} onRate={rate} onForget={learnerForget} />
         ) : (
@@ -621,6 +658,8 @@ function NoteSourceDrawer(props: { open: boolean; focusId: string | null; onClos
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [oldQs, setOldQs] = useState<QuestionItem[] | null>(null)
+  /** 缺失源的重连新路径（V-6 #109，按源 id 分格）。 */
+  const [relinkPaths, setRelinkPaths] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setDoc(await api.noteSources().catch(() => null))
@@ -709,6 +748,21 @@ function NoteSourceDrawer(props: { open: boolean; focusId: string | null; onClos
     }
   }
 
+  /** 改路径重连（V-6 #109）：源缺失（改名/移动）时把既有源重连到新路径——
+   * 卡池与每张卡的调度保留（区别于解除后重注册：旧卡不会变孤儿）。 */
+  const relink = async (id: string) => {
+    const p = (relinkPaths[id] ?? '').trim()
+    if (!p) { Message.warning('填写改名/移动后的新路径（vault 相对或绝对）'); return }
+    try {
+      const r = await api.noteSourceRelink(id, p)
+      Message.success(`「${r.id}」已重连到 ${r.to}（卡池与调度保留）`)
+      setRelinkPaths(m => ({ ...m, [id]: '' }))
+      await Promise.all([load(), props.onChanged()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const STATUS: Record<string, { label: string; color: string }> = {
     ok: { label: '正常', color: 'green' },
     drifted: { label: '漂移', color: 'orange' },
@@ -764,6 +818,14 @@ function NoteSourceDrawer(props: { open: boolean; focusId: string | null; onClos
                   <Text type={s.status === 'missing' ? 'error' : 'warning'} style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
                     {s.hint}
                   </Text>
+                )}
+                {s.status === 'missing' && (
+                  <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
+                    <Input size='mini' value={relinkPaths[s.id] ?? ''} onChange={v => setRelinkPaths(m => ({ ...m, [s.id]: v }))}
+                      placeholder='改名/移动后的新路径（重连保留卡池与调度）'
+                      onPressEnter={() => void relink(s.id)} />
+                    <Button size='mini' type='outline' onClick={() => void relink(s.id)}>重连</Button>
+                  </div>
                 )}
                 {expanded === s.id && (
                   <div style={{ marginTop: 8, borderTop: '1px solid var(--color-border-2,#e5e6eb)', paddingTop: 8 }}>
@@ -994,6 +1056,23 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   }
 
   // C2 导出到 Anki（#63/#72）：横幅按钮直推到期卡（Anki 未开时引擎报错带指引）
+  /** 挖错误卡（C-3 #82）：全局课程挖矿 → 生成错误对比卡进错误 deck（新卡随复习队列出现）。 */
+  const [mining, setMining] = useState(false)
+  const mineErrors = async () => {
+    setMining(true)
+    try {
+      const r = await api.errorGenerate()
+      const n = r.generated.reduce((s, g) => s + g.ids.length, 0)
+      if (n > 0) Message.success(`已生成 ${n} 张错误对比卡，进入复习队列`)
+      else Message.info('这次没有挖到新的高频错误模式')
+    } catch (err) {
+      Message.warning(err instanceof Error ? err.message : String(err))
+    } finally {
+      setMining(false)
+      await Promise.all([frame.reload(), load()])
+    }
+  }
+
   const exportAnki = async () => {
     setExportingAnki(true)
     try {
@@ -1087,7 +1166,8 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
         onOpenSources={focusId => setSourceDrawer({ open: true, focusId: focusId ?? null })}
         onRegenerateSource={id => void regenerateSource(id)}
         onReregister={path => void reregisterSource(path)}
-        onManage={() => setCardMgrOpen(true)} />
+        onManage={() => setCardMgrOpen(true)}
+        onMineErrors={() => void mineErrors()} mining={mining} />
 
       {/* 核心区：「接下来学/复习」推荐流——点开直接进学习视图 */}
       {frame.tree && frame.tree.courses.length === 0 ? (

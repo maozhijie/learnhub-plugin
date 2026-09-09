@@ -3,6 +3,9 @@
  *
  * 职责边界（ADR-0004）：Missing 是合法空状态，Broken 是对象存在但无法解析或
  * 未通过契约；本模块只读文件并汇总分类，不修复、不清理、不写入 Vault。
+ * V-6（#109）起盘点覆盖全库注册源：每个注册表 note_sources 条目都做存在性 +
+ * 指纹盘点（Missing/漂移计数进 inventory、源文件缺失报 finding）——用户笔记本身
+ * 仍**永不判 Broken**（漂移是状态不是损坏，逐源明细以 noteSourceList 为准）。
  */
 import { readdir, readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
@@ -10,15 +13,16 @@ import { join, resolve } from 'node:path'
 import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
-import { validateNoteSourceManifest } from './note-source.ts'
+import { classifySource, fingerprintOf, validateNoteSourceManifest } from './note-source.ts'
 import { validateLearnerCards } from './learner-cards.ts'
+import { validateErrorCards } from './error-cards.ts'
 import { validateNoteFrontmatter } from './notes.ts'
 import { YAML } from './yaml.ts'
 import type { CourseEntry } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards'
 
 export type DataCheckFindingLevel = 'missing' | 'broken'
 
@@ -44,10 +48,13 @@ export type DataCheckReason =
   | 'note_source_manifest_yaml_parse'
   | 'note_source_manifest_schema'
   | 'note_source_mirror_inconsistent'
+  | 'note_source_file_missing'
   | 'note_source_bank_yaml_parse'
   | 'note_source_bank_schema'
   | 'learner_card_yaml_parse'
   | 'learner_card_schema'
+  | 'error_card_yaml_parse'
+  | 'error_card_schema'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -70,6 +77,11 @@ export interface DataCheckReport {
     graphFiles: number
     notes: number
     questionBanks: number
+    /** 已出题的笔记源镜像题库数。 */
+    noteSourceBanks: number
+    /** 全库注册源漂移盘点（V-6 #109）：注册表条目逐源的存在性 + 指纹状态计数。
+     * missing/drifted 是合法状态不是损坏（ADR-0004），逐源明细以 noteSourceList 为准。 */
+    noteSourceFiles: { total: number; ok: number; missing: number; drifted: number; inconsistent: number }
   }
   findings: DataCheckFinding[]
 }
@@ -309,16 +321,24 @@ async function scanCourse(
 }
 
 /** 笔记源体检（C1 #59 / ADR-0010）：镜像区契约文件（源清单/题库）按 Missing/Broken
- * 纪律盘点；用户笔记本身**不是**体检对象（永不判 Broken）。注册表条目 × 源清单
- * 条目双向对账——单边缺失 = 镜像不一致（Broken 级，说明有人手改了镜像区）。 */
+ * 纪律盘点；用户笔记本身**不是** Broken 对象（永不判 Broken——漂移是状态不是损坏）。
+ * 注册表条目 × 源清单条目双向对账——单边缺失 = 镜像不一致（Broken 级，说明有人手改
+ * 了镜像区）。V-6（#109）起对全库注册源逐源盘点：存在性 + 指纹比对（与引擎读路径
+ * classifySource 同口径），计数进 inventory（inconsistent = 指纹无法核对：清单缺条目
+ * 或文件不可读）；源文件缺失另报 Missing 级 finding（合法状态、卡池挂起，但盘点必须
+ * 显式可见——ADR-0004 不静默）。 */
 async function scanNoteSources(
   findings: DataCheckFinding[],
   paths: Paths,
   noteSources: Array<{ id: string; path: string }>,
-): Promise<number> {
+): Promise<{ banks: number; files: DataCheckReport['inventory']['noteSourceFiles'] }> {
+  const files: DataCheckReport['inventory']['noteSourceFiles'] = {
+    total: noteSources.length, ok: 0, missing: 0, drifted: 0, inconsistent: 0,
+  }
+  const countAllInconsistent = () => { files.inconsistent = noteSources.length }
   let banks = 0
   const manifestPath = paths.noteSourceManifestPath
-  let manifestIds: string[] = []
+  let itemsById = new Map<string, { path: string; fingerprint: string }>()
   if (existsSync(manifestPath)) {
     const where = `笔记源清单 ${manifestPath}`
     let text: string
@@ -326,23 +346,26 @@ async function scanNoteSources(
       text = await readFile(manifestPath, 'utf8')
     } catch (err) {
       push(findings, 'note_source', 'broken', 'note_source_manifest_unreadable', where, errorText(err))
-      return banks
+      countAllInconsistent()
+      return { banks, files }
     }
     let doc: unknown
     try {
       doc = YAML.parse(text)
     } catch (err) {
       push(findings, 'note_source', 'broken', 'note_source_manifest_yaml_parse', where, errorText(err))
-      return banks
+      countAllInconsistent()
+      return { banks, files }
     }
     const v = validateNoteSourceManifest(doc)
     if (v.errors) {
       push(findings, 'note_source', 'broken', 'note_source_manifest_schema', where, v.errors.join('；'))
-      return banks
+      countAllInconsistent()
+      return { banks, files }
     }
-    manifestIds = v.spec!.sources.map(s => s.id)
+    itemsById = new Map(v.spec!.sources.map(s => [s.id, s]))
     const entryIds = new Set(noteSources.map(e => e.id))
-    for (const id of manifestIds) {
+    for (const id of itemsById.keys()) {
       if (!entryIds.has(id)) {
         push(findings, 'note_source', 'broken', 'note_source_mirror_inconsistent', where,
           `源清单条目「${id}」在注册表 note_sources 域没有对应条目（镜像不一致）`)
@@ -351,14 +374,37 @@ async function scanNoteSources(
   } else if (noteSources.length) {
     push(findings, 'note_source', 'broken', 'note_source_mirror_inconsistent', `笔记源清单 ${manifestPath}`,
       `注册表有 ${noteSources.length} 个笔记源但源清单缺失（镜像不一致）`)
-    return banks
+    countAllInconsistent()
+    return { banks, files }
   }
-  const entryIdSet = new Set(manifestIds)
+  const entryIdSet = new Set(itemsById.keys())
   for (const e of noteSources) {
     if (!entryIdSet.has(e.id)) {
       push(findings, 'note_source', 'broken', 'note_source_mirror_inconsistent',
         `笔记源「${e.id}」（${e.path}）`, '注册表条目在源清单中没有对应条目（镜像不一致）')
+      files.inconsistent++
     }
+    const abs = `${paths.vaultRoot}/${e.path}`
+    if (!existsSync(abs)) {
+      files.missing++
+      push(findings, 'note_source', 'missing', 'note_source_file_missing',
+        `笔记源「${e.id}」源文件 ${abs}`,
+        '源文件缺失：卡池挂起——改名/移动用 learnhub_note_source_relink 重连，或重新注册/解除。')
+      continue
+    }
+    if (!entryIdSet.has(e.id)) continue // 指纹无从核对（镜像不一致已报）
+    let raw: string
+    try {
+      raw = await readFile(abs, 'utf8')
+    } catch {
+      // 用户笔记不可读（权限/同步锁）不是 Broken（它不是引擎契约对象，永不判
+      // Broken）；按「指纹无法核对」归 inconsistent 计数——不静默，读路径
+      // （noteSourceList）会以异常显式浮出
+      files.inconsistent++
+      continue
+    }
+    const status = classifySource(true, itemsById.get(e.id)!.fingerprint === fingerprintOf(raw))
+    files[status]++
     const bankPath = join(paths.noteSourceDir, '题库', `${safeFilename(e.id)}.yaml`)
     if (!existsSync(bankPath)) continue // 未出题 = 合法空卡池
     banks++
@@ -377,7 +423,7 @@ async function scanNoteSources(
       push(findings, 'note_source', 'broken', 'note_source_bank_schema', where, v.errors.join('；'))
     }
   }
-  return banks
+  return { banks, files }
 }
 
 /** 我的卡域体检（E1/#68）：课程根/我的卡/<节点>.yaml 存在但坏 = Broken（队列侧
@@ -415,10 +461,49 @@ async function scanLearnerCards(
   }
 }
 
+/** 错误对比卡域体检（C-3/#82）：课程根/错误卡/<节点>.yaml 存在但坏 = Broken
+ * （队列/生成/清单侧跳过不阻塞其他卡，这里负责把损坏显式报出——学习者数据
+ * 不得无声降级）。 */
+async function scanErrorCards(
+  findings: DataCheckFinding[],
+  paths: Paths,
+  courses: Array<{ name: string; root: string }>,
+): Promise<void> {
+  for (const course of courses) {
+    const dir = paths.errorCardsDir(String(course.root))
+    let entries
+    try {
+      entries = await readdir(dir, { withFileTypes: true })
+    } catch {
+      continue // 该课程还没有任何错误卡：合法空态
+    }
+    for (const entry of entries.filter(e => e.isFile() && e.name.endsWith('.yaml')).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(dir, entry.name)
+      const where = `课程「${String(course.name)}」错误卡 ${path}`
+      const result = await readYamlDoc(path)
+      if (result.readError) {
+        push(findings, 'error_cards', 'broken', 'error_card_yaml_parse', where, result.readError)
+        continue
+      }
+      if (result.parseError) {
+        push(findings, 'error_cards', 'broken', 'error_card_yaml_parse', where, result.parseError)
+        continue
+      }
+      const v = validateErrorCards(result.doc)
+      if (v.errors) {
+        push(findings, 'error_cards', 'broken', 'error_card_schema', where, v.errors.join('；'))
+      }
+    }
+  }
+}
+
 /** 一次只读体检。注册表损坏时无法安全展开课程，因此只报告注册表本身。 */
 export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
   const findings: DataCheckFinding[] = []
-  const inventory = { registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0, noteSourceBanks: 0 }
+  const inventory: DataCheckReport['inventory'] = {
+    registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0, noteSourceBanks: 0,
+    noteSourceFiles: { total: 0, ok: 0, missing: 0, drifted: 0, inconsistent: 0 },
+  }
   const registryWhere = `课程注册表 ${paths.registryPath}`
 
   let registryRaw: unknown
@@ -468,8 +553,11 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     inventory.questionBanks += result.banks
   }
 
-  inventory.noteSourceBanks = await scanNoteSources(findings, paths, noteSources)
+  const noteSourceScan = await scanNoteSources(findings, paths, noteSources)
+  inventory.noteSourceBanks = noteSourceScan.banks
+  inventory.noteSourceFiles = noteSourceScan.files
   await scanLearnerCards(findings, paths, courses)
+  await scanErrorCards(findings, paths, courses)
 
   const byArea: DataCheckReport['byArea'] = {
     registry: { missing: 0, broken: 0 },
@@ -478,6 +566,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     question_bank: { missing: 0, broken: 0 },
     note_source: { missing: 0, broken: 0 },
     learner_cards: { missing: 0, broken: 0 },
+    error_cards: { missing: 0, broken: 0 },
   }
   for (const finding of findings) {
     byArea[finding.area][finding.level]++

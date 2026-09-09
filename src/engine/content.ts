@@ -14,7 +14,7 @@ import { todayStr } from './dates.ts'
 import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { normChoice } from './grading.ts'
-import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock } from '../../shared/content-renderers.ts'
+import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../shared/content-renderers.ts'
 import type { GRegion, GNode, SectionManifest, EncEdge } from './types.ts'
 import type { Graph } from './graph.ts'
@@ -203,6 +203,21 @@ export class Content {
       out.push('- 第一节必须是挑战节：类型「例题」、标题以「挑战：」开头，只给题面与尝试引导（明确请学习者先自己尝试、带着缺口往下读），本节不给解答步骤与答案。')
       out.push('- 随后的讲解节围绕挑战题展开；讲解收尾处（或紧随其后的独立节）完整解答挑战题，回扣学习者在第一节的尝试与缺口。')
       out.push('- 其余硬约束、节类型菜单与质检门不变；节清单按挑战节在前的顺序给出，生成与学习顺序都照此走。')
+      out.push('')
+      out.push('## 11. 专家思维轨迹（认知学徒制 modeling；本节点 difficulty/bloom 达到高难阈值）')
+      out.push('- 大纲必须包含恰好一节「思维」节（标题以「思维：」开头），放在讲解铺开之后、收尾之前：它演示的题应与挑战节/讲解核心同族（可直接解挑战题，或解一道同族典型题）。')
+      out.push('- 思维节写专家的意识流解题：第一人称叙述真实思维过程（尝试、犹豫、自我盘问、监控与调整），不是整洁的板书式解答；叙述与 $$ 公式/示意图穿插。')
+      out.push('- 必须故意踩一次坑：走到一个典型错误岔路并「做下去」，直到出现矛盾信号，再当场用元评论点破（> **元评论**：我为什么差点走进去、什么信号暴露了它、下次靠什么提前绕开）。')
+      out.push('- 关键转折处（坑前与收敛前至少各一处）设预测门：正文直接写 ```learnhub-predict 机器块——先让学习者预测专家下一步该做什么，再继续读。块格式（逐行字段）：')
+      out.push('')
+      out.push('```learnhub-predict')
+      out.push('q: <预测提问：接下来专家会先做什么/哪条路是对的？>')
+      out.push('options: ["<做法一>", "<做法二>", "<做法三>"]（2–4 项，互不相同，句式相近）')
+      out.push('answer: <正确做法项的原文，与 options 中一项逐字一致>')
+      out.push('why: <揭晓时的元评论一两句（可省）>')
+      out.push('```')
+      out.push('- 思维节收尾提炼 1–3 条可迁移的解题元策略（什么时候先看边界、什么时候量纲先行之类，按内容定）。')
+      out.push('- 预测门会被质检门做结构校验（字段齐全、answer ∈ options），不合规格式会被拒收返工。')
     }
     return out.join('\n') + '\n'
   }
@@ -267,10 +282,11 @@ export class Content {
 ## 设计原则
 
 1. 节的划分、数量、顺序与类型配比完全由你根据课程内容、主题与讲解风格判断，选择最自然的讲解骨架：不套固定栏目，不设固定收尾段（无强制的过渡节/总结节）。
-2. 一节 = 一个可完成的学习单元（一个概念、一道例题、一次演示、一次动手练习或一个交互模拟）；标题描述本节具体内容，不用栏目化通名；一节 = 学习页 1–2 屏，上下文包 §9 的篇幅与可视化预算是**硬约束**（单节文字超预算 1.3 倍警告、2 倍拒收；可视化块 ≤2 个）——一个知识点需要 公式+推导+例题+图 才能讲完时拆成多个节，预算装不下的内容进新节；节内不允许再分小节（### 子标题会被质检门提示，建议并入正文或拆成独立节）。
-3. type 从节类型菜单选（概念/例题/演示/小结/练习/交互）；练习节可选（整课可以没有练习节）；节类型配比按内容选组合模式，例如：连续 2–3 个概念节后跟一个练习节集中练、概念-演示穿插、全概念无练习节——不要机械地一节内容跟一节练习。
+2. 一节 = 一个可完成的学习单元（一个概念、一道例题、一次演示、一次动手练习、一个交互模拟或一段专家思维轨迹）；标题描述本节具体内容，不用栏目化通名；一节 = 学习页 1–2 屏，上下文包 §9 的篇幅与可视化预算是**硬约束**（单节文字超预算 1.3 倍警告、2 倍拒收；可视化块 ≤2 个）——一个知识点需要 公式+推导+例题+图 才能讲完时拆成多个节，预算装不下的内容进新节；节内不允许再分小节（### 子标题会被质检门提示，建议并入正文或拆成独立节）。
+3. type 从节类型菜单选（概念/例题/演示/小结/练习/交互/思维）；练习节可选（整课可以没有练习节）；节类型配比按内容选组合模式，例如：连续 2–3 个概念节后跟一个练习节集中练、概念-演示穿插、全概念无练习节——不要机械地一节内容跟一节练习。
 4. 节数按上下文包 §9 复杂度档案锚定：目标节段数区间内的自然划分（简单节点不注水拆长课，复杂节点留够展开空间；拿不准时偏向多一节——单节塞满两倍预算会被拒收返工，拆开讲更从容）；相邻节之间要有学习上的递进关系（逐节生成时会注入前节已生成正文保证连贯）。
 5. 若上下文包附有「学习者已有理解（Vault 先验）」段：划分与措辞尊重学习者已有的理解与记法——已会内容不重复铺陈，记法沿用其笔记写法。
+6. 上下文包 §10（先做后教）与 §11（专家思维轨迹）出现时是硬性要求：按其指令纳入挑战节与/或「思维」节，位置与写法照指令执行。
 
 ## 输出
 
@@ -556,6 +572,32 @@ subgraph:
 3. 错误具体 = 指到「哪个要点、错在哪、怎么改」，不写「整体不错，继续加油」式的空评。
 4. 回执是学习者真实练习的记录：语气直接但尊重劳动，错误归错误、肯定归肯定。
 `,
+    // 错误对比卡（C-3 #82）：从作答流水挖出的高频错误模式 → 「三选一，其中一项是
+    // 学习者的错法」辨别卡（错误管理训练：错法本身成为复习对象，入错误 deck 走 FSRS）。
+    错误对比卡: `<!-- learnhub:prompt/v6 -->
+# 错误对比卡生成提示词（用户可编辑；挖出的错误模式与原题材料由系统附在本模板之后）
+
+你是 learnhub 学习系统的错误教练。学习者在一批题目上反复犯了错，请把每个错误模式做成一张「三选一」辨别卡：三个选项里，一项是正确做法，一项就是**这位学习者自己的错法**（从附材料的学习者错答里提炼），一项是有辨析价值的干扰做法——让错法本身成为复习对象。
+
+## 硬约束
+
+1. 只输出一个 YAML 文档（不要代码围栏、不要任何解释），结构如下：
+
+cards:
+  - node: <节点名，照抄候选给出的节点名>
+    source_q: <原题 id，照抄候选给出的 qid>
+    q: 情境题面（把原题情境重述成「该用哪个做法」的选择情境；不要照抄原题问法）
+    options: ["做法一", "做法二", "做法三"]
+    answer: <正确做法项的原文，与 options 中一项逐字一致>
+    mine: <学习者错法项的原文，与 options 中一项逐字一致，不得与 answer 相同>
+    explanation: 为什么正确项对、学习者的错法错在哪、怎么辨析（≤4 句）
+
+2. 每张卡恰好 3 个选项，互不相同、句式相近（不靠措辞长短或详略泄露答案）；三个选项在 options 里乱序给出。
+3. mine 忠实还原学习者的真实思路（以其错答为准），不要美化为标准错误示例——这张卡考的是「认出自己的错法并选对」。
+4. 干扰项来自同族常见误区（有迷惑性但可辨析），不设明显错误的凑数项。
+5. 只依据附后的原题、正确答案、解析、学习者错答与节正文出卡，不得引入材料外的新概念。
+6. 系统给出的每个候选都出恰好一张卡；node 与 source_q 必须逐字照抄候选标注。
+`,
   }
 
   /** 读提示词模板；内置模板带版本标记，vault 快照缺标记或版本更低时覆盖升级（旧文件存 .bak 供 diff 恢复），
@@ -710,15 +752,35 @@ subgraph:
       .map(([bad, good]) => `别名不一致: 正文用了「${bad}」，应采用「${good}」`)
   }
 
-  /** 未注册的代码块语言（面板无渲染器、会降级为源码显示）→ 警告，防 AI 产出渲染不了的块。 */
+  /** 未注册的代码块语言（面板无渲染器、会降级为源码显示）→ 警告，防 AI 产出渲染不了的块。
+   * learnhub- 前缀是引擎管理的机器块（learnhub-predict 预测门等），有自己的结构门，不在此列。 */
   static checkRendererLangs(body: string): string[] {
     const known = new Set(RENDERERS.map(r => r.lang))
     const hits = new Set<string>()
     for (const m of body.matchAll(/^```([A-Za-z0-9_-]+)/gm)) {
       const lang = m[1].toLowerCase()
+      if (lang.startsWith('learnhub-')) continue
       if (lang && !known.has(lang) && !PLAIN_CODE_LANGS.has(lang)) hits.add(lang)
     }
     return [...hits].sort()
+  }
+
+  /** 正文是否含预测门机器块（思维节必备门用）。 */
+  static hasPredictBlock(body: string): boolean {
+    return predictBlockRe().test(body)
+  }
+
+  /** 预测门块结构门（P-8 #97）：learnhub-predict 块逐块解析——字段齐全、options 2–4 项
+   * 互异、answer ∈ options。任何节里出现该块都须合法（MdView 会渲染成阅读流门）。 */
+  static checkPredictBlocks(body: string): string[] {
+    const findings: string[] = []
+    let i = 0
+    for (const m of body.matchAll(predictBlockRe())) {
+      i++
+      const v = parsePredictBlock(m[1]!)
+      if ('error' in v) findings.push('```learnhub-predict 第 ' + i + ' 块不合法：' + v.error)
+    }
+    return findings
   }
 
   /** 富内容块语法门：plot/chart 必须是合法 JSON 对象、svg 必须以 <svg 开头
@@ -861,6 +923,7 @@ subgraph:
     }
     const badLangs = Content.checkRendererLangs(body)
     if (badLangs.length) warns.push(`未注册的代码块语言（面板无法渲染，请改用支持的格式）: ${badLangs.join('、')}`)
+    findings.push(...Content.checkPredictBlocks(body))
     findings.push(...Content.checkVisualBlocks(body))
     const checkedBody = this.stripRoadmapSections(body)
     const shape = Content.checkSectionShape(checkedBody, TIER_ANCHORS[nodeTierOf(graph, node)].sectionWordBudget)
@@ -986,6 +1049,11 @@ subgraph:
     const sectionMd = Content.fixRichBlocks(Content.stripLeadingSectionTitle(split.body, entry.title))
     const gate = await this.gateReport(graph, root, node, `## ${entry.title}\n\n${sectionMd}`)
     const html = Content.checkInteractiveHtml(split.files)
+    // 思维节专属门（P-8 #97）：预测门至少一处——「先预测再揭晓」的阅读流门是这一
+    // 节类型的存在理由；块结构合法性已在 gateReport 全节检查。
+    if (entry.type === '思维' && !Content.hasPredictBlock(sectionMd)) {
+      gate.findings.push('「思维轨迹」节必须至少设一处 ```learnhub-predict 预测门（关键转折处先预测再揭晓；格式见上下文包 §11）')
+    }
     if (gate.findings.length || html.findings.length) {
       const e: Error & { code?: string } = new Error(`[section] 「${entry.title}」质检门未过：\n${[...gate.findings, ...html.findings].map(x => `  ✗ ${x}`).join('\n')}\n${[...gate.warns, ...html.warns].map(w => `  ⚠ ${w}`).join('\n')}`)
       e.code = 'GATE_FAILED'

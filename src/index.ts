@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：98 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
+ * - agent 工具面：106 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -1073,6 +1073,12 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/learner-queue', () => engine.learnerQueue(course)))
       return
     }
+    if (req.method === 'GET' && route === '/error-queue') {
+      // 「错误对比卡」清单（C-3/#82）：到期在前、新卡随后（全卡面，管理/抽查用）
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/error-queue', () => engine.errorCardQueue(course)))
+      return
+    }
     if (req.method === 'GET' && route === '/skills') {
       // 技能条目 lane（#89）：生效到期已折算维持节拍帽（读侧）
       sendJson(res, 200, await apiRun('api/skills', () => engine.skillList()))
@@ -1323,6 +1329,12 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
           engine.noteSourceUnexclude(need(body, 'path'))))
         return
       }
+      if (route === '/note-source/relink') {
+        // 漂移治理 relink（V-6 #109）：改名/移动后把既有源重连到新路径（卡池与调度保留）
+        sendJson(res, 200, await apiRun('api/note-source/relink', () =>
+          engine.noteSourceRelink(need(body, 'id'), need(body, 'path'))))
+        return
+      }
       if (route === '/note-source/generate') {
         // 笔记源出题（#59）：读笔记正文 → 笔记出题 prompt → validateBank 门禁落镜像
         sendJson(res, 200, await apiRun('api/note-source/generate', () => engine.noteSourceGenerate(
@@ -1359,6 +1371,28 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       if (route === '/learner-forget') {
         sendJson(res, 200, await apiRun('api/learner-forget', () => engine.learnerCardForget(
           need(body, 'course'), need(body, 'node'), need(body, 'card'))))
+        return
+      }
+      if (route === '/error-answer') {
+        // 「错误对比卡」作答（C-3/#82）：三选一自动判分，一卡一天一次，无绑定 XP
+        sendJson(res, 200, await apiRun('api/error-answer', () => engine.errorCardAnswer(
+          need(body, 'course'), need(body, 'node'), need(body, 'card'), String(body.choice ?? ''))))
+        return
+      }
+      if (route === '/error-generate') {
+        // 「错误对比卡」生成（C-3/#82）：挖矿 → 模型出卡 → schema 门禁落盘
+        sendJson(res, 200, await apiRun('api/error-generate', () => engine.errorCardGenerate(
+          need(body, 'course'),
+          {
+            ...(typeof body.node === 'string' && body.node.trim() ? { node: body.node } : {}),
+            ...(body.max !== undefined ? { max: Number(body.max) } : {}),
+          },
+          async prompt => stripFences(await llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort })))))
+        return
+      }
+      if (route === '/error-archive') {
+        sendJson(res, 200, await apiRun('api/error-archive', () => engine.errorCardArchive(
+          need(body, 'course'), need(body, 'node'), need(body, 'card'), Boolean(body.archived))))
         return
       }
       if (route === '/learner-add') {
@@ -1979,6 +2013,16 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
     (args: { course?: string }) => run('learnhub_graph_enc_backfill', async () =>
       JSON.stringify(await engine.graphEncBackfill(args.course))))
+  tool('learnhub_vault_links_scan',
+    'Scan the WHOLE vault (outside the learning center; dot-dirs, built-in attachment/archive dirs 99附件/05ob自定义/00类型/03属性/过时*, and the user note-source exclusion list skipped — the built-in list can be replaced via vault_link_excludes in learnhub.json) for [[wikilinks]] between personal notes and produce de-noised UNDIRECTED association pairs with confidence w∈[0,1] (enc-edge weight convention): embeds ![[…]], non-.md targets (.base/.png/…), diary date targets, unresolved targets, self-links and code-fence examples are filtered, each with a hit-count audit (nothing silently dropped). READ-ONLY on personal notes — the cache lands in the engine state dir (state/vault链接.json with per-file fingerprints for drift/rescan); pure file scanning, no host search API. Pair confidence tiers: w≥0.7 proposal-ready (learnhub_graph_link_backfill), 0.4–0.7 shown in learnhub_graph_analyze suggestions.vault_link_candidates for human adjudication, <0.4 report-only. Run before graph analysis to surface vault link priors.',
+    {},
+    () => run('learnhub_vault_links_scan', async () =>
+      JSON.stringify(await engine.vaultLinksScan())))
+  tool('learnhub_graph_link_backfill',
+    'Turn vault link priors into enc candidate edges (V-2 #91): mapped pairs with w ≥ 0.7 whose direction resolves INSIDE the pre-transitive-closure become set_enc whole-replace ops (declared enc preserved, new edges noted with the source link evidence for traceability), queued as a SINGLE pending edit proposal per course — the enc_backfill single-proposal human-review channel. Pairs without a pre relation are NOT forced (enc contract/E7: enc target must sit in the holder\'s prereq closure) — they come back as blocked_no_pre with a why, for you to add pre edges explicitly or drop. Re-runnable; already-declared edges are skipped. Requires learnhub_vault_links_scan to have run (fails loud with a pointer otherwise). Review/apply with learnhub_graph_apply(kind=edit).',
+    { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
+    (args: { course?: string }) => run('learnhub_graph_link_backfill', async () =>
+      JSON.stringify(await engine.graphLinkBackfill(args.course))))
   tool('learnhub_graph_apply',
     'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
     {
@@ -2152,10 +2196,18 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     () => run('learnhub_note_source_list', async () =>
       JSON.stringify(await engine.noteSourceList())))
   tool('learnhub_note_source_unregister',
-    'Unregister a Note Source (C1): removes the registry entry, the mirror manifest item, and the mirror question bank. The user\'s note file is untouched. Use the id from learnhub_note_source_list.',
+    'Unregister a Note Source (C1): removes the registry entry, the mirror manifest item, the mirror question bank, and the pool-mirror md. The user\'s note file is untouched. Use the id from learnhub_note_source_list.',
     { id: { type: 'string', required: true, description: 'Note-source id, e.g. "note-1"' } },
     (args: { id: string }) => run('learnhub_note_source_unregister', async () =>
       JSON.stringify(await engine.noteSourceUnregister(args.id))))
+  tool('learnhub_note_source_relink',
+    'Relink a Note Source to a new path (V-6 drift governance): when a registered note was RENAMED or MOVED, the source reads Missing and its card pool suspends — relink re-attaches the SAME source id to the new path, keeping the mirror bank and every card\'s FSRS schedule (unlike unregister+re-register, which orphans the old cards). Fingerprint and title refresh from the new file; the pool-mirror md backlink follows. The new path passes the same hygiene as registration (outside the learning center, not on the user exclusion list, not already taken by another source) and must EXIST — relink is a recovery action. Fails loud on every conflict.',
+    {
+      id: { type: 'string', required: true, description: 'Note-source id, e.g. "note-1"' },
+      path: { type: 'string', required: true, description: 'New note path (after the rename/move), vault-relative or absolute' },
+    },
+    (args: { id: string; path: string }) => run('learnhub_note_source_relink', async () =>
+      JSON.stringify(await engine.noteSourceRelink(args.id, args.path))))
   tool('learnhub_note_source_exclude',
     'Add a path to the user exclusion list (V-1): a note/folder that batch registrations must never absorb (e.g. private journals, sync-noise folders). Vault-relative or absolute, file or folder (folder = the whole subtree), need not exist yet. Governs FUTURE registrations only — already-registered sources stay until learnhub_note_source_unregister. Current list rides learnhub_note_source_list.',
     { path: { type: 'string', required: true, description: 'Note or folder path to exclude, vault-relative or absolute; must be outside the learning center' } },
@@ -2281,6 +2333,56 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string; card: string; archived?: boolean }) => run('learnhub_learner_card_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[learner-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
       return JSON.stringify(await engine.learnerCardArchive(args.course, args.node, args.card, args.archived))
+    }))
+
+  // —— C-3 错误对比卡（#82）：错法挖矿 → 三选一辨别卡 → 错误 deck 走 FSRS ——
+
+  tool('learnhub_error_card_mine',
+    'Mine the answer-attempt stream for high-frequency error patterns (C-3 #82, read-only preview): groups substantive wrong answers (correct=false with an actual wrong answer; forget declarations do not count) by course/node/question and returns candidates with >=2 lapses, each carrying the learner\'s distinct wrong answers (most recent first). This is the human-audit surface for "error patterns are reasonable" — generation is learnhub_error_card_generate; nothing is written here.',
+    {
+      course: { type: 'string', description: 'Course name; omit for all enabled courses' },
+      node: { type: 'string', description: 'Node name to scope the mining' },
+    },
+    (args: { course?: string; node?: string }) => run('learnhub_error_card_mine', async () =>
+      JSON.stringify(await engine.errorCardMine(args.course, args.node))))
+  tool('learnhub_error_card_generate',
+    'Generate 错误对比卡 discrimination cards from mined error patterns (C-3 #82): picks the top uncovered candidates (same question failed substantively >=2 times, no active card yet, batch cap 5), feeds the model the original question/answer/explanation + the learner\'s own wrong answers + the bound section excerpt, and the model returns three-option cards where ONE option is the learner\'s own wrong approach. Cards pass a schema gate (exactly 3 distinct options; answer and mine must both be among them and differ; (node,source_q) must match an offered candidate) and land in the per-node 错误卡 deck (课程根/错误卡/<节点>.yaml). Creation is zero XP and writes nothing canonical — the deck joins the review queue (source=error) and reviews earn unbound XP via learnhub_error_card_answer. Zero-disk-write on any model/gate failure.',
+    {
+      course: { type: 'string', description: 'Course name' },
+      node: { type: 'string', description: 'Node name to scope mining/generation' },
+      max: { type: 'number', description: 'Max cards this run (default 5, cap 5)' },
+    },
+    (args: { course: string; node?: string; max?: number }) => run('learnhub_error_card_generate', async () =>
+      JSON.stringify(await engine.errorCardGenerate(args.course, {
+        ...(args.node ? { node: args.node } : {}),
+        ...(args.max !== undefined ? { max: args.max } : {}),
+      }, async prompt => stripFences(await llmComplete(ctx, prompt))))))
+  tool('learnhub_error_card_queue',
+    'List ALL 错误对比卡 (C-3 #82) for inventory/audit: due cards first (due ascending), never-scheduled cards after. Each card carries the full face (q/options/answer/mine/explanation) plus source_q provenance — use this to spot-check that mined error patterns are faithful to what the learner actually did. Review happens in the merged cross-course review queue (source=error) or directly via learnhub_error_card_answer (auto-graded: pick the correct approach = 3, pick wrong = 1; one push per card per day). Correct picks earn unbound XP (totals/daily goal/streak only).',
+    { course: { type: 'string', description: 'Course name; omit for all enabled courses' } },
+    (args: { course?: string }) => run('learnhub_error_card_queue', async () =>
+      JSON.stringify(await engine.errorCardQueue(args.course))))
+  tool('learnhub_error_card_answer',
+    'Settle one 错误对比卡 (C-3 #82) with the learner\'s three-way choice: the choice must be one of the card\'s option texts verbatim. Auto-graded — picking the correct approach pushes the card with rating 3, picking wrong with rating 1 (one push per card per day, second same-day answer rejected). Only the card\'s own FSRS block moves (default params, optimizer never trains it); a correct pick earns unbound XP (xp_error journal row — totals/daily goal/streak only, never per-course/per-node ledgers or mastery); wrong picks leave a 0-XP unbound row. The reveal (answer / the learner\'s mine option / explanation) rides the response for the learner to compare.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node the card belongs to' },
+      card: { type: 'string', required: true, description: 'Card id, e.g. "c1"' },
+      choice: { type: 'string', required: true, description: 'The chosen option text (verbatim one of options)' },
+    },
+    (args: { course: string; node: string; card: string; choice: string }) => run('learnhub_error_card_answer', async () =>
+      JSON.stringify(await engine.errorCardAnswer(args.course, args.node, args.card, args.choice))))
+  tool('learnhub_error_card_archive',
+    'Archive or restore one 错误对比卡 (C-3 #82 management): archived cards leave the review queue but keep their history in the card file; a question with only an archived card becomes minable again on the next generate run. Error-deck internal action: zero canonical writes.',
+    {
+      course: { type: 'string', required: true, description: 'Course name' },
+      node: { type: 'string', required: true, description: 'Node the card belongs to' },
+      card: { type: 'string', required: true, description: 'Card id, e.g. "c1"' },
+      archived: { type: 'boolean', required: true, description: 'true to archive, false to restore' },
+    },
+    (args: { course: string; node: string; card: string; archived?: boolean }) => run('learnhub_error_card_archive', async () => {
+      if (typeof args.archived !== 'boolean') throw new Error('[error-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
+      return JSON.stringify(await engine.errorCardArchive(args.course, args.node, args.card, args.archived))
     }))
 
   // —— 项目域（P 区 / ADR-0015；#92）：Project 是 Course 姊妹实体，零 XP、零 FSRS、不进 sessions/srs ——
@@ -2608,7 +2710,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 98 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 106 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

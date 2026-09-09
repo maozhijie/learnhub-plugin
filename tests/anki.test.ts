@@ -401,3 +401,60 @@ test('AnkiConnectClient：坏端点带指引报错；错误响应透传 AnkiConn
     new Response(JSON.stringify({ result: null, error: 'deck was not found' }), { status: 200 })) as unknown as typeof fetch)
   await assert.rejects(() => erring.invoke('createDeck', { deck: 'x' }), /deck was not found/)
 })
+
+// ---- V-4（#108）：笔记源卡并入 Anki 通道 ----
+
+test('笔记源卡 Anki 衔接：到期卡入 learnhub::笔记源 镜象，作答回写路由到镜像题库（默认参数调度、零代表卡）', async () => {
+  await makeVault({
+    tag: 'learnhub-anki-notesrc-',
+    notes: { 入门: `${NOTE}\n` },
+    banks: { 入门: bankYaml() },
+    files: [{ path: '我的笔记/费曼技巧.md', content: '# 费曼技巧\n\n讲给外行听。\n' }],
+  }, async ({ engine }) => {
+    await engine.noteSourceRegister('我的笔记/费曼技巧.md')
+    const gen = await engine.noteSourceGenerate('note-1', 1, async () => [
+      'node: note-1',
+      'questions:',
+      '  - id: q1',
+      '    kind: single_choice',
+      '    q: 费曼技巧的核心动作是？',
+      '    options: ["讲给外行听", "多刷题", "抄笔记", "看视频"]',
+      '    answer: A',
+    ].join('\n'))
+    assert.equal(gen.added, 1)
+    // 合成首复习 = 明天起刷：改到今天让它进导出集
+    await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
+      fsrs: { stability: 3, difficulty: 5, due: TODAY, last_review: '2026-09-01', reps: 1, lapses: 0 },
+    })
+
+    const anki = new FakeAnki()
+    const exp = await engine.ankiExportPush(anki)
+    assert.equal(exp.total, 3, '课程 2 张 + 笔记源 1 张')
+    assert.deepEqual([...exp.decks].sort(), ['learnhub::数学', 'learnhub::笔记源'])
+    assert.match(anki.noteFields('笔记源/note-1/q1')['题目'], /费曼技巧的核心动作/)
+
+    // Anki 侧作答 Good → 回写路由到镜像题库（默认参数、无代表卡回刷）
+    const repsBefore = await engine.bank.load(engine.paths.noteSourceDir, 'note-1')
+    const fsBefore = repsBefore.questions[0]!.fsrs
+    anki.answer('笔记源/note-1/q1', 3, todayNoonMs())
+    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
+    assert.equal(r.imported, 1)
+    assert.equal(r.advanced, 1)
+    assert.equal(r.skipped_unknown, 0)
+
+    const after = await engine.bank.load(engine.paths.noteSourceDir, 'note-1')
+    const fsAfter = after.questions[0]!.fsrs!
+    assert.equal(fsAfter.reps, (fsBefore?.reps ?? 0) + 1)
+    assert.equal(fsAfter.last_review, TODAY)
+    assert.ok(fsAfter.due > TODAY, 'vault 重算排期')
+    // 流水与复习日志落笔记源伪课程；无绑定 XP 零掺入（judge=review 行 xp=0）
+    const reviews = await engine.store.reviewLogAll()
+    const noteReview = reviews.find(x => x.course === '笔记源' && x.qid === 'q1' && x.rating_source === 'self')
+    assert.equal(noteReview?.rating, 3)
+    const practice = await engine.store.practiceAll()
+    assert.equal(practice.find(x => x.course === '笔记源' && x.judge === 'review')?.qid, 'q1')
+    // 节点文件零写入（笔记源没有代表卡——课程域 frontmatter 不被 Anki 事件触碰）
+    const fm = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    assert.ok(!fm.includes(`due: "${TODAY}"`), '课程节点 frontmatter 未被笔记源 Anki 事件改写')
+  })
+})

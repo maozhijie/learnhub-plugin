@@ -83,6 +83,7 @@ export const SECTION_TYPES: SectionTypeSpec[] = [
   { prefix: '小结', label: '小结', rule: '要点回顾与易错点清单' },
   { prefix: '练习', label: '练习', rule: '本节为题组：题目由题库提供，正文只写能力目标与作答引导（≤120 字），不写题' },
   { prefix: '交互', label: '交互', rule: '一节 = 一个交互模拟 + 少量旁注：正文用 learnhub-interactive 标记块内联写完整自包含 HTML' },
+  { prefix: '思维', label: '思维轨迹', rule: '专家意识流解题（P-8）：第一人称叙述专家拿到一道题后的真实思维流——尝试、犹豫、自我盘问；中途故意踩一次典型坑并当场用元评论点破；关键转折处设 learnhub-predict 预测门（先预测再揭晓）；收尾提炼可迁移的解题元策略' },
 ]
 
 /** 节标题解析 → {type, clean}；无匹配前缀返回默认「概念」类型。 */
@@ -112,3 +113,84 @@ export const PLAIN_CODE_LANGS = new Set([
   'python', 'py', 'js', 'javascript', 'ts', 'typescript', 'sql', 'java', 'c',
   'cpp', 'html', 'css', 'xml', 'md', 'markdown', 'diff', 'none', '',
 ])
+
+// ---- 预测门机器块（P-8 #97：专家思维轨迹节的阅读流门）----
+// 正文内嵌 ```learnhub-predict 围栏块，MdView 渲染为「先预测再揭晓」的阅读门；
+// 引擎质检门按同一解析器校验结构（shared 单一事实源）。块内容是受限行式 YAML：
+// q（预测题面）/ options（候选做法流式数组，2–4 项互异）/ answer（正确项原文）/
+// why（可选，揭晓时的元评论）。
+
+export const PREDICT_BLOCK_LANG = 'learnhub-predict'
+
+export interface PredictBlock { q: string; options: string[]; answer: string; why?: string }
+
+/** 解析流式数组 ["项一", "项二"]（容忍单双引号与尾随逗号）；非数组形态返回 null。 */
+function parseFlowArray(text: string): string[] | null {
+  const t = text.trim()
+  if (!t.startsWith('[') || !t.endsWith(']')) return null
+  const inner = t.slice(1, -1)
+  const items: string[] = []
+  let cur = ''
+  let quote: string | null = null
+  for (const ch of inner) {
+    if (quote) {
+      if (ch === quote) quote = null
+      else cur += ch
+    } else if (ch === '"' || ch === "'") quote = ch
+    else if (ch === ',') { items.push(cur.trim()); cur = '' }
+    else cur += ch
+  }
+  if (quote !== null) return null
+  const last = cur.trim()
+  if (last) items.push(last)
+  return items
+}
+
+/** 解析预测门块内容 → 结构化数据或错误说明（质检门与 UI 渲染共用）。 */
+export function parsePredictBlock(text: string): PredictBlock | { error: string } {
+  const fields = new Map<string, string>()
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+    const m = /^([A-Za-z_]+):\s*(.*)$/.exec(line)
+    if (!m) return { error: `无法识别的行：「${line.slice(0, 40)}」（只允许 q/options/answer/why 字段）` }
+    fields.set(m[1]!, m[2]!.trim())
+  }
+  const q = fields.get('q')
+  const optionsRaw = fields.get('options')
+  const answer = fields.get('answer')
+  if (!q) return { error: '缺少 q（预测题面）' }
+  if (!optionsRaw) return { error: '缺少 options（候选做法数组）' }
+  const options = parseFlowArray(optionsRaw)
+  if (!options || !options.length) return { error: 'options 必须是 ["做法一", "做法二", …] 形式的数组' }
+  if (options.length < 2 || options.length > 4) return { error: `options 需要 2–4 项（收到 ${options.length} 项）` }
+  if (new Set(options).size !== options.length) return { error: 'options 各项必须互不相同' }
+  if (!answer) return { error: '缺少 answer（正确项原文）' }
+  if (!options.includes(answer)) return { error: 'answer 必须是 options 中一项的原文' }
+  const why = fields.get('why')
+  return { q, options, answer, ...(why ? { why } : {}) }
+}
+
+/** 预测门围栏块的围栏正则（围栏行容忍尾随空白与 CRLF，同 checkVisualBlocks 纪律）。 */
+export function predictBlockRe(): RegExp {
+  return /^```learnhub-predict[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm
+}
+
+/** 把 markdown 切成 md / predict 段序列（UI 渲染分界用）；predict 段携带解析结果
+ * 与「块后全部内容」（门未过时隐藏，答案揭晓后经递归 MdView 再渲染）。 */
+export function splitPredictSegments(md: string): Array<
+  { type: 'md'; md: string } | { type: 'predict'; raw: string; parsed: PredictBlock | { error: string }; after: string }
+> {
+  const out: Array<{ type: 'md'; md: string } | { type: 'predict'; raw: string; parsed: PredictBlock | { error: string }; after: string }> = []
+  let last = 0
+  for (const m of md.matchAll(predictBlockRe())) {
+    const before = md.slice(last, m.index)
+    if (before.trim()) out.push({ type: 'md', md: before })
+    const afterStart = m.index + m[0].length
+    out.push({ type: 'predict', raw: m[0], parsed: parsePredictBlock(m[1]!), after: md.slice(afterStart) })
+    last = afterStart
+  }
+  const tail = md.slice(last)
+  if (tail.trim()) out.push({ type: 'md', md: tail })
+  return out
+}
