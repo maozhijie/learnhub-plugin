@@ -12,6 +12,9 @@ const FW_MAP: Record<string, string> = {
   '"': '＂', '<': '＜', '>': '＞', '|': '｜',
 }
 
+/** 学习产物输出区目录名（V-3 #107；output.ts 注册豁免判定共用同一常量）。 */
+export const OUTPUT_DIR_NAME = '我的产出'
+
 /** 节点名 → 安全文件名（不含扩展名）。 */
 export function safeFilename(name: string): string {
   return [...name].map(c => FW_MAP[c] ?? c).join('')
@@ -107,7 +110,7 @@ export class Paths {
   projectMilestonePath(id: string, file: string): string { return `${this.projectMilestoneDir(id)}/${file}` }
   /** 学习产物输出区（V-3 #107）：复盘稿/讲解稿/错误卡/周复盘的引擎专属输出区；
    * 只出链指向个人笔记，永不改写个人文件（ADR-0010）。 */
-  get outputDir(): string { return `${this.centerRoot}/我的产出` }
+  get outputDir(): string { return `${this.centerRoot}/${OUTPUT_DIR_NAME}` }
   outputKindDir(kind: string): string { return `${this.outputDir}/${safeFilename(kind)}` }
   /** 项目日志（V-5 #113，设计文档预留位）：学习者自由记录，可注册为笔记源复习。 */
   projectLogPath(id: string): string { return `${this.projectDir(id)}/日志.md` }

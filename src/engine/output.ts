@@ -12,7 +12,7 @@
  * 引擎之外的手改。
  */
 import { mkdir } from 'node:fs/promises'
-import { safeFilename } from './paths.ts'
+import { OUTPUT_DIR_NAME, safeFilename } from './paths.ts'
 import { atomicWrite } from './store.ts'
 import { YAML } from './yaml.ts'
 import type { Paths } from './paths.ts'
@@ -63,6 +63,6 @@ export async function writeOutputArtifact(
  * 仅对学习中心内部 rel 调用；centerRel 为学习中心相对 vault 的 posix 路径。 */
 export function isRegistrableCenterRel(centerRel: string, rel: string): boolean {
   const c = centerRel.replace(/\/+$/, '')
-  if (rel === `${c}/我的产出` || rel.startsWith(`${c}/我的产出/`)) return true
+  if (rel === `${c}/${OUTPUT_DIR_NAME}` || rel.startsWith(`${c}/${OUTPUT_DIR_NAME}/`)) return true
   return /^projects\/[^/]+\/日志\.md$/.test(rel.slice(c.length + 1))
 }

@@ -209,7 +209,7 @@ const pct = (v: number): string => `${Math.round(v * 100)}%`
 /** 现状段渲染（markdown 行；空态诚实留痕，不造假数据）。 */
 export function renderKataReality(r: KataReality): string {
   const lines: string[] = ['### 总览', '']
-  const overview = [`学习 ${r.days} 天`, `XP +${r.xp}`, `作答 ${r.answers} 次${r.accuracy !== null ? `（正确率 ${pct(r.accuracy)}）` : ''}`]
+  const overview = [`学习 ${r.days} 天`, `XP +${r.xp}`, `作答 ${r.answers} 次${r.accuracy !== null ? `（作答正确率 ${pct(r.accuracy)}）` : ''}`]
   if (r.due_reviews > 0) {
     overview.push(`到期复习 ${r.due_reviews} 次${r.retention !== null ? `（真实保留率 ${pct(r.retention)}）` : ''}`)
   }
