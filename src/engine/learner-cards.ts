@@ -2,9 +2,10 @@
  * 学习者产出卡（E1 / ADR-0009 Learner Output；schema 依据 #45 调研报告）。
  *
  * 独立卡域：课程根/我的卡/<节点>.yaml，独立 schema + 独立门禁，**不入**题库九题型
- * AlloKind、不进 nodeMastery/完成门禁/XP 定价的任何消费面（独立目录 = 结构性隔离）。
- * 每卡自带 fsrs 调度块（隔离自调度，复习对象是卡自身）+ stats.last「一卡一天一次
- * 推进」门禁；调度内核复用 srs.applyRatingBlock，srs.ts 零改动。
+ * AlloKind、不进 nodeMastery/完成门禁/节点定价的任何消费面（独立目录 = 结构性隔离）。
+ * 每卡自带 fsrs 调度块（默认参数，复习对象是卡自身）+ stats.last「一卡一学习日一次
+ * 推进」门禁；调度内核复用 srs.applyRatingBlock，srs.ts 零改动。复习呈现并入复习
+ * 队列、复习入账走无绑定 XP（ADR-0021）——节点调度面依旧零掺入。
  *
  * 三种卡面：recall_cue 提示重述 / cloze_rewrite 挖空重述 / self_explain 自注讲解。
  * 判分一律走复习自评语义（Hard/Good/Easy + 忘记），不走 evaluateAllo、不做 AI 判分

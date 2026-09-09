@@ -155,7 +155,7 @@ test('注册 → 出题 → 复习全流程：用户笔记字节级零写入，�
     assert.equal(a.correct, true)
     assert.equal(a.pendingRating, true)
     assert.equal(a.scheduled, false)
-    assert.equal(a.xp, 0)
+    assert.equal(a.xp, 1) // 无绑定 XP（ADR-0021）：single_choice 权重 1 × 难度 1，答对挂起即入账
     await assert.rejects(
       () => engine.questionForget('笔记源', 'note-1', 'q1'),
       /今天已有推进记录/)
@@ -176,6 +176,14 @@ test('注册 → 出题 → 复习全流程：用户笔记字节级零写入，�
     assert.equal(f.judge, 'forget')
     assert.equal(f.xp, 0)
     assert.equal((await engine.store.reviewLogAll()).filter(r => r.rating === 1 && r.rating_source === 'auto' && r.course === '笔记源').length, 1)
+
+    // 无绑定 XP 行（ADR-0021）：作答 ×1（挂起即落）+ 忘记 ×1（0 XP）= 2 条；
+    // course/node='*' 不绑实体，只入总账/streak
+    const xpRows = (await engine.store.journalTail(null, Number.MAX_SAFE_INTEGER))
+      .filter(r => r.kind === 'xp_notesource')
+    assert.equal(xpRows.length, 2)
+    assert.ok(xpRows.every(r => r.course === '*' && r.node === '*'))
+    assert.equal(xpRows.reduce((s, r) => s + (r.xp ?? 0), 0), 1)
 
     // 全程笔记字节不变
     assert.equal(await readFile(p.noteAbs, 'utf8'), before)

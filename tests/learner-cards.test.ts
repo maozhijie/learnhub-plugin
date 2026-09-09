@@ -377,11 +377,65 @@ test('我的卡队列与自评：新卡入队→首推到期→一卡一天一�
     await assert.rejects(() => engine.learnerCardRate('数学', '入门', 'c3', 3), /没有 c3/)
     await assert.rejects(() => engine.learnerCardRate('数学', '入门', 'c1', 5), /自评档位/)
 
-    // E 池隔离自调度：不写复习日志/practice/journal，无 XP；节点 frontmatter 未被动
+    // 测量面零掺入（ADR-0021 裁决 2）：不写复习日志/practice，节点 frontmatter 未被动；
+    // XP 走无绑定行（journal，ADR-0021）：c1 自评 Good = max(1, round(难度 5)) = 5，c2 忘记 = 0
     assert.ok(!existsSync(engine.paths.reviewLogPath))
     assert.ok(!existsSync(engine.paths.practicePath))
-    assert.ok(!existsSync(engine.paths.journalPath))
+    const xpRows = (await engine.store.journalTail(null, Number.MAX_SAFE_INTEGER))
+      .filter(r => r.kind === 'xp_learner')
+    assert.equal(xpRows.length, 2)
+    assert.ok(xpRows.every(r => r.course === '*' && r.node === '*'))
+    assert.deepEqual(xpRows.map(r => r.xp).sort((a, b) => a - b), [0, 5])
     const fm = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
     assert.match(fm, /practice:\n  attempts: 3\n  correct: 2/)
+  })
+})
+
+test('我的卡汇入复习队列（ADR-0021）：新卡队尾首推、到期卡入队、定向入口可见、复习日志零掺入', async () => {
+  await withVault(LEARNER_VAULT, async ({ engine }) => {
+    await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A：求和公式的来历。' })
+
+    // 未调度新卡：due 空、R 满档落队尾，learner 字段随卡带出（UI 分面渲染依据）
+    const q1 = await engine.reviewQueue()
+    assert.equal(q1.total, 1)
+    const fresh = q1.cards[0] as Record<string, unknown>
+    assert.equal(fresh.source, 'learner')
+    assert.equal(fresh.due, null)
+    assert.equal(fresh.r, 1)
+    const lf = fresh.learner as Record<string, unknown>
+    assert.equal(lf.id, 'c1')
+    assert.equal(lf.kind, 'recall_cue')
+    assert.equal(lf.course, '数学')
+    assert.equal(lf.node, '入门')
+    assert.equal(lf.due, null)
+    assert.match(String(lf.prompt), /再讲一遍/)
+    assert.match(String(lf.content), /求和公式/)
+
+    // 定向入口同可见（单节点会话带起点难度带）
+    const qDir = await engine.reviewQueue('数学', '入门')
+    assert.equal(qDir.cards.length, 1)
+    assert.ok(qDir.band !== undefined)
+
+    // 种一个 due=当前的调度块 → 进队且 R < 1；rate 结算走无绑定 XP（权重 1 × 难度 5）
+    const today = todayStr()
+    await engine.learnerCards.updateCardEvidence('math', '入门', 'c1', {
+      fsrs: { stability: 3, difficulty: 5, due: today, last_review: '2026-09-08', reps: 1, lapses: 0 },
+    })
+    const q2 = await engine.reviewQueue()
+    assert.equal(q2.total, 1)
+    assert.equal(String(q2.cards[0]!.due), today)
+    assert.ok((q2.cards[0]!.r as number) < 1)
+    const r = await engine.learnerCardRate('数学', '入门', 'c1', 3)
+    assert.equal(r.xp, 5)
+
+    // 推到明天 → 出队；无绑定行已落 journal，复习日志/practice 零掺入
+    assert.equal((await engine.reviewQueue()).total, 0)
+    const rows = (await engine.store.journalTail(null, Number.MAX_SAFE_INTEGER))
+      .filter(x => x.kind === 'xp_learner')
+    assert.equal(rows.length, 1)
+    assert.equal(rows[0]!.xp, 5)
+    assert.equal(rows[0]!.course, '*')
+    assert.ok(!existsSync(engine.paths.reviewLogPath))
+    assert.ok(!existsSync(engine.paths.practicePath))
   })
 })

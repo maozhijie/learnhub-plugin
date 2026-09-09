@@ -1454,7 +1454,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string; transcript: string }) => run('learnhub_explain_feedback', async () =>
       JSON.stringify(await engine.explainBackFeedback(args.course, args.node, args.transcript, (prompt, system) => llmComplete(ctx, prompt, system)))))
   tool('learnhub_learner_card_add',
-    'Archive the learner\'s own wording as a LearnerCard (E1「我的卡」, the archive target of E2 explain-back): kind recall_cue (再讲一遍 — default; front asks them to re-explain in their own words) or cloze_rewrite (挖空重述; content must contain at least one non-empty {{…}} cloze). The card lives in the isolated E domain with its own schedule (learnerQueue / learner-rate / learner-forget; one push per card per day) — zero XP, zero canonical writes. Duplicate content on the same node is rejected.',
+    'Archive the learner\'s own wording as a LearnerCard (E1「我的卡」, the archive target of E2 explain-back): kind recall_cue (再讲一遍 — default; front asks them to re-explain in their own words) or cloze_rewrite (挖空重述; content must contain at least one non-empty {{…}} cloze). The card lives in the「我的卡」E domain (ADR-0021: its reviews ride the merged cross-course review queue and earn unbound XP — totals/daily goal/streak only, never per-course or per-node ledgers; one push per card per day via learnhub_learner_rate / learnhub_learner_forget). Creating the card is zero XP and writes nothing to mastery or node scheduling. Duplicate content on the same node is rejected.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Source node the card attaches to' },
@@ -1473,7 +1473,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       }))
     }))
   tool('learnhub_understanding_add',
-    'Add the learner\'s「我的理解」as a section-anchored self-note (E1「加我的理解」entry): the learner writes ONE explanation/example/mnemonic in their OWN words for a section they just learned; the model compares it against that section\'s taught points and returns verdict (对/部分对/错) + located deviations (含糊/跳跃/说错) + a "how to fill the gap" advice + the full markdown feedback. The verdict is archived ONLY in the E archive and the wording becomes a LearnerCard in the isolated「我的卡」domain (own schedule; review via learnhub_learner_queue) — Learner Output boundary: zero XP, zero mastery/FSRS/canonical writes. Unparseable model feedback fails loud with zero side effects (nothing is archived, no card is created). kind: recall_cue 提示重述 (default) / cloze_rewrite 挖空重述 (content must contain a non-empty {{…}} cloze) / self_explain 自注讲解.',
+    'Add the learner\'s「我的理解」as a section-anchored self-note (E1「加我的理解」entry): the learner writes ONE explanation/example/mnemonic in their OWN words for a section they just learned; the model compares it against that section\'s taught points and returns verdict (对/部分对/错) + located deviations (含糊/跳跃/说错) + a "how to fill the gap" advice + the full markdown feedback. The verdict is archived ONLY in the E archive and the wording becomes a LearnerCard in the「我的卡」E domain (ADR-0021: reviews ride the merged review queue and earn unbound XP — totals only, never per-course ledgers) — Learner Output boundary: creating is zero XP, zero mastery/node-scheduling writes. Unparseable model feedback fails loud with zero side effects (nothing is archived, no card is created). kind: recall_cue 提示重述 (default) / cloze_rewrite 挖空重述 (content must contain a non-empty {{…}} cloze) / self_explain 自注讲解.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name' },
@@ -1492,12 +1492,12 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       }, (prompt, system) => llmComplete(ctx, prompt, system, { effort: llmCfg.fastEffort })))
     }))
   tool('learnhub_learner_queue',
-    'List the「我的卡」E-domain queue (E1): the learner\'s own self-note cards — due cards first (due ascending), never-scheduled cards after (their first review is the first push). Each card carries prompt (front: what to restate) and content (back: the learner\'s own wording), source_node/source_section anchors, and attempts. Review = have the learner restate from the prompt in their own words, flip to compare with their content, then settle via learnhub_learner_rate (Hard/Good/Easy 2/3/4) or learnhub_learner_forget — one push per card per day. Isolated schedule: zero XP, zero canonical writes; never mixed into the course review queue.',
+    'List ALL「我的卡」E-domain cards (E1) for inventory/management: due cards first (due ascending), never-scheduled cards after. Each card carries prompt (front: what to restate) and content (back: the learner\'s own wording), source_node/source_section anchors, and attempts. Review happens in the merged cross-course review queue (ADR-0021) or directly via learnhub_learner_rate (Hard/Good/Easy 2/3/4) / learnhub_learner_forget — one push per card per day. Rating earns unbound XP: counted in totals/daily goal/streak only, never in per-course/per-node ledgers, never in mastery.',
     { course: { type: 'string', description: 'Course name; omit for all enabled courses' } },
     (args: { course?: string }) => run('learnhub_learner_queue', async () =>
       JSON.stringify(await engine.learnerQueue(args.course))))
   tool('learnhub_learner_rate',
-    'Settle one「我的卡」self-note card with the learner\'s self-rating after they restated and compared (2=Hard 3=Good 4=Easy). One push per card per day (a second same-day rating is rejected). Only the card\'s own isolated FSRS block moves — zero XP, zero canonical/scheduling side effects.',
+    'Settle one「我的卡」self-note card with the learner\'s self-rating after they restated and compared (2=Hard 3=Good 4=Easy). One push per card per day (a second same-day rating is rejected). Only the card\'s own FSRS block moves; the rating earns unbound XP (ADR-0021) — counted in totals/daily goal/streak only, never in per-course/per-node ledgers or mastery.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node the card belongs to (source_node)' },
@@ -1507,7 +1507,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string; card: string; rating: number }) => run('learnhub_learner_rate', async () =>
       JSON.stringify(await engine.learnerCardRate(args.course, args.node, args.card, args.rating))))
   tool('learnhub_learner_forget',
-    'Declare「忘记」on a「我的卡」self-note card — the learner could not restate it, so the card is pushed with rating 1 (again tomorrow). One push per card per day; zero XP, zero canonical writes.',
+    'Declare「忘记」on a「我的卡」self-note card — the learner could not restate it, so the card is pushed with rating 1 (again tomorrow). One push per card per day; zero XP (a 0-XP unbound journal row keeps the streak ledger honest, ADR-0021), no mastery or node-scheduling writes.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node the card belongs to (source_node)' },

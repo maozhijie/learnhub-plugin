@@ -59,7 +59,7 @@ import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence } from './grading.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration } from './xp.ts'
-import { XP_GUESS_SECONDS, XP_PERFECT_BONUS } from './params.ts'
+import { XP_GUESS_SECONDS, XP_PERFECT_BONUS, FSRS_DIFFICULTY_MID } from './params.ts'
 import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
@@ -1028,7 +1028,10 @@ export class LearnhubEngine {
    * JOL 抽查（#66 E4）：按抽样率（默认约 1/3，可全局关闭）标记本批应弹预测的卡
    * （jol 字段）——选卡优先到期边界/难度中段/曾有预测偏差，UI 据此只在选中卡上
    * 问一档三点；预测本身随作答/忘记经 questionAnswer/questionForget 落流水。
-   * 节点不在范围内任何课程的图内时 fail loud——拼错的直达入口不该静默空队列。 */
+   * 节点不在范围内任何课程的图内时 fail loud——拼错的直达入口不该静默空队列。
+   * 我的卡（E1，ADR-0021）：汇入本队列（source='learner'，卡面数据在 learner 字段），
+   * 同一 R 风险排序与单节点定向入口；测量面不扩——JOL 抽查、复习日志、Anki 导出
+   * 均不含我卡，复习入账走无绑定 XP（learnerCardRate/Forget）。 */
   async reviewQueue(
     courseKey?: string, node?: string, today?: string, bandPref?: BandPref,
   ): Promise<ReviewQueueDoc> {
@@ -1048,6 +1051,44 @@ export class LearnhubEngine {
       }
       const courseRoot = this.paths.courseRoot(c.root)
       const sched = await this.sched(courseRoot)
+      // 我的卡（E1，ADR-0021 汇入）：同队列同会话；FSRS 走默认参数（与笔记源同一
+      // sched(null) 通道，参数优化器不训它）。R/d 按卡自身调度块现算；未调度新卡
+      // （首推入口，别无来处）due 为空、R 满档 1.0 落队尾。只进队列与无绑定 XP——
+      // 节点证据/门禁/复习日志零掺入（ADR-0021 裁决 2）。Broken 卡组不阻塞队列。
+      const learnerSched = await this.sched(null)
+      let learnerFiles: string[] = []
+      try {
+        learnerFiles = await readdir(this.paths.learnerCardsDir(c.root))
+      } catch {
+        learnerFiles = [] // 该课程还没有任何我的卡：合法空态
+      }
+      for (const f of learnerFiles.filter(f => f.endsWith('.yaml')).sort()) {
+        const lNode = f.replace(/\.yaml$/, '')
+        if (node !== undefined && lNode !== node) continue
+        let doc: LearnerCardDoc
+        try {
+          doc = await this.learnerCards.load(c.root, lNode)
+        } catch {
+          continue
+        }
+        for (const card of doc.cards) {
+          if (card.archived) continue
+          const due = card.fsrs?.reps ? card.fsrs.due : null
+          if (due && String(due) > today) continue
+          const r = retrievabilityBlock(learnerSched, card.fsrs ?? null, today)
+          const diff = card.fsrs?.difficulty && card.fsrs.difficulty > 0 ? card.fsrs.difficulty : FSRS_DIFFICULTY_MID
+          cards.push({
+            course: c.name, node: lNode, source: 'learner',
+            id: card.id, due,
+            r: Math.round(r * 1000) / 1000, d: diff, difficulty: diff,
+            attempts: card.stats?.attempts ?? 0,
+            learner: { course: c.name, node: lNode, id: card.id, kind: card.kind,
+              prompt: card.prompt, content: card.content,
+              source_section: card.source_section ?? null, due,
+              attempts: card.stats?.attempts ?? 0 },
+          })
+        }
+      }
       let files: string[] = []
       try {
         files = await readdir(this.paths.bankDir(c.root))
@@ -1075,17 +1116,19 @@ export class LearnhubEngine {
     }
     // JOL 抽查标记（#66 E4）：全局开关关闭或空队列时静默；否则按抽样率选卡、
     // 随卡带 jol 标记（UI 只在选中卡的翻面前弹一档三点，可忽略）。偏差重探按
-    // 「课程/节点/题id」复合键对齐（qid 只在节点题库内唯一）。
+    // 「课程/节点/题id」复合键对齐（qid 只在节点题库内唯一）。我的卡不参与
+    // （ADR-0021：测量面不扩；自评卡无作答判分可配对）。
     const jol = await this.jolConfig()
-    if (jol.enabled && cards.length) {
+    const jolEligible = cards.filter(c => c.source !== 'learner')
+    if (jol.enabled && jolEligible.length) {
       const deviated = jolDeviatedKeys(await this.store.practiceAll())
-      const candidates = cards.map(c => ({
+      const candidates = jolEligible.map(c => ({
         key: `${c.course}/${c.node}/${String(c.id)}`,
         r: c.r as number,
         difficulty: c.difficulty as number | undefined,
       }))
       const marks = pickJolTargets(candidates, this.jolRng, { rate: jol.rate, deviated })
-      cards.forEach((c, i) => {
+      jolEligible.forEach((c, i) => {
         if (marks.has(candidates[i]!.key)) c.jol = true
       })
     }
@@ -1138,9 +1181,9 @@ export class LearnhubEngine {
     opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null },
   ): Promise<AnswerResult> {
     // 笔记源卡路由（C1 #59）：course=「笔记源」伪课程（与真实课程重名时课程优先），
-    // node = 源 id——同复习自评语义，但无节点证据/XP/practice 流水。
+    // node = 源 id——同复习自评语义，但无节点证据/practice 流水（XP 走无绑定行，ADR-0021）。
     if (await this.isNoteSourceCourse(courseKey)) {
-      return this.noteSourceAnswer(llmComplete, node, qid, answer, opts)
+      return this.noteSourceAnswer(llmComplete, node, qid, answer, { ...opts, elapsed_s: elapsedS ?? null })
     }
     const predicted = this.jolPredicted(opts?.predicted)
     const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question')
@@ -1684,11 +1727,12 @@ export class LearnhubEngine {
 
   /** 笔记源作答（C1 #59）：判卷同题库通道；推进只有题目级 FSRS + 复习日志
    * （course=笔记源）——无节点证据、无 practice 流水、无节点定价/settle（同复习
-   * 自评语义，ADR-0010）、无代表卡（笔记源没有节点）。 */
+   * 自评语义，ADR-0010）、无代表卡（笔记源没有节点）。XP 走无绑定行（ADR-0021）：
+   * 与题卡同公式结算（含乱猜负 XP），作答时即落（挂起路径同题卡 practice 同时点）。 */
   private async noteSourceAnswer(
     llmComplete: (prompt: string, system?: string) => Promise<string>,
     sourceId: string, qid: string, answer: string,
-    opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null },
+    opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null },
   ): Promise<Record<string, unknown>> {
     const bank = await this.bank.load(this.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
@@ -1697,6 +1741,13 @@ export class LearnhubEngine {
     const correct = score >= PASS_SCORE
     const { today } = await this.learningDay()
     const repeated = alreadyAdvanced(q, today)
+    const settle = xpForAnswer(q.kind, q.difficulty ?? 1, correct, opts?.elapsed_s ?? null, !repeated)
+    if (!repeated) {
+      await this.store.appendJournal({
+        course: '*', node: '*', rating: null, kind: 'xp_notesource', elapsed_days: 0,
+        xp: settle.xp, detail: `笔记源 ${sourceId}#${q.id}（${settle.reason}）`,
+      })
+    }
     let fs: FsrsBlock | null
     let pendingRating = false
     let advanced = false
@@ -1733,7 +1784,7 @@ export class LearnhubEngine {
       due: fs?.due ?? null,
       scheduled: advanced, pendingRating,
       ...(previews ? { previews } : {}),
-      xp: 0, // 复习自评语义不含 XP（笔记源无节点定价与 settle）
+      xp: settle.xp, // 无绑定 XP（ADR-0021）：不入节点/practice 账，journal 行已落
     }
   }
 
@@ -1764,6 +1815,11 @@ export class LearnhubEngine {
       attempts: (q.stats?.attempts ?? 0) + 1,
       correct: q.stats?.correct ?? 0,
       last: today,
+    })
+    // 忘记也是真实推进：落 0 XP 无绑定行，streak 口径与题卡忘记申报一致（ADR-0021）
+    await this.store.appendJournal({
+      course: '*', node: '*', rating: 1, kind: 'xp_notesource', elapsed_days: 0,
+      xp: 0, detail: `笔记源 ${sourceId}#${q.id}（forget）`,
     })
     return {
       correct: false, judge: 'forget',
@@ -2314,8 +2370,9 @@ export class LearnhubEngine {
   }
 
   /** 把一版讲解存档为 E1 自注卡（#68 存档目标）：卡面两档——再讲一遍（recall_cue，
-   * 默认）与挖空重述（cloze_rewrite，content 须带 {{…}} 挖空）。入「我的卡」独立
-   * 域隔离自调度；判词与卡都属 Learner Output，canonical 零写入。 */
+   * 默认）与挖空重述（cloze_rewrite，content 须带 {{…}} 挖空）。入「我的卡」独立域
+   * （复习呈现已并入复习队列、复习走无绑定 XP，ADR-0021）；判词与卡都属 Learner
+   * Output，创建零 XP、节点调度面零写入。 */
   async explainArchiveCard(
     courseKey: string | undefined, node: string,
     opts: { content: string; kind?: 'recall_cue' | 'cloze_rewrite'; prompt?: string; section?: string },
@@ -2345,9 +2402,9 @@ export class LearnhubEngine {
 
   // ---- E1「我的卡」复习（#45 schema / #68 存档目标；#70 落节级入口与管理面）----
 
-  /** E 池到期队列：全部启用课程的「我的卡」，到期卡按 due 升序在前，从未调度的新卡
-   * 随后（首推入口）。自评语义 = 先重述再翻面对照（Hard/Good/Easy + 忘记）；
-   * 隔离自调度——不进全局复习队列、不产生 XP、不写复习日志（canonical 零掺入）。 */
+  /** 「我的卡」全量清单（管理面 / agent 清点用）：到期卡按 due 升序在前，从未调度的
+   * 新卡随后。复习呈现已并入 reviewQueue（ADR-0021）——本清单不再承担复习入口，
+   * 只做全量盘点（队列只出到期+新卡，这里还能看到未到期卡）。 */
   async learnerQueue(courseKey?: string, today?: string): Promise<LearnerQueueDoc> {
     today ??= (await this.learningDay()).today
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
@@ -2403,8 +2460,10 @@ export class LearnhubEngine {
     return { c, card }
   }
 
-  /** E 卡自评结算（2/3/4）：新卡在此首推，老卡按档推进；一卡一天一次推进
-   * （stats.last 把守）。只动卡自身的隔离调度块，canonical/日志/XP 零写入。 */
+  /** E 卡自评结算（2/3/4）：新卡在此首推，老卡按档推进；一卡一学习日一次推进
+   * （stats.last 把守）。复习呈现已并入复习队列（ADR-0021）：入账走无绑定 XP
+   * （与题卡同公式、权重 1，难度取卡自身 FSRS difficulty、未调度取中性 5）；
+   * 复习日志/practice/节点调度面零写入（ADR-0021 裁决 2）。 */
   async learnerCardRate(
     courseKey: string | undefined, node: string, cardId: string, rating: number,
   ): Promise<LearnerRateResult> {
@@ -2416,10 +2475,17 @@ export class LearnhubEngine {
     const pushed = advanceStrict(await this.sched(null), card, r, today,
       `[learner-rate] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
     await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats: pushed.stats })
-    return { course: c.name, node, id: cardId, rating: r, due: pushed.fs.due, scheduled: true }
+    const diff = card.fsrs?.difficulty && card.fsrs.difficulty > 0 ? card.fsrs.difficulty : FSRS_DIFFICULTY_MID
+    const settle = xpForAnswer(card.kind, diff, true, null, true)
+    await this.store.appendJournal({
+      course: '*', node: '*', rating: r, kind: 'xp_learner', elapsed_days: 0,
+      xp: settle.xp, detail: `我的卡 ${c.name}/${node}#${cardId}（self ${r}）`,
+    })
+    return { course: c.name, node, id: cardId, rating: r, due: pushed.fs.due, scheduled: true, xp: settle.xp }
   }
 
-  /** E 卡忘记申报（rating=1）：不作答直接翻面，一卡一天一次，0 XP 零 canonical。 */
+  /** E 卡忘记申报（rating=1）：不作答直接翻面，一卡一学习日一次；0 XP 无绑定行，
+   * 节点调度面零写入。 */
   async learnerCardForget(
     courseKey: string | undefined, node: string, cardId: string,
   ): Promise<LearnerForgetResult> {
@@ -2428,14 +2494,18 @@ export class LearnhubEngine {
     const pushed = advanceStrict(await this.sched(null), card, 1, today,
       `[learner-forget] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
     await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats: pushed.stats })
+    await this.store.appendJournal({
+      course: '*', node: '*', rating: 1, kind: 'xp_learner', elapsed_days: 0,
+      xp: 0, detail: `我的卡 ${c.name}/${node}#${cardId}（forget）`,
+    })
     return { course: c.name, node, id: cardId, rating: 1, due: pushed.fs.due, scheduled: true, xp: 0 }
   }
 
   /** E1「加我的理解」节级入口（#70）：学习者用自己的话写一句解释/例子/助记
    * （锚点 = 节 id/标题），AI 对照该节已教要点给 是非 + 定位（含糊/跳跃/说错）
    * + 可怎么补——判词入 E 档案（kind=self_note），产出成独立域 LearnerCard。
-   * ADR-0009 边界：零 XP、不写掌握度/FSRS/canonical；AI 判词不可解析时抛错，
-   * 卡与判词零落盘（ADR-0004 事务性）。 */
+   * ADR-0009/0021 边界：创建零 XP、不写掌握度/节点调度面；卡汇入复习队列、
+   * 复习走无绑定 XP。AI 判词不可解析时抛错，卡与判词零落盘（ADR-0004 事务性）。 */
   async learnerNoteAdd(
     courseKey: string | undefined, node: string,
     opts: { content: string; kind?: LearnerCard['kind']; prompt?: string; section?: string },

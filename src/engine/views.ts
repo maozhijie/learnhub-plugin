@@ -440,8 +440,11 @@ export interface ReviewCard extends QuestionItem {
   /** JOL 抽查命中（#66 E4）：翻面前弹一档三点预测，可忽略。 */
   jol?: boolean
   /** 笔记源卡（C1 #59）：source='note'，title=笔记标题；course 恒为「笔记源」伪课程。 */
-  source?: 'note'
+  source?: 'note' | 'learner'
   title?: string
+  /** 我的卡（E1，ADR-0021 汇入）：source='learner' 时携带——卡面渲染与
+   * learner-rate/learner-forget 结算走此通道；调度/入账语义见 ADR-0021。 */
+  learner?: LearnerCardItem
 }
 
 /** 复习刷卡队列（reviewQueue）：全局跨课程队列（可带笔记源状态）；node 过滤时为
@@ -564,7 +567,9 @@ export interface MemoryHealthDoc {
  * learner-cards.LearnerCardKind 的视图镜像（learner-cards 依赖 node:fs，ui 侧无法拉入）。 */
 export type LearnerCardKind = 'recall_cue' | 'cloze_rewrite' | 'self_explain'
 
-/** 「我的卡」条目（E1 独立域）：prompt = 正面提示，content = 学习者自己的表述（翻面对照）。 */
+/** 「我的卡」条目（E1）：prompt = 正面提示，content = 学习者自己的表述（翻面对照）。
+ * 复习呈现已并入 Review Queue（ADR-0021）；本条目同时是 learner 字段与
+ * learnerQueue（管理面/agent 清点）的视图形状。 */
 export interface LearnerCardItem {
   course: string
   node: string
@@ -577,7 +582,8 @@ export interface LearnerCardItem {
   attempts: number
 }
 
-/** 「我的卡」E 池队列（learnerQueue）：到期在前、新卡随后；隔离自调度，一卡一天一次推进。 */
+/** 「我的卡」全量清单（learnerQueue）：到期在前、新卡随后；管理面/agent 清点用
+ * （复习入口已并入 Review Queue，ADR-0021）。 */
 export interface LearnerQueueDoc {
   date: string
   total: number
@@ -585,7 +591,7 @@ export interface LearnerQueueDoc {
   cards: LearnerCardItem[]
 }
 
-/** E 卡自评结算（learnerCardRate）。 */
+/** E 卡自评结算（learnerCardRate）：XP 走无绑定行已落 journal，这里带回执（ADR-0021）。 */
 export interface LearnerRateResult {
   course: string
   node: string
@@ -594,9 +600,11 @@ export interface LearnerRateResult {
   /** 推卡后的新到期日。 */
   due: string
   scheduled: true
+  /** 本次结算的无绑定 XP（自评通过 = max(1, round(难度))，ADR-0021）。 */
+  xp: number
 }
 
-/** E 卡忘记申报（learnerCardForget）：rating=1 推卡，0 XP 零 canonical。 */
+/** E 卡忘记申报（learnerCardForget）：rating=1 推卡，0 XP 无绑定行。 */
 export interface LearnerForgetResult {
   course: string
   node: string
