@@ -55,6 +55,7 @@
 - S39 `thermostat.ts::retentionBand / bandDistribution / execRatingDistribution / thermostatSuggestions` —— D-2 恒温器观测聚合与建议触发（保留率带、难度带长期分布窗口、执行评级宽松读入、择易×高保留/择难×低保留触发、低数据静默、同向沉默；`tests/thermostat.test.ts`；仪表只读/建议逐条显式确认/伪造 id 拒绝走 facade）
 - S40 `sandbox.ts::simulateRun / aggregateRuns / quantile` —— D-3 沙盘蒙特卡洛纯函数（播种确定、schedFor 按课程注入与调度同源、预算决定引入、跳过节点不计、p50/p80 聚合；`tests/sandbox.test.ts`；全链路零 canonical 写入逐字节比对走 facade）
 - S41 `project-decompile.ts::decompileGoalOf / decompileTerms / splitDecompileDoc / subgraphSpecOf / decompileRepairPrompt` —— P-5 目标反编译纯函数层（空目标拒绝、检索词派生同 priorTerms 口径、双产物拆分校验 = validatePlanArtifact + validateGenProposal 同门、子图落点裁决 append/new、修复轮提示词；`tests/project-decompile.test.ts`；双提案受理/apply/红线零写入走 facade）
+- S42 `project-exec.ts::execRatingScore / exercisedEncEdges / classifyCross / masteryAggregate / execEvidenceScore / recommendTier` —— P-7 项目执行事件流纯函数层（评级→0-1 带中点映射、被行使 enc 边判定 v1=两端都在事件 nodes 内、2×2 象限分类（null 归该轴低侧）、入档推荐纯函数（档内表现+底座，永不做门禁）；`tests/project-exec.test.ts`；回流→mastery→2×2 主链与零 canonical 红线走 facade）
 
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 

@@ -28,3 +28,9 @@ export const XP_PER_NODE_DEFAULT = 12    // 无课程历史时每节点 XP 估�
 export const XP_PER_MILESTONE_DEFAULT = 120 // 里程碑无 est 申报时的过点定价缺省（1–2 周粒度的保守投入，#94）
 export const DAILY_XP_GOAL_DEFAULT = 30  // 每日 XP 目标缺省（state/learnhub.json 可覆盖）
 export const DAY_CUTOFF_DEFAULT = '02:00' // 日界缺省（ADR-0020；state/learnhub.json 的 day_cutoff 可覆盖）
+
+// ---- Mastery 交叉 2×2 与入档推荐（P-7 #98 / ADR-0015 §4/§8；阈值唯一出处）----
+export const CROSS_AXIS_THRESHOLD = 0.6   // 2×2 两轴高低分界（与练习证据及格线 PASS_SCORE 同口径 0.6）
+export const TIER_REC_MIN_EVENTS = 3      // 入档推荐的档内样本下限（攒够前提议，低于静默维持）
+export const TIER_REC_PROMOTE_SCORE = 0.8 // 档内均分 ≥ 该值 → 提议升档（当前档吃得过饱）
+export const TIER_REC_DEMOTE_SCORE = 0.4  // 档内均分 < 该值 → 提议降档（支持不足；challenge point 双向）
