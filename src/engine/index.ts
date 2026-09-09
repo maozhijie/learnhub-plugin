@@ -17,6 +17,8 @@ import { GraphStore, Graph, writeReadyList } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
+import { advance, advancePending, advanceStrict, alreadyAdvanced } from './advance.ts'
+import type { FSRS } from 'ts-fsrs'
 import { bandOffset, combinedDifficulty, startBand, sessionOrder } from './adaptive.ts'
 import type { BandPref } from './adaptive.ts'
 import { JOL_PREDICTIONS, JOL_SAMPLE_RATE, jolCalibration, jolDeviatedKeys, pickJolTargets } from './jol.ts'
@@ -46,7 +48,7 @@ import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
 import { LearnerCards, LEARNER_CARD_KINDS } from './learner-cards.ts'
 import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
 import { selfNoteFeedbackPrompt, selfNoteFeedbackSystem, selfNotePromptOf } from './self-note.ts'
-import { AnkiMirror, ankiAddNote, ankiCardPayload, ankiCardReviews, ankiCardsInfo, ankiCreateDeck, ankiCreateModel, ankiDeckNames, ankiDeleteNotes, ankiFindNotes, ankiModelNames, ankiNotesInfo, ankiUpdateNoteFields, deckNameOf, isAnkiNoteMissing, isoFromMs, mapAnkiEase, parseSourceKey, planMirrorSync, sameDayAdvanced, ANKI_MODEL, ANKI_TAG } from './anki.ts'
+import { AnkiMirror, ankiAddNote, ankiCardPayload, ankiCardReviews, ankiCardsInfo, ankiCreateDeck, ankiCreateModel, ankiDeckNames, ankiDeleteNotes, ankiFindNotes, ankiModelNames, ankiNotesInfo, ankiUpdateNoteFields, deckNameOf, isAnkiNoteMissing, isoFromMs, mapAnkiEase, parseSourceKey, planMirrorSync, ANKI_MODEL, ANKI_TAG } from './anki.ts'
 import type { AnkiMirrorEntry, AnkiNotePayload, AnkiTransport } from './anki.ts'
 import { explainBackPack, explainFeedbackSystem, explainFeedbackPrompt, parseExplainVerdict } from './explain.ts'
 import type { ExplainPoint, ExplainTag, ExplainVerdict } from './explain.ts'
@@ -111,6 +113,20 @@ export class LearnhubEngine {
   readonly vaultRoot: string
   /** JOL 抽查的随机源（#66 E4）：可注入播种（测试确定性；运行时 Math.random）。 */
   jolRng: () => number = Math.random
+
+  /** 课程调度器实例缓存（ADR-0014 附带）：参数文件唯一写者是 optimizeFsrsParams
+   * （写回后显式失效）——每答一题重建 FSRS 并读一次参数盘是白付成本。
+   * 键 = courseRoot（null = 默认参数，笔记源/我的卡用）。 */
+  private schedCache = new Map<string | null, FSRS>()
+
+  private async sched(courseRoot: string | null): Promise<FSRS> {
+    let s = this.schedCache.get(courseRoot)
+    if (!s) {
+      s = await getScheduler(this.paths, courseRoot)
+      this.schedCache.set(courseRoot, s)
+    }
+    return s
+  }
 
   constructor(config: EngineConfig) {
     const centerRel = (config.centerRel ?? '学习中心').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
@@ -1006,7 +1022,7 @@ export class LearnhubEngine {
         nodeFound = true
       }
       const courseRoot = this.paths.courseRoot(c.root)
-      const sched = await getScheduler(this.paths, courseRoot)
+      const sched = await this.sched(courseRoot)
       let files: string[] = []
       try {
         files = await readdir(this.paths.bankDir(c.root))
@@ -1102,21 +1118,16 @@ export class LearnhubEngine {
       return this.noteSourceAnswer(llmComplete, node, qid, answer, opts)
     }
     const predicted = this.jolPredicted(opts?.predicted)
-    const c = await this.registry.resolve(courseKey)
-    const { graph, broken } = await this.loadView(c)
-    if (!graph.nset.has(node)) throw new Error(`[question] 节点「${node}」不在图内。`)
-    this.assertNoteOk(c, graph, broken, node, 'question')
-    const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-    const idx = bank.questions.findIndex(q => q.id === qid)
-    if (idx < 0) throw new Error(`[question] ${node} 的题库没有 ${qid}。`)
-    const q = bank.questions[idx]
+    const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question')
     const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer)
     const correct = score >= PASS_SCORE
     // XP 时间账本：同日重复作答不记账（防刷）；乱猜（耗时过短且答错）负 XP。
     // 乱猜作答同时不推进 FSRS——难度证据（k 校准）只由认真作答驱动，防乱猜推高节点定价。
     const today = todayStr()
     const guessed = !correct && elapsedS !== null && elapsedS < XP_GUESS_SECONDS
-    const repeated = (q.stats?.last === today && Boolean(q.fsrs?.reps)) || guessed
+    // 同日重复判定（ADR-0014 真实推进口径）：挂起作答（deferSchedule 只记账不推卡）
+    // 之后的当日再作答也算重复——旧口径会绕过重复判定再推卡并静默丢弃 pending 标记。
+    const repeated = guessed || alreadyAdvanced(q, today)
     const settle = xpForAnswer(q.kind, q.difficulty ?? 1, correct, elapsedS ?? null, !repeated)
     await this.store.appendPractice({
       course: c.name, node, ex: idx + 1, answer,
@@ -1127,37 +1138,31 @@ export class LearnhubEngine {
       ...(predicted ? { predicted } : {}),
     })
     // frontmatter 计数 + 练习证据 EMA（口径 B 的练习项；mastery 本身纯派生不落盘）
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
-    const fm = asFm(rawFm)
+    const note = await this.nodeNote(c, graph, node)
     let next: Fm | null = null
-    if (fm) {
-      next = applyPracticeEvidence(fm, correct ? 1.0 : 0.0)
+    if (note.fm) {
+      next = applyPracticeEvidence(note.fm, correct ? 1.0 : 0.0)
       // 刷卡模型：首答把节点从 ready/unseen 推进 learning（后续调度由题目聚合驱动）
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
-      await saveNote(path, next as unknown as Record<string, unknown>, body)
-      if (next.stage !== fm.stage) {
+      await this.saveNodeNote(note.path, next, note.body)
+      if (next.stage !== note.fm.stage) {
         const { state: stateNow } = await this.loadView(c)
         await this.content.onStageChange(c.root, graph, stateNow, node, next.stage)
       }
     }
     // 题目级 FSRS：作答对错映射 rating（对=3、错=1）推进该题调度并写回题库。
-    // 每题每天至多推进一次：同日重复作答（「再做一次」）只记练习统计，
-    // 不再碰调度卡——避免反复刷同一题把 reps/stability/due 推到失真位置。
-    // 乱猜作答同样不碰卡（含首答）：难度证据（XP 预算的 k 校准）只由认真作答驱动。
-    // 复习刷卡流（deferSchedule）答对时调度挂起：背面自评档位经 questionRate 落盘，
-    // 挂起以 stats.pending_rating 标记（rate 的前置、forget 的互斥条件）。
+    // 每题每天至多推进一次（ADR-0014 advance 守门）；复习刷卡流（deferSchedule）
+    // 答对时调度挂起：背面自评档位经 questionRate 落盘（stats.pending_rating 标记）。
     let fs: FsrsBlock | null
     let pendingRating = false
     let advanced = false
     // 复习日志（#60 ADR-0012）：只有真实推进才落一条；记录复习前 R/S/D 快照
     let reviewRec: Omit<ReviewRec, 'ts'> | null = null
     let previews: { hard: string; good: string; easy: string } | undefined
-    if (guessed || (repeated && q.fsrs)) {
+    if (repeated) {
       fs = q.fsrs ?? null
     } else if (opts?.deferSchedule === true && correct) {
-      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+      const sched = await this.sched(this.paths.courseRoot(c.root))
       pendingRating = true
       previews = {
         hard: previewDue(sched, q.fsrs ?? null, 2, today),
@@ -1166,18 +1171,12 @@ export class LearnhubEngine {
       }
       fs = q.fsrs ?? null
     } else {
-      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
-      const rating = correct ? 3 : 1
-      const rPred = retrievabilityBlock(sched, q.fsrs, today)
-      const pushed = applyRatingBlock(q.fsrs ?? null, rating, today, sched)
-      fs = pushed.fs
+      const sched = await this.sched(this.paths.courseRoot(c.root))
+      const r = advanceStrict(sched, q, correct ? 3 : 1, today,
+        `[question] ${node}/${qid} 今天已推进过（应为不可达分支：同日重复已分流）。`)
+      fs = r.fs
       advanced = true
-      reviewRec = {
-        rating, rating_source: 'auto', elapsed_days: pushed.elapsed_days,
-        stability_before: q.fsrs?.stability ?? null,
-        difficulty_before: q.fsrs?.difficulty ?? null,
-        r_pred: rPred,
-      }
+      reviewRec = { rating: correct ? 3 : 1, rating_source: 'auto', ...r.log }
     }
     const stats = {
       attempts: (q.stats?.attempts ?? 0) + 1,
@@ -1247,6 +1246,19 @@ export class LearnhubEngine {
     return { c, graph, q: bank.questions[idx], idx }
   }
 
+  /** 节点笔记读写便道（ADR-0014 附带）：blockOf → courseNotePath → loadNote → asFm
+   * 四步舞收口；写回经 saveNodeNote（saveNote 的双强转收在门面一处）。 */
+  private async nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }> {
+    const [, regionName] = graph.blockOf[node]
+    const path = this.paths.courseNotePath(c.root, regionName, node)
+    const { fm: rawFm, body } = await loadNote(path)
+    return { path, fm: asFm(rawFm), body }
+  }
+
+  private async saveNodeNote(path: string, fm: Fm, body: string): Promise<void> {
+    await saveNote(path, fm as unknown as Record<string, unknown>, body)
+  }
+
   /** 复习刷卡流：答对后的自评结算（Hard/Good/Easy → FSRS 2/3/4）。
    * 前置 = 该题今天已由 deferSchedule 作答记账且调度仍挂起（stats.pending_rating）。
    * 只推卡：不记流水、不动 stats 计数、不给 XP（XP 在作答时已结算）；
@@ -1264,22 +1276,21 @@ export class LearnhubEngine {
       // 挂起标记是唯一准入：练习流作答与「完成学习」当日初始化（last_review=今天）都不产生挂起
       throw new Error(`[question-rate] ${node}/${qid} 今天没有待结算的自评（未作答或非挂起路径）。`)
     }
-    const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
-    const rPred = retrievabilityBlock(sched, q.fsrs, today)
-    const pushed = applyRatingBlock(q.fsrs ?? null, r, today, sched)
-    const fs = pushed.fs
+    // 挂起结算 = 当日预留推进的执行（ADR-0014 advancePending）：准入是上面的
+    // pending 旗标，不走 guard——可达态里 deferred 作答不碰 fsrs，双门必不命中。
+    const sched = await this.sched(this.paths.courseRoot(c.root))
+    const pushed = advancePending(sched, q, r as 1 | 2 | 3 | 4, today)
     const { pending_rating: _drop, ...statsRest } = q.stats
-    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats: { ...statsRest } })
+    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: pushed.fs, stats: { ...statsRest } })
     await this.store.appendReview({
       course: c.name, node, qid,
-      rating: r as ReviewRec['rating'], rating_source: 'self', elapsed_days: pushed.elapsed_days,
-      stability_before: q.fsrs?.stability ?? null, difficulty_before: q.fsrs?.difficulty ?? null, r_pred: rPred,
+      rating: r as ReviewRec['rating'], rating_source: 'self', ...pushed.log,
     })
     // 自评落盘后回刷代表卡；mastery 与全端同口径（口径 B 派生），自评本身不额外改证据
     const fmNow = await this.refreshRepCard(c, graph, node)
     return {
       course: c.name, node, qid, rating: r,
-      due: fs.due,
+      due: pushed.fs.due,
       mastery: masteryOfFm(fmNow),
       scheduled: true,
     }
@@ -1298,12 +1309,11 @@ export class LearnhubEngine {
     const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question-forget')
     const pred = this.jolPredicted(predicted)
     const today = todayStr()
-    if (q.stats?.last === today) {
-      throw new Error(`[question-forget] ${node}/${qid} 今天已有作答记录，忘记只用于本日首次刷卡。`)
-    }
-    const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
-    const rPred = retrievabilityBlock(sched, q.fsrs, today)
-    const pushed = applyRatingBlock(q.fsrs ?? null, 1, today, sched)
+    // 推进与守门一体（ADR-0014 advanceStrict）：同日已真实推进（stats.last）即拒绝，
+    // 合成初始化（只写 fsrs 不占当日额度）后的覆推 Again 照旧允许。
+    const sched = await this.sched(this.paths.courseRoot(c.root))
+    const pushed = advanceStrict(sched, q, 1, today,
+      `[question-forget] ${node}/${qid} 今天已有作答记录，忘记只用于本日首次刷卡。`)
     const fs = pushed.fs
     await this.store.appendPractice({
       course: c.name, node, ex: idx + 1, answer: '',
@@ -1313,30 +1323,21 @@ export class LearnhubEngine {
       ...(pred ? { predicted: pred } : {}),
     })
     // 节点侧证据：忘记 = 0 分（EMA 衰减 + 计一次未过），stage 推进与作答路径一致
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
-    const fm = asFm(rawFm)
+    const note = await this.nodeNote(c, graph, node)
     let next: Fm | null = null
-    if (fm) {
-      next = applyPracticeEvidence(fm, 0.0)
+    if (note.fm) {
+      next = applyPracticeEvidence(note.fm, 0.0)
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
-      await saveNote(path, next as unknown as Record<string, unknown>, body)
-      if (next.stage !== fm.stage) {
+      await this.saveNodeNote(note.path, next, note.body)
+      if (next.stage !== note.fm.stage) {
         const { state: stateNow } = await this.loadView(c)
         await this.content.onStageChange(c.root, graph, stateNow, node, next.stage)
       }
     }
-    const stats = {
-      attempts: (q.stats?.attempts ?? 0) + 1,
-      correct: q.stats?.correct ?? 0,
-      last: today,
-    }
-    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
+    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: pushed.fs, stats: pushed.stats })
     await this.store.appendReview({
       course: c.name, node, qid,
-      rating: 1, rating_source: 'auto', elapsed_days: pushed.elapsed_days,
-      stability_before: q.fsrs?.stability ?? null, difficulty_before: q.fsrs?.difficulty ?? null, r_pred: rPred,
+      rating: 1, rating_source: 'auto', ...pushed.log,
     })
     // 忘记把被忘卡的 due 拉到最近 → 代表卡拉回（最早 due 换成它）→ mastery 回落
     const fmNow = await this.refreshRepCard(c, graph, node)
@@ -1366,17 +1367,14 @@ export class LearnhubEngine {
       if (q.archived || !q.fsrs?.reps || !q.fsrs.due) continue
       if (!rep || q.fsrs.due < rep.due) rep = q.fsrs
     }
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
-    const fm = asFm(rawFm)
-    if (!fm) return null
-    if (!rep) return fm
-    const cur = fm.fsrs
+    const note = await this.nodeNote(c, graph, node)
+    if (!note.fm) return null
+    if (!rep) return note.fm
+    const cur = note.fm.fsrs
     if (cur && cur.stability === rep.stability && cur.difficulty === rep.difficulty && cur.due === rep.due
-      && cur.last_review === rep.last_review && cur.reps === rep.reps && cur.lapses === rep.lapses) return fm
-    const next: Fm = { ...fm, fsrs: rep }
-    await saveNote(path, next as unknown as Record<string, unknown>, body)
+      && cur.last_review === rep.last_review && cur.reps === rep.reps && cur.lapses === rep.lapses) return note.fm
+    const next: Fm = { ...note.fm, fsrs: rep }
+    await this.saveNodeNote(note.path, next, note.body)
     return next
   }
 
@@ -1557,7 +1555,7 @@ export class LearnhubEngine {
     }
     if (!added) throw new Error('[note-quiz] 模型产出的题目全部未过校验门（题型/答案格式不符），一道都没入库。')
     // 新卡合成首复习初始化（同 nodeComplete 语义：明天起刷）
-    const sched = await getScheduler(this.paths, null)
+    const sched = await this.sched(null)
     const bank = await this.bank.load(this.paths.noteSourceDir, id)
     for (const q of bank.questions) {
       if (q.archived || q.fsrs?.reps) continue
@@ -1597,7 +1595,7 @@ export class LearnhubEngine {
     if (!entries.length) return { cards, drifted, suspended }
     const manifest = await this.noteManifest.load()
     const itemById = new Map(manifest.sources.map(s => [s.id, s]))
-    const sched = await getScheduler(this.paths, null)
+    const sched = await this.sched(null)
     for (const e of entries) {
       if (e.enabled === false) continue
       const item = itemById.get(e.id)
@@ -1638,20 +1636,19 @@ export class LearnhubEngine {
   }
 
   /** 笔记源卡一次评分推进（作答/自评/忘记三通道共用）：推镜像题库卡 + 落复习日志
-   * （course=笔记源；调度器用默认参数——笔记源不挂课程个人参数）。返回新 fsrs 块。 */
+   * （course=笔记源；调度器用默认参数——笔记源不挂课程个人参数）。返回新 fsrs 块。
+   * 无守门（ADR-0014 advancePending）：三个调用方各自持准入（repeated/pending/stats.last）。 */
   private async pushNoteCard(
     sourceId: string, q: BankQuestion, fsOld: FsrsBlock | null,
     rating: 1 | 2 | 3 | 4, ratingSource: 'auto' | 'self', today: string,
     stats: BankQuestion['stats'],
   ): Promise<FsrsBlock> {
-    const sched = await getScheduler(this.paths, null)
-    const rPred = retrievabilityBlock(sched, fsOld, today)
-    const pushed = applyRatingBlock(fsOld, rating, today, sched)
+    const sched = await this.sched(null)
+    const pushed = advancePending(sched, { fsrs: fsOld }, rating, today)
     await this.bank.updateQuestionEvidence(this.paths.noteSourceDir, sourceId, q.id, { fsrs: pushed.fs, stats })
     await this.store.appendReview({
       course: NOTE_SOURCE_COURSE, node: sourceId, qid: q.id,
-      rating, rating_source: ratingSource, elapsed_days: pushed.elapsed_days,
-      stability_before: fsOld?.stability ?? null, difficulty_before: fsOld?.difficulty ?? null, r_pred: rPred,
+      rating, rating_source: ratingSource, ...pushed.log,
     })
     return pushed.fs
   }
@@ -1670,7 +1667,7 @@ export class LearnhubEngine {
     const { score, feedback } = await this.judgeBankAnswer(llmComplete, q, answer)
     const correct = score >= PASS_SCORE
     const today = todayStr()
-    const repeated = q.stats?.last === today && Boolean(q.fsrs?.reps)
+    const repeated = alreadyAdvanced(q, today)
     let fs: FsrsBlock | null
     let pendingRating = false
     let advanced = false
@@ -1684,7 +1681,7 @@ export class LearnhubEngine {
       fs = q.fsrs ?? null
       await this.bank.updateQuestionEvidence(this.paths.noteSourceDir, sourceId, qid, { fsrs: fs, stats })
     } else if (opts?.deferSchedule === true && correct) {
-      const sched = await getScheduler(this.paths, null)
+      const sched = await this.sched(null)
       pendingRating = true
       previews = {
         hard: previewDue(sched, q.fsrs ?? null, 2, today),
@@ -1874,7 +1871,7 @@ export class LearnhubEngine {
         if (!c) ctx = null
         else {
           const { graph } = await this.loadView(c)
-          ctx = { c, graph, sched: await getScheduler(this.paths, this.paths.courseRoot(c.root)) }
+          ctx = { c, graph, sched: await this.sched(this.paths.courseRoot(c.root)) }
         }
         ctxCache.set(loc.course, ctx)
       }
@@ -1899,30 +1896,23 @@ export class LearnhubEngine {
         ...(ev.timeMs > 0 ? { elapsed_s: ev.timeMs / 1000 } : {}),
         xp: 0,
       }
-      if (sameDayAdvanced(q, day)) {
-        // 当日已推进：跳过调度只留档（fsrs/stats/复习日志零写入）
-        await this.store.appendPractice({ ...practiceBase, ts: iso })
+      // 回放守门（ADR-0014 anki 通道 = vault 调度动作判定）：当日已推进过
+      // （含合成初始化）→ 跳过调度只留档（fsrs/stats/复习日志零写入）
+      const r = advance(ctx.sched, q, map.rating, day, 'anki')
+      await this.store.appendPractice({ ...practiceBase, ts: iso })
+      if (!r.advanced) {
         result.skipped_same_day++
         continue
       }
-      const rPred = retrievabilityBlock(ctx.sched, q.fsrs, day)
-      const pushed = applyRatingBlock(q.fsrs ?? null, map.rating, day, ctx.sched)
-      const stats = {
-        attempts: (q.stats?.attempts ?? 0) + 1,
-        correct: (q.stats?.correct ?? 0) + (map.correct ? 1 : 0),
-        last: day,
-      }
-      await this.bank.updateQuestionEvidence(courseRoot, loc.node, loc.qid, { fsrs: pushed.fs, stats })
-      await this.store.appendPractice({ ...practiceBase, ts: iso })
+      await this.bank.updateQuestionEvidence(courseRoot, loc.node, loc.qid, { fsrs: r.fs, stats: r.stats })
       await this.store.appendReview({
         course: ctx.c.name, node: loc.node, qid: loc.qid,
-        rating: map.rating, rating_source: map.ratingSource, elapsed_days: pushed.elapsed_days,
-        stability_before: q.fsrs?.stability ?? null, difficulty_before: q.fsrs?.difficulty ?? null, r_pred: rPred,
+        rating: map.rating, rating_source: map.ratingSource, ...r.log,
       })
       // 代表卡随真实推进回刷（口径 B 稳定度分量随复习前进；与站内复习同一语义）
       await this.refreshRepCard(ctx.c, ctx.graph, loc.node)
-      q.fsrs = pushed.fs // 后续同日事件在内存里立即可见（不变量判定不重读盘）
-      q.stats = stats
+      q.fsrs = r.fs // 后续同日事件在内存里立即可见（不变量判定不重读盘）
+      q.stats = r.stats
       result.advanced++
     }
     mirror.last_import_ms = lastMs
@@ -2012,7 +2002,7 @@ export class LearnhubEngine {
         reason: `正确率 ${Math.round(accuracy * 100)}% 低于及格线（${PASS_SCORE}），建议明天再来或先复习前置概念。`,
       }
     }
-    const sched = await getScheduler(this.paths, courseRoot)
+    const sched = await this.sched(courseRoot)
     const today = todayStr()
     let initialized = 0
     let due: string | null = null
@@ -2131,7 +2121,7 @@ export class LearnhubEngine {
     const dues: string[] = []
     const samples: Array<{ stability: number | null; difficulty: number | null; r: number }> = []
     for (const c of await this.enabledCourses()) {
-      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+      const sched = await this.sched(this.paths.courseRoot(c.root))
       await this.scanCourseBanks(c, async (_node, bank) => {
         for (const q of bank.questions) {
           if (q.archived || !q.fsrs?.reps || !q.fsrs.due) continue
@@ -2219,7 +2209,7 @@ export class LearnhubEngine {
     const courses = await this.enabledCourses()
     let dueHard = 0
     for (const c of courses) {
-      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+      const sched = await this.sched(this.paths.courseRoot(c.root))
       await this.scanCourseBanks(c, async (_node, bank) => {
         for (const q of bank.questions) {
           if (q.archived || !q.fsrs?.reps || !q.fsrs.due || q.fsrs.due > today) continue
@@ -2380,17 +2370,10 @@ export class LearnhubEngine {
     if (r < 2 || r > 4) throw new Error(`[learner-rate] 自评档位只能是 2/3/4（收到 ${String(rating)}）；忘记走 learner-forget。`)
     const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-rate')
     const today = todayStr()
-    if (card.stats?.last === today) {
-      throw new Error(`[learner-rate] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
-    }
-    const sched = await getScheduler(this.paths, null)
-    const pushed = applyRatingBlock(card.fsrs ?? null, r, today, sched)
-    const stats = {
-      attempts: (card.stats?.attempts ?? 0) + 1,
-      correct: (card.stats?.correct ?? 0) + 1,
-      last: today,
-    }
-    await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats })
+    // ADR-0014 advanceStrict：守门即原 stats.last 检查（一卡一天一次），文案是测试契约
+    const pushed = advanceStrict(await this.sched(null), card, r, today,
+      `[learner-rate] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
+    await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats: pushed.stats })
     return { course: c.name, node, id: cardId, rating: r, due: pushed.fs.due, scheduled: true }
   }
 
@@ -2400,17 +2383,9 @@ export class LearnhubEngine {
   ): Promise<Record<string, unknown>> {
     const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-forget')
     const today = todayStr()
-    if (card.stats?.last === today) {
-      throw new Error(`[learner-forget] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
-    }
-    const sched = await getScheduler(this.paths, null)
-    const pushed = applyRatingBlock(card.fsrs ?? null, 1, today, sched)
-    const stats = {
-      attempts: (card.stats?.attempts ?? 0) + 1,
-      correct: card.stats?.correct ?? 0,
-      last: today,
-    }
-    await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats })
+    const pushed = advanceStrict(await this.sched(null), card, 1, today,
+      `[learner-forget] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
+    await this.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats: pushed.stats })
     return { course: c.name, node, id: cardId, rating: 1, due: pushed.fs.due, scheduled: true, xp: 0 }
   }
 
@@ -2539,6 +2514,7 @@ export class LearnhubEngine {
       await atomicWrite(this.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n')
       written.push(c.name)
     }
+    this.schedCache.clear() // 参数唯一写者在此：缓存调度器全部失效，后续推进用新参数
     return { status: 'written', written, meta }
   }
 
@@ -2928,6 +2904,7 @@ export class LearnhubEngine {
       await mkdir(this.paths.trashDir, { recursive: true })
       await rename(src, trash)
     }
+    this.schedCache.delete(c.root) // 课程参数随目录移除，缓存条目一并作废
     return { removed: c.name, trash }
   }
 

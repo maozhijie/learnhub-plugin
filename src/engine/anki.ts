@@ -13,6 +13,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { atomicWrite } from './store.ts'
+import { alreadyScheduledOn } from './advance.ts'
 import type { Paths } from './paths.ts'
 import type { FsrsBlock } from './types.ts'
 import type { AlloKind } from './grading.ts'
@@ -37,12 +38,13 @@ export function mapAnkiEase(ease: number): { rating: 1 | 2 | 3 | 4; correct: boo
   throw new Error(`[anki] Anki 作答按钮只能是 1–4（Again/Hard/Good/Easy），收到 ${String(ease)}`)
 }
 
-/** 「一题一天只推进一次」跨端不变量的当日判定：vault 侧该题当日已有推进
- * （stats.last 或 fsrs.last_review 命中事件日）→ 该 Anki 事件跳过调度只留档。 */
+/** 「一题一天只推进一次」跨端不变量的当日判定：vault 侧该题当日已有调度动作
+ * （stats.last 或 fsrs.last_review 命中事件日，含合成初始化）→ 该 Anki 事件跳过
+ * 调度只留档。ADR-0014 起为 advance.ts::alreadyScheduledOn 的回放通道别名。 */
 export function sameDayAdvanced(
   q: { fsrs?: FsrsBlock | null; stats?: { last?: string } | null }, day: string,
 ): boolean {
-  return q.stats?.last === day || q.fsrs?.last_review === day
+  return alreadyScheduledOn(q, day)
 }
 
 // ---- 纯函数缝：来源键（回写归属）----
