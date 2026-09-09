@@ -51,12 +51,14 @@ export type AdvanceResult =
 /** 推进通道：learner = 学习者真实互动（真实推进判定把守）；anki = 镜象回放（vault 调度动作判定把守）。 */
 export type AdvanceChannel = 'learner' | 'anki'
 
-/** 统计合并由 rating 推导（correct = rating > 1）——与题卡/我的卡/回填事件全部现有口径一致。 */
+/** 统计合并由 rating 推导（correct = rating > 1）——与题卡/我的卡/回填事件全部现有口径一致。
+ * last_correct 同由 rating 推导：最近一次真实作答的对错（questions 读视图直通卡展示用）。 */
 function mergedStats(card: AdvanceCard, rating: 1 | 2 | 3 | 4, day: string): PushedResult['stats'] {
   return {
     attempts: (card.stats?.attempts ?? 0) + 1,
     correct: (card.stats?.correct ?? 0) + (rating > 1 ? 1 : 0),
     last: day,
+    last_correct: rating > 1,
   }
 }
 

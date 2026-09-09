@@ -1325,8 +1325,12 @@ export class LearnhubEngine {
     return { courses }
   }
 
-  /** 题目 → 作答视图（questions 与 reviewQueue 共用；matching 右列打乱防泄题）。 */
-  private questionView(q: BankQuestion, i: number): Record<string, unknown> {
+  /** 题目 → 作答视图（questions 与 reviewQueue 共用；matching 右列打乱防泄题）。
+   * opts.reveal（questions 通道专属）：本学习日已推进的题带出答案/解析——直通卡
+   * 披露与作答响应同一披露边界（都发生在「当日额度已用掉」之后）；复习队列是
+   * 主动回忆面，永不带答案。 */
+  private questionView(q: BankQuestion, i: number, opts?: { today?: string; reveal?: boolean }): Record<string, unknown> {
+    const advancedToday = opts?.today !== undefined && alreadyAdvanced(q, opts.today)
     return {
       id: q.id, kind: q.kind, q: q.q, no: i + 1,
       difficulty: q.difficulty ?? 1,
@@ -1337,7 +1341,11 @@ export class LearnhubEngine {
       hasExplanation: Boolean(q.explanation),
       due: q.fsrs?.reps ? q.fsrs.due : null,
       attempts: q.stats?.attempts ?? 0,
-      lastCorrect: q.stats?.attempts ? (q.stats.correct / q.stats.attempts) >= 0.6 : null,
+      // 最近一次作答对错（stats.last_correct；旧数据无此字段 = null）
+      lastCorrect: q.stats?.last_correct ?? null,
+      ...(opts?.reveal && advancedToday
+        ? { advancedToday: true, answer: revealAnswer(q), explanation: q.explanation ?? '' }
+        : {}),
     }
   }
 
@@ -1347,12 +1355,13 @@ export class LearnhubEngine {
    * 管理动作需要逐题清单（questionGet/questionArchive 同一伪课程路由约定）；
    * ADR-0010 v1 不套掌握度模型，响应不带 mastery。 */
   async questions(courseKey: string | undefined, node: string): Promise<QuestionsDoc> {
+    const { today } = await this.learningDay()
     if (await this.isNoteSourceCourse(courseKey)) {
       const bank = await this.bank.load(this.paths.noteSourceDir, node)
       return {
         course: NOTE_SOURCE_COURSE, node,
         questions: bank.questions.filter(q => q.archived !== true)
-          .map((q, i) => this.questionView(q, i)),
+          .map((q, i) => this.questionView(q, i, { today, reveal: true })),
       }
     }
     const c = await this.registry.resolve(courseKey)
@@ -1362,7 +1371,7 @@ export class LearnhubEngine {
       course: c.name, node,
       mastery: masteryOfFm(state[node]),
       questions: bank.questions.filter(q => q.archived !== true)
-        .map((q, i) => this.questionView(q, i)),
+        .map((q, i) => this.questionView(q, i, { today, reveal: true })),
     }
   }
 
@@ -1605,6 +1614,7 @@ export class LearnhubEngine {
       attempts: (q.stats?.attempts ?? 0) + 1,
       correct: (q.stats?.correct ?? 0) + (correct ? 1 : 0),
       last: today,
+      last_correct: correct,
       // 同日重复作答不丢今日已挂起的自评（ADR-0014：pending 态保持完整，rate 仍可达）
       ...(pendingRating || (q.stats?.pending_rating && q.stats?.last === today) ? { pending_rating: true } : {}),
     }
@@ -2163,6 +2173,7 @@ export class LearnhubEngine {
       attempts: (q.stats?.attempts ?? 0) + 1,
       correct: (q.stats?.correct ?? 0) + (correct ? 1 : 0),
       last: today,
+      last_correct: correct,
       // 同日重复作答不丢今日已挂起的自评（ADR-0014：pending 态保持完整）
       ...(q.stats?.pending_rating && q.stats?.last === today ? { pending_rating: true } : {}),
     }
@@ -2222,6 +2233,7 @@ export class LearnhubEngine {
       attempts: (q.stats?.attempts ?? 0) + 1,
       correct: q.stats?.correct ?? 0,
       last: today,
+      last_correct: false,
     })
     // 忘记也是真实推进：落 0 XP 无绑定行，streak 口径与题卡忘记申报一致（ADR-0021）
     await this.store.appendJournal({

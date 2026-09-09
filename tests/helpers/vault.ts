@@ -166,7 +166,7 @@ export function tfQuestion(id: string, opts: {
   difficulty?: number | string
   archived?: boolean
   section?: string
-  stats?: { attempts: number; correct: number }
+  stats?: { attempts: number; correct: number; last?: string; last_correct?: boolean }
 } = {}): string[] {
   return [
     `  - id: ${id}`,
@@ -176,7 +176,7 @@ export function tfQuestion(id: string, opts: {
     ...(opts.difficulty !== undefined ? [`    difficulty: ${opts.difficulty}`] : []),
     ...(opts.section !== undefined ? [`    section: ${opts.section}`] : []),
     ...(opts.archived ? ['    archived: true'] : []),
-    ...(opts.stats ? [`    stats: { attempts: ${opts.stats.attempts}, correct: ${opts.stats.correct} }`] : []),
+    ...(opts.stats ? [`    stats: { attempts: ${opts.stats.attempts}, correct: ${opts.stats.correct}${opts.stats.last !== undefined ? `, last: ${opts.stats.last}` : ''}${opts.stats.last_correct !== undefined ? `, last_correct: ${opts.stats.last_correct}` : ''} }`] : []),
     ...(opts.fsrs ? ['    fsrs:', ...Object.entries(opts.fsrs).map(([k, v]) => `      ${k}: ${v}`)] : []),
   ]
 }

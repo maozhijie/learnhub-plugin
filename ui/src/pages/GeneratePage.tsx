@@ -4,6 +4,7 @@
 import { Alert, Button, Card, Empty, Message, Modal, Progress, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api, discussInHost } from '../api'
+import { isActiveTab } from '../active-tab'
 import type { AppFrame } from '../App'
 import type { GenJobItem, QueueItem } from '../types'
 
@@ -94,8 +95,8 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
 
   useEffect(() => {
     void load()
-    // 生成中 5s 轮询（任务与队列同源刷新）
-    const timer = setInterval(() => void load(), 5000)
+    // 生成中 5s 轮询（任务与队列同源刷新）；页签保活（ADR-0027）：非激活跳过取数
+    const timer = setInterval(() => { if (isActiveTab('generate')) void load() }, 5000)
     return () => clearInterval(timer)
   }, [load])
 

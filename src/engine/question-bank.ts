@@ -47,8 +47,9 @@ export interface BankQuestion {
   /** 题目级 FSRS 调度（刷卡模型：每题一张卡，作答对错驱动推进）。 */
   fsrs?: FsrsBlock
   /** 作答统计（节点掌握度 = 各题该数据的汇总）。pending_rating = 复习刷卡流答对后
-   * 待自评结算的挂起标记（questionRate 落盘时清除）。 */
-  stats?: { attempts: number; correct: number; last?: string; pending_rating?: boolean }
+   * 待自评结算的挂起标记（questionRate 落盘时清除）。last_correct = 最近一次真实
+   * 作答的对错（questions 读视图的 lastCorrect 原料，ADR-0027 直通卡）。 */
+  stats?: { attempts: number; correct: number; last?: string; pending_rating?: boolean; last_correct?: boolean }
 }
 
 export interface BankDoc { node: string; questions: BankQuestion[] }

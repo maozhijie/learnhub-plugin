@@ -416,7 +416,14 @@ export interface QuestionItem {
   /** 题目级 FSRS 下次到期日（未进入调度的题 = null）。 */
   due: string | null
   attempts: number
+  /** 最近一次作答对错（stats.last_correct；旧数据无此字段 = null）。 */
   lastCorrect: boolean | null
+  /** 本学习日已真实推进（一卡一学习日口径）：练习会话据此渲染直通卡（ADR-0027）。 */
+  advancedToday?: boolean
+  /** 直通卡披露：仅 questions 通道对本学习日已推进的题带出（与作答响应同一披露
+   * 边界）；复习队列是主动回忆面，同视图产出不带答案。 */
+  answer?: string
+  explanation?: string
 }
 
 /** 节点题库题目列表（questions；刷卡视图，不含答案）。 */

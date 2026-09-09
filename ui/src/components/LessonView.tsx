@@ -14,6 +14,7 @@ import TutorDrawer from './TutorDrawer'
 import ExplainDrawer from './ExplainDrawer'
 import { WidgetBusProvider } from './widget-bus'
 import { api, discussInHost } from '../api'
+import { isActiveTab } from '../active-tab'
 import type { AppFrame } from '../App'
 import type { GenJobItem, LearnerCardItem, LessonSection, QuestionItem, SectionManifestItem, UnderstandingResult } from '../types'
 
@@ -158,10 +159,17 @@ export default function LessonView(props: { course: string; node: string; frame:
   const jobRef = useRef<GenJobItem | null>(null)
   /** 上次见到的正文版本（增量刷新：其他视图/agent 修订了正文时静默刷新）。 */
   const lastVersionRef = useRef<number | null>(null)
+  /** 练习会话存续中（PracticeFlow 挂载）——冻结语义开关的每次渲染镜像（ADR-0027）。 */
+  const sessionActiveRef = useRef(false)
+  sessionActiveRef.current = questions !== null && questions.length > 0
+  /** 会话期间后台内容有更新（冻结不打断）：轻提示横幅；本课结束后重进生效。 */
+  const [staleNotice, setStaleNotice] = useState(false)
+  useEffect(() => { setStaleNotice(false) }, [course, node])
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     // silent：作答后的统计刷新——保留旧内容直接覆盖，不闪 Spin（提交不整页刷新）
-    if (!opts?.silent) { setSections(null); setQuestions(null) }
+    // 非 silent 在会话存续中同样不置空（ADR-0027）：任何数据刷新不得卸载练习会话
+    if (!opts?.silent && !sessionActiveRef.current) { setSections(null); setQuestions(null) }
     try {
       const [lesson, bank, cards] = await Promise.all([
         api.lesson(node, course).catch(() => null),
@@ -201,17 +209,25 @@ export default function LessonView(props: { course: string; node: string; frame:
     let timer: ReturnType<typeof setTimeout>
     let wasActive = false
     const tick = async () => {
+      // 页签保活：非激活页签跳过取数（组件常驻，定时器只保留节拍）
+      if (!isActiveTab('learn')) { timer = setTimeout(() => void tick(), 15000); return }
       const mine = await poll()
       if (stopped) return
       const active = !!mine && (mine.status === 'running' || mine.status === 'cancelling')
       // 任务完成边沿（running→终态）：/generate 挂起请求若在出题阶段断开，
       // 出题仍会在服务端后台落盘，这里兜底刷新，避免「重开页面才见题目」。
-      if (wasActive && !active) { wasActive = false; void refresh(); void frame.reload() }
-      else if (active) wasActive = true
+      // 会话存续中冻结（ADR-0027）：不打断作答，只留轻提示，本课结束后重进生效。
+      if (wasActive && !active) {
+        wasActive = false
+        void frame.reload()
+        if (sessionActiveRef.current) setStaleNotice(true)
+        else void refresh()
+      } else if (active) wasActive = true
       // 增量刷新：正文版本变化（dsh 会话里 agent 修订了正文）→ 静默刷新当前视图
       const v = mine?.contentVersion
       if (v !== undefined && lastVersionRef.current !== null && v !== lastVersionRef.current) {
-        void refresh({ silent: true })
+        if (sessionActiveRef.current) setStaleNotice(true)
+        else void refresh({ silent: true })
       }
       if (v !== undefined) lastVersionRef.current = v
       timer = setTimeout(() => void tick(), active ? 3000 : 15000)
@@ -289,13 +305,15 @@ export default function LessonView(props: { course: string; node: string; frame:
     }
   }
 
-  /** 单节重写：指定节重新生成并过门（节清单里有 id 的节才可重写）。 */
+  /** 单节重写：指定节重新生成并过门（节清单里有 id 的节才可重写）。
+   * 会话存续中冻结（ADR-0027）：不热替换正文，留提示，重进生效。 */
   const rewriteSection = async (sectionId: string) => {
     setBusy(`section:${sectionId}`)
     try {
       const res = await api.sectionRewrite(course, node, sectionId)
       Message.success(res.message)
-      await refresh()
+      if (sessionActiveRef.current) setStaleNotice(true)
+      else await refresh()
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
     } finally {
@@ -411,6 +429,19 @@ export default function LessonView(props: { course: string; node: string; frame:
           borderRadius: 8, padding: '10px 14px',
         }}>
           <Text>{job.status === 'failed' ? '上次生成失败' : '部分完成'}：{job.message}</Text>
+        </div>
+      )}
+
+      {/* 后台内容更新提示（ADR-0027 冻结语义）：不打断当前练习，本课结束后重进生效 */}
+      {staleNotice && (
+        <div style={{
+          border: '1px solid var(--color-warning-3,#ffd257)', background: 'var(--color-warning-light-1,#fff7e8)',
+          borderRadius: 8, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <Text type='secondary' style={{ fontSize: 13, flex: 1 }}>
+            本节点内容在后台有更新（正文/题目）。当前练习不受影响；本课结束后重进即见新版。
+          </Text>
+          <Button size='mini' type='text' onClick={() => setStaleNotice(false)}>知道了</Button>
         </div>
       )}
 

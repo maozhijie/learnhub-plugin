@@ -10,7 +10,7 @@
  * 自评难度按钮等复习专属背面件由 footer 注入。
  * JOL 抽查（#66 E4）：jolAsk=true 时在题面出示后、翻面前弹一档三点预测
  * （会/不会/没把握）——单点即过、可忽略不卡流程，预测随提交/忘记上报落流水。 */
-import { Button, Input, Message, Radio, Select, Tag, Tooltip, Typography } from '@arco-design/web-react'
+import { Button, Input, Message, Radio, Select, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { InlineMd } from './MdView'
@@ -371,6 +371,54 @@ export default function QuestionCard(props: {
           {props.footer?.(outcome)}
         </div>
       )}
+    </div>
+  )
+}
+
+/** 直通卡（ADR-0027）：本学习日已推进过的题——题面、最近一次作答对错、正确答案与
+ * 解析直接可见，无作答控件，仅可前往下一题。对错中性：不计连对、不入练习证据、
+ * 零 XP，也不落作答流水（无提交）；答案/解析由 questions 通道按已推进披露。 */
+export function RevealCard(props: {
+  question: QuestionItem
+  onNext: () => void
+  onPrev?: () => void
+}) {
+  const q = props.question
+  return (
+    <div style={{
+      border: '1px solid var(--color-border-2,#e5e6eb)', borderRadius: 8,
+      padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Tag size='small' color='arcoblue'>{KIND_LABEL[q.kind]}</Tag>
+        <Tag size='small' color='gray'>本学习日已推进 · 直通</Tag>
+        <Text type='secondary' style={{ fontSize: 12 }}>难度 {q.difficulty} · #{q.no}</Text>
+      </div>
+      <div style={{ fontSize: 16, lineHeight: 1.75 }}><InlineMd text={q.q} /></div>
+      {q.lastCorrect != null && (
+        <Text type='secondary' style={{ fontSize: 13 }}>
+          最近一次作答：{q.lastCorrect ? '答对了' : '答错了'}
+        </Text>
+      )}
+      {q.answer && (
+        <div style={{ fontSize: 13 }}>
+          <Text type='secondary'>正确答案：</Text>
+          <Text bold>{q.answer}</Text>
+        </div>
+      )}
+      {q.explanation && (
+        <div style={{
+          borderLeft: '3px solid var(--color-border-3,#c9cdd4)', background: 'var(--color-fill-1,#f7f8fa)',
+          borderRadius: '0 6px 6px 0', padding: '8px 12px', fontSize: 13, lineHeight: 1.7,
+        }}>
+          <Text type='secondary'>解析：</Text>
+          <InlineMd text={q.explanation} />
+        </div>
+      )}
+      <Space size={8} style={{ alignSelf: 'flex-end' }}>
+        {props.onPrev && <Button size='small' onClick={props.onPrev}>上一步</Button>}
+        <Button type='primary' size='small' onClick={props.onNext}>下一题</Button>
+      </Space>
     </div>
   )
 }

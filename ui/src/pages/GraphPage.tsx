@@ -5,6 +5,7 @@ import { Button, Card, Input, Message, Modal, Select, Space, Switch, Tag, Typogr
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import GraphDagView from '../components/GraphDagView'
 import { api } from '../api'
+import { isActiveTab } from '../active-tab'
 import type { AppFrame } from '../App'
 import type { BankEntry, GraphDoc, RecommendDoc } from '../types'
 
@@ -89,7 +90,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
       }
     }
     void poll()
-    const timer = setInterval(() => void poll(), 5000)
+    // 页签保活（ADR-0027）：非激活页签跳过取数，定时器只保留节拍
+    const timer = setInterval(() => { if (isActiveTab('graph')) void poll() }, 5000)
     return () => clearInterval(timer)
   }, [course, load])
 

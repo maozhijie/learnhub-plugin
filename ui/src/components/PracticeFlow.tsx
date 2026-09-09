@@ -10,7 +10,7 @@ import { Alert, Button, Card, Space, Tag, Typography } from '@arco-design/web-re
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import MdView from './MdView'
-import QuestionCard, { type AnswerOutcome } from './QuestionCard'
+import QuestionCard, { RevealCard, type AnswerOutcome } from './QuestionCard'
 import { SettleContext } from './settle-context'
 import { parseSectionTitle } from '../../../shared/content-renderers'
 import { MAX_ASK_PER_ROUND, passStreakFor } from './quiz-rules'
@@ -175,6 +175,9 @@ export default function PracticeFlow(props: {
   const round = roundIdx < rounds.length ? rounds[roundIdx] : null
   const qs = round?.type === 'quiz' ? round.questions ?? [] : []
   const current = qs[qIdx]
+  // 可作答题数（直通题不计，ADR-0027）：连对目标按它算，全直通轮为 0（翻完即过）
+  const answerableLen = qs.filter(q => !q.advancedToday).length
+  const passTarget = passStreakFor(answerableLen)
 
   useEffect(() => { props.onPassChange?.(allDone) }, [allDone, props])
 
@@ -232,12 +235,12 @@ export default function PracticeFlow(props: {
     props.onSettled()
   }
 
-  /** 「下一题」：连对达标（目标随组内题量收缩）→ 过节（整组标记完成）；
+  /** 「下一题」：连对达标（目标随组内可作答题量收缩）→ 过节（整组标记完成）；
    * 未答题用尽/超上限 → struggle；否则跳到组内下一个未作答题（已答过的题不重复出现）。 */
   const advance = () => {
     const wasCorrect = answered?.correct === true
     const newStreak = wasCorrect ? streak + 1 : 0
-    if (newStreak >= passStreakFor(qs.length)) {
+    if (newStreak >= passTarget) {
       if (round) setDoneRounds(d => new Set(d).add(round.key))
       nextRound()
       return
@@ -250,6 +253,20 @@ export default function PracticeFlow(props: {
       return
     }
     setStruggling(true)
+  }
+
+  /** 直通卡「下一题」（ADR-0027）：对错中性——计入本会话已看集合即可，不产连对、
+   * 不记 outcomes。组内再无可看的题时收轮：全直通轮翻完直接过关；混合轮（可作答
+   * 题已用尽仍未达标）落 struggle，与既有口径一致。 */
+  const revealNext = () => {
+    if (!current) return
+    const seen = new Set(answeredIds).add(current.id)
+    setAnsweredIds(seen)
+    const next = qs.find(q => !seen.has(q.id))
+    if (next) { setQIdx(qs.indexOf(next)); setAnswered(null); return }
+    if (answerableLen === 0 && round) setDoneRounds(d => new Set(d).add(round.key))
+    else setStruggling(true)
+    nextRound()
   }
 
   /** struggle → AI 再出题：出完回到本步开头重读/重做（新题经 questions 刷新进轮，
@@ -353,7 +370,7 @@ export default function PracticeFlow(props: {
           <Space direction='vertical' size={10} style={{ width: '100%' }}>
             <Alert
               type='warning'
-              content={`「${round.title}」这一节还没过关（需连对 ${passStreakFor(qs.length)} 题，本节最多 ${MAX_ASK_PER_ROUND} 题）。可以先重读一遍，或让 AI 再出几道同类题。`}
+              content={`「${round.title}」这一节还没过关（需连对 ${passTarget} 题，本节最多 ${MAX_ASK_PER_ROUND} 题）。可以先重读一遍，或让 AI 再出几道同类题。`}
             />
             <Space size={8} wrap>
               <Button size='small' onClick={() => {
@@ -379,18 +396,21 @@ export default function PracticeFlow(props: {
             <Tag color='arcoblue'>{round.typeLabel}</Tag>
             <Title heading={6} style={{ margin: 0 }}>{round.title}</Title>
             <Text type='secondary' style={{ fontSize: 12 }}>
-              第 {qIdx + 1}/{qs.length} 题 · 连对 {streak}/{passStreakFor(qs.length)}
+              第 {qIdx + 1}/{qs.length} 题 · 连对 {streak}/{passTarget}
             </Text>
           </Space>
-          {current && (
+          {current && (current.advancedToday ? (
+            <RevealCard key={current.id} question={current} onNext={revealNext}
+              onPrev={roundIdx > 0 ? prevRound : undefined} />
+          ) : (
             <QuestionCard key={current.id} course={props.course} node={props.node} question={current} noRedo onDone={handleDone} />
-          )}
-          {(answered || roundIdx > 0) && (
+          ))}
+          {!current?.advancedToday && (answered || roundIdx > 0) && (
             <Space size={8} style={{ alignSelf: 'flex-end' }}>
               {roundIdx > 0 && <Button size='small' onClick={prevRound}>上一步</Button>}
               {answered && (
                 <Button type='primary' size='small' onClick={advance}>
-                  {answered.correct === true && streak + 1 >= passStreakFor(qs.length) ? '连对达标，下一节' : '下一题'}
+                  {answered.correct === true && streak + 1 >= passTarget ? '连对达标，下一节' : '下一题'}
                 </Button>
               )}
             </Space>

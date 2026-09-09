@@ -1,6 +1,7 @@
 import { Button, Empty, Message, Result, Spin, Tabs } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
+import { setActiveTab } from './active-tab'
 import BankPage from './pages/BankPage'
 import GeneratePage from './pages/GeneratePage'
 import GraphPage from './pages/GraphPage'
@@ -62,6 +63,9 @@ export default function App() {
   }, [])
 
   useEffect(() => { void reload() }, [reload])
+
+  // 页签保活（ADR-0027）：把当前页签广播给各页轮询——隐藏页签据此跳过取数
+  useEffect(() => { setActiveTab(tab) }, [tab])
 
   // 夜间模式：arco-theme 切换（跟随系统默认，手动选择存 localStorage）
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -131,17 +135,30 @@ export default function App() {
   )
 }
 
+/** 页签保活（ADR-0027）：首访后常驻、非激活隐藏——练习会话等页内状态跨页签存续；
+ * 隐藏页签的后台轮询由 active-tab 信号自行跳过。 */
+const TAB_KEYS: TabKey[] = ['learn', 'graph', 'bank', 'stats', 'generate', 'proposals', 'practice']
+
 function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
-  switch (tab) {
-    case 'learn': return <LearnPage frame={frame} />
-    case 'graph': return <GraphPage frame={frame} />
-    case 'bank': return <BankPage frame={frame} />
-    case 'stats': return <StatsPage frame={frame} />
-    case 'generate': return <GeneratePage frame={frame} />
-    case 'proposals': return <ProposalsPage />
-    case 'practice': return <PracticePage />
-    default: return null
-  }
+  const [visited, setVisited] = useState<Set<TabKey>>(() => new Set([tab]))
+  useEffect(() => {
+    setVisited(v => (v.has(tab) ? v : new Set(v).add(tab)))
+  }, [tab])
+  return (
+    <>
+      {TAB_KEYS.filter(k => visited.has(k)).map(k => (
+        <div key={k} style={{ display: k === tab ? undefined : 'none' }}>
+          {k === 'learn' && <LearnPage frame={frame} />}
+          {k === 'graph' && <GraphPage frame={frame} />}
+          {k === 'bank' && <BankPage frame={frame} />}
+          {k === 'stats' && <StatsPage frame={frame} />}
+          {k === 'generate' && <GeneratePage frame={frame} />}
+          {k === 'proposals' && <ProposalsPage />}
+          {k === 'practice' && <PracticePage />}
+        </div>
+      ))}
+    </>
+  )
 }
 
 export function toastError(err: unknown) {

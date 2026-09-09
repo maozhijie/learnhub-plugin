@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import LessonView from '../components/LessonView'
+import { isActiveTab } from '../active-tab'
 import QuestionCard, { type AnswerOutcome, type JolPick, toOutcome } from '../components/QuestionCard'
 import LearnerCardCard from '../components/LearnerCardCard'
 import { nextBand, pickNext } from '../../../src/engine/adaptive'
@@ -925,7 +926,8 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       }
     }
     void poll()
-    const timer = setInterval(() => void poll(), 5000)
+    // 页签保活（ADR-0027）：非激活页签跳过取数，定时器只保留节拍
+    const timer = setInterval(() => { if (isActiveTab('learn')) void poll() }, 5000)
     return () => clearInterval(timer)
   }, [load])
   useEffect(() => {
