@@ -1060,7 +1060,8 @@ export class LearnhubEngine {
     if (opts.notes?.length) {
       const byKey = new Map(manifest.sources.flatMap(s => [[s.id, s], [s.path.replace(/\\/g, '/'), s]] as const))
       for (const spec of opts.notes) {
-        const hit = byKey.get(spec.replace(/\\/g, '/'))
+        // 与路由侧同口径：spec trim + 反斜杠归一后再查双键表（id / vault 相对路径）
+        const hit = byKey.get(spec.trim().replace(/\\/g, '/'))
         if (!hit) {
           throw new Error(`[project-decompile] 笔记「${spec}」不在注册清单（先 learnhub_note_source_register，或省略 notes 取全部注册源）。`)
         }
