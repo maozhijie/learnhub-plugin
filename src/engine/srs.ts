@@ -8,13 +8,14 @@
  */
 import { readFile } from 'node:fs/promises'
 import { fsrs, createEmptyCard, Rating, State, generatorParameters } from 'ts-fsrs'
-import type { FSRS, Card } from 'ts-fsrs'
+import type { FSRS, Card, Grade } from 'ts-fsrs'
 import type { FsrsBlock, Fm } from './types.ts'
 import { parseDay, fmtDay, daysBetween } from './dates.ts'
 import { DESIRED_RETENTION, S_MASTER } from './params.ts'
 import type { Paths } from './paths.ts'
 
-const RATING_BY_NUM: Record<number, Rating> = {
+// 值域锁 Grade（= Rating 去 Manual）：sched.next 的形参类型；整枚 Rating 不可赋（ts-fsrs v5）
+const RATING_BY_NUM: Record<number, Grade> = {
   1: Rating.Again, 2: Rating.Hard, 3: Rating.Good, 4: Rating.Easy,
 }
 export const RATING_NAME: Record<number, string> = {
