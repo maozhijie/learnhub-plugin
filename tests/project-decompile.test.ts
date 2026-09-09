@@ -331,6 +331,42 @@ test('校验门：首跑未过门、修复轮通过 → 双提案正常受理（
   })
 })
 
+test('反编译显式 notes 正向解析：id 与 vault 相对路径（反斜杠/含空白形式）双键命中，先验检索生效', async () => {
+  const SECOND_NOTE = { path: 'notes/乐理手记.md', content: '# 乐理手记\n\n自学吉他的乐理底座：音程与音阶结构记法，目标曲目《野蜂飞舞》选段。\n' }
+  const TWO_NOTE_MANIFEST = [
+    'sources:',
+    '  - id: note-1',
+    '    path: notes/吉他练习.md',
+    '    fingerprint: abcdef1234567890',
+    '    title: 吉他练习',
+    '  - id: note-2',
+    '    path: notes/乐理手记.md',
+    '    fingerprint: 1234567890abcdef',
+    '    title: 乐理手记',
+  ].join('\n')
+  await withVault({
+    graph: TWO_NODE_GRAPH,
+    notes: { 入门: {}, 进阶: {} },
+    files: [...NOTE_FILES, SECOND_NOTE, { path: '学习中心/笔记源/源清单.yaml', content: TWO_NOTE_MANIFEST }],
+  }, async ({ engine }) => {
+    await engine.projectCreate({ name: '练琴计划', goal: GOAL })
+    let prompt = ''
+    const r = await engine.projectDecompile('练琴计划', {
+      course: '数学',
+      notes: [' note-1 ', 'notes\\乐理手记.md'], // id 带空白走 trim；path 走反斜杠归一
+    }, async p => {
+      prompt = p
+      return decompileYaml('练琴计划', '吉他')
+    })
+    assert.deepEqual(r.notes, ['notes/吉他练习.md', 'notes/乐理手记.md'], '显式 notes 按 id 与路径双键解析命中')
+    assert.match(prompt, /《吉他练习》/, '命中笔记元数据进上下文')
+    assert.match(prompt, /《乐理手记》/, '命中笔记元数据进上下文')
+    assert.match(prompt, /学习者已有理解（Vault 先验）/, '先验段注入')
+    assert.match(prompt, /（notes\/乐理手记\.md）/, '检索摘录带出处路径')
+    assert.equal(r.prior_hits, 2, '两篇注册笔记都被先验检索命中')
+  })
+})
+
 test('校验门：显式 notes 不在注册清单 fail loud；显式目标课程不存在 fail loud', async () => {
   await withVault(DECOMPILE_VAULT, async ({ engine }) => {
     await engine.projectCreate({ name: '练琴计划', goal: GOAL })
