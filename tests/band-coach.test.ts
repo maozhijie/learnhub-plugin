@@ -1,117 +1,26 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { bandOffset, BAND_PREF_OFFSET } from '../src/engine/adaptive.ts'
 import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, COACH_MIN_ANSWERED, COACH_MIN_SESSIONS, withinCoachWindow } from '../src/engine/coach.ts'
 import type { BandRec } from '../src/engine/coach.ts'
 import { todayStr } from '../src/engine/dates.ts'
+import { tfQuestion, withVault } from './helpers/vault.ts'
 
 // E5 自选难度 + 可用的困难教练（决议 #50 / 实施工单 #65）：显式带选择作为 A1 的
 // 带权偏好（防挫回落保留）；教练 = 只读信息性反馈，低数据静默，无门禁无判分。
 
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-
-/** 高掌握节点：standard 带 >0.6（开场难题），easy 偏移后应回落到基础题。 */
-function note(opts: { fsrs: Record<string, string | number> }): string {
-  return [
-    '---',
-    'node: 入门',
-    'stage: review',
-    'fsrs:',
-    ...Object.entries(opts.fsrs).map(([k, v]) => `  ${k}: ${v}`),
-    'content:',
-    '  version: 0',
-    '  generated_at: null',
-    '  status: draft',
-    'practice:',
-    '  attempts: 3',
-    '  correct: 3',
-    '  practice_ema: 1.0',
-    '---',
-    '',
-    '# 入门',
-  ].join('\n')
-}
-
-function tfQuestion(id: string, difficulty: number): string[] {
-  return [
-    `  - id: ${id}`,
-    '    kind: true_false',
-    `    q: ${id} 题干：说法是否成立。`,
-    '    answer: true',
-    `    difficulty: ${difficulty}`,
-    '    fsrs:',
-    '      stability: 5',
-    '      difficulty: 5',
-    '      due: 2024-01-01',
-    '      last_review: 2024-01-01',
-    '      reps: 2',
-    '      lapses: 0',
-  ]
-}
-
 const YESTERDAY = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
-
-/** 到期难题卡：R 高（昨天刚复习、stability 30）+ 合用难度高（静态 3 + FSRS 8）→ 教练的「该会的到期难题」。 */
-function hardDueQuestion(id: string): string[] {
-  return [
-    `  - id: ${id}`,
-    '    kind: true_false',
-    `    q: ${id} 题干：说法是否成立。`,
-    '    answer: true',
-    '    difficulty: 3',
-    '    fsrs:',
-    '      stability: 30',
-    '      difficulty: 8',
-    `      due: ${YESTERDAY}`,
-    `      last_review: ${YESTERDAY}`,
-    '      reps: 4',
-    '      lapses: 0',
-  ]
-}
 
 const HIGH_MASTERY_FSRS = { stability: 40, difficulty: 5, due: '2024-01-01', last_review: '2024-01-01', reps: 6, lapses: 0 }
 
-async function withVault(
-  bankQuestions: string[][],
-  noteYaml: string,
-  run: (engine: LearnhubEngine) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-band-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${noteYaml}\n`, 'utf8')
-    await writeFile(join(course, '题库', '入门.yaml'),
-      ['node: 入门', 'questions:', ...bankQuestions.flat()].join('\n') + '\n', 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+/** 高掌握节点：standard 带 >0.6（开场难题），easy 偏移后应回落到基础题。 */
+const NOTE = {
+  stage: 'review',
+  fsrs: HIGH_MASTERY_FSRS,
+  practice: { attempts: 3, correct: 3, ema: 1.0 },
 }
+
+const DUE_TF = { stability: 5, difficulty: 5, due: '2024-01-01', last_review: '2024-01-01', reps: 2, lapses: 0 }
 
 type QueueDoc = { band?: number; cards: Array<{ id: string; d: number }> }
 
@@ -173,46 +82,54 @@ test('coachFeedback：全简单 + 有该会的到期难题 → 温和点出；�
 // ---- 门面：bandPref 传导（带权偏好而非过滤）+ 防挫回落不变 ----
 
 test('reviewQueue bandPref：挑战抬高目标带、简单放宽（同一节点上偏移 ±0.2）', async () => {
-  await withVault([tfQuestion('easy1', 1), tfQuestion('hard1', 3)],
-    note({ fsrs: HIGH_MASTERY_FSRS }), async engine => {
-      const std = await engine.reviewQueue('数学', '入门') as QueueDoc
-      const hard = await engine.reviewQueue('数学', '入门', undefined, 'hard') as QueueDoc
-      const easy = await engine.reviewQueue('数学', '入门', undefined, 'easy') as QueueDoc
-      assert.ok(hard.band! > std.band!, '挑战抬高')
-      assert.ok(easy.band! < std.band!, '简单放宽')
-      assert.ok(Math.abs((hard.band! - std.band!) - BAND_PREF_OFFSET) < 1e-6)
-      assert.ok(Math.abs((std.band! - easy.band!) - BAND_PREF_OFFSET) < 1e-6)
-      // 高掌握 standard 开场难题；放宽到简单带后开场回到基础题（带权偏好重排，非过滤）
-      assert.equal(std.cards[0]!.id, 'hard1')
-      assert.equal(easy.cards[0]!.id, 'easy1')
-      assert.equal(hard.cards.length, 2, '不建独立过滤通道：全部到期题仍在队列')
-    })
+  await withVault({
+    notes: { 入门: NOTE },
+    banks: { 入门: [tfQuestion('easy1', { difficulty: 1, fsrs: DUE_TF }), tfQuestion('hard1', { difficulty: 3, fsrs: DUE_TF })] },
+  }, async ({ engine }) => {
+    const std = await engine.reviewQueue('数学', '入门') as QueueDoc
+    const hard = await engine.reviewQueue('数学', '入门', undefined, 'hard') as QueueDoc
+    const easy = await engine.reviewQueue('数学', '入门', undefined, 'easy') as QueueDoc
+    assert.ok(hard.band! > std.band!, '挑战抬高')
+    assert.ok(easy.band! < std.band!, '简单放宽')
+    assert.ok(Math.abs((hard.band! - std.band!) - BAND_PREF_OFFSET) < 1e-6)
+    assert.ok(Math.abs((std.band! - easy.band!) - BAND_PREF_OFFSET) < 1e-6)
+    // 高掌握 standard 开场难题；放宽到简单带后开场回到基础题（带权偏好重排，非过滤）
+    assert.equal(std.cards[0]!.id, 'hard1')
+    assert.equal(easy.cards[0]!.id, 'easy1')
+    assert.equal(hard.cards.length, 2, '不建独立过滤通道：全部到期题仍在队列')
+  })
 })
 
 test('难度带会话日志 + 教练反馈（门面）：全简单日志 + 到期难题 → 教练出声', async () => {
-  await withVault([hardDueQuestion('h1'), tfQuestion('easy1', 1)],
-    note({ fsrs: HIGH_MASTERY_FSRS }), async engine => {
-      const empty = await engine.coachAdvice() as { messages: string[]; due_hard: number }
-      assert.ok(empty.due_hard >= 1, 'fixture 有 R 高且难的到期题')
-      assert.deepEqual(empty.messages, [], '无会话数据静默')
+  await withVault({
+    notes: { 入门: NOTE },
+    // 到期难题卡：R 高（昨天刚复习、stability 30）+ 合用难度高（静态 3 + FSRS 8）→ 教练的「该会的到期难题」
+    banks: { 入门: [
+      tfQuestion('h1', { difficulty: 3, fsrs: { stability: 30, difficulty: 8, due: YESTERDAY, last_review: YESTERDAY, reps: 4, lapses: 0 } }),
+      tfQuestion('easy1', { difficulty: 1, fsrs: DUE_TF }),
+    ] },
+  }, async ({ engine }) => {
+    const empty = await engine.coachAdvice() as { messages: string[]; due_hard: number }
+    assert.ok(empty.due_hard >= 1, 'fixture 有 R 高且难的到期题')
+    assert.deepEqual(empty.messages, [], '无会话数据静默')
 
-      for (let i = 0; i < 3; i++) {
-        await engine.logBandSession({ course: '数学', node: '入门', band: 'easy', answered: 4, correct: 4 })
-      }
-      const coach = await engine.coachAdvice() as { messages: string[]; due_hard: number }
-      assert.equal(coach.messages.length, 1, coach.messages.join('；'))
-      assert.ok(coach.messages[0]!.includes('标准带'))
+    for (let i = 0; i < 3; i++) {
+      await engine.logBandSession({ course: '数学', node: '入门', band: 'easy', answered: 4, correct: 4 })
+    }
+    const coach = await engine.coachAdvice() as { messages: string[]; due_hard: number }
+    assert.equal(coach.messages.length, 1, coach.messages.join('；'))
+    assert.ok(coach.messages[0]!.includes('标准带'))
 
-      // 日志落盘可回读
-      const recs = await engine.store.bandRecsAll()
-      assert.equal(recs.length, 3)
-      assert.equal(recs[0]!.band, 'easy')
-      assert.ok(recs[0]!.date.length === 10)
-      await assert.rejects(
-        () => engine.logBandSession({ course: '数学', node: '入门', band: '变态' as never, answered: 1, correct: 1 }),
-        /band 只能是/,
-      )
-    })
+    // 日志落盘可回读
+    const recs = await engine.store.bandRecsAll()
+    assert.equal(recs.length, 3)
+    assert.equal(recs[0]!.band, 'easy')
+    assert.ok(recs[0]!.date.length === 10)
+    await assert.rejects(
+      () => engine.logBandSession({ course: '数学', node: '入门', band: '变态' as never, answered: 1, correct: 1 }),
+      /band 只能是/,
+    )
+  })
 })
 
 test('教练口径常量：「该会的到期难题」= R 高 + 合用难度中档以上', () => {

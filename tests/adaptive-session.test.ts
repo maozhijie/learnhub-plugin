@@ -1,97 +1,26 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { BAND_STEP_UP, combinedDifficulty, nextBand, pickNext, sessionOrder, startBand } from '../src/engine/adaptive.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-
-/** 节点笔记：fsrs/practice 可播种——masteryOfFm 的先验来源。 */
-function note(opts: { stage: string; fsrs: Record<string, string | number> | null; attempts: number; correct: number; ema?: number }): string {
-  return [
-    '---',
-    'node: 入门',
-    `stage: ${opts.stage}`,
-    ...(opts.fsrs
-      ? ['fsrs:', ...Object.entries(opts.fsrs).map(([k, v]) => `  ${k}: ${v}`)]
-      : ['fsrs: null']),
-    'content:',
-    '  version: 0',
-    '  generated_at: null',
-    '  status: draft',
-    'practice:',
-    `  attempts: ${opts.attempts}`,
-    `  correct: ${opts.correct}`,
-    ...(opts.ema !== undefined ? [`practice_ema: ${opts.ema}`] : []),
-    '---',
-    '',
-    '# 入门',
-  ].join('\n')
-}
-
-/** true_false 题目：fsrs 全部同种子（R 同档），只让静态题面难度拉开合用难度 d。 */
-function tfQuestion(id: string, difficulty: number, seedDue: string): string[] {
-  return [
-    `  - id: ${id}`,
-    '    kind: true_false',
-    `    q: ${id} 题干：说法是否成立。`,
-    '    answer: true',
-    `    difficulty: ${difficulty}`,
-    '    fsrs:',
-    '      stability: 5',
-    '      difficulty: 5',
-    `      due: ${seedDue}`,
-    `      last_review: ${seedDue}`,
-    '      reps: 2',
-    '      lapses: 0',
-  ]
-}
+import { tfQuestion, withVault } from './helpers/vault.ts'
 
 const PAST = '2024-01-01'
 
-async function withVault(
-  noteYaml: string,
-  run: (engine: LearnhubEngine) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-adaptive-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${noteYaml}\n`, 'utf8')
-    await writeFile(
-      join(course, '题库', '入门.yaml'),
-      ['node: 入门', 'questions:',
-        ...tfQuestion('easy1', 1, PAST), ...tfQuestion('easy2', 1, PAST),
-        ...tfQuestion('hard1', 3, PAST), ...tfQuestion('hard2', 3, PAST)].join('\n') + '\n',
-      'utf8',
-    )
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+/** 节点笔记：fsrs/practice 可播种——masteryOfFm 的先验来源（高掌握种子）。 */
+const HIGH_MASTERY = {
+  stage: 'review',
+  fsrs: { stability: 40, difficulty: 5, due: PAST, last_review: PAST, reps: 6, lapses: 0 },
+  practice: { attempts: 3, correct: 3, ema: 1.0 },
 }
+
+/** true_false 题目：fsrs 全部同种子（R 同档），只让静态题面难度拉开合用难度 d。 */
+const DUE_TF = { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 2, lapses: 0 }
+
+const BANK = [
+  tfQuestion('easy1', { difficulty: 1, fsrs: DUE_TF }),
+  tfQuestion('easy2', { difficulty: 1, fsrs: DUE_TF }),
+  tfQuestion('hard1', { difficulty: 3, fsrs: DUE_TF }),
+  tfQuestion('hard2', { difficulty: 3, fsrs: DUE_TF }),
+]
 
 // ---- 纯规则（接缝 S24）----
 
@@ -137,19 +66,16 @@ test('pickNext/sessionOrder：距目标带最近者优先，平局稳定', () =>
 // ---- 门面：单节点会话起点先验 + 首学新题流不动 ----
 
 test('单节点定向队列：起点难度带随节点 Mastery 单调——高掌握先出难题，低掌握先出基础题', async () => {
-  const highMastery = note({
-    stage: 'review',
-    fsrs: { stability: 40, difficulty: 5, due: PAST, last_review: PAST, reps: 6, lapses: 0 },
-    attempts: 3, correct: 3, ema: 1.0,
-  })
-  await withVault(highMastery, async engine => {
+  await withVault({ notes: { 入门: HIGH_MASTERY }, banks: { 入门: BANK } }, async ({ engine }) => {
     const r = await engine.reviewQueue('数学', '入门') as Record<string, unknown>
     assert.ok((r.band as number) > 0.6, `高掌握起点带在上半区，得到 ${r.band}`)
     const cards = r.cards as Array<Record<string, unknown>>
     assert.equal(cards[0].id, 'hard1', '先验带高 → 开场是高难度档')
   })
-  const lowMastery = note({ stage: 'review', fsrs: null, attempts: 3, correct: 0 })
-  await withVault(lowMastery, async engine => {
+  await withVault({
+    notes: { 入门: { stage: 'review', fsrs: null, practice: { attempts: 3, correct: 0 } } },
+    banks: { 入门: BANK },
+  }, async ({ engine }) => {
     const r = await engine.reviewQueue('数学', '入门') as Record<string, unknown>
     assert.equal(r.band, 0.2, '零掌握从基础带起')
     const cards = r.cards as Array<Record<string, unknown>>
@@ -159,12 +85,7 @@ test('单节点定向队列：起点难度带随节点 Mastery 单调——高�
 })
 
 test('全局队列与首学新题流不动：全局维持 R 组合排序，questions 维持题库序', async () => {
-  const highMastery = note({
-    stage: 'review',
-    fsrs: { stability: 40, difficulty: 5, due: PAST, last_review: PAST, reps: 6, lapses: 0 },
-    attempts: 3, correct: 3, ema: 1.0,
-  })
-  await withVault(highMastery, async engine => {
+  await withVault({ notes: { 入门: HIGH_MASTERY }, banks: { 入门: BANK } }, async ({ engine }) => {
     const r = await engine.reviewQueue('数学') as Record<string, unknown>
     assert.equal(r.band, undefined, '全局队列没有先验带字段（不走 A1 微调）')
     const cards = r.cards as Array<Record<string, unknown>>

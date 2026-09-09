@@ -1,86 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { jolCalibration, jolDeviatedKeys, pickJolTargets } from '../src/engine/jol.ts'
 import type { PracticeRec } from '../src/engine/types.ts'
+import { tfQuestion, withVault } from './helpers/vault.ts'
 
 // E4 预测-校准 JOL（决议 #49 修订 / 实施工单 #66）：复习流作答前一档三点预测
 // （抽查 ~1/3、可忽略、可全局关）+ 校准曲线（只展示、不喂 canonical）。
 
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-
-function note(): string {
-  return [
-    '---',
-    'node: 入门',
-    'stage: review',
-    'fsrs: null',
-    'content:',
-    '  version: 0',
-    '  generated_at: null',
-    '  status: draft',
-    'practice:',
-    '  attempts: 0',
-    '  correct: 0',
-    '---',
-    '',
-    '# 入门',
-  ].join('\n')
-}
-
 /** 到期 true_false 题（R 低：老 last_review + 小 stability → 全部 0 分候选，随机补齐可断言）。 */
-function tfQuestion(id: string): string[] {
-  return [
-    `  - id: ${id}`,
-    '    kind: true_false',
-    `    q: ${id} 题干：说法是否成立。`,
-    '    answer: true',
-    '    difficulty: 1',
-    '    fsrs:',
-    '      stability: 0.5',
-    '      difficulty: 5',
-    '      due: 2024-01-01',
-    '      last_review: 2024-01-01',
-    '      reps: 2',
-    '      lapses: 0',
-  ]
-}
-
-async function withVault(run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-jol-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${note()}\n`, 'utf8')
-    await writeFile(join(course, '题库', '入门.yaml'),
-      ['node: 入门', 'questions:', ...tfQuestion('q1'), ...tfQuestion('q2'), ...tfQuestion('q3')].join('\n') + '\n', 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+const DUE_TF = {
+  difficulty: 1,
+  fsrs: { stability: 0.5, difficulty: 5, due: '2024-01-01', last_review: '2024-01-01', reps: 2, lapses: 0 },
 }
 
 const rec = (p: Partial<PracticeRec>): PracticeRec => ({
@@ -148,7 +78,10 @@ test('jolCalibration：(predicted, 实际) 逐条配对聚合；门槛前 null�
 // ---- 门面：抽查标记 / predicted 落流水 / 全局开关 / 校准入口 ----
 
 test('reviewQueue：抽查约 1/3 弹预测标记，关闭后完全消失', async () => {
-  await withVault(async engine => {
+  await withVault({
+    notes: { 入门: { stage: 'review' } },
+    banks: { 入门: [tfQuestion('q1', DUE_TF), tfQuestion('q2', DUE_TF), tfQuestion('q3', DUE_TF)] },
+  }, async ({ engine }) => {
     engine.jolRng = () => 0.5
     const r = await engine.reviewQueue('数学') as { cards: Array<{ id: string; jol?: boolean }> }
     const marked = r.cards.filter(c => c.jol)
@@ -167,7 +100,10 @@ test('reviewQueue：抽查约 1/3 弹预测标记，关闭后完全消失', asyn
 })
 
 test('作答/忘记携带预测落流水（逐条配对成立）；非法预测显式拒绝', async () => {
-  await withVault(async engine => {
+  await withVault({
+    notes: { 入门: { stage: 'review' } },
+    banks: { 入门: [tfQuestion('q1', DUE_TF), tfQuestion('q2', DUE_TF), tfQuestion('q3', DUE_TF)] },
+  }, async ({ engine }) => {
     const llm = async () => { throw new Error('不应调用 LLM') }
     // 复习流答对（挂起）+ 预测「会」
     await engine.questionAnswer(llm, '数学', '入门', 'q1', 'true', null,
@@ -190,7 +126,10 @@ test('作答/忘记携带预测落流水（逐条配对成立）；非法预测�
 })
 
 test('memoryHealth：校准配对足门槛后呈现（jol 字段），不足为 null', async () => {
-  await withVault(async engine => {
+  await withVault({
+    notes: { 入门: { stage: 'review' } },
+    banks: { 入门: [tfQuestion('q1', DUE_TF), tfQuestion('q2', DUE_TF), tfQuestion('q3', DUE_TF)] },
+  }, async ({ engine }) => {
     const empty = await engine.memoryHealth() as { jol: unknown }
     assert.equal(empty.jol, null, '无配对不显示（空态不造假）')
     for (let i = 0; i < 10; i++) {

@@ -1,30 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { LearnhubEngine, revealAnswer } from '../src/engine/index.ts'
 import { mapAnkiEase, sameDayAdvanced, planMirrorSync, sourceKeyOf, parseSourceKey, ankiCardPayload, fingerprintOf, isoFromMs } from '../src/engine/anki.ts'
 import type { AnkiTransport } from '../src/engine/anki.ts'
 import { todayStr } from '../src/engine/dates.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
+import { withVault as makeVault } from './helpers/vault.ts'
 
 const NOTE = [
   '---',
@@ -76,21 +58,7 @@ function bankYaml(): string {
 }
 
 async function withVault(run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-anki-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${NOTE}\n`, 'utf8')
-    await writeFile(join(course, '题库', '入门.yaml'), bankYaml(), 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+  await makeVault({ tag: 'learnhub-anki-', notes: { 入门: `${NOTE}\n` }, banks: { 入门: bankYaml() } }, ({ engine }) => run(engine))
 }
 
 /** 假 AnkiConnect：内存态牌组/笔记/复习日志（cardReviews 按毫秒水位过滤）。 */

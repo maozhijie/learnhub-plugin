@@ -1,12 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { calibrationBins, dueReviewFirstPushes, forecast, forgettingCurve, stateHistograms, trueRetention } from '../src/engine/memory.ts'
 import { todayStr } from '../src/engine/dates.ts'
 import type { ReviewRec } from '../src/engine/types.ts'
+import { tfQuestion, withVault } from './helpers/vault.ts'
 
 // ---- 纯聚合（接缝 S26）----
 
@@ -79,103 +76,29 @@ test('校准分箱与遗忘曲线：按 r_pred / elapsed_days 分桶的通过率
 
 // ---- 门面：跨课程聚合 + 与 reviewQueue 扫描口径一致 + 空态 ----
 
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-
-const NOTE = [
-  '---',
-  'node: 入门',
-  'stage: review',
-  'fsrs: null',
-  'content:',
-  '  version: 0',
-  '  generated_at: null',
-  '  status: draft',
-  'practice:',
-  '  attempts: 0',
-  '  correct: 0',
-  '---',
-  '',
-  '# 入门',
-].join('\n')
-
 const PAST = '2024-01-01'
 
 /** fsrs 种子：due 可指定（负载预报与状态分布的原料）。 */
-function tfQuestion(id: string, due?: string): string[] {
-  return [
-    `  - id: ${id}`,
-    '    kind: true_false',
-    `    q: ${id} 题干：说法是否成立。`,
-    '    answer: true',
-    ...(due
-      ? ['    fsrs:', '      stability: 5', '      difficulty: 5', `      due: ${due}`,
-        `      last_review: ${due}`, '      reps: 2', '      lapses: 0']
-      : []),
-  ]
-}
-
-async function withVault(
-  questions: string[][],
-  logs: ReviewRec[],
-  run: (engine: LearnhubEngine) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-memory-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${NOTE}\n`, 'utf8')
-    if (questions.length) {
-      await writeFile(
-        join(course, '题库', '入门.yaml'),
-        ['node: 入门', 'questions:', ...questions.flat()].join('\n') + '\n',
-        'utf8',
-      )
-    }
-    const engine = new LearnhubEngine({ vault: root })
-    if (logs.length) {
-      await mkdir(engine.paths.centerStateDir, { recursive: true })
-      await writeFile(engine.paths.reviewLogPath, logs.map(l => JSON.stringify(l)).join('\n') + '\n', 'utf8')
-    }
-    await run(engine)
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
+const seeded = (due: string) => ({ stability: 5, difficulty: 5, due, last_review: due, reps: 2, lapses: 0 })
 
 test('memoryHealth：预报/分布立刻有数且与 reviewQueue 扫描口径一致；保留率只计真实到期复习', async () => {
   const today = todayStr()
   const day = (offset: number) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86400000).toISOString().slice(0, 10)
-  await withVault([
-    tfQuestion('a1', PAST),        // 逾期
-    tfQuestion('a2', today),       // 今日到期
-    tfQuestion('a3', day(2)),      // 后天
-    tfQuestion('a4', '2099-01-01'), // 远期：状态分布计入，预报逐日不计
-    tfQuestion('a5'),              // 未调度：不入任何面板
-  ], [
-    rec({ ts: '2026-09-01T10:00:00', qid: 'a1', rating: 1, elapsed_days: 5, r_pred: 0.8 }),
-    rec({ ts: '2026-09-02T10:00:00', qid: 'a2', rating: 3, rating_source: 'self', elapsed_days: 2, stability_before: 5, r_pred: 0.7 }),
-    rec({ ts: '2026-09-03T10:00:00', qid: 'a3', rating: 3, rating_source: 'synthetic', stability_before: null, difficulty_before: null, r_pred: null }),
-  ], async engine => {
+  await withVault({
+    notes: { 入门: { stage: 'review' } },
+    banks: { 入门: [
+      tfQuestion('a1', { fsrs: seeded(PAST) }),         // 逾期
+      tfQuestion('a2', { fsrs: seeded(today) }),        // 今日到期
+      tfQuestion('a3', { fsrs: seeded(day(2)) }),       // 后天
+      tfQuestion('a4', { fsrs: seeded('2099-01-01') }), // 远期：状态分布计入，预报逐日不计
+      tfQuestion('a5'),                                 // 未调度：不入任何面板
+    ] },
+    reviewLog: [
+      rec({ ts: '2026-09-01T10:00:00', qid: 'a1', rating: 1, elapsed_days: 5, r_pred: 0.8 }),
+      rec({ ts: '2026-09-02T10:00:00', qid: 'a2', rating: 3, rating_source: 'self', elapsed_days: 2, stability_before: 5, r_pred: 0.7 }),
+      rec({ ts: '2026-09-03T10:00:00', qid: 'a3', rating: 3, rating_source: 'synthetic', stability_before: null, difficulty_before: null, r_pred: null }),
+    ].map(l => JSON.stringify(l)),
+  }, async ({ engine }) => {
     const m = await engine.memoryHealth() as {
       forecast: { overdue: number; per_day: Array<{ d: string; count: number }> }
       state: { scheduled: number; stability: Array<{ label: string; count: number }> }
@@ -210,7 +133,7 @@ test('memoryHealth：预报/分布立刻有数且与 reviewQueue 扫描口径一
 })
 
 test('memoryHealth 空态：无题库无日志 → 全零计数与 rate=null，不造假数据', async () => {
-  await withVault([], [], async engine => {
+  await withVault({ notes: { 入门: { stage: 'review' } } }, async ({ engine }) => {
     const m = await engine.memoryHealth() as {
       state: { scheduled: number }
       retention: { real: number; rate: number | null }

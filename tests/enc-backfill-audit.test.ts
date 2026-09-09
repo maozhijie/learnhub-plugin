@@ -1,21 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { Content } from '../src/engine/content.ts'
 import { Graph, GraphStore } from '../src/engine/graph.ts'
 import { runAudit } from '../src/engine/audit.ts'
+import type { LearnhubEngine } from '../src/engine/index.ts'
 import type { GNode, GRegion } from '../src/engine/types.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
+import { withVault } from './helpers/vault.ts'
 
 const GRAPH = [
   'region: 基础',
@@ -27,25 +18,6 @@ const GRAPH = [
   '      - { name: 乙, pre: [甲], opt: false, note: "", est: 20 }',
   '      - { name: 丙, pre: [], opt: false, note: "", est: 10 }',
 ].join('\n')
-
-function plainNote(node: string): string {
-  return [
-    '---',
-    `node: ${node}`,
-    'stage: ready',
-    'fsrs: null',
-    'content:',
-    '  version: 0',
-    '  generated_at: null',
-    '  status: draft',
-    'practice:',
-    '  attempts: 0',
-    '  correct: 0',
-    '---',
-    '',
-    `# ${node}`,
-  ].join('\n')
-}
 
 /** 乙：已有 Ready 内容（sections.ready）+ 正文声明 enc_candidates（反哺候选源）。 */
 const NOTE_乙 = [
@@ -77,23 +49,11 @@ const NOTE_乙 = [
   '<!-- enc_candidates: [甲] -->',
 ].join('\n')
 
-async function withCourse(run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-enc-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '00_基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '甲.md'), `${plainNote('甲')}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '乙.md'), `${NOTE_乙}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '丙.md'), `${plainNote('丙')}\n`, 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+/** 甲乙丙三节点课程（图文件名 00_基础.yaml）；乙用原始笔记，甲丙用共享工厂缺省笔记。 */
+const ENC_VAULT = {
+  graph: GRAPH,
+  graphFile: '00_基础.yaml',
+  notes: { 甲: {}, 乙: `${NOTE_乙}\n`, 丙: {} },
 }
 
 async function auditOf(engine: LearnhubEngine) {
@@ -203,7 +163,7 @@ test('encContentHints：practice 节点合法空 enc 不报缺口；非 Ready �
 // ---- 集成：存量回填 → 提案 → apply → 可重入；审计 R14 随覆盖销号 ----
 
 test('graphEncBackfill：Ready 节点补 enc 提案，apply 后覆盖销号，重跑 ops=0', async () => {
-  await withCourse(async engine => {
+  await withVault(ENC_VAULT, async ({ engine }) => {
     // 初始审计：乙有 Ready 内容 + 候选但未落 enc → R14 覆盖缺口
     const before = await auditOf(engine)
     assert.ok(before.warns.some(w => /R14 enc 覆盖缺口.*乙/.test(w)), '审计报出覆盖缺口')
@@ -229,7 +189,7 @@ test('graphEncBackfill：Ready 节点补 enc 提案，apply 后覆盖销号，�
 })
 
 test('graphEncBackfill：无反哺候选 → ops=0 且不产生提案', async () => {
-  await withCourse(async engine => {
+  await withVault(ENC_VAULT, async ({ engine }) => {
     // 擦掉乙的 enc_candidates 机器块 → 候选为空 → 无回填
     const { writeFile } = await import('node:fs/promises')
     await writeFile(

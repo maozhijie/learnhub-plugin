@@ -1,13 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { defaultParams, FSRS6_PARAM_COUNT, OPTIMIZE_MIN_REVIEWS, sequenceReviews, trainingSequences } from '../src/engine/optimize.ts'
 import type { OptimizerImpl, TrainingSequence } from '../src/engine/optimize.ts'
+import type { LearnhubEngine } from '../src/engine/index.ts'
 import type { ReviewRec } from '../src/engine/types.ts'
+import { withVault } from './helpers/vault.ts'
 
+/** 双课程注册表（数学 + 物理）；优化器写回覆盖全部启用课程。 */
 const REGISTRY = [
   'courses:',
   '  - id: math-01',
@@ -19,19 +19,6 @@ const REGISTRY = [
   '    root: phys',
   '    enabled: true',
 ].join('\n')
-
-async function withVault(run: (engine: LearnhubEngine, root: string) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-optimize-'))
-  try {
-    const center = join(root, '学习中心')
-    await mkdir(join(center, 'state'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    const engine = new LearnhubEngine({ vault: root })
-    await run(engine, root)
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
 
 /** 造一条复习日志（默认真实 auto 源；ts 用日序稳定的 ISO）。 */
 function rec(overrides: Partial<ReviewRec> & { day: string; qid: string }): Omit<ReviewRec, 'ts'> & { ts: string } {
@@ -107,7 +94,7 @@ function fakeImpl(opts: {
 }
 
 test('优化器：<400 条真实日志 → 不训练不写回，返回原因', async () => {
-  await withVault(async engine => {
+  await withVault({ registry: REGISTRY, graph: null }, async ({ engine }) => {
     await seedRealLogs(engine, { total: OPTIMIZE_MIN_REVIEWS - 1 })
     let trained = 0
     const impl = fakeImpl({ parameters: defaultParams() })
@@ -120,7 +107,7 @@ test('优化器：<400 条真实日志 → 不训练不写回，返回原因', a
 })
 
 test('优化器：评估优于默认参数 → 学习者级一套写回全部启用课程（含元数据）', async () => {
-  await withVault(async engine => {
+  await withVault({ registry: REGISTRY, graph: null }, async ({ engine }) => {
     await seedRealLogs(engine)
     const trained = Array.from({ length: FSRS6_PARAM_COUNT }, (_, i) => 1 + i * 0.1)
     const impl = fakeImpl({ parameters: trained })
@@ -143,7 +130,7 @@ test('优化器：评估优于默认参数 → 学习者级一套写回全部启
 })
 
 test('优化器：评估劣于现参 → 不写回（现参文件保持不动），返回跳过原因', async () => {
-  await withVault(async engine => {
+  await withVault({ registry: REGISTRY, graph: null }, async ({ engine }) => {
     await seedRealLogs(engine)
     const previous = Array.from({ length: FSRS6_PARAM_COUNT }, (_, i) => 0.5 + i)
     for (const root of ['math', 'phys']) {
@@ -163,7 +150,7 @@ test('优化器：评估劣于现参 → 不写回（现参文件保持不动）
 })
 
 test('优化器：训练产出长度不是 21 → 拒绝写回', async () => {
-  await withVault(async engine => {
+  await withVault({ registry: REGISTRY, graph: null }, async ({ engine }) => {
     await seedRealLogs(engine)
     const impl = fakeImpl({ parameters: [1, 2, 3] })
     const r = await engine.optimizeFsrsParams(impl)

@@ -1,17 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
+import { withVault } from './helpers/vault.ts'
+import type { NoteSeed } from './helpers/vault.ts'
 
 const GRAPH = [
   'region: 基础',
@@ -23,38 +13,34 @@ const GRAPH = [
   '      - { name: 入门, pre: [前置概念], opt: false, note: "", est: 20 }',
 ].join('\n')
 
-/** 带 manifest（s1/s2 两节）与正文的节点笔记。 */
-const NOTE = [
-  '---',
-  'node: 入门',
-  'stage: review',
-  'fsrs: null',
-  'content:',
-  '  version: 2',
-  '  generated_at: "2026-09-01"',
-  '  status: draft',
-  '  sections:',
-  '    - { id: s1, title: "概念：定义", type: 概念, status: ready, version: 1 }',
-  '    - { id: s2, title: "例题：应用", type: 例题, status: ready, version: 0 }',
-  'practice:',
-  '  attempts: 3',
-  '  correct: 1',
-  '---',
-  '',
-  '# 入门',
-  '',
-  '## 概念：定义',
-  '',
-  'S1 勾股定理说的是直角三角形两直角边与斜边的平方关系。',
-  '',
-  '## 例题：应用',
-  '',
-  'S2 已知两直角边求斜边的完整例题演示。',
-  '',
-  '## 练习',
-  '',
-  '（练习占位）',
-].join('\n')
+/** 带 manifest（s1/s2 两节）与正文的入门笔记种子（noteText 逐字生成原 NOTE 常量）。 */
+const NOTE: NoteSeed = {
+  stage: 'review',
+  content: {
+    version: 2,
+    generatedAt: '2026-09-01',
+    sections: [
+      '    - { id: s1, title: "概念：定义", type: 概念, status: ready, version: 1 }',
+      '    - { id: s2, title: "例题：应用", type: 例题, status: ready, version: 0 }',
+    ],
+  },
+  practice: { attempts: 3, correct: 1 },
+  body: [
+    '# 入门',
+    '',
+    '## 概念：定义',
+    '',
+    'S1 勾股定理说的是直角三角形两直角边与斜边的平方关系。',
+    '',
+    '## 例题：应用',
+    '',
+    'S2 已知两直角边求斜边的完整例题演示。',
+    '',
+    '## 练习',
+    '',
+    '（练习占位）',
+  ],
+}
 
 const BANK = [
   'node: 入门',
@@ -78,26 +64,16 @@ const BANK = [
   '    section: 已删除的节',
 ].join('\n')
 
-async function withVault(run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-explain-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${NOTE}\n`, 'utf8')
-    await writeFile(join(course, '题库', '入门.yaml'), BANK, 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
+/** 讲解包 vault：两节点图 + manifest 笔记 + 混合题型题库。 */
+const explainVault = () => ({
+  tag: 'learnhub-explain-',
+  graph: GRAPH,
+  notes: { 入门: NOTE },
+  banks: { 入门: BANK },
+})
 
 test('讲解包：答错场景含题面/答案/解析/本次作答/判语/对应节正文/渐退教法指令', async () => {
-  await withVault(async engine => {
+  await withVault(explainVault(), async ({ engine }) => {
     await engine.store.appendPractice({
       course: '数学', node: '入门', ex: 1, answer: 'B',
       correct: false, judge: 'single_choice', qid: 'q1',
@@ -128,7 +104,7 @@ test('讲解包：答错场景含题面/答案/解析/本次作答/判语/对应
 })
 
 test('讲解包：忘记申报场景带忘记标记；旧题按节标题回退定位', async () => {
-  await withVault(async engine => {
+  await withVault(explainVault(), async ({ engine }) => {
     await engine.store.appendPractice({
       course: '数学', node: '入门', ex: 2, answer: '',
       correct: false, judge: 'forget', qid: 'q2', ts: '2026-09-08T11:00:00',
@@ -143,7 +119,7 @@ test('讲解包：忘记申报场景带忘记标记；旧题按节标题回退�
 })
 
 test('讲解包：节映射失败退化为整课节选并明示，不崩', async () => {
-  await withVault(async engine => {
+  await withVault(explainVault(), async ({ engine }) => {
     const pack = await engine.errorExplainPack('数学', '入门', 'q3')
     assert.match(pack, /未能把这道题精确定位到某一节/)
     assert.match(pack, /S1 勾股定理说的是/) // 整课节选兜底
@@ -152,7 +128,7 @@ test('讲解包：节映射失败退化为整课节选并明示，不崩', async
 })
 
 test('讲解包：无流水记录时如实说明（按主动求助理解）', async () => {
-  await withVault(async engine => {
+  await withVault(explainVault(), async ({ engine }) => {
     const pack = await engine.errorExplainPack('数学', '入门', 'q1')
     assert.match(pack, /流水里没有本次作答记录/)
   })

@@ -1,23 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
+import type { LearnhubEngine } from '../src/engine/index.ts'
 import { validateLearnerCards, LEARNER_PROMPT_MAX, LEARNER_CONTENT_MAX } from '../src/engine/learner-cards.ts'
 import { parseExplainVerdict, explainBackPack, EXPLAIN_VERDICTS, EXPLAIN_TAGS } from '../src/engine/explain.ts'
 import { selfNoteFeedbackSystem, selfNoteFeedbackPrompt, selfNotePromptOf } from '../src/engine/self-note.ts'
 import { todayStr } from '../src/engine/dates.ts'
+import { withVault } from './helpers/vault.ts'
 
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
+/** 入门带悬挂前置（前置概念不在图内）——讲解包要能照常点名前置。 */
 const GRAPH = [
   'region: 基础',
   'color: blue',
@@ -60,21 +53,8 @@ const NOTE = [
   '（练习占位）',
 ].join('\n')
 
-async function withVault(run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-e1e2-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${NOTE}\n`, 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
+/** 悬挂前置图 + 双 section 笔记；无题库。原始字符串逐字落盘，补上原 harness 的结尾换行。 */
+const LEARNER_VAULT = { graph: GRAPH, notes: { 入门: `${NOTE}\n` } }
 
 const VALID_JSON = JSON.stringify({
   verdict: '部分对',
@@ -163,7 +143,7 @@ test('纯函数缝：讲解包拼装与判词解析（不可解析抛错、tags 
 // ---- 门面：E2 讲解会话 ----
 
 test('讲解包：面板/宿主通道取到要点+图位置+初学者人设指令；未知节点 fail loud', async () => {
-  await withVault(async engine => {
+  await withVault(LEARNER_VAULT, async ({ engine }) => {
     const pack = await engine.explainBackPack('数学', '入门')
     assert.match(pack, /### 概念：定义/)
     assert.match(pack, /### 例题：应用/)
@@ -176,7 +156,7 @@ test('讲解包：面板/宿主通道取到要点+图位置+初学者人设指�
 })
 
 test('定位反馈：判词解析入 E 档案；解析失败零副作用；canonical 通道零写入（#33 边界回归）', async () => {
-  await withVault(async engine => {
+  await withVault(LEARNER_VAULT, async ({ engine }) => {
     const bankBefore = existsSync(engine.paths.journalPath) ? await readFile(engine.paths.journalPath, 'utf8') : ''
     const noteBefore = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
 
@@ -222,7 +202,7 @@ test('定位反馈：判词解析入 E 档案；解析失败零副作用；canon
 // ---- 门面：E2 存档 → E1 卡 ----
 
 test('存成我的卡：默认再讲一遍；挖空重述需带 {{}}；同内容去重', async () => {
-  await withVault(async engine => {
+  await withVault(LEARNER_VAULT, async ({ engine }) => {
     const r1 = await engine.explainArchiveCard('数学', '入门', {
       content: '等差求和 = (a₁+aₙ)×n÷2，倒序相加每对和相等。',
       section: 's2',
@@ -275,7 +255,7 @@ test('纯函数缝：自注反馈指令与默认卡面提示（对照要点、�
 })
 
 test('加我的理解：AI 对照该节要点给定位反馈 → 判词入 E 档案 + 成卡（节锚点）', async () => {
-  await withVault(async engine => {
+  await withVault(LEARNER_VAULT, async ({ engine }) => {
     const r = await engine.learnerNoteAdd('数学', '入门', {
       content: '等差数列就是每一步加固定的数，比如 2、4、6。',
       kind: 'recall_cue',
@@ -334,7 +314,7 @@ test('加我的理解：AI 对照该节要点给定位反馈 → 判词入 E 档
 })
 
 test('加我的理解：AI 判词不可解析 → 卡与判词零落盘（ADR-0004 事务性）；非法卡面拒绝', async () => {
-  await withVault(async engine => {
+  await withVault(LEARNER_VAULT, async ({ engine }) => {
     await assert.rejects(
       () => engine.learnerNoteAdd('数学', '入门', { content: '我的理解' }, async () => '模型抽风'),
       /未存档/)
@@ -352,7 +332,7 @@ test('加我的理解：AI 判词不可解析 → 卡与判词零落盘（ADR-00
 })
 
 test('我的卡管理面：归档/恢复（E 池内部动作，canonical 零写入）', async () => {
-  await withVault(async engine => {
+  await withVault(LEARNER_VAULT, async ({ engine }) => {
     const r = await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A。' })
     await engine.learnerCardArchive('数学', '入门', r.id, true)
     let q = await engine.learnerQueue('数学')
@@ -368,7 +348,7 @@ test('我的卡管理面：归档/恢复（E 池内部动作，canonical 零写�
 // ---- 门面：E1「我的卡」隔离调度 ----
 
 test('我的卡队列与自评：新卡入队→首推到期→一卡一天一次；canonical 零掺入', async () => {
-  await withVault(async engine => {
+  await withVault(LEARNER_VAULT, async ({ engine }) => {
     await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A：求和公式的来历。' })
     await engine.explainArchiveCard('数学', '入门', { content: '讲稿 B：末项公式的来历。' })
 

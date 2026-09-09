@@ -1,96 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import type { ReviewRec } from '../src/engine/types.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-
-const NOTE = [
-  '---',
-  'node: 入门',
-  'stage: ready',
-  'fsrs: null',
-  'content:',
-  '  version: 0',
-  '  generated_at: null',
-  '  status: draft',
-  'practice:',
-  '  attempts: 0',
-  '  correct: 0',
-  '---',
-  '',
-  '# 入门',
-].join('\n')
-
-/** 单个 true_false 题目的 YAML 行（可选种子 fsrs 块 = 已入复习循环的题卡）。 */
-function tfQuestion(id: string, opts: { fsrs?: Record<string, string | number> } = {}): string[] {
-  return [
-    `  - id: ${id}`,
-    '    kind: true_false',
-    `    q: ${id} 题干：说法是否成立。`,
-    '    answer: true',
-    ...(opts.fsrs ? ['    fsrs:', ...Object.entries(opts.fsrs).map(([k, v]) => `      ${k}: ${v}`)] : []),
-  ]
-}
+import { answer, tfQuestion, withVault } from './helpers/vault.ts'
 
 const PAST = '2024-01-01'
 
-async function withVault(
-  questions: string[][],
-  run: (engine: LearnhubEngine) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-revlog-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    const note = join(course, '课程', '基础', '入门.md')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(note, `${NOTE}\n`, 'utf8')
-    await writeFile(
-      join(course, '题库', '入门.yaml'),
-      ['node: 入门', 'questions:', ...questions.flat()].join('\n') + '\n',
-      'utf8',
-    )
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
-
-const answer = (
-  engine: LearnhubEngine,
-  qid: string, response: string, elapsedS: number,
-  opts?: { deferSchedule?: boolean },
-) => engine.questionAnswer(
-  async () => 'unused', '数学', '入门', qid, response, elapsedS,
-  opts?.deferSchedule ? { deferSchedule: true } : undefined,
-)
-
 test('练习流答对：auto/Good 落一条，首学无旧卡 → 快照 null、r_pred=1.0', async () => {
-  await withVault([tfQuestion('a1')], async engine => {
-    await answer(engine, 'a1', 'true', 30)
+  await withVault({ banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
+    await answer(engine, 'a1', 'true')
     const recs = await engine.store.reviewLogAll() as ReviewRec[]
     assert.equal(recs.length, 1, '一次真实推进恰好一条')
     const rec = recs[0]
@@ -108,9 +27,11 @@ test('练习流答对：auto/Good 落一条，首学无旧卡 → 快照 null、
 })
 
 test('忘记申报：auto/Again + 复习前快照（种子卡 elapsed>0、S/D 取旧值、R 已衰减）', async () => {
-  await withVault([tfQuestion('a1', {
-    fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 3, lapses: 0 },
-  })], async engine => {
+  await withVault({
+    banks: { 入门: [tfQuestion('a1', {
+      fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 3, lapses: 0 },
+    })] },
+  }, async ({ engine }) => {
     await engine.questionForget('数学', '入门', 'a1', 7)
     const recs = await engine.store.reviewLogAll() as ReviewRec[]
     assert.equal(recs.length, 1)
@@ -125,8 +46,8 @@ test('忘记申报：auto/Again + 复习前快照（种子卡 elapsed>0、S/D �
 })
 
 test('复习流自评：挂起作答不落日志，questionRate(Hard) 落 self/2', async () => {
-  await withVault([tfQuestion('a1')], async engine => {
-    await answer(engine, 'a1', 'true', 30, { deferSchedule: true })
+  await withVault({ banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
+    await answer(engine, 'a1', 'true', { deferSchedule: true })
     assert.deepEqual(await engine.store.reviewLogAll(), [], '挂起=未推进，不落日志')
     await engine.questionRate('数学', '入门', 'a1', 2)
     const recs = await engine.store.reviewLogAll() as ReviewRec[]
@@ -140,7 +61,7 @@ test('复习流自评：挂起作答不落日志，questionRate(Hard) 落 self/2
 })
 
 test('完成学习合成初始化：synthetic/3、elapsed=0、快照三字段 null；重复完成不重复落', async () => {
-  await withVault([tfQuestion('a1'), tfQuestion('a2')], async engine => {
+  await withVault({ banks: { 入门: [tfQuestion('a1'), tfQuestion('a2')] } }, async ({ engine }) => {
     const done = await engine.nodeComplete('数学', '入门') as Record<string, unknown>
     assert.equal(done.accepted, true)
     assert.equal(done.initialized, 2)
@@ -162,10 +83,10 @@ test('完成学习合成初始化：synthetic/3、elapsed=0、快照三字段 nu
 })
 
 test('同日重复作答与 5s 内乱猜都不推进、不落日志', async () => {
-  await withVault([tfQuestion('a1'), tfQuestion('a2')], async engine => {
-    await answer(engine, 'a1', 'true', 30)
-    await answer(engine, 'a1', 'true', 30)
-    await answer(engine, 'a2', 'false', 2) // 耗时 2s < 5s 且答错 → 乱猜
+  await withVault({ banks: { 入门: [tfQuestion('a1'), tfQuestion('a2')] } }, async ({ engine }) => {
+    await answer(engine, 'a1', 'true')
+    await answer(engine, 'a1', 'true')
+    await answer(engine, 'a2', 'false', { elapsedS: 2 }) // 耗时 2s < 5s 且答错 → 乱猜
     const recs = await engine.store.reviewLogAll() as ReviewRec[]
     assert.equal(recs.length, 1, '只有首次认真作答落了日志')
     assert.equal(recs[0].qid, 'a1')
@@ -173,7 +94,7 @@ test('同日重复作答与 5s 内乱猜都不推进、不落日志', async () =
 })
 
 test('读取契约：文件缺失 = 合法空态；逐行损坏 = Broken 报出不静默吞', async () => {
-  await withVault([], async engine => {
+  await withVault({}, async ({ engine }) => {
     assert.deepEqual(await engine.store.reviewLogAll(), [], 'Missing 合法空态')
     const dir = engine.paths.centerStateDir
     await mkdir(dir, { recursive: true })

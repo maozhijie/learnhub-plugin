@@ -1,29 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile, readFile, rename } from 'node:fs/promises'
+import { readFile, rename, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { fingerprintOf, classifySource, sourceHint, normalizeSourcePath, validateNoteSourceEntries } from '../src/engine/note-source.ts'
 import { todayStr } from '../src/engine/dates.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
+import { DEFAULT_REGISTRY, withVault as makeVault } from './helpers/vault.ts'
 
 const NOTE = [
   '---',
@@ -55,19 +38,10 @@ const PERSONAL_NOTE = [
 
 /** 带一门课程（含到期题）+ 一篇中心外个人笔记的临时 vault。 */
 async function withVault(run: (engine: LearnhubEngine, paths: { noteAbs: string; folderAbs: string }) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-notesrc-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    const personal = join(root, '我的笔记')
-    await mkdir(personal, { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${NOTE}\n`, 'utf8')
-    await writeFile(join(course, '题库', '入门.yaml'), [
+  await makeVault({
+    tag: 'learnhub-notesrc-',
+    notes: { 入门: NOTE },
+    banks: { 入门: [
       'node: 入门',
       'questions:',
       '  - id: q1',
@@ -76,14 +50,15 @@ async function withVault(run: (engine: LearnhubEngine, paths: { noteAbs: string;
       '    options: ["A项", "B项", "C项", "D项"]',
       '    answer: A',
       '    fsrs: { stability: 5, difficulty: 5, due: "' + todayStr() + '", last_review: "2026-09-01", reps: 1, lapses: 0 }',
-    ].join('\n'), 'utf8')
-    const noteAbs = join(personal, '费曼技巧.md')
-    await writeFile(noteAbs, `${PERSONAL_NOTE}\n`, 'utf8')
-    await writeFile(join(personal, '另一篇.md'), '# 另一篇\n\n内容 B。\n', 'utf8')
-    await run(new LearnhubEngine({ vault: root }), { noteAbs, folderAbs: personal })
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+    ].join('\n') },
+    files: [
+      { path: '我的笔记/费曼技巧.md', content: `${PERSONAL_NOTE}\n` },
+      { path: '我的笔记/另一篇.md', content: '# 另一篇\n\n内容 B。\n' },
+    ],
+  }, async ({ engine, root }) => {
+    const personal = join(root, '我的笔记')
+    await run(engine, { noteAbs: join(personal, '费曼技巧.md'), folderAbs: personal })
+  })
 }
 
 const NOTE_BANK_YAML = [
@@ -352,7 +327,7 @@ test('源清单本身 Broken = fail loud（镜像区契约文件），注册表 
   })
   await withVault(async engine => {
     // 注册表 note_sources 域契约坏 → 注册表整体 Broken（沿用 ADR-0004 fail loud）
-    await writeFile(join(engine.paths.centerRoot, '课程注册表.yaml'), `${REGISTRY}\nnote_sources:\n  - { id: "", path: "" }\n`, 'utf8')
+    await writeFile(join(engine.paths.centerRoot, '课程注册表.yaml'), `${DEFAULT_REGISTRY}\nnote_sources:\n  - { id: "", path: "" }\n`, 'utf8')
     await assert.rejects(() => engine.enabledCourses(), /note_sources\.1\.id: 不能为空/)
   })
 })

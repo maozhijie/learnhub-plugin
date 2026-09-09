@@ -1,44 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
+import { withVault } from './helpers/vault.ts'
 
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-
-const NOTE = [
-  '---',
-  'node: 入门',
-  'stage: ready',
-  'fsrs: null',
-  'mastery: 0',
-  'content:',
-  '  version: 0',
-  '  generated_at: null',
-  '  status: draft',
-  'practice:',
-  '  attempts: 0',
-  '  correct: 0',
-  '---',
-  '',
-  '# 入门',
-].join('\n')
+/** 节点笔记：ready 缺省 + 存量 mastery: 0（fmExtra 行）。 */
+const NOTE = { fmExtra: ['mastery: 0'] }
 
 const BANK = [
   'node: 入门',
@@ -55,26 +22,8 @@ const BANK = [
   '    answer: true',
 ].join('\n')
 
-async function withVault(bankText: string | null, run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-bank-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${NOTE}\n`, 'utf8')
-    if (bankText !== null) await writeFile(join(course, '题库', '入门.yaml'), `${bankText}\n`, 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
-
 test('#8 missing bank remains a legal empty bank', async () => {
-  await withVault(null, async engine => {
+  await withVault({ notes: { 入门: NOTE } }, async ({ engine }) => {
     assert.deepEqual(await engine.bank.load(engine.paths.courseRoot('math'), '入门'), { node: '入门', questions: [] })
     const list = await engine.questions('数学', '入门')
     assert.equal(list.questions.length, 0)
@@ -86,7 +35,7 @@ test('#8 missing bank remains a legal empty bank', async () => {
 
 test('#8 present malformed bank blocks load/list and reports Broken without mutating', async () => {
   const corrupt = BANK.replace('true_false', 'impossible')
-  await withVault(corrupt, async engine => {
+  await withVault({ notes: { 入门: NOTE }, banks: { 入门: `${corrupt}\n` } }, async ({ engine }) => {
     const courseRoot = engine.paths.courseRoot('math')
     await assert.rejects(() => engine.bank.load(courseRoot, '入门'), /题库 Broken.*入门\.yaml[\s\S]*impossible/s)
     await assert.rejects(() => engine.questions('数学', '入门'), /题库 Broken/s)
@@ -101,13 +50,13 @@ test('#8 present malformed bank blocks load/list and reports Broken without muta
 })
 
 test('#8 YAML parse failure is Broken, not an empty bank', async () => {
-  await withVault('node: 入门\nquestions:\n  - { kind: true_false, q: "x', async engine => {
+  await withVault({ notes: { 入门: NOTE }, banks: { 入门: 'node: 入门\nquestions:\n  - { kind: true_false, q: "x\n' } }, async ({ engine }) => {
     await assert.rejects(() => engine.questions('数学', '入门'), /题库 Broken.*YAML 无法解析/s)
   })
 })
 
 test('#8 question revision rejects empty, unknown, identity, scheduler, statistics, and archive fields', async () => {
-  await withVault(BANK, async engine => {
+  await withVault({ notes: { 入门: NOTE }, banks: { 入门: `${BANK}\n` } }, async ({ engine }) => {
     const rejected: Array<[Record<string, unknown>, RegExp]> = [
       [{}, /patch 不能为空/],
       [{ bogus: 1 }, /不允许的字段/],
@@ -126,7 +75,7 @@ test('#8 question revision rejects empty, unknown, identity, scheduler, statisti
 })
 
 test('#8 authoring fields remain editable and the whole bank revalidates', async () => {
-  await withVault(BANK, async engine => {
+  await withVault({ notes: { 入门: NOTE }, banks: { 入门: `${BANK}\n` } }, async ({ engine }) => {
     await engine.questionUpdate('数学', '入门', 'q1', {
       q: '1+2=？',
       answer: 'B',
@@ -151,7 +100,7 @@ test('#8 authoring fields remain editable and the whole bank revalidates', async
 })
 
 test('#8 archive is a separate operation and both normal and archive paths preserve valid state', async () => {
-  await withVault(BANK, async engine => {
+  await withVault({ notes: { 入门: NOTE }, banks: { 入门: `${BANK}\n` } }, async ({ engine }) => {
     await engine.questionArchive('数学', '入门', 'q2', true)
     const list = await engine.questions('数学', '入门')
     assert.ok(list.questions.every(q => q.id !== 'q2'))
@@ -162,7 +111,7 @@ test('#8 archive is a separate operation and both normal and archive paths prese
 })
 
 test('#8 evidence writes from answering still go through the derived-state channel', async () => {
-  await withVault(BANK, async engine => {
+  await withVault({ notes: { 入门: NOTE }, banks: { 入门: `${BANK}\n` } }, async ({ engine }) => {
     const r = await engine.questionAnswer(async () => { throw new Error('objective question must not call AI') }, '数学', '入门', 'q1', 'A')
     assert.equal(r.correct, true)
     const bank = await engine.bank.load(engine.paths.courseRoot('math'), '入门')

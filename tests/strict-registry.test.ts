@@ -1,22 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
-
-const CENTER = '学习中心'
-const REGISTRY_PATH = '课程注册表.yaml'
+import type { LearnhubEngine } from '../src/engine/index.ts'
+import { withVault } from './helpers/vault.ts'
 
 async function withRegistry(registryYaml: string | null, run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-registry-'))
-  try {
-    await mkdir(join(root, CENTER), { recursive: true })
-    if (registryYaml !== null) await writeFile(join(root, CENTER, REGISTRY_PATH), registryYaml, 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+  await withVault({ registry: registryYaml, graph: null }, ({ engine }) => run(engine))
 }
 
 const VALID = [

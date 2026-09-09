@@ -1,19 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, readdir, rm, stat, writeFile, mkdir } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import type { DataCheckReport } from '../src/engine/data-check.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
+import { withVault } from './helpers/vault.ts'
 
 const GRAPH = [
   'region: 基础',
@@ -61,25 +52,12 @@ const BANK = [
   '    answer: true',
 ].join('\n')
 
-async function writeVault(root: string): Promise<void> {
-  const center = join(root, '学习中心')
-  const course = join(center, 'math')
-  await mkdir(join(course, 'data'), { recursive: true })
-  await mkdir(join(course, '课程', '基础'), { recursive: true })
-  await mkdir(join(course, '题库'), { recursive: true })
-  await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`)
-  await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`)
-  await writeFile(join(course, '课程', '基础', '入门.md'), `${NOTE}\n`)
-  await writeFile(join(course, '题库', '入门.yaml'), `${BANK}\n`)
-}
-
-async function writeBrokenVault(root: string): Promise<void> {
-  await writeVault(root)
-  const course = join(root, '学习中心', 'math')
-  await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n        broken: true\n`)
-  await writeFile(join(course, '课程', '基础', '入门.md'), '---\nnode: "入门\n---\n')
-  await writeFile(join(course, '题库', '入门.yaml'), `${BANK.replace('true_false', 'impossible')}\n`)
-}
+/** 三处故意损坏：图 schema、笔记 frontmatter、题库 kind（经逃生口覆盖正常档）。 */
+const BROKEN_FILES = [
+  { path: '学习中心/math/data/基础.yaml', content: `${GRAPH}\n        broken: true\n` },
+  { path: '学习中心/math/课程/基础/入门.md', content: '---\nnode: "入门\n---\n' },
+  { path: '学习中心/math/题库/入门.yaml', content: `${BANK.replace('true_false', 'impossible')}\n` },
+]
 
 async function snapshot(root: string): Promise<Map<string, unknown>> {
   const out = new Map<string, unknown>()
@@ -114,19 +92,8 @@ function byReason(report: DataCheckReport): Map<string, number> {
   return out
 }
 
-async function withVault(seed: (root: string) => Promise<void>, run: (root: string) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-data-check-'))
-  try {
-    await seed(root)
-    await run(root)
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
-
 test('Data Check separates legal missing objects from valid data at the engine facade', async () => {
-  await withVault(writeVault, async root => {
-    const engine = new LearnhubEngine({ vault: root })
+  await withVault({ graph: GRAPH, notes: { 入门: NOTE }, banks: { 入门: BANK } }, async ({ engine, root }) => {
     const report = await engine.dataCheck()
 
     assert.equal(report.status, 'missing')
@@ -144,8 +111,7 @@ test('Data Check separates legal missing objects from valid data at the engine f
 })
 
 test('Data Check reports broken YAML and schema without crashing the scan', async () => {
-  await withVault(writeBrokenVault, async root => {
-    const engine = new LearnhubEngine({ vault: root })
+  await withVault({ graph: GRAPH, notes: { 入门: NOTE }, banks: { 入门: BANK }, files: BROKEN_FILES }, async ({ engine, root }) => {
     const report = await engine.dataCheck()
 
     assert.equal(report.status, 'broken')
@@ -160,11 +126,7 @@ test('Data Check reports broken YAML and schema without crashing the scan', asyn
 })
 
 test('Data Check keeps malformed registry as Broken instead of an empty course list', async () => {
-  await withVault(async root => {
-    await mkdir(join(root, '学习中心'), { recursive: true })
-    await writeFile(join(root, '学习中心', '课程注册表.yaml'), 'courses:\n  - name: "数学\n')
-  }, async root => {
-    const engine = new LearnhubEngine({ vault: root })
+  await withVault({ registry: 'courses:\n  - name: "数学\n', graph: null }, async ({ engine }) => {
     const report = await engine.dataCheck()
 
     assert.equal(report.status, 'broken')
@@ -175,8 +137,7 @@ test('Data Check keeps malformed registry as Broken instead of an empty course l
 })
 
 test('Data Check does not write or mutate Vault files', async () => {
-  await withVault(writeBrokenVault, async root => {
-    const engine = new LearnhubEngine({ vault: root })
+  await withVault({ graph: GRAPH, notes: { 入门: NOTE }, banks: { 入门: BANK }, files: BROKEN_FILES }, async ({ engine, root }) => {
     const before = await snapshot(root)
     await engine.dataCheck()
     const after = await snapshot(root)

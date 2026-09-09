@@ -1,18 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { applyId, questionCount, rejectId, requireSkipDirection } from '../src/tool-contracts.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
+import { withVault } from './helpers/vault.ts'
 
 const REGION_A = [
   'region: 甲区',
@@ -58,21 +47,12 @@ const NOTE = [
   '本节点正文用于出题冒烟，足够长。',
 ].join('\n')
 
-async function withGraphVault(run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-contracts-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '甲区'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '甲区.yaml'), `${REGION_A}\n`, 'utf8')
-    await writeFile(join(course, 'data', '乙区.yaml'), `${REGION_B}\n`, 'utf8')
-    await writeFile(join(course, '课程', '甲区', '甲一.md'), `${NOTE}\n`, 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+/** 甲区图走 graph/graphFile；乙区图用 files 逃生口补第二张区图（factory 单 graph 槽）。 */
+const CONTRACT_VAULT = {
+  graph: REGION_A,
+  graphFile: '甲区.yaml',
+  notes: { '甲区/甲一': `${NOTE}\n` },
+  files: [{ path: '学习中心/math/data/乙区.yaml', content: `${REGION_B}\n` }],
 }
 
 function sixQuestions(): string {
@@ -97,7 +77,7 @@ test('#12 question count: omitted uses default; supplied zero/negative/fraction/
 })
 
 test('#12 engine facade rejects invalid question counts before invoking the model', async () => {
-  await withGraphVault(async engine => {
+  await withVault(CONTRACT_VAULT, async ({ engine }) => {
     const llm = async (): Promise<string> => { throw new Error('model must not be called') }
     for (const bad of [0, -1, 2.5, Number.NaN]) {
       await assert.rejects(() => engine.questionGenerate('数学', '甲一', bad, llm), /count 必须是正整数/, String(bad))
@@ -109,7 +89,7 @@ test('#12 engine facade rejects invalid question counts before invoking the mode
 })
 
 test('#12 block-only graph browsing: unambiguous succeeds, zero-match and ambiguous fail with context', async () => {
-  await withGraphVault(async engine => {
+  await withVault(CONTRACT_VAULT, async ({ engine }) => {
     const ok = await engine.graphBrowse('数学', undefined, '唯一块') as { total: number; regions: Array<{ name: string }> }
     assert.equal(ok.total, 1)
     assert.deepEqual(ok.regions.map(r => r.name), ['乙区'])

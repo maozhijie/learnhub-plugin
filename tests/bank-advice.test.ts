@@ -1,20 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readdir, readFile, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { B2_EASY_MIN_ATTEMPTS, B2_MASTERY_LOW, B2_NODE_MIN_ATTEMPTS, calibrationAdvice, tooEasyAdvice } from '../src/engine/bank-advice.ts'
+import { withVault } from './helpers/vault.ts'
 
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
+/** 本文件课程图带 `bloom: 理解`（bloom 目标带断言的原料），与工厂默认图不同。 */
 const GRAPH = [
   'region: 基础',
   'color: blue',
@@ -24,26 +16,8 @@ const GRAPH = [
   '      - { name: 入门, pre: [], opt: false, note: "", est: 20, bloom: 理解 }',
 ].join('\n')
 
-function note(stage: string): string {
-  return [
-    '---',
-    'node: 入门',
-    `stage: ${stage}`,
-    'fsrs: null',
-    'content:',
-    '  version: 0',
-    '  generated_at: null',
-    '  status: draft',
-    'practice:',
-    '  attempts: 0',
-    '  correct: 0',
-    '---',
-    '',
-    '# 入门',
-  ].join('\n')
-}
-
-/** 题目行：stats 可播种（作答统计是检测的证据源）。 */
+/** 题目行：stats 可播种（作答统计是检测的证据源）。
+ * stats 用多行块式落盘，与工厂 tfQuestion 的 flow 式不同字节 → 保留本地实现。 */
 function tfQuestion(id: string, opts: { attempts?: number; correct?: number } = {}): string[] {
   return [
     `  - id: ${id}`,
@@ -54,32 +28,6 @@ function tfQuestion(id: string, opts: { attempts?: number; correct?: number } = 
       ? ['    stats:', `      attempts: ${opts.attempts}`, `      correct: ${opts.correct ?? 0}`]
       : []),
   ]
-}
-
-async function withVault(
-  stage: string,
-  questions: string[][],
-  run: (engine: LearnhubEngine, root: string) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-b2-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${note(stage)}\n`, 'utf8')
-    await writeFile(
-      join(course, '题库', '入门.yaml'),
-      ['node: 入门', 'questions:', ...questions.flat()].join('\n') + '\n',
-      'utf8',
-    )
-    await run(new LearnhubEngine({ vault: root }), root)
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
 }
 
 // ---- 纯规则（接缝 S25）----
@@ -117,10 +65,14 @@ test('tooEasyAdvice：单题全对且作答量达门槛才标注，已归档跳�
 // ---- 门面：只读检测、建议先行、新节点不误报 ----
 
 test('review 期低掌握 + 答错证据 → 校准建议；全对题 → 归档标注；零写入', async () => {
-  await withVault('review', [
-    ...[1, 2, 3, 4, 5, 6].map(i => tfQuestion(`w${i}`, { attempts: 1, correct: 0 })),
-    tfQuestion('easy', { attempts: 4, correct: 4 }),
-  ], async (engine, root) => {
+  await withVault({
+    graph: GRAPH,
+    notes: { 入门: { stage: 'review' } },
+    banks: { 入门: [
+      ...[1, 2, 3, 4, 5, 6].map(i => tfQuestion(`w${i}`, { attempts: 1, correct: 0 })),
+      tfQuestion('easy', { attempts: 4, correct: 4 }),
+    ] },
+  }, async ({ engine, root }) => {
     const snapshot = async () => {
       const out = new Map<string, unknown>()
       const walk = async (dir: string): Promise<void> => {
@@ -155,14 +107,20 @@ test('review 期低掌握 + 答错证据 → 校准建议；全对题 → 归档
 
 test('新节点全对一次（mastery 低但作答量低于门槛）不误报；学习期节点静默', async () => {
   // ready 节点：1 次全对，mastery 低是防饱和正常低值 → 两极都静默
-  await withVault('ready', [tfQuestion('a1', { attempts: 1, correct: 1 })], async engine => {
+  await withVault({
+    graph: GRAPH,
+    notes: { 入门: { stage: 'ready' } },
+    banks: { 入门: [tfQuestion('a1', { attempts: 1, correct: 1 })] },
+  }, async ({ engine }) => {
     const r = await engine.difficultyAdvice() as { nodes: unknown[] }
     assert.deepEqual(r.nodes, [], '低数据静默，不误报')
   })
   // learning 节点即使作答量够也静默（stage 守门）
-  await withVault('learning', [
-    ...[1, 2, 3, 4, 5, 6].map(i => tfQuestion(`w${i}`, { attempts: 1, correct: 0 })),
-  ], async engine => {
+  await withVault({
+    graph: GRAPH,
+    notes: { 入门: { stage: 'learning' } },
+    banks: { 入门: [1, 2, 3, 4, 5, 6].map(i => tfQuestion(`w${i}`, { attempts: 1, correct: 0 })) },
+  }, async ({ engine }) => {
     const r = await engine.difficultyAdvice() as { nodes: unknown[] }
     assert.deepEqual(r.nodes, [], 'learning 期低掌握是正常状态，不出校准建议')
   })

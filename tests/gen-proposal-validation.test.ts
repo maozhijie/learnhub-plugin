@@ -1,10 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { GraphStore } from '../src/engine/graph.ts'
+import { withVault } from './helpers/vault.ts'
 
 const validProposal = `course: 校验课
 mode: new
@@ -37,9 +34,7 @@ regions:
 `
 
 test('gen 提案按持久图 schema 逐节点拒绝无效字段，且不受理提案', async () => {
-  const vault = await mkdtemp(join(tmpdir(), 'learnhub-gen-invalid-'))
-  try {
-    const engine = new LearnhubEngine({ vault })
+  await withVault({ registry: null, graph: null, tag: 'learnhub-gen-invalid-' }, async ({ engine }) => {
     const yaml = `course: 校验课
 mode: new
 regions:
@@ -103,15 +98,11 @@ regions:
       },
     )
     assert.deepEqual(await engine.store.loadProposals(), [])
-  } finally {
-    await rm(vault, { recursive: true, force: true })
-  }
+  })
 })
 
 test('gen 提案保留可选图维度，受理后与持久图解析一致', async () => {
-  const vault = await mkdtemp(join(tmpdir(), 'learnhub-gen-valid-'))
-  try {
-    const engine = new LearnhubEngine({ vault })
+  await withVault({ registry: null, graph: null, tag: 'learnhub-gen-valid-' }, async ({ engine }) => {
     const proposed = await engine.graphPropose('gen', validProposal) as { id: number; nodes: number }
     assert.equal(proposed.nodes, 2)
 
@@ -132,15 +123,11 @@ test('gen 提案保留可选图维度，受理后与持久图解析一致', asyn
     assert.deepEqual(nodes[1]!.enc, [{ node: '前置技能', w: 0.8, note: '强依赖' }])
     assert.equal(nodes[1]!.bloom, '应用')
     assert.equal(nodes[1]!.difficulty, 3)
-  } finally {
-    await rm(vault, { recursive: true, force: true })
-  }
+  })
 })
 
 test('gen 与 edit 的目标键名区分保持不变', async () => {
-  const vault = await mkdtemp(join(tmpdir(), 'learnhub-gen-keys-'))
-  try {
-    const engine = new LearnhubEngine({ vault })
+  await withVault({ registry: null, graph: null, tag: 'learnhub-gen-keys-' }, async ({ engine }) => {
     const gen = await engine.graphPropose('gen', validProposal) as { id: number }
     await engine.graphApply('gen', gen.id)
 
@@ -158,7 +145,5 @@ ops:
       engine.graphPropose('edit', wrongEditKey),
       /add_node 的节点字段名是 node，不是 name/,
     )
-  } finally {
-    await rm(vault, { recursive: true, force: true })
-  }
+  })
 })

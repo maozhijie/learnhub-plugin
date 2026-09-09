@@ -1,46 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { LearnhubEngine } from '../src/engine/index.ts'
+import { answer, withVault } from './helpers/vault.ts'
 
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
+/** ready 节点 + 存量 `mastery: 0` 键（旧文件兼容形态，顶层键）。 */
+const READY_NOTE = { stage: 'ready', fmExtra: ['mastery: 0'] }
 
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-
-const NOTE = [
-  '---',
-  'node: 入门',
-  'stage: ready',
-  'fsrs: null',
-  'mastery: 0',
-  'content:',
-  '  version: 0',
-  '  generated_at: null',
-  '  status: draft',
-  'practice:',
-  '  attempts: 0',
-  '  correct: 0',
-  '---',
-  '',
-  '# 入门',
-].join('\n')
-
-/** 单个 true_false 题目的 YAML 行（可选种子 fsrs 块 / 归档标记 / 出题难度）。 */
+/** 单个 true_false 题目的 YAML 行（可选种子 fsrs 块 / 归档标记 / 出题难度）。
+ * 字段序 difficulty → fsrs → archived 与工厂 tfQuestion（archived 在 fsrs 前）不同字节 → 保留本地实现。 */
 function tfQuestion(id: string, opts: { fsrs?: Record<string, string | number>; archived?: boolean; difficulty?: number } = {}): string[] {
   return [
     `  - id: ${id}`,
@@ -56,45 +25,13 @@ function tfQuestion(id: string, opts: { fsrs?: Record<string, string | number>; 
 const PAST = '2024-01-01'
 const FUTURE = '2099-01-01'
 
-async function withVault(
-  questions: string[][],
-  run: (engine: LearnhubEngine, paths: { bank: string; note: string; center: string }) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-review-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    const bank = join(course, '题库', '入门.yaml')
-    const note = join(course, '课程', '基础', '入门.md')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(note, `${NOTE}\n`, 'utf8')
-    await writeFile(bank, ['node: 入门', 'questions:', ...questions.flat()].join('\n') + '\n', 'utf8')
-    await run(new LearnhubEngine({ vault: root }), { bank, note, center })
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
-
-const answer = (
-  engine: LearnhubEngine,
-  qid: string, response: string,
-  opts?: { deferSchedule?: boolean },
-) => engine.questionAnswer(
-  async () => 'unused', '数学', '入门', qid, response, 30,
-  opts?.deferSchedule ? { deferSchedule: true } : undefined,
-)
-
 const loadQ = async (engine: LearnhubEngine, qid: string) => {
   const bank = await engine.bank.load(engine.paths.courseRoot('math'), '入门')
   return bank.questions.find(x => x.id === qid)!
 }
 
 test('defer 答对：调度挂起 + 三档到期预览，questionRate 落盘并清挂起标记', async () => {
-  await withVault([tfQuestion('a1')], async engine => {
+  await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
     const r = await answer(engine, 'a1', 'true', { deferSchedule: true }) as Record<string, unknown>
     assert.equal(r.correct, true)
     assert.equal(r.pendingRating, true, 'correct + defer → 自评挂起')
@@ -129,7 +66,7 @@ test('defer 答对：调度挂起 + 三档到期预览，questionRate 落盘并�
 })
 
 test('defer 答错：立即按 Again 推进，不出自评；事后 rate 拒绝', async () => {
-  await withVault([tfQuestion('a1')], async engine => {
+  await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
     const r = await answer(engine, 'a1', 'false', { deferSchedule: true }) as Record<string, unknown>
     assert.equal(r.correct, false)
     assert.notEqual(r.pendingRating, true, '答错无自评')
@@ -142,7 +79,7 @@ test('defer 答错：立即按 Again 推进，不出自评；事后 rate 拒绝'
 })
 
 test('rate 无当日挂起作答 → 拒绝（含从未作答与练习流作答两条路径）', async () => {
-  await withVault([tfQuestion('a1')], async engine => {
+  await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
     await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 3), /没有待结算/, '从未作答')
     await answer(engine, 'a1', 'true') // 练习流：自动 Good，无挂起
     await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 4), /没有待结算/, '练习流作答不产生挂起')
@@ -150,7 +87,7 @@ test('rate 无当日挂起作答 → 拒绝（含从未作答与练习流作答�
 })
 
 test('rate 档位只能 2/3/4', async () => {
-  await withVault([tfQuestion('a1')], async engine => {
+  await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
     await answer(engine, 'a1', 'true', { deferSchedule: true })
     await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 1), /2\/3\/4/)
     await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 5), /2\/3\/4/)
@@ -158,7 +95,7 @@ test('rate 档位只能 2/3/4', async () => {
 })
 
 test('忘记：按答错记全部证据、0 XP、推进 Again；重复忘记拒绝', async () => {
-  await withVault([tfQuestion('a1')], async engine => {
+  await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
     const r = await engine.questionForget('数学', '入门', 'a1', 7) as Record<string, unknown>
     assert.equal(r.correct, false)
     assert.equal(r.judge, 'forget')
@@ -188,7 +125,7 @@ test('忘记：按答错记全部证据、0 XP、推进 Again；重复忘记拒�
 })
 
 test('忘记与作答互斥：当天已作答（含挂起自评）再忘记 → 拒绝', async () => {
-  await withVault([tfQuestion('a1'), tfQuestion('a2')], async engine => {
+  await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1'), tfQuestion('a2')] } }, async ({ engine }) => {
     await answer(engine, 'a1', 'true', { deferSchedule: true })
     await assert.rejects(() => engine.questionForget('数学', '入门', 'a1', 7), /已有作答记录/, '挂起自评后不可忘记')
     await answer(engine, 'a2', 'true')
@@ -197,7 +134,7 @@ test('忘记与作答互斥：当天已作答（含挂起自评）再忘记 → 
 })
 
 test('错误降低掌握度（口径 B）：答对推高练习证据 EMA，忘记后回落', async () => {
-  await withVault([tfQuestion('a1'), tfQuestion('a2')], async engine => {
+  await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1'), tfQuestion('a2')] } }, async ({ engine }) => {
     const ok = await answer(engine, 'a1', 'true') as Record<string, unknown>
     // 代表卡回刷后（#52）：首答即落节点卡，mastery = 0.7×稳定度项 + 0.3×EMA(1.0)，
     // 首学稳定度很小 → 只在三成附近（防饱和语义），但已高于纯 EMA 的 0.3
@@ -209,12 +146,15 @@ test('错误降低掌握度（口径 B）：答对推高练习证据 EMA，忘�
 })
 
 test('reviewQueue：只含到期未归档卡，同稳定度同 due 仍按题序稳定排序', async () => {
-  await withVault([
-    tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 3, lapses: 0 } }),
-    tfQuestion('a2', { fsrs: { stability: 5, difficulty: 5, due: FUTURE, last_review: PAST, reps: 1, lapses: 0 } }),
-    tfQuestion('a3', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 1, lapses: 0 } }),
-    tfQuestion('a4', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 1, lapses: 0 }, archived: true }),
-  ], async engine => {
+  await withVault({
+    notes: { 入门: READY_NOTE },
+    banks: { 入门: [
+      tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 3, lapses: 0 } }),
+      tfQuestion('a2', { fsrs: { stability: 5, difficulty: 5, due: FUTURE, last_review: PAST, reps: 1, lapses: 0 } }),
+      tfQuestion('a3', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 1, lapses: 0 } }),
+      tfQuestion('a4', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 1, lapses: 0 }, archived: true }),
+    ] },
+  }, async ({ engine }) => {
     const r = await engine.reviewQueue('数学') as Record<string, unknown>
     assert.equal(r.total, 2, '未调度新题与未来到期卡不入队')
     const cards = r.cards as Array<Record<string, unknown>>
@@ -229,13 +169,16 @@ test('reviewQueue：只含到期未归档卡，同稳定度同 due 仍按题序�
 })
 
 test('reviewQueue：主排序 = 预测遗忘风险 R 升序（同 due 短稳定度先刷），同档内难度渐进', async () => {
-  await withVault([
-    // long：稳定度高 → R 高 → 排最后；fragile/easy 同 due 同稳定度 → 同 R 档，
-    // 但出题难度 5 vs 1 → 难度渐进由易到难（easy 先刷）真正由比较器决定
-    tfQuestion('long', { fsrs: { stability: 30, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
-    tfQuestion('fragile', { difficulty: 5, fsrs: { stability: 1, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
-    tfQuestion('easy', { difficulty: 1, fsrs: { stability: 1, difficulty: 1, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
-  ], async engine => {
+  await withVault({
+    notes: { 入门: READY_NOTE },
+    banks: { 入门: [
+      // long：稳定度高 → R 高 → 排最后；fragile/easy 同 due 同稳定度 → 同 R 档，
+      // 但出题难度 5 vs 1 → 难度渐进由易到难（easy 先刷）真正由比较器决定
+      tfQuestion('long', { fsrs: { stability: 30, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
+      tfQuestion('fragile', { difficulty: 5, fsrs: { stability: 1, difficulty: 5, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
+      tfQuestion('easy', { difficulty: 1, fsrs: { stability: 1, difficulty: 1, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
+    ] },
+  }, async ({ engine }) => {
     const r = await engine.reviewQueue('数学') as Record<string, unknown>
     assert.equal(r.total, 3, '全部到期卡都在队列')
     const cards = r.cards as Array<Record<string, unknown>>
@@ -248,10 +191,13 @@ test('reviewQueue：主排序 = 预测遗忘风险 R 升序（同 due 短稳定�
 })
 
 test('questionsAll 下发 due/lastReview（未调度新题为 null）', async () => {
-  await withVault([
-    tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 3, lapses: 0 } }),
-    tfQuestion('a2'),
-  ], async engine => {
+  await withVault({
+    notes: { 入门: READY_NOTE },
+    banks: { 入门: [
+      tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 3, lapses: 0 } }),
+      tfQuestion('a2'),
+    ] },
+  }, async ({ engine }) => {
     const r = await engine.questionsAll('数学') as { questions: Array<Record<string, unknown>> }
     const byId = Object.fromEntries(r.questions.map(x => [x.qid, x]))
     assert.equal(byId.a1.due, PAST)

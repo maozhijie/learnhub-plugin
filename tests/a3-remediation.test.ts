@@ -1,17 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
+import { answer, tfQuestion, withVault } from './helpers/vault.ts'
 
 /** 基石 → 入门 → 进阶；enc 边按测试开关挂在入门（→基石）或进阶（→入门）上。 */
 function graphYaml(encOn入门: boolean, encOn进阶 = false): string {
@@ -35,87 +24,26 @@ const DECAYED = { stability: 1, difficulty: 5, due: PAST, last_review: PAST, rep
 /** 超稳定卡：R≈1，绝不触发弱前置。 */
 const SOLID = { stability: 100000, difficulty: 5, due: FUTURE, last_review: PAST, reps: 6, lapses: 0 }
 
-function note(node: string, stage: string, fsrs: Record<string, number | string> | null): string {
-  return [
-    '---',
-    `node: ${node}`,
-    `stage: ${stage}`,
-    ...(fsrs
-      ? ['fsrs:', ...Object.entries(fsrs).map(([k, v]) => `  ${k}: ${v}`)]
-      : ['fsrs: null']),
-    'content:',
-    '  version: 0',
-    '  generated_at: null',
-    '  status: draft',
-    'practice:',
-    '  attempts: 0',
-    '  correct: 0',
-    '---',
-    '',
-    `# ${node}`,
-  ].join('\n')
-}
-
-/** true_false 题目 YAML 行；seedDue 给出时带已入调度（到期）的 fsrs 块。 */
-function tfQuestion(id: string, seedDue?: string): string[] {
-  return [
-    `  - id: ${id}`,
-    '    kind: true_false',
-    `    q: ${id} 题干：说法是否成立。`,
-    '    answer: true',
-    ...(seedDue
-      ? ['    fsrs:', '      stability: 5', '      difficulty: 5', `      due: ${seedDue}`,
-        `      last_review: ${seedDue}`, '      reps: 1', '      lapses: 0']
-      : []),
-  ]
-}
-
-async function withVault(
-  graph: string,
-  notes: Record<string, { stage: string; fsrs?: Record<string, number | string> | null }>,
-  banks: Record<string, string[][]>,
-  run: (engine: LearnhubEngine) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-a3-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${graph}\n`, 'utf8')
-    for (const [node, seed] of Object.entries(notes)) {
-      await writeFile(join(course, '课程', '基础', `${node}.md`), `${note(node, seed.stage, seed.fsrs ?? null)}\n`, 'utf8')
-    }
-    for (const [node, questions] of Object.entries(banks)) {
-      await writeFile(
-        join(course, '题库', `${node}.yaml`),
-        ['node: ' + node, 'questions:', ...questions.flat()].join('\n') + '\n',
-        'utf8',
-      )
-    }
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
-
-const answer = (engine: LearnhubEngine, node: string, qid: string, response: string) =>
-  engine.questionAnswer(async () => 'unused', '数学', node, qid, response, 30)
+/** 已入调度（到期）的题卡 fsrs 种子。 */
+const dueSeed = (due: string) => ({ stability: 5, difficulty: 5, due, last_review: due, reps: 1, lapses: 0 })
 
 const findEvent = (events: Array<Record<string, unknown>>, node: string) =>
   events.find(e => e.node === node)
 
 test('A3 软闸：衰减前置 → 进阶 new 事件带可执行建议；直刷入门到期题后建议消退、进阶回到 gated', async () => {
-  await withVault(graphYaml(false), {
-    基石: { stage: 'review', fsrs: SOLID },
-    入门: { stage: 'review', fsrs: DECAYED },
-    进阶: { stage: 'ready' },
-  }, {
-    入门: [tfQuestion('a1', PAST), tfQuestion('a2', PAST)],
-    基石: [tfQuestion('b1')],
-  }, async engine => {
+  await withVault({
+    tag: 'learnhub-a3-',
+    graph: graphYaml(false),
+    notes: {
+      基石: { stage: 'review', fsrs: SOLID },
+      入门: { stage: 'review', fsrs: DECAYED },
+      进阶: { stage: 'ready' },
+    },
+    banks: {
+      入门: [tfQuestion('a1', { fsrs: dueSeed(PAST) }), tfQuestion('a2', { fsrs: dueSeed(PAST) })],
+      基石: [tfQuestion('b1')],
+    },
+  }, async ({ engine }) => {
     const before = await engine.statusJson() as { courses: Array<Record<string, unknown>> }
     const st0 = before.courses[0] as Record<string, unknown>
     const blocked0 = (st0.blocked as Record<string, Array<Record<string, unknown>>>)['进阶']
@@ -136,7 +64,7 @@ test('A3 软闸：衰减前置 → 进阶 new 事件带可执行建议；直刷�
 
     // 直达入口：刷完入门的 2 道到期题（真实作答推进 → R 回升）
     for (const qid of ['a1', 'a2']) {
-      const r = await answer(engine, '入门', qid, 'true') as Record<string, unknown>
+      const r = await answer(engine, qid, 'true', { node: '入门' }) as Record<string, unknown>
       assert.equal(r.scheduled, true)
     }
     const after = await engine.statusJson() as { courses: Array<Record<string, unknown>> }
@@ -153,13 +81,18 @@ test('A3 软闸：衰减前置 → 进阶 new 事件带可执行建议；直刷�
 })
 
 test('reviewQueue node 过滤：定向复习直达入口（存在性 fail loud，合法空队列为空）', async () => {
-  await withVault(graphYaml(false), {
-    基石: { stage: 'review', fsrs: SOLID },
-    入门: { stage: 'review', fsrs: DECAYED },
-    进阶: { stage: 'ready' },
-  }, {
-    入门: [tfQuestion('a1', PAST), tfQuestion('a2', PAST)],
-  }, async engine => {
+  await withVault({
+    tag: 'learnhub-a3-',
+    graph: graphYaml(false),
+    notes: {
+      基石: { stage: 'review', fsrs: SOLID },
+      入门: { stage: 'review', fsrs: DECAYED },
+      进阶: { stage: 'ready' },
+    },
+    banks: {
+      入门: [tfQuestion('a1', { fsrs: dueSeed(PAST) }), tfQuestion('a2', { fsrs: dueSeed(PAST) })],
+    },
+  }, async ({ engine }) => {
     const scoped = await engine.reviewQueue('数学', '入门') as { total: number; cards: Array<Record<string, unknown>> }
     assert.equal(scoped.total, 2)
     assert.ok(scoped.cards.every(c => c.node === '入门' && c.course === '数学'))
@@ -179,16 +112,21 @@ test('reviewQueue node 过滤：定向复习直达入口（存在性 fail loud�
 })
 
 test('A3 enc 回退：复习中节点窗口内反复答错 → struggle 事件带 enc 定向建议；作答证据更新后消退', async () => {
-  await withVault(graphYaml(true), {
-    基石: { stage: 'review', fsrs: SOLID },
-    入门: { stage: 'review' },
-  }, {
-    基石: [tfQuestion('b1', PAST)],
-    入门: [tfQuestion('a1'), tfQuestion('a2'), tfQuestion('a3')],
-  }, async engine => {
+  await withVault({
+    tag: 'learnhub-a3-',
+    graph: graphYaml(true),
+    notes: {
+      基石: { stage: 'review', fsrs: SOLID },
+      入门: { stage: 'review' },
+    },
+    banks: {
+      基石: [tfQuestion('b1', { fsrs: dueSeed(PAST) })],
+      入门: [tfQuestion('a1'), tfQuestion('a2'), tfQuestion('a3')],
+    },
+  }, async ({ engine }) => {
     // 窗口内 3 次全错（作答量达下限、正确率 0）→ struggle
     for (const qid of ['a1', 'a2', 'a3']) {
-      const r = await answer(engine, '入门', qid, 'false') as Record<string, unknown>
+      const r = await answer(engine, qid, 'false', { node: '入门' }) as Record<string, unknown>
       assert.equal(r.correct, false)
     }
     const rec0 = await engine.recommend(20) as { events: Array<Record<string, unknown>> }
@@ -202,7 +140,7 @@ test('A3 enc 回退：复习中节点窗口内反复答错 → struggle 事件�
 
     // 作答证据更新：窗口内补 6 次正确（6/9 = 0.67 ≥ 0.6）→ 建议消退
     for (const qid of ['a1', 'a2', 'a3', 'a1', 'a2', 'a3']) {
-      await answer(engine, '入门', qid, 'true')
+      await answer(engine, qid, 'true', { node: '入门' })
     }
     const rec1 = await engine.recommend(20) as { events: Array<Record<string, unknown>> }
     assert.equal(findEvent(rec1.events, '入门'), undefined, '正确率回到阈值上 → struggle 事件静默')
@@ -211,38 +149,53 @@ test('A3 enc 回退：复习中节点窗口内反复答错 → struggle 事件�
 
 test('A3 静默：作答量不足或 enc 缺失时不产 struggle 事件', async () => {
   // 作答量不足（2 次 < 下限）
-  await withVault(graphYaml(true), {
-    基石: { stage: 'review', fsrs: SOLID },
-    入门: { stage: 'review' },
-  }, {
-    入门: [tfQuestion('a1'), tfQuestion('a2')],
-  }, async engine => {
-    await answer(engine, '入门', 'a1', 'false')
-    await answer(engine, '入门', 'a2', 'false')
+  await withVault({
+    tag: 'learnhub-a3-',
+    graph: graphYaml(true),
+    notes: {
+      基石: { stage: 'review', fsrs: SOLID },
+      入门: { stage: 'review' },
+    },
+    banks: {
+      入门: [tfQuestion('a1'), tfQuestion('a2')],
+    },
+  }, async ({ engine }) => {
+    await answer(engine, 'a1', 'false', { node: '入门' })
+    await answer(engine, 'a2', 'false', { node: '入门' })
     const rec = await engine.recommend(20) as { events: Array<Record<string, unknown>> }
     assert.equal(findEvent(rec.events, '入门'), undefined, '低数据静默')
   })
   // enc 缺失：struggle 但无处定向
-  await withVault(graphYaml(false), {
-    基石: { stage: 'review', fsrs: SOLID },
-    入门: { stage: 'review' },
-  }, {
-    入门: [tfQuestion('a1'), tfQuestion('a2'), tfQuestion('a3')],
-  }, async engine => {
-    for (const qid of ['a1', 'a2', 'a3']) await answer(engine, '入门', qid, 'false')
+  await withVault({
+    tag: 'learnhub-a3-',
+    graph: graphYaml(false),
+    notes: {
+      基石: { stage: 'review', fsrs: SOLID },
+      入门: { stage: 'review' },
+    },
+    banks: {
+      入门: [tfQuestion('a1'), tfQuestion('a2'), tfQuestion('a3')],
+    },
+  }, async ({ engine }) => {
+    for (const qid of ['a1', 'a2', 'a3']) await answer(engine, qid, 'false', { node: '入门' })
     const rec = await engine.recommend(20) as { events: Array<Record<string, unknown>> }
     assert.equal(findEvent(rec.events, '入门'), undefined, 'enc=0 → 静默')
   })
   // 学习中节点累计作答量不足（2 次 < 下限）：事件文案保留旧引导，但不产 enc 建议
-  await withVault(graphYaml(false, true), {
-    基石: { stage: 'review', fsrs: SOLID },
-    入门: { stage: 'review', fsrs: SOLID },
-    进阶: { stage: 'learning' },
-  }, {
-    进阶: [tfQuestion('c1'), tfQuestion('c2')],
-  }, async engine => {
-    await answer(engine, '进阶', 'c1', 'false')
-    await answer(engine, '进阶', 'c2', 'false')
+  await withVault({
+    tag: 'learnhub-a3-',
+    graph: graphYaml(false, true),
+    notes: {
+      基石: { stage: 'review', fsrs: SOLID },
+      入门: { stage: 'review', fsrs: SOLID },
+      进阶: { stage: 'learning' },
+    },
+    banks: {
+      进阶: [tfQuestion('c1'), tfQuestion('c2')],
+    },
+  }, async ({ engine }) => {
+    await answer(engine, 'c1', 'false', { node: '进阶' })
+    await answer(engine, 'c2', 'false', { node: '进阶' })
     const rec = await engine.recommend(20) as { events: Array<Record<string, unknown>> }
     const learning = findEvent(rec.events, '进阶')
     assert.equal(learning?.type, 'learning')
@@ -252,15 +205,20 @@ test('A3 静默：作答量不足或 enc 缺失时不产 struggle 事件', async
 })
 
 test('A3 学习中节点 struggle：learning 事件带 enc 定向建议与具体文案', async () => {
-  await withVault(graphYaml(false, true), {
-    基石: { stage: 'review', fsrs: SOLID },
-    入门: { stage: 'review', fsrs: SOLID },
-    进阶: { stage: 'learning' },
-  }, {
-    入门: [tfQuestion('a1', PAST), tfQuestion('a2', PAST)],
-    进阶: [tfQuestion('c1'), tfQuestion('c2'), tfQuestion('c3')],
-  }, async engine => {
-    for (const qid of ['c1', 'c2', 'c3']) await answer(engine, '进阶', qid, 'false')
+  await withVault({
+    tag: 'learnhub-a3-',
+    graph: graphYaml(false, true),
+    notes: {
+      基石: { stage: 'review', fsrs: SOLID },
+      入门: { stage: 'review', fsrs: SOLID },
+      进阶: { stage: 'learning' },
+    },
+    banks: {
+      入门: [tfQuestion('a1', { fsrs: dueSeed(PAST) }), tfQuestion('a2', { fsrs: dueSeed(PAST) })],
+      进阶: [tfQuestion('c1'), tfQuestion('c2'), tfQuestion('c3')],
+    },
+  }, async ({ engine }) => {
+    for (const qid of ['c1', 'c2', 'c3']) await answer(engine, qid, 'false', { node: '进阶' })
     const rec = await engine.recommend(20) as { events: Array<Record<string, unknown>> }
     const learning = findEvent(rec.events, '进阶')
     assert.equal(learning?.type, 'learning')

@@ -1,21 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { newLessonRationale, pinHeadScore, todayPins } from '../src/engine/goals.ts'
 import type { PinRec } from '../src/engine/goals.ts'
+import { tfQuestion, withVault } from './helpers/vault.ts'
+import type { NoteSeed } from './helpers/vault.ts'
 
 // E3 目标所有权（决议 #48 / 实施工单 #67）：「今天学它」pin 覆盖层 + 推荐 rationale。
-
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
 
 /** 极限(review, 前置衰减源) → 导数/积分(ready, 被软闸拦)；几何(ready, 无前置) → 几何进阶(unseen)；已会(mastered, 无题库)。 */
 const GRAPH = [
@@ -32,77 +22,31 @@ const GRAPH = [
   '      - { name: 已会, pre: [], opt: false, note: "", est: 20 }',
 ].join('\n')
 
-function note(opts: { stage: string; fsrs?: Record<string, string | number> | null }): string {  return [
-    '---',
-    'node: 占位',
-    `stage: ${opts.stage}`,
-    ...(opts.fsrs
-      ? ['fsrs:', ...Object.entries(opts.fsrs).map(([k, v]) => `  ${k}: ${v}`)]
-      : ['fsrs: null']),
-    'content:',
-    '  version: 0',
-    '  generated_at: null',
-    '  status: draft',
-    'practice:',
-    '  attempts: 0',
-    '  correct: 0',
-    '---',
-    '',
-    '# 节点',
-  ].join('\n')
-}
-
-function noteFor(name: string, stage: string, fsrs?: Record<string, string | number>): string {
-  return note({ stage, fsrs }).replace('node: 占位', `node: ${name}`).replace('# 节点', `# ${name}`)
-}
-
 const PAST = '2024-01-01'
 const FUTURE = '2099-01-01'
 
-/** 极限的题库：全部到期 → review/overdue 事件，且节点代表卡 R 衰减（软闸判据）。 */
-function bankDue(): string {
-  return [
-    'node: 极限',
-    'questions:',
-    '  - id: q1',
-    '    kind: true_false',
-    '    q: q1 题干：说法是否成立。',
-    '    answer: true',
-    '    difficulty: 1',
-    '    fsrs:',
-    '      stability: 5',
-    '      difficulty: 5',
-    `      due: ${PAST}`,
-    `      last_review: ${PAST}`,
-    '      reps: 2',
-    '      lapses: 0',
-  ].join('\n') + '\n'
+/** 六节点笔记种子：极限代表卡衰减、已会代表卡超稳，其余 ready/unseen 无 fsrs。 */
+const NOTES: Record<string, NoteSeed> = {
+  极限: { stage: 'review', fsrs: { stability: 30, difficulty: 5, due: PAST, last_review: PAST, reps: 8, lapses: 0 } },
+  导数: { stage: 'ready' },
+  积分: { stage: 'ready' },
+  几何: { stage: 'ready' },
+  几何进阶: { stage: 'unseen' },
+  已会: { stage: 'mastered', fsrs: { stability: 90, difficulty: 5, due: FUTURE, last_review: PAST, reps: 9, lapses: 0 } },
 }
 
-async function withVault(run: (engine: LearnhubEngine) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-goals-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '极限.md'),
-      noteFor('极限', 'review', { stability: 30, difficulty: 5, due: PAST, last_review: PAST, reps: 8, lapses: 0 }) + '\n', 'utf8')
-    await writeFile(join(course, '课程', '基础', '导数.md'), noteFor('导数', 'ready') + '\n', 'utf8')
-    await writeFile(join(course, '课程', '基础', '积分.md'), noteFor('积分', 'ready') + '\n', 'utf8')
-    await writeFile(join(course, '课程', '基础', '几何.md'), noteFor('几何', 'ready') + '\n', 'utf8')
-    await writeFile(join(course, '课程', '基础', '几何进阶.md'), noteFor('几何进阶', 'unseen') + '\n', 'utf8')
-    await writeFile(join(course, '课程', '基础', '已会.md'), noteFor('已会', 'mastered',
-      { stability: 90, difficulty: 5, due: FUTURE, last_review: PAST, reps: 9, lapses: 0 }) + '\n', 'utf8')
-    await writeFile(join(course, '题库', '极限.yaml'), bankDue(), 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
+/** 极限的题库：全部到期 → review/overdue 事件，且节点代表卡 R 衰减（软闸判据）。 */
+const goalsVault = () => ({
+  tag: 'learnhub-goals-',
+  graph: GRAPH,
+  notes: NOTES,
+  banks: {
+    极限: [tfQuestion('q1', {
+      difficulty: 1,
+      fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 2, lapses: 0 },
+    })],
+  },
+})
 
 type Ev = Record<string, unknown>
 
@@ -138,7 +82,7 @@ test('newLessonRationale：解锁数与区轮转拼成一句自然语句', () =>
 // ---- 门面：pin 覆盖层 / 就绪提示保留 / 过期失效 / 合成事件 ----
 
 test('pin「今天学它」：事件当日置顶课程内榜首，附「你选了它」标识、原理由与软闸建议', async () => {
-  await withVault(async engine => {
+  await withVault(goalsVault(), async ({ engine }) => {
     await engine.pinToday('数学', '导数')
     const rec = await engine.recommend(20) as { events: Ev[] }
     const head = rec.events[0] as Ev
@@ -153,7 +97,7 @@ test('pin「今天学它」：事件当日置顶课程内榜首，附「你选�
 })
 
 test('pin 未就绪语义不拒绝、且落盘清单只保留当日有效条目', async () => {
-  await withVault(async engine => {
+  await withVault(goalsVault(), async ({ engine }) => {
     // 预置一条过期 pin（直接写清单），再 pin 新节点 → 过期条目被清理
     await engine.store.savePins([{ course: '数学', node: '已会', date: '2020-01-01' }])
     const r = await engine.pinToday('数学', '几何', '2026-09-08') as Ev
@@ -164,7 +108,7 @@ test('pin 未就绪语义不拒绝、且落盘清单只保留当日有效条目'
 })
 
 test('次日 pin 失效：过期清单不影响推荐（回落默认排序、无 pinned 标识）', async () => {
-  await withVault(async engine => {
+  await withVault(goalsVault(), async ({ engine }) => {
     await engine.store.savePins([{ course: '数学', node: '导数', date: '2020-01-01' }])
     const rec = await engine.recommend(20) as { events: Ev[] }
     assert.ok(rec.events.every(e => !e.pinned), '无任何 pinned 标识')
@@ -174,7 +118,7 @@ test('次日 pin 失效：过期清单不影响推荐（回落默认排序、无
 })
 
 test('pin 无事件的节点（已掌握、无到期题）：合成 pin 事件置顶，类型 pin、可打开', async () => {
-  await withVault(async engine => {
+  await withVault(goalsVault(), async ({ engine }) => {
     await engine.pinToday('数学', '已会')
     const rec = await engine.recommend(20) as { events: Ev[] }
     const head = rec.events[0] as Ev
@@ -188,7 +132,7 @@ test('pin 无事件的节点（已掌握、无到期题）：合成 pin 事件�
 })
 
 test('取消 pin：清单清空、推荐回落默认排序', async () => {
-  await withVault(async engine => {
+  await withVault(goalsVault(), async ({ engine }) => {
     await engine.pinToday('数学', '导数')
     await engine.unpinToday('数学', '导数')
     assert.deepEqual(await engine.store.loadPins(), [])
@@ -198,7 +142,7 @@ test('取消 pin：清单清空、推荐回落默认排序', async () => {
 })
 
 test('rationale：未 pin 的榜首新课 why 是一句自然语句（解锁数 + 区轮转）', async () => {
-  await withVault(async engine => {
+  await withVault(goalsVault(), async ({ engine }) => {
     const rec = await engine.recommend(20) as { events: Ev[] }
     const geo = rec.events.find(e => e.node === '几何') as Ev | undefined
     assert.ok(geo, '几何（无前置 ready）出 new 事件')

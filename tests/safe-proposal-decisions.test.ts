@@ -1,10 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
+import type { LearnhubEngine } from '../src/engine/index.ts'
 import { GraphStore } from '../src/engine/graph.ts'
+import { withVault } from './helpers/vault.ts'
 
 const validGen = `course: 校验课
 mode: new
@@ -27,15 +25,11 @@ regions:
 `
 
 async function vaultWithCourse(run: (engine: LearnhubEngine, courseName: string) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-proposals-'))
-  try {
-    const engine = new LearnhubEngine({ vault: root })
+  await withVault({ registry: null, graph: null, tag: 'learnhub-proposals-' }, async ({ engine }) => {
     const proposed = await engine.graphPropose('gen', validGen) as { id: number }
     await engine.graphApply('gen', proposed.id)
     await run(engine, '校验课')
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+  })
 }
 
 test('#11 explicit proposal ids must be positive integers; 0/negative/fraction/NaN fail', async () => {
@@ -113,13 +107,9 @@ ops:
 })
 
 test('#11 apply result on gen mode lists created blocks explicitly', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-proposals-gen-'))
-  try {
-    const engine = new LearnhubEngine({ vault: root })
+  await withVault({ registry: null, graph: null, tag: 'learnhub-proposals-gen-' }, async ({ engine }) => {
     const prop = await engine.graphPropose('gen', validGen) as { id: number }
     const applied = await engine.graphApply('gen', prop.id) as { created_blocks: string[] }
     assert.deepEqual(applied.created_blocks, ['入门'])
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
+  })
 })

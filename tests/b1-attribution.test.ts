@@ -1,11 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { LearnhubEngine } from '../src/engine/index.ts'
 import { evaluateSectionSignals, formatSignalDetail, normSectionKey, parseSignalDetail, sectionEntryOf } from '../src/engine/attribution.ts'
 import type { AttemptFact, RewriteFact, SectionManifest, SectionSignalInput } from '../src/engine/attribution.ts'
+import { withVault } from './helpers/vault.ts'
+import type { NoteSeed, VaultHandle } from './helpers/vault.ts'
 
 const MANIFEST: SectionManifest[] = [
   { id: 's1', title: '概念：定义', type: '概念', status: 'ready', version: 1 },
@@ -155,45 +153,17 @@ test('触发留痕 detail 编解码回读（base 快照是重触发与升级的�
 
 // ---- 门面集成：status/recommend 出建议项、留痕、冷却、重写窗口归零 ----
 
-const REGISTRY = [
-  'courses:',
-  '  - id: math-01',
-  '    name: 数学',
-  '    root: math',
-  '    enabled: true',
-].join('\n')
-
-const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-
-const NOTE = [
-  '---',
-  'node: 入门',
-  'stage: review',
-  'fsrs: null',
-  'content:',
-  '  version: 1',
-  '  generated_at: "2026-01-01"',
-  '  status: draft',
-  '  sections:',
-  '    - { id: s1, title: "概念：定义", type: 概念, status: ready, version: 1 }',
-  'practice:',
-  '  attempts: 5',
-  '  correct: 2',
-  '---',
-  '',
-  '# 入门',
-  '',
-  '## 概念：定义',
-  '',
-  '正文内容。',
-].join('\n')
+/** 入门笔记种子（noteText 逐字生成原 NOTE 常量：s1 节 manifest + 节正文 + 练习证据）。 */
+const NOTE: NoteSeed = {
+  stage: 'review',
+  content: {
+    version: 1,
+    generatedAt: '2026-01-01',
+    sections: ['    - { id: s1, title: "概念：定义", type: 概念, status: ready, version: 1 }'],
+  },
+  practice: { attempts: 5, correct: 2 },
+  body: ['# 入门', '', '## 概念：定义', '', '正文内容。'],
+}
 
 /** 单题题库（fsrs.lapses 可选种子；section 绑节 id）。 */
 function bank(lapses: number): string {
@@ -217,26 +187,12 @@ function bank(lapses: number): string {
   ].join('\n') + '\n'
 }
 
-async function withVault(
-  run: (engine: LearnhubEngine) => Promise<void>,
-  opts: { lapses?: number } = {},
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-b1-'))
-  try {
-    const center = join(root, '学习中心')
-    const course = join(center, 'math')
-    await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
-    await mkdir(join(course, '题库'), { recursive: true })
-    await writeFile(join(center, '课程注册表.yaml'), `${REGISTRY}\n`, 'utf8')
-    await writeFile(join(course, 'data', '基础.yaml'), `${GRAPH}\n`, 'utf8')
-    await writeFile(join(course, '课程', '基础', '入门.md'), `${NOTE}\n`, 'utf8')
-    await writeFile(join(course, '题库', '入门.yaml'), bank(opts.lapses ?? 0), 'utf8')
-    await run(new LearnhubEngine({ vault: root }))
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-}
+/** b1 门面 vault：默认单课程/单节点图 + 入门笔记 + 单题题库（lapses 种子）。 */
+const b1Vault = (lapses = 0) => ({
+  tag: 'learnhub-b1-',
+  notes: { 入门: NOTE },
+  banks: { 入门: bank(lapses) },
+})
 
 /** 相对今天的 ISO 日（前 n 天；留痕/作答流水播种用）。 */
 function daysAgoIso(n: number): string {
@@ -245,7 +201,7 @@ function daysAgoIso(n: number): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-async function seedR2Evidence(engine: LearnhubEngine): Promise<void> {
+async function seedR2Evidence(engine: VaultHandle['engine']): Promise<void> {
   for (const [i, ok] of [false, true, false, true, false].entries()) {
     await engine.store.appendPractice({
       course: '数学', node: '入门', ex: 1, answer: ok ? 'true' : 'false',
@@ -255,7 +211,7 @@ async function seedR2Evidence(engine: LearnhubEngine): Promise<void> {
 }
 
 test('门面：R2 命中 → status/recommend 出带理由与重写入口的诊断项；留痕只写一条', async () => {
-  await withVault(async engine => {
+  await withVault(b1Vault(), async ({ engine }) => {
     await seedR2Evidence(engine)
     const status = await engine.statusJson()
     const course = (status.courses as Array<Record<string, unknown>>)[0]!
@@ -292,8 +248,8 @@ test('门面：R2 命中 → status/recommend 出带理由与重写入口的诊�
 })
 
 test('门面：R1 冷却后二次命中 → escalate 转人工，不再给重写建议', async () => {
-  await withVault(async engine => {
-    // 上次 R1 触发在 10 天前（冷却已过），base_lapses=3；现在 lapses=4 → 升级
+  // 上次 R1 触发在 10 天前（冷却已过），base_lapses=3；现在 lapses=4 → 升级
+  await withVault(b1Vault(4), async ({ engine }) => {
     await engine.store.appendJournal({
       course: '数学', node: '入门', rating: null, kind: 'section_regen_signal', elapsed_days: 0,
       detail: formatSignalDetail({ sectionId: 's1', signal: 'R1', base: 3 }, '概念：定义', 'qid=q1 lapses=3'),
@@ -305,11 +261,11 @@ test('门面：R1 冷却后二次命中 → escalate 转人工，不再给重写
     assert.equal(d.escalate, true)
     assert.match(d.reason, /转人工处理/)
     assert.equal(d.fresh, true)
-  }, { lapses: 4 })
+  })
 })
 
 test('门面：单节重写落盘（content_section 留痕）→ R2 窗口归零 + 进入冷却', async () => {
-  await withVault(async engine => {
+  await withVault(b1Vault(), async ({ engine }) => {
     await seedR2Evidence(engine)
     assert.equal((await engine.diagnosticsAdvice()).length, 1)
     // 重写落盘 = 节版本 +1 的留痕（today）→ 证据全部出窗 + 冷却
