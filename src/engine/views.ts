@@ -459,9 +459,13 @@ export interface ReviewCard extends QuestionItem {
   d: number
   /** JOL 抽查命中（#66 E4）：翻面前弹一档三点预测，可忽略。 */
   jol?: boolean
-  /** 笔记源卡（C1 #59）：source='note'，title=笔记标题；course 恒为「笔记源」伪课程。 */
+  /** 笔记源卡（C1 #59）：source='note'，title=笔记标题；course 恒为「笔记源」伪课程。
+   * source_path/source_abs = 来源笔记的 vault 相对/绝对路径（V-4 #108）——面板显示
+   * 来源笔记并经 obsidian://open?path= 跳转（绝对路径由 Obsidian 自解析所属 vault）。 */
   source?: 'note' | 'learner' | 'error'
   title?: string
+  source_path?: string
+  source_abs?: string
   /** 我的卡（E1，ADR-0021 汇入）：source='learner' 时携带——卡面渲染与
    * learner-rate/learner-forget 结算走此通道；调度/入账语义见 ADR-0021。 */
   learner?: LearnerCardItem

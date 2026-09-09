@@ -554,7 +554,15 @@ function ReviewSession(props: {
       <Space direction='vertical' style={{ width: '100%' }} size={12}>
         <Space size={8} wrap>
           <Text type='secondary'>{card.course} · </Text>
-          <Text bold>{card.node}</Text>
+          {/* V-4（#108）：笔记源卡显示来源笔记标题（node 是机器 id，对学习者无意义），
+          并给 obsidian:// 跳转——绝对路径由 Obsidian 自解析所属 vault */}
+          <Text bold>{card.source === 'note' ? (card.title ?? card.node) : card.node}</Text>
+          {card.source === 'note' && card.source_abs && (
+            <Tooltip content={`在 Obsidian 中打开来源笔记：${card.source_path ?? ''}`}>
+              <a href={`obsidian://open?path=${encodeURIComponent(card.source_abs)}`}
+                style={{ fontSize: 12, textDecoration: 'none' }}>↗ 来源笔记</a>
+            </Tooltip>
+          )}
           {card.learner && <Tag size='small' color='purple'>{LEARNER_KIND_LABEL[card.learner.kind] ?? card.learner.kind}</Tag>}
           {card.error && <Tag size='small' color='orange'>错误对比卡</Tag>}
           {/* A1（#56/#72）：随卡下发的 FSRS 预测可回忆度 R——用词遵守 CONTEXT（可回忆度，不是掌握度）；
@@ -650,6 +658,8 @@ function NoteSourceDrawer(props: { open: boolean; focusId: string | null; onClos
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [oldQs, setOldQs] = useState<QuestionItem[] | null>(null)
+  /** 缺失源的重连新路径（V-6 #109，按源 id 分格）。 */
+  const [relinkPaths, setRelinkPaths] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setDoc(await api.noteSources().catch(() => null))
@@ -738,6 +748,21 @@ function NoteSourceDrawer(props: { open: boolean; focusId: string | null; onClos
     }
   }
 
+  /** 改路径重连（V-6 #109）：源缺失（改名/移动）时把既有源重连到新路径——
+   * 卡池与每张卡的调度保留（区别于解除后重注册：旧卡不会变孤儿）。 */
+  const relink = async (id: string) => {
+    const p = (relinkPaths[id] ?? '').trim()
+    if (!p) { Message.warning('填写改名/移动后的新路径（vault 相对或绝对）'); return }
+    try {
+      const r = await api.noteSourceRelink(id, p)
+      Message.success(`「${r.id}」已重连到 ${r.to}（卡池与调度保留）`)
+      setRelinkPaths(m => ({ ...m, [id]: '' }))
+      await Promise.all([load(), props.onChanged()])
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const STATUS: Record<string, { label: string; color: string }> = {
     ok: { label: '正常', color: 'green' },
     drifted: { label: '漂移', color: 'orange' },
@@ -793,6 +818,14 @@ function NoteSourceDrawer(props: { open: boolean; focusId: string | null; onClos
                   <Text type={s.status === 'missing' ? 'error' : 'warning'} style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
                     {s.hint}
                   </Text>
+                )}
+                {s.status === 'missing' && (
+                  <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
+                    <Input size='mini' value={relinkPaths[s.id] ?? ''} onChange={v => setRelinkPaths(m => ({ ...m, [s.id]: v }))}
+                      placeholder='改名/移动后的新路径（重连保留卡池与调度）'
+                      onPressEnter={() => void relink(s.id)} />
+                    <Button size='mini' type='outline' onClick={() => void relink(s.id)}>重连</Button>
+                  </div>
                 )}
                 {expanded === s.id && (
                   <div style={{ marginTop: 8, borderTop: '1px solid var(--color-border-2,#e5e6eb)', paddingTop: 8 }}>

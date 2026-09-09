@@ -27,6 +27,12 @@ export class Paths {
     this.centerRoot = centerRoot
   }
 
+  /** vault 根（centerRoot 剥掉最后一段）：中心外个人笔记的定位基面（data-check 的
+   * 全库注册源盘点用）；引擎另有构造注入的 vaultRoot，两者恒等（centerRoot = vault/centerRel）。 */
+  get vaultRoot(): string {
+    return this.centerRoot.replace(/\\/g, '/').replace(/\/+$/, '').replace(/\/[^/]+$/, '')
+  }
+
   // ---- 中心级 ----
   get registryPath(): string { return `${this.centerRoot}/课程注册表.yaml` }
   get sessionDir(): string { return `${this.centerRoot}/会话` }
@@ -42,6 +48,9 @@ export class Paths {
   get runLogPath(): string { return `${this.centerStateDir}/运行日志.md` }
   get promptDir(): string { return `${this.centerStateDir}/提示词` }
   get learnhubConfigPath(): string { return `${this.centerStateDir}/learnhub.json` }
+  /** Vault 链接先验缓存（V-2 #91）：state/vault链接.json——全库 wikilink 扫描产物
+   * （候选边 + 命中率审计 + 源文件指纹）；只写引擎 state 区，个人笔记零写入。 */
+  get vaultLinksPath(): string { return `${this.centerStateDir}/vault链接.json` }
   get genJobsPath(): string { return `${this.centerStateDir}/生成任务.json` }
   /** 「今天学它」pin 清单（E3 #67）：中心级 [{course,node,date}]，过期自动失效。 */
   get pinPath(): string { return `${this.centerStateDir}/今日pin.json` }
@@ -70,6 +79,10 @@ export class Paths {
   /** 笔记源自料区（C1 #59 / ADR-0010）：镜像区，用户笔记零写入。 */
   get noteSourceDir(): string { return `${this.centerRoot}/笔记源` }
   get noteSourceManifestPath(): string { return `${this.noteSourceDir}/源清单.yaml` }
+  /** 笔记源卡池镜像（V-4 #108）：卡池/<源id>.md，带 [[个人笔记]] 链接——Obsidian
+   * backlink 让个人笔记侧看到关联卡池状态；引擎镜像区文件，个人笔记零写入。 */
+  get noteSourcePoolDir(): string { return `${this.noteSourceDir}/卡池` }
+  noteSourcePoolPath(id: string): string { return `${this.noteSourcePoolDir}/${safeFilename(id)}.md` }
   /** 学习者产出卡域（E1 #45/#68）：课程根/我的卡/<节点>.yaml，独立门禁独立调度。 */
   learnerCardsDir(root: string): string { return `${this.courseRoot(root)}/我的卡` }
   /** 错误对比卡域（C-3 #82）：课程根/错误卡/<节点>.yaml——学习者错法挖矿的独立
