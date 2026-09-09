@@ -19,6 +19,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './store.ts'
+import { isRegistrableCenterRel } from './output.ts'
 import type { NoteSourceEntry } from './types.ts'
 import type { Paths } from './paths.ts'
 
@@ -143,7 +144,10 @@ export function validateNoteSourceManifest(doc: unknown): { errors?: string[]; s
 }
 
 /** vault 输入路径 → vault 相对 posix 路径。拒绝学习中心内部与越界（..）路径——
- * 引擎管理区不收编为笔记源（课程文件另有通道），用户笔记在中心外。 */
+ * 引擎管理区不收编为笔记源（课程文件另有通道），用户笔记在中心外。
+ * 豁免区（V-3 #107 / V-5 #113）：学习中心内的 我的产出/ 整区与 projects/<id>/日志.md
+ * 是学习者可读可编辑的文档区，放行注册（ADR-0026「复盘对象可被调度走既有注册通道」）；
+ * 其余中心内路径（课程/状态/项目契约文件）维持拒绝。 */
 export function normalizeSourcePath(vaultRoot: string, centerRoot: string, input: string): string {
   const p = input.replace(/\\/g, '/').trim()
   const abs = p.startsWith(`${vaultRoot}/`)
@@ -155,9 +159,11 @@ export function normalizeSourcePath(vaultRoot: string, centerRoot: string, input
   if (!norm.startsWith(`${vaultRoot}/`)) throw new Error(`[note-source] 路径不在 vault 内：${input}`)
   const rel = norm.slice(vaultRoot.length + 1).replace(/\/+$/, '')
   if (rel.split('/').some(seg => seg === '..')) throw new Error(`[note-source] 路径不允许 ..（越界拒绝）：${input}`)
+  const centerRel = centerRoot.slice(vaultRoot.length + 1)
   if (`${vaultRoot}/${rel}`.replace(/\/{2,}/g, '/') === centerRoot
-    || rel === centerRoot.slice(vaultRoot.length + 1)
-    || rel.startsWith(`${centerRoot.slice(vaultRoot.length + 1)}/`)) {
+    || rel === centerRel
+    || rel.startsWith(`${centerRel}/`)) {
+    if (isRegistrableCenterRel(centerRel, rel)) return rel
     throw new Error(`[note-source] 学习中心内部文件不注册为笔记源（引擎管理区另有通道）：${rel}`)
   }
   return rel

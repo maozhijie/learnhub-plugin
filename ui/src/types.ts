@@ -211,3 +211,17 @@ export interface SandboxDoc {
   map: Array<{ node: string; p50: number; p80: number }>
   assumptions: string[]
 }
+
+// ---- U4 周复盘 Weekly Kata（#114 / ADR-0026）----
+
+export interface KataDoc {
+  date: string
+  week_start: string
+  week_end: string
+  path: string
+  created: boolean
+  reality: string
+  sections: Record<string, string>
+  answered: boolean
+  list: Array<{ week_start: string; answered: boolean }>
+}

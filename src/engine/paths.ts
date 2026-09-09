@@ -105,6 +105,14 @@ export class Paths {
   projectNotePath(id: string): string { return `${this.projectDir(id)}/项目.md` }
   projectMilestoneDir(id: string): string { return `${this.projectDir(id)}/milestones` }
   projectMilestonePath(id: string, file: string): string { return `${this.projectMilestoneDir(id)}/${file}` }
+  /** 学习产物输出区（V-3 #107）：复盘稿/讲解稿/错误卡/周复盘的引擎专属输出区；
+   * 只出链指向个人笔记，永不改写个人文件（ADR-0010）。 */
+  get outputDir(): string { return `${this.centerRoot}/我的产出` }
+  outputKindDir(kind: string): string { return `${this.outputDir}/${safeFilename(kind)}` }
+  /** 项目日志（V-5 #113，设计文档预留位）：学习者自由记录，可注册为笔记源复习。 */
+  projectLogPath(id: string): string { return `${this.projectDir(id)}/日志.md` }
+  /** 项目回执镜像（V-5 #113）：关联节点回执的可读落盘副本（canonical 流水仍在中心 state）。 */
+  projectReceiptDir(id: string): string { return `${this.projectDir(id)}/回执` }
   /** 项目域提案快照（被替换的计划 YAML / 里程碑产物旧文；state/snapshots/ 全留痕）。 */
   projectSnapshotPath(pid: number, what: string): string { return `${this.snapshotDir}/project-${pid}-${what}` }
   /** 检索点会话流水（#93：抽题+自述 JSONL 追加；项目域自有数据，零 journal/FSRS 写入）。 */

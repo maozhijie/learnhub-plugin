@@ -237,6 +237,27 @@ export const api = {
   /** 渐退档变更（引擎推荐只是提议；改档是学习者的显式动作）。 */
   projectSetTier: (id: string, tier: import('./types').FadingTier) =>
     http<import('./types').ProjectFm>('POST', '/project/tier', { id, tier }),
+  /** 项目日志读面（V-5 #113）：未写过 = null 合法空态。 */
+  projectLog: (id: string) =>
+    http<{ project: string; path: string; log: string | null }>('GET', `/project/log${q({ id })}`),
+  /** 项目日志追加一条学习者条目（V-5 #113）。 */
+  projectLogAppend: (id: string, text: string) =>
+    http<{ project: string; path: string; day: string }>('POST', '/project/log', { id, text }),
+  // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026）：零 XP 零 canonical；入口常驻、缺勤不罚 ----
+  /** 打开/发起周复盘（缺省 = 上一完整学习周）：现状引擎现算重填，四问保留。 */
+  kataOpen: (weekStart?: string) =>
+    http<import('./types').KataDoc>('GET', `/kata${q({ week_start: weekStart })}`),
+  /** 保存四问作答（patch 语义：给出的键才写；现状引擎段不可写）。 */
+  kataSave: (weekStart: string, answers: Partial<Record<string, string>>) =>
+    http<import('./types').KataDoc>('POST', '/kata/save', { week_start: weekStart, answers }),
+  /** 「下一实验」一键转 N-of-1 实验提案（提案-确认制，确认仍走实验 apply）。 */
+  kataConvertExperiment: (weekStart: string, template: string, course?: string) =>
+    http<{ proposal: number; title: string; week_start: string }>('POST', '/kata/convert/experiment',
+      { week_start: weekStart, template, ...(course ? { course } : {}) }),
+  /** 「下一实验」一键转执行意图挂今日目标偏好（随 pin 当日过期）。 */
+  kataConvertIntention: (weekStart: string, course: string, node: string, cue: string, action: string) =>
+    http<{ course: string; node: string; week_start: string }>('POST', '/kata/convert/intention',
+      { week_start: weekStart, course, node, cue, action }),
 }
 
 /** 请求宿主新开 dsh 会话讨论本课（client 侧 learnhub:discuss 桥消费）。
