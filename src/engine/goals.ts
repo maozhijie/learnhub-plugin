@@ -11,6 +11,9 @@ import type { ExecutionIntention } from './habits.ts'
  * 类型、各归其主（ADR-0017 裁决 6）：只覆盖推荐读侧，随 pin 当日过期，无独立生命周期。 */
 export interface PinRec { course: string; node: string; date: string; intention?: ExecutionIntention }
 
+/** 执行意图的录入形状（facade/工具层的成对可选字段；两字段同时给出 = 写入，同时缺省 = 清除）。 */
+export interface GoalIntentionInput { cue?: string; action?: string }
+
 /** 执行意图录入校验（C-5 #84；格式锁死与习惯同款）：cue/action 必须成对出现且都
  * 非空，trim 后返回归一化意图；两者都缺 = undefined（不挂载/清除）。只给其一时
  * fail loud——半条 if-then 是模糊线索或悬空行动，掉出证据范围。 */

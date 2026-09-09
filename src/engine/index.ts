@@ -70,7 +70,7 @@ import type { SkillDoc, ExecutionSource, ExecutionEventKind, ExecutionEvidence, 
 import { Habits, habitStreak, automationCurve } from './habits.ts'
 import type { HabitDoc, HabitRepeatRec, ExecutionIntention } from './habits.ts'
 import { normalizeGoalIntention } from './goals.ts'
-import type { PinRec } from './goals.ts'
+import type { PinRec, GoalIntentionInput } from './goals.ts'
 import { submitReceipt, receiptsUntilNextFull, RECEIPT_KIND_LABEL } from './receipts.ts'
 import type { ReceiptLogRec, ReceiptKind, ReceiptSubmitResult } from './receipts.ts'
 import { selfNoteFeedbackPrompt, selfNoteFeedbackSystem, selfNotePromptOf } from './self-note.ts'
@@ -325,7 +325,7 @@ export class LearnhubEngine {
    * 写入时顺带清理过期条目。零调度副作用（不碰 canonical/XP/掌握度）。
    * intention（C-5 #84）：可选挂载执行意图（if-then 计划），随 pin 当日过期
    * （ADR-0017 裁决 6），格式锁死校验走 normalizeGoalIntention。 */
-  async pinToday(courseKey: string | undefined, node: string, today?: string, intention?: { cue?: string; action?: string }): Promise<{ course: string; node: string; date: string; intention?: ExecutionIntention }> {
+  async pinToday(courseKey: string | undefined, node: string, today?: string, intention?: GoalIntentionInput): Promise<{ course: string; node: string; date: string; intention?: ExecutionIntention }> {
     today ??= (await this.learningDay()).today
     const plan = normalizeGoalIntention(intention?.cue, intention?.action)
     const c = await this.registry.resolve(courseKey)
@@ -343,13 +343,13 @@ export class LearnhubEngine {
    * 目标偏好上，只覆盖推荐读侧（随 pin 当日过期，ADR-0017 裁决 6）。cue/action
    * 都传 = 写入（格式锁死：稳定线索 + 单一具体行动），都不传 = 清除；当日无该
    * 节点的 pin = Missing fail loud——意图没有独立生命周期，载体缺失就不能悬空写。
-   * Learner Output：零调度副作用。 */
-  async setGoalIntention(courseKey: string | undefined, node: string, intention: { cue?: string; action?: string } | null, today?: string): Promise<{ course: string; node: string; intention: ExecutionIntention | null }> {
+   * 写入时顺带清理过期条目（pinToday/unpin 同款卫生步骤）。Learner Output：零调度副作用。 */
+  async setGoalIntention(courseKey: string | undefined, node: string, intention: GoalIntentionInput | null, today?: string): Promise<{ course: string; node: string; intention: ExecutionIntention | null }> {
     today ??= (await this.learningDay()).today
     const plan = intention ? normalizeGoalIntention(intention.cue, intention.action) : undefined
     const c = await this.registry.resolve(courseKey)
-    const pins = await this.store.loadPins()
-    const hit = pins.find(p => p.date === today && p.course === c.name && p.node === node)
+    const pins = (await this.store.loadPins()).filter(p => p.date === today)
+    const hit = pins.find(p => p.course === c.name && p.node === node)
     if (!hit) throw new Error(`[goal-intention] 「${c.name}/${node}」今天没有 pin：执行意图挂在「今天学它」的目标偏好上，先 learnhub_pin_today。`)
     const next = pins.map(p => p === hit
       ? (plan ? { ...p, intention: plan } : { course: p.course, node: p.node, date: p.date })

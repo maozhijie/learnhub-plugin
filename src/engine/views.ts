@@ -109,7 +109,7 @@ export interface RecEvent {
   /** 「今天学它」pin 标识（E3 #67）：当日课程内置顶，次日自动失效。 */
   pinned?: true
   /** 挂载的执行意图（C-5 #84）：if-then 计划（稳定线索 + 单一具体行动），随 pin 当日过期。
-   * goals.ExecutionIntention 的视图镜像（habits.ts 依赖 node:fs，ui 侧无法拉入）。 */
+   * habits.ExecutionIntention 的视图镜像（habits.ts 依赖 node:fs，ui 侧无法拉入）。 */
   intention?: { cue: string; action: string }
   /** D-4 睡眠耦合建议（#85）：重巩固型节点的「睡前练、醒后验」时段建议（可关）。 */
   sleep?: SleepSuggestionEntry

@@ -174,6 +174,7 @@ export function streakFrom(byDay: Record<string, { total: number }>, today: stri
   if (!(byDay[fmtDay(cursor)]?.total > 0)) cursor.setUTCDate(cursor.getUTCDate() - 1)
   let streak = 0
   let gap = 0
+  // 3650 = 防御上限（同 habits.habitStreak）：正常终止靠 gap 超容忍，此帽只封 10 年级病态输入
   for (let i = 0; i < 3650; i++) {
     if (byDay[fmtDay(cursor)]?.total > 0) {
       streak++

@@ -42,7 +42,7 @@
 - S26 `memory.ts::forecast / stateHistograms / dueReviewFirstPushes / trueRetention / calibrationBins / forgettingCurve` —— 记忆健康四面板聚合（synthetic 与首学推进排除、每卡每天第一条；`tests/memory-health.test.ts`）
 - S27 `optimize.ts::trainingSequences` —— FSRS 优化器训练序列构建（synthetic 排除、每卡每天第一条、delta_t 链；`tests/fsrs-optimize.test.ts`；门禁/写回走 facade + 假优化器注入）
 - S28 `attribution.ts::evaluateSectionSignals / sectionEntryOf` —— B1 节级归因触发（R1/R2 阈值、（题,日）去重、节重写锚点、冷却 fresh/met 分层、R1 二次升级；`tests/b1-attribution.test.ts`；facade 集成同文件）
-- S29 `goals.ts::todayPins / pinHeadScore / newLessonRationale` —— E3「今天学它」pin 当日有效期、课程内置顶分与新课自然语句 rationale（`tests/goals-pin.test.ts`；pin 覆盖层/过期失效/未就绪照开走 facade）
+- S29 `goals.ts::todayPins / pinHeadScore / newLessonRationale / normalizeGoalIntention` —— E3「今天学它」pin 当日有效期、课程内置顶分与新课自然语句 rationale、执行意图录入校验（成对必填/trim 归一/都缺=清除；`tests/goals-pin.test.ts`；pin 覆盖层/过期失效/未就绪照开/意图挂载与清除走 facade）
 - S30 `jol.ts::pickJolTargets / jolDeviatedQids / jolCalibration` —— E4 JOL 抽查选卡（信息价值优先 + 随机补齐）、偏差重探与校准配对聚合（门槛前 null；`tests/jol.test.ts`；抽查标记/predicted 落流水/全局开关走 facade）
 - S31 `coach.ts::coachFeedback / withinCoachWindow` + `adaptive.ts::bandOffset` —— E5 难度带带权偏移与「可用的困难」教练触发（7 天窗口、全简单/全挑战分布、作答量门槛低数据静默；`tests/band-coach.test.ts`；bandPref 传导与会话日志走 facade）
 - S32 `note-source.ts::validateNoteSourceEntries / classifySource / sourceHint / fingerprintOf / normalizeSourcePath` —— C1 笔记源注册契约、Missing/漂移判定与提示、路径归一（拒绝学习中心内部/越界；`tests/note-source.test.ts`；注册/出题/复习队列/作答通道/零写入快照走 facade）
