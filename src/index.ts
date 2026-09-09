@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：63 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/Anki 互通）
+ * - agent 工具面：65 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -1277,6 +1277,15 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { id: { type: 'number', description: 'Experiment id; omit for the running (or latest) one' } },
     (args: { id?: number }) => run('learnhub_experiment_report', async () =>
       JSON.stringify(await engine.experimentReport(args.id))))
+  tool('learnhub_thermostat',
+    'Get the challenge-point thermostat dashboard (D-2, ADR-0024): cross-region observation aggregate + READ-ONLY suggestions — the thermostat is NOT an auto-controller. Course region: true-retention band + long-term difficulty-band choice distribution. Unbounded region: execution-event rating distribution (empty until the U-area execution channel lands). Project region: deferred to P-7, tier list only. Three knobs max (A1 target difficulty-band default, retrieval-point density [not yet available], fading-tier move aggregation); at most three suggestions, low-data-silent. To ACT on a suggestion, show it to the learner and after their explicit confirmation call learnhub_thermostat_apply with the suggestion id — never apply without confirmation; there is no engine-side auto adjustment.',
+    {},
+    () => run('learnhub_thermostat', async () => JSON.stringify(await engine.thermostatView())))
+  tool('learnhub_thermostat_apply',
+    'Apply ONE thermostat suggestion AFTER the learner explicitly confirms it (D-2, ADR-0024): only ids currently offered by learnhub_thermostat are accepted (stale or invented ids fail loud) — this is the single confirmation gate. Confirmed band-default suggestions write the A1 default difficulty band via the existing config entry; the learner\'s explicit per-session band choice still overrides it.',
+    { suggestion: { type: 'string', required: true, description: 'Suggestion id exactly as offered by learnhub_thermostat (e.g. band_default:standard)' } },
+    (args: { suggestion: string }) => run('learnhub_thermostat_apply', async () =>
+      JSON.stringify(await engine.thermostatApply(args.suggestion))))
   tool('learnhub_rebuild',
     'Run audit gate + ready-list regeneration for all enabled courses, or one course.',
     { course: { type: 'string', description: 'Course name; omit to rebuild all enabled courses' } },
@@ -1732,7 +1741,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 63 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 65 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

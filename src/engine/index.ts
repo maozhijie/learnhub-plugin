@@ -26,6 +26,8 @@ import type { JolPrediction } from './jol.ts'
 import { DEFAULT_SLEEP_ADVICE, normalizeSleepAdvice } from './sleep.ts'
 import { NOF1_TEMPLATES, NOF1_PER_ARM_MIN, NOF1_VARIABLE_WHITELIST, nof1Template, nof1ArmForDay, nof1Outcomes, analyzeNof1, shuffleAssign, interleaveBySource, mulberry32 } from './nof1.ts'
 import type { Nof1Template, Nof1Variable, ExperimentDef, Nof1Analysis } from './nof1.ts'
+import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from './thermostat.ts'
+import type { ThermostatDoc, ThermostatSuggestion } from './thermostat.ts'
 import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, withinCoachWindow } from './coach.ts'
 import type { BandRec } from './coach.ts'
 import { calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
@@ -1146,6 +1148,8 @@ export class LearnhubEngine {
     // N-of-1 实验当日生效臂（#110 ADR-0023，批次交替）：band_default 在未显式选带时
     // 决定默认带；session_composition 决定全局队列呈现顺序。显式学习者选择优先。
     const expEffect = await this.nof1QueueEffect(today)
+    // A1 目标难度带默认值（#111 恒温器旋钮；配置层缺省 = 纯 A1）。
+    const defaultBand = await this.bandDefault()
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
     let nodeFound = false
@@ -1247,7 +1251,9 @@ export class LearnhubEngine {
     // 距离升序（会话内流式调整由会话方以纯规则驱动）。
     if (node !== undefined) {
       const band = Math.min(1, Math.max(0,
-        startBand(mastery) + bandOffset(bandPref ?? (expEffect?.variable === 'band_default' ? expEffect.arm as BandPref : undefined))))
+        startBand(mastery) + bandOffset(bandPref
+          ?? (expEffect?.variable === 'band_default' ? expEffect.arm as BandPref : undefined)
+          ?? defaultBand)))
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
         cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band) }
     }
@@ -2564,6 +2570,89 @@ export class LearnhubEngine {
     const recs = nof1Outcomes(await this.store.reviewLogAll(), hit.id)
     const analysis = analyzeNof1(recs, hit, 9000 + hit.id)
     return { experiment: hit, analysis }
+  }
+
+  // ---- D2 挑战点恒温器（#111 / ADR-0024：跨区观测聚合 + 只读建议，非自动控制器）----
+
+  /** A1 目标难度带默认值（state/learnhub.json 的 band_default；null = 纯 A1 自动）。
+   * 消费链：会话显式选带 > 实验当日臂 > 此默认值 > 纯 A1。 */
+  async bandDefault(): Promise<BandPref | null> {
+    try {
+      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
+        band_default?: string
+      }
+      return ['easy', 'standard', 'hard'].includes(doc.band_default ?? '')
+        ? doc.band_default as BandPref : null
+    } catch {
+      return null
+    }
+  }
+
+  /** 写默认带（既有配置入口——恒温器建议显式确认后落到这里；null = 清除回纯 A1）。 */
+  async setBandDefault(band: string | null): Promise<{ band_default: BandPref | null }> {
+    if (band !== null && !['easy', 'standard', 'hard'].includes(band)) {
+      throw new Error(`[band-default] band 只能是 easy/standard/hard 或 null（收到 ${String(band)}）。`)
+    }
+    let prev: Record<string, unknown> = {}
+    try {
+      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
+    } catch {
+      // 无配置文件/损坏 → 全新写入
+    }
+    const next = { ...prev, band_default: band }
+    if (band === null) delete next.band_default
+    await atomicWrite(this.paths.learnhubConfigPath, JSON.stringify(next, null, 1) + '\n')
+    return { band_default: band as BandPref | null }
+  }
+
+  /** 跨区挑战点仪表（只读聚合，零新度量；ADR-0024）。 */
+  async thermostatView(today?: string): Promise<ThermostatDoc> {
+    const { today: learningToday, cutoff } = await this.learningDay()
+    today ??= learningToday
+    const logs = await this.store.reviewLogAll()
+    const retention = trueRetention(dueReviewFirstPushes(logs, cutoff))
+    const bands = bandDistribution(await this.store.bandRecsAll(), today)
+    const defaultBand = await this.bandDefault()
+    const suggestions = thermostatSuggestions({
+      retention: { rate: retention.rate, real: retention.real },
+      bands, defaultBand,
+    })
+    const projects = await this.projects.list()
+    return {
+      date: today,
+      course_region: {
+        retention,
+        retention_band: retentionBand(retention.rate),
+        band_choices: bands,
+      },
+      unbounded_region: {
+        execution_ratings: execRatingDistribution(logs, today),
+        note: '执行事件评级分布——数据源随 U 区执行事件通道（#89）落地；落地前为合法空态。',
+      },
+      project_region: {
+        status: 'deferred',
+        note: '项目区观测（Mastery 交叉 2×2 + 档内表现）随 P-7（#96）后补，不阻塞 v1；下表只聚合展示各项目当前渐退档。',
+        projects: projects.map(p => ({ id: p.id, name: p.name, tier: p.tier })),
+      },
+      knobs: [
+        { knob: 'band_default', title: 'A1 目标难度带默认值', status: '可确认生效（既有配置入口）', current: defaultBand },
+        { knob: 'retrieval_density', title: '检索点密度', status: '未上线（随 #93 检索点会话落地解锁）' },
+        { knob: 'fading_tier', title: '渐退档移动提议', status: '聚合展示（档位移动提议走项目域既有入口）', current: projects.map(p => `${p.name}:${p.tier}`).join('、') || null },
+      ],
+      suggestions,
+    }
+  }
+
+  /** 建议的显式确认入口（ADR-0024：建议采用走既有入口、逐条显式确认）。只受理
+   * 当前仪表正在给出的建议 id——陈旧/伪造 id 拒绝；引擎内无任何自动调用路径。 */
+  async thermostatApply(suggestionId: string): Promise<{ applied: string; band_default: BandPref | null }> {
+    const view = await this.thermostatView()
+    const hit = view.suggestions.find(s => s.id === suggestionId)
+    if (!hit) {
+      throw new Error(`[thermostat] 建议「${suggestionId}」不在当前建议清单里（可能已过期或从未给出）——恒温器只逐条确认当前建议，不受理任意参数写入。`)
+    }
+    await this.setBandDefault(hit.apply.value)
+    return { applied: hit.id, band_default: hit.apply.value }
   }
 
   /** JOL 预测值的显式契约：三档之外拒绝（参数错误），null/undefined 放行为无预测。 */
