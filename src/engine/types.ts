@@ -171,10 +171,15 @@ export interface ReviewRec {
   stability_before: number | null
   difficulty_before: number | null
   r_pred: number | null
+  /** 实验臂标注（D-1 #110 / ADR-0023）：本次推进发生时正在运行的 N-of-1 实验与
+   * 所属臂（batch = 当日臂；card = 卡级分臂）。只是归因留痕——不改变推进本身；
+   * 优化器默认混训不特判。无实验时字段缺省。 */
+  exp?: { id: number; arm: string }
 }
 
-/** 提案 kind 全集（P-2 泛化：图谱域 gen/edit + 项目域 project_plan/project_milestone）。 */
-export const PROPOSAL_KINDS = ['gen', 'edit', 'project_plan', 'project_milestone'] as const
+/** 提案 kind 全集（P-2 泛化：图谱域 gen/edit + 项目域 project_plan/project_milestone
+ * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制））。 */
+export const PROPOSAL_KINDS = ['gen', 'edit', 'project_plan', 'project_milestone', 'experiment'] as const
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
 
 /** 提案记录（db.proposals 行同构；产物 YAML 另存 state/proposals/）。

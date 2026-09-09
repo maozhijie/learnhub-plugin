@@ -14,6 +14,7 @@ import type { ReceiptLogRec } from './receipts.ts'
 import type { HabitRepeatRec } from './habits.ts'
 import type { PinRec } from './goals.ts'
 import type { BandRec } from './coach.ts'
+import type { ExperimentDef } from './nof1.ts'
 import type { Paths } from './paths.ts'
 
 /** 临时文件 + rename 原子写。 */
@@ -114,6 +115,7 @@ export class Store {
       stability_before: rec.stability_before ?? null,
       difficulty_before: rec.difficulty_before ?? null,
       r_pred: rec.r_pred === null || rec.r_pred === undefined ? null : Math.round(rec.r_pred * 1000) / 1000,
+      ...(rec.exp ? { exp: rec.exp } : {}),
       ...(rec.event_kind ? { event_kind: rec.event_kind } : {}),
       ...(rec.exec_source ? { exec_source: rec.exec_source } : {}),
     }
@@ -308,6 +310,42 @@ export class Store {
       }
     }
     return out
+  }
+
+  // ---- N-of-1 实验定义（D-1 #110 / ADR-0023；whole-file 原子写）----
+
+  /** 全部实验定义；文件缺失 = Missing 合法空态（[]）；损坏 = Broken 报出
+   * （分臂与结局登记是预注册事实，静默回空会被新实验覆盖）。 */
+  async loadExperiments(): Promise<ExperimentDef[]> {
+    let raw: string
+    try {
+      raw = await readFile(this.paths.experimentsPath, 'utf8')
+    } catch {
+      return []
+    }
+    let doc: unknown
+    try {
+      doc = JSON.parse(raw)
+    } catch (err) {
+      throw new Error(`[nof1] ${this.paths.experimentsPath} 不是合法 JSON（Broken）：修复或删除该文件后再试。${err instanceof Error ? ` ${err.message}` : ''}`)
+    }
+    if (!Array.isArray(doc)) {
+      throw new Error(`[nof1] ${this.paths.experimentsPath} 不是清单数组（Broken）：修复或删除该文件后再试。`)
+    }
+    // 最小形状契约（Broken 判据：未通过数据契约，不静默降级——分臂与结局登记是预注册事实）
+    for (const [i, e] of doc.entries()) {
+      const rec = e as Partial<ExperimentDef>
+      if (typeof rec?.id !== 'number' || (rec.status !== 'running' && rec.status !== 'stopped')
+        || !Array.isArray(rec.arms) || !rec.assignment) {
+        throw new Error(`[nof1] ${this.paths.experimentsPath} 第 ${i} 条不满足实验定义契约（Broken）：修复或删除该条目后再试。`)
+      }
+    }
+    return doc as ExperimentDef[]
+  }
+
+  /** 全量替换实验清单（原子写；调用方负责状态机合法）。 */
+  async saveExperiments(list: ExperimentDef[]): Promise<void> {
+    await atomicWrite(this.paths.experimentsPath, JSON.stringify(list, null, 1) + '\n')
   }
 
   // ---- 回执流水（U-1 #88 / ADR-0016）与习惯重复流（U-3 #90 / ADR-0017）----
