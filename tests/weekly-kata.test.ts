@@ -57,7 +57,7 @@ test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔�
   await withVault({
     banks: { '入门': BANK },
     files: [{ path: '读书笔记/吉他.md', content: '# 吉他\n' }],
-  }, async ({ engine, root }) => {
+  }, async ({ engine }) => {
     // 上一周的真实行为：作答（XP）+ 笔记源复习 + 习惯重复 + 技能执行事件 + 项目过点
     await engine.noteSourceRegister('读书笔记/吉他.md')
     await engine.store.appendPractice({ ts: mid(0), course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'auto', qid: 'q1', xp: 60 })
@@ -86,7 +86,6 @@ test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔�
     const fileText = await readFile(doc.path, 'utf8')
     assert.match(fileText, /kind: weekly_kata/)
     assert.match(fileText, /week_start: /)
-    void root
   })
 })
 
@@ -148,7 +147,7 @@ test('#114 清单面：多周记录按周排列，answered 现判', async () => 
   const d = new Date(`${w1}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() - 7)
   const w0 = weekStartOf(d.toISOString().slice(0, 10))!
-  await withVault({}, async ({ engine }) => {
+  await withVault({}, async ({ engine, paths }) => {
     await engine.kataOpen(w1)
     await engine.kataSave(w1, { 目标条件: 'a', 障碍: 'b', 下一实验: 'c', 预期所学: 'd' })
     await engine.kataOpen(w0)
@@ -156,6 +155,7 @@ test('#114 清单面：多周记录按周排列，answered 现判', async () => 
     assert.deepEqual(list.map(x => x.week_start), [w0, w1])
     assert.equal(list[0].answered, false)
     assert.equal(list[1].answered, true)
-    assert.ok(existsSync(engine.kataPath(w0)))
+    // 记录落在输出区约定位置：我的产出/周复盘/<周一>.md（公开 Paths 面，不走私有方法）
+    assert.ok(existsSync(`${paths.outputKindDir('周复盘')}/${w0}.md`))
   })
 })

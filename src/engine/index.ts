@@ -312,7 +312,6 @@ export class LearnhubEngine {
   async dataCheck(): Promise<DataCheckReport> {
     return dataCheck(this.paths)
   }
-
   /** 题库内容体检（ADR-0029/0030 存量盘点）：只读扫描全部课程题库与笔记源镜像题库，
    * 按现行契约标出违规存量题——表达式/数字填空、记法违规（裸 ^/_/LaTeX 命令）、
    * 转义损坏、超长解析。零写入零修复，清单供人工决定走归档重生成/定向补题。 */
@@ -363,6 +362,7 @@ export class LearnhubEngine {
     }
     return report
   }
+
 
   async statusJson(): Promise<StatusDoc> {
     const { today, cutoff } = await this.learningDay()
@@ -3381,6 +3381,21 @@ export class LearnhubEngine {
     return `${this.paths.outputKindDir('周复盘')}/${weekStart}.md`
   }
 
+  /** 读复盘记录 → frontmatter + 五问各问（读侧收口，三个写点共用）。 */
+  private async kataReadDoc(path: string): Promise<{ fm: Record<string, unknown>; sections: Record<KataQuestion, string> }> {
+    const { fm, body } = await loadNote(path)
+    return { fm, sections: parseKataBody(body) }
+  }
+
+  /** 落盘复盘记录 + 刷新已注册源指纹（写侧收口：引擎自己的写不算漂移）。 */
+  private async kataPersist(
+    path: string, weekStart: string, reality: string,
+    sections: Record<KataQuestion, string>, created: string,
+  ): Promise<void> {
+    await this.kataWriteDoc(path, weekStart, weekEndOf(weekStart)!, reality, sections, created)
+    await this.refreshSourceFingerprints([path])
+  }
+
   /** 打开/发起周复盘：复盘对象 = 上一完整学习周（可显式指定更早的完整周补记）。
    * 现状 = 引擎用该学习周真实数据现算重填（引擎段）；四问保留学习者已写内容。
    * 文件缺失即建（入口常驻、无推送、缺勤不罚）。weekStart 必须是周一且不晚于
@@ -3398,17 +3413,16 @@ export class LearnhubEngine {
     let sections: Record<KataQuestion, string>
     let created: boolean
     if (existsSync(path)) {
-      const { fm, body } = await loadNote(path)
-      sections = parseKataBody(body)
-      sections['现状'] = reality // 引擎段随开随新；四问原样保留
+      const { fm, sections: existing } = await this.kataReadDoc(path)
+      existing['现状'] = reality // 引擎段随开随新；四问原样保留
+      sections = existing
       created = false
-      await this.kataWriteDoc(path, target, weekEnd, reality, sections, String(fm.created ?? today))
+      await this.kataPersist(path, target, reality, sections, String(fm.created ?? today))
     } else {
       sections = parseKataBody(assembleKataDoc({ weekStart: target, weekEnd, created: today, reality, answers: {} }))
       created = true
-      await this.kataWriteDoc(path, target, weekEnd, reality, sections, today)
+      await this.kataPersist(path, target, reality, sections, today)
     }
-    await this.refreshSourceFingerprints([path])
     return {
       date: today, week_start: target, week_end: weekEnd, path, created,
       reality, sections, answered: kataAnswered(sections),
@@ -3425,15 +3439,13 @@ export class LearnhubEngine {
     if (!existsSync(path)) {
       throw new Error(`[kata] 该周还没有复盘记录（${path}）——先 learnhub_kata_open 发起。`)
     }
-    const { body } = await loadNote(path)
-    const sections = parseKataBody(body)
+    const sections = (await this.kataReadDoc(path)).sections
     const reality = sections['现状']
     for (const q of KATA_LEARNER_QUESTIONS) {
       if (answers[q] === undefined) continue
       sections[q] = answers[q]!.trim() || KATA_EMPTY
     }
-    await this.kataWriteDoc(path, target, weekEndOf(target)!, reality, sections, today)
-    await this.refreshSourceFingerprints([path])
+    await this.kataPersist(path, target, reality, sections, today)
     return {
       date: today, week_start: target, week_end: weekEndOf(target)!, path, created: false,
       reality, sections, answered: kataAnswered(sections), list: await this.kataList(),
@@ -3522,12 +3534,10 @@ export class LearnhubEngine {
 
   /** 「下一实验」出口留痕：目标小节追加一行转换记录（其余内容不动）。 */
   private async stampKata(path: string, weekStart: string, line: string): Promise<void> {
-    const { fm, body } = await loadNote(path)
-    const sections = parseKataBody(body)
+    const { fm, sections } = await this.kataReadDoc(path)
     const reality = sections['现状']
     sections['下一实验'] = `${sections['下一实验'].trim()}\n\n${line}`.trim()
-    await this.kataWriteDoc(path, weekStart, weekEndOf(weekStart)!, reality, sections, String(fm.created ?? todayStr()))
-    await this.refreshSourceFingerprints([path])
+    await this.kataPersist(path, weekStart, reality, sections, String(fm.created ?? todayStr()))
   }
 
   // ---- D2 挑战点恒温器（#111 / ADR-0024：跨区观测聚合 + 只读建议，非自动控制器）----

@@ -98,7 +98,6 @@ test('#113 回执镜像：关联节点回执落项目工作区可读副本；can
     const r2 = await engine.receiptSubmit('数学', '练琴', { kind: 'text', material: '第二次回执。' }, REVIEW_LLM)
     assert.deepEqual((r2 as unknown as { mirrored_projects?: string[] }).mirrored_projects, ['吉他翻新'],
       '只有计划声明了该节点的项目才收到镜像')
-    void existsSync
   })
 })
 
@@ -107,7 +106,7 @@ async function seedProject2(engine: import('../src/engine/index.ts').LearnhubEng
 }
 
 test('#113 项目日志注册为复习源后：出题读日志、零写日志文件（ADR-0010 只读纪律）', async () => {
-  await withVault({ graph: PRACTICE_GRAPH, notes: { '练琴': `${NOTE}\n` } }, async ({ engine, root }) => {
+  await withVault({ graph: PRACTICE_GRAPH, notes: { '练琴': `${NOTE}\n` } }, async ({ engine }) => {
     await engine.projectCreate({ name: '吉他翻新', goal: 'g' })
     await engine.projectLogAppend('吉他翻新', '换弦的完整步骤记录，足够出题的内容：先松弦，再换弦，最后调音。', '2026-09-08')
     const logAbs = engine.paths.projectLogPath('吉他翻新')
@@ -118,6 +117,5 @@ test('#113 项目日志注册为复习源后：出题读日志、零写日志文
     }))
     assert.equal(gen.added, 1)
     assert.equal(await readFile(logAbs, 'utf8'), before, '出题对日志零写入')
-    void root
   })
 })

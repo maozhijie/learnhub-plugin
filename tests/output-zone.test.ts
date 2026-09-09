@@ -21,7 +21,7 @@ test('obsidianLink：vault 相对路径 → [[路径|别名]]，剥 .md、归一
 })
 
 test('outputArtifactFile / writeOutputArtifact：kind 白名单、文件名安全化、frontmatter 契约', async () => {
-  await withVault({ registry: null, graph: null }, async ({ engine, paths }) => {
+  await withVault({ registry: null, graph: null }, async ({ paths }) => {
     for (const bad of ['../x', '']) assert.throws(() => outputArtifactFile(bad))
     // 路径分隔按仓库命名惯例全角化（与节点改名同款），不构成越界
     assert.equal(outputArtifactFile('a/b.md'), 'a／b.md')
@@ -41,7 +41,6 @@ test('outputArtifactFile / writeOutputArtifact：kind 白名单、文件名安�
     assert.match(text, /\[\[读书笔记\/吉他技巧\|吉他\]\]/)
     // 文件落在输出区约定位置：学习中心/我的产出/<类>/
     assert.ok(p.replace(/\\/g, '/').includes('/我的产出/讲解稿/入门.1.md'))
-    void engine
   })
 })
 
@@ -117,6 +116,5 @@ test('#113 引擎写注册豁免区文件后刷新指纹：自己的写不算漂
     await writeFile(logPath, (await readFile(logPath, 'utf8')) + '手改的一行\n', 'utf8')
     list = await engine.noteSourceList()
     assert.equal(list.sources[0].status, 'drifted')
-    void engine
   })
 })

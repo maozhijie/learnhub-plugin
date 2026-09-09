@@ -24,7 +24,9 @@ import type {
 } from '../types'
 
 const { Text } = Typography
-const KATA_QUESTIONS = ['目标条件', '障碍', '下一实验', '预期所学'] as const
+/** 学习者作答的四问（引擎常量 KATA_QUESTIONS 含「现状」，此处只列作答面；值须与引擎一致）。 */
+const KATA_ANSWER_KEYS = ['目标条件', '障碍', '下一实验', '预期所学'] as const
+const KATA_PLACEHOLDER = '（待答）'
 
 const EMPTY_HINT = '暂无足够复习数据，继续学习将自动填充'
 
@@ -531,7 +533,7 @@ function KataCard({ courseNames }: { courseNames: string[] }) {
     try {
       const doc = await api.kataOpen(week)
       setKata(doc)
-      setAnswers(Object.fromEntries(KATA_QUESTIONS.map(q => [q, doc.sections[q] === '（待答）' ? '' : doc.sections[q] ?? ''])))
+      setAnswers(Object.fromEntries(KATA_ANSWER_KEYS.map(q => [q, doc.sections[q] === KATA_PLACEHOLDER ? '' : doc.sections[q] ?? ''])))
     } catch (err) {
       toastError(err)
     }
@@ -569,7 +571,7 @@ function KataCard({ courseNames }: { courseNames: string[] }) {
     if (!kata || !iCourse || !iNode.trim() || !iCue.trim() || !iAct.trim()) return
     try {
       await api.kataConvertIntention(kata.week_start, iCourse, iNode.trim(), iCue.trim(), iAct.trim())
-      Message.success('执行意图已挂上今天的目标偏好（随今日过期）')
+      Message.success('执行意图已挂上今天的目标偏好（学习日日界后过期）')
       setIntModal(false)
       await load(kata.week_start)
     } catch (err) {
@@ -603,7 +605,7 @@ function KataCard({ courseNames }: { courseNames: string[] }) {
               <pre style={{ margin: 0, fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{kata.reality}</pre>
             </Collapse.Item>
           </Collapse>
-          {KATA_QUESTIONS.map(q => (
+          {KATA_ANSWER_KEYS.map(q => (
             <div key={q} style={{ display: 'grid', gap: 4 }}>
               <Text style={{ fontSize: 12, fontWeight: 600 }}>
                 {q}{q === '下一实验' && <Text type='secondary' style={{ fontSize: 11 }}>（自由文本；可一键转实验提案或执行意图）</Text>}
@@ -648,7 +650,7 @@ function KataCard({ courseNames }: { courseNames: string[] }) {
         footer={null}>
         <div style={{ display: 'grid', gap: 10 }}>
           <Text type='secondary' style={{ fontSize: 12 }}>
-            「在【稳定线索】之后做【单一具体行动】」——挂上今天的目标偏好（推荐榜首），随今日过期。
+            「在【稳定线索】之后做【单一具体行动】」——挂上今天的目标偏好（推荐榜首），随当前学习日过期（日界后失效）。
           </Text>
           <Select placeholder='课程' value={iCourse} onChange={setICourse} style={{ width: '100%' }}>
             {courseNames.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
