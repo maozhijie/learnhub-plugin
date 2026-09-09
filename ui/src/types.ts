@@ -10,12 +10,13 @@ export type ContentStatus = 'draft' | 'reviewed' | 'flagged'
 
 export type {
   AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, DiagnosticEntry,
-  DifficultyAdviceDoc, DifficultyAdviceNode, DoctorDoc, EtaItem, GraphApplyResult, GraphBrowseDoc,
+  DifficultyAdviceDoc, DifficultyAdviceNode, DoctorDoc, EtaItem, FadingTier, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphPathResult, GraphProposeResult,
   HabitCurvePoint, HabitListItem, HabitShowDoc, HabitsListDoc, HistogramBin, LearnerArchiveResult,
   LearnerCardItem, LearnerCardKind, LearnerForgetResult,
   LearnerQueueDoc, LearnerRateResult, LessonDoc, LessonSection, MemoryHealthDoc as MemoryHealth,
   NoteSourceDoc, NoteSourceItem, NoteSourceRegisterResult, ProposalRec as PropItem,
+  ProjectCrossDoc, ProjectExecRec, ProjectExecResult, ProjectLifecycle,
   QuestionForgetResult, QuestionGetDoc, QuestionItem, QuestionKind, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueItem, RecEvent, RecEventType, RecommendDoc, ReviewCard,
   ReviewQueueDoc, SectionManifest as SectionManifestItem, SkillLaneItem, SkillsListDoc, StatusCourse,
@@ -23,7 +24,30 @@ export type {
   TreeBlock, TreeCourse, TreeDoc, TreeRegion, TreeNode, XpStatus,
 } from '../../src/engine/views'
 
-import type { LearnerCardKind } from '../../src/engine/views'
+// ---- 项目域（P 区）档案轻量镜像（GET /projects 返回 projects.ProjectFm[];
+// projects.ts 带值依赖不进 views.ts，这里按引擎 schema 镜像，与 validateProjectFm 同步）----
+
+export interface ProjectPlanItem {
+  id: string
+  name: string
+  task_class: string
+  acceptance_hints: string
+  est?: number
+  nodes?: string[]
+}
+
+export interface ProjectFm {
+  id: string
+  name: string
+  lifecycle: ProjectLifecycle
+  tier: FadingTier
+  goal: string
+  plan: ProjectPlanItem[]
+  created: string
+  updated: string
+}
+
+import type { FadingTier, LearnerCardKind, ProjectLifecycle } from '../../src/engine/views'
 
 // ---- 宿主侧形状（src/index.ts generation-jobs；非引擎门面读视图）----
 

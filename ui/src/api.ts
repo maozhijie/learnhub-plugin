@@ -189,6 +189,20 @@ export const api = {
     http<{ skill: string; status: string }>('POST', '/skills/archive', { skill, archived }),
   skillMaintenance: (skill: string, days: number | null) =>
     http<{ maintenance_days: number | null }>('POST', '/skills/maintenance', { skill, days }),
+  // ---- 项目域（P 区 / ADR-0015）：清单 + 2×2 交叉视图 + 执行事件落流（#98）----
+  projects: () => http<import('./types').ProjectFm[]>('GET', '/projects'),
+  /** 项目 2×2 交叉视图（P-7）：象限 + 两轴口径 + 只读入档推荐 + 最近事件。 */
+  projectCross: (id: string) =>
+    http<import('./types').ProjectCrossDoc>('GET', `/project/cross${q({ id })}`),
+  /** 记一条项目执行事件：被行使 enc 边两端节点各回流一次练习证据；零 XP 零调度。 */
+  projectExec: (id: string, input: { source: 'self' | 'ai'; rating: number; nodes?: string[]; note?: string }) =>
+    http<import('./types').ProjectExecResult>('POST', '/project/exec',
+      { id, source: input.source, rating: input.rating,
+        ...(input.nodes?.length ? { nodes: input.nodes } : {}),
+        ...(input.note?.trim() ? { note: input.note.trim() } : {}) }),
+  /** 渐退档变更（引擎推荐只是提议；改档是学习者的显式动作）。 */
+  projectSetTier: (id: string, tier: import('./types').FadingTier) =>
+    http<import('./types').ProjectFm>('POST', '/project/tier', { id, tier }),
 }
 
 /** 请求宿主新开 dsh 会话讨论本课（client 侧 learnhub:discuss 桥消费）。
