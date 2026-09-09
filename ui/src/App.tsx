@@ -5,13 +5,14 @@ import { setActiveTab } from './active-tab'
 import BankPage from './pages/BankPage'
 import GeneratePage from './pages/GeneratePage'
 import GraphPage from './pages/GraphPage'
+import LabPage from './pages/LabPage'
 import LearnPage from './pages/LearnPage'
 import PracticePage from './pages/PracticePage'
 import ProposalsPage from './pages/ProposalsPage'
 import StatsPage from './pages/StatsPage'
 import type { StatusDoc, TreeDoc } from './types'
 
-export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'generate' | 'proposals' | 'practice'
+export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'lab' | 'generate' | 'proposals' | 'practice'
 
 /** 打开中的节点学习视图（学习页二级视图）；focusNode = 图页定位高亮目标。 */
 export interface LessonRef { course: string; node: string }
@@ -111,6 +112,7 @@ export default function App() {
           <Tabs.TabPane key='graph' title='学习图' />
           <Tabs.TabPane key='bank' title='题目管理' />
           <Tabs.TabPane key='stats' title='统计' />
+          <Tabs.TabPane key='lab' title='实验室' />
           <Tabs.TabPane key='generate' title='生成' />
           <Tabs.TabPane key='proposals' title='提案' />
           <Tabs.TabPane key='practice' title='实践' />
@@ -137,7 +139,7 @@ export default function App() {
 
 /** 页签保活（ADR-0027）：首访后常驻、非激活隐藏——练习会话等页内状态跨页签存续；
  * 隐藏页签的后台轮询由 active-tab 信号自行跳过。 */
-const TAB_KEYS: TabKey[] = ['learn', 'graph', 'bank', 'stats', 'generate', 'proposals', 'practice']
+const TAB_KEYS: TabKey[] = ['learn', 'graph', 'bank', 'stats', 'lab', 'generate', 'proposals', 'practice']
 
 function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
   const [visited, setVisited] = useState<Set<TabKey>>(() => new Set([tab]))
@@ -152,6 +154,7 @@ function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
           {k === 'graph' && <GraphPage frame={frame} />}
           {k === 'bank' && <BankPage frame={frame} />}
           {k === 'stats' && <StatsPage frame={frame} />}
+          {k === 'lab' && <LabPage frame={frame} />}
           {k === 'generate' && <GeneratePage frame={frame} />}
           {k === 'proposals' && <ProposalsPage />}
           {k === 'practice' && <PracticePage />}
