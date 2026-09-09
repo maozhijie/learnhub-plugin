@@ -102,4 +102,6 @@ export class Paths {
   projectMilestonePath(id: string, file: string): string { return `${this.projectMilestoneDir(id)}/${file}` }
   /** 项目域提案快照（被替换的计划 YAML / 里程碑产物旧文；state/snapshots/ 全留痕）。 */
   projectSnapshotPath(pid: number, what: string): string { return `${this.snapshotDir}/project-${pid}-${what}` }
+  /** 检索点会话流水（#93：抽题+自述 JSONL 追加；项目域自有数据，零 journal/FSRS 写入）。 */
+  projectRecallPath(id: string): string { return `${this.projectDir(id)}/recall.jsonl` }
 }

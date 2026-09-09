@@ -372,6 +372,12 @@ export function snapshotDoc(store: GraphStore, regions: GRegion[]): unknown {
   return regions.map(r => store.regionDoc(r))
 }
 
+/** 既有声明 enc 原始形态表（节点名 → 边数组）。图视图的 encOf 会丢 note——
+ * enc 回填与行为推断提案要「整体替换且既有声明原样保留」，必须走这里。 */
+export function declaredEncOf(graph: Graph): Map<string, EncEdge[]> {
+  return new Map(graph.regions.flatMap(r => r.blocks.flatMap(b => b.nodes)).map(n => [n.name, n.enc]))
+}
+
 /** 就绪清单构建（build 产物：按区/块列未学条目）。 */
 export async function writeReadyList(paths: Paths, root: string, graph: Graph, done: Set<string>): Promise<void> {
   const lines: string[] = ['# 就绪清单', '', '> 引擎自动生成：当前就绪（前置达标）的未学节点，按区/块分组。', '']

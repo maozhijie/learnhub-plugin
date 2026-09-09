@@ -1698,6 +1698,49 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { id: { type: 'number', required: true, description: 'Pending proposal id' } },
     (args: { id: number }) => run('learnhub_project_apply', async () =>
       JSON.stringify(await engine.projectApply(args.id))))
+  tool('learnhub_project_milestone_pass',
+    'Record the learner\'s EXPLICIT milestone pass (P-4 settlement): the learner declares a milestone checkpoint reached — no checklist gate and no question gate (Kulik 1990: strict gates hurt completion). One journal settlement row lands (kind=milestone_settle, aligned with the node xp_settle precedent): XP price = the plan\'s est declaration × FSRS difficulty calibration over the DECLARED linked nodes\' question pools (defaults when undeclared; the calibration basis is locked to the plan — it cannot be extended at pass time), locked once — a second pass of the same milestone id is rejected, so revising a plan must use fresh milestone ids. This is the ONLY journal write the project domain ever makes; it counts toward the ledger and streak like real focused work does.',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      milestone: { type: 'string', required: true, description: 'Milestone id from the plan' },
+    },
+    (args: { id: string; milestone: string }) => run('learnhub_project_milestone_pass', async () =>
+      JSON.stringify(await engine.projectMilestonePass(args.id, args.milestone))))
+  tool('learnhub_project_milestone_recall',
+    'Start a MILESTONE RECALL session (P-3): draw a few questions from the linked course nodes\' question banks so the knowledge base stays connected to the real project — retrieval points serve the knowledge base only, they are NOT project acceptance criteria (the gate is only that the milestone artifact exists). Zero XP, zero FSRS, zero scheduling writes: the drawn questions are archived to projects/<id>/recall.jsonl and returned WITH answers for you to run verbally — ask, hear the learner out, compare; never call learnhub_question_answer for these. Then archive the learner\'s spoken key-decision narration with learnhub_project_recall_reflect.',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      milestone: { type: 'string', required: true, description: 'Milestone id from the plan (artifact must be generated)' },
+      nodes: { type: 'array', items: { type: 'string' }, description: 'Extra linked course nodes (merged with the plan\'s declared nodes)' },
+      limit: { type: 'number', description: 'Questions to draw (default 5)' },
+    },
+    (args: { id: string; milestone: string; nodes?: string[]; limit?: number }) => run('learnhub_project_milestone_recall', async () =>
+      JSON.stringify(await engine.projectMilestoneRecall(args.id, args.milestone, { nodes: args.nodes, limit: args.limit }))))
+  tool('learnhub_project_recall_reflect',
+    'Archive the learner\'s key-decision narration from a milestone recall session (P-3): their spoken「到目前为止的关键决策」goes verbatim into projects/<id>/recall.jsonl for later retrospection. No verdict, no scoring, no canonical writes — the narration is for looking back on, not for feeding the scheduler.',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      milestone: { type: 'string', required: true, description: 'Milestone id' },
+      narration: { type: 'string', required: true, description: 'Learner\'s key-decision narration (verbatim, non-empty)' },
+    },
+    (args: { id: string; milestone: string; narration: string }) => run('learnhub_project_recall_reflect', async () =>
+      JSON.stringify(await engine.projectRecallReflect(args.id, args.milestone, args.narration))))
+  tool('learnhub_project_recall_log',
+    'Read a project\'s recall-session ledger (P-3): the draw records (which questions were drawn at which milestone) and reflect records (key-decision narrations). Read-only.',
+    { id: { type: 'string', required: true, description: 'Project id' } },
+    (args: { id: string }) => run('learnhub_project_recall_log', async () =>
+      JSON.stringify(await engine.projectRecallLog(args.id))))
+  tool('learnhub_project_enc_candidates',
+    'Mine BEHAVIORALLY-INFERRED enc candidate edges (P-6): scan the learner\'s real card flips/answer activity on the project\'s linked course nodes inside a window (default the 14 days before the named milestone\'s pass, else before now); node pairs co-active on ≥ min_co days (default 2) become enc candidates with confidence-weighted edges (≥3 days 1.0 / 2 days 0.8 / 1 day 0.6; direction from the pre-closure when the graph knows it, first-activity heuristic otherwise). Files ONE pending edit proposal per course (set_enc whole-replace ops, declared edges preserved — zero schema break; single-proposal human review like enc_backfill); the panel/learnhub_graph_apply decides. Cross-course pairs are dropped, already-declared edges are skipped. This is how the all-zero enc graph starts growing from doing, not declaring.',
+    {
+      id: { type: 'string', required: true, description: 'Project id' },
+      milestone: { type: 'string', description: 'Milestone id anchoring the window end at its pass time (must have a pass record); omit to anchor at now' },
+      nodes: { type: 'array', items: { type: 'string' }, description: 'Extra linked course nodes (merged with the plan\'s declared nodes)' },
+      window_days: { type: 'number', description: 'Window length in days, 1-90 (default 14)' },
+      min_co: { type: 'number', description: 'Minimum co-active days per pair (default 2)' },
+    },
+    (args: { id: string; milestone?: string; nodes?: string[]; window_days?: number; min_co?: number }) => run('learnhub_project_enc_candidates', async () =>
+      JSON.stringify(await engine.projectEncCandidates(args.id, { milestone: args.milestone, nodes: args.nodes, window_days: args.window_days, min_co: args.min_co }))))
 
   // —— U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）：lane 与题目 FSRS 并行，不复用题目卡、不进复习队列 ——
 
@@ -1870,7 +1913,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 69 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 74 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()
