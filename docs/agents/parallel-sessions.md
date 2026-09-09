@@ -29,9 +29,20 @@ Open one ZCode session per worktree directory. Commits, branch switches, and reb
 - **Per-task boundaries go in the session prompt, not `AGENTS.md`.** `AGENTS.md` is committed, so every worktree sees the identical file. State the worktree's task and branch boundary in the opening prompt to keep the session from drifting into files another session owns.
 - **dsh host testing only reflects the linked checkout.** The `web` profile installs this plugin via `link:` to one fixed path, so `npx @deepseek-ai/dsh web` always loads that checkout's build no matter which worktree the session runs in. To smoke-test a worktree's build in the host, re-point the profile's `link:` at the worktree first (and back afterwards).
 
+## Merge back: the session lands its own branch (default)
+
+Landing is part of the task, not a separate handoff. The flow ends with the branch merged back, not with a pushed feature branch: unless the task explicitly says otherwise, the session that owns the worktree merges its branch back into **the branch it was cut from** (normally main) in the same session — commit → push → close issues (see `issue-tracker.md`) → merge back → verify → clean up. Do not stop and wait for the user to say "merge".
+
+Run the merge in the source checkout (the integration point), never inside the task worktree:
+
+1. **Re-check the base first.** `git fetch origin`, then compare. If the source branch still points at your branch point, `git merge --ff-only <feature-branch>` — fast-forward keeps the linear history this repo runs on. If it has moved (another session landed first): merge the source branch into your feature branch inside the worktree, re-run the full test suite, push the feature branch again, then do a plain merge in the source checkout. Never rewrite or force-push the source branch.
+2. **Respect the source checkout's dirty files.** `git status --short` there first. Other sessions' uncommitted edits are theirs; if the merge would touch a file that is dirty in the source checkout, stop and coordinate — do not stash, revert, or commit their hunks to get the merge through. A merge that touches none of the dirty files is safe to proceed.
+3. **Verify after merging.** Run the full test suite and the build in the source checkout — environment insurance (each worktree has its own node_modules) and it refreshes `lib/` so the dsh host loads the merged build on its next restart.
+4. **Clean up** (below). Remote feature branches stay on origin unless there is a reason to delete them.
+
 ## Clean up
 
-After the branch is merged:
+After the branch is merged back (by you, per above):
 
 ```sh
 git worktree remove ../learnhub-plugin-task1

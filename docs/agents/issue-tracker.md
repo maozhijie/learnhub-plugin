@@ -11,6 +11,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`
 - **Close an issue when its work lands**: once your implementation commit is on the pushed branch, close the issue you implemented in the same session — `gh issue close <number> --comment "<what shipped, acceptance result, commit sha>"`. Commit messages here reference issues as `(#123)` without `Closes` keywords, so GitHub never auto-closes; the explicit close is the only close. Closing is scoped: only the issue your session implemented — prerequisites and other tickets stay with their own sessions.
+- **Land it yourself — merging back is part of the task**: closing the tickets is not the end of the flow. Unless the task says otherwise, the same session merges its delivery branch back into the branch it was cut from (normally main), verifies (full test suite + build in the source checkout), and cleans up its worktree — without waiting for the user to ask for the merge. Step-by-step: `docs/agents/parallel-sessions.md` → "Merge back".
 
 ## Sandboxed execution and gh authentication
 
