@@ -158,8 +158,8 @@ export const api = {
   review: (course: string, node: string) => http<{ message: string }>('POST', '/review', { course, node }),
   feedback: (path: string) => http<{ message: string }>('POST', '/feedback', { path }),
   proposals: () => http<import('./types').PropItem[]>('GET', '/proposals'),
-  proposalApply: (kind: 'gen' | 'edit' | 'project_plan' | 'project_milestone' | 'experiment', id?: number) =>
-    http<import('./types').GraphApplyResult>('POST', '/proposals/apply', { kind, id }),
+  proposalApply: (kind: import('./types').PropItem['kind'], id?: number) =>
+    http<import('./types').GraphApplyResult | Record<string, unknown>>('POST', '/proposals/apply', { kind, id }),
   proposalReject: (id: number, note = '') => http<{ message: string }>('POST', '/proposals/reject', { id, note }),
   doctor: () => http<import('./types').DoctorDoc>('GET', '/doctor'),
   questionsAll: (course?: string) =>
@@ -194,6 +194,21 @@ export const api = {
   sandboxRun: (minutesPerDay: number, weeks?: number, course?: string, nodes?: string[]) =>
     http<import('./types').SandboxDoc>('POST', '/sandbox/run',
       { minutes_per_day: minutesPerDay, ...(weeks !== undefined ? { weeks } : {}), ...(course ? { course } : {}), ...(nodes?.length ? { nodes } : {}) }),
+  // ---- U 区（无界实践区）：技能 lane / 习惯（#89/#90）----
+  skills: () => http<import('./types').SkillsListDoc>('GET', '/skills'),
+  habits: () => http<import('./types').HabitsListDoc>('GET', '/habits'),
+  habit: (habit: string) => http<import('./types').HabitShowDoc>('GET', `/habit${q({ habit })}`),
+  habitCreate: (name: string, cue: string, action: string) =>
+    http<{ habit: string; name: string; status: string }>('POST', '/habits/create', { name, cue, action }),
+  habitRepeat: (habit: string, autoRating?: number, note?: string) =>
+    http<Record<string, unknown>>('POST', '/habits/repeat',
+      { habit, ...(autoRating !== undefined ? { auto_rating: autoRating } : {}), ...(note ? { note } : {}) }),
+  habitArchive: (habit: string, archived: boolean) =>
+    http<{ habit: string; status: string }>('POST', '/habits/archive', { habit, archived }),
+  skillArchive: (skill: string, archived: boolean) =>
+    http<{ skill: string; status: string }>('POST', '/skills/archive', { skill, archived }),
+  skillMaintenance: (skill: string, days: number | null) =>
+    http<{ maintenance_days: number | null }>('POST', '/skills/maintenance', { skill, days }),
 }
 
 /** 请求宿主新开 dsh 会话讨论本课（client 侧 learnhub:discuss 桥消费）。

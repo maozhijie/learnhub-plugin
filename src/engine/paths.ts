@@ -49,6 +49,16 @@ export class Paths {
   /** N-of-1 实验定义（D-1 #110 / ADR-0023）：whole-file 原子写；臂标注进复习日志，
    * 本文件只存实验定义与状态。 */
   get experimentsPath(): string { return `${this.centerStateDir}/实验.json` }
+  /** 回执流水（U-1 #88 / ADR-0016）：JSONL 追加，学习者证据账本——只增不回滚。 */
+  get receiptLogPath(): string { return `${this.centerStateDir}/回执.jsonl` }
+  /** 习惯重复流（U-3 #90 / ADR-0017）：JSONL 追加，自报重复即事实；曲线/streak 派生。 */
+  get habitRepeatLogPath(): string { return `${this.centerStateDir}/习惯重复.jsonl` }
+  /** 技能条目（U-2 #89 / ADR-0018）：学习中心/技能/<id>.yaml，lane 载体（不复用题目卡）。 */
+  get skillsDir(): string { return `${this.centerRoot}/技能` }
+  skillPath(id: string): string { return `${this.skillsDir}/${safeFilename(id)}.yaml` }
+  /** 习惯（U-3 #90 / ADR-0017）：学习中心/习惯/<id>.yaml，一等实体（零 FSRS 语义）。 */
+  get habitsDir(): string { return `${this.centerRoot}/习惯` }
+  habitPath(id: string): string { return `${this.habitsDir}/${safeFilename(id)}.yaml` }
   /** 笔记源自料区（C1 #59 / ADR-0010）：镜像区，用户笔记零写入。 */
   get noteSourceDir(): string { return `${this.centerRoot}/笔记源` }
   get noteSourceManifestPath(): string { return `${this.noteSourceDir}/源清单.yaml` }
@@ -95,4 +105,6 @@ export class Paths {
   projectMilestonePath(id: string, file: string): string { return `${this.projectMilestoneDir(id)}/${file}` }
   /** 项目域提案快照（被替换的计划 YAML / 里程碑产物旧文；state/snapshots/ 全留痕）。 */
   projectSnapshotPath(pid: number, what: string): string { return `${this.snapshotDir}/project-${pid}-${what}` }
+  /** 检索点会话流水（#93：抽题+自述 JSONL 追加；项目域自有数据，零 journal/FSRS 写入）。 */
+  projectRecallPath(id: string): string { return `${this.projectDir(id)}/recall.jsonl` }
 }

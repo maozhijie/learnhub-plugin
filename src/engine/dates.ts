@@ -69,6 +69,13 @@ export function daysBetween(a: Date, b: Date): number {
   return Math.round((a.getTime() - b.getTime()) / 86400000)
 }
 
+/** 'YYYY-MM-DD' + n 天 → 'YYYY-MM-DD'（维持节拍帽等日粒度推移；不可解析输入返回 null）。 */
+export function addDays(s: string | null | undefined, n: number): string | null {
+  const d = parseDay(s)
+  if (!d) return null
+  return fmtDay(new Date(d.getTime() + n * 86400000))
+}
+
 /** ISO 时间戳（秒精度，journal/practice 流水用）。 */
 export function nowIso(): string {
   const d = new Date()

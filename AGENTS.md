@@ -22,11 +22,15 @@ npx @deepseek-ai/dsh web
 
 `web` 是 profile 名（profile 在 `~/.dsh/profiles/web`，本插件以 `link:` 装在其中）；后台运行、启动完看输出里的本地 URL。
 
-首次报 `Cannot find package '@deepseek-ai/dsh-llm'` 时是 peer junction 缺失，用本机 monorepo 路径补一次（link-peers 默认指向 `C:/Users/test/...`，本机实际在 `C:/Users/Administrator/Desktop/deepseek-harness/packages`）：
+报 `Cannot find package '@deepseek-ai/dsh-llm'` 时是 peer junction 缺失：本插件以 `link:` 装进 profile，Node 按仓库真实路径解析 peer，被 import 的宿主私有包（dsh-llm、dsh-tools，见 `src/index.ts` 顶部）必须以 junction 形式存在于本仓库 `node_modules/@deepseek-ai/`。跑一次脚本补齐：
 
 ```sh
-DSH_MONOREPO="C:/Users/Administrator/Desktop/deepseek-harness/packages" node scripts/link-peers.mjs
+node scripts/link-peers.mjs
 ```
+
+默认从 npx 缓存里 dsh 自带的副本取源（与宿主实际加载同一份，版本天然一致；npm 上虽有同包但 `latest` 标签停在旧版，不能作普通依赖安装）。npx 缓存目录按调用 spec 生成哈希，`npx @deepseek-ai/dsh web` 原地更新不影响 junction；换 spec（如 `dsh@0.2`）会生成新目录致 junction 悬空，重跑脚本即可。设 `DSH_MONOREPO` 可改从 deepseek-harness monorepo 检出取源（本机该检出已删除）。
+
+报 `[learnhub] config.vault 目录不存在` 时是 vault 挪了位置：机器级配置（vault 路径、provider、model）不在仓库里，写在 `~/.dsh/profiles/web/cordis.patch.yml` 的 `dsh-learnhub` patch 条目中，按机器现状改那里。
 
 ## 并行会话用 worktree 隔离
 

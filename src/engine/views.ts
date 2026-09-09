@@ -759,14 +759,83 @@ export interface NoteSourceItem {
   broken?: true
 }
 
-/** 笔记源清单（noteSourceList）。 */
-export interface NoteSourceDoc { date: string; total: number; sources: NoteSourceItem[] }
+/** 笔记源清单（noteSourceList）。excludes = 用户排除清单（V-1 #86，只管未来注册）。 */
+export interface NoteSourceDoc {
+  date: string
+  total: number
+  excludes: string[]
+  sources: NoteSourceItem[]
+}
 
-/** 笔记源注册（noteSourceRegister）：单篇 .md 或文件夹批量登记；随响应带回最新清单。 */
+/** 笔记源注册（noteSourceRegister）：单篇 .md 或文件夹批量登记；随响应带回最新清单。
+ * skipped = 被跳过条目数（排除清单命中 + 学习中心内部文件）；skipped_paths 仅在有
+ * 跳过时带回（vault 相对，混合两类）。 */
 export interface NoteSourceRegisterResult {
   date: string
   registered: number
   updated: number
   skipped: number
   sources: NoteSourceItem[]
+  skipped_paths?: string[]
+}
+
+// ---- 技能条目 lane（U 区 #89 / ADR-0018：skillList，GET /api/skills、learnhub_skill_list）----
+
+/** 技能条目 lane 清单项：生效到期已折算维持节拍帽（帽先到 = maintenance 维持复活）。 */
+export interface SkillLaneItem {
+  id: string
+  name: string
+  status: 'active' | 'archived'
+  /** 维持节拍上限（天；null = 关）。 */
+  maintenance_days: number | null
+  /** lane 生效到期（从未执行 = null，无到期语义）。 */
+  due: string | null
+  /** 到期种类（已到期才有意义）：acquisition 习得 / maintenance 维持（迷你重做+回放）。 */
+  due_kind: 'acquisition' | 'maintenance' | null
+  attempts: number
+}
+
+/** 技能清单（skillList）。 */
+export interface SkillsListDoc {
+  date: string
+  skills: SkillLaneItem[]
+  broken: Array<{ id: string; path: string; reason: string }>
+}
+
+// ---- 习惯（U 区 #90 / ADR-0017：habitList / habitShow，GET /api/habits、/api/habit）----
+
+/** 习惯清单项：派生面（streak/曲线摘要）只展示给学习者，永不进 canonical。 */
+export interface HabitListItem {
+  id: string
+  name: string
+  status: 'active' | 'archived'
+  intention: { cue: string; action: string }
+  total_repeats: number
+  /** 宽容 streak（漏天无损；与 XP streak 各算各的）。 */
+  streak: number
+  latest_rating: number | null
+}
+
+/** 习惯清单（habitList）。 */
+export interface HabitsListDoc {
+  date: string
+  habits: HabitListItem[]
+  broken: Array<{ id: string; path: string; reason: string }>
+}
+
+/** 自动化曲线点：x = 该次自报时的累计重复次数，y = 自动化自评 1-5（中断不衰减）。 */
+export interface HabitCurvePoint { repeats: number; rating: number }
+
+/** 习惯详情（habitShow）。 */
+export interface HabitShowDoc {
+  habit: string
+  name: string
+  status: 'active' | 'archived'
+  intention: { cue: string; action: string }
+  created: string
+  updated: string
+  total_repeats: number
+  streak: number
+  curve: HabitCurvePoint[]
+  recent: Array<{ ts: string; habit: string; day: string; auto_rating?: number; note?: string }>
 }

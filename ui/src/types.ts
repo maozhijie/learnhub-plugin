@@ -12,12 +12,14 @@ export type {
   AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, DiagnosticEntry,
   DifficultyAdviceDoc, DifficultyAdviceNode, DoctorDoc, EtaItem, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphPathResult, GraphProposeResult,
-  HistogramBin, LearnerArchiveResult, LearnerCardItem, LearnerCardKind, LearnerForgetResult,
+  HabitCurvePoint, HabitListItem, HabitShowDoc, HabitsListDoc, HistogramBin, LearnerArchiveResult,
+  LearnerCardItem, LearnerCardKind, LearnerForgetResult,
   LearnerQueueDoc, LearnerRateResult, LessonDoc, LessonSection, MemoryHealthDoc as MemoryHealth,
   NoteSourceDoc, NoteSourceItem, NoteSourceRegisterResult, ProposalRec as PropItem,
   QuestionForgetResult, QuestionGetDoc, QuestionItem, QuestionKind, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueItem, RecEvent, RecEventType, RecommendDoc, ReviewCard,
-  ReviewQueueDoc, SectionManifest as SectionManifestItem, StatusCourse, StatusDoc, TooEasyAdvice,
+  ReviewQueueDoc, SectionManifest as SectionManifestItem, SkillLaneItem, SkillsListDoc, StatusCourse,
+  StatusDoc, TooEasyAdvice,
   TreeBlock, TreeCourse, TreeDoc, TreeRegion, TreeNode, XpStatus,
 } from '../../src/engine/views'
 

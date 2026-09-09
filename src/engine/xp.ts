@@ -11,7 +11,7 @@
  *   （FSRS difficulty 加权，无人工干预）；完成时 settle 对账锁定定价。
  */
 import { readFile } from 'node:fs/promises'
-import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, DAILY_XP_GOAL_DEFAULT, DAY_CUTOFF_DEFAULT, FSRS_DIFFICULTY_MID } from './params.ts'
+import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, XP_PER_MILESTONE_DEFAULT, DAILY_XP_GOAL_DEFAULT, DAY_CUTOFF_DEFAULT, FSRS_DIFFICULTY_MID } from './params.ts'
 import { parseDay, fmtDay, dayOfTs, parseCutoff, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './store.ts'
 import type { PracticeRec, JournalRec } from './types.ts'
@@ -65,6 +65,17 @@ export function difficultyCalibration(questions: BudgetQuestion[]): number {
   }
   if (!weights) return 1
   return Math.min(3, Math.max(0.5, weighted / weights))
+}
+
+/** 里程碑过点定价（#94 票内敲定口径，对齐节点公式 N = N₀ × k）：
+ * N₀ = 计划条目 est 申报（分钟，规划时按 1–2 周粒度估的真实投入），缺省回落常量；
+ * k = 关联节点题池的 FSRS 难度校准（复用 difficultyCalibration），无关联或无证据 = 1
+ * （里程碑自己没有题，校准只能借它挂靠的知识底座——没有就不虚造假精度）。
+ * 过点一次性入账并锁定；重复过点不再入账（守卫在调用方）。 */
+export function milestonePrice(est: number | undefined, calibration: number): number {
+  const n0 = est !== undefined && est > 0 ? est : XP_PER_MILESTONE_DEFAULT
+  const k = Number.isFinite(calibration) && calibration > 0 ? Math.min(3, Math.max(0.5, calibration)) : 1
+  return Math.max(1, Math.round(n0 * k))
 }
 
 // ---- 每日目标（state/learnhub.json） ----

@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { LearnhubEngine } from '../src/engine/index.ts'
-import { fingerprintOf, classifySource, sourceHint, normalizeSourcePath, validateNoteSourceEntries } from '../src/engine/note-source.ts'
+import { fingerprintOf, classifySource, sourceHint, normalizeSourcePath, validateNoteSourceEntries, isExcludedPath } from '../src/engine/note-source.ts'
 import { todayStr } from '../src/engine/dates.ts'
 import { DEFAULT_REGISTRY, withVault as makeVault } from './helpers/vault.ts'
 
@@ -379,5 +379,116 @@ test('全量快照回归：题库/掌握度通道零新增写入（笔记源复�
 
     assert.equal(await readFile(join(engine.paths.courseRoot('math'), '题库', '入门.yaml'), 'utf8'), courseBankBefore)
     assert.equal(await readFile(p.noteAbs, 'utf8'), noteBefore)
+  })
+})
+
+test('纯函数缝：排除命中判定（精确 + 目录前缀，前缀串撞名不误伤）', () => {
+  assert.equal(isExcludedPath('我的笔记/存档', ['我的笔记/存档']), true)
+  assert.equal(isExcludedPath('我的笔记/存档/旧.md', ['我的笔记/存档']), true)
+  assert.equal(isExcludedPath('我的笔记/日记.md', ['我的笔记/日记.md']), true)
+  // 前缀串撞名不误伤：存档备 ≠ 存档/
+  assert.equal(isExcludedPath('我的笔记/存档备/旧.md', ['我的笔记/存档']), false)
+  assert.equal(isExcludedPath('我的笔记/另一篇.md', ['我的笔记/存档', '我的笔记/日记.md']), false)
+})
+
+test('排除清单管理：落盘归一去重、重复排除幂等、解除不在清单 fail loud、手编配置形状归一、其他字段保留', async () => {
+  await withVault(async (engine, p) => {
+    // 场上先有其他配置字段：写排除不得抹掉
+    await engine.setDayCutoff('03:00')
+    const add = await engine.noteSourceExclude(join(p.folderAbs, '存档'))
+    assert.deepEqual(add.excludes, ['我的笔记/存档'])
+    const again = await engine.noteSourceExclude('我的笔记/存档/') // 同路径异写法（尾斜杠）幂等
+    assert.deepEqual(again.excludes, ['我的笔记/存档'])
+
+    const cfg = JSON.parse(await readFile(engine.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
+    assert.deepEqual(cfg.note_source_excludes, ['我的笔记/存档'])
+    assert.equal(cfg.day_cutoff, '03:00')
+
+    assert.deepEqual((await engine.noteSourceExcludes()).excludes, ['我的笔记/存档'])
+    assert.deepEqual((await engine.noteSourceList()).excludes, ['我的笔记/存档'])
+
+    // 手编配置的反斜杠/尾斜杠写法读时归一——防收编不因写法静默失效
+    await writeFile(
+      engine.paths.learnhubConfigPath,
+      JSON.stringify({ day_cutoff: '03:00', note_source_excludes: ['我的笔记\\存档\\', '我的笔记/日记.md', '  ', 42] }, null, 1) + '\n',
+      'utf8',
+    )
+    assert.deepEqual(
+      (await engine.noteSourceExcludes()).excludes,
+      ['我的笔记/存档', '我的笔记/日记.md'],
+    )
+    await assert.rejects(
+      () => engine.noteSourceRegister(join(p.folderAbs, '存档')),
+      /排除清单内/,
+    )
+
+    assert.deepEqual((await engine.noteSourceUnexclude('我的笔记/存档/')).excludes, ['我的笔记/日记.md'])
+    await assert.rejects(() => engine.noteSourceUnexclude('我的笔记/存档'), /排除清单没有/)
+    // 排除条目同样不收学习中心与越界路径（内置排除不可复制、清单不出 vault）
+    await assert.rejects(() => engine.noteSourceExclude('学习中心/数学'), /学习中心内部/)
+    await assert.rejects(() => engine.noteSourceExclude('../外部.md'), /\.\./)
+  })
+})
+
+test('排除清单在注册入口强制执行：直注被排除路径 fail loud；批量登记跳过排除子树（计数 + skipped_paths）；解除后可注册', async () => {
+  await withVault(async (engine, p) => {
+    await mkdir(join(p.folderAbs, '存档'), { recursive: true })
+    await writeFile(join(p.folderAbs, '存档', '旧笔记.md'), '# 旧笔记\n\n不要收编。\n', 'utf8')
+    await writeFile(join(p.folderAbs, '日记.md'), '# 日记\n\n私密内容。\n', 'utf8')
+    await engine.noteSourceExclude(join(p.folderAbs, '存档'))
+    await engine.noteSourceExclude(join(p.folderAbs, '日记.md'))
+
+    // 直注被排除：文件与文件夹都拒绝（提示先解除）
+    await assert.rejects(() => engine.noteSourceRegister(join(p.folderAbs, '日记.md')), /排除清单内/)
+    await assert.rejects(() => engine.noteSourceRegister(join(p.folderAbs, '存档')), /排除清单内/)
+
+    // 文件夹本身不在清单、但其下 .md 全部命中：报错点名排除清单，不是「没有 .md 笔记」
+    await mkdir(join(p.folderAbs, '私密'), { recursive: true })
+    await writeFile(join(p.folderAbs, '私密', '手记.md'), '# 手记\n\n内容。\n', 'utf8')
+    await engine.noteSourceExclude(join(p.folderAbs, '私密', '手记.md'))
+    await assert.rejects(() => engine.noteSourceRegister(join(p.folderAbs, '私密')), /全部命中排除清单/)
+
+    // 批量登记：排除子树整枝不下钻、排除文件不收，其余照常
+    // （skipped/skipped_paths 记被跳过的清单条目本身——目录级，不展开内部文件）
+    const reg = await engine.noteSourceRegister(p.folderAbs)
+    assert.equal(reg.registered, 2)
+    assert.equal(reg.skipped, 3)
+    assert.deepEqual(
+      [...(reg.skipped_paths ?? [])].sort(),
+      ['我的笔记/存档', '我的笔记/日记.md', '我的笔记/私密/手记.md'],
+    )
+    assert.ok((reg.sources as Array<Record<string, unknown>>).every(s => !String(s.path).includes('存档')))
+
+    // 解除后同路径可注册
+    await engine.noteSourceUnexclude('我的笔记/日记.md')
+    const re = await engine.noteSourceRegister(join(p.folderAbs, '日记.md'))
+    assert.equal(re.registered, 1)
+  })
+})
+
+test('排除清单只管未来注册：先注册后排除不摘源、卡照常出队；Missing 后重注册被拒（提示先解除）', async () => {
+  await withVault(async (engine, p) => {
+    await engine.noteSourceRegister(p.noteAbs)
+    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    const before = await readFile(p.noteAbs, 'utf8')
+    const today = todayStr()
+    await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
+      fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
+    })
+
+    // 源路径进排除清单：已注册源不摘除、状态 ok、到期卡照常出队（摘除走 unregister）
+    await engine.noteSourceExclude(p.noteAbs)
+    const q = await engine.reviewQueue()
+    assert.equal(q.cards.filter(c => c.source === 'note').length, 1)
+    const list = await engine.noteSourceList()
+    assert.equal((list.sources[0] as Record<string, unknown>).status, 'ok')
+
+    // 但 Missing 后不能再靠重注册恢复——排除清单拒绝，提示先解除
+    await rename(p.noteAbs, `${p.noteAbs}.bak`)
+    await assert.rejects(() => engine.noteSourceRegister(p.noteAbs), /排除清单内/)
+    await rename(`${p.noteAbs}.bak`, p.noteAbs)
+
+    // 排除动作全程不碰笔记文件（ADR-0010 零写入纪律）
+    assert.equal(await readFile(p.noteAbs, 'utf8'), before)
   })
 })
