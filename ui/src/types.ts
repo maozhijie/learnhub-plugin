@@ -1,158 +1,29 @@
-/** 引擎 API 返回形状（与 learnhub-plugin 引擎输出一一对应）。 */
+/** 面板类型：引擎读视图统一 re-export 自引擎侧命名类型（src/engine/views.ts，
+ * 引擎形状 = 事实源，消灭手工镜像漂移）；本文件只保留 UI 本地词汇与宿主侧形状。 */
+
+// ---- UI 本地词汇 ----
 
 export type Stage = 'unseen' | 'ready' | 'learning' | 'review' | 'mastered' | 'skipped'
 export type ContentStatus = 'draft' | 'reviewed' | 'flagged'
 
-export interface StatusCourse {
-  id: string
-  name: string
-  total: number
-  counts: { unseen: number; ready: number; learning: number; review: number; mastered: number; skipped: number }
-  due_today: number
-  overdue: Array<{ node: string; since: string; count: number; path: string | null }>
-  ready: Array<{ node: string; path: string | null }>
-  gated: Array<{ node: string; path: string | null }>
-  blocked: Record<string, string[]>
-}
+// ---- 引擎读视图（src/engine/views.ts 命名导出）----
 
-export interface StatusDoc { date: string; courses: StatusCourse[] }
+export type {
+  AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, DiagnosticEntry,
+  DifficultyAdviceDoc, DifficultyAdviceNode, DoctorDoc, EtaItem, GraphApplyResult, GraphBrowseDoc,
+  GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphPathResult, GraphProposeResult,
+  HistogramBin, LearnerArchiveResult, LearnerCardItem, LearnerCardKind, LearnerForgetResult,
+  LearnerQueueDoc, LearnerRateResult, LessonDoc, LessonSection, MemoryHealthDoc as MemoryHealth,
+  NoteSourceDoc, NoteSourceItem, NoteSourceRegisterResult, ProposalRec as PropItem,
+  QuestionForgetResult, QuestionGetDoc, QuestionItem, QuestionKind, QuestionRateResult,
+  QuestionsAllDoc, QuestionsDoc, QueueItem, RecEvent, RecEventType, RecommendDoc, ReviewCard,
+  ReviewQueueDoc, SectionManifest as SectionManifestItem, StatusCourse, StatusDoc, TooEasyAdvice,
+  TreeBlock, TreeCourse, TreeDoc, TreeRegion, TreeNode, XpStatus,
+} from '../../src/engine/views'
 
-export interface TreeNode {
-  node: string
-  opt: boolean
-  stage: Stage
-  mastery: number
-  contentVersion: number
-  contentStatus: ContentStatus
-  path: string | null
-  hasBank: boolean
-}
-export interface TreeBlock { name: string; nodes: TreeNode[] }
-export interface TreeRegion { name: string; color: string; blocks: TreeBlock[] }
-export interface TreeCourse { name: string; id: string; regions: TreeRegion[] }
-export interface TreeDoc { courses: TreeCourse[] }
+import type { LearnerCardKind } from '../../src/engine/views'
 
-/** graphAnalyze 输出：React Flow elements 格式（host 直接可喂 <ReactFlow>）。 */
-export interface GraphNodeData {
-  id: string
-  region: string
-  block: string
-  depth: number
-  stage: Stage
-  opt: boolean
-  /** 掌握度 0-1（派生值 = 0.7·完成卡稳定度完成度 + 0.3·练习 EMA，随复习增长、不因一次全对饱和）；底色深浅按它插值。 */
-  mastery?: number
-  /** practice = 交互实践节点（「练」角标）。 */
-  type?: string
-  /** 已生成可读正文（点开有东西读；列表/图三态标识数据源）。 */
-  hasContent?: boolean
-}
-export interface GraphEdgeData { id: string; source: string; target: string; kind: string }
-export interface GraphDoc {
-  stats?: Record<string, unknown>
-  unreachable?: string[]
-  bottlenecks?: string[]
-  lapse_hotspots?: string[]
-  nodes: Array<{ data: GraphNodeData }>
-  edges: Array<{ data: GraphEdgeData }>
-}
-
-export type RecEventType = 'new' | 'ready' | 'review' | 'overdue' | 'learning' | string
-/** A3 建议项（#54/#55）：软闸弱前置 / enc 成分技能的定向复习建议——
- * node 同课程内目标节点，r = 其当前可回忆度，due = 到期题数（w = enc 边权，可缺省）。 */
-export interface AdviceItem { node: string; w?: number; r: number; due: number }
-/** 内容诊断建议项（B1 #69：节级答错集中/单题反复失败的信号 + 重写直达动作）。 */
-export interface DiagnosticEntry {
-  section: string
-  sectionTitle: string
-  signal: 'R1' | 'R2'
-  escalate: boolean
-  reason: string
-  rewrite: { course: string; node: string; section: string }
-  explain: { course: string; node: string }
-}
-export interface RecEvent {
-  type: RecEventType
-  course: string
-  node: string
-  region?: string
-  score: number
-  why: string
-  path?: string | null
-  /** 已生成可读正文（点开有东西读；列表三态标识数据源）。 */
-  hasContent?: boolean
-  /** 「今天学它」pin 标识（E3 #67）：当日课程内置顶，次日自动失效。 */
-  pinned?: boolean
-  /** 内容诊断建议项（附着在学习事件上，或独立 diagnostic 事件）。 */
-  diagnostics?: DiagnosticEntry[]
-  /** A3 定向复习建议项（#54/#55）：软闸/enc 回退——先复习建议节点的到期题。 */
-  advice?: AdviceItem[]
-}
-export interface RecommendDoc { date: string; events: RecEvent[] }
-
-export type QuestionKind =
-  | 'single_choice' | 'fill_in_blank' | 'true_false' | 'reflection'
-  | 'multi_choice' | 'numeric' | 'ordering' | 'matching' | 'open_question'
-
-/** 作答列表条目（不含答案；带刷卡调度状态）。 */
-export interface QuestionItem {
-  id: string
-  kind: QuestionKind
-  q: string
-  no: number
-  difficulty: number
-  /** 绑定节：节清单 id（如 s2）优先，旧题为正文节标题或「通用」（null/缺省 = 通用收尾轮）。 */
-  section?: string | null
-  options?: string[]
-  /** matching 专属：右列候选（服务端打乱顺序，防按序泄题）。 */
-  pairOptions?: string[]
-  /** 题目级 FSRS 下次到期日（未进入调度的题 = null）。 */
-  due: string | null
-  attempts: number
-  lastCorrect: boolean | null
-}
-
-export interface BankEntry {
-  course: string
-  node: string
-  qid: string
-  no: number
-  kind: QuestionKind
-  q: string
-  difficulty: number
-  tags: string[]
-  archived: boolean
-  hasExplanation: boolean
-  /** 题目级 FSRS 调度（未进调度 = null）。lastReview 供到期列 hover 展示。 */
-  due: string | null
-  lastReview?: string | null
-  options?: string[]
-}
-
-export interface PropItem {
-  id: number
-  kind: 'gen' | 'edit'
-  course: string
-  status: 'pending' | 'applied' | 'rejected'
-  summary: string
-  artifact: string
-  created: string
-  decided?: string | null
-  decision_note?: string
-}
-
-/** 节清单条目（frontmatter content.sections；逐节生成管线的进度事实源）。 */
-export interface SectionManifestItem {
-  id: string
-  title: string
-  /** 节类型前缀（概念/例题/演示/类比/练习/交互…）。 */
-  type: string
-  status: 'pending' | 'ready'
-  version: number
-}
-
-/** 课程学习分节（lesson 响应；manifest 存在时带 id/type 供练习轮装配）。 */
-export interface LessonSection { title: string; md: string; id?: string; type?: string }
+// ---- 宿主侧形状（src/index.ts generation-jobs；非引擎门面读视图）----
 
 export interface GenJobItem {
   key: string
@@ -178,84 +49,7 @@ export interface GenStatusDoc {
   queuedCount: number
 }
 
-export interface QueueItem { course: string; node: string; kind: string; reason: string; priority: string }
-export interface DoctorDoc { problems: Array<{ level: string; message: string }> }
-
-/** 作答判卷结果（question-answer / question-forget；含该题新到期日与节点聚合掌握度）。
- * scheduled=false 表示该题今日已推进过调度，本次仅记录练习统计。
- * pendingRating=true（复习刷卡流答对挂起）时 previews 给出三档自评的下次到期预览。
- * xp/xp_reason = XP 时间账本结算（对=+权重×难度、乱猜=-1、同日重复=0）。 */
-export interface AnswerResult {
-  correct?: boolean | null
-  judge: string
-  feedback?: string
-  message?: string
-  answer?: string
-  explanation?: string
-  kind?: QuestionKind
-  due?: string | null
-  mastery?: number
-  scheduled?: boolean
-  pendingRating?: boolean
-  previews?: { hard: string; good: string; easy: string }
-  xp?: number
-  xp_reason?: 'correct' | 'wrong' | 'guess' | 'repeat'
-}
-
-/** 复习刷卡队列条目（跨课程到期题扁平队列；QuestionItem 的超集）。
- * d = 合用难度标量（静态题面难度 + FSRS difficulty，0-1；#57 会话内选档消费）。
- * jol = JOL 抽查命中（#66 E4）：翻面前弹一档三点预测，可忽略。 */
-export interface ReviewCard extends QuestionItem {
-  course: string
-  node: string
-  r?: number
-  d: number
-  jol?: boolean
-  /** 笔记源卡（C1 #59）：source='note'，title=笔记标题；course 恒为「笔记源」伪课程。 */
-  source?: 'note'
-  title?: string
-}
-export interface ReviewQueueDoc {
-  date: string
-  total: number
-  cards: ReviewCard[]
-  /** 单节点定向复习会话的起点难度带（节点 Mastery 先验 + 显式带偏移，#57/#65）。 */
-  band?: number
-  /** 笔记源状态（C1 #59）：漂移提示 / 挂起原因随全局队列带出。 */
-  note_drifted?: Array<{ id: string; path: string; hint: string }>
-  note_suspended?: Array<{ id: string; path: string; reason: string }>
-}
-
-/** 每课程 ETA（剩余节点 × 每节点 XP ÷ 每日目标）。 */
-export interface EtaItem { course: string; remaining: number; done: number; per_node: number; days: number }
-
-/** XP 时间账本视图（GET /xp）。 */
-export interface XpStatus {
-  date: string
-  today_xp: number
-  goal: number
-  streak: number
-  eta: EtaItem[]
-}
-
-/** 记忆健康仪表盘（GET /memory，#61 A2）。 */
-export interface HistogramBin { label: string; count: number }
-export interface MemoryHealth {
-  date: string
-  forecast: { horizon_days: number; overdue: number; per_day: Array<{ d: string; count: number }> }
-  state: {
-    scheduled: number
-    stability: HistogramBin[]
-    difficulty: HistogramBin[]
-    retrievability: HistogramBin[]
-  }
-  /** 真实保留率（True Retention）：只计 auto+self 的到期复习；real=0 时 rate 为 null（空态）。 */
-  retention: { pass: number; fail: number; rate: number | null; real: number }
-  calibration: Array<{ label: string; pred: number; actual: number | null; n: number }>
-  forgetting: Array<{ label: string; n: number; rate: number | null }>
-  /** 预测-校准（#66 E4）：学习者 JOL 预测 vs 实际——配对数足门槛才有值，null = 不显示。 */
-  jol?: { pairs: number; bins: Array<{ label: string; n: number; accuracy: number | null; forgot: number }> } | null
-}
+// ---- 引擎内联类型的轻量镜像（引擎侧已是命名返回，非 Record 裸返回；保持 UI 名）----
 
 /** JOL 抽查配置（GET/PUT /jol）。 */
 export interface JolConfig { enabled: boolean; rate: number }
@@ -263,69 +57,6 @@ export interface JolConfig { enabled: boolean; rate: number }
 /** 可用的困难教练（GET /coach，#65 E5）：只读信息性反馈。 */
 export interface CoachDoc { messages: string[]; due_hard: number }
 
-/** 「我的卡」卡面（E1 #70）：提示重述 / 挖空重述 / 自注讲解。 */
-export type LearnerCardKind = 'recall_cue' | 'cloze_rewrite' | 'self_explain'
-
-/** 「我的卡」条目（E1 独立域）：prompt = 正面提示，content = 学习者自己的表述（翻面对照）。 */
-export interface LearnerCardItem {
-  course: string
-  node: string
-  id: string
-  kind: LearnerCardKind
-  prompt: string
-  content: string
-  source_section: string | null
-  due: string | null
-  attempts: number
-}
-
-/** 「我的卡」E 池队列（到期在前、新卡随后；隔离自调度，一卡一天一次推进）。 */
-export interface LearnerQueueDoc {
-  date: string
-  total: number
-  due_count: number
-  cards: LearnerCardItem[]
-}
-
-/** 「加我的理解」（E1 #70）：写注当下的 AI 定位反馈结果（判词入 E 档案，零 canonical）。 */
-export interface UnderstandingResult {
-  course: string
-  node: string
-  card: { id: string; kind: LearnerCardKind; count: number }
-  verdict: { verdict: '对' | '部分对' | '错'; tags: string[]; advice?: string }
-  reply: string
-}
-
-/** 笔记源清单条目（C1 #59）：注册身份 × 指纹状态 × 卡池概况。 */
-export interface NoteSourceItem {
-  id: string
-  path: string
-  title?: string
-  enabled: boolean
-  created: string
-  /** ok 正常 / drifted 漂移（可重出或归档旧题）/ missing 缺失（重注册或解除）/ inconsistent 镜象不一致。 */
-  status: 'ok' | 'drifted' | 'missing' | 'inconsistent'
-  cards: number
-  due: number
-  hint?: string
-  broken?: boolean
-}
-export interface NoteSourceDoc { date: string; total: number; sources: NoteSourceItem[] }
-export interface NoteSourceRegisterResult {
-  date: string
-  registered: number
-  updated: number
-  skipped: number
-  sources: NoteSourceItem[]
-}
-
-/** Anki 通道状态（C2 #63，GET /anki/status）。 */
-export interface AnkiStatusDoc {
-  date: string
-  mirror: { entries: number; last_push: string | null; last_import: string | null; decks: string[] }
-  due: { total: number; by_deck: Array<{ deck: string; count: number }> }
-  anki?: { connected: boolean; error?: string }
-}
 /** 导出到 Anki（POST /anki/export）：vault 到期集校准/重建镜象卡组的结果。 */
 export interface AnkiExportResult { date: string; added: number; updated: number; removed: number; total: number; decks: string[] }
 /** Anki 回写导入（POST /anki/import）：原始作答证据按 vault 调度重算的结果。 */
@@ -349,13 +80,11 @@ export interface OptimizeResult {
   }
 }
 
-/** B2 难度建议（#58，GET /difficulty-advice）：节点级失衡/过于简单只读建议。 */
-export interface CalibrationAdvice { kind: 'difficulty_calibration'; reason: string; instruction: string }
-export interface TooEasyAdvice { kind: 'too_easy'; qid: string; attempts: number; reason: string }
-export interface DifficultyAdviceNode {
+/** 「加我的理解」（E1 #70）：写注当下的 AI 定位反馈结果（判词入 E 档案，零 canonical）。 */
+export interface UnderstandingResult {
   course: string
   node: string
-  calibration?: CalibrationAdvice
-  too_easy?: TooEasyAdvice[]
+  card: { id: string; kind: LearnerCardKind; count: number }
+  verdict: { verdict: '对' | '部分对' | '错'; tags: string[]; advice?: string }
+  reply: string
 }
-export interface DifficultyAdviceDoc { date: string; nodes: DifficultyAdviceNode[] }

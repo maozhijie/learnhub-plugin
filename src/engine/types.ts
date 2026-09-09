@@ -177,11 +177,3 @@ export interface ProposalRec {
   decided?: string | null
   decision_note?: string
 }
-
-/** 一门课程在引擎内的完整视图（一次加载，多处消费）。 */
-export interface CourseView {
-  course: CourseEntry
-  graph: import('./graph').Graph
-  state: Record<string, Fm>
-  broken: import('./notes').BrokenNote[]
-}

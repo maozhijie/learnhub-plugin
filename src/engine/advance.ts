@@ -17,7 +17,7 @@ import { applyRatingBlock, retrievabilityBlock } from './srs.ts'
 /** 任何自带 FSRS 隔离调度块的卡的最小投影：题卡 / 笔记源镜像卡 / 我的卡 / Anki 内存卡同构。 */
 export interface AdvanceCard {
   fsrs?: FsrsBlock | null
-  stats?: { last?: string } | null
+  stats?: { attempts?: number; correct?: number; last?: string } | null
 }
 
 /** 真实推进判定：当日已有真实互动（作答/忘记/自评结算/回填）。合成初始化不算。 */
@@ -66,10 +66,9 @@ export function advance(
   sched: FSRS, card: AdvanceCard, rating: 1 | 2 | 3 | 4, day: string,
   channel: AdvanceChannel = 'learner',
 ): AdvanceResult {
-  const stats = mergedStats(card, rating, day)
   const blocked = channel === 'anki' ? alreadyScheduledOn(card, day) : alreadyAdvanced(card, day)
-  if (blocked) return { advanced: false, reason: 'already-advanced', stats }
-  return { advanced: true, ...pushCard(sched, card, rating, day), stats }
+  if (blocked) return { advanced: false, reason: 'already-advanced', stats: mergedStats(card, rating, day) }
+  return { advanced: true, ...pushCard(sched, card, rating, day) }
 }
 
 /** 交互单发形态：guard 冲突即抛调用方给的文案（各入口的报错措辞是测试契约）。 */

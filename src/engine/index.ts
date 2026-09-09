@@ -64,6 +64,16 @@ import type { CourseEntry, EArchiveRec, Fm, FsrsBlock, GNode, NoteSourceEntry, R
 import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
 import type { DataCheckReport } from './data-check.ts'
+import type { ProposalRec } from './types.ts'
+import type {
+  AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DoctorDoc, GraphApplyResult, GraphBrowseDoc,
+  GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
+  GraphProposeResult, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
+  LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
+  NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
+  QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, StatusDoc, TreeDoc,
+  XpStatus,
+} from './views.ts'
 
 /** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
 function shuffled<T>(items: T[]): T[] {
@@ -217,7 +227,7 @@ export class LearnhubEngine {
     return dataCheck(this.paths)
   }
 
-  async statusJson(): Promise<Record<string, unknown>> {
+  async statusJson(): Promise<StatusDoc> {
     const [stats, diagnostics] = await Promise.all([this.bankSnapshot(), this.diagnosticsAdvice()])
     const doc = await this.sessions.statusJson(await this.enabledCourses(), stats)
     // 内容诊断建议项（#69 B1）：每课程附 diagnostics（信号/理由/证据 + 重写与讲解直达入口）
@@ -228,7 +238,7 @@ export class LearnhubEngine {
     return doc
   }
 
-  async recommend(limit = 5): Promise<Record<string, unknown>> {
+  async recommend(limit = 5): Promise<RecommendDoc> {
     const [stats, window, diagnostics, pins] = await Promise.all([
       this.bankSnapshot(), this.struggleWindow(), this.diagnosticsAdvice(), this.store.loadPins(),
     ])
@@ -392,7 +402,7 @@ export class LearnhubEngine {
 
   // ---- doctor（fm schema 对账） ----
 
-  async doctor(): Promise<Record<string, unknown>> {
+  async doctor(): Promise<DoctorDoc> {
     const courses = []
     for (const c of await this.enabledCourses()) {
       const { graph, state, broken } = await this.loadView(c)
@@ -433,7 +443,7 @@ export class LearnhubEngine {
 
   async graphAnalyze(
     courseKey?: string, elementsOnly = false, scaleTarget?: ScaleTarget | null,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<GraphDoc | GraphElementsDoc> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state } = await this.loadView(c)
     const doc = await analyzeGraph(c.name, graph, state, this.store, scaleTarget)
@@ -444,7 +454,7 @@ export class LearnhubEngine {
   // ---- 图探索（agent 逐步查询，不拉全图）----
 
   /** 单节点图详情：schema 字段值 + 直接邻域（succ）+ enc 边（含 note）+ 前置传递闭包。 */
-  async graphNode(courseKey: string | undefined, node: string): Promise<Record<string, unknown>> {
+  async graphNode(courseKey: string | undefined, node: string): Promise<GraphNodeDoc> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[graph-node] 节点「${node}」不在课程「${c.name}」的图内。`)
@@ -487,7 +497,7 @@ export class LearnhubEngine {
   }
 
   /** 区/块浏览：按区名/块名过滤的节点清单（探索某区域的结构与内容状态）。 */
-  async graphBrowse(courseKey: string | undefined, region?: string, block?: string): Promise<Record<string, unknown>> {
+  async graphBrowse(courseKey: string | undefined, region?: string, block?: string): Promise<GraphBrowseDoc> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     const blockNames = [...new Set(graph.regions.flatMap(r => r.blocks.map(b => b.name)))]
@@ -547,7 +557,7 @@ export class LearnhubEngine {
   }
 
   /** 前置路径查询：from 是否（以及经哪条链）是 to 的前置。 */
-  async graphPath(courseKey: string | undefined, from: string, to: string): Promise<Record<string, unknown>> {
+  async graphPath(courseKey: string | undefined, from: string, to: string): Promise<GraphPathResult> {
     const c = await this.registry.resolve(courseKey)
     const { graph } = await this.loadView(c)
     if (!graph.nset.has(from)) throw new Error(`[graph-path] from 节点「${from}」不在课程「${c.name}」的图内。`)
@@ -579,12 +589,12 @@ export class LearnhubEngine {
 
   // ---- 提案门禁包装（apply 前 audit 拦截） ----
 
-  async graphPropose(kind: 'gen' | 'edit', yamlText: string): Promise<Record<string, unknown>> {
+  async graphPropose(kind: 'gen' | 'edit', yamlText: string): Promise<GraphProposeResult> {
     if (kind !== 'gen' && kind !== 'edit') throw new Error(`[propose] 非法 kind: ${String(kind)}（只允许 gen/edit——拼错会被静默当成 gen 处理，已加防呆）`)
     return kind === 'edit' ? this.proposals.proposeEdit(yamlText) : this.proposals.proposeGen(yamlText)
   }
 
-  async graphApply(kind: 'gen' | 'edit', pid?: number): Promise<Record<string, unknown>> {
+  async graphApply(kind: 'gen' | 'edit', pid?: number): Promise<GraphApplyResult> {
     if (kind !== 'gen' && kind !== 'edit') throw new Error(`[apply] 非法 kind: ${String(kind)}（只允许 gen/edit）`)
     // audit 门禁：目标课程存在 ERROR 时拒绝 apply；warns 摘要 + 健康分随 findings 返回
     const pending = await this.store.takePending(kind, pid)
@@ -598,7 +608,7 @@ export class LearnhubEngine {
     return kind === 'edit' ? this.proposals.applyEdit(pid, audit) : this.proposals.applyGen(pid, audit)
   }
 
-  async graphReject(pid: number, note = ''): Promise<Record<string, unknown>> {
+  async graphReject(pid: number, note = ''): Promise<ProposalRec> {
     return this.proposals.reject(pid, note)
   }
 
@@ -609,7 +619,7 @@ export class LearnhubEngine {
    * 既有声明 enc 原样保留 + 补闭包内提升边，权重取调用强度）。可重入——已全覆盖节点不产生
    * op，重跑不会重复膨胀、不与已声明 enc 冲突；practice 节点维持合法空 enc 不动。
    * 提案走人审（ADR-0003 修订变更语义）：过审计后由 graphApply 生效，留痕可回溯。 */
-  async graphEncBackfill(courseKey?: string): Promise<Record<string, unknown>> {
+  async graphEncBackfill(courseKey?: string): Promise<GraphEncBackfillResult> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     assertNoBrokenNotes('enc-backfill', broken)
@@ -652,7 +662,7 @@ export class LearnhubEngine {
     }
   }
 
-  async graphProposals(status?: string, kind?: string): Promise<Record<string, unknown>[]> {
+  async graphProposals(status?: string, kind?: string): Promise<ProposalRec[]> {
     return this.proposals.list(status, kind)
   }
 
@@ -851,7 +861,7 @@ export class LearnhubEngine {
     return this.content.queueManual(c.root, node)
   }
 
-  async queueItemsAll(): Promise<Array<Record<string, unknown>>> {
+  async queueItemsAll(): Promise<QueueItem[]> {
     const out: Array<Record<string, unknown>> = []
     for (const c of await this.enabledCourses()) {
       for (const it of await this.content.queueItems(c.root)) {
@@ -861,7 +871,7 @@ export class LearnhubEngine {
     return out
   }
 
-  async lesson(courseKey: string | undefined, node: string): Promise<Record<string, unknown>> {
+  async lesson(courseKey: string | undefined, node: string): Promise<LessonDoc> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[lesson] 课程「${c.name}」中没有节点「${node}」。`)
@@ -921,7 +931,7 @@ export class LearnhubEngine {
   // ---- P4：课程工作区（树形）与题库 ----
 
   /** 课程工作区树：course → region → block → node（stage/mastery/笔记/题库状态）。 */
-  async coursesTree(courseKey?: string): Promise<Record<string, unknown>> {
+  async coursesTree(courseKey?: string): Promise<TreeDoc> {
     const targets = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const courses = []
     for (const c of targets) {
@@ -967,7 +977,7 @@ export class LearnhubEngine {
    * 笔记源卡（course=「笔记源」伪课程）同通道只读列出：漂移提示的「归档旧题」
    * 管理动作需要逐题清单（questionGet/questionArchive 同一伪课程路由约定）；
    * ADR-0010 v1 不套掌握度模型，响应不带 mastery。 */
-  async questions(courseKey: string | undefined, node: string): Promise<Record<string, unknown>> {
+  async questions(courseKey: string | undefined, node: string): Promise<QuestionsDoc> {
     if (await this.isNoteSourceCourse(courseKey)) {
       const bank = await this.bank.load(this.paths.noteSourceDir, node)
       return {
@@ -1007,7 +1017,7 @@ export class LearnhubEngine {
    * 节点不在范围内任何课程的图内时 fail loud——拼错的直达入口不该静默空队列。 */
   async reviewQueue(
     courseKey?: string, node?: string, today = todayStr(), bandPref?: BandPref,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<ReviewQueueDoc> {
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
     let nodeFound = false
@@ -1111,7 +1121,7 @@ export class LearnhubEngine {
     courseKey: string | undefined, node: string, qid: string, answer: string,
     elapsedS?: number | null,
     opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null },
-  ): Promise<Record<string, unknown>> {
+  ): Promise<AnswerResult> {
     // 笔记源卡路由（C1 #59）：course=「笔记源」伪课程（与真实课程重名时课程优先），
     // node = 源 id——同复习自评语义，但无节点证据/XP/practice 流水。
     if (await this.isNoteSourceCourse(courseKey)) {
@@ -1182,7 +1192,8 @@ export class LearnhubEngine {
       attempts: (q.stats?.attempts ?? 0) + 1,
       correct: (q.stats?.correct ?? 0) + (correct ? 1 : 0),
       last: today,
-      ...(pendingRating ? { pending_rating: true } : {}),
+      // 同日重复作答不丢今日已挂起的自评（ADR-0014：pending 态保持完整，rate 仍可达）
+      ...(pendingRating || (q.stats?.pending_rating && q.stats?.last === today) ? { pending_rating: true } : {}),
     }
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
     if (reviewRec) await this.store.appendReview({ course: c.name, node, qid, ...reviewRec })
@@ -1265,7 +1276,7 @@ export class LearnhubEngine {
    * 推完回刷节点聚合代表卡（refreshRepCard）。 */
   async questionRate(
     courseKey: string | undefined, node: string, qid: string, rating: number,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<QuestionRateResult> {
     const r = Math.round(rating)
     if (r < 2 || r > 4) throw new Error(`[question-rate] 自评档位只能是 2/3/4（收到 ${String(rating)}）。`)
     // 笔记源卡路由（C1 #59）：自评结算进镜像题库，无代表卡回刷（笔记源无节点）。
@@ -1303,7 +1314,7 @@ export class LearnhubEngine {
   async questionForget(
     courseKey: string | undefined, node: string, qid: string,
     elapsedS?: number | null, predicted?: JolPrediction | null,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<QuestionForgetResult> {
     // 笔记源卡路由（C1 #59）：忘记申报进镜像题库，无节点证据（笔记源无 frontmatter）。
     if (await this.isNoteSourceCourse(courseKey)) return this.noteSourceForget(node, qid)
     const { c, graph, q, idx } = await this.questionContext(courseKey, node, qid, 'question-forget')
@@ -1396,7 +1407,7 @@ export class LearnhubEngine {
    * 文件夹批量登记时逐文件归一；学习中心内部的 .md（如注册 vault 根）跳过不失败。 */
   async noteSourceRegister(
     input: string, today = todayStr(),
-  ): Promise<{ date: string; registered: number; updated: number; skipped: number; sources: Array<Record<string, unknown>> }> {
+  ): Promise<{ date: string; registered: number; updated: number; skipped: number; sources: NoteSourceItem[] }> {
     const rel0 = normalizeSourcePath(this.vaultRoot, this.paths.centerRoot, input)
     const files = await collectNoteFiles(`${this.vaultRoot}/${rel0}`)
     if (!files.length) throw new Error('[note-source] 该路径下没有 .md 笔记。')
@@ -1443,7 +1454,7 @@ export class LearnhubEngine {
   /** 笔记源清单：注册身份（注册表）× 指纹状态（源清单 + 现读文件）× 卡池概况。
    * 用户笔记永不判 Broken：文件缺失 = missing、指纹不符 = drifted、清单条目缺失 =
    * inconsistent（镜像不一致，data-check 同步报出），状态与提示随条目带出。 */
-  async noteSourceList(today = todayStr()): Promise<{ date: string; total: number; sources: Array<Record<string, unknown>> }> {
+  async noteSourceList(today = todayStr()): Promise<NoteSourceDoc> {
     const entries = await this.registry.loadNoteSources()
     const manifest = await this.noteManifest.load()
     const itemById = new Map(manifest.sources.map(s => [s.id, s]))
@@ -1676,6 +1687,8 @@ export class LearnhubEngine {
       attempts: (q.stats?.attempts ?? 0) + 1,
       correct: (q.stats?.correct ?? 0) + (correct ? 1 : 0),
       last: today,
+      // 同日重复作答不丢今日已挂起的自评（ADR-0014：pending 态保持完整）
+      ...(q.stats?.pending_rating && q.stats?.last === today ? { pending_rating: true } : {}),
     }
     if (repeated) {
       fs = q.fsrs ?? null
@@ -1921,7 +1934,7 @@ export class LearnhubEngine {
   }
 
   /** Anki 通道状态：镜象规模/最近推送与导入/当前到期分布 + AnkiConnect 可达性。 */
-  async ankiStatus(transport?: AnkiTransport, today = todayStr()): Promise<Record<string, unknown>> {
+  async ankiStatus(transport?: AnkiTransport, today = todayStr()): Promise<AnkiStatusDoc> {
     const mirror = await this.ankiMirror.load()
     const payloads = await this.collectAnkiDuePayloads(today)
     const byDeck = new Map<string, number>()
@@ -2072,7 +2085,7 @@ export class LearnhubEngine {
   /** XP 视图：今日 XP / streak / 每日目标 / 每课程 ETA。
    * ETA 预算制：剩余工作量 = Σ(未完成节点 N₀×k)——est 内容定价 × FSRS 难度校准，
    * 随作答证据积累自动校准；days = 剩余预算 ÷ 每日目标。 */
-  async xpStatus(): Promise<Record<string, unknown>> {
+  async xpStatus(): Promise<XpStatus> {
     const today = todayStr()
     const [practice, journal, activity, goal] = await Promise.all([
       this.store.practiceAll(),
@@ -2117,7 +2130,7 @@ export class LearnhubEngine {
    * 可回忆度直方图；R 复用 reviewQueue 的 retrievabilityBlock 口径按各课程参数现算）、
    * 真实保留率 + 预测对照 + 遗忘曲线（#60 review-log：只计 auto+self 的到期复习，
    * synthetic 与首学推进不计入）。无数据给空态（rate=null / 计数 0），不造假数据。 */
-  async memoryHealth(today = todayStr()): Promise<Record<string, unknown>> {
+  async memoryHealth(today = todayStr()): Promise<MemoryHealthDoc> {
     const dues: string[] = []
     const samples: Array<{ stability: number | null; difficulty: number | null; r: number }> = []
     for (const c of await this.enabledCourses()) {
@@ -2304,10 +2317,7 @@ export class LearnhubEngine {
   /** E 池到期队列：全部启用课程的「我的卡」，到期卡按 due 升序在前，从未调度的新卡
    * 随后（首推入口）。自评语义 = 先重述再翻面对照（Hard/Good/Easy + 忘记）；
    * 隔离自调度——不进全局复习队列、不产生 XP、不写复习日志（canonical 零掺入）。 */
-  async learnerQueue(courseKey?: string, today = todayStr()): Promise<{
-    date: string; total: number; due_count: number
-    cards: Array<Record<string, unknown>>
-  }> {
+  async learnerQueue(courseKey?: string, today = todayStr()): Promise<LearnerQueueDoc> {
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
     for (const c of courses) {
@@ -2365,7 +2375,7 @@ export class LearnhubEngine {
    * （stats.last 把守）。只动卡自身的隔离调度块，canonical/日志/XP 零写入。 */
   async learnerCardRate(
     courseKey: string | undefined, node: string, cardId: string, rating: number,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<LearnerRateResult> {
     const r = Math.round(rating)
     if (r < 2 || r > 4) throw new Error(`[learner-rate] 自评档位只能是 2/3/4（收到 ${String(rating)}）；忘记走 learner-forget。`)
     const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-rate')
@@ -2380,7 +2390,7 @@ export class LearnhubEngine {
   /** E 卡忘记申报（rating=1）：不作答直接翻面，一卡一天一次，0 XP 零 canonical。 */
   async learnerCardForget(
     courseKey: string | undefined, node: string, cardId: string,
-  ): Promise<Record<string, unknown>> {
+  ): Promise<LearnerForgetResult> {
     const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-forget')
     const today = todayStr()
     const pushed = advanceStrict(await this.sched(null), card, 1, today,
@@ -2442,7 +2452,7 @@ export class LearnhubEngine {
   /** 归档/恢复一张我的卡（管理面）：E 池内部动作，canonical 零写入。 */
   async learnerCardArchive(
     courseKey: string | undefined, node: string, cardId: string, archived: boolean,
-  ): Promise<{ course: string; node: string; id: string; archived: boolean }> {
+  ): Promise<LearnerArchiveResult> {
     const c = await this.registry.resolve(courseKey)
     await this.learnerCards.archiveCard(c.root, node, cardId, archived)
     return { course: c.name, node, id: cardId, archived }
@@ -2624,7 +2634,7 @@ export class LearnhubEngine {
   // ---- 学习面板扩展（题目管理/课程删除）----
 
   /** 全部题库条目（题目管理列表；不含答案，带到期与统计）。 */
-  async questionsAll(courseKey?: string): Promise<{ total: number; questions: Array<Record<string, unknown>> }> {
+  async questionsAll(courseKey?: string): Promise<QuestionsAllDoc> {
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.registry.enabled()
     const out: Array<Record<string, unknown>> = []
     for (const c of courses) {
@@ -2662,7 +2672,7 @@ export class LearnhubEngine {
    * 动作前消费。建议先行不自动改库——再生成走既有 question_generate/question_save
    * 与单节重写通道，归档走题目管理的独立归档操作；practice 节点无题库天然静默；
    * Broken 笔记 fail loud（与 status/recommend 同一门前置）。 */
-  async difficultyAdvice(courseKey?: string): Promise<{ date: string; nodes: Array<Record<string, unknown>> }> {
+  async difficultyAdvice(courseKey?: string): Promise<DifficultyAdviceDoc> {
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const nodes: Array<Record<string, unknown>> = []
     for (const c of courses) {
@@ -2705,7 +2715,7 @@ export class LearnhubEngine {
 
   /** 单题全量读取（含 answer/explanation）：修订/审题用——questionList 不带答案（作答流防泄题），改题前用这个看原题。
    * 笔记源卡（course=「笔记源」伪课程）同通道可读：漂移后审旧题用。 */
-  async questionGet(courseKey: string | undefined, node: string, qid: string): Promise<Record<string, unknown>> {
+  async questionGet(courseKey: string | undefined, node: string, qid: string): Promise<QuestionGetDoc> {
     if (await this.isNoteSourceCourse(courseKey)) {
       const bank = await this.bank.load(this.paths.noteSourceDir, node)
       const q = bank.questions.find(x => x.id === qid)
@@ -2904,7 +2914,7 @@ export class LearnhubEngine {
       await mkdir(this.paths.trashDir, { recursive: true })
       await rename(src, trash)
     }
-    this.schedCache.delete(c.root) // 课程参数随目录移除，缓存条目一并作废
+    this.schedCache.delete(this.paths.courseRoot(c.root)) // 缓存键是 courseRoot 路径，逐课失效须同键
     return { removed: c.name, trash }
   }
 

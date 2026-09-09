@@ -27,7 +27,8 @@ export type JolPick = '会' | '不会' | '没把握'
 
 export interface AnswerOutcome {
   correct: boolean | null
-  judge: string
+  /** 判卷标记：仅忘记申报响应携带 'forget'（作答响应不含 judge 字段）。 */
+  judge?: string
   feedback?: string
   /** 本次作答 XP 结算（answer 响应的 xp/xp_reason 透传）。 */
   xp?: number
@@ -39,13 +40,16 @@ export interface AnswerOutcome {
   previews?: { hard: string; good: string; easy: string }
 }
 
-/** 引擎作答/忘记响应 → 卡面结果（AnswerResult 的可选字段收窄为 Outcome 语义）。 */
-export function toOutcome(r: import('../types').AnswerResult): AnswerOutcome {
+/** 引擎作答/忘记响应 → 卡面结果（判卷字段仅忘记申报携带；可选字段收窄为 Outcome 语义）。 */
+export function toOutcome(r: import('../types').AnswerResult | import('../types').QuestionForgetResult): AnswerOutcome {
   return {
-    correct: r.correct ?? null, judge: r.judge, feedback: r.feedback,
-    xp: r.xp, xp_reason: r.xp_reason,
+    correct: r.correct ?? null,
+    judge: 'judge' in r ? r.judge : undefined,
+    feedback: r.feedback,
+    xp: r.xp, xp_reason: 'xp_reason' in r ? r.xp_reason : undefined,
     answer: r.answer, explanation: r.explanation,
-    pendingRating: r.pendingRating, previews: r.previews,
+    pendingRating: 'pendingRating' in r ? r.pendingRating : undefined,
+    previews: 'previews' in r ? r.previews : undefined,
   }
 }
 

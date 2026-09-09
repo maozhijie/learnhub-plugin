@@ -493,7 +493,7 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
       </Card>
 
       <Card size='small' title='课程状态总览' style={{ borderRadius: 10 }}>
-        <Table size='small' data={frame.status?.courses ?? []} rowKey={c => c.id} pagination={false}
+        <Table size='small' data={frame.status?.courses ?? []} rowKey={c => c.id ?? c.name} pagination={false}
           columns={[
             { title: '课程', dataIndex: 'name' },
             { title: '总节点', dataIndex: 'total', width: 80 },

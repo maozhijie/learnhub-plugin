@@ -56,10 +56,10 @@ export const api = {
         ...(opts?.predicted ? { predicted: opts.predicted } : {}) }),
   /** 复习刷卡流：答对后的自评结算（2=Hard 3=Good 4=Easy）。 */
   questionRate: (course: string, node: string, qid: string, rating: 2 | 3 | 4) =>
-    http<import('./types').AnswerResult>('POST', '/question-rate', { course, node, qid, rating }),
+    http<import('./types').QuestionRateResult>('POST', '/question-rate', { course, node, qid, rating }),
   /** 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）。predicted = 翻面前的 JOL 预测。 */
   questionForget: (course: string, node: string, qid: string, elapsedS?: number, predicted?: string) =>
-    http<import('./types').AnswerResult>('POST', '/question-forget', { course, node, qid, elapsed_s: elapsedS, ...(predicted ? { predicted } : {}) }),
+    http<import('./types').QuestionForgetResult>('POST', '/question-forget', { course, node, qid, elapsed_s: elapsedS, ...(predicted ? { predicted } : {}) }),
   /** 复习刷卡队列：跨课程到期题扁平队列；node 过滤 = 单节点定向复习（响应带 Mastery 先验带 band，#57）；
    * band = 显式难度带偏好（#65 E5）；卡片带 jol 抽查标记（#66 E4）。 */
   reviewQueue: (course?: string, node?: string, band?: 'easy' | 'standard' | 'hard') =>
@@ -101,17 +101,17 @@ export const api = {
     http<import('./types').LearnerQueueDoc>('GET', `/learner-queue${q({ course })}`),
   /** 「我的卡」自评结算（E1 #70）：一卡一天一次推进，隔离自调度。 */
   learnerRate: (course: string, node: string, card: string, rating: 2 | 3 | 4) =>
-    http<Record<string, unknown>>('POST', '/learner-rate', { course, node, card, rating }),
+    http<import('./types').LearnerRateResult>('POST', '/learner-rate', { course, node, card, rating }),
   /** 「我的卡」忘记申报（E1 #70）：rating=1 推卡，0 XP。 */
   learnerForget: (course: string, node: string, card: string) =>
-    http<Record<string, unknown>>('POST', '/learner-forget', { course, node, card }),
+    http<import('./types').LearnerForgetResult>('POST', '/learner-forget', { course, node, card }),
   /** 「加我的理解」（E1 #70）：写注当下 AI 对照该节要点给是非+定位反馈；判词入 E 档案 + 成卡。 */
   understandingAdd: (course: string, node: string, content: string, opts?: { kind?: string; prompt?: string; section?: string }) =>
     http<import('./types').UnderstandingResult>('POST', '/learner-add',
       { course, node, content, ...(opts?.kind ? { kind: opts.kind } : {}), ...(opts?.prompt ? { prompt: opts.prompt } : {}), ...(opts?.section ? { section: opts.section } : {}) }),
   /** 「我的卡」归档/恢复（E1 管理面）。 */
   learnerArchive: (course: string, node: string, card: string, archived: boolean) =>
-    http<Record<string, unknown>>('POST', '/learner-archive', { course, node, card, archived }),
+    http<import('./types').LearnerArchiveResult>('POST', '/learner-archive', { course, node, card, archived }),
   /** 笔记源清单（C1 #59）：注册身份 × Missing/漂移状态 × 卡池概况。 */
   noteSources: () => http<import('./types').NoteSourceDoc>('GET', '/note-sources'),
   /** 笔记源注册（C1 #59）：单篇 .md 或文件夹（批量登记其下全部 .md）。 */
@@ -159,7 +159,7 @@ export const api = {
   feedback: (path: string) => http<{ message: string }>('POST', '/feedback', { path }),
   proposals: () => http<import('./types').PropItem[]>('GET', '/proposals'),
   proposalApply: (kind: 'gen' | 'edit', id?: number) =>
-    http<Record<string, unknown>>('POST', '/proposals/apply', { kind, id }),
+    http<import('./types').GraphApplyResult>('POST', '/proposals/apply', { kind, id }),
   proposalReject: (id: number, note = '') => http<{ message: string }>('POST', '/proposals/reject', { id, note }),
   doctor: () => http<import('./types').DoctorDoc>('GET', '/doctor'),
   questionsAll: (course?: string) =>
