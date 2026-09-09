@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：76 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/Anki 互通）
+ * - agent 工具面：85 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -742,6 +742,32 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       sendJson(res, 200, await apiRun('api/coach', () => engine.coachAdvice()))
       return
     }
+    if (req.method === 'GET' && route === '/sleep') {
+      // D-4 睡眠耦合建议层开关（#85）：默认开
+      sendJson(res, 200, await apiRun('api/sleep', () => engine.sleepAdviceConfig()))
+      return
+    }
+    if (req.method === 'GET' && route === '/thermostat') {
+      // D-2 挑战点恒温器（#111 ADR-0024）：跨区观测聚合 + 只读建议（非自动控制器）
+      sendJson(res, 200, await apiRun('api/thermostat', () => engine.thermostatView()))
+      return
+    }
+    if (req.method === 'GET' && route === '/experiments') {
+      // D-1 N-of-1 实验（#110 ADR-0023）：模板库 + 实验清单 + 报告（无实验时 report=null）
+      sendJson(res, 200, await apiRun('api/experiments', async () => {
+        const experiments = await engine.experimentList()
+        let report = null
+        if (experiments.length) {
+          try {
+            report = await engine.experimentReport()
+          } catch {
+            report = null
+          }
+        }
+        return { templates: await engine.experimentTemplates(), experiments, report }
+      }))
+      return
+    }
     if (req.method === 'GET' && route === '/generate/status') {
       sendJson(res, 200, await apiRun('api/generate/status', () => generationStatus()))
       return
@@ -900,6 +926,42 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         const id = rejectId(body.id)
         await engine.graphReject(id, typeof body.note === 'string' ? body.note.trim() : '')
         sendJson(res, 200, { message: `[reject] 提案 #${id} 已拒绝留痕。` })
+        return
+      }
+      if (route === '/thermostat/apply') {
+        // D-2 恒温器建议的逐条显式确认（#111 ADR-0024）：只受理当前清单内 id
+        sendJson(res, 200, await apiRun('api/thermostat/apply', () =>
+          engine.thermostatApply(need(body, 'suggestion'))))
+        return
+      }
+      if (route === '/experiments/propose') {
+        // D-1 实验提案（#110）：模板发起 → pending 提案
+        const course = typeof body.course === 'string' && body.course.trim() ? body.course.trim() : undefined
+        sendJson(res, 200, await apiRun('api/experiments/propose', () =>
+          engine.experimentPropose(need(body, 'template'), course)))
+        return
+      }
+      if (route === '/experiments/apply') {
+        // D-1 实验确认开跑（#110 提案-确认制第二步）
+        sendJson(res, 200, await apiRun('api/experiments/apply', () =>
+          engine.experimentApply(applyId(body.id))))
+        return
+      }
+      if (route === '/experiments/stop') {
+        // D-1 实验手动停止（开停手动，ADR-0023）
+        const id = body.id === undefined || body.id === null ? undefined : applyId(body.id)
+        sendJson(res, 200, await apiRun('api/experiments/stop', () => engine.experimentStop(id)))
+        return
+      }
+      if (route === '/sandbox/run') {
+        // D-3 沙盘（#112 ADR-0025）：只读蒙特卡洛推演，零写侧
+        const minutes = Number(body.minutes_per_day)
+        if (!Number.isFinite(minutes)) throw new Error('missing required field: minutes_per_day')
+        const weeks = body.weeks === undefined ? undefined : Number(body.weeks)
+        const course = typeof body.course === 'string' && body.course.trim() ? body.course.trim() : undefined
+        const nodes = Array.isArray(body.nodes) ? body.nodes.filter((n): n is string => typeof n === 'string') : undefined
+        sendJson(res, 200, await apiRun('api/sandbox/run', () =>
+          engine.sandboxRun({ minutesPerDay: minutes, ...(weeks !== undefined && Number.isFinite(weeks) ? { weeks } : {}), ...(course ? { course } : {}), ...(nodes?.length ? { nodes } : {}) })))
         return
       }
       if (route === '/generate') {
@@ -1195,6 +1257,13 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         })))
         return
       }
+      if (route === '/sleep') {
+        // D-4 睡眠耦合建议层开关（#85）：enabled=false 全层静默
+        sendJson(res, 200, await apiRun('api/sleep', () => engine.setSleepAdviceConfig({
+          ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+        })))
+        return
+      }
       if (route === '/question-update') {
         const patch = typeof body.patch === 'object' && body.patch !== null
           ? body.patch as Record<string, unknown> : {}
@@ -1300,7 +1369,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { node: string; course: string }) => run('learnhub_lesson', async () => JSON.stringify(await engine.lesson(args.course, args.node))))
   tool('learnhub_recommend',
-    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle/diagnostic/pin) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events the learner pinned as「今天学它」carry pinned=true and lead their course for today only (tomorrow they fall back to the default order); a pinned node with no other event appears as a standalone pin event — a not-ready pinned node keeps its soft-gate hint but stays openable. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Events may also carry a `diagnostics` array (B1 content diagnostics, standalone events typed diagnostic): a section whose content keeps failing the learner (R1 single-question repeated lapses, or R2 answer accuracy <0.5 over ≥4 deduped answers since the section was last rewritten) with reason, evidence, and a rewrite direct action {course, node, section} — after the learner confirms, execute it with learnhub_section_rewrite (gated single-section rewrite; the question bank is untouched); the Arc D per-question explain entry lives in the panel\'s error state. Fetch the next batch after finishing one.',
+    'Get the dynamic cross-course recommendation queue as JSON: next events (review/learning/new/struggle/diagnostic/pin) ranked by priority (overdue reviews first by days overdue and retention decay, then half-finished lessons, then new lessons by unlock count and region rotation). Each event has type/course/node/score/why. Events the learner pinned as「今天学它」carry pinned=true and lead their course for today only (tomorrow they fall back to the default order); a pinned node with no other event appears as a standalone pin event — a not-ready pinned node keeps its soft-gate hint but stays openable. Events may carry an `advice` array of executable review suggestions {node, r, due, w?}: soft-gate advice on new lessons when a prerequisite\'s retention decayed below the R gate (review that prereq\'s due questions first — you may still learn the lesson directly), and remedial advice when a node keeps struggling (review its weighted component-skill ancestors first, ranked by w×(1−R); silent when the node has no enc edges or too few recent answers). Execute an advice item with learnhub_review_queue on {course, node: advice[].node}, then learnhub_question_answer. Events may also carry a `diagnostics` array (B1 content diagnostics, standalone events typed diagnostic): a section whose content keeps failing the learner (R1 single-question repeated lapses, or R2 answer accuracy <0.5 over ≥4 deduped answers since the section was last rewritten) with reason, evidence, and a rewrite direct action {course, node, section} — after the learner confirms, execute it with learnhub_section_rewrite (gated single-section rewrite; the question bank is untouched); the Arc D per-question explain entry lives in the panel\'s error state. Practice/interaction nodes (reconsolidation-typed, D-4) may appear as type:"sleep" events or carry a sleep field {text, rehearsal}: a「睡前练、醒后验」timing suggestion with an optional mental-rehearsal note (evidence-weighted wording) — surface it with the node, never treat it as a due change; the whole layer is switchable via learnhub_sleep_config. Fetch the next batch after finishing one.',
     { limit: { type: 'number', description: 'Max events to return (default 5)' } },
     (args: { limit?: number }) => run('learnhub_recommend', async () =>
       JSON.stringify(await engine.recommend(args.limit === undefined ? 5 : args.limit))))
@@ -1333,6 +1402,62 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'Get the「可用的困难」coach feedback (E5, read-only informational, no gates or scoring): checks the last 7 days of the learner\'s difficulty-band session choices and in-band performance. All-easy streak with due questions their FSRS state says they should know → a gentle nudge to try the standard band; consistent challenge-band struggle (accuracy below 0.6) → a pointer back to prerequisite/component-skill review. Low data stays silent. Surface messages verbatim when present; never force anything.',
     {},
     () => run('learnhub_coach', async () => JSON.stringify(await engine.coachAdvice())))
+  tool('learnhub_sleep_config',
+    'Get or set the sleep-coupled scheduling advice layer (D-4). When enabled (default), recommendations for reconsolidation-type nodes (practice/interaction nodes, e.g. instrument or sport practice) carry a「睡前练、醒后验」timing suggestion — practice briefly before sleep, verify retention right after waking (Walker 2002/2005) — plus an optional mental-rehearsal note (small effect r≈0.13, expectation-managed wording). Read-side advice only: it never changes scheduling semantics, due dates, mastery, or XP. Omit enabled to read the current config.',
+    { enabled: { type: 'boolean', description: 'true/false to turn the sleep advice layer on/off; omit to read current config' } },
+    (args: { enabled?: boolean }) => run('learnhub_sleep_config', async () =>
+      JSON.stringify(args.enabled === undefined
+        ? await engine.sleepAdviceConfig()
+        : await engine.setSleepAdviceConfig({ enabled: args.enabled }))))
+  tool('learnhub_experiment_templates',
+    'List the N-of-1 experiment template library (D-1, ADR-0023): preset self-experiments on engine-controlled content/design parameters only (scheduling core is NEVER an experiment variable). Each template carries id/title/question/arms/unit/description and an unlocked flag — unlocked=false templates are visible but cannot be started yet. Zero XP, never touches Mastery; arm labels go into the review log for attribution. Propose with learnhub_experiment_propose, the learner confirms, then learnhub_experiment_apply.',
+    {}, () => run('learnhub_experiment_templates', async () =>
+      JSON.stringify(await engine.experimentTemplates())))
+  tool('learnhub_experiment_propose',
+    'Propose an N-of-1 experiment from a preset template (D-1, proposal-confirmation flow, step 1): validates the template is unlocked and no experiment is running (v1 runs one at a time), previews the eligible card pool (scheduled, non-archived bank questions), and files a pending experiment proposal for the learner to confirm. Whitelist enforcement is structural: only template ids resolve; unknown ids and non-whitelist parameters fail loud. Never starts anything by itself.',
+    {
+      template: { type: 'string', required: true, description: 'Template id from learnhub_experiment_templates' },
+      course: { type: 'string', description: 'Scope the experiment to one course; omit for all enabled courses' },
+    },
+    (args: { template: string; course?: string }) => run('learnhub_experiment_propose', async () =>
+      JSON.stringify(await engine.experimentPropose(args.template, args.course))))
+  tool('learnhub_experiment_apply',
+    'Confirm and start a pending N-of-1 experiment proposal (D-1, proposal-confirmation flow, step 2): re-validates the artifact against the template whitelist, builds the assignment (batch templates alternate arms by learning day starting today; card-level templates get a seeded deterministic split), writes the experiment definition, and reports today\'s arm. Fails loud if another experiment is already running or the artifact fails re-validation.',
+    { id: { type: 'number', description: 'Proposal id; omit for the newest pending experiment proposal' } },
+    (args: { id?: number }) => run('learnhub_experiment_apply', async () =>
+      JSON.stringify(await engine.experimentApply(applyId(args.id)))))
+  tool('learnhub_experiment_stop',
+    'Stop a running N-of-1 experiment (start/stop is always manual, ADR-0023): annotations cease, the report becomes final. Omit id to stop the currently running experiment.',
+    { id: { type: 'number', description: 'Experiment id; omit for the running one' } },
+    (args: { id?: number }) => run('learnhub_experiment_stop', async () =>
+      JSON.stringify(await engine.experimentStop(args.id))))
+  tool('learnhub_experiment_report',
+    'Get the plain-language N-of-1 report (D-1, ADR-0023): arm-by-arm true retention, arm difference, 95% bootstrap interval, and a permutation test — phrased as an individual effect, never a population claim. Below the minimum observation window (per-arm real-advance minimum) it reports progress only and refuses to judge. running = interim reading; stopped = final.',
+    { id: { type: 'number', description: 'Experiment id; omit for the running (or latest) one' } },
+    (args: { id?: number }) => run('learnhub_experiment_report', async () =>
+      JSON.stringify(await engine.experimentReport(args.id))))
+  tool('learnhub_thermostat',
+    'Get the challenge-point thermostat dashboard (D-2, ADR-0024): cross-region observation aggregate + READ-ONLY suggestions — the thermostat is NOT an auto-controller. Course region: true-retention band + long-term difficulty-band choice distribution. Unbounded region: execution-event rating distribution (empty until the U-area execution channel lands). Project region: deferred to P-7, tier list only. Three knobs max (A1 target difficulty-band default, retrieval-point density [not yet available], fading-tier move aggregation); at most three suggestions, low-data-silent. To ACT on a suggestion, show it to the learner and after their explicit confirmation call learnhub_thermostat_apply with the suggestion id — never apply without confirmation; there is no engine-side auto adjustment.',
+    {},
+    () => run('learnhub_thermostat', async () => JSON.stringify(await engine.thermostatView())))
+  tool('learnhub_thermostat_apply',
+    'Apply ONE thermostat suggestion AFTER the learner explicitly confirms it (D-2, ADR-0024): only ids currently offered by learnhub_thermostat are accepted (stale or invented ids fail loud) — this is the single confirmation gate. Confirmed band-default suggestions write the A1 default difficulty band via the existing config entry; the learner\'s explicit per-session band choice still overrides it.',
+    { suggestion: { type: 'string', required: true, description: 'Suggestion id exactly as offered by learnhub_thermostat (e.g. band_default:standard)' } },
+    (args: { suggestion: string }) => run('learnhub_thermostat_apply', async () =>
+      JSON.stringify(await engine.thermostatApply(args.suggestion))))
+  tool('learnhub_sandbox',
+    'Run the plan sandbox (D-3, ADR-0025): Monte-Carlo projection of the learner\'s study plan using the SAME FSRS+mastery models as the scheduler (~200 seeded runs). Input = daily minutes goal x horizon in weeks (default 6) x intended course/nodes. Output = end-of-horizon mastery map (per node p50/p80) + total-mastery curve with 50/80 percentile bands + the honest assumption list (1 min per review, practice evidence frozen, new nodes introduced in course order). READ-ONLY: zero canonical writes, no gating, no scheduling side effects. The wording is locked to「模型推演，非承诺」— present the distribution as a distribution, never as a promise, and never as a feasibility verdict; the learner negotiates their own plan with it.',
+    {
+      minutes_per_day: { type: 'number', required: true, description: 'Daily learning-minutes goal of the plan' },
+      weeks: { type: 'number', description: 'Horizon in weeks (default 6, max 26)' },
+      course: { type: 'string', description: 'Scope to one course; omit for all enabled courses' },
+      nodes: { type: 'array', items: { type: 'string' }, description: 'Intended node subset; omit for whole course(s)' },
+    },
+    (args: { minutes_per_day: number; weeks?: number; course?: string; nodes?: string[] }) =>
+      run('learnhub_sandbox', async () =>
+        JSON.stringify(await engine.sandboxRun({
+          minutesPerDay: args.minutes_per_day, weeks: args.weeks, course: args.course, nodes: args.nodes,
+        }))))
   tool('learnhub_rebuild',
     'Run audit gate + ready-list regeneration for all enabled courses, or one course.',
     { course: { type: 'string', description: 'Course name; omit to rebuild all enabled courses' } },
@@ -1855,7 +1980,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       source: { type: 'string', required: true, description: 'auto (evidence-mapped) / self / ai' },
       minutes: { type: 'number', required: true, description: 'Focused minutes of this execution (1-1440); credited as XP 1:1' },
       rating: { type: 'number', description: 'Performance rating 1-4 (required unless source=auto)' },
-      evidence: { type: 'object', description: 'source=auto only: {accuracy: 0-1, self_help?: count}' },
+      evidence: { type: 'object', additionalProperties: true, description: 'source=auto only: {accuracy: 0-1, self_help?: count}' },
       note: { type: 'string', description: 'Free note (e.g. what was practiced, receipt reference)' },
     },
     (args: { skill: string; source: string; minutes: number; rating?: number; evidence?: { accuracy?: number; self_help?: number }; note?: string }) =>
@@ -1986,7 +2111,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 76 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${VAULT}, center=${VAULT}/${CENTER_REL}, 85 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void engine.statusJson()

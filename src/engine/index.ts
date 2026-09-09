@@ -23,6 +23,13 @@ import { bandOffset, combinedDifficulty, startBand, sessionOrder } from './adapt
 import type { BandPref } from './adaptive.ts'
 import { JOL_PREDICTIONS, JOL_SAMPLE_RATE, jolCalibration, jolDeviatedKeys, pickJolTargets } from './jol.ts'
 import type { JolPrediction } from './jol.ts'
+import { DEFAULT_SLEEP_ADVICE, normalizeSleepAdvice } from './sleep.ts'
+import { NOF1_TEMPLATES, NOF1_PER_ARM_MIN, NOF1_VARIABLE_WHITELIST, nof1Template, nof1ArmForDay, nof1Outcomes, analyzeNof1, shuffleAssign, interleaveBySource, mulberry32 } from './nof1.ts'
+import type { Nof1Template, Nof1Variable, ExperimentDef, Nof1Analysis } from './nof1.ts'
+import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from './thermostat.ts'
+import type { ThermostatDoc, ThermostatSuggestion } from './thermostat.ts'
+import { SANDBOX_RUNS, SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING, simulateRun, aggregateRuns } from './sandbox.ts'
+import type { SandboxDoc, SandboxCard, SandboxNode, SandboxPlan } from './sandbox.ts'
 import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, withinCoachWindow } from './coach.ts'
 import type { BandRec } from './coach.ts'
 import { calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
@@ -81,7 +88,8 @@ import type { DataCheckReport } from './data-check.ts'
 import type { ProposalRec } from './types.ts'
 import { PROPOSAL_KINDS } from './types.ts'
 import type {
-  AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DoctorDoc, GraphApplyResult, GraphBrowseDoc,
+  AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DoctorDoc, ExperimentProposeResult,
+  ExperimentStartResult, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
   GraphProposeResult, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
   LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
@@ -270,10 +278,11 @@ export class LearnhubEngine {
 
   async recommend(limit = 5): Promise<RecommendDoc> {
     const { today } = await this.learningDay()
-    const [stats, window, diagnostics, pins] = await Promise.all([
+    const [stats, window, diagnostics, pins, sleep] = await Promise.all([
       this.bankSnapshot(today), this.struggleWindow(today), this.diagnosticsAdvice(today), this.store.loadPins(),
+      this.sleepAdviceConfig(),
     ])
-    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, today, limit, window, diagnostics, pins)
+    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, today, limit, window, diagnostics, pins, sleep.enabled)
     return { date: today, events }
   }
 
@@ -698,10 +707,13 @@ export class LearnhubEngine {
     return this.proposals.list(status, kind)
   }
 
-  /** 提案统一 apply 入口（图谱域 + 项目域；面板 /proposals/apply 消费）。
+  /** 提案统一 apply 入口（图谱域 + 项目域 + 实验域；面板 /proposals/apply 消费）。
    * kind 显式照抄提案记录——未知 kind 报错，绝不静默归一成 gen。图谱域走 audit 门禁，
    * 项目域无图审计（takePending 各自在 apply 内做）。 */
-  async proposalApply(kind: string, pid?: number): Promise<GraphApplyResult | ProjectApplyResult> {
+  async proposalApply(
+    kind: string, pid?: number,
+  ): Promise<GraphApplyResult | ProjectApplyResult | ExperimentStartResult> {
+    if (kind === 'experiment') return this.experimentApply(pid)
     if (kind === 'project_plan' || kind === 'project_milestone') {
       return kind === 'project_plan' ? this.projects.applyPlan(pid) : this.projects.applyMilestone(pid)
     }
@@ -1519,6 +1531,11 @@ export class LearnhubEngine {
     courseKey?: string, node?: string, today?: string, bandPref?: BandPref,
   ): Promise<ReviewQueueDoc> {
     today ??= (await this.learningDay()).today
+    // N-of-1 实验当日生效臂（#110 ADR-0023，批次交替）：band_default 在未显式选带时
+    // 决定默认带；session_composition 决定全局队列呈现顺序。显式学习者选择优先。
+    const expEffect = await this.nof1QueueEffect(today)
+    // A1 目标难度带默认值（#111 恒温器旋钮；配置层缺省 = 纯 A1）。
+    const defaultBand = await this.bandDefault()
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: Array<Record<string, unknown>> = []
     let nodeFound = false
@@ -1619,7 +1636,10 @@ export class LearnhubEngine {
     // → 目标难度带，再叠加显式带偏移（挑战抬高/简单放宽）；初始顺序按距先验带
     // 距离升序（会话内流式调整由会话方以纯规则驱动）。
     if (node !== undefined) {
-      const band = Math.min(1, Math.max(0, startBand(mastery) + bandOffset(bandPref)))
+      const band = Math.min(1, Math.max(0,
+        startBand(mastery) + bandOffset(bandPref
+          ?? (expEffect?.variable === 'band_default' ? expEffect.arm as BandPref : undefined)
+          ?? defaultBand)))
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
         cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band) }
     }
@@ -1639,7 +1659,13 @@ export class LearnhubEngine {
       || String(a.due).localeCompare(String(b.due))
       || String(a.node).localeCompare(String(b.node))
       || String(a.id).localeCompare(String(b.id)))
-    return { date: today, total: cards.length, cards,
+    // 会组成实验「混排」臂（#110 ADR-0023）：把我的卡/笔记源卡均匀摊进题卡序列；
+    // 「分面」臂 = 现行排序原样。只改呈现顺序，不改到期与调度。
+    const ordered = expEffect?.variable === 'session_composition' && expEffect.arm === 'mixed'
+      ? interleaveBySource(cards)
+      : cards
+    return { date: today, total: cards.length, cards: ordered,
+      ...(expEffect ? { exp: { id: expEffect.id, arm: expEffect.arm } } : {}),
       ...(noteSources.drifted.length ? { note_drifted: noteSources.drifted } : {}),
       ...(noteSources.suspended.length ? { note_suspended: noteSources.suspended } : {}) }
   }
@@ -1737,7 +1763,11 @@ export class LearnhubEngine {
       ...(pendingRating || (q.stats?.pending_rating && q.stats?.last === today) ? { pending_rating: true } : {}),
     }
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: fs, stats })
-    if (reviewRec) await this.store.appendReview({ course: c.name, node, qid, ...reviewRec })
+    if (reviewRec) {
+      // N-of-1 臂标注（#110 ADR-0023）：真实推进发生时的实验归因，只添字段不改推进
+      const exp = await this.expTag(c.name, node, qid, today)
+      await this.store.appendReview({ course: c.name, node, qid, ...reviewRec, ...(exp ? { exp } : {}) })
+    }
     // 代表卡回刷（ADR-0007 前提）：只有真实推进才重算——挂起/同日重复没动卡，代表卡不变。
     // mastery 从回刷后的 frontmatter 派生，稳定度分量才随复习前进。
     const fmNow = advanced ? await this.refreshRepCard(c, graph, node) : next
@@ -1834,9 +1864,11 @@ export class LearnhubEngine {
     const pushed = advancePending(sched, q, r as 1 | 2 | 3 | 4, today)
     const { pending_rating: _drop, ...statsRest } = q.stats
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: pushed.fs, stats: { ...statsRest } })
+    const rateExp = await this.expTag(c.name, node, qid, today)
     await this.store.appendReview({
       course: c.name, node, qid,
       rating: r as ReviewRec['rating'], rating_source: 'self', ...pushed.log,
+      ...(rateExp ? { exp: rateExp } : {}),
     })
     // 自评落盘后回刷代表卡；mastery 与全端同口径（口径 B 派生），自评本身不额外改证据
     const fmNow = await this.refreshRepCard(c, graph, node)
@@ -1887,9 +1919,11 @@ export class LearnhubEngine {
       }
     }
     await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { fsrs: pushed.fs, stats: pushed.stats })
+    const forgetExp = await this.expTag(c.name, node, qid, today)
     await this.store.appendReview({
       course: c.name, node, qid,
       rating: 1, rating_source: 'auto', ...pushed.log,
+      ...(forgetExp ? { exp: forgetExp } : {}),
     })
     // 忘记把被忘卡的 due 拉到最近 → 代表卡拉回（最早 due 换成它）→ mastery 回落
     const fmNow = await this.refreshRepCard(c, graph, node)
@@ -2812,6 +2846,346 @@ export class LearnhubEngine {
     return next
   }
 
+  // ---- D1 N-of-1 实验引擎（#110 / ADR-0023：提案-确认制、白名单、批次交替/卡级分臂）----
+
+  /** 实验模板库（含未解锁项——可见不可发起；白名单外参数结构上无法配置：propose
+   * 只收模板 id，模板只从白名单登记）。 */
+  async experimentTemplates(): Promise<Nof1Template[]> {
+    return NOF1_TEMPLATES
+  }
+
+  async experimentList(): Promise<ExperimentDef[]> {
+    return this.store.loadExperiments()
+  }
+
+  /** 当前在跑的实验（v1 一次一个；开停手动）。 */
+  private async nof1Active(): Promise<ExperimentDef | null> {
+    const list = await this.store.loadExperiments()
+    return list.find(e => e.status === 'running') ?? null
+  }
+
+  /** 实验对复习队列的当日生效臂（批次交替，ADR-0023 裁决 2）。 */
+  private async nof1QueueEffect(
+    today: string,
+  ): Promise<{ id: number; variable: Nof1Variable; arm: string } | null> {
+    const exp = await this.nof1Active()
+    if (!exp || exp.assignment.kind !== 'batch') return null
+    return { id: exp.id, variable: exp.variable, arm: nof1ArmForDay(exp, today) }
+  }
+
+  /** 推进落复习日志时的臂标注（ADR-0023 裁决 5）：batch = 当日臂（范围内课程）；
+   * card = 卡级分臂 map。只是归因留痕——不改变推进、XP、Mastery；优化器混训不特判。 */
+  private async expTag(
+    courseName: string, node: string, qid: string, today: string,
+  ): Promise<{ id: number; arm: string } | null> {
+    const exp = await this.nof1Active()
+    if (!exp) return null
+    if (exp.scope_course && exp.scope_course !== courseName) return null
+    if (exp.assignment.kind === 'card') {
+      const arm = exp.assignment.map[`${courseName}/${node}/${qid}`]
+      return arm ? { id: exp.id, arm } : null
+    }
+    return { id: exp.id, arm: nof1ArmForDay(exp, today) }
+  }
+
+  /** 合格卡池（已调度未归档题卡，范围过滤）：卡级随机化的分臂对象与提案预览口径。 */
+  private async nof1PoolKeys(scopeCourse: string | null): Promise<string[]> {
+    const keys: string[] = []
+    for (const c of await this.enabledCourses()) {
+      if (scopeCourse && c.name !== scopeCourse) continue
+      await this.scanCourseBanks(c, async (node, bank) => {
+        for (const q of bank.questions) {
+          if (!q.archived && q.fsrs?.reps) keys.push(`${c.name}/${node}/${q.id}`)
+        }
+      })
+    }
+    return keys
+  }
+
+  /** 提案-确认制第一步：模板发起 → pending experiment 提案（参数与合格卡池随提案
+   * 给学习者过目）。白名单外/未解锁模板 fail loud；已有实验在跑拒绝（v1 单实验）。 */
+  async experimentPropose(
+    templateId: string, course?: string,
+  ): Promise<{ proposal: number; template: string; title: string; pool: number; scope_course: string | null }> {
+    const tpl = nof1Template(templateId)
+    if (!tpl) {
+      throw new Error(`[nof1] 没有模板「${templateId}」（可用：${NOF1_TEMPLATES.map(t => t.id).join('、')}）。白名单外参数无法配置为实验变量（ADR-0023）。`)
+    }
+    if (!tpl.unlocked) {
+      throw new Error(`[nof1] 模板「${tpl.title}」未解锁：${tpl.unlock_note ?? '参数未上线'}。`)
+    }
+    if (course) await this.registry.resolve(course)
+    const running = await this.nof1Active()
+    if (running) {
+      throw new Error(`[nof1] 实验 #${running.id}（${running.title}）还在跑——v1 一次一个实验，先 learnhub_experiment_stop 再开新的。`)
+    }
+    const pool = (await this.nof1PoolKeys(course ?? null)).length
+    const armText = tpl.arms.map(a => tpl.arm_labels[a] ?? a).join(' / ')
+    const summary = `${tpl.title}（N-of-1 提案）：主结局=真实保留率；臂 ${armText}；${tpl.unit === 'batch' ? '按学习日轮臂（批次交替）' : '卡级随机分臂'}；合格卡池 ${pool} 张；最短观察窗每臂 ${NOF1_PER_ARM_MIN} 次真实推进。确认后开跑。`
+    const doc = {
+      template: tpl.id, variable: tpl.variable, title: tpl.title, question: tpl.question,
+      outcome: tpl.outcome, arms: tpl.arms, arm_labels: tpl.arm_labels, unit: tpl.unit,
+      scope_course: course ?? null, per_arm_min: NOF1_PER_ARM_MIN, pool,
+    }
+    const scope = course ?? '全部课程'
+    const pid = await this.store.createProposal('experiment', scope, summary, '')
+    const path = this.paths.proposalArtifactPath(pid, 'experiment', scope)
+    await mkdir(this.paths.proposalDir, { recursive: true })
+    await writeFile(path, YAML.stringify(doc), 'utf8')
+    await this.store.updateProposal(pid, { artifact: path })
+    return { proposal: pid, template: tpl.id, title: tpl.title, pool, scope_course: course ?? null }
+  }
+
+  /** 确认开跑（提案 apply）：重新校验产物 → 生成实验定义与分臂（batch 起始日=今天；
+   * card 播种自提案 id 的确定性均分）→ 写 state/实验.json。提案产物失效 fail loud。 */
+  async experimentApply(pid?: number): Promise<{ id: number; title: string; arm_today: string }> {
+    const prop = await this.store.takePending('experiment', pid)
+    if (await this.nof1Active()) {
+      throw new Error(`[nof1-apply] 已有实验在跑——v1 一次一个，先 stop 再开。`)
+    }
+    let doc: {
+      template?: string; variable?: string; title?: string; question?: string
+      outcome?: string; arms?: string[]; arm_labels?: Record<string, string>
+      unit?: string; scope_course?: string | null; per_arm_min?: number
+    }
+    try {
+      doc = YAML.parse(await readFile(prop.artifact, 'utf8')) as typeof doc
+    } catch (err) {
+      throw new Error(`[nof1-apply] 提案产物无法解析（${prop.artifact}）：${err instanceof Error ? err.message : String(err)}`)
+    }
+    const tpl = doc.template ? nof1Template(doc.template) : null
+    if (!tpl || tpl.variable !== doc.variable || !NOF1_VARIABLE_WHITELIST.includes(doc.variable as Nof1Variable)
+      || (doc.outcome !== 'true_retention' && doc.outcome !== 'practice_ema')
+      || doc.unit !== tpl.unit
+      || !Array.isArray(doc.arms) || doc.arms.length !== 2 || doc.arms[0] !== tpl.arms[0] || doc.arms[1] !== tpl.arms[1]
+      || !doc.title) {
+      throw new Error(`[nof1-apply] 提案产物与模板不一致或白名单校验失败（template=${String(doc.template)} variable=${String(doc.variable)}）。`)
+    }
+    const { today } = await this.learningDay()
+    const list = await this.store.loadExperiments()
+    const def: ExperimentDef = {
+      id: list.reduce((m, e) => Math.max(m, e.id), 0) + 1,
+      template: tpl.id, variable: tpl.variable, title: doc.title,
+      question: doc.question ?? tpl.question,
+      outcome: 'true_retention',
+      arms: [doc.arms[0]!, doc.arms[1]!], arm_labels: doc.arm_labels ?? tpl.arm_labels,
+      unit: tpl.unit, scope_course: doc.scope_course ?? null,
+      assignment: tpl.unit === 'card'
+        ? { kind: 'card', map: shuffleAssign(await this.nof1PoolKeys(doc.scope_course ?? null), doc.arms, mulberry32(1000 + prop.id)) }
+        : { kind: 'batch', start_day: today, order: [doc.arms[0]!, doc.arms[1]!] },
+      per_arm_min: doc.per_arm_min ?? NOF1_PER_ARM_MIN,
+      started_day: today, started_ts: nowIso(), status: 'running', proposal: prop.id,
+    }
+    list.push(def)
+    await this.store.saveExperiments(list)
+    await this.store.updateProposal(prop.id, {
+      status: 'applied', decided: new Date().toISOString(),
+      decision_note: `实验 #${def.id} 开跑（今日臂 ${nof1ArmForDay(def, today)}）`,
+    })
+    return { id: def.id, title: def.title, arm_today: nof1ArmForDay(def, today) }
+  }
+
+  /** 手动停（ADR-0023：实验开停手动）。停后不再标注、报告定稿。 */
+  async experimentStop(id?: number): Promise<ExperimentDef> {
+    const list = await this.store.loadExperiments()
+    const hit = id !== undefined ? list.find(e => e.id === id) : list.find(e => e.status === 'running')
+    if (!hit) throw new Error(`[nof1-stop] 没有可停的实验${id !== undefined ? `（实验 #${id} 不存在）` : ''}。`)
+    if (hit.status !== 'running') throw new Error(`[nof1-stop] 实验 #${hit.id} 已是 ${hit.status}。`)
+    const { today } = await this.learningDay()
+    hit.status = 'stopped'
+    hit.stopped_day = today
+    await this.store.saveExperiments(list)
+    return hit
+  }
+
+  /** 直白话报告（臂间比较+置换检验+效应量区间；ADR-0023 裁决 3）。未达最短观察窗
+   * 只报进度不做效应判断；running = 期中读数，stopped = 定稿。练习侧结局（EMA）
+   * 随 #88/#89 练习证据通道解锁，登记在案但 v1 分析器只支持调度侧二元结局。 */
+  async experimentReport(id?: number): Promise<{ experiment: ExperimentDef; analysis: Nof1Analysis }> {
+    const list = await this.store.loadExperiments()
+    const hit = id !== undefined
+      ? list.find(e => e.id === id)
+      : list.find(e => e.status === 'running') ?? list[list.length - 1]
+    if (!hit) throw new Error('[nof1-report] 还没有实验——先从模板库发起（learnhub_experiment_propose）。')
+    if (hit.outcome !== 'true_retention') {
+      return {
+        experiment: hit,
+        analysis: {
+          ready: false, per_arm: [], need_per_arm: hit.per_arm_min,
+          diff: null, ci95: null, p: null,
+          message: '该实验预登记的练习侧结局（EMA）随回执/执行事件通道（#88/#89）解锁后才能分析；臂标注已在积累。',
+        },
+      }
+    }
+    const recs = nof1Outcomes(await this.store.reviewLogAll(), hit.id)
+    const analysis = analyzeNof1(recs, hit, 9000 + hit.id)
+    return { experiment: hit, analysis }
+  }
+
+  // ---- D2 挑战点恒温器（#111 / ADR-0024：跨区观测聚合 + 只读建议，非自动控制器）----
+
+  /** A1 目标难度带默认值（state/learnhub.json 的 band_default；null = 纯 A1 自动）。
+   * 消费链：会话显式选带 > 实验当日臂 > 此默认值 > 纯 A1。 */
+  async bandDefault(): Promise<BandPref | null> {
+    try {
+      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
+        band_default?: string
+      }
+      return ['easy', 'standard', 'hard'].includes(doc.band_default ?? '')
+        ? doc.band_default as BandPref : null
+    } catch {
+      return null
+    }
+  }
+
+  /** 写默认带（既有配置入口——恒温器建议显式确认后落到这里；null = 清除回纯 A1）。 */
+  async setBandDefault(band: string | null): Promise<{ band_default: BandPref | null }> {
+    if (band !== null && !['easy', 'standard', 'hard'].includes(band)) {
+      throw new Error(`[band-default] band 只能是 easy/standard/hard 或 null（收到 ${String(band)}）。`)
+    }
+    let prev: Record<string, unknown> = {}
+    try {
+      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
+    } catch {
+      // 无配置文件/损坏 → 全新写入
+    }
+    const next = { ...prev, band_default: band }
+    if (band === null) delete next.band_default
+    await atomicWrite(this.paths.learnhubConfigPath, JSON.stringify(next, null, 1) + '\n')
+    return { band_default: band as BandPref | null }
+  }
+
+  /** 跨区挑战点仪表（只读聚合，零新度量；ADR-0024）。 */
+  async thermostatView(today?: string): Promise<ThermostatDoc> {
+    const { today: learningToday, cutoff } = await this.learningDay()
+    today ??= learningToday
+    const logs = await this.store.reviewLogAll()
+    const retention = trueRetention(dueReviewFirstPushes(logs, cutoff))
+    const bands = bandDistribution(await this.store.bandRecsAll(), today)
+    const defaultBand = await this.bandDefault()
+    const suggestions = thermostatSuggestions({
+      retention: { rate: retention.rate, real: retention.real },
+      bands, defaultBand,
+    })
+    const projects = await this.projects.list()
+    return {
+      date: today,
+      course_region: {
+        retention,
+        retention_band: retentionBand(retention.rate),
+        band_choices: bands,
+      },
+      unbounded_region: {
+        execution_ratings: execRatingDistribution(logs, today),
+        note: '执行事件评级分布——数据源随 U 区执行事件通道（#89）落地；落地前为合法空态。',
+      },
+      project_region: {
+        status: 'deferred',
+        note: '项目区观测（Mastery 交叉 2×2 + 档内表现）随 P-7（#96）后补，不阻塞 v1；下表只聚合展示各项目当前渐退档。',
+        projects: projects.map(p => ({ id: p.id, name: p.name, tier: p.tier })),
+      },
+      knobs: [
+        { knob: 'band_default', title: 'A1 目标难度带默认值', status: '可确认生效（既有配置入口）', current: defaultBand },
+        { knob: 'retrieval_density', title: '检索点密度', status: '未上线（随 #93 检索点会话落地解锁）' },
+        { knob: 'fading_tier', title: '渐退档移动提议', status: '聚合展示：档位移动走项目域显式入口（projectSetTier），v1 无待决移动提议对象，此处只汇总各项目当前档', current: projects.map(p => `${p.name}:${p.tier}`).join('、') || null },
+      ],
+      suggestions,
+    }
+  }
+
+  /** 建议的显式确认入口（ADR-0024：建议采用走既有入口、逐条显式确认）。只受理
+   * 当前仪表正在给出的建议 id——陈旧/伪造 id 拒绝；引擎内无任何自动调用路径。 */
+  async thermostatApply(suggestionId: string): Promise<{ applied: string; band_default: BandPref | null }> {
+    const view = await this.thermostatView()
+    const hit = view.suggestions.find(s => s.id === suggestionId)
+    if (!hit) {
+      throw new Error(`[thermostat] 建议「${suggestionId}」不在当前建议清单里（可能已过期或从未给出）——恒温器只逐条确认当前建议，不受理任意参数写入。`)
+    }
+    await this.setBandDefault(hit.apply.value)
+    return { applied: hit.id, band_default: hit.apply.value }
+  }
+
+  // ---- D3 沙盘（#112 / ADR-0025：现有模型的蒙特卡洛计划推演，只读、零写侧）----
+
+  /** 按计划推演：现有 FSRS 的 R 作伯努利抽样推进 + mastery 派生原样复用，
+   * SANDBOX_RUNS 次蒙特卡洛。输出分布（50/80% 分位带）；措辞锁「模型推演，
+   * 非承诺」。零写侧——不进门禁、不进调度、不改账本，不给可行性判定。 */
+  async sandboxRun(input: {
+    minutesPerDay: number
+    weeks?: number
+    course?: string
+    nodes?: string[]
+  }): Promise<SandboxDoc> {
+    if (!Number.isFinite(input.minutesPerDay) || input.minutesPerDay <= 0) {
+      throw new Error(`[sandbox] minutesPerDay 必须是正数（收到 ${String(input.minutesPerDay)}）。`)
+    }
+    const weeks = Math.min(26, Math.max(1, Math.round(input.weeks ?? SANDBOX_DEFAULT_WEEKS)))
+    const plan: SandboxPlan = { minutesPerDay: Math.round(input.minutesPerDay), weeks }
+    const { today } = await this.learningDay()
+    const courses = input.course ? [await this.registry.resolve(input.course)] : await this.enabledCourses()
+    const nodeFilter = input.nodes?.length ? new Set(input.nodes) : null
+    const cards: SandboxCard[] = []
+    const nodes: SandboxNode[] = []
+    const scheds = new Map<string, FSRS>()
+    for (const c of courses) {
+      scheds.set(c.name, await this.sched(this.paths.courseRoot(c.root)))
+      const { graph, state } = await this.loadView(c)
+      for (const name of graph.order) {
+        if (nodeFilter && !nodeFilter.has(name)) continue
+        const fm = state[name]
+        // skipped = 学习者自报已会：不在推演范围（与推荐口径一致）
+        if (effectiveStage(state, name) === 'skipped') continue
+        const started = Boolean(fm?.fsrs?.reps)
+        nodes.push({
+          course: c.name, node: name,
+          est: graph.estOf[name] ?? 15,
+          practice: fm?.practice ?? { attempts: 0, correct: 0 },
+          ema: fm?.practice_ema,
+          started, skipped: false,
+        })
+        // 节点代表卡（有起点状态带 fs；未开始 = null，随引入学成创建）
+        cards.push({
+          key: `node:${c.name}/${name}`, course: c.name, node: name, kind: 'node',
+          fs: started ? fm!.fsrs! : null,
+        })
+        try {
+          const bank = await this.bank.load(this.paths.courseRoot(c.root), name)
+          for (const q of bank.questions) {
+            if (q.archived) continue
+            cards.push({ key: `${c.name}/${name}/${q.id}`, course: c.name, node: name, kind: 'question', fs: q.fsrs ?? null })
+          }
+        } catch {
+          // 该节点还没有题库：合法空态（practice 节点常态）
+        }
+      }
+    }
+    // 蒙特卡洛：播种确定（同输入同分布）；每门课注入自己的调度器实例（与调度同源，
+    // R 参数跟课走——与 reviewQueue/memoryHealth 同一 sched 通道）。
+    const runs: Array<{ endByNode: number[]; curve: number[] }> = []
+    for (let i = 0; i < SANDBOX_RUNS; i++) {
+      runs.push(simulateRun(plan, cards, nodes, today, {
+        schedFor: course => scheds.get(course) ?? scheds.get(courses[0]!.name)!,
+        rng: mulberry32(7000 + i * 7919),
+      }))
+    }
+    const { curve, map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
+    return {
+      wording: SANDBOX_WORDING,
+      date: today,
+      plan,
+      runs: SANDBOX_RUNS,
+      scope: { courses: courses.map(c => c.name), nodes: nodes.length },
+      curve,
+      map,
+      assumptions: [
+        `每次复习计 1 分钟；每日预算 ${plan.minutesPerDay} 分钟，耗尽后剩余到期卡顺延（与真实欠账一致）。`,
+        '复习通过率 = 当前 FSRS 模型的可提取性 R 伯努利抽样：过记 Good、败记 Again；推进与调度同一套函数（各课程用自己的调度器参数）。',
+        '新节点按课程图序在预算内引入（est 分钟摊日），学成记一次合成 Good；未调度题随学成入场。',
+        '练习证据（EMA/正确率）冻结为当前值——沙盘只模拟「记」的维持，不模拟「练」的进步。',
+      ],
+    }
+  }
+
   /** JOL 预测值的显式契约：三档之外拒绝（参数错误），null/undefined 放行为无预测。 */
   private jolPredicted(p: JolPrediction | null | undefined): JolPrediction | null {
     if (p === null || p === undefined) return null
@@ -2819,6 +3193,33 @@ export class LearnhubEngine {
       throw new Error(`[jol] 预测只能是「${JOL_PREDICTIONS.join('」「')}」之一（收到 ${String(p)}）。`)
     }
     return p
+  }
+
+  // ---- D4 睡眠耦合建议配置（state/learnhub.json 的 sleep 字段；#85，默认开）----
+
+  /** 读睡眠耦合建议配置：enabled=false 时推荐里不再出现「睡前练、醒后验」建议层。 */
+  async sleepAdviceConfig(): Promise<{ enabled: boolean }> {
+    try {
+      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
+        sleep?: { enabled?: boolean }
+      }
+      return normalizeSleepAdvice(doc.sleep)
+    } catch {
+      return { ...DEFAULT_SLEEP_ADVICE }
+    }
+  }
+
+  /** 写睡眠耦合建议配置（原子替换，保留配置文件其他字段）。 */
+  async setSleepAdviceConfig(patch: { enabled?: boolean }): Promise<{ enabled: boolean }> {
+    let prev: Record<string, unknown> = {}
+    try {
+      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
+    } catch {
+      // 无配置文件/损坏 → 全新写入
+    }
+    const next = await this.sleepAdviceConfig().then(cur => ({ enabled: patch.enabled ?? cur.enabled }))
+    await atomicWrite(this.paths.learnhubConfigPath, JSON.stringify({ ...prev, sleep: next }, null, 1) + '\n')
+    return next
   }
 
   // ---- E5 可用的困难教练（#65；只读信息性反馈，无门禁无判分）----

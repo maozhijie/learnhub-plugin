@@ -32,6 +32,8 @@ node scripts/link-peers.mjs
 
 报 `[learnhub] config.vault 目录不存在` 时是 vault 挪了位置：机器级配置（vault 路径、provider、model）不在仓库里，写在 `~/.dsh/profiles/web/cordis.patch.yml` 的 `dsh-learnhub` patch 条目中，按机器现状改那里。
 
+启动前与故障时的三条经验：报 `EADDRINUSE 3080` 先查 `netstat -ano | findstr :3080`——很可能是用户自己起的宿主，探活 `curl http://127.0.0.1:3080/learnhub/api/status` 正常就别动它。Agent 需要自己拉起宿主时不要挂在会话后台任务里（会被静默回收，无任何日志），用 `Start-Process -WindowStyle Hidden cmd '/c npx … > 日志 2>&1'` 完全脱离。npx 刚跑完就报 `UNSUPPORTED_SCHEMA`（如 additionalProperties 校验失败）多半是 npx 原地换包瞬间的撕裂读取：当前盘上副本单独复现通过的话，重跑一次即可。
+
 ## 并行会话用 worktree 隔离
 
 ZCode 没有会话级分支/worktree 隔离：同目录开多个会话共享同一 checkout 和当前分支，未提交改动与 switch/rebase 会互相踩。并行做多个任务时，每个任务建一个 git worktree、每个 worktree 开一个会话；同一会话内的并行 subagent 共享工作目录，配置隔离不了，只能按文件范围拆分或改走多 worktree。命令与注意事项见 `docs/agents/parallel-sessions.md`。

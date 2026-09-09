@@ -85,7 +85,7 @@ export interface StatusDoc {
 
 // ---- recommend（GET /api/recommend、learnhub_recommend；recommend → sessions.recommendEvents）----
 
-export type RecEventType = 'new' | 'review' | 'overdue' | 'learning' | 'struggle' | 'diagnostic' | 'pin'
+export type RecEventType = 'new' | 'review' | 'overdue' | 'learning' | 'struggle' | 'diagnostic' | 'pin' | 'sleep'
 
 /** A3 复习建议项（#54/#55；sessions.AdviceItem 的视图镜像——sessions 依赖 node:fs，
  * ui 侧 tsc 无法拉入该模块，故按其形状在本模块声明，改动需两处同步）。 */
@@ -108,6 +108,16 @@ export interface RecEvent {
   diagnostics?: DiagnosticEntry[]
   /** 「今天学它」pin 标识（E3 #67）：当日课程内置顶，次日自动失效。 */
   pinned?: true
+  /** D-4 睡眠耦合建议（#85）：重巩固型节点的「睡前练、醒后验」时段建议（可关）。 */
+  sleep?: SleepSuggestionEntry
+}
+
+/** 睡眠耦合建议条目（sleep.ts SleepSuggestion 的视图镜像）。 */
+export interface SleepSuggestionEntry {
+  /** 主建议：睡前练、醒后验（Walker 2002/2005 措辞）。 */
+  text: string
+  /** 可选心理演练附注（r≈0.13 小效应，预期管理措辞）。 */
+  rehearsal: string
 }
 
 export interface RecommendDoc { date: string; events: RecEvent[] }
@@ -455,10 +465,36 @@ export interface ReviewQueueDoc {
   cards: ReviewCard[]
   /** 单节点定向复习会话的起点难度带（节点 Mastery 先验 + 显式带偏移）；仅 node 过滤时存在。 */
   band?: number
+  /** N-of-1 实验当日生效臂（#110 ADR-0023，批次交替）：队列呈现正受实验影响时带出
+   * （会组成实验的混排/分组臂、难度带默认实验的当日带），供呈现层如实标注。 */
+  exp?: { id: number; arm: string }
   /** 笔记源漂移提示（C1 #59）：可重出/归档旧题；仅全局队列带出。 */
   note_drifted?: Array<{ id: string; path: string; hint: string }>
   /** 笔记源挂起原因（Missing / 镜像 Broken）；挂起卡的源不出卡。 */
   note_suspended?: Array<{ id: string; path: string; reason: string }>
+}
+
+// ---- D 区个人实验室（#85/#110/#111/#112；nof1.ts 为零依赖纯函数模块，视图层直接复用其类型）----
+
+export type { Nof1Template, ExperimentDef, Nof1Analysis, Nof1ArmStats } from './nof1.ts'
+export type { SandboxDoc } from './sandbox.ts'
+
+/** 实验提案受理结果（experimentPropose：提案-确认制第一步）。 */
+export interface ExperimentProposeResult {
+  proposal: number
+  template: string
+  title: string
+  /** 合格卡池张数（已调度未归档题卡，范围过滤）。 */
+  pool: number
+  scope_course: string | null
+}
+
+/** 实验开跑结果（experimentApply = 提案确认）。 */
+export interface ExperimentStartResult {
+  id: number
+  title: string
+  /** 开跑当日（学习日）的生效臂。 */
+  arm_today: string
 }
 
 /** 作答结算（questionAnswer）。课程题库通道与笔记源卡通道共用：

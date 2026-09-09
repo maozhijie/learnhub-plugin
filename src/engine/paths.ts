@@ -46,6 +46,9 @@ export class Paths {
   get bandLogPath(): string { return `${this.centerStateDir}/难度带.jsonl` }
   /** E 档案（ADR-0009 Learner Output 判词存档；#68 E2）：JSONL 追加，判词只入档案不 canonical。 */
   get eArchivePath(): string { return `${this.centerStateDir}/e档案.jsonl` }
+  /** N-of-1 实验定义（D-1 #110 / ADR-0023）：whole-file 原子写；臂标注进复习日志，
+   * 本文件只存实验定义与状态。 */
+  get experimentsPath(): string { return `${this.centerStateDir}/实验.json` }
   /** 回执流水（U-1 #88 / ADR-0016）：JSONL 追加，学习者证据账本——只增不回滚。 */
   get receiptLogPath(): string { return `${this.centerStateDir}/回执.jsonl` }
   /** 习惯重复流（U-3 #90 / ADR-0017）：JSONL 追加，自报重复即事实；曲线/streak 派生。 */
