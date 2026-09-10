@@ -57,8 +57,8 @@ import { graphHealthScore } from './health.ts'
 import { Content } from './content.ts'
 import { nodeTierOf, perSectionQuizTarget, genericQuizTarget, sectionTierLabel } from './complexity.ts'
 import type { ComplexityTier } from './complexity.ts'
-import { GraphProposals, genRetiredError, validateEditProposal, addNodeCountOf } from './gengraph.ts'
-import type { ApplyAudit, EditProposalSpec, EnrichFieldEntry, GrowthNote } from './gengraph.ts'
+import { GraphProposals, validateEditProposal, addNodeCountOf } from './proposals.ts'
+import type { ApplyAudit, EditProposalSpec, EnrichFieldEntry, GrowthNote } from './proposals.ts'
 import type { LlmComplete } from './llm.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier, planRevisionDiff } from './projects.ts'
 import type { PlanRevisionDiff, PlanGrowthTrigger } from './projects.ts'
@@ -983,21 +983,18 @@ export class LearnhubEngine {
 
   // ---- 提案门禁包装（apply 前 audit 拦截） ----
 
-  async graphPropose(kind: 'gen' | 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult> {
-    if (kind !== 'gen' && kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
-      throw new Error(`[propose] 非法 kind: ${String(kind)}（允许 edit/seed/enrich——gen 已退役，拼错不会再被静默当成 gen）`)
+  async graphPropose(kind: 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult> {
+    if (kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
+      throw new Error(`[propose] 非法 kind: ${String(kind)}（图谱域只受理 edit/seed/enrich）`)
     }
-    // 受理门退役检查先行（#138）：不落提案、不查流水，直接指路
-    if (kind === 'gen') throw genRetiredError('propose')
     if (kind === 'seed') return this.proposals.proposeSeed(yamlText)
     return kind === 'edit' ? this.proposals.proposeEdit(yamlText) : this.proposals.proposeEnrich(yamlText)
   }
 
-  async graphApply(kind: 'gen' | 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult> {
-    if (kind !== 'gen' && kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
-      throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 edit/seed/enrich——gen 已退役）`)
+  async graphApply(kind: 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult> {
+    if (kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
+      throw new Error(`[apply] 非法 kind: ${String(kind)}（图谱域只受理 edit/seed/enrich）`)
     }
-    if (kind === 'gen') throw genRetiredError('apply')
     // audit 门禁：目标课程存在 ERROR 时拒绝 apply；warns 摘要 + 健康分随 findings 返回
     // （mode=new 的种子提案课程尚未建 data 目录，audit 空跑——种子图豁免在 runAudit/applySeed 内按锚判）
     const pending = await this.store.takePending(kind, pid)
@@ -1097,7 +1094,7 @@ export class LearnhubEngine {
     if (kind === 'experiment') return this.experimentApply(pid)
     if (kind === 'project_plan') return this.applyProjectPlanProposal(pid)
     if (kind === 'project_milestone') return this.projects.applyMilestone(pid)
-    if (kind === 'gen' || kind === 'edit' || kind === 'seed' || kind === 'enrich') return this.graphApply(kind, pid)
+    if (kind === 'edit' || kind === 'seed' || kind === 'enrich') return this.graphApply(kind, pid)
     throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 ${PROPOSAL_KINDS.join('/')}）`)
   }
 

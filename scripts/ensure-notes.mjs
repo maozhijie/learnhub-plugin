@@ -1,5 +1,5 @@
 /** 一次性维护脚本：为全部启用课程缺笔记的节点补骨架文件（幂等）。
- * 用途：修复早期 gen/edit apply 不落笔记骨架的存量课程。
+ * 用途：修复早期版本 apply 不落笔记骨架的存量课程。
  * 用法：node scripts/ensure-notes.mjs <vault> [course]
  */
 import { LearnhubEngine } from '../lib/engine.js'

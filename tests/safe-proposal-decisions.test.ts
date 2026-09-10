@@ -4,8 +4,7 @@ import type { LearnhubEngine } from '../src/engine/index.ts'
 import { GraphStore } from '../src/engine/graph.ts'
 import { withVault } from './helpers/vault.ts'
 
-/** 工厂基线课程（数学 / 基础区 / 入门块 / 入门节点）上做提案决策测试；gen 建课路径
- * 已随 #138 cutover 退役，测试不再经由它搭课程。 */
+/** 工厂基线课程（数学 / 基础区 / 入门块 / 入门节点）上做提案决策测试。 */
 async function vaultWithCourse(run: (engine: LearnhubEngine, courseName: string) => Promise<void>): Promise<void> {
   await withVault({ tag: 'learnhub-proposals-' }, async ({ engine }) => {
     await run(engine, '数学')
@@ -81,13 +80,13 @@ ops:
   })
 })
 
-test('#11 存量 pending gen 提案：apply 被退役门拒收，reject 留痕仍可用', async () => {
+test('#11 存量 pending 未知 kind 提案：apply 统一拒收，reject 留痕仍可用', async () => {
   await vaultWithCourse(async engine => {
-    // 直接在提案流水里种一条 v1 时代的 pending gen 记录（cutover 后不再产生新的）
-    const legacy = await engine.store.createProposal('gen' as never, '数学', 'v1 遗留骨架提案', 'state/proposals/legacy.yaml')
-    await assert.rejects(() => engine.graphApply('gen', legacy), /kind=gen 骨架提案已退役/)
-    await engine.graphReject(legacy, 'cutover 后拒绝留痕')
+    // 直接在提案流水里种一条旧时代的 pending 未知 kind 记录（现行引擎不再产生该形态）
+    const legacy = await engine.store.createProposal('skeleton' as never, '数学', '遗留结构提案', 'state/proposals/legacy.yaml')
+    await assert.rejects(() => engine.graphApply('skeleton' as never, legacy), /非法 kind/)
+    await engine.graphReject(legacy, '旧记录拒绝留痕')
     const rejected = await engine.graphProposals('rejected')
-    assert.ok(rejected.some(p => p.id === legacy && (p as { kind?: string }).kind === 'gen'))
+    assert.ok(rejected.some(p => p.id === legacy && (p as { kind?: string }).kind === 'skeleton'))
   })
 })

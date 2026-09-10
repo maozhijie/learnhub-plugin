@@ -13,7 +13,7 @@ import {
   ConceptRegistry,
 } from '../src/engine/concepts.ts'
 import { validateBank } from '../src/engine/question-bank.ts'
-import { validateEditProposal } from '../src/engine/gengraph.ts'
+import { validateEditProposal } from '../src/engine/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import type { Paths } from '../src/engine/paths.ts'
 

@@ -126,7 +126,7 @@ export function parseConceptFields(
   return out
 }
 
-/** 持久图与 gen 提案共用的节点 schema 解析：gen 在受理前收集同一套错误。
+/** 持久图与提案共用的节点 schema 解析：受理门在受理前收集同一套错误。
  * warns 槽可选：受理门传入以收集概念字段组的非阻提示（窄节点等），持久图加载省略。 */
 export function parseNode(raw: unknown, path: string, where: string, warns?: string[]): GNode {
   if (typeof raw !== 'object' || raw === null) fail(path, `${where} 节点必须是映射`)
@@ -222,7 +222,7 @@ export class GraphStore {
       .map(f => join(this.dataDir, f))
   }
 
-  /** 区名 → yaml 文件路径（gen 的 append/编辑用）。 */
+  /** 区名 → yaml 文件路径（edit/seed apply 落图用）。 */
   async regionFiles(): Promise<Record<string, string>> {
     const out: Record<string, string> = {}
     for (const p of await this.regionFilePaths()) {
@@ -436,7 +436,7 @@ export class Graph {
   }
 }
 
-/** 合并结构检查：重名 / 断边 / 环 → 错误列表（空 = 通过）（gen._structure_check 同语义）。 */
+/** 合并结构检查：重名 / 断边 / 环 → 错误列表（空 = 通过）。 */
 export function structureCheck(existing: Graph | null, newRegions: GRegion[], label: string): string[] {
   const errors: string[] = []
   const mergedNames = existing ? [...existing.names] : []

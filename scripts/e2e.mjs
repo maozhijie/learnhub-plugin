@@ -38,6 +38,8 @@ writeFileSync(
   ['courses:', `  - id: ${seed.id ?? `${courseRoot}-01`}`, `    name: ${courseName}`, `    root: ${courseRoot}`, '    enabled: true', ''].join('\n'),
   'utf8',
 )
+// schema 版本戳（ADR-0034 硬门：v2 起出生的库由工厂/脚本盖版本戳，无版本即拒载）
+writeFileSync(join(dstCenter, 'state', 'learnhub.json'), JSON.stringify({ schema: { version: 2, breaks: [], formats: {} } }, null, 1), 'utf8')
 // 逐项手动复制：本机环境（Desktop 目录的云同步/过滤驱动 + Node fs.cpSync）会以
 // 0xC0000409 原生崩溃（基线 e2e 同样可复现），readFile/writeFile 路径不受影响
 function copyDir(src, dest) {
@@ -424,11 +426,11 @@ async function run() {
     try { await engine.loadPrompt('课程节生成-不存在') } catch { threw = true }
     assert(threw, 'unknown style must fail loud')
   })
-  await step('提示词版本迁移：旧快照（无标记）→ v5 覆盖升级 + .bak 生成', async () => {
+  await step('提示词版本迁移：旧快照（无标记）→ 当前版覆盖升级 + .bak 生成', async () => {
     const promptPath = join(dstCenter, 'state', '提示词', '课程节生成.md')
     writeFileSync(promptPath, '# 旧版课程节生成（无版本标记）\n\n旧内容', 'utf8')
     const text = await engine.loadPrompt('课程节生成')
-    assert(text.startsWith('<!-- learnhub:prompt/v5 -->'), `vault snapshot should upgrade to v5, got: ${text.slice(0, 60)}`)
+    assert(/^<!-- learnhub:prompt\/v\d+ -->/.test(text), `vault snapshot should upgrade to the current versioned prompt, got: ${text.slice(0, 60)}`)
     assert(existsSync(`${promptPath}.bak`), '.bak not written')
     assert(readFileSync(`${promptPath}.bak`, 'utf8').includes('旧版课程节生成'), '.bak content mismatch')
     const bak1 = readFileSync(`${promptPath}.bak`, 'utf8')
@@ -481,60 +483,59 @@ async function run() {
     const notePath = findFile(join(dstCenter, courseRoot, '课程'), `${noteName}B.md`)
     assert(notePath, 'note file not found')
     assert(readFileSync(notePath, 'utf8').includes('points: 一句话要点甲'), 'outline points not persisted')
-    // ### 子标题 → finding 拒
-    let threw = ''
-    try {
-      await engine.contentSection(courseName, `${noteName}B`, 's1', '开头。\n\n### 非法子标题\n\n内容。')
-    } catch (err) { threw = err.message }
-    assert(threw.includes('### 子标题'), `### must reject: ${threw}`)
+    // ### 子标题 → warn 不拒（门禁改革：不可程序修复的格式类不硬拦，S5）
+    await engine.contentSection(courseName, `${noteName}B`, 's1', '开头。\n\n### 非法子标题\n\n内容。')
+    const shapeCheck = await engine.contentCheck(courseName, `${noteName}B`)
+    assert(shapeCheck.warns.some(w => w.includes('### 子标题')), `### warn missing: ${JSON.stringify(shapeCheck.warns)}`)
     // 超长 prose（>2000，不含代码块/公式）→ finding 拒
-    threw = ''
+    let threw = ''
     try {
       await engine.contentSection(courseName, `${noteName}B`, 's1', '好'.repeat(2200))
     } catch (err) { threw = err.message }
     assert(threw.includes('正文过长'), `overlong must reject: ${threw}`)
-    // 合法节过门；未加引号的 mermaid | 只 warn 不拦
+    // 合法节过门；未加引号的 mermaid | 由写侧管线自动补引号（渲染降级高频根因的落盘前修复）
     await engine.contentSection(courseName, `${noteName}B`, 's1', '合法正文。\n\n```mermaid\ngraph TD\n  A[模 |v| 值] --> B[相等]\n```\n')
     const check = await engine.contentCheck(courseName, `${noteName}B`)
     assert(check.passed, `gate should pass: ${check.findings.join('；')}`)
-    assert(check.warns.some(w => w.includes('未用双引号包裹')), `mermaid warn missing: ${JSON.stringify(check.warns)}`)
+    const mermaidNote = readFileSync(notePath, 'utf8')
+    assert(/\["[^"]*\|[^"]*"\]/.test(mermaidNote), `mermaid auto-quote missing: ${mermaidNote.slice(-400)}`)
   })
-  await step('图谱健康分/建议 + gen/edit 认知维度字段 + R13 跳步候选 + enc 反哺 hints', async () => {
-    // gen 提案（含 est/type/bloom/difficulty）→ apply → findings + 字段落盘 + analyze health/suggestions
-    const prop = await engine.graphPropose('gen', [
+  await step('图谱健康分/建议 + edit 认知维度字段 + R13 跳步候选 + enc 反哺 hints', async () => {
+    // edit 提案（add_node 携 est/bloom/difficulty）→ apply → findings + 字段落盘 + analyze health/suggestions
+    // edit 不能新建区（add_node 的区/块必须已存在）——锚直接从图上取既有区/块/节点
+    // （课程笔记目录里可能有剪除归档的孤儿笔记，不可靠）
+    const anyBrowse = await engine.graphBrowse(courseName)
+    const region = anyBrowse.regions[0].name
+    const block = anyBrowse.regions[0].blocks[0].name
+    const anchorNode = anyBrowse.regions[0].blocks[0].nodes[0].node
+    const prop = await engine.graphPropose('edit', [
       `course: ${courseName}`,
-      'mode: append',
-      'regions:',
-      '  - region: e2e认知区',
-      '    blocks:',
-      '      - name: 块甲',
-      '        nodes:',
-      '          - { name: 计算e2e基础量, pre: [], est: 10, bloom: 理解, difficulty: 1 }',
-      '          - { name: 应用e2e基础量解题, pre: [计算e2e基础量], est: 20, bloom: 应用, difficulty: 3 }',
-      '      - name: 块乙',
-      '        nodes:',
-      '          - { name: 证明e2e进阶结论, pre: [应用e2e基础量解题], est: 30, bloom: 分析, difficulty: 5 }',
+      'reason: e2e 认知维度字段',
+      'ops:',
+      `  - { op: add_node, name: 计算e2e基础量, region: ${region}, block: ${block}, pre: [${anchorNode}], est: 10, bloom: 理解, difficulty: 1 }`,
+      `  - { op: add_node, name: 应用e2e基础量解题, region: ${region}, block: ${block}, pre: [计算e2e基础量], est: 20, bloom: 应用, difficulty: 3 }`,
+      `  - { op: add_node, name: 证明e2e进阶结论, region: ${region}, block: ${block}, pre: [应用e2e基础量解题], est: 30, bloom: 分析, difficulty: 5 }`,
     ].join('\n'))
-    const applied = await engine.graphApply('gen', prop.id)
+    const applied = await engine.graphApply('edit', prop.id)
     assert(Array.isArray(applied.findings), `apply findings missing: ${JSON.stringify(applied)}`)
     const dataDir = join(dstCenter, courseRoot, 'data')
-    const regionFile = readdirSync(dataDir).find(f => readFileSync(join(dataDir, f), 'utf8').includes('e2e认知区'))
-    assert(regionFile, 'gen region file not found')
+    const regionFile = readdirSync(dataDir).find(f => readFileSync(join(dataDir, f), 'utf8').includes(region))
+    assert(regionFile, 'region file not found')
     const regionText = readFileSync(join(dataDir, regionFile), 'utf8')
-    assert(regionText.includes('difficulty: 5') && regionText.includes('bloom: 分析') && regionText.includes('est: 30'), `gen node fields not persisted: ${regionText.slice(0, 400)}`)
+    assert(regionText.includes('difficulty: 5') && regionText.includes('bloom: 分析') && regionText.includes('est: 30'), `edit node fields not persisted: ${regionText.slice(0, 400)}`)
     const a = await engine.graphAnalyze(courseName)
     assert(a.health && a.health.score >= 0 && a.health.score <= 100, `health: ${JSON.stringify(a.health)}`)
     for (const k of ['action_naming', 'est_coverage', 'pre_completeness', 'convergence', 'structure_hygiene']) {
       assert(k in a.health.breakdown, `breakdown missing ${k}: ${JSON.stringify(a.health.breakdown)}`)
     }
-    assert(a.suggestions.expand_blocks.length > 0 && a.suggestions.expand_blocks.every(b => b.nodes < 5), `expand_blocks: ${JSON.stringify(a.suggestions.expand_blocks)}`)
+    assert(Array.isArray(a.suggestions.expand_blocks) && a.suggestions.expand_blocks.every(b => b.nodes < 5), `expand_blocks: ${JSON.stringify(a.suggestions.expand_blocks)}`)
     assert(Array.isArray(a.suggestions.missing_pre) && Array.isArray(a.suggestions.unconverged), 'suggestions shape')
     // edit add_node 字段透传（回归：旧实现一律丢弃 est/type）
     const prop2 = await engine.graphPropose('edit', [
       `course: ${courseName}`,
       'reason: e2e edit 认知维度',
       'ops:',
-      '  - { op: add_node, node: 辨析e2e边界情形, region: e2e认知区, block: 块甲, pre: [计算e2e基础量], est: 15, type: practice, bloom: 分析, difficulty: 2 }',
+      `  - { op: add_node, name: 辨析e2e边界情形, region: ${region}, block: ${block}, pre: [计算e2e基础量], est: 15, type: practice, bloom: 分析, difficulty: 2 }`,
     ].join('\n'))
     await engine.graphApply('edit', prop2.id)
     const regionText2 = readFileSync(join(dataDir, regionFile), 'utf8')
@@ -551,7 +552,7 @@ async function run() {
         `course: ${courseName}`,
         'reason: e2e 非法 bloom',
         'ops:',
-        '  - { op: add_node, node: 理解e2e非法字段, region: e2e认知区, block: 块甲, pre: [], bloom: 顿悟 }',
+        `  - { op: add_node, name: 理解e2e非法字段, region: ${region}, block: ${block}, pre: [], bloom: 顿悟 }`,
       ].join('\n'))
     } catch (err) { threw = err.message }
     assert(threw.includes('非法认知层级'), `bad bloom must reject: ${threw}`)
@@ -593,8 +594,8 @@ async function run() {
     assert(nd.succ.includes('应用e2e基础量解题'), `graphNode succ: ${JSON.stringify(nd.succ)}`)
     assert(nd.enc.some(e => e.node === '辨析e2e边界情形' && e.w === 0.5), `graphNode enc: ${JSON.stringify(nd.enc)}`)
     assert(Array.isArray(nd.prereq_closure), 'graphNode closure')
-    const br = await engine.graphBrowse(courseName, 'e2e认知区')
-    assert(br.total >= 4 && br.regions.length === 1 && br.regions[0].blocks.length === 2, `graphBrowse: ${JSON.stringify(br).slice(0, 200)}`)
+    const br = await engine.graphBrowse(courseName, region)
+    assert(br.total >= 4 && br.regions.length === 1 && br.regions[0].blocks.length >= 1, `graphBrowse: ${JSON.stringify(br).slice(0, 200)}`)
     const pa = await engine.graphPath(courseName, '计算e2e基础量', '证明e2e进阶结论')
     assert(pa.related === true && pa.direct === false, `graphPath related: ${JSON.stringify(pa)}`)
     assert(JSON.stringify(pa.chain) === JSON.stringify(['计算e2e基础量', '应用e2e基础量解题', '证明e2e进阶结论']), `graphPath chain: ${JSON.stringify(pa.chain)}`)
@@ -655,11 +656,13 @@ async function run() {
     ]
     for (const [name, target] of peers) {
       const link = join(pluginRoot, 'node_modules', '@deepseek-ai', name)
+      const targetReady = existsSync(join(target, 'package.json')) && existsSync(join(target, 'lib'))
       if (existsSync(link)) {
-        if (realpathSync(link) === realpathSync(target)) continue
+        // 已有可用 junction（link-peers 落的 npx 缓存副本也算——宿主实际加载同一份）；
+        // monorepo 检出不在盘上（target 不存在）时不折腾现有 junction
+        if (!targetReady || realpathSync(link) === realpathSync(target)) continue
         rmSync(link, { recursive: true, force: true }) // 目标不对（如指到分组目录）则重建
-      }
-      if (!existsSync(join(target, 'package.json')) || !existsSync(join(target, 'lib'))) {
+      } else if (!targetReady) {
         console.warn(`[e2e] 插件加载冒烟跳过：宿主包未构建（${target}）——先在仓库根 pnpm build 后重跑可覆盖此检查`)
         return
       }

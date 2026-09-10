@@ -178,7 +178,7 @@ export async function analyzeGraph(
     blockStats.set(key, s)
   }
   const blocks = [...blockStats.values()]
-  // 建议条目上限随图规模伸缩：数百节点的大图浅块/空降节点成倍出现，固定 top-N 看不全
+  // 建议条目上限随图规模伸缩：大图的浅块/空降节点更多，固定 top-N 看不全
   const sugCap = Math.min(16, Math.max(8, Math.ceil(graph.names.length / 25)))
   const topBlocks = (
     items: typeof blocks, keep: (b: { nodes: number }) => boolean, cap: number,
