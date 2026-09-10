@@ -86,7 +86,7 @@ test('candidateCallSites：enc_candidates 块 + 练习 uses 各计一站并去�
   assert.equal(sites.get('丙'), 1)
 })
 
-test('encPromotion：只提升图内且在 pre 闭包内的候选，权重随调用强度', () => {
+test('encPromotion：只提升图内且在 pre 闭包内的候选；权重取 invokes 投影、无投影落缺省 1（#148 阶梯退役）', () => {
   const graph = graphOf([
     node({ name: '甲' }),
     node({ name: '丙' }),
@@ -94,7 +94,61 @@ test('encPromotion：只提升图内且在 pre 闭包内的候选，权重随调
   ])
   const body = '<!-- enc_candidates: [甲, 丙, 不存在] -->\n<!-- ex:1 | uses: [甲] | answer: x -->'
   const promo = Content.encPromotion(graph, '乙', body)
-  assert.deepEqual(promo, [{ node: '甲', w: 0.8 }], '丙不在闭包、不存在不在图内 → 只提升甲（2 站 → 0.8）')
+  assert.deepEqual(promo, [{ node: '甲', w: 1 }], '丙不在闭包、不存在不在图内 → 只提升甲；无 invokes 数据 → schema 缺省权重 1')
+  const projW = new Map([['甲', { w: 0.67, note: 'invokes 投影 2/3' }]])
+  assert.deepEqual(
+    Content.encPromotion(graph, '乙', body, projW),
+    [{ node: '甲', w: 0.67, note: 'invokes 投影 2/3' }],
+    '有 invokes 投影 → 出生权重随带投影 note',
+  )
+})
+
+test('invokesProjection：invokes 覆盖率投影——份额、自教不投影、归档不进分母（#148）', () => {
+  const graph = graphOf([
+    node({ name: '甲', teaches: { 自然数: '知道' } }),
+    node({ name: '丁', teaches: { 集合: '知道' } }),
+    node({ name: '乙', pre: ['甲', '丁'], teaches: { 质数: '会用' } }),
+  ])
+  const qs = [
+    { invokes: '自然数' },
+    { invokes: '自然数' },
+    { invokes: '质数' }, // 自教概念 → 不投影
+    { invokes: '集合' },
+    { invokes: '自然数', archived: true }, // 归档 → 不进分母
+    {}, // 缺 invokes → 不进分母
+  ]
+  assert.deepEqual(
+    Content.invokesProjection(graph, '乙', qs),
+    [{ node: '丁', w: 0.25, note: 'invokes 投影 1/4' }, { node: '甲', w: 0.5, note: 'invokes 投影 2/4' }],
+    '分母 = 全部带 invokes 的在库题（4，自教概念也进分母——自教稀释前置覆盖）；丁 1/4、甲 2/4，按节点名排序',
+  )
+})
+
+test('invokesProjection：零 invokes / 概念无闭包内前置教 → 零投影（合法空态）', () => {
+  const graph = graphOf([
+    node({ name: '甲' }),
+    node({ name: '乙', pre: ['甲'], teaches: { 质数: '会用' } }),
+  ])
+  assert.deepEqual(Content.invokesProjection(graph, '乙', [{}, { invokes: '' }]), [], '零 invokes → 零投影')
+  assert.deepEqual(
+    Content.invokesProjection(graph, '乙', [{ invokes: '集合' }]),
+    [],
+    '概念没有任何闭包内前置教 → 不投影',
+  )
+})
+
+test('conceptScopeOf：本节 teaches 在前、祖先按深度浅→深（#148 出生打标候选集）', () => {
+  const graph = graphOf([
+    node({ name: '根', teaches: { 算术: '知道' } }),
+    node({ name: '甲', pre: ['根'], teaches: { 自然数: '知道' } }),
+    node({ name: '丁', pre: ['甲'], teaches: { 集合: '知道' } }),
+    node({ name: '乙', pre: ['丁'], teaches: { 质数: '会用', 素性: '会用' } }),
+  ])
+  assert.deepEqual(
+    Content.conceptScopeOf(graph, '乙'),
+    ['质数', '素性', '算术', '自然数', '集合'],
+    '本节在前（teaches 键序）；祖先按深度浅→深：根(0) → 甲(1) → 丁(2)；传递祖先也在闭包内',
+  )
 })
 
 test('encBackfeedHints：闭包内未落 enc → set_enc 建议；闭包外 → set_pre 建议', () => {
@@ -200,5 +254,61 @@ test('graphEncBackfill：无反哺候选 → ops=0 且不产生提案', async ()
     const r = await engine.graphEncBackfill('数学') as Record<string, unknown>
     assert.equal(r.ops, 0)
     assert.equal(r.proposal, null)
+  })
+})
+
+test('graphEncBackfill：invokes 投影出生权重随 enrich 提案回填（#148 权重新语义）', async () => {
+  const GRAPH_TEACHES = [
+    'region: 基础',
+    'color: blue',
+    'blocks:',
+    '  - name: 入门块',
+    '    nodes:',
+    '      - { name: 甲, pre: [], opt: false, note: "", est: 10, teaches: { 自然数: 知道 } }',
+    '      - { name: 乙, pre: [甲], opt: false, note: "", est: 20 }',
+    '      - { name: 丙, pre: [], opt: false, note: "", est: 10 }',
+  ].join('\n')
+  const NOTE_乙_NO_CAND = NOTE_乙.replace('\n<!-- enc_candidates: [甲] -->', '')
+  const BANK_乙 = [
+    'node: 乙',
+    'questions:',
+    '  - id: q1',
+    '    kind: true_false',
+    '    q: 乙题一：说法是否成立。',
+    '    answer: true',
+    '    invokes: 自然数',
+    '  - id: q2',
+    '    kind: true_false',
+    '    q: 乙题二：说法是否成立。',
+    '    answer: false',
+  ].join('\n')
+  await withVault({
+    graph: GRAPH_TEACHES,
+    graphFile: '00_基础.yaml',
+    notes: { 甲: {}, 乙: `${NOTE_乙_NO_CAND}\n`, 丙: {} },
+    banks: { 乙: BANK_乙 },
+  }, async ({ engine }) => {
+    // 无正文候选、有 invokes 投影 → 仍产生回填条目（投影是独立生产者）
+    const r = await engine.graphEncBackfill('数学') as Record<string, unknown>
+    assert.equal(r.scanned, 1)
+    assert.equal(r.ops, 1)
+    const prop = r.proposal as { id: number; kind: string }
+    assert.equal(prop.kind, 'enrich', '覆盖层通道（指纹、读侧只读正典，#140 已建通道照用）')
+
+    const applied = await engine.graphApply('enrich', prop.id) as Record<string, unknown>
+    assert.equal(applied.course, '数学')
+
+    // 正典生效：甲 w = 1/1（唯一带 invokes 的题），投影 note 留痕
+    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math')).load()
+    const graph = new Graph(regions)
+    assert.deepEqual(graph.encOf['乙'], [['甲', 1]])
+    const edge = regions[0]!.blocks[0]!.nodes.find(n => n.name === '乙')!.enc[0]!
+    assert.equal(edge.node, '甲')
+    assert.equal(edge.w, 1)
+    assert.equal(edge.note, 'invokes 投影 1/1')
+
+    // 可重入：已声明 → ops=0
+    const again = await engine.graphEncBackfill('数学') as Record<string, unknown>
+    assert.equal(again.ops, 0)
   })
 })

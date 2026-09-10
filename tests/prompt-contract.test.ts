@@ -103,6 +103,20 @@ test('#147: 题目生成模板升到 v10——难度按注入锚定走、误解�
   assert.match(tpl, /以指令为准/, '先验让位于学习者生成指令')
 })
 
+// ---- v11 题目生成契约（#148）：invokes 出生打标（恰一枚概念） ----
+
+test('#148: 题目生成模板升到 v11——出生打标 invokes：恰一枚概念、清单照抄、空缺禁令', () => {
+  const tpl = Content.PROMPT_KINDS['题目生成']!
+  assert.ok(Content.promptVersionOf(tpl) >= 11, '题目生成 应升到 v11')
+  assert.match(tpl, /恰一枚/, '一枚 invokes（不多枚）')
+  assert.match(tpl, /概念清单/, '取值域 = 引擎注入的概念清单')
+  assert.match(tpl, /精确照抄/, '名字精确照抄（canonical/别名）')
+  assert.match(tpl, /不得空缺/, '空缺禁令（空→修复一次仍空拒收的服务端兜底）')
+  assert.match(tpl, /清单外的名字/, '不得自创清单外名字')
+  assert.match(tpl, /未附「概念清单」时省略 invokes/, '清单缺席 = 门不激活（invokes 恒合法 Missing）')
+  assert.match(tpl, /invokes: <概念清单中的名字>/, '输出 schema 样例带 invokes 字段')
+})
+
 // ---- v7 错误对比卡契约（#147）：出生期候选错法（先验让位于真实错答） ----
 
 test('#147: 错误对比卡模板升到 v7——干扰做法可从误解先验取材、mine 仍以真实错答为准', () => {

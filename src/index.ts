@@ -2044,7 +2044,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { status?: string; kind?: string }) => run('learnhub_graph_proposals', async () =>
       JSON.stringify(await engine.graphProposals(args.status, args.kind))))
   tool('learnhub_graph_enc_backfill',
-    'Backfill enc (component-skill) edges for a course from existing ready content (ADR-0008) via the enrichment-overlay channel (#140): every non-practice node whose note body / exercise metadata declares enc_candidates or uses inside its prereq closure that are not yet declared as enc becomes one field entry (whole-replace enc), queued as a SINGLE pending enrich proposal with sha256 fingerprints of the canonical region files. Nothing changed returns ops=0. Re-runnable — already-covered nodes produce no entries; practice nodes keep legal empty enc. Use for the A3 pilot when enabling that course, then review/apply with learnhub_graph_apply(kind=enrich).',
+    'Backfill enc (component-skill) edges for a course via the enrichment-overlay channel (#140, weight semantics #148): every non-practice node with ready content whose note body / exercise metadata declares enc_candidates or whose bank questions invoke prereq-taught concepts (invokes-coverage projection) that are not yet declared as enc becomes one field entry (whole-replace enc). Weights = the invokes-coverage projection (share of the node\'s questions invoking concepts taught by that prereq; candidate edges without invokes data land the schema-default weight 1 — the old call-site ladder is retired). Queued as a SINGLE pending enrich proposal with sha256 fingerprints of the canonical region files. Nothing changed returns ops=0. Re-runnable — already-covered nodes produce no entries; practice nodes keep legal empty enc. Use for the A3 pilot when enabling that course, then review/apply with learnhub_graph_apply(kind=enrich).',
     { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
     (args: { course?: string }) => run('learnhub_graph_enc_backfill', async () =>
       JSON.stringify(await engine.graphEncBackfill(args.course))))
@@ -2137,7 +2137,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     () => run('learnhub_optimize_params', async () =>
       JSON.stringify(await engine.optimizeFsrsParams())))
   tool('learnhub_question_generate',
-    'Generate quiz questions for a node via the model — queued as a quiz job on the global serial generation queue (mutually exclusive with the node content pipeline, so bank writes never interleave) and this call WAITS for the job to finish, then returns the result: node body → question prompt → llm → validateBank gate appends every question to the bank. The prompt lists the node\'s existing question stems and the engine drops generated questions that duplicate or closely resemble them (reported as duplicates). Use when a node has no/too few questions. Progress is visible in the gen-jobs registry / panel generate tab while it waits.',
+    'Generate quiz questions for a node via the model — queued as a quiz job on the global serial generation queue (mutually exclusive with the node content pipeline, so bank writes never interleave) and this call WAITS for the job to finish, then returns the result: node body → question prompt → llm → validateBank gate appends every question to the bank. The prompt lists the node\'s existing question stems and the engine drops generated questions that duplicate or closely resemble them (reported as duplicates). Birth tagging (#148): when the course concept registry scope (node teaches ∪ prereq-closure teaches) is non-empty every question must carry exactly ONE invokes concept — a missing tag gets one repair pass, still-empty questions are rejected and reported; the result\'s `enc` field carries the invokes-coverage projection (birth weights over prereq nodes, share of questions invoking each) — carry those into the next growth batch via set_enc whole-replace. Use when a node has no/too few questions. Progress is visible in the gen-jobs registry / panel generate tab while it waits.',
     {
       course: { type: 'string', required: true, description: 'Course name' },
       node: { type: 'string', required: true, description: 'Node name (must have generated content)' },
@@ -2155,7 +2155,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         status: job.status, message: job.message,
         ...(r ? {
           course: r.course, node: r.node, added: r.added, skipped: r.skipped, total: r.total,
-          duplicates: r.duplicates, rejected: r.rejected,
+          duplicates: r.duplicates, rejected: r.rejected, enc: r.enc,
         } : {}),
       })
     }))

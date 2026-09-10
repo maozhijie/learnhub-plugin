@@ -111,7 +111,7 @@ import type { QuestionAuditReport } from './question-hygiene.ts'
 import { parseSectionTitle } from '../../shared/content-renderers.ts'
 import { xpForAnswer, readDailyGoal, writeDailyGoal, readDayCutoff, writeDayCutoff, sumXp, streakFrom, nominalBudget, difficultyCalibration, milestonePrice } from './xp.ts'
 import { XP_STREAK_GRACE_DAYS, XP_GUESS_SECONDS, XP_PERFECT_BONUS, XP_PER_MILESTONE_DEFAULT, FSRS_DIFFICULTY_MID, CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
-import type { CourseEntry, EArchiveRec, ErratumRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
+import type { CourseEntry, EArchiveRec, EncEdge, ErratumRec, Fm, FsrsBlock, GNode, NoteSourceEntry, ReviewRec, SectionManifest, Stage } from './types.ts'
 import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
 import type { DataCheckReport } from './data-check.ts'
@@ -1004,11 +1004,13 @@ export class LearnhubEngine {
 
   // ---- enc 覆盖层回填（kind=enrich，#140：出生/覆盖层分家；原 edit 通道随分家转富化）----
 
-  /** enc 覆盖层回填入口：对课程里已有 Ready 内容、正文反哺候选非空、且候选尚未全落
-   * enc 的非 practice 节点，批量生成一个 pending enrich 提案（每节点一条字段条目：
-   * 既有声明 enc 原样保留 + 补闭包内提升边，权重取调用强度；sha256 指纹锚定正典版本）。
-   * 可重入——已全覆盖节点不产生条目，重跑不会重复膨胀、不与已声明 enc 冲突；practice
-   * 节点维持合法空 enc 不动。提案走人审（ADR-0003 修订变更语义）：过审计后由
+  /** enc 覆盖层回填入口（#148 权重新语义）：对课程里已有 Ready 内容、且反哺候选或
+   * 题目 invokes 投影尚有未落 enc 边的非 practice 节点，批量生成一个 pending enrich
+   * 提案（每节点一条字段条目：既有声明 enc 原样保留 + 补闭包内提升边）。权重 =
+   * invokes 覆盖率投影（该前置被 invokes 的题数份额，调用站阶梯已退役）；候选边无
+   * invokes 数据时落 schema 缺省权重 1，投影-only 边带投影 note。sha256 指纹锚定正典
+   * 版本。可重入——已全覆盖节点不产生条目，重跑不会重复膨胀、不与已声明 enc 冲突；
+   * practice 节点维持合法空 enc 不动。提案走人审（ADR-0003 修订变更语义）：过审计后由
    * graphApply(kind=enrich) 生效，留痕可回溯（state/覆盖层.jsonl）。 */
   async graphEncBackfill(courseKey?: string): Promise<GraphEncBackfillResult> {
     const c = await this.registry.resolve(courseKey)
@@ -1024,24 +1026,33 @@ export class LearnhubEngine {
       if (graph.typeOf[node] === 'practice') continue // practice 节点无题，enc: [] 合法空态
       const [, regionName] = graph.blockOf[node]
       const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
-      if (!Content.candidateCallSites(body).size) continue
+      // 投影（#148）：节点在库题目的 invokes 覆盖率 → 前置节点的出生 w（候选边同享此权重）
+      const proj = Content.invokesProjection(graph, node, (await this.bank.load(this.paths.courseRoot(c.root), node)).questions)
+      const projW = new Map(proj.map(e => [e.node, { w: e.w, note: e.note }]))
+      if (!Content.candidateCallSites(body).size && !proj.length) continue
       scanned++
       const declared = encOfNode.get(node) ?? []
       const declaredName = new Set(declared.map(e => e.node))
       const target = [...declared]
-      for (const p of Content.encPromotion(graph, node, body)) {
+      for (const p of Content.encPromotion(graph, node, body, projW)) {
         if (declaredName.has(p.node)) continue
         target.push(p)
+        declaredName.add(p.node)
+      }
+      for (const e of proj) {
+        if (declaredName.has(e.node)) continue // 已声明/候选已补 → 保留在先形态
+        target.push(e)
+        declaredName.add(e.node)
       }
       if (target.length === declared.length) continue // 候选已全落 enc → 无变更
       fields.push({ node, enc: target })
     }
     if (!fields.length) {
-      return { course: c.name, scanned, ops: 0, proposal: null, message: '没有需要回填的节点：候选已全落 enc，或没有可提升的反哺候选。' }
+      return { course: c.name, scanned, ops: 0, proposal: null, message: '没有需要回填的节点：候选已全落 enc，或没有可提升的反哺候选与 invokes 投影。' }
     }
     const yamlText = YAML.stringify({
       course: c.name,
-      reason: `enc 反哺回填（覆盖层通道，ADR-0008 / #53）：${fields.length} 个节点按既有 Ready 内容补成分技能边`,
+      reason: `enc 反哺回填（覆盖层通道，ADR-0008 / #148 权重=invokes 覆盖率投影）：${fields.length} 个节点按既有 Ready 内容与在库题目补成分技能边`,
       fields,
     })
     const prop = await this.graphPropose('enrich', yamlText)
@@ -2738,6 +2749,60 @@ export class LearnhubEngine {
     }
     existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
     return { verdict: 'added' }
+  }
+
+  /** 出生打标修复轮（#148）：概念清单在场且有题缺 invokes 时的一次补标调用——按题目
+   * 序号回填清单内名字；清单缺席直接跳过（出生打标门不激活，invokes 恒合法 Missing）。
+   * 修复恰好一次：补不齐不重试，仍空的题由受理门拒收/弃置（负路径在受理门侧收口）。
+   * 返回实际回填的题数（留痕用）。 */
+  private async repairInvokesOnce(
+    llm: LlmComplete,
+    items: unknown[],
+    scope: string[],
+  ): Promise<number> {
+    if (!scope.length) return 0
+    const missing = items.filter((x): x is Record<string, unknown> => {
+      if (typeof x !== 'object' || x === null) return false
+      const v = (x as Record<string, unknown>).invokes
+      return !(typeof v === 'string' && v.trim())
+    })
+    if (!missing.length) return 0
+    const prompt = [
+      '## 任务：为下列题目各补一枚 invokes 概念标注',
+      '',
+      '从概念清单中为每道题选**恰一枚**本题最主要考察的概念，名字精确照抄清单（一字不差）。只输出一个 YAML 映射（不要代码围栏、不要任何解释），键为题目序号、值为概念名：',
+      '',
+      '1: 概念名',
+      '2: 概念名',
+      '',
+      '## 概念清单',
+      '',
+      ...scope.map(c => `- ${c}`),
+      '',
+      '## 题目（按序号）',
+      '',
+      ...missing.map((it, i) => {
+        const stem = typeof it.q === 'string' ? it.q : ''
+        return `${i + 1}. ${stem ? stem.slice(0, 80) : '（无题干）'}`
+      }),
+    ].join('\n')
+    let doc: unknown
+    try {
+      doc = YAML.parseModel(await llm(prompt))
+    } catch {
+      return 0 // 补标应答不可解析 = 修复失败，仍空交受理门拒收
+    }
+    if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return 0
+    const map = doc as Record<string, unknown>
+    let filled = 0
+    missing.forEach((it, i) => {
+      const v = map[String(i + 1)] ?? map[i + 1]
+      if (typeof v === 'string' && v.trim()) {
+        it.invokes = v.trim()
+        filled++
+      }
+    })
+    return filled
   }
 
   /** 笔记源出题：读笔记正文（只读）→ 笔记出题 prompt + llm → validateBank 门禁逐题
@@ -5513,6 +5578,10 @@ export class LearnhubEngine {
    * opts.instruction = 生成指令（#120 提意见重生成的学习者意见），原样注入提示词；
    * 防相似（#119）：提示词注入题库已有题面 ≤15 条（只题面/题型/难度），生成后逐题
    *   程序化查重（归一化精确 + trigram ≥0.8），命中的丢弃不入库并在 duplicates 报告。
+   * 出生打标（#148）：概念清单（本节 teaches ∪ 前置闭包 teaches）在场时逐题必须恰一枚
+   *   invokes——缺席先走一次补标调用（修复一次），仍空拒收并报告；清单缺席（存量/手编
+   *   图）invokes 恒合法 Missing。返回的 enc = 题目 invokes 覆盖率投影（出生 w 作回退
+   *   初值，随生长批经 set_enc 写入）。
    * opts.isCancelled = 逐题检查的取消旗标（GenJob 取消语义，#118）。 */
   async questionGenerate(
     courseKey: string | undefined, node: string, count?: number,
@@ -5530,6 +5599,8 @@ export class LearnhubEngine {
     rejected: Array<{ q: string; reason: string }>
     /** 转义损坏修复处数（ADR-0030：确定性修复留痕，不静默）。 */
     escapesRepaired: number
+    /** invokes 覆盖率投影（#148）：节点全部在库题目的 enc 边候选（出生 w），随生长批 set_enc 写入。 */
+    enc: EncEdge[]
   }> {
     if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
       throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认。`)
@@ -5575,10 +5646,18 @@ export class LearnhubEngine {
         ? '本节点为高复杂度：收尾可出 1-2 道 difficulty: 3 的综合/易错题。'
         : '本节点为中复杂度：难度递进到 2，收尾至多 1 道 difficulty: 3。'
     const misBlock = misconceptionPromptBlock(graph.misconceptionsOf[node], '干扰项材料')
-    const raw = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`)
+    // 出生打标（#148）：概念清单 = 本节 teaches ∪ 前置闭包 teaches；空清单 = 门不激活
+    const conceptScope = Content.conceptScopeOf(graph, node)
+    const conceptBlock = Content.conceptListBlock(conceptScope)
+    const raw = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`)
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
+    }
+    // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用；仍空由下方受理门拒收
+    if (conceptScope.length) {
+      if (opts?.isCancelled?.()) throw new Error('生成已取消，结果已丢弃。')
+      await this.repairInvokesOnce(llm, doc.questions.slice(0, requested), conceptScope)
     }
     // doc.node 只是模型对节点的复述（常自创短名），落盘位置由入参决定，不作硬校验
     let added = 0
@@ -5627,6 +5706,11 @@ export class LearnhubEngine {
         rejected.push({ q: stem.slice(0, 80), reason: invokesErr })
         continue
       }
+      // 出生打标门（#148）：清单在场时新题必须带恰一枚 invokes；修复一次仍空拒收
+      if (conceptScope.length && !(typeof q.invokes === 'string' && q.invokes.trim())) {
+        rejected.push({ q: stem.slice(0, 80), reason: 'invokes 缺失（出生打标要求恰一枚概念；修复一次仍空，拒收）' })
+        continue
+      }
       // 程序化查重（#119）：与已有题、本批已收题比对，命中丢弃并报告
       const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
       if (verdict.verdict === 'duplicate') {
@@ -5637,19 +5721,21 @@ export class LearnhubEngine {
         skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
       }
     }
-    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/记法违规/重复/无法归节），一道都没入库。')
+    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/记法违规/重复/无法归节/invokes 缺失），一道都没入库。')
     const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected, escapesRepaired }
+    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected, escapesRepaired, enc: Content.invokesProjection(graph, node, bank.questions) }
   }
 
   /** 逐节出题（逐节管线第 2 段）：每个内容节一次模型调用（出题量随档位锚点：
    * 低/中/高档内容节目标 1/2/3 道，含练习节时 -1），section 服务端强制为该节 id；
    * 练习/交互节跳过，正文未生成的节（断点续跑）跳过。防相似（#119）：提示词注入
-   * 节点已有题面 ≤15 条，生成后逐题查重，命中的丢弃并计入 duplicates。 */
+   * 节点已有题面 ≤15 条，生成后逐题查重，命中的丢弃并计入 duplicates。
+   * 出生打标（#148）：与 questionGenerate 同一门——概念清单在场逐题恰一枚 invokes，
+   * 缺席修复一次仍空即弃（不入库）；返回 enc = invokes 覆盖率投影（出生 w 作回退初值）。 */
   async questionGenerateSections(
     courseKey: string | undefined, node: string,
     llm: LlmComplete,
-  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number }> {
+  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[] }> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -5679,6 +5765,9 @@ export class LearnhubEngine {
     const hasPracticeSection = manifest.some(s => s.type === '练习')
     const perSection = perSectionQuizTarget(tier, hasPracticeSection)
     const misBlock = misconceptionPromptBlock(graph.misconceptionsOf[node], '干扰项材料')
+    // 出生打标（#148）：概念清单整课一次组装，逐节提示词与补标调用共用
+    const conceptScope = Content.conceptScopeOf(graph, node)
+    const conceptBlock = Content.conceptListBlock(conceptScope)
     let added = 0
     let sections = 0
     let duplicates = 0
@@ -5697,7 +5786,7 @@ export class LearnhubEngine {
         : tierLabel === '高'
           ? '本节难度档：高——允许 1-2 道 difficulty: 3 的易错/综合题。'
           : '本节难度档：中——难度递进到 2 即可（收尾至多 1 道 difficulty: 3）。'
-      const raw = await llm(`${tpl}${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
+      const raw = await llm(`${tpl}${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
       let doc: { questions?: unknown } | null = null
       try {
         doc = YAML.parseModel(raw) as { questions?: unknown } | null
@@ -5705,21 +5794,26 @@ export class LearnhubEngine {
         continue // 该节模型输出非法 YAML：跳过，综合调用兼底
       }
       if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions)) continue
+      // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用，仍空由下方门弃
+      if (conceptScope.length) await this.repairInvokesOnce(llm, doc.questions, conceptScope)
       for (const rawQ of doc.questions) {
         const q: Record<string, unknown> = { ...((rawQ ?? {}) as Record<string, unknown>), section: s.id }
         delete q.id
         // 题目卫生（ADR-0029/0030）：转义修复留痕，修不好或记法/边界违规的题丢弃；
-        // invokes 未在册同罪（#141 受理门对表，与 questionGenerate 同口径）
+        // invokes 未在册同罪（#141 受理门对表，与 questionGenerate 同口径）；
+        // 出生打标门（#148）：清单在场缺 invokes（修复一次仍空）同弃
         const hygiene = repairQuestionStrings(q)
         escapesRepaired += hygiene.repaired
         const stem = typeof q.q === 'string' ? q.q : ''
         if (hygiene.unrepairable || questionViolation(q) || invokesUnregistered(q, conceptNames)) continue
+        if (conceptScope.length && !(typeof q.invokes === 'string' && q.invokes.trim())) continue
         const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
         if (verdict.verdict === 'duplicate') duplicates++
         else if (verdict.verdict === 'added') added++ // 单题非法（invalid）不毁整批
       }
     }
-    return { course: c.name, node, added, sections, duplicates, escapesRepaired }
+    const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
+    return { course: c.name, node, added, sections, duplicates, escapesRepaired, enc: Content.invokesProjection(graph, node, bank.questions) }
   }
 
   /** 交互件成绩结算：面板 sandbox iframe 上报 LEARNHUB_COMPLETE → practice 流水 +

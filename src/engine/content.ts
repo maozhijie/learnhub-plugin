@@ -399,7 +399,7 @@ sections:
 只输出本节正文（## 标题 + 内容），不要附加解释。
 `,
     题目生成: `\
-<!-- learnhub:prompt/v10 -->
+<!-- learnhub:prompt/v11 -->
 # 题目生成提示词（用户可编辑；节点正文由系统附在本模板之后）
 
 你是 learnhub 学习系统的出题老师。根据附后的节点正文出一组练习题，覆盖正文的核心概念、易错点与典型应用。
@@ -426,6 +426,7 @@ sections:
 9. 查重：系统附有「题库已有题目」清单时，与清单中题面重复或高度相似（同考点同问法、仅换数字/措辞）的题一律不要出——出全新角度或不同考点的题；若附「生成指令（学习者意见）」，按指令优先。
 10. 交卷前逐题自检（出题老师对答案键负责）：把每道题**当作考生独立重解一遍**，核对三件事——①答案键与重解结果一致（多选逐项判真假，杜绝凑不满「至少 2 个正确项」硬凑错项）；②解析与答案键一致（解析的每句结论都要支撑答案键，不得自相矛盾）；③答案唯一的题不得出现第二个可辩护的正确选项。发现不一致，以重解结果为准改完再交。
 11. 若附有「误解先验（干扰项材料）」段：选择题/判断题的干扰项优先把先验里的典型错误模型改编成选项（错误模型文字 → 学习者真会写出的选项），并在解析「最易错点」一句里点破；先验是生成期的候选材料——与「生成指令（学习者意见）」冲突时以指令为准。
+12. 每题必须标注 \`invokes\`：**恰一枚**概念——本题最主要考察的那一个，从系统附的「概念清单」里选，名字**精确照抄**清单（一字不差）；只标一枚，不得多枚、不得空缺、不得写清单外的名字。系统未附「概念清单」时省略 invokes 字段即可。
 
 ## 输出
 
@@ -441,6 +442,7 @@ questions:
     explanation: 解析
     difficulty: 1
     section: 概念：定义与性质
+    invokes: <概念清单中的名字>
     uses: [用到的前置概念]
 
 YAML 写法注意：含反斜杠（LaTeX 命令）、冒号或特殊字符的标量一律用**单引号**包裹（如 q: '$3.14\\times57 + 3.14\\times43$'）；**禁用双引号**——双引号里 \\t \\n 会被 YAML 解释成控制字符，吃掉公式里的反斜杠（\\times 会损坏成 tab+imes）。
@@ -1327,44 +1329,104 @@ cards:
     return sites
   }
 
-  /** 调用强度 → enc 权重（供 A3 作相关度）。阶梯：1 站 0.6（保底可路由）、2 站 0.8、
-   * ≥3 站 1.0——随频次单调不减，跨节/跨练习多站归一。全同权重无区分度由审计 R16 管。 */
-  static encWeightOf(sites: number): number {
-    return sites >= 3 ? 1.0 : sites === 2 ? 0.8 : 0.6
+  /** 概念清单（#148 出生打标候选集）：本节点 teaches ∪ pre 闭包内各节点 teaches 的
+   * 概念名，去重保序（本节点在前、祖先按深度浅→深、同深按名字）。清单 = 题目 invokes
+   * 的合法取值域：本节概念供卡点聚合，前置概念供 enc 投影；全部在册（teaches 过受理门）。
+   * 空清单（节点与闭包都无 teaches，存量/手编图）= 出生打标门不激活，invokes 恒合法 Missing。 */
+  static conceptScopeOf(graph: Graph, node: string): string[] {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const push = (n: string): void => {
+      for (const c of Object.keys(graph.teachesOf[n] ?? {})) {
+        if (!seen.has(c)) { seen.add(c); out.push(c) }
+      }
+    }
+    push(node)
+    // 祖先按 (depth, name) 确定序遍历（pred 闭包，isAncestor 同口径不含自身）
+    const anc = graph.names.filter(n => n !== node && graph.isAncestor(n, node))
+      .sort((a, b) => (graph.depth[a] ?? 0) - (graph.depth[b] ?? 0) || a.localeCompare(b))
+    for (const a of anc) push(a)
+    return out
+  }
+
+  /** 概念清单提示词块（清单为空 → 空串，出生打标门不激活）。 */
+  static conceptListBlock(scope: string[]): string {
+    if (!scope.length) return ''
+    return `\n\n## 概念清单（invokes 只能从这里选，名字精确照抄）\n\n${scope.map(c => `- ${c}`).join('\n')}`
+  }
+
+  /** 题目 invokes 覆盖率投影（#148，enc 权重新语义）：节点题目集按一枚 invokes 概念
+   * 聚合，投影到 pre 闭包内教该概念的前置节点 → enc 边候选。w = 该前置被 invokes 的
+   * 题数 / 带 invokes 的题数（覆盖率份额，两位小数；每题恰一枚 → 份额和 ≤1）。本节点
+   * 自教的概念不投影（enc 指向前置组件，不是自身教学目标）；概念无闭包内前置教 →
+   * 不投影（invokes 本身仍供卡点聚合）。零 invokes → 零投影（合法空态，不造权重）。
+   * 同概念多节点教的取闭包内最近者（depth 浅优先、名字断平）。出生 w 随生长批经
+   * set_enc 写入作回退初值；归档题不进分母。 */
+  static invokesProjection(graph: Graph, node: string, questions: Array<{ invokes?: unknown; archived?: unknown }>): EncEdge[] {
+    const invoked = questions.filter(q => !q.archived && typeof q.invokes === 'string' && q.invokes.trim())
+    if (!invoked.length) return []
+    const total = invoked.length
+    const cntByConcept = new Map<string, number>()
+    for (const q of invoked) {
+      const c = (q.invokes as string).trim()
+      cntByConcept.set(c, (cntByConcept.get(c) ?? 0) + 1)
+    }
+    // 概念 → 闭包内教它的前置节点（最近者；教的节点与闭包都没变时结果稳定）
+    const holderOf = new Map<string, { node: string; depth: number }>()
+    for (const c of cntByConcept.keys()) {
+      let best: { node: string; depth: number } | null = null
+      for (const m of graph.names) {
+        if (m === node || !graph.isAncestor(m, node) || !(c in (graph.teachesOf[m] ?? {}))) continue
+        const d = graph.depth[m] ?? 0
+        if (!best || d < best.depth || (d === best.depth && m.localeCompare(best.node) < 0)) best = { node: m, depth: d }
+      }
+      if (best) holderOf.set(c, best)
+    }
+    const cntByHolder = new Map<string, number>()
+    for (const [c, cnt] of cntByConcept) {
+      const holder = holderOf.get(c)
+      if (!holder) continue
+      cntByHolder.set(holder.node, (cntByHolder.get(holder.node) ?? 0) + cnt)
+    }
+    return [...cntByHolder.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([holder, cnt]) => ({
+        node: holder,
+        w: Math.round((cnt / total) * 100) / 100,
+        note: `invokes 投影 ${cnt}/${total}`,
+      }))
   }
 
   /** 本节点反哺候选 → 可提升的 enc 边：候选名解析回图节点（graph.nset）、只接受在本节点
-   * pre 传递闭包内（isAncestor，与 E7 一致）的候选；权重取调用强度。目标形态走 set_enc
-   * 整体替换（gengraph 已支持）；practice 型节点无候选块，保持 enc: [] 合法空态。 */
-  static encPromotion(graph: Graph, node: string, body: string): EncEdge[] {
+   * pre 传递闭包内（isAncestor，与 E7 一致）的候选。权重 = invokes 覆盖率投影（#148：
+   * projW 给出该前置的出生 w 时随带投影 note），无 invokes 数据的候选边落 schema 缺省
+   * 权重 1——调用站阶梯已退役（#148），区分度告警归审计 R16。practice 型节点无候选块，
+   * 保持 enc: [] 合法空态。 */
+  static encPromotion(graph: Graph, node: string, body: string, projW?: Map<string, { w: number; note?: string }>): EncEdge[] {
     const out: EncEdge[] = []
-    for (const [cand, sites] of Content.candidateCallSites(body)) {
+    for (const cand of [...Content.candidateCallSites(body).keys()].sort((a, b) => a.localeCompare(b))) {
       if (!graph.nset.has(cand) || cand === node || !graph.isAncestor(cand, node)) continue
-      out.push({ node: cand, w: Content.encWeightOf(sites) })
+      const proj = projW?.get(cand)
+      out.push({ node: cand, w: proj?.w ?? 1, ...(proj ? { note: proj.note } : {}) })
     }
-    out.sort((a, b) => a.node.localeCompare(b.node))
     return out
   }
 
   /** enc 反哺 hints：把反哺候选的图依赖缺口在内容落盘时（修正时机最早）指出来——
-   * 候选在图内但不在本节点 pre 闭包 → 建议 set_pre 补边；在闭包内但未声明为 enc → 建议
-   * set_enc 补边，已声明但权重偏离当前调用强度 → 建议 set_enc 改权重（都整体替换、保留
-   * 既有边，ADR-0008）；候选不在图内 → 提示别名/拼写。E7（audit）管已写入图的 enc 边；
-   * 结构审计验不了语义真假，内容级背书见 encContentHints。 */
+   * 候选在图内但不在本节点 pre 闭包 → 建议 set_pre 补边；在闭包内但未声明为 enc →
+   * 建议 set_enc 补边（都整体替换、保留既有边，ADR-0008）。权重不在此建议——出生 w
+   * 由题目 invokes 覆盖率投影随生长批写入（#148）。候选不在图内 → 提示别名/拼写。
+   * E7（audit）管已写入图的 enc 边；结构审计验不了语义真假，内容级背书见 encContentHints。 */
   static encBackfeedHints(graph: Graph, node: string, body: string): string[] {
     const out: string[] = []
-    const declared = new Map((graph.encOf[node] ?? []).map(([t, w]) => [t, w]))
+    const declared = new Set((graph.encOf[node] ?? []).map(([t]) => t))
     const sites = Content.candidateCallSites(body)
-    for (const [cand, count] of [...sites.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
-      const w = Content.encWeightOf(count)
+    for (const cand of [...sites.keys()].sort((a, b) => a.localeCompare(b))) {
       if (!graph.nset.has(cand)) {
         out.push(`enc_candidates 引用「${cand}」不在图内（别名/拼写核对，或用 add_node/set_pre 补节点后再谈 enc）`)
       } else if (graph.isAncestor(cand, node)) {
-        const cur = declared.get(cand)
-        if (cur === undefined) {
-          out.push(`enc_candidates 引用「${cand}」在本节点 pre 闭包内但未声明为 enc——用 learnhub_graph_propose(kind=edit) 的 set_enc 补边（整体替换、保留既有 enc，建议追加 {node: ${cand}, w: ${w}}）`)
-        } else if (cur !== w) {
-          out.push(`「${cand}」已声明为 enc 但权重（${cur}）偏离当前调用强度（建议 ${w}）——用 set_enc 改权重（整体替换、保留既有 enc 其它边）`)
+        if (!declared.has(cand)) {
+          out.push(`enc_candidates 引用「${cand}」在本节点 pre 闭包内但未声明为 enc——用 learnhub_graph_propose(kind=edit) 的 set_enc 补边（整体替换、保留既有 enc；出生权重由题目 invokes 覆盖率投影随生长批写入）`)
         }
       } else {
         out.push(`「${cand}」被 enc_candidates 引用但不在本节点 pre 闭包——确认依赖后用 learnhub_graph_propose(kind=edit) 的 set_pre 补边`)

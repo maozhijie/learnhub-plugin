@@ -65,7 +65,8 @@ export function orientCandidate(
   return { ok: false, hint_skill: hint, why: `无 pre 关系（enc 契约/E7 要求闭包内）；首事件启发式倾向 ${hint} 为底座` }
 }
 
-/** 共现 → enc 权重（对齐 encWeightOf 标尺：≥3 天 1.0 / 2 天 0.8 / 1 天 0.6）。 */
+/** 共现 → enc 权重（P-6 行为侧自有的共现档标尺：≥3 天 1.0 / 2 天 0.8 / 1 天 0.6；
+ * 与内容侧 invokes 覆盖率投影（#148）并行——行为证据提名的边走自己的置信标尺）。 */
 export function coWeight(co: number): number {
   return co >= 3 ? 1.0 : co === 2 ? 0.8 : 0.6
 }

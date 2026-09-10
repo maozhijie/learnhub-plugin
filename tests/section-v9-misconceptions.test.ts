@@ -211,14 +211,19 @@ const GOLD_BANK = [
   '    answer: true',
   '    difficulty: 1',
   '    section: 通用',
+  '    invokes: 鸽巢原理',
   '```',
 ].join('\n')
+
+/** 出生打标（#148）：invokes 在册校验需要登记表在册（MISC_GRAPH 的 teaches 概念）。 */
+const REGISTRY = [{ path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: 鸽巢原理\n' }]
 
 test('questionGenerate：提示词附「误解先验（干扰项材料）」段（有误解才附）', async () => {
   await withVault({
     tag: 'v9-quiz-mis-',
     graph: MISC_GRAPH,
     notes: { 入门: { content: { version: 1, status: 'draft' }, body: ['# 入门', '', '鸽巢原理：把 n+1 只鸽放进 n 个巢，必有一巢至少两只。'] } },
+    files: REGISTRY,
   }, async ({ engine }) => {
     const fake = replayFake(GOLD_BANK)
     const r = await engine.questionGenerate('数学', '入门', undefined, fake)
@@ -229,6 +234,7 @@ test('questionGenerate：提示词附「误解先验（干扰项材料）」段�
   await withVault({
     tag: 'v9-quiz-nomis-',
     notes: { 入门: { content: { version: 1, status: 'draft' }, body: ['# 入门', '', '鸽巢原理正文。'] } },
+    files: REGISTRY,
   }, async ({ engine }) => {
     const fake = replayFake(GOLD_BANK)
     await engine.questionGenerate('数学', '入门', undefined, fake)
@@ -241,6 +247,7 @@ test('questionGenerateSections：逐节难度锚走节段难度档（清单值/�
     tag: 'v9-quiz-sections-',
     graph: MISC_GRAPH,
     notes: { 入门: {} },
+    files: REGISTRY,
   }, async ({ engine }) => {
     await seedOutline(engine)
     await engine.contentSection('数学', '入门', 's1', GOLD_S1)
