@@ -382,5 +382,26 @@ plan:
     const p3 = await engine.projectPlanPropose('练琴计划', plan3)
     const r3 = await engine.projectApply(p3.id) as { plan_diff_warnings?: string[] }
     assert.ok((r3.plan_diff_warnings ?? []).some(w => w.includes('m1') && w.includes('过点')), '「终点消失」要可见')
+
+    // 已过点的 m2 被同 id 改名 → 改名警告（身份不变、名字漂移要可见）；nodes 未变不产触发
+    await engine.projectMilestonePass('练琴计划', 'm2')
+    const plan4 = `\
+project: 练琴计划
+plan:
+  - id: m2
+    name: 双音听辨（进阶版）
+    task_class: 中：结合乐器
+    acceptance_hints: 十次内八次正确
+    nodes: [数学/进阶]
+`
+    const p4 = await engine.projectPlanPropose('练琴计划', plan4)
+    const r4 = await engine.projectApply(p4.id) as {
+      plan_diff_warnings?: string[]
+      plan_diff?: { retargeted: unknown[]; added: unknown[] }
+      growth?: unknown[]
+    }
+    assert.ok((r4.plan_diff_warnings ?? []).some(w => w.includes('m2') && w.includes('改名')), '改名漂移要可见')
+    assert.equal(r4.plan_diff!.retargeted.length, 0, 'nodes 未变不进 retargeted')
+    assert.equal(r4.growth, undefined, '零 diff 条目零生长触发')
   })
 })

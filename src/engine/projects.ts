@@ -390,7 +390,9 @@ export class Projects {
 
   // ---- 计划提案（project_plan；带快照的修订通道，设计 §7） ----
 
-  async proposePlan(projectId: string, yamlText: string): Promise<{ id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }> {
+  async proposePlan(
+    projectId: string, yamlText: string, opts: { pair?: number } = {},
+  ): Promise<{ id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }> {
     const project = await this.load(projectId)
     let doc: unknown
     try {
@@ -408,7 +410,12 @@ export class Projects {
     const path = this.paths.proposalArtifactPath(pid, 'project_plan', projectId)
     await mkdir(this.paths.proposalDir, { recursive: true })
     await writeFile(path, YAML.stringify(doc), 'utf8')
-    await this.store.updateProposal(pid, { artifact: path })
+    // pair 出生即写（#149 同源双提案）：计划提案落盘那一刻就带联动——任一时刻崩溃
+    // 都不会留下可单边 apply 的无守卫计划半区（时序缺口守卫从出生起生效）。
+    await this.store.updateProposal(pid, {
+      artifact: path,
+      ...(opts.pair ? { pair: opts.pair } : {}),
+    })
     return { id: pid, kind: 'project_plan', project: projectId, milestones: v.plan.length, initial }
   }
 

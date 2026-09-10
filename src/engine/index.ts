@@ -62,7 +62,7 @@ import type { ApplyAudit, EditProposalSpec, EnrichFieldEntry, GrowthNote } from 
 import type { LlmComplete } from './llm.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier, planRevisionDiff } from './projects.ts'
 import type { PlanRevisionDiff, PlanGrowthTrigger } from './projects.ts'
-import { decompileGoalOf, decompileTerms, splitDecompileDoc, decompileRepairPrompt, reconcilePlanNodes } from './project-decompile.ts'
+import { decompileGoalOf, decompileTerms, splitDecompileDoc, decompileRepairPrompt, reconcilePlanNodes, splitNodeSpec } from './project-decompile.ts'
 import type { DecompileDoc } from './project-decompile.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
@@ -1640,8 +1640,8 @@ export class LearnhubEngine {
       : '（空——本项目还没有里程碑计划，本次为初次规划）'
     const pack = `${tpl}\n\n---\n\n## 目标项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 渐退档：${fm.tier}\n- 目标描述（目标项目描述原文）：\n\n${goal}\n\n## 现状计划（给出完整新版本，不保守微调）\n\n${current}\n\n## 注册笔记（Vault 先验的检索来源）\n\n${notesList}\n\n## 知识子图落点\n\n${courseBlock}${prior ? `\n\n---\n\n${prior}` : ''}`
     // 模型产出 → 双产物校验门 + 名字对账门（未过回灌修复一轮，对齐「生成→门禁→修复
-    // 一轮」机械）。对账域 = 种子簇 ∪ 既有课程图节点名（目标课程 + 计划引用到的第三
-    // 课程按前缀装载）；种子课程名撞注册表同进对账错误行。
+    // 一轮」机械）。对账域 = 种子簇 ∪ 全部启用课程的图节点名（与消费面 locateNode 的
+    // 跨课解析同域——裸名歧义/悬空在受理前拦下，不留到消费面才炸）。
     const reconcileErrors = async (doc: DecompileDoc | undefined): Promise<string[]> => {
       if (!doc) return []
       const existingByCourse = new Map<string, Set<string>>()
@@ -1652,7 +1652,7 @@ export class LearnhubEngine {
         const { graph } = await this.loadView(c)
         existingByCourse.set(courseName, new Set(graph.names))
       }
-      if (target) await ensureNames(target.name)
+      for (const c of await this.enabledCourses()) await ensureNames(c.name)
       const seedCourseNames = new Set<string>()
       const extra: string[] = []
       if (doc.seed) {
@@ -1661,16 +1661,6 @@ export class LearnhubEngine {
           extra.push(`seed.course「${doc.seed.course}」已在注册表（mode=new 新课程入口撞名）——自拟一个新课程名，或显式 course 参数指向既有课程`)
         }
       }
-      const prefixes = new Set<string>()
-      for (const item of doc.plan) {
-        for (const spec of item.nodes ?? []) {
-          if (!spec.includes('/')) continue
-          const cname = spec.split('/', 2)[0].trim()
-          if (doc.seed && cname === doc.seed.course) continue
-          prefixes.add(cname)
-        }
-      }
-      for (const p of prefixes) await ensureNames(p) // 未注册前缀由对账门报错
       return [...extra, ...reconcilePlanNodes(doc.plan, {
         ...(doc.seed ? { seed: { course: doc.seed.course, nodeNames: seedCourseNames } } : {}),
         existingByCourse,
@@ -1695,26 +1685,37 @@ export class LearnhubEngine {
     }
     const doc: DecompileDoc = gate.result
     // 名字对账门已在修复环内跑过（reconcile 为空 = 通过）——此处直接受理。
-    // 双提案受理（先种子后计划——种子门更重；两提案落盘后 pair 互相指认）。
-    // 概念引用已在 proposeSeed 受理门对登记表（铸名随种子 apply 同事务落盘）。
-    let seedProposal: { id: number; kind: 'seed'; course: string; endpoint: string; starts: number } | null = null
-    if (doc.seed) {
-      const sub = await this.graphPropose('seed', YAML.stringify(doc.seed)) as { id: number; course: string; endpoint: string; starts: number }
-      seedProposal = { id: sub.id, kind: 'seed', course: sub.course, endpoint: sub.endpoint, starts: sub.starts }
+    // 双提案受理（先种子后计划）：种子提案先落（重门已预检通过）；计划提案**出生即带
+    // pair**（联动守卫从落盘那一刻生效——任一时刻崩溃都不会留下可单边 apply 的无守卫
+    // 计划半区）；最后补种子半区的 pair 指认（此窗口内计划已被守卫保护，种子半区单边
+    // apply 无害——计划未落盘就无悬空引用可言）。概念引用在 proposeSeed 受理门对
+    // 登记表（铸名随种子 apply 同事务落盘）。
+    let seedId: number | null = null
+    let planProposal: Awaited<ReturnType<LearnhubEngine['projects']['proposePlan']>> | null = null
+    try {
+      if (doc.seed) {
+        seedId = ((await this.graphPropose('seed', YAML.stringify(doc.seed))) as { id: number }).id
+      }
+      planProposal = await this.projects.proposePlan(fm.id, YAML.stringify({ project: fm.id, plan: doc.plan }), seedId !== null ? { pair: seedId } : {})
+      if (seedId !== null) await this.store.updateProposal(seedId, { pair: planProposal.id })
+    } catch (err) {
+      // 计划半区受理失败：种子半区联动退回（不留孤儿 pending），原样抛错
+      if (seedId !== null) {
+        await this.proposals.reject(seedId, `同源双提案受理失败联动退回：${err instanceof Error ? err.message : String(err)}`).catch(() => undefined)
+      }
+      throw err
     }
-    const planProp = await this.projects.proposePlan(fm.id, YAML.stringify({ project: fm.id, plan: doc.plan }))
-    if (seedProposal) {
-      await this.store.updateProposal(planProp.id, { pair: seedProposal.id })
-      await this.store.updateProposal(seedProposal.id, { pair: planProp.id })
-    }
+    const seedProposal = doc.seed
+      ? { id: seedId!, kind: 'seed' as const, course: doc.seed.course, endpoint: doc.seed.endpoint.name, starts: doc.seed.starts.length }
+      : null
     return {
       project: fm.id,
       prior_hits: hits.length,
       notes: picked.map(p => p.path),
       repaired,
-      plan_proposal: planProp,
+      plan_proposal: planProposal!,
       seed_proposal: seedProposal,
-      pair: { plan: planProp.id, seed: seedProposal?.id ?? null },
+      pair: { plan: planProposal!.id, seed: seedProposal?.id ?? null },
     }
   }
 
@@ -1741,7 +1742,7 @@ export class LearnhubEngine {
       throw bad(`提案 kind 不对（#${planPid}=${plan.kind}，#${seedPid}=${seed.kind}）——联合 apply 只收 反编译对（project_plan + seed）。`)
     }
     if (plan.pair !== seedPid || seed.pair !== planPid) {
-      throw bad(`提案 #${planPid} 与 #${seedPid} 不是同一反编译对（pair 联动缺失）——各自单独生效走 learnhub_project_apply / learnhub_graph_apply。`)
+      throw bad(`提案 #${planPid} 与 #${seedPid} 不是同一反编译对（pair 联动缺失或互指不符）——反编译对只走本联合入口；独立提案（无 pair）才走 learnhub_project_apply / learnhub_graph_apply 单独生效。`)
     }
     const today = (await this.learningDay()).today
     // 种子先落图：簇节点 + 终点锚 + ensureNotesFor 笔记脚手架——计划引用先有图可解析
@@ -1769,16 +1770,15 @@ export class LearnhubEngine {
 
   /** 计划提案 apply 的引擎包装（#149 修订驱动生长）：apply 前捕旧计划，apply 后派生
    * 快照 diff（id 为身份锚）并解析换线/补支触发（按锚定课程聚合，宿主入队生长批）；
-   * 已过点里程碑被移除出显式警告（不拒绝）。单边守卫在 projects.applyPlan 内。 */
+   * 已过点里程碑被移除/改名出显式警告（不拒绝）。单边守卫在 projects.applyPlan 内。 */
   async applyProjectPlanProposal(
     pid?: number, opts: { pairApply?: boolean } = {},
   ): Promise<ProjectApplyResult> {
     let before: ProjectFm | null = null
-    const targetPid = pid ?? [...(await this.store.loadProposals())]
-      .reverse().find(p => p.status === 'pending' && p.kind === 'project_plan')?.id
+    const proposals = await this.store.loadProposals()
+    const targetPid = pid ?? [...proposals].reverse().find(p => p.status === 'pending' && p.kind === 'project_plan')?.id
     if (targetPid !== undefined) {
-      const list = await this.store.loadProposals()
-      const prop = list.find(p => p.id === targetPid)
+      const prop = proposals.find(p => p.id === targetPid)
       if (prop?.kind === 'project_plan') {
         before = await this.projects.load(prop.course).catch(() => null)
       }
@@ -1787,7 +1787,7 @@ export class LearnhubEngine {
     if (result.kind !== 'project_plan') return result
     const after = await this.projects.load(result.project)
     const diff = planRevisionDiff(before?.plan ?? [], after.plan)
-    const { triggers, warnings } = await this.planGrowthTriggers(result.project, after, diff)
+    const { triggers, warnings } = await this.planGrowthTriggers(result.project, before, after, diff)
     return {
       ...result,
       plan_diff: diff,
@@ -1799,38 +1799,47 @@ export class LearnhubEngine {
   /** 换线/补支触发解析（读侧派生，#126 接口输入）：added/retargeted 条目的每个
    * nodes 引用——图上已存在 = 换线（stub 激活：内容生成/接入路线）；图上不存在 =
    * 补支（朝新里程碑长粗分支）。路由目标：显式「课程/」前缀照抄；裸名按其余计划
-   * 条目的锚定课程集收敛（恰一门 → 路由，否则落警告不强路由）。 */
+   * 条目的锚定课程集收敛（恰一门 → 路由，否则落警告不强路由）。已过点里程碑被
+   * 移除/改名（同 id）出显式警告——账本事实不改写，但「终点消失/漂移」要可见。 */
   private async planGrowthTriggers(
-    projectId: string, after: ProjectFm, diff: PlanRevisionDiff,
+    projectId: string, before: ProjectFm | null, after: ProjectFm, diff: PlanRevisionDiff,
   ): Promise<{ triggers: PlanGrowthTrigger[]; warnings: string[] }> {
     const warnings: string[] = []
     for (const m of diff.removed) {
-      const settled = await this.projects.milestoneSettleRec(projectId, m.id)
-      if (settled) warnings.push(`里程碑「${m.name}」（${m.id}）已过点对账却被本次修订移除——账本事实不改写，但「终点消失」请知悉。`)
+      if (await this.projects.milestoneSettleRec(projectId, m.id)) {
+        warnings.push(`里程碑「${m.name}」（${m.id}）已过点对账却被本次修订移除——账本事实不改写，但「终点消失」请知悉。`)
+      }
+    }
+    if (before) {
+      const afterById = new Map(after.plan.map(m => [m.id, m]))
+      for (const old of before.plan) {
+        const now = afterById.get(old.id)
+        if (!now || now.name === old.name) continue
+        if (await this.projects.milestoneSettleRec(projectId, old.id)) {
+          warnings.push(`里程碑「${old.name}」（${old.id}）已过点对账却被本次修订改名为「${now.name}」——产物文件名随计划漂移（orphans 提示可见）。`)
+        }
+      }
     }
     type Candidate = { milestone: string; name: string; kind: '换线' | '补支'; node: string; course: string | null }
     const candidates: Candidate[] = []
-    const items = [
-      ...diff.added.map(m => ({ item: m, beforeNodes: undefined as string[] | undefined })),
-      ...diff.retargeted.map(r => ({ item: after.plan.find(m => m.id === r.id)!, beforeNodes: r.before })),
-    ]
-    for (const { item } of items) {
+    const items = [...diff.added, ...diff.retargeted.map(r => after.plan.find(m => m.id === r.id)!)]
+    for (const item of items) {
       for (const spec of item.nodes ?? []) {
+        const { course: specCourse, node } = splitNodeSpec(spec)
         let course: string | null = null
         let exists = false
-        if (spec.includes('/')) {
-          const [cname, node] = spec.split('/', 2)
-          const c = await this.registry.get(cname.trim())
+        if (specCourse !== undefined) {
+          const c = await this.registry.get(specCourse)
           if (!c) {
-            warnings.push(`里程碑「${item.name}」（${item.id}）引用课程「${cname.trim()}」不在注册表——该行不入生长触发。`)
+            warnings.push(`里程碑「${item.name}」（${item.id}）引用课程「${specCourse}」不在注册表——该行不入生长触发。`)
             continue
           }
           const { graph } = await this.loadView(c)
           course = c.name
-          exists = graph.nset.has(node.trim())
+          exists = graph.nset.has(node)
         } else {
           try {
-            const hit = await this.locateNode(spec.trim())
+            const hit = await this.locateNode(node)
             course = hit.course.name
             exists = true
           } catch {

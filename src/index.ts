@@ -550,7 +550,7 @@ function triggerPlanGrowth(ctx: Context, result: { kind?: string; growth?: Array
   for (const t of result.growth) {
     try {
       const r = enqueueGrowthBatch(ctx, t.course, '里程碑计划修订（换线/补支）', t.lines.join('\n'))
-      void runLog('coach_growth', r.message)
+      void runLog('coach_growth', r.message).catch(() => undefined)
     } catch (err) {
       void runLog('coach_growth', `「${t.course}」计划修订生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
         .catch(() => undefined)

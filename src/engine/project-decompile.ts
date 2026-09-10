@@ -93,46 +93,60 @@ export function splitDecompileDoc(
   return { errors: [], result: { plan: pv.plan!, ...(seed ? { seed } : {}) } }
 }
 
+/** 「课程/节点」规格的共享解析（对账门与门面触发解析同一条解析路径）：带「/」前缀
+ * = 显式课程引用；裸名 = 跨课程引用（存在性/唯一性由调用方按各自语义判定）。 */
+export function splitNodeSpec(spec: string): { course?: string; node: string } {
+  return spec.includes('/')
+    ? (() => {
+        const [cname, node] = spec.split('/', 2)
+        return { course: cname.trim(), node: node.trim() }
+      })()
+    : { node: spec.trim() }
+}
+
 /** 名字对账门（受理侧质量门，非学习者门禁；#126 接口输入的落地）：plan[].nodes
- * 引用的节点名必须有着落——种子簇节点名（同源产物自洽）∪ 既有课程图节点名（按
- * 「课程/节点」前缀定位课程，裸名对全部既有名字）。悬空引用会让 resolveProjectNodes
- * 在消费面 fail loud（过点/检索点/行使/2×2），对账门把它拦在受理前；与断边/环检查
- * 同一性质（约束 agent 产出自洽，ADR-0015 裁决 6 的「关联不门禁人」不拦「对账约束
- * agent」）。返回错误行列表（空 = 通过）。 */
+ * 引用的节点名必须有着落且无歧义——种子簇节点名（同源产物自洽）∪ 既有课程图节点名。
+ * 显式「课程/节点」= 该课程图内必须存在；裸名 = 恰一着落（种子簇命中与既有课程命中
+ * 并存、或多门课程命中都是歧义——消费面 locateNode 对多门命中 fail loud，对账门把
+ * 悬空与歧义一并拦在受理前；与断边/环检查同一性质：约束 agent 产出自洽，ADR-0015
+ * 裁决 6 的「关联不门禁人」不拦「对账约束 agent」）。返回错误行列表（空 = 通过）。 */
 export function reconcilePlanNodes(
   plan: PlanItem[],
   opts: { seed?: { course: string; nodeNames: Set<string> }; existingByCourse: Map<string, Set<string>> },
 ): string[] {
-  const existingNames = new Set<string>()
-  for (const names of opts.existingByCourse.values()) for (const n of names) existingNames.add(n)
   const errors: string[] = []
   plan.forEach((item, i) => {
     for (const [j, spec] of (item.nodes ?? []).entries()) {
       const where = `plan.${i + 1}.nodes.${j + 1}`
-      if (spec.includes('/')) {
-        const [cname, node] = spec.split('/', 2)
-        const courseKey = cname.trim()
-        const nodeKey = node.trim()
-        if (opts.seed && courseKey === opts.seed.course) {
-          const inSeed = opts.seed.nodeNames.has(nodeKey)
-          const inExisting = opts.existingByCourse.get(courseKey)?.has(nodeKey) ?? false
+      const { course, node } = splitNodeSpec(spec)
+      if (course !== undefined) {
+        if (opts.seed && course === opts.seed.course) {
+          const inSeed = opts.seed.nodeNames.has(node)
+          const inExisting = opts.existingByCourse.get(course)?.has(node) ?? false
           if (!inSeed && !inExisting) {
             errors.push(`${where}「${spec}」不在种子簇节点名中（同源对账：种子簇 = ${[...opts.seed.nodeNames].sort().join('、')}）`)
           }
           continue
         }
-        const names = opts.existingByCourse.get(courseKey)
+        const names = opts.existingByCourse.get(course)
         if (!names) {
-          errors.push(`${where} 引用课程「${courseKey}」不在注册表（反编译对账只对种子课程与既有课程）`)
+          errors.push(`${where} 引用课程「${course}」不在注册表（反编译对账只对种子课程与既有课程）`)
           continue
         }
-        if (!names.has(nodeKey)) {
-          errors.push(`${where}「${spec}」引用的节点不在课程「${courseKey}」图内——反编译双提案必须自洽（计划引用悬空节点会在过点/检索点/行使消费面炸）；朝尚不存在节点的意图留给计划修订驱动的教练补支`)
+        if (!names.has(node)) {
+          errors.push(`${where}「${spec}」引用的节点不在课程「${course}」图内——反编译双提案必须自洽（计划引用悬空节点会在过点/检索点/行使消费面炸）；朝尚不存在节点的意图留给计划修订驱动的教练补支`)
         }
         continue
       }
-      if (!opts.seed?.nodeNames.has(spec.trim()) && !existingNames.has(spec.trim())) {
-        errors.push(`${where}「${spec.trim()}」未落在种子簇或既有图节点名中（名字对账门：引用的节点必须在种子簇内或既有图内；跨课程建议写「课程/节点」全形）`)
+      // 裸名：恰一着落（种子簇 ∪ 各课程唯一命中）
+      const courseHits = [...opts.existingByCourse.entries()].filter(([, names]) => names.has(node)).map(([c]) => c)
+      const seedHit = opts.seed?.nodeNames.has(node) ?? false
+      if (seedHit && courseHits.length) {
+        errors.push(`${where}「${node}」同时落在种子簇与课程「${courseHits.join('、')}」——歧义引用，写「课程名/节点名」全形`)
+      } else if (courseHits.length > 1) {
+        errors.push(`${where}「${node}」在多门课程中命中（${courseHits.join('、')}）——歧义引用，写「课程名/节点名」全形`)
+      } else if (!seedHit && courseHits.length === 0) {
+        errors.push(`${where}「${node}」未落在种子簇或既有图节点名中（名字对账门：引用的节点必须在种子簇内或既有图内；跨课程建议写「课程/节点」全形）`)
       }
     }
   })

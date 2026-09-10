@@ -190,10 +190,16 @@ test('reconcilePlanNodes：名字对账门——引用必须有 种子簇∪既�
   assert.match(dangling[0]!, /弹唱编配/)
   assert.match(dangling[0]!, /不在种子簇节点名/)
 
-  // 裸名对全部既有名字 + 种子簇
+  // 裸名：恰一着落——种子簇唯一命中或恰一门课程命中都放行；歧义（多门命中/种子∩既有）
   assert.deepEqual(reconcilePlanNodes(planOf([['音阶爬格']]), { seed, existingByCourse: existing }), [])
+  assert.deepEqual(reconcilePlanNodes(planOf([['入门']]), { seed, existingByCourse: new Map([['数学', new Set(['入门'])]]) }), [])
   const bareMiss = reconcilePlanNodes(planOf([['不存在的节点']]), { seed, existingByCourse: existing })
   assert.match(bareMiss[0]!, /未落在种子簇或既有图节点名/)
+  const twoCourses = new Map<string, Set<string>>([['数学', new Set(['入门'])], ['物理', new Set(['入门'])]])
+  const ambiguous = reconcilePlanNodes(planOf([['入门']]), { seed, existingByCourse: twoCourses })
+  assert.match(ambiguous[0]!, /多门课程中命中/)
+  const bothHit = reconcilePlanNodes(planOf([['音阶爬格']]), { seed, existingByCourse: new Map([['数学', new Set(['音阶爬格'])]]) })
+  assert.match(bothHit[0]!, /同时落在种子簇/)
 
   // 未注册课程前缀
   const noCourse = reconcilePlanNodes(planOf([['钢琴/入门']]), { seed, existingByCourse: existing })
