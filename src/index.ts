@@ -131,7 +131,7 @@ const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prompt?: st
     prompt: '为「<项目>」起草一份里程碑计划提案' },
   { tool: 'learnhub_project_milestone_generate', page: 'projects', text: '按当前渐退档生成里程碑任务卡（部分完成 + 验收清单）。',
     prompt: '给「<项目>」的里程碑 m1 生成任务卡' },
-  { tool: 'learnhub_project_decompile', page: 'projects', text: '目标反编译：从项目目标描述反推「里程碑计划 + 知识子图」双提案（人审后生效）。',
+  { tool: 'learnhub_project_decompile', page: 'projects', text: '目标反编译 v8：从项目目标反推「里程碑计划 + 知识种子簇」双提案（同进同退，人审后联合生效）。',
     prompt: '对目标「<项目描述>」做一次目标反编译' },
   { tool: 'learnhub_project_milestone_pass', page: 'projects', text: '里程碑显式通过结算：按 est 定价锁定 XP（对账动作，不是删除）。',
     prompt: '「<项目>」的里程碑 m1 通过了，帮我结算' },
@@ -169,6 +169,9 @@ interface GenJob {
   /** 生长批任务的裁决结果（#145，phase=生长；队列空闲自动拉批的重拉判据读它）：
    * idle=就绪深度满足未拉回合 / no_structure=教练裁决暂不产结构 / applied=已应用。 */
   growthOutcome?: 'idle' | 'no_structure' | 'applied'
+  /** 里程碑计划修订注入（#149）：换线/补支注入块随任务携带进教练回合（注入即显式
+   * 重新裁决请求——就绪深度满足也不短路停摆，见 coachGrowthBatch）。 */
+  growthInject?: string
 }
 const genJobs = new Map<string, GenJob>()
 
@@ -515,8 +518,10 @@ const GROWTH_JOB_NODE = '生长批'
  * 阻尼防泵循环（否则「失败→排空→检查点→入队」立即成环）：同课已有生长批在途不重入；
  * 上一批失败/取消不自动重试——从生成页人工重试，或终态保留期（24h）过后自然恢复；
  * 上一批以 idle/no_structure 收尾也不重拉——教练停摆与「暂不产结构」都是裁决，
- * 重拉要等新的队列活动带来新内容。自动拉批只在队列空闲检查点接线（另两点=感知面）。 */
-function enqueueGrowthBatch(ctx: Context, course: string, why: string): { message: string; queued: boolean } {
+ * 重拉要等新的队列活动带来新内容。自动拉批只在队列空闲检查点接线（另两点=感知面）。
+ * inject（#149）= 计划修订的换线/补支注入：显式的重新裁决请求，豁免 idle/no_structure
+ * 阻尼（计划改了目标，上一次停摆裁决不再代表现状）；在途/失败阻尼照旧。 */
+function enqueueGrowthBatch(ctx: Context, course: string, why: string, inject?: string): { message: string; queued: boolean } {
   const key = `${course}/${GROWTH_JOB_NODE}`
   const last = genJobs.get(key)
   if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
@@ -525,16 +530,32 @@ function enqueueGrowthBatch(ctx: Context, course: string, why: string): { messag
   if (last && (last.status === 'failed' || last.status === 'cancelled')) {
     return { message: `「${course}」上一生长批${last.status === 'failed' ? '失败' : '已取消'}（${last.message ?? ''}），不自动重试——可从生成页重试或等下一次触发。`, queued: false }
   }
-  if (last && last.status === 'done' && last.growthOutcome !== 'applied') {
+  if (!inject && last && last.status === 'done' && last.growthOutcome !== 'applied') {
     return { message: `「${course}」上一生长批裁决为 ${last.growthOutcome === 'idle' ? '停摆' : '暂不产结构'}，不重拉。`, queued: false }
   }
   genJobs.set(key, {
     course, node: GROWTH_JOB_NODE, startedAt: new Date().toISOString(), status: 'queued', phase: '生长',
     model: llmCfg.model, message: `排队等待教练回合（${why}）…`,
+    ...(inject ? { growthInject: inject } : {}),
   })
   persistGenJobs()
   pumpGeneration(ctx)
   return { message: `「${course}」生长批已入队（${why}）。`, queued: true }
+}
+
+/** 计划修订驱动的生长批入队（#149）：apply 结果携带换线/补支触发时逐课程入队
+ * （注入块随任务走）。 */
+function triggerPlanGrowth(ctx: Context, result: { kind?: string; growth?: Array<{ course: string; lines: string[] }> }): void {
+  if (result.kind !== 'project_plan' || !result.growth?.length) return
+  for (const t of result.growth) {
+    try {
+      const r = enqueueGrowthBatch(ctx, t.course, '里程碑计划修订（换线/补支）', t.lines.join('\n'))
+      void runLog('coach_growth', r.message)
+    } catch (err) {
+      void runLog('coach_growth', `「${t.course}」计划修订生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
+        .catch(() => undefined)
+    }
+  }
 }
 
 /** 生长批任务执行（#145）：coachGrowthBatch 两段式回合 + 受理接线；应用成功后对
@@ -546,7 +567,7 @@ async function generateGrowthJob(ctx: Context, job: GenJob): Promise<void> {
   job.message = '教练回合裁决中（轻量段）…'
   persistGenJobs()
   try {
-    const r = await engine.coachGrowthBatch(job.course, llmSeam(ctx))
+    const r = await engine.coachGrowthBatch(job.course, llmSeam(ctx), job.growthInject ? { inject: job.growthInject } : {})
     if (r.state === 'idle') {
       job.growthOutcome = 'idle'
       job.status = 'done'
@@ -1319,8 +1340,11 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       }
       if (route === '/proposals/apply') {
         // 提案统一 apply（图谱域 gen/edit + 项目域 project_plan/project_milestone）：
-        // kind 必须显式照抄提案记录，未知 kind 引擎报错——不再静默归一成 gen
-        sendJson(res, 200, await engine.proposalApply(need(body, 'kind'), applyId(body.id)))
+        // kind 必须显式照抄提案记录，未知 kind 引擎报错——不再静默归一成 gen；
+        // 计划修订触发的换线/补支生长批随后入队（#149）
+        const applied = await engine.proposalApply(need(body, 'kind'), applyId(body.id))
+        triggerPlanGrowth(ctx, applied as { kind?: string })
+        sendJson(res, 200, applied)
         return
       }
       if (route === '/proposals/reject') {
@@ -2124,7 +2148,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; from: string; to: string }) => run('learnhub_graph_path', async () =>
       JSON.stringify(await engine.graphPath(args.course, args.from, args.to))))
   tool('learnhub_graph_propose',
-    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen is RETIRED (cutover #138, ADR-0033 grown graph) and rejected at the gate. kind=seed (#142) is the NEW-COURSE ENTRY: 1-3 start nodes + one endpoint node; the engine lands coarse placeholder edges (endpoint.pre = starts), one human review then the course starts. Seed nodes carry ZERO enc and ZERO est (rejected if declared); goal_type defaults to capability (completion = endpoint mastery + closure health) — coverage must be explicit AND carry a non-empty worksheet list ({block, note?, done?}; capability+worksheet is rejected). mode=new requires the course NOT be registered (the engine scaffolds the registry entry + dirs on apply); mode=reseed requires it — endpoint change / worksheet update of an existing course, the ONLY anchor-edit channel (no direct anchor writes; the endpoint-anchored node is also guarded: del_node/rename via kind=edit are rejected). Start entries may declare basis: baseline (common knowledge start) / vault (prior familiarity boundary) / project (decompiled-cluster placeholder, wired by the project-anchoring ticket). Seed node keys: name/region/block/note?/bloom?/difficulty?/teaches?/assumes?/misconceptions?. kind=edit (per batch) top-level keys: course; reason?; concepts? ([{canonical, aliases?, definition?}] — concept-registry minting block, #141: names land in 课程根/概念登记表.yaml with the SAME apply transaction, nothing written while the proposal is pending/rejected); ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Concept-reference gate (#141): every concept named in teaches/assumes/misconceptions must be registered in the course concept registry (canonical or alias, exact match) OR minted in the same proposal\'s concepts block — unregistered names are rejected with the missing list; minting a name that already exists is rejected too (reference the entry, or merge via learnhub_concept_merge after human confirmation). Prior feed (#142): vault-link candidates with w≥0.7 mapped to the proposal\'s nodes that the structure does NOT explicitly answer (no pre/enc edge between the pair) come back in warns (non-blocking) — answer them with real edges, or let a vault rescan drop them; zero priors is a legal normal path. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In graph-generation batches apply edit proposals immediately after gates pass (anchor-review model, ADR-0003); seed proposals wait for the one human review.',
+    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen is RETIRED (cutover #138, ADR-0033 grown graph) and rejected at the gate. kind=seed (#142) is the NEW-COURSE ENTRY: 1-3 start nodes + one endpoint node; the engine lands coarse placeholder edges (endpoint.pre = starts), one human review then the course starts. Seed nodes carry ZERO enc and ZERO est (rejected if declared); goal_type defaults to capability (completion = endpoint mastery + closure health) — coverage must be explicit AND carry a non-empty worksheet list ({block, note?, done?}; capability+worksheet is rejected). mode=new requires the course NOT be registered (the engine scaffolds the registry entry + dirs on apply); mode=reseed requires it — endpoint change / worksheet update of an existing course, the ONLY anchor-edit channel (no direct anchor writes; the endpoint-anchored node is also guarded: del_node/rename via kind=edit are rejected). Start entries may declare basis: baseline (common knowledge start) / vault (prior familiarity boundary) / project (decompiled cluster; goal decompilation #149 stamps it automatically on the starts it files). Seed node keys: name/region/block/note?/bloom?/difficulty?/teaches?/assumes?/misconceptions?. kind=edit (per batch) top-level keys: course; reason?; concepts? ([{canonical, aliases?, definition?}] — concept-registry minting block, #141: names land in 课程根/概念登记表.yaml with the SAME apply transaction, nothing written while the proposal is pending/rejected); ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Concept-reference gate (#141): every concept named in teaches/assumes/misconceptions must be registered in the course concept registry (canonical or alias, exact match) OR minted in the same proposal\'s concepts block — unregistered names are rejected with the missing list; minting a name that already exists is rejected too (reference the entry, or merge via learnhub_concept_merge after human confirmation). Prior feed (#142): vault-link candidates with w≥0.7 mapped to the proposal\'s nodes that the structure does NOT explicitly answer (no pre/enc edge between the pair) come back in warns (non-blocking) — answer them with real edges, or let a vault rescan drop them; zero priors is a legal normal path. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In graph-generation batches apply edit proposals immediately after gates pass (anchor-review model, ADR-0003); seed proposals wait for the one human review.',
     {
       kind: { type: 'string', required: true, description: '"seed" (new-course entry or endpoint change — one human review) or "edit" (change ops) or "enrich" (overlay backfill); kind=gen (course skeleton) is retired and rejected' },
       yaml: { type: 'string', required: true, description: 'Full proposal YAML text (SeedProposal / EditProposal / EnrichProposal schema)' },
@@ -2602,10 +2626,13 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { id: string; milestone: string }) => run('learnhub_project_milestone_generate', () =>
       generateProjectMilestone(ctx, args.id, args.milestone)))
   tool('learnhub_project_apply',
-    'Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted; project_milestone = overwrite the milestone artifact with the old text snapshotted). Graph proposals (gen/edit) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.',
+    'Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted — a revision diff (milestone identity keyed by id) is returned and switch-line/branch-in growth batches are ENQUEUED for the anchored courses (#149); project_milestone = overwrite the milestone artifact with the old text snapshotted). Decompile-linked plan proposals CANNOT apply alone while their seed half is pending — use learnhub_project_decompile_apply. Graph proposals (edit/seed) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.',
     { id: { type: 'number', required: true, description: 'Pending proposal id' } },
-    (args: { id: number }) => run('learnhub_project_apply', async () =>
-      JSON.stringify(await engine.projectApply(args.id))))
+    (args: { id: number }) => run('learnhub_project_apply', async () => {
+      const result = await engine.projectApply(args.id)
+      triggerPlanGrowth(ctx, result)
+      return JSON.stringify(result)
+    }))
   tool('learnhub_project_milestone_pass',
     'Record the learner\'s EXPLICIT milestone pass (P-4 settlement): the learner declares a milestone checkpoint reached — no checklist gate and no question gate (Kulik 1990: strict gates hurt completion). One journal settlement row lands (kind=milestone_settle, aligned with the node xp_settle precedent): XP price = the plan\'s est declaration × FSRS difficulty calibration over the DECLARED linked nodes\' question pools (defaults when undeclared; the calibration basis is locked to the plan — it cannot be extended at pass time), locked once — a second pass of the same milestone id is rejected, so revising a plan must use fresh milestone ids. This is the ONLY journal write the project domain ever makes; it counts toward the ledger and streak like real focused work does.',
     {
@@ -2650,11 +2677,11 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { id: string; milestone?: string; nodes?: string[]; window_days?: number; min_co?: number }) => run('learnhub_project_enc_candidates', async () =>
       JSON.stringify(await engine.projectEncCandidates(args.id, { milestone: args.milestone, nodes: args.nodes, window_days: args.window_days, min_co: args.min_co }))))
   tool('learnhub_project_decompile',
-    'RETIRED at the cutover (#138, ADR-0033 grown graph): the knowledge-subgraph half rode the retired gen skeleton proposal path, so this entry now fails loud with a pointer — decompile subgraph clusters return later as SEEDS (#149 project milestone anchoring). Day-to-day milestone plan revision is unaffected: use learnhub_project_plan_generate (project_plan proposals + snapshot diff).',
+    'GOAL DECOMPILATION, v8 seed-cluster form (#149): one model call produces TWO paired proposals from the goal description + registered notes — a milestone plan draft (project_plan) and a knowledge-subgraph SEED CLUSTER (kind=seed: 1-3 start nodes + endpoint, engine stamps basis=project and lands the coarse placeholder edges). Same-origin in-out: both pass gates before EITHER is filed (plan-seed name-reconciliation gate: every plan.nodes reference must resolve to a seed-cluster node or an existing graph node — dangling references reject the whole run), and the pair is LINKED (apply ONLY via learnhub_project_decompile_apply which lands the seed graph first then the plan; rejecting one auto-rejects the other). With an explicit course param: the course must already exist and NO seed half is produced (the plan references existing nodes only — new knowledge needs are grown later by the coach, driven by plan-revision diffs). Vault priors are mined read-only; nothing canonical is written before apply.',
     {
       id: { type: 'string', required: true, description: 'Project id (the plan-draft proposal targets it)' },
       goal: { type: 'string', description: 'Goal description prose; defaults to the project\'s goal field (empty goal is rejected)' },
-      course: { type: 'string', description: 'Target course name: the subgraph appends to it; omit → subgraph becomes a NEW course skeleton proposal' },
+      course: { type: 'string', description: 'Existing target course: plan-only run (nodes must reference existing graph nodes); omit → the seed cluster becomes a NEW course seed proposal (pair-linked with the plan)' },
       notes: { type: 'array', items: { type: 'string' }, description: 'Registered note-source ids or vault-relative paths to mine for prior context; omit → all registered sources' },
     },
     (args: { id: string; goal?: string; course?: string; notes?: string[] }) => run('learnhub_project_decompile', async () =>
@@ -2667,8 +2694,16 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         },
         llmSeam(ctx),
       ))))
+  tool('learnhub_project_decompile_apply',
+    'Apply a DECOMPILED pair TOGETHER (project_plan + seed, #149 same-origin in-out): pass BOTH proposal ids from learnhub_project_decompile; the seed lands first (cluster nodes + endpoint anchor + note scaffolds) so the plan\'s node references resolve, then the plan writes. Single-sided apply of a linked pair is rejected at the guard — use this joint entry (crash recovery: an already-applied half is skipped, a rejected half never revives — re-decompile instead).',
+    {
+      plan: { type: 'number', required: true, description: 'project_plan proposal id' },
+      seed: { type: 'number', required: true, description: 'seed proposal id (pair-linked with the plan)' },
+    },
+    (args: { plan: number; seed: number }) => run('learnhub_project_decompile_apply', async () =>
+      JSON.stringify(await engine.projectDecompileApply(args.plan, args.seed))))
   tool('learnhub_project_exec_log',
-    'Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project\'s OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. When nodes names linked course nodes, every EXISTING enc edge whose BOTH ends are among them counts as exercised: practice evidence flows ONE-WAY into each endpoint node\'s practice channel (existing applyPracticeEvidence EMA; the two streams stay separate). Zero XP, zero journal, zero FSRS/scheduling writes.',
+    'Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project\'s OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. Exercised linked nodes get practice evidence backflow ONE-WAY into each node\'s practice channel (existing applyPracticeEvidence EMA, node-level dedup — seeded stub nodes participate exactly like taught ones); the count of exercised existing enc edges is reported for observability but coarse placeholder pre edges are NOT backflow channels. Zero XP, zero journal, zero FSRS/scheduling writes.',
     {
       id: { type: 'string', required: true, description: 'Project id' },
       source: { type: 'string', required: true, description: 'auto (requires evidence) / self / ai' },

@@ -14,8 +14,9 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   validatePlanItems, validatePlanArtifact, validateMilestoneArtifact,
-  gateMilestone, milestoneFileOf, PROJECT_LIFECYCLES, FADING_TIERS,
+  gateMilestone, milestoneFileOf, PROJECT_LIFECYCLES, FADING_TIERS, planRevisionDiff,
 } from '../src/engine/projects.ts'
+import type { PlanItem } from '../src/engine/projects.ts'
 import { Content } from '../src/engine/content.ts'
 import { withVault } from './helpers/vault.ts'
 
@@ -271,5 +272,115 @@ test('红线：项目全路径零 canonical 写入——复习队列/XP 账本/�
     const after = await store.journalTail(null, 100)
     assert.equal(after.length, journalBefore.length)
     assert.equal(PROJECT_LIFECYCLES.length, 4)
+  })
+})
+
+// ---- #149 项目里程碑锚定：计划修订快照 diff（id 身份锚）与换线/补支触发 ----
+
+test('#149 快照 diff 纯函数：id 身份锚定——重排/改名词不误报；nodes 重指进 retargeted', () => {
+  const item = (id: string, name: string, nodes?: string[]): PlanItem => ({
+    id, name, task_class: '简', acceptance_hints: '达标', ...(nodes ? { nodes } : {}),
+  })
+  const before = [item('m1', '甲', ['数学/入门']), item('m2', '乙', ['数学/进阶']), item('m3', '丙')]
+  // 重排 + 改名 + est 微调：身份与挂靠都没变 → 零 diff（id 是身份锚，序位/名字会漂移）
+  const reordered = [item('m3', '丙（改名）'), item('m1', '甲', ['数学/入门']), item('m2', '乙', ['数学/进阶'])]
+  const empty = planRevisionDiff(before, reordered)
+  assert.equal(empty.added.length, 0)
+  assert.equal(empty.removed.length, 0)
+  assert.equal(empty.retargeted.length, 0)
+  // nodes 集合比较与顺序无关：仅顺序变化不算重指
+  const orderOnly = planRevisionDiff(
+    [item('m1', '甲', ['数学/入门', '数学/进阶']), item('m2', '乙'), item('m3', '丙')],
+    [item('m1', '甲', ['数学/进阶', '数学/入门']), item('m2', '乙'), item('m3', '丙')],
+  )
+  assert.equal(orderOnly.retargeted.length, 0)
+  // 丢弃全部 nodes = 解除挂靠，也算重指（after 为空集，触发派生侧自然忽略空引用）
+  const dropped = planRevisionDiff(before, [item('m1', '甲', ['数学/入门']), item('m2', '乙'), item('m3', '丙')])
+  assert.deepEqual(dropped.retargeted, [{ id: 'm2', name: '乙', before: ['数学/进阶'], after: [] }])
+  // 增/删/重指各就位
+  const diff = planRevisionDiff(before, [
+    item('m1', '甲', ['数学/即兴']), // 重指
+    item('m4', '丁', ['数学/入门']), // 新增
+  ])
+  assert.deepEqual(diff.added.map(m => m.id), ['m4'])
+  assert.deepEqual(diff.removed.map(m => m.id), ['m2', 'm3'])
+  assert.deepEqual(diff.retargeted, [{ id: 'm1', name: '甲', before: ['数学/入门'], after: ['数学/即兴'] }])
+})
+
+test('#149 修订 apply 面：换线/补支触发随结果带出（按锚定课程聚合）；已过点里程碑被移除出显式警告', async () => {
+  await withVault({
+    graph: [
+      'region: 基础',
+      'color: blue',
+      'blocks:',
+      '  - name: 入门块',
+      '    nodes:',
+      '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+      '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
+    ].join('\n'),
+    notes: { 入门: {}, 进阶: {} },
+  }, async ({ engine }) => {
+    await engine.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
+    const plan1 = `\
+project: 练琴计划
+plan:
+  - id: m1
+    name: 识谱弹奏
+    task_class: 简：照谱复现
+    acceptance_hints: 十次内八次正确
+    nodes: [数学/入门]
+`
+    const p1 = await engine.projectPlanPropose('练琴计划', plan1)
+    const r1 = await engine.projectApply(p1.id)
+    assert.equal(r1.kind, 'project_plan')
+    // 初次规划的 added=m1 → 既有节点 = 换线（stub 激活），路由到锚定课程
+    const g1 = (r1 as { growth?: Array<{ course: string; lines: string[] }> }).growth
+    assert.ok(g1?.length === 1 && g1[0].course === '数学')
+    assert.match(g1[0].lines.join('\n'), /换线.*数学\/入门/)
+
+    await engine.projectMilestonePass('练琴计划', 'm1') // m1 过点对账（账本事实）
+
+    // 修订：m1 重指到不存在节点（补支）+ m2 挂既有节点（换线）+ m1 过点后被移除会触发警告（此处不删 m1）
+    const plan2 = `\
+project: 练琴计划
+plan:
+  - id: m1
+    name: 识谱弹奏
+    task_class: 简：照谱复现
+    acceptance_hints: 十次内八次正确
+    nodes: [数学/即兴入门]
+  - id: m2
+    name: 双音听辨
+    task_class: 中：结合乐器
+    acceptance_hints: 十次内八次正确
+    nodes: [数学/进阶]
+`
+    const p2 = await engine.projectPlanPropose('练琴计划', plan2)
+    const r2 = await engine.projectApply(p2.id) as {
+      plan_diff?: { added: Array<{ id: string }>; removed: Array<{ id: string }>; retargeted: Array<{ id: string }> }
+      plan_diff_warnings?: string[]
+      growth?: Array<{ course: string; lines: string[] }>
+    }
+    assert.deepEqual(r2.plan_diff!.retargeted.map(r => r.id), ['m1'])
+    assert.deepEqual(r2.plan_diff!.added.map(m => m.id), ['m2'])
+    assert.equal(r2.plan_diff!.removed.length, 0)
+    const lines = r2.growth!.map(t => t.lines.join('\n')).join('\n')
+    assert.match(lines, /补支.*数学\/即兴入门/, '图上不存在的引用 → 补支')
+    assert.match(lines, /换线.*数学\/进阶/, '图上已有的引用 → 换线（stub 激活）')
+    assert.ok(r2.growth!.every(t => t.course === '数学'), '按锚定课程聚合')
+
+    // 已过点的 m1 被修订移除 → 显式警告（不拒绝）
+    const plan3 = `\
+project: 练琴计划
+plan:
+  - id: m2
+    name: 双音听辨
+    task_class: 中：结合乐器
+    acceptance_hints: 十次内八次正确
+    nodes: [数学/进阶]
+`
+    const p3 = await engine.projectPlanPropose('练琴计划', plan3)
+    const r3 = await engine.projectApply(p3.id) as { plan_diff_warnings?: string[] }
+    assert.ok((r3.plan_diff_warnings ?? []).some(w => w.includes('m1') && w.includes('过点')), '「终点消失」要可见')
   })
 })

@@ -1119,12 +1119,11 @@ export interface ProjectExecRec {
   note?: string
 }
 
-/** 单个节点的练习证据回流回执（projectExecLog；单向复制进节点练习证据通道）。 */
+/** 单个节点的练习证据回流回执（projectExecLog；#149 行使即回流——节点级单向复制进
+ * 练习证据通道；粗 pre 占位边不是回流通道，行使记录只留 exec 流水）。 */
 export interface ProjectExecBackflow {
   course: string
   node: string
-  /** 被行使的 enc 边（holder → skill 有向形态，审计展示用）。 */
-  edge: [string, string]
   ema_before: number
   ema_after: number
   mastery_after: number
@@ -1139,10 +1138,10 @@ export interface ProjectExecResult {
   /** 评级映射后的 0-1 分数（回流写入节点 practice_ema 的分值）。 */
   score: number
   nodes: string[]
-  /** 被行使的既有 enc 边数（每条边两端节点各回流一次）。 */
+  /** 被行使的既有 enc 边数（两端都在事件 nodes 内；enc 面观测——回流已改节点级）。 */
   edges: number
   backflow: ProjectExecBackflow[]
-  /** 行使边两端节点笔记缺失/不可用时的跳过清单（Missing 合法空态）。 */
+  /** 行使节点笔记缺失/不可用时的跳过清单（Missing 合法空态）。 */
   skipped: Array<{ course: string; node: string; reason: string }>
 }
 

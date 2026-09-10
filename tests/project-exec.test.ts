@@ -1,10 +1,13 @@
 /**
- * 项目执行事件流与 Mastery 交叉 2×2（P-7 / #98 / ADR-0015 §3/§4/§8）。
+ * 项目执行事件流与 Mastery 交叉 2×2（P-7 / #98 / ADR-0015 §3/§4/§8；#149 行使即回流）。
  *
  * - 纯函数：评级→0-1 分数确定性映射（ratingFromEvidence 证据带的带中点逆映射）、
- *   被行使 enc 边判定（两端都在事件 nodes 内）、2×2 象限分类、入档推荐（challenge point）。
- * - 验收主链：一条执行事件走完 回流（两端节点 practice EMA 各变化一次）→ mastery 变化
+ *   被行使 enc 边判定（两端都在事件 nodes 内；#149 起降为 enc 面观测）、2×2 象限分类、
+ *   入档推荐（challenge point）。
+ * - 验收主链：一条执行事件走完 回流（节点级：行使节点各回流一次 EMA）→ mastery 变化
  *   → 项目 2×2 象限落位 全链。
+ * - #149 stub 语义：种子簇节点（stub）行使即回流 EMA（mastery/enc 面天然参与）；
+ *   粗 pre 占位边只记流（exec.jsonl）不回流（边零证据写入）。
  * - 非对称红线：升档推荐在任何门禁位不出现（gateMilestone/passMilestone 行为零变化、
  *   推荐纯函数、推荐不落盘）；执行事件零 XP、零 journal/review-log/practice/sessions/srs。
  */
@@ -165,13 +168,12 @@ test('主链：一条执行事件走完 回流→practice EMA→mastery→2×2 �
       source: 'self', rating: 3, nodes: ['进阶', '入门'], note: '第一次合练',
     })
     assert.equal(r.score, 0.8)
-    assert.equal(r.edges, 1, '一条被行使 enc 边（进阶→入门）')
-    assert.equal(r.backflow.length, 2, '边两端节点各回流一次')
+    assert.equal(r.edges, 1, '一条被行使 enc 边（进阶→入门；enc 面观测）')
+    assert.equal(r.backflow.length, 2, '行使即回流（节点级）：两节点各一次、同节点去重')
     const bf = Object.fromEntries(r.backflow.map(b => [b.node, b]))
     assert.equal(bf['入门'].ema_before, 0)
     assert.equal(bf['入门'].ema_after, 0.8)
     assert.equal(bf['进阶'].ema_after, 0.8)
-    assert.deepEqual(bf['入门'].edge, ['进阶', '入门'])
 
     // 两端节点 practice EMA 各变化一次、mastery 相应变化（frontmatter 是唯一写点）
     const after = await stateOf(engine)
@@ -205,7 +207,7 @@ test('主链：一条执行事件走完 回流→practice EMA→mastery→2×2 �
   })
 })
 
-test('事件流边界：无 enc 边 / 空 nodes / 未知节点 / 评级越界 / auto 无证据', async () => {
+test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / 未知节点 / 评级越界 / auto 无证据', async () => {
   await withVault({
     graph: NO_ENC_GRAPH,
     notes: { 入门: {}, 平行: {} },
@@ -214,17 +216,19 @@ test('事件流边界：无 enc 边 / 空 nodes / 未知节点 / 评级越界 / 
     const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 平行'))
     await engine.projectApply(p1.id)
 
-    // 无 enc 边 → 只落项目流、不回流
+    // 无 enc 边（#149 行使即回流的节点级修订）：节点照样回流 EMA——stub 语义的底座
     const r = await engine.projectExecLog('练琴计划', { source: 'self', rating: 4, nodes: ['入门', '平行'] })
-    assert.equal(r.edges, 0)
-    assert.equal(r.backflow.length, 0)
+    assert.equal(r.edges, 0, '零被行使 enc 边（只作观测）')
+    assert.equal(r.backflow.length, 2, '行使即回流：两节点各一次')
     const after = await stateOf(engine)
-    assert.equal(after['入门']?.practice_ema ?? 0, 0, '无行使边不回流')
+    assert.equal(after['入门']?.practice_ema, 0.95, '节点练习证据 EMA 随行使写入')
+    assert.equal(after['平行']?.practice_ema, 0.95)
 
-    // 空 nodes（文档化语义：只落项目流）
+    // 空 nodes（文档化语义：只落项目流，零回流）
     const r2 = await engine.projectExecLog('练琴计划', { source: 'ai', rating: 2 })
     assert.deepEqual(r2.nodes, [])
     assert.equal(r2.edges, 0)
+    assert.equal(r2.backflow.length, 0)
     assert.equal(JSON.parse(readFileSync(join(paths.projectsDir, '练琴计划', 'exec.jsonl'), 'utf8').trim().split('\n').at(-1)!).nodes.length, 0)
 
     // 评级越界 / 小数 / 未知来源 / 未知节点 fail loud，且不落流
@@ -241,6 +245,47 @@ test('事件流边界：无 enc 边 / 空 nodes / 未知节点 / 评级越界 / 
     const r3 = await engine.projectExecLog('练琴计划', { source: 'auto', evidence: { accuracy: 0.95 } })
     assert.equal(r3.rating, 4)
     assert.equal(r3.score, 0.95)
+  })
+})
+
+test('#149 stub 与粗 pre：种子簇节点行使回流 EMA（自身一次）；粗 pre 占位边只记流不回流', async () => {
+  await withVault({ registry: null, graph: null }, async ({ engine, paths }) => {
+    // 种子图（粗占位边：endpoint.pre = starts）+ 项目挂靠种子簇节点
+    const seedYaml = `course: 数学
+mode: new
+goal_type: capability
+endpoint:
+  name: 弹唱目标
+  region: 演奏
+  block: 终点块
+starts:
+  - name: 持琴与手型
+    region: 演奏
+    block: 入手块
+    basis: project
+  - name: 音阶爬格
+    region: 演奏
+    block: 入手块
+    basis: project
+`
+    const sp = await engine.graphPropose('seed', seedYaml) as { id: number }
+    await engine.graphApply('seed', sp.id)
+    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '数学/弹唱目标, 数学/音阶爬格'))
+    await engine.projectApply(p1.id)
+
+    // 事件行使「终点 + 一个起点」：两节点间只有粗 pre 占位边（无 enc）
+    const r = await engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['数学/弹唱目标', '数学/音阶爬格'] })
+    assert.equal(r.edges, 0, '粗 pre 占位边不是 enc 边——零被行使边（只记流）')
+    assert.equal(r.backflow.length, 2, '行使即回流：被行使节点各一次（粗 pre 关系不产生第三笔回流）')
+    const course = await engine.registry.get('数学')
+    const { graph, state } = await engine.loadView(course!)
+    assert.ok(graph.preOf['弹唱目标'].includes('音阶爬格'), '种子粗占位边在图（endpoint.pre = starts）')
+    assert.equal(state['弹唱目标']?.practice_ema, 0.8, 'stub 行使回流 EMA——mastery 面天然参与')
+    assert.equal(state['音阶爬格']?.practice_ema, 0.8)
+    // 粗 pre 只记流：事件完整落 exec.jsonl（行使记录在项目流水里，不在边上）
+    const line = JSON.parse(readFileSync(join(paths.projectsDir, '练琴计划', 'exec.jsonl'), 'utf8').trim().split('\n').at(-1)!)
+    assert.deepEqual(line.nodes, ['数学/弹唱目标', '数学/音阶爬格'])
   })
 })
 

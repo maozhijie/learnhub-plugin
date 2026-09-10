@@ -9,7 +9,7 @@ import { readFile, writeFile, rename, mkdir, unlink, appendFile } from 'node:fs/
 import { existsSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { YAML } from './yaml.ts'
-import { atomicWrite } from './store.ts'
+import { Store, atomicWrite } from './store.ts'
 import { Graph, GraphStore, loadRegionDoc, parseNode, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc, structureCheck } from './graph.ts'
 import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflicts, namesOf, validateConceptEntry } from './concepts.ts'
 import type { ConceptEntry, ConceptRef } from './concepts.ts'
@@ -96,7 +96,8 @@ export interface EditProposalSpec {
 const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'move', 'set_note'] as const
 
 /** gen 骨架提案退役（#138 cutover / ADR-0033 生长式图）：受理门统一拒收，新课程
- * 入口由种子提案接管（#142），反编译子图入口随种子票重接（#149）。 */
+ * 入口由种子提案接管（#142），反编译子图入口已重接为种子簇（#149：learnhub_project_decompile
+ * 产 project_plan + seed 双提案，同进同退）。 */
 export function genRetiredError(what: string): Error {
   return new Error(
     `[${what}] kind=gen 骨架提案已退役（#138 cutover / ADR-0033 生长式图）——`
@@ -823,12 +824,17 @@ export class GraphProposals {
 
   /** graph apply-seed（#142）：概念对表复验 + 结构复验 →（mode=new 建课脚手架）→
    * 落图（起点 + 终点 + 朝终点的粗占位边）→ 终点锚落盘（整份覆盖：换终点/换工作表
-   * 都只走种子提案人审，锚无直改通道）→ 铸名 + 快照 + 笔记脚手架 + journal。 */
+   * 都只走种子提案人审，锚无直改通道）→ 铸名 + 快照 + 笔记脚手架 + journal。
+   * 同源双提案守卫（#149）：反编译 pair 联动的种子提案不得先于计划半区单独 apply
+   * （联合入口走 opts.pairApply 豁免；计划已生效的恢复续段放行）。 */
   async applySeed(
     pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }, today?: string,
+    opts: { pairApply?: boolean } = {},
   ): Promise<Record<string, unknown>> {
     if (!audit.ok) throw new Error('[apply-seed] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
     const prop = await this.store.takePending('seed', pid)
+    const pairBlock = Store.pairApplyBlock(prop, await this.store.loadProposals(), opts)
+    if (pairBlock) throw new Error(`[apply-seed] ${pairBlock}`)
     const v = validateSeedProposal(await this.loadArtifact(prop.artifact))
     if (v.errors || !v.spec) throw new Error(`[apply-seed] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec
@@ -1122,7 +1128,9 @@ export class GraphProposals {
     }
   }
 
-  /** graph reject。 */
+  /** graph reject。同源双提案联动（#149）：pair 在场的提案被拒时，pending 的另一半
+   * 联动同拒（同进同退——反编译双提案是一个逻辑单元，半挂的 pending 只会误导人审）；
+   * 已决的另一半不动（applied 不回滚、rejected 幂等）。 */
   async reject(pid: number, note = ''): Promise<Record<string, unknown>> {
     if (!Number.isInteger(pid) || pid <= 0) {
       throw new Error(`[reject] 提案 id 必须是正整数（收到 ${String(pid)}）；拒绝不能省略 id。`)
@@ -1131,6 +1139,15 @@ export class GraphProposals {
     const prop = list.find(p => p.id === pid)
     if (!prop || prop.status !== 'pending') throw new Error(`[reject] 提案 #${pid} 不存在或已决。`)
     await this.store.updateProposal(pid, { status: 'rejected', decided: new Date().toISOString(), decision_note: note })
+    if (prop.pair) {
+      const sibling = list.find(p => p.id === prop.pair)
+      if (sibling && sibling.status === 'pending') {
+        await this.store.updateProposal(sibling.id, {
+          status: 'rejected', decided: new Date().toISOString(),
+          decision_note: `同源双提案同退（#${pid} 已拒，联动拒绝）${note ? `：${note}` : ''}`,
+        })
+      }
+    }
     return prop
   }
 

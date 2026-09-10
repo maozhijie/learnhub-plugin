@@ -25,7 +25,8 @@ export type GoalType = 'capability' | 'coverage'
 /** 完成判据的终点 mastery 阈值（读侧折叠常量；mastery = 0.7·稳定度完成度 + 0.3·练习证据）。 */
 export const COMPLETION_MASTERY_THRESHOLD = 0.8
 
-/** 起点定位三路（词条「种子」；project 路的完整接线归项目锚定票 #149，本票只留声明位）。 */
+/** 起点定位三路（词条「种子」）：baseline 常识基线 / vault 先验熟悉边界 / project
+ * 反编译子图簇（#149 接线：目标反编译产出种子提案时由引擎把起点铸成 project）。 */
 export const START_BASES = ['baseline', 'vault', 'project'] as const
 export type StartBasis = (typeof START_BASES)[number]
 
@@ -180,7 +181,8 @@ export interface SeedNodeSpec {
   teaches?: Record<string, ConceptTier>
   assumes?: Record<string, ConceptTier>
   misconceptions?: Misconception[]
-  /** 起点定位路由声明（仅起点；baseline 常识基线 / vault 先验熟悉边界 / project 反编译子图簇占位——第三路语义归项目锚定票）。 */
+  /** 起点定位路由声明（仅起点；baseline 常识基线 / vault 先验熟悉边界 / project 反编译
+   * 子图簇——第三路由 #149 目标反编译受理时铸成）。 */
   basis?: StartBasis
 }
 
