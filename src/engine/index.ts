@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rename, unlink, writeFile, appendFile } from 'node:fs/promises'
 import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
-import { ConceptRegistry, invokesTagged, invokesUnregistered, namesOf } from './concepts.ts'
+import { ConceptRegistry, invokesTagged, invokesUnregistered, namesOf, resolveConcept } from './concepts.ts'
 import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList, declaredEncOf } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
@@ -76,6 +76,8 @@ import {
   hasLearnerAnnotations,
 } from './compass.ts'
 import type { CompassEta, CompassEtaProbe } from './compass.ts'
+import { behaviorDigest, readyDepthCheck, renderBehaviorDigest, renderSedimentForCoach } from './coach-round.ts'
+import type { CoachCheck, CoachTrigger } from './coach-round.ts'
 import type { VaultLinkPrior } from './analysis.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -102,7 +104,7 @@ import type { AnkiMirrorEntry, AnkiNotePayload, AnkiTransport } from './anki.ts'
 import { explainBackPack, explainFeedbackSystem, explainFeedbackPrompt, parseExplainVerdict } from './explain.ts'
 import type { ExplainPoint, ExplainTag, ExplainVerdict } from './explain.ts'
 import { YAML } from './yaml.ts'
-import { Sessions, assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from './sessions.ts'
+import { Sessions, assertNoBrokenNotes, readySet, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from './sessions.ts'
 import type { NodeStat, WindowStat } from './sessions.ts'
 import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite, netPracticeRecs, readLearnhubConfig, writeLearnhubConfig } from './store.ts'
@@ -123,7 +125,8 @@ import type { AlloKind } from './grading.ts'
 import { dataCheck } from './data-check.ts'
 import type { DataCheckReport } from './data-check.ts'
 import type { ProposalRec } from './types.ts'
-import { PROPOSAL_KINDS } from './types.ts'
+import { PROPOSAL_KINDS, CONCEPT_TIERS } from './types.ts'
+import type { ConceptTier } from './types.ts'
 import type {
   AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DisputeApplyResult, DisputeReviewResult, DoctorDoc, ExperimentProposeResult,
   ExperimentStartResult, GraphApplyResult, GraphBrowseDoc,
@@ -430,6 +433,9 @@ export class LearnhubEngine {
       if (!course) continue
       const completion = await this.courseCompletion(entry)
       if (completion) course.completion = completion
+      // 教练回合触发点·会话开始（#144）：learnhub_status / 面板 /api/status 是会话开工
+      // 的汇总入口——逐课程附就绪深度检查（读侧感知，ready=0 只告警不阻塞）
+      course.coach = await this.coachCheckFor(entry, today)
     }
     return doc
   }
@@ -3380,6 +3386,7 @@ export class LearnhubEngine {
   async nodeComplete(courseKey: string | undefined, node: string, force = false): Promise<{
     accepted: boolean; accuracy: number | null; course: string; node: string
     stage?: Stage; initialized?: number; due?: string | null; reason?: string
+    coach?: CoachCheck
   }> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
@@ -3467,7 +3474,10 @@ export class LearnhubEngine {
         })
       }
     }
-    return { accepted: true, accuracy, course: c.name, node, stage: 'review', initialized, due }
+    // 教练回合触发点·节点完成（#144）：完成落定后拉起就绪深度检查，随完成结果带出
+    // （读侧感知，零写副作用；生长批裁决归 #145）。
+    const coach = await this.coachCheckFor(c, today)
+    return { accepted: true, accuracy, course: c.name, node, stage: 'review', initialized, due, coach }
   }
 
   // ---- XP 时间账本（Math Academy 语义：1 XP ≈ 1 分钟有效专注） ----
@@ -4315,6 +4325,165 @@ export class LearnhubEngine {
       p80_week: p80Week,
       wording: SANDBOX_WORDING,
     }
+  }
+
+  // ---- 教练回合感知面（#144 / ADR-0033 滚动教练：触发三点 × 就绪深度 × 六区块上下文包）----
+
+  /** 就绪前沿：未开始（非 opt 前置全部达成）的节点——R 软闸不改变可学性，故不带门。 */
+  private coachFrontier(graph: Graph, state: Record<string, Fm>): string[] {
+    return readySet(graph, state, () => 1)
+  }
+
+  /** 就绪存量（就绪深度检查的计数口径）：就绪前沿中正文已生成（hasReadyContent）的
+   * 节点——「现在点开就能学」的缓冲。 */
+  private coachReadyBuffer(graph: Graph, state: Record<string, Fm>): string[] {
+    return this.coachFrontier(graph, state).filter(n => hasReadyContent(state[n]))
+  }
+
+  /** 单课程就绪深度检查（coachCheckpoint 与 statusJson 共用核）：终点锚缺失 = 未播种
+   * （不判冷启动，合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。 */
+  private async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
+    const { graph, state } = await this.loadView(c)
+    const anchor = await readAnchor(this.paths.anchorPath(c.root))
+    return {
+      course: c.name,
+      ...readyDepthCheck({
+        ready: this.coachReadyBuffer(graph, state).length,
+        declared: anchor?.declared ?? null,
+        today,
+      }),
+    }
+  }
+
+  /** 教练回合检查点（#144 触发三点）：节点完成（nodeComplete 随完成结果带出）/ 会话
+   * 开始（statusJson——agent 会话开工与面板打开共用的汇总入口）/ 队列空闲（宿主生成
+   * 泵排空时调用）。逐课程拉起就绪深度检查——纯读侧感知，零写副作用、零 LLM 调用
+   * （裁决与生长批生产归受理票 #145）；ready=0 只告警，生长永不挡当前学习动作
+   * （FIFO 不插队靠检查点前置：生长批只在检查点之后入队，不越过任何已排队任务）。 */
+  async coachCheckpoint(
+    trigger: CoachTrigger, courseKey?: string, opts: { today?: string } = {},
+  ): Promise<{ trigger: CoachTrigger; courses: CoachCheck[] }> {
+    const { today: learningToday } = await this.learningDay()
+    const today = opts.today ?? learningToday
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const out: CoachCheck[] = []
+    for (const c of courses) out.push(await this.coachCheckFor(c, today))
+    return { trigger, courses: out }
+  }
+
+  /** 教练回合上下文包（#144 六区块定序：终点锚→行为摘要→登记表档位→误解目录→
+   * 罗盘尾段（罗盘+沉淀折叠）→V-2 接缝；轻量包恰两件 = 行为摘要+罗盘，不带锚/
+   * 登记表/误解目录与沉淀半区）。纯组装零写副作用：行为摘要即算即用（读侧折叠，
+   * 不落盘）；沉淀折叠从 sedimentFold 读侧单向取（Missing 合法空态）；V-2 接缝 =
+   * vault 链接先验注入教练回合的定序占位（宿主检索面依赖 Out of Scope，接线前恒为
+   * 占位行）。缺失数据一律合法空态行；终点锚 Broken fail loud。消费方 = 教练回合
+   * 模板（#145），此处只保证定序稳定与可观测。 */
+  async coachContextPack(
+    courseKey?: string, opts: { lightweight?: boolean; today?: string } = {},
+  ): Promise<string> {
+    const c = await this.registry.resolve(courseKey)
+    const { graph, state } = await this.loadView(c)
+    const { today: learningToday, cutoff } = await this.learningDay()
+    const today = opts.today ?? learningToday
+    const lightweight = opts.lightweight === true
+    const anchor = await readAnchor(this.paths.anchorPath(c.root))
+    const active = [...this.coachFrontier(graph, state), ...graph.names.filter(n => effectiveStage(state, n) === 'learning')]
+
+    const out: string[] = [
+      `# 教练回合上下文包：${c.name}（${lightweight ? '轻量段——只带行为摘要与罗盘' : '全量六区块'}）`,
+    ]
+    const block = (title: string, body: string): void => {
+      out.push('', `## ${title}`, '', body)
+    }
+
+    if (!lightweight) {
+      // ① 终点锚（课程唯一结构承诺物——教练回合的目标视野）
+      if (anchor) {
+        const lines = [
+          `- 终点节点：${anchor.endpoint}`,
+          `- 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
+          `- 声明日期：${anchor.declared}`,
+        ]
+        if (anchor.worksheet.length) {
+          lines.push(`- 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`)
+        }
+        block('终点锚', lines.join('\n'))
+      } else {
+        block('终点锚', '（未播种——终点锚 Missing 是合法空态，但教练回合无从锚定目标；先走种子提案 kind=seed。）')
+      }
+    }
+
+    // ② 行为摘要五件套（读侧折叠即算即用；轻量包两件之一）
+    const entries = await this.concepts.load(c.root)
+    const invokesOfQ = new Map<string, string>()
+    await this.scanCourseBanks(c, async (_node, bank) => {
+      for (const q of bank.questions) {
+        const inv = typeof q.invokes === 'string' ? q.invokes.trim() : ''
+        if (!inv) continue
+        invokesOfQ.set(q.id, resolveConcept(entries, inv)?.canonical ?? inv)
+      }
+    })
+    const masteryOf: Record<string, number> = {}
+    for (const n of graph.names) masteryOf[n] = masteryOfFm(state[n])
+    const digest = behaviorDigest({
+      course: c.name,
+      practice: netPracticeRecs(await this.store.practiceAll(), await this.store.erratumAll()),
+      reviews: await this.store.reviewLogAll(),
+      invokesOf: qid => invokesOfQ.get(qid) ?? null,
+      estOf: graph.estOf,
+      misconceptionsOf: graph.misconceptionsOf,
+      masteryOf,
+      today,
+      cutoffMin: cutoff,
+    })
+    block('行为摘要（窗=最近 7 学习日或 10 节取大；即算即用不落盘）', renderBehaviorDigest(digest))
+
+    if (!lightweight) {
+      // ③ 登记表档位（前沿视野 = 可学 ∪ 在学节点的概念档位折叠；同概念取最高档）
+      const tierRank = (t: ConceptTier): number => CONCEPT_TIERS.indexOf(t)
+      const foldTiers = (pick: (n: string) => Record<string, ConceptTier> | undefined): Array<[string, ConceptTier]> => {
+        const best = new Map<string, ConceptTier>()
+        for (const n of active) {
+          for (const [concept, tier] of Object.entries(pick(n) ?? {})) {
+            const cur = best.get(concept)
+            if (!cur || tierRank(tier) > tierRank(cur)) best.set(concept, tier)
+          }
+        }
+        return [...best.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+      }
+      const fmtTiers = (xs: Array<[string, ConceptTier]>): string => xs.map(([k, t]) => `${k} ${t}`).join('、')
+      const teaches = foldTiers(n => graph.teachesOf[n])
+      const assumes = foldTiers(n => graph.assumesOf[n])
+      block('登记表档位（前沿概念的教学档位视野）', [
+        `- 概念登记表：${entries.length ? `${entries.length} 条在册` : 'Missing（合法空态——铸名随生长批提案落盘）'}`,
+        `- 可学/在学节点 ${active.length} 个`,
+        `- 前沿 teaches：${teaches.length ? fmtTiers(teaches) : '（前沿节点无 teaches 字段）'}`,
+        `- 前沿 assumes：${assumes.length ? fmtTiers(assumes) : '（前沿节点无 assumes 字段）'}`,
+      ].join('\n'))
+
+      // ④ 误解目录（前沿节点的误解先验；判据签名不设机器字段，#124）
+      const misLines = active.slice().sort().flatMap(n =>
+        (graph.misconceptionsOf[n] ?? []).map(m => `- ${n} · ${m.concept}：${m.model}`))
+      block('误解目录（前沿节点的误解先验）', misLines.length
+        ? misLines.join('\n')
+        : '（误解目录空——合法空态：误解先验随生长批写入；真实错误检测归作答流水挖矿与申诉复核）')
+    }
+
+    // ⑤ 罗盘尾段（罗盘+沉淀折叠；轻量包只带罗盘半区）
+    const tail = await this.compassTail(c.name)
+    const parts = ['### 罗盘', '', tail || '（罗盘缺席或尚无已画路线——合法空态：未播种/未初画时教练无从读路线。）']
+    if (!lightweight) {
+      parts.push('', '### 沉淀折叠', '', renderSedimentForCoach(await this.sedimentFold()))
+    }
+    block('罗盘尾段', parts.join('\n'))
+
+    if (!lightweight) {
+      // ⑥ V-2 接缝（先验上下文注入——预留占位，Out of Scope：宿主检索面依赖）
+      block('V-2 接缝（先验上下文注入——预留）',
+        '（v1 未接线：vault 链接先验注入教练回合依赖宿主检索面——本区块为六区块定序占位，接线后由此注入。）')
+    }
+
+    return out.join('\n') + '\n'
   }
 
   /** JOL 预测值的显式契约：三档之外拒绝（参数错误），null/undefined 放行为无预测。 */

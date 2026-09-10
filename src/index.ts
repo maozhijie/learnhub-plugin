@@ -519,6 +519,15 @@ function pumpGeneration(ctx: Context): void {
     .catch(() => { /* 执行器已置 failed 留注册表可重试 */ })
     .finally(() => {
       genPumping = false
+      // 队列空闲触发点（#144）：生成队列排空 → 拉起教练回合就绪深度检查（读侧感知，
+      // 零写副作用；失败只留运行日志，不挡生成泵）。生长永不挡当前学习动作——生长批
+      // 只在检查点之后入队（FIFO 不插队靠检查点前置），受理接线归生长批受理票 #145。
+      if (!nextQueuedJob([...genJobs.values()])) {
+        void engine.coachCheckpoint('queue_idle')
+          .then(r => runLog('coach_checkpoint(queue_idle)',
+            r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}${x.ok ? '' : '（低于前瞻，已告警）'}`).join('；')))
+          .catch(err => runLog('coach_checkpoint(queue_idle)', `调用失败：${err instanceof Error ? err.message : String(err)}`))
+      }
       pumpGeneration(ctx)
     })
 }

@@ -186,7 +186,7 @@ const KIND_TITLES: Record<SedimentKind, string> = {
   calibration: '校准画像（自评 vs 实际）',
   speed_resilience: '速度韧性（节奏与保持）',
   content_quality: '内容质量结论',
-  rereview_outcome: '复诊结局',
+  recheck_outcome: '复诊结局',
   graph_repair: '图修复史与概念级先验',
 }
 
