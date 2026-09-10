@@ -3,6 +3,13 @@
 /** 生成任务状态：queued 为排队待跑（非活动、非终态）；running/cancelling 为活动态，其余为终态。 */
 export type GenJobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
 
+/** 生成队列 phase 全集（#131 §5 / #140）：
+ * - 节点内容管线（course/node 键）：outline 大纲 → sections 逐节正文 → quiz 自动出题（quiz 亦为纯出题任务的入队形态）。
+ * - 图生成任务（#131：种子/生长 = agent 循环 job 走图工具面；富化 = 引擎直跑覆盖层）。
+ * 骨架（gen 骨架提案）已随 #138 cutover 退役，由 种子/生长 接管图结构生长。 */
+export const GEN_JOB_PHASES = ['outline', 'sections', 'quiz', '种子', '生长', '富化'] as const
+export type GenJobPhase = (typeof GEN_JOB_PHASES)[number]
+
 /** 全局生成队列的 FIFO 选取：startedAt（入队时间）最早者先跑；无排队任务返回 null。
  * 纯函数——host 队列执行器与测试共用，保证「同时只跑一个」的选取语义单一。 */
 export function nextQueuedJob<J extends { status: GenJobStatus; startedAt: string }>(jobs: J[]): J | null {

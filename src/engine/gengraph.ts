@@ -5,17 +5,18 @@
  * 提案落盘 pending（产物文件全留痕）→ 人审 → apply 过 audit 门禁生效 → journal + 快照。
  * 拒绝同样留痕（status=rejected）。
  */
-import { readFile, writeFile, rename, mkdir, unlink } from 'node:fs/promises'
+import { readFile, writeFile, rename, mkdir, unlink, appendFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './store.ts'
-import { Graph, GraphStore, parseNode, snapshotDoc } from './graph.ts'
+import { Graph, GraphStore, parseNode, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from './graph.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
-import type { GRegion, GBlock, GNode, BloomLevel, EncEdge } from './types.ts'
+import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { Store } from './store.ts'
-import type { CourseEntry } from './types.ts'
+import type { CourseEntry, ProposalKind } from './types.ts'
 
 /** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。 */
 export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
@@ -29,6 +30,8 @@ export interface GenProposalSpec {
 export interface EditOp {
   op: 'add_node' | 'del_node' | 'set_pre' | 'set_enc' | 'rename' | 'move' | 'set_note'
   node?: string
+  /** add_node 的节点键（#131 §7 键名统一：与图 YAML/parseNode 同名，旧 `node` 键退役）。 */
+  name?: string
   new?: string
   region?: string
   block?: string
@@ -41,6 +44,10 @@ export interface EditOp {
   type?: 'practice'
   bloom?: string
   difficulty?: number
+  /** 概念字段组（add_node 出生层，schema v2 #127）：teaches/assumes 概念名→档，误解条目列表。 */
+  teaches?: Record<string, ConceptTier>
+  assumes?: Record<string, ConceptTier>
+  misconceptions?: Misconception[]
 }
 
 export interface EditProposalSpec {
@@ -137,8 +144,8 @@ export function validateGenProposal(doc: unknown): { errors?: string[]; spec?: G
   return { spec: { course: (d!.course as string).trim(), mode: (d!.mode as 'new' | 'append') ?? 'append', regions } }
 }
 
-/** EditOp / EditProposal schema 校验。 */
-export function validateEditProposal(doc: unknown): { errors?: string[]; spec?: EditProposalSpec } {
+/** EditOp / EditProposal schema 校验（warns 收集概念字段组的非阻提示，可省略）。 */
+export function validateEditProposal(doc: unknown, warns?: string[]): { errors?: string[]; spec?: EditProposalSpec } {
   const errors: string[] = []
   const d = doc as Record<string, unknown> | null
   if (typeof d !== 'object' || d === null) return { errors: ['(顶层): 必须是映射'] }
@@ -161,14 +168,22 @@ export function validateEditProposal(doc: unknown): { errors?: string[]; spec?: 
         errors.push(`${where}.op: 非法操作 ${String(op)}（允许 ${EDIT_OPS.join('/')}）`)
         return
       }
-      // 历史口径：gen 提案节点键是 name（对齐图 YAML），edit 的 add_node 用 node——刻意不统一
-      // （统一是 breaking 改动，影响技能文档/校验/存量提案），由速查表 + 报错键名对照兜底。
-      // 统一计划与影响面：https://github.com/maozhijie/learnhub-plugin/issues/1
-      if (!(o.node && String(o.node).trim())) {
-        const hint = op === 'add_node' && typeof o.name === 'string' && o.name.trim()
-          ? `（add_node 的节点字段名是 node，不是 name——你写了 name: ${o.name.trim()}）`
-          : ''
-        errors.push(`${where}: op=${op} 需要 node${hint}`)
+      // 键名统一到 name（#131 §7 / #1：与图 YAML、gen 节点同口径，不做兼容双读也不容双写）——
+      // add_node 用 name 定义新节点；其余 op 用 node 引用既有节点。写错键一律 fail loud。
+      if (op === 'add_node') {
+        if (o.node !== undefined && String(o.node).trim()) {
+          errors.push(`${where}: op=add_node 不接受 node 键（键名已统一到 name——你写了 node: ${String(o.node).trim()}；速查表见技能文档）`)
+        }
+        if (!(o.name && String(o.name).trim())) errors.push(`${where}: op=add_node 需要 name`)
+      } else {
+        if (o.name !== undefined && String(o.name).trim()) {
+          errors.push(`${where}: op=${op} 不接受 name 键（name 只用于 add_node 定义新节点；引用既有节点写 node: ${String(o.name).trim()}）`)
+        }
+        if (!(o.node && String(o.node).trim())) errors.push(`${where}: op=${op} 需要 node`)
+      }
+      // 概念字段组只随 add_node 出生；写在其他 op 上 = 提案方误解语义，静默丢弃会丢字段
+      if (op !== 'add_node' && (o.teaches !== undefined || o.assumes !== undefined || o.misconceptions !== undefined)) {
+        errors.push(`${where}: op=${op} 不接受 teaches/assumes/misconceptions（概念字段组只在 add_node 出生时写）`)
       }
       if (op === 'rename' && !(o.new && String(o.new).trim())) errors.push(`${where}: rename 需要 new（rename 成对字段：node=旧名，new=新名）`)
       if ((op === 'add_node' || op === 'move') && !(o.region && o.block)) errors.push(`${where}: op=${op} 需要 region 与 block（分区定位：区名 + 块名）`)
@@ -199,9 +214,20 @@ export function validateEditProposal(doc: unknown): { errors?: string[]; spec?: 
           if (w !== undefined && (typeof w !== 'number' || w < 0 || w > 1)) errors.push(`${where}.enc.${j}: w 必须是 0–1 的数`)
         })
       }
+      // 概念字段组（add_node 出生层）走 parseConceptFields 同一闸：尺寸/枚举 ERROR 直接拒收，
+      // 1–2 条的窄节点 WARN 收集给受理回执（不阻）。
+      let conceptFields: { teaches?: Record<string, ConceptTier>; assumes?: Record<string, ConceptTier>; misconceptions?: Misconception[] } = {}
+      if (op === 'add_node' && (o.teaches !== undefined || o.assumes !== undefined || o.misconceptions !== undefined)) {
+        try {
+          conceptFields = parseConceptFields(o, where, op, String(o.name ?? ''), warns)
+        } catch (e) {
+          errors.push((e as Error).message)
+        }
+      }
       ops.push({
         op: op as EditOp['op'],
         node: typeof o.node === 'string' ? o.node.trim() : undefined,
+        name: typeof o.name === 'string' ? o.name.trim() : undefined,
         new: typeof o.new === 'string' ? o.new.trim() : undefined,
         region: typeof o.region === 'string' ? o.region.trim() : undefined,
         block: typeof o.block === 'string' ? o.block.trim() : undefined,
@@ -215,6 +241,7 @@ export function validateEditProposal(doc: unknown): { errors?: string[]; spec?: 
           ? { bloom: o.bloom as BloomLevel } : {}),
         ...([1, 2, 3, 4, 5].includes(Number(o.difficulty))
           ? { difficulty: Number(o.difficulty) as 1 | 2 | 3 | 4 | 5 } : {}),
+        ...conceptFields,
       })
     })
   }
@@ -230,6 +257,97 @@ function applyFindings(audit: ApplyAudit): string[] {
     findings.push(`⚠ 图谱健康分 ${audit.health} < 80：结束条件未满足，继续分批构建（learnhub_graph_analyze 的 health/suggestions 给出方向）`)
   }
   return findings
+}
+
+// ---- 富化覆盖层通道（kind=enrich，#140：schema v2 出生/覆盖层分家）----
+
+/** 覆盖层字段条目：节点 → 该字段的写入值。首期只有 enc（#127 §6：覆盖层首期=enc 回填）。 */
+export interface EnrichFieldEntry { node: string; enc: EncEdge[] }
+
+export interface EnrichProposalSpec {
+  course: string
+  reason?: string
+  fields: EnrichFieldEntry[]
+  /** 引擎受理时写入：受影响正典文件（课程根相对路径）的 sha256——apply 时复核，
+   * 不符 = 提案基于旧版图，拒收。手工构造的提案没有指纹，同样拒收。 */
+  fingerprints?: Record<string, string>
+}
+
+const ENRICH_TOP_KEYS = new Set(['course', 'reason', 'fields', 'fingerprints'])
+const ENRICH_ENTRY_KEYS = new Set(['node', 'enc'])
+
+/** EnrichProposal schema 校验（富化=引擎直跑通道，指纹外的部分同样过 schema 门）。 */
+export function validateEnrichProposal(doc: unknown): { errors?: string[]; spec?: EnrichProposalSpec } {
+  const errors: string[] = []
+  const d = doc as Record<string, unknown> | null
+  if (typeof d !== 'object' || d === null) return { errors: ['(顶层): 必须是映射'] }
+  const unknownTop = Object.keys(d).filter(k => !ENRICH_TOP_KEYS.has(k))
+  if (unknownTop.length) {
+    errors.push(`(顶层) 含未知字段 ${JSON.stringify(unknownTop)}（只允许 ${[...ENRICH_TOP_KEYS].join('/')}；fingerprints 由引擎受理时写入，不手工填）`)
+  }
+  try {
+    nonempty(d.course, 'course')
+  } catch (e) { errors.push((e as Error).message) }
+  const fields: EnrichFieldEntry[] = []
+  if (!Array.isArray(d.fields) || !d.fields.length) {
+    errors.push('fields: 富化提案没有字段条目（每条 = {node, enc}）')
+  } else {
+    d.fields.forEach((raw: unknown, i: number) => {
+      const where = `fields.${i}`
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        errors.push(`${where}: 必须是映射（{node, enc}）`)
+        return
+      }
+      const f = raw as Record<string, unknown>
+      const unknown = Object.keys(f).filter(k => !ENRICH_ENTRY_KEYS.has(k))
+      if (unknown.length) {
+        errors.push(`${where} 含未知字段 ${JSON.stringify(unknown)}（覆盖层首期只补写 enc——teaches/assumes/误解是出生字段，随生长批写；只允许 node/enc）`)
+      }
+      const node = typeof f.node === 'string' ? f.node.trim() : ''
+      if (!node) errors.push(`${where}.node 不能为空`)
+      if (f.enc === undefined) errors.push(`${where}.enc 缺失（覆盖层条目是字段全量替换；显式清空写 enc: []）`)
+      else if (!Array.isArray(f.enc)) errors.push(`${where}.enc 必须是列表`)
+      else {
+        let enc: EncEdge[] = []
+        try {
+          enc = parseEnc(f.enc, where, 'enrich', node || '?')
+        } catch (e) { errors.push((e as Error).message) }
+        if (node) fields.push({ node, enc })
+      }
+    })
+  }
+  if (errors.length) return { errors }
+  let fingerprints: Record<string, string> | undefined
+  if (d.fingerprints !== undefined) {
+    if (typeof d.fingerprints !== 'object' || d.fingerprints === null || Array.isArray(d.fingerprints)) {
+      errors.push('fingerprints: 必须是映射（文件相对路径 → sha256）')
+    } else {
+      fingerprints = Object.fromEntries(
+        Object.entries(d.fingerprints as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+    }
+  }
+  if (errors.length) return { errors }
+  const dupes = [...new Set(fields.map(f => f.node).filter((n, i, arr) => arr.indexOf(n) !== i))]
+  if (dupes.length) errors.push(`fields: 节点重复条目 ${JSON.stringify(dupes)}（每节点至多一条；合并 enc 后重提）`)
+  if (errors.length) return { errors }
+  return {
+    spec: {
+      course: (d!.course as string).trim(),
+      reason: typeof d!.reason === 'string' ? d!.reason : '',
+      fields,
+      ...(fingerprints ? { fingerprints } : {}),
+    },
+  }
+}
+
+/** sha256 内容指纹（enrich 受理/复核共用；utf8 文本）。 */
+function sha256(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
+}
+
+/** 富化提案的目标节点缺席清单（受理与 apply 双门共用）。 */
+function enrichMissingTargets(fields: EnrichFieldEntry[], graph: Graph): string[] {
+  return [...new Set(fields.map(f => f.node).filter(n => !graph.nset.has(n)))]
 }
 
 export class GraphProposals {
@@ -258,8 +376,8 @@ export class GraphProposals {
   }
 
   /** 提案产物 YAML 落盘（全留痕）→ artifact 路径。 */
-  private async saveArtifact(kind: string, course: string, doc: unknown): Promise<{ pid: number; path: string }> {
-    const pid = await this.store.createProposal(kind as 'gen' | 'edit', course, '', '')
+  private async saveArtifact(kind: ProposalKind, course: string, doc: unknown): Promise<{ pid: number; path: string }> {
+    const pid = await this.store.createProposal(kind, course, '', '')
     const path = this.paths.proposalArtifactPath(pid, kind, course)
     await mkdir(this.paths.proposalDir, { recursive: true })
     await writeFile(path, YAML.stringify(doc), 'utf8')
@@ -272,9 +390,11 @@ export class GraphProposals {
     return YAML.parse(await readFile(path, 'utf8'))
   }
 
-  /** graph propose-edit：在内存图上模拟执行 → pending。 */
+  /** graph propose-edit：在内存图上模拟执行 → pending。warns = 受理门的非阻提示
+   * （窄节点等概念字段组提示），随受理回执返给提案方。 */
   async proposeEdit(yamlText: string): Promise<Record<string, unknown>> {
-    const v = validateEditProposal(YAML.parseModel(yamlText))
+    const warns: string[] = []
+    const v = validateEditProposal(YAML.parseModel(yamlText), warns)
     if (v.errors) throw new Error(`[propose-edit] schema 校验失败，提案未受理。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec!
     const course = await this.registry.get(spec.course)
@@ -285,7 +405,7 @@ export class GraphProposals {
     if (errors.length) throw new Error(`[propose-edit] 模拟执行失败，提案未受理（修正后重提）。\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
     const { pid } = await this.saveArtifact('edit', spec.course, YAML.parseModel(yamlText))
     await this.store.updateProposal(pid, { summary: `${spec.ops.length} 条操作：${spec.ops.map(o => o.op).join('、')}` })
-    return { id: pid, kind: 'edit', course: spec.course, ops: spec.ops.length }
+    return { id: pid, kind: 'edit', course: spec.course, ops: spec.ops.length, ...(warns.length ? { warns } : {}) }
   }
 
   /** graph apply-edit：执行变更 + 改名/移动/删除联动课程笔记 + 快照。 */
@@ -349,6 +469,122 @@ export class GraphProposals {
       created_blocks: [...createdBlocks],
       renames,
       deleted: dels,
+      findings: applyFindings(audit),
+    }
+  }
+
+  /** graph propose-enrich（富化覆盖层，#140）：schema 门 → 目标节点在图核验 →
+   * 受影响正典文件计 sha256 指纹（写入 artifact，apply 时复核）→ pending。 */
+  async proposeEnrich(yamlText: string): Promise<Record<string, unknown>> {
+    const v = validateEnrichProposal(YAML.parseModel(yamlText))
+    if (v.errors) throw new Error(`[propose-enrich] schema 校验失败，提案未受理。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    const spec = v.spec!
+    const course = await this.registry.get(spec.course)
+    if (!course) throw new Error(`[propose-enrich] 注册表中没有课程「${spec.course}」。`)
+    const store = new GraphStore(this.paths, this.paths.courseRoot(course.root))
+    const regions = await store.load()
+    const graph = new Graph(regions)
+    const missing = enrichMissingTargets(spec.fields, graph)
+    if (missing.length) {
+      throw new Error(`[propose-enrich] 目标节点不在图内，提案未受理：${missing.join('、')}（覆盖层只补写既有节点；新增节点走 kind=edit）`)
+    }
+    const regionFiles = await store.regionFiles()
+    const fingerprints: Record<string, string> = {}
+    for (const f of spec.fields) {
+      const regionName = graph.blockOf[f.node][1]
+      const abs = regionFiles[regionName]
+      if (!abs) throw new Error(`[propose-enrich] 区「${regionName}」没有对应 data/*.yaml（图加载不一致）。`)
+      const rel = `data/${abs.replace(/[/\\]/g, '/').split('/').pop()}`
+      if (!(rel in fingerprints)) fingerprints[rel] = sha256(await readFile(abs, 'utf8'))
+    }
+    const { pid } = await this.saveArtifact('enrich', spec.course, {
+      course: spec.course,
+      reason: spec.reason,
+      fields: spec.fields,
+      fingerprints,
+    })
+    await this.store.updateProposal(pid, { summary: `覆盖层回填 ${spec.fields.length} 个节点（enc）` })
+    return { id: pid, kind: 'enrich', course: spec.course, fields: spec.fields.length, files: Object.keys(fingerprints).length }
+  }
+
+  /** graph apply-enrich：指纹复核 → 写正典（enc 整体替换）→ 覆盖层留痕 → journal + 快照。 */
+  async applyEnrich(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<Record<string, unknown>> {
+    if (!audit.ok) throw new Error('[apply-enrich] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
+    const prop = await this.store.takePending('enrich', pid)
+    const v = validateEnrichProposal(await this.loadArtifact(prop.artifact))
+    if (v.errors || !v.spec) throw new Error(`[apply-enrich] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
+    const spec = v.spec
+    if (!spec.fingerprints || !Object.keys(spec.fingerprints).length) {
+      throw new Error('[apply-enrich] 提案缺内容指纹（fingerprints 由引擎 propose-enrich 受理时写入；手工构造的提案不受理，重新生成）。')
+    }
+    const course = await this.registry.get(spec.course)
+    if (!course) throw new Error(`[apply-enrich] 注册表中没有课程「${spec.course}」。`)
+    const root = course.root
+    const store = new GraphStore(this.paths, this.paths.courseRoot(root))
+    // 指纹复核先行：任一受影响正典文件在受理后被改过 → 提案基于旧版图，拒收（AC：指纹不符拒收）
+    const stale: string[] = []
+    for (const [rel, want] of Object.entries(spec.fingerprints)) {
+      let cur: string
+      try {
+        cur = await readFile(`${this.paths.courseRoot(root)}/${rel}`, 'utf8')
+      } catch {
+        stale.push(`${rel}（文件不存在）`)
+        continue
+      }
+      if (sha256(cur) !== want) stale.push(rel)
+    }
+    if (stale.length) {
+      throw new Error(`[apply-enrich] 正典文件在提案受理后被修改，sha256 指纹不符，拒绝写入：${stale.join('、')}`
+        + `——reject 本提案后重新生成富化提案（提案必须基于当前正典）。`)
+    }
+    const regions = await store.load()
+    const graph = new Graph(regions)
+    const missing = enrichMissingTargets(spec.fields, graph)
+    if (missing.length) throw new Error(`[apply-enrich] 目标节点已不在图内：${missing.join('、')}。`)
+    // 写正典：enc 整体替换 + 受影响区文件重写（同事务：快照/覆盖层留痕只在全部写成功后）
+    const touched = new Map<string, string>() // 区名 → 重写后的文件文本（算指纹用）
+    for (const f of spec.fields) {
+      const regionName = graph.blockOf[f.node][1]
+      const region = regions.find(r => r.name === regionName)
+      if (!region) throw new Error(`[apply-enrich] 区「${regionName}」在图中不存在。`)
+      for (const b of region.blocks) {
+        const n = b.nodes.find(x => x.name === f.node)
+        if (n) n.enc = f.enc.map(e => ({ ...e }))
+      }
+      touched.set(regionName, YAML.stringify(store.regionDoc(region)))
+    }
+    const regionFiles = await store.regionFiles()
+    const fileHashes = new Map<string, string>()
+    for (const [regionName, text] of touched) {
+      const abs = regionFiles[regionName]
+      if (!abs) throw new Error(`[apply-enrich] 区「${regionName}」没有对应 data/*.yaml。`)
+      await atomicWrite(abs, text)
+      fileHashes.set(regionName, sha256(text))
+    }
+    // 覆盖层留痕（state/覆盖层.jsonl，追加只增；读侧只读正典，这里只是审计与出处）
+    const now = new Date().toISOString()
+    const lines = spec.fields.map(f => JSON.stringify({
+      target: f.node,
+      field: 'enc',
+      value: f.enc,
+      content_hash: fileHashes.get(graph.blockOf[f.node][1]),
+      applied_at: now,
+    }))
+    await mkdir(this.paths.courseStateDir(root), { recursive: true })
+    await appendFile(this.paths.overlayPath(root), lines.join('\n') + '\n', 'utf8')
+    const regions2 = await store.load()
+    const version = (await this.store.latestSnapshotVersion(course.name)) + 1
+    await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
+    await this.store.appendJournal({
+      course: course.name, node: '*', rating: null, kind: 'graph_enrich', elapsed_days: 0,
+      session: String(prop.id), detail: spec.fields.map(f => `enc(${f.node})×${f.enc.length}`).join('；'),
+    })
+    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
+    return {
+      course: course.name,
+      fields: spec.fields.length,
+      snapshot: version,
+      files: [...touched.keys()],
       findings: applyFindings(audit),
     }
   }
@@ -443,6 +679,24 @@ export function specToRegions(specRegions: GenProposalSpec['regions']): GRegion[
   }))
 }
 
+/** add_node op → GNode（模拟与实落共用一个构造；概念字段组随 op 携带，键名统一后取 name）。 */
+function nodeFromAddOp(op: EditOp): GNode {
+  return {
+    name: op.name!,
+    pre: [...(op.pre ?? [])],
+    opt: Boolean(op.opt),
+    note: op.note ?? '',
+    ...(op.enc !== undefined ? { enc: normalizeOpEnc(op.enc) } : { enc: [] }),
+    ...(op.est !== undefined ? { est: op.est } : {}),
+    ...(op.type ? { type: op.type } : {}),
+    ...(op.bloom ? { bloom: op.bloom as BloomLevel } : {}),
+    ...(op.difficulty !== undefined ? { difficulty: op.difficulty as GNode['difficulty'] } : {}),
+    ...(op.teaches ? { teaches: { ...op.teaches } } : {}),
+    ...(op.assumes ? { assumes: { ...op.assumes } } : {}),
+    ...(op.misconceptions?.length ? { misconceptions: op.misconceptions.map(m => ({ ...m })) } : {}),
+  }
+}
+
 /** 在 regions 副本上模拟全部操作 → 错误列表（gen._simulate_ops 同语义）。 */
 export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): string[] {
   const sim: GRegion[] = JSON.parse(JSON.stringify(regions))
@@ -455,7 +709,7 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
 
   for (const op of ops) {
     if (op.op === 'add_node') {
-      if (names.has(op.node!)) { errors.push(`add_node 重名: ${op.node}`); continue }
+      if (names.has(op.name!)) { errors.push(`add_node 重名: ${op.name}`); continue }
       const r = regionOf(op.region!)
       if (!r) { errors.push(`add_node 区不存在: ${op.region}`); continue }
       let blk = r.blocks.find(b => b.name === op.block)
@@ -463,15 +717,8 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
         blk = { name: op.block!, nodes: [] }
         r.blocks.push(blk)
       }
-      blk.nodes.push({
-              name: op.node!, pre: [...(op.pre ?? [])], opt: Boolean(op.opt), note: op.note ?? '',
-              ...(op.enc !== undefined ? { enc: normalizeOpEnc(op.enc) } : { enc: [] }),
-              ...(op.est !== undefined ? { est: op.est } : {}),
-              ...(op.type ? { type: op.type } : {}),
-              ...(op.bloom ? { bloom: op.bloom as BloomLevel } : {}),
-              ...(op.difficulty !== undefined ? { difficulty: op.difficulty as GNode['difficulty'] } : {}),
-            })
-      names.add(op.node!)
+      blk.nodes.push(nodeFromAddOp(op))
+      names.add(op.name!)
     } else if (op.op === 'del_node') {
       if (!names.has(op.node!)) { errors.push(`del_node 节点不存在: ${op.node}`); continue }
       names.delete(op.node!)
@@ -523,6 +770,7 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
     const encDangling = new Set(merged.names.flatMap(n => (merged.encOf[n] ?? []).filter(([p]) => !merged.nset.has(p)).map(([p]) => `${n} ~enc~ ${p}`)))
     for (const d of [...encDangling].sort()) errors.push(`变更后 enc 断边: ${d}`)
     if (merged.hasCycle) errors.push(`变更后引入环：${merged.cycleNodes.slice(0, 5).join('、')}`)
+    errors.push(...misconceptionCapErrors(sim))
   }
   return errors
 }
@@ -548,14 +796,7 @@ export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
         blk = { name: op.block!, nodes: [] }
         r.blocks.push(blk)
       }
-      blk.nodes.push({
-              name: op.node!, pre: [...(op.pre ?? [])], opt: Boolean(op.opt), note: op.note ?? '',
-              ...(op.enc !== undefined ? { enc: normalizeOpEnc(op.enc) } : { enc: [] }),
-              ...(op.est !== undefined ? { est: op.est } : {}),
-              ...(op.type ? { type: op.type } : {}),
-              ...(op.bloom ? { bloom: op.bloom as BloomLevel } : {}),
-              ...(op.difficulty !== undefined ? { difficulty: op.difficulty as GNode['difficulty'] } : {}),
-            })
+      blk.nodes.push(nodeFromAddOp(op))
     } else if (op.op === 'del_node') {
       removed.add(op.node!)
     } else if (op.op === 'rename') {

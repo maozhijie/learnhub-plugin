@@ -114,6 +114,10 @@ export class Paths {
     return `${this.proposalDir}/${pid}-${kind}-${course}.yaml`
   }
 
+  /** 覆盖层留痕（schema v2 富化通道，#127 §6 / #131 §6）：每课程一份追加 jsonl，
+   * 只作审计与出处——覆盖层是写入通道概念，读侧永远只读正典文件。 */
+  overlayPath(root: string): string { return `${this.courseStateDir(root)}/覆盖层.jsonl` }
+
   snapshotPath(course: string, version: number): string {
     return `${this.snapshotDir}/${course}-v${version}.json`
   }

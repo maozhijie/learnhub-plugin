@@ -29,13 +29,14 @@ import type { LlmComplete, LlmEffort } from './engine/llm.ts'
 import { Content } from './engine/content.ts'
 import { ANKI_ENDPOINT, AnkiConnectClient } from './engine/anki.ts'
 import { TIER_LABELS, tierIdxOf, genericQuizTarget } from './engine/complexity.ts'
-import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
+import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
 import {
   contentFailureStatus,
   generationJobRetentionMs,
   nextQueuedJob,
   quizFailureOutcome,
   quizSuccessOutcome,
+  type GenJobPhase,
   type GenJobStatus,
 } from './generation-jobs.ts'
 
@@ -148,9 +149,10 @@ interface GenJob {
   node: string
   startedAt: string
   status: GenJobStatus
-  /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）。
-   * phase=quiz 且直接入队 = 纯出题任务（#118 补生成任务化：/question-generate）。 */
-  phase?: 'outline' | 'sections' | 'quiz'
+  /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）；
+   * 图域任务用 种子/生长/富化（#131 §5 / #140）。phase=quiz 且直接入队 = 纯出题任务
+   * （#118 补生成任务化：/question-generate）。 */
+  phase?: GenJobPhase
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
   progress?: { done: number; total: number; current?: string }
   message?: string
@@ -2005,23 +2007,23 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; from: string; to: string }) => run('learnhub_graph_path', async () =>
       JSON.stringify(await engine.graphPath(args.course, args.from, args.to))))
   tool('learnhub_graph_propose',
-    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen is RETIRED (cutover #138, ADR-0033 grown graph) and rejected at the gate — new course entry comes from seed proposals. kind=edit (per batch) top-level keys: course; reason?; ops[] — every op targets its node via key `node` (NOT name, opposite of gen nodes): add_node{node, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?}; set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges). In graph-generation batches apply immediately after gates pass (anchor-review model, ADR-0003); revision changes stay pending for human review.',
+    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen is RETIRED (cutover #138, ADR-0033 grown graph) and rejected at the gate — new course entry comes from seed proposals. kind=edit (per batch) top-level keys: course; reason?; ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In graph-generation batches apply immediately after gates pass (anchor-review model, ADR-0003); revision changes stay pending for human review.',
     {
-      kind: { type: 'string', required: true, description: '"edit" (change ops); kind=gen (course skeleton) is retired and rejected — seeds own new course entry now' },
-      yaml: { type: 'string', required: true, description: 'Full proposal YAML text (GenProposal or EditProposal schema)' },
+      kind: { type: 'string', required: true, description: '"edit" (change ops) or "enrich" (overlay backfill); kind=gen (course skeleton) is retired and rejected — seeds own new course entry now' },
+      yaml: { type: 'string', required: true, description: 'Full proposal YAML text (EditProposal or EnrichProposal schema)' },
     },
     (args: { kind: string; yaml: string }) => run('learnhub_graph_propose', async () =>
-      JSON.stringify(await engine.graphPropose(args.kind === 'edit' ? 'edit' : 'gen', args.yaml))))
+      JSON.stringify(await engine.graphPropose(graphKind(args.kind), args.yaml))))
   tool('learnhub_graph_proposals',
-    'List graph proposals (gen/edit) by status — use status=pending to see what awaits human review in the panel, with the proposal id, course, reason, and op summary. After the user decides in the panel, apply with learnhub_graph_apply using that id.',
+    'List graph proposals by status — use status=pending to see what awaits human review in the panel, with the proposal id, course, reason, and op summary. After the user decides in the panel, apply with learnhub_graph_apply using that id.',
     {
       status: { type: 'string', description: 'Filter by status (default pending; e.g. applied/rejected)' },
-      kind: { type: 'string', description: 'Filter by kind: edit (gen is retired; historical gen rows still list without the filter)' },
+      kind: { type: 'string', description: 'Filter by kind: edit / enrich / project_plan / project_milestone / experiment (gen is retired; historical gen rows still list without the filter)' },
     },
     (args: { status?: string; kind?: string }) => run('learnhub_graph_proposals', async () =>
       JSON.stringify(await engine.graphProposals(args.status, args.kind))))
   tool('learnhub_graph_enc_backfill',
-    'Backfill enc (component-skill) edges for a course from existing ready content (ADR-0008): every non-practice node whose note body / exercise metadata declares enc_candidates or uses inside its prereq closure that are not yet declared as enc becomes one set_enc whole-replace op, queued as a SINGLE pending edit proposal. Nothing changed returns ops=0. Re-runnable — already-covered nodes produce no ops; practice nodes keep legal empty enc. Use for the A3 pilot when enabling that course, then review/apply with learnhub_graph_apply(kind=edit).',
+    'Backfill enc (component-skill) edges for a course from existing ready content (ADR-0008) via the enrichment-overlay channel (#140): every non-practice node whose note body / exercise metadata declares enc_candidates or uses inside its prereq closure that are not yet declared as enc becomes one field entry (whole-replace enc), queued as a SINGLE pending enrich proposal with sha256 fingerprints of the canonical region files. Nothing changed returns ops=0. Re-runnable — already-covered nodes produce no entries; practice nodes keep legal empty enc. Use for the A3 pilot when enabling that course, then review/apply with learnhub_graph_apply(kind=enrich).',
     { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
     (args: { course?: string }) => run('learnhub_graph_enc_backfill', async () =>
       JSON.stringify(await engine.graphEncBackfill(args.course))))
@@ -2031,14 +2033,14 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     () => run('learnhub_vault_links_scan', async () =>
       JSON.stringify(await engine.vaultLinksScan())))
   tool('learnhub_graph_link_backfill',
-    'Turn vault link priors into enc candidate edges (V-2 #91): mapped pairs with w ≥ 0.7 whose direction resolves INSIDE the pre-transitive-closure become set_enc whole-replace ops (declared enc preserved, new edges noted with the source link evidence for traceability), queued as a SINGLE pending edit proposal per course — the enc_backfill single-proposal human-review channel. Pairs without a pre relation are NOT forced (enc contract/E7: enc target must sit in the holder\'s prereq closure) — they come back as blocked_no_pre with a why, for you to add pre edges explicitly or drop. Re-runnable; already-declared edges are skipped. Requires learnhub_vault_links_scan to have run (fails loud with a pointer otherwise). Review/apply with learnhub_graph_apply(kind=edit).',
+    'Turn vault link priors into enc candidate edges (V-2 #91) via the enrichment-overlay channel (#140): mapped pairs with w ≥ 0.7 whose direction resolves INSIDE the pre-transitive-closure become field entries (whole-replace enc; declared enc preserved, new edges noted with the source link evidence for traceability), queued as a SINGLE pending enrich proposal per course with sha256 fingerprints of the canonical region files. Pairs without a pre relation are NOT forced (enc contract/E7: enc target must sit in the holder\'s prereq closure) — they come back as blocked_no_pre with a why, for you to add pre edges explicitly or drop. Re-runnable; already-declared edges are skipped. Requires learnhub_vault_links_scan to have run (fails loud with a pointer otherwise). Review/apply with learnhub_graph_apply(kind=enrich).',
     { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
     (args: { course?: string }) => run('learnhub_graph_link_backfill', async () =>
       JSON.stringify(await engine.graphLinkBackfill(args.course))))
   tool('learnhub_graph_apply',
-    'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
+    'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot; kind=enrich re-checks the sha256 content fingerprints and refuses stale proposals) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
     {
-      kind: { type: 'string', required: true, description: '"edit" (gen retired — legacy pending gen proposals can only be rejected)' },
+      kind: { type: 'string', required: true, description: '"edit" (change ops) or "enrich" (overlay backfill; gen retired — legacy pending gen proposals can only be rejected)' },
       id: { type: 'number', description: 'Proposal id as a positive integer; omit only for the latest pending of this kind' },
       reject: { type: 'boolean', description: 'true to reject instead of apply' },
       note: { type: 'string', description: 'Rejection reason (recorded)' },
@@ -2050,7 +2052,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
           await engine.graphReject(id, args.note ?? '')
           return `[reject] 提案 #${id} 已拒绝留痕。`
         }
-        return JSON.stringify(await engine.graphApply(args.kind === 'edit' ? 'edit' : 'gen', applyId(args.id)))
+        return JSON.stringify(await engine.graphApply(graphKind(args.kind), applyId(args.id)))
       }))
   tool('learnhub_generate',
     'Queue one course note for generation via the global serial queue: outline first (the model decides section split, order, and types from the content, topic, and style — no fixed structure), then one model call per section through the quality gates as a draft (ready sections are skipped, so retrying resumes the pipeline), then per-section + synthesis quiz questions. Returns immediately with a queue position; at most one node pipeline runs at a time (check the gen-jobs registry tool or panel generate tab for progress). The context pack (prereqs, domain boundary, forbidden concepts) and user-editable prompt templates (state/提示词/课程大纲.md, 课程节生成.md) drive the calls. Missing notes are scaffolded first (on-demand lesson semantics). style selects a per-section prompt variant (课程节生成-<style>, e.g. 苏格拉底/费曼) applied to every section call; the outline and gates stay on the default path.',

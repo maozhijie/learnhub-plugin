@@ -240,6 +240,10 @@ export interface GraphNodeDoc {
   type?: string
   bloom?: string
   difficulty?: number
+  /** 概念字段组（schema v2；缺席缺省）。 */
+  teaches?: Record<string, string>
+  assumes?: Record<string, string>
+  misconceptions?: Array<{ concept: string; model: string }>
   note?: string
   stage: Stage
   mastery: number
@@ -299,17 +303,27 @@ export type GraphPathResult = GraphPathUnrelatedResult | GraphPathRelatedResult
 
 // ---- 提案门禁（graphPropose / graphApply / graphEncBackfill；gengraph.GraphProposals）----
 // gen 提案形态（GraphGenProposalResult / GraphApplyGenResult）随 #138 cutover 退役——
-// kind=gen 不再受理，只剩 edit 通道。
+// kind=gen 不再受理；图谱域剩 edit（变更）与 enrich（富化覆盖层，#140）两通道。
 
-/** 变更提案受理（proposeEdit）。 */
+/** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。 */
 export interface GraphEditProposalResult {
   id: number
   kind: 'edit'
   course: string
   ops: number
+  warns?: string[]
 }
 
-export type GraphProposeResult = GraphEditProposalResult
+/** 富化提案受理（proposeEnrich，覆盖层通道）：files = 指纹锚定的正典文件数。 */
+export interface GraphEnrichProposalResult {
+  id: number
+  kind: 'enrich'
+  course: string
+  fields: number
+  files: number
+}
+
+export type GraphProposeResult = GraphEditProposalResult | GraphEnrichProposalResult
 
 export interface GraphApplyEditResult {
   course: string
@@ -322,9 +336,18 @@ export interface GraphApplyEditResult {
   findings: string[]
 }
 
-export type GraphApplyResult = GraphApplyEditResult
+/** 富化提案 apply（指纹复核通过后写正典）：files = 被重写的区文件。 */
+export interface GraphApplyEnrichResult {
+  course: string
+  fields: number
+  snapshot: number
+  files: string[]
+  findings: string[]
+}
 
-/** enc 存量回填（ADR-0008 / #53）：没有需要回填的节点（候选已全落 enc，可重入）。 */
+export type GraphApplyResult = GraphApplyEditResult | GraphApplyEnrichResult
+
+/** enc 覆盖层回填：没有需要回填的节点（候选已全落 enc，可重入）。 */
 export interface GraphEncBackfillNoneResult {
   course: string
   scanned: number
@@ -333,7 +356,7 @@ export interface GraphEncBackfillNoneResult {
   message: string
 }
 
-/** enc 存量回填：已生成 pending edit 提案（过审后 learnhub_graph_apply(kind=edit) 生效）。 */
+/** enc 覆盖层回填：已生成 pending enrich 提案（过审后 learnhub_graph_apply(kind=enrich) 生效）。 */
 export interface GraphEncBackfillProposedResult {
   course: string
   scanned: number

@@ -62,7 +62,7 @@ test('#11 add_node may create a block and apply reports created_blocks; later mo
   await vaultWithCourse(async engine => {
     const add = await engine.graphPropose('edit', `course: 数学
 ops:
-  - { op: add_node, node: 新块起点, region: 基础, block: 新块, pre: [入门], est: 15 }
+  - { op: add_node, name: 新块起点, region: 基础, block: 新块, pre: [入门], est: 15 }
 `) as { id: number }
     const applied = await engine.graphApply('edit', add.id) as { created_blocks: string[] }
     assert.deepEqual(applied.created_blocks, ['新块'])

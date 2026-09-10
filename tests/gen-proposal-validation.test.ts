@@ -129,13 +129,13 @@ test('gen 形态门保留可选图维度，spec 与持久图解析一致', async
   assert.equal(nodes[1]!.difficulty, 3)
 })
 
-test('gen 与 edit 的目标键名区分保持不变', async () => {
-  await withVault({ registry: null, graph: null, tag: 'learnhub-gen-keys-' }, async ({ engine }) => {
-    // gen 节点用 name（形态门已验证）；edit add_node 刻意用 node。这里锁定后者不被顺手“统一”。
+test('键名统一到 name（#140）：add_node 用 name，旧 node 键拒收并给可执行提示', async () => {
+  await withVault({ registry: null, graph: null, tag: 'learnhub-key-unify-' }, async ({ engine }) => {
+    // schema v2 键名统一：add_node 与图 YAML/gen 节点同用 name，旧双键退役、不做兼容双读（#131 §7）
     const wrongEditKey = `course: 校验课
 ops:
   - op: add_node
-    name: 追加技能
+    node: 追加技能
     region: 基础区
     block: 入门
     pre: [前置技能]
@@ -143,7 +143,17 @@ ops:
 `
     await assert.rejects(
       engine.graphPropose('edit', wrongEditKey),
-      /add_node 的节点字段名是 node，不是 name/,
+      /op=add_node 不接受 node 键（键名已统一到 name/,
+    )
+    // 非 add_node 的 op 用 node 引用既有节点；误写 name 一律 fail loud（不容双写）
+    const misplacedName = `course: 校验课
+ops:
+  - op: del_node
+    name: 前置技能
+`
+    await assert.rejects(
+      engine.graphPropose('edit', misplacedName),
+      /op=del_node 不接受 name 键（name 只用于 add_node 定义新节点/,
     )
   })
 })

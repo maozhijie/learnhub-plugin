@@ -63,8 +63,8 @@ export interface GraphAnalysis {
   vault_links: { scanned_at: string | null; mapped_total: number; hint?: string }
   nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: string; opt: boolean; mastery: number; type?: string } }>
   edges: Array<{ data: { id: string; source: string; target: string; kind: string; w?: number } }>
-  /** 节点 schema 全量（pre/enc/est/bloom/difficulty/note…）——编辑规划与边级自查的数据依据；
-   * elementsOnly 模式不含。 */
+  /** 节点 schema 全量（pre/enc/est/bloom/difficulty/teaches/assumes/misconceptions/note…）
+   * ——编辑规划与边级自查的数据依据；elementsOnly 模式不含。 */
   schema: Record<string, {
     pre: string[]
     enc: Array<{ node: string; w: number }>
@@ -73,6 +73,9 @@ export interface GraphAnalysis {
     type?: string
     bloom?: string
     difficulty?: number
+    teaches?: Record<string, string>
+    assumes?: Record<string, string>
+    misconceptions?: Array<{ concept: string; model: string }>
     note?: string
   }>
 }
@@ -152,6 +155,9 @@ export async function analyzeGraph(
     ...(graph.typeOf[n] ? { type: graph.typeOf[n] } : {}),
     ...(graph.bloomOf[n] ? { bloom: graph.bloomOf[n] } : {}),
     ...(graph.difficultyOf[n] !== undefined ? { difficulty: graph.difficultyOf[n] } : {}),
+    ...(graph.teachesOf[n] ? { teaches: graph.teachesOf[n] } : {}),
+    ...(graph.assumesOf[n] ? { assumes: graph.assumesOf[n] } : {}),
+    ...(graph.misconceptionsOf[n] ? { misconceptions: graph.misconceptionsOf[n].map(m => ({ ...m })) } : {}),
     ...(graph.noteOf[n] ? { note: graph.noteOf[n] } : {}),
   }]))
 

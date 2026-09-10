@@ -11,12 +11,20 @@ import { join } from 'node:path'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './store.ts'
 import { safeFilename } from './paths.ts'
-import type { GBlock, GNode, GRegion, EncEdge } from './types.ts'
-import { BLOOM_LEVELS } from './types.ts'
+import type { GBlock, GNode, GRegion, EncEdge, ConceptTier, Misconception } from './types.ts'
+import { BLOOM_LEVELS, CONCEPT_TIERS } from './types.ts'
 import type { Paths } from './paths.ts'
 
-const NODE_KEYS = new Set(['name', 'pre', 'opt', 'note', 'enc', 'est', 'type', 'bloom', 'difficulty'])
+const NODE_KEYS = new Set(['name', 'pre', 'opt', 'note', 'enc', 'est', 'type', 'bloom', 'difficulty',
+  'teaches', 'assumes', 'misconceptions'])
 const NODE_TYPES = new Set(['practice'])
+
+/** 边轻纪律（#127）：这些键是生长机制的边元数据，图 YAML 永不存储——给出指向性拒收文案。 */
+const RETIRED_EDGE_KEYS: Record<string, string> = {
+  origin: '边轻纪律：origin 从提案 journal 派生，图 YAML 不存储',
+  status: '边轻纪律：复诊状态落 state/边实验.jsonl（边实验账本），图 YAML 零边字段',
+  probation: '边轻纪律：复诊状态落 state/边实验.jsonl（边实验账本），图 YAML 零边字段',
+}
 
 export class SchemaError extends Error {}
 
@@ -24,7 +32,8 @@ function fail(path: string, msg: string): never {
   throw new SchemaError(`${path.replace(/[/\\]/g, '/').split('/').pop()}: ${msg}`)
 }
 
-function parseEnc(raw: unknown, path: string, where: string, name: string): EncEdge[] {
+/** enc 列表解析（图 YAML / 提案 / 覆盖层条目共用：字符串=权重 1，映射带可选 w/note）。 */
+export function parseEnc(raw: unknown, path: string, where: string, name: string): EncEdge[] {
   if (!Array.isArray(raw)) fail(path, `${where}[${name}] enc 必须是列表`)
   const out: EncEdge[] = []
   for (const item of raw) {
@@ -51,12 +60,83 @@ function parseEnc(raw: unknown, path: string, where: string, name: string): EncE
   return out
 }
 
-/** 持久图与 gen 提案共用的节点 schema 解析：gen 在受理前收集同一套错误。 */
-export function parseNode(raw: unknown, path: string, where: string): GNode {
+/** 概念名→档位映射的共用读取（teaches/assumes 同构：键=非空概念名、值=中文档枚举）。 */
+function readTierMap(
+  raw: unknown, path: string, where: string, name: string, field: string,
+): Record<string, ConceptTier> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    fail(path, `${where}[${name}] ${field} 必须是映射（概念名 → 档位）`)
+  }
+  const tiers: Record<string, ConceptTier> = {}
+  for (const [concept, tier] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof concept !== 'string' || !concept.trim()) fail(path, `${where}[${name}] ${field} 概念名不能为空`)
+    if (!(CONCEPT_TIERS as readonly string[]).includes(String(tier))) {
+      fail(path, `${where}[${name}] ${field}[${concept}] 档位非法 ${JSON.stringify(String(tier))}（允许 ${CONCEPT_TIERS.join('/')}）`)
+    }
+    tiers[concept.trim()] = tier as ConceptTier
+  }
+  return tiers
+}
+
+/** 概念字段组解析（schema v2 #127 §1/§7）：teaches/assumes 为概念名→档位映射，
+ * misconceptions 为 {concept, model} 列表。尺寸带：teaches 在场 1–8（1–2 条 WARN 窄节点
+ * 提示）、assumes 缺席合法在场 3–10（1–2 条 WARN）、越界 ERROR；误解每概念封顶 3 条。
+ * 抛 SchemaError=拒收；WARN 不阻，写入调用方给的 warns 槽（持久图加载时不收集）。 */
+export function parseConceptFields(
+  r: Record<string, unknown>, path: string, where: string, name: string, warns?: string[],
+): { teaches?: Record<string, ConceptTier>; assumes?: Record<string, ConceptTier>; misconceptions?: Misconception[] } {
+  const out: { teaches?: Record<string, ConceptTier>; assumes?: Record<string, ConceptTier>; misconceptions?: Misconception[] } = {}
+  if (r.teaches !== undefined) {
+    const tiers = readTierMap(r.teaches, path, where, name, 'teaches')
+    const n = Object.keys(tiers).length
+    if (n > 8) fail(path, `${where}[${name}] teaches 有 ${n} 条（上限 8）——概念密度过高，拆节点或收敛到本节点真正教的`)
+    if (n >= 1 && n <= 2) warns?.push(`${where}[${name}] teaches 仅 ${n} 条（窄节点提示：中继/旁支/巩固的窄节点是常态，非错误）`)
+    out.teaches = tiers
+  }
+  if (r.assumes !== undefined) {
+    const tiers = readTierMap(r.assumes, path, where, name, 'assumes')
+    const n = Object.keys(tiers).length
+    if (n > 10) fail(path, `${where}[${name}] assumes 有 ${n} 条（上限 10）——前置面过宽，节点切入面太大`)
+    if (n >= 1 && n <= 2) warns?.push(`${where}[${name}] assumes 仅 ${n} 条（提示：常规节点假设 3–10 条前置概念；1–2 条常见于入口/窄节点，非错误）`)
+    out.assumes = tiers
+  }
+  if (r.misconceptions !== undefined) {
+    if (!Array.isArray(r.misconceptions)) fail(path, `${where}[${name}] misconceptions 必须是列表`)
+    const items: Misconception[] = []
+    for (const raw of r.misconceptions) {
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+        fail(path, `${where}[${name}] misconceptions 条目必须是映射（{concept, model}）`)
+      }
+      const m = raw as Record<string, unknown>
+      const unknown = Object.keys(m).filter(k => !['concept', 'model'].includes(k))
+      if (unknown.length) {
+        fail(path, `${where}[${name}] misconceptions 条目含未知字段 ${JSON.stringify(unknown)}（判据签名不设机器字段，典型错答写进 model 文字；只允许 concept/model）`)
+      }
+      if (typeof m.concept !== 'string' || !m.concept.trim()) fail(path, `${where}[${name}] misconceptions 条目缺 concept（登记表在册概念名）`)
+      if (typeof m.model !== 'string' || !m.model.trim()) fail(path, `${where}[${name}] misconceptions[${m.concept}] 缺 model（错误模型文字：典型错答、坑位用途）`)
+      items.push({ concept: m.concept.trim(), model: m.model })
+    }
+    const byConcept = new Map<string, number>()
+    for (const m of items) byConcept.set(m.concept, (byConcept.get(m.concept) ?? 0) + 1)
+    for (const [concept, n] of byConcept) {
+      if (n > 3) fail(path, `${where}[${name}] misconceptions[${concept}] 有 ${n} 条（同一概念全课程封顶 3 条）`)
+    }
+    out.misconceptions = items
+  }
+  return out
+}
+
+/** 持久图与 gen 提案共用的节点 schema 解析：gen 在受理前收集同一套错误。
+ * warns 槽可选：受理门传入以收集概念字段组的非阻提示（窄节点等），持久图加载省略。 */
+export function parseNode(raw: unknown, path: string, where: string, warns?: string[]): GNode {
   if (typeof raw !== 'object' || raw === null) fail(path, `${where} 节点必须是映射`)
   const r = raw as Record<string, unknown>
   const unknown = Object.keys(r).filter(k => !NODE_KEYS.has(k))
-  if (unknown.length) fail(path, `${where} 含未知字段 ${JSON.stringify(unknown)}（只允许 ${[...NODE_KEYS].join('/')}）`)
+  if (unknown.length) {
+    const edgeHints = unknown.map(k => RETIRED_EDGE_KEYS[k]).filter(Boolean)
+    fail(path, `${where} 含未知字段 ${JSON.stringify(unknown)}（只允许 ${[...NODE_KEYS].join('/')}）`
+      + (edgeHints.length ? `；${edgeHints.join('；')}` : ''))
+  }
   const name = r.name
   if (typeof name !== 'string' || !name.trim()) fail(path, `${where} 节点 name 缺失或为空`)
   const pre = r.pre ?? []
@@ -88,6 +168,7 @@ export function parseNode(raw: unknown, path: string, where: string): GNode {
     if (![1, 2, 3, 4, 5].includes(difficulty)) fail(path, `${where}[${node.name}] difficulty 必须是 1-5`)
     node.difficulty = difficulty as GNode['difficulty']
   }
+  Object.assign(node, parseConceptFields(r, path, where, node.name, warns))
   return node
 }
 
@@ -151,7 +232,8 @@ export class GraphStore {
     return out
   }
 
-  /** Region → YAML 文本（节点字段按 name/pre/opt/note/est/type/bloom/difficulty/enc 顺序，省空值）。 */
+  /** Region → YAML 文本（节点字段按 name/pre/opt/note/est/type/bloom/difficulty/teaches/
+   * assumes/misconceptions/enc 顺序，省空值）。 */
   regionDoc(region: GRegion, color?: string): Record<string, unknown> {
     return {
       region: region.name,
@@ -167,6 +249,9 @@ export class GraphStore {
           if (n.type) doc.type = n.type
           if (n.bloom) doc.bloom = n.bloom
           if (n.difficulty !== undefined) doc.difficulty = n.difficulty
+          if (n.teaches && Object.keys(n.teaches).length) doc.teaches = { ...n.teaches }
+          if (n.assumes && Object.keys(n.assumes).length) doc.assumes = { ...n.assumes }
+          if (n.misconceptions?.length) doc.misconceptions = n.misconceptions.map(m => ({ ...m }))
           if (n.enc.length) doc.enc = n.enc.map(e => {
             const edge: Record<string, unknown> = { node: e.node, w: e.w }
             if (e.note) edge.note = e.note
@@ -198,6 +283,12 @@ export class Graph {
   bloomOf: Record<string, string> = {}
   /** name → 难度 1-5（可选字段；未标注的节点不在表内）。 */
   difficultyOf: Record<string, number> = {}
+  /** name → {概念 → 教学档位}（可选字段；缺席的节点不在表内，schema v2 概念字段组）。 */
+  teachesOf: Record<string, Record<string, ConceptTier>> = {}
+  /** name → {概念 → 所需档位}（可选字段；缺席的节点不在表内）。 */
+  assumesOf: Record<string, Record<string, ConceptTier>> = {}
+  /** name → 误解先验列表（可选字段；缺席的节点不在表内）。 */
+  misconceptionsOf: Record<string, Misconception[]> = {}
   regionIdxOf: Record<string, number> = {}
   /** name → [区序号, 区名, 块名]。 */
   blockOf: Record<string, [number, string, string]> = {}
@@ -236,6 +327,9 @@ export class Graph {
           if (node.type) this.typeOf[n] = node.type
           if (node.bloom) this.bloomOf[n] = node.bloom
           if (node.difficulty !== undefined) this.difficultyOf[n] = node.difficulty
+          if (node.teaches && Object.keys(node.teaches).length) this.teachesOf[n] = node.teaches
+          if (node.assumes && Object.keys(node.assumes).length) this.assumesOf[n] = node.assumes
+          if (node.misconceptions?.length) this.misconceptionsOf[n] = node.misconceptions
         }
       }
     }
@@ -365,6 +459,19 @@ export function structureCheck(existing: Graph | null, newRegions: GRegion[], la
     if (merged.hasCycle) errors.push(`${label}引入环：涉及 ${merged.cycleNodes.slice(0, 5).join('、')}`)
   }
   return errors
+}
+
+/** 误解封顶的跨节点计数（#127 §1.3/§7）：同一概念全课程（合并视图）封顶 3 条，
+ * 越界 ERROR。受理门在模拟合并后的图上跑——提案新增与存量一起计数，存量已越界时
+ * 下一笔提案同样被拒（拒收信息可执行：列出概念与现计数）。 */
+export function misconceptionCapErrors(regions: GRegion[]): string[] {
+  const count = new Map<string, number>()
+  for (const r of regions) for (const b of r.blocks) for (const n of b.nodes) {
+    for (const m of n.misconceptions ?? []) count.set(m.concept, (count.get(m.concept) ?? 0) + 1)
+  }
+  return [...count.entries()].filter(([, n]) => n > 3)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([concept, n]) => `误解封顶越界: 概念「${concept}」全课程已有 ${n} 条误解（同一概念封顶 3 条）——新增前先收敛（并入既有条目文字或换节点承载）`)
 }
 
 /** 整图快照文档（data/*.yaml 的文档序列 JSON 化，save_snapshot 同构）。 */

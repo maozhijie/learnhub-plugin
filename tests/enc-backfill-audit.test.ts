@@ -172,10 +172,10 @@ test('graphEncBackfill：Ready 节点补 enc 提案，apply 后覆盖销号，�
     assert.equal(r.scanned, 1, '只有乙有 Ready 内容 + 候选')
     assert.equal(r.ops, 1)
     const prop = r.proposal as { id: number; kind: string }
-    assert.equal(prop.kind, 'edit')
+    assert.equal(prop.kind, 'enrich', 'enc 回填走富化覆盖层通道（#140 出生/覆盖层分家）')
 
     // apply 走 audit 门禁（R14 是 warn 不阻断）
-    const applied = await engine.graphApply('edit', prop.id) as Record<string, unknown>
+    const applied = await engine.graphApply('enrich', prop.id) as Record<string, unknown>
     assert.equal(applied.course, '数学')
 
     // apply 后审计不再报 R14（覆盖已销号）

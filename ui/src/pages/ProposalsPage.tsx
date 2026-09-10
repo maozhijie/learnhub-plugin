@@ -1,8 +1,19 @@
-/** 提案页：agent 图构建的 gen/edit 提案，人审后应用或拒绝（全留痕）。 */
+/** 提案页：agent 图构建的 edit/enrich 提案（gen 已退役），人审后应用或拒绝（全留痕）。 */
 import { Alert, Button, Card, Empty, Message, Modal, Space, Table, Tag } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import type { PropItem } from '../types'
+
+/** 提案 kind → 人读标签（gen 仅存量留痕展示）。 */
+const KIND_LABELS: Record<string, { label: string; color: string }> = {
+  gen: { label: '建课（退役）', color: 'gray' },
+  edit: { label: '编辑', color: 'orange' },
+  enrich: { label: '富化', color: 'cyan' },
+  project_plan: { label: '项目计划', color: 'purple' },
+  project_milestone: { label: '里程碑', color: 'purple' },
+  experiment: { label: '实验开跑', color: 'green' },
+}
+const kindLabel = (kind: string) => KIND_LABELS[kind] ?? { label: kind, color: 'orange' }
 
 export default function ProposalsPage() {
   const [items, setItems] = useState<PropItem[] | null>(null)
@@ -20,7 +31,7 @@ export default function ProposalsPage() {
 
   const apply = (p: PropItem) => {
     Modal.confirm({
-      title: `应用提案 #${p.id}（${p.kind === 'gen' ? '建课' : p.kind === 'edit' ? '编辑' : p.kind === 'experiment' ? '实验开跑' : '项目域'}）？`,
+      title: `应用提案 #${p.id}（${kindLabel(p.kind).label}）？`,
       content: p.summary,
       style: { width: 620 },
       onOk: async () => {
@@ -53,7 +64,7 @@ export default function ProposalsPage() {
 
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
-      <Alert type='info' content='agent 在 dsh 对话里构建课程图（多轮 gen/edit 提案）→ 这里人审 → 应用后图结构与 Obsidian 笔记联动落盘。' />
+      <Alert type='info' content='agent 在 dsh 对话里构建课程图（edit 变更 / enrich 富化提案）→ 这里人审 → 应用后图结构与 Obsidian 笔记联动落盘。' />
       <Card size='small' title='提案列表' style={{ borderRadius: 10 }}>
         {items === null ? null : items.length === 0 ? (
           <Empty description='没有提案：在 dsh 对话里让 agent 生成课程（learnhub-graph-generate 技能）' />
@@ -61,9 +72,10 @@ export default function ProposalsPage() {
           <Table size='small' data={items} rowKey={p => p.id} pagination={{ pageSize: 15, showTotal: true }}
             columns={[
               { title: '#', dataIndex: 'id', width: 54 },
-              { title: '类型', width: 70, render: (_, p) => (
-                <Tag size='small' color={p.kind === 'gen' ? 'arcoblue' : 'orange'}>{p.kind === 'gen' ? '建课' : '编辑'}</Tag>
-              ) },
+              { title: '类型', width: 96, render: (_, p) => {
+                const { label, color } = kindLabel(p.kind)
+                return <Tag size='small' color={color}>{label}</Tag>
+              } },
               { title: '课程', dataIndex: 'course', width: 130 },
               { title: '摘要', dataIndex: 'summary', ellipsis: true },
               { title: '状态', width: 90, render: (_, p) => {

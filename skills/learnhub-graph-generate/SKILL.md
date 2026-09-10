@@ -23,19 +23,7 @@ description: （#138 cutover 起退役待重写）旧的一次成型课程图管
 ## 提案 schema 速查（写 YAML 前先读这节，不要翻源码）
 
 ```yaml
-# kind: "gen"（骨架，一次）
-course: 课程名
-mode: new            # 只允许 new / append
-regions:
-  - region: 区名      # 区条目的键是 region，不是 name
-    blocks:
-      - name: 块名
-        nodes:
-          - name: 节点名    # gen 路径节点键是 name
-            pre: [前置]
-            est: 15
-            bloom: 理解
-            difficulty: 2
+# kind: "gen"（骨架）——已退役，受理门直接拒收（#138），不要写
 ```
 
 ```yaml
@@ -44,15 +32,20 @@ course: 课程名
 reason: 一句话
 ops:
   - op: add_node
-    node: 节点名       # ⚠️ edit 路径节点键是 node，不是 name（与 gen 相反）
+    name: 节点名       # #140 键名统一：add_node 与图 YAML 同用 name（旧 node 键拒收）
     region: 区名
     block: 块名
     pre: [已有节点或本批更早创建的节点]
     est: 15
     bloom: 理解
     difficulty: 2
+    teaches: {概念名: 会用}          # 概念字段组（schema v2 #127，可选；档∈知道/会用/能教，
+    assumes: {概念名: 知道}          #   teaches 1–8 条、assumes 在场 3–10 条；1–2 条 WARN 不阻）
+    misconceptions:                  # 可选；每条 {concept, model} 文字承载典型错答，
+      - concept: 概念名              #   同一概念全课程封顶 3 条（越界拒收；判据签名不设机器字段）
+        model: 典型错答/坑位描述
   - op: set_pre       # 整体替换前置全集
-    node: 节点名
+    node: 节点名       # 非 add_node 的 op 用 node 引用既有节点
     pre: [完整清单]
   - op: set_enc
     node: 节点名
@@ -60,9 +53,14 @@ ops:
 # 其余 op：del_node{node} / rename{node,new} / move{node,region,block} / set_note{node,note}
 ```
 
-高频坑三连：① `mode` 只允许 new/append；② 区条目键是 `region`（写成 name 会被拒并提示）；
-③ `add_node` 用 `node` 字段（写成 name 会被拒并提示）。批内 `pre` 只能引用图中已有节点
-或本批更早创建的节点。
+高频坑三连：① 区条目键是 `region`（写成 name 会被拒并提示）；② `add_node` 用 `name`
+定义新节点（旧 `node` 键已退役，写错会被拒并提示），其余 op 用 `node` 引用既有节点；
+③ 边轻纪律：图 YAML/提案节点**零边元数据字段**（origin/status/probation 一律拒收——候选边留在
+提案侧、origin 从 journal 派生、复诊状态落 `state/边实验.jsonl`）。批内 `pre` 只能引用
+图中已有节点或本批更早创建的节点。
+
+另有 `kind: "enrich"`（富化覆盖层，#140）：引擎直跑的回填通道（enc 回填），不手写——
+它带正典文件 sha256 指纹，apply 时指纹不符会被拒收。
 
 ## 第 0 阶段：范围分析（先想清楚，一轮纯思考，可向用户确认）
 
@@ -100,6 +98,10 @@ merge_blocks = 过小块该合并了）与 `schema`（每节点的 pre/enc/est/b
 - add_node 可携带可选字段：`est`（分钟）、`type: practice`、`bloom`（记忆/理解/应用/分析/评价/创造）、
   `difficulty`（1-5）。**建议每批都给 est 与 difficulty**——难度字段让审计能自动检出认知跳跃
   （R13 认知跨步候选的难度差口径）。
+- 概念字段组（schema v2，出生层）：`teaches`/`assumes`（概念名→档位映射，档∈知道/会用/能教）
+  与 `misconceptions`（{concept, model} 列表）随 add_node 落图。概念名按概念登记表词汇书写
+  （生长批可自铸新名，同批自洽；受理门对表校验随 #141 接线）；teaches/assumes 各 1–2 条得到
+  窄节点 WARN 不阻，尺寸越界直接拒收。
 
 ### 边级自查表（每批提交前必做）
 

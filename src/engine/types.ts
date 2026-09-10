@@ -64,8 +64,21 @@ export interface EncEdge { node: string; w: number; note?: string }
 export const BLOOM_LEVELS = ['记忆', '理解', '应用', '分析', '评价', '创造'] as const
 export type BloomLevel = (typeof BLOOM_LEVELS)[number]
 
+/** 概念档位（schema v2 字段契约 #127：teaches/assumes 的档值，中文锁定）。
+ * 刻意不叫 Mastery*——词条里 Mastery 是 0–1 掌握度量（读侧派生、不落盘），这里是
+ * 教学深度档（知道/会用/能教），档位不进门禁不进调度（既裁），只作概念级生成注入
+ * 与教练登记表档位视野的感知面。 */
+export const CONCEPT_TIERS = ['知道', '会用', '能教'] as const
+export type ConceptTier = (typeof CONCEPT_TIERS)[number]
+
+/** 误解条目（节点 misconceptions 列表项）：错误模型文字承载典型错答与坑位用途；
+ * 判据签名不设机器字段（#124 裁决）。同一概念全课程跨节点封顶 2–3 条（受理门计数）。 */
+export interface Misconception { concept: string; model: string }
+
 /** 图节点（graphstore.Node）。est = 标称学习时长（分钟，XP 内容定价）；type = practice 交互实践节点；
- * bloom/difficulty = 认知维度（可选，渐进采纳；认知跨步检测 R13 消费）。 */
+ * bloom/difficulty = 认知维度（可选，渐进采纳；认知跨步检测 R13 消费）；
+ * teaches/assumes/misconceptions = 概念字段组（schema v2 #127，出生层随内容生长批写入，
+ * 概念名 = 登记表在册名字；缺席全合法）。 */
 export interface GNode {
   name: string
   pre: string[]
@@ -76,6 +89,12 @@ export interface GNode {
   type?: 'practice'
   bloom?: BloomLevel
   difficulty?: 1 | 2 | 3 | 4 | 5
+  /** 本节点教到的概念 → 教学档位（在场 1–8：1–2 条 WARN 窄节点提示、>8 ERROR）。 */
+  teaches?: Record<string, ConceptTier>
+  /** 本节点假设学习者已具备的概念 → 所需档位（缺席合法；在场 1–2 WARN、>10 ERROR）。 */
+  assumes?: Record<string, ConceptTier>
+  /** 本节点的误解先验（缺席合法；每概念全课程封顶 3 条，越界 ERROR）。 */
+  misconceptions?: Misconception[]
 }
 
 /** 图块（graphstore.Block）。 */
@@ -178,10 +197,11 @@ export interface ReviewRec {
 }
 
 /** 提案 kind 全集（P-2 泛化：图谱域 edit + 项目域 project_plan/project_milestone
- * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制））。
+ * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制）+ 覆盖域 enrich（schema v2
+ * 出生/覆盖层分家，#127/#131：回填通道，sha256 内容指纹，只补写图谱可对照字段））。
  * gen（骨架提案）已随 #138 cutover 退役（ADR-0033 生长式图）——存量流水里的 gen
  * 记录只读展示（loadProposals 不校验 kind），不再是可创建/受理的 kind。 */
-export const PROPOSAL_KINDS = ['edit', 'project_plan', 'project_milestone', 'experiment'] as const
+export const PROPOSAL_KINDS = ['edit', 'enrich', 'project_plan', 'project_milestone', 'experiment'] as const
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
 
 /** 提案记录（db.proposals 行同构；产物 YAML 另存 state/proposals/）。

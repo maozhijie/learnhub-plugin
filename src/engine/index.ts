@@ -57,7 +57,7 @@ import { Content } from './content.ts'
 import { nodeTierOf, perSectionQuizTarget, genericQuizTarget } from './complexity.ts'
 import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals, genRetiredError } from './gengraph.ts'
-import type { ApplyAudit, EditOp } from './gengraph.ts'
+import type { ApplyAudit, EnrichFieldEntry } from './gengraph.ts'
 import type { LlmComplete } from './llm.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
@@ -746,7 +746,7 @@ export class LearnhubEngine {
     const { graph } = await this.loadView(c)
     const proposalTier = mapEdgesToNodes(cache.edges.filter(e => scoreTier(e.w) === 'proposal'), graph.names)
     const declared = declaredEncOf(graph)
-    const ops: EditOp[] = []
+    const fields: EnrichFieldEntry[] = []
     const candidates: Array<{ holder: string; skill: string; w: number }> = []
     const blockedNoPre: Array<{ a: string; b: string; w: number; why: string }> = []
     let skippedDeclared = 0
@@ -761,8 +761,8 @@ export class LearnhubEngine {
         skippedDeclared++
         continue
       }
-      ops.push({
-        op: 'set_enc', node: dir.holder,
+      fields.push({
+        node: dir.holder,
         enc: [...existing, {
           node: dir.skill, w: edge.w,
           note: `vault 链接先验（#91）：${edge.a.split('/').pop()} ↔ ${edge.b.split('/').pop()}（${edge.count} 次/${edge.files} 源${edge.bidirectional ? '/双向' : ''}）`,
@@ -770,7 +770,7 @@ export class LearnhubEngine {
       })
       candidates.push({ holder: dir.holder, skill: dir.skill, w: edge.w })
     }
-    if (!ops.length) {
+    if (!fields.length) {
       return {
         course: c.name, scanned_edges: cache.edges.length, mapped: proposalTier.length, ops: 0,
         proposal: null, blocked_no_pre: blockedNoPre, skipped_declared: skippedDeclared,
@@ -779,15 +779,15 @@ export class LearnhubEngine {
     }
     const yamlText = YAML.stringify({
       course: c.name,
-      reason: `Vault 链接先验回填（V-2 #91）：${ops.length} 个节点的个人笔记关联对成 enc 边（w ≥ 0.7、pre 闭包内）`,
-      ops,
+      reason: `Vault 链接先验回填（覆盖层通道，V-2 #91）：${fields.length} 个节点的个人笔记关联对成 enc 边（w ≥ 0.7、pre 闭包内）`,
+      fields,
     })
-    const prop = await this.graphPropose('edit', yamlText)
+    const prop = await this.graphPropose('enrich', yamlText)
     return {
-      course: c.name, scanned_edges: cache.edges.length, mapped: proposalTier.length, ops: ops.length,
+      course: c.name, scanned_edges: cache.edges.length, mapped: proposalTier.length, ops: fields.length,
       proposal: { id: (prop as { id: number }).id }, blocked_no_pre: blockedNoPre,
       skipped_declared: skippedDeclared,
-      message: `已生成 pending edit 提案 #${(prop as { id: number }).id}——过审后 learnhub_graph_apply(kind=edit) 生效（可重入，已声明边不重复提名）`,
+      message: `已生成 pending enrich 提案 #${(prop as { id: number }).id}（覆盖层通道）——过审后 learnhub_graph_apply(kind=enrich) 生效（可重入，已声明边不重复提名）`,
     }
   }
 
@@ -828,6 +828,9 @@ export class LearnhubEngine {
       type: graph.typeOf[node],
       bloom: graph.bloomOf[node],
       difficulty: graph.difficultyOf[node],
+      ...(gnode?.teaches ? { teaches: gnode.teaches } : {}),
+      ...(gnode?.assumes ? { assumes: gnode.assumes } : {}),
+      ...(gnode?.misconceptions?.length ? { misconceptions: gnode.misconceptions } : {}),
       note: graph.noteOf[node],
       stage: effectiveStage(state, node),
       mastery: masteryOfFm(fm),
@@ -929,15 +932,19 @@ export class LearnhubEngine {
 
   // ---- 提案门禁包装（apply 前 audit 拦截） ----
 
-  async graphPropose(kind: 'gen' | 'edit', yamlText: string): Promise<GraphProposeResult> {
-    if (kind !== 'gen' && kind !== 'edit') throw new Error(`[propose] 非法 kind: ${String(kind)}（只允许 edit——gen 已退役，拼错不会再被静默当成 gen）`)
+  async graphPropose(kind: 'gen' | 'edit' | 'enrich', yamlText: string): Promise<GraphProposeResult> {
+    if (kind !== 'gen' && kind !== 'edit' && kind !== 'enrich') {
+      throw new Error(`[propose] 非法 kind: ${String(kind)}（允许 edit/enrich——gen 已退役，拼错不会再被静默当成 gen）`)
+    }
     // 受理门退役检查先行（#138）：不落提案、不查流水，直接指路
     if (kind === 'gen') throw genRetiredError('propose')
-    return this.proposals.proposeEdit(yamlText)
+    return kind === 'edit' ? this.proposals.proposeEdit(yamlText) : this.proposals.proposeEnrich(yamlText)
   }
 
-  async graphApply(kind: 'gen' | 'edit', pid?: number): Promise<GraphApplyResult> {
-    if (kind !== 'gen' && kind !== 'edit') throw new Error(`[apply] 非法 kind: ${String(kind)}（只允许 edit——gen 已退役）`)
+  async graphApply(kind: 'gen' | 'edit' | 'enrich', pid?: number): Promise<GraphApplyResult> {
+    if (kind !== 'gen' && kind !== 'edit' && kind !== 'enrich') {
+      throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 edit/enrich——gen 已退役）`)
+    }
     if (kind === 'gen') throw genRetiredError('apply')
     // audit 门禁：目标课程存在 ERROR 时拒绝 apply；warns 摘要 + 健康分随 findings 返回
     const pending = await this.store.takePending(kind, pid)
@@ -948,27 +955,28 @@ export class LearnhubEngine {
       const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, (await this.learningDay()).today)
       audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
     }
-    return kind === 'edit' ? this.proposals.applyEdit(pid, audit) : this.proposals.applyGen(pid, audit)
+    return kind === 'edit' ? this.proposals.applyEdit(pid, audit) : this.proposals.applyEnrich(pid, audit)
   }
 
   async graphReject(pid: number, note = ''): Promise<ProposalRec> {
     return this.proposals.reject(pid, note)
   }
 
-  // ---- enc 存量回填（ADR-0008 / #53；A3 启用试点课程时跑）----
+  // ---- enc 覆盖层回填（kind=enrich，#140：出生/覆盖层分家；原 edit 通道随分家转富化）----
 
-  /** enc 存量回填入口：对试点课程里已有 Ready 内容、正文反哺候选非空、且候选尚未全落
-   * enc 的非 practice 节点，批量生成一个 pending edit 提案（每节点一条 set_enc 整体替换：
-   * 既有声明 enc 原样保留 + 补闭包内提升边，权重取调用强度）。可重入——已全覆盖节点不产生
-   * op，重跑不会重复膨胀、不与已声明 enc 冲突；practice 节点维持合法空 enc 不动。
-   * 提案走人审（ADR-0003 修订变更语义）：过审计后由 graphApply 生效，留痕可回溯。 */
+  /** enc 覆盖层回填入口：对课程里已有 Ready 内容、正文反哺候选非空、且候选尚未全落
+   * enc 的非 practice 节点，批量生成一个 pending enrich 提案（每节点一条字段条目：
+   * 既有声明 enc 原样保留 + 补闭包内提升边，权重取调用强度；sha256 指纹锚定正典版本）。
+   * 可重入——已全覆盖节点不产生条目，重跑不会重复膨胀、不与已声明 enc 冲突；practice
+   * 节点维持合法空 enc 不动。提案走人审（ADR-0003 修订变更语义）：过审计后由
+   * graphApply(kind=enrich) 生效，留痕可回溯（state/覆盖层.jsonl）。 */
   async graphEncBackfill(courseKey?: string): Promise<GraphEncBackfillResult> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     assertNoBrokenNotes('enc-backfill', broken)
     // 既有声明 enc 的原始形态在 region 节点上（图视图 encOf 丢 note）；declaredEncOf 一次建表
     const encOfNode = declaredEncOf(graph)
-    const ops: EditOp[] = []
+    const fields: EnrichFieldEntry[] = []
     let scanned = 0
     for (const node of graph.order) {
       const fm = state[node]
@@ -986,20 +994,20 @@ export class LearnhubEngine {
         target.push(p)
       }
       if (target.length === declared.length) continue // 候选已全落 enc → 无变更
-      ops.push({ op: 'set_enc', node, enc: target })
+      fields.push({ node, enc: target })
     }
-    if (!ops.length) {
+    if (!fields.length) {
       return { course: c.name, scanned, ops: 0, proposal: null, message: '没有需要回填的节点：候选已全落 enc，或没有可提升的反哺候选。' }
     }
     const yamlText = YAML.stringify({
       course: c.name,
-      reason: `enc 反哺回填（ADR-0008 / #53）：${ops.length} 个节点按既有 Ready 内容补成分技能边`,
-      ops,
+      reason: `enc 反哺回填（覆盖层通道，ADR-0008 / #53）：${fields.length} 个节点按既有 Ready 内容补成分技能边`,
+      fields,
     })
-    const prop = await this.graphPropose('edit', yamlText)
+    const prop = await this.graphPropose('enrich', yamlText)
     return {
-      course: c.name, scanned, ops: ops.length, proposal: prop,
-      message: `已为 ${ops.length} 个节点生成 pending edit 提案 #${String((prop as { id?: unknown }).id)}——过审后 learnhub_graph_apply(kind=edit) 生效（可重入，无遗漏则返回 ops=0）`,
+      course: c.name, scanned, ops: fields.length, proposal: prop,
+      message: `已为 ${fields.length} 个节点生成 pending enrich 提案 #${String((prop as { id?: unknown }).id)}（覆盖层通道，sha256 指纹锚定正典）——过审后 learnhub_graph_apply(kind=enrich) 生效（可重入，无遗漏则返回 ops=0）`,
     }
   }
 
@@ -1017,7 +1025,7 @@ export class LearnhubEngine {
     if (kind === 'project_plan' || kind === 'project_milestone') {
       return kind === 'project_plan' ? this.projects.applyPlan(pid) : this.projects.applyMilestone(pid)
     }
-    if (kind === 'gen' || kind === 'edit') return this.graphApply(kind, pid)
+    if (kind === 'gen' || kind === 'edit' || kind === 'enrich') return this.graphApply(kind, pid)
     throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 ${PROPOSAL_KINDS.join('/')}）`)
   }
 
@@ -1456,7 +1464,7 @@ export class LearnhubEngine {
       if (!c) continue
       const { graph } = await this.loadView(c)
       const declared = declaredEncOf(graph)
-      const ops: EditOp[] = []
+      const fields: EnrichFieldEntry[] = []
       for (const pair of pairs.slice(0, 12)) {
         const dir = orientCandidate(
           pair.a, pair.b,
@@ -1474,20 +1482,20 @@ export class LearnhubEngine {
           continue
         }
         const w = coWeight(pair.co)
-        ops.push({
-          op: 'set_enc', node: dir.holder,
+        fields.push({
+          node: dir.holder,
           enc: [...existing, { node: dir.skill, w, note: `行为推断（P-6 #96）：${days} 天窗口内共现 ${pair.co} 天（pre 闭包方向）` }],
         })
         candidates.push({ course: courseName, holder: dir.holder, skill: dir.skill, co: pair.co, w })
       }
-      if (!ops.length) continue
+      if (!fields.length) continue
       const yamlText = YAML.stringify({
         course: courseName,
-        reason: `行为推断 enc 边（P-6 #96）：项目「${fm.name}」${days} 天窗口内翻卡/回看共现 ≥${minCo} 天的关联节点对`,
-        ops,
+        reason: `行为推断 enc 边（覆盖层通道，P-6 #96）：项目「${fm.name}」${days} 天窗口内翻卡/回看共现 ≥${minCo} 天的关联节点对`,
+        fields,
       })
-      const prop = await this.graphPropose('edit', yamlText)
-      proposals.push({ course: courseName, id: (prop as { id: number }).id, ops: ops.length })
+      const prop = await this.graphPropose('enrich', yamlText)
+      proposals.push({ course: courseName, id: (prop as { id: number }).id, ops: fields.length })
     }
     return {
       project: id,

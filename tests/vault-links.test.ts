@@ -245,7 +245,7 @@ test('analyze 建议段：候选映射到图节点（proposal/review 分层 + �
   })
 })
 
-test('链接先验回填：pre 闭包内成 set_enc 单提案（既有 enc 保留、可重入）；闭包外降级 blocked_no_pre', async () => {
+test('链接先验回填：pre 闭包内成 enrich 单提案（既有 enc 保留、可重入）；闭包外降级 blocked_no_pre', async () => {
   await withLinksVault(async ({ engine }) => {
     await engine.vaultLinksScan()
     const r = await engine.graphLinkBackfill('数学')
@@ -257,19 +257,21 @@ test('链接先验回填：pre 闭包内成 set_enc 单提案（既有 enc 保�
       { a: r.blocked_no_pre[0]!.a, b: r.blocked_no_pre[0]!.b },
       { a: '未关联', b: '进阶' },
     )
-    // 提案内容：set_enc 挂在 holder=进阶，skill=入门，w 保留，note 可溯源
-    const proposals = await engine.graphProposals('pending', 'edit')
+    // 提案内容：覆盖层字段条目挂在 holder=进阶，skill=入门，w 保留，note 可溯源（#140 kind=enrich）
+    const proposals = await engine.graphProposals('pending', 'enrich')
     const prop = proposals.find(p => p.id === r.proposal!.id)
     assert.ok(prop, '提案在 pending 列表')
+    assert.equal(prop!.kind, 'enrich')
     const yamlText = await readFile(
-      engine.paths.proposalArtifactPath(r.proposal!.id, 'edit', '数学'), 'utf8')
-    assert.match(yamlText, /op: set_enc/)
+      engine.paths.proposalArtifactPath(r.proposal!.id, 'enrich', '数学'), 'utf8')
+    assert.match(yamlText, /fields:/)
     assert.match(yamlText, /node: 进阶/)
+    assert.match(yamlText, /fingerprints:/)
     assert.match(yamlText, /vault 链接先验（#91）/)
     assert.match(yamlText, /w: 0.9/)
 
     // 可重入：提案过审 apply 后，同一批候选不再重复提名（已声明边跳过）
-    await engine.graphApply('edit', r.proposal!.id)
+    await engine.graphApply('enrich', r.proposal!.id)
     const r2 = await engine.graphLinkBackfill('数学')
     assert.equal(r2.ops, 0)
     assert.equal(r2.proposal, null)

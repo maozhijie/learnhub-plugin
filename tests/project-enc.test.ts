@@ -91,7 +91,7 @@ async function seedCoActivity(
   }
 }
 
-test('行为推断 enc：共现窗口 → 单个 pending edit 提案 → 人审 apply 落边（既有声明保留）', async () => {
+test('行为推断 enc：共现窗口 → 单个 pending enrich 提案 → 人审 apply 落边（既有声明保留）', async () => {
   await withVault({
     graph: TWO_NODE_GRAPH,
     notes: { 入门: {}, 进阶: {} },
@@ -111,10 +111,10 @@ test('行为推断 enc：共现窗口 → 单个 pending edit 提案 → 人审 
     assert.equal(r.candidates[0].skill, '入门')
     assert.equal(r.candidates[0].w, 1.0, '共现 3 天')
 
-    // 人审：走既有 graphApply（含审计门）——零 schema 破坏，既有 apply 通路直接消费
-    const applied = await engine.graphApply('edit', r.proposals[0].id)
+    // 人审：走既有 graphApply（含审计门；行为推断 enc 属覆盖层，kind=enrich，#140）
+    const applied = await engine.graphApply('enrich', r.proposals[0].id)
     assert.equal(applied.course, '数学')
-    assert.equal(applied.ops, 1)
+    assert.equal(applied.fields, 1)
     const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '基础.yaml'), 'utf8')
     assert.match(dataYaml, /行为推断（P-6 #96）/)
     assert.match(dataYaml, /name: 进阶[\s\S]*enc:[\s\S]*node: 入门/)

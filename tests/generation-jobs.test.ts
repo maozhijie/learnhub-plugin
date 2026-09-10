@@ -1,15 +1,22 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  GEN_JOB_PHASES,
   contentFailureStatus,
   generationJobRetentionMs,
   nextQueuedJob,
   quizFailureOutcome,
   quizSuccessOutcome,
 } from '../src/generation-jobs.ts'
-import type { GenJobStatus } from '../src/generation-jobs.ts'
+import type { GenJobPhase, GenJobStatus } from '../src/generation-jobs.ts'
 
 const HOUR = 60 * 60_000
+
+test('队列 phase 六值（#131 §5 / #140）：节点内容管线三值 + 图域 种子/生长/富化', () => {
+  assert.deepEqual([...GEN_JOB_PHASES], ['outline', 'sections', 'quiz', '种子', '生长', '富化'])
+  const phases: GenJobPhase[] = ['outline', 'sections', 'quiz', '种子', '生长', '富化']
+  assert.equal(phases.length, GEN_JOB_PHASES.length, '类型与值表同步（phase 联合不漂移）')
+})
 
 test('生成任务保留：done 30 分钟，partial/failed/cancelled 保留 24h；queued 非终态不清理', () => {
   const statuses: GenJobStatus[] = ['queued', 'running', 'cancelling', 'done', 'partial', 'failed', 'cancelled']
