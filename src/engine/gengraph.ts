@@ -22,7 +22,7 @@ import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
 import type { PriorFeedVerdict } from './vault-links.ts'
 import {
   SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ETA_PENDING,
-  compassScaffold, withSectionText, parseCompass, sectionBody,
+  compassScaffold, withSectionText, parseCompass, sectionBody, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
 import { todayStr } from './dates.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception } from './types.ts'
@@ -63,6 +63,27 @@ export interface EditOp {
   misconceptions?: Misconception[]
 }
 
+/** 生长算子集（#145 / ADR-0033 滚动教练）：停机规则转译进算子语义——前进=目标消费，
+ * 插入=症状当场补过渡（复诊随 #146 边实验账本结算），巩固=足迹末端综合只引已教概念、
+ * 旁支=教学消费支线（两者不走复诊），换向=批注/目标变化下重定路线（换终点走重新种子）。 */
+export const GROWTH_OPERATORS = ['前进', '插入', '巩固', '旁支', '换向'] as const
+export type GrowthOperator = (typeof GROWTH_OPERATORS)[number]
+
+/** 生长批 note 区（#145 裁决产物面）：算子标签 + 理由 + 分歧声明（可选）。生长批仍是
+ * kind=edit 提案（不新增提案 kind）；note 在场即生长批——ops 允许为空（裁决=暂不产
+ * 结构，罗盘重写照走同事务）。 */
+export interface GrowthNote {
+  operator: GrowthOperator
+  reason: string
+  /** 真分歧声明：轻量段裁决与上下文/批注存在实质分歧时声明，宿主升级全量段重裁
+   * （两段式 effort；显然步免仲裁税不声明）。 */
+  dispute?: string
+}
+
+/** 提案 op 上的边轻纪律键（#127：候选边留提案侧留痕、origin 从 journal 派生、
+ * 复诊状态落 state/边实验.jsonl——提案节点同样零边元数据字段，一律拒收不静默丢弃）。 */
+const RETIRED_OP_KEYS = ['origin', 'status', 'probation'] as const
+
 export interface EditProposalSpec {
   course: string
   reason?: string
@@ -70,6 +91,11 @@ export interface EditProposalSpec {
    * 提案被拒则登记不落盘。省略 = 本批零铸名。 */
   concepts?: ConceptEntry[]
   ops: EditOp[]
+  /** 生长批 note 区（#145）：在场 = 生长批（教练回合裁决产物）；缺席 = 普通 edit 提案。 */
+  note?: GrowthNote
+  /** 罗盘批内重写（#145）：「剩余路线」段新正文，与图 apply 同事务落盘——提案被拒
+   * 罗盘不落盘。唯一写权属生长批（note 在场）；普通 edit 提案携带即拒收。 */
+  route?: string
 }
 
 const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'move', 'set_note'] as const
@@ -183,8 +209,55 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       })
     }
   }
+  // 生长批 note 区（#145）：严格 schema——恰 {operator, reason, dispute?}，未知键拒收。
+  let note: GrowthNote | undefined
+  if (d.note !== undefined) {
+    if (typeof d.note !== 'object' || d.note === null || Array.isArray(d.note)) {
+      errors.push('note: 必须是映射（生长批裁决区 = {operator, reason, dispute?}）')
+    } else {
+      const n = d.note as Record<string, unknown>
+      const noteErrors: string[] = []
+      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'dispute'].includes(k))
+      if (unknown.length) {
+        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/dispute；分歧声明写在 dispute，不另立字段）`)
+      }
+      if (!(GROWTH_OPERATORS as readonly string[]).includes(String(n.operator))) {
+        noteErrors.push(`note.operator: 非法算子 ${JSON.stringify(String(n.operator))}（允许 ${GROWTH_OPERATORS.join('/')}）`)
+      }
+      if (typeof n.reason !== 'string' || !n.reason.trim()) {
+        noteErrors.push('note.reason 不能为空（每步生长都带理由——可解释、可追问）')
+      }
+      if (n.dispute !== undefined && (typeof n.dispute !== 'string' || !n.dispute.trim())) {
+        noteErrors.push('note.dispute: 分歧声明声明了就要写内容（真分歧才声明——显然步免仲裁税）')
+      }
+      errors.push(...noteErrors)
+      if (!noteErrors.length) {
+        note = {
+          operator: String(n.operator) as GrowthOperator,
+          reason: (n.reason as string).trim(),
+          ...(typeof n.dispute === 'string' && n.dispute.trim() ? { dispute: n.dispute.trim() } : {}),
+        }
+      }
+    }
+  }
+  // 罗盘批内重写（#145）：route 只随生长批携带——「剩余路线」写权属教练回合生长批，
+  // 普通 edit 提案携带即拒收（罗盘唯一写权，见 compass.ts 头注）。
+  let route: string | undefined
+  if (d.route !== undefined) {
+    if (!note) {
+      errors.push('route: 普通 edit 提案不得携带（「剩余路线」唯一写权属教练回合生长批——带 note 区的生长批才随批重写罗盘）')
+    } else if (typeof d.route !== 'string' || !d.route.trim()) {
+      errors.push('route: 必须是非空字符串（「剩余路线」段新正文；不重写罗盘就省略本字段）')
+    } else {
+      route = d.route
+    }
+  }
   const ops: EditOp[] = []
-  if (!Array.isArray(d.ops) || !d.ops.length) {
+  if (d.ops === undefined && note) {
+    // 生长批允许零操作（裁决=暂不产结构；罗盘重写与批留痕照走同事务）
+  } else if (!Array.isArray(d.ops)) {
+    errors.push('ops: 必须是列表（普通提案至少一条操作；生长批裁决不产结构时写空列表 ops: []）')
+  } else if (!d.ops.length && !note) {
     errors.push('ops: 提案没有操作条目')
   } else {
     d.ops.forEach((raw: unknown, i: number) => {
@@ -198,6 +271,11 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       if (typeof op !== 'string' || !(EDIT_OPS as readonly string[]).includes(op)) {
         errors.push(`${where}.op: 非法操作 ${String(op)}（允许 ${EDIT_OPS.join('/')}）`)
         return
+      }
+      // 边轻纪律（#127）：提案节点同样零边元数据字段——静默丢弃会丢生长语义，fail loud。
+      const retired = Object.keys(o).filter(k => (RETIRED_OP_KEYS as readonly string[]).includes(k))
+      if (retired.length) {
+        errors.push(`${where}: 提案 op 不接受边元数据字段 ${JSON.stringify(retired)}（origin 从提案 journal 派生、复诊状态落 state/边实验.jsonl——图与提案节点零边字段）`)
       }
       // 键名统一到 name（#131 §7 / #1：与图 YAML、gen 节点同口径，不做兼容双读也不容双写）——
       // add_node 用 name 定义新节点；其余 op 用 node 引用既有节点。写错键一律 fail loud。
@@ -283,6 +361,8 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       reason: typeof d!.reason === 'string' ? d!.reason : '',
       ...(concepts !== undefined ? { concepts } : {}),
       ops,
+      ...(note ? { note } : {}),
+      ...(route !== undefined ? { route } : {}),
     },
   }
 }
@@ -297,6 +377,32 @@ function conceptRefsOfOps(ops: EditOp[]): ConceptRef[] {
     for (const m of op.misconceptions ?? []) refs.push({ where: `misconceptions[${where}]`, concept: m.concept })
   }
   return refs
+}
+
+/** 巩固门（#145 受理门校验）：operator=巩固 的批是综合收束——add_node 的概念引用
+ * （teaches/assumes/误解）只许引已教概念（既有图 teaches 并集），不产新概念；
+ * 不走复诊由边轻纪律键拒收与 #146 结算语义共同保证（巩固批没有复诊通道）。 */
+export function consolidationGateErrors(
+  operator: GrowthOperator | undefined, ops: EditOp[], graph: Graph,
+): string[] {
+  if (operator !== '巩固') return []
+  const taught = new Set<string>()
+  for (const n of graph.names) for (const c of Object.keys(graph.teachesOf[n] ?? {})) taught.add(c)
+  const errors: string[] = []
+  for (const [i, op] of ops.entries()) {
+    if (op.op !== 'add_node') continue
+    const where = `ops.${i}(add_node ${op.name})`
+    for (const concept of Object.keys(op.teaches ?? {})) {
+      if (!taught.has(concept)) errors.push(`${where}: 巩固节点 teaches「${concept}」不是已教概念——巩固只引已教概念做综合收束；新概念走 前进/插入/旁支 产出`)
+    }
+    for (const concept of Object.keys(op.assumes ?? {})) {
+      if (!taught.has(concept)) errors.push(`${where}: 巩固节点 assumes「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
+    }
+    for (const m of op.misconceptions ?? []) {
+      if (!taught.has(m.concept)) errors.push(`${where}: 巩固节点误解条目「${m.concept}」不是已教概念——巩固只引已教概念做综合收束`)
+    }
+  }
+  return errors
 }
 
 /** 种子提案全部概念引用（起点/终点节点的概念字段组；铸名随种子提案同事务落盘）。 */
@@ -468,8 +574,9 @@ export class GraphProposals {
     return YAML.parse(await readFile(path, 'utf8'))
   }
 
-  /** graph propose-edit：在内存图上模拟执行 + 概念引用对表 + 终点锚保护 → pending。
-   * warns = 受理门的非阻提示（窄节点等概念字段组提示），随受理回执返给提案方。 */
+  /** graph propose-edit：在内存图上模拟执行 + 概念引用对表 + 终点锚保护 + 巩固门
+   * （#145）→ pending。warns = 受理门的非阻提示（窄节点等概念字段组提示），随受理
+   * 回执返给提案方。note 在场 = 生长批：summary 带算子标签与理由（每步可解释）。 */
   async proposeEdit(yamlText: string): Promise<Record<string, unknown>> {
     const warns: string[] = []
     const v = validateEditProposal(YAML.parseModel(yamlText), warns)
@@ -484,13 +591,40 @@ export class GraphProposals {
     // 终点锚保护（#142 雾区条款下半）：锚定的终点节点不可经 edit 直改——
     // del_node/rename 会把锚悬空，换终点只走重新种子提案（kind=seed, mode=reseed）。
     const anchorErrors = await this.anchorGuardErrors(course.root, spec.ops)
-    if (errors.length || conceptErrors.length || anchorErrors.length) {
+    // 巩固门（#145）：operator=巩固 的 add_node 只引已教概念。
+    const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
+    if (errors.length || conceptErrors.length || anchorErrors.length || consolidationErrors.length) {
       throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n`
-        + [...errors, ...conceptErrors, ...anchorErrors].map(e => `  ✗ ${e}`).join('\n'))
+        + [...errors, ...conceptErrors, ...anchorErrors, ...consolidationErrors].map(e => `  ✗ ${e}`).join('\n'))
+    }
+    // 罗盘重写预检（#145 同事务：提案被拒罗盘不落盘——route 门在受理时就走一遍，
+    // 不给坏路线落 pending 的机会）
+    if (spec.route !== undefined) {
+      const routeErrors = await this.routeGate(course.root, spec.route)
+      if (routeErrors.length) {
+        throw new Error(`[propose-edit] 罗盘重写未过路线门，提案未受理。\n${routeErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+      }
     }
     const { pid } = await this.saveArtifact('edit', spec.course, YAML.parseModel(yamlText))
-    await this.store.updateProposal(pid, { summary: `${spec.ops.length} 条操作${spec.concepts?.length ? `；铸名 ${spec.concepts.length} 条` : ''}：${spec.ops.map(o => o.op).join('、')}` })
-    return { id: pid, kind: 'edit', course: spec.course, ops: spec.ops.length, ...(warns.length ? { warns } : {}) }
+    await this.store.updateProposal(pid, {
+      summary: spec.note
+        ? `生长批（${spec.note.operator}）：${spec.note.reason}｜${spec.ops.length} 条操作`
+        : `${spec.ops.length} 条操作${spec.concepts?.length ? `；铸名 ${spec.concepts.length} 条` : ''}：${spec.ops.map(o => o.op).join('、')}`,
+    })
+    return {
+      id: pid, kind: 'edit', course: spec.course, ops: spec.ops.length,
+      ...(spec.note ? { operator: spec.note.operator, ...(spec.note.dispute ? { disputed: true } : {}) } : {}),
+      ...(spec.route !== undefined ? { compass_rewrite: true } : {}),
+      ...(warns.length ? { warns } : {}),
+    }
+  }
+
+  /** 罗盘重写预检（propose 与 apply 双门共用；返回错误行，空 = 通过）：锚在终点上
+   * （未播种 fail loud）+ 路线门（非空/无标题/限长）。 compass.ts 的写权机械不变。 */
+  private async routeGate(root: string, routeMd: string): Promise<string[]> {
+    const anchor = await readAnchor(this.paths.anchorPath(root))
+    if (!anchor) return ['课程未播种（终点锚 Missing）——罗盘重写锚在终点上，先走种子提案（kind=seed）。']
+    return validateRouteBody(stripWrappingFence(routeMd))
   }
 
   /** 终点锚保护（#142）：edit 提案不得 del/rename 锚定的终点节点——那是绕开
@@ -512,7 +646,9 @@ export class GraphProposals {
   }
 
   /** graph apply-edit：概念对表复验 → 铸名与图同事务落盘 + 改名/移动/删除联动课程
-   * 笔记 + 快照。登记表先写（孤儿条目合法、悬空引用违约），graph 落盘在后。 */
+   * 笔记 + 罗盘批内重写（#145：route 在场时与图 apply 同事务——路线门/巩固门全过
+   * 才开始任何写盘，提案被拒罗盘不落盘）+ 快照。登记表先写（孤儿条目合法、悬空引用
+   * 违约），graph 落盘在后。 */
   async applyEdit(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<Record<string, unknown>> {
     if (!audit.ok) throw new Error('[apply-edit] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
     const prop = await this.store.takePending('edit', pid)
@@ -540,6 +676,20 @@ export class GraphProposals {
     const anchorErrors = await this.anchorGuardErrors(root, spec.ops)
     if (anchorErrors.length) {
       throw new Error(`[apply-edit] 终点锚保护拒绝写入——换终点只走重新种子提案（kind=seed）。\n${anchorErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    // 巩固门复验（#145）：受理与 apply 之间图可能变化，已教概念集在当前图上重算。
+    const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
+    if (consolidationErrors.length) {
+      throw new Error(`[apply-edit] 巩固门拒绝写入——巩固节点只引已教概念。\n${consolidationErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    // 罗盘重写预检（#145 同事务最后一道门）：路线门与锚复验不过 = 零写盘。
+    let compassRoute: string | null = null
+    if (spec.route !== undefined) {
+      const routeErrors = await this.routeGate(root, spec.route)
+      if (routeErrors.length) {
+        throw new Error(`[apply-edit] 罗盘重写未过路线门，提案不落盘。\n${routeErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+      }
+      compassRoute = stripWrappingFence(spec.route)
     }
 
     // 1. 铸名随生长批落盘（同事务第一笔：此后任一步失败，登记表至多多出孤儿条目——
@@ -575,15 +725,27 @@ export class GraphProposals {
     for (const [node, regionName] of moves) await this.relocateNote(root, graph, node, undefined, regionName)
     for (const node of dels) await this.archiveNote(root, graph, node, prop.id)
 
+    // 3.5 罗盘批内重写（#145 同事务）：路线门已过、只换「剩余路线」段，批注区/ETA
+    //     字节保留；罗盘缺席落脚手架打底（与 compassRewrite 同语义）。
+    let compassRewritten = false
+    if (compassRoute !== null) {
+      const compassPath = this.paths.compassPath(root)
+      const base = existsSync(compassPath) ? await readFile(compassPath, 'utf8') : compassScaffold(course.name)
+      await atomicWrite(compassPath, withSectionText(base, SECTION_ROUTE, compassRoute))
+      compassRewritten = true
+    }
+
     const regions2 = await store.load()
     const version = (await this.store.latestSnapshotVersion(course.name)) + 1
     await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
     await this.ensureNotesFor(root, regions2)
+    const growthDetail = spec.note ? `；生长批（${spec.note.operator}）：${spec.note.reason}` : ''
     await this.store.appendJournal({
       course: course.name, node: '*', rating: null, kind: 'graph_edit', elapsed_days: 0,
       session: String(prop.id),
-      detail: spec.ops.map(o => `${o.op}(${o.node})`).join('；')
-        + (spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''),
+      detail: (spec.ops.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('；')
+        + (spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : '')
+        || `（零操作${spec.route !== undefined ? '，罗盘重写' : '，裁决留痕'}）`) + growthDetail,
     })
     await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
@@ -595,6 +757,10 @@ export class GraphProposals {
       created_blocks: [...createdBlocks],
       renames,
       deleted: dels,
+      ...(spec.note
+        ? { operator: spec.note.operator, coach_reason: spec.note.reason, ...(spec.note.dispute ? { disputed: true } : {}) }
+        : {}),
+      ...(compassRewritten ? { compass_rewritten: true } : {}),
       findings: applyFindings(audit, seedPhase),
     }
   }

@@ -309,12 +309,16 @@ export type GraphPathResult = GraphPathUnrelatedResult | GraphPathRelatedResult
 // gen 提案形态（GraphGenProposalResult / GraphApplyGenResult）随 #138 cutover 退役——
 // kind=gen 不再受理；图谱域剩 edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
 
-/** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。 */
+/** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。
+ * operator/disputed = 生长批受理时随行（#145 note 区算子标签；disputed=带分歧声明）。 */
 export interface GraphEditProposalResult {
   id: number
   kind: 'edit'
   course: string
   ops: number
+  operator?: string
+  disputed?: boolean
+  compass_rewrite?: boolean
   warns?: string[]
 }
 
@@ -352,6 +356,11 @@ export interface GraphApplyEditResult {
   /** rename 联动：旧名 → 新名。 */
   renames: Record<string, string>
   deleted: string[]
+  /** 生长批字段（#145 note 区在场时随行）：算子标签 + 理由 + 分歧声明 + 罗盘同事务重写。 */
+  operator?: string
+  coach_reason?: string
+  disputed?: boolean
+  compass_rewritten?: boolean
   findings: string[]
 }
 

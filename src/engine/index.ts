@@ -57,9 +57,9 @@ import { graphHealthScore } from './health.ts'
 import { Content } from './content.ts'
 import { nodeTierOf, perSectionQuizTarget, genericQuizTarget, sectionTierLabel } from './complexity.ts'
 import type { ComplexityTier } from './complexity.ts'
-import { GraphProposals, genRetiredError } from './gengraph.ts'
-import type { ApplyAudit, EnrichFieldEntry } from './gengraph.ts'
-import type { LlmComplete } from './llm.ts'
+import { GraphProposals, genRetiredError, validateEditProposal } from './gengraph.ts'
+import type { ApplyAudit, EditProposalSpec, EnrichFieldEntry, GrowthNote } from './gengraph.ts'
+import type { LlmComplete, LlmEffort } from './llm.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
@@ -129,8 +129,8 @@ import { PROPOSAL_KINDS, CONCEPT_TIERS } from './types.ts'
 import type { ConceptTier } from './types.ts'
 import type {
   AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DisputeApplyResult, DisputeReviewResult, DoctorDoc, ExperimentProposeResult,
-  ExperimentStartResult, GraphApplyResult, GraphBrowseDoc,
-  GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
+  ExperimentStartResult, GraphApplyEditResult, GraphApplyResult, GraphBrowseDoc,
+  GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphEditProposalResult, GraphNodeDoc, GraphPathResult,
   GraphProposeResult, CalibrationProfileDoc, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
   LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
   ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc, ErrorAnswerResult,
@@ -4484,6 +4484,149 @@ export class LearnhubEngine {
     }
 
     return out.join('\n') + '\n'
+  }
+
+  // ---- 生长批受理（#145 / ADR-0033 滚动教练：教练回合裁决 → edit 提案 → 同事务罗盘）----
+
+  /** 图面全名单的预览上限（防生长后教练上下文失控；罗盘 GRAPH_NAMES_PREVIEW 同款纪律）。 */
+  private static readonly GROWTH_GRAPH_NAMES_CAP = 200
+
+  /** 图面（教练回合装配的第三块，两段共用）：结构事实源——裁决 ops 的节点名与 pre
+   * 引用的取值域。前沿与在学节点给细节行（区·块/pre/teaches/est/正文态），其余节点
+   * 给全名单（供 set_pre 等引用既有节点）。纯组装零写副作用。 */
+  private growthGraphView(graph: Graph, state: Record<string, Fm>): string {
+    const active = [...new Set([
+      ...this.coachFrontier(graph, state),
+      ...graph.names.filter(n => effectiveStage(state, n) === 'learning'),
+    ])].sort()
+    const activeSet = new Set(active)
+    const stageLabel = (n: string): string => {
+      const s = effectiveStage(state, n)
+      if (s === 'learning') return '在学'
+      if (s === 'mastered') return '已掌握'
+      if (s === 'review') return '复习中'
+      return hasReadyContent(state[n]) ? '未开始·正文已生成' : '未开始·待生成'
+    }
+    const lines: string[] = [
+      '## 当前图面（结构事实源——ops 的节点名与 pre 引用必须逐字来自这里）', '',
+      `- 节点共 ${graph.names.length} 个；前沿与在学 ${active.length} 个（带细节行）`,
+      '', '### 前沿与在学节点', '',
+    ]
+    for (const n of active) {
+      const [, region, block] = graph.blockOf[n]
+      const pres = graph.preOf[n]
+      const teaches = Object.entries(graph.teachesOf[n] ?? {}).map(([c, t]) => `${c} ${t}`)
+      const est = graph.estOf[n]
+      lines.push(`- ${n}（${region}·${block}｜${stageLabel(n)}${est ? `｜est ${est}′` : ''}）`
+        + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
+        + (teaches.length ? `｜teaches: ${teaches.join('、')}` : ''))
+    }
+    const rest = graph.names.filter(n => !activeSet.has(n)).sort()
+    if (rest.length) {
+      const shown = rest.slice(0, LearnhubEngine.GROWTH_GRAPH_NAMES_CAP)
+      lines.push('', `### 其余节点（全部名单，供 pre 引用；共 ${rest.length} 个）`, '',
+        shown.join('、') + (rest.length > shown.length ? `……（超出预览上限 ${LearnhubEngine.GROWTH_GRAPH_NAMES_CAP}，余 ${rest.length - shown.length} 个）` : ''))
+    }
+    return lines.join('\n') + '\n'
+  }
+
+  /** 裁决产物解析（纯函数语义：零写盘、失败零副作用）：剥围栏 → edit 提案 schema 门
+   * （复用 validateEditProposal——生长批与 agent 手写提案同门）→ 生长批必须有 note 区
+   * （算子标签+理由；分歧声明可选）。 */
+  private parseGrowthVerdict(raw: string): { spec: EditProposalSpec; yaml: string; note: GrowthNote } {
+    const yaml = stripWrappingFence(raw)
+    const v = validateEditProposal(YAML.parseModel(yaml))
+    if (v.errors || !v.spec) {
+      throw new Error(`[coach-growth] 教练回合裁决未过 schema 门（零写盘）。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    if (!v.spec.note) {
+      throw new Error('[coach-growth] 教练回合裁决缺 note 区——生长批必须携带算子标签与理由（note.operator/note.reason）。')
+    }
+    return { spec: v.spec, yaml, note: v.spec.note }
+  }
+
+  /** 生长批受理（#145 裁决产物面）：两段式教练回合——轻量段（fast 档：行为摘要+罗盘
+   * +图面）先裁；note.dispute 声明真分歧时升级全量段（deep 档：六区块包+图面）重裁并
+   * 以全量段结论为准（显然步免仲裁税，升级路径随 segments 可观测）。最终裁决照 kind=edit
+   * 既有受理门（schema/结构/概念对表/锚保护/巩固门）propose→apply：罗盘重写与图 apply
+   * 同事务（提案被拒罗盘不落盘）、journal 挂提案 id、不新增提案 kind。
+   * 停机转译：就绪深度满足（check.ok）时不拉回合直接停摆——判据满足的自然结果，不是
+   * 新状态（force 供测试/手动排障越过）。裁决语义在提示词；本方法只保证组装、schema
+   * 与同事务纪律。金样本回放闸锚调用数基线：显然步恒 1 次调用、分歧升级恒 2 次。 */
+  async coachGrowthBatch(
+    courseKey: string, llm: LlmComplete, opts: { force?: boolean; today?: string } = {},
+  ): Promise<{
+    course: string
+    state: 'idle' | 'applied'
+    check: CoachCheck
+    segments: Array<{ tier: 'light' | 'full'; effort: LlmEffort; operator: string; disputed: boolean }>
+    proposal: { id: number; ops: number; operator: string; reason: string; disputed: boolean } | null
+    applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[]; ready_unbuilt: string[] } | null
+  }> {
+    const c = await this.registry.resolve(courseKey)
+    const anchor = await readAnchor(this.paths.anchorPath(c.root))
+    if (!anchor) {
+      throw new Error(`[coach-growth] 课程「${c.name}」未播种（终点锚 Missing）——教练回合锚在终点上，先走种子提案（kind=seed）。`)
+    }
+    const today = opts.today ?? (await this.learningDay()).today
+    const check = await this.coachCheckFor(c, today)
+    if (check.ok && !opts.force) {
+      return { course: c.name, state: 'idle', check, segments: [], proposal: null, applied: null }
+    }
+    const { graph, state } = await this.loadView(c)
+    const view = this.growthGraphView(graph, state)
+    const template = await this.content.loadPrompt('教练回合')
+    const segments: Array<{ tier: 'light' | 'full'; effort: LlmEffort; operator: string; disputed: boolean }> = []
+    const runSegment = async (tier: 'light' | 'full'): Promise<{ spec: EditProposalSpec; yaml: string; note: GrowthNote }> => {
+      const pack = await this.coachContextPack(c.name, { lightweight: tier === 'light', today })
+      const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n`
+      const raw = await llm(prompt, undefined, { effort: tier === 'light' ? 'fast' : 'deep' })
+      const verdict = this.parseGrowthVerdict(raw)
+      segments.push({ tier, effort: tier === 'light' ? 'fast' : 'deep', operator: verdict.note.operator, disputed: Boolean(verdict.note.dispute) })
+      return verdict
+    }
+
+    let final = await runSegment('light')
+    if (final.note.dispute) final = await runSegment('full')
+
+    const prop = await this.graphPropose('edit', final.yaml) as GraphEditProposalResult
+    let applied: GraphApplyEditResult
+    try {
+      applied = await this.graphApply('edit', prop.id) as GraphApplyEditResult
+    } catch (err) {
+      // 受理过门但 apply 失败（审计 ERROR/图已变化等竞态）：机器裁决不留 pending——
+      // 自清后原样抛错（教练回合是每步重算的函数，下一触发重新裁决即可）
+      await this.graphReject(prop.id, `生长批自动 apply 失败：${err instanceof Error ? err.message : String(err)}`)
+        .catch(() => undefined)
+      throw err
+    }
+    // 内容链补给（宿主消费）：本批新建节点中「前置已达成且正文未生成」者即就绪缺口——
+    // 宿主据此入队正文生成（生长-内容交替，FIFO 不插队）。
+    const created = final.spec.ops.filter(o => o.op === 'add_node').map(o => o.name!)
+    let readyUnbuilt: string[] = []
+    if (created.length) {
+      const after = await this.loadView(c)
+      const frontierAfter = new Set(this.coachFrontier(after.graph, after.state))
+      readyUnbuilt = created.filter(n => frontierAfter.has(n) && !hasReadyContent(after.state[n]))
+    }
+    return {
+      course: c.name,
+      state: 'applied',
+      check,
+      segments,
+      proposal: {
+        id: prop.id, ops: final.spec.ops.length,
+        operator: final.note.operator, reason: final.note.reason,
+        disputed: Boolean(final.note.dispute),
+      },
+      applied: {
+        ops: applied.ops,
+        snapshot: applied.snapshot,
+        compass_rewritten: applied.compass_rewritten === true,
+        created,
+        ready_unbuilt: readyUnbuilt,
+      },
+    }
   }
 
   /** JOL 预测值的显式契约：三档之外拒绝（参数错误），null/undefined 放行为无预测。 */

@@ -166,6 +166,9 @@ interface GenJob {
   instruction?: string
   /** 入队时实际使用的模型名（模型透明：任务注册表与面板可审计每次生成用的是什么）。 */
   model?: string
+  /** 生长批任务的裁决结果（#145，phase=生长；队列空闲自动拉批的重拉判据读它）：
+   * idle=就绪深度满足未拉回合 / no_structure=教练裁决暂不产结构 / applied=已应用。 */
+  growthOutcome?: 'idle' | 'no_structure' | 'applied'
 }
 const genJobs = new Map<string, GenJob>()
 
@@ -505,8 +508,77 @@ function scheduleJobRetention(key: string, status: GenJobStatus): void {
   }, generationJobRetentionMs(status)).unref()
 }
 
+/** 生长批任务键（课程级任务，node 槽放「生长批」标签；队列 phase=生长，#145）。 */
+const GROWTH_JOB_NODE = '生长批'
+
+/** 入队一个生长批任务（#145）：教练回合裁决 → kind=edit 提案 → 同事务罗盘重写。
+ * 阻尼防泵循环：同课已有生长批在途不重入；上一批失败/取消不自动重试（留运行日志，
+ * 等下一次节点完成/会话开始触发或人工）；上一批以 idle/no_structure 收尾也不重拉
+ * ——教练停摆与「暂不产结构」都是裁决，重拉要等新的队列活动带来新内容。 */
+function enqueueGrowthBatch(ctx: Context, course: string, why: string): { message: string; queued: boolean } {
+  const key = `${course}/${GROWTH_JOB_NODE}`
+  const last = genJobs.get(key)
+  if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
+    return { message: `「${course}」已有生长批任务在途，不重复入队。`, queued: false }
+  }
+  if (last && (last.status === 'failed' || last.status === 'cancelled')) {
+    return { message: `「${course}」上一生长批${last.status === 'failed' ? '失败' : '已取消'}（${last.message ?? ''}），不自动重试——可从生成页重试或等下一次触发。`, queued: false }
+  }
+  if (last && last.status === 'done' && last.growthOutcome !== 'applied') {
+    return { message: `「${course}」上一生长批裁决为 ${last.growthOutcome === 'idle' ? '停摆' : '暂不产结构'}，不重拉。`, queued: false }
+  }
+  genJobs.set(key, {
+    course, node: GROWTH_JOB_NODE, startedAt: new Date().toISOString(), status: 'queued', phase: '生长',
+    model: llmCfg.model, message: `排队等待教练回合（${why}）…`,
+  })
+  persistGenJobs()
+  pumpGeneration(ctx)
+  return { message: `「${course}」生长批已入队（${why}）。`, queued: true }
+}
+
+/** 生长批任务执行（#145）：coachGrowthBatch 两段式回合 + 受理接线；应用成功后对
+ * 「新建且正文未生成」的就绪缺口节点入队正文生成（生长-内容交替，永远 FIFO 不插队
+ * ——生长批只在检查点之后入队，内容任务在它完成之后排队）。 */
+async function generateGrowthJob(ctx: Context, job: GenJob): Promise<void> {
+  const key = `${job.course}/${GROWTH_JOB_NODE}`
+  job.status = 'running'
+  job.message = '教练回合裁决中（轻量段）…'
+  persistGenJobs()
+  try {
+    const r = await engine.coachGrowthBatch(job.course, llmSeam(ctx))
+    if (r.state === 'idle') {
+      job.growthOutcome = 'idle'
+      job.status = 'done'
+      job.message = `就绪深度满足（ready ${r.check.ready}/${r.check.required}）——教练停摆，无批可产。`
+    } else {
+      const p = r.proposal!
+      const a = r.applied!
+      job.growthOutcome = a.ops > 0 ? 'applied' : 'no_structure'
+      job.status = 'done'
+      const tierNote = r.segments.map(s => `${s.tier}${s.disputed ? '↑分歧升级' : ''}(${s.operator})`).join('→')
+      job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
+        + `${a.compass_rewritten ? '；罗盘已同事务重写' : ''}｜${tierNote}｜理由：${p.reason}`
+      // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）
+      for (const node of a.ready_unbuilt) {
+        try {
+          enqueueGeneration(ctx, job.course, node)
+        } catch { /* 同节点已在队列（去重），跳过 */ }
+      }
+      if (a.ready_unbuilt.length) job.message += `；正文生成已入队 ${a.ready_unbuilt.length} 节`
+    }
+  } catch (err) {
+    job.status = contentFailureStatus(job.status)
+    job.message = err instanceof Error ? err.message : String(err)
+  } finally {
+    persistGenJobs()
+    scheduleJobRetention(key, job.status)
+    void runLog('coach_growth', `「${job.course}」生长批：${job.message}`)
+  }
+}
+
 /** 队列执行泵：空闲且未暂停时取队首排队任务跑管线；跑完（含失败）继续泵下一个。
- * phase=quiz 的纯出题任务走 generateQuizJob，其余按节点管线执行（#118）。 */
+ * phase=quiz 的纯出题任务走 generateQuizJob、phase=生长走 generateGrowthJob（#145），
+ * 其余按节点管线执行（#118）。 */
 function pumpGeneration(ctx: Context): void {
   if (genPumping || genQueuePaused) return
   const next = nextQueuedJob([...genJobs.values()])
@@ -514,18 +586,32 @@ function pumpGeneration(ctx: Context): void {
   genPumping = true
   const task = next.phase === 'quiz'
     ? generateQuizJob(ctx, next)
-    : generateContent(ctx, next.course, next.node, next.style)
+    : next.phase === '生长'
+      ? generateGrowthJob(ctx, next)
+      : generateContent(ctx, next.course, next.node, next.style)
   void task
     .catch(() => { /* 执行器已置 failed 留注册表可重试 */ })
     .finally(() => {
       genPumping = false
-      // 队列空闲触发点（#144）：生成队列排空 → 拉起教练回合就绪深度检查（读侧感知，
-      // 零写副作用；失败只留运行日志，不挡生成泵）。生长永不挡当前学习动作——生长批
-      // 只在检查点之后入队（FIFO 不插队靠检查点前置），受理接线归生长批受理票 #145。
+      // 队列空闲触发点（#144）：生成队列排空 → 拉起教练回合就绪深度检查（读侧感知）；
+      // 就绪缺口课程随后入队生长批（#145：生长批只在检查点之后入队——FIFO 不插队，
+      // 重拉阻尼见 enqueueGrowthBatch）。失败只留运行日志，不挡生成泵。
       if (!nextQueuedJob([...genJobs.values()])) {
         void engine.coachCheckpoint('queue_idle')
-          .then(r => runLog('coach_checkpoint(queue_idle)',
-            r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}${x.ok ? '' : '（低于前瞻，已告警）'}`).join('；')))
+          .then(async r => {
+            runLog('coach_checkpoint(queue_idle)',
+              r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}${x.ok ? '' : '（低于前瞻，已告警）'}`).join('；'))
+              .catch(() => undefined)
+            for (const chk of r.courses) {
+              if (chk.ok) continue
+              try {
+                enqueueGrowthBatch(ctx, chk.course, `就绪深度 ${chk.ready}/${chk.required}`)
+              } catch (err) {
+                runLog('coach_growth', `「${chk.course}」生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
+                  .catch(() => undefined)
+              }
+            }
+          })
           .catch(err => runLog('coach_checkpoint(queue_idle)', `调用失败：${err instanceof Error ? err.message : String(err)}`))
       }
       pumpGeneration(ctx)

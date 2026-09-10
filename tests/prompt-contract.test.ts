@@ -4,9 +4,9 @@ import { Content } from '../src/engine/content.ts'
 
 // ---- v6 提示词契约（#14 P2/P3）：版本标记 + 复杂度档案锚点 ----
 
-test('P2: 存量内置模板全部升到 prompt/v6（罗盘初画除外——新套件模板自带版本线，#143）', () => {
+test('P2: 存量内置模板全部升到 prompt/v6（生长式套件除外——新套件模板自带版本线）', () => {
   for (const kind of Object.keys(Content.PROMPT_KINDS)) {
-    if (kind === '罗盘初画') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
+    if (kind === '罗盘初画' || kind === '教练回合') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
     const text = Content.PROMPT_KINDS[kind]!
     assert.ok(Content.promptVersionOf(text) >= 6, `${kind} 应升到 v6+`)
   }
@@ -153,4 +153,37 @@ test('#143: 罗盘初画模板 v1——非承诺措辞、批注软输入、路�
   assert.match(tpl, /不写时间估算|不写进度百分比/, '零时间/进度承诺')
   assert.match(tpl, /模型推演，非承诺/, 'ETA 才是推演参照且措辞锁死')
   assert.match(tpl, /块工作表/, '覆盖锚定课程按工作表块组织')
+})
+
+// ---- v1 教练回合契约（#145 / ADR-0033 滚动教练）：算子集 + 停机转译 + 两段式 + note/route 输出契约 ----
+
+test('#145: 教练回合模板 v1——五算子语义、停机转译、分歧升级、note/route/ops 输出契约', () => {
+  const tpl = Content.PROMPT_KINDS['教练回合']!
+  assert.ok(Content.promptVersionOf(tpl) >= 1, '教练回合 应带版本标记 v1+')
+  // 算子集五件与停机规则转译（前进=目标消费、旁支=教学消费不走复诊）
+  for (const op of ['前进', '插入', '巩固', '旁支', '换向']) {
+    assert.ok(tpl.includes(`**${op}**`), `算子集含「${op}」`)
+  }
+  assert.match(tpl, /目标消费/, '前进 = 目标消费（停机规则转译进算子语义）')
+  assert.match(tpl, /教学消费/, '旁支 = 教学消费')
+  assert.match(tpl, /不走复诊/, '旁支/巩固不走复诊')
+  assert.match(tpl, /只引已教概念/, '巩固只引已教概念')
+  assert.match(tpl, /重新种子提案/, '换终点不归教练（走重新种子人审）')
+  // 两段式与分歧纪律
+  assert.match(tpl, /轻量段/, '轻量段（显然步）')
+  assert.match(tpl, /免仲裁税/, '显然步免仲裁税')
+  assert.match(tpl, /真分歧/, '真分歧才声明')
+  assert.match(tpl, /dispute/, '分歧声明字段')
+  assert.match(tpl, /全量段/, '分歧升级全量段')
+  // 输出契约
+  assert.match(tpl, /note:/, 'note 区（算子+理由+分歧）')
+  assert.match(tpl, /operator: 前进\|插入\|巩固\|旁支\|换向/, '算子枚举锁死')
+  assert.match(tpl, /reason:/, '理由必填')
+  assert.match(tpl, /route: \|/, '罗盘随批重写（route 块）')
+  assert.match(tpl, /ops: \[\]/, '零操作=暂不产结构（合法语态）')
+  assert.match(tpl, /逐字来自图面/, '节点名/pre 引用逐字来自图面')
+  assert.match(tpl, /每批重算一次|不做一次性规划|≤8 个操作/, '批规模克制')
+  assert.match(tpl, /单引号/, 'YAML 单引号规则锚点')
+  // 停机语义：回合被拉起 = 就绪深度未满足
+  assert.match(tpl, /就绪深度检查未满足/, '停机转译：拉起即缺口')
 })
