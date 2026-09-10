@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateGenProposal, validateEditProposal, specToRegions, GROWTH_OPERATORS } from '../src/engine/gengraph.ts'
+import { validateGenProposal, validateEditProposal, specToRegions } from '../src/engine/gengraph.ts'
+import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 import { withVault } from './helpers/vault.ts'
 import { YAML } from '../src/engine/yaml.ts'
 
@@ -160,22 +161,22 @@ ops:
 
 // ---- 生长批裁决产物面（#145）：note 区 / route / 零操作 / 边轻键 ----
 
-test('#145 note 区严格 schema：恰 {operator, reason, dispute?}，算子枚举锁死', () => {
+test('#145 note 区严格 schema：恰 {operator, reason, disagreement?}，算子枚举锁死', () => {
   const base = (note: string): string => `course: 校验课\n${note}ops:\n  - op: add_node\n    name: 新节点\n    region: 基础区\n    block: 入门\n    pre: []\n`
-  // 非法算子 / 缺理由 / 未知字段 / dispute 空声明
+  // 非法算子 / 缺理由 / 未知字段 / disagreement 空声明
   const badOperator = validateEditProposal(YAML.parse(base('note:\n  operator: 冲刺\n  reason: 理由\n')))
   assert.ok(badOperator.errors!.some(e => e.includes('note.operator: 非法算子') && e.includes(GROWTH_OPERATORS.join('/'))))
   const noReason = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n')))
   assert.ok(noReason.errors!.some(e => e.includes('note.reason 不能为空')))
   const unknownKey = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n  reason: 理由\n  mode: auto\n')))
-  assert.ok(unknownKey.errors!.some(e => e.includes('note 含未知字段') && e.includes('operator/reason/dispute')))
-  const emptyDispute = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n  reason: 理由\n  dispute: "  "\n')))
-  assert.ok(emptyDispute.errors!.some(e => e.includes('note.dispute')))
+  assert.ok(unknownKey.errors!.some(e => e.includes('note 含未知字段') && e.includes('operator/reason/disagreement')))
+  const emptyDisagreement = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n  reason: 理由\n  disagreement: "  "\n')))
+  assert.ok(emptyDisagreement.errors!.some(e => e.includes('note.disagreement')))
 
-  // 合法形态：dispute 解析进 spec（trim 后），缺席 = undefined
-  const ok = validateEditProposal(YAML.parse(base('note:\n  operator: 旁支\n  reason: 教学消费支线\n  dispute: 与批注指向有分歧\n')))
+  // 合法形态：disagreement 解析进 spec（trim 后），缺席 = undefined
+  const ok = validateEditProposal(YAML.parse(base('note:\n  operator: 旁支\n  reason: 教学消费支线\n  disagreement: 与批注指向有分歧\n')))
   assert.equal(ok.errors, undefined)
-  assert.deepEqual(ok.spec!.note, { operator: '旁支', reason: '教学消费支线', dispute: '与批注指向有分歧' })
+  assert.deepEqual(ok.spec!.note, { operator: '旁支', reason: '教学消费支线', disagreement: '与批注指向有分歧' })
   const plain = validateEditProposal(YAML.parse(base('')))
   assert.equal(plain.errors, undefined)
   assert.equal(plain.spec!.note, undefined, '普通提案无 note 区')

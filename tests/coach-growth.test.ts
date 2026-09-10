@@ -9,7 +9,7 @@ import type { LlmComplete } from '../src/engine/llm.ts'
 
 // 生长批受理（#145 / ADR-0033 滚动教练的裁决产物面）：
 // - 教练回合两段式 effort：显然步轻量段（fast，行为摘要+罗盘+图面）恒 1 次调用；
-//   真分歧（note.dispute）升级全量段（deep，六区块包+图面）重裁——升级路径可观测。
+//   真分歧（note.disagreement）升级全量段（deep，六区块包+图面）重裁——升级路径可观测。
 // - 裁决产物 = kind=edit 提案 + note{算子, 理由, 分歧声明?}：算子标签/理由进 note 区
 //   与 journal、罗盘重写与图 apply 同事务（提案被拒罗盘不落盘）、journal 挂提案 id。
 // - 巩固门：巩固节点只引已教概念（受理门校验）、不走复诊（边轻键一律拒收）。
@@ -40,7 +40,7 @@ starts:
 function goldVerdict(opts: {
   operator?: string
   reason?: string
-  dispute?: string
+  disagreement?: string
   ops?: string[]
   concepts?: string[]
   route?: string
@@ -67,7 +67,7 @@ function goldVerdict(opts: {
     'note:',
     `  operator: ${opts.operator ?? '前进'}`,
     `  reason: ${opts.reason ?? '前沿缺下一台阶，沿终点推进'}`,
-    ...(opts.dispute ? [`  dispute: ${opts.dispute}`] : []),
+    ...(opts.disagreement ? [`  disagreement: ${opts.disagreement}`] : []),
     'route: |',
     ...routeLines,
     ...(opts.ops && opts.ops.length === 0 ? ['ops: []'] : ['ops:', ...opsBody.map(l => `  ${l}`)]),
@@ -164,7 +164,7 @@ test('AC2 两段式升级：分歧声明升级全量段（deep、六区块），
     await seedApplied(engine)
     const compassPath = paths.compassPath('数学')
     const fake = scriptFake([
-      goldVerdict({ dispute: '轻量段看不到误解目录，插入判据不足——升级' }),
+      goldVerdict({ disagreement: '轻量段看不到误解目录，插入判据不足——升级' }),
       goldVerdict({ operator: '插入', reason: '卡点集中度指向缺口，插入过渡节' }),
     ])
     const r = await engine.coachGrowthBatch('数学', fake)
@@ -183,8 +183,8 @@ test('AC2 两段式升级：分歧声明升级全量段（deep、六区块），
     assert.match(fake.calls[1]!.prompt, /## 误解目录/)
     // 以全量段结论为准：最终提案 = 插入批；分歧只在轻量段的 segments 上可观测
     assert.equal(r.proposal!.operator, '插入')
-    assert.equal(r.proposal!.disputed, false, '全量段结论无分歧声明')
-    assert.equal(r.segments[0]!.disputed, true, '升级起点 = 轻量段的分歧声明')
+    assert.equal(r.proposal!.disagreement, false, '全量段结论无分歧声明')
+    assert.equal(r.segments[0]!.disagreement, true, '升级起点 = 轻量段的分歧声明')
     assert.match((await readFile(compassPath, 'utf8')), /把变化率说成本质/)
   })
 })
@@ -371,7 +371,33 @@ test('零操作生长批：裁决=暂不产结构（ops: []）合法——罗盘
   })
 })
 
-test('金样本回放确定性：同种子 vault 两次回合，组装 prompt 字节级一致', async () => {
+test('金样本回放闸：两族金样本首过（首过率对照、调用数基线恒 1）+ 同种子回放组装字节一致', async () => {
+  // 第二族 = 旁支批（换算子/换理由/换节点名——覆盖另一算子的首过与组装）
+  const sideBranch = goldVerdict({
+    operator: '旁支',
+    reason: '讲清主线必须先教的支线',
+    ops: [
+      '- op: add_node',
+      '  name: 导数的几何意义',
+      '  region: 基础',
+      '  block: 起点块',
+      '  pre: [认识变化率]',
+      '  est: 10',
+    ],
+  })
+
+  // 首过率对照：每族金样本一次调用即过全部门（无修复轮、无升级）
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    for (const verdict of [goldVerdict(), sideBranch]) {
+      const fake = replayFake(verdict)
+      const r = await engine.coachGrowthBatch('数学', fake)
+      assert.equal(fake.calls.length, 1, `首过基线：${r.proposal!.operator} 批一次调用过门`)
+      assert.equal(r.state, 'applied')
+    }
+  })
+
+  // 确定性：同种子两 vault，同族金样本的组装 prompt 字节级一致
   const prompts: string[] = []
   for (let i = 0; i < 2; i++) {
     await withVault(SEED_VAULT, async ({ engine }) => {

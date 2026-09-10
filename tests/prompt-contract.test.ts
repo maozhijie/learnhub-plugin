@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Content } from '../src/engine/content.ts'
+import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 
 // ---- v6 提示词契约（#14 P2/P3）：版本标记 + 复杂度档案锚点 ----
 
@@ -161,7 +162,7 @@ test('#145: 教练回合模板 v1——五算子语义、停机转译、分歧�
   const tpl = Content.PROMPT_KINDS['教练回合']!
   assert.ok(Content.promptVersionOf(tpl) >= 1, '教练回合 应带版本标记 v1+')
   // 算子集五件与停机规则转译（前进=目标消费、旁支=教学消费不走复诊）
-  for (const op of ['前进', '插入', '巩固', '旁支', '换向']) {
+  for (const op of GROWTH_OPERATORS) {
     assert.ok(tpl.includes(`**${op}**`), `算子集含「${op}」`)
   }
   assert.match(tpl, /目标消费/, '前进 = 目标消费（停机规则转译进算子语义）')
@@ -173,7 +174,7 @@ test('#145: 教练回合模板 v1——五算子语义、停机转译、分歧�
   assert.match(tpl, /轻量段/, '轻量段（显然步）')
   assert.match(tpl, /免仲裁税/, '显然步免仲裁税')
   assert.match(tpl, /真分歧/, '真分歧才声明')
-  assert.match(tpl, /dispute/, '分歧声明字段')
+  assert.match(tpl, /disagreement/, '分歧声明字段（避让申诉 Dispute 词条）')
   assert.match(tpl, /全量段/, '分歧升级全量段')
   // 输出契约
   assert.match(tpl, /note:/, 'note 区（算子+理由+分歧）')

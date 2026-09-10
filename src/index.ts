@@ -512,9 +512,10 @@ function scheduleJobRetention(key: string, status: GenJobStatus): void {
 const GROWTH_JOB_NODE = '生长批'
 
 /** 入队一个生长批任务（#145）：教练回合裁决 → kind=edit 提案 → 同事务罗盘重写。
- * 阻尼防泵循环：同课已有生长批在途不重入；上一批失败/取消不自动重试（留运行日志，
- * 等下一次节点完成/会话开始触发或人工）；上一批以 idle/no_structure 收尾也不重拉
- * ——教练停摆与「暂不产结构」都是裁决，重拉要等新的队列活动带来新内容。 */
+ * 阻尼防泵循环（否则「失败→排空→检查点→入队」立即成环）：同课已有生长批在途不重入；
+ * 上一批失败/取消不自动重试——从生成页人工重试，或终态保留期（24h）过后自然恢复；
+ * 上一批以 idle/no_structure 收尾也不重拉——教练停摆与「暂不产结构」都是裁决，
+ * 重拉要等新的队列活动带来新内容。自动拉批只在队列空闲检查点接线（另两点=感知面）。 */
 function enqueueGrowthBatch(ctx: Context, course: string, why: string): { message: string; queued: boolean } {
   const key = `${course}/${GROWTH_JOB_NODE}`
   const last = genJobs.get(key)
@@ -555,7 +556,7 @@ async function generateGrowthJob(ctx: Context, job: GenJob): Promise<void> {
       const a = r.applied!
       job.growthOutcome = a.ops > 0 ? 'applied' : 'no_structure'
       job.status = 'done'
-      const tierNote = r.segments.map(s => `${s.tier}${s.disputed ? '↑分歧升级' : ''}(${s.operator})`).join('→')
+      const tierNote = r.segments.map(s => `${s.tier}${s.disagreement ? '↑分歧升级' : ''}(${s.operator})`).join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
         + `${a.compass_rewritten ? '；罗盘已同事务重写' : ''}｜${tierNote}｜理由：${p.reason}`
       // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）

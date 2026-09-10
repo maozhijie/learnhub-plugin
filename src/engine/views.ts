@@ -15,7 +15,7 @@
  * node 内建无关的模块，保证 ui typecheck 能把本模块拉进程序。
  */
 import type {
-  ContentStatus, EncEdge, FsrsBlock, SectionManifest, Stage,
+  ContentStatus, EncEdge, FsrsBlock, GrowthOperator, SectionManifest, Stage,
 } from './types'
 import type { AlloKind } from './grading'
 import type { JolBin, JolPrediction } from './jol'
@@ -310,14 +310,15 @@ export type GraphPathResult = GraphPathUnrelatedResult | GraphPathRelatedResult
 // kind=gen 不再受理；图谱域剩 edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
 
 /** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。
- * operator/disputed = 生长批受理时随行（#145 note 区算子标签；disputed=带分歧声明）。 */
+ * operator/disagreement = 生长批受理时随行（#145 note 区算子标签；disagreement=带分歧声明）。
+ * compass_rewrite（受理=意图）与 apply 侧 compass_rewritten（已落盘=事实）分相位命名。 */
 export interface GraphEditProposalResult {
   id: number
   kind: 'edit'
   course: string
   ops: number
-  operator?: string
-  disputed?: boolean
+  operator?: GrowthOperator
+  disagreement?: boolean
   compass_rewrite?: boolean
   warns?: string[]
 }
@@ -357,9 +358,9 @@ export interface GraphApplyEditResult {
   renames: Record<string, string>
   deleted: string[]
   /** 生长批字段（#145 note 区在场时随行）：算子标签 + 理由 + 分歧声明 + 罗盘同事务重写。 */
-  operator?: string
+  operator?: GrowthOperator
   coach_reason?: string
-  disputed?: boolean
+  disagreement?: boolean
   compass_rewritten?: boolean
   findings: string[]
 }

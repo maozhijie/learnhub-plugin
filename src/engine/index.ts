@@ -59,7 +59,7 @@ import { nodeTierOf, perSectionQuizTarget, genericQuizTarget, sectionTierLabel }
 import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals, genRetiredError, validateEditProposal } from './gengraph.ts'
 import type { ApplyAudit, EditProposalSpec, EnrichFieldEntry, GrowthNote } from './gengraph.ts'
-import type { LlmComplete, LlmEffort } from './llm.ts'
+import type { LlmComplete } from './llm.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
@@ -77,7 +77,7 @@ import {
 } from './compass.ts'
 import type { CompassEta, CompassEtaProbe } from './compass.ts'
 import { behaviorDigest, readyDepthCheck, renderBehaviorDigest, renderSedimentForCoach } from './coach-round.ts'
-import type { CoachCheck, CoachTrigger } from './coach-round.ts'
+import type { CoachCheck, CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
 import type { VaultLinkPrior } from './analysis.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -4488,7 +4488,9 @@ export class LearnhubEngine {
 
   // ---- 生长批受理（#145 / ADR-0033 滚动教练：教练回合裁决 → edit 提案 → 同事务罗盘）----
 
-  /** 图面全名单的预览上限（防生长后教练上下文失控；罗盘 GRAPH_NAMES_PREVIEW 同款纪律）。 */
+  /** 图面全名单的预览上限（防生长后教练上下文失控）。比罗盘初画的 GRAPH_NAMES_PREVIEW
+   * (80) 宽：初画只需路标感，教练裁决的 pre 引用必须逐字命中既有节点名，名单截断会
+   * 直接造成受理门断边拒收——上限只防膨胀，不服务取值域完整性时才收紧。 */
   private static readonly GROWTH_GRAPH_NAMES_CAP = 200
 
   /** 图面（教练回合装配的第三块，两段共用）：结构事实源——裁决 ops 的节点名与 pre
@@ -4546,7 +4548,7 @@ export class LearnhubEngine {
   }
 
   /** 生长批受理（#145 裁决产物面）：两段式教练回合——轻量段（fast 档：行为摘要+罗盘
-   * +图面）先裁；note.dispute 声明真分歧时升级全量段（deep 档：六区块包+图面）重裁并
+   * +图面）先裁；note.disagreement 声明真分歧时升级全量段（deep 档：六区块包+图面）重裁并
    * 以全量段结论为准（显然步免仲裁税，升级路径随 segments 可观测）。最终裁决照 kind=edit
    * 既有受理门（schema/结构/概念对表/锚保护/巩固门）propose→apply：罗盘重写与图 apply
    * 同事务（提案被拒罗盘不落盘）、journal 挂提案 id、不新增提案 kind。
@@ -4559,8 +4561,8 @@ export class LearnhubEngine {
     course: string
     state: 'idle' | 'applied'
     check: CoachCheck
-    segments: Array<{ tier: 'light' | 'full'; effort: LlmEffort; operator: string; disputed: boolean }>
-    proposal: { id: number; ops: number; operator: string; reason: string; disputed: boolean } | null
+    segments: CoachGrowthSegment[]
+    proposal: { id: number; ops: number; operator: string; reason: string; disagreement: boolean } | null
     applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[]; ready_unbuilt: string[] } | null
   }> {
     const c = await this.registry.resolve(courseKey)
@@ -4576,18 +4578,18 @@ export class LearnhubEngine {
     const { graph, state } = await this.loadView(c)
     const view = this.growthGraphView(graph, state)
     const template = await this.content.loadPrompt('教练回合')
-    const segments: Array<{ tier: 'light' | 'full'; effort: LlmEffort; operator: string; disputed: boolean }> = []
+    const segments: CoachGrowthSegment[] = []
     const runSegment = async (tier: 'light' | 'full'): Promise<{ spec: EditProposalSpec; yaml: string; note: GrowthNote }> => {
       const pack = await this.coachContextPack(c.name, { lightweight: tier === 'light', today })
       const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n`
       const raw = await llm(prompt, undefined, { effort: tier === 'light' ? 'fast' : 'deep' })
       const verdict = this.parseGrowthVerdict(raw)
-      segments.push({ tier, effort: tier === 'light' ? 'fast' : 'deep', operator: verdict.note.operator, disputed: Boolean(verdict.note.dispute) })
+      segments.push({ tier, effort: tier === 'light' ? 'fast' : 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
       return verdict
     }
 
     let final = await runSegment('light')
-    if (final.note.dispute) final = await runSegment('full')
+    if (final.note.disagreement) final = await runSegment('full')
 
     const prop = await this.graphPropose('edit', final.yaml) as GraphEditProposalResult
     let applied: GraphApplyEditResult
@@ -4617,7 +4619,7 @@ export class LearnhubEngine {
       proposal: {
         id: prop.id, ops: final.spec.ops.length,
         operator: final.note.operator, reason: final.note.reason,
-        disputed: Boolean(final.note.dispute),
+        disagreement: Boolean(final.note.disagreement),
       },
       applied: {
         ops: applied.ops,

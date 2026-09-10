@@ -25,8 +25,8 @@ import {
   compassScaffold, withSectionText, parseCompass, sectionBody, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
 import { todayStr } from './dates.ts'
-import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception } from './types.ts'
-import { BLOOM_LEVELS, PROPOSAL_KINDS } from './types.ts'
+import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
+import { BLOOM_LEVELS, PROPOSAL_KINDS, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { Store } from './store.ts'
 import type { CourseEntry, ProposalKind } from './types.ts'
@@ -63,21 +63,16 @@ export interface EditOp {
   misconceptions?: Misconception[]
 }
 
-/** 生长算子集（#145 / ADR-0033 滚动教练）：停机规则转译进算子语义——前进=目标消费，
- * 插入=症状当场补过渡（复诊随 #146 边实验账本结算），巩固=足迹末端综合只引已教概念、
- * 旁支=教学消费支线（两者不走复诊），换向=批注/目标变化下重定路线（换终点走重新种子）。 */
-export const GROWTH_OPERATORS = ['前进', '插入', '巩固', '旁支', '换向'] as const
-export type GrowthOperator = (typeof GROWTH_OPERATORS)[number]
-
 /** 生长批 note 区（#145 裁决产物面）：算子标签 + 理由 + 分歧声明（可选）。生长批仍是
  * kind=edit 提案（不新增提案 kind）；note 在场即生长批——ops 允许为空（裁决=暂不产
  * 结构，罗盘重写照走同事务）。 */
 export interface GrowthNote {
   operator: GrowthOperator
   reason: string
-  /** 真分歧声明：轻量段裁决与上下文/批注存在实质分歧时声明，宿主升级全量段重裁
-   * （两段式 effort；显然步免仲裁税不声明）。 */
-  dispute?: string
+  /** 真分歧声明（disagreement）：轻量段裁决与上下文/批注存在实质分歧时声明，宿主
+   * 升级全量段重裁（两段式 effort；显然步免仲裁税不声明）。字段名避让「申诉
+   * （Dispute，ADR-0031）」词条——同名同义纪律。 */
+  disagreement?: string
 }
 
 /** 提案 op 上的边轻纪律键（#127：候选边留提案侧留痕、origin 从 journal 派生、
@@ -209,17 +204,17 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       })
     }
   }
-  // 生长批 note 区（#145）：严格 schema——恰 {operator, reason, dispute?}，未知键拒收。
+  // 生长批 note 区（#145）：严格 schema——恰 {operator, reason, disagreement?}，未知键拒收。
   let note: GrowthNote | undefined
   if (d.note !== undefined) {
     if (typeof d.note !== 'object' || d.note === null || Array.isArray(d.note)) {
-      errors.push('note: 必须是映射（生长批裁决区 = {operator, reason, dispute?}）')
+      errors.push('note: 必须是映射（生长批裁决区 = {operator, reason, disagreement?}）')
     } else {
       const n = d.note as Record<string, unknown>
       const noteErrors: string[] = []
-      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'dispute'].includes(k))
+      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'disagreement'].includes(k))
       if (unknown.length) {
-        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/dispute；分歧声明写在 dispute，不另立字段）`)
+        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/disagreement；分歧声明写在 disagreement，不另立字段）`)
       }
       if (!(GROWTH_OPERATORS as readonly string[]).includes(String(n.operator))) {
         noteErrors.push(`note.operator: 非法算子 ${JSON.stringify(String(n.operator))}（允许 ${GROWTH_OPERATORS.join('/')}）`)
@@ -227,15 +222,15 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       if (typeof n.reason !== 'string' || !n.reason.trim()) {
         noteErrors.push('note.reason 不能为空（每步生长都带理由——可解释、可追问）')
       }
-      if (n.dispute !== undefined && (typeof n.dispute !== 'string' || !n.dispute.trim())) {
-        noteErrors.push('note.dispute: 分歧声明声明了就要写内容（真分歧才声明——显然步免仲裁税）')
+      if (n.disagreement !== undefined && (typeof n.disagreement !== 'string' || !n.disagreement.trim())) {
+        noteErrors.push('note.disagreement: 分歧声明声明了就要写内容（真分歧才声明——显然步免仲裁税）')
       }
       errors.push(...noteErrors)
       if (!noteErrors.length) {
         note = {
           operator: String(n.operator) as GrowthOperator,
           reason: (n.reason as string).trim(),
-          ...(typeof n.dispute === 'string' && n.dispute.trim() ? { dispute: n.dispute.trim() } : {}),
+          ...(typeof n.disagreement === 'string' && n.disagreement.trim() ? { disagreement: n.disagreement.trim() } : {}),
         }
       }
     }
@@ -613,7 +608,7 @@ export class GraphProposals {
     })
     return {
       id: pid, kind: 'edit', course: spec.course, ops: spec.ops.length,
-      ...(spec.note ? { operator: spec.note.operator, ...(spec.note.dispute ? { disputed: true } : {}) } : {}),
+      ...(spec.note ? { operator: spec.note.operator, ...(spec.note.disagreement ? { disagreement: true } : {}) } : {}),
       ...(spec.route !== undefined ? { compass_rewrite: true } : {}),
       ...(warns.length ? { warns } : {}),
     }
@@ -739,13 +734,17 @@ export class GraphProposals {
     const version = (await this.store.latestSnapshotVersion(course.name)) + 1
     await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
     await this.ensureNotesFor(root, regions2)
-    const growthDetail = spec.note ? `；生长批（${spec.note.operator}）：${spec.note.reason}` : ''
+    // detail 三段：操作清单（add_node 显示 name，其余显示 node）→ 铸名 → 生长批裁决；
+    // 零操作批（裁决暂不产结构）也要留痕可读
+    const opList = spec.ops.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('；')
+    const mintList = spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''
+    const detail = (opList || `（零操作${spec.route !== undefined ? '，罗盘重写' : '，裁决留痕'}）`)
+      + mintList
+      + (spec.note ? `；生长批（${spec.note.operator}）：${spec.note.reason}` : '')
     await this.store.appendJournal({
       course: course.name, node: '*', rating: null, kind: 'graph_edit', elapsed_days: 0,
       session: String(prop.id),
-      detail: (spec.ops.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('；')
-        + (spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : '')
-        || `（零操作${spec.route !== undefined ? '，罗盘重写' : '，裁决留痕'}）`) + growthDetail,
+      detail,
     })
     await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
@@ -758,7 +757,7 @@ export class GraphProposals {
       renames,
       deleted: dels,
       ...(spec.note
-        ? { operator: spec.note.operator, coach_reason: spec.note.reason, ...(spec.note.dispute ? { disputed: true } : {}) }
+        ? { operator: spec.note.operator, coach_reason: spec.note.reason, ...(spec.note.disagreement ? { disagreement: true } : {}) }
         : {}),
       ...(compassRewritten ? { compass_rewritten: true } : {}),
       findings: applyFindings(audit, seedPhase),

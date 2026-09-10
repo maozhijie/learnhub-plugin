@@ -300,6 +300,15 @@ export const COACH_COLD_START_EST_MULT = 1.5
 /** 回合触发三点（#144）：节点完成 / 会话开始 / 队列空闲。 */
 export type CoachTrigger = 'node_complete' | 'session_start' | 'queue_idle'
 
+/** 教练回合单段装配的观测记录（#145 两段式 effort）：tier/effort 定档，operator 为
+ * 该段裁决产出的算子标签，disagreement = 该段是否声明真分歧（true → 升级下一段）。 */
+export interface CoachGrowthSegment {
+  tier: 'light' | 'full'
+  effort: 'fast' | 'deep'
+  operator: string
+  disagreement: boolean
+}
+
 /** 单课程就绪深度检查（facade 附加课程名后的对外视图）。 */
 export interface CoachCheck extends ReadyDepthCheck { course: string }
 
