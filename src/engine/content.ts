@@ -11,7 +11,7 @@ import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
-import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
+import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { normChoice } from './grading.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
@@ -946,10 +946,9 @@ cards:
    * （块按门禁同款正则定位、记录原文），否则 null——一条非块级 finding 混入就放弃
    * 局部修补（fail-safe 回整节修复，不猜测）。 */
   static blockPatchPlan(body: string, gateReport: string): Array<{ kind: string; index: number; original: string }> | null {
-    const wanted = new Map<string, number>()
+    const wanted = new Set<string>()
     for (const m of gateReport.matchAll(Content.BLOCK_FINDING_RE)) {
-      const key = `${m[1]}#${m[2]}`
-      wanted.set(key, Number(m[2]))
+      wanted.add(`${m[1]}#${m[2]}`)
     }
     if (!wanted.size) return null
     // ✗ 级 finding（清单里 ⚠ 是警告不拦落盘）出现任何非块级条目 → 不走局部修补
@@ -962,7 +961,7 @@ cards:
         ? predictBlockRe()
         : new RegExp('^```' + kind + '[ \\t]*\\r?\\n([\\s\\S]*?)```[ \\t]*\\r?$', 'gm')
       const hits = [...body.matchAll(re)]
-      for (const [key, idx] of wanted) {
+      for (const key of wanted) {
         const [k, n] = key.split('#')
         if (k === kind && hits[Number(n) - 1]) {
           out.push({ kind, index: Number(n), original: hits[Number(n) - 1]![0] })
@@ -1107,7 +1106,7 @@ cards:
       const points = typeof e.points === 'string' ? e.points.trim() : ''
       // 节段难度档（#147）：大纲期定的出题难度递进锚；只收 低/中/高，非法值视为缺席
       // （走推导路径，不拒收——档位不进门禁）。
-      const tier = typeof e.tier === 'string' && (e.tier === '低' || e.tier === '中' || e.tier === '高') ? e.tier as '低' | '中' | '高' : undefined
+      const tier = typeof e.tier === 'string' && TIER_LABEL_TO_IDX[e.tier] !== undefined ? e.tier as '低' | '中' | '高' : undefined
       out.push({ id, title, type, status: 'pending', version: 0, ...(points ? { points } : {}), ...(tier ? { tier } : {}) })
     })
     return out
