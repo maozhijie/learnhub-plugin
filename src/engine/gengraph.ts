@@ -20,6 +20,10 @@ import {
 import type { SeedProposalSpec } from './seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
 import type { PriorFeedVerdict } from './vault-links.ts'
+import {
+  SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ETA_PENDING,
+  compassScaffold, withSectionText, parseCompass, sectionBody,
+} from './compass.ts'
 import { todayStr } from './dates.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS } from './types.ts'
@@ -729,6 +733,17 @@ export class GraphProposals {
     const anchor = anchorFromSeed(spec, prop.id, declared)
     await writeAnchor(this.paths.anchorPath(root), anchor)
 
+    // 4. 罗盘常驻（#143 / ADR-0033 透明度装置）：种子 apply 落罗盘——新建 = 脚手架
+    //    （路线/ETA 待初画与周挂载接管）；reseed（换终点）= 批注区字节保留，路线与
+    //    ETA 重置占位（旧路线锚在旧终点上，初画重画后周挂载回填）。零 LLM 依赖，
+    //    apply 永不被透明度装置挡住。
+    const compassPath = this.paths.compassPath(root)
+    const existingCompass = existsSync(compassPath) ? await readFile(compassPath, 'utf8') : null
+    const compassNext = existingCompass
+      ? withSectionText(withSectionText(existingCompass, SECTION_ROUTE, ROUTE_PENDING), SECTION_ETA, ETA_PENDING)
+      : compassScaffold(course.name)
+    await atomicWrite(compassPath, compassNext)
+
     const regions = await store.load()
     const version = (await this.store.latestSnapshotVersion(course.name)) + 1
     await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions))
@@ -755,6 +770,9 @@ export class GraphProposals {
       regions: written,
       snapshot: version,
       created_blocks: [...createdBlocks],
+      compass: existingCompass
+        ? { state: 'reseeded' as const, annotations_preserved: Boolean(sectionBody(parseCompass(compassNext), SECTION_ANNOTATIONS)?.trim()) }
+        : { state: 'scaffold' as const, annotations_preserved: false },
       prior_feed: { unresponded: feed.unresponded.length },
       findings: applyFindings(audit, seedPhase),
     }

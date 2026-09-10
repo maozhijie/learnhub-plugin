@@ -4,8 +4,9 @@ import { Content } from '../src/engine/content.ts'
 
 // ---- v6 提示词契约（#14 P2/P3）：版本标记 + 复杂度档案锚点 ----
 
-test('P2: 五个内置模板全部升到 prompt/v6', () => {
+test('P2: 五个内置模板全部升到 prompt/v6（罗盘初画除外——新套件模板自带版本线，#143）', () => {
   for (const kind of Object.keys(Content.PROMPT_KINDS)) {
+    if (kind === '罗盘初画') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
     const text = Content.PROMPT_KINDS[kind]!
     assert.ok(Content.promptVersionOf(text) >= 6, `${kind} 应升到 v6+`)
   }
@@ -136,4 +137,20 @@ test('C3: 错误对比卡模板——三选一、mine 忠实错法、候选照�
   assert.match(tpl, /source_q/, '候选来源照抄字段')
   assert.match(tpl, /恰好 3 个选项/, '三选一结构锚点')
   assert.match(tpl, /忠实还原学习者的真实思路/, '错法忠实性锚点')
+})
+
+// ---- v1 罗盘初画契约（#143 / ADR-0033 透明度装置）：非承诺草图 + 批注软输入 ----
+
+test('#143: 罗盘初画模板 v1——非承诺措辞、批注软输入、路线条目输出契约', () => {
+  const tpl = Content.PROMPT_KINDS['罗盘初画']!
+  assert.ok(Content.promptVersionOf(tpl) >= 1, '罗盘初画 应带版本标记 v1+')
+  assert.match(tpl, /不是承诺/, '路线是草图不是承诺')
+  assert.match(tpl, /软输入/, '批注区是教练软输入')
+  assert.match(tpl, /提议非指令/, '批注提议非指令锚点')
+  assert.match(tpl, /不带 "## " 标题/, '输出不得携带段级标题（段落结构保护）')
+  assert.match(tpl, /3–7 个阶段条目/, '路线条目数量锚')
+  assert.match(tpl, /（候选）/, '未落图台阶一律标候选')
+  assert.match(tpl, /不写时间估算|不写进度百分比/, '零时间/进度承诺')
+  assert.match(tpl, /模型推演，非承诺/, 'ETA 才是推演参照且措辞锁死')
+  assert.match(tpl, /块工作表/, '覆盖锚定课程按工作表块组织')
 })

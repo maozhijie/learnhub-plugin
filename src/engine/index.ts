@@ -67,8 +67,14 @@ import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, readVaultLinksCache, scanVaultLinks, scoreTier } from './vault-links.ts'
 import type { VaultLinksDoc, VaultLinkCandidateView } from './vault-links.ts'
-import { readAnchor, foldCompletion, isSeedGraph } from './seed.ts'
+import { readAnchor, foldCompletion, isSeedGraph, COMPLETION_MASTERY_THRESHOLD } from './seed.ts'
 import type { CompletionFold } from './seed.ts'
+import {
+  SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,
+  COMPASS_ETA_PROBE_WEEKS, compassScaffold, parseCompass, sectionBody, withSectionText,
+  validateRouteBody, stripWrappingFence, etaMarkerOf, renderEtaBody, compassPaintContext,
+} from './compass.ts'
+import type { CompassEta, CompassEtaProbe } from './compass.ts'
 import type { VaultLinkPrior } from './analysis.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -3779,6 +3785,7 @@ export class LearnhubEngine {
 
   /** 打开/发起周复盘：复盘对象 = 上一完整学习周（可显式指定更早的完整周补记）。
    * 打开即沉淀结算点（#139）：校准画像/速度韧性周档出生即写、档案投影重建（同周幂等）。
+   * 罗盘每周挂载沙盘 ETA（#143：挂周复盘；标记周幂等，单课失败不挡复盘）。
    * 现状 = 引擎用该学习周真实数据现算重填（引擎段）；四问保留学习者已写内容。
    * 文件缺失即建（入口常驻、无推送、缺勤不罚）。weekStart 必须是周一且不晚于
    * 上一完整周——复盘只向后看，不预填未来。零 XP、零 canonical 写入。 */
@@ -3787,6 +3794,8 @@ export class LearnhubEngine {
     // 沉淀结算随周复盘走（#139）：开复盘 = 上一完整学习周的一次结算点——校准画像/
     // 速度韧性周档出生即写、学习者档案投影重建（同周幂等，重复打开不重写）
     await this.sedimentSettle()
+    // 罗盘每周挂载（#143）：ETA 段每周一刷（标记周判重），透明度装置失败不挡复盘
+    await this.compassEtaRefresh(undefined, { today }).catch(() => undefined)
     const target = kataMonday(weekStart ?? prevWeekStartOf(today) ?? '')
     const prev = prevWeekStartOf(today)!
     if (target > prev) {
@@ -4018,6 +4027,44 @@ export class LearnhubEngine {
     const { today } = await this.learningDay()
     const courses = input.course ? [await this.registry.resolve(input.course)] : await this.enabledCourses()
     const nodeFilter = input.nodes?.length ? new Set(input.nodes) : null
+    const { cards, nodes, scheds } = await this.sandboxPopulation(courses, nodeFilter)
+    // 蒙特卡洛：播种确定（同输入同分布）；每门课注入自己的调度器实例（与调度同源，
+    // R 参数跟课走——与 reviewQueue/memoryHealth 同一 sched 通道）。
+    const runs: Array<{ endByNode: number[]; curve: number[] }> = []
+    for (let i = 0; i < SANDBOX_RUNS; i++) {
+      runs.push(simulateRun(plan, cards, nodes, today, {
+        schedFor: course => scheds.get(course) ?? scheds.get(courses[0]!.name)!,
+        rng: mulberry32(7000 + i * 7919),
+      }))
+    }
+    const { curve, map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
+    return {
+      wording: SANDBOX_WORDING,
+      date: today,
+      plan,
+      runs: SANDBOX_RUNS,
+      scope: { courses: courses.map(c => c.name), nodes: nodes.length },
+      curve,
+      map,
+      assumptions: [
+        `每次复习计 1 分钟；每日预算 ${plan.minutesPerDay} 分钟，耗尽后剩余到期卡顺延（与真实欠账一致）。`,
+        '复习通过率 = 当前 FSRS 模型的可提取性 R 伯努利抽样：过记 Good、败记 Again；推进与调度同一套函数（各课程用自己的调度器参数）。',
+        '新节点按课程图序在预算内引入（est 分钟摊日），学成记一次合成 Good；休眠题随学成入场。',
+        '练习证据（EMA/正确率）冻结为当前值——沙盘只模拟「记」的维持，不模拟「练」的进步。',
+      ],
+    }
+  }
+
+  /** 沙盘推演的总体采集（sandboxRun 与罗盘 ETA 挂载共用，#143）：模拟卡 + 模拟节点
+   * + 各课调度器实例。skipped（学习者自报已会）不进推演范围；未开始节点带 null 代表
+   * 卡随引入学成创建；题库缺失 = 合法空态。 */
+  private async sandboxPopulation(
+    courses: CourseEntry[], nodeFilter: Set<string> | null,
+  ): Promise<{
+    cards: SandboxCard[]
+    nodes: SandboxNode[]
+    scheds: Map<string, FSRS>
+  }> {
     const cards: SandboxCard[] = []
     const nodes: SandboxNode[] = []
     const scheds = new Map<string, FSRS>()
@@ -4053,30 +4100,215 @@ export class LearnhubEngine {
         }
       }
     }
-    // 蒙特卡洛：播种确定（同输入同分布）；每门课注入自己的调度器实例（与调度同源，
-    // R 参数跟课走——与 reviewQueue/memoryHealth 同一 sched 通道）。
-    const runs: Array<{ endByNode: number[]; curve: number[] }> = []
-    for (let i = 0; i < SANDBOX_RUNS; i++) {
-      runs.push(simulateRun(plan, cards, nodes, today, {
-        schedFor: course => scheds.get(course) ?? scheds.get(courses[0]!.name)!,
-        rng: mulberry32(7000 + i * 7919),
-      }))
+    return { cards, nodes, scheds }
+  }
+
+  // ---- 罗盘（#143 / ADR-0033 透明度装置：常驻非承诺路线草图）----
+
+  /** 读罗盘（learnhub_compass / 教练上下文消费）：文件 Missing = null（合法空态——
+   * 未播种或未落盘）；终点锚随行携带（coach 的目标视野）。 */
+  async compassRead(courseKey?: string): Promise<{
+    course: string
+    path: string
+    endpoint: string | null
+    goal_type: 'capability' | 'coverage' | null
+    missing: boolean
+    route: string | null
+    annotations: string | null
+    eta: string | null
+    eta_week: string | null
+  }> {
+    const c = await this.registry.resolve(courseKey)
+    const path = this.paths.compassPath(c.root)
+    const anchor = await readAnchor(this.paths.anchorPath(c.root)).catch(() => null)
+    if (!existsSync(path)) {
+      return {
+        course: c.name, path,
+        endpoint: anchor?.endpoint ?? null, goal_type: anchor?.goal_type ?? null,
+        missing: true, route: null, annotations: null, eta: null, eta_week: null,
+      }
     }
-    const { curve, map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
+    const doc = parseCompass(await readFile(path, 'utf8'))
+    const eta = sectionBody(doc, SECTION_ETA)
     return {
+      course: c.name, path,
+      endpoint: anchor?.endpoint ?? null, goal_type: anchor?.goal_type ?? null,
+      missing: false,
+      route: sectionBody(doc, SECTION_ROUTE),
+      annotations: sectionBody(doc, SECTION_ANNOTATIONS),
+      eta,
+      eta_week: etaMarkerOf(eta),
+    }
+  }
+
+  /** 罗盘尾段（#144 教练回合上下文包「罗盘+沉淀折叠」区块的罗盘半区消费缝；本票只
+   * 就位读侧）：剩余路线 + 批注区（软输入、提议非指令标注）。Missing = ''（合法空态，
+   * 整段省略由组装方裁决）。 */
+  async compassTail(courseKey: string): Promise<string> {
+    const v = await this.compassRead(courseKey)
+    if (v.missing) return ''
+    const lines: string[] = []
+    if (v.route?.trim() && v.route.trim() !== ROUTE_PENDING) {
+      lines.push('### 罗盘 · 剩余路线（非承诺草图——方向感，不是承诺）', '', v.route.trim())
+    }
+    if (v.annotations?.trim() && v.annotations.trim() !== ANNOTATION_GUIDE) {
+      lines.push('### 罗盘 · 学习者批注（软输入——提议非指令）', '', v.annotations.trim())
+    }
+    return lines.join('\n\n')
+  }
+
+  /** 罗盘初画/重画（learnhub_compass_paint；「罗盘初画」模板 v1，deep 档一次调用）：
+   * 终点锚缺失 fail loud（初画锚在终点上）；路线门（非空/无标题/限长）首过即落盘——
+   * 只重写「剩余路线」段，批注区字节保留，ETA 重置待刷新（旧带是旧结构的推演）。
+   * 金样本回放闸：调用数恒 1、无修复轮（首过率对照在测试锚定）。 */
+  async compassPaint(courseKey: string | undefined, llm: LlmComplete): Promise<{
+    course: string; path: string; route_lines: number; annotations_preserved: boolean; repainted: boolean
+  }> {
+    const c = await this.registry.resolve(courseKey)
+    const root = c.root
+    const anchor = await readAnchor(this.paths.anchorPath(root))
+    if (!anchor) {
+      throw new Error(`[compass] 课程「${c.name}」未播种（终点锚 Missing）——罗盘初画锚在终点上，先走种子提案（kind=seed）。`)
+    }
+    const { graph } = await this.loadView(c)
+    const path = this.paths.compassPath(root)
+    const existing = existsSync(path) ? await readFile(path, 'utf8') : null
+    const doc = existing ? parseCompass(existing) : null
+    const rawAnnotations = doc ? sectionBody(doc, SECTION_ANNOTATIONS) : null
+    const annotations = rawAnnotations?.trim() && rawAnnotations.trim() !== ANNOTATION_GUIDE ? rawAnnotations : null
+    const template = await this.content.loadPrompt('罗盘初画')
+    const prompt = template + compassPaintContext({
+      courseName: c.name,
+      anchor,
+      starts: anchor.seed_nodes.filter(n => n !== anchor.endpoint).map(n => ({
+        name: n,
+        note: graph.noteOf[n] ?? '',
+      })),
+      graphNames: graph.names,
+      annotations,
+    })
+    const raw = await llm(prompt, undefined, { effort: 'deep' })
+    const body = stripWrappingFence(raw)
+    const errors = validateRouteBody(body)
+    if (errors.length) {
+      throw new Error(`[compass] 初画产物未过路线门（原样落盘会破坏罗盘结构），罗盘未改动：\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    const next = withSectionText(
+      withSectionText(existing ?? compassScaffold(c.name), SECTION_ROUTE, body),
+      SECTION_ETA, ETA_PENDING,
+    )
+    await atomicWrite(path, next)
+    await this.store.appendJournal({
+      course: c.name, node: '*', rating: null, kind: 'compass_paint', elapsed_days: 0,
+      detail: `罗盘初画/重画：路线 ${body.split('\n').filter(l => l.trim()).length} 行${annotations ? '（批注区软输入已附）' : ''}`,
+    })
+    return {
+      course: c.name, path,
+      route_lines: body.split('\n').filter(l => l.trim()).length,
+      annotations_preserved: Boolean(annotations),
+      repainted: Boolean(existing && existing !== compassScaffold(c.name)
+        && sectionBody(parseCompass(existing), SECTION_ROUTE)?.trim() !== ROUTE_PENDING),
+    }
+  }
+
+  /** 罗盘重写——「剩余路线」的唯一写权接口（词条「罗盘」；调用方 = 生长批受理票 #145，
+   * 与图 apply 同事务、journal 由调用方挂提案 id，此处零 journal）：批注区与 ETA 字节
+   * 保留；学习者手编的路线在下一次重写处被覆盖——手编不产生权威变更。路线门同初画。 */
+  async compassRewrite(
+    courseKey: string, routeMd: string,
+  ): Promise<{ course: string; path: string; route_lines: number }> {
+    const c = await this.registry.resolve(courseKey)
+    const anchor = await readAnchor(this.paths.anchorPath(c.root))
+    if (!anchor) {
+      throw new Error(`[compass] 课程「${c.name}」未播种（终点锚 Missing）——罗盘重写锚在终点上，先走种子提案（kind=seed）。`)
+    }
+    const body = stripWrappingFence(routeMd)
+    const errors = validateRouteBody(body)
+    if (errors.length) {
+      throw new Error(`[compass] 重写产物未过路线门，罗盘未改动：\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    const path = this.paths.compassPath(c.root)
+    const base = existsSync(path) ? await readFile(path, 'utf8') : compassScaffold(c.name)
+    await atomicWrite(path, withSectionText(base, SECTION_ROUTE, body))
+    return { course: c.name, path, route_lines: body.split('\n').filter(l => l.trim()).length }
+  }
+
+  /** 罗盘每周挂载沙盘 ETA（挂周复盘——kataOpen 触发；标记周幂等，force 可重算）：
+   * 逐启用课程——未播种跳过、罗盘缺席先落脚手架、当前周已挂 current、否则探测带
+   * 折叠后重写「沙盘 ETA」段（措辞锁死「模型推演，非承诺」）。透明度装置：单课失败
+   * 不挡其他课，更不挡周复盘。 */
+  async compassEtaRefresh(
+    courseKey?: string, opts: { today?: string; force?: boolean } = {},
+  ): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string }>> {
+    const { today: learningToday } = await this.learningDay()
+    const today = opts.today ?? learningToday
+    const weekStart = weekStartOf(today)
+    if (!weekStart) throw new Error(`[compass] today 不是合法日期：${String(today)}`)
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string }> = []
+    for (const c of courses) {
+      try {
+        const anchor = await readAnchor(this.paths.anchorPath(c.root))
+        if (!anchor) {
+          out.push({ course: c.name, state: 'skipped', detail: '未播种（终点锚 Missing）' })
+          continue
+        }
+        const path = this.paths.compassPath(c.root)
+        const existing = existsSync(path) ? await readFile(path, 'utf8') : compassScaffold(c.name)
+        if (!opts.force && etaMarkerOf(sectionBody(parseCompass(existing), SECTION_ETA)) === weekStart) {
+          out.push({ course: c.name, state: 'current' })
+          continue
+        }
+        const eta = await this.compassEtaFold(c, anchor, today, weekStart)
+        await atomicWrite(path, withSectionText(existing, SECTION_ETA, renderEtaBody(eta)))
+        out.push({ course: c.name, state: 'refreshed' })
+      } catch (err) {
+        out.push({ course: c.name, state: 'skipped', detail: err instanceof Error ? err.message : String(err) })
+      }
+    }
+    return out
+  }
+
+  /** 沙盘 ETA 折叠（罗盘 weekly；读侧即算即用，落盘的只有渲染段）：按每日 XP 目标
+   * 分钟数取探测地平线逐档跑沙盘，读终点掌握度的 p50/p80 分位带；两口径首次越阈的
+   * 档 = 「还要多久」的诚实参照（阈值与完成判据同一常量）。 */
+  private async compassEtaFold(
+    c: CourseEntry, anchor: { endpoint: string }, today: string, weekStart: string,
+  ): Promise<CompassEta> {
+    const minutesPerDay = await readDailyGoal(this.paths)
+    const { cards, nodes, scheds } = await this.sandboxPopulation([c], null)
+    const endpointKey = `${c.name}/${anchor.endpoint}`
+    const probes: CompassEtaProbe[] = []
+    let p50Week: CompassEta['p50_week'] = null
+    let p80Week: CompassEta['p80_week'] = null
+    for (const weeks of COMPASS_ETA_PROBE_WEEKS) {
+      const plan: SandboxPlan = { minutesPerDay, weeks }
+      const runs: Array<{ endByNode: number[]; curve: number[] }> = []
+      for (let i = 0; i < SANDBOX_RUNS; i++) {
+        runs.push(simulateRun(plan, cards, nodes, today, {
+          schedFor: course => scheds.get(course)!,
+          rng: mulberry32(7000 + i * 7919),
+        }))
+      }
+      const { map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
+      const hit = map.find(m => m.node === endpointKey)
+      const p50 = hit?.p50 ?? 0
+      const p80 = hit?.p80 ?? 0
+      probes.push({ weeks, p50, p80 })
+      const from = probes.length > 1 ? COMPASS_ETA_PROBE_WEEKS[probes.length - 2]! : null
+      if (!p50Week && p50 >= COMPLETION_MASTERY_THRESHOLD) p50Week = { at: weeks, from }
+      if (!p80Week && p80 >= COMPLETION_MASTERY_THRESHOLD) p80Week = { at: weeks, from }
+      if (p50Week && p80Week) break
+    }
+    return {
+      week_start: weekStart,
+      minutes_per_day: minutesPerDay,
+      endpoint: anchor.endpoint,
+      threshold: COMPLETION_MASTERY_THRESHOLD,
+      probes,
+      p50_week: p50Week,
+      p80_week: p80Week,
       wording: SANDBOX_WORDING,
-      date: today,
-      plan,
-      runs: SANDBOX_RUNS,
-      scope: { courses: courses.map(c => c.name), nodes: nodes.length },
-      curve,
-      map,
-      assumptions: [
-        `每次复习计 1 分钟；每日预算 ${plan.minutesPerDay} 分钟，耗尽后剩余到期卡顺延（与真实欠账一致）。`,
-        '复习通过率 = 当前 FSRS 模型的可提取性 R 伯努利抽样：过记 Good、败记 Again；推进与调度同一套函数（各课程用自己的调度器参数）。',
-        '新节点按课程图序在预算内引入（est 分钟摊日），学成记一次合成 Good；休眠题随学成入场。',
-        '练习证据（EMA/正确率）冻结为当前值——沙盘只模拟「记」的维持，不模拟「练」的进步。',
-      ],
     }
   }
 

@@ -356,7 +356,8 @@ export interface GraphApplyEditResult {
 }
 
 /** 种子提案 apply（#142）：终点锚落盘 + 起点/终点/占位边落图。
- * seedPhase 豁免生效时 findings 不带健康分提示（种子图健康分不设阈值）。 */
+ * seedPhase 豁免生效时 findings 不带健康分提示（种子图健康分不设阈值）。
+ * compass = 罗盘常驻随 apply 就位（#143）：scaffold 新建待初画 / reseed 批注区保留。 */
 export interface GraphApplySeedResult {
   course: string
   mode: 'new' | 'reseed'
@@ -368,6 +369,7 @@ export interface GraphApplySeedResult {
   regions: string[]
   snapshot: number
   created_blocks: string[]
+  compass: { state: 'scaffold' | 'reseeded'; annotations_preserved: boolean }
   prior_feed: { unresponded: number }
   findings: string[]
 }

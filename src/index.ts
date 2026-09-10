@@ -2084,6 +2084,16 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { course: string; from: string; into: string }) => run('learnhub_concept_merge', async () =>
       JSON.stringify(await engine.conceptMerge(args.course, args.from, args.into))))
+  tool('learnhub_compass',
+    'Read a course compass (罗盘, ADR-0033 transparency device #143): the resident non-commitment route sketch at the course root — current 剩余路线 (route, coach-owned, rewritten per growth batch), the learner annotation area (软输入: read it before planning growth batches; proposals, never orders), and the weekly sandbox ETA (quantile bands, 模型推演非承诺). Missing file = legal empty state (course not seeded yet). This file NEVER enters completion criteria or any authority — do not treat hand-edited routes as structure changes.',
+    { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
+    (args: { course?: string }) => run('learnhub_compass', async () =>
+      JSON.stringify(await engine.compassRead(args.course))))
+  tool('learnhub_compass_paint',
+    'Paint (or repaint) the compass initial route (罗盘初画 #143): ONE deep-effort model call with the 罗盘初画 prompt template — endpoint anchor, seed graph, worksheet (coverage) and existing learner annotations (soft input) go in; ONLY the 剩余路线 section is rewritten (annotations preserved byte-for-byte, ETA reset for the weekly refresh). The route is a non-commitment sketch: stages toward the endpoint, candidate steps marked (候选), no time promises. Run right after a seed apply (the apply lands the scaffold with a 待初画 placeholder) and after a reseed; a route failing the format gate (non-empty, no ## headings, length cap) leaves the compass untouched. Completion criteria never read this file.',
+    { course: { type: 'string', description: 'Course name; omit when only one course is enabled' } },
+    (args: { course?: string }) => run('learnhub_compass_paint', async () =>
+      JSON.stringify(await engine.compassPaint(args.course, llmSeam(ctx)))))
   tool('learnhub_generate',
     'Queue one course note for generation via the global serial queue: outline first (the model decides section split, order, and types from the content, topic, and style — no fixed structure), then one model call per section through the quality gates as a draft (ready sections are skipped, so retrying resumes the pipeline), then per-section + synthesis quiz questions. Returns immediately with a queue position; at most one node pipeline runs at a time (check the gen-jobs registry tool or panel generate tab for progress). The context pack (prereqs, domain boundary, forbidden concepts) and user-editable prompt templates (state/提示词/课程大纲.md, 课程节生成.md) drive the calls. Missing notes are scaffolded first (on-demand lesson semantics). style selects a per-section prompt variant (课程节生成-<style>, e.g. 苏格拉底/费曼) applied to every section call; the outline and gates stay on the default path.',
     {

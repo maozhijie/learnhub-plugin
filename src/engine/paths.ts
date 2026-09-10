@@ -15,6 +15,9 @@ const FW_MAP: Record<string, string> = {
 /** 学习产物输出区目录名（V-3 #107；output.ts 注册豁免判定共用同一常量）。 */
 export const OUTPUT_DIR_NAME = '我的产出'
 
+/** 罗盘文件名（#143 / compass.ts）：课程根下的常驻路线草图。 */
+export const COMPASS_FILE = '罗盘.md'
+
 /** 节点名 → 安全文件名（不含扩展名）。 */
 export function safeFilename(name: string): string {
   return [...name].map(c => FW_MAP[c] ?? c).join('')
@@ -122,6 +125,11 @@ export class Paths {
    * （终点节点+目标类型+声明日期），种子提案 apply 落盘；无直改通道，换终点走
    * 重新种子提案（kind=seed）。 */
   anchorPath(root: string): string { return `${this.courseStateDir(root)}/终点锚.json` }
+
+  /** 罗盘（#143 / ADR-0033 透明度装置）：课程根/罗盘.md——常驻的非承诺路线草图，
+   * 三段式（剩余路线=教练唯一写权 / 学习者批注区=软输入 / 沙盘 ETA=每周挂载）；
+   * 永不进完成判据或任何权威面。 */
+  compassPath(root: string): string { return `${this.courseRoot(root)}/${COMPASS_FILE}` }
 
   snapshotPath(course: string, version: number): string {
     return `${this.snapshotDir}/${course}-v${version}.json`
