@@ -3,23 +3,17 @@
  *
  * - 硬门：v2 正常构造；v1（缺 schema/缺版本/旧版本号/损坏 JSON/缺文件）在构造期
  *   同步拒载，报错含迁移指引——封死一切取用引擎的路径。
- * - 迁移脚本：子进程跑 scripts/migrate-v1.mjs，端到端验证存档搬移、登记表豁免、
- *   行为流水原地保留、版本戳与防重跑。（脚本 cutover 完成后按裁决退役为存根，
- *   本段端到端测试随之删除。）
+ * - 迁移脚本：已按裁决退役为存根（scripts/migrate-v1.mjs 头注），其端到端测试
+ *   随脚本一同删除；存根时代的防回归 = 硬门拒载测试（下方）继续守护。
  * - data-check：存档区 archived 信息级盘点（数文件、不校验内容、不进 status）。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { promisify } from 'node:util'
 import { LearnhubEngine } from '../src/engine/index.ts'
-import { localDay, tfQuestion, withVault } from './helpers/vault.ts'
-
-const run = promisify(execFile)
+import { tfQuestion, withVault } from './helpers/vault.ts'
 
 /** 工厂外的裸 vault（版本门负路径专用：工厂总是盖 v2 戳并构造引擎）。 */
 async function rawVault(files: Record<string, string>): Promise<string> {
@@ -70,70 +64,6 @@ test('硬门：未来版本号同样拒载（引擎只认当前主版本）', as
     assert.throws(() => new LearnhubEngine({ vault: root }), /v3/)
   } finally {
     await rm(root, { recursive: true, force: true })
-  }
-})
-
-// ---- 迁移脚本（端到端子进程；脚本退役后本段随之删除） ----
-
-/** 搭一个 v1 库：注册表两课（其一含概念登记表）+ 课程目录 + 行为流水 + 旧 learnhub.json。 */
-async function seedV1Vault(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'learnhub-migrate-'))
-  const center = join(root, '学习中心')
-  await mkdir(join(center, 'math', 'state'), { recursive: true })
-  await mkdir(join(center, '物理'), { recursive: true })
-  await writeFile(join(center, '课程注册表.yaml'), [
-    'courses:',
-    '  - id: math-01',
-    '    name: 数学',
-    '    root: math',
-    '    enabled: true',
-    '  - { name: 物理, root: 物理, enabled: true }',
-    'note_sources:',
-    '  - { id: n1, path: notes/a.md, fingerprint: x, created: "2026-01-01", enabled: true }',
-  ].join('\n'), 'utf8')
-  await writeFile(join(center, 'math', 'data.yaml'), 'region: 基础\nblocks: []\n', 'utf8')
-  await writeFile(join(center, 'math', 'state', 'fsrs参数.json'), '{"parameters":[1,2,3]}', 'utf8')
-  await writeFile(join(center, '物理', '概念登记表.yaml'), 'concepts: []\n', 'utf8')
-  await mkdir(join(center, 'state'), { recursive: true })
-  await writeFile(join(center, 'state', 'practice.jsonl'), '{"ts":"2026-01-01T10:00:00+08:00","course":"math","node":"入门","ex":"q","answer":"a","correct":true,"judge":"quiz"}\n', 'utf8')
-  await writeFile(join(center, 'state', 'learnhub.json'), '{"day_cutoff":"00:00"}', 'utf8')
-  return root
-}
-
-test('迁移脚本：存档搬移 + 登记表豁免 + 流水原地 + 版本戳 + 防重跑', async () => {
-  const vault = await seedV1Vault()
-  const script = join(process.cwd(), 'scripts', 'migrate-v1.mjs')
-  const day = localDay()
-  try {
-    const { stdout } = await run(process.execPath, [script, vault])
-    assert.match(stdout, /cutover 完成：v1 → v2/)
-
-    const center = join(vault, '学习中心')
-    // ① 课程根整树入存档（fsrs参数.json 随课归档）
-    const archivedMath = join(center, '存档', 'pre-v1', day, 'math')
-    assert.equal(await readFile(join(archivedMath, 'state', 'fsrs参数.json'), 'utf8'), '{"parameters":[1,2,3]}')
-    assert.ok(!existsSync(join(center, 'math')), '原课程根不在现役区')
-    // ② 概念登记表豁免：随树搬走后放回原位
-    assert.equal(await readFile(join(center, '物理', '概念登记表.yaml'), 'utf8'), 'concepts: []\n')
-    // ③ 行为流水原地保留
-    assert.match(await readFile(join(center, 'state', 'practice.jsonl'), 'utf8'), /"course":"math"/)
-    // ④ 注册表清空、note_sources 保留、原文进存档
-    const registry = await readFile(join(center, '课程注册表.yaml'), 'utf8')
-    assert.match(registry, /courses: \[\]/)
-    assert.match(registry, /note_sources:/)
-    assert.match(await readFile(join(center, '存档', 'pre-v1', day, '课程注册表.yaml.v1'), 'utf8'), /root: math/)
-    // ⑤ 版本戳 + breaks 断裂史
-    const config = JSON.parse(await readFile(join(center, 'state', 'learnhub.json'), 'utf8'))
-    assert.equal(config.schema.version, 2)
-    assert.equal(config.schema.breaks[0].from, 1)
-    assert.deepEqual([...config.schema.breaks[0].archived].sort(), ['math', '物理'])
-    // ⑥ 引擎此刻可正常构造（硬门放行）
-    const engine = new LearnhubEngine({ vault })
-    assert.equal(engine.schema.version, 2)
-    // ⑦ 防重跑
-    await assert.rejects(run(process.execPath, [script, vault]), /拒绝重跑/)
-  } finally {
-    await rm(vault, { recursive: true, force: true })
   }
 })
 
