@@ -149,8 +149,14 @@ export interface CompassEta {
 
 const pctText = (v: number): string => `${Math.round(v * 100)}%`
 
-/** 越阈措辞：首档越阈「≤ 4 周」，跨档「约 9–12 周」，未及「推演时程（24 周）内未及」。 */
-function crossingText(c: CompassEta['p50_week'], horizon: number): string {
+/** 推演地平线上界（周）：ETA 段渲染与周复盘 ETA 旁挂（#150）共用的未及口径。 */
+export function etaHorizonOf(eta: CompassEta): number {
+  return eta.probes.at(-1)?.weeks ?? COMPASS_ETA_PROBE_WEEKS[COMPASS_ETA_PROBE_WEEKS.length - 1]!
+}
+
+/** 越阈措辞：首档越阈「≤ 4 周」，跨档「约 9–12 周」，未及「推演时程（24 周）内未及」。
+ * 罗盘 ETA 段与周复盘现状区的 ETA 旁挂（#150）共用同一措辞口径。 */
+export function crossingText(c: CompassEta['p50_week'], horizon: number): string {
   if (!c) return `推演时程（${horizon} 周）内未及`
   if (c.from === null) return `≤ ${c.at} 周`
   return `约 ${c.from + 1}–${c.at} 周`
@@ -158,7 +164,7 @@ function crossingText(c: CompassEta['p50_week'], horizon: number): string {
 
 /** ETA 段渲染：标记行 + 基准与措辞锁死 + 两口径越阈参照 + 分位带读数。 */
 export function renderEtaBody(eta: CompassEta): string {
-  const horizon = eta.probes.at(-1)?.weeks ?? COMPASS_ETA_PROBE_WEEKS[COMPASS_ETA_PROBE_WEEKS.length - 1]
+  const horizon = etaHorizonOf(eta)
   const band = eta.probes
     .map(p => `${p.weeks} 周 p50=${pctText(p.p50)}/p80=${pctText(p.p80)}`)
     .join(' · ')

@@ -3,10 +3,12 @@ import assert from 'node:assert/strict'
 import {
   behaviorWindow, behaviorDigest, renderBehaviorDigest,
   readyDepthCheck, renderSedimentForCoach,
+  arbitrationPopulations, renderArbitrationEvidence,
   COACH_LOOKAHEAD_DEFAULT, COACH_LOOKAHEAD_MIN, COACH_LOOKAHEAD_MAX,
   COACH_COLD_START_DAYS, COACH_COLD_START_EST_MULT,
 } from '../src/engine/coach-round.ts'
 import type { DigestInput } from '../src/engine/coach-round.ts'
+import type { SandboxCard, SandboxNode } from '../src/engine/sandbox.ts'
 import { foldSediment, renderLearnerProfile } from '../src/engine/sediment.ts'
 import type { PracticeRec, ReviewRec, SedimentEvent } from '../src/engine/types.ts'
 
@@ -277,6 +279,62 @@ test('沉淀档案投影回归：「复诊结局」标题按正典 kind 渲染�
   const profile = renderLearnerProfile(foldSediment(events))
   assert.ok(profile.includes('## 复诊结局'))
   assert.ok(!profile.includes('undefined'))
+})
+
+// ---- 双沙盘仲裁参照（#150：全量段仍真分歧 → 终审段的两份推演参照） ----
+
+const arbNodes: SandboxNode[] = [
+  { course: '数学', node: '认识变化率', est: 15, practice: { attempts: 3, correct: 2 }, started: true, skipped: false },
+]
+const arbCards: SandboxCard[] = [
+  { key: 'node:数学/认识变化率', course: '数学', node: '认识变化率', kind: 'node', fs: null },
+]
+
+test('双沙盘总体：after 追加候选节点与代表卡（est 缺省 15、同名/空名跳过）；注入数组零改写', () => {
+  const nodes = arbNodes.map(n => ({ ...n }))
+  const cards = arbCards.map(c => ({ ...c }))
+  const pops = arbitrationPopulations(nodes, cards, [
+    { name: '平均变化率', est: 20 },
+    { name: '认识变化率', est: 99 }, // 同名跳过（已在总体里）
+    { name: '' }, // 空名跳过
+  ], '数学')
+  assert.equal(pops.before.nodes.length, 1, 'before = 注入总体原样')
+  assert.equal(pops.after.nodes.length, 2)
+  const addedNode = pops.after.nodes[1]!
+  assert.equal(addedNode.node, '平均变化率')
+  assert.equal(addedNode.est, 20)
+  assert.equal(addedNode.started, false)
+  assert.deepEqual(addedNode.practice, { attempts: 0, correct: 0 })
+  assert.deepEqual(pops.after.cards.at(-1),
+    { key: 'node:数学/平均变化率', course: '数学', node: '平均变化率', kind: 'node', fs: null })
+  assert.equal(nodes.length, 1, '注入数组零改写（纯函数）')
+  assert.equal(cards.length, 1)
+  // est 缺省：非正数回落 15（与沙盘总体采集同口径）
+  const dflt = arbitrationPopulations([], [], [{ name: 'X', est: 0 }], '数学')
+  assert.equal(dflt.after.nodes[0]!.est, 15)
+})
+
+test('双沙盘参照渲染：两计划带并排、措辞锁死非承诺、终审归教学判断；同输入同输出', () => {
+  const band = Array.from({ length: 6 }, (_, i) => ({ week: i + 1, p50: 0.1 + i * 0.05, p80: 0.2 + i * 0.05 }))
+  const input = {
+    disagreement: '行为摘要指向插入，我认为该前进',
+    minutes_per_day: 30,
+    weeks: 6,
+    added: ['平均变化率'],
+    before: band,
+    after: band.map(p => ({ ...p, p50: p.p50 - 0.01 })),
+  }
+  const md = renderArbitrationEvidence(input)
+  assert.ok(md.includes('## 双沙盘推演（终审参照——模型推演，非承诺）'))
+  assert.ok(md.includes('分歧声明（全量段）：行为摘要指向插入，我认为该前进'))
+  assert.ok(md.includes('推演基准：每日约 30 分钟 × 6 周；两份推演同一总体、同一随机种子序列（配对比较）。'))
+  assert.ok(md.includes('计划一（现状照走）：W1 p50=10%/p80=20%'))
+  assert.ok(md.includes('计划二（含本批照走，新增：平均变化率）'))
+  assert.ok(md.includes('两带差异只读作本批的预算/保留代价参考；终审归你的教学判断。'))
+  assert.equal(md, renderArbitrationEvidence(input), '同输入同输出（字节一致，金样本回放前提）')
+  // 零新增节点（空批仍分歧）：计划二如实标注，不造假差异来源
+  const empty = renderArbitrationEvidence({ ...input, added: [] })
+  assert.ok(empty.includes('计划二（含本批照走，本批无新增节点）'))
 })
 
 // ---- 门面：六区块上下文包 / 检查点接线（vault 工厂，facade 测试缝） ----

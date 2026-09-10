@@ -31,11 +31,11 @@ import { NOF1_TEMPLATES, NOF1_PER_ARM_MIN, NOF1_VARIABLE_WHITELIST, nof1Template
 import type { Nof1Template, Nof1Variable, ExperimentDef, Nof1Analysis } from './nof1.ts'
 import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from './thermostat.ts'
 import type { ThermostatDoc, ThermostatSuggestion } from './thermostat.ts'
-import { SANDBOX_RUNS, SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING, simulateRun, aggregateRuns } from './sandbox.ts'
-import type { SandboxDoc, SandboxCard, SandboxNode, SandboxPlan } from './sandbox.ts'
+import { SANDBOX_RUNS, SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING, SANDBOX_NODE_EST_DEFAULT, simulateRun, aggregateRuns } from './sandbox.ts'
+import type { SandboxDoc, SandboxCard, SandboxCurvePoint, SandboxNode, SandboxPlan } from './sandbox.ts'
 import {
   KATA_KIND, KATA_EMPTY, KATA_LEARNER_QUESTIONS, weekStartOf, weekEndOf, prevWeekStartOf,
-  buildKataReality, renderKataReality, assembleKataDoc, parseKataBody, kataAnswered,
+  buildKataReality, renderKataReality, assembleKataDoc, parseKataBody, kataAnswered, kataEtaSummary,
 } from './kata.ts'
 import type { KataAnswer, KataQuestion } from './kata.ts'
 import { writeOutputArtifact, obsidianLink } from './output.ts'
@@ -76,7 +76,7 @@ import {
   hasLearnerAnnotations,
 } from './compass.ts'
 import type { CompassEta, CompassEtaProbe } from './compass.ts'
-import { behaviorDigest, readyDepthCheck, renderBehaviorDigest, renderSedimentForCoach } from './coach-round.ts'
+import { behaviorDigest, readyDepthCheck, renderBehaviorDigest, renderSedimentForCoach, arbitrationPopulations, renderArbitrationEvidence } from './coach-round.ts'
 import type { CoachCheck, CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
 import type { VaultLinkPrior } from './analysis.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
@@ -3732,17 +3732,60 @@ export class LearnhubEngine {
     return { id: def.id, title: def.title, arm_today: nof1ArmForDay(def, today) }
   }
 
-  /** 手动停（ADR-0023：实验开停手动）。停后不再标注、报告定稿。 */
+  /** 手动停（ADR-0023：实验开停手动）。停 = 定稿（#150 结局落沉淀正典）：结局分析
+   * 出生即写沉淀正典（kind=nof1_outcome、immediate 档；未达观察窗的如实进度态也落——
+   * 正典记录发生了什么，不造假结论），学习者档案投影重建。幂等护栏在前：同实验 id
+   * 已有结局事件则不再追加——追加写与停标志落盘任何顺序崩溃后重试都收敛，不产重复
+   * 结局事件。 */
   async experimentStop(id?: number): Promise<ExperimentDef> {
     const list = await this.store.loadExperiments()
     const hit = id !== undefined ? list.find(e => e.id === id) : list.find(e => e.status === 'running')
     if (!hit) throw new Error(`[nof1-stop] 没有可停的实验${id !== undefined ? `（实验 #${id} 不存在）` : ''}。`)
     if (hit.status !== 'running') throw new Error(`[nof1-stop] 实验 #${hit.id} 已是 ${hit.status}。`)
     const { today } = await this.learningDay()
+    const analysis = await this.nof1AnalysisOf(hit)
+    const fold = await this.sedimentFold()
+    const landed = fold.events.some(e => e.kind === 'nof1_outcome' && e.payload.experiment === hit.id)
+    if (!landed) {
+      await this.sedimentAppend('nof1_outcome', 'immediate', {
+        experiment: hit.id,
+        template: hit.template,
+        variable: hit.variable,
+        title: hit.title,
+        question: hit.question,
+        outcome: hit.outcome,
+        arms: hit.arms,
+        arm_labels: hit.arm_labels,
+        unit: hit.unit,
+        started_day: hit.started_day,
+        stopped_day: today,
+        ready: analysis.ready,
+        per_arm: analysis.per_arm,
+        diff: analysis.diff,
+        ci95: analysis.ci95,
+        p: analysis.p,
+        message: analysis.message,
+      })
+    }
     hit.status = 'stopped'
     hit.stopped_day = today
     await this.store.saveExperiments(list)
+    await this.sedimentRebuildProfile()
     return hit
+  }
+
+  /** 实验结局分析（report 与 stop 共用的唯一口径，#150）：调度侧二元结局可析
+   * （种子约定 9000+id 与报告一致）；练习侧（EMA）分析器待后票，占位结论如实落档。 */
+  private async nof1AnalysisOf(hit: ExperimentDef): Promise<Nof1Analysis> {
+    if (hit.outcome !== 'true_retention') {
+      return {
+        ready: false, per_arm: [], need_per_arm: hit.per_arm_min,
+        diff: null, ci95: null, p: null,
+        message: '该实验预登记了练习侧结局（EMA）：EMA 分析器与练习侧模板登记待后票落地；臂标注已在积累。',
+      }
+    }
+    const recs = nof1Outcomes(await this.store.reviewLogAll(), hit.id)
+    return analyzeNof1(recs, hit, 9000 + hit.id)
   }
 
   /** 直白话报告（臂间比较+置换检验+效应量区间；ADR-0023 裁决 3）。未达最短观察窗
@@ -3754,19 +3797,7 @@ export class LearnhubEngine {
       ? list.find(e => e.id === id)
       : list.find(e => e.status === 'running') ?? list[list.length - 1]
     if (!hit) throw new Error('[nof1-report] 还没有实验——先从模板库发起（learnhub_experiment_propose）。')
-    if (hit.outcome !== 'true_retention') {
-      return {
-        experiment: hit,
-        analysis: {
-          ready: false, per_arm: [], need_per_arm: hit.per_arm_min,
-          diff: null, ci95: null, p: null,
-          message: '该实验预登记了练习侧结局（EMA）：证据通道已上线（回执/执行事件），EMA 分析器与练习侧模板登记待后票落地；臂标注已在积累。',
-        },
-      }
-    }
-    const recs = nof1Outcomes(await this.store.reviewLogAll(), hit.id)
-    const analysis = analyzeNof1(recs, hit, 9000 + hit.id)
-    return { experiment: hit, analysis }
+    return { experiment: hit, analysis: await this.nof1AnalysisOf(hit) }
   }
 
   // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）----
@@ -3794,6 +3825,7 @@ export class LearnhubEngine {
   /** 打开/发起周复盘：复盘对象 = 上一完整学习周（可显式指定更早的完整周补记）。
    * 打开即沉淀结算点（#139）：校准画像/速度韧性周档出生即写、档案投影重建（同周幂等）。
    * 罗盘每周挂载沙盘 ETA（#143：挂周复盘；标记周幂等，单课失败不挡复盘）。
+   * 现状区旁挂沙盘 ETA 摘要（#150）：与罗盘挂载同一份折叠数据，逐课一行越阈参照。
    * 现状 = 引擎用该学习周真实数据现算重填（引擎段）；四问保留学习者已写内容。
    * 文件缺失即建（入口常驻、无推送、缺勤不罚）。weekStart 必须是周一且不晚于
    * 上一完整周——复盘只向后看，不预填未来。零 XP、零 canonical 写入。 */
@@ -3807,10 +3839,14 @@ export class LearnhubEngine {
     if (target > prev) {
       throw new Error(`[kata] 复盘对象是已完整结束的学习周：${prev} 起的那一周是最近的完整周。`)
     }
-    // 罗盘每周挂载（#143）：ETA 段每周一刷（标记周判重），透明度装置失败不挡复盘
-    await this.compassEtaRefresh(undefined, { today }).catch(() => undefined)
+    // 罗盘每周挂载（#143）：ETA 段每周一刷（标记周判重），透明度装置失败不挡复盘；
+    // 折叠结果随行携带 eta——现状区旁挂沙盘 ETA 摘要（#150）取同一份数据，不二次蒙特卡洛
+    const etaMounts = await this.compassEtaRefresh(undefined, { today }).catch(() => [])
+    const etas = etaMounts
+      .filter(m => m.eta !== undefined)
+      .map(m => kataEtaSummary(m.course, m.eta!))
     const weekEnd = weekEndOf(target)!
-    const reality = renderKataReality(await this.kataRealityFor(target, weekEnd, cutoff))
+    const reality = renderKataReality(await this.kataRealityFor(target, weekEnd, cutoff), etas)
     const path = this.kataPath(target)
     let sections: Record<KataQuestion, string>
     let created: boolean
@@ -4038,8 +4074,7 @@ export class LearnhubEngine {
     const { cards, nodes, scheds } = await this.sandboxPopulation(courses, nodeFilter)
     // 蒙特卡洛：播种确定（同输入同分布）；每门课注入自己的调度器实例（与调度同源，
     // R 参数跟课走——与 reviewQueue/memoryHealth 同一 sched 通道）。
-    const runs = this.mcRuns(plan, cards, nodes, today, scheds, courses[0]!.name)
-    const { curve, map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
+    const { curve, map } = this.mcAggregate(plan, cards, nodes, today, scheds, courses[0]!.name)
     return {
       wording: SANDBOX_WORDING,
       date: today,
@@ -4080,7 +4115,7 @@ export class LearnhubEngine {
         const started = Boolean(fm?.fsrs?.reps)
         nodes.push({
           course: c.name, node: name,
-          est: graph.estOf[name] ?? 15,
+          est: graph.estOf[name] ?? SANDBOX_NODE_EST_DEFAULT,
           practice: fm?.practice ?? { attempts: 0, correct: 0 },
           ema: fm?.practice_ema,
           started, skipped: false,
@@ -4118,6 +4153,17 @@ export class LearnhubEngine {
       }))
     }
     return runs
+  }
+
+  /** 蒙特卡洛 + 聚合一步（三调用点共用：sandboxRun / 罗盘 ETA 折叠 / 双沙盘仲裁参照）。 */
+  private mcAggregate(
+    plan: SandboxPlan, cards: SandboxCard[], nodes: SandboxNode[], today: string,
+    scheds: Map<string, FSRS>, fallbackCourse: string,
+  ): { curve: SandboxCurvePoint[]; map: Array<{ node: string; p50: number; p80: number }> } {
+    return aggregateRuns(
+      this.mcRuns(plan, cards, nodes, today, scheds, fallbackCourse),
+      nodes.map(n => `${n.course}/${n.node}`), plan.weeks,
+    )
   }
 
   // ---- 罗盘（#143 / ADR-0033 透明度装置：常驻非承诺路线草图）----
@@ -4254,19 +4300,24 @@ export class LearnhubEngine {
     return { course: c.name, path, route_lines: body.split('\n').filter(l => l.trim()).length }
   }
 
+  /** 周内 ETA 备忘（进程级读侧缓存）：kataOpen 是面板常开入口，同一学习周重复打开
+   * 不重复蒙特卡洛；键=课程名，周翻转即重算，force 绕过（罗盘写侧仍按标记幂等）。 */
+  private etaMemo = new Map<string, { week: string; eta: CompassEta }>()
+
   /** 罗盘每周挂载沙盘 ETA（挂周复盘——kataOpen 触发；标记周幂等，force 可重算）：
    * 逐启用课程——未播种跳过、罗盘缺席先落脚手架、当前周已挂 current、否则探测带
    * 折叠后重写「沙盘 ETA」段（措辞锁死「模型推演，非承诺」）。透明度装置：单课失败
-   * 不挡其他课，更不挡周复盘。 */
+   * 不挡其他课，更不挡周复盘。折叠每课都算（周频成本，同周进程内走备忘）：结果随行
+   * 携带 eta——周复盘现状区的 ETA 旁挂（#150）取同一份数据，不二次蒙特卡洛。 */
   async compassEtaRefresh(
     courseKey?: string, opts: { today?: string; force?: boolean } = {},
-  ): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string }>> {
+  ): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta }>> {
     const { today: learningToday } = await this.learningDay()
     const today = opts.today ?? learningToday
     const weekStart = weekStartOf(today)
     if (!weekStart) throw new Error(`[compass] today 不是合法日期：${String(today)}`)
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
-    const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string }> = []
+    const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta }> = []
     for (const c of courses) {
       try {
         const anchor = await readAnchor(this.paths.anchorPath(c.root))
@@ -4276,13 +4327,17 @@ export class LearnhubEngine {
         }
         const path = this.paths.compassPath(c.root)
         const existing = existsSync(path) ? await readFile(path, 'utf8') : compassScaffold(c.name)
+        const memoed = this.etaMemo.get(c.name)
+        const eta = !opts.force && memoed?.week === weekStart
+          ? memoed.eta
+          : await this.compassEtaFold(c, anchor, today, weekStart)
+        this.etaMemo.set(c.name, { week: weekStart, eta })
         if (!opts.force && etaMarkerOf(sectionBody(parseCompass(existing), SECTION_ETA)) === weekStart) {
-          out.push({ course: c.name, state: 'current' })
+          out.push({ course: c.name, state: 'current', eta })
           continue
         }
-        const eta = await this.compassEtaFold(c, anchor, today, weekStart)
         await atomicWrite(path, withSectionText(existing, SECTION_ETA, renderEtaBody(eta)))
-        out.push({ course: c.name, state: 'refreshed' })
+        out.push({ course: c.name, state: 'refreshed', eta })
       } catch (err) {
         out.push({ course: c.name, state: 'skipped', detail: err instanceof Error ? err.message : String(err) })
       }
@@ -4304,8 +4359,7 @@ export class LearnhubEngine {
     let p80Week: CompassEta['p80_week'] = null
     for (const weeks of COMPASS_ETA_PROBE_WEEKS) {
       const plan: SandboxPlan = { minutesPerDay, weeks }
-      const runs = this.mcRuns(plan, cards, nodes, today, scheds, c.name)
-      const { map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
+      const { map } = this.mcAggregate(plan, cards, nodes, today, scheds, c.name)
       const hit = map.find(m => m.node === endpointKey)
       const p50 = hit?.p50 ?? 0
       const p80 = hit?.p80 ?? 0
@@ -4379,7 +4433,7 @@ export class LearnhubEngine {
    * 占位行）。缺失数据一律合法空态行；终点锚 Broken fail loud。消费方 = 教练回合
    * 模板（#145），此处只保证定序稳定与可观测。 */
   async coachContextPack(
-    courseKey?: string, opts: { lightweight?: boolean; today?: string } = {},
+    courseKey?: string, opts: { lightweight?: boolean; today?: string; packLabel?: string } = {},
   ): Promise<string> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state } = await this.loadView(c)
@@ -4390,7 +4444,7 @@ export class LearnhubEngine {
     const active = [...this.coachFrontier(graph, state), ...graph.names.filter(n => effectiveStage(state, n) === 'learning')]
 
     const out: string[] = [
-      `# 教练回合上下文包：${c.name}（${lightweight ? '轻量段——只带行为摘要与罗盘' : '全量六区块'}）`,
+      `# 教练回合上下文包：${c.name}（${opts.packLabel ?? (lightweight ? '轻量段——只带行为摘要与罗盘' : '全量六区块')}）`,
     ]
     const block = (title: string, body: string): void => {
       out.push('', `## ${title}`, '', body)
@@ -4547,14 +4601,17 @@ export class LearnhubEngine {
     return { spec: v.spec, yaml, note: v.spec.note }
   }
 
-  /** 生长批受理（#145 裁决产物面）：两段式教练回合——轻量段（fast 档：行为摘要+罗盘
-   * +图面）先裁；note.disagreement 声明真分歧时升级全量段（deep 档：六区块包+图面）重裁并
-   * 以全量段结论为准（显然步免仲裁税，升级路径随 segments 可观测）。最终裁决照 kind=edit
+  /** 生长批受理（#145/#150 裁决产物面）：三段式教练回合——轻量段（fast 档：行为摘要
+   * +罗盘+图面）先裁；note.disagreement 声明真分歧时升级全量段（deep 档：六区块包+图面）
+   * 重裁；全量段仍声明真分歧时升级双沙盘仲裁段（deep 档：六区块包+图面+两份沙盘推演
+   * 参照——现状照走 vs 含本批照走，同种子配对、零写侧、措辞照旧「模型推演，非承诺」），
+   * 仲裁段结论为终审。显然步免仲裁税，升级路径随 segments 可观测。最终裁决照 kind=edit
    * 既有受理门（schema/结构/概念对表/锚保护/巩固门）propose→apply：罗盘重写与图 apply
    * 同事务（提案被拒罗盘不落盘）、journal 挂提案 id、不新增提案 kind。
    * 停机转译：就绪深度满足（check.ok）时不拉回合直接停摆——判据满足的自然结果，不是
    * 新状态（force 供测试/手动排障越过）。裁决语义在提示词；本方法只保证组装、schema
-   * 与同事务纪律。金样本回放闸锚调用数基线：显然步恒 1 次调用、分歧升级恒 2 次。 */
+   * 与同事务纪律。金样本回放闸锚调用数基线：显然步恒 1 次、分歧升级恒 2 次、双沙盘
+   * 仲裁恒 3 次（沙盘推演是读侧计算，不计调用数）。 */
   async coachGrowthBatch(
     courseKey: string, llm: LlmComplete, opts: { force?: boolean; today?: string } = {},
   ): Promise<{
@@ -4587,9 +4644,39 @@ export class LearnhubEngine {
       segments.push({ tier, effort: tier === 'light' ? 'fast' : 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
       return verdict
     }
+    // 双沙盘仲裁段（#150）：现状照走 vs 含本批候选节点照走——同种子配对推演（读侧
+    // 计算，零写侧），两份分位带并排进终审 prompt；终审结论即最终裁决，不再升级。
+    const runArbitration = async (contested: { spec: EditProposalSpec; note: GrowthNote }): Promise<{ spec: EditProposalSpec; yaml: string; note: GrowthNote }> => {
+      const added = contested.spec.ops
+        .filter(o => o.op === 'add_node' && o.name)
+        .map(o => ({ name: o.name!, est: o.est }))
+      const minutesPerDay = await readDailyGoal(this.paths)
+      const { cards, nodes, scheds } = await this.sandboxPopulation([c], null)
+      const pops = arbitrationPopulations(nodes, cards, added, c.name)
+      const plan: SandboxPlan = { minutesPerDay, weeks: SANDBOX_DEFAULT_WEEKS }
+      const curves = (pop: { nodes: SandboxNode[]; cards: SandboxCard[] }): SandboxCurvePoint[] =>
+        this.mcAggregate(plan, pop.cards, pop.nodes, today, scheds, c.name).curve
+      const evidence = renderArbitrationEvidence({
+        disagreement: typeof contested.note.disagreement === 'string' ? contested.note.disagreement : '',
+        minutes_per_day: minutesPerDay,
+        weeks: plan.weeks,
+        added: added.map(a => a.name),
+        before: curves(pops.before),
+        after: curves(pops.after),
+      })
+      const pack = await this.coachContextPack(c.name, { today, packLabel: '仲裁段——全量包+双沙盘推演参照' })
+      const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n\n---\n\n${evidence.trimEnd()}\n`
+      const raw = await llm(prompt, undefined, { effort: 'deep' })
+      const verdict = this.parseGrowthVerdict(raw)
+      segments.push({ tier: 'arbitration', effort: 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
+      return verdict
+    }
 
     let final = await runSegment('light')
-    if (final.note.disagreement) final = await runSegment('full')
+    if (final.note.disagreement) {
+      final = await runSegment('full')
+      if (final.note.disagreement) final = await runArbitration(final)
+    }
 
     const prop = await this.graphPropose('edit', final.yaml) as GraphEditProposalResult
     let applied: GraphApplyEditResult

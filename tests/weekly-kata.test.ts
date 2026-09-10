@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { withVault } from './helpers/vault.ts'
-import { weekStartOf, weekEndOf, prevWeekStartOf, buildKataReality } from '../src/engine/kata.ts'
+import { weekStartOf, weekEndOf, prevWeekStartOf, buildKataReality, renderKataReality } from '../src/engine/kata.ts'
 import { todayStr, dayOfTs } from '../src/engine/dates.ts'
 
 const BANK = [
@@ -158,4 +158,60 @@ test('#114 清单面：多周记录按周排列，answered 现判', async () => 
     // 记录落在输出区约定位置：我的产出/周复盘/<周一>.md（公开 Paths 面，不走私有方法）
     assert.ok(existsSync(`${paths.outputKindDir('周复盘')}/${w0}.md`))
   })
+})
+
+// ---- #150 罗盘周 ETA 挂周复盘：现状区旁挂沙盘 ETA 摘要 ----
+
+test('#150 现状区旁挂沙盘 ETA：有锚课程逐课一行越阈参照（非承诺措辞）；未播种无此小节', async () => {
+  const weekStart = prevWeekStartOf(todayStr())!
+  const SEED = `course: 数学
+mode: new
+concepts:
+  - canonical: 变化率
+endpoint:
+  name: 用导数解决优化问题
+  region: 基础
+  block: 终点块
+  teaches: {变化率: 会用}
+starts:
+  - name: 认识变化率
+    region: 基础
+    block: 起点块
+    basis: baseline
+    teaches: {变化率: 会用}
+`
+  await withVault({ registry: null, graph: null }, async ({ engine }) => {
+    // 未播种：无 ETA 小节（合法空态——透明度装置锚在终点锚上）
+    const bare = await engine.kataOpen(weekStart)
+    assert.doesNotMatch(bare.reality, /### 沙盘 ETA/)
+
+    // 播种（终点锚在位）→ 打开复盘即旁挂 ETA 摘要
+    const r = await engine.graphPropose('seed', SEED) as { id: number }
+    await engine.graphApply('seed', r.id)
+    const doc = await engine.kataOpen(weekStart)
+    assert.match(doc.reality, /### 沙盘 ETA/)
+    assert.match(doc.reality, /数学 → 终点「用导数解决优化问题」：p50/)
+    assert.match(doc.reality, /p80/)
+    assert.match(doc.reality, /每日约 30 分钟口径；模型推演，非承诺/)
+    // 旁挂与罗盘挂载同一份数据：罗盘「沙盘 ETA」段同时被刷出（写侧幂等归 compass.test.ts）
+  })
+})
+
+test('#150 ETA 旁挂渲染：注入摘要逐课一行、周次未及如实说；空注入零小节', () => {
+  const reality = buildKataReality({
+    weekStart: '2026-09-07', weekEnd: '2026-09-13', cutoffMin: 0,
+    practice: [], journal: [], reviewLog: [], habitRepeats: [],
+    projects: [], projectExec: {}, noteSources: {}, habitNames: {}, skillNames: {},
+  })
+  const etas = [{
+    course: '数学', endpoint: '用导数解决优化问题', minutes_per_day: 30,
+    p50_week: { at: 8, from: 4 }, p80_week: null, horizon: 24,
+    wording: '模型推演，非承诺',
+  }]
+  const md = renderKataReality(reality, etas)
+  assert.ok(md.includes('### 沙盘 ETA'))
+  assert.ok(md.includes('数学 → 终点「用导数解决优化问题」：p50约 5–8 周；p80推演时程（24 周）内未及（每日约 30 分钟口径；模型推演，非承诺）'))
+  assert.ok(md.indexOf('### 有界 · 课程') < md.indexOf('### 沙盘 ETA'), '小节旁挂在有界 · 课程之后')
+  assert.ok(md.indexOf('### 沙盘 ETA') < md.indexOf('### 有界 · 项目'))
+  assert.doesNotMatch(renderKataReality(reality), /### 沙盘 ETA/, '空注入 = 零小节（缺席降级）')
 })

@@ -49,6 +49,17 @@ test('折叠确定性：两次折叠同输入同输出；events 稳定升序', (
   assert.deepEqual(a.events.map(e => e.ts), [...a.events.map(e => e.ts)].sort())
 })
 
+test('#150 第七类 nof1_outcome：合法 kind 进折叠与档案投影（「实验结局（N-of-1）」标题）', () => {
+  const fold = foldSediment([
+    { ts: '2026-09-10T10:00:00', kind: 'nof1_outcome', tier: 'immediate', payload: { experiment: 1, ready: true, diff: 0.12 } },
+  ])
+  assert.equal(fold.counts.nof1_outcome, 1)
+  assert.equal(fold.latest.nof1_outcome?.payload.experiment, 1)
+  const profile = renderLearnerProfile(fold)
+  assert.ok(profile.includes('## 实验结局（N-of-1）'))
+  assert.ok(profile.includes('"experiment":1'))
+})
+
 test('折叠三读法：latest 最新态 / weekly 按学习周分组 / byConcept 概念地址寻址', () => {
   const fold = foldSediment(EVENTS)
   assert.deepEqual(fold.latest.fsrs_params?.payload.parameters, [3, 4], 'immediate = 最新态')

@@ -19,6 +19,8 @@ import { parseDay, fmtDay, dayOfTs } from './dates.ts'
 import { obsidianLink } from './output.ts'
 import { execRatingScore } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
+import { crossingText, etaHorizonOf } from './compass.ts'
+import type { CompassEta } from './compass.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import type { PracticeRec, JournalRec, ReviewRec } from './types.ts'
 import type { HabitRepeatRec } from './habits.ts'
@@ -206,8 +208,38 @@ export function buildKataReality(input: KataRealityInput): KataReality {
 
 const pct = (v: number): string => `${Math.round(v * 100)}%`
 
-/** 现状段渲染（markdown 行；空态诚实留痕，不造假数据）。 */
-export function renderKataReality(r: KataReality): string {
+/** 现状区旁挂的沙盘 ETA 摘要（#150 周复盘挂罗盘 ETA）：引擎 compassEtaRefresh 折叠
+ * 后随行注入——与罗盘「沙盘 ETA」段同一份数据，零二次蒙特卡洛；此周复盘打开即附，
+ * 与「现状」的上周聚合无关（推演是当下快照）。 */
+export interface KataEtaSummary {
+  course: string
+  endpoint: string
+  minutes_per_day: number
+  /** 首次越阈档（at=探测周，from=上一探测周；null = 推演时程内未及）。 */
+  p50_week: { at: number; from: number | null } | null
+  p80_week: { at: number; from: number | null } | null
+  /** 探测地平线上界（周；未及时如实说「N 周内未及」）。 */
+  horizon: number
+  wording: string
+}
+
+/** CompassEta → 旁挂摘要的唯一映射（kataOpen 消费；地平线口径与罗盘 ETA 段渲染同源）。 */
+export function kataEtaSummary(course: string, eta: CompassEta): KataEtaSummary {
+  return {
+    course,
+    endpoint: eta.endpoint,
+    minutes_per_day: eta.minutes_per_day,
+    p50_week: eta.p50_week,
+    p80_week: eta.p80_week,
+    horizon: etaHorizonOf(eta),
+    wording: eta.wording,
+  }
+}
+
+/** 现状段渲染（markdown 行；空态诚实留痕，不造假数据）。etas = 罗盘周 ETA 旁挂
+ * （#150）：非空时在「有界 · 课程」后附「沙盘 ETA」小节——每周随罗盘挂载刷新，
+ * 分位带参照、非承诺措辞照旧（ADR-0025 纪律不动）。 */
+export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = []): string {
   const lines: string[] = ['### 总览', '']
   const overview = [`学习 ${r.days} 天`, `XP +${r.xp}`, `作答 ${r.answers} 次${r.accuracy !== null ? `（作答正确率 ${pct(r.accuracy)}）` : ''}`]
   if (r.due_reviews > 0) {
@@ -219,6 +251,12 @@ export function renderKataReality(r: KataReality): string {
   lines.push(...(r.courses.length
     ? r.courses.map(c => `- ${c.course}：作答 ${c.answers} 次${c.xp ? ` · XP +${c.xp}` : ''}`)
     : ['当周没有课程作答。']), '')
+
+  if (etas.length) {
+    lines.push('### 沙盘 ETA', '')
+    lines.push(...etas.map(e => `- ${e.course} → 终点「${e.endpoint}」：p50${crossingText(e.p50_week, e.horizon)}；p80${crossingText(e.p80_week, e.horizon)}（每日约 ${e.minutes_per_day} 分钟口径；${e.wording}）`))
+    lines.push('')
+  }
 
   lines.push('### 有界 · 项目', '')
   lines.push(...(r.projects.length

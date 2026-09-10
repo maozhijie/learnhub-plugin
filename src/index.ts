@@ -556,7 +556,9 @@ async function generateGrowthJob(ctx: Context, job: GenJob): Promise<void> {
       const a = r.applied!
       job.growthOutcome = a.ops > 0 ? 'applied' : 'no_structure'
       job.status = 'done'
-      const tierNote = r.segments.map(s => `${s.tier}${s.disagreement ? '↑分歧升级' : ''}(${s.operator})`).join('→')
+      const tierNote = r.segments
+        .map(s => `${{ light: '轻', full: '全', arbitration: '双沙盘仲裁' }[s.tier] ?? s.tier}${s.disagreement ? '↑分歧升级' : ''}(${s.operator})`)
+        .join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
         + `${a.compass_rewritten ? '；罗盘已同事务重写' : ''}｜${tierNote}｜理由：${p.reason}`
       // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）

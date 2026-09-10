@@ -15,6 +15,8 @@
  * - 六区块上下文包的组装在门面（coachContextPack）：终点锚→行为摘要→登记表档位
  *   →误解目录→罗盘尾段（罗盘+沉淀折叠）→V-2 接缝；轻量包恰两件（行为摘要+罗盘）。
  *   本模块只出区块体渲染（行为摘要 / 沉淀折叠教练投影）。
+ * - 双沙盘仲裁参照（#150）：全量段仍真分歧时，终审段的两份沙盘总体（现状照走 vs
+ *   含本批照走）与参照块渲染——零写侧，读法锁「模型推演，非承诺」。
  *
  * 裁决语义（算子集、停机规则）在提示词、归生长批受理票 #145——本票只管感知。
  * 零依赖纯函数（接缝 S51）。
@@ -23,6 +25,8 @@ import { dayOfTs, parseDay, daysBetween } from './dates.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import { SEDIMENT_KINDS } from './sediment.ts'
 import type { SedimentFold } from './sediment.ts'
+import { SANDBOX_NODE_EST_DEFAULT } from './sandbox.ts'
+import type { SandboxCard, SandboxCurvePoint, SandboxNode } from './sandbox.ts'
 import type { PracticeRec, ReviewRec, Misconception } from './types.ts'
 
 // ---- 行为摘要：窗口（最近 7 学习日或 10 节取大） ----
@@ -300,10 +304,11 @@ export const COACH_COLD_START_EST_MULT = 1.5
 /** 回合触发三点（#144）：节点完成 / 会话开始 / 队列空闲。 */
 export type CoachTrigger = 'node_complete' | 'session_start' | 'queue_idle'
 
-/** 教练回合单段装配的观测记录（#145 两段式 effort）：tier/effort 定档，operator 为
- * 该段裁决产出的算子标签，disagreement = 该段是否声明真分歧（true → 升级下一段）。 */
+/** 教练回合单段装配的观测记录（#145 两段式 effort；#150 增仲裁段）：tier/effort 定档，
+ * operator 为该段裁决产出的算子标签，disagreement = 该段是否声明真分歧（轻量段 true →
+ * 升级全量段；全量段 true → 升级双沙盘仲裁段；仲裁段为终审，声明只作可观测留痕）。 */
 export interface CoachGrowthSegment {
-  tier: 'light' | 'full'
+  tier: 'light' | 'full' | 'arbitration'
   effort: 'fast' | 'deep'
   operator: string
   disagreement: boolean
@@ -353,6 +358,64 @@ export function readyDepthCheck(input: {
     warnings.push(`就绪深度 ${input.ready} 低于前瞻需求 ${required}（深度 ${depth}${cold_start ? `，冷启动首周 ×${COACH_COLD_START_EST_MULT}` : ''}）——教练回合应裁决生长。`)
   }
   return { ready: input.ready, depth, required, cold_start, ok, warnings }
+}
+
+// ---- 双沙盘仲裁（#150：全量段仍真分歧 → 终审段的两份推演参照） ----
+
+/** 仲裁参照的两份沙盘总体：before = 现状照走（注入总体原样）；after = 含本批候选
+ * 节点照走（add_node 逐一追加未开始节点与代表卡——est 缺省 15 与总体采集同口径、
+ * 已有同名节点跳过）。纯函数：不改注入数组。沙盘零写侧纪律不动（ADR-0025）——
+ * 两份总体都只进读侧蒙特卡洛，不落盘、不进门禁。 */
+export function arbitrationPopulations(
+  nodes: SandboxNode[], cards: SandboxCard[],
+  added: Array<{ name: string; est?: number }>, course: string,
+): {
+  before: { nodes: SandboxNode[]; cards: SandboxCard[] }
+  after: { nodes: SandboxNode[]; cards: SandboxCard[] }
+} {
+  const extraNodes: SandboxNode[] = []
+  const extraCards: SandboxCard[] = []
+  const known = new Set(nodes.map(n => n.node))
+  for (const a of added) {
+    if (!a.name || known.has(a.name)) continue
+    known.add(a.name)
+    extraNodes.push({
+      course, node: a.name,
+      est: typeof a.est === 'number' && a.est > 0 ? a.est : SANDBOX_NODE_EST_DEFAULT,
+      practice: { attempts: 0, correct: 0 },
+      started: false, skipped: false,
+    })
+    extraCards.push({ key: `node:${course}/${a.name}`, course, node: a.name, kind: 'node', fs: null })
+  }
+  return {
+    before: { nodes, cards },
+    after: { nodes: [...nodes, ...extraNodes], cards: [...cards, ...extraCards] },
+  }
+}
+
+/** 仲裁参照块渲染（终审段 prompt 末块）：两份计划的逐周总掌握分位带并排 + 读法一句
+ * ——沙盘只模拟「记」的维持，本批的收益不在推演里，两带差异只读作预算/保留的代价
+ * 参考；措辞锁死「模型推演，非承诺」（ADR-0025 照旧），终审归教练的教学判断。 */
+export function renderArbitrationEvidence(input: {
+  /** 全量段的分歧声明（原话携带，仲裁段读得到撕的是什么）。 */
+  disagreement: string
+  minutes_per_day: number
+  weeks: number
+  /** 本批候选新增节点名（渲染用；与推演总体的 after 追加一致）。 */
+  added: string[]
+  before: SandboxCurvePoint[]
+  after: SandboxCurvePoint[]
+}): string {
+  const band = (xs: SandboxCurvePoint[]): string =>
+    xs.map(p => `W${p.week} p50=${pct(p.p50)}/p80=${pct(p.p80)}`).join(' · ')
+  return [
+    '## 双沙盘推演（终审参照——模型推演，非承诺）', '',
+    `- 分歧声明（全量段）：${input.disagreement || '（未携带声明原文）'}`,
+    `- 推演基准：每日约 ${input.minutes_per_day} 分钟 × ${input.weeks} 周；两份推演同一总体、同一随机种子序列（配对比较）。`,
+    `- 计划一（现状照走）：${band(input.before)}`,
+    `- 计划二（含本批照走${input.added.length ? `，新增：${input.added.join('、')}` : '，本批无新增节点'}）：${band(input.after)}`,
+    '- 读法：沙盘只模拟「记」的维持——本批的收益不在推演里，两带差异只读作本批的预算/保留代价参考；终审归你的教学判断。',
+  ].join('\n') + '\n'
 }
 
 // ---- 沉淀折叠的教练投影（六区块包第 5 块「罗盘尾段」的沉淀半区） ----

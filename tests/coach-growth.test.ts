@@ -7,9 +7,10 @@ import { parseCompass, sectionBody, SECTION_ROUTE, SECTION_ANNOTATIONS } from '.
 import { withVault, noteText } from './helpers/vault.ts'
 import type { LlmComplete } from '../src/engine/llm.ts'
 
-// 生长批受理（#145 / ADR-0033 滚动教练的裁决产物面）：
-// - 教练回合两段式 effort：显然步轻量段（fast，行为摘要+罗盘+图面）恒 1 次调用；
-//   真分歧（note.disagreement）升级全量段（deep，六区块包+图面）重裁——升级路径可观测。
+// 生长批受理（#145/#150 / ADR-0033 滚动教练的裁决产物面）：
+// - 教练回合三段式 effort：显然步轻量段（fast，行为摘要+罗盘+图面）恒 1 次调用；
+//   真分歧（note.disagreement）升级全量段（deep，六区块包+图面）重裁；全量段仍真分歧
+//   升级双沙盘仲裁段（deep，+两份沙盘推演参照）终审——升级路径可观测。
 // - 裁决产物 = kind=edit 提案 + note{算子, 理由, 分歧声明?}：算子标签/理由进 note 区
 //   与 journal、罗盘重写与图 apply 同事务（提案被拒罗盘不落盘）、journal 挂提案 id。
 // - 巩固门：巩固节点只引已教概念（受理门校验）、不走复诊（边轻键一律拒收）。
@@ -170,7 +171,8 @@ test('AC2 两段式升级：分歧声明升级全量段（deep、六区块），
     const r = await engine.coachGrowthBatch('数学', fake)
 
     // 升级路径可观测：恰两次调用（light/fast → full/deep），segments 逐步带算子
-    assert.equal(fake.calls.length, 2, '调用数基线：分歧升级恒两次（无第三段）')
+    // （全量段未再声明分歧——升级链到此为止，无仲裁段）
+    assert.equal(fake.calls.length, 2, '调用数基线：分歧升级恒两次（全量段未再声明，无仲裁段）')
     assert.equal(fake.calls[0]!.effort, 'fast')
     assert.equal(fake.calls[1]!.effort, 'deep')
     assert.deepEqual(r.segments.map(s => [s.tier, s.effort, s.operator]), [
@@ -186,6 +188,43 @@ test('AC2 两段式升级：分歧声明升级全量段（deep、六区块），
     assert.equal(r.proposal!.disagreement, false, '全量段结论无分歧声明')
     assert.equal(r.segments[0]!.disagreement, true, '升级起点 = 轻量段的分歧声明')
     assert.match((await readFile(compassPath, 'utf8')), /把变化率说成本质/)
+  })
+})
+
+test('AC3 双沙盘仲裁：全量段仍真分歧 → 第三段带两份推演参照终审；调用数恒 3、结论为最终裁决', async () => {
+  await withVault(SEED_VAULT, async ({ engine, paths }) => {
+    await seedApplied(engine)
+    const fake = scriptFake([
+      goldVerdict({ disagreement: '轻量段看不到误解目录，插入判据不足——升级' }),
+      goldVerdict({ operator: '插入', reason: '卡点集中度指向缺口', disagreement: '带着六区块仍然撕不动：插入补救 vs 直接前进' }),
+      goldVerdict({ operator: '前进', reason: '推演代价可忽略，按教学判断沿终点推进' }),
+    ])
+    const r = await engine.coachGrowthBatch('数学', fake)
+
+    // 升级路径可观测：恰三次调用（light/fast → full/deep → arbitration/deep）；
+    // 沙盘推演是读侧蒙特卡洛，不计 LLM 调用数
+    assert.equal(fake.calls.length, 3, '调用数基线：双沙盘仲裁恒三次调用')
+    assert.deepEqual(fake.calls.map(c => c.effort), ['fast', 'deep', 'deep'])
+    assert.deepEqual(r.segments.map(s => [s.tier, s.effort, s.operator, s.disagreement]), [
+      ['light', 'fast', '前进', true],
+      ['full', 'deep', '插入', true],
+      ['arbitration', 'deep', '前进', false],
+    ])
+    // 仲裁段装配：全量区块仍在 + 双沙盘参照块（两计划带并排、非承诺措辞、分歧声明原话）
+    const arb = fake.calls[2]!.prompt
+    assert.match(arb, /仲裁段——全量包\+双沙盘推演参照/)
+    assert.match(arb, /## 终点锚/, '仲裁段带全量包（六区块定序不变）')
+    assert.match(arb, /## 双沙盘推演（终审参照——模型推演，非承诺）/)
+    assert.ok(arb.includes('分歧声明（全量段）：带着六区块仍然撕不动：插入补救 vs 直接前进'))
+    assert.ok(arb.includes('计划一（现状照走）：W1'), '计划一 = 现状照走的逐周分位带')
+    assert.ok(arb.includes('计划二（含本批照走，新增：平均变化率）'), '计划二 = 含全量段候选批照走')
+    assert.match(arb, /推演基准：每日约 30 分钟 × 6 周/)
+    assert.match(arb, /终审归你的教学判断/, '代价参考口径：收益不在推演里')
+    // 以仲裁段结论为准：最终提案 = 前进批（全量段的插入批被终审推翻）
+    assert.equal(r.state, 'applied')
+    assert.equal(r.proposal!.operator, '前进')
+    assert.equal(r.proposal!.disagreement, false, '仲裁段终审不再声明分歧（没有更多段）')
+    assert.match((await readFile(paths.compassPath('数学'), 'utf8')), /把变化率说成本质/, '罗盘同事务照走')
   })
 })
 

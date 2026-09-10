@@ -3,8 +3,8 @@
  *
  * 两个结构保证：
  * - **出生即写**：泛用模型数据（FSRS 参数、校准画像、速度韧性、内容质量结论、
- *   复诊结局、图修复史/概念级先验）出生即追加进正典，断裂零蒸馏——v1→v2 的
- *   断裂蒸馏桥已裁取消（#151 不予修复、ADR-0036）。
+ *   复诊结局、图修复史/概念级先验、N-of-1 实验结局）出生即追加进正典，断裂零蒸馏——
+ *   v1→v2 的断裂蒸馏桥已裁取消（#151 不予修复、ADR-0036）。
  * - **读侧单向**：消费一律从正典折叠（foldSediment），禁止再读内容层旧居所——
  *   FSRS 参数文件已退役为缓存（正典在沉淀，删缓存不丢事实）。
  *
@@ -23,7 +23,7 @@ import { weekStartOf } from './kata.ts'
 import { nowIso } from './dates.ts'
 import type { Paths } from './paths.ts'
 
-/** 六类事件（#139 事件骨架）。 */
+/** 七类事件（#139 事件骨架；#150 增 N-of-1 实验结局——停=定稿，个体效应结论出生即写）。 */
 export const SEDIMENT_KINDS = [
   'fsrs_params',
   'calibration',
@@ -31,6 +31,7 @@ export const SEDIMENT_KINDS = [
   'content_quality',
   'recheck_outcome',
   'graph_repair',
+  'nof1_outcome',
 ] as const
 export type SedimentKind = (typeof SEDIMENT_KINDS)[number]
 
@@ -135,7 +136,7 @@ export interface SedimentFold {
 }
 
 function emptyCounts(): Record<SedimentKind, number> {
-  return { fsrs_params: 0, calibration: 0, speed_resilience: 0, content_quality: 0, recheck_outcome: 0, graph_repair: 0 }
+  return { fsrs_params: 0, calibration: 0, speed_resilience: 0, content_quality: 0, recheck_outcome: 0, graph_repair: 0, nof1_outcome: 0 }
 }
 
 /** 稳定排序：ts 升序；同 ts（或不可解析 ts）保持追加序——同输入同输出。 */
@@ -188,6 +189,7 @@ const KIND_TITLES: Record<SedimentKind, string> = {
   content_quality: '内容质量结论',
   recheck_outcome: '复诊结局',
   graph_repair: '图修复史与概念级先验',
+  nof1_outcome: '实验结局（N-of-1）',
 }
 
 function section(kind: SedimentKind, fold: SedimentFold): string {

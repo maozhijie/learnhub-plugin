@@ -7,6 +7,8 @@ import {
   shuffleAssign, nof1ArmForDay, interleaveBySource, analyzeNof1, nof1Outcomes, mulberry32,
 } from '../src/engine/nof1.ts'
 import type { ExperimentDef, Nof1OutcomeRec } from '../src/engine/nof1.ts'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 import { addDays } from '../src/engine/dates.ts'
 
@@ -175,6 +177,56 @@ test('全链路：模板发起→确认→分臂→推进带臂标注→报告�
     assert.equal(stopped.status, 'stopped')
     assert.ok(stopped.stopped_day)
     await assert.rejects(() => engine.experimentStop(), /没有可停的实验/)
+  })
+})
+
+// ---- #150 结局落沉淀正典：停 = 定稿 ----
+
+test('#150 结局落沉淀：停=定稿——结局分析出生即写 nof1_outcome 正典、档案投影重建；同 id 不重复追加', async () => {
+  await withVault({
+    banks: {
+      入门: [
+        tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: '2024-01-01', last_review: '2024-01-01', reps: 3, lapses: 0 } }),
+      ],
+    },
+  }, async ({ engine, paths }) => {
+    const prop = await engine.experimentPropose('band_default_std_vs_hard')
+    await engine.proposalApply('experiment', prop.proposal)
+    // 一次真实推进（臂标注在案）→ 未达观察窗就停：正典如实落进度态，不造假结论
+    await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
+
+    const stopped = await engine.experimentStop()
+    assert.equal(stopped.status, 'stopped')
+
+    const fold = await engine.sedimentFold()
+    const events = fold.events.filter(e => e.kind === 'nof1_outcome')
+    assert.equal(events.length, 1, '结局事件恰一条（出生即写）')
+    assert.equal(events[0]!.tier, 'immediate', '点结论 = 最新态语义')
+    const payload = events[0]!.payload as Record<string, unknown>
+    assert.equal(payload.experiment, stopped.id)
+    assert.equal(payload.variable, 'band_default')
+    assert.equal(payload.template, 'band_default_std_vs_hard')
+    assert.deepEqual(payload.arms, ['standard', 'hard'])
+    assert.equal(payload.outcome, 'true_retention')
+    assert.equal(payload.ready, false, '未达观察窗如实落 ready=false')
+    assert.ok(String(payload.message).includes('还在积累数据'))
+    assert.deepEqual(payload.per_arm, [
+      { arm: 'standard', label: '默认标准带', n: 1, rate: 1 },
+      { arm: 'hard', label: '默认挑战带', n: 0, rate: 0 },
+    ], '臂级读数随事件留痕')
+
+    // 学习者档案投影重建：第七类标题与结局载荷可见
+    const profile = await readFile(join(paths.sedimentDir, '学习者档案.md'), 'utf8')
+    assert.match(profile, /## 实验结局（N-of-1）/)
+    assert.match(profile, /"experiment":1/)
+
+    // 幂等护栏：同实验 id 已有结局事件则不重复追加（停标志丢失后重停的收敛路径）
+    const list = await engine.store.loadExperiments()
+    list[0]!.status = 'running'
+    await engine.store.saveExperiments(list)
+    await engine.experimentStop()
+    const fold2 = await engine.sedimentFold()
+    assert.equal(fold2.events.filter(e => e.kind === 'nof1_outcome').length, 1, '同 id 结局事件不重复')
   })
 })
 

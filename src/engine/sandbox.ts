@@ -35,6 +35,11 @@ export const SANDBOX_RUNS = 200
 export const SANDBOX_WORDING = '模型推演，非承诺'
 /** 默认推演时长（周）。 */
 export const SANDBOX_DEFAULT_WEEKS = 6
+/** 未标注 est 的节点进推演时的缺省时长（分钟）——总体采集与仲裁追加总体共用同一缺省。 */
+export const SANDBOX_NODE_EST_DEFAULT = 15
+
+/** 曲线点：某周总掌握值的分位带（p50/p80）。 */
+export interface SandboxCurvePoint { week: number; p50: number; p80: number }
 
 /** 沙盘计划输入。 */
 export interface SandboxPlan {
@@ -185,7 +190,7 @@ export function aggregateRuns(
   nodeKeys: string[],
   weeks: number,
 ): {
-  curve: Array<{ week: number; p50: number; p80: number }>
+  curve: SandboxCurvePoint[]
   map: Array<{ node: string; p50: number; p80: number }>
 } {
   const curve = Array.from({ length: weeks }, (_, w) => ({
