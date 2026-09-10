@@ -8,12 +8,12 @@
  * - 沙盘 ETA：引擎每周随周复盘挂载的蒙特卡洛分位带（措辞锁死「模型推演，非承诺」）。
  *
  * 罗盘永不进完成判据或任何权威面（foldCompletion 零读取）；Missing（未播种/未落盘）
- * 是合法空态，手改破坏段落结构由解析器 fail loud（结构是机器合并的前提）。
+ * 是合法空态。解析刻意宽容：学习者手删 `## ` 标题时该段内容并入 preamble 残留（可见、
+ * 非权威），机器段按需追加末尾——权威覆盖语义不受手编破坏影响，不做 fail loud。
  */
 import { SANDBOX_WORDING } from './sandbox.ts'
+import type { EndpointAnchor } from './seed.ts'
 
-/** 课程根下的常驻文件名（Paths.compassPath 同款）。 */
-export const COMPASS_FILE = '罗盘.md'
 export const SECTION_ROUTE = '剩余路线'
 export const SECTION_ANNOTATIONS = '学习者批注区'
 export const SECTION_ETA = '沙盘 ETA'
@@ -33,6 +33,8 @@ export const COMPASS_ETA_PROBE_WEEKS = [4, 8, 12, 18, 24] as const
 export const ETA_MARKER_PREFIX = '<!-- learnhub:eta-week='
 /** 路线正文上限（字符）：罗盘会进教练上下文与初画重放，防失控膨胀；超限拒收重写。 */
 export const ROUTE_MAX_CHARS = 4000
+/** 初画上下文里「当前图节点」清单的预览上限（防生长后上下文失控）。 */
+export const GRAPH_NAMES_PREVIEW = 80
 
 /** 解析产物：preamble = 首个 `## ` 之前的全部（标题行+引言）；sections 保序。 */
 export interface CompassSection { title: string; body: string }
@@ -172,13 +174,7 @@ export function renderEtaBody(eta: CompassEta): string {
 /** 初画上下文包（附在「罗盘初画」模板之后）：终点锚 + 种子与当前图 + 批注区软输入。 */
 export function compassPaintContext(input: {
   courseName: string
-  anchor: {
-    endpoint: string
-    goal_type: 'capability' | 'coverage'
-    declared: string
-    worksheet: Array<{ block: string; note?: string; done: boolean }>
-    start_basis: Record<string, string>
-  }
+  anchor: EndpointAnchor
   starts: Array<{ name: string; note: string }>
   graphNames: string[]
   annotations: string | null
@@ -197,10 +193,16 @@ export function compassPaintContext(input: {
     const basis = input.anchor.start_basis[s.name]
     lines.push(`- 起点「${s.name}」${basis ? `（定位：${basis}）` : ''}${s.note ? `：${s.note}` : ''}`)
   }
-  const shown = input.graphNames.slice(0, 80)
+  const shown = input.graphNames.slice(0, GRAPH_NAMES_PREVIEW)
   lines.push(`- 当前图节点（${input.graphNames.length} 个）：${shown.join('、')}${input.graphNames.length > shown.length ? '……' : ''}`)
   if (input.annotations?.trim()) {
     lines.push('', '## 学习者批注（软输入——提议非指令；与你的判断冲突时保留你的路线，并在受影响阶段行尾以（批注：…）回应一句）', '', input.annotations.trim())
   }
   return lines.join('\n') + '\n'
+}
+
+/** 批注区是否被学习者写过（空白或引导文案 = 未写；初画上下文与罗盘尾段共用同一哨兵）。 */
+export function hasLearnerAnnotations(body: string | null): boolean {
+  const t = body?.trim() ?? ''
+  return Boolean(t) && t !== ANNOTATION_GUIDE
 }

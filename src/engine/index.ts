@@ -12,7 +12,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rename, unlink, writeFile, appendFile } from 'node:fs/promises'
 import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
-import { ConceptRegistry, invokesUnregistered, namesOf } from './concepts.ts'
+import { ConceptRegistry, invokesTagged, invokesUnregistered, namesOf } from './concepts.ts'
 import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList, declaredEncOf } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
@@ -70,9 +70,10 @@ import type { VaultLinksDoc, VaultLinkCandidateView } from './vault-links.ts'
 import { readAnchor, foldCompletion, isSeedGraph, COMPLETION_MASTERY_THRESHOLD } from './seed.ts'
 import type { CompletionFold } from './seed.ts'
 import {
-  SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,
+  SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ETA_PENDING,
   COMPASS_ETA_PROBE_WEEKS, compassScaffold, parseCompass, sectionBody, withSectionText,
   validateRouteBody, stripWrappingFence, etaMarkerOf, renderEtaBody, compassPaintContext,
+  hasLearnerAnnotations,
 } from './compass.ts'
 import type { CompassEta, CompassEtaProbe } from './compass.ts'
 import type { VaultLinkPrior } from './analysis.ts'
@@ -2767,11 +2768,8 @@ export class LearnhubEngine {
     scope: string[],
   ): Promise<number> {
     if (!scope.length) return 0
-    const missing = items.filter((x): x is Record<string, unknown> => {
-      if (typeof x !== 'object' || x === null) return false
-      const v = (x as Record<string, unknown>).invokes
-      return !(typeof v === 'string' && v.trim())
-    })
+    const missing = items.filter((x): x is Record<string, unknown> =>
+      typeof x === 'object' && x !== null && !invokesTagged(x as Record<string, unknown>))
     if (!missing.length) return 0
     const prompt = [
       '## 任务：为下列题目各补一枚 invokes 概念标注',
@@ -3794,13 +3792,13 @@ export class LearnhubEngine {
     // 沉淀结算随周复盘走（#139）：开复盘 = 上一完整学习周的一次结算点——校准画像/
     // 速度韧性周档出生即写、学习者档案投影重建（同周幂等，重复打开不重写）
     await this.sedimentSettle()
-    // 罗盘每周挂载（#143）：ETA 段每周一刷（标记周判重），透明度装置失败不挡复盘
-    await this.compassEtaRefresh(undefined, { today }).catch(() => undefined)
     const target = kataMonday(weekStart ?? prevWeekStartOf(today) ?? '')
     const prev = prevWeekStartOf(today)!
     if (target > prev) {
       throw new Error(`[kata] 复盘对象是已完整结束的学习周：${prev} 起的那一周是最近的完整周。`)
     }
+    // 罗盘每周挂载（#143）：ETA 段每周一刷（标记周判重），透明度装置失败不挡复盘
+    await this.compassEtaRefresh(undefined, { today }).catch(() => undefined)
     const weekEnd = weekEndOf(target)!
     const reality = renderKataReality(await this.kataRealityFor(target, weekEnd, cutoff))
     const path = this.kataPath(target)
@@ -4030,13 +4028,7 @@ export class LearnhubEngine {
     const { cards, nodes, scheds } = await this.sandboxPopulation(courses, nodeFilter)
     // 蒙特卡洛：播种确定（同输入同分布）；每门课注入自己的调度器实例（与调度同源，
     // R 参数跟课走——与 reviewQueue/memoryHealth 同一 sched 通道）。
-    const runs: Array<{ endByNode: number[]; curve: number[] }> = []
-    for (let i = 0; i < SANDBOX_RUNS; i++) {
-      runs.push(simulateRun(plan, cards, nodes, today, {
-        schedFor: course => scheds.get(course) ?? scheds.get(courses[0]!.name)!,
-        rng: mulberry32(7000 + i * 7919),
-      }))
-    }
+    const runs = this.mcRuns(plan, cards, nodes, today, scheds, courses[0]!.name)
     const { curve, map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
     return {
       wording: SANDBOX_WORDING,
@@ -4057,8 +4049,7 @@ export class LearnhubEngine {
 
   /** 沙盘推演的总体采集（sandboxRun 与罗盘 ETA 挂载共用，#143）：模拟卡 + 模拟节点
    * + 各课调度器实例。skipped（学习者自报已会）不进推演范围；未开始节点带 null 代表
-   * 卡随引入学成创建；题库缺失 = 合法空态。 */
-  private async sandboxPopulation(
+   * 卡随引入学成创建；题库缺失 = 合法空态。 */  private async sandboxPopulation(
     courses: CourseEntry[], nodeFilter: Set<string> | null,
   ): Promise<{
     cards: SandboxCard[]
@@ -4103,10 +4094,27 @@ export class LearnhubEngine {
     return { cards, nodes, scheds }
   }
 
+  /** 蒙特卡洛循环（sandboxRun 与罗盘 ETA 挂载共用，#143）：SANDBOX_RUNS 次、播种
+   * 约定 7000+i·7919（同输入同分布）；无该课调度器时回退 fallbackCourse 的实例。 */
+  private mcRuns(
+    plan: SandboxPlan, cards: SandboxCard[], nodes: SandboxNode[], today: string,
+    scheds: Map<string, FSRS>, fallbackCourse: string,
+  ): Array<{ endByNode: number[]; curve: number[] }> {
+    const runs: Array<{ endByNode: number[]; curve: number[] }> = []
+    for (let i = 0; i < SANDBOX_RUNS; i++) {
+      runs.push(simulateRun(plan, cards, nodes, today, {
+        schedFor: course => scheds.get(course) ?? scheds.get(fallbackCourse)!,
+        rng: mulberry32(7000 + i * 7919),
+      }))
+    }
+    return runs
+  }
+
   // ---- 罗盘（#143 / ADR-0033 透明度装置：常驻非承诺路线草图）----
 
   /** 读罗盘（learnhub_compass / 教练上下文消费）：文件 Missing = null（合法空态——
-   * 未播种或未落盘）；终点锚随行携带（coach 的目标视野）。 */
+   * 未播种或未落盘）；终点锚随行携带（coach 的目标视野），锚 Broken fail loud
+   * （承诺物损坏必须显式浮出，不静默折成未播种）。 */
   async compassRead(courseKey?: string): Promise<{
     course: string
     path: string
@@ -4120,7 +4128,7 @@ export class LearnhubEngine {
   }> {
     const c = await this.registry.resolve(courseKey)
     const path = this.paths.compassPath(c.root)
-    const anchor = await readAnchor(this.paths.anchorPath(c.root)).catch(() => null)
+    const anchor = await readAnchor(this.paths.anchorPath(c.root))
     if (!existsSync(path)) {
       return {
         course: c.name, path,
@@ -4151,8 +4159,8 @@ export class LearnhubEngine {
     if (v.route?.trim() && v.route.trim() !== ROUTE_PENDING) {
       lines.push('### 罗盘 · 剩余路线（非承诺草图——方向感，不是承诺）', '', v.route.trim())
     }
-    if (v.annotations?.trim() && v.annotations.trim() !== ANNOTATION_GUIDE) {
-      lines.push('### 罗盘 · 学习者批注（软输入——提议非指令）', '', v.annotations.trim())
+    if (hasLearnerAnnotations(v.annotations)) {
+      lines.push('### 罗盘 · 学习者批注（软输入——提议非指令）', '', v.annotations!.trim())
     }
     return lines.join('\n\n')
   }
@@ -4174,8 +4182,9 @@ export class LearnhubEngine {
     const path = this.paths.compassPath(root)
     const existing = existsSync(path) ? await readFile(path, 'utf8') : null
     const doc = existing ? parseCompass(existing) : null
-    const rawAnnotations = doc ? sectionBody(doc, SECTION_ANNOTATIONS) : null
-    const annotations = rawAnnotations?.trim() && rawAnnotations.trim() !== ANNOTATION_GUIDE ? rawAnnotations : null
+    const annotations = hasLearnerAnnotations(doc ? sectionBody(doc, SECTION_ANNOTATIONS) : null)
+      ? sectionBody(doc!, SECTION_ANNOTATIONS)
+      : null
     const template = await this.content.loadPrompt('罗盘初画')
     const prompt = template + compassPaintContext({
       courseName: c.name,
@@ -4198,16 +4207,18 @@ export class LearnhubEngine {
       SECTION_ETA, ETA_PENDING,
     )
     await atomicWrite(path, next)
+    // repainted = 罗盘上曾有已画路线（占位/缺席不算）；重写不覆盖的语义由段级合并保证
+    const priorRoute = doc ? sectionBody(doc, SECTION_ROUTE)?.trim() ?? '' : ''
+    const routeLines = body.split('\n').filter(l => l.trim()).length
     await this.store.appendJournal({
       course: c.name, node: '*', rating: null, kind: 'compass_paint', elapsed_days: 0,
-      detail: `罗盘初画/重画：路线 ${body.split('\n').filter(l => l.trim()).length} 行${annotations ? '（批注区软输入已附）' : ''}`,
+      detail: `罗盘初画/重画：路线 ${routeLines} 行${annotations ? '（批注区软输入已附）' : ''}`,
     })
     return {
       course: c.name, path,
-      route_lines: body.split('\n').filter(l => l.trim()).length,
+      route_lines: routeLines,
       annotations_preserved: Boolean(annotations),
-      repainted: Boolean(existing && existing !== compassScaffold(c.name)
-        && sectionBody(parseCompass(existing), SECTION_ROUTE)?.trim() !== ROUTE_PENDING),
+      repainted: Boolean(priorRoute) && priorRoute !== ROUTE_PENDING,
     }
   }
 
@@ -4283,13 +4294,7 @@ export class LearnhubEngine {
     let p80Week: CompassEta['p80_week'] = null
     for (const weeks of COMPASS_ETA_PROBE_WEEKS) {
       const plan: SandboxPlan = { minutesPerDay, weeks }
-      const runs: Array<{ endByNode: number[]; curve: number[] }> = []
-      for (let i = 0; i < SANDBOX_RUNS; i++) {
-        runs.push(simulateRun(plan, cards, nodes, today, {
-          schedFor: course => scheds.get(course)!,
-          rng: mulberry32(7000 + i * 7919),
-        }))
-      }
+      const runs = this.mcRuns(plan, cards, nodes, today, scheds, c.name)
       const { map } = aggregateRuns(runs, nodes.map(n => `${n.course}/${n.node}`), weeks)
       const hit = map.find(m => m.node === endpointKey)
       const p50 = hit?.p50 ?? 0
@@ -5938,9 +5943,9 @@ export class LearnhubEngine {
         rejected.push({ q: stem.slice(0, 80), reason: invokesErr })
         continue
       }
-      // 出生打标门（#148）：清单在场时新题必须带恰一枚 invokes；修复一次仍空拒收
-      if (conceptScope.length && !(typeof q.invokes === 'string' && q.invokes.trim())) {
-        rejected.push({ q: stem.slice(0, 80), reason: 'invokes 缺失（出生打标要求恰一枚概念；修复一次仍空，拒收）' })
+      // 出生打标门（#148）：清单在场时新题必须带恰一枚 invokes；修复一次仍不合格拒收
+      if (conceptScope.length && !invokesTagged(q)) {
+        rejected.push({ q: stem.slice(0, 80), reason: 'invokes 未标注恰一枚概念（出生打标；修复一次仍不合格，拒收）' })
         continue
       }
       // 程序化查重（#119）：与已有题、本批已收题比对，命中丢弃并报告
@@ -6038,7 +6043,7 @@ export class LearnhubEngine {
         escapesRepaired += hygiene.repaired
         const stem = typeof q.q === 'string' ? q.q : ''
         if (hygiene.unrepairable || questionViolation(q) || invokesUnregistered(q, conceptNames)) continue
-        if (conceptScope.length && !(typeof q.invokes === 'string' && q.invokes.trim())) continue
+        if (conceptScope.length && !invokesTagged(q)) continue
         const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
         if (verdict.verdict === 'duplicate') duplicates++
         else if (verdict.verdict === 'added') added++ // 单题非法（invalid）不毁整批

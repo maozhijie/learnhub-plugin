@@ -4,7 +4,7 @@ import { Content } from '../src/engine/content.ts'
 
 // ---- v6 提示词契约（#14 P2/P3）：版本标记 + 复杂度档案锚点 ----
 
-test('P2: 五个内置模板全部升到 prompt/v6（罗盘初画除外——新套件模板自带版本线，#143）', () => {
+test('P2: 存量内置模板全部升到 prompt/v6（罗盘初画除外——新套件模板自带版本线，#143）', () => {
   for (const kind of Object.keys(Content.PROMPT_KINDS)) {
     if (kind === '罗盘初画') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
     const text = Content.PROMPT_KINDS[kind]!
