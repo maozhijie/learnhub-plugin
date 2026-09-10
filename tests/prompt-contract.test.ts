@@ -72,6 +72,46 @@ test('P8: 课程大纲模板升到 v8 并携带思维节类型与 §10/§11 硬�
   assert.match(tpl, /§10（先做后教）与 §11（专家思维轨迹）出现时是硬性要求/, '上下文包硬性要求指针')
 })
 
+// ---- v9 节段模板契约（#147）：难度档锚 + 前置档位区块 + 误解坑位 + 检索点 + 样例密度 ----
+
+test('#147: 课程大纲/节生成三模板升到 v9 并携带难度档锚与前置档位/误解坑位/检索点/样例密度锚点', () => {
+  for (const kind of ['课程大纲', '课程节生成', '课程节生成-苏格拉底', '课程节生成-费曼'] as const) {
+    const tpl = Content.PROMPT_KINDS[kind]!
+    assert.ok(Content.promptVersionOf(tpl) >= 9, `${kind} 应升到 v9`)
+    assert.match(tpl, /节段难度档/, `${kind} 节段难度档锚点`)
+  }
+  const outline = Content.PROMPT_KINDS['课程大纲']!
+  assert.match(outline, /tier: 低\|中\|高/, '大纲输出 schema 含节段 tier 字段')
+  assert.match(outline, /难度档锚/, 'tier 字段语义 = 难度档锚')
+  for (const kind of ['课程节生成', '课程节生成-苏格拉底', '课程节生成-费曼'] as const) {
+    const tpl = Content.PROMPT_KINDS[kind]!
+    assert.match(tpl, /前置概念档位/, `${kind} 前置档位区块锚点`)
+    assert.match(tpl, /误解坑位（生成期先验）/, `${kind} 误解坑位区块锚点`)
+    assert.match(tpl, /检索点/, `${kind} 检索点锚点`)
+    assert.match(tpl, /样例密度/, `${kind} 样例密度锚点`)
+    assert.match(tpl, /worked example/, `${kind} 样例（worked example）锚点`)
+  }
+})
+
+// ---- v10 题目生成契约（#147）：难度锚定跟随注入 + 误解先验干扰项材料 ----
+
+test('#147: 题目生成模板升到 v10——难度按注入锚定走、误解先验（干扰项材料）消费锚点', () => {
+  const tpl = Content.PROMPT_KINDS['题目生成']!
+  assert.ok(Content.promptVersionOf(tpl) >= 10, '题目生成 应升到 v10')
+  assert.match(tpl, /难度按系统附的「难度锚定」走/, '写死的开头 d1/中间 d2/收尾 d3 退役，跟随注入锚定')
+  assert.match(tpl, /误解先验（干扰项材料）/, '干扰项消费误解先验')
+  assert.match(tpl, /以指令为准/, '先验让位于学习者生成指令')
+})
+
+// ---- v7 错误对比卡契约（#147）：出生期候选错法（先验让位于真实错答） ----
+
+test('#147: 错误对比卡模板升到 v7——干扰做法可从误解先验取材、mine 仍以真实错答为准', () => {
+  const tpl = Content.PROMPT_KINDS['错误对比卡']!
+  assert.ok(Content.promptVersionOf(tpl) >= 7, '错误对比卡 应升到 v7')
+  assert.match(tpl, /误解先验（出生期候选错法）/, '出生期候选错法锚点')
+  assert.match(tpl, /mine 仍以学习者错答为准/, '先验让位于真实数据')
+})
+
 // ---- 错误对比卡模板（C-3 #82）：三选一辨别卡契约 ----
 
 test('C3: 错误对比卡模板——三选一、mine 忠实错法、候选照抄契约', () => {
