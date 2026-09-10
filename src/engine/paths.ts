@@ -98,7 +98,6 @@ export class Paths {
    * 只增不删、引擎读侧永不读取——data-check 以 archived 信息级盘点文件数，
    * 既非 Missing 也非 Broken（显式的第三类）。 */
   get archiveDir(): string { return `${this.centerRoot}/存档` }
-  archiveVersionDir(from: number | string): string { return `${this.archiveDir}/pre-v${from}` }
   /** 沉淀层（#139 / ADR-0034）：学习模型状态第四存储域——学习中心/沉淀/。
    * 追加 jsonl 正典（沉淀.jsonl）+ 学习者档案.md 可读投影；小到单文件可抄走，
    * 永不自动删除，跨一切不可逆操作不变。 */

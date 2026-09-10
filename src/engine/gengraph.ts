@@ -272,18 +272,6 @@ export class GraphProposals {
     return YAML.parse(await readFile(path, 'utf8'))
   }
 
-  /** graph propose-gen：已退役（#138 cutover / ADR-0033 生长式图）。
-   * validateGenProposal/specToRegions 保留——反编译子图半区（project-decompile）
-   * 仍以它们做静态形态门；gen 作为提案 kind 不再受理。 */
-  async proposeGen(_yamlText?: string): Promise<Record<string, unknown>> {
-    throw genRetiredError('propose-gen')
-  }
-
-  /** graph apply-gen：已退役（同上）；存量 pending gen 提案只能 reject 留痕。 */
-  async applyGen(_pid?: number, _audit?: ApplyAudit): Promise<Record<string, unknown>> {
-    throw genRetiredError('apply-gen')
-  }
-
   /** graph propose-edit：在内存图上模拟执行 → pending。 */
   async proposeEdit(yamlText: string): Promise<Record<string, unknown>> {
     const v = validateEditProposal(YAML.parseModel(yamlText))

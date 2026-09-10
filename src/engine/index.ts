@@ -16,7 +16,7 @@ import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList, declaredEncOf } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
-import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
+import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock, resolveFsrsParams } from './srs.ts'
 import { advance, advancePending, advanceStrict, alreadyAdvanced } from './advance.ts'
 import type { FSRS } from 'ts-fsrs'
 import { bandOffset, combinedDifficulty, startBand, sessionOrder } from './adaptive.ts'
@@ -95,9 +95,9 @@ import { Sessions, assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DA
 import type { NodeStat, WindowStat } from './sessions.ts'
 import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite, netPracticeRecs, readLearnhubConfig, writeLearnhubConfig } from './store.ts'
-import { gateAtConstruction } from './schema.ts'
+import { assertSchemaVersion } from './schema.ts'
 import type { SchemaBlock } from './schema.ts'
-import { appendSedimentEvent, readSedimentCanon, foldSediment, rebuildLearnerProfile, latestFsrsParams } from './sediment.ts'
+import { appendSedimentEvent, readSedimentCanon, foldSediment, rebuildLearnerProfile } from './sediment.ts'
 import type { SedimentEvent, SedimentFold, SedimentKind, SedimentTier } from './sediment.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence, answerDiff, DISPUTE_REVIEW_SYSTEM, parseDisputeReview } from './grading.ts'
 import type { DisputeVerdict } from './grading.ts'
@@ -235,7 +235,7 @@ export class LearnhubEngine {
     this.paths = new Paths(centerRoot)
     // schema 版本硬门（#138 / ADR-0034）：非当前主版本拒载，封死一切取用引擎的路径。
     // 同步读（构造函数无 await），先于任何惰性读盘——v1 库在第一次方法调用前就拒载。
-    this.schema = gateAtConstruction(this.paths)
+    this.schema = assertSchemaVersion(this.paths.learnhubConfigPath)
     this.registry = new Registry(this.paths)
     this.store = new Store(this.paths)
     this.content = new Content(this.paths)
@@ -3659,11 +3659,15 @@ export class LearnhubEngine {
   }
 
   /** 打开/发起周复盘：复盘对象 = 上一完整学习周（可显式指定更早的完整周补记）。
+   * 打开即沉淀结算点（#139）：校准画像/速度韧性周档出生即写、档案投影重建（同周幂等）。
    * 现状 = 引擎用该学习周真实数据现算重填（引擎段）；四问保留学习者已写内容。
    * 文件缺失即建（入口常驻、无推送、缺勤不罚）。weekStart 必须是周一且不晚于
    * 上一完整周——复盘只向后看，不预填未来。零 XP、零 canonical 写入。 */
   async kataOpen(weekStart?: string): Promise<KataDoc> {
     const { today, cutoff } = await this.learningDay()
+    // 沉淀结算随周复盘走（#139）：开复盘 = 上一完整学习周的一次结算点——校准画像/
+    // 速度韧性周档出生即写、学习者档案投影重建（同周幂等，重复打开不重写）
+    await this.sedimentSettle()
     const target = kataMonday(weekStart ?? prevWeekStartOf(today) ?? '')
     const prev = prevWeekStartOf(today)!
     if (target > prev) {
@@ -4809,30 +4813,12 @@ export class LearnhubEngine {
     }
     const courses = await this.enabledCourses()
     if (!courses.length) return { status: 'skipped', reason: '没有启用课程，参数无处写回' }
-    // 基线 = 现参（学习者级一套）：沉淀正典最新 fsrs_params（事实源）优先，缺则退
-    // 任一启用课程的参数缓存文件（同一套的镜像），再缺 = 官方默认。参数缓存损坏时
-    // 与 getScheduler 同语义：忽略坏缓存按下一级取（对照基线必须是调度此刻实际
-    // 生效的同一套参数），不因基线读取阻塞训练。
-    let baselineParams = defaultParams()
-    let baselineSource: 'sediment' | 'cache' | 'default' = 'default'
-    const sedimentParams = await latestFsrsParams(this.paths)
-    if (sedimentParams && sedimentParams.length === FSRS6_PARAM_COUNT) {
-      baselineParams = sedimentParams
-      baselineSource = 'sediment'
-    } else {
-      for (const c of courses) {
-        try {
-          const doc = JSON.parse(await readFile(this.paths.fsrsParamsPath(c.root), 'utf8')) as { parameters?: number[] }
-          if (Array.isArray(doc.parameters) && doc.parameters.length === FSRS6_PARAM_COUNT) {
-            baselineParams = doc.parameters
-            baselineSource = 'cache'
-            break
-          }
-        } catch {
-          // 该课程无参数缓存：继续找下一门（同为学习者级一套，任一命中即可）
-        }
-      }
-    }
+    // 基线 = 现参（学习者级一套），走 resolveFsrsParams 唯一口径：沉淀正典（事实源）
+    // → 任一启用课程的参数缓存 → 官方默认。对照基线必须与调度此刻实际生效的同一套，
+    // 不因基线读取阻塞训练。
+    const baseline = await resolveFsrsParams(this.paths, courses.map(c => c.root))
+    let baselineParams = baseline.parameters ?? defaultParams()
+    const baselineSource = baseline.source
     const baselineEval = await impl.evaluate(baselineParams, seqs)
     const { parameters, splitEval } = await impl.train(seqs)
     if (parameters.length !== FSRS6_PARAM_COUNT) {
@@ -4903,6 +4889,10 @@ export class LearnhubEngine {
     const wrote: SedimentKind[] = []
     const skipped: Array<{ kind: SedimentKind; reason: string }> = []
     if (weekStart && weekEnd) {
+      // 同周幂等：该学习周已有同 kind 周档 → 不重写（追加正典不吃重复结算）
+      const fold = await this.sedimentFold()
+      const settled = (kind: SedimentKind): boolean =>
+        (fold.weekly[kind] ?? []).some(g => g.week === weekStart)
       const inWeek = (ts: string | undefined): boolean => {
         const d = ts ? dayOfTs(ts, cutoff) : null
         return d !== null && d >= weekStart && d <= weekEnd
@@ -4912,7 +4902,9 @@ export class LearnhubEngine {
 
       // 校准画像：JOL 预测配对样本（predicted 字段）；无配对静默
       const paired = weekPractice.filter(r => r.predicted != null && typeof r.correct === 'boolean')
-      if (paired.length) {
+      if (settled('calibration')) {
+        skipped.push({ kind: 'calibration', reason: `学习周 ${weekStart} 已结算` })
+      } else if (paired.length) {
         const view = calibrationProfileView(weekPractice)
         await this.sedimentAppend('calibration', 'weekly', {
           week: weekStart,
@@ -4929,7 +4921,9 @@ export class LearnhubEngine {
       const dueReviews = dueReviewFirstPushes(await this.store.reviewLogAll(), cutoff)
         .filter(r => inWeek(r.ts))
       const retention = trueRetention(dueReviews)
-      if (elapsed.length || dueReviews.length) {
+      if (settled('speed_resilience')) {
+        skipped.push({ kind: 'speed_resilience', reason: `学习周 ${weekStart} 已结算` })
+      } else if (elapsed.length || dueReviews.length) {
         elapsed.sort((a, b) => a - b)
         const mid = Math.floor(elapsed.length / 2)
         const median = elapsed.length % 2
