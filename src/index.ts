@@ -2049,17 +2049,19 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course: string; node: string; section: string }) => run('learnhub_section_rewrite', async () =>
       generateSection(ctx, args.course, args.node, args.section)))
   tool('learnhub_course_reset',
-    'Reset one course for full regeneration: all node notes are backed up into .trash/regenerate-<ts>/ and rewritten as ungenerated skeletons; the question bank, interactive artifacts, and generated-image dirs move into the same backup. The graph, learning progress, and prompt snapshots are kept. Regeneration then runs as a background chain over all nodes in graph topological order (each node: outline → sections → quiz) and this call returns immediately with the queued count; progress shows in the panel generate tab. Refuses while generation tasks are running. Destructive but recoverable — confirm with the user before calling.',
+    'Reset one course for full regeneration: all node notes are backed up into .trash/regenerate-<ts>/ and rewritten as ungenerated skeletons; the question bank, interactive artifacts, and generated-image dirs move into the same backup. The graph, learning progress, and prompt snapshots are kept. Regeneration then runs as a background chain over all nodes in graph topological order (each node: outline → sections → quiz) and this call returns immediately with the queued count; progress shows in the panel generate tab. Refuses while generation tasks are running. Destructive but recoverable — confirm with the user before calling. The sediment layer (learner-model state: FSRS params, calibration profile) is NEVER touched — surface that as its own separate confirmation item (#139).',
     { course: { type: 'string', required: true, description: 'Course name' } },
     (args: { course: string }) => run('learnhub_course_reset', async () => {
       const r = await resetCourseChain(ctx, args.course)
-      return JSON.stringify({ message: `已重置「${args.course}」（${r.reset.nodes.length} 节点），${r.queued} 个节点已入队重新生成（后台链，进度看任务注册表）`, reset: r.reset, queued: r.queued })
+      return JSON.stringify({ message: `已重置「${args.course}」（${r.reset.nodes.length} 节点），${r.queued} 个节点已入队重新生成（后台链，进度看任务注册表）。沉淀层波及：${r.reset.sediment}`, reset: r.reset, queued: r.queued })
     }))
   tool('learnhub_course_delete',
     'Delete one course: remove it from the course registry and move the whole course directory into 学习中心/.trash/ (recoverable by hand). Learning progress lives inside the course directory, so it goes too. Destructive — confirm with the user before calling; for a content-only redo prefer learnhub_course_reset (keeps the graph and progress).',
     { course: { type: 'string', required: true, description: 'Course name' } },
-    (args: { course: string }) => run('learnhub_course_delete', async () =>
-      JSON.stringify(await engine.courseDelete(args.course))))
+    (args: { course: string }) => run('learnhub_course_delete', async () => {
+      const r = await engine.courseDelete(args.course)
+      return JSON.stringify({ message: `已删除「${r.removed}」（整课目录移入 .trash，可手工恢复）。沉淀层波及：${r.sediment}`, ...r })
+    }))
   tool('learnhub_difficulty_advice',
     'Detect difficulty-mismatch advice across question banks (B2, read-only, advice-first — nothing is written): nodes in review/mastered with low derived mastery + struggling answer accuracy + enough answer volume get a "difficulty band miscalibrated, regenerate" suggestion carrying a difficulty/bloom target-band instruction (feed it to learnhub_question_generate or the section-rewrite flow, validateBank gate applies); individual questions whose scheduling evidence says "too easy" (enough FSRS advances with zero lapses and an interval grown past the threshold — same-day repeats never count) get a "too easy, archivable" annotation (archiving is the author/panel decision via learnhub_question_update archived patch — never silent removal). Responses already dismissed by the learner are filtered out (dismissed count returned). Low data stays silent.',
     { course: { type: 'string', description: 'Course name; omit to scan all enabled courses' } },

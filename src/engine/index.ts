@@ -97,6 +97,8 @@ import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
 import { atomicWrite, netPracticeRecs, readLearnhubConfig, writeLearnhubConfig } from './store.ts'
 import { gateAtConstruction } from './schema.ts'
 import type { SchemaBlock } from './schema.ts'
+import { appendSedimentEvent, readSedimentCanon, foldSediment, rebuildLearnerProfile, latestFsrsParams } from './sediment.ts'
+import type { SedimentEvent, SedimentFold, SedimentKind, SedimentTier } from './sediment.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence, answerDiff, DISPUTE_REVIEW_SYSTEM, parseDisputeReview } from './grading.ts'
 import type { DisputeVerdict } from './grading.ts'
 import { findDuplicateStem, existingStemsPromptBlock, bankStemList } from './question-dedup.ts'
@@ -1626,7 +1628,7 @@ export class LearnhubEngine {
    * （content=draft/sections 清空、正文清空）；题库/交互/课程图三个生成产物目录移入同一
    * trash 备份目录（rename，可恢复）。图谱（data/）、注册表、学习进度（state/）、
    * 提示词快照、生成队列.md 均不动；重新生成由调用方按拓扑序串行跑生成管线。 */
-  async contentReset(courseKey: string | undefined): Promise<{ course: string; nodes: string[]; trashed: string[] }> {
+  async contentReset(courseKey: string | undefined): Promise<{ course: string; nodes: string[]; trashed: string[]; sediment: string }> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (broken.length) {
@@ -1661,7 +1663,11 @@ export class LearnhubEngine {
       course: c.name, node: '*', rating: null, kind: 'content_reset', elapsed_days: 0,
       detail: `整课重置：${nodes.length} 节点笔记回 draft；移入 .trash：${trashed.join('、') || '（无）'}`,
     })
-    return { course: c.name, nodes, trashed }
+    return {
+      course: c.name, nodes, trashed,
+      // 重置波及面单独确认项（#139）：模型状态在沉淀层，永不随内容层重置清除
+      sediment: '沉淀层不受影响：FSRS 参数/校准画像等模型状态永不自动删除（ADR-0034）',
+    }
   }
 
   /** 单节正文落盘：门禁通过后按清单重组正文，该节置 ready/version+1；hints = enc 候选反哺提醒。 */
@@ -4784,8 +4790,10 @@ export class LearnhubEngine {
   /** 手动触发 FSRS-6 个人参数重训：数据 = 中心级跨课程复习日志的真实推进（排除
    * synthetic、每卡每天第一条）；门禁 = 真实条数 ≥400（官方口径）且训练后评估
    * （in-sample logLoss，新参/基线同协议对照）优于现参或默认参数，否则不写并返回
-   * 跳过原因。参数是学习者级一套：写回每个启用课程的 fsrs参数.json（含元数据可
-   * 追溯），getScheduler 读法零改动。impl 接缝供测试注入假优化器。 */
+   * 跳过原因。参数是学习者级一套：正典写沉淀（fsrs_params 事件，出生即写）+ 每个
+   * 启用课程的 fsrs参数.json 作缓存写回（#139 降级：删缓存不丢事实，getScheduler
+   * 落沉淀折叠取回）。impl 接缝供测试注入假优化器。本优化即一次结算：写正典后
+   * 重建学习者档案投影。 */
   async optimizeFsrsParams(
     impl: OptimizerImpl = bindingImpl,
   ): Promise<{
@@ -4801,21 +4809,28 @@ export class LearnhubEngine {
     }
     const courses = await this.enabledCourses()
     if (!courses.length) return { status: 'skipped', reason: '没有启用课程，参数无处写回' }
-    // 基线 = 现参（学习者级一套，任一启用课程文件里的就是同一套）；无文件 → 官方默认。
-    // 参数文件损坏时与 getScheduler 同语义：忽略坏文件按默认参数对照（调度此刻实际生效
-    // 的就是默认参数，对照基线必须与之同一），不因基线读取阻塞训练。
+    // 基线 = 现参（学习者级一套）：沉淀正典最新 fsrs_params（事实源）优先，缺则退
+    // 任一启用课程的参数缓存文件（同一套的镜像），再缺 = 官方默认。参数缓存损坏时
+    // 与 getScheduler 同语义：忽略坏缓存按下一级取（对照基线必须是调度此刻实际
+    // 生效的同一套参数），不因基线读取阻塞训练。
     let baselineParams = defaultParams()
-    let baselineSource: 'previous' | 'default' = 'default'
-    for (const c of courses) {
-      try {
-        const doc = JSON.parse(await readFile(this.paths.fsrsParamsPath(c.root), 'utf8')) as { parameters?: number[] }
-        if (Array.isArray(doc.parameters) && doc.parameters.length === FSRS6_PARAM_COUNT) {
-          baselineParams = doc.parameters
-          baselineSource = 'previous'
-          break
+    let baselineSource: 'sediment' | 'cache' | 'default' = 'default'
+    const sedimentParams = await latestFsrsParams(this.paths)
+    if (sedimentParams && sedimentParams.length === FSRS6_PARAM_COUNT) {
+      baselineParams = sedimentParams
+      baselineSource = 'sediment'
+    } else {
+      for (const c of courses) {
+        try {
+          const doc = JSON.parse(await readFile(this.paths.fsrsParamsPath(c.root), 'utf8')) as { parameters?: number[] }
+          if (Array.isArray(doc.parameters) && doc.parameters.length === FSRS6_PARAM_COUNT) {
+            baselineParams = doc.parameters
+            baselineSource = 'cache'
+            break
+          }
+        } catch {
+          // 该课程无参数缓存：继续找下一门（同为学习者级一套，任一命中即可）
         }
-      } catch {
-        // 该课程无参数文件：继续找下一门（同为学习者级一套，任一命中即可）
       }
     }
     const baselineEval = await impl.evaluate(baselineParams, seqs)
@@ -4838,15 +4853,106 @@ export class LearnhubEngine {
       split_rmse_bins: splitEval ? round4(splitEval.rmseBins) : null,
     }
     if (!(newEval.logLoss < baselineEval.logLoss)) {
-      return { status: 'skipped', reason: `评估未优于${baselineSource === 'previous' ? '现' : '默认'}参数（logLoss ${round4(newEval.logLoss)} ≥ 基线 ${round4(baselineEval.logLoss)}）——不写回`, meta }
+      const baselineLabel = baselineSource === 'default' ? '默认' : '现'
+      return { status: 'skipped', reason: `评估未优于${baselineLabel}参数（logLoss ${round4(newEval.logLoss)} ≥ 基线 ${round4(baselineEval.logLoss)}）——不写回`, meta }
     }
+    // 正典在沉淀（出生即写），课程文件只作缓存镜像；随后本结算重建学习者档案投影。
+    await appendSedimentEvent(this.paths, { kind: 'fsrs_params', tier: 'immediate', payload: { parameters, meta } })
     const written: string[] = []
     for (const c of courses) {
       await atomicWrite(this.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n')
       written.push(c.name)
     }
     this.schedCache.clear() // 参数唯一写者在此：缓存调度器全部失效，后续推进用新参数
+    await rebuildLearnerProfile(this.paths, foldSediment(await readSedimentCanon(this.paths)))
     return { status: 'written', written, meta }
+  }
+
+  // ---- 沉淀层（#139 / ADR-0034：学习模型状态第四存储域）----
+
+  /** 出生即写：追加一条沉淀事件（六类事件骨架的唯一写入口；校验在 sediment 模块）。
+   * 永不自动删除——内容层任何不可逆操作不写这里。 */
+  async sedimentAppend(kind: SedimentKind, tier: SedimentTier, payload: Record<string, unknown>, concept?: string): Promise<SedimentEvent> {
+    return appendSedimentEvent(this.paths, { kind, tier, payload, ...(concept !== undefined ? { concept } : {}) })
+  }
+
+  /** 读侧单向的唯一消费口径：读正典 → 折叠（两次折叠同输入同输出）。教练折叠
+   * （#144）等后续消费方一律从这里取，禁止再读内容层旧居所。 */
+  async sedimentFold(): Promise<SedimentFold> {
+    return foldSediment(await readSedimentCanon(this.paths))
+  }
+
+  /** 重建学习者档案投影（学习中心/沉淀/学习者档案.md；纯派生，手编必被覆盖）。 */
+  async sedimentRebuildProfile(): Promise<string> {
+    return rebuildLearnerProfile(this.paths, await this.sedimentFold())
+  }
+
+  /** 沉淀结算：从行为流水蒸馏校准画像与速度韧性的周档事件（出生即写；窗口 =
+   * 上一完整学习周，与周复盘同口径）→ 重建学习者档案投影。数据不足门槛的 kind
+   * 静默跳过（不造假数据）；复诊结局/图修复史/内容质量结论的生产者由后续票接线
+   * （#146 边实验结算、#145 生长批）。 */
+  async sedimentSettle(): Promise<{
+    week: string | null
+    wrote: SedimentKind[]
+    skipped: Array<{ kind: SedimentKind; reason: string }>
+    profile: string
+  }> {
+    const { today, cutoff } = await this.learningDay()
+    const weekStart = prevWeekStartOf(today)
+    const weekEnd = weekStart ? weekEndOf(weekStart) : null
+    const wrote: SedimentKind[] = []
+    const skipped: Array<{ kind: SedimentKind; reason: string }> = []
+    if (weekStart && weekEnd) {
+      const inWeek = (ts: string | undefined): boolean => {
+        const d = ts ? dayOfTs(ts, cutoff) : null
+        return d !== null && d >= weekStart && d <= weekEnd
+      }
+      const practice = await this.store.practiceAll()
+      const weekPractice = practice.filter(r => inWeek(r.ts))
+
+      // 校准画像：JOL 预测配对样本（predicted 字段）；无配对静默
+      const paired = weekPractice.filter(r => r.predicted != null && typeof r.correct === 'boolean')
+      if (paired.length) {
+        const view = calibrationProfileView(weekPractice)
+        await this.sedimentAppend('calibration', 'weekly', {
+          week: weekStart,
+          pairs: paired.length,
+          view,
+        })
+        wrote.push('calibration')
+      } else {
+        skipped.push({ kind: 'calibration', reason: '上一学习周无 JOL 预测配对样本' })
+      }
+
+      // 速度韧性：作答耗时（est vs 实际的节奏面）+ 到期复习真实保留率
+      const elapsed = weekPractice.map(r => r.elapsed_s).filter((s): s is number => typeof s === 'number' && s > 0)
+      const dueReviews = dueReviewFirstPushes(await this.store.reviewLogAll(), cutoff)
+        .filter(r => inWeek(r.ts))
+      const retention = trueRetention(dueReviews)
+      if (elapsed.length || dueReviews.length) {
+        elapsed.sort((a, b) => a - b)
+        const mid = Math.floor(elapsed.length / 2)
+        const median = elapsed.length % 2
+          ? elapsed[mid]!
+          : Math.round(((elapsed[mid - 1]! + elapsed[mid]!) / 2) * 10) / 10
+        await this.sedimentAppend('speed_resilience', 'weekly', {
+          week: weekStart,
+          answers: weekPractice.length,
+          median_elapsed_s: elapsed.length ? median : null,
+          due_reviews: dueReviews.length,
+          true_retention: retention.rate,
+          lapses: retention.fail,
+        })
+        wrote.push('speed_resilience')
+      } else {
+        skipped.push({ kind: 'speed_resilience', reason: '上一学习周无作答耗时与到期复习记录' })
+      }
+    } else {
+      skipped.push({ kind: 'calibration', reason: '学习日不可解析' })
+      skipped.push({ kind: 'speed_resilience', reason: '学习日不可解析' })
+    }
+    const profile = await this.sedimentRebuildProfile()
+    return { week: weekStart, wrote, skipped, profile }
   }
 
   // ---- 生成任务持久化（host 的 genJobs 内存态落盘出口；D14：文件读写收口 engine）----
@@ -5584,7 +5690,7 @@ export class LearnhubEngine {
   }
 
   /** 删除课程：注册表移除 + 课程目录移入 学习中心/.trash/（不真删，可手工找回）。 */
-  async courseDelete(courseKey: string): Promise<{ removed: string; trash: string }> {
+  async courseDelete(courseKey: string): Promise<{ removed: string; trash: string; sediment: string }> {
     const c = await this.registry.get(courseKey)
     if (!c) throw new Error(`[learnhub] 注册表中没有课程「${courseKey}」。`)
     const rest = (await this.registry.load()).filter(x => x.name !== c.name && x.id !== c.id)
@@ -5596,7 +5702,11 @@ export class LearnhubEngine {
       await rename(src, trash)
     }
     this.schedCache.delete(this.paths.courseRoot(c.root)) // 缓存键是 courseRoot 路径，逐课失效须同键
-    return { removed: c.name, trash }
+    return {
+      removed: c.name, trash,
+      // 删除波及面单独确认项（#139）：卡级实例记忆随课进 .trash，沉淀层模型状态保留
+      sediment: '沉淀层不受影响：泛用模型状态跨课程删除存活（先验连续，ADR-0034）',
+    }
   }
 
   /** 为课程缺笔记的节点补骨架文件（幂等；存量课程修复/维护用）。 */

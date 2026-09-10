@@ -12,6 +12,7 @@ import type { FSRS, Card, Grade } from 'ts-fsrs'
 import type { FsrsBlock, Fm } from './types.ts'
 import { parseDay, fmtDay, daysBetween } from './dates.ts'
 import { DESIRED_RETENTION, S_MASTER } from './params.ts'
+import { latestFsrsParams } from './sediment.ts'
 import type { Paths } from './paths.ts'
 
 // 值域锁 Grade（= Rating 去 Manual）：sched.next 的形参类型；整枚 Rating 不可赋（ts-fsrs v5）
@@ -22,7 +23,9 @@ export const RATING_NAME: Record<number, string> = {
   1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy',
 }
 
-/** 构造调度器（日粒度、无 fuzz；个人参数文件优先）。 */
+/** 构造调度器（日粒度、无 fuzz）：个人参数三级读法（#139 正典化后）——
+ * ① 课程参数文件（缓存）→ ② 沉淀正典最新 fsrs_params（事实源，删缓存不丢）
+ * → ③ 官方默认。 */
 export async function getScheduler(paths: Paths, courseRoot: string | null = null): Promise<FSRS> {
   let w: number[] | undefined
   if (courseRoot) {
@@ -30,9 +33,10 @@ export async function getScheduler(paths: Paths, courseRoot: string | null = nul
       const doc = JSON.parse(await readFile(paths.fsrsParamsPath(courseRoot), 'utf8')) as { parameters?: number[] }
       if (Array.isArray(doc.parameters) && doc.parameters.length) w = doc.parameters
     } catch {
-      // 无个人参数 → 用官方默认
+      // 无参数缓存 → 落沉淀正典回退
     }
   }
+  if (!w) w = await latestFsrsParams(paths)
   return fsrs(generatorParameters({
     request_retention: DESIRED_RETENTION,
     enable_fuzz: false,

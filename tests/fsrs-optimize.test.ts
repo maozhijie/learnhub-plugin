@@ -145,7 +145,7 @@ test('优化器：评估劣于现参 → 不写回（现参文件保持不动）
     assert.equal(r.status, 'skipped')
     assert.match(r.reason ?? '', /未优于现参数/)
     assert.equal(await readFile(engine.paths.fsrsParamsPath('math'), 'utf8'), before)
-    assert.equal(r.meta?.baseline_source, 'previous')
+    assert.equal(r.meta?.baseline_source, 'cache')
   })
 })
 
