@@ -58,6 +58,7 @@ import { nodeTierOf, perSectionQuizTarget, genericQuizTarget } from './complexit
 import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals, genRetiredError } from './gengraph.ts'
 import type { ApplyAudit, EditOp } from './gengraph.ts'
+import type { LlmComplete } from './llm.ts'
 import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
@@ -1504,7 +1505,7 @@ export class LearnhubEngine {
   async projectDecompile(
     id: string,
     opts: { goal?: string; course?: string; notes?: string[] } = {},
-    llm: (prompt: string) => Promise<string>,
+    llm: LlmComplete,
   ): Promise<never> {
     void id; void opts; void llm
     throw new Error(
@@ -2090,7 +2091,7 @@ export class LearnhubEngine {
    * opts.predicted = 翻面前的一档 JOL 预测（#66 E4，Learner Output 元标注）：
    * 只随作答落流水供校准配对，非法值显式拒绝、null/缺省不落字段。 */
   async questionAnswer(
-    llmComplete: (prompt: string, system?: string) => Promise<string>,
+    llmComplete: LlmComplete,
     courseKey: string | undefined, node: string, qid: string, answer: string,
     elapsedS?: number | null,
     opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null },
@@ -2208,7 +2209,7 @@ export class LearnhubEngine {
    * （#9 / ADR-0004 事务性）。每次解析失败把原始模型输出截断留痕到
    * state/判卷失败.jsonl（#116），ref 提供课程/节点/题目定位。 */
   private async judgeBankAnswer(
-    llmComplete: (prompt: string, system?: string) => Promise<string>,
+    llmComplete: LlmComplete,
     q: BankQuestion, answer: string, op = 'question',
     ref: { course: string; node: string; qid: string },
   ): Promise<{ score: number; feedback: string }> {
@@ -2693,7 +2694,7 @@ export class LearnhubEngine {
    * 防相似（#119）：提示词注入镜像题库已有题面 ≤15 条，生成后逐题查重，命中的丢弃。 */
   async noteSourceGenerate(
     id: string, count: number | undefined,
-    llm: (prompt: string) => Promise<string>,
+    llm: LlmComplete,
     today?: string,
   ): Promise<{ id: string; added: number; skipped: number; total: number; duplicates: Array<{ q: string; against: string }> }> {
     today ??= (await this.learningDay()).today
@@ -2842,7 +2843,7 @@ export class LearnhubEngine {
    * 自评语义，ADR-0010）、无代表卡（笔记源没有节点）。XP 走无绑定行（ADR-0021）：
    * 与题卡同公式结算（含乱猜负 XP），作答时即落（挂起路径同题卡 practice 同时点）。 */
   private async noteSourceAnswer(
-    llmComplete: (prompt: string, system?: string) => Promise<string>,
+    llmComplete: LlmComplete,
     sourceId: string, qid: string, answer: string,
     opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null },
   ): Promise<Record<string, unknown>> {
@@ -4075,7 +4076,7 @@ export class LearnhubEngine {
    * （appendEArchive）——不产生 XP、不写 canonical 任何字段（#33 三不进）。 */
   async explainBackFeedback(
     courseKey: string | undefined, node: string, transcript: string,
-    llm: (prompt: string, system?: string) => Promise<string>,
+    llm: LlmComplete,
   ): Promise<EArchiveRec & { reply: string }> {
     if (!transcript.trim()) throw new Error('[explain-feedback] 讲解对话记录为空，无从反馈。')
     const c = await this.registry.resolve(courseKey)
@@ -4234,7 +4235,7 @@ export class LearnhubEngine {
   async learnerNoteAdd(
     courseKey: string | undefined, node: string,
     opts: { content: string; kind?: LearnerCard['kind']; prompt?: string; section?: string },
-    llm: (prompt: string, system?: string) => Promise<string>,
+    llm: LlmComplete,
   ): Promise<{
     course: string; node: string
     card: { id: string; kind: LearnerCard['kind']; count: number }
@@ -4259,7 +4260,8 @@ export class LearnhubEngine {
       sectionTitle = state[node]?.content.sections?.find(s => s.id === raw || s.title === raw)?.title ?? raw
     }
     const points = sectionTitle ? sections.filter(s => s.title === sectionTitle) : sections
-    const raw = await llm(selfNoteFeedbackPrompt(points, sectionTitle, content), selfNoteFeedbackSystem())
+    // 机械反馈调用恒走 fast 档（#137：档位沿缝声明，宿主适配器翻译成部署思考档）
+    const raw = await llm(selfNoteFeedbackPrompt(points, sectionTitle, content), selfNoteFeedbackSystem(), { effort: 'fast' })
     const v = parseExplainVerdict(raw) // 不可解析抛错 → 卡与判词零落盘
     const card = await this.learnerCards.addCard(c.root, node, {
       kind,
@@ -4340,7 +4342,7 @@ export class LearnhubEngine {
    * 创建零 XP、零 canonical 写入——卡入错误 deck，复习时才走无绑定 XP。 */
   async errorCardGenerate(
     courseKey: string | undefined, opts: { node?: string; max?: number } | undefined,
-    llm: (prompt: string, system?: string) => Promise<string>,
+    llm: LlmComplete,
   ): Promise<ErrorGenerateResult> {
     const c = await this.registry.resolve(courseKey)
     const candidates = mineErrorPatterns(await this.store.practiceAll(),
@@ -4405,7 +4407,8 @@ export class LearnhubEngine {
     }
     const tpl = await this.loadPrompt('错误对比卡')
     const prompt = `${tpl}\n\n## 挖出的错误模式（${mats.length} 个候选，每个候选出一张卡）\n\n${mats.map(m => m.material).join('\n\n')}`
-    const raw = await llm(prompt)
+    // 机械出卡调用恒走 fast 档（#137：档位沿缝声明，宿主适配器翻译成部署思考档）
+    const raw = await llm(prompt, undefined, { effort: 'fast' })
     const doc = YAML.parseModel(raw) as { cards?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.cards) || !doc.cards.length) {
       throw new Error('[error-card-generate] 模型没有产出可用卡清单（cards 为空或不可解析），零落盘。')
@@ -4623,7 +4626,7 @@ export class LearnhubEngine {
   async receiptSubmit(
     courseKey: string | undefined, node: string,
     input: { kind: ReceiptKind; material: string; force_full?: boolean },
-    llm: (prompt: string, system?: string) => Promise<string>,
+    llm: LlmComplete,
   ): Promise<ReceiptSubmitResult> {
     const kind = input.kind
     if (!RECEIPT_KIND_LABEL[kind]) {
@@ -5281,7 +5284,7 @@ export class LearnhubEngine {
    * 解析失败自动重问一次，仍失败抛「AI 复核输出不可用」（UI 据此放行跳过复核的
    * 直接豁免降级入口）；原始输出照 #116 惯例留痕判卷失败.jsonl。 */
   async questionDisputeReview(
-    llmComplete: (prompt: string, system?: string) => Promise<string>,
+    llmComplete: LlmComplete,
     courseKey: string | undefined, node: string, qid: string,
   ): Promise<DisputeReviewResult> {
     const { c, graph, q, rec } = await this.disputeTarget(courseKey, node, qid, 'dispute')
@@ -5462,7 +5465,7 @@ export class LearnhubEngine {
    * opts.isCancelled = 逐题检查的取消旗标（GenJob 取消语义，#118）。 */
   async questionGenerate(
     courseKey: string | undefined, node: string, count?: number,
-    llm: (prompt: string) => Promise<string>,
+    llm: LlmComplete,
     opts?: {
       sections?: Array<{ id: string; title: string }>
       generic?: boolean
@@ -5585,7 +5588,7 @@ export class LearnhubEngine {
    * 节点已有题面 ≤15 条，生成后逐题查重，命中的丢弃并计入 duplicates。 */
   async questionGenerateSections(
     courseKey: string | undefined, node: string,
-    llm: (prompt: string) => Promise<string>,
+    llm: LlmComplete,
   ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number }> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)

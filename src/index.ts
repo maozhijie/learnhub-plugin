@@ -25,6 +25,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
+import type { LlmComplete, LlmEffort } from './engine/llm.ts'
 import { Content } from './engine/content.ts'
 import { ANKI_ENDPOINT, AnkiConnectClient } from './engine/anki.ts'
 import { TIER_LABELS, tierIdxOf, genericQuizTarget } from './engine/complexity.ts'
@@ -64,10 +65,11 @@ const llmCfg = {
   deepEffort: 'low' as 'off' | 'low',
 }
 
-/** P4 分层 effort：机械调用统一走 fastEffort；高复杂度节点的大纲/修复轮升 deepEffort。
- * 调用点以此替代散落的 { effort: llmCfg.fastEffort }，档位只在任务级决定。 */
-function contentEffort(highTier: boolean): 'off' | 'low' {
-  return highTier ? llmCfg.deepEffort : llmCfg.fastEffort
+/** P4 分层 effort：机械调用统一走 fast 档；高复杂度节点的大纲/修复轮升 deep 档。
+ * 调用点只声明语义档（注入侧可观测），翻译成部署的 fastEffort/deepEffort 收口在 llmSeam（#137）。
+ * 名字留在 effort 词族——「档位」在 CONTEXT.md 语言表里专指复杂度档位（contentTierOf），不混用。 */
+function contentEffort(highTier: boolean): LlmEffort {
+  return highTier ? 'deep' : 'fast'
 }
 
 /** 当前 LLM 配置视图（模型透明，#? 与 /status、learnhub_status 一同带出，面板只读展示；
@@ -264,6 +266,17 @@ async function llmComplete(ctx: Context, prompt: string, system?: string, opts?:
   }
 }
 
+/** 宿主→引擎 LLM 补全注入缝的真实现适配器（#137）：语义档 fast/deep 翻译成部署的
+ * fastEffort/deepEffort（不传档 = 部署默认），空闲超时/截断重试/档位降级都在底层
+ * llmComplete。引擎侧生成/组装函数一律只认 LlmComplete 缝型——测试注入假实现
+ * （固定回放/脚本化应答）即可不依赖真实模型确定性跑通金样本回放。 */
+function llmSeam(ctx: Context): LlmComplete {
+  return (prompt, system, opts) => llmComplete(ctx, prompt, system,
+    opts?.effort === 'fast' ? { effort: llmCfg.fastEffort }
+      : opts?.effort === 'deep' ? { effort: llmCfg.deepEffort }
+        : undefined)
+}
+
 /** llmComplete 的单次流式执行；effort 非空时显式指定思考档。
  * 空闲超时：每收到一个 chunk 重置计时，LLM_IDLE_TIMEOUT_MS 内无新输出即 abort（#118）。
  * 返回 truncated 标记（finish reason = max-tokens），截断重试由 llmComplete 处理。 */
@@ -326,15 +339,16 @@ function stripFences(body: string): string {
 }
 
 /** AI 出题管线：节点正文 → 出题提示词 → llm → validateBank 门禁逐题落盘。
- * opts 透传节标注清单/综合题模式（逐节管线的出题段）、定向补节与生成指令（#117/#120）。 */
-async function generateQuiz(ctx: Context, course: string, node: string, count: number | undefined, opts?: {
+ * complete 为注入的补全缝（#137）。opts 透传节标注清单/综合题模式（逐节管线的出题段）、
+ * 定向补节与生成指令（#117/#120）。 */
+async function generateQuiz(complete: LlmComplete, course: string, node: string, count: number | undefined, opts?: {
   sections?: Array<{ id: string; title: string }>
   generic?: boolean
   section?: { id: string; title: string }
   instruction?: string
   isCancelled?: () => boolean
 }) {
-  return engine.questionGenerate(course, node, count, async prompt => stripFences(await llmComplete(ctx, prompt)), opts)
+  return engine.questionGenerate(course, node, count, async prompt => stripFences(await complete(prompt)), opts)
 }
 
 /** 节生成提示词拼装：模板 + 本节任务（id/标题/类型）+ 上下文包。 */
@@ -345,15 +359,15 @@ function sectionPrompt(tpl: string, pack: string, s: { id: string; title: string
 /** 逐节生成共用出口：模型产出 → sectionApply；质检门未过时把门禁清单回灌模型修复一轮
  * （仅一轮，防循环；修复轮仍未过则带说明抛出）。fast 档模型偶发违反硬约束
  * （### 子标题/超长正文/非 JSON plot），一次盲跑定生死会让管线反复卡在同一节。
- * P4：正文初跑恒 fastEffort；修复轮按 highTier 升 deepEffort（复杂节点值得多思考一轮）。
- * isCancelled 在每次模型产出后检查，取消即丢结果。 */
+ * P4：正文初跑恒 fast 档；修复轮按 highTier 升 deep 档（复杂节点值得多思考一轮）。
+ * complete 为注入的补全缝（#137）。isCancelled 在每次模型产出后检查，取消即丢结果。 */
 async function applySectionWithRepair(
-  ctx: Context, course: string, node: string,
+  complete: LlmComplete, course: string, node: string,
   s: { id: string; title: string; type: string }, tpl: string, pack: string,
   opts?: { isCancelled?: () => boolean; highTier?: boolean },
 ): Promise<{ version: number; title: string; hints: string[] }> {
   const cancelled = () => opts?.isCancelled?.() ?? false
-  const first = stripFences(await llmComplete(ctx, sectionPrompt(tpl, pack, s), undefined, { effort: llmCfg.fastEffort }))
+  const first = stripFences(await complete(sectionPrompt(tpl, pack, s), undefined, { effort: 'fast' }))
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   let gateReport = ''
   try {
@@ -363,8 +377,7 @@ async function applySectionWithRepair(
     if (code !== 'GATE_FAILED') throw err
     gateReport = err.message
   }
-  const repaired = stripFences(await llmComplete(
-    ctx,
+  const repaired = stripFences(await complete(
     Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s), first, gateReport),
     undefined, { effort: contentEffort(opts?.highTier === true) },
   ))
@@ -499,7 +512,7 @@ async function generateQuizJob(ctx: Context, job: GenJob): Promise<void> {
       : '正在出题…'
   persistGenJobs()
   try {
-    const r = await generateQuiz(ctx, job.course, job.node, job.count, {
+    const r = await generateQuiz(llmSeam(ctx), job.course, job.node, job.count, {
       ...(job.section ? { section: job.section } : {}),
       ...(job.instruction ? { instruction: job.instruction } : {}),
       isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
@@ -539,6 +552,7 @@ async function generateContent(ctx: Context, course: string, node: string, style
     : { course, node, startedAt: new Date().toISOString(), status: 'running', phase: 'outline', ...(style ? { style } : {}) }
   genJobs.set(key, job)
   persistGenJobs()
+  const complete = llmSeam(ctx)
   try {
     const pack = await engine.contentPack(course, node)
     // 档位元数据（GenJob 记录；quiz 量分发与后续弹性评估用）
@@ -555,16 +569,16 @@ async function generateContent(ctx: Context, course: string, node: string, style
     let views = await engine.contentSectionsView(course, node)
     if (!views.some(s => s.status === 'ready')) {
       const outlineTpl = await engine.loadPrompt('课程大纲')
-      // P4：高复杂度节点的大纲轮升思考档（deepEffort）
+      // P4：高复杂度节点的大纲轮升 deep 档
       const outlineEffort = contentEffort(highTier)
       // 大纲护栏未过（OUTLINE_BUDGET）时重跑一次并回灌节数与预期区间，仍失败才置 failed
-      let outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: outlineEffort }))
+      let outlineYaml = stripFences(await complete(`${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: outlineEffort }))
       if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
       try {
         await engine.contentOutline(course, node, outlineYaml)
       } catch (err) {
         if (job.status === 'cancelling' || (err instanceof Error && (err as Error & { code?: string }).code !== 'OUTLINE_BUDGET')) throw err
-        outlineYaml = stripFences(await llmComplete(ctx, `${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: outlineEffort }))
+        outlineYaml = stripFences(await complete(`${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: outlineEffort }))
         if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
         await engine.contentOutline(course, node, outlineYaml)
       }
@@ -580,11 +594,11 @@ async function generateContent(ctx: Context, course: string, node: string, style
       if (s.status === 'ready') continue
       job.progress = { ...job.progress!, current: s.title }
       persistGenJobs()
-      await applySectionWithRepair(ctx, course, node, s, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier })
+      await applySectionWithRepair(complete, course, node, s, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier })
       job.progress = { done: job.progress!.done + 1, total: job.progress!.total }
       persistGenJobs()
     }
-    return await finishWithQuiz(ctx, job, `「${node}」正文完成（${job.progress!.total} 节）`)
+    return await finishWithQuiz(complete, job, `「${node}」正文完成（${job.progress!.total} 节）`)
   } catch (err) {
     job.status = contentFailureStatus(job.status)
     job.message = err instanceof Error ? err.message : String(err)
@@ -597,13 +611,13 @@ async function generateContent(ctx: Context, course: string, node: string, style
 }
 
 /** 管线收尾：逐节出题（每内容节按档位目标题量，绑节 id）+ 综合题（通用随档位），汇总任务终态。 */
-async function finishWithQuiz(ctx: Context, job: GenJob, contentMsg: string): Promise<string> {
+async function finishWithQuiz(complete: LlmComplete, job: GenJob, contentMsg: string): Promise<string> {
   job.phase = 'quiz'
   job.message = `${contentMsg}；自动出题中…`
   persistGenJobs()
   try {
-    const per = await engine.questionGenerateSections(job.course, job.node, async prompt => stripFences(await llmComplete(ctx, prompt)))
-    const quiz = await generateQuiz(ctx, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true })
+    const per = await engine.questionGenerateSections(job.course, job.node, async prompt => stripFences(await complete(prompt)))
+    const quiz = await generateQuiz(complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status
     job.message = outcome.message
@@ -624,14 +638,14 @@ async function generateSection(ctx: Context, course: string, node: string, secti
   if (!s) throw new Error(`「${node}」没有节「${sectionId}」——先运行大纲。`)
   const sectionTpl = await engine.loadPrompt('课程节生成')
   const highTier = TIER_LABELS[await engine.contentTierOf(course, node)] === '高'
-  const r = await applySectionWithRepair(ctx, course, node, s, sectionTpl, pack, { highTier })
+  const r = await applySectionWithRepair(llmSeam(ctx), course, node, s, sectionTpl, pack, { highTier })
   return `[section] 「${r.title}」v${r.version} 落盘。`
 }
 
 /** 项目里程碑计划生成（P 区 #92）：计划提示词包 → 模型 → 提案受理（人审后 apply 带快照生效）。 */
 async function generateProjectPlan(ctx: Context, id: string): Promise<string> {
   const prompt = await engine.projectPlanPack(id)
-  const yaml = stripFences(await llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }))
+  const yaml = stripFences(await llmSeam(ctx)(prompt, undefined, { effort: 'fast' }))
   const prop = await engine.projectPlanPropose(id, yaml)
   return `[project-plan] 提案 #${prop.id} 已受理（${prop.initial ? '初次规划' : '计划修订'}：${prop.milestones} 个里程碑）——人审后 learnhub_project_apply 生效（apply 带旧计划快照）。`
 }
@@ -639,19 +653,19 @@ async function generateProjectPlan(ctx: Context, id: string): Promise<string> {
 /** 项目里程碑产物生成：任务卡提示词包 → 模型 → 轻量结构门（未过回灌修复一轮）
  * → 首生直落 / 已生成自动转重生成提案（带快照，不静默覆盖）。 */
 async function generateProjectMilestone(ctx: Context, id: string, milestoneId: string): Promise<string> {
+  const complete = llmSeam(ctx)
   const prompt = await engine.projectMilestonePack(id, milestoneId)
   const write = (md: string) => engine.projectMilestoneWrite(id, milestoneId, md)
-  let md = stripFences(await llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }))
+  let md = stripFences(await complete(prompt, undefined, { effort: 'fast' }))
   let out: Awaited<ReturnType<typeof write>>
   try {
     out = await write(md)
   } catch (err) {
     const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
     if (code !== 'MILESTONE_GATE_FAILED') throw err
-    md = stripFences(await llmComplete(
-      ctx,
+    md = stripFences(await complete(
       Content.sectionRepairPrompt(prompt, md, err instanceof Error ? err.message : String(err)),
-      undefined, { effort: llmCfg.deepEffort },
+      undefined, { effort: 'deep' },
     ))
     out = await write(md)
   }
@@ -1293,7 +1307,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         sendJson(res, 200, await apiRun('api/explain-feedback', () => engine.explainBackFeedback(
           need(body, 'course'), need(body, 'node'),
           typeof body.transcript === 'string' ? body.transcript : '',
-          (prompt, system) => llmComplete(ctx, prompt, system))))
+          llmSeam(ctx))))
         return
       }
       if (route === '/explain-archive') {
@@ -1339,7 +1353,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         // 笔记源出题（#59）：读笔记正文 → 笔记出题 prompt → validateBank 门禁落镜像
         sendJson(res, 200, await apiRun('api/note-source/generate', () => engine.noteSourceGenerate(
           need(body, 'id'), questionCount(body.count),
-          async prompt => stripFences(await llmComplete(ctx, prompt)))))
+          async prompt => stripFences(await llmSeam(ctx)(prompt)))))
         return
       }
       if (route === '/anki/export') {
@@ -1387,7 +1401,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
             ...(typeof body.node === 'string' && body.node.trim() ? { node: body.node } : {}),
             ...(body.max !== undefined ? { max: Number(body.max) } : {}),
           },
-          async prompt => stripFences(await llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort })))))
+          async prompt => stripFences(await llmSeam(ctx)(prompt)))))
         return
       }
       if (route === '/error-archive') {
@@ -1403,7 +1417,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
             ...(typeof body.kind === 'string' && body.kind.trim() ? { kind: body.kind as never } : {}),
             ...(typeof body.prompt === 'string' && body.prompt.trim() ? { prompt: body.prompt } : {}),
             ...(typeof body.section === 'string' && body.section.trim() ? { section: body.section } : {}),
-          }, (prompt, system) => llmComplete(ctx, prompt, system, { effort: llmCfg.fastEffort }))))
+          }, llmSeam(ctx))))
         return
       }
       if (route === '/learner-archive') {
@@ -1450,7 +1464,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       }
       if (route === '/question-answer') {
         sendJson(res, 200, await apiRun('api/question-answer', () => engine.questionAnswer(
-          prompt => llmComplete(ctx, prompt),
+          llmSeam(ctx),
           need(body, 'course'), need(body, 'node'), need(body, 'qid'),
           typeof body.answer === 'string' ? body.answer : '',
           typeof body.elapsed_s === 'number' && Number.isFinite(body.elapsed_s) ? body.elapsed_s : null,
@@ -1478,7 +1492,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
       if (route === '/question-dispute/review') {
         // 瑕疵题申诉复核（ADR-0031）：LLM 两阶段复核三态裁定，只读不落盘
         sendJson(res, 200, await apiRun('api/question-dispute/review', () => engine.questionDisputeReview(
-          (prompt, system) => llmComplete(ctx, prompt, system),
+          llmSeam(ctx),
           need(body, 'course'), need(body, 'node'), need(body, 'qid'))))
         return
       }
@@ -1591,7 +1605,7 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
                 ? { notes: body.notes.filter((n: unknown): n is string => typeof n === 'string' && !!n.trim()) }
                 : {}),
             },
-            prompt => llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }),
+            llmSeam(ctx),
           ),
         })))
         return
@@ -2174,7 +2188,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { course: string; node: string; qid: string; answer: string; predicted?: string }) => run('learnhub_question_answer', async () =>
       JSON.stringify(await engine.questionAnswer(
-        prompt => llmComplete(ctx, prompt), args.course, args.node, args.qid, args.answer,
+        llmSeam(ctx), args.course, args.node, args.qid, args.answer,
         null, { ...(args.predicted !== undefined ? { predicted: args.predicted as never } : {}) }))))
 
   tool('learnhub_note_source_register',
@@ -2218,7 +2232,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     },
     (args: { id: string; count?: number }) => run('learnhub_note_source_generate', async () => {
       const n = questionCount(args.count)
-      return JSON.stringify(await engine.noteSourceGenerate(args.id, n, async prompt => stripFences(await llmComplete(ctx, prompt))))
+      return JSON.stringify(await engine.noteSourceGenerate(args.id, n, async prompt => stripFences(await llmSeam(ctx)(prompt))))
     }))
   tool('learnhub_anki_export',
     'Push today\'s due cards to desktop Anki over AnkiConnect (C2 #63, ADR-0011 — Anki is a pure ANSWERING conduit, the vault stays the ONLY scheduler): recalibrates the mirror deck(s) learnhub::<课程> on every call — adds missing due cards (model「learnhub」, fields 题目/答案/来源, the 来源 field carries 课程/节点/题id for write-back attribution), updates reworded ones, and DELETES mirror cards that are archived, regenerated, or no longer due in the vault (the deck is a disposable mirror — never judged Broken, vault wins on any mismatch; Anki-side scheduling output is discarded). Requires Anki running with the AnkiConnect add-on. After the learner answers in Anki (Again/Hard/Good/Easy), bring the answers home with learnhub_anki_import — import BEFORE the next export so freshly answered cards are not re-pushed.',
@@ -2251,7 +2265,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       transcript: { type: 'string', required: true, description: 'Full explain-back dialogue (learner explanations + your novice questions)' },
     },
     (args: { course: string; node: string; transcript: string }) => run('learnhub_explain_feedback', async () =>
-      JSON.stringify(await engine.explainBackFeedback(args.course, args.node, args.transcript, (prompt, system) => llmComplete(ctx, prompt, system)))))
+      JSON.stringify(await engine.explainBackFeedback(args.course, args.node, args.transcript, llmSeam(ctx)))))
   tool('learnhub_learner_card_add',
     'Archive the learner\'s own wording as a LearnerCard (E1「我的卡」, the archive target of E2 explain-back): kind recall_cue (再讲一遍 — default; front asks them to re-explain in their own words) or cloze_rewrite (挖空重述; content must contain at least one non-empty {{…}} cloze). The card lives in the「我的卡」E domain (ADR-0021: its reviews ride the merged cross-course review queue and earn unbound XP — totals/daily goal/streak only, never per-course or per-node ledgers; one push per card per day via learnhub_learner_rate / learnhub_learner_forget). Creating the card is zero XP and writes nothing to mastery or node scheduling. Duplicate content on the same node is rejected.',
     {
@@ -2288,7 +2302,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         ...(args.section !== undefined && args.section.trim() ? { section: args.section } : {}),
         ...(args.kind !== undefined ? { kind: args.kind as never } : {}),
         ...(args.prompt !== undefined && args.prompt.trim() ? { prompt: args.prompt } : {}),
-      }, (prompt, system) => llmComplete(ctx, prompt, system, { effort: llmCfg.fastEffort })))
+      }, llmSeam(ctx)))
     }))
   tool('learnhub_learner_queue',
     'List ALL「我的卡」E-domain cards (E1) for inventory/management: due cards first (due ascending), never-scheduled cards after. Each card carries prompt (front: what to restate) and content (back: the learner\'s own wording), source_node/source_section anchors, and attempts. Review happens in the merged cross-course review queue (ADR-0021) or directly via learnhub_learner_rate (Hard/Good/Easy 2/3/4) / learnhub_learner_forget — one push per card per day. Rating earns unbound XP: counted in totals/daily goal/streak only, never in per-course/per-node ledgers, never in mastery.',
@@ -2348,7 +2362,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       JSON.stringify(await engine.errorCardGenerate(args.course, {
         ...(args.node ? { node: args.node } : {}),
         ...(args.max !== undefined ? { max: args.max } : {}),
-      }, async prompt => stripFences(await llmComplete(ctx, prompt))))))
+      }, async prompt => stripFences(await llmSeam(ctx)(prompt))))))
   tool('learnhub_error_card_queue',
     'List ALL 错误对比卡 (C-3 #82) for inventory/audit: due cards first (due ascending), never-scheduled cards after. Each card carries the full face (q/options/answer/mine/explanation) plus source_q provenance — use this to spot-check that mined error patterns are faithful to what the learner actually did. Review happens in the merged cross-course review queue (source=error) or directly via learnhub_error_card_answer (auto-graded: pick the correct approach = 3, pick wrong = 1; one push per card per day). Correct picks earn unbound XP (totals/daily goal/streak only).',
     { course: { type: 'string', description: 'Course name; omit for all enabled courses' } },
@@ -2505,7 +2519,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
           ...(args.course !== undefined ? { course: args.course } : {}),
           ...(args.notes !== undefined ? { notes: args.notes } : {}),
         },
-        prompt => llmComplete(ctx, prompt, undefined, { effort: llmCfg.fastEffort }),
+        llmSeam(ctx),
       ))))
   tool('learnhub_project_exec_log',
     'Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project\'s OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. When nodes names linked course nodes, every EXISTING enc edge whose BOTH ends are among them counts as exercised: practice evidence flows ONE-WAY into each endpoint node\'s practice channel (existing applyPracticeEvidence EMA; the two streams stay separate). Zero XP, zero journal, zero FSRS/scheduling writes.',
@@ -2599,7 +2613,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         return JSON.stringify(await engine.receiptSubmit(
           args.course, args.node,
           { kind: args.kind as never, material: args.material, ...(args.force_full !== undefined ? { force_full: args.force_full } : {}) },
-          async (prompt, system) => llmComplete(ctx, prompt, system, { effort: llmCfg.deepEffort }),
+          llmSeam(ctx),
         ))
       }))
   tool('learnhub_receipt_list',

@@ -62,6 +62,7 @@
 - S46 `vault-links.ts::parseWikilinks / stripCodeFences / isDateTarget / isNonMdTarget / normalizeLinkName / buildNameIndex / linkScore / scoreTier / mapEdgesToNodes / orientLinkPair / dirExcluded / readVaultLinkDirExcludes / scanVaultLinks` —— V-2 Vault 链接先验（#91）：单正则解析（嵌入/别名/锚点/.md 剥离、代码围栏排除）、资产扩展名白名单（含点标题不误滤）、全半角归一与 basename 索引（撞车取最短）、可解释加法打分与三层分级（≥0.7 提案 / 0.4–0.7 待裁决 / <0.4 报告）、候选边双端映射与 pre 闭包方向裁决（闭包外不成边）、目录段排除（x* 段前缀）与 learnhub.json 整体替换；`tests/vault-links.test.ts`；扫描去噪审计/缓存落 state/analyze 建议段/单提案回填可重入/个人笔记零写入走 facade
 - S48 `sediment.ts::foldSediment / renderLearnerProfile / latestFsrsParams` —— 沉淀层读侧折叠（#139 / ADR-0034）：六类事件追加正典（即时/周分档，weekly 按 payload.week 归桶可重折）、latest/weekly/byConcept 三读法（两次折叠同输入同输出）、学习者档案纯渲染（手编必被覆盖）、FSRS 参数正典读法（缓存退役后删缓存不丢事实）；`tests/sediment.test.ts`；出生即写/断裂不变性（清内容层合成初始化仍取沉淀先验）/legacy 分区零消费/重置波及单独确认项走 facade
 - S47 `note-source.ts::poolMirrorBody` —— V-4 卡池镜像正文（#108）：[[个人笔记]] wikilink + 卡数/到期快照 + 零写入红线条目；`tests/note-source.test.ts`；出题落镜像/解除随删/relink 跟随新路径走 facade
+- S49 `llm.ts::LlmComplete` —— 宿主→引擎 LLM 补全注入缝（#137）：引擎侧生成/组装函数只依赖缝型（12 处回调签名统一），opts.effort 语义档 fast/deep 沿缝贯通、注入侧可观测（档位翻译成部署 fastEffort/deepEffort 收口在宿主 llmSeam 适配器）；`tests/llm-seam.test.ts`；固定回放假实现驱动出题全链字节级确定性、脚本化应答驱动判卷重问、learnerNoteAdd=fast / receiptSubmit=deep 档位观测走 facade
 
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 

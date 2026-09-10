@@ -20,6 +20,7 @@ import { nowIso } from './dates.ts'
 import { applyPracticeEvidence } from './grading.ts'
 import type { Fm } from './types.ts'
 import type { Store } from './store.ts'
+import type { LlmComplete } from './llm.ts'
 
 /** 回执材料形态（来源枚举，ADR-0016 裁决 4：留档、同权进 EMA）。 */
 export type ReceiptKind = 'text' | 'image' | 'export' | 'signoff'
@@ -181,7 +182,7 @@ export async function submitReceipt(input: {
   /** 当前节点 frontmatter。 */
   fm: Fm
   saveFm: (fm: Fm) => Promise<void>
-  llm: (prompt: string, system?: string) => Promise<string>
+  llm: LlmComplete
   template: string
 }): Promise<ReceiptSubmitResult> {
   const prior = (await input.store.receiptsAll()).filter(r => r.course === input.course && r.node === input.node)
@@ -197,7 +198,8 @@ export async function submitReceipt(input: {
     mode,
     recentVerdicts: prior.map(p => p.verdict).filter(Boolean),
   })
-  const review = parseReceiptReview(await input.llm(prompt, receiptReviewSystem()))
+  // 量表评审带错误逐条拆解，值得多思考一轮：恒走 deep 档（#137：档位沿缝声明，宿主适配器翻译成部署思考档）
+  const review = parseReceiptReview(await input.llm(prompt, receiptReviewSystem(), { effort: 'deep' }))
   const rec: ReceiptLogRec = {
     id: `r${index}`,
     ts: nowIso(),
