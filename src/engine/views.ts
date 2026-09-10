@@ -309,9 +309,8 @@ export interface GraphPathRelatedResult {
 
 export type GraphPathResult = GraphPathUnrelatedResult | GraphPathRelatedResult
 
-// ---- 提案门禁（graphPropose / graphApply / graphEncBackfill；gengraph.GraphProposals）----
-// gen 提案形态（GraphGenProposalResult / GraphApplyGenResult）随 #138 cutover 退役——
-// kind=gen 不再受理；图谱域剩 edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
+// ---- 提案门禁（graphPropose / graphApply / graphEncBackfill；proposals.GraphProposals）----
+// 图谱域：edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
 
 /** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。
  * operator/disagreement = 生长批受理时随行（#145 note 区算子标签；disagreement=带分歧声明）。
@@ -327,7 +326,7 @@ export interface GraphEditProposalResult {
   warns?: string[]
 }
 
-/** 种子提案受理（proposeSeed，#142）：课程新入口（gen 退役后接管），一次人审即开工。
+/** 种子提案受理（proposeSeed，#142）：课程新入口，一次人审即开工。
  * prior_feed_unresponded = ≥0.7 先验候选未被结构回应的条数（喂料分流，非阻可见）。 */
 export interface GraphSeedProposalResult {
   id: number

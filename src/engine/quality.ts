@@ -5,8 +5,7 @@
  * - audit.ts：R13 跨步候选 WARN
  * - analysis.ts：suggestions.jump_candidates / merge_blocks
  * - health.ts：前置完备项的空降口径
- * 术语口径见 CONTEXT.md「Jump / Float」。规模底线（Scale Floor）随 #138 cutover
- * 退役（ADR-0033：种子+生长式图，完成判据按目标类型二分，不再有交付规模承诺）。
+ * 术语口径见 CONTEXT.md「Jump / Float」。
  */
 import type { Graph } from './graph.ts'
 

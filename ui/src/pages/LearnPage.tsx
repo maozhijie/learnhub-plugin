@@ -640,18 +640,18 @@ function ReviewSession(props: {
   )
 }
 
-/** 建课引导：多轮生成走 dsh agent（技能 learnhub-graph-generate），面板只给入口说明。 */
+/** 建课引导：新课入口 = 种子提案（dsh agent 经 learnhub_graph_propose kind=seed 提交，一次人审），面板只给入口说明。 */
 function CreateDialog(props: { visible: boolean; onClose: () => void }) {
   return (
     <Modal title='生成新课程' visible={props.visible} footer={null} onCancel={props.onClose} style={{ width: 560 }}>
       <Space direction='vertical' size={12}>
-        <Alert type='info' content='课程图由 dsh agent 按多轮流程构建（范围分析 → 骨架 → 分批展开 → 审计修复），复杂主题产出数百节点，节点名用动作句。' />
+        <Alert type='info' content='课程图是生长式图（ADR-0033），不再一次成型铺骨架：agent 先提交「种子提案」（1–3 个起点 + 终点锚，一次人审即开工），图由教练随生长批逐步生长，节点名用动作句。' />
         <Text>在 dsh 对话里直接说：</Text>
         <Input.TextArea
-          value='用 learnhub-graph-generate 技能，为我生成课程「<主题>」，起点：<已有基础>，目标：<学会什么>'
+          value='用 learnhub_graph_propose 提交种子提案（kind=seed），为我建课程「<主题>」，起点：<已有基础>，终点锚：<学会什么>'
           readOnly autoSize={{ minRows: 3, maxRows: 4 }} />
         <Text type='secondary' style={{ fontSize: 12 }}>
-          提案生成后回到本面板「提案」页签审阅应用；在推荐流里点开节点即可「生成正文（自动出题）」。已有基础的节点可在推荐卡或节点学习页里「跳过」。
+          种子提案生成后回到本面板「提案」页签人审应用，应用后让 agent 罗盘初画（learnhub_compass_paint）出路线初稿，之后教练回合随生长批长图。在推荐流里点开节点即可「生成正文（自动出题）」；已有基础的节点可在推荐卡或节点学习页里「跳过」。
         </Text>
       </Space>
     </Modal>
@@ -1179,7 +1179,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
 
       {/* 核心区：「接下来学/复习」推荐流——点开直接进学习视图 */}
       {frame.tree && frame.tree.courses.length === 0 ? (
-        <Empty description='还没有课程。点右上角「生成新课程」看引导，然后在 dsh 对话里让 agent 按技能建课。' />
+        <Empty description='还没有课程。点右上角「生成新课程」看引导，然后在 dsh 对话里让 agent 提交种子提案建课。' />
       ) : (rec && (reviewEvents.length + learnEvents.length) > 0 ? (
         <Card size='small' title='接下来' style={{ borderRadius: 10 }}>
           <Space direction='vertical' style={{ width: '100%' }} size={10}>

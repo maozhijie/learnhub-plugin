@@ -41,7 +41,7 @@ test('#149: 项目目标反编译模板 v8——plan/seed 双半区契约、名�
   assert.ok(Content.promptVersionOf(tpl) >= 8, '项目目标反编译 应升到 v8')
   assert.match(tpl, /project: <项目 id/, 'plan 半区 = #92 的 PlanArtifact 契约')
   assert.match(tpl, /acceptance_hints/, '计划条目字段按设计 §3')
-  assert.match(tpl, /seed:/, '种子半区 = kind=seed 种子簇形态（gen regions 已随骨架退役）')
+  assert.match(tpl, /seed:/, '种子半区 = kind=seed 种子簇形态')
   assert.match(tpl, /零 est 零 enc 零 pre/, '种子节点骨架模式（est/enc/pre 不进提案，粗占位边引擎落）')
   assert.match(tpl, /1–3 起点/, '种子簇 = 1–3 起点 + 终点')
   assert.match(tpl, /名字对账/, '受理侧名字对账指令（计划引用悬空节点整体拒收）')

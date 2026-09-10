@@ -130,7 +130,7 @@ export default function App() {
       <div className={`app-body${tab === 'graph' ? ' no-pad' : ''}`}>
         {tab !== 'learn' && tab !== 'practice' && tab !== 'projects' && noCourse ? (
           <div style={{ paddingTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-            <Empty description='还没有课程：先在 dsh 里让 agent 按 learnhub-graph-generate 技能多轮生成课程图' />
+            <Empty description='还没有课程：在 dsh 对话里让 agent 提交种子提案建课（一次人审即开工，图随生长批生长）' />
             <Button type='primary' onClick={() => setTab('learn')}>回到学习页</Button>
           </div>
         ) : (

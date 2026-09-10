@@ -181,7 +181,7 @@ createServer(async (req, res) => {
         case '/question-archive': return sendJson(res, 200, await engine.questionArchive(need(body, 'course'), need(body, 'node'), need(body, 'qid'), body.archived === true))
         case '/course/delete': return sendJson(res, 200, await engine.courseDelete(need(body, 'course')))
         case '/generate/cancel': return sendJson(res, 200, { cancelled: false })
-        case '/proposals/apply': return sendJson(res, 200, await engine.graphApply(need(body, 'kind') === 'edit' ? 'edit' : 'gen', body.id !== undefined ? Number(body.id) : undefined))
+        case '/proposals/apply': return sendJson(res, 200, await engine.proposalApply(need(body, 'kind'), body.id !== undefined ? Number(body.id) : undefined))
         case '/proposals/reject': {
           const id = Number(body.id)
           await engine.graphReject(id, typeof body.note === 'string' ? body.note.trim() : '')

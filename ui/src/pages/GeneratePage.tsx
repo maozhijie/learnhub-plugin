@@ -192,7 +192,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
             </Space>} />
         )}
         <Text type='secondary' style={{ display: 'block', marginBottom: 8 }}>
-          全局串行队列：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。课程图的多轮生成在 dsh 对话里进行（agent 侧）。
+          全局串行队列：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。课程图的种子提案与生长批在 dsh 对话里进行（agent 侧）。
         </Text>
         {jobs === null ? null : jobs.length === 0 ? (
           <Empty description='当前没有生成任务' />

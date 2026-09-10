@@ -5,8 +5,7 @@ export type GenJobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'parti
 
 /** 生成队列 phase 全集（#131 §5 / #140）：
  * - 节点内容管线（course/node 键）：outline 大纲 → sections 逐节正文 → quiz 自动出题（quiz 亦为纯出题任务的入队形态）。
- * - 图生成任务（#131：种子/生长 = agent 循环 job 走图工具面；富化 = 引擎直跑覆盖层）。
- * 骨架（gen 骨架提案）已随 #138 cutover 退役，由 种子/生长 接管图结构生长。 */
+ * - 图结构生长（#131：种子/生长 = agent 循环 job 走图工具面；富化 = 引擎直跑覆盖层）。 */
 export const GEN_JOB_PHASES = ['outline', 'sections', 'quiz', '种子', '生长', '富化'] as const
 export type GenJobPhase = (typeof GEN_JOB_PHASES)[number]
 

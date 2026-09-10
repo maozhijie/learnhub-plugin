@@ -9,7 +9,7 @@ import { dataCheck } from '../src/engine/data-check.ts'
 import { withVault } from './helpers/vault.ts'
 
 // 种子提案 + 终点锚 + 完成宣告 + 先验喂料分流（#142 / ADR-0033 生长式图）：
-// kind=seed 是课程唯一新入口（gen 骨架已退役）——1–3 起点 + 终点 + 朝终点的粗占位边，
+// kind=seed 是课程唯一新入口——1–3 起点 + 终点 + 朝终点的粗占位边，
 // 一次人审即开工；apply 落终点锚（state/终点锚.json：终点+目标类型+声明日期）；
 // 完成 = 读侧宣告（零写侧状态）；换终点只走重新种子提案，锚无直改通道；
 // vault 链接先验 ≥0.7 喂料分流（未回应可见，零先验 Missing 非 Broken）。

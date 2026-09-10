@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { GraphStore } from '../src/engine/graph.ts'
-import { validateEnrichProposal } from '../src/engine/gengraph.ts'
+import { validateEnrichProposal } from '../src/engine/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import { YAML } from '../src/engine/yaml.ts'
 

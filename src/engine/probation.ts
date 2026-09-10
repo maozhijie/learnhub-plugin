@@ -12,7 +12,7 @@
  * 本模块是纯函数层 + 账本 IO 薄层：预注册校验、复诊期 clamp、到期判定与三枚可机判
  * metric（前进恢复/卡点集中度降幅/保留率恢复）、三率（插入率/剪枝率/复诊通过率，
  * 滚动 30 学习日）与韧性闸门映射。全部输入注入式（流水/账本行/学习日序列），同输入
- * 同输出；图与提案的读写归 gengraph/门面，这里零图依赖。
+ * 同输出；图与提案的读写归 proposals/门面，这里零图依赖。
  *
  * 账本是状态机索引：复诊预注册的落字处 = 提案 artifact（note.recheck），metric 由
  * 结算钩子按条目 proposal 字段回读——账本不重复存储（与 origin 从 journal 派生同款
@@ -136,7 +136,7 @@ export function clampRecheckDays(n: number): number {
   return Math.min(RECHECK_DAYS_MAX, Math.max(RECHECK_DAYS_MIN, Math.round(n)))
 }
 
-/** note.recheck 的 schema 门（gengraph.validateEditProposal 消费）：恰 {metric, days?}，
+/** note.recheck 的 schema 门（proposals.validateEditProposal 消费）：恰 {metric, days?}，
  * 未知键拒收；days 非法值拒收、越界值 clamp + warn（默认 10，声明只作快慢调节）。 */
 export function recheckPreregOf(raw: unknown): { errors: string[]; warns: string[]; prereg?: RecheckPrereg } {
   const errors: string[] = []
