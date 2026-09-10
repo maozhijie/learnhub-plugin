@@ -13,6 +13,13 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Close an issue when its work lands**: once your implementation commit is on the pushed branch, close the issue you implemented in the same session — `gh issue close <number> --comment "<what shipped, acceptance result, commit sha>"`. Commit messages here reference issues as `(#123)` without `Closes` keywords, so GitHub never auto-closes; the explicit close is the only close. Closing is scoped: only the issue your session implemented — prerequisites and other tickets stay with their own sessions.
 - **Land it yourself — merging back is part of the task**: closing the tickets is not the end of the flow. Unless the task says otherwise, the same session merges its delivery branch back into the branch it was cut from (normally main), verifies (full test suite + build in the source checkout), and cleans up its worktree — without waiting for the user to ask for the merge. Step-by-step: `docs/agents/parallel-sessions.md` → "Merge back".
 
+## Sub-issues and blocking edges
+
+结构化工单（`/to-tickets` 的 tracer-bullet 票、`/wayfinder` 的决策票）挂 GitHub 原生 sub-issue 与 blocking 关系。原生关系是依赖的唯一权威载体：它机器可读（`gh issue view <n> --json parent,blockedBy`），并行会话遍历依赖边抢票靠的就是它；正文里的 "Blocked by" 至多是人读摘要。以下 flag 已在本机 gh 2.100+ 实测可用（2026-09-10）：
+
+- **建票时**：`gh issue create --parent <父票号> --blocked-by <阻塞票号,...>`，反向声明用 `--blocking`。
+- **挂到已有票**：`gh issue edit <n> --parent <p>`、`--add-sub-issue <m,...>`、`--add-blocked-by <m,...>`、`--add-blocking <m,...>`，各有对应的 `--remove-parent` / `--remove-sub-issue` / `--remove-blocked-by` / `--remove-blocking`。
+
 ## Sandboxed execution and gh authentication
 
 `gh` normally reads its GitHub token from the OS credential store. On Windows this is the Credential Manager. A sandboxed command may be unable to read that store, so `gh auth status` can incorrectly report that the saved token is invalid even though the same command succeeds outside the sandbox.
