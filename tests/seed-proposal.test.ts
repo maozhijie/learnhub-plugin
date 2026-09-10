@@ -419,4 +419,16 @@ test('foldCompletion：锚缺席返回 null（未播种无从宣告）；覆盖�
   assert.equal(capFold!.complete, false)
   assert.equal(capFold!.criteria.closure_healthy, true)
   assert.equal(capFold!.criteria.mastery_met, false)
+
+  // 闭包口径：闭包之外远端节点的断边/enc 违约不拦终点的「闭包健康」
+  const messy = new Graph([{
+    name: '区', color: '', blocks: [{ name: '块', nodes: [
+      { name: '起点', pre: [], opt: false, note: '', enc: [] },
+      { name: '终点', pre: ['起点'], opt: false, note: '', enc: [] },
+      { name: '远端节点', pre: ['幽灵前置'], opt: false, note: '', enc: [{ node: '幽灵技能', w: 1 }] },
+    ] }],
+  }])
+  const messyFold = foldCompletion(messy, {}, { ...anchor, goal_type: 'capability', worksheet: [] })
+  assert.equal(messyFold!.criteria.closure_healthy, true, '闭包外的破损不进终点的闭包健康')
+  assert.equal(messyFold!.criteria.closure_errors!.length, 0)
 })

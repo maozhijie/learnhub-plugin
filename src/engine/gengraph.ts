@@ -15,7 +15,7 @@ import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflic
 import type { ConceptEntry, ConceptRef } from './concepts.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
 import {
-  validateSeedProposal, seedNodeToGNode, anchorFromSeed, readAnchor, writeAnchor,
+  validateSeedProposal, seedNodeToGNode, anchorFromSeed, readAnchor, writeAnchor, isSeedGraph,
 } from './seed.ts'
 import type { SeedProposalSpec } from './seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
@@ -583,11 +583,7 @@ export class GraphProposals {
     })
     await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
-    const graph2 = new Graph(regions2)
-    const anchor = await readAnchor(this.paths.anchorPath(root))
-    const seedPhase = !!anchor
-      && anchor.seed_nodes.length === graph2.names.length
-      && anchor.seed_nodes.every(n => graph2.nset.has(n))
+    const seedPhase = isSeedGraph(await readAnchor(this.paths.anchorPath(root)), new Graph(regions2))
     return {
       course: course.name,
       ops: spec.ops.length,
@@ -747,7 +743,7 @@ export class GraphProposals {
     const merged = new Graph(regions)
     const feed = await this.priorFeed(merged)
     // 种子图豁免：图仍 = 种子节点全集时健康分不设阈值（findings 不带 <80 提示）
-    const seedPhase = anchor.seed_nodes.length === merged.names.length && anchor.seed_nodes.every(n => merged.nset.has(n))
+    const seedPhase = isSeedGraph(anchor, merged)
     return {
       course: course.name,
       mode: spec.mode,

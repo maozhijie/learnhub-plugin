@@ -67,7 +67,7 @@ import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, readVaultLinksCache, scanVaultLinks, scoreTier } from './vault-links.ts'
 import type { VaultLinksDoc, VaultLinkCandidateView } from './vault-links.ts'
-import { readAnchor, foldCompletion } from './seed.ts'
+import { readAnchor, foldCompletion, isSeedGraph } from './seed.ts'
 import type { CompletionFold } from './seed.ts'
 import type { VaultLinkPrior } from './analysis.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
@@ -666,9 +666,7 @@ export class LearnhubEngine {
     const vaultLinks = await this.loadVaultLinkPrior(graph)
     // 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，Float（missing_pre）建议豁免
     const anchor = await readAnchor(this.paths.anchorPath(c.root))
-    const seedPhase = !!anchor
-      && anchor.seed_nodes.length === graph.names.length
-      && anchor.seed_nodes.every(n => graph.nset.has(n))
+    const seedPhase = isSeedGraph(anchor, graph)
     const doc = await analyzeGraph(c.name, graph, state, this.store, (await this.learningDay()).today, vaultLinks, seedPhase)
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
     return doc
@@ -4413,14 +4411,9 @@ export class LearnhubEngine {
     }
     // max 只是下调旋钮（批上限硬帽 ERROR_CARD_BATCH_MAX 防注水；工具面宣称的 cap 在此强制）
     const max = Math.max(1, Math.min(opts?.max ?? ERROR_CARD_BATCH_MAX, ERROR_CARD_BATCH_MAX, fresh.length))
-    // 节误解先验（#147 出生期候选错法）：图视图加载一次；加载失败不阻塞挖矿路径——
-    // 先验缺席合法，出卡照走。
-    let graph: Graph | null = null
-    try {
-      graph = (await this.loadView(c)).graph
-    } catch {
-      graph = null
-    }
+    // 图视图加载一次（fail loud——图 Broken 不能被静默读成先验缺席，Missing/Broken 两态
+    // 不混同）；节误解先验（#147 出生期候选错法）取材于此，先验缺席仍合法。
+    const { graph, state } = await this.loadView(c)
     const skipped: string[] = []
     interface Mat { node: string; qid: string; section: string | null; sectionBody: string | null }
     const mats: Array<Mat & { material: string }> = []
@@ -4440,7 +4433,6 @@ export class LearnhubEngine {
       let sectionTitle: string | null = null
       let sectionBody: string | null = null
       try {
-        const { graph, state } = await this.loadView(c)
         const manifest = state[x.node]?.content.sections
         const entry = sectionEntryOf(q.section, manifest)
         const sections = await this.explainPoints(c, graph, x.node)
@@ -4454,7 +4446,7 @@ export class LearnhubEngine {
         // 正文缺失不阻塞生成：原题解析已足够对照
       }
       const wrongs = x.wrongs.map(w => `「${w}」`).join('、')
-      const mis = graph?.misconceptionsOf[x.node] ?? []
+      const mis = graph.misconceptionsOf[x.node] ?? []
       mats.push({
         node: x.node, qid: x.qid, section: q.section ?? sectionTitle,
         sectionBody,

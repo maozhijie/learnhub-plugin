@@ -444,10 +444,3 @@ export function splitPriorFeed(
   }
   return { responded, unresponded }
 }
-
-/** Graph 的最小形状（splitPriorFeed 只读这三样；真 Graph 兼容）。 */
-export interface PriorFeedGraph {
-  nset: Set<string>
-  preOf: Record<string, string[]>
-  encOf: Record<string, [string, number][]>
-}

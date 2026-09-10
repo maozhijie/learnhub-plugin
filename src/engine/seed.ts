@@ -10,7 +10,6 @@
  *   终点 mastery ≥ 阈值且闭包健康；覆盖锚定 = 块工作表全部核销且终点 mastery 达标。
  *   零写侧状态、零专门停机代码；锚文件缺失 = 未播种（Missing 合法，null 折叠）。
  */
-import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { atomicWrite } from './store.ts'
 import { parseConceptFields } from './graph.ts'
@@ -26,6 +25,10 @@ export type GoalType = 'capability' | 'coverage'
 /** 完成判据的终点 mastery 阈值（读侧折叠常量；mastery = 0.7·稳定度完成度 + 0.3·练习证据）。 */
 export const COMPLETION_MASTERY_THRESHOLD = 0.8
 
+/** 起点定位三路（词条「种子」；project 路的完整接线归项目锚定票 #149，本票只留声明位）。 */
+export const START_BASES = ['baseline', 'vault', 'project'] as const
+export type StartBasis = (typeof START_BASES)[number]
+
 /** 终点锚（state/终点锚.json）：课程唯一结构承诺物。 */
 export interface EndpointAnchor {
   version: 1
@@ -39,9 +42,40 @@ export interface EndpointAnchor {
   /** 种子节点全集（起点 + 终点）：种子图豁免与完成折叠的闭包口径用。 */
   seed_nodes: string[]
   /** 起点定位三路声明（常识基线/vault 先验/项目簇占位；语义路由，引擎只留痕）。 */
-  start_basis: Record<string, string>
+  start_basis: Record<string, StartBasis>
   /** 块工作表（仅覆盖锚定课程携带；计划层核对表，图结构层零块承诺）。 */
   worksheet: Array<{ block: string; note?: string; done: boolean }>
+}
+
+/** 块工作表条目的共用解析+归一（validateAnchor 与 validateSeedProposal 同一契约）：
+ * block 必填非空、note/done 选填合法；strictKeys 时未知键拒收（提案侧防呆，锚读侧宽容）。
+ * 返回归一条目列表（坏条目跳过，错误行已入 errors）。 */
+function parseWorksheetEntries(
+  raw: unknown, where: string, errors: string[], opts: { strictKeys?: boolean; requireNonEmpty?: boolean } = {},
+): Array<{ block: string; note?: string; done: boolean }> {
+  if (!Array.isArray(raw) || (opts.requireNonEmpty && !raw.length)) {
+    errors.push(`${where}: 必须是非空列表（条目 = {block, note?, done?}）`)
+    return []
+  }
+  const out: Array<{ block: string; note?: string; done: boolean }> = []
+  raw.forEach((item, i) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      errors.push(`${where}.${i}: 必须是映射`)
+      return
+    }
+    const w = item as Record<string, unknown>
+    if (opts.strictKeys) {
+      const unknownW = Object.keys(w).filter(k => !['block', 'note', 'done'].includes(k))
+      if (unknownW.length) errors.push(`${where}.${i} 含未知字段 ${JSON.stringify(unknownW)}（只允许 block/note/done）`)
+    }
+    if (typeof w.block !== 'string' || !w.block.trim()) errors.push(`${where}.${i}.block: 不能为空`)
+    if (w.note !== undefined && typeof w.note !== 'string') errors.push(`${where}.${i}.note: 必须是字符串`)
+    if (w.done !== undefined && typeof w.done !== 'boolean') errors.push(`${where}.${i}.done: 必须是布尔值`)
+    if (typeof w.block === 'string' && w.block.trim()) {
+      out.push({ block: w.block.trim(), ...(typeof w.note === 'string' && w.note ? { note: w.note } : {}), done: w.done === true })
+    }
+  })
+  return out
 }
 
 /** 锚文件契约校验（读侧 fail loud 的依据；手改破坏形状 = Broken 可见）。 */
@@ -70,35 +104,20 @@ export function validateAnchor(doc: unknown): { errors: string[]; anchor?: Endpo
   }
   let worksheet: EndpointAnchor['worksheet'] = []
   if (d.worksheet !== undefined) {
-    if (!Array.isArray(d.worksheet)) {
-      errors.push('worksheet: 必须是列表（块工作表条目 = {block, note?, done}）')
-    } else {
-      worksheet = []
-      d.worksheet.forEach((raw, i) => {
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-          errors.push(`worksheet.${i}: 必须是映射`)
-          return
-        }
-        const w = raw as Record<string, unknown>
-        if (typeof w.block !== 'string' || !w.block.trim()) errors.push(`worksheet.${i}.block: 不能为空`)
-        if (w.note !== undefined && typeof w.note !== 'string') errors.push(`worksheet.${i}.note: 必须是字符串`)
-        if (w.done !== undefined && typeof w.done !== 'boolean') errors.push(`worksheet.${i}.done: 必须是布尔值`)
-        worksheet.push({ block: String(w.block ?? '').trim(), ...(typeof w.note === 'string' && w.note ? { note: w.note } : {}), done: w.done === true })
-      })
-    }
+    worksheet = parseWorksheetEntries(d.worksheet, 'worksheet', errors)
   }
   if (d.goal_type === 'coverage' && (!Array.isArray(d.worksheet) || !d.worksheet.length)) {
     errors.push('worksheet: 覆盖锚定课程必须携带块工作表（非空）；能力锚定课程不带')
   }
-  const startBasis: Record<string, string> = {}
+  const startBasis: Record<string, StartBasis> = {}
   if (d.start_basis !== undefined) {
     if (typeof d.start_basis !== 'object' || d.start_basis === null || Array.isArray(d.start_basis)) {
       errors.push('start_basis: 必须是映射（起点名 → 定位路由 baseline/vault/project）')
     } else {
       for (const [k, v] of Object.entries(d.start_basis as Record<string, unknown>)) {
-        if (typeof v !== 'string' || !['baseline', 'vault', 'project'].includes(v)) {
-          errors.push(`start_basis[${k}]: 非法定位 ${JSON.stringify(v)}（允许 baseline/vault/project）`)
-        } else startBasis[k] = v
+        if (typeof v !== 'string' || !(START_BASES as readonly string[]).includes(v)) {
+          errors.push(`start_basis[${k}]: 非法定位 ${JSON.stringify(v)}（允许 ${START_BASES.join('/')}）`)
+        } else startBasis[k] = v as StartBasis
       }
     }
   }
@@ -118,15 +137,22 @@ export function validateAnchor(doc: unknown): { errors: string[]; anchor?: Endpo
   }
 }
 
-/** 读锚：Missing = null（未播种，合法空态）；Broken（不可读/契约违约）fail loud——
- * 锚是结构承诺物，静默降级会让完成判据按坏锚折叠（ADR-0004）。 */
+/** 读锚：Missing = null（未播种，合法空态）；Broken（不可读/JSON 坏/契约违约）fail
+ * loud——锚是结构承诺物，静默降级会让完成判据按坏锚折叠（ADR-0004）。 */
 export async function readAnchor(path: string): Promise<EndpointAnchor | null> {
-  if (!existsSync(path)) return null
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch (err) {
+    const code = (err as { code?: unknown }).code
+    if (code === 'ENOENT') return null
+    throw new Error(`[终点锚] 锚文件不可读（位置：${path}）——锚不提供直改通道，换终点走种子提案（kind=seed）重写。\n  ✗ ${err instanceof Error ? err.message : String(err)}`)
+  }
   let doc: unknown
   try {
-    doc = JSON.parse(await readFile(path, 'utf8'))
+    doc = JSON.parse(text)
   } catch (err) {
-    throw new Error(`[终点锚] 锚文件 Broken（JSON 无法解析，位置：${path}）——锚不提供直改通道，换终点走种子提案（kind=seed）重写。`)
+    throw new Error(`[终点锚] 锚文件 Broken（JSON 无法解析，位置：${path}）——锚不提供直改通道，换终点走种子提案（kind=seed）重写。\n  ✗ ${err instanceof Error ? err.message : String(err)}`)
   }
   const v = validateAnchor(doc)
   if (v.errors.length || !v.anchor) {
@@ -155,7 +181,7 @@ export interface SeedNodeSpec {
   assumes?: Record<string, ConceptTier>
   misconceptions?: Misconception[]
   /** 起点定位路由声明（仅起点；baseline 常识基线 / vault 先验熟悉边界 / project 反编译子图簇占位——第三路语义归项目锚定票）。 */
-  basis?: 'baseline' | 'vault' | 'project'
+  basis?: StartBasis
 }
 
 export interface SeedProposalSpec {
@@ -200,8 +226,8 @@ function parseSeedNode(raw: unknown, where: string, errors: string[], warns: str
   if (r.difficulty !== undefined && ![1, 2, 3, 4, 5].includes(Number(r.difficulty))) {
     errors.push(`${where}.difficulty: 非法难度 ${String(r.difficulty)}（允许 1-5）`)
   }
-  if (r.basis !== undefined && !['baseline', 'vault', 'project'].includes(String(r.basis))) {
-    errors.push(`${where}.basis: 非法定位 ${String(r.basis)}（允许 baseline/vault/project）`)
+  if (r.basis !== undefined && !(START_BASES as readonly string[]).includes(String(r.basis))) {
+    errors.push(`${where}.basis: 非法定位 ${String(r.basis)}（允许 ${START_BASES.join('/')}）`)
   }
   let fields: ReturnType<typeof parseConceptFields> = {}
   if (r.teaches !== undefined || r.assumes !== undefined || r.misconceptions !== undefined) {
@@ -218,7 +244,7 @@ function parseSeedNode(raw: unknown, where: string, errors: string[], warns: str
     ...(typeof r.bloom === 'string' && (BLOOM_LEVELS as readonly string[]).includes(r.bloom) ? { bloom: r.bloom as BloomLevel } : {}),
     ...([1, 2, 3, 4, 5].includes(Number(r.difficulty)) ? { difficulty: Number(r.difficulty) as 1 | 2 | 3 | 4 | 5 } : {}),
     ...fields,
-    ...(typeof r.basis === 'string' && ['baseline', 'vault', 'project'].includes(r.basis) ? { basis: r.basis as SeedNodeSpec['basis'] } : {}),
+    ...(typeof r.basis === 'string' && (START_BASES as readonly string[]).includes(r.basis) ? { basis: r.basis as StartBasis } : {}),
   }
 }
 
@@ -259,26 +285,7 @@ export function validateSeedProposal(doc: unknown, warns?: string[]): { errors?:
   // 工作表：覆盖必带非空、能力拒收（互斥由判据语义锁定，不靠约定）
   let worksheet: SeedProposalSpec['worksheet']
   if (d.worksheet !== undefined) {
-    if (!Array.isArray(d.worksheet) || !d.worksheet.length) {
-      errors.push('worksheet: 必须是非空列表（条目 = {block, note?}；覆盖锚定的计划层核对表）')
-    } else {
-      worksheet = []
-      d.worksheet.forEach((raw, i) => {
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-          errors.push(`worksheet.${i}: 必须是映射`)
-          return
-        }
-        const w = raw as Record<string, unknown>
-        const unknownW = Object.keys(w).filter(k => !['block', 'note', 'done'].includes(k))
-        if (unknownW.length) errors.push(`worksheet.${i} 含未知字段 ${JSON.stringify(unknownW)}（只允许 block/note/done）`)
-        if (typeof w.block !== 'string' || !w.block.trim()) errors.push(`worksheet.${i}.block: 不能为空`)
-        if (w.note !== undefined && typeof w.note !== 'string') errors.push(`worksheet.${i}.note: 必须是字符串`)
-        if (w.done !== undefined && typeof w.done !== 'boolean') errors.push(`worksheet.${i}.done: 必须是布尔值`)
-        if (typeof w.block === 'string' && w.block.trim()) {
-          worksheet!.push({ block: w.block.trim(), ...(typeof w.note === 'string' && w.note ? { note: w.note } : {}), done: w.done === true })
-        }
-      })
-    }
+    worksheet = parseWorksheetEntries(d.worksheet, 'worksheet', errors, { strictKeys: true, requireNonEmpty: true })
   }
   if (goalType === 'coverage' && !worksheet?.length) {
     errors.push('worksheet: 覆盖锚定（goal_type=coverage）必须携带块工作表——完成判据=块工作表+终点')
@@ -357,27 +364,48 @@ export interface CompletionFold {
   }
 }
 
-/** 终点前置闭包健康（结构可判定部分；audit 的 E 级同款口径，纯派生零 IO 零写入）：
- * E1 重名 / E2 断边 / E3 环 / E6 enc 断边 / E7 enc 非祖先。 */
+/** 终点前置闭包健康（能力锚定完成判据的结构可判定部分；audit 的 E 级同款口径，
+ * 纯派生零 IO 零写入）。检查面收敛在「终点 + 其前置传递闭包」上——闭包之外与终点
+ * 无关的远端破损由审计/生成门负责，不拦完成宣告：E1 重名 / E2 闭包断边 /
+ * E3 闭包上的环 / E6 闭包 enc 断边 / E7 闭包 enc 非祖先。 */
 export function closureHealthErrors(graph: Graph, endpoint: string): string[] {
   const errors: string[] = []
   for (const [n, c] of Object.entries(graph.count)) {
     if (c > 1) errors.push(`重名节点: ${n} 出现 ${c} 次`)
   }
   if (!graph.nset.has(endpoint)) return errors // 悬空锚由 endpoint_in_graph 呈现，这里不重复
-  for (const n of graph.names) {
+  // 终点前置闭包 = 终点 + 全部传递前置（环存在时 reach 缺席，退化为闭包内逐点 BFS）
+  const closure = new Set<string>([endpoint])
+  if (!graph.hasCycle) {
+    for (const n of graph.names) if (graph.isAncestor(n, endpoint)) closure.add(n)
+  } else {
+    const queue = [endpoint]
+    while (queue.length) {
+      const u = queue.shift()!
+      for (const p of graph.preOf[u]) {
+        if (graph.nset.has(p) && !closure.has(p)) { closure.add(p); queue.push(p) }
+      }
+    }
+  }
+  for (const n of closure) {
     for (const p of graph.preOf[n]) {
       if (!graph.nset.has(p)) errors.push(`断边: ${n} -> ${p}`)
     }
-  }
-  if (graph.hasCycle) errors.push(`存在环：涉及 ${graph.cycleNodes.length} 个节点`)
-  for (const n of graph.names) {
+    if (graph.cycleNodes.includes(n)) errors.push(`环上有闭包节点: ${n}`)
     for (const [target] of graph.encOf[n] ?? []) {
       if (!graph.nset.has(target)) errors.push(`enc 断边: ${n} -> ${target}`)
       else if (!graph.hasCycle && !graph.isAncestor(target, n)) errors.push(`enc 非祖先: ${n} -> ${target}`)
     }
   }
   return errors
+}
+
+/** 种子图判定（种子审计豁免与健康分不设阈值的口径，#142）：图仍 = 终点锚的
+ * 种子节点全集（一个不多一个不少）——图还是种子本身；生长批进入任一节点即翻转。 */
+export function isSeedGraph(anchor: EndpointAnchor | null, graph: Graph): boolean {
+  return !!anchor
+    && anchor.seed_nodes.length === graph.names.length
+    && anchor.seed_nodes.every(n => graph.nset.has(n))
 }
 
 /** 完成判据折叠（读侧宣告，零写副作用）：锚缺失返回 null（未播种 = 无从宣告）。

@@ -19,7 +19,7 @@ import { parseDay, todayStr, daysBetween } from './dates.ts'
 import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import { Content } from './content.ts'
-import { readAnchor } from './seed.ts'
+import { readAnchor, isSeedGraph } from './seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
 
 export interface AuditResult {
@@ -57,9 +57,7 @@ export async function runAudit(
   // 种子图豁免（#142）：图仍 = 终点锚的种子节点全集 = 图还是种子本身——形状类告警
   // 豁免（生长批进入后自动恢复）；E 级照查，种子也有真错误。
   const anchor = await readAnchor(paths.anchorPath(root))
-  const seedPhase = !!anchor
-    && anchor.seed_nodes.length === names.length
-    && anchor.seed_nodes.every(n => nset.has(n))
+  const seedPhase = isSeedGraph(anchor, graph)
 
   // R1 / R2 —— R1 阈值随图最大深度相对化（大图 depth>20 时 depth≤5 的旁支叶子是正常收尾），
   // 条目多时只列前 15 条附溢出行，避免淹没报告里的其他发现
