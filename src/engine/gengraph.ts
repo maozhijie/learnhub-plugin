@@ -9,7 +9,7 @@ import { readFile, writeFile, rename, mkdir, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './store.ts'
-import { Graph, GraphStore, structureCheck, loadRegionDoc, parseNode, snapshotDoc } from './graph.ts'
+import { Graph, GraphStore, parseNode, snapshotDoc } from './graph.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS } from './types.ts'
@@ -50,6 +50,15 @@ export interface EditProposalSpec {
 }
 
 const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'move', 'set_note'] as const
+
+/** gen 骨架提案退役（#138 cutover / ADR-0033 生长式图）：受理门统一拒收，新课程
+ * 入口由种子提案接管（#142），反编译子图入口随种子票重接（#149）。 */
+export function genRetiredError(what: string): Error {
+  return new Error(
+    `[${what}] kind=gen 骨架提案已退役（#138 cutover / ADR-0033 生长式图）——`
+    + '新课程入口由种子提案接管（#142），课程结构变更用 kind=edit；'
+    + '存量 pending gen 提案不再受理 apply（reject 留痕）。')
+}
 
 /** EditOp 的 enc 载荷 → EncEdge[]（字符串=权重 1，映射带可选 w/note；与图 YAML parseEnc 同形态）。 */
 function normalizeOpEnc(raw: EditOp['enc']): EncEdge[] {
@@ -263,102 +272,16 @@ export class GraphProposals {
     return YAML.parse(await readFile(path, 'utf8'))
   }
 
-  /** graph propose-gen：校验课程图 YAML → pending 提案。 */
-  async proposeGen(yamlText: string): Promise<Record<string, unknown>> {
-    const v = validateGenProposal(YAML.parseModel(yamlText))
-    if (v.errors) throw new Error(`[propose-gen] schema 校验失败，提案未受理。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
-    const spec = v.spec!
-    const course = await this.registry.get(spec.course)
-    if (spec.mode === 'new' && course) throw new Error(`[propose-gen] mode=new 但课程「${spec.course}」已在注册表（改用 append）。`)
-    if (spec.mode === 'append' && !course) throw new Error(`[propose-gen] mode=append 但注册表中没有课程「${spec.course}」。`)
-
-    const newRegions = specToRegions(spec.regions)
-    const existing = course ? new Graph(await new GraphStore(this.paths, this.paths.courseRoot(course.root)).load()) : null
-    const errors = structureCheck(existing, newRegions, '生成提案')
-    if (errors.length) throw new Error(`[propose-gen] 结构检查失败，提案未受理（修正后重提）。\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
-
-    const nodeCount = newRegions.flatMap(r => r.blocks.flatMap(b => b.nodes)).length
-    const { pid } = await this.saveArtifact('gen', spec.course, YAML.parseModel(yamlText))
-    await this.store.updateProposal(pid, { summary: `${spec.mode}：${spec.regions.length} 区 / ${nodeCount} 节点` })
-    return { id: pid, kind: 'gen', course: spec.course, mode: spec.mode, regions: spec.regions.length, nodes: nodeCount }
+  /** graph propose-gen：已退役（#138 cutover / ADR-0033 生长式图）。
+   * validateGenProposal/specToRegions 保留——反编译子图半区（project-decompile）
+   * 仍以它们做静态形态门；gen 作为提案 kind 不再受理。 */
+  async proposeGen(_yamlText?: string): Promise<Record<string, unknown>> {
+    throw genRetiredError('propose-gen')
   }
 
-  /** graph apply-gen：把 pending 生成提案写入 data/*.yaml（audit 门禁在 facade 层跑）。 */
-  async applyGen(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<Record<string, unknown>> {
-    if (!audit.ok) throw new Error('[apply-gen] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
-    const prop = await this.store.takePending('gen', pid)
-    const v = validateGenProposal(await this.loadArtifact(prop.artifact))
-    if (v.errors || !v.spec) throw new Error(`[apply-gen] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
-    const spec = v.spec
-    const newRegions = specToRegions(spec.regions)
-
-    let course = await this.registry.get(spec.course)
-    if (spec.mode === 'new' && !course) course = await this.initCourse(spec.course)
-    if (!course) throw new Error(`[apply-gen] 注册表中没有课程「${spec.course}」。`)
-    const root = course.root
-    const store = new GraphStore(this.paths, this.paths.courseRoot(root))
-
-    const existingFiles = await store.regionFiles()
-    // 记录本次会新建的块（append 到已存在区时只算真正新增的块名；mode=new 全算）
-    const existingRegionBlocks = new Map<string, Set<string>>()
-    for (const [regionName, path] of Object.entries(existingFiles)) {
-      const current = loadRegionDoc(YAML.parse(await readFile(path, 'utf8')), path)
-      existingRegionBlocks.set(regionName, new Set(current.blocks.map(b => b.name)))
-    }
-    const createdBlocks = new Set<string>()
-    for (const region of newRegions) {
-      const currentBlocks = existingRegionBlocks.get(region.name)
-      for (const block of region.blocks) {
-        if (!currentBlocks?.has(block.name)) createdBlocks.add(block.name)
-      }
-    }
-    const written: string[] = []
-    for (const region of newRegions) {
-      if (region.name in existingFiles) {
-        const path = existingFiles[region.name]
-        const current = loadRegionDoc(YAML.parse(await readFile(path, 'utf8')), path)
-        const byName = new Map(current.blocks.map(b => [b.name, b]))
-        for (const nb of region.blocks) {
-          const hit = byName.get(nb.name)
-          if (hit) hit.nodes.push(...nb.nodes)
-          else current.blocks.push(nb)
-        }
-        await store.writeRegionDoc(path, current)
-      } else {
-        const idx = Object.keys(existingFiles).length + written.length
-        const path = `${this.paths.dataDir(root)}/${String(idx).padStart(2, '0')}_${region.name}.yaml`
-        await store.writeRegionDoc(path, region)
-      }
-      written.push(region.name)
-    }
-
-    const regions = await store.load()
-    const version = (await this.store.latestSnapshotVersion(course.name)) + 1
-    await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions))
-    await this.ensureNotesFor(root, regions)
-    await this.store.appendJournal({ course: course.name, node: '*', rating: null, kind: 'graph_gen', elapsed_days: 0, session: String(prop.id), detail: `新增区: ${written.join('、')}` })
-    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
-    return {
-      course: course.name,
-      regions: written,
-      snapshot: version,
-      nodes: new Graph(regions).names.length,
-      created_blocks: [...createdBlocks],
-      findings: applyFindings(audit),
-    }
-  }
-
-  /** mode=new：注册表条目 + data/课程/state 脚手架。 */
-  private async initCourse(name: string): Promise<CourseEntry> {
-    const items = await this.registry.load()
-    const root = name
-    for (const sub of ['data', '课程', 'state']) {
-      await mkdir(`${this.centerRoot}/${root}/${sub}`, { recursive: true })
-    }
-    const entry: CourseEntry = { id: `${root}-01`, name, root, enabled: true }
-    items.push(entry)
-    await this.registry.save(items)
-    return entry
+  /** graph apply-gen：已退役（同上）；存量 pending gen 提案只能 reject 留痕。 */
+  async applyGen(_pid?: number, _audit?: ApplyAudit): Promise<Record<string, unknown>> {
+    throw genRetiredError('apply-gen')
   }
 
   /** graph propose-edit：在内存图上模拟执行 → pending。 */

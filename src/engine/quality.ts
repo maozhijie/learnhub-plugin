@@ -1,11 +1,12 @@
 /**
- * 图结构质量检测器：认知跨步（Jump）/ 空降节点（Float）/ 规模底线（Scale Floor）。
+ * 图结构质量检测器：认知跨步（Jump）/ 空降节点（Float）。
  *
  * 纯函数、零依赖（Graph 只以 Pick/类型形式出现），供三处消费：
  * - audit.ts：R13 跨步候选 WARN
- * - analysis.ts：suggestions.jump_candidates / merge_blocks、scale 对照
+ * - analysis.ts：suggestions.jump_candidates / merge_blocks
  * - health.ts：前置完备项的空降口径
- * 术语口径见 CONTEXT.md「Jump / Float / Scale Floor」；规模独立门槛的决策见 ADR-0002。
+ * 术语口径见 CONTEXT.md「Jump / Float」。规模底线（Scale Floor）随 #138 cutover
+ * 退役（ADR-0033：种子+生长式图，完成判据按目标类型二分，不再有交付规模承诺）。
  */
 import type { Graph } from './graph.ts'
 
@@ -57,20 +58,4 @@ export function floatNodes(
   return graph.names
     .filter(n => graph.preOf[n].length === 0 && graph.regionIdxOf[n] >= exempt)
     .sort()
-}
-
-export interface ScaleTarget { min: number; max: number }
-
-export interface ScaleReport {
-  nodes: number
-  target: ScaleTarget | null
-  /** null = 未宣布目标，不作判定；超上限不拦（宁愿节点过多不要过少）。 */
-  ok: boolean | null
-  shortfall: number
-}
-
-/** 规模底线对照：节点数是否达到宣布的目标下限，缺口多少。 */
-export function scaleReport(nodes: number, target?: ScaleTarget | null): ScaleReport {
-  if (!target) return { nodes, target: null, ok: null, shortfall: 0 }
-  return { nodes, target, ok: nodes >= target.min, shortfall: Math.max(0, target.min - nodes) }
 }

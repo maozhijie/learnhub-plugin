@@ -1949,23 +1949,13 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { path: string }) => run('learnhub_note_resolve', async () =>
       JSON.stringify(await engine.resolveNote(VAULT, args.path, CENTER_REL))))
   tool('learnhub_graph_analyze',
-    'Analyze a course knowledge graph: structural stats, unreachable nodes, bottlenecks, lapse hotspots, graph health score (0-100, see health), next-batch suggestions (suggestions.expand_blocks/missing_pre/unconverged, plus jump_candidates + jump_total — cognitive-jump edges needing a verdict each — and merge_blocks), the scale-floor report (scale; pass targetMin/targetMax declared in scope analysis), the full per-node schema (schema: pre/enc/est/bloom/difficulty/note per node — the data basis for edge-level self-checks), plus cytoscape render elements. Returns JSON. Run before planning each batch of graph edits; the next-batch plan must cite concrete entries from health/suggestions/scale.',
+    'Analyze a course knowledge graph: structural stats, unreachable nodes, bottlenecks, lapse hotspots, graph health score (0-100, see health), next-batch suggestions (suggestions.expand_blocks/missing_pre/unconverged, plus jump_candidates + jump_total — cognitive-jump edges needing a verdict each — and merge_blocks), the full per-node schema (schema: pre/enc/est/bloom/difficulty/note per node — the data basis for edge-level self-checks), plus cytoscape render elements. Returns JSON. Run before planning each batch of graph edits; the next-batch plan must cite concrete entries from health/suggestions.',
     {
       course: { type: 'string', description: 'Course name; omit when only one course is enabled' },
       elementsOnly: { type: 'boolean', description: 'Only output cytoscape render elements (nodes/edges)' },
-      targetMin: { type: 'number', description: 'Scale-floor target node count min (declared in scope analysis); provide together with targetMax, omit both when not declared' },
-      targetMax: { type: 'number', description: 'Scale-floor target node count max (advisory upper bound, never blocking); provide together with targetMin' },
     },
-    (args: { course?: string; elementsOnly?: boolean; targetMin?: number; targetMax?: number }) => run('learnhub_graph_analyze', async () => {
-      if ((args.targetMin !== undefined) !== (args.targetMax !== undefined)) {
-        throw new Error('[graph-analyze] targetMin 与 targetMax 必须成对提供（只给一个会被忽略）')
-      }
-      return JSON.stringify(await engine.graphAnalyze(
-        args.course,
-        args.elementsOnly,
-        args.targetMin !== undefined && args.targetMax !== undefined ? { min: args.targetMin, max: args.targetMax } : null,
-      ))
-    }))
+    (args: { course?: string; elementsOnly?: boolean }) => run('learnhub_graph_analyze', async () =>
+      JSON.stringify(await engine.graphAnalyze(args.course, args.elementsOnly))))
   tool('learnhub_graph_node',
     'Inspect one graph node in depth: schema field values (pre/est/type/bloom/difficulty/note), direct successors, enc component-skill edges with weights and notes, block placement, learning stage/content status, and the full transitive prerequisite closure (sorted deepest-first). Use to drill into a single node without pulling the whole graph.',
     {
@@ -1993,9 +1983,9 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; from: string; to: string }) => run('learnhub_graph_path', async () =>
       JSON.stringify(await engine.graphPath(args.course, args.from, args.to))))
   tool('learnhub_graph_propose',
-    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen (skeleton, once) top-level keys: course; mode (REQUIRED; only "new" or "append" — new course vs append-to-existing); regions[] where each region entry is {region: 区名, color?, blocks: [{name: 块名, nodes: [...]}]} — the region-entry key is `region`, NOT name; each gen node is {name: 节点名, pre: [前置], opt?, note?, enc?, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5)} — gen nodes use key `name`. kind=edit (per batch) top-level keys: course; reason?; ops[] — every op targets its node via key `node` (NOT name, opposite of gen nodes): add_node{node, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?}; set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges). In graph-generation batches apply immediately after gates pass (anchor-review model, ADR-0003); revision changes stay pending for human review.',
+    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen is RETIRED (cutover #138, ADR-0033 grown graph) and rejected at the gate — new course entry comes from seed proposals. kind=edit (per batch) top-level keys: course; reason?; ops[] — every op targets its node via key `node` (NOT name, opposite of gen nodes): add_node{node, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?}; set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges). In graph-generation batches apply immediately after gates pass (anchor-review model, ADR-0003); revision changes stay pending for human review.',
     {
-      kind: { type: 'string', required: true, description: '"gen" (new/append course graph) or "edit" (change ops)' },
+      kind: { type: 'string', required: true, description: '"edit" (change ops); kind=gen (course skeleton) is retired and rejected — seeds own new course entry now' },
       yaml: { type: 'string', required: true, description: 'Full proposal YAML text (GenProposal or EditProposal schema)' },
     },
     (args: { kind: string; yaml: string }) => run('learnhub_graph_propose', async () =>
@@ -2004,7 +1994,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'List graph proposals (gen/edit) by status — use status=pending to see what awaits human review in the panel, with the proposal id, course, reason, and op summary. After the user decides in the panel, apply with learnhub_graph_apply using that id.',
     {
       status: { type: 'string', description: 'Filter by status (default pending; e.g. applied/rejected)' },
-      kind: { type: 'string', description: 'Filter by kind: gen or edit' },
+      kind: { type: 'string', description: 'Filter by kind: edit (gen is retired; historical gen rows still list without the filter)' },
     },
     (args: { status?: string; kind?: string }) => run('learnhub_graph_proposals', async () =>
       JSON.stringify(await engine.graphProposals(args.status, args.kind))))
@@ -2026,7 +2016,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   tool('learnhub_graph_apply',
     'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
     {
-      kind: { type: 'string', required: true, description: '"gen" or "edit"' },
+      kind: { type: 'string', required: true, description: '"edit" (gen retired — legacy pending gen proposals can only be rejected)' },
       id: { type: 'number', description: 'Proposal id as a positive integer; omit only for the latest pending of this kind' },
       reject: { type: 'boolean', description: 'true to reject instead of apply' },
       note: { type: 'string', description: 'Rejection reason (recorded)' },
@@ -2498,7 +2488,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { id: string; milestone?: string; nodes?: string[]; window_days?: number; min_co?: number }) => run('learnhub_project_enc_candidates', async () =>
       JSON.stringify(await engine.projectEncCandidates(args.id, { milestone: args.milestone, nodes: args.nodes, window_days: args.window_days, min_co: args.min_co }))))
   tool('learnhub_project_decompile',
-    'DECOMPILE a goal into a milestone-plan draft + a knowledge-subgraph proposal (P-5, reverse design = 4C/ID task analysis + PjBL): input is the goal description (+ registered vault notes for prior context; V-2 read-only retrieval injects「学习者已有理解」excerpts) and ONE model call produces TWO artifacts, both filed as PENDING proposals for human review — ① a project_plan proposal on the target project (same PlanArtifact contract and apply/reject path as learnhub_project_plan_generate) and ② ONE pending graph gen proposal: with an explicit `course` the subgraph APPENDS to that course (mode=append); without one it becomes a NEW course skeleton (mode=new). Zero canonical writes before apply — nothing touches the course graph, the project frontmatter, or personal notes; review both in the panel, then learnhub_project_apply + learnhub_graph_apply (or reject). A failed output gate auto-repairs one round before giving up.',
+    'RETIRED at the cutover (#138, ADR-0033 grown graph): the knowledge-subgraph half rode the retired gen skeleton proposal path, so this entry now fails loud with a pointer — decompile subgraph clusters return later as SEEDS (#149 project milestone anchoring). Day-to-day milestone plan revision is unaffected: use learnhub_project_plan_generate (project_plan proposals + snapshot diff).',
     {
       id: { type: 'string', required: true, description: 'Project id (the plan-draft proposal targets it)' },
       goal: { type: 'string', description: 'Goal description prose; defaults to the project\'s goal field (empty goal is rejected)' },

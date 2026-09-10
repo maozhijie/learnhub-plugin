@@ -61,6 +61,9 @@ export interface VaultOptions {
   banks?: Record<string, string | string[][]>
   /** 预置 state/review-log.jsonl（每元素一行 JSON）。 */
   reviewLog?: string[]
+  /** schema 版本戳覆盖（#138 硬门）：undefined = 盖当前 v2；给 version 可伪造旧/新
+   * 版本测门。门本身的负路径（拒载文案）直接裸构造引擎测——工厂总是构造引擎。 */
+  schema?: { version?: number; breaks?: unknown[] }
   /** 逃生口：vault 相对路径任意文件。 */
   files?: Array<{ path: string; content: string }>
 }
@@ -108,12 +111,18 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
       await writeFile(join(course, '题库', `${node}.yaml`), text, 'utf8')
     }
 
-    const engine = new LearnhubEngine(centerRel === '学习中心' ? { vault: root } : { vault: root, centerRel })
+    // schema 版本戳与日界基线都在引擎构造**前**落盘：版本硬门在构造函数同步读盘
+    // （#138），构造后再写就来不及了。日界固定 00:00（ADR-0020 回归基线 = 旧午夜口径）：
+    // 引擎默认 02:00 会让真实时钟测试在 0-2 点窗口内不确定；日界专项测试用 files 覆盖。
+    const configPath = join(center, 'state', 'learnhub.json')
+    await mkdir(join(center, 'state'), { recursive: true })
+    const schema = options.schema ?? {}
+    await writeFile(configPath, JSON.stringify({
+      schema: { version: schema.version ?? 2, ...(schema.breaks ? { breaks: schema.breaks } : {}) },
+      day_cutoff: '00:00',
+    }, null, 1) + '\n', 'utf8')
 
-    // 测试基线固定日界 00:00（ADR-0020 回归基线 = 旧午夜口径）：引擎默认 02:00 会让
-    // 真实时钟测试在 0-2 点窗口内不确定；日界专项测试用 files 覆盖此文件。
-    await mkdir(engine.paths.centerStateDir, { recursive: true })
-    await writeFile(engine.paths.learnhubConfigPath, JSON.stringify({ day_cutoff: '00:00' }, null, 1) + '\n', 'utf8')
+    const engine = new LearnhubEngine(centerRel === '学习中心' ? { vault: root } : { vault: root, centerRel })
 
     if (options.reviewLog?.length) {
       await writeFile(engine.paths.reviewLogPath, options.reviewLog.join('\n') + '\n', 'utf8')

@@ -177,9 +177,11 @@ export interface ReviewRec {
   exp?: { id: number; arm: string }
 }
 
-/** 提案 kind 全集（P-2 泛化：图谱域 gen/edit + 项目域 project_plan/project_milestone
- * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制））。 */
-export const PROPOSAL_KINDS = ['gen', 'edit', 'project_plan', 'project_milestone', 'experiment'] as const
+/** 提案 kind 全集（P-2 泛化：图谱域 edit + 项目域 project_plan/project_milestone
+ * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制））。
+ * gen（骨架提案）已随 #138 cutover 退役（ADR-0033 生长式图）——存量流水里的 gen
+ * 记录只读展示（loadProposals 不校验 kind），不再是可创建/受理的 kind。 */
+export const PROPOSAL_KINDS = ['edit', 'project_plan', 'project_milestone', 'experiment'] as const
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
 
 /** 提案记录（db.proposals 行同构；产物 YAML 另存 state/proposals/）。

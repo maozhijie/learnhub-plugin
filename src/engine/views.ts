@@ -154,15 +154,6 @@ export interface GraphJumpCandidate {
   reasons: Array<'difficulty' | 'depth'>
 }
 
-/** 规模底线对照（quality.ScaleReport 镜像；ADR-0002：绝对规模走独立门槛，不进健康分）。 */
-export interface GraphScaleReport {
-  nodes: number
-  target: { min: number; max: number } | null
-  /** null = 未宣布目标，不作判定；超上限不拦（宁愿节点过多不要过少）。 */
-  ok: boolean | null
-  shortfall: number
-}
-
 /** 节点 schema 全量条目（pre/enc/est/bloom/difficulty/note…；elementsOnly 模式不含）。 */
 export interface GraphNodeSchema {
   pre: string[]
@@ -207,7 +198,6 @@ export interface GraphDoc {
     /** 节点数 <3 的块（合并比展开更划算时）。 */
     merge_blocks: Array<{ region: string; block: string; nodes: number }>
   }
-  scale: GraphScaleReport
   nodes: Array<{ data: {
     id: string
     region: string
@@ -308,16 +298,8 @@ export interface GraphPathRelatedResult {
 export type GraphPathResult = GraphPathUnrelatedResult | GraphPathRelatedResult
 
 // ---- 提案门禁（graphPropose / graphApply / graphEncBackfill；gengraph.GraphProposals）----
-
-/** 生成提案受理（proposeGen）。 */
-export interface GraphGenProposalResult {
-  id: number
-  kind: 'gen'
-  course: string
-  mode: 'new' | 'append'
-  regions: number
-  nodes: number
-}
+// gen 提案形态（GraphGenProposalResult / GraphApplyGenResult）随 #138 cutover 退役——
+// kind=gen 不再受理，只剩 edit 通道。
 
 /** 变更提案受理（proposeEdit）。 */
 export interface GraphEditProposalResult {
@@ -327,18 +309,7 @@ export interface GraphEditProposalResult {
   ops: number
 }
 
-export type GraphProposeResult = GraphGenProposalResult | GraphEditProposalResult
-
-/** apply 门禁 findings：audit warns 摘要 + 健康分不足提示（引擎不设阈值）。 */
-export interface GraphApplyGenResult {
-  course: string
-  /** 本次写入的区名。 */
-  regions: string[]
-  snapshot: number
-  nodes: number
-  created_blocks: string[]
-  findings: string[]
-}
+export type GraphProposeResult = GraphEditProposalResult
 
 export interface GraphApplyEditResult {
   course: string
@@ -351,7 +322,7 @@ export interface GraphApplyEditResult {
   findings: string[]
 }
 
-export type GraphApplyResult = GraphApplyGenResult | GraphApplyEditResult
+export type GraphApplyResult = GraphApplyEditResult
 
 /** enc 存量回填（ADR-0008 / #53）：没有需要回填的节点（候选已全落 enc，可重入）。 */
 export interface GraphEncBackfillNoneResult {

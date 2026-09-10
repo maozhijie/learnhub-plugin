@@ -1,9 +1,16 @@
 ---
 name: learnhub-graph-generate
-description: 为 learnhub 生成新课程知识图谱：范围分析 → 骨架提案 → 分批多轮展开（常规每批 ≤35 操作，大图可放宽到 ≤50）→ 审计修复，直至覆盖完整。复杂主题产出数百节点属正常。用于用户要求新建课程、规划学习路线时。
+description: （#138 cutover 起退役待重写）旧的一次成型课程图管线：范围分析 → 骨架提案 → 分批多轮展开 → 审计修复。gen 骨架提案与 Scale Floor 门禁已退役——新课程入口由种子提案接管（#142），本技能的提示词重写归教练回合套件（#133）。在重写落地前，仅其 edit 批次与审计修复机械仍可参照，第 0-1 阶段（范围分析/gen 骨架）不再可用。
 ---
 
-# learnhub 图谱生成（多轮分批构建）
+# learnhub 图谱生成（已退役待重写，ADR-0033 生长式图）
+
+> **#138 cutover 退役通告**：本技能描述的「gen 骨架提案 + Scale Floor 交付门禁」
+> 已从引擎退役——`learnhub_graph_propose` kind=gen 会被受理门拒收，analyze 不再有
+> `scale` 段与 `targetMin/targetMax` 参数。新课程入口由**种子提案**接管（一次人审
+> 即开工，#142），其后由滚动教练逐生长批推进（#133 套件重写本技能）。下列原文中
+> 第 2 阶段的 edit 批次纪律（批次规模分档、门禁、熔断线、检察官）仍是 edit 提案
+> 的有效机械，可继续参照；涉及 gen/骨架/scale 的段落一律跳过。
 
 铁律：LLM 只产 YAML，一切入库必须过门禁（schema + 结构检查 + audit）→ 提案落盘 → 自动 apply。
 批次不需要人审：人审只保留两个锚点——骨架提案与最终交付（ADR-0003）；批质量由门禁 +
@@ -66,21 +73,20 @@ ops:
   baseline 是零基时，起点必须从最原始、最日常可及的概念起步，不得凭空拔高入口难度。
 - **覆盖清单（scope）**：主题下必须出现的子领域 / 大块概念清单。**它是下限不是上限**：
   目标隐含的子领域、必备的常识性概念即使清单没列也要补上，不要只局限于此清单。
-- **规模底线（Scale Floor）**：宣布目标节点数区间（如 250-400）。它是交付门禁（analyze
-  的 `scale.ok`），后续每批 analyze 带 `targetMin/targetMax` 对照；宁多勿少，超上限不拦。
+- ~~**规模底线（Scale Floor）**~~：已退役（#138）——完成判据按目标类型二分（能力/覆盖锚定），
+  不再宣布交付规模。
 
-## 第 1 阶段：骨架提案（1 轮 gen）
+## 第 1 阶段：骨架提案（已退役，勿执行）
 
-`learnhub_graph_propose`（kind=gen）：完整的 region/block 结构 + **每块 1-2 个入口节点**
-（空块会被门禁拒绝）。区块划分按「从易到难」组织，模块间形成连续学习路径。
-把结构摘要（区/块数、覆盖思路）讲给用户，同意后 `learnhub_graph_apply`。
+~~`learnhub_graph_propose`（kind=gen）……~~ gen 骨架提案被受理门拒收（#138）。新课程
+改由种子提案（起点+终点锚一次人审，#142）开工。
 
 ## 第 2 阶段：分批展开（多轮 edit，核心）
 
 逐块推进，每批一个 edit 提案（`learnhub_graph_propose` kind=edit，ops 全部 `add_node`，
 **批次规模分档：常规 ≤35 ops；图超约 150 节点且连续多批零 ERROR 后可 ≤50**）。
 **门禁通过（无 ERROR）即自动 apply，不等用户**；apply 后立即 `learnhub_graph_analyze`
-（带 targetMin/targetMax）读取 `health.score`、`scale`（规模对照，缺口多大）、
+读取 `health.score`、
 `suggestions`（expand_blocks = 往哪扩 / missing_pre = 空降节点先补谁 /
 unconverged = 哪里连接过少 / jump_candidates + jump_total = 认知跨步候选逐条 verdict /
 merge_blocks = 过小块该合并了）与 `schema`（每节点的 pre/enc/est/bloom/difficulty/note 字段值——
@@ -162,7 +168,7 @@ merge_blocks = 过小块该合并了）与 `schema`（每节点的 pre/enc/est/b
   断开组件 → set_pre 接入主结构；孤环/断边 → 修正 pre；R13 认知跨步候选 → 补中间台阶节点）。
 3. 重新审计直至无 ERROR。
 4. **结束条件（全绿才交付）**：audit 无 ERROR；图谱健康分 ≥ 80（`learnhub_graph_analyze` 的
-   `health.score`）；规模达标（`scale.ok = true`，缺多少补多少）；jump 候选与 R6 冗余边全部
+   `health.score`）；~~规模达标（`scale.ok`）~~（Scale Floor 已退役，#138）；jump 候选与 R6 冗余边全部
    处置（每条 verdict：认可留下理由，或修复）；检察官全图终审通过。任一不满足继续构建或修复。
 
 ## 检察官委派（对抗性审查）

@@ -12,7 +12,7 @@
 - S1 `quality.ts::jumpCandidates` —— 认知跨步候选（|Δdifficulty|≥2 或 depth 跨度 ≥3）
 - S2 `quality.ts::floatNodes` —— 空降节点（region 序后 3/4 且 pre 空）
 - S3 `health.ts::graphHealthScore` —— 前置完备项基于 S2
-- S4 `quality.ts::scaleReport` —— 规模底线对照
+- S4 `quality.ts::scaleReport` —— 规模底线对照（**已随 #138 cutover 退役**，函数与登记一并移除）
 - Data Check `engine.index.ts::dataCheck` —— Missing/Broken 只读盘点（临时 Vault fixtures）
 
 内容管线接缝（2026-09-07 新增，`content-gate.test.ts`；被测模块已改为显式字段赋值，strip-only 可导入）：

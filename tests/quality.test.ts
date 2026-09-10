@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { jumpCandidates, floatNodes, scaleReport } from '../src/engine/quality.ts'
+import { jumpCandidates, floatNodes } from '../src/engine/quality.ts'
 
 /** 构造 jumpCandidates / floatNodes 所需的最小图形状（两个函数都是 Pick 接口）。 */
 function jumpGraph(nodes: Record<string, { pre: string[]; d?: number; depth: number }>) {
@@ -87,20 +87,5 @@ test('S2: region 总数 <4 时至少豁免首区（首区入口不误判）', ()
   assert.deepEqual(floatNodes(g), ['次区入口'])
 })
 
-test('S4: 低于规模底线报缺口', () => {
-  const r = scaleReport(10, { min: 20, max: 40 })
-  assert.equal(r.ok, false)
-  assert.equal(r.shortfall, 10)
-})
 
-test('S4: 达到底线即达标（超上限不拦——宁多勿少）', () => {
-  assert.equal(scaleReport(25, { min: 20, max: 40 }).ok, true)
-  assert.equal(scaleReport(45, { min: 20, max: 40 }).ok, true)
-  assert.equal(scaleReport(45, { min: 20, max: 40 }).shortfall, 0)
-})
 
-test('S4: 未宣布目标时不判定', () => {
-  const r = scaleReport(7, undefined)
-  assert.equal(r.ok, null)
-  assert.equal(r.target, null)
-})

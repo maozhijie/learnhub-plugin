@@ -18,13 +18,14 @@ import { validateLearnerCards } from './learner-cards.ts'
 import { validateErrorCards } from './error-cards.ts'
 import { validateNoteFrontmatter } from './notes.ts'
 import { YAML } from './yaml.ts'
+import { parseSchemaBlock } from './schema.ts'
 import type { CourseEntry } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'archive'
 
-export type DataCheckFindingLevel = 'missing' | 'broken'
+export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived'
 
 export type DataCheckReason =
   | 'registry_missing'
@@ -55,6 +56,8 @@ export type DataCheckReason =
   | 'learner_card_schema'
   | 'error_card_yaml_parse'
   | 'error_card_schema'
+  | 'pre_v2_archive'
+  | 'pre_v2_artifact'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -69,8 +72,8 @@ export interface DataCheckFinding {
 
 export interface DataCheckReport {
   status: 'ok' | 'missing' | 'broken'
-  counts: { missing: number; broken: number }
-  byArea: Record<DataCheckArea, { missing: number; broken: number }>
+  counts: { missing: number; broken: number; archived: number }
+  byArea: Record<DataCheckArea, { missing: number; broken: number; archived: number }>
   inventory: {
     registryPresent: boolean
     courses: number
@@ -82,6 +85,9 @@ export interface DataCheckReport {
     /** 全库注册源漂移盘点（V-6 #109）：注册表条目逐源的存在性 + 指纹状态计数。
      * missing/drifted 是合法状态不是损坏（ADR-0004），逐源明细以 noteSourceList 为准。 */
     noteSourceFiles: { total: number; ok: number; missing: number; drifted: number; inconsistent: number }
+    /** 断裂存档区盘点（#138 / ADR-0034）：present = 存档区在盘；files = 区内文件总数
+     *（不校验内容——存档只增不删、引擎读侧永不读取，数文件即盘点）。 */
+    archive: { present: boolean; files: number }
   }
   findings: DataCheckFinding[]
 }
@@ -497,12 +503,60 @@ async function scanErrorCards(
   }
 }
 
+/** 断裂存档区盘点（#138 / ADR-0034）：archived 是显式的第三类——既非 Missing 也非
+ * Broken，不进 status、不校验内容，只数文件数并对照 learnhub.json 的断裂史。
+ * - pre_v2_archive：存档区在盘 → 信息级盘点一条（文件总数 + 断裂日期）。
+ * - pre_v2_artifact：断裂史（schema.breaks）在档但存档区缺失——记录与实物对不上，
+ *   提示级浮出（不判损坏：存档可能被学习者手工挪动，引擎读侧永不读取）。 */
+async function scanArchive(
+  findings: DataCheckFinding[],
+  paths: Paths,
+  breaks: Array<{ date?: string; archived?: string[] }>,
+): Promise<{ present: boolean; files: number }> {
+  let files = 0
+  let present = false
+  try {
+    const entries = await readdir(paths.archiveDir, { withFileTypes: true })
+    present = true
+    const count = async (dir: string): Promise<number> => {
+      let n = 0
+      let children
+      try {
+        children = await readdir(dir, { withFileTypes: true })
+      } catch {
+        return 0
+      }
+      for (const child of children) {
+        if (child.isDirectory()) n += await count(join(dir, child.name))
+        else if (child.isFile()) n++
+      }
+      return n
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) files += await count(join(paths.archiveDir, entry.name))
+      else if (entry.isFile()) files++
+    }
+  } catch {
+    present = false
+  }
+  if (present) {
+    const dates = [...new Set(breaks.map(b => b.date).filter(Boolean))].join('、')
+    push(findings, 'archive', 'archived', 'pre_v2_archive', `存档区 ${paths.archiveDir}`,
+      `pre-v2 存档 ${files} 个文件（只增不删、读侧永不读取）${dates ? `；断裂史：${dates}` : ''}`)
+  } else if (breaks.length) {
+    push(findings, 'archive', 'archived', 'pre_v2_artifact', `存档区 ${paths.archiveDir}`,
+      'learnhub.json 记有断裂史但存档区不在盘上（可能被手工挪动；引擎读侧永不读取，仅提示对账）。')
+  }
+  return { present, files }
+}
+
 /** 一次只读体检。注册表损坏时无法安全展开课程，因此只报告注册表本身。 */
 export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
   const findings: DataCheckFinding[] = []
   const inventory: DataCheckReport['inventory'] = {
     registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0, noteSourceBanks: 0,
     noteSourceFiles: { total: 0, ok: 0, missing: 0, drifted: 0, inconsistent: 0 },
+    archive: { present: false, files: 0 },
   }
   const registryWhere = `课程注册表 ${paths.registryPath}`
 
@@ -559,23 +613,37 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
   await scanLearnerCards(findings, paths, courses)
   await scanErrorCards(findings, paths, courses)
 
+  // 断裂存档区（#138）：archived 信息级，与断裂史（learnhub.json schema.breaks）对账
+  let breaks: Array<{ date?: string; archived?: string[] }> = []
+  try {
+    const schema = parseSchemaBlock(await readFile(paths.learnhubConfigPath, 'utf8'))
+    if (Array.isArray(schema?.breaks)) breaks = schema!.breaks!
+  } catch {
+    // learnhub.json 缺失/损坏：版本硬门已在引擎构造期拒载；体检侧按无断裂史盘点
+  }
+  inventory.archive = await scanArchive(findings, paths, breaks)
+
+  const emptyArea = () => ({ missing: 0, broken: 0, archived: 0 })
   const byArea: DataCheckReport['byArea'] = {
-    registry: { missing: 0, broken: 0 },
-    graph: { missing: 0, broken: 0 },
-    note: { missing: 0, broken: 0 },
-    question_bank: { missing: 0, broken: 0 },
-    note_source: { missing: 0, broken: 0 },
-    learner_cards: { missing: 0, broken: 0 },
-    error_cards: { missing: 0, broken: 0 },
+    registry: emptyArea(),
+    graph: emptyArea(),
+    note: emptyArea(),
+    question_bank: emptyArea(),
+    note_source: emptyArea(),
+    learner_cards: emptyArea(),
+    error_cards: emptyArea(),
+    archive: emptyArea(),
   }
   for (const finding of findings) {
     byArea[finding.area][finding.level]++
   }
+  const archived = findings.filter(f => f.level === 'archived').length
   const missing = findings.filter(f => f.level === 'missing').length
   const broken = findings.filter(f => f.level === 'broken').length
   return {
+    // archived 是显式第三类：不进 status（既非 Missing 也非 Broken）
     status: broken ? 'broken' : missing ? 'missing' : 'ok',
-    counts: { missing, broken },
+    counts: { missing, broken, archived },
     byArea,
     inventory,
     findings,

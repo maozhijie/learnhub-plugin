@@ -8,8 +8,8 @@ import type { Fm } from './types.ts'
 import type { Store } from './store.ts'
 import { effectiveStage } from './audit.ts'
 import { graphHealthScore, estSpreadNote } from './health.ts'
-import { floatNodes, jumpCandidates, scaleReport } from './quality.ts'
-import type { JumpCandidate, ScaleReport, ScaleTarget } from './quality.ts'
+import { floatNodes, jumpCandidates } from './quality.ts'
+import type { JumpCandidate } from './quality.ts'
 import { parseDay, todayStr, daysBetween } from './dates.ts'
 import { masteryOfFm } from './srs.ts'
 import { hasReadyContent } from './notes.ts'
@@ -61,8 +61,6 @@ export interface GraphAnalysis {
   }
   /** Vault 链接扫描元信息：未扫描时 scanned_at=null（带 hint 指路扫描工具）。 */
   vault_links: { scanned_at: string | null; mapped_total: number; hint?: string }
-  /** 规模底线对照（ADR-0002：绝对规模走独立门槛，不进健康分）。 */
-  scale: ScaleReport
   nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: string; opt: boolean; mastery: number; type?: string } }>
   edges: Array<{ data: { id: string; source: string; target: string; kind: string; w?: number } }>
   /** 节点 schema 全量（pre/enc/est/bloom/difficulty/note…）——编辑规划与边级自查的数据依据；
@@ -81,7 +79,7 @@ export interface GraphAnalysis {
 
 export async function analyzeGraph(
   courseName: string, graph: Graph, state: Record<string, Fm>, store: Store,
-  scaleTarget?: ScaleTarget | null, today: string = todayStr(),
+  today: string = todayStr(),
   vaultLinks: VaultLinkPrior = { scanned_at: null, mapped_total: 0, candidates: [] },
 ): Promise<GraphAnalysis> {
   const t = parseDay(today)!
@@ -219,7 +217,6 @@ export async function analyzeGraph(
         ? { hint: '还没有 Vault 链接扫描缓存——跑 learnhub_vault_links_scan 后这里出现个人笔记的关联候选' }
         : {}),
     },
-    scale: scaleReport(graph.names.length, scaleTarget),
     schema,
     nodes,
     edges,

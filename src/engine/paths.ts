@@ -94,6 +94,11 @@ export class Paths {
    * 记录 key↔noteId 归属与导入水位，坏档静默重建不判 Broken。 */
   get ankiMirrorPath(): string { return `${this.centerRoot}/anki/镜象.json` }
   get trashDir(): string { return `${this.centerRoot}/.trash` }
+  /** 断裂存档区（#138 / ADR-0034）：学习中心/存档/pre-v<来源版本>/<日期>/<课程root>/。
+   * 只增不删、引擎读侧永不读取——data-check 以 archived 信息级盘点文件数，
+   * 既非 Missing 也非 Broken（显式的第三类）。 */
+  get archiveDir(): string { return `${this.centerRoot}/存档` }
+  archiveVersionDir(from: number | string): string { return `${this.archiveDir}/pre-v${from}` }
 
   sessionPath(dateStr: string): string { return `${this.sessionDir}/${dateStr}.md` }
 
