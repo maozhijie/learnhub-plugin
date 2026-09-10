@@ -46,7 +46,7 @@ export interface Nof1Template {
   /** card = 卡级随机化；batch = 会话级参数按学习日交替（ADR-0023 裁决 2）。 */
   unit: 'card' | 'batch'
   /** 预登记主结局（ADR-0023 裁决 3）：调度侧 = 真实保留率（v1 模板全部此项）；
-   * 练习侧 = EMA（随 #88/#89 练习证据通道解锁，模板登记后生效）。 */
+   * 练习侧 = EMA（#88/#89 证据通道已上线，分析器与练习侧模板登记待后票）。 */
   outcome: 'true_retention' | 'practice_ema'
   description: string
   unlocked: boolean

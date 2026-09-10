@@ -278,7 +278,7 @@ test('存储契约：实验文件条目不满足定义形状 → Broken 报出�
     await writeFile(engine.paths.experimentsPath, JSON.stringify([{ id: 'oops' }]), 'utf8')
     await assert.rejects(() => engine.experimentList(), /不满足实验定义契约|Broken/, '形状损坏不是合法空态')
 
-    // 练习侧结局（EMA）：预登记在案，分析通道随 #88/#89 解锁——报告不假装能算
+    // 练习侧结局（EMA）：预登记在案，分析器未实现——报告不假装能算
     await writeFile(engine.paths.experimentsPath, JSON.stringify([{
       ...BATCH_DEF, outcome: 'practice_ema', status: 'stopped', stopped_day: '2026-09-09',
     }]), 'utf8')

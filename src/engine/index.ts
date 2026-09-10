@@ -3684,7 +3684,7 @@ export class LearnhubEngine {
       id: list.reduce((m, e) => Math.max(m, e.id), 0) + 1,
       template: tpl.id, variable: tpl.variable, title: doc.title,
       question: doc.question ?? tpl.question,
-      outcome: 'true_retention',
+      outcome: doc.outcome,
       arms: [doc.arms[0]!, doc.arms[1]!], arm_labels: doc.arm_labels ?? tpl.arm_labels,
       unit: tpl.unit, scope_course: doc.scope_course ?? null,
       assignment: tpl.unit === 'card'
@@ -3717,7 +3717,7 @@ export class LearnhubEngine {
 
   /** 直白话报告（臂间比较+置换检验+效应量区间；ADR-0023 裁决 3）。未达最短观察窗
    * 只报进度不做效应判断；running = 期中读数，stopped = 定稿。练习侧结局（EMA）
-   * 随 #88/#89 练习证据通道解锁，登记在案但 v1 分析器只支持调度侧二元结局。 */
+   * 的证据通道已上线（#88/#89），登记在案但 v1 分析器只支持调度侧二元结局。 */
   async experimentReport(id?: number): Promise<{ experiment: ExperimentDef; analysis: Nof1Analysis }> {
     const list = await this.store.loadExperiments()
     const hit = id !== undefined
@@ -3730,7 +3730,7 @@ export class LearnhubEngine {
         analysis: {
           ready: false, per_arm: [], need_per_arm: hit.per_arm_min,
           diff: null, ci95: null, p: null,
-          message: '该实验预登记的练习侧结局（EMA）随回执/执行事件通道（#88/#89）解锁后才能分析；臂标注已在积累。',
+          message: '该实验预登记了练习侧结局（EMA）：证据通道已上线（回执/执行事件），EMA 分析器与练习侧模板登记待后票落地；臂标注已在积累。',
         },
       }
     }
