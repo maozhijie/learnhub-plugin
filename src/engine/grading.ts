@@ -202,11 +202,11 @@ function stripGradingFences(body: string): string {
   return m ? m[1] : body
 }
 
-/** 判卷 JSON 提取的公共容错：剥围栏 → 取 {...} → 去尾逗号 → JSON.parse。 */
-function parseGradingDoc(raw: string): { score?: unknown; feedback?: unknown } {
+/** 判卷 JSON 提取的公共容错（判卷/申诉复核共用）：剥围栏 → 取 {...} → 去尾逗号 → JSON.parse。 */
+function parseGradingDoc(raw: string): Record<string, unknown> {
   const m = stripGradingFences(raw).match(/\{[\s\S]*\}/)
   if (!m) throw new Error('reply 中找不到 JSON 对象')
-  return JSON.parse(m[0].replace(/,\s*([}\]])/g, '$1')) as { score?: unknown; feedback?: unknown }
+  return JSON.parse(m[0].replace(/,\s*([}\]])/g, '$1')) as Record<string, unknown>
 }
 
 /** score 数值化：模型常把分数写成字符串（"0.75"/"7"），可安全转数字的放行。 */
@@ -348,9 +348,7 @@ Verdict rules:
 
 /** 从模型回复中提取申诉复核结果（容错同判卷：围栏/尾逗号/外层散文）。 */
 export function parseDisputeReview(raw: string): DisputeReviewDoc {
-  const m = stripGradingFences(raw).match(/\{[\s\S]*\}/)
-  if (!m) throw new Error('reply 中找不到 JSON 对象')
-  const doc = JSON.parse(m[0].replace(/,\s*([}\]])/g, '$1')) as Record<string, unknown>
+  const doc = parseGradingDoc(raw)
   const verdict = doc.verdict
   if (verdict !== 'key_error' && verdict !== 'defective' && verdict !== 'ok') {
     throw new Error(`dispute review verdict 非法：${String(verdict)}（允许 key_error/defective/ok）`)

@@ -25,6 +25,21 @@ export async function atomicWrite(path: string, data: string): Promise<void> {
   await rename(tmp, path)
 }
 
+/** state/learnhub.json 整档读取：无文件/损坏 → 空档。键级缺省与非法值回落
+ * 默认的语义归各消费方（ADR-0004 的 fail loud 针对学习者数据损坏，不是配置笔误）。 */
+export async function readLearnhubConfig(path: string): Promise<Record<string, unknown>> {
+  try {
+    return JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
+/** state/learnhub.json 整档原子写回（保留未触及字段；1 空格缩进 + 尾换行的统一落盘口径）。 */
+export async function writeLearnhubConfig(path: string, doc: Record<string, unknown>): Promise<void> {
+  await atomicWrite(path, JSON.stringify(doc, null, 1) + '\n')
+}
+
 /** 勘误冲正的读侧净值（ADR-0031）：key_error 的作答按勘误记录替换 xp/对错；
  * defective/overridden 的作答整体剔除。原始流水不动，聚合账（XP、作答统计）
  * 一律先过本函数再算——「行为流水即事实」包含冲正凭证本身。 */

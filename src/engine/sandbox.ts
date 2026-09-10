@@ -16,7 +16,7 @@
  * - 每次复习计 REVIEW_MIN 分钟（粗化）；预算耗尽后剩余到期卡顺延（R 继续衰减——
  *   与真实欠账一致）。
  * - 新节点按课程图序在预算内引入（est 分钟摊日），学成记一次合成 Good（与
- *   「完成学习」的合成初始化同语义），其未调度题同日入场。
+ *   「完成学习」的合成初始化同语义），其休眠题同日入场。
  * - 练习证据（EMA/正确率）冻结为当前值——沙盘只模拟「记」的维持，不模拟「练」的进步。
  * - 节点代表卡与题目卡同为模拟卡：代表卡跟随本节点当日首次推进结果。
  *
@@ -117,7 +117,7 @@ export function simulateRun(
   for (let d = 0; d < totalDays; d++) {
     const day = dayShift(today, d)
     let budget = plan.minutesPerDay
-    // 引入阶段：未开始未跳过的节点按图序消耗预算；学成 = 代表卡合成 Good + 未调度题入场
+    // 引入阶段：未开始未跳过的节点按图序消耗预算；学成 = 代表卡合成 Good + 休眠题入场
     for (const n of nodes) {
       if (budget < REVIEW_MIN) break
       if (n.skipped || n.started) continue

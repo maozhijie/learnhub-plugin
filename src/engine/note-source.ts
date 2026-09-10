@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
-import { atomicWrite } from './store.ts'
+import { readLearnhubConfig, writeLearnhubConfig } from './store.ts'
 import { isRegistrableCenterRel } from './output.ts'
 import type { NoteSourceEntry } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -248,32 +248,20 @@ export function isExcludedPath(rel: string, excludes: string[]): boolean {
  * 写法不得静默失效（防收编是本清单的存在理由）；缺失/顶层形态不符回落空列表
  * ——learnhub.json 配置同款：ADR-0004 的 fail loud 针对学习者数据损坏，不是配置笔误。 */
 export async function readNoteSourceExcludes(paths: Paths): Promise<string[]> {
-  try {
-    const doc = JSON.parse(await readFile(paths.learnhubConfigPath, 'utf8')) as {
-      note_source_excludes?: unknown
-    }
-    if (!Array.isArray(doc.note_source_excludes)) return []
-    return doc.note_source_excludes
-      .filter((e): e is string => typeof e === 'string')
-      .map(e => e.replace(/\\/g, '/').replace(/\/+$/, '').trim())
-      .filter(e => !!e)
-  } catch {
-    return []
+  const doc = await readLearnhubConfig(paths.learnhubConfigPath) as {
+    note_source_excludes?: unknown
   }
+  if (!Array.isArray(doc.note_source_excludes)) return []
+  return doc.note_source_excludes
+    .filter((e): e is string => typeof e === 'string')
+    .map(e => e.replace(/\\/g, '/').replace(/\/+$/, '').trim())
+    .filter(e => !!e)
 }
 
 /** 写排除清单（原子替换，保留 learnhub.json 其他字段）。入参须是已归一形态。 */
 export async function writeNoteSourceExcludes(paths: Paths, excludes: string[]): Promise<void> {
-  let prev: Record<string, unknown> = {}
-  try {
-    prev = JSON.parse(await readFile(paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
-  } catch {
-    // 无配置文件/损坏 → 全新写入
-  }
-  await atomicWrite(
-    paths.learnhubConfigPath,
-    JSON.stringify({ ...prev, note_source_excludes: excludes }, null, 1) + '\n',
-  )
+  const prev = await readLearnhubConfig(paths.learnhubConfigPath)
+  await writeLearnhubConfig(paths.learnhubConfigPath, { ...prev, note_source_excludes: excludes })
 }
 
 /** 镜像区源清单 IO（Missing = 合法空；Broken fail loud——它是镜像区契约文件）。 */

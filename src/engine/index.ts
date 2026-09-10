@@ -25,7 +25,7 @@ import { JOL_PREDICTIONS, JOL_SAMPLE_RATE, jolCalibration, jolDeviatedKeys, pick
 import type { JolPrediction } from './jol.ts'
 import { CALIBRATION_BOOST_SAMPLE_RATE } from './params.ts'
 import { calibrationHintText, calibrationProfileView, overconfidenceOf } from './calibration.ts'
-import { DEFAULT_SLEEP_ADVICE, normalizeSleepAdvice } from './sleep.ts'
+import { normalizeSleepAdvice } from './sleep.ts'
 import { NOF1_TEMPLATES, NOF1_PER_ARM_MIN, NOF1_VARIABLE_WHITELIST, nof1Template, nof1ArmForDay, nof1Outcomes, analyzeNof1, shuffleAssign, interleaveBySource, mulberry32 } from './nof1.ts'
 import type { Nof1Template, Nof1Variable, ExperimentDef, Nof1Analysis } from './nof1.ts'
 import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from './thermostat.ts'
@@ -78,7 +78,7 @@ import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
 import { LearnerCards, LEARNER_CARD_KINDS } from './learner-cards.ts'
 import type { LearnerCard, LearnerCardDoc } from './learner-cards.ts'
 import { ErrorCards, mineErrorPatterns, validateErrorCards, ERROR_CARD_BATCH_MAX } from './error-cards.ts'
-import type { ErrorCard, ErrorCardDoc, ErrorPatternCandidate } from './error-cards.ts'
+import type { ErrorCard, ErrorPatternCandidate } from './error-cards.ts'
 import { Skills, laneDue, laneEventKind, ratingFromEvidence, clampMaintenanceDays, executionRowIdentity, executionXpDetail } from './skills.ts'
 import type { SkillDoc, ExecutionSource, ExecutionEventKind, ExecutionEvidence, ExecutionLogResult } from './skills.ts'
 import { Habits, habitStreak, automationCurve } from './habits.ts'
@@ -96,7 +96,7 @@ import { YAML } from './yaml.ts'
 import { Sessions, assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from './sessions.ts'
 import type { NodeStat, WindowStat } from './sessions.ts'
 import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
-import { atomicWrite, netPracticeRecs } from './store.ts'
+import { atomicWrite, netPracticeRecs, readLearnhubConfig, writeLearnhubConfig } from './store.ts'
 import { REFLECTION_GRADING_SYSTEM, parseReflectionGrading, OPEN_QUESTION_GRADING_SYSTEM, parseOpenGrading, evaluateAllo, PASS_SCORE, applyPracticeEvidence, answerDiff, DISPUTE_REVIEW_SYSTEM, parseDisputeReview } from './grading.ts'
 import type { DisputeVerdict } from './grading.ts'
 import { findDuplicateStem, existingStemsPromptBlock, bankStemList } from './question-dedup.ts'
@@ -1426,10 +1426,10 @@ export class LearnhubEngine {
       const list = eventsByCourse.get(course) ?? []
       list.push({ node, day })
       eventsByCourse.set(course, list)
-      const days1 = firstDayByCourse.get(course) ?? new Map<string, string>()
-      const prev = days1.get(node)
-      if (prev === undefined || day < prev) days1.set(node, day)
-      firstDayByCourse.set(course, days1)
+      const firstDays = firstDayByCourse.get(course) ?? new Map<string, string>()
+      const prev = firstDays.get(node)
+      if (prev === undefined || day < prev) firstDays.set(node, day)
+      firstDayByCourse.set(course, firstDays)
     }
     for (const r of reviews) if (r.rating_source !== 'synthetic') bump(r.course, r.node, r.ts)
     for (const r of practices) bump(r.course, r.node, r.ts)
@@ -2053,39 +2053,22 @@ export class LearnhubEngine {
       // 只进队列与无绑定 XP——节点证据/门禁/复习日志零掺入；自动判分（三选一答案
       // 唯一，选对=3/选错=1，走 errorCardAnswer）。Broken 卡组不阻塞队列。
       const errorSched = await this.sched(null)
-      let errorFiles: string[] = []
-      try {
-        errorFiles = await readdir(this.paths.errorCardsDir(c.root))
-      } catch {
-        errorFiles = [] // 该课程还没有任何错误卡：合法空态
-      }
-      for (const f of errorFiles.filter(f => f.endsWith('.yaml')).sort()) {
-        const eNode = f.replace(/\.yaml$/, '')
-        if (node !== undefined && eNode !== node) continue
-        let edoc: ErrorCardDoc
-        try {
-          edoc = await this.errorCards.load(c.root, eNode)
-        } catch {
-          continue
-        }
-        for (const card of edoc.cards) {
-          if (card.archived) continue
-          const due = card.fsrs?.reps ? card.fsrs.due : null
-          if (due && String(due) > today) continue
-          const r = retrievabilityBlock(errorSched, card.fsrs ?? null, today)
-          const diff = card.fsrs?.difficulty && card.fsrs.difficulty > 0 ? card.fsrs.difficulty : FSRS_DIFFICULTY_MID
-          cards.push({
-            course: c.name, node: eNode, source: 'error',
-            id: `err:${card.id}`, due,
-            r: Math.round(r * 1000) / 1000, d: diff, difficulty: diff,
-            attempts: card.stats?.attempts ?? 0,
-            // 队列卡面只带题面与选项——answer/mine/explanation 是作答后揭晓面，
-            // 经 errorCardAnswer 随判分返回（同 questionView 不带答案的泄露纪律）。
-            error: { course: c.name, node: eNode, id: card.id, q: card.q, options: card.options,
-              source_q: card.source_q, source_section: card.source_section ?? null, due,
-              attempts: card.stats?.attempts ?? 0 },
-          })
-        }
+      for await (const { course: eCourse, node: eNode, card } of this.errorCardTriples([c], node)) {
+        const due = card.fsrs?.reps ? card.fsrs.due : null
+        if (due && String(due) > today) continue
+        const r = retrievabilityBlock(errorSched, card.fsrs ?? null, today)
+        const diff = card.fsrs?.difficulty && card.fsrs.difficulty > 0 ? card.fsrs.difficulty : FSRS_DIFFICULTY_MID
+        cards.push({
+          course: eCourse, node: eNode, source: 'error',
+          id: `err:${card.id}`, due,
+          r: Math.round(r * 1000) / 1000, d: diff, difficulty: diff,
+          attempts: card.stats?.attempts ?? 0,
+          // 队列卡面只带题面与选项——answer/mine/explanation 是作答后揭晓面，
+          // 经 errorCardAnswer 随判分返回（同 questionView 不带答案的泄露纪律）。
+          error: { course: eCourse, node: eNode, id: card.id, q: card.q, options: card.options,
+            source_q: card.source_q, source_section: card.source_section ?? null, due,
+            attempts: card.stats?.attempts ?? 0 },
+        })
       }
       let files: string[] = []
       try {
@@ -2776,6 +2759,24 @@ export class LearnhubEngine {
     return { status: classifySource(true, item.fingerprint === fingerprintOf(raw)), title }
   }
 
+  /** 收题公步（#119 防相似：笔记出题/节点出题/逐节出题三处同缝）：程序化查重命中
+   * → duplicate（附对方题面供报告）；入库成功把题面登记进查重基线（批内互查）；
+   * 单题非法（超纲题型等）→ invalid，不毁整批。 */
+  private async admitQuestion(
+    root: string, node: string, q: Record<string, unknown>, stem: string,
+    existingStems: Array<{ q: string; kind?: string; difficulty?: number }>,
+  ): Promise<{ verdict: 'added' } | { verdict: 'duplicate'; against: string } | { verdict: 'invalid' }> {
+    const dup = findDuplicateStem(stem, existingStems)
+    if (dup) return { verdict: 'duplicate', against: dup }
+    try {
+      await this.bank.addQuestion(root, node, q)
+    } catch {
+      return { verdict: 'invalid' }
+    }
+    existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
+    return { verdict: 'added' }
+  }
+
   /** 笔记源出题：读笔记正文（只读）→ 笔记出题 prompt + llm → validateBank 门禁逐题
    * 落镜像题库（学习中心/笔记源/题库/<源id>.yaml）→ 新卡初始化 FSRS（同完成学习的
    * 合成首复习语义，明天起刷，rating_source=synthetic 落复习日志）→ 源清单指纹刷新
@@ -2814,16 +2815,12 @@ export class LearnhubEngine {
       const q = { ...((rawQ ?? {}) as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有卡数自动编号
       const stem = typeof q.q === 'string' ? q.q : ''
-      const dup = findDuplicateStem(stem, existingStems)
-      if (dup) {
-        duplicates.push({ q: stem.slice(0, 80), against: dup.slice(0, 80) })
-        continue
-      }
-      try {
-        await this.bank.addQuestion(this.paths.noteSourceDir, id, q)
-        existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
+      const verdict = await this.admitQuestion(this.paths.noteSourceDir, id, q, stem, existingStems)
+      if (verdict.verdict === 'duplicate') {
+        duplicates.push({ q: stem.slice(0, 80), against: verdict.against.slice(0, 80) })
+      } else if (verdict.verdict === 'added') {
         added++
-      } catch {
+      } else {
         skipped++ // 单题非法（如超纲题型）不毁整批
       }
     }
@@ -3536,30 +3533,21 @@ export class LearnhubEngine {
 
   /** 读 JOL 抽查配置：enabled=false 全局关闭（复习流完全不弹预测）；rate 抽样率。 */
   async jolConfig(): Promise<{ enabled: boolean; rate: number }> {
-    try {
-      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
-        jol?: { enabled?: boolean; rate?: number }
-      }
-      const enabled = doc.jol?.enabled !== false
-      const rate = typeof doc.jol?.rate === 'number' && doc.jol.rate > 0 && doc.jol.rate <= 1
-        ? doc.jol.rate : JOL_SAMPLE_RATE
-      return { enabled, rate }
-    } catch {
-      return { enabled: true, rate: JOL_SAMPLE_RATE }
+    const doc = await readLearnhubConfig(this.paths.learnhubConfigPath) as {
+      jol?: { enabled?: boolean; rate?: number }
     }
+    const enabled = doc.jol?.enabled !== false
+    const rate = typeof doc.jol?.rate === 'number' && doc.jol.rate > 0 && doc.jol.rate <= 1
+      ? doc.jol.rate : JOL_SAMPLE_RATE
+    return { enabled, rate }
   }
 
   /** 写 JOL 抽查配置（原子替换，保留配置文件其他字段）。 */
   async setJolConfig(patch: { enabled?: boolean; rate?: number }): Promise<{ enabled: boolean; rate: number }> {
-    let prev: Record<string, unknown> = {}
-    try {
-      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
-    } catch {
-      // 无配置文件/损坏 → 全新写入
-    }
+    const prev = await readLearnhubConfig(this.paths.learnhubConfigPath)
     const cur = await this.jolConfig()
     const next = { enabled: patch.enabled ?? cur.enabled, rate: patch.rate ?? cur.rate }
-    await atomicWrite(this.paths.learnhubConfigPath, JSON.stringify({ ...prev, jol: next }, null, 1) + '\n')
+    await writeLearnhubConfig(this.paths.learnhubConfigPath, { ...prev, jol: next })
     return next
   }
 
@@ -3910,15 +3898,11 @@ export class LearnhubEngine {
   /** A1 目标难度带默认值（state/learnhub.json 的 band_default；null = 纯 A1 自动）。
    * 消费链：会话显式选带 > 实验当日臂 > 此默认值 > 纯 A1。 */
   async bandDefault(): Promise<BandPref | null> {
-    try {
-      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
-        band_default?: string
-      }
-      return ['easy', 'standard', 'hard'].includes(doc.band_default ?? '')
-        ? doc.band_default as BandPref : null
-    } catch {
-      return null
+    const doc = await readLearnhubConfig(this.paths.learnhubConfigPath) as {
+      band_default?: string
     }
+    return ['easy', 'standard', 'hard'].includes(doc.band_default ?? '')
+      ? doc.band_default as BandPref : null
   }
 
   /** 写默认带（既有配置入口——恒温器建议显式确认后落到这里；null = 清除回纯 A1）。 */
@@ -3926,15 +3910,10 @@ export class LearnhubEngine {
     if (band !== null && !['easy', 'standard', 'hard'].includes(band)) {
       throw new Error(`[band-default] band 只能是 easy/standard/hard 或 null（收到 ${String(band)}）。`)
     }
-    let prev: Record<string, unknown> = {}
-    try {
-      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
-    } catch {
-      // 无配置文件/损坏 → 全新写入
-    }
+    const prev = await readLearnhubConfig(this.paths.learnhubConfigPath)
     const next = { ...prev, band_default: band }
     if (band === null) delete next.band_default
-    await atomicWrite(this.paths.learnhubConfigPath, JSON.stringify(next, null, 1) + '\n')
+    await writeLearnhubConfig(this.paths.learnhubConfigPath, next)
     return { band_default: band as BandPref | null }
   }
 
@@ -4063,7 +4042,7 @@ export class LearnhubEngine {
       assumptions: [
         `每次复习计 1 分钟；每日预算 ${plan.minutesPerDay} 分钟，耗尽后剩余到期卡顺延（与真实欠账一致）。`,
         '复习通过率 = 当前 FSRS 模型的可提取性 R 伯努利抽样：过记 Good、败记 Again；推进与调度同一套函数（各课程用自己的调度器参数）。',
-        '新节点按课程图序在预算内引入（est 分钟摊日），学成记一次合成 Good；未调度题随学成入场。',
+        '新节点按课程图序在预算内引入（est 分钟摊日），学成记一次合成 Good；休眠题随学成入场。',
         '练习证据（EMA/正确率）冻结为当前值——沙盘只模拟「记」的维持，不模拟「练」的进步。',
       ],
     }
@@ -4091,26 +4070,17 @@ export class LearnhubEngine {
    * 「可全局关」）。关闭后复习队列不带轻提示、抽查密度不再加强（JOL 抽查本身
    * 仍由 jol.enabled 独立控制）。 */
   async calibrationHintsConfig(): Promise<{ hints_enabled: boolean }> {
-    try {
-      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
-        calibration?: { hints_enabled?: boolean }
-      }
-      return { hints_enabled: doc.calibration?.hints_enabled !== false }
-    } catch {
-      return { hints_enabled: true }
+    const doc = await readLearnhubConfig(this.paths.learnhubConfigPath) as {
+      calibration?: { hints_enabled?: boolean }
     }
+    return { hints_enabled: doc.calibration?.hints_enabled !== false }
   }
 
   /** 写显式过信提示开关（原子替换，保留配置文件其他字段；照 jolConfig 先例）。 */
   async setCalibrationHints(hints_enabled: boolean): Promise<{ hints_enabled: boolean }> {
-    let prev: Record<string, unknown> = {}
-    try {
-      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
-    } catch {
-      // 无配置文件/损坏 → 全新写入
-    }
-    await atomicWrite(this.paths.learnhubConfigPath,
-      JSON.stringify({ ...prev, calibration: { hints_enabled } }, null, 1) + '\n')
+    const prev = await readLearnhubConfig(this.paths.learnhubConfigPath)
+    await writeLearnhubConfig(this.paths.learnhubConfigPath,
+      { ...prev, calibration: { hints_enabled } })
     return { hints_enabled }
   }
 
@@ -4118,26 +4088,17 @@ export class LearnhubEngine {
 
   /** 读睡眠耦合建议配置：enabled=false 时推荐里不再出现「睡前练、醒后验」建议层。 */
   async sleepAdviceConfig(): Promise<{ enabled: boolean }> {
-    try {
-      const doc = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as {
-        sleep?: { enabled?: boolean }
-      }
-      return normalizeSleepAdvice(doc.sleep)
-    } catch {
-      return { ...DEFAULT_SLEEP_ADVICE }
+    const doc = await readLearnhubConfig(this.paths.learnhubConfigPath) as {
+      sleep?: { enabled?: boolean }
     }
+    return normalizeSleepAdvice(doc.sleep)
   }
 
   /** 写睡眠耦合建议配置（原子替换，保留配置文件其他字段）。 */
   async setSleepAdviceConfig(patch: { enabled?: boolean }): Promise<{ enabled: boolean }> {
-    let prev: Record<string, unknown> = {}
-    try {
-      prev = JSON.parse(await readFile(this.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
-    } catch {
-      // 无配置文件/损坏 → 全新写入
-    }
+    const prev = await readLearnhubConfig(this.paths.learnhubConfigPath)
     const next = await this.sleepAdviceConfig().then(cur => ({ enabled: patch.enabled ?? cur.enabled }))
-    await atomicWrite(this.paths.learnhubConfigPath, JSON.stringify({ ...prev, sleep: next }, null, 1) + '\n')
+    await writeLearnhubConfig(this.paths.learnhubConfigPath, { ...prev, sleep: next })
     return next
   }
 
@@ -4427,23 +4388,38 @@ export class LearnhubEngine {
     return { course: c.name, candidates }
   }
 
-  /** 全课程活跃错误卡已覆盖的 (node,qid) 集合（生成去重；Broken 文件跳过不阻塞）。 */
-  private async errorCardCovered(root: string): Promise<Set<string>> {
-    const covered = new Set<string>()
-    let files: string[] = []
-    try {
-      files = await readdir(this.paths.errorCardsDir(root))
-    } catch {
-      return covered
-    }
-    for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
-      const node = f.replace(/\.yaml$/, '')
+  /** 在册错误卡全展开（(course, node, card) 三元组，文件名序稳定）：空目录 = 合法
+   * 空态、Broken 卡组跳过不阻塞（体检面报出）。复习队列、全量清单、生成去重三处同缝。 */
+  private async *errorCardTriples(
+    courses: ReadonlyArray<{ name: string; root: string }>, nodeFilter?: string,
+  ): AsyncGenerator<{ course: string; node: string; card: ErrorCard }> {
+    for (const c of courses) {
+      let files: string[] = []
       try {
-        const doc = await this.errorCards.load(root, node)
-        for (const card of doc.cards) if (!card.archived) covered.add(`${node}\n${card.source_q}`)
+        files = await readdir(this.paths.errorCardsDir(c.root))
       } catch {
-        continue
+        continue // 该课程还没有任何错误卡：合法空态
       }
+      for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
+        const node = f.replace(/\.yaml$/, '')
+        if (nodeFilter !== undefined && node !== nodeFilter) continue
+        try {
+          const doc = await this.errorCards.load(c.root, node)
+          for (const card of doc.cards) {
+            if (!card.archived) yield { course: c.name, node, card }
+          }
+        } catch {
+          continue // Broken 卡组不阻塞其他卡（data-check 体检面报出）
+        }
+      }
+    }
+  }
+
+  /** 全课程活跃错误卡已覆盖的 (node,qid) 集合（生成去重；Broken 文件跳过不阻塞）。 */
+  private async errorCardCovered(course: { name: string; root: string }): Promise<Set<string>> {
+    const covered = new Set<string>()
+    for await (const { node, card } of this.errorCardTriples([course])) {
+      covered.add(`${node}\n${card.source_q}`)
     }
     return covered
   }
@@ -4460,7 +4436,7 @@ export class LearnhubEngine {
     const c = await this.registry.resolve(courseKey)
     const candidates = mineErrorPatterns(await this.store.practiceAll(),
       { course: c.name, ...(opts?.node ? { node: opts.node } : {}) })
-    const covered = await this.errorCardCovered(c.root)
+    const covered = await this.errorCardCovered(c)
     const fresh = candidates.filter(x => !covered.has(`${x.node}\n${x.qid}`))
     if (!fresh.length) {
       throw new Error('[error-card-generate] 没有可挖的新错误模式（判定线：同一题 ≥2 次实质答错且尚未建卡）；候选已被覆盖或证据不足。')
@@ -4599,33 +4575,14 @@ export class LearnhubEngine {
     today ??= (await this.learningDay()).today
     const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
     const cards: ErrorCardItem[] = []
-    for (const c of courses) {
-      const dir = this.paths.errorCardsDir(c.root)
-      let files: string[] = []
-      try {
-        files = await readdir(dir)
-      } catch {
-        continue // 该课程还没有任何错误卡：合法空态
-      }
-      for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
-        const node = f.replace(/\.yaml$/, '')
-        let doc: ErrorCardDoc
-        try {
-          doc = await this.errorCards.load(c.root, node)
-        } catch {
-          continue // Broken 卡组不阻塞其他卡（data-check 体检面报出）
-        }
-        for (const card of doc.cards) {
-          if (card.archived) continue
-          cards.push({
-            course: c.name, node, id: card.id, q: card.q, options: card.options,
-            answer: card.answer, mine: card.mine, explanation: card.explanation,
-            source_q: card.source_q, source_section: card.source_section ?? null,
-            due: card.fsrs?.reps ? card.fsrs.due : null,
-            attempts: card.stats?.attempts ?? 0,
-          })
-        }
-      }
+    for await (const { course, node, card } of this.errorCardTriples(courses)) {
+      cards.push({
+        course, node, id: card.id, q: card.q, options: card.options,
+        answer: card.answer, mine: card.mine, explanation: card.explanation,
+        source_q: card.source_q, source_section: card.source_section ?? null,
+        due: card.fsrs?.reps ? card.fsrs.due : null,
+        attempts: card.stats?.attempts ?? 0,
+      })
     }
     const due = cards.filter(c => c.due !== null && String(c.due) <= today)
       .sort((a, b) => String(a.due).localeCompare(String(b.due)) || `${a.node}/${a.id}`.localeCompare(`${b.node}/${b.id}`))
@@ -5599,16 +5556,12 @@ export class LearnhubEngine {
         continue
       }
       // 程序化查重（#119）：与已有题、本批已收题比对，命中丢弃并报告
-      const dup = findDuplicateStem(stem, existingStems)
-      if (dup) {
-        duplicates.push({ q: stem.slice(0, 80), against: dup.slice(0, 80) })
-        continue
-      }
-      try {
-        await this.bank.addQuestion(this.paths.courseRoot(c.root), node, q)
-        existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
+      const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
+      if (verdict.verdict === 'duplicate') {
+        duplicates.push({ q: stem.slice(0, 80), against: verdict.against.slice(0, 80) })
+      } else if (verdict.verdict === 'added') {
         added++
-      } catch {
+      } else {
         skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
       }
     }
@@ -5682,14 +5635,9 @@ export class LearnhubEngine {
         escapesRepaired += hygiene.repaired
         const stem = typeof q.q === 'string' ? q.q : ''
         if (hygiene.unrepairable || questionViolation(q)) continue
-        if (findDuplicateStem(stem, existingStems)) { duplicates++; continue }
-        try {
-          await this.bank.addQuestion(this.paths.courseRoot(c.root), node, q)
-          existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
-          added++
-        } catch {
-          // 单题非法不毁整批
-        }
+        const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
+        if (verdict.verdict === 'duplicate') duplicates++
+        else if (verdict.verdict === 'added') added++ // 单题非法（invalid）不毁整批
       }
     }
     return { course: c.name, node, added, sections, duplicates, escapesRepaired }

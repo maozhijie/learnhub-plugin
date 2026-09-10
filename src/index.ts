@@ -1887,7 +1887,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'Save the learner\'s answers to the four learner questions of a Weekly Kata record (现状 is engine-owned and cannot be written here — facts come from behavior). Patch semantics: only provided keys are written; empty string resets a question to unanswered. Use this after the learner answers out loud, or point them at the panel/obsidian file to write directly.',
     {
       week_start: { type: 'string', required: true, description: 'Monday YYYY-MM-DD of the record' },
-      answers: { type: 'object', required: true, description: 'Partial map: 目标条件/障碍/下一实验/预期所学 → learner\'s own words' },
+      answers: { type: 'object', additionalProperties: true, required: true, description: 'Partial map: 目标条件/障碍/下一实验/预期所学 → learner\'s own words' },
     },
     (args: { week_start: string; answers: Record<string, string> }) => run('learnhub_kata_save', async () =>
       JSON.stringify(await engine.kataSave(args.week_start, args.answers as never))))
