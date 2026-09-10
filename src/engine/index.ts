@@ -55,7 +55,7 @@ import { runAudit, effectiveStage } from './audit.ts'
 import { analyzeGraph } from './analysis.ts'
 import { graphHealthScore } from './health.ts'
 import { Content } from './content.ts'
-import { nodeTierOf, perSectionQuizTarget, genericQuizTarget } from './complexity.ts'
+import { nodeTierOf, perSectionQuizTarget, genericQuizTarget, sectionTierLabel } from './complexity.ts'
 import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals, genRetiredError } from './gengraph.ts'
 import type { ApplyAudit, EnrichFieldEntry } from './gengraph.ts'
@@ -65,8 +65,10 @@ import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem }
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
 import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
-import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLinks, scoreTier } from './vault-links.ts'
+import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, readVaultLinksCache, scanVaultLinks, scoreTier } from './vault-links.ts'
 import type { VaultLinksDoc, VaultLinkCandidateView } from './vault-links.ts'
+import { readAnchor, foldCompletion } from './seed.ts'
+import type { CompletionFold } from './seed.ts'
 import type { VaultLinkPrior } from './analysis.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -173,6 +175,14 @@ function sectionMdOf(body: string, title: string): string | null {
     if (t && normSectionKey(t) === wanted) return (nl >= 0 ? part.slice(nl + 1) : '').trim()
   }
   return null
+}
+
+/** 误解先验注入段（#147 误解目录消费；节点无误解时返回 ''，Missing 合法空态）。
+ * 生成期先验——真实错误检测归作答流水挖矿与申诉复核，有真实数据后先验让位，
+ * 让位语义由各消费方模板措辞声明（干扰项以生成指令为准、错误卡 mine 以真实错答为准）。 */
+function misconceptionPromptBlock(mis: Array<{ concept: string; model: string }> | undefined, use: string): string {
+  if (!mis?.length) return ''
+  return `\n\n## 误解先验（${use}）\n\n- 本节点登记在册的误解先验（概念：错误模型）：\n${mis.map(m => `- ${m.concept}：${m.model}`).join('\n')}`
 }
 
 /** 错题公布答案的题型化展示（多选字母并排、排序箭头链、匹配左→右）。 */
@@ -387,14 +397,32 @@ export class LearnhubEngine {
   }
 
 
+  /** 完成宣告折叠（#142 雾区条款上半，读侧零写副作用）：终点锚缺失 = null
+   * （未播种，无从宣告）；锚 Broken fail loud——锚无直改通道，手改损坏必须显式浮出。 */
+  async courseCompletion(course: { name: string; root: string }): Promise<CompletionFold | null> {
+    const anchor = await readAnchor(this.paths.anchorPath(course.root))
+    if (!anchor) return null
+    const { graph, state } = await this.loadView(course)
+    return foldCompletion(graph, state, anchor)
+  }
+
   async statusJson(): Promise<StatusDoc> {
     const { today, cutoff } = await this.learningDay()
     const [stats, diagnostics] = await Promise.all([this.bankSnapshot(today), this.diagnosticsAdvice(today)])
-    const doc = await this.sessions.statusJson(await this.enabledCourses(), stats, today, fmtCutoff(cutoff))
+    const courses = await this.enabledCourses()
+    const doc = await this.sessions.statusJson(courses, stats, today, fmtCutoff(cutoff))
     // 内容诊断建议项（#69 B1）：每课程附 diagnostics（信号/理由/证据 + 重写与讲解直达入口）
     for (const course of doc.courses as Array<Record<string, unknown>>) {
       const items = diagnostics.filter(d => d.course === course.name)
       if (items.length) course.diagnostics = items.map(d => diagnosticView(d))
+    }
+    // 完成宣告（#142 雾区条款上半）：完成判据读侧折叠（能力=终点 mastery≥阈值且闭包健康；
+    // 覆盖=块工作表+终点），面板宣告——零写侧状态、零专门停机代码
+    for (const entry of courses) {
+      const course = (doc.courses as Array<Record<string, unknown>>).find(c => c.name === entry.name)
+      if (!course) continue
+      const completion = await this.courseCompletion(entry)
+      if (completion) course.completion = completion
     }
     return doc
   }
@@ -636,7 +664,12 @@ export class LearnhubEngine {
     const c = await this.registry.resolve(courseKey)
     const { graph, state } = await this.loadView(c)
     const vaultLinks = await this.loadVaultLinkPrior(graph)
-    const doc = await analyzeGraph(c.name, graph, state, this.store, (await this.learningDay()).today, vaultLinks)
+    // 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，Float（missing_pre）建议豁免
+    const anchor = await readAnchor(this.paths.anchorPath(c.root))
+    const seedPhase = !!anchor
+      && anchor.seed_nodes.length === graph.names.length
+      && anchor.seed_nodes.every(n => graph.nset.has(n))
+    const doc = await analyzeGraph(c.name, graph, state, this.store, (await this.learningDay()).today, vaultLinks, seedPhase)
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
     return doc
   }
@@ -645,18 +678,7 @@ export class LearnhubEngine {
 
   /** 读链接先验缓存（Missing = null 合法空态；坏档 fail loud——它是引擎 state 契约文件）。 */
   private async readVaultLinksCache(): Promise<VaultLinksDoc | null> {
-    if (!existsSync(this.paths.vaultLinksPath)) return null
-    let doc: unknown
-    try {
-      doc = JSON.parse(await readFile(this.paths.vaultLinksPath, 'utf8'))
-    } catch (err) {
-      throw new Error(`[vault-links] 链接缓存 Broken（JSON 无法解析，位置：${this.paths.vaultLinksPath}）——重跑 learnhub_vault_links_scan 覆盖。\n  ✗ ${err instanceof Error ? err.message : String(err)}`)
-    }
-    const d = doc as Partial<VaultLinksDoc> | null
-    if (typeof d !== 'object' || d === null || d.version !== 1 || !Array.isArray(d.edges)) {
-      throw new Error(`[vault-links] 链接缓存 Broken（契约形状不符，位置：${this.paths.vaultLinksPath}）——重跑 learnhub_vault_links_scan 覆盖。`)
-    }
-    return d as VaultLinksDoc
+    return readVaultLinksCache(this.paths.vaultLinksPath)
   }
 
   /** analyze 的先验段：缓存映射到本课程图的候选（w ≥ 0.4，proposal/review 分层 +
@@ -936,29 +958,33 @@ export class LearnhubEngine {
 
   // ---- 提案门禁包装（apply 前 audit 拦截） ----
 
-  async graphPropose(kind: 'gen' | 'edit' | 'enrich', yamlText: string): Promise<GraphProposeResult> {
-    if (kind !== 'gen' && kind !== 'edit' && kind !== 'enrich') {
-      throw new Error(`[propose] 非法 kind: ${String(kind)}（允许 edit/enrich——gen 已退役，拼错不会再被静默当成 gen）`)
+  async graphPropose(kind: 'gen' | 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult> {
+    if (kind !== 'gen' && kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
+      throw new Error(`[propose] 非法 kind: ${String(kind)}（允许 edit/seed/enrich——gen 已退役，拼错不会再被静默当成 gen）`)
     }
     // 受理门退役检查先行（#138）：不落提案、不查流水，直接指路
     if (kind === 'gen') throw genRetiredError('propose')
+    if (kind === 'seed') return this.proposals.proposeSeed(yamlText)
     return kind === 'edit' ? this.proposals.proposeEdit(yamlText) : this.proposals.proposeEnrich(yamlText)
   }
 
-  async graphApply(kind: 'gen' | 'edit' | 'enrich', pid?: number): Promise<GraphApplyResult> {
-    if (kind !== 'gen' && kind !== 'edit' && kind !== 'enrich') {
-      throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 edit/enrich——gen 已退役）`)
+  async graphApply(kind: 'gen' | 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult> {
+    if (kind !== 'gen' && kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
+      throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 edit/seed/enrich——gen 已退役）`)
     }
     if (kind === 'gen') throw genRetiredError('apply')
     // audit 门禁：目标课程存在 ERROR 时拒绝 apply；warns 摘要 + 健康分随 findings 返回
+    // （mode=new 的种子提案课程尚未建 data 目录，audit 空跑——种子图豁免在 runAudit/applySeed 内按锚判）
     const pending = await this.store.takePending(kind, pid)
     const course = await this.registry.get(pending.course)
+    const today = (await this.learningDay()).today
     let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
-    if (course) {
+    if (course && existsSync(this.paths.dataDir(course.root))) {
       const { graph } = await this.loadView(course)
-      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, (await this.learningDay()).today)
+      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, today)
       audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
     }
+    if (kind === 'seed') return this.proposals.applySeed(pid, audit, today)
     return kind === 'edit' ? this.proposals.applyEdit(pid, audit) : this.proposals.applyEnrich(pid, audit)
   }
 
@@ -1041,7 +1067,7 @@ export class LearnhubEngine {
     if (kind === 'project_plan' || kind === 'project_milestone') {
       return kind === 'project_plan' ? this.projects.applyPlan(pid) : this.projects.applyMilestone(pid)
     }
-    if (kind === 'gen' || kind === 'edit' || kind === 'enrich') return this.graphApply(kind, pid)
+    if (kind === 'gen' || kind === 'edit' || kind === 'seed' || kind === 'enrich') return this.graphApply(kind, pid)
     throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 ${PROPOSAL_KINDS.join('/')}）`)
   }
 
@@ -1619,7 +1645,7 @@ export class LearnhubEngine {
       await mkdir(target.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
       await writeFile(target, f.html, 'utf8')
     }
-    const fixed = Content.fixRichBlocks(split.body)
+    const fixed = Content.fixRichBlocks((await this.content.fixAliases(c.root, split.body)).body)
     const gate = await this.content.gateReport(graph, c.root, node, fixed)
     const html = Content.checkInteractiveHtml(split.files)
     if (!gate.passed || html.findings.length) {
@@ -1704,9 +1730,10 @@ export class LearnhubEngine {
     return this.content.sectionApply(c.root, graph, node, sectionId, md, rec => this.store.appendJournal({ ...rec, course: c.name }))
   }
 
-  /** 节清单视图：manifest + 每节现正文（面板节进度/单节重写入口用；
-   * 无清单旧节点回退为整篇重导出，全部 ready）。 */
-  async contentSectionsView(courseKey: string | undefined, node: string): Promise<Array<SectionManifest & { md: string | null }>> {
+  /** 节清单视图：manifest + 每节现正文 + 解析后的节段难度档 tierLabel（清单 tier 在场用
+   * 清单值，缺席按节位置+节点难度推导——不回填清单；面板节进度/单节重写/生成管线的
+   * 本节任务注入共用；无清单旧节点回退为整篇重导出，全部 ready）。 */
+  async contentSectionsView(courseKey: string | undefined, node: string): Promise<Array<SectionManifest & { md: string | null; tierLabel: string }>> {
     const c = await this.registry.resolve(courseKey)
     const { graph, state, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[sections] 节点「${node}」不在图内。`)
@@ -1720,7 +1747,11 @@ export class LearnhubEngine {
       if (title) mdByTitle.set(title, (nl >= 0 ? part.slice(nl + 1) : '').trim())
     }
     const manifest = state[node]?.content.sections ?? Content.manifestFromBody(body, 0)
-    return manifest.map(s => ({ ...s, md: mdByTitle.get(s.title) ?? null }))
+    return manifest.map((s, i) => ({
+      ...s,
+      md: mdByTitle.get(s.title) ?? null,
+      tierLabel: sectionTierLabel(s.tier, graph.difficultyOf[node], graph.estOf[node], i + 1, manifest.length),
+    }))
   }
 
   async contentFeedback(courseKey: string | undefined, node: string): Promise<string> {
@@ -4382,6 +4413,14 @@ export class LearnhubEngine {
     }
     // max 只是下调旋钮（批上限硬帽 ERROR_CARD_BATCH_MAX 防注水；工具面宣称的 cap 在此强制）
     const max = Math.max(1, Math.min(opts?.max ?? ERROR_CARD_BATCH_MAX, ERROR_CARD_BATCH_MAX, fresh.length))
+    // 节误解先验（#147 出生期候选错法）：图视图加载一次；加载失败不阻塞挖矿路径——
+    // 先验缺席合法，出卡照走。
+    let graph: Graph | null = null
+    try {
+      graph = (await this.loadView(c)).graph
+    } catch {
+      graph = null
+    }
     const skipped: string[] = []
     interface Mat { node: string; qid: string; section: string | null; sectionBody: string | null }
     const mats: Array<Mat & { material: string }> = []
@@ -4415,6 +4454,7 @@ export class LearnhubEngine {
         // 正文缺失不阻塞生成：原题解析已足够对照
       }
       const wrongs = x.wrongs.map(w => `「${w}」`).join('、')
+      const mis = graph?.misconceptionsOf[x.node] ?? []
       mats.push({
         node: x.node, qid: x.qid, section: q.section ?? sectionTitle,
         sectionBody,
@@ -4426,6 +4466,7 @@ export class LearnhubEngine {
           `- 原题正确答案：${typeof q.answer === 'boolean' ? (q.answer ? '对' : '错') : String(q.answer)}`,
           ...(q.explanation ? [`- 原题解析：${q.explanation}`] : []),
           `- 学习者的错答（去重，最近在前）：${wrongs}`,
+          ...(mis.length ? [`- 误解先验（出生期候选错法；「干扰做法」项可从中改编，mine 仍以学习者错答为准）：${mis.map(m => `${m.concept}（${m.model}）`).join('；')}`] : []),
           ...(sectionBody ? [`- 来源节「${sectionTitle}」正文节选：${sectionBody}`] : []),
         ].join('\n'),
       })
@@ -5541,7 +5582,8 @@ export class LearnhubEngine {
       : tier === 3
         ? '本节点为高复杂度：收尾可出 1-2 道 difficulty: 3 的综合/易错题。'
         : '本节点为中复杂度：难度递进到 2，收尾至多 1 道 difficulty: 3。'
-    const raw = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`)
+    const misBlock = misconceptionPromptBlock(graph.misconceptionsOf[node], '干扰项材料')
+    const raw = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`)
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
@@ -5644,22 +5686,26 @@ export class LearnhubEngine {
     // （集中练习模式：读读读→集中练，综合题数随档位而非恒定 3）。
     const hasPracticeSection = manifest.some(s => s.type === '练习')
     const perSection = perSectionQuizTarget(tier, hasPracticeSection)
+    const misBlock = misconceptionPromptBlock(graph.misconceptionsOf[node], '干扰项材料')
     let added = 0
     let sections = 0
     let duplicates = 0
     let escapesRepaired = 0
-    for (const s of manifest) {
+    for (const [si, s] of manifest.entries()) {
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
       if (!sectionMd) continue
       if (perSection <= 0) continue // 该档位不要求本内容节单独出题（综合题兼底）
       sections++
-      const difficultyAnchor = tier === 1
-        ? '本节属低复杂度节点：题目难度 1 为主（至多 1 道 2），不出 difficulty: 3。'
-        : tier === 3
-          ? '本节属高复杂度节点：允许 1-2 道 difficulty: 3 的易错/综合题。'
-          : '本节属中复杂度节点：难度递进到 2 即可。'
-      const raw = await llm(`${tpl}${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
+      // 难度递进锚（#147）：逐节出题按节段难度档走（清单 tier 在场用清单值，缺席按
+      // 节位置+节点难度推导）——替换写死的开头 d1/中间 d2/收尾 d3 模板口径。
+      const tierLabel = sectionTierLabel(s.tier, graph.difficultyOf[node], graph.estOf[node], si + 1, manifest.length)
+      const difficultyAnchor = tierLabel === '低'
+        ? '本节难度档：低——题目难度 1 为主（至多 1 道 2），不出 difficulty: 3。'
+        : tierLabel === '高'
+          ? '本节难度档：高——允许 1-2 道 difficulty: 3 的易错/综合题。'
+          : '本节难度档：中——难度递进到 2 即可（收尾至多 1 道 difficulty: 3）。'
+      const raw = await llm(`${tpl}${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
       let doc: { questions?: unknown } | null = null
       try {
         doc = YAML.parseModel(raw) as { questions?: unknown } | null

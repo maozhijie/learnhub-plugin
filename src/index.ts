@@ -353,19 +353,22 @@ async function generateQuiz(complete: LlmComplete, course: string, node: string,
   return engine.questionGenerate(course, node, count, async prompt => stripFences(await complete(prompt)), opts)
 }
 
-/** 节生成提示词拼装：模板 + 本节任务（id/标题/类型）+ 上下文包。 */
-function sectionPrompt(tpl: string, pack: string, s: { id: string; title: string; type: string }): string {
-  return `${tpl}\n\n## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}\n\n---\n\n${pack}`
+/** 节生成提示词拼装：模板 + 本节任务（id/标题/类型/节段难度档）+ 上下文包。
+ * tierLabel 来自节清单视图（清单 tier 在场用清单值，缺席按节位置+节点难度推导，#147）。 */
+function sectionPrompt(tpl: string, pack: string, s: { id: string; title: string; type: string; tierLabel?: string }): string {
+  return `${tpl}\n\n## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}\n\n---\n\n${pack}`
 }
 
-/** 逐节生成共用出口：模型产出 → sectionApply；质检门未过时把门禁清单回灌模型修复一轮
- * （仅一轮，防循环；修复轮仍未过则带说明抛出）。fast 档模型偶发违反硬约束
- * （### 子标题/超长正文/非 JSON plot），一次盲跑定生死会让管线反复卡在同一节。
- * P4：正文初跑恒 fast 档；修复轮按 highTier 升 deep 档（复杂节点值得多思考一轮）。
- * complete 为注入的补全缝（#137）。isCancelled 在每次模型产出后检查，取消即丢结果。 */
+/** 逐节生成共用出口：模型产出 → sectionApply；质检门未过时先试块级局部修补
+ * （#147：清单 ✗ 全部定位到具体违规块时只回灌这些块、只收替换块，其余内容零重跑），
+ * 块级不可定位/修补产出不可拼接/修补后仍未过 → 回退整节修复一轮；仍未过则带说明抛出。
+ * fast 档模型偶发违反硬约束（### 子标题/超长正文/非 JSON plot），一次盲跑定生死会让
+ * 管线反复卡在同一节。P4：正文初跑恒 fast 档；修补/修复轮按 highTier 升 deep 档
+ * （复杂节点值得多思考一轮）。complete 为注入的补全缝（#137）。isCancelled 在每次
+ * 模型产出后检查，取消即丢结果。 */
 async function applySectionWithRepair(
   complete: LlmComplete, course: string, node: string,
-  s: { id: string; title: string; type: string }, tpl: string, pack: string,
+  s: { id: string; title: string; type: string; tierLabel?: string }, tpl: string, pack: string,
   opts?: { isCancelled?: () => boolean; highTier?: boolean },
 ): Promise<{ version: number; title: string; hints: string[] }> {
   const cancelled = () => opts?.isCancelled?.() ?? false
@@ -379,9 +382,27 @@ async function applySectionWithRepair(
     if (code !== 'GATE_FAILED') throw err
     gateReport = err.message
   }
+  const repairEffort = { effort: contentEffort(opts?.highTier === true) }
+  // 块级局部修补：全部 ✗ 都能定位到具体违规块才走（混入任何非块级 finding 时
+  // fail-safe 回整节修复）；替换块数量对不上或拼接失败同样回退。
+  const plan = Content.blockPatchPlan(first, gateReport)
+  if (plan) {
+    const patched = stripFences(await complete(Content.blockPatchPrompt(plan), undefined, repairEffort))
+    if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
+    const merged = Content.applyBlockPatch(first, plan, Content.extractFencedBlocks(patched))
+    if (merged !== null) {
+      try {
+        return await engine.contentSection(course, node, s.id, merged)
+      } catch (err) {
+        const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
+        if (code !== 'GATE_FAILED') throw err
+        gateReport = err.message // 带最新清单回退整节修复
+      }
+    }
+  }
   const repaired = stripFences(await complete(
     Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s), first, gateReport),
-    undefined, { effort: contentEffort(opts?.highTier === true) },
+    undefined, repairEffort,
   ))
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   try {
@@ -2007,10 +2028,10 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; from: string; to: string }) => run('learnhub_graph_path', async () =>
       JSON.stringify(await engine.graphPath(args.course, args.from, args.to))))
   tool('learnhub_graph_propose',
-    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen is RETIRED (cutover #138, ADR-0033 grown graph) and rejected at the gate — new course entry comes from seed proposals. kind=edit (per batch) top-level keys: course; reason?; concepts? ([{canonical, aliases?, definition?}] — concept-registry minting block, #141: names land in 课程根/概念登记表.yaml with the SAME apply transaction, nothing written while the proposal is pending/rejected); ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Concept-reference gate (#141): every concept named in teaches/assumes/misconceptions must be registered in the course concept registry (canonical or alias, exact match) OR minted in the same proposal\'s concepts block — unregistered names are rejected with the missing list; minting a name that already exists is rejected too (reference the entry, or merge via learnhub_concept_merge after human confirmation). Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In graph-generation batches apply immediately after gates pass (anchor-review model, ADR-0003); revision changes stay pending for human review.',
+    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen is RETIRED (cutover #138, ADR-0033 grown graph) and rejected at the gate. kind=seed (#142) is the NEW-COURSE ENTRY: 1-3 start nodes + one endpoint node; the engine lands coarse placeholder edges (endpoint.pre = starts), one human review then the course starts. Seed nodes carry ZERO enc and ZERO est (rejected if declared); goal_type defaults to capability (completion = endpoint mastery + closure health) — coverage must be explicit AND carry a non-empty worksheet list ({block, note?, done?}; capability+worksheet is rejected). mode=new requires the course NOT be registered (the engine scaffolds the registry entry + dirs on apply); mode=reseed requires it — endpoint change / worksheet update of an existing course, the ONLY anchor-edit channel (no direct anchor writes; the endpoint-anchored node is also guarded: del_node/rename via kind=edit are rejected). Start entries may declare basis: baseline (common knowledge start) / vault (prior familiarity boundary) / project (decompiled-cluster placeholder, wired by the project-anchoring ticket). Seed node keys: name/region/block/note?/bloom?/difficulty?/teaches?/assumes?/misconceptions?. kind=edit (per batch) top-level keys: course; reason?; concepts? ([{canonical, aliases?, definition?}] — concept-registry minting block, #141: names land in 课程根/概念登记表.yaml with the SAME apply transaction, nothing written while the proposal is pending/rejected); ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Concept-reference gate (#141): every concept named in teaches/assumes/misconceptions must be registered in the course concept registry (canonical or alias, exact match) OR minted in the same proposal\'s concepts block — unregistered names are rejected with the missing list; minting a name that already exists is rejected too (reference the entry, or merge via learnhub_concept_merge after human confirmation). Prior feed (#142): vault-link candidates with w≥0.7 mapped to the proposal\'s nodes that the structure does NOT explicitly answer (no pre/enc edge between the pair) come back in warns (non-blocking) — answer them with real edges, or let a vault rescan drop them; zero priors is a legal normal path. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In graph-generation batches apply edit proposals immediately after gates pass (anchor-review model, ADR-0003); seed proposals wait for the one human review.',
     {
-      kind: { type: 'string', required: true, description: '"edit" (change ops) or "enrich" (overlay backfill); kind=gen (course skeleton) is retired and rejected — seeds own new course entry now' },
-      yaml: { type: 'string', required: true, description: 'Full proposal YAML text (EditProposal or EnrichProposal schema)' },
+      kind: { type: 'string', required: true, description: '"seed" (new-course entry or endpoint change — one human review) or "edit" (change ops) or "enrich" (overlay backfill); kind=gen (course skeleton) is retired and rejected' },
+      yaml: { type: 'string', required: true, description: 'Full proposal YAML text (SeedProposal / EditProposal / EnrichProposal schema)' },
     },
     (args: { kind: string; yaml: string }) => run('learnhub_graph_propose', async () =>
       JSON.stringify(await engine.graphPropose(graphKind(args.kind), args.yaml))))
@@ -2018,7 +2039,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'List graph proposals by status — use status=pending to see what awaits human review in the panel, with the proposal id, course, reason, and op summary. After the user decides in the panel, apply with learnhub_graph_apply using that id.',
     {
       status: { type: 'string', description: 'Filter by status (default pending; e.g. applied/rejected)' },
-      kind: { type: 'string', description: 'Filter by kind: edit / enrich / project_plan / project_milestone / experiment (gen is retired; historical gen rows still list without the filter)' },
+      kind: { type: 'string', description: 'Filter by kind: edit / seed / enrich / project_plan / project_milestone / experiment (gen is retired; historical gen rows still list without the filter)' },
     },
     (args: { status?: string; kind?: string }) => run('learnhub_graph_proposals', async () =>
       JSON.stringify(await engine.graphProposals(args.status, args.kind))))
@@ -2038,9 +2059,9 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string }) => run('learnhub_graph_link_backfill', async () =>
       JSON.stringify(await engine.graphLinkBackfill(args.course))))
   tool('learnhub_graph_apply',
-    'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot; kind=enrich re-checks the sha256 content fingerprints and refuses stale proposals) or reject (kept on record). In graph-generation batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold — address them in the next batch.',
+    'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot; kind=enrich re-checks the sha256 content fingerprints and refuses stale proposals; kind=seed lands the endpoint anchor state/终点锚.json + start/endpoint nodes with coarse placeholder edges, seed graphs get the shape-warning & health-threshold exemption) or reject (kept on record). Seed proposals (kind=seed) are the new-course entry and the ONLY endpoint-change channel — they always wait for the one human review. In edit batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold (suppressed while the graph is still just the seed) — address them in the next batch.',
     {
-      kind: { type: 'string', required: true, description: '"edit" (change ops) or "enrich" (overlay backfill; gen retired — legacy pending gen proposals can only be rejected)' },
+      kind: { type: 'string', required: true, description: '"seed" (course entry / endpoint change) or "edit" (change ops) or "enrich" (overlay backfill; gen retired — legacy pending gen proposals can only be rejected)' },
       id: { type: 'number', description: 'Proposal id as a positive integer; omit only for the latest pending of this kind' },
       reject: { type: 'boolean', description: 'true to reject instead of apply' },
       note: { type: 'string', description: 'Rejection reason (recorded)' },

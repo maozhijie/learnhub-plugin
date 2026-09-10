@@ -143,6 +143,44 @@ export function nodeProblemFirstOf(g: GraphSignalsSource, node: string): boolean
   return problemFirstOf({ difficulty: g.difficultyOf[node], bloom: g.bloomOf[node] })
 }
 
+// ---- 节段难度档（Section Difficulty Tier，#147） ----
+
+/**
+ * 节段难度档推导（节清单 tier 缺席时的读侧兜底，不回填）：
+ * 基档只看节点 difficulty（1-2→低 / 3→中 / 4-5→高；缺失按 est 回退，都缺兜底中档），
+ * 再按节位置做节点内的难度递进——位置在前 1/3 降一档、在后 1/3 升一档、中段持平，
+ * 单节（total≤1）即基档不调。刻意不复用 complexityTier 折叠（bloom/前置规模是内容
+ * 规模与认知形态信号，不是难度信号；与 PS-I 分流同纪律）。
+ */
+export function deriveSectionTier(
+  nodeDifficulty: number | undefined, nodeEst: number | undefined,
+  position: number, total: number,
+): ComplexityTier {
+  let base: ComplexityTier
+  if (nodeDifficulty !== undefined) {
+    base = nodeDifficulty <= 2 ? 1 : nodeDifficulty === 3 ? 2 : 3
+  } else if (nodeEst !== undefined) {
+    base = baseByEst(nodeEst)
+  } else {
+    base = 2
+  }
+  if (total <= 1) return base
+  const t = Math.min(Math.max(position, 1), total) / total
+  if (t <= 1 / 3) return Math.max(1, base - 1) as ComplexityTier
+  if (t > 2 / 3) return Math.min(3, base + 1) as ComplexityTier
+  return base
+}
+
+/** 节段难度档解析（清单 tier 在场用清单值，缺席走推导；清单值非法视为缺席）。 */
+export function sectionTierLabel(
+  tier: string | undefined, nodeDifficulty: number | undefined, nodeEst: number | undefined,
+  position: number, total: number,
+): string {
+  const stored = tier !== undefined ? TIER_LABEL_TO_IDX[tier] : undefined
+  return TIER_LABELS[stored ?? deriveSectionTier(nodeDifficulty, nodeEst, position, total)]
+}
+
+
 /** 节点大纲护栏：按节点档位查节段数是否方向性极端。空 = 放行。 */
 export function outlineBudgetForNode(g: GraphSignalsSource, node: string, sectionCount: number): string[] {
   return checkOutlineBudget(nodeTierOf(g, node), sectionCount)

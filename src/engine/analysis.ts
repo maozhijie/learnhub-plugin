@@ -54,6 +54,9 @@ export interface GraphAnalysis {
     jump_total: number
     /** 节点数 <3 的块（合并比展开更划算时）。 */
     merge_blocks: Array<{ region: string; block: string; nodes: number }>
+    /** 种子图豁免（#142）：true = 图仍是种子本身（终点锚种子节点全集）——
+     * missing_pre 豁免、健康分不设阈值；生长批进入后翻转 false。自由 JSON 段字段。 */
+    seed_phase?: boolean
     /** Vault 链接先验候选（V-2 #91）：个人笔记 wikilink 映射到本课程图的无向关联对
      * （w ≥ 0.4；tier=proposal 的走 learnhub_graph_link_backfill 单提案人审、review 的
      * 逐条人工裁决）。自由 JSON 段——suggestions 非校验 schema，加段零 schema 破坏。 */
@@ -84,6 +87,9 @@ export async function analyzeGraph(
   courseName: string, graph: Graph, state: Record<string, Fm>, store: Store,
   today: string = todayStr(),
   vaultLinks: VaultLinkPrior = { scanned_at: null, mapped_total: 0, candidates: [] },
+  /** 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，Float（missing_pre）建议豁免
+   * ——种子本来就只有起点+终点几张节点（facade 按锚判定传入，analysis 保持无 IO）。 */
+  seedPhase = false,
 ): Promise<GraphAnalysis> {
   const t = parseDay(today)!
 
@@ -182,7 +188,7 @@ export async function analyzeGraph(
     .slice(0, cap)
     .map(({ region, block, nodes }) => ({ region, block, nodes }))
   const expandBlocks = topBlocks(blocks, b => b.nodes < 5, sugCap)
-  const missingPre = floatNodes(graph).slice(0, sugCap)
+  const missingPre = seedPhase ? [] : floatNodes(graph).slice(0, sugCap)
   const jumps = jumpCandidates(graph)
   const mergeBlocks = topBlocks(blocks, b => b.nodes < 3, sugCap)
   const unconverged = blocks
@@ -214,6 +220,7 @@ export async function analyzeGraph(
       jump_candidates: jumps.slice(0, sugCap),
       jump_total: jumps.length,
       merge_blocks: mergeBlocks,
+      ...(seedPhase ? { seed_phase: true } : {}),
       vault_link_candidates: vaultLinks.candidates.slice(0, sugCap),
     },
     vault_links: {

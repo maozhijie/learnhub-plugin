@@ -4,10 +4,12 @@
  * ERROR: E1 重名 / E2 未定义前置 / E3 环 / E4 课程文件↔图失同步 / E5 frontmatter schema / E6 enc 断边 / E7 enc 非祖先
  * WARN : R1 浅叶子 / R2 单浅前置叶子 / R4 深度异常 / R6 传递冗余 / R8 多连通分量 / R10 状态异常 / R13 认知跨步候选
  *         R14 enc 覆盖缺口 / R15 enc 与反哺候选不一致 / R16 enc 权重无区分度（内容级背书，#53）
- * INFO : R5 跨区引用 / R9 疑似别名
+ *         R17 先验候选未被结构回应（w≥0.7 喂料分流，#142）
+ * INFO : R5 跨区引用 / R9 疑似别名 / R18 概念字段组盘点（#147，档位零门禁零调度的审计面确认）
  * ERROR 存在时返回 failed=true（生成/结算门禁）。
+ * 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，R1/R2/R8/R13 豁免、健康分不设阈值
+ * ——种子本来就只有起点+终点几张节点，形状告警与低健康分是噪音（生长批进入后恢复）。
  */
-import { existsSync } from 'node:fs'
 import { scanAll, loadNote, hasReadyContent } from './notes.ts'
 import { STAGES } from './types.ts'
 import type { GRegion, Fm } from './types.ts'
@@ -17,6 +19,8 @@ import { parseDay, todayStr, daysBetween } from './dates.ts'
 import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import { Content } from './content.ts'
+import { readAnchor } from './seed.ts'
+import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
 
 export interface AuditResult {
   failed: boolean
@@ -50,19 +54,28 @@ export async function runAudit(
   // E3
   if (hasCycle) errors.push(`E3 存在环！涉及 ${graph.cycleNodes.length} 个节点，例如: ${graph.cycleNodes.slice(0, 5).join('、')}`)
 
+  // 种子图豁免（#142）：图仍 = 终点锚的种子节点全集 = 图还是种子本身——形状类告警
+  // 豁免（生长批进入后自动恢复）；E 级照查，种子也有真错误。
+  const anchor = await readAnchor(paths.anchorPath(root))
+  const seedPhase = !!anchor
+    && anchor.seed_nodes.length === names.length
+    && anchor.seed_nodes.every(n => nset.has(n))
+
   // R1 / R2 —— R1 阈值随图最大深度相对化（大图 depth>20 时 depth≤5 的旁支叶子是正常收尾），
   // 条目多时只列前 15 条附溢出行，避免淹没报告里的其他发现
   const maxDepth = names.length ? Math.max(...names.map(n => depth[n] ?? 0)) : 0
   const r1Depth = hasCycle ? 5 : Math.max(5, Math.round(maxDepth / 4))
   const r1 = graph.leaves.filter(n => !hasCycle && (depth[n] ?? 0) <= r1Depth)
-  for (const n of r1.slice(0, 15)) warns.push(`R1 浅叶子: [${name2region[n]}] ${n}（depth=${depth[n]}，阈值 ${r1Depth}）`)
-  if (r1.length > 15) warns.push(`R1 浅叶子另有多 ${r1.length - 15} 处未列出`)
-  const r2 = names.filter(n => {
-    const ps = preOf[n]
-    return ps.length === 1 && depth[ps[0]] !== undefined && depth[ps[0]] <= 1 && depth[n] !== undefined && !graph.succ[n].length
-  })
-  for (const n of r2.slice(0, 15)) warns.push(`R2 单浅前置叶子: ${n} 仅依赖 ${preOf[n][0]}（depth=${depth[n]}）`)
-  if (r2.length > 15) warns.push(`R2 单浅前置叶子另有多 ${r2.length - 15} 处未列出`)
+  if (!seedPhase) {
+    for (const n of r1.slice(0, 15)) warns.push(`R1 浅叶子: [${name2region[n]}] ${n}（depth=${depth[n]}，阈值 ${r1Depth}）`)
+    if (r1.length > 15) warns.push(`R1 浅叶子另有多 ${r1.length - 15} 处未列出`)
+    const r2 = names.filter(n => {
+      const ps = preOf[n]
+      return ps.length === 1 && depth[ps[0]] !== undefined && depth[ps[0]] <= 1 && depth[n] !== undefined && !graph.succ[n].length
+    })
+    for (const n of r2.slice(0, 15)) warns.push(`R2 单浅前置叶子: ${n} 仅依赖 ${preOf[n][0]}（depth=${depth[n]}）`)
+    if (r2.length > 15) warns.push(`R2 单浅前置叶子另有多 ${r2.length - 15} 处未列出`)
+  }
 
   // R4 深度异常
   const blockDepths: Record<string, Array<[number, string]>> = {}
@@ -102,7 +115,7 @@ export async function runAudit(
     }
   }
   // R8
-  if (graph.components.length > 1) {
+  if (!seedPhase && graph.components.length > 1) {
     for (const members of [...graph.components].sort((a, b) => b.length - a.length)) {
       warns.push(`R8 孤立连通分量（${members.length} 节点）: ${members.slice(0, 5).join('、')}${members.length > 5 ? '…' : ''}`)
     }
@@ -218,11 +231,35 @@ export async function runAudit(
 
   // R13 认知跨步候选（合成口径：难度差 / 铺垫断层，见 quality.ts；唯一跳步检测器，
   // 已吸收旧 R11 的难度差口径以免同一跳重复 WARN；WARN 只列前 15，全量走 analyze）
-  const jumpAll = jumpCandidates(graph)
-  for (const j of jumpAll.slice(0, 15)) {
-    warns.push(`R13 认知跨步候选（需 verdict）: ${j.pre} -> ${j.node}（难度差 ${j.difficultyGap ?? '—'}，depth 跨 ${j.depthSpan}，${j.reasons.join('+')}）`)
+  if (!seedPhase) {
+    const jumpAll = jumpCandidates(graph)
+    for (const j of jumpAll.slice(0, 15)) {
+      warns.push(`R13 认知跨步候选（需 verdict）: ${j.pre} -> ${j.node}（难度差 ${j.difficultyGap ?? '—'}，depth 跨 ${j.depthSpan}，${j.reasons.join('+')}）`)
+    }
+    if (jumpAll.length > 15) warns.push(`R13 认知跨步候选另有多 ${jumpAll.length - 15} 处未列出`)
   }
-  if (jumpAll.length > 15) warns.push(`R13 认知跨步候选另有多 ${jumpAll.length - 15} 处未列出`)
+
+  // R17 先验喂料分流（#142）：vault 链接先验 w≥0.7 的候选对未被结构显式回应
+  // （pre/enc 任一方向）→ WARN 可见——喂料分流取代人审分流；候选/断言边用位置
+  // 区分（不动节点键集）。零先验（缓存 Missing）零输出——合法常态路径非 Broken。
+  const vaultCache = await readVaultLinksCache(paths.vaultLinksPath)
+  if (vaultCache) {
+    const { unresponded } = splitPriorFeed(vaultCache.edges, names, graph)
+    for (const v of unresponded) {
+      warns.push(`R17 先验候选未被结构回应（w≥0.7 喂料分流）: ${v.aNode} ~ ${v.bNode}（w=${v.w}）——补 pre/enc 显式回应，或重扫 vault 后自然消失`)
+    }
+  }
+  if (seedPhase) {
+    infos.push(`种子图豁免生效：浅叶/多分量/认知跨步等形状告警豁免、健康分不设阈值（种子 = 终点「${anchor!.endpoint}」，${anchor!.declared} 声明；生长批进入后恢复）`)
+  }
+
+  // R18 概念字段组盘点（#147）：teaches/assumes 档位与误解先验的规模盘点。显式分工——
+  // 档位（知道/会用/能教）是概念级生成注入的感知面，不进门禁不进调度（既裁；bloom 管
+  // 认知形态、difficulty 管难度信号）；误解消费锚定内容生成。本项只盘点，不校验语义。
+  const teachesNodes = Object.keys(graph.teachesOf).length
+  const assumesNodes = Object.keys(graph.assumesOf).length
+  const misCount = Object.values(graph.misconceptionsOf).reduce((s, v) => s + v.length, 0)
+  infos.push(`R18 概念字段组盘点: teaches ${teachesNodes} 节点、assumes ${assumesNodes} 节点、误解 ${misCount} 条（概念档位为生成注入感知面——不进门禁不进调度，本项只盘点）`)
 
   const exempt = names.filter(n => !found[n])
   const baseline: Record<string, number | string> = {
@@ -234,6 +271,10 @@ export async function runAudit(
     最大深度: Object.keys(depth).length ? Math.max(...Object.values(depth)) : '-',
     '课程文件（已纳管）': Object.keys(found).length,
     未生成豁免: exempt.length,
+    终点锚: anchor
+      ? `${anchor.endpoint}（${anchor.goal_type === 'coverage' ? '覆盖' : '能力'}锚定，${anchor.declared} 声明）`
+      : '未播种',
+    '概念字段（teaches/assumes/误解）': `${teachesNodes} / ${assumesNodes} / ${misCount}`,
     图谱健康分: graphHealthScore(graph).score,
     'ERROR / WARN / INFO': `${errors.length} / ${warns.length} / ${infos.length}`,
   }

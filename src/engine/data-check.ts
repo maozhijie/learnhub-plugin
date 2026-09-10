@@ -14,6 +14,7 @@ import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
 import { validateConceptRegistry } from './concepts.ts'
+import { validateAnchor } from './seed.ts'
 import { classifySource, fingerprintOf, validateNoteSourceManifest } from './note-source.ts'
 import { validateLearnerCards } from './learner-cards.ts'
 import { validateErrorCards } from './error-cards.ts'
@@ -24,7 +25,7 @@ import type { CourseEntry } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'archive'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive'
 
 export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived'
 
@@ -60,6 +61,10 @@ export type DataCheckReason =
   | 'concept_registry_unreadable'
   | 'concept_registry_yaml_parse'
   | 'concept_registry_schema'
+  | 'endpoint_anchor_unreadable'
+  | 'endpoint_anchor_json_parse'
+  | 'endpoint_anchor_schema'
+  | 'endpoint_anchor_dangling'
   | 'pre_v2_archive'
   | 'pre_v2_artifact'
 
@@ -95,6 +100,8 @@ export interface DataCheckReport {
     /** 概念登记表盘点（#141）：present = 在盘课程数；entries = 条目总数（跨断裂
      * 存活的档案坐标系，与存档区互斥——登记表永不入存档清单）。 */
     conceptRegistries: { present: number; entries: number }
+    /** 终点锚盘点（#142）：present = 已播种课程数（锚在盘；缺席 = 未播种 Missing 合法）。 */
+    endpointAnchors: { present: number }
   }
   findings: DataCheckFinding[]
 }
@@ -544,6 +551,48 @@ async function scanConceptRegistry(
   return { present: true, entries: checked.entries.length }
 }
 
+/** 终点锚体检（#142 / ADR-0033）：课程根/state/终点锚.json——文件缺失 = 未播种
+ * （Missing 合法空态，零 finding，inventory 计数即盘点可见）；存在但不可读/JSON 坏/
+ * 契约违约/锚悬空（终点节点不在图内——edit 直改被受理门拒绝后的残余形态）= Broken。
+ * 锚无直改通道：换终点只走重新种子提案（kind=seed, mode=reseed）。 */
+async function scanEndpointAnchor(
+  findings: DataCheckFinding[],
+  courseName: string,
+  path: string,
+  nodeNames: Set<string>,
+): Promise<{ present: boolean }> {
+  const where = `课程「${courseName}」终点锚 ${path}`
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch (err) {
+    const code = (err as { code?: unknown }).code
+    if (code === 'ENOENT') return { present: false } // 合法空态：种子提案 apply 后出现
+    push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_unreadable', where, errorText(err))
+    return { present: true }
+  }
+  let doc: unknown
+  try {
+    doc = JSON.parse(text)
+  } catch (err) {
+    push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_json_parse', where,
+      `${errorText(err)}——锚无直改通道，换终点走重新种子提案（kind=seed, mode=reseed）`)
+    return { present: true }
+  }
+  const checked = validateAnchor(doc)
+  if (checked.errors.length) {
+    push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_schema', where,
+      `${checked.errors.join('；')}——锚无直改通道，换终点走重新种子提案（kind=seed, mode=reseed）`)
+    return { present: true }
+  }
+  const anchor = checked.anchor!
+  if (!nodeNames.has(anchor.endpoint)) {
+    push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_dangling', where,
+      `终点节点「${anchor.endpoint}」不在图内——锚悬空；换终点走重新种子提案（kind=seed, mode=reseed），锚不直改`)
+  }
+  return { present: true }
+}
+
 /** 断裂存档区盘点（#138 / ADR-0034）：archived 是显式的第三类——既非 Missing 也非
  * Broken，不进 status、不校验内容，只数文件数并对照 learnhub.json 的断裂史。
  * - pre_v2_archive：存档区在盘 → 信息级盘点一条（文件总数 + 断裂日期）。
@@ -599,6 +648,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     noteSourceFiles: { total: 0, ok: 0, missing: 0, drifted: 0, inconsistent: 0 },
     archive: { present: false, files: 0 },
     conceptRegistries: { present: 0, entries: 0 },
+    endpointAnchors: { present: 0 },
   }
   const registryWhere = `课程注册表 ${paths.registryPath}`
 
@@ -653,6 +703,14 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
       inventory.conceptRegistries.present++
       inventory.conceptRegistries.entries += regScan.entries
     }
+    // 终点锚（#142）：缺席 = 未播种 Missing 合法空态零 finding；在盘 = 校验形状与悬空
+    const anchorScan = await scanEndpointAnchor(
+      findings,
+      courseName,
+      paths.anchorPath(String(course.root)),
+      new Set(result.nodes.map(n => n.name)),
+    )
+    if (anchorScan.present) inventory.endpointAnchors.present++
   }
 
   const noteSourceScan = await scanNoteSources(findings, paths, noteSources)
@@ -681,6 +739,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     learner_cards: emptyArea(),
     error_cards: emptyArea(),
     concept_registry: emptyArea(),
+    endpoint_anchor: emptyArea(),
     archive: emptyArea(),
   }
   for (const finding of findings) {

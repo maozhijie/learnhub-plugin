@@ -104,8 +104,8 @@ export class Paths {
   get sedimentDir(): string { return `${this.centerRoot}/沉淀` }
   get sedimentPath(): string { return `${this.sedimentDir}/沉淀.jsonl` }
   get learnerProfilePath(): string { return `${this.sedimentDir}/学习者档案.md` }
-  /** 沉淀 legacy 分区：史前/蒸馏过渡数据的收容位——只保留不消费（折叠读侧永不
-   * 读取；断裂蒸馏桥 #151 的落点，v2 起出生即写、断裂零蒸馏）。 */
+  /** 沉淀 legacy 分区：史前数据的收容位——只保留不消费（折叠读侧永不读取；
+   * 断裂蒸馏桥已裁取消 #151/ADR-0036，保留为空收容位）。 */
   get sedimentLegacyDir(): string { return `${this.sedimentDir}/legacy` }
 
   sessionPath(dateStr: string): string { return `${this.sessionDir}/${dateStr}.md` }
@@ -117,6 +117,11 @@ export class Paths {
   /** 覆盖层留痕（schema v2 富化通道，#127 §6 / #131 §6）：每课程一份追加 jsonl，
    * 只作审计与出处——覆盖层是写入通道概念，读侧永远只读正典文件。 */
   overlayPath(root: string): string { return `${this.courseStateDir(root)}/覆盖层.jsonl` }
+
+  /** 终点锚（#142 / ADR-0033）：课程根/state/终点锚.json——课程唯一结构承诺物
+   * （终点节点+目标类型+声明日期），种子提案 apply 落盘；无直改通道，换终点走
+   * 重新种子提案（kind=seed）。 */
+  anchorPath(root: string): string { return `${this.courseStateDir(root)}/终点锚.json` }
 
   snapshotPath(course: string, version: number): string {
     return `${this.snapshotDir}/${course}-v${version}.json`

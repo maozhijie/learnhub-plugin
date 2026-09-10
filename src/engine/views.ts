@@ -19,6 +19,7 @@ import type {
 } from './types'
 import type { AlloKind } from './grading'
 import type { JolBin, JolPrediction } from './jol'
+import type { CompletionFold } from './seed'
 
 /** 提案记录（store/proposals 持久化条目）与节清单（frontmatter content.sections）
  * 的转发导出：graphReject/graphProposals 的返回与 LessonDoc.manifest 引用，
@@ -73,6 +74,9 @@ export interface StatusCourse {
   blocked: Record<string, StatusGateAdvice[]>
   /** 内容诊断建议项（#69 B1）：该课程命中时附带（facade 逐课程过滤 diagnosticsAdvice）。 */
   diagnostics?: DiagnosticEntry[]
+  /** 完成宣告（#142 雾区条款上半，读侧折叠零写副作用）：有终点锚的课程附带——
+   * 能力锚定 = 终点 mastery≥阈值且闭包健康；覆盖锚定 = 块工作表+终点。零写侧状态。 */
+  completion?: CompletionFold
 }
 
 export interface StatusDoc {
@@ -303,7 +307,7 @@ export type GraphPathResult = GraphPathUnrelatedResult | GraphPathRelatedResult
 
 // ---- 提案门禁（graphPropose / graphApply / graphEncBackfill；gengraph.GraphProposals）----
 // gen 提案形态（GraphGenProposalResult / GraphApplyGenResult）随 #138 cutover 退役——
-// kind=gen 不再受理；图谱域剩 edit（变更）与 enrich（富化覆盖层，#140）两通道。
+// kind=gen 不再受理；图谱域剩 edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
 
 /** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。 */
 export interface GraphEditProposalResult {
@@ -311,6 +315,21 @@ export interface GraphEditProposalResult {
   kind: 'edit'
   course: string
   ops: number
+  warns?: string[]
+}
+
+/** 种子提案受理（proposeSeed，#142）：课程新入口（gen 退役后接管），一次人审即开工。
+ * prior_feed_unresponded = ≥0.7 先验候选未被结构回应的条数（喂料分流，非阻可见）。 */
+export interface GraphSeedProposalResult {
+  id: number
+  kind: 'seed'
+  course: string
+  mode: 'new' | 'reseed'
+  goal_type: 'capability' | 'coverage'
+  endpoint: string
+  starts: number
+  worksheet?: number
+  prior_feed_unresponded: number
   warns?: string[]
 }
 
@@ -323,7 +342,7 @@ export interface GraphEnrichProposalResult {
   files: number
 }
 
-export type GraphProposeResult = GraphEditProposalResult | GraphEnrichProposalResult
+export type GraphProposeResult = GraphEditProposalResult | GraphSeedProposalResult | GraphEnrichProposalResult
 
 export interface GraphApplyEditResult {
   course: string
@@ -336,6 +355,23 @@ export interface GraphApplyEditResult {
   findings: string[]
 }
 
+/** 种子提案 apply（#142）：终点锚落盘 + 起点/终点/占位边落图。
+ * seedPhase 豁免生效时 findings 不带健康分提示（种子图健康分不设阈值）。 */
+export interface GraphApplySeedResult {
+  course: string
+  mode: 'new' | 'reseed'
+  goal_type: 'capability' | 'coverage'
+  endpoint: string
+  starts: string[]
+  declared: string
+  worksheet_items?: number
+  regions: string[]
+  snapshot: number
+  created_blocks: string[]
+  prior_feed: { unresponded: number }
+  findings: string[]
+}
+
 /** 富化提案 apply（指纹复核通过后写正典）：files = 被重写的区文件。 */
 export interface GraphApplyEnrichResult {
   course: string
@@ -345,7 +381,7 @@ export interface GraphApplyEnrichResult {
   findings: string[]
 }
 
-export type GraphApplyResult = GraphApplyEditResult | GraphApplyEnrichResult
+export type GraphApplyResult = GraphApplyEditResult | GraphApplySeedResult | GraphApplyEnrichResult
 
 /** enc 覆盖层回填：没有需要回填的节点（候选已全落 enc，可重入）。 */
 export interface GraphEncBackfillNoneResult {

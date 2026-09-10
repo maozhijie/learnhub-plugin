@@ -22,6 +22,9 @@ export interface SectionManifest {
   version: number
   /** 大纲要点（一句话；contextPack 前置骨架注入用，可选）。 */
   points?: string
+  /** 节段难度档（CONTEXT.md Section Difficulty Tier；#147）：大纲期定的出题难度递进锚。
+   * 缺席按节位置+节点难度推导（deriveSectionTier），不回填。 */
+  tier?: '低' | '中' | '高'
 }
 
 /** FSRS 状态块（frontmatter fsrs 字段；日期均为 YYYY-MM-DD 本地日）。 */
@@ -196,12 +199,13 @@ export interface ReviewRec {
   exp?: { id: number; arm: string }
 }
 
-/** 提案 kind 全集（P-2 泛化：图谱域 edit + 项目域 project_plan/project_milestone
+/** 提案 kind 全集（P-2 泛化：图谱域 edit/seed + 项目域 project_plan/project_milestone
  * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制）+ 覆盖域 enrich（schema v2
  * 出生/覆盖层分家，#127/#131：回填通道，sha256 内容指纹，只补写图谱可对照字段））。
  * gen（骨架提案）已随 #138 cutover 退役（ADR-0033 生长式图）——存量流水里的 gen
- * 记录只读展示（loadProposals 不校验 kind），不再是可创建/受理的 kind。 */
-export const PROPOSAL_KINDS = ['edit', 'enrich', 'project_plan', 'project_milestone', 'experiment'] as const
+ * 记录只读展示（loadProposals 不校验 kind），不再是可创建/受理的 kind；
+ * seed（种子提案，#142）接管课程新入口。 */
+export const PROPOSAL_KINDS = ['edit', 'seed', 'enrich', 'project_plan', 'project_milestone', 'experiment'] as const
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
 
 /** 提案记录（db.proposals 行同构；产物 YAML 另存 state/proposals/）。

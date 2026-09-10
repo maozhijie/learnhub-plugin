@@ -1,6 +1,6 @@
 ---
 name: learnhub-graph-generate
-description: （#138 cutover 起退役待重写）旧的一次成型课程图管线：范围分析 → 骨架提案 → 分批多轮展开 → 审计修复。gen 骨架提案与 Scale Floor 门禁已退役——新课程入口由种子提案接管（#142），本技能的提示词重写归教练回合套件（#133）。在重写落地前，仅其 edit 批次与审计修复机械仍可参照，第 0-1 阶段（范围分析/gen 骨架）不再可用。
+description: （#138 cutover 起退役待重写）旧的一次成型课程图管线：范围分析 → 骨架提案 → 分批多轮展开 → 审计修复。gen 骨架提案与 Scale Floor 门禁已退役——新课程入口由种子提案接管（kind=seed 已落地，#142：1–3 起点+终点锚一次人审即开工；换终点走 mode=reseed），本技能的提示词重写归教练回合套件（#133）。在重写落地前，仅其 edit 批次与审计修复机械仍可参照，第 0-1 阶段（范围分析/gen 骨架）不再可用。
 ---
 
 # learnhub 图谱生成（已退役待重写，ADR-0033 生长式图）
@@ -24,6 +24,25 @@ description: （#138 cutover 起退役待重写）旧的一次成型课程图管
 
 ```yaml
 # kind: "gen"（骨架）——已退役，受理门直接拒收（#138），不要写
+```
+
+```yaml
+# kind: "seed"（种子，#142——课程新入口，一次人审即开工）
+course: 课程名
+mode: new              # new = 新课程（注册表不得已有同名）；reseed = 既有课程重新种子（换终点/换工作表——锚的唯一合法通道）
+goal_type: capability  # 缺省 = capability 能力锚定（完成=终点掌握）；coverage 覆盖锚定必须显式选择且带 worksheet
+endpoint:              # 终点节点（课程唯一结构承诺物，apply 落 state/终点锚.json）
+  name: 终点节点名
+  region: 区名
+  block: 块名
+starts:                # 1–3 个起点（引擎自动落 朝终点的粗占位边：终点.pre = 起点）
+  - name: 起点节点名
+    region: 区名
+    block: 块名
+    basis: baseline    # 可选定位声明：baseline 常识基线 / vault 先验熟悉边界 / project 反编译簇占位（第三路归项目锚定票接线）
+# 节点可选字段：note/bloom/difficulty/teaches/assumes/misconceptions（种子节点零 enc 零 est，
+# est/enc/pre 写了即拒收；概念字段可少量铸造，concepts 铸名块与 edit 同契约）
+# worksheet: [{block: 块名, note: 说明?, done: false}]   # 仅 coverage 携带；capability 带了即拒收
 ```
 
 ```yaml
@@ -58,6 +77,9 @@ ops:
 ③ 边轻纪律：图 YAML/提案节点**零边元数据字段**（origin/status/probation 一律拒收——候选边留在
 提案侧、origin 从 journal 派生、复诊状态落 `state/边实验.jsonl`）。批内 `pre` 只能引用
 图中已有节点或本批更早创建的节点。
+种子专项（#142）：种子提案与换终点走**一次人审**（面板应用，不自动 apply）；终点锚保护的
+终点节点 del/rename 会被拒；vault 链接先验 w≥0.7 的候选对若未被结构回应（无 pre/enc 边）会进
+受理回执 warns（非阻）——补边显式回应或确属无关；零先验是合法常态。
 
 另有 `kind: "enrich"`（富化覆盖层，#140）：引擎直跑的回填通道（enc 回填），不手写——
 它带正典文件 sha256 指纹，apply 时指纹不符会被拒收。

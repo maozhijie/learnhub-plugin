@@ -1,4 +1,4 @@
-/** 提案页：agent 图构建的 edit/enrich 提案（gen 已退役），人审后应用或拒绝（全留痕）。 */
+/** 提案页：agent 图构建的 seed/edit/enrich 提案（gen 已退役），人审后应用或拒绝（全留痕）。 */
 import { Alert, Button, Card, Empty, Message, Modal, Space, Table, Tag } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
@@ -7,6 +7,7 @@ import type { PropItem } from '../types'
 /** 提案 kind → 人读标签（gen 仅存量留痕展示）。 */
 const KIND_LABELS: Record<string, { label: string; color: string }> = {
   gen: { label: '建课（退役）', color: 'gray' },
+  seed: { label: '种子', color: 'lime' },
   edit: { label: '编辑', color: 'orange' },
   enrich: { label: '富化', color: 'cyan' },
   project_plan: { label: '项目计划', color: 'purple' },
@@ -64,7 +65,7 @@ export default function ProposalsPage() {
 
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
-      <Alert type='info' content='agent 在 dsh 对话里构建课程图（edit 变更 / enrich 富化提案）→ 这里人审 → 应用后图结构与 Obsidian 笔记联动落盘。' />
+      <Alert type='info' content='agent 在 dsh 对话里提出种子（建课/换终点，一次人审）、edit 变更与 enrich 富化提案 → 这里人审 → 应用后图结构与 Obsidian 笔记联动落盘。' />
       <Card size='small' title='提案列表' style={{ borderRadius: 10 }}>
         {items === null ? null : items.length === 0 ? (
           <Empty description='没有提案：在 dsh 对话里让 agent 生成课程（learnhub-graph-generate 技能）' />

@@ -206,6 +206,32 @@ export function edgeKeyOf(a: string, b: string): string {
   return a < b ? `${a}${PAIR_SEP}${b}` : `${b}${PAIR_SEP}${a}`
 }
 
+// ---- 缓存读取（引擎 state 契约文件：Missing = null 合法空态；坏档 fail loud）----
+
+/** 读扫描缓存（state/vault链接.json）：缺文件返回 null（未扫描 = Missing，喂料分流
+ * 零候选全绿）；存在但 JSON 坏/契约形状不符抛错——重跑 learnhub_vault_links_scan 覆盖。 */
+export async function readVaultLinksCache(path: string): Promise<VaultLinksDoc | null> {
+  let raw: string
+  try {
+    raw = await readFile(path, 'utf8')
+  } catch (err) {
+    const code = (err as { code?: unknown }).code
+    if (code === 'ENOENT') return null
+    throw new Error(`[vault-links] 链接缓存不可读（位置：${path}）——重跑 learnhub_vault_links_scan 覆盖。\n  ✗ ${err instanceof Error ? err.message : String(err)}`)
+  }
+  let doc: unknown
+  try {
+    doc = JSON.parse(raw)
+  } catch (err) {
+    throw new Error(`[vault-links] 链接缓存 Broken（JSON 无法解析，位置：${path}）——重跑 learnhub_vault_links_scan 覆盖。\n  ✗ ${err instanceof Error ? err.message : String(err)}`)
+  }
+  const d = doc as Partial<VaultLinksDoc> | null
+  if (typeof d !== 'object' || d === null || d.version !== 1 || !Array.isArray(d.edges)) {
+    throw new Error(`[vault-links] 链接缓存 Broken（契约形状不符，位置：${path}）——重跑 learnhub_vault_links_scan 覆盖。`)
+  }
+  return d as VaultLinksDoc
+}
+
 // ---- 扫描（模块内唯一 IO；调用方负责缓存落盘）----
 
 export interface VaultLinkScanOptions {
@@ -376,4 +402,52 @@ export function orientLinkPair(
   if (isAncestor(a, b)) return { ok: true, skill: a, holder: b }
   if (isAncestor(b, a)) return { ok: true, skill: b, holder: a }
   return { ok: false, why: '两节点无 pre 关系（enc 契约/E7 要求闭包内）——先补 pre 边或放弃；链接先验只提示关联，不代裁决' }
+}
+
+// ---- 纯函数缝：喂料分流（#142：≥0.7 须被结构显式回应，取代人审分流）----
+
+/** 一条喂料分流判定：映射到图节点的 ≥0.7 候选对，结构是否已显式回应。
+ * 回应 = 两节点之间存在 pre 或 enc 边（任一方向）——pre 是生长中的结构回应，
+ * enc 是既有回填通道（learnhub_graph_link_backfill）的落点；候选边自身不进图（边轻）。 */
+export interface PriorFeedVerdict {
+  aNode: string
+  bNode: string
+  w: number
+}
+
+/** Graph 的最小形状（splitPriorFeed 只读这三样；真 Graph 结构兼容）。 */
+export interface PriorFeedGraph {
+  nset: Set<string>
+  preOf: Record<string, string[]>
+  encOf: Record<string, [string, number][]>
+}
+
+/** ≥0.7 候选对 → {回应/未回应} 两组（候选/断言边用位置区分，不动节点键集）。
+ * graph 参数取「回应判定所依据的结构」：受理门传投影后的合并图（含本提案新节点），
+ * 审计传当前持久图。零先验（缓存缺文件/零映射对）返回两组全空——Missing 非 Broken，
+ * 零先验零注入是合法常态路径。 */
+export function splitPriorFeed(
+  edges: VaultLinkEdge[], nodeNames: string[], graph: PriorFeedGraph,
+): { responded: PriorFeedVerdict[]; unresponded: PriorFeedVerdict[] } {
+  const responded: PriorFeedVerdict[] = []
+  const unresponded: PriorFeedVerdict[] = []
+  const hasEdge = (a: string, b: string): boolean =>
+    (graph.preOf[a] ?? []).includes(b)
+    || (graph.preOf[b] ?? []).includes(a)
+    || (graph.encOf[a] ?? []).some(([n]) => n === b)
+    || (graph.encOf[b] ?? []).some(([n]) => n === a)
+  for (const { edge, aNode, bNode } of mapEdgesToNodes(edges, nodeNames)) {
+    if (edge.w < 0.7) continue
+    const verdict: PriorFeedVerdict = { aNode, bNode, w: edge.w }
+    if (graph.nset.has(aNode) && graph.nset.has(bNode) && hasEdge(aNode, bNode)) responded.push(verdict)
+    else unresponded.push(verdict)
+  }
+  return { responded, unresponded }
+}
+
+/** Graph 的最小形状（splitPriorFeed 只读这三样；真 Graph 兼容）。 */
+export interface PriorFeedGraph {
+  nset: Set<string>
+  preOf: Record<string, string[]>
+  encOf: Record<string, [string, number][]>
 }

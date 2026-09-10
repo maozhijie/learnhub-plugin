@@ -33,11 +33,11 @@ export function applyId(value: unknown): number | undefined {
   return value
 }
 
-/** 图提案/应用工具的 kind：edit/enrich 合法；gen 显式透传（受理门给退役指路）；
+/** 图提案/应用工具的 kind：edit/seed/enrich 合法；gen 显式透传（受理门给退役指路）；
  * 其余值当场拒绝，不静默归一成 gen 拿到误导性的退役报错。 */
-export function graphKind(value: unknown): 'edit' | 'enrich' | 'gen' {
-  if (value === 'edit' || value === 'enrich' || value === 'gen') return value
-  throw new Error(`[graph] 非法 kind: ${String(value)}（允许 edit/enrich；gen 已退役只能对存量提案 reject）`)
+export function graphKind(value: unknown): 'edit' | 'seed' | 'enrich' | 'gen' {
+  if (value === 'edit' || value === 'seed' || value === 'enrich' || value === 'gen') return value
+  throw new Error(`[graph] 非法 kind: ${String(value)}（允许 edit/seed/enrich；gen 已退役只能对存量提案 reject）`)
 }
 
 /** reject 的提案 id：拒绝无省略语义，必须显式正整数。 */

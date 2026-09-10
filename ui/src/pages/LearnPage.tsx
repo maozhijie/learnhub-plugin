@@ -23,8 +23,8 @@ import { nextBand, pickNext } from '../../../src/engine/adaptive'
 import { api } from '../api'
 import type { AppFrame } from '../App'
 import type {
-  AdviceItem, AnkiStatusDoc, DiagnosticEntry, LearnerCardItem, LearnerQueueDoc,
-  NoteSourceDoc, QuestionItem, RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, XpStatus,
+  AdviceItem, AnkiStatusDoc, DiagnosticEntry, LearnerCardItem, LearnerQueueDoc, NoteSourceDoc,
+  QuestionItem, RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, StatusCourse, XpStatus,
 } from '../types'
 
 const { Text, Title } = Typography
@@ -267,12 +267,14 @@ function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
   )
 }
 
-/** 课程卡（次要区）：进度 + 打开图/复习/删除。计数语义：未学 = unseen+ready。 */
+/** 课程卡（次要区）：进度 + 完成宣告 + 打开图/复习/删除。计数语义：未学 = unseen+ready。
+ * 完成宣告（#142 雾区条款上半）：读侧折叠的宣告——完成判据满足时这里展示，零写侧状态。 */
 function CourseCard(props: {
   name: string
   counts: { unseen: number; ready: number; learning: number; review: number; mastered: number; skipped: number }
   total: number
   due: number
+  completion?: StatusCourse['completion']
   onOpen: () => void
   onReview: () => void
   onRegenerate: () => void
@@ -281,6 +283,7 @@ function CourseCard(props: {
   const notStarted = props.counts.unseen + props.counts.ready
   const done = props.counts.mastered
   const percent = props.total ? Math.round((done / props.total) * 100) : 0
+  const goalLabel = props.completion?.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'
   return (
     <Card size='small' hoverable style={{ borderRadius: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -293,6 +296,11 @@ function CourseCard(props: {
           <Tag size='small' color='green'>掌握 {done}</Tag>
           {props.counts.skipped > 0 && <Tag size='small' color='purple'>跳过 {props.counts.skipped}</Tag>}
           {props.due > 0 && <Tag size='small' color='red'>到期 {props.due}</Tag>}
+          {props.completion?.complete && (
+            <Tag size='small' color='green'>
+              🎉 已完成（{goalLabel} · 终点「{props.completion.endpoint}」· {props.completion.declared} 宣告锚定）
+            </Tag>
+          )}
         </Space>
         <Space size={6}>
           <Button size='mini' onClick={props.onOpen}>打开图</Button>
@@ -1199,6 +1207,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
               <CourseCard
                 key={c.name} name={c.name} total={s?.total ?? 0} due={s?.due_today ?? 0}
                 counts={s?.counts ?? { unseen: 0, ready: 0, learning: 0, review: 0, mastered: 0, skipped: 0 }}
+                completion={s?.completion}
                 onOpen={() => { frame.setCourse(c.name); frame.goto('graph') }}
                 onRegenerate={() => regenerateCourse(c.name)}
                 onReview={() => {
