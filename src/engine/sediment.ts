@@ -29,7 +29,7 @@ export const SEDIMENT_KINDS = [
   'calibration',
   'speed_resilience',
   'content_quality',
-  'rereview_outcome',
+  'recheck_outcome',
   'graph_repair',
 ] as const
 export type SedimentKind = (typeof SEDIMENT_KINDS)[number]
@@ -135,7 +135,7 @@ export interface SedimentFold {
 }
 
 function emptyCounts(): Record<SedimentKind, number> {
-  return { fsrs_params: 0, calibration: 0, speed_resilience: 0, content_quality: 0, rereview_outcome: 0, graph_repair: 0 }
+  return { fsrs_params: 0, calibration: 0, speed_resilience: 0, content_quality: 0, recheck_outcome: 0, graph_repair: 0 }
 }
 
 /** 稳定排序：ts 升序；同 ts（或不可解析 ts）保持追加序——同输入同输出。 */

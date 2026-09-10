@@ -19,7 +19,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { readFile, unlink, writeFile, appendFile, mkdir } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath, sep } from 'node:path'
@@ -1718,6 +1718,14 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   CENTER_REL = (config?.centerRel ?? '学习中心').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
   const center = `${vault}/${CENTER_REL}`
   if (!existsSync(center)) throw new Error(`[learnhub] 学习中心目录不存在：${center}`)
+  // 新鲜库出生盖戳（#138）：learnhub.json 与课程注册表都还不存在的全新 vault 直接
+  // 盖 v2（免跑已退役的迁移脚本）；任何 v1 痕迹（两者之一在）都交版本硬门判定——
+  // 盖戳只发生在真正的一无所有，不掩盖任何旧库。
+  const freshConfigPath = `${center}/state/learnhub.json`
+  if (!existsSync(freshConfigPath) && !existsSync(`${center}/课程注册表.yaml`)) {
+    mkdirSync(`${center}/state`, { recursive: true })
+    writeFileSync(freshConfigPath, JSON.stringify({ schema: { version: 2, formats: {} } }, null, 1) + '\n', 'utf8')
+  }
   VAULT = vault
   engine = new LearnhubEngine({ vault, centerRel: CENTER_REL })
 

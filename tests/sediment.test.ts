@@ -30,7 +30,7 @@ import { localDay, tfQuestion, withVault } from './helpers/vault.ts'
 const EVENTS: SedimentEvent[] = [
   { ts: '2026-09-01T10:00:00', kind: 'fsrs_params', tier: 'immediate', payload: { parameters: [1, 2] } },
   { ts: '2026-09-08T10:00:00', kind: 'fsrs_params', tier: 'immediate', payload: { parameters: [3, 4] } },
-  { ts: '2026-09-09T10:00:00', kind: 'rereview_outcome', tier: 'immediate', payload: { outcome: 'proven' }, concept: '概率' },
+  { ts: '2026-09-09T10:00:00', kind: 'recheck_outcome', tier: 'immediate', payload: { outcome: 'proven' }, concept: '概率' },
   { ts: '2026-09-02T10:00:00', kind: 'calibration', tier: 'weekly', payload: { pairs: 3 } },
   { ts: '2026-09-03T10:00:00', kind: 'calibration', tier: 'weekly', payload: { pairs: 5 } },
 ]
@@ -56,7 +56,7 @@ test('折叠三读法：latest 最新态 / weekly 按学习周分组 / byConcept
   assert.equal(fold.weekly.calibration?.length, 1, '同一学习周并桶')
   assert.equal(fold.weekly.calibration?.[0]?.week, weekOf('2026-09-02'))
   assert.equal(fold.weekly.calibration?.[0]?.events.length, 2)
-  assert.equal(fold.byConcept.rereview_outcome?.['概率']?.payload.outcome, 'proven')
+  assert.equal(fold.byConcept.recheck_outcome?.['概率']?.payload.outcome, 'proven')
 })
 
 // ---- 写侧：出生即写入口 + legacy 分区 ----
@@ -264,6 +264,14 @@ test('sedimentSettle：上一完整学习周的校准与速度韧性出生即写
     const speed = fold.weekly.speed_resilience?.[0]?.events[0]?.payload as { median_elapsed_s?: number }
     assert.equal(speed.median_elapsed_s, 32.5)
     assert.match(r.profile, /速度韧性/)
+
+    // 同周幂等：重复结算不重写正典（kataOpen 每次打开都会触发结算）
+    const before = (await engine.sedimentFold()).counts
+    const r2 = await engine.sedimentSettle()
+    assert.deepEqual(r2.wrote, [])
+    assert.ok(r2.skipped.every(x => /已结算/.test(x.reason)))
+    const after = await engine.sedimentFold()
+    assert.deepEqual(after.counts, before)
   })
 })
 

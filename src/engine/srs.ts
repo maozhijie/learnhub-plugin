@@ -12,6 +12,7 @@ import type { FSRS, Card, Grade } from 'ts-fsrs'
 import type { FsrsBlock, Fm } from './types.ts'
 import { parseDay, fmtDay, daysBetween } from './dates.ts'
 import { DESIRED_RETENTION, S_MASTER } from './params.ts'
+import { FSRS6_PARAM_COUNT } from './optimize.ts'
 import { latestFsrsParams } from './sediment.ts'
 import type { Paths } from './paths.ts'
 
@@ -23,20 +24,32 @@ export const RATING_NAME: Record<number, string> = {
   1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy',
 }
 
-/** 构造调度器（日粒度、无 fuzz）：个人参数三级读法（#139 正典化后）——
- * ① 课程参数文件（缓存）→ ② 沉淀正典最新 fsrs_params（事实源，删缓存不丢）
- * → ③ 官方默认。 */
-export async function getScheduler(paths: Paths, courseRoot: string | null = null): Promise<FSRS> {
-  let w: number[] | undefined
-  if (courseRoot) {
+/** FSRS 参数唯一取参口径（#139 正典化）：沉淀正典（事实源）→ 课程参数缓存（按传入
+ * 顺序逐个找）→ 官方默认（undefined，由调用方决定省略 w 或用 defaultParams 对照）。
+ * getScheduler 与优化器基线共用同一函数——杜绝「缓存与沉淀分叉时两口径各执一词」。 */
+export async function resolveFsrsParams(
+  paths: Paths, courseRoots: Array<string | null> = [],
+): Promise<{ parameters: number[] | undefined; source: 'sediment' | 'cache' | 'default' }> {
+  const canon = await latestFsrsParams(paths)
+  if (canon && canon.length === FSRS6_PARAM_COUNT) return { parameters: canon, source: 'sediment' }
+  for (const root of courseRoots) {
+    if (!root) continue
     try {
-      const doc = JSON.parse(await readFile(paths.fsrsParamsPath(courseRoot), 'utf8')) as { parameters?: number[] }
-      if (Array.isArray(doc.parameters) && doc.parameters.length) w = doc.parameters
+      const doc = JSON.parse(await readFile(paths.fsrsParamsPath(root), 'utf8')) as { parameters?: number[] }
+      if (Array.isArray(doc.parameters) && doc.parameters.length === FSRS6_PARAM_COUNT) {
+        return { parameters: doc.parameters, source: 'cache' }
+      }
     } catch {
-      // 无参数缓存 → 落沉淀正典回退
+      // 该课程无参数缓存：继续
     }
   }
-  if (!w) w = await latestFsrsParams(paths)
+  return { parameters: undefined, source: 'default' }
+}
+
+/** 构造调度器（日粒度、无 fuzz）：参数走 resolveFsrsParams 唯一口径（#139 正典化，
+ * 参数文件已退役为缓存——删缓存不丢事实）。 */
+export async function getScheduler(paths: Paths, courseRoot: string | null = null): Promise<FSRS> {
+  const { parameters: w } = await resolveFsrsParams(paths, [courseRoot])
   return fsrs(generatorParameters({
     request_retention: DESIRED_RETENTION,
     enable_fuzz: false,

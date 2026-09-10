@@ -12,7 +12,6 @@
  * 路径（宿主 apply、测试工厂、脚本直连）——单个小 JSON 的同步读成本可接受。
  */
 import { readFileSync } from 'node:fs'
-import type { Paths } from './paths.ts'
 
 /** 当前引擎唯一认许的 schema 主版本。 */
 export const CURRENT_SCHEMA_VERSION = 2
@@ -77,9 +76,4 @@ export function assertSchemaVersion(configPath: string): SchemaBlock {
     + `  请先运行一次性迁移脚本：node scripts/migrate-v1.mjs "<vault根目录>"\n`
     + `  （脚本已在 cutover 完成后退役为存根——本机库应已迁移；在其他机器遇到旧 v1 库时，`
     + `脚本实现见 git 历史，存根文件头部有说明。）`)
-}
-
-/** 引擎构造期的版本门：返回解析出的 schema 块（breaks 档案可供 data-check 读）。 */
-export function gateAtConstruction(paths: Paths): SchemaBlock {
-  return assertSchemaVersion(paths.learnhubConfigPath)
 }
