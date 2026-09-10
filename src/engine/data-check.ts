@@ -13,6 +13,7 @@ import { join, resolve } from 'node:path'
 import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
+import { validateConceptRegistry } from './concepts.ts'
 import { classifySource, fingerprintOf, validateNoteSourceManifest } from './note-source.ts'
 import { validateLearnerCards } from './learner-cards.ts'
 import { validateErrorCards } from './error-cards.ts'
@@ -23,7 +24,7 @@ import type { CourseEntry } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'archive'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'archive'
 
 export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived'
 
@@ -56,6 +57,9 @@ export type DataCheckReason =
   | 'learner_card_schema'
   | 'error_card_yaml_parse'
   | 'error_card_schema'
+  | 'concept_registry_unreadable'
+  | 'concept_registry_yaml_parse'
+  | 'concept_registry_schema'
   | 'pre_v2_archive'
   | 'pre_v2_artifact'
 
@@ -88,6 +92,9 @@ export interface DataCheckReport {
     /** 断裂存档区盘点（#138 / ADR-0034）：present = 存档区在盘；files = 区内文件总数
      *（不校验内容——存档只增不删、引擎读侧永不读取，数文件即盘点）。 */
     archive: { present: boolean; files: number }
+    /** 概念登记表盘点（#141）：present = 在盘课程数；entries = 条目总数（跨断裂
+     * 存活的档案坐标系，与存档区互斥——登记表永不入存档清单）。 */
+    conceptRegistries: { present: number; entries: number }
   }
   findings: DataCheckFinding[]
 }
@@ -503,6 +510,40 @@ async function scanErrorCards(
   }
 }
 
+/** 概念登记表体检（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml——文件缺失 =
+ * 合法空态（选填域，与我的卡/错误卡同款：缺席零 finding，inventory 计数即盘点可见）；
+ * 存在但不可读/YAML 坏/契约违约（名字联合唯一等）= Broken。登记表跨宣告式断裂存活，
+ * 永不入存档清单。 */
+async function scanConceptRegistry(
+  findings: DataCheckFinding[],
+  courseName: string,
+  path: string,
+): Promise<{ present: boolean; entries: number }> {
+  const where = `课程「${courseName}」概念登记表 ${path}`
+  let text: string
+  try {
+    text = await readFile(path, 'utf8')
+  } catch (err) {
+    const code = (err as { code?: unknown }).code
+    if (code === 'ENOENT') return { present: false, entries: 0 } // 合法空态：跟随生长批铸名后出现
+    push(findings, 'concept_registry', 'broken', 'concept_registry_unreadable', where, errorText(err))
+    return { present: true, entries: 0 }
+  }
+  let doc: unknown
+  try {
+    doc = YAML.parse(text)
+  } catch (err) {
+    push(findings, 'concept_registry', 'broken', 'concept_registry_yaml_parse', where, errorText(err))
+    return { present: true, entries: 0 }
+  }
+  const checked = validateConceptRegistry(doc)
+  if (checked.errors.length) {
+    push(findings, 'concept_registry', 'broken', 'concept_registry_schema', where, checked.errors.join('；'))
+    return { present: true, entries: 0 }
+  }
+  return { present: true, entries: checked.entries.length }
+}
+
 /** 断裂存档区盘点（#138 / ADR-0034）：archived 是显式的第三类——既非 Missing 也非
  * Broken，不进 status、不校验内容，只数文件数并对照 learnhub.json 的断裂史。
  * - pre_v2_archive：存档区在盘 → 信息级盘点一条（文件总数 + 断裂日期）。
@@ -557,6 +598,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0, noteSourceBanks: 0,
     noteSourceFiles: { total: 0, ok: 0, missing: 0, drifted: 0, inconsistent: 0 },
     archive: { present: false, files: 0 },
+    conceptRegistries: { present: 0, entries: 0 },
   }
   const registryWhere = `课程注册表 ${paths.registryPath}`
 
@@ -605,6 +647,12 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     inventory.graphFiles += result.graphFiles
     inventory.notes += result.notes
     inventory.questionBanks += result.banks
+    // 概念登记表（#141）：缺席 = 合法空态零 finding（inventory 计数即盘点可见）；在盘 = 盘点条目数
+    const regScan = await scanConceptRegistry(findings, courseName, paths.conceptRegistryPath(String(course.root)))
+    if (regScan.present) {
+      inventory.conceptRegistries.present++
+      inventory.conceptRegistries.entries += regScan.entries
+    }
   }
 
   const noteSourceScan = await scanNoteSources(findings, paths, noteSources)
@@ -632,6 +680,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     note_source: emptyArea(),
     learner_cards: emptyArea(),
     error_cards: emptyArea(),
+    concept_registry: emptyArea(),
     archive: emptyArea(),
   }
   for (const finding of findings) {

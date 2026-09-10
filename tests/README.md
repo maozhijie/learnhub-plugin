@@ -63,6 +63,7 @@
 - S47 `note-source.ts::poolMirrorBody` —— V-4 卡池镜像正文（#108）：[[个人笔记]] wikilink + 卡数/到期快照 + 零写入红线条目；`tests/note-source.test.ts`；出题落镜像/解除随删/relink 跟随新路径走 facade
 - S48 `sediment.ts::foldSediment / renderLearnerProfile / latestFsrsParams` —— 沉淀层读侧折叠（#139 / ADR-0034）：六类事件追加正典（即时/周分档，weekly 按 payload.week 归桶可重折）、latest/weekly/byConcept 三读法（两次折叠同输入同输出）、学习者档案纯渲染（手编必被覆盖）、FSRS 参数正典读法（缓存退役后删缓存不丢事实）；`tests/sediment.test.ts`；出生即写/断裂不变性（清内容层合成初始化仍取沉淀先验）/legacy 分区零消费/重置波及单独确认项走 facade
 - S49 `llm.ts::LlmComplete` —— 宿主→引擎 LLM 补全注入缝（#137）：引擎侧生成/组装函数只依赖缝型（12 处回调签名统一），opts.effort 语义档 fast/deep 沿缝贯通、注入侧可观测（档位翻译成部署 fastEffort/deepEffort 收口在宿主 llmSeam 适配器）；`tests/llm-seam.test.ts`；固定回放假实现驱动出题全链字节级确定性、脚本化应答驱动判卷重问、learnerNoteAdd=fast / receiptSubmit=deep 档位观测走 facade
+- S50 `concepts.ts::validateConceptEntry / validateConceptRegistry / namesOf / resolveConcept / conceptReferenceErrors / invokesUnregistered / mintConflicts / applyConceptMints / mergeConceptEntries / ConceptRegistry` —— 概念登记表（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml 受控词表（条目 = canonical + 别名[] + 选填定义，全部名字联合唯一违约 Broken、文件缺失 Missing 合法空态且零 finding——选填域与我的卡同款）、精确匹配解析（canonical/别名 → 同一条目，永不模糊）、并入合并纯函数（名字并集、旧地址经别名续解析、definition 缺省回退）、铸名冲突双门（propose 从严同条目也拒 / apply 幂等同条目跳过）、引用对表（teaches/assumes/误解/invokes 未在册可执行拒收行）；`tests/concept-registry.test.ts`；铸名随 edit 提案 concepts 块与图 apply 同事务（被拒不落盘）、登记表 Broken 读侧抛错、data-check concept_registry 类走 facade
 
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 

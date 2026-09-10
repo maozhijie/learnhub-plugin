@@ -176,7 +176,12 @@ ops:
 test('受理门：add_node 携带概念字段组过门落图；窄节点 warns 随受理回执返回', async () => {
   await withVault({ tag: 'learnhub-conceptfields-' }, async ({ engine, root }) => {
     // 默认单节点图起步：生长批形态的窄节点（teaches 1 条 = WARN 不阻；assumes 2 条 = WARN）
+    // 概念引用随 #141 铸名块同批入册（teaches 引用铸名，assumes 引用登记表外名字须铸名）
     const yaml = `course: 数学
+concepts:
+  - canonical: 行变换几何直觉
+  - canonical: 矩阵乘法
+  - canonical: 行列式
 ops:
   - op: add_node
     name: 中继节点

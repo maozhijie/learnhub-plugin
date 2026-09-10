@@ -124,6 +124,10 @@ export class Paths {
 
   // ---- 课程级 ----
   courseRoot(root: string): string { return `${this.centerRoot}/${root}` }
+  /** 概念登记表（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml——每课程一份受控
+   * 词表，沉淀层档案坐标系。跨宣告式断裂存活：不在 cutover 归档清单（课程根整树
+   * 移入存档时豁免，迁移脚本同款约定）。 */
+  conceptRegistryPath(root: string): string { return `${this.courseRoot(root)}/概念登记表.yaml` }
   /** 题库目录（question-bank 的 <课程根>/题库/<节点>.yaml）。 */
   bankDir(root: string): string { return `${this.courseRoot(root)}/题库` }
   dataDir(root: string): string { return `${this.courseRoot(root)}/data` }

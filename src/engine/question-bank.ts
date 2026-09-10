@@ -43,6 +43,9 @@ export interface BankQuestion {
   tol?: number
   /** 来源正文节标题（mastery 会话按节轮转出题；缺省归入「通用」收尾轮）。 */
   section?: string
+  /** 出生打标的概念引用（#141 一枚 invokes；#148 出生打标全链）：登记表在册名字
+   * （canonical 或别名）；缺席恒合法 Missing。 */
+  invokes?: string
   archived?: boolean
   /** 归档原因（skip=节点跳过自动归档 / cleanup=一键清理 / too_easy=过于简单建议
    * 确认 / erratum=瑕疵题作废 / manual=人工）。恢复归档时一并清除（ADR-0032）。 */
@@ -172,6 +175,12 @@ export function validateBank(doc: unknown, expectedNode?: string): { errors?: st
           return
         }
       }
+      // 一枚 invokes（#141/#148）：出生打标的概念引用，登记表在册名字；缺席/空串 =
+      // 合法 Missing（静默当缺席）；给了就必须是字符串（读侧折叠按 invokes 聚合，坏形态在这里拦）
+      if (e.invokes !== undefined && e.invokes !== null && typeof e.invokes !== 'string') {
+        errors.push(`questions.${n}.invokes: 必须是概念名字符串（一枚 invokes：登记表在册名字）；缺席/空串 = 合法 Missing`)
+        return
+      }
       questions.push({
         id,
         kind,
@@ -185,6 +194,7 @@ export function validateBank(doc: unknown, expectedNode?: string): { errors?: st
         ...(Array.isArray(e.tags) && e.tags.length ? { tags: e.tags.map(String) } : {}),
         ...(kind === 'numeric' && Number(e.tol) > 0 ? { tol: Number(e.tol) } : {}),
         ...(typeof e.section === 'string' && e.section.trim() ? { section: e.section.trim() } : {}),
+        ...(typeof e.invokes === 'string' && e.invokes.trim() ? { invokes: e.invokes.trim() } : {}),
         ...(e.archived === true ? { archived: true } : {}),
         ...(typeof e.archived_reason === 'string' && e.archived_reason ? { archived_reason: e.archived_reason } : {}),
         // 调度/统计块由作答侧写入，schema 只透传不做内部校验

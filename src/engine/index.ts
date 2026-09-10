@@ -12,6 +12,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, rename, unlink, writeFile, appendFile } from 'node:fs/promises'
 import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
+import { ConceptRegistry, invokesUnregistered, namesOf } from './concepts.ts'
 import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList, declaredEncOf } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
@@ -202,6 +203,8 @@ export class LearnhubEngine {
   readonly proposals: GraphProposals
   readonly projects: Projects
   readonly bank: QuestionBank
+  /** 概念登记表（#141）：每课程受控词表，沉淀层档案坐标系与概念引用校准基底。 */
+  readonly concepts: ConceptRegistry
   readonly learnerCards: LearnerCards
   readonly errorCards: ErrorCards
   readonly skills: Skills
@@ -241,6 +244,7 @@ export class LearnhubEngine {
     this.store = new Store(this.paths)
     this.content = new Content(this.paths)
     this.bank = new QuestionBank(this.paths)
+    this.concepts = new ConceptRegistry(this.paths)
     this.learnerCards = new LearnerCards(this.paths)
     this.errorCards = new ErrorCards(this.paths)
     this.skills = new Skills(this.paths)
@@ -960,6 +964,18 @@ export class LearnhubEngine {
 
   async graphReject(pid: number, note = ''): Promise<ProposalRec> {
     return this.proposals.reject(pid, note)
+  }
+
+  /** 概念并入（#141 条目禁删只并入；human 领域判断的执行面）：from 整条并入 into，
+   * 名字并集，旧地址经别名续解析；journal 留痕。 */
+  async conceptMerge(courseKey: string, from: string, into: string): Promise<{ course: string; into: string; names: string[] }> {
+    const c = await this.registry.resolve(courseKey)
+    const r = await this.concepts.merge(c.root, from, into)
+    await this.store.appendJournal({
+      course: c.name, node: '*', rating: null, kind: 'concept_merge', elapsed_days: 0,
+      detail: `概念「${from}」并入「${r.into}」（名字并集：${r.names.join('、')}）`,
+    })
+    return { course: c.name, ...r }
   }
 
   // ---- enc 覆盖层回填（kind=enrich，#140：出生/覆盖层分家；原 edit 通道随分家转富化）----
@@ -5490,6 +5506,8 @@ export class LearnhubEngine {
     const { graph, broken } = await this.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
     this.assertNoteOk(c, graph, broken, node, 'quiz')
+    // invokes 概念引用对表基线（#141）：登记表在册名字集，出题受理门逐题对照
+    const conceptNames = namesOf(await this.concepts.load(c.root))
     const [, regionName] = graph.blockOf[node]
     const note = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
     const body = note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
@@ -5569,6 +5587,12 @@ export class LearnhubEngine {
         rejected.push({ q: stem.slice(0, 80), reason: shapeErr })
         continue
       }
+      // invokes 概念引用在册校验（#141 受理门对表）：未在册名字拒收并报告
+      const invokesErr = invokesUnregistered(q, conceptNames)
+      if (invokesErr) {
+        rejected.push({ q: stem.slice(0, 80), reason: invokesErr })
+        continue
+      }
       // 程序化查重（#119）：与已有题、本批已收题比对，命中丢弃并报告
       const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
       if (verdict.verdict === 'duplicate') {
@@ -5598,6 +5622,8 @@ export class LearnhubEngine {
     this.assertNoteOk(c, graph, broken, node, 'quiz')
     const manifest = state[node]?.content.sections
     if (!manifest?.length) throw new Error(`[quiz] 「${node}」没有节清单——先运行大纲。`)
+    // invokes 概念引用对表基线（#141）：与 questionGenerate 同一受理门
+    const conceptNames = namesOf(await this.concepts.load(c.root))
     const [, regionName] = graph.blockOf[node]
     const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
     const mdByTitle = new Map<string, string>()
@@ -5644,11 +5670,12 @@ export class LearnhubEngine {
       for (const rawQ of doc.questions) {
         const q: Record<string, unknown> = { ...((rawQ ?? {}) as Record<string, unknown>), section: s.id }
         delete q.id
-        // 题目卫生（ADR-0029/0030）：转义修复留痕，修不好或记法/边界违规的题丢弃
+        // 题目卫生（ADR-0029/0030）：转义修复留痕，修不好或记法/边界违规的题丢弃；
+        // invokes 未在册同罪（#141 受理门对表，与 questionGenerate 同口径）
         const hygiene = repairQuestionStrings(q)
         escapesRepaired += hygiene.repaired
         const stem = typeof q.q === 'string' ? q.q : ''
-        if (hygiene.unrepairable || questionViolation(q)) continue
+        if (hygiene.unrepairable || questionViolation(q) || invokesUnregistered(q, conceptNames)) continue
         const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
         if (verdict.verdict === 'duplicate') duplicates++
         else if (verdict.verdict === 'added') added++ // 单题非法（invalid）不毁整批

@@ -11,6 +11,8 @@ import { createHash } from 'node:crypto'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './store.ts'
 import { Graph, GraphStore, parseNode, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from './graph.ts'
+import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflicts, namesOf, validateConceptEntry } from './concepts.ts'
+import type { ConceptEntry, ConceptRef } from './concepts.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS } from './types.ts'
@@ -53,6 +55,9 @@ export interface EditOp {
 export interface EditProposalSpec {
   course: string
   reason?: string
+  /** 铸名块（#141 登记机械化）：随生长批提案铸名入册，与图 apply 同事务落盘；
+   * 提案被拒则登记不落盘。省略 = 本批零铸名。 */
+  concepts?: ConceptEntry[]
   ops: EditOp[]
 }
 
@@ -152,6 +157,21 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
   try {
     nonempty(d.course, 'course')
   } catch (e) { errors.push((e as Error).message) }
+  // 铸名块（#141）：条目形态同一契约（canonical 必填、aliases/definition 选填、
+  // 未知键拒收）。与登记表的撞名对账在受理门（需要读登记表文件），这里只管形态。
+  let concepts: ConceptEntry[] | undefined
+  if (d.concepts !== undefined) {
+    if (!Array.isArray(d.concepts)) {
+      errors.push('concepts: 必须是列表（铸名条目 = {canonical, aliases?, definition?}）')
+    } else {
+      concepts = []
+      d.concepts.forEach((raw: unknown, i: number) => {
+        const v = validateConceptEntry(raw, `concepts.${i + 1}`)
+        errors.push(...v.errors)
+        if (v.entry) concepts!.push(v.entry)
+      })
+    }
+  }
   const ops: EditOp[] = []
   if (!Array.isArray(d.ops) || !d.ops.length) {
     errors.push('ops: 提案没有操作条目')
@@ -246,7 +266,26 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
     })
   }
   if (errors.length) return { errors }
-  return { spec: { course: (d!.course as string).trim(), reason: typeof d!.reason === 'string' ? d!.reason : '', ops } }
+  return {
+    spec: {
+      course: (d!.course as string).trim(),
+      reason: typeof d!.reason === 'string' ? d!.reason : '',
+      ...(concepts !== undefined ? { concepts } : {}),
+      ops,
+    },
+  }
+}
+
+/** edit 提案全部概念引用（teaches/assumes 键 + 误解 concept；#141 受理门对表原料）。 */
+function conceptRefsOfOps(ops: EditOp[]): ConceptRef[] {
+  const refs: ConceptRef[] = []
+  for (const [i, op] of ops.entries()) {
+    const where = `ops.${i}(${op.op === 'add_node' ? op.name : op.node})`
+    for (const concept of Object.keys(op.teaches ?? {})) refs.push({ where: `teaches[${where}]`, concept })
+    for (const concept of Object.keys(op.assumes ?? {})) refs.push({ where: `assumes[${where}]`, concept })
+    for (const m of op.misconceptions ?? []) refs.push({ where: `misconceptions[${where}]`, concept: m.concept })
+  }
+  return refs
 }
 
 /** apply 返回的 findings：audit warns 摘要 + 健康分不足提示（引擎不设阈值，
@@ -351,12 +390,27 @@ function enrichMissingTargets(fields: EnrichFieldEntry[], graph: Graph): string[
 }
 
 export class GraphProposals {
+  private concepts: ConceptRegistry
   constructor(
     private paths: Paths,
     private store: Store,
     private registry: { get(key: string): Promise<CourseEntry | null>; load(): Promise<CourseEntry[]>; save(c: CourseEntry[]): Promise<void> },
     private centerRoot: string,
-  ) {}
+  ) {
+    this.concepts = new ConceptRegistry(paths)
+  }
+
+  /** 概念引用对表门（#141）：teaches/assumes/误解 的概念引用必须精确命中登记表
+   * 在册名字（canonical 或别名）或本提案 concepts 块的铸名；铸名与登记表撞名同样
+   * 拒收。返回错误行列表（空 = 通过）。root 参数是课程 root（非路径）。 */
+  private async conceptGateErrors(root: string, spec: EditProposalSpec): Promise<string[]> {
+    const existing = await this.concepts.load(root) // 登记表 Broken 在此抛错，apply 不落盘
+    const mints = spec.concepts ?? []
+    const errors = mintConflicts(mints, existing)
+    const known = namesOf([...existing, ...mints])
+    errors.push(...conceptReferenceErrors(conceptRefsOfOps(spec.ops), known))
+    return errors
+  }
 
   /** 为图中缺笔记的节点补骨架文件（幂等）：gen/edit apply 落图后调用。
    * 节点存在于图就该有 frontmatter 文件——vault 笔记是调度状态的事实源。 */
@@ -390,8 +444,8 @@ export class GraphProposals {
     return YAML.parse(await readFile(path, 'utf8'))
   }
 
-  /** graph propose-edit：在内存图上模拟执行 → pending。warns = 受理门的非阻提示
-   * （窄节点等概念字段组提示），随受理回执返给提案方。 */
+  /** graph propose-edit：在内存图上模拟执行 + 概念引用对表 → pending。warns = 受理
+   * 门的非阻提示（窄节点等概念字段组提示），随受理回执返给提案方。 */
   async proposeEdit(yamlText: string): Promise<Record<string, unknown>> {
     const warns: string[] = []
     const v = validateEditProposal(YAML.parseModel(yamlText), warns)
@@ -402,13 +456,18 @@ export class GraphProposals {
     const regions = await new GraphStore(this.paths, this.paths.courseRoot(course.root)).load()
     const graph = new Graph(regions)
     const errors = simulateOps(regions, graph, spec.ops)
-    if (errors.length) throw new Error(`[propose-edit] 模拟执行失败，提案未受理（修正后重提）。\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    const conceptErrors = await this.conceptGateErrors(course.root, spec)
+    if (errors.length || conceptErrors.length) {
+      throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n`
+        + [...errors, ...conceptErrors].map(e => `  ✗ ${e}`).join('\n'))
+    }
     const { pid } = await this.saveArtifact('edit', spec.course, YAML.parseModel(yamlText))
-    await this.store.updateProposal(pid, { summary: `${spec.ops.length} 条操作：${spec.ops.map(o => o.op).join('、')}` })
+    await this.store.updateProposal(pid, { summary: `${spec.ops.length} 条操作${spec.concepts?.length ? `；铸名 ${spec.concepts.length} 条` : ''}：${spec.ops.map(o => o.op).join('、')}` })
     return { id: pid, kind: 'edit', course: spec.course, ops: spec.ops.length, ...(warns.length ? { warns } : {}) }
   }
 
-  /** graph apply-edit：执行变更 + 改名/移动/删除联动课程笔记 + 快照。 */
+  /** graph apply-edit：概念对表复验 → 铸名与图同事务落盘 + 改名/移动/删除联动课程
+   * 笔记 + 快照。登记表先写（孤儿条目合法、悬空引用违约），graph 落盘在后。 */
   async applyEdit(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<Record<string, unknown>> {
     if (!audit.ok) throw new Error('[apply-edit] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
     const prop = await this.store.takePending('edit', pid)
@@ -419,10 +478,22 @@ export class GraphProposals {
     if (!course) throw new Error(`[apply-edit] 注册表中没有课程「${spec.course}」。`)
     const root = course.root
     const store = new GraphStore(this.paths, this.paths.courseRoot(root))
+    // 概念对表复验（#141）：受理与 apply 之间登记表可能被并入/手改；铸名侧幂等
+    // （已属同一条目跳过），撞上其他条目即拒绝，两门全过才开始任何写盘。
+    const existing = await this.concepts.load(root)
+    const { errors: mintErrors, entries: mergedEntries } = applyConceptMints(existing, spec.concepts ?? [])
+    const conceptErrors = [...mintErrors, ...conceptReferenceErrors(conceptRefsOfOps(spec.ops), namesOf(mergedEntries))]
+    if (conceptErrors.length) {
+      throw new Error(`[apply-edit] 概念引用对表失败，提案不落盘。\n${conceptErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
     const regions = await store.load()
     const graph = new Graph(regions)
     const errors = simulateOps(regions, graph, spec.ops) // 二次校验
     if (errors.length) throw new Error('[apply-edit] 提案已不适用当前图（被拒绝，可重提）。')
+
+    // 1. 铸名随生长批落盘（同事务第一笔：此后任一步失败，登记表至多多出孤儿条目——
+    //    合法态；反过来图先写会让引用悬空）
+    if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
 
     const createdBlocks = new Set<string>()
     for (const op of spec.ops) {
@@ -440,14 +511,14 @@ export class GraphProposals {
       else if (op.op === 'del_node') dels.push(op.node!)
     }
 
-    // 1. data/*.yaml 重写
+    // 2. data/*.yaml 重写
     applyOpsToRegions(regions, spec.ops)
     const files = await store.regionFiles()
     for (const region of regions) {
       if (region.name in files) await store.writeRegionDoc(files[region.name], region)
     }
 
-    // 2. 改名/移动/删除联动课程笔记（用 ops 应用前的图定位旧文件位置；
+    // 3. 改名/移动/删除联动课程笔记（用 ops 应用前的图定位旧文件位置；
     //    graphAfter 里旧名已不存在/位置已变，会让联动静默失效）
     for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(root, graph, oldName, newName, undefined)
     for (const [node, regionName] of moves) await this.relocateNote(root, graph, node, undefined, regionName)
@@ -459,7 +530,9 @@ export class GraphProposals {
     await this.ensureNotesFor(root, regions2)
     await this.store.appendJournal({
       course: course.name, node: '*', rating: null, kind: 'graph_edit', elapsed_days: 0,
-      session: String(prop.id), detail: spec.ops.map(o => `${o.op}(${o.node})`).join('；'),
+      session: String(prop.id),
+      detail: spec.ops.map(o => `${o.op}(${o.node})`).join('；')
+        + (spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''),
     })
     await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
     return {
