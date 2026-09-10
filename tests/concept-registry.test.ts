@@ -414,7 +414,7 @@ test('#141 data-check：登记表缺席 = 合法空态零 finding（选填域，
   await withVault({ graph: null, tag: 'learnhub-dcmiss-' }, async ({ engine }) => {
     const report = await engine.dataCheck()
     assert.ok(!report.findings.some(f => f.area === 'concept_registry'), '缺席不报 finding')
-    assert.deepEqual(report.byArea.concept_registry, { missing: 0, broken: 0, archived: 0 })
+    assert.deepEqual(report.byArea.concept_registry, { missing: 0, broken: 0, archived: 0, hint: 0 })
     assert.equal(report.inventory.conceptRegistries.present, 0)
     assert.equal(report.inventory.conceptRegistries.entries, 0)
   })
@@ -431,7 +431,7 @@ test('#141 data-check：联合唯一违约 = broken（concept_registry_schema）
   }, async ({ engine }) => {
     const report = await engine.dataCheck()
     assert.equal(report.status, 'broken')
-    assert.deepEqual(report.byArea.concept_registry, { missing: 0, broken: 1, archived: 0 })
+    assert.deepEqual(report.byArea.concept_registry, { missing: 0, broken: 1, archived: 0, hint: 0 })
     const f = report.findings.find(x => x.reason === 'concept_registry_schema')
     assert.ok(f, '报 concept_registry_schema')
     assert.match(f!.detail ?? '', /联合唯一|甲/)
@@ -441,7 +441,7 @@ test('#141 data-check：联合唯一违约 = broken（concept_registry_schema）
 test('#141 data-check：合法登记表盘点条目数', async () => {
   await withVault({ ...registryVault(), graph: null, tag: 'learnhub-dcok-' }, async ({ engine }) => {
     const report = await engine.dataCheck()
-    assert.deepEqual(report.byArea.concept_registry, { missing: 0, broken: 0, archived: 0 })
+    assert.deepEqual(report.byArea.concept_registry, { missing: 0, broken: 0, archived: 0, hint: 0 })
     assert.equal(report.inventory.conceptRegistries.present, 1)
     assert.equal(report.inventory.conceptRegistries.entries, 2)
   })

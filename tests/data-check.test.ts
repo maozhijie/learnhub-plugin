@@ -99,8 +99,8 @@ test('Data Check separates legal missing objects from valid data at the engine f
     assert.equal(report.status, 'missing')
     assert.equal(report.counts.broken, 0)
     assert.equal(report.counts.missing, 2)
-    assert.deepEqual(report.byArea.note, { missing: 1, broken: 0, archived: 0 })
-    assert.deepEqual(report.byArea.question_bank, { missing: 1, broken: 0, archived: 0 })
+    assert.deepEqual(report.byArea.note, { missing: 1, broken: 0, archived: 0, hint: 0 })
+    assert.deepEqual(report.byArea.question_bank, { missing: 1, broken: 0, archived: 0, hint: 0 })
 
     const reasons = byReason(report)
     assert.equal(reasons.get('note_missing'), 1)
@@ -130,7 +130,7 @@ test('Data Check keeps malformed registry as Broken instead of an empty course l
     const report = await engine.dataCheck()
 
     assert.equal(report.status, 'broken')
-    assert.deepEqual(report.byArea.registry, { missing: 0, broken: 1, archived: 0 })
+    assert.deepEqual(report.byArea.registry, { missing: 0, broken: 1, archived: 0, hint: 0 })
     assert.equal(report.inventory.courses, 0)
     assert.equal(byReason(report).get('registry_yaml_parse'), 1)
   })

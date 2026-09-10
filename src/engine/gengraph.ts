@@ -25,6 +25,9 @@ import {
   compassScaffold, withSectionText, parseCompass, sectionBody, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
 import { todayStr } from './dates.ts'
+import { appendProbationEntry, recheckPreregOf } from './probation.ts'
+import type { RecheckPrereg } from './probation.ts'
+import { RECHECK_DAYS_DEFAULT } from './params.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -65,7 +68,8 @@ export interface EditOp {
 
 /** 生长批 note 区（#145 裁决产物面）：算子标签 + 理由 + 分歧声明（可选）。生长批仍是
  * kind=edit 提案（不新增提案 kind）；note 在场即生长批——ops 允许为空（裁决=暂不产
- * 结构，罗盘重写照走同事务）。 */
+ * 结构，罗盘重写照走同事务）。#146 起插入批随批预注册复诊（note.recheck：恰一枚
+ * 可机判 metric + 复诊期缺省 10 学习日 clamp [5,20]），apply 同事务登记边实验账本。 */
 export interface GrowthNote {
   operator: GrowthOperator
   reason: string
@@ -73,6 +77,10 @@ export interface GrowthNote {
    * 升级全量段重裁（两段式 effort；显然步免仲裁税不声明）。字段名避让「申诉
    * （Dispute，ADR-0031）」词条——同名同义纪律。 */
   disagreement?: string
+  /** 复诊预注册（#146 词条「复诊」）：只随 operator=插入 且本批有 add_node 的批携带
+   * （其他算子携带即拒收；插入批缺预注册拒收）——metric 恰一枚（前进恢复/卡点集中度
+   * 降幅/保留率恢复），days 缺省 10 学习日 clamp [5,20]。 */
+  recheck?: RecheckPrereg
 }
 
 /** 提案 op 上的边轻纪律键（#127：候选边留提案侧留痕、origin 从 journal 派生、
@@ -94,6 +102,12 @@ export interface EditProposalSpec {
 }
 
 const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'move', 'set_note'] as const
+
+/** 批内 add_node 数（插入登记/调速闸门的「本批新增」口径单点；解析前 doc.ops 与
+ * EditOp[] 同形消费）。 */
+export function addNodeCountOf(ops: Array<{ op?: unknown }> | undefined): number {
+  return (ops ?? []).filter(o => o.op === 'add_node').length
+}
 
 /** gen 骨架提案退役（#138 cutover / ADR-0033 生长式图）：受理门统一拒收，新课程
  * 入口由种子提案接管（#142），反编译子图入口随种子票重接（#149）。 */
@@ -204,17 +218,19 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       })
     }
   }
-  // 生长批 note 区（#145）：严格 schema——恰 {operator, reason, disagreement?}，未知键拒收。
+  // 生长批 note 区（#145）：严格 schema——恰 {operator, reason, disagreement?, recheck?}，
+  // 未知键拒收。#146：recheck 只随插入批携带；插入批（有 add_node）缺预注册拒收。
   let note: GrowthNote | undefined
+  let recheckWarns: string[] = []
   if (d.note !== undefined) {
     if (typeof d.note !== 'object' || d.note === null || Array.isArray(d.note)) {
-      errors.push('note: 必须是映射（生长批裁决区 = {operator, reason, disagreement?}）')
+      errors.push('note: 必须是映射（生长批裁决区 = {operator, reason, disagreement?, recheck?}）')
     } else {
       const n = d.note as Record<string, unknown>
       const noteErrors: string[] = []
-      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'disagreement'].includes(k))
+      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'disagreement', 'recheck'].includes(k))
       if (unknown.length) {
-        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/disagreement；分歧声明写在 disagreement，不另立字段）`)
+        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/disagreement/recheck；分歧声明写在 disagreement，复诊预注册写在 recheck）`)
       }
       if (!(GROWTH_OPERATORS as readonly string[]).includes(String(n.operator))) {
         noteErrors.push(`note.operator: 非法算子 ${JSON.stringify(String(n.operator))}（允许 ${GROWTH_OPERATORS.join('/')}）`)
@@ -225,12 +241,21 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       if (n.disagreement !== undefined && (typeof n.disagreement !== 'string' || !n.disagreement.trim())) {
         noteErrors.push('note.disagreement: 分歧声明声明了就要写内容（真分歧才声明——显然步免仲裁税）')
       }
+      // 复诊预注册（#146）：schema 门在此，跨字段规则在 ops 就位后统一裁（见下方 preregGate）
+      let recheck: RecheckPrereg | undefined
+      if (n.recheck !== undefined) {
+        const v = recheckPreregOf(n.recheck)
+        noteErrors.push(...v.errors)
+        recheckWarns = v.warns
+        if (!v.errors.length && v.prereg) recheck = v.prereg
+      }
       errors.push(...noteErrors)
       if (!noteErrors.length) {
         note = {
           operator: String(n.operator) as GrowthOperator,
           reason: (n.reason as string).trim(),
           ...(typeof n.disagreement === 'string' && n.disagreement.trim() ? { disagreement: n.disagreement.trim() } : {}),
+          ...(recheck ? { recheck } : {}),
         }
       }
     }
@@ -349,6 +374,20 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       })
     })
   }
+  if (errors.length) return { errors }
+  // 复诊预注册的跨字段规则（#146，ops 就位后裁）：插入=带预注册的生长批——
+  // 有 add_node 的插入批必须预注册复诊（零人审结算的判据前提）；预注册只随插入批
+  // 携带（其他算子/零新增节点没有可登记的插入边）。
+  if (note) {
+    const adds = addNodeCountOf(ops)
+    if (note.operator === '插入' && adds > 0 && !note.recheck) {
+      errors.push('note.recheck: 插入批必须预注册复诊（metric: 前进恢复|卡点集中度降幅|保留率恢复；days 缺省 10 学习日）——插入边的到期结算零人审，没有预注册就没有结算判据')
+    }
+    if (note.recheck && (note.operator !== '插入' || adds === 0)) {
+      errors.push(`note.recheck: 复诊预注册只随插入批携带（本批 operator=${note.operator}、add_node ${adds} 条——没有可登记的插入边就无需预注册）`)
+    }
+  }
+  warns?.push(...recheckWarns)
   if (errors.length) return { errors }
   return {
     spec: {
@@ -521,6 +560,9 @@ export class GraphProposals {
     private store: Store,
     private registry: { get(key: string): Promise<CourseEntry | null>; load(): Promise<CourseEntry[]>; save(c: CourseEntry[]): Promise<void> },
     private centerRoot: string,
+    /** 生长闸门（#146 插入/旁支调速）：受理与 apply 双门在 schema 门后调用——需要
+     * 三率流水（账本/提案/练习），由门面注入（本类零流水依赖）；返回拒收行，空 = 放行。 */
+    private growthGate?: (spec: EditProposalSpec) => Promise<string[]>,
   ) {
     this.concepts = new ConceptRegistry(paths)
   }
@@ -591,6 +633,12 @@ export class GraphProposals {
     if (errors.length || conceptErrors.length || anchorErrors.length || consolidationErrors.length) {
       throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n`
         + [...errors, ...conceptErrors, ...anchorErrors, ...consolidationErrors].map(e => `  ✗ ${e}`).join('\n'))
+    }
+    // 生长闸门（#146 插入/旁支调速）：三率超限/复诊通过率触底时插入与旁支闸停（低数据
+    // 静默）——插入积极性的调速器在受理门就拦，不让超速批落 pending。
+    const gateErrors = this.growthGate ? await this.growthGate(spec) : []
+    if (gateErrors.length) {
+      throw new Error(`[propose-edit] 生长闸门拒绝受理（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     // 罗盘重写预检（#145 同事务：提案被拒罗盘不落盘——route 门在受理时就走一遍，
     // 不给坏路线落 pending 的机会）
@@ -686,6 +734,12 @@ export class GraphProposals {
       }
       compassRoute = stripWrappingFence(spec.route)
     }
+    // 生长闸门复验（#146）：受理与 apply 之间三率可能被其他批的结算/登记推移，
+    // 双门全过才开始任何写盘（与巩固门同款纪律）。
+    const gateErrors = this.growthGate ? await this.growthGate(spec) : []
+    if (gateErrors.length) {
+      throw new Error(`[apply-edit] 生长闸门拒绝写入（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
 
     // 1. 铸名随生长批落盘（同事务第一笔：此后任一步失败，登记表至多多出孤儿条目——
     //    合法态；反过来图先写会让引用悬空）
@@ -730,6 +784,21 @@ export class GraphProposals {
       compassRewritten = true
     }
 
+    // 3.6 边实验账本登记（#146 同事务）：插入批的每个 add_node 登记一条在途复诊
+    //     （node/pre = 登记快照、proposal = 本批提案 id、due = 预注册学习日数）——
+    //     到期结算钩子据此自动裁决（proven｜自动剪除），零人审。
+    const probationRegistered: string[] = []
+    if (spec.note?.operator === '插入' && spec.note.recheck) {
+      const due = spec.note.recheck.days ?? RECHECK_DAYS_DEFAULT
+      for (const op of spec.ops) {
+        if (op.op !== 'add_node') continue
+        await appendProbationEntry(this.paths, root, {
+          node: op.name!, pre: [...(op.pre ?? [])], proposal: prop.id, due,
+        })
+        probationRegistered.push(op.name!)
+      }
+    }
+
     const regions2 = await store.load()
     const version = (await this.store.latestSnapshotVersion(course.name)) + 1
     await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
@@ -758,6 +827,12 @@ export class GraphProposals {
       deleted: dels,
       ...(spec.note
         ? { operator: spec.note.operator, coach_reason: spec.note.reason, ...(spec.note.disagreement ? { disagreement: true } : {}) }
+        : {}),
+      ...(probationRegistered.length
+        ? {
+            probation_registered: probationRegistered,
+            recheck: { metric: spec.note!.recheck!.metric, due: spec.note!.recheck!.days ?? RECHECK_DAYS_DEFAULT },
+          }
         : {}),
       ...(compassRewritten ? { compass_rewritten: true } : {}),
       findings: applyFindings(audit, seedPhase),

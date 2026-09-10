@@ -479,22 +479,28 @@ export class Store {
   // ---- utils ----
 
   private async readJsonl<T>(path: string): Promise<T[]> {
-    let raw: string
-    try {
-      raw = await readFile(path, 'utf8')
-    } catch {
-      return []
-    }
-    const out: T[] = []
-    for (const line of raw.split('\n')) {
-      const s = line.trim()
-      if (!s) continue
-      try {
-        out.push(JSON.parse(s) as T)
-      } catch {
-        // 跳过半行损坏（进程中断可能留下未写完的尾行）
-      }
-    }
-    return out
+    return readJsonlLines<T>(path)
   }
+}
+
+/** jsonl 只读（跳过半行损坏——追加写单行原子，中断最多留半行尾；store 与无依赖
+ * 读侧扫描器共用的唯一实现，#146 起从私有方法提升为模块函数）。 */
+export async function readJsonlLines<T>(path: string): Promise<T[]> {
+  let raw: string
+  try {
+    raw = await readFile(path, 'utf8')
+  } catch {
+    return []
+  }
+  const out: T[] = []
+  for (const line of raw.split('\n')) {
+    const s = line.trim()
+    if (!s) continue
+    try {
+      out.push(JSON.parse(s) as T)
+    } catch {
+      // 跳过半行损坏（进程中断可能留下未写完的尾行）
+    }
+  }
+  return out
 }

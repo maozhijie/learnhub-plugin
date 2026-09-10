@@ -105,7 +105,7 @@ _Avoid_: 空、损坏
 _Avoid_: 坏档、异常数据
 
 **Data Check（数据体检）**:
-只读盘点学习者数据完整性的动作：报告 Missing 与 Broken，不修复、不写入。
+只读盘点学习者数据完整性的动作：报告 Missing 与 Broken，不修复、不写入；存档区以 archived 信息级盘点、边实验账本到期未决以 hint 提示级浮出（#146）——两类都不进 status（既非 Missing 也非 Broken）。
 _Avoid_: 修复、清理、健康分
 
 **Health Score（健康分）**:

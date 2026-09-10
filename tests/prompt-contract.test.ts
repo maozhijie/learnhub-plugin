@@ -188,3 +188,21 @@ test('#145: 教练回合模板 v1——五算子语义、停机转译、分歧�
   // 停机语义：回合被拉起 = 就绪深度未满足
   assert.match(tpl, /就绪深度检查未满足/, '停机转译：拉起即缺口')
 })
+
+// ---- v2 教练回合契约（#146 / 插入提案生命周期）：插入批复诊预注册 + 插入积极性调速 ----
+
+test('#146: 教练回合模板 v2——插入批 note.recheck 预注册（metric 三选一/days 缺省 10）与调速闸门措辞', () => {
+  const tpl = Content.PROMPT_KINDS['教练回合']!
+  assert.ok(Content.promptVersionOf(tpl) >= 2, '教练回合应带版本标记 v2+')
+  // 复诊预注册：metric 恰一枚可机判（小集合枚举锁死）+ 复诊期缺省
+  assert.match(tpl, /recheck/, 'recheck 预注册字段（随 note 区）')
+  assert.match(tpl, /metric: 前进恢复\|卡点集中度降幅\|保留率恢复/, 'metric 枚举锁死（可机判小集合）')
+  assert.match(tpl, /缺省 10 学习日|days 缺省 10/, '复诊期缺省 10 学习日')
+  assert.match(tpl, /自动结算/, '到期自动结算归引擎，教练不写结论')
+  // 调速闸门对教练可见（插入积极性调速器）
+  assert.match(tpl, /闸停|拒收/, '超限批被闸停/拒收的现势语义')
+  assert.match(tpl, /旁支占比|旁支超限|韧性闸门/, '旁支上限的韧性闸门')
+  // 插入批纪律与其他算子的边界
+  assert.match(tpl, /插入批纪律|note\.recheck 必填/, '插入批必须预注册')
+  assert.match(tpl, /不走复诊/, '旁支/巩固不走复诊')
+})

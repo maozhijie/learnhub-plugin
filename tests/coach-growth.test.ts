@@ -68,6 +68,8 @@ function goldVerdict(opts: {
     `  operator: ${opts.operator ?? '前进'}`,
     `  reason: ${opts.reason ?? '前沿缺下一台阶，沿终点推进'}`,
     ...(opts.disagreement ? [`  disagreement: ${opts.disagreement}`] : []),
+    // #146 起插入批必须预注册复诊（metric 恰一枚 + days 缺省 10 学习日）
+    ...(opts.operator === '插入' ? ['  recheck:', '    metric: 卡点集中度降幅', '    days: 10'] : []),
     'route: |',
     ...routeLines,
     ...(opts.ops && opts.ops.length === 0 ? ['ops: []'] : ['ops:', ...opsBody.map(l => `  ${l}`)]),

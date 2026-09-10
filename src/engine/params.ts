@@ -39,3 +39,20 @@ export const TIER_REC_DEMOTE_SCORE = 0.4  // 档内均分 < 该值 → 提议降
 // ---- Self-Calibration 自评校准画像（ADR-0022 #104；呈现层参数，零 canonical）----
 export const CALIBRATION_OVERCONF_THRESHOLD = 0.6 // 「会」档系统性过信显著阈值：该档 ≥JOL_CALIBRATION_MIN 条配对且实际正确率低于此值即检出（宣称「会」≈接近确知；真伪题瞎猜基线 0.5，持续低于 0.6 = 预测几乎不带信息）
 export const CALIBRATION_BOOST_SAMPLE_RATE = 1 / 2 // 过信检出且提示开时的 JOL 抽查加强密度（默认 1/3 → 1/2；只影响抽查频率，不改任何 canonical 写入）
+
+// ---- 复诊与插入调速（#146；词条「复诊」「边实验账本」——插入积极性的调速器）----
+export const RECHECK_DAYS_DEFAULT = 10   // 复诊期缺省（学习日；插入批 note.recheck.days 缺省值）
+export const RECHECK_DAYS_MIN = 5        // 复诊期 clamp 下界（声明值越界 clamp 不拒收）
+export const RECHECK_DAYS_MAX = 20       // 复诊期 clamp 上界
+export const RECHECK_CONCENTRATION_DROP = 0.2 // metric=卡点集中度降幅 的达标降幅（最大概念份额绝对下降）
+export const RECHECK_RETENTION_RECOVER = 0.1  // metric=保留率恢复 的达标回升（真实保留率绝对回升）
+export const RECHECK_RETENTION_MIN_SAMPLES = 3 // 保留率恢复前后窗的到期复习样本下限（不足不达标，不造假达标）
+
+// ---- 三率与韧性分映射闸门（#146；滚动 30 学习日，结构可判定在代码=受理/apply 双门）----
+export const GROWTH_RATES_WINDOW_DAYS = 30      // 三率滚动窗（学习日）
+export const GROWTH_RATE_MIN_SAMPLE = 3         // 闸门生效的已决复诊样本下限（低数据静默）
+export const GROWTH_RECHECK_PASS_FLOOR = 0.5    // 复诊通过率低于此 → 插入批闸停
+export const GROWTH_INSERT_RATE_CAP = 0.5       // 插入节点占生长新增超此 → 插入批闸停
+export const GROWTH_SIDEBRANCH_CAP = 0.2        // 旁支节点占生长新增上限（韧性低/样本不足）
+export const GROWTH_SIDEBRANCH_CAP_RESILIENT = 0.3 // 韧性高时放宽（20%→30%）
+export const GROWTH_RESILIENCE_HIGH = 0.8       // 复诊通过率达此（样本足）= 韧性高

@@ -20,6 +20,7 @@ import type {
 import type { AlloKind } from './grading'
 import type { JolBin, JolPrediction } from './jol'
 import type { CompletionFold } from './seed'
+import type { ProbationCourseView } from './probation'
 
 /** 提案记录（store/proposals 持久化条目）与节清单（frontmatter content.sections）
  * 的转发导出：graphReject/graphProposals 的返回与 LessonDoc.manifest 引用，
@@ -77,6 +78,9 @@ export interface StatusCourse {
   /** 完成宣告（#142 雾区条款上半，读侧折叠零写副作用）：有终点锚的课程附带——
    * 能力锚定 = 终点 mastery≥阈值且闭包健康；覆盖锚定 = 块工作表+终点。零写侧状态。 */
   completion?: CompletionFold
+  /** 插入实验面（#146）：在途插入节点（「实验中」标记取数）、到期未决、三率
+   * （滚动 30 学习日）与韧性闸门现势——插入积极性对学习者透明。 */
+  probation?: ProbationCourseView
 }
 
 export interface StatusDoc {
@@ -629,6 +633,8 @@ export interface AnswerResult {
   /** 判错差异摘要（规则题判错时携带）：点名「漏选了 A / 多选了 C / 从第 2 项起顺序不对」，
    * 让判错反馈能对上学习者的作答（ADR-0031）。 */
   diff?: string
+  /** probation 在途行使闸（#146）：实验中的插入节点——作答只记流不回流练习证据。 */
+  evidence_gated?: true
 }
 
 /** 申诉复核结论（questionDisputeReview，只读不落盘）。 */
@@ -692,6 +698,8 @@ export interface QuestionForgetResult {
   /** 节点聚合掌握度（课程题库通道；笔记源无节点，缺省）。 */
   mastery?: number
   xp: 0
+  /** probation 在途行使闸（#146）：实验中的插入节点——忘记只记流不回流练习证据。 */
+  evidence_gated?: true
 }
 
 // ---- Anki 通道（C2 #63 / ADR-0011；ankiStatus）----

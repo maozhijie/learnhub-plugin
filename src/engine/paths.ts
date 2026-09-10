@@ -121,6 +121,11 @@ export class Paths {
    * 只作审计与出处——覆盖层是写入通道概念，读侧永远只读正典文件。 */
   overlayPath(root: string): string { return `${this.courseStateDir(root)}/覆盖层.jsonl` }
 
+  /** 边实验账本（#146 / 词条「边实验账本」）：课程根/state/边实验.jsonl——插入边
+   * 复诊状态的追加流水（只增）：条目 {node, pre, proposal, due, outcome?, decided_at?}，
+   * 状态集 {probation→proven｜剪除}，仅插入边持有；图 YAML 零边字段（边轻）。 */
+  probationLedgerPath(root: string): string { return `${this.courseStateDir(root)}/边实验.jsonl` }
+
   /** 终点锚（#142 / ADR-0033）：课程根/state/终点锚.json——课程唯一结构承诺物
    * （终点节点+目标类型+声明日期），种子提案 apply 落盘；无直改通道，换终点走
    * 重新种子提案（kind=seed）。 */
