@@ -411,3 +411,56 @@ test('金样本回放闸：两族金样本首过（首过率对照、调用数�
   }
   assert.equal(prompts[0], prompts[1], '同种子同金样本 → 组装字节一致')
 })
+
+test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重裁请求），注入块随包进提示词', async () => {
+  await withVault(SEED_VAULT, async ({ engine, paths }) => {
+    const declared = todayStr()
+    const r = await engine.graphPropose('seed', `course: 数学
+mode: new
+endpoint:
+  name: 用导数解决优化问题
+  region: 基础
+  block: 终点块
+starts:
+  - name: 认识变化率
+    region: 基础
+    block: 起点块
+  - name: 极限直觉
+    region: 基础
+    block: 起点块
+  - name: 函数图像
+    region: 基础
+    block: 起点块
+`) as { id: number }
+    await engine.graphApply('seed', r.id)
+    // 三个起点正文就绪（ready=3）；today 移出冷启动首周（required=3）→ 深度满足
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    for (const node of ['认识变化率', '极限直觉', '函数图像']) {
+      await mkdir(`${paths.centerRoot}/数学/课程/基础`, { recursive: true })
+      await writeFile(
+        paths.courseNotePath('数学', '基础', node),
+        noteText(node, { content: { sections: ['    - { id: s1, title: 开场, type: 概念, status: ready, version: 0 }'] } }),
+        'utf8',
+      )
+    }
+    const verdict = goldVerdict({ ops: [
+      '- op: add_node',
+      '  name: 平均变化率',
+      '  region: 基础',
+      '  block: 起点块',
+      '  pre: [认识变化率]',
+    ] })
+    // 对照：就绪深度满足 + 无注入 → 停摆零调用
+    const idle = await engine.coachGrowthBatch('数学', replayFake(verdict), { today: addDays(declared, 7)! })
+    assert.equal(idle.state, 'idle')
+    // 计划修订注入 = 显式的重新裁决请求：check.ok 不短路，注入块随包进轻量段提示词
+    const inject = '- 补支：里程碑 m2「双音听辨」关联「数学/即兴入门」图上尚无——沿足迹朝它长最小必要分支'
+    const fake = replayFake(verdict)
+    const round = await engine.coachGrowthBatch('数学', fake, { today: addDays(declared, 7)!, inject })
+    assert.equal(round.state, 'applied')
+    assert.equal(fake.calls.length, 1, '注入回合照走两段式（显然步恒 1 次调用）')
+    assert.match(fake.calls[0]!.prompt, /里程碑计划修订注入（项目消费拉动的生长请求）/)
+    assert.match(fake.calls[0]!.prompt, /即兴入门/)
+    assert.match(fake.calls[0]!.prompt, /换线 = 激活图上已有节点/)
+  })
+})

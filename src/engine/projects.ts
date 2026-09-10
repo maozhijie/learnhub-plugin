@@ -14,11 +14,10 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, writeFile, appendFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
-import { atomicWrite } from './store.ts'
+import { Store, atomicWrite } from './store.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
-import type { Store } from './store.ts'
 import type { ProposalRec, JournalRec } from './types.ts'
 
 /** 项目日志文件头（V-5 #113：首次追加时落一次；说明口径与注册语义）。 */
@@ -250,9 +249,62 @@ export interface ProjectView {
   orphans: string[]
 }
 
-/** 项目提案 apply 结果（判别联合：kind 区分计划/里程碑）。 */
+// ---- 计划修订快照 diff（#149：里程碑身份锚钉 id，修订驱动教练换线/补支的触发器原料） ----
+
+/** 修订 diff（applyPlan 快照的前后 plan 派生，零新存储——快照语义的第二个消费方）：
+ * added/removed 按 id 差集；retargeted = 同 id 而 nodes 集合变化（重指 = 换线判定的
+ * 原料）。其余同 id 内容变化（name/est/验收口径微调）不入 diff——里程碑身份与消费
+ * 挂靠都没变，不改生长方向（id 是身份锚：序位与文件名会漂移，id 不漂移）。 */
+export interface PlanRevisionDiff {
+  added: PlanItem[]
+  removed: PlanItem[]
+  retargeted: Array<{ id: string; name: string; before: string[]; after: string[] }>
+}
+
+/** nodes 集合比较（去重 + 与顺序无关——nodes 是抽题池/行使域的集合语义）。 */
+function nodesSetEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+  const sa = [...new Set(a ?? [])].sort()
+  const sb = [...new Set(b ?? [])].sort()
+  return sa.length === sb.length && sa.every((v, i) => v === sb[i])
+}
+
+/** 快照 diff（纯函数）：id 为身份锚派生 {added, removed, retargeted}。stable 排序
+ * （按 id）保证同输入同输出，注入生长批可回放。 */
+export function planRevisionDiff(oldPlan: PlanItem[], newPlan: PlanItem[]): PlanRevisionDiff {
+  const oldById = new Map(oldPlan.map(m => [m.id, m]))
+  const newById = new Map(newPlan.map(m => [m.id, m]))
+  const added = newPlan.filter(m => !oldById.has(m.id))
+  const removed = oldPlan.filter(m => !newById.has(m.id))
+  const retargeted = newPlan
+    .filter(m => oldById.has(m.id) && !nodesSetEqual(oldById.get(m.id)!.nodes, m.nodes))
+    .map(m => ({
+      id: m.id, name: m.name,
+      before: [...new Set(oldById.get(m.id)!.nodes ?? [])],
+      after: [...new Set(m.nodes ?? [])],
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id))
+  return { added, removed, retargeted }
+}
+
+/** 计划修订的生长触发（#149：快照 diff 驱动教练换线/补支）：每个有锚定课程的课程
+ * 一条——lines 是已渲染的注入行（coach 生长批的 inject 块正文），宿主据此入队
+ * phase=生长 任务。无锚定课程的 diff 行落 plan_diff_warnings 不强路由（诚实降级）。 */
+export interface PlanGrowthTrigger {
+  course: string
+  lines: string[]
+}
+
+/** 项目提案 apply 结果（判别联合：kind 区分计划/里程碑）。project_plan 变体可携带
+ * 修订 diff 与生长触发（初次规划 diff 照产——空计划起点的 added=全量；无引擎侧
+ * 解析面时（纯 Projects 类）growth 缺省）。 */
 export type ProjectApplyResult =
-  | { kind: 'project_plan'; project: string; milestones: number; snapshot: string | null }
+  | { kind: 'project_plan'; project: string; milestones: number; snapshot: string | null;
+      /** 计划修订快照 diff（旧计划 → 新计划，id 为身份锚；引擎 apply 包装层填写）。 */
+      plan_diff?: PlanRevisionDiff
+      /** 已过点里程碑被修订移除的显式警告（不拒绝——账本事实不改写，但「终点消失」要可见）。 */
+      plan_diff_warnings?: string[]
+      /** 换线/补支触发（按锚定课程聚合；宿主入队生长批）。 */
+      growth?: PlanGrowthTrigger[] }
   | { kind: 'project_milestone'; project: string; milestone: string; file: string; snapshot: string }
 
 export class Projects {
@@ -338,7 +390,9 @@ export class Projects {
 
   // ---- 计划提案（project_plan；带快照的修订通道，设计 §7） ----
 
-  async proposePlan(projectId: string, yamlText: string): Promise<{ id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }> {
+  async proposePlan(
+    projectId: string, yamlText: string, opts: { pair?: number } = {},
+  ): Promise<{ id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }> {
     const project = await this.load(projectId)
     let doc: unknown
     try {
@@ -356,13 +410,22 @@ export class Projects {
     const path = this.paths.proposalArtifactPath(pid, 'project_plan', projectId)
     await mkdir(this.paths.proposalDir, { recursive: true })
     await writeFile(path, YAML.stringify(doc), 'utf8')
-    await this.store.updateProposal(pid, { artifact: path })
+    // pair 出生即写（#149 同源双提案）：计划提案落盘那一刻就带联动——任一时刻崩溃
+    // 都不会留下可单边 apply 的无守卫计划半区（时序缺口守卫从出生起生效）。
+    await this.store.updateProposal(pid, {
+      artifact: path,
+      ...(opts.pair ? { pair: opts.pair } : {}),
+    })
     return { id: pid, kind: 'project_plan', project: projectId, milestones: v.plan.length, initial }
   }
 
-  /** apply 计划提案：被替换的旧计划 YAML 落快照（初次规划无快照），不静默覆盖。 */
-  async applyPlan(pid?: number): Promise<ProjectApplyResult> {
+  /** apply 计划提案：被替换的旧计划 YAML 落快照（初次规划无快照），不静默覆盖。
+   * 同源双提案守卫（#149）：反编译 pair 联动的计划提案不得先于种子半区单独 apply
+   * （计划引用悬空节点炸消费面）——联合入口走 opts.pairApply 豁免。 */
+  async applyPlan(pid?: number, opts: { pairApply?: boolean } = {}): Promise<ProjectApplyResult> {
     const prop = await this.store.takePending('project_plan', pid)
+    const block = Store.pairApplyBlock(prop, await this.store.loadProposals(), opts)
+    if (block) throw new Error(`[project-plan-apply] ${block}`)
     const v = validatePlanArtifact(await this.loadArtifact(prop), prop.course)
     if (v.errors || !v.plan) {
       throw new Error(`[project-plan-apply] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)

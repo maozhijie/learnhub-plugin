@@ -6,11 +6,13 @@
  * 诊断，与节点练习证据通道是两条流（ADR-0015 §4）。事件多记一个 tier 快照（落流时
  * 的项目档位）：入档推荐的「档内表现」口径据此归属，裁决事件形状的最小集扩展。
  *
- * 上行回流（§3）：执行事件落流时，对 nodes[] 中每一条「被行使的既有 enc 边」（= 图上
- * 实际存在的 enc 边，两端都在事件 nodes 内）两端节点各调一次既有 applyPracticeEvidence
- * ——单向复制进节点练习证据通道，零新存储形态。被行使判定 v1 就这么简单（两端都在
- * 事件 nodes 里即算行使）；判定机制精细化（何谓「这次执行真的调用了该技能」）归
- * P-6 行为推断 enc 后续票。
+ * 上行回流（§3；#149 行使即回流的节点级修订）：执行事件落流时，事件 nodes 解析到
+ * 图上的每个节点（含种子簇 stub——有笔记有身份，mastery=0 落补底象限的缺席语义）各调
+ * 一次既有 applyPracticeEvidence——单向复制进节点练习证据通道，同节点去重，零新存储
+ * 形态。粗 pre 占位边（种子簇的朝终点粗边）不是回流通道：行使记录留在 exec 流水、
+ * 边零证据写入（「粗 pre 只记流不回流」）；被行使的既有 enc 边数只作 enc 面观测随
+ * 结果带出，回流不再以 enc 边为门。判定机制精细化（何谓「这次执行真的调用了该节点」）
+ * 归 P-6 行为推断 enc 后续票。
  *
  * 下行入档推荐（§8，challenge point）：只读纯函数——输入 = 当前档 + 档内表现（当前档
  * 下的执行事件统计）+ 关联节点 mastery 聚合，输出 = 推荐档位 + 理由摘要。永不写状态、
@@ -101,10 +103,11 @@ export function validateExecEvent(
   }
 }
 
-/** 被行使 enc 边判定（纯函数，v1）：图上实际存在的 enc 边（holder 的 enc 邻接里指向
+/** 被行使 enc 边判定（纯函数）：图上实际存在的 enc 边（holder 的 enc 邻接里指向
  * skill）且两端都在事件 nodes 集合内 → 被行使。同一有序对去重；排序稳定可回放。
- * encOf 返回 holder 的 enc 邻接（skill 名列表；Graph.encOf 的 [skill, w] 元组由调用方
- * 拍平）。判定机制精细化归 P-6 后续（文件头注释）。 */
+ * #149 起回流改节点级（行使即回流），本判定降为 enc 面观测（edges 计数）与 P-6
+ * 候选边的原料；encOf 返回 holder 的 enc 邻接（skill 名列表；Graph.encOf 的
+ * [skill, w] 元组由调用方拍平）。 */
 export function exercisedEncEdges(
   nodes: string[],
   encOf: (holder: string) => readonly string[],

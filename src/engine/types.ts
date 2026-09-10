@@ -226,6 +226,10 @@ export interface ProposalRec {
   created: string
   decided?: string | null
   decision_note?: string
+  /** 同源双提案联动（#149 目标反编译 v8）：另一半提案 id。反编译产出计划+种子双提案
+   * 时互相指认，apply 须走联合入口（同进同退——计划引用先有图可解析）、任一半区
+   * reject 联动拒另一半；普通提案缺席合法（无对账）。 */
+  pair?: number
 }
 
 /** 勘误冲正流水条目（state/勘误.jsonl，ADR-0031）：对一条已落盘作答判罚的抵消记录。

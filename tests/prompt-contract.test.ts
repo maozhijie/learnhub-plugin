@@ -34,17 +34,21 @@ test('P2: 风格变体模板同步 v6 锚点（与默认模板同口径）', () 
   }
 })
 
-// ---- P-5 目标反编译模板（#95）：版本标记 + 双产物输出契约 + 先验注入指令 ----
+// ---- P-5 目标反编译模板（#95；v8 种子簇形态 #149）：版本标记 + plan/seed 双半区契约 + 对账与先验注入指令 ----
 
-test('P5: 项目目标反编译模板——版本标记、plan/subgraph 双产物契约、Vault 先验注入指令', () => {
+test('#149: 项目目标反编译模板 v8——plan/seed 双半区契约、名字对账指令、Vault 先验注入、同进同退', () => {
   const tpl = Content.PROMPT_KINDS['项目目标反编译']!
-  assert.ok(Content.promptVersionOf(tpl) >= 6, '项目目标反编译 应带版本标记 v6+')
+  assert.ok(Content.promptVersionOf(tpl) >= 8, '项目目标反编译 应升到 v8')
   assert.match(tpl, /project: <项目 id/, 'plan 半区 = #92 的 PlanArtifact 契约')
   assert.match(tpl, /acceptance_hints/, '计划条目字段按设计 §3')
-  assert.match(tpl, /subgraph:/, '子图半区 = 图谱域 gen regions 形态')
-  assert.match(tpl, /enc:/, '子图节点可挂成分技能边')
+  assert.match(tpl, /seed:/, '种子半区 = kind=seed 种子簇形态（gen regions 已随骨架退役）')
+  assert.match(tpl, /零 est 零 enc 零 pre/, '种子节点骨架模式（est/enc/pre 不进提案，粗占位边引擎落）')
+  assert.match(tpl, /1–3 起点/, '种子簇 = 1–3 起点 + 终点')
+  assert.match(tpl, /名字对账/, '受理侧名字对账指令（计划引用悬空节点整体拒收）')
+  assert.match(tpl, /沿用原 id/, '里程碑身份锚钉 id（修订沿用未变条目的 id）')
   assert.match(tpl, /学习者已有理解（Vault 先验）/, '先验段注入指令（尊重已有理解，不从零铺已会节点）')
   assert.match(tpl, /提案/, '双产物走人审提案通道（apply 前零 canonical 写入）')
+  assert.match(tpl, /同进同退/, '双提案同进同退（一起生效或一起放弃）')
 })
 
 // ---- v9 题目生成契约（ADR-0029/0030）：唯一答案填空 + 记法契约 + YAML 单引号规则 ----
