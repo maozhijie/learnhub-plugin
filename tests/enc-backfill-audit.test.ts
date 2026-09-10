@@ -124,6 +124,19 @@ test('invokesProjection：invokes 覆盖率投影——份额、自教不投影�
   )
 })
 
+test('invokesProjection：同概念多节点教 → 取闭包内最近的前置（depth 最大）', () => {
+  const graph = graphOf([
+    node({ name: '根', teaches: { 自然数: '知道' } }),
+    node({ name: '甲', pre: ['根'], teaches: { 自然数: '会用' } }),
+    node({ name: '乙', pre: ['甲'], teaches: { 质数: '会用' } }),
+  ])
+  assert.deepEqual(
+    Content.invokesProjection(graph, '乙', [{ invokes: '自然数' }]),
+    [{ node: '甲', w: 1, note: 'invokes 投影 1/1' }],
+    '螺旋图上根与甲都教自然数 → 投影到离乙最近的甲',
+  )
+})
+
 test('invokesProjection：零 invokes / 概念无闭包内前置教 → 零投影（合法空态）', () => {
   const graph = graphOf([
     node({ name: '甲' }),

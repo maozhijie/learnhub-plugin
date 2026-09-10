@@ -115,8 +115,8 @@ test('负路径：修复一次仍空 → 拒收并报告；全军仍空 → 整�
     assert.equal(fake.calls.length, 2, '修复恰好一次，不重试')
     assert.equal(r.added, 1, '已带 invokes 的题照常入库')
     assert.equal(r.rejected.length, 1)
-    assert.match(r.rejected[0]!.reason, /invokes 缺失/)
-    assert.match(r.rejected[0]!.reason, /修复一次仍空/)
+    assert.match(r.rejected[0]!.reason, /invokes 未标注恰一枚概念/)
+    assert.match(r.rejected[0]!.reason, /修复一次仍不合格/)
   })
   await withVault(VAULT, async ({ engine }) => {
     const allMissing = GOLD.replace('\n    invokes: 自然数', '').replace('\n    invokes: 质数', '')

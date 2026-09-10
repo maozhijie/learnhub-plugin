@@ -33,7 +33,7 @@
 - S17 `ui/src/components/md-chain.ts::MD_HTML_POLICY` —— markdown 链 skipHtml 策略（机器注释不显示；`tests/md-chain.test.ts`）
 - S18 `generation-jobs.ts::nextQueuedJob` —— 全局生成队列 FIFO 选取（queued 非终态不清理；`tests/generation-jobs.test.ts`）
 - S19 `notes.ts::hasReadyContent` —— 「已生成」三态标识数据源（任一节 ready；`tests/has-ready-content.test.ts`）
-- S20 `content.ts::candidateCallSites / encWeightOf / encPromotion` —— enc 反哺候选收集与闭包内提升（权重取调用强度；`tests/enc-backfill-audit.test.ts`）
+- S20 `content.ts::candidateCallSites / encPromotion / invokesProjection` —— enc 反哺候选收集、闭包内提升与 invokes 覆盖率投影（权重=invokes 覆盖率投影、无数据落缺省 1，#148 调用站阶梯退役；`tests/enc-backfill-audit.test.ts`）
 - S21 `content.ts::encBackfeedHints / encContentHints` —— enc 反哺写回建议 + 内容级背书 R14–R16（覆盖缺口/一致性/权重区分度；`tests/enc-backfill-audit.test.ts`）
 - S22 `sessions.ts::gateAdvice` —— A3 R 半 R 门建议生成（被 R-gate 拦下候选 → {前置, R, 到期题数}；`tests/a3-gate-advice.test.ts`）
 - S23 `sessions.ts::isStruggle / withinStruggleWindow / encRemedialAdvice` —— A3 F 半 struggle 判定（作答量门槛低数据静默、近期窗口）与 enc 祖先 w×(1−R) 降序定向建议（`tests/a3-gate-advice.test.ts`）

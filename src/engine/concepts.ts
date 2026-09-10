@@ -136,6 +136,12 @@ export function invokesUnregistered(q: { invokes?: unknown }, known: Set<string>
     : `invokes 概念「${name}」未在概念登记表在册——随生长批提案铸名（concepts 块）或改用在册名字（canonical/别名）`
 }
 
+/** 题目是否带一枚 invokes 概念标注（#148 出生打标的共用谓词：受理门、补标轮、
+ * 覆盖率投影四处同口径——缺席/空串/非字符串都算未标注）。 */
+export function invokesTagged(q: { invokes?: unknown }): boolean {
+  return typeof q.invokes === 'string' && !!q.invokes.trim()
+}
+
 /** 铸名冲突校验（propose 受理门，从严）：铸名的任何名字撞上既有登记表（含撞自己
  * 的 canonical）或批内其他铸名都是冲突——引用既有名字直接用，吞并既有条目走人审
  * 合并；同条目幂等重写不是铸名的语义（那是 apply 侧 applyConceptMints 的事）。 */

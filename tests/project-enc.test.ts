@@ -3,7 +3,7 @@
  * 每课程单个 pending edit 提案走人审（enc_backfill「单提案人审」先例）。
  *
  * - 纯函数：共现对提取（同日去重、minCo、稳定排序）、方向裁决（pre 闭包优先，
- *   启发式兜底）、共现→权重标尺（对齐 encWeightOf）。
+ *   启发式兜底）、共现→权重标尺（行为侧自有共现档，与内容侧 invokes 投影并行，#148）。
  * - 边界（ADR-0015 裁决 3/6）：enc 边归节点域，项目只产出候选提案；跨课程对不成边；
  *   已声明边不重复提名。零 schema 破坏——提案 = 既有 set_enc 整体替换 op，
  *   既有声明 enc 原样保留，人审走既有 graphApply（含审计门）。
@@ -54,7 +54,7 @@ test('orientCandidate：pre 闭包定方向；无 pre 关系不硬提边（降�
   assert.equal(orientCandidate('甲', '乙', () => false, () => '2026-09-03').hint_skill, '乙', '首日相同取后者为提示')
 })
 
-test('coWeight：对齐 encWeightOf 标尺（≥3 天 1.0 / 2 天 0.8 / 1 天 0.6）', () => {
+test('coWeight：行为侧自有共现档标尺（≥3 天 1.0 / 2 天 0.8 / 1 天 0.6）', () => {
   assert.equal(coWeight(1), 0.6)
   assert.equal(coWeight(2), 0.8)
   assert.equal(coWeight(3), 1.0)

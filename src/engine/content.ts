@@ -14,6 +14,7 @@ import { todayStr } from './dates.ts'
 import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { normChoice } from './grading.ts'
+import { invokesTagged } from './concepts.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../shared/content-renderers.ts'
 import type { GRegion, GNode, SectionManifest, EncEdge } from './types.ts'
@@ -1346,6 +1347,12 @@ cards:
     return sites
   }
 
+  /** 祖先序比较（确定性的深度浅→深、名字断平）——概念清单排序与投影选教者共用
+   * 同一 depth 口径（graph.depth：根=0 向下递增）。 */
+  private static byDepthDesc(node: Graph, a: string, b: string): number {
+    return (node.depth[a] ?? 0) - (node.depth[b] ?? 0) || a.localeCompare(b)
+  }
+
   /** 概念清单（#148 出生打标候选集）：本节点 teaches ∪ pre 闭包内各节点 teaches 的
    * 概念名，去重保序（本节点在前、祖先按深度浅→深、同深按名字）。清单 = 题目 invokes
    * 的合法取值域：本节概念供卡点聚合，前置概念供 enc 投影；全部在册（teaches 过受理门）。
@@ -1359,9 +1366,8 @@ cards:
       }
     }
     push(node)
-    // 祖先按 (depth, name) 确定序遍历（pred 闭包，isAncestor 同口径不含自身）
     const anc = graph.names.filter(n => n !== node && graph.isAncestor(n, node))
-      .sort((a, b) => (graph.depth[a] ?? 0) - (graph.depth[b] ?? 0) || a.localeCompare(b))
+      .sort((a, b) => Content.byDepthDesc(graph, a, b))
     for (const a of anc) push(a)
     return out
   }
@@ -1375,12 +1381,13 @@ cards:
   /** 题目 invokes 覆盖率投影（#148，enc 权重新语义）：节点题目集按一枚 invokes 概念
    * 聚合，投影到 pre 闭包内教该概念的前置节点 → enc 边候选。w = 该前置被 invokes 的
    * 题数 / 带 invokes 的题数（覆盖率份额，两位小数；每题恰一枚 → 份额和 ≤1）。本节点
-   * 自教的概念不投影（enc 指向前置组件，不是自身教学目标）；概念无闭包内前置教 →
-   * 不投影（invokes 本身仍供卡点聚合）。零 invokes → 零投影（合法空态，不造权重）。
-   * 同概念多节点教的取闭包内最近者（depth 浅优先、名字断平）。出生 w 随生长批经
-   * set_enc 写入作回退初值；归档题不进分母。 */
+   * 自教的概念不投影（enc 指向前置组件，不是自身教学目标），但仍进分母（自教稀释前置
+   * 覆盖）；概念无闭包内前置教 → 不投影（invokes 本身仍供卡点聚合）。零 invokes →
+   * 零投影（合法空态，不造权重）。同概念多节点教 → 取闭包内**最近**的前置（depth
+   * 最大 = 离本节点最近的教授者，螺旋图上即本节点实际踩着的那个版本；同深名字断平）。
+   * 出生 w 随生长批经 set_enc 写入作回退初值；归档题不进分母。 */
   static invokesProjection(graph: Graph, node: string, questions: Array<{ invokes?: unknown; archived?: unknown }>): EncEdge[] {
-    const invoked = questions.filter(q => !q.archived && typeof q.invokes === 'string' && q.invokes.trim())
+    const invoked = questions.filter(q => !q.archived && invokesTagged(q))
     if (!invoked.length) return []
     const total = invoked.length
     const cntByConcept = new Map<string, number>()
@@ -1388,14 +1395,14 @@ cards:
       const c = (q.invokes as string).trim()
       cntByConcept.set(c, (cntByConcept.get(c) ?? 0) + 1)
     }
-    // 概念 → 闭包内教它的前置节点（最近者；教的节点与闭包都没变时结果稳定）
+    // 概念 → 闭包内教它的最近前置（depth 最大；同深名字典序小者；教的节点与闭包没变时结果稳定）
     const holderOf = new Map<string, { node: string; depth: number }>()
     for (const c of cntByConcept.keys()) {
       let best: { node: string; depth: number } | null = null
       for (const m of graph.names) {
         if (m === node || !graph.isAncestor(m, node) || !(c in (graph.teachesOf[m] ?? {}))) continue
         const d = graph.depth[m] ?? 0
-        if (!best || d < best.depth || (d === best.depth && m.localeCompare(best.node) < 0)) best = { node: m, depth: d }
+        if (!best || d > best.depth || (d === best.depth && m.localeCompare(best.node) < 0)) best = { node: m, depth: d }
       }
       if (best) holderOf.set(c, best)
     }
@@ -1416,14 +1423,14 @@ cards:
 
   /** 本节点反哺候选 → 可提升的 enc 边：候选名解析回图节点（graph.nset）、只接受在本节点
    * pre 传递闭包内（isAncestor，与 E7 一致）的候选。权重 = invokes 覆盖率投影（#148：
-   * projW 给出该前置的出生 w 时随带投影 note），无 invokes 数据的候选边落 schema 缺省
+   * projByHolder 给出该前置的出生 w 时随带投影 note），无 invokes 数据的候选边落 schema 缺省
    * 权重 1——调用站阶梯已退役（#148），区分度告警归审计 R16。practice 型节点无候选块，
    * 保持 enc: [] 合法空态。 */
-  static encPromotion(graph: Graph, node: string, body: string, projW?: Map<string, { w: number; note?: string }>): EncEdge[] {
+  static encPromotion(graph: Graph, node: string, body: string, projByHolder?: Map<string, { w: number; note?: string }>): EncEdge[] {
     const out: EncEdge[] = []
     for (const cand of [...Content.candidateCallSites(body).keys()].sort((a, b) => a.localeCompare(b))) {
       if (!graph.nset.has(cand) || cand === node || !graph.isAncestor(cand, node)) continue
-      const proj = projW?.get(cand)
+      const proj = projByHolder?.get(cand)
       out.push({ node: cand, w: proj?.w ?? 1, ...(proj ? { note: proj.note } : {}) })
     }
     return out
