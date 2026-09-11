@@ -93,9 +93,26 @@ for tag, a, b in sections:
                 par -= 1
             elif ch == '{':
                 if ang == 0 and par == 0 and brace == 0:
-                    body_ci = cj
-                    break
-                brace += 1
+                    # 零深度 '{' 后若紧跟另一个 '{'，前者是对象字面量返回类型，跳过
+                    d2, k2 = 1, cj + 1
+                    while k2 < len(join):
+                        if join[k2] == '{':
+                            d2 += 1
+                        elif join[k2] == '}':
+                            d2 -= 1
+                            if d2 == 0:
+                                break
+                        k2 += 1
+                    n2 = k2 + 1
+                    while n2 < len(join) and join[n2] in ' \t\r\n':
+                        n2 += 1
+                    if n2 < len(join) and join[n2] == '{':
+                        cj = k2
+                    else:
+                        body_ci = cj
+                        break
+                else:
+                    brace += 1
             elif ch == '}':
                 brace -= 1
             cj += 1
@@ -128,7 +145,16 @@ for tag, a, b in sections:
         while li < len(join) and lineno[li] <= end_line:
             li += 1
 
-names = [b['name'] for b in blocks]
+# 节内类字段（private x = ...）与搬移方法同等保护：避免 this.e. 误改
+for _tag, _a, _b in sections:
+    for _i in range(_a, _b):
+        _m = re.match(r'^  (?:private |protected |readonly )*([a-zA-Z_]\w*)\s*[:=]\s*(?!.*\()', lines[_i])
+        if _m and _m.group(1) not in [b['name'] for b in blocks]:
+            blocks.append(dict(tag=_tag, start=_i, end=_i, sig='', private=True,
+                               is_async=False, is_gen=False, name=_m.group(1), body=[]))
+            blocks[-1]['field_only'] = True
+
+names = [b['name'] for b in blocks if not b.get('field_only')]
 assert len(names) == len(set(names)), '方法重名?'
 print('moved methods:', len(names))
 print('  ', ', '.join(names))
@@ -245,7 +271,7 @@ def transform(body_text):
     return t.replace('\x00', 'this.')
 
 class_chunks = []
-blk_by_start = {blk['start']: blk for blk in blocks}
+blk_by_start = {blk['start']: blk for blk in blocks if not blk.get('field_only')}
 for tag, a, b in sections:
     chunk_lines = []
     i = a + 1

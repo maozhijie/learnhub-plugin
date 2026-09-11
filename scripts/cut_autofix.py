@@ -12,6 +12,8 @@ def save(p, s): io.open(p, 'w', encoding='utf8', newline='\n').write(s)
 # ---- 引擎导出表：名字 → (模块相对路径, 'type'|'value') ----
 exports = {}
 for f in sorted(glob.glob('src/engine/*.ts')) + sorted(glob.glob('src/engine/views/*.ts')):
+    if os.path.basename(f) in ('index.ts',) or os.path.basename(f) == os.path.basename(lord_path):
+        continue  # 门面自身与领主自身不作符号源（R6：子系统不回引门面）
     rel = './' + os.path.basename(f)
     if os.path.dirname(f).replace('\\', '/').endswith('views'):
         rel = './views/' + os.path.basename(f)
