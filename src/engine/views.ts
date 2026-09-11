@@ -310,47 +310,19 @@ export interface GraphPathRelatedResult {
 export type GraphPathResult = GraphPathUnrelatedResult | GraphPathRelatedResult
 
 // ---- 提案门禁（graphPropose / graphApply / graphEncBackfill；proposals.GraphProposals）----
+// Graph*ProposalResult 四型住 proposals.ts（提案域词汇，#152 刀 5 归位——projects 的
+// 窄面引用它们，经 views barrel 会绕出类型环）。
+export type {
+  GraphEditProposalResult, GraphSeedProposalResult, GraphEnrichProposalResult, GraphProposeResult,
+} from './proposals.ts'
 // 图谱域：edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
 
 /** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。
  * operator/disagreement = 生长批受理时随行（#145 note 区算子标签；disagreement=带分歧声明）。
  * compass_rewrite（受理=意图）与 apply 侧 compass_rewritten（已落盘=事实）分相位命名。 */
-export interface GraphEditProposalResult {
-  id: number
-  kind: 'edit'
-  course: string
-  ops: number
-  operator?: GrowthOperator
-  disagreement?: boolean
-  compass_rewrite?: boolean
-  warns?: string[]
-}
-
 /** 种子提案受理（proposeSeed，#142）：课程新入口，一次人审即开工。
  * prior_feed_unresponded = ≥0.7 先验候选未被结构回应的条数（喂料分流，非阻可见）。 */
-export interface GraphSeedProposalResult {
-  id: number
-  kind: 'seed'
-  course: string
-  mode: 'new' | 'reseed'
-  goal_type: 'capability' | 'coverage'
-  endpoint: string
-  starts: number
-  worksheet?: number
-  prior_feed_unresponded: number
-  warns?: string[]
-}
-
 /** 富化提案受理（proposeEnrich，覆盖层通道）：files = 指纹锚定的正典文件数。 */
-export interface GraphEnrichProposalResult {
-  id: number
-  kind: 'enrich'
-  course: string
-  fields: number
-  files: number
-}
-
-export type GraphProposeResult = GraphEditProposalResult | GraphSeedProposalResult | GraphEnrichProposalResult
 
 export interface GraphApplyEditResult {
   course: string
@@ -953,70 +925,11 @@ export type {
   HabitListItem, HabitsListDoc, HabitCurvePoint, HabitShowDoc,
 } from './views/learner.ts'
 
-// ---- 项目域（P 区 / ADR-0015）：2×2 交叉视图（P-7 #98）----
-// 自包含形状：不引 projects.ts / project-exec.ts——二者带 node 侧值依赖（fs/store），
-// 被 ui tsc 程序解析会整片报 TS5097/TS2307（views.ts 既有纪律：只依赖无值导入的
-// 类型模块）。字面量联合与 projects.FadingTier / project-exec.ProjectExecRec 同步维护。
+// ---- 项目域（P 区 / ADR-0015）：2×2 交叉视图——视图类型归档 views/project.ts（#152 刀 5）----
 
-export type ProjectLifecycle = 'active' | 'paused' | 'delivered' | 'archived'
-export type FadingTier = '骨架' | '补全' | '独立'
-
-/** 项目执行事件（projects/<id>/exec.jsonl 逐行的视图镜像）。 */
-export interface ProjectExecRec {
-  ts: string
-  day: string
-  rating: number
-  source: string
-  nodes: string[]
-  tier: FadingTier
-  note?: string
-}
-
-/** 单个节点的练习证据回流回执（projectExecLog；#149 行使即回流——节点级单向复制进
- * 练习证据通道；粗 pre 占位边不是回流通道，行使记录只留 exec 流水）。 */
-export interface ProjectExecBackflow {
-  course: string
-  node: string
-  ema_before: number
-  ema_after: number
-  mastery_after: number
-}
-
-/** 一次项目执行事件的落流结果（projectExecLog；零 XP/零 canonical）。 */
-export interface ProjectExecResult {
-  project: string
-  day: string
-  rating: number
-  source: string
-  /** 评级映射后的 0-1 分数（回流写入节点 practice_ema 的分值）。 */
-  score: number
-  nodes: string[]
-  /** 被行使的既有 enc 边数（两端都在事件 nodes 内；enc 面观测——回流已改节点级）。 */
-  edges: number
-  backflow: ProjectExecBackflow[]
-  /** 行使节点笔记缺失/不可用时的跳过清单（Missing 合法空态）。 */
-  skipped: Array<{ course: string; node: string; reason: string }>
-}
-
-/** 项目 2×2 交叉视图（projectCrossView；项目面板核心视图，只读）。 */
-export interface ProjectCrossDoc {
-  project: string
-  name: string
-  lifecycle: ProjectLifecycle
-  tier: FadingTier
-  /** X 轴：陈述性掌握（关联节点 masteryOfFm 均值；无关联节点 = null）。 */
-  x: { value: number | null; caliber: string }
-  /** Y 轴：项目执行证据（事件分 EMA 0.7/0.3；无事件 = null）。 */
-  y: { value: number | null; caliber: string }
-  quadrant: { key: string; label: string; hint: string }
-  linked_nodes: Array<{ course: string; node: string; mastery: number }>
-  exec: { count: number; ema: number | null; avg: number | null }
-  /** 只读入档推荐（challenge point：引擎提议学习者可改，永不写状态、永不门禁）。 */
-  recommendation: { current: FadingTier; recommended: FadingTier; action: 'promote' | 'demote' | 'hold'; reasons: string[] }
-  /** 最近事件（尾部 20 条，新→旧）。 */
-  events: ProjectExecRec[]
-  thresholds: { axis: number; promote_min_events: number; promote_score: number; demote_score: number }
-}
+export type {
+  ProjectLifecycle, FadingTier, ProjectExecRec, ProjectExecBackflow, ProjectExecResult, ProjectCrossDoc,
+} from './views/project.ts'
 
 // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）——视图类型归档 views/learner.ts（#152 刀 4）----
 

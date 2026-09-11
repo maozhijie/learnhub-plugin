@@ -33,8 +33,8 @@
 import { existsSync } from 'node:fs'
 import { mkdir, appendFile, readFile } from 'node:fs/promises'
 import { nextEma } from './grading.ts'
-import { FADING_TIERS } from './projects.ts'
-import type { FadingTier } from './projects.ts'
+import { FADING_TIERS } from './types.ts'
+import type { FadingTier } from './types.ts'
 import { CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
 import type { Paths } from './paths.ts'
 

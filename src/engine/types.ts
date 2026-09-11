@@ -295,3 +295,8 @@ export interface ExperimentDef {
  * 留在原地会锁死 learner-cards→self-note 的正向导入（R7）。 */
 export type LearnerCardKind = 'recall_cue' | 'cloze_rewrite' | 'self_explain'
 export const LEARNER_CARD_KINDS: LearnerCardKind[] = ['recall_cue', 'cloze_rewrite', 'self_explain']
+
+/** 项目渐退档（P 区 / ADR-0015；#152 刀 5 自 projects.ts 归位中立层——project-exec
+ * 反向值导入该常量，留原地会锁死 projects→project-exec 的正向导入）。 */
+export type FadingTier = '骨架' | '补全' | '独立'
+export const FADING_TIERS: FadingTier[] = ['骨架', '补全', '独立']

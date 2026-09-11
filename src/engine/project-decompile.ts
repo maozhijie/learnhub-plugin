@@ -20,8 +20,6 @@
  * 校验、名字对账门、修复轮提示词拼装；编排（检索/提案受理/联动）在引擎门面
  * projectDecompile / projectDecompileApply。
  */
-import { validatePlanArtifact } from './projects.ts'
-import type { PlanItem } from './projects.ts'
 import { validateSeedProposal } from './seed.ts'
 import type { SeedProposalSpec } from './seed.ts'
 import { priorTerms } from './vault-prior.ts'
@@ -158,4 +156,90 @@ export function reconcilePlanNodes(
  * 「生成→门禁→修复一轮」机械）。 */
 export function decompileRepairPrompt(pack: string, previous: string, errors: string[]): string {
   return `${pack}\n\n## 上一次输出未过双产物校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`
+}
+
+export interface PlanItem {
+  id: string
+  name: string
+  task_class: string
+  acceptance_hints: string
+  /** 过点定价申报（分钟，正数；缺省回落 XP_PER_MILESTONE_DEFAULT）。 */
+  est?: number
+  /** 关联课程节点（节点名或「课程/节点」；抽题/行为扫描按此解析，空 = 未关联）。 */
+  nodes?: string[]
+}
+
+
+export function validatePlanItems(raw: unknown, where = 'plan'): { errors: string[]; plan: PlanItem[] } {
+  const errors: string[] = []
+  const plan: PlanItem[] = []
+  if (!Array.isArray(raw)) {
+    return { errors: [`${where}: 必须是列表`], plan }
+  }
+  const ids = new Set<string>()
+  raw.forEach((item, i) => {
+    const n = i + 1
+    if (typeof item !== 'object' || item === null) {
+      errors.push(`${where}.${n}: 必须是映射`)
+      return
+    }
+    const e = item as Record<string, unknown>
+    const id = typeof e.id === 'string' ? e.id.trim() : ''
+    const name = typeof e.name === 'string' ? e.name.trim() : ''
+    const taskClass = typeof e.task_class === 'string' ? e.task_class.trim() : ''
+    const hints = typeof e.acceptance_hints === 'string' ? e.acceptance_hints.trim() : ''
+    if (!id) errors.push(`${where}.${n}.id: 不能为空`)
+    else if (ids.has(id)) errors.push(`${where}.${n}.id「${id}」重复`)
+    else ids.add(id)
+    if (!name) errors.push(`${where}.${n}.name: 不能为空`)
+    if (!taskClass) errors.push(`${where}.${n}.task_class: 不能为空（任务类由简到繁的梯度描述）`)
+    if (!hints) errors.push(`${where}.${n}.acceptance_hints: 不能为空（验收要点草案）`)
+    // 可选域（#93/#94）：est 正数申报；nodes 非空字符串列表（去重保序）
+    let est: number | undefined
+    if (e.est !== undefined) {
+      if (typeof e.est !== 'number' || !Number.isFinite(e.est) || e.est <= 0) {
+        errors.push(`${where}.${n}.est: 必须是正数（分钟）`)
+      } else {
+        est = Math.round(e.est)
+      }
+    }
+    let nodes: string[] | undefined
+    if (e.nodes !== undefined) {
+      if (!Array.isArray(e.nodes)) {
+        errors.push(`${where}.${n}.nodes: 必须是列表`)
+      } else {
+        const seen = new Set<string>()
+        nodes = []
+        for (const v of e.nodes) {
+          if (typeof v !== 'string' || !v.trim()) {
+            errors.push(`${where}.${n}.nodes: 条目必须是非空字符串`)
+            nodes = undefined
+            break
+          }
+          const t = v.trim()
+          if (!seen.has(t)) {
+            seen.add(t)
+            nodes.push(t)
+          }
+        }
+        if (nodes && !nodes.length) nodes = undefined
+      }
+    }
+    plan.push({
+      id, name, task_class: taskClass, acceptance_hints: hints,
+      ...(est !== undefined ? { est } : {}),
+      ...(nodes ? { nodes } : {}),
+    })
+  })
+  return { errors, plan }
+}
+
+export function validatePlanArtifact(doc: unknown, projectId: string): { errors?: string[]; plan?: PlanItem[] } {
+  if (typeof doc !== 'object' || doc === null) return { errors: ['(顶层): 必须是映射'] }
+  const d = doc as Record<string, unknown>
+  if (d.project !== projectId) return { errors: [`project: 「${String(d.project)}」与目标项目「${projectId}」不一致`] }
+  const plan = validatePlanItems(d.plan)
+  if (plan.errors.length) return { errors: plan.errors }
+  if (!plan.plan.length) return { errors: ['plan: 不能为空（撤销计划请改用生命周期 archived，不 empty-plan 覆写）'] }
+  return { plan: plan.plan }
 }

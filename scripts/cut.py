@@ -215,10 +215,13 @@ for tag, a, b in sections:
         if blk['private'] and used_outside(blk['name']) == 0:
             continue
         call = 'this.%s.%s(%s)' % (spec.field_name, blk['name'], ', '.join(a.strip() for a in args))
-        if ret == '' or ret == 'void':
+        if ret == 'void':
             body = '    %s' % call
-        elif ret == 'Promise<void>':
-            body = '    await %s' % call
+        elif ret == '' and blk['is_async']:
+            # 原方法未标注返回类型（TS 推断）：return 兼容 void 与有值两种
+            body = '    return %s' % call
+        elif ret == '' or ret == 'Promise<void>':
+            body = ('    await %s' % call) if blk['is_async'] else ('    %s' % call)
         else:
             body = '    return %s' % call
         one = blk['sig']

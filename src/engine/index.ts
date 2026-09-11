@@ -60,7 +60,7 @@ import type { ComplexityTier } from './complexity.ts'
 import { GraphProposals, validateEditProposal, addNodeCountOf } from './proposals.ts'
 import type { ApplyAudit, EditProposalSpec, EnrichFieldEntry, GrowthNote } from './proposals.ts'
 import type { LlmComplete } from './llm.ts'
-import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier, planRevisionDiff } from './projects.ts'
+import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier, planRevisionDiff, ProjectSubsystem } from './projects.ts'
 import type { PlanRevisionDiff, PlanGrowthTrigger } from './projects.ts'
 import { decompileGoalOf, decompileTerms, splitDecompileDoc, decompileRepairPrompt, reconcilePlanNodes, splitNodeSpec } from './project-decompile.ts'
 import type { DecompileDoc } from './project-decompile.ts'
@@ -242,6 +242,8 @@ export class LearnhubEngine {
   private channels: ChannelsSubsystem
   /** Learner 子系统（学习者输出域，#152 刀 4）：窄面注入构造，见 constructor 尾部。 */
   private learner: LearnerSubsystem
+  /** Project 子系统（项目域，#152 刀 5）：窄面注入构造，见 constructor 尾部。 */
+  private project: ProjectSubsystem
   /** vault 根目录（笔记源注册路径归一用；posix 规范形态）。 */
   readonly vaultRoot: string
   /** schema 版本块（#138 启动硬门的解析产物；breaks 断裂史为纯档案，引擎零消费）。 */
@@ -336,6 +338,20 @@ export class LearnhubEngine {
       sedimentSettle: () => this.sedimentSettle(),
       compassEtaRefresh: (courseKey, opts) => this.compassEtaRefresh(courseKey, opts),
       experimentPropose: (templateId, course) => this.experimentPropose(templateId, course),
+      refreshSourceFingerprints: absPaths => this.refreshSourceFingerprints(absPaths),
+    })
+    this.project = new ProjectSubsystem({
+      store: this.store, paths: this.paths, registry: this.registry,
+      bank: this.bank, proposals: this.proposals, projects: this.projects, noteManifest: this.noteManifest,
+      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng,
+      learningDay: () => this.learningDay(),
+      loadView: course => this.loadView(course),
+      enabledCourses: () => this.enabledCourses(),
+      loadPrompt: kind => this.loadPrompt(kind),
+      locateNode: nodeSpec => this.locateNode(nodeSpec),
+      graphPropose: (kind, yamlText) => this.graphPropose(kind, yamlText),
+      nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
+      saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
       refreshSourceFingerprints: absPaths => this.refreshSourceFingerprints(absPaths),
     })
   }
@@ -1093,371 +1109,91 @@ export class LearnhubEngine {
 
   // ---- 项目域（P 区 / ADR-0015；#92）----
 
+  // 以下 项目域/过点对账/执行事件流/目标反编译 四节方法体住 ProjectSubsystem（projects.ts，#152 刀 5 聚合+转发）
+
   async projectCreate(input: { name: string; goal: string; tier?: FadingTier; id?: string }): Promise<ProjectFm> {
-    return this.projects.create(input)
+    return this.project.projectCreate(input)
   }
 
   async projectList(): Promise<ProjectFm[]> {
-    return this.projects.list()
+    return this.project.projectList()
   }
 
   async projectShow(id: string): Promise<ProjectView> {
-    return this.projects.view(id)
+    return this.project.projectShow(id)
   }
 
-  /** 追加一条项目日志（V-5 #113）：学习者自由记录；日志可经笔记源注册通道注册为
-   * 复习源，引擎写入后顺带刷新已注册指纹（自己的写不算漂移）。 */
   async projectLogAppend(id: string, text: string, today?: string): Promise<{ project: string; path: string; day: string }> {
-    const { today: day } = await this.learningDay()
-    today ??= day
-    const p = await this.projects.appendLog(id, text, today)
-    await this.refreshSourceFingerprints([p])
-    return { project: id, path: p, day: today }
+    return this.project.projectLogAppend(id, text, today)
   }
 
-  /** 读项目日志全文（未写过 = null 合法空态，不建空文件）。 */
   async projectLog(id: string): Promise<{ project: string; path: string; log: string | null }> {
-    return { project: id, path: this.paths.projectLogPath(id), log: await this.projects.readLog(id) }
+    return this.project.projectLog(id)
   }
 
-  /** 引擎写「注册豁免区」文件（我的产出/、项目日志）后刷新已注册源指纹（#107/#113）：
-   * 引擎自己的写不算内容漂移——漂移语义只留给引擎之外的手改。该路径未注册或文件
-   * 缺失时静默跳过（刷新是写侧卫生步骤，不是独立动作）。 */
   private async refreshSourceFingerprints(absPaths: string[]): Promise<void> {
-    if (!absPaths.length) return
-    const rels = absPaths.map(p => p.replace(/\\/g, '/').slice(this.vaultRoot.length + 1))
-    const manifest = await this.noteManifest.load()
-    let changed = false
-    for (const item of manifest.sources) {
-      if (!rels.includes(item.path)) continue
-      const abs = `${this.vaultRoot}/${item.path}`
-      if (!existsSync(abs)) continue
-      const fp = fingerprintOf(await readFile(abs, 'utf8'))
-      if (fp !== item.fingerprint) {
-        item.fingerprint = fp
-        changed = true
-      }
-    }
-    if (changed) await this.noteManifest.save(manifest)
+    await this.project.refreshSourceFingerprints(absPaths)
   }
 
-  /** 生命周期变更（ADR-0015：无不可逆转移，任意状态可重开回 active）。 */
   async projectSetLifecycle(id: string, lifecycle: string): Promise<ProjectFm> {
-    if (!isProjectLifecycle(lifecycle)) {
-      throw new Error(`[project-lifecycle] 非法生命周期: ${lifecycle}（允许 ${PROJECT_LIFECYCLES.join('/')}）`)
-    }
-    const fm = await this.projects.load(id)
-    const next = { ...fm, lifecycle }
-    await this.projects.saveFm(id, next)
-    return next
+    return this.project.projectSetLifecycle(id, lifecycle)
   }
 
-  /** 渐退档变更（ADR-0015：档位移动判据归执行事件流，v1 学习者/agent 显式设定；
-   * 已生成产物不回溯——新档只作用于后续生成）。 */
   async projectSetTier(id: string, tier: string): Promise<ProjectFm> {
-    if (!isFadingTier(tier)) {
-      throw new Error(`[project-tier] 非法档位: ${tier}（允许 ${FADING_TIERS.join('/')}）`)
-    }
-    const fm = await this.projects.load(id)
-    const next = { ...fm, tier }
-    await this.projects.saveFm(id, next)
-    return next
+    return this.project.projectSetTier(id, tier)
   }
 
-  /** 计划生成提示词：模板 + 项目档案 + 现状计划（修订时对照）。 */
   async projectPlanPack(id: string): Promise<string> {
-    const fm = await this.projects.load(id)
-    const tpl = await this.loadPrompt('项目里程碑计划')
-    const current = fm.plan.length
-      ? YAML.stringify({ plan: fm.plan })
-      : '（空——本项目还没有里程碑计划，本次为初次规划）'
-    return `${tpl}\n\n---\n\n## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 渐退档：${fm.tier}\n- 目标描述：\n\n${fm.goal}\n\n## 现状计划（修订时给出完整新版本，不保守微调）\n\n${current}`
+    return this.project.projectPlanPack(id)
   }
 
   async projectPlanPropose(id: string, yamlText: string) {
-    return this.projects.proposePlan(id, yamlText)
+    return this.project.projectPlanPropose(id, yamlText)
   }
 
-  /** 里程碑产物生成提示词：模板 + 项目档案 + 计划全景 + 本里程碑任务与档位。 */
   async projectMilestonePack(id: string, milestoneId: string): Promise<string> {
-    const view = await this.projects.view(id)
-    const fm = view.fm
-    const hit = view.milestones.find(m => m.id === milestoneId)
-    if (!hit) {
-      throw new Error(`[project-milestone-pack] 项目「${id}」的计划里没有里程碑「${milestoneId}」。`)
-    }
-    const tpl = await this.loadPrompt('项目里程碑产物')
-    const planTable = view.milestones
-      .map((m, i) => `${i + 1}. ${m.id}｜${m.name}｜任务类：${m.task_class}${m.generated ? '｜已生成' : ''}`)
-      .join('\n')
-    return `${tpl}\n\n---\n\n## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 目标描述：\n\n${fm.goal}\n\n## 里程碑计划（本里程碑的位置）\n\n${planTable}\n\n## 本里程碑任务\n\n- 里程碑 id：${hit.id}\n- 名称：${hit.name}\n- 任务类：${hit.task_class}\n- 验收要点草案：${hit.acceptance_hints}\n- 当前档位：${fm.tier}（产物按此档生成，只写这一档）\n${hit.generated ? `- 注意：该里程碑已有产物，本次是按档重生成——将走提案通道，apply 前旧文有快照。\n` : ''}`
+    return this.project.projectMilestonePack(id, milestoneId)
   }
 
-  /** 里程碑产物落盘分发：未生成 = 直落（首生）；已生成 = 自动转重生成提案（带快照覆盖）。 */
   async projectMilestoneWrite(id: string, milestoneId: string, md: string): Promise<
     { written: string; tier: FadingTier } | { proposed: number; kind: 'project_milestone'; file: string }
   > {
-    return this.projects.writeMilestone(id, milestoneId, md)
+    return this.project.projectMilestoneWrite(id, milestoneId, md)
   }
-
   // ---- 过点对账 / 检索点 / 行为推断 enc（P-3/P-4/P-6；#94/#93/#96）----
 
-  /** 项目关联节点解析（计划声明 ∪ 调用补充；ADR-0015 裁决 6：关联可显式声明，永不门禁）。
-   * 定位失败 fail loud 并点名——悬空关联先修计划，不在消费面静默降级。 */
-  private async resolveProjectNodes(specs: string[]): Promise<Array<{ course: CourseEntry; node: string }>> {
-    const out: Array<{ course: CourseEntry; node: string }> = []
-    const seen = new Set<string>()
-    for (const spec of specs) {
-      const hit = await this.locateNode(spec)
-      const key = `${hit.course.name}/${hit.node}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      out.push(hit)
-    }
-    return out
-  }
-
-  private planItemOf(fm: ProjectFm, milestoneId: string, tool: string): PlanItem {
-    const item = fm.plan.find(m => m.id === milestoneId)
-    if (!item) {
-      throw new Error(`[${tool}] 项目「${fm.id}」的计划里没有里程碑「${milestoneId}」（先修订计划）。`)
-    }
-    return item
-  }
-
-  /** 关联节点的活跃题池（pass 定价校准与检索点抽题共用）：逐节点读题库、滤归档。
-   * course/node 与题目一起返回，消费方各取所需。 */
-  private async loadActivePools(linked: Array<{ course: CourseEntry; node: string }>): Promise<Array<{ course: CourseEntry; node: string; questions: BankQuestion[] }>> {
-    const pools: Array<{ course: CourseEntry; node: string; questions: BankQuestion[] }> = []
-    for (const { course, node } of linked) {
-      const bank = await this.bank.load(this.paths.courseRoot(course.root), node)
-      const active = bank.questions.filter(q => !q.archived)
-      if (active.length) pools.push({ course, node, questions: active })
-    }
-    return pools
-  }
-
-  /** 显式过点（#94 / 设计 §5）：里程碑完成 = 学习者显式动作，无清单门禁、无题目门禁。
-   * 定价 = milestonePrice（计划 est 申报 × 关联节点题池 FSRS 难度校准；无申报/无证据
-   * 回落缺省/中性）——校准池锁定为计划条目 nodes 声明，调用方不能临时加池（过点即
-   * 锁定，事后注水＝账本不诚实）。对账流水 journal kind='milestone_settle' 一次性入账
-   * 并锁定（重复过点被守卫拒绝）。这是项目域唯一获准写 journal 的动作：真实投入的
-   * 显式陈述，进账本汇总与 streak 口径（ADR-0015 裁决 5 的 Settle 新粒度；
-   * 计划/产物/检索点仍零 journal 写入）。 */
   async projectMilestonePass(
     id: string, milestoneId: string,
   ): Promise<{ project: string; milestone: string; name: string; xp: number; detail: string }> {
-    const fm = await this.projects.load(id)
-    const item = this.planItemOf(fm, milestoneId, 'project-pass')
-    const linked = await this.resolveProjectNodes(item.nodes ?? [])
-    const pools = await this.loadActivePools(linked)
-    const pool = pools.flatMap(p => p.questions)
-    const calibration = pool.length ? difficultyCalibration(pool) : 1
-    const price = milestonePrice(item.est, calibration)
-    const detail = `N₀=${item.est ?? XP_PER_MILESTONE_DEFAULT}${item.est ? '（est 申报）' : '（缺省，无 est 申报）'}`
-      + ` × k=${calibration.toFixed(2)}（${pool.length ? `${linked.length} 个关联节点题池校准` : '无关联题池证据，取中性'}）= ${price}，定价锁定`
-    const r = await this.projects.passMilestone(id, milestoneId, { xp: price, detail })
-    return { project: r.project, milestone: r.milestone, name: r.name, xp: r.xp, detail }
+    return this.project.projectMilestonePass(id, milestoneId)
   }
 
-  /** 发起里程碑检索点会话（#93）：产物已生成（交付物在手）才受理；从关联节点题池
-   * 抽题（跨池轮转、未作答优先、due 最早优先），抽题流水落 projects/<id>/recall.jsonl。
-   * 零 XP、零 FSRS、零 journal——检索点只服务知识底座，不作项目验收标准。 */
   async projectMilestoneRecall(
     id: string, milestoneId: string, opts: { nodes?: string[]; limit?: number } = {},
   ): Promise<{ project: string; milestone: string; file: string; questions: Array<RecallQuestion & { answer: BankQuestion['answer']; options?: string[]; explanation?: string }> }> {
-    const delivered = await this.projects.isMilestoneDelivered(id, milestoneId)
-    if (!delivered.delivered) {
-      throw new Error(`[project-recall] 里程碑「${milestoneId}」的产物尚未生成——检索点在交付物在手时发起（先 learnhub_project_milestone_generate）。`)
-    }
-    const fm = await this.projects.load(id)
-    const item = this.planItemOf(fm, milestoneId, 'project-recall')
-    const specs = [...new Set([...(item.nodes ?? []), ...(opts.nodes ?? [])])]
-    if (!specs.length) {
-      throw new Error('[project-recall] 该里程碑没有关联节点：计划条目 nodes 或调用参数 nodes 至少给一个（节点名或「课程/节点」）。')
-    }
-    const linked = await this.resolveProjectNodes(specs)
-    const pools = await this.loadActivePools(linked)
-    const byKey = new Map<string, BankQuestion>()
-    for (const p of pools) {
-      for (const q of p.questions) byKey.set(`${p.course.name}\u0000${p.node}\u0000${q.id}`, q)
-    }
-    if (!pools.length) {
-      throw new Error('[project-recall] 关联节点都没有可用题目（题库为空或全归档）——先出题，或修订计划的 nodes 关联。')
-    }
-    const drawn = drawRecallQuestions(pools.map(p => ({ course: p.course.name, node: p.node, questions: p.questions })), opts.limit ?? 5, this.jolRng)
-    await appendRecallRec(this.paths, id, {
-      ts: nowIso(), kind: 'draw', milestone: milestoneId, file: delivered.file,
-      nodes: specs, questions: drawn,
-    })
-    const questions = drawn.map(d => {
-      const q = byKey.get(`${d.course}\u0000${d.node}\u0000${d.qid}`)!
-      return { ...d, answer: q.answer, ...(q.options ? { options: q.options } : {}), ...(q.explanation ? { explanation: q.explanation } : {}) }
-    })
-    return { project: id, milestone: milestoneId, file: delivered.file, questions }
+    return this.project.projectMilestoneRecall(id, milestoneId, opts)
   }
 
-  /** 检索点自述落档（#93）：学习者口述「到目前为止的关键决策」，追加进 recall.jsonl。
-   * 判词不评、canonical 不碰——自述是给复盘看的，不是给调度喂的。 */
   async projectRecallReflect(id: string, milestoneId: string, narration: string): Promise<{ project: string; milestone: string; recorded: true }> {
-    const trimmed = narration?.trim()
-    if (!trimmed) throw new Error('[project-recall] 自述不能为空（关键决策口述原文）。')
-    const fm = await this.projects.load(id)
-    this.planItemOf(fm, milestoneId, 'project-recall')
-    await appendRecallRec(this.paths, id, { ts: nowIso(), kind: 'reflect', milestone: milestoneId, narration: trimmed })
-    return { project: id, milestone: milestoneId, recorded: true }
+    return this.project.projectRecallReflect(id, milestoneId, narration)
   }
 
-  /** 检索点流水读取（#93；面板/复盘消费）。 */
   async projectRecallLog(id: string): Promise<RecallRec[]> {
-    await this.projects.load(id)
-    return recallRecsAll(this.paths, id)
+    return this.project.projectRecallLog(id)
   }
-
   // ---- 执行事件流 / Mastery 交叉 2×2（P-7 / #98 / ADR-0015 §3/§4/§8）----
 
-  /** 记一条项目执行事件（P-7 #98；#149 stub 回流修订；#146 复诊闸）：项目自己的事件流
-   * （projects/<id>/exec.jsonl，与节点练习证据通道是两条流，ADR-0015 §4）。评级 1-4
-   * 整数 + 来源 auto/self/ai——auto 必须带可观测证据走确定性映射（ratingFromEvidence，
-   * skills 先例）；自评/ai 照收（ADR-0016 自报即可信）。
-   * 上行回流 = **行使即回流（节点级，#149）**：事件 nodes 解析到图上的每个节点（含种子簇
-   * stub——有笔记有身份）各回流一次练习证据（applyPracticeEvidence 单向复制，同节点
-   * 去重）；粗 pre 占位边不是回流通道（行使记录留在 exec 流水，边零证据写入——
-   * 「粗 pre 只记流不回流」）；probation 在途的插入节点不回流（#146 复诊闸，只记流，
-   * proven 后恢复）；被行使的既有 enc 边数随结果带出（enc 面观测，回流不再以 enc 边
-   * 为门）。零 XP、零 journal、零 review-log、零 sessions/srs（ADR-0015 §7）。 */
   async projectExecLog(
     id: string,
     input: { source: string; rating?: number; evidence?: ExecutionEvidence; nodes?: string[]; note?: string },
   ): Promise<ProjectExecResult> {
-    const fm = await this.projects.load(id)
-    const source = input.source
-    if (!(source === 'auto' || source === 'self' || source === 'ai')) {
-      throw new Error(`[project-exec] source 只能是 auto/self/ai（收到 ${String(source)}）。`)
-    }
-    let rating: unknown = input.rating
-    if (source === 'auto') {
-      if (!input.evidence) {
-        throw new Error("[project-exec] source='auto' 需要可观测证据（evidence.accuracy/self_help）——确定性映射是自动来源的唯一入口；无可观测判据时改用自评档（source='self' + rating）。")
-      }
-      rating = ratingFromEvidence(input.evidence)
-    }
-    const v = validateExecEvent(rating, source, input.nodes ?? [], input.note, 'project-exec')
-    const { today } = await this.learningDay()
-    const score = execRatingScore(v.rating)
-
-    // 行使判定与节点级回流：逐课程载图（enc 边归节点域、不可跨图），每节点至多回流一次
-    const linked = v.nodes.length ? await this.resolveProjectNodes(v.nodes) : []
-    const byCourse = new Map<string, string[]>()
-    for (const { course, node } of linked) {
-      const list = byCourse.get(course.name) ?? []
-      list.push(node)
-      byCourse.set(course.name, list)
-    }
-    const backflow: ProjectExecBackflow[] = []
-    const skipped: Array<{ course: string; node: string; reason: string }> = []
-    let edges = 0
-    for (const [courseName, nodes] of byCourse) {
-      const c = await this.registry.get(courseName)
-      if (!c) continue
-      const { graph } = await this.loadView(c)
-      // probation 在途行使闸（#146）：实验中的插入节点不回流练习证据（行使照落 exec 流水）。
-      const gated = foldProbation(await readProbationLedger(this.paths, c.root))
-      const gatedNodes = new Set(gated.inFlight.map(e => e.node))
-      // enc 面观测：被行使的既有 enc 边数（两端都在 nodes 内）；回流已改节点级，边数只作观测
-      edges += exercisedEncEdges(nodes, holder => (graph.encOf[holder] ?? []).map(e => e[0])).length
-      for (const node of nodes) {
-        if (gatedNodes.has(node)) {
-          skipped.push({
-            course: courseName, node,
-            reason: 'probation 在途（实验中的插入节点）——行使只记流不回流练习证据，proven 后恢复',
-          })
-          continue
-        }
-        const note = await this.nodeNote(c, graph, node)
-        if (!note.fm) {
-          skipped.push({
-            course: courseName, node,
-            reason: '节点笔记缺失或 frontmatter 不可用——练习证据无处落，跳过（Missing 合法空态）',
-          })
-          continue
-        }
-        const before = note.fm.practice_ema ?? 0
-        const next = applyPracticeEvidence(note.fm, score)
-        await this.saveNodeNote(note.path, next, note.body)
-        backflow.push({
-          course: courseName, node,
-          ema_before: before, ema_after: next.practice_ema ?? 0, mastery_after: masteryOfFm(next),
-        })
-      }
-    }
-
-    await appendExecRec(this.paths, id, {
-      ts: nowIso(), day: today, rating: v.rating, source: v.source,
-      nodes: v.nodes, tier: fm.tier, ...(v.note ? { note: v.note } : {}),
-    })
-    backflow.sort((a, b) => a.course.localeCompare(b.course) || a.node.localeCompare(b.node))
-    return {
-      project: id, day: today, rating: v.rating, source: v.source, score,
-      nodes: v.nodes, edges, backflow, skipped,
-    }
+    return this.project.projectExecLog(id, input)
   }
 
-  /** 项目 2×2 交叉视图（P-7 #98；项目面板核心视图，只读）：X = 关联节点 masteryOfFm
-   * 均值（陈述性掌握），Y = 执行事件分 EMA 0.7/0.3（项目执行证据），阈值统一
-   * CROSS_AXIS_THRESHOLD；四象限 = 会而不会用 / 会用而不牢 / 健康 / 补底。附只读
-   * 入档推荐（challenge point：升档判据 = 档内表现 + 知识底座；引擎提议学习者经
-   * projectSetTier 改档——不写任何状态、不参与 gateMilestone/passMilestone/门禁）。 */
   async projectCrossView(id: string): Promise<ProjectCrossDoc> {
-    const fm = await this.projects.load(id)
-    const specs = [...new Set(fm.plan.flatMap(m => m.nodes ?? []))]
-    const linked = specs.length ? await this.resolveProjectNodes(specs) : []
-    const linkedNodes: Array<{ course: string; node: string; mastery: number }> = []
-    const masteryList: number[] = []
-    const viewCache = new Map<string, Awaited<ReturnType<LearnhubEngine['loadView']>>>()
-    for (const { course, node } of linked) {
-      let v = viewCache.get(course.name)
-      if (!v) {
-        v = await this.loadView(course)
-        viewCache.set(course.name, v)
-      }
-      const m = masteryOfFm(v.state[node] ?? null)
-      linkedNodes.push({ course: course.name, node, mastery: m })
-      masteryList.push(m)
-    }
-    const x = masteryAggregate(masteryList)
-    const recs = await execRecsAll(this.paths, id)
-    const y = execEvidenceScore(recs)
-    const avg = (list: ProjectExecRec[]) => list.length
-      ? Math.round(list.reduce((a, r) => a + execRatingScore(r.rating), 0) / list.length * 1000) / 1000
-      : null
-    // 档内表现：事件带的 tier 快照 = 当前档才计入（改档后旧档事件不冒充新档表现）
-    const inTierRecs = recs.filter(r => r.tier === fm.tier)
-    return {
-      project: fm.id, name: fm.name, lifecycle: fm.lifecycle, tier: fm.tier,
-      x: { value: x, caliber: `关联节点 masteryOfFm 均值（${masteryList.length} 个${specs.length ? '' : '；计划未关联节点'}）` },
-      y: { value: y, caliber: `执行事件分（评级映射 0-1）EMA 0.7/0.3（${recs.length} 条事件）` },
-      quadrant: classifyCross(x, y),
-      linked_nodes: linkedNodes,
-      exec: { count: recs.length, ema: y, avg: avg(recs) },
-      recommendation: recommendTier(fm.tier, { count: inTierRecs.length, avg: avg(inTierRecs) }, x),
-      events: recs.slice(-20).reverse(),
-      thresholds: {
-        axis: CROSS_AXIS_THRESHOLD,
-        promote_min_events: TIER_REC_MIN_EVENTS,
-        promote_score: TIER_REC_PROMOTE_SCORE,
-        demote_score: TIER_REC_DEMOTE_SCORE,
-      },
-    }
+    return this.project.projectCrossView(id)
   }
 
-  /** 行为推断 enc 候选边（#96 / ADR-0015 裁决 3/6）：项目窗口内的翻卡/回看共现 →
-   * 带置信度候选边 → 每课程单个 pending edit 提案走人审（enc_backfill「单提案人审」
-   * 先例；set_enc 整体替换、既有声明 enc 原样保留，零 schema 破坏）。窗口终点 =
-   * 指定里程碑的过点时刻（省略则现在）；事件源 = review-log（synthetic 除外）+ practice，
-   * 只取关联节点。边只在 pre 闭包内落（CONTEXT Enc 契约 / 审计 E7）——跨无关节点对
-   * 不硬提边，降级为 blocked_no_pre 信号（带方向提示，供未来补 pre 边参考）；
-   * 已声明边不重复提名。 */
   async projectEncCandidates(
     id: string, opts: { milestone?: string; nodes?: string[]; window_days?: number; min_co?: number } = {},
   ): Promise<{
@@ -1466,120 +1202,10 @@ export class LearnhubEngine {
     blocked_no_pre: Array<{ course: string; a: string; b: string; co: number; hint_skill: string; why: string }>
     proposals: Array<{ course: string; id: number; ops: number }>; skipped_declared: number
   }> {
-    const fm = await this.projects.load(id)
-    const days = Math.min(90, Math.max(1, Math.round(opts.window_days ?? 14)))
-    const minCo = Math.max(1, Math.round(opts.min_co ?? 2))
-    let endMs = Date.now()
-    if (opts.milestone !== undefined) {
-      const rec = await this.projects.milestoneSettleRec(id, opts.milestone)
-      if (!rec) {
-        throw new Error(`[project-enc] 里程碑「${opts.milestone}」没有过点记录——共现窗口没有锚点（先过点，或省略 milestone 以现在为终点）。`)
-      }
-      endMs = Date.parse(rec.ts)
-    }
-    const startMs = endMs - days * 86_400_000
-    const specs = [...new Set([...fm.plan.flatMap(m => m.nodes ?? []), ...(opts.nodes ?? [])])]
-    if (!specs.length) {
-      throw new Error('[project-enc] 项目没有关联节点：计划条目 nodes 或调用参数 nodes 至少给一个（行为扫描只在关联节点间成对）。')
-    }
-    const linked = await this.resolveProjectNodes(specs)
-    const byCourse = new Map<string, Set<string>>()
-    for (const { course, node } of linked) {
-      let set = byCourse.get(course.name)
-      if (!set) byCourse.set(course.name, set = new Set())
-      set.add(node)
-    }
-    const { cutoff } = await this.learningDay()
-    const inWindow = (ts: string) => {
-      const ms = Date.parse(ts)
-      return ms >= startMs && ms <= endMs
-    }
-    const [reviews, practices] = await Promise.all([
-      this.store.reviewLogAll(), this.store.practiceAll(),
-    ])
-    let events = 0
-    const firstDayByCourse = new Map<string, Map<string, string>>()
-    const eventsByCourse = new Map<string, Array<{ node: string; day: string }>>()
-    const bump = (course: string, node: string, ts: string) => {
-      if (!byCourse.get(course)?.has(node)) return
-      if (!inWindow(ts)) return
-      const day = dayOfTs(ts, cutoff)
-      events++
-      const list = eventsByCourse.get(course) ?? []
-      list.push({ node, day })
-      eventsByCourse.set(course, list)
-      const firstDays = firstDayByCourse.get(course) ?? new Map<string, string>()
-      const prev = firstDays.get(node)
-      if (prev === undefined || day < prev) firstDays.set(node, day)
-      firstDayByCourse.set(course, firstDays)
-    }
-    for (const r of reviews) if (r.rating_source !== 'synthetic') bump(r.course, r.node, r.ts)
-    for (const r of practices) bump(r.course, r.node, r.ts)
-
-    const candidates: Array<{ course: string; holder: string; skill: string; co: number; w: number }> = []
-    const blockedNoPre: Array<{ course: string; a: string; b: string; co: number; hint_skill: string; why: string }> = []
-    const proposals: Array<{ course: string; id: number; ops: number }> = []
-    let skippedDeclared = 0
-    for (const [courseName, nodes] of byCourse) {
-      const pairs = cooccurrencePairs(eventsByCourse.get(courseName) ?? [], minCo)
-      if (!pairs.length) continue
-      const c = await this.registry.get(courseName)
-      if (!c) continue
-      const { graph } = await this.loadView(c)
-      const declared = declaredEncOf(graph)
-      const fields: EnrichFieldEntry[] = []
-      for (const pair of pairs.slice(0, 12)) {
-        const dir = orientCandidate(
-          pair.a, pair.b,
-          (from, to) => graph.nset.has(from) && graph.nset.has(to) && graph.isAncestor(from, to),
-          node => firstDayByCourse.get(courseName)?.get(node),
-        )
-        if (!dir.ok) {
-          blockedNoPre.push({ course: courseName, a: pair.a, b: pair.b, co: pair.co, hint_skill: dir.hint_skill, why: dir.why })
-          continue
-        }
-        if (!nodes.has(dir.holder) || !nodes.has(dir.skill)) continue
-        const existing = declared.get(dir.holder) ?? []
-        if (existing.some(e => e.node === dir.skill)) {
-          skippedDeclared++
-          continue
-        }
-        const w = coWeight(pair.co)
-        fields.push({
-          node: dir.holder,
-          enc: [...existing, { node: dir.skill, w, note: `行为推断（P-6 #96）：${days} 天窗口内共现 ${pair.co} 天（pre 闭包方向）` }],
-        })
-        candidates.push({ course: courseName, holder: dir.holder, skill: dir.skill, co: pair.co, w })
-      }
-      if (!fields.length) continue
-      const yamlText = YAML.stringify({
-        course: courseName,
-        reason: `行为推断 enc 边（覆盖层通道，P-6 #96）：项目「${fm.name}」${days} 天窗口内翻卡/回看共现 ≥${minCo} 天的关联节点对`,
-        fields,
-      })
-      const prop = await this.graphPropose('enrich', yamlText)
-      proposals.push({ course: courseName, id: (prop as { id: number }).id, ops: fields.length })
-    }
-    return {
-      project: id,
-      window: { start: new Date(startMs).toISOString(), end: new Date(endMs).toISOString(), days },
-      events, candidates, blocked_no_pre: blockedNoPre, proposals, skipped_declared: skippedDeclared,
-    }
+    return this.project.projectEncCandidates(id, opts)
   }
-
   // ---- 目标反编译（P-5 / #95：逆向设计 + PjBL；v8 种子簇形态 #149）----
 
-  /** 目标反编译（P-5，v8 #149）：一次模型调用产出**双提案**——里程碑计划草案
-   * （project_plan）与知识子图种子簇（kind=seed，子图簇直通新课程的种子起点，
-   * 起点 basis 铸 project）。同源同进同退：
-   * - 受理侧门禁全部过完才落任何提案：双半区 schema 门 + 名字对账门（plan.nodes ⊆
-   *   种子簇 ∪ 既有图节点名）+ 种子落点/结构预检——任一失败回灌修复一轮，仍败则
-   *   DECOMPILE_GATE_FAILED 零提案（同退的静态半）；
-   * - 两提案 pair 互相指认：apply 只走 projectDecompileApply 联合入口（种子先落图、
-   *   计划后落盘），单边 apply 被守卫拒、单边 reject 联动拒另一半（同退的动态半）。
-   * 显式目标课程 = 已播种课程的新计划半区（nodes 引用既有节点名，对账门收紧到既有
-   * 图；新知识需要走计划修订驱动的教练补支）；省略 course = 种子簇充当新课程种子。
-   * 检索面复用 Vault 先验（只读）；apply 前零 canonical 写入（ADR-0015 裁决 6）。 */
   async projectDecompile(
     id: string,
     opts: { goal?: string; course?: string; notes?: string[] } = {},
@@ -1593,298 +1219,26 @@ export class LearnhubEngine {
     seed_proposal: { id: number; kind: 'seed'; course: string; endpoint: string; starts: number } | null
     pair: { plan: number; seed: number | null }
   }> {
-    const fm = await this.projects.load(id)
-    const goal = decompileGoalOf(opts.goal, fm.goal)
-    // 注册笔记（V-1 manifest 只读）：显式 notes 按 id/path 解析，缺省 = 全部注册源
-    const manifest = await this.noteManifest.load()
-    const baseOf = (path: string): string => path.split('/').pop()!.replace(/\.md$/i, '')
-    const picked: Array<{ id: string; path: string; title: string }> = []
-    if (opts.notes?.length) {
-      const byKey = new Map(manifest.sources.flatMap(s => [[s.id, s], [s.path.replace(/\\/g, '/'), s]] as const))
-      for (const spec of opts.notes) {
-        const hit = byKey.get(spec.replace(/\\/g, '/'))
-        if (!hit) {
-          throw new Error(`[project-decompile] 笔记「${spec}」不在注册清单（先 learnhub_note_source_register，或省略 notes 取全部注册源）。`)
-        }
-        picked.push({ id: hit.id, path: hit.path, title: hit.title ?? baseOf(hit.path) })
-      }
-    } else {
-      for (const s of manifest.sources) {
-        picked.push({ id: s.id, path: s.path, title: s.title ?? baseOf(s.path) })
-      }
-    }
-    // 落点裁决（受理前）：显式课程必须在册并取其既有节点名（对账域）；未给 = 种子簇
-    // 充当新课程种子（mode=new）
-    const explicitCourse = opts.course?.trim()
-    let target: CourseEntry | null = null
-    if (explicitCourse) {
-      target = await this.registry.get(explicitCourse)
-      if (!target) throw new Error(`[project-decompile] 注册表中没有课程「${explicitCourse}」（显式目标课程须先建课播种；省略 course 参数可让种子簇充当新课程）。`)
-    }
-    // Vault 先验（只读检索）注入反编译上下文
-    const terms = decompileTerms(goal, picked.map(p => p.title))
-    const centerRel = this.paths.centerRoot.slice(this.vaultRoot.length + 1)
-    const hits = terms.length ? await searchVaultPrior(this.vaultRoot, centerRel, terms) : []
-    const prior = priorSection(hits)
-    // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出
-    let courseBlock: string
-    if (target) {
-      const { graph } = await this.loadView(target)
-      const names = graph.names.slice().sort()
-      courseBlock = `- 目标课程：${target.name}（已播种/既有课程——**不产 seed 半区**，只给 plan）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形）：\n${names.map(n => `  - ${n}`).join('\n') || '  -（空图）'}`
-    } else {
-      courseBlock = '- 未指定目标课程：seed 半区必出（自拟新课程名写进 seed.course，子图簇 = 该新课程的种子：1–3 起点 + 终点）；plan.nodes 引用种子簇节点名（写「课程名/节点名」全形）'
-    }
-    const tpl = await this.loadPrompt('项目目标反编译')
-    const notesList = picked.length ? picked.map(p => `- 《${p.title}》（${p.path}）`).join('\n') : '-（无注册笔记）'
-    const current = fm.plan.length
-      ? YAML.stringify({ plan: fm.plan })
-      : '（空——本项目还没有里程碑计划，本次为初次规划）'
-    const pack = `${tpl}\n\n---\n\n## 目标项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 渐退档：${fm.tier}\n- 目标描述（目标项目描述原文）：\n\n${goal}\n\n## 现状计划（给出完整新版本，不保守微调）\n\n${current}\n\n## 注册笔记（Vault 先验的检索来源）\n\n${notesList}\n\n## 知识子图落点\n\n${courseBlock}${prior ? `\n\n---\n\n${prior}` : ''}`
-    // 模型产出 → 双产物校验门 + 名字对账门（未过回灌修复一轮，对齐「生成→门禁→修复
-    // 一轮」机械）。对账域 = 种子簇 ∪ 全部启用课程的图节点名（与消费面 locateNode 的
-    // 跨课解析同域——裸名歧义/悬空在受理前拦下，不留到消费面才炸）。
-    const reconcileErrors = async (doc: DecompileDoc | undefined): Promise<string[]> => {
-      if (!doc) return []
-      const existingByCourse = new Map<string, Set<string>>()
-      const ensureNames = async (courseName: string): Promise<void> => {
-        if (existingByCourse.has(courseName)) return
-        const c = await this.registry.get(courseName)
-        if (!c) return
-        const { graph } = await this.loadView(c)
-        existingByCourse.set(courseName, new Set(graph.names))
-      }
-      for (const c of await this.enabledCourses()) await ensureNames(c.name)
-      const seedCourseNames = new Set<string>()
-      const extra: string[] = []
-      if (doc.seed) {
-        for (const n of [doc.seed.endpoint.name, ...doc.seed.starts.map(s => s.name)]) seedCourseNames.add(n)
-        if (await this.registry.get(doc.seed.course)) {
-          extra.push(`seed.course「${doc.seed.course}」已在注册表（mode=new 新课程入口撞名）——自拟一个新课程名，或显式 course 参数指向既有课程`)
-        }
-      }
-      return [...extra, ...reconcilePlanNodes(doc.plan, {
-        ...(doc.seed ? { seed: { course: doc.seed.course, nodeNames: seedCourseNames } } : {}),
-        existingByCourse,
-      })]
-    }
-    let raw = await llm(pack)
-    let gate = splitDecompileDoc(YAML.parseModel(raw), fm.id, { expectSeed: !target })
-    let reconcile = await reconcileErrors(gate.result)
-    let repaired = false
-    if (gate.errors.length || reconcile.length) {
-      repaired = true
-      raw = await llm(decompileRepairPrompt(pack, raw, [...gate.errors, ...reconcile].map(e => `  ✗ ${e}`)))
-      gate = splitDecompileDoc(YAML.parseModel(raw), fm.id, { expectSeed: !target })
-      reconcile = await reconcileErrors(gate.result)
-    }
-    if (gate.errors.length || reconcile.length || !gate.result) {
-      const e: Error & { code?: string } = new Error(
-        `[project-decompile] 模型产出未过双产物校验门（已自动修复重试一轮，提案未受理）：\n`
-        + [...gate.errors, ...reconcile].map(x => `  ✗ ${x}`).join('\n'))
-      e.code = 'DECOMPILE_GATE_FAILED'
-      throw e
-    }
-    const doc: DecompileDoc = gate.result
-    // 名字对账门已在修复环内跑过（reconcile 为空 = 通过）——此处直接受理。
-    // 双提案受理（先种子后计划）：种子提案先落（重门已预检通过）；计划提案**出生即带
-    // pair**（联动守卫从落盘那一刻生效——任一时刻崩溃都不会留下可单边 apply 的无守卫
-    // 计划半区）；最后补种子半区的 pair 指认（此窗口内计划已被守卫保护，种子半区单边
-    // apply 无害——计划未落盘就无悬空引用可言）。概念引用在 proposeSeed 受理门对
-    // 登记表（铸名随种子 apply 同事务落盘）。
-    let seedId: number | null = null
-    let planProposal: Awaited<ReturnType<LearnhubEngine['projects']['proposePlan']>> | null = null
-    try {
-      if (doc.seed) {
-        seedId = ((await this.graphPropose('seed', YAML.stringify(doc.seed))) as { id: number }).id
-      }
-      planProposal = await this.projects.proposePlan(fm.id, YAML.stringify({ project: fm.id, plan: doc.plan }), seedId !== null ? { pair: seedId } : {})
-      if (seedId !== null) await this.store.updateProposal(seedId, { pair: planProposal.id })
-    } catch (err) {
-      // 计划半区受理失败：种子半区联动退回（不留孤儿 pending），原样抛错
-      if (seedId !== null) {
-        await this.proposals.reject(seedId, `同源双提案受理失败联动退回：${err instanceof Error ? err.message : String(err)}`).catch(() => undefined)
-      }
-      throw err
-    }
-    const seedProposal = doc.seed
-      ? { id: seedId!, kind: 'seed' as const, course: doc.seed.course, endpoint: doc.seed.endpoint.name, starts: doc.seed.starts.length }
-      : null
-    return {
-      project: fm.id,
-      prior_hits: hits.length,
-      notes: picked.map(p => p.path),
-      repaired,
-      plan_proposal: planProposal!,
-      seed_proposal: seedProposal,
-      pair: { plan: planProposal!.id, seed: seedProposal?.id ?? null },
-    }
+    return this.project.projectDecompile(id, opts, llm)
   }
 
-  /** 反编译双提案联合 apply（#149 同进同退的动态半）：两提案 pair 互指才受理；
-   * 种子先落图（簇节点 + 终点锚 + 笔记脚手架——计划引用先有图可解析）、计划后落盘。
-   * 任一半区已是 applied = 崩溃恢复续段（跳过重放该半区）；rejected = 拒绝复活
-   * （重新反编译产生新对）。 */
   async projectDecompileApply(planPid: number, seedPid: number): Promise<{
     project: string
     seed: Record<string, unknown> | null
     plan: ProjectApplyResult | null
   }> {
-    const list = await this.store.loadProposals()
-    const plan = list.find(p => p.id === planPid)
-    const seed = list.find(p => p.id === seedPid)
-    const bad = (why: string): Error => new Error(`[project-decompile-apply] ${why}`)
-    if (!plan || (plan.status !== 'pending' && plan.status !== 'applied')) {
-      throw bad(`计划提案 #${planPid} 不存在或已决（pending/applied 之外不受理）。`)
-    }
-    if (!seed || (seed.status !== 'pending' && seed.status !== 'applied')) {
-      throw bad(`种子提案 #${seedPid} 不存在或已决（pending/applied 之外不受理）。`)
-    }
-    if (plan.kind !== 'project_plan' || seed.kind !== 'seed') {
-      throw bad(`提案 kind 不对（#${planPid}=${plan.kind}，#${seedPid}=${seed.kind}）——联合 apply 只收 反编译对（project_plan + seed）。`)
-    }
-    if (plan.pair !== seedPid || seed.pair !== planPid) {
-      throw bad(`提案 #${planPid} 与 #${seedPid} 不是同一反编译对（pair 联动缺失或互指不符）——反编译对只走本联合入口；独立提案（无 pair）才走 learnhub_project_apply / learnhub_graph_apply 单独生效。`)
-    }
-    const today = (await this.learningDay()).today
-    // 种子先落图：簇节点 + 终点锚 + ensureNotesFor 笔记脚手架——计划引用先有图可解析
-    const seedResult = seed.status === 'pending'
-      ? await this.proposals.applySeed(seedPid, await this.seedAuditFor(seed.course, today), today, { pairApply: true })
-      : null
-    const planResult = plan.status === 'pending'
-      ? await this.applyProjectPlanProposal(planPid, { pairApply: true })
-      : null
-    return { project: (planResult as { project?: string })?.project ?? plan.course, seed: seedResult, plan: planResult }
+    return this.project.projectDecompileApply(planPid, seedPid)
   }
 
-  /** 种子 apply 的 audit 门预计算（graphApply 同款；mode=new 课程无 data 目录时空跑）。
-   * 联合 apply 直调 proposals.applySeed 时复用，不经过 graphApply 的 takePending。 */
   private async seedAuditFor(courseName: string, today: string): Promise<ApplyAudit> {
-    const course = await this.registry.get(courseName)
-    let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
-    if (course && existsSync(this.paths.dataDir(course.root))) {
-      const { graph } = await this.loadView(course)
-      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, today)
-      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
-    }
-    return audit
+    return this.project.seedAuditFor(courseName, today)
   }
 
-  /** 计划提案 apply 的引擎包装（#149 修订驱动生长）：apply 前捕旧计划，apply 后派生
-   * 快照 diff（id 为身份锚）并解析换线/补支触发（按锚定课程聚合，宿主入队生长批）；
-   * 已过点里程碑被移除/改名出显式警告（不拒绝）。单边守卫在 projects.applyPlan 内。 */
   async applyProjectPlanProposal(
     pid?: number, opts: { pairApply?: boolean } = {},
   ): Promise<ProjectApplyResult> {
-    let before: ProjectFm | null = null
-    const proposals = await this.store.loadProposals()
-    const targetPid = pid ?? [...proposals].reverse().find(p => p.status === 'pending' && p.kind === 'project_plan')?.id
-    if (targetPid !== undefined) {
-      const prop = proposals.find(p => p.id === targetPid)
-      if (prop?.kind === 'project_plan') {
-        before = await this.projects.load(prop.course).catch(() => null)
-      }
-    }
-    const result = await this.projects.applyPlan(pid, opts)
-    if (result.kind !== 'project_plan') return result
-    const after = await this.projects.load(result.project)
-    const diff = planRevisionDiff(before?.plan ?? [], after.plan)
-    const { triggers, warnings } = await this.planGrowthTriggers(result.project, before, after, diff)
-    return {
-      ...result,
-      plan_diff: diff,
-      ...(warnings.length ? { plan_diff_warnings: warnings } : {}),
-      ...(triggers.length ? { growth: triggers } : {}),
-    }
+    return this.project.applyProjectPlanProposal(pid, opts)
   }
-
-  /** 换线/补支触发解析（读侧派生，#126 接口输入）：added/retargeted 条目的每个
-   * nodes 引用——图上已存在 = 换线（stub 激活：内容生成/接入路线）；图上不存在 =
-   * 补支（朝新里程碑长粗分支）。路由目标：显式「课程/」前缀照抄；裸名按其余计划
-   * 条目的锚定课程集收敛（恰一门 → 路由，否则落警告不强路由）。已过点里程碑被
-   * 移除/改名（同 id）出显式警告——账本事实不改写，但「终点消失/漂移」要可见。 */
-  private async planGrowthTriggers(
-    projectId: string, before: ProjectFm | null, after: ProjectFm, diff: PlanRevisionDiff,
-  ): Promise<{ triggers: PlanGrowthTrigger[]; warnings: string[] }> {
-    const warnings: string[] = []
-    for (const m of diff.removed) {
-      if (await this.projects.milestoneSettleRec(projectId, m.id)) {
-        warnings.push(`里程碑「${m.name}」（${m.id}）已过点对账却被本次修订移除——账本事实不改写，但「终点消失」请知悉。`)
-      }
-    }
-    if (before) {
-      const afterById = new Map(after.plan.map(m => [m.id, m]))
-      for (const old of before.plan) {
-        const now = afterById.get(old.id)
-        if (!now || now.name === old.name) continue
-        if (await this.projects.milestoneSettleRec(projectId, old.id)) {
-          warnings.push(`里程碑「${old.name}」（${old.id}）已过点对账却被本次修订改名为「${now.name}」——产物文件名随计划漂移（orphans 提示可见）。`)
-        }
-      }
-    }
-    type Candidate = { milestone: string; name: string; kind: '换线' | '补支'; node: string; course: string | null }
-    const candidates: Candidate[] = []
-    const items = [...diff.added, ...diff.retargeted.map(r => after.plan.find(m => m.id === r.id)!)]
-    for (const item of items) {
-      for (const spec of item.nodes ?? []) {
-        const { course: specCourse, node } = splitNodeSpec(spec)
-        let course: string | null = null
-        let exists = false
-        if (specCourse !== undefined) {
-          const c = await this.registry.get(specCourse)
-          if (!c) {
-            warnings.push(`里程碑「${item.name}」（${item.id}）引用课程「${specCourse}」不在注册表——该行不入生长触发。`)
-            continue
-          }
-          const { graph } = await this.loadView(c)
-          course = c.name
-          exists = graph.nset.has(node)
-        } else {
-          try {
-            const hit = await this.locateNode(node)
-            course = hit.course.name
-            exists = true
-          } catch {
-            exists = false
-          }
-        }
-        candidates.push({
-          milestone: item.id, name: item.name,
-          kind: exists ? '换线' : '补支',
-          node: spec,
-          course, // 显式「课程/」前缀恒路由；裸名未解析的补支走锚定课程集收敛
-        })
-      }
-    }
-    // 裸名补支的路由：锚定课程集 = 计划其余条目 nodes 解析到的课程（恰一门才强路由）
-    const anchored = new Set<string>()
-    for (const m of after.plan) {
-      for (const spec of m.nodes ?? []) {
-        try {
-          anchored.add((await this.locateNode(spec)).course.name)
-        } catch { /* 未解析的引用不参与锚定 */ }
-      }
-    }
-    const byCourse = new Map<string, string[]>()
-    for (const c of candidates) {
-      let target = c.course
-      if (!target && !c.node.includes('/') && anchored.size === 1) target = [...anchored][0]
-      if (!target) {
-        warnings.push(`里程碑「${c.name}」（${c.milestone}）的补支引用「${c.node}」无法确定锚定课程（多门或无锚定）——未入生长触发，请显式写「课程/节点」或人工在生成页拉批。`)
-        continue
-      }
-      const lines = byCourse.get(target) ?? []
-      lines.push(c.kind === '换线'
-        ? `- 换线：里程碑 ${c.milestone}「${c.name}」关联「${c.node}」已在图上——激活它（内容生成/接入路线），不长重复结构`
-        : `- 补支：里程碑 ${c.milestone}「${c.name}」关联「${c.node}」图上尚无——沿足迹朝它长最小必要分支（粗节点+粗 pre，经生长批受理门）`)
-      byCourse.set(target, lines)
-    }
-    const triggers: PlanGrowthTrigger[] = [...byCourse.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([course, lines]) => ({ course, lines }))
-    return { triggers, warnings }
-  }
-
   // ---- 内容管线 ----
 
   /** Vault 先验注入段（V-2 / #106；生成面共用，零命中返回 ''）：检索词 = 节点名 +

@@ -1346,3 +1346,41 @@ export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
   }
 }
 
+// ---- 图提案受理结果（#152 刀 5 自 views.ts 归位）----
+
+export interface GraphEditProposalResult {
+  id: number
+  kind: 'edit'
+  course: string
+  ops: number
+  operator?: GrowthOperator
+  disagreement?: boolean
+  compass_rewrite?: boolean
+  warns?: string[]
+}
+
+
+export interface GraphSeedProposalResult {
+  id: number
+  kind: 'seed'
+  course: string
+  mode: 'new' | 'reseed'
+  goal_type: 'capability' | 'coverage'
+  endpoint: string
+  starts: number
+  worksheet?: number
+  prior_feed_unresponded: number
+  warns?: string[]
+}
+
+
+export interface GraphEnrichProposalResult {
+  id: number
+  kind: 'enrich'
+  course: string
+  fields: number
+  files: number
+}
+
+
+export type GraphProposeResult = GraphEditProposalResult | GraphSeedProposalResult | GraphEnrichProposalResult
