@@ -13,7 +13,7 @@ export const 实验室域 = {
     args: {
       id: { type: "number", description: "Proposal id; omit for the newest pending experiment proposal" }
     },
-    engine: "experimentApply",
+    engine: "lab.experimentApply",
     domain: "实验室",
     channels: [
       {
@@ -35,7 +35,7 @@ export const 实验室域 = {
       template: { type: "string", description: "Template id from learnhub_experiment_templates", required: true },
       course: { type: "string", description: "Scope the experiment to one course; omit for all enabled courses" }
     },
-    engine: "experimentPropose",
+    engine: "lab.experimentPropose",
     domain: "实验室",
     channels: [
       {
@@ -58,7 +58,7 @@ export const 实验室域 = {
     args: {
       id: { type: "number", description: "Experiment id; omit for the running (or latest) one" }
     },
-    engine: "experimentReport",
+    engine: "lab.experimentReport",
     domain: "实验室",
     channels: [
       {
@@ -75,7 +75,7 @@ export const 实验室域 = {
     args: {
       id: { type: "number", description: "Experiment id; omit for the running one" }
     },
-    engine: "experimentStop",
+    engine: "lab.experimentStop",
     domain: "实验室",
     channels: [
       {
@@ -95,7 +95,7 @@ export const 实验室域 = {
     id: "experiment-templates",
     summary: "List the N-of-1 experiment template library (D-1, ADR-0023): preset self-experiments on engine-controlled content/design parameters only (scheduling core is NEVER an experiment variable). Each template carries id/title/question/arms/unit/description and an unlocked flag — unlocked=false templates are visible but cannot be started yet. Zero XP, never touches Mastery; arm labels go into the review log for attribution. Propose with learnhub_experiment_propose, the learner confirms, then learnhub_experiment_apply.",
     args: {},
-    engine: "experimentTemplates",
+    engine: "lab.experimentTemplates",
     domain: "实验室",
     channels: [
       {
@@ -159,7 +159,7 @@ export const 实验室域 = {
     id: "thermostat",
     summary: "Get the challenge-point thermostat dashboard (D-2, ADR-0024): cross-region observation aggregate + READ-ONLY suggestions — the thermostat is NOT an auto-controller. Course region: true-retention band + long-term difficulty-band choice distribution. Unbounded region: execution-event rating distribution (empty until the U-area execution channel lands). Project region: deferred to P-7, tier list only. Three knobs max (A1 target difficulty-band default, retrieval-point density [not yet available], fading-tier move aggregation); at most three suggestions, low-data-silent. To ACT on a suggestion, show it to the learner and after their explicit confirmation call learnhub_thermostat_apply with the suggestion id — never apply without confirmation; there is no engine-side auto adjustment.",
     args: {},
-    engine: "thermostatView",
+    engine: "lab.thermostatView",
     domain: "实验室",
     channels: [
       {
@@ -181,7 +181,7 @@ export const 实验室域 = {
     args: {
       suggestion: { type: "string", description: "Suggestion id exactly as offered by learnhub_thermostat (e.g. band_default:standard)", required: true }
     },
-    engine: "thermostatApply",
+    engine: "lab.thermostatApply",
     domain: "实验室",
     channels: [
       {

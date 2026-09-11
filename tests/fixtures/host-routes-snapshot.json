@@ -44,7 +44,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "lesson(\"1\",\"1\")"
+   "content2.lesson(\"1\",\"1\")"
   ]
  },
  {
@@ -64,7 +64,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "lesson(undefined,\"1\")"
+   "content2.lesson(undefined,\"1\")"
   ]
  },
  {
@@ -104,7 +104,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "queueItemsAll()"
+   "content2.queueItemsAll()"
   ]
  },
  {
@@ -114,7 +114,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "coursesTree(undefined)"
+   "content2.coursesTree(undefined)"
   ]
  },
  {
@@ -124,7 +124,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "coursesTree(\"1\")"
+   "content2.coursesTree(\"1\")"
   ]
  },
  {
@@ -134,7 +134,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "coursesTree(undefined)"
+   "content2.coursesTree(undefined)"
   ]
  },
  {
@@ -154,7 +154,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questions(\"1\",\"1\")"
+   "content2.questions(\"1\",\"1\")"
   ]
  },
  {
@@ -174,7 +174,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questions(undefined,\"1\")"
+   "content2.questions(undefined,\"1\")"
   ]
  },
  {
@@ -326,7 +326,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "graphProposals()"
+   "graph.graphProposals()"
   ]
  },
  {
@@ -346,7 +346,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionsAll(undefined)"
+   "bank2.questionsAll(undefined)"
   ]
  },
  {
@@ -356,7 +356,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionsAll(\"1\")"
+   "bank2.questionsAll(\"1\")"
   ]
  },
  {
@@ -366,7 +366,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionsAll(undefined)"
+   "bank2.questionsAll(undefined)"
   ]
  },
  {
@@ -426,7 +426,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "xpStatus()"
+   "sched2.xpStatus()"
   ]
  },
  {
@@ -466,7 +466,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "memoryHealth()"
+   "sched2.memoryHealth()"
   ]
  },
  {
@@ -476,7 +476,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "jolConfig()"
+   "learner.jolConfig()"
   ]
  },
  {
@@ -486,7 +486,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "calibrationProfile()"
+   "learner.calibrationProfile()"
   ]
  },
  {
@@ -496,7 +496,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "calibrationHintsConfig()"
+   "learner.calibrationHintsConfig()"
   ]
  },
  {
@@ -506,7 +506,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "coachAdvice()"
+   "learner.coachAdvice()"
   ]
  },
  {
@@ -516,7 +516,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "sleepAdviceConfig()"
+   "lab.sleepAdviceConfig()"
   ]
  },
  {
@@ -526,7 +526,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "thermostatView()"
+   "lab.thermostatView()"
   ]
  },
  {
@@ -563,7 +563,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "promptKinds()"
+   "content2.promptKinds()"
   ]
  },
  {
@@ -673,7 +673,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "explainBackPack(\"1\",\"1\")"
+   "learner.explainBackPack(\"1\",\"1\")"
   ]
  },
  {
@@ -693,7 +693,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "explainBackPack(undefined,\"1\")"
+   "learner.explainBackPack(undefined,\"1\")"
   ]
  },
  {
@@ -703,7 +703,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "noteSourceList()"
+   "channels.noteSourceList()"
   ]
  },
  {
@@ -723,7 +723,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "difficultyAdvice(undefined)"
+   "bank2.difficultyAdvice(undefined)"
   ]
  },
  {
@@ -733,7 +733,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "difficultyAdvice(\"1\")"
+   "bank2.difficultyAdvice(\"1\")"
   ]
  },
  {
@@ -743,7 +743,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "difficultyAdvice(undefined)"
+   "bank2.difficultyAdvice(undefined)"
   ]
  },
  {
@@ -934,7 +934,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerQueue(undefined)"
+   "learner.learnerQueue(undefined)"
   ]
  },
  {
@@ -944,7 +944,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerQueue(\"1\")"
+   "learner.learnerQueue(\"1\")"
   ]
  },
  {
@@ -954,7 +954,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerQueue(undefined)"
+   "learner.learnerQueue(undefined)"
   ]
  },
  {
@@ -964,7 +964,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardQueue(undefined)"
+   "bank2.errorCardQueue(undefined)"
   ]
  },
  {
@@ -974,7 +974,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardQueue(\"1\")"
+   "bank2.errorCardQueue(\"1\")"
   ]
  },
  {
@@ -984,7 +984,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardQueue(undefined)"
+   "bank2.errorCardQueue(undefined)"
   ]
  },
  {
@@ -994,7 +994,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "skillList()"
+   "learner.skillList()"
   ]
  },
  {
@@ -1004,7 +1004,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "habitList()"
+   "learner.habitList()"
   ]
  },
  {
@@ -1024,7 +1024,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "habitShow(\"1\")"
+   "learner.habitShow(\"1\")"
   ]
  },
  {
@@ -1044,7 +1044,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectList()"
+   "project.projectList()"
   ]
  },
  {
@@ -1064,7 +1064,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectCrossView(\"1\")"
+   "project.projectCrossView(\"1\")"
   ]
  },
  {
@@ -1094,7 +1094,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectLog(\"1\")"
+   "project.projectLog(\"1\")"
   ]
  },
  {
@@ -1114,7 +1114,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "kataOpen(undefined)"
+   "learner.kataOpen(undefined)"
   ]
  },
  {
@@ -1124,7 +1124,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "kataOpen(\"1\")"
+   "learner.kataOpen(\"1\")"
   ]
  },
  {
@@ -1134,7 +1134,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "kataOpen(undefined)"
+   "learner.kataOpen(undefined)"
   ]
  },
  {
@@ -1803,7 +1803,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "thermostatApply(\"1\")"
+   "lab.thermostatApply(\"1\")"
   ]
  },
  {
@@ -1839,7 +1839,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "experimentPropose(\"1\",\"1\")"
+   "lab.experimentPropose(\"1\",\"1\")"
   ]
  },
  {
@@ -1865,7 +1865,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "experimentPropose(\"1\",undefined)"
+   "lab.experimentPropose(\"1\",undefined)"
   ]
  },
  {
@@ -2750,7 +2750,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "noteSourceRegister(\"1\")"
+   "channels.noteSourceRegister(\"1\")"
   ]
  },
  {
@@ -2785,7 +2785,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "noteSourceUnregister(\"1\")"
+   "channels.noteSourceUnregister(\"1\")"
   ]
  },
  {
@@ -2820,7 +2820,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "noteSourceExclude(\"1\")"
+   "channels.noteSourceExclude(\"1\")"
   ]
  },
  {
@@ -2855,7 +2855,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "noteSourceUnexclude(\"1\")"
+   "channels.noteSourceUnexclude(\"1\")"
   ]
  },
  {
@@ -2891,7 +2891,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "noteSourceRelink(\"1\",\"1\")"
+   "channels.noteSourceRelink(\"1\",\"1\")"
   ]
  },
  {
@@ -3114,7 +3114,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerCardForget(\"1\",\"1\",\"1\")"
+   "learner.learnerCardForget(\"1\",\"1\",\"1\")"
   ]
  },
  {
@@ -3854,7 +3854,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionSave(\"1\",\"1\",\"1\")"
+   "content2.questionSave(\"1\",\"1\",\"1\")"
   ]
  },
  {
@@ -4874,7 +4874,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "bankCleanupApply(undefined)"
+   "bank2.bankCleanupApply(undefined)"
   ]
  },
  {
@@ -4887,7 +4887,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "bankCleanupApply(\"1\")"
+   "bank2.bankCleanupApply(\"1\")"
   ]
  },
  {
@@ -4898,7 +4898,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "bankCleanupApply(undefined)"
+   "bank2.bankCleanupApply(undefined)"
   ]
  },
  {
@@ -5082,7 +5082,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "graphEncBackfill(undefined)"
+   "graph.graphEncBackfill(undefined)"
   ]
  },
  {
@@ -5095,7 +5095,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "graphEncBackfill(\"1\")"
+   "graph.graphEncBackfill(\"1\")"
   ]
  },
  {
@@ -5106,7 +5106,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "graphEncBackfill(undefined)"
+   "graph.graphEncBackfill(undefined)"
   ]
  },
  {
@@ -5405,7 +5405,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectSetLifecycle(\"1\",\"1\")"
+   "project.projectSetLifecycle(\"1\",\"1\")"
   ]
  },
  {
@@ -5456,7 +5456,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectSetTier(\"1\",\"1\")"
+   "project.projectSetTier(\"1\",\"1\")"
   ]
  },
  {
@@ -5879,7 +5879,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectLogAppend(\"1\",\"1\")"
+   "project.projectLogAppend(\"1\",\"1\")"
   ]
  },
  {
@@ -5982,7 +5982,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "kataToExperiment(\"1\",\"1\",\"1\")"
+   "learner.kataToExperiment(\"1\",\"1\",\"1\")"
   ]
  },
  {
@@ -6024,7 +6024,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "kataToExperiment(\"1\",\"1\",undefined)"
+   "learner.kataToExperiment(\"1\",\"1\",undefined)"
   ]
  },
  {
@@ -6156,7 +6156,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "setDailyGoal(1)"
+   "sched2.setDailyGoal(1)"
   ]
  },
  {
@@ -6191,7 +6191,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "setDayCutoff(\"1\")"
+   "sched2.setDayCutoff(\"1\")"
   ]
  },
  {

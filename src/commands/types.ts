@@ -16,10 +16,33 @@
 import type { GenJobPhase } from '../generation-jobs.ts'
 import type { LearnhubEngine } from '../engine/index.ts'
 
-/** 门面上「方法型」的入口名（`output` 从它派生，故非方法的键排除在外）。 */
-type EngineMethod = {
-  [K in keyof LearnhubEngine]: LearnhubEngine[K] extends (...a: never[]) => unknown ? K : never
-}[keyof LearnhubEngine]
+/** hub 上的子系统容器键（C 形态，ADR-0049）：这些键是公开子系统实例，非方法。 */
+type EngineSubsystemName =
+  | 'learner' | 'content2' | 'project' | 'bank2' | 'channels' | 'lab'
+  | 'graph' | 'growth2' | 'sched2' | 'registry' | 'proposals' | 'projects'
+
+/** hub 自身的装配域方法名（status/recommend/doctor/rebuild/生成任务持久化/私有 helper）。 */
+type HubMethod = {
+  [K in Exclude<keyof LearnhubEngine, EngineSubsystemName>]: LearnhubEngine[K] extends (...a: never[]) => unknown ? K : never
+}[Exclude<keyof LearnhubEngine, EngineSubsystemName>]
+
+/** 子系统方法路径：`<子系统>.<方法>`（C 形态公开面，ADR-0049）。 */
+type SubsystemMethodPath = {
+  [K in EngineSubsystemName]: `${K}.${keyof LearnhubEngine[K] & string}`
+}[EngineSubsystemName]
+
+/**
+ * 引擎入口名（ADR-0049 C 形态）：子系统方法写 `<子系统>.<方法>` 点路径；
+ * hub 装配域方法（statusJson/recommend 等）保留裸名。`output` 从它派生。
+ */
+type EngineMethod = HubMethod | SubsystemMethodPath
+
+/** 解析引擎入口的类型值：点路径走子系统实例，裸名走 hub 方法。 */
+type EngineEntryValue<E> = E extends `${infer S}.${infer M}`
+  ? S extends keyof LearnhubEngine
+    ? M extends keyof LearnhubEngine[S] ? LearnhubEngine[S][M] : never
+    : never
+  : E extends keyof LearnhubEngine ? LearnhubEngine[E] : never
 
 /** 面板路由今天实际在用的三种方法。 */
 export type HttpMethod = 'GET' | 'POST' | 'PUT'
@@ -88,7 +111,7 @@ export interface CommandSpec<E extends string = string> {
    * 别名都从它来，这就是「响应类型派生自 output、引擎形状镜像消失」的机制（#169）。
    * 引擎入口留空的命令（队列型/按参分派型/无引擎型）→ `unknown`（UI 侧无对应端点或另有 handler）。
    */
-  output?: E extends EngineMethod ? Awaited<ReturnType<LearnhubEngine[E]>> : unknown
+  output?: E extends EngineMethod ? Awaited<ReturnType<EngineEntryValue<E>>> : unknown
   domain: CommandDomain
   channels: ChannelSpec[]
 }

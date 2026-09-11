@@ -13,7 +13,7 @@ export const 通道域 = {
     args: {
       endpoint: { type: "string", description: "AnkiConnect endpoint; default http://127.0.0.1:8765" }
     },
-    engine: "ankiExportPush",
+    engine: "channels.ankiExportPush",
     domain: "通道",
     channels: [
       {
@@ -34,7 +34,7 @@ export const 通道域 = {
     args: {
       endpoint: { type: "string", description: "AnkiConnect endpoint; default http://127.0.0.1:8765" }
     },
-    engine: "ankiImportEvents",
+    engine: "channels.ankiImportEvents",
     domain: "通道",
     channels: [
       {
@@ -55,7 +55,7 @@ export const 通道域 = {
     args: {
       endpoint: { type: "string", description: "AnkiConnect endpoint; default http://127.0.0.1:8765" }
     },
-    engine: "ankiStatus",
+    engine: "channels.ankiStatus",
     domain: "通道",
     channels: [
       {
@@ -76,7 +76,7 @@ export const 通道域 = {
     args: {
       path: { type: "string", description: "Note or folder path to exclude, vault-relative or absolute; must be outside the learning center", required: true }
     },
-    engine: "noteSourceExclude",
+    engine: "channels.noteSourceExclude",
     domain: "通道",
     channels: [
       {
@@ -100,7 +100,7 @@ export const 通道域 = {
       id: { type: "string", description: "Note-source id, e.g. \"note-1\"", required: true },
       count: { type: "number", description: "Question count cap (default 6)" }
     },
-    engine: "noteSourceGenerate",
+    engine: "channels.noteSourceGenerate",
     domain: "通道",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_note_source_generate" },
@@ -115,7 +115,7 @@ export const 通道域 = {
     id: "note-source-list",
     summary: "List registered Note Sources (C1) with pool status: ok / missing (note deleted or renamed — pool suspended, re-register or unregister) / drifted (note edited since question generation — regenerate or archive old questions, never automatic). Cards enter the global review queue automatically when due (course field = 笔记源). The response also carries excludes — the user exclusion list (paths never auto-registered; governs future registrations only, existing sources stay).",
     args: {},
-    engine: "noteSourceList",
+    engine: "channels.noteSourceList",
     domain: "通道",
     channels: [
       {
@@ -137,7 +137,7 @@ export const 通道域 = {
     args: {
       path: { type: "string", description: "Note or folder path, vault-relative or absolute; must be outside the learning center (except the two learner-document zones), not on the user exclusion list, and must exist", required: true }
     },
-    engine: "noteSourceRegister",
+    engine: "channels.noteSourceRegister",
     domain: "通道",
     channels: [
       {
@@ -161,7 +161,7 @@ export const 通道域 = {
       id: { type: "string", description: "Note-source id, e.g. \"note-1\"", required: true },
       path: { type: "string", description: "New note path (after the rename/move), vault-relative or absolute", required: true }
     },
-    engine: "noteSourceRelink",
+    engine: "channels.noteSourceRelink",
     domain: "通道",
     channels: [
       {
@@ -184,7 +184,7 @@ export const 通道域 = {
     args: {
       path: { type: "string", description: "Excluded path to release, vault-relative or absolute", required: true }
     },
-    engine: "noteSourceUnexclude",
+    engine: "channels.noteSourceUnexclude",
     domain: "通道",
     channels: [
       {
@@ -207,7 +207,7 @@ export const 通道域 = {
     args: {
       id: { type: "string", description: "Note-source id, e.g. \"note-1\"", required: true }
     },
-    engine: "noteSourceUnregister",
+    engine: "channels.noteSourceUnregister",
     domain: "通道",
     channels: [
       {

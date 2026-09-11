@@ -1,5 +1,4 @@
 {
- "$comment": "路由↔工具对账基线（#167 夹具，实测口径＝工具注册区 vs 工具区外全部；重构后路由面=host 技术层除 tools.ts 外全部文件）。",
  "shared": [
   "ankiExportPush",
   "ankiImportEvents",
@@ -131,6 +130,7 @@
   "coursesTree",
   "discussionPack",
   "doctor",
+  "enabled",
   "enabledCourses",
   "errorExplainPack",
   "experimentList",

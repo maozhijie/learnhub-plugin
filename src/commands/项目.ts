@@ -13,7 +13,7 @@ export const 项目域 = {
     args: {
       id: { type: "number", description: "Pending proposal id", required: true }
     },
-    engine: "projectApply",
+    engine: "graph.projectApply",
     domain: "项目",
     channels: [
       {
@@ -31,7 +31,7 @@ export const 项目域 = {
       goal: { type: "string", description: "Learner's goal description prose (plan drafting input)", required: true },
       tier: { type: "string", description: "Fading tier: 骨架/补全/独立 (default 补全)" }
     },
-    engine: "projectCreate",
+    engine: "project.projectCreate",
     domain: "项目",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_project_create" },
@@ -53,7 +53,7 @@ export const 项目域 = {
         read: "query"
       }
     },
-    engine: "projectCrossView",
+    engine: "project.projectCrossView",
     domain: "项目",
     channels: [
       {
@@ -166,7 +166,7 @@ export const 项目域 = {
       id: { type: "string", description: "Project id", required: true },
       lifecycle: { type: "string", description: "active/paused/delivered/archived", required: true }
     },
-    engine: "projectSetLifecycle",
+    engine: "project.projectSetLifecycle",
     domain: "项目",
     channels: [
       {
@@ -187,7 +187,7 @@ export const 项目域 = {
     id: "project-list",
     summary: "List all projects as JSON (id/name/lifecycle/tier/plan size). Projects are the bounded project area: real practice with milestone plans, separate from course nodes.",
     args: {},
-    engine: "projectList",
+    engine: "project.projectList",
     domain: "项目",
     channels: [
       {
@@ -214,7 +214,7 @@ export const 项目域 = {
         read: "query"
       }
     },
-    engine: "projectLog",
+    engine: "project.projectLog",
     domain: "项目",
     channels: [
       {
@@ -238,7 +238,7 @@ export const 项目域 = {
       id: { type: "string", description: "Project id", required: true },
       text: { type: "string", description: "Entry body (non-empty prose; multiple paragraphs/lines fine)", required: true }
     },
-    engine: "projectLogAppend",
+    engine: "project.projectLogAppend",
     domain: "项目",
     channels: [
       {
@@ -285,7 +285,7 @@ export const 项目域 = {
       id: { type: "string", description: "Project id", required: true },
       milestone: { type: "string", description: "Milestone id from the plan", required: true }
     },
-    engine: "projectMilestonePass",
+    engine: "project.projectMilestonePass",
     domain: "项目",
     channels: [
       {
@@ -343,7 +343,7 @@ export const 项目域 = {
     args: {
       id: { type: "string", description: "Project id", required: true }
     },
-    engine: "projectRecallLog",
+    engine: "project.projectRecallLog",
     domain: "项目",
     channels: [
       {
@@ -362,7 +362,7 @@ export const 项目域 = {
       milestone: { type: "string", description: "Milestone id", required: true },
       narration: { type: "string", description: "Learner's key-decision narration (verbatim, non-empty)", required: true }
     },
-    engine: "projectRecallReflect",
+    engine: "project.projectRecallReflect",
     domain: "项目",
     channels: [
       {
@@ -379,7 +379,7 @@ export const 项目域 = {
     args: {
       id: { type: "string", description: "Project id", required: true }
     },
-    engine: "projectShow",
+    engine: "project.projectShow",
     domain: "项目",
     channels: [
       {
@@ -397,7 +397,7 @@ export const 项目域 = {
       id: { type: "string", description: "Project id", required: true },
       tier: { type: "string", description: "骨架/补全/独立", required: true }
     },
-    engine: "projectSetTier",
+    engine: "project.projectSetTier",
     domain: "项目",
     channels: [
       {

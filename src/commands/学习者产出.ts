@@ -16,7 +16,7 @@ export const 学习者产出域 = {
       card: { type: "string", description: "Card id, e.g. \"c1\"", required: true },
       choice: { type: "string", description: "The chosen option text (verbatim one of options)", required: true }
     },
-    engine: "errorCardAnswer",
+    engine: "bank2.errorCardAnswer",
     domain: "学习者产出",
     channels: [
       {
@@ -41,7 +41,7 @@ export const 学习者产出域 = {
       card: { type: "string", description: "Card id, e.g. \"c1\"", required: true },
       archived: { type: "boolean", description: "true to archive, false to restore", required: true }
     },
-    engine: "errorCardArchive",
+    engine: "bank2.errorCardArchive",
     domain: "学习者产出",
     channels: [
       {
@@ -83,7 +83,7 @@ export const 学习者产出域 = {
       course: { type: "string", description: "Course name; omit for all enabled courses" },
       node: { type: "string", description: "Node name to scope the mining" }
     },
-    engine: "errorCardMine",
+    engine: "bank2.errorCardMine",
     domain: "学习者产出",
     channels: [
       {
@@ -100,7 +100,7 @@ export const 学习者产出域 = {
     args: {
       course: { type: "string", description: "Course name; omit for all enabled courses", read: "query" }
     },
-    engine: "errorCardQueue",
+    engine: "bank2.errorCardQueue",
     domain: "学习者产出",
     channels: [
       {
@@ -167,7 +167,7 @@ export const 学习者产出域 = {
         read: "query"
       }
     },
-    engine: "explainBackPack",
+    engine: "learner.explainBackPack",
     domain: "学习者产出",
     channels: [
       {
@@ -197,7 +197,7 @@ export const 学习者产出域 = {
         read: "fallback"
       }
     },
-    engine: "explainBackFeedback",
+    engine: "learner.explainBackFeedback",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_explain_feedback" },
@@ -233,7 +233,7 @@ export const 学习者产出域 = {
       habit: { type: "string", description: "Habit id", required: true },
       archived: { type: "boolean", description: "true to archive, false to restore", required: true }
     },
-    engine: "habitArchive",
+    engine: "learner.habitArchive",
     domain: "学习者产出",
     channels: [
       {
@@ -256,7 +256,7 @@ export const 学习者产出域 = {
       cue: { type: "string", description: "Stable cue: time/place anchor (e.g. \"after brushing teeth in the morning\")", required: true },
       action: { type: "string", description: "ONE concrete action (verb-first); multi-behavior chains fall outside the evidence format", required: true }
     },
-    engine: "habitCreate",
+    engine: "learner.habitCreate",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_habit_create" },
@@ -271,7 +271,7 @@ export const 学习者产出域 = {
     id: "habit-list",
     summary: "List habits with their derived surfaces: total self-reported repeats, forgiving streak (small gaps ≤2 days don't break it), and latest automation self-rating. Curve and streak are shown to the learner only — they never enter mastery, XP, or any canonical measure.",
     args: {},
-    engine: "habitList",
+    engine: "learner.habitList",
     domain: "学习者产出",
     channels: [
       {
@@ -295,7 +295,7 @@ export const 学习者产出域 = {
       auto_rating: { type: "number", description: "Optional automation self-rating 1-5 (how automatic did it feel?)" },
       note: { type: "string", description: "Free note", read: "text" }
     },
-    engine: "habitRepeat",
+    engine: "learner.habitRepeat",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_habit_repeat" },
@@ -317,7 +317,7 @@ export const 学习者产出域 = {
         read: "query"
       }
     },
-    engine: "habitShow",
+    engine: "learner.habitShow",
     domain: "学习者产出",
     channels: [
       {
@@ -342,7 +342,7 @@ export const 学习者产出域 = {
       template: { type: "string", description: "Template id from learnhub_experiment_templates", required: true },
       course: { type: "string", description: "Scope to one course; omit for all enabled courses" }
     },
-    engine: "kataToExperiment",
+    engine: "learner.kataToExperiment",
     domain: "学习者产出",
     channels: [
       {
@@ -386,7 +386,7 @@ export const 学习者产出域 = {
     args: {
       week_start: { type: "string", description: "Monday YYYY-MM-DD of the week to review; omit for the most recent complete week", read: "query" }
     },
-    engine: "kataOpen",
+    engine: "learner.kataOpen",
     domain: "学习者产出",
     channels: [
       {
@@ -415,7 +415,7 @@ export const 学习者产出域 = {
         required: true
       }
     },
-    engine: "kataSave",
+    engine: "learner.kataSave",
     domain: "学习者产出",
     channels: [
       {
@@ -468,7 +468,7 @@ export const 学习者产出域 = {
       card: { type: "string", description: "Card id, e.g. \"c1\"", required: true },
       archived: { type: "boolean", description: "true to archive, false to restore", required: true }
     },
-    engine: "learnerCardArchive",
+    engine: "learner.learnerCardArchive",
     domain: "学习者产出",
     channels: [
       {
@@ -491,7 +491,7 @@ export const 学习者产出域 = {
       node: { type: "string", description: "Node the card belongs to (source_node)", required: true },
       card: { type: "string", description: "Card id, e.g. \"c1\"", required: true }
     },
-    engine: "learnerCardForget",
+    engine: "learner.learnerCardForget",
     domain: "学习者产出",
     channels: [
       {
@@ -514,7 +514,7 @@ export const 学习者产出域 = {
     args: {
       course: { type: "string", description: "Course name; omit for all enabled courses", read: "query" }
     },
-    engine: "learnerQueue",
+    engine: "learner.learnerQueue",
     domain: "学习者产出",
     channels: [
       {
@@ -540,7 +540,7 @@ export const 学习者产出域 = {
       card: { type: "string", description: "Card id, e.g. \"c1\"", required: true },
       rating: { type: "number", description: "Self-rating: 2 Hard / 3 Good / 4 Easy", required: true }
     },
-    engine: "learnerCardRate",
+    engine: "learner.learnerCardRate",
     domain: "学习者产出",
     channels: [
       {
@@ -597,7 +597,7 @@ export const 学习者产出域 = {
       skill: { type: "string", description: "Skill id", required: true },
       archived: { type: "boolean", description: "true to archive, false to restore", required: true }
     },
-    engine: "skillArchive",
+    engine: "learner.skillArchive",
     domain: "学习者产出",
     channels: [
       {
@@ -619,7 +619,7 @@ export const 学习者产出域 = {
       name: { type: "string", description: "Skill name (also becomes the id)", required: true },
       maintenance_days: { type: "number", description: "Maintenance beat cap in days: 7-365, or 0/null to disable (default 30)" }
     },
-    engine: "skillCreate",
+    engine: "learner.skillCreate",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_skill_create" }
@@ -629,7 +629,7 @@ export const 学习者产出域 = {
     id: "skill-list",
     summary: "List skill entries with their lane due dates (maintenance cap folded in). due_kind marks what a due lane wants: acquisition (FSRS due drove it) or maintenance (the beat cap brought it back — mini-redo + replay). Fresh skills (never executed) have due=null: no due semantics until the first execution.",
     args: {},
-    engine: "skillList",
+    engine: "learner.skillList",
     domain: "学习者产出",
     channels: [
       {
@@ -652,7 +652,7 @@ export const 学习者产出域 = {
       skill: { type: "string", description: "Skill id", required: true },
       days: { type: "number", description: "Cap in days (7-365); omit/null disables the cap" }
     },
-    engine: "skillSetMaintenance",
+    engine: "learner.skillSetMaintenance",
     domain: "学习者产出",
     channels: [
       {

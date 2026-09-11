@@ -65,14 +65,30 @@ function scrub(call: string): string {
 function shadowEngine(rt: HostRuntime): { calls: string[]; stop: () => void } {
   const calls: string[] = []
   let recording = true
+  const record = (label: string, args: unknown[]) => {
+    if (recording) calls.push(scrub(`${label}(${args.map(a => JSON.stringify(a) ?? String(a)).join(',')})`))
+    return Promise.resolve(SENTINEL)
+  }
+  // hub 装配域方法（裸名）：覆盖在门面实例上
   const proto = LearnhubEngine.prototype as unknown as Record<string, unknown>
   for (const name of Object.getOwnPropertyNames(proto)) {
     if (name === 'constructor') continue
     const desc = Object.getOwnPropertyDescriptor(proto, name)
     if (typeof desc?.value !== 'function') continue
-    ;(rt.engine as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => {
-      if (recording) calls.push(scrub(`${name}(${args.map(a => JSON.stringify(a) ?? String(a)).join(',')})`))
-      return Promise.resolve(SENTINEL)
+    ;(rt.engine as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => record(name, args)
+  }
+  // 子系统方法（C 形态，ADR-0049）：覆盖在子系统实例上，探针记名走 `<子系统>.<方法>`
+  const engine = rt.engine as unknown as Record<string, unknown>
+  for (const key of Object.getOwnPropertyNames(engine)) {
+    const sub = engine[key]
+    if (sub === null || typeof sub !== 'object') continue
+    const subProto = Object.getPrototypeOf(sub) as Record<string, unknown> | null
+    if (!subProto || subProto === Object.prototype) continue
+    for (const name of Object.getOwnPropertyNames(subProto)) {
+      if (name === 'constructor') continue
+      const desc = Object.getOwnPropertyDescriptor(subProto, name)
+      if (typeof desc?.value !== 'function') continue
+      ;(sub as Record<string, unknown>)[name] = (...args: unknown[]) => record(`${key}.${name}`, args)
     }
   }
   return { calls, stop: () => { recording = false } }

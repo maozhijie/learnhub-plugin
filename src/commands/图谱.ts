@@ -56,7 +56,7 @@ export const 图谱域 = {
       from: { type: "string", description: "Name (canonical or alias) of the entry to absorb", required: true },
       into: { type: "string", description: "Name (canonical or alias) of the surviving entry", required: true }
     },
-    engine: "conceptMerge",
+    engine: "graph.conceptMerge",
     domain: "图谱",
     channels: [
       {
@@ -74,7 +74,7 @@ export const 图谱域 = {
       course: { type: "string", description: "Course name; omit when only one course is enabled", read: "query" },
       elementsOnly: { type: "boolean", description: "Only output cytoscape render elements (nodes/edges)" }
     },
-    engine: "graphAnalyze",
+    engine: "graph.graphAnalyze",
     domain: "图谱",
     channels: [
       {
@@ -112,7 +112,7 @@ export const 图谱域 = {
       region: { type: "string", description: "Region name filter" },
       block: { type: "string", description: "Block name filter (requires region when ambiguous)" }
     },
-    engine: "graphBrowse",
+    engine: "graph.graphBrowse",
     domain: "图谱",
     channels: [
       {
@@ -129,7 +129,7 @@ export const 图谱域 = {
     args: {
       course: { type: "string", description: "Course name; omit when only one course is enabled", read: "text" }
     },
-    engine: "graphEncBackfill",
+    engine: "graph.graphEncBackfill",
     domain: "图谱",
     channels: [
       {
@@ -170,7 +170,7 @@ export const 图谱域 = {
       course: { type: "string", description: "Course name; omit when only one course is enabled" },
       node: { type: "string", description: "Node name", required: true }
     },
-    engine: "graphNode",
+    engine: "graph.graphNode",
     domain: "图谱",
     channels: [
       {
@@ -189,7 +189,7 @@ export const 图谱域 = {
       from: { type: "string", description: "Candidate prerequisite node", required: true },
       to: { type: "string", description: "Target node", required: true }
     },
-    engine: "graphPath",
+    engine: "graph.graphPath",
     domain: "图谱",
     channels: [
       {
@@ -207,7 +207,7 @@ export const 图谱域 = {
       status: { type: "string", description: "Filter by status (default pending; e.g. applied/rejected)" },
       kind: { type: "string", description: "Filter by kind: edit / seed / enrich / project_plan / project_milestone / experiment" }
     },
-    engine: "graphProposals",
+    engine: "graph.graphProposals",
     domain: "图谱",
     channels: [
       {
@@ -231,7 +231,7 @@ export const 图谱域 = {
       kind: { type: "string", description: "\"seed\" (new-course entry or endpoint change — one human review) or \"edit\" (change ops) or \"enrich\" (overlay backfill)", required: true },
       yaml: { type: "string", description: "Full proposal YAML text (SeedProposal / EditProposal / EnrichProposal schema)", required: true }
     },
-    engine: "graphPropose",
+    engine: "graph.graphPropose",
     domain: "图谱",
     channels: [
       {
@@ -246,7 +246,7 @@ export const 图谱域 = {
     args: {
       kind: { type: "string", required: true }
     },
-    engine: "proposalApply",
+    engine: "graph.proposalApply",
     domain: "图谱",
     channels: [
       {
@@ -261,7 +261,7 @@ export const 图谱域 = {
     args: {
       note: { type: "string", read: "fallback" }
     },
-    engine: "graphReject",
+    engine: "graph.graphReject",
     domain: "图谱",
     channels: [
       {

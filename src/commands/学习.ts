@@ -14,7 +14,7 @@ export const 学习域 = {
       node: { type: "string", required: true },
       band: { type: "string", read: "raw" }
     },
-    engine: "logBandSession",
+    engine: "learner.logBandSession",
     domain: "学习",
     channels: [
       {
@@ -29,7 +29,7 @@ export const 学习域 = {
     args: {
       hints_enabled: { type: "boolean", required: true }
     },
-    engine: "calibrationHintsConfig",
+    engine: "learner.calibrationHintsConfig",
     domain: "学习",
     channels: [
       {
@@ -49,7 +49,7 @@ export const 学习域 = {
     id: "calibration-profile",
     summary: "Get the Self-Calibration profile (ADR-0022, #104) as JSON: per-source slices of learner self-assessment × objective outcome pairs (v1 source \"jol\" = JOL prediction × actual answer; more sources land via the pairing contract). Each source carries calibration bins (per-prediction actual accuracy, shown only at >=10 sampled pairs — below the gate it is null, never fabricated) and an overconfidence verdict with evidence (the「会」bin's n / actual accuracy / threshold). `global` merges sources as a REFERENCE view only — domain-specific components are significant, so always present it together with its warning and treat the per-source slices as authoritative. When a source is overconfident and hints are enabled, review-queue responses ride a `calibration_hint` string: surface it verbatim at the self-assessment exit as a gentle nudge (see learnhub_review_queue); JOL probe density is then boosted (1/3 → 1/2) automatically. Read-only derivation: this NEVER discounts learner self-assessment driving canonical state — FSRS ratings pass through untouched and nothing feeds Mastery/XP. Never present it as a personality trait or a score.",
     args: {},
-    engine: "calibrationProfile",
+    engine: "learner.calibrationProfile",
     domain: "学习",
     channels: [
       {
@@ -69,7 +69,7 @@ export const 学习域 = {
     id: "coach",
     summary: "Get the「可用的困难」coach feedback (E5, read-only informational, no gates or scoring): checks the last 7 days of the learner's difficulty-band session choices and in-band performance. All-easy streak with due questions their FSRS state says they should know → a gentle nudge to try the standard band; consistent challenge-band struggle (accuracy below 0.6) → a pointer back to prerequisite/component-skill review. Low data stays silent. Surface messages verbatim when present; never force anything.",
     args: {},
-    engine: "coachAdvice",
+    engine: "learner.coachAdvice",
     domain: "学习",
     channels: [
       {
@@ -141,7 +141,7 @@ export const 学习域 = {
   'courses': command({
     id: "courses",
     args: {},
-    engine: "enabledCourses",
+    engine: "registry.enabled",
     domain: "学习",
     channels: [
       {
@@ -156,7 +156,7 @@ export const 学习域 = {
     args: {
       course: { type: "string", read: "query" }
     },
-    engine: "coursesTree",
+    engine: "content2.coursesTree",
     domain: "学习",
     channels: [
       {
@@ -172,7 +172,7 @@ export const 学习域 = {
     args: {
       goal: { type: "number", required: true }
     },
-    engine: "setDailyGoal",
+    engine: "sched2.setDailyGoal",
     domain: "学习",
     channels: [
       {
@@ -188,7 +188,7 @@ export const 学习域 = {
     args: {
       value: { type: "string", required: true }
     },
-    engine: "setDayCutoff",
+    engine: "sched2.setDayCutoff",
     domain: "学习",
     channels: [
       {
@@ -300,7 +300,7 @@ export const 学习域 = {
       cue: { type: "string", description: "Execution-intention cue (stable time/place anchor) — omit cue AND action to clear" },
       action: { type: "string", description: "Execution-intention action (ONE concrete action, verb-first) — omit cue AND action to clear" }
     },
-    engine: "setGoalIntention",
+    engine: "learner.setGoalIntention",
     domain: "学习",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_goal_intention" }
@@ -312,7 +312,7 @@ export const 学习域 = {
       enabled: { type: "boolean" },
       rate: { type: "number", read: "finite" }
     },
-    engine: "jolConfig",
+    engine: "learner.jolConfig",
     domain: "学习",
     channels: [
       {
@@ -345,7 +345,7 @@ export const 学习域 = {
         read: "query"
       }
     },
-    engine: "lesson",
+    engine: "content2.lesson",
     domain: "学习",
     channels: [
       {
@@ -366,7 +366,7 @@ export const 学习域 = {
   'memory': command({
     id: "memory",
     args: {},
-    engine: "memoryHealth",
+    engine: "sched2.memoryHealth",
     domain: "学习",
     channels: [
       {
@@ -402,7 +402,7 @@ export const 学习域 = {
       cue: { type: "string", description: "Execution-intention cue (stable time/place anchor, e.g. 早上刷完牙后) — required together with action" },
       action: { type: "string", description: "Execution-intention action (ONE concrete action, verb-first) — required together with cue" }
     },
-    engine: "pinToday",
+    engine: "learner.pinToday",
     domain: "学习",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_pin_today" }
@@ -411,7 +411,7 @@ export const 学习域 = {
   'prompts': command({
     id: "prompts",
     args: {},
-    engine: "promptKinds",
+    engine: "content2.promptKinds",
     domain: "学习",
     channels: [
       {
@@ -452,7 +452,7 @@ export const 学习域 = {
   'queue': command({
     id: "queue",
     args: {},
-    engine: "queueItemsAll",
+    engine: "content2.queueItemsAll",
     domain: "学习",
     channels: [
       {
@@ -490,7 +490,7 @@ export const 学习域 = {
       course: { type: "string", required: true },
       node: { type: "string", required: true }
     },
-    engine: "contentReview",
+    engine: "content2.contentReview",
     domain: "学习",
     channels: [
       {
@@ -508,7 +508,7 @@ export const 学习域 = {
       node: { type: "string", description: "Node name filter — targeted review of this node's due questions (A3 advice direct entry; adaptive difficulty order)", read: "query" },
       band_pref: { type: "string", description: "Learner's explicit difficulty band (E5): easy/standard/hard as a weighted preference on the A1 start band" }
     },
-    engine: "reviewQueue",
+    engine: "content2.reviewQueue",
     domain: "学习",
     channels: [
       {
@@ -573,7 +573,7 @@ export const 学习域 = {
       node: { type: "string", description: "Node name", required: true },
       skipped: { type: "boolean", description: "Explicit direction: true to skip, false to un-skip (omission is an argument error)", required: true }
     },
-    engine: "nodeSkip",
+    engine: "sched2.nodeSkip",
     domain: "学习",
     channels: [
       {
@@ -593,7 +593,7 @@ export const 学习域 = {
     args: {
       enabled: { type: "boolean" }
     },
-    engine: "sleepAdviceConfig",
+    engine: "lab.sleepAdviceConfig",
     domain: "学习",
     channels: [
       {
@@ -646,7 +646,7 @@ export const 学习域 = {
       course: { type: "string", description: "Course name", required: true },
       node: { type: "string", description: "Node name", required: true }
     },
-    engine: "unpinToday",
+    engine: "learner.unpinToday",
     domain: "学习",
     channels: [
       {
@@ -673,7 +673,7 @@ export const 学习域 = {
   'xp': command({
     id: "xp",
     args: {},
-    engine: "xpStatus",
+    engine: "sched2.xpStatus",
     domain: "学习",
     channels: [
       {

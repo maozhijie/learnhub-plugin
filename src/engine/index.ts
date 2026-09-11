@@ -159,23 +159,23 @@ export class LearnhubEngine {
   private ankiMirror: AnkiMirror
   readonly sessions: Sessions
   /** Lab 子系统（D 系列实验台，#152 刀 2）：窄面注入构造，见 constructor 尾部。 */
-  private lab: LabSubsystem
+  readonly lab: LabSubsystem
   /** Channels 子系统（通道域，#152 刀 3）：窄面注入构造，见 constructor 尾部。 */
-  private channels: ChannelsSubsystem
+  readonly channels: ChannelsSubsystem
   /** Learner 子系统（学习者输出域，#152 刀 4）：窄面注入构造，见 constructor 尾部。 */
-  private learner: LearnerSubsystem
+  readonly learner: LearnerSubsystem
   /** Project 子系统（项目域，#152 刀 5）：窄面注入构造，见 constructor 尾部。 */
-  private project: ProjectSubsystem
+  readonly project: ProjectSubsystem
   /** Bank 子系统（题库域，#152 刀 6）：窄面注入构造，见 constructor 尾部。 */
-  private bank2: BankSubsystem
+  readonly bank2: BankSubsystem
   /** Graph 子系统（图域，#152 刀 7）：窄面注入构造，见 constructor 尾部。 */
-  private graph: GraphSubsystem
+  readonly graph: GraphSubsystem
   /** Content 子系统（内容管线域，#152 刀 8）：窄面注入构造，见 constructor 尾部。 */
-  private content2: ContentSubsystem
+  readonly content2: ContentSubsystem
   /** Sched 子系统（调度域，#152 刀 9）：窄面注入构造，见 constructor 尾部。 */
-  private sched2: SchedSubsystem
+  readonly sched2: SchedSubsystem
   /** Growth 子系统（滚动教练域，#152 刀 11）：窄面注入构造，见 constructor 尾部。 */
-  private growth2: GrowthSubsystem
+  readonly growth2: GrowthSubsystem
   /** vault 根目录（笔记源注册路径归一用；posix 规范形态）。 */
   readonly vaultRoot: string
   /** schema 版本块（#138 启动硬门的解析产物；breaks 断裂史为纯档案，引擎零消费）。 */

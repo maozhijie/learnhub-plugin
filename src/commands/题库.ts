@@ -29,7 +29,7 @@ export const 题库域 = {
     args: {
       course: { type: "string", read: "raw" }
     },
-    engine: "bankCleanupApply",
+    engine: "bank2.bankCleanupApply",
     domain: "题库",
     channels: [
       {
@@ -46,7 +46,7 @@ export const 题库域 = {
     args: {
       course: { type: "string", description: "Course name; omit to scan all enabled courses", read: "query" }
     },
-    engine: "difficultyAdvice",
+    engine: "bank2.difficultyAdvice",
     domain: "题库",
     channels: [
       {
@@ -72,7 +72,7 @@ export const 题库域 = {
       undo: { type: "boolean" },
       all: { type: "boolean" }
     },
-    engine: "adviceDismiss",
+    engine: "bank2.adviceDismiss",
     domain: "题库",
     channels: [
       {
@@ -89,7 +89,7 @@ export const 题库域 = {
       course: { type: "string", required: true },
       node: { type: "string", required: true }
     },
-    engine: "questionAdd",
+    engine: "bank2.questionAdd",
     domain: "题库",
     channels: [
       {
@@ -108,7 +108,7 @@ export const 题库域 = {
       archived: { type: "boolean" },
       reason: { type: "string", read: "raw" }
     },
-    engine: "questionArchive",
+    engine: "bank2.questionArchive",
     domain: "题库",
     channels: [
       {
@@ -169,7 +169,7 @@ export const 题库域 = {
       node: { type: "string", required: true },
       qid: { type: "string", required: true }
     },
-    engine: "questionDisputeReview",
+    engine: "bank2.questionDisputeReview",
     domain: "题库",
     channels: [
       {
@@ -188,7 +188,7 @@ export const 题库域 = {
       elapsed_s: { type: "number", read: "finite" },
       predicted: { type: "string", read: "raw" }
     },
-    engine: "questionForget",
+    engine: "content2.questionForget",
     domain: "题库",
     channels: [
       {
@@ -230,7 +230,7 @@ export const 题库域 = {
       node: { type: "string", description: "Node name", required: true },
       qid: { type: "string", description: "Question id inside the bank, e.g. \"q1\"", required: true }
     },
-    engine: "questionGet",
+    engine: "bank2.questionGet",
     domain: "题库",
     channels: [
       {
@@ -258,7 +258,7 @@ export const 题库域 = {
         read: "query"
       }
     },
-    engine: "questions",
+    engine: "content2.questions",
     domain: "题库",
     channels: [
       {
@@ -283,7 +283,7 @@ export const 题库域 = {
       node: { type: "string", required: true },
       qid: { type: "string", required: true }
     },
-    engine: "questionRate",
+    engine: "content2.questionRate",
     domain: "题库",
     channels: [
       {
@@ -301,7 +301,7 @@ export const 题库域 = {
       node: { type: "string", description: "Node name (must match the node field inside the YAML)", required: true },
       yaml: { type: "string", description: "Bank YAML text (node/questions[id,kind,q,answer,options?,explanation?,difficulty?,uses?])", required: true }
     },
-    engine: "questionSave",
+    engine: "content2.questionSave",
     domain: "题库",
     channels: [
       {
@@ -347,7 +347,7 @@ export const 题库域 = {
     args: {
       course: { type: "string", read: "query" }
     },
-    engine: "questionsAll",
+    engine: "bank2.questionsAll",
     domain: "题库",
     channels: [
       {

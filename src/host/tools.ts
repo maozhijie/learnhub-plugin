@@ -17,7 +17,7 @@ import { defineTool } from '@deepseek-ai/dsh-tools'
 import { COMMAND_LIST } from '../commands/index.ts'
 import type { CommandSpec } from '../commands/index.ts'
 import type { ParamSpec, ParameterSchemaSpec } from '../commands/types.ts'
-import { run } from './runtime.ts'
+import { resolveEngineEntry, run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import type { LearnhubEngine } from '../engine/index.ts'
 import { toolHandlers } from './tool-handlers.ts'
@@ -110,7 +110,7 @@ export function registerTools(ctx: Context, rt: HostRuntime): void {
     const engine = c.engine
     const bind = channel.bind
     const execute = bind !== undefined && engine !== undefined
-      ? (args: Record<string, unknown>) => run(rt, tool, async () => JSON.stringify(await (rt.engine[engine as keyof LearnhubEngine] as (...a: unknown[]) => unknown)(...boundArgs(args, bind))))
+      ? (args: Record<string, unknown>) => run(rt, tool, async () => JSON.stringify(await resolveEngineEntry(rt, engine)(...boundArgs(args, bind) as never[])))
       : handlers[tool]
     ctx.tools.register(defineTool({
       name: tool,

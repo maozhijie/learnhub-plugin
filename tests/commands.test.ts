@@ -19,6 +19,17 @@ import { fileURLToPath } from 'node:url'
 import { BY_ROUTE, BY_TOOL, COMMAND_LIST, COMMANDS, DOMAIN_SIZES } from '../src/commands/index.ts'
 import { GEN_JOB_PHASES, isNodeAnchoredPhase } from '../src/generation-jobs.ts'
 import { LearnhubEngine } from '../src/engine/index.ts'
+import { LearnerSubsystem } from '../src/engine/learner-cards.ts'
+import { ContentSubsystem } from '../src/engine/content-subsystem.ts'
+import { ProjectSubsystem, Projects } from '../src/engine/projects.ts'
+import { BankSubsystem } from '../src/engine/question-bank.ts'
+import { ChannelsSubsystem } from '../src/engine/note-source.ts'
+import { LabSubsystem } from '../src/engine/nof1.ts'
+import { GraphSubsystem } from '../src/engine/graph-subsystem.ts'
+import { GrowthSubsystem } from '../src/engine/growth-subsystem.ts'
+import { SchedSubsystem } from '../src/engine/sched-subsystem.ts'
+import { Registry } from '../src/engine/registry.ts'
+import { GraphProposals } from '../src/engine/proposals.ts'
 import { AGENT_GUIDE, sdkParameters } from '../src/host/tools.ts'
 import { HANDLERS } from '../src/host/handlers.ts'
 
@@ -47,7 +58,22 @@ const NO_ENGINE: Record<string, '队列型' | '按参分派型' | '无引擎型'
 
 // ---------------------------------------------------------------- ① engine 存在性
 
-test('门① engine 存在性：声明值 ∈ 门面原型方法；留空的逐条在白名单里', () => {
+test('门① engine 存在性：点路径 ∈ 子系统原型 / 裸名 ∈ hub 装配域（ADR-0049 C 形态）；留空的逐条在白名单里', () => {
+  // 子系统名 → 类原型（C 形态的公开面契约表；hub 字段名与此表键一一对应）
+  const SUBSYSTEM_PROTOS: Record<string, Record<string, unknown>> = {
+    learner: LearnerSubsystem.prototype,
+    content2: ContentSubsystem.prototype,
+    project: ProjectSubsystem.prototype,
+    bank2: BankSubsystem.prototype,
+    channels: ChannelsSubsystem.prototype,
+    lab: LabSubsystem.prototype,
+    graph: GraphSubsystem.prototype,
+    growth2: GrowthSubsystem.prototype,
+    sched2: SchedSubsystem.prototype,
+    registry: Registry.prototype,
+    proposals: GraphProposals.prototype,
+    projects: Projects.prototype,
+  } as unknown as Record<string, Record<string, unknown>>
   const proto = LearnhubEngine.prototype as unknown as Record<string, unknown>
   const bad: string[] = []
   const unlisted: string[] = []
@@ -56,7 +82,12 @@ test('门① engine 存在性：声明值 ∈ 门面原型方法；留空的逐�
       if (!NO_ENGINE[c.id]) unlisted.push(c.id)
       continue
     }
-    if (typeof proto[c.engine] !== 'function') bad.push(`${c.id} → ${c.engine}`)
+    // C 形态（ADR-0049）：`<子系统>.<方法>` 断言子系统类原型；裸名断言 hub 装配域方法
+    const dot = c.engine.indexOf('.')
+    const hit = dot < 0
+      ? typeof proto[c.engine] === 'function'
+      : typeof SUBSYSTEM_PROTOS[c.engine.slice(0, dot)]?.[c.engine.slice(dot + 1)] === 'function'
+    if (!hit) bad.push(`${c.id} → ${c.engine}`)
   }
   assert.deepEqual(bad, [], `这些命令的 engine 在门面上不存在（接线指向空气）：\n${bad.join('\n')}`)
   assert.deepEqual(unlisted, [], `这些命令没有 engine 又不在白名单里（留空要逐条有理由）：\n${unlisted.join('\n')}`)

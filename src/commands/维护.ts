@@ -14,7 +14,7 @@ export const 维护域 = {
       course: { type: "string", description: "Course name", required: true },
       node: { type: "string", description: "Node name", required: true }
     },
-    engine: "contentCheck",
+    engine: "content2.contentCheck",
     domain: "维护",
     channels: [
       {
@@ -31,7 +31,7 @@ export const 维护域 = {
     args: {
       course: { type: "string", description: "Course name", required: true }
     },
-    engine: "courseDelete",
+    engine: "bank2.courseDelete",
     domain: "维护",
     channels: [
       {
@@ -102,7 +102,7 @@ export const 维护域 = {
     args: {
       path: { type: "string", description: "Note path, vault-relative or absolute", required: true }
     },
-    engine: "submitFeedback",
+    engine: "content2.submitFeedback",
     domain: "维护",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_feedback" },
@@ -133,7 +133,7 @@ export const 维护域 = {
       section: { type: "string", required: true },
       detail: { type: "string", read: "raw" }
     },
-    engine: "interactiveSettle",
+    engine: "bank2.interactiveSettle",
     domain: "维护",
     channels: [
       {
@@ -154,7 +154,7 @@ export const 维护域 = {
         read: "query"
       }
     },
-    engine: "resolveNote",
+    engine: "content2.resolveNote",
     domain: "维护",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_note_resolve" },

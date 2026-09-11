@@ -504,8 +504,11 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 22, '指南条目数（22 条手写，增减要显式）')
 })
 
-test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、路由独有 49（ADR-0045 迁移回归网）', () => {
-  const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]))
+test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、路由独有 50（ADR-0045 迁移回归网；#182 起按末段方法名归一）', () => {
+  // C 形态（ADR-0049）：入口名按「末段方法名」归一——点路径 `子系统.方法` 与过渡期
+  // 的裸名直调在同一口径下对账（方法名在转发映射里已验证全局唯一，无歧义）。
+  const last = (p: string) => p.split('.').pop()!
+  const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => last(m[1])))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
   // 工具面 = tools.ts；路由面 = 其余宿主技术层（与基线口径一致：工具注册区 vs 工具区外全部）。
   // **动态发现**（#168：路由表拆成 route-table/routes/routes-post 后，硬编码清单会让
@@ -516,12 +519,12 @@ test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、�
   // #169：两面都改成「源码直调 ∪ 注册表声明」——生成路径的调用住在声明里（src/commands/），
   // 源码里只剩例外 handler（host/tool-handlers.ts、host/handlers.ts）
   const agentDeclared = new Set(COMMAND_LIST.filter(c => c.channels.some(ch => ch.tool))
-    .map(c => c.engine).filter((e): e is string => !!e))
+    .map(c => c.engine).filter((e): e is string => !!e).map(last))
   const toolFace = new Set([...faceOf(read('src/host/tools.ts') + read('src/host/tool-handlers.ts')), ...agentDeclared])
   // #169：路由面的引擎入口 = **注册表 panel 通道的声明** ∪ 宿主源码里的直调。生成路径的调用
   // 现在住在声明里（src/commands/），不在任何 .ts 文件里——只扫源码会让大部分 route-only 凭空消失。
   const declared = new Set(COMMAND_LIST.filter(c => c.channels.some(ch => ch.route))
-    .map(c => c.engine).filter((e): e is string => !!e))
+    .map(c => c.engine).filter((e): e is string => !!e).map(last))
   const routeFace = new Set([...faceOf([...hostFiles.map(f => `src/host/${f}`), 'src/index.ts'].map(read).join('\n')), ...declared])
   const base = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-face-baseline.json'), 'utf8')) as {
     shared: string[]; toolOnly: string[]; routeOnly: string[]
@@ -534,7 +537,7 @@ test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、�
   assert.deepEqual(routeOnly, base.routeOnly, '路由独有引擎入口集漂移')
   assert.equal(shared.length, 84)
   assert.equal(toolOnly.length, 26)
-  assert.equal(routeOnly.length, 49)
+  assert.equal(routeOnly.length, 50)
 })
 
 // ---------------------------------------------------------------- 清理
