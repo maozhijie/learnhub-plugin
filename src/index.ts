@@ -3,7 +3,7 @@
  *
  * Python 引擎已退役：原 `spawn python -m learnhub` 的全部命令面由
  * src/engine/（TS）同进程承载，本文件只做三件事：
- * - agent 工具面：106 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
+ * - agent 工具面：111 个 defineTool 直调 engine（学习/数据体检/图谱/生成/题库/笔记源/学习者产出/项目/实验室/无界实践/Anki 互通）
  * - HTTP 路由 /learnhub/api/*：面板后端，直调 engine
  * - /learnhub 独立面板页（伺服 web/dist Vite SPA）+ /file 媒体路由
  *
@@ -60,35 +60,6 @@ export interface LearnhubConfig {
 }
 
 /** AI 调用的 provider/model/快速档/高档（cordis 行 config 可覆盖，apply 时写入）。 */
-const llmCfg = {
-  provider: 'deepseek-official', model: 'deepseek-v4-flash',
-  fastEffort: 'off' as 'off' | 'low',
-  deepEffort: 'low' as 'off' | 'low',
-}
-
-/** P4 分层 effort：机械调用统一走 fast 档；高复杂度节点的大纲/修复轮升 deep 档。
- * 调用点只声明语义档（注入侧可观测），翻译成部署的 fastEffort/deepEffort 收口在 llmSeam（#137）。
- * 名字留在 effort 词族——「档位」在 CONTEXT.md 语言表里专指复杂度档位（contentTierOf），不混用。 */
-function contentEffort(highTier: boolean): LlmEffort {
-  return highTier ? 'deep' : 'fast'
-}
-
-/** 当前 LLM 配置视图（模型透明，#? 与 /status、learnhub_status 一同带出，面板只读展示；
- * 切换模型 = 编辑 profile patch（cordis.patch.yml 的 dsh-learnhub 行 provider/model/
- * fastEffort/deepEffort）后重启宿主——插件不写宿主机器级配置）。 */
-function llmView() {
-  return {
-    provider: llmCfg.provider, model: llmCfg.model,
-    fast_effort: llmCfg.fastEffort, deep_effort: llmCfg.deepEffort,
-  }
-}
-
-/** Agent 独有能力在面板的说明锚点（能指南，ADR 面无此决议；与工具注册同文件维护，
- * 指南页与各页「这些事可以找 agent」提示都从这里渲染——单一事实源防文案漂移）。
- * 分流纪律：面板已有控件的动作不进指南（UI 是默认通道，agent 是进阶路径）——
- * 建课/生长/罗盘/回填/反编译/项目草案/项目创建已随面板下发退出本清单。
- * page = 面板页签（learn/graph/bank/stats/lab/generate/practice/projects/global）；
- * prompt = 可直接粘进 dsh 会话的示例指令。 */
 const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prompt?: string }> = [
   { tool: 'learnhub_pin_today', page: 'learn', text: '「今天学它」：把节点置顶为今日推荐榜首（可挂执行意图），只影响今天、次日自动失效。',
     prompt: '用 learnhub_pin_today 把「<节点>」设为今天的学习目标' },
@@ -194,24 +165,6 @@ const API = '/learnhub/api'
 /** 独立面板页面路由（伺服 web/dist）。 */
 const PAGE = '/learnhub'
 /** 面板 SPA 构建产物目录（ui/ 经 vite build 产出；每次请求现读，改 UI 无需重启）。 */
-const PAGE_DIST = fileURLToPath(new URL('../web/dist/', import.meta.url))
-/** vendored 库目录（交互件沙箱 CSP 放开 'self' 后的唯一取库途径；build.mjs copyVendor 落盘）。 */
-const VENDOR_DIST = fileURLToPath(new URL('../web/vendor/', import.meta.url))
-/** /file 路由允许伺服的二进制媒体扩展名 → MIME（课程插图等）。 */
-const FILE_MIME: Record<string, string> = {
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-}
-
-/** 面板 SPA 资产扩展名 → MIME。 */
-const ASSET_MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf',
-  '.json': 'application/json; charset=utf-8', '.map': 'application/json; charset=utf-8',
-}
-
 /** 运行日志：每次引擎调用的记录（工具名 + 输出摘要）。 */
 async function runLog(tool: string, output: string): Promise<void> {
   const path = `${engine.paths.centerStateDir}/运行日志.md`
@@ -252,95 +205,6 @@ async function apiRun<T>(tool: string, fn: () => Promise<T>): Promise<T> {
 
 /** LLM 空闲超时（#118）：连续无新输出 chunk 超过该时长即 abort 本次调用——
  * 流挂起不再永久等待（占死单并发闸）。判卷、出题、生成管线全部调用受益。 */
-const LLM_IDLE_TIMEOUT_MS = 120_000
-/** max-tokens 截断重试（#116）的显式输出上限：截断是断尾 JSON/YAML 的常见诱因，
- * 原题提高输出上限重试一次（与引擎侧判卷重问相互独立、各限一次）。 */
-const LLM_TRUNCATION_RETRY_TOKENS = 8192
-
-/** dsh llm 一次性调用：收集 text-delta；终止块非 success 即抛错。
- * opts.effort 指定思考档（如 'off' 快速路径）；路由不支持该档位时
- * （UNSUPPORTED_REASONING_EFFORT）自动降级为部署默认重试一次。 */
-async function llmComplete(ctx: Context, prompt: string, system?: string, opts?: { effort?: 'off' | 'low' }): Promise<string> {
-  const attempt = async (effort?: 'off' | 'low', maxTokens?: number): Promise<string> => {
-    const r = await llmStreamOnce(ctx, prompt, system, effort, maxTokens)
-    if (!r.truncated) return r.text
-    console.warn(`[learnhub] 模型输出被 max-tokens 截断（model=${llmCfg.model}），提高输出上限原题重试一次`)
-    return (await llmStreamOnce(ctx, prompt, system, effort, LLM_TRUNCATION_RETRY_TOKENS)).text
-  }
-  if (opts?.effort === undefined) return attempt()
-  try {
-    return await attempt(opts.effort)
-  } catch (err) {
-    if (!(err instanceof Error && (err as { code?: string }).code === 'UNSUPPORTED_REASONING_EFFORT')) throw err
-    return attempt()
-  }
-}
-
-/** 宿主→引擎 LLM 补全注入缝的真实现适配器（#137）：语义档 fast/deep 翻译成部署的
- * fastEffort/deepEffort（不传档 = 部署默认），空闲超时/截断重试/档位降级都在底层
- * llmComplete。引擎侧生成/组装函数一律只认 LlmComplete 缝型——测试注入假实现
- * （固定回放/脚本化应答）即可不依赖真实模型确定性跑通金样本回放。 */
-function llmSeam(ctx: Context): LlmComplete {
-  return (prompt, system, opts) => llmComplete(ctx, prompt, system,
-    opts?.effort === 'fast' ? { effort: llmCfg.fastEffort }
-      : opts?.effort === 'deep' ? { effort: llmCfg.deepEffort }
-        : undefined)
-}
-
-/** llmComplete 的单次流式执行；effort 非空时显式指定思考档。
- * 空闲超时：每收到一个 chunk 重置计时，LLM_IDLE_TIMEOUT_MS 内无新输出即 abort（#118）。
- * 返回 truncated 标记（finish reason = max-tokens），截断重试由 llmComplete 处理。 */
-async function llmStreamOnce(ctx: Context, prompt: string, system?: string, effort?: 'off' | 'low', maxTokens?: number): Promise<{ text: string; truncated: boolean }> {
-  const msg = createUserMessage({
-    source: { kind: 'user' },
-    content: [{ type: 'text', text: prompt }],
-  })
-  let text = ''
-  let truncated = false
-  let timedOut = false
-  const controller = new AbortController()
-  let idle: ReturnType<typeof setTimeout> | undefined
-  const armIdle = () => {
-    clearTimeout(idle)
-    idle = setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, LLM_IDLE_TIMEOUT_MS)
-  }
-  armIdle()
-  try {
-    const stream = ctx.llm.stream({
-      provider: llmCfg.provider, model: llmCfg.model, messages: [msg],
-      ...system === undefined ? {} : { system },
-      ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
-      ...maxTokens === undefined ? {} : { maxTokens },
-      signal: controller.signal,
-    })
-    for await (const chunk of stream) {
-      armIdle()
-      if (chunk.type === 'text-delta') text += chunk.text
-      if (chunk.type === 'finish' && (chunk.reason.kind === 'aborted' || chunk.reason.kind === 'error')) {
-        if (chunk.reason.kind === 'aborted') {
-          throw new Error(timedOut
-            ? `模型输出空闲超时（${Math.round(LLM_IDLE_TIMEOUT_MS / 1000)}s 无新输出），已中止本次调用`
-            : '模型调用被取消')
-        }
-        // failure.code 是稳定错误码（NO_ADAPTER/MISSING_CREDENTIAL/AUTH/RATE_LIMIT/...），一眼定位配置问题
-        const f = chunk.reason.failure
-        const status = f.status ? `/${f.status}` : ''
-        const e: Error & { code?: string } = new Error(`模型调用失败[${f.code}${status}]（provider=${llmCfg.provider} model=${llmCfg.model}）：${String(f.message)}`)
-        e.code = f.code
-        throw e
-      }
-      if (chunk.type === 'finish' && chunk.reason.kind === 'max-tokens') truncated = true
-    }
-  } finally {
-    clearTimeout(idle)
-  }
-  if (!text.trim()) throw new Error('模型没有返回内容')
-  return { text: text.trim(), truncated }
-}
-
 /** 剥掉模型可能包住的整段 markdown 代码围栏：限 markdown/yaml/json 等数据类标签——
  * 正文类标签（svg/plot 等）本身是内容的一部分，剥掉会毁掉 ```svg/```plot 引用块。 */
 function stripFences(body: string): string {
@@ -1089,43 +953,6 @@ async function explainBackTurn(ctx: Context, course: string, node: string, histo
 }
 
 /** 发送 JSON 响应（no-store：状态类接口禁止浏览器缓存，保证评分后即时刷新）。 */
-function sendJson(res: ServerResponse, code: number, body: unknown): void {
-  res.writeHead(code, {
-    'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
-  })
-  res.end(JSON.stringify(body))
-}
-
-/** 读取并解析 POST JSON 请求体。 */
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = []
-  for await (const chunk of req) chunks.push(chunk as Buffer)
-  const text = Buffer.concat(chunks).toString('utf8')
-  return text ? (JSON.parse(text) as Record<string, unknown>) : {}
-}
-
-/** 字符串参数取值；缺失即抛 400 语义错误。 */
-function need(body: Record<string, unknown>, key: string): string {
-  const v = body[key]
-  if (typeof v !== 'string' || !v.trim()) throw new Error(`missing required field: ${key}`)
-  return v.trim()
-}
-
-/** 交互件伺服时注入 vendored KaTeX 自动渲染（检测到公式定界符且未自带 katex 才注入；
- * 存量交互件免重生成即获得公式渲染）。定界符与正文一致：$…$/$$…$$。 */
-function injectKatexIfMathed(html: string): string {
-  if (!/\$\$|\\\(|\\\[/.test(html) || /katex/i.test(html)) return html
-  const inject = [
-    '<link rel="stylesheet" href="/learnhub/api/vendor/katex/katex.min.css">',
-    '<script src="/learnhub/api/vendor/katex/katex.min.js"></script>',
-    '<script src="/learnhub/api/vendor/katex/contrib/auto-render.min.js"></script>',
-    '<script>document.addEventListener("DOMContentLoaded",function(){window.renderMathInElement(document.body,{delimiters:[{left:"$$",right:"$$",display:true},{left:"$",right:"$",display:false}],throwOnError:false})})</script>',
-  ].join('\n')
-  const head = html.toLowerCase().indexOf('</head>')
-  return head === -1 ? html + inject : html.slice(0, head) + inject + '\n' + html.slice(head)
-}
-
 /** /learnhub/api/* 路由分发：客户端面板的全部后端入口（响应形状与 v2 一致）。 */
 async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost')
