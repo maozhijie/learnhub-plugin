@@ -289,3 +289,9 @@ export interface ExperimentDef {
   /** 来源提案 id（留痕）。 */
   proposal: number
 }
+
+/** 「我的卡」卡面（E1 #70）：提示重述 / 挖空重述 / 自注讲解。
+ * #152 刀 4 自 learner-cards.ts 归位中立层：self-note 反向 type-import 本类型，
+ * 留在原地会锁死 learner-cards→self-note 的正向导入（R7）。 */
+export type LearnerCardKind = 'recall_cue' | 'cloze_rewrite' | 'self_explain'
+export const LEARNER_CARD_KINDS: LearnerCardKind[] = ['recall_cue', 'cloze_rewrite', 'self_explain']

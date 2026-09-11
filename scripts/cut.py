@@ -221,8 +221,8 @@ for tag, a, b in sections:
             body = '    await %s' % call
         else:
             body = '    return %s' % call
-        one = re.sub(r'\s+', ' ', blk['sig']).strip()
-        stubs.append('  ' + one)
+        one = blk['sig']
+        stubs.append(one)
         stubs.append(body)
         stubs.append('  }')
         stubs.append('')

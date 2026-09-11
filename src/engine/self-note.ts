@@ -7,7 +7,7 @@
  * （kind=self_note）、零 XP、不写掌握度/FSRS/canonical 任何字段。
  */
 import type { ExplainPoint } from './explain.ts'
-import type { LearnerCardKind } from './learner-cards.ts'
+import type { LearnerCardKind } from './types.ts'
 
 /** 自注卡的默认正面提示（按卡面档；学习者可显式覆盖）。 */
 export function selfNotePromptOf(kind: LearnerCardKind, anchor: string): string {

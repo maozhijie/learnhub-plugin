@@ -15,7 +15,7 @@
  * 聚合纯函数（buildKataReality）：流水进 → 分箱出；周归属全部经 dayOfTs（学习日
  * 口径，凌晨归属随日界），周内/周外用 YYYY-MM-DD 字典序比较。
  */
-import { dayOfTs, inWeek } from './dates.ts'
+import { dayOfTs, inWeek, weekStartOf } from './dates.ts'
 import { obsidianLink } from './output.ts'
 import { execRatingScore } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -307,4 +307,12 @@ export function kataAnswered(sections: Record<KataQuestion, string>): boolean {
     const v = sections[q].trim()
     return v.length > 0 && v !== KATA_EMPTY
   })
+}
+
+/** 周复盘的周参数校验（周一锚定；非法 fail loud；#152 刀 4 自门面文件归位）。 */
+export function kataMonday(weekStart: string): string {
+  if (typeof weekStart !== 'string' || weekStartOf(weekStart) !== weekStart) {
+    throw new Error(`[kata] weekStart 必须是某周的周一 'YYYY-MM-DD'（收到 ${String(weekStart)}）。`)
+  }
+  return weekStart
 }
