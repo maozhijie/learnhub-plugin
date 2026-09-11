@@ -461,3 +461,20 @@ export function anchorFromSeed(
     worksheet: (spec.worksheet ?? []).map(w => ({ block: w.block, ...(w.note ? { note: w.note } : {}), done: w.done === true })),
   }
 }
+
+/** 面板下发的种子起草请求（ADR-0038）：绑定字段（课程名/模式/目标类型/块工作表）
+ * 以表单为准，引擎受理前覆盖写入——模型照抄错误不影响绑定。 */
+export interface SeedDraftRequest {
+  course: string
+  goal: string
+  mode?: 'new' | 'reseed'
+  goalType?: 'capability' | 'coverage'
+  useVaultPrior?: boolean
+  worksheet?: Array<{ block: string; note?: string }>
+}
+
+/** 种子起草修复轮提示词（面板下发的 seedPropose 用，decompileRepairPrompt 同款机械）：
+ * 上一次输出未过干跑校验门 → 附校验清单重出完整 YAML。 */
+export function seedRepairPrompt(pack: string, previous: string, errors: string[]): string {
+  return `${pack}\n\n## 上一次输出未过种子校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`
+}

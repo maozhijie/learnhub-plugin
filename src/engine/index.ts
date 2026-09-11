@@ -70,8 +70,8 @@ import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, readVaultLinksCache, scanVaultLinks, scoreTier } from './vault-links.ts'
 import type { VaultLinksDoc, VaultLinkCandidateView } from './vault-links.ts'
-import { readAnchor, foldCompletion, isSeedGraph, COMPLETION_MASTERY_THRESHOLD } from './seed.ts'
-import type { CompletionFold } from './seed.ts'
+import { readAnchor, foldCompletion, isSeedGraph, COMPLETION_MASTERY_THRESHOLD, validateSeedProposal, seedRepairPrompt } from './seed.ts'
+import type { CompletionFold, SeedProposalSpec, SeedDraftRequest } from './seed.ts'
 import {
   SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ETA_PENDING,
   COMPASS_ETA_PROBE_WEEKS, compassScaffold, parseCompass, sectionBody, withSectionText,
@@ -81,6 +81,10 @@ import {
 import type { CompassEta, CompassEtaProbe } from './compass.ts'
 import { behaviorDigest, readyDepthCheck, renderBehaviorDigest, renderSedimentForCoach } from './coach-round.ts'
 import type { CoachCheck, CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
+
+/** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。 */
+export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
+export type { SeedDraftRequest } from './seed.ts'
 import {
   appendProbationEntry, readProbationLedger, foldProbation, recheckVerdict, recheckDue,
   learningDaysOf, growthRates, growthGate,
@@ -1006,6 +1010,79 @@ export class LearnhubEngine {
 
   async graphReject(pid: number, note = ''): Promise<ProposalRec> {
     return this.proposals.reject(pid, note)
+  }
+
+  /** 面板下发的种子起草（学习图页建课/换终点表单入口）：目标描述 + 模式 + 目标类型
+   * （coverage 附块工作表）→「种子提案」提示词组装（vault 先验选配——熟悉边界定位）→
+   * llm → 种子 YAML 干跑校验门（validateSeedProposal 直跑，未过回灌修复一轮）→
+   * proposeSeed 权威受理（schema/注册表对账/结构/概念对表在受理侧重跑全量），一次人审
+   * 即开工。课程名/模式/目标类型/工作表是表单绑定字段——以输入为准，不信模型照抄。
+   * llm 为注入缝（#137）。 */
+  async seedPropose(
+    input: SeedDraftRequest,
+    llm: LlmComplete,
+  ): Promise<{ id: number; course: string; mode: 'new' | 'reseed'; goal_type: string; endpoint: string; starts: number; prior_hits: number; repaired: boolean }> {
+    const course = input.course.trim()
+    const goal = input.goal.trim()
+    if (!course) throw new Error('[seed-propose] 课程名必填（mode=new 自拟新名，mode=reseed 选既有课程）。')
+    if (!goal) throw new Error('[seed-propose] 目标描述必填——种子起草只认学习者的目标，不猜。')
+    const mode = input.mode ?? 'new'
+    const goalType = input.goalType ?? 'capability'
+    const worksheet = goalType === 'coverage' ? (input.worksheet ?? []).filter(w => typeof w.block === 'string' && w.block.trim()) : []
+    if (goalType === 'coverage' && !worksheet.length) {
+      throw new Error('[seed-propose] 覆盖锚定必须携带非空块工作表（{block, note?} 列表）；能力锚定不需要。')
+    }
+    // vault 先验选配（只读检索）：注册清单 Missing = 零命中合法，退化常识基线
+    let prior = ''
+    let priorHits = 0
+    if (input.useVaultPrior === true) {
+      const manifest = await this.noteManifest.load()
+      const titles = manifest.sources.map(s => s.title ?? s.path.split('/').pop()!.replace(/\.md$/i, ''))
+      const terms = decompileTerms(goal, titles)
+      const centerRel = this.paths.centerRoot.slice(this.vaultRoot.length + 1)
+      const hits = terms.length ? await searchVaultPrior(this.vaultRoot, centerRel, terms) : []
+      priorHits = hits.length
+      if (hits.length) {
+        const items = hits.map(h => `- 《${h.title}》（${h.path}）\n  > ${h.excerpt.replaceAll('\n', '\n  > ')}`).join('\n')
+        prior = `## 学习者已有理解（Vault 先验）\n\n以下是学习者个人 Vault 里与目标相关的笔记摘录（只读检索所得）：\n\n${items}\n\n起点定位要求：把起点放在熟悉边界——笔记已稳定覆盖的内容不作起点（那是可快速略过的地形，在 reason 里点一句）；摘录只是他记过的东西，只读，永不改写。`
+      }
+    }
+    const tpl = await this.loadPrompt('种子提案')
+    const pack = `${tpl}\n\n---\n\n## 目标描述（学习者原文）\n\n${goal}\n\n## 模式与绑定（照抄，不自拟）\n\n- 课程名：${course}\n- 模式：${mode}\n- 目标类型：${goalType}`
+      + (goalType === 'coverage' ? `\n- 块工作表（照抄块名）：\n${worksheet.map(w => `  - block: ${w.block}`).join('\n')}` : '')
+      + (prior ? `\n\n---\n\n${prior}` : '')
+    const gateOnce = (raw: string): { errors: string[]; spec: SeedProposalSpec | null } => {
+      let doc: unknown
+      try {
+        doc = YAML.parseModel(raw)
+      } catch (err) {
+        return { errors: [`YAML 解析失败：${err instanceof Error ? err.message : String(err)}`], spec: null }
+      }
+      const v = validateSeedProposal(doc)
+      return { errors: v.errors ?? [], spec: v.spec ?? null }
+    }
+    let raw = await llm(pack)
+    let gate = gateOnce(raw)
+    let repaired = false
+    if (gate.errors.length) {
+      repaired = true
+      raw = await llm(seedRepairPrompt(pack, raw, gate.errors.map(x => `  ✗ ${x}`)))
+      gate = gateOnce(raw)
+    }
+    if (gate.errors.length || !gate.spec) {
+      const e: Error & { code?: string } = new Error(
+        `[seed-propose] 模型产出未过种子校验门（已自动修复重试一轮，提案未受理）：\n${gate.errors.map(x => `  ✗ ${x}`).join('\n')}`)
+      e.code = 'SEED_GATE_FAILED'
+      throw e
+    }
+    const spec = gate.spec
+    spec.course = course
+    spec.mode = mode
+    spec.goal_type = goalType
+    if (goalType === 'coverage') spec.worksheet = worksheet
+    else delete spec.worksheet
+    const r = await this.graphPropose('seed', YAML.stringify(spec)) as { id: number; endpoint: string; starts: number }
+    return { id: r.id, course, mode, goal_type: goalType, endpoint: r.endpoint, starts: r.starts, prior_hits: priorHits, repaired }
   }
 
   /** 概念并入（#141 条目禁删只并入；human 领域判断的执行面）：from 整条并入 into，
@@ -4659,23 +4736,23 @@ export class LearnhubEngine {
     return readySet(graph, state, () => 1)
   }
 
-  /** 就绪存量（就绪深度检查的计数口径）：就绪前沿中正文已生成（hasReadyContent）的
-   * 节点——「现在点开就能学」的缓冲。 */
-  private coachReadyBuffer(graph: Graph, state: Record<string, Fm>): string[] {
-    return this.coachFrontier(graph, state).filter(n => hasReadyContent(state[n]))
-  }
-
   /** 单课程就绪深度检查（coachCheckpoint 与 statusJson 共用核）：终点锚缺失 = 未播种
-   * （不判冷启动，合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。 */
+   * （不判冷启动，合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。
+   * 就绪存量与前瞻需求都不计终点（词条「前瞻深度」：终点是锚点不是课程节点）——
+   * 课程尾段前沿只剩终点时判据永不可满足会让教练永不停摆；除终点外前沿清空 =
+   * exhausted，判据自然通过、零告警。 */
   private async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
     const { graph, state } = await this.loadView(c)
     const anchor = await readAnchor(this.paths.anchorPath(c.root))
+    const endpoint = anchor?.endpoint ?? null
+    const live = this.coachFrontier(graph, state).filter(n => n !== endpoint)
     return {
       course: c.name,
       ...readyDepthCheck({
-        ready: this.coachReadyBuffer(graph, state).length,
+        ready: live.filter(n => hasReadyContent(state[n])).length,
         declared: anchor?.declared ?? null,
         today,
+        exhausted: anchor !== null && live.length === 0,
       }),
     }
   }
@@ -4695,11 +4772,10 @@ export class LearnhubEngine {
     return qid => map.get(qid) ?? null
   }
 
-  /** 教练回合检查点（#144 触发三点）：节点完成（nodeComplete 随完成结果带出）/ 会话
-   * 开始（statusJson——agent 会话开工与面板打开共用的汇总入口）/ 队列空闲（宿主生成
-   * 泵排空时调用）。逐课程拉起就绪深度检查——纯读侧感知，零写副作用、零 LLM 调用
-   * （裁决与生长批生产归受理票 #145）；ready=0 只告警，生长永不挡当前学习动作
-   * （FIFO 不插队靠检查点前置：生长批只在检查点之后入队，不越过任何已排队任务）。 */
+  /** 教练回合检查点（#144 触发五点：节点完成/节点跳过/会话开始/队列空闲/面板下发）。
+   * 逐课程拉起就绪深度检查——纯读侧感知，零写副作用、零 LLM 调用（裁决与生长批生产
+   * 归受理票 #145，入队阻尼语义归宿主）；ready=0 只告警，生长永不挡当前学习动作
+   * （FIFO 不插队靠检查点前置：自动拉批只在检查点之后入队，不越过任何已排队任务）。 */
   async coachCheckpoint(
     trigger: CoachTrigger, courseKey?: string, opts: { today?: string } = {},
   ): Promise<{ trigger: CoachTrigger; courses: CoachCheck[] }> {

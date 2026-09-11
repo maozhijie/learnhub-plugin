@@ -13,6 +13,7 @@ import ProjectsPage from './pages/ProjectsPage'
 import ProposalsPage from './pages/ProposalsPage'
 import StatsPage from './pages/StatsPage'
 import type { StatusWithLlm, TreeDoc } from './types'
+import { useCoachToasts } from './useCoachToasts'
 
 export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'generate' | 'proposals' | 'practice' | 'projects' | 'lab' | 'guide'
 
@@ -66,6 +67,10 @@ export default function App() {
   }, [])
 
   useEffect(() => { void reload() }, [reload])
+
+  // 教练通知（ADR-0038）：图域任务生命周期 + 复诊结算的 App 级轻轮询弹条（10s/60s），
+  // 点击「去生成页」跳队列视图；早退分支之前调用（hooks 顺序恒定）。
+  useCoachToasts(() => setTab('generate'))
 
   // 页签保活（ADR-0027）：把当前页签广播给各页轮询——隐藏页签据此跳过取数
   useEffect(() => { setActiveTab(tab) }, [tab])
@@ -128,10 +133,10 @@ export default function App() {
         </Button>
       </div>
       <div className={`app-body${tab === 'graph' ? ' no-pad' : ''}`}>
-        {tab !== 'learn' && tab !== 'practice' && tab !== 'projects' && noCourse ? (
+        {tab !== 'learn' && tab !== 'practice' && tab !== 'projects' && tab !== 'graph' && noCourse ? (
           <div style={{ paddingTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-            <Empty description='还没有课程：在 dsh 对话里让 agent 提交种子提案建课（一次人审即开工，图随生长批生长）' />
-            <Button type='primary' onClick={() => setTab('learn')}>回到学习页</Button>
+            <Empty description='还没有课程：到「学习图」页新建课程（种子提案一次人审即开工，图随教练回合生长）' />
+            <Button type='primary' onClick={() => setTab('graph')}>去学习图页建课</Button>
           </div>
         ) : (
           <TabBody tab={tab} frame={frame} />

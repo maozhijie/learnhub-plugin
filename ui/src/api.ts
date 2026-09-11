@@ -304,6 +304,44 @@ export const api = {
   kataConvertIntention: (weekStart: string, course: string, node: string, cue: string, action: string) =>
     http<{ course: string; node: string; week_start: string }>('POST', '/kata/convert/intention',
       { week_start: weekStart, course, node, cue, action }),
+  // ---- 图域命令（面板下发，学习图生命周期 UI 化）：入队即返回，进度/结果看生成页 ----
+  /** 生长一步：教练回合显式重新裁决（即时入队、豁免停摆阻尼；在途/失败仍拒）。 */
+  coachGrowth: (course: string) =>
+    http<{ message: string; queued: boolean }>('POST', '/coach/growth', { course }),
+  /** 罗盘初画/重画（LLM 一次调用，队列任务化）。 */
+  compassPaint: (course: string) =>
+    http<{ message: string }>('POST', '/coach/compass', { course }),
+  /** 成分技能边回填（确定性推断，同步受理 → 富化提案待人审）。 */
+  encBackfill: (course?: string) =>
+    http<Record<string, unknown>>('POST', '/graph/backfill', { ...(course ? { course } : {}) }),
+  /** 建课/换终点种子起草（phase=种子队列任务，产物 = 种子提案待人审）。
+   * 请求契约 = 引擎 SeedDraftRequest（绑定字段以表单为准）。 */
+  seedPropose: (input: import('../../src/engine/seed').SeedDraftRequest) =>
+    http<{ message: string }>('POST', '/seed/propose', {
+      course: input.course, goal: input.goal,
+      ...(input.mode ? { mode: input.mode } : {}),
+      ...(input.goalType ? { goalType: input.goalType } : {}),
+      ...(input.useVaultPrior !== undefined ? { useVaultPrior: input.useVaultPrior } : {}),
+      ...(input.worksheet?.length ? { worksheet: input.worksheet } : {}),
+    }),
+  /** 插入实验面（#146）：在途/到期未决/三率/闸门。 */
+  probation: (course?: string) =>
+    http<import('./types').ProbationDoc>('GET', `/probation${q({ course })}`),
+  /** 复诊结算手动触发（零人审自动行为的手动面，无确认步）：到期插入边 proven｜自动剪除。 */
+  probationSettle: () =>
+    http<{ courses?: Array<{ course: string; settled: Array<{ node: string; outcome: string; metric?: string }> }> }>('POST', '/probation/settle', {}),
+  /** 项目创建（反编译前奏；P 区创建从 agent 通道扩到面板）。 */
+  projectCreate: (name: string, goal: string) =>
+    http<Record<string, unknown>>('POST', '/project/create', { name, goal }),
+  /** 目标反编译（任务化）：计划+种子双提案联合人审。 */
+  projectDecompile: (id: string, course?: string) =>
+    http<{ message: string }>('POST', '/project/decompile', { id, ...(course ? { course } : {}) }),
+  /** 里程碑计划草案（任务化）。 */
+  projectPlanGenerate: (id: string) =>
+    http<{ message: string }>('POST', '/project/plan/generate', { id }),
+  /** 里程碑任务卡草案（任务化）。 */
+  projectMilestoneGenerate: (id: string, milestone: string) =>
+    http<{ message: string }>('POST', '/project/milestone/generate', { id, milestone }),
 }
 
 /** 请求宿主新开 dsh 会话讨论本课（client 侧 learnhub:discuss 桥消费）。

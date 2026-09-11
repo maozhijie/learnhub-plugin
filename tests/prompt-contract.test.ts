@@ -7,7 +7,7 @@ import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 
 test('P2: 存量内置模板全部升到 prompt/v6（生长式套件除外——新套件模板自带版本线）', () => {
   for (const kind of Object.keys(Content.PROMPT_KINDS)) {
-    if (kind === '罗盘初画' || kind === '教练回合') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
+    if (kind === '罗盘初画' || kind === '教练回合' || kind === '种子提案') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
     const text = Content.PROMPT_KINDS[kind]!
     assert.ok(Content.promptVersionOf(text) >= 6, `${kind} 应升到 v6+`)
   }
@@ -49,6 +49,19 @@ test('#149: 项目目标反编译模板 v8——plan/seed 双半区契约、名�
   assert.match(tpl, /学习者已有理解（Vault 先验）/, '先验段注入指令（尊重已有理解，不从零铺已会节点）')
   assert.match(tpl, /提案/, '双产物走人审提案通道（apply 前零 canonical 写入）')
   assert.match(tpl, /同进同退/, '双提案同进同退（一起生效或一起放弃）')
+})
+
+test('面板下发：种子提案模板 v1——起草契约（骨架模式/熟悉边界/绑定字段/目标类型二分）', () => {
+  const tpl = Content.PROMPT_KINDS['种子提案']!
+  assert.ok(Content.promptVersionOf(tpl) >= 1, '种子提案 自带版本线（生长式套件 v1 起）')
+  assert.match(tpl, /1–3 个起点节点 \+ 一个终点节点/, '种子形态锚点')
+  assert.match(tpl, /零 enc 零 est 零 pre/, '种子骨架模式（粗占位边引擎落）')
+  assert.match(tpl, /熟悉边界/, '起点定位 = vault 先验的熟悉边界路')
+  assert.match(tpl, /basis: baseline\|vault/, '起点三路的语义路由声明')
+  assert.match(tpl, /照抄附后的「课程名」/, '绑定字段以表单为准（课程名不自拟）')
+  assert.match(tpl, /goal_type 照抄附后的「目标类型」/, '目标类型二分由表单绑定')
+  assert.match(tpl, /capability/, '能力锚定缺省')
+  assert.match(tpl, /仅 goal_type=coverage 时携带/, 'worksheet 只随 coverage')
 })
 
 // ---- v9 题目生成契约（ADR-0029/0030）：唯一答案填空 + 记法契约 + YAML 单引号规则 ----

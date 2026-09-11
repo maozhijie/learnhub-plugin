@@ -297,8 +297,9 @@ export const COACH_COLD_START_DAYS = 7
 /** 冷启动首周的节奏折算（同样 est 的内容首周耗时约 ×1.5）。 */
 export const COACH_COLD_START_EST_MULT = 1.5
 
-/** 回合触发三点（#144）：节点完成 / 会话开始 / 队列空闲。 */
-export type CoachTrigger = 'node_complete' | 'session_start' | 'queue_idle'
+/** 回合触发五点（#144 三点 + 面板下发扩展）：节点完成 / 节点跳过 / 会话开始 / 队列空闲 /
+ * 面板下发。跳过与面板下发是显式重新裁决——上一次停摆裁决不再代表现状（重拉阻尼豁免在宿主入队侧）。 */
+export type CoachTrigger = 'node_complete' | 'node_skip' | 'session_start' | 'queue_idle' | 'panel_dispatch'
 
 /** 教练回合单段装配的观测记录（#145 两段式 effort）：tier/effort 定档，operator 为
  * 该段裁决产出的算子标签，disagreement = 该段是否声明真分歧（true → 升级下一段）。 */
@@ -327,13 +328,17 @@ export interface ReadyDepthCheck {
 
 /** 就绪深度检查（纯函数）：ready ≥ required 即满足——满足时教练回合自然无批可产
  * （停摆是判据满足的自然结果，不是新状态）；ready=0 只告警（合法空态：刚播种/
- * 生长尚未跟上），永不阻塞、永不抛错。 */
+ * 生长尚未跟上），永不阻塞、永不抛错。exhausted = 除终点外就绪前沿已清空（课程尾段，
+ * 词条「前瞻深度」：终点是锚点不是课程节点）——判据自然通过，零告警：教练合法停摆，
+ * 剩下的路是学掉终点，不是继续生长。 */
 export function readyDepthCheck(input: {
   ready: number
   /** 终点锚声明日（null = 未播种，不判冷启动）。 */
   declared: string | null
   today: string
   depth?: number | null
+  /** 除终点外就绪前沿已清空（仅已播种课程可能为 true）。 */
+  exhausted?: boolean
 }): ReadyDepthCheck {
   const raw = input.depth ?? COACH_LOOKAHEAD_DEFAULT
   const depth = Number.isFinite(raw)
@@ -345,6 +350,11 @@ export function readyDepthCheck(input: {
     && daysBetween(today, declared) >= 0
     && daysBetween(today, declared) < COACH_COLD_START_DAYS
   const required = cold_start ? Math.ceil(depth * COACH_COLD_START_EST_MULT) : depth
+  if (input.exhausted === true) {
+    // 课程尾段：非终点前沿已清空——合法停摆，判据自然通过、零告警（词条「前瞻深度」：
+    // 终点是锚点不是课程节点，剩下的路是学掉终点，不是继续生长）。
+    return { ready: input.ready, depth, required, cold_start, ok: true, warnings: [] }
+  }
   const ok = input.ready >= required
   const warnings: string[] = []
   if (input.ready === 0) {

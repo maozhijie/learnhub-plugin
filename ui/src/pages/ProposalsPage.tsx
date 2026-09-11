@@ -65,10 +65,10 @@ export default function ProposalsPage() {
 
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
-      <Alert type='info' content='agent 在 dsh 对话里提出种子（建课/换终点，一次人审）、edit 变更与 enrich 富化提案 → 这里人审 → 应用后图结构与 Obsidian 笔记联动落盘。' />
+      <Alert type='info' content='面板下发的种子/富化/反编译/项目草案与教练回合的生长批提案都汇集在这里人审 → 应用后图结构与 Obsidian 笔记联动落盘（生长批过受理门即自动应用，不在此排队——ADR-0003）。' />
       <Card size='small' title='提案列表' style={{ borderRadius: 10 }}>
         {items === null ? null : items.length === 0 ? (
-          <Empty description='没有提案：在 dsh 对话里让 agent 提交提案——建课走种子提案（kind=seed），生长批随教练回合产生' />
+          <Empty description='没有提案：学习图页教练台可下发建课/回填/反编译，项目页可起草计划与里程碑；生长批随教练回合自动产生并直接应用' />
         ) : (
           <Table size='small' data={items} rowKey={p => p.id} pagination={{ pageSize: 15, showTotal: true }}
             columns={[

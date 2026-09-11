@@ -1,8 +1,9 @@
-/** 图页 = 全局总览（低频）：DAG 纵览 + 区过滤/搜索/只看就绪 + 推荐星标。
- * 点节点直接进学习视图（LessonView）；从学习视图「在图中查看」跳入时
- * focusNode 红描边定位。图本身不承载学习操作。 */
+/** 图页 = 学习图驾驶舱（低频）：教练台（建课/生长一步/罗盘/回填/复诊）+ DAG 纵览
+ * （区过滤/搜索/只看就绪 + 推荐星标）。点节点直接进学习视图（LessonView）；从学习
+ * 视图「在图中查看」跳入时 focusNode 红描边定位。图本身不承载学习操作。 */
 import { Button, Card, Input, Message, Modal, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import CoachCockpit from '../components/CoachCockpit'
 import GraphDagView from '../components/GraphDagView'
 import { api } from '../api'
 import { isActiveTab } from '../active-tab'
@@ -172,7 +173,13 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   }
 
   if (!course) {
-    return <Card><Text type='secondary'>在「学习」页选择课程后查看学习图。</Text></Card>
+    // 空 vault：驾驶舱仍然可达——建课从这里开始（种子提案一次人审即开工）
+    return (
+      <Space direction='vertical' style={{ width: '100%' }} size={12}>
+        <Card><Text type='secondary'>还没有课程——在这里新建：种子一次人审即开工，图随教练回合沿真实的需要生长。</Text></Card>
+        <CoachCockpit course={null} />
+      </Space>
+    )
   }
   if (loading && !doc) {
     return <Card><Text type='secondary'>加载学习图…</Text></Card>
@@ -213,6 +220,9 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
           <Button size='small' loading={loading} onClick={() => void load()}>刷新</Button>
         </div>
       </div>
+
+      {/* 教练台：图域命令面板下发（ADR-0038） */}
+      <CoachCockpit course={course} />
 
       {/* 推荐条（琥珀=下一步推荐；点击卡片直接进学习视图） */}
       {(rec?.events ?? []).filter(e => e.course === course).length > 0 && (

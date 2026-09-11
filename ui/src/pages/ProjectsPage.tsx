@@ -6,11 +6,13 @@
  * 门禁。执行事件记录：评级/来源/行使节点/一句话备注；auto 来源（可观测证据确定性
  * 映射）走 agent 工具 learnhub_project_exec_log。执行事件零 XP、零调度写入。
  */
-import { Alert, Button, Card, Empty, Input, Message, Select, Space, Table, Tag, Tooltip } from '@arco-design/web-react'
+import { Alert, Button, Card, Empty, Input, Message, Select, Space, Table, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import type { FadingTier, ProjectCrossDoc, ProjectFm } from '../types'
 import AgentHints from '../components/AgentHints'
+
+const { Text } = Typography
 
 const LIFECYCLE_LABEL: Record<string, string> = {
   active: '进行中', paused: '暂停', delivered: '已交付', archived: '已归档',
@@ -52,6 +54,12 @@ export default function ProjectsPage() {
   const [rating, setRating] = useState(3)
   const [nodesText, setNodesText] = useState('')
   const [note, setNote] = useState('')
+  // 目标反编译（面板下发，ADR-0038）：新建项目并起草「里程碑计划 + 知识种子簇」双提案
+  const [dcName, setDcName] = useState('')
+  const [dcGoal, setDcGoal] = useState('')
+  const [dcBusy, setDcBusy] = useState(false)
+  // 选中项目的 AI 起草（计划草案 / 里程碑任务卡，均为队列任务 + 提案人审）
+  const [draftBusy, setDraftBusy] = useState<string | null>(null)
 
   const loadList = useCallback(async () => {
     try {
@@ -114,14 +122,68 @@ export default function ProjectsPage() {
     }
   }
 
+  /** 新建项目 + 目标反编译：项目落地后入队双提案起草（计划半区 + 种子半区，同进同退）。 */
+  const createAndDecompile = async () => {
+    if (!dcName.trim()) { Message.warning('给项目起个名'); return }
+    if (!dcGoal.trim()) { Message.warning('描述一下目标——反编译只认目标描述'); return }
+    setDcBusy(true)
+    try {
+      const created = await api.projectCreate(dcName.trim(), dcGoal.trim())
+      const id = String((created as { id?: unknown }).id ?? '')
+      if (!id) throw new Error('项目创建返回缺少 id')
+      const r = await api.projectDecompile(id)
+      Message.success(`${r.message}（生成页看进度，提案页联合人审）`)
+      setDcName('')
+      setDcGoal('')
+      await loadList()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDcBusy(false)
+    }
+  }
+
+  /** 既有项目的反编译/起草动作：全部队列任务化，产物走提案人审。 */
+  const draft = async (kind: 'decompile' | 'plan' | `milestone:${string}`) => {
+    if (!selected) return
+    setDraftBusy(kind)
+    try {
+      const r = kind === 'decompile' ? await api.projectDecompile(selected)
+        : kind === 'plan' ? await api.projectPlanGenerate(selected)
+          : await api.projectMilestoneGenerate(selected, kind.slice('milestone:'.length))
+      Message.success(`${r.message}（生成页看进度）`)
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDraftBusy(null)
+    }
+  }
+
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
       <Alert type='info' content='项目区（Course 的姊妹实体，以周/月计的真实实践）：这里看每个项目的 2×2 掌握交叉诊断——左边陈述性掌握（关联节点），下边项目执行证据。执行事件零 XP、零调度写入；入档推荐只是提议，改档是你的显式动作，推荐永不参与任何门禁。' />
+
+      <Card size='small' title='目标反编译（建课引导）' style={{ borderRadius: 10 }}>
+        <Space direction='vertical' size={8} style={{ width: '100%' }}>
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            从「目标项目描述」反推学习资产：里程碑计划草案 + 知识种子簇双提案（同进同退，提案页联合人审）；
+            显式目标课程时只产计划半区。知识子图检索只读 Vault 先验，apply 前零写入。
+          </Text>
+          <Space size={8} wrap>
+            <Input style={{ width: 200 }} placeholder='项目名（如：三个月弹会小曲）' value={dcName} onChange={setDcName} />
+            <Input style={{ width: 360 }} placeholder='目标描述：做出什么、给谁、什么算成' value={dcGoal} onChange={setDcGoal} />
+            <Button type='primary' size='small' loading={dcBusy} onClick={() => void createAndDecompile()}>
+              创建项目并反编译
+            </Button>
+          </Space>
+        </Space>
+      </Card>
+
       <AgentHints page='projects' />
 
       <Card size='small' title='项目' style={{ borderRadius: 10 }}>
         {projects === null ? null : projects.length === 0 ? (
-          <Empty description='还没有项目：在 agent 对话里 learnhub_project_create（真实在做的实践，如「三个月弹会小曲」）' />
+          <Empty description='还没有项目：上面「目标反编译」建一个（真实在做的实践，如「三个月弹会小曲」）' />
         ) : (
           <Table
             size='small'
@@ -143,6 +205,24 @@ export default function ProjectsPage() {
           />
         )}
       </Card>
+
+      {selected && (
+        <Card size='small' title='AI 起草（提案-人审通道）' style={{ borderRadius: 10 }}>
+          <Space size={8} wrap>
+            <Button size='small' loading={draftBusy === 'decompile'} onClick={() => void draft('decompile')}>目标反编译（双提案）</Button>
+            <Button size='small' loading={draftBusy === 'plan'} onClick={() => void draft('plan')}>里程碑计划草案</Button>
+            {(projects?.find(p => p.id === selected)?.plan ?? []).map(m => (
+              <Button key={m.id} size='small' loading={draftBusy === `milestone:${m.id}`}
+                onClick={() => void draft(`milestone:${m.id}`)}>
+                任务卡：{m.name || m.id}
+              </Button>
+            ))}
+          </Space>
+          <div style={{ marginTop: 6, color: 'var(--color-text-3)', fontSize: 12 }}>
+            全部入队即返回（生成页看进度）；产物走提案页人审——计划 apply 带旧计划快照，里程碑已生成过则自动转重生成提案。
+          </div>
+        </Card>
+      )}
 
       {selected && cross && (
         <>

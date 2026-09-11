@@ -432,3 +432,84 @@ test('foldCompletion：锚缺席返回 null（未播种无从宣告）；覆盖�
   assert.equal(messyFold!.criteria.closure_healthy, true, '闭包外的破损不进终点的闭包健康')
   assert.equal(messyFold!.criteria.closure_errors!.length, 0)
 })
+
+// ---- 面板下发的种子起草（seedPropose）：目标描述 → LLM → 干跑门 → proposeSeed 受理 ----
+
+import type { LlmComplete } from '../src/engine/llm.ts'
+
+const SEED_LLM_OK = (course: string): string => `course: ${course}
+mode: new
+reason: 常识基线起步
+goal_type: capability
+endpoint:
+  name: 用导数解决优化问题
+  region: 基础
+  block: 终点块
+starts:
+  - name: 认识变化率
+    region: 基础
+    block: 起点块
+    basis: baseline
+`
+
+test('seedPropose：目标起草种子提案——受理 pending、绑定字段以表单为准、零先验合法', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    let calls = 0
+    const fake: LlmComplete = async prompt => {
+      calls++
+      assert.ok(prompt.includes('学会用微积分解决优化问题'), '目标描述进上下文')
+      assert.ok(prompt.includes('- 课程名：微积分'), '课程名绑定进上下文')
+      assert.ok(prompt.includes('- 模式：new'), '模式进上下文')
+      assert.ok(prompt.includes('- 目标类型：capability'), '目标类型进上下文')
+      assert.ok(!prompt.includes('只读检索所得'), '未选配先验不附检索注入段')
+      return 'course: 完全不相干的错名\n' + SEED_LLM_OK('x').slice('course: x\n'.length)
+    }
+    const r = await engine.seedPropose({ course: '微积分', goal: '学会用微积分解决优化问题' }, fake)
+    assert.equal(calls, 1)
+    assert.equal(r.course, '微积分', '课程名以表单为准（模型照抄错也被绑定覆盖）')
+    assert.equal(r.endpoint, '用导数解决优化问题')
+    assert.equal(r.starts, 1)
+    assert.equal(r.repaired, false)
+    assert.equal(r.prior_hits, 0)
+    const seed = (await engine.store.loadProposals()).find(p => p.kind === 'seed' && p.id === r.id)
+    assert.ok(seed && seed.status === 'pending', '提案 pending 等一次人审')
+  })
+})
+
+test('seedPropose：首轮 YAML 违约回灌修复一轮；两轮仍违约拒收（SEED_GATE_FAILED）', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    const broken = 'course: 微积分\nmode: new\nreason: 缺终点\nstarts: []\n'
+    let n = 0
+    const flaky: LlmComplete = async prompt => {
+      n++
+      if (n === 2) assert.ok(prompt.includes('种子校验门'), '修复轮带校验清单')
+      return n === 1 ? broken : SEED_LLM_OK('微积分')
+    }
+    const r = await engine.seedPropose({ course: '微积分', goal: '学会微积分' }, flaky)
+    assert.equal(n, 2)
+    assert.equal(r.repaired, true)
+    const alwaysBad: LlmComplete = async () => broken
+    await assert.rejects(
+      () => engine.seedPropose({ course: '微积分', goal: '学会微积分' }, alwaysBad),
+      (err: Error & { code?: string }) => err.code === 'SEED_GATE_FAILED',
+    )
+  })
+})
+
+test('seedPropose：coverage 绑定表单工作表（不信模型）；空工作表拒收', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    const cov: LlmComplete = async prompt => {
+      assert.ok(prompt.includes('块工作表'), 'coverage 工作表进上下文')
+      return 'course: 历史\nmode: new\nreason: x\ngoal_type: coverage\nworksheet:\n  - block: 模型瞎写的块\nendpoint:\n  name: 完成考纲综述\n  region: 基础\n  block: 收束\nstarts:\n  - name: 通读考纲\n    region: 基础\n    block: 起点块\n    basis: baseline\n'
+    }
+    const r = await engine.seedPropose(
+      { course: '历史', goal: '过一遍考纲', goalType: 'coverage', worksheet: [{ block: '代数' }, { block: '几何' }] }, cov)
+    const seed = (await engine.store.loadProposals()).find(p => p.kind === 'seed' && p.id === r.id)
+    assert.ok(seed?.summary.includes('块工作表 2 项'), '绑定表单的两块工作表（模型的单块被覆盖）')
+    await assert.rejects(
+      () => engine.seedPropose({ course: '历史', goal: '过一遍考纲', goalType: 'coverage' }, cov),
+      /块工作表/,
+      'coverage 缺工作表直接拒收',
+    )
+  })
+})

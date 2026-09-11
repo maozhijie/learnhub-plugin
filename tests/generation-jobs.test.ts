@@ -12,9 +12,10 @@ import type { GenJobPhase, GenJobStatus } from '../src/generation-jobs.ts'
 
 const HOUR = 60 * 60_000
 
-test('队列 phase 六值（#131 §5 / #140）：节点内容管线三值 + 图域 种子/生长/富化', () => {
-  assert.deepEqual([...GEN_JOB_PHASES], ['outline', 'sections', 'quiz', '种子', '生长', '富化'])
-  const phases: GenJobPhase[] = ['outline', 'sections', 'quiz', '种子', '生长', '富化']
+test('队列 phase 十值（#131 §5 / #140 + 面板下发扩展）：节点内容管线三值 + 图域七值', () => {
+  assert.deepEqual([...GEN_JOB_PHASES],
+    ['outline', 'sections', 'quiz', '种子', '生长', '富化', '罗盘', '反编译', '计划', '里程碑'])
+  const phases: GenJobPhase[] = ['outline', 'sections', 'quiz', '种子', '生长', '富化', '罗盘', '反编译', '计划', '里程碑']
   assert.equal(phases.length, GEN_JOB_PHASES.length, '类型与值表同步（phase 联合不漂移）')
 })
 
