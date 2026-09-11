@@ -39,7 +39,7 @@
     "build": "node build.mjs",
     "check": "node --check lib/index.js && node --check lib/client.js",
     "prepare": "node scripts/link-peers.mjs",
-    "typecheck": "node scripts/arch-baseline.mjs --types",
+    "typecheck": "node scripts/arch-baseline.mjs --types && node scripts/scan-ui-types.mjs",
     "test": "npm run typecheck && node --experimental-transform-types --test tests/*.test.ts"
   },
   "peerDependencies": {
