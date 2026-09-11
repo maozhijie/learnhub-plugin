@@ -15,13 +15,14 @@ engine/index.ts（7,200+ 行、约 240 方法、52 个 `// ----` 分节）的拆
   - **learner**（住 learner-cards.ts）：pin「今天学它」(E3)、JOL 抽查 (E4)、Self-Calibration、E5 可用的困难教练、E2 讲给我听、E1 我的卡、U 区技能与执行事件、U 区回执、U 区习惯、U4 周复盘
   - **project**（住 projects.ts）：项目域 P 区、过点对账/检索点/行为推断 enc、执行事件流 2×2、目标反编译
   - **bank**（住 question-bank.ts）：C-3 错误对比卡、学习面板题目管理、B2 难度感知回流、题库一键清理、瑕疵题勘误冲正
-  - **graph**（住 graph.ts）：graph analyze、Vault 链接先验、图探索、提案门禁包装、enc 覆盖层回填
+  - **graph**（住 graph-subsystem.ts——枢纽领主例外）：graph analyze、Vault 链接先验、图探索、提案门禁包装、enc 覆盖层回填
   - **content**（住 content.ts）：内容管线、note resolve/反馈区、P4 课程工作区与题库
   - **sched**（住 srs.ts）：节点跳过/完成确认、XP 时间账本、记忆健康仪表盘、FSRS 参数优化器、沉淀层
   - **registry**（住 registry.ts）：概念注册表管理、课程删除清扫
   - **growth**（住 compass.ts）：罗盘、教练回合感知面、生长批受理、边实验账本与复诊
   - **留门面（装配域，不设子系统）**：加载与解析、status/recommend、doctor、rebuild、生成任务持久化（宿主队列落盘臂）、utils 私有 helper 归位
 - **门面验收形态**：纯转发 + 装配 + 私有 helper 归位，目标 ≤800 行；转发含少量私有（门面内部跨域调用点所用），同为逐行转发。
+- **枢纽领主例外（刀 7 落地时补充）**：领主文件被大量 engine 模块引用时（graph.ts 被 17 个模块引用，含 type-only 边），把子系统类放进领主会迫使它反向依赖 proposals/projects/analysis/audit/content 等全部下游——结构化的窄面得膨胀到四十余个成员，且每加一个纯函数都要过门面，反而模糊了域边界。此类「枢纽领主」改用**同域新文件**承载子系统类（`graph-subsystem.ts`），该文件只被门面引用，可自由 import 领域模块；「零既有模块搬移、接缝路径不晃」的原则不变。判定线：领主文件的 importer 数（≥5 个 engine 模块即按枢纽处理）。
 
 边界：
 - 跨子系统调用一律经门面转发链（`this.e.<方法>` 注入窄面），子系统间零横向 import。
