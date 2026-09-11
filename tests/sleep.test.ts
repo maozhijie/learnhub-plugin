@@ -87,9 +87,9 @@ test('可关闭：sleep.enabled=false 后推荐零睡眠建议；配置写不碰
       练习节: { stage: 'learning', practice: { attempts: 2, correct: 2 } },
     },
   }, async ({ engine }) => {
-    assert.deepEqual(await engine.sleepAdviceConfig(), { enabled: true }, '默认开')
-    await engine.setSleepAdviceConfig({ enabled: false })
-    assert.deepEqual(await engine.sleepAdviceConfig(), { enabled: false })
+    assert.deepEqual(await engine.lab.sleepAdviceConfig(), { enabled: true }, '默认开')
+    await engine.lab.setSleepAdviceConfig({ enabled: false })
+    assert.deepEqual(await engine.lab.sleepAdviceConfig(), { enabled: false })
     const doc = await engine.recommend()
     assert.ok(!doc.events.some(e => e.sleep || e.type === 'sleep'), '关闭后整层静默')
     // 配置文件其他键原样保留（day_cutoff 是测试基线写入的）

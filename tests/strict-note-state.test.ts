@@ -39,7 +39,7 @@ test('#7 valid core state loads, unknown metadata is preserved on write, missing
     assert.equal(state['入门']?.mastery, undefined, 'mastery 已退役：无键合法且不入规范化状态')
     assert.equal(state['入门']?.stage, 'ready')
 
-    await engine.nodeSkip('数学', '入门', true)
+    await engine.sched2.nodeSkip('数学', '入门', true)
     const raw = await readFile(join(await engine.paths.courseDir('math'), '基础', '入门.md'), 'utf8')
     assert.ok(raw.includes('custom_user_field: 我的元数据'), 'unknown metadata was dropped by a state write')
     assert.ok(raw.includes('stage: skipped'), 'stage update missing')
@@ -65,7 +65,7 @@ test('#7 malformed core state is Broken: targeted operations fail with location/
     assert.ok(view.broken[0].path.endsWith('入门.md'))
 
     await assert.rejects(() => engine.content2.lesson('数学', '入门'), /节点笔记 Broken.*入门\.md[\s\S]*mastery/s)
-    await assert.rejects(() => engine.nodeSkip('数学', '入门', true), /节点笔记 Broken/s)
+    await assert.rejects(() => engine.sched2.nodeSkip('数学', '入门', true), /节点笔记 Broken/s)
     await assert.rejects(() => engine.nodeComplete('数学', '入门'), /节点笔记 Broken/s)
     await assert.rejects(() => engine.statusJson(), /状态 Broken/s)
     await assert.rejects(() => engine.recommend(), /状态 Broken/s)

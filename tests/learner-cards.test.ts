@@ -161,7 +161,7 @@ test('定位反馈：判词解析入 E 档案；解析失败零副作用；canon
     const noteBefore = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
 
     let feedbackSystem = ''
-    const v = await engine.explainBackFeedback('数学', '入门',
+    const v = await engine.learner.explainBackFeedback('数学', '入门',
       '[学习者] 等差求和就是首项加末项乘项数除以二。为什么除以二我忘了。',
       async (prompt, system) => {
         feedbackSystem = system ?? ''
@@ -186,7 +186,7 @@ test('定位反馈：判词解析入 E 档案；解析失败零副作用；canon
 
     // 解析失败：抛错且 E 档案零新增（判词零副作用）
     await assert.rejects(
-      () => engine.explainBackFeedback('数学', '入门', '[学习者] …', async () => '模型抽风输出'),
+      () => engine.learner.explainBackFeedback('数学', '入门', '[学习者] …', async () => '模型抽风输出'),
       /未存档/)
     assert.equal((await engine.store.eArchiveAll()).length, 1)
 

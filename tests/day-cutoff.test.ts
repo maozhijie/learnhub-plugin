@@ -144,9 +144,9 @@ test('interactiveSettle：同节同学习日一次（凌晨过界仍算当日）
       course: '数学', node: '入门', ex: 0, answer: '', correct: true,
       judge: 'interactive', qid: 'interactive:s1', ts: `${next}T00:30:00`,
     })
-    const blocked = await engine.interactiveSettle('数学', '入门', 's1', 0.9)
+    const blocked = await engine.bank2.interactiveSettle('数学', '入门', 's1', 0.9)
     assert.equal(blocked.settled, false) // 凌晨过界那条属当前学习日 → 防刷命中
-    const fresh = await engine.interactiveSettle('数学', '入门', 's2', 0.9)
+    const fresh = await engine.bank2.interactiveSettle('数学', '入门', 's2', 0.9)
     assert.equal(fresh.settled, true) // 无记录的节照常结算
   })
 })
@@ -158,7 +158,7 @@ test('interactiveSettle：日界之前的凌晨记录属上一学习日，不挡
       course: '数学', node: '入门', ex: 0, answer: '', correct: true,
       judge: 'interactive', qid: 'interactive:s1', ts: `${date}T00:30:00`, // 属学习日前一天
     })
-    const r = await engine.interactiveSettle('数学', '入门', 's1', 0.9)
+    const r = await engine.bank2.interactiveSettle('数学', '入门', 's1', 0.9)
     assert.equal(r.settled, true)
   })
 })

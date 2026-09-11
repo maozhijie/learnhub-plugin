@@ -97,7 +97,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'GET /note': async ({ rt, url, res }) => {
     const [path] = needQuery(url, 'path')
-    sendJson(res, 200, await rt.engine.resolveNote(rt.vault, path, rt.centerRel))
+    sendJson(res, 200, await rt.engine.content2.resolveNote(rt.vault, path, rt.centerRel))
   },
   'GET /graph': async ({ rt, url, res }) => {
     const elementsOnly = url.searchParams.get('elements') === '1'
@@ -124,7 +124,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
       let report = null
       if (experiments.length) {
         try {
-          report = await rt.engine.experimentReport()
+          report = await rt.engine.lab.experimentReport()
         } catch {
           report = null
         }
@@ -156,7 +156,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'PUT /jol': async ({ rt, body, res }) => {
     // JOL 抽查配置（#66 E4）：enabled 全局开关 + rate 抽样率（0<r≤1）
-    sendJson(res, 200, await apiRun(rt, 'api/jol', () => rt.engine.setJolConfig({
+    sendJson(res, 200, await apiRun(rt, 'api/jol', () => rt.engine.learner.setJolConfig({
       ...pick('enabled', optBoolean(body, 'enabled')),
       ...pick('rate', optFinite(body, 'rate')),
     })))
@@ -164,27 +164,27 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'PUT /calibration/hints': async ({ rt, body, res }) => {
     // 过信轻提示全局开关（ADR-0022 #104）：显式布尔，缺省报错（fail loud）
     sendJson(res, 200, await apiRun(rt, 'api/calibration/hints',
-      () => rt.engine.setCalibrationHints(requireBoolean(body, 'hints_enabled'))))
+      () => rt.engine.learner.setCalibrationHints(requireBoolean(body, 'hints_enabled'))))
   },
   'PUT /sleep': async ({ rt, body, res }) => {
     // D-4 睡眠耦合建议层开关（#85）：enabled=false 全层静默
-    sendJson(res, 200, await apiRun(rt, 'api/sleep', () => rt.engine.setSleepAdviceConfig({
+    sendJson(res, 200, await apiRun(rt, 'api/sleep', () => rt.engine.lab.setSleepAdviceConfig({
       ...pick('enabled', optBoolean(body, 'enabled')),
     })))
   },
   'PUT /question-update': async ({ rt, body, res }) => {
-    sendJson(res, 200, await rt.engine.questionUpdate(
+    sendJson(res, 200, await rt.engine.bank2.questionUpdate(
       need(body, 'course'), need(body, 'node'), need(body, 'qid'), optObject(body, 'patch') ?? {}))
   },
   'POST /habits/create': async ({ rt, body, res }) => {
     // 习惯创建（#90）：意图两字段（线索/行动）由引擎 fail loud 校验
-    sendJson(res, 200, await apiRun(rt, 'api/habits/create', () => rt.engine.habitCreate({
+    sendJson(res, 200, await apiRun(rt, 'api/habits/create', () => rt.engine.learner.habitCreate({
       name: need(body, 'name'), cue: need(body, 'cue'), action: need(body, 'action'),
     })))
   },
   'POST /habits/repeat': async ({ rt, body, res }) => {
     // 自报重复（#90）：唯一计数来源，无门禁；可选自动化自评 1-5
-    sendJson(res, 200, await apiRun(rt, 'api/habits/repeat', () => rt.engine.habitRepeat(need(body, 'habit'), {
+    sendJson(res, 200, await apiRun(rt, 'api/habits/repeat', () => rt.engine.learner.habitRepeat(need(body, 'habit'), {
       ...pick('auto_rating', optNumber(body, 'auto_rating')),
       ...pick('note', optText(body, 'note')),
     })))
@@ -211,7 +211,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 跳过 = 显式重新裁决（词条「教练回合」五点之一）：force 豁免停摆/暂不产结构
     // 阻尼——跳过改了症状与路线，上一次停摆裁决不再代表现状；路由返回后 fire-and-forget
     const skipped = await apiRun(rt, 'api/node/skip', () =>
-      rt.engine.nodeSkip(need(body, 'course'), need(body, 'node'), requireSkipDirection(body.skipped)))
+      rt.engine.sched2.nodeSkip(need(body, 'course'), need(body, 'node'), requireSkipDirection(body.skipped)))
     coachTriggerDetached(rt, ctx, 'node_skip', need(body, 'course'), { force: true })
     sendJson(res, 200, skipped)
   },
@@ -220,8 +220,8 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 排序、保留就绪提示、次日自动失效），false 取消。
     const pinned = requireBoolean(body, 'pinned')
     const out = pinned
-      ? await rt.engine.pinToday(need(body, 'course'), need(body, 'node'))
-      : await rt.engine.unpinToday(need(body, 'course'), need(body, 'node'))
+      ? await rt.engine.learner.pinToday(need(body, 'course'), need(body, 'node'))
+      : await rt.engine.learner.unpinToday(need(body, 'course'), need(body, 'node'))
     sendJson(res, 200, await apiRun(rt, 'api/node/pin', async () => out))
   },
   'POST /node/complete': async ({ rt, ctx, body, res }) => {
@@ -252,7 +252,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /experiments/apply': async ({ rt, body, res }) => {
     // D-1 实验确认开跑（#110 提案-确认制第二步）
     sendJson(res, 200, await apiRun(rt, 'api/experiments/apply', () =>
-      rt.engine.experimentApply(applyId(body.id))))
+      rt.engine.lab.experimentApply(applyId(body.id))))
   },
   'POST /experiments/stop': async ({ rt, body, res }) => {
     // D-1 实验手动停止（开停手动，ADR-0023）
@@ -297,7 +297,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /interactive/settle': async ({ rt, body, res }) => {
     // 交互件成绩结算（LEARNHUB_COMPLETE 上报；同节同日一次，防刷）
     const score = Number(body.score)
-    sendJson(res, 200, await apiRun(rt, 'api/interactive/settle', () => rt.engine.interactiveSettle(
+    sendJson(res, 200, await apiRun(rt, 'api/interactive/settle', () => rt.engine.bank2.interactiveSettle(
       need(body, 'course'), need(body, 'node'), need(body, 'section'),
       Number.isFinite(score) ? score : 0,
       optRaw(body, 'detail'))))
@@ -318,7 +318,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /explain-feedback': async ({ rt, ctx, body, res }) => {
     // E2 定位反馈回合（#68）：对照要点给是非+定位+怎么补；判词只入 E 档案
-    sendJson(res, 200, await apiRun(rt, 'api/explain-feedback', () => rt.engine.explainBackFeedback(
+    sendJson(res, 200, await apiRun(rt, 'api/explain-feedback', () => rt.engine.learner.explainBackFeedback(
       need(body, 'course'), need(body, 'node'), optString(body, 'transcript'), llmSeam(ctx))))
   },
   'POST /explain-archive': async ({ rt, body, res }) => {
@@ -333,7 +333,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /note-source/generate': async ({ rt, ctx, body, res }) => {
     // 笔记源出题（#59）：读笔记正文 → 笔记出题 prompt → validateBank 门禁落镜像
-    sendJson(res, 200, await apiRun(rt, 'api/note-source/generate', () => rt.engine.noteSourceGenerate(
+    sendJson(res, 200, await apiRun(rt, 'api/note-source/generate', () => rt.engine.channels.noteSourceGenerate(
       need(body, 'id'), questionCount(body.count),
       llmSeamStripped(ctx))))
   },
@@ -341,13 +341,13 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 导出到 Anki（C2 #63，#72 UI 挂接）：与 learnhub_anki_export 同一引擎通道
     // ——按 vault 到期集校准/重建镜象卡组（Anki 未开时 fail loud 带指引）
     sendJson(res, 200, await apiRun(rt, 'api/anki/export', () =>
-      rt.engine.ankiExportPush(new AnkiConnectClient(ANKI_ENDPOINT))))
+      rt.engine.channels.ankiExportPush(new AnkiConnectClient(ANKI_ENDPOINT))))
   },
   'POST /anki/import': async ({ rt, res }) => {
     // Anki 作答回写（C2 #63，#72 UI 挂接）：拉上次导入水位以来的复习事件，
     // 按 vault 自己的 ts-fsrs 重算调度（Anki 侧排期输出不作数）
     sendJson(res, 200, await apiRun(rt, 'api/anki/import', () =>
-      rt.engine.ankiImportEvents(new AnkiConnectClient(ANKI_ENDPOINT))))
+      rt.engine.channels.ankiImportEvents(new AnkiConnectClient(ANKI_ENDPOINT))))
   },
   'POST /learner-rate': async ({ rt, body, res }) => {
     // 「我的卡」自评结算（E1/#68）：一卡一天一次推进，隔离自调度
@@ -464,7 +464,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /band-session': async ({ rt, body, res }) => {
     // 难度带会话日志（E5 #65）：会话结束反馈点落一条带选择与作答结算（教练数据源）
-    sendJson(res, 200, await apiRun(rt, 'api/band-session', () => rt.engine.logBandSession({
+    sendJson(res, 200, await apiRun(rt, 'api/band-session', () => rt.engine.learner.logBandSession({
       course: need(body, 'course'), node: need(body, 'node'),
       band: (optRaw(body, 'band') ?? 'standard') as never,
       answered: Number(body.answered ?? 0), correct: Number(body.correct ?? 0),
@@ -472,12 +472,12 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /question-add': async ({ rt, body, res }) => {
     const q = requireObject(body, 'question')
-    sendJson(res, 200, await rt.engine.questionAdd(
+    sendJson(res, 200, await rt.engine.bank2.questionAdd(
       need(body, 'course'), need(body, 'node'), q))
   },
   'POST /question-archive': async ({ rt, body, res }) => {
     // reason = 归档原因（ADR-0032：too_easy=建议确认 / manual=人工等），可逆恢复时清除
-    sendJson(res, 200, await rt.engine.questionArchive(
+    sendJson(res, 200, await rt.engine.bank2.questionArchive(
       need(body, 'course'), need(body, 'node'), need(body, 'qid'),
       optTrue(body, 'archived'), optRaw(body, 'reason')))
   },
@@ -485,14 +485,14 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // B2 建议忽略/恢复：误判的持久忽略（undo 恢复单条，all 清空全部；
     // all=true 时 course/node/qid 均不需要）
     sendJson(res, 200, await apiRun(rt, 'api/difficulty-advice-dismiss', () =>
-      rt.engine.adviceDismiss(
+      rt.engine.bank2.adviceDismiss(
         optString(body, 'course'),
         optString(body, 'node'),
         optRaw(body, 'qid'),
         optTrue(body, 'undo'), optTrue(body, 'all'))))
   },
   'POST /course/delete': async ({ rt, body, res }) => {
-    const r = await rt.engine.courseDelete(need(body, 'course'))
+    const r = await rt.engine.bank2.courseDelete(need(body, 'course'))
     // 写侧联动（ADR-0039）：课程没了，注册表里它的任务记录（含排队/在途）随即出册
     await sweepGenJobs(rt)
     sendJson(res, 200, r)
@@ -544,7 +544,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /project/create': async ({ rt, body, res }) => {
     // 项目创建（P 区 #92）：Project 是 Course 姊妹实体，零调度零 XP
-    sendJson(res, 200, await apiRun(rt, 'api/project/create', () => rt.engine.projectCreate({
+    sendJson(res, 200, await apiRun(rt, 'api/project/create', () => rt.engine.project.projectCreate({
       name: need(body, 'name'),
       goal: need(body, 'goal'),
       ...pick('tier', optTrimmed(body, 'tier') as never),

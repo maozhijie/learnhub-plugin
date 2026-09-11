@@ -120,7 +120,7 @@ const VALID_SECTION_MD = [
 ].join('\n')
 
 async function applySection(h: Awaited<ReturnType<typeof withVault>>, node: string, md: string) {
-  return h.engine.contentSection('数学', node, 's1', md)
+  return h.engine.content2.contentSection('数学', node, 's1', md)
 }
 
 test('sectionApply：思维节带合法预测门 → 落盘 ready；块结构随正文入库', async () => {
@@ -136,7 +136,7 @@ test('sectionApply：思维节带合法预测门 → 落盘 ready；块结构随
   }, async h => {
     const r = await applySection(h, '高难节点', VALID_SECTION_MD)
     assert.equal(r.title, '思维：专家怎么想')
-    const view = await h.engine.contentSectionsView('数学', '高难节点')
+    const view = await h.engine.content2.contentSectionsView('数学', '高难节点')
     assert.equal(view[0]!.status, 'ready')
     assert.match(view[0]!.md ?? '', /learnhub-predict/)
   })
@@ -185,7 +185,7 @@ test('sectionApply：概念节不带预测门照常通过（必备门只约束�
       },
     },
   }, async h => {
-    const r = await h.engine.contentSection('数学', '高难节点', 's1', '## 概念：背景铺垫\n\n一个平实的概念节，没有预测门。')
+    const r = await h.engine.content2.contentSection('数学', '高难节点', 's1', '## 概念：背景铺垫\n\n一个平实的概念节，没有预测门。')
     assert.equal(r.title, '概念：背景铺垫')
   })
 })

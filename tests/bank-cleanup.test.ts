@@ -74,7 +74,7 @@ test('bankCleanupPreview/Apply：skipped 节点收全部、review 节点只收�
     assert.deepEqual(byNode.get('进阶')!.reasons, { skipped_node: 0, dormant_after_complete: 1 })
     assert.ok(byNode.get('进阶')!.stems.length === 1, '题面样本带出')
 
-    const applied = await engine.bankCleanupApply('数学')
+    const applied = await engine.bank2.bankCleanupApply('数学')
     assert.equal(applied.reduce((s, g) => s + g.archived, 0), 3)
 
     // 归档可逆：archived_reason=cleanup 落盘，恢复时一并清除
@@ -85,7 +85,7 @@ test('bankCleanupPreview/Apply：skipped 节点收全部、review 节点只收�
     assert.ok(!d2Block.includes('archived'), '已调度的题不被清理（d2 无 archived 块）')
 
     // 恢复单题：archived 与 reason 一并清除
-    await engine.questionArchive('数学', '进阶', 'd1', false)
+    await engine.bank2.questionArchive('数学', '进阶', 'd1', false)
     const restored = await readFile(bankFile, 'utf8')
     assert.doesNotMatch(restored, /archived_reason/, '恢复时归档原因一并清除')
 
@@ -109,7 +109,7 @@ test('nodeSkip：跳过时该节点全部未归档题自动归档（reason=skip�
       ],
     },
   }, async ({ engine, paths }) => {
-    const r = await engine.nodeSkip('数学', '入门', true)
+    const r = await engine.sched2.nodeSkip('数学', '入门', true)
     assert.equal(r.stage, 'skipped')
     assert.equal(r.archived, 2, 's1/s2 归档，已归档的 s3 不动')
 
@@ -119,7 +119,7 @@ test('nodeSkip：跳过时该节点全部未归档题自动归档（reason=skip�
     assert.match(text, /archived_reason: manual/, '既有归档原因不被覆盖')
 
     // unskip：stage 回 ready，题目保持归档（恢复是显式动作）
-    await engine.nodeSkip('数学', '入门', false)
+    await engine.sched2.nodeSkip('数学', '入门', false)
     const after = await readFile(bankFile, 'utf8')
     assert.match(after, /id: s1[\s\S]*?archived: true/, '取消跳过不自动恢复')
 

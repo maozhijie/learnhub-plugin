@@ -135,10 +135,10 @@ test('全链路：模板发起→确认→分臂→推进带臂标注→报告�
     },
   }, async ({ engine }) => {
     // 白名单外参数结构上无法配置：propose 只收模板 id
-    await assert.rejects(() => engine.experimentPropose('fsrs_weights'), /白名单外|没有模板/)
-    await assert.rejects(() => engine.experimentPropose('ps_i_order'), /未解锁/, '锁定模板可见不可发起')
+    await assert.rejects(() => engine.lab.experimentPropose('fsrs_weights'), /白名单外|没有模板/)
+    await assert.rejects(() => engine.lab.experimentPropose('ps_i_order'), /未解锁/, '锁定模板可见不可发起')
 
-    const prop = await engine.experimentPropose('band_default_std_vs_hard')
+    const prop = await engine.lab.experimentPropose('band_default_std_vs_hard')
     assert.ok(prop.proposal >= 1)
     assert.equal(prop.pool, 1, '池 = 已调度未归档题卡（a1 已调度、a2 未调度）')
     const props = await engine.store.loadProposals()
@@ -157,8 +157,8 @@ test('全链路：模板发起→确认→分臂→推进带臂标注→报告�
     assert.deepEqual(list[0]!.assignment.order, ['standard', 'hard'])
 
     // 在跑时再开一个：propose 直接拦（v1 单实验）；apply 无 pending 报提案错误
-    await assert.rejects(() => engine.experimentPropose('session_composition_facet_vs_mixed'), /还在跑/)
-    await assert.rejects(() => engine.experimentApply(), /没有 pending/)
+    await assert.rejects(() => engine.lab.experimentPropose('session_composition_facet_vs_mixed'), /还在跑/)
+    await assert.rejects(() => engine.lab.experimentApply(), /没有 pending/)
 
     // 推进一张卡 → 复习日志带臂标注；报告未达窗只报进度
     await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
@@ -166,7 +166,7 @@ test('全链路：模板发起→确认→分臂→推进带臂标注→报告�
     assert.equal(recs.length, 1)
     assert.deepEqual(recs[0]!.exp, { id: 1, arm: 'standard' }, '臂标注进复习日志')
 
-    const report = await engine.experimentReport()
+    const report = await engine.lab.experimentReport()
     assert.equal(report.experiment.id, 1)
     assert.equal(report.analysis.ready, false)
     assert.match(report.analysis.message, /还在积累数据/)
@@ -190,7 +190,7 @@ test('#150 结局落沉淀：停=定稿——结局分析出生即写 nof1_outco
       ],
     },
   }, async ({ engine, paths }) => {
-    const prop = await engine.experimentPropose('band_default_std_vs_hard')
+    const prop = await engine.lab.experimentPropose('band_default_std_vs_hard')
     await engine.graph.proposalApply('experiment', prop.proposal)
     // 一次真实推进（臂标注在案）→ 未达观察窗就停：正典如实落进度态，不造假结论
     await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
@@ -249,8 +249,8 @@ test('实验不改推进语义：同流程在有/无实验两 vault 间账本一
   const SEED = { notes: { 入门: { stage: 'review' } }, banks: BANKS }
   const base = await withVault(SEED, async ({ engine }) => flow(engine))
   await withVault(SEED, async ({ engine }) => {
-    const prop = await engine.experimentPropose('band_default_std_vs_hard')
-    await engine.experimentApply(prop.proposal)
+    const prop = await engine.lab.experimentPropose('band_default_std_vs_hard')
+    await engine.lab.experimentApply(prop.proposal)
     const got = await flow(engine)
     assert.equal(got.note, base.note, '课程笔记（调度事实源）零改动')
     assert.equal(got.practice, base.practice, '作答流水零改动')
@@ -274,8 +274,8 @@ test('批次生效：band_default 实验决定未显式选带时的会话默认�
     const plain = await engine.content2.reviewQueue('数学', '入门')
     assert.ok(Math.abs((plain.band ?? 0) - 0.2) < 1e-6, '无实验：Mastery 0 先验带 0.2')
 
-    const prop = await engine.experimentPropose('band_default_std_vs_hard')
-    await engine.experimentApply(prop.proposal)
+    const prop = await engine.lab.experimentPropose('band_default_std_vs_hard')
+    await engine.lab.experimentApply(prop.proposal)
     // 批次起点拨回昨天 → 今日轮到第二臂（hard）；起点必须从引擎学习日现推，
     // 硬编码日期会让臂序随真实日历奇偶隔天翻面
     const today = (await engine.content2.reviewQueue('数学', '入门')).date
@@ -307,8 +307,8 @@ test('会组成实验：混排臂在全局队列带出 exp 标注；报告从预
     banks: { 入门: [tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: '2024-01-01', last_review: '2024-01-01', reps: 3, lapses: 0 } })] },
     reviewLog: seeded,
   }, async ({ engine }) => {
-    const prop = await engine.experimentPropose('session_composition_facet_vs_mixed')
-    await engine.experimentApply(prop.proposal)
+    const prop = await engine.lab.experimentPropose('session_composition_facet_vs_mixed')
+    await engine.lab.experimentApply(prop.proposal)
     const today = (await engine.content2.reviewQueue()).date
     const list = await engine.store.loadExperiments()
     list[0]!.assignment = { kind: 'batch', start_day: addDays(today, -1)!, order: ['faceted', 'mixed'] }
@@ -316,7 +316,7 @@ test('会组成实验：混排臂在全局队列带出 exp 标注；报告从预
     const q = await engine.content2.reviewQueue()
     assert.deepEqual(q.exp, { id: 1, arm: 'mixed' }, '队列如实标注当日实验臂')
 
-    const report = await engine.experimentReport()
+    const report = await engine.lab.experimentReport()
     assert.equal(report.analysis.ready, true, '每臂 20 次推进达观察窗')
     assert.equal(report.analysis.diff, -0.5, 'mixed 臂 0.25 − faceted 臂 0.75')
     assert.match(report.analysis.message, /低 50 个百分点/)
@@ -334,7 +334,7 @@ test('存储契约：实验文件条目不满足定义形状 → Broken 报出�
     await writeFile(engine.paths.experimentsPath, JSON.stringify([{
       ...BATCH_DEF, outcome: 'practice_ema', status: 'stopped', stopped_day: '2026-09-09',
     }]), 'utf8')
-    const report = await engine.experimentReport(1)
+    const report = await engine.lab.experimentReport(1)
     assert.equal(report.experiment.outcome, 'practice_ema')
     assert.equal(report.analysis.ready, false)
     assert.match(report.analysis.message, /练习侧结局（EMA）|#88\/#89/)

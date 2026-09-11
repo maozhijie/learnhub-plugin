@@ -12,94 +12,76 @@ import { graphHealthScore } from './health.ts'
 import type { VaultFs } from './io.ts'
 /** vault 存储端口（#175 阶段②）：类型随门面出，实现住 host/vault-fs.ts。 */
 export type { VaultFs } from './io.ts'
-import { Paths} from './paths.ts'
-import { Registry} from './registry.ts'
-import { ConceptRegistry} from './concepts.ts'
-import { Store} from './store.ts'
-import { GraphStore, Graph, writeReadyList} from './graph.ts'
-import { GraphSubsystem} from './graph-subsystem.ts'
-import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter} from './notes.ts'
-import type { BrokenNote} from './notes.ts'
-import { getScheduler, masteryOfFm} from './srs.ts'
+import { Paths } from './paths.ts'
+import { Registry } from './registry.ts'
+import { ConceptRegistry } from './concepts.ts'
+import { Store } from './store.ts'
+import { GraphStore, Graph, writeReadyList } from './graph.ts'
+import { GraphSubsystem } from './graph-subsystem.ts'
+import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './notes.ts'
+import type { BrokenNote } from './notes.ts'
+import { getScheduler, masteryOfFm } from './srs.ts'
 import type { OptimizeMeta } from './sched-subsystem.ts'
-import { SchedSubsystem} from './sched-subsystem.ts'
-import { GrowthSubsystem} from './growth-subsystem.ts'
-import type { FSRS} from 'ts-fsrs'
-import type { BandPref} from './adaptive.ts'
-import type { JolPrediction} from './jol.ts'
-import { LabSubsystem} from './nof1.ts'
-import type { Nof1Variable, ExperimentDef, Nof1Analysis} from './nof1.ts'
-import type { SandboxDoc, SandboxCard, SandboxCurvePoint, SandboxNode, SandboxPlan} from './sandbox.ts'
-import type { BandRec} from './coach.ts'
-import type { AdviceDismissRec} from './bank-advice.ts'
-import { bindingImpl} from './optimize.ts'
-import type { OptimizerImpl} from './optimize.ts'
-import { sectionEntryOf} from './attribution.ts'
-import { diagnosticView} from './attribution.ts'
-import { runAudit} from './audit.ts'
-import { Content} from './content.ts'
-import { ContentSubsystem} from './content-subsystem.ts'
-import { GraphProposals} from './proposals.ts'
-import type { ApplyAudit, EditProposalSpec} from './proposals.ts'
-import type { LlmComplete} from './llm.ts'
-import type { Clock, Rng} from './clock.ts'
+import { SchedSubsystem } from './sched-subsystem.ts'
+import { GrowthSubsystem } from './growth-subsystem.ts'
+import type { FSRS } from 'ts-fsrs'
+import type { JolPrediction } from './jol.ts'
+import { LabSubsystem } from './nof1.ts'
+import type { SandboxDoc } from './sandbox.ts'
+import { bindingImpl } from './optimize.ts'
+import type { OptimizerImpl } from './optimize.ts'
+import { sectionEntryOf } from './attribution.ts'
+import { diagnosticView } from './attribution.ts'
+import { runAudit } from './audit.ts'
+import { Content } from './content.ts'
+import { ContentSubsystem } from './content-subsystem.ts'
+import { GraphProposals } from './proposals.ts'
+import type { ApplyAudit } from './proposals.ts'
+import type { LlmComplete } from './llm.ts'
+import type { Clock, Rng } from './clock.ts'
 
-import type { AgentSeam} from './agent.ts'
-import { Projects, ProjectSubsystem} from './projects.ts'
-import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult} from './projects.ts'
-import type { RecallQuestion, RecallRec} from './project-recall.ts'
-import type { VaultLinksDoc} from './vault-links.ts'
-import { readAnchor, foldCompletion} from './seed.ts'
-import type { CompletionFold, SeedDraftRequest} from './seed.ts'
-import type { CompassEta} from './compass.ts'
-import type { CoachCheck, CoachGrowthSegment, CoachTrigger} from './coach-round.ts'
+import type { AgentSeam } from './agent.ts'
+import { Projects, ProjectSubsystem } from './projects.ts'
+import type { FadingTier, ProjectApplyResult } from './projects.ts'
+import type { RecallQuestion } from './project-recall.ts'
+import type { VaultLinksDoc } from './vault-links.ts'
+import { readAnchor, foldCompletion } from './seed.ts'
+import type { CompletionFold } from './seed.ts'
+import type { CompassEta } from './compass.ts'
+import type { CoachCheck, CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
 
 /** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。 */
 export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
 export type { GateVerdict } from './agent.ts'
 export type { SeedDraftRequest } from './seed.ts'
-import type { ProbationOutcome, ProbationCourseView, RecheckMetric} from './probation.ts'
-import { QuestionBank, validateBank, BankSubsystem} from './question-bank.ts'
-import type { BankQuestion} from './question-bank.ts'
-import { NoteSourceManifest, ChannelsSubsystem} from './note-source.ts'
-import { LearnerCards, LearnerSubsystem} from './learner-cards.ts'
-import type { LearnerCard} from './learner-cards.ts'
-import { ErrorCards} from './error-cards.ts'
-import type { ErrorCard} from './error-cards.ts'
-import { Skills} from './skills.ts'
-import type { SkillDoc, ExecutionSource, ExecutionEvidence, ExecutionLogResult} from './skills.ts'
-import { Habits} from './habits.ts'
-import type { HabitDoc, HabitRepeatRec, ExecutionIntention} from './habits.ts'
-import type { GoalIntentionInput} from './goals.ts'
-import type { ReceiptLogRec, ReceiptKind, ReceiptSubmitResult} from './receipts.ts'
-import { AnkiMirror} from './anki.ts'
-import type { AnkiTransport} from './anki.ts'
-import { YAML} from './yaml.ts'
-import { Sessions} from './sessions.ts'
-import { todayStr, nowIsoOf, fmtCutoff} from './dates.ts'
-import { atomicWrite} from './io.ts'
-import { assertSchemaVersion} from './schema.ts'
-import type { SchemaBlock} from './schema.ts'
-import type { SedimentEvent, SedimentFold, SedimentKind, SedimentTier} from './sediment.ts'
+import type { ProbationOutcome, ProbationCourseView, RecheckMetric } from './probation.ts'
+import { QuestionBank, validateBank, BankSubsystem } from './question-bank.ts'
+import type { BankQuestion } from './question-bank.ts'
+import { NoteSourceManifest, ChannelsSubsystem } from './note-source.ts'
+import { LearnerCards, LearnerSubsystem } from './learner-cards.ts'
+import type { LearnerCard } from './learner-cards.ts'
+import { ErrorCards } from './error-cards.ts'
+import type { ErrorCard } from './error-cards.ts'
+import { Skills } from './skills.ts'
+import type { ExecutionSource, ExecutionEvidence, ExecutionLogResult } from './skills.ts'
+import { Habits } from './habits.ts'
+import type { ReceiptLogRec, ReceiptKind, ReceiptSubmitResult } from './receipts.ts'
+import { AnkiMirror } from './anki.ts'
+import { YAML } from './yaml.ts'
+import { Sessions } from './sessions.ts'
+import { todayStr, nowIsoOf, fmtCutoff } from './dates.ts'
+import { atomicWrite } from './io.ts'
+import { assertSchemaVersion } from './schema.ts'
+import type { SchemaBlock } from './schema.ts'
+import type { SedimentKind } from './sediment.ts'
 import { revealAnswer, pctOf } from './grading.ts'
-import { auditQuestion} from './question-hygiene.ts'
-import type { QuestionAuditReport} from './question-hygiene.ts'
-import { readDayCutoff} from './xp.ts'
-import type { CourseEntry, EArchiveRec, EncEdge, Fm, SectionManifest, Stage} from './types.ts'
-import { dataCheck} from './data-check.ts'
-import type { DataCheckReport} from './data-check.ts'
-import type { ProposalRec} from './types.ts'
-import type {
-  AnswerResult, DisputeApplyResult, DoctorDoc, 
-  ExperimentStartResult, GraphApplyResult, GraphBrowseDoc,
-  GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
-  GraphProposeResult, 
-  MemoryHealthDoc, 
-  ErrorGenerateResult, 
-  
-  QuestionItem, RecommendDoc, ReviewCard, StatusDoc, 
-  XpStatus, ProjectCrossDoc, ProjectExecResult,
-} from './views.ts'
+import { auditQuestion } from './question-hygiene.ts'
+import type { QuestionAuditReport } from './question-hygiene.ts'
+import { readDayCutoff } from './xp.ts'
+import type { CourseEntry, EArchiveRec, EncEdge, Fm, Stage } from './types.ts'
+import { dataCheck } from './data-check.ts'
+import type { DataCheckReport } from './data-check.ts'
+import type { AnswerResult, DisputeApplyResult, DoctorDoc, GraphApplyResult, ErrorGenerateResult, RecommendDoc, StatusDoc, ProjectExecResult } from './views.ts'
 
 /** 宿主取值走门面（D14 收口，#152 刀 1 / ADR-0042）：re-export 门只供应纯函数、
  * 常量与缝型——数据访问仍只走门面方法，门不是数据旁路。 */
@@ -223,7 +205,7 @@ export class LearnhubEngine {
     // 生长闸门注入（#146 插入/旁支调速）：三率流水在门面（账本/提案/练习），受理与
     // apply 双门经此回调消费同一份闸门判定。
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot,
-      spec => this.growthGateErrors(spec), this.clock, this.fs)
+      spec => this.growth2.growthGateErrors(spec), this.clock, this.fs)
     this.projects = new Projects(this.paths, this.store, this.clock, this.fs)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course), this.fs)
     this.lab = new LabSubsystem({
@@ -233,11 +215,11 @@ export class LearnhubEngine {
       sched: courseRoot => this.sched(courseRoot),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      enabledCourses: () => this.enabledCourses(),
+      enabledCourses: () => this.registry.enabled(),
       scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
-      sedimentAppend: (kind, tier, payload, concept) => this.sedimentAppend(kind, tier, payload, concept),
-      sedimentFold: () => this.sedimentFold(),
-      sedimentRebuildProfile: () => this.sedimentRebuildProfile(),
+      sedimentAppend: (kind, tier, payload, concept) => this.sched2.sedimentAppend(kind, tier, payload, concept),
+      sedimentFold: () => this.sched2.sedimentFold(),
+      sedimentRebuildProfile: () => this.sched2.sedimentRebuildProfile(),
     })
     this.channels = new ChannelsSubsystem({
       clock: this.clock, fs: this.fs,
@@ -252,10 +234,10 @@ export class LearnhubEngine {
       sched: courseRoot => this.sched(courseRoot),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      enabledCourses: () => this.enabledCourses(),
+      enabledCourses: () => this.registry.enabled(),
       scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
       loadPrompt: kind => this.content2.loadPrompt(kind),
-      questionView: (q, i, opts) => this.questionView(q, i, opts),
+      questionView: (q, i, opts) => this.content2.questionView(q, i, opts),
       judgeBankAnswer: (llmComplete, q, answer, op, ref) => this.judgeBankAnswer(llmComplete, q, answer, op, ref),
       refreshRepCard: (c, graph, node) => this.content2.refreshRepCard(c, graph, node),
     })
@@ -267,15 +249,15 @@ export class LearnhubEngine {
       sched: courseRoot => this.sched(courseRoot),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      enabledCourses: () => this.enabledCourses(),
+      enabledCourses: () => this.registry.enabled(),
       loadPrompt: kind => this.content2.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
-      nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
+      nodeNote: (c, graph, node) => this.content2.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
       sedimentSettle: () => this.sedimentSettle(),
       compassEtaRefresh: (courseKey, opts) => this.compassEtaRefresh(courseKey, opts),
-      experimentPropose: (templateId, course) => this.experimentPropose(templateId, course),
-      refreshSourceFingerprints: absPaths => this.refreshSourceFingerprints(absPaths),
+      experimentPropose: (templateId, course) => this.lab.experimentPropose(templateId, course),
+      refreshSourceFingerprints: absPaths => this.project.refreshSourceFingerprints(absPaths),
     })
     this.project = new ProjectSubsystem({
       store: this.store, paths: this.paths, registry: this.registry,
@@ -283,12 +265,12 @@ export class LearnhubEngine {
       vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      enabledCourses: () => this.enabledCourses(),
+      enabledCourses: () => this.registry.enabled(),
       loadPrompt: kind => this.content2.loadPrompt(kind),
       locateNode: nodeSpec => this.locateNode(nodeSpec),
       graphApply: (kind, pid, opts) => this.graphApply(kind, pid, opts),
-      graphPropose: (kind, yamlText) => this.graphPropose(kind, yamlText),
-      nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
+      graphPropose: (kind, yamlText) => this.graph.graphPropose(kind, yamlText),
+      nodeNote: (c, graph, node) => this.content2.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
     })
     this.bank2 = new BankSubsystem({
@@ -299,18 +281,18 @@ export class LearnhubEngine {
       sched: courseRoot => this.sched(courseRoot),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      enabledCourses: () => this.enabledCourses(),
+      enabledCourses: () => this.registry.enabled(),
       scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
       loadPrompt: kind => this.content2.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
-      nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
+      nodeNote: (c, graph, node) => this.content2.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
       vaultPriorFor: (graph, node) => this.content2.vaultPriorFor(graph, node),
       logGradingFailure: rec => this.logGradingFailure(rec),
       questionContext: (courseKey, node, qid, op) => this.content2.questionContext(courseKey, node, qid, op),
-      exerciseGated: (c, node) => this.exerciseGated(c, node),
+      exerciseGated: (c, node) => this.growth2.exerciseGated(c, node),
       repairInvokesOnce: (llm, items, scope) => this.channels.repairInvokesOnce(llm, items, scope),
-      admitQuestion: (root, node, q, stem, existingStems) => this.admitQuestion(root, node, q, stem, existingStems),
+      admitQuestion: (root, node, q, stem, existingStems) => this.channels.admitQuestion(root, node, q, stem, existingStems),
       explainPoints: (c, graph, node) => this.learner.explainPoints(c, graph, node),
       isNoteSourceCourse: courseKey => this.channels.isNoteSourceCourse(courseKey),
     })
@@ -325,7 +307,7 @@ export class LearnhubEngine {
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       seedAuditFor: (courseName, today) => this.seedAuditFor(courseName, today),
       applyProjectPlanProposal: (pid, opts) => this.applyProjectPlanProposal(pid, opts),
-      experimentApply: pid => this.experimentApply(pid),
+      experimentApply: pid => this.lab.experimentApply(pid),
     })
     this.content2 = new ContentSubsystem({
       store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
@@ -333,20 +315,20 @@ export class LearnhubEngine {
       vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       bandDefault: () => this.lab.bandDefault(),
-      calibrationHintsConfig: () => this.calibrationHintsConfig(),
-      collectNoteSourceCards: today => this.collectNoteSourceCards(today),
-      enabledCourses: () => this.enabledCourses(),
+      calibrationHintsConfig: () => this.learner.calibrationHintsConfig(),
+      collectNoteSourceCards: today => this.channels.collectNoteSourceCards(today),
+      enabledCourses: () => this.registry.enabled(),
       ensureNote: (root, graph, node) => this.ensureNote(root, graph, node),
       errorCardTriples: (courses, nodeFilter) => this.errorCardTriples(courses, nodeFilter),
-      exerciseGated: (c, node) => this.exerciseGated(c, node),
-      expTag: (courseName, node, qid, today) => this.expTag(courseName, node, qid, today),
+      exerciseGated: (c, node) => this.growth2.exerciseGated(c, node),
+      expTag: (courseName, node, qid, today) => this.lab.expTag(courseName, node, qid, today),
       isNoteSourceCourse: courseKey => this.channels.isNoteSourceCourse(courseKey),
-      jolConfig: () => this.jolConfig(),
-      jolPredicted: p => this.jolPredicted(p),
+      jolConfig: () => this.learner.jolConfig(),
+      jolPredicted: p => this.growth2.jolPredicted(p),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      nof1QueueEffect: today => this.nof1QueueEffect(today),
-      noteSourceAnswer: (llmComplete, sourceId, qid, answer, opts) => this.noteSourceAnswer(llmComplete, sourceId, qid, answer, opts),
+      nof1QueueEffect: today => this.lab.nof1QueueEffect(today),
+      noteSourceAnswer: (llmComplete, sourceId, qid, answer, opts) => this.channels.noteSourceAnswer(llmComplete, sourceId, qid, answer, opts),
       noteSourceForget: (sourceId, qid) => this.channels.noteSourceForget(sourceId, qid),
       noteSourceRate: (sourceId, qid, r) => this.channels.noteSourceRate(sourceId, qid, r),
       sched: courseRoot => this.sched(courseRoot),
@@ -357,8 +339,8 @@ export class LearnhubEngine {
       store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
       content: this.content, schedCache: this.schedCache,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
-      coachCheckFor: (c, today) => this.coachCheckFor(c, today),
-      enabledCourses: () => this.enabledCourses(),
+      coachCheckFor: (c, today) => this.growth2.coachCheckFor(c, today),
+      enabledCourses: () => this.registry.enabled(),
       ensureNote: (root, graph, node) => this.ensureNote(root, graph, node),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
@@ -369,17 +351,17 @@ export class LearnhubEngine {
       clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, registry: this.registry,
       concepts: this.concepts, content: this.content,
-      enabledCourses: () => this.enabledCourses(),
+      enabledCourses: () => this.registry.enabled(),
       graphApply: (kind, pid) => this.graphApply(kind, pid),
-      graphPropose: (kind, yamlText) => this.graphPropose(kind, yamlText),
-      graphReject: (pid, note) => this.graphReject(pid, note),
+      graphPropose: (kind, yamlText) => this.graph.graphPropose(kind, yamlText),
+      graphReject: (pid, note) => this.graph.graphReject(pid, note),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      mcAggregate: (plan, cards, nodes, today, scheds, fallbackCourse) => this.mcAggregate(plan, cards, nodes, today, scheds, fallbackCourse),
-      sandboxPopulation: (courses, nodeFilter) => this.sandboxPopulation(courses, nodeFilter),
+      mcAggregate: (plan, cards, nodes, today, scheds, fallbackCourse) => this.lab.mcAggregate(plan, cards, nodes, today, scheds, fallbackCourse),
+      sandboxPopulation: (courses, nodeFilter) => this.lab.sandboxPopulation(courses, nodeFilter),
       scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
-      sedimentFold: () => this.sedimentFold(),
-      sedimentRebuildProfile: () => this.sedimentRebuildProfile(),
+      sedimentFold: () => this.sched2.sedimentFold(),
+      sedimentRebuildProfile: () => this.sched2.sedimentRebuildProfile(),
     })
   }
 
@@ -402,20 +384,6 @@ export class LearnhubEngine {
     return { graph, state, broken }
   }
 
-  async enabledCourses(): Promise<CourseEntry[]> {
-    return this.registry.enabled()
-  }
-
-  async resolveCourse(key?: string): Promise<CourseEntry> {
-    return this.registry.resolve(key)
-  }
-
-  /** 课程条目精确查找（name 或 id）：不存在返回 null，不抛——注册表清扫等存在性判定用
-   * （区别于 resolveCourse 的 fail loud）；停用课程不算缺失，内容仍在。 */
-  async courseByKey(key: string): Promise<CourseEntry | null> {
-    return this.registry.get(key)
-  }
-
   /** 跨课定位节点：「课程/节点」直接命中；否则在启用课程中搜唯一命中。 */
   async locateNode(nodeSpec: string): Promise<{ course: CourseEntry; node: string }> {
     if (nodeSpec.includes('/')) {
@@ -425,7 +393,7 @@ export class LearnhubEngine {
       return { course: c, node: node.trim() }
     }
     const hits: CourseEntry[] = []
-    for (const c of await this.enabledCourses()) {
+    for (const c of await this.registry.enabled()) {
       const { graph } = await this.loadView(c)
       if (graph.nset.has(nodeSpec)) hits.push(c)
     }
@@ -532,7 +500,7 @@ export class LearnhubEngine {
   async statusJson(): Promise<StatusDoc> {
     const { today, cutoff } = await this.learningDay()
     const [stats, diagnostics] = await Promise.all([this.learner.bankSnapshot(today), this.learner.diagnosticsAdvice(today)])
-    const courses = await this.enabledCourses()
+    const courses = await this.registry.enabled()
     const doc = await this.sessions.statusJson(courses, stats, today, fmtCutoff(cutoff))
     // 内容诊断建议项（#69 B1）：每课程附 diagnostics（信号/理由/证据 + 重写与讲解直达入口）
     for (const course of doc.courses) {
@@ -548,10 +516,10 @@ export class LearnhubEngine {
       if (completion) course.completion = completion
       // 教练回合触发点·会话开始（#144）：learnhub_status / 面板 /api/status 是会话开工
       // 的汇总入口——逐课程附就绪深度检查（读侧感知，ready=0 只告警不阻塞）
-      course.coach = await this.coachCheckFor(entry, today)
+      course.coach = await this.growth2.coachCheckFor(entry, today)
       // 插入实验面（#146）：在途插入节点（面板「实验中」标记取数）、到期未决、
       // 三率（滚动 30 学习日）与韧性闸门现势——插入积极性对学习者透明
-      course.probation = await this.probationViewFor(entry, today, cutoff)
+      course.probation = await this.growth2.probationViewFor(entry, today, cutoff)
     }
     return doc
   }
@@ -560,9 +528,9 @@ export class LearnhubEngine {
     const { today } = await this.learningDay()
     const [stats, window, diagnostics, pins, sleep] = await Promise.all([
       this.learner.bankSnapshot(today), this.learner.struggleWindow(today), this.learner.diagnosticsAdvice(today), this.store.loadPins(),
-      this.sleepAdviceConfig(),
+      this.lab.sleepAdviceConfig(),
     ])
-    const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, today, limit, window, diagnostics, pins, sleep.enabled)
+    const events = await this.sessions.recommendEvents(await this.registry.enabled(), stats, today, limit, window, diagnostics, pins, sleep.enabled)
     return { date: today, events }
   }
 
@@ -570,23 +538,11 @@ export class LearnhubEngine {
 
   // 以下 E3pin/E4jol/U4kata/E5coach/E2explain/E1cards/SC/Uskill/Ureceipt/Uhabit 十节方法体住 LearnerSubsystem（learner-cards.ts，#152 刀 4 聚合+转发）
 
-  async pinToday(courseKey: string | undefined, node: string, today?: string, intention?: GoalIntentionInput): Promise<{ course: string; node: string; date: string; intention?: ExecutionIntention }> {
-    return this.learner.pinToday(courseKey, node, today, intention)
-  }
-
-  async setGoalIntention(courseKey: string | undefined, node: string, intention: GoalIntentionInput | null, today?: string): Promise<{ course: string; node: string; intention: ExecutionIntention | null }> {
-    return this.learner.setGoalIntention(courseKey, node, intention, today)
-  }
-
-  async unpinToday(courseKey: string | undefined, node: string, today?: string): Promise<{ course: string; node: string; pinned: false }> {
-    return this.learner.unpinToday(courseKey, node, today)
-  }
-
   // ---- doctor（fm schema 对账） ----
 
   async doctor(): Promise<DoctorDoc> {
     const courses = []
-    for (const c of await this.enabledCourses()) {
+    for (const c of await this.registry.enabled()) {
       const { graph, state, broken } = await this.loadView(c)
       const missing = graph.names.filter(n => !state[n])
       const unknown = Object.keys(state).filter(n => !graph.nset.has(n))
@@ -605,7 +561,7 @@ export class LearnhubEngine {
   // ---- rebuild（audit + 就绪清单） ----
 
   async rebuild(courseKey?: string): Promise<{ message: string }> {
-    const targets = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const targets = courseKey ? [await this.registry.resolve(courseKey)] : await this.registry.enabled()
     const lines: string[] = []
     let failed = false
     for (const c of targets) {
@@ -625,11 +581,6 @@ export class LearnhubEngine {
 
   // 以下 graph analyze/Vault 链接先验/图探索/提案门禁包装/enc 回填 五节方法体住 GraphSubsystem（graph-subsystem.ts，#152 刀 7 聚合+转发）
 
-  async graphAnalyze(
-    courseKey?: string, elementsOnly = false,
-  ): Promise<GraphDoc | GraphElementsDoc> {
-    return this.graph.graphAnalyze(courseKey, elementsOnly)
-  }
   // ---- Vault 链接先验（V-2 #91：wikilink → 无向关联对 → analyze 展示 + 单提案人审）----
 
   async vaultLinksScan(): Promise<{
@@ -660,22 +611,7 @@ export class LearnhubEngine {
   }
   // ---- 图探索（agent 逐步查询，不拉全图）----
 
-  async graphNode(courseKey: string | undefined, node: string): Promise<GraphNodeDoc> {
-    return this.graph.graphNode(courseKey, node)
-  }
-
-  async graphBrowse(courseKey: string | undefined, region?: string, block?: string): Promise<GraphBrowseDoc> {
-    return this.graph.graphBrowse(courseKey, region, block)
-  }
-
-  async graphPath(courseKey: string | undefined, from: string, to: string): Promise<GraphPathResult> {
-    return this.graph.graphPath(courseKey, from, to)
-  }
   // ---- 提案门禁包装（apply 前 audit 拦截） ----
-
-  async graphPropose(kind: 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult> {
-    return this.graph.graphPropose(kind, yamlText)
-  }
 
   async graphApply(
     kind: 'edit' | 'seed' | 'enrich', pid?: number,
@@ -684,86 +620,11 @@ export class LearnhubEngine {
     return this.graph.graphApply(kind, pid, opts)
   }
 
-  async graphReject(pid: number, note = ''): Promise<ProposalRec> {
-    return this.graph.graphReject(pid, note)
-  }
-
-  async seedPropose(
-    input: SeedDraftRequest,
-    agent: AgentSeam,
-  ): Promise<{ id: number; course: string; mode: 'new' | 'reseed'; goal_type: string; endpoint: string; starts: number; prior_hits: number; repaired: boolean }> {
-    return this.graph.seedPropose(input, agent)
-  }
-
-  async conceptMerge(courseKey: string, from: string, into: string): Promise<{ course: string; into: string; names: string[] }> {
-    return this.graph.conceptMerge(courseKey, from, into)
-  }
   // ---- enc 覆盖层回填（kind=enrich，#140：出生/覆盖层分家；原 edit 通道随分家转富化）----
 
-  async graphEncBackfill(courseKey?: string): Promise<GraphEncBackfillResult> {
-    return this.graph.graphEncBackfill(courseKey)
-  }
-
-  async graphProposals(status?: string, kind?: string): Promise<ProposalRec[]> {
-    return this.graph.graphProposals(status, kind)
-  }
-
-  async proposalApply(
-    kind: string, pid?: number,
-  ): Promise<GraphApplyResult | ProjectApplyResult | ExperimentStartResult> {
-    return this.graph.proposalApply(kind, pid)
-  }
-
-  async projectApply(pid: number): Promise<ProjectApplyResult> {
-    return this.graph.projectApply(pid)
-  }
   // ---- 项目域（P 区 / ADR-0015；#92）----
 
   // 以下 项目域/过点对账/执行事件流/目标反编译 四节方法体住 ProjectSubsystem（projects.ts，#152 刀 5 聚合+转发）
-
-  async projectCreate(input: { name: string; goal: string; tier?: FadingTier; id?: string }): Promise<ProjectFm> {
-    return this.project.projectCreate(input)
-  }
-
-  async projectList(): Promise<ProjectFm[]> {
-    return this.project.projectList()
-  }
-
-  async projectShow(id: string): Promise<ProjectView> {
-    return this.project.projectShow(id)
-  }
-
-  async projectLogAppend(id: string, text: string, today?: string): Promise<{ project: string; path: string; day: string }> {
-    return this.project.projectLogAppend(id, text, today)
-  }
-
-  async projectLog(id: string): Promise<{ project: string; path: string; log: string | null }> {
-    return this.project.projectLog(id)
-  }
-
-  private async refreshSourceFingerprints(absPaths: string[]): Promise<void> {
-    await this.project.refreshSourceFingerprints(absPaths)
-  }
-
-  async projectSetLifecycle(id: string, lifecycle: string): Promise<ProjectFm> {
-    return this.project.projectSetLifecycle(id, lifecycle)
-  }
-
-  async projectSetTier(id: string, tier: string): Promise<ProjectFm> {
-    return this.project.projectSetTier(id, tier)
-  }
-
-  async projectPlanPack(id: string): Promise<string> {
-    return this.project.projectPlanPack(id)
-  }
-
-  async projectPlanPropose(id: string, yamlText: string) {
-    return this.project.projectPlanPropose(id, yamlText)
-  }
-
-  async projectMilestonePack(id: string, milestoneId: string): Promise<string> {
-    return this.project.projectMilestonePack(id, milestoneId)
-  }
 
   async projectMilestoneWrite(id: string, milestoneId: string, md: string): Promise<
     { written: string; tier: FadingTier } | { proposed: number; kind: 'project_milestone'; file: string }
@@ -772,25 +633,12 @@ export class LearnhubEngine {
   }
   // ---- 过点对账 / 检索点 / 行为推断 enc（P-3/P-4/P-6；#94/#93/#96）----
 
-  async projectMilestonePass(
-    id: string, milestoneId: string,
-  ): Promise<{ project: string; milestone: string; name: string; xp: number; detail: string }> {
-    return this.project.projectMilestonePass(id, milestoneId)
-  }
-
   async projectMilestoneRecall(
     id: string, milestoneId: string, opts: { nodes?: string[]; limit?: number } = {},
   ): Promise<{ project: string; milestone: string; file: string; questions: Array<RecallQuestion & { answer: BankQuestion['answer']; options?: string[]; explanation?: string }> }> {
     return this.project.projectMilestoneRecall(id, milestoneId, opts)
   }
 
-  async projectRecallReflect(id: string, milestoneId: string, narration: string): Promise<{ project: string; milestone: string; recorded: true }> {
-    return this.project.projectRecallReflect(id, milestoneId, narration)
-  }
-
-  async projectRecallLog(id: string): Promise<RecallRec[]> {
-    return this.project.projectRecallLog(id)
-  }
   // ---- 执行事件流 / Mastery 交叉 2×2（P-7 / #98 / ADR-0015 §3/§4/§8）----
 
   async projectExecLog(
@@ -798,10 +646,6 @@ export class LearnhubEngine {
     input: { source: string; rating?: number; evidence?: ExecutionEvidence; nodes?: string[]; note?: string },
   ): Promise<ProjectExecResult> {
     return this.project.projectExecLog(id, input)
-  }
-
-  async projectCrossView(id: string): Promise<ProjectCrossDoc> {
-    return this.project.projectCrossView(id)
   }
 
   async projectEncCandidates(
@@ -860,41 +704,9 @@ export class LearnhubEngine {
 
   // 以下 内容管线/note resolve/课程工作区 三节方法体住 ContentSubsystem（content-subsystem.ts，#152 刀 8 聚合+转发）
 
-  async contentCheck(courseKey: string | undefined, node: string): Promise<{ passed: boolean; findings: string[]; warns: string[] }> {
-    return this.content2.contentCheck(courseKey, node)
-  }
-
-  async contentApply(courseKey: string | undefined, node: string, body: string): Promise<{ version: number; message: string; hints: string[] }> {
-    return this.content2.contentApply(courseKey, node, body)
-  }
-
-  async contentReset(courseKey: string | undefined): Promise<{ course: string; nodes: string[]; trashed: string[]; sediment: string }> {
-    return this.content2.contentReset(courseKey)
-  }
-
-  async contentSection(courseKey: string | undefined, node: string, sectionId: string, md: string): Promise<{ version: number; title: string; hints: string[] }> {
-    return this.content2.contentSection(courseKey, node, sectionId, md)
-  }
-
-  async contentSectionsView(courseKey: string | undefined, node: string): Promise<Array<SectionManifest & { md: string | null; tierLabel: string }>> {
-    return this.content2.contentSectionsView(courseKey, node)
-  }
-
   // ---- note resolve / 反馈区读取 ----
 
-  async resolveNote(vaultRoot: string, input: string, centerRel: string): Promise<{ path: string; node: string; course: string }> {
-    return this.content2.resolveNote(vaultRoot, input, centerRel)
-  }
-
   // ---- P4：课程工作区（树形）与题库 ----
-
-  private questionView(q: BankQuestion, i: number, opts?: { today?: string }): QuestionItem {
-    return this.content2.questionView(q, i, opts)
-  }
-
-  async questionSave(courseKey: string | undefined, node: string, yamlText: string): Promise<{ node: string; count: number; path: string }> {
-    return this.content2.questionSave(courseKey, node, yamlText)
-  }
 
   async questionAnswer(
     llmComplete: LlmComplete,
@@ -919,72 +731,22 @@ export class LearnhubEngine {
     await this.content2.logGradingFailure(rec)
   }
 
-  private async nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }> {
-    return this.content2.nodeNote(c, graph, node)
-  }
-
   // ---- C1 笔记复习源（#59 / ADR-0010：只出题不动文，派生物落镜像区）----
 
   // 以下 C1/卡池镜像/漂移治理/排除清单/Anki 通道的方法体住 ChannelsSubsystem（note-source.ts，#152 刀 3 聚合+转发）
 
-  async noteSourceUnregister(id: string): Promise<{ removed: string; path: string }> {
-    return this.channels.noteSourceUnregister(id)
-  }
   // ---- 卡池镜像（V-4 #108：Obsidian backlink 通道）----
 
 
   // ---- 漂移治理全量化（V-6 #109：改名/移动 → relink 或 Missing）----
 
-  async noteSourceRelink(id: string, input: string, today?: string): Promise<{ id: string; from: string; to: string }> {
-    return this.channels.noteSourceRelink(id, input, today)
-  }
   // ---- 用户排除清单（V-1 #86：state/learnhub.json 的 note_source_excludes）----
 
-  async noteSourceExcludes(): Promise<{ excludes: string[] }> {
-    return this.channels.noteSourceExcludes()
-  }
-
-  async noteSourceExclude(input: string): Promise<{ excludes: string[] }> {
-    return this.channels.noteSourceExclude(input)
-  }
-
-  async noteSourceUnexclude(input: string): Promise<{ excludes: string[] }> {
-    return this.channels.noteSourceUnexclude(input)
-  }
-
-  private async admitQuestion( root: string, node: string, q: Record<string, unknown>, stem: string, existingStems: Array<{ q: string; kind?: string; difficulty?: number }>, ): Promise<{ verdict: 'added' } | { verdict: 'duplicate'; against: string } | { verdict: 'invalid' }> {
-    return this.channels.admitQuestion(root, node, q, stem, existingStems)
-  }
-
-  async noteSourceGenerate( id: string, count: number | undefined, llm: LlmComplete, today?: string, ): Promise<{ id: string; added: number; skipped: number; total: number; duplicates: Array<{ q: string; against: string }> }> {
-    return this.channels.noteSourceGenerate(id, count, llm, today)
-  }
-
-  private async collectNoteSourceCards( today: string, ): Promise<{ cards: ReviewCard[]; drifted: Array<{ id: string; path: string; hint: string }>; suspended: Array<{ id: string; path: string; reason: string }> }> {
-    return this.channels.collectNoteSourceCards(today)
-  }
-
-  private async noteSourceAnswer( llmComplete: LlmComplete, sourceId: string, qid: string, answer: string, opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null }, ): Promise<AnswerResult> {
-    return this.channels.noteSourceAnswer(llmComplete, sourceId, qid, answer, opts)
-  }
-
   // ---- C2 Anki 通道（#63 / ADR-0011：Anki 纯作答通道，vault 唯一调度者）----
-
-  async ankiExportPush(transport: AnkiTransport, today?: string): Promise<{ date: string; added: number; updated: number; removed: number; total: number; decks: string[] }> {
-    return this.channels.ankiExportPush(transport, today)
-  }
-
-  async ankiImportEvents(transport: AnkiTransport, opts?: { nowMs?: number }): Promise<{ imported: number; advanced: number; skipped_same_day: number; skipped_unknown: number; unknown: string[] }> {
-    return this.channels.ankiImportEvents(transport, opts)
-  }
 
   // ---- 节点跳过 / 完成确认 ----
 
   // 以下 跳过/完成确认、XP 账本、记忆健康、优化器、沉淀层 五节方法体住 SchedSubsystem（sched-subsystem.ts，#152 刀 9 聚合+转发）
-
-  async nodeSkip(courseKey: string | undefined, node: string, skipped: boolean): Promise<{ course: string; node: string; stage: Stage; archived?: number }> {
-    return this.sched2.nodeSkip(courseKey, node, skipped)
-  }
 
   async nodeComplete(courseKey: string | undefined, node: string, force = false): Promise<{
     accepted: boolean; accuracy: number | null; course: string; node: string
@@ -995,64 +757,13 @@ export class LearnhubEngine {
   }
   // ---- XP 时间账本（Math Academy 语义：1 XP ≈ 1 分钟有效专注） ----
 
-  async xpStatus(): Promise<XpStatus> {
-    return this.sched2.xpStatus()
-  }
-
-  async setDailyGoal(goal: number): Promise<{ goal: number }> {
-    return this.sched2.setDailyGoal(goal)
-  }
-
-  async setDayCutoff(value: string): Promise<{ day_cutoff: string }> {
-    return this.sched2.setDayCutoff(value)
-  }
   // ---- 记忆健康仪表盘（#61 A2 / ADR-0012）----
 
-  async memoryHealth(today?: string): Promise<MemoryHealthDoc> {
-    return this.sched2.memoryHealth(today)
-  }
   // ---- E4 JOL 抽查配置（state/learnhub.json 的 jol 字段；默认开、约 1/3）----
 
-  async jolConfig(): Promise<{ enabled: boolean; rate: number }> {
-    return this.learner.jolConfig()
-  }
-
-  async setJolConfig(patch: { enabled?: boolean; rate?: number }): Promise<{ enabled: boolean; rate: number }> {
-    return this.learner.setJolConfig(patch)
-  }
   // ---- D1 N-of-1 实验引擎（#110 / ADR-0023）——LabSubsystem 住 nof1.ts（#152 刀 2）----
 
-  async experimentPropose(
-    templateId: string, course?: string,
-  ): Promise<{ proposal: number; template: string; title: string; pool: number; scope_course: string | null }> {
-    return this.lab.experimentPropose(templateId, course)
-  }
-
-  async experimentApply(pid?: number): Promise<{ id: number; title: string; arm_today: string }> {
-    return this.lab.experimentApply(pid)
-  }
-
-  async experimentReport(id?: number): Promise<{ experiment: ExperimentDef; analysis: Nof1Analysis }> {
-    return this.lab.experimentReport(id)
-  }
-
-  private async nof1QueueEffect(
-    today: string,
-  ): Promise<{ id: number; variable: Nof1Variable; arm: string } | null> {
-    return this.lab.nof1QueueEffect(today)
-  }
-
-  private async expTag(
-    courseName: string, node: string, qid: string, today: string,
-  ): Promise<{ id: number; arm: string } | null> {
-    return this.lab.expTag(courseName, node, qid, today)
-  }
-
   // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）----
-
-  async kataToExperiment(weekStart: string, templateId: string, course?: string): Promise<{ proposal: number; title: string; week_start: string }> {
-    return this.learner.kataToExperiment(weekStart, templateId, course)
-  }
 
   async kataToIntention(
     weekStart: string, input: { course: string; node: string; cue: string; action: string },
@@ -1061,18 +772,7 @@ export class LearnhubEngine {
   }
 
 
-  async kataList(): Promise<Array<{ week_start: string; answered: boolean }>> {
-    return this.learner.kataList()
-  }
   // ---- D2 挑战点恒温器（#111 / ADR-0024）——LabSubsystem 住 nof1.ts（#152 刀 2）----
-
-  async setBandDefault(band: string | null): Promise<{ band_default: BandPref | null }> {
-    return this.lab.setBandDefault(band)
-  }
-
-  async thermostatApply(suggestionId: string): Promise<{ applied: string; band_default: BandPref | null }> {
-    return this.lab.thermostatApply(suggestionId)
-  }
 
   // ---- D3 沙盘（#112 / ADR-0025）——LabSubsystem 住 nof1.ts（#152 刀 2）----
 
@@ -1083,19 +783,6 @@ export class LearnhubEngine {
     nodes?: string[]
   }): Promise<SandboxDoc> {
     return this.lab.sandboxRun(input)
-  }
-
-  private sandboxPopulation(
-    courses: CourseEntry[], nodeFilter: Set<string> | null,
-  ): Promise<{ cards: SandboxCard[]; nodes: SandboxNode[]; scheds: Map<string, FSRS> }> {
-    return this.lab.sandboxPopulation(courses, nodeFilter)
-  }
-
-  private mcAggregate(
-    plan: SandboxPlan, cards: SandboxCard[], nodes: SandboxNode[], today: string,
-    scheds: Map<string, FSRS>, fallbackCourse: string,
-  ): { curve: SandboxCurvePoint[]; map: Array<{ node: string; p50: number; p80: number }> } {
-    return this.lab.mcAggregate(plan, cards, nodes, today, scheds, fallbackCourse)
   }
 
   // ---- 罗盘（#143 / ADR-0033 透明度装置：常驻非承诺路线草图）----
@@ -1116,20 +803,10 @@ export class LearnhubEngine {
     return this.growth2.compassRead(courseKey)
   }
 
-  async compassTail(courseKey: string): Promise<string> {
-    return this.growth2.compassTail(courseKey)
-  }
-
   async compassPaint(courseKey: string | undefined, agent: AgentSeam): Promise<{
     course: string; path: string; route_lines: number; annotations_preserved: boolean; repainted: boolean
   }> {
     return this.growth2.compassPaint(courseKey, agent)
-  }
-
-  async compassRewrite(
-    courseKey: string, routeMd: string,
-  ): Promise<{ course: string; path: string; route_lines: number }> {
-    return this.growth2.compassRewrite(courseKey, routeMd)
   }
 
   async compassEtaRefresh(
@@ -1138,10 +815,6 @@ export class LearnhubEngine {
     return this.growth2.compassEtaRefresh(courseKey, opts)
   }
   // ---- 教练回合感知面（#144 / ADR-0033 滚动教练：触发三点 × 就绪深度 × 六区块上下文包）----
-
-  private async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
-    return this.growth2.coachCheckFor(c, today)
-  }
 
   async coachCheckpoint(
     trigger: CoachTrigger, courseKey?: string, opts: { today?: string } = {},
@@ -1171,23 +844,11 @@ export class LearnhubEngine {
   }
   // ---- 边实验账本与复诊（#146 / 插入提案生命周期：预注册→登记→到期结算→proven｜自动剪除）----
 
-  private async growthGateErrors(spec: EditProposalSpec): Promise<string[]> {
-    return this.growth2.growthGateErrors(spec)
-  }
-
-  private async probationViewFor(c: CourseEntry, today: string, cutoff: number): Promise<ProbationCourseView> {
-    return this.growth2.probationViewFor(c, today, cutoff)
-  }
-
   async probationStatus(courseKey?: string): Promise<{
     date: string
     courses: Array<{ course: string } & ProbationCourseView>
   }> {
     return this.growth2.probationStatus(courseKey)
-  }
-
-  private async exerciseGated(c: CourseEntry, node: string): Promise<boolean> {
-    return this.growth2.exerciseGated(c, node)
   }
 
   async settleRechecks(courseKey?: string, opts: { today?: string } = {}): Promise<{
@@ -1201,45 +862,13 @@ export class LearnhubEngine {
     return this.growth2.settleRechecks(courseKey, opts)
   }
 
-  private jolPredicted(p: JolPrediction | null | undefined): JolPrediction | null {
-    return this.growth2.jolPredicted(p)
-  }
   // ---- Self-Calibration 自评校准画像（ADR-0022 #104；分源自省面 + 显式呈现层提示）----
 
-  async calibrationHintsConfig(): Promise<{ hints_enabled: boolean }> {
-    return this.learner.calibrationHintsConfig()
-  }
-
-  async setCalibrationHints(hints_enabled: boolean): Promise<{ hints_enabled: boolean }> {
-    return this.learner.setCalibrationHints(hints_enabled)
-  }
   // ---- D4 睡眠耦合建议配置（#85）——LabSubsystem 住 nof1.ts（#152 刀 2）----
-
-  async sleepAdviceConfig(): Promise<{ enabled: boolean }> {
-    return this.lab.sleepAdviceConfig()
-  }
-
-  async setSleepAdviceConfig(patch: { enabled?: boolean }): Promise<{ enabled: boolean }> {
-    return this.lab.setSleepAdviceConfig(patch)
-  }
 
   // ---- E5 可用的困难教练（#65；只读信息性反馈，无门禁无判分）----
 
-  async logBandSession(rec: { course: string; node: string; band: BandPref; answered: number; correct: number }, today?: string): Promise<BandRec> {
-    return this.learner.logBandSession(rec, today)
-  }
-
-  async coachAdvice(today?: string): Promise<{ messages: string[]; due_hard: number }> {
-    return this.learner.coachAdvice(today)
-  }
   // ---- E2「讲给我听」（#68 / ADR-0009 Learner Output：判词只入 E 档案，零 XP）----
-
-  async explainBackFeedback(
-    courseKey: string | undefined, node: string, transcript: string,
-    llm: LlmComplete,
-  ): Promise<EArchiveRec & { reply: string }> {
-    return this.learner.explainBackFeedback(courseKey, node, transcript, llm)
-  }
 
   async explainArchiveCard(
     courseKey: string | undefined, node: string,
@@ -1280,10 +909,6 @@ export class LearnhubEngine {
 
   // ---- U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）----
 
-  async skillCreate(name: string, opts?: { id?: string; maintenance_days?: number | null }): Promise<SkillDoc> {
-    return this.learner.skillCreate(name, opts)
-  }
-
   async executionLog(
     skillId: string,
     input: { source: ExecutionSource; minutes: number; rating?: number; evidence?: ExecutionEvidence; note?: string },
@@ -1310,14 +935,6 @@ export class LearnhubEngine {
   }
   // ---- U 区·习惯一等公民（#90 / ADR-0017：零 FSRS 语义、零 canonical 写入）----
 
-  async habitCreate(input: { name: string; cue: string; action: string; id?: string }): Promise<HabitDoc> {
-    return this.learner.habitCreate(input)
-  }
-
-  async habitRepeat(habitId: string, input: { auto_rating?: number; note?: string }): Promise<HabitRepeatRec> {
-    return this.learner.habitRepeat(habitId, input)
-  }
-
   // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----
 
   async optimizeFsrsParams(
@@ -1331,18 +948,6 @@ export class LearnhubEngine {
     return this.sched2.optimizeFsrsParams(impl)
   }
   // ---- 沉淀层（#139 / ADR-0034：学习模型状态第四存储域）----
-
-  async sedimentAppend(kind: SedimentKind, tier: SedimentTier, payload: Record<string, unknown>, concept?: string): Promise<SedimentEvent> {
-    return this.sched2.sedimentAppend(kind, tier, payload, concept)
-  }
-
-  async sedimentFold(): Promise<SedimentFold> {
-    return this.sched2.sedimentFold()
-  }
-
-  async sedimentRebuildProfile(): Promise<string> {
-    return this.sched2.sedimentRebuildProfile()
-  }
 
   async sedimentSettle(): Promise<{
     week: string | null
@@ -1459,26 +1064,8 @@ export class LearnhubEngine {
 
   // ---- B2 难度感知回流（决议 #41 / #58）----
 
-  async adviceDismiss(course: string, node: string, qid: string | undefined, undo = false, all = false): Promise<{ dismissed: AdviceDismissRec[] }> {
-    return this.bank2.adviceDismiss(course, node, qid, undo, all)
-  }
-
-  async questionAdd(courseKey: string, node: string, question: Record<string, unknown>): Promise<{ course: string; node: string; id: string; count: number }> {
-    return this.bank2.questionAdd(courseKey, node, question)
-  }
-
-  async questionUpdate(courseKey: string, node: string, qid: string, patch: Record<string, unknown>): Promise<{ course: string; node: string; qid: string }> {
-    return this.bank2.questionUpdate(courseKey, node, qid, patch)
-  }
-
-  async questionArchive(courseKey: string, node: string, qid: string, archived: boolean, reason?: string): Promise<{ course: string; node: string; qid: string; archived: boolean }> {
-    return this.bank2.questionArchive(courseKey, node, qid, archived, reason)
-  }
   // ---- 题库一键清理（ADR-0032）----
 
-  async bankCleanupApply(courseKey?: string): Promise<{ course: string; node: string; archived: number }[]> {
-    return this.bank2.bankCleanupApply(courseKey)
-  }
   // ---- 瑕疵题勘误与判罚冲正（ADR-0031）----
 
   async questionDisputeApply(
@@ -1511,26 +1098,6 @@ export class LearnhubEngine {
     return this.bank2.questionGenerate(courseKey, node, count, llm, opts)
   }
 
-  async questionGenerateSections(
-    courseKey: string | undefined, node: string,
-    llm: LlmComplete,
-  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[] }> {
-    return this.bank2.questionGenerateSections(courseKey, node, llm)
-  }
-
-  async interactiveSettle(
-    courseKey: string | undefined, node: string, sectionId: string, score: number, detail?: string,
-  ): Promise<{ settled: boolean; mastery: number }> {
-    return this.bank2.interactiveSettle(courseKey, node, sectionId, score, detail)
-  }
-
-  async courseDelete(courseKey: string): Promise<{ removed: string; trash: string; sediment: string }> {
-    return this.bank2.courseDelete(courseKey)
-  }
-
-  async ensureAllNotes(courseKey?: string): Promise<{ courses: Array<{ course: string; created: number }> }> {
-    return this.bank2.ensureAllNotes(courseKey)
-  }
   // ---- utils ----
 
   private async updateNoteFm(path: string, fm: Fm): Promise<void> {

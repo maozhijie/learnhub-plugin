@@ -60,7 +60,7 @@ async function applySectionWithRepair(
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   let gateReport = ''
   try {
-    return await rt.engine.contentSection(course, node, s.id, first)
+    return await rt.engine.content2.contentSection(course, node, s.id, first)
   } catch (err) {
     const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
     if (code !== 'GATE_FAILED') throw err
@@ -76,7 +76,7 @@ async function applySectionWithRepair(
     const merged = Content.applyBlockPatch(first, plan, Content.extractFencedBlocks(patched))
     if (merged !== null) {
       try {
-        return await rt.engine.contentSection(course, node, s.id, merged)
+        return await rt.engine.content2.contentSection(course, node, s.id, merged)
       } catch (err) {
         const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
         if (code !== 'GATE_FAILED') throw err
@@ -90,7 +90,7 @@ async function applySectionWithRepair(
   )
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   try {
-    return await rt.engine.contentSection(course, node, s.id, repaired)
+    return await rt.engine.content2.contentSection(course, node, s.id, repaired)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     throw new Error(`${msg}\n（已按门禁清单自动修复重试一轮，仍未通过——可对单节重写或在面板人工修正后 learnhub_content_check）`)
@@ -357,7 +357,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
     if (job.phase === '种子' && job.seedPayload) {
       job.message = '种子起草中（目标描述 → 模型）…'
       persistGenJobs(rt)
-      const r = await rt.engine.seedPropose({
+      const r = await rt.engine.graph.seedPropose({
         course: job.course, goal: job.seedPayload.goal, mode: job.seedPayload.mode,
         goalType: job.seedPayload.goalType, useVaultPrior: job.seedPayload.useVaultPrior,
         worksheet: job.seedPayload.worksheet,
@@ -565,7 +565,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     const highTier = job.tier === '高'
 
     // —— 大纲：节清单落盘。已有 ready 节（断点续跑）沿用既有清单，否则重跑覆盖 ——
-    let views = await rt.engine.contentSectionsView(course, node)
+    let views = await rt.engine.content2.contentSectionsView(course, node)
     if (!views.some(s => s.status === 'ready')) {
       const outlineTpl = await rt.engine.content2.loadPrompt('课程大纲')
       // P4：高复杂度节点的大纲轮升 deep 档
@@ -581,7 +581,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
         if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
         await rt.engine.content2.contentOutline(course, node, outlineYaml)
       }
-      views = await rt.engine.contentSectionsView(course, node)
+      views = await rt.engine.content2.contentSectionsView(course, node)
       if (!views.length) throw new Error('[generate] 大纲没有产出任何节。')
     }
     job.phase = 'sections'
@@ -615,7 +615,7 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   job.message = `${contentMsg}；自动出题中…`
   persistGenJobs(rt)
   try {
-    const per = await rt.engine.questionGenerateSections(job.course, job.node, async prompt => complete(prompt))
+    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, async prompt => complete(prompt))
     const quiz = await generateQuiz(rt, complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status
@@ -632,7 +632,7 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
 /** 单节重写：节任务上下文 → 模型 → sectionApply（与管线共用同一拼装、门禁与修复回路）。 */
 export async function generateSection(rt: HostRuntime, ctx: Context, course: string, node: string, sectionId: string): Promise<string> {
   const pack = await rt.engine.content2.contentPack(course, node)
-  const views = await rt.engine.contentSectionsView(course, node)
+  const views = await rt.engine.content2.contentSectionsView(course, node)
   const s = views.find(v => v.id === sectionId)
   if (!s) throw new Error(`「${node}」没有节「${sectionId}」——先运行大纲。`)
   const sectionTpl = await rt.engine.content2.loadPrompt('课程节生成')
@@ -684,12 +684,12 @@ export async function generateProjectMilestone(rt: HostRuntime, id: string, mile
 /** 整课重置 + 拓扑序串行重跑生成链（HTTP 与 agent 工具共用）：
  * contentReset 备份旧产物并重写 draft → 清掉该课程遗留任务（含排队）→ 按拓扑序逐节点入队全局队列。
  * 立即返回 { reset, queued }；进度由任务注册表展示。课程有 running 任务时拒绝。 */
-export async function resetCourseChain(rt: HostRuntime, ctx: Context, courseKey: string): Promise<{ reset: Awaited<ReturnType<LearnhubEngine['contentReset']>>; queued: number }> {
+export async function resetCourseChain(rt: HostRuntime, ctx: Context, courseKey: string): Promise<{ reset: Awaited<ReturnType<LearnhubEngine['content2']['contentReset']>>; queued: number }> {
   const running = [...rt.jobs.genJobs.values()].filter(j => j.course === courseKey && (j.status === 'running' || j.status === 'cancelling'))
   if (running.length) throw new Error(`课程「${courseKey}」有 ${running.length} 个生成任务进行中，先取消或等完成再重生成。`)
   const c = await rt.engine.registry.resolve(courseKey)
   const { graph } = await rt.engine.loadView(c)
-  const reset = await rt.engine.contentReset(c.name)
+  const reset = await rt.engine.content2.contentReset(c.name)
   for (const [key, j] of rt.jobs.genJobs.entries()) if (j.course === c.name) rt.jobs.genJobs.delete(key)
   persistGenJobs(rt)
   // 整课重生成是显式意图：解除重启暂停，让链条立即开跑

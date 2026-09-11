@@ -109,7 +109,7 @@ test('V-2 注入：出题提示词带先验段（综合与逐节同款），题�
 
     // 逐节管线同款注入（节清单播种在 frontmatter，正文按标题切分）
     const prompts2: string[] = []
-    await engine.questionGenerateSections('数学', '入门', async prompt => {
+    await engine.bank2.questionGenerateSections('数学', '入门', async prompt => {
       prompts2.push(prompt)
       return 'questions:\n  - kind: true_false\n    q: 节题。\n    answer: true'
     })

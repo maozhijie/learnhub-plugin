@@ -80,20 +80,20 @@ test('意图 schema：线索与单一行动都必填（格式锁死）；缺即 
 
 test('习惯全链：建档 → 自报重复（可选自评）→ 清单派生面', async () => {
   await withVault({ tag: 'habit-chain', registry: null, graph: null }, async h => {
-    const doc = await h.engine.habitCreate({ name: '晨间音阶', cue: '早上刷完牙后', action: '打开吉他弹一段音阶' })
+    const doc = await h.engine.learner.habitCreate({ name: '晨间音阶', cue: '早上刷完牙后', action: '打开吉他弹一段音阶' })
     assert.equal(doc.status, 'active')
     assert.equal(existsSync(h.paths.habitPath('晨间音阶')), true)
     // 同名拒绝；意图缺字段 fail loud
-    await assert.rejects(() => h.engine.habitCreate({ name: '晨间音阶', cue: 'a', action: 'b' }), /已存在/)
-    await assert.rejects(() => h.engine.habitCreate({ name: 'x', cue: '', action: 'b' }), /cue 不能为空/)
-    await assert.rejects(() => h.engine.habitCreate({ name: 'x', cue: 'c', action: '' }), /action 不能为空/)
+    await assert.rejects(() => h.engine.learner.habitCreate({ name: '晨间音阶', cue: 'a', action: 'b' }), /已存在/)
+    await assert.rejects(() => h.engine.learner.habitCreate({ name: 'x', cue: '', action: 'b' }), /cue 不能为空/)
+    await assert.rejects(() => h.engine.learner.habitCreate({ name: 'x', cue: 'c', action: '' }), /action 不能为空/)
 
-    await h.engine.habitRepeat('晨间音阶', { auto_rating: 2 })
-    await h.engine.habitRepeat('晨间音阶', {})
-    await h.engine.habitRepeat('晨间音阶', { auto_rating: 4, note: '今天很顺' })
+    await h.engine.learner.habitRepeat('晨间音阶', { auto_rating: 2 })
+    await h.engine.learner.habitRepeat('晨间音阶', {})
+    await h.engine.learner.habitRepeat('晨间音阶', { auto_rating: 4, note: '今天很顺' })
     // 自评枚举守门
-    await assert.rejects(() => h.engine.habitRepeat('晨间音阶', { auto_rating: 6 }), /1-5/)
-    await assert.rejects(() => h.engine.habitRepeat('不存在', {}), /Missing/)
+    await assert.rejects(() => h.engine.learner.habitRepeat('晨间音阶', { auto_rating: 6 }), /1-5/)
+    await assert.rejects(() => h.engine.learner.habitRepeat('不存在', {}), /Missing/)
 
     const list = await h.engine.learner.habitList()
     assert.equal(list.habits.length, 1)
@@ -113,11 +113,11 @@ test('习惯全链：建档 → 自报重复（可选自评）→ 清单派生�
 
 test('归档可逆；无到期语义——引擎侧没有任何催办字段', async () => {
   await withVault({ tag: 'habit-arch', registry: null, graph: null }, async h => {
-    await h.engine.habitCreate({ name: '散步', cue: '午饭后', action: '出门走十分钟' })
+    await h.engine.learner.habitCreate({ name: '散步', cue: '午饭后', action: '出门走十分钟' })
     await h.engine.learner.habitArchive('散步', true)
     assert.equal((await h.engine.habits.load('散步')).status, 'archived')
     // 归档只是收纳标签：仍可自报（无门禁），也可恢复
-    await h.engine.habitRepeat('散步', {})
+    await h.engine.learner.habitRepeat('散步', {})
     await h.engine.learner.habitArchive('散步', false)
     assert.equal((await h.engine.habits.load('散步')).status, 'active')
     // 归档参数必须显式
@@ -127,9 +127,9 @@ test('归档可逆；无到期语义——引擎侧没有任何催办字段', as
 
 test('红线：习惯域全路径零 canonical 写入（journal/practice/review-log 零行）', async () => {
   await withVault({ tag: 'habit-redline', registry: null, graph: null }, async h => {
-    await h.engine.habitCreate({ name: '冥想', cue: '到工位坐下后', action: '闭眼呼吸三分钟' })
-    await h.engine.habitRepeat('冥想', { auto_rating: 3 })
-    await h.engine.habitRepeat('冥想', { auto_rating: 3 })
+    await h.engine.learner.habitCreate({ name: '冥想', cue: '到工位坐下后', action: '闭眼呼吸三分钟' })
+    await h.engine.learner.habitRepeat('冥想', { auto_rating: 3 })
+    await h.engine.learner.habitRepeat('冥想', { auto_rating: 3 })
     await h.engine.learner.habitArchive('冥想', true)
     // 学习账本零触碰：习惯重复不进 XP、不进 streak、不进任何调度面（ADR-0017 三边界）
     assert.equal((await h.store.journalTail()).length, 0)
@@ -151,7 +151,7 @@ test('Missing/Broken：缺失合法空态；坏档 load 抛 Broken、清单跳�
     await assert.rejects(() => h.engine.habits.load('不存在'), /Missing/)
     assert.equal(existsSync(h.paths.habitRepeatLogPath), false)
     assert.deepEqual(await h.store.habitRepeatsAll(), [])
-    await h.engine.habitCreate({ name: '好的', cue: 'c', action: 'a' })
+    await h.engine.learner.habitCreate({ name: '好的', cue: 'c', action: 'a' })
     const { writeFile } = await import('node:fs/promises')
     await writeFile(h.paths.habitPath('坏的'), 'habit: [broken\n', 'utf8')
     await assert.rejects(() => h.engine.habits.load('坏的'), /Broken/)

@@ -154,7 +154,7 @@ test('主链：一条执行事件走完 回流→practice EMA→mastery→2×2 �
     graph: ENC_GRAPH,
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine, paths }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
     await engine.graph.projectApply(p1.id)
 
@@ -212,7 +212,7 @@ test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / �
     graph: NO_ENC_GRAPH,
     notes: { 入门: {}, 平行: {} },
   }, async ({ engine, paths }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 平行'))
     await engine.graph.projectApply(p1.id)
 
@@ -270,7 +270,7 @@ starts:
 `
     const sp = await engine.graph.graphPropose('seed', seedYaml) as { id: number }
     await engine.graphApply('seed', sp.id)
-    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '数学/弹唱目标, 数学/音阶爬格'))
     await engine.graph.projectApply(p1.id)
 
@@ -297,7 +297,7 @@ test('入档推荐全链：档内表现攒够 → 推荐升档但不落盘；改
       进阶: { fsrs: { stability: 60, difficulty: 5, due: '2026-09-10', last_review: '2026-09-01', reps: 3, lapses: 0 }, practice: { attempts: 3, correct: 3, ema: 0.9 } },
     },
   }, async ({ engine }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
     await engine.graph.projectApply(p1.id)
 
@@ -326,7 +326,7 @@ test('红线：执行事件零 XP / 零 journal / 零 review-log / 零 practice 
     graph: ENC_GRAPH,
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine, store }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
     await engine.graph.projectApply(p1.id)
 
@@ -352,7 +352,7 @@ test('红线：升档推荐不出现在任何门禁位——gateMilestone/passMi
     graph: ENC_GRAPH,
     notes: { 入门: STRONG, 进阶: STRONG },
   }, async ({ engine, store }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
     await engine.graph.projectApply(p1.id)
 
@@ -369,7 +369,7 @@ test('红线：升档推荐不出现在任何门禁位——gateMilestone/passMi
       (err: unknown) => (err as { code?: string }).code === 'MILESTONE_GATE_FAILED',
     )
     // 门禁位 2：过点对账照旧——定价语义与推荐无关（无题池 → k=1，est 未申报 → 120）
-    const pass = await engine.projectMilestonePass('练琴计划', 'm1')
+    const pass = await engine.project.projectMilestonePass('练琴计划', 'm1')
     assert.equal(pass.xp, 120)
     assert.doesNotMatch(pass.detail, /推荐|升档|promote/, '对账流水不含任何推荐语义')
     const rows = await store.journalTail('练琴计划', 10)

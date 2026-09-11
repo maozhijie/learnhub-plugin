@@ -111,7 +111,7 @@ function scriptFake(replies: string[]) {
 }
 
 async function projectOf(engine: Awaited<ReturnType<typeof withVault>>['engine'], goal = GOAL): Promise<void> {
-  await engine.projectCreate({ name: '练琴计划', goal })
+  await engine.project.projectCreate({ name: '练琴计划', goal })
 }
 
 /** 计划条目构造（对账门只消费 nodes；其余字段按 schema 补全）。 */

@@ -156,19 +156,19 @@ test('忽略清单：dismiss 后建议不再出现（dismissed 计数带出）�
     const r1 = await engine.bank2.difficultyAdvice('数学') as { nodes: unknown[]; dismissed: number }
     assert.equal(r1.nodes.length, 1, '先出建议')
 
-    await engine.adviceDismiss('数学', '入门', 'easy')
+    await engine.bank2.adviceDismiss('数学', '入门', 'easy')
     const r2 = await engine.bank2.difficultyAdvice('数学') as { nodes: Array<Record<string, unknown>>; dismissed: number }
     assert.deepEqual(r2.nodes, [], '被忽略的建议不再出现')
     assert.equal(r2.dismissed, 1, 'dismissed 计数带出')
 
-    await engine.adviceDismiss('数学', '入门', 'easy', true) // undo
+    await engine.bank2.adviceDismiss('数学', '入门', 'easy', true) // undo
     const r3 = await engine.bank2.difficultyAdvice('数学') as { nodes: unknown[]; dismissed: number }
     assert.equal(r3.nodes.length, 1, 'undo 后建议恢复')
     assert.equal(r3.dismissed, 0)
 
     // 同条幂等
-    await engine.adviceDismiss('数学', '入门', 'easy')
-    await engine.adviceDismiss('数学', '入门', 'easy')
+    await engine.bank2.adviceDismiss('数学', '入门', 'easy')
+    await engine.bank2.adviceDismiss('数学', '入门', 'easy')
     const r4 = await engine.bank2.difficultyAdvice('数学') as { dismissed: number }
     assert.equal(r4.dismissed, 1, '重复忽略不叠加')
   })

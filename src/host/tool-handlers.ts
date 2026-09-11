@@ -25,15 +25,15 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       return JSON.stringify({ ...(await rt.engine.statusJson()), llm: llmView() })
     }),
   'learnhub_skip': (args: { course: string; node: string; skipped?: boolean }) => run(rt, 'learnhub_skip', async () =>
-      JSON.stringify(await rt.engine.nodeSkip(args.course, args.node, requireSkipDirection(args.skipped)))),
+      JSON.stringify(await rt.engine.sched2.nodeSkip(args.course, args.node, requireSkipDirection(args.skipped)))),
   'learnhub_complete': (args: { course: string; node: string; force?: boolean }) => run(rt, 'learnhub_complete', async () =>
       JSON.stringify(await rt.engine.nodeComplete(args.course, args.node, args.force === true))),
   'learnhub_recommend': (args: { limit?: number }) => run(rt, 'learnhub_recommend', async () =>
       JSON.stringify(await rt.engine.recommend(args.limit === undefined ? 5 : args.limit))),
   'learnhub_pin_today': (args: { course: string; node: string; cue?: string; action?: string }) => run(rt, 'learnhub_pin_today', async () =>
-      JSON.stringify(await rt.engine.pinToday(args.course, args.node, undefined, { cue: args.cue, action: args.action }))),
+      JSON.stringify(await rt.engine.learner.pinToday(args.course, args.node, undefined, { cue: args.cue, action: args.action }))),
   'learnhub_goal_intention': (args: { course: string; node: string; cue?: string; action?: string }) => run(rt, 'learnhub_goal_intention', async () =>
-      JSON.stringify(await rt.engine.setGoalIntention(args.course, args.node, { cue: args.cue, action: args.action }))),
+      JSON.stringify(await rt.engine.learner.setGoalIntention(args.course, args.node, { cue: args.cue, action: args.action }))),
   'learnhub_review_queue': (args: { course?: string; node?: string; band_pref?: string }) => run(rt, 'learnhub_review_queue', async () =>
       JSON.stringify(await rt.engine.content2.reviewQueue(args.course, args.node, undefined, bandPref(args.band_pref)))),
   'learnhub_question_answer': (args: { course: string; node: string; qid: string; answer: string; predicted?: string }) => run(rt, 'learnhub_question_answer', async () =>
@@ -44,12 +44,12 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       async () => JSON.stringify(await enqueueGeneration(rt, ctx, args.course, args.node, args.style))),
   'learnhub_section_rewrite': (args: { course: string; node: string; section: string }) => run(rt, 'learnhub_section_rewrite', async () =>
       generateSection(rt, ctx, args.course, args.node, args.section)),
-  'learnhub_coach': () => run(rt, 'learnhub_coach', async () => JSON.stringify(await rt.engine.coachAdvice())),
+  'learnhub_coach': () => run(rt, 'learnhub_coach', async () => JSON.stringify(await rt.engine.learner.coachAdvice())),
   'learnhub_calibration_profile': () => run(rt, 'learnhub_calibration_profile', async () => JSON.stringify(await rt.engine.learner.calibrationProfile())),
   'learnhub_sleep_config': (args: { enabled?: boolean }) => run(rt, 'learnhub_sleep_config', async () =>
       JSON.stringify(args.enabled === undefined
-        ? await rt.engine.sleepAdviceConfig()
-        : await rt.engine.setSleepAdviceConfig({ enabled: args.enabled }))),
+        ? await rt.engine.lab.sleepAdviceConfig()
+        : await rt.engine.lab.setSleepAdviceConfig({ enabled: args.enabled }))),
   'learnhub_graph_propose': (args: { kind: string; yaml: string }) => run(rt, 'learnhub_graph_propose', async () =>
       JSON.stringify(await rt.engine.graph.graphPropose(graphKind(args.kind), args.yaml))),
   'learnhub_vault_links_scan': () => run(rt, 'learnhub_vault_links_scan', async () =>
@@ -96,17 +96,17 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
           throw new Error('[question-update] 归档与内容修订是两条独立操作，混合 patch 会被整体拒绝（先归档，或先改内容再单独归档）')
         }
         const reason = typeof args.patch.reason === 'string' ? args.patch.reason : undefined
-        await rt.engine.questionArchive(args.course, args.node, args.qid, archived, reason)
+        await rt.engine.bank2.questionArchive(args.course, args.node, args.qid, archived, reason)
         return JSON.stringify({ course: args.course, node: args.node, qid: args.qid, archived })
       }
-      return JSON.stringify(await rt.engine.questionUpdate(args.course, args.node, args.qid, args.patch))
+      return JSON.stringify(await rt.engine.bank2.questionUpdate(args.course, args.node, args.qid, args.patch))
     }),
   'learnhub_bank_cleanup': (args: { course?: string; apply?: boolean }) => run(rt, 'learnhub_bank_cleanup', async () =>
       JSON.stringify(args.apply === true
-        ? { applied: await rt.engine.bankCleanupApply(args.course) }
+        ? { applied: await rt.engine.bank2.bankCleanupApply(args.course) }
         : await rt.engine.bank2.bankCleanupPreview(args.course))),
   'learnhub_project_create': (args: { name: string; goal: string; tier?: string }) => run(rt, 'learnhub_project_create', async () =>
-      JSON.stringify(await rt.engine.projectCreate({
+      JSON.stringify(await rt.engine.project.projectCreate({
         name: args.name, goal: args.goal,
         ...(args.tier !== undefined ? { tier: args.tier as never } : {}),
       }))),
@@ -144,7 +144,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_explain_back_pack': (args: { course: string; node: string }) => run(rt, 'learnhub_explain_back_pack', () =>
       rt.engine.learner.explainBackPack(args.course, args.node)),
   'learnhub_explain_feedback': (args: { course: string; node: string; transcript: string }) => run(rt, 'learnhub_explain_feedback', async () =>
-      JSON.stringify(await rt.engine.explainBackFeedback(args.course, args.node, args.transcript, llmSeam(ctx)))),
+      JSON.stringify(await rt.engine.learner.explainBackFeedback(args.course, args.node, args.transcript, llmSeam(ctx)))),
   'learnhub_learner_card_add': (args: { course: string; node: string; content: string; kind?: string; prompt?: string; section?: string }) => run(rt, 'learnhub_learner_card_add', async () => {
       if (!args.content?.trim()) throw new Error('[learner-card-add] content 必填——存的是学习者自己的话。')
       return JSON.stringify(await rt.engine.explainArchiveCard(args.course, args.node, {
@@ -177,7 +177,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       return JSON.stringify(await rt.engine.bank2.errorCardArchive(args.course, args.node, args.card, args.archived))
     }),
   'learnhub_skill_create': (args: { name: string; maintenance_days?: number | null }) => run(rt, 'learnhub_skill_create', async () =>
-      JSON.stringify(await rt.engine.skillCreate(args.name, {
+      JSON.stringify(await rt.engine.learner.skillCreate(args.name, {
         ...(args.maintenance_days !== undefined ? { maintenance_days: args.maintenance_days } : {}),
       }))),
   'learnhub_skill_list': () => run(rt, 'learnhub_skill_list', async () => JSON.stringify(await rt.engine.learner.skillList())),
@@ -204,10 +204,10 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         ))
       }),
   'learnhub_habit_create': (args: { name: string; cue: string; action: string }) => run(rt, 'learnhub_habit_create', async () =>
-      JSON.stringify(await rt.engine.habitCreate(args))),
+      JSON.stringify(await rt.engine.learner.habitCreate(args))),
   'learnhub_habit_list': () => run(rt, 'learnhub_habit_list', async () => JSON.stringify(await rt.engine.learner.habitList())),
   'learnhub_habit_repeat': (args: { habit: string; auto_rating?: number; note?: string }) => run(rt, 'learnhub_habit_repeat', async () =>
-      JSON.stringify(await rt.engine.habitRepeat(args.habit, {
+      JSON.stringify(await rt.engine.learner.habitRepeat(args.habit, {
         ...(args.auto_rating !== undefined ? { auto_rating: args.auto_rating } : {}),
         ...(args.note ? { note: args.note } : {}),
       }))),
@@ -223,7 +223,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_experiment_templates': () => run(rt, 'learnhub_experiment_templates', async () =>
       JSON.stringify(await rt.engine.lab.experimentTemplates())),
   'learnhub_experiment_apply': (args: { id?: number }) => run(rt, 'learnhub_experiment_apply', async () =>
-      JSON.stringify(await rt.engine.experimentApply(applyId(args.id)))),
+      JSON.stringify(await rt.engine.lab.experimentApply(applyId(args.id)))),
   'learnhub_thermostat': () => run(rt, 'learnhub_thermostat', async () => JSON.stringify(await rt.engine.lab.thermostatView())),
   'learnhub_sandbox': (args: { minutes_per_day: number; weeks?: number; course?: string; nodes?: string[] }) =>
       run(rt, 'learnhub_sandbox', async () =>
@@ -234,12 +234,12 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.channels.noteSourceList())),
   'learnhub_note_source_generate': (args: { id: string; count?: number }) => run(rt, 'learnhub_note_source_generate', async () => {
       const n = questionCount(args.count)
-      return JSON.stringify(await rt.engine.noteSourceGenerate(args.id, n, llmSeamStripped(ctx)))
+      return JSON.stringify(await rt.engine.channels.noteSourceGenerate(args.id, n, llmSeamStripped(ctx)))
     }),
   'learnhub_anki_export': (args: { endpoint?: string }) => run(rt, 'learnhub_anki_export', async () =>
-      JSON.stringify(await rt.engine.ankiExportPush(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
+      JSON.stringify(await rt.engine.channels.ankiExportPush(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
   'learnhub_anki_import': (args: { endpoint?: string }) => run(rt, 'learnhub_anki_import', async () =>
-      JSON.stringify(await rt.engine.ankiImportEvents(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
+      JSON.stringify(await rt.engine.channels.ankiImportEvents(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
   'learnhub_anki_status': (args: { endpoint?: string }) => run(rt, 'learnhub_anki_status', async () =>
       JSON.stringify(await rt.engine.channels.ankiStatus(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
   'learnhub_data_check': () => run(rt, 'learnhub_data_check', async () => JSON.stringify(await rt.engine.dataCheck())),
@@ -252,13 +252,13 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       (await rt.engine.rebuild(args.course)).message),
   'learnhub_feedback': (args: { path: string }) => run(rt, 'learnhub_feedback', () => rt.engine.content2.submitFeedback(rt.vault, rt.centerRel, args.path)),
   'learnhub_note_resolve': (args: { path: string }) => run(rt, 'learnhub_note_resolve', async () =>
-      JSON.stringify(await rt.engine.resolveNote(rt.vault, args.path, rt.centerRel))),
+      JSON.stringify(await rt.engine.content2.resolveNote(rt.vault, args.path, rt.centerRel))),
   'learnhub_course_reset': (args: { course: string }) => run(rt, 'learnhub_course_reset', async () => {
       const r = await resetCourseChain(rt, ctx, args.course)
       return JSON.stringify({ message: `已重置「${args.course}」（${r.reset.nodes.length} 节点），${r.queued} 个节点已入队重新生成（后台链，进度看任务注册表）。沉淀层波及：${r.reset.sediment}`, reset: r.reset, queued: r.queued })
     }),
   'learnhub_course_delete': (args: { course: string }) => run(rt, 'learnhub_course_delete', async () => {
-      const r = await rt.engine.courseDelete(args.course)
+      const r = await rt.engine.bank2.courseDelete(args.course)
       await sweepGenJobs(rt) // 写侧联动（ADR-0039）：任务记录随课程删除出册
       return JSON.stringify({ message: `已删除「${r.removed}」（整课目录移入 .trash，可手工恢复）。沉淀层波及：${r.sediment}`, ...r })
     }),

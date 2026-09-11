@@ -153,7 +153,7 @@ test('reviewQueue:过信检出且提示开 → 抽样 1/3→1/2 加强 + 队列�
   await withVault(SIX_DUE, async ({ engine }) => {
     await seedOverconfident(engine)
     engine.jolRng = () => 0.5
-    assert.deepEqual(await engine.calibrationHintsConfig(), { hints_enabled: true }, '缺省开(可全局关)')
+    assert.deepEqual(await engine.learner.calibrationHintsConfig(), { hints_enabled: true }, '缺省开(可全局关)')
 
     const r = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }>; calibration_hint?: string }
     assert.equal(r.cards.filter(c => c.jol).length, 3, '6 张 × 1/2(加强密度)= 3')
@@ -167,8 +167,8 @@ test('reviewQueue:过信检出且提示开 → 抽样 1/3→1/2 加强 + 队列�
     assert.match(rNode.calibration_hint ?? '', /保守/)
 
     // 全局关:密度回落 1/3、提示消失(既有 JOL 开关不受影响)
-    await engine.setCalibrationHints(false)
-    assert.deepEqual(await engine.calibrationHintsConfig(), { hints_enabled: false })
+    await engine.learner.setCalibrationHints(false)
+    assert.deepEqual(await engine.learner.calibrationHintsConfig(), { hints_enabled: false })
     const r2 = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }>; calibration_hint?: string }
     assert.equal(r2.cards.filter(c => c.jol).length, 2, '回落 1/3:6 张 × 1/3 = 2')
     assert.equal(r2.calibration_hint, undefined)

@@ -129,7 +129,7 @@ test('注册 → 出题 → 复习全流程：用户笔记字节级零写入，�
     assert.match(manifestText, new RegExp(fingerprintOf(before)))
 
     // 出题（假模型产出过 validateBank 门禁的题库 YAML）→ 镜像题库 + 合成首复习 + 指纹
-    const gen = await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    const gen = await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     assert.equal(gen.added, 2)
     assert.equal(gen.total, 2)
     const afterGen = await readFile(p.noteAbs, 'utf8')
@@ -200,12 +200,12 @@ test('注册文件夹 = 批量登记；重复注册同路径是恢复语义；�
     const otherId = idOf('另一篇.md')
     assert.notEqual(feynmanId, otherId)
 
-    await engine.noteSourceGenerate(feynmanId, undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate(feynmanId, undefined, async () => NOTE_BANK_YAML)
     assert.ok(existsSync(join(engine.paths.noteSourceDir, '题库', `${feynmanId}.yaml`)))
 
     // 解除费曼技巧：镜像题库与清单/注册表条目清除；笔记文件仍在
     const noteBytes = await readFile(join(p.folderAbs, '费曼技巧.md'), 'utf8')
-    const rm = await engine.noteSourceUnregister(feynmanId)
+    const rm = await engine.channels.noteSourceUnregister(feynmanId)
     assert.equal(rm.removed, feynmanId)
     assert.ok(!existsSync(join(engine.paths.noteSourceDir, '题库', `${feynmanId}.yaml`)))
     assert.equal((await engine.registry.loadNoteSources()).length, 1)
@@ -224,7 +224,7 @@ test('注册文件夹 = 批量登记；重复注册同路径是恢复语义；�
 test('删除/改名 = Missing：卡池挂起、不阻塞其他源、重注册可恢复；用户笔记永不判 Broken', async () => {
   await withVault(async (engine, p) => {
     const reg = await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
@@ -243,7 +243,7 @@ test('删除/改名 = Missing：卡池挂起、不阻塞其他源、重注册可
     assert.match(String((q.note_suspended as Array<Record<string, unknown>>)?.[0]?.reason), /源文件缺失/)
 
     // Missing 源上出题 fail loud（提示先恢复），data-check 不报用户笔记（永不判 Broken）
-    await assert.rejects(() => engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML), /源文件缺失/)
+    await assert.rejects(() => engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML), /源文件缺失/)
 
     // 重注册同路径恢复 → 卡池回到队列
     await rename(moved, p.noteAbs)
@@ -258,7 +258,7 @@ test('删除/改名 = Missing：卡池挂起、不阻塞其他源、重注册可
 test('编辑正文 = 内容漂移：状态提示可重出/归档；出题确认指纹后回到 ok；不自动改题', async () => {
   await withVault(async (engine, p) => {
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.noteSourceGenerate('note-1', 1, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', 1, async () => NOTE_BANK_YAML)
     const before = await readFile(join(engine.paths.noteSourceDir, '题库', 'note-1.yaml'), 'utf8')
 
     await writeFile(p.noteAbs, `${PERSONAL_NOTE}\n\n补充：2026 版新增要点。\n`, 'utf8')
@@ -271,7 +271,7 @@ test('编辑正文 = 内容漂移：状态提示可重出/归档；出题确认�
     assert.equal((q as Record<string, unknown>).note_suspended, undefined)
 
     // 重出题 = 确认当前内容：指纹刷新 → ok；旧卡仍在（归档是独立动作）
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     const list2 = await engine.channels.noteSourceList()
     assert.equal((list2.sources[0] as Record<string, unknown>).status, 'ok')
     const after = await readFile(join(engine.paths.noteSourceDir, '题库', 'note-1.yaml'), 'utf8')
@@ -284,7 +284,7 @@ test('编辑正文 = 内容漂移：状态提示可重出/归档；出题确认�
 test('镜像题库 Broken：该源卡挂起并带原因，不阻塞其他源；data-check 在 note_source 区报 Broken', async () => {
   await withVault(async (engine, p) => {
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     await writeFile(join(engine.paths.noteSourceDir, '题库', 'note-1.yaml'), 'node: [broken\n', 'utf8')
 
     const q = await engine.content2.reviewQueue()
@@ -302,7 +302,7 @@ test('镜像题库 Broken：该源卡挂起并带原因，不阻塞其他源；d
 test('源清单条目缺失（镜像不一致）= inconsistent：列表如实标注，队列卡照常出（不误报漂移）', async () => {
   await withVault(async (engine, p) => {
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
@@ -343,7 +343,7 @@ test('源清单本身 Broken = fail loud（镜像区契约文件），注册表 
 test('注册表 save 保留 note_sources 域：课程删除不抹笔记源', async () => {
   await withVault(async (engine, p) => {
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.courseDelete('数学')
+    await engine.bank2.courseDelete('数学')
     const entries = await engine.registry.loadNoteSources()
     assert.equal(entries.length, 1)
     const text = await readFile(engine.paths.registryPath, 'utf8')
@@ -354,14 +354,14 @@ test('注册表 save 保留 note_sources 域：课程删除不抹笔记源', asy
 test('出题 count 非法显式拒绝；空正文笔记拒绝出题', async () => {
   await withVault(async (engine, p) => {
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await assert.rejects(() => engine.noteSourceGenerate('note-1', 0, async () => NOTE_BANK_YAML), /count 必须是正整数/)
+    await assert.rejects(() => engine.channels.noteSourceGenerate('note-1', 0, async () => NOTE_BANK_YAML), /count 必须是正整数/)
     const emptyPath = join(p.folderAbs, '空.md')
     await writeFile(emptyPath, '', 'utf8')
     const reg = await engine.channels.noteSourceRegister(emptyPath)
     const emptyId = String(
       (reg.sources as Array<Record<string, unknown>>).find(s => String(s.path).endsWith('空.md'))!.id)
     await assert.rejects(
-      () => engine.noteSourceGenerate(emptyId, undefined, async () => NOTE_BANK_YAML),
+      () => engine.channels.noteSourceGenerate(emptyId, undefined, async () => NOTE_BANK_YAML),
       /正文为空/)
   })
 })
@@ -373,8 +373,8 @@ test('全量快照回归：题库/掌握度通道零新增写入（笔记源复�
     const noteBefore = await readFile(p.noteAbs, 'utf8')
 
     await engine.channels.noteSourceRegister(p.folderAbs)
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
-    await engine.noteSourceGenerate('note-2', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-2', undefined, async () => NOTE_BANK_YAML)
     await engine.content2.questionRate('笔记源', 'note-1', 'q1', 2).catch(() => { /* 未挂起被拒绝也是边界行为 */ })
 
     assert.equal(await readFile(join(engine.paths.courseRoot('math'), '题库', '入门.yaml'), 'utf8'), courseBankBefore)
@@ -394,17 +394,17 @@ test('纯函数缝：排除命中判定（精确 + 目录前缀，前缀串撞�
 test('排除清单管理：落盘归一去重、重复排除幂等、解除不在清单 fail loud、手编配置形状归一、其他字段保留', async () => {
   await withVault(async (engine, p) => {
     // 场上先有其他配置字段：写排除不得抹掉
-    await engine.setDayCutoff('03:00')
-    const add = await engine.noteSourceExclude(join(p.folderAbs, '存档'))
+    await engine.sched2.setDayCutoff('03:00')
+    const add = await engine.channels.noteSourceExclude(join(p.folderAbs, '存档'))
     assert.deepEqual(add.excludes, ['我的笔记/存档'])
-    const again = await engine.noteSourceExclude('我的笔记/存档/') // 同路径异写法（尾斜杠）幂等
+    const again = await engine.channels.noteSourceExclude('我的笔记/存档/') // 同路径异写法（尾斜杠）幂等
     assert.deepEqual(again.excludes, ['我的笔记/存档'])
 
     const cfg = JSON.parse(await readFile(engine.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
     assert.deepEqual(cfg.note_source_excludes, ['我的笔记/存档'])
     assert.equal(cfg.day_cutoff, '03:00')
 
-    assert.deepEqual((await engine.noteSourceExcludes()).excludes, ['我的笔记/存档'])
+    assert.deepEqual((await engine.channels.noteSourceExcludes()).excludes, ['我的笔记/存档'])
     assert.deepEqual((await engine.channels.noteSourceList()).excludes, ['我的笔记/存档'])
 
     // 手编配置的反斜杠/尾斜杠写法读时归一——防收编不因写法静默失效
@@ -414,7 +414,7 @@ test('排除清单管理：落盘归一去重、重复排除幂等、解除不�
       'utf8',
     )
     assert.deepEqual(
-      (await engine.noteSourceExcludes()).excludes,
+      (await engine.channels.noteSourceExcludes()).excludes,
       ['我的笔记/存档', '我的笔记/日记.md'],
     )
     await assert.rejects(
@@ -422,11 +422,11 @@ test('排除清单管理：落盘归一去重、重复排除幂等、解除不�
       /排除清单内/,
     )
 
-    assert.deepEqual((await engine.noteSourceUnexclude('我的笔记/存档/')).excludes, ['我的笔记/日记.md'])
-    await assert.rejects(() => engine.noteSourceUnexclude('我的笔记/存档'), /排除清单没有/)
+    assert.deepEqual((await engine.channels.noteSourceUnexclude('我的笔记/存档/')).excludes, ['我的笔记/日记.md'])
+    await assert.rejects(() => engine.channels.noteSourceUnexclude('我的笔记/存档'), /排除清单没有/)
     // 排除条目同样不收学习中心与越界路径（内置排除不可复制、清单不出 vault）
-    await assert.rejects(() => engine.noteSourceExclude('学习中心/数学'), /学习中心内部/)
-    await assert.rejects(() => engine.noteSourceExclude('../外部.md'), /\.\./)
+    await assert.rejects(() => engine.channels.noteSourceExclude('学习中心/数学'), /学习中心内部/)
+    await assert.rejects(() => engine.channels.noteSourceExclude('../外部.md'), /\.\./)
   })
 })
 
@@ -435,8 +435,8 @@ test('排除清单在注册入口强制执行：直注被排除路径 fail loud�
     await mkdir(join(p.folderAbs, '存档'), { recursive: true })
     await writeFile(join(p.folderAbs, '存档', '旧笔记.md'), '# 旧笔记\n\n不要收编。\n', 'utf8')
     await writeFile(join(p.folderAbs, '日记.md'), '# 日记\n\n私密内容。\n', 'utf8')
-    await engine.noteSourceExclude(join(p.folderAbs, '存档'))
-    await engine.noteSourceExclude(join(p.folderAbs, '日记.md'))
+    await engine.channels.noteSourceExclude(join(p.folderAbs, '存档'))
+    await engine.channels.noteSourceExclude(join(p.folderAbs, '日记.md'))
 
     // 直注被排除：文件与文件夹都拒绝（提示先解除）
     await assert.rejects(() => engine.channels.noteSourceRegister(join(p.folderAbs, '日记.md')), /排除清单内/)
@@ -445,7 +445,7 @@ test('排除清单在注册入口强制执行：直注被排除路径 fail loud�
     // 文件夹本身不在清单、但其下 .md 全部命中：报错点名排除清单，不是「没有 .md 笔记」
     await mkdir(join(p.folderAbs, '私密'), { recursive: true })
     await writeFile(join(p.folderAbs, '私密', '手记.md'), '# 手记\n\n内容。\n', 'utf8')
-    await engine.noteSourceExclude(join(p.folderAbs, '私密', '手记.md'))
+    await engine.channels.noteSourceExclude(join(p.folderAbs, '私密', '手记.md'))
     await assert.rejects(() => engine.channels.noteSourceRegister(join(p.folderAbs, '私密')), /全部命中排除清单/)
 
     // 批量登记：排除子树整枝不下钻、排除文件不收，其余照常
@@ -460,7 +460,7 @@ test('排除清单在注册入口强制执行：直注被排除路径 fail loud�
     assert.ok((reg.sources as Array<Record<string, unknown>>).every(s => !String(s.path).includes('存档')))
 
     // 解除后同路径可注册
-    await engine.noteSourceUnexclude('我的笔记/日记.md')
+    await engine.channels.noteSourceUnexclude('我的笔记/日记.md')
     const re = await engine.channels.noteSourceRegister(join(p.folderAbs, '日记.md'))
     assert.equal(re.registered, 1)
   })
@@ -469,7 +469,7 @@ test('排除清单在注册入口强制执行：直注被排除路径 fail loud�
 test('排除清单只管未来注册：先注册后排除不摘源、卡照常出队；Missing 后重注册被拒（提示先解除）', async () => {
   await withVault(async (engine, p) => {
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     const before = await readFile(p.noteAbs, 'utf8')
     const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
@@ -477,7 +477,7 @@ test('排除清单只管未来注册：先注册后排除不摘源、卡照常�
     })
 
     // 源路径进排除清单：已注册源不摘除、状态 ok、到期卡照常出队（摘除走 unregister）
-    await engine.noteSourceExclude(p.noteAbs)
+    await engine.channels.noteSourceExclude(p.noteAbs)
     const q = await engine.content2.reviewQueue()
     assert.equal(q.cards.filter(c => c.source === 'note').length, 1)
     const list = await engine.channels.noteSourceList()
@@ -498,7 +498,7 @@ test('卡池镜像（V-4 #108）：出题落 [[个人笔记]] backlink 镜像、
     const before = await readFile(p.noteAbs, 'utf8')
     const today = todayStr(new Date())
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
 
     const poolPath = engine.paths.noteSourcePoolPath('note-1')
     assert.ok(existsSync(poolPath), '出题后卡池镜像存在')
@@ -514,7 +514,7 @@ test('卡池镜像（V-4 #108）：出题落 [[个人笔记]] backlink 镜像、
     })
 
     // 解除注册：镜像随删；个人笔记全程字节不变
-    await engine.noteSourceUnregister('note-1')
+    await engine.channels.noteSourceUnregister('note-1')
     assert.ok(!existsSync(poolPath), '解除注册后卡池镜像清除')
     assert.equal(await readFile(p.noteAbs, 'utf8'), before)
   })
@@ -523,7 +523,7 @@ test('卡池镜像（V-4 #108）：出题落 [[个人笔记]] backlink 镜像、
 test('relink（V-6 #109）：改名后 Missing → 重连带卡池与调度恢复，指纹/标题/镜像跟随新路径', async () => {
   await withVault(async (engine, p) => {
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
@@ -535,7 +535,7 @@ test('relink（V-6 #109）：改名后 Missing → 重连带卡池与调度恢�
     assert.equal((await engine.channels.noteSourceList()).sources[0]!.status, 'missing')
 
     // relink 到新路径：id 不变（卡池与调度保留）、状态回 ok、到期卡回队列
-    const rel = await engine.noteSourceRelink('note-1', moved)
+    const rel = await engine.channels.noteSourceRelink('note-1', moved)
     assert.equal(rel.id, 'note-1')
     assert.equal(rel.from, '我的笔记/费曼技巧.md')
     assert.equal(rel.to, '我的笔记/费曼技巧-v2.md')
@@ -568,19 +568,19 @@ test('relink fail loud：同路径、目标不存在、路径被他源占用、�
   await withVault(async (engine, p) => {
     await engine.channels.noteSourceRegister(p.noteAbs)
     await engine.channels.noteSourceRegister(join(p.folderAbs, '另一篇.md'))
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
 
-    await assert.rejects(() => engine.noteSourceRelink('note-1', p.noteAbs), /已注册在路径/)
-    await assert.rejects(() => engine.noteSourceRelink('note-1', join(p.folderAbs, '不存在.md')), /目标文件不存在/)
-    await assert.rejects(() => engine.noteSourceRelink('note-1', join(p.folderAbs, '另一篇.md')), /已是笔记源「note-2」/)
+    await assert.rejects(() => engine.channels.noteSourceRelink('note-1', p.noteAbs), /已注册在路径/)
+    await assert.rejects(() => engine.channels.noteSourceRelink('note-1', join(p.folderAbs, '不存在.md')), /目标文件不存在/)
+    await assert.rejects(() => engine.channels.noteSourceRelink('note-1', join(p.folderAbs, '另一篇.md')), /已是笔记源「note-2」/)
     // 排除清单目标拒绝
-    await engine.noteSourceExclude(join(p.folderAbs, '私密.md'))
+    await engine.channels.noteSourceExclude(join(p.folderAbs, '私密.md'))
     await writeFile(join(p.folderAbs, '私密.md'), '# 私密\n', 'utf8')
-    await assert.rejects(() => engine.noteSourceRelink('note-1', join(p.folderAbs, '私密.md')), /排除清单内/)
+    await assert.rejects(() => engine.channels.noteSourceRelink('note-1', join(p.folderAbs, '私密.md')), /排除清单内/)
     // 中心内路径过不了注册同款卫生
-    await assert.rejects(() => engine.noteSourceRelink('note-1', '学习中心/math/课程/入门.md'), /学习中心内部/)
+    await assert.rejects(() => engine.channels.noteSourceRelink('note-1', '学习中心/math/课程/入门.md'), /学习中心内部/)
     // 不存在的 id
-    await assert.rejects(() => engine.noteSourceRelink('note-99', p.noteAbs), /没有笔记源/)
+    await assert.rejects(() => engine.channels.noteSourceRelink('note-99', p.noteAbs), /没有笔记源/)
   })
 })
 
@@ -588,7 +588,7 @@ test('Data Check 全库注册源盘点（V-6 #109）：逐源存在性+指纹计
   await withVault(async (engine, p) => {
     // 源1 出题后编辑 → 漂移；源2 注册后删除 → 缺失（清单条目在，不算镜像不一致）
     await engine.channels.noteSourceRegister(p.noteAbs)
-    await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
+    await engine.channels.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     await writeFile(p.noteAbs, `${PERSONAL_NOTE}\n\n补充要点。\n`, 'utf8')
     const gone = join(p.folderAbs, '将删除.md')
     await writeFile(gone, '# 将删除\n\n内容。\n', 'utf8')
@@ -611,7 +611,7 @@ test('Data Check 全库注册源盘点（V-6 #109）：逐源存在性+指纹计
     // 全恢复基线：note-2 relink 到另一现存文件（缺失清零）；note-1 仍是漂移（编辑没确认）
     const restored = join(p.folderAbs, '恢复.md')
     await writeFile(restored, '# 恢复\n\n内容。\n', 'utf8')
-    await engine.noteSourceRelink('note-2', restored)
+    await engine.channels.noteSourceRelink('note-2', restored)
     const report2 = await engine.dataCheck()
     assert.equal(report2.inventory.noteSourceFiles.ok, 1)
     assert.equal(report2.inventory.noteSourceFiles.drifted, 1)

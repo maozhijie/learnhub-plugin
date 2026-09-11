@@ -244,7 +244,7 @@ test('写入侧多选 ≥2 正确项门禁：addQuestion 拒收；生成路径�
     )
     // 修订路径同门禁：把存量多选改成单正确项 → 拒绝
     await assert.rejects(
-      () => engine.questionUpdate('数学', '入门', 'q13', { answer: ['A'] }),
+      () => engine.bank2.questionUpdate('数学', '入门', 'q13', { answer: ['A'] }),
       /至少 2 个/,
     )
     // 生成路径：坏多选拒收进 rejected，好题照常入库

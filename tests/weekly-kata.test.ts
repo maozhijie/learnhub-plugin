@@ -65,7 +65,7 @@ test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔�
     await engine.store.appendReview({ ts: mid(1), course: '笔记源', node: 'note-1', qid: 'q1', rating: 3, rating_source: 'self', elapsed_days: 3, stability_before: 5, difficulty_before: 5, r_pred: 0.8 })
     await engine.store.appendReview({ ts: mid(3), course: '*', node: '吉他', qid: 'exec', rating: 4, rating_source: 'execution', event_kind: 'acquisition', exec_source: 'self', elapsed_days: 2, stability_before: 4, difficulty_before: 5, r_pred: 0.7 })
     await engine.store.appendHabitRepeat({ ts: mid(1), habit: '晨间拉伸', day: dayOfTs(mid(1)) })
-    await engine.projectCreate({ name: '吉他翻新', goal: 'g' })
+    await engine.project.projectCreate({ name: '吉他翻新', goal: 'g' })
     const prop = await engine.project.projectPlanPropose('吉他翻新', 'project: 吉他翻新\nplan:\n  - { id: m1, name: 换弦, task_class: 照做, acceptance_hints: 能换弦 }\n')
     await engine.graph.projectApply(prop.id)
     await engine.store.appendJournal({ ts: mid(4), course: '吉他翻新', node: 'm1', rating: null, kind: 'milestone_settle', elapsed_days: 0, xp: 60, detail: '里程碑「换弦」过点：x' })
@@ -106,7 +106,7 @@ test('#114 四问保存与重开：引擎段刷新、四问保留；answered 随
     assert.equal(doc.sections['现状'].includes('### 总览'), true, '引擎段保持')
 
     await engine.learner.kataSave(weekStart, { 下一实验: '把复习放在早上', 预期所学: '保留率上升' })
-    doc = await engine.kataList().then(l => l[0])
+    doc = await engine.learner.kataList().then(l => l[0])
     assert.equal(doc.answered, true, '四问齐备')
   })
 })
@@ -126,7 +126,7 @@ test('#114 「下一实验」出口：一键转 N-of-1 提案 / 执行意图，�
     ]
     const before = await snap()
 
-    const exp = await engine.kataToExperiment(weekStart, 'band_default_std_vs_hard')
+    const exp = await engine.learner.kataToExperiment(weekStart, 'band_default_std_vs_hard')
     assert.ok(exp.proposal >= 1)
     const int = await engine.kataToIntention(weekStart, { course: '数学', node: '入门', cue: '早上刷完牙后', action: '做 5 道到期复习' })
     assert.equal(int.node, '入门')
@@ -151,7 +151,7 @@ test('#114 清单面：多周记录按周排列，answered 现判', async () => 
     await engine.learner.kataOpen(w1)
     await engine.learner.kataSave(w1, { 目标条件: 'a', 障碍: 'b', 下一实验: 'c', 预期所学: 'd' })
     await engine.learner.kataOpen(w0)
-    const list = await engine.kataList()
+    const list = await engine.learner.kataList()
     assert.deepEqual(list.map(x => x.week_start), [w0, w1])
     assert.equal(list[0].answered, false)
     assert.equal(list[1].answered, true)

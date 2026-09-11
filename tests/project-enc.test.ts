@@ -97,7 +97,7 @@ test('行为推断 enc：共现窗口 → 单个 pending enrich 提案 → 人�
     notes: { 入门: {}, 进阶: {} },
     banks: { 入门: [tfQuestion('q1')] },
   }, async ({ engine, root }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', ENC_PLAN('练琴计划'))
     await engine.graph.projectApply(p1.id)
     await seedCoActivity(engine, [1, 2, 3])
@@ -136,12 +136,12 @@ test('行为推断 enc 边界：窗口锚定里程碑过点时刻（过点后行
     graph: TWO_NODE_GRAPH,
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', ENC_PLAN('练琴计划'))
     await engine.graph.projectApply(p1.id)
     await engine.projectMilestoneWrite('练琴计划', 'm1',
       '## 给定\n\n起点。\n\n## 待办\n\n做。\n\n## 验收清单\n\n- [ ] 完成\n\n## 支持\n\n提示。')
-    await engine.projectMilestonePass('练琴计划', 'm1')
+    await engine.project.projectMilestonePass('练琴计划', 'm1')
     // 过点「之后」的共现行为（此刻）不落在「过点前窗口」内
     await seedCoActivity(engine, [0])
     const r = await engine.projectEncCandidates('练琴计划', { milestone: 'm1' })
@@ -180,7 +180,7 @@ test('行为推断 enc 红线：跨课程关联不成边；直接写 data 的路
       content: TWO_NODE_GRAPH,
     }],
   }, async ({ engine }) => {
-    await engine.projectCreate({ name: '混合计划', goal: '跨课练' })
+    await engine.project.projectCreate({ name: '混合计划', goal: '跨课练' })
     const plan = ENC_PLAN('混合计划').replace('nodes: [入门, 进阶]', 'nodes: [数学/入门, 英语/入门]')
     const p1 = await engine.project.projectPlanPropose('混合计划', plan)
     await engine.graph.projectApply(p1.id)
@@ -201,7 +201,7 @@ test('行为推断 enc 红线：synthetic 复习推进不算行为证据', async
     graph: TWO_NODE_GRAPH,
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', ENC_PLAN('练琴计划'))
     await engine.graph.projectApply(p1.id)
     for (const d of [1, 2, 3]) {
@@ -236,7 +236,7 @@ test('行为推断 enc 闭包契约：无 pre 关系的共现对不硬提边（E
     graph: THREE_NODE_GRAPH,
     notes: { 入门: {}, 进阶: {}, 平行: {} },
   }, async ({ engine }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const plan = ENC_PLAN('练琴计划').replace('nodes: [入门, 进阶]', 'nodes: [入门, 平行]')
     const p1 = await engine.project.projectPlanPropose('练琴计划', plan)
     await engine.graph.projectApply(p1.id)
@@ -260,7 +260,7 @@ test('行为推断 enc 守卫：无关联节点/过点锚点缺失 fail loud', a
     graph: TWO_NODE_GRAPH,
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const noNodes = `project: 练琴计划\nplan:\n  - id: m1\n    name: 里程碑一\n    task_class: 简\n    acceptance_hints: 达标\n`
     const p1 = await engine.project.projectPlanPropose('练琴计划', noNodes)
     await engine.graph.projectApply(p1.id)

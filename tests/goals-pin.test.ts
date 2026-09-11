@@ -83,7 +83,7 @@ test('newLessonRationale：解锁数与区轮转拼成一句自然语句', () =>
 
 test('pin「今天学它」：事件当日置顶课程内榜首，附「你选了它」标识、原理由与软闸建议', async () => {
   await withVault(goalsVault(), async ({ engine }) => {
-    await engine.pinToday('数学', '导数')
+    await engine.learner.pinToday('数学', '导数')
     const rec = await engine.recommend(20) as { events: Ev[] }
     const head = rec.events[0] as Ev
     assert.equal(head.node, '导数', '被 pin 节点居榜首')
@@ -100,7 +100,7 @@ test('pin 未就绪语义不拒绝、且落盘清单只保留当日有效条目'
   await withVault(goalsVault(), async ({ engine }) => {
     // 预置一条过期 pin（直接写清单），再 pin 新节点 → 过期条目被清理
     await engine.store.savePins([{ course: '数学', node: '已会', date: '2020-01-01' }])
-    const r = await engine.pinToday('数学', '几何', '2026-09-08') as Ev
+    const r = await engine.learner.pinToday('数学', '几何', '2026-09-08') as Ev
     assert.equal(r.node, '几何')
     const pins = await engine.store.loadPins()
     assert.deepEqual(pins, [{ course: '数学', node: '几何', date: '2026-09-08' }], '过期条目写入时清理')
@@ -119,7 +119,7 @@ test('次日 pin 失效：过期清单不影响推荐（回落默认排序、无
 
 test('pin 无事件的节点（已掌握、无到期题）：合成 pin 事件置顶，类型 pin、可打开', async () => {
   await withVault(goalsVault(), async ({ engine }) => {
-    await engine.pinToday('数学', '已会')
+    await engine.learner.pinToday('数学', '已会')
     const rec = await engine.recommend(20) as { events: Ev[] }
     const head = rec.events[0] as Ev
     assert.equal(head.node, '已会')
@@ -133,8 +133,8 @@ test('pin 无事件的节点（已掌握、无到期题）：合成 pin 事件�
 
 test('取消 pin：清单清空、推荐回落默认排序', async () => {
   await withVault(goalsVault(), async ({ engine }) => {
-    await engine.pinToday('数学', '导数')
-    await engine.unpinToday('数学', '导数')
+    await engine.learner.pinToday('数学', '导数')
+    await engine.learner.unpinToday('数学', '导数')
     assert.deepEqual(await engine.store.loadPins(), [])
     const rec = await engine.recommend(20) as { events: Ev[] }
     assert.ok(rec.events.every(e => !e.pinned))
@@ -169,7 +169,7 @@ test('normalizeGoalIntention：成对必填、trim 归一、都缺 = 清除', ()
 test('pin 携带执行意图：可录入、持久化、推荐事件带出（验收三条）', async () => {
   await withVault(goalsVault(), async ({ engine }) => {
     // today 缺省 = 当前学习日，与 recommend 的「今日」口径一致（意图随 pin 当日有效）
-    const r = await engine.pinToday('数学', '导数', undefined, { cue: '早上刷完牙后', action: '学一节导数' }) as Ev
+    const r = await engine.learner.pinToday('数学', '导数', undefined, { cue: '早上刷完牙后', action: '学一节导数' }) as Ev
     assert.deepEqual(r.intention, { cue: '早上刷完牙后', action: '学一节导数' })
     // 持久化：意图落在 pin 清单里（无独立文件/无独立生命周期）
     assert.deepEqual((await engine.store.loadPins())[0]!.intention, { cue: '早上刷完牙后', action: '学一节导数' })
@@ -183,25 +183,25 @@ test('pin 携带执行意图：可录入、持久化、推荐事件带出（验�
 
 test('setGoalIntention：已 pin 节点写入/清除；当日无 pin = Missing fail loud', async () => {
   await withVault(goalsVault(), async ({ engine }) => {
-    await engine.pinToday('数学', '几何', '2026-09-08')
-    const set = await engine.setGoalIntention('数学', '几何', { cue: '到工位坐下后', action: '先做一道几何题' }, '2026-09-08') as Ev
+    await engine.learner.pinToday('数学', '几何', '2026-09-08')
+    const set = await engine.learner.setGoalIntention('数学', '几何', { cue: '到工位坐下后', action: '先做一道几何题' }, '2026-09-08') as Ev
     assert.deepEqual(set.intention, { cue: '到工位坐下后', action: '先做一道几何题' })
     // 只给其一半条意图 → fail loud（格式锁死）
-    await assert.rejects(() => engine.setGoalIntention('数学', '几何', { cue: '到工位坐下后' }, '2026-09-08'), /action/)
+    await assert.rejects(() => engine.learner.setGoalIntention('数学', '几何', { cue: '到工位坐下后' }, '2026-09-08'), /action/)
     // 清除（都不传）→ 事件不再带意图
-    const cleared = await engine.setGoalIntention('数学', '几何', null, '2026-09-08') as Ev
+    const cleared = await engine.learner.setGoalIntention('数学', '几何', null, '2026-09-08') as Ev
     assert.equal(cleared.intention, null)
     assert.equal((await engine.store.loadPins()).find(p => p.node === '几何')!.intention, undefined)
     // 载体缺失不能悬空写：当日无 pin 的节点 fail loud
-    await assert.rejects(() => engine.setGoalIntention('数学', '导数', { cue: 'c', action: 'a' }, '2026-09-08'), /没有 pin/)
+    await assert.rejects(() => engine.learner.setGoalIntention('数学', '导数', { cue: 'c', action: 'a' }, '2026-09-08'), /没有 pin/)
   })
 })
 
 test('意图随 pin 的读侧语义走：重 pin 无意图 = 覆盖清除；过期 = 失效不泄漏', async () => {
   await withVault(goalsVault(), async ({ engine }) => {
-    await engine.pinToday('数学', '导数', '2026-09-08', { cue: 'c', action: 'a' })
+    await engine.learner.pinToday('数学', '导数', '2026-09-08', { cue: 'c', action: 'a' })
     // 同节点重 pin 不带意图 → 旧意图被覆盖清除（pinToday 去重替换语义）
-    await engine.pinToday('数学', '导数', '2026-09-08')
+    await engine.learner.pinToday('数学', '导数', '2026-09-08')
     assert.equal((await engine.store.loadPins())[0]!.intention, undefined)
     // 次日：过期 pin（带意图）整体失效，意图不泄漏到任何事件
     await engine.store.savePins([{ course: '数学', node: '导数', date: '2020-01-01', intention: { cue: 'c', action: 'a' } }])
@@ -212,9 +212,9 @@ test('意图随 pin 的读侧语义走：重 pin 无意图 = 覆盖清除；过�
 
 test('红线：pin/意图写入零 canonical 触碰（Learner Output，ADR-0009）', async () => {
   await withVault(goalsVault(), async ({ engine }) => {
-    await engine.pinToday('数学', '导数', '2026-09-08', { cue: 'c', action: 'a' })
-    await engine.setGoalIntention('数学', '导数', { cue: 'c2', action: 'a2' }, '2026-09-08')
-    await engine.setGoalIntention('数学', '导数', null, '2026-09-08')
+    await engine.learner.pinToday('数学', '导数', '2026-09-08', { cue: 'c', action: 'a' })
+    await engine.learner.setGoalIntention('数学', '导数', { cue: 'c2', action: 'a2' }, '2026-09-08')
+    await engine.learner.setGoalIntention('数学', '导数', null, '2026-09-08')
     assert.equal((await engine.store.journalTail()).length, 0)
     assert.equal((await engine.store.practiceAll()).length, 0)
     assert.equal((await engine.sched2.xpStatus()).today_xp, 0)

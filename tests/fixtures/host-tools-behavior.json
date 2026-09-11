@@ -21,7 +21,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "nodeSkip(\"1\",\"1\",true)"
+   "sched2.nodeSkip(\"1\",\"1\",true)"
   ]
  },
  {
@@ -157,7 +157,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "pinToday(\"1\",\"1\",undefined,{\"cue\":\"1\",\"action\":\"1\"})"
+   "learner.pinToday(\"1\",\"1\",undefined,{\"cue\":\"1\",\"action\":\"1\"})"
   ]
  },
  {
@@ -198,7 +198,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "setGoalIntention(\"1\",\"1\",{\"cue\":\"1\",\"action\":\"1\"})"
+   "learner.setGoalIntention(\"1\",\"1\",{\"cue\":\"1\",\"action\":\"1\"})"
   ]
  },
  {
@@ -440,7 +440,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "coachAdvice()"
+   "learner.coachAdvice()"
   ]
  },
  {
@@ -462,7 +462,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "setSleepAdviceConfig({\"enabled\":true})"
+   "lab.setSleepAdviceConfig({\"enabled\":true})"
   ]
  },
  {
@@ -798,7 +798,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "questionUpdate(\"1\",\"1\",\"1\",{\"answer\":\"1\"})"
+   "bank2.questionUpdate(\"1\",\"1\",\"1\",{\"answer\":\"1\"})"
   ]
  },
  {
@@ -1004,7 +1004,7 @@
   "queued": false,
   "text": "{\"applied\":[]}",
   "calls": [
-   "bankCleanupApply(\"1\")"
+   "bank2.bankCleanupApply(\"1\")"
   ]
  },
  {
@@ -1018,7 +1018,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectCreate({\"name\":\"1\",\"goal\":\"1\",\"tier\":\"1\"})"
+   "project.projectCreate({\"name\":\"1\",\"goal\":\"1\",\"tier\":\"1\"})"
   ]
  },
  {
@@ -1657,7 +1657,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "explainBackFeedback(\"1\",\"1\",\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.explainBackFeedback(\"1\",\"1\",\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
   ]
  },
  {
@@ -2199,7 +2199,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "skillCreate(\"1\",{\"maintenance_days\":1})"
+   "learner.skillCreate(\"1\",{\"maintenance_days\":1})"
   ]
  },
  {
@@ -2470,7 +2470,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "habitCreate({\"name\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
+   "learner.habitCreate({\"name\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
   ]
  },
  {
@@ -2551,7 +2551,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "habitRepeat(\"1\",{\"auto_rating\":1,\"note\":\"1\"})"
+   "learner.habitRepeat(\"1\",{\"auto_rating\":1,\"note\":\"1\"})"
   ]
  },
  {
@@ -2819,7 +2819,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "experimentApply(1)"
+   "lab.experimentApply(1)"
   ]
  },
  {
@@ -3048,7 +3048,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "noteSourceGenerate(\"1\",1,async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
+   "channels.noteSourceGenerate(\"1\",1,async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -3071,7 +3071,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "ankiExportPush({\"endpoint\":\"1\"})"
+   "channels.ankiExportPush({\"endpoint\":\"1\"})"
   ]
  },
  {
@@ -3083,7 +3083,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "ankiImportEvents({\"endpoint\":\"1\"})"
+   "channels.ankiImportEvents({\"endpoint\":\"1\"})"
   ]
  },
  {
@@ -3161,7 +3161,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "resolveNote(\"«vault»\",\"1\",\"学习中心\")"
+   "content2.resolveNote(\"«vault»\",\"1\",\"学习中心\")"
   ]
  },
  {
@@ -3202,7 +3202,7 @@
   "queued": false,
   "text": "{\"message\":\"已删除「undefined」（整课目录移入 .trash，可手工恢复）。沉淀层波及：undefined\"}",
   "calls": [
-   "courseDelete(\"1\")"
+   "bank2.courseDelete(\"1\")"
   ]
  },
  {

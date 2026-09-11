@@ -124,7 +124,7 @@ test('#119 questionGenerateSections：逐节路径同款查重', async () => {
       ].join('\n'),
     },
   }, async ({ engine }) => {
-    const r = await engine.questionGenerateSections('数学', '入门', async () => [
+    const r = await engine.bank2.questionGenerateSections('数学', '入门', async () => [
       'questions:',
       '  - kind: true_false',
       '    q: 大三度有 4 个半音。', // 精确重复 → 丢弃
@@ -144,7 +144,7 @@ test('#119 noteSourceGenerate：镜像题库同款注入与查重，指纹与初
     files: [{ path: '我的笔记/费曼技巧.md', content: '# 费曼技巧\n\n费曼技巧 = 把概念讲给完全不懂的人听。\n' }],
   }, async ({ engine, paths }) => {
     await engine.channels.noteSourceRegister('我的笔记/费曼技巧.md')
-    const first = await engine.noteSourceGenerate('note-1', undefined, async () => [
+    const first = await engine.channels.noteSourceGenerate('note-1', undefined, async () => [
       'node: note-1',
       'questions:',
       '  - kind: true_false',
@@ -155,7 +155,7 @@ test('#119 noteSourceGenerate：镜像题库同款注入与查重，指纹与初
     assert.equal(first.duplicates.length, 0)
 
     // 第二次：一道精确重复（丢弃）+ 一道新题（入库）
-    const second = await engine.noteSourceGenerate('note-1', 2, async () => [
+    const second = await engine.channels.noteSourceGenerate('note-1', 2, async () => [
       'node: note-1',
       'questions:',
       '  - kind: true_false',

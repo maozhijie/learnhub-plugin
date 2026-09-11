@@ -70,8 +70,8 @@ test('#107 我的产出/项目日志可注册为笔记源；中心内其余路�
     assert.equal(kata.registered, 1)
     // 项目日志放行（#113 约定路径）；文件尚不存在 = 注册入口拒绝（与用户笔记同语义：注册的是现存文件）
     await assert.rejects(() => engine.channels.noteSourceRegister('学习中心/projects/p1/日志.md'), /路径不存在/)
-    await engine.projectCreate({ name: 'P1', goal: 'g' })
-    await engine.projectLogAppend('P1', '第一条。')
+    await engine.project.projectCreate({ name: 'P1', goal: 'g' })
+    await engine.project.projectLogAppend('P1', '第一条。')
     const log = await engine.channels.noteSourceRegister('学习中心/projects/p1/日志.md')
     assert.equal(log.registered, 1)
     // 真实个人笔记照旧可注册（回归）
@@ -105,11 +105,11 @@ test('#107 红线：产物写入 + 注册全链对个人笔记零字节改动；
 test('#113 引擎写注册豁免区文件后刷新指纹：自己的写不算漂移，外部手改才算', async () => {
   await withVault({ registry: null, graph: null }, async ({ engine }) => {
     // 先落一条项目日志并注册，再经引擎追加——引擎写后应保持 ok 而非 drifted
-    await engine.projectCreate({ name: '吉他翻新', goal: '半年内能完整弹一首曲子' })
-    await engine.projectLogAppend('吉他翻新', '今天换了琴弦，手感好多了。')
+    await engine.project.projectCreate({ name: '吉他翻新', goal: '半年内能完整弹一首曲子' })
+    await engine.project.projectLogAppend('吉他翻新', '今天换了琴弦，手感好多了。')
     const logPath = engine.paths.projectLogPath('吉他翻新')
     await engine.channels.noteSourceRegister(logPath.replace(/\\/g, '/'))
-    await engine.projectLogAppend('吉他翻新', '第二天：练了 F 和弦转换。')
+    await engine.project.projectLogAppend('吉他翻新', '第二天：练了 F 和弦转换。')
     let list = await engine.channels.noteSourceList()
     assert.equal(list.sources[0].status, 'ok', '引擎自己的日志追加不算内容漂移')
     // 用户在引擎之外手改 → 漂移如实报出（可重出/归档）

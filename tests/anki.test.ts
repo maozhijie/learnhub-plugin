@@ -214,7 +214,7 @@ test('纯函数缝：导出负载（选项上正面不泄答案、答案+解析�
 test('导出推送：到期卡入镜象（未归档 due≤今日），已归档排除；重复推送零变更；清单落盘', async () => {
   await withVault(async engine => {
     const anki = new FakeAnki()
-    const r1 = await engine.ankiExportPush(anki)
+    const r1 = await engine.channels.ankiExportPush(anki)
     assert.equal(r1.added, 2, 'q1/q2 入镜象；q3 已归档排除')
     assert.equal(r1.total, 2)
     assert.deepEqual(r1.decks, ['learnhub::数学'])
@@ -226,7 +226,7 @@ test('导出推送：到期卡入镜象（未归档 due≤今日），已归档�
     assert.equal(mirror.notes.length, 2)
     assert.match(mirror.last_push, /T/)
     // 再推一次：无新增（到期集未变）
-    const r2 = await engine.ankiExportPush(anki)
+    const r2 = await engine.channels.ankiExportPush(anki)
     assert.equal(r2.added, 0)
     assert.equal(r2.updated, 0)
     assert.equal(r2.removed, 0)
@@ -239,7 +239,7 @@ test('导出推送：到期卡入镜象（未归档 due≤今日），已归档�
 test('导入回写：Again/Hard/Good/Easy 按 vault ts-fsrs 重算 + 流水/复习日志/代表卡；Anki 排期不作数', async () => {
   await withVault(async engine => {
     const anki = new FakeAnki()
-    await engine.ankiExportPush(anki)
+    await engine.channels.ankiExportPush(anki)
     const before = await engine.bank2.questionGet('数学', '入门', 'q1')
     const beforeQ2 = await engine.bank2.questionGet('数学', '入门', 'q2')
     const q1Before = (before.question as { fsrs: { reps: number; due: string } }).fsrs
@@ -248,7 +248,7 @@ test('导入回写：Again/Hard/Good/Easy 按 vault ts-fsrs 重算 + 流水/复�
     // 学习者在 Anki 作答：q1 Good（自评 3）、q2 Again（答错 1）
     anki.answer('数学/入门/q1', 3, todayNoonMs())
     anki.answer('数学/入门/q2', 1, todayNoonMs() + 60_000)
-    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
+    const r = await engine.channels.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.imported, 2)
     assert.equal(r.advanced, 2)
     assert.equal(r.skipped_same_day, 0)
@@ -290,7 +290,7 @@ test('导入回写：Again/Hard/Good/Easy 按 vault ts-fsrs 重算 + 流水/复�
 test('导入回写：同日已在 vault 推进的题，其当日 Anki 事件跳过调度只留档', async () => {
   await withVault(async engine => {
     const anki = new FakeAnki()
-    await engine.ankiExportPush(anki)
+    await engine.channels.ankiExportPush(anki)
     // 先在 vault 里推进 q1（练习流自动判卷答对 → rating 3）
     const ans = await engine.questionAnswer(async () => { throw new Error('不该调模型') }, '数学', '入门', 'q1', 'A')
     assert.equal(ans.scheduled, true)
@@ -301,7 +301,7 @@ test('导入回写：同日已在 vault 推进的题，其当日 Anki 事件跳�
 
     // 同日 Anki 事件（q1 Good）：不产生第二次调度推进
     anki.answer('数学/入门/q1', 3, todayNoonMs() + 120_000)
-    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
+    const r = await engine.channels.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.imported, 1)
     assert.equal(r.skipped_same_day, 1)
     assert.equal(r.advanced, 0)
@@ -319,14 +319,14 @@ test('导入回写：同日已在 vault 推进的题，其当日 Anki 事件跳�
 test('导入回写：题目已归档/重生成的事件不落库只计数；未知归属事件零副作用', async () => {
   await withVault(async engine => {
     const anki = new FakeAnki()
-    await engine.ankiExportPush(anki)
+    await engine.channels.ankiExportPush(anki)
     // q1 归档后其 Anki 事件到来：不落库（下次推送时旧卡按 vault 校准移除）
-    await engine.questionArchive('数学', '入门', 'q1', true)
+    await engine.bank2.questionArchive('数学', '入门', 'q1', true)
     anki.answer('数学/入门/q1', 3, todayNoonMs())
     // 未知卡（清单/来源都对不上）：只计数
     anki.cards.set(999_999, 888_888)
     anki.reviews.push([todayNoonMs() + 300_000, 999_999, 0, 3, 0, 0, 3, 4000, 1])
-    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
+    const r = await engine.channels.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.skipped_unknown, 2)
     assert.equal(r.advanced, 0)
     assert.ok(!existsSync(engine.paths.practicePath), '无事件落库')
@@ -337,12 +337,12 @@ test('导入回写：题目已归档/重生成的事件不落库只计数；未�
 test('导入回写：镜象清单丢失自愈（Anki 来源字段回补归属）', async () => {
   await withVault(async engine => {
     const anki = new FakeAnki()
-    await engine.ankiExportPush(anki)
+    await engine.channels.ankiExportPush(anki)
     // 清单文件丢失（镜象可丢弃，不判 Broken）
     const { unlink } = await import('node:fs/promises')
     await unlink(engine.paths.ankiMirrorPath)
     anki.answer('数学/入门/q1', 4, todayNoonMs())
-    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
+    const r = await engine.channels.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.advanced, 1, '来源字段回补归属后照常重算')
     // 清单重建：本事件涉及的那张卡回补归属（fp 空 → 下次推送按内容校准；
     // 无事件的卡要等下次导出推送补全清单）
@@ -359,10 +359,10 @@ test('导入回写：镜象清单丢失自愈（Anki 来源字段回补归属）
 test('下次同步移除：vault 归档/消费的卡从 Anki 镜象删除（镜象以 vault 为准）', async () => {
   await withVault(async engine => {
     const anki = new FakeAnki()
-    await engine.ankiExportPush(anki)
+    await engine.channels.ankiExportPush(anki)
     assert.equal(anki.notes.size, 2)
-    await engine.questionArchive('数学', '入门', 'q2', true)
-    const r = await engine.ankiExportPush(anki)
+    await engine.bank2.questionArchive('数学', '入门', 'q2', true)
+    const r = await engine.channels.ankiExportPush(anki)
     assert.equal(r.removed, 1)
     assert.equal(anki.notes.size, 1)
     assert.ok(anki.noteFields('数学/入门/q1'))
@@ -379,7 +379,7 @@ test('Anki 状态：镜象概况 + 到期分布 + AnkiConnect 可达性；连接
     assert.equal(empty.mirror.entries, 0)
     assert.equal(empty.due.total, 2)
     assert.deepEqual((empty.anki as { connected: boolean }).connected, true)
-    await engine.ankiExportPush(anki)
+    await engine.channels.ankiExportPush(anki)
     const st = await engine.channels.ankiStatus(anki)
     assert.equal(st.mirror.entries, 2)
     assert.match(String(st.mirror.last_push), /T/)
@@ -413,7 +413,7 @@ test('笔记源卡 Anki 衔接：到期卡入 learnhub::笔记源 镜象，作�
     files: [{ path: '我的笔记/费曼技巧.md', content: '# 费曼技巧\n\n讲给外行听。\n' }],
   }, async ({ engine }) => {
     await engine.channels.noteSourceRegister('我的笔记/费曼技巧.md')
-    const gen = await engine.noteSourceGenerate('note-1', 1, async () => [
+    const gen = await engine.channels.noteSourceGenerate('note-1', 1, async () => [
       'node: note-1',
       'questions:',
       '  - id: q1',
@@ -429,7 +429,7 @@ test('笔记源卡 Anki 衔接：到期卡入 learnhub::笔记源 镜象，作�
     })
 
     const anki = new FakeAnki()
-    const exp = await engine.ankiExportPush(anki)
+    const exp = await engine.channels.ankiExportPush(anki)
     assert.equal(exp.total, 3, '课程 2 张 + 笔记源 1 张')
     assert.deepEqual([...exp.decks].sort(), ['learnhub::数学', 'learnhub::笔记源'])
     assert.match(anki.noteFields('笔记源/note-1/q1')['题目'], /费曼技巧的核心动作/)
@@ -438,7 +438,7 @@ test('笔记源卡 Anki 衔接：到期卡入 learnhub::笔记源 镜象，作�
     const repsBefore = await engine.bank.load(engine.paths.noteSourceDir, 'note-1')
     const fsBefore = repsBefore.questions[0]!.fsrs
     anki.answer('笔记源/note-1/q1', 3, todayNoonMs())
-    const r = await engine.ankiImportEvents(anki, IMPORT_AT)
+    const r = await engine.channels.ankiImportEvents(anki, IMPORT_AT)
     assert.equal(r.imported, 1)
     assert.equal(r.advanced, 1)
     assert.equal(r.skipped_unknown, 0)

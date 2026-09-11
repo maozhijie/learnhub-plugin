@@ -202,7 +202,7 @@ test('扫描排除区：学习中心/点目录/内置目录排除/用户排除�
     await writeFile(join(root, '.obsidian', '配置.md'), NOTE('配置', ['[[入门]]']), 'utf8')
     await mkdir(join(root, '私密区'), { recursive: true })
     await writeFile(join(root, '私密区', '手记.md'), NOTE('手记', ['[[入门]]']), 'utf8')
-    await engine.noteSourceExclude('私密区')
+    await engine.channels.noteSourceExclude('私密区')
 
     const base = await engine.vaultLinksScan()
     assert.equal(base.scanned_files, 5, '99附件 与 私密区 不进扫描')

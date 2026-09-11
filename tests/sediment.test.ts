@@ -292,12 +292,12 @@ test('sedimentSettle：上一完整学习周的校准与速度韧性出生即写
 test('重置与删课：沉淀层波及作为单独确认项显式返回（永不自动删除）', async () => {
   await withVault({ notes: { 入门: {} }, banks: { 入门: [tfQuestion('q1', {})] } }, async ({ engine }) => {
     await engine.sched2.sedimentAppend('fsrs_params', 'immediate', { parameters: [1] })
-    const reset = await engine.contentReset('数学')
+    const reset = await engine.content2.contentReset('数学')
     assert.match(reset.sediment, /沉淀层不受影响/)
     const fold1 = await engine.sched2.sedimentFold()
     assert.equal(fold1.counts.fsrs_params, 1, '重置不伤沉淀')
 
-    const del = await engine.courseDelete('数学')
+    const del = await engine.bank2.courseDelete('数学')
     assert.match(del.sediment, /沉淀层不受影响|存活/)
     const fold2 = await engine.sched2.sedimentFold()
     assert.equal(fold2.counts.fsrs_params, 1, '删课不伤沉淀')

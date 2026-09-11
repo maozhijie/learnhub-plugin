@@ -120,7 +120,7 @@ test('行为：建议逐条显式确认后生效——确认写默认带、复�
     // 确认前默认带为 null；显式确认后写入并被队列消费（standard 偏移 0 = 纯 A1，带值不变）
     assert.equal(await engine.lab.bandDefault(), null)
     const plainBand = (await engine.content2.reviewQueue('数学', '入门')).band
-    const applied = await engine.thermostatApply('band_default:standard')
+    const applied = await engine.lab.thermostatApply('band_default:standard')
     assert.equal(applied.band_default, 'standard')
     assert.equal(await engine.lab.bandDefault(), 'standard')
     assert.equal((await engine.content2.reviewQueue('数学', '入门')).band, plainBand, '默认 standard = 纯 A1 语义（偏移 0）')
@@ -128,11 +128,11 @@ test('行为：建议逐条显式确认后生效——确认写默认带、复�
     // 建议已消化（同向沉默）→ 再确认同一 id 拒绝；伪造 id 拒绝
     const after = await engine.lab.thermostatView()
     assert.deepEqual(after.suggestions, [], '当前默认已是目标值，不再重复建议')
-    await assert.rejects(() => engine.thermostatApply('band_default:standard'), /不在当前建议清单/)
-    await assert.rejects(() => engine.thermostatApply('retrieval_density:5'), /不在当前建议清单/, '不存在引擎侧参数调整路径')
+    await assert.rejects(() => engine.lab.thermostatApply('band_default:standard'), /不在当前建议清单/)
+    await assert.rejects(() => engine.lab.thermostatApply('retrieval_density:5'), /不在当前建议清单/, '不存在引擎侧参数调整路径')
 
     // 消费链同源验证：默认 hard 抬带、显式 easy 覆盖默认
-    await engine.setBandDefault('hard')
+    await engine.lab.setBandDefault('hard')
     const q = await engine.content2.reviewQueue('数学', '入门')
     assert.ok(Math.abs((q.band ?? 0) - 0.4) < 1e-6, `默认 hard 抬高起点先验（band=${q.band}）`)
     const explicit = await engine.content2.reviewQueue('数学', '入门', undefined, 'easy')

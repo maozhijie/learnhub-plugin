@@ -109,14 +109,14 @@ test('难度带会话日志 + 教练反馈（门面）：全简单日志 + 到�
       tfQuestion('easy1', { difficulty: 1, fsrs: DUE_TF }),
     ] },
   }, async ({ engine }) => {
-    const empty = await engine.coachAdvice() as { messages: string[]; due_hard: number }
+    const empty = await engine.learner.coachAdvice() as { messages: string[]; due_hard: number }
     assert.ok(empty.due_hard >= 1, 'fixture 有 R 高且难的到期题')
     assert.deepEqual(empty.messages, [], '无会话数据静默')
 
     for (let i = 0; i < 3; i++) {
-      await engine.logBandSession({ course: '数学', node: '入门', band: 'easy', answered: 4, correct: 4 })
+      await engine.learner.logBandSession({ course: '数学', node: '入门', band: 'easy', answered: 4, correct: 4 })
     }
-    const coach = await engine.coachAdvice() as { messages: string[]; due_hard: number }
+    const coach = await engine.learner.coachAdvice() as { messages: string[]; due_hard: number }
     assert.equal(coach.messages.length, 1, coach.messages.join('；'))
     assert.ok(coach.messages[0]!.includes('标准带'))
 
@@ -126,7 +126,7 @@ test('难度带会话日志 + 教练反馈（门面）：全简单日志 + 到�
     assert.equal(recs[0]!.band, 'easy')
     assert.ok(recs[0]!.date.length === 10)
     await assert.rejects(
-      () => engine.logBandSession({ course: '数学', node: '入门', band: '变态' as never, answered: 1, correct: 1 }),
+      () => engine.learner.logBandSession({ course: '数学', node: '入门', band: '变态' as never, answered: 1, correct: 1 }),
       /band 只能是/,
     )
   })

@@ -87,15 +87,15 @@ test('reviewQueue：抽查约 1/3 弹预测标记，关闭后完全消失', asyn
     const marked = r.cards.filter(c => c.jol)
     assert.equal(marked.length, 1, '3 张 × 1/3 向上取整 = 1（非逐卡）')
 
-    await engine.setJolConfig({ enabled: false })
+    await engine.learner.setJolConfig({ enabled: false })
     const r2 = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }> }
     assert.ok(r2.cards.every(c => !c.jol), '全局关闭后完全不打扰')
-    assert.deepEqual(await engine.jolConfig(), { enabled: false, rate: 1 / 3 })
+    assert.deepEqual(await engine.learner.jolConfig(), { enabled: false, rate: 1 / 3 })
 
-    await engine.setJolConfig({ enabled: true, rate: 1 })
+    await engine.learner.setJolConfig({ enabled: true, rate: 1 })
     const r3 = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }> }
     assert.equal(r3.cards.filter(c => c.jol).length, 3, '抽样率可配')
-    await engine.setJolConfig({ rate: 1 / 3 })
+    await engine.learner.setJolConfig({ rate: 1 / 3 })
   })
 })
 

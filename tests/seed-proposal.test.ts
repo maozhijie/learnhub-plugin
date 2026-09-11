@@ -468,7 +468,7 @@ test('seedPropose：目标起草种子提案——受理 pending、绑定字段�
       assert.ok(!prompt.includes('只读检索所得'), '未选配先验不附检索注入段')
       return 'course: 完全不相干的错名\n' + SEED_LLM_OK('x').slice('course: x\n'.length)
     } }, systemClock)
-    const r = await engine.seedPropose({ course: '微积分', goal: '学会用微积分解决优化问题' }, fake)
+    const r = await engine.graph.seedPropose({ course: '微积分', goal: '学会用微积分解决优化问题' }, fake)
     assert.equal(calls, 1)
     assert.equal(r.course, '微积分', '课程名以表单为准（模型照抄错也被绑定覆盖）')
     assert.equal(r.endpoint, '用导数解决优化问题')
@@ -489,12 +489,12 @@ test('seedPropose：首轮 YAML 违约回灌修复一轮；两轮仍违约拒收
       if (n === 2) assert.ok(prompt.includes('种子校验门'), '修复轮带校验清单')
       return n === 1 ? broken : SEED_LLM_OK('微积分')
     } }, systemClock)
-    const r = await engine.seedPropose({ course: '微积分', goal: '学会微积分' }, flaky)
+    const r = await engine.graph.seedPropose({ course: '微积分', goal: '学会微积分' }, flaky)
     assert.equal(n, 2)
     assert.equal(r.repaired, true)
     const alwaysBad = new AgentSeam({ complete: async () => broken }, systemClock)
     await assert.rejects(
-      () => engine.seedPropose({ course: '微积分', goal: '学会微积分' }, alwaysBad),
+      () => engine.graph.seedPropose({ course: '微积分', goal: '学会微积分' }, alwaysBad),
       (err: Error & { code?: string }) => err.code === 'SEED_GATE_FAILED',
     )
   })
@@ -506,12 +506,12 @@ test('seedPropose：coverage 绑定表单工作表（不信模型）；空工作
       assert.ok(prompt.includes('块工作表'), 'coverage 工作表进上下文')
       return 'course: 历史\nmode: new\nreason: x\ngoal_type: coverage\nworksheet:\n  - block: 模型瞎写的块\nendpoint:\n  name: 完成考纲综述\n  region: 基础\n  block: 收束\nstarts:\n  - name: 通读考纲\n    region: 基础\n    block: 起点块\n    basis: baseline\n'
     } }, systemClock)
-    const r = await engine.seedPropose(
+    const r = await engine.graph.seedPropose(
       { course: '历史', goal: '过一遍考纲', goalType: 'coverage', worksheet: [{ block: '代数' }, { block: '几何' }] }, cov)
     const seed = (await engine.store.loadProposals()).find(p => p.kind === 'seed' && p.id === r.id)
     assert.ok(seed?.summary.includes('块工作表 2 项'), '绑定表单的两块工作表（模型的单块被覆盖）')
     await assert.rejects(
-      () => engine.seedPropose({ course: '历史', goal: '过一遍考纲', goalType: 'coverage' }, cov),
+      () => engine.graph.seedPropose({ course: '历史', goal: '过一遍考纲', goalType: 'coverage' }, cov),
       /块工作表/,
       'coverage 缺工作表直接拒收',
     )

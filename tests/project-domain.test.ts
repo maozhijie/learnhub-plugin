@@ -137,11 +137,11 @@ plan:
 test('项目生命周期：创建→清单→视图→生命周期/档位变更；Missing/Broken 纪律', async () => {
   await withVault({}, async ({ engine, paths }) => {
     await assert.rejects(engine.project.projectShow('不存在'), /不存在（Missing）/)
-    const fm = await engine.projectCreate({ name: '练耳日记', goal: '三个月内能听辨大小三度' })
+    const fm = await engine.project.projectCreate({ name: '练耳日记', goal: '三个月内能听辨大小三度' })
     assert.equal(fm.lifecycle, 'active')
     assert.equal(fm.tier, '补全')
     assert.deepEqual(fm.plan, [])
-    await assert.rejects(engine.projectCreate({ name: '练耳日记', goal: '重复建' }), /已存在/)
+    await assert.rejects(engine.project.projectCreate({ name: '练耳日记', goal: '重复建' }), /已存在/)
 
     const list = await engine.project.projectList()
     assert.equal(list.length, 1)
@@ -176,7 +176,7 @@ test('Broken 纪律：项目档案存在但缺 lifecycle 字段 → Broken 抛�
 
 test('计划提案流：初次规划 apply 无快照；修订 apply 带旧计划快照；提案记录留痕', async () => {
   await withVault({}, async ({ engine, store }) => {
-    await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
+    await engine.project.projectCreate({ name: '练耳日记', goal: '听辨音程' })
     await assert.rejects(engine.project.projectPlanPropose('练耳日记', 'project: 别的项目\nplan: []'), /不一致/)
 
     const p1 = await engine.project.projectPlanPropose('练耳日记', PLAN_YAML('练耳日记'))
@@ -219,7 +219,7 @@ test('计划提案流：初次规划 apply 无快照；修订 apply 带旧计划
 
 test('里程碑产物流：首生直落；重生成自动转提案；apply 后旧文快照；门禁未过拒收', async () => {
   await withVault({}, async ({ engine }) => {
-    await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
+    await engine.project.projectCreate({ name: '练耳日记', goal: '听辨音程' })
     const p1 = await engine.project.projectPlanPropose('练耳日记', PLAN_YAML('练耳日记'))
     await engine.graph.projectApply(p1.id)
 
@@ -257,7 +257,7 @@ test('红线：项目全路径零 canonical 写入——复习队列/XP 账本/�
     const noteBefore = readFileSync(join(root, '学习中心', 'math', '课程', '基础', '入门.md'), 'utf8')
     const journalBefore = await store.journalTail(null, 100)
 
-    await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
+    await engine.project.projectCreate({ name: '练耳日记', goal: '听辨音程' })
     const p1 = await engine.project.projectPlanPropose('练耳日记', PLAN_YAML('练耳日记'))
     await engine.graph.projectApply(p1.id)
     await engine.projectMilestoneWrite('练耳日记', 'm1',
@@ -320,7 +320,7 @@ test('#149 修订 apply 面：换线/补支触发随结果带出（按锚定课�
     ].join('\n'),
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine }) => {
-    await engine.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
+    await engine.project.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
     const plan1 = `\
 project: 练琴计划
 plan:
@@ -338,7 +338,7 @@ plan:
     assert.ok(g1?.length === 1 && g1[0].course === '数学')
     assert.match(g1[0].lines.join('\n'), /换线.*数学\/入门/)
 
-    await engine.projectMilestonePass('练琴计划', 'm1') // m1 过点对账（账本事实）
+    await engine.project.projectMilestonePass('练琴计划', 'm1') // m1 过点对账（账本事实）
 
     // 修订：m1 重指到不存在节点（补支）+ m2 挂既有节点（换线）+ m1 过点后被移除会触发警告（此处不删 m1）
     const plan2 = `\
@@ -384,7 +384,7 @@ plan:
     assert.ok((r3.plan_diff_warnings ?? []).some(w => w.includes('m1') && w.includes('过点')), '「终点消失」要可见')
 
     // 已过点的 m2 被同 id 改名 → 改名警告（身份不变、名字漂移要可见）；nodes 未变不产触发
-    await engine.projectMilestonePass('练琴计划', 'm2')
+    await engine.project.projectMilestonePass('练琴计划', 'm2')
     const plan4 = `\
 project: 练琴计划
 plan:

@@ -141,7 +141,7 @@ test('contentSectionsView：tierLabel 清单值优先、缺席按位置推导，
     notes: { 入门: {} },
   }, async ({ engine, paths }) => {
     await seedOutline(engine)
-    const views = await engine.contentSectionsView('数学', '入门')
+    const views = await engine.content2.contentSectionsView('数学', '入门')
     assert.equal(views[0]!.tierLabel, '低', 's1 清单 tier=低 在场直接用')
     assert.equal(views[1]!.tierLabel, '高', 's2 缺席 → 推导（difficulty 3 基中，pos2/2 → 高）')
     // 不回填：视图解析后 frontmatter 里 s2 仍无 tier 字段
@@ -162,8 +162,8 @@ test('金样本回放：v9 换装后大纲+逐节落盘全链，同种子 vault 
     notes: { 入门: {} },
   }, async ({ engine, paths }) => {
     await seedOutline(engine)
-    const r1 = await engine.contentSection('数学', '入门', 's1', GOLD_S1)
-    const r2 = await engine.contentSection('数学', '入门', 's2', GOLD_S2)
+    const r1 = await engine.content2.contentSection('数学', '入门', 's1', GOLD_S1)
+    const r2 = await engine.content2.contentSection('数学', '入门', 's2', GOLD_S2)
     const notePath = paths.courseNotePath('math', '基础', '入门')
     return { r1, r2, note: await readFile(notePath, 'utf8') }
   })
@@ -252,10 +252,10 @@ test('questionGenerateSections：逐节难度锚走节段难度档（清单值/�
     files: REGISTRY,
   }, async ({ engine }) => {
     await seedOutline(engine)
-    await engine.contentSection('数学', '入门', 's1', GOLD_S1)
-    await engine.contentSection('数学', '入门', 's2', GOLD_S2)
+    await engine.content2.contentSection('数学', '入门', 's1', GOLD_S1)
+    await engine.content2.contentSection('数学', '入门', 's2', GOLD_S2)
     const fake = replayFake(GOLD_BANK)
-    const r = await engine.questionGenerateSections('数学', '入门', fake)
+    const r = await engine.bank2.questionGenerateSections('数学', '入门', fake)
     assert.equal(fake.calls.length, 2, '两个内容节各一次调用')
     assert.match(fake.calls[0]!.prompt, /本节难度档：低/, 's1 清单 tier=低')
     assert.match(fake.calls[1]!.prompt, /本节难度档：高/, 's2 推导 = 高（pos2/2，基中+1）')
@@ -328,13 +328,13 @@ test('QC 程序化修复：别名不一致落盘前确定性替换，repairs 留
   }, async ({ engine }) => {
     await seedOutline(engine)
     const md = '## 概念：鸽巢原理\n\n毕达哥拉斯定理说直角边平方和等于斜边平方。\n'
-    const r = await engine.contentSection('数学', '入门', 's1', md)
+    const r = await engine.content2.contentSection('数学', '入门', 's1', md)
     assert.deepEqual(r.repairs, ['毕达哥拉斯定理→勾股定理'])
-    const views = await engine.contentSectionsView('数学', '入门')
+    const views = await engine.content2.contentSectionsView('数学', '入门')
     assert.match(views[0]!.md!, /勾股定理说直角边平方和/)
     assert.doesNotMatch(views[0]!.md!, /毕达哥拉斯定理/)
     // 只读校验不受写侧修复影响：合法正文过门
-    const check = await engine.contentCheck('数学', '入门')
+    const check = await engine.content2.contentCheck('数学', '入门')
     assert.equal(check.passed, true)
   })
 })

@@ -88,14 +88,14 @@ function stubContentPipeline(rt: HostRuntime, opts: { saved?: Array<Array<unknow
     'content2.contentPack': async () => '上下文包',
     'content2.contentTierOf': async () => 1,
     'content2.loadPrompt': async () => 'TPL',
-    contentSectionsView: async () => [{ id: 's1', title: '第一节', type: '概念', status: 'ready' }],
-    questionGenerateSections: async () => ({ added: 2 }),
+    'content2.contentSectionsView': async () => [{ id: 's1', title: '第一节', type: '概念', status: 'ready' }],
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
     questionGenerate: async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
     'registry.get': async () => ({ name: '数学' }),
     loadView: async () => ({ graph: { nset: new Set(['节点A', '节点B', '节点C']) } }),
     saveGenJobs: async (jobs: Array<unknown>) => { opts.saved?.push(jobs) },
-    coachCheckpoint: async () => ({ courses: [] }),
-    settleRechecks: async () => null,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
   })
 }
 
@@ -174,8 +174,8 @@ test('队列泵状态机：running 重复入队拒绝；排队任务可取消（
   stub(rt, {
     'content2.contentPack': () => gate, // 挂住管线，制造 running 窗口
     saveGenJobs: async () => undefined,
-    coachCheckpoint: async () => ({ courses: [] }),
-    settleRechecks: async () => null,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
   })
   const ctx = fakeCtx()
   enqueueGeneration(rt, ctx, '数学', '节点A')
@@ -236,8 +236,8 @@ test('等待语义：入队 + 等终态 + 结果表读取（agent 工具同步�
   stub(rt, {
     questionGenerate: async () => ({ added: 4, total: 4, duplicates: [], rejected: [], skipped: [], enc: {} }),
     saveGenJobs: async () => undefined,
-    coachCheckpoint: async () => ({ courses: [] }),
-    settleRechecks: async () => null,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
   })
   const enq = enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点C', { count: 4 })
   assert.equal(enq.queued, true)
@@ -269,8 +269,8 @@ test('生长批失败终态：教练回合抛错 → failed 带死因；自动�
       throw new Error('[coach-growth] 生长批受理门拒收（回灌重裁一轮仍未过——零落盘）。\n【首轮】…区不存在: 幻区…\n【重裁】…')
     },
     saveGenJobs: async () => undefined,
-    coachCheckpoint: async () => ({ courses: [] }),
-    settleRechecks: async () => null,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
   })
   const key = '数学/生长批'
   const enq = enqueueGrowthBatch(rt, ctx, '数学', '测试触发')
@@ -295,8 +295,8 @@ test('生长批已取消：明确的中止意图不被 force 豁免（重试只�
   const rt = makeRuntime()
   stub(rt, {
     saveGenJobs: async () => undefined,
-    coachCheckpoint: async () => ({ courses: [] }),
-    settleRechecks: async () => null,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
   })
   rt.jobs.genJobs.set('数学/生长批', {
     course: '数学', node: '生长批', startedAt: new Date().toISOString(),
@@ -315,7 +315,7 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
   const rt = makeRuntime()
   const seedCalls: Array<Record<string, unknown>> = []
   stub(rt, {
-    seedPropose: async (req: Record<string, unknown>) => {
+    'graph.seedPropose': async (req: Record<string, unknown>) => {
       seedCalls.push(req)
       return { id: 7, starts: 1, endpoint: '终点', prior_hits: 0 }
     },
@@ -331,8 +331,8 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
     // 恢复清扫的存在性探针（真实注册表为空会把恢复记录判悬空清掉）
     'registry.get': async (key: string) => ({ name: key }),
     loadView: async () => ({ graph: { nset: new Set<string>() } }),
-    coachCheckpoint: async () => ({ courses: [] }),
-    settleRechecks: async () => null,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
   })
   restoreGenJobs(rt)
   await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'queued')
@@ -364,8 +364,8 @@ test('重启恢复：负载要求的排队图域任务缺负载 → 恢复处明
     // 恢复清扫的存在性探针（真实注册表为空会把恢复记录判悬空清掉）
     'registry.get': async (key: string) => ({ name: key }),
     loadView: async () => ({ graph: { nset: new Set<string>() } }),
-    coachCheckpoint: async () => ({ courses: [] }),
-    settleRechecks: async () => null,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
   })
   restoreGenJobs(rt)
   await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'failed')
@@ -426,7 +426,7 @@ test('路由分发：GET /status 附 llm 配置视图（模型透明；会话开
   stub(rt, {
     statusJson: async () => ({ ok: true }),
     saveGenJobs: async () => undefined,
-    coachCheckpoint: async () => ({ courses: [] }),
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
   })
   const res = fakeRes()
   await handleApi(rt, fakeCtx(), get('/learnhub/api/status'), res as never)
@@ -510,7 +510,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 22, '指南条目数（22 条手写，增减要显式）')
 })
 
-test('路由↔工具对账基线：91 共享引擎入口、工具独有 34、路由独有 58（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、路由独有 49（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // C 形态（ADR-0049）：入口名 = `<子系统>.<方法>` 点路径或 hub 装配域裸名，
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
@@ -540,9 +540,9 @@ test('路由↔工具对账基线：91 共享引擎入口、工具独有 34、�
   assert.deepEqual(shared, base.shared, '两面共享的引擎入口集漂移')
   assert.deepEqual(toolOnly, base.toolOnly, '工具独有引擎入口集漂移')
   assert.deepEqual(routeOnly, base.routeOnly, '路由独有引擎入口集漂移')
-  assert.equal(shared.length, 91)
-  assert.equal(toolOnly.length, 34)
-  assert.equal(routeOnly.length, 58)
+  assert.equal(shared.length, 84)
+  assert.equal(toolOnly.length, 26)
+  assert.equal(routeOnly.length, 49)
 })
 
 // ---------------------------------------------------------------- 清理

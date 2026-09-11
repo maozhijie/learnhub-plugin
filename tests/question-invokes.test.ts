@@ -163,7 +163,7 @@ test('逐节出题同门：清单注入、出生打标入库、投影返回', as
   }
   await withVault({ ...VAULT, notes: { 乙: NOTE_乙_SECTIONS } }, async ({ engine }) => {
     const fake = replayFake(GOLD)
-    const r = await engine.questionGenerateSections('数学', '乙', fake)
+    const r = await engine.bank2.questionGenerateSections('数学', '乙', fake)
     assert.match(fake.calls[0].prompt, /## 概念清单/)
     assert.match(fake.calls[0].prompt, /section 字段必须精确写「s1」/)
     assert.equal(r.added, 2)

@@ -199,7 +199,7 @@ test('AC2 批注区是软输入：初画附进上下文；写权重写保批注�
     assert.match(tail, /跳过证明类的块/)
 
     // 写权接口：批注区、ETA、自留段字节保留，只换路线
-    await engine.compassRewrite('数学', GOLD_ROUTE)
+    await engine.growth2.compassRewrite('数学', GOLD_ROUTE)
     const afterRewrite = await readFile(p, 'utf8')
     const doc2 = parseCompass(afterRewrite)
     assert.equal(sectionBody(doc2, SECTION_ROUTE)?.trim(), GOLD_ROUTE)
