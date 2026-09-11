@@ -147,7 +147,7 @@ test('全链路：模板发起→确认→分臂→推进带臂标注→报告�
 
     // 二连提案拒绝：v1 单实验（apply 前看 pending 也拦——running 判定在 apply，
     // 但 propose 不挡 pending：两个 pending 可并存，确认时才互斥）
-    const started = await engine.proposalApply('experiment', prop.proposal)
+    const started = await engine.graph.proposalApply('experiment', prop.proposal)
     assert.equal(started.arm_today, 'standard', '开跑日 = 批次第一臂')
 
     const list = await engine.store.loadExperiments()
@@ -191,14 +191,14 @@ test('#150 结局落沉淀：停=定稿——结局分析出生即写 nof1_outco
     },
   }, async ({ engine, paths }) => {
     const prop = await engine.experimentPropose('band_default_std_vs_hard')
-    await engine.proposalApply('experiment', prop.proposal)
+    await engine.graph.proposalApply('experiment', prop.proposal)
     // 一次真实推进（臂标注在案）→ 未达观察窗就停：正典如实落进度态，不造假结论
     await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
 
     const stopped = await engine.lab.experimentStop()
     assert.equal(stopped.status, 'stopped')
 
-    const fold = await engine.sedimentFold()
+    const fold = await engine.sched2.sedimentFold()
     const events = fold.events.filter(e => e.kind === 'nof1_outcome')
     assert.equal(events.length, 1, '结局事件恰一条（出生即写）')
     assert.equal(events[0]!.tier, 'immediate', '点结论 = 最新态语义')
@@ -225,7 +225,7 @@ test('#150 结局落沉淀：停=定稿——结局分析出生即写 nof1_outco
     list[0]!.status = 'running'
     await engine.store.saveExperiments(list)
     await engine.lab.experimentStop()
-    const fold2 = await engine.sedimentFold()
+    const fold2 = await engine.sched2.sedimentFold()
     assert.equal(fold2.events.filter(e => e.kind === 'nof1_outcome').length, 1, '同 id 结局事件不重复')
   })
 })

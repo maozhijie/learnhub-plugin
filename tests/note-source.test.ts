@@ -336,7 +336,7 @@ test('源清单本身 Broken = fail loud（镜像区契约文件），注册表 
   await withVault(async engine => {
     // 注册表 note_sources 域契约坏 → 注册表整体 Broken（沿用 ADR-0004 fail loud）
     await writeFile(join(engine.paths.centerRoot, '课程注册表.yaml'), `${DEFAULT_REGISTRY}\nnote_sources:\n  - { id: "", path: "" }\n`, 'utf8')
-    await assert.rejects(() => engine.enabledCourses(), /note_sources\.1\.id: 不能为空/)
+    await assert.rejects(() => engine.registry.enabled(), /note_sources\.1\.id: 不能为空/)
   })
 })
 

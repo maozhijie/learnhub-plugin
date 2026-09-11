@@ -98,13 +98,13 @@ function scriptFake(replies: string[]) {
 }
 
 async function seedApplied(engine: Awaited<ReturnType<typeof withVault>>['engine']): Promise<void> {
-  const r = await engine.graphPropose('seed', CAPABILITY_SEED) as { id: number }
+  const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
   await engine.graphApply('seed', r.id)
 }
 
 /** 巩固门底座核对：种子的 teaches 已让「变化率」成为已教概念。 */
 async function assertTaught(engine: Awaited<ReturnType<typeof withVault>>['engine'], concept: string): Promise<void> {
-  const applied = await engine.graphPropose('edit', `course: 数学
+  const applied = await engine.graph.graphPropose('edit', `course: 数学
 ops:
   - op: add_node
     name: 巩固合法探针
@@ -113,7 +113,7 @@ ops:
     pre: [认识变化率]
     teaches: {${concept}: 知道}
 `)
-  await engine.graphReject((applied as { id: number }).id)
+  await engine.graph.graphReject((applied as { id: number }).id)
 }
 
 test('AC1 金样本全链：轻量段单次 fast 调用、提案应用、罗盘同事务重写、journal 挂提案 id', async () => {
@@ -161,7 +161,7 @@ test('AC1 金样本全链：轻量段单次 fast 调用、提案应用、罗盘�
     assert.match(growthLine, new RegExp(`"session":"${r.proposal!.id}"`))
     assert.match(growthLine, /生长批（前进）：前沿缺下一台阶/)
     assert.match(growthLine, /add_node\(平均变化率\)/)
-    const props = await engine.graphProposals('applied', 'edit')
+    const props = await engine.graph.graphProposals('applied', 'edit')
     assert.match(props[0]!.summary, /生长批（前进）：前沿缺下一台阶/)
   })
 })
@@ -251,8 +251,8 @@ test('拒收零落盘：裁决未过受理门时罗盘与图零改动、零提�
     ] })
     await assert.rejects(() => engine.coachGrowthBatch('数学', replayFake(bad)), /悬空|断边|不存在/)
     assert.equal(await readFile(compassPath, 'utf8'), before, '提案被拒罗盘不落盘')
-    assert.deepEqual(await engine.graphProposals('pending'), [])
-    assert.deepEqual(await engine.graphProposals('applied', 'edit'), [], '零 edit 提案（种子提案除外）')
+    assert.deepEqual(await engine.graph.graphProposals('pending'), [])
+    assert.deepEqual(await engine.graph.graphProposals('applied', 'edit'), [], '零 edit 提案（种子提案除外）')
 
     // 路线门拒绝（route 带 "## " 标题劫持）：受理时就拒——零 pending、罗盘零改动
     const badRoute = goldVerdict({ route: '## 剩余路线\n\n- 冒充整页' })
@@ -263,7 +263,7 @@ test('拒收零落盘：裁决未过受理门时罗盘与图零改动、零提�
       journalBefore,
       '零 graph_edit journal',
     )
-    assert.deepEqual(await engine.graphProposals('pending'), [], '路线门在受理时拒绝——零 pending 遗留')
+    assert.deepEqual(await engine.graph.graphProposals('pending'), [], '路线门在受理时拒绝——零 pending 遗留')
   })
 })
 
@@ -279,10 +279,10 @@ test('apply 失败自清：审计 ERROR 拦下 apply 时机器裁决不留 pendi
 
     await assert.rejects(() => engine.coachGrowthBatch('数学', replayFake(goldVerdict())), /审计存在 ERROR/)
     assert.equal(await readFile(compassPath, 'utf8'), before, '罗盘零改动')
-    const props = await engine.graphProposals('rejected', 'edit')
+    const props = await engine.graph.graphProposals('rejected', 'edit')
     assert.equal(props.length, 1, 'apply 失败的机器裁决自清为 rejected')
     assert.match(props[0]!.decision_note ?? '', /生长批自动 apply 失败/)
-    assert.deepEqual(await engine.graphProposals('pending'), [])
+    assert.deepEqual(await engine.graph.graphProposals('pending'), [])
   })
 })
 
@@ -348,7 +348,7 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
 test('停机转译：就绪深度满足时不拉回合（零调用）；force 越过后照常受理', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     const declared = todayStr(new Date())
-    const r = await engine.graphPropose('seed', `course: 数学
+    const r = await engine.graph.graphPropose('seed', `course: 数学
 mode: new
 endpoint:
   name: 用导数解决优化问题
@@ -411,7 +411,7 @@ test('零操作生长批：裁决=暂不产结构（ops: []）合法——罗盘
     assert.deepEqual(r.applied!.created, [])
     const doc = parseCompass(await readFile(paths.compassPath('数学'), 'utf8'))
     assert.match(sectionBody(doc, SECTION_ROUTE)!.trim(), /把变化率说成本质/)
-    const props = await engine.graphProposals('applied', 'edit')
+    const props = await engine.graph.graphProposals('applied', 'edit')
     assert.match(props[0]!.summary, /生长批（前进）：结构已足/)
   })
 })
@@ -458,7 +458,7 @@ test('金样本回放闸：两族金样本首过（首过率对照、调用数�
 test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重裁请求），注入块随包进提示词', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     const declared = todayStr(new Date())
-    const r = await engine.graphPropose('seed', `course: 数学
+    const r = await engine.graph.graphPropose('seed', `course: 数学
 mode: new
 endpoint:
   name: 用导数解决优化问题
@@ -570,6 +570,6 @@ test('#157 回灌仍败：重裁产出再被受理门拒收 → 原样失败且�
     )
     assert.equal(fake.calls.length, 2, '恰两轮调用（轻量段 + 回灌重裁段），不无限重试')
     // 被拒批次零落盘：两轮都没到 saveArtifact，无 pending 提案残留
-    assert.equal((await engine.graphProposals('pending', 'edit')).length, 0)
+    assert.equal((await engine.graph.graphProposals('pending', 'edit')).length, 0)
   })
 })

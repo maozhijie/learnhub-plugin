@@ -175,7 +175,7 @@ ops:
     misconceptions:
       - { concept: 误解未登记, model: 错法 }
 `
-    await assert.rejects(() => engine.graphPropose('edit', yaml), e => {
+    await assert.rejects(() => engine.graph.graphPropose('edit', yaml), e => {
       const m = (e as Error).message
       assert.match(m, /未登记概念/)
       assert.match(m, /未在登记表/)
@@ -198,7 +198,7 @@ ops:
     pre: [入门]
     teaches: { 十字相乘法: 知道 }
 `
-    const r = await engine.graphPropose('edit', yaml) as { id: number }
+    const r = await engine.graph.graphPropose('edit', yaml) as { id: number }
     assert.ok(r.id > 0, '别名是在册地址，受理')
   })
   await withVault({ tag: 'learnhub-refnone-' }, async ({ engine }) => {
@@ -211,7 +211,7 @@ ops:
     pre: [入门]
     teaches: { 任意概念: 知道 }
 `
-    await assert.rejects(() => engine.graphPropose('edit', yaml), /任意概念.*未在登记表|不在登记表/)
+    await assert.rejects(() => engine.graph.graphPropose('edit', yaml), /任意概念.*未在登记表|不在登记表/)
   })
 })
 
@@ -233,7 +233,7 @@ ops:
     misconceptions:
       - { concept: 行变换几何直觉, model: 把行变换当成列变换 }
 `
-    const r = await engine.graphPropose('edit', yaml) as { id: number }
+    const r = await engine.graph.graphPropose('edit', yaml) as { id: number }
     assert.ok(r.id > 0)
   })
 })
@@ -250,7 +250,7 @@ ops:
     block: 入门块
     pre: [入门]
 `
-    await assert.rejects(() => engine.graphPropose('edit', clashCanonical), /「因式分解」.*已在登记表|铸名冲突/)
+    await assert.rejects(() => engine.graph.graphPropose('edit', clashCanonical), /「因式分解」.*已在登记表|铸名冲突/)
     const clashAlias = `course: 数学
 concepts:
   - canonical: 新名字
@@ -262,7 +262,7 @@ ops:
     block: 入门块
     pre: [入门]
 `
-    await assert.rejects(() => engine.graphPropose('edit', clashAlias), /十字相乘法/)
+    await assert.rejects(() => engine.graph.graphPropose('edit', clashAlias), /十字相乘法/)
     const clashWithin = `course: 数学
 concepts:
   - canonical: 概念甲
@@ -274,7 +274,7 @@ ops:
     block: 入门块
     pre: [入门]
 `
-    await assert.rejects(() => engine.graphPropose('edit', clashWithin), /概念甲/)
+    await assert.rejects(() => engine.graph.graphPropose('edit', clashWithin), /概念甲/)
     assert.equal((await engine.store.loadProposals()).length, 0)
   })
 })
@@ -313,7 +313,7 @@ ops:
 
 test('#141 同事务：apply 后图与登记表同时落盘（铸名随生长批生效）', async () => {
   await withVault({ tag: 'learnhub-mintapply-' }, async ({ engine, root }) => {
-    const r = await engine.graphPropose('edit', MINT_YAML) as { id: number }
+    const r = await engine.graph.graphPropose('edit', MINT_YAML) as { id: number }
     await engine.graphApply('edit', r.id)
     const onDisk = readFileSync(registryPath(root), 'utf8')
     assert.match(onDisk, /行变换几何直觉/)
@@ -325,8 +325,8 @@ test('#141 同事务：apply 后图与登记表同时落盘（铸名随生长批
 
 test('#141 同事务：提案被拒则登记表不落盘', async () => {
   await withVault({ tag: 'learnhub-mintreject-' }, async ({ engine, root }) => {
-    const r = await engine.graphPropose('edit', MINT_YAML) as { id: number }
-    await engine.graphReject(r.id, '人审不通过')
+    const r = await engine.graph.graphPropose('edit', MINT_YAML) as { id: number }
+    await engine.graph.graphReject(r.id, '人审不通过')
     assert.equal(existsSync(registryPath(root)), false, '登记不落盘')
   })
 })

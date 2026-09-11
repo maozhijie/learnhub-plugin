@@ -69,8 +69,8 @@ test('检索点门槛：产物未生成拒绝；生成后抽题落档（题干�
     banks: { 入门: [tfQuestion('q1'), tfQuestion('q2', { fsrs: { stability: 2, difficulty: 5, due: '2026-08-01', last_review: '2026-07-01', reps: 2, lapses: 0 } })] },
   }, async ({ engine, root }) => {
     await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
-    const p1 = await engine.projectPlanPropose('练耳日记', RECALL_PLAN('练耳日记'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练耳日记', RECALL_PLAN('练耳日记'))
+    await engine.graph.projectApply(p1.id)
 
     await assert.rejects(engine.projectMilestoneRecall('练耳日记', 'm1'), /产物尚未生成/)
 
@@ -84,7 +84,7 @@ test('检索点门槛：产物未生成拒绝；生成后抽题落档（题干�
     }
 
     // 流水落档：draw 记录只有题干（答案不落档），不写任何课程域状态
-    const log = await engine.projectRecallLog('练耳日记')
+    const log = await engine.project.projectRecallLog('练耳日记')
     assert.equal(log.length, 1)
     assert.equal(log[0].kind, 'draw')
     const draw = log[0] as Extract<typeof log[0], { kind: 'draw' }>
@@ -101,15 +101,15 @@ test('检索点红线：零 XP/零 FSRS/零 practice/零 journal，题库文件�
     banks: { 入门: [tfQuestion('q1', { fsrs: { stability: 2, difficulty: 5, due: '2026-08-01', last_review: '2026-07-01', reps: 2, lapses: 0 } })] },
   }, async ({ engine, store, paths, root }) => {
     await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
-    const p1 = await engine.projectPlanPropose('练耳日记', RECALL_PLAN('练耳日记'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练耳日记', RECALL_PLAN('练耳日记'))
+    await engine.graph.projectApply(p1.id)
     await engine.projectMilestoneWrite('练耳日记', 'm1', CARD)
 
     const bankBefore = (await engine.bank.load(paths.courseRoot('math'), '入门')).questions
     const reviewBefore = await store.reviewLogAll()
     const practiceBefore = await store.practiceAll()
     const journalBefore = await store.journalTail(null, 100)
-    const xpBefore = JSON.stringify(await engine.xpStatus())
+    const xpBefore = JSON.stringify(await engine.sched2.xpStatus())
 
     await engine.projectMilestoneRecall('练耳日记', 'm1')
     await engine.projectRecallReflect('练耳日记', 'm1', '关键决策：先装 runtime 再配编辑器，避免权限坑。')
@@ -118,9 +118,9 @@ test('检索点红线：零 XP/零 FSRS/零 practice/零 journal，题库文件�
     assert.deepEqual(await store.reviewLogAll(), reviewBefore)
     assert.deepEqual(await store.practiceAll(), practiceBefore)
     assert.deepEqual(await store.journalTail(null, 100), journalBefore, '检索点零 journal 写入')
-    assert.equal(JSON.stringify(await engine.xpStatus()), xpBefore, '零 XP')
+    assert.equal(JSON.stringify(await engine.sched2.xpStatus()), xpBefore, '零 XP')
 
-    const log = await engine.projectRecallLog('练耳日记')
+    const log = await engine.project.projectRecallLog('练耳日记')
     assert.equal(log.length, 2)
     const reflect = log[1] as Extract<typeof log[0], { kind: 'reflect' }>
     assert.equal(reflect.kind, 'reflect')
@@ -132,8 +132,8 @@ test('检索点守卫：无关联节点 fail loud（调用参数可补）；自�
   await withVault({ banks: { 入门: [tfQuestion('q1')] } }, async ({ engine }) => {
     await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
     const noNodes = `project: 练耳日记\nplan:\n  - id: m1\n    name: 过点\n    task_class: 简\n    acceptance_hints: 能跑\n`
-    const p1 = await engine.projectPlanPropose('练耳日记', noNodes)
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练耳日记', noNodes)
+    await engine.graph.projectApply(p1.id)
     await engine.projectMilestoneWrite('练耳日记', 'm1', CARD)
 
     await assert.rejects(engine.projectMilestoneRecall('练耳日记', 'm1'), /没有关联节点/)

@@ -66,8 +66,8 @@ test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔�
     await engine.store.appendReview({ ts: mid(3), course: '*', node: '吉他', qid: 'exec', rating: 4, rating_source: 'execution', event_kind: 'acquisition', exec_source: 'self', elapsed_days: 2, stability_before: 4, difficulty_before: 5, r_pred: 0.7 })
     await engine.store.appendHabitRepeat({ ts: mid(1), habit: '晨间拉伸', day: dayOfTs(mid(1)) })
     await engine.projectCreate({ name: '吉他翻新', goal: 'g' })
-    const prop = await engine.projectPlanPropose('吉他翻新', 'project: 吉他翻新\nplan:\n  - { id: m1, name: 换弦, task_class: 照做, acceptance_hints: 能换弦 }\n')
-    await engine.projectApply(prop.id)
+    const prop = await engine.project.projectPlanPropose('吉他翻新', 'project: 吉他翻新\nplan:\n  - { id: m1, name: 换弦, task_class: 照做, acceptance_hints: 能换弦 }\n')
+    await engine.graph.projectApply(prop.id)
     await engine.store.appendJournal({ ts: mid(4), course: '吉他翻新', node: 'm1', rating: null, kind: 'milestone_settle', elapsed_days: 0, xp: 60, detail: '里程碑「换弦」过点：x' })
 
     const doc = await engine.learner.kataOpen(weekStart)
@@ -186,7 +186,7 @@ starts:
     assert.doesNotMatch(bare.reality, /### 沙盘 ETA/)
 
     // 播种（终点锚在位）→ 打开复盘即旁挂 ETA 摘要
-    const r = await engine.graphPropose('seed', SEED) as { id: number }
+    const r = await engine.graph.graphPropose('seed', SEED) as { id: number }
     await engine.graphApply('seed', r.id)
     const doc = await engine.learner.kataOpen(weekStart)
     assert.match(doc.reality, /### 沙盘 ETA/)

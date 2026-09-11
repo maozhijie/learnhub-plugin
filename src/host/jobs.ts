@@ -208,7 +208,7 @@ export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<n
     if (!p) {
       p = (async (): Promise<Set<string> | null | undefined> => {
         try {
-          const c = await rt.engine.courseByKey(course)
+          const c = await rt.engine.registry.get(course)
           if (!c) return null
           return (await rt.engine.loadView(c)).graph.nset
         } catch {
@@ -645,9 +645,9 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
  * 迁入缝）→ 提案受理（人审后 apply 带快照生效）。受理门在 projectPlanPropose——
  * 计划草案一次成型、无修复轮（修订走提案快照的人审语义，草案不自动重试）。 */
 export async function generateProjectPlan(rt: HostRuntime, id: string): Promise<string> {
-  const prompt = await rt.engine.projectPlanPack(id)
+  const prompt = await rt.engine.project.projectPlanPack(id)
   const yaml = await rt.agent.complete('计划草案', prompt, { effort: 'fast' })
-  const prop = await rt.engine.projectPlanPropose(id, yaml)
+  const prop = await rt.engine.project.projectPlanPropose(id, yaml)
   return `[project-plan] 提案 #${prop.id} 已受理（${prop.initial ? '初次规划' : '计划修订'}：${prop.milestones} 个里程碑）——人审后 learnhub_project_apply 生效（apply 带旧计划快照）。`
 }
 
@@ -656,7 +656,7 @@ export async function generateProjectPlan(rt: HostRuntime, id: string): Promise<
  * 不静默覆盖）。写盘是受理式门：过门即落产物，经 GateVerdict.result 随行交还。 */
 export async function generateProjectMilestone(rt: HostRuntime, id: string, milestoneId: string): Promise<string> {
   const agent = rt.agent
-  const prompt = await rt.engine.projectMilestonePack(id, milestoneId)
+  const prompt = await rt.engine.project.projectMilestonePack(id, milestoneId)
   const write = (md: string) => rt.engine.projectMilestoneWrite(id, milestoneId, md)
   type MilestoneWriteResult = Awaited<ReturnType<typeof write>>
   const round = await agent.gateRepairRound<string, MilestoneWriteResult>('里程碑草案', {
@@ -687,7 +687,7 @@ export async function generateProjectMilestone(rt: HostRuntime, id: string, mile
 export async function resetCourseChain(rt: HostRuntime, ctx: Context, courseKey: string): Promise<{ reset: Awaited<ReturnType<LearnhubEngine['contentReset']>>; queued: number }> {
   const running = [...rt.jobs.genJobs.values()].filter(j => j.course === courseKey && (j.status === 'running' || j.status === 'cancelling'))
   if (running.length) throw new Error(`课程「${courseKey}」有 ${running.length} 个生成任务进行中，先取消或等完成再重生成。`)
-  const c = await rt.engine.resolveCourse(courseKey)
+  const c = await rt.engine.registry.resolve(courseKey)
   const { graph } = await rt.engine.loadView(c)
   const reset = await rt.engine.contentReset(c.name)
   for (const [key, j] of rt.jobs.genJobs.entries()) if (j.course === c.name) rt.jobs.genJobs.delete(key)

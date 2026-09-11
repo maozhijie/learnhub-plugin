@@ -142,7 +142,7 @@ test('执行事件全链：lane 推进 + 复习日志行 + journal XP 行 + stre
     assert.equal(executionXpDetail({ skill: '吉他', source: 'self', kind: 'acquisition', rating: 3, minutes: 25 }), journal[0].detail)
 
     // XP 账本终态：today_xp 含执行 XP、streak 命中（ADR-0019 同账同权）
-    const xp = await h.engine.xpStatus()
+    const xp = await h.engine.sched2.xpStatus()
     assert.equal(xp.today_xp, 25)
     assert.equal(xp.streak, 1)
 

@@ -100,7 +100,7 @@ export async function serveInteractive(rt: HostRuntime, url: URL, res: ServerRes
   // 引用块存「学习中心相对路径」（<课程根>/交互/x.html），兼容 vault 相对（学习中心/…）——归一后再校验
   const rel = raw.startsWith(`${rt.centerRel}/`) ? raw : `${rt.centerRel}/${raw}`
   const courseRoot = rel.slice(rt.centerRel.length + 1).split('/')[0]
-  if (!(await rt.engine.enabledCourses()).some(c => c.root === courseRoot)) {
+  if (!(await rt.engine.registry.enabled()).some(c => c.root === courseRoot)) {
     throw new Error(`interactive 不在任何启用课程的根内: ${courseRoot}`)
   }
   if (!rel.toLowerCase().endsWith('.html')) throw new Error('interactive 只允许 .html')

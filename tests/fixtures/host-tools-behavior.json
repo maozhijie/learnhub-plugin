@@ -647,7 +647,7 @@
   "queued": false,
   "text": "[reject] 提案 #1 已拒绝留痕。",
   "calls": [
-   "graphReject(1,\"1\")"
+   "graph.graphReject(1,\"1\")"
   ]
  },
  {
@@ -1052,7 +1052,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectList()"
+   "project.projectList()"
   ]
  },
  {
@@ -1265,7 +1265,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectApply(1)"
+   "graph.projectApply(1)"
   ]
  },
  {

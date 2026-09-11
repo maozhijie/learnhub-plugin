@@ -155,8 +155,8 @@ test('主链：一条执行事件走完 回流→practice EMA→mastery→2×2 �
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine, paths }) => {
     await engine.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
-    const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
+    await engine.graph.projectApply(p1.id)
 
     const before = await stateOf(engine)
     const mBefore = { 入门: masteryOfFm(before['入门']), 进阶: masteryOfFm(before['进阶']) }
@@ -194,7 +194,7 @@ test('主链：一条执行事件走完 回流→practice EMA→mastery→2×2 �
     assert.equal(line.note, '第一次合练')
 
     // 2×2 象限随证据落位：x=关联节点 mastery 均值(0.24)，y=事件分 EMA(0.8) → 会用而不牢
-    const cross = await engine.projectCrossView('练琴计划')
+    const cross = await engine.project.projectCrossView('练琴计划')
     assert.equal(cross.x.value, 0.24)
     assert.equal(cross.y.value, 0.8)
     assert.equal(cross.quadrant.key, 'applied_shaky')
@@ -213,8 +213,8 @@ test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / �
     notes: { 入门: {}, 平行: {} },
   }, async ({ engine, paths }) => {
     await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
-    const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 平行'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 平行'))
+    await engine.graph.projectApply(p1.id)
 
     // 无 enc 边（#149 行使即回流的节点级修订）：节点照样回流 EMA——stub 语义的底座
     const r = await engine.projectExecLog('练琴计划', { source: 'self', rating: 4, nodes: ['入门', '平行'] })
@@ -232,13 +232,13 @@ test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / �
     assert.equal(JSON.parse(readFileSync(join(paths.projectsDir, '练琴计划', 'exec.jsonl'), 'utf8').trim().split('\n').at(-1)!).nodes.length, 0)
 
     // 评级越界 / 小数 / 未知来源 / 未知节点 fail loud，且不落流
-    const recsBefore = (await engine.projectCrossView('练琴计划')).exec.count
+    const recsBefore = (await engine.project.projectCrossView('练琴计划')).exec.count
     await assert.rejects(engine.projectExecLog('练琴计划', { source: 'self', rating: 5 }), /1-4 的整数/)
     await assert.rejects(engine.projectExecLog('练琴计划', { source: 'self', rating: 2.5 }), /1-4 的整数/)
     await assert.rejects(engine.projectExecLog('练琴计划', { source: 'self', rating: 0 }), /1-4 的整数/)
     await assert.rejects(engine.projectExecLog('练琴计划', { source: 'chat', rating: 3 }), /auto\/self\/ai/)
     await assert.rejects(engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['不存在的节点'] }), /找不到节点/)
-    assert.equal((await engine.projectCrossView('练琴计划')).exec.count, recsBefore, '被拒事件不落流')
+    assert.equal((await engine.project.projectCrossView('练琴计划')).exec.count, recsBefore, '被拒事件不落流')
 
     // auto 来源必须带可观测证据（skills 先例）；带证据走确定性映射
     await assert.rejects(engine.projectExecLog('练琴计划', { source: 'auto', rating: 3 }), /可观测证据/)
@@ -268,11 +268,11 @@ starts:
     block: 入手块
     basis: project
 `
-    const sp = await engine.graphPropose('seed', seedYaml) as { id: number }
+    const sp = await engine.graph.graphPropose('seed', seedYaml) as { id: number }
     await engine.graphApply('seed', sp.id)
     await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
-    const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '数学/弹唱目标, 数学/音阶爬格'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '数学/弹唱目标, 数学/音阶爬格'))
+    await engine.graph.projectApply(p1.id)
 
     // 事件行使「终点 + 一个起点」：两节点间只有粗 pre 占位边（无 enc）
     const r = await engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['数学/弹唱目标', '数学/音阶爬格'] })
@@ -298,21 +298,21 @@ test('入档推荐全链：档内表现攒够 → 推荐升档但不落盘；改
     },
   }, async ({ engine }) => {
     await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
-    const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
+    await engine.graph.projectApply(p1.id)
 
     for (let i = 0; i < 3; i++) {
       await engine.projectExecLog('练琴计划', { source: 'self', rating: 4 })
     }
-    const cross = await engine.projectCrossView('练琴计划')
+    const cross = await engine.project.projectCrossView('练琴计划')
     assert.equal(cross.recommendation.action, 'promote', '档内 3 次 0.95 + 底座 0.97 → 推荐升档')
     assert.equal(cross.recommendation.recommended, '独立')
     // 非对称红线：推荐不落盘——项目档位原样，学习者显式改档才生效
     assert.equal((await engine.projects.load('练琴计划')).tier, '补全')
 
     // 学习者显式改档（既有 projectSetTier 通道）后，档内统计归属切换：新档样本不足 → 维持
-    await engine.projectSetTier('练琴计划', '独立')
-    const cross2 = await engine.projectCrossView('练琴计划')
+    await engine.project.projectSetTier('练琴计划', '独立')
+    const cross2 = await engine.project.projectCrossView('练琴计划')
     assert.equal(cross2.recommendation.current, '独立')
     assert.equal(cross2.recommendation.action, 'hold')
     assert.match(cross2.recommendation.reasons.join('；'), /样本|最高档/)
@@ -327,11 +327,11 @@ test('红线：执行事件零 XP / 零 journal / 零 review-log / 零 practice 
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine, store }) => {
     await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
-    const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
+    await engine.graph.projectApply(p1.id)
 
     const queueBefore = JSON.stringify(await engine.content2.reviewQueue())
-    const xpBefore = JSON.stringify(await engine.xpStatus())
+    const xpBefore = JSON.stringify(await engine.sched2.xpStatus())
     const journalBefore = await store.journalTail(null, 100)
     const reviewBefore = await store.reviewLogAll()
     const practiceBefore = await store.practiceAll()
@@ -339,7 +339,7 @@ test('红线：执行事件零 XP / 零 journal / 零 review-log / 零 practice 
     await engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['入门', '进阶'] })
 
     assert.equal(JSON.stringify(await engine.content2.reviewQueue()), queueBefore, '复习队列不动')
-    assert.equal(JSON.stringify(await engine.xpStatus()), xpBefore, 'XP 账本不动（执行事件零 XP）')
+    assert.equal(JSON.stringify(await engine.sched2.xpStatus()), xpBefore, 'XP 账本不动（执行事件零 XP）')
     assert.equal((await store.journalTail(null, 100)).length, journalBefore.length, 'journal 零写入')
     assert.equal((await store.reviewLogAll()).length, reviewBefore.length, 'review-log 零写入')
     assert.equal((await store.practiceAll()).length, practiceBefore.length, 'practice 流水零写入（回流走节点 frontmatter EMA，非中央流水）')
@@ -353,14 +353,14 @@ test('红线：升档推荐不出现在任何门禁位——gateMilestone/passMi
     notes: { 入门: STRONG, 进阶: STRONG },
   }, async ({ engine, store }) => {
     await engine.projectCreate({ name: '练琴计划', goal: '弹小曲' })
-    const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
+    await engine.graph.projectApply(p1.id)
 
     // 攒出一份「强烈推荐升档」的状态
     for (let i = 0; i < 3; i++) {
       await engine.projectExecLog('练琴计划', { source: 'self', rating: 4 })
     }
-    const cross = await engine.projectCrossView('练琴计划')
+    const cross = await engine.project.projectCrossView('练琴计划')
     assert.equal(cross.recommendation.action, 'promote')
 
     // 门禁位 1：轻量结构门照旧——与推荐无关的失败原样拒绝

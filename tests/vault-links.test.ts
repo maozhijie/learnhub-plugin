@@ -221,14 +221,14 @@ test('扫描排除区：学习中心/点目录/内置目录排除/用户排除�
 test('analyze 建议段：候选映射到图节点（proposal/review 分层 + 行动指引）；未扫描带 hint', async () => {
   await withLinksVault(async ({ engine }) => {
     // 未扫描：空段 + hint（零 schema 破坏——新字段缺省可空）
-    const before = await engine.graphAnalyze('数学') as Record<string, unknown>
+    const before = await engine.graph.graphAnalyze('数学') as Record<string, unknown>
     const beforeSug = before.suggestions as Record<string, unknown>
     assert.deepEqual(beforeSug.vault_link_candidates, [])
     assert.equal((before.vault_links as Record<string, unknown>).scanned_at, null)
     assert.match(String((before.vault_links as Record<string, unknown>).hint), /vault_links_scan/)
 
     await engine.vaultLinksScan()
-    const doc = await engine.graphAnalyze('数学') as Record<string, unknown>
+    const doc = await engine.graph.graphAnalyze('数学') as Record<string, unknown>
     const cands = (doc.suggestions as Record<string, unknown>).vault_link_candidates as Array<Record<string, unknown>>
     assert.equal((doc.vault_links as Record<string, unknown>).scanned_at !== null, true)
     // 全部候选对的两端都映射到图节点（笔记名 = 节点名）
@@ -258,7 +258,7 @@ test('链接先验回填：pre 闭包内成 enrich 单提案（既有 enc 保留
       { a: '未关联', b: '进阶' },
     )
     // 提案内容：覆盖层字段条目挂在 holder=进阶，skill=入门，w 保留，note 可溯源（#140 kind=enrich）
-    const proposals = await engine.graphProposals('pending', 'enrich')
+    const proposals = await engine.graph.graphProposals('pending', 'enrich')
     const prop = proposals.find(p => p.id === r.proposal!.id)
     assert.ok(prop, '提案在 pending 列表')
     assert.equal(prop!.kind, 'enrich')

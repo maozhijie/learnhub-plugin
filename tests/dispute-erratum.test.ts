@@ -68,7 +68,7 @@ test('rekey：新键重判原作答 → 改判对，XP 补记、对错/EMA 修�
     assert.match(note, /practice_ema: 0\.79/)
 
     // XP 读侧净额：原 0 分替换为对题 XP
-    const xp = await engine.xpStatus()
+    const xp = await engine.sched2.xpStatus()
     assert.equal(xp.today_xp, r.xp)
 
     // 勘误流水留痕；原 practice 流水不改写（仍含原判错行）
@@ -132,7 +132,7 @@ test('void：作答作废——XP 净值归零（乱猜罚返还）、attempts�
     assert.match(note, /attempts: 0/)
     assert.match(note, /practice_ema: 0\.7/, 'EMA 逆向一步回到 0.49/0.7')
 
-    const xp = await engine.xpStatus()
+    const xp = await engine.sched2.xpStatus()
     assert.equal(xp.today_xp, 0)
     const stats = await engine.store.attemptStats('数学', '入门')
     assert.equal(stats.attempts, 0, 'attemptStats 读侧按净值剔除')
@@ -149,7 +149,7 @@ test('乱猜判错的 void 返还 −1 XP', async () => {
     const guessed = await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 2)
     assert.equal(guessed.xp, -1)
     await engine.questionDisputeApply('数学', '入门', 'q13', 'void', {})
-    const xp = await engine.xpStatus()
+    const xp = await engine.sched2.xpStatus()
     assert.equal(xp.today_xp, 0, '乱猜 −1 随作废返还')
   })
 })

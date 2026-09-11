@@ -167,7 +167,7 @@ ops:
       - { concept: 概念甲, model: 错法四 }
 `
     await assert.rejects(
-      () => engine.graphPropose('edit', yaml),
+      () => engine.graph.graphPropose('edit', yaml),
       /误解封顶越界: 概念「概念甲」全课程已有 4 条误解（同一概念封顶 3 条）/,
     )
     assert.equal((await engine.store.loadProposals()).length, 0, '拒收不落提案')
@@ -195,7 +195,7 @@ ops:
     misconceptions:
       - { concept: 行变换几何直觉, model: 把行变换当成列变换 }
 `
-    const r = await engine.graphPropose('edit', yaml) as { id: number; warns?: string[] }
+    const r = await engine.graph.graphPropose('edit', yaml) as { id: number; warns?: string[] }
     assert.ok(r.warns?.some(w => /teaches 仅 1 条（窄节点提示/.test(w)), '窄节点提示随受理回执返回')
     assert.ok(r.warns?.some(w => /assumes 仅 2 条/.test(w)))
     await engine.graphApply('edit', r.id)
@@ -220,7 +220,7 @@ ops:
     teaches: { 概念1: 知道, 概念2: 知道, 概念3: 知道, 概念4: 知道, 概念5: 知道, 概念6: 知道, 概念7: 知道, 概念8: 知道, 概念9: 知道 }
     assumes: { 概念A: 知道, 概念B: 知道 }
 `
-    await assert.rejects(() => engine.graphPropose('edit', bad), /teaches 有 9 条（上限 8）/)
+    await assert.rejects(() => engine.graph.graphPropose('edit', bad), /teaches 有 9 条（上限 8）/)
 
     const badTier = `course: 数学
 ops:
@@ -231,7 +231,7 @@ ops:
     pre: []
     teaches: { 概念: 精通 }
 `
-    await assert.rejects(() => engine.graphPropose('edit', badTier), /档位非法 "精通"（允许 知道\/会用\/能教）/)
+    await assert.rejects(() => engine.graph.graphPropose('edit', badTier), /档位非法 "精通"（允许 知道\/会用\/能教）/)
     assert.equal((await engine.store.loadProposals()).length, 0, '负路径不落提案')
   })
 })

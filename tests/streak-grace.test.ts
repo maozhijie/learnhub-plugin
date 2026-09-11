@@ -68,7 +68,7 @@ test('xpStatus：漏一天后 streak 仍累计；grace 随视图暴露；账本�
       kind: 'xp_bonus', elapsed_days: 0, xp: 2,
     })
 
-    const xp = await h.engine.xpStatus()
+    const xp = await h.engine.sched2.xpStatus()
     assert.equal(xp.streak, 2)
     assert.equal(xp.streak_grace_days, XP_STREAK_GRACE_DAYS)
     // 红线：账本口径不变——today_xp 仍 = 该学习日流水 xp 之和（7 + 2），宽容不动账

@@ -75,10 +75,10 @@ test('折叠三读法：latest 最新态 / weekly 按学习周分组 / byConcept
 
 test('追加写：kind/tier/payload 校验 fail loud；正典落 jsonl；legacy 分区随首写落盘', async () => {
   await withVault({}, async ({ engine }) => {
-    await assert.rejects(engine.sedimentAppend('bogus' as never, 'immediate', {}), /非法 kind/)
-    await assert.rejects(engine.sedimentAppend('calibration', 'daily' as never, {}), /非法 tier/)
-    await assert.rejects(engine.sedimentAppend('calibration', 'weekly', 'nope' as never), /payload/)
-    await engine.sedimentAppend('fsrs_params', 'immediate', { parameters: [1, 2, 3] }, ' 概率 ')
+    await assert.rejects(engine.sched2.sedimentAppend('bogus' as never, 'immediate', {}), /非法 kind/)
+    await assert.rejects(engine.sched2.sedimentAppend('calibration', 'daily' as never, {}), /非法 tier/)
+    await assert.rejects(engine.sched2.sedimentAppend('calibration', 'weekly', 'nope' as never), /payload/)
+    await engine.sched2.sedimentAppend('fsrs_params', 'immediate', { parameters: [1, 2, 3] }, ' 概率 ')
     const canon = await readSedimentCanon(engine.paths, nodeVaultFs)
     assert.equal(canon.length, 1)
     assert.equal(canon[0]!.concept, '概率', '概念地址 trim 后落盘')
@@ -88,7 +88,7 @@ test('追加写：kind/tier/payload 校验 fail loud；正典落 jsonl；legacy 
 
 test('legacy 零消费路径：legacy/ 里的事件永不进折叠', async () => {
   await withVault({}, async ({ engine }) => {
-    await engine.sedimentAppend('fsrs_params', 'immediate', { parameters: [1, 2, 3] })
+    await engine.sched2.sedimentAppend('fsrs_params', 'immediate', { parameters: [1, 2, 3] })
     await mkdir(engine.paths.sedimentLegacyDir, { recursive: true })
     const legacyLine = JSON.stringify({ ts: '2020-01-01T00:00:00', kind: 'fsrs_params', tier: 'immediate', payload: { parameters: [9, 9, 9] } })
     await writeFile(join(engine.paths.sedimentLegacyDir, '史前.jsonl'), legacyLine + '\n', 'utf8')
@@ -155,7 +155,7 @@ test('FSRS 正典化：优化写沉淀正典 + 缓存镜像 + 档案投影；删
     assert.equal(r.meta?.baseline_source, 'sediment')
 
     // 正典事件在沉淀（含 meta 可追溯）
-    const fold = await engine.sedimentFold()
+    const fold = await engine.sched2.sedimentFold()
     assert.equal(fold.counts.fsrs_params, 2)
     assert.deepEqual(await latestFsrsParams(engine.paths, nodeVaultFs), trained2)
 
@@ -242,14 +242,14 @@ test('断裂不变性：清空内容层后合成初始化仍取到沉淀先验�
 
 test('学习者档案：纯派生投影，手编被重建覆盖', async () => {
   await withVault({}, async ({ engine }) => {
-    await engine.sedimentAppend('calibration', 'weekly', { week: '2026-09-01', pairs: 2 })
-    const md1 = await engine.sedimentRebuildProfile()
+    await engine.sched2.sedimentAppend('calibration', 'weekly', { week: '2026-09-01', pairs: 2 })
+    const md1 = await engine.sched2.sedimentRebuildProfile()
     assert.match(md1, /校准画像/)
-    const fold = await engine.sedimentFold()
+    const fold = await engine.sched2.sedimentFold()
     assert.equal(md1, renderLearnerProfile(fold, Date.now()), '投影 = 折叠的纯渲染')
 
     await writeFile(engine.paths.learnerProfilePath, '手编内容', 'utf8')
-    const md2 = await engine.sedimentRebuildProfile()
+    const md2 = await engine.sched2.sedimentRebuildProfile()
     assert.equal(md2, md1, '重建覆盖手编')
   })
 })
@@ -271,18 +271,18 @@ test('sedimentSettle：上一完整学习周的校准与速度韧性出生即写
     })
     const r = await engine.sedimentSettle()
     assert.deepEqual(r.wrote.sort(), ['calibration', 'speed_resilience'])
-    const fold = await engine.sedimentFold()
+    const fold = await engine.sched2.sedimentFold()
     assert.equal(fold.weekly.calibration?.[0]?.week, weekOf(week))
     const speed = fold.weekly.speed_resilience?.[0]?.events[0]?.payload as { median_elapsed_s?: number }
     assert.equal(speed.median_elapsed_s, 32.5)
     assert.match(r.profile, /速度韧性/)
 
     // 同周幂等：重复结算不重写正典（kataOpen 每次打开都会触发结算）
-    const before = (await engine.sedimentFold()).counts
+    const before = (await engine.sched2.sedimentFold()).counts
     const r2 = await engine.sedimentSettle()
     assert.deepEqual(r2.wrote, [])
     assert.ok(r2.skipped.every(x => /已结算/.test(x.reason)))
-    const after = await engine.sedimentFold()
+    const after = await engine.sched2.sedimentFold()
     assert.deepEqual(after.counts, before)
   })
 })
@@ -291,15 +291,15 @@ test('sedimentSettle：上一完整学习周的校准与速度韧性出生即写
 
 test('重置与删课：沉淀层波及作为单独确认项显式返回（永不自动删除）', async () => {
   await withVault({ notes: { 入门: {} }, banks: { 入门: [tfQuestion('q1', {})] } }, async ({ engine }) => {
-    await engine.sedimentAppend('fsrs_params', 'immediate', { parameters: [1] })
+    await engine.sched2.sedimentAppend('fsrs_params', 'immediate', { parameters: [1] })
     const reset = await engine.contentReset('数学')
     assert.match(reset.sediment, /沉淀层不受影响/)
-    const fold1 = await engine.sedimentFold()
+    const fold1 = await engine.sched2.sedimentFold()
     assert.equal(fold1.counts.fsrs_params, 1, '重置不伤沉淀')
 
     const del = await engine.courseDelete('数学')
     assert.match(del.sediment, /沉淀层不受影响|存活/)
-    const fold2 = await engine.sedimentFold()
+    const fold2 = await engine.sched2.sedimentFold()
     assert.equal(fold2.counts.fsrs_params, 1, '删课不伤沉淀')
   })
 })

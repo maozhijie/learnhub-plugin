@@ -273,8 +273,8 @@ test('单边 apply 守卫（apply 时序缺口回归钉）：pair 在场时计�
     await projectOf(engine)
     const r = await engine.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
     // 计划先 apply = 计划引用悬空节点炸消费面——守卫拒收并指向联合入口
-    await assert.rejects(engine.projectApply(r.plan_proposal.id), /同进同退/)
-    await assert.rejects(engine.projectApply(r.plan_proposal.id), /decompile_apply/)
+    await assert.rejects(engine.graph.projectApply(r.plan_proposal.id), /同进同退/)
+    await assert.rejects(engine.graph.projectApply(r.plan_proposal.id), /decompile_apply/)
     await assert.rejects(engine.graphApply('seed', r.seed_proposal!.id), /同进同退/)
     // 两提案都还 pending（守卫发生在任何写盘前）
     const list = await engine.store.loadProposals()
@@ -313,7 +313,7 @@ test('reject 联动：任一半区被拒，pending 的另一半同退', async ()
   await withVault(DECOMPILE_VAULT, async ({ engine }) => {
     await projectOf(engine)
     const r = await engine.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
-    await engine.graphReject(r.pair.plan, '不想要这个方向')
+    await engine.graph.graphReject(r.pair.plan, '不想要这个方向')
     const list = await engine.store.loadProposals()
     const plan = list.find(p => p.id === r.pair.plan)!
     const seed = list.find(p => p.id === r.pair.seed)!
@@ -352,7 +352,7 @@ plan:
     assert.equal(list.filter(p => p.status === 'pending').length, 1, '只落计划提案')
     assert.equal(list[0]!.pair, undefined, '单提案无 pair 联动')
     // 修订通道照常：apply 带 diff 触发面在 project-domain 测
-    const applied = await engine.projectApply(r.plan_proposal.id)
+    const applied = await engine.graph.projectApply(r.plan_proposal.id)
     assert.equal(applied.kind, 'project_plan')
   })
 })

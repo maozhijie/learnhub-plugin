@@ -130,7 +130,7 @@ test('memoryHealth：校准配对足门槛后呈现（jol 字段），不足为 
     notes: { 入门: { stage: 'review' } },
     banks: { 入门: [tfQuestion('q1', DUE_TF), tfQuestion('q2', DUE_TF), tfQuestion('q3', DUE_TF)] },
   }, async ({ engine }) => {
-    const empty = await engine.memoryHealth() as { jol: unknown }
+    const empty = await engine.sched2.memoryHealth() as { jol: unknown }
     assert.equal(empty.jol, null, '无配对不显示（空态不造假）')
     for (let i = 0; i < 10; i++) {
       await engine.store.appendPractice({
@@ -138,7 +138,7 @@ test('memoryHealth：校准配对足门槛后呈现（jol 字段），不足为 
         judge: 'true_false', qid: 'q1', predicted: i < 5 ? '会' : '不会',
       })
     }
-    const full = await engine.memoryHealth() as { jol: { pairs: number; bins: Array<{ label: string; n: number }> } | null }
+    const full = await engine.sched2.memoryHealth() as { jol: { pairs: number; bins: Array<{ label: string; n: number }> } | null }
     assert.ok(full.jol, '10 条配对后呈现')
     assert.equal(full.jol!.pairs, 10)
     assert.equal(full.jol!.bins.length, 3)

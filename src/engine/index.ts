@@ -28,21 +28,17 @@ import type { FSRS} from 'ts-fsrs'
 import type { BandPref} from './adaptive.ts'
 import type { JolPrediction} from './jol.ts'
 import { LabSubsystem} from './nof1.ts'
-import type { Nof1Template, Nof1Variable, ExperimentDef, Nof1Analysis} from './nof1.ts'
-import type { ThermostatDoc} from './thermostat.ts'
+import type { Nof1Variable, ExperimentDef, Nof1Analysis} from './nof1.ts'
 import type { SandboxDoc, SandboxCard, SandboxCurvePoint, SandboxNode, SandboxPlan} from './sandbox.ts'
-import type { KataAnswer} from './kata.ts'
 import type { BandRec} from './coach.ts'
 import type { AdviceDismissRec} from './bank-advice.ts'
 import { bindingImpl} from './optimize.ts'
 import type { OptimizerImpl} from './optimize.ts'
 import { sectionEntryOf} from './attribution.ts'
 import { diagnosticView} from './attribution.ts'
-import type { DiagnosticItem} from './attribution.ts'
 import { runAudit} from './audit.ts'
 import { Content} from './content.ts'
 import { ContentSubsystem} from './content-subsystem.ts'
-import type { ComplexityTier} from './complexity.ts'
 import { GraphProposals} from './proposals.ts'
 import type { ApplyAudit, EditProposalSpec} from './proposals.ts'
 import type { LlmComplete} from './llm.ts'
@@ -64,7 +60,7 @@ export type { GateVerdict } from './agent.ts'
 export type { SeedDraftRequest } from './seed.ts'
 import type { ProbationOutcome, ProbationCourseView, RecheckMetric} from './probation.ts'
 import { QuestionBank, validateBank, BankSubsystem} from './question-bank.ts'
-import type { BankDoc, BankQuestion} from './question-bank.ts'
+import type { BankQuestion} from './question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem} from './note-source.ts'
 import { LearnerCards, LearnerSubsystem} from './learner-cards.ts'
 import type { LearnerCard} from './learner-cards.ts'
@@ -78,10 +74,8 @@ import type { GoalIntentionInput} from './goals.ts'
 import type { ReceiptLogRec, ReceiptKind, ReceiptSubmitResult} from './receipts.ts'
 import { AnkiMirror} from './anki.ts'
 import type { AnkiTransport} from './anki.ts'
-import type { ExplainPoint} from './explain.ts'
 import { YAML} from './yaml.ts'
 import { Sessions} from './sessions.ts'
-import type { NodeStat, WindowStat} from './sessions.ts'
 import { todayStr, nowIsoOf, fmtCutoff} from './dates.ts'
 import { atomicWrite} from './io.ts'
 import { assertSchemaVersion} from './schema.ts'
@@ -96,16 +90,15 @@ import { dataCheck} from './data-check.ts'
 import type { DataCheckReport} from './data-check.ts'
 import type { ProposalRec} from './types.ts'
 import type {
-  AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DisputeApplyResult, DisputeReviewResult, DoctorDoc, 
+  AnswerResult, DisputeApplyResult, DoctorDoc, 
   ExperimentStartResult, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
-  GraphProposeResult, CalibrationProfileDoc, LearnerArchiveResult, LearnerForgetResult, LearnerQueueDoc,
-  LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, 
-  ErrorArchiveResult, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc, ErrorAnswerResult,
-  NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
-  QuestionsAllDoc, QuestionsDoc, QueueItem, QuestionItem, RecommendDoc, ReviewCard, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
-  XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, 
-  KataDoc, CleanupPreviewDoc,
+  GraphProposeResult, 
+  MemoryHealthDoc, 
+  ErrorGenerateResult, 
+  
+  QuestionItem, RecommendDoc, ReviewCard, StatusDoc, 
+  XpStatus, ProjectCrossDoc, ProjectExecResult,
 } from './views.ts'
 
 /** 宿主取值走门面（D14 收口，#152 刀 1 / ADR-0042）：re-export 门只供应纯函数、

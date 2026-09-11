@@ -31,7 +31,7 @@ async function rawVault(files: Record<string, string>): Promise<string> {
 test('硬门：v2 库正常构造，schema 块随引擎可读', async () => {
   await withVault({}, async ({ engine }) => {
     assert.equal(engine.schema.version, 2)
-    await engine.enabledCourses() // 一切方法照常
+    await engine.registry.enabled() // 一切方法照常
   })
 })
 

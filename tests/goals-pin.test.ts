@@ -217,6 +217,6 @@ test('红线：pin/意图写入零 canonical 触碰（Learner Output，ADR-0009�
     await engine.setGoalIntention('数学', '导数', null, '2026-09-08')
     assert.equal((await engine.store.journalTail()).length, 0)
     assert.equal((await engine.store.practiceAll()).length, 0)
-    assert.equal((await engine.xpStatus()).today_xp, 0)
+    assert.equal((await engine.sched2.xpStatus()).today_xp, 0)
   })
 })

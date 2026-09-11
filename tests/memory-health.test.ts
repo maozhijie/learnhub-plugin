@@ -99,7 +99,7 @@ test('memoryHealth：预报/分布立刻有数且与 reviewQueue 扫描口径一
       rec({ ts: '2026-09-03T10:00:00', qid: 'a3', rating: 3, rating_source: 'synthetic', stability_before: null, difficulty_before: null, r_pred: null }),
     ].map(l => JSON.stringify(l)),
   }, async ({ engine }) => {
-    const m = await engine.memoryHealth() as {
+    const m = await engine.sched2.memoryHealth() as {
       forecast: { overdue: number; per_day: Array<{ d: string; count: number }> }
       state: { scheduled: number; stability: Array<{ label: string; count: number }> }
       retention: { pass: number; fail: number; rate: number | null; real: number }
@@ -134,7 +134,7 @@ test('memoryHealth：预报/分布立刻有数且与 reviewQueue 扫描口径一
 
 test('memoryHealth 空态：无题库无日志 → 全零计数与 rate=null，不造假数据', async () => {
   await withVault({ notes: { 入门: { stage: 'review' } } }, async ({ engine }) => {
-    const m = await engine.memoryHealth() as {
+    const m = await engine.sched2.memoryHealth() as {
       state: { scheduled: number }
       retention: { real: number; rate: number | null }
       calibration: Array<{ n: number; actual: number | null }>

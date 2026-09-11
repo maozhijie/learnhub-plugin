@@ -18,8 +18,8 @@ const VALID = [
 
 test('#6 missing registry remains a legal empty course list', async () => {
   await withRegistry(null, async engine => {
-    assert.deepEqual(await engine.enabledCourses(), [])
-    await assert.rejects(() => engine.resolveCourse(), /没有启用中的课程/)
+    assert.deepEqual(await engine.registry.enabled(), [])
+    await assert.rejects(() => engine.registry.resolve(), /没有启用中的课程/)
   })
 })
 
@@ -44,7 +44,7 @@ test('#6 valid registry loads all entries in order', async () => {
 
 test('#6 malformed registry YAML fails loudly instead of becoming an empty list', async () => {
   await withRegistry('courses:\n  - name: "数学\n', async engine => {
-    await assert.rejects(() => engine.enabledCourses(), /注册表 Broken.*YAML 无法解析/s)
+    await assert.rejects(() => engine.registry.enabled(), /注册表 Broken.*YAML 无法解析/s)
   })
 })
 
@@ -61,7 +61,7 @@ test('#6 registry failing top-level or entry contract throws with reasons', asyn
   ]
   for (const [yaml, pattern] of cases) {
     await withRegistry(yaml, async engine => {
-      await assert.rejects(() => engine.enabledCourses(), pattern, `registry:\n${yaml}`)
+      await assert.rejects(() => engine.registry.enabled(), pattern, `registry:\n${yaml}`)
     })
   }
 })

@@ -135,7 +135,7 @@ test('红线：习惯域全路径零 canonical 写入（journal/practice/review-
     assert.equal((await h.store.journalTail()).length, 0)
     assert.equal((await h.store.practiceAll()).length, 0)
     assert.equal((await h.store.reviewLogAll()).length, 0)
-    const xp = await h.engine.xpStatus()
+    const xp = await h.engine.sched2.xpStatus()
     assert.equal(xp.today_xp, 0)
     assert.equal(xp.streak, 0)
     // 实体零 FSRS 语义：习惯 YAML 无 fsrs/stats 字段（错配表：R/S/D 在习惯域无定义）

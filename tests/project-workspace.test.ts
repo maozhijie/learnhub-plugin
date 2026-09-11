@@ -46,7 +46,7 @@ const REVIEW_LLM = async (): Promise<string> => JSON.stringify({
 /** 建项目 + 计划（关联节点「练琴」）+ apply。 */
 async function seedProject(engine: import('../src/engine/index.ts').LearnhubEngine, nodes: string[] | undefined): Promise<void> {
   await engine.projectCreate({ name: '吉他翻新', goal: '半年内能完整弹一首曲子' })
-  const prop = await engine.projectPlanPropose('吉他翻新', [
+  const prop = await engine.project.projectPlanPropose('吉他翻新', [
     'project: 吉他翻新',
     'plan:',
     '  - id: m1',
@@ -55,7 +55,7 @@ async function seedProject(engine: import('../src/engine/index.ts').LearnhubEngi
     '    acceptance_hints: 能独立完成换弦',
     ...(nodes ? [`    nodes: [${nodes.map(n => JSON.stringify(n)).join(', ')}]`] : []),
   ].join('\n') + '\n')
-  await engine.projectApply(prop.id)
+  await engine.graph.projectApply(prop.id)
 }
 
 test('#113 项目日志：追加带学习日条目、文件头只落一次、未写过 = null 合法空态', async () => {

@@ -237,7 +237,7 @@ test('graphEncBackfill：Ready 节点补 enc 提案，apply 后覆盖销号，�
     const before = await auditOf(engine)
     assert.ok(before.warns.some(w => /R14 enc 覆盖缺口.*乙/.test(w)), '审计报出覆盖缺口')
 
-    const r = await engine.graphEncBackfill('数学') as Record<string, unknown>
+    const r = await engine.graph.graphEncBackfill('数学') as Record<string, unknown>
     assert.equal(r.scanned, 1, '只有乙有 Ready 内容 + 候选')
     assert.equal(r.ops, 1)
     const prop = r.proposal as { id: number; kind: string }
@@ -252,7 +252,7 @@ test('graphEncBackfill：Ready 节点补 enc 提案，apply 后覆盖销号，�
     assert.ok(!after.warns.some(w => /R14 enc 覆盖缺口.*乙/.test(w)), '补 enc 后覆盖缺口销号')
 
     // 可重入：重跑不再产生 op
-    const again = await engine.graphEncBackfill('数学') as Record<string, unknown>
+    const again = await engine.graph.graphEncBackfill('数学') as Record<string, unknown>
     assert.equal(again.ops, 0)
   })
 })
@@ -266,7 +266,7 @@ test('graphEncBackfill：无反哺候选 → ops=0 且不产生提案', async ()
       NOTE_乙.replace('<!-- enc_candidates: [甲] -->', ''),
       'utf8',
     )
-    const r = await engine.graphEncBackfill('数学') as Record<string, unknown>
+    const r = await engine.graph.graphEncBackfill('数学') as Record<string, unknown>
     assert.equal(r.ops, 0)
     assert.equal(r.proposal, null)
   })
@@ -304,7 +304,7 @@ test('graphEncBackfill：invokes 投影出生权重随 enrich 提案回填（#14
     banks: { 乙: BANK_乙 },
   }, async ({ engine }) => {
     // 无正文候选、有 invokes 投影 → 仍产生回填条目（投影是独立生产者）
-    const r = await engine.graphEncBackfill('数学') as Record<string, unknown>
+    const r = await engine.graph.graphEncBackfill('数学') as Record<string, unknown>
     assert.equal(r.scanned, 1)
     assert.equal(r.ops, 1)
     const prop = r.proposal as { id: number; kind: string }
@@ -323,7 +323,7 @@ test('graphEncBackfill：invokes 投影出生权重随 enrich 提案回填（#14
     assert.equal(edge.note, 'invokes 投影 1/1')
 
     // 可重入：已声明 → ops=0
-    const again = await engine.graphEncBackfill('数学') as Record<string, unknown>
+    const again = await engine.graph.graphEncBackfill('数学') as Record<string, unknown>
     assert.equal(again.ops, 0)
   })
 })

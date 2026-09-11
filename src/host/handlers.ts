@@ -74,7 +74,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     sendJson(res, 200, await apiRun(rt, 'api/status', async () => ({ ...(await rt.engine.statusJson()), llm: llmView() })))
   },
   'GET /courses': async ({ rt, res }) => {
-    const list = (await rt.engine.enabledCourses()).map(c => ({
+    const list = (await rt.engine.registry.enabled()).map(c => ({
       name: c.name, root: c.root, enabled: String(c.enabled !== false),
     }))
     sendJson(res, 200, list)
@@ -101,7 +101,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'GET /graph': async ({ rt, url, res }) => {
     const elementsOnly = url.searchParams.get('elements') === '1'
-    sendJson(res, 200, await apiRun(rt, 'api/graph', () => rt.engine.graphAnalyze(optQuery(url, 'course'), elementsOnly)))
+    sendJson(res, 200, await apiRun(rt, 'api/graph', () => rt.engine.graph.graphAnalyze(optQuery(url, 'course'), elementsOnly)))
   },
   'GET /review-queue': async ({ rt, url, res }) => {
     // 复习刷卡队列：跨课程到期题扁平队列，按预测遗忘风险 R 升序为主（r 字段随卡带出，#56）；
@@ -238,7 +238,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 提案统一 apply（图谱域 edit/seed/enrich + 项目域 project_plan/project_milestone）：
     // kind 必须显式照抄提案记录，未知 kind 引擎报错；
     // 计划修订触发的换线/补支生长批随后入队（#149）
-    const applied = await rt.engine.proposalApply(need(body, 'kind'), applyId(body.id))
+    const applied = await rt.engine.graph.proposalApply(need(body, 'kind'), applyId(body.id))
     // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
     await sweepGenJobs(rt)
     triggerPlanGrowth(rt, ctx, applied as { kind?: string })
@@ -246,7 +246,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /proposals/reject': async ({ rt, body, res }) => {
     const id = rejectId(body.id)
-    await rt.engine.graphReject(id, optString(body, 'note').trim())
+    await rt.engine.graph.graphReject(id, optString(body, 'note').trim())
     sendJson(res, 200, { message: `[reject] 提案 #${id} 已拒绝留痕。` })
   },
   'POST /experiments/apply': async ({ rt, body, res }) => {

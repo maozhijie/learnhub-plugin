@@ -72,7 +72,7 @@ function insertionYaml(opts: {
 
 /** 插入批受理：propose + apply（返回 apply 结果）。 */
 async function applyInsertion(engine: Awaited<ReturnType<typeof withVault>>['engine'], yaml: string): Promise<Record<string, unknown>> {
-  const prop = await engine.graphPropose('edit', yaml) as { id: number }
+  const prop = await engine.graph.graphPropose('edit', yaml) as { id: number }
   return await engine.graphApply('edit', prop.id) as Record<string, unknown>
 }
 
@@ -328,7 +328,7 @@ test('AC1 插入批受理：预注册随提案落字、apply 同事务落账本�
   await withVault({ graph: TWO_NODE_GRAPH }, async ({ engine, paths }) => {
     // 学习日底座（三率滚动窗的取材域；登记日 = 今天在窗内）
     for (let d = -2; d <= 0; d++) await engine.store.appendPractice(pRec(d, '入门'))
-    const prop = await engine.graphPropose('edit', insertionYaml({ days: '100', withConcept: true })) as { id: number; recheck?: unknown }
+    const prop = await engine.graph.graphPropose('edit', insertionYaml({ days: '100', withConcept: true })) as { id: number; recheck?: unknown }
     assert.ok(((prop as { warns?: string[] }).warns ?? []).some(w => w.includes('clamp')), 'clamp 落受理回执 warn')
     const applied = await engine.graphApply('edit', prop.id) as Record<string, unknown>
     assert.deepEqual(applied.probation_registered, ['过渡'])
@@ -362,18 +362,18 @@ test('AC1 插入批受理：预注册随提案落字、apply 同事务落账本�
 test('预注册负路径：插入批缺预注册/非插入批携带/非法 metric 一律拒收，零账本零提案', async () => {
   await withVault({ graph: TWO_NODE_GRAPH }, async ({ engine, paths }) => {
     await assert.rejects(
-      () => engine.graphPropose('edit', insertionYaml({ recheck: false })),
+      () => engine.graph.graphPropose('edit', insertionYaml({ recheck: false })),
       /note\.recheck: 插入批必须预注册复诊/,
       '插入批（有 add_node）必须预注册——零人审结算的判据前提')
     await assert.rejects(
-      () => engine.graphPropose('edit', insertionYaml({ operator: '前进' })),
+      () => engine.graph.graphPropose('edit', insertionYaml({ operator: '前进' })),
       /复诊预注册只随插入批携带/,
       '前进批没有可登记的插入边')
     await assert.rejects(
-      () => engine.graphPropose('edit', insertionYaml({ metric: '疗效验证' })),
+      () => engine.graph.graphPropose('edit', insertionYaml({ metric: '疗效验证' })),
       /metric/)
     // 拒收零落盘：无提案、无账本
-    assert.equal((await engine.graphProposals()).length, 0)
+    assert.equal((await engine.graph.graphProposals()).length, 0)
     assert.deepEqual(await readProbationLedger(paths, 'math', nodeVaultFs), [])
   })
 })
@@ -425,7 +425,7 @@ test('AC2 行使闸：probation 在途行使只记流不回流（EMA/计数不�
     assert.match(liftedFm, /practice_ema: 0/, '答错 = 0 分入 EMA')
 
     // 沉淀正典：recheck_outcome 按概念地址书写（过渡概念 随批铸名）
-    const fold = await engine.sedimentFold()
+    const fold = await engine.sched2.sedimentFold()
     assert.equal(fold.counts.recheck_outcome, 1)
     assert.equal(fold.byConcept.recheck_outcome!['过渡概念']!.payload.outcome, 'proven')
   })
@@ -475,7 +475,7 @@ test('AC1 到期结算·自动剪除：不达标 del_node 归档 + 原粗边恢�
     const journal = await readFile(paths.journalPath, 'utf8')
     assert.match(journal, /probation_settle/)
     assert.match(journal, new RegExp(`"session":"${ledger[0]!.proposal}"`))
-    const appliedProps = await engine.graphProposals('applied', 'edit')
+    const appliedProps = await engine.graph.graphProposals('applied', 'edit')
     assert.ok(appliedProps.some(p => p.id === settlePid && (p.decision_note ?? '').includes('快照')))
 
     // 幂等：再次结算无在途可决
@@ -548,26 +548,26 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
     assert.match(view.courses[0]!.gate.insert_blocks.join(''), /复诊通过率/)
 
     await assert.rejects(
-      () => engine.graphPropose('edit', [
+      () => engine.graph.graphPropose('edit', [
         'course: 数学', 'note:', '  operator: 插入', '  reason: 再插一节', '  recheck:', '    metric: 前进恢复', '    days: 5', 'ops:',
         '  - op: add_node', '    name: 过渡二号', '    region: 基础', '    block: 入门块', '    pre: [入门]',
       ].join('\n') + '\n'),
       /生长闸门拒绝受理[\s\S]*复诊通过率/,
       '超速插入批在受理门就被拒收（构造超限场景验证调速）')
     // 前进批不受闸（route 不携带——未播种课程没有罗盘重写通道，与本票无关）
-    const fwd = await engine.graphPropose('edit', [
+    const fwd = await engine.graph.graphPropose('edit', [
       'course: 数学', 'note:', '  operator: 前进', '  reason: 主线推进', 'ops:',
       '  - op: add_node', '    name: 前进节点', '    region: 基础', '    block: 入门块', '    pre: [入门]',
     ].join('\n') + '\n') as { id: number }
     assert.ok(fwd.id > 0)
-    await engine.graphReject(fwd.id)
+    await engine.graph.graphReject(fwd.id)
     // 旁支 1 节：占比 1/8 = 12.5% ≤ 20% → 放行
-    const side = await engine.graphPropose('edit', [
+    const side = await engine.graph.graphPropose('edit', [
       'course: 数学', 'note:', '  operator: 旁支', '  reason: 教学消费支线', 'ops:',
       '  - op: add_node', '    name: 旁支节点', '    region: 基础', '    block: 入门块', '    pre: [入门]',
     ].join('\n') + '\n') as { id: number }
     assert.ok(side.id > 0)
-    await engine.graphReject(side.id)
+    await engine.graph.graphReject(side.id)
   })
 })
 
@@ -601,7 +601,7 @@ test('结算只遍历折叠后的在途条目：已决 (proposal,node) 的裁决
     assert.equal(byProposal.get(ledger[0]!.proposal), 2, 'A 恰登记+裁决各一行')
     const provenLines = ledger.filter(e => e.outcome === 'proven')
     assert.equal(provenLines.length, 1, 'proven 恰一条（无重复结算刷正典）')
-    const fold = await engine.sedimentFold()
+    const fold = await engine.sched2.sedimentFold()
     assert.equal(fold.counts.recheck_outcome, 2, '沉淀恰 A+B 两条复诊结局')
   })
 })

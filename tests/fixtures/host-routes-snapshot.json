@@ -24,7 +24,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "enabledCourses()"
+   "registry.enabled()"
   ]
  },
  {
@@ -236,7 +236,7 @@
    "error": "interactive 不在任何启用课程的根内: 1"
   },
   "calls": [
-   "enabledCourses()"
+   "registry.enabled()"
   ]
  },
  {
@@ -286,7 +286,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "graphAnalyze(undefined,false)"
+   "graph.graphAnalyze(undefined,false)"
   ]
  },
  {
@@ -296,7 +296,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "graphAnalyze(\"1\",true)"
+   "graph.graphAnalyze(\"1\",true)"
   ]
  },
  {
@@ -306,7 +306,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "graphAnalyze(undefined,true)"
+   "graph.graphAnalyze(undefined,true)"
   ]
  },
  {
@@ -316,7 +316,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "graphAnalyze(\"1\",false)"
+   "graph.graphAnalyze(\"1\",false)"
   ]
  },
  {
@@ -1728,7 +1728,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "proposalApply(\"1\",undefined)"
+   "graph.proposalApply(\"1\",undefined)"
   ]
  },
  {
@@ -2231,7 +2231,7 @@
    "error": "Cannot read properties of undefined (reading 'order')"
   },
   "calls": [
-   "resolveCourse(\"1\")",
+   "registry.resolve(\"1\")",
    "loadView([])",
    "contentReset(undefined)",
    "saveGenJobs([])"
@@ -5511,7 +5511,7 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
-   "projectPlanPack(\"1\")",
+   "project.projectPlanPack(\"1\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "coachCheckpoint(\"queue_idle\",undefined)"
@@ -5555,7 +5555,7 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
-   "projectMilestonePack(\"1\",\"1\")",
+   "project.projectMilestonePack(\"1\",\"1\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "coachCheckpoint(\"queue_idle\",undefined)"

@@ -51,14 +51,14 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         ? await rt.engine.sleepAdviceConfig()
         : await rt.engine.setSleepAdviceConfig({ enabled: args.enabled }))),
   'learnhub_graph_propose': (args: { kind: string; yaml: string }) => run(rt, 'learnhub_graph_propose', async () =>
-      JSON.stringify(await rt.engine.graphPropose(graphKind(args.kind), args.yaml))),
+      JSON.stringify(await rt.engine.graph.graphPropose(graphKind(args.kind), args.yaml))),
   'learnhub_vault_links_scan': () => run(rt, 'learnhub_vault_links_scan', async () =>
       JSON.stringify(await rt.engine.vaultLinksScan())),
   'learnhub_graph_apply': async (args: { kind: string; id?: number; reject?: boolean; note?: string }) =>
       run(rt, 'learnhub_graph_apply', async () => {
         if (args.reject) {
           const id = rejectId(args.id)
-          await rt.engine.graphReject(id, args.note ?? '')
+          await rt.engine.graph.graphReject(id, args.note ?? '')
           return `[reject] 提案 #${id} 已拒绝留痕。`
         }
         const r = await rt.engine.graphApply(graphKind(args.kind), applyId(args.id))
@@ -110,12 +110,12 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         name: args.name, goal: args.goal,
         ...(args.tier !== undefined ? { tier: args.tier as never } : {}),
       }))),
-  'learnhub_project_list': () => run(rt, 'learnhub_project_list', async () => JSON.stringify(await rt.engine.projectList())),
+  'learnhub_project_list': () => run(rt, 'learnhub_project_list', async () => JSON.stringify(await rt.engine.project.projectList())),
   'learnhub_project_plan_generate': (args: { id: string }) => run(rt, 'learnhub_project_plan_generate', () => generateProjectPlan(rt, args.id)),
   'learnhub_project_milestone_generate': (args: { id: string; milestone: string }) => run(rt, 'learnhub_project_milestone_generate', () =>
       generateProjectMilestone(rt, args.id, args.milestone)),
   'learnhub_project_apply': (args: { id: number }) => run(rt, 'learnhub_project_apply', async () => {
-      const result = await rt.engine.projectApply(args.id)
+      const result = await rt.engine.graph.projectApply(args.id)
       triggerPlanGrowth(rt, ctx, result)
       return JSON.stringify(result)
     }),

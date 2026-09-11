@@ -69,14 +69,14 @@ test('#7 malformed core state is Broken: targeted operations fail with location/
     await assert.rejects(() => engine.nodeComplete('数学', '入门'), /节点笔记 Broken/s)
     await assert.rejects(() => engine.statusJson(), /状态 Broken/s)
     await assert.rejects(() => engine.recommend(), /状态 Broken/s)
-    await assert.rejects(() => engine.xpStatus(), /状态 Broken/s)
+    await assert.rejects(() => engine.sched2.xpStatus(), /状态 Broken/s)
   })
 })
 
 test('#7 pure graph browsing still works and exposes broken_notes explicitly', async () => {
   const note = frontmatter({ stage: 'sometimes' })
   await withVault({ notes: { 入门: `${note}\n` } }, async ({ engine }) => {
-    const doc = await engine.graphBrowse('数学')
+    const doc = await engine.graph.graphBrowse('数学')
     assert.equal(doc.total, 1)
     assert.equal(doc.broken_notes.length, 1)
     assert.equal(doc.broken_notes[0].node, '入门')

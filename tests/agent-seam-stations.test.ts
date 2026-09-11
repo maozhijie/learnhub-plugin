@@ -55,8 +55,8 @@ function scriptedSeam(rt: HostRuntime, replies: string[]) {
 test('计划草案站经缝：剥围栏在缝里完成（受理拿到净 YAML）、fast 档可观测', async () => {
   const rt = makeRuntime()
   const calls: Array<{ id: string; yaml: string }> = []
-  rt.engine.projectPlanPack = async () => '计划提示词包'
-  rt.engine.projectPlanPropose = (async (id: string, yaml: string) => {
+  rt.engine.project.projectPlanPack = async () => '计划提示词包'
+  rt.engine.project.projectPlanPropose = (async (id: string, yaml: string) => {
     calls.push({ id, yaml })
     return { id: 7, initial: true, milestones: 2 }
   }) as never
@@ -75,8 +75,8 @@ test('计划草案站经缝：剥围栏在缝里完成（受理拿到净 YAML）
 test('里程碑草案站经缝：轻量结构门未过恰回灌重产一次（修复轮 deep）；仍败带原样门错误与错误码', async () => {
   const rt = makeRuntime()
   const writes: string[] = []
-  rt.engine.projectMilestonePack = async () => '里程碑任务卡提示词包'
-  rt.engine.projectMilestoneWrite = (async (_id: string, _m: string, md: string) => {
+  rt.engine.project.projectMilestonePack = async () => '里程碑任务卡提示词包'
+  rt.engine.project.projectMilestoneWrite = (async (_id: string, _m: string, md: string) => {
     writes.push(md)
     if (writes.length === 1) {
       const e: Error & { code?: string } = new Error('[project-milestone] 轻量结构门未过：缺验收清单')
@@ -100,8 +100,8 @@ test('里程碑草案站经缝：轻量结构门未过恰回灌重产一次（�
 
   // 修复轮仍败：SEED 同款——错误原样抛出（与旧直抛形态同文案同码）
   const rt2 = makeRuntime()
-  rt2.engine.projectMilestonePack = async () => '包'
-  rt2.engine.projectMilestoneWrite = (async () => {
+  rt2.engine.project.projectMilestonePack = async () => '包'
+  rt2.engine.project.projectMilestoneWrite = (async () => {
     const e: Error & { code?: string } = new Error('[project-milestone] 轻量结构门未过：仍缺验收清单')
     e.code = 'MILESTONE_GATE_FAILED'
     throw e

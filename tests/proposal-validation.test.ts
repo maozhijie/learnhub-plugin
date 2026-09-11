@@ -8,7 +8,7 @@ import { YAML } from '../src/engine/yaml.ts'
 test('未知提案 kind：受理门统一拒收且不落提案', async () => {
   await withVault({ registry: null, graph: null, tag: 'learnhub-unknown-kind-' }, async ({ engine }) => {
     await assert.rejects(
-      engine.graphPropose('skeleton' as never, 'course: 校验课\nops: []\n'),
+      engine.graph.graphPropose('skeleton' as never, 'course: 校验课\nops: []\n'),
       /非法 kind/,
     )
     await assert.rejects(
@@ -32,7 +32,7 @@ ops:
     est: 10
 `
     await assert.rejects(
-      engine.graphPropose('edit', wrongEditKey),
+      engine.graph.graphPropose('edit', wrongEditKey),
       /op=add_node 不接受 node 键（键名已统一到 name/,
     )
     // 非 add_node 的 op 用 node 引用既有节点；误写 name 一律 fail loud（不容双写）
@@ -42,7 +42,7 @@ ops:
     name: 前置技能
 `
     await assert.rejects(
-      engine.graphPropose('edit', misplacedName),
+      engine.graph.graphPropose('edit', misplacedName),
       /op=del_node 不接受 name 键（name 只用于 add_node 定义新节点/,
     )
   })
@@ -130,7 +130,7 @@ starts:
     block: 入门
     teaches: {变化率: 会用}
 `
-    const seeded = await engine.graphPropose('seed', seed) as { id: number }
+    const seeded = await engine.graph.graphPropose('seed', seed) as { id: number }
     await engine.graphApply('seed', seeded.id)
     const consolidate = (teaches: string, extraConcepts = ''): string => `course: 校验课
 note:
@@ -145,15 +145,15 @@ ops:
     teaches: {${teaches}}
 ${extraConcepts}`
     await assert.rejects(
-      () => engine.graphPropose('edit', consolidate('极限: 知道', 'concepts:\n  - canonical: 极限\n')),
+      () => engine.graph.graphPropose('edit', consolidate('极限: 知道', 'concepts:\n  - canonical: 极限\n')),
       /巩固门|只引已教概念/,
       '随批铸名 ≠ 已教——巩固节点引新概念拒收',
     )
-    const ok = await engine.graphPropose('edit', consolidate('变化率: 会用')) as { id: number; operator?: string }
+    const ok = await engine.graph.graphPropose('edit', consolidate('变化率: 会用')) as { id: number; operator?: string }
     assert.equal(ok.operator, '巩固')
     // 边轻键在引擎全门同样拒收（受理与 schema 一致）
     await assert.rejects(
-      () => engine.graphPropose('edit', `course: 校验课
+      () => engine.graph.graphPropose('edit', `course: 校验课
 ops:
   - op: set_pre
     node: 入门

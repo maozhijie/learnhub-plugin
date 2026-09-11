@@ -77,8 +77,8 @@ test('过点对账：显式动作落 journal kind=milestone_settle，定价=est�
     banks: { 入门: [tfQuestion('q1', { fsrs: { stability: 3, difficulty: 9, due: '2026-09-10', last_review: '2026-09-01', reps: 2, lapses: 0 } })] },
   }, async ({ engine, store }) => {
     await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
-    const p1 = await engine.projectPlanPropose('练耳日记', PLAN_WITH_NODES('练耳日记'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练耳日记', PLAN_WITH_NODES('练耳日记'))
+    await engine.graph.projectApply(p1.id)
 
     // 过点前无 milestone_settle（对账流水即事实，经 store 缝断言）
     assert.equal(await engine.projects.milestoneSettleRec('练耳日记', 'm1'), null)
@@ -110,19 +110,19 @@ test('过点对账：显式动作落 journal kind=milestone_settle，定价=est�
 
 test('过点进账本与 streak 口径：today_xp 计入对账行；除对账行外项目域零 journal 写入', async () => {
   await withVault({ notes: { 入门: {} } }, async ({ engine, store, root }) => {
-    const xpBefore = await engine.xpStatus()
+    const xpBefore = await engine.sched2.xpStatus()
     await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
-    const p1 = await engine.projectPlanPropose('练耳日记', PLAN_WITH_NODES('练耳日记'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练耳日记', PLAN_WITH_NODES('练耳日记'))
+    await engine.graph.projectApply(p1.id)
     await engine.projectMilestoneWrite('练耳日记', 'm1',
       '## 给定\n\n空工程模板。\n\n## 待办\n\n安装依赖并运行。\n\n## 验收清单\n\n- [ ] 能运行 hello world\n\n## 支持\n\n命令清单。')
-    await engine.projectSetTier('练耳日记', '骨架')
+    await engine.project.projectSetTier('练耳日记', '骨架')
 
     const afterPlanOps = await store.journalTail(null, 100)
     assert.equal(afterPlanOps.length, 0, '计划/产物/档位操作零 journal 写入')
 
     await engine.projectMilestonePass('练耳日记', 'm1')
-    const xp = await engine.xpStatus()
+    const xp = await engine.sched2.xpStatus()
     assert.equal(xp.today_xp, xpBefore.today_xp + 100, '对账行进今日 XP 汇总（本测无题库 → k=1，est=100）')
     assert.equal(xp.streak, xpBefore.streak + 1, '过点当日进 streak 口径（真实投入显式陈述）')
     assert.equal((await store.journalTail(null, 100)).length, 1, '全库 journal 只增对账这一行')
@@ -136,13 +136,13 @@ test('过点进账本与 streak 口径：today_xp 计入对账行；除对账行
 test('过点守卫：计划里没有该里程碑 fail loud；关联节点悬空 fail loud 点名', async () => {
   await withVault({}, async ({ engine }) => {
     await engine.projectCreate({ name: '练耳日记', goal: '听辨音程' })
-    const p1 = await engine.projectPlanPropose('练耳日记', PLAN_WITH_NODES('练耳日记'))
-    await engine.projectApply(p1.id)
+    const p1 = await engine.project.projectPlanPropose('练耳日记', PLAN_WITH_NODES('练耳日记'))
+    await engine.graph.projectApply(p1.id)
     await assert.rejects(engine.projectMilestonePass('练耳日记', 'm9'), /没有里程碑「m9」/)
     // 悬空关联：计划声明 nodes 指向不存在的节点 → 点名报错（先修计划，不静默降级）
     const badPlan = PLAN_WITH_NODES('练耳日记').replace('nodes: [入门]', 'nodes: [不存在的节点]')
-    const p2 = await engine.projectPlanPropose('练耳日记', badPlan)
-    await engine.projectApply(p2.id)
+    const p2 = await engine.project.projectPlanPropose('练耳日记', badPlan)
+    await engine.graph.projectApply(p2.id)
     await assert.rejects(engine.projectMilestonePass('练耳日记', 'm1'), /不存在的节点|找不到节点/)
   })
 })

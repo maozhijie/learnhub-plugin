@@ -46,7 +46,7 @@ fields:
         w: 0.8
         note: 正文反哺候选
 `
-    const r = await engine.graphPropose('enrich', yamlText) as { id: number; kind: string; files: number }
+    const r = await engine.graph.graphPropose('enrich', yamlText) as { id: number; kind: string; files: number }
     assert.equal(r.kind, 'enrich')
     assert.equal(r.files, 1, '目标节点的区文件被指纹锚定')
 
@@ -91,7 +91,7 @@ fields:
   - node: 进阶
     enc: [{ node: 入门, w: 0.8 }]
 `
-    const r = await engine.graphPropose('enrich', yamlText) as { id: number }
+    const r = await engine.graph.graphPropose('enrich', yamlText) as { id: number }
 
     // 受理后有人改了正典（edit 提案/手工）
     const dataPath = join(root, '学习中心', 'math', 'data', '基础.yaml')
@@ -123,7 +123,7 @@ test('手工构造的 enrich 提案（无指纹）apply 被拒；目标节点不
     )
 
     await assert.rejects(
-      () => engine.graphPropose('enrich', YAML.stringify({ course: '数学', fields: [{ node: '幽灵节点', enc: [] }] })),
+      () => engine.graph.graphPropose('enrich', YAML.stringify({ course: '数学', fields: [{ node: '幽灵节点', enc: [] }] })),
       /目标节点不在图内，提案未受理：幽灵节点（覆盖层只补写既有节点；新增节点走 kind=edit）/,
     )
   })
@@ -136,7 +136,7 @@ fields:
   - node: 进阶
     enc: [{ node: 入门, w: 0.6, note: 先验 }]
 `
-    const r = await engine.graphPropose('enrich', yamlText) as { id: number }
+    const r = await engine.graph.graphPropose('enrich', yamlText) as { id: number }
     await engine.graphApply('enrich', r.id)
     const store = new GraphStore(engine.paths, join(root, '学习中心', 'math'), nodeVaultFs)
     const regions = await store.load()

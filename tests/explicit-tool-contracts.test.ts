@@ -90,22 +90,22 @@ test('#12 engine facade rejects invalid question counts before invoking the mode
 
 test('#12 block-only graph browsing: unambiguous succeeds, zero-match and ambiguous fail with context', async () => {
   await withVault(CONTRACT_VAULT, async ({ engine }) => {
-    const ok = await engine.graphBrowse('数学', undefined, '唯一块') as { total: number; regions: Array<{ name: string }> }
+    const ok = await engine.graph.graphBrowse('数学', undefined, '唯一块') as { total: number; regions: Array<{ name: string }> }
     assert.equal(ok.total, 1)
     assert.deepEqual(ok.regions.map(r => r.name), ['乙区'])
 
     await assert.rejects(
-      () => engine.graphBrowse('数学', undefined, '不存在块'),
+      () => engine.graph.graphBrowse('数学', undefined, '不存在块'),
       (err: unknown) => (err as Error).message.includes('块「不存在块」不存在')
         && (err as Error).message.includes('可用块'),
     )
     await assert.rejects(
-      () => engine.graphBrowse('数学', undefined, '同名块'),
+      () => engine.graph.graphBrowse('数学', undefined, '同名块'),
       (err: unknown) => (err as Error).message.includes('块「同名块」不唯一')
         && (err as Error).message.includes('甲区') && (err as Error).message.includes('乙区'),
     )
     await assert.rejects(
-      () => engine.graphBrowse('数学', '甲区', '唯一块'),
+      () => engine.graph.graphBrowse('数学', '甲区', '唯一块'),
       (err: unknown) => (err as Error).message.includes('区「甲区」中没有块「唯一块」'),
     )
   })

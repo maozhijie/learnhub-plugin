@@ -366,7 +366,7 @@ starts:
 `
 
 async function seedApplied(engine: LearnhubEngine): Promise<void> {
-  const r = await engine.graphPropose('seed', CAPABILITY_SEED) as { id: number }
+  const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
   await engine.graphApply('seed', r.id)
 }
 

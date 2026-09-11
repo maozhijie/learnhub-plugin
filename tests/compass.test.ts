@@ -62,7 +62,7 @@ function replayFake(reply: string) {
 async function seedApplied(
   engine: LearnhubEngine,
 ): Promise<{ compass: { state: string; annotations_preserved: boolean } }> {
-  const r = await engine.graphPropose('seed', CAPABILITY_SEED) as { id: number }
+  const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
   return await engine.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
 }
 
@@ -193,7 +193,7 @@ test('AC2 批注区是软输入：初画附进上下文；写权重写保批注�
     assert.match(text, /## 我的备忘/)
 
     // 罗盘尾段（#144 教练上下文消费缝）：路线 + 批注软输入成块
-    const tail = await engine.compassTail('数学')
+    const tail = await engine.growth2.compassTail('数学')
     assert.match(tail, /剩余路线/)
     assert.match(tail, /提议非指令/)
     assert.match(tail, /跳过证明类的块/)
@@ -236,7 +236,7 @@ starts:
     region: 基础
     block: 起点块
 `
-    const r = await engine.graphPropose('seed', reseed) as { id: number }
+    const r = await engine.graph.graphPropose('seed', reseed) as { id: number }
     const applied = await engine.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
     assert.equal(applied.compass.state, 'reseeded')
     assert.equal(applied.compass.annotations_preserved, true)
@@ -323,7 +323,7 @@ test('罗盘缺席的读侧：compassRead/compassTail 合法空态；未播种�
     assert.equal(read.missing, true)
     assert.equal(read.route, null)
     assert.equal(read.endpoint, null, '未播种课程锚缺席 = null')
-    assert.equal(await engine.compassTail('数学'), '', '罗盘缺席 = 空段（组装方整段省略）')
+    assert.equal(await engine.growth2.compassTail('数学'), '', '罗盘缺席 = 空段（组装方整段省略）')
     // 未播种初画 fail loud（锚在终点上）
     await assert.rejects(() => engine.compassPaint('数学', replayFake(GOLD_ROUTE)), /未播种[\s\S]*种子提案/)
   })

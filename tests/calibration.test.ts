@@ -233,11 +233,11 @@ test('红线:画像/提示/密度全开——读路径零写入;复习自评档�
 
     // 画像全开后的全部读路径:vault 字节级不变(零 canonical 写入)
     const before = await snapshot(root)
-    const xpBefore = await engine.xpStatus()
+    const xpBefore = await engine.sched2.xpStatus()
     await engine.learner.calibrationProfile()
     await engine.content2.reviewQueue('数学')
     await engine.content2.reviewQueue('数学', '入门')
     assert.deepEqual(await snapshot(root), before, '画像/队列读路径零落盘(含题库 fsrs、笔记 frontmatter、流水)')
-    assert.deepEqual(await engine.xpStatus(), xpBefore, 'XP 账本零变化')
+    assert.deepEqual(await engine.sched2.xpStatus(), xpBefore, 'XP 账本零变化')
   })
 })

@@ -91,7 +91,7 @@ function stubContentPipeline(rt: HostRuntime, opts: { saved?: Array<Array<unknow
     contentSectionsView: async () => [{ id: 's1', title: '第一节', type: '概念', status: 'ready' }],
     questionGenerateSections: async () => ({ added: 2 }),
     questionGenerate: async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
-    courseByKey: async () => ({ name: '数学' }),
+    'registry.get': async () => ({ name: '数学' }),
     loadView: async () => ({ graph: { nset: new Set(['节点A', '节点B', '节点C']) } }),
     saveGenJobs: async (jobs: Array<unknown>) => { opts.saved?.push(jobs) },
     coachCheckpoint: async () => ({ courses: [] }),
@@ -329,7 +329,7 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
         model: 'test', message: '就绪深度满足——教练停摆，无批可产。' },
     ],
     // 恢复清扫的存在性探针（真实注册表为空会把恢复记录判悬空清掉）
-    courseByKey: async (key: string) => ({ name: key }),
+    'registry.get': async (key: string) => ({ name: key }),
     loadView: async () => ({ graph: { nset: new Set<string>() } }),
     coachCheckpoint: async () => ({ courses: [] }),
     settleRechecks: async () => null,
@@ -362,7 +362,7 @@ test('重启恢复：负载要求的排队图域任务缺负载 → 恢复处明
         phase: '种子', model: 'test', message: '排队等待生成队列…' },
     ],
     // 恢复清扫的存在性探针（真实注册表为空会把恢复记录判悬空清掉）
-    courseByKey: async (key: string) => ({ name: key }),
+    'registry.get': async (key: string) => ({ name: key }),
     loadView: async () => ({ graph: { nset: new Set<string>() } }),
     coachCheckpoint: async () => ({ courses: [] }),
     settleRechecks: async () => null,
@@ -510,11 +510,10 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 22, '指南条目数（22 条手写，增减要显式）')
 })
 
-test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、路由独有 50（ADR-0045 迁移回归网；#182 起按末段方法名归一）', () => {
-  // C 形态（ADR-0049）：入口名按「末段方法名」归一——点路径 `子系统.方法` 与过渡期
-  // 的裸名直调在同一口径下对账（方法名在转发映射里已验证全局唯一，无歧义）。
-  const last = (p: string) => p.split('.').pop()!
-  const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => last(m[1])))
+test('路由↔工具对账基线：91 共享引擎入口、工具独有 34、路由独有 58（终态点路径口径；ADR-0045 迁移回归网）', () => {
+  // C 形态（ADR-0049）：入口名 = `<子系统>.<方法>` 点路径或 hub 装配域裸名，
+  // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
+  const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
   // 工具面 = tools.ts；路由面 = 其余宿主技术层（与基线口径一致：工具注册区 vs 工具区外全部）。
   // **动态发现**（#168：路由表拆成 route-table/routes/routes-post 后，硬编码清单会让
@@ -525,12 +524,12 @@ test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、�
   // #169：两面都改成「源码直调 ∪ 注册表声明」——生成路径的调用住在声明里（src/commands/），
   // 源码里只剩例外 handler（host/tool-handlers.ts、host/handlers.ts）
   const agentDeclared = new Set(COMMAND_LIST.filter(c => c.channels.some(ch => ch.tool))
-    .map(c => c.engine).filter((e): e is string => !!e).map(last))
+    .map(c => c.engine).filter((e): e is string => !!e))
   const toolFace = new Set([...faceOf(read('src/host/tools.ts') + read('src/host/tool-handlers.ts')), ...agentDeclared])
   // #169：路由面的引擎入口 = **注册表 panel 通道的声明** ∪ 宿主源码里的直调。生成路径的调用
   // 现在住在声明里（src/commands/），不在任何 .ts 文件里——只扫源码会让大部分 route-only 凭空消失。
   const declared = new Set(COMMAND_LIST.filter(c => c.channels.some(ch => ch.route))
-    .map(c => c.engine).filter((e): e is string => !!e).map(last))
+    .map(c => c.engine).filter((e): e is string => !!e))
   const routeFace = new Set([...faceOf([...hostFiles.map(f => `src/host/${f}`), 'src/index.ts'].map(read).join('\n')), ...declared])
   const base = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-face-baseline.json'), 'utf8')) as {
     shared: string[]; toolOnly: string[]; routeOnly: string[]
@@ -541,9 +540,9 @@ test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、�
   assert.deepEqual(shared, base.shared, '两面共享的引擎入口集漂移')
   assert.deepEqual(toolOnly, base.toolOnly, '工具独有引擎入口集漂移')
   assert.deepEqual(routeOnly, base.routeOnly, '路由独有引擎入口集漂移')
-  assert.equal(shared.length, 84)
-  assert.equal(toolOnly.length, 26)
-  assert.equal(routeOnly.length, 50)
+  assert.equal(shared.length, 91)
+  assert.equal(toolOnly.length, 34)
+  assert.equal(routeOnly.length, 58)
 })
 
 // ---------------------------------------------------------------- 清理

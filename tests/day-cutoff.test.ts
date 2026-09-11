@@ -121,14 +121,14 @@ test('store.activityCounts：凌晨流水重键到前一学习日', async () => 
 
 test('xpStatus：date=学习日、today_xp/streak 只算学习日内流水、day_cutoff 生效值随载荷带出', async () => {
   await withVault({ tag: 'cutoff-xp-', files: cfg({ day_cutoff: '02:00' }) }, async ({ engine }) => {
-    const { date } = await engine.xpStatus()
+    const { date } = await engine.sched2.xpStatus()
     const next = nextDay(date)
     const prev = fmtDay(new Date(parseDay(date)!.getTime() - 86400000))
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: '', correct: true, judge: 'true_false', xp: 6, ts: `${date}T10:00:00` })
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 2, answer: '', correct: true, judge: 'true_false', xp: 3, ts: `${date}T00:30:00` }) // 学习日上一天
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 3, answer: '', correct: true, judge: 'true_false', xp: 4, ts: `${next}T00:30:00` }) // 学习日本日
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 4, answer: '', correct: true, judge: 'true_false', xp: 1, ts: `${prev}T15:00:00` }) // 前一学习日有行为 → streak 连上
-    const xp = await engine.xpStatus()
+    const xp = await engine.sched2.xpStatus()
     assert.equal(xp.date, date)
     assert.equal(xp.today_xp, 10)
     assert.equal(xp.streak, 2) // 当前学习日 + 前一学习日（次日 00:30 那条已归当日）
@@ -138,7 +138,7 @@ test('xpStatus：date=学习日、today_xp/streak 只算学习日内流水、day
 
 test('interactiveSettle：同节同学习日一次（凌晨过界仍算当日）', async () => {
   await withVault({ tag: 'cutoff-interactive-', files: cfg({ day_cutoff: '02:00' }) }, async ({ engine }) => {
-    const { date } = await engine.xpStatus()
+    const { date } = await engine.sched2.xpStatus()
     const next = nextDay(date)
     await engine.store.appendPractice({
       course: '数学', node: '入门', ex: 0, answer: '', correct: true,
@@ -153,7 +153,7 @@ test('interactiveSettle：同节同学习日一次（凌晨过界仍算当日）
 
 test('interactiveSettle：日界之前的凌晨记录属上一学习日，不挡当日结算', async () => {
   await withVault({ tag: 'cutoff-interactive2-', files: cfg({ day_cutoff: '02:00' }) }, async ({ engine }) => {
-    const { date } = await engine.xpStatus()
+    const { date } = await engine.sched2.xpStatus()
     await engine.store.appendPractice({
       course: '数学', node: '入门', ex: 0, answer: '', correct: true,
       judge: 'interactive', qid: 'interactive:s1', ts: `${date}T00:30:00`, // 属学习日前一天
@@ -173,7 +173,7 @@ test('statusJson：date=学习日、day_cutoff 生效值随载荷带出', async 
 
 test('reviewQueue：date=学习日（与到期判定同口径）', async () => {
   await withVault({ tag: 'cutoff-queue-', files: cfg({ day_cutoff: '02:00' }) }, async ({ engine }) => {
-    const { date } = await engine.xpStatus()
+    const { date } = await engine.sched2.xpStatus()
     const q = await engine.content2.reviewQueue()
     assert.equal(q.date, date)
   })
