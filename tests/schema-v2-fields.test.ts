@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { GraphStore, loadRegionDoc, parseConceptFields, parseNode, SchemaError } from '../src/engine/graph.ts'
-import { validateEditProposal } from '../src/engine/gengraph.ts'
+import { validateEditProposal } from '../src/engine/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import { YAML } from '../src/engine/yaml.ts'
 

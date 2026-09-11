@@ -26,13 +26,17 @@ import { join, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LearnhubEngine } from './engine/index.ts'
 import type { LlmComplete, LlmEffort } from './engine/llm.ts'
+import type { CoachTrigger, SeedDraftRequest } from './engine/index.ts'
 import { Content } from './engine/content.ts'
 import { ANKI_ENDPOINT, AnkiConnectClient } from './engine/anki.ts'
 import { TIER_LABELS, tierIdxOf, genericQuizTarget } from './engine/complexity.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
 import {
   contentFailureStatus,
+  genJobRetentionRemainingMs,
+  genJobSweepVerdict,
   generationJobRetentionMs,
+  isGenJobTerminal,
   nextQueuedJob,
   quizFailureOutcome,
   quizSuccessOutcome,
@@ -85,6 +89,8 @@ function llmView() {
 
 /** Agent 独有能力在面板的说明锚点（能指南，ADR 面无此决议；与工具注册同文件维护，
  * 指南页与各页「这些事可以找 agent」提示都从这里渲染——单一事实源防文案漂移）。
+ * 分流纪律：面板已有控件的动作不进指南（UI 是默认通道，agent 是进阶路径）——
+ * 建课/生长/罗盘/回填/反编译/项目草案/项目创建已随面板下发退出本清单。
  * page = 面板页签（learn/graph/bank/stats/lab/generate/practice/projects/global）；
  * prompt = 可直接粘进 dsh 会话的示例指令。 */
 const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prompt?: string }> = [
@@ -102,8 +108,6 @@ const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prompt?: st
   { tool: 'learnhub_graph_browse', page: 'graph', text: '按区/块浏览课程图结构。', prompt: '按区块浏览「<课程>」的图结构' },
   { tool: 'learnhub_graph_path', page: 'graph', text: '查询两节点之间的先修链（学 B 之前要过哪些节点）。',
     prompt: '查一下从「<节点A>」到「<节点B>」的先修链' },
-  { tool: 'learnhub_graph_enc_backfill', page: 'graph', text: '依据真实作答记录推断缺失的成分技能边，生成待人审的图提案。',
-    prompt: '回填「<课程>」的成分技能边候选' },
   { tool: 'learnhub_question_audit', page: 'bank', text: '题库契约只读体检：表达式/数字填空、记法违规、转义损坏、超长解析——只盘点不修复。',
     prompt: '跑一次题库体检，把违规存量题列给我' },
   { tool: 'learnhub_question_get', page: 'bank', text: '读单题全文（含答案与解析）——改题/审题前先看原题。',
@@ -125,19 +129,11 @@ const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prompt?: st
   { tool: 'learnhub_receipt_submit', page: 'practice', text: '提交外部练习回执（描述/图片/导出皆可；AI 量表评审，零 XP、不推调度）。',
     prompt: '提交一份回执：<练习内容描述>' },
   { tool: 'learnhub_receipt_list', page: 'practice', text: '查看已提交的回执清单。', prompt: '列出我提交过的回执' },
-  { tool: 'learnhub_project_create', page: 'projects', text: '创建项目实体（有界项目区的载体；面板只读清单与诊断，创建走 agent）。',
-    prompt: '创建项目「<项目名>」：<一句话目标>' },
-  { tool: 'learnhub_project_plan_generate', page: 'projects', text: 'AI 起草里程碑计划提案（提案-人审通道，不直接落盘）。',
-    prompt: '为「<项目>」起草一份里程碑计划提案' },
-  { tool: 'learnhub_project_milestone_generate', page: 'projects', text: '按当前渐退档生成里程碑任务卡（部分完成 + 验收清单）。',
-    prompt: '给「<项目>」的里程碑 m1 生成任务卡' },
-  { tool: 'learnhub_project_decompile', page: 'projects', text: '目标反编译：从项目目标描述反推「里程碑计划 + 知识子图」双提案（人审后生效）。',
-    prompt: '对目标「<项目描述>」做一次目标反编译' },
   { tool: 'learnhub_project_milestone_pass', page: 'projects', text: '里程碑显式通过结算：按 est 定价锁定 XP（对账动作，不是删除）。',
     prompt: '「<项目>」的里程碑 m1 通过了，帮我结算' },
   { tool: 'learnhub_project_milestone_recall', page: 'projects', text: '里程碑回溯会话：过点前对关联节点抽题+自述（检索点练习）。',
     prompt: '为「<项目>」的里程碑 m1 发起回溯会话' },
-  { tool: 'learnhub_project_enc_candidates', page: 'projects', text: '从项目执行行为推断成分技能边候选，生成待人审图提案。',
+  { tool: 'learnhub_project_enc_candidates', page: 'projects', text: '从项目执行行为推断成分技能边候选，生成待人审图提案（面板回填按钮走的是作答记录推断，这是项目执行流推断——两条通道）。',
     prompt: '从「<项目>」的执行记录里找成分技能边候选' },
 ]
 
@@ -148,6 +144,9 @@ interface GenJob {
   course: string
   node: string
   startedAt: string
+  /** 终态时刻（保留期起算点，随注册表落盘）：恢复清扫据此让保留期跨重启仍生效；
+   * 旧档无戳回退 startedAt（ADR-0039）。 */
+  finishedAt?: string
   status: GenJobStatus
   /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）；
    * 图域任务用 种子/生长/富化（#131 §5 / #140）。phase=quiz 且直接入队 = 纯出题任务
@@ -169,6 +168,16 @@ interface GenJob {
   /** 生长批任务的裁决结果（#145，phase=生长；队列空闲自动拉批的重拉判据读它）：
    * idle=就绪深度满足未拉回合 / no_structure=教练裁决暂不产结构 / applied=已应用。 */
   growthOutcome?: 'idle' | 'no_structure' | 'applied'
+  /** 里程碑计划修订注入（#149）：换线/补支注入块随任务携带进教练回合（注入即显式
+   * 重新裁决请求——就绪深度满足也不短路停摆，见 coachGrowthBatch）。 */
+  growthInject?: string
+  /** 图域任务负载（面板下发，phase 决定形状）：种子=建课/换终点表单（SeedDraftRequest
+   * 去 course——course 是任务键槽）；反编译=项目目标反编译；计划/里程碑=项目草案
+   * （course 槽放项目 id）。 */
+  seedPayload?: Omit<SeedDraftRequest, 'course'>
+  decompilePayload?: { project: string; course?: string; goal?: string; notes?: string[] }
+  planPayload?: { project: string }
+  milestonePayload?: { project: string; milestone: string }
 }
 const genJobs = new Map<string, GenJob>()
 
@@ -499,13 +508,57 @@ function waitForQuizJob(key: string, timeoutMs = 15 * 60_000): Promise<GenJob> {
   })
 }
 
-/** 任务终态保留期满后清出注册表（失败/取消留 24h 供排查与重试，成功留 30 分钟）。 */
-function scheduleJobRetention(key: string, status: GenJobStatus): void {
+/** 任务终态保留期满后清出注册表（失败/取消留 24h 供排查与重试，成功留 30 分钟）。
+ * 终态进入时盖 finishedAt 戳（保留期起算点落盘，ADR-0039）；delayMs 供重启恢复按
+ * 剩余时长补挂——进程内 setTimeout 随进程消失，恢复侧必须自己结算。 */
+function scheduleJobRetention(key: string, status: GenJobStatus, delayMs?: number): void {
+  const job = genJobs.get(key)
+  if (job && isGenJobTerminal(status) && !job.finishedAt) {
+    job.finishedAt = new Date().toISOString()
+    persistGenJobs()
+  }
   setTimeout(() => {
     const cur = genJobs.get(key)
     if (cur && cur.status !== 'running' && cur.status !== 'cancelling') genJobs.delete(key)
     persistGenJobs()
-  }, generationJobRetentionMs(status)).unref()
+  }, delayMs ?? generationJobRetentionMs(status)).unref()
+}
+
+/** 注册表清扫（ADR-0039 写侧联动出口）：课程已删，或内容锚定任务的节点已删/改名 →
+ * 记录悬空，唯一处置是清除（不做墓碑）；终态超保留期（finishedAt 起算）一并出册。
+ * running 记录先置取消旗标再出册——runner 持同一对象，下个检查点中止，而落盘序列化
+ * 取自 Map，已删条目的终态不会复活。存在性 = 注册表精确匹配 + 图节点名集；课程在而
+ * 图读不动（Broken）按存在性未知保守保留。courseDelete、删/改名节点的各 apply 出口
+ * 与重启恢复共用。返回清扫条数。 */
+async function sweepGenJobs(now = Date.now()): Promise<number> {
+  const perCourse = new Map<string, Promise<Set<string> | null | undefined>>()
+  const nodeNamesOf = (course: string): Promise<Set<string> | null | undefined> => {
+    let p = perCourse.get(course)
+    if (!p) {
+      p = (async (): Promise<Set<string> | null | undefined> => {
+        try {
+          const c = await engine.courseByKey(course)
+          if (!c) return null
+          return (await engine.loadView(c)).graph.nset
+        } catch {
+          return undefined
+        }
+      })()
+      perCourse.set(course, p)
+    }
+    return p
+  }
+  let swept = 0
+  for (const [key, j] of [...genJobs.entries()]) {
+    const names = await nodeNamesOf(j.course)
+    const verdict = genJobSweepVerdict(j, { courseMissing: names === null, nodeMissing: !!names && !names.has(j.node) }, now)
+    if (verdict === 'keep') continue
+    if (j.status === 'running') j.status = 'cancelling'
+    genJobs.delete(key)
+    swept++
+  }
+  if (swept) persistGenJobs()
+  return swept
 }
 
 /** 生长批任务键（课程级任务，node 槽放「生长批」标签；队列 phase=生长，#145）。 */
@@ -515,8 +568,12 @@ const GROWTH_JOB_NODE = '生长批'
  * 阻尼防泵循环（否则「失败→排空→检查点→入队」立即成环）：同课已有生长批在途不重入；
  * 上一批失败/取消不自动重试——从生成页人工重试，或终态保留期（24h）过后自然恢复；
  * 上一批以 idle/no_structure 收尾也不重拉——教练停摆与「暂不产结构」都是裁决，
- * 重拉要等新的队列活动带来新内容。自动拉批只在队列空闲检查点接线（另两点=感知面）。 */
-function enqueueGrowthBatch(ctx: Context, course: string, why: string): { message: string; queued: boolean } {
+ * 重拉要等新的队列活动带来新内容。自动拉批只在队列空闲检查点接线（另两点=感知面）。
+ * inject（#149）= 计划修订的换线/补支注入：显式的重新裁决请求，豁免 idle/no_structure
+ * 阻尼（计划改了目标，上一次停摆裁决不再代表现状）；在途/失败阻尼照旧。
+ * force（面板下发）= 同 inject 的显式豁免（学习者点了「生长一步」就是重新裁决的意图）；
+ * 在途/失败阻尼照旧——在途防重入，失败走生成页重试。 */
+function enqueueGrowthBatch(ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean } = {}): { message: string; queued: boolean } {
   const key = `${course}/${GROWTH_JOB_NODE}`
   const last = genJobs.get(key)
   if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
@@ -525,16 +582,153 @@ function enqueueGrowthBatch(ctx: Context, course: string, why: string): { messag
   if (last && (last.status === 'failed' || last.status === 'cancelled')) {
     return { message: `「${course}」上一生长批${last.status === 'failed' ? '失败' : '已取消'}（${last.message ?? ''}），不自动重试——可从生成页重试或等下一次触发。`, queued: false }
   }
-  if (last && last.status === 'done' && last.growthOutcome !== 'applied') {
+  if (!inject && opts.force !== true && last && last.status === 'done' && last.growthOutcome !== 'applied') {
     return { message: `「${course}」上一生长批裁决为 ${last.growthOutcome === 'idle' ? '停摆' : '暂不产结构'}，不重拉。`, queued: false }
   }
   genJobs.set(key, {
     course, node: GROWTH_JOB_NODE, startedAt: new Date().toISOString(), status: 'queued', phase: '生长',
     model: llmCfg.model, message: `排队等待教练回合（${why}）…`,
+    ...(inject ? { growthInject: inject } : {}),
   })
   persistGenJobs()
   pumpGeneration(ctx)
   return { message: `「${course}」生长批已入队（${why}）。`, queued: true }
+}
+
+/** 计划修订驱动的生长批入队（#149）：apply 结果携带换线/补支触发时逐课程入队
+ * （注入块随任务走）。 */
+function triggerPlanGrowth(ctx: Context, result: { kind?: string; growth?: Array<{ course: string; lines: string[] }> }): void {
+  if (result.kind !== 'project_plan' || !result.growth?.length) return
+  for (const t of result.growth) {
+    try {
+      const r = enqueueGrowthBatch(ctx, t.course, '里程碑计划修订（换线/补支）', t.lines.join('\n'))
+      void runLog('coach_growth', r.message).catch(() => undefined)
+    } catch (err) {
+      void runLog('coach_growth', `「${t.course}」计划修订生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
+        .catch(() => undefined)
+    }
+  }
+}
+
+/** 教练回合触发统一出口（五点接线，词条「教练回合」）：就绪深度检查 → 低于前瞻的课程
+ * 入队生长批（自动触点走阻尼；显式触点 force 豁免停摆/暂不产结构——显式重新裁决）→
+ * 运行日志。触发点：node_complete / node_skip（各自路由）、session_start（节流）、
+ * queue_idle（生成泵排空）、panel_dispatch（「生长一步」按钮直达入队，不走本函数的检查）。
+ * 返回人读摘要（调用方留痕）。 */
+async function coachTrigger(ctx: Context, trigger: CoachTrigger, courseKey?: string, opts: { force?: boolean } = {}): Promise<string> {
+  const r = await engine.coachCheckpoint(trigger, courseKey)
+  const lines: string[] = []
+  for (const chk of r.courses) {
+    lines.push(`${chk.course}：ready=${chk.ready}/${chk.required}${chk.ok ? '' : '（低于前瞻，已告警）'}`)
+    if (chk.ok) continue
+    try {
+      const enq = enqueueGrowthBatch(ctx, chk.course, `${trigger} 触发（就绪深度 ${chk.ready}/${chk.required}）`, undefined, opts)
+      lines.push(enq.message)
+    } catch (err) {
+      lines.push(`「${chk.course}」生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  const summary = lines.join('；')
+  await runLog(`coach_checkpoint(${trigger})`, summary).catch(() => undefined)
+  return summary
+}
+
+/** 会话开始检查点的节流窗（检查点是逐课程读侧 loadView，不能跟着 5s 轮询跑）。 */
+const SESSION_START_THROTTLE_MS = 30 * 60_000
+let lastSessionStartAt = 0
+
+/** 教练触点的 fire-and-forget 包装（路由/状态入口侧）：失败只留运行日志，不挡原动作。 */
+function coachTriggerDetached(ctx: Context, trigger: CoachTrigger, courseKey?: string, opts: { force?: boolean } = {}): void {
+  void coachTrigger(ctx, trigger, courseKey, opts)
+    .catch(err => runLog(`coach_checkpoint(${trigger})`, `调用失败：${err instanceof Error ? err.message : String(err)}`).catch(() => undefined))
+}
+
+/** 会话开始触点（节流 30 分钟）：面板打开（GET /status）与 agent 会话开工
+ * （learnhub_status）共用入口，fire-and-forget——失败只留运行日志。 */
+function sessionStartCheckpoint(ctx: Context): void {
+  const now = Date.now()
+  if (now - lastSessionStartAt < SESSION_START_THROTTLE_MS) return
+  lastSessionStartAt = now
+  coachTriggerDetached(ctx, 'session_start')
+}
+
+/** 图域任务入队（面板下发共用）：键 = course/node 标签；同键在途不重入，终态即覆盖
+ * （单发起草，重按 = 重来）。返回消息给路由留痕。 */
+function enqueueGraphJob(ctx: Context, j: { course: string; node: string; phase: GenJobPhase } & Partial<Pick<GenJob, 'seedPayload' | 'decompilePayload' | 'planPayload' | 'milestonePayload'>>): { message: string } {
+  const key = `${j.course}/${j.node}`
+  const last = genJobs.get(key)
+  if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
+    return { message: `「${j.course}」${j.node}任务已在途，不重复入队。` }
+  }
+  genJobs.set(key, {
+    course: j.course, node: j.node, startedAt: new Date().toISOString(),
+    status: 'queued', phase: j.phase, model: llmCfg.model, message: '排队等待生成队列…',
+    ...(j.seedPayload ? { seedPayload: j.seedPayload } : {}),
+    ...(j.decompilePayload ? { decompilePayload: j.decompilePayload } : {}),
+    ...(j.planPayload ? { planPayload: j.planPayload } : {}),
+    ...(j.milestonePayload ? { milestonePayload: j.milestonePayload } : {}),
+  })
+  persistGenJobs()
+  pumpGeneration(ctx)
+  return { message: `「${j.course}」${j.node}已入队（生成队列 FIFO）。` }
+}
+
+/** 图域任务执行（面板下发）：种子/罗盘/反编译/计划/里程碑——引擎 LLM 方法一次受理，
+ * 产物一律走提案人审通道（种子一次人审、反编译联合人审、计划 apply 带快照），任务
+ * 只留受理摘要；失败落 failed 可从生成页重试。 */
+async function generateGraphJob(ctx: Context, job: GenJob): Promise<void> {
+  job.status = 'running'
+  persistGenJobs()
+  try {
+    if (job.phase === '种子' && job.seedPayload) {
+      job.message = '种子起草中（目标描述 → 模型）…'
+      persistGenJobs()
+      const r = await engine.seedPropose({
+        course: job.course, goal: job.seedPayload.goal, mode: job.seedPayload.mode,
+        goalType: job.seedPayload.goalType, useVaultPrior: job.seedPayload.useVaultPrior,
+        worksheet: job.seedPayload.worksheet,
+      }, llmSeam(ctx))
+      job.status = 'done'
+      job.message = `种子提案 #${r.id} 待人审：${r.starts} 起点 → 终点「${r.endpoint}」`
+        + `${r.prior_hits ? `；先验命中 ${r.prior_hits}` : ''}${r.repaired ? '；修复轮一次' : ''}——提案页一次人审即开工`
+    } else if (job.phase === '罗盘') {
+      job.message = '罗盘初画中（deep 档一次调用）…'
+      persistGenJobs()
+      const r = await engine.compassPaint(job.course, llmSeam(ctx))
+      job.status = 'done'
+      job.message = `罗盘已重画：${r.route_lines} 条路线${r.annotations_preserved ? '（学习者批注原样保留）' : ''}`
+    } else if (job.phase === '反编译' && job.decompilePayload) {
+      job.message = '目标反编译中（计划 + 种子双提案）…'
+      persistGenJobs()
+      const p = job.decompilePayload
+      const r = await engine.projectDecompile(p.project, {
+        ...(p.goal ? { goal: p.goal } : {}),
+        ...(p.course ? { course: p.course } : {}),
+        ...(p.notes?.length ? { notes: p.notes } : {}),
+      }, llmSeam(ctx))
+      job.status = 'done'
+      job.message = `反编译双提案待联合人审：计划 #${r.pair.plan}${r.pair.seed ? ` + 种子 #${r.pair.seed}` : ''}（先验命中 ${r.prior_hits}）——提案页同进同退`
+    } else if (job.phase === '计划' && job.planPayload) {
+      job.message = '里程碑计划草案生成中…'
+      persistGenJobs()
+      job.message = await generateProjectPlan(ctx, job.planPayload.project)
+      job.status = 'done'
+    } else if (job.phase === '里程碑' && job.milestonePayload) {
+      job.message = '里程碑任务卡生成中…'
+      persistGenJobs()
+      job.message = await generateProjectMilestone(ctx, job.milestonePayload.project, job.milestonePayload.milestone)
+      job.status = 'done'
+    } else {
+      throw new Error(`图域任务负载缺失或 phase 未知：${String(job.phase)}`)
+    }
+  } catch (err) {
+    job.status = contentFailureStatus(job.status)
+    job.message = err instanceof Error ? err.message : String(err)
+  } finally {
+    persistGenJobs()
+    scheduleJobRetention(`${job.course}/${job.node}`, job.status)
+    void runLog(`graph_job(${job.phase})`, `「${job.course}」${job.message}`).catch(() => undefined)
+  }
 }
 
 /** 生长批任务执行（#145）：coachGrowthBatch 两段式回合 + 受理接线；应用成功后对
@@ -546,7 +740,7 @@ async function generateGrowthJob(ctx: Context, job: GenJob): Promise<void> {
   job.message = '教练回合裁决中（轻量段）…'
   persistGenJobs()
   try {
-    const r = await engine.coachGrowthBatch(job.course, llmSeam(ctx))
+    const r = await engine.coachGrowthBatch(job.course, llmSeam(ctx), job.growthInject ? { inject: job.growthInject } : {})
     if (r.state === 'idle') {
       job.growthOutcome = 'idle'
       job.status = 'done'
@@ -561,6 +755,8 @@ async function generateGrowthJob(ctx: Context, job: GenJob): Promise<void> {
         .join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
         + `${a.compass_rewritten ? '；罗盘已同事务重写' : ''}｜${tierNote}｜理由：${p.reason}`
+      // 受理批可含 del_node/rename（ADR-0039 写侧联动）：先清扫悬空任务记录再入队正文
+      if (a.ops > 0) await sweepGenJobs()
       // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）
       for (const node of a.ready_unbuilt) {
         try {
@@ -580,8 +776,11 @@ async function generateGrowthJob(ctx: Context, job: GenJob): Promise<void> {
 }
 
 /** 队列执行泵：空闲且未暂停时取队首排队任务跑管线；跑完（含失败）继续泵下一个。
- * phase=quiz 的纯出题任务走 generateQuizJob、phase=生长走 generateGrowthJob（#145），
- * 其余按节点管线执行（#118）。 */
+ * phase=quiz 的纯出题任务走 generateQuizJob、phase=生长走 generateGrowthJob（#145）、
+ * 图域任务（种子/罗盘/反编译/计划/里程碑）走 generateGraphJob（面板下发），其余按节点
+ * 管线执行（#118）。 */
+const GRAPH_JOB_PHASES: ReadonlySet<GenJobPhase> = new Set<GenJobPhase>(['种子', '罗盘', '反编译', '计划', '里程碑'])
+
 function pumpGeneration(ctx: Context): void {
   if (genPumping || genQueuePaused) return
   const next = nextQueuedJob([...genJobs.values()])
@@ -591,29 +790,34 @@ function pumpGeneration(ctx: Context): void {
     ? generateQuizJob(ctx, next)
     : next.phase === '生长'
       ? generateGrowthJob(ctx, next)
-      : generateContent(ctx, next.course, next.node, next.style)
+      : GRAPH_JOB_PHASES.has(next.phase)
+        ? generateGraphJob(ctx, next)
+        : generateContent(ctx, next.course, next.node, next.style)
   void task
     .catch(() => { /* 执行器已置 failed 留注册表可重试 */ })
     .finally(() => {
       genPumping = false
-      // 队列空闲触发点（#144）：生成队列排空 → 拉起教练回合就绪深度检查（读侧感知）；
-      // 就绪缺口课程随后入队生长批（#145：生长批只在检查点之后入队——FIFO 不插队，
+      // 队列空闲触发点（#144 → 五点接线）：生成队列排空 → 教练回合就绪深度检查，
+      // 低于前瞻的课程随后入队生长批（#145：自动拉批只在检查点之后入队——FIFO 不插队，
       // 重拉阻尼见 enqueueGrowthBatch）。失败只留运行日志，不挡生成泵。
       if (!nextQueuedJob([...genJobs.values()])) {
-        void engine.coachCheckpoint('queue_idle')
-          .then(async r => {
-            runLog('coach_checkpoint(queue_idle)',
-              r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}${x.ok ? '' : '（低于前瞻，已告警）'}`).join('；'))
-              .catch(() => undefined)
-            for (const chk of r.courses) {
-              if (chk.ok) continue
-              try {
-                enqueueGrowthBatch(ctx, chk.course, `就绪深度 ${chk.ready}/${chk.required}`)
-              } catch (err) {
-                runLog('coach_growth', `「${chk.course}」生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
-                  .catch(() => undefined)
-              }
+        void coachTrigger(ctx, 'queue_idle')
+          .then(() =>
+            // 复诊结算钩子（#146）：队列空闲时自动结算到期插入边（零人审：proven｜
+            // 自动剪除）；失败只留运行日志，不挡泵——到期未决由 data-check 提示类可见。
+            engine.settleRechecks())
+          .then(r => {
+            if (!r) return
+            let settledAny = false
+            for (const c of r.courses) {
+              if (!c.settled.length) continue
+              settledAny = true
+              runLog('probation_settle', `「${c.course}」复诊结算：${c.settled.map(s =>
+                `${s.node}→${s.outcome}${s.metric ? `（${s.metric}）` : ''}`).join('；')}`)
+                .catch(() => undefined)
             }
+            // 复诊不达标自动剪除会删节点（无人审 del_node，ADR-0039 写侧联动）
+            if (settledAny) return sweepGenJobs()
           })
           .catch(err => runLog('coach_checkpoint(queue_idle)', `调用失败：${err instanceof Error ? err.message : String(err)}`))
       }
@@ -932,7 +1136,9 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
   const route = url.pathname.slice(API.length)
   try {
     if (req.method === 'GET' && route === '/status') {
-      // 模型透明：status 附带当前 LLM 配置（provider/model/思考档，面板只读展示）
+      // 模型透明：status 附带当前 LLM 配置（provider/model/思考档，面板只读展示）。
+      // 会话开始触点（五点接线，30 分钟节流）：面板打开/轮询共用入口，fire-and-forget。
+      sessionStartCheckpoint(ctx)
       sendJson(res, 200, await apiRun('api/status', async () => ({ ...(await engine.statusJson()), llm: llmView() })))
       return
     }
@@ -1081,6 +1287,13 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
     }
     if (req.method === 'GET' && route === '/xp') {
       sendJson(res, 200, await apiRun('api/xp', () => engine.xpStatus()))
+      return
+    }
+    if (req.method === 'GET' && route === '/probation') {
+      // 插入实验面（#146）：在途插入节点（「实验中」标记取数）、到期未决、三率
+      // （滚动 30 学习日）与韧性闸门现势；course 缺省 = 全部启用课程
+      const course = url.searchParams.get('course') ?? undefined
+      sendJson(res, 200, await apiRun('api/probation', () => engine.probationStatus(course)))
       return
     }
     if (req.method === 'GET' && route === '/memory') {
@@ -1296,8 +1509,12 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/node/skip') {
-        sendJson(res, 200, await apiRun('api/node/skip', () =>
-          engine.nodeSkip(need(body, 'course'), need(body, 'node'), requireSkipDirection(body.skipped))))
+        // 跳过 = 显式重新裁决（词条「教练回合」五点之一）：force 豁免停摆/暂不产结构
+        // 阻尼——跳过改了症状与路线，上一次停摆裁决不再代表现状；路由返回后 fire-and-forget
+        const skipped = await apiRun('api/node/skip', () =>
+          engine.nodeSkip(need(body, 'course'), need(body, 'node'), requireSkipDirection(body.skipped)))
+        coachTriggerDetached(ctx, 'node_skip', need(body, 'course'), { force: true })
+        sendJson(res, 200, skipped)
         return
       }
       if (route === '/node/pin') {
@@ -1311,8 +1528,11 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/node/complete') {
-        sendJson(res, 200, await apiRun('api/node/complete', () =>
-          engine.nodeComplete(need(body, 'course'), need(body, 'node'), body.force === true)))
+        // 完成 = 教练回合触发点之一（五点接线）：自动触点走阻尼；路由返回后 fire-and-forget
+        const done = await apiRun('api/node/complete', () =>
+          engine.nodeComplete(need(body, 'course'), need(body, 'node'), body.force === true))
+        coachTriggerDetached(ctx, 'node_complete', need(body, 'course'))
+        sendJson(res, 200, done)
         return
       }
       if (route === '/feedback') {
@@ -1320,9 +1540,14 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/proposals/apply') {
-        // 提案统一 apply（图谱域 gen/edit + 项目域 project_plan/project_milestone）：
-        // kind 必须显式照抄提案记录，未知 kind 引擎报错——不再静默归一成 gen
-        sendJson(res, 200, await engine.proposalApply(need(body, 'kind'), applyId(body.id)))
+        // 提案统一 apply（图谱域 edit/seed/enrich + 项目域 project_plan/project_milestone）：
+        // kind 必须显式照抄提案记录，未知 kind 引擎报错；
+        // 计划修订触发的换线/补支生长批随后入队（#149）
+        const applied = await engine.proposalApply(need(body, 'kind'), applyId(body.id))
+        // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
+        await sweepGenJobs()
+        triggerPlanGrowth(ctx, applied as { kind?: string })
+        sendJson(res, 200, applied)
         return
       }
       if (route === '/proposals/reject') {
@@ -1676,11 +1901,73 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/course/delete') {
-        sendJson(res, 200, await engine.courseDelete(need(body, 'course')))
+        const r = await engine.courseDelete(need(body, 'course'))
+        // 写侧联动（ADR-0039）：课程没了，注册表里它的任务记录（含排队/在途）随即出册
+        await sweepGenJobs()
+        sendJson(res, 200, r)
         return
       }
       if (route === '/generate/cancel') {
         sendJson(res, 200, cancelGeneration(need(body, 'course'), need(body, 'node')))
+        return
+      }
+      if (route === '/coach/growth') {
+        // 生长一步（面板下发 = 显式重新裁决，词条「生长批」）：即时入队、追加队尾、
+        // 豁免停摆/暂不产结构阻尼；被拒时 message 带原因（在途/失败）。
+        // 触发五点的检查点观测（读侧感知留运行日志）——入队本身不受检查结果闸：
+        // 显式请求恒产一轮，就绪满足由教练回合停机转译为 idle。
+        const growthCourse = need(body, 'course')
+        void engine.coachCheckpoint('panel_dispatch', growthCourse)
+          .then(r => runLog('coach_checkpoint(panel_dispatch)',
+            r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}`).join('；')))
+          .catch(() => undefined)
+        sendJson(res, 200, await apiRun('api/coach/growth', async () =>
+          enqueueGrowthBatch(ctx, growthCourse, '面板下发（显式重新裁决）', undefined, { force: true })))
+        return
+      }
+      if (route === '/coach/compass') {
+        // 罗盘初画/重画（#143 透明度装置）：LLM 一次调用进串行队列，不占请求
+        sendJson(res, 200, await apiRun('api/coach/compass', async () =>
+          enqueueGraphJob(ctx, { course: need(body, 'course'), node: '罗盘', phase: '罗盘' })))
+        return
+      }
+      if (route === '/graph/backfill') {
+        // 成分技能边回填（确定性推断，零 LLM）：同步受理，产物 = 富化提案待人审
+        sendJson(res, 200, await apiRun('api/graph/backfill', () =>
+          engine.graphEncBackfill(typeof body.course === 'string' && body.course.trim() ? body.course : undefined)))
+        return
+      }
+      if (route === '/seed/propose') {
+        // 建课/换终点起草（面板下发，phase=种子）：表单绑定字段随任务携带进引擎
+        const seedCourse = need(body, 'course')
+        const goal = typeof body.goal === 'string' ? body.goal.trim() : ''
+        if (!goal) throw new Error('missing required field: goal')
+        const worksheet = Array.isArray(body.worksheet)
+          ? body.worksheet
+            .filter((w: unknown): w is { block?: unknown; note?: unknown } => typeof w === 'object' && w !== null)
+            .map((w: { block?: unknown; note?: unknown }) => ({
+              block: typeof w.block === 'string' ? w.block : '',
+              ...(typeof w.note === 'string' && w.note.trim() ? { note: w.note } : {}),
+            }))
+            .filter(w => w.block.trim())
+          : []
+        sendJson(res, 200, await apiRun('api/seed/propose', async () =>
+          enqueueGraphJob(ctx, {
+            course: seedCourse, node: '种子起草', phase: '种子',
+            seedPayload: {
+              goal,
+              mode: body.mode === 'reseed' ? 'reseed' : 'new',
+              goalType: body.goalType === 'coverage' ? 'coverage' : 'capability',
+              useVaultPrior: body.useVaultPrior === true,
+              worksheet,
+            },
+          })))
+        return
+      }
+      if (route === '/probation/settle') {
+        // 复诊结算手动触发（#146 零人审自动行为的手动面，无确认步）：到期插入边
+        // proven｜自动剪除
+        sendJson(res, 200, await apiRun('api/probation/settle', () => engine.settleRechecks()))
         return
       }
       if (route === '/project/create') {
@@ -1703,32 +1990,39 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/project/plan/generate') {
-        sendJson(res, 200, await apiRun('api/project/plan/generate', async () => ({
-          message: await generateProjectPlan(ctx, need(body, 'id')),
-        })))
+        // 计划草案任务化（面板下发）：LLM 起草进串行队列，不占请求
+        const project = need(body, 'id')
+        sendJson(res, 200, await apiRun('api/project/plan/generate', async () =>
+          enqueueGraphJob(ctx, { course: project, node: '计划草案', phase: '计划', planPayload: { project } })))
         return
       }
       if (route === '/project/milestone/generate') {
-        sendJson(res, 200, await apiRun('api/project/milestone/generate', async () => ({
-          message: await generateProjectMilestone(ctx, need(body, 'id'), need(body, 'milestone')),
-        })))
+        // 里程碑任务卡任务化（面板下发）
+        const project = need(body, 'id')
+        const milestone = need(body, 'milestone')
+        sendJson(res, 200, await apiRun('api/project/milestone/generate', async () =>
+          enqueueGraphJob(ctx, {
+            course: project, node: `里程碑草案(${milestone})`, phase: '里程碑',
+            milestonePayload: { project, milestone },
+          })))
         return
       }
       if (route === '/project/decompile') {
-        // 目标反编译（P-5 #95）：目标描述+注册笔记 → 计划草案+知识子图双提案（人审通道）
-        sendJson(res, 200, await apiRun('api/project/decompile', async () => ({
-          result: await engine.projectDecompile(
-            need(body, 'id'),
-            {
+        // 目标反编译（P-5 #95）任务化（面板下发）：计划+种子双提案进串行队列，提案页联合人审；
+        // goal/notes 透传给引擎（缺省读项目档案目标 + 全部注册笔记，契约与 agent 工具一致）
+        const project = need(body, 'id')
+        sendJson(res, 200, await apiRun('api/project/decompile', async () =>
+          enqueueGraphJob(ctx, {
+            course: project, node: '反编译', phase: '反编译',
+            decompilePayload: {
+              project,
               ...(typeof body.goal === 'string' && body.goal.trim() ? { goal: body.goal } : {}),
-              ...(typeof body.course === 'string' && body.course.trim() ? { course: body.course } : {}),
+              ...(typeof body.course === 'string' && body.course.trim() ? { course: body.course.trim() } : {}),
               ...(Array.isArray(body.notes)
                 ? { notes: body.notes.filter((n: unknown): n is string => typeof n === 'string' && !!n.trim()) }
                 : {}),
             },
-            llmSeam(ctx),
-          ),
-        })))
+          })))
         return
       }
       if (route === '/project/exec') {
@@ -1852,14 +2146,12 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
 
   // 生成任务注册表恢复：running/cancelling 随进程消失标失败；queued 保留但队列置为
   // 暂停（不自动开跑——重启后静默烧 token 是惊吓，生成页一键恢复）
-  void engine.loadGenJobs().then(stale => {
-    let restoredQueued = 0
+  void engine.loadGenJobs().then(async stale => {
     for (const raw of stale) {
       const j = raw as Partial<GenJob>
       if (typeof j.course !== 'string' || typeof j.node !== 'string') continue
       const key = `${j.course}/${j.node}`
       const interrupted = j.status === 'running' || j.status === 'cancelling'
-      if (j.status === 'queued') restoredQueued++
       genJobs.set(key, {
         course: j.course, node: j.node,
         startedAt: typeof j.startedAt === 'string' ? j.startedAt : new Date().toISOString(),
@@ -1876,12 +2168,25 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         ...(typeof j.instruction === 'string' ? { instruction: j.instruction } : {}),
         ...(typeof j.model === 'string' ? { model: j.model } : {}),
         message: interrupted ? '进程重启，任务中断——可重试' : (typeof j.message === 'string' ? j.message : undefined),
+        // 终态时刻随档恢复（保留期跨重启的起算点）；中断标失败的从恢复当下起算
+        ...(interrupted
+          ? { finishedAt: new Date().toISOString() }
+          : (typeof j.finishedAt === 'string' ? { finishedAt: j.finishedAt } : {})),
       })
     }
-    if (restoredQueued > 0) genQueuePaused = true
+    // 恢复清扫（ADR-0039）：内容已删的悬空记录清除（不做墓碑），终态超保留期一并出册
+    // ——重启前挂的保留期定时器已随进程消失，跨重启只能靠时间戳在这里结算
+    const swept = await sweepGenJobs()
+    // 幸存终态按剩余保留期补挂定时器
+    for (const [key, j] of genJobs) {
+      if (!isGenJobTerminal(j.status)) continue
+      scheduleJobRetention(key, j.status, genJobRetentionRemainingMs(j, Date.now()))
+    }
+    const aliveQueued = [...genJobs.values()].filter(j => j.status === 'queued').length
+    if (aliveQueued > 0) genQueuePaused = true
     persistGenJobs()
     if (stale.length) {
-      console.log(`[learnhub] gen-jobs restored: ${stale.length} (interrupted marked failed${restoredQueued ? `, ${restoredQueued} queued paused` : ''})`)
+      console.log(`[learnhub] gen-jobs restored: ${stale.length} (swept ${swept} dangling/expired${aliveQueued ? `, ${aliveQueued} queued paused` : ''})`)
     }
   })
 
@@ -1905,10 +2210,21 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
 
   tool('learnhub_status',
     'Return the learning center status (center summary + per-course detail) as JSON. blocked entries are executable soft-gate advice: a candidate blocked only by a decayed prerequisite carries {pre, r, due, entry} — review the prerequisite\'s due questions first (direct entry) or still learn the candidate directly. Courses may also carry diagnostics (B1 content-diagnostic suggestions): a section with concentrated wrong answers (R1 single-question lapses or R2 section accuracy <0.5 over ≥4 deduped answers) with reason, evidence, and a rewrite direct action — surface it to the learner and rewrite via learnhub_section_rewrite ONLY after they confirm (advice-first, never automatic). Evaluating diagnostics appends a trigger record to the journal when a signal fires fresh (that ledger drives the 7-day cooldown and R1 escalation); nothing else is written.',
-    {}, () => run('learnhub_status', async () => JSON.stringify({ ...(await engine.statusJson()), llm: llmView() })))
+    {}, () => run('learnhub_status', async () => {
+      sessionStartCheckpoint(ctx) // 会话开始触点（agent 会话开工 = 同一面板打开语义，节流共用）
+      return JSON.stringify({ ...(await engine.statusJson()), llm: llmView() })
+    }))
   tool('learnhub_data_check',
     'Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.',
     {}, () => run('learnhub_data_check', async () => JSON.stringify(await engine.dataCheck())))
+  tool('learnhub_probation',
+    'Insertion-edge probation (recheck) status and settlement, #146. action=status (default): per-course view of insertion edges under probation (nodes the panel marks 实验中/under experiment), overdue-but-undecided entries, the three throttle rates over the rolling 30 learning days (insertion rate / prune rate / recheck pass rate) and the resilience gate state (side-branch cap 20%→30% when resilient; insertion batches are rejected at the gate when the pass rate bottoms out). action=settle: run the settlement hook now — due entries are auto-adjudicated with zero human review: metric met → proven (insertion becomes permanent); not met → the engine proposes and auto-applies del_node with coarse-edge restoration (settleRechecks). Settlement also writes recheck_outcome / graph_repair events to the sediment canon.',
+    { action: { type: 'string', enum: ['status', 'settle'], description: 'default status' }, course: { type: 'string', description: 'course name; default all enabled courses' } },
+    (args: { action?: 'status' | 'settle'; course?: string }) => run('learnhub_probation', async () => {
+      const a = (args ?? {}) as { action?: 'status' | 'settle'; course?: string }
+      if (a.action === 'settle') return JSON.stringify(await engine.settleRechecks(a.course))
+      return JSON.stringify(await engine.probationStatus(a.course))
+    }))
   tool('learnhub_question_audit',
     'Read-only content audit of all question banks (course banks + note-source mirror). Flags legacy questions that violate current contracts: fill_in_blank answers that look numeric or algebraic (ADR-0029 unique-answer blanks), notation violations in stem/options/explanation (bare ^ or _ outside $...$, LaTeX commands without $ delimiters), YAML double-quote escape corruption (control characters), and over-long explanations. Returns a JSON findings list; never repairs or writes.',
     {}, () => run('learnhub_question_audit', async () => JSON.stringify(await engine.questionAudit())))
@@ -2126,9 +2442,11 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string; from: string; to: string }) => run('learnhub_graph_path', async () =>
       JSON.stringify(await engine.graphPath(args.course, args.from, args.to))))
   tool('learnhub_graph_propose',
-    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=gen is RETIRED (cutover #138, ADR-0033 grown graph) and rejected at the gate. kind=seed (#142) is the NEW-COURSE ENTRY: 1-3 start nodes + one endpoint node; the engine lands coarse placeholder edges (endpoint.pre = starts), one human review then the course starts. Seed nodes carry ZERO enc and ZERO est (rejected if declared); goal_type defaults to capability (completion = endpoint mastery + closure health) — coverage must be explicit AND carry a non-empty worksheet list ({block, note?, done?}; capability+worksheet is rejected). mode=new requires the course NOT be registered (the engine scaffolds the registry entry + dirs on apply); mode=reseed requires it — endpoint change / worksheet update of an existing course, the ONLY anchor-edit channel (no direct anchor writes; the endpoint-anchored node is also guarded: del_node/rename via kind=edit are rejected). Start entries may declare basis: baseline (common knowledge start) / vault (prior familiarity boundary) / project (decompiled-cluster placeholder, wired by the project-anchoring ticket). Seed node keys: name/region/block/note?/bloom?/difficulty?/teaches?/assumes?/misconceptions?. kind=edit (per batch) top-level keys: course; reason?; concepts? ([{canonical, aliases?, definition?}] — concept-registry minting block, #141: names land in 课程根/概念登记表.yaml with the SAME apply transaction, nothing written while the proposal is pending/rejected); ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Concept-reference gate (#141): every concept named in teaches/assumes/misconceptions must be registered in the course concept registry (canonical or alias, exact match) OR minted in the same proposal\'s concepts block — unregistered names are rejected with the missing list; minting a name that already exists is rejected too (reference the entry, or merge via learnhub_concept_merge after human confirmation). Prior feed (#142): vault-link candidates with w≥0.7 mapped to the proposal\'s nodes that the structure does NOT explicitly answer (no pre/enc edge between the pair) come back in warns (non-blocking) — answer them with real edges, or let a vault rescan drop them; zero priors is a legal normal path. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In graph-generation batches apply edit proposals immediately after gates pass (anchor-review model, ADR-0003); seed proposals wait for the one human review.',
+
+    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=seed (#142) is the NEW-COURSE ENTRY: 1-3 start nodes + one endpoint node — starts must be SINGLE-BEHAVIOR units a zero-basis learner can step onto from common knowledge, with ZERO compound/blanket concepts (「Python 基础语法」-style blanket names fail as starts; compound content belongs to the growth path, ADR-0040); the engine lands coarse placeholder edges (endpoint.pre = starts), one human review then the course starts. Seed nodes carry ZERO enc and ZERO est (rejected if declared); goal_type defaults to capability (completion = endpoint mastery + closure health) — coverage must be explicit AND carry a non-empty worksheet list ({block, note?, done?}; capability+worksheet is rejected). mode=new requires the course NOT be registered (the engine scaffolds the registry entry + dirs on apply); mode=reseed requires it — endpoint change / worksheet update of an existing course, the ONLY anchor-edit channel (no direct anchor writes; the endpoint-anchored node is also guarded: del_node/rename via kind=edit are rejected). Start entries may declare basis: baseline (common knowledge start) / vault (prior familiarity boundary) / project (decompiled cluster; goal decompilation #149 stamps it automatically on the starts it files). Seed node keys: name/region/block/note?/bloom?/difficulty?/teaches?/assumes?/misconceptions?. kind=edit (per batch) top-level keys: course; reason?; concepts? ([{canonical, aliases?, definition?}] — concept-registry minting block, #141: names land in 课程根/概念登记表.yaml with the SAME apply transaction, nothing written while the proposal is pending/rejected); ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Generation-time discipline the gates cannot check (ADR-0040): each add_node is ONE independent learning act — self-question whether a zero-basis learner could pick it up from its pre within 30 minutes, else split or add a prerequisite first; most names are action sentences (解/求/推导…, no「理解导数」-style level-unclear near-duplicates, no blanket compounds); pre is the COMPLETE direct-prerequisite set (no transitive padding); give every new pre edge a necessity verdict (delete-the-edge test: no concrete failure point = redundant, drop it). Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Growth-batch note region (#145/#146): note{operator: 前进|插入|巩固|旁支|换向, reason, disagreement?, recheck?} marks the batch as a coach-round verdict; an insertion batch (operator=插入 with add_node ops) MUST preregister its recheck — note.recheck{metric: 前进恢复|卡点集中度降幅|保留率恢复 (exactly one, same source as the symptom), days? (learning days, default 10, clamped to [5,20] with a warn)} — the engine auto-adjudicates at expiry (proven, or auto-prune via del_node + coarse-edge restore, zero human review); recheck on non-insertion batches is rejected, and insertion batches are gate-throttled when the recheck pass rate bottoms out or the insertion/side-branch share exceeds its cap. Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Concept-reference gate (#141): every concept named in teaches/assumes/misconceptions must be registered in the course concept registry (canonical or alias, exact match) OR minted in the same proposal\'s concepts block — unregistered names are rejected with the missing list; minting a name that already exists is rejected too (reference the entry, or merge via learnhub_concept_merge after human confirmation). Prior feed (#142): vault-link candidates with w≥0.7 mapped to the proposal\'s nodes that the structure does NOT explicitly answer (no pre/enc edge between the pair) come back in warns (non-blocking) — answer them with real edges, or let a vault rescan drop them; zero priors is a legal normal path. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In growth batches apply edit proposals immediately after gates pass (anchor-review model, ADR-0003); seed proposals wait for the one human review.',
+
     {
-      kind: { type: 'string', required: true, description: '"seed" (new-course entry or endpoint change — one human review) or "edit" (change ops) or "enrich" (overlay backfill); kind=gen (course skeleton) is retired and rejected' },
+      kind: { type: 'string', required: true, description: '"seed" (new-course entry or endpoint change — one human review) or "edit" (change ops) or "enrich" (overlay backfill)' },
       yaml: { type: 'string', required: true, description: 'Full proposal YAML text (SeedProposal / EditProposal / EnrichProposal schema)' },
     },
     (args: { kind: string; yaml: string }) => run('learnhub_graph_propose', async () =>
@@ -2137,7 +2455,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'List graph proposals by status — use status=pending to see what awaits human review in the panel, with the proposal id, course, reason, and op summary. After the user decides in the panel, apply with learnhub_graph_apply using that id.',
     {
       status: { type: 'string', description: 'Filter by status (default pending; e.g. applied/rejected)' },
-      kind: { type: 'string', description: 'Filter by kind: edit / seed / enrich / project_plan / project_milestone / experiment (gen is retired; historical gen rows still list without the filter)' },
+      kind: { type: 'string', description: 'Filter by kind: edit / seed / enrich / project_plan / project_milestone / experiment' },
     },
     (args: { status?: string; kind?: string }) => run('learnhub_graph_proposals', async () =>
       JSON.stringify(await engine.graphProposals(args.status, args.kind))))
@@ -2157,9 +2475,9 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { course?: string }) => run('learnhub_graph_link_backfill', async () =>
       JSON.stringify(await engine.graphLinkBackfill(args.course))))
   tool('learnhub_graph_apply',
-    'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot; kind=enrich re-checks the sha256 content fingerprints and refuses stale proposals; kind=seed lands the endpoint anchor state/终点锚.json + start/endpoint nodes with coarse placeholder edges, seed graphs get the shape-warning & health-threshold exemption) or reject (kept on record). Seed proposals (kind=seed) are the new-course entry and the ONLY endpoint-change channel — they always wait for the one human review. In edit batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the skill exit threshold (suppressed while the graph is still just the seed) — address them in the next batch.',
+    'Decide a pending graph proposal: apply (audit-gated, writes data/*.yaml with rename linkage + journal + snapshot; kind=enrich re-checks the sha256 content fingerprints and refuses stale proposals; kind=seed lands the endpoint anchor state/终点锚.json + start/endpoint nodes with coarse placeholder edges, seed graphs get the shape-warning & health-threshold exemption) or reject (kept on record). Seed proposals (kind=seed) are the new-course entry and the ONLY endpoint-change channel — they always wait for the one human review. In edit batches the agent applies directly after gates pass; revision changes wait for human review first (ADR-0003). The apply result carries findings: audit warns plus a health-score hint when below the quality baseline (suppressed while the graph is still just the seed) — address them in the next batch.',
     {
-      kind: { type: 'string', required: true, description: '"seed" (course entry / endpoint change) or "edit" (change ops) or "enrich" (overlay backfill; gen retired — legacy pending gen proposals can only be rejected)' },
+      kind: { type: 'string', required: true, description: '"seed" (course entry / endpoint change) or "edit" (change ops) or "enrich" (overlay backfill)' },
       id: { type: 'number', description: 'Proposal id as a positive integer; omit only for the latest pending of this kind' },
       reject: { type: 'boolean', description: 'true to reject instead of apply' },
       note: { type: 'string', description: 'Rejection reason (recorded)' },
@@ -2171,7 +2489,10 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
           await engine.graphReject(id, args.note ?? '')
           return `[reject] 提案 #${id} 已拒绝留痕。`
         }
-        return JSON.stringify(await engine.graphApply(graphKind(args.kind), applyId(args.id)))
+        const r = await engine.graphApply(graphKind(args.kind), applyId(args.id))
+        // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
+        await sweepGenJobs()
+        return JSON.stringify(r)
       }))
   tool('learnhub_concept_merge',
     'Merge one concept-registry entry into another (概念登记表 #141, human-decision surface): the absorbed entry disappears and ALL of its names (canonical + aliases) become aliases of the surviving entry, so every historical address keeps resolving — entries are never deleted, only merged. Use when the same concept was minted twice under different names (same meaning, confirmed by the learner); deepening a concept to a higher tier REUSES the same entry and is NOT a merge. Journal-tracked; the registry file is 课程根/概念登记表.yaml.',
@@ -2222,6 +2543,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { course: { type: 'string', required: true, description: 'Course name' } },
     (args: { course: string }) => run('learnhub_course_delete', async () => {
       const r = await engine.courseDelete(args.course)
+      await sweepGenJobs() // 写侧联动（ADR-0039）：任务记录随课程删除出册
       return JSON.stringify({ message: `已删除「${r.removed}」（整课目录移入 .trash，可手工恢复）。沉淀层波及：${r.sediment}`, ...r })
     }))
   tool('learnhub_difficulty_advice',
@@ -2604,10 +2926,13 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { id: string; milestone: string }) => run('learnhub_project_milestone_generate', () =>
       generateProjectMilestone(ctx, args.id, args.milestone)))
   tool('learnhub_project_apply',
-    'Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted; project_milestone = overwrite the milestone artifact with the old text snapshotted). Graph proposals (gen/edit) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.',
+    'Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted — a revision diff (milestone identity keyed by id) is returned and switch-line/branch-in growth batches are ENQUEUED for the anchored courses (#149); project_milestone = overwrite the milestone artifact with the old text snapshotted). Decompile-linked plan proposals CANNOT apply alone while their seed half is pending — use learnhub_project_decompile_apply. Graph proposals (edit/seed) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.',
     { id: { type: 'number', required: true, description: 'Pending proposal id' } },
-    (args: { id: number }) => run('learnhub_project_apply', async () =>
-      JSON.stringify(await engine.projectApply(args.id))))
+    (args: { id: number }) => run('learnhub_project_apply', async () => {
+      const result = await engine.projectApply(args.id)
+      triggerPlanGrowth(ctx, result)
+      return JSON.stringify(result)
+    }))
   tool('learnhub_project_milestone_pass',
     'Record the learner\'s EXPLICIT milestone pass (P-4 settlement): the learner declares a milestone checkpoint reached — no checklist gate and no question gate (Kulik 1990: strict gates hurt completion). One journal settlement row lands (kind=milestone_settle, aligned with the node xp_settle precedent): XP price = the plan\'s est declaration × FSRS difficulty calibration over the DECLARED linked nodes\' question pools (defaults when undeclared; the calibration basis is locked to the plan — it cannot be extended at pass time), locked once — a second pass of the same milestone id is rejected, so revising a plan must use fresh milestone ids. This is the ONLY journal write the project domain ever makes; it counts toward the ledger and streak like real focused work does.',
     {
@@ -2652,11 +2977,11 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     (args: { id: string; milestone?: string; nodes?: string[]; window_days?: number; min_co?: number }) => run('learnhub_project_enc_candidates', async () =>
       JSON.stringify(await engine.projectEncCandidates(args.id, { milestone: args.milestone, nodes: args.nodes, window_days: args.window_days, min_co: args.min_co }))))
   tool('learnhub_project_decompile',
-    'RETIRED at the cutover (#138, ADR-0033 grown graph): the knowledge-subgraph half rode the retired gen skeleton proposal path, so this entry now fails loud with a pointer — decompile subgraph clusters return later as SEEDS (#149 project milestone anchoring). Day-to-day milestone plan revision is unaffected: use learnhub_project_plan_generate (project_plan proposals + snapshot diff).',
+    'GOAL DECOMPILATION, v8 seed-cluster form (#149): one model call produces TWO paired proposals from the goal description + registered notes — a milestone plan draft (project_plan) and a knowledge-subgraph SEED CLUSTER (kind=seed: 1-3 start nodes + endpoint, engine stamps basis=project and lands the coarse placeholder edges). Same-origin in-out: both pass gates before EITHER is filed (plan-seed name-reconciliation gate: every plan.nodes reference must resolve to a seed-cluster node or an existing graph node — dangling references reject the whole run), and the pair is LINKED (apply ONLY via learnhub_project_decompile_apply which lands the seed graph first then the plan; rejecting one auto-rejects the other). With an explicit course param: the course must already exist and NO seed half is produced (the plan references existing nodes only — new knowledge needs are grown later by the coach, driven by plan-revision diffs). Vault priors are mined read-only; nothing canonical is written before apply.',
     {
       id: { type: 'string', required: true, description: 'Project id (the plan-draft proposal targets it)' },
       goal: { type: 'string', description: 'Goal description prose; defaults to the project\'s goal field (empty goal is rejected)' },
-      course: { type: 'string', description: 'Target course name: the subgraph appends to it; omit → subgraph becomes a NEW course skeleton proposal' },
+      course: { type: 'string', description: 'Existing target course: plan-only run (nodes must reference existing graph nodes); omit → the seed cluster becomes a NEW course seed proposal (pair-linked with the plan)' },
       notes: { type: 'array', items: { type: 'string' }, description: 'Registered note-source ids or vault-relative paths to mine for prior context; omit → all registered sources' },
     },
     (args: { id: string; goal?: string; course?: string; notes?: string[] }) => run('learnhub_project_decompile', async () =>
@@ -2669,8 +2994,16 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         },
         llmSeam(ctx),
       ))))
+  tool('learnhub_project_decompile_apply',
+    'Apply a DECOMPILED pair TOGETHER (project_plan + seed, #149 same-origin in-out): pass BOTH proposal ids from learnhub_project_decompile; the seed lands first (cluster nodes + endpoint anchor + note scaffolds) so the plan\'s node references resolve, then the plan writes. Single-sided apply of a linked pair is rejected at the guard — use this joint entry (crash recovery: an already-applied half is skipped, a rejected half never revives — re-decompile instead).',
+    {
+      plan: { type: 'number', required: true, description: 'project_plan proposal id' },
+      seed: { type: 'number', required: true, description: 'seed proposal id (pair-linked with the plan)' },
+    },
+    (args: { plan: number; seed: number }) => run('learnhub_project_decompile_apply', async () =>
+      JSON.stringify(await engine.projectDecompileApply(args.plan, args.seed))))
   tool('learnhub_project_exec_log',
-    'Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project\'s OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. When nodes names linked course nodes, every EXISTING enc edge whose BOTH ends are among them counts as exercised: practice evidence flows ONE-WAY into each endpoint node\'s practice channel (existing applyPracticeEvidence EMA; the two streams stay separate). Zero XP, zero journal, zero FSRS/scheduling writes.',
+    'Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project\'s OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. Exercised linked nodes get practice evidence backflow ONE-WAY into each node\'s practice channel (existing applyPracticeEvidence EMA, node-level dedup — seeded stub nodes participate exactly like taught ones); the count of exercised existing enc edges is reported for observability but coarse placeholder pre edges are NOT backflow channels. Zero XP, zero journal, zero FSRS/scheduling writes.',
     {
       id: { type: 'string', required: true, description: 'Project id' },
       source: { type: 'string', required: true, description: 'auto (requires evidence) / self / ai' },

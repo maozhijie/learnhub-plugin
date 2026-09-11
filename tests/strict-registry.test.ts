@@ -70,7 +70,7 @@ test('#6 Data Check reports the same broken entries without consulting Registry 
   await withRegistry('courses:\n  - { name: 数学, root: math, enabled: 1 }\n', async engine => {
     const report = await engine.dataCheck()
     assert.equal(report.status, 'broken')
-    assert.deepEqual(report.byArea.registry, { missing: 0, broken: 1, archived: 0 })
+    assert.deepEqual(report.byArea.registry, { missing: 0, broken: 1, archived: 0, hint: 0 })
     assert.ok(report.findings.some(f => f.reason === 'registry_schema' && f.detail?.includes('enabled')))
   })
 })

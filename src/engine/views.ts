@@ -20,6 +20,7 @@ import type {
 import type { AlloKind } from './grading'
 import type { JolBin, JolPrediction } from './jol'
 import type { CompletionFold } from './seed'
+import type { ProbationCourseView } from './probation'
 
 /** 提案记录（store/proposals 持久化条目）与节清单（frontmatter content.sections）
  * 的转发导出：graphReject/graphProposals 的返回与 LessonDoc.manifest 引用，
@@ -77,6 +78,9 @@ export interface StatusCourse {
   /** 完成宣告（#142 雾区条款上半，读侧折叠零写副作用）：有终点锚的课程附带——
    * 能力锚定 = 终点 mastery≥阈值且闭包健康；覆盖锚定 = 块工作表+终点。零写侧状态。 */
   completion?: CompletionFold
+  /** 插入实验面（#146）：在途插入节点（「实验中」标记取数）、到期未决、三率
+   * （滚动 30 学习日）与韧性闸门现势——插入积极性对学习者透明。 */
+  probation?: ProbationCourseView
 }
 
 export interface StatusDoc {
@@ -305,9 +309,8 @@ export interface GraphPathRelatedResult {
 
 export type GraphPathResult = GraphPathUnrelatedResult | GraphPathRelatedResult
 
-// ---- 提案门禁（graphPropose / graphApply / graphEncBackfill；gengraph.GraphProposals）----
-// gen 提案形态（GraphGenProposalResult / GraphApplyGenResult）随 #138 cutover 退役——
-// kind=gen 不再受理；图谱域剩 edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
+// ---- 提案门禁（graphPropose / graphApply / graphEncBackfill；proposals.GraphProposals）----
+// 图谱域：edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
 
 /** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。
  * operator/disagreement = 生长批受理时随行（#145 note 区算子标签；disagreement=带分歧声明）。
@@ -323,7 +326,7 @@ export interface GraphEditProposalResult {
   warns?: string[]
 }
 
-/** 种子提案受理（proposeSeed，#142）：课程新入口（gen 退役后接管），一次人审即开工。
+/** 种子提案受理（proposeSeed，#142）：课程新入口，一次人审即开工。
  * prior_feed_unresponded = ≥0.7 先验候选未被结构回应的条数（喂料分流，非阻可见）。 */
 export interface GraphSeedProposalResult {
   id: number
@@ -629,6 +632,8 @@ export interface AnswerResult {
   /** 判错差异摘要（规则题判错时携带）：点名「漏选了 A / 多选了 C / 从第 2 项起顺序不对」，
    * 让判错反馈能对上学习者的作答（ADR-0031）。 */
   diff?: string
+  /** probation 在途行使闸（#146）：实验中的插入节点——作答只记流不回流练习证据。 */
+  evidence_gated?: true
 }
 
 /** 申诉复核结论（questionDisputeReview，只读不落盘）。 */
@@ -692,6 +697,8 @@ export interface QuestionForgetResult {
   /** 节点聚合掌握度（课程题库通道；笔记源无节点，缺省）。 */
   mastery?: number
   xp: 0
+  /** probation 在途行使闸（#146）：实验中的插入节点——忘记只记流不回流练习证据。 */
+  evidence_gated?: true
 }
 
 // ---- Anki 通道（C2 #63 / ADR-0011；ankiStatus）----
@@ -1119,12 +1126,11 @@ export interface ProjectExecRec {
   note?: string
 }
 
-/** 单个节点的练习证据回流回执（projectExecLog；单向复制进节点练习证据通道）。 */
+/** 单个节点的练习证据回流回执（projectExecLog；#149 行使即回流——节点级单向复制进
+ * 练习证据通道；粗 pre 占位边不是回流通道，行使记录只留 exec 流水）。 */
 export interface ProjectExecBackflow {
   course: string
   node: string
-  /** 被行使的 enc 边（holder → skill 有向形态，审计展示用）。 */
-  edge: [string, string]
   ema_before: number
   ema_after: number
   mastery_after: number
@@ -1139,10 +1145,10 @@ export interface ProjectExecResult {
   /** 评级映射后的 0-1 分数（回流写入节点 practice_ema 的分值）。 */
   score: number
   nodes: string[]
-  /** 被行使的既有 enc 边数（每条边两端节点各回流一次）。 */
+  /** 被行使的既有 enc 边数（两端都在事件 nodes 内；enc 面观测——回流已改节点级）。 */
   edges: number
   backflow: ProjectExecBackflow[]
-  /** 行使边两端节点笔记缺失/不可用时的跳过清单（Missing 合法空态）。 */
+  /** 行使节点笔记缺失/不可用时的跳过清单（Missing 合法空态）。 */
   skipped: Array<{ course: string; node: string; reason: string }>
 }
 

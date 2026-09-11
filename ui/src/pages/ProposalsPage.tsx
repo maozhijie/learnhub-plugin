@@ -1,7 +1,9 @@
-/** 提案页：agent 图构建的 seed/edit/enrich 提案（gen 已退役），人审后应用或拒绝（全留痕）。 */
+/** 提案页：agent 图构建的 seed/edit/enrich 提案（gen 已退役），人审后应用或拒绝（全留痕）。
+ * 列表常驻新鲜（8s 轮询 + 手动刷新）——起草完成后提案才出现，人审队列不能是死数据。 */
 import { Alert, Button, Card, Empty, Message, Modal, Space, Table, Tag } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
+import { isActiveTab } from '../active-tab'
 import type { PropItem } from '../types'
 
 /** 提案 kind → 人读标签（gen 仅存量留痕展示）。 */
@@ -29,6 +31,12 @@ export default function ProposalsPage() {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  // 8s 轮询（页签保活纪律：非激活跳过取数）——起草任务完成、教练回合产批后提案自动浮现
+  useEffect(() => {
+    const timer = setInterval(() => { if (isActiveTab('proposals')) void load() }, 8000)
+    return () => clearInterval(timer)
+  }, [load])
 
   const apply = (p: PropItem) => {
     Modal.confirm({
@@ -65,10 +73,11 @@ export default function ProposalsPage() {
 
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
-      <Alert type='info' content='agent 在 dsh 对话里提出种子（建课/换终点，一次人审）、edit 变更与 enrich 富化提案 → 这里人审 → 应用后图结构与 Obsidian 笔记联动落盘。' />
-      <Card size='small' title='提案列表' style={{ borderRadius: 10 }}>
+      <Alert type='info' content='面板下发的种子/富化/反编译/项目草案与教练回合的生长批提案都汇集在这里人审 → 应用后图结构与 Obsidian 笔记联动落盘（生长批过受理门即自动应用，不在此排队——ADR-0003）。' />
+      <Card size='small' title='提案列表' style={{ borderRadius: 10 }}
+        extra={<Button size='mini' onClick={() => void load()}>刷新</Button>}>
         {items === null ? null : items.length === 0 ? (
-          <Empty description='没有提案：在 dsh 对话里让 agent 生成课程（learnhub-graph-generate 技能）' />
+          <Empty description='没有提案：学习图页教练台可下发建课/回填/反编译，项目页可起草计划与里程碑；生长批随教练回合自动产生并直接应用' />
         ) : (
           <Table size='small' data={items} rowKey={p => p.id} pagination={{ pageSize: 15, showTotal: true }}
             columns={[

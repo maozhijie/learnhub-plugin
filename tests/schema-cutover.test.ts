@@ -84,7 +84,7 @@ test('data-check：存档区出 archived 盘点（数文件、不校验内容、
     const report = await engine.dataCheck()
     assert.equal(report.status, 'ok', 'archived 不进 status')
     assert.equal(report.counts.archived, 1)
-    assert.deepEqual(report.byArea.archive, { missing: 0, broken: 0, archived: 1 })
+    assert.deepEqual(report.byArea.archive, { missing: 0, broken: 0, archived: 1, hint: 0 })
     assert.deepEqual(report.inventory.archive, { present: true, files: 2 })
     const finding = report.findings.find(f => f.reason === 'pre_v2_archive')!
     assert.equal(finding.level, 'archived')

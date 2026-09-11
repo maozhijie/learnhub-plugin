@@ -63,6 +63,8 @@
     }
   },
   "devDependencies": {
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-tools": "^0.1.5-rc.2",
     "esbuild": "^0.25.0"
   },
   "dependencies": {

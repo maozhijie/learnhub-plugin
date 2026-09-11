@@ -45,8 +45,8 @@ XP 例外：完成节点时有一次 `xp_settle` 对账（见「XP 预算制」�
 
 - 调度与学习：`learnhub_status / recommend / lesson / rebuild / feedback / note_resolve`
 - 节点操作：`learnhub_skip`（跳过/取消跳过，已有基础的节点）、`learnhub_complete`（完成确认，未答题入复习循环）
-- 图谱五面 + 逐步探索：`learnhub_graph_analyze / propose / proposals / apply`（analyze 返回图谱健康分 0-100、下一批建议 expand_blocks/missing_pre/unconverged 与每节点 schema 字段值 pre/enc/est/bloom/difficulty/note——边级自查的数据依据，建议条目上限随图规模伸缩；proposals 列 pending/历史提案；apply 返回 findings = audit warns 摘要 + 健康分不足提醒；edit ops 含 set_enc 成分技能边整体替换，add_node 支持可选 est/type/bloom/difficulty/enc，gen 与 edit 两路一致）；探索三件套 `learnhub_graph_node`（单节点详情+前置传递闭包）/ `learnhub_graph_browse`（区/块过滤浏览）/ `learnhub_graph_path`（from 是否 to 的前置 + BFS 最短链）——不拉全图逐步查细节
-- 图谱质量机制：健康分 5 项（动作句命名/est 覆盖/前置完备/收敛度/结构卫生）进审计基线表；审计新增 R11 难度跳跃（相邻 pre 边 |Δdifficulty|≥2 → warn）与 R12 认知-时长失配（info）；`learnhub-graph-generate` 技能规定结束条件为「audit 无 ERROR 且健康分 ≥ 80」+ 每批边级自查表 + 每累计约 50 ops 委派 `subagent_graph_prosecutor` 对抗审查；数量限定按图规模伸缩（批次 ≤25、大图放宽 ≤40；健康分别名命中按节点数归一；R1 浅叶阈值随最大深度相对化；审计条目超 15 附溢出行）——数百节点的课程属正常范围；正文落盘时 enc_candidates 引用非祖先节点 → 返回值附 hints 提醒补边（内容反哺图）
+- 图谱五面 + 逐步探索：`learnhub_graph_analyze / propose / proposals / apply`（analyze 返回图谱健康分 0-100、下一批建议 expand_blocks/missing_pre/unconverged 与每节点 schema 字段值 pre/enc/est/bloom/difficulty/note——边级自查的数据依据，建议条目上限随图规模伸缩；proposals 列 pending/历史提案；apply 返回 findings = audit warns 摘要 + 健康分基线提醒；propose 受理 edit/seed/enrich——seed（种子提案）为建课入口一次人审；edit ops 含 set_enc 成分技能边整体替换，add_node 支持可选 est/type/bloom/difficulty/enc）；探索三件套 `learnhub_graph_node`（单节点详情+前置传递闭包）/ `learnhub_graph_browse`（区/块过滤浏览）/ `learnhub_graph_path`（from 是否 to 的前置 + BFS 最短链）——不拉全图逐步查细节
+- 图谱质量机制：健康分 5 项（动作句命名/est 覆盖/前置完备/收敛度/结构卫生）进审计基线表；审计 R13 认知跨步（相邻 pre 边 |Δdifficulty|≥2 → warn，原 R11 口径并入）与 R12 认知-时长失配（info）；生长批质量由受理门把守（schema/结构检查/概念对表/终点锚保护/巩固门/插入批调速闸），批次节奏由教练回合提示词约束（每批 ≤8 操作、单算子方向，apply 后看清全图再裁下一批）；数量限定按图规模伸缩（健康分别名命中按节点数归一；R1 浅叶阈值随最大深度相对化；审计条目超 15 附溢出行）；正文落盘时 enc_candidates 引用非祖先节点 → 返回值附 hints 提醒补边（内容反哺图）
 - 题库（刷卡作答流）：`learnhub_question_list / question_save / question_answer`，`learnhub_question_generate`（模型出题管线，与自动出题同门禁）、`learnhub_question_get`（单题全量含答案，修订用——list 不带答案防作答流泄题）、`learnhub_question_update`（patch 合并重新校验，`{archived:true}` 隐藏题）
 - 生成：`learnhub_generate`（大纲 → 逐节正文 → 自动出题三段管线，断点续跑；缺笔记先补骨架，on-demand 课时语义；可选 `style` 节级风格变体作用于每节生成）、`learnhub_course_reset`（整课重置后台重跑，HTTP 与工具同通道）与 `learnhub_course_delete`（删课移入 .trash，可手工恢复）
 - 质检：`learnhub_content_check`（对现有课程笔记跑质检门——超纲引用/别名一致性/未注册代码块语言/interactive 引用文件存在；agent 手改正文后必须跑一遍并修掉全部 findings）
@@ -217,7 +217,7 @@ e2e 在系统临时目录复制最小 vault 子集并重置笔记 frontmatter，
 
 ```
 src/index.ts          host 插件源码（工具面 + HTTP 路由 + SPA 伺服 + 生成任务注册表）
-src/engine/*.ts       TS 引擎（paths/registry/graph/notes/srs/grading/sessions/content/gengraph/audit/analysis/question-bank/store/门面）
+src/engine/*.ts       TS 引擎（paths/registry/graph/notes/srs/grading/sessions/content/proposals/audit/analysis/question-bank/store/门面）
 ui/                   面板 SPA 源码（Vite + React + Arco + React Flow；pages/ components/）
 web/dist/             面板构建产物（host 伺服；assets 带 hash 永久缓存，index.html no-store）
 web/vendor/           交互件 vendored 库（katex/three，build 时从 ui/node_modules 复制）

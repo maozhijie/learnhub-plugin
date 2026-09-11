@@ -235,6 +235,15 @@ test('就绪深度：ready=0 只告警不阻塞；低于前瞻一行告警；满
   assert.deepEqual(ok.warnings, [])
 })
 
+test('就绪深度：exhausted（除终点外前沿清空）判据自然通过——尾段合法停摆零告警', () => {
+  const tail = readyDepthCheck({ ready: 0, declared: null, today: TODAY, exhausted: true })
+  assert.equal(tail.ok, true)
+  assert.deepEqual(tail.warnings, [])
+  const coldTail = readyDepthCheck({ ready: 2, declared: '2026-09-07', today: TODAY, exhausted: true })
+  assert.equal(coldTail.ok, true, '冷启动放大也不复活已清空的前沿')
+  assert.deepEqual(coldTail.warnings, [])
+})
+
 // ---- 渲染：行为摘要区块体 / 沉淀折叠教练投影 ----
 
 test('行为摘要渲染：空窗 = 合法空态一行；有数据时五件各有区块且数字可读', () => {
@@ -455,6 +464,41 @@ test('门面：coachCheckpoint 三个触发点同核——就绪存量只数「�
       assert.equal(check.warnings.length, 1)
       assert.ok(check.warnings[0]!.includes('低于前瞻需求 3'))
     }
+  })
+})
+
+const TAIL_GRAPH = [
+  'region: 基础',
+  'color: blue',
+  'blocks:',
+  '  - name: 链块',
+  '    nodes:',
+  '      - { name: 起点, pre: [], opt: false, note: "", est: 20 }',
+  '      - { name: 中继, pre: [起点], opt: false, note: "", est: 25 }',
+  '      - { name: 终点, pre: [中继], opt: false, note: "", est: 30 }',
+].join('\n')
+
+test('门面：就绪核算剔除终点——尾段非终点前沿清空判据通过；终点正文不虚增存量', async () => {
+  await withVault({
+    graph: TAIL_GRAPH,
+    notes: {
+      起点: { stage: 'skipped' },
+      中继: { stage: 'skipped' },
+      终点: { stage: 'ready', content: { sections: READY_SECTIONS } },
+    },
+    files: [{
+      path: '学习中心/math/state/终点锚.json',
+      content: JSON.stringify({
+        version: 1, endpoint: '终点', goal_type: 'capability', declared: localDay(-30),
+        origin_proposal: 1, seed_nodes: ['起点', '中继', '终点'], start_basis: { 起点: 'baseline' }, worksheet: [],
+      }),
+    }],
+  }, async ({ engine }) => {
+    const r = await engine.coachCheckpoint('queue_idle', '数学')
+    const check = r.courses[0]!
+    assert.equal(check.ready, 0, '终点有正文也不入就绪存量（锚点不是课程节点）')
+    assert.equal(check.ok, true, '除终点外前沿清空 → 判据自然通过')
+    assert.deepEqual(check.warnings, [])
   })
 })
 

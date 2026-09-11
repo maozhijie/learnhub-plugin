@@ -24,7 +24,7 @@ import { bandOffset, combinedDifficulty, startBand, sessionOrder } from './adapt
 import type { BandPref } from './adaptive.ts'
 import { JOL_PREDICTIONS, JOL_SAMPLE_RATE, jolCalibration, jolDeviatedKeys, pickJolTargets } from './jol.ts'
 import type { JolPrediction } from './jol.ts'
-import { CALIBRATION_BOOST_SAMPLE_RATE } from './params.ts'
+import { CALIBRATION_BOOST_SAMPLE_RATE, RECHECK_DAYS_DEFAULT } from './params.ts'
 import { calibrationHintText, calibrationProfileView, overconfidenceOf } from './calibration.ts'
 import { normalizeSleepAdvice } from './sleep.ts'
 import { NOF1_TEMPLATES, NOF1_PER_ARM_MIN, NOF1_VARIABLE_WHITELIST, nof1Template, nof1ArmForDay, nof1Outcomes, analyzeNof1, shuffleAssign, interleaveBySource, mulberry32 } from './nof1.ts'
@@ -57,18 +57,21 @@ import { graphHealthScore } from './health.ts'
 import { Content } from './content.ts'
 import { nodeTierOf, perSectionQuizTarget, genericQuizTarget, sectionTierLabel } from './complexity.ts'
 import type { ComplexityTier } from './complexity.ts'
-import { GraphProposals, genRetiredError, validateEditProposal } from './gengraph.ts'
-import type { ApplyAudit, EditProposalSpec, EnrichFieldEntry, GrowthNote } from './gengraph.ts'
+import { GraphProposals, validateEditProposal, addNodeCountOf } from './proposals.ts'
+import type { ApplyAudit, EditProposalSpec, EnrichFieldEntry, GrowthNote } from './proposals.ts'
 import type { LlmComplete } from './llm.ts'
-import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier } from './projects.ts'
+import { Projects, PROJECT_LIFECYCLES, FADING_TIERS, isProjectLifecycle, isFadingTier, planRevisionDiff } from './projects.ts'
+import type { PlanRevisionDiff, PlanGrowthTrigger } from './projects.ts'
+import { decompileGoalOf, decompileTerms, splitDecompileDoc, decompileRepairPrompt, reconcilePlanNodes, splitNodeSpec } from './project-decompile.ts'
+import type { DecompileDoc } from './project-decompile.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult, PlanItem } from './projects.ts'
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
 import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, readVaultLinksCache, scanVaultLinks, scoreTier } from './vault-links.ts'
 import type { VaultLinksDoc, VaultLinkCandidateView } from './vault-links.ts'
-import { readAnchor, foldCompletion, isSeedGraph, COMPLETION_MASTERY_THRESHOLD } from './seed.ts'
-import type { CompletionFold } from './seed.ts'
+import { readAnchor, foldCompletion, isSeedGraph, COMPLETION_MASTERY_THRESHOLD, validateSeedProposal, seedRepairPrompt } from './seed.ts'
+import type { CompletionFold, SeedProposalSpec, SeedDraftRequest } from './seed.ts'
 import {
   SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ETA_PENDING,
   COMPASS_ETA_PROBE_WEEKS, compassScaffold, parseCompass, sectionBody, withSectionText,
@@ -78,6 +81,15 @@ import {
 import type { CompassEta, CompassEtaProbe } from './compass.ts'
 import { behaviorDigest, readyDepthCheck, renderBehaviorDigest, renderSedimentForCoach, arbitrationPopulations, renderArbitrationEvidence } from './coach-round.ts'
 import type { CoachCheck, CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
+
+/** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。 */
+export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
+export type { SeedDraftRequest } from './seed.ts'
+import {
+  appendProbationEntry, readProbationLedger, foldProbation, recheckVerdict, recheckDue,
+  learningDaysOf, growthRates, growthGate,
+} from './probation.ts'
+import type { ProbationEntry, ProbationOutcome, ProbationFold, ProbationCourseView, RecheckMetric, GrowthBatchTally } from './probation.ts'
 import type { VaultLinkPrior } from './analysis.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -271,7 +283,10 @@ export class LearnhubEngine {
     this.habits = new Habits(this.paths)
     this.noteManifest = new NoteSourceManifest(this.paths)
     this.ankiMirror = new AnkiMirror(this.paths)
-    this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot)
+    // 生长闸门注入（#146 插入/旁支调速）：三率流水在门面（账本/提案/练习），受理与
+    // apply 双门经此回调消费同一份闸门判定。
+    this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot,
+      spec => this.growthGateErrors(spec))
     this.projects = new Projects(this.paths, this.store)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course))
   }
@@ -301,6 +316,12 @@ export class LearnhubEngine {
 
   async resolveCourse(key?: string): Promise<CourseEntry> {
     return this.registry.resolve(key)
+  }
+
+  /** 课程条目精确查找（name 或 id）：不存在返回 null，不抛——注册表清扫等存在性判定用
+   * （区别于 resolveCourse 的 fail loud）；停用课程不算缺失，内容仍在。 */
+  async courseByKey(key: string): Promise<CourseEntry | null> {
+    return this.registry.get(key)
   }
 
   /** 跨课定位节点：「课程/节点」直接命中；否则在启用课程中搜唯一命中。 */
@@ -436,6 +457,9 @@ export class LearnhubEngine {
       // 教练回合触发点·会话开始（#144）：learnhub_status / 面板 /api/status 是会话开工
       // 的汇总入口——逐课程附就绪深度检查（读侧感知，ready=0 只告警不阻塞）
       course.coach = await this.coachCheckFor(entry, today)
+      // 插入实验面（#146）：在途插入节点（面板「实验中」标记取数）、到期未决、
+      // 三率（滚动 30 学习日）与韧性闸门现势——插入积极性对学习者透明
+      course.probation = await this.probationViewFor(entry, today, cutoff)
     }
     return doc
   }
@@ -969,38 +993,102 @@ export class LearnhubEngine {
 
   // ---- 提案门禁包装（apply 前 audit 拦截） ----
 
-  async graphPropose(kind: 'gen' | 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult> {
-    if (kind !== 'gen' && kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
-      throw new Error(`[propose] 非法 kind: ${String(kind)}（允许 edit/seed/enrich——gen 已退役，拼错不会再被静默当成 gen）`)
+  async graphPropose(kind: 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult> {
+    if (kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
+      throw new Error(`[propose] 非法 kind: ${String(kind)}（图谱域只受理 edit/seed/enrich）`)
     }
-    // 受理门退役检查先行（#138）：不落提案、不查流水，直接指路
-    if (kind === 'gen') throw genRetiredError('propose')
     if (kind === 'seed') return this.proposals.proposeSeed(yamlText)
     return kind === 'edit' ? this.proposals.proposeEdit(yamlText) : this.proposals.proposeEnrich(yamlText)
   }
 
-  async graphApply(kind: 'gen' | 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult> {
-    if (kind !== 'gen' && kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
-      throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 edit/seed/enrich——gen 已退役）`)
+  async graphApply(kind: 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult> {
+    if (kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
+      throw new Error(`[apply] 非法 kind: ${String(kind)}（图谱域只受理 edit/seed/enrich）`)
     }
-    if (kind === 'gen') throw genRetiredError('apply')
     // audit 门禁：目标课程存在 ERROR 时拒绝 apply；warns 摘要 + 健康分随 findings 返回
     // （mode=new 的种子提案课程尚未建 data 目录，audit 空跑——种子图豁免在 runAudit/applySeed 内按锚判）
     const pending = await this.store.takePending(kind, pid)
-    const course = await this.registry.get(pending.course)
     const today = (await this.learningDay()).today
-    let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
-    if (course && existsSync(this.paths.dataDir(course.root))) {
-      const { graph } = await this.loadView(course)
-      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, today)
-      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
-    }
+    const audit = await this.seedAuditFor(pending.course, today)
     if (kind === 'seed') return this.proposals.applySeed(pid, audit, today)
     return kind === 'edit' ? this.proposals.applyEdit(pid, audit) : this.proposals.applyEnrich(pid, audit)
   }
 
   async graphReject(pid: number, note = ''): Promise<ProposalRec> {
     return this.proposals.reject(pid, note)
+  }
+
+  /** 面板下发的种子起草（学习图页建课/换终点表单入口）：目标描述 + 模式 + 目标类型
+   * （coverage 附块工作表）→「种子提案」提示词组装（vault 先验选配——熟悉边界定位）→
+   * llm → 种子 YAML 干跑校验门（validateSeedProposal 直跑，未过回灌修复一轮）→
+   * proposeSeed 权威受理（schema/注册表对账/结构/概念对表在受理侧重跑全量），一次人审
+   * 即开工。课程名/模式/目标类型/工作表是表单绑定字段——以输入为准，不信模型照抄。
+   * llm 为注入缝（#137）。 */
+  async seedPropose(
+    input: SeedDraftRequest,
+    llm: LlmComplete,
+  ): Promise<{ id: number; course: string; mode: 'new' | 'reseed'; goal_type: string; endpoint: string; starts: number; prior_hits: number; repaired: boolean }> {
+    const course = input.course.trim()
+    const goal = input.goal.trim()
+    if (!course) throw new Error('[seed-propose] 课程名必填（mode=new 自拟新名，mode=reseed 选既有课程）。')
+    if (!goal) throw new Error('[seed-propose] 目标描述必填——种子起草只认学习者的目标，不猜。')
+    const mode = input.mode ?? 'new'
+    const goalType = input.goalType ?? 'capability'
+    const worksheet = goalType === 'coverage' ? (input.worksheet ?? []).filter(w => typeof w.block === 'string' && w.block.trim()) : []
+    if (goalType === 'coverage' && !worksheet.length) {
+      throw new Error('[seed-propose] 覆盖锚定必须携带非空块工作表（{block, note?} 列表）；能力锚定不需要。')
+    }
+    // vault 先验选配（只读检索）：注册清单 Missing = 零命中合法，退化常识基线
+    let prior = ''
+    let priorHits = 0
+    if (input.useVaultPrior === true) {
+      const manifest = await this.noteManifest.load()
+      const titles = manifest.sources.map(s => s.title ?? s.path.split('/').pop()!.replace(/\.md$/i, ''))
+      const terms = decompileTerms(goal, titles)
+      const centerRel = this.paths.centerRoot.slice(this.vaultRoot.length + 1)
+      const hits = terms.length ? await searchVaultPrior(this.vaultRoot, centerRel, terms) : []
+      priorHits = hits.length
+      if (hits.length) {
+        const items = hits.map(h => `- 《${h.title}》（${h.path}）\n  > ${h.excerpt.replaceAll('\n', '\n  > ')}`).join('\n')
+        prior = `## 学习者已有理解（Vault 先验）\n\n以下是学习者个人 Vault 里与目标相关的笔记摘录（只读检索所得）：\n\n${items}\n\n起点定位要求：把起点放在熟悉边界——笔记已稳定覆盖的内容不作起点（那是可快速略过的地形，在 reason 里点一句）；摘录只是他记过的东西，只读，永不改写。`
+      }
+    }
+    const tpl = await this.loadPrompt('种子提案')
+    const pack = `${tpl}\n\n---\n\n## 目标描述（学习者原文）\n\n${goal}\n\n## 模式与绑定（照抄，不自拟）\n\n- 课程名：${course}\n- 模式：${mode}\n- 目标类型：${goalType}`
+      + (goalType === 'coverage' ? `\n- 块工作表（照抄块名）：\n${worksheet.map(w => `  - block: ${w.block}`).join('\n')}` : '')
+      + (prior ? `\n\n---\n\n${prior}` : '')
+    const gateOnce = (raw: string): { errors: string[]; spec: SeedProposalSpec | null } => {
+      let doc: unknown
+      try {
+        doc = YAML.parseModel(raw)
+      } catch (err) {
+        return { errors: [`YAML 解析失败：${err instanceof Error ? err.message : String(err)}`], spec: null }
+      }
+      const v = validateSeedProposal(doc)
+      return { errors: v.errors ?? [], spec: v.spec ?? null }
+    }
+    let raw = await llm(pack)
+    let gate = gateOnce(raw)
+    let repaired = false
+    if (gate.errors.length) {
+      repaired = true
+      raw = await llm(seedRepairPrompt(pack, raw, gate.errors.map(x => `  ✗ ${x}`)))
+      gate = gateOnce(raw)
+    }
+    if (gate.errors.length || !gate.spec) {
+      const e: Error & { code?: string } = new Error(
+        `[seed-propose] 模型产出未过种子校验门（已自动修复重试一轮，提案未受理）：\n${gate.errors.map(x => `  ✗ ${x}`).join('\n')}`)
+      e.code = 'SEED_GATE_FAILED'
+      throw e
+    }
+    const spec = gate.spec
+    spec.course = course
+    spec.mode = mode
+    spec.goal_type = goalType
+    if (goalType === 'coverage') spec.worksheet = worksheet
+    else delete spec.worksheet
+    const r = await this.graphPropose('seed', YAML.stringify(spec)) as { id: number; endpoint: string; starts: number }
+    return { id: r.id, course, mode, goal_type: goalType, endpoint: r.endpoint, starts: r.starts, prior_hits: priorHits, repaired }
   }
 
   /** 概念并入（#141 条目禁删只并入；human 领域判断的执行面）：from 整条并入 into，
@@ -1081,15 +1169,15 @@ export class LearnhubEngine {
 
   /** 提案统一 apply 入口（图谱域 + 项目域 + 实验域；面板 /proposals/apply 消费）。
    * kind 显式照抄提案记录——未知 kind 报错，绝不静默归一成 gen。图谱域走 audit 门禁，
-   * 项目域无图审计（takePending 各自在 apply 内做）。 */
+   * 项目域无图审计（takePending 各自在 apply 内做）；project_plan 走引擎包装
+   * （修订快照 diff + 换线/补支触发随结果带出，#149）。 */
   async proposalApply(
     kind: string, pid?: number,
   ): Promise<GraphApplyResult | ProjectApplyResult | ExperimentStartResult> {
     if (kind === 'experiment') return this.experimentApply(pid)
-    if (kind === 'project_plan' || kind === 'project_milestone') {
-      return kind === 'project_plan' ? this.projects.applyPlan(pid) : this.projects.applyMilestone(pid)
-    }
-    if (kind === 'gen' || kind === 'edit' || kind === 'seed' || kind === 'enrich') return this.graphApply(kind, pid)
+    if (kind === 'project_plan') return this.applyProjectPlanProposal(pid)
+    if (kind === 'project_milestone') return this.projects.applyMilestone(pid)
+    if (kind === 'edit' || kind === 'seed' || kind === 'enrich') return this.graphApply(kind, pid)
     throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 ${PROPOSAL_KINDS.join('/')}）`)
   }
 
@@ -1098,7 +1186,7 @@ export class LearnhubEngine {
     const list = await this.store.loadProposals()
     const prop = list.find(p => p.id === pid)
     if (!prop || prop.status !== 'pending') throw new Error(`[project-apply] 提案 #${pid} 不存在或已决。`)
-    if (prop.kind === 'project_plan') return this.projects.applyPlan(pid)
+    if (prop.kind === 'project_plan') return this.applyProjectPlanProposal(pid)
     if (prop.kind === 'project_milestone') return this.projects.applyMilestone(pid)
     throw new Error(`[project-apply] 提案 #${pid} 是 ${prop.kind} 提案——图谱域走 learnhub_graph_apply。`)
   }
@@ -1328,13 +1416,16 @@ export class LearnhubEngine {
 
   // ---- 执行事件流 / Mastery 交叉 2×2（P-7 / #98 / ADR-0015 §3/§4/§8）----
 
-  /** 记一条项目执行事件（P-7 #98）：项目自己的事件流（projects/<id>/exec.jsonl，与
-   * 节点练习证据通道是两条流，ADR-0015 §4）。评级 1-4 整数 + 来源 auto/self/ai——
-   * auto 必须带可观测证据走确定性映射（ratingFromEvidence，skills 先例）；自评/ai
-   * 照收（ADR-0016 自报即可信）。nodes 给出本次行使的关联节点时，被行使的既有 enc
-   * 边（= 图上实际存在的边，两端都在 nodes 内）两端节点各回流一次练习证据
-   * （applyPracticeEvidence，单向复制零新存储形态；判定机制精细化归 P-6 后续）。
-   * 零 XP、零 journal、零 review-log、零 sessions/srs（ADR-0015 §7）。 */
+  /** 记一条项目执行事件（P-7 #98；#149 stub 回流修订；#146 复诊闸）：项目自己的事件流
+   * （projects/<id>/exec.jsonl，与节点练习证据通道是两条流，ADR-0015 §4）。评级 1-4
+   * 整数 + 来源 auto/self/ai——auto 必须带可观测证据走确定性映射（ratingFromEvidence，
+   * skills 先例）；自评/ai 照收（ADR-0016 自报即可信）。
+   * 上行回流 = **行使即回流（节点级，#149）**：事件 nodes 解析到图上的每个节点（含种子簇
+   * stub——有笔记有身份）各回流一次练习证据（applyPracticeEvidence 单向复制，同节点
+   * 去重）；粗 pre 占位边不是回流通道（行使记录留在 exec 流水，边零证据写入——
+   * 「粗 pre 只记流不回流」）；probation 在途的插入节点不回流（#146 复诊闸，只记流，
+   * proven 后恢复）；被行使的既有 enc 边数随结果带出（enc 面观测，回流不再以 enc 边
+   * 为门）。零 XP、零 journal、零 review-log、零 sessions/srs（ADR-0015 §7）。 */
   async projectExecLog(
     id: string,
     input: { source: string; rating?: number; evidence?: ExecutionEvidence; nodes?: string[]; note?: string },
@@ -1355,7 +1446,7 @@ export class LearnhubEngine {
     const { today } = await this.learningDay()
     const score = execRatingScore(v.rating)
 
-    // 行使判定与回流：逐课程载图（enc 边归节点域、不可跨图），每条被行使边两端各记一次
+    // 行使判定与节点级回流：逐课程载图（enc 边归节点域、不可跨图），每节点至多回流一次
     const linked = v.nodes.length ? await this.resolveProjectNodes(v.nodes) : []
     const byCourse = new Map<string, string[]>()
     for (const { course, node } of linked) {
@@ -1370,26 +1461,34 @@ export class LearnhubEngine {
       const c = await this.registry.get(courseName)
       if (!c) continue
       const { graph } = await this.loadView(c)
-      const exercised = exercisedEncEdges(nodes, holder => (graph.encOf[holder] ?? []).map(e => e[0]))
-      edges += exercised.length
-      for (const pair of exercised) {
-        for (const endpoint of [pair.holder, pair.skill]) {
-          const note = await this.nodeNote(c, graph, endpoint)
-          if (!note.fm) {
-            skipped.push({
-              course: courseName, node: endpoint,
-              reason: '节点笔记缺失或 frontmatter 不可用——练习证据无处落，跳过（Missing 合法空态）',
-            })
-            continue
-          }
-          const before = note.fm.practice_ema ?? 0
-          const next = applyPracticeEvidence(note.fm, score)
-          await this.saveNodeNote(note.path, next, note.body)
-          backflow.push({
-            course: courseName, node: endpoint, edge: [pair.holder, pair.skill],
-            ema_before: before, ema_after: next.practice_ema ?? 0, mastery_after: masteryOfFm(next),
+      // probation 在途行使闸（#146）：实验中的插入节点不回流练习证据（行使照落 exec 流水）。
+      const gated = foldProbation(await readProbationLedger(this.paths, c.root))
+      const gatedNodes = new Set(gated.inFlight.map(e => e.node))
+      // enc 面观测：被行使的既有 enc 边数（两端都在 nodes 内）；回流已改节点级，边数只作观测
+      edges += exercisedEncEdges(nodes, holder => (graph.encOf[holder] ?? []).map(e => e[0])).length
+      for (const node of nodes) {
+        if (gatedNodes.has(node)) {
+          skipped.push({
+            course: courseName, node,
+            reason: 'probation 在途（实验中的插入节点）——行使只记流不回流练习证据，proven 后恢复',
           })
+          continue
         }
+        const note = await this.nodeNote(c, graph, node)
+        if (!note.fm) {
+          skipped.push({
+            course: courseName, node,
+            reason: '节点笔记缺失或 frontmatter 不可用——练习证据无处落，跳过（Missing 合法空态）',
+          })
+          continue
+        }
+        const before = note.fm.practice_ema ?? 0
+        const next = applyPracticeEvidence(note.fm, score)
+        await this.saveNodeNote(note.path, next, note.body)
+        backflow.push({
+          course: courseName, node,
+          ema_before: before, ema_after: next.practice_ema ?? 0, mastery_after: masteryOfFm(next),
+        })
       }
     }
 
@@ -1568,21 +1667,322 @@ export class LearnhubEngine {
     }
   }
 
-  // ---- 目标反编译（P-5 / #95：逆向设计 + PjBL）----
+  // ---- 目标反编译（P-5 / #95：逆向设计 + PjBL；v8 种子簇形态 #149）----
 
-  /** 目标反编译（P-5）：**入口随 #138 cutover 退役**——知识子图半区走 pending gen
-   * 提案（骨架路径），gen 已按 ADR-0033 生长式图退役（新课程入口由种子提案接管）。
-   * 反编译子图簇在 v2 的重接形态 = 直接充当种子起点（#149 项目里程碑锚定）；
-   * 里程碑计划修订的日常通道（project_plan 提案 + 快照 diff）不受影响。 */
+  /** 目标反编译（P-5，v8 #149）：一次模型调用产出**双提案**——里程碑计划草案
+   * （project_plan）与知识子图种子簇（kind=seed，子图簇直通新课程的种子起点，
+   * 起点 basis 铸 project）。同源同进同退：
+   * - 受理侧门禁全部过完才落任何提案：双半区 schema 门 + 名字对账门（plan.nodes ⊆
+   *   种子簇 ∪ 既有图节点名）+ 种子落点/结构预检——任一失败回灌修复一轮，仍败则
+   *   DECOMPILE_GATE_FAILED 零提案（同退的静态半）；
+   * - 两提案 pair 互相指认：apply 只走 projectDecompileApply 联合入口（种子先落图、
+   *   计划后落盘），单边 apply 被守卫拒、单边 reject 联动拒另一半（同退的动态半）。
+   * 显式目标课程 = 已播种课程的新计划半区（nodes 引用既有节点名，对账门收紧到既有
+   * 图；新知识需要走计划修订驱动的教练补支）；省略 course = 种子簇充当新课程种子。
+   * 检索面复用 Vault 先验（只读）；apply 前零 canonical 写入（ADR-0015 裁决 6）。 */
   async projectDecompile(
     id: string,
     opts: { goal?: string; course?: string; notes?: string[] } = {},
     llm: LlmComplete,
-  ): Promise<never> {
-    void id; void opts; void llm
-    throw new Error(
-      '[project-decompile] 知识子图入口已随 gen 骨架提案退役（#138 cutover / ADR-0033）——'
-      + '反编译子图簇将由种子提案重接（#149）；里程碑计划修订走既有 project_plan 通道。')
+  ): Promise<{
+    project: string
+    prior_hits: number
+    notes: string[]
+    repaired: boolean
+    plan_proposal: { id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }
+    seed_proposal: { id: number; kind: 'seed'; course: string; endpoint: string; starts: number } | null
+    pair: { plan: number; seed: number | null }
+  }> {
+    const fm = await this.projects.load(id)
+    const goal = decompileGoalOf(opts.goal, fm.goal)
+    // 注册笔记（V-1 manifest 只读）：显式 notes 按 id/path 解析，缺省 = 全部注册源
+    const manifest = await this.noteManifest.load()
+    const baseOf = (path: string): string => path.split('/').pop()!.replace(/\.md$/i, '')
+    const picked: Array<{ id: string; path: string; title: string }> = []
+    if (opts.notes?.length) {
+      const byKey = new Map(manifest.sources.flatMap(s => [[s.id, s], [s.path.replace(/\\/g, '/'), s]] as const))
+      for (const spec of opts.notes) {
+        const hit = byKey.get(spec.replace(/\\/g, '/'))
+        if (!hit) {
+          throw new Error(`[project-decompile] 笔记「${spec}」不在注册清单（先 learnhub_note_source_register，或省略 notes 取全部注册源）。`)
+        }
+        picked.push({ id: hit.id, path: hit.path, title: hit.title ?? baseOf(hit.path) })
+      }
+    } else {
+      for (const s of manifest.sources) {
+        picked.push({ id: s.id, path: s.path, title: s.title ?? baseOf(s.path) })
+      }
+    }
+    // 落点裁决（受理前）：显式课程必须在册并取其既有节点名（对账域）；未给 = 种子簇
+    // 充当新课程种子（mode=new）
+    const explicitCourse = opts.course?.trim()
+    let target: CourseEntry | null = null
+    if (explicitCourse) {
+      target = await this.registry.get(explicitCourse)
+      if (!target) throw new Error(`[project-decompile] 注册表中没有课程「${explicitCourse}」（显式目标课程须先建课播种；省略 course 参数可让种子簇充当新课程）。`)
+    }
+    // Vault 先验（只读检索）注入反编译上下文
+    const terms = decompileTerms(goal, picked.map(p => p.title))
+    const centerRel = this.paths.centerRoot.slice(this.vaultRoot.length + 1)
+    const hits = terms.length ? await searchVaultPrior(this.vaultRoot, centerRel, terms) : []
+    const prior = priorSection(hits)
+    // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出
+    let courseBlock: string
+    if (target) {
+      const { graph } = await this.loadView(target)
+      const names = graph.names.slice().sort()
+      courseBlock = `- 目标课程：${target.name}（已播种/既有课程——**不产 seed 半区**，只给 plan）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形）：\n${names.map(n => `  - ${n}`).join('\n') || '  -（空图）'}`
+    } else {
+      courseBlock = '- 未指定目标课程：seed 半区必出（自拟新课程名写进 seed.course，子图簇 = 该新课程的种子：1–3 起点 + 终点）；plan.nodes 引用种子簇节点名（写「课程名/节点名」全形）'
+    }
+    const tpl = await this.loadPrompt('项目目标反编译')
+    const notesList = picked.length ? picked.map(p => `- 《${p.title}》（${p.path}）`).join('\n') : '-（无注册笔记）'
+    const current = fm.plan.length
+      ? YAML.stringify({ plan: fm.plan })
+      : '（空——本项目还没有里程碑计划，本次为初次规划）'
+    const pack = `${tpl}\n\n---\n\n## 目标项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 渐退档：${fm.tier}\n- 目标描述（目标项目描述原文）：\n\n${goal}\n\n## 现状计划（给出完整新版本，不保守微调）\n\n${current}\n\n## 注册笔记（Vault 先验的检索来源）\n\n${notesList}\n\n## 知识子图落点\n\n${courseBlock}${prior ? `\n\n---\n\n${prior}` : ''}`
+    // 模型产出 → 双产物校验门 + 名字对账门（未过回灌修复一轮，对齐「生成→门禁→修复
+    // 一轮」机械）。对账域 = 种子簇 ∪ 全部启用课程的图节点名（与消费面 locateNode 的
+    // 跨课解析同域——裸名歧义/悬空在受理前拦下，不留到消费面才炸）。
+    const reconcileErrors = async (doc: DecompileDoc | undefined): Promise<string[]> => {
+      if (!doc) return []
+      const existingByCourse = new Map<string, Set<string>>()
+      const ensureNames = async (courseName: string): Promise<void> => {
+        if (existingByCourse.has(courseName)) return
+        const c = await this.registry.get(courseName)
+        if (!c) return
+        const { graph } = await this.loadView(c)
+        existingByCourse.set(courseName, new Set(graph.names))
+      }
+      for (const c of await this.enabledCourses()) await ensureNames(c.name)
+      const seedCourseNames = new Set<string>()
+      const extra: string[] = []
+      if (doc.seed) {
+        for (const n of [doc.seed.endpoint.name, ...doc.seed.starts.map(s => s.name)]) seedCourseNames.add(n)
+        if (await this.registry.get(doc.seed.course)) {
+          extra.push(`seed.course「${doc.seed.course}」已在注册表（mode=new 新课程入口撞名）——自拟一个新课程名，或显式 course 参数指向既有课程`)
+        }
+      }
+      return [...extra, ...reconcilePlanNodes(doc.plan, {
+        ...(doc.seed ? { seed: { course: doc.seed.course, nodeNames: seedCourseNames } } : {}),
+        existingByCourse,
+      })]
+    }
+    let raw = await llm(pack)
+    let gate = splitDecompileDoc(YAML.parseModel(raw), fm.id, { expectSeed: !target })
+    let reconcile = await reconcileErrors(gate.result)
+    let repaired = false
+    if (gate.errors.length || reconcile.length) {
+      repaired = true
+      raw = await llm(decompileRepairPrompt(pack, raw, [...gate.errors, ...reconcile].map(e => `  ✗ ${e}`)))
+      gate = splitDecompileDoc(YAML.parseModel(raw), fm.id, { expectSeed: !target })
+      reconcile = await reconcileErrors(gate.result)
+    }
+    if (gate.errors.length || reconcile.length || !gate.result) {
+      const e: Error & { code?: string } = new Error(
+        `[project-decompile] 模型产出未过双产物校验门（已自动修复重试一轮，提案未受理）：\n`
+        + [...gate.errors, ...reconcile].map(x => `  ✗ ${x}`).join('\n'))
+      e.code = 'DECOMPILE_GATE_FAILED'
+      throw e
+    }
+    const doc: DecompileDoc = gate.result
+    // 名字对账门已在修复环内跑过（reconcile 为空 = 通过）——此处直接受理。
+    // 双提案受理（先种子后计划）：种子提案先落（重门已预检通过）；计划提案**出生即带
+    // pair**（联动守卫从落盘那一刻生效——任一时刻崩溃都不会留下可单边 apply 的无守卫
+    // 计划半区）；最后补种子半区的 pair 指认（此窗口内计划已被守卫保护，种子半区单边
+    // apply 无害——计划未落盘就无悬空引用可言）。概念引用在 proposeSeed 受理门对
+    // 登记表（铸名随种子 apply 同事务落盘）。
+    let seedId: number | null = null
+    let planProposal: Awaited<ReturnType<LearnhubEngine['projects']['proposePlan']>> | null = null
+    try {
+      if (doc.seed) {
+        seedId = ((await this.graphPropose('seed', YAML.stringify(doc.seed))) as { id: number }).id
+      }
+      planProposal = await this.projects.proposePlan(fm.id, YAML.stringify({ project: fm.id, plan: doc.plan }), seedId !== null ? { pair: seedId } : {})
+      if (seedId !== null) await this.store.updateProposal(seedId, { pair: planProposal.id })
+    } catch (err) {
+      // 计划半区受理失败：种子半区联动退回（不留孤儿 pending），原样抛错
+      if (seedId !== null) {
+        await this.proposals.reject(seedId, `同源双提案受理失败联动退回：${err instanceof Error ? err.message : String(err)}`).catch(() => undefined)
+      }
+      throw err
+    }
+    const seedProposal = doc.seed
+      ? { id: seedId!, kind: 'seed' as const, course: doc.seed.course, endpoint: doc.seed.endpoint.name, starts: doc.seed.starts.length }
+      : null
+    return {
+      project: fm.id,
+      prior_hits: hits.length,
+      notes: picked.map(p => p.path),
+      repaired,
+      plan_proposal: planProposal!,
+      seed_proposal: seedProposal,
+      pair: { plan: planProposal!.id, seed: seedProposal?.id ?? null },
+    }
+  }
+
+  /** 反编译双提案联合 apply（#149 同进同退的动态半）：两提案 pair 互指才受理；
+   * 种子先落图（簇节点 + 终点锚 + 笔记脚手架——计划引用先有图可解析）、计划后落盘。
+   * 任一半区已是 applied = 崩溃恢复续段（跳过重放该半区）；rejected = 拒绝复活
+   * （重新反编译产生新对）。 */
+  async projectDecompileApply(planPid: number, seedPid: number): Promise<{
+    project: string
+    seed: Record<string, unknown> | null
+    plan: ProjectApplyResult | null
+  }> {
+    const list = await this.store.loadProposals()
+    const plan = list.find(p => p.id === planPid)
+    const seed = list.find(p => p.id === seedPid)
+    const bad = (why: string): Error => new Error(`[project-decompile-apply] ${why}`)
+    if (!plan || (plan.status !== 'pending' && plan.status !== 'applied')) {
+      throw bad(`计划提案 #${planPid} 不存在或已决（pending/applied 之外不受理）。`)
+    }
+    if (!seed || (seed.status !== 'pending' && seed.status !== 'applied')) {
+      throw bad(`种子提案 #${seedPid} 不存在或已决（pending/applied 之外不受理）。`)
+    }
+    if (plan.kind !== 'project_plan' || seed.kind !== 'seed') {
+      throw bad(`提案 kind 不对（#${planPid}=${plan.kind}，#${seedPid}=${seed.kind}）——联合 apply 只收 反编译对（project_plan + seed）。`)
+    }
+    if (plan.pair !== seedPid || seed.pair !== planPid) {
+      throw bad(`提案 #${planPid} 与 #${seedPid} 不是同一反编译对（pair 联动缺失或互指不符）——反编译对只走本联合入口；独立提案（无 pair）才走 learnhub_project_apply / learnhub_graph_apply 单独生效。`)
+    }
+    const today = (await this.learningDay()).today
+    // 种子先落图：簇节点 + 终点锚 + ensureNotesFor 笔记脚手架——计划引用先有图可解析
+    const seedResult = seed.status === 'pending'
+      ? await this.proposals.applySeed(seedPid, await this.seedAuditFor(seed.course, today), today, { pairApply: true })
+      : null
+    const planResult = plan.status === 'pending'
+      ? await this.applyProjectPlanProposal(planPid, { pairApply: true })
+      : null
+    return { project: (planResult as { project?: string })?.project ?? plan.course, seed: seedResult, plan: planResult }
+  }
+
+  /** 种子 apply 的 audit 门预计算（graphApply 同款；mode=new 课程无 data 目录时空跑）。
+   * 联合 apply 直调 proposals.applySeed 时复用，不经过 graphApply 的 takePending。 */
+  private async seedAuditFor(courseName: string, today: string): Promise<ApplyAudit> {
+    const course = await this.registry.get(courseName)
+    let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
+    if (course && existsSync(this.paths.dataDir(course.root))) {
+      const { graph } = await this.loadView(course)
+      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, today)
+      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
+    }
+    return audit
+  }
+
+  /** 计划提案 apply 的引擎包装（#149 修订驱动生长）：apply 前捕旧计划，apply 后派生
+   * 快照 diff（id 为身份锚）并解析换线/补支触发（按锚定课程聚合，宿主入队生长批）；
+   * 已过点里程碑被移除/改名出显式警告（不拒绝）。单边守卫在 projects.applyPlan 内。 */
+  async applyProjectPlanProposal(
+    pid?: number, opts: { pairApply?: boolean } = {},
+  ): Promise<ProjectApplyResult> {
+    let before: ProjectFm | null = null
+    const proposals = await this.store.loadProposals()
+    const targetPid = pid ?? [...proposals].reverse().find(p => p.status === 'pending' && p.kind === 'project_plan')?.id
+    if (targetPid !== undefined) {
+      const prop = proposals.find(p => p.id === targetPid)
+      if (prop?.kind === 'project_plan') {
+        before = await this.projects.load(prop.course).catch(() => null)
+      }
+    }
+    const result = await this.projects.applyPlan(pid, opts)
+    if (result.kind !== 'project_plan') return result
+    const after = await this.projects.load(result.project)
+    const diff = planRevisionDiff(before?.plan ?? [], after.plan)
+    const { triggers, warnings } = await this.planGrowthTriggers(result.project, before, after, diff)
+    return {
+      ...result,
+      plan_diff: diff,
+      ...(warnings.length ? { plan_diff_warnings: warnings } : {}),
+      ...(triggers.length ? { growth: triggers } : {}),
+    }
+  }
+
+  /** 换线/补支触发解析（读侧派生，#126 接口输入）：added/retargeted 条目的每个
+   * nodes 引用——图上已存在 = 换线（stub 激活：内容生成/接入路线）；图上不存在 =
+   * 补支（朝新里程碑长粗分支）。路由目标：显式「课程/」前缀照抄；裸名按其余计划
+   * 条目的锚定课程集收敛（恰一门 → 路由，否则落警告不强路由）。已过点里程碑被
+   * 移除/改名（同 id）出显式警告——账本事实不改写，但「终点消失/漂移」要可见。 */
+  private async planGrowthTriggers(
+    projectId: string, before: ProjectFm | null, after: ProjectFm, diff: PlanRevisionDiff,
+  ): Promise<{ triggers: PlanGrowthTrigger[]; warnings: string[] }> {
+    const warnings: string[] = []
+    for (const m of diff.removed) {
+      if (await this.projects.milestoneSettleRec(projectId, m.id)) {
+        warnings.push(`里程碑「${m.name}」（${m.id}）已过点对账却被本次修订移除——账本事实不改写，但「终点消失」请知悉。`)
+      }
+    }
+    if (before) {
+      const afterById = new Map(after.plan.map(m => [m.id, m]))
+      for (const old of before.plan) {
+        const now = afterById.get(old.id)
+        if (!now || now.name === old.name) continue
+        if (await this.projects.milestoneSettleRec(projectId, old.id)) {
+          warnings.push(`里程碑「${old.name}」（${old.id}）已过点对账却被本次修订改名为「${now.name}」——产物文件名随计划漂移（orphans 提示可见）。`)
+        }
+      }
+    }
+    type Candidate = { milestone: string; name: string; kind: '换线' | '补支'; node: string; course: string | null }
+    const candidates: Candidate[] = []
+    const items = [...diff.added, ...diff.retargeted.map(r => after.plan.find(m => m.id === r.id)!)]
+    for (const item of items) {
+      for (const spec of item.nodes ?? []) {
+        const { course: specCourse, node } = splitNodeSpec(spec)
+        let course: string | null = null
+        let exists = false
+        if (specCourse !== undefined) {
+          const c = await this.registry.get(specCourse)
+          if (!c) {
+            warnings.push(`里程碑「${item.name}」（${item.id}）引用课程「${specCourse}」不在注册表——该行不入生长触发。`)
+            continue
+          }
+          const { graph } = await this.loadView(c)
+          course = c.name
+          exists = graph.nset.has(node)
+        } else {
+          try {
+            const hit = await this.locateNode(node)
+            course = hit.course.name
+            exists = true
+          } catch {
+            exists = false
+          }
+        }
+        candidates.push({
+          milestone: item.id, name: item.name,
+          kind: exists ? '换线' : '补支',
+          node: spec,
+          course, // 显式「课程/」前缀恒路由；裸名未解析的补支走锚定课程集收敛
+        })
+      }
+    }
+    // 裸名补支的路由：锚定课程集 = 计划其余条目 nodes 解析到的课程（恰一门才强路由）
+    const anchored = new Set<string>()
+    for (const m of after.plan) {
+      for (const spec of m.nodes ?? []) {
+        try {
+          anchored.add((await this.locateNode(spec)).course.name)
+        } catch { /* 未解析的引用不参与锚定 */ }
+      }
+    }
+    const byCourse = new Map<string, string[]>()
+    for (const c of candidates) {
+      let target = c.course
+      if (!target && !c.node.includes('/') && anchored.size === 1) target = [...anchored][0]
+      if (!target) {
+        warnings.push(`里程碑「${c.name}」（${c.milestone}）的补支引用「${c.node}」无法确定锚定课程（多门或无锚定）——未入生长触发，请显式写「课程/节点」或人工在生成页拉批。`)
+        continue
+      }
+      const lines = byCourse.get(target) ?? []
+      lines.push(c.kind === '换线'
+        ? `- 换线：里程碑 ${c.milestone}「${c.name}」关联「${c.node}」已在图上——激活它（内容生成/接入路线），不长重复结构`
+        : `- 补支：里程碑 ${c.milestone}「${c.name}」关联「${c.node}」图上尚无——沿足迹朝它长最小必要分支（粗节点+粗 pre，经生长批受理门）`)
+      byCourse.set(target, lines)
+    }
+    const triggers: PlanGrowthTrigger[] = [...byCourse.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([course, lines]) => ({ course, lines }))
+    return { triggers, warnings }
   }
 
   // ---- 内容管线 ----
@@ -2199,11 +2599,14 @@ export class LearnhubEngine {
       xp: settle.xp,
       ...(predicted ? { predicted } : {}),
     })
-    // frontmatter 计数 + 练习证据 EMA（口径 B 的练习项；mastery 本身纯派生不落盘）
+    // frontmatter 计数 + 练习证据 EMA（口径 B 的练习项；mastery 本身纯派生不落盘）。
+    // probation 在途行使闸（#146）：实验中的插入节点只记流不回流——流水已落上面，
+    // EMA/计数在此跳过（proven 后恢复；普通前进/旁支节点不受闸）。
+    const evidenceGated = await this.exerciseGated(c, node)
     const note = await this.nodeNote(c, graph, node)
     let next: Fm | null = null
     if (note.fm) {
-      next = applyPracticeEvidence(note.fm, correct ? 1.0 : 0.0)
+      next = evidenceGated ? note.fm : applyPracticeEvidence(note.fm, correct ? 1.0 : 0.0)
       // 刷卡模型：首答把节点从 ready/unseen 推进 learning（后续调度由题目聚合驱动）
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
       await this.saveNodeNote(note.path, next, note.body)
@@ -2276,6 +2679,8 @@ export class LearnhubEngine {
       // XP 时间账本：本次作答的结算结果
       xp: settle.xp,
       xp_reason: settle.reason,
+      // probation 在途行使闸（#146）：只记流不回流的实验节点标记（面板可提示）
+      ...(evidenceGated ? { evidence_gated: true as const } : {}),
     }
   }
 
@@ -2421,11 +2826,13 @@ export class LearnhubEngine {
       xp: 0,
       ...(pred ? { predicted: pred } : {}),
     })
-    // 节点侧证据：忘记 = 0 分（EMA 衰减 + 计一次未过），stage 推进与作答路径一致
+    // 节点侧证据：忘记 = 0 分（EMA 衰减 + 计一次未过），stage 推进与作答路径一致。
+    // probation 在途行使闸（#146）：实验中的插入节点只记流不回流。
+    const evidenceGated = await this.exerciseGated(c, node)
     const note = await this.nodeNote(c, graph, node)
     let next: Fm | null = null
     if (note.fm) {
-      next = applyPracticeEvidence(note.fm, 0.0)
+      next = evidenceGated ? note.fm : applyPracticeEvidence(note.fm, 0.0)
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
       await this.saveNodeNote(note.path, next, note.body)
       if (next.stage !== note.fm.stage) {
@@ -2453,6 +2860,7 @@ export class LearnhubEngine {
       mastery: masteryOfFm(fmNow),
       scheduled: true,
       xp: 0,
+      ...(evidenceGated ? { evidence_gated: true as const } : {}),
     }
   }
 
@@ -4388,32 +4796,46 @@ export class LearnhubEngine {
     return readySet(graph, state, () => 1)
   }
 
-  /** 就绪存量（就绪深度检查的计数口径）：就绪前沿中正文已生成（hasReadyContent）的
-   * 节点——「现在点开就能学」的缓冲。 */
-  private coachReadyBuffer(graph: Graph, state: Record<string, Fm>): string[] {
-    return this.coachFrontier(graph, state).filter(n => hasReadyContent(state[n]))
-  }
-
   /** 单课程就绪深度检查（coachCheckpoint 与 statusJson 共用核）：终点锚缺失 = 未播种
-   * （不判冷启动，合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。 */
+   * （不判冷启动，合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。
+   * 就绪存量与前瞻需求都不计终点（词条「前瞻深度」：终点是锚点不是课程节点）——
+   * 课程尾段前沿只剩终点时判据永不可满足会让教练永不停摆；除终点外前沿清空 =
+   * exhausted，判据自然通过、零告警。 */
   private async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
     const { graph, state } = await this.loadView(c)
     const anchor = await readAnchor(this.paths.anchorPath(c.root))
+    const endpoint = anchor?.endpoint ?? null
+    const live = this.coachFrontier(graph, state).filter(n => n !== endpoint)
     return {
       course: c.name,
       ...readyDepthCheck({
-        ready: this.coachReadyBuffer(graph, state).length,
+        ready: live.filter(n => hasReadyContent(state[n])).length,
         declared: anchor?.declared ?? null,
         today,
+        exhausted: anchor !== null && live.length === 0,
       }),
     }
   }
 
-  /** 教练回合检查点（#144 触发三点）：节点完成（nodeComplete 随完成结果带出）/ 会话
-   * 开始（statusJson——agent 会话开工与面板打开共用的汇总入口）/ 队列空闲（宿主生成
-   * 泵排空时调用）。逐课程拉起就绪深度检查——纯读侧感知，零写副作用、零 LLM 调用
-   * （裁决与生长批生产归受理票 #145）；ready=0 只告警，生长永不挡当前学习动作
-   * （FIFO 不插队靠检查点前置：生长批只在检查点之后入队，不越过任何已排队任务）。 */
+  /** 题目 id → invokes 概念（登记表 canonical 解析后；未标注返回 null）。行为摘要
+   * （卡点集中度聚合）与复诊结算共用同一取数口径——聚合不因消费方分叉。 */
+  private async invokesResolver(c: CourseEntry): Promise<(qid: string) => string | null> {
+    const entries = await this.concepts.load(c.root)
+    const map = new Map<string, string>()
+    await this.scanCourseBanks(c, async (_node, bank) => {
+      for (const q of bank.questions) {
+        const inv = typeof q.invokes === 'string' ? q.invokes.trim() : ''
+        if (!inv) continue
+        map.set(q.id, resolveConcept(entries, inv)?.canonical ?? inv)
+      }
+    })
+    return qid => map.get(qid) ?? null
+  }
+
+  /** 教练回合检查点（#144 触发五点：节点完成/节点跳过/会话开始/队列空闲/面板下发）。
+   * 逐课程拉起就绪深度检查——纯读侧感知，零写副作用、零 LLM 调用（裁决与生长批生产
+   * 归受理票 #145，入队阻尼语义归宿主）；ready=0 只告警，生长永不挡当前学习动作
+   * （FIFO 不插队靠检查点前置：自动拉批只在检查点之后入队，不越过任何已排队任务）。 */
   async coachCheckpoint(
     trigger: CoachTrigger, courseKey?: string, opts: { today?: string } = {},
   ): Promise<{ trigger: CoachTrigger; courses: CoachCheck[] }> {
@@ -4469,21 +4891,14 @@ export class LearnhubEngine {
 
     // ② 行为摘要五件套（读侧折叠即算即用；轻量包两件之一）
     const entries = await this.concepts.load(c.root)
-    const invokesOfQ = new Map<string, string>()
-    await this.scanCourseBanks(c, async (_node, bank) => {
-      for (const q of bank.questions) {
-        const inv = typeof q.invokes === 'string' ? q.invokes.trim() : ''
-        if (!inv) continue
-        invokesOfQ.set(q.id, resolveConcept(entries, inv)?.canonical ?? inv)
-      }
-    })
+    const invokesOfQ = await this.invokesResolver(c)
     const masteryOf: Record<string, number> = {}
     for (const n of graph.names) masteryOf[n] = masteryOfFm(state[n])
     const digest = behaviorDigest({
       course: c.name,
       practice: netPracticeRecs(await this.store.practiceAll(), await this.store.erratumAll()),
       reviews: await this.store.reviewLogAll(),
-      invokesOf: qid => invokesOfQ.get(qid) ?? null,
+      invokesOf: invokesOfQ,
       estOf: graph.estOf,
       misconceptionsOf: graph.misconceptionsOf,
       masteryOf,
@@ -4609,11 +5024,14 @@ export class LearnhubEngine {
    * 既有受理门（schema/结构/概念对表/锚保护/巩固门）propose→apply：罗盘重写与图 apply
    * 同事务（提案被拒罗盘不落盘）、journal 挂提案 id、不新增提案 kind。
    * 停机转译：就绪深度满足（check.ok）时不拉回合直接停摆——判据满足的自然结果，不是
-   * 新状态（force 供测试/手动排障越过）。裁决语义在提示词；本方法只保证组装、schema
-   * 与同事务纪律。金样本回放闸锚调用数基线：显然步恒 1 次、分歧升级恒 2 次、双沙盘
-   * 仲裁恒 3 次（沙盘推演是读侧计算，不计调用数）。 */
+   * 新状态（force 供测试/手动排障越过）。opts.inject = 里程碑计划修订的换线/补支注入
+   * （#149 项目消费拉动的生长请求）：注入块随包进回合，且注入本身是显式的重新裁决
+   * 请求——check.ok 不再短路停摆（裁决仍可能产出零操作批）。裁决语义在提示词；本
+   * 方法只保证组装、schema 与同事务纪律。金样本回放闸锚调用数基线：显然步恒 1 次、
+   * 分歧升级恒 2 次、双沙盘仲裁恒 3 次（沙盘推演是读侧计算，不计调用数）。 */
   async coachGrowthBatch(
-    courseKey: string, llm: LlmComplete, opts: { force?: boolean; today?: string } = {},
+    courseKey: string, llm: LlmComplete,
+    opts: { force?: boolean; today?: string; inject?: string } = {},
   ): Promise<{
     course: string
     state: 'idle' | 'applied'
@@ -4629,7 +5047,7 @@ export class LearnhubEngine {
     }
     const today = opts.today ?? (await this.learningDay()).today
     const check = await this.coachCheckFor(c, today)
-    if (check.ok && !opts.force) {
+    if (check.ok && !opts.force && opts.inject === undefined) {
       return { course: c.name, state: 'idle', check, segments: [], proposal: null, applied: null }
     }
     const { graph, state } = await this.loadView(c)
@@ -4638,7 +5056,9 @@ export class LearnhubEngine {
     const segments: CoachGrowthSegment[] = []
     const runSegment = async (tier: 'light' | 'full'): Promise<{ spec: EditProposalSpec; yaml: string; note: GrowthNote }> => {
       const pack = await this.coachContextPack(c.name, { lightweight: tier === 'light', today })
-      const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n`
+      const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}`
+        + (opts.inject !== undefined ? `\n\n---\n\n## 里程碑计划修订注入（项目消费拉动的生长请求）\n\n${opts.inject.trimEnd()}\n\n换线 = 激活图上已有节点（内容生成/接入路线），补支 = 朝新里程碑长最小必要分支；你的裁决仍走五算子与既定纪律，判断注入与就绪深度后照常产出（含零操作批）。` : '')
+        + `\n\n---\n\n${view.trimEnd()}\n`
       const raw = await llm(prompt, undefined, { effort: tier === 'light' ? 'fast' : 'deep' })
       const verdict = this.parseGrowthVerdict(raw)
       segments.push({ tier, effort: tier === 'light' ? 'fast' : 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
@@ -4716,6 +5136,311 @@ export class LearnhubEngine {
         ready_unbuilt: readyUnbuilt,
       },
     }
+  }
+
+  // ---- 边实验账本与复诊（#146 / 插入提案生命周期：预注册→登记→到期结算→proven｜自动剪除）----
+
+  /** 生长闸门（注入 GraphProposals 的回调，propose/apply 双门消费）：只对生长批的
+   * 插入/旁支生效——三率超限或复诊通过率触底时闸停（低数据静默），普通 edit 提案与
+   * 结算自动提案（无 note）恒放行。插入积极性调速器，参数唯一出处 params.ts。 */
+  private async growthGateErrors(spec: EditProposalSpec): Promise<string[]> {
+    if (!spec.note || (spec.note.operator !== '插入' && spec.note.operator !== '旁支')) return []
+    const adds = addNodeCountOf(spec.ops)
+    if (!adds) return []
+    const c = await this.registry.get(spec.course)
+    if (!c) return []
+    const { today, cutoff } = await this.learningDay()
+    const { rates } = await this.probationFrame(c, today, cutoff)
+    return growthGate(rates, { operator: spec.note.operator, adds }).blocks
+  }
+
+  /** 课程复诊面的一次性取材（结算/状态/闸门共用）：账本折叠 + 课程学习日序列 + 三率。
+   * 登记日/决定日都从提案记录派生（账本只存 proposal id——与 origin 从 journal 派生
+   * 同款纪律）；生长批出材从已决生长批提案 artifact 折叠。 */
+  private async probationFrame(c: CourseEntry, today: string, cutoff: number): Promise<{
+    fold: ProbationFold
+    learningDays: string[]
+    registrations: Array<{ entry: ProbationEntry; day: string | null }>
+    /** 在途复诊（折叠后每 (proposal,node) 最新行；结算遍历的唯一口径——遍历原始行会
+     * 把已决条目的裁决前行复读重裁，proven 可被翻案剪除）。 */
+    inFlightWithDay: Array<{ entry: ProbationEntry; day: string | null }>
+    decisions: Array<{ entry: ProbationEntry & { outcome: ProbationOutcome }; day: string | null }>
+    tallies: GrowthBatchTally[]
+    rates: ReturnType<typeof growthRates>
+  }> {
+    const fold = foldProbation(await readProbationLedger(this.paths, c.root))
+    const practice = netPracticeRecs(await this.store.practiceAll(), await this.store.erratumAll())
+    const reviews = await this.store.reviewLogAll()
+    const learningDays = learningDaysOf(practice, reviews, c.name, cutoff, today)
+    const proposals = await this.store.loadProposals()
+    const regDay = new Map<number, string | null>()
+    for (const p of proposals) regDay.set(p.id, p.decided ? dayOfTs(p.decided, cutoff) : null)
+    const registrations = fold.entries.map(entry => ({ entry, day: regDay.get(entry.proposal) ?? null }))
+    const inFlight = new Set(fold.inFlight)
+    const inFlightWithDay = registrations.filter(r => inFlight.has(r.entry))
+    const decisions = fold.decided.map(entry => ({
+      entry,
+      day: entry.decided_at ? dayOfTs(entry.decided_at, cutoff) : null,
+    }))
+    const tallies = await this.growthTallies(proposals, cutoff)
+    const rates = growthRates(registrations, decisions, tallies, learningDays)
+    return { fold, learningDays, registrations, inFlightWithDay, decisions, tallies, rates }
+  }
+
+  /** 生长批出材折叠（三率的生长分母）：已决 edit 提案中的生长批（summary 前缀）——
+   * 从 artifact 读 note.operator 与 add_node 数（账本只持有插入，前进/旁支出材从提案
+   * 留痕折叠）。artifact 缺失/损坏的批次不计入（留痕缺失是审计问题，不炸读侧）。 */
+  private async growthTallies(proposals: ProposalRec[], cutoff: number): Promise<GrowthBatchTally[]> {
+    const tallies: GrowthBatchTally[] = []
+    for (const p of proposals) {
+      if (p.kind !== 'edit' || p.status !== 'applied' || !p.decided) continue
+      if (!p.summary.startsWith('生长批（')) continue
+      try {
+        const doc = YAML.parse(await readFile(this.paths.proposalArtifactPath(p.id, 'edit', p.course), 'utf8')) as {
+          note?: { operator?: unknown }
+          ops?: Array<{ op?: unknown }>
+        }
+        const operator = typeof doc.note?.operator === 'string' ? doc.note.operator : ''
+        const added = addNodeCountOf(doc.ops)
+        if (!operator || !added) continue
+        tallies.push({ operator, added, day: dayOfTs(p.decided, cutoff) })
+      } catch {
+        // 留痕缺失不炸读侧
+      }
+    }
+    return tallies
+  }
+
+  /** 单课程复诊/实验状态视图（statusJson 附带、/api/probation、learnhub_probation 共用
+   * 核）：在途插入节点（面板「实验中」标记的取数）、到期未决、三率（滚动 30 学习日）
+   * 与韧性闸门现势（含「下一个最小插入批」的standing 判定——调速器对教练的现势语义）。 */
+  private async probationViewFor(c: CourseEntry, today: string, cutoff: number): Promise<ProbationCourseView> {
+    const frame = await this.probationFrame(c, today, cutoff)
+    const standing = growthGate(frame.rates, { operator: '插入', adds: 0 })
+    const nextInsert = growthGate(frame.rates, { operator: '插入', adds: 1 })
+    const overdue: string[] = []
+    for (const { entry, day } of frame.inFlightWithDay) {
+      if (!day) continue
+      if (recheckDue(frame.learningDays, day, entry.due).due) overdue.push(entry.node)
+    }
+    return {
+      in_flight: frame.fold.inFlight.map(e => e.node).sort(),
+      overdue: overdue.sort(),
+      rates: frame.rates,
+      gate: {
+        resilient: standing.resilient,
+        sidebranch_cap: standing.sidebranch_cap,
+        insert_blocked: nextInsert.blocks.length > 0,
+        insert_blocks: nextInsert.blocks,
+      },
+    }
+  }
+
+  /** 插入实验面（面板/agent 共用入口）：全启用课程或单课程的复诊状态视图。 */
+  async probationStatus(courseKey?: string): Promise<{
+    date: string
+    courses: Array<{ course: string } & ProbationCourseView>
+  }> {
+    const { today, cutoff } = await this.learningDay()
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const out: Array<{ course: string } & ProbationCourseView> = []
+    for (const c of courses) out.push({ course: c.name, ...(await this.probationViewFor(c, today, cutoff)) })
+    return { date: today, courses: out }
+  }
+
+  /** probation 在途行使闸（#146）：实验中的插入节点——行使只记流不回流练习证据
+   * （EMA/计数不动，proven 后恢复；普通前进/旁支节点不受闸）。questionAnswer/
+   * questionForget/interactiveSettle/项目回流四处消费。 */
+  private async exerciseGated(c: CourseEntry, node: string): Promise<boolean> {
+    const fold = foldProbation(await readProbationLedger(this.paths, c.root))
+    const hit = fold.byNode.get(node)
+    return hit !== undefined && !hit.outcome
+  }
+
+  /** 复诊结算钩子（#146 零人审自动裁决）：到期（课程学习日推进满预注册复诊期）的在途
+   * 插入边逐条结算——达标 proven（插入转正），不达标自动剪（set_pre 恢复原粗边 +
+   * del_node 归档，走既有提案受理门 apply，零人审；审计 ERROR 时提案自清、条目留待
+   * 下次重试）。复诊结局与图修复事件出生即写沉淀正典（概念地址书写），journal 留痕，
+   * 学习者档案投影随结算重建。触发面 = 队列空闲检查点（宿主）/ learnhub_probation
+   * settle（手动）。 metric 预注册不可读或提案记录缺失的到期条目跳过不决——到期未决
+   * 由 data-check 提示类消费，不造假裁决。 */
+  async settleRechecks(courseKey?: string, opts: { today?: string } = {}): Promise<{
+    date: string
+    courses: Array<{
+      course: string
+      settled: Array<{ node: string; outcome: ProbationOutcome; metric?: RecheckMetric; detail?: string; proposal?: number }>
+      skipped: Array<{ node: string; reason: string }>
+    }>
+  }> {
+    const { today: learningToday, cutoff } = await this.learningDay()
+    const today = opts.today ?? learningToday
+    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
+    const out: Array<{ course: string; settled: Array<{ node: string; outcome: ProbationOutcome; metric?: RecheckMetric; detail?: string; proposal?: number }>; skipped: Array<{ node: string; reason: string }> }> = []
+    for (const c of courses) {
+      const settled: Array<{ node: string; outcome: ProbationOutcome; metric?: RecheckMetric; detail?: string; proposal?: number }> = []
+      const skipped: Array<{ node: string; reason: string }> = []
+      const frame = await this.probationFrame(c, today, cutoff)
+      if (frame.inFlightWithDay.length) {
+        const proposals = await this.store.loadProposals()
+        const { graph } = await this.loadView(c)
+        const invokesOf = await this.invokesResolver(c)
+        const practice = netPracticeRecs(await this.store.practiceAll(), await this.store.erratumAll())
+        const reviews = await this.store.reviewLogAll()
+        for (const { entry, day } of frame.inFlightWithDay) {
+          if (!day) {
+            skipped.push({ node: entry.node, reason: `提案 #${entry.proposal} 缺失或未决——登记日无从判定，到期检查挂起` })
+            continue
+          }
+          const due = recheckDue(frame.learningDays, day, entry.due)
+          if (!due.due) {
+            skipped.push({ node: entry.node, reason: `复诊期推进中（${due.elapsed}/${entry.due} 学习日）` })
+            continue
+          }
+          const metric = await this.recheckMetricOf(c, proposals, entry)
+          if (!metric) {
+            skipped.push({ node: entry.node, reason: `预注册不可读（提案 #${entry.proposal} artifact 缺失/损坏）——留待人工核对` })
+            continue
+          }
+          // 结局判定（读侧折叠；节点已先行移除 = 插入未证，按剪除收口不重开提案）
+          const coarsePre = graph.preOf[entry.node] ?? []
+          let outcome: ProbationOutcome
+          let detail: string
+          let settlePid: number | undefined
+          if (!graph.nset.has(entry.node)) {
+            outcome = '剪除'
+            detail = '节点已不在图（被先行移除）——插入未证，按剪除收口'
+          } else {
+            const verdict = recheckVerdict({
+              metric, practice, reviews, course: c.name, cutoff,
+              entryDay: day, today, period: entry.due,
+              consumers: graph.succ[entry.node] ?? [],
+              invokesOf,
+            })
+            outcome = verdict.met ? 'proven' : '剪除'
+            detail = verdict.detail
+            if (!verdict.met) {
+              const pid = await this.pruneProbationNode(c, graph, entry, metric, detail)
+              if (pid === null) {
+                skipped.push({ node: entry.node, reason: '剪除提案被受理门/审计拒绝——条目保持在途，待结构修复后重试' })
+                continue
+              }
+              settlePid = pid
+            }
+          }
+          const decidedAt = nowIso()
+          await appendProbationEntry(this.paths, c.root, {
+            ...entry, outcome, decided_at: decidedAt,
+          })
+          await this.recordRecheckOutcome(c, { ...entry, outcome, decided_at: decidedAt }, {
+            metric, detail, settlePid, graph, coarsePre,
+          })
+          settled.push({ node: entry.node, outcome, metric, detail, ...(settlePid ? { proposal: settlePid } : {}) })
+        }
+      }
+      if (settled.length) await this.sedimentRebuildProfile()
+      out.push({ course: c.name, settled, skipped })
+    }
+    return { date: today, courses: out }
+  }
+
+  /** 从提案 artifact 回读预注册 metric（账本只存 proposal id 的对账；缺失返回 null）。 */
+  private async recheckMetricOf(c: CourseEntry, proposals: ProposalRec[], entry: ProbationEntry): Promise<RecheckMetric | null> {
+    const rec = proposals.find(p => p.id === entry.proposal)
+    if (!rec) return null
+    try {
+      const doc = YAML.parse(await readFile(this.paths.proposalArtifactPath(entry.proposal, 'edit', rec.course), 'utf8')) as {
+        note?: { recheck?: { metric?: unknown } }
+      }
+      const metric = doc.note?.recheck?.metric
+      return typeof metric === 'string' ? (metric as RecheckMetric) : null
+    } catch {
+      return null
+    }
+  }
+
+  /** 自动剪除（不达标结算的执行半）：set_pre 把插入节点的现行 pre 还给每个下游消费
+   * 节点（原粗边恢复）+ del_node 归档（课程笔记与题库随 apply 的既有归档语义进
+   * state/archive）。走 propose→apply 完整受理门（结构/锚保护/审计零豁免）；任一门
+   * 拒绝即返回 null（条目保持 in-flight，留待重试）。 */
+  private async pruneProbationNode(
+    c: CourseEntry, graph: Graph, entry: ProbationEntry, metric: RecheckMetric, detail: string,
+  ): Promise<number | null> {
+    const node = entry.node
+    const coarse = graph.preOf[node] ?? []
+    const ops: Array<Record<string, unknown>> = []
+    for (const consumer of graph.succ[node] ?? []) {
+      const restored = [...new Set(graph.preOf[consumer].flatMap(p => p === node ? coarse : [p]))]
+      ops.push({ op: 'set_pre', node: consumer, pre: restored })
+    }
+    ops.push({ op: 'del_node', node })
+    const yaml = YAML.stringify({
+      course: c.name,
+      reason: `复诊未达标自动剪除（#146）：插入节点「${node}」未过预注册复诊（${metric}：${detail}）——恢复原粗边并归档`,
+      ops,
+    })
+    try {
+      const prop = await this.graphPropose('edit', yaml) as { id: number }
+      try {
+        await this.graphApply('edit', prop.id)
+        return prop.id
+      } catch (err) {
+        await this.graphReject(prop.id, `复诊剪除 apply 失败：${err instanceof Error ? err.message : String(err)}`)
+          .catch(() => undefined)
+        return null
+      }
+    } catch {
+      // 受理门拒绝（结构不可恢复等）：条目保持 in-flight
+      return null
+    }
+  }
+
+  /** 复诊结局落账（出生即写沉淀正典 + journal 留痕）：recheck_outcome 按插入节点
+   * teaches 的概念地址逐条书写（无 teaches = 单条无概念地址，缺席合法）；剪除附一条
+   * 图修复事件（结构级，概念清单进 payload）。图与 taught 一律取结算起点的快照——
+   * 剪除落盘后再查现图，插入节点已删，概念与粗边会静默蒸发。 */
+  private async recordRecheckOutcome(
+    c: CourseEntry,
+    entry: ProbationEntry & { outcome: ProbationOutcome },
+    ctx: { metric: RecheckMetric; detail: string; settlePid?: number; graph: Graph; coarsePre: string[] },
+  ): Promise<void> {
+    const graph = ctx.graph
+    const taught = graph.nset.has(entry.node)
+      ? Object.keys(graph.teachesOf[entry.node] ?? {})
+      : []
+    const entries = await this.concepts.load(c.root)
+    const canonicalOf = (name: string): string => resolveConcept(entries, name)?.canonical ?? name
+    const payload: Record<string, unknown> = {
+      course: c.name, node: entry.node, outcome: entry.outcome,
+      metric: ctx.metric, detail: ctx.detail, proposal: entry.proposal,
+      period_days: entry.due,
+      ...(ctx.settlePid ? { settlement_proposal: ctx.settlePid } : {}),
+    }
+    if (taught.length) {
+      for (const concept of taught) {
+        await appendSedimentEvent(this.paths, {
+          kind: 'recheck_outcome', tier: 'immediate', concept: canonicalOf(concept), payload: { ...payload },
+        })
+      }
+    } else {
+      await appendSedimentEvent(this.paths, { kind: 'recheck_outcome', tier: 'immediate', payload })
+    }
+    if (entry.outcome === '剪除' && ctx.settlePid) {
+      await appendSedimentEvent(this.paths, {
+        kind: 'graph_repair', tier: 'immediate',
+        payload: {
+          ...payload,
+          action: 'recheck_prune',
+          restored: (graph.succ[entry.node] ?? []).map(consumer => `${consumer} ← ${ctx.coarsePre.join('、')}`),
+          concepts: taught.map(canonicalOf),
+        },
+      })
+    }
+    await this.store.appendJournal({
+      course: c.name, node: entry.node, rating: null, kind: 'probation_settle', elapsed_days: 0,
+      session: String(entry.proposal),
+      detail: `复诊${entry.outcome === 'proven' ? '达标（proven）' : '未达标（剪除）'}｜${ctx.metric}：${ctx.detail}`
+        + (ctx.settlePid ? `；剪除提案 #${ctx.settlePid}` : ''),
+    })
   }
 
   /** JOL 预测值的显式契约：三档之外拒绝（参数错误），null/undefined 放行为无预测。 */
@@ -6484,7 +7209,9 @@ export class LearnhubEngine {
     })
     let next: Fm | null = null
     if (fm) {
-      next = applyPracticeEvidence(fm, clamped)
+      // probation 在途行使闸（#146）：实验中的插入节点只记流不回流。
+      const evidenceGated = await this.exerciseGated(c, node)
+      next = evidenceGated ? fm : applyPracticeEvidence(fm, clamped)
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
       await saveNote(path, next as unknown as Record<string, unknown>, body)
     }

@@ -1,15 +1,19 @@
-/** 图页 = 全局总览（低频）：DAG 纵览 + 区过滤/搜索/只看就绪 + 推荐星标。
- * 点节点直接进学习视图（LessonView）；从学习视图「在图中查看」跳入时
- * focusNode 红描边定位。图本身不承载学习操作。 */
+/** 图页 = 学习图驾驶舱（低频）：教练台（建课/生长一步/罗盘/回填/复诊）+ DAG 纵览
+ * （区过滤/搜索/只看就绪 + 推荐星标）。点节点直接进学习视图（LessonView）；从学习
+ * 视图「在图中查看」跳入时 focusNode 红描边定位。图本身不承载学习操作。 */
 import { Button, Card, Input, Message, Modal, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import CoachCockpit from '../components/CoachCockpit'
 import GraphDagView from '../components/GraphDagView'
 import { api } from '../api'
 import { isActiveTab } from '../active-tab'
 import type { AppFrame } from '../App'
-import type { BankEntry, GraphDoc, RecommendDoc } from '../types'
+import type { BankEntry, GenJobItem, GraphDoc, RecommendDoc } from '../types'
 
 const { Text } = Typography
+
+/** 图域任务 phase 全集（与 useCoachToasts 同口径）：驾驶舱在途条与完成通知的消费面。 */
+const GRAPH_PHASES = new Set(['种子', '生长', '罗盘', '反编译', '计划', '里程碑'])
 
 const REC_TYPE_COLOR: Record<string, string> = { review: 'green', overdue: 'red', ready: 'blue', new: 'cyan' }
 const REC_TYPE_LABEL: Record<string, string> = { review: '复习', overdue: '逾期', ready: '就绪', new: '新学' }
@@ -44,6 +48,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   const [loading, setLoading] = useState(false)
   /** 排队/生成中的节点（节点名 → 阶段；角标与 hover 工具条消费）。 */
   const [genStates, setGenStates] = useState<Record<string, 'queued' | 'running'>>({})
+  /** 全部图域任务（不限当前课程——空 vault 时种子起草的 course 是尚未存在的新课）。 */
+  const [graphJobs, setGraphJobs] = useState<GenJobItem[]>([])
   // 总览过滤
   const [region, setRegion] = useState<string>('')
   const [search, setSearch] = useState('')
@@ -74,6 +80,7 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
     const poll = async () => {
       try {
         const st = await api.generateStatus()
+        setGraphJobs(st.jobs.filter(j => GRAPH_PHASES.has(j.phase ?? '')))
         const gen: Record<string, 'queued' | 'running'> = {}
         const active = new Set<string>()
         for (const j of st.jobs) {
@@ -172,7 +179,13 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   }
 
   if (!course) {
-    return <Card><Text type='secondary'>在「学习」页选择课程后查看学习图。</Text></Card>
+    // 空 vault：驾驶舱仍然可达——建课从这里开始（种子提案一次人审即开工）
+    return (
+      <Space direction='vertical' style={{ width: '100%' }} size={12}>
+        <Card><Text type='secondary'>还没有课程——在这里新建：种子一次人审即开工，图随教练回合沿真实的需要生长。</Text></Card>
+        <CoachCockpit course={null} jobs={graphJobs} />
+      </Space>
+    )
   }
   if (loading && !doc) {
     return <Card><Text type='secondary'>加载学习图…</Text></Card>
@@ -213,6 +226,9 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
           <Button size='small' loading={loading} onClick={() => void load()}>刷新</Button>
         </div>
       </div>
+
+      {/* 教练台：图域命令面板下发（ADR-0038） */}
+      <CoachCockpit course={course} jobs={graphJobs} />
 
       {/* 推荐条（琥珀=下一步推荐；点击卡片直接进学习视图） */}
       {(rec?.events ?? []).filter(e => e.course === course).length > 0 && (

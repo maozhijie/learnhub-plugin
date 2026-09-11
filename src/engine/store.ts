@@ -249,6 +249,27 @@ export class Store {
     return prop
   }
 
+  /** 同源双提案单边 apply 守卫（#149 反编译 v8 pair 联动；返回拒收文案，null = 放行）。
+   * 另一半 pending = apply 时序缺口（计划先落盘会让 plan.nodes 引用悬空节点炸消费面）
+   * ——拒收并指向联合入口；applied = 联合 apply 的崩溃恢复续段——放行；rejected =
+   * 双提案应同退，单边生效会让同源产物半挂——拒收（重新反编译产生新对）。
+   * opts.pairApply = 联合入口在两半区之间调用时的豁免旗标。 */
+  static pairApplyBlock(
+    prop: ProposalRec, proposals: ProposalRec[], opts: { pairApply?: boolean } = {},
+  ): string | null {
+    if (!prop.pair || opts.pairApply) return null
+    const sibling = proposals.find(p => p.id === prop.pair)
+    if (!sibling) return `提案 #${prop.id} 声明的联动提案 #${prop.pair} 不存在（同源对账数据不一致，fail loud）——先修复提案记录。`
+    if (sibling.status === 'pending') {
+      return `反编译双提案同进同退：另一半 #${sibling.id}（${sibling.kind}）仍 pending——`
+        + '计划与种子簇必须同时生效（计划引用先有图可解析），用 learnhub_project_decompile_apply 联合 apply；要放弃就两半一起 reject。'
+    }
+    if (sibling.status === 'rejected') {
+      return `反编译双提案同进同退：另一半 #${sibling.id}（${sibling.kind}）已拒——本提案应同退，不单边生效；重新反编译产生新对。`
+    }
+    return null // applied：联合 apply 中途失败后的恢复续段，放行
+  }
+
   // ---- snapshots ----
 
   async latestSnapshotVersion(course: string): Promise<number> {
@@ -479,22 +500,28 @@ export class Store {
   // ---- utils ----
 
   private async readJsonl<T>(path: string): Promise<T[]> {
-    let raw: string
-    try {
-      raw = await readFile(path, 'utf8')
-    } catch {
-      return []
-    }
-    const out: T[] = []
-    for (const line of raw.split('\n')) {
-      const s = line.trim()
-      if (!s) continue
-      try {
-        out.push(JSON.parse(s) as T)
-      } catch {
-        // 跳过半行损坏（进程中断可能留下未写完的尾行）
-      }
-    }
-    return out
+    return readJsonlLines<T>(path)
   }
+}
+
+/** jsonl 只读（跳过半行损坏——追加写单行原子，中断最多留半行尾；store 与无依赖
+ * 读侧扫描器共用的唯一实现，#146 起从私有方法提升为模块函数）。 */
+export async function readJsonlLines<T>(path: string): Promise<T[]> {
+  let raw: string
+  try {
+    raw = await readFile(path, 'utf8')
+  } catch {
+    return []
+  }
+  const out: T[] = []
+  for (const line of raw.split('\n')) {
+    const s = line.trim()
+    if (!s) continue
+    try {
+      out.push(JSON.parse(s) as T)
+    } catch {
+      // 跳过半行损坏（进程中断可能留下未写完的尾行）
+    }
+  }
+  return out
 }

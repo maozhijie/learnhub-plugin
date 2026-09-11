@@ -20,6 +20,17 @@ const STATUS_TAG: Record<GenJobItem['status'], { label: string; color: string }>
   cancelled: { label: '已取消', color: 'gray' },
 }
 
+/** phase → 人读标签（图域任务 = 面板下发/教练回合产物的队列形态）。 */
+const PHASE_TAG: Partial<Record<NonNullable<GenJobItem['phase']>, { label: string; color: string }>> = {
+  quiz: { label: '出题', color: 'cyan' },
+  种子: { label: '种子起草', color: 'lime' },
+  生长: { label: '生长批', color: 'orange' },
+  罗盘: { label: '罗盘初画', color: 'gold' },
+  反编译: { label: '目标反编译', color: 'purple' },
+  计划: { label: '计划草案', color: 'purple' },
+  里程碑: { label: '里程碑草案', color: 'purple' },
+}
+
 export default function GeneratePage({ frame }: { frame?: AppFrame }) {
   const [jobs, setJobs] = useState<GenJobItem[] | null>(null)
   const [queuePaused, setQueuePaused] = useState(false)
@@ -192,7 +203,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
             </Space>} />
         )}
         <Text type='secondary' style={{ display: 'block', marginBottom: 8 }}>
-          全局串行队列：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。课程图的多轮生成在 dsh 对话里进行（agent 侧）。
+          全局串行队列：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。课程图的种子提案与生长批在 dsh 对话里进行（agent 侧）。
         </Text>
         {jobs === null ? null : jobs.length === 0 ? (
           <Empty description='当前没有生成任务' />
@@ -202,7 +213,9 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
               { title: '节点', dataIndex: 'node', ellipsis: true, render: (_, j) => (
                 <Space size={6}>
                   <span>{j.node}</span>
-                  {j.phase === 'quiz' && <Tag size='small' color='cyan'>出题</Tag>}
+                  {j.phase && PHASE_TAG[j.phase] && (
+                    <Tag size='small' color={PHASE_TAG[j.phase]!.color}>{PHASE_TAG[j.phase]!.label}</Tag>
+                  )}
                 </Space>
               ) },
               { title: '课程', dataIndex: 'course', width: 130 },

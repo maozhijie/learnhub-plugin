@@ -1,7 +1,7 @@
 /**
  * 种子与终点锚（#142 / ADR-0033 生长式图）：
  *
- * - 种子提案（kind=seed）是课程唯一的新入口（gen 骨架已退役）：1–3 起点 + 终点节点 +
+ * - 种子提案（kind=seed）是课程唯一的新入口：1–3 起点 + 终点节点 +
  *   朝终点的粗占位边（终点.pre = 起点），一次人审即开工；种子节点零 enc 零 est。
  * - 终点锚 = 课程唯一结构承诺物（state/终点锚.json：终点节点+目标类型+声明日期），
  *   种子 apply 一次落盘；此后唯一的合法写通道是重新种子提案（换终点），锚不提供
@@ -25,7 +25,8 @@ export type GoalType = 'capability' | 'coverage'
 /** 完成判据的终点 mastery 阈值（读侧折叠常量；mastery = 0.7·稳定度完成度 + 0.3·练习证据）。 */
 export const COMPLETION_MASTERY_THRESHOLD = 0.8
 
-/** 起点定位三路（词条「种子」；project 路的完整接线归项目锚定票 #149，本票只留声明位）。 */
+/** 起点定位三路（词条「种子」）：baseline 常识基线 / vault 先验熟悉边界 / project
+ * 反编译子图簇（#149 接线：目标反编译产出种子提案时由引擎把起点铸成 project）。 */
 export const START_BASES = ['baseline', 'vault', 'project'] as const
 export type StartBasis = (typeof START_BASES)[number]
 
@@ -180,7 +181,8 @@ export interface SeedNodeSpec {
   teaches?: Record<string, ConceptTier>
   assumes?: Record<string, ConceptTier>
   misconceptions?: Misconception[]
-  /** 起点定位路由声明（仅起点；baseline 常识基线 / vault 先验熟悉边界 / project 反编译子图簇占位——第三路语义归项目锚定票）。 */
+  /** 起点定位路由声明（仅起点；baseline 常识基线 / vault 先验熟悉边界 / project 反编译
+   * 子图簇——第三路由 #149 目标反编译受理时铸成）。 */
   basis?: StartBasis
 }
 
@@ -458,4 +460,21 @@ export function anchorFromSeed(
     start_basis: Object.fromEntries(spec.starts.filter(s => s.basis).map(s => [s.name, s.basis!])),
     worksheet: (spec.worksheet ?? []).map(w => ({ block: w.block, ...(w.note ? { note: w.note } : {}), done: w.done === true })),
   }
+}
+
+/** 面板下发的种子起草请求（ADR-0038）：绑定字段（课程名/模式/目标类型/块工作表）
+ * 以表单为准，引擎受理前覆盖写入——模型照抄错误不影响绑定。 */
+export interface SeedDraftRequest {
+  course: string
+  goal: string
+  mode?: 'new' | 'reseed'
+  goalType?: 'capability' | 'coverage'
+  useVaultPrior?: boolean
+  worksheet?: Array<{ block: string; note?: string }>
+}
+
+/** 种子起草修复轮提示词（面板下发的 seedPropose 用，decompileRepairPrompt 同款机械）：
+ * 上一次输出未过干跑校验门 → 附校验清单重出完整 YAML。 */
+export function seedRepairPrompt(pack: string, previous: string, errors: string[]): string {
+  return `${pack}\n\n## 上一次输出未过种子校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`
 }

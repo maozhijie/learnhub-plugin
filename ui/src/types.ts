@@ -73,8 +73,10 @@ export interface GenJobItem {
   node: string
   startedAt: string
   status: 'queued' | 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
-  /** 组合管线阶段：outline（大纲）→ sections（逐节正文）→ quiz（自动出题）；queued 无阶段。 */
-  phase?: 'outline' | 'sections' | 'quiz'
+  /** 组合管线阶段：outline（大纲）→ sections（逐节正文）→ quiz（自动出题）；
+   * 图域任务（课程级）：种子（建课/换终点起草）/ 生长（教练回合生长批）/ 罗盘 /
+   * 反编译 / 计划 / 里程碑（面板下发任务）。queued 无阶段。 */
+  phase?: 'outline' | 'sections' | 'quiz' | '种子' | '生长' | '罗盘' | '反编译' | '计划' | '里程碑'
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
   progress?: { done: number; total: number; current?: string }
   message?: string
@@ -89,6 +91,37 @@ export interface GenStatusDoc {
   jobs: GenJobItem[]
   queuePaused: boolean
   queuedCount: number
+}
+
+/** GET /probation 响应（#146 插入实验面，引擎 probationStatus 视图的轻镜像）。 */
+export interface ProbationDoc {
+  date: string
+  courses: Array<{
+    course: string
+    /** 在途复诊的插入节点（「实验中」标记取数）。 */
+    in_flight: string[]
+    /** 已到复诊期仍未决的插入节点。 */
+    overdue: string[]
+    rates: {
+      window_days: number
+      coach_added: number
+      inserted: number
+      insert_rate: number | null
+      sidebranch: number
+      sidebranch_share: number | null
+      decided: number
+      proven: number
+      pruned: number
+      recheck_pass_rate: number | null
+      prune_rate: number | null
+    }
+    gate: {
+      resilient: boolean | null
+      sidebranch_cap: number
+      insert_blocked: boolean
+      insert_blocks: string[]
+    }
+  }>
 }
 
 // ---- 引擎内联类型的轻量镜像（引擎侧已是命名返回，非 Record 裸返回；保持 UI 名）----

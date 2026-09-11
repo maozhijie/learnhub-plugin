@@ -21,13 +21,17 @@ import { validateErrorCards } from './error-cards.ts'
 import { validateNoteFrontmatter } from './notes.ts'
 import { YAML } from './yaml.ts'
 import { parseSchemaBlock } from './schema.ts'
-import type { CourseEntry } from './types.ts'
+import { readProbationLedger, foldProbation, recheckDue, learningDaysOf } from './probation.ts'
+import { readDayCutoff } from './xp.ts'
+import { readJsonlLines } from './store.ts'
+import { dayOfTs, todayStr } from './dates.ts'
+import type { CourseEntry, PracticeRec, ReviewRec } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger'
 
-export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived'
+export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived' | 'hint'
 
 export type DataCheckReason =
   | 'registry_missing'
@@ -67,6 +71,7 @@ export type DataCheckReason =
   | 'endpoint_anchor_dangling'
   | 'pre_v2_archive'
   | 'pre_v2_artifact'
+  | 'probation_overdue'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -81,8 +86,8 @@ export interface DataCheckFinding {
 
 export interface DataCheckReport {
   status: 'ok' | 'missing' | 'broken'
-  counts: { missing: number; broken: number; archived: number }
-  byArea: Record<DataCheckArea, { missing: number; broken: number; archived: number }>
+  counts: { missing: number; broken: number; archived: number; hint: number }
+  byArea: Record<DataCheckArea, { missing: number; broken: number; archived: number; hint: number }>
   inventory: {
     registryPresent: boolean
     courses: number
@@ -102,6 +107,9 @@ export interface DataCheckReport {
     conceptRegistries: { present: number; entries: number }
     /** 终点锚盘点（#142）：present = 已播种课程数（锚在盘；缺席 = 未播种 Missing 合法）。 */
     endpointAnchors: { present: number }
+    /** 边实验账本盘点（#146）：present = 在册课程数；entries/inFlight/overdue = 账本
+     * 行数、在途复诊与到期未决（overdue 是 hint 提示类，不进 status）。 */
+    probationLedgers: { present: number; entries: number; inFlight: number; overdue: number }
   }
   findings: DataCheckFinding[]
 }
@@ -640,6 +648,49 @@ async function scanArchive(
   return { present, files }
 }
 
+/** 边实验账本盘点（#146 / 词条「边实验账本」「复诊」）：到期未决是提示级（hint，
+ * 第四类 level——既非 Missing 也非 Broken 也非 archived，不进 status）：结算钩子是
+ * 幂等重试（队列空闲检查点/手动触发），「该决未决」只说明结算未跑到或剪除提案被拒，
+ * 让它可见即体检的本分，不判损坏。学习日序列与结算钩子同口径（practice ∪ 到期
+ * 复习首推，按日界折叠），保证提示与结算的到期判定不分叉。 */
+async function scanProbationLedger(
+  findings: DataCheckFinding[],
+  courseName: string,
+  paths: Paths,
+  root: string,
+  cutoff: number,
+  today: string,
+): Promise<{ present: boolean; entries: number; inFlight: number; overdue: number }> {
+  const ledger = await readProbationLedger(paths, root)
+  if (!ledger.length) return { present: false, entries: 0, inFlight: 0, overdue: 0 }
+  const fold = foldProbation(ledger)
+  const practice = await readJsonlLines<PracticeRec>(paths.practicePath)
+  const reviews = await readJsonlLines<ReviewRec>(paths.reviewLogPath)
+  const learningDays = learningDaysOf(practice, reviews, courseName, cutoff, today)
+  let proposals: Array<{ id?: unknown; decided?: unknown }> = []
+  try {
+    const doc = JSON.parse(await readFile(paths.proposalsPath, 'utf8'))
+    if (Array.isArray(doc)) proposals = doc
+  } catch {
+    // proposals 缺失/损坏：登记日无从对账，overdue 静默（提案盘点自身另有 finding）
+  }
+  const regDay = new Map<number, string>()
+  for (const p of proposals) {
+    if (typeof p.id === 'number' && typeof p.decided === 'string') regDay.set(p.id, p.decided)
+  }
+  let overdue = 0
+  for (const entry of fold.inFlight) {
+    const decided = regDay.get(entry.proposal)
+    if (!decided) continue
+    if (!recheckDue(learningDays, dayOfTs(decided, cutoff), entry.due).due) continue
+    overdue++
+    push(findings, 'probation_ledger', 'hint', 'probation_overdue',
+      `课程「${courseName}」边实验账本 ${paths.probationLedgerPath(root)}：节点「${entry.node}」（提案 #${entry.proposal}，复诊期 ${entry.due} 学习日）`,
+      '复诊期已满仍未决——结算钩子未跑到或剪除提案被拒（自动重试于下一次结算触发；可用 learnhub_probation settle 手动结算）。')
+  }
+  return { present: true, entries: ledger.length, inFlight: fold.inFlight.length, overdue }
+}
+
 /** 一次只读体检。注册表损坏时无法安全展开课程，因此只报告注册表本身。 */
 export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
   const findings: DataCheckFinding[] = []
@@ -649,6 +700,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     archive: { present: false, files: 0 },
     conceptRegistries: { present: 0, entries: 0 },
     endpointAnchors: { present: 0 },
+    probationLedgers: { present: 0, entries: 0, inFlight: 0, overdue: 0 },
   }
   const registryWhere = `课程注册表 ${paths.registryPath}`
 
@@ -711,6 +763,17 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
       new Set(result.nodes.map(n => n.name)),
     )
     if (anchorScan.present) inventory.endpointAnchors.present++
+    // 边实验账本（#146）：缺席 = 无插入实验合法空态零 finding；在盘 = 盘点在途与到期未决（hint）
+    const cutoff = await readDayCutoff(paths)
+    const probationScan = await scanProbationLedger(
+      findings, courseName, paths, String(course.root), cutoff, todayStr(new Date(), cutoff),
+    )
+    if (probationScan.present) {
+      inventory.probationLedgers.present++
+      inventory.probationLedgers.entries += probationScan.entries
+      inventory.probationLedgers.inFlight += probationScan.inFlight
+      inventory.probationLedgers.overdue += probationScan.overdue
+    }
   }
 
   const noteSourceScan = await scanNoteSources(findings, paths, noteSources)
@@ -729,7 +792,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
   }
   inventory.archive = await scanArchive(findings, paths, breaks)
 
-  const emptyArea = () => ({ missing: 0, broken: 0, archived: 0 })
+  const emptyArea = () => ({ missing: 0, broken: 0, archived: 0, hint: 0 })
   const byArea: DataCheckReport['byArea'] = {
     registry: emptyArea(),
     graph: emptyArea(),
@@ -741,17 +804,19 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     concept_registry: emptyArea(),
     endpoint_anchor: emptyArea(),
     archive: emptyArea(),
+    probation_ledger: emptyArea(),
   }
   for (const finding of findings) {
     byArea[finding.area][finding.level]++
   }
   const archived = findings.filter(f => f.level === 'archived').length
+  const hint = findings.filter(f => f.level === 'hint').length
   const missing = findings.filter(f => f.level === 'missing').length
   const broken = findings.filter(f => f.level === 'broken').length
   return {
-    // archived 是显式第三类：不进 status（既非 Missing 也非 Broken）
+    // archived 是显式第三类、hint 是提示类：都不进 status（既非 Missing 也非 Broken）
     status: broken ? 'broken' : missing ? 'missing' : 'ok',
-    counts: { missing, broken, archived },
+    counts: { missing, broken, archived, hint },
     byArea,
     inventory,
     findings,

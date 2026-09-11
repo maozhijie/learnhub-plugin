@@ -1,5 +1,5 @@
 /**
- * agent 产出（图/变更）的门禁与落盘 + 提案生命周期（吸收自 Python gen.py）。
+ * agent 产出（图/变更）的门禁与落盘 + 提案生命周期。
  *
  * 流程铁律：agent 产出 YAML → schema 校验 → 结构检查（断边/环/冲突）→
  * 提案落盘 pending（产物文件全留痕）→ 人审 → apply 过 audit 门禁生效 → journal + 快照。
@@ -9,8 +9,8 @@ import { readFile, writeFile, rename, mkdir, unlink, appendFile } from 'node:fs/
 import { existsSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { YAML } from './yaml.ts'
-import { atomicWrite } from './store.ts'
-import { Graph, GraphStore, loadRegionDoc, parseNode, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc, structureCheck } from './graph.ts'
+import { Store, atomicWrite } from './store.ts'
+import { Graph, GraphStore, loadRegionDoc, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc, structureCheck } from './graph.ts'
 import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflicts, namesOf, validateConceptEntry } from './concepts.ts'
 import type { ConceptEntry, ConceptRef } from './concepts.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
@@ -25,6 +25,9 @@ import {
   compassScaffold, withSectionText, parseCompass, sectionBody, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
 import { todayStr } from './dates.ts'
+import { appendProbationEntry, recheckPreregOf } from './probation.ts'
+import type { RecheckPrereg } from './probation.ts'
+import { RECHECK_DAYS_DEFAULT } from './params.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -33,12 +36,6 @@ import type { CourseEntry, ProposalKind } from './types.ts'
 
 /** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。 */
 export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
-
-export interface GenProposalSpec {
-  course: string
-  mode: 'new' | 'append'
-  regions: Array<{ region: string; color?: string; blocks: Array<{ name: string; nodes: GNode[] }> }>
-}
 
 export interface EditOp {
   op: 'add_node' | 'del_node' | 'set_pre' | 'set_enc' | 'rename' | 'move' | 'set_note'
@@ -65,7 +62,8 @@ export interface EditOp {
 
 /** 生长批 note 区（#145 裁决产物面）：算子标签 + 理由 + 分歧声明（可选）。生长批仍是
  * kind=edit 提案（不新增提案 kind）；note 在场即生长批——ops 允许为空（裁决=暂不产
- * 结构，罗盘重写照走同事务）。 */
+ * 结构，罗盘重写照走同事务）。#146 起插入批随批预注册复诊（note.recheck：恰一枚
+ * 可机判 metric + 复诊期缺省 10 学习日 clamp [5,20]），apply 同事务登记边实验账本。 */
 export interface GrowthNote {
   operator: GrowthOperator
   reason: string
@@ -73,6 +71,10 @@ export interface GrowthNote {
    * 升级全量段重裁（两段式 effort；显然步免仲裁税不声明）。字段名避让「申诉
    * （Dispute，ADR-0031）」词条——同名同义纪律。 */
   disagreement?: string
+  /** 复诊预注册（#146 词条「复诊」）：只随 operator=插入 且本批有 add_node 的批携带
+   * （其他算子携带即拒收；插入批缺预注册拒收）——metric 恰一枚（前进恢复/卡点集中度
+   * 降幅/保留率恢复），days 缺省 10 学习日 clamp [5,20]。 */
+  recheck?: RecheckPrereg
 }
 
 /** 提案 op 上的边轻纪律键（#127：候选边留提案侧留痕、origin 从 journal 派生、
@@ -95,13 +97,10 @@ export interface EditProposalSpec {
 
 const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'move', 'set_note'] as const
 
-/** gen 骨架提案退役（#138 cutover / ADR-0033 生长式图）：受理门统一拒收，新课程
- * 入口由种子提案接管（#142），反编译子图入口随种子票重接（#149）。 */
-export function genRetiredError(what: string): Error {
-  return new Error(
-    `[${what}] kind=gen 骨架提案已退役（#138 cutover / ADR-0033 生长式图）——`
-    + '新课程入口由种子提案接管（#142），课程结构变更用 kind=edit；'
-    + '存量 pending gen 提案不再受理 apply（reject 留痕）。')
+/** 批内 add_node 数（插入登记/调速闸门的「本批新增」口径单点；解析前 doc.ops 与
+ * EditOp[] 同形消费）。 */
+export function addNodeCountOf(ops: Array<{ op?: unknown }> | undefined): number {
+  return (ops ?? []).filter(o => o.op === 'add_node').length
 }
 
 /** EditOp 的 enc 载荷 → EncEdge[]（字符串=权重 1，映射带可选 w/note；与图 YAML parseEnc 同形态）。 */
@@ -114,71 +113,6 @@ function normalizeOpEnc(raw: EditOp['enc']): EncEdge[] {
 function nonempty(v: unknown, what: string): string {
   if (typeof v !== 'string' || !v.trim()) throw new Error(`${what} 不能为空`)
   return v.trim()
-}
-
-/** GenProposal schema 校验（手写，错误行格式与旧引擎一致）。 */
-export function validateGenProposal(doc: unknown): { errors?: string[]; spec?: GenProposalSpec } {
-  const errors: string[] = []
-  const d = doc as Record<string, unknown> | null
-  if (typeof d !== 'object' || d === null) return { errors: ['(顶层): 必须是映射'] }
-  try {
-    nonempty(d.course, 'course')
-  } catch (e) { errors.push((e as Error).message) }
-  if (d.mode === undefined) errors.push('mode: 缺失（必填，只允许 new/append：新增课程写 new，向已有课程追加写 append）')
-  else if (d.mode !== 'new' && d.mode !== 'append') errors.push('mode: 只允许 new/append（新增课程写 new；向已有课程追加写 append）')
-  const regions: GenProposalSpec['regions'] = []
-  if (!Array.isArray(d.regions) || !d.regions.length) {
-    errors.push('regions: 不能为空')
-  } else {
-    d.regions.forEach((rr: unknown, i: number) => {
-      const r = rr as Record<string, unknown> | null
-      const where = `regions.${i}`
-      if (typeof r !== 'object' || r === null) {
-        errors.push(`${where}: 必须是映射`)
-        return
-      }
-      if (typeof r.region !== 'string' || !r.region.trim()) {
-        const hint = typeof r.name === 'string' && r.name.trim()
-          ? `（区条目的键是 region，不是 name——你写了 name: ${r.name.trim()}）`
-          : ''
-        errors.push(`${where}.region 不能为空${hint}`)
-      }
-      const blocks: GenProposalSpec['regions'][number]['blocks'] = []
-      if (!Array.isArray(r.blocks) || !r.blocks.length) {
-        errors.push(`${where}.blocks: 块[${String(r.region)}] 没有节点`)
-      } else {
-        r.blocks.forEach((br: unknown, bi: number) => {
-          const b = br as Record<string, unknown> | null
-          if (typeof b !== 'object' || b === null || typeof b.name !== 'string' || !b.name.trim()) {
-            errors.push(`${where}.blocks.${bi}: 块 name 不能为空`)
-            return
-          }
-          if (!Array.isArray(b.nodes)) {
-            errors.push(`${where}.blocks.${bi}: 块[${b.name}] nodes 必须是列表`)
-            return
-          }
-          const rawNodes = b.nodes
-          const nodes: GNode[] = []
-          if (!rawNodes.length) {
-            errors.push(`${where}.blocks.${bi}: 块[${b.name}] 没有节点`)
-            return
-          }
-          // 受理前复用持久图节点解析，避免 gen 专用宽松解析把坏数据留到 apply 时才暴露。
-          rawNodes.forEach((rawNode: unknown, ni: number) => {
-            try {
-              nodes.push(parseNode(rawNode, '生成提案', `${where}.blocks.${bi}.nodes.${ni}`))
-            } catch (e) {
-              errors.push((e as Error).message)
-            }
-          })
-          blocks.push({ name: b.name.trim(), nodes })
-        })
-      }
-      regions.push({ region: typeof r.region === 'string' ? r.region.trim() : '', color: typeof r.color === 'string' ? r.color : '', blocks })
-    })
-  }
-  if (errors.length) return { errors }
-  return { spec: { course: (d!.course as string).trim(), mode: (d!.mode as 'new' | 'append') ?? 'append', regions } }
 }
 
 /** EditOp / EditProposal schema 校验（warns 收集概念字段组的非阻提示，可省略）。 */
@@ -204,17 +138,19 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       })
     }
   }
-  // 生长批 note 区（#145）：严格 schema——恰 {operator, reason, disagreement?}，未知键拒收。
+  // 生长批 note 区（#145）：严格 schema——恰 {operator, reason, disagreement?, recheck?}，
+  // 未知键拒收。#146：recheck 只随插入批携带；插入批（有 add_node）缺预注册拒收。
   let note: GrowthNote | undefined
+  let recheckWarns: string[] = []
   if (d.note !== undefined) {
     if (typeof d.note !== 'object' || d.note === null || Array.isArray(d.note)) {
-      errors.push('note: 必须是映射（生长批裁决区 = {operator, reason, disagreement?}）')
+      errors.push('note: 必须是映射（生长批裁决区 = {operator, reason, disagreement?, recheck?}）')
     } else {
       const n = d.note as Record<string, unknown>
       const noteErrors: string[] = []
-      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'disagreement'].includes(k))
+      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'disagreement', 'recheck'].includes(k))
       if (unknown.length) {
-        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/disagreement；分歧声明写在 disagreement，不另立字段）`)
+        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/disagreement/recheck；分歧声明写在 disagreement，复诊预注册写在 recheck）`)
       }
       if (!(GROWTH_OPERATORS as readonly string[]).includes(String(n.operator))) {
         noteErrors.push(`note.operator: 非法算子 ${JSON.stringify(String(n.operator))}（允许 ${GROWTH_OPERATORS.join('/')}）`)
@@ -225,12 +161,21 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       if (n.disagreement !== undefined && (typeof n.disagreement !== 'string' || !n.disagreement.trim())) {
         noteErrors.push('note.disagreement: 分歧声明声明了就要写内容（真分歧才声明——显然步免仲裁税）')
       }
+      // 复诊预注册（#146）：schema 门在此，跨字段规则在 ops 就位后统一裁（见下方 preregGate）
+      let recheck: RecheckPrereg | undefined
+      if (n.recheck !== undefined) {
+        const v = recheckPreregOf(n.recheck)
+        noteErrors.push(...v.errors)
+        recheckWarns = v.warns
+        if (!v.errors.length && v.prereg) recheck = v.prereg
+      }
       errors.push(...noteErrors)
       if (!noteErrors.length) {
         note = {
           operator: String(n.operator) as GrowthOperator,
           reason: (n.reason as string).trim(),
           ...(typeof n.disagreement === 'string' && n.disagreement.trim() ? { disagreement: n.disagreement.trim() } : {}),
+          ...(recheck ? { recheck } : {}),
         }
       }
     }
@@ -272,11 +217,11 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       if (retired.length) {
         errors.push(`${where}: 提案 op 不接受边元数据字段 ${JSON.stringify(retired)}（origin 从提案 journal 派生、复诊状态落 state/边实验.jsonl——图与提案节点零边字段）`)
       }
-      // 键名统一到 name（#131 §7 / #1：与图 YAML、gen 节点同口径，不做兼容双读也不容双写）——
+      // 键名统一到 name（#131 §7 / #1：与图 YAML 同口径，不做兼容双读也不容双写）——
       // add_node 用 name 定义新节点；其余 op 用 node 引用既有节点。写错键一律 fail loud。
       if (op === 'add_node') {
         if (o.node !== undefined && String(o.node).trim()) {
-          errors.push(`${where}: op=add_node 不接受 node 键（键名已统一到 name——你写了 node: ${String(o.node).trim()}；速查表见技能文档）`)
+          errors.push(`${where}: op=add_node 不接受 node 键（键名已统一到 name——你写了 node: ${String(o.node).trim()}）`)
         }
         if (!(o.name && String(o.name).trim())) errors.push(`${where}: op=add_node 需要 name`)
       } else {
@@ -350,6 +295,20 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
     })
   }
   if (errors.length) return { errors }
+  // 复诊预注册的跨字段规则（#146，ops 就位后裁）：插入=带预注册的生长批——
+  // 有 add_node 的插入批必须预注册复诊（零人审结算的判据前提）；预注册只随插入批
+  // 携带（其他算子/零新增节点没有可登记的插入边）。
+  if (note) {
+    const adds = addNodeCountOf(ops)
+    if (note.operator === '插入' && adds > 0 && !note.recheck) {
+      errors.push('note.recheck: 插入批必须预注册复诊（metric: 前进恢复|卡点集中度降幅|保留率恢复；days 缺省 10 学习日）——插入边的到期结算零人审，没有预注册就没有结算判据')
+    }
+    if (note.recheck && (note.operator !== '插入' || adds === 0)) {
+      errors.push(`note.recheck: 复诊预注册只随插入批携带（本批 operator=${note.operator}、add_node ${adds} 条——没有可登记的插入边就无需预注册）`)
+    }
+  }
+  warns?.push(...recheckWarns)
+  if (errors.length) return { errors }
   return {
     spec: {
       course: (d!.course as string).trim(),
@@ -411,14 +370,14 @@ function conceptRefsOfSeed(spec: SeedProposalSpec): ConceptRef[] {
   return refs
 }
 
-/** apply 返回的 findings：audit warns 摘要 + 健康分不足提示（引擎不设阈值，
- * 结束条件「≥ 80」归 learnhub-graph-generate 技能的 agent 纪律）。
+/** apply 返回的 findings：audit warns 摘要 + 健康分基线提示（健康分是审计基线
+ * 报告项，引擎不设阈值、不进完成判据——完成=终点锚判据。
  * seedPhase=true 时健康分提示豁免（#142：种子图健康分不设阈值——起点/终点几张
  * 节点的图分数必然低，提示是噪音；生长批进入后恢复）。 */
 export function applyFindings(audit: ApplyAudit, seedPhase = false): string[] {
   const findings = audit.warns.map(w => `⚠ ${w}`)
   if (!seedPhase && audit.ok && audit.health > 0 && audit.health < 80) {
-    findings.push(`⚠ 图谱健康分 ${audit.health} < 80：结束条件未满足，继续分批构建（learnhub_graph_analyze 的 health/suggestions 给出方向）`)
+    findings.push(`⚠ 图谱健康分 ${audit.health} < 80 基线：继续生长前可参考 learnhub_graph_analyze 的 health/suggestions 定位短板`)
   }
   return findings
 }
@@ -521,6 +480,9 @@ export class GraphProposals {
     private store: Store,
     private registry: { get(key: string): Promise<CourseEntry | null>; load(): Promise<CourseEntry[]>; save(c: CourseEntry[]): Promise<void> },
     private centerRoot: string,
+    /** 生长闸门（#146 插入/旁支调速）：受理与 apply 双门在 schema 门后调用——需要
+     * 三率流水（账本/提案/练习），由门面注入（本类零流水依赖）；返回拒收行，空 = 放行。 */
+    private growthGate?: (spec: EditProposalSpec) => Promise<string[]>,
   ) {
     this.concepts = new ConceptRegistry(paths)
   }
@@ -537,7 +499,7 @@ export class GraphProposals {
     return errors
   }
 
-  /** 为图中缺笔记的节点补骨架文件（幂等）：gen/edit apply 落图后调用。
+  /** 为图中缺笔记的节点补骨架文件（幂等）：seed/edit apply 落图后调用。
    * 节点存在于图就该有 frontmatter 文件——vault 笔记是调度状态的事实源。 */
   async ensureNotesFor(root: string, regions: GRegion[]): Promise<number> {
     let created = 0
@@ -565,7 +527,7 @@ export class GraphProposals {
   }
 
   private async loadArtifact(path: string): Promise<unknown> {
-    if (!existsSync(path)) throw new Error(`[gen] 文件不存在: ${path}`)
+    if (!existsSync(path)) throw new Error(`[proposal] 文件不存在: ${path}`)
     return YAML.parse(await readFile(path, 'utf8'))
   }
 
@@ -591,6 +553,12 @@ export class GraphProposals {
     if (errors.length || conceptErrors.length || anchorErrors.length || consolidationErrors.length) {
       throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n`
         + [...errors, ...conceptErrors, ...anchorErrors, ...consolidationErrors].map(e => `  ✗ ${e}`).join('\n'))
+    }
+    // 生长闸门（#146 插入/旁支调速）：三率超限/复诊通过率触底时插入与旁支闸停（低数据
+    // 静默）——插入积极性的调速器在受理门就拦，不让超速批落 pending。
+    const gateErrors = this.growthGate ? await this.growthGate(spec) : []
+    if (gateErrors.length) {
+      throw new Error(`[propose-edit] 生长闸门拒绝受理（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     // 罗盘重写预检（#145 同事务：提案被拒罗盘不落盘——route 门在受理时就走一遍，
     // 不给坏路线落 pending 的机会）
@@ -686,6 +654,12 @@ export class GraphProposals {
       }
       compassRoute = stripWrappingFence(spec.route)
     }
+    // 生长闸门复验（#146）：受理与 apply 之间三率可能被其他批的结算/登记推移，
+    // 双门全过才开始任何写盘（与巩固门同款纪律）。
+    const gateErrors = this.growthGate ? await this.growthGate(spec) : []
+    if (gateErrors.length) {
+      throw new Error(`[apply-edit] 生长闸门拒绝写入（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
 
     // 1. 铸名随生长批落盘（同事务第一笔：此后任一步失败，登记表至多多出孤儿条目——
     //    合法态；反过来图先写会让引用悬空）
@@ -730,6 +704,21 @@ export class GraphProposals {
       compassRewritten = true
     }
 
+    // 3.6 边实验账本登记（#146 同事务）：插入批的每个 add_node 登记一条在途复诊
+    //     （node/pre = 登记快照、proposal = 本批提案 id、due = 预注册学习日数）——
+    //     到期结算钩子据此自动裁决（proven｜自动剪除），零人审。
+    const probationRegistered: string[] = []
+    if (spec.note?.operator === '插入' && spec.note.recheck) {
+      const due = spec.note.recheck.days ?? RECHECK_DAYS_DEFAULT
+      for (const op of spec.ops) {
+        if (op.op !== 'add_node') continue
+        await appendProbationEntry(this.paths, root, {
+          node: op.name!, pre: [...(op.pre ?? [])], proposal: prop.id, due,
+        })
+        probationRegistered.push(op.name!)
+      }
+    }
+
     const regions2 = await store.load()
     const version = (await this.store.latestSnapshotVersion(course.name)) + 1
     await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
@@ -759,12 +748,18 @@ export class GraphProposals {
       ...(spec.note
         ? { operator: spec.note.operator, coach_reason: spec.note.reason, ...(spec.note.disagreement ? { disagreement: true } : {}) }
         : {}),
+      ...(probationRegistered.length
+        ? {
+            probation_registered: probationRegistered,
+            recheck: { metric: spec.note!.recheck!.metric, due: spec.note!.recheck!.days ?? RECHECK_DAYS_DEFAULT },
+          }
+        : {}),
       ...(compassRewritten ? { compass_rewritten: true } : {}),
       findings: applyFindings(audit, seedPhase),
     }
   }
 
-  // ---- 种子提案（kind=seed，#142：课程新入口 + 终点锚；gen 骨架退役后接管）----
+  // ---- 种子提案（kind=seed，#142：课程新入口 + 终点锚）----
 
   /** 先验喂料分流判定（#142）：≥0.7 候选对在给定图结构上的回应情况。缓存缺文件 =
    * 零候选（Missing 合法空态，零先验零注入全绿）；坏档 fail loud（引擎 state 契约文件）。 */
@@ -774,7 +769,7 @@ export class GraphProposals {
     return splitPriorFeed(cache.edges, graph.names, graph)
   }
 
-  /** graph propose-seed（#142）：课程新入口（gen 骨架退役后接管）。schema 门 →
+  /** graph propose-seed（#142）：课程新入口。schema 门 →
    * 注册表状态对账（new/reseed）→ 结构检查（投影图）→ 概念对表 → 先验喂料分流
    * （≥0.7 未被结构回应的候选进 warns，非阻——喂料分流取代人审分流）→ pending，
    * 一次人审即开工。 */
@@ -823,12 +818,17 @@ export class GraphProposals {
 
   /** graph apply-seed（#142）：概念对表复验 + 结构复验 →（mode=new 建课脚手架）→
    * 落图（起点 + 终点 + 朝终点的粗占位边）→ 终点锚落盘（整份覆盖：换终点/换工作表
-   * 都只走种子提案人审，锚无直改通道）→ 铸名 + 快照 + 笔记脚手架 + journal。 */
+   * 都只走种子提案人审，锚无直改通道）→ 铸名 + 快照 + 笔记脚手架 + journal。
+   * 同源双提案守卫（#149）：反编译 pair 联动的种子提案不得先于计划半区单独 apply
+   * （联合入口走 opts.pairApply 豁免；计划已生效的恢复续段放行）。 */
   async applySeed(
     pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }, today?: string,
+    opts: { pairApply?: boolean } = {},
   ): Promise<Record<string, unknown>> {
     if (!audit.ok) throw new Error('[apply-seed] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
     const prop = await this.store.takePending('seed', pid)
+    const pairBlock = Store.pairApplyBlock(prop, await this.store.loadProposals(), opts)
+    if (pairBlock) throw new Error(`[apply-seed] ${pairBlock}`)
     const v = validateSeedProposal(await this.loadArtifact(prop.artifact))
     if (v.errors || !v.spec) throw new Error(`[apply-seed] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec
@@ -873,7 +873,7 @@ export class GraphProposals {
     // 1. 铸名随种子落盘（同事务第一笔：登记表先写，图在后——孤儿条目合法、悬空引用违约）
     if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
 
-    // 2. data/*.yaml 落图（既有区按块名合并；新区新建文件——gen 同款布局）
+    // 2. data/*.yaml 落图（既有区按块名合并；新区新建文件）
     const written: string[] = []
     for (const region of seedRegions) {
       const path = existingFiles[region.name]
@@ -943,8 +943,7 @@ export class GraphProposals {
     }
   }
 
-  /** mode=new 的建课脚手架：注册表条目 + data/课程/state 目录（原 gen 建课语义，
-   * #142 随种子提案回归）。 */
+  /** mode=new 的建课脚手架：注册表条目 + data/课程/state 目录（#142 随种子提案）。 */
   private async initCourse(name: string): Promise<CourseEntry> {
     const items = await this.registry.load()
     const root = name
@@ -1122,7 +1121,9 @@ export class GraphProposals {
     }
   }
 
-  /** graph reject。 */
+  /** graph reject。同源双提案联动（#149）：pair 在场的提案被拒时，pending 的另一半
+   * 联动同拒（同进同退——反编译双提案是一个逻辑单元，半挂的 pending 只会误导人审）；
+   * 已决的另一半不动（applied 不回滚、rejected 幂等）。 */
   async reject(pid: number, note = ''): Promise<Record<string, unknown>> {
     if (!Number.isInteger(pid) || pid <= 0) {
       throw new Error(`[reject] 提案 id 必须是正整数（收到 ${String(pid)}）；拒绝不能省略 id。`)
@@ -1131,6 +1132,15 @@ export class GraphProposals {
     const prop = list.find(p => p.id === pid)
     if (!prop || prop.status !== 'pending') throw new Error(`[reject] 提案 #${pid} 不存在或已决。`)
     await this.store.updateProposal(pid, { status: 'rejected', decided: new Date().toISOString(), decision_note: note })
+    if (prop.pair) {
+      const sibling = list.find(p => p.id === prop.pair)
+      if (sibling && sibling.status === 'pending') {
+        await this.store.updateProposal(sibling.id, {
+          status: 'rejected', decided: new Date().toISOString(),
+          decision_note: `同源双提案同退（#${pid} 已拒，联动拒绝）${note ? `：${note}` : ''}`,
+        })
+      }
+    }
     return prop
   }
 
@@ -1149,18 +1159,6 @@ export class GraphProposals {
     }
     return list.slice(-limit).reverse() as unknown as Record<string, unknown>[]
   }
-}
-
-/** GenProposal regions → GRegion（gen._spec_to_regions 同构；YAML 路径直接产 GNode）。 */
-export function specToRegions(specRegions: GenProposalSpec['regions']): GRegion[] {
-  return specRegions.map(r => ({
-    name: r.region,
-    color: r.color ?? '',
-    blocks: r.blocks.map(b => ({
-      name: b.name,
-      nodes: b.nodes,
-    })),
-  }))
 }
 
 /** SeedProposal → GRegion[]（#142）：起点 pre=[]，终点 pre=起点——朝终点的粗占位边
@@ -1208,7 +1206,7 @@ function nodeFromAddOp(op: EditOp): GNode {
   }
 }
 
-/** 在 regions 副本上模拟全部操作 → 错误列表（gen._simulate_ops 同语义）。 */
+/** 在 regions 副本上模拟全部操作 → 错误列表。 */
 export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): string[] {
   const sim: GRegion[] = JSON.parse(JSON.stringify(regions))
   const errors: string[] = []
@@ -1286,7 +1284,7 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
   return errors
 }
 
-/** 把 op 列表实际落到 Region 对象列表（gen._apply_ops_to_regions 同语义）。 */
+/** 把 op 列表实际落到 Region 对象列表。 */
 export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
   const renameMap: Record<string, string> = {}
   const removed = new Set<string>()
