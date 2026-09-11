@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { mathRng, systemClock } from '../src/host/clock.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 
 /** 工厂外的裸 vault（版本门负路径专用：工厂总是盖 v2 戳并构造引擎）。 */
@@ -44,7 +45,7 @@ test('硬门：v1 库（缺 schema 块 / 旧版本号 / 损坏 JSON / 缺文件�
   for (const [files, versionPattern] of cases) {
     const root = await rawVault({ '学习中心/课程注册表.yaml': 'courses: []\n', ...files })
     try {
-      assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng }), (err: unknown) => {
+      assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng, fs: nodeVaultFs }), (err: unknown) => {
         const message = (err as Error).message
         assert.ok(versionPattern.test(message), message)
         assert.match(message, /scripts\/migrate-v1\.mjs/, '报错必须指路一次性迁移脚本')
@@ -62,7 +63,7 @@ test('硬门：未来版本号同样拒载（引擎只认当前主版本）', as
     '学习中心/state/learnhub.json': JSON.stringify({ schema: { version: 3 } }),
   })
   try {
-    assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng }), /v3/)
+    assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng, fs: nodeVaultFs }), /v3/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

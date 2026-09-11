@@ -10,6 +10,7 @@
  * 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，R1/R2/R8/R13 豁免、健康分不设阈值
  * ——种子本来就只有起点+终点几张节点，形状告警与低健康分是噪音（生长批进入后恢复）。
  */
+import type { VaultFs } from './io.ts'
 import { scanAll, loadNote, hasReadyContent } from './notes.ts'
 import { STAGES } from './types.ts'
 import type { GRegion, Fm } from './types.ts'
@@ -33,7 +34,7 @@ export interface AuditResult {
 
 export async function runAudit(
   paths: Paths, root: string, courseName: string, graph: Graph, regions: GRegion[],
-  today: string,
+  today: string, fs: VaultFs,
 ): Promise<AuditResult> {
   const errors: string[] = []
   const warns: string[] = []
@@ -56,7 +57,7 @@ export async function runAudit(
 
   // 种子图豁免（#142）：图仍 = 终点锚的种子节点全集 = 图还是种子本身——形状类告警
   // 豁免（生长批进入后自动恢复）；E 级照查，种子也有真错误。
-  const anchor = await readAnchor(paths.anchorPath(root))
+  const anchor = await readAnchor(paths.anchorPath(root), fs)
   const seedPhase = isSeedGraph(anchor, graph)
 
   // R1 / R2 —— R1 阈值随图最大深度相对化（大图 depth>20 时 depth≤5 的旁支叶子是正常收尾），
@@ -133,7 +134,7 @@ export async function runAudit(
   }
 
   // E4 课程文件 ↔ 图同步 + E5 frontmatter schema
-  const { found, broken } = await scanAll(paths.courseDir(root))
+  const { found, broken } = await scanAll(paths.courseDir(root), fs)
   const fsErrors = new Set<string>()
   for (const b of broken) {
     errors.push(`E4 课程文件 Broken（${b.path.replace(/\\/g, '/').split(`${root}/`)[1] ?? b.path}）: ${b.reason}`)
@@ -153,33 +154,33 @@ export async function runAudit(
     if (typeof stage !== 'string' || !(STAGES as string[]).includes(stage)) {
       errors.push(`E5 stage 非法（${JSON.stringify(stage)}）: ${rel}，允许 ${STAGES.join('/')}`)
     }
-    let fs: Record<string, unknown> | null = null
+    let fsB: Record<string, unknown> | null = null
     if (fm.fsrs !== null && fm.fsrs !== undefined) {
       if (typeof fm.fsrs !== 'object') {
         fsErrors.add(`E5 fsrs 字段类型错误: ${rel}`)
       } else {
-        fs = fm.fsrs as Record<string, unknown>
+        fsB = fm.fsrs as Record<string, unknown>
       }
     }
-    if ((stage === 'review' || stage === 'mastered') && !fs) {
+    if ((stage === 'review' || stage === 'mastered') && !fsB) {
       fsErrors.add(`E5 stage=${stage} 但 fsrs 字段缺失: ${rel}`)
     }
-    if (fs) {
-      const s = fs.stability
-      const d = fs.difficulty
+    if (fsB) {
+      const s = fsB.stability
+      const d = fsB.difficulty
       if (typeof s !== 'number' || s <= 0) fsErrors.add(`E5 fsrs.stability 非法（${JSON.stringify(s)}）: ${rel}`)
       if (typeof d !== 'number' || !(d >= 1 && d <= 10)) fsErrors.add(`E5 fsrs.difficulty 非法（${JSON.stringify(d)}）: ${rel}`)
       for (const key of ['due', 'last_review'] as const) {
-        if (fs[key] !== null && fs[key] !== undefined && !parseDay(fs[key] as string)) {
-          fsErrors.add(`E5 fsrs.${key} 日期不可解析（${JSON.stringify(fs[key])}）: ${rel}`)
+        if (fsB[key] !== null && fsB[key] !== undefined && !parseDay(fsB[key] as string)) {
+          fsErrors.add(`E5 fsrs.${key} 日期不可解析（${JSON.stringify(fsB[key])}）: ${rel}`)
         }
       }
       for (const key of ['reps', 'lapses'] as const) {
-        if (fs[key] !== null && fs[key] !== undefined && !Number.isInteger(fs[key])) {
+        if (fsB[key] !== null && fsB[key] !== undefined && !Number.isInteger(fsB[key])) {
           fsErrors.add(`E5 fsrs.${key} 必须是整数: ${rel}`)
         }
       }
-      const due = parseDay(fs.due as string)
+      const due = parseDay(fsB.due as string)
       if (stage === 'review' || stage === 'mastered') {
         if (!due) warns.push(`R10 stage=${stage} 但 due 缺失: ${rel}`)
         else {
@@ -188,7 +189,7 @@ export async function runAudit(
         }
       }
       const practice = (fm.practice ?? {}) as { attempts?: number }
-      const reps = Number(fs.reps ?? 0)
+      const reps = Number(fsB.reps ?? 0)
       if ((stage === 'review' || stage === 'mastered') && reps > 0 && !(practice.attempts)) {
         warns.push(`R10 已复习 ${reps} 次但练习作答为 0: ${rel}`)
       }
@@ -201,7 +202,7 @@ export async function runAudit(
     // 反哺候选与已声明 enc 报覆盖缺口/一致性/权重合理性（warn/info，不阻断——补覆盖渐进）。
     const hasReady = hasReadyContent(fm as unknown as Fm)
     if ((graph.encOf[nodeName] ?? []).length || hasReady) {
-      const { body } = await loadNote(path)
+      const { body } = await loadNote(path, fs)
       const encHints = Content.encContentHints(graph, nodeName, body, hasReady)
       warns.push(...encHints.warns)
       infos.push(...encHints.infos)
@@ -240,7 +241,7 @@ export async function runAudit(
   // R17 先验喂料分流（#142）：vault 链接先验 w≥0.7 的候选对未被结构显式回应
   // （pre/enc 任一方向）→ WARN 可见——喂料分流取代人审分流；候选/断言边用位置
   // 区分（不动节点键集）。零先验（缓存 Missing）零输出——合法常态路径非 Broken。
-  const vaultCache = await readVaultLinksCache(paths.vaultLinksPath)
+  const vaultCache = await readVaultLinksCache(paths.vaultLinksPath, fs)
   if (vaultCache) {
     const { unresponded } = splitPriorFeed(vaultCache.edges, names, graph)
     for (const v of unresponded) {
@@ -304,7 +305,7 @@ export async function runAudit(
   }
   lines.push('')
   section('INFO · R5/R9 提示项', infos)
-  await import('./io.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n')))
+  await import('./io.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n'), fs))
 
   return { failed: errors.length > 0, errors, warns, infos, baseline, exempt }
 }

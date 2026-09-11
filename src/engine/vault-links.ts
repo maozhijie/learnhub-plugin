@@ -20,7 +20,7 @@
  * ADR-0010 只读纪律：个人笔记零写入——产物只落引擎 state 区；缓存带源文件
  * 指纹（与笔记源指纹同法），漂移可见、可重扫。纯文件扫描，不依赖宿主检索 API。
  */
-import { readdir, readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { fingerprintOf, stripFrontmatter } from './note-source.ts'
 import { clamp01 } from './grading.ts'
 
@@ -71,9 +71,9 @@ export const VAULT_LINK_DEFAULT_DIR_EXCLUDES = ['99附件', '05ob自定义', '00
 
 /** 读扫描目录排除配置（缺省/形状不符回落内置清单——同 learnhub.json 配置口径：
  * 容错的是配置笔误，不是学习者数据）。 */
-export async function readVaultLinkDirExcludes(configPath: string): Promise<string[]> {
+export async function readVaultLinkDirExcludes(configPath: string, fs: VaultFs): Promise<string[]> {
   try {
-    const doc = JSON.parse(await readFile(configPath, 'utf8')) as { vault_link_excludes?: unknown }
+    const doc = JSON.parse(await fs.readFile(configPath)) as { vault_link_excludes?: unknown }
     if (!Array.isArray(doc.vault_link_excludes)) return VAULT_LINK_DEFAULT_DIR_EXCLUDES
     const list = doc.vault_link_excludes
       .filter((e): e is string => typeof e === 'string' && !!e.trim())
@@ -211,10 +211,10 @@ export function edgeKeyOf(a: string, b: string): string {
 
 /** 读扫描缓存（state/vault链接.json）：缺文件返回 null（未扫描 = Missing，喂料分流
  * 零候选全绿）；存在但 JSON 坏/契约形状不符抛错——重跑 learnhub_vault_links_scan 覆盖。 */
-export async function readVaultLinksCache(path: string): Promise<VaultLinksDoc | null> {
+export async function readVaultLinksCache(path: string, fs: VaultFs): Promise<VaultLinksDoc | null> {
   let raw: string
   try {
-    raw = await readFile(path, 'utf8')
+    raw = await fs.readFile(path)
   } catch (err) {
     const code = (err as { code?: unknown }).code
     if (code === 'ENOENT') return null
@@ -237,6 +237,8 @@ export async function readVaultLinksCache(path: string): Promise<VaultLinksDoc |
 
 export interface VaultLinkScanOptions {
   vaultRoot: string
+  /** 存储端口（#175 阶段②）：walk 的目录列举与文件读取。 */
+  fs: VaultFs
   /** 当前时刻（#175 阶段①：时钟经 Clock 端口由调用方注入，本模块零时钟直读）。 */
   nowMs: number
   /** 学习中心相对段（整体排除——引擎管理区不是先验来源）。 */
@@ -261,20 +263,20 @@ export async function scanVaultLinks(opts: VaultLinkScanOptions): Promise<VaultL
     if (files.length >= maxFiles) return
     let entries
     try {
-      entries = await readdir(dir, { withFileTypes: true })
+      entries = await opts.fs.readdirTypes(dir)
     } catch {
       return // 目录不可读：跳过（与 vault-prior 同口径，扫描是尽力而为的增益）
     }
     for (const ent of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       if (files.length >= maxFiles) return
       const child = `${dir}/${ent.name}`
-      if (ent.isDirectory()) {
+      if (ent.directory) {
         if (ent.name.startsWith('.')) continue
         if (child === centerPrefix || child.startsWith(`${centerPrefix}/`)) continue
         const rel = child.slice(opts.vaultRoot.length + 1)
         if (dirExcluded(rel, opts.dirExcludes) || isPathExcluded(rel)) continue
         await walk(child)
-      } else if (ent.isFile() && ent.name.toLowerCase().endsWith('.md')) {
+      } else if (!ent.directory && ent.name.toLowerCase().endsWith('.md')) {
         const rel = child.slice(opts.vaultRoot.length + 1)
         if (isPathExcluded(rel)) continue
         files.push({ abs: child, rel })
@@ -305,7 +307,7 @@ export async function scanVaultLinks(opts: VaultLinkScanOptions): Promise<VaultL
   for (const f of files) {
     let raw: string
     try {
-      raw = await readFile(f.abs, 'utf8')
+      raw = await opts.fs.readFile(f.abs)
     } catch {
       continue // 不可读：跳过并保持指纹缺席（缓存可见该文件未被纳入本轮边累积）
     }

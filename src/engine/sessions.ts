@@ -6,7 +6,7 @@
  * 复习到期判定 = 题库聚合（节点 due = min(题目 due)），由 facade 注入 bankDue。
  * 节点的 stage 推进发生在作答（首答→learning）与完成确认（→review）两处，见 engine。
  */
-import { existsSync } from 'node:fs'
+import type { VaultFs } from './io.ts'
 import { parseDay, daysBetween, dayOfTs } from './dates.ts'
 import { effectiveStage } from './srs.ts'
 import { retrievability, getScheduler, masteryOfFm } from './srs.ts'
@@ -213,6 +213,7 @@ export class Sessions {
   constructor(
     private paths: Paths,
     private viewOf: ViewSource,
+    private fs: VaultFs,
   ) {}
 
   // ---- 笔记路径 ----
@@ -222,7 +223,7 @@ export class Sessions {
     if (!graph.blockOf[n]) return null
     const region = graph.blockOf[n][1]
     const path = this.paths.courseNotePath(root, region, n)
-    if (!existsSync(path)) return null
+    if (!this.fs.exists(path)) return null
     const marker = '/学习中心/'
     const idx = path.replace(/\\/g, '/').indexOf(marker)
     return idx >= 0 ? path.replace(/\\/g, '/').slice(idx + 1).replace(/\.md$/, '') : null
@@ -240,7 +241,7 @@ export class Sessions {
     for (const c of enabled) {
       const { graph, state, broken } = await this.viewOf(c)
       assertNoBrokenNotes('status', broken)
-      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root), this.fs)
       const rValue = (n: string) => retrievability(sched, state[n], today)
       const statByNode = new Map((statsByCourse.get(c.name) ?? []).map(s => [s.node, s]))
       const st = courseStats(graph, state, rValue, today, R_GATE, n => statByNode.get(n)?.count ?? 0)
@@ -287,7 +288,7 @@ export class Sessions {
     for (const c of enabled) {
       const { graph, state, broken } = await this.viewOf(c)
       assertNoBrokenNotes('recommend', broken)
-      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root))
+      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root), this.fs)
       const rValue = (n: string) => retrievability(sched, state[n], today)
       const stats = statsByCourse.get(c.name) ?? []
       const statByNode = new Map(stats.map(s => [s.node, s]))
@@ -519,7 +520,7 @@ export class Sessions {
     if (!graph.nset.has(node)) throw new Error(`[lesson] 课程「${courseName}」中没有节点「${node}」。`)
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
+    const { fm: rawFm, body } = await loadNote(path, this.fs)
     const fm = asFm(rawFm)
     if (!fm) {
       if (rawFm) {
@@ -529,7 +530,7 @@ export class Sessions {
       throw new Error(`[lesson] 课程文件不存在（内容未生成？）：${node}`)
     }
     const sections = Sessions.lessonSections(body)
-    const sched = await getScheduler(this.paths, this.paths.courseRoot(root))
+    const sched = await getScheduler(this.paths, this.paths.courseRoot(root), this.fs)
     const rValue = (n: string) => retrievability(sched, state[n], today)
     const candidates = readySet(graph, state, rValue).filter(n => n !== node)
     const unlocks = candidates.filter(n => graph.preOf[n].includes(node))

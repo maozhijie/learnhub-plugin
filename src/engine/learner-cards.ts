@@ -13,8 +13,7 @@
  *
  * Missing/Broken 纪律沿用 ADR-0004：文件缺失 = 合法空卡组；存在但坏 = 抛 Broken。
  */
-import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { YAML } from './yaml.ts'
 import type { FsrsBlock, Fm, CourseEntry, EArchiveRec, LearnerCardKind } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -186,9 +185,11 @@ export function validateLearnerCards(doc: unknown, expectedNode?: string): { err
 export class LearnerCards {
   private paths: Paths
   private clock: Clock
-  constructor(paths: Paths, clock: Clock) {
+  private fs: VaultFs
+  constructor(paths: Paths, clock: Clock, fs: VaultFs) {
     this.paths = paths
     this.clock = clock
+    this.fs = fs
   }
 
   cardPath(courseRoot: string, node: string): string {
@@ -198,7 +199,7 @@ export class LearnerCards {
   /** 读某节点卡组；文件缺失返回空卡组（合法 Missing）；存在但坏则抛 Broken。 */
   async load(courseRoot: string, node: string): Promise<LearnerCardDoc> {
     const p = this.cardPath(courseRoot, node)
-    if (!existsSync(p)) return { node, cards: [] }
+    if (!this.fs.exists(p)) return { node, cards: [] }
     const doc = await this.readDoc(p)
     const v = validateLearnerCards(doc, node)
     if (v.errors) throw cardError('learner-card-load', p, v.errors.join('；'))
@@ -208,7 +209,7 @@ export class LearnerCards {
   private async readDoc(p: string): Promise<Record<string, unknown>> {
     let text: string
     try {
-      text = await readFile(p, 'utf8')
+      text = await this.fs.readFile(p)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       throw cardError('learner-card-load', p, `无法读取: ${message}`)
@@ -228,12 +229,12 @@ export class LearnerCards {
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
     const p = this.cardPath(courseRoot, node)
-    await atomicWrite(p, YAML.stringify(doc))
+    await atomicWrite(p, YAML.stringify(doc), this.fs)
   }
 
   private async loadChecked(courseRoot: string, node: string, op: string): Promise<Record<string, unknown> | null> {
     const p = this.cardPath(courseRoot, node)
-    if (!existsSync(p)) return null
+    if (!this.fs.exists(p)) return null
     const doc = await this.readDoc(p)
     const v = validateLearnerCards(doc, node)
     if (v.errors) throw cardError(op, p, v.errors.join('；'))
@@ -319,6 +320,8 @@ export class LearnerCards {
 export interface LearnerDeps {
   /** 时钟端口（#175 阶段①）：习惯重复 ts 戳。 */
   clock: Clock
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   store: Pick<Store, 'appendBandRec' | 'appendEArchive' | 'appendHabitRepeat' | 'appendJournal' | 'appendReview' | 'bandRecsAll' | 'habitRepeatsAll' | 'journalTail' | 'loadPins' | 'practiceAll' | 'receiptsAll' | 'reviewLogAll' | 'savePins'>
   paths: Paths
   registry: Pick<Registry, 'resolve'>
@@ -479,7 +482,7 @@ export class LearnerSubsystem {
    * stats 分开——复习中节点的 struggle 只看近期窗口，老账不翻。 */
   private async struggleWindow(today: string): Promise<Map<string, Map<string, WindowStat>>> {
     const out = new Map<string, Map<string, WindowStat>>()
-    const cutoff = await readDayCutoff(this.e.paths)
+    const cutoff = await readDayCutoff(this.e.paths, this.e.fs)
     for (const r of await this.e.store.practiceAll()) {
       if (typeof r.correct !== 'boolean' || !withinStruggleWindow(r.ts, today, STRUGGLE_WINDOW_DAYS, cutoff)) continue
       const byNode = out.get(r.course) ?? new Map<string, WindowStat>()
@@ -498,7 +501,7 @@ export class LearnerSubsystem {
   private async scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void> {
     let files: string[] = []
     try {
-      files = await readdir(this.e.paths.bankDir(c.root))
+      files = await this.e.fs.readdir(this.e.paths.bankDir(c.root))
     } catch {
       return
     }
@@ -543,7 +546,7 @@ export class LearnerSubsystem {
 
   /** 读 JOL 抽查配置：enabled=false 全局关闭（复习流完全不弹预测）；rate 抽样率。 */
   async jolConfig(): Promise<{ enabled: boolean; rate: number }> {
-    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath) as {
+    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs) as {
       jol?: { enabled?: boolean; rate?: number }
     }
     const enabled = doc.jol?.enabled !== false
@@ -555,10 +558,10 @@ export class LearnerSubsystem {
 
   /** 写 JOL 抽查配置（原子替换，保留配置文件其他字段）。 */
   async setJolConfig(patch: { enabled?: boolean; rate?: number }): Promise<{ enabled: boolean; rate: number }> {
-    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath)
+    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs)
     const cur = await this.jolConfig()
     const next = { enabled: patch.enabled ?? cur.enabled, rate: patch.rate ?? cur.rate }
-    await writeLearnhubConfig(this.e.paths.learnhubConfigPath, { ...prev, jol: next })
+    await writeLearnhubConfig(this.e.paths.learnhubConfigPath, { ...prev, jol: next }, this.e.fs)
     return next
   }
 
@@ -570,7 +573,7 @@ export class LearnerSubsystem {
 
   /** 读复盘记录 → frontmatter + 五问各问（读侧收口，三个写点共用）。 */
   private async kataReadDoc(path: string): Promise<{ fm: Record<string, unknown>; sections: Record<KataQuestion, string> }> {
-    const { fm, body } = await loadNote(path)
+    const { fm, body } = await loadNote(path, this.e.fs)
     return { fm, sections: parseKataBody(body) }
   }
 
@@ -613,7 +616,7 @@ export class LearnerSubsystem {
     const path = this.kataPath(target)
     let sections: Record<KataQuestion, string>
     let created: boolean
-    if (existsSync(path)) {
+    if (this.e.fs.exists(path)) {
       const { fm, sections: existing } = await this.kataReadDoc(path)
       existing['现状'] = reality // 引擎段随开随新；四问原样保留
       sections = existing
@@ -638,7 +641,7 @@ export class LearnerSubsystem {
     const { today } = await this.e.learningDay()
     const target = kataMonday(weekStart)
     const path = this.kataPath(target)
-    if (!existsSync(path)) {
+    if (!this.e.fs.exists(path)) {
       throw new Error(`[kata] 该周还没有复盘记录（${path}）——先 learnhub_kata_open 发起。`)
     }
     const sections = (await this.kataReadDoc(path)).sections
@@ -660,7 +663,7 @@ export class LearnerSubsystem {
   async kataToExperiment(weekStart: string, templateId: string, course?: string): Promise<{ proposal: number; title: string; week_start: string }> {
     const target = kataMonday(weekStart)
     const path = this.kataPath(target)
-    if (!existsSync(path)) throw new Error('[kata] 该周还没有复盘记录——先 learnhub_kata_open 发起。')
+    if (!this.e.fs.exists(path)) throw new Error('[kata] 该周还没有复盘记录——先 learnhub_kata_open 发起。')
     const prop = await this.e.experimentPropose(templateId, course)
     await this.stampKata(path, target, `- 已转 N-of-1 实验提案 #${prop.proposal}（${prop.title}）——确认开跑走实验 apply 通道。`)
     return { proposal: prop.proposal, title: prop.title, week_start: target }
@@ -674,7 +677,7 @@ export class LearnerSubsystem {
   ): Promise<{ course: string; node: string; week_start: string }> {
     const target = kataMonday(weekStart)
     const path = this.kataPath(target)
-    if (!existsSync(path)) throw new Error('[kata] 该周还没有复盘记录——先 learnhub_kata_open 发起。')
+    if (!this.e.fs.exists(path)) throw new Error('[kata] 该周还没有复盘记录——先 learnhub_kata_open 发起。')
     await this.pinToday(input.course, input.node, undefined, { cue: input.cue, action: input.action })
     await this.stampKata(path, target, `- 已挂今日执行意图（${input.node}：「${input.cue.trim()}」之后 ${input.action.trim()}）。`)
     return { course: input.course, node: input.node, week_start: target }
@@ -684,11 +687,11 @@ export class LearnerSubsystem {
   /** 已有复盘清单（周一起排序；answered 现读现判——入口常驻的清单面）。 */
   async kataList(): Promise<Array<{ week_start: string; answered: boolean }>> {
     const dir = this.e.paths.outputKindDir('周复盘')
-    if (!existsSync(dir)) return []
+    if (!this.e.fs.exists(dir)) return []
     const out: Array<{ week_start: string; answered: boolean }> = []
-    for (const f of (await readdir(dir)).filter(f => f.endsWith('.md')).sort()) {
+    for (const f of (await this.e.fs.readdir(dir)).filter(f => f.endsWith('.md')).sort()) {
       try {
-        const { body } = await loadNote(`${dir}/${f}`)
+        const { body } = await loadNote(`${dir}/${f}`, this.e.fs)
         const sections = parseKataBody(body)
         const fmWeek = /^#\s*周复盘\s+(\d{4}-\d{2}-\d{2})/.exec(body)?.[1]
         out.push({ week_start: fmWeek ?? f.replace(/\.md$/, ''), answered: kataAnswered(sections) })
@@ -710,7 +713,7 @@ export class LearnerSubsystem {
     ])
     const projects = (await this.e.projects.list()).filter(p => p.lifecycle === 'active')
     const projectExec: Record<string, ProjectExecRec[]> = {}
-    for (const p of projects) projectExec[p.id] = await execRecsAll(this.e.paths, p.id)
+    for (const p of projects) projectExec[p.id] = await execRecsAll(this.e.paths, p.id, this.e.fs)
     const noteSources: Record<string, { path: string; title?: string }> = {}
     for (const s of (await this.e.noteManifest.load()).sources) {
       noteSources[s.id] = { path: s.path, ...(s.title ? { title: s.title } : {}) }
@@ -736,7 +739,7 @@ export class LearnerSubsystem {
       kind: '周复盘', file: `${weekStart}.md`,
       fm: { kind: KATA_KIND, week_start: weekStart, week_end: weekEnd, created, updated: todayStr(new Date(this.e.clock.nowMs())) },
       body,
-    })
+    }, this.e.fs)
   }
 
 
@@ -788,7 +791,7 @@ export class LearnerSubsystem {
    * 封顶 8 节防包体失控（讲解包是会话 system，不是全文导出）。 */
   private async explainPoints(c: CourseEntry, graph: Graph, node: string): Promise<ExplainPoint[]> {
     const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node))
+    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
     return Sessions.lessonSections(body).slice(0, 8)
   }
 
@@ -873,7 +876,7 @@ export class LearnerSubsystem {
       const dir = this.e.paths.learnerCardsDir(c.root)
       let files: string[] = []
       try {
-        files = await readdir(dir)
+        files = await this.e.fs.readdir(dir)
       } catch {
         continue // 该课程还没有任何我的卡：合法空态
       }
@@ -1039,7 +1042,7 @@ export class LearnerSubsystem {
    * 「可全局关」）。关闭后复习队列不带轻提示、抽查密度不再加强（JOL 抽查本身
    * 仍由 jol.enabled 独立控制）。 */
   async calibrationHintsConfig(): Promise<{ hints_enabled: boolean }> {
-    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath) as {
+    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs) as {
       calibration?: { hints_enabled?: boolean }
     }
     return { hints_enabled: doc.calibration?.hints_enabled !== false }
@@ -1048,9 +1051,9 @@ export class LearnerSubsystem {
 
   /** 写显式过信提示开关（原子替换，保留配置文件其他字段；照 jolConfig 先例）。 */
   async setCalibrationHints(hints_enabled: boolean): Promise<{ hints_enabled: boolean }> {
-    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath)
+    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs)
     await writeLearnhubConfig(this.e.paths.learnhubConfigPath,
-      { ...prev, calibration: { hints_enabled } })
+      { ...prev, calibration: { hints_enabled } }, this.e.fs)
     return { hints_enabled }
   }
 
@@ -1217,7 +1220,7 @@ export class LearnerSubsystem {
     for (const p of await this.e.projects.list()) {
       if (!p.plan.some(m => (m.nodes ?? []).some(n => specs.has(n)))) continue
       const dir = this.e.paths.projectReceiptDir(p.id)
-      await mkdir(dir, { recursive: true })
+      await this.e.fs.mkdir(dir)
       const file = `${safeFilename(courseName)}-${safeFilename(node)}-${safeFilename(rec.id)}.md`
       const lines = [
         '---',
@@ -1240,7 +1243,7 @@ export class LearnerSubsystem {
       for (const e of rec.errors ?? []) {
         lines.push(`- **${e.point}**：${e.issue} → ${e.advice}`)
       }
-      await writeFile(`${dir}/${file}`, lines.join('\n').trimEnd() + '\n', 'utf8')
+      await this.e.fs.writeFile(`${dir}/${file}`, lines.join('\n').trimEnd() + '\n')
       out.push(p.id)
     }
     return out

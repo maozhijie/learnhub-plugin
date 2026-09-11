@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { LearnhubEngine } from '../src/engine/index.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { GraphStore } from '../src/engine/graph.ts'
 import { withVault } from './helpers/vault.ts'
 
@@ -73,7 +74,7 @@ ops:
     const moved = await engine.graphApply('edit', move.id) as { created_blocks: string[] }
     assert.deepEqual(moved.created_blocks, [], 'move must not create blocks')
 
-    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math')).load()
+    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
     const newBlock = regions[0]!.blocks.find(b => b.name === '新块')
     assert.ok(newBlock)
     assert.deepEqual(newBlock!.nodes.map(n => n.name).sort(), ['入门', '新块起点'])

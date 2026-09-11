@@ -6,7 +6,7 @@
  * Graph 构造不因重名/断边/环崩溃：派生邻接表、拓扑序（环检测）、深度、可达集、
  * 传递约简边、连通分量、就绪判定，语义与 Python 版逐项对齐。
  */
-import { readdir, readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { join } from 'node:path'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './io.ts'
@@ -196,7 +196,7 @@ export function loadRegionDoc(doc: unknown, path: string): GRegion {
 }
 
 export class GraphStore {
-  constructor(private paths: Paths, private courseRoot: string) {}
+  constructor(private paths: Paths, private courseRoot: string, private fs: VaultFs) {}
 
   private get dataDir(): string { return join(this.courseRoot, 'data') }
 
@@ -206,7 +206,7 @@ export class GraphStore {
     if (!files.length) throw new SchemaError(`数据目录为空或不存在: ${this.dataDir}`)
     const out: GRegion[] = []
     for (const p of files) {
-      out.push(loadRegionDoc(YAML.parse(await readFile(p, 'utf8')), p))
+      out.push(loadRegionDoc(YAML.parse(await this.fs.readFile(p)), p))
     }
     return out
   }
@@ -214,7 +214,7 @@ export class GraphStore {
   async regionFilePaths(): Promise<string[]> {
     let entries
     try {
-      entries = await readdir(this.dataDir)
+      entries = await this.fs.readdir(this.dataDir)
     } catch {
       return []
     }
@@ -226,7 +226,7 @@ export class GraphStore {
   async regionFiles(): Promise<Record<string, string>> {
     const out: Record<string, string> = {}
     for (const p of await this.regionFilePaths()) {
-      const r = loadRegionDoc(YAML.parse(await readFile(p, 'utf8')), p)
+      const r = loadRegionDoc(YAML.parse(await this.fs.readFile(p)), p)
       out[r.name] = p
     }
     return out
@@ -264,7 +264,7 @@ export class GraphStore {
   }
 
   async writeRegionDoc(path: string, region: GRegion): Promise<void> {
-    await atomicWrite(path, YAML.stringify(this.regionDoc(region))) // 与 applyEnrich 同一原语（ADR-0046：同一正典一种 durability）
+    await atomicWrite(path, YAML.stringify(this.regionDoc(region)), this.fs) // 与 applyEnrich 同一原语（ADR-0046：同一正典一种 durability）
   }
 }
 
@@ -485,7 +485,7 @@ export function declaredEncOf(graph: Graph): Map<string, EncEdge[]> {
 }
 
 /** 就绪清单构建（build 产物：按区/块列未学条目）。 */
-export async function writeReadyList(paths: Paths, root: string, graph: Graph, done: Set<string>): Promise<void> {
+export async function writeReadyList(paths: Paths, root: string, graph: Graph, done: Set<string>, fs: VaultFs): Promise<void> {
   const lines: string[] = ['# 就绪清单', '', '> 引擎自动生成：当前就绪（前置达标）的未学节点，按区/块分组。', '']
   const ready = graph.readySet(done, new Set())
   const byRegion: Record<string, string[]> = {}
@@ -500,7 +500,7 @@ export async function writeReadyList(paths: Paths, root: string, graph: Graph, d
     for (const n of items) lines.push(`- ${n}（块：${graph.blockOf[n][2]}）`)
     lines.push('')
   }
-  await atomicWrite(paths.readyPath(root), lines.join('\n'))
+  await atomicWrite(paths.readyPath(root), lines.join('\n'), fs)
 }
 
 export { safeFilename }

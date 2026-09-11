@@ -7,6 +7,7 @@ import {
   recheckVerdict, recheckDue, learningDaysOf, growthRates, growthGate,
 } from '../src/engine/probation.ts'
 import type { ProbationEntry, ReviewRec } from '../src/engine/probation.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import type { PracticeRec } from '../src/engine/types.ts'
 import { readSedimentCanon } from '../src/engine/sediment.ts'
 import { withVault, tfQuestion, localDay } from './helpers/vault.ts'
@@ -117,26 +118,26 @@ test('recheckPreregOf：metric 恰一枚枚举锁死、未知键拒收、days �
 test('边实验账本：追加只增、Missing 合法空态、损坏行跳过、写侧坏形状 fail loud', async () => {
   await withVault({ graph: TWO_NODE_GRAPH }, async ({ paths }) => {
     // Missing = 合法空态
-    assert.deepEqual(await readProbationLedger(paths, 'math'), [])
+    assert.deepEqual(await readProbationLedger(paths, 'math', nodeVaultFs), [])
 
     const entry: ProbationEntry = { node: '过渡', pre: ['入门'], proposal: 3, due: 10 }
-    await appendProbationEntry(paths, 'math', entry)
-    await appendProbationEntry(paths, 'math', { ...entry, outcome: 'proven', decided_at: '2026-09-10T10:00:00' })
-    const ledger = await readProbationLedger(paths, 'math')
+    await appendProbationEntry(paths, 'math', entry, nodeVaultFs)
+    await appendProbationEntry(paths, 'math', { ...entry, outcome: 'proven', decided_at: '2026-09-10T10:00:00' }, nodeVaultFs)
+    const ledger = await readProbationLedger(paths, 'math', nodeVaultFs)
     assert.equal(ledger.length, 2)
 
     // 写侧坏形状 fail loud（outcome 落了没带 decided_at；proposal 非正整数）
     await assert.rejects(
-      () => appendProbationEntry(paths, 'math', { node: '过渡', pre: [], proposal: 3, due: 10, outcome: 'proven' }),
+      () => appendProbationEntry(paths, 'math', { node: '过渡', pre: [], proposal: 3, due: 10, outcome: 'proven' }, nodeVaultFs),
       /decided_at/)
     await assert.rejects(
-      () => appendProbationEntry(paths, 'math', { node: '过渡', pre: [], proposal: -1, due: 10 }),
+      () => appendProbationEntry(paths, 'math', { node: '过渡', pre: [], proposal: -1, due: 10 }, nodeVaultFs),
       /proposal/)
 
     // 损坏行跳过（手工半行）
     const p = paths.probationLedgerPath('math')
     await writeFile(p, await readFile(p, 'utf8') + '{broken\n', 'utf8')
-    assert.equal((await readProbationLedger(paths, 'math')).length, 2)
+    assert.equal((await readProbationLedger(paths, 'math', nodeVaultFs)).length, 2)
   })
 })
 
@@ -333,7 +334,7 @@ test('AC1 插入批受理：预注册随提案落字、apply 同事务落账本�
     assert.deepEqual(applied.probation_registered, ['过渡'])
     assert.deepEqual(applied.recheck, { metric: '前进恢复', due: 20 }, 'days 100 clamp 到 20')
 
-    const ledger = await readProbationLedger(paths, 'math')
+    const ledger = await readProbationLedger(paths, 'math', nodeVaultFs)
     assert.equal(ledger.length, 1)
     assert.equal(ledger[0]!.node, '过渡')
     assert.deepEqual(ledger[0]!.pre, ['入门'])
@@ -373,7 +374,7 @@ test('预注册负路径：插入批缺预注册/非插入批携带/非法 metri
       /metric/)
     // 拒收零落盘：无提案、无账本
     assert.equal((await engine.graphProposals()).length, 0)
-    assert.deepEqual(await readProbationLedger(paths, 'math'), [])
+    assert.deepEqual(await readProbationLedger(paths, 'math', nodeVaultFs), [])
   })
 })
 
@@ -455,13 +456,13 @@ test('AC1 到期结算·自动剪除：不达标 del_node 归档 + 原粗边恢�
     assert.match(archive, /node: 过渡/)
 
     // 账本：outcome 行追加（只增）→ 剪除收口
-    const ledger = await readProbationLedger(paths, 'math')
+    const ledger = await readProbationLedger(paths, 'math', nodeVaultFs)
     assert.equal(ledger.length, 2)
     assert.equal(ledger[1]!.outcome, '剪除')
     assert.ok(ledger[1]!.decided_at)
 
     // 沉淀正典：recheck_outcome（无 teaches = 单条无概念地址）+ graph_repair
-    const canon = await readSedimentCanon(paths)
+    const canon = await readSedimentCanon(paths, nodeVaultFs)
     const recheck = canon.filter(e => e.kind === 'recheck_outcome')
     assert.equal(recheck.length, 1)
     assert.equal(recheck[0]!.payload.outcome, '剪除')
@@ -535,11 +536,11 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
           '  - op: add_node', `    name: 场景节点${i}甲`, '    region: 基础', '    block: 入门块', '    pre: [入门]',
           '  - op: add_node', `    name: 场景节点${i}乙`, '    region: 基础', '    block: 入门块', '    pre: [入门]'].join('\n') + '\n', 'utf8')
       await engine.store.updateProposal(pid, { status: 'applied', decided: ts(-8 + i) })
-      await appendProbationEntry(paths, 'math', { node: `场景${i}`, pre: ['入门'], proposal: pid, due: 5 })
+      await appendProbationEntry(paths, 'math', { node: `场景${i}`, pre: ['入门'], proposal: pid, due: 5 }, nodeVaultFs)
       await appendProbationEntry(paths, 'math', {
         node: `场景${i}`, pre: ['入门'], proposal: pid, due: 5,
         outcome: i === 0 ? 'proven' : '剪除', decided_at: ts(-4 + i),
-      })
+      }, nodeVaultFs)
     }
     // 调速现势：通过率 1/3 < 0.5、插入率 4/7 > 0.5 → 插入批闸停；旁支 1 节（1/8=12.5%）放行
     const view = await engine.probationStatus('数学')
@@ -594,7 +595,7 @@ test('结算只遍历折叠后的在途条目：已决 (proposal,node) 的裁决
     // A 的 proven 不翻案：过渡仍在图、账本恰 2 行（登记 + 一条 proven），无重复结局
     const data = await readFile(join(paths.courseRoot('math'), 'data', '基础.yaml'), 'utf8')
     assert.match(data, /过渡\n|过渡 /, 'A 节点仍在图（未翻案剪除）')
-    const ledger = await readProbationLedger(paths, 'math')
+    const ledger = await readProbationLedger(paths, 'math', nodeVaultFs)
     const byProposal = new Map<number, number>()
     for (const e of ledger) byProposal.set(e.proposal, (byProposal.get(e.proposal) ?? 0) + 1)
     assert.equal(byProposal.get(ledger[0]!.proposal), 2, 'A 恰登记+裁决各一行')

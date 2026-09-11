@@ -6,7 +6,7 @@
  * 键序固定 node/stage/fsrs/mastery/practice_ema/content/practice，其余键保序追加；
  * mastery 位仅为旧文件键序稳定保留，新文件不再写入该键（ADR-0007）。
  */
-import { readFile, readdir } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import { join } from 'node:path'
 import { YAML } from './yaml.ts'
@@ -63,10 +63,10 @@ export function renderFrontmatter(fm: Record<string, unknown>): string {
 }
 
 /** 读课程文件 → (fm, body)。文件不存在返回 (null, '')。 */
-export async function loadNote(path: string): Promise<{ fm: Record<string, unknown> | null; body: string }> {
+export async function loadNote(path: string, fs: VaultFs): Promise<{ fm: Record<string, unknown> | null; body: string }> {
   let raw: string
   try {
-    raw = await readFile(path, 'utf8')
+    raw = await fs.readFile(path)
   } catch {
     return { fm: null, body: '' }
   }
@@ -246,7 +246,7 @@ function parseFmBlock(text: string): { ok: true; doc: unknown; raw: string } | {
 
 /** 遍历 课程/ 目录，把每个 Markdown 分类为合法状态 / Broken（带原因）。
  * 无 node 字段的非课程文件也按 Broken 暴露，避免状态扫描静默忽略。 */
-export async function scanCourseNotes(courseDir: string): Promise<{
+export async function scanCourseNotes(courseDir: string, fs: VaultFs): Promise<{
   state: Record<string, Fm>
   raw: Record<string, { path: string; fm: Record<string, unknown> }>
   broken: BrokenNote[]
@@ -258,20 +258,20 @@ export async function scanCourseNotes(courseDir: string): Promise<{
   async function walk(dir: string): Promise<void> {
     let entries
     try {
-      entries = await readdir(dir, { withFileTypes: true })
+      entries = await fs.readdirTypes(dir)
     } catch {
       return
     }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const path = join(dir, entry.name)
-      if (entry.isDirectory()) {
+      if (entry.directory) {
         await walk(path)
         continue
       }
-      if (!entry.isFile() || !entry.name.endsWith('.md')) continue
+      if (!!entry.directory || !entry.name.endsWith('.md')) continue
       let text: string
       try {
-        text = await readFile(path, 'utf8')
+        text = await fs.readFile(path)
       } catch (err) {
         broken.push({ path, reason: `无法读取: ${err instanceof Error ? err.message : String(err)}` })
         continue
@@ -304,31 +304,31 @@ export async function scanCourseNotes(courseDir: string): Promise<{
 }
 
 /** 旧签名兼容包装：合法 raw 映射 + BrokenNote 列表（audit 等调用方已按此结构读取）。 */
-export async function scanAll(courseDir: string): Promise<{
+export async function scanAll(courseDir: string, fs: VaultFs): Promise<{
   found: Record<string, { path: string; fm: Record<string, unknown> }>
   broken: BrokenNote[]
 }> {
-  const scan = await scanCourseNotes(courseDir)
+  const scan = await scanCourseNotes(courseDir, fs)
   return { found: scan.raw, broken: scan.broken }
 }
 
 /** 写课程文件（frontmatter + 正文），自动建目录。 */
-export async function saveNote(path: string, fm: Record<string, unknown>, body: string): Promise<void> {
+export async function saveNote(path: string, fm: Record<string, unknown>, body: string, fs: VaultFs): Promise<void> {
   const head = `---\n${renderFrontmatter(fm)}\n---\n\n`
-  await atomicWrite(path, head + (body.startsWith('#') || !body.trim() ? body : body)) // 调度事实源必须原子（ADR-0046）
+  await atomicWrite(path, head + (body.startsWith('#') || !body.trim() ? body : body), fs) // 调度事实源必须原子（ADR-0046）
 }
 
 /** 就地更新 frontmatter 顶层键（patch 合并），正文不动。 */
-export async function updateNote(path: string, patch: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const { fm, body } = await loadNote(path)
+export async function updateNote(path: string, patch: Record<string, unknown>, fs: VaultFs): Promise<Record<string, unknown>> {
+  const { fm, body } = await loadNote(path, fs)
   if (!fm) throw new Error(`无有效 frontmatter: ${path}`)
   const next = { ...fm, ...patch }
-  await saveNote(path, next, body)
+  await saveNote(path, next, body, fs)
   return next
 }
 
 /** frontmatter 状态视图：{节点名: Fm} + BrokenNote（带位置与原因）。 */
-export async function stateMap(courseDir: string): Promise<{ state: Record<string, Fm>; broken: BrokenNote[] }> {
-  const scan = await scanCourseNotes(courseDir)
+export async function stateMap(courseDir: string, fs: VaultFs): Promise<{ state: Record<string, Fm>; broken: BrokenNote[] }> {
+  const scan = await scanCourseNotes(courseDir, fs)
   return { state: scan.state, broken: scan.broken }
 }

@@ -12,6 +12,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { wantsFullReview, receiptsUntilNextFull, parseReceiptReview, RECEIPT_KIND_LABEL } from '../src/engine/receipts.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { withVault } from './helpers/vault.ts'
 
 const GRAPH_PRACTICE = [
@@ -153,7 +154,7 @@ test('事务性：AI 输出不可解析 → 回执与 EMA 零落盘；坏流水 
     )
     assert.equal((await h.store.receiptsAll()).length, 0) // 回执未落
     const { loadNote } = await import('../src/engine/notes.ts')
-    const { fm } = await loadNote(`${h.root}/学习中心/math/课程/基础/练耳.md`)
+    const { fm } = await loadNote(`${h.root}/学习中心/math/课程/基础/练耳.md`, nodeVaultFs)
     assert.equal(fm.practice_ema, undefined) // EMA 未动
     assert.equal(fm.practice.attempts, 0)
     // 坏流水 = Broken（不静默吞：渐退曲线会数错位置）

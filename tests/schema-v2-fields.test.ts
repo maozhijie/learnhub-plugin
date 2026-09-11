@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { GraphStore, loadRegionDoc, parseConceptFields, parseNode, SchemaError } from '../src/engine/graph.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEditProposal } from '../src/engine/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import { YAML } from '../src/engine/yaml.ts'
@@ -46,7 +47,7 @@ test('概念字段组：合法三组照抄落图，regionDoc 序列化与 parseN
   assert.deepEqual(n.assumes, { 整式乘法: '知道', 一元一次方程: '会用' })
   assert.deepEqual(n.misconceptions, [{ concept: '因式分解', model: '把因式分解当成整式乘法的逆运算瞎展开' }])
   // 快照/落盘序列化保真（regionDoc 顺序与省空值纪律）
-  const round = new GraphStore(null as never, '').regionDoc(region)
+  const round = new GraphStore(null as never, '', nodeVaultFs).regionDoc(region)
   const again = loadRegionDoc(round, 'data/基础.yaml')
   assert.deepEqual(again.blocks[0]!.nodes[0]!.teaches, n.teaches)
   assert.deepEqual(again.blocks[0]!.nodes[0]!.misconceptions, n.misconceptions)

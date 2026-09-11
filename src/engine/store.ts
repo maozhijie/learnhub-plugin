@@ -8,9 +8,8 @@
  * 通用 IO 原语（atomicWrite / learnhub.json 读写 / JSONL 只读）住 ./io.ts——零领域
  * 依赖叶子，供 graph 等低层模块回引，不构成对存储层的反向依赖（#152 刀 1 / ADR-0042）。
  */
-import { mkdir, readFile, appendFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { atomicWrite, readJsonlLines } from './io.ts'
+import type { VaultFs } from './io.ts'
 import { netPracticeRecs } from './grading.ts'
 import { nowIsoOf, dayOfTs } from './dates.ts'
 import type { Clock } from './clock.ts'
@@ -27,7 +26,7 @@ import type { Paths } from './paths.ts'
 export { netPracticeRecs } from './grading.ts'
 
 export class Store {
-  constructor(private paths: Paths, private clock: Clock) {}
+  constructor(private paths: Paths, private clock: Clock, private fs: VaultFs) {}
 
   // ---- journal ----
 
@@ -41,8 +40,8 @@ export class Store {
       ...(rec.xp !== undefined ? { xp: rec.xp } : {}),
       ...(rec.detail ? { detail: rec.detail } : {}),
     }
-    await mkdir(this.paths.centerStateDir, { recursive: true })
-    await appendFile(this.paths.journalPath, JSON.stringify(full) + '\n', 'utf8')
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.journalPath, JSON.stringify(full) + '\n')
     return full
   }
 
@@ -93,8 +92,8 @@ export class Store {
       ...(rec.xp !== undefined ? { xp: rec.xp } : {}),
       ...(rec.predicted ? { predicted: rec.predicted } : {}),
     }
-    await mkdir(this.paths.centerStateDir, { recursive: true })
-    await appendFile(this.paths.practicePath, JSON.stringify(full) + '\n', 'utf8')
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.practicePath, JSON.stringify(full) + '\n')
     return full
   }
 
@@ -120,8 +119,8 @@ export class Store {
       ...(rec.event_kind ? { event_kind: rec.event_kind } : {}),
       ...(rec.exec_source ? { exec_source: rec.exec_source } : {}),
     }
-    await mkdir(this.paths.centerStateDir, { recursive: true })
-    await appendFile(this.paths.reviewLogPath, JSON.stringify(full) + '\n', 'utf8')
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.reviewLogPath, JSON.stringify(full) + '\n')
     return full
   }
 
@@ -130,7 +129,7 @@ export class Store {
   async reviewLogAll(): Promise<ReviewRec[]> {
     let raw: string
     try {
-      raw = await readFile(this.paths.reviewLogPath, 'utf8')
+      raw = await this.fs.readFile(this.paths.reviewLogPath)
     } catch {
       return []
     }
@@ -166,7 +165,7 @@ export class Store {
 
   async loadProposals(): Promise<ProposalRec[]> {
     try {
-      const raw = await readFile(this.paths.proposalsPath, 'utf8')
+      const raw = await this.fs.readFile(this.paths.proposalsPath)
       const doc = JSON.parse(raw)
       return Array.isArray(doc) ? doc as ProposalRec[] : []
     } catch {
@@ -175,7 +174,7 @@ export class Store {
   }
 
   async saveProposals(list: ProposalRec[]): Promise<void> {
-    await atomicWrite(this.paths.proposalsPath, JSON.stringify(list, null, 1) + '\n')
+    await atomicWrite(this.paths.proposalsPath, JSON.stringify(list, null, 1) + '\n', this.fs)
   }
 
   /** 新建提案 → id（自增）。 */
@@ -242,10 +241,9 @@ export class Store {
 
   async latestSnapshotVersion(course: string): Promise<number> {
     const dir = this.paths.snapshotDir
-    if (!existsSync(dir)) return 0
-    const { readdir } = await import('node:fs/promises')
+    if (!this.fs.exists(dir)) return 0
     let max = 0
-    for (const f of await readdir(dir)) {
+    for (const f of await this.fs.readdir(dir)) {
       const m = f.match(new RegExp(`^${course}-v(\\d+)\\.json$`))
       if (m) max = Math.max(max, Number(m[1]))
     }
@@ -253,7 +251,7 @@ export class Store {
   }
 
   async saveSnapshot(course: string, version: number, doc: unknown): Promise<void> {
-    await atomicWrite(this.paths.snapshotPath(course, version), JSON.stringify(doc, null, 1) + '\n')
+    await atomicWrite(this.paths.snapshotPath(course, version), JSON.stringify(doc, null, 1) + '\n', this.fs)
   }
 
   // ---- 今日 pin（E3 #67）----
@@ -263,7 +261,7 @@ export class Store {
   async loadPins(): Promise<PinRec[]> {
     let raw: string
     try {
-      raw = await readFile(this.paths.pinPath, 'utf8')
+      raw = await this.fs.readFile(this.paths.pinPath)
     } catch {
       return []
     }
@@ -281,7 +279,7 @@ export class Store {
 
   /** 全量替换 pin 清单（原子写；调用方负责只保留当日有效条目）。 */
   async savePins(list: PinRec[]): Promise<void> {
-    await atomicWrite(this.paths.pinPath, JSON.stringify(list, null, 1) + '\n')
+    await atomicWrite(this.paths.pinPath, JSON.stringify(list, null, 1) + '\n', this.fs)
   }
 
   // ---- 「过于简单」建议忽略清单（B2；bank-advice.AdviceDismissRec）----
@@ -290,7 +288,7 @@ export class Store {
   async loadAdviceDismissals(): Promise<import('./bank-advice.ts').AdviceDismissRec[]> {
     let raw: string
     try {
-      raw = await readFile(this.paths.adviceDismissPath, 'utf8')
+      raw = await this.fs.readFile(this.paths.adviceDismissPath)
     } catch {
       return []
     }
@@ -308,15 +306,15 @@ export class Store {
 
   /** 全量替换忽略清单（原子写）。 */
   async saveAdviceDismissals(list: import('./bank-advice.ts').AdviceDismissRec[]): Promise<void> {
-    await atomicWrite(this.paths.adviceDismissPath, JSON.stringify(list, null, 1) + '\n')
+    await atomicWrite(this.paths.adviceDismissPath, JSON.stringify(list, null, 1) + '\n', this.fs)
   }
 
   // ---- 难度带会话日志（E5 #65）----
 
   /** 追加一条难度带会话记录（JSONL；会话结束反馈点调用）。 */
   async appendBandRec(rec: BandRec): Promise<BandRec> {
-    await mkdir(this.paths.centerStateDir, { recursive: true })
-    await appendFile(this.paths.bandLogPath, JSON.stringify(rec) + '\n', 'utf8')
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.bandLogPath, JSON.stringify(rec) + '\n')
     return rec
   }
 
@@ -336,8 +334,8 @@ export class Store {
       ...(rec.advice ? { advice: rec.advice } : {}),
       ...(rec.excerpt ? { excerpt: rec.excerpt } : {}),
     }
-    await mkdir(this.paths.centerStateDir, { recursive: true })
-    await appendFile(this.paths.eArchivePath, JSON.stringify(full) + '\n', 'utf8')
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.eArchivePath, JSON.stringify(full) + '\n')
     return full
   }
 
@@ -345,7 +343,7 @@ export class Store {
   async eArchiveAll(): Promise<EArchiveRec[]> {
     let raw: string
     try {
-      raw = await readFile(this.paths.eArchivePath, 'utf8')
+      raw = await this.fs.readFile(this.paths.eArchivePath)
     } catch {
       return []
     }
@@ -369,7 +367,7 @@ export class Store {
   async loadExperiments(): Promise<ExperimentDef[]> {
     let raw: string
     try {
-      raw = await readFile(this.paths.experimentsPath, 'utf8')
+      raw = await this.fs.readFile(this.paths.experimentsPath)
     } catch {
       return []
     }
@@ -395,15 +393,15 @@ export class Store {
 
   /** 全量替换实验清单（原子写；调用方负责状态机合法）。 */
   async saveExperiments(list: ExperimentDef[]): Promise<void> {
-    await atomicWrite(this.paths.experimentsPath, JSON.stringify(list, null, 1) + '\n')
+    await atomicWrite(this.paths.experimentsPath, JSON.stringify(list, null, 1) + '\n', this.fs)
   }
 
   // ---- 回执流水（U-1 #88 / ADR-0016）与习惯重复流（U-3 #90 / ADR-0017）----
 
   /** 追加一条回执（含评审结果）。账本只增：已入 EMA 的历史分值永不回滚（ADR-0016）。 */
   async appendReceipt(rec: ReceiptLogRec): Promise<ReceiptLogRec> {
-    await mkdir(this.paths.centerStateDir, { recursive: true })
-    await appendFile(this.paths.receiptLogPath, JSON.stringify(rec) + '\n', 'utf8')
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.receiptLogPath, JSON.stringify(rec) + '\n')
     return rec
   }
 
@@ -412,7 +410,7 @@ export class Store {
   async receiptsAll(): Promise<ReceiptLogRec[]> {
     let raw: string
     try {
-      raw = await readFile(this.paths.receiptLogPath, 'utf8')
+      raw = await this.fs.readFile(this.paths.receiptLogPath)
     } catch {
       return []
     }
@@ -431,8 +429,8 @@ export class Store {
 
   /** 追加一条习惯重复（自报即事实，无门禁；引擎侧零派生写入）。 */
   async appendHabitRepeat(rec: HabitRepeatRec): Promise<HabitRepeatRec> {
-    await mkdir(this.paths.centerStateDir, { recursive: true })
-    await appendFile(this.paths.habitRepeatLogPath, JSON.stringify(rec) + '\n', 'utf8')
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.habitRepeatLogPath, JSON.stringify(rec) + '\n')
     return rec
   }
 
@@ -455,8 +453,8 @@ export class Store {
       ...(rec.revision !== undefined ? { revision: rec.revision } : {}),
       ...(rec.reason ? { reason: rec.reason } : {}),
     }
-    await mkdir(this.paths.centerStateDir, { recursive: true })
-    await appendFile(this.paths.erratumLogPath, JSON.stringify(full) + '\n', 'utf8')
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.erratumLogPath, JSON.stringify(full) + '\n')
     return full
   }
 
@@ -468,6 +466,6 @@ export class Store {
   // ---- utils ----
 
   private async readJsonl<T>(path: string): Promise<T[]> {
-    return readJsonlLines<T>(path)
+    return readJsonlLines<T>(path, this.fs)
   }
 }

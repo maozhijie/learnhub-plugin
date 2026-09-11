@@ -16,6 +16,7 @@ import type { SeedDraftRequest } from '../engine/index.ts'
 import type { GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
 import { mathRng, systemClock } from './clock.ts'
+import { nodeVaultFs } from './vault-fs.ts'
 
 /** apply 时的行 config：部署路径与 AI 路由，均可在 profile patch 覆盖。 */
 export interface LearnhubConfig {
@@ -126,7 +127,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     mkdirSync(`${center}/state`, { recursive: true })
     writeFileSync(freshConfigPath, JSON.stringify({ schema: { version: 2, formats: {} } }, null, 1) + '\n', 'utf8')
   }
-  const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng })
+  const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng, fs: nodeVaultFs })
   // —— 统一 agent 缝装配（#162）：端口适配住 host/llm.ts 唯一适配文件，投递层只构造
   // 与注入；调用日志沿缝贯通、注入侧可观测（console + 运行日志）。 ——
   let rtRef: HostRuntime | undefined

@@ -1,5 +1,4 @@
-import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readFile, readdir, rename } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 /**
  * Content 子系统（#152 刀 8 / ADR-0043）：内容管线、笔记 resolve/反馈区、课程工作区
@@ -37,6 +36,8 @@ import type { Clock } from './clock.ts'
 export interface ContentDeps {
   /** 时钟端口（#175 阶段①）：回收站目录戳与评分失败日志 ts。 */
   clock: Clock
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   store: Store
   paths: Paths
   registry: Registry
@@ -107,7 +108,7 @@ export class ContentSubsystem {
     const terms = priorTerms([node, ...(graph.preOf[node] ?? [])])
     if (!terms.length) return ''
     const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-    const hits = await searchVaultPrior(this.e.vaultRoot, centerRel, terms)
+    const hits = await searchVaultPrior(this.e.vaultRoot, centerRel, terms, {}, this.e.fs)
     return priorSection(hits)
   }
 
@@ -161,7 +162,7 @@ export class ContentSubsystem {
     if (!graph.nset.has(node)) throw new Error(`[check] 节点「${node}」不在图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'check')
     const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node))
+    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
     return this.e.content.gateReport(graph, c.root, node, body)
   }
 
@@ -183,7 +184,7 @@ export class ContentSubsystem {
     const courseRoot = this.e.paths.courseRoot(c.root)
     for (const f of split.files) {
       const target = `${courseRoot}/${f.rel}`
-      await atomicWrite(target, f.html)
+      await atomicWrite(target, f.html, this.e.fs)
     }
     const fixed = Content.fixRichBlocks((await this.e.content.fixAliases(c.root, split.body)).body)
     const gate = await this.e.content.gateReport(graph, c.root, node, fixed)
@@ -235,20 +236,20 @@ export class ContentSubsystem {
       const [, regionName] = graph.blockOf[node]
       const path = this.e.paths.courseNotePath(c.root, regionName, node)
       const backup = `${trashBase}/${c.root}/课程/${safeFilename(regionName)}/${safeFilename(node)}.md`
-      await atomicWrite(backup, await readFile(path, 'utf8'))
-      const { fm } = await loadNote(path)
+      await atomicWrite(backup, await this.e.fs.readFile(path), this.e.fs)
+      const { fm } = await loadNote(path, this.e.fs)
       await saveNote(path, {
         ...((fm ?? {}) as Record<string, unknown>),
         content: { version: 0, generated_at: null, status: 'draft', sections: [] },
-      }, '> 内容待生成。\n')
+      }, '> 内容待生成。\n', this.e.fs)
       nodes.push(node)
     }
     const trashed: string[] = []
     for (const dir of ['题库', '交互', '课程图']) {
       const src = `${this.e.paths.courseRoot(c.root)}/${dir}`
-      if (!existsSync(src)) continue
-      await mkdir(trashBase, { recursive: true })
-      await rename(src, `${trashBase}/${dir}`)
+      if (!this.e.fs.exists(src)) continue
+      await this.e.fs.mkdir(trashBase)
+      await this.e.fs.rename(src, `${trashBase}/${dir}`)
       trashed.push(dir)
     }
     await this.e.store.appendJournal({
@@ -282,7 +283,7 @@ export class ContentSubsystem {
     if (!graph.nset.has(node)) throw new Error(`[sections] 节点「${node}」不在图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'sections')
     const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node))
+    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
     const mdByTitle = new Map<string, string>()
     for (const part of body.split(/^## /m).slice(1)) {
       const nl = part.indexOf('\n')
@@ -367,7 +368,7 @@ export class ContentSubsystem {
     const p = input.replace(/\\/g, '/')
     const rel = p.startsWith(`${vaultRoot}/`) ? p.slice(vaultRoot.length + 1) : p.replace(/^\/+/, '')
     const abs = `${vaultRoot}/${rel}`
-    const raw = await readFile(abs, 'utf8')
+    const raw = await this.e.fs.readFile(abs)
     const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/)
     const node = m ? (m[1].match(/^node:\s*(.+)$/m)?.[1] ?? '').trim() : ''
     if (!node) throw new Error(`${rel} 的 frontmatter 缺少 node 字段，不是课程文件。`)
@@ -382,7 +383,7 @@ export class ContentSubsystem {
 
   /** 提取笔记「内容反馈」区正文；仅占位符或为空返回 null。 */
   async feedbackBody(absPath: string): Promise<string | null> {
-    const raw = await readFile(absPath, 'utf8')
+    const raw = await this.e.fs.readFile(absPath)
     const sec = raw.match(/## 内容反馈\n([\s\S]*?)(?=\n## |<!-- enc_candidates|$)/)
     const body = (sec?.[1] ?? '').replace(/在此写下你对本课内容的问题与建议.*$/m, '').trim()
     return body || null
@@ -414,7 +415,7 @@ export class ContentSubsystem {
             contentVersion: state[n.name]?.content.version ?? 0,
             contentStatus: state[n.name]?.content.status ?? 'draft',
             path: this.e.sessions.notePath(c.root, graph, n.name),
-            hasBank: existsSync(this.e.bank.bankPath(this.e.paths.courseRoot(c.root), n.name)),
+            hasBank: this.e.fs.exists(this.e.bank.bankPath(this.e.paths.courseRoot(c.root), n.name)),
           })),
         })),
       }))
@@ -531,7 +532,7 @@ export class ContentSubsystem {
       const learnerSched = await this.e.sched(null)
       let learnerFiles: string[] = []
       try {
-        learnerFiles = await readdir(this.e.paths.learnerCardsDir(c.root))
+        learnerFiles = await this.e.fs.readdir(this.e.paths.learnerCardsDir(c.root))
       } catch {
         learnerFiles = [] // 该课程还没有任何我的卡：合法空态
       }
@@ -586,7 +587,7 @@ export class ContentSubsystem {
       }
       let files: string[] = []
       try {
-        files = await readdir(this.e.paths.bankDir(c.root))
+        files = await this.e.fs.readdir(this.e.paths.bankDir(c.root))
       } catch {
         continue
       }
@@ -859,9 +860,9 @@ export class ContentSubsystem {
     course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string
   }): Promise<void> {
     try {
-      await mkdir(this.e.paths.centerStateDir, { recursive: true })
+      await this.e.fs.mkdir(this.e.paths.centerStateDir)
       const line = JSON.stringify({ ts: new Date(this.e.clock.nowMs()).toISOString(), ...rec, raw: rec.raw.slice(0, 2000) })
-      await appendFile(this.e.paths.gradingFailurePath, `${line}\n`, 'utf8')
+      await this.e.fs.appendFile(this.e.paths.gradingFailurePath, `${line}\n`)
     } catch {
       // 留痕失败不影响主流程
     }
@@ -886,13 +887,13 @@ export class ContentSubsystem {
   private async nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }> {
     const [, regionName] = graph.blockOf[node]
     const path = this.e.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
+    const { fm: rawFm, body } = await loadNote(path, this.e.fs)
     return { path, fm: asFm(rawFm), body }
   }
 
 
   private async saveNodeNote(path: string, fm: Fm, body: string): Promise<void> {
-    await saveNote(path, fm as unknown as Record<string, unknown>, body)
+    await saveNote(path, fm as unknown as Record<string, unknown>, body, this.e.fs)
   }
 
 

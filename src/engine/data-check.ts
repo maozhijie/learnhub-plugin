@@ -7,8 +7,7 @@
  * 指纹盘点（Missing/漂移计数进 inventory、源文件缺失报 finding）——用户笔记本身
  * 仍**永不判 Broken**（漂移是状态不是损坏，逐源明细以 noteSourceList 为准）。
  */
-import { readdir, readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import type { VaultFs } from './io.ts'
 import { join, resolve } from 'node:path'
 import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
@@ -143,10 +142,10 @@ function splitFrontmatterForCheck(text: string): { raw: string | null; malformed
   return { raw: text.slice(3, end), malformed: false }
 }
 
-async function readYamlDoc(path: string): Promise<{ text?: string; doc?: unknown; readError?: string; parseError?: string }> {
+async function readYamlDoc(path: string, fs: VaultFs): Promise<{ text?: string; doc?: unknown; readError?: string; parseError?: string }> {
   let text: string
   try {
-    text = await readFile(path, 'utf8')
+    text = await fs.readFile(path)
   } catch (err) {
     return { readError: errorText(err) }
   }
@@ -157,30 +156,30 @@ async function readYamlDoc(path: string): Promise<{ text?: string; doc?: unknown
   }
 }
 
-async function listFiles(path: string, ext: string): Promise<string[]> {
+async function listFiles(path: string, ext: string, fs: VaultFs): Promise<string[]> {
   let entries
   try {
-    entries = await readdir(path, { withFileTypes: true })
+    entries = await fs.readdirTypes(path)
   } catch {
     return []
   }
-  return entries.filter(e => e.isFile() && e.name.endsWith(ext)).sort((a, b) => a.name.localeCompare(b.name))
+  return entries.filter(e => !e.directory && e.name.endsWith(ext)).sort((a, b) => a.name.localeCompare(b.name))
     .map(e => join(path, e.name))
 }
 
-async function listMarkdown(path: string): Promise<string[]> {
+async function listMarkdown(path: string, fs: VaultFs): Promise<string[]> {
   const out: string[] = []
   async function walk(dir: string): Promise<void> {
     let entries
     try {
-      entries = await readdir(dir, { withFileTypes: true })
+      entries = await fs.readdirTypes(dir)
     } catch {
       return
     }
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const child = join(dir, entry.name)
-      if (entry.isDirectory()) await walk(child)
-      else if (entry.isFile() && entry.name.endsWith('.md')) out.push(child)
+      if (entry.directory) await walk(child)
+      else if (!entry.directory && entry.name.endsWith('.md')) out.push(child)
     }
   }
   await walk(path)
@@ -190,14 +189,13 @@ async function listMarkdown(path: string): Promise<string[]> {
 async function scanNotes(
   findings: DataCheckFinding[],
   courseName: string,
-  courseDir: string,
-): Promise<string[]> {
-  const files = await listMarkdown(courseDir)
+  courseDir: string, fs: VaultFs): Promise<string[]> {
+  const files = await listMarkdown(courseDir, fs)
   for (const path of files) {
     const where = `课程「${courseName}」笔记 ${path}`
     let text: string
     try {
-      text = await readFile(path, 'utf8')
+      text = await fs.readFile(path)
     } catch (err) {
       push(findings, 'note', 'broken', 'note_unreadable', where, errorText(err))
       continue
@@ -226,15 +224,14 @@ async function scanBanks(
   findings: DataCheckFinding[],
   courseName: string,
   bankDir: string,
-  nodes: GraphNodeLike[],
-): Promise<number> {
-  const files = await listFiles(bankDir, '.yaml')
+  nodes: GraphNodeLike[], fs: VaultFs): Promise<number> {
+  const files = await listFiles(bankDir, '.yaml', fs)
   const byPath = new Map(files.map(path => [resolve(path).toLowerCase(), path]))
   const checked = new Set<string>()
 
   const validateOne = async (path: string, expectedNode?: string): Promise<void> => {
     const where = `课程「${courseName}」题库 ${path}`
-    const result = await readYamlDoc(path)
+    const result = await readYamlDoc(path, fs)
     if (result.readError) {
       push(findings, 'question_bank', 'broken', 'question_bank_unreadable', where, result.readError)
       return
@@ -278,9 +275,8 @@ async function scanCourse(
   courseRoot: string,
   dataDir: string,
   courseDir: string,
-  bankDir: string,
-): Promise<{ graphFiles: number; notes: number; banks: number; nodes: GraphNodeLike[] }> {
-  const graphFiles = await listFiles(dataDir, '.yaml')
+  bankDir: string, fs: VaultFs): Promise<{ graphFiles: number; notes: number; banks: number; nodes: GraphNodeLike[] }> {
+  const graphFiles = await listFiles(dataDir, '.yaml', fs)
   const nodes: GraphNodeLike[] = []
   if (!graphFiles.length) {
     push(
@@ -295,10 +291,10 @@ async function scanCourse(
 
   const regionNames = new Set<string>()
   const nodeNames = new Set<string>()
-  const noteFiles = new Set((await listMarkdown(courseDir)).map(path => resolve(path).toLowerCase()))
+  const noteFiles = new Set((await listMarkdown(courseDir, fs)).map(path => resolve(path).toLowerCase()))
   for (const path of graphFiles) {
     const where = `课程「${courseName}」图文件 ${path}`
-    const result = await readYamlDoc(path)
+    const result = await readYamlDoc(path, fs)
     if (result.readError) {
       push(findings, 'graph', 'broken', 'graph_unreadable', where, result.readError)
       continue
@@ -343,8 +339,8 @@ async function scanCourse(
     }
   }
 
-  const noteFilesList = await scanNotes(findings, courseName, courseDir)
-  const bankCount = await scanBanks(findings, courseName, bankDir, nodes)
+  const noteFilesList = await scanNotes(findings, courseName, courseDir, fs)
+  const bankCount = await scanBanks(findings, courseName, bankDir, nodes, fs)
   return { graphFiles: graphFiles.length, notes: noteFilesList.length, banks: bankCount, nodes }
 }
 
@@ -358,8 +354,7 @@ async function scanCourse(
 async function scanNoteSources(
   findings: DataCheckFinding[],
   paths: Paths,
-  noteSources: Array<{ id: string; path: string }>,
-): Promise<{ banks: number; files: DataCheckReport['inventory']['noteSourceFiles'] }> {
+  noteSources: Array<{ id: string; path: string }>, fs: VaultFs): Promise<{ banks: number; files: DataCheckReport['inventory']['noteSourceFiles'] }> {
   const files: DataCheckReport['inventory']['noteSourceFiles'] = {
     total: noteSources.length, ok: 0, missing: 0, drifted: 0, inconsistent: 0,
   }
@@ -367,11 +362,11 @@ async function scanNoteSources(
   let banks = 0
   const manifestPath = paths.noteSourceManifestPath
   let itemsById = new Map<string, { path: string; fingerprint: string }>()
-  if (existsSync(manifestPath)) {
+  if (fs.exists(manifestPath)) {
     const where = `笔记源清单 ${manifestPath}`
     let text: string
     try {
-      text = await readFile(manifestPath, 'utf8')
+      text = await fs.readFile(manifestPath)
     } catch (err) {
       push(findings, 'note_source', 'broken', 'note_source_manifest_unreadable', where, errorText(err))
       countAllInconsistent()
@@ -413,7 +408,7 @@ async function scanNoteSources(
       files.inconsistent++
     }
     const abs = `${paths.vaultRoot}/${e.path}`
-    if (!existsSync(abs)) {
+    if (!fs.exists(abs)) {
       files.missing++
       push(findings, 'note_source', 'missing', 'note_source_file_missing',
         `笔记源「${e.id}」源文件 ${abs}`,
@@ -423,7 +418,7 @@ async function scanNoteSources(
     if (!entryIdSet.has(e.id)) continue // 指纹无从核对（镜像不一致已报）
     let raw: string
     try {
-      raw = await readFile(abs, 'utf8')
+      raw = await fs.readFile(abs)
     } catch {
       // 用户笔记不可读（权限/同步锁）不是 Broken（它不是引擎契约对象，永不判
       // Broken）；按「指纹无法核对」归 inconsistent 计数——不静默，读路径
@@ -434,10 +429,10 @@ async function scanNoteSources(
     const status = classifySource(true, itemsById.get(e.id)!.fingerprint === fingerprintOf(raw))
     files[status]++
     const bankPath = join(paths.noteSourceDir, '题库', `${safeFilename(e.id)}.yaml`)
-    if (!existsSync(bankPath)) continue // 未出题 = 合法空卡池
+    if (!fs.exists(bankPath)) continue // 未出题 = 合法空卡池
     banks++
     const where = `笔记源题库 ${bankPath}`
-    const result = await readYamlDoc(bankPath)
+    const result = await readYamlDoc(bankPath, fs)
     if (result.readError) {
       push(findings, 'note_source', 'broken', 'note_source_bank_yaml_parse', where, result.readError)
       continue
@@ -459,20 +454,19 @@ async function scanNoteSources(
 async function scanLearnerCards(
   findings: DataCheckFinding[],
   paths: Paths,
-  courses: Array<{ name: string; root: string }>,
-): Promise<void> {
+  courses: Array<{ name: string; root: string }>, fs: VaultFs): Promise<void> {
   for (const course of courses) {
     const dir = paths.learnerCardsDir(String(course.root))
     let entries
     try {
-      entries = await readdir(dir, { withFileTypes: true })
+      entries = await fs.readdirTypes(dir)
     } catch {
       continue // 该课程还没有任何我的卡：合法空态
     }
-    for (const entry of entries.filter(e => e.isFile() && e.name.endsWith('.yaml')).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of entries.filter(e => !e.directory && e.name.endsWith('.yaml')).sort((a, b) => a.name.localeCompare(b.name))) {
       const path = join(dir, entry.name)
       const where = `课程「${String(course.name)}」我的卡 ${path}`
-      const result = await readYamlDoc(path)
+      const result = await readYamlDoc(path, fs)
       if (result.readError) {
         push(findings, 'learner_cards', 'broken', 'learner_card_yaml_parse', where, result.readError)
         continue
@@ -495,20 +489,19 @@ async function scanLearnerCards(
 async function scanErrorCards(
   findings: DataCheckFinding[],
   paths: Paths,
-  courses: Array<{ name: string; root: string }>,
-): Promise<void> {
+  courses: Array<{ name: string; root: string }>, fs: VaultFs): Promise<void> {
   for (const course of courses) {
     const dir = paths.errorCardsDir(String(course.root))
     let entries
     try {
-      entries = await readdir(dir, { withFileTypes: true })
+      entries = await fs.readdirTypes(dir)
     } catch {
       continue // 该课程还没有任何错误卡：合法空态
     }
-    for (const entry of entries.filter(e => e.isFile() && e.name.endsWith('.yaml')).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of entries.filter(e => !e.directory && e.name.endsWith('.yaml')).sort((a, b) => a.name.localeCompare(b.name))) {
       const path = join(dir, entry.name)
       const where = `课程「${String(course.name)}」错误卡 ${path}`
-      const result = await readYamlDoc(path)
+      const result = await readYamlDoc(path, fs)
       if (result.readError) {
         push(findings, 'error_cards', 'broken', 'error_card_yaml_parse', where, result.readError)
         continue
@@ -532,12 +525,11 @@ async function scanErrorCards(
 async function scanConceptRegistry(
   findings: DataCheckFinding[],
   courseName: string,
-  path: string,
-): Promise<{ present: boolean; entries: number }> {
+  path: string, fs: VaultFs): Promise<{ present: boolean; entries: number }> {
   const where = `课程「${courseName}」概念登记表 ${path}`
   let text: string
   try {
-    text = await readFile(path, 'utf8')
+    text = await fs.readFile(path)
   } catch (err) {
     const code = (err as { code?: unknown }).code
     if (code === 'ENOENT') return { present: false, entries: 0 } // 合法空态：跟随生长批铸名后出现
@@ -567,12 +559,11 @@ async function scanEndpointAnchor(
   findings: DataCheckFinding[],
   courseName: string,
   path: string,
-  nodeNames: Set<string>,
-): Promise<{ present: boolean }> {
+  nodeNames: Set<string>, fs: VaultFs): Promise<{ present: boolean }> {
   const where = `课程「${courseName}」终点锚 ${path}`
   let text: string
   try {
-    text = await readFile(path, 'utf8')
+    text = await fs.readFile(path)
   } catch (err) {
     const code = (err as { code?: unknown }).code
     if (code === 'ENOENT') return { present: false } // 合法空态：种子提案 apply 后出现
@@ -609,30 +600,29 @@ async function scanEndpointAnchor(
 async function scanArchive(
   findings: DataCheckFinding[],
   paths: Paths,
-  breaks: Array<{ date?: string; archived?: string[] }>,
-): Promise<{ present: boolean; files: number }> {
+  breaks: Array<{ date?: string; archived?: string[] }>, fs: VaultFs): Promise<{ present: boolean; files: number }> {
   let files = 0
   let present = false
   try {
-    const entries = await readdir(paths.archiveDir, { withFileTypes: true })
+    const entries = await fs.readdirTypes(paths.archiveDir)
     present = true
     const count = async (dir: string): Promise<number> => {
       let n = 0
       let children
       try {
-        children = await readdir(dir, { withFileTypes: true })
+        children = await fs.readdirTypes(dir)
       } catch {
         return 0
       }
       for (const child of children) {
-        if (child.isDirectory()) n += await count(join(dir, child.name))
-        else if (child.isFile()) n++
+        if (child.directory) n += await count(join(dir, child.name))
+        else if (!child.directory) n++
       }
       return n
     }
     for (const entry of entries) {
-      if (entry.isDirectory()) files += await count(join(paths.archiveDir, entry.name))
-      else if (entry.isFile()) files++
+      if (entry.directory) files += await count(join(paths.archiveDir, entry.name))
+      else if (!entry.directory) files++
     }
   } catch {
     present = false
@@ -659,17 +649,16 @@ async function scanProbationLedger(
   paths: Paths,
   root: string,
   cutoff: number,
-  today: string,
-): Promise<{ present: boolean; entries: number; inFlight: number; overdue: number }> {
-  const ledger = await readProbationLedger(paths, root)
+  today: string, fs: VaultFs): Promise<{ present: boolean; entries: number; inFlight: number; overdue: number }> {
+  const ledger = await readProbationLedger(paths, root, fs)
   if (!ledger.length) return { present: false, entries: 0, inFlight: 0, overdue: 0 }
   const fold = foldProbation(ledger)
-  const practice = await readJsonlLines<PracticeRec>(paths.practicePath)
-  const reviews = await readJsonlLines<ReviewRec>(paths.reviewLogPath)
+  const practice = await readJsonlLines<PracticeRec>(paths.practicePath, fs)
+  const reviews = await readJsonlLines<ReviewRec>(paths.reviewLogPath, fs)
   const learningDays = learningDaysOf(practice, reviews, courseName, cutoff, today)
   let proposals: Array<{ id?: unknown; decided?: unknown }> = []
   try {
-    const doc = JSON.parse(await readFile(paths.proposalsPath, 'utf8'))
+    const doc = JSON.parse(await fs.readFile(paths.proposalsPath))
     if (Array.isArray(doc)) proposals = doc
   } catch {
     // proposals 缺失/损坏：登记日无从对账，overdue 静默（提案盘点自身另有 finding）
@@ -692,7 +681,7 @@ async function scanProbationLedger(
 }
 
 /** 一次只读体检。注册表损坏时无法安全展开课程，因此只报告注册表本身。 */
-export async function dataCheck(paths: Paths, nowMs: number): Promise<DataCheckReport> {
+export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promise<DataCheckReport> {
   const findings: DataCheckFinding[] = []
   const inventory: DataCheckReport['inventory'] = {
     registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0, noteSourceBanks: 0,
@@ -706,7 +695,7 @@ export async function dataCheck(paths: Paths, nowMs: number): Promise<DataCheckR
 
   let registryRaw: unknown
   try {
-    const text = await readFile(paths.registryPath, 'utf8')
+    const text = await fs.readFile(paths.registryPath)
     inventory.registryPresent = true
     try {
       registryRaw = YAML.parse(text)
@@ -745,12 +734,13 @@ export async function dataCheck(paths: Paths, nowMs: number): Promise<DataCheckR
       paths.dataDir(String(course.root)),
       paths.courseDir(String(course.root)),
       paths.bankDir(String(course.root)),
+      fs,
     )
     inventory.graphFiles += result.graphFiles
     inventory.notes += result.notes
     inventory.questionBanks += result.banks
     // 概念登记表（#141）：缺席 = 合法空态零 finding（inventory 计数即盘点可见）；在盘 = 盘点条目数
-    const regScan = await scanConceptRegistry(findings, courseName, paths.conceptRegistryPath(String(course.root)))
+    const regScan = await scanConceptRegistry(findings, courseName, paths.conceptRegistryPath(String(course.root)), fs)
     if (regScan.present) {
       inventory.conceptRegistries.present++
       inventory.conceptRegistries.entries += regScan.entries
@@ -761,12 +751,13 @@ export async function dataCheck(paths: Paths, nowMs: number): Promise<DataCheckR
       courseName,
       paths.anchorPath(String(course.root)),
       new Set(result.nodes.map(n => n.name)),
+      fs,
     )
     if (anchorScan.present) inventory.endpointAnchors.present++
     // 边实验账本（#146）：缺席 = 无插入实验合法空态零 finding；在盘 = 盘点在途与到期未决（hint）
-    const cutoff = await readDayCutoff(paths)
+    const cutoff = await readDayCutoff(paths, fs)
     const probationScan = await scanProbationLedger(
-      findings, courseName, paths, String(course.root), cutoff, todayStr(new Date(nowMs), cutoff),
+      findings, courseName, paths, String(course.root), cutoff, todayStr(new Date(nowMs), cutoff), fs,
     )
     if (probationScan.present) {
       inventory.probationLedgers.present++
@@ -776,21 +767,21 @@ export async function dataCheck(paths: Paths, nowMs: number): Promise<DataCheckR
     }
   }
 
-  const noteSourceScan = await scanNoteSources(findings, paths, noteSources)
+  const noteSourceScan = await scanNoteSources(findings, paths, noteSources, fs)
   inventory.noteSourceBanks = noteSourceScan.banks
   inventory.noteSourceFiles = noteSourceScan.files
-  await scanLearnerCards(findings, paths, courses)
-  await scanErrorCards(findings, paths, courses)
+  await scanLearnerCards(findings, paths, courses, fs)
+  await scanErrorCards(findings, paths, courses, fs)
 
   // 断裂存档区（#138）：archived 信息级，与断裂史（learnhub.json schema.breaks）对账
   let breaks: Array<{ date?: string; archived?: string[] }> = []
   try {
-    const schema = parseSchemaBlock(await readFile(paths.learnhubConfigPath, 'utf8'))
+    const schema = parseSchemaBlock(await fs.readFile(paths.learnhubConfigPath))
     if (Array.isArray(schema?.breaks)) breaks = schema!.breaks!
   } catch {
     // learnhub.json 缺失/损坏：版本硬门已在引擎构造期拒载；体检侧按无断裂史盘点
   }
-  inventory.archive = await scanArchive(findings, paths, breaks)
+  inventory.archive = await scanArchive(findings, paths, breaks, fs)
 
   const emptyArea = () => ({ missing: 0, broken: 0, archived: 0, hint: 0 })
   const byArea: DataCheckReport['byArea'] = {

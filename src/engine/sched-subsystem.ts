@@ -9,6 +9,7 @@
 // 记忆健康仪表盘、FSRS 参数优化器、沉淀层。住同域新文件（srs.ts 被 13 模块引用，
 // 枢纽领主例外）；本文件只被门面引用，跨子系统调用经窄面注入回引门面。
 
+import type { VaultFs } from './io.ts'
 import type { Store } from './store.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
@@ -42,6 +43,8 @@ export interface OptimizeMeta {
 export interface SchedDeps {
   /** 时钟端口（#175 阶段①）：参数写回 trained_at 戳。 */
   clock: Clock
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   store: Store
   paths: Paths
   registry: Registry
@@ -101,9 +104,9 @@ export class SchedSubsystem {
     const stage: Stage = skipped ? 'skipped' : 'ready'
     const [, regionName] = graph.blockOf[node]
     const path = this.e.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
+    const { fm: rawFm, body } = await loadNote(path, this.e.fs)
     const fm = asFm(rawFm)
-    if (fm) await saveNote(path, { ...fm, stage } as unknown as Record<string, unknown>, body)
+    if (fm) await saveNote(path, { ...fm, stage } as unknown as Record<string, unknown>, body, this.e.fs)
     let archived: number | undefined
     if (skipped) {
       const courseRoot = this.e.paths.courseRoot(c.root)
@@ -164,7 +167,7 @@ export class SchedSubsystem {
     const path = this.e.paths.courseNotePath(c.root, regionName, node)
     // stage 守卫的幂等判据（声明给三步共用）：frontmatter 已是 review = 该块已落，续段跳过
     const stageAlreadyReview = async () => {
-      const { fm: rawFm } = await loadNote(path)
+      const { fm: rawFm } = await loadNote(path, this.e.fs)
       const f = asFm(rawFm)
       return Boolean(f && f.stage === 'review')
     }
@@ -218,12 +221,12 @@ export class SchedSubsystem {
           name: '节点 frontmatter stage→review（含聚合代表卡）',
           done: stageAlreadyReview,
           run: async () => {
-            const { fm: rawFm, body } = await loadNote(path)
+            const { fm: rawFm, body } = await loadNote(path, this.e.fs)
             const fm = asFm(rawFm)
             if (!(fm && fm.stage !== 'review')) return
             const next: Fm = { ...fm, stage: 'review' }
             if (repCard) next.fsrs = repCard
-            await saveNote(path, next as unknown as Record<string, unknown>, body)
+            await saveNote(path, next as unknown as Record<string, unknown>, body, this.e.fs)
           },
         },
         {
@@ -275,7 +278,7 @@ export class SchedSubsystem {
       this.e.store.practiceAll(),
       this.e.store.journalTail(null, Number.MAX_SAFE_INTEGER),
       this.e.store.activityCounts(cutoff),
-      readDailyGoal(this.e.paths),
+      readDailyGoal(this.e.paths, this.e.fs),
     ])
     // 勘误冲正按净值入 XP 账（ADR-0031）：streak 口径不变（行为条数，原流水仍在），
     // XP 值按冲正后的净值替换（作废归零、改判按对题补记）
@@ -308,13 +311,13 @@ export class SchedSubsystem {
 
   /** 调整每日 XP 目标（state/learnhub.json）。 */
   async setDailyGoal(goal: number): Promise<{ goal: number }> {
-    return { goal: await writeDailyGoal(this.e.paths, goal) }
+    return { goal: await writeDailyGoal(this.e.paths, goal, this.e.fs) }
   }
 
 
   /** 调整日界（state/learnhub.json 的 day_cutoff；ADR-0020）→ 生效 'HH:mm'。 */
   async setDayCutoff(value: string): Promise<{ day_cutoff: string }> {
-    return { day_cutoff: await writeDayCutoff(this.e.paths, value) }
+    return { day_cutoff: await writeDayCutoff(this.e.paths, value, this.e.fs) }
   }
 
   /** 统计页四面板聚合（xpStatus 的姊妹方法，只读）：每日负载预报（扫全部启用课程
@@ -370,7 +373,7 @@ export class SchedSubsystem {
     written?: string[]
     meta?: OptimizeMeta
   }> {
-    const seqs = trainingSequences(await this.e.store.reviewLogAll(), await readDayCutoff(this.e.paths))
+    const seqs = trainingSequences(await this.e.store.reviewLogAll(), await readDayCutoff(this.e.paths, this.e.fs))
     const count = sequenceReviews(seqs)
     if (count < OPTIMIZE_MIN_REVIEWS) {
       return { status: 'skipped', reason: `真实复习日志 ${count} 条，不足 ${OPTIMIZE_MIN_REVIEWS} 条——保持现参不训练（synthetic 已排除，每卡每天只计第一条）` }
@@ -380,7 +383,7 @@ export class SchedSubsystem {
     // 基线 = 现参（学习者级一套），走 resolveFsrsParams 唯一口径：沉淀正典（事实源）
     // → 任一启用课程的参数缓存 → 官方默认。对照基线必须与调度此刻实际生效的同一套，
     // 不因基线读取阻塞训练。
-    const baseline = await resolveFsrsParams(this.e.paths, courses.map(c => c.root))
+    const baseline = await resolveFsrsParams(this.e.paths, courses.map(c => c.root), this.e.fs)
     let baselineParams = baseline.parameters ?? defaultParams()
     const baselineSource = baseline.source
     const baselineEval = await impl.evaluate(baselineParams, seqs)
@@ -418,14 +421,14 @@ export class SchedSubsystem {
         {
           name: 'fsrs_params 落沉淀正典',
           run: async () => {
-            await appendSedimentEvent(this.e.paths, { kind: 'fsrs_params', tier: 'immediate', payload: { parameters, meta } }, this.e.clock.nowMs())
+            await appendSedimentEvent(this.e.paths, { kind: 'fsrs_params', tier: 'immediate', payload: { parameters, meta } }, this.e.clock.nowMs(), this.e.fs)
           },
         },
         {
           name: '逐课程参数缓存镜像',
           run: async () => {
             for (const c of courses) {
-              await atomicWrite(this.e.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n')
+              await atomicWrite(this.e.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n', this.e.fs)
               written.push(c.name)
             }
           },
@@ -438,7 +441,7 @@ export class SchedSubsystem {
         {
           name: '学习者档案投影重建',
           run: async () => {
-            await rebuildLearnerProfile(this.e.paths, foldSediment(await readSedimentCanon(this.e.paths)), this.e.clock.nowMs())
+            await rebuildLearnerProfile(this.e.paths, foldSediment(await readSedimentCanon(this.e.paths, this.e.fs)), this.e.clock.nowMs(), this.e.fs)
           },
         },
       ],
@@ -449,20 +452,20 @@ export class SchedSubsystem {
   /** 出生即写：追加一条沉淀事件（六类事件骨架的唯一写入口；校验在 sediment 模块）。
    * 永不自动删除——内容层任何不可逆操作不写这里。 */
   async sedimentAppend(kind: SedimentKind, tier: SedimentTier, payload: Record<string, unknown>, concept?: string): Promise<SedimentEvent> {
-    return appendSedimentEvent(this.e.paths, { kind, tier, payload, ...(concept !== undefined ? { concept } : {}) }, this.e.clock.nowMs())
+    return appendSedimentEvent(this.e.paths, { kind, tier, payload, ...(concept !== undefined ? { concept } : {}) }, this.e.clock.nowMs(), this.e.fs)
   }
 
 
   /** 读侧单向的唯一消费口径：读正典 → 折叠（两次折叠同输入同输出）。教练折叠
    * （#144）等后续消费方一律从这里取，禁止再读内容层旧居所。 */
   async sedimentFold(): Promise<SedimentFold> {
-    return foldSediment(await readSedimentCanon(this.e.paths))
+    return foldSediment(await readSedimentCanon(this.e.paths, this.e.fs))
   }
 
 
   /** 重建学习者档案投影（学习中心/沉淀/学习者档案.md；纯派生，手编必被覆盖）。 */
   async sedimentRebuildProfile(): Promise<string> {
-    return rebuildLearnerProfile(this.e.paths, await this.sedimentFold(), this.e.clock.nowMs())
+    return rebuildLearnerProfile(this.e.paths, await this.sedimentFold(), this.e.clock.nowMs(), this.e.fs)
   }
 
 

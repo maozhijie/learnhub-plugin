@@ -13,6 +13,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { mineErrorPatterns, isMinableWrong, validateErrorCards, ErrorCards } from '../src/engine/error-cards.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import type { PracticeRec } from '../src/engine/types.ts'
 import { withVault } from './helpers/vault.ts'
 
@@ -280,7 +281,7 @@ test('归档后原题重新可挖（covered 只算活跃卡）', async () => {
     await h.engine.errorCardArchive('数学', '入门', 'c1', true)
     const result = await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     assert.equal(result.generated[0]!.ids[0], 'c2')
-    const doc = await new ErrorCards(h.paths).load('math', '入门')
+    const doc = await new ErrorCards(h.paths, nodeVaultFs).load('math', '入门')
     assert.equal(doc.cards.length, 2)
   })
 })

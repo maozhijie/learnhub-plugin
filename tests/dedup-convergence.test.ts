@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { round2, clamp01, pctOf } from '../src/engine/grading.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { DAY_MS, calendarDayOf, dayOfTs, fmtDay, addDays } from '../src/engine/dates.ts'
 // 来源键经 anki.ts 原路径导入——有意验证 re-export 接缝未晃（本体在 types.ts）
 import { sourceKeyOf, parseSourceKey, nodeKeyOf } from '../src/engine/anki.ts'
@@ -177,7 +178,7 @@ test('saveNote 原子落盘：内容完整、目录零 tmp 残留、自动建父
   const dir = await mkdtemp(join(tmpdir(), 'lh-atomic-'))
   try {
     const notePath = join(dir, '区', '节点.md')
-    await saveNote(notePath, { node: '节点', content: { version: 1 } }, '## 正文')
+    await saveNote(notePath, { node: '节点', content: { version: 1 } }, '## 正文', nodeVaultFs)
     const leftovers = (await readdir(dir, { recursive: true })).filter(f => String(f).includes('.tmp-'))
     assert.deepEqual(leftovers, [], `tmp 残留：${leftovers.join('、')}`)
     const content = await readFile(notePath, 'utf8')

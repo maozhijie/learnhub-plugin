@@ -23,8 +23,7 @@
  *
  * Missing/Broken 纪律沿用 ADR-0004：技能文件缺失 = 合法空态；存在但坏 = Broken 抛出。
  */
-import { existsSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { todayStr, addDays, daysBetween, parseDay } from './dates.ts'
@@ -170,20 +169,22 @@ export type SkillCard = SkillDoc & AdvanceCard
 export class Skills {
   private paths: Paths
   private clock: Clock
-  constructor(paths: Paths, clock: Clock) {
+  private fs: VaultFs
+  constructor(paths: Paths, clock: Clock, fs: VaultFs) {
     this.paths = paths
     this.clock = clock
+    this.fs = fs
   }
 
   /** 全部技能（按 id 序）。目录存在但文件读不了 = 跳过并在 broken 报出（不阻塞清单）。 */
   async list(): Promise<{ skills: SkillDoc[]; broken: Array<{ id: string; path: string; reason: string }> }> {
     const out: SkillDoc[] = []
     const broken: Array<{ id: string; path: string; reason: string }> = []
-    if (!existsSync(this.paths.skillsDir)) return { skills: out, broken }
-    for (const f of (await readdir(this.paths.skillsDir)).filter(f => f.endsWith('.yaml')).sort()) {
+    if (!this.fs.exists(this.paths.skillsDir)) return { skills: out, broken }
+    for (const f of (await this.fs.readdir(this.paths.skillsDir)).filter(f => f.endsWith('.yaml')).sort()) {
       const p = `${this.paths.skillsDir}/${f}`
       try {
-        out.push(validateSkillDoc(YAML.parse(await readFile(p, 'utf8')), p))
+        out.push(validateSkillDoc(YAML.parse(await this.fs.readFile(p)), p))
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
         broken.push({ id: f.replace(/\.yaml$/, ''), path: p, reason: reason.includes('Broken') ? reason : `技能条目 Broken：${reason}` })
@@ -195,10 +196,10 @@ export class Skills {
   /** 读单个技能；不存在 = Missing 报错；存在但坏（含 YAML 解析失败）= Broken。 */
   async load(id: string): Promise<SkillDoc> {
     const p = this.paths.skillPath(id)
-    if (!existsSync(p)) throw new Error(`[skills] 技能「${id}」不存在（Missing）：先 learnhub_skill_create。`)
+    if (!this.fs.exists(p)) throw new Error(`[skills] 技能「${id}」不存在（Missing）：先 learnhub_skill_create。`)
     let raw: unknown
     try {
-      raw = YAML.parse(await readFile(p, 'utf8'))
+      raw = YAML.parse(await this.fs.readFile(p))
     } catch (err) {
       throw new Error(`[skills] 技能条目 Broken（位置：${p}）\n  ✗ YAML 无法解析：${err instanceof Error ? err.message : String(err)}`)
     }
@@ -212,19 +213,19 @@ export class Skills {
     const id = (input.id ?? name).trim()
     if (!id || id.includes('..')) throw new Error(`[skill-create] id 非法：${id}`)
     const p = this.paths.skillPath(id)
-    if (existsSync(p)) throw new Error(`[skill-create] 技能「${id}」已存在（${p}）。`)
+    if (this.fs.exists(p)) throw new Error(`[skill-create] 技能「${id}」已存在（${p}）。`)
     const maintenance = clampMaintenanceDays(input.maintenance_days, 'skill-create')
     const today = todayStr(new Date(this.clock.nowMs()))
     const doc: SkillDoc = { skill: id, name, status: 'active', maintenance_days: maintenance, created: today, updated: today }
-    await atomicWrite(p, YAML.stringify(doc))
+    await atomicWrite(p, YAML.stringify(doc), this.fs)
     return doc
   }
 
   /** 全量写回（updated 随写随戳）；Evidence 字段（fsrs/stats）整体替换由作答侧调用。 */
   async save(id: string, doc: SkillDoc): Promise<void> {
     const p = this.paths.skillPath(id)
-    if (!existsSync(p)) throw new Error(`[skills] 技能「${id}」不存在（Missing）。`)
-    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr(new Date(this.clock.nowMs())) }))
+    if (!this.fs.exists(p)) throw new Error(`[skills] 技能「${id}」不存在（Missing）。`)
+    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr(new Date(this.clock.nowMs())) }), this.fs)
   }
 
   /** 归档/恢复（可逆；archived 只是收纳标签）。 */

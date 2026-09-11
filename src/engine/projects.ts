@@ -10,8 +10,7 @@
  * Missing/Broken 纪律沿用 ADR-0004：项目文件缺失 = 合法空态（清单跳过）；
  * 存在但坏 = Broken 抛出。
  */
-import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, appendFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { YAML } from './yaml.ts'
 // FadingTier/FADING_TIERS 住 types.ts、PlanItem 与计划产物校验住 project-decompile.ts
 // （#152 刀 5 归位：project-exec/project-decompile 反向引用，留原地即成环）；
@@ -269,20 +268,22 @@ export class Projects {
   private paths: Paths
   private store: Store
   private clock: Clock
-  constructor(paths: Paths, store: Store, clock: Clock) {
+  private fs: VaultFs
+  constructor(paths: Paths, store: Store, clock: Clock, fs: VaultFs) {
     this.paths = paths
     this.store = store
     this.clock = clock
+    this.fs = fs
   }
 
   /** 全部项目（按目录名序）。目录存在但项目.md 缺失 = 跳过（半建状态不算 Broken）。 */
   async list(): Promise<ProjectFm[]> {
-    if (!existsSync(this.paths.projectsDir)) return []
+    if (!this.fs.exists(this.paths.projectsDir)) return []
     const out: ProjectFm[] = []
-    for (const ent of await readdir(this.paths.projectsDir, { withFileTypes: true })) {
-      if (!ent.isDirectory()) continue
+    for (const ent of await this.fs.readdirTypes(this.paths.projectsDir)) {
+      if (!ent.directory) continue
       const p = this.paths.projectNotePath(ent.name)
-      if (!existsSync(p)) continue
+      if (!this.fs.exists(p)) continue
       out.push(await this.load(ent.name))
     }
     return out.sort((a, b) => a.id.localeCompare(b.id))
@@ -291,8 +292,8 @@ export class Projects {
   /** 读单个项目；不存在 = Missing 报错（调用方决定语义）。存在但坏 = Broken。 */
   async load(id: string): Promise<ProjectFm> {
     const p = this.paths.projectNotePath(id)
-    if (!existsSync(p)) throw new Error(`[projects] 项目「${id}」不存在（Missing）：先 learnhub_project_create。`)
-    const { fm } = await loadNote(p)
+    if (!this.fs.exists(p)) throw new Error(`[projects] 项目「${id}」不存在（Missing）：先 learnhub_project_create。`)
+    const { fm } = await loadNote(p, this.fs)
     return validateProjectFm(fm, p)
   }
 
@@ -309,21 +310,21 @@ export class Projects {
     const id = (input.id ?? safeFilename(name)).trim()
     if (!id || id.includes('..')) throw new Error(`[project-create] id 非法：${id}`)
     const p = this.paths.projectNotePath(id)
-    if (existsSync(p)) throw new Error(`[project-create] 项目「${id}」已存在（${p}）。`)
+    if (this.fs.exists(p)) throw new Error(`[project-create] 项目「${id}」已存在（${p}）。`)
     const today = todayStr(new Date(this.clock.nowMs()))
     const fm: ProjectFm = { id, name, lifecycle: 'active', tier, goal, plan: [], created: today, updated: today }
-    await mkdir(this.paths.projectDir(id), { recursive: true })
-    await mkdir(this.paths.projectMilestoneDir(id), { recursive: true })
-    await saveNote(p, fm as unknown as Record<string, unknown>, `# ${name}\n\n> 目标：${goal}\n\n（里程碑计划走 learnhub_project_plan_generate 提案通道；产物见 milestones/。）\n`)
+    await this.fs.mkdir(this.paths.projectDir(id))
+    await this.fs.mkdir(this.paths.projectMilestoneDir(id))
+    await saveNote(p, fm as unknown as Record<string, unknown>, `# ${name}\n\n> 目标：${goal}\n\n（里程碑计划走 learnhub_project_plan_generate 提案通道；产物见 milestones/。）\n`, this.fs)
     return fm
   }
 
   /** 全量写回项目 frontmatter（updated 随写随戳；body 不动）。 */
   async saveFm(id: string, fm: ProjectFm): Promise<void> {
     const p = this.paths.projectNotePath(id)
-    if (!existsSync(p)) throw new Error(`[projects] 项目「${id}」不存在（Missing）。`)
-    const { body } = await loadNote(p)
-    await saveNote(p, { ...fm, updated: todayStr(new Date(this.clock.nowMs())) } as unknown as Record<string, unknown>, body)
+    if (!this.fs.exists(p)) throw new Error(`[projects] 项目「${id}」不存在（Missing）。`)
+    const { body } = await loadNote(p, this.fs)
+    await saveNote(p, { ...fm, updated: todayStr(new Date(this.clock.nowMs())) } as unknown as Record<string, unknown>, body, this.fs)
   }
 
   /** 项目视图：计划 × 产物落盘状态 + 遗留文件。 */
@@ -332,8 +333,8 @@ export class Projects {
     const expected = new Map(fm.plan.map((m, i) => [milestoneFileOf(i, m.name), m]))
     const orphans: string[] = []
     const dir = this.paths.projectMilestoneDir(id)
-    if (existsSync(dir)) {
-      for (const f of await readdir(dir)) {
+    if (this.fs.exists(dir)) {
+      for (const f of await this.fs.readdir(dir)) {
         if (!expected.has(f)) orphans.push(f)
       }
     }
@@ -341,7 +342,7 @@ export class Projects {
       fm,
       milestones: fm.plan.map((m, i) => {
         const file = milestoneFileOf(i, m.name)
-        return { id: m.id, name: m.name, task_class: m.task_class, acceptance_hints: m.acceptance_hints, file, generated: existsSync(this.paths.projectMilestonePath(id, file)) }
+        return { id: m.id, name: m.name, task_class: m.task_class, acceptance_hints: m.acceptance_hints, file, generated: this.fs.exists(this.paths.projectMilestonePath(id, file)) }
       }),
       orphans,
     }
@@ -367,7 +368,7 @@ export class Projects {
     const pid = await this.store.createProposal('project_plan', projectId,
       `${initial ? '初次规划' : '计划修订'}：${v.plan.length} 个里程碑`, '')
     const path = this.paths.proposalArtifactPath(pid, 'project_plan', projectId)
-    await atomicWrite(path, YAML.stringify(doc))
+    await atomicWrite(path, YAML.stringify(doc), this.fs)
     // pair 出生即写（#149 同源双提案）：计划提案落盘那一刻就带联动——任一时刻崩溃
     // 都不会留下可单边 apply 的无守卫计划半区（时序缺口守卫从出生起生效）。
     await this.store.updateProposal(pid, {
@@ -392,7 +393,7 @@ export class Projects {
     let snapshot: string | null = null
     if (project.plan.length) {
       snapshot = this.paths.projectSnapshotPath(prop.id, 'plan.yaml')
-      await atomicWrite(snapshot, YAML.stringify({ project: project.id, plan: project.plan }))
+      await atomicWrite(snapshot, YAML.stringify({ project: project.id, plan: project.plan }), this.fs)
     }
     await this.saveFm(project.id, { ...project, plan: v.plan })
     // 不写 journal：journal 是学习行为流水（streak/热力图聚合它的全部行），项目域写它会
@@ -421,11 +422,11 @@ export class Projects {
   async generateMilestone(projectId: string, milestoneId: string, md: string): Promise<{ written: string; tier: FadingTier }> {
     const { project, file } = await this.locateMilestone(projectId, milestoneId)
     const path = this.paths.projectMilestonePath(projectId, file)
-    if (existsSync(path)) {
+    if (this.fs.exists(path)) {
       throw new Error(`[project-milestone] 「${file}」已生成——按档重生成走提案通道（learnhub_project_milestone_generate 会自动转提案，apply 后带快照覆盖）。`)
     }
     this.gateOrFail(md, project.tier)
-    await atomicWrite(path, md.trimEnd() + '\n')
+    await atomicWrite(path, md.trimEnd() + '\n', this.fs)
     return { written: file, tier: project.tier }
   }
 
@@ -433,7 +434,7 @@ export class Projects {
   async proposeMilestone(projectId: string, milestoneId: string, md: string): Promise<{ id: number; kind: 'project_milestone'; project: string; milestone: string; file: string }> {
     const { project, item, file } = await this.locateMilestone(projectId, milestoneId)
     const path = this.paths.projectMilestonePath(projectId, file)
-    if (!existsSync(path)) {
+    if (!this.fs.exists(path)) {
       throw new Error(`[project-milestone] 「${file}」尚未生成——首生直落即可（learnhub_project_milestone_generate），无需提案。`)
     }
     this.gateOrFail(md, project.tier)
@@ -441,7 +442,7 @@ export class Projects {
     const pid = await this.store.createProposal('project_milestone', projectId,
       `里程碑「${item.name}」按档「${project.tier}」重生成`, '')
     const artifactPath = this.paths.proposalArtifactPath(pid, 'project_milestone', projectId)
-    await atomicWrite(artifactPath, YAML.stringify(doc))
+    await atomicWrite(artifactPath, YAML.stringify(doc), this.fs)
     await this.store.updateProposal(pid, { artifact: artifactPath })
     return { id: pid, kind: 'project_milestone', project: projectId, milestone: milestoneId, file }
   }
@@ -456,8 +457,8 @@ export class Projects {
     const { project, file } = await this.locateMilestone(prop.course, v.milestone)
     const path = this.paths.projectMilestonePath(project.id, file)
     const snapshot = this.paths.projectSnapshotPath(prop.id, `m${file}`)
-    await atomicWrite(snapshot, await readFile(path, 'utf8'))
-    await atomicWrite(path, v.md.trimEnd() + '\n')
+    await atomicWrite(snapshot, await this.fs.readFile(path), this.fs)
+    await atomicWrite(path, v.md.trimEnd() + '\n', this.fs)
     await this.store.updateProposal(prop.id, {
       status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: `快照 ${snapshot}`,
     })
@@ -470,7 +471,7 @@ export class Projects {
     { written: string; tier: FadingTier } | { proposed: number; kind: 'project_milestone'; file: string }
   > {
     const { project, file } = await this.locateMilestone(projectId, milestoneId)
-    if (existsSync(this.paths.projectMilestonePath(projectId, file))) {
+    if (this.fs.exists(this.paths.projectMilestonePath(projectId, file))) {
       const prop = await this.proposeMilestone(projectId, milestoneId, md)
       return { proposed: prop.id, kind: 'project_milestone', file }
     }
@@ -486,9 +487,9 @@ export class Projects {
     const body = text.trim()
     if (!body) throw new Error('[project-log] 日志内容不能为空。')
     const p = this.paths.projectLogPath(projectId)
-    await mkdir(this.paths.projectDir(projectId), { recursive: true })
-    const header = existsSync(p) ? '' : PROJECT_LOG_HEADER
-    await appendFile(p, `${header}## ${day}\n\n${body}\n\n`, 'utf8')
+    await this.fs.mkdir(this.paths.projectDir(projectId))
+    const header = this.fs.exists(p) ? '' : PROJECT_LOG_HEADER
+    await this.fs.appendFile(p, `${header}## ${day}\n\n${body}\n\n`)
     return p
   }
 
@@ -496,8 +497,8 @@ export class Projects {
   async readLog(projectId: string): Promise<string | null> {
     await this.load(projectId)
     const p = this.paths.projectLogPath(projectId)
-    if (!existsSync(p)) return null
-    return readFile(p, 'utf8')
+    if (!this.fs.exists(p)) return null
+    return this.fs.readFile(p)
   }
 
   // ---- 过点与对账（#94 / 设计 §5：过点是显式动作，无清单门禁、无题目门禁） ----
@@ -533,7 +534,7 @@ export class Projects {
   /** 里程碑产物落盘状态（#93 检索点门槛：交付物 = 任务卡已生成）。 */
   async isMilestoneDelivered(projectId: string, milestoneId: string): Promise<{ delivered: boolean; file: string }> {
     const { file } = await this.locateMilestone(projectId, milestoneId)
-    return { delivered: existsSync(this.paths.projectMilestonePath(projectId, file)), file }
+    return { delivered: this.fs.exists(this.paths.projectMilestonePath(projectId, file)), file }
   }
 
   /** 轻量结构门未过 → 抛 code=MILESTONE_GATE_FAILED（修复回路据此识别）。 */
@@ -548,8 +549,8 @@ export class Projects {
   }
 
   private async loadArtifact(prop: ProposalRec): Promise<unknown> {
-    if (!existsSync(prop.artifact)) throw new Error(`[projects] 提案产物文件不存在: ${prop.artifact}`)
-    return YAML.parse(await readFile(prop.artifact, 'utf8'))
+    if (!this.fs.exists(prop.artifact)) throw new Error(`[projects] 提案产物文件不存在: ${prop.artifact}`)
+    return YAML.parse(await this.fs.readFile(prop.artifact))
   }
 }
 
@@ -570,6 +571,8 @@ export interface ProjectDeps {
   vaultRoot: string
   /** 取当前 JOL 随机源（可注入播种；经访问器惰性取，测试注入后构造期不锁定）。 */
   jolRng(): () => number
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   /** 时钟端口（#175 阶段①）：检索点/执行流水 ts 与回看窗口终点。 */
   clock: Clock
   learningDay(): Promise<{ today: string; cutoff: number }>
@@ -634,8 +637,8 @@ export class ProjectSubsystem {
     for (const item of manifest.sources) {
       if (!rels.includes(item.path)) continue
       const abs = `${this.e.vaultRoot}/${item.path}`
-      if (!existsSync(abs)) continue
-      const fp = fingerprintOf(await readFile(abs, 'utf8'))
+      if (!this.e.fs.exists(abs)) continue
+      const fp = fingerprintOf(await this.e.fs.readFile(abs))
       if (fp !== item.fingerprint) {
         item.fingerprint = fp
         changed = true
@@ -800,7 +803,7 @@ export class ProjectSubsystem {
     await appendRecallRec(this.e.paths, id, {
       ts: nowIsoOf(this.e.clock.nowMs()), kind: 'draw', milestone: milestoneId, file: delivered.file,
       nodes: specs, questions: drawn,
-    })
+    }, this.e.fs)
     const questions = drawn.map(d => {
       const q = byKey.get(`${d.course}\u0000${d.node}\u0000${d.qid}`)!
       return { ...d, answer: q.answer, ...(q.options ? { options: q.options } : {}), ...(q.explanation ? { explanation: q.explanation } : {}) }
@@ -816,7 +819,7 @@ export class ProjectSubsystem {
     if (!trimmed) throw new Error('[project-recall] 自述不能为空（关键决策口述原文）。')
     const fm = await this.e.projects.load(id)
     this.planItemOf(fm, milestoneId, 'project-recall')
-    await appendRecallRec(this.e.paths, id, { ts: nowIsoOf(this.e.clock.nowMs()), kind: 'reflect', milestone: milestoneId, narration: trimmed })
+    await appendRecallRec(this.e.paths, id, { ts: nowIsoOf(this.e.clock.nowMs()), kind: 'reflect', milestone: milestoneId, narration: trimmed }, this.e.fs)
     return { project: id, milestone: milestoneId, recorded: true }
   }
 
@@ -824,7 +827,7 @@ export class ProjectSubsystem {
   /** 检索点流水读取（#93；面板/复盘消费）。 */
   async projectRecallLog(id: string): Promise<RecallRec[]> {
     await this.e.projects.load(id)
-    return recallRecsAll(this.e.paths, id)
+    return recallRecsAll(this.e.paths, id, this.e.fs)
   }
 
   /** 记一条项目执行事件（P-7 #98；#149 stub 回流修订；#146 复诊闸）：项目自己的事件流
@@ -873,7 +876,7 @@ export class ProjectSubsystem {
       if (!c) continue
       const { graph } = await this.e.loadView(c)
       // probation 在途行使闸（#146）：实验中的插入节点不回流练习证据（行使照落 exec 流水）。
-      const gated = foldProbation(await readProbationLedger(this.e.paths, c.root))
+      const gated = foldProbation(await readProbationLedger(this.e.paths, c.root, this.e.fs))
       const gatedNodes = new Set(gated.inFlight.map(e => e.node))
       // enc 面观测：被行使的既有 enc 边数（两端都在 nodes 内）；回流已改节点级，边数只作观测
       edges += exercisedEncEdges(nodes, holder => (graph.encOf[holder] ?? []).map(e => e[0])).length
@@ -906,7 +909,7 @@ export class ProjectSubsystem {
     await appendExecRec(this.e.paths, id, {
       ts: nowIsoOf(this.e.clock.nowMs()), day: today, rating: v.rating, source: v.source,
       nodes: v.nodes, tier: fm.tier, ...(v.note ? { note: v.note } : {}),
-    })
+    }, this.e.fs)
     backflow.sort((a, b) => a.course.localeCompare(b.course) || a.node.localeCompare(b.node))
     return {
       project: id, day: today, rating: v.rating, source: v.source, score,
@@ -938,7 +941,7 @@ export class ProjectSubsystem {
       masteryList.push(m)
     }
     const x = masteryAggregate(masteryList)
-    const recs = await execRecsAll(this.e.paths, id)
+    const recs = await execRecsAll(this.e.paths, id, this.e.fs)
     const y = execEvidenceScore(recs)
     const avg = (list: ProjectExecRec[]) => list.length
       ? Math.round(list.reduce((a, r) => a + execRatingScore(r.rating), 0) / list.length * 1000) / 1000
@@ -1137,7 +1140,7 @@ export class ProjectSubsystem {
     // Vault 先验（只读检索）注入反编译上下文
     const terms = decompileTerms(goal, picked.map(p => p.title))
     const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-    const hits = terms.length ? await searchVaultPrior(this.e.vaultRoot, centerRel, terms) : []
+    const hits = terms.length ? await searchVaultPrior(this.e.vaultRoot, centerRel, terms, {}, this.e.fs) : []
     const prior = priorSection(hits)
     // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出
     let courseBlock: string
@@ -1278,9 +1281,9 @@ export class ProjectSubsystem {
   private async seedAuditFor(courseName: string, today: string): Promise<ApplyAudit> {
     const course = await this.e.registry.get(courseName)
     let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
-    if (course && existsSync(this.e.paths.dataDir(course.root))) {
+    if (course && this.e.fs.exists(this.e.paths.dataDir(course.root))) {
       const { graph } = await this.e.loadView(course)
-      const result = await runAudit(this.e.paths, course.root, course.name, graph, graph.regions, today)
+      const result = await runAudit(this.e.paths, course.root, course.name, graph, graph.regions, today, this.e.fs)
       audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
     }
     return audit

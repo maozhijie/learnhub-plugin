@@ -14,9 +14,8 @@
  * 用户排除清单（V-1 #86）的配置 IO 也归本模块：learnhub.json 的 note_source_excludes，
  * 注册入口强制执行（清单内路径不收编），只管未来注册、不摘已注册源。
  */
+import type { VaultFs } from './io.ts'
 import { createHash } from 'node:crypto'
-import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, stat, unlink } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
 import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import { isRegistrableCenterRel } from './output.ts'
@@ -225,15 +224,15 @@ export function normalizeSourcePath(vaultRoot: string, centerRoot: string, input
 /** 递归收集目录下全部 .md（跳过点开头目录）；文件输入原样返回。
  * skip 谓词（收 abs 路径）命中时：目录不下钻、文件不收（V-1 #86 用户排除清单用）。 */
 export async function collectNoteFiles(
-  absPath: string, skip?: (abs: string) => boolean,
+  absPath: string, skip: (abs: string) => boolean, fs: VaultFs,
 ): Promise<Array<{ abs: string; filename: string }>> {
-  let st
+  let isFile: boolean
   try {
-    st = await stat(absPath)
+    isFile = await fs.statIsFile(absPath)
   } catch {
     throw new Error(`[note-source] 路径不存在：${absPath}`)
   }
-  if (st.isFile()) {
+  if (isFile) {
     if (skip?.(absPath)) return []
     if (!absPath.toLowerCase().endsWith('.md')) {
       throw new Error(`[note-source] 只支持 .md 笔记（收到：${absPath}）`)
@@ -242,13 +241,13 @@ export async function collectNoteFiles(
   }
   const out: Array<{ abs: string; filename: string }> = []
   async function walk(dir: string): Promise<void> {
-    const entries = await readdir(dir, { withFileTypes: true })
+    const entries = await fs.readdirTypes(dir)
     for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const child = `${dir}/${entry.name}`
       if (skip?.(child)) continue
-      if (entry.isDirectory()) {
+      if (entry.directory) {
         if (!entry.name.startsWith('.')) await walk(child)
-      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+      } else if (!entry.directory && entry.name.toLowerCase().endsWith('.md')) {
         out.push({ abs: child, filename: entry.name })
       }
     }
@@ -267,8 +266,8 @@ export function isExcludedPath(rel: string, excludes: string[]): boolean {
 /** 读排除清单。条目做形状归一（反斜杠→posix、剥尾斜杠、滤空）——手编配置的常见
  * 写法不得静默失效（防收编是本清单的存在理由）；缺失/顶层形态不符回落空列表
  * ——learnhub.json 配置同款：ADR-0004 的 fail loud 针对学习者数据损坏，不是配置笔误。 */
-export async function readNoteSourceExcludes(paths: Paths): Promise<string[]> {
-  const doc = await readLearnhubConfig(paths.learnhubConfigPath) as {
+export async function readNoteSourceExcludes(paths: Paths, fs: VaultFs): Promise<string[]> {
+  const doc = await readLearnhubConfig(paths.learnhubConfigPath, fs) as {
     note_source_excludes?: unknown
   }
   if (!Array.isArray(doc.note_source_excludes)) return []
@@ -279,24 +278,26 @@ export async function readNoteSourceExcludes(paths: Paths): Promise<string[]> {
 }
 
 /** 写排除清单（原子替换，保留 learnhub.json 其他字段）。入参须是已归一形态。 */
-export async function writeNoteSourceExcludes(paths: Paths, excludes: string[]): Promise<void> {
-  const prev = await readLearnhubConfig(paths.learnhubConfigPath)
-  await writeLearnhubConfig(paths.learnhubConfigPath, { ...prev, note_source_excludes: excludes })
+export async function writeNoteSourceExcludes(paths: Paths, excludes: string[], fs: VaultFs): Promise<void> {
+  const prev = await readLearnhubConfig(paths.learnhubConfigPath, fs)
+  await writeLearnhubConfig(paths.learnhubConfigPath, { ...prev, note_source_excludes: excludes }, fs)
 }
 
 /** 镜像区源清单 IO（Missing = 合法空；Broken fail loud——它是镜像区契约文件）。 */
 export class NoteSourceManifest {
   private paths: Paths
-  constructor(paths: Paths) {
+  private fs: VaultFs
+  constructor(paths: Paths, fs: VaultFs) {
     this.paths = paths
+    this.fs = fs
   }
 
   async load(): Promise<NoteSourceManifestDoc> {
     const p = this.paths.noteSourceManifestPath
-    if (!existsSync(p)) return { sources: [] }
+    if (!this.fs.exists(p)) return { sources: [] }
     let doc: unknown
     try {
-      doc = YAML.parse(await readFile(p, 'utf8'))
+      doc = YAML.parse(await this.fs.readFile(p))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       throw new Error(`[note-source] 源清单 Broken（YAML 无法解析，位置：${p}）\n  ✗ ${message}`)
@@ -309,7 +310,7 @@ export class NoteSourceManifest {
   }
 
   async save(doc: NoteSourceManifestDoc): Promise<void> {
-    await atomicWrite(this.paths.noteSourceManifestPath, YAML.stringify(doc))
+    await atomicWrite(this.paths.noteSourceManifestPath, YAML.stringify(doc), this.fs)
   }
 }
 
@@ -323,6 +324,8 @@ export class NoteSourceManifest {
 export interface ChannelsDeps {
   /** 时钟端口（#175 阶段①）：镜像清单 last_push 戳与 Anki 导入视界。 */
   clock: Clock
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   /** store 结构化窄面：本域是低层模块（registry/vault-links 等反向依赖它），引 Store
    * 类型会把存储层拖成下游，成环（R7 实测 store→…→vault-links→note-source→store）。 */
   store: {
@@ -387,7 +390,7 @@ export class ChannelsSubsystem {
     today ??= (await this.e.learningDay()).today
     const rel0 = normalizeSourcePath(this.e.vaultRoot, this.e.paths.centerRoot, input)
     const relOf = (abs: string): string => abs.slice(this.e.vaultRoot.length + 1)
-    const excludes = await readNoteSourceExcludes(this.e.paths)
+    const excludes = await readNoteSourceExcludes(this.e.paths, this.e.fs)
     if (isExcludedPath(rel0, excludes)) {
       throw new Error(`[note-source] 路径在用户排除清单内，不注册（先 learnhub_note_source_unexclude 解除）：${rel0}`)
     }
@@ -396,7 +399,7 @@ export class ChannelsSubsystem {
       if (!isExcludedPath(relOf(abs), excludes)) return false
       skippedPaths.push(relOf(abs))
       return true
-    })
+    }, this.e.fs)
     if (!files.length) {
       if (skippedPaths.length) {
         throw new Error(`[note-source] 该路径下的 .md 全部命中排除清单，没有可注册的笔记（learnhub_note_source_unexclude 可解除）：${skippedPaths.join('、')}`)
@@ -419,7 +422,7 @@ export class ChannelsSubsystem {
         skippedPaths.push(relOf(f.abs))
         continue
       }
-      const raw = await readFile(f.abs, 'utf8')
+      const raw = await this.e.fs.readFile(f.abs)
       let entry = byPath.get(rel)
       if (entry) {
         entry.enabled = true
@@ -453,7 +456,7 @@ export class ChannelsSubsystem {
   private async noteSourcePoolStats(
     id: string, today: string,
   ): Promise<{ cards: number; due: number; broken?: string }> {
-    if (!existsSync(this.e.bank.bankPath(this.e.paths.noteSourceDir, id))) return { cards: 0, due: 0 }
+    if (!this.e.fs.exists(this.e.bank.bankPath(this.e.paths.noteSourceDir, id))) return { cards: 0, due: 0 }
     try {
       const bank = await this.e.bank.load(this.e.paths.noteSourceDir, id)
       let cards = 0
@@ -476,7 +479,7 @@ export class ChannelsSubsystem {
    * excludes = 用户排除清单（V-1 #86），只影响未来的注册入口，不挂起已注册源。 */
   async noteSourceList(today?: string): Promise<NoteSourceDoc> {
     today ??= (await this.e.learningDay()).today
-    const excludes = await readNoteSourceExcludes(this.e.paths)
+    const excludes = await readNoteSourceExcludes(this.e.paths, this.e.fs)
     const entries = await this.e.registry.loadNoteSources()
     const manifest = await this.e.noteManifest.load()
     const itemById = new Map(manifest.sources.map(s => [s.id, s]))
@@ -503,9 +506,9 @@ export class ChannelsSubsystem {
     const manifest = await this.e.noteManifest.load()
     await this.e.noteManifest.save({ sources: manifest.sources.filter(s => s.id !== id) })
     const bankPath = this.e.bank.bankPath(this.e.paths.noteSourceDir, id)
-    if (existsSync(bankPath)) await unlink(bankPath)
+    if (this.e.fs.exists(bankPath)) await this.e.fs.unlink(bankPath)
     const poolPath = this.e.paths.noteSourcePoolPath(id)
-    if (existsSync(poolPath)) await unlink(poolPath) // 卡池镜像随源清除（V-4 #108）
+    if (this.e.fs.exists(poolPath)) await this.e.fs.unlink(poolPath) // 卡池镜像随源清除（V-4 #108）
     return { removed: id, path: entry.path }
   }
 
@@ -516,13 +519,13 @@ export class ChannelsSubsystem {
     const { entry, item } = await this.requireSource(id)
     const { status, title } = await this.sourceStatusOf(entry, item)
     const pool = await this.noteSourcePoolStats(id, today)
-    await mkdir(this.e.paths.noteSourcePoolDir, { recursive: true })
+    await this.e.fs.mkdir(this.e.paths.noteSourcePoolDir)
     await atomicWrite(this.e.paths.noteSourcePoolPath(id), poolMirrorBody({
       notePath: entry.path, title, cards: pool.cards, due: pool.due, today,
       ...(sourceHint(status) || pool.broken
         ? { statusHint: sourceHint(status) ?? `题库镜像异常：${pool.broken}` }
         : {}),
-    }))
+    }), this.e.fs)
   }
 
   /** 笔记源 relink：把既有源重连到新路径——注册身份（id）与镜像题库/卡池原样保留
@@ -538,7 +541,7 @@ export class ChannelsSubsystem {
     if (entry.path === rel) {
       throw new Error(`[note-source] 「${id}」已注册在路径 ${rel}（relink 请给改名/移动后的新路径）。`)
     }
-    const excludes = await readNoteSourceExcludes(this.e.paths)
+    const excludes = await readNoteSourceExcludes(this.e.paths, this.e.fs)
     if (isExcludedPath(rel, excludes)) {
       throw new Error(`[note-source] 目标路径在用户排除清单内，不重连（先 learnhub_note_source_unexclude 解除）：${rel}`)
     }
@@ -548,10 +551,10 @@ export class ChannelsSubsystem {
       throw new Error(`[note-source] 目标路径已是笔记源「${taken.id}」的注册路径：${rel}（先解除它再重连）。`)
     }
     const abs = `${this.e.vaultRoot}/${rel}`
-    if (!existsSync(abs)) {
+    if (!this.e.fs.exists(abs)) {
       throw new Error(`[note-source] relink 目标文件不存在：${rel}（重连的是现存文件；整体挪走目录后给出新路径）。`)
     }
-    const raw = await readFile(abs, 'utf8')
+    const raw = await this.e.fs.readFile(abs)
     const from = entry.path
     const entries = await this.e.registry.loadNoteSources()
     const target = entries.find(e => e.id === id)!
@@ -575,30 +578,30 @@ export class ChannelsSubsystem {
 
   /** 读排除清单（noteSourceList 同款视图；只影响未来注册，不摘除已注册源）。 */
   async noteSourceExcludes(): Promise<{ excludes: string[] }> {
-    return { excludes: await readNoteSourceExcludes(this.e.paths) }
+    return { excludes: await readNoteSourceExcludes(this.e.paths, this.e.fs) }
   }
 
 
   /** 加一条排除（vault 相对/绝对路径，文件或文件夹均可；归一去重排序落盘）。
    * 已在清单 = 幂等返回；路径不要求现存（可先排除后建文件）。 */
   async noteSourceExclude(input: string): Promise<{ excludes: string[] }> {
-    const cur = await readNoteSourceExcludes(this.e.paths)
+    const cur = await readNoteSourceExcludes(this.e.paths, this.e.fs)
     const rel = normalizeSourcePath(this.e.vaultRoot, this.e.paths.centerRoot, input)
     const next = [...new Set([...cur, rel])].sort()
-    await writeNoteSourceExcludes(this.e.paths, next)
+    await writeNoteSourceExcludes(this.e.paths, next, this.e.fs)
     return { excludes: next }
   }
 
 
   /** 解除一条排除：不在清单 fail loud（提示现清单——显式动作要对得上号）。 */
   async noteSourceUnexclude(input: string): Promise<{ excludes: string[] }> {
-    const cur = await readNoteSourceExcludes(this.e.paths)
+    const cur = await readNoteSourceExcludes(this.e.paths, this.e.fs)
     const rel = normalizeSourcePath(this.e.vaultRoot, this.e.paths.centerRoot, input)
     if (!cur.includes(rel)) {
       throw new Error(`[note-source] 排除清单没有「${rel}」（noteSourceList 的 excludes 查看现清单）。`)
     }
     const next = cur.filter(e => e !== rel)
-    await writeNoteSourceExcludes(this.e.paths, next)
+    await writeNoteSourceExcludes(this.e.paths, next, this.e.fs)
     return { excludes: next }
   }
 
@@ -624,8 +627,8 @@ export class ChannelsSubsystem {
   ): Promise<{ status: NoteSourceStatus; title: string }> {
     const abs = `${this.e.vaultRoot}/${e.path}`
     const fallbackTitle = e.path.split('/').pop() ?? e.path
-    if (!existsSync(abs)) return { status: 'missing', title: item?.title ?? fallbackTitle }
-    const raw = await readFile(abs, 'utf8')
+    if (!this.e.fs.exists(abs)) return { status: 'missing', title: item?.title ?? fallbackTitle }
+    const raw = await this.e.fs.readFile(abs)
     const title = titleOfBody(stripFrontmatter(raw), fallbackTitle)
     if (!item) return { status: 'inconsistent', title }
     return { status: classifySource(true, item.fingerprint === fingerprintOf(raw)), title }
@@ -720,10 +723,10 @@ export class ChannelsSubsystem {
     const requested = count ?? 6
     const { entry } = await this.requireSource(id)
     const abs = `${this.e.vaultRoot}/${entry.path}`
-    if (!existsSync(abs)) {
+    if (!this.e.fs.exists(abs)) {
       throw new Error(`[note-quiz] 源文件缺失（Missing）：${entry.path}——重新注册（同路径）可恢复后再生题。`)
     }
-    const raw = await readFile(abs, 'utf8')
+    const raw = await this.e.fs.readFile(abs)
     const body = stripFrontmatter(raw)
     if (!body) throw new Error(`[note-quiz] 笔记正文为空，无可出题内容：${entry.path}`)
     const tpl = await this.e.loadPrompt('笔记出题')
@@ -810,7 +813,7 @@ export class ChannelsSubsystem {
         drifted.push({ id: e.id, path: e.path, hint: sourceHint('inconsistent') })
       }
       const bankPath = this.e.bank.bankPath(this.e.paths.noteSourceDir, e.id)
-      if (!existsSync(bankPath)) continue // 尚未出题：合法空卡池
+      if (!this.e.fs.exists(bankPath)) continue // 尚未出题：合法空卡池
       let bank: BankDoc
       try {
         bank = await this.e.bank.load(this.e.paths.noteSourceDir, e.id)
@@ -986,9 +989,9 @@ export class ChannelsSubsystem {
     }
     for (const e of await this.e.registry.loadNoteSources()) {
       if (e.enabled === false) continue
-      if (!existsSync(`${this.e.vaultRoot}/${e.path}`)) continue // Missing：卡池挂起
+      if (!this.e.fs.exists(`${this.e.vaultRoot}/${e.path}`)) continue // Missing：卡池挂起
       const bankPath = this.e.bank.bankPath(this.e.paths.noteSourceDir, e.id)
-      if (!existsSync(bankPath)) continue // 尚未出题：合法空卡池
+      if (!this.e.fs.exists(bankPath)) continue // 尚未出题：合法空卡池
       let bank: BankDoc
       try {
         bank = await this.e.bank.load(this.e.paths.noteSourceDir, e.id)
@@ -1076,7 +1079,7 @@ export class ChannelsSubsystem {
   }> {
     const mirror = await this.e.ankiMirror.load()
     // 事件的学习日按 vault 自己的日界推（ADR-0020 裁决 5：不对齐 Anki rollover）
-    const cutoff = await readDayCutoff(this.e.paths)
+    const cutoff = await readDayCutoff(this.e.paths, this.e.fs)
     const rows = await ankiCardReviews(transport, mirror.last_import_ms, (opts?.nowMs ?? this.e.clock.nowMs()) + 60_000)
     const events = rows
       .map(r => ({ ts: Number(r[0]), cardId: Number(r[1]), button: Number(r[3]), timeMs: Number(r[7]) }))

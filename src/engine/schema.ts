@@ -1,3 +1,4 @@
+import type { VaultFs } from './io.ts'
 /**
  * schema 版本门（#138 / ADR-0034 宣告式断裂）：引擎只认当前主版本，旧库拒载并
  * 指引一次性迁移脚本——零兼容代码（不迁移、无双读、不降级，断裂语义见 ADR）。
@@ -11,7 +12,6 @@
  * 硬门用同步读：LearnhubEngine 构造函数没有 await，而门必须封死一切取用引擎的
  * 路径（宿主 apply、测试工厂、脚本直连）——单个小 JSON 的同步读成本可接受。
  */
-import { readFileSync } from 'node:fs'
 
 /** 当前引擎唯一认许的 schema 主版本。 */
 export const CURRENT_SCHEMA_VERSION = 2
@@ -60,10 +60,10 @@ export function parseSchemaBlock(raw: string | null): SchemaBlock | null {
  * 脚本。版本判定口径：有 version 数字按数字比；无 schema 块/文件缺失/JSON 损坏
  * 一律视为史前库（v1 时代没有版本标记），同样拒载——v2 起出生的库由工厂/脚本
  * 盖版本戳，不存在「合法的没版本」状态。 */
-export function assertSchemaVersion(configPath: string): SchemaBlock {
+export function assertSchemaVersion(configPath: string, fs: VaultFs): SchemaBlock {
   let raw: string | null = null
   try {
-    raw = readFileSync(configPath, 'utf8')
+    raw = fs.readFileSync(configPath)
   } catch {
     // 无文件 = 史前库，走统一拒载文案
   }

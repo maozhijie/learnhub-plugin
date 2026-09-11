@@ -10,6 +10,7 @@
  * - 预算制：节点预算 = 标称 N₀（est 内容定价，回落题目权重和）× 客观难度校准 k
  *   （FSRS difficulty 加权，无人工干预）；完成时 settle 对账锁定定价。
  */
+import type { VaultFs } from './io.ts'
 import { readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, XP_PER_MILESTONE_DEFAULT, DAILY_XP_GOAL_DEFAULT, DAY_CUTOFF_DEFAULT, XP_STREAK_GRACE_DAYS, FSRS_DIFFICULTY_MID } from './params.ts'
 import { parseDay, fmtDay, dayOfTs, parseCutoff, fmtCutoff } from './dates.ts'
@@ -82,16 +83,16 @@ export function milestonePrice(est: number | undefined, calibration: number): nu
 interface LearnhubConfigFile { daily_xp_goal?: number; day_cutoff?: string }
 
 /** 读每日 XP 目标（缺失/非法回落默认）。 */
-export async function readDailyGoal(paths: Paths): Promise<number> {
-  const doc = await readLearnhubConfig(paths.learnhubConfigPath) as LearnhubConfigFile
+export async function readDailyGoal(paths: Paths, fs: VaultFs): Promise<number> {
+  const doc = await readLearnhubConfig(paths.learnhubConfigPath, fs) as LearnhubConfigFile
   return clampGoal(doc.daily_xp_goal ?? DAILY_XP_GOAL_DEFAULT)
 }
 
 /** 写每日 XP 目标（原子替换）→ clamp 后的值。 */
-export async function writeDailyGoal(paths: Paths, goal: number): Promise<number> {
+export async function writeDailyGoal(paths: Paths, goal: number, fs: VaultFs): Promise<number> {
   const clamped = clampGoal(goal)
-  const prev = await readLearnhubConfig(paths.learnhubConfigPath) as LearnhubConfigFile
-  await writeLearnhubConfig(paths.learnhubConfigPath, { ...prev, daily_xp_goal: clamped })
+  const prev = await readLearnhubConfig(paths.learnhubConfigPath, fs) as LearnhubConfigFile
+  await writeLearnhubConfig(paths.learnhubConfigPath, { ...prev, daily_xp_goal: clamped }, fs)
   return clamped
 }
 
@@ -103,18 +104,18 @@ function clampGoal(n: number): number {
 
 /** 读日界 → 当日分钟数。缺失/非法静默回落默认（learnhub.json 配置三件套同款；
  * ADR-0004 的 fail loud 针对用户数据损坏，不是配置笔误），生效值由 views 暴露可见。 */
-export async function readDayCutoff(paths: Paths): Promise<number> {
-  const doc = await readLearnhubConfig(paths.learnhubConfigPath) as LearnhubConfigFile
+export async function readDayCutoff(paths: Paths, fs: VaultFs): Promise<number> {
+  const doc = await readLearnhubConfig(paths.learnhubConfigPath, fs) as LearnhubConfigFile
   return parseCutoff(doc.day_cutoff ?? DAY_CUTOFF_DEFAULT) ?? parseCutoff(DAY_CUTOFF_DEFAULT)!
 }
 
 /** 写日界（原子替换，保留其他字段）→ 归一化 'HH:mm'；非法值 fail loud（显式设置动作）。 */
-export async function writeDayCutoff(paths: Paths, value: string): Promise<string> {
+export async function writeDayCutoff(paths: Paths, value: string, fs: VaultFs): Promise<string> {
   const minutes = parseCutoff(value)
   if (minutes === null) throw new Error(`[config] day_cutoff 必须是 00:00–23:59 的 'HH:mm'（收到 ${String(value)}）。`)
-  const prev = await readLearnhubConfig(paths.learnhubConfigPath) as LearnhubConfigFile
+  const prev = await readLearnhubConfig(paths.learnhubConfigPath, fs) as LearnhubConfigFile
   const normalized = fmtCutoff(minutes)
-  await writeLearnhubConfig(paths.learnhubConfigPath, { ...prev, day_cutoff: normalized })
+  await writeLearnhubConfig(paths.learnhubConfigPath, { ...prev, day_cutoff: normalized }, fs)
   return normalized
 }
 

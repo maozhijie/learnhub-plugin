@@ -30,8 +30,7 @@
  * 自评/ai 照收（ADR-0016 自报即可信精神）。零 XP、零 journal、零 review-log、
  * 零 sessions/srs（ADR-0015 §7：节点消费者对 Project 不可见）。
  */
-import { existsSync } from 'node:fs'
-import { mkdir, appendFile, readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { nextEma, round2, pctOf } from './grading.ts'
 import { FADING_TIERS } from './types.ts'
 import type { FadingTier } from './types.ts'
@@ -249,17 +248,17 @@ export function recommendTier(
 // ---- 事件流 IO（projects/<id>/exec.jsonl；先例 recall.jsonl 同惯例） ----
 
 /** 追加一条执行事件（JSONL 一次整行追加）。 */
-export async function appendExecRec(paths: Paths, projectId: string, rec: ProjectExecRec): Promise<void> {
-  await mkdir(paths.projectDir(projectId), { recursive: true })
-  await appendFile(paths.projectExecPath(projectId), JSON.stringify(rec) + '\n', 'utf8')
+export async function appendExecRec(paths: Paths, projectId: string, rec: ProjectExecRec, fs: VaultFs): Promise<void> {
+  await fs.mkdir(paths.projectDir(projectId))
+  await fs.appendFile(paths.projectExecPath(projectId), JSON.stringify(rec) + '\n')
 }
 
 /** 全部执行事件（文件缺失 = 合法空态；半行损坏跳过，与 journal 同惯例）。 */
-export async function execRecsAll(paths: Paths, projectId: string): Promise<ProjectExecRec[]> {
+export async function execRecsAll(paths: Paths, projectId: string, fs: VaultFs): Promise<ProjectExecRec[]> {
   const p = paths.projectExecPath(projectId)
-  if (!existsSync(p)) return []
+  if (!fs.exists(p)) return []
   const out: ProjectExecRec[] = []
-  for (const line of (await readFile(p, 'utf8')).split('\n')) {
+  for (const line of (await fs.readFile(p)).split('\n')) {
     const s = line.trim()
     if (!s) continue
     try {

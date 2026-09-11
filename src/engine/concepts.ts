@@ -10,7 +10,7 @@
  * 登记机械化无人审：铸名随生长批提案（edit 提案 concepts 块）随图 apply 的写入单元落盘，
  * 人的领域判断只在合并/改名时行使。
  */
-import { readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './io.ts'
 import type { Paths } from './paths.ts'
@@ -245,15 +245,17 @@ export function mergeConceptEntries(
 export class ConceptRegistry {
   // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
   private paths: Paths
-  constructor(paths: Paths) {
+  private fs: VaultFs
+  constructor(paths: Paths, fs: VaultFs) {
     this.paths = paths
+    this.fs = fs
   }
 
   /** 读登记表 → 条目列表（保序）。文件缺失返回 []（合法 Missing）；Broken 抛错。 */
   async load(root: string): Promise<ConceptEntry[]> {
     let raw: string
     try {
-      raw = await readFile(this.paths.conceptRegistryPath(root), 'utf8')
+      raw = await this.fs.readFile(this.paths.conceptRegistryPath(root))
     } catch (err) {
       if ((err as { code?: unknown }).code === 'ENOENT') return []
       const message = err instanceof Error ? err.message : String(err)
@@ -275,7 +277,7 @@ export class ConceptRegistry {
 
   /** 全量写登记表（原子写）。 */
   async save(root: string, entries: ConceptEntry[]): Promise<void> {
-    await atomicWrite(this.paths.conceptRegistryPath(root), YAML.stringify({ concepts: entries }))
+    await atomicWrite(this.paths.conceptRegistryPath(root), YAML.stringify({ concepts: entries }), this.fs)
   }
 
   /** 并入（human 决策执行面）：from 并入 into，名字并集，旧地址经别名续解析。

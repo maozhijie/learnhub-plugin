@@ -18,8 +18,7 @@
  *
  * Missing/Broken 纪律沿用 ADR-0004：实体文件缺失 = 合法空态；存在但坏 = Broken 抛出。
  */
-import { existsSync } from 'node:fs'
-import { readdir, readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { todayStr, parseDay, fmtDay } from './dates.ts'
@@ -131,20 +130,22 @@ export function validateHabitDoc(raw: unknown, path: string): HabitDoc {
 export class Habits {
   private paths: Paths
   private clock: Clock
-  constructor(paths: Paths, clock: Clock) {
+  private fs: VaultFs
+  constructor(paths: Paths, clock: Clock, fs: VaultFs) {
     this.paths = paths
     this.clock = clock
+    this.fs = fs
   }
 
   /** 全部习惯（按 id 序）。坏档跳过并在 broken 报出（不阻塞清单）。 */
   async list(): Promise<{ habits: HabitDoc[]; broken: Array<{ id: string; path: string; reason: string }> }> {
     const out: HabitDoc[] = []
     const broken: Array<{ id: string; path: string; reason: string }> = []
-    if (!existsSync(this.paths.habitsDir)) return { habits: out, broken }
-    for (const f of (await readdir(this.paths.habitsDir)).filter(f => f.endsWith('.yaml')).sort()) {
+    if (!this.fs.exists(this.paths.habitsDir)) return { habits: out, broken }
+    for (const f of (await this.fs.readdir(this.paths.habitsDir)).filter(f => f.endsWith('.yaml')).sort()) {
       const p = `${this.paths.habitsDir}/${f}`
       try {
-        out.push(validateHabitDoc(YAML.parse(await readFile(p, 'utf8')), p))
+        out.push(validateHabitDoc(YAML.parse(await this.fs.readFile(p)), p))
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)
         broken.push({ id: f.replace(/\.yaml$/, ''), path: p, reason: reason.includes('Broken') ? reason : `习惯 Broken：${reason}` })
@@ -156,10 +157,10 @@ export class Habits {
   /** 读单个习惯；不存在 = Missing 报错；存在但坏（含 YAML 解析失败）= Broken。 */
   async load(id: string): Promise<HabitDoc> {
     const p = this.paths.habitPath(id)
-    if (!existsSync(p)) throw new Error(`[habits] 习惯「${id}」不存在（Missing）：先 learnhub_habit_create。`)
+    if (!this.fs.exists(p)) throw new Error(`[habits] 习惯「${id}」不存在（Missing）：先 learnhub_habit_create。`)
     let raw: unknown
     try {
-      raw = YAML.parse(await readFile(p, 'utf8'))
+      raw = YAML.parse(await this.fs.readFile(p))
     } catch (err) {
       throw new Error(`[habits] 习惯 Broken（位置：${p}）\n  ✗ YAML 无法解析：${err instanceof Error ? err.message : String(err)}`)
     }
@@ -177,18 +178,18 @@ export class Habits {
     const id = (input.id ?? name).trim()
     if (!id || id.includes('..')) throw new Error(`[habit-create] id 非法：${id}`)
     const p = this.paths.habitPath(id)
-    if (existsSync(p)) throw new Error(`[habit-create] 习惯「${id}」已存在（${p}）。`)
+    if (this.fs.exists(p)) throw new Error(`[habit-create] 习惯「${id}」已存在（${p}）。`)
     const today = todayStr(new Date(this.clock.nowMs()))
     const doc: HabitDoc = { habit: id, name, status: 'active', intention: { cue, action }, created: today, updated: today }
-    await atomicWrite(p, YAML.stringify(doc))
+    await atomicWrite(p, YAML.stringify(doc), this.fs)
     return doc
   }
 
   /** 全量写回（updated 随写随戳）。 */
   async save(id: string, doc: HabitDoc): Promise<void> {
     const p = this.paths.habitPath(id)
-    if (!existsSync(p)) throw new Error(`[habits] 习惯「${id}」不存在（Missing）。`)
-    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr(new Date(this.clock.nowMs())) }))
+    if (!this.fs.exists(p)) throw new Error(`[habits] 习惯「${id}」不存在（Missing）。`)
+    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr(new Date(this.clock.nowMs())) }), this.fs)
   }
 
   /** 归档/恢复（可逆；无到期，archived 只是收纳标签）。 */

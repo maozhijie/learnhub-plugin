@@ -7,76 +7,16 @@
   ],
   "depsFace": {
     "BankDeps": {
-      "declared": 26,
-      "used": 26,
-      "wired": 26,
+      "declared": 27,
+      "used": 27,
+      "wired": 27,
       "slots": {
-        "handles": 9,
+        "handles": 10,
         "facade": 17,
         "fns": 0
       }
     },
     "ChannelsDeps": {
-      "declared": 17,
-      "used": 17,
-      "wired": 17,
-      "slots": {
-        "handles": 8,
-        "facade": 9,
-        "fns": 0
-      }
-    },
-    "ContentDeps": {
-      "declared": 30,
-      "used": 30,
-      "wired": 30,
-      "slots": {
-        "handles": 9,
-        "facade": 21,
-        "fns": 0
-      }
-    },
-    "GraphDeps": {
-      "declared": 17,
-      "used": 17,
-      "wired": 17,
-      "slots": {
-        "handles": 10,
-        "facade": 7,
-        "fns": 0
-      }
-    },
-    "GrowthDeps": {
-      "declared": 17,
-      "used": 17,
-      "wired": 17,
-      "slots": {
-        "handles": 6,
-        "facade": 11,
-        "fns": 0
-      }
-    },
-    "LabDeps": {
-      "declared": 14,
-      "used": 14,
-      "wired": 14,
-      "slots": {
-        "handles": 6,
-        "facade": 8,
-        "fns": 0
-      }
-    },
-    "LearnerDeps": {
-      "declared": 22,
-      "used": 22,
-      "wired": 22,
-      "slots": {
-        "handles": 10,
-        "facade": 12,
-        "fns": 0
-      }
-    },
-    "ProjectDeps": {
       "declared": 18,
       "used": 18,
       "wired": 18,
@@ -86,12 +26,72 @@
         "fns": 0
       }
     },
-    "SchedDeps": {
+    "ContentDeps": {
+      "declared": 31,
+      "used": 31,
+      "wired": 31,
+      "slots": {
+        "handles": 10,
+        "facade": 21,
+        "fns": 0
+      }
+    },
+    "GraphDeps": {
+      "declared": 18,
+      "used": 18,
+      "wired": 18,
+      "slots": {
+        "handles": 11,
+        "facade": 7,
+        "fns": 0
+      }
+    },
+    "GrowthDeps": {
+      "declared": 18,
+      "used": 18,
+      "wired": 18,
+      "slots": {
+        "handles": 7,
+        "facade": 11,
+        "fns": 0
+      }
+    },
+    "LabDeps": {
       "declared": 15,
       "used": 15,
       "wired": 15,
       "slots": {
         "handles": 7,
+        "facade": 8,
+        "fns": 0
+      }
+    },
+    "LearnerDeps": {
+      "declared": 23,
+      "used": 23,
+      "wired": 23,
+      "slots": {
+        "handles": 11,
+        "facade": 12,
+        "fns": 0
+      }
+    },
+    "ProjectDeps": {
+      "declared": 19,
+      "used": 19,
+      "wired": 19,
+      "slots": {
+        "handles": 10,
+        "facade": 9,
+        "fns": 0
+      }
+    },
+    "SchedDeps": {
+      "declared": 16,
+      "used": 16,
+      "wired": 16,
+      "slots": {
+        "handles": 8,
         "facade": 8,
         "fns": 0
       }
@@ -115,7 +115,7 @@
     "src/engine/analysis.ts": 245,
     "src/engine/anki.ts": 323,
     "src/engine/attribution.ts": 245,
-    "src/engine/audit.ts": 317,
+    "src/engine/audit.ts": 318,
     "src/engine/bank-advice.ts": 117,
     "src/engine/bank-cleanup.ts": 28,
     "src/engine/calibration.ts": 110,
@@ -124,65 +124,65 @@
     "src/engine/coach.ts": 61,
     "src/engine/compass.ts": 214,
     "src/engine/complexity.ts": 267,
-    "src/engine/concepts.ts": 293,
-    "src/engine/content-subsystem.ts": 1026,
-    "src/engine/content.ts": 1811,
-    "src/engine/data-check.ts": 824,
+    "src/engine/concepts.ts": 295,
+    "src/engine/content-subsystem.ts": 1027,
+    "src/engine/content.ts": 1812,
+    "src/engine/data-check.ts": 815,
     "src/engine/dates.ts": 126,
-    "src/engine/error-cards.ts": 351,
+    "src/engine/error-cards.ts": 352,
     "src/engine/explain.ts": 105,
     "src/engine/goals.ts": 51,
     "src/engine/grading.ts": 439,
-    "src/engine/graph-subsystem.ts": 591,
+    "src/engine/graph-subsystem.ts": 594,
     "src/engine/graph.ts": 506,
-    "src/engine/growth-subsystem.ts": 1048,
-    "src/engine/habits.ts": 201,
+    "src/engine/growth-subsystem.ts": 1049,
+    "src/engine/habits.ts": 202,
     "src/engine/health.ts": 94,
-    "src/engine/index.ts": 1819,
-    "src/engine/io.ts": 55,
+    "src/engine/index.ts": 1826,
+    "src/engine/io.ts": 73,
     "src/engine/jol.ts": 78,
     "src/engine/kata.ts": 318,
-    "src/engine/learner-cards.ts": 1337,
+    "src/engine/learner-cards.ts": 1340,
     "src/engine/llm.ts": 54,
     "src/engine/memory.ts": 118,
-    "src/engine/nof1.ts": 783,
-    "src/engine/note-source.ts": 1240,
+    "src/engine/nof1.ts": 785,
+    "src/engine/note-source.ts": 1243,
     "src/engine/notes.ts": 334,
     "src/engine/optimize.ts": 140,
-    "src/engine/output.ts": 66,
+    "src/engine/output.ts": 68,
     "src/engine/params.ts": 58,
     "src/engine/paths.ts": 186,
     "src/engine/probation.ts": 414,
     "src/engine/project-decompile.ts": 249,
     "src/engine/project-enc.ts": 72,
-    "src/engine/project-exec.ts": 272,
-    "src/engine/project-recall.ts": 89,
-    "src/engine/projects.ts": 1405,
+    "src/engine/project-exec.ts": 271,
+    "src/engine/project-recall.ts": 88,
+    "src/engine/projects.ts": 1408,
     "src/engine/proposals.ts": 1496,
     "src/engine/quality.ts": 60,
-    "src/engine/question-bank.ts": 1483,
+    "src/engine/question-bank.ts": 1486,
     "src/engine/question-dedup.ts": 84,
     "src/engine/question-hygiene.ts": 246,
     "src/engine/receipts.ts": 234,
     "src/engine/registry.ts": 153,
-    "src/engine/sandbox.ts": 220,
-    "src/engine/sched-subsystem.ts": 551,
+    "src/engine/sandbox.ts": 221,
+    "src/engine/sched-subsystem.ts": 554,
     "src/engine/schema.ts": 79,
     "src/engine/sediment.ts": 235,
     "src/engine/seed.ts": 480,
     "src/engine/self-note.ts": 50,
-    "src/engine/sessions.ts": 546,
+    "src/engine/sessions.ts": 547,
     "src/engine/shuffle.ts": 17,
-    "src/engine/skills.ts": 258,
+    "src/engine/skills.ts": 259,
     "src/engine/sleep.ts": 41,
     "src/engine/srs.ts": 191,
-    "src/engine/store.ts": 473,
+    "src/engine/store.ts": 471,
     "src/engine/thermostat.ts": 138,
-    "src/engine/vault-links.ts": 449,
+    "src/engine/vault-links.ts": 451,
     "src/engine/vault-prior.ts": 138,
     "src/engine/views.ts": 357,
     "src/engine/write-unit.ts": 71,
-    "src/engine/xp.ts": 182,
+    "src/engine/xp.ts": 183,
     "src/engine/yaml.ts": 23,
     "src/generation-jobs.ts": 138,
     "src/host/api.ts": 79,
@@ -193,10 +193,11 @@
     "src/host/llm.ts": 229,
     "src/host/params.ts": 205,
     "src/host/route-table.ts": 74,
-    "src/host/runtime.ts": 196,
+    "src/host/runtime.ts": 197,
     "src/host/static.ts": 122,
     "src/host/tool-handlers.ts": 268,
     "src/host/tools.ts": 121,
+    "src/host/vault-fs.ts": 23,
     "src/index.ts": 90,
     "src/tool-contracts.ts": 54
   },
@@ -204,7 +205,7 @@
     "src/engine/content-subsystem.ts": 10,
     "src/engine/content.ts": 1,
     "src/engine/graph-subsystem.ts": 10,
-    "src/engine/index.ts": 35,
+    "src/engine/index.ts": 36,
     "src/engine/learner-cards.ts": 4,
     "src/engine/note-source.ts": 2,
     "src/engine/proposals.ts": 1,
@@ -217,7 +218,7 @@
   "adapterFace": {
     "clockReads": 1,
     "mathRandom": 0,
-    "fsImports": 49,
-    "fsCalls": 233
+    "fsImports": 0,
+    "fsCalls": 0
   }
 }

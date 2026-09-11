@@ -11,6 +11,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { priorTerms, searchVaultPrior, priorSection, excerptAround } from '../src/engine/vault-prior.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { withVault } from './helpers/vault.ts'
 
 // ---- 纯函数 ----
@@ -52,13 +53,13 @@ test('searchVaultPrior：命中中心外个人笔记；学习中心与点目录�
     ],
   }, async ({ engine, root }) => {
     const vault = root.replace(/\\/g, '/')
-    const hits = await searchVaultPrior(vault, '学习中心', ['大三度', '吉他和弦'])
+    const hits = await searchVaultPrior(vault, '学习中心', ['大三度', '吉他和弦'], {}, nodeVaultFs)
     assert.equal(hits.length, 1, '中心内与点目录条目不入结果')
     assert.equal(hits[0].path, '乐理/和弦.md')
     assert.equal(hits[0].title, '吉他和弦笔记')
     assert.match(hits[0].excerpt, /三大度|大三度/)
 
-    assert.equal((await searchVaultPrior(vault, '学习中心', ['不存在的词'])).length, 0)
+    assert.equal((await searchVaultPrior(vault, '学习中心', ['不存在的词'], {}, nodeVaultFs)).length, 0)
 
     // 只读纪律：检索后个人笔记原样
     assert.equal(readFileSync(join(root, '乐理', '和弦.md'), 'utf8'), personalNote)

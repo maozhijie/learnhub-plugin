@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { GraphStore } from '../src/engine/graph.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEnrichProposal } from '../src/engine/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import { YAML } from '../src/engine/yaml.ts'
@@ -137,7 +138,7 @@ fields:
 `
     const r = await engine.graphPropose('enrich', yamlText) as { id: number }
     await engine.graphApply('enrich', r.id)
-    const store = new GraphStore(engine.paths, join(root, '学习中心', 'math'))
+    const store = new GraphStore(engine.paths, join(root, '学习中心', 'math'), nodeVaultFs)
     const regions = await store.load()
     const node = regions[0]!.blocks[0]!.nodes.find(n => n.name === '进阶')!
     assert.deepEqual(node.enc, [{ node: '入门', w: 0.6, note: '先验' }])

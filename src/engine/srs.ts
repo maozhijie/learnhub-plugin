@@ -6,7 +6,7 @@
  * - frontmatter fsrs 块 ⇔ ts-fsrs Card 的双向转换在此集中。
  * - 阶段机与评分落盘原语在此；settle/grade 是唯二调用方（D15）。
  */
-import { readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { fsrs, createEmptyCard, Rating, State, generatorParameters } from 'ts-fsrs'
 import type { FSRS, Card, Grade } from 'ts-fsrs'
 import type { FsrsBlock, Fm } from './types.ts'
@@ -30,14 +30,14 @@ export const RATING_NAME: Record<number, string> = {
  * 顺序逐个找）→ 官方默认（undefined，由调用方决定省略 w 或用 defaultParams 对照）。
  * getScheduler 与优化器基线共用同一函数——杜绝「缓存与沉淀分叉时两口径各执一词」。 */
 export async function resolveFsrsParams(
-  paths: Paths, courseRoots: Array<string | null> = [],
+  paths: Paths, courseRoots: Array<string | null> = [], fs: VaultFs,
 ): Promise<{ parameters: number[] | undefined; source: 'sediment' | 'cache' | 'default' }> {
-  const canon = await latestFsrsParams(paths)
+  const canon = await latestFsrsParams(paths, fs)
   if (canon && canon.length === FSRS6_PARAM_COUNT) return { parameters: canon, source: 'sediment' }
   for (const root of courseRoots) {
     if (!root) continue
     try {
-      const doc = JSON.parse(await readFile(paths.fsrsParamsPath(root), 'utf8')) as { parameters?: number[] }
+      const doc = JSON.parse(await fs.readFile(paths.fsrsParamsPath(root))) as { parameters?: number[] }
       if (Array.isArray(doc.parameters) && doc.parameters.length === FSRS6_PARAM_COUNT) {
         return { parameters: doc.parameters, source: 'cache' }
       }
@@ -50,8 +50,8 @@ export async function resolveFsrsParams(
 
 /** 构造调度器（日粒度、无 fuzz）：参数走 resolveFsrsParams 唯一口径（#139 正典化，
  * 参数文件已退役为缓存——删缓存不丢事实）。 */
-export async function getScheduler(paths: Paths, courseRoot: string | null = null): Promise<FSRS> {
-  const { parameters: w } = await resolveFsrsParams(paths, [courseRoot])
+export async function getScheduler(paths: Paths, courseRoot: string | null = null, fs: VaultFs): Promise<FSRS> {
+  const { parameters: w } = await resolveFsrsParams(paths, [courseRoot], fs)
   return fsrs(generatorParameters({
     request_retention: DESIRED_RETENTION,
     enable_fuzz: false,

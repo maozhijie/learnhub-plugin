@@ -19,7 +19,7 @@
  *
  * 抽样与聚合全部零依赖纯函数（complexity.ts 先例）；RNG 播种自实验 id，确定性可测。
  */
-import { readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { calendarDayOf, daysBetween, nowIsoOf, parseDay } from './dates.ts'
 import type { Clock } from './clock.ts'
 import { nodeKeyOf, sourceKeyOf } from './types.ts'
@@ -338,6 +338,8 @@ export interface LabStore {
 export interface LabDeps {
   /** 时钟端口（#175 阶段①）：实验 started_ts/decided 戳。 */
   clock: Clock
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   store: LabStore
   paths: Paths
   registry: Pick<Registry, 'resolve'>
@@ -439,7 +441,7 @@ export class LabSubsystem {
     const scope = course ?? '全部课程'
     const pid = await this.e.store.createProposal('experiment', scope, summary, '')
     const path = this.e.paths.proposalArtifactPath(pid, 'experiment', scope)
-    await atomicWrite(path, YAML.stringify(doc))
+    await atomicWrite(path, YAML.stringify(doc), this.e.fs)
     await this.e.store.updateProposal(pid, { artifact: path })
     return { proposal: pid, template: tpl.id, title: tpl.title, pool, scope_course: course ?? null }
   }
@@ -457,7 +459,7 @@ export class LabSubsystem {
       unit?: string; scope_course?: string | null; per_arm_min?: number
     }
     try {
-      doc = YAML.parse(await readFile(prop.artifact, 'utf8')) as typeof doc
+      doc = YAML.parse(await this.e.fs.readFile(prop.artifact)) as typeof doc
     } catch (err) {
       throw new Error(`[nof1-apply] 提案产物无法解析（${prop.artifact}）：${err instanceof Error ? err.message : String(err)}`)
     }
@@ -582,7 +584,7 @@ export class LabSubsystem {
   /** A1 目标难度带默认值（state/learnhub.json 的 band_default；null = 纯 A1 自动）。
    * 消费链：会话显式选带 > 实验当日臂 > 此默认值 > 纯 A1。 */
   async bandDefault(): Promise<BandPref | null> {
-    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath) as {
+    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs) as {
       band_default?: string
     }
     return ['easy', 'standard', 'hard'].includes(doc.band_default ?? '')
@@ -594,10 +596,10 @@ export class LabSubsystem {
     if (band !== null && !['easy', 'standard', 'hard'].includes(band)) {
       throw new Error(`[band-default] band 只能是 easy/standard/hard 或 null（收到 ${String(band)}）。`)
     }
-    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath)
+    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs)
     const next = { ...prev, band_default: band }
     if (band === null) delete next.band_default
-    await writeLearnhubConfig(this.e.paths.learnhubConfigPath, next)
+    await writeLearnhubConfig(this.e.paths.learnhubConfigPath, next, this.e.fs)
     return { band_default: band as BandPref | null }
   }
 
@@ -767,7 +769,7 @@ export class LabSubsystem {
 
   /** 读睡眠耦合建议配置：enabled=false 时推荐里不再出现「睡前练、醒后验」建议层。 */
   async sleepAdviceConfig(): Promise<{ enabled: boolean }> {
-    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath) as {
+    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs) as {
       sleep?: { enabled?: boolean }
     }
     return normalizeSleepAdvice(doc.sleep)
@@ -775,9 +777,9 @@ export class LabSubsystem {
 
   /** 写睡眠耦合建议配置（原子替换，保留配置文件其他字段）。 */
   async setSleepAdviceConfig(patch: { enabled?: boolean }): Promise<{ enabled: boolean }> {
-    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath)
+    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs)
     const next = await this.sleepAdviceConfig().then(cur => ({ enabled: patch.enabled ?? cur.enabled }))
-    await writeLearnhubConfig(this.e.paths.learnhubConfigPath, { ...prev, sleep: next })
+    await writeLearnhubConfig(this.e.paths.learnhubConfigPath, { ...prev, sleep: next }, this.e.fs)
     return next
   }
 }

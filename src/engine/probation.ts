@@ -19,7 +19,7 @@
  * 纪律）。outcome 缺席 = probation 在途；同一 (proposal, node) 的后行覆盖前行
  * （追加只增，读侧折叠取最新行）。
  */
-import { appendFile, mkdir } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import { readJsonlLines } from './io.ts'
 import {
@@ -75,8 +75,8 @@ function entryErrors(e: unknown, where: string): string[] {
 
 /** 读账本（缺文件 = Missing 合法空态；行内容经 entryErrors 校验，坏形状/损坏行跳过
  * ——与行为流水同一 jsonl 容错惯例，形状校验比裸 JSON.parse 多一道账本契约）。 */
-export async function readProbationLedger(paths: Paths, root: string): Promise<ProbationEntry[]> {
-  const lines = await readJsonlLines<unknown>(paths.probationLedgerPath(root))
+export async function readProbationLedger(paths: Paths, root: string, fs: VaultFs): Promise<ProbationEntry[]> {
+  const lines = await readJsonlLines<unknown>(paths.probationLedgerPath(root), fs)
   const out: ProbationEntry[] = []
   for (const e of lines) {
     if (entryErrors(e, '').length) continue
@@ -86,11 +86,11 @@ export async function readProbationLedger(paths: Paths, root: string): Promise<P
 }
 
 /** 追加一条账本记录（只增；写侧严格校验，坏形状 fail loud 不落盘）。 */
-export async function appendProbationEntry(paths: Paths, root: string, entry: ProbationEntry): Promise<void> {
+export async function appendProbationEntry(paths: Paths, root: string, entry: ProbationEntry, fs: VaultFs): Promise<void> {
   const errors = entryErrors(entry, '边实验账本')
   if (errors.length) throw new Error(`[probation] 账本条目不合格，未落盘。\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
-  await mkdir(paths.courseStateDir(root), { recursive: true })
-  await appendFile(paths.probationLedgerPath(root), JSON.stringify(entry) + '\n', 'utf8')
+  await fs.mkdir(paths.courseStateDir(root))
+  await fs.appendFile(paths.probationLedgerPath(root), JSON.stringify(entry) + '\n')
 }
 
 export interface ProbationFold {

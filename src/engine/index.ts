@@ -8,8 +8,8 @@
  * 图结构唯一事实源；state/ 只承载追加型流水（journal/practice/review-log JSONL）与
  * 人审产物（proposals.json / snapshots/）。无 SQLite，无投影回写。
  */
-import { existsSync} from 'node:fs'
-import { readdir, readFile} from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
+/** vault 存储端口（#175 阶段②）：类型随门面出，实现住 host/vault-fs.ts。 */export type { VaultFs } from './io.ts'
 import { Paths} from './paths.ts'
 import { Registry} from './registry.ts'
 import { ConceptRegistry} from './concepts.ts'
@@ -49,6 +49,7 @@ import { GraphProposals} from './proposals.ts'
 import type { ApplyAudit, EditProposalSpec} from './proposals.ts'
 import type { LlmComplete} from './llm.ts'
 import type { Clock, Rng} from './clock.ts'
+
 import type { AgentSeam} from './agent.ts'
 import { Projects, ProjectSubsystem} from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult} from './projects.ts'
@@ -159,6 +160,9 @@ export interface EngineConfig {
   /** 随机源端口（#175 阶段①）：JOL 抽查（jolRng 的上游）与抽题洗牌共用；注入定长
    * 随机流即可断言确定性。宿主给 mathRng。 */
   rng: Rng
+  /** vault 存储端口（#175 阶段② / ADR-0044）：engine 侧一切读盘落盘的唯一通道。
+   * 实现住 host/vault-fs.ts（nodeVaultFs）；R2 自此是应用→适配器的存储边界。 */
+  fs: VaultFs
 }
 
 export class LearnhubEngine {
@@ -206,6 +210,8 @@ export class LearnhubEngine {
    * 随配置的 rng 走。 */
   readonly clock: Clock
   readonly rng: Rng
+  /** vault 存储端口（#175 阶段②）：域类与子系统经构造注入共享同一实例。 */
+  readonly fs: VaultFs
   jolRng: () => number
 
   /** 课程调度器实例缓存（ADR-0014 附带）：参数文件唯一写者是 optimizeFsrsParams
@@ -216,7 +222,7 @@ export class LearnhubEngine {
   private async sched(courseRoot: string | null): Promise<FSRS> {
     let s = this.schedCache.get(courseRoot)
     if (!s) {
-      s = await getScheduler(this.paths, courseRoot)
+      s = await getScheduler(this.paths, courseRoot, this.fs)
       this.schedCache.set(courseRoot, s)
     }
     return s
@@ -229,30 +235,31 @@ export class LearnhubEngine {
     this.clock = config.clock
     this.rng = config.rng
     this.jolRng = config.rng
+    this.fs = config.fs
     this.vaultRoot = vault
     this.paths = new Paths(centerRoot)
     // schema 版本硬门（#138 / ADR-0034）：非当前主版本拒载，封死一切取用引擎的路径。
     // 同步读（构造函数无 await），先于任何惰性读盘——v1 库在第一次方法调用前就拒载。
-    this.schema = assertSchemaVersion(this.paths.learnhubConfigPath)
-    this.registry = new Registry(this.paths)
-    this.store = new Store(this.paths, this.clock)
-    this.content = new Content(this.paths, this.clock)
-    this.bank = new QuestionBank(this.paths)
-    this.concepts = new ConceptRegistry(this.paths)
-    this.learnerCards = new LearnerCards(this.paths, this.clock)
-    this.errorCards = new ErrorCards(this.paths)
-    this.skills = new Skills(this.paths, this.clock)
-    this.habits = new Habits(this.paths, this.clock)
-    this.noteManifest = new NoteSourceManifest(this.paths)
-    this.ankiMirror = new AnkiMirror(this.paths)
+    this.schema = assertSchemaVersion(this.paths.learnhubConfigPath, this.fs)
+    this.registry = new Registry(this.paths, this.fs)
+    this.store = new Store(this.paths, this.clock, this.fs)
+    this.content = new Content(this.paths, this.clock, this.fs)
+    this.bank = new QuestionBank(this.paths, this.fs)
+    this.concepts = new ConceptRegistry(this.paths, this.fs)
+    this.learnerCards = new LearnerCards(this.paths, this.clock, this.fs)
+    this.errorCards = new ErrorCards(this.paths, this.fs)
+    this.skills = new Skills(this.paths, this.clock, this.fs)
+    this.habits = new Habits(this.paths, this.clock, this.fs)
+    this.noteManifest = new NoteSourceManifest(this.paths, this.fs)
+    this.ankiMirror = new AnkiMirror(this.paths, this.fs)
     // 生长闸门注入（#146 插入/旁支调速）：三率流水在门面（账本/提案/练习），受理与
     // apply 双门经此回调消费同一份闸门判定。
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot,
-      spec => this.growthGateErrors(spec), this.clock)
-    this.projects = new Projects(this.paths, this.store, this.clock)
-    this.sessions = new Sessions(this.paths, async course => this.loadView(course))
+      spec => this.growthGateErrors(spec), this.clock, this.fs)
+    this.projects = new Projects(this.paths, this.store, this.clock, this.fs)
+    this.sessions = new Sessions(this.paths, async course => this.loadView(course), this.fs)
     this.lab = new LabSubsystem({
-      clock: this.clock,
+      clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, registry: this.registry,
       projects: this.projects, bank: this.bank,
       sched: courseRoot => this.sched(courseRoot),
@@ -265,7 +272,7 @@ export class LearnhubEngine {
       sedimentRebuildProfile: () => this.sedimentRebuildProfile(),
     })
     this.channels = new ChannelsSubsystem({
-      clock: this.clock,
+      clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, bank: this.bank,
       ankiMirror: this.ankiMirror, noteManifest: this.noteManifest, vaultRoot: this.vaultRoot,
       registry: {
@@ -285,7 +292,7 @@ export class LearnhubEngine {
       refreshRepCard: (c, graph, node) => this.refreshRepCard(c, graph, node),
     })
     this.learner = new LearnerSubsystem({
-      clock: this.clock,
+      clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, projects: this.projects, habits: this.habits,
       skills: this.skills, learnerCards: this.learnerCards, noteManifest: this.noteManifest,
@@ -305,7 +312,7 @@ export class LearnhubEngine {
     this.project = new ProjectSubsystem({
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, proposals: this.proposals, projects: this.projects, noteManifest: this.noteManifest,
-      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock,
+      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
@@ -316,7 +323,7 @@ export class LearnhubEngine {
       saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
     })
     this.bank2 = new BankSubsystem({
-      clock: this.clock,
+      clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, errorCards: this.errorCards, concepts: this.concepts,
       proposals: this.proposals, schedCache: this.schedCache,
@@ -339,7 +346,7 @@ export class LearnhubEngine {
       isNoteSourceCourse: courseKey => this.isNoteSourceCourse(courseKey),
     })
     this.graph = new GraphSubsystem({
-      clock: this.clock,
+      clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, projects: this.projects, proposals: this.proposals,
       concepts: this.concepts, registry: this.registry, bank: this.bank,
       noteManifest: this.noteManifest, vaultRoot: this.vaultRoot,
@@ -354,7 +361,7 @@ export class LearnhubEngine {
     this.content2 = new ContentSubsystem({
       store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
       content: this.content, sessions: this.sessions, learnerCards: this.learnerCards,
-      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock,
+      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       bandDefault: () => this.bandDefault(),
       calibrationHintsConfig: () => this.calibrationHintsConfig(),
@@ -377,7 +384,7 @@ export class LearnhubEngine {
       updateNoteFm: (path, fm) => this.updateNoteFm(path, fm),
     })
     this.sched2 = new SchedSubsystem({
-      clock: this.clock,
+      clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
       content: this.content, schedCache: this.schedCache,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
@@ -390,7 +397,7 @@ export class LearnhubEngine {
       sched: courseRoot => this.sched(courseRoot),
     })
     this.growth2 = new GrowthSubsystem({
-      clock: this.clock,
+      clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, registry: this.registry,
       concepts: this.concepts, content: this.content,
       enabledCourses: () => this.enabledCourses(),
@@ -411,7 +418,7 @@ export class LearnhubEngine {
    * 一切调度/结算/「今日」视图的学习日单点——出处戳（generated_at/trained_at 等）
    * 不属于学习口径，不经这里。 */
   private async learningDay(): Promise<{ today: string; cutoff: number }> {
-    const cutoff = await readDayCutoff(this.paths)
+    const cutoff = await readDayCutoff(this.paths, this.fs)
     return { today: todayStr(new Date(this.clock.nowMs()), cutoff), cutoff }
   }
 
@@ -419,10 +426,10 @@ export class LearnhubEngine {
 
   /** 单课完整视图：图 + frontmatter 状态（每次现读，文件量小，天然最新）。 */
   async loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }> {
-    const store = new GraphStore(this.paths, this.paths.courseRoot(course.root))
+    const store = new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs)
     const regions = await store.load()
     const graph = new Graph(regions)
-    const { state, broken } = await stateMap(this.paths.courseDir(course.root))
+    const { state, broken } = await stateMap(this.paths.courseDir(course.root), this.fs)
     return { graph, state, broken }
   }
 
@@ -475,14 +482,14 @@ export class LearnhubEngine {
   private async ensureNote(root: string, graph: Graph, node: string): Promise<Fm> {
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
-    if (existsSync(path)) {
-      const { fm: rawFm } = await loadNote(path)
+    if (this.fs.exists(path)) {
+      const { fm: rawFm } = await loadNote(path, this.fs)
       const checked = validateNoteFrontmatter(rawFm)
       const detail = checked.errors.length ? checked.errors.join('；') : '状态未通过 frontmatter 契约（可运行 learnhub_data_check 定位）'
       throw new Error(`[learnhub] 笔记文件已存在但 Broken，拒绝覆盖（位置：${path}）\n  ✗ ${detail}`)
     }
     const fm = defaultFrontmatter(node)
-    await saveNote(path, fm as unknown as Record<string, unknown>, '> 内容待生成。\n')
+    await saveNote(path, fm as unknown as Record<string, unknown>, '> 内容待生成。\n', this.fs)
     return fm
   }
 
@@ -490,7 +497,7 @@ export class LearnhubEngine {
 
   /** 只读数据体检：盘点 Missing/Broken，不做任何修复或清理。 */
   async dataCheck(): Promise<DataCheckReport> {
-    return dataCheck(this.paths, this.clock.nowMs())
+    return dataCheck(this.paths, this.clock.nowMs(), this.fs)
   }
   /** 题库内容体检（ADR-0029/0030 存量盘点）：只读扫描全部课程题库与笔记源镜像题库，
    * 按现行契约标出违规存量题——表达式/数字填空、记法违规（裸 ^/_/LaTeX 命令）、
@@ -500,7 +507,7 @@ export class LearnhubEngine {
     const scanBankFile = async (courseName: string, path: string): Promise<void> => {
       let text: string
       try {
-        text = await readFile(path, 'utf8')
+        text = await this.fs.readFile(path)
       } catch {
         return // 读不到的损坏档归 dataCheck 管，这里只盘点可解析题库
       }
@@ -526,7 +533,7 @@ export class LearnhubEngine {
       const dir = `${this.paths.courseRoot(entry.root)}/题库`
       let files: string[] = []
       try {
-        files = (await readdir(dir)).filter(f => f.endsWith('.yaml'))
+        files = (await this.fs.readdir(dir)).filter(f => f.endsWith('.yaml'))
       } catch {
         continue // 课程还没有题库 = 合法空
       }
@@ -534,7 +541,7 @@ export class LearnhubEngine {
     }
     const nsDir = `${this.paths.noteSourceDir}/题库`
     try {
-      for (const f of (await readdir(nsDir)).filter(f => f.endsWith('.yaml'))) {
+      for (const f of (await this.fs.readdir(nsDir)).filter(f => f.endsWith('.yaml'))) {
         await scanBankFile('（笔记源镜像）', `${nsDir}/${f}`)
       }
     } catch {
@@ -547,7 +554,7 @@ export class LearnhubEngine {
   /** 完成宣告折叠（#142 雾区条款上半，读侧零写副作用）：终点锚缺失 = null
    * （未播种，无从宣告）；锚 Broken fail loud——锚无直改通道，手改损坏必须显式浮出。 */
   async courseCompletion(course: { name: string; root: string }): Promise<CompletionFold | null> {
-    const anchor = await readAnchor(this.paths.anchorPath(course.root))
+    const anchor = await readAnchor(this.paths.anchorPath(course.root), this.fs)
     if (!anchor) return null
     const { graph, state } = await this.loadView(course)
     return foldCompletion(graph, state, anchor)
@@ -650,13 +657,13 @@ export class LearnhubEngine {
     for (const c of targets) {
       const { graph, state } = await this.loadView(c)
       const regions = graph.regions
-      const audit = await runAudit(this.paths, c.root, c.name, graph, regions, (await this.learningDay()).today)
+      const audit = await runAudit(this.paths, c.root, c.name, graph, regions, (await this.learningDay()).today, this.fs)
       if (audit.failed) failed = true
       lines.push(`[${c.name}] 审计：ERROR ${audit.errors.length} | WARN ${audit.warns.length} | INFO ${audit.infos.length}${audit.failed ? '（阻断）' : ''}`)
       const done = new Set(Object.entries(state).filter(([, f]) => ['review', 'mastered', 'skipped'].includes(f.stage)).map(([n]) => n))
-      await writeReadyList(this.paths, c.root, graph, done)
+      await writeReadyList(this.paths, c.root, graph, done, this.fs)
     }
-    if (failed) throw new Error(`[rebuild] 审计存在 ERROR：\n${lines.join('\n')}`)
+    if (failed, this.fs) throw new Error(`[rebuild] 审计存在 ERROR：\n${lines.join('\n')}`)
     return { message: `[rebuild] 完成：\n${lines.join('\n')}` }
   }
 
@@ -1610,13 +1617,13 @@ export class LearnhubEngine {
 
   /** 全量写入生成任务注册表（host 在每次任务状态变更时调用）。 */
   async saveGenJobs(jobs: Array<Record<string, unknown>>): Promise<void> {
-    await atomicWrite(this.paths.genJobsPath, JSON.stringify(jobs, null, 1) + '\n')
+    await atomicWrite(this.paths.genJobsPath, JSON.stringify(jobs, null, 1) + '\n', this.fs)
   }
 
   /** 读入生成任务注册表；文件缺失/损坏返回空表。 */
   async loadGenJobs(): Promise<Array<Record<string, unknown>>> {
     try {
-      const doc = JSON.parse(await readFile(this.paths.genJobsPath, 'utf8')) as unknown
+      const doc = JSON.parse(await this.fs.readFile(this.paths.genJobsPath)) as unknown
       return Array.isArray(doc) ? doc as Array<Record<string, unknown>> : []
     } catch {
       return []
@@ -1638,7 +1645,7 @@ export class LearnhubEngine {
     if (note) lines.push(`- note：${note}`)
     const [, regionName] = graph.blockOf[node]
     try {
-      const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
+      const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node), this.fs)
       const cleaned = body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
       lines.push('', '## 节点正文', cleaned ? cleaned.slice(0, 6000) : '（尚未生成正文）')
     } catch {
@@ -1664,7 +1671,7 @@ export class LearnhubEngine {
   async errorExplainPack(courseKey: string | undefined, node: string, qid: string): Promise<string> {
     const { c, graph, q } = await this.questionContext(courseKey, node, qid, 'explain')
     const [, regionName] = graph.blockOf[node]
-    const { fm: rawFm, body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
+    const { fm: rawFm, body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node), this.fs)
     const fm = asFm(rawFm)
     // 本次作答 = practice 流水里该题最近一条（答错作答或忘记申报；动作只从错误态进入）
     const rec = (await this.store.practiceAll())
@@ -1810,8 +1817,8 @@ export class LearnhubEngine {
   // ---- utils ----
 
   private async updateNoteFm(path: string, fm: Fm): Promise<void> {
-    const { body } = await loadNote(path)
-    await saveNote(path, fm as unknown as Record<string, unknown>, body)
+    const { body } = await loadNote(path, this.fs)
+    await saveNote(path, fm as unknown as Record<string, unknown>, body, this.fs)
   }
 
   /** 写一条 journal（运行日志等由插件层做）。 */

@@ -10,8 +10,7 @@
  * 抽题只读课程题库：不出新题、不改题、不推进任何调度（与 learnhub_question_answer
  * 通道彻底分流——检索点的作答证据只留学习者与 agent 的会话里）。
  */
-import { existsSync } from 'node:fs'
-import { mkdir, appendFile, readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import type { BankQuestion } from './question-bank.ts'
 import type { Paths } from './paths.ts'
 import { shuffledWith as shuffled } from './shuffle.ts'
@@ -66,17 +65,17 @@ export type RecallRec =
   | { ts: string; kind: 'reflect'; milestone: string; narration: string }
 
 /** 追加一条检索点流水（JSONL 一次整行追加，与 journal 同惯例）。 */
-export async function appendRecallRec(paths: Paths, projectId: string, rec: RecallRec): Promise<void> {
-  await mkdir(paths.projectDir(projectId), { recursive: true })
-  await appendFile(paths.projectRecallPath(projectId), JSON.stringify(rec) + '\n', 'utf8')
+export async function appendRecallRec(paths: Paths, projectId: string, rec: RecallRec, fs: VaultFs): Promise<void> {
+  await fs.mkdir(paths.projectDir(projectId))
+  await fs.appendFile(paths.projectRecallPath(projectId), JSON.stringify(rec) + '\n')
 }
 
 /** 全部检索点流水（文件缺失 = 合法空态；消费方 = 复盘与视图）。 */
-export async function recallRecsAll(paths: Paths, projectId: string): Promise<RecallRec[]> {
+export async function recallRecsAll(paths: Paths, projectId: string, fs: VaultFs): Promise<RecallRec[]> {
   const p = paths.projectRecallPath(projectId)
-  if (!existsSync(p)) return []
+  if (!fs.exists(p)) return []
   const out: RecallRec[] = []
-  for (const line of (await readFile(p, 'utf8')).split('\n')) {
+  for (const line of (await fs.readFile(p)).split('\n')) {
     const s = line.trim()
     if (!s) continue
     try {

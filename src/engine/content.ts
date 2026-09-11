@@ -7,9 +7,8 @@
  * - 反馈重生成协议：内容反馈区 → flagged → 重生成条目
  * - gen-exercises：题组过 schema/结构门禁后写入练习区（计数同步 + journal）
  */
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
-import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
 import type { Clock } from './clock.ts'
@@ -45,23 +44,25 @@ export class Content {
   // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
   private paths: Paths
   private clock: Clock
-  constructor(paths: Paths, clock: Clock) {
+  private fs: VaultFs
+  constructor(paths: Paths, clock: Clock, fs: VaultFs) {
     this.paths = paths
     this.clock = clock
+    this.fs = fs
   }
 
   // ---- 生成队列 ----
 
   private async queueLines(root: string): Promise<string[] | null> {
     const p = this.paths.queuePath(root)
-    if (!existsSync(p)) return null
-    return (await readFile(p, 'utf8')).split('\n')
+    if (!this.fs.exists(p)) return null
+    return (await this.fs.readFile(p)).split('\n')
   }
 
   async queueInit(root: string): Promise<void> {
     const p = this.paths.queuePath(root)
-    if (existsSync(p)) return
-    await atomicWrite(p, '# 生成队列\n\n> 待生成/待重生成清单。引擎自动维护，人可编辑；完成条目打勾即止。\n')
+    if (this.fs.exists(p)) return
+    await atomicWrite(p, '# 生成队列\n\n> 待生成/待重生成清单。引擎自动维护，人可编辑；完成条目打勾即止。\n', this.fs)
   }
 
   /** 入队一条任务；同节点同 kind 未完成条目不重复。 */
@@ -72,7 +73,7 @@ export class Content {
       if (ln.startsWith('- [ ]') && ln.includes(`${kind}：${node}`)) return false
     }
     lines.push(`- [ ] ${kind}：${node} ｜ ${reason} ｜ 优先：${priority}`)
-    await atomicWrite(this.paths.queuePath(root), lines.join('\n').replace(/\n+$/, '') + '\n')
+    await atomicWrite(this.paths.queuePath(root), lines.join('\n').replace(/\n+$/, '') + '\n', this.fs)
     return true
   }
 
@@ -98,7 +99,7 @@ export class Content {
         changed = true
       }
     }
-    if (changed) await atomicWrite(this.paths.queuePath(root), lines.join('\n'))
+    if (changed) await atomicWrite(this.paths.queuePath(root), lines.join('\n'), this.fs)
     return changed
   }
 
@@ -788,19 +789,19 @@ worksheet:
    * {{renderers}} 占位符注入渲染能力清单；旧模板缺占位符时在末尾追加注入段（运行时兜底，不改用户文件）。 */
   async loadPrompt(kind: string): Promise<string> {
     const builtin = Content.PROMPT_KINDS[kind]
-    await mkdir(this.paths.promptDir, { recursive: true })
+    await this.fs.mkdir(this.paths.promptDir)
     const p = `${this.paths.promptDir}/${kind}.md`
-    if (!builtin && !existsSync(p)) {
+    if (!builtin && !this.fs.exists(p)) {
       throw new Error(`[prompt] 未知提示词类型: ${kind}（内置：${Object.keys(Content.PROMPT_KINDS).join('、')}；或在 state/提示词/ 自建 ${kind}.md）`)
     }
     if (builtin) {
-      const vaultVer = existsSync(p) ? Content.promptVersionOf(await readFile(p, 'utf8')) : 0
+      const vaultVer = this.fs.exists(p) ? Content.promptVersionOf(await this.fs.readFile(p)) : 0
       if (vaultVer < Content.promptVersionOf(builtin)) {
-        if (existsSync(p)) await writeFile(`${p}.bak`, await readFile(p, 'utf8'), 'utf8')
-        await writeFile(p, builtin, 'utf8')
+        if (this.fs.exists(p)) await this.fs.writeFile(`${p}.bak`, await this.fs.readFile(p))
+        await this.fs.writeFile(p, builtin)
       }
     }
-    const text = await readFile(p, 'utf8')
+    const text = await this.fs.readFile(p)
     const caps = rendererCapabilityBlock()
     if (text.includes('{{renderers}}')) return text.replaceAll('{{renderers}}', caps)
     return text.trimEnd() + '\n\n' + caps
@@ -816,7 +817,7 @@ worksheet:
   async promptKinds(): Promise<string[]> {
     const names = new Set(Object.keys(Content.PROMPT_KINDS))
     try {
-      for (const f of await readdir(this.paths.promptDir)) {
+      for (const f of await this.fs.readdir(this.paths.promptDir)) {
         if (f.endsWith('.md')) names.add(f.replace(/\.md$/, ''))
       }
     } catch {
@@ -831,9 +832,9 @@ worksheet:
   private async aliasTable(root: string): Promise<Record<string, string>> {
     const p = `${this.paths.courseRoot(root)}/理念与规范.md`
     const table: Record<string, string> = {}
-    if (!existsSync(p)) return table
+    if (!this.fs.exists(p)) return table
     let inSection = false
-    for (const line of (await readFile(p, 'utf8')).split('\n')) {
+    for (const line of (await this.fs.readFile(p)).split('\n')) {
       if (line.startsWith('## 8.')) {
         inSection = true
         continue
@@ -1201,7 +1202,7 @@ worksheet:
     for (const m of body.matchAll(/```interactive\n([^\n]+)\n```/g)) {
       // 引用块统一存「学习中心相对路径」（extractInteractive 写入 <课程根>/<rel>，交互件伺服按同一路径解析）
       const rel = m[1].trim()
-      if (!existsSync(`${this.paths.centerRoot}/${rel}`)) missingInteractive.push(rel)
+      if (!this.fs.exists(`${this.paths.centerRoot}/${rel}`)) missingInteractive.push(rel)
     }
     if (missingInteractive.length) {
       findings.push(`interactive 引用的交互件文件不存在: ${missingInteractive.join('、')}`)
@@ -1281,13 +1282,13 @@ worksheet:
     }
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
-    const { fm, body } = await loadNote(path)
+    const { fm, body } = await loadNote(path, this.fs)
     if (!fm || typeof fm.node !== 'string') throw new Error(`[outline] 课程文件不存在（先为节点生成内容骨架）: ${node}`)
     // 档位随大纲记录（预留接入点：弹性评估读 content.tier；不驱动调度）
     const tier = TIER_LABELS[nodeTierOf(graph, node)]
     // PS-I 顺序变体随大纲留痕（#81：只改生成顺序，调度/门禁不读它）
     const psi = graph.typeOf[node] !== 'practice' && nodeProblemFirstOf(graph, node)
-    await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: manifest, tier } }, body)
+    await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: manifest, tier } }, body, this.fs)
     await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending；档位 ${tier}${psi ? '；PS-I 先做后教' : ''}）` })
     return manifest
   }
@@ -1302,7 +1303,7 @@ worksheet:
   ): Promise<{ version: number; title: string; hints: string[]; repairs: string[] }> {
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
-    const { fm, body } = await loadNote(path)
+    const { fm, body } = await loadNote(path, this.fs)
     if (!fm || typeof fm.node !== 'string') throw new Error(`[section] 课程文件不存在: ${node}`)
     const sections = ((fm.content as { sections?: SectionManifest[] } | undefined)?.sections) ?? []
     const entry = sections.find(m => m.id === sectionId)
@@ -1313,7 +1314,7 @@ worksheet:
     }
     for (const f of split.files) {
       const target = `${this.paths.courseRoot(root)}/${f.rel}`
-      await atomicWrite(target, f.html)
+      await atomicWrite(target, f.html, this.fs)
     }
     // 提示词要求模型输出以 `## 标题` 开头，本方法按清单再包一层同名标题——先剥掉，避免正文标题重复
     const stripped = Content.stripLeadingSectionTitle(split.body, entry.title)
@@ -1345,7 +1346,7 @@ worksheet:
         status: 'draft',
         sections: nextSections,
       },
-    }, newBody)
+    }, newBody, this.fs)
     await journal({ course: '', node, rating: null, kind: 'content_section', elapsed_days: 0, detail: `节「${entry.title}」v${entry.version + 1} 落盘${aliasFix.fixed.length ? `（程序化修复：${aliasFix.fixed.join('、')}）` : ''}` })
     // 反哺候选取自落盘后的整篇正文（enc_candidates 机器块可能在其它节末尾），
     // 这样单节落盘后也能对全文候选给出 enc/set_pre 反哺提醒
@@ -1691,7 +1692,7 @@ worksheet:
   async collectFeedback(root: string, graph: Graph, node: string): Promise<string> {
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
-    const { body } = await loadNote(path)
+    const { body } = await loadNote(path, this.fs)
     const m = body.match(/## 内容反馈\s*\n([\s\S]*?)(?=\n## |$)/)
     if (!m) return ''
     return m[1].replace(/<!--[\s\S]*?-->/g, '').replace(/^（[\s\S]*?）$/m, '').trim()
@@ -1733,7 +1734,7 @@ worksheet:
     }
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
-    await saveNote(path, next as unknown as Record<string, unknown>, body)
+    await saveNote(path, next as unknown as Record<string, unknown>, body, this.fs)
     await journal({ course: '', node, rating: null, kind: 'content_apply', elapsed_days: 0, detail: `正文 v${version} 落盘（status=draft）` })
     return version
   }

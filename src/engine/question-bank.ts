@@ -20,8 +20,7 @@
  * （open_question 0–10 分制，≥6 及格）。作答副作用 = practice 流水 + frontmatter
  * 计数/EMA（调度仍走 D15 settle）。
  */
-import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, rename } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { clamp01, normChoice, numericOf } from './grading.ts'
@@ -252,8 +251,10 @@ export function validateBank(doc: unknown, expectedNode?: string): { errors?: st
 export class QuestionBank {
   // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
   private paths: Paths
-  constructor(paths: Paths) {
+  private fs: VaultFs
+  constructor(paths: Paths, fs: VaultFs) {
     this.paths = paths
+    this.fs = fs
   }
 
   bankPath(courseRoot: string, node: string): string {
@@ -263,7 +264,7 @@ export class QuestionBank {
   /** 读某节点题库；文件缺失返回空题库（合法 Missing）；存在但 YAML/契约坏则抛 Broken。 */
   async load(courseRoot: string, node: string): Promise<BankDoc> {
     const p = this.bankPath(courseRoot, node)
-    if (!existsSync(p)) return { node, questions: [] }
+    if (!this.fs.exists(p)) return { node, questions: [] }
     const text = await this.readBankText(p)
     const doc = this.parseBankDoc(p, text)
     const v = validateBank(doc, node)
@@ -273,7 +274,7 @@ export class QuestionBank {
 
   private async readBankText(p: string): Promise<string> {
     try {
-      return await readFile(p, 'utf8')
+      return await this.fs.readFile(p)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       throw bankError('question-load', p, `无法读取: ${message}`)
@@ -301,7 +302,7 @@ export class QuestionBank {
     if (v.errors) throw new Error(`[question-save] schema 校验失败，题库未写入。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec!
     const p = this.bankPath(courseRoot, spec.node)
-    await atomicWrite(p, YAML.stringify(doc))
+    await atomicWrite(p, YAML.stringify(doc), this.fs)
     return { node: spec.node, count: spec.questions.length, path: p }
   }
 
@@ -310,7 +311,7 @@ export class QuestionBank {
   /** 读并校验已有题库原始 YAML 文档（缺失返回 null；存在但 Broken 抛错，绝不静默当空库）。 */
   private async loadDoc(courseRoot: string, node: string): Promise<Record<string, unknown> | null> {
     const p = this.bankPath(courseRoot, node)
-    if (!existsSync(p)) return null
+    if (!this.fs.exists(p)) return null
     const doc = this.parseBankDoc(p, await this.readBankText(p))
     const v = validateBank(doc, node)
     if (v.errors) throw bankError('question-load', p, v.errors.join('；'))
@@ -319,7 +320,7 @@ export class QuestionBank {
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
     const p = this.bankPath(courseRoot, node)
-    await atomicWrite(p, YAML.stringify(doc))
+    await atomicWrite(p, YAML.stringify(doc), this.fs)
   }
 
   /** 追加单题 → 新题 id 与题库总题数。 */
@@ -449,6 +450,8 @@ export class QuestionBank {
 export interface BankDeps {
   /** 时钟端口（#175 阶段①）：勘误/回收站戳与移入回收站的唯一性后缀。 */
   clock: Clock
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   /** store/registry/proposals 均为结构化窄面：question-bank 被通道域（note-source）
    * 反向 type-import，任何引向 store/registry/proposals 下游的类类型都会合拢成环（R7）。 */
   store: {
@@ -524,7 +527,7 @@ export class BankSubsystem {
     for (const c of courses) {
       let files: string[] = []
       try {
-        files = await readdir(this.e.paths.errorCardsDir(c.root))
+        files = await this.e.fs.readdir(this.e.paths.errorCardsDir(c.root))
       } catch {
         continue // 该课程还没有任何错误卡：合法空态
       }
@@ -745,7 +748,7 @@ export class BankSubsystem {
     for (const c of courses) {
       let files: string[] = []
       try {
-        files = await readdir(this.e.paths.bankDir(c.root))
+        files = await this.e.fs.readdir(this.e.paths.bankDir(c.root))
       } catch {
         continue
       }
@@ -1175,7 +1178,7 @@ export class BankSubsystem {
     // invokes 概念引用对表基线（#141）：登记表在册名字集，出题受理门逐题对照
     const conceptNames = namesOf(await this.e.concepts.load(c.root))
     const [, regionName] = graph.blockOf[node]
-    const note = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node))
+    const note = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
     const body = note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
     if (!body) throw new Error(`[quiz] 「${node}」还没有正文——先「生成正文」再出题。`)
     const tpl = await this.e.loadPrompt('题目生成')
@@ -1308,7 +1311,7 @@ export class BankSubsystem {
     // invokes 概念引用对表基线（#141）：与 questionGenerate 同一受理门
     const conceptNames = namesOf(await this.e.concepts.load(c.root))
     const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node))
+    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
     const mdByTitle = new Map<string, string>()
     for (const part of body.split(/^## /m).slice(1)) {
       const nl = part.indexOf('\n')
@@ -1400,7 +1403,7 @@ export class BankSubsystem {
       && dayOfTs(r.ts, cutoff) === today)
     const [, regionName] = graph.blockOf[node]
     const path = this.e.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
+    const { fm: rawFm, body } = await loadNote(path, this.e.fs)
     const fm = asFm(rawFm)
     if (played) return { settled: false, mastery: masteryOfFm(fm) }
     await this.e.store.appendPractice({
@@ -1414,7 +1417,7 @@ export class BankSubsystem {
       const evidenceGated = await this.e.exerciseGated(c, node)
       next = evidenceGated ? fm : applyPracticeEvidence(fm, clamped)
       if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
-      await saveNote(path, next as unknown as Record<string, unknown>, body)
+      await saveNote(path, next as unknown as Record<string, unknown>, body, this.e.fs)
     }
     return { settled: true, mastery: masteryOfFm(next) }
   }
@@ -1428,9 +1431,9 @@ export class BankSubsystem {
     await this.e.registry.save(rest)
     const src = this.e.paths.courseRoot(c.root)
     const trash = `${this.e.paths.trashDir}/${c.root}-${this.e.clock.nowMs()}`
-    if (existsSync(src)) {
-      await mkdir(this.e.paths.trashDir, { recursive: true })
-      await rename(src, trash)
+    if (this.e.fs.exists(src)) {
+      await this.e.fs.mkdir(this.e.paths.trashDir)
+      await this.e.fs.rename(src, trash)
     }
     this.e.schedCache.delete(this.e.paths.courseRoot(c.root)) // 缓存键是 courseRoot 路径，逐课失效须同键
     return {

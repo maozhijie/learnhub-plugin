@@ -15,6 +15,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Content } from '../src/engine/content.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { todayStr } from '../src/engine/dates.ts'
 import { deriveSectionTier, sectionTierLabel } from '../src/engine/complexity.ts'
 import { Graph, GraphStore } from '../src/engine/graph.ts'
@@ -384,9 +385,9 @@ test('blockPatchPrompt/applyBlockPatch/extractFencedBlocks：逐块替换、数�
 
 test('runAudit：R18 概念字段组盘点进 INFO 与基线（只盘点，不校验语义）', async () => {
   await withVault({ tag: 'v9-audit-', graph: MISC_GRAPH, notes: { 入门: {} } }, async ({ engine }) => {
-    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math')).load()
+    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
     const graph = new Graph(regions)
-    const r = await runAudit(engine.paths, 'math', '数学', graph, regions, todayStr(new Date()))
+    const r = await runAudit(engine.paths, 'math', '数学', graph, regions, todayStr(new Date()), nodeVaultFs)
     const r18 = r.infos.find(x => x.startsWith('R18 概念字段组盘点'))
     assert.ok(r18, 'R18 INFO 在场')
     assert.match(r18!, /teaches 1 节点、assumes 1 节点、误解 1 条/)

@@ -5,8 +5,7 @@
  * 提案落盘 pending（产物文件全留痕）→ 人审 → apply 过 audit 门禁生效 → journal + 快照。
  * 拒绝同样留痕（status=rejected）。
  */
-import { readFile, writeFile, rename, mkdir, unlink, appendFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import type { VaultFs } from './io.ts'
 import { createHash } from 'node:crypto'
 import { YAML } from './yaml.ts'
 import { Store } from './store.ts'
@@ -487,8 +486,9 @@ export class GraphProposals {
     private growthGate?: (spec: EditProposalSpec) => Promise<string[]>,
     /** 时钟端口（#175 阶段①）：decided/now 戳与学习日缺省都经它取时。 */
     private clock?: Clock,
+    private fs?: VaultFs,
   ) {
-    this.concepts = new ConceptRegistry(paths)
+    this.concepts = new ConceptRegistry(paths, this.fs)
   }
 
   /** 概念引用对表门（#141）：teaches/assumes/误解 的概念引用必须精确命中登记表
@@ -511,8 +511,8 @@ export class GraphProposals {
       for (const b of r.blocks) {
         for (const n of b.nodes) {
           const path = this.paths.courseNotePath(root, r.name, n.name)
-          if (existsSync(path)) continue
-          await saveNote(path, defaultFrontmatter(n.name) as unknown as Record<string, unknown>, '> 内容待生成。\n')
+          if (this.fs.exists(path)) continue
+          await saveNote(path, defaultFrontmatter(n.name) as unknown as Record<string, unknown>, '> 内容待生成。\n', this.fs)
           created++
         }
       }
@@ -524,14 +524,14 @@ export class GraphProposals {
   private async saveArtifact(kind: ProposalKind, course: string, doc: unknown): Promise<{ pid: number; path: string }> {
     const pid = await this.store.createProposal(kind, course, '', '')
     const path = this.paths.proposalArtifactPath(pid, kind, course)
-    await atomicWrite(path, YAML.stringify(doc))
+    await atomicWrite(path, YAML.stringify(doc), this.fs)
     await this.store.updateProposal(pid, { artifact: path })
     return { pid, path }
   }
 
   private async loadArtifact(path: string): Promise<unknown> {
-    if (!existsSync(path)) throw new Error(`[proposal] 文件不存在: ${path}`)
-    return YAML.parse(await readFile(path, 'utf8'))
+    if (!this.fs.exists(path)) throw new Error(`[proposal] 文件不存在: ${path}`)
+    return YAML.parse(await this.fs.readFile(path))
   }
 
   /** graph propose-edit：在内存图上模拟执行 + 概念引用对表 + 终点锚保护 + 巩固门
@@ -544,7 +544,7 @@ export class GraphProposals {
     const spec = v.spec!
     const course = await this.registry.get(spec.course)
     if (!course) throw new Error(`[propose-edit] 注册表中没有课程「${spec.course}」。`)
-    const regions = await new GraphStore(this.paths, this.paths.courseRoot(course.root)).load()
+    const regions = await new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs).load()
     const graph = new Graph(regions)
     const errors = simulateOps(regions, graph, spec.ops)
     const conceptErrors = await this.conceptGateErrors(course.root, conceptRefsOfOps(spec.ops), spec.concepts ?? [])
@@ -588,7 +588,7 @@ export class GraphProposals {
   /** 罗盘重写预检（propose 与 apply 双门共用；返回错误行，空 = 通过）：锚在终点上
    * （未播种 fail loud）+ 路线门（非空/无标题/限长）。 compass.ts 的写权机械不变。 */
   private async routeGate(root: string, routeMd: string): Promise<string[]> {
-    const anchor = await readAnchor(this.paths.anchorPath(root))
+    const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
     if (!anchor) return ['课程未播种（终点锚 Missing）——罗盘重写锚在终点上，先走种子提案（kind=seed）。']
     return validateRouteBody(stripWrappingFence(routeMd))
   }
@@ -597,7 +597,7 @@ export class GraphProposals {
    * 种子提案通道的锚直改。其余 op（set_pre/set_enc/move/set_note）不构成「换终点」，
    * 不拦——结构生长照常。 */
   private async anchorGuardErrors(root: string, ops: EditOp[]): Promise<string[]> {
-    const anchor = await readAnchor(this.paths.anchorPath(root))
+    const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
     if (!anchor) return []
     const errors: string[] = []
     for (const [i, op] of ops.entries()) {
@@ -624,7 +624,7 @@ export class GraphProposals {
     const course = await this.registry.get(spec.course)
     if (!course) throw new Error(`[apply-edit] 注册表中没有课程「${spec.course}」。`)
     const root = course.root
-    const store = new GraphStore(this.paths, this.paths.courseRoot(root))
+    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
     // 概念对表复验（#141）：受理与 apply 之间登记表可能被并入/手改；铸名侧幂等
     // （已属同一条目跳过），撞上其他条目即拒绝，两门全过才开始任何写盘。
     const existing = await this.concepts.load(root)
@@ -730,8 +730,8 @@ export class GraphProposals {
           run: async () => {
             if (compassRoute === null) return
             const compassPath = this.paths.compassPath(root)
-            const base = existsSync(compassPath) ? await readFile(compassPath, 'utf8') : compassScaffold(course.name)
-            await atomicWrite(compassPath, withSectionText(base, SECTION_ROUTE, compassRoute))
+            const base = this.fs.exists(compassPath) ? await this.fs.readFile(compassPath) : compassScaffold(course.name)
+            await atomicWrite(compassPath, withSectionText(base, SECTION_ROUTE, compassRoute), this.fs)
             compassRewritten = true
           },
         },
@@ -747,7 +747,7 @@ export class GraphProposals {
               if (op.op !== 'add_node') continue
               await appendProbationEntry(this.paths, root, {
                 node: op.name!, pre: [...(op.pre ?? [])], proposal: prop.id, due,
-              })
+              }, this.fs)
               probationRegistered.push(op.name!)
             }
           },
@@ -791,7 +791,7 @@ export class GraphProposals {
       ],
     })
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
-    const seedPhase = isSeedGraph(await readAnchor(this.paths.anchorPath(root)), new Graph(regions2))
+    const seedPhase = isSeedGraph(await readAnchor(this.paths.anchorPath(root), this.fs), new Graph(regions2))
     return {
       course: course.name,
       ops: spec.ops.length,
@@ -818,7 +818,7 @@ export class GraphProposals {
   /** 先验喂料分流判定（#142）：≥0.7 候选对在给定图结构上的回应情况。缓存缺文件 =
    * 零候选（Missing 合法空态，零先验零注入全绿）；坏档 fail loud（引擎 state 契约文件）。 */
   private async priorFeed(graph: Graph): Promise<{ responded: PriorFeedVerdict[]; unresponded: PriorFeedVerdict[] }> {
-    const cache = await readVaultLinksCache(this.paths.vaultLinksPath)
+    const cache = await readVaultLinksCache(this.paths.vaultLinksPath, this.fs!)
     if (!cache) return { responded: [], unresponded: [] }
     return splitPriorFeed(cache.edges, graph.names, graph)
   }
@@ -841,10 +841,10 @@ export class GraphProposals {
     }
     // 对表/检查用的课程根：新课程尚无注册表条目，root 约定 = 课程名（initCourse 同款）
     const root = course?.root ?? spec.course
-    const store = new GraphStore(this.paths, this.paths.courseRoot(root))
+    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
     const existingRegions: GRegion[] = []
     for (const path of Object.values(await store.regionFiles())) {
-      existingRegions.push(loadRegionDoc(YAML.parse(await readFile(path, 'utf8')), path))
+      existingRegions.push(loadRegionDoc(YAML.parse(await this.fs.readFile(path)), path))
     }
     const seedRegions = seedSpecToRegions(spec)
     const errors = structureCheck(existingRegions.length ? new Graph(existingRegions) : null, seedRegions, '种子提案')
@@ -895,7 +895,7 @@ export class GraphProposals {
     }
     if (!course) throw new Error(`[apply-seed] 注册表中没有课程「${spec.course}」。`)
     const root = course.root
-    const store = new GraphStore(this.paths, this.paths.courseRoot(root))
+    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
     // 概念对表复验（#141 同款：受理与 apply 之间登记表可能变化；铸名侧幂等），两门全过才开始写盘
     const existing = await this.concepts.load(root)
     const { errors: mintErrors, entries: mergedEntries } = applyConceptMints(existing, spec.concepts ?? [])
@@ -907,7 +907,7 @@ export class GraphProposals {
     const existingFiles = await store.regionFiles()
     const existingRegions: GRegion[] = []
     for (const path of Object.values(existingFiles)) {
-      existingRegions.push(loadRegionDoc(YAML.parse(await readFile(path, 'utf8')), path))
+      existingRegions.push(loadRegionDoc(YAML.parse(await this.fs.readFile(path)), path))
     }
     const seedRegions = seedSpecToRegions(spec)
     const errors = structureCheck(existingRegions.length ? new Graph(existingRegions) : null, seedRegions, '种子提案')
@@ -935,7 +935,7 @@ export class GraphProposals {
     const written: string[] = []
     // 罗盘现状读取（在写序第一笔前读与第四步读等价——本单元内无更早的罗盘写入）
     const compassPath = this.paths.compassPath(root)
-    const existingCompass = existsSync(compassPath) ? await readFile(compassPath, 'utf8') : null
+    const existingCompass = this.fs.exists(compassPath) ? await this.fs.readFile(compassPath) : null
     const compassNext = existingCompass
       ? withSectionText(withSectionText(existingCompass, SECTION_ROUTE, ROUTE_PENDING), SECTION_ETA, ETA_PENDING)
       : compassScaffold(course.name)
@@ -957,7 +957,7 @@ export class GraphProposals {
             for (const region of seedRegions) {
               const path = existingFiles[region.name]
               if (path) {
-                const current = loadRegionDoc(YAML.parse(await readFile(path, 'utf8')), path)
+                const current = loadRegionDoc(YAML.parse(await this.fs.readFile(path)), path)
                 const byName = new Map(current.blocks.map(b => [b.name, b]))
                 for (const nb of region.blocks) {
                   const hit = byName.get(nb.name)
@@ -978,7 +978,7 @@ export class GraphProposals {
           name: '终点锚落盘',
           run: async () => {
             anchor = anchorFromSeed(spec, prop.id, declared)
-            await writeAnchor(this.paths.anchorPath(root), anchor)
+            await writeAnchor(this.paths.anchorPath(root), anchor, this.fs!)
           },
         },
         {
@@ -987,7 +987,7 @@ export class GraphProposals {
           // 零 LLM 依赖，apply 永不被透明度装置挡住。
           name: '罗盘常驻',
           run: async () => {
-            await atomicWrite(compassPath, compassNext)
+            await atomicWrite(compassPath, compassNext, this.fs)
           },
         },
         {
@@ -1050,7 +1050,7 @@ export class GraphProposals {
     const items = await this.registry.load()
     const root = name
     for (const sub of ['data', '课程', 'state']) {
-      await mkdir(`${this.centerRoot}/${root}/${sub}`, { recursive: true })
+      await this.fs.mkdir(`${this.centerRoot}/${root}/${sub}`)
     }
     const entry: CourseEntry = { id: `${root}-01`, name, root, enabled: true }
     items.push(entry)
@@ -1066,7 +1066,7 @@ export class GraphProposals {
     const spec = v.spec!
     const course = await this.registry.get(spec.course)
     if (!course) throw new Error(`[propose-enrich] 注册表中没有课程「${spec.course}」。`)
-    const store = new GraphStore(this.paths, this.paths.courseRoot(course.root))
+    const store = new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs)
     const regions = await store.load()
     const graph = new Graph(regions)
     const missing = enrichMissingTargets(spec.fields, graph)
@@ -1080,7 +1080,7 @@ export class GraphProposals {
       const abs = regionFiles[regionName]
       if (!abs) throw new Error(`[propose-enrich] 区「${regionName}」没有对应 data/*.yaml（图加载不一致）。`)
       const rel = `data/${abs.replace(/[/\\]/g, '/').split('/').pop()}`
-      if (!(rel in fingerprints)) fingerprints[rel] = sha256(await readFile(abs, 'utf8'))
+      if (!(rel in fingerprints)) fingerprints[rel] = sha256(await this.fs.readFile(abs))
     }
     const { pid } = await this.saveArtifact('enrich', spec.course, {
       course: spec.course,
@@ -1105,13 +1105,13 @@ export class GraphProposals {
     const course = await this.registry.get(spec.course)
     if (!course) throw new Error(`[apply-enrich] 注册表中没有课程「${spec.course}」。`)
     const root = course.root
-    const store = new GraphStore(this.paths, this.paths.courseRoot(root))
+    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
     // 指纹复核先行：任一受影响正典文件在受理后被改过 → 提案基于旧版图，拒收（AC：指纹不符拒收）
     const stale: string[] = []
     for (const [rel, want] of Object.entries(spec.fingerprints)) {
       let cur: string
       try {
-        cur = await readFile(`${this.paths.courseRoot(root)}/${rel}`, 'utf8')
+        cur = await this.fs.readFile(`${this.paths.courseRoot(root)}/${rel}`)
       } catch {
         stale.push(`${rel}（文件不存在）`)
         continue
@@ -1155,7 +1155,7 @@ export class GraphProposals {
             for (const [regionName, text] of touched) {
               const abs = regionFiles[regionName]
               if (!abs) throw new Error(`[apply-enrich] 区「${regionName}」没有对应 data/*.yaml。`)
-              await atomicWrite(abs, text)
+              await atomicWrite(abs, text, this.fs)
               fileHashes.set(regionName, sha256(text))
             }
           },
@@ -1172,8 +1172,8 @@ export class GraphProposals {
               content_hash: fileHashes.get(graph.blockOf[f.node][1]),
               applied_at: now,
             }))
-            await mkdir(this.paths.courseStateDir(root), { recursive: true })
-            await appendFile(this.paths.overlayPath(root), lines.join('\n') + '\n', 'utf8')
+            await this.fs.mkdir(this.paths.courseStateDir(root))
+            await this.fs.appendFile(this.paths.overlayPath(root), lines.join('\n') + '\n')
           },
         },
         {
@@ -1217,16 +1217,16 @@ export class GraphProposals {
     const oldPath = this.paths.courseNotePath(root, region, node)
     const targetName = newName ?? node
     const targetRegion = newRegion ?? region
-    if (existsSync(oldPath)) {
+    if (this.fs.exists(oldPath)) {
       const { loadNote, saveNote } = await import('./notes.ts')
-      const { fm, body } = await loadNote(oldPath)
+      const { fm, body } = await loadNote(oldPath, this.fs)
       const newPath = this.paths.courseNotePath(root, targetRegion, targetName)
-      await saveNote(newPath, { ...(fm ?? {}), node: targetName }, body)
+      await saveNote(newPath, { ...(fm ?? {}), node: targetName }, body, this.fs)
       if (oldPath.toLowerCase() !== newPath.toLowerCase()) {
         // 新内容（fm.node=新名）已写入 newPath；摘除旧文件。
         // 不能 rename(oldPath, newPath)——会把旧 frontmatter 覆盖回新路径。
-        await unlink(oldPath).catch(async () => {
-          await writeFile(oldPath, '').catch(() => undefined)
+        await this.fs.unlink(oldPath).catch(async () => {
+          await this.fs.writeFile(oldPath, '').catch(() => undefined)
         })
       }
     }
@@ -1235,8 +1235,8 @@ export class GraphProposals {
       const { safeFilename } = await import('./paths.ts')
       const bankDir = this.paths.courseRoot(root)
       const oldBank = `${bankDir}/题库/${safeFilename(node)}.yaml`
-      if (existsSync(oldBank)) {
-        await rename(oldBank, `${bankDir}/题库/${safeFilename(targetName)}.yaml`).catch(() => undefined)
+      if (this.fs.exists(oldBank)) {
+        await this.fs.rename(oldBank, `${bankDir}/题库/${safeFilename(targetName)}.yaml`).catch(() => undefined)
       }
     }
   }
@@ -1248,14 +1248,14 @@ export class GraphProposals {
     const oldPath = this.paths.courseNotePath(root, region, node)
     const archiveDir = `${this.paths.courseStateDir(root)}/archive`
     const { safeFilename } = await import('./paths.ts')
-    if (existsSync(oldPath)) {
-      await mkdir(archiveDir, { recursive: true })
-      await rename(oldPath, `${archiveDir}/del-${pid}-${safeFilename(node)}.md`)
+    if (this.fs.exists(oldPath)) {
+      await this.fs.mkdir(archiveDir)
+      await this.fs.rename(oldPath, `${archiveDir}/del-${pid}-${safeFilename(node)}.md`)
     }
     const oldBank = `${this.paths.courseRoot(root)}/题库/${safeFilename(node)}.yaml`
-    if (existsSync(oldBank)) {
-      await mkdir(archiveDir, { recursive: true })
-      await rename(oldBank, `${archiveDir}/del-${pid}-${safeFilename(node)}.yaml`)
+    if (this.fs.exists(oldBank)) {
+      await this.fs.mkdir(archiveDir)
+      await this.fs.rename(oldBank, `${archiveDir}/del-${pid}-${safeFilename(node)}.yaml`)
     }
   }
 

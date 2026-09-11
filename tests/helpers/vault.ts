@@ -14,6 +14,7 @@ import { dirname, join } from 'node:path'
 import { LearnhubEngine } from '../../src/engine/index.ts'
 import type { Clock, Rng } from '../../src/engine/index.ts'
 import { systemClock, mathRng } from '../../src/host/clock.ts'
+import { nodeVaultFs } from '../../src/host/vault-fs.ts'
 import type { Paths } from '../../src/engine/paths.ts'
 import type { Store } from '../../src/engine/store.ts'
 
@@ -134,6 +135,7 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
       ...(centerRel === '学习中心' ? {} : { centerRel }),
       clock: options.clock ?? systemClock,
       rng: options.rng ?? mathRng,
+      fs: nodeVaultFs,
     })
 
     if (options.reviewLog?.length) {

@@ -1,4 +1,3 @@
-import { mkdir } from 'node:fs/promises'
 /**
  * Graph 子系统（#152 刀 7 / ADR-0043）：图域——graph analyze、Vault 链接先验、
  * 图探索、提案门禁包装、enc 覆盖层回填。
@@ -12,6 +11,7 @@ import { mkdir } from 'node:fs/promises'
 // ---- Graph 子系统（#152 刀 7 / ADR-0043）：图域五节。本文件只被门面引用，可自由
 // import 领域模块（枢纽领主 graph.ts 不被反向依赖）。
 
+import type { VaultFs } from './io.ts'
 import type { Clock } from './clock.ts'
 import type { Store } from './store.ts'
 import type { Paths } from './paths.ts'
@@ -30,6 +30,8 @@ import type { Fm } from './types.ts'
 export interface GraphDeps {
   /** 时钟端口（#175 阶段①）：vault 链接扫描 generated_at。 */
   clock: Clock
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   store: Store
   paths: Paths
   projects: Projects
@@ -89,7 +91,7 @@ export class GraphSubsystem {
     const { graph, state } = await this.e.loadView(c)
     const vaultLinks = await this.loadVaultLinkPrior(graph)
     // 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，Float（missing_pre）建议豁免
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root))
+    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
     const seedPhase = isSeedGraph(anchor, graph)
     const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase)
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
@@ -98,7 +100,7 @@ export class GraphSubsystem {
 
   /** 读链接先验缓存（Missing = null 合法空态；坏档 fail loud——它是引擎 state 契约文件）。 */
   private async readVaultLinksCache(): Promise<VaultLinksDoc | null> {
-    return readVaultLinksCache$mod(this.e.paths.vaultLinksPath)
+    return readVaultLinksCache$mod(this.e.paths.vaultLinksPath, this.e.fs)
   }
 
 
@@ -146,16 +148,17 @@ export class GraphSubsystem {
     edges: Array<{ a: string; b: string; count: number; files: number; w: number; tier: string }>
     cache: string
   }> {
-    const dirExcludes = await readVaultLinkDirExcludes(this.e.paths.learnhubConfigPath)
+    const dirExcludes = await readVaultLinkDirExcludes(this.e.paths.learnhubConfigPath, this.e.fs)
     const doc = await scanVaultLinks({
       vaultRoot: this.e.vaultRoot,
       centerRel: this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1),
       dirExcludes,
-      pathExcludes: await readNoteSourceExcludes(this.e.paths),
+      pathExcludes: await readNoteSourceExcludes(this.e.paths, this.e.fs),
       nowMs: this.e.clock.nowMs(),
+      fs: this.e.fs,
     })
-    await mkdir(this.e.paths.centerStateDir, { recursive: true })
-    await atomicWrite(this.e.paths.vaultLinksPath, JSON.stringify(doc, null, 1) + '\n')
+    await this.e.fs.mkdir(this.e.paths.centerStateDir)
+    await atomicWrite(this.e.paths.vaultLinksPath, JSON.stringify(doc, null, 1) + '\n', this.e.fs)
     const tiers = { proposal: 0, review: 0, report: 0 }
     for (const e of doc.edges) tiers[scoreTier(e.w)]++
     return {
@@ -439,7 +442,7 @@ export class GraphSubsystem {
       const titles = manifest.sources.map(s => s.title ?? s.path.split('/').pop()!.replace(/\.md$/i, ''))
       const terms = decompileTerms(goal, titles)
       const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-      const hits = terms.length ? await searchVaultPrior(this.e.vaultRoot, centerRel, terms) : []
+      const hits = terms.length ? await searchVaultPrior(this.e.vaultRoot, centerRel, terms, {}, this.e.fs) : []
       priorHits = hits.length
       if (hits.length) {
         const items = hits.map(h => `- 《${h.title}》（${h.path}）\n  > ${h.excerpt.replaceAll('\n', '\n  > ')}`).join('\n')
@@ -521,7 +524,7 @@ export class GraphSubsystem {
       if (!fm || !hasReadyContent(fm)) continue
       if (graph.typeOf[node] === 'practice') continue // practice 节点无题，enc: [] 合法空态
       const [, regionName] = graph.blockOf[node]
-      const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node))
+      const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
       // 投影（#148）：节点在库题目的 invokes 覆盖率 → 前置节点的出生 w（候选边同享此权重）
       const proj = Content.invokesProjection(graph, node, (await this.e.bank.load(this.e.paths.courseRoot(c.root), node)).questions)
       const projW = new Map(proj.map(e => [e.node, { w: e.w, note: e.note }]))

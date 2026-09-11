@@ -10,7 +10,7 @@
  *   终点 mastery ≥ 阈值且闭包健康；覆盖锚定 = 块工作表全部核销且终点 mastery 达标。
  *   零写侧状态、零专门停机代码；锚文件缺失 = 未播种（Missing 合法，null 折叠）。
  */
-import { readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import { parseConceptFields } from './graph.ts'
 import { validateConceptEntry } from './concepts.ts'
@@ -140,10 +140,10 @@ export function validateAnchor(doc: unknown): { errors: string[]; anchor?: Endpo
 
 /** 读锚：Missing = null（未播种，合法空态）；Broken（不可读/JSON 坏/契约违约）fail
  * loud——锚是结构承诺物，静默降级会让完成判据按坏锚折叠（ADR-0004）。 */
-export async function readAnchor(path: string): Promise<EndpointAnchor | null> {
+export async function readAnchor(path: string, fs: VaultFs): Promise<EndpointAnchor | null> {
   let text: string
   try {
-    text = await readFile(path, 'utf8')
+    text = await fs.readFile(path)
   } catch (err) {
     const code = (err as { code?: unknown }).code
     if (code === 'ENOENT') return null
@@ -163,8 +163,8 @@ export async function readAnchor(path: string): Promise<EndpointAnchor | null> {
 }
 
 /** 写锚（唯一调用方 = 种子 apply；整份覆盖——换终点/换工作表都走种子提案人审）。 */
-export async function writeAnchor(path: string, anchor: EndpointAnchor): Promise<void> {
-  await atomicWrite(path, JSON.stringify(anchor, null, 1) + '\n')
+export async function writeAnchor(path: string, anchor: EndpointAnchor, fs: VaultFs): Promise<void> {
+  await atomicWrite(path, JSON.stringify(anchor, null, 1) + '\n', fs)
 }
 
 // ---- 种子提案 schema（kind=seed） ----

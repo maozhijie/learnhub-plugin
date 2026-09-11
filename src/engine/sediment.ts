@@ -18,7 +18,7 @@
  * 坐标系，CONTEXT.md「概念」词条）；addresser 尚未接线（#141 登记表、#146 复诊、
  * #145 生长批），concept 字段缺席合法。
  */
-import { mkdir, readFile, appendFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import { calendarDayOf, weekStartOf } from './dates.ts'
 import { nowIsoOf } from './dates.ts'
@@ -57,7 +57,7 @@ export function isSedimentKind(v: unknown): v is SedimentKind {
 }
 
 /** 追加一条沉淀事件（出生即写的唯一入口）：落正典 + 确保 legacy 分区在盘。 */
-export async function appendSedimentEvent(paths: Paths, event: SedimentEventInput, nowMs: number): Promise<SedimentEvent> {
+export async function appendSedimentEvent(paths: Paths, event: SedimentEventInput, nowMs: number, fs: VaultFs): Promise<SedimentEvent> {
   if (!isSedimentKind(event.kind)) {
     throw new Error(`[sediment] 非法 kind: ${String(event.kind)}（允许 ${SEDIMENT_KINDS.join('/')}）`)
   }
@@ -77,18 +77,18 @@ export async function appendSedimentEvent(paths: Paths, event: SedimentEventInpu
     payload: event.payload,
     ...(event.concept !== undefined ? { concept: event.concept.trim() } : {}),
   }
-  await mkdir(paths.sedimentDir, { recursive: true })
-  await mkdir(paths.sedimentLegacyDir, { recursive: true })
-  await appendFile(paths.sedimentPath, JSON.stringify(full) + '\n', 'utf8')
+  await fs.mkdir(paths.sedimentDir)
+  await fs.mkdir(paths.sedimentLegacyDir)
+  await fs.appendFile(paths.sedimentPath, JSON.stringify(full) + '\n')
   return full
 }
 
 /** 读正典（缺文件 = 合法空态；跳过半行损坏——与行为流水同一 jsonl 容错惯例，
  * 追加写单行原子，中断最多留半行尾）。 */
-export async function readSedimentCanon(paths: Paths): Promise<SedimentEvent[]> {
+export async function readSedimentCanon(paths: Paths, fs: VaultFs): Promise<SedimentEvent[]> {
   let raw: string
   try {
-    raw = await readFile(paths.sedimentPath, 'utf8')
+    raw = await fs.readFile(paths.sedimentPath)
   } catch {
     return []
   }
@@ -109,8 +109,8 @@ export async function readSedimentCanon(paths: Paths): Promise<SedimentEvent[]> 
 
 /** 沉淀正典里的最新 FSRS 参数（读侧单向的唯一参数事实源）：课程参数文件退役为
  * 缓存后，getScheduler / 优化器基线在缓存缺失时从这里取（删缓存不丢事实）。 */
-export async function latestFsrsParams(paths: Paths): Promise<number[] | undefined> {
-  const w = foldSediment(await readSedimentCanon(paths)).latest.fsrs_params?.payload.parameters
+export async function latestFsrsParams(paths: Paths, fs: VaultFs): Promise<number[] | undefined> {
+  const w = foldSediment(await readSedimentCanon(paths, fs)).latest.fsrs_params?.payload.parameters
   return Array.isArray(w) && w.length > 0 && w.every(x => typeof x === 'number')
     ? w as number[]
     : undefined
@@ -228,8 +228,8 @@ export function renderLearnerProfile(fold: SedimentFold, nowMs: number): string 
 }
 
 /** 重建投影（结算钩子的落盘出口）：fold → 写 学习者档案.md（原子替换；ADR-0046：手搓 tmp+rename 复制品改调唯一原语）。 */
-export async function rebuildLearnerProfile(paths: Paths, fold: SedimentFold, nowMs: number): Promise<string> {
+export async function rebuildLearnerProfile(paths: Paths, fold: SedimentFold, nowMs: number, fs: VaultFs): Promise<string> {
   const md = renderLearnerProfile(fold, nowMs)
-  await atomicWrite(paths.learnerProfilePath, md)
+  await atomicWrite(paths.learnerProfilePath, md, fs)
   return md
 }

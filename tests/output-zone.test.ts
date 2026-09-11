@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { withVault } from './helpers/vault.ts'
 import { obsidianLink, writeOutputArtifact, outputArtifactFile, isRegistrableCenterRel } from '../src/engine/output.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 
 /** 个人笔记字节快照（红线：输出区/注册动作对用户笔记零写入）。 */
 async function snapshot(root: string, rels: string[]): Promise<Map<string, string>> {
@@ -26,7 +27,7 @@ test('outputArtifactFile / writeOutputArtifact：kind 白名单、文件名安�
     // 路径分隔按仓库命名惯例全角化（与节点改名同款），不构成越界
     assert.equal(outputArtifactFile('a/b.md'), 'a／b.md')
     await assert.rejects(
-      () => writeOutputArtifact(paths, { kind: '随手记' as never, file: 'x.md', fm: {}, body: 'x' }),
+      () => writeOutputArtifact(paths, { kind: '随手记' as never, file: 'x.md', fm: {}, body: 'x' }, nodeVaultFs),
       /产物类非法/,
     )
     const p = await writeOutputArtifact(paths, {
@@ -34,7 +35,7 @@ test('outputArtifactFile / writeOutputArtifact：kind 白名单、文件名安�
       file: '入门.1.md',
       fm: { kind: 'explain_script', created: '2026-09-09' },
       body: `# 讲解稿\n\n${obsidianLink('读书笔记/吉他技巧.md', '吉他')}`,
-    })
+    }, nodeVaultFs)
     assert.ok(existsSync(p))
     const text = await readFile(p, 'utf8')
     assert.match(text, /^---\nkind: explain_script\ncreated: 2026-09-09\n---/)
@@ -92,7 +93,7 @@ test('#107 红线：产物写入 + 注册全链对个人笔记零字节改动；
       file: 'q1.md',
       fm: { kind: 'error_card', created: '2026-09-09' },
       body: `错因：坐标转换漏了尺度。\n\n出处：${obsidianLink('读书笔记/吉他.md')}`,
-    })
+    }, nodeVaultFs)
     assert.match(await readFile(p, 'utf8'), /\[\[读书笔记\/吉他\]\]/)
     // 把带出链的产物注册为复习源（豁免区）→ 用户笔记依旧零改动
     await engine.noteSourceRegister(p.replace(/\\/g, '/').slice(root.length + 1))

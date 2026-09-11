@@ -14,8 +14,7 @@
  *
  * Missing/Broken 纪律沿用 ADR-0004：文件缺失 = 合法空卡组；存在但坏 = 抛 Broken。
  */
-import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import type { FsrsBlock, PracticeRec } from './types.ts'
@@ -223,8 +222,10 @@ export function validateErrorCards(doc: unknown, expectedNode?: string): { error
 
 export class ErrorCards {
   private paths: Paths
-  constructor(paths: Paths) {
+  private fs: VaultFs
+  constructor(paths: Paths, fs: VaultFs) {
     this.paths = paths
+    this.fs = fs
   }
 
   cardPath(courseRoot: string, node: string): string {
@@ -234,7 +235,7 @@ export class ErrorCards {
   /** 读某节点卡组；文件缺失返回空卡组（合法 Missing）；存在但坏则抛 Broken。 */
   async load(courseRoot: string, node: string): Promise<ErrorCardDoc> {
     const p = this.cardPath(courseRoot, node)
-    if (!existsSync(p)) return { node, cards: [] }
+    if (!this.fs.exists(p)) return { node, cards: [] }
     const doc = await this.readDoc(p)
     const v = validateErrorCards(doc, node)
     if (v.errors) throw cardError('error-card-load', p, v.errors.join('；'))
@@ -244,7 +245,7 @@ export class ErrorCards {
   private async readDoc(p: string): Promise<Record<string, unknown>> {
     let text: string
     try {
-      text = await readFile(p, 'utf8')
+      text = await this.fs.readFile(p)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       throw cardError('error-card-load', p, `无法读取: ${message}`)
@@ -264,12 +265,12 @@ export class ErrorCards {
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
     const p = this.cardPath(courseRoot, node)
-    await atomicWrite(p, YAML.stringify(doc))
+    await atomicWrite(p, YAML.stringify(doc), this.fs)
   }
 
   private async loadChecked(courseRoot: string, node: string, op: string): Promise<Record<string, unknown> | null> {
     const p = this.cardPath(courseRoot, node)
-    if (!existsSync(p)) return null
+    if (!this.fs.exists(p)) return null
     const doc = await this.readDoc(p)
     const v = validateErrorCards(doc, node)
     if (v.errors) throw cardError(op, p, v.errors.join('；'))

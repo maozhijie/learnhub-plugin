@@ -11,6 +11,7 @@
  * （门面 refreshSourceFingerprints）——引擎自己的写不算内容漂移，漂移只留给
  * 引擎之外的手改。
  */
+import type { VaultFs } from './io.ts'
 import { OUTPUT_DIR_NAME, safeFilename } from './paths.ts'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
@@ -43,6 +44,7 @@ export function outputArtifactFile(file: string): string {
 export async function writeOutputArtifact(
   paths: Paths,
   artifact: { kind: OutputKind; file: string; fm: Record<string, string | number | string[]>; body: string },
+  fs: VaultFs,
 ): Promise<string> {
   if (!isOutputKind(artifact.kind)) {
     throw new Error(`[output] 产物类非法：${String(artifact.kind)}（允许 ${OUTPUT_KINDS.join('/')}）`)
@@ -51,7 +53,7 @@ export async function writeOutputArtifact(
   const dir = paths.outputKindDir(artifact.kind)
   const md = `---\n${YAML.stringify(artifact.fm).trimEnd()}\n---\n\n${artifact.body.trimEnd()}\n`
   const path = `${dir}/${file}`
-  await atomicWrite(path, md)
+  await atomicWrite(path, md, fs)
   return path
 }
 

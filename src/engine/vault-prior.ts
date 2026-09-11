@@ -15,7 +15,7 @@
  * 不改 frontmatter；注入产物只进生成提示词（提示词落盘属提示词快照域，与个人笔记
  * 无关）。学习中心/ 与点目录整体排除（引擎管理区不是先验来源）。
  */
-import { readdir, readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { stripFrontmatter, titleOfBody } from './note-source.ts'
 
 /** 一条 Vault 先验命中。 */
@@ -63,7 +63,7 @@ export function excerptAround(body: string, term: string, chars: number): string
 /** 纯扫描检索：vault 根下全部 .md（排除学习中心与点目录），按检索词命中粗分排序。
  * 只读——不写任何文件、不改任何状态。找不到检索词命中时返回 []（生成面零注入）。 */
 export async function searchVaultPrior(
-  vaultRoot: string, centerRel: string, terms: string[], opts: VaultPriorOptions = {},
+  vaultRoot: string, centerRel: string, terms: string[], opts: VaultPriorOptions = {}, fs?: VaultFs,
 ): Promise<VaultPriorHit[]> {
   if (!terms.length) return []
   const limit = opts.limit ?? 3
@@ -75,17 +75,17 @@ export async function searchVaultPrior(
     if (files.length >= maxFiles) return
     let entries
     try {
-      entries = await readdir(dir, { withFileTypes: true })
+      entries = await fs.readdirTypes(dir)
     } catch {
       return // 目录不可读（权限/消失）：静默跳过——检索是尽力而为的增益，不是契约读
     }
     for (const ent of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       if (files.length >= maxFiles) return
       const child = `${dir}/${ent.name}`
-      if (ent.isDirectory()) {
+      if (ent.directory) {
         if (ent.name.startsWith('.')) continue
         await walk(child)
-      } else if (ent.isFile() && ent.name.toLowerCase().endsWith('.md')) {
+      } else if (!ent.directory && ent.name.toLowerCase().endsWith('.md')) {
         if (child === excludePrefix || child.startsWith(`${excludePrefix}/`)) continue
         files.push(child)
       }
@@ -96,7 +96,7 @@ export async function searchVaultPrior(
   for (const abs of files) {
     let raw: string
     try {
-      raw = await readFile(abs, 'utf8')
+      raw = await fs.readFile(abs)
     } catch {
       continue
     }

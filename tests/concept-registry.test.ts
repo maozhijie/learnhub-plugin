@@ -13,6 +13,7 @@ import {
   ConceptRegistry,
 } from '../src/engine/concepts.ts'
 import { validateBank } from '../src/engine/question-bank.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEditProposal } from '../src/engine/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import type { Paths } from '../src/engine/paths.ts'
@@ -467,7 +468,7 @@ test('#141 conceptReferenceErrors：逐名可执行错误行', () => {
 test('#141 登记表路径在课程根下（跨断裂存活的坐标位）', async () => {
   await withVault({ graph: null }, async ({ paths }: { paths: Paths }) => {
     assert.equal(paths.conceptRegistryPath('math'), `${paths.courseRoot('math')}/概念登记表.yaml`)
-    const reg = new ConceptRegistry(paths)
+    const reg = new ConceptRegistry(paths, nodeVaultFs)
     await reg.save('math', [{ canonical: '甲' }])
     assert.deepEqual(await reg.load('math'), [{ canonical: '甲' }])
   })

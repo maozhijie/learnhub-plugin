@@ -422,7 +422,10 @@ test('G8 自检：棘轮抓上涨、抓降了未同步基线（过期即失败�
 
 test('G8 适配器面：engine 内时钟/随机直读与 node:fs 依赖按基线棘轮（#175 阶段①起受控）', () => {
   const measured = adapterFaceTotals(ROOT)
-  assert.ok(measured.fsImports > 0, 'engine 的 node:fs 导入数为 0 但受控面没登记——扫描面塌了会静默恒过（外移完成后再把这条断言收紧为 == 0）')
+  assert.equal(measured.fsImports, 0, 'engine 内仍有 node:fs import——存储端口外移未完成（#175 阶段②）')
+  assert.equal(measured.fsCalls, 0, 'engine 内仍有 fs 直调——走 VaultFs 端口（#175 阶段②）')
+  const probe = countAdapterFace("import { readFile } from 'node:fs/promises'\nconst x = await readFile('a')")
+  assert.ok(probe.fsImports === 1 && probe.fsCalls === 1, '收集器必须看得见 node:fs 形态（扫描面塌了会静默恒过）')
   const bad = adapterFaceViolations(measured, BASELINE.adapterFace ?? {})
   assert.deepEqual(bad, [], `适配器面棘轮不符基线：\n${bad.join('\n')}\n（Clock/Rng 走 engine/clock.ts 端口、fs 走 vault 存储端口；io.ts 的 atomicWrite tmp 命名是登记过的例外）`)
 })

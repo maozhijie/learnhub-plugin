@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { Content } from '../src/engine/content.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { todayStr } from '../src/engine/dates.ts'
 import { Graph, GraphStore } from '../src/engine/graph.ts'
 import { runAudit } from '../src/engine/audit.ts'
@@ -58,9 +59,9 @@ const ENC_VAULT = {
 }
 
 async function auditOf(engine: LearnhubEngine) {
-  const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math')).load()
+  const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
   const graph = new Graph(regions)
-  return runAudit(engine.paths, 'math', '数学', graph, regions, todayStr(new Date()))
+  return runAudit(engine.paths, 'math', '数学', graph, regions, todayStr(new Date()), nodeVaultFs)
 }
 
 // ---- 纯函数：候选收集 / 提升 / 反哺 hints / 内容级审计 ----
@@ -313,7 +314,7 @@ test('graphEncBackfill：invokes 投影出生权重随 enrich 提案回填（#14
     assert.equal(applied.course, '数学')
 
     // 正典生效：甲 w = 1/1（唯一带 invokes 的题），投影 note 留痕
-    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math')).load()
+    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
     const graph = new Graph(regions)
     assert.deepEqual(graph.encOf['乙'], [['甲', 1]])
     const edge = regions[0]!.blocks[0]!.nodes.find(n => n.name === '乙')!.enc[0]!

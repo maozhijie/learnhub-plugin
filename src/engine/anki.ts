@@ -11,7 +11,7 @@
  * （sourceKeyOf / parseSourceKey）。AnkiConnect 走可注入 transport（测试用
  * 假 Anki，运行时 fetch 到 http://127.0.0.1:8765）。
  */
-import { readFile } from 'node:fs/promises'
+import type { VaultFs } from './io.ts'
 import { sourceKeyOf } from './types.ts'
 import { atomicWrite } from './io.ts'
 import { alreadyScheduledOn } from './advance.ts'
@@ -145,7 +145,7 @@ export function planMirrorSync(payloads: AnkiNotePayload[], entries: AnkiMirrorE
 // ---- 镜象清单落盘 ----
 
 export class AnkiMirror {
-  constructor(private paths: Paths) {}
+  constructor(private paths: Paths, private fs: VaultFs) {}
 
   path(): string {
     return this.paths.ankiMirrorPath
@@ -156,7 +156,7 @@ export class AnkiMirror {
   async load(): Promise<AnkiMirrorDoc> {
     let raw: string
     try {
-      raw = await readFile(this.path(), 'utf8')
+      raw = await this.fs.readFile(this.path())
     } catch {
       return emptyMirror()
     }
@@ -179,7 +179,7 @@ export class AnkiMirror {
   }
 
   async save(doc: AnkiMirrorDoc): Promise<void> {
-    await atomicWrite(this.path(), JSON.stringify(doc, null, 1) + '\n')
+    await atomicWrite(this.path(), JSON.stringify(doc, null, 1) + '\n', this.fs)
   }
 }
 

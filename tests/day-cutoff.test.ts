@@ -7,6 +7,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { dayOfTs, todayStr, parseCutoff, fmtCutoff, parseDay, fmtDay } from '../src/engine/dates.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { readDayCutoff, writeDayCutoff, sumXp } from '../src/engine/xp.ts'
 import { DAY_CUTOFF_DEFAULT } from '../src/engine/params.ts'
 import type { PracticeRec } from '../src/engine/types.ts'
@@ -65,24 +66,24 @@ test('dayOfTs：本地 ISO ts → 学习日；跨月/跨年正确；cutoff=0 恒
 test('readDayCutoff：缺失回落默认 02:00，非法同样回落，00:00 合法为 0', async () => {
   assert.equal(DAY_CUTOFF_DEFAULT, '02:00')
   await withVault({ tag: 'cutoff-missing-', files: cfg({ daily_xp_goal: 42 }) }, async ({ engine }) => {
-    assert.equal(await readDayCutoff(engine.paths), 120)
+    assert.equal(await readDayCutoff(engine.paths, nodeVaultFs), 120)
   })
   await withVault({ tag: 'cutoff-zero-', files: cfg({ day_cutoff: '00:00' }) }, async ({ engine }) => {
-    assert.equal(await readDayCutoff(engine.paths), 0)
+    assert.equal(await readDayCutoff(engine.paths, nodeVaultFs), 0)
   })
   await withVault({ tag: 'cutoff-bad-', files: cfg({ day_cutoff: '25:00' }) }, async ({ engine }) => {
-    assert.equal(await readDayCutoff(engine.paths), 120)
+    assert.equal(await readDayCutoff(engine.paths, nodeVaultFs), 120)
   })
 })
 
 test('writeDayCutoff：归一化落盘、合并保留其他字段、非法 fail loud', async () => {
   await withVault({ tag: 'cutoff-write-', files: cfg({ daily_xp_goal: 42 }) }, async ({ engine }) => {
-    assert.equal(await writeDayCutoff(engine.paths, '4:30'), '04:30')
-    assert.equal(await readDayCutoff(engine.paths), 270)
+    assert.equal(await writeDayCutoff(engine.paths, '4:30', nodeVaultFs), '04:30')
+    assert.equal(await readDayCutoff(engine.paths, nodeVaultFs), 270)
     const doc = JSON.parse(await readFile(engine.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
     assert.equal(doc.daily_xp_goal, 42)
     assert.equal(doc.day_cutoff, '04:30')
-    await assert.rejects(() => writeDayCutoff(engine.paths, '99:00'), /HH:mm/)
+    await assert.rejects(() => writeDayCutoff(engine.paths, '99:00', nodeVaultFs), /HH:mm/)
   })
 })
 

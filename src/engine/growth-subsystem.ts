@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
 /**
  * Growth 子系统（#152 刀 11 / ADR-0043）：滚动教练域——罗盘、教练回合感知面、
  * 生长批受理、边实验账本与复诊。
@@ -12,6 +10,7 @@ import { readFile } from 'node:fs/promises'
 // 生长批受理、边实验账本与复诊。住同域新文件（compass.ts 与 proposals.ts 互相引用，
 // 放进领主即成环）；本文件只被门面引用，跨子系统调用经窄面注入回引门面。
 
+import type { VaultFs } from './io.ts'
 import type { Store } from './store.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
@@ -35,6 +34,8 @@ import type { ProbationCourseView, ProbationEntry, ProbationFold, ProbationOutco
 export interface GrowthDeps {
   /** 时钟端口（#175 阶段①）：复诊结算 decidedAt 戳。 */
   clock: Clock
+  /** vault 存储端口（#175 阶段②）。 */
+  fs: VaultFs
   store: Store
   paths: Paths
   registry: Registry
@@ -106,15 +107,15 @@ export class GrowthSubsystem {
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const path = this.e.paths.compassPath(c.root)
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root))
-    if (!existsSync(path)) {
+    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
+    if (!this.e.fs.exists(path)) {
       return {
         course: c.name, path,
         endpoint: anchor?.endpoint ?? null, goal_type: anchor?.goal_type ?? null,
         missing: true, route: null, annotations: null, eta: null, eta_week: null,
       }
     }
-    const doc = parseCompass(await readFile(path, 'utf8'))
+    const doc = parseCompass(await this.e.fs.readFile(path))
     const eta = sectionBody(doc, SECTION_ETA)
     return {
       course: c.name, path,
@@ -155,13 +156,13 @@ export class GrowthSubsystem {
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const root = c.root
-    const anchor = await readAnchor(this.e.paths.anchorPath(root))
+    const anchor = await readAnchor(this.e.paths.anchorPath(root), this.e.fs)
     if (!anchor) {
       throw new Error(`[compass] 课程「${c.name}」未播种（终点锚 Missing）——罗盘初画锚在终点上，先走种子提案（kind=seed）。`)
     }
     const { graph } = await this.e.loadView(c)
     const path = this.e.paths.compassPath(root)
-    const existing = existsSync(path) ? await readFile(path, 'utf8') : null
+    const existing = this.e.fs.exists(path) ? await this.e.fs.readFile(path) : null
     const doc = existing ? parseCompass(existing) : null
     const annotations = hasLearnerAnnotations(doc ? sectionBody(doc, SECTION_ANNOTATIONS) : null)
       ? sectionBody(doc!, SECTION_ANNOTATIONS)
@@ -187,7 +188,7 @@ export class GrowthSubsystem {
       withSectionText(existing ?? compassScaffold(c.name), SECTION_ROUTE, body),
       SECTION_ETA, ETA_PENDING,
     )
-    await atomicWrite(path, next)
+    await atomicWrite(path, next, this.e.fs)
     // repainted = 罗盘上曾有已画路线（占位/缺席不算）；重写不覆盖的语义由段级合并保证
     const priorRoute = doc ? sectionBody(doc, SECTION_ROUTE)?.trim() ?? '' : ''
     const routeLines = body.split('\n').filter(l => l.trim()).length
@@ -211,7 +212,7 @@ export class GrowthSubsystem {
     courseKey: string, routeMd: string,
   ): Promise<{ course: string; path: string; route_lines: number }> {
     const c = await this.e.registry.resolve(courseKey)
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root))
+    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
     if (!anchor) {
       throw new Error(`[compass] 课程「${c.name}」未播种（终点锚 Missing）——罗盘重写锚在终点上，先走种子提案（kind=seed）。`)
     }
@@ -221,8 +222,8 @@ export class GrowthSubsystem {
       throw new Error(`[compass] 重写产物未过路线门，罗盘未改动：\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     const path = this.e.paths.compassPath(c.root)
-    const base = existsSync(path) ? await readFile(path, 'utf8') : compassScaffold(c.name)
-    await atomicWrite(path, withSectionText(base, SECTION_ROUTE, body))
+    const base = this.e.fs.exists(path) ? await this.e.fs.readFile(path) : compassScaffold(c.name)
+    await atomicWrite(path, withSectionText(base, SECTION_ROUTE, body), this.e.fs)
     return { course: c.name, path, route_lines: body.split('\n').filter(l => l.trim()).length }
   }
 
@@ -247,13 +248,13 @@ export class GrowthSubsystem {
     const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta }> = []
     for (const c of courses) {
       try {
-        const anchor = await readAnchor(this.e.paths.anchorPath(c.root))
+        const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
         if (!anchor) {
           out.push({ course: c.name, state: 'skipped', detail: '未播种（终点锚 Missing）' })
           continue
         }
         const path = this.e.paths.compassPath(c.root)
-        const existing = existsSync(path) ? await readFile(path, 'utf8') : compassScaffold(c.name)
+        const existing = this.e.fs.exists(path) ? await this.e.fs.readFile(path) : compassScaffold(c.name)
         const memoed = this.etaMemo.get(c.name)
         const eta = !opts.force && memoed?.week === weekStart
           ? memoed.eta
@@ -263,7 +264,7 @@ export class GrowthSubsystem {
           out.push({ course: c.name, state: 'current', eta })
           continue
         }
-        await atomicWrite(path, withSectionText(existing, SECTION_ETA, renderEtaBody(eta)))
+        await atomicWrite(path, withSectionText(existing, SECTION_ETA, renderEtaBody(eta)), this.e.fs)
         out.push({ course: c.name, state: 'refreshed', eta })
       } catch (err) {
         out.push({ course: c.name, state: 'skipped', detail: err instanceof Error ? err.message : String(err) })
@@ -279,7 +280,7 @@ export class GrowthSubsystem {
   private async compassEtaFold(
     c: CourseEntry, anchor: { endpoint: string }, today: string, weekStart: string,
   ): Promise<CompassEta> {
-    const minutesPerDay = await readDailyGoal(this.e.paths)
+    const minutesPerDay = await readDailyGoal(this.e.paths, this.e.fs)
     const { cards, nodes, scheds } = await this.e.sandboxPopulation([c], null)
     const endpointKey = `${c.name}/${anchor.endpoint}`
     const probes: CompassEtaProbe[] = []
@@ -322,7 +323,7 @@ export class GrowthSubsystem {
    * exhausted，判据自然通过、零告警。 */
   private async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
     const { graph, state } = await this.e.loadView(c)
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root))
+    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
     const endpoint = anchor?.endpoint ?? null
     const live = this.coachFrontier(graph, state).filter(n => n !== endpoint)
     return {
@@ -384,7 +385,7 @@ export class GrowthSubsystem {
     const { today: learningToday, cutoff } = await this.e.learningDay()
     const today = opts.today ?? learningToday
     const lightweight = opts.lightweight === true
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root))
+    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
     const active = [...this.coachFrontier(graph, state), ...graph.names.filter(n => effectiveStage(state, n) === 'learning')]
 
     const out: string[] = [
@@ -565,7 +566,7 @@ export class GrowthSubsystem {
     applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[]; ready_unbuilt: string[] } | null
   }> {
     const c = await this.e.registry.resolve(courseKey)
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root))
+    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
     if (!anchor) {
       throw new Error(`[coach-growth] 课程「${c.name}」未播种（终点锚 Missing）——教练回合锚在终点上，先走种子提案（kind=seed）。`)
     }
@@ -595,7 +596,7 @@ export class GrowthSubsystem {
       const added = contested.spec.ops
         .filter(o => o.op === 'add_node' && o.name)
         .map(o => ({ name: o.name!, est: o.est }))
-      const minutesPerDay = await readDailyGoal(this.e.paths)
+      const minutesPerDay = await readDailyGoal(this.e.paths, this.e.fs)
       const { cards, nodes, scheds } = await this.e.sandboxPopulation([c], null)
       const pops = arbitrationPopulations(nodes, cards, added, c.name)
       const plan: SandboxPlan = { minutesPerDay, weeks: SANDBOX_DEFAULT_WEEKS }
@@ -732,7 +733,7 @@ export class GrowthSubsystem {
     tallies: GrowthBatchTally[]
     rates: ReturnType<typeof growthRates>
   }> {
-    const fold = foldProbation(await readProbationLedger(this.e.paths, c.root))
+    const fold = foldProbation(await readProbationLedger(this.e.paths, c.root, this.e.fs))
     const practice = netPracticeRecs(await this.e.store.practiceAll(), await this.e.store.erratumAll())
     const reviews = await this.e.store.reviewLogAll()
     const learningDays = learningDaysOf(practice, reviews, c.name, cutoff, today)
@@ -761,7 +762,7 @@ export class GrowthSubsystem {
       if (p.kind !== 'edit' || p.status !== 'applied' || !p.decided) continue
       if (!p.summary.startsWith('生长批（')) continue
       try {
-        const doc = YAML.parse(await readFile(this.e.paths.proposalArtifactPath(p.id, 'edit', p.course), 'utf8')) as {
+        const doc = YAML.parse(await this.e.fs.readFile(this.e.paths.proposalArtifactPath(p.id, 'edit', p.course))) as {
           note?: { operator?: unknown }
           ops?: Array<{ op?: unknown }>
         }
@@ -820,7 +821,7 @@ export class GrowthSubsystem {
    * （EMA/计数不动，proven 后恢复；普通前进/旁支节点不受闸）。questionAnswer/
    * questionForget/interactiveSettle/项目回流四处消费。 */
   private async exerciseGated(c: CourseEntry, node: string): Promise<boolean> {
-    const fold = foldProbation(await readProbationLedger(this.e.paths, c.root))
+    const fold = foldProbation(await readProbationLedger(this.e.paths, c.root, this.e.fs))
     const hit = fold.byNode.get(node)
     return hit !== undefined && !hit.outcome
   }
@@ -911,7 +912,7 @@ export class GrowthSubsystem {
                 // 账本追加只增，折叠口径每 (proposal, node) 取最后一行（读侧幂等）
                 name: `账本结局行#${entry.proposal}:${entry.node}`,
                 run: async () => {
-                  await appendProbationEntry(this.e.paths, c.root, settledEntry)
+                  await appendProbationEntry(this.e.paths, c.root, settledEntry, this.e.fs)
                 },
               },
               {
@@ -939,7 +940,7 @@ export class GrowthSubsystem {
     const rec = proposals.find(p => p.id === entry.proposal)
     if (!rec) return null
     try {
-      const doc = YAML.parse(await readFile(this.e.paths.proposalArtifactPath(entry.proposal, 'edit', rec.course), 'utf8')) as {
+      const doc = YAML.parse(await this.e.fs.readFile(this.e.paths.proposalArtifactPath(entry.proposal, 'edit', rec.course))) as {
         note?: { recheck?: { metric?: unknown } }
       }
       const metric = doc.note?.recheck?.metric
@@ -1012,10 +1013,10 @@ export class GrowthSubsystem {
       for (const concept of taught) {
         await appendSedimentEvent(this.e.paths, {
           kind: 'recheck_outcome', tier: 'immediate', concept: canonicalOf(concept), payload: { ...payload },
-        }, this.e.clock.nowMs())
+        }, this.e.clock.nowMs(), this.e.fs)
       }
     } else {
-      await appendSedimentEvent(this.e.paths, { kind: 'recheck_outcome', tier: 'immediate', payload }, this.e.clock.nowMs())
+      await appendSedimentEvent(this.e.paths, { kind: 'recheck_outcome', tier: 'immediate', payload }, this.e.clock.nowMs(), this.e.fs)
     }
     if (entry.outcome === '剪除' && ctx.settlePid) {
       await appendSedimentEvent(this.e.paths, {
@@ -1026,7 +1027,7 @@ export class GrowthSubsystem {
           restored: (graph.succ[entry.node] ?? []).map(consumer => `${consumer} ← ${ctx.coarsePre.join('、')}`),
           concepts: taught.map(canonicalOf),
         },
-      }, this.e.clock.nowMs())
+      }, this.e.clock.nowMs(), this.e.fs)
     }
     await this.e.store.appendJournal({
       course: c.name, node: entry.node, rating: null, kind: 'probation_settle', elapsed_days: 0,

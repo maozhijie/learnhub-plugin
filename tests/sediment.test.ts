@@ -16,6 +16,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fsrs, generatorParameters } from 'ts-fsrs'
 import { foldSediment, readSedimentCanon, renderLearnerProfile, latestFsrsParams } from '../src/engine/sediment.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import type { SedimentEvent } from '../src/engine/sediment.ts'
 import { getScheduler, previewDue } from '../src/engine/srs.ts'
 import { DESIRED_RETENTION } from '../src/engine/params.ts'
@@ -78,7 +79,7 @@ test('追加写：kind/tier/payload 校验 fail loud；正典落 jsonl；legacy 
     await assert.rejects(engine.sedimentAppend('calibration', 'daily' as never, {}), /非法 tier/)
     await assert.rejects(engine.sedimentAppend('calibration', 'weekly', 'nope' as never), /payload/)
     await engine.sedimentAppend('fsrs_params', 'immediate', { parameters: [1, 2, 3] }, ' 概率 ')
-    const canon = await readSedimentCanon(engine.paths)
+    const canon = await readSedimentCanon(engine.paths, nodeVaultFs)
     assert.equal(canon.length, 1)
     assert.equal(canon[0]!.concept, '概率', '概念地址 trim 后落盘')
     assert.ok(existsSync(engine.paths.sedimentLegacyDir), 'legacy 分区存在性保证')
@@ -91,9 +92,9 @@ test('legacy 零消费路径：legacy/ 里的事件永不进折叠', async () =>
     await mkdir(engine.paths.sedimentLegacyDir, { recursive: true })
     const legacyLine = JSON.stringify({ ts: '2020-01-01T00:00:00', kind: 'fsrs_params', tier: 'immediate', payload: { parameters: [9, 9, 9] } })
     await writeFile(join(engine.paths.sedimentLegacyDir, '史前.jsonl'), legacyLine + '\n', 'utf8')
-    const canon = await readSedimentCanon(engine.paths)
+    const canon = await readSedimentCanon(engine.paths, nodeVaultFs)
     assert.equal(canon.length, 1, '读正典不读 legacy')
-    assert.deepEqual(await latestFsrsParams(engine.paths), [1, 2, 3])
+    assert.deepEqual(await latestFsrsParams(engine.paths, nodeVaultFs), [1, 2, 3])
   })
 })
 
@@ -156,7 +157,7 @@ test('FSRS 正典化：优化写沉淀正典 + 缓存镜像 + 档案投影；删
     // 正典事件在沉淀（含 meta 可追溯）
     const fold = await engine.sedimentFold()
     assert.equal(fold.counts.fsrs_params, 2)
-    assert.deepEqual(await latestFsrsParams(engine.paths), trained2)
+    assert.deepEqual(await latestFsrsParams(engine.paths, nodeVaultFs), trained2)
 
     // 投影随结算重建
     const profile = await readFile(engine.paths.learnerProfilePath, 'utf8')
@@ -166,7 +167,7 @@ test('FSRS 正典化：优化写沉淀正典 + 缓存镜像 + 档案投影；删
     // 删缓存不丢事实：getScheduler 落沉淀取回同一套参数
     await rm(engine.paths.fsrsParamsPath('math'))
     const today = localDay()
-    const sched = await getScheduler(engine.paths, 'math')
+    const sched = await getScheduler(engine.paths, 'math', nodeVaultFs)
     assert.equal(previewDue(sched, null, 3, today), previewDue(schedWith(trained2), null, 3, today), '与显式用沉淀参数构造的调度器同推演')
     assert.notEqual(previewDue(sched, null, 3, today), previewDue(schedWith(defaultParams()), null, 3, today), '确实不是默认参数')
   })
