@@ -15,6 +15,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
+import { WIRE_ARGS } from '../src/commands/index.ts'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -39,4 +40,32 @@ test('UI 形状收口：引擎形状手工镜像已清零（响应类型一律�
   assert.deepEqual(local.sort(), ['AgentGuideItem', 'ExperimentsDoc', 'LlmView'].sort(),
     `ui/src/types.ts 又多出手写 interface（引擎形状该从 output 派生）：${local.join(', ')}`)
   assert.ok(text.includes("from '../../src/commands/index'"), '派生入口（注册表）不在了')
+})
+
+test('UI 请求体线名以声明为权威：UI 写出的每个 snake_case 键都在某个命令的声明里', () => {
+  // 第三处手写映射（UI 端 JS 名 → 线名）今天仍逐处写着；这条门把它的**权威**钉在声明上：
+  // 声明（registry 的 args 键）是线名的唯一出处——UI 写出一个声明里没有的 snake_case 键即失败。
+  const text = readFileSync(join(ROOT, 'ui', 'src', 'api.ts'), 'utf8')
+  const declared = new Set([...WIRE_ARGS.values()].flat())
+  const written = new Set([...text.matchAll(/(?:^|[{,\s])([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\s*[:,}]/gm)]
+    .map(m => m[1]!)
+    // 排除误取：URL 查询串里的参数名不是「体键」（`?week_start=` 一类由 q() 拼）
+    .filter(k => !text.includes(`?${k}=`) && !text.includes(`${k}=\${`)))
+  // 覆盖面说明：只扫「体对象里直接写出的 snake_case 键」（展开式 `...(cond ? {k: v} : {})` 里的
+  // 键也在内），不含 q() 拼进查询串的参数名——键集小不是塌了，是它只覆盖这一层；
+  // 加一个新线名而声明里没有，仍然会被挡下。
+  assert.ok(written.size >= 8, `扫到的线名只剩 ${written.size} 个（扫描面塌了）`)
+  // 登记在案的非请求键（逐条理由）：扫描把**响应字段**也一并看见了，它们不是线名；
+  // defer_schedule 是唯一真例外——面板独有键，工具面 schema 不许它进 args，由该路由的 handler 自读。
+  const NOT_WIRE: Record<string, string> = {
+    suggest_next: '响应字段（读侧，非请求键）',
+    arm_today: '响应字段（读侧，非请求键）',
+    maintenance_days: '响应字段（读侧，非请求键）',
+    defer_schedule: '面板独有键：工具面 schema 不含它（门⑧ 不许并进 args），由 /question-answer 的 handler 自读',
+  }
+  const bad = [...written].filter(k => !declared.has(k) && !(k in NOT_WIRE))
+  assert.deepEqual(bad, [], `这些线名不在任何命令的声明里（映射与声明漂移）：${bad.join(', ')}`)
+  // 清单自检：登记的非请求键必须真的不在声明里（不许沉淀成永久豁免）
+  const stale = Object.keys(NOT_WIRE).filter(k => declared.has(k))
+  assert.deepEqual(stale, [], `这些键已经在声明里了，该从 NOT_WIRE 里删掉：${stale.join(', ')}`)
 })

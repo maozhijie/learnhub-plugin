@@ -96,6 +96,7 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 - **八道门**（1-6 硬门、7 既有快照、8 一致性锁）：① `engine` ∈ 门面原型方法（留空的 25 条逐条登记理由：队列型 9／按参分派型 7／无引擎型 9）② 队列通道 `phase` ∈ `GEN_JOB_PHASES` 且 runner 认得（节点锚定阶段或 `jobs.ts` 里有字面分支）③ `id`／`tool` 名／`(method, path)` 唯一（并断言索引没被静默覆盖）④ handler 覆盖（待适配器切面）⑤ `AGENT_GUIDE` 每条 tool ∈ 注册表的 agent 通道 ⑥ `src/commands/` 零对外运行时依赖（只允许同目录相对 import 与 `import type`）⑦ 零行为漂移：**工具面 259 条行为探针**（`tests/fixtures/host-tools-behavior.json`，每个工具全参 + 逐个缺必填）+ 路由面 464 条探针快照 ⑧ 声明与面一致：agent 通道 `args` 经 `sdkParameters` 投影后与工具面快照**逐字相同**、panel 通道 `(method, path)` 与路由清单逐字相同。
 - **`bind`／`required`／`phase` 住通道**（ADR-0045 裁定）：实参绑定 `Array<string|null>`＝引擎实参位置序、`required` 表达「必填是（命令,通道）对的事实」（实测 9 处两面不一致）、`phase` 是队列通道的入口阶段。`args` 的 `read` 键是投递层取值语义（trimmed／text／raw／fallback／finite／query），下发工具面前由 `sdkParameters` 剥掉——**工具面 schema 逐字不变是硬约束**，门⑧ 就是它的锁。
 - 声明由重构前的两个投递面实测生成（生成器一次性，不入库）；此后手改会被门⑧ 打回。
+- **UI 同源派生**（`tests/ui-types.test.ts` + `scripts/scan-ui-types.mjs`）：响应类型从注册表 `output` 派生（`CommandOutput<id>`，镜像已清零）、139 处调用点零改动；UI 类型门只断言 `ui/src` 自身 0 错（依赖源码的存量债归根类型门），另有一条「UI 写出的 snake_case 线名必须在声明里」的权威门。
 - **两个适配器已切到声明**：panel 面 = `host/api.ts`（查表 → 有 `bind` 走生成路径 49/125 → 否则 `host/handlers.ts` 的 76 条例外 handler）；agent 面 = `host/tools.ts`（1039 → 127 行注册循环 + `sdkParameters` 投影 → 例外 66 条在 `host/tool-handlers.ts`）。`routes.ts`／`routes-post.ts` 退役。
 - **零漂移的三张网**：工具面 schema 快照（111 条 name/description/parameters）+ 工具面 259 条行为探针（文本 + 引擎调用序列）+ 路由面 464 条探针，切面前捕获、切面后逐字复现。
 

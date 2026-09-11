@@ -75,7 +75,9 @@ interface CommandSpec {
 - **panel 通道切面**（`3d15d3a`）：`host/api.ts` 只做查表分发（有 bind → 生成路径：声明式取值 + engine 直调，无 bind → 例外 handler），`host/handlers.ts` 承接 76 条（形状要加工 33／实参不可绑 33／无单一入口 3／取值语义与次序表达不了 7）；`routes.ts`／`routes-post.ts` 退役。生成路径 49/125。
 - **agent 通道切面**（`e1c83d8`）：`host/tools.ts` 1039 → 127 行（注册循环 + `sdkParameters` + AGENT_GUIDE），`host/tool-handlers.ts` 承接 66 条（形状要加工 37／实参要换算 29）。生成路径 45/111。
 - **零行为漂移的证据**：464 条路由探针 + 259 条工具行为探针 + 工具面 schema 快照，三个面全部逐字复现；775 个测试全绿；类型门 75 处不变（错误随代码搬移）。
-- **未完成（本票唯一开口）**：UI 侧同源派生——`output` 的类型引用未逐命令填、`ui/src/api.ts` 的 49 处内联匿名响应类型与 `ui/src/types.ts` 的 19 处引擎形状镜像未收口、camelCase→snake_case 的第三处手写映射未数据化。`output` 的填法建议走 `command<E>()` 的泛型推断（`output?: Awaited<ReturnType<LearnhubEngine[E]>>`，零手写注解），需要把注册表从「数组」改成可按 id 索引的类型可见形状（或逐命令具名导出）。
+- **UI 同源派生**（`cb5d267`／`451cc01`／`c89c2a4`）：`output` 做成 **`command()` 对 `engine` 泛型的推断**（`output?: E extends EngineMethod ? Awaited<ReturnType<LearnhubEngine[E]>> : unknown`）——154 条声明**零手写输出类型**；为此注册表从「数组」改成**按 id 键的类型可见对象**（`COMMANDS`），运行时遍历面另给 `COMMAND_LIST`，并导出 `CommandId` / `CommandOutput<id>` / `WIRE_ARGS`（线名表）。UI 侧：`ui/src/types.ts` 的 **21 处引擎形状镜像全部收口为派生别名**（`CommandOutput<id>`，子类型按索引取），宿主形状改从宿主模块派生；`ui/src/api.ts` 的**生成路径端点响应类型改为 `CommandOutput<id>`**、调用点 139 处零改动；**ui/src 类型错 58 → 0**（派生把镜像藏住的两处真漂移暴露出来并修掉：BankPage 按 `{applied}` 读数组响应、ExplainDrawer 的 `advice` 必填）。引擎侧顺带收口：优化器 `meta?: Record<string, unknown>` → 具名 `OptimizeMeta`。
+  - **UI 类型门的扫描面**：派生要求 UI 的类型程序把宿主/引擎源码当**类型依赖**拉进来，而它们按根 tsconfig（`strict: false`）写；故 UI 的类型门只断言 `ui/src` 自身 0 错（`scripts/scan-ui-types.mjs`，串行跑在 `npm run typecheck` 里），依赖侧存量债（186 处）照实打印、归根类型门另开票。
+  - **两处有理由的保留**（登记而非默默放过）：①`/experiments` 是多入口命令的复合响应，组成仍从引擎入口派生、复合本身三行手写；②`ui/src/api.ts` 里 **40 处内联响应类型保持显式**——它们的命令没有单一 `output`（队列受理／无引擎／宿主复合响应，正是本 ADR 裁定 1 的三类），线名映射由新门「UI 写出的 snake_case 键必须在声明里」钉住权威，但**翻译仍是逐处手写**（未生成）。
 
 **八道门**（1-6 硬门 0，各带自检；7 沿用既有棘轮/快照门，8 是新增的一致性锁）：
 

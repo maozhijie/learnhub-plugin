@@ -51,6 +51,15 @@ export type CommandId = keyof typeof COMMANDS
 /** 命令的响应类型 = 该命令 `output` 的派生（引擎入口的返回类型；留空者 unknown）。 */
 export type CommandOutput<K extends CommandId> = NonNullable<(typeof COMMANDS)[K]['output']>
 
+/**
+ * panel 通道的**线名表**（`${method} ${path}` → 该命令 `args` 的键名）：
+ * 请求体的键名出处——UI 侧 camelCase→snake_case 的翻译以它为权威（`tests/ui-types.test.ts` 逐条核对）。
+ */
+export const WIRE_ARGS: ReadonlyMap<string, readonly string[]> = new Map(
+  COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route)
+    .map(x => [`${x.route!.method} ${x.route!.path}`, Object.keys(c.args)] as const)),
+)
+
 /** 按工具名索引（agent 通道）。 */
 export const BY_TOOL: ReadonlyMap<string, CommandSpec> = new Map(
   COMMAND_LIST.flatMap(c => c.channels.filter(x => x.tool).map(x => [x.tool!, c] as const)),

@@ -99,7 +99,7 @@
   },
   "sizes": {
     "src/client/index.tsx": 155,
-    "src/commands/index.ts": 62,
+    "src/commands/index.ts": 71,
     "src/commands/types.ts": 105,
     "src/commands/图谱.ts": 289,
     "src/commands/学习.ts": 688,
