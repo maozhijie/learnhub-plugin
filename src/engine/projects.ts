@@ -631,7 +631,7 @@ export class ProjectSubsystem {
   /** 引擎写「注册豁免区」文件（我的产出/、项目日志）后刷新已注册源指纹（#107/#113）：
    * 引擎自己的写不算内容漂移——漂移语义只留给引擎之外的手改。该路径未注册或文件
    * 缺失时静默跳过（刷新是写侧卫生步骤，不是独立动作）。 */
-  private async refreshSourceFingerprints(absPaths: string[]): Promise<void> {
+  async refreshSourceFingerprints(absPaths: string[]): Promise<void> {
     if (!absPaths.length) return
     const rels = absPaths.map(p => p.replace(/\\/g, '/').slice(this.e.vaultRoot.length + 1))
     const manifest = await this.e.noteManifest.load()

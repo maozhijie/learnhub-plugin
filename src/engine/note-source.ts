@@ -370,7 +370,7 @@ export class ChannelsSubsystem {
   private noteManifest: NoteSourceManifest
 
   /** 笔记源路由判定：course=「笔记源」伪课程（真实课程同名时课程优先，不触发路由）。 */
-  private async isNoteSourceCourse(courseKey: string | undefined): Promise<boolean> {
+  async isNoteSourceCourse(courseKey: string | undefined): Promise<boolean> {
     if (courseKey !== NOTE_SOURCE_COURSE) return false
     return (await this.e.registry.get(NOTE_SOURCE_COURSE)) === null
   }
@@ -638,7 +638,7 @@ export class ChannelsSubsystem {
   /** 收题公步（#119 防相似：笔记出题/节点出题/逐节出题三处同缝）：程序化查重命中
    * → duplicate（附对方题面供报告）；入库成功把题面登记进查重基线（批内互查）；
    * 单题非法（超纲题型等）→ invalid，不毁整批。 */
-  private async admitQuestion(
+  async admitQuestion(
     root: string, node: string, q: Record<string, unknown>, stem: string,
     existingStems: Array<{ q: string; kind?: string; difficulty?: number }>,
   ): Promise<{ verdict: 'added' } | { verdict: 'duplicate'; against: string } | { verdict: 'invalid' }> {
@@ -658,7 +658,7 @@ export class ChannelsSubsystem {
    * 序号回填清单内名字；清单缺席直接跳过（出生打标门不激活，invokes 恒合法 Missing）。
    * 修复恰好一次：补不齐不重试，仍空的题由受理门拒收/弃置（负路径在受理门侧收口）。
    * 返回实际回填的题数（留痕用）。 */
-  private async repairInvokesOnce(
+  async repairInvokesOnce(
     llm: LlmComplete,
     items: unknown[],
     scope: string[],
@@ -787,7 +787,7 @@ export class ChannelsSubsystem {
    * 状态随响应带出）；题库镜像 Broken → 该源卡挂起并带原因（镜像契约文件才 fail
    * loud，且不阻塞其他源）；漂移不挂起（旧卡继续复习，提示可重出/归档）。
    * inconsistent（清单条目缺失）无法核对指纹：卡照常出，状态随响应带出。 */
-  private async collectNoteSourceCards(
+  async collectNoteSourceCards(
     today: string,
   ): Promise<{ cards: Array<Record<string, unknown>>; drifted: Array<Record<string, unknown>>; suspended: Array<Record<string, unknown>> }> {
     const cards: Array<Record<string, unknown>> = []
@@ -864,7 +864,7 @@ export class ChannelsSubsystem {
    * （course=笔记源）——无节点证据、无 practice 流水、无节点定价/settle（同复习
    * 自评语义，ADR-0010）、无代表卡（笔记源没有节点）。XP 走无绑定行（ADR-0021）：
    * 与题卡同公式结算（含乱猜负 XP），作答时即落（挂起路径同题卡 practice 同时点）。 */
-  private async noteSourceAnswer(
+  async noteSourceAnswer(
     llmComplete: LlmComplete,
     sourceId: string, qid: string, answer: string,
     opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null },
@@ -927,7 +927,7 @@ export class ChannelsSubsystem {
 
 
   /** 笔记源自评结算：挂起标记唯一准入，推卡 + 复习日志（self），无代表卡回刷。 */
-  private async noteSourceRate(sourceId: string, qid: string, r: number): Promise<Record<string, unknown>> {
+  async noteSourceRate(sourceId: string, qid: string, r: number): Promise<Record<string, unknown>> {
     const bank = await this.e.bank.load(this.e.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
     if (!q) throw new Error(`[question-rate] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
@@ -942,7 +942,7 @@ export class ChannelsSubsystem {
 
 
   /** 笔记源忘记申报：rating=1 推卡 + 复习日志（auto），当日已推进拒绝。 */
-  private async noteSourceForget(sourceId: string, qid: string): Promise<Record<string, unknown>> {
+  async noteSourceForget(sourceId: string, qid: string): Promise<Record<string, unknown>> {
     const bank = await this.e.bank.load(this.e.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
     if (!q) throw new Error(`[question-forget] 笔记源 ${sourceId} 的题库没有 ${qid}。`)

@@ -480,7 +480,7 @@ export class LearnerSubsystem {
   /** struggle 近期窗口统计（#55 F 半）：作答流水按 (course,node) 聚合，只留窗口内的
    * 真实作答证据（含交互件结算与忘记申报）。recommendEvents 消费；与累计的题库
    * stats 分开——复习中节点的 struggle 只看近期窗口，老账不翻。 */
-  private async struggleWindow(today: string): Promise<Map<string, Map<string, WindowStat>>> {
+  async struggleWindow(today: string): Promise<Map<string, Map<string, WindowStat>>> {
     const out = new Map<string, Map<string, WindowStat>>()
     const cutoff = await readDayCutoff(this.e.paths, this.e.fs)
     for (const r of await this.e.store.practiceAll()) {
@@ -498,7 +498,7 @@ export class LearnerSubsystem {
 
   /** 单课程题库文件的共用遍历（bankSnapshot / difficultyAdvice / memoryHealth 消费）：
    * 对课程根题库目录下每个 <节点>.yaml 回调 (node, bank)；无题库目录的课程静默跳过。 */
-  private async scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void> {
+  async scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void> {
     let files: string[] = []
     try {
       files = await this.e.fs.readdir(this.e.paths.bankDir(c.root))
@@ -516,7 +516,7 @@ export class LearnerSubsystem {
   /** 全部启用课程的题库聚合（一次遍历）：每节点 due/count/accuracy/attempts。
    * 复习队列（due/count）与 struggle 提示（accuracy）共用；未做题节点也入表
    * （accuracy=null），供推荐流判定 struggle 与面板通用轮组装。 */
-  private async bankSnapshot(today: string): Promise<Map<string, NodeStat[]>> {
+  async bankSnapshot(today: string): Promise<Map<string, NodeStat[]>> {
     const out = new Map<string, NodeStat[]>()
     for (const c of await this.e.enabledCourses()) {
       const items: NodeStat[] = []
@@ -566,7 +566,7 @@ export class LearnerSubsystem {
   }
 
   /** 周复盘记录定位（<输出区>/周复盘/<周一>.md）。 */
-  private kataPath(weekStart: string): string {
+  kataPath(weekStart: string): string {
     return `${this.e.paths.outputKindDir('周复盘')}/${weekStart}.md`
   }
 
@@ -789,7 +789,7 @@ export class LearnerSubsystem {
 
   /** 讲解会话的正文要点（s1–s3 型）：lessonSections 切分（练习/反馈排除），
    * 封顶 8 节防包体失控（讲解包是会话 system，不是全文导出）。 */
-  private async explainPoints(c: CourseEntry, graph: Graph, node: string): Promise<ExplainPoint[]> {
+  async explainPoints(c: CourseEntry, graph: Graph, node: string): Promise<ExplainPoint[]> {
     const [, regionName] = graph.blockOf[node]
     const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
     return Sessions.lessonSections(body).slice(0, 8)

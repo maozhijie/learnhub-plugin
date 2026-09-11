@@ -104,7 +104,7 @@ export class ContentSubsystem {
    * 直接前置名，纯扫描 vault 个人笔记（排除学习中心；ADR-0010 只读纪律——检索
    * 永不写个人笔记）。宿主无检索/嵌入 API（探测结论见 vault-prior.ts 头注），走
    * #78 推荐的纯扫描降级路径。 */
-  private async vaultPriorFor(graph: Graph, node: string): Promise<string> {
+  async vaultPriorFor(graph: Graph, node: string): Promise<string> {
     const terms = priorTerms([node, ...(graph.preOf[node] ?? [])])
     if (!terms.length) return ''
     const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
@@ -429,7 +429,7 @@ export class ContentSubsystem {
    * opts.today（questions 通道专属）= 当前学习日：本学习日已推进的题带出答案/解析
    * ——直通卡披露与作答响应同一披露边界（都发生在「当日额度已用掉」之后）；
    * 复习队列是主动回忆面，不传 today，永不带答案。 */
-  private questionView(q: BankQuestion, i: number, opts?: { today?: string }): Record<string, unknown> {
+  questionView(q: BankQuestion, i: number, opts?: { today?: string }): Record<string, unknown> {
     const advancedToday = opts?.today !== undefined && alreadyAdvanced(q, opts.today)
     return {
       id: q.id, kind: q.kind, q: q.q, no: i + 1,
@@ -821,7 +821,7 @@ export class ContentSubsystem {
    * llmComplete 内），仍失败则抛错——本次作答在边界失败，不写任何分数/卡/证据
    * （#9 / ADR-0004 事务性）。每次解析失败把原始模型输出截断留痕到
    * state/判卷失败.jsonl（#116），ref 提供课程/节点/题目定位。 */
-  private async judgeBankAnswer(
+  async judgeBankAnswer(
     llmComplete: LlmComplete,
     q: BankQuestion, answer: string, op = 'question',
     ref: { course: string; node: string; qid: string },
@@ -856,7 +856,7 @@ export class ContentSubsystem {
 
   /** 判卷失败留痕（#116）：原始模型输出截断到 2000 字符附题目定位落 JSONL；
    * 留痕失败静默——debug 通道不能反过来弄垮作答主流程。 */
-  private async logGradingFailure(rec: {
+  async logGradingFailure(rec: {
     course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string
   }): Promise<void> {
     try {
@@ -870,7 +870,7 @@ export class ContentSubsystem {
 
 
   /** 作答 / 忘记 / 自评共用的前置：课程解析、笔记体检、题库定位。 */
-  private async questionContext(courseKey: string | undefined, node: string, qid: string, op: string) {
+  async questionContext(courseKey: string | undefined, node: string, qid: string, op: string) {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[${op}] 节点「${node}」不在图内。`)
@@ -884,7 +884,7 @@ export class ContentSubsystem {
 
   /** 节点笔记读写便道（ADR-0014 附带）：blockOf → courseNotePath → loadNote → asFm
    * 四步舞收口；写回经 saveNodeNote（saveNote 的双强转收在门面一处）。 */
-  private async nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }> {
+  async nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }> {
     const [, regionName] = graph.blockOf[node]
     const path = this.e.paths.courseNotePath(c.root, regionName, node)
     const { fm: rawFm, body } = await loadNote(path, this.e.fs)
@@ -892,7 +892,7 @@ export class ContentSubsystem {
   }
 
 
-  private async saveNodeNote(path: string, fm: Fm, body: string): Promise<void> {
+  async saveNodeNote(path: string, fm: Fm, body: string): Promise<void> {
     await saveNote(path, fm as unknown as Record<string, unknown>, body, this.e.fs)
   }
 
@@ -1007,7 +1007,7 @@ export class ContentSubsystem {
    * （ADR-0007 成立的前提）。节点文件仍是调度状态事实源——coursesTree / graphNode /
    * 图着色继续只读 fm；这只是快照回写，不是新的调度入口，「每题每天一次推进」
    * 不变量仍由题卡侧把守。代表卡没变（推的不是代表题）时不重写文件。 */
-  private async refreshRepCard(c: CourseEntry, graph: Graph, node: string): Promise<Fm | null> {
+  async refreshRepCard(c: CourseEntry, graph: Graph, node: string): Promise<Fm | null> {
     const bank = await this.e.bank.load(this.e.paths.courseRoot(c.root), node)
     let rep: FsrsBlock | null = null
     for (const q of bank.questions) {

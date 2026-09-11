@@ -521,7 +521,7 @@ export class BankSubsystem {
 
   /** 在册错误卡全展开（(course, node, card) 三元组，文件名序稳定）：空目录 = 合法
    * 空态、Broken 卡组跳过不阻塞（体检面报出）。复习队列、全量清单、生成去重三处同缝。 */
-  private async *errorCardTriples(
+  async *errorCardTriples(
     courses: ReadonlyArray<{ name: string; root: string }>, nodeFilter?: string,
   ): AsyncGenerator<{ course: string; node: string; card: ErrorCard }> {
     for (const c of courses) {

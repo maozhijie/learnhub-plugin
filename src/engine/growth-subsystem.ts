@@ -321,7 +321,7 @@ export class GrowthSubsystem {
    * 就绪存量与前瞻需求都不计终点（词条「前瞻深度」：终点是锚点不是课程节点）——
    * 课程尾段前沿只剩终点时判据永不可满足会让教练永不停摆；除终点外前沿清空 =
    * exhausted，判据自然通过、零告警。 */
-  private async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
+  async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
     const { graph, state } = await this.e.loadView(c)
     const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
     const endpoint = anchor?.endpoint ?? null
@@ -707,7 +707,7 @@ export class GrowthSubsystem {
   /** 生长闸门（注入 GraphProposals 的回调，propose/apply 双门消费）：只对生长批的
    * 插入/旁支生效——三率超限或复诊通过率触底时闸停（低数据静默），普通 edit 提案与
    * 结算自动提案（无 note）恒放行。插入积极性调速器，参数唯一出处 params.ts。 */
-  private async growthGateErrors(spec: EditProposalSpec): Promise<string[]> {
+  async growthGateErrors(spec: EditProposalSpec): Promise<string[]> {
     if (!spec.note || (spec.note.operator !== '插入' && spec.note.operator !== '旁支')) return []
     const adds = addNodeCountOf(spec.ops)
     if (!adds) return []
@@ -781,7 +781,7 @@ export class GrowthSubsystem {
   /** 单课程复诊/实验状态视图（statusJson 附带、/api/probation、learnhub_probation 共用
    * 核）：在途插入节点（面板「实验中」标记的取数）、到期未决、三率（滚动 30 学习日）
    * 与韧性闸门现势（含「下一个最小插入批」的standing 判定——调速器对教练的现势语义）。 */
-  private async probationViewFor(c: CourseEntry, today: string, cutoff: number): Promise<ProbationCourseView> {
+  async probationViewFor(c: CourseEntry, today: string, cutoff: number): Promise<ProbationCourseView> {
     const frame = await this.probationFrame(c, today, cutoff)
     const standing = growthGate(frame.rates, { operator: '插入', adds: 0 })
     const nextInsert = growthGate(frame.rates, { operator: '插入', adds: 1 })
@@ -820,7 +820,7 @@ export class GrowthSubsystem {
   /** probation 在途行使闸（#146）：实验中的插入节点——行使只记流不回流练习证据
    * （EMA/计数不动，proven 后恢复；普通前进/旁支节点不受闸）。questionAnswer/
    * questionForget/interactiveSettle/项目回流四处消费。 */
-  private async exerciseGated(c: CourseEntry, node: string): Promise<boolean> {
+  async exerciseGated(c: CourseEntry, node: string): Promise<boolean> {
     const fold = foldProbation(await readProbationLedger(this.e.paths, c.root, this.e.fs))
     const hit = fold.byNode.get(node)
     return hit !== undefined && !hit.outcome
@@ -1039,7 +1039,7 @@ export class GrowthSubsystem {
 
 
   /** JOL 预测值的显式契约：三档之外拒绝（参数错误），null/undefined 放行为无预测。 */
-  private jolPredicted(p: JolPrediction | null | undefined): JolPrediction | null {
+  jolPredicted(p: JolPrediction | null | undefined): JolPrediction | null {
     if (p === null || p === undefined) return null
     if (!JOL_PREDICTIONS.includes(p)) {
       throw new Error(`[jol] 预测只能是「${JOL_PREDICTIONS.join('」「')}」之一（收到 ${String(p)}）。`)

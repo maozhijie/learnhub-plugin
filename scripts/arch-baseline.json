@@ -205,7 +205,7 @@
     "src/engine/content-subsystem.ts": 10,
     "src/engine/content.ts": 1,
     "src/engine/graph-subsystem.ts": 10,
-    "src/engine/index.ts": 35,
+    "src/engine/index.ts": 4,
     "src/engine/learner-cards.ts": 4,
     "src/engine/note-source.ts": 2,
     "src/engine/projects.ts": 1,

@@ -376,7 +376,7 @@ export class LabSubsystem {
   }
 
   /** 实验对复习队列的当日生效臂（批次交替，ADR-0023 裁决 2）。 */
-  private async nof1QueueEffect(
+  async nof1QueueEffect(
     today: string,
   ): Promise<{ id: number; variable: Nof1Variable; arm: string } | null> {
     const exp = await this.nof1Active()
@@ -386,7 +386,7 @@ export class LabSubsystem {
 
   /** 推进落复习日志时的臂标注（ADR-0023 裁决 5）：batch = 当日臂（范围内课程）；
    * card = 卡级分臂 map。只是归因留痕——不改变推进、XP、Mastery；优化器混训不特判。 */
-  private async expTag(
+  async expTag(
     courseName: string, node: string, qid: string, today: string,
   ): Promise<{ id: number; arm: string } | null> {
     const exp = await this.nof1Active()
@@ -694,7 +694,7 @@ export class LabSubsystem {
 
   /** 沙盘推演的总体采集（sandboxRun 与罗盘 ETA 挂载共用，#143）：模拟卡 + 模拟节点
    * + 各课调度器实例。skipped（学习者自报已会）不进推演范围；未开始节点带 null 代表
-   * 卡随引入学成创建；题库缺失 = 合法空态。 */  private async sandboxPopulation(
+   * 卡随引入学成创建；题库缺失 = 合法空态。 */  async sandboxPopulation(
     courses: CourseEntry[], nodeFilter: Set<string> | null,
   ): Promise<{
     cards: SandboxCard[]
@@ -756,7 +756,7 @@ export class LabSubsystem {
   }
 
   /** 蒙特卡洛 + 聚合一步（三调用点共用：sandboxRun / 罗盘 ETA 折叠 / 双沙盘仲裁参照）。 */
-  private mcAggregate(
+  mcAggregate(
     plan: SandboxPlan, cards: SandboxCard[], nodes: SandboxNode[], today: string,
     scheds: Map<string, FSRS>, fallbackCourse: string,
   ): { curve: SandboxCurvePoint[]; map: Array<{ node: string; p50: number; p80: number }> } {
