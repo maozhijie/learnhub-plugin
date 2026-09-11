@@ -83,17 +83,17 @@ test('reviewQueue：抽查约 1/3 弹预测标记，关闭后完全消失', asyn
     banks: { 入门: [tfQuestion('q1', DUE_TF), tfQuestion('q2', DUE_TF), tfQuestion('q3', DUE_TF)] },
   }, async ({ engine }) => {
     engine.jolRng = () => 0.5
-    const r = await engine.reviewQueue('数学') as { cards: Array<{ id: string; jol?: boolean }> }
+    const r = await engine.content2.reviewQueue('数学') as { cards: Array<{ id: string; jol?: boolean }> }
     const marked = r.cards.filter(c => c.jol)
     assert.equal(marked.length, 1, '3 张 × 1/3 向上取整 = 1（非逐卡）')
 
     await engine.setJolConfig({ enabled: false })
-    const r2 = await engine.reviewQueue('数学') as { cards: Array<{ jol?: boolean }> }
+    const r2 = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }> }
     assert.ok(r2.cards.every(c => !c.jol), '全局关闭后完全不打扰')
     assert.deepEqual(await engine.jolConfig(), { enabled: false, rate: 1 / 3 })
 
     await engine.setJolConfig({ enabled: true, rate: 1 })
-    const r3 = await engine.reviewQueue('数学') as { cards: Array<{ jol?: boolean }> }
+    const r3 = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }> }
     assert.equal(r3.cards.filter(c => c.jol).length, 3, '抽样率可配')
     await engine.setJolConfig({ rate: 1 / 3 })
   })
@@ -109,7 +109,7 @@ test('作答/忘记携带预测落流水（逐条配对成立）；非法预测�
     await engine.questionAnswer(llm, '数学', '入门', 'q1', 'true', null,
       { deferSchedule: true, predicted: '会' })
     // 忘记申报 + 预测「不会」
-    await engine.questionForget('数学', '入门', 'q2', null, '不会')
+    await engine.content2.questionForget('数学', '入门', 'q2', null, '不会')
     const recs = await engine.store.practiceAll()
     assert.equal(recs.find(r => r.qid === 'q1')?.predicted, '会')
     assert.equal(recs.find(r => r.qid === 'q2')?.predicted, '不会')

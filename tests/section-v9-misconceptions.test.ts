@@ -71,7 +71,7 @@ const GOLD_S1 = '## 概念：鸽巢原理\n\n把不少于 n 只鸽放进 n 个�
 const GOLD_S2 = '## 例题：放球\n\n把 3 个球放进 2 个抽屉，必有一个抽屉至少 2 个球。\n'
 
 async function seedOutline(engine: { contentOutline: (c: string, n: string, y: string) => Promise<unknown> }) {
-  return engine.contentOutline('数学', '入门', OUTLINE_YAML)
+  return engine.content2.contentOutline('数学', '入门', OUTLINE_YAML)
 }
 
 // ---- 节段难度档：推导纯函数 ----
@@ -178,7 +178,7 @@ test('金样本回放：v9 换装后大纲+逐节落盘全链，同种子 vault 
 
 test('误解坑位进上下文包 §12；assumes 档位进 §13；缺席整段省略（Missing 合法空态）', async () => {
   await withVault({ tag: 'v9-pack-', graph: MISC_GRAPH, notes: { 入门: {} } }, async ({ engine }) => {
-    const pack = await engine.contentPack('数学', '入门')
+    const pack = await engine.content2.contentPack('数学', '入门')
     assert.match(pack, /## 12\. 误解坑位（生成期先验；讲到对应概念时预埋坑位警示）/)
     assert.match(pack, MIS_MODEL, '误解错误模型文字进包')
     assert.match(pack, /## 13\. 前置概念档位（assumes；写作时按档位把握「能默认学习者会什么」）/)
@@ -186,7 +186,7 @@ test('误解坑位进上下文包 §12；assumes 档位进 §13；缺席整段�
     assert.doesNotMatch(pack, /## 10\. 先做后教/, 'difficulty 3 未达 PS-I 阈值，§10/§11 不出现')
   })
   await withVault({ tag: 'v9-pack-empty-' }, async ({ engine }) => {
-    const pack = await engine.contentPack('数学', '入门')
+    const pack = await engine.content2.contentPack('数学', '入门')
     assert.doesNotMatch(pack, /误解坑位/, '无误解 → §12 整段省略')
     assert.doesNotMatch(pack, /前置概念档位/, '无 assumes → §13 整段省略')
   })
@@ -195,7 +195,7 @@ test('误解坑位进上下文包 §12；assumes 档位进 §13；缺席整段�
 test('PS-I 高难节点的 §11 踩坑选材接线：§12 在场时坑必须从登记先验中取', async () => {
   const PSI_GRAPH = MISC_GRAPH.replace('difficulty: 3', 'difficulty: 4')
   await withVault({ tag: 'v9-pack-psi-', graph: PSI_GRAPH, notes: { 入门: {} } }, async ({ engine }) => {
-    const pack = await engine.contentPack('数学', '入门')
+    const pack = await engine.content2.contentPack('数学', '入门')
     assert.match(pack, /## 11\. 专家思维轨迹/)
     assert.match(pack, /坑位选材：§12 附有误解坑位时\*\*必须\*\*从其中选一条与演示题同族的（登记在册的先验优先）/)
     assert.match(pack, MIS_MODEL)

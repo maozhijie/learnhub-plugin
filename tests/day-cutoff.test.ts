@@ -174,7 +174,7 @@ test('statusJson：date=学习日、day_cutoff 生效值随载荷带出', async 
 test('reviewQueue：date=学习日（与到期判定同口径）', async () => {
   await withVault({ tag: 'cutoff-queue-', files: cfg({ day_cutoff: '02:00' }) }, async ({ engine }) => {
     const { date } = await engine.xpStatus()
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.equal(q.date, date)
   })
 })

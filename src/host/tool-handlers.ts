@@ -35,7 +35,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_goal_intention': (args: { course: string; node: string; cue?: string; action?: string }) => run(rt, 'learnhub_goal_intention', async () =>
       JSON.stringify(await rt.engine.setGoalIntention(args.course, args.node, { cue: args.cue, action: args.action }))),
   'learnhub_review_queue': (args: { course?: string; node?: string; band_pref?: string }) => run(rt, 'learnhub_review_queue', async () =>
-      JSON.stringify(await rt.engine.reviewQueue(args.course, args.node, undefined, bandPref(args.band_pref)))),
+      JSON.stringify(await rt.engine.content2.reviewQueue(args.course, args.node, undefined, bandPref(args.band_pref)))),
   'learnhub_question_answer': (args: { course: string; node: string; qid: string; answer: string; predicted?: string }) => run(rt, 'learnhub_question_answer', async () =>
       JSON.stringify(await rt.engine.questionAnswer(
         llmSeam(ctx), args.course, args.node, args.qid, args.answer,
@@ -250,7 +250,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
     }),
   'learnhub_rebuild': (args: { course?: string }) => run(rt, 'learnhub_rebuild', async () =>
       (await rt.engine.rebuild(args.course)).message),
-  'learnhub_feedback': (args: { path: string }) => run(rt, 'learnhub_feedback', () => rt.engine.submitFeedback(rt.vault, rt.centerRel, args.path)),
+  'learnhub_feedback': (args: { path: string }) => run(rt, 'learnhub_feedback', () => rt.engine.content2.submitFeedback(rt.vault, rt.centerRel, args.path)),
   'learnhub_note_resolve': (args: { path: string }) => run(rt, 'learnhub_note_resolve', async () =>
       JSON.stringify(await rt.engine.resolveNote(rt.vault, args.path, rt.centerRel))),
   'learnhub_course_reset': (args: { course: string }) => run(rt, 'learnhub_course_reset', async () => {

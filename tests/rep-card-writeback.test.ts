@@ -55,7 +55,7 @@ test('自评挂起期间代表卡不动，questionRate 落盘后回刷', async (
     const before = await noteFsrs(note)
     assert.equal(before.reps, '1', '挂起期间卡没动，代表卡保持完成时刻快照')
 
-    const rated = await engine.questionRate('数学', '入门', 'a1', 3) as Record<string, unknown>
+    const rated = await engine.content2.questionRate('数学', '入门', 'a1', 3) as Record<string, unknown>
     const after = await noteFsrs(note)
     assert.equal(after.reps, '6', 'rate 落盘后回刷代表卡')
     assert.equal(after.due, rated.due)
@@ -72,7 +72,7 @@ test('忘记把代表卡拉回：due 变近、稳定度回落 → mastery 回落
   }, async ({ engine, paths }) => {
     const note = paths.courseNotePath('math', '基础', '入门')
     // 种子态：代表卡 = 该题卡，mastery = 0.7 × min(1, 20/60) = 0.33（无练习证据）
-    const r = await engine.questionForget('数学', '入门', 'a1', 7) as Record<string, unknown>
+    const r = await engine.content2.questionForget('数学', '入门', 'a1', 7) as Record<string, unknown>
     assert.equal(r.scheduled, true)
     assert.ok((r.mastery as number) < 0.33, `忘记后 mastery 应回落（得到 ${r.mastery}）`)
 

@@ -86,9 +86,9 @@ test('reviewQueue bandPref：挑战抬高目标带、简单放宽（同一节点
     notes: { 入门: NOTE },
     banks: { 入门: [tfQuestion('easy1', { difficulty: 1, fsrs: DUE_TF }), tfQuestion('hard1', { difficulty: 3, fsrs: DUE_TF })] },
   }, async ({ engine }) => {
-    const std = await engine.reviewQueue('数学', '入门') as QueueDoc
-    const hard = await engine.reviewQueue('数学', '入门', undefined, 'hard') as QueueDoc
-    const easy = await engine.reviewQueue('数学', '入门', undefined, 'easy') as QueueDoc
+    const std = await engine.content2.reviewQueue('数学', '入门') as QueueDoc
+    const hard = await engine.content2.reviewQueue('数学', '入门', undefined, 'hard') as QueueDoc
+    const easy = await engine.content2.reviewQueue('数学', '入门', undefined, 'easy') as QueueDoc
     assert.ok(hard.band! > std.band!, '挑战抬高')
     assert.ok(easy.band! < std.band!, '简单放宽')
     assert.ok(Math.abs((hard.band! - std.band!) - BAND_PREF_OFFSET) < 1e-6)

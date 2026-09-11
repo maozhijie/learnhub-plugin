@@ -396,7 +396,7 @@ test('我的卡汇入复习队列（ADR-0021）：新卡队尾首推、到期卡
     await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A：求和公式的来历。' })
 
     // 未调度新卡：due 空、R 满档落队尾，learner 字段随卡带出（UI 分面渲染依据）
-    const q1 = await engine.reviewQueue()
+    const q1 = await engine.content2.reviewQueue()
     assert.equal(q1.total, 1)
     const fresh = q1.cards[0] as Record<string, unknown>
     assert.equal(fresh.source, 'learner')
@@ -412,7 +412,7 @@ test('我的卡汇入复习队列（ADR-0021）：新卡队尾首推、到期卡
     assert.match(String(lf.content), /求和公式/)
 
     // 定向入口同可见（单节点会话带起点难度带）
-    const qDir = await engine.reviewQueue('数学', '入门')
+    const qDir = await engine.content2.reviewQueue('数学', '入门')
     assert.equal(qDir.cards.length, 1)
     assert.ok(qDir.band !== undefined)
 
@@ -421,7 +421,7 @@ test('我的卡汇入复习队列（ADR-0021）：新卡队尾首推、到期卡
     await engine.learnerCards.updateCardEvidence('math', '入门', 'c1', {
       fsrs: { stability: 3, difficulty: 5, due: today, last_review: '2026-09-08', reps: 1, lapses: 0 },
     })
-    const q2 = await engine.reviewQueue()
+    const q2 = await engine.content2.reviewQueue()
     assert.equal(q2.total, 1)
     assert.equal(String(q2.cards[0]!.due), today)
     assert.ok((q2.cards[0]!.r as number) < 1)
@@ -429,7 +429,7 @@ test('我的卡汇入复习队列（ADR-0021）：新卡队尾首推、到期卡
     assert.equal(r.xp, 5)
 
     // 推到明天 → 出队；无绑定行已落 journal，复习日志/practice 零掺入
-    assert.equal((await engine.reviewQueue()).total, 0)
+    assert.equal((await engine.content2.reviewQueue()).total, 0)
     const rows = (await engine.store.journalTail(null, Number.MAX_SAFE_INTEGER))
       .filter(x => x.kind === 'xp_learner')
     assert.equal(rows.length, 1)

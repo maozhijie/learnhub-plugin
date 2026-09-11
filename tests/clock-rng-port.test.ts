@@ -44,7 +44,7 @@ test('时钟端口：固定时钟下 doctor.generated_at 确定（同输入同�
 test('随机端口：同种子定长流下 pairOptions 洗牌确定（同输入同输出），且值集合不漂移', async () => {
   const run = async (rng: Rng) =>
     withVault({ banks: { 入门: MATCHING_BANK }, rng }, async ({ engine }) => {
-      const doc = await engine.questions('数学', '入门') as { questions: Array<{ pairOptions?: string[] }> }
+      const doc = await engine.content2.questions('数学', '入门') as { questions: Array<{ pairOptions?: string[] }> }
       return doc.questions[0].pairOptions
     })
   const a = await run(seededRng(42))

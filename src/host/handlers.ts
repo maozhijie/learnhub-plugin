@@ -109,7 +109,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 单节点会话按 Mastery 先验带自适应排序（band + 每卡 d，#57 A1）；
     // band 查询参数 = 显式难度带偏好（#65 E5：easy/hard 偏移目标带，standard/缺省 = 纯 A1）；
     // 卡片带 jol 标记（#66 E4）：抽查命中翻面前弹一档预测，可忽略
-    sendJson(res, 200, await apiRun(rt, 'api/review-queue', () => rt.engine.reviewQueue(
+    sendJson(res, 200, await apiRun(rt, 'api/review-queue', () => rt.engine.content2.reviewQueue(
       optQuery(url, 'course'), optQuery(url, 'node'), undefined, bandPref(url.searchParams.get('band')))))
   },
   'GET /probation': async ({ rt, url, res }) => {
@@ -232,7 +232,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     sendJson(res, 200, done)
   },
   'POST /feedback': async ({ rt, body, res }) => {
-    sendJson(res, 200, { message: await rt.engine.submitFeedback(rt.vault, rt.centerRel, need(body, 'path')) })
+    sendJson(res, 200, { message: await rt.engine.content2.submitFeedback(rt.vault, rt.centerRel, need(body, 'path')) })
   },
   'POST /proposals/apply': async ({ rt, ctx, body, res }) => {
     // 提案统一 apply（图谱域 edit/seed/enrich + 项目域 project_plan/project_milestone）：
@@ -415,7 +415,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     }))
   },
   'POST /review': async ({ rt, body, res }) => {
-    sendJson(res, 200, { message: await rt.engine.contentReview(need(body, 'course'), need(body, 'node')) })
+    sendJson(res, 200, { message: await rt.engine.content2.contentReview(need(body, 'course'), need(body, 'node')) })
   },
   'POST /question-answer': async ({ rt, ctx, body, res }) => {
     sendJson(res, 200, await apiRun(rt, 'api/question-answer', () => rt.engine.questionAnswer(
@@ -431,12 +431,12 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /question-rate': async ({ rt, body, res }) => {
     // 复习刷卡流：答对后的自评难度结算（2/3/4 → FSRS Hard/Good/Easy）
-    sendJson(res, 200, await apiRun(rt, 'api/question-rate', () => rt.engine.questionRate(
+    sendJson(res, 200, await apiRun(rt, 'api/question-rate', () => rt.engine.content2.questionRate(
       need(body, 'course'), need(body, 'node'), need(body, 'qid'), Number(body.rating))))
   },
   'POST /question-forget': async ({ rt, body, res }) => {
     // 复习刷卡流：「忘记」申报（不作答翻面，按答错记证据、0 XP）
-    sendJson(res, 200, await apiRun(rt, 'api/question-forget', () => rt.engine.questionForget(
+    sendJson(res, 200, await apiRun(rt, 'api/question-forget', () => rt.engine.content2.questionForget(
       need(body, 'course'), need(body, 'node'), need(body, 'qid'),
       optFinite(body, 'elapsed_s') ?? null,
       (optRaw(body, 'predicted') ?? null) as never)))

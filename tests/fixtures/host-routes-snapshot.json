@@ -376,7 +376,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "reviewQueue(undefined,undefined,undefined,undefined)"
+   "content2.reviewQueue(undefined,undefined,undefined,undefined)"
   ]
  },
  {
@@ -386,7 +386,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "reviewQueue(\"1\",\"1\",undefined,undefined)"
+   "content2.reviewQueue(\"1\",\"1\",undefined,undefined)"
   ]
  },
  {
@@ -396,7 +396,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "reviewQueue(undefined,\"1\",undefined,undefined)"
+   "content2.reviewQueue(undefined,\"1\",undefined,undefined)"
   ]
  },
  {
@@ -406,7 +406,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "reviewQueue(\"1\",undefined,undefined,undefined)"
+   "content2.reviewQueue(\"1\",undefined,undefined,undefined)"
   ]
  },
  {
@@ -416,7 +416,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "reviewQueue(\"1\",\"1\",undefined,undefined)"
+   "content2.reviewQueue(\"1\",\"1\",undefined,undefined)"
   ]
  },
  {
@@ -1666,7 +1666,7 @@
    "message": []
   },
   "calls": [
-   "submitFeedback(\"«vault»\",\"学习中心\",\"1\")"
+   "content2.submitFeedback(\"«vault»\",\"学习中心\",\"1\")"
   ]
  },
  {
@@ -2061,11 +2061,11 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
-   "contentPack(\"1\",\"1\")",
-   "contentTierOf(\"1\",\"1\")",
-   "loadPrompt(\"课程节生成-1\")",
+   "content2.contentPack(\"1\",\"1\")",
+   "content2.contentTierOf(\"1\",\"1\")",
+   "content2.loadPrompt(\"课程节生成-1\")",
    "contentSectionsView(\"1\",\"1\")",
-   "loadPrompt(\"课程大纲\")",
+   "content2.loadPrompt(\"课程大纲\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
    "coachCheckpoint(\"queue_idle\",undefined)"
@@ -2115,11 +2115,11 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
-   "contentPack(\"1\",\"1\")",
-   "contentTierOf(\"1\",\"1\")",
-   "loadPrompt(\"课程节生成\")",
+   "content2.contentPack(\"1\",\"1\")",
+   "content2.contentTierOf(\"1\",\"1\")",
+   "content2.loadPrompt(\"课程节生成\")",
    "contentSectionsView(\"1\",\"1\")",
-   "loadPrompt(\"课程大纲\")",
+   "content2.loadPrompt(\"课程大纲\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
    "coachCheckpoint(\"queue_idle\",undefined)"
@@ -2162,7 +2162,7 @@
    "error": "「1」没有节「1」——先运行大纲。"
   },
   "calls": [
-   "contentPack(\"1\",\"1\")",
+   "content2.contentPack(\"1\",\"1\")",
    "contentSectionsView(\"1\",\"1\")"
   ]
  },
@@ -3802,7 +3802,7 @@
    "message": []
   },
   "calls": [
-   "contentReview(\"1\",\"1\")"
+   "content2.contentReview(\"1\",\"1\")"
   ]
  },
  {
@@ -4079,7 +4079,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionRate(\"1\",\"1\",\"1\",1)"
+   "content2.questionRate(\"1\",\"1\",\"1\",1)"
   ]
  },
  {
@@ -4139,7 +4139,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionRate(\"1\",\"1\",\"1\",null)"
+   "content2.questionRate(\"1\",\"1\",\"1\",null)"
   ]
  },
  {
@@ -4167,7 +4167,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionForget(\"1\",\"1\",\"1\",1,\"1\")"
+   "content2.questionForget(\"1\",\"1\",\"1\",1,\"1\")"
   ]
  },
  {
@@ -4231,7 +4231,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionForget(\"1\",\"1\",\"1\",null,\"1\")"
+   "content2.questionForget(\"1\",\"1\",\"1\",null,\"1\")"
   ]
  },
  {
@@ -4247,7 +4247,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionForget(\"1\",\"1\",\"1\",1,null)"
+   "content2.questionForget(\"1\",\"1\",\"1\",1,null)"
   ]
  },
  {

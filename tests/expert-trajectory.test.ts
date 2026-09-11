@@ -77,7 +77,7 @@ const GRAPH = [
 
 test('上下文包：高难节点注入 §11 专家思维轨迹（含预测门格式），平易节点不注入', async () => {
   await withVault({ tag: 'learnhub-expert-pack-', graph: GRAPH }, async ({ engine }) => {
-    const high = await engine.contentPack('数学', '高难节点')
+    const high = await engine.content2.contentPack('数学', '高难节点')
     assert.match(high, /## 11\. 专家思维轨迹/)
     assert.match(high, /「思维」节/)
     assert.match(high, /learnhub-predict/)
@@ -85,10 +85,10 @@ test('上下文包：高难节点注入 §11 专家思维轨迹（含预测门�
     assert.match(high, /元策略/)
 
     // bloom 高阶层单独即触发（#97 验收口径「高 bloom 节点可生成」）
-    const bloom = await engine.contentPack('数学', '高bloom节点')
+    const bloom = await engine.content2.contentPack('数学', '高bloom节点')
     assert.match(bloom, /## 11\. 专家思维轨迹/)
 
-    const easy = await engine.contentPack('数学', '平易节点')
+    const easy = await engine.content2.contentPack('数学', '平易节点')
     assert.doesNotMatch(easy, /专家思维轨迹/)
     assert.doesNotMatch(easy, /learnhub-predict/)
   })

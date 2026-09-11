@@ -261,10 +261,10 @@ export class LearnhubEngine {
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
       scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
-      loadPrompt: kind => this.loadPrompt(kind),
+      loadPrompt: kind => this.content2.loadPrompt(kind),
       questionView: (q, i, opts) => this.questionView(q, i, opts),
       judgeBankAnswer: (llmComplete, q, answer, op, ref) => this.judgeBankAnswer(llmComplete, q, answer, op, ref),
-      refreshRepCard: (c, graph, node) => this.refreshRepCard(c, graph, node),
+      refreshRepCard: (c, graph, node) => this.content2.refreshRepCard(c, graph, node),
     })
     this.learner = new LearnerSubsystem({
       clock: this.clock, fs: this.fs,
@@ -275,10 +275,10 @@ export class LearnhubEngine {
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
-      loadPrompt: kind => this.loadPrompt(kind),
+      loadPrompt: kind => this.content2.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
-      saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
+      saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
       sedimentSettle: () => this.sedimentSettle(),
       compassEtaRefresh: (courseKey, opts) => this.compassEtaRefresh(courseKey, opts),
       experimentPropose: (templateId, course) => this.experimentPropose(templateId, course),
@@ -291,12 +291,12 @@ export class LearnhubEngine {
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
-      loadPrompt: kind => this.loadPrompt(kind),
+      loadPrompt: kind => this.content2.loadPrompt(kind),
       locateNode: nodeSpec => this.locateNode(nodeSpec),
       graphApply: (kind, pid, opts) => this.graphApply(kind, pid, opts),
       graphPropose: (kind, yamlText) => this.graphPropose(kind, yamlText),
       nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
-      saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
+      saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
     })
     this.bank2 = new BankSubsystem({
       clock: this.clock, fs: this.fs,
@@ -308,13 +308,13 @@ export class LearnhubEngine {
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
       scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
-      loadPrompt: kind => this.loadPrompt(kind),
+      loadPrompt: kind => this.content2.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
-      saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
-      vaultPriorFor: (graph, node) => this.vaultPriorFor(graph, node),
+      saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
+      vaultPriorFor: (graph, node) => this.content2.vaultPriorFor(graph, node),
       logGradingFailure: rec => this.logGradingFailure(rec),
-      questionContext: (courseKey, node, qid, op) => this.questionContext(courseKey, node, qid, op),
+      questionContext: (courseKey, node, qid, op) => this.content2.questionContext(courseKey, node, qid, op),
       exerciseGated: (c, node) => this.exerciseGated(c, node),
       repairInvokesOnce: (llm, items, scope) => this.repairInvokesOnce(llm, items, scope),
       admitQuestion: (root, node, q, stem, existingStems) => this.admitQuestion(root, node, q, stem, existingStems),
@@ -328,7 +328,7 @@ export class LearnhubEngine {
       noteManifest: this.noteManifest, vaultRoot: this.vaultRoot,
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      loadPrompt: kind => this.loadPrompt(kind),
+      loadPrompt: kind => this.content2.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       seedAuditFor: (courseName, today) => this.seedAuditFor(courseName, today),
       applyProjectPlanProposal: (pid, opts) => this.applyProjectPlanProposal(pid, opts),
@@ -867,40 +867,12 @@ export class LearnhubEngine {
 
   // 以下 内容管线/note resolve/课程工作区 三节方法体住 ContentSubsystem（content-subsystem.ts，#152 刀 8 聚合+转发）
 
-  private async vaultPriorFor(graph: Graph, node: string): Promise<string> {
-    return this.content2.vaultPriorFor(graph, node)
-  }
-
-  async contentPack(courseKey: string | undefined, node: string): Promise<string> {
-    return this.content2.contentPack(courseKey, node)
-  }
-
-  async loadPrompt(kind: string): Promise<string> {
-    return this.content2.loadPrompt(kind)
-  }
-
-  async promptKinds(): Promise<string[]> {
-    return this.content2.promptKinds()
-  }
-
-  async contentVersion(courseKey: string | undefined, node: string): Promise<number> {
-    return this.content2.contentVersion(courseKey, node)
-  }
-
-  async contentTierOf(courseKey: string | undefined, node: string): Promise<ComplexityTier> {
-    return this.content2.contentTierOf(courseKey, node)
-  }
-
   async contentCheck(courseKey: string | undefined, node: string): Promise<{ passed: boolean; findings: string[]; warns: string[] }> {
     return this.content2.contentCheck(courseKey, node)
   }
 
   async contentApply(courseKey: string | undefined, node: string, body: string): Promise<{ version: number; message: string; hints: string[] }> {
     return this.content2.contentApply(courseKey, node, body)
-  }
-
-  async contentOutline(courseKey: string | undefined, node: string, yamlText: string): Promise<SectionManifest[]> {
-    return this.content2.contentOutline(courseKey, node, yamlText)
   }
 
   async contentReset(courseKey: string | undefined): Promise<{ course: string; nodes: string[]; trashed: string[]; sediment: string }> {
@@ -915,56 +887,16 @@ export class LearnhubEngine {
     return this.content2.contentSectionsView(courseKey, node)
   }
 
-  async contentFeedback(courseKey: string | undefined, node: string): Promise<string> {
-    return this.content2.contentFeedback(courseKey, node)
-  }
-
-  async contentReview(courseKey: string | undefined, node: string): Promise<string> {
-    return this.content2.contentReview(courseKey, node)
-  }
-
-  async contentQueue(courseKey: string | undefined, node: string): Promise<string> {
-    return this.content2.contentQueue(courseKey, node)
-  }
-
-  async queueItemsAll(): Promise<QueueItem[]> {
-    return this.content2.queueItemsAll()
-  }
-
-  async lesson(courseKey: string | undefined, node: string): Promise<LessonDoc> {
-    return this.content2.lesson(courseKey, node)
-  }
   // ---- note resolve / 反馈区读取 ----
 
   async resolveNote(vaultRoot: string, input: string, centerRel: string): Promise<{ path: string; node: string; course: string }> {
     return this.content2.resolveNote(vaultRoot, input, centerRel)
   }
 
-  async feedbackBody(absPath: string): Promise<string | null> {
-    return this.content2.feedbackBody(absPath)
-  }
-
-  async submitFeedback(vaultRoot: string, centerRel: string, input: string): Promise<string> {
-    return this.content2.submitFeedback(vaultRoot, centerRel, input)
-  }
   // ---- P4：课程工作区（树形）与题库 ----
-
-  async coursesTree(courseKey?: string): Promise<TreeDoc> {
-    return this.content2.coursesTree(courseKey)
-  }
 
   private questionView(q: BankQuestion, i: number, opts?: { today?: string }): QuestionItem {
     return this.content2.questionView(q, i, opts)
-  }
-
-  async questions(courseKey: string | undefined, node: string): Promise<QuestionsDoc> {
-    return this.content2.questions(courseKey, node)
-  }
-
-  async reviewQueue(
-    courseKey?: string, node?: string, today?: string, bandPref?: BandPref,
-  ): Promise<ReviewQueueDoc> {
-    return this.content2.reviewQueue(courseKey, node, today, bandPref)
   }
 
   async questionSave(courseKey: string | undefined, node: string, yamlText: string): Promise<{ node: string; count: number; path: string }> {
@@ -994,34 +926,10 @@ export class LearnhubEngine {
     await this.content2.logGradingFailure(rec)
   }
 
-  private async questionContext(courseKey: string | undefined, node: string, qid: string, op: string) {
-    return this.content2.questionContext(courseKey, node, qid, op)
-  }
-
   private async nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }> {
     return this.content2.nodeNote(c, graph, node)
   }
 
-  private async saveNodeNote(path: string, fm: Fm, body: string): Promise<void> {
-    await this.content2.saveNodeNote(path, fm, body)
-  }
-
-  async questionRate(
-    courseKey: string | undefined, node: string, qid: string, rating: number,
-  ): Promise<QuestionRateResult> {
-    return this.content2.questionRate(courseKey, node, qid, rating)
-  }
-
-  async questionForget(
-    courseKey: string | undefined, node: string, qid: string,
-    elapsedS?: number | null, predicted?: JolPrediction | null,
-  ): Promise<QuestionForgetResult> {
-    return this.content2.questionForget(courseKey, node, qid, elapsedS, predicted)
-  }
-
-  private async refreshRepCard(c: CourseEntry, graph: Graph, node: string): Promise<Fm | null> {
-    return this.content2.refreshRepCard(c, graph, node)
-  }
   // ---- C1 笔记复习源（#59 / ADR-0010：只出题不动文，派生物落镜像区）----
 
   // 以下 C1/卡池镜像/漂移治理/排除清单/Anki 通道的方法体住 ChannelsSubsystem（note-source.ts，#152 刀 3 聚合+转发）
@@ -1572,7 +1480,7 @@ export class LearnhubEngine {
    * 映射失败退化为整课节选并明示，不崩。宿主会话首条消息 = 本包（面板答错/忘记
    * 错误态的「讲解这道题」动作经 explain-pack 路由取用）。 */
   async errorExplainPack(courseKey: string | undefined, node: string, qid: string): Promise<string> {
-    const { c, graph, q } = await this.questionContext(courseKey, node, qid, 'explain')
+    const { c, graph, q } = await this.content2.questionContext(courseKey, node, qid, 'explain')
     const [, regionName] = graph.blockOf[node]
     const { fm: rawFm, body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node), this.fs)
     const fm = asFm(rawFm)

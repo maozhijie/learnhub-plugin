@@ -136,13 +136,13 @@ test('注册 → 出题 → 复习全流程：用户笔记字节级零写入，�
     assert.equal(afterGen, before, '出题后笔记仍字节不变')
 
     // 题卡初始化为明天起刷 → 今天不在队列；把 due 改到今天后进全局队列（course=笔记源）
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.equal(q.cards.filter(c => c.source === 'note').length, 0)
     const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
     })
-    const q2 = await engine.reviewQueue()
+    const q2 = await engine.content2.reviewQueue()
     const noteCards = q2.cards.filter(c => c.course === '笔记源' && c.source === 'note')
     assert.equal(noteCards.length, 1)
     assert.equal(noteCards[0]!.node, 'note-1')
@@ -157,9 +157,9 @@ test('注册 → 出题 → 复习全流程：用户笔记字节级零写入，�
     assert.equal(a.scheduled, false)
     assert.equal(a.xp, 1) // 无绑定 XP（ADR-0021）：single_choice 权重 1 × 难度 1，答对挂起即入账
     await assert.rejects(
-      () => engine.questionForget('笔记源', 'note-1', 'q1'),
+      () => engine.content2.questionForget('笔记源', 'note-1', 'q1'),
       /今天已有推进记录/)
-    const rated = await engine.questionRate('笔记源', 'note-1', 'q1', 3)
+    const rated = await engine.content2.questionRate('笔记源', 'note-1', 'q1', 3)
     assert.equal(rated.scheduled, true)
     const due = String(rated.due)
     assert.ok(due > today)
@@ -172,7 +172,7 @@ test('注册 → 出题 → 复习全流程：用户笔记字节级零写入，�
     assert.ok(!existsSync(engine.paths.practicePath))
 
     // 忘记申报：另一题当日首次 → rating 1 推卡，0 XP
-    const f = await engine.questionForget('笔记源', 'note-1', 'q2')
+    const f = await engine.content2.questionForget('笔记源', 'note-1', 'q2')
     assert.equal(f.judge, 'forget')
     assert.equal(f.xp, 0)
     assert.equal((await engine.store.reviewLogAll()).filter(r => r.rating === 1 && r.rating_source === 'auto' && r.course === '笔记源').length, 1)
@@ -236,7 +236,7 @@ test('删除/改名 = Missing：卡池挂起、不阻塞其他源、重注册可
     const list = await engine.noteSourceList()
     assert.equal((list.sources[0] as Record<string, unknown>).status, 'missing')
     assert.match(String((list.sources[0] as Record<string, unknown>).hint), /源文件缺失，卡池挂起/)
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.equal(q.cards.filter(c => c.source === 'note').length, 0)
     assert.ok(q.cards.some(c => c.course === '数学'))
     assert.equal((q.note_suspended as Array<Record<string, unknown>>)?.[0]?.id, 'note-1')
@@ -248,7 +248,7 @@ test('删除/改名 = Missing：卡池挂起、不阻塞其他源、重注册可
     // 重注册同路径恢复 → 卡池回到队列
     await rename(moved, p.noteAbs)
     await engine.noteSourceRegister(p.noteAbs)
-    const q2 = await engine.reviewQueue()
+    const q2 = await engine.content2.reviewQueue()
     assert.equal(q2.cards.filter(c => c.source === 'note').length, 1)
     assert.equal((q2 as Record<string, unknown>).note_suspended, undefined)
     void reg
@@ -266,7 +266,7 @@ test('编辑正文 = 内容漂移：状态提示可重出/归档；出题确认�
     assert.equal((list.sources[0] as Record<string, unknown>).status, 'drifted')
     assert.match(String((list.sources[0] as Record<string, unknown>).hint), /内容已变/)
     // 漂移不挂起：卡照常可复习
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.equal((q as Record<string, unknown>).note_drifted !== undefined, true)
     assert.equal((q as Record<string, unknown>).note_suspended, undefined)
 
@@ -287,7 +287,7 @@ test('镜像题库 Broken：该源卡挂起并带原因，不阻塞其他源；d
     await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     await writeFile(join(engine.paths.noteSourceDir, '题库', 'note-1.yaml'), 'node: [broken\n', 'utf8')
 
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.ok(q.cards.some(c => c.course === '数学'))
     assert.equal(q.cards.filter(c => c.source === 'note').length, 0)
     const susp = (q as Record<string, unknown>).note_suspended as Array<Record<string, unknown>>
@@ -316,7 +316,7 @@ test('源清单条目缺失（镜像不一致）= inconsistent：列表如实标
     assert.match(String(src.hint), /镜像不一致/)
     assert.notEqual(src.status, 'drifted')
 
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.equal(q.cards.filter(c => c.source === 'note').length, 1) // 不挂起、不误判漂移
     assert.match(String(((q as Record<string, unknown>).note_drifted as Array<Record<string, unknown>>)?.[0]?.hint), /镜像不一致/)
     const report = await engine.dataCheck()
@@ -328,7 +328,7 @@ test('源清单本身 Broken = fail loud（镜像区契约文件），注册表 
   await withVault(async (engine, p) => {
     await engine.noteSourceRegister(p.noteAbs)
     await writeFile(engine.paths.noteSourceManifestPath, 'sources: nope\n', 'utf8')
-    await assert.rejects(() => engine.reviewQueue(), /源清单 Broken/)
+    await assert.rejects(() => engine.content2.reviewQueue(), /源清单 Broken/)
     await assert.rejects(() => engine.noteSourceList(), /源清单 Broken/)
     const report = await engine.dataCheck()
     assert.ok(report.findings.some(f => f.reason === 'note_source_manifest_schema'))
@@ -375,7 +375,7 @@ test('全量快照回归：题库/掌握度通道零新增写入（笔记源复�
     await engine.noteSourceRegister(p.folderAbs)
     await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     await engine.noteSourceGenerate('note-2', undefined, async () => NOTE_BANK_YAML)
-    await engine.questionRate('笔记源', 'note-1', 'q1', 2).catch(() => { /* 未挂起被拒绝也是边界行为 */ })
+    await engine.content2.questionRate('笔记源', 'note-1', 'q1', 2).catch(() => { /* 未挂起被拒绝也是边界行为 */ })
 
     assert.equal(await readFile(join(engine.paths.courseRoot('math'), '题库', '入门.yaml'), 'utf8'), courseBankBefore)
     assert.equal(await readFile(p.noteAbs, 'utf8'), noteBefore)
@@ -478,7 +478,7 @@ test('排除清单只管未来注册：先注册后排除不摘源、卡照常�
 
     // 源路径进排除清单：已注册源不摘除、状态 ok、到期卡照常出队（摘除走 unregister）
     await engine.noteSourceExclude(p.noteAbs)
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.equal(q.cards.filter(c => c.source === 'note').length, 1)
     const list = await engine.noteSourceList()
     assert.equal((list.sources[0] as Record<string, unknown>).status, 'ok')
@@ -546,7 +546,7 @@ test('relink（V-6 #109）：改名后 Missing → 重连带卡池与调度恢�
     assert.equal(entries.length, 1)
     assert.equal(entries[0]!.id, 'note-1')
     // 新路径内容与旧一致 → 指纹与源清单同步（不被判漂移）
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.equal(q.cards.filter(c => c.source === 'note').length, 1)
     assert.equal((q as Record<string, unknown>).note_suspended, undefined)
     // V-4 #108：队列卡带来源笔记标题与路径（面板显示 + obsidian:// 跳转的数据源）

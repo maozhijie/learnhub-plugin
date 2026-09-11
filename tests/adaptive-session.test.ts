@@ -67,7 +67,7 @@ test('pickNext/sessionOrder：距目标带最近者优先，平局稳定', () =>
 
 test('单节点定向队列：起点难度带随节点 Mastery 单调——高掌握先出难题，低掌握先出基础题', async () => {
   await withVault({ notes: { 入门: HIGH_MASTERY }, banks: { 入门: BANK } }, async ({ engine }) => {
-    const r = await engine.reviewQueue('数学', '入门') as Record<string, unknown>
+    const r = await engine.content2.reviewQueue('数学', '入门') as Record<string, unknown>
     assert.ok((r.band as number) > 0.6, `高掌握起点带在上半区，得到 ${r.band}`)
     const cards = r.cards as Array<Record<string, unknown>>
     assert.equal(cards[0].id, 'hard1', '先验带高 → 开场是高难度档')
@@ -76,7 +76,7 @@ test('单节点定向队列：起点难度带随节点 Mastery 单调——高�
     notes: { 入门: { stage: 'review', fsrs: null, practice: { attempts: 3, correct: 0 } } },
     banks: { 入门: BANK },
   }, async ({ engine }) => {
-    const r = await engine.reviewQueue('数学', '入门') as Record<string, unknown>
+    const r = await engine.content2.reviewQueue('数学', '入门') as Record<string, unknown>
     assert.equal(r.band, 0.2, '零掌握从基础带起')
     const cards = r.cards as Array<Record<string, unknown>>
     assert.equal(cards[0].id, 'easy1', '先验带低 → 开场是基础题')
@@ -86,13 +86,13 @@ test('单节点定向队列：起点难度带随节点 Mastery 单调——高�
 
 test('全局队列与首学新题流不动：全局维持 R 组合排序，questions 维持题库序', async () => {
   await withVault({ notes: { 入门: HIGH_MASTERY }, banks: { 入门: BANK } }, async ({ engine }) => {
-    const r = await engine.reviewQueue('数学') as Record<string, unknown>
+    const r = await engine.content2.reviewQueue('数学') as Record<string, unknown>
     assert.equal(r.band, undefined, '全局队列没有先验带字段（不走 A1 微调）')
     const cards = r.cards as Array<Record<string, unknown>>
     // 全局口径（#56）：同 R 档内按静态难度由易到难——easy1/easy2 在前
     assert.deepEqual(cards.map(c => c.id), ['easy1', 'easy2', 'hard1', 'hard2'])
 
-    const qs = await engine.questions('数学', '入门') as Record<string, unknown>
+    const qs = await engine.content2.questions('数学', '入门') as Record<string, unknown>
     assert.deepEqual((qs.questions as Array<{ id: string }>).map(q => q.id),
       ['easy1', 'easy2', 'hard1', 'hard2'], '首学新题列表维持题库原序（首学流不动）')
   })

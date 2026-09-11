@@ -25,7 +25,7 @@ const BANK = [
 test('#8 missing bank remains a legal empty bank', async () => {
   await withVault({ notes: { 入门: NOTE } }, async ({ engine }) => {
     assert.deepEqual(await engine.bank.load(engine.paths.courseRoot('math'), '入门'), { node: '入门', questions: [] })
-    const list = await engine.questions('数学', '入门')
+    const list = await engine.content2.questions('数学', '入门')
     assert.equal(list.questions.length, 0)
     const report = await engine.dataCheck()
     assert.equal(report.byArea.question_bank.missing, 1)
@@ -38,7 +38,7 @@ test('#8 present malformed bank blocks load/list and reports Broken without muta
   await withVault({ notes: { 入门: NOTE }, banks: { 入门: `${corrupt}\n` } }, async ({ engine }) => {
     const courseRoot = engine.paths.courseRoot('math')
     await assert.rejects(() => engine.bank.load(courseRoot, '入门'), /题库 Broken.*入门\.yaml[\s\S]*impossible/s)
-    await assert.rejects(() => engine.questions('数学', '入门'), /题库 Broken/s)
+    await assert.rejects(() => engine.content2.questions('数学', '入门'), /题库 Broken/s)
     await assert.rejects(() => engine.questionGet('数学', '入门', 'q1'), /题库 Broken/s)
     await assert.rejects(() => engine.questionUpdate('数学', '入门', 'q1', { q: '改写题干' }), /题库 Broken/s)
     await assert.rejects(() => engine.questionAdd('数学', '入门', { kind: 'true_false', q: 'x', answer: true }), /题库 Broken/s)
@@ -51,7 +51,7 @@ test('#8 present malformed bank blocks load/list and reports Broken without muta
 
 test('#8 YAML parse failure is Broken, not an empty bank', async () => {
   await withVault({ notes: { 入门: NOTE }, banks: { 入门: 'node: 入门\nquestions:\n  - { kind: true_false, q: "x\n' } }, async ({ engine }) => {
-    await assert.rejects(() => engine.questions('数学', '入门'), /题库 Broken.*YAML 无法解析/s)
+    await assert.rejects(() => engine.content2.questions('数学', '入门'), /题库 Broken.*YAML 无法解析/s)
   })
 })
 
@@ -102,10 +102,10 @@ test('#8 authoring fields remain editable and the whole bank revalidates', async
 test('#8 archive is a separate operation and both normal and archive paths preserve valid state', async () => {
   await withVault({ notes: { 入门: NOTE }, banks: { 入门: `${BANK}\n` } }, async ({ engine }) => {
     await engine.questionArchive('数学', '入门', 'q2', true)
-    const list = await engine.questions('数学', '入门')
+    const list = await engine.content2.questions('数学', '入门')
     assert.ok(list.questions.every(q => q.id !== 'q2'))
     await engine.questionArchive('数学', '入门', 'q2', false)
-    const again = await engine.questions('数学', '入门')
+    const again = await engine.content2.questions('数学', '入门')
     assert.equal(again.questions.length, 2)
   })
 })

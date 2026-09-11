@@ -75,14 +75,14 @@ test('V-2 注入：contentPack 附「学习者已有理解」段；零命中不�
   await withVault({
     files: [{ path: '乐理/音程.md', content: '# 我的音程笔记\n\n入门的时候我总把大三度和小三度听混，后来用「大=宽」记住的。' }],
   }, async ({ engine }) => {
-    const pack = await engine.contentPack('数学', '入门')
+    const pack = await engine.content2.contentPack('数学', '入门')
     assert.match(pack, /学习者已有理解（Vault 先验）/)
     assert.match(pack, /我的音程笔记/)
     assert.match(pack, /永不改写/)
   })
 
   await withVault({}, async ({ engine }) => {
-    const pack = await engine.contentPack('数学', '入门')
+    const pack = await engine.content2.contentPack('数学', '入门')
     assert.doesNotMatch(pack, /学习者已有理解/, '零命中零注入（生成面不带空段）')
   })
 })

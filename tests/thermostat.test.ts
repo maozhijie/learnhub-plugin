@@ -119,11 +119,11 @@ test('行为：建议逐条显式确认后生效——确认写默认带、复�
 
     // 确认前默认带为 null；显式确认后写入并被队列消费（standard 偏移 0 = 纯 A1，带值不变）
     assert.equal(await engine.bandDefault(), null)
-    const plainBand = (await engine.reviewQueue('数学', '入门')).band
+    const plainBand = (await engine.content2.reviewQueue('数学', '入门')).band
     const applied = await engine.thermostatApply('band_default:standard')
     assert.equal(applied.band_default, 'standard')
     assert.equal(await engine.bandDefault(), 'standard')
-    assert.equal((await engine.reviewQueue('数学', '入门')).band, plainBand, '默认 standard = 纯 A1 语义（偏移 0）')
+    assert.equal((await engine.content2.reviewQueue('数学', '入门')).band, plainBand, '默认 standard = 纯 A1 语义（偏移 0）')
 
     // 建议已消化（同向沉默）→ 再确认同一 id 拒绝；伪造 id 拒绝
     const after = await engine.thermostatView()
@@ -133,9 +133,9 @@ test('行为：建议逐条显式确认后生效——确认写默认带、复�
 
     // 消费链同源验证：默认 hard 抬带、显式 easy 覆盖默认
     await engine.setBandDefault('hard')
-    const q = await engine.reviewQueue('数学', '入门')
+    const q = await engine.content2.reviewQueue('数学', '入门')
     assert.ok(Math.abs((q.band ?? 0) - 0.4) < 1e-6, `默认 hard 抬高起点先验（band=${q.band}）`)
-    const explicit = await engine.reviewQueue('数学', '入门', undefined, 'easy')
+    const explicit = await engine.content2.reviewQueue('数学', '入门', undefined, 'easy')
     assert.ok(Math.abs((explicit.band ?? 0) - 0) < 1e-6, '显式选带覆盖默认（学习者选择优先）')
   })
 })

@@ -53,16 +53,16 @@ test('PS-I 路由图派生：difficulty/bloom 缺省不启用', () => {
 
 test('上下文包：高难节点注入 §10 先做后教指令，平易节点不注入', async () => {
   await withVault({ graph: PSI_GRAPH }, async ({ engine }) => {
-    const high = await engine.contentPack('数学', '高难节点')
+    const high = await engine.content2.contentPack('数学', '高难节点')
     assert.match(high, /## 10\. 先做后教（PS-I 顺序变体/)
     assert.match(high, /第一节必须是挑战节/)
     assert.match(high, /标题以「挑战：」开头/)
     assert.match(high, /本节不给解答步骤与答案/)
 
-    const bloom = await engine.contentPack('数学', '高bloom节点')
+    const bloom = await engine.content2.contentPack('数学', '高bloom节点')
     assert.match(bloom, /## 10\. 先做后教/)
 
-    const easy = await engine.contentPack('数学', '平易节点')
+    const easy = await engine.content2.contentPack('数学', '平易节点')
     assert.doesNotMatch(easy, /先做后教/)
     assert.doesNotMatch(easy, /挑战节/)
   })
@@ -77,7 +77,7 @@ test('大纲落盘 journal：PS-I 节点留痕「先做后教」，平易节点�
       '  - { id: s2, title: 概念：贪心策略, type: 概念, points: 展开解法 }',
       '  - { id: s3, title: 概念：反例与修正, type: 概念, points: 回扣挑战 }',
     ].join('\n')
-    await engine.contentOutline('数学', '高难节点', outline)
+    await engine.content2.contentOutline('数学', '高难节点', outline)
     const recs = await store.journalTail('数学', 5)
     const outlineRec = recs.find(r => r.kind === 'content_outline')
     assert.ok(outlineRec)
@@ -88,7 +88,7 @@ test('大纲落盘 journal：PS-I 节点留痕「先做后教」，平易节点�
       'sections:',
       '  - { id: s1, title: 概念：直白讲法, type: 概念, points: 先教后练 }',
     ].join('\n')
-    await engine.contentOutline('数学', '平易节点', easyOutline)
+    await engine.content2.contentOutline('数学', '平易节点', easyOutline)
     const recs2 = await store.journalTail('数学', 5)
     const easyRec = recs2.find(r => r.node === '平易节点' && r.kind === 'content_outline')
     assert.ok(easyRec)

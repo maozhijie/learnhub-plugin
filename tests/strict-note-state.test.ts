@@ -64,7 +64,7 @@ test('#7 malformed core state is Broken: targeted operations fail with location/
     assert.ok(view.broken[0].reason.includes('mastery'), view.broken[0].reason)
     assert.ok(view.broken[0].path.endsWith('入门.md'))
 
-    await assert.rejects(() => engine.lesson('数学', '入门'), /节点笔记 Broken.*入门\.md[\s\S]*mastery/s)
+    await assert.rejects(() => engine.content2.lesson('数学', '入门'), /节点笔记 Broken.*入门\.md[\s\S]*mastery/s)
     await assert.rejects(() => engine.nodeSkip('数学', '入门', true), /节点笔记 Broken/s)
     await assert.rejects(() => engine.nodeComplete('数学', '入门'), /节点笔记 Broken/s)
     await assert.rejects(() => engine.statusJson(), /状态 Broken/s)

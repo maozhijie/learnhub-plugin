@@ -48,7 +48,7 @@ test('defer 答对：调度挂起 + 三档到期预览，questionRate 落盘并�
     assert.equal(q.stats?.attempts, 1)
     assert.equal(q.stats?.pending_rating, true)
 
-    const rated = await engine.questionRate('数学', '入门', 'a1', 2) as Record<string, unknown>
+    const rated = await engine.content2.questionRate('数学', '入门', 'a1', 2) as Record<string, unknown>
     assert.equal(rated.due, previews.hard, 'rate 按选中档位推进')
     assert.equal(rated.scheduled, true)
 
@@ -58,7 +58,7 @@ test('defer 答对：调度挂起 + 三档到期预览，questionRate 落盘并�
     assert.equal(q.stats?.pending_rating, undefined, '结算后清挂起标记')
 
     await assert.rejects(
-      () => engine.questionRate('数学', '入门', 'a1', 3),
+      () => engine.content2.questionRate('数学', '入门', 'a1', 3),
       /没有待结算|已推进/,
       '重复 rate 拒绝',
     )
@@ -74,29 +74,29 @@ test('defer 答错：立即按 Again 推进，不出自评；事后 rate 拒绝'
     const q = await loadQ(engine, 'a1')
     assert.equal(q.fsrs?.reps, 1)
     assert.equal(q.stats?.pending_rating, undefined)
-    await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 3), /没有待结算/)
+    await assert.rejects(() => engine.content2.questionRate('数学', '入门', 'a1', 3), /没有待结算/)
   })
 })
 
 test('rate 无当日挂起作答 → 拒绝（含从未作答与练习流作答两条路径）', async () => {
   await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
-    await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 3), /没有待结算/, '从未作答')
+    await assert.rejects(() => engine.content2.questionRate('数学', '入门', 'a1', 3), /没有待结算/, '从未作答')
     await answer(engine, 'a1', 'true') // 练习流：自动 Good，无挂起
-    await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 4), /没有待结算/, '练习流作答不产生挂起')
+    await assert.rejects(() => engine.content2.questionRate('数学', '入门', 'a1', 4), /没有待结算/, '练习流作答不产生挂起')
   })
 })
 
 test('rate 档位只能 2/3/4', async () => {
   await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
     await answer(engine, 'a1', 'true', { deferSchedule: true })
-    await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 1), /2\/3\/4/)
-    await assert.rejects(() => engine.questionRate('数学', '入门', 'a1', 5), /2\/3\/4/)
+    await assert.rejects(() => engine.content2.questionRate('数学', '入门', 'a1', 1), /2\/3\/4/)
+    await assert.rejects(() => engine.content2.questionRate('数学', '入门', 'a1', 5), /2\/3\/4/)
   })
 })
 
 test('忘记：按答错记全部证据、0 XP、推进 Again；重复忘记拒绝', async () => {
   await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
-    const r = await engine.questionForget('数学', '入门', 'a1', 7) as Record<string, unknown>
+    const r = await engine.content2.questionForget('数学', '入门', 'a1', 7) as Record<string, unknown>
     assert.equal(r.correct, false)
     assert.equal(r.judge, 'forget')
     assert.equal(r.xp, 0)
@@ -120,16 +120,16 @@ test('忘记：按答错记全部证据、0 XP、推进 Again；重复忘记拒�
     assert.match(note, /attempts: 1/)
     assert.match(note, /correct: 0/)
 
-    await assert.rejects(() => engine.questionForget('数学', '入门', 'a1', 7), /已有作答记录/)
+    await assert.rejects(() => engine.content2.questionForget('数学', '入门', 'a1', 7), /已有作答记录/)
   })
 })
 
 test('忘记与作答互斥：当天已作答（含挂起自评）再忘记 → 拒绝', async () => {
   await withVault({ notes: { 入门: READY_NOTE }, banks: { 入门: [tfQuestion('a1'), tfQuestion('a2')] } }, async ({ engine }) => {
     await answer(engine, 'a1', 'true', { deferSchedule: true })
-    await assert.rejects(() => engine.questionForget('数学', '入门', 'a1', 7), /已有作答记录/, '挂起自评后不可忘记')
+    await assert.rejects(() => engine.content2.questionForget('数学', '入门', 'a1', 7), /已有作答记录/, '挂起自评后不可忘记')
     await answer(engine, 'a2', 'true')
-    await assert.rejects(() => engine.questionForget('数学', '入门', 'a2', 7), /已有作答记录/, '自动作答后不可忘记')
+    await assert.rejects(() => engine.content2.questionForget('数学', '入门', 'a2', 7), /已有作答记录/, '自动作答后不可忘记')
   })
 })
 
@@ -139,7 +139,7 @@ test('错误降低掌握度（口径 B）：答对推高练习证据 EMA，忘�
     // 代表卡回刷后（#52）：首答即落节点卡，mastery = 0.7×稳定度项 + 0.3×EMA(1.0)，
     // 首学稳定度很小 → 只在三成附近（防饱和语义），但已高于纯 EMA 的 0.3
     assert.ok((ok.mastery as number) > 0.3 && (ok.mastery as number) < 0.5, `得到 ${ok.mastery}`)
-    const forgot = await engine.questionForget('数学', '入门', 'a2', 7) as Record<string, unknown>
+    const forgot = await engine.content2.questionForget('数学', '入门', 'a2', 7) as Record<string, unknown>
     // 忘记：EMA 回落（1.0×0.7=0.7）且代表卡被拉回稳定度更小的忘记卡 → mastery 整体回落
     assert.ok((forgot.mastery as number) < (ok.mastery as number))
   })
@@ -155,7 +155,7 @@ test('reviewQueue：只含到期未归档卡，同稳定度同 due 仍按题序�
       tfQuestion('a4', { fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 1, lapses: 0 }, archived: true }),
     ] },
   }, async ({ engine }) => {
-    const r = await engine.reviewQueue('数学') as Record<string, unknown>
+    const r = await engine.content2.reviewQueue('数学') as Record<string, unknown>
     assert.equal(r.total, 2, '未调度新题与未来到期卡不入队')
     const cards = r.cards as Array<Record<string, unknown>>
     assert.deepEqual(cards.map(c => c.id), ['a1', 'a3'])
@@ -163,7 +163,7 @@ test('reviewQueue：只含到期未归档卡，同稳定度同 due 仍按题序�
     assert.equal(cards[0].node, '入门')
     assert.equal(cards[0].due, PAST)
     assert.equal(cards[0].kind, 'true_false')
-    const all = await engine.reviewQueue() as Record<string, unknown>
+    const all = await engine.content2.reviewQueue() as Record<string, unknown>
     assert.equal(all.total, 2, '全课程口径一致')
   })
 })
@@ -179,7 +179,7 @@ test('reviewQueue：主排序 = 预测遗忘风险 R 升序（同 due 短稳定�
       tfQuestion('easy', { difficulty: 1, fsrs: { stability: 1, difficulty: 1, due: PAST, last_review: PAST, reps: 5, lapses: 0 } }),
     ] },
   }, async ({ engine }) => {
-    const r = await engine.reviewQueue('数学') as Record<string, unknown>
+    const r = await engine.content2.reviewQueue('数学') as Record<string, unknown>
     assert.equal(r.total, 3, '全部到期卡都在队列')
     const cards = r.cards as Array<Record<string, unknown>>
     // fragile 与 long 同 due：短稳定度 R 更低 → 先刷；easy 与 fragile 同 R 档 → 出题难度低的先

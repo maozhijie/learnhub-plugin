@@ -252,7 +252,7 @@ test('里程碑产物流：首生直落；重生成自动转提案；apply 后�
 
 test('红线：项目全路径零 canonical 写入——复习队列/XP 账本/课程笔记原样', async () => {
   await withVault({ notes: { 入门: {} } }, async ({ engine, store, root }) => {
-    const queueBefore = JSON.stringify(await engine.reviewQueue())
+    const queueBefore = JSON.stringify(await engine.content2.reviewQueue())
     const xpBefore = JSON.stringify(await engine.xpStatus())
     const noteBefore = readFileSync(join(root, '学习中心', 'math', '课程', '基础', '入门.md'), 'utf8')
     const journalBefore = await store.journalTail(null, 100)
@@ -265,7 +265,7 @@ test('红线：项目全路径零 canonical 写入——复习队列/XP 账本/�
     await engine.projectSetTier('练耳日记', '骨架')
     await engine.projectSetLifecycle('练耳日记', 'paused')
 
-    assert.equal(JSON.stringify(await engine.reviewQueue()), queueBefore)
+    assert.equal(JSON.stringify(await engine.content2.reviewQueue()), queueBefore)
     assert.equal(JSON.stringify(await engine.xpStatus()), xpBefore)
     assert.equal(readFileSync(join(root, '学习中心', 'math', '课程', '基础', '入门.md'), 'utf8'), noteBefore)
     // journal 一行不增（streak/热力图聚合 journal 全部行——项目域写它会涨 streak，ADR-0015 裁决 7）

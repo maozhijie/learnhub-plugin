@@ -330,7 +330,7 @@ test('红线：执行事件零 XP / 零 journal / 零 review-log / 零 practice 
     const p1 = await engine.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '入门, 进阶'))
     await engine.projectApply(p1.id)
 
-    const queueBefore = JSON.stringify(await engine.reviewQueue())
+    const queueBefore = JSON.stringify(await engine.content2.reviewQueue())
     const xpBefore = JSON.stringify(await engine.xpStatus())
     const journalBefore = await store.journalTail(null, 100)
     const reviewBefore = await store.reviewLogAll()
@@ -338,7 +338,7 @@ test('红线：执行事件零 XP / 零 journal / 零 review-log / 零 practice 
 
     await engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['入门', '进阶'] })
 
-    assert.equal(JSON.stringify(await engine.reviewQueue()), queueBefore, '复习队列不动')
+    assert.equal(JSON.stringify(await engine.content2.reviewQueue()), queueBefore, '复习队列不动')
     assert.equal(JSON.stringify(await engine.xpStatus()), xpBefore, 'XP 账本不动（执行事件零 XP）')
     assert.equal((await store.journalTail(null, 100)).length, journalBefore.length, 'journal 零写入')
     assert.equal((await store.reviewLogAll()).length, reviewBefore.length, 'review-log 零写入')

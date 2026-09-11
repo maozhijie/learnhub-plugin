@@ -127,7 +127,7 @@ test('红线：回执零 XP、零 FSRS 推进、不进复习队列；非实践�
     assert.equal((await h.store.practiceAll()).length, 0)
     assert.equal((await h.store.reviewLogAll()).length, 0)
     // 复习队列零卡（回执永不推卡、也本就不是复习对象）
-    const q = await h.engine.reviewQueue('数学', '练耳')
+    const q = await h.engine.content2.reviewQueue('数学', '练耳')
     assert.equal(q.cards.length, 0)
     // 非实践节点（普通节点乐理）拒绝——v1 载体 = 实践节点
     await assert.rejects(
@@ -170,8 +170,8 @@ test('事务性：AI 输出不可解析 → 回执与 EMA 零落盘；坏流水 
 
 test('提示词模板：回执评审入 PROMPT_KINDS（可编辑、带版本标记）', async () => {
   await withVault({ tag: 'receipt-prompt', registry: null, graph: null }, async h => {
-    assert.ok((await h.engine.promptKinds()).includes('回执评审'))
-    const tpl = await h.engine.loadPrompt('回执评审')
+    assert.ok((await h.engine.content2.promptKinds()).includes('回执评审'))
+    const tpl = await h.engine.content2.loadPrompt('回执评审')
     assert.ok(tpl.includes('回执评审'))
     assert.ok(tpl.includes('learnhub:prompt/v6'))
     assert.ok(Object.keys(RECEIPT_KIND_LABEL).length === 4)

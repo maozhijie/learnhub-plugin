@@ -69,9 +69,15 @@ function makeRuntime(): HostRuntime {
 }
 
 /** 影子化引擎方法（实例属性覆盖原型方法），脚本化宿主依赖的引擎入口。 */
+/** 测试桩（C 形态感知，ADR-0049）：键可以是裸名（hub 装配域方法，覆盖在门面实例上）
+ * 或 `<子系统>.<方法>` 点路径（覆盖在子系统实例上）——与 jobs 的实际调用路径一致。 */
 function stub(rt: HostRuntime, methods: Record<string, unknown>): void {
+  const engine = rt.engine as unknown as Record<string, unknown>
   for (const [k, fn] of Object.entries(methods)) {
-    ;(rt.engine as unknown as Record<string, unknown>)[k] = fn
+    const dot = k.indexOf('.')
+    if (dot < 0) { engine[k] = fn; continue }
+    const sub = engine[k.slice(0, dot)] as Record<string, unknown>
+    sub[k.slice(dot + 1)] = fn
   }
 }
 
@@ -79,9 +85,9 @@ function stub(rt: HostRuntime, methods: Record<string, unknown>): void {
  * saveGenJobs 捕获每次落盘快照；coach/settle 静默（queue_idle 触点的消费方）。 */
 function stubContentPipeline(rt: HostRuntime, opts: { saved?: Array<Array<unknown>> } = {}): void {
   stub(rt, {
-    contentPack: async () => '上下文包',
-    contentTierOf: async () => 1,
-    loadPrompt: async () => 'TPL',
+    'content2.contentPack': async () => '上下文包',
+    'content2.contentTierOf': async () => 1,
+    'content2.loadPrompt': async () => 'TPL',
     contentSectionsView: async () => [{ id: 's1', title: '第一节', type: '概念', status: 'ready' }],
     questionGenerateSections: async () => ({ added: 2 }),
     questionGenerate: async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
@@ -166,7 +172,7 @@ test('队列泵状态机：running 重复入队拒绝；排队任务可取消（
   let releasePack: (() => void) | undefined
   const gate = new Promise<void>(r => { releasePack = r })
   stub(rt, {
-    contentPack: () => gate, // 挂住管线，制造 running 窗口
+    'content2.contentPack': () => gate, // 挂住管线，制造 running 窗口
     saveGenJobs: async () => undefined,
     coachCheckpoint: async () => ({ courses: [] }),
     settleRechecks: async () => null,
@@ -185,7 +191,7 @@ test('队列暂停/恢复：暂停旗标挡泵（入队不开跑），resumeQueu
   const rt = makeRuntime()
   const hits = { pack: 0 }
   stubContentPipeline(rt)
-  ;(rt.engine as unknown as Record<string, unknown>).contentPack = async () => { hits.pack++; return '上下文包' }
+  stub(rt, { 'content2.contentPack': async () => { hits.pack++; return '上下文包' } })
   const ctx = fakeCtx()
   rt.flags.queuePaused = true // 重启恢复后的暂停语义（restoreGenJobs 置位，生成页一键恢复）
   enqueueGeneration(rt, ctx, '数学', '节点B')

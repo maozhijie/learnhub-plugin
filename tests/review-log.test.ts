@@ -32,7 +32,7 @@ test('忘记申报：auto/Again + 复习前快照（种子卡 elapsed>0、S/D �
       fsrs: { stability: 5, difficulty: 5, due: PAST, last_review: PAST, reps: 3, lapses: 0 },
     })] },
   }, async ({ engine }) => {
-    await engine.questionForget('数学', '入门', 'a1', 7)
+    await engine.content2.questionForget('数学', '入门', 'a1', 7)
     const recs = await engine.store.reviewLogAll() as ReviewRec[]
     assert.equal(recs.length, 1)
     const rec = recs[0]
@@ -49,7 +49,7 @@ test('复习流自评：挂起作答不落日志，questionRate(Hard) 落 self/2
   await withVault({ banks: { 入门: [tfQuestion('a1')] } }, async ({ engine }) => {
     await answer(engine, 'a1', 'true', { deferSchedule: true })
     assert.deepEqual(await engine.store.reviewLogAll(), [], '挂起=未推进，不落日志')
-    await engine.questionRate('数学', '入门', 'a1', 2)
+    await engine.content2.questionRate('数学', '入门', 'a1', 2)
     const recs = await engine.store.reviewLogAll() as ReviewRec[]
     assert.equal(recs.length, 1)
     const rec = recs[0]

@@ -137,7 +137,7 @@ test('生成→落盘→复习队列汇入：指定课程产出错误对比卡�
     assert.match(readFileSync(cardPath, 'utf8'), /把两直角边相加/)
 
     // 未调度新卡：进复习队列队尾（due=null，source=error，卡面不带答案）
-    const q = await h.engine.reviewQueue()
+    const q = await h.engine.content2.reviewQueue()
     const hit = q.cards.find(c => c.source === 'error')
     assert.ok(hit)
     assert.equal(hit!.node, '入门')
@@ -252,7 +252,7 @@ test('选对路径：昨日已推进的卡今日再答选对 → rating 3 + 无�
     assert.equal(row!.course, '*')
     assert.equal(row!.xp, right.xp)
     // 队列里旧到期快照不再出现（已推进，新 due 在未来）
-    const q = await h.engine.reviewQueue()
+    const q = await h.engine.content2.reviewQueue()
     assert.ok(!q.cards.some(c => c.source === 'error' && c.id === 'err:c1'))
   })
 })
@@ -262,7 +262,7 @@ test('队列排除归档卡；errorCardQueue 管理面带全卡面供人工抽�
     await seedWrongAttempts(h)
     await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     await h.engine.errorCardArchive('数学', '入门', 'c1', true)
-    const q = await h.engine.reviewQueue()
+    const q = await h.engine.content2.reviewQueue()
     assert.ok(!q.cards.some(c => c.source === 'error'))
     const list = await h.engine.errorCardQueue('数学')
     assert.equal(list.total, 0)
@@ -290,8 +290,8 @@ test('单节点定向复习入口：node 过滤命中错误卡；跨课程拼错
   await withVault({ tag: 'learnhub-error-node-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
     await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
-    const q = await h.engine.reviewQueue('数学', '入门')
+    const q = await h.engine.content2.reviewQueue('数学', '入门')
     assert.equal(q.cards.filter(c => c.source === 'error').length, 1)
-    await assert.rejects(() => h.engine.reviewQueue('数学', '不存在'), /不在/)
+    await assert.rejects(() => h.engine.content2.reviewQueue('数学', '不存在'), /不在/)
   })
 })

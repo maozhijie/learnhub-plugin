@@ -93,21 +93,21 @@ test('reviewQueue node 过滤：定向复习直达入口（存在性 fail loud�
       入门: [tfQuestion('a1', { fsrs: dueSeed(PAST) }), tfQuestion('a2', { fsrs: dueSeed(PAST) })],
     },
   }, async ({ engine }) => {
-    const scoped = await engine.reviewQueue('数学', '入门') as { total: number; cards: Array<Record<string, unknown>> }
+    const scoped = await engine.content2.reviewQueue('数学', '入门') as { total: number; cards: Array<Record<string, unknown>> }
     assert.equal(scoped.total, 2)
     assert.ok(scoped.cards.every(c => c.node === '入门' && c.course === '数学'))
 
-    const cross = await engine.reviewQueue(undefined, '入门') as { total: number }
+    const cross = await engine.content2.reviewQueue(undefined, '入门') as { total: number }
     assert.equal(cross.total, 2, '跨课程口径一致')
 
-    const empty = await engine.reviewQueue('数学', '进阶') as { total: number }
+    const empty = await engine.content2.reviewQueue('数学', '进阶') as { total: number }
     assert.equal(empty.total, 0, '节点在图内但无到期题 → 合法空队列')
 
-    const whole = await engine.reviewQueue('数学') as { total: number }
+    const whole = await engine.content2.reviewQueue('数学') as { total: number }
     assert.equal(whole.total, 2, '不带 node 过滤维持原全局口径')
 
-    await assert.rejects(() => engine.reviewQueue('数学', '幽灵'), /不在.*图内/, '拼错的直达入口 fail loud')
-    await assert.rejects(() => engine.reviewQueue(undefined, '幽灵'), /不在任何启用课程/, '跨课程同样 fail loud')
+    await assert.rejects(() => engine.content2.reviewQueue('数学', '幽灵'), /不在.*图内/, '拼错的直达入口 fail loud')
+    await assert.rejects(() => engine.content2.reviewQueue(undefined, '幽灵'), /不在任何启用课程/, '跨课程同样 fail loud')
   })
 })
 

@@ -127,7 +127,7 @@ test('memoryHealth：预报/分布立刻有数且与 reviewQueue 扫描口径一
     ])
 
     // 与 reviewQueue 的扫描口径一致：到期队列 = 逾期 + 今日（PAST + today）
-    const q = await engine.reviewQueue() as { total: number }
+    const q = await engine.content2.reviewQueue() as { total: number }
     assert.equal(q.total, m.forecast.overdue + m.forecast.per_day[0].count)
   })
 })

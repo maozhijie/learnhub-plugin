@@ -217,7 +217,7 @@ test('红线：执行事件不复用题目卡、不进复习队列、不写练�
     )
 
     // 复习队列为空（技能 lane 不汇入）；练习作答流水零写入
-    const q = await h.engine.reviewQueue()
+    const q = await h.engine.content2.reviewQueue()
     assert.equal(q.cards.length, 0)
     const journal = await h.store.journalTail()
     assert.ok(journal.every(r => r.kind === 'xp_execution')) // journal 只有执行 XP 行

@@ -155,7 +155,7 @@ test('reviewQueue:过信检出且提示开 → 抽样 1/3→1/2 加强 + 队列�
     engine.jolRng = () => 0.5
     assert.deepEqual(await engine.calibrationHintsConfig(), { hints_enabled: true }, '缺省开(可全局关)')
 
-    const r = await engine.reviewQueue('数学') as { cards: Array<{ jol?: boolean }>; calibration_hint?: string }
+    const r = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }>; calibration_hint?: string }
     assert.equal(r.cards.filter(c => c.jol).length, 3, '6 张 × 1/2(加强密度)= 3')
     assert.match(r.calibration_hint ?? '', /「会」/)
     assert.match(r.calibration_hint ?? '', /保守/)
@@ -163,13 +163,13 @@ test('reviewQueue:过信检出且提示开 → 抽样 1/3→1/2 加强 + 队列�
       '队列提示 = 引擎文案决策,单一出处')
 
     // 定向(单节点)队列同样带出
-    const rNode = await engine.reviewQueue('数学', '入门') as { calibration_hint?: string }
+    const rNode = await engine.content2.reviewQueue('数学', '入门') as { calibration_hint?: string }
     assert.match(rNode.calibration_hint ?? '', /保守/)
 
     // 全局关:密度回落 1/3、提示消失(既有 JOL 开关不受影响)
     await engine.setCalibrationHints(false)
     assert.deepEqual(await engine.calibrationHintsConfig(), { hints_enabled: false })
-    const r2 = await engine.reviewQueue('数学') as { cards: Array<{ jol?: boolean }>; calibration_hint?: string }
+    const r2 = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }>; calibration_hint?: string }
     assert.equal(r2.cards.filter(c => c.jol).length, 2, '回落 1/3:6 张 × 1/3 = 2')
     assert.equal(r2.calibration_hint, undefined)
   })
@@ -185,7 +185,7 @@ test('门槛静默:配对不足时队列无加强、无提示,不报错', async 
       })
     }
     engine.jolRng = () => 0.5
-    const r = await engine.reviewQueue('数学') as { cards: Array<{ jol?: boolean }>; calibration_hint?: string }
+    const r = await engine.content2.reviewQueue('数学') as { cards: Array<{ jol?: boolean }>; calibration_hint?: string }
     assert.equal(r.cards.filter(c => c.jol).length, 2, '仍按 1/3 抽样')
     assert.equal(r.calibration_hint, undefined)
   })
@@ -221,7 +221,7 @@ test('红线:画像/提示/密度全开——读路径零写入;复习自评档�
     const ans = await engine.questionAnswer(llm, '数学', '入门', 'q1', 'true', 30,
       { deferSchedule: true, predicted: '会' }) as { pendingRating?: boolean; previews?: { good: string } }
     assert.equal(ans.pendingRating, true)
-    const rated = await engine.questionRate('数学', '入门', 'q1', 3) as { scheduled?: boolean; due?: string }
+    const rated = await engine.content2.questionRate('数学', '入门', 'q1', 3) as { scheduled?: boolean; due?: string }
     assert.equal(rated.scheduled, true)
     assert.equal(rated.due, ans.previews?.good, '自评档 Good 原样决定到期(评分行为不被画像改动)')
     const q1 = await loadQ(engine, 'q1')
@@ -235,8 +235,8 @@ test('红线:画像/提示/密度全开——读路径零写入;复习自评档�
     const before = await snapshot(root)
     const xpBefore = await engine.xpStatus()
     await engine.learner.calibrationProfile()
-    await engine.reviewQueue('数学')
-    await engine.reviewQueue('数学', '入门')
+    await engine.content2.reviewQueue('数学')
+    await engine.content2.reviewQueue('数学', '入门')
     assert.deepEqual(await snapshot(root), before, '画像/队列读路径零落盘(含题库 fsrs、笔记 frontmatter、流水)')
     assert.deepEqual(await engine.xpStatus(), xpBefore, 'XP 账本零变化')
   })

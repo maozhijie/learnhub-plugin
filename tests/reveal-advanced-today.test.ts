@@ -4,7 +4,7 @@ import { LearnhubEngine } from '../src/engine/index.ts'
 import { answer, tfQuestion, withVault } from './helpers/vault.ts'
 
 const loadQs = async (engine: LearnhubEngine): Promise<Array<Record<string, unknown>>> => {
-  const r = await engine.questions('数学', '入门') as unknown as { questions: Array<Record<string, unknown>> }
+  const r = await engine.content2.questions('数学', '入门') as unknown as { questions: Array<Record<string, unknown>> }
   return r.questions
 }
 
@@ -51,7 +51,7 @@ test('答错如实记 last_correct=false；reviewQueue 通道永不带答案', a
     const qs = await loadQs(engine)
     assert.equal(qs.find(q => q.id === 'a1')!.lastCorrect, false, '答错如实落 last_correct')
 
-    const r = await engine.reviewQueue('数学') as unknown as { cards: Array<Record<string, unknown>> }
+    const r = await engine.content2.reviewQueue('数学') as unknown as { cards: Array<Record<string, unknown>> }
     const card = r.cards.find(c => c.id === 'due')!
     assert.ok(card, '到期卡入队')
     assert.equal('answer' in card, false, '复习队列是主动回忆面，不带答案')

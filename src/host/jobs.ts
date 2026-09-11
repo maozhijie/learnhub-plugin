@@ -553,33 +553,33 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
   persistGenJobs(rt)
   const complete = llmSeamStripped(ctx)
   try {
-    const pack = await rt.engine.contentPack(course, node)
+    const pack = await rt.engine.content2.contentPack(course, node)
     // 档位元数据（GenJob 记录；quiz 量分发与后续弹性评估用）
     try {
-      job.tier = TIER_LABELS[await rt.engine.contentTierOf(course, node)]
+      job.tier = TIER_LABELS[await rt.engine.content2.contentTierOf(course, node)]
     } catch {
       // 档位缺失不阻塞生成（difficulty/bloom 全缺时折叠兜底中档，引擎侧不抛）
     }
     // 节模板提前 load：风格名写错在这里 fail loud，不浪费大纲调用
-    const sectionTpl = await rt.engine.loadPrompt(style ? `课程节生成-${style}` : '课程节生成')
+    const sectionTpl = await rt.engine.content2.loadPrompt(style ? `课程节生成-${style}` : '课程节生成')
     const highTier = job.tier === '高'
 
     // —— 大纲：节清单落盘。已有 ready 节（断点续跑）沿用既有清单，否则重跑覆盖 ——
     let views = await rt.engine.contentSectionsView(course, node)
     if (!views.some(s => s.status === 'ready')) {
-      const outlineTpl = await rt.engine.loadPrompt('课程大纲')
+      const outlineTpl = await rt.engine.content2.loadPrompt('课程大纲')
       // P4：高复杂度节点的大纲轮升 deep 档
       const outlineEffort = contentEffort(highTier)
       // 大纲护栏未过（OUTLINE_BUDGET）时重跑一次并回灌节数与预期区间，仍失败才置 failed
       let outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: outlineEffort })
       if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
       try {
-        await rt.engine.contentOutline(course, node, outlineYaml)
+        await rt.engine.content2.contentOutline(course, node, outlineYaml)
       } catch (err) {
         if (job.status === 'cancelling' || (err instanceof Error && (err as Error & { code?: string }).code !== 'OUTLINE_BUDGET')) throw err
         outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: outlineEffort })
         if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
-        await rt.engine.contentOutline(course, node, outlineYaml)
+        await rt.engine.content2.contentOutline(course, node, outlineYaml)
       }
       views = await rt.engine.contentSectionsView(course, node)
       if (!views.length) throw new Error('[generate] 大纲没有产出任何节。')
@@ -631,12 +631,12 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
 
 /** 单节重写：节任务上下文 → 模型 → sectionApply（与管线共用同一拼装、门禁与修复回路）。 */
 export async function generateSection(rt: HostRuntime, ctx: Context, course: string, node: string, sectionId: string): Promise<string> {
-  const pack = await rt.engine.contentPack(course, node)
+  const pack = await rt.engine.content2.contentPack(course, node)
   const views = await rt.engine.contentSectionsView(course, node)
   const s = views.find(v => v.id === sectionId)
   if (!s) throw new Error(`「${node}」没有节「${sectionId}」——先运行大纲。`)
-  const sectionTpl = await rt.engine.loadPrompt('课程节生成')
-  const highTier = TIER_LABELS[await rt.engine.contentTierOf(course, node)] === '高'
+  const sectionTpl = await rt.engine.content2.loadPrompt('课程节生成')
+  const highTier = TIER_LABELS[await rt.engine.content2.contentTierOf(course, node)] === '高'
   const r = await applySectionWithRepair(rt, llmSeam(ctx), course, node, s, sectionTpl, pack, { highTier })
   return `[section] 「${r.title}」v${r.version} 落盘。`
 }
@@ -712,7 +712,7 @@ export async function generationStatus(rt: HostRuntime): Promise<{
   for (const [key, j] of rt.jobs.genJobs.entries()) {
     let contentVersion: number | undefined
     try {
-      contentVersion = await rt.engine.contentVersion(j.course, j.node)
+      contentVersion = await rt.engine.content2.contentVersion(j.course, j.node)
     } catch {
       // 节点/课程缺失等：版本缺省，面板走全量刷新
     }

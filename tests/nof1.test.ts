@@ -238,7 +238,7 @@ test('实验不改推进语义：同流程在有/无实验两 vault 间账本一
     }).join('\n') : ''
   const flow = async (engine: import('../src/engine/index.ts').LearnhubEngine) => {
     await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
-    await engine.questionForget('数学', '入门', 'a2', 8)
+    await engine.content2.questionForget('数学', '入门', 'a2', 8)
     const note = readFileSync(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
     const practice = stripTs(existsSync(engine.paths.practicePath) ? readFileSync(engine.paths.practicePath, 'utf8') : '')
     const journal = stripTs(existsSync(engine.paths.journalPath) ? readFileSync(engine.paths.journalPath, 'utf8') : '')
@@ -271,21 +271,21 @@ test('批次生效：band_default 实验决定未显式选带时的会话默认�
     banks: { 入门: [tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: '2024-01-01', last_review: '2024-01-01', reps: 3, lapses: 0 } })] },
     notes: { 入门: { stage: 'review', fsrs: null } },
   }, async ({ engine }) => {
-    const plain = await engine.reviewQueue('数学', '入门')
+    const plain = await engine.content2.reviewQueue('数学', '入门')
     assert.ok(Math.abs((plain.band ?? 0) - 0.2) < 1e-6, '无实验：Mastery 0 先验带 0.2')
 
     const prop = await engine.experimentPropose('band_default_std_vs_hard')
     await engine.experimentApply(prop.proposal)
     // 批次起点拨回昨天 → 今日轮到第二臂（hard）；起点必须从引擎学习日现推，
     // 硬编码日期会让臂序随真实日历奇偶隔天翻面
-    const today = (await engine.reviewQueue('数学', '入门')).date
+    const today = (await engine.content2.reviewQueue('数学', '入门')).date
     const list = await engine.store.loadExperiments()
     list[0]!.assignment = { kind: 'batch', start_day: addDays(today, -1)!, order: ['standard', 'hard'] }
     await engine.store.saveExperiments(list)
-    const q = await engine.reviewQueue('数学', '入门')
+    const q = await engine.content2.reviewQueue('数学', '入门')
     assert.equal(nof1ArmForDay(list[0]!, today), 'hard')
     assert.ok(Math.abs((q.band ?? 0) - 0.4) < 1e-6, `实验默认挑战带生效（band=${q.band}）`)
-    const explicit = await engine.reviewQueue('数学', '入门', undefined, 'easy')
+    const explicit = await engine.content2.reviewQueue('数学', '入门', undefined, 'easy')
     assert.ok(Math.abs((explicit.band ?? 0) - 0) < 1e-6, '显式选带覆盖实验默认（学习者选择优先）')
   })
 })
@@ -309,11 +309,11 @@ test('会组成实验：混排臂在全局队列带出 exp 标注；报告从预
   }, async ({ engine }) => {
     const prop = await engine.experimentPropose('session_composition_facet_vs_mixed')
     await engine.experimentApply(prop.proposal)
-    const today = (await engine.reviewQueue()).date
+    const today = (await engine.content2.reviewQueue()).date
     const list = await engine.store.loadExperiments()
     list[0]!.assignment = { kind: 'batch', start_day: addDays(today, -1)!, order: ['faceted', 'mixed'] }
     await engine.store.saveExperiments(list)
-    const q = await engine.reviewQueue()
+    const q = await engine.content2.reviewQueue()
     assert.deepEqual(q.exp, { id: 1, arm: 'mixed' }, '队列如实标注当日实验臂')
 
     const report = await engine.experimentReport()
