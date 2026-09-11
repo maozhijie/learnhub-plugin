@@ -485,8 +485,8 @@ export class GraphProposals {
      * 三率流水（账本/提案/练习），由门面注入（本类零流水依赖）；返回拒收行，空 = 放行。 */
     private growthGate?: (spec: EditProposalSpec) => Promise<string[]>,
     /** 时钟端口（#175 阶段①）：decided/now 戳与学习日缺省都经它取时。 */
-    private clock?: Clock,
-    private fs?: VaultFs,
+    private clock: Clock,
+    private fs: VaultFs,
   ) {
     this.concepts = new ConceptRegistry(paths, this.fs)
   }
@@ -785,7 +785,7 @@ export class GraphProposals {
         {
           name: '提案 applied',
           run: async () => {
-            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `快照 v${version}` })
+            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: `快照 v${version}` })
           },
         },
       ],
@@ -818,7 +818,7 @@ export class GraphProposals {
   /** 先验喂料分流判定（#142）：≥0.7 候选对在给定图结构上的回应情况。缓存缺文件 =
    * 零候选（Missing 合法空态，零先验零注入全绿）；坏档 fail loud（引擎 state 契约文件）。 */
   private async priorFeed(graph: Graph): Promise<{ responded: PriorFeedVerdict[]; unresponded: PriorFeedVerdict[] }> {
-    const cache = await readVaultLinksCache(this.paths.vaultLinksPath, this.fs!)
+    const cache = await readVaultLinksCache(this.paths.vaultLinksPath, this.fs)
     if (!cache) return { responded: [], unresponded: [] }
     return splitPriorFeed(cache.edges, graph.names, graph)
   }
@@ -931,7 +931,7 @@ export class GraphProposals {
     let regions: Awaited<ReturnType<GraphStore['load']>> = []
     let version = 0
     let anchor: ReturnType<typeof anchorFromSeed>
-    const declared = today ?? todayStr(new Date(this.clock!.nowMs()))
+    const declared = today ?? todayStr(new Date(this.clock.nowMs()))
     const written: string[] = []
     // 罗盘现状读取（在写序第一笔前读与第四步读等价——本单元内无更早的罗盘写入）
     const compassPath = this.paths.compassPath(root)
@@ -978,7 +978,7 @@ export class GraphProposals {
           name: '终点锚落盘',
           run: async () => {
             anchor = anchorFromSeed(spec, prop.id, declared)
-            await writeAnchor(this.paths.anchorPath(root), anchor, this.fs!)
+            await writeAnchor(this.paths.anchorPath(root), anchor, this.fs)
           },
         },
         {
@@ -1017,7 +1017,7 @@ export class GraphProposals {
         {
           name: '提案 applied',
           run: async () => {
-            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `终点锚落盘；快照 v${version}` })
+            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: `终点锚落盘；快照 v${version}` })
           },
         },
       ],
@@ -1164,7 +1164,7 @@ export class GraphProposals {
           name: '覆盖层留痕',
           run: async () => {
             // state/覆盖层.jsonl，追加只增；读侧只读正典，这里只是审计与出处
-            const now = new Date(this.clock!.nowMs()).toISOString()
+            const now = new Date(this.clock.nowMs()).toISOString()
             const lines = spec.fields.map(f => JSON.stringify({
               target: f.node,
               field: 'enc',
@@ -1196,7 +1196,7 @@ export class GraphProposals {
         {
           name: '提案 applied',
           run: async () => {
-            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `快照 v${version}` })
+            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: `快照 v${version}` })
           },
         },
       ],
@@ -1269,12 +1269,12 @@ export class GraphProposals {
     const list = await this.store.loadProposals()
     const prop = list.find(p => p.id === pid)
     if (!prop || prop.status !== 'pending') throw new Error(`[reject] 提案 #${pid} 不存在或已决。`)
-    await this.store.updateProposal(pid, { status: 'rejected', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: note })
+    await this.store.updateProposal(pid, { status: 'rejected', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: note })
     if (prop.pair) {
       const sibling = list.find(p => p.id === prop.pair)
       if (sibling && sibling.status === 'pending') {
         await this.store.updateProposal(sibling.id, {
-          status: 'rejected', decided: new Date(this.clock!.nowMs()).toISOString(),
+          status: 'rejected', decided: new Date(this.clock.nowMs()).toISOString(),
           decision_note: `同源双提案同退（#${pid} 已拒，联动拒绝）${note ? `：${note}` : ''}`,
         })
       }

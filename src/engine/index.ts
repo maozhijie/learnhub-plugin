@@ -10,7 +10,8 @@
  */
 import { graphHealthScore } from './health.ts'
 import type { VaultFs } from './io.ts'
-/** vault 存储端口（#175 阶段②）：类型随门面出，实现住 host/vault-fs.ts。 */export type { VaultFs } from './io.ts'
+/** vault 存储端口（#175 阶段②）：类型随门面出，实现住 host/vault-fs.ts。 */
+export type { VaultFs } from './io.ts'
 import { Paths} from './paths.ts'
 import { Registry} from './registry.ts'
 import { ConceptRegistry} from './concepts.ts'
