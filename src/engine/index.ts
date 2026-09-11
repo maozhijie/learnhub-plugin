@@ -13,7 +13,7 @@ import { mkdir, readdir, readFile, rename, unlink, writeFile, appendFile } from 
 import { Paths, safeFilename } from './paths.ts'
 import { Registry } from './registry.ts'
 import { ConceptRegistry, invokesTagged, invokesUnregistered, namesOf, resolveConcept } from './concepts.ts'
-import { Store } from './store.ts'
+import { Store, netPracticeRecs } from './store.ts'
 import { GraphStore, Graph, writeReadyList, declaredEncOf } from './graph.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
@@ -119,7 +119,7 @@ import { YAML } from './yaml.ts'
 import { Sessions, assertNoBrokenNotes, readySet, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from './sessions.ts'
 import type { NodeStat, WindowStat } from './sessions.ts'
 import { todayStr, nowIso, dayOfTs, fmtCutoff } from './dates.ts'
-import { atomicWrite, netPracticeRecs, readLearnhubConfig, writeLearnhubConfig } from './store.ts'
+import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import { assertSchemaVersion } from './schema.ts'
 import type { SchemaBlock } from './schema.ts'
 import { appendSedimentEvent, readSedimentCanon, foldSediment, rebuildLearnerProfile } from './sediment.ts'
@@ -151,6 +151,13 @@ import type {
   XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, ProjectExecBackflow,
   KataDoc, CleanupGroup, CleanupPreviewDoc,
 } from './views.ts'
+
+/** 宿主取值走门面（D14 收口，#152 刀 1 / ADR-0042）：re-export 门只供应纯函数、
+ * 常量与缝型——数据访问仍只走门面方法，门不是数据旁路。 */
+export { Content } from './content.ts'
+export { ANKI_ENDPOINT, AnkiConnectClient } from './anki.ts'
+export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './complexity.ts'
+export type { LlmComplete, LlmEffort } from './llm.ts'
 
 /** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
 function shuffled<T>(items: T[]): T[] {

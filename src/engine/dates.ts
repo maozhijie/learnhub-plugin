@@ -82,3 +82,33 @@ export function nowIso(): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
+
+// ---- 学习周折叠（ADR-0026 裁决 2：日历周按学习日折叠；#152 刀 1 自 kata.ts 归位
+// ——纯日历语义住日历模块，sediment 等消费方回引此处不构成对复盘层的反向依赖）----
+
+/** 'YYYY-MM-DD' → 所在日历周的周一（UTC 日算术；解析失败 null）。 */
+export function weekStartOf(day: string): string | null {
+  const d = parseDay(day)
+  if (!d) return null
+  const shift = (d.getUTCDay() + 6) % 7 // Mon=0 .. Sun=6
+  return fmtDay(new Date(d.getTime() - shift * 86400000))
+}
+
+/** 周一 → 周日（+6 天）。 */
+export function weekEndOf(weekStart: string): string | null {
+  const d = parseDay(weekStart)
+  return d ? fmtDay(new Date(d.getTime() + 6 * 86400000)) : null
+}
+
+/** 相对 today 的上一完整学习周周一（today 所在周的周一往前推 7 天）。 */
+export function prevWeekStartOf(today: string): string | null {
+  const cur = weekStartOf(today)
+  if (!cur) return null
+  const d = parseDay(cur)!
+  return fmtDay(new Date(d.getTime() - 7 * 86400000))
+}
+
+/** 学习日是否落在 [weekStart, weekEnd]（字符串字典序即日序）。 */
+export function inWeek(day: string, weekStart: string, weekEnd: string): boolean {
+  return day >= weekStart && day <= weekEnd
+}

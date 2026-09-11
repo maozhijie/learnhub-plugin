@@ -12,7 +12,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
-import { atomicWrite } from './store.ts'
+import { atomicWrite } from './io.ts'
 import type { Paths } from './paths.ts'
 
 /** 登记表条目：canonical 主名；别名可选（名字并集后历史地址都在这）；定义选填

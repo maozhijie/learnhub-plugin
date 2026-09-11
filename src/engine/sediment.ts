@@ -19,7 +19,7 @@
  * #145 生长批），concept 字段缺席合法。
  */
 import { mkdir, readFile, appendFile, writeFile, rename } from 'node:fs/promises'
-import { weekStartOf } from './kata.ts'
+import { weekStartOf } from './dates.ts'
 import { nowIso } from './dates.ts'
 import type { Paths } from './paths.ts'
 

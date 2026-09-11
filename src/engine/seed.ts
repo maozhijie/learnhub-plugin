@@ -11,7 +11,7 @@
  *   零写侧状态、零专门停机代码；锚文件缺失 = 未播种（Missing 合法，null 折叠）。
  */
 import { readFile } from 'node:fs/promises'
-import { atomicWrite } from './store.ts'
+import { atomicWrite } from './io.ts'
 import { parseConceptFields } from './graph.ts'
 import { validateConceptEntry } from './concepts.ts'
 import type { ConceptEntry } from './concepts.ts'

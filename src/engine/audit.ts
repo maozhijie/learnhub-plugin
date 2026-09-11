@@ -304,7 +304,7 @@ export async function runAudit(
   }
   lines.push('')
   section('INFO · R5/R9 提示项', infos)
-  await import('./store.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n')))
+  await import('./io.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n')))
 
   return { failed: errors.length > 0, errors, warns, infos, baseline, exempt }
 }

@@ -9,7 +9,8 @@ import { readFile, writeFile, rename, mkdir, unlink, appendFile } from 'node:fs/
 import { existsSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { YAML } from './yaml.ts'
-import { Store, atomicWrite } from './store.ts'
+import { Store } from './store.ts'
+import { atomicWrite } from './io.ts'
 import { Graph, GraphStore, loadRegionDoc, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc, structureCheck } from './graph.ts'
 import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflicts, namesOf, validateConceptEntry } from './concepts.ts'
 import type { ConceptEntry, ConceptRef } from './concepts.ts'
@@ -31,7 +32,6 @@ import { RECHECK_DAYS_DEFAULT } from './params.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
-import type { Store } from './store.ts'
 import type { CourseEntry, ProposalKind } from './types.ts'
 
 /** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。 */
@@ -1346,4 +1346,3 @@ export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
   }
 }
 
-export { atomicWrite }

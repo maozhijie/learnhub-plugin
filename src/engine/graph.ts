@@ -9,7 +9,7 @@
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { YAML } from './yaml.ts'
-import { atomicWrite } from './store.ts'
+import { atomicWrite } from './io.ts'
 import { safeFilename } from './paths.ts'
 import type { GBlock, GNode, GRegion, EncEdge, ConceptTier, Misconception } from './types.ts'
 import { BLOOM_LEVELS, CONCEPT_TIERS } from './types.ts'

@@ -12,7 +12,7 @@
  * 假 Anki，运行时 fetch 到 http://127.0.0.1:8765）。
  */
 import { readFile } from 'node:fs/promises'
-import { atomicWrite } from './store.ts'
+import { atomicWrite } from './io.ts'
 import { alreadyScheduledOn } from './advance.ts'
 import type { Paths } from './paths.ts'
 import type { FsrsBlock } from './types.ts'

@@ -15,7 +15,7 @@
  * 聚合纯函数（buildKataReality）：流水进 → 分箱出；周归属全部经 dayOfTs（学习日
  * 口径，凌晨归属随日界），周内/周外用 YYYY-MM-DD 字典序比较。
  */
-import { parseDay, fmtDay, dayOfTs } from './dates.ts'
+import { dayOfTs, inWeek } from './dates.ts'
 import { obsidianLink } from './output.ts'
 import { execRatingScore } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -36,34 +36,9 @@ export const KATA_LEARNER_QUESTIONS: KataAnswer[] = ['目标条件', '障碍', '
 /** 未作答占位（区分「写了空话」与「还没写」的判定基准）。 */
 export const KATA_EMPTY = '（待答）'
 
-// ---- 学习周折叠（ADR-0026 裁决 2：日历周按学习日折叠）----
-
-/** 'YYYY-MM-DD' → 所在日历周的周一（UTC 日算术；解析失败 null）。 */
-export function weekStartOf(day: string): string | null {
-  const d = parseDay(day)
-  if (!d) return null
-  const shift = (d.getUTCDay() + 6) % 7 // Mon=0 .. Sun=6
-  return fmtDay(new Date(d.getTime() - shift * 86400000))
-}
-
-/** 周一 → 周日（+6 天）。 */
-export function weekEndOf(weekStart: string): string | null {
-  const d = parseDay(weekStart)
-  return d ? fmtDay(new Date(d.getTime() + 6 * 86400000)) : null
-}
-
-/** 相对 today 的上一完整学习周周一（today 所在周的周一往前推 7 天）。 */
-export function prevWeekStartOf(today: string): string | null {
-  const cur = weekStartOf(today)
-  if (!cur) return null
-  const d = parseDay(cur)!
-  return fmtDay(new Date(d.getTime() - 7 * 86400000))
-}
-
-/** 学习日是否落在 [weekStart, weekEnd]（字符串字典序即日序）。 */
-export function inWeek(day: string, weekStart: string, weekEnd: string): boolean {
-  return day >= weekStart && day <= weekEnd
-}
+// ---- 学习周折叠：定义住 dates.ts（纯日历语义，#152 刀 1 归位），此处原路径
+// re-export 保住 S45 接缝（tests 与 engine 门面仍从 kata 导入）----
+export { weekStartOf, weekEndOf, prevWeekStartOf, inWeek } from './dates.ts'
 
 // ---- 现状聚合（引擎自动填的四问之外那一问）----
 

@@ -21,7 +21,7 @@
  */
 import { appendFile, mkdir } from 'node:fs/promises'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
-import { readJsonlLines } from './store.ts'
+import { readJsonlLines } from './io.ts'
 import {
   RECHECK_DAYS_MIN, RECHECK_DAYS_MAX,
   RECHECK_CONCENTRATION_DROP, RECHECK_RETENTION_RECOVER, RECHECK_RETENTION_MIN_SAMPLES,

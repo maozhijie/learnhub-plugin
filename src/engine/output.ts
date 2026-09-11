@@ -13,7 +13,7 @@
  */
 import { mkdir } from 'node:fs/promises'
 import { OUTPUT_DIR_NAME, safeFilename } from './paths.ts'
-import { atomicWrite } from './store.ts'
+import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import type { Paths } from './paths.ts'
 

@@ -19,7 +19,6 @@
 import { nowIso } from './dates.ts'
 import { applyPracticeEvidence } from './grading.ts'
 import type { Fm } from './types.ts'
-import type { Store } from './store.ts'
 import type { LlmComplete } from './llm.ts'
 
 /** 回执材料形态（来源枚举，ADR-0016 裁决 4：留档、同权进 EMA）。 */
@@ -166,11 +165,19 @@ export interface ReceiptSubmitResult {
   next_full_in: number | null
 }
 
+/** 回执落盘的结构化窄面（#152 刀 1 / ADR-0042）：receipts 只认这两个方法，不再
+ * import store 的 Store 类型——store→receipts 单向类型依赖得以成立，类型环不解自开
+ * （engine.store 结构化满足本面，facade 传参零改动）。 */
+interface ReceiptStore {
+  receiptsAll(): Promise<ReceiptLogRec[]>
+  appendReceipt(rec: ReceiptLogRec): Promise<ReceiptLogRec>
+}
+
 /** 回执提交（引擎侧收口）：评审（llm seam 注入）→ 流水落盘 → EMA 入账。评审解析失败
  * 时回执与 EMA 零落盘（ADR-0004 事务性）；fsrs 块经 fm 原样透传——回执永不推进任何
  * FSRS 卡。 */
 export async function submitReceipt(input: {
-  store: Store
+  store: ReceiptStore
   course: string
   node: string
   kind: ReceiptKind

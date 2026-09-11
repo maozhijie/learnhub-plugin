@@ -74,3 +74,6 @@
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 
 `analyzeGraph`/`runAudit` 只做薄接线，不在接缝清单内。
+架构门（2026-09-11 新增，ADR-0042 / #152 刀 1；`tests/import-rules.test.ts`）：
+
+- 分层依赖规则执法，随 `npm test` 全量必跑：R1 host 的 engine 导入只走门面、R2 engine 禁引宿主、R3 engine 禁引 `@deepseek-ai/*`、R4 views 纯类型、R5 io.ts 零相对导入叶子、R6 门面唯一汇点（engine 子模块不回引 engine/index.ts）、R7 src 相对 import 全图零环（含 type-only 与动态导入边）。行级收集相对导入（静态/type/侧效/export-from/动态）+ DFS；说明符解析带 .ts 直用、否则补 .ts、否则补 /index.ts。刀 1 随门落地两处解环先例：receipts 用本地 ReceiptStore 结构化窄面（receipts 不 import store）、周折叠函数族归位 dates.ts（sediment 改引 dates，kata 原路径 re-export 保 S45 接缝）。
