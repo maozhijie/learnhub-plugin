@@ -300,3 +300,7 @@ export const LEARNER_CARD_KINDS: LearnerCardKind[] = ['recall_cue', 'cloze_rewri
  * 反向值导入该常量，留原地会锁死 projects→project-exec 的正向导入）。 */
 export type FadingTier = '骨架' | '补全' | '独立'
 export const FADING_TIERS: FadingTier[] = ['骨架', '补全', '独立']
+
+/** 笔记源伪课程名（C1 #59；#152 刀 6 自 note-source.ts 归位中立层——题库域消费它，
+ * 经 note-source 会与该域的低层消费者合拢成环）。 */
+export const NOTE_SOURCE_COURSE = '笔记源'

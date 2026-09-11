@@ -314,8 +314,4 @@ function fmt(d: Date): string {
 }
 
 /** stage 视图（调度消费的统一入口）：无状态行视为 unseen。 */
-export function effectiveStage(state: Record<string, Fm>, n: string): Fm['stage'] {
-  const fm = state[n]
-  if (!fm) return 'unseen'
-  return STAGES.includes(fm.stage) ? fm.stage : 'unseen'
-}
+export { effectiveStage } from './srs.ts'

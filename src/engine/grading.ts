@@ -1,3 +1,4 @@
+import type { PracticeRec, ErratumRec } from './types.ts'
 import type { AlloKind } from './types.ts'
 /**
  * 判卷与作答记录。
@@ -401,3 +402,22 @@ export function revealAnswer(q: { kind: AlloKind; answer: string | boolean | str
     default: return String(q.answer)
   }
 }
+
+/** 勘误冲正的读侧净值（ADR-0031）：key_error 的作答按勘误记录替换 xp/对错；
+ * defective/overridden 的作答整体剔除。原始流水不动，聚合账（XP、作答统计）
+ * 一律先过本函数再算——「行为流水即事实」包含冲正凭证本身。 */
+export function netPracticeRecs<T extends PracticeRec>(recs: readonly T[], errata: readonly ErratumRec[]): T[] {
+  const byKey = new Map(errata.map(e => [`${e.target_ts}|${e.qid}`, e]))
+  const out: T[] = []
+  for (const r of recs) {
+    const e = r.ts ? byKey.get(`${r.ts}|${r.qid ?? ''}`) : undefined
+    if (!e) {
+      out.push(r as T)
+    } else if (e.verdict === 'key_error') {
+      out.push({ ...(r as T), xp: e.xp, correct: e.correct ?? r.correct })
+    }
+    // defective/overridden：本次作答作废，不出现在净流里
+  }
+  return out
+}
+

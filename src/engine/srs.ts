@@ -10,6 +10,7 @@ import { readFile } from 'node:fs/promises'
 import { fsrs, createEmptyCard, Rating, State, generatorParameters } from 'ts-fsrs'
 import type { FSRS, Card, Grade } from 'ts-fsrs'
 import type { FsrsBlock, Fm } from './types.ts'
+import { STAGES } from './types.ts'
 import { parseDay, fmtDay, daysBetween } from './dates.ts'
 import { DESIRED_RETENTION, S_MASTER } from './params.ts'
 import { FSRS6_PARAM_COUNT } from './optimize.ts'
@@ -177,4 +178,12 @@ export function masteryValue(fs: FsrsBlock | null, practice: { attempts: number;
 /** 节点掌握度口径的唯一入口（图/树/学习包共用）：frontmatter → masteryValue。 */
 export function masteryOfFm(fm: Fm | null | undefined): number {
   return masteryValue(fm?.fsrs ?? null, fm?.practice ?? { attempts: 0, correct: 0 }, fm?.practice_ema)
+}
+
+// 节点阶段判定（#152 刀 6 自 audit.ts 归位：题库域消费它，经 audit 会绕进
+// vault-links→note-source 的低层链成环）。
+export function effectiveStage(state: Record<string, Fm>, n: string): Fm['stage'] {
+  const fm = state[n]
+  if (!fm) return 'unseen'
+  return STAGES.includes(fm.stage) ? fm.stage : 'unseen'
 }

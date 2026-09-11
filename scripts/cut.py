@@ -24,7 +24,7 @@ for tag, a_s, b_s in spec.sections:
     sections.append((tag, a, b))
 
 # ---- 2. 方法块解析（字符级：参数闭括号 → 类型感知找方法体 '{' → 计数找配对 '}'）----
-method_re = re.compile(r'^  (private )?(async )?([A-Za-z_]\w*)\(')
+method_re = re.compile(r'^  (private )?(async )?\*?([A-Za-z_]\w*)\(')
 blocks = []
 for tag, a, b in sections:
     join = ''
@@ -122,6 +122,7 @@ for tag, a, b in sections:
         body = lines[body_open_line + 1:end_line]
         blocks.append(dict(tag=tag, start=start_line, end=end_line, sig=sig,
                            private=bool(m.group(1)), is_async=bool(m.group(2)),
+                           is_gen='*' in sig[:sig.index('(')],
                            name=m.group(3), body=body))
         li = ck + 1
         while li < len(join) and lineno[li] <= end_line:
@@ -154,8 +155,10 @@ def split_top(s):
         elif ch == '<' and (prev.isalnum() or prev == '_'):
             d += 1  # 泛型开（Record<、Array<）
             cur.append(ch)
-        elif ch == '>' and d > 0 and (prev.isalnum() or prev in '_]>'):
-            d -= 1  # 泛型闭；=> 的 > 前是 =，不计
+        elif ch == '>' and prev == '=':
+            cur.append(ch)  # 箭头函数 => 的 '>'，不入泛型深度
+        elif ch == '>' and d > 0:
+            d -= 1  # 泛型闭（允许 '} >' 这类带空格的书写）
             cur.append(ch)
         elif ch == ',' and d == 0:
             out.append(''.join(cur))
@@ -215,7 +218,9 @@ for tag, a, b in sections:
         if blk['private'] and used_outside(blk['name']) == 0:
             continue
         call = 'this.%s.%s(%s)' % (spec.field_name, blk['name'], ', '.join(a.strip() for a in args))
-        if ret == 'void':
+        if blk.get('is_gen'):
+            body = '    yield* %s' % call
+        elif ret == 'void':
             body = '    %s' % call
         elif ret == '' and blk['is_async']:
             # 原方法未标注返回类型（TS 推断）：return 兼容 void 与有值两种

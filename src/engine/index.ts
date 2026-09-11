@@ -94,7 +94,7 @@ import type { VaultLinkPrior } from './analysis.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
-import { QuestionBank, questionAnswerShapeError, validateBank } from './question-bank.ts'
+import { QuestionBank, questionAnswerShapeError, validateBank, BankSubsystem } from './question-bank.ts'
 import type { BankDoc, BankQuestion } from './question-bank.ts'
 import { NoteSourceManifest, NOTE_SOURCE_COURSE, classifySource, collectNoteFiles, fingerprintOf, isExcludedPath, normalizeSourcePath, poolMirrorBody, readNoteSourceExcludes, sourceHint, stripFrontmatter, titleOfBody, writeNoteSourceExcludes, ChannelsSubsystem } from './note-source.ts'
 import type { NoteSourceManifestItem, NoteSourceStatus } from './note-source.ts'
@@ -188,31 +188,7 @@ function normSectionKey(s: string): string {
   return parseSectionTitle(s).clean.replace(/\s+/g, '')
 }
 
-/** 从节点正文提取一节的 markdown：先精确标题匹配，再按归一化标题回退；
- * 找不到返回 null（定向补题时 fail loud，不静默附全文）。 */
-function sectionMdOf(body: string, title: string): string | null {
-  const parts = body.split(/^## /m).slice(1)
-  const wanted = normSectionKey(title)
-  for (const part of parts) {
-    const nl = part.indexOf('\n')
-    const t = (nl >= 0 ? part.slice(0, nl) : part).trim()
-    if (t === title) return (nl >= 0 ? part.slice(nl + 1) : '').trim()
-  }
-  for (const part of parts) {
-    const nl = part.indexOf('\n')
-    const t = (nl >= 0 ? part.slice(0, nl) : part).trim()
-    if (t && normSectionKey(t) === wanted) return (nl >= 0 ? part.slice(nl + 1) : '').trim()
-  }
-  return null
-}
 
-/** 误解先验注入段（#147 误解目录消费；节点无误解时返回 ''，Missing 合法空态）。
- * 生成期先验——真实错误检测归作答流水挖矿与申诉复核，有真实数据后先验让位，
- * 让位语义由各消费方模板措辞声明（干扰项以生成指令为准、错误卡 mine 以真实错答为准）。 */
-function misconceptionPromptBlock(mis: Array<{ concept: string; model: string }> | undefined, use: string): string {
-  if (!mis?.length) return ''
-  return `\n\n## 误解先验（${use}）\n\n- 本节点登记在册的误解先验（概念：错误模型）：\n${mis.map(m => `- ${m.concept}：${m.model}`).join('\n')}`
-}
 
 export interface EngineConfig {
   /** vault 根目录绝对路径（必填）。 */
@@ -244,6 +220,8 @@ export class LearnhubEngine {
   private learner: LearnerSubsystem
   /** Project 子系统（项目域，#152 刀 5）：窄面注入构造，见 constructor 尾部。 */
   private project: ProjectSubsystem
+  /** Bank 子系统（题库域，#152 刀 6）：窄面注入构造，见 constructor 尾部。 */
+  private bank2: BankSubsystem
   /** vault 根目录（笔记源注册路径归一用；posix 规范形态）。 */
   readonly vaultRoot: string
   /** schema 版本块（#138 启动硬门的解析产物；breaks 断裂史为纯档案，引擎零消费）。 */
@@ -353,6 +331,28 @@ export class LearnhubEngine {
       nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
       refreshSourceFingerprints: absPaths => this.refreshSourceFingerprints(absPaths),
+    })
+    this.bank2 = new BankSubsystem({
+      store: this.store, paths: this.paths, registry: this.registry,
+      bank: this.bank, errorCards: this.errorCards, concepts: this.concepts,
+      proposals: this.proposals, content: Content, schedCache: this.schedCache,
+      sched: courseRoot => this.sched(courseRoot),
+      learningDay: () => this.learningDay(),
+      loadView: course => this.loadView(course),
+      enabledCourses: () => this.enabledCourses(),
+      scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
+      loadPrompt: kind => this.loadPrompt(kind),
+      assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
+      nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
+      saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
+      vaultPriorFor: (graph, node) => this.vaultPriorFor(graph, node),
+      logGradingFailure: rec => this.logGradingFailure(rec),
+      questionContext: (courseKey, node, qid, op) => this.questionContext(courseKey, node, qid, op),
+      exerciseGated: (c, node) => this.exerciseGated(c, node),
+      repairInvokesOnce: (llm, items, scope) => this.repairInvokesOnce(llm, items, scope),
+      admitQuestion: (root, node, q, stem, existingStems) => this.admitQuestion(root, node, q, stem, existingStems),
+      explainPoints: (c, graph, node) => this.explainPoints(c, graph, node),
+      isNoteSourceCourse: courseKey => this.isNoteSourceCourse(courseKey),
     })
   }
 
@@ -3539,233 +3539,40 @@ export class LearnhubEngine {
   }
   // ---- C-3 错误对比卡（#82：错误库→对比案例卡）----
 
-  /** 挖矿预览（只读）：当前流水中的高频错误模式候选（同一题 ≥MIN_ERROR_LAPSES 次
-   * 实质答错；忘记申报不是错法证据）。人工抽查入口——生成走 errorCardGenerate，
-   * 本方法零写入。 */
+  // 以下 错误对比卡/学习面板题目管理/B2 回流/一键清理/勘误冲正 五节方法体住 BankSubsystem（question-bank.ts，#152 刀 6 聚合+转发）
+
   async errorCardMine(courseKey: string | undefined, node?: string): Promise<ErrorMineDoc> {
-    const c = await this.registry.resolve(courseKey)
-    const candidates = mineErrorPatterns(await this.store.practiceAll(),
-      { course: c.name, ...(node ? { node } : {}) })
-    return { course: c.name, candidates }
+    return this.bank2.errorCardMine(courseKey, node)
   }
 
-  /** 在册错误卡全展开（(course, node, card) 三元组，文件名序稳定）：空目录 = 合法
-   * 空态、Broken 卡组跳过不阻塞（体检面报出）。复习队列、全量清单、生成去重三处同缝。 */
   private async *errorCardTriples(
     courses: ReadonlyArray<{ name: string; root: string }>, nodeFilter?: string,
   ): AsyncGenerator<{ course: string; node: string; card: ErrorCard }> {
-    for (const c of courses) {
-      let files: string[] = []
-      try {
-        files = await readdir(this.paths.errorCardsDir(c.root))
-      } catch {
-        continue // 该课程还没有任何错误卡：合法空态
-      }
-      for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
-        const node = f.replace(/\.yaml$/, '')
-        if (nodeFilter !== undefined && node !== nodeFilter) continue
-        try {
-          const doc = await this.errorCards.load(c.root, node)
-          for (const card of doc.cards) {
-            if (!card.archived) yield { course: c.name, node, card }
-          }
-        } catch {
-          continue // Broken 卡组不阻塞其他卡（data-check 体检面报出）
-        }
-      }
-    }
+    yield* this.bank2.errorCardTriples(courses, nodeFilter)
   }
 
-  /** 全课程活跃错误卡已覆盖的 (node,qid) 集合（生成去重；Broken 文件跳过不阻塞）。 */
-  private async errorCardCovered(course: { name: string; root: string }): Promise<Set<string>> {
-    const covered = new Set<string>()
-    for await (const { node, card } of this.errorCardTriples([course])) {
-      covered.add(`${node}\n${card.source_q}`)
-    }
-    return covered
-  }
-
-  /** 生成错误对比卡（C-3）：挖矿 → 取前 ERROR_CARD_BATCH_MAX 个未覆盖候选 →
-   * 原题材料（题干/答案/解析/学习者错答/节正文节选）喂「错误对比卡」提示词 →
-   * 模型 YAML 过 schema 门禁（含 (node,source_q) 必须命中候选）逐节点落盘。
-   * 归 learner-cards 同款事务性：模型产出不可解析/未过门禁时抛错零落盘。
-   * 创建零 XP、零 canonical 写入——卡入错误 deck，复习时才走无绑定 XP。 */
   async errorCardGenerate(
     courseKey: string | undefined, opts: { node?: string; max?: number } | undefined,
     llm: LlmComplete,
   ): Promise<ErrorGenerateResult> {
-    const c = await this.registry.resolve(courseKey)
-    const candidates = mineErrorPatterns(await this.store.practiceAll(),
-      { course: c.name, ...(opts?.node ? { node: opts.node } : {}) })
-    const covered = await this.errorCardCovered(c)
-    const fresh = candidates.filter(x => !covered.has(`${x.node}\n${x.qid}`))
-    if (!fresh.length) {
-      throw new Error('[error-card-generate] 没有可挖的新错误模式（判定线：同一题 ≥2 次实质答错且尚未建卡）；候选已被覆盖或证据不足。')
-    }
-    // max 只是下调旋钮（批上限硬帽 ERROR_CARD_BATCH_MAX 防注水；工具面宣称的 cap 在此强制）
-    const max = Math.max(1, Math.min(opts?.max ?? ERROR_CARD_BATCH_MAX, ERROR_CARD_BATCH_MAX, fresh.length))
-    // 图视图加载一次（fail loud——图 Broken 不能被静默读成先验缺席，Missing/Broken 两态
-    // 不混同）；节误解先验（#147 出生期候选错法）取材于此，先验缺席仍合法。
-    const { graph, state } = await this.loadView(c)
-    const skipped: string[] = []
-    interface Mat { node: string; qid: string; section: string | null; sectionBody: string | null }
-    const mats: Array<Mat & { material: string }> = []
-    for (const x of fresh.slice(0, max)) {
-      let q: BankQuestion | undefined
-      try {
-        const bank = await this.bank.load(this.paths.courseRoot(c.root), x.node)
-        q = bank.questions.find(q => q.id === x.qid && !q.archived)
-      } catch {
-        q = undefined
-      }
-      if (!q) {
-        skipped.push(`${x.node}/${x.qid}（原题缺失或已归档，无法对照出卡）`)
-        continue
-      }
-      // 节正文节选（答案对照面）：来源节命中该节正文，否则整课节选兜底（同 errorExplainPack 定位语义）
-      let sectionTitle: string | null = null
-      let sectionBody: string | null = null
-      try {
-        const manifest = state[x.node]?.content.sections
-        const entry = sectionEntryOf(q.section, manifest)
-        const sections = await this.explainPoints(c, graph, x.node)
-        const hit = entry ? sections.find(s => s.title === entry.title) : null
-        const point = hit ?? sections[0]
-        if (point) {
-          sectionTitle = entry?.title ?? point.title
-          sectionBody = point.md.slice(0, 800)
-        }
-      } catch {
-        // 正文缺失不阻塞生成：原题解析已足够对照
-      }
-      const wrongs = x.wrongs.map(w => `「${w}」`).join('、')
-      const mis = graph.misconceptionsOf[x.node] ?? []
-      mats.push({
-        node: x.node, qid: x.qid, section: q.section ?? sectionTitle,
-        sectionBody,
-        material: [
-          `### 候选：节点「${x.node}」 qid=${x.qid}（实质答错 ${x.lapses} 次）`,
-          `- 题型：${q.kind}`,
-          `- 原题题干：${q.q}`,
-          ...(q.options?.length ? [`- 原题选项：${q.options.join(' | ')}`] : []),
-          `- 原题正确答案：${typeof q.answer === 'boolean' ? (q.answer ? '对' : '错') : String(q.answer)}`,
-          ...(q.explanation ? [`- 原题解析：${q.explanation}`] : []),
-          `- 学习者的错答（去重，最近在前）：${wrongs}`,
-          ...(mis.length ? [`- 误解先验（出生期候选错法；「干扰做法」项可从中改编，mine 仍以学习者错答为准）：${mis.map(m => `${m.concept}（${m.model}）`).join('；')}`] : []),
-          ...(sectionBody ? [`- 来源节「${sectionTitle}」正文节选：${sectionBody}`] : []),
-        ].join('\n'),
-      })
-    }
-    if (!mats.length) {
-      throw new Error(`[error-card-generate] 候选的原题全部缺失/归档，无法生成：${skipped.join('；')}`)
-    }
-    const tpl = await this.loadPrompt('错误对比卡')
-    const prompt = `${tpl}\n\n## 挖出的错误模式（${mats.length} 个候选，每个候选出一张卡）\n\n${mats.map(m => m.material).join('\n\n')}`
-    // 机械出卡调用恒走 fast 档（#137：档位沿缝声明，宿主适配器翻译成部署思考档）
-    const raw = await llm(prompt, undefined, { effort: 'fast' })
-    const doc = YAML.parseModel(raw) as { cards?: unknown } | null
-    if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.cards) || !doc.cards.length) {
-      throw new Error('[error-card-generate] 模型没有产出可用卡清单（cards 为空或不可解析），零落盘。')
-    }
-    const offered = new Set(mats.map(m => `${m.node}\n${m.qid}`))
-    const byNode = new Map<string, Array<Record<string, unknown>>>()
-    const errors: string[] = []
-    const cardsRaw = doc.cards as Array<Record<string, unknown>>
-    cardsRaw.forEach((e, i) => {
-      const n = i + 1
-      const node = typeof e.node === 'string' ? e.node.trim() : ''
-      const qid = typeof e.source_q === 'string' ? e.source_q.trim() : ''
-      if (!offered.has(`${node}\n${qid}`)) {
-        errors.push(`cards.${n}: (node, source_q)=(${node || '空'}, ${qid || '空'}) 不在候选清单内（必须照抄系统给出的候选）`)
-        return
-      }
-      const list = byNode.get(node) ?? []
-      list.push({ ...e, kind: 'contrast', source_node: node, source_q: qid })
-      byNode.set(node, list)
-    })
-    if (errors.length) {
-      throw new Error(`[error-card-generate] 模型产出未过候选对照门，零落盘。\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
-    }
-    const generated: Array<{ node: string; ids: string[]; count: number }> = []
-    for (const [node, cards] of byNode) {
-      const v = validateErrorCards({ node, cards })
-      if (v.errors) {
-        throw new Error(`[error-card-generate] 「${node}」的卡未过 schema 门禁，零落盘。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
-      }
-      const r = await this.errorCards.addCards(c.root, node,
-        v.spec!.cards.map(({ kind: _kind, id: _id, source_node: _sn, archived: _a, fsrs: _f, stats: _st, ...rest }) => rest))
-      generated.push({ node, ids: r.ids, count: r.count })
-    }
-    return { course: c.name, generated, ...(skipped.length ? { skipped } : {}) }
+    return this.bank2.errorCardGenerate(courseKey, opts, llm)
   }
 
-  /** 错误卡作答结算（自动判分）：三选一答案唯一——选对=rating 3、选错=rating 1，
-   * 一卡一学习日一次推进（stats.last 把守）。只推卡自身 FSRS（sched(null) 默认参数）；
-   * 选对入无绑定 XP（xp_error 行，只计总账/目标/streak），选错 0 XP 同样留净行；
-   * 复习日志/practice/节点调度面零写入。 */
   async errorCardAnswer(
     courseKey: string | undefined, node: string, cardId: string, choice: string,
   ): Promise<ErrorAnswerResult> {
-    const pick = String(choice ?? '').trim()
-    const c = await this.registry.resolve(courseKey)
-    const doc = await this.errorCards.load(c.root, node)
-    const card = doc.cards.find(x => x.id === cardId && !x.archived)
-    if (!card) throw new Error(`[error-answer] 「${node}」的错误卡没有 ${cardId}（或已归档）。`)
-    if (!card.options.includes(pick)) {
-      throw new Error(`[error-answer] 所选选项不在本题三个选项内（收到「${pick.slice(0, 60)}」）。`)
-    }
-    const correct = pick === card.answer
-    const rating = correct ? 3 : 1
-    const { today } = await this.learningDay()
-    // ADR-0014 advanceStrict：守门即原 stats.last 检查（一卡一天一次），文案是测试契约
-    const pushed = advanceStrict(await this.sched(null), card, rating, today,
-      `[error-answer] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
-    await this.errorCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats: pushed.stats })
-    const diff = card.fsrs?.difficulty && card.fsrs.difficulty > 0 ? card.fsrs.difficulty : FSRS_DIFFICULTY_MID
-    const xp = correct ? xpForAnswer(card.kind, diff, true, null, true).xp : 0
-    await this.store.appendJournal({
-      course: '*', node: '*', rating, kind: 'xp_error', elapsed_days: 0, xp,
-      detail: `错误对比卡 ${c.name}/${node}#${cardId}（${correct ? 'correct 3' : 'wrong 1'}）`,
-    })
-    return {
-      course: c.name, node, id: cardId, correct, rating,
-      answer: card.answer, mine: card.mine, explanation: card.explanation,
-      due: pushed.fs.due, scheduled: true, xp,
-    }
+    return this.bank2.errorCardAnswer(courseKey, node, cardId, choice)
   }
 
-  /** 「错误卡」全量清单（管理面/agent 清点用）：到期卡按 due 升序在前，从未调度的
-   * 新卡随后。复习呈现已并入 reviewQueue（C-3）——本清单只做全量盘点（含答案与
-   * 错法标注，供人工抽查「错误模式合理」验收）。 */
   async errorCardQueue(courseKey?: string, today?: string): Promise<ErrorQueueDoc> {
-    today ??= (await this.learningDay()).today
-    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
-    const cards: ErrorCardItem[] = []
-    for await (const { course, node, card } of this.errorCardTriples(courses)) {
-      cards.push({
-        course, node, id: card.id, q: card.q, options: card.options,
-        answer: card.answer, mine: card.mine, explanation: card.explanation,
-        source_q: card.source_q, source_section: card.source_section ?? null,
-        due: card.fsrs?.reps ? card.fsrs.due : null,
-        attempts: card.stats?.attempts ?? 0,
-      })
-    }
-    const due = cards.filter(c => c.due !== null && String(c.due) <= today)
-      .sort((a, b) => String(a.due).localeCompare(String(b.due)) || `${a.node}/${a.id}`.localeCompare(`${b.node}/${b.id}`))
-    const fresh = cards.filter(c => c.due === null)
-      .sort((a, b) => `${a.node}/${a.id}`.localeCompare(`${b.node}/${b.id}`))
-    return { date: today, total: cards.length, due_count: due.length, cards: [...due, ...fresh] }
+    return this.bank2.errorCardQueue(courseKey, today)
   }
 
-  /** 归档/恢复一张错误卡（管理面）：错误 deck 内部动作，canonical 零写入。 */
   async errorCardArchive(
     courseKey: string | undefined, node: string, cardId: string, archived: boolean,
   ): Promise<ErrorArchiveResult> {
-    const c = await this.registry.resolve(courseKey)
-    await this.errorCards.archiveCard(c.root, node, cardId, archived)
-    return { course: c.name, node, id: cardId, archived }
+    return this.bank2.errorCardArchive(courseKey, node, cardId, archived)
   }
-
   // ---- U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）----
 
   async skillCreate(name: string, opts?: { id?: string; maintenance_days?: number | null }): Promise<SkillDoc> {
@@ -4094,410 +3901,60 @@ export class LearnhubEngine {
 
   // ---- 学习面板扩展（题目管理/课程删除）----
 
-  /** 全部题库条目（题目管理列表；不含答案，带到期与统计）。 */
   async questionsAll(courseKey?: string): Promise<QuestionsAllDoc> {
-    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.registry.enabled()
-    const out: Array<Record<string, unknown>> = []
-    for (const c of courses) {
-      let files: string[] = []
-      try {
-        files = await readdir(this.paths.bankDir(c.root))
-      } catch {
-        continue
-      }
-      for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
-        const node = f.replace(/\.yaml$/, '')
-        const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-        bank.questions.forEach((q, i) => {
-          out.push({
-            course: c.name, node, qid: q.id, no: i + 1, kind: q.kind, q: q.q,
-            difficulty: q.difficulty ?? 1, tags: q.tags ?? [],
-            archived: q.archived === true,
-            ...(q.archived_reason ? { archivedReason: q.archived_reason } : {}),
-            hasExplanation: Boolean(q.explanation),
-            // 调度字段（题目管理页「到期」列消费；未进调度的题为 null）
-            due: q.fsrs?.reps ? q.fsrs.due : null,
-            lastReview: q.fsrs?.reps ? q.fsrs.last_review : null,
-            ...(q.options?.length ? { options: q.options } : {}),
-            ...(q.kind === 'matching' && Array.isArray(q.answer)
-              ? { pairOptions: [...new Set(q.answer as string[])] } : {}),
-          })
-        })
-      }
-    }
-    return { total: out.length, questions: out }
+    return this.bank2.questionsAll(courseKey)
   }
-
   // ---- B2 难度感知回流（决议 #41 / #58）----
 
-  /** 节点级只读检测：扫题库 stats/fsrs（bank per-qid）+ masteryOfFm + 门槛 →
-   * {低掌握校准建议, 全对归档建议} 清单，供 orchestrator/harness 在出题与题目管理
-   * 动作前消费。建议先行不自动改库——再生成走既有 question_generate/question_save
-   * 与单节重写通道，归档走题目管理的独立归档操作；practice 节点无题库天然静默；
-   * Broken 笔记 fail loud（与 status/recommend 同一门前置）。
-   * 被忽略的建议（adviceDismiss）不进 nodes，只以 dismissed 计数带出（恢复入口消费）。 */
   async difficultyAdvice(courseKey?: string): Promise<DifficultyAdviceDoc> {
-    const { today } = await this.learningDay()
-    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
-    const dismissedKeys = new Set((await this.store.loadAdviceDismissals()).map(d => adviceDismissKey(d.course, d.node, d.qid)))
-    let dismissed = 0
-    const nodes: Array<Record<string, unknown>> = []
-    for (const c of courses) {
-      const { graph, state, broken } = await this.loadView(c)
-      assertNoBrokenNotes('difficulty-advice', broken)
-      await this.scanCourseBanks(c, async (node, bank) => {
-        const fm = state[node]
-        if (!fm || graph.typeOf[node] === 'practice') return // practice 节点无题库，合法空态
-        const qs = bank.questions.filter(q => !q.archived)
-        let attempts = 0
-        let correct = 0
-        for (const q of qs) {
-          attempts += q.stats?.attempts ?? 0
-          correct += q.stats?.correct ?? 0
-        }
-        const calibration = calibrationAdvice({
-          stage: effectiveStage(state, node),
-          attempts,
-          accuracy: attempts ? correct / attempts : null,
-          mastery: masteryOfFm(fm),
-          bloom: graph.bloomOf[node],
-        })
-        const tooEasy = tooEasyAdvice(qs).filter(t => {
-          if (dismissedKeys.has(adviceDismissKey(c.name, node, t.qid))) {
-            dismissed++
-            return false
-          }
-          return true
-        })
-        if (!calibration && !tooEasy.length) return
-        nodes.push({
-          course: c.name, node,
-          ...(calibration ? { calibration } : {}),
-          ...(tooEasy.length ? { too_easy: tooEasy } : {}),
-        })
-      })
-    }
-    return { date: today, nodes, dismissed }
+    return this.bank2.difficultyAdvice(courseKey)
   }
 
-  /** 忽略/恢复一条「过于简单」建议（持久忽略清单，学习中心 state/难度建议忽略.json）：
-   * undo=false 追加（幂等），true 移除；all=true 清空恢复。误判的恢复成本为零——
-   * 与「建议先行、不自动移除」同一立场（ADR-0032 同期）。 */
   async adviceDismiss(course: string, node: string, qid: string | undefined, undo = false, all = false): Promise<{ dismissed: AdviceDismissRec[] }> {
-    let list = await this.store.loadAdviceDismissals()
-    if (all) {
-      list = []
-    } else if (undo) {
-      list = list.filter(d => !(d.course === course && d.node === node && d.qid === qid))
-    } else {
-      if (!qid) throw new Error('[advice-dismiss] 忽略必须带 qid（恢复可用 all=true 清空）。')
-      const key = adviceDismissKey(course, node, qid)
-      if (!list.some(d => adviceDismissKey(d.course, d.node, d.qid) === key)) {
-        list = [...list, { course, node, qid, date: (await this.learningDay()).today }]
-      }
-    }
-    await this.store.saveAdviceDismissals(list)
-    return { dismissed: list }
+    return this.bank2.adviceDismiss(course, node, qid, undo, all)
   }
 
   async questionAdd(courseKey: string, node: string, question: Record<string, unknown>): Promise<{ course: string; node: string; id: string; count: number }> {
-    const c = await this.registry.resolve(courseKey)
-    const r = await this.bank.addQuestion(this.paths.courseRoot(c.root), node, question)
-    return { course: c.name, node, ...r }
+    return this.bank2.questionAdd(courseKey, node, question)
   }
 
-  /** 单题全量读取（含 answer/explanation）：修订/审题用——questionList 不带答案（作答流防泄题），改题前用这个看原题。
-   * 笔记源卡（course=「笔记源」伪课程）同通道可读：漂移后审旧题用。 */
   async questionGet(courseKey: string | undefined, node: string, qid: string): Promise<QuestionGetDoc> {
-    if (await this.isNoteSourceCourse(courseKey)) {
-      const bank = await this.bank.load(this.paths.noteSourceDir, node)
-      const q = bank.questions.find(x => x.id === qid)
-      if (!q) throw new Error(`[question-get] 笔记源「${node}」的题库没有 ${qid}（共 ${bank.questions.length} 题）。`)
-      return { course: NOTE_SOURCE_COURSE, node, question: q }
-    }
-    const c = await this.registry.resolve(courseKey)
-    const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-    const q = bank.questions.find(x => x.id === qid)
-    if (!q) throw new Error(`[question-get] 「${node}」的题库没有 ${qid}（共 ${bank.questions.length} 题）。`)
-    return { course: c.name, node, question: q }
+    return this.bank2.questionGet(courseKey, node, qid)
   }
 
   async questionUpdate(courseKey: string, node: string, qid: string, patch: Record<string, unknown>): Promise<{ course: string; node: string; qid: string }> {
-    const c = await this.registry.resolve(courseKey)
-    await this.bank.updateQuestion(this.paths.courseRoot(c.root), node, qid, patch)
-    return { course: c.name, node, qid }
+    return this.bank2.questionUpdate(courseKey, node, qid, patch)
   }
 
-  /** 归档/取消归档单题。笔记源卡（course=「笔记源」伪课程）同通道：漂移提示的
-   * 「归档旧题」直达动作走这里（学习中心/笔记源 镜像题库）。reason 记入
-   * archived_reason（ADR-0032：too_easy=建议确认、manual=人工等），恢复时清除。 */
   async questionArchive(courseKey: string, node: string, qid: string, archived: boolean, reason?: string): Promise<{ course: string; node: string; qid: string; archived: boolean }> {
-    if (await this.isNoteSourceCourse(courseKey)) {
-      await this.bank.archiveQuestion(this.paths.noteSourceDir, node, qid, archived, reason)
-      return { course: NOTE_SOURCE_COURSE, node, qid, archived }
-    }
-    const c = await this.registry.resolve(courseKey)
-    await this.bank.archiveQuestion(this.paths.courseRoot(c.root), node, qid, archived, reason)
-    return { course: c.name, node, qid, archived }
+    return this.bank2.questionArchive(courseKey, node, qid, archived, reason)
   }
-
   // ---- 题库一键清理（ADR-0032）----
 
-  /** 清理预览（只读）：两条规则扫全部启用课程——跳过节点全部未归档题 +
-   * 已完成节点的休眠题。按课程/节点分组带题面样本，确认后才 apply。 */
   async bankCleanupPreview(courseKey?: string): Promise<CleanupPreviewDoc> {
-    const { today } = await this.learningDay()
-    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
-    const groups: CleanupGroup[] = []
-    let total = 0
-    for (const c of courses) {
-      const { state } = await this.loadView(c)
-      await this.scanCourseBanks(c, async (node, bank) => {
-        const stage = state[node]?.stage
-        const cands = cleanupCandidatesForNode(stage, bank.questions)
-        if (!cands.length) return
-        const reasons: Record<CleanupReason, number> = { skipped_node: 0, dormant_after_complete: 0 }
-        for (const x of cands) reasons[x.reason]++
-        const byId = new Map(bank.questions.map(q => [q.id, q]))
-        total += cands.length
-        groups.push({
-          course: c.name, node, stage: stage ?? 'ready', count: cands.length, reasons,
-          stems: cands.slice(0, 3).map(x => (byId.get(x.qid)?.q ?? '').slice(0, 80)),
-        })
-      })
-    }
-    return { date: today, total, groups }
+    return this.bank2.bankCleanupPreview(courseKey)
   }
 
-  /** 清理应用：按当前预览逐题归档（reason=cleanup，可逆；恢复走题库管理面）。
-   * 预览与应用之间库可能变化——apply 现算一遍候选，不做两阶段锁。 */
   async bankCleanupApply(courseKey?: string): Promise<{ course: string; node: string; archived: number }[]> {
-    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.enabledCourses()
-    const done: Array<{ course: string; node: string; archived: number }> = []
-    for (const c of courses) {
-      const { state } = await this.loadView(c)
-      const courseRoot = this.paths.courseRoot(c.root)
-      await this.scanCourseBanks(c, async (node, bank) => {
-        const cands = cleanupCandidatesForNode(state[node]?.stage, bank.questions)
-        if (cands.length) {
-          await this.bank.archiveQuestions(courseRoot, node, cands.map(x => x.qid), true, 'cleanup')
-          done.push({ course: c.name, node, archived: cands.length })
-        }
-      })
-    }
-    return done
+    return this.bank2.bankCleanupApply(courseKey)
   }
-
   // ---- 瑕疵题勘误与判罚冲正（ADR-0031）----
 
-  /** 被申诉作答的定位与准入：该题最近一条判错的 practice 记录，未被冲正过。
-   * 目标 = 最近一条（练习会话的即时申诉与直通卡/复习流的「最近一次答错」一致）。
-   * AI 判卷题型（reflection/open_question）不在申诉范围（Q8 裁定）：评分异议走
-   * 既有「讲解这道题」通道，判卷故障已有 #116 逃生门。 */
-  private async disputeTarget(courseKey: string | undefined, node: string, qid: string, op: string) {
-    const { c, graph, q } = await this.questionContext(courseKey, node, qid, op)
-    if (q.kind === 'reflection' || q.kind === 'open_question') {
-      throw new Error(`[${op}] AI 判卷题型（reflection/open_question）不走申诉：评分异议用「讲解这道题」，判卷故障有逃生门。`)
-    }
-    const rec = (await this.store.practiceAll())
-      .filter(r => r.course === c.name && r.node === node && r.qid === qid && r.correct === false)
-      .sort((a, b) => a.ts.localeCompare(b.ts))
-      .at(-1)
-    if (!rec) throw new Error(`[${op}] ${node}/${qid} 没有可申诉的判错作答记录（申诉只针对判错的作答）。`)
-    const errata = await this.store.erratumAll()
-    if (errata.some(e => e.target_ts === rec.ts && e.qid === qid)) {
-      throw new Error(`[${op}] ${node}/${qid} 最近一条判错作答（${rec.ts}）已被冲正过，同一条作答至多申诉一次。`)
-    }
-    return { c, graph, q, rec }
-  }
-
-  /** 申诉复核（只读，不落盘）：LLM 两阶段复核——先独立解题再对账，三态裁定。
-   * 解析失败自动重问一次，仍失败抛「AI 复核输出不可用」（UI 据此放行跳过复核的
-   * 直接豁免降级入口）；原始输出照 #116 惯例留痕判卷失败.jsonl。 */
   async questionDisputeReview(
     llmComplete: LlmComplete,
     courseKey: string | undefined, node: string, qid: string,
   ): Promise<DisputeReviewResult> {
-    const { c, graph, q, rec } = await this.disputeTarget(courseKey, node, qid, 'dispute')
-    const note = await this.nodeNote(c, graph, node)
-    const entry = sectionEntryOf(q.section, note.fm?.content.sections)
-    const sectionMd = entry
-      ? Sessions.lessonSections(note.body).find(s => s.title === entry.title)?.md ?? null
-      : null
-    const forgot = rec.judge === 'forget'
-    const prompt = [
-      '# 复核一道练习题的申诉', '',
-      '学习者作答被判错并申诉「题目错了」。请严格按两阶段复核：',
-      '1. **独立解题**：只看题面自己完整解一遍（此阶段忽略下面给出的存储答案键），写出过程与你的答案；',
-      '2. **对账**：把你的独立结果与存储答案键/解析、以及学习者作答逐一比对；',
-      '3. 按系统提示的三态规则给出裁定。', '',
-      '## 题目', q.q,
-      ...(q.options?.length ? q.options.map((o, i) => `- ${String.fromCharCode(65 + i)}. ${o}`) : []),
-      '', `存储的答案键：${revealAnswer(q)}`,
-      ...(q.explanation ? ['', `存储的解析：${q.explanation}`] : []),
-      '', '## 学习者的作答',
-      forgot ? '（空——学习者按「忘记」翻面，未作答）' : (rec.answer || '（空作答）'),
-      '', '## 对应节正文（超纲判定依据）',
-      ...(entry && sectionMd
-        ? [`（来自节「${entry.title}」）`, '', sectionMd.slice(0, 4000)]
-        : ['（未能定位到具体节——以下为整课节选）', '', note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim().slice(0, 2500)]),
-    ].join('\n')
-    let lastError = ''
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const ask = attempt === 1
-        ? prompt
-        : `${prompt}\n\n[重判要求] 上一次输出无法解析为复核结果。这一次只输出一个 JSON 对象（shape 见系统提示），不要任何其他文字、解释或代码围栏。`
-      const raw = await llmComplete(ask, DISPUTE_REVIEW_SYSTEM)
-      try {
-        const v = parseDisputeReview(raw)
-        return {
-          course: c.name, node, qid,
-          target_ts: rec.ts,
-          verdict: v.verdict,
-          reasoning: v.reasoning,
-          current_answer: revealAnswer(q),
-          ...(v.suggested_answer !== undefined
-            ? { suggested_answer: v.suggested_answer as DisputeReviewResult['suggested_answer'] } : {}),
-          ...(v.suggested_explanation ? { suggested_explanation: v.suggested_explanation } : {}),
-        }
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err)
-        await this.logGradingFailure({ course: c.name, node, qid, kind: 'dispute-review', attempt, error: lastError, raw })
-      }
-    }
-    throw new Error(`[dispute] AI 复核输出不可用，未做任何改动（可重试，或跳过复核直接豁免本题）：${lastError}`)
+    return this.bank2.questionDisputeReview(llmComplete, courseKey, node, qid)
   }
 
-  /** 申诉结算（落盘）：resolution 三选一。
-   * - rekey：按 revision 修订题目（改键/解析，questionUpdate 作者门禁+形态门禁），
-   *   用新键重判原作答——原作答符合新键则改判为对（XP 按对题补记、frontmatter
-   *   correct+1、EMA 补 0.3 步）；不符合则只修键，判罚维持。
-   * - void / overridden：本次作答作废（判卷逃生门口径）——XP 净值归零（乱猜罚随减）、
-   *   attempts−1、EMA 逆向一步；void 语义 = 题是瑕疵题，归档随结算原子落盘（重出走
-   *   生成队列、可重试）；overridden = 复核判题没问题但学习者坚持豁免（题保留在调度里）。
-   * 共同边界（ADR-0031）：FSRS 不回滚、review-log 不抹；冲正走 勘误.jsonl 追加 +
-   * 聚合账净额重算（practice.jsonl 永不改写）。EMA/frontmatter 计数是增量聚合，
-   * 逆向调整在「争议条为该节点最新证据」时精确，否则为可接受的近似（派生读侧）；
-   * rekey 且原作答与新键仍不符 = 净零变动（只修键，证据不动）。 */
   async questionDisputeApply(
     courseKey: string | undefined, node: string, qid: string,
     resolution: 'rekey' | 'void' | 'overridden',
     opts?: { targetTs?: string; revision?: { answer?: unknown; explanation?: string }; reason?: string },
   ): Promise<DisputeApplyResult> {
-    if (resolution !== 'rekey' && resolution !== 'void' && resolution !== 'overridden') {
-      throw new Error(`[dispute-apply] resolution 必须是 rekey/void/overridden（收到 ${String(resolution)}）。`)
-    }
-    const { c, graph, rec } = await this.disputeTarget(courseKey, node, qid, 'dispute-apply')
-    if (opts?.targetTs && opts.targetTs !== rec.ts) {
-      throw new Error(`[dispute-apply] targetTs 与该题最近判错记录不一致（${opts.targetTs} ≠ ${rec.ts}）——复核后题目状态可能已变化，请重新申诉。`)
-    }
-    const { cutoff } = await this.learningDay()
-    let verdict: ErratumRec['verdict']
-    let xpNet = rec.xp ?? 0
-    let correctNow: boolean | null = false
-
-    if (resolution === 'rekey') {
-      const answer = opts?.revision?.answer
-      if (answer === undefined || answer === null || (typeof answer === 'string' && !answer.trim())) {
-        throw new Error('[dispute-apply] rekey 需要 revision.answer（新答案键）。')
-      }
-      const patch: Record<string, unknown> = { answer }
-      if (typeof opts?.revision?.explanation === 'string' && opts.revision.explanation.trim()) {
-        patch.explanation = opts.revision.explanation
-      }
-      await this.bank.updateQuestion(this.paths.courseRoot(c.root), node, qid, patch)
-      const fresh = (await this.bank.load(this.paths.courseRoot(c.root), node)).questions.find(x => x.id === qid)
-      if (!fresh) throw new Error(`[dispute-apply] ${node}/${qid} 改键后读取失败。`)
-      // 重判原作答：空作答（忘记翻面）必然不符，且 evaluateAllo 对空作答按题型抛错——直接判不符
-      const r = rec.answer && rec.judge !== 'forget'
-        ? (() => { try { return evaluateAllo(fresh, rec.answer) } catch { return { score: 0 } } })()
-        : { score: 0 }
-      correctNow = r.score >= PASS_SCORE
-      verdict = 'key_error'
-      if (correctNow) {
-        // 改判对：对题 XP 补记（豁免永不产生得分，改判只来自键修改后的重判）；乱猜罚随键纠正一并消失
-        xpNet = xpForAnswer(fresh.kind, fresh.difficulty ?? 1, true, null, true).xp
-      }
-    } else {
-      verdict = resolution === 'void' ? 'defective' : 'overridden'
-      xpNet = 0 // 作废：本次作答 XP 净值归零（乱猜 −1 罚随之返还）
-    }
-
-    // 题目 stats 从净流水重算（作废剔除该条；改判按新对错计；rekey 维持 = 原样重写）；
-    // FSRS 块不动
-    const errata = await this.store.erratumAll()
-    const pending: ErratumRec = {
-      ts: nowIso(), course: c.name, node, qid, target_ts: rec.ts,
-      verdict, xp: xpNet,
-      ...(correctNow === true ? { correct: true } : {}),
-      ...(resolution === 'rekey' ? { revision: opts?.revision ?? {} } : {}),
-      ...(opts?.reason?.trim() ? { reason: opts.reason.trim().slice(0, 500) } : {}),
-    }
-    const net = netPracticeRecs(
-      (await this.store.practiceAll()).filter(r => r.course === c.name && r.node === node && r.qid === qid),
-      [...errata, pending],
-    )
-    const latest = [...net].sort((a, b) => a.ts.localeCompare(b.ts)).at(-1)
-    const stats = {
-      attempts: net.length,
-      correct: net.filter(r => r.correct === true).length,
-      ...(latest ? { last: dayOfTs(latest.ts, cutoff), last_correct: latest.correct === true } : {}),
-    }
-    await this.bank.updateQuestionEvidence(this.paths.courseRoot(c.root), node, qid, { stats })
-
-    // 节点 frontmatter 逆向调整：作废 = 撤 0 分步（attempts−1、EMA ÷0.7）；改判对 =
-    // 撤 0 分步再补 1 分步（净 +0.3）；rekey 且判罚维持 = 净零变动（证据不动，只修键）。
-    const evidenceChange = resolution !== 'rekey' || correctNow === true
-    const note = await this.nodeNote(c, graph, node)
-    let fmAfter = note.fm
-    if (note.fm && evidenceChange) {
-      const round3 = (x: number) => Math.round(Math.min(1, Math.max(0, x)) * 1000) / 1000
-      const practice = {
-        attempts: Math.max(0, note.fm.practice.attempts + (resolution === 'rekey' ? 0 : -1)),
-        correct: Math.max(0, note.fm.practice.correct + (correctNow ? 1 : 0)),
-      }
-      const ema = note.fm.practice_ema
-      const practice_ema = correctNow
-        ? (ema === undefined ? 1 : round3(ema + 0.3))
-        : (ema === undefined ? undefined : round3(ema / 0.7))
-      fmAfter = {
-        ...note.fm, practice,
-        ...(practice_ema !== undefined ? { practice_ema } : {}),
-      }
-      await this.saveNodeNote(note.path, fmAfter, note.body)
-    }
-    await this.store.appendErratum(pending)
-    if (resolution === 'void') {
-      // 瑕疵题的归档随作废结算原子落盘（ADR-0031）：重出走生成队列（可重试），
-      // 不再由 UI 两段拼接留下「已作废未归档」的悬空态。归档原因 erratum（ADR-0032）。
-      await this.bank.archiveQuestion(this.paths.courseRoot(c.root), node, qid, true, 'erratum')
-    }
-    return {
-      course: c.name, node, qid, resolution,
-      verdict,
-      correct_now: resolution === 'rekey' ? correctNow : null,
-      xp: xpNet,
-      ...(resolution === 'void' ? { archived: true } : {}),
-      ...(fmAfter ? { mastery: masteryOfFm(fmAfter) } : {}),
-    }
+    return this.bank2.questionDisputeApply(courseKey, node, qid, resolution, opts)
   }
 
-  /** AI 出题：节点正文 → 出题提示词 + llm → 产出的题库 YAML 逐题过 validateBank 门禁追加落盘。
-   * llm 由 host 注入（输出可能带 markdown 围栏，解析侧 parseModel 统一剥离）。骨架节点（无正文）直接报错。
-   * count 缺省 = 既有默认 6（定向补生成 = 3）；一旦给出必须是正整数，非法值不改写成默认（#12）。
-   * opts.sections = 节标注清单（逐节管线）：模型照抄清单节 id 进 section 字段；
-   * opts.generic = 只出跨节综合题（section 强制「通用」，逐节管线收尾用）；
-   * opts.section = 定向补生成（#117）：只为本节补题——提示词只附该节正文、产物强制
-   *   section: s.id，与清单不符的先按标题归一化（剥「类型：」前缀+去空白，同会话口径）
-   *   回填，仍无法归类的题拒收并在返回结果中报告（fail loud，不兜底挂「通用」）；
-   * opts.instruction = 生成指令（#120 提意见重生成的学习者意见），原样注入提示词；
-   * 防相似（#119）：提示词注入题库已有题面 ≤15 条（只题面/题型/难度），生成后逐题
-   *   程序化查重（归一化精确 + trigram ≥0.8），命中的丢弃不入库并在 duplicates 报告。
-   * 出生打标（#148）：概念清单（本节 teaches ∪ 前置闭包 teaches）在场时逐题必须恰一枚
-   *   invokes——缺席先走一次补标调用（修复一次），仍空拒收并报告；清单缺席（存量/手编
-   *   图）invokes 恒合法 Missing。返回的 enc = 题目 invokes 覆盖率投影（出生 w 作回退
-   *   初值，随生长批经 set_enc 写入）。
-   * opts.isCancelled = 逐题检查的取消旗标（GenJob 取消语义，#118）。 */
   async questionGenerate(
     courseKey: string | undefined, node: string, count?: number,
     llm: LlmComplete,
@@ -4517,291 +3974,29 @@ export class LearnhubEngine {
     /** invokes 覆盖率投影（#148）：节点全部在库题目的 enc 边候选（出生 w），随生长批 set_enc 写入。 */
     enc: EncEdge[]
   }> {
-    if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
-      throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认。`)
-    }
-    const requested = count ?? (opts?.section ? 3 : 6)
-    const c = await this.registry.resolve(courseKey)
-    const { graph, broken } = await this.loadView(c)
-    if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
-    this.assertNoteOk(c, graph, broken, node, 'quiz')
-    // invokes 概念引用对表基线（#141）：登记表在册名字集，出题受理门逐题对照
-    const conceptNames = namesOf(await this.concepts.load(c.root))
-    const [, regionName] = graph.blockOf[node]
-    const note = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
-    const body = note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
-    if (!body) throw new Error(`[quiz] 「${node}」还没有正文——先「生成正文」再出题。`)
-    const tpl = await this.loadPrompt('题目生成')
-    const tier = nodeTierOf(graph, node)
-    const prior = await this.vaultPriorFor(graph, node)
-    // 已有题面（#119）：注入提示词 + 查重基线（归档题不参与——归档旧题后按意见重出同题面是合法意图）
-    const bankBefore = await this.bank.load(this.paths.courseRoot(c.root), node)
-    const existingStems = bankStemList(bankBefore)
-
-    // 定向补生成：只附该节正文（找不到该节 fail loud），节标注 = 单节强绑指令
-    let contentBody = body
-    let listing: string
-    if (opts?.section) {
-      const s = opts.section
-      const md = sectionMdOf(body, s.title)
-      if (md === null) throw new Error(`[quiz] 正文里找不到节「${s.title}」——定向补题需要该节正文，请先确认节标题。`)
-      contentBody = `## ${s.title}\n\n${md}`
-      listing = `\n\n## 节标注清单\n\n本批全部题目都属于这一节：section 字段必须精确写「${s.id}」（节标题：${s.title}），不要写「通用」或其他节。`
-    } else if (opts?.sections?.length) {
-      listing = `\n\n## 节标注清单\n\nsection 字段必须精确取自下列节 id（跨节综合题写「通用」）：\n${opts.sections.map(s => `- ${s.id} ｜ ${s.title}`).join('\n')}`
-    } else {
-      listing = ''
-    }
-    const instruction = opts?.instruction?.trim()
-      ? `\n\n## 生成指令（学习者意见，优先遵循）\n\n${opts.instruction.trim()}`
-      : ''
-    const difficultyAnchor = tier === 1
-      ? '本节点为低复杂度：题目难度集中在 1-2，不出 difficulty: 3 的收尾难题。'
-      : tier === 3
-        ? '本节点为高复杂度：收尾可出 1-2 道 difficulty: 3 的综合/易错题。'
-        : '本节点为中复杂度：难度递进到 2，收尾至多 1 道 difficulty: 3。'
-    const misBlock = misconceptionPromptBlock(graph.misconceptionsOf[node], '干扰项材料')
-    // 出生打标（#148）：概念清单 = 本节 teaches ∪ 前置闭包 teaches；空清单 = 门不激活
-    const conceptScope = Content.conceptScopeOf(graph, node)
-    const conceptBlock = Content.conceptListBlock(conceptScope)
-    const raw = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`)
-    const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
-    if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
-      throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
-    }
-    // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用；仍空由下方受理门拒收
-    if (conceptScope.length) {
-      if (opts?.isCancelled?.()) throw new Error('生成已取消，结果已丢弃。')
-      await this.repairInvokesOnce(llm, doc.questions.slice(0, requested), conceptScope)
-    }
-    // doc.node 只是模型对节点的复述（常自创短名），落盘位置由入参决定，不作硬校验
-    let added = 0
-    let skipped = 0
-    let escapesRepaired = 0
-    const duplicates: Array<{ q: string; against: string }> = []
-    const rejected: Array<{ q: string; reason: string }> = []
-    for (const item of doc.questions.slice(0, requested)) {
-      if (opts?.isCancelled?.()) throw new Error('生成已取消，结果已丢弃。')
-      const q = { ...(item as Record<string, unknown>) }
-      delete q.id // id 由 addQuestion 按现有题数自动编号，避免与既有 q1 冲突
-      if (opts?.generic) q.section = '通用' // 综合题不绑节（轮装配时统一收尾）
-      // 题目卫生（ADR-0029/0030）：先确定性修复转义损坏（计数留痕），修不好或记法/边界违规的题拒收
-      const hygiene = repairQuestionStrings(q)
-      escapesRepaired += hygiene.repaired
-      const stem = typeof q.q === 'string' ? q.q : ''
-      const violation = hygiene.unrepairable
-        ? '题面含无法修复的转义损坏（控制字符）——YAML 双引号吃掉了 LaTeX 转义'
-        : questionViolation(q)
-      if (violation) {
-        rejected.push({ q: stem.slice(0, 80), reason: violation })
-        continue
-      }
-      // 定向补生成强校验（#117）：不符先按标题归一化回填，仍无法归类拒收并报告
-      if (opts?.section) {
-        const sec = typeof q.section === 'string' ? q.section : ''
-        if (sec !== opts.section.id) {
-          if (sec && normSectionKey(sec) === normSectionKey(opts.section.title)) {
-            q.section = opts.section.id
-          } else {
-            rejected.push({ q: stem.slice(0, 80), reason: sec ? `section「${sec}」无法归类到节「${opts.section.title}」` : '缺少 section 标注' })
-            continue
-          }
-        }
-      }
-      // 写入侧答案形态门禁（多选 ≥2 正确项，prompt 约束 9 的服务端兜底）：
-      // 拒收并报告（与 #117 同款 fail loud），不静默降级成 skipped
-      const shapeErr = questionAnswerShapeError(q)
-      if (shapeErr) {
-        rejected.push({ q: stem.slice(0, 80), reason: shapeErr })
-        continue
-      }
-      // invokes 概念引用在册校验（#141 受理门对表）：未在册名字拒收并报告
-      const invokesErr = invokesUnregistered(q, conceptNames)
-      if (invokesErr) {
-        rejected.push({ q: stem.slice(0, 80), reason: invokesErr })
-        continue
-      }
-      // 出生打标门（#148）：清单在场时新题必须带恰一枚 invokes；修复一次仍不合格拒收
-      if (conceptScope.length && !invokesTagged(q)) {
-        rejected.push({ q: stem.slice(0, 80), reason: 'invokes 未标注恰一枚概念（出生打标；修复一次仍不合格，拒收）' })
-        continue
-      }
-      // 程序化查重（#119）：与已有题、本批已收题比对，命中丢弃并报告
-      const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
-      if (verdict.verdict === 'duplicate') {
-        duplicates.push({ q: stem.slice(0, 80), against: verdict.against.slice(0, 80) })
-      } else if (verdict.verdict === 'added') {
-        added++
-      } else {
-        skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
-      }
-    }
-    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/记法违规/重复/无法归节/invokes 缺失），一道都没入库。')
-    const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected, escapesRepaired, enc: Content.invokesProjection(graph, node, bank.questions) }
+    return this.bank2.questionGenerate(courseKey, node, count, llm, opts)
   }
 
-  /** 逐节出题（逐节管线第 2 段）：每个内容节一次模型调用（出题量随档位锚点：
-   * 低/中/高档内容节目标 1/2/3 道，含练习节时 -1），section 服务端强制为该节 id；
-   * 练习/交互节跳过，正文未生成的节（断点续跑）跳过。防相似（#119）：提示词注入
-   * 节点已有题面 ≤15 条，生成后逐题查重，命中的丢弃并计入 duplicates。
-   * 出生打标（#148）：与 questionGenerate 同一门——概念清单在场逐题恰一枚 invokes，
-   * 缺席修复一次仍空即弃（不入库）；返回 enc = invokes 覆盖率投影（出生 w 作回退初值）。 */
   async questionGenerateSections(
     courseKey: string | undefined, node: string,
     llm: LlmComplete,
   ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[] }> {
-    const c = await this.registry.resolve(courseKey)
-    const { graph, state, broken } = await this.loadView(c)
-    if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
-    this.assertNoteOk(c, graph, broken, node, 'quiz')
-    const manifest = state[node]?.content.sections
-    if (!manifest?.length) throw new Error(`[quiz] 「${node}」没有节清单——先运行大纲。`)
-    // invokes 概念引用对表基线（#141）：与 questionGenerate 同一受理门
-    const conceptNames = namesOf(await this.concepts.load(c.root))
-    const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node))
-    const mdByTitle = new Map<string, string>()
-    for (const part of body.split(/^## /m).slice(1)) {
-      const nl = part.indexOf('\n')
-      const title = (nl >= 0 ? part.slice(0, nl) : part).trim()
-      if (title) mdByTitle.set(title, (nl >= 0 ? part.slice(nl + 1) : '').trim())
-    }
-    const tpl = await this.loadPrompt('题目生成')
-    const tier = nodeTierOf(graph, node)
-    const prior = await this.vaultPriorFor(graph, node)
-    const priorBlock = prior ? `\n\n---\n\n${prior}` : ''
-    // 已有题面（#119）：注入 + 查重基线（本批新收题也进基线，批内互查）
-    const bankBefore = await this.bank.load(this.paths.courseRoot(c.root), node)
-    const existingStems = bankStemList(bankBefore)
-    const stemBlock = existingStemsPromptBlock(existingStems)
-    // 出题量弹性（P3，复杂度档案锚点）：每档给内容节目标题量；大纲含练习节时内容节 −1
-    // （集中练习模式：读读读→集中练，综合题数随档位而非恒定 3）。
-    const hasPracticeSection = manifest.some(s => s.type === '练习')
-    const perSection = perSectionQuizTarget(tier, hasPracticeSection)
-    const misBlock = misconceptionPromptBlock(graph.misconceptionsOf[node], '干扰项材料')
-    // 出生打标（#148）：概念清单整课一次组装，逐节提示词与补标调用共用
-    const conceptScope = Content.conceptScopeOf(graph, node)
-    const conceptBlock = Content.conceptListBlock(conceptScope)
-    let added = 0
-    let sections = 0
-    let duplicates = 0
-    let escapesRepaired = 0
-    for (const [si, s] of manifest.entries()) {
-      if (s.type === '练习' || s.type === '交互') continue
-      const sectionMd = mdByTitle.get(s.title)
-      if (!sectionMd) continue
-      if (perSection <= 0) continue // 该档位不要求本内容节单独出题（综合题兼底）
-      sections++
-      // 难度递进锚（#147）：逐节出题按节段难度档走（清单 tier 在场用清单值，缺席按
-      // 节位置+节点难度推导）——替换写死的开头 d1/中间 d2/收尾 d3 模板口径。
-      const tierLabel = sectionTierLabel(s.tier, graph.difficultyOf[node], graph.estOf[node], si + 1, manifest.length)
-      const difficultyAnchor = tierLabel === '低'
-        ? '本节难度档：低——题目难度 1 为主（至多 1 道 2），不出 difficulty: 3。'
-        : tierLabel === '高'
-          ? '本节难度档：高——允许 1-2 道 difficulty: 3 的易错/综合题。'
-          : '本节难度档：中——难度递进到 2 即可（收尾至多 1 道 difficulty: 3）。'
-      const raw = await llm(`${tpl}${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
-      let doc: { questions?: unknown } | null = null
-      try {
-        doc = YAML.parseModel(raw) as { questions?: unknown } | null
-      } catch {
-        continue // 该节模型输出非法 YAML：跳过，综合调用兼底
-      }
-      if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions)) continue
-      // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用，仍空由下方门弃
-      if (conceptScope.length) await this.repairInvokesOnce(llm, doc.questions, conceptScope)
-      for (const rawQ of doc.questions) {
-        const q: Record<string, unknown> = { ...((rawQ ?? {}) as Record<string, unknown>), section: s.id }
-        delete q.id
-        // 题目卫生（ADR-0029/0030）：转义修复留痕，修不好或记法/边界违规的题丢弃；
-        // invokes 未在册同罪（#141 受理门对表，与 questionGenerate 同口径）；
-        // 出生打标门（#148）：清单在场缺 invokes（修复一次仍空）同弃
-        const hygiene = repairQuestionStrings(q)
-        escapesRepaired += hygiene.repaired
-        const stem = typeof q.q === 'string' ? q.q : ''
-        if (hygiene.unrepairable || questionViolation(q) || invokesUnregistered(q, conceptNames)) continue
-        if (conceptScope.length && !invokesTagged(q)) continue
-        const verdict = await this.admitQuestion(this.paths.courseRoot(c.root), node, q, stem, existingStems)
-        if (verdict.verdict === 'duplicate') duplicates++
-        else if (verdict.verdict === 'added') added++ // 单题非法（invalid）不毁整批
-      }
-    }
-    const bank = await this.bank.load(this.paths.courseRoot(c.root), node)
-    return { course: c.name, node, added, sections, duplicates, escapesRepaired, enc: Content.invokesProjection(graph, node, bank.questions) }
+    return this.bank2.questionGenerateSections(courseKey, node, llm)
   }
 
-  /** 交互件成绩结算：面板 sandbox iframe 上报 LEARNHUB_COMPLETE → practice 流水 +
-   * 练习证据 EMA（复用题库作答链路；judge='interactive'、qid='interactive:<节id>'）。
-   * 同一节同日只记一次（防刷）；不碰题目 FSRS（交互件不是题库题），
-   * 节点掌握度为口径 B 派生值（masteryOfFm），随练习证据 EMA 变化并即时回传。 */
   async interactiveSettle(
     courseKey: string | undefined, node: string, sectionId: string, score: number, detail?: string,
   ): Promise<{ settled: boolean; mastery: number }> {
-    const c = await this.registry.resolve(courseKey)
-    const { graph, broken } = await this.loadView(c)
-    if (!graph.nset.has(node)) throw new Error(`[interactive] 节点「${node}」不在图内。`)
-    this.assertNoteOk(c, graph, broken, node, 'interactive')
-    if (!Number.isFinite(score)) throw new Error('[interactive] score 必须是数字。')
-    const clamped = Math.min(1, Math.max(0, score))
-    const qid = `interactive:${sectionId}`
-    const { today, cutoff } = await this.learningDay()
-    const played = (await this.store.practiceAll()).some(r =>
-      r.course === c.name && r.node === node && r.judge === 'interactive' && r.qid === qid
-      && dayOfTs(r.ts, cutoff) === today)
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
-    const fm = asFm(rawFm)
-    if (played) return { settled: false, mastery: masteryOfFm(fm) }
-    await this.store.appendPractice({
-      course: c.name, node, ex: 0, answer: detail ?? '',
-      correct: clamped >= PASS_SCORE, judge: 'interactive', qid,
-      ...(detail ? { feedback: detail } : {}),
-    })
-    let next: Fm | null = null
-    if (fm) {
-      // probation 在途行使闸（#146）：实验中的插入节点只记流不回流。
-      const evidenceGated = await this.exerciseGated(c, node)
-      next = evidenceGated ? fm : applyPracticeEvidence(fm, clamped)
-      if (next.stage === 'ready' || next.stage === 'unseen') next.stage = 'learning'
-      await saveNote(path, next as unknown as Record<string, unknown>, body)
-    }
-    return { settled: true, mastery: masteryOfFm(next) }
+    return this.bank2.interactiveSettle(courseKey, node, sectionId, score, detail)
   }
 
-  /** 删除课程：注册表移除 + 课程目录移入 学习中心/.trash/（不真删，可手工找回）。 */
   async courseDelete(courseKey: string): Promise<{ removed: string; trash: string; sediment: string }> {
-    const c = await this.registry.get(courseKey)
-    if (!c) throw new Error(`[learnhub] 注册表中没有课程「${courseKey}」。`)
-    const rest = (await this.registry.load()).filter(x => x.name !== c.name && x.id !== c.id)
-    await this.registry.save(rest)
-    const src = this.paths.courseRoot(c.root)
-    const trash = `${this.paths.trashDir}/${c.root}-${Date.now()}`
-    if (existsSync(src)) {
-      await mkdir(this.paths.trashDir, { recursive: true })
-      await rename(src, trash)
-    }
-    this.schedCache.delete(this.paths.courseRoot(c.root)) // 缓存键是 courseRoot 路径，逐课失效须同键
-    return {
-      removed: c.name, trash,
-      // 删除波及面单独确认项（#139）：卡级实例记忆随课进 .trash，沉淀层模型状态保留
-      sediment: '沉淀层不受影响：泛用模型状态跨课程删除存活（先验连续，ADR-0034）',
-    }
+    return this.bank2.courseDelete(courseKey)
   }
 
-  /** 为课程缺笔记的节点补骨架文件（幂等；存量课程修复/维护用）。 */
   async ensureAllNotes(courseKey?: string): Promise<{ courses: Array<{ course: string; created: number }> }> {
-    const courses = courseKey ? [await this.registry.resolve(courseKey)] : await this.registry.enabled()
-    const out: Array<{ course: string; created: number }> = []
-    for (const c of courses) {
-      const { graph } = await this.loadView(c)
-      const created = await this.proposals.ensureNotesFor(c.root, graph.regions)
-      out.push({ course: c.name, created })
-    }
-    return { courses: out }
+    return this.bank2.ensureAllNotes(courseKey)
   }
-
   // ---- utils ----
 
   private async updateNoteFm(path: string, fm: Fm): Promise<void> {

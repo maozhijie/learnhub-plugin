@@ -8,7 +8,7 @@
  */
 import { existsSync } from 'node:fs'
 import { parseDay, daysBetween, dayOfTs } from './dates.ts'
-import { effectiveStage } from './audit.ts'
+import { effectiveStage } from './srs.ts'
 import { retrievability, getScheduler, masteryOfFm } from './srs.ts'
 import { R_GATE } from './params.ts'
 import { loadNote, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'

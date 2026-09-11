@@ -41,7 +41,9 @@ import { readDayCutoff, xpForAnswer } from './xp.ts'
 
 /** 复习队列里笔记源卡的伪课程名（questionAnswer/Rate/Forget 以它路由到镜像题库；
  * 与真实课程重名时真实课程优先——同名课程存在则不触发笔记源路由）。 */
-export const NOTE_SOURCE_COURSE = '笔记源'
+// NOTE_SOURCE_COURSE 住 types.ts（中立层，#152 刀 6）；原路径 re-export。
+export { NOTE_SOURCE_COURSE } from './types.ts'
+import { NOTE_SOURCE_COURSE } from './types.ts'
 
 /** 源清单条目（镜像区 working set；enabled 语义以注册表为准，写入时同步）。 */
 export interface NoteSourceManifestItem {

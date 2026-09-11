@@ -11,6 +11,7 @@
 import { mkdir, readFile, appendFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { atomicWrite, readJsonlLines } from './io.ts'
+import { netPracticeRecs } from './grading.ts'
 import { nowIso, dayOfTs } from './dates.ts'
 import type { JournalRec, PracticeRec, ProposalRec, ReviewRec, EArchiveRec, ErratumRec } from './types.ts'
 import type { ReceiptLogRec } from './receipts.ts'
@@ -20,23 +21,9 @@ import type { BandRec } from './coach.ts'
 import type { ExperimentDef } from './types.ts'
 import type { Paths } from './paths.ts'
 
-/** 勘误冲正的读侧净值（ADR-0031）：key_error 的作答按勘误记录替换 xp/对错；
- * defective/overridden 的作答整体剔除。原始流水不动，聚合账（XP、作答统计）
- * 一律先过本函数再算——「行为流水即事实」包含冲正凭证本身。 */
-export function netPracticeRecs<T extends PracticeRec>(recs: readonly T[], errata: readonly ErratumRec[]): T[] {
-  const byKey = new Map(errata.map(e => [`${e.target_ts}|${e.qid}`, e]))
-  const out: T[] = []
-  for (const r of recs) {
-    const e = r.ts ? byKey.get(`${r.ts}|${r.qid ?? ''}`) : undefined
-    if (!e) {
-      out.push(r as T)
-    } else if (e.verdict === 'key_error') {
-      out.push({ ...(r as T), xp: e.xp, correct: e.correct ?? r.correct })
-    }
-    // defective/overridden：本次作答作废，不出现在净流里
-  }
-  return out
-}
+// netPracticeRecs 住 grading.ts（#152 刀 6 归位：题库域经 grading 取用；store 被低层
+// 模块反向 type-import，值依赖留原地会把存储层拖进下游成环）。
+export { netPracticeRecs } from './grading.ts'
 
 export class Store {
   constructor(private paths: Paths) {}
