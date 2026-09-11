@@ -12,7 +12,7 @@ const { Text } = Typography
 
 interface Turn { role: 'user' | 'assistant'; content: string }
 
-interface Verdict { verdict: string; tags: string[]; advice: string; reply: string }
+interface Verdict { verdict: string; tags: string[]; advice?: string; reply: string }
 
 const VERDICT_COLOR: Record<string, string> = { 对: 'green', 部分对: 'orange', 错: 'red' }
 const TAG_COLOR: Record<string, string> = { 含糊: 'orange', 跳跃: 'purple', 说错: 'red' }

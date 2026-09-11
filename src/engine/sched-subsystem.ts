@@ -22,6 +22,23 @@ import type { CoachCheck } from './coach-round.ts'
 import type { SedimentEvent, SedimentFold, SedimentKind, SedimentTier } from './sediment.ts'
 
 /** Sched 域对门面的窄面：领域实例直接 import 类型，跨子系统方法走本面注入。 */
+
+/** FSRS 参数优化器写回的元数据（#169：从 `Record<string, unknown>` 收成真实形状——
+ * UI 的 StatsPage 要读这些字段，松类型等于把形状藏起来不给消费方）。 */
+export interface OptimizeMeta {
+  trained_at: string
+  params_version: string
+  source: string
+  reviews: number
+  cards: number
+  baseline_source: 'sediment' | 'cache' | 'default'
+  baseline_log_loss: number
+  log_loss: number
+  rmse_bins: number
+  split_log_loss: number | null
+  split_rmse_bins: number | null
+}
+
 export interface SchedDeps {
   store: Store
   paths: Paths
@@ -304,7 +321,7 @@ export class SchedSubsystem {
     status: 'written' | 'skipped'
     reason?: string
     written?: string[]
-    meta?: Record<string, unknown>
+    meta?: OptimizeMeta
   }> {
     const seqs = trainingSequences(await this.e.store.reviewLogAll(), await readDayCutoff(this.e.paths))
     const count = sequenceReviews(seqs)

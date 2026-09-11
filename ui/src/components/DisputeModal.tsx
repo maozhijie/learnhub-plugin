@@ -115,7 +115,7 @@ export default function DisputeModal(props: {
       visible={visible}
       onCancel={props.onClose}
       footer={null}
-      width={580}
+      style={{ width: 580 }}
       unmountOnExit>
       <Space direction='vertical' style={{ width: '100%' }} size={10}>
         <Input.TextArea
@@ -129,7 +129,7 @@ export default function DisputeModal(props: {
 
         {reviewError && (
           <>
-            <Text type='danger' style={{ fontSize: 13 }}>复核失败：{reviewError}</Text>
+            <Text type='error' style={{ fontSize: 13 }}>复核失败：{reviewError}</Text>
             <Space size={8}>
               <Button size='small' loading={reviewing} onClick={() => void runReview()}>重试复核</Button>
               {fallbackable && (

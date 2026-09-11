@@ -19,6 +19,7 @@ import { GraphSubsystem} from './graph-subsystem.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter} from './notes.ts'
 import type { BrokenNote} from './notes.ts'
 import { getScheduler, masteryOfFm} from './srs.ts'
+import type { OptimizeMeta } from './sched-subsystem.ts'
 import { SchedSubsystem} from './sched-subsystem.ts'
 import { GrowthSubsystem} from './growth-subsystem.ts'
 import type { FSRS} from 'ts-fsrs'
@@ -1563,7 +1564,7 @@ export class LearnhubEngine {
     status: 'written' | 'skipped'
     reason?: string
     written?: string[]
-    meta?: Record<string, unknown>
+    meta?: OptimizeMeta
   }> {
     return this.sched2.optimizeFsrsParams(impl)
   }

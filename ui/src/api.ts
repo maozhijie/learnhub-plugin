@@ -1,5 +1,7 @@
 /** 面板 → 引擎 API 客户端。全部走 /learnhub/api/*（host 伺服同源）。 */
 
+import type { CommandOutput } from '../../src/commands/index'
+
 const BASE = '/learnhub/api'
 
 export class ApiError extends Error {
@@ -153,10 +155,10 @@ export const api = {
     http<import('./types').NoteSourceRegisterResult>('POST', '/note-source/register', { path }),
   /** 解除注册（C1 #59）：注册表 + 镜象清单 + 镜象题库一并清除，用户笔记不动。 */
   noteSourceUnregister: (id: string) =>
-    http<{ removed: string; path: string }>('POST', '/note-source/unregister', { id }),
+    http<CommandOutput<'note-source-unregister'>>('POST', '/note-source/unregister', { id }),
   /** 改路径重连（V-6 #109）：改名/移动后把既有源重连到新路径（卡池与调度保留）。 */
   noteSourceRelink: (id: string, path: string) =>
-    http<{ id: string; from: string; to: string }>('POST', '/note-source/relink', { id, path }),
+    http<CommandOutput<'note-source-relink'>>('POST', '/note-source/relink', { id, path }),
   /** 笔记源出题（C1 #59）：读笔记正文 → 模型 → validateBank 门禁落镜象题库。 */
   noteSourceGenerate: (id: string, count = 6) =>
     http<{ id: string; added: number; skipped: number; total: number }>('POST', '/note-source/generate', { id, count }),
@@ -185,7 +187,7 @@ export const api = {
     http<import('./types').CleanupPreviewDoc>('GET', `/bank-cleanup${q({ course })}`),
   /** 题库一键清理应用：候选全部归档（reason=cleanup，可逆）。 */
   bankCleanupApply: (course?: string) =>
-    http<{ applied: Array<{ course: string; node: string; archived: number }> }>('POST', '/bank-cleanup/apply', { ...(course ? { course } : {}) }),
+    http<CommandOutput<'bank-cleanup-apply'>>('POST', '/bank-cleanup/apply', { ...(course ? { course } : {}) }),
   /** 能力指南（agent 独有工具的面板说明，单一事实源在宿主 AGENT_GUIDE）。 */
   agentGuide: () => http<import('./types').AgentGuideItem[]>('GET', '/agent-guide'),
   /** 出题任务化（#118）：入队即返回（phase=quiz 全局队列），可取消、进度在生成页；
@@ -213,7 +215,7 @@ export const api = {
   xp: () => http<import('./types').XpStatus>('GET', '/xp'),
   /** 记忆健康仪表盘（#61）：负载预报/状态分布/真实保留率/遗忘曲线四面板。 */
   memory: () => http<import('./types').MemoryHealth>('GET', '/memory'),
-  setDailyGoal: (goal: number) => http<{ goal: number }>('PUT', '/daily-goal', { goal }),
+  setDailyGoal: (goal: number) => http<CommandOutput<'daily-goal'>>('PUT', '/daily-goal', { goal }),
   review: (course: string, node: string) => http<{ message: string }>('POST', '/review', { course, node }),
   feedback: (path: string) => http<{ message: string }>('POST', '/feedback', { path }),
   proposals: () => http<import('./types').PropItem[]>('GET', '/proposals'),
@@ -241,11 +243,11 @@ export const api = {
   /** D-2 挑战点恒温器（#111 ADR-0024）：跨区仪表 + 只读建议；建议逐条显式确认后生效。 */
   thermostat: () => http<import('./types').ThermostatDoc>('GET', '/thermostat'),
   thermostatApply: (suggestion: string) =>
-    http<{ applied: string }>('POST', '/thermostat/apply', { suggestion }),
+    http<CommandOutput<'thermostat-apply'>>('POST', '/thermostat/apply', { suggestion }),
   /** D-1 N-of-1 实验（#110 ADR-0023）：模板库 + 实验清单 + 报告。 */
   experiments: () => http<import('./types').ExperimentsDoc>('GET', '/experiments'),
   experimentPropose: (template: string, course?: string) =>
-    http<{ proposal: number; title: string; pool: number }>('POST', '/experiments/propose', { template, ...(course ? { course } : {}) }),
+    http<CommandOutput<'experiment-propose'>>('POST', '/experiments/propose', { template, ...(course ? { course } : {}) }),
   experimentApply: (id?: number) =>
     http<{ id: number; title: string; arm_today: string }>('POST', '/experiments/apply', { ...(id !== undefined ? { id } : {}) }),
   experimentStop: (id?: number) =>
@@ -288,7 +290,7 @@ export const api = {
     http<{ project: string; path: string; log: string | null }>('GET', `/project/log${q({ id })}`),
   /** 项目日志追加一条学习者条目（V-5 #113）。 */
   projectLogAppend: (id: string, text: string) =>
-    http<{ project: string; path: string; day: string }>('POST', '/project/log', { id, text }),
+    http<CommandOutput<'project-log-append'>>('POST', '/project/log', { id, text }),
   // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026）：零 XP 零 canonical；入口常驻、缺勤不罚 ----
   /** 打开/发起周复盘（缺省 = 上一完整学习周）：现状引擎现算重填，四问保留。 */
   kataOpen: (weekStart?: string) =>
@@ -298,7 +300,7 @@ export const api = {
     http<import('./types').KataDoc>('POST', '/kata/save', { week_start: weekStart, answers }),
   /** 「下一实验」一键转 N-of-1 实验提案（提案-确认制，确认仍走实验 apply）。 */
   kataConvertExperiment: (weekStart: string, template: string, course?: string) =>
-    http<{ proposal: number; title: string; week_start: string }>('POST', '/kata/convert/experiment',
+    http<CommandOutput<'kata-convert-experiment'>>('POST', '/kata/convert/experiment',
       { week_start: weekStart, template, ...(course ? { course } : {}) }),
   /** 「下一实验」一键转执行意图挂今日目标偏好（随 pin 当日过期）。 */
   kataConvertIntention: (weekStart: string, course: string, node: string, cue: string, action: string) =>
@@ -329,7 +331,7 @@ export const api = {
     http<import('./types').ProbationDoc>('GET', `/probation${q({ course })}`),
   /** 复诊结算手动触发（零人审自动行为的手动面，无确认步）：到期插入边 proven｜自动剪除。 */
   probationSettle: () =>
-    http<{ courses?: Array<{ course: string; settled: Array<{ node: string; outcome: string; metric?: string }> }> }>('POST', '/probation/settle', {}),
+    http<CommandOutput<'probation-settle'>>('POST', '/probation/settle', {}),
   /** 项目创建（反编译前奏；P 区创建从 agent 通道扩到面板）。 */
   projectCreate: (name: string, goal: string) =>
     http<Record<string, unknown>>('POST', '/project/create', { name, goal }),

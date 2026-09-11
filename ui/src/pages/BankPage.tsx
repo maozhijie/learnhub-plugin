@@ -261,7 +261,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     setCleanupBusy(true)
     try {
       const r = await api.bankCleanupApply(filterCourse)
-      const n = r.applied.reduce((s, g) => s + g.archived, 0)
+      const n = r.reduce((s, g) => s + g.archived, 0)
       Message.success(`已归档 ${n} 道题（可在列表「显示已归档」里按原因恢复）`)
       setCleanup(null)
       await Promise.all([load(), loadAdvice()])
