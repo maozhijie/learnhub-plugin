@@ -625,7 +625,7 @@ export class ContentSubsystem {
       if (hintOn) calibrationHint = calibrationHintText(verdict)
       const deviated = jolDeviatedKeys(practice)
       const candidates = jolEligible.map(c => ({
-        key: sourceKeyOf(c.course, c.node, String(c.id)),
+        key: sourceKeyOf(String(c.course), String(c.node), String(c.id)),
         r: c.r as number,
         difficulty: c.difficulty as number | undefined,
       }))
