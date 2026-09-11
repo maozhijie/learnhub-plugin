@@ -68,6 +68,15 @@ interface CommandSpec {
 6. **`output` 的零依赖口径放宽为「零运行时依赖」**：`output` 必须是**真实类型引用**，UI 才能派生；而视图类型的家在 `src/engine/views.ts`（ADR-0042 的 R4 保证它是纯类型模块）。**裁定**：注册表只允许 `import type`（构建期擦除，UI 跨包 `import type` 的前提不变），禁止任何运行时 import（含 `node:*`、`@deepseek-ai/*`、fs 耦合模块的值）。
 7. **`#169` 一票到底、不拆子票**：注册表骨架、八道门、两个通道切到生成路径、UI 同源派生在一次交付里完成；每步 `npm test` 全绿、按域/按表段分步提交、每步可独立回滚。
 
+
+### #169 落地记录（2026-09-11；四个提交）
+
+- **注册表**（`9dc977a`）：154 条命令（111 agent + 125 panel，73 双通道）按 8 域分文件 + `index.ts` 单点装配；八道门进 `tests/commands.test.ts`；新增工具面 259 条行为探针（切面前捕获）。
+- **panel 通道切面**（`3d15d3a`）：`host/api.ts` 只做查表分发（有 bind → 生成路径：声明式取值 + engine 直调，无 bind → 例外 handler），`host/handlers.ts` 承接 76 条（形状要加工 33／实参不可绑 33／无单一入口 3／取值语义与次序表达不了 7）；`routes.ts`／`routes-post.ts` 退役。生成路径 49/125。
+- **agent 通道切面**（`e1c83d8`）：`host/tools.ts` 1039 → 127 行（注册循环 + `sdkParameters` + AGENT_GUIDE），`host/tool-handlers.ts` 承接 66 条（形状要加工 37／实参要换算 29）。生成路径 45/111。
+- **零行为漂移的证据**：464 条路由探针 + 259 条工具行为探针 + 工具面 schema 快照，三个面全部逐字复现；775 个测试全绿；类型门 75 处不变（错误随代码搬移）。
+- **未完成（本票唯一开口）**：UI 侧同源派生——`output` 的类型引用未逐命令填、`ui/src/api.ts` 的 49 处内联匿名响应类型与 `ui/src/types.ts` 的 19 处引擎形状镜像未收口、camelCase→snake_case 的第三处手写映射未数据化。`output` 的填法建议走 `command<E>()` 的泛型推断（`output?: Awaited<ReturnType<LearnhubEngine[E]>>`，零手写注解），需要把注册表从「数组」改成可按 id 索引的类型可见形状（或逐命令具名导出）。
+
 **八道门**（1-6 硬门 0，各带自检；7 沿用既有棘轮/快照门，8 是新增的一致性锁）：
 
 | # | 门 | 内容 |
@@ -79,6 +88,7 @@ interface CommandSpec {
 | 5 | 指南投影 | `AGENT_GUIDE` 每条 `tool` 所属命令确实带 agent 通道（前半「∈ 工具面」已在 #168 后进门） |
 | 6 | 零运行时依赖 | `src/commands/` 下只允许 `import type`，禁 `node:*`／`@deepseek-ai/*`／值 import |
 | 7 | 零行为漂移 | 工具面快照（111 条 name/description/parameters）+ 路由探针快照（464 条）继续当门 |
+| ④ | handler 覆盖 | **已落地**：`host/handlers.ts` 键（method+path）== 没有 bind 的 panel 通道集合；`host/tool-handlers.ts` 键（工具名）== 没有 bind 的 agent 通道集合（无孤儿、无死代码） |
 | 8 | 声明与面一致 | 注册表 agent 通道的 `(tool, args, summary)` 与工具面快照逐字一致；panel 通道的 `(method, path)` 与路由清单逐字一致 |
 
 - **「门面转发层消失或自动生成」**（消费方直连子系统）是终极形态，牵动 host/UI/测试全部调用点，**另开票**，本 ADR 不裁。
