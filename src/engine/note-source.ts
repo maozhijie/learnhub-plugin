@@ -16,7 +16,7 @@
  */
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat, unlink } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
 import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import { isRegistrableCenterRel } from './output.ts'
@@ -36,6 +36,7 @@ import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { QuestionBank, BankDoc, BankQuestion } from './question-bank.ts'
 import type { FSRS } from 'ts-fsrs'
+import type { AnkiStatusDoc, NoteSourceDoc, NoteSourceRegisterResult } from './views/channels.ts'
 import { dayOfTs, nowIso } from './dates.ts'
 import { readDayCutoff, xpForAnswer } from './xp.ts'
 
@@ -307,8 +308,7 @@ export class NoteSourceManifest {
   }
 
   async save(doc: NoteSourceManifestDoc): Promise<void> {
-    await mkdir(this.paths.noteSourceDir, { recursive: true })
-    await writeFile(this.paths.noteSourceManifestPath, YAML.stringify(doc), 'utf8')
+    await atomicWrite(this.paths.noteSourceManifestPath, YAML.stringify(doc))
   }
 }
 

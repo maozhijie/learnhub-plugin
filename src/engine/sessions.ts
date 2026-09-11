@@ -228,11 +228,6 @@ export class Sessions {
     return idx >= 0 ? path.replace(/\\/g, '/').slice(idx + 1).replace(/\.md$/, '') : null
   }
 
-  private nodeLink(root: string, graph: Graph, n: string): string {
-    const vp = this.notePath(root, graph, n)
-    return vp ? `[[${vp}|${n}]]` : n
-  }
-
   // ---- status ----
 
   async statusJson(

@@ -1,5 +1,4 @@
 import type { PracticeRec, ErratumRec } from './types.ts'
-import type { AlloKind } from './types.ts'
 /**
  * 判卷与作答记录。
  *
@@ -14,6 +13,23 @@ import type { AlloKind } from './types.ts'
  * practice 计数累加（frontmatter）+ 作答流水 + 练习证据 EMA（allo mastery 语义）。
  */
 import type { Fm } from './types.ts'
+
+// ---------------------------------------------------------------- 数值工具（#172 单一出处）
+
+/** 两位舍入（原 15 处 `Math.round(x * 100) / 100` 的唯一实现：占比、正确率、S/D 值等展示值）。 */
+export function round2(x: number): number {
+  return Math.round(x * 100) / 100
+}
+
+/** [0,1] 截断（原 7 处 `Math.min(1, Math.max(0, x))` 的唯一实现：掌握度、比率、带值）。 */
+export function clamp01(x: number): number {
+  return Math.min(1, Math.max(0, x))
+}
+
+/** 比率 → 'NN%' 展示（原 5 处本地 pct 的唯一实现；四舍五入取整百分比，与各处旧输出一致）。 */
+export function pctOf(x: number): string {
+  return `${Math.round(x * 100)}%`
+}
 
 // ---------------------------------------------------------------- 答案归一（吸收自 Python grading.py）
 
@@ -376,7 +392,7 @@ export function parseDisputeReview(raw: string): DisputeReviewDoc {
 export function nextEma(current: number | undefined, score: number): number {
   const prev = current && current > 0 ? current : null
   const next = prev === null ? score : prev * 0.7 + score * 0.3
-  return Math.round(Math.min(1, Math.max(0, next)) * 1000) / 1000
+  return Math.round(clamp01(next) * 1000) / 1000
 }
 
 /** recordAttempt 的 frontmatter 侧更新：practice 计数 + 练习证据 EMA（mastery 纯派生，此处不落盘）。 */

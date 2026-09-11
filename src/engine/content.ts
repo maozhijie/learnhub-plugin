@@ -8,12 +8,13 @@
  * - gen-exercises：题组过 schema/结构门禁后写入练习区（计数同步 + journal）
  */
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
 import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
-import { normChoice } from './grading.ts'
+import { normChoice, round2 } from './grading.ts'
 import { invokesTagged } from './concepts.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../shared/content-renderers.ts'
@@ -57,8 +58,7 @@ export class Content {
   async queueInit(root: string): Promise<void> {
     const p = this.paths.queuePath(root)
     if (existsSync(p)) return
-    await mkdir(this.paths.courseStateDir(root), { recursive: true })
-    await writeFile(p, '# 生成队列\n\n> 待生成/待重生成清单。引擎自动维护，人可编辑；完成条目打勾即止。\n', 'utf8')
+    await atomicWrite(p, '# 生成队列\n\n> 待生成/待重生成清单。引擎自动维护，人可编辑；完成条目打勾即止。\n')
   }
 
   /** 入队一条任务；同节点同 kind 未完成条目不重复。 */
@@ -69,7 +69,7 @@ export class Content {
       if (ln.startsWith('- [ ]') && ln.includes(`${kind}：${node}`)) return false
     }
     lines.push(`- [ ] ${kind}：${node} ｜ ${reason} ｜ 优先：${priority}`)
-    await writeFile(this.paths.queuePath(root), lines.join('\n').replace(/\n+$/, '') + '\n', 'utf8')
+    await atomicWrite(this.paths.queuePath(root), lines.join('\n').replace(/\n+$/, '') + '\n')
     return true
   }
 
@@ -95,7 +95,7 @@ export class Content {
         changed = true
       }
     }
-    if (changed) await writeFile(this.paths.queuePath(root), lines.join('\n'), 'utf8')
+    if (changed) await atomicWrite(this.paths.queuePath(root), lines.join('\n'))
     return changed
   }
 
@@ -1310,8 +1310,7 @@ worksheet:
     }
     for (const f of split.files) {
       const target = `${this.paths.courseRoot(root)}/${f.rel}`
-      await mkdir(target.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-      await writeFile(target, f.html, 'utf8')
+      await atomicWrite(target, f.html)
     }
     // 提示词要求模型输出以 `## 标题` 开头，本方法按清单再包一层同名标题——先剥掉，避免正文标题重复
     const stripped = Content.stripLeadingSectionTitle(split.body, entry.title)
@@ -1547,7 +1546,7 @@ worksheet:
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([holder, cnt]) => ({
         node: holder,
-        w: Math.round((cnt / total) * 100) / 100,
+        w: round2(cnt / total),
         note: `invokes 投影 ${cnt}/${total}`,
       }))
   }

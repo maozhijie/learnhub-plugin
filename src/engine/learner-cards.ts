@@ -14,9 +14,9 @@
  * Missing/Broken 纪律沿用 ADR-0004：文件缺失 = 合法空卡组；存在但坏 = 抛 Broken。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile, unlink, rename } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
-import type { FsrsBlock, Fm, CourseEntry, EArchiveRec } from './types.ts'
+import type { FsrsBlock, Fm, CourseEntry, EArchiveRec, LearnerCardKind } from './types.ts'
 import type { Paths } from './paths.ts'
 import { safeFilename } from './paths.ts'
 import type { Store } from './store.ts'
@@ -33,7 +33,9 @@ import type { BrokenNote } from './notes.ts'
 import { loadNote } from './notes.ts'
 import type { FSRS } from 'ts-fsrs'
 import { todayStr, dayOfTs, nowIso } from './dates.ts'
-import { readLearnhubConfig, writeLearnhubConfig } from './io.ts'
+import { nodeKeyOf } from './types.ts'
+import { round2 } from './grading.ts'
+import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import type { BandPref } from './adaptive.ts'
 import { combinedDifficulty } from './adaptive.ts'
 import { advanceStrict } from './advance.ts'
@@ -60,6 +62,11 @@ import { Sessions } from './sessions.ts'
 import { selfNoteFeedbackPrompt, selfNoteFeedbackSystem, selfNotePromptOf } from './self-note.ts'
 import { writeOutputArtifact } from './output.ts'
 import { execRecsAll } from './project-exec.ts'
+import type { ProjectExecRec } from './project-exec.ts'
+import type {
+  CalibrationProfileDoc, HabitShowDoc, HabitsListDoc, KataDoc, LearnerQueueDoc, SkillsListDoc,
+} from './views/learner.ts'
+import type { LearnerArchiveResult, LearnerForgetResult, LearnerRateResult } from './views.ts'
 import { assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from './sessions.ts'
 import type { NodeStat, WindowStat } from './sessions.ts'
 import type { SedimentKind } from './sediment.ts'
@@ -218,8 +225,7 @@ export class LearnerCards {
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
     const p = this.cardPath(courseRoot, node)
-    await mkdir(p.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
   }
 
   private async loadChecked(courseRoot: string, node: string, op: string): Promise<Record<string, unknown> | null> {
@@ -522,7 +528,7 @@ export class LearnerSubsystem {
           node,
           due: dues.sort()[0] ?? null,
           count: dues.length,
-          accuracy: attempts ? Math.round((correct / attempts) * 100) / 100 : null,
+          accuracy: attempts ? round2(correct / attempts) : null,
           attempts,
         })
       })
@@ -1200,7 +1206,7 @@ export class LearnerSubsystem {
   private async mirrorReceiptToProjects(
     courseName: string, node: string, rec: ReceiptLogRec, material: string,
   ): Promise<string[]> {
-    const specs = new Set([node, `${courseName}/${node}`])
+    const specs = new Set([node, nodeKeyOf(courseName, node)])
     const out: string[] = []
     for (const p of await this.e.projects.list()) {
       if (!p.plan.some(m => (m.nodes ?? []).some(n => specs.has(n)))) continue

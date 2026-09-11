@@ -16,6 +16,7 @@
  * 口径，凌晨归属随日界），周内/周外用 YYYY-MM-DD 字典序比较。
  */
 import { dayOfTs, inWeek, weekStartOf } from './dates.ts'
+import { round2, pctOf } from './grading.ts'
 import { obsidianLink } from './output.ts'
 import { execRatingScore } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -130,7 +131,7 @@ export function buildKataReality(input: KataRealityInput): KataReality {
       .map(r => p.plan.find(m => m.id === r.node)?.name ?? r.node)
     const exec = (input.projectExec[p.id] ?? []).filter(r => hit(r.day))
     const execAvg = exec.length
-      ? Math.round((exec.reduce((s, r) => s + execRatingScore(r.rating), 0) / exec.length) * 100) / 100
+      ? round2(exec.reduce((s, r) => s + execRatingScore(r.rating), 0) / exec.length)
       : null
     return { id: p.id, name: p.name, milestones, exec_count: exec.length, exec_avg: execAvg }
   })
@@ -181,7 +182,6 @@ export function buildKataReality(input: KataRealityInput): KataReality {
   }
 }
 
-const pct = (v: number): string => `${Math.round(v * 100)}%`
 
 /** 现状区旁挂的沙盘 ETA 摘要（#150 周复盘挂罗盘 ETA）：引擎 compassEtaRefresh 折叠
  * 后随行注入——与罗盘「沙盘 ETA」段同一份数据，零二次蒙特卡洛；此周复盘打开即附，
@@ -216,9 +216,9 @@ export function kataEtaSummary(course: string, eta: CompassEta): KataEtaSummary 
  * 分位带参照、非承诺措辞照旧（ADR-0025 纪律不动）。 */
 export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = []): string {
   const lines: string[] = ['### 总览', '']
-  const overview = [`学习 ${r.days} 天`, `XP +${r.xp}`, `作答 ${r.answers} 次${r.accuracy !== null ? `（作答正确率 ${pct(r.accuracy)}）` : ''}`]
+  const overview = [`学习 ${r.days} 天`, `XP +${r.xp}`, `作答 ${r.answers} 次${r.accuracy !== null ? `（作答正确率 ${pctOf(r.accuracy)}）` : ''}`]
   if (r.due_reviews > 0) {
-    overview.push(`到期复习 ${r.due_reviews} 次${r.retention !== null ? `（真实保留率 ${pct(r.retention)}）` : ''}`)
+    overview.push(`到期复习 ${r.due_reviews} 次${r.retention !== null ? `（真实保留率 ${pctOf(r.retention)}）` : ''}`)
   }
   lines.push(`- ${overview.join(' · ')}`, '')
 
@@ -238,7 +238,7 @@ export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = []): 
     ? r.projects.map(p => {
         const bits: string[] = []
         bits.push(p.milestones.length ? `过点 ${p.milestones.length} 个（${p.milestones.join('、')}）` : '当周无过点')
-        if (p.exec_count) bits.push(`执行事件 ${p.exec_count} 次（均分 ${pct(p.exec_avg ?? 0)}）`)
+        if (p.exec_count) bits.push(`执行事件 ${p.exec_count} 次（均分 ${pctOf(p.exec_avg ?? 0)}）`)
         return `- ${p.name}：${bits.join(' · ')}`
       })
     : ['没有进行中的项目。']), '')

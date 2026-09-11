@@ -20,7 +20,7 @@
  * - D15：评分只经工作单 → settle 入库；UI 自动写回也只写工作单评分行。
  * - 每次工具/路由调用追加 state/运行日志.md（LOG_LIMIT 截断）。
  */
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Effect } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { llmCfg } from './host/llm.ts'
 import { createHostRuntime } from './host/runtime.ts'

@@ -6,7 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Content, TIER_LABELS, genericQuizTarget, tierIdxOf } from '../engine/index.ts'
-import type { CoachTrigger, LlmComplete } from '../engine/index.ts'
+import type { CoachTrigger, LearnhubEngine, LlmComplete } from '../engine/index.ts'
 import {
   contentFailureStatus,
   genJobRetentionRemainingMs,

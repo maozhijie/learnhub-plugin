@@ -6,6 +6,7 @@
  * Output，ADR-0009）——不喂 canonical、不进掌握度/XP。零依赖纯函数（接缝 S30）。
  */
 import type { PracticeRec } from './types.ts'
+import { sourceKeyOf } from './types.ts'
 
 /** 一档三点预测（题面出示后、翻面前作答）。 */
 export type JolPrediction = '会' | '不会' | '没把握'
@@ -50,7 +51,7 @@ export function jolDeviatedKeys(recs: PracticeRec[]): Set<string> {
   const out = new Set<string>()
   for (const r of recs) {
     if (!r.qid || !r.predicted || typeof r.correct !== 'boolean') continue
-    if ((r.predicted === '会') !== r.correct) out.add(`${r.course}/${r.node}/${r.qid}`)
+    if ((r.predicted === '会') !== r.correct) out.add(sourceKeyOf(r.course, r.node, r.qid))
   }
   return out
 }

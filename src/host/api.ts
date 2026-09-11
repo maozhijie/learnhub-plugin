@@ -21,6 +21,7 @@ import {
   enqueueGraphJob,
   enqueueGrowthBatch,
   enqueueQuizGeneration,
+  generateSection,
   generationStatus,
   resetCourseChain,
   resumeQueue,
@@ -482,7 +483,7 @@ export async function handleApi(rt: HostRuntime, ctx: Context, req: IncomingMess
       }
       if (route === '/generate/resume') {
         // 恢复重启后暂停的队列（遗留排队任务不自动开跑，防静默烧 token）
-        sendJson(res, 200, await apiRun(rt, 'api/generate/resume', () => resumeQueue(rt, ctx)))
+        sendJson(res, 200, await apiRun(rt, 'api/generate/resume', async () => resumeQueue(rt, ctx)))
         return
       }
       if (route === '/generate/section') {

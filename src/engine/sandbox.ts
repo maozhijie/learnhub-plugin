@@ -25,7 +25,8 @@
 import { applyRatingBlock, retrievabilityBlock, masteryValue } from './srs.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { FsrsBlock } from './types.ts'
-import { parseDay, fmtDay } from './dates.ts'
+import { DAY_MS, parseDay, fmtDay } from './dates.ts'
+import { nodeKeyOf } from './types.ts'
 
 /** 单次复习的成本（分钟；粗化常数）。 */
 export const REVIEW_MIN = 1
@@ -73,7 +74,7 @@ export interface SandboxNode {
 
 const dayShift = (today: string, days: number): string => {
   const t = parseDay(today)!
-  return fmtDay(new Date(t.getTime() + days * 86400000))
+  return fmtDay(new Date(t.getTime() + days * DAY_MS))
 }
 
 /** 单次推演（纯函数）：返回各节点终局 mastery 与逐周总掌握值。
@@ -93,15 +94,15 @@ export function simulateRun(
   for (const c of cards) fs.set(c.key, c.fs)
   const cardsByNode = new Map<string, SandboxCard[]>()
   for (const c of cards) {
-    const list = cardsByNode.get(`${c.course}/${c.node}`) ?? []
+    const list = cardsByNode.get(nodeKeyOf(c.course, c.node)) ?? []
     list.push(c)
-    cardsByNode.set(`${c.course}/${c.node}`, list)
+    cardsByNode.set(nodeKeyOf(c.course, c.node), list)
   }
   // 节点代表卡（调用方保证每个非 skipped 节点一张：有起点状态带 fs，否则 null 随引入创建）
   const nodeCards = new Map<string, SandboxCard>()
   for (const n of nodes) {
     const rep = cards.find(c => c.kind === 'node' && c.course === n.course && c.node === n.node)
-    if (rep) nodeCards.set(`${n.course}/${n.node}`, rep)
+    if (rep) nodeCards.set(nodeKeyOf(n.course, n.node), rep)
   }
   const introSpent = new Map<string, number>()
 
@@ -112,7 +113,7 @@ export function simulateRun(
     if (!active.length) return 0
     let sum = 0
     for (const n of active) {
-      const rep = nodeCards.get(`${n.course}/${n.node}`)
+      const rep = nodeCards.get(nodeKeyOf(n.course, n.node))
       sum += nodeMastery(n, rep ? getFs(rep.key) : null)
     }
     return sum / active.length
@@ -126,7 +127,7 @@ export function simulateRun(
     for (const n of nodes) {
       if (budget < REVIEW_MIN) break
       if (n.skipped || n.started) continue
-      const nk = `${n.course}/${n.node}`
+      const nk = nodeKeyOf(n.course, n.node)
       const spent = introSpent.get(nk) ?? 0
       if (spent >= n.est) continue
       const take = Math.min(n.est - spent, budget)
@@ -156,7 +157,7 @@ export function simulateRun(
       budget -= REVIEW_MIN
       // 节点代表卡跟随本节点当日首次推进结果（同过同败）
       if (card.kind === 'question') {
-        const rep = nodeCards.get(`${card.course}/${card.node}`)
+        const rep = nodeCards.get(nodeKeyOf(card.course, card.node))
         if (rep) {
           const repFs = fs.get(rep.key)
           if (repFs && repFs.reps) fs.set(rep.key, applyRatingBlock(repFs, pass ? 3 : 1, day, schedFor(card.course)).fs)
@@ -167,7 +168,7 @@ export function simulateRun(
   }
   const endByNode = nodes.map(n => {
     if (n.skipped) return 0
-    const rep = nodeCards.get(`${n.course}/${n.node}`)
+    const rep = nodeCards.get(nodeKeyOf(n.course, n.node))
     return nodeMastery(n, rep ? fs.get(rep.key) ?? null : null)
   })
   return { endByNode, curve }

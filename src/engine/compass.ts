@@ -12,6 +12,7 @@
  * 非权威），机器段按需追加末尾——权威覆盖语义不受手编破坏影响，不做 fail loud。
  */
 import { SANDBOX_WORDING } from './sandbox.ts'
+import { pctOf } from './grading.ts'
 import type { EndpointAnchor } from './seed.ts'
 
 export const SECTION_ROUTE = '剩余路线'
@@ -147,7 +148,6 @@ export interface CompassEta {
   wording: string
 }
 
-const pctText = (v: number): string => `${Math.round(v * 100)}%`
 
 /** 推演地平线上界（周）：ETA 段渲染与周复盘 ETA 旁挂（#150）共用的未及口径。 */
 export function etaHorizonOf(eta: CompassEta): number {
@@ -166,12 +166,12 @@ export function crossingText(c: CompassEta['p50_week'], horizon: number): string
 export function renderEtaBody(eta: CompassEta): string {
   const horizon = etaHorizonOf(eta)
   const band = eta.probes
-    .map(p => `${p.weeks} 周 p50=${pctText(p.p50)}/p80=${pctText(p.p80)}`)
+    .map(p => `${p.weeks} 周 p50=${pctOf(p.p50)}/p80=${pctOf(p.p80)}`)
     .join(' · ')
   return [
     `${ETA_MARKER_PREFIX}${eta.week_start} -->`,
     `推演基准：每日目标约 ${eta.minutes_per_day} 分钟（取自每日 XP 目标）；${eta.wording}。`,
-    `终点「${eta.endpoint}」掌握度阈值 ${pctText(eta.threshold)}：p50 口径${crossingText(eta.p50_week, horizon)}；p80 口径${crossingText(eta.p80_week, horizon)}。`,
+    `终点「${eta.endpoint}」掌握度阈值 ${pctOf(eta.threshold)}：p50 口径${crossingText(eta.p50_week, horizon)}；p80 口径${crossingText(eta.p80_week, horizon)}。`,
     `分位带（终点掌握度）：${band}。`,
     '',
   ].join('\n')

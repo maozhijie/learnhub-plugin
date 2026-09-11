@@ -8,6 +8,7 @@
  */
 import type { Graph } from './graph.ts'
 import { floatNodes } from './quality.ts'
+import { clamp01 } from './grading.ts'
 
 /** 动作词表（动作句命名的机械化判定：节点名以这些动词性字眼开头/包含才算「动作句」）。 */
 const ACTION_WORDS = [
@@ -17,7 +18,6 @@ const ACTION_WORDS = [
   '列举', '描述', '解释', '分析', '选择', '转换', '识别', '掌握', '理解',
 ]
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 
 /** est 分布压缩提示的输入最小形状（Graph 兼容）。 */
 export interface EstSpreadSource {

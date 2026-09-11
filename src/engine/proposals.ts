@@ -30,7 +30,7 @@ import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
 import { RECHECK_DAYS_DEFAULT } from './params.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
-import { BLOOM_LEVELS, PROPOSAL_KINDS, GROWTH_OPERATORS } from './types.ts'
+import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { CourseEntry, ProposalKind } from './types.ts'
 
@@ -520,8 +520,7 @@ export class GraphProposals {
   private async saveArtifact(kind: ProposalKind, course: string, doc: unknown): Promise<{ pid: number; path: string }> {
     const pid = await this.store.createProposal(kind, course, '', '')
     const path = this.paths.proposalArtifactPath(pid, kind, course)
-    await mkdir(this.paths.proposalDir, { recursive: true })
-    await writeFile(path, YAML.stringify(doc), 'utf8')
+    await atomicWrite(path, YAML.stringify(doc))
     await this.store.updateProposal(pid, { artifact: path })
     return { pid, path }
   }
@@ -1148,7 +1147,9 @@ export class GraphProposals {
   async list(status?: string, kind?: string, limit = 100): Promise<Record<string, unknown>[]> {
     let list = await this.store.loadProposals()
     if (status) {
-      if (!['pending', 'applied', 'rejected'].includes(status)) throw new Error(`[proposals] 非法 status: ${status}（允许 pending/applied/rejected）`)
+      if (!(PROPOSAL_STATUSES as readonly string[]).includes(status)) {
+        throw new Error(`[proposals] 非法 status: ${status}（允许 ${PROPOSAL_STATUSES.join('/')}）`)
+      }
       list = list.filter(p => p.status === status)
     }
     if (kind) {

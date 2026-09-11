@@ -1,6 +1,6 @@
 # 测试
 
-`node --experimental-transform-types --test tests/`（Node >=24 原生 TS + `--experimental-transform-types`，零测试框架依赖；facade 测试需要 transform 模式处理注入类的 constructor parameter properties，引擎门面测试直接实例化 `LearnhubEngine`）。
+`npm test` = `npm run typecheck`（类型门，G7）+ `node --experimental-transform-types --test tests/*.test.ts`（Node >=24 原生 TS + `--experimental-transform-types`，零测试框架依赖；facade 测试需要 transform 模式处理注入类的 constructor parameter properties，引擎门面测试直接实例化 `LearnhubEngine`）。单跑规则测试可用 `node --experimental-transform-types --test tests/`。
 
 ## 测试缝与 vault 工厂（ADR-0013，2026-09-09）
 
@@ -86,29 +86,35 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 
 - 分层依赖规则执法，随 `npm test` 全量必跑：R1 host 的 engine 导入只走门面、R2 engine 禁引宿主、R3 engine 禁引 `@deepseek-ai/*`、R4 views 纯类型、R5 io.ts 零相对导入叶子、R6 门面唯一汇点（engine 子模块不回引 engine/index.ts）、R7 src 相对 import 全图零环（含 type-only 与动态导入边）。R3 带自检：收集器须能看见裸包/作用域包说明符（曾出现只收相对说明符致 R3 恒过的实测缺陷，自检锁死）。行级收集相对导入（静态/type/侧效/export-from/动态）+ DFS；说明符解析带 .ts 直用、否则补 .ts、否则补 /index.ts。刀 1 随门落地两处解环先例：receipts 用本地 ReceiptStore 结构化窄面（receipts 不 import store）、周折叠函数族归位 dates.ts（sediment 改引 dates，kata 原路径 re-export 保 S45 接缝）。
 
-架构门 G1–G6（2026-09-11 新增，#165 / ADR-0047；`tests/arch-guards.test.ts`）：
+单一出处门（#172；`tests/dedup-convergence.test.ts`）：七组重复实现收敛的对照测试 + 文本门——每位数值工具/键标识/常量收敛后的出处（grading 的 round2·clamp01·pctOf、dates 的 DAY_MS·calendarDayOf、types 的 sourceKeyOf·parseSourceKey·nodeKeyOf·PROPOSAL_STATUSES）与其收敛前参考公式逐值对照；文本扫描断言七组模式（含「pctOf 后拼字面百分号」的 %% 回归）在出处模块外零残留，剥注释扫描、每门带「必然违规样本」自检。两段节点键 `${course}/${node}` 不设文本门（与 `${dir}/${file}` 路径拼接文本不可区分，误咬更坏），由调用点改造与对照覆盖；键标识本体住 types.ts 中立词汇层、anki 原路径 re-export 保接缝（S35 所指 anki.ts 导入仍有效）。
 
-把「约定只活在注释与 ADR 里」变成会失败的东西。全部零依赖、文本／加载层面、`node:test` 原生、随 `npm test` 全量执行。两条铁律：**每个门都带自检**（构造必然违规的样本并断言门会失败；收集器类门另断言它能看见目标形态——R3 曾因收集器只收相对说明符而**恒过**，恒过的门比没有门更坏）；**棘轮是精确匹配**（实际 == 基线，涨了失败、**降了但未同步下调基线也失败**＝过期即失败）。
+架构门 G1–G7（2026-09-11 新增，#165 / ADR-0047；`tests/arch-guards.test.ts`）：
 
-| 门 | 内容 | 档位 | 阈值来源（落笔实测） |
+把「约定只活在注释与 ADR 里」变成会失败的东西。全部零依赖、文本／加载／编译层面、`node:test` 原生、随 `npm test` 全量执行。两条铁律：**每个门都带自检**（构造必然违规的样本并断言门会失败；收集器类门另断言它能看见目标形态——R3 曾因收集器只收相对说明符而**恒过**，恒过的门比没有门更坏）；**棘轮是精确匹配**（实际 == 基线，涨了失败、**降了但未同步下调基线也失败**＝过期即失败）。
+
+| 门 | 内容 | 档位 | 阈值来源（实测） |
 |---|---|---|---|
-| G1 未定义标识符 | 剥注释与字符串后「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`） | 硬门 0 | 0（`shuffled` 修复后）。tsc 落地后由 TS2304 接管、本门退役 |
-| G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在、入口文件非空；G2c＝宿主（index + host/*）除常量外零模块级 `let`（ADR-0048，带自检：模块级 let 被抓、函数内 let 不误伤） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径 |
-| G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。缺件方向（dead／missing／unwired）**硬门 0**；多余接线按基线棘轮 | 缺件硬门 0 ＋ 多余棘轮 | 声明 **167** ／ 实用 167 ／ 接线 **197** ／ 多余 **30**（含 **10** phantom，全在 growth 的门面接线里） |
+| G1 未定义标识符 | 剥注释与字符串后「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`） | 硬门 0 | 0（`shuffled` 修复后）。**已由 G7 的 TS2304 接管**（同一形态的编译期权威判据），本门留作零依赖兜底 |
+| G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在、入口文件非空；G2c＝宿主除常量外零模块级 `let`（`scripts/scan-host-state.mjs`，受控面**动态发现**＝index.ts + host/**/*.ts；ADR-0048） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径。G2c 受控面 8 个文件、模块级 let 0 |
+| G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。**四个方向全为硬门 0**（dead／missing／unwired／surplus） | 硬门 0 | 声明 **167** ／ 实用 167 ／ 接线 **167** ／ 多余 **0**（#171 清掉 30 条多余接线——10 phantom + 20 未使用——后由棘轮转硬门） |
 | G4 窄面宽度（三槽位） | `handles`／`facade`／`fns` 逐子系统卡基线；`handles ≤12／facade ≤20／fns ≤10` 是**非活动目标** | 棘轮 | 实测最大 handles **9**／facade **20**／fns **1**（对预算已绿；facade 已触上限，无余量） |
-| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件超 600；宿主 `index.ts` 3029 → **71**（#167 拆分后降到目标内），但 `host/api.ts` **998**／`host/tools.ts` **1044** 超 900，故活动门＝逐文件基线（#167 后 **83** 个受控文件） |
+| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件超 600；宿主 `index.ts` 3029 → **91**（#167 拆成薄入口后回到目标内），但拆出的 `host/api.ts` **998**／`host/tools.ts` **1044** 接过超限项，故活动门＝逐文件基线（#167 后 **83** 个受控文件） |
 | G6 顶层不变量 | 除教练层 `proposals.ts` 外无模块调用图写原语（`GraphStore.writeRegionDoc`，`data/*.yaml` 的唯一写路径） | 硬门 | 绿（唯一调用者就是 `proposals.ts`） |
+| G7 类型门 | `tsc --noEmit`（根 `tsconfig.json`；`module`／`moduleResolution` = `nodenext`、`noEmit`、`strict: false` 起步）逐文件错误数卡基线 | 棘轮 | 扫描面 `src/`：**80 处 / 9 个涉错文件**。实测链：main **196 处 / 17 个涉错文件**（未清理）→ #171 清 30 条接线后 **181** → #170 清掉 TS2304 40／TS2339 26／TS2305 20／TS2300 6／TS1361 5／TS2835 6／TS2552+TS2484+TS2440 3（共 106 处真缺陷；修准窄面类型后新暴露 5 处净增）→ **80**。受控面 88 个文件 |
 
 门的三处实现事实（照着改时别踩）：
 
 - **G3 的第三方向只取接线字面量的 brace-depth-1 键**：`ChannelsSubsystem` 的接线里 `registry: { load, loadNoteSources, save, get }` 是嵌套窄子面（`ChannelsDeps` 正以结构化窄面声明它），按扁平正则抽取会把子面成员误计为顶层接线——实测会伪造出 **4 条不存在的 phantom**。G4 的「顶层成员计，嵌套子面不计」是同一条判据。自检：夹具有嵌套子面 + 一条多余接线，断言接线键恰 5 个、phantom 恰 1 条。
 - **G4 的槽位归属是声明形式规则**：值属性 → `handles`（领域实例与值）、方法签名（含 generator）→ `facade`（回引门面）、函数型属性（`jolRng: () => number`）→ `fns`（注入的纯函数）。规则写在 `scripts/scan-deps-face.mjs` 头注释里。
 - **G6 的白名单是紧的**：`graphApply('enrich')` 从 `growth-subsystem.ts`／`projects.ts` 直调 `proposals.*` 属提案门内的教练层行为，不触本门（ADR-0044 已登记）；原语定义处 `graph.ts` 不算调用者。自检：白名单外的调用（含解构别名）必须被看见。
+- **G7 的扫描面自检靠 `--listFiles`**：测量与诊断同一次 `tsc` 调用取回（`scripts/scan-types.mjs`），门断言「src/ 里每个 `.ts`／`.tsx` 都被 tsc 读到」——只看错误数无法区分「干净」与「根本没扫」，这正是 R3 恒过的形状。另：tsc 只报无文件位置的错（tsconfig 写坏）时测量**抛错**而不是静默返回空集。**typescript 与 @types/node 精确锁版本**：错误数随工具链版本漂移，换档必须与基线同提交。
+- **G7 的收窄档位**：`strict: false` 下真假分支不参与字面量联合收窄（`if (!x.ok)` 不收窄、`if (x.ok === false)` 收窄）——#170 实测，清理时统一改用显式比较。
 
 棘轮基线与操作（`scripts/arch-baseline.json` + `scripts/arch-baseline.mjs`）：
 
-- 基线记录每个受控量的实测值：逐子系统的声明／实用／接线数、三槽位计数、多余接线集与 phantom 集、逐文件行数。**基线只在清理提交里下调**；涨了先看这行长在哪、能不能不长。
-- 基线自身也自检**幽灵条目**：删了子系统／文件却留下基线条目 = 永不复活的门，一并失败。
-- 看当前实测与违规：`node scripts/arch-baseline.mjs`（违规退出 1）；单看窄面：`node scripts/scan-deps-face.mjs`；单看规模：`node scripts/scan-budget.mjs`；单看顶层不变量：`node scripts/scan-invariant.mjs`；按实测重写基线：`node scripts/arch-baseline.mjs --update`。
-- 三个「缺件」方向（dead 声明未用／missing 用而未声明／unwired 声明未接线）**不进基线**——它们必须是 0，由 G3 直接卡（这些是装配断裂，不是可以棘轮化的债）。
+- 基线记录每个受控量的实测值：逐子系统的声明／实用／接线数与三槽位计数、逐文件行数、**涉错文件的类型错误数**（只记有错的文件，未列出即 0 处）。**基线只在清理提交里下调**；涨了先看这行长在哪、能不能不长。
+- 基线自身也自检**幽灵条目**：删了子系统／文件／修好一个文件却留下基线条目 = 永不复活的门，一并失败。
+- 看当前实测与违规：`node scripts/arch-baseline.mjs`（全部受控量，违规退出 1）；单看类型门：`npm run typecheck`（= `node scripts/arch-baseline.mjs --types`）；单看窄面：`node scripts/scan-deps-face.mjs`；单看规模：`node scripts/scan-budget.mjs`；单看类型清单：`node scripts/scan-types.mjs`；单看顶层不变量：`node scripts/scan-invariant.mjs`；按实测重写基线：`node scripts/arch-baseline.mjs --update`。
+- 四个「装配」方向（dead 声明未用／missing 用而未声明／unwired 声明未接线／surplus 接线未声明）**不进基线**——它们必须是 0，由 G3 直接卡（这些是装配断裂，不是可以棘轮化的债；`surplus` 在 #171 清到 0 后由棘轮转本档）。
+- `npm test` = **类型门**（`npm run typecheck`）+ 全部规则与行为测试（类型门在 `tests/arch-guards.test.ts` 的 G7 里再跑一次同一份对照，故单独 `node --test` 也拦得住）。
 

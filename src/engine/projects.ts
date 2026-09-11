@@ -11,7 +11,7 @@
  * 存在但坏 = Broken 抛出。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile, appendFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, appendFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
 // FadingTier/FADING_TIERS 住 types.ts、PlanItem 与计划产物校验住 project-decompile.ts
 // （#152 刀 5 归位：project-exec/project-decompile 反向引用，留原地即成环）；
@@ -32,10 +32,11 @@ import { loadNote, saveNote } from './notes.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
-import type { QuestionBank } from './question-bank.ts'
+import type { QuestionBank, BankQuestion } from './question-bank.ts'
 import type { GraphProposals, ApplyAudit, EnrichFieldEntry } from './proposals.ts'
 import type { NoteSourceManifest } from './note-source.ts'
 import type { Graph } from './graph.ts'
+import type { ProjectCrossDoc, ProjectExecBackflow, ProjectExecResult } from './views/project.ts'
 import { declaredEncOf } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { CourseEntry, Fm } from './types.ts'
@@ -78,20 +79,6 @@ export function isProjectLifecycle(v: unknown): v is ProjectLifecycle {
 }
 export function isFadingTier(v: unknown): v is FadingTier {
   return (FADING_TIERS as string[]).includes(v as string)
-}
-
-/** 里程碑计划条目（设计 §3 关键接口：#92 提案修订与 #95 目标反编译的共同产出形态）。
- * est/nodes 可选（#93/#94 落地）：est = 过点定价申报（分钟）；nodes = 关联课程节点
- * （检索点抽题与行为推断 enc 的挂靠点，ADR-0015 裁决 6——关联永不构成门禁）。 */
-export interface PlanItem {
-  id: string
-  name: string
-  task_class: string
-  acceptance_hints: string
-  /** 过点定价申报（分钟，正数；缺省回落 XP_PER_MILESTONE_DEFAULT）。 */
-  est?: number
-  /** 关联课程节点（节点名或「课程/节点」；抽题/行为扫描按此解析，空 = 未关联）。 */
-  nodes?: string[]
 }
 
 /** 项目 frontmatter（项目.md；设计 §1 schema）。 */
@@ -377,8 +364,7 @@ export class Projects {
     const pid = await this.store.createProposal('project_plan', projectId,
       `${initial ? '初次规划' : '计划修订'}：${v.plan.length} 个里程碑`, '')
     const path = this.paths.proposalArtifactPath(pid, 'project_plan', projectId)
-    await mkdir(this.paths.proposalDir, { recursive: true })
-    await writeFile(path, YAML.stringify(doc), 'utf8')
+    await atomicWrite(path, YAML.stringify(doc))
     // pair 出生即写（#149 同源双提案）：计划提案落盘那一刻就带联动——任一时刻崩溃
     // 都不会留下可单边 apply 的无守卫计划半区（时序缺口守卫从出生起生效）。
     await this.store.updateProposal(pid, {
@@ -436,8 +422,7 @@ export class Projects {
       throw new Error(`[project-milestone] 「${file}」已生成——按档重生成走提案通道（learnhub_project_milestone_generate 会自动转提案，apply 后带快照覆盖）。`)
     }
     this.gateOrFail(md, project.tier)
-    await mkdir(this.paths.projectMilestoneDir(projectId), { recursive: true })
-    await writeFile(path, md.trimEnd() + '\n', 'utf8')
+    await atomicWrite(path, md.trimEnd() + '\n')
     return { written: file, tier: project.tier }
   }
 
@@ -453,8 +438,7 @@ export class Projects {
     const pid = await this.store.createProposal('project_milestone', projectId,
       `里程碑「${item.name}」按档「${project.tier}」重生成`, '')
     const artifactPath = this.paths.proposalArtifactPath(pid, 'project_milestone', projectId)
-    await mkdir(this.paths.proposalDir, { recursive: true })
-    await writeFile(artifactPath, YAML.stringify(doc), 'utf8')
+    await atomicWrite(artifactPath, YAML.stringify(doc))
     await this.store.updateProposal(pid, { artifact: artifactPath })
     return { id: pid, kind: 'project_milestone', project: projectId, milestone: milestoneId, file }
   }
@@ -470,8 +454,7 @@ export class Projects {
     const path = this.paths.projectMilestonePath(project.id, file)
     const snapshot = this.paths.projectSnapshotPath(prop.id, `m${file}`)
     await atomicWrite(snapshot, await readFile(path, 'utf8'))
-    await mkdir(this.paths.projectMilestoneDir(project.id), { recursive: true })
-    await writeFile(path, v.md.trimEnd() + '\n', 'utf8')
+    await atomicWrite(path, v.md.trimEnd() + '\n')
     await this.store.updateProposal(prop.id, {
       status: 'applied', decided: new Date().toISOString(), decision_note: `快照 ${snapshot}`,
     })
@@ -579,7 +562,7 @@ export interface ProjectDeps {
   bank: Pick<QuestionBank, 'load'>
   proposals: Pick<GraphProposals, 'applySeed' | 'reject'>
   projects: Projects
-  noteManifest: Pick<NoteSourceManifest, 'load'>
+  noteManifest: Pick<NoteSourceManifest, 'load' | 'save'>
   /** vault 根目录。 */
   vaultRoot: string
   /** JOL 抽查的随机源（可注入播种）。 */
@@ -939,7 +922,7 @@ export class ProjectSubsystem {
     const linked = specs.length ? await this.resolveProjectNodes(specs) : []
     const linkedNodes: Array<{ course: string; node: string; mastery: number }> = []
     const masteryList: number[] = []
-    const viewCache = new Map<string, Awaited<ReturnType<LearnhubEngine['loadView']>>>()
+    const viewCache = new Map<string, Awaited<ReturnType<ProjectDeps['loadView']>>>()
     for (const { course, node } of linked) {
       let v = viewCache.get(course.name)
       if (!v) {
@@ -1060,7 +1043,7 @@ export class ProjectSubsystem {
           (from, to) => graph.nset.has(from) && graph.nset.has(to) && graph.isAncestor(from, to),
           node => firstDayByCourse.get(courseName)?.get(node),
         )
-        if (!dir.ok) {
+        if (dir.ok === false) {
           blockedNoPre.push({ course: courseName, a: pair.a, b: pair.b, co: pair.co, hint_skill: dir.hint_skill, why: dir.why })
           continue
         }
@@ -1217,7 +1200,7 @@ export class ProjectSubsystem {
     // apply 无害——计划未落盘就无悬空引用可言）。概念引用在 proposeSeed 受理门对
     // 登记表（铸名随种子 apply 同事务落盘）。
     let seedId: number | null = null
-    let planProposal: Awaited<ReturnType<LearnhubEngine['projects']['proposePlan']>> | null = null
+    let planProposal: Awaited<ReturnType<Projects['proposePlan']>> | null = null
     try {
       if (doc.seed) {
         seedId = ((await this.e.graphPropose('seed', YAML.stringify(doc.seed))) as { id: number }).id

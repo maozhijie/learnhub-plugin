@@ -1,6 +1,7 @@
 /**
  * Learner 域视图类型（E3/E1/校准画像/技能 lane/习惯/U4 周复盘；#152 刀 4 自 views.ts 归档）。
  */
+import type { JolBin, JolPrediction } from '../jol.ts'
 
 // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）
 

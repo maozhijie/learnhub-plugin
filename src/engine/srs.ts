@@ -12,6 +12,7 @@ import type { FSRS, Card, Grade } from 'ts-fsrs'
 import type { FsrsBlock, Fm } from './types.ts'
 import { STAGES } from './types.ts'
 import { parseDay, fmtDay, daysBetween } from './dates.ts'
+import { round2 } from './grading.ts'
 import { DESIRED_RETENTION, S_MASTER } from './params.ts'
 import { FSRS6_PARAM_COUNT } from './optimize.ts'
 import { latestFsrsParams } from './sediment.ts'
@@ -81,8 +82,8 @@ export function cardFromFm(fm: Fm | null): Card {
 export function fmFromCard(card: Card, fsOld: FsrsBlock | null, today: string): FsrsBlock {
   const fs: FsrsBlock = {
     ...(fsOld ?? { reps: 0, lapses: 0 }),
-    stability: Math.round(card.stability * 100) / 100,
-    difficulty: Math.round(card.difficulty * 100) / 100,
+    stability: round2(card.stability),
+    difficulty: round2(card.difficulty),
     due: fmtDay(card.due),
     last_review: today,
   }
@@ -166,13 +167,13 @@ export function previewDue(sched: FSRS, fsOld: FsrsBlock | null, ratingNum: numb
 export function masteryValue(fs: FsrsBlock | null, practice: { attempts: number; correct: number }, ema: number | undefined): number {
   const sComp = fs && fs.reps ? Math.min(1.0, fs.stability / (S_MASTER * 2)) : 0
   if (practice.attempts >= 1 && ema && ema > 0) {
-    return Math.round((0.7 * sComp + 0.3 * ema) * 100) / 100
+    return round2(0.7 * sComp + 0.3 * ema)
   }
   if (practice.attempts >= 3) {
     const acc = practice.correct / practice.attempts
-    return Math.round((0.7 * sComp + 0.3 * acc) * 100) / 100
+    return round2(0.7 * sComp + 0.3 * acc)
   }
-  return Math.round(sComp * 100) / 100
+  return round2(sComp)
 }
 
 /** 节点掌握度口径的唯一入口（图/树/学习包共用）：frontmatter → masteryValue。 */

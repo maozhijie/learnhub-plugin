@@ -1,3 +1,4 @@
+import { clamp01 } from './grading.ts'
 /**
  * A1 作答期难度微调（决议 #34 / 实施工单 #57）：已调度题「单节点会话」（复习该节点
  * 到期题 / Forgot 后重学 / 节点二刷补做）内的流式难度自适应选序。
@@ -23,7 +24,6 @@ export function combinedDifficulty(difficulty: number | undefined, fsrs: { diffi
   return 0.5 * staticN + 0.5 * fsrsN
 }
 
-const clamp01 = (x: number) => Math.min(1, Math.max(0, x))
 
 /** 起点先验：目标难度带（0–1）随节点 Mastery 单调上行——掌握越好，开场可越难；
  * Mastery 0 → 0.2（从基础题起），Mastery 1 → 0.8（不上顶，留升档空间）。 */

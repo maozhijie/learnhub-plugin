@@ -8,6 +8,15 @@
  * 不属于学习口径，继续用日历日。
  */
 
+/** 日毫秒数（UTC 日算术常量；原 11 处字面量 86400000 的唯一出处）。 */
+export const DAY_MS = 86400000
+
+/** ISO 时间戳 → 日历日 'YYYY-MM-DD'（取前 10 位；出处戳/统计窗口径——不是学习日，
+ * 学习口径用 dayOfTs 过日界。原 5 处散落的 `slice(0, 10)` 收敛于此单点）。 */
+export function calendarDayOf(ts: string): string {
+  return ts.slice(0, 10)
+}
+
 /** 本地今日 → 'YYYY-MM-DD'（学习日口径：减去日界后取本地日分量）。 */
 export function todayStr(now: Date = new Date(), cutoffMin = 0): string {
   const t = cutoffMin ? new Date(now.getTime() - cutoffMin * 60000) : now
@@ -20,7 +29,7 @@ export function todayStr(now: Date = new Date(), cutoffMin = 0): string {
 /** 本地 ISO 时间戳（nowIso 形态）→ 学习日 'YYYY-MM-DD'。cutoffMin=0 恒等 ts 前 10 位。 */
 export function dayOfTs(ts: string, cutoffMin = 0): string {
   const m = ts.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
-  if (!m) return ts.slice(0, 10) // 非 nowIso 形态：退化为日历日切片
+  if (!m) return calendarDayOf(ts) // 非 nowIso 形态：退化为日历日切片
   const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - cutoffMin * 60000)
   const y = d.getUTCFullYear()
   const mo = String(d.getUTCMonth() + 1).padStart(2, '0')
@@ -51,7 +60,7 @@ export function parseDay(s: string | null | undefined): Date | null {
   const m = s.trim().match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (!m) {
     const t = Date.parse(s.trim())
-    return Number.isNaN(t) ? null : new Date(Math.floor(t / 86400000) * 86400000)
+    return Number.isNaN(t) ? null : new Date(Math.floor(t / DAY_MS) * DAY_MS)
   }
   return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))
 }
@@ -66,14 +75,14 @@ export function fmtDay(d: Date): string {
 
 /** a - b 的天数（两侧均按 UTC 日零点语义）。 */
 export function daysBetween(a: Date, b: Date): number {
-  return Math.round((a.getTime() - b.getTime()) / 86400000)
+  return Math.round((a.getTime() - b.getTime()) / DAY_MS)
 }
 
 /** 'YYYY-MM-DD' + n 天 → 'YYYY-MM-DD'（维持节拍帽等日粒度推移；不可解析输入返回 null）。 */
 export function addDays(s: string | null | undefined, n: number): string | null {
   const d = parseDay(s)
   if (!d) return null
-  return fmtDay(new Date(d.getTime() + n * 86400000))
+  return fmtDay(new Date(d.getTime() + n * DAY_MS))
 }
 
 /** ISO 时间戳（秒精度，journal/practice 流水用）。 */
@@ -91,13 +100,13 @@ export function weekStartOf(day: string): string | null {
   const d = parseDay(day)
   if (!d) return null
   const shift = (d.getUTCDay() + 6) % 7 // Mon=0 .. Sun=6
-  return fmtDay(new Date(d.getTime() - shift * 86400000))
+  return fmtDay(new Date(d.getTime() - shift * DAY_MS))
 }
 
 /** 周一 → 周日（+6 天）。 */
 export function weekEndOf(weekStart: string): string | null {
   const d = parseDay(weekStart)
-  return d ? fmtDay(new Date(d.getTime() + 6 * 86400000)) : null
+  return d ? fmtDay(new Date(d.getTime() + 6 * DAY_MS)) : null
 }
 
 /** 相对 today 的上一完整学习周周一（today 所在周的周一往前推 7 天）。 */
@@ -105,7 +114,7 @@ export function prevWeekStartOf(today: string): string | null {
   const cur = weekStartOf(today)
   if (!cur) return null
   const d = parseDay(cur)!
-  return fmtDay(new Date(d.getTime() - 7 * 86400000))
+  return fmtDay(new Date(d.getTime() - 7 * DAY_MS))
 }
 
 /** 学习日是否落在 [weekStart, weekEnd]（字符串字典序即日序）。 */

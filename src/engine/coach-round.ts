@@ -22,10 +22,12 @@
  * 零依赖纯函数（接缝 S51）。
  */
 import { dayOfTs, parseDay, daysBetween } from './dates.ts'
+import { pctOf } from './grading.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import { SEDIMENT_KINDS } from './sediment.ts'
 import type { SedimentFold } from './sediment.ts'
 import { SANDBOX_NODE_EST_DEFAULT } from './sandbox.ts'
+import { nodeKeyOf } from './types.ts'
 import type { SandboxCard, SandboxCurvePoint, SandboxNode } from './sandbox.ts'
 import type { PracticeRec, ReviewRec, Misconception } from './types.ts'
 
@@ -229,7 +231,6 @@ export function behaviorDigest(input: DigestInput): BehaviorDigest {
 
 // ---- 行为摘要：区块体渲染 ----
 
-const pct = (x: number): string => `${Math.round(x * 100)}%`
 
 /** 行为摘要区块体（六区块包的第 2 块；轻量包第 1 块）。空窗 = 合法空态一行——
  * 区块本体仍在（定序稳定、轻量包恒两件），由组装方决定是否再加措辞。 */
@@ -245,7 +246,7 @@ export function renderBehaviorDigest(d: BehaviorDigest): string {
 
   lines.push('', '### 掌握轨迹')
   const days = d.trajectory.days.map(t =>
-    `  - ${t.day}：${t.attempts} 答${t.accuracy !== null ? `，正确率 ${pct(t.accuracy)}` : '（无判分）'}`)
+    `  - ${t.day}：${t.attempts} 答${t.accuracy !== null ? `，正确率 ${pctOf(t.accuracy)}` : '（无判分）'}`)
   if (days.length) lines.push(...days)
   else lines.push('  - （窗口内无已判分作答）')
   if (d.trajectory.trend) lines.push(`  - 趋势：${d.trajectory.trend === 'up' ? '升' : d.trajectory.trend === 'down' ? '降' : '平'}（窗口后半对照前半）`)
@@ -258,7 +259,7 @@ export function renderBehaviorDigest(d: BehaviorDigest): string {
     lines.push('- 窗口内无错误作答')
   } else {
     lines.push(`- 窗口错误 ${d.blockers.errors} 处：${d.blockers.by_concept.map(b => `${b.concept ?? '（未标注）'} ×${b.count}`).join('、')}`)
-    if (d.blockers.concentration !== null) lines.push(`- 集中度（最大概念份额）：${pct(d.blockers.concentration)}`)
+    if (d.blockers.concentration !== null) lines.push(`- 集中度（最大概念份额）：${pctOf(d.blockers.concentration)}`)
     for (const s of d.blockers.stalls) {
       lines.push(`- 停滞：${s.node} ${s.days} 天${s.last_correct ? `未答对（最近答对 ${s.last_correct}）` : '自首次作答从未答对'}`)
     }
@@ -271,7 +272,7 @@ export function renderBehaviorDigest(d: BehaviorDigest): string {
     lines.push('- （窗口内无可折算的作答耗时/est 数据）')
   }
   if (d.speed.jol.count > 0) {
-    lines.push(`- JOL「会」档：${d.speed.jol.count} 次中错 ${d.speed.jol.wrong}，过信率 ${pct(d.speed.jol.rate!)}`)
+    lines.push(`- JOL「会」档：${d.speed.jol.count} 次中错 ${d.speed.jol.wrong}，过信率 ${pctOf(d.speed.jol.rate!)}`)
   } else {
     lines.push('- JOL「会」档：窗口内无「会」预测样本')
   }
@@ -286,7 +287,7 @@ export function renderBehaviorDigest(d: BehaviorDigest): string {
   lines.push('', '### 保留率概况')
   // 真实保留率口径（trueRetention）：pass+fail>0 时 rate 必非 null
   lines.push((d.retention.pass + d.retention.fail) > 0
-    ? `- 窗口内到期复习 ${d.retention.pass + d.retention.fail} 次：通过 ${d.retention.pass}、失手 ${d.retention.fail}，真实保留率 ${pct(d.retention.rate!)}`
+    ? `- 窗口内到期复习 ${d.retention.pass + d.retention.fail} 次：通过 ${d.retention.pass}、失手 ${d.retention.fail}，真实保留率 ${pctOf(d.retention.rate!)}`
     : '- 窗口内无到期复习记录')
   return lines.join('\n')
 }
@@ -395,7 +396,7 @@ export function arbitrationPopulations(
       practice: { attempts: 0, correct: 0 },
       started: false, skipped: false,
     })
-    extraCards.push({ key: `node:${course}/${a.name}`, course, node: a.name, kind: 'node', fs: null })
+    extraCards.push({ key: `node:${nodeKeyOf(course, a.name)}`, course, node: a.name, kind: 'node', fs: null })
   }
   return {
     before: { nodes, cards },
@@ -417,7 +418,7 @@ export function renderArbitrationEvidence(input: {
   after: SandboxCurvePoint[]
 }): string {
   const band = (xs: SandboxCurvePoint[]): string =>
-    xs.map(p => `W${p.week} p50=${pct(p.p50)}/p80=${pct(p.p80)}`).join(' · ')
+    xs.map(p => `W${p.week} p50=${pctOf(p.p50)}/p80=${pctOf(p.p80)}`).join(' · ')
   return [
     '## 双沙盘推演（终审参照——模型推演，非承诺）', '',
     `- 分歧声明（全量段）：${input.disagreement || '（未携带声明原文）'}`,

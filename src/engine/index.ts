@@ -95,7 +95,7 @@ import { atomicWrite} from './io.ts'
 import { assertSchemaVersion} from './schema.ts'
 import type { SchemaBlock} from './schema.ts'
 import type { SedimentEvent, SedimentFold, SedimentKind, SedimentTier} from './sediment.ts'
-import { revealAnswer} from './grading.ts'
+import { revealAnswer, pctOf } from './grading.ts'
 import { auditQuestion} from './question-hygiene.ts'
 import type { QuestionAuditReport} from './question-hygiene.ts'
 import { parseSectionTitle} from '../../shared/content-renderers.ts'
@@ -280,7 +280,6 @@ export class LearnhubEngine {
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
-      scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
       loadPrompt: kind => this.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
@@ -302,12 +301,11 @@ export class LearnhubEngine {
       graphPropose: (kind, yamlText) => this.graphPropose(kind, yamlText),
       nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
-      refreshSourceFingerprints: absPaths => this.refreshSourceFingerprints(absPaths),
     })
     this.bank2 = new BankSubsystem({
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, errorCards: this.errorCards, concepts: this.concepts,
-      proposals: this.proposals, content: Content, schedCache: this.schedCache,
+      proposals: this.proposals, schedCache: this.schedCache,
       sched: courseRoot => this.sched(courseRoot),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
@@ -354,23 +352,14 @@ export class LearnhubEngine {
       isNoteSourceCourse: courseKey => this.isNoteSourceCourse(courseKey),
       jolConfig: () => this.jolConfig(),
       jolPredicted: p => this.jolPredicted(p),
-      judgeBankAnswer: (llmComplete, q, answer, op, ref) => this.judgeBankAnswer(llmComplete, q, answer, op, ref),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      logGradingFailure: rec => this.logGradingFailure(rec),
-      nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
       nof1QueueEffect: today => this.nof1QueueEffect(today),
       noteSourceAnswer: (llmComplete, sourceId, qid, answer, opts) => this.noteSourceAnswer(llmComplete, sourceId, qid, answer, opts),
       noteSourceForget: (sourceId, qid) => this.noteSourceForget(sourceId, qid),
       noteSourceRate: (sourceId, qid, r) => this.noteSourceRate(sourceId, qid, r),
-      questionContext: (courseKey, node, qid, op) => this.questionContext(courseKey, node, qid, op),
-      questionView: (q, i, opts) => this.questionView(q, i, opts),
-      refreshRepCard: (c, graph, node) => this.refreshRepCard(c, graph, node),
-      resolveNote: (vaultRoot, input, centerRel) => this.resolveNote(vaultRoot, input, centerRel),
-      saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
       sched: courseRoot => this.sched(courseRoot),
       updateNoteFm: (path, fm) => this.updateNoteFm(path, fm),
-      vaultPriorFor: (graph, node) => this.vaultPriorFor(graph, node),
     })
     this.sched2 = new SchedSubsystem({
       store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
@@ -383,35 +372,17 @@ export class LearnhubEngine {
       loadView: course => this.loadView(course),
       scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
       sched: courseRoot => this.sched(courseRoot),
-      sedimentAppend: (kind, tier, payload, concept) => this.sedimentAppend(kind, tier, payload, concept),
-      sedimentFold: () => this.sedimentFold(),
-      sedimentRebuildProfile: () => this.sedimentRebuildProfile(),
     })
     this.growth2 = new GrowthSubsystem({
       store: this.store, paths: this.paths, registry: this.registry,
       concepts: this.concepts, content: this.content,
-      coachCheckFor: (c, today) => this.coachCheckFor(c, today),
-      coachContextPack: (courseKey, opts) => this.coachContextPack(courseKey, opts),
-      coachFrontier: (graph, state) => this.coachFrontier(graph, state),
-      compassEtaFold: (c, anchor, today, weekStart) => this.compassEtaFold(c, anchor, today, weekStart),
-      compassRead: courseKey => this.compassRead(courseKey),
-      compassTail: courseKey => this.compassTail(courseKey),
       enabledCourses: () => this.enabledCourses(),
       graphApply: (kind, pid) => this.graphApply(kind, pid),
       graphPropose: (kind, yamlText) => this.graphPropose(kind, yamlText),
       graphReject: (pid, note) => this.graphReject(pid, note),
-      growthGraphView: (graph, state) => this.growthGraphView(graph, state),
-      growthTallies: (proposals, cutoff) => this.growthTallies(proposals, cutoff),
-      invokesResolver: c => this.invokesResolver(c),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       mcAggregate: (plan, cards, nodes, today, scheds, fallbackCourse) => this.mcAggregate(plan, cards, nodes, today, scheds, fallbackCourse),
-      parseGrowthVerdict: raw => this.parseGrowthVerdict(raw),
-      probationFrame: (c, today, cutoff) => this.probationFrame(c, today, cutoff),
-      probationViewFor: (c, today, cutoff) => this.probationViewFor(c, today, cutoff),
-      pruneProbationNode: (c, graph, entry, metric, detail) => this.pruneProbationNode(c, graph, entry, metric, detail),
-      recheckMetricOf: (c, proposals, entry) => this.recheckMetricOf(c, proposals, entry),
-      recordRecheckOutcome: (c, entry, ctx) => this.recordRecheckOutcome(c, entry, ctx),
       sandboxPopulation: (courses, nodeFilter) => this.sandboxPopulation(courses, nodeFilter),
       scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
       sedimentFold: () => this.sedimentFold(),
@@ -1645,7 +1616,7 @@ export class LearnhubEngine {
     const mastery = masteryOfFm(fm)
     const lines: string[] = []
     lines.push(`# 课程上下文：${c.name} / ${node}`)
-    lines.push(`- 区/块：${graph.blockOf[node][1]} · ${graph.blockOf[node][2]}；深度 L${(graph.depth[node] ?? 0) + 1}；阶段：${fm?.stage ?? 'unknown'}；掌握度：${Math.round(mastery * 100)}%`)
+    lines.push(`- 区/块：${graph.blockOf[node][1]} · ${graph.blockOf[node][2]}；深度 L${(graph.depth[node] ?? 0) + 1}；阶段：${fm?.stage ?? 'unknown'}；掌握度：${pctOf(mastery)}`)
     const note = graph.noteOf[node]
     if (note) lines.push(`- note：${note}`)
     const [, regionName] = graph.blockOf[node]

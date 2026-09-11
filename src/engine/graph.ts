@@ -6,7 +6,7 @@
  * Graph 构造不因重名/断边/环崩溃：派生邻接表、拓扑序（环检测）、深度、可达集、
  * 传递约简边、连通分量、就绪判定，语义与 Python 版逐项对齐。
  */
-import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './io.ts'
@@ -264,8 +264,7 @@ export class GraphStore {
   }
 
   async writeRegionDoc(path: string, region: GRegion): Promise<void> {
-    await mkdir(path.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-    await writeFile(path, YAML.stringify(this.regionDoc(region)), 'utf8')
+    await atomicWrite(path, YAML.stringify(this.regionDoc(region))) // 与 applyEnrich 同一原语（ADR-0046：同一正典一种 durability）
   }
 }
 

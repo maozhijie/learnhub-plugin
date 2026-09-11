@@ -21,9 +21,10 @@
  * 计数/EMA（调度仍走 D15 settle）。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
-import { normChoice, numericOf } from './grading.ts'
+import { clamp01, normChoice, numericOf } from './grading.ts'
 import type { AlloKind } from './grading.ts'
 import type { FsrsBlock } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -35,7 +36,8 @@ import type { BrokenNote } from './notes.ts'
 import { asFm, loadNote, saveNote } from './notes.ts'
 import type { FSRS } from 'ts-fsrs'
 import { NOTE_SOURCE_COURSE } from './types.ts'
-import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, AdviceDismissRec, NoteSourceEntry, GRegion } from './types.ts'
+import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, NoteSourceEntry, GRegion } from './types.ts'
+import type { AdviceDismissRec } from './bank-advice.ts'
 import type { LlmComplete } from './llm.ts'
 import type { ExplainPoint } from './explain.ts'
 import { advanceStrict } from './advance.ts'
@@ -298,8 +300,7 @@ export class QuestionBank {
     if (v.errors) throw new Error(`[question-save] schema 校验失败，题库未写入。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec!
     const p = this.bankPath(courseRoot, spec.node)
-    await mkdir(p.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
     return { node: spec.node, count: spec.questions.length, path: p }
   }
 
@@ -317,8 +318,7 @@ export class QuestionBank {
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
     const p = this.bankPath(courseRoot, node)
-    await mkdir(p.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
   }
 
   /** 追加单题 → 新题 id 与题库总题数。 */
@@ -484,7 +484,7 @@ export interface BankDeps {
   saveNodeNote(path: string, fm: Fm, body: string): Promise<void>
   vaultPriorFor(graph: Graph, node: string): Promise<string>
   logGradingFailure(rec: { course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string }): Promise<void>
-  questionContext(courseKey: string | undefined, node: string, qid: string, op: string): Promise<Record<string, unknown>>
+  questionContext(courseKey: string | undefined, node: string, qid: string, op: string): Promise<{ c: CourseEntry; graph: Graph; q: BankQuestion; idx: number }>
   exerciseGated(c: CourseEntry, node: string): Promise<boolean>
   repairInvokesOnce(llm: LlmComplete, items: unknown[], scope: string[]): Promise<number>
   admitQuestion(root: string, node: string, q: Record<string, unknown>, stem: string, existingStems: Array<{ q: string; kind?: string; difficulty?: number }>): Promise<{ verdict: 'added' } | { verdict: 'duplicate'; against: string } | { verdict: 'invalid' }>
@@ -1094,7 +1094,7 @@ export class BankSubsystem {
     const note = await this.e.nodeNote(c, graph, node)
     let fmAfter = note.fm
     if (note.fm && evidenceChange) {
-      const round3 = (x: number) => Math.round(Math.min(1, Math.max(0, x)) * 1000) / 1000
+      const round3 = (x: number) => Math.round(clamp01(x) * 1000) / 1000
       const practice = {
         attempts: Math.max(0, note.fm.practice.attempts + (resolution === 'rekey' ? 0 : -1)),
         correct: Math.max(0, note.fm.practice.correct + (correctNow ? 1 : 0)),
@@ -1389,7 +1389,7 @@ export class BankSubsystem {
     if (!graph.nset.has(node)) throw new Error(`[interactive] 节点「${node}」不在图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'interactive')
     if (!Number.isFinite(score)) throw new Error('[interactive] score 必须是数字。')
-    const clamped = Math.min(1, Math.max(0, score))
+    const clamped = clamp01(score)
     const qid = `interactive:${sectionId}`
     const { today, cutoff } = await this.e.learningDay()
     const played = (await this.e.store.practiceAll()).some(r =>

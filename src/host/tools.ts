@@ -8,7 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
-import { llmSeam } from './llm.ts'
+import { llmSeam, llmView } from './llm.ts'
 import { run, stripFences } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import {

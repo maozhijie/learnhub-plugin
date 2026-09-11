@@ -11,7 +11,6 @@
  * （门面 refreshSourceFingerprints）——引擎自己的写不算内容漂移，漂移只留给
  * 引擎之外的手改。
  */
-import { mkdir } from 'node:fs/promises'
 import { OUTPUT_DIR_NAME, safeFilename } from './paths.ts'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
@@ -50,7 +49,6 @@ export async function writeOutputArtifact(
   }
   const file = outputArtifactFile(artifact.file)
   const dir = paths.outputKindDir(artifact.kind)
-  await mkdir(dir, { recursive: true })
   const md = `---\n${YAML.stringify(artifact.fm).trimEnd()}\n---\n\n${artifact.body.trimEnd()}\n`
   const path = `${dir}/${file}`
   await atomicWrite(path, md)

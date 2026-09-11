@@ -11,6 +11,7 @@ import { graphHealthScore, estSpreadNote } from './health.ts'
 import { floatNodes, jumpCandidates } from './quality.ts'
 import type { JumpCandidate } from './quality.ts'
 import { parseDay, todayStr, daysBetween } from './dates.ts'
+import { round2 } from './grading.ts'
 import { masteryOfFm } from './srs.ts'
 import { hasReadyContent } from './notes.ts'
 import type { VaultLinkCandidateView } from './vault-links.ts'
@@ -192,7 +193,7 @@ export async function analyzeGraph(
   const jumps = jumpCandidates(graph)
   const mergeBlocks = topBlocks(blocks, b => b.nodes < 3, sugCap)
   const unconverged = blocks
-    .map(b => ({ ...b, avg_pre: Math.round((b.preSum / b.nodes) * 100) / 100 }))
+    .map(b => ({ ...b, avg_pre: round2(b.preSum / b.nodes) }))
     .filter(b => b.avg_pre < 1.5)
     .sort((a, b) => a.avg_pre - b.avg_pre)
     .slice(0, sugCap)

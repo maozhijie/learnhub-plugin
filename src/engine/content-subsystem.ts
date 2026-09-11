@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, rename } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 /**
  * Content 子系统（#152 刀 8 / ADR-0043）：内容管线、笔记 resolve/反馈区、课程工作区
  * 与题库树。
@@ -17,7 +18,7 @@ import type { Store } from './store.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
 import type { QuestionBank, BankQuestion } from './question-bank.ts'
-import type { Content } from './content.ts'
+import { Content } from './content.ts'
 import { shuffled } from './shuffle.ts'
 import type { Sessions } from './sessions.ts'
 import type { LearnerCards } from './learner-cards.ts'
@@ -70,7 +71,7 @@ import { effectiveStage } from './audit.ts'
 import { calibrationHintText, overconfidenceOf } from './calibration.ts'
 import type { ComplexityTier } from './complexity.ts'
 import { nodeTierOf, sectionTierLabel } from './complexity.ts'
-import { OPEN_QUESTION_GRADING_SYSTEM, PASS_SCORE, REFLECTION_GRADING_SYSTEM, answerDiff, applyPracticeEvidence, evaluateAllo, parseOpenGrading, parseReflectionGrading, revealAnswer } from './grading.ts'
+import { OPEN_QUESTION_GRADING_SYSTEM, PASS_SCORE, REFLECTION_GRADING_SYSTEM, answerDiff, applyPracticeEvidence, clamp01, evaluateAllo, parseOpenGrading, parseReflectionGrading, revealAnswer } from './grading.ts'
 import { safeFilename } from './graph.ts'
 import { jolDeviatedKeys, pickJolTargets } from './jol.ts'
 import type { LearnerCardDoc } from './learner-cards.ts'
@@ -80,10 +81,10 @@ import { asFm, loadNote, saveNote } from './notes.ts'
 import { CALIBRATION_BOOST_SAMPLE_RATE, FSRS_DIFFICULTY_MID, XP_GUESS_SECONDS } from './params.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
+import { sourceKeyOf } from './types.ts'
 import type { FsrsBlock, ReviewRec, SectionManifest } from './types.ts'
 import { priorSection, priorTerms, searchVaultPrior } from './vault-prior.ts'
 import type { AnswerResult, LessonDoc, QuestionForgetResult, QuestionRateResult, QuestionsDoc, QueueItem, ReviewQueueDoc, TreeDoc } from './views/content.ts'
-import type { AnswerResult, QuestionForgetResult, QuestionRateResult } from './views/content.ts'
 import { xpForAnswer } from './xp.ts'
 import { YAML } from './yaml.ts'
 export class ContentSubsystem {
@@ -178,8 +179,7 @@ export class ContentSubsystem {
     const courseRoot = this.e.paths.courseRoot(c.root)
     for (const f of split.files) {
       const target = `${courseRoot}/${f.rel}`
-      await mkdir(target.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-      await writeFile(target, f.html, 'utf8')
+      await atomicWrite(target, f.html)
     }
     const fixed = Content.fixRichBlocks((await this.e.content.fixAliases(c.root, split.body)).body)
     const gate = await this.e.content.gateReport(graph, c.root, node, fixed)
@@ -231,8 +231,7 @@ export class ContentSubsystem {
       const [, regionName] = graph.blockOf[node]
       const path = this.e.paths.courseNotePath(c.root, regionName, node)
       const backup = `${trashBase}/${c.root}/课程/${safeFilename(regionName)}/${safeFilename(node)}.md`
-      await mkdir(backup.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-      await writeFile(backup, await readFile(path, 'utf8'), 'utf8')
+      await atomicWrite(backup, await readFile(path, 'utf8'))
       const { fm } = await loadNote(path)
       await saveNote(path, {
         ...((fm ?? {}) as Record<string, unknown>),
@@ -626,7 +625,7 @@ export class ContentSubsystem {
       if (hintOn) calibrationHint = calibrationHintText(verdict)
       const deviated = jolDeviatedKeys(practice)
       const candidates = jolEligible.map(c => ({
-        key: `${c.course}/${c.node}/${String(c.id)}`,
+        key: sourceKeyOf(String(c.course), String(c.node), String(c.id)),
         r: c.r as number,
         difficulty: c.difficulty as number | undefined,
       }))
@@ -642,10 +641,10 @@ export class ContentSubsystem {
     // → 目标难度带，再叠加显式带偏移（挑战抬高/简单放宽）；初始顺序按距先验带
     // 距离升序（会话内流式调整由会话方以纯规则驱动）。
     if (node !== undefined) {
-      const band = Math.min(1, Math.max(0,
+      const band = clamp01(
         startBand(mastery) + bandOffset(bandPref
           ?? (expEffect?.variable === 'band_default' ? expEffect.arm as BandPref : undefined)
-          ?? defaultBand)))
+          ?? defaultBand))
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
         cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band),
         ...(calibrationHint ? { calibration_hint: calibrationHint } : {}) }
