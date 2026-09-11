@@ -77,3 +77,5 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 架构门（2026-09-11 新增，ADR-0042 / #152 刀 1；`tests/import-rules.test.ts`）：
 
 - 分层依赖规则执法，随 `npm test` 全量必跑：R1 host 的 engine 导入只走门面、R2 engine 禁引宿主、R3 engine 禁引 `@deepseek-ai/*`、R4 views 纯类型、R5 io.ts 零相对导入叶子、R6 门面唯一汇点（engine 子模块不回引 engine/index.ts）、R7 src 相对 import 全图零环（含 type-only 与动态导入边）。R3 带自检：收集器须能看见裸包/作用域包说明符（曾出现只收相对说明符致 R3 恒过的实测缺陷，自检锁死）。行级收集相对导入（静态/type/侧效/export-from/动态）+ DFS；说明符解析带 .ts 直用、否则补 .ts、否则补 /index.ts。刀 1 随门落地两处解环先例：receipts 用本地 ReceiptStore 结构化窄面（receipts 不 import store）、周折叠函数族归位 dates.ts（sediment 改引 dates，kata 原路径 re-export 保 S45 接缝）。
+
+单一出处门（#172；`tests/dedup-convergence.test.ts`）：七组重复实现收敛的对照测试 + 文本门——每位数值工具/键标识/常量收敛后的出处（grading 的 round2·clamp01·pctOf、dates 的 DAY_MS·calendarDayOf、types 的 sourceKeyOf·parseSourceKey·nodeKeyOf·PROPOSAL_STATUSES）与其收敛前参考公式逐值对照；文本扫描断言七组模式（含「pctOf 后拼字面百分号」的 %% 回归）在出处模块外零残留，剥注释扫描、每门带「必然违规样本」自检。两段节点键 `${course}/${node}` 不设文本门（与 `${dir}/${file}` 路径拼接文本不可区分，误咬更坏），由调用点改造与对照覆盖；键标识本体住 types.ts 中立词汇层、anki 原路径 re-export 保接缝（S35 所指 anki.ts 导入仍有效）。

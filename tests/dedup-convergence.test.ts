@@ -145,6 +145,13 @@ test('单一出处门：七组收敛模式在出处外零残留', () => {
     // 两段节点键 `${course}/${node}` 不设文本门：与 `${dir}/${file}` 一类合法路径
     // 拼接在文本上不可区分（误咬比漏咬更坏）；收敛由调用点改造 + 对照测试覆盖。
     {
+      // pctOf 自带 %，调用点再拼字面 % 会输出 %%（收敛期实测回归，门锁死）
+      label: 'pctOf 后拼字面百分号',
+      re: /pctOf\([^\n)]*\)\}?%/,
+      home: 'grading.ts',
+      bad: 'const s = `正确率 ${pctOf(x)}%`',
+    },
+    {
       label: '提案状态字面量数组',
       re: /\['pending', 'applied', 'rejected'\]/,
       home: 'types.ts',

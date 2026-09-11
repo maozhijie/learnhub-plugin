@@ -1645,7 +1645,7 @@ export class LearnhubEngine {
     const mastery = masteryOfFm(fm)
     const lines: string[] = []
     lines.push(`# 课程上下文：${c.name} / ${node}`)
-    lines.push(`- 区/块：${graph.blockOf[node][1]} · ${graph.blockOf[node][2]}；深度 L${(graph.depth[node] ?? 0) + 1}；阶段：${fm?.stage ?? 'unknown'}；掌握度：${pctOf(mastery)}%`)
+    lines.push(`- 区/块：${graph.blockOf[node][1]} · ${graph.blockOf[node][2]}；深度 L${(graph.depth[node] ?? 0) + 1}；阶段：${fm?.stage ?? 'unknown'}；掌握度：${pctOf(mastery)}`)
     const note = graph.noteOf[node]
     if (note) lines.push(`- note：${note}`)
     const [, regionName] = graph.blockOf[node]

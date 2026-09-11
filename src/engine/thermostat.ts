@@ -99,7 +99,7 @@ export function thermostatSuggestions(input: {
       id: 'band_default:standard',
       knob: 'band_default',
       title: '目标难度带默认值',
-      text: `最近 ${THERMOSTAT_WINDOW_DAYS} 天你的复习会话 ${pctOf(bands.shares.easy)}% 都选了简单带，而到期复习的真实保留率高达 ${pctOf(retention.rate)}%——「可用的困难」还有余量。要不要把会话的默认难度带设为「标准」？你随时可以在会话里显式选带覆盖默认。`,
+      text: `最近 ${THERMOSTAT_WINDOW_DAYS} 天你的复习会话 ${pctOf(bands.shares.easy)} 都选了简单带，而到期复习的真实保留率高达 ${pctOf(retention.rate)}——「可用的困难」还有余量。要不要把会话的默认难度带设为「标准」？你随时可以在会话里显式选带覆盖默认。`,
       apply: { config: 'band_default', value: 'standard' },
     })
   }
@@ -109,7 +109,7 @@ export function thermostatSuggestions(input: {
       id: 'band_default:standard',
       knob: 'band_default',
       title: '目标难度带默认值',
-      text: `最近 ${THERMOSTAT_WINDOW_DAYS} 天你的复习会话 ${pctOf(bands.shares.hard)}% 都在挑战带，但到期复习的真实保留率只有 ${pctOf(retention.rate)}%——当心的困难正在变成受伤的困难。要不要把会话的默认难度带回落到「标准」？先回补前置与成分技能的到期复习也会有帮助。`,
+      text: `最近 ${THERMOSTAT_WINDOW_DAYS} 天你的复习会话 ${pctOf(bands.shares.hard)} 都在挑战带，但到期复习的真实保留率只有 ${pctOf(retention.rate)}——当心的困难正在变成受伤的困难。要不要把会话的默认难度带回落到「标准」？先回补前置与成分技能的到期复习也会有帮助。`,
       apply: { config: 'band_default', value: 'standard' },
     })
   }
