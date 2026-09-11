@@ -11,6 +11,7 @@ import { createHash } from 'node:crypto'
 import { YAML } from './yaml.ts'
 import { Store } from './store.ts'
 import { atomicWrite } from './io.ts'
+import { runWriteUnit } from './write-unit.ts'
 import { Graph, GraphStore, loadRegionDoc, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc, structureCheck } from './graph.ts'
 import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflicts, namesOf, validateConceptEntry } from './concepts.ts'
 import type { ConceptEntry, ConceptRef } from './concepts.ts'
@@ -1026,7 +1027,7 @@ export class GraphProposals {
     const graph = new Graph(regions)
     const missing = enrichMissingTargets(spec.fields, graph)
     if (missing.length) throw new Error(`[apply-enrich] 目标节点已不在图内：${missing.join('、')}。`)
-    // 写正典：enc 整体替换 + 受影响区文件重写（同事务：快照/覆盖层留痕只在全部写成功后）
+    // 内存侧先算好各区重写文本（不是落盘动作；落盘步骤见下方写入单元声明）
     const touched = new Map<string, string>() // 区名 → 重写后的文件文本（算指纹用）
     for (const f of spec.fields) {
       const regionName = graph.blockOf[f.node][1]
@@ -1040,31 +1041,67 @@ export class GraphProposals {
     }
     const regionFiles = await store.regionFiles()
     const fileHashes = new Map<string, string>()
-    for (const [regionName, text] of touched) {
-      const abs = regionFiles[regionName]
-      if (!abs) throw new Error(`[apply-enrich] 区「${regionName}」没有对应 data/*.yaml。`)
-      await atomicWrite(abs, text)
-      fileHashes.set(regionName, sha256(text))
-    }
-    // 覆盖层留痕（state/覆盖层.jsonl，追加只增；读侧只读正典，这里只是审计与出处）
-    const now = new Date(this.clock!.nowMs()).toISOString()
-    const lines = spec.fields.map(f => JSON.stringify({
-      target: f.node,
-      field: 'enc',
-      value: f.enc,
-      content_hash: fileHashes.get(graph.blockOf[f.node][1]),
-      applied_at: now,
-    }))
-    await mkdir(this.paths.courseStateDir(root), { recursive: true })
-    await appendFile(this.paths.overlayPath(root), lines.join('\n') + '\n', 'utf8')
-    const regions2 = await store.load()
-    const version = (await this.store.latestSnapshotVersion(course.name)) + 1
-    await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
-    await this.store.appendJournal({
-      course: course.name, node: '*', rating: null, kind: 'graph_enrich', elapsed_days: 0,
-      session: String(prop.id), detail: spec.fields.map(f => `enc(${f.node})×${f.enc.length}`).join('；'),
+    // 写入单元（#176）：写序照今天的声明——受影响区正典重写 → 覆盖层留痕 → 快照 →
+    // journal(graph_enrich) → 提案 applied（覆盖层/快照只在全部正典写成功后）。
+    // 指纹复核（上方）就是防重放门：部分 apply 后重放必被拒收。失败上抛中止，
+    // 不回滚不续跑，失败不写 journal；恢复 = reject 后基于新正典重提。
+    let version = 0
+    await runWriteUnit('applyEnrich', {
+      clock: this.clock!,
+      journal: rec => this.store.appendJournal(rec),
+      steps: [
+        {
+          name: '受影响区正典重写',
+          run: async () => {
+            for (const [regionName, text] of touched) {
+              const abs = regionFiles[regionName]
+              if (!abs) throw new Error(`[apply-enrich] 区「${regionName}」没有对应 data/*.yaml。`)
+              await atomicWrite(abs, text)
+              fileHashes.set(regionName, sha256(text))
+            }
+          },
+        },
+        {
+          name: '覆盖层留痕',
+          run: async () => {
+            // state/覆盖层.jsonl，追加只增；读侧只读正典，这里只是审计与出处
+            const now = new Date(this.clock!.nowMs()).toISOString()
+            const lines = spec.fields.map(f => JSON.stringify({
+              target: f.node,
+              field: 'enc',
+              value: f.enc,
+              content_hash: fileHashes.get(graph.blockOf[f.node][1]),
+              applied_at: now,
+            }))
+            await mkdir(this.paths.courseStateDir(root), { recursive: true })
+            await appendFile(this.paths.overlayPath(root), lines.join('\n') + '\n', 'utf8')
+          },
+        },
+        {
+          name: '快照',
+          run: async () => {
+            const regions2 = await store.load()
+            version = (await this.store.latestSnapshotVersion(course.name)) + 1
+            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
+          },
+        },
+        {
+          name: 'journal graph_enrich',
+          run: async () => {
+            await this.store.appendJournal({
+              course: course.name, node: '*', rating: null, kind: 'graph_enrich', elapsed_days: 0,
+              session: String(prop.id), detail: spec.fields.map(f => `enc(${f.node})×${f.enc.length}`).join('；'),
+            })
+          },
+        },
+        {
+          name: '提案 applied',
+          run: async () => {
+            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `快照 v${version}` })
+          },
+        },
+      ],
     })
-    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `快照 v${version}` })
     return {
       course: course.name,
       fields: spec.fields.length,
