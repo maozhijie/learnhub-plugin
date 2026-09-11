@@ -2942,7 +2942,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "noteSourceGenerate(\"1\",1,async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+   "noteSourceGenerate(\"1\",1,async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -2968,7 +2968,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "noteSourceGenerate(\"1\",6,async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+   "noteSourceGenerate(\"1\",6,async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -3269,7 +3269,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardGenerate(\"1\",{\"node\":\"1\",\"max\":1},async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+   "errorCardGenerate(\"1\",{\"node\":\"1\",\"max\":1},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -3297,7 +3297,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardGenerate(\"1\",{\"max\":1},async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+   "errorCardGenerate(\"1\",{\"max\":1},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -3311,7 +3311,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardGenerate(\"1\",{\"node\":\"1\"},async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+   "errorCardGenerate(\"1\",{\"node\":\"1\"},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -3653,7 +3653,7 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "questionGenerate(\"1\",\"1\",1,async (prompt)=>stripFences(await complete(prompt)),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
+   "questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "coachCheckpoint(\"queue_idle\",undefined)"
@@ -3716,7 +3716,7 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在按学习者意见重出新题…\"}])",
-   "questionGenerate(\"1\",\"1\",1,async (prompt)=>stripFences(await complete(prompt)),{\"instruction\":\"1\"})",
+   "questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"instruction\":\"1\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "coachCheckpoint(\"queue_idle\",undefined)"
@@ -3744,7 +3744,7 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "questionGenerate(\"1\",\"1\",1,async (prompt)=>stripFences(await complete(prompt)),{\"section\":{\"id\":\"1\",\"title\":\"1\"}})",
+   "questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "coachCheckpoint(\"queue_idle\",undefined)"
@@ -3772,7 +3772,7 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "questionGenerate(\"1\",\"1\",undefined,async (prompt)=>stripFences(await complete(prompt)),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
+   "questionGenerate(\"1\",\"1\",undefined,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "coachCheckpoint(\"queue_idle\",undefined)"

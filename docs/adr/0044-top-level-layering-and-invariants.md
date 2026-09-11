@@ -19,7 +19,10 @@
 - **顶层不变量：只有教练层能改图，且必经提案门。** 其余各层只写自己的正典。实测今天在**模块粒度已经成立**：唯一写 `data/*.yaml` 的原语是 `graph.ts:266` 的 `GraphStore.writeRegionDoc`，唯一调用者是 `proposals.ts`（`:688` `applyEdit`、`:888`／`:891` `applySeed`；另一路径 `:1044` `applyEnrich` 直写原子）。登记两处松动、**不就地改**：① `writeRegionDoc` 是 public 且非原子，结构上拦不住新调用者；② `graphApply('enrich')` 从 `growth-subsystem.ts:907`、`projects.ts:1277` 绕过 `graphApply` 包装直调 `proposals.*`。判据取「谁能调用图写原语」：**门白名单＝`proposals.ts`**——今天即绿，不需要棘轮（门清单见 ADR-0047）。
 - **缝住哪一层、谁拥有 dsh 耦合**（补 ADR-0041 的归属，**不重裁其形状**）：ADR-0041 已定缝的形状（`complete()` 单发 + `agentLoop()` 有界工具回路、回路预算 K≤6 + 1 门错修复轮、教练工具面＝只读引擎视图白名单），缺的是归属。裁决：**端口住应用层、实现住适配器、装配住投递层**——`engine/llm.ts` 已有 `LlmComplete`，**照同一形状新增 `LlmStream` 端口**；`engine/agent.ts` 是应用层的端口消费者（实现 `complete()` 与 `agentLoop()`，含只读引擎视图白名单与 K 轮预算）；**dsh 耦合 100% 收在 `host/llm.ts` 这一个适配器文件**（`@deepseek-ai/dsh-llm`／`cordis` 的引用点不增加）；`src/index.ts` 只做构造与注入。R3「engine 禁 import `@deepseek-ai/*`」原样成立，且**从此就是域／应用与适配器的分界线**。
 - **为什么 `agentLoop()` 不搬适配器**：白名单是「只读**引擎视图**」这一引擎概念，回路又只在生成队列任务内运行（队列是应用与宿主共有的机制）——搬走会让 ADR-0041 上述两条字面裁决同时失效，并把 #163 的教练回路推成跨包重构。多一个与既有端口同形的类型，成本远低于此。
-- **`stripFences` 的 9 处接线**是适配器行为（补全结果的文本后处理）散在投递层，随缝一并归位；登记为已知缺口，不在本 ADR 施工。
+- **`stripFences` 的 9 处接线**是适配器行为（补全结果的文本后处理）散在投递层，随缝一并归位；登记为已知缺口，不在本 ADR 施工。**归位完成（#175 阶段③，2026-09-11）**：机械站补全缝 `llmSeamStripped` 收口在 `host/llm.ts`（适配器层），jobs／handlers／tool-handlers 的投递层接线不再各自 import `stripFences` 手工包裹；`stripFences` 定义住 `engine/agent.ts`（缝本体，策略站内建）不变。
+- **两处不变量松动的裁决（#175 阶段③，2026-09-11）**：
+  1. **`writeRegionDoc` 的 public 面：保留 public，以 G6 门执法。** TS 访问修饰符表达不了「仅 proposals.ts 可调用」——GraphStore 必须在 engine 内可构造（proposals 与 loadView 各自现建），语言层没有「仅指定模块可调」的可见面；原语本体已原子（ADR-0046 第一刀落地），可执行的白名单执法就是 G6 文本门本身（精确匹配、带自检）。再叠「可见面 + 白名单」双锁没有增量执法力，不设。
+  2. **联合受理直调 `applySeed`：归位到 `graphApply` 包装。** 包装贯通 `{ pairApply?, today? }`，projects 联合受理（#149 双提案）改走 `graphApply('seed', pid, { pairApply: true, today })`，不再直调 `proposals.applySeed`（ProjectDeps 的窄面 Pick 相应收窄为 `'reject'`）；growth-subsystem 侧的原登记点已在 #157/#162 重构中自然消除（自动剪除走 graphPropose/graphApply/graphReject 包装）。
 - **「同事务」属应用层**：写入单元的编排（顺序 + 幂等 + journal）是应用关注点；落盘的原子原语属适配器关注点（见 ADR-0046）。
 - **三件不要做**：
   - **不引通用工作流／事件溯源框架**：32 处「同事务」顺序约定是**领域知识**（哪一处先写、为何先写，只有该域说得清），不是框架缺口；现有 append-only 流水 + 幂等重放已够用。引框架要先把领域顺序重表达成配置，收益为负。

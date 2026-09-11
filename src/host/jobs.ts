@@ -5,7 +5,7 @@
  * 读写，本文件零模块级可变状态；队列语义零改动（FIFO、可取消、重启可恢复、阻尼）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, TIER_LABELS, genericQuizTarget, tierIdxOf, stripFences } from '../engine/index.ts'
+import { Content, TIER_LABELS, genericQuizTarget, tierIdxOf } from '../engine/index.ts'
 import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete } from '../engine/index.ts'
 import {
   contentFailureStatus,
@@ -20,7 +20,7 @@ import {
   type GenJobPhase,
   type GenJobStatus,
 } from '../generation-jobs.ts'
-import { contentEffort, llmCfg, llmSeam } from './llm.ts'
+import { contentEffort, llmCfg, llmSeam, llmSeamStripped } from './llm.ts'
 import { runLog } from './runtime.ts'
 import type { GenJob, HostRuntime } from './runtime.ts'
 
@@ -34,7 +34,7 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
   instruction?: string
   isCancelled?: () => boolean
 }) {
-  return rt.engine.questionGenerate(course, node, count, async prompt => stripFences(await complete(prompt)), opts)
+  return rt.engine.questionGenerate(course, node, count, async prompt => complete(prompt), opts)
 }
 
 /** 节生成提示词拼装：模板 + 本节任务（id/标题/类型/节段难度档）+ 上下文包。
@@ -56,7 +56,7 @@ async function applySectionWithRepair(
   opts?: { isCancelled?: () => boolean; highTier?: boolean },
 ): Promise<{ version: number; title: string; hints: string[] }> {
   const cancelled = () => opts?.isCancelled?.() ?? false
-  const first = stripFences(await complete(sectionPrompt(tpl, pack, s), undefined, { effort: 'fast' }))
+  const first = await complete(sectionPrompt(tpl, pack, s), undefined, { effort: 'fast' })
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   let gateReport = ''
   try {
@@ -71,7 +71,7 @@ async function applySectionWithRepair(
   // fail-safe 回整节修复）；替换块数量对不上或拼接失败同样回退。
   const plan = Content.blockPatchPlan(first, gateReport)
   if (plan) {
-    const patched = stripFences(await complete(Content.blockPatchPrompt(plan), undefined, repairEffort))
+    const patched = await complete(Content.blockPatchPrompt(plan), undefined, repairEffort)
     if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
     const merged = Content.applyBlockPatch(first, plan, Content.extractFencedBlocks(patched))
     if (merged !== null) {
@@ -84,10 +84,10 @@ async function applySectionWithRepair(
       }
     }
   }
-  const repaired = stripFences(await complete(
+  const repaired = await complete(
     Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s), first, gateReport),
     undefined, repairEffort,
-  ))
+  )
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   try {
     return await rt.engine.contentSection(course, node, s.id, repaired)
@@ -551,7 +551,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     : { course, node, startedAt: new Date().toISOString(), status: 'running', phase: 'outline', ...(style ? { style } : {}) }
   rt.jobs.genJobs.set(key, job)
   persistGenJobs(rt)
-  const complete = llmSeam(ctx)
+  const complete = llmSeamStripped(ctx)
   try {
     const pack = await rt.engine.contentPack(course, node)
     // 档位元数据（GenJob 记录；quiz 量分发与后续弹性评估用）
@@ -571,13 +571,13 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
       // P4：高复杂度节点的大纲轮升 deep 档
       const outlineEffort = contentEffort(highTier)
       // 大纲护栏未过（OUTLINE_BUDGET）时重跑一次并回灌节数与预期区间，仍失败才置 failed
-      let outlineYaml = stripFences(await complete(`${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: outlineEffort }))
+      let outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: outlineEffort })
       if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
       try {
         await rt.engine.contentOutline(course, node, outlineYaml)
       } catch (err) {
         if (job.status === 'cancelling' || (err instanceof Error && (err as Error & { code?: string }).code !== 'OUTLINE_BUDGET')) throw err
-        outlineYaml = stripFences(await complete(`${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: outlineEffort }))
+        outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: outlineEffort })
         if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
         await rt.engine.contentOutline(course, node, outlineYaml)
       }
@@ -615,7 +615,7 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   job.message = `${contentMsg}；自动出题中…`
   persistGenJobs(rt)
   try {
-    const per = await rt.engine.questionGenerateSections(job.course, job.node, async prompt => stripFences(await complete(prompt)))
+    const per = await rt.engine.questionGenerateSections(job.course, job.node, async prompt => complete(prompt))
     const quiz = await generateQuiz(rt, complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status

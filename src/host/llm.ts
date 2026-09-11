@@ -15,6 +15,7 @@ import {
   ReasoningEffortId,
 } from '@deepseek-ai/dsh-llm'
 import type { Message, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
+import { stripFences } from '../engine/index.ts'
 import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream } from '../engine/index.ts'
 
 export const llmCfg = {
@@ -76,6 +77,14 @@ export function llmSeam(ctx: Context): LlmComplete {
     opts?.effort === 'fast' ? { effort: llmCfg.fastEffort }
       : opts?.effort === 'deep' ? { effort: llmCfg.deepEffort }
         : undefined)
+}
+
+/** 机械站的补全缝（#175 阶段③：stripFences 九处接线随适配器归位）——llmSeam 包上
+ * 补全后处理，投递层直接把它当 LlmComplete 传给引擎，不再各自 import stripFences
+ * 手工包裹（stripFences 本体住 engine/agent.ts，随缝定义；这里是它的适配器组装位）。 */
+export function llmSeamStripped(ctx: Context): LlmComplete {
+  const seam = llmSeam(ctx)
+  return async (prompt, system, opts) => stripFences(await seam(prompt, system, opts))
 }
 
 /** 宿主→引擎工具回路端口（LlmStream）的适配器（#162 / ADR-0041 回路半）：端口中立

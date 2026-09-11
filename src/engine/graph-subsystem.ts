@@ -394,16 +394,19 @@ export class GraphSubsystem {
   }
 
 
-  async graphApply(kind: 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult> {
+  async graphApply(
+    kind: 'edit' | 'seed' | 'enrich', pid?: number,
+    opts?: { pairApply?: boolean; today?: string },
+  ): Promise<GraphApplyResult> {
     if (kind !== 'edit' && kind !== 'seed' && kind !== 'enrich') {
       throw new Error(`[apply] 非法 kind: ${String(kind)}（图谱域只受理 edit/seed/enrich）`)
     }
     // audit 门禁：目标课程存在 ERROR 时拒绝 apply；warns 摘要 + 健康分随 findings 返回
     // （mode=new 的种子提案课程尚未建 data 目录，audit 空跑——种子图豁免在 runAudit/applySeed 内按锚判）
     const pending = await this.e.store.takePending(kind, pid)
-    const today = (await this.e.learningDay()).today
+    const today = opts?.today ?? (await this.e.learningDay()).today
     const audit = await this.e.seedAuditFor(pending.course, today)
-    if (kind === 'seed') return this.e.proposals.applySeed(pid, audit, today)
+    if (kind === 'seed') return this.e.proposals.applySeed(pid, audit, today, { pairApply: opts?.pairApply })
     return kind === 'edit' ? this.e.proposals.applyEdit(pid, audit) : this.e.proposals.applyEnrich(pid, audit)
   }
 

@@ -41,7 +41,7 @@ import { declaredEncOf } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { CourseEntry, Fm } from './types.ts'
 import type { AgentSeam, GateVerdict } from './agent.ts'
-import type { GraphProposeResult } from './views/proposals.ts'
+import type { GraphApplyResult, GraphProposeResult } from './views/proposals.ts'
 import { runAudit } from './audit.ts'
 import { graphHealthScore } from './health.ts'
 import { applyPracticeEvidence } from './grading.ts'
@@ -564,7 +564,9 @@ export interface ProjectDeps {
   paths: Paths
   registry: Pick<Registry, 'get'>
   bank: Pick<QuestionBank, 'load'>
-  proposals: Pick<GraphProposals, 'applySeed' | 'reject'>
+  proposals: Pick<GraphProposals, 'reject'>
+  /** 图 apply 包装（#175 阶段③归位：联合受理不再直调 applySeed）。 */
+  graphApply(kind: 'seed', pid?: number, opts?: { pairApply?: boolean; today?: string }): Promise<GraphApplyResult>
   projects: Projects
   noteManifest: Pick<NoteSourceManifest, 'load' | 'save'>
   /** vault 根目录。 */
@@ -1267,7 +1269,7 @@ export class ProjectSubsystem {
     const today = (await this.e.learningDay()).today
     // 种子先落图：簇节点 + 终点锚 + ensureNotesFor 笔记脚手架——计划引用先有图可解析
     const seedResult = seed.status === 'pending'
-      ? await this.e.proposals.applySeed(seedPid, await this.seedAuditFor(seed.course, today), today, { pairApply: true })
+      ? await this.e.graphApply('seed', seedPid, { pairApply: true, today })
       : null
     const planResult = plan.status === 'pending'
       ? await this.applyProjectPlanProposal(planPid, { pairApply: true })
@@ -1275,19 +1277,6 @@ export class ProjectSubsystem {
     return { project: (planResult as { project?: string })?.project ?? plan.course, seed: seedResult, plan: planResult }
   }
 
-
-  /** 种子 apply 的 audit 门预计算（graphApply 同款；mode=new 课程无 data 目录时空跑）。
-   * 联合 apply 直调 proposals.applySeed 时复用，不经过 graphApply 的 takePending。 */
-  private async seedAuditFor(courseName: string, today: string): Promise<ApplyAudit> {
-    const course = await this.e.registry.get(courseName)
-    let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
-    if (course && this.e.fs.exists(this.e.paths.dataDir(course.root))) {
-      const { graph } = await this.e.loadView(course)
-      const result = await runAudit(this.e.paths, course.root, course.name, graph, graph.regions, today, this.e.fs)
-      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
-    }
-    return audit
-  }
 
 
   /** 计划提案 apply 的引擎包装（#149 修订驱动生长）：apply 前捕旧计划，apply 后派生

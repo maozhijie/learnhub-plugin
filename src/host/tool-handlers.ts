@@ -8,9 +8,9 @@
  * 键是工具名（与注册表 agent 通道同源）；门④·agent 侧断言键集合恰等于没有 bind 的 agent 通道集合。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { ANKI_ENDPOINT, AnkiConnectClient, stripFences } from '../engine/index.ts'
+import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
-import { llmSeam, llmView } from './llm.ts'
+import { llmSeam, llmSeamStripped, llmView } from './llm.ts'
 import { run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import {
@@ -171,7 +171,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.errorCardGenerate(args.course, {
         ...(args.node ? { node: args.node } : {}),
         ...(args.max !== undefined ? { max: args.max } : {}),
-      }, async prompt => stripFences(await llmSeam(ctx)(prompt))))),
+      }, llmSeamStripped(ctx)))),
   'learnhub_error_card_archive': (args: { course: string; node: string; card: string; archived?: boolean }) => run(rt, 'learnhub_error_card_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[error-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
       return JSON.stringify(await rt.engine.errorCardArchive(args.course, args.node, args.card, args.archived))
@@ -234,7 +234,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.noteSourceList())),
   'learnhub_note_source_generate': (args: { id: string; count?: number }) => run(rt, 'learnhub_note_source_generate', async () => {
       const n = questionCount(args.count)
-      return JSON.stringify(await rt.engine.noteSourceGenerate(args.id, n, async prompt => stripFences(await llmSeam(ctx)(prompt))))
+      return JSON.stringify(await rt.engine.noteSourceGenerate(args.id, n, llmSeamStripped(ctx)))
     }),
   'learnhub_anki_export': (args: { endpoint?: string }) => run(rt, 'learnhub_anki_export', async () =>
       JSON.stringify(await rt.engine.ankiExportPush(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),

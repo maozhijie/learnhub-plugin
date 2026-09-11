@@ -8,6 +8,7 @@
  * 图结构唯一事实源；state/ 只承载追加型流水（journal/practice/review-log JSONL）与
  * 人审产物（proposals.json / snapshots/）。无 SQLite，无投影回写。
  */
+import { graphHealthScore } from './health.ts'
 import type { VaultFs } from './io.ts'
 /** vault 存储端口（#175 阶段②）：类型随门面出，实现住 host/vault-fs.ts。 */export type { VaultFs } from './io.ts'
 import { Paths} from './paths.ts'
@@ -318,6 +319,7 @@ export class LearnhubEngine {
       enabledCourses: () => this.enabledCourses(),
       loadPrompt: kind => this.loadPrompt(kind),
       locateNode: nodeSpec => this.locateNode(nodeSpec),
+      graphApply: (kind, pid, opts) => this.graphApply(kind, pid, opts),
       graphPropose: (kind, yamlText) => this.graphPropose(kind, yamlText),
       nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
@@ -723,8 +725,11 @@ export class LearnhubEngine {
     return this.graph.graphPropose(kind, yamlText)
   }
 
-  async graphApply(kind: 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult> {
-    return this.graph.graphApply(kind, pid)
+  async graphApply(
+    kind: 'edit' | 'seed' | 'enrich', pid?: number,
+    opts?: { pairApply?: boolean; today?: string },
+  ): Promise<GraphApplyResult> {
+    return this.graph.graphApply(kind, pid, opts)
   }
 
   async graphReject(pid: number, note = ''): Promise<ProposalRec> {
@@ -884,7 +889,14 @@ export class LearnhubEngine {
   }
 
   private async seedAuditFor(courseName: string, today: string): Promise<ApplyAudit> {
-    return this.project.seedAuditFor(courseName, today)
+    const course = await this.registry.get(courseName)
+    let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
+    if (course && this.fs.exists(this.paths.dataDir(course.root))) {
+      const { graph } = await this.loadView(course)
+      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, today, this.fs)
+      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
+    }
+    return audit
   }
 
   async applyProjectPlanProposal(

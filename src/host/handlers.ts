@@ -11,7 +11,7 @@
  * 注册表里**没有 bind 的 panel 通道**集合。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { ANKI_ENDPOINT, AnkiConnectClient, stripFences } from '../engine/index.ts'
+import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
 import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
 import { sendJson } from './http.ts'
 import {
@@ -21,7 +21,7 @@ import {
 import { apiRun, runLog } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import type { RouteHandler } from './route-table.ts'
-import { llmComplete, llmSeam, llmView } from './llm.ts'
+import { llmComplete, llmSeam, llmSeamStripped, llmView } from './llm.ts'
 import { AGENT_GUIDE } from './tools.ts'
 import { serveInteractive, serveVaultFile, serveVendor } from './static.ts'
 import {
@@ -335,7 +335,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 笔记源出题（#59）：读笔记正文 → 笔记出题 prompt → validateBank 门禁落镜像
     sendJson(res, 200, await apiRun(rt, 'api/note-source/generate', () => rt.engine.noteSourceGenerate(
       need(body, 'id'), questionCount(body.count),
-      async prompt => stripFences(await llmSeam(ctx)(prompt)))))
+      llmSeamStripped(ctx))))
   },
   'POST /anki/export': async ({ rt, res }) => {
     // 导出到 Anki（C2 #63，#72 UI 挂接）：与 learnhub_anki_export 同一引擎通道
@@ -367,7 +367,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
         ...pick('node', optText(body, 'node')),
         ...(body.max !== undefined ? { max: Number(body.max) } : {}),
       },
-      async prompt => stripFences(await llmSeam(ctx)(prompt)))))
+      llmSeamStripped(ctx))))
   },
   'POST /error-archive': async ({ rt, body, res }) => {
     sendJson(res, 200, await apiRun(rt, 'api/error-archive', () => rt.engine.errorCardArchive(
