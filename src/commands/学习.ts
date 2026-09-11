@@ -57,7 +57,6 @@ export const 学习域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_calibration_profile",
-        bind: []
       },
       {
         channel: "panel",
@@ -78,7 +77,6 @@ export const 学习域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_coach",
-        bind: []
       },
       {
         channel: "panel",
@@ -133,7 +131,6 @@ export const 学习域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_complete",
-        bind: ["course", "node", "force"]
       },
       {
         channel: "panel",
@@ -480,7 +477,6 @@ export const 学习域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_recommend",
-        bind: ["limit"]
       },
       {
         channel: "panel",
@@ -520,7 +516,6 @@ export const 学习域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_review_queue",
-        bind: ["course", "node", null, "band_pref"]
       },
       {
         channel: "panel",
@@ -586,7 +581,6 @@ export const 学习域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_skip",
-        bind: ["course", "node", "skipped"]
       },
       {
         channel: "panel",
@@ -638,7 +632,6 @@ export const 学习域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_status",
-        bind: []
       },
       {
         channel: "panel",

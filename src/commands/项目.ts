@@ -21,7 +21,6 @@ export const 项目域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_project_apply",
-        bind: ["id"]
       }
     ]
   }),
@@ -196,7 +195,6 @@ export const 项目域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_project_list",
-        bind: []
       },
       {
         channel: "panel",

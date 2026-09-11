@@ -385,9 +385,14 @@ test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、�
   // 工具面 = tools.ts；路由面 = 其余宿主技术层（与基线口径一致：工具注册区 vs 工具区外全部）。
   // **动态发现**（#168：路由表拆成 route-table/routes/routes-post 后，硬编码清单会让
   // 新文件静默逃出对账网——正是 R3「收集器收空」的同族缺陷）
-  const hostFiles = readdirSync(join(ROOT, 'src', 'host')).filter(f => f.endsWith('.ts') && f !== 'tools.ts').sort()
+  const hostFiles = readdirSync(join(ROOT, 'src', 'host'))
+    .filter(f => f.endsWith('.ts') && f !== 'tools.ts' && f !== 'tool-handlers.ts').sort()
   assert.ok(hostFiles.length >= 8, `路由面受控文件只剩 ${hostFiles.length} 个（扫描面塌了）`)
-  const toolFace = faceOf(read('src/host/tools.ts'))
+  // #169：两面都改成「源码直调 ∪ 注册表声明」——生成路径的调用住在声明里（src/commands/），
+  // 源码里只剩例外 handler（host/tool-handlers.ts、host/handlers.ts）
+  const agentDeclared = new Set(COMMANDS.filter(c => c.channels.some(ch => ch.tool))
+    .map(c => c.engine).filter((e): e is string => !!e))
+  const toolFace = new Set([...faceOf(read('src/host/tools.ts') + read('src/host/tool-handlers.ts')), ...agentDeclared])
   // #169：路由面的引擎入口 = **注册表 panel 通道的声明** ∪ 宿主源码里的直调。生成路径的调用
   // 现在住在声明里（src/commands/），不在任何 .ts 文件里——只扫源码会让大部分 route-only 凭空消失。
   const declared = new Set(COMMANDS.filter(c => c.channels.some(ch => ch.route))

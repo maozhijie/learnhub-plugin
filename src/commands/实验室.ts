@@ -21,7 +21,6 @@ export const 实验室域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_experiment_apply",
-        bind: ["id"]
       },
       {
         channel: "panel",
@@ -104,7 +103,6 @@ export const 实验室域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_experiment_templates",
-        bind: []
       }
     ]
   }),
@@ -169,7 +167,6 @@ export const 实验室域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_thermostat",
-        bind: []
       },
       {
         channel: "panel",

@@ -39,7 +39,6 @@ export const 维护域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_course_delete",
-        bind: ["course"]
       },
       {
         channel: "panel",
@@ -81,7 +80,6 @@ export const 维护域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_data_check",
-        bind: []
       }
     ]
   }),
@@ -179,7 +177,6 @@ export const 维护域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_optimize_params",
-        bind: []
       },
       {
         channel: "panel",
@@ -223,7 +220,6 @@ export const 维护域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_rebuild",
-        bind: ["course"]
       },
       {
         channel: "panel",

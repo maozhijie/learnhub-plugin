@@ -49,7 +49,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_error_card_archive",
-        bind: ["course", "node", "card", "archived"]
       },
       {
         channel: "panel",
@@ -176,7 +175,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_explain_back_pack",
-        bind: ["course", "node"]
       },
       {
         channel: "panel",
@@ -243,7 +241,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_habit_archive",
-        bind: ["habit", "archived"]
       },
       {
         channel: "panel",
@@ -282,7 +279,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_habit_list",
-        bind: []
       },
       {
         channel: "panel",
@@ -427,7 +423,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_kata_save",
-        bind: ["week_start", "answers"]
       },
       {
         channel: "panel",
@@ -481,7 +476,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_learner_card_archive",
-        bind: ["course", "node", "card", "archived"]
       },
       {
         channel: "panel",
@@ -611,7 +605,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_skill_archive",
-        bind: ["skill", "archived"]
       },
       {
         channel: "panel",
@@ -644,7 +637,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_skill_list",
-        bind: []
       },
       {
         channel: "panel",
@@ -668,7 +660,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_skill_maintenance",
-        bind: ["skill", "days"]
       },
       {
         channel: "panel",

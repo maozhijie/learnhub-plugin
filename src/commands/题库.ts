@@ -130,7 +130,6 @@ export const 题库域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_question_audit",
-        bind: []
       },
       {
         channel: "panel",

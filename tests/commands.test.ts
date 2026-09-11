@@ -66,7 +66,7 @@ test('门① engine 存在性：声明值 ∈ 门面原型方法；留空的逐�
   assert.deepEqual(ghosts, [], `白名单里的这些 id 在注册表里不存在（幽灵条目）：\n${ghosts.join('\n')}`)
   // 生成路径的命令必须真的声明了 bind（否则适配器无从装配实参）
   const generic = COMMANDS.filter(c => c.channels.some(x => x.bind !== undefined))
-  assert.ok(generic.length >= 90, `走生成路径的命令只剩 ${generic.length} 条（实测 92 = agent 77 ∪ panel 49，塌了就说明声明退化）`)
+  assert.ok(generic.length >= 65, `走生成路径的命令只剩 ${generic.length} 条（实测 agent 45 ∪ panel 49 ≈ 70，塌了就说明声明退化）`)
 })
 
 // ---------------------------------------------------------------- ② 队列阶段
@@ -144,7 +144,17 @@ test('门⑧ 声明与面一致：agent 通道投影后与工具面快照逐字�
     const c = byTool.get(snap.name)
     if (!c) { diffs.push(`注册表缺工具 ${snap.name}`); continue }
     if (c.summary !== snap.description) diffs.push(`${snap.name} 的 summary 与工具面 description 不一致`)
-    const projected = sdkParameters(c.args)
+    // 快照记的是 defineTool 的**注册形态**（{type:object,properties,required[]}）：
+    // sdkParameters 只剥投递层键（工具面吃的是 per-property 形态），这里补上归一化
+    const stripped = sdkParameters(c.args) as Record<string, { required?: boolean } & Record<string, unknown>>
+    const properties: Record<string, unknown> = {}
+    const required: string[] = []
+    for (const [k, v] of Object.entries(stripped)) {
+      const { required: req, ...rest } = v
+      properties[k] = rest
+      if (req) required.push(k)
+    }
+    const projected = { type: 'object', properties, ...(required.length ? { required } : {}) }
     if (JSON.stringify(projected) !== JSON.stringify(snap.parameters)) {
       diffs.push(`${snap.name} 的 args 投影后与工具面 schema 不一致\n    期望 ${JSON.stringify(snap.parameters).slice(0, 200)}\n    实得 ${JSON.stringify(projected).slice(0, 200)}`)
     }

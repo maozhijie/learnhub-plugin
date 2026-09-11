@@ -101,14 +101,14 @@
     "src/client/index.tsx": 155,
     "src/commands/index.ts": 40,
     "src/commands/types.ts": 86,
-    "src/commands/图谱.ts": 291,
-    "src/commands/学习.ts": 695,
-    "src/commands/学习者产出.ts": 708,
-    "src/commands/实验室.ts": 205,
-    "src/commands/维护.ts": 251,
-    "src/commands/通道.ts": 232,
-    "src/commands/项目.ts": 420,
-    "src/commands/题库.ts": 363,
+    "src/commands/图谱.ts": 289,
+    "src/commands/学习.ts": 688,
+    "src/commands/学习者产出.ts": 699,
+    "src/commands/实验室.ts": 202,
+    "src/commands/维护.ts": 247,
+    "src/commands/通道.ts": 228,
+    "src/commands/项目.ts": 418,
+    "src/commands/题库.ts": 362,
     "src/engine/adaptive.ts": 81,
     "src/engine/advance.ts": 106,
     "src/engine/analysis.ts": 245,
@@ -191,7 +191,8 @@
     "src/host/route-table.ts": 74,
     "src/host/runtime.ts": 176,
     "src/host/static.ts": 122,
-    "src/host/tools.ts": 1071,
+    "src/host/tool-handlers.ts": 268,
+    "src/host/tools.ts": 121,
     "src/index.ts": 90,
     "src/tool-contracts.ts": 54
   },
@@ -206,6 +207,7 @@
     "src/engine/question-bank.ts": 4,
     "src/host/handlers.ts": 2,
     "src/host/jobs.ts": 3,
-    "src/host/tools.ts": 2
+    "src/host/tool-handlers.ts": 1,
+    "src/host/tools.ts": 1
   }
 }

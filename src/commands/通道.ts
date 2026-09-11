@@ -21,7 +21,6 @@ export const 通道域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_anki_export",
-        bind: ["endpoint"]
       },
       {
         channel: "panel",
@@ -43,7 +42,6 @@ export const 通道域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_anki_import",
-        bind: ["endpoint"]
       },
       {
         channel: "panel",
@@ -65,7 +63,6 @@ export const 通道域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_anki_status",
-        bind: ["endpoint"]
       },
       {
         channel: "panel",
@@ -126,7 +123,6 @@ export const 通道域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_note_source_list",
-        bind: []
       },
       {
         channel: "panel",

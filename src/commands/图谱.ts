@@ -239,7 +239,6 @@ export const 图谱域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_graph_propose",
-        bind: ["kind", "yaml"]
       }
     ]
   }),
@@ -284,7 +283,6 @@ export const 图谱域: CommandSpec[] = [
         channel: "agent",
         mode: "sync",
         tool: "learnhub_vault_links_scan",
-        bind: []
       }
     ]
   }),
