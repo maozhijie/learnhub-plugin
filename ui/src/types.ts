@@ -73,15 +73,15 @@ export type SandboxDoc = CommandOutput<'sandbox'>
 export type KataDoc = CommandOutput<'kata-open'>
 // 同类例外（多入口命令）：`/probation` 与工具面合并后没有单一 `output`（settleRechecks|probationStatus），
 // 故从引擎入口直接派生——出处仍是引擎，只是不经注册表的 output。
-export type ProbationDoc = Awaited<ReturnType<LearnhubEngine['probationStatus']>>
+export type ProbationDoc = Awaited<ReturnType<LearnhubEngine['growth2']['probationStatus']>>
 export type ProjectFm = CommandOutput<'project-list'>[number]
 export type ProjectPlanItem = ProjectFm['plan'][number]
 
 // 一处例外（有理由的）：`/experiments` 是**多入口命令**（一次读 templates + list + report 三处），
 // 没有单一 `output` 可派——它的**组成**仍从引擎入口派生，只有复合本身是本文件写的三行。
-export type Nof1Template = Awaited<ReturnType<LearnhubEngine['experimentTemplates']>>[number]
-export type ExperimentDef = Awaited<ReturnType<LearnhubEngine['experimentList']>>[number]
-export type Nof1Analysis = NonNullable<Awaited<ReturnType<LearnhubEngine['experimentReport']>>>['analysis']
+export type Nof1Template = Awaited<ReturnType<LearnhubEngine['lab']['experimentTemplates']>>[number]
+export type ExperimentDef = Awaited<ReturnType<LearnhubEngine['lab']['experimentList']>>[number]
+export type Nof1Analysis = NonNullable<Awaited<ReturnType<LearnhubEngine['lab']['experimentReport']>>>['analysis']
 export interface ExperimentsDoc {
   templates: Nof1Template[]
   experiments: ExperimentDef[]
