@@ -242,8 +242,8 @@
     "src/host/llm.ts": 129,
     "src/host/runtime.ts": 176,
     "src/host/static.ts": 123,
-    "src/host/tools.ts": 1044,
-    "src/index.ts": 71,
+    "src/host/tools.ts": 1040,
+    "src/index.ts": 90,
     "src/tool-contracts.ts": 54
   }
 }

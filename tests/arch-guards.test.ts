@@ -17,13 +17,14 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scanUndefined } from '../scripts/undefined-scan.mjs'
 import { faceOf, scanDepsFaces, depthOneKeys } from '../scripts/scan-deps-face.mjs'
 import { scanSizes, srcFiles, whitelistHits, SIZE_WHITELIST } from '../scripts/scan-budget.mjs'
 import { scanGraphWriters, graphWriteCallers, GRAPH_WRITE_WHITELIST } from '../scripts/scan-invariant.mjs'
+import { hostFiles, moduleLevelLets, scanHostLets } from '../scripts/scan-host-state.mjs'
 import { BASELINE_FILE, measure, readBaseline, depsFaceViolations, sizeViolations, missingDirectionViolations } from '../scripts/arch-baseline.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -101,21 +102,23 @@ test('G2b src 下的入口文件存在且非空（防止误删/误移）', () =>
 // ---------------------------------------------------------------- G2c 宿主模块级可变状态
 
 test('G2c 自检：模块级 let 会被看见、函数内 let 不误伤（门不是恒过）', () => {
-  const moduleLevelLets = (code: string) => [...code.matchAll(/^(export\s+)?let\s+/gm)].length
-  assert.equal(moduleLevelLets('let genJobs = new Map()\nfunction f() { let x = 1 }'), 1,
-    '列 0 的 let = 模块级，必须被抓；缩进的 let = 函数局部，不误伤')
-  assert.equal(moduleLevelLets("export let VAULT = ''"), 1, 'export let 同样被抓')
-  assert.equal(moduleLevelLets('const genJobs = new Map()'), 0, '常量放行（无运行时可变性声明）')
+  // 自检驱动门自己用的纯判据（真代码），不是另写一份正则——否则门可以腐烂而自检照绿
+  assert.deepEqual(moduleLevelLets('let genJobs = new Map()\nfunction f() { let x = 1 }'), ['genJobs'],
+    '行首 let = 模块级（被抓）；缩进 let = 函数局部（不误伤）')
+  assert.deepEqual(moduleLevelLets("export let VAULT = ''"), ['VAULT'], 'export let 同样被抓')
+  assert.deepEqual(moduleLevelLets('const genJobs = new Map()'), [], '常量放行（无运行时可变性声明）')
+  assert.deepEqual(moduleLevelLets('    let x = 1'), [], '缩进即局部（即使顶层缩进也不误判为模块级）')
 })
 
 test('G2c 宿主模块级可变状态归零（ADR-0048：可变态全部进 HostRuntime）', () => {
-  const hostFiles = ['index.ts', 'host/runtime.ts', 'host/jobs.ts', 'host/api.ts', 'host/static.ts', 'host/tools.ts']
-  const bad: string[] = []
-  for (const rel of hostFiles) {
-    for (const m of readFileSync(join(SRC, rel), 'utf8').matchAll(/^(export\s+)?let\s+(\w+)/gm)) {
-      bad.push(`${rel}: ${m[2]}`)
-    }
-  }
+  const files = hostFiles(ROOT)
+  // 收集器可见性自检（R3 恒过教训）：面塌了门会静默恒过
+  assert.ok(files.length >= 6, `宿主受控面只剩 ${files.length} 个文件（扫描面塌了）`)
+  assert.ok(files.includes('src/index.ts'), '受控面必须含装配入口 src/index.ts')
+  assert.ok(files.some(f => f === 'src/host/runtime.ts'), '受控面必须含 runtime.ts（ADR-0048 的分层基准）')
+  const bad = scanHostLets(ROOT)
+    .filter(r => r.names.length)
+    .map(r => `${r.file}: ${r.names.join(', ')}`)
   assert.deepEqual(bad, [], `宿主出现模块级 let（可变态必须进 HostRuntime，ADR-0048）：\n${bad.join('\n')}`)
 })
 

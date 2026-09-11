@@ -96,7 +96,7 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 | G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在、入口文件非空；G2c＝宿主（index + host/*）除常量外零模块级 `let`（ADR-0048，带自检：模块级 let 被抓、函数内 let 不误伤） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径 |
 | G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。缺件方向（dead／missing／unwired）**硬门 0**；多余接线按基线棘轮 | 缺件硬门 0 ＋ 多余棘轮 | 声明 **167** ／ 实用 167 ／ 接线 **197** ／ 多余 **30**（含 **10** phantom，全在 growth 的门面接线里） |
 | G4 窄面宽度（三槽位） | `handles`／`facade`／`fns` 逐子系统卡基线；`handles ≤12／facade ≤20／fns ≤10` 是**非活动目标** | 棘轮 | 实测最大 handles **9**／facade **20**／fns **1**（对预算已绿；facade 已触上限，无余量） |
-| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件与宿主 `index.ts`（3029 行）全超 600／900，故活动门＝逐文件基线（**78** 个受控文件） |
+| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件超 600；宿主 `index.ts` 3029 → **71**（#167 拆分后降到目标内），但 `host/api.ts` **998**／`host/tools.ts` **1044** 超 900，故活动门＝逐文件基线（#167 后 **83** 个受控文件） |
 | G6 顶层不变量 | 除教练层 `proposals.ts` 外无模块调用图写原语（`GraphStore.writeRegionDoc`，`data/*.yaml` 的唯一写路径） | 硬门 | 绿（唯一调用者就是 `proposals.ts`） |
 
 门的三处实现事实（照着改时别踩）：

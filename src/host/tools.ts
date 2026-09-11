@@ -574,9 +574,6 @@ export function registerTools(ctx: Context, rt: HostRuntime): void {
     (args: { id: string }) => run(rt, 'learnhub_project_cross_view', async () =>
       JSON.stringify(await rt.engine.projectCrossView(args.id))))
 
-  // —— U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）：lane 与题目 FSRS 并行，不复用题目卡、不进复习队列 ——
-
-
   // —— 学习者产出（E 区我的卡与错误卡 + U 区技能/回执/习惯 + 周复盘） ——
   tool('learnhub_explain_back_pack',
     'Open the「讲给我听」Feynman session for a node (E2, learner output — the learner explains to YOU): returns the session pack = section-by-section content points + graph position + your role instructions. Your role in this and following turns: a COMPLETE NOVICE who knows nothing about the topic — ask questions ONLY from the content points, one question at a time, probing ambiguity/vagueness, skipped steps, and wrong statements in the learner\'s words; never grade, never praise, never go beyond the points, never give answers; if the learner says「换一种问」re-ask the unclear point from a different angle; wrap up briefly in-character once everything is covered. After the session ends, call learnhub_explain_feedback with the full transcript.',
@@ -670,7 +667,7 @@ export function registerTools(ctx: Context, rt: HostRuntime): void {
       return JSON.stringify(await rt.engine.learnerCardArchive(args.course, args.node, args.card, args.archived))
     }))
 
-  // —— C-3 错误对比卡（#82）：错法挖矿 → 三选一辨别卡 → 错误 deck 走 FSRS ——
+  // ·· C-3 错误对比卡（#82）：错法挖矿 → 三选一辨别卡 → 错误 deck 走 FSRS ··
 
   tool('learnhub_error_card_mine',
     'Mine the answer-attempt stream for high-frequency error patterns (C-3 #82, read-only preview): groups substantive wrong answers (correct=false with an actual wrong answer; forget declarations do not count) by course/node/question and returns candidates with >=2 lapses, each carrying the learner\'s distinct wrong answers (most recent first). This is the human-audit surface for "error patterns are reasonable" — generation is learnhub_error_card_generate; nothing is written here.',
@@ -720,8 +717,7 @@ export function registerTools(ctx: Context, rt: HostRuntime): void {
       return JSON.stringify(await rt.engine.errorCardArchive(args.course, args.node, args.card, args.archived))
     }))
 
-  // —— 项目域（P 区 / ADR-0015；#92）：Project 是 Course 姊妹实体，零 XP、零 FSRS、不进 sessions/srs ——
-
+  // ·· U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）：lane 与题目 FSRS 并行，不复用题目卡、不进复习队列 ··
   tool('learnhub_skill_create',
     'Create a skill entry (U-area schedulable practice subject, e.g. guitar/swimming/coding): the carrier of the execution-event scheduling lane. The lane runs PARALLEL to question FSRS (same kernel math, own isolated state) — it never reuses question cards, never enters the review queue, and has no mastery. Optional maintenance beat cap (days, default 30, null = off) guarantees long-dormant skills resurface at low frequency (mini-redo + replay).',
     {
@@ -772,7 +768,7 @@ export function registerTools(ctx: Context, rt: HostRuntime): void {
           ...(args.note ? { note: args.note } : {}),
         }))))
 
-  // —— U 区·回执反馈环（#88 / ADR-0016）：回执 → AI 量表评审 → EMA + 渐退反馈 ——
+  // ·· U 区·回执反馈环（#88 / ADR-0016）：回执 → AI 量表评审 → EMA + 渐退反馈 ··
 
   tool('learnhub_receipt_submit',
     'File an external-practice receipt on a PRACTICE node (v1 carrier) and run the full loop: receipt → AI rubric review (rubric source = the node\'s content points; free-form questions are NOT answered) → the score enters the node\'s practice EMA (same weight, old 0.7/new 0.3). Self-reported = trusted (no anti-cheat gate); material is free-form (text description / image path / export / coach signoff). Receipts never earn XP, never push any FSRS card, and are never Broken. Feedback fades: full error-specific reviews follow a decreasing-frequency curve (receipt #1,2,4,7,11,16,… capped at every 5th); other receipts get score + one-line verdict only. The learner can always force a full review (force_full).',
@@ -800,7 +796,7 @@ export function registerTools(ctx: Context, rt: HostRuntime): void {
     (args: { course?: string; node: string }) => run(rt, 'learnhub_receipt_list', async () =>
       JSON.stringify(await rt.engine.receiptList(args.course, args.node))))
 
-  // —— U 区·习惯一等公民（#90 / ADR-0017）：零 FSRS 语义、零 canonical 写入 ——
+  // ·· U 区·习惯一等公民（#90 / ADR-0017）：零 FSRS 语义、零 canonical 写入 ··
 
   tool('learnhub_habit_create',
     'Create a habit (U-area first-class object): an execution intention (cue + action, format locked to "stable time/place cue → ONE concrete action") + an automation curve + a forgiving streak. Habits have NO FSRS semantics, no mastery, NO due dates — the scheduler is context and calendar, the engine never reminds. Repetitions are self-reported (no gate, no anti-cheat — self-measurement is not an exam).',

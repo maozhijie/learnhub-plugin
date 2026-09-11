@@ -333,7 +333,7 @@ test('路由分发：static 抽离后 /file、/vendor、/interactive 的守卫�
 
 test('工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变', () => {
   const rt = makeRuntime()
-  const captured: Array<{ name?: string; description?: string; parameters?: unknown }> = []
+  const captured: Array<{ name?: string; description?: string; parameters?: unknown; output?: unknown }> = []
   registerTools(fakeCtx(captured), rt)
   assert.equal(captured.length, 111, '工具总数不变（注册顺序按域分组重排，逐工具逐字不变）')
   const snapshot = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-snapshot.json'), 'utf8')) as
@@ -349,6 +349,12 @@ test('工具面快照：111 个工具的名称/描述/schema 与重构前基线�
       { description: expect.description, parameters: expect.parameters },
       `工具 ${expect.name} 的描述/schema 相对重构前基线漂移`,
     )
+  }
+  // output 描述符是工具契约的另一半：111 个共享同一 textOutput（render 把值包成 text 块）
+  for (const t of captured) {
+    const out = t.output as { schema?: { type?: string }; render?: (a: unknown, v: unknown) => unknown } | undefined
+    assert.equal(out?.schema?.type, 'string', `${t.name} 的 output schema 漂移`)
+    assert.deepEqual(out?.render?.(undefined, 'x'), [{ type: 'text', text: 'x' }], `${t.name} 的 output render 漂移`)
   }
 })
 

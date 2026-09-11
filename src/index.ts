@@ -21,6 +21,7 @@
  * - 每次工具/路由调用追加 state/运行日志.md（LOG_LIMIT 截断）。
  */
 import type { Context } from '@deepseek-ai/cordis'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { llmCfg } from './host/llm.ts'
 import { createHostRuntime } from './host/runtime.ts'
 import type { LearnhubConfig } from './host/runtime.ts'
@@ -31,6 +32,24 @@ import { PAGE, panelPageHandler } from './host/static.ts'
 
 export const name = 'dsh-learnhub'
 export const inject = ['tools', 'webServer', 'llm']
+
+/**
+ * `webServer` 服务由宿主的 web 插件提供（dsh CLI 私有包，本仓库不依赖它，故类型不在册）：
+ * 按消费面补声明——本插件只用 `register({ kind: 'prefix', path, handler })` 两种前缀路由
+ * （ADR-0013 的结构化窄面：宽面由宿主定义，这里只登记自己用的那一格）。
+ * `llm` / `tools` 的类型由 dsh-llm / dsh-tools 各自的 `declare module` 提供，无需在此重述。
+ */
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    webServer: {
+      register(route: {
+        kind: 'prefix'
+        path: string
+        handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+      }): Effect
+    }
+  }
+}
 
 export type { LearnhubConfig } from './host/runtime.ts'
 
