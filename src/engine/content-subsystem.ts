@@ -18,6 +18,7 @@ import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
 import type { QuestionBank, BankQuestion } from './question-bank.ts'
 import type { Content } from './content.ts'
+import { shuffled } from './shuffle.ts'
 import type { Sessions } from './sessions.ts'
 import type { LearnerCards } from './learner-cards.ts'
 import type { Graph } from './graph.ts'
@@ -54,23 +55,14 @@ export interface ContentDeps {
   isNoteSourceCourse(courseKey: string | undefined): Promise<boolean>
   jolConfig(): Promise<{ enabled: boolean; rate: number }>
   jolPredicted(p: JolPrediction | null | undefined): JolPrediction | null
-  judgeBankAnswer(llmComplete: LlmComplete, q: BankQuestion, answer: string, op: string, ref: { course: string; node: string; qid: string }): Promise<{ score: number; feedback: string }>
   learningDay(): Promise<{ today: string; cutoff: number }>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
-  logGradingFailure(rec: { course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string }): Promise<void>
-  nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }>
   nof1QueueEffect(today: string): Promise<{ id: number; variable: Nof1Variable; arm: string } | null>
   noteSourceAnswer(llmComplete: LlmComplete, sourceId: string, qid: string, answer: string, opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null }): Promise<Record<string, unknown>>
   noteSourceForget(sourceId: string, qid: string): Promise<Record<string, unknown>>
   noteSourceRate(sourceId: string, qid: string, r: number): Promise<Record<string, unknown>>
-  questionContext(courseKey: string | undefined, node: string, qid: string, op: string): Promise<Record<string, unknown>>
-  questionView(q: BankQuestion, i: number, opts?: { today?: string }): Record<string, unknown>
-  refreshRepCard(c: CourseEntry, graph: Graph, node: string): Promise<Fm | null>
-  resolveNote(vaultRoot: string, input: string, centerRel: string): Promise<{ path: string; node: string; course: string }>
-  saveNodeNote(path: string, fm: Fm, body: string): Promise<void>
   sched(courseRoot: string | null): Promise<FSRS>
   updateNoteFm(path: string, fm: Fm): Promise<void>
-  vaultPriorFor(graph: Graph, node: string): Promise<string>
 }
 import { bandOffset, combinedDifficulty, nextBand, sessionOrder, startBand } from './adaptive.ts'
 import { advance, advancePending, advanceStrict, alreadyAdvanced } from './advance.ts'

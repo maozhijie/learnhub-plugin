@@ -593,7 +593,6 @@ export interface ProjectDeps {
   graphPropose(kind: 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult>
   nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }>
   saveNodeNote(path: string, fm: Fm, body: string): Promise<void>
-  refreshSourceFingerprints(absPaths: string[]): Promise<void>
 }
 
 export class ProjectSubsystem {

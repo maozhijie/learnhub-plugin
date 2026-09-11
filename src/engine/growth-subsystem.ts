@@ -39,29 +39,13 @@ export interface GrowthDeps {
   concepts: ConceptRegistry
   content: Content
   /** 罗盘 ETA 折叠记忆（同一学习日同锚复用）。 */
-  etaMemo: Map<string, CompassEta>
-  coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck>
-  coachContextPack(courseKey?: string, opts?: { lightweight?: boolean; today?: string; packLabel?: string }): Promise<string>
-  coachFrontier(graph: Graph, state: Record<string, Fm>): string[]
-  compassEtaFold(c: CourseEntry, anchor: { endpoint: string }, today: string, weekStart: string): Promise<CompassEta>
-  compassRead(courseKey?: string): Promise<CompassDoc>
-  compassTail(courseKey: string): Promise<string>
   enabledCourses(): Promise<CourseEntry[]>
   graphApply(kind: 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult>
   graphPropose(kind: 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult>
   graphReject(pid: number, note?: string): Promise<ProposalRec>
-  growthGraphView(graph: Graph, state: Record<string, Fm>): string
-  growthTallies(proposals: ProposalRec[], cutoff: number): Promise<GrowthBatchTally[]>
-  invokesResolver(c: CourseEntry): Promise<(qid: string) => string | null>
   learningDay(): Promise<{ today: string; cutoff: number }>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   mcAggregate(plan: SandboxPlan, cards: SandboxCard[], nodes: SandboxNode[], today: string, scheds: Map<string, FSRS>, fallbackCourse: string): { curve: SandboxCurvePoint[]; map: Array<{ node: string; p50: number; p80: number }> }
-  parseGrowthVerdict(raw: string): { spec: EditProposalSpec; yaml: string; note: GrowthNote }
-  probationFrame(c: CourseEntry, today: string, cutoff: number): Promise<{ courses: ProbationCourseView[]; ledger: ProbationFold }>
-  probationViewFor(c: CourseEntry, today: string, cutoff: number): Promise<ProbationCourseView>
-  pruneProbationNode(c: CourseEntry, graph: Graph, entry: ProbationEntry, metric: RecheckMetric, detail: string): Promise<number | null>
-  recheckMetricOf(c: CourseEntry, proposals: ProposalRec[], entry: ProbationEntry): Promise<RecheckMetric | null>
-  recordRecheckOutcome(c: CourseEntry, entry: ProbationEntry & { outcome: ProbationOutcome }, ctx: { metric: RecheckMetric; detail: string; settlePid?: number; graph: Graph; coarsePre: string[] }): Promise<void>
   sandboxPopulation(courses: CourseEntry[], nodeFilter: Set<string> | null): Promise<{ cards: SandboxCard[]; nodes: SandboxNode[]; scheds: Map<string, FSRS> }>
   scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void>
   sedimentFold(): Promise<SedimentFold>

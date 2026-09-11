@@ -38,9 +38,6 @@ export interface SchedDeps {
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void>
   sched(courseRoot: string | null): Promise<FSRS>
-  sedimentAppend(kind: SedimentKind, tier: SedimentTier, payload: Record<string, unknown>, concept?: string): Promise<SedimentEvent>
-  sedimentFold(): Promise<SedimentFold>
-  sedimentRebuildProfile(): Promise<string>
 }
 import { effectiveStage } from './audit.ts'
 import { calibrationProfileView } from './calibration.ts'

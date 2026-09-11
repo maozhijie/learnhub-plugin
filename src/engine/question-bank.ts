@@ -471,7 +471,6 @@ export interface BankDeps {
   proposals: {
     ensureNotesFor(root: string, regions: GRegion[]): Promise<number>
   }
-  content: typeof Content
   /** 课程调度器实例缓存（FSRS 写回后失效用）。 */
   schedCache: Map<string | null, FSRS>
   sched(courseRoot: string | null): Promise<FSRS>

@@ -14,6 +14,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, appendFile, readFile } from 'node:fs/promises'
 import type { BankQuestion } from './question-bank.ts'
 import type { Paths } from './paths.ts'
+import { shuffledWith as shuffled } from './shuffle.ts'
 
 /** 检索点抽中的题（跨课程汇集；答案不落档——流水留「抽了什么」，判对错是会话内口头事）。 */
 export interface RecallQuestion {
@@ -29,16 +30,6 @@ export interface RecallPool {
   course: string
   node: string
   questions: BankQuestion[]
-}
-
-/** Fisher–Yates 洗牌（返回新数组；rng 注入，测试可播种）。 */
-function shuffled<T>(items: T[], rng: () => number): T[] {
-  const out = [...items]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  return out
 }
 
 /** 抽题（纯函数）：跨池轮转（多节点项目不被单一大库淹没）；池内排序 = 从未作答优先

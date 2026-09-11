@@ -321,7 +321,6 @@ export interface LearnerDeps {
   learningDay(): Promise<{ today: string; cutoff: number }>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   enabledCourses(): Promise<CourseEntry[]>
-  scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void>
   loadPrompt(kind: string): Promise<string>
   assertNoteOk(course: { root: string }, graph: Graph, broken: BrokenNote[], node: string, tool: string): void
   nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }>

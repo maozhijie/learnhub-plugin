@@ -172,6 +172,9 @@ export class LearnhubEngine {
   readonly errorCards: ErrorCards
   readonly skills: Skills
   readonly habits: Habits
+  /** 笔记源清单（C1 通道）与 Anki 镜象：赋值在 constructor；字段声明曾在抽离中丢失。 */
+  private noteManifest: NoteSourceManifest
+  private ankiMirror: AnkiMirror
   readonly sessions: Sessions
   /** Lab 子系统（D 系列实验台，#152 刀 2）：窄面注入构造，见 constructor 尾部。 */
   private lab: LabSubsystem
