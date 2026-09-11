@@ -1,3 +1,5 @@
+import type { ParamSpec, ParameterSchemaSpec } from '../commands/types.ts'
+
 /**
  * 宿主参数守卫语义的唯一出处（#168；ADR-0045「参数校验收成一处的语义」）。
  *
@@ -149,4 +151,55 @@ export function optList(body: Body, key: string): unknown[] | undefined {
 /** 可选项 → 可展开的补丁：值为 undefined 即空对象（`...(cond ? {k: v} : {})` 的等价形式）。 */
 export function pick<K extends string, V>(key: K, value: V | undefined): Record<string, V> | Record<string, never> {
   return value === undefined ? {} : { [key]: value } as Record<string, V>
+}
+
+// ---------------------------------------------------------------- 注册表驱动的取值（#169）
+
+/** 参数来源：GET 段是查询串，POST/PUT 段是 JSON 体（与手写时代的取值面一致）。 */
+export type ArgSource =
+  | { kind: 'query'; url: URL }
+  | { kind: 'body'; body: Body }
+
+/** 一个键按声明取值：`required` 决定必填语义，`read` 决定可选语义（查询串恒为字符串面）。 */
+function readOne(key: string, spec: ParamSpec, source: ArgSource, required: boolean): unknown {
+  if (source.kind === 'query') {
+    return required ? needQuery(source.url, key)[0] : optQuery(source.url, key)
+  }
+  const body = source.body
+  if (spec.type === 'string') {
+    if (required) return spec.enum ? requireOneOf(body, key, spec.enum) : spec.read === 'raw' ? requireString(body, key) : need(body, key)
+    switch (spec.read) {
+      case 'text': return optText(body, key)
+      case 'raw': return optRaw(body, key)
+      case 'fallback': return optString(body, key)
+      default: return optTrimmed(body, key)
+    }
+  }
+  if (spec.type === 'number') {
+    if (required) return requireNumber(body, key)
+    return spec.read === 'finite' ? optFinite(body, key) : optNumber(body, key)
+  }
+  if (spec.type === 'boolean') return required ? requireBoolean(body, key) : optBoolean(body, key)
+  if (spec.type === 'object') return required ? requireObject(body, key) : optObject(body, key)
+  return optList(body, key)
+}
+
+/**
+ * 注册表声明 + 通道 `bind` → 引擎实参（顺序＝bind 顺序；`null` 位传 undefined）。
+ * 必填清单取通道的 `required`（缺失时回落到 `args` 的 `required`）——「必填」是（命令,通道）
+ * 对的事实（实测 9 处两面不一致），故优先级在通道。
+ */
+export function readArgs(
+  args: ParameterSchemaSpec,
+  channel: { required?: string[] },
+  source: ArgSource,
+  bind: Array<string | null>,
+): unknown[] {
+  const required = new Set(channel.required ?? Object.entries(args).filter(([, s]) => s.required).map(([k]) => k))
+  return bind.map(key => {
+    if (key === null) return undefined
+    const spec = args[key]
+    if (!spec) throw new Error(`missing required field: ${key}`) // 声明漏键（门⑧ 该拦下）
+    return readOne(key, spec, source, required.has(key))
+  })
 }

@@ -22,7 +22,6 @@ export const 题库域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "GET", path: "/bank-cleanup" },
-        bind: ["course"]
       }
     ]
   }),
@@ -81,7 +80,6 @@ export const 题库域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/difficulty-advice-dismiss" },
-        bind: ["course", "node", "qid", "undo", "all"]
       }
     ]
   }),
@@ -99,7 +97,6 @@ export const 题库域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/question-add" },
-        bind: ["course", "node", "question"]
       }
     ]
   }),
@@ -119,7 +116,6 @@ export const 题库域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/question-archive" },
-        bind: ["course", "node", "qid", "archived", "reason"]
       }
     ]
   }),
@@ -345,7 +341,6 @@ export const 题库域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "PUT", path: "/question-update" },
-        bind: ["course", "node", "qid", "patch"]
       }
     ]
   }),

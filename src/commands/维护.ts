@@ -45,7 +45,6 @@ export const 维护域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/course/delete" },
-        bind: ["course"]
       }
     ]
   }),
@@ -208,7 +207,6 @@ export const 维护域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "GET", path: "/probation" },
-        bind: ["course"]
       }
     ]
   }),
@@ -231,7 +229,6 @@ export const 维护域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/rebuild" },
-        bind: []
       }
     ]
   }),

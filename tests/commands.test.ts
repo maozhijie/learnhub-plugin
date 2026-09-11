@@ -20,6 +20,7 @@ import { BY_ROUTE, BY_TOOL, COMMANDS } from '../src/commands/index.ts'
 import { GEN_JOB_PHASES, isNodeAnchoredPhase } from '../src/generation-jobs.ts'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { AGENT_GUIDE, sdkParameters } from '../src/host/tools.ts'
+import { HANDLERS } from '../src/host/handlers.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -65,7 +66,7 @@ test('门① engine 存在性：声明值 ∈ 门面原型方法；留空的逐�
   assert.deepEqual(ghosts, [], `白名单里的这些 id 在注册表里不存在（幽灵条目）：\n${ghosts.join('\n')}`)
   // 生成路径的命令必须真的声明了 bind（否则适配器无从装配实参）
   const generic = COMMANDS.filter(c => c.channels.some(x => x.bind !== undefined))
-  assert.ok(generic.length > 100, `走生成路径的命令只剩 ${generic.length} 条（低于预期，装机率塌了）`)
+  assert.ok(generic.length >= 90, `走生成路径的命令只剩 ${generic.length} 条（实测 92 = agent 77 ∪ panel 49，塌了就说明声明退化）`)
 })
 
 // ---------------------------------------------------------------- ② 队列阶段
@@ -158,4 +159,24 @@ test('门⑧ 声明与面一致：panel 通道的 (method, path) 与路由清单
     .map(x => shape({ method: x.route!.method, route: x.route!.path, ...(x.prefix ? { prefix: true } : {}) })))
     .sort()
   assert.deepEqual(fromRegistry, baseline.map(shape).sort(), 'panel 通道的路由清单与重构前实测漂移')
+})
+
+// ---------------------------------------------------------------- ④ handler 覆盖
+
+test('门④ handler 覆盖：handlers.ts 的键集合 == 没有 bind 的 panel 通道集合', () => {
+  const panel = COMMANDS.flatMap(c => c.channels.filter(ch => ch.route).map(ch => ({ command: c, channel: ch })))
+  const generic = panel.filter(x => x.channel.bind !== undefined)
+  const handled = panel.filter(x => x.channel.bind === undefined)
+  const keys = new Set(Object.keys(HANDLERS))
+  const missing = handled.filter(x => !keys.has(`${x.channel.route!.method} ${x.channel.route!.path}`))
+    .map(x => `${x.channel.route!.method} ${x.channel.route!.path}`)
+  const dead = [...keys].filter(k => !handled.some(x => `${x.channel.route!.method} ${x.channel.route!.path}` === k))
+  assert.deepEqual(missing, [], `这些路由既没有 bind（生成路径）也没有 handler：\n${missing.join('\n')}`)
+  assert.deepEqual(dead, [], `这些 handler 已被生成路径覆盖（死代码，该删）：\n${dead.join('\n')}`)
+  assert.ok(generic.length >= 45, `生成路径只剩 ${generic.length} 条（装机率塌了）`)
+  assert.equal(generic.length + handled.length, 125, '面板通道总数应恰 125')
+  // bind 的每个键都必须在 args 里（否则取值器会抛「声明漏键」）
+  const badBind = panel.filter(x => (x.channel.bind ?? []).some(k => k !== null && !(k in x.command.args)))
+    .map(x => x.command.id)
+  assert.deepEqual(badBind, [], `这些命令的 bind 引用了未声明的键：\n${badBind.join('\n')}`)
 })

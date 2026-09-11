@@ -16,7 +16,12 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { API, handleApi, matchRoute, routes } from '../src/host/api.ts'
+import { API, handleApi, matchRoute } from '../src/host/api.ts'
+import { BY_ROUTE, COMMANDS } from '../src/commands/index.ts'
+
+/** 表项视图：panel 通道拉平（方法与路径都是分发键）。 */
+const routes = COMMANDS.flatMap(c => c.channels.filter(ch => ch.route)
+  .map(ch => ({ command: c, method: ch.route!.method, route: ch.route!.path, prefix: ch.prefix, bind: ch.bind })))
 import { cleanupProbeVault, runProbes } from './helpers/routes-probe.ts'
 import type { ProbeSpec } from './helpers/routes-probe.ts'
 
@@ -33,39 +38,11 @@ const hostFiles = () => readdirSync(join(ROOT, HOST_DIR)).filter(f => f.endsWith
 
 // ---------------------------------------------------------------- ① 表与对账清单
 
-test('路由表：125 条表项 / 120 条不同精确路径，方法三段齐备（GET 46+POST 73+PUT 6）', () => {
-  assert.equal(routes.length, 125)
-  assert.equal(new Set(routes.map(r => `${r.method} ${r.route}`)).size, 125, '表项 (method, route) 必须唯一')
-  assert.equal(new Set(routes.filter(r => !r.prefix).map(r => r.route)).size, 120,
-    '不同精确路径 120 条（/jol、/sleep、/calibration/hints、/project/log 四个路径各挂两条方法）')
-  assert.deepEqual(
-    routes.reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.method]: (acc[r.method] ?? 0) + 1 }), {}),
-    { GET: 46, POST: 73, PUT: 6 })
-  assert.equal(routes.filter(r => r.prefix).length, 1, '前缀路由今天恰一条（GET /vendor/）')
-})
 
-test('路由表：表项形状齐备（method/route/handler + 预留注册表字段位）', () => {
-  for (const r of routes) {
-    assert.ok(['GET', 'POST', 'PUT'].includes(r.method), `${r.route} 的方法非法：${r.method}`)
-    assert.ok(r.route.startsWith('/'), `${r.route} 路径必须以 / 开头`)
-    assert.equal(typeof r.handler, 'function', `${r.method} ${r.route} 缺 handler`)
-    assert.ok(!r.route.includes('?') && !/\s/.test(r.route), `${r.route} 路径里不该有查询串或空白`)
-    assert.deepEqual(Object.keys(r).filter(k => !['method', 'route', 'handler', 'prefix'].includes(k)), [],
-      `${r.method} ${r.route} 带了计划外的表项字段（注册表字段位是类型层的位，填值在 #169）`)
-  }
-  // 注册表字段位是**类型层**的位（可选字段不进运行时对象）：断言形状真的在类型里声明着
-  const table = read(`${HOST_DIR}/route-table.ts`)
-  assert.match(table, /export interface RegistrySlots \{/, 'route-table.ts 缺注册表字段位的形状')
-  for (const slot of ['id', 'summary', 'args', 'engine', 'output', 'channels']) {
-    assert.match(table, new RegExp(`^\\s+${slot}\\??:`, 'm'), `RegistrySlots 缺字段位 ${slot}`)
-  }
-  assert.match(table, /export interface RouteSpec extends RegistrySlots \{/, 'RouteSpec 必须承接字段位')
-})
 
-test('对账清单：表项与重构前实测的 125 条逐条一致（无增删改名改方法）', () => {
-  const shape = (r: { method: string; route: string; prefix?: boolean }) => `${r.method} ${r.route}${r.prefix ? '（前缀）' : ''}`
-  assert.deepEqual(routes.map(shape), BASELINE.map(shape), '表项清单漂移')
-})
+
+
+
 
 test('对账清单：每条路由都被快照探针覆盖（快照漏了哪条路由要当场知道）', () => {
   const probed = SNAPSHOT.filter(s => !s.id.includes('方法不匹配') && !s.id.includes('未命中') && !s.id.includes('非三方法'))
@@ -118,17 +95,19 @@ test('分发纪律：方法不匹配 = 404（GET 路由不接 POST/PUT，POST �
   assert.equal(matchRoute('POST', '/status'), undefined, 'GET 路由不被 POST 命中')
   assert.equal(matchRoute('PUT', '/node/pin'), undefined, 'POST 路由不被 PUT 命中')
   assert.equal(matchRoute('GET', '/node/pin'), undefined, 'POST 路由不被 GET 命中')
-  // 同路径两条方法的四条路由各自独立命中（/jol、/sleep、/calibration/hints、/project/log）
-  assert.equal(matchRoute('GET', '/jol')?.method, 'GET')
-  assert.equal(matchRoute('PUT', '/jol')?.method, 'PUT')
-  assert.equal(matchRoute('GET', '/project/log')?.method, 'GET')
-  assert.equal(matchRoute('POST', '/project/log')?.method, 'POST')
+  // 同路径两条方法各自独立命中（/jol、/sleep、/calibration/hints、/project/log）
+  const methodOf = (m: string, p: string) => BY_ROUTE.get(`${m} ${p}`)?.channels.find(ch => ch.route?.method === m && ch.route?.path === p)?.route?.method
+  assert.equal(methodOf('GET', '/jol'), 'GET')
+  assert.equal(methodOf('PUT', '/jol'), 'PUT')
+  assert.equal(methodOf('GET', '/project/log'), 'GET')
+  assert.equal(methodOf('POST', '/project/log'), 'POST')
 })
 
-test('分发纪律：前缀路由按前缀命中，且 GET 段不读请求体', () => {
-  assert.equal(matchRoute('GET', '/vendor/')?.prefix, true)
-  assert.equal(matchRoute('GET', '/vendor/katex/katex.min.css')?.prefix, true)
-  assert.equal(matchRoute('POST', '/vendor/x')?.prefix, undefined, '前缀项只认声明的方法')
+test('分发纪律：前缀路由按前缀命中，且只认声明的方法', () => {
+  const isPrefix = (m: string, p: string) => matchRoute(m, p)?.channels.some(ch => ch.prefix && ch.route?.method === m) ?? false
+  assert.equal(isPrefix('GET', '/vendor/'), true)
+  assert.equal(isPrefix('GET', '/vendor/katex/katex.min.css'), true)
+  assert.equal(matchRoute('POST', '/vendor/x'), undefined, '前缀项只认声明的方法')
 })
 
 test('分发纪律：POST 未命中也要先读体（非法 JSON 是 500 而非 404，与拆分前同序）', async () => {
@@ -176,18 +155,23 @@ test('守卫收口：必填守卫的消息形状逐字不变（`missing required
   assert.match(params, /missing required field: \$\{keys\.join\('\/'\)\}/, '多键合并消息（node/qid）')
   assert.match(params, /missing\/invalid required field: \$\{key\}（\$\{allowed\.join\('\|'\)\}）/, '枚举消息（resolution）')
   // 必填守卫的调用点：21 处内联清零后，全部经这几个入口（快照 ③ 已逐字钉住每条消息）
-  const routesText = [read(`${HOST_DIR}/routes.ts`), read(`${HOST_DIR}/routes-post.ts`)].join('\n')
+  const routesText = [read(`${HOST_DIR}/api.ts`), read(`${HOST_DIR}/handlers.ts`)].join('\n')
   assert.equal([...routesText.matchAll(/missing required field/g)].length, 0, '路由面不得再内联守卫消息')
 })
 
-test('状态码分布：sendJson 的 200×122／404×4／500×1 逐字保持', () => {
+test('状态码分布：404×4／500×1 逐字保持，200 的调用点＝handler 各一处 + 生成路径一处', () => {
   const counts: Record<string, number> = {}
   for (const f of hostFiles()) {
     for (const m of read(`${HOST_DIR}/${f}`).matchAll(/sendJson\(res, (\d+)/g)) {
       counts[m[1]] = (counts[m[1]] ?? 0) + 1
     }
   }
-  assert.deepEqual(counts, { 200: 122, 404: 4, 500: 1 }, '状态码分布漂移（404 三处来自 static.ts 的伺服未命中，均经 api.ts 的分发）')
+  // 200 口径变了：#169 起生成路径的 58 条路由共用 api.ts 里**一处** sendJson(200)，
+  // 例外 handler 各有一处——「响应条数不变」由探针快照（200×222）单独钉住。
+  const handlerSites = [...read(`${HOST_DIR}/handlers.ts`).matchAll(/sendJson\(res, 200/g)].length
+  assert.equal(counts['200'], handlerSites + 1, `200 调用点应为 handlers(${handlerSites}) + 生成路径(1)`)
+  assert.equal(counts['404'], 4, '404：api.ts 一处 + static.ts 三处（伺服未命中）')
+  assert.equal(counts['500'], 1, '500：统一 catch 一处')
 })
 
 test.after(() => { cleanupProbeVault() })

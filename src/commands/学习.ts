@@ -43,7 +43,6 @@ export const 学习域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "PUT", path: "/calibration/hints" },
-        bind: ["hints_enabled"]
       }
     ]
   }),
@@ -140,7 +139,6 @@ export const 学习域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/node/complete" },
-        bind: ["course", "node", "force"]
       }
     ]
   }),
@@ -154,7 +152,6 @@ export const 学习域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "GET", path: "/courses" },
-        bind: []
       }
     ]
   }),
@@ -505,7 +502,6 @@ export const 学习域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/review" },
-        bind: ["course", "node"]
       }
     ]
   }),
@@ -648,7 +644,6 @@ export const 学习域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "GET", path: "/status" },
-        bind: []
       }
     ]
   }),

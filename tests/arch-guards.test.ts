@@ -93,17 +93,20 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   assert.equal(typeof api.handleApi, 'function', 'host/api.ts 缺导出 handleApi')
   assert.equal(typeof api.matchRoute, 'function', 'host/api.ts 缺导出 matchRoute（分发即查表）')
   assert.equal(api.API, '/learnhub/api', 'host/api.ts 路由前缀漂移')
-  assert.equal(api.routes.length, 125, 'host/api.ts 装配的路由表应为 125 条（GET 46 + POST 73 + PUT 6）')
+
   // 路由表三段各自成模块（#168）：形状在 route-table.ts，GET/PUT 在 routes.ts，POST 子表在 routes-post.ts
   const table = await import('../src/host/route-table.ts')
   for (const n of ['get', 'post', 'put', 'getPrefix']) {
     assert.equal(typeof table[n], 'function', `host/route-table.ts 缺表项构造器 ${n}`)
   }
-  const routeSegments = await import('../src/host/routes.ts')
-  assert.equal(routeSegments.getRoutes.length, 46, 'host/routes.ts 的 GET 段应为 46 条')
-  assert.equal(routeSegments.putRoutes.length, 6, 'host/routes.ts 的 PUT 段应为 6 条')
-  const postSegment = await import('../src/host/routes-post.ts')
-  assert.equal(postSegment.postRoutes.length, 73, 'host/routes-post.ts 的 POST 子表应为 73 条')
+  // #169：路由表演进为命令注册表（routes.ts／routes-post.ts 的 125 条表项 → src/commands/ 的声明，
+  // 例外 handler 落 host/handlers.ts）
+  const commands = await import('../src/commands/index.ts')
+  assert.equal(commands.COMMANDS.length, 154, '注册表应为 154 条命令')
+  assert.equal(commands.BY_TOOL.size, 111, 'agent 通道索引应为 111 条工具')
+  assert.equal(commands.BY_ROUTE.size, 125, 'panel 通道索引应为 125 条路由')
+  const handlers = await import('../src/host/handlers.ts')
+  assert.equal(typeof handlers.HANDLERS, 'object', 'host/handlers.ts 缺 HANDLERS')
   const staticSrv = await import('../src/host/static.ts')
   for (const n of ['panelPageHandler', 'serveVaultFile', 'serveVendor', 'serveInteractive']) {
     assert.equal(typeof staticSrv[n], 'function', `host/static.ts 缺导出 ${n}`)
@@ -116,7 +119,7 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
 
 test('G2b src 下的入口文件存在且非空（防止误删/误移）', () => {
   for (const rel of ['index.ts', 'host/llm.ts', 'host/http.ts', 'host/params.ts', 'host/route-table.ts',
-    'host/routes.ts', 'host/routes-post.ts',
+    'host/handlers.ts',
     'host/runtime.ts', 'host/jobs.ts', 'host/api.ts', 'host/static.ts', 'host/tools.ts', 'engine/index.ts']) {
     assert.ok(statSync(join(SRC, rel)).size > 0, `${rel} 缺失或为空`)
   }

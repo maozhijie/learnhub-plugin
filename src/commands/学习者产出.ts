@@ -226,7 +226,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "GET", path: "/explain-pack" },
-        bind: ["course", "node", "qid"]
       }
     ]
   }),
@@ -250,7 +249,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/habits/archive" },
-        bind: ["habit", "archived"]
       }
     ]
   }),
@@ -489,7 +487,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/learner-archive" },
-        bind: ["course", "node", "card", "archived"]
       }
     ]
   }),
@@ -620,7 +617,6 @@ export const 学习者产出域: CommandSpec[] = [
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/skills/archive" },
-        bind: ["skill", "archived"]
       }
     ]
   }),
