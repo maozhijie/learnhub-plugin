@@ -8,7 +8,8 @@
  * 契约（ADR-0004 / #6）：注册表缺失是合法空状态；文件存在但 YAML 或条目
  * 不合契约时必须 fail loud，不能被读成空课程列表或静默过滤坏条目。
  */
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import type { CourseEntry, NoteSourceEntry } from './types.ts'
 import { validateNoteSourceEntries } from './note-source.ts'
@@ -115,10 +116,9 @@ export class Registry {
    * （不静默降级为空域覆写）。 */
   async save(courses: CourseEntry[], noteSources?: NoteSourceEntry[]): Promise<void> {
     const sources = noteSources ?? (await this.loadDoc()).noteSources
-    await mkdir(this.paths.centerRoot, { recursive: true })
     const doc: Record<string, unknown> = { courses }
     if (sources.length) doc.note_sources = sources
-    await writeFile(this.paths.registryPath, YAML.stringify(doc), 'utf8')
+    await atomicWrite(this.paths.registryPath, YAML.stringify(doc))
   }
 
   /** 按 name 或 id 精确匹配；未找到返回 null。 */

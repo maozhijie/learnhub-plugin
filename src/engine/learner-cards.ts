@@ -14,7 +14,7 @@
  * Missing/Broken 纪律沿用 ADR-0004：文件缺失 = 合法空卡组；存在但坏 = 抛 Broken。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile, unlink, rename } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
 import type { FsrsBlock, Fm, CourseEntry, EArchiveRec } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -35,7 +35,7 @@ import type { FSRS } from 'ts-fsrs'
 import { todayStr, dayOfTs, nowIso } from './dates.ts'
 import { nodeKeyOf } from './types.ts'
 import { round2 } from './grading.ts'
-import { readLearnhubConfig, writeLearnhubConfig } from './io.ts'
+import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import type { BandPref } from './adaptive.ts'
 import { combinedDifficulty } from './adaptive.ts'
 import { advanceStrict } from './advance.ts'
@@ -220,8 +220,7 @@ export class LearnerCards {
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
     const p = this.cardPath(courseRoot, node)
-    await mkdir(p.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
   }
 
   private async loadChecked(courseRoot: string, node: string, op: string): Promise<Record<string, unknown> | null> {

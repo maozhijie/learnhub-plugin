@@ -6,7 +6,8 @@
  * 键序固定 node/stage/fsrs/mastery/practice_ema/content/practice，其余键保序追加；
  * mastery 位仅为旧文件键序稳定保留，新文件不再写入该键（ADR-0007）。
  */
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { join } from 'node:path'
 import { YAML } from './yaml.ts'
 import type { Fm, FsrsBlock, Stage } from './types.ts'
@@ -313,9 +314,8 @@ export async function scanAll(courseDir: string): Promise<{
 
 /** 写课程文件（frontmatter + 正文），自动建目录。 */
 export async function saveNote(path: string, fm: Record<string, unknown>, body: string): Promise<void> {
-  await mkdir(path.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
   const head = `---\n${renderFrontmatter(fm)}\n---\n\n`
-  await writeFile(path, head + (body.startsWith('#') || !body.trim() ? body : body), 'utf8')
+  await atomicWrite(path, head + (body.startsWith('#') || !body.trim() ? body : body)) // 调度事实源必须原子（ADR-0046）
 }
 
 /** 就地更新 frontmatter 顶层键（patch 合并），正文不动。 */

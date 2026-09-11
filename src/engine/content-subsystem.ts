@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, rename } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 /**
  * Content 子系统（#152 刀 8 / ADR-0043）：内容管线、笔记 resolve/反馈区、课程工作区
  * 与题库树。
@@ -179,8 +180,7 @@ export class ContentSubsystem {
     const courseRoot = this.e.paths.courseRoot(c.root)
     for (const f of split.files) {
       const target = `${courseRoot}/${f.rel}`
-      await mkdir(target.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-      await writeFile(target, f.html, 'utf8')
+      await atomicWrite(target, f.html)
     }
     const fixed = Content.fixRichBlocks((await this.e.content.fixAliases(c.root, split.body)).body)
     const gate = await this.e.content.gateReport(graph, c.root, node, fixed)
@@ -232,8 +232,7 @@ export class ContentSubsystem {
       const [, regionName] = graph.blockOf[node]
       const path = this.e.paths.courseNotePath(c.root, regionName, node)
       const backup = `${trashBase}/${c.root}/课程/${safeFilename(regionName)}/${safeFilename(node)}.md`
-      await mkdir(backup.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-      await writeFile(backup, await readFile(path, 'utf8'), 'utf8')
+      await atomicWrite(backup, await readFile(path, 'utf8'))
       const { fm } = await loadNote(path)
       await saveNote(path, {
         ...((fm ?? {}) as Record<string, unknown>),

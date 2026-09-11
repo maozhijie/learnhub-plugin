@@ -19,13 +19,13 @@
  *
  * 抽样与聚合全部零依赖纯函数（complexity.ts 先例）；RNG 播种自实验 id，确定性可测。
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import { calendarDayOf, daysBetween, nowIso, parseDay } from './dates.ts'
 import { nodeKeyOf, sourceKeyOf } from './types.ts'
 import { NOF1_VARIABLE_WHITELIST } from './types.ts'
 import type { ExperimentDef, Nof1Variable } from './types.ts'
 import { YAML } from './yaml.ts'
-import { readLearnhubConfig, writeLearnhubConfig } from './io.ts'
+import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import { normalizeSleepAdvice } from './sleep.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from './thermostat.ts'
@@ -432,8 +432,7 @@ export class LabSubsystem {
     const scope = course ?? '全部课程'
     const pid = await this.e.store.createProposal('experiment', scope, summary, '')
     const path = this.e.paths.proposalArtifactPath(pid, 'experiment', scope)
-    await mkdir(this.e.paths.proposalDir, { recursive: true })
-    await writeFile(path, YAML.stringify(doc), 'utf8')
+    await atomicWrite(path, YAML.stringify(doc))
     await this.e.store.updateProposal(pid, { artifact: path })
     return { proposal: pid, template: tpl.id, title: tpl.title, pool, scope_course: course ?? null }
   }

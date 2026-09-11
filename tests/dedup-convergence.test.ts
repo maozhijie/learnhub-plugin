@@ -13,6 +13,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { round2, clamp01, pctOf } from '../src/engine/grading.ts'
@@ -20,6 +22,7 @@ import { DAY_MS, calendarDayOf, dayOfTs, fmtDay, addDays } from '../src/engine/d
 // 来源键经 anki.ts 原路径导入——有意验证 re-export 接缝未晃（本体在 types.ts）
 import { sourceKeyOf, parseSourceKey, nodeKeyOf } from '../src/engine/anki.ts'
 import { PROPOSAL_STATUSES } from '../src/engine/types.ts'
+import { saveNote } from '../src/engine/notes.ts'
 
 const ENGINE = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'engine')
 
@@ -159,4 +162,21 @@ test('单一出处门：七组收敛模式在出处外零残留', () => {
     }
   }
   assert.deepEqual(offenders, [], `[单一出处] 七组模式仍有残留：\n${offenders.join('\n')}`)
+})
+
+// ---- #173 原子写倒挂：正典写入器经 atomicWrite（tmp + rename），落盘零 tmp 残留 ----
+
+test('saveNote 原子落盘：内容完整、目录零 tmp 残留、自动建父目录', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'lh-atomic-'))
+  try {
+    const notePath = join(dir, '区', '节点.md')
+    await saveNote(notePath, { node: '节点', content: { version: 1 } }, '## 正文')
+    const leftovers = (await readdir(dir, { recursive: true })).filter(f => String(f).includes('.tmp-'))
+    assert.deepEqual(leftovers, [], `tmp 残留：${leftovers.join('、')}`)
+    const content = await readFile(notePath, 'utf8')
+    assert.ok(content.startsWith('---\n'), 'frontmatter 头缺失')
+    assert.ok(content.trimEnd().endsWith('## 正文'), '正文缺失')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

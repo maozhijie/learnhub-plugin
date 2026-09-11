@@ -15,7 +15,8 @@
  * Missing/Broken 纪律沿用 ADR-0004：文件缺失 = 合法空卡组；存在但坏 = 抛 Broken。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import type { FsrsBlock, PracticeRec } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -263,8 +264,7 @@ export class ErrorCards {
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
     const p = this.cardPath(courseRoot, node)
-    await mkdir(p.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
   }
 
   private async loadChecked(courseRoot: string, node: string, op: string): Promise<Record<string, unknown> | null> {

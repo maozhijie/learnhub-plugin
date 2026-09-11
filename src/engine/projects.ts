@@ -11,7 +11,7 @@
  * 存在但坏 = Broken 抛出。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile, appendFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, appendFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
 // FadingTier/FADING_TIERS 住 types.ts、PlanItem 与计划产物校验住 project-decompile.ts
 // （#152 刀 5 归位：project-exec/project-decompile 反向引用，留原地即成环）；
@@ -377,8 +377,7 @@ export class Projects {
     const pid = await this.store.createProposal('project_plan', projectId,
       `${initial ? '初次规划' : '计划修订'}：${v.plan.length} 个里程碑`, '')
     const path = this.paths.proposalArtifactPath(pid, 'project_plan', projectId)
-    await mkdir(this.paths.proposalDir, { recursive: true })
-    await writeFile(path, YAML.stringify(doc), 'utf8')
+    await atomicWrite(path, YAML.stringify(doc))
     // pair 出生即写（#149 同源双提案）：计划提案落盘那一刻就带联动——任一时刻崩溃
     // 都不会留下可单边 apply 的无守卫计划半区（时序缺口守卫从出生起生效）。
     await this.store.updateProposal(pid, {
@@ -436,8 +435,7 @@ export class Projects {
       throw new Error(`[project-milestone] 「${file}」已生成——按档重生成走提案通道（learnhub_project_milestone_generate 会自动转提案，apply 后带快照覆盖）。`)
     }
     this.gateOrFail(md, project.tier)
-    await mkdir(this.paths.projectMilestoneDir(projectId), { recursive: true })
-    await writeFile(path, md.trimEnd() + '\n', 'utf8')
+    await atomicWrite(path, md.trimEnd() + '\n')
     return { written: file, tier: project.tier }
   }
 
@@ -453,8 +451,7 @@ export class Projects {
     const pid = await this.store.createProposal('project_milestone', projectId,
       `里程碑「${item.name}」按档「${project.tier}」重生成`, '')
     const artifactPath = this.paths.proposalArtifactPath(pid, 'project_milestone', projectId)
-    await mkdir(this.paths.proposalDir, { recursive: true })
-    await writeFile(artifactPath, YAML.stringify(doc), 'utf8')
+    await atomicWrite(artifactPath, YAML.stringify(doc))
     await this.store.updateProposal(pid, { artifact: artifactPath })
     return { id: pid, kind: 'project_milestone', project: projectId, milestone: milestoneId, file }
   }
@@ -470,8 +467,7 @@ export class Projects {
     const path = this.paths.projectMilestonePath(project.id, file)
     const snapshot = this.paths.projectSnapshotPath(prop.id, `m${file}`)
     await atomicWrite(snapshot, await readFile(path, 'utf8'))
-    await mkdir(this.paths.projectMilestoneDir(project.id), { recursive: true })
-    await writeFile(path, v.md.trimEnd() + '\n', 'utf8')
+    await atomicWrite(path, v.md.trimEnd() + '\n')
     await this.store.updateProposal(prop.id, {
       status: 'applied', decided: new Date().toISOString(), decision_note: `快照 ${snapshot}`,
     })

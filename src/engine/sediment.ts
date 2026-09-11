@@ -18,7 +18,8 @@
  * 坐标系，CONTEXT.md「概念」词条）；addresser 尚未接线（#141 登记表、#146 复诊、
  * #145 生长批），concept 字段缺席合法。
  */
-import { mkdir, readFile, appendFile, writeFile, rename } from 'node:fs/promises'
+import { mkdir, readFile, appendFile } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { calendarDayOf, weekStartOf } from './dates.ts'
 import { nowIso } from './dates.ts'
 import type { Paths } from './paths.ts'
@@ -226,12 +227,9 @@ export function renderLearnerProfile(fold: SedimentFold): string {
   ].join('\n')
 }
 
-/** 重建投影（结算钩子的落盘出口）：fold → 写 学习者档案.md（原子替换）。 */
+/** 重建投影（结算钩子的落盘出口）：fold → 写 学习者档案.md（原子替换；ADR-0046：手搓 tmp+rename 复制品改调唯一原语）。 */
 export async function rebuildLearnerProfile(paths: Paths, fold: SedimentFold): Promise<string> {
   const md = renderLearnerProfile(fold)
-  const tmp = `${paths.learnerProfilePath}.tmp-${process.pid}-${Date.now()}`
-  await mkdir(paths.sedimentDir, { recursive: true })
-  await writeFile(tmp, md, 'utf8')
-  await rename(tmp, paths.learnerProfilePath)
+  await atomicWrite(paths.learnerProfilePath, md)
   return md
 }

@@ -520,8 +520,7 @@ export class GraphProposals {
   private async saveArtifact(kind: ProposalKind, course: string, doc: unknown): Promise<{ pid: number; path: string }> {
     const pid = await this.store.createProposal(kind, course, '', '')
     const path = this.paths.proposalArtifactPath(pid, kind, course)
-    await mkdir(this.paths.proposalDir, { recursive: true })
-    await writeFile(path, YAML.stringify(doc), 'utf8')
+    await atomicWrite(path, YAML.stringify(doc))
     await this.store.updateProposal(pid, { artifact: path })
     return { pid, path }
   }

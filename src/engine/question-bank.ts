@@ -21,7 +21,8 @@
  * 计数/EMA（调度仍走 D15 settle）。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { clamp01, normChoice, numericOf } from './grading.ts'
 import type { AlloKind } from './grading.ts'
@@ -298,8 +299,7 @@ export class QuestionBank {
     if (v.errors) throw new Error(`[question-save] schema 校验失败，题库未写入。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec!
     const p = this.bankPath(courseRoot, spec.node)
-    await mkdir(p.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
     return { node: spec.node, count: spec.questions.length, path: p }
   }
 
@@ -317,8 +317,7 @@ export class QuestionBank {
 
   private async writeDoc(courseRoot: string, node: string, doc: unknown): Promise<void> {
     const p = this.bankPath(courseRoot, node)
-    await mkdir(p.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
   }
 
   /** 追加单题 → 新题 id 与题库总题数。 */

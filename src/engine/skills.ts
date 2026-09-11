@@ -24,7 +24,8 @@
  * Missing/Broken 纪律沿用 ADR-0004：技能文件缺失 = 合法空态；存在但坏 = Broken 抛出。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { todayStr, addDays, daysBetween, parseDay } from './dates.ts'
 import type { FsrsBlock } from './types.ts'
@@ -212,8 +213,7 @@ export class Skills {
     const maintenance = clampMaintenanceDays(input.maintenance_days, 'skill-create')
     const today = todayStr()
     const doc: SkillDoc = { skill: id, name, status: 'active', maintenance_days: maintenance, created: today, updated: today }
-    await mkdir(this.paths.skillsDir, { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
     return doc
   }
 
@@ -221,7 +221,7 @@ export class Skills {
   async save(id: string, doc: SkillDoc): Promise<void> {
     const p = this.paths.skillPath(id)
     if (!existsSync(p)) throw new Error(`[skills] 技能「${id}」不存在（Missing）。`)
-    await writeFile(p, YAML.stringify({ ...doc, updated: todayStr() }), 'utf8')
+    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr() }))
   }
 
   /** 归档/恢复（可逆；archived 只是收纳标签）。 */

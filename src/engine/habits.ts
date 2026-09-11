@@ -19,7 +19,8 @@
  * Missing/Broken 纪律沿用 ADR-0004：实体文件缺失 = 合法空态；存在但坏 = Broken 抛出。
  */
 import { existsSync } from 'node:fs'
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
+import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { todayStr, parseDay, fmtDay } from './dates.ts'
 import type { Paths } from './paths.ts'
@@ -176,8 +177,7 @@ export class Habits {
     if (existsSync(p)) throw new Error(`[habit-create] 习惯「${id}」已存在（${p}）。`)
     const today = todayStr()
     const doc: HabitDoc = { habit: id, name, status: 'active', intention: { cue, action }, created: today, updated: today }
-    await mkdir(this.paths.habitsDir, { recursive: true })
-    await writeFile(p, YAML.stringify(doc), 'utf8')
+    await atomicWrite(p, YAML.stringify(doc))
     return doc
   }
 
@@ -185,7 +185,7 @@ export class Habits {
   async save(id: string, doc: HabitDoc): Promise<void> {
     const p = this.paths.habitPath(id)
     if (!existsSync(p)) throw new Error(`[habits] 习惯「${id}」不存在（Missing）。`)
-    await writeFile(p, YAML.stringify({ ...doc, updated: todayStr() }), 'utf8')
+    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr() }))
   }
 
   /** 归档/恢复（可逆；无到期，archived 只是收纳标签）。 */
