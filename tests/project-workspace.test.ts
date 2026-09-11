@@ -110,7 +110,7 @@ test('#113 项目日志注册为复习源后：出题读日志、零写日志文
     await engine.projectCreate({ name: '吉他翻新', goal: 'g' })
     await engine.projectLogAppend('吉他翻新', '换弦的完整步骤记录，足够出题的内容：先松弦，再换弦，最后调音。', '2026-09-08')
     const logAbs = engine.paths.projectLogPath('吉他翻新')
-    await engine.noteSourceRegister(logAbs.replace(/\\/g, '/'))
+    await engine.channels.noteSourceRegister(logAbs.replace(/\\/g, '/'))
     const before = await readFile(logAbs, 'utf8')
     const gen = await engine.noteSourceGenerate('note-1', 3, async () => YAML.stringify({
       questions: [{ kind: 'true_false', q: '日志中换弦步骤的第一步是先松弦。', answer: true }],

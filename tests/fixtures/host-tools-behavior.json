@@ -2937,7 +2937,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "noteSourceList()"
+   "channels.noteSourceList()"
   ]
  },
  {
@@ -3095,7 +3095,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "ankiStatus({\"endpoint\":\"1\"})"
+   "channels.ankiStatus({\"endpoint\":\"1\"})"
   ]
  },
  {

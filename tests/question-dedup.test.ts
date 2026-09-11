@@ -143,7 +143,7 @@ test('#119 noteSourceGenerate：镜像题库同款注入与查重，指纹与初
   await withVault({
     files: [{ path: '我的笔记/费曼技巧.md', content: '# 费曼技巧\n\n费曼技巧 = 把概念讲给完全不懂的人听。\n' }],
   }, async ({ engine, paths }) => {
-    await engine.noteSourceRegister('我的笔记/费曼技巧.md')
+    await engine.channels.noteSourceRegister('我的笔记/费曼技巧.md')
     const first = await engine.noteSourceGenerate('note-1', undefined, async () => [
       'node: note-1',
       'questions:',

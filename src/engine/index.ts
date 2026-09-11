@@ -316,10 +316,10 @@ export class LearnhubEngine {
       logGradingFailure: rec => this.logGradingFailure(rec),
       questionContext: (courseKey, node, qid, op) => this.content2.questionContext(courseKey, node, qid, op),
       exerciseGated: (c, node) => this.exerciseGated(c, node),
-      repairInvokesOnce: (llm, items, scope) => this.repairInvokesOnce(llm, items, scope),
+      repairInvokesOnce: (llm, items, scope) => this.channels.repairInvokesOnce(llm, items, scope),
       admitQuestion: (root, node, q, stem, existingStems) => this.admitQuestion(root, node, q, stem, existingStems),
       explainPoints: (c, graph, node) => this.learner.explainPoints(c, graph, node),
-      isNoteSourceCourse: courseKey => this.isNoteSourceCourse(courseKey),
+      isNoteSourceCourse: courseKey => this.channels.isNoteSourceCourse(courseKey),
     })
     this.graph = new GraphSubsystem({
       clock: this.clock, fs: this.fs,
@@ -347,15 +347,15 @@ export class LearnhubEngine {
       errorCardTriples: (courses, nodeFilter) => this.errorCardTriples(courses, nodeFilter),
       exerciseGated: (c, node) => this.exerciseGated(c, node),
       expTag: (courseName, node, qid, today) => this.expTag(courseName, node, qid, today),
-      isNoteSourceCourse: courseKey => this.isNoteSourceCourse(courseKey),
+      isNoteSourceCourse: courseKey => this.channels.isNoteSourceCourse(courseKey),
       jolConfig: () => this.jolConfig(),
       jolPredicted: p => this.jolPredicted(p),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       nof1QueueEffect: today => this.nof1QueueEffect(today),
       noteSourceAnswer: (llmComplete, sourceId, qid, answer, opts) => this.noteSourceAnswer(llmComplete, sourceId, qid, answer, opts),
-      noteSourceForget: (sourceId, qid) => this.noteSourceForget(sourceId, qid),
-      noteSourceRate: (sourceId, qid, r) => this.noteSourceRate(sourceId, qid, r),
+      noteSourceForget: (sourceId, qid) => this.channels.noteSourceForget(sourceId, qid),
+      noteSourceRate: (sourceId, qid, r) => this.channels.noteSourceRate(sourceId, qid, r),
       sched: courseRoot => this.sched(courseRoot),
       updateNoteFm: (path, fm) => this.updateNoteFm(path, fm),
     })
@@ -934,18 +934,6 @@ export class LearnhubEngine {
 
   // 以下 C1/卡池镜像/漂移治理/排除清单/Anki 通道的方法体住 ChannelsSubsystem（note-source.ts，#152 刀 3 聚合+转发）
 
-  private async isNoteSourceCourse(courseKey: string | undefined): Promise<boolean> {
-    return this.channels.isNoteSourceCourse(courseKey)
-  }
-
-  async noteSourceRegister( input: string, today?: string, ): Promise<NoteSourceRegisterResult> {
-    return this.channels.noteSourceRegister(input, today)
-  }
-
-  async noteSourceList(today?: string): Promise<NoteSourceDoc> {
-    return this.channels.noteSourceList(today)
-  }
-
   async noteSourceUnregister(id: string): Promise<{ removed: string; path: string }> {
     return this.channels.noteSourceUnregister(id)
   }
@@ -975,10 +963,6 @@ export class LearnhubEngine {
     return this.channels.admitQuestion(root, node, q, stem, existingStems)
   }
 
-  private async repairInvokesOnce( llm: LlmComplete, items: unknown[], scope: string[], ): Promise<number> {
-    return this.channels.repairInvokesOnce(llm, items, scope)
-  }
-
   async noteSourceGenerate( id: string, count: number | undefined, llm: LlmComplete, today?: string, ): Promise<{ id: string; added: number; skipped: number; total: number; duplicates: Array<{ q: string; against: string }> }> {
     return this.channels.noteSourceGenerate(id, count, llm, today)
   }
@@ -991,13 +975,6 @@ export class LearnhubEngine {
     return this.channels.noteSourceAnswer(llmComplete, sourceId, qid, answer, opts)
   }
 
-  private async noteSourceRate(sourceId: string, qid: string, r: number): Promise<QuestionRateResult> {
-    return this.channels.noteSourceRate(sourceId, qid, r)
-  }
-
-  private async noteSourceForget(sourceId: string, qid: string): Promise<QuestionForgetResult> {
-    return this.channels.noteSourceForget(sourceId, qid)
-  }
   // ---- C2 Anki 通道（#63 / ADR-0011：Anki 纯作答通道，vault 唯一调度者）----
 
   async ankiExportPush(transport: AnkiTransport, today?: string): Promise<{ date: string; added: number; updated: number; removed: number; total: number; decks: string[] }> {
@@ -1008,9 +985,6 @@ export class LearnhubEngine {
     return this.channels.ankiImportEvents(transport, opts)
   }
 
-  async ankiStatus(transport?: AnkiTransport, today?: string): Promise<AnkiStatusDoc> {
-    return this.channels.ankiStatus(transport, today)
-  }
   // ---- 节点跳过 / 完成确认 ----
 
   // 以下 跳过/完成确认、XP 账本、记忆健康、优化器、沉淀层 五节方法体住 SchedSubsystem（sched-subsystem.ts，#152 刀 9 聚合+转发）

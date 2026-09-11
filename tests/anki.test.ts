@@ -375,18 +375,18 @@ test('下次同步移除：vault 归档/消费的卡从 Anki 镜象删除（镜�
 test('Anki 状态：镜象概况 + 到期分布 + AnkiConnect 可达性；连接失败不抛', async () => {
   await withVault(async engine => {
     const anki = new FakeAnki()
-    const empty = await engine.ankiStatus(anki)
+    const empty = await engine.channels.ankiStatus(anki)
     assert.equal(empty.mirror.entries, 0)
     assert.equal(empty.due.total, 2)
     assert.deepEqual((empty.anki as { connected: boolean }).connected, true)
     await engine.ankiExportPush(anki)
-    const st = await engine.ankiStatus(anki)
+    const st = await engine.channels.ankiStatus(anki)
     assert.equal(st.mirror.entries, 2)
     assert.match(String(st.mirror.last_push), /T/)
     assert.equal((st.anki as { connected: boolean }).connected, true)
     // 坏 transport：connected=false 带原因（不判 Broken）
     const bad: AnkiTransport = { invoke: async () => { throw new Error('ECONNREFUSED') } }
-    const off = await engine.ankiStatus(bad)
+    const off = await engine.channels.ankiStatus(bad)
     assert.equal((off.anki as { connected: boolean }).connected, false)
     assert.match(String((off.anki as { error: string }).error), /ECONNREFUSED/)
   })
@@ -412,7 +412,7 @@ test('笔记源卡 Anki 衔接：到期卡入 learnhub::笔记源 镜象，作�
     banks: { 入门: bankYaml() },
     files: [{ path: '我的笔记/费曼技巧.md', content: '# 费曼技巧\n\n讲给外行听。\n' }],
   }, async ({ engine }) => {
-    await engine.noteSourceRegister('我的笔记/费曼技巧.md')
+    await engine.channels.noteSourceRegister('我的笔记/费曼技巧.md')
     const gen = await engine.noteSourceGenerate('note-1', 1, async () => [
       'node: note-1',
       'questions:',

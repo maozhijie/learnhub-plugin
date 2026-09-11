@@ -59,7 +59,7 @@ test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔�
     files: [{ path: '读书笔记/吉他.md', content: '# 吉他\n' }],
   }, async ({ engine }) => {
     // 上一周的真实行为：作答（XP）+ 笔记源复习 + 习惯重复 + 技能执行事件 + 项目过点
-    await engine.noteSourceRegister('读书笔记/吉他.md')
+    await engine.channels.noteSourceRegister('读书笔记/吉他.md')
     await engine.store.appendPractice({ ts: mid(0), course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'auto', qid: 'q1', xp: 60 })
     await engine.store.appendJournal({ ts: mid(2), course: '数学', node: '入门', rating: null, kind: 'xp_bonus', elapsed_days: 0, xp: 10 })
     await engine.store.appendReview({ ts: mid(1), course: '笔记源', node: 'note-1', qid: 'q1', rating: 3, rating_source: 'self', elapsed_days: 3, stability_before: 5, difficulty_before: 5, r_pred: 0.8 })

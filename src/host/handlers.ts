@@ -144,7 +144,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // Anki 通道状态（C2 #63，#72 UI 挂接）：镜象/最近推送与回写/当前到期分布
     // + AnkiConnect 可达性（连接失败不抛，status.anki.connected=false 带原因）
     sendJson(res, 200, await apiRun(rt, 'api/anki/status', () =>
-      rt.engine.ankiStatus(new AnkiConnectClient(ANKI_ENDPOINT))))
+      rt.engine.channels.ankiStatus(new AnkiConnectClient(ANKI_ENDPOINT))))
   },
   'GET /agent-guide': async ({ res }) => {
     // 能力指南：agent 独有工具的面板说明锚点（AGENT_GUIDE 单一事实源）

@@ -231,7 +231,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
           minutesPerDay: args.minutes_per_day, weeks: args.weeks, course: args.course, nodes: args.nodes,
         }))),
   'learnhub_note_source_list': () => run(rt, 'learnhub_note_source_list', async () =>
-      JSON.stringify(await rt.engine.noteSourceList())),
+      JSON.stringify(await rt.engine.channels.noteSourceList())),
   'learnhub_note_source_generate': (args: { id: string; count?: number }) => run(rt, 'learnhub_note_source_generate', async () => {
       const n = questionCount(args.count)
       return JSON.stringify(await rt.engine.noteSourceGenerate(args.id, n, llmSeamStripped(ctx)))
@@ -241,7 +241,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_anki_import': (args: { endpoint?: string }) => run(rt, 'learnhub_anki_import', async () =>
       JSON.stringify(await rt.engine.ankiImportEvents(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
   'learnhub_anki_status': (args: { endpoint?: string }) => run(rt, 'learnhub_anki_status', async () =>
-      JSON.stringify(await rt.engine.ankiStatus(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
+      JSON.stringify(await rt.engine.channels.ankiStatus(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
   'learnhub_data_check': () => run(rt, 'learnhub_data_check', async () => JSON.stringify(await rt.engine.dataCheck())),
   'learnhub_probation': (args: { action?: 'status' | 'settle'; course?: string }) => run(rt, 'learnhub_probation', async () => {
       const a = (args ?? {}) as { action?: 'status' | 'settle'; course?: string }
