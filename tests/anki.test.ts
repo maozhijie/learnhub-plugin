@@ -2,7 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
-import { LearnhubEngine, revealAnswer } from '../src/engine/index.ts'
+import { LearnhubEngine } from '../src/engine/index.ts'
+import { revealAnswer } from '../src/engine/grading.ts'
 import { mapAnkiEase, sameDayAdvanced, planMirrorSync, sourceKeyOf, parseSourceKey, ankiCardPayload, fingerprintOf, isoFromMs } from '../src/engine/anki.ts'
 import type { AnkiTransport } from '../src/engine/anki.ts'
 import { todayStr } from '../src/engine/dates.ts'
@@ -204,7 +205,7 @@ test('纯函数缝：导出负载（选项上正面不泄答案、答案+解析�
   assert.equal(payload.fp, fingerprintOf('single_choice\u001f题面 <A> & B\nA. 甲\nB. 乙\u001f答案：A\n\n解析：因为 x'))
   assert.equal(isoFromMs(0).length >= 19, true)
 
-  // revealAnswer 仍是引擎出口（背面排版复用）
+  // revealAnswer（判卷域，grading.ts）背面排版复用
   assert.equal(revealAnswer({ kind: 'true_false', answer: true }), 'true')
 })
 

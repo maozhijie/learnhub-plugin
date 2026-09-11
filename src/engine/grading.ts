@@ -1,3 +1,4 @@
+import type { AlloKind } from './types.ts'
 /**
  * 判卷与作答记录。
  *
@@ -385,4 +386,18 @@ export function applyPracticeEvidence(fm: Fm, score: number): Fm {
   }
   const practice_ema = nextEma(fm.practice_ema, score)
   return { ...fm, practice, practice_ema }
+}
+
+/** 错题公布答案的题型化展示（多选字母并排、排序箭头链、匹配左→右）。
+ * #152 刀 3 自门面文件归位：通道域（note-source.ts）出题/作答共用，住判卷域模块。 */
+export function revealAnswer(q: { kind: AlloKind; answer: string | boolean | string[]; options?: string[] }): string {
+  switch (q.kind) {
+    case 'multi_choice': return Array.isArray(q.answer) ? q.answer.join('') : String(q.answer)
+    case 'ordering': return Array.isArray(q.answer) ? q.answer.join(' → ') : String(q.answer)
+    case 'matching': return Array.isArray(q.answer) && q.options?.length
+      ? q.options.map((o, i) => `${o} → ${q.answer[i] ?? '?'}`).join('；')
+      : Array.isArray(q.answer) ? q.answer.join(' / ') : String(q.answer)
+    case 'fill_in_blank': return Array.isArray(q.answer) ? q.answer.join(' / ') : String(q.answer)
+    default: return String(q.answer)
+  }
 }
