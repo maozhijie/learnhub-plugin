@@ -14,14 +14,14 @@ import { todayStr } from './dates.ts'
 import type { Clock } from './clock.ts'
 import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
-import { normChoice, round2 } from './grading.ts'
+import { round2 } from './grading.ts'
 import { invokesTagged } from './concepts.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../shared/content-renderers.ts'
 import type { GRegion, GNode, SectionManifest, EncEdge } from './types.ts'
 import type { Graph } from './graph.ts'
 import type { Paths } from './paths.ts'
-import type { Fm, CourseEntry, JournalRec } from './types.ts'
+import type { Fm, JournalRec } from './types.ts'
 
 export const QUEUE_GENERATE = '生成'
 export const QUEUE_REGEN = '重生成'
@@ -1028,7 +1028,7 @@ worksheet:
     // mermaid：节点文本含 | 等特殊字符且未整体双引号包裹时自动补引号（渲染降级的高频根因）
     body = body.replace(/^```mermaid[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm, (whole, code: string) => {
       const fixed = code.split('\n').map(line =>
-        line.replace(/(\w[\w\u4e00-\u9fff]*)\[([^\]"\n]*\|[^\]"\n]*)\]/g, (m, id: string, label: string) => `${id}["${label.replace(/"/g, '\\"')}"]`),
+        line.replace(/(\w[\w\u4e00-\u9fff]*)\[([^\]"\n]*\|[^\]"\n]*)\]/g, (_m, id: string, label: string) => `${id}["${label.replace(/"/g, '\\"')}"]`),
       ).join('\n')
       return fixed === code ? whole : '```mermaid\n' + fixed + '```'
     })
@@ -1740,7 +1740,7 @@ worksheet:
   }
 
   /** 人审通过 → content.status=reviewed。 */
-  async review(root: string, graph: Graph, node: string, fmOf: (n: string) => Fm | undefined, project: (node: string, fm: Fm) => Promise<void>): Promise<string> {
+  async review(_root: string, _graph: Graph, node: string, fmOf: (n: string) => Fm | undefined, project: (node: string, fm: Fm) => Promise<void>): Promise<string> {
     const fm = fmOf(node)
     if (!fm) throw new Error(`[review] 课程文件不存在: ${node}`)
     const next = { ...fm, content: { ...fm.content, status: 'reviewed' as const } }

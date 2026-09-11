@@ -92,7 +92,7 @@ export async function analyzeGraph(
    * ——种子本来就只有起点+终点几张节点（facade 按锚判定传入，analysis 保持无 IO）。 */
   seedPhase = false,
 ): Promise<GraphAnalysis> {
-  const t = parseDay(today)!
+  void parseDay(today)
 
   // 不可达 = 从任一根出发 BFS 达不到的节点（有环时跳过）
   const unreachable: string[] = []

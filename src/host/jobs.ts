@@ -350,7 +350,7 @@ export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: stri
 /** 图域任务执行（面板下发）：种子/罗盘/反编译/计划/里程碑——引擎 LLM 方法一次受理，
  * 产物一律走提案人审通道（种子一次人审、反编译联合人审、计划 apply 带快照），任务
  * 只留受理摘要；失败落 failed 可从生成页重试。 */
-async function generateGraphJob(rt: HostRuntime, ctx: Context, job: GenJob): Promise<void> {
+async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Promise<void> {
   job.status = 'running'
   persistGenJobs(rt)
   try {

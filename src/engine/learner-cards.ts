@@ -51,10 +51,9 @@ import type { GoalIntentionInput, PinRec } from './goals.ts'
 import { normalizeGoalIntention } from './goals.ts'
 import { JOL_SAMPLE_RATE } from './jol.ts'
 import type { KataAnswer, KataQuestion } from './kata.ts'
-import { kataMonday, weekStartOf, weekEndOf, prevWeekStartOf, inWeek } from './kata.ts'
+import { kataMonday, weekEndOf, prevWeekStartOf } from './kata.ts'
 import { KATA_KIND, KATA_EMPTY, KATA_LEARNER_QUESTIONS, buildKataReality, renderKataReality, assembleKataDoc, parseKataBody, kataAnswered, kataEtaSummary } from './kata.ts'
 import type { LlmComplete } from './llm.ts'
-import { calibrationBins } from './memory.ts'
 import { FSRS_DIFFICULTY_MID } from './params.ts'
 import type { ReceiptKind, ReceiptLogRec, ReceiptSubmitResult } from './receipts.ts'
 import { RECEIPT_KIND_LABEL, receiptsUntilNextFull, submitReceipt } from './receipts.ts'
@@ -184,11 +183,9 @@ export function validateLearnerCards(doc: unknown, expectedNode?: string): { err
 
 export class LearnerCards {
   private paths: Paths
-  private clock: Clock
   private fs: VaultFs
-  constructor(paths: Paths, clock: Clock, fs: VaultFs) {
+  constructor(paths: Paths, _clock: Clock, fs: VaultFs) {
     this.paths = paths
-    this.clock = clock
     this.fs = fs
   }
 
@@ -731,7 +728,7 @@ export class LearnerSubsystem {
 
   /** 落盘一份五问记录（我的产出/周复盘/<周一>.md；created/updated 出处戳用日历日）。 */
   private async kataWriteDoc(
-    path: string, weekStart: string, weekEnd: string,
+    _path: string, weekStart: string, weekEnd: string,
     reality: string, sections: Record<KataQuestion, string>, created: string,
   ): Promise<void> {
     const body = assembleKataDoc({ weekStart, weekEnd, created, reality, answers: sections })
@@ -1180,7 +1177,7 @@ export class LearnerSubsystem {
     const material = input.material?.trim()
     if (!material) throw new Error('[receipt-submit] material 不能为空——回执是练习证据（描述/图片路径/导出/签核皆可）。')
     const c = await this.e.registry.resolve(courseKey)
-    const { graph, state, broken } = await this.e.loadView(c)
+    const { graph, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[receipt-submit] 节点「${node}」不在课程「${c.name}」的图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'receipt-submit')
     if (graph.typeOf[node] !== 'practice') {

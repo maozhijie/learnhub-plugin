@@ -31,10 +31,6 @@ import { LabSubsystem} from './nof1.ts'
 import type { Nof1Template, Nof1Variable, ExperimentDef, Nof1Analysis} from './nof1.ts'
 import type { ThermostatDoc} from './thermostat.ts'
 import type { SandboxDoc, SandboxCard, SandboxCurvePoint, SandboxNode, SandboxPlan} from './sandbox.ts'
-import {
-  KATA_KIND, KATA_EMPTY, KATA_LEARNER_QUESTIONS, weekStartOf, weekEndOf, prevWeekStartOf,
-  buildKataReality, renderKataReality, assembleKataDoc, parseKataBody, kataAnswered, kataEtaSummary,
-} from './kata.ts'
 import type { KataAnswer} from './kata.ts'
 import type { BandRec} from './coach.ts'
 import type { AdviceDismissRec} from './bank-advice.ts'
@@ -59,12 +55,6 @@ import type { RecallQuestion, RecallRec} from './project-recall.ts'
 import type { VaultLinksDoc} from './vault-links.ts'
 import { readAnchor, foldCompletion} from './seed.ts'
 import type { CompletionFold, SeedDraftRequest} from './seed.ts'
-import {
-  SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ETA_PENDING,
-  COMPASS_ETA_PROBE_WEEKS, compassScaffold, parseCompass, sectionBody, withSectionText,
-  validateRouteBody, stripWrappingFence, etaMarkerOf, renderEtaBody, compassPaintContext,
-  hasLearnerAnnotations,
-} from './compass.ts'
 import type { CompassEta} from './compass.ts'
 import type { CoachCheck, CoachGrowthSegment, CoachTrigger} from './coach-round.ts'
 
@@ -72,10 +62,6 @@ import type { CoachCheck, CoachGrowthSegment, CoachTrigger} from './coach-round.
 export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
 export type { GateVerdict } from './agent.ts'
 export type { SeedDraftRequest } from './seed.ts'
-import {
-  appendProbationEntry, readProbationLedger, foldProbation, recheckVerdict, recheckDue,
-  learningDaysOf, growthRates, growthGate,
-} from './probation.ts'
 import type { ProbationOutcome, ProbationCourseView, RecheckMetric} from './probation.ts'
 import { QuestionBank, validateBank, BankSubsystem} from './question-bank.ts'
 import type { BankDoc, BankQuestion} from './question-bank.ts'
@@ -92,7 +78,6 @@ import type { GoalIntentionInput} from './goals.ts'
 import type { ReceiptLogRec, ReceiptKind, ReceiptSubmitResult} from './receipts.ts'
 import { AnkiMirror} from './anki.ts'
 import type { AnkiTransport} from './anki.ts'
-import { explainBackPack} from './explain.ts'
 import type { ExplainPoint} from './explain.ts'
 import { YAML} from './yaml.ts'
 import { Sessions} from './sessions.ts'
@@ -105,23 +90,22 @@ import type { SedimentEvent, SedimentFold, SedimentKind, SedimentTier} from './s
 import { revealAnswer, pctOf } from './grading.ts'
 import { auditQuestion} from './question-hygiene.ts'
 import type { QuestionAuditReport} from './question-hygiene.ts'
-import { parseSectionTitle} from '../../shared/content-renderers.ts'
 import { readDayCutoff} from './xp.ts'
 import type { CourseEntry, EArchiveRec, EncEdge, Fm, SectionManifest, Stage} from './types.ts'
 import { dataCheck} from './data-check.ts'
 import type { DataCheckReport} from './data-check.ts'
 import type { ProposalRec} from './types.ts'
 import type {
-  AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DisputeApplyResult, DisputeReviewResult, DoctorDoc, ExperimentProposeResult,
-  ExperimentStartResult, GraphApplyEditResult, GraphApplyResult, GraphBrowseDoc,
-  GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphEditProposalResult, GraphNodeDoc, GraphPathResult,
-  GraphProposeResult, CalibrationProfileDoc, LearnerArchiveResult, LearnerCardItem, LearnerForgetResult, LearnerQueueDoc,
-  LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
-  ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc, ErrorAnswerResult,
+  AnkiStatusDoc, AnswerResult, DifficultyAdviceDoc, DisputeApplyResult, DisputeReviewResult, DoctorDoc, 
+  ExperimentStartResult, GraphApplyResult, GraphBrowseDoc,
+  GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult,
+  GraphProposeResult, CalibrationProfileDoc, LearnerArchiveResult, LearnerForgetResult, LearnerQueueDoc,
+  LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, 
+  ErrorArchiveResult, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc, ErrorAnswerResult,
   NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueItem, QuestionItem, RecommendDoc, ReviewCard, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
-  XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, ProjectExecBackflow,
-  KataDoc, CleanupGroup, CleanupPreviewDoc,
+  XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, 
+  KataDoc, CleanupPreviewDoc,
 } from './views.ts'
 
 /** 宿主取值走门面（D14 收口，#152 刀 1 / ADR-0042）：re-export 门只供应纯函数、
@@ -136,19 +120,7 @@ export type { Clock, Rng } from './clock.ts'
 export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
 export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
 
-/** 周复盘的周参数校验（周一锚定；非法 fail loud）。 */
-function kataMonday(weekStart: string): string {
-  if (typeof weekStart !== 'string' || weekStartOf(weekStart) !== weekStart) {
-    throw new Error(`[kata] weekStart 必须是某周的周一 'YYYY-MM-DD'（收到 ${String(weekStart)}）。`)
-  }
-  return weekStart
-}
 
-/** 节标题归一化（#117 定向补题的归类口径，与前端会话 normSection 同款）：
- * 剥「类型：」前缀 + 去全部空白——模型 section 标注与前缀/空白差异据此吸收。 */
-function normSectionKey(s: string): string {
-  return parseSectionTitle(s).clean.replace(/\s+/g, '')
-}
 
 
 
@@ -1230,6 +1202,11 @@ export class LearnhubEngine {
 
   // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）----
 
+  /** 周复盘记录的盘上路径（tests 直接消费，S45 接缝；#182 公开面随子系统迁移）。 */
+  kataPath(weekStart: string): string {
+    return this.learner.kataPath(weekStart)
+  }
+
   async kataOpen(weekStart?: string): Promise<KataDoc> {
     return this.learner.kataOpen(weekStart)
   }
@@ -1248,10 +1225,6 @@ export class LearnhubEngine {
     return this.learner.kataToIntention(weekStart, input)
   }
 
-  /** → LearnerSubsystem（tests 直接消费路径拼装，S45 接缝）。 */
-  private kataPath(weekStart: string): string {
-    return this.learner.kataPath(weekStart)
-  }
 
   async kataList(): Promise<Array<{ week_start: string; answered: boolean }>> {
     return this.learner.kataList()

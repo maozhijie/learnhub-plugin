@@ -26,7 +26,7 @@
 import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
-import { todayStr, addDays, daysBetween, parseDay } from './dates.ts'
+import { todayStr, addDays } from './dates.ts'
 import type { Clock } from './clock.ts'
 import type { FsrsBlock } from './types.ts'
 import type { AdvanceCard, AdvanceLog } from './advance.ts'

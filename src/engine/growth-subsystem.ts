@@ -22,7 +22,7 @@ import type { BrokenNote } from './notes.ts'
 import type { Fm, CourseEntry, ProposalRec } from './types.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { CoachCheck } from './coach-round.ts'
-import type { CompassDoc, CompassEta } from './compass.ts'
+import type { CompassEta } from './compass.ts'
 import type { GraphApplyResult } from './views/graph.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
 import type { EditProposalSpec, GrowthNote } from './proposals.ts'
@@ -58,7 +58,7 @@ import { effectiveStage } from './audit.ts'
 import type { CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
 import { arbitrationPopulations, behaviorDigest, readyDepthCheck, renderArbitrationEvidence, renderBehaviorDigest, renderSedimentForCoach } from './coach-round.ts'
 import type { CompassEtaProbe } from './compass.ts'
-import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, GRAPH_NAMES_PREVIEW, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, parseCompass, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
+import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, parseCompass, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { resolveConcept } from './concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from './dates.ts'
 import type { Clock } from './clock.ts'
@@ -69,7 +69,7 @@ import { JOL_PREDICTIONS } from './jol.ts'
 import type { AgentSeam, GateVerdict } from './agent.ts'
 import { hasReadyContent } from './notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
-import { GraphProposals, addNodeCountOf, validateEditProposal } from './proposals.ts'
+import { addNodeCountOf, validateEditProposal } from './proposals.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from './sandbox.ts'
 import { appendSedimentEvent } from './sediment.ts'
 import { runWriteUnit } from './write-unit.ts'
@@ -936,7 +936,7 @@ export class GrowthSubsystem {
 
 
   /** 从提案 artifact 回读预注册 metric（账本只存 proposal id 的对账；缺失返回 null）。 */
-  private async recheckMetricOf(c: CourseEntry, proposals: ProposalRec[], entry: ProbationEntry): Promise<RecheckMetric | null> {
+  private async recheckMetricOf(_c: CourseEntry, proposals: ProposalRec[], entry: ProbationEntry): Promise<RecheckMetric | null> {
     const rec = proposals.find(p => p.id === entry.proposal)
     if (!rec) return null
     try {

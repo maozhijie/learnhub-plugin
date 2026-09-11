@@ -5,7 +5,6 @@
  * tests/commands.test.ts 的两道对账（工具面快照 + 路由清单/探针快照）。
  */
 import { command } from './types.ts'
-import type { CommandSpec } from './types.ts'
 
 export const 项目域 = {
   'project-apply': command({

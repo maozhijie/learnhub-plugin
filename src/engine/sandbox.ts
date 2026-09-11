@@ -22,7 +22,7 @@
  *
  * 抽样与聚合为零依赖纯函数（依赖仅 ts-fsrs 的调度器闭包，由调用方注入）。
  */
-import type { VaultFs } from './io.ts'
+
 import { applyRatingBlock, retrievabilityBlock, masteryValue } from './srs.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { FsrsBlock } from './types.ts'

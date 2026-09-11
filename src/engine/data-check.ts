@@ -272,7 +272,7 @@ async function scanBanks(
 async function scanCourse(
   findings: DataCheckFinding[],
   courseName: string,
-  courseRoot: string,
+  _courseRoot: string,
   dataDir: string,
   courseDir: string,
   bankDir: string, fs: VaultFs): Promise<{ graphFiles: number; notes: number; banks: number; nodes: GraphNodeLike[] }> {

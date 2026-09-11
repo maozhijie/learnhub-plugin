@@ -70,8 +70,8 @@ export interface ContentDeps {
   sched(courseRoot: string | null): Promise<FSRS>
   updateNoteFm(path: string, fm: Fm): Promise<void>
 }
-import { bandOffset, combinedDifficulty, nextBand, sessionOrder, startBand } from './adaptive.ts'
-import { advance, advancePending, advanceStrict, alreadyAdvanced } from './advance.ts'
+import { bandOffset, combinedDifficulty, sessionOrder, startBand } from './adaptive.ts'
+import { advancePending, advanceStrict, alreadyAdvanced } from './advance.ts'
 import { effectiveStage } from './audit.ts'
 import { calibrationHintText, overconfidenceOf } from './calibration.ts'
 import type { ComplexityTier } from './complexity.ts'
@@ -91,7 +91,6 @@ import type { FsrsBlock, ReviewRec, SectionManifest } from './types.ts'
 import { priorSection, priorTerms, searchVaultPrior } from './vault-prior.ts'
 import type { AnswerResult, LessonDoc, QuestionForgetResult, QuestionRateResult, QuestionsDoc, QueueItem, QuestionItem, QueueCard, ReviewCard, ReviewQueueDoc, TreeDoc } from './views/content.ts'
 import { xpForAnswer } from './xp.ts'
-import { YAML } from './yaml.ts'
 export class ContentSubsystem {
   constructor(private e: ContentDeps) {}
 

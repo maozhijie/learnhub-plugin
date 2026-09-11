@@ -54,11 +54,11 @@ import { normSectionKey } from './attribution.ts'
 import { adviceDismissKey, calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
 import { cleanupCandidatesForNode } from './bank-cleanup.ts'
 import type { CleanupReason } from './bank-cleanup.ts'
-import { sectionBody } from './compass.ts'
-import { ERROR_CARD_BATCH_MAX, MIN_ERROR_LAPSES, mineErrorPatterns, validateErrorCards } from './error-cards.ts'
+
+import { ERROR_CARD_BATCH_MAX, mineErrorPatterns, validateErrorCards } from './error-cards.ts'
 import type { ErrorCard } from './error-cards.ts'
-import { bankStemList, existingStemsPromptBlock, findDuplicateStem } from './question-dedup.ts'
-import { questionViolation, repairQuestionStrings, auditQuestion } from './question-hygiene.ts'
+import { bankStemList, existingStemsPromptBlock } from './question-dedup.ts'
+import { questionViolation, repairQuestionStrings } from './question-hygiene.ts'
 import type {
   BankEntry, CleanupGroup, CleanupPreviewDoc, DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult,
   ErrorAnswerResult, ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc,
@@ -250,10 +250,8 @@ export function validateBank(doc: unknown, expectedNode?: string): { errors?: st
 
 export class QuestionBank {
   // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
-  private paths: Paths
   private fs: VaultFs
-  constructor(paths: Paths, fs: VaultFs) {
-    this.paths = paths
+  constructor(_paths: Paths, fs: VaultFs) {
     this.fs = fs
   }
 

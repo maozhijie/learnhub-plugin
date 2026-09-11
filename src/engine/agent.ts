@@ -102,7 +102,7 @@ export class AgentSeam {
    * → 未过以门错误原文 + 被拒候选原文回灌 repair() 重产**恰一次** → 仍败（或修复轮
    * 自身失败）以 fatal() 抛两轮死因。修复轮的语义档由站点在 repair() 内声明（回灌
    * 重裁恒 deep 档）。过门的受理产物经 `result` 交还（受理式门：类型上过门必有产物）。 */
-  async gateRepairRound<T, U>(station: string, spec: GateRepairSpec<T, U>): Promise<{ candidate: T; result: U; repaired: boolean }> {
+  async gateRepairRound<T, U>(_station: string, spec: GateRepairSpec<T, U>): Promise<{ candidate: T; result: U; repaired: boolean }> {
     const candidate = await spec.first()
     const firstGate = await spec.gate(candidate)
     if (!firstGate.errors.length) return { candidate, result: firstGate.result as U, repaired: false }

@@ -1,27 +1,3 @@
-/**
- * 引擎门面读视图的命名类型（learnhub-plugin/src/engine/views）。
- *
- * 背景：门面（index.ts）的读方法历史上以 `Record<string, unknown>` 裸返回，UI 侧
- * （ui/src/types.ts）手工镜像形状并逐渐漂移。本模块把这些返回形状收口为命名类型：
- * index.ts 的方法签名引用这里的名字，UI 通过 re-export 消费同一名词（引擎形状 =
- * 事实源，本文件逐处注释产出方法）。
- *
- * 诚实可选：字段按引擎实际返回标注——条件展开（`...(x ? {y} : {})`）一律 `y?: T`；
- * 双分支返回（课程通道 / 笔记源伪课程通道）形状不同处，公共字段必填、独有字段可选。
- *
- * 注意：本模块是纯类型模块（全部 `import type`），运行时永不加载——index.ts 以
- * `import type` 引用，strip 模式下整句擦除。说明符一律带 `.ts` 扩展名（与其余 engine
- * 文件一致）：宿主根 tsconfig 走 nodenext（#170 类型门），无扩展名的相对说明符在那里
- * 直接是错；ui 的 tsc/vite 按 bundler 语义同样解析 `.ts`（allowImportingTsExtensions）。
- * 依赖只取 node 内建无关的模块，保证 ui typecheck 能把本模块拉进程序。
- */
-import type {
-  ContentStatus, EncEdge, FsrsBlock, GrowthOperator, SectionManifest, Stage,
-} from './types.ts'
-import type { AlloKind } from './grading.ts'
-import type { JolBin, JolPrediction } from './jol.ts'
-import type { CompletionFold } from './seed.ts'
-import type { ProbationCourseView } from './probation.ts'
 export type { DiagnosticEntry } from './attribution.ts'
 export type {
   AdviceItem, RecommendDoc, RecEvent, RecEventType, SleepSuggestionEntry,

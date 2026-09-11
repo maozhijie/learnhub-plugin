@@ -52,7 +52,7 @@ export interface GraphDeps {
 import { readVaultLinksCache as readVaultLinksCache$mod } from './vault-links.ts'
 import type { VaultLinkPrior } from './analysis.ts'
 import { analyzeGraph } from './analysis.ts'
-import { effectiveStage, runAudit } from './audit.ts'
+import { effectiveStage } from './audit.ts'
 import { Content } from './content.ts'
 import { declaredEncOf } from './graph.ts'
 import { atomicWrite } from './io.ts'

@@ -196,7 +196,7 @@ export function loadRegionDoc(doc: unknown, path: string): GRegion {
 }
 
 export class GraphStore {
-  constructor(private paths: Paths, private courseRoot: string, private fs: VaultFs) {}
+  constructor(_paths: Paths, private courseRoot: string, private fs: VaultFs) {}
 
   private get dataDir(): string { return join(this.courseRoot, 'data') }
 

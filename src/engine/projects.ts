@@ -25,7 +25,7 @@ import type { PlanItem } from './project-decompile.ts'
 import { validatePlanItems, validatePlanArtifact } from './project-decompile.ts'
 import { todayStr } from './dates.ts'
 import type { Clock } from './clock.ts'
-import { appendProbationEntry, readProbationLedger, foldProbation, recheckVerdict, recheckDue, learningDaysOf, growthRates, growthGate } from './probation.ts'
+import { readProbationLedger, foldProbation } from './probation.ts'
 import { Store } from './store.ts'
 import { atomicWrite } from './io.ts'
 import { loadNote, saveNote } from './notes.ts'
@@ -33,7 +33,7 @@ import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
 import type { QuestionBank, BankQuestion } from './question-bank.ts'
-import type { GraphProposals, ApplyAudit, EnrichFieldEntry } from './proposals.ts'
+import type { GraphProposals, EnrichFieldEntry } from './proposals.ts'
 import type { NoteSourceManifest } from './note-source.ts'
 import type { Graph } from './graph.ts'
 import type { ProjectCrossDoc, ProjectExecBackflow, ProjectExecResult } from './views/project.ts'
@@ -43,26 +43,25 @@ import type { CourseEntry, Fm } from './types.ts'
 import type { AgentSeam, GateVerdict } from './agent.ts'
 import type { GraphApplyResult } from './views/graph.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
-import { runAudit } from './audit.ts'
-import { graphHealthScore } from './health.ts'
+
 import { applyPracticeEvidence } from './grading.ts'
 import { masteryOfFm } from './srs.ts'
 import type { ExecutionEvidence } from './skills.ts'
 import { ratingFromEvidence } from './skills.ts'
-import type { SkillDoc } from './skills.ts'
+
 import { difficultyCalibration, milestonePrice } from './xp.ts'
 import { dayOfTs, nowIsoOf } from './dates.ts'
 import { CROSS_AXIS_THRESHOLD, TIER_REC_DEMOTE_SCORE, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, XP_PER_MILESTONE_DEFAULT } from './params.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
-import { searchVaultPrior, priorTerms, priorSection } from './vault-prior.ts'
-import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, readVaultLinksCache, scanVaultLinks, scoreTier } from './vault-links.ts'
+import { searchVaultPrior, priorSection } from './vault-prior.ts'
+
 import { decompileGoalOf, decompileTerms, splitDecompileDoc, decompileRepairPrompt, reconcilePlanNodes, splitNodeSpec } from './project-decompile.ts'
 import type { DecompileDoc } from './project-decompile.ts'
 import { drawRecallQuestions, appendRecallRec, recallRecsAll } from './project-recall.ts'
 import type { RecallQuestion, RecallRec } from './project-recall.ts'
 import { cooccurrencePairs, orientCandidate, coWeight } from './project-enc.ts'
-import { fingerprintOf, stripFrontmatter } from './note-source.ts'
+import { fingerprintOf } from './note-source.ts'
 import type { ProposalRec, JournalRec } from './types.ts'
 
 /** 项目日志文件头（V-5 #113：首次追加时落一次；说明口径与注册语义）。 */
@@ -471,7 +470,7 @@ export class Projects {
   async writeMilestone(projectId: string, milestoneId: string, md: string): Promise<
     { written: string; tier: FadingTier } | { proposed: number; kind: 'project_milestone'; file: string }
   > {
-    const { project, file } = await this.locateMilestone(projectId, milestoneId)
+    const { file } = await this.locateMilestone(projectId, milestoneId)
     if (this.fs.exists(this.paths.projectMilestonePath(projectId, file))) {
       const prop = await this.proposeMilestone(projectId, milestoneId, md)
       return { proposed: prop.id, kind: 'project_milestone', file }
