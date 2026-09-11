@@ -10,6 +10,7 @@ import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
 import { llmSeam, llmView } from './llm.ts'
 import { run, stripFences } from './runtime.ts'
+import type { ParameterSchemaSpec } from '../commands/types.ts'
 import type { HostRuntime } from './runtime.ts'
 import {
   enqueueGeneration,
@@ -73,6 +74,36 @@ export const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prom
   { tool: 'learnhub_project_enc_candidates', page: 'projects', text: '从项目执行行为推断成分技能边候选，生成待人审图提案（面板回填按钮走的是作答记录推断，这是项目执行流推断——两条通道）。',
     prompt: '从「<项目>」的执行记录里找成分技能边候选' },
 ]
+
+/**
+ * 注册表的 `args` → SDK 的 `parameters`（#169 的投影，工具面逐字契约的守门）：
+ * 剥掉投递层扩展键（`read`），并把源码形态 `{k: {..., required: true}}` 归一成
+ * defineTool 的注册形态 `{type: 'object', properties, required[]}`——两者都与工具面快照
+ * 逐字一致，见 tests/commands.test.ts 的门⑧。
+ */
+export function sdkParameters(args: ParameterSchemaSpec): Record<string, unknown> {
+  const SDK_KEYS = new Set(['type', 'required', 'description', 'enum', 'items', 'additionalProperties'])
+  const stripSpec = (spec: unknown): unknown => {
+    if (Array.isArray(spec)) return spec.map(stripSpec)
+    if (spec && typeof spec === 'object') {
+      const out: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(spec as Record<string, unknown>)) {
+        if (!SDK_KEYS.has(k)) continue
+        out[k] = k === 'items' ? stripSpec(v) : v
+      }
+      return out
+    }
+    return spec
+  }
+  const properties: Record<string, unknown> = {}
+  const required: string[] = []
+  for (const [k, v] of Object.entries(args)) {
+    const { required: req, ...rest } = (v ?? {}) as { required?: boolean } & Record<string, unknown>
+    properties[k] = stripSpec(rest)
+    if (req) required.push(k)
+  }
+  return { type: 'object', properties, ...(required.length ? { required } : {}) }
+}
 
 /** 注册全部 agent 工具（apply 装配步；名称与 schema 逐字不变，仅组织方式改为按域分组）。 */
 export function registerTools(ctx: Context, rt: HostRuntime): void {

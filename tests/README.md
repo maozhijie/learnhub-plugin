@@ -84,12 +84,18 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 - **「路由 ↔ 工具」对账基线**：`tests/fixtures/host-face-baseline.json`（口径＝工具注册区 vs 工具区外全部，ADR-0045 实测）：共享引擎入口 **84**、工具独有 **26**、路由独有 **49**——命令注册表迁移的回归网。
 
 路由表与参数守卫（2026-09-11 新增，#168 / ADR-0045／ADR-0048；`tests/host-routes.test.ts` + `tests/helpers/routes-probe.ts`）：
-
 - **路由从 if 链变成数据表**：`host/routes.ts`（GET 46 + PUT 6）／`host/routes-post.ts`（POST 子表 73）／`host/route-table.ts`（表项形状 `{method, route, handler}` + ADR-0045 注册表字段位 `id·summary·args·engine·output·channels`，本票只留位）／`host/api.ts`（装配 + 一次查表分发）。`handleApi` 保留两处**逐字不动**的今天语义：POST/PUT **先读体再查表**（非法 JSON 的未知路由今天也是 500）、404 文案带原始方法与剥前缀后的路由名。
 - **参数守卫收成一处的语义**：`host/params.ts` 是唯一出处（`need` 自 `http.ts` 迁来）——必填 `need`／`needQuery`／`requireString`／`requireBoolean`／`requireNumber`／`requireObject`／`requireOneOf`，可选 `opt*`（查询串 `optQuery`）与 `pick(key, value)`（＝今天 `...(cond ? {k:v} : {})`）。**21 处内联 `missing required field:` 与 51 处手写 `typeof body.x` 归零**，错误消息与状态码逐字不变。今天可选参数的语义是「非法即当省略」（比 ADR-0045 的「省略或合法」更宽松），本票原样保留；#169 若收紧成 fail loud 须在票面登记。
 - **对账清单**：`tests/fixtures/host-routes-baseline.json` ＝重构前实测的 125 条（GET 46 / POST 73 / PUT 6；120 条不同精确路径 + 1 条前缀路由），逐条断言表项无增删改名改方法，且每条都被探针覆盖。
 - **行为快照**：`tests/fixtures/host-routes-snapshot.json` ＝**464 条探针**（每条路由 × 空参／全参／逐个缺参 + 分发纪律样本）在重构前实测的 `{status, res, 引擎调用序列}`，重构后逐字重放比对——「120 条路由的方法／路径／响应形状逐字不变」与「守卫错误消息逐字不变」的证据。探针驱动见 `tests/helpers/routes-probe.ts`：每次探针一个全新 runtime、引擎方法影子化为录制替身、`res.end` 即冻结（响应后的 fire-and-forget 不入快照；vault 路径与 ISO 时刻换占位符，快照不钉机器与时钟）。
 - 守卫收口另有两道文本门：`src/host/` 下 `typeof body.` 与守卫消息（`params.ts` 之外）清零；`sendJson` 状态码分布 200×122／404×4／500×1（404 的另三处来自 `static.ts` 的伺服未命中）。
+
+命令注册表（2026-09-11 新增，#169 / ADR-0045 裁定；`tests/commands.test.ts` + `tests/tools-face.test.ts` + `tests/helpers/tools-probe.ts`）：
+
+- **一份声明、两个适配器**的地基：`src/commands/`（`types.ts` 表项形状 + 8 个域文件 + `index.ts` 装配）声明 **154 条命令**（111 agent 通道 + 125 panel 通道、73 条双通道；154 = 73 双 + 38 仅工具 + 43 仅面板），`BY_TOOL`／`BY_ROUTE` 是两张索引。
+- **八道门**（1-6 硬门、7 既有快照、8 一致性锁）：① `engine` ∈ 门面原型方法（留空的 25 条逐条登记理由：队列型 9／按参分派型 7／无引擎型 9）② 队列通道 `phase` ∈ `GEN_JOB_PHASES` 且 runner 认得（节点锚定阶段或 `jobs.ts` 里有字面分支）③ `id`／`tool` 名／`(method, path)` 唯一（并断言索引没被静默覆盖）④ handler 覆盖（待适配器切面）⑤ `AGENT_GUIDE` 每条 tool ∈ 注册表的 agent 通道 ⑥ `src/commands/` 零对外运行时依赖（只允许同目录相对 import 与 `import type`）⑦ 零行为漂移：**工具面 259 条行为探针**（`tests/fixtures/host-tools-behavior.json`，每个工具全参 + 逐个缺必填）+ 路由面 464 条探针快照 ⑧ 声明与面一致：agent 通道 `args` 经 `sdkParameters` 投影后与工具面快照**逐字相同**、panel 通道 `(method, path)` 与路由清单逐字相同。
+- **`bind`／`required`／`phase` 住通道**（ADR-0045 裁定）：实参绑定 `Array<string|null>`＝引擎实参位置序、`required` 表达「必填是（命令,通道）对的事实」（实测 9 处两面不一致）、`phase` 是队列通道的入口阶段。`args` 的 `read` 键是投递层取值语义（trimmed／text／raw／fallback／finite／query），下发工具面前由 `sdkParameters` 剥掉——**工具面 schema 逐字不变是硬约束**，门⑧ 就是它的锁。
+- 声明由重构前的两个投递面实测生成（生成器一次性，不入库）；此后手改会被门⑧ 打回。
 
 架构门（2026-09-11 新增，ADR-0042 / #152 刀 1；`tests/import-rules.test.ts`）：
 

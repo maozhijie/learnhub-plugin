@@ -1,0 +1,3262 @@
+[
+ {
+  "id": "learnhub_status · 全参",
+  "tool": "learnhub_status",
+  "args": {},
+  "queued": false,
+  "text": "{\"llm\":{\"provider\":\"deepseek-official\",\"model\":\"deepseek-v4-flash\",\"fast_effort\":\"off\",\"deep_effort\":\"low\"}}",
+  "calls": [
+   "coachCheckpoint(\"session_start\",undefined)",
+   "statusJson()"
+  ]
+ },
+ {
+  "id": "learnhub_skip · 全参",
+  "tool": "learnhub_skip",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "skipped": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "nodeSkip(\"1\",\"1\",true)"
+  ]
+ },
+ {
+  "id": "learnhub_skip · 缺 course",
+  "tool": "learnhub_skip",
+  "args": {
+   "node": "1",
+   "skipped": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_skip · 缺 node",
+  "tool": "learnhub_skip",
+  "args": {
+   "course": "1",
+   "skipped": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_skip · 缺 skipped",
+  "tool": "learnhub_skip",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"skipped\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_complete · 全参",
+  "tool": "learnhub_complete",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "force": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "nodeComplete(\"1\",\"1\",true)"
+  ]
+ },
+ {
+  "id": "learnhub_complete · 缺 course",
+  "tool": "learnhub_complete",
+  "args": {
+   "node": "1",
+   "force": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_complete · 缺 node",
+  "tool": "learnhub_complete",
+  "args": {
+   "course": "1",
+   "force": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_lesson · 全参",
+  "tool": "learnhub_lesson",
+  "args": {
+   "node": "1",
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "lesson(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_lesson · 缺 node",
+  "tool": "learnhub_lesson",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_lesson · 缺 course",
+  "tool": "learnhub_lesson",
+  "args": {
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_recommend · 全参",
+  "tool": "learnhub_recommend",
+  "args": {
+   "limit": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "recommend(1)"
+  ]
+ },
+ {
+  "id": "learnhub_pin_today · 全参",
+  "tool": "learnhub_pin_today",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "pinToday(\"1\",\"1\",undefined,{\"cue\":\"1\",\"action\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_pin_today · 缺 course",
+  "tool": "learnhub_pin_today",
+  "args": {
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_pin_today · 缺 node",
+  "tool": "learnhub_pin_today",
+  "args": {
+   "course": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_goal_intention · 全参",
+  "tool": "learnhub_goal_intention",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "setGoalIntention(\"1\",\"1\",{\"cue\":\"1\",\"action\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_goal_intention · 缺 course",
+  "tool": "learnhub_goal_intention",
+  "args": {
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_goal_intention · 缺 node",
+  "tool": "learnhub_goal_intention",
+  "args": {
+   "course": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_unpin · 全参",
+  "tool": "learnhub_unpin",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "unpinToday(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_unpin · 缺 course",
+  "tool": "learnhub_unpin",
+  "args": {
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_unpin · 缺 node",
+  "tool": "learnhub_unpin",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_review_queue · 全参",
+  "tool": "learnhub_review_queue",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "band_pref": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "reviewQueue(\"1\",\"1\",undefined,undefined)"
+  ]
+ },
+ {
+  "id": "learnhub_question_answer · 全参",
+  "tool": "learnhub_question_answer",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "answer": "1",
+   "predicted": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",null,{\"predicted\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_question_answer · 缺 course",
+  "tool": "learnhub_question_answer",
+  "args": {
+   "node": "1",
+   "qid": "1",
+   "answer": "1",
+   "predicted": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_answer · 缺 node",
+  "tool": "learnhub_question_answer",
+  "args": {
+   "course": "1",
+   "qid": "1",
+   "answer": "1",
+   "predicted": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_answer · 缺 qid",
+  "tool": "learnhub_question_answer",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "answer": "1",
+   "predicted": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"qid\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_answer · 缺 answer",
+  "tool": "learnhub_question_answer",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "predicted": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"answer\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_generate · 全参",
+  "tool": "learnhub_generate",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "style": "1"
+  },
+  "queued": true,
+  "text": "{\"message\":\"「1」已入队，将在后台按序生成（进度见生成页）。\",\"queued\":true}",
+  "calls": []
+ },
+ {
+  "id": "learnhub_generate · 缺 course",
+  "tool": "learnhub_generate",
+  "args": {
+   "node": "1",
+   "style": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_generate · 缺 node",
+  "tool": "learnhub_generate",
+  "args": {
+   "course": "1",
+   "style": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_section_rewrite · 全参",
+  "tool": "learnhub_section_rewrite",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "section": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "「1」没有节「1」——先运行大纲。",
+  "calls": []
+ },
+ {
+  "id": "learnhub_section_rewrite · 缺 course",
+  "tool": "learnhub_section_rewrite",
+  "args": {
+   "node": "1",
+   "section": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_section_rewrite · 缺 node",
+  "tool": "learnhub_section_rewrite",
+  "args": {
+   "course": "1",
+   "section": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_section_rewrite · 缺 section",
+  "tool": "learnhub_section_rewrite",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"section\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_coach · 全参",
+  "tool": "learnhub_coach",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "coachAdvice()"
+  ]
+ },
+ {
+  "id": "learnhub_calibration_profile · 全参",
+  "tool": "learnhub_calibration_profile",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "calibrationProfile()"
+  ]
+ },
+ {
+  "id": "learnhub_sleep_config · 全参",
+  "tool": "learnhub_sleep_config",
+  "args": {
+   "enabled": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "setSleepAdviceConfig({\"enabled\":true})"
+  ]
+ },
+ {
+  "id": "learnhub_graph_analyze · 全参",
+  "tool": "learnhub_graph_analyze",
+  "args": {
+   "course": "1",
+   "elementsOnly": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "graphAnalyze(\"1\",true)"
+  ]
+ },
+ {
+  "id": "learnhub_graph_node · 全参",
+  "tool": "learnhub_graph_node",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "graphNode(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_graph_node · 缺 node",
+  "tool": "learnhub_graph_node",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_graph_browse · 全参",
+  "tool": "learnhub_graph_browse",
+  "args": {
+   "course": "1",
+   "region": "1",
+   "block": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "graphBrowse(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_graph_path · 全参",
+  "tool": "learnhub_graph_path",
+  "args": {
+   "course": "1",
+   "from": "1",
+   "to": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "graphPath(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_graph_path · 缺 from",
+  "tool": "learnhub_graph_path",
+  "args": {
+   "course": "1",
+   "to": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"from\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_graph_path · 缺 to",
+  "tool": "learnhub_graph_path",
+  "args": {
+   "course": "1",
+   "from": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"to\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_graph_propose · 全参",
+  "tool": "learnhub_graph_propose",
+  "args": {
+   "kind": "1",
+   "yaml": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "[graph] 非法 kind: 1（允许 edit/seed/enrich）",
+  "calls": []
+ },
+ {
+  "id": "learnhub_graph_propose · 缺 kind",
+  "tool": "learnhub_graph_propose",
+  "args": {
+   "yaml": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"kind\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_graph_propose · 缺 yaml",
+  "tool": "learnhub_graph_propose",
+  "args": {
+   "kind": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"yaml\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_graph_proposals · 全参",
+  "tool": "learnhub_graph_proposals",
+  "args": {
+   "status": "1",
+   "kind": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "graphProposals(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_graph_enc_backfill · 全参",
+  "tool": "learnhub_graph_enc_backfill",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "graphEncBackfill(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_vault_links_scan · 全参",
+  "tool": "learnhub_vault_links_scan",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "vaultLinksScan()"
+  ]
+ },
+ {
+  "id": "learnhub_graph_link_backfill · 全参",
+  "tool": "learnhub_graph_link_backfill",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "graphLinkBackfill(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_graph_apply · 全参",
+  "tool": "learnhub_graph_apply",
+  "args": {
+   "kind": "1",
+   "id": 1,
+   "reject": true,
+   "note": "1"
+  },
+  "queued": false,
+  "text": "[reject] 提案 #1 已拒绝留痕。",
+  "calls": [
+   "graphReject(1,\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_graph_apply · 缺 kind",
+  "tool": "learnhub_graph_apply",
+  "args": {
+   "id": 1,
+   "reject": true,
+   "note": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"kind\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_concept_merge · 全参",
+  "tool": "learnhub_concept_merge",
+  "args": {
+   "course": "1",
+   "from": "1",
+   "into": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "conceptMerge(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_concept_merge · 缺 course",
+  "tool": "learnhub_concept_merge",
+  "args": {
+   "from": "1",
+   "into": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_concept_merge · 缺 from",
+  "tool": "learnhub_concept_merge",
+  "args": {
+   "course": "1",
+   "into": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"from\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_concept_merge · 缺 into",
+  "tool": "learnhub_concept_merge",
+  "args": {
+   "course": "1",
+   "from": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"into\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_compass · 全参",
+  "tool": "learnhub_compass",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "compassRead(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_compass_paint · 全参",
+  "tool": "learnhub_compass_paint",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "compassPaint(\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "learnhub_question_audit · 全参",
+  "tool": "learnhub_question_audit",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "questionAudit()"
+  ]
+ },
+ {
+  "id": "learnhub_question_generate · 全参",
+  "tool": "learnhub_question_generate",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "count": 1
+  },
+  "queued": true,
+  "text": "",
+  "error": "Cannot read properties of undefined (reading 'length')",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_generate · 缺 course",
+  "tool": "learnhub_question_generate",
+  "args": {
+   "node": "1",
+   "count": 1
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_generate · 缺 node",
+  "tool": "learnhub_question_generate",
+  "args": {
+   "course": "1",
+   "count": 1
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_update · 全参",
+  "tool": "learnhub_question_update",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "patch": {
+    "answer": "1"
+   }
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "questionUpdate(\"1\",\"1\",\"1\",{\"answer\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_question_update · 缺 course",
+  "tool": "learnhub_question_update",
+  "args": {
+   "node": "1",
+   "qid": "1",
+   "patch": {
+    "answer": "1"
+   }
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_update · 缺 node",
+  "tool": "learnhub_question_update",
+  "args": {
+   "course": "1",
+   "qid": "1",
+   "patch": {
+    "answer": "1"
+   }
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_update · 缺 qid",
+  "tool": "learnhub_question_update",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "patch": {
+    "answer": "1"
+   }
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"qid\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_update · 缺 patch",
+  "tool": "learnhub_question_update",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "qid": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"patch\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_get · 全参",
+  "tool": "learnhub_question_get",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "qid": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "questionGet(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_question_get · 缺 node",
+  "tool": "learnhub_question_get",
+  "args": {
+   "course": "1",
+   "qid": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_get · 缺 qid",
+  "tool": "learnhub_question_get",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"qid\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_list · 全参",
+  "tool": "learnhub_question_list",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "questions(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_question_list · 缺 course",
+  "tool": "learnhub_question_list",
+  "args": {
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_list · 缺 node",
+  "tool": "learnhub_question_list",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_save · 全参",
+  "tool": "learnhub_question_save",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "yaml": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "questionSave(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_question_save · 缺 course",
+  "tool": "learnhub_question_save",
+  "args": {
+   "node": "1",
+   "yaml": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_save · 缺 node",
+  "tool": "learnhub_question_save",
+  "args": {
+   "course": "1",
+   "yaml": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_question_save · 缺 yaml",
+  "tool": "learnhub_question_save",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"yaml\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_difficulty_advice · 全参",
+  "tool": "learnhub_difficulty_advice",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "difficultyAdvice(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_bank_cleanup · 全参",
+  "tool": "learnhub_bank_cleanup",
+  "args": {
+   "course": "1",
+   "apply": true
+  },
+  "queued": false,
+  "text": "{\"applied\":[]}",
+  "calls": [
+   "bankCleanupApply(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_create · 全参",
+  "tool": "learnhub_project_create",
+  "args": {
+   "name": "1",
+   "goal": "1",
+   "tier": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectCreate({\"name\":\"1\",\"goal\":\"1\",\"tier\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_project_create · 缺 name",
+  "tool": "learnhub_project_create",
+  "args": {
+   "goal": "1",
+   "tier": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"name\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_create · 缺 goal",
+  "tool": "learnhub_project_create",
+  "args": {
+   "name": "1",
+   "tier": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"goal\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_list · 全参",
+  "tool": "learnhub_project_list",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectList()"
+  ]
+ },
+ {
+  "id": "learnhub_project_show · 全参",
+  "tool": "learnhub_project_show",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectShow(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_show · 缺 id",
+  "tool": "learnhub_project_show",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_log · 全参",
+  "tool": "learnhub_project_log",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectLog(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_log · 缺 id",
+  "tool": "learnhub_project_log",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_log_append · 全参",
+  "tool": "learnhub_project_log_append",
+  "args": {
+   "id": "1",
+   "text": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectLogAppend(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_log_append · 缺 id",
+  "tool": "learnhub_project_log_append",
+  "args": {
+   "text": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_log_append · 缺 text",
+  "tool": "learnhub_project_log_append",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"text\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_lifecycle · 全参",
+  "tool": "learnhub_project_lifecycle",
+  "args": {
+   "id": "1",
+   "lifecycle": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectSetLifecycle(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_lifecycle · 缺 id",
+  "tool": "learnhub_project_lifecycle",
+  "args": {
+   "lifecycle": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_lifecycle · 缺 lifecycle",
+  "tool": "learnhub_project_lifecycle",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"lifecycle\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_tier · 全参",
+  "tool": "learnhub_project_tier",
+  "args": {
+   "id": "1",
+   "tier": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectSetTier(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_tier · 缺 id",
+  "tool": "learnhub_project_tier",
+  "args": {
+   "tier": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_tier · 缺 tier",
+  "tool": "learnhub_project_tier",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"tier\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_plan_generate · 全参",
+  "tool": "learnhub_project_plan_generate",
+  "args": {
+   "id": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "Cannot read properties of undefined (reading 'stream')",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_plan_generate · 缺 id",
+  "tool": "learnhub_project_plan_generate",
+  "args": {},
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_milestone_generate · 全参",
+  "tool": "learnhub_project_milestone_generate",
+  "args": {
+   "id": "1",
+   "milestone": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "Cannot read properties of undefined (reading 'stream')",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_milestone_generate · 缺 id",
+  "tool": "learnhub_project_milestone_generate",
+  "args": {
+   "milestone": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_milestone_generate · 缺 milestone",
+  "tool": "learnhub_project_milestone_generate",
+  "args": {
+   "id": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"milestone\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_apply · 全参",
+  "tool": "learnhub_project_apply",
+  "args": {
+   "id": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectApply(1)"
+  ]
+ },
+ {
+  "id": "learnhub_project_apply · 缺 id",
+  "tool": "learnhub_project_apply",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_milestone_pass · 全参",
+  "tool": "learnhub_project_milestone_pass",
+  "args": {
+   "id": "1",
+   "milestone": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectMilestonePass(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_milestone_pass · 缺 id",
+  "tool": "learnhub_project_milestone_pass",
+  "args": {
+   "milestone": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_milestone_pass · 缺 milestone",
+  "tool": "learnhub_project_milestone_pass",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"milestone\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_milestone_recall · 全参",
+  "tool": "learnhub_project_milestone_recall",
+  "args": {
+   "id": "1",
+   "milestone": "1",
+   "nodes": [
+    "1"
+   ],
+   "limit": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectMilestoneRecall(\"1\",\"1\",{\"nodes\":[\"1\"],\"limit\":1})"
+  ]
+ },
+ {
+  "id": "learnhub_project_milestone_recall · 缺 id",
+  "tool": "learnhub_project_milestone_recall",
+  "args": {
+   "milestone": "1",
+   "nodes": [
+    "1"
+   ],
+   "limit": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_milestone_recall · 缺 milestone",
+  "tool": "learnhub_project_milestone_recall",
+  "args": {
+   "id": "1",
+   "nodes": [
+    "1"
+   ],
+   "limit": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"milestone\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_recall_reflect · 全参",
+  "tool": "learnhub_project_recall_reflect",
+  "args": {
+   "id": "1",
+   "milestone": "1",
+   "narration": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectRecallReflect(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_recall_reflect · 缺 id",
+  "tool": "learnhub_project_recall_reflect",
+  "args": {
+   "milestone": "1",
+   "narration": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_recall_reflect · 缺 milestone",
+  "tool": "learnhub_project_recall_reflect",
+  "args": {
+   "id": "1",
+   "narration": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"milestone\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_recall_reflect · 缺 narration",
+  "tool": "learnhub_project_recall_reflect",
+  "args": {
+   "id": "1",
+   "milestone": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"narration\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_recall_log · 全参",
+  "tool": "learnhub_project_recall_log",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectRecallLog(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_recall_log · 缺 id",
+  "tool": "learnhub_project_recall_log",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_enc_candidates · 全参",
+  "tool": "learnhub_project_enc_candidates",
+  "args": {
+   "id": "1",
+   "milestone": "1",
+   "nodes": [
+    "1"
+   ],
+   "window_days": 1,
+   "min_co": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectEncCandidates(\"1\",{\"milestone\":\"1\",\"nodes\":[\"1\"],\"window_days\":1,\"min_co\":1})"
+  ]
+ },
+ {
+  "id": "learnhub_project_enc_candidates · 缺 id",
+  "tool": "learnhub_project_enc_candidates",
+  "args": {
+   "milestone": "1",
+   "nodes": [
+    "1"
+   ],
+   "window_days": 1,
+   "min_co": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_decompile · 全参",
+  "tool": "learnhub_project_decompile",
+  "args": {
+   "id": "1",
+   "goal": "1",
+   "course": "1",
+   "notes": [
+    "1"
+   ]
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "learnhub_project_decompile · 缺 id",
+  "tool": "learnhub_project_decompile",
+  "args": {
+   "goal": "1",
+   "course": "1",
+   "notes": [
+    "1"
+   ]
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_decompile_apply · 全参",
+  "tool": "learnhub_project_decompile_apply",
+  "args": {
+   "plan": 1,
+   "seed": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectDecompileApply(1,1)"
+  ]
+ },
+ {
+  "id": "learnhub_project_decompile_apply · 缺 plan",
+  "tool": "learnhub_project_decompile_apply",
+  "args": {
+   "seed": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"plan\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_decompile_apply · 缺 seed",
+  "tool": "learnhub_project_decompile_apply",
+  "args": {
+   "plan": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"seed\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_exec_log · 全参",
+  "tool": "learnhub_project_exec_log",
+  "args": {
+   "id": "1",
+   "source": "1",
+   "rating": 1,
+   "evidence": {
+    "answer": "1"
+   },
+   "nodes": [
+    "1"
+   ],
+   "note": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{\"answer\":\"1\"},\"nodes\":[\"1\"],\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_project_exec_log · 缺 id",
+  "tool": "learnhub_project_exec_log",
+  "args": {
+   "source": "1",
+   "rating": 1,
+   "evidence": {
+    "answer": "1"
+   },
+   "nodes": [
+    "1"
+   ],
+   "note": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_exec_log · 缺 source",
+  "tool": "learnhub_project_exec_log",
+  "args": {
+   "id": "1",
+   "rating": 1,
+   "evidence": {
+    "answer": "1"
+   },
+   "nodes": [
+    "1"
+   ],
+   "note": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"source\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_project_cross_view · 全参",
+  "tool": "learnhub_project_cross_view",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "projectCrossView(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_project_cross_view · 缺 id",
+  "tool": "learnhub_project_cross_view",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_explain_back_pack · 全参",
+  "tool": "learnhub_explain_back_pack",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "explainBackPack(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_explain_back_pack · 缺 course",
+  "tool": "learnhub_explain_back_pack",
+  "args": {
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_explain_back_pack · 缺 node",
+  "tool": "learnhub_explain_back_pack",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_explain_feedback · 全参",
+  "tool": "learnhub_explain_feedback",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "transcript": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "explainBackFeedback(\"1\",\"1\",\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "learnhub_explain_feedback · 缺 course",
+  "tool": "learnhub_explain_feedback",
+  "args": {
+   "node": "1",
+   "transcript": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_explain_feedback · 缺 node",
+  "tool": "learnhub_explain_feedback",
+  "args": {
+   "course": "1",
+   "transcript": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_explain_feedback · 缺 transcript",
+  "tool": "learnhub_explain_feedback",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"transcript\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_card_add · 全参",
+  "tool": "learnhub_learner_card_add",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_learner_card_add · 缺 course",
+  "tool": "learnhub_learner_card_add",
+  "args": {
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_card_add · 缺 node",
+  "tool": "learnhub_learner_card_add",
+  "args": {
+   "course": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_card_add · 缺 content",
+  "tool": "learnhub_learner_card_add",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"content\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_understanding_add · 全参",
+  "tool": "learnhub_understanding_add",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "section": "1",
+   "kind": "1",
+   "prompt": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"section\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "learnhub_understanding_add · 缺 course",
+  "tool": "learnhub_understanding_add",
+  "args": {
+   "node": "1",
+   "content": "1",
+   "section": "1",
+   "kind": "1",
+   "prompt": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_understanding_add · 缺 node",
+  "tool": "learnhub_understanding_add",
+  "args": {
+   "course": "1",
+   "content": "1",
+   "section": "1",
+   "kind": "1",
+   "prompt": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_understanding_add · 缺 content",
+  "tool": "learnhub_understanding_add",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "section": "1",
+   "kind": "1",
+   "prompt": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"content\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_queue · 全参",
+  "tool": "learnhub_learner_queue",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "learnerQueue(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_learner_rate · 全参",
+  "tool": "learnhub_learner_rate",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1",
+   "rating": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "learnerCardRate(\"1\",\"1\",\"1\",1)"
+  ]
+ },
+ {
+  "id": "learnhub_learner_rate · 缺 course",
+  "tool": "learnhub_learner_rate",
+  "args": {
+   "node": "1",
+   "card": "1",
+   "rating": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_rate · 缺 node",
+  "tool": "learnhub_learner_rate",
+  "args": {
+   "course": "1",
+   "card": "1",
+   "rating": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_rate · 缺 card",
+  "tool": "learnhub_learner_rate",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "rating": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"card\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_rate · 缺 rating",
+  "tool": "learnhub_learner_rate",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"rating\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_forget · 全参",
+  "tool": "learnhub_learner_forget",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "learnerCardForget(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_learner_forget · 缺 course",
+  "tool": "learnhub_learner_forget",
+  "args": {
+   "node": "1",
+   "card": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_forget · 缺 node",
+  "tool": "learnhub_learner_forget",
+  "args": {
+   "course": "1",
+   "card": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_forget · 缺 card",
+  "tool": "learnhub_learner_forget",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"card\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_card_archive · 全参",
+  "tool": "learnhub_learner_card_archive",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "learnerCardArchive(\"1\",\"1\",\"1\",true)"
+  ]
+ },
+ {
+  "id": "learnhub_learner_card_archive · 缺 course",
+  "tool": "learnhub_learner_card_archive",
+  "args": {
+   "node": "1",
+   "card": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_card_archive · 缺 node",
+  "tool": "learnhub_learner_card_archive",
+  "args": {
+   "course": "1",
+   "card": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_card_archive · 缺 card",
+  "tool": "learnhub_learner_card_archive",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"card\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_learner_card_archive · 缺 archived",
+  "tool": "learnhub_learner_card_archive",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"archived\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_error_card_mine · 全参",
+  "tool": "learnhub_error_card_mine",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "errorCardMine(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_error_card_generate · 全参",
+  "tool": "learnhub_error_card_generate",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "max": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "errorCardGenerate(\"1\",{\"node\":\"1\",\"max\":1},async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+  ]
+ },
+ {
+  "id": "learnhub_error_card_queue · 全参",
+  "tool": "learnhub_error_card_queue",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "errorCardQueue(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_error_card_answer · 全参",
+  "tool": "learnhub_error_card_answer",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1",
+   "choice": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "errorCardAnswer(\"1\",\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_error_card_answer · 缺 course",
+  "tool": "learnhub_error_card_answer",
+  "args": {
+   "node": "1",
+   "card": "1",
+   "choice": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_error_card_answer · 缺 node",
+  "tool": "learnhub_error_card_answer",
+  "args": {
+   "course": "1",
+   "card": "1",
+   "choice": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_error_card_answer · 缺 card",
+  "tool": "learnhub_error_card_answer",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "choice": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"card\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_error_card_answer · 缺 choice",
+  "tool": "learnhub_error_card_answer",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"choice\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_error_card_archive · 全参",
+  "tool": "learnhub_error_card_archive",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "errorCardArchive(\"1\",\"1\",\"1\",true)"
+  ]
+ },
+ {
+  "id": "learnhub_error_card_archive · 缺 course",
+  "tool": "learnhub_error_card_archive",
+  "args": {
+   "node": "1",
+   "card": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_error_card_archive · 缺 node",
+  "tool": "learnhub_error_card_archive",
+  "args": {
+   "course": "1",
+   "card": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_error_card_archive · 缺 card",
+  "tool": "learnhub_error_card_archive",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"card\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_error_card_archive · 缺 archived",
+  "tool": "learnhub_error_card_archive",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"archived\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_skill_create · 全参",
+  "tool": "learnhub_skill_create",
+  "args": {
+   "name": "1",
+   "maintenance_days": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "skillCreate(\"1\",{\"maintenance_days\":1})"
+  ]
+ },
+ {
+  "id": "learnhub_skill_create · 缺 name",
+  "tool": "learnhub_skill_create",
+  "args": {
+   "maintenance_days": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"name\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_skill_list · 全参",
+  "tool": "learnhub_skill_list",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "skillList()"
+  ]
+ },
+ {
+  "id": "learnhub_skill_maintenance · 全参",
+  "tool": "learnhub_skill_maintenance",
+  "args": {
+   "skill": "1",
+   "days": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "skillSetMaintenance(\"1\",1)"
+  ]
+ },
+ {
+  "id": "learnhub_skill_maintenance · 缺 skill",
+  "tool": "learnhub_skill_maintenance",
+  "args": {
+   "days": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"skill\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_skill_archive · 全参",
+  "tool": "learnhub_skill_archive",
+  "args": {
+   "skill": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "skillArchive(\"1\",true)"
+  ]
+ },
+ {
+  "id": "learnhub_skill_archive · 缺 skill",
+  "tool": "learnhub_skill_archive",
+  "args": {
+   "archived": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"skill\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_skill_archive · 缺 archived",
+  "tool": "learnhub_skill_archive",
+  "args": {
+   "skill": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"archived\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_execution_log · 全参",
+  "tool": "learnhub_execution_log",
+  "args": {
+   "skill": "1",
+   "source": "1",
+   "minutes": 1,
+   "rating": 1,
+   "evidence": {
+    "answer": "1"
+   },
+   "note": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "executionLog(\"1\",{\"source\":\"1\",\"minutes\":1,\"rating\":1,\"evidence\":{\"answer\":\"1\"},\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_execution_log · 缺 skill",
+  "tool": "learnhub_execution_log",
+  "args": {
+   "source": "1",
+   "minutes": 1,
+   "rating": 1,
+   "evidence": {
+    "answer": "1"
+   },
+   "note": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"skill\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_execution_log · 缺 source",
+  "tool": "learnhub_execution_log",
+  "args": {
+   "skill": "1",
+   "minutes": 1,
+   "rating": 1,
+   "evidence": {
+    "answer": "1"
+   },
+   "note": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"source\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_execution_log · 缺 minutes",
+  "tool": "learnhub_execution_log",
+  "args": {
+   "skill": "1",
+   "source": "1",
+   "rating": 1,
+   "evidence": {
+    "answer": "1"
+   },
+   "note": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"minutes\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_receipt_submit · 全参",
+  "tool": "learnhub_receipt_submit",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "kind": "1",
+   "material": "1",
+   "force_full": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "receiptSubmit(\"1\",\"1\",{\"kind\":\"1\",\"material\":\"1\",\"force_full\":true},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "learnhub_receipt_submit · 缺 course",
+  "tool": "learnhub_receipt_submit",
+  "args": {
+   "node": "1",
+   "kind": "1",
+   "material": "1",
+   "force_full": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_receipt_submit · 缺 node",
+  "tool": "learnhub_receipt_submit",
+  "args": {
+   "course": "1",
+   "kind": "1",
+   "material": "1",
+   "force_full": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_receipt_submit · 缺 kind",
+  "tool": "learnhub_receipt_submit",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "material": "1",
+   "force_full": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"kind\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_receipt_submit · 缺 material",
+  "tool": "learnhub_receipt_submit",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "kind": "1",
+   "force_full": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"material\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_receipt_list · 全参",
+  "tool": "learnhub_receipt_list",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "receiptList(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_receipt_list · 缺 course",
+  "tool": "learnhub_receipt_list",
+  "args": {
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_receipt_list · 缺 node",
+  "tool": "learnhub_receipt_list",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_habit_create · 全参",
+  "tool": "learnhub_habit_create",
+  "args": {
+   "name": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "habitCreate({\"name\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_habit_create · 缺 name",
+  "tool": "learnhub_habit_create",
+  "args": {
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"name\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_habit_create · 缺 cue",
+  "tool": "learnhub_habit_create",
+  "args": {
+   "name": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"cue\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_habit_create · 缺 action",
+  "tool": "learnhub_habit_create",
+  "args": {
+   "name": "1",
+   "cue": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"action\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_habit_list · 全参",
+  "tool": "learnhub_habit_list",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "habitList()"
+  ]
+ },
+ {
+  "id": "learnhub_habit_show · 全参",
+  "tool": "learnhub_habit_show",
+  "args": {
+   "habit": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "habitShow(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_habit_show · 缺 habit",
+  "tool": "learnhub_habit_show",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"habit\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_habit_repeat · 全参",
+  "tool": "learnhub_habit_repeat",
+  "args": {
+   "habit": "1",
+   "auto_rating": 1,
+   "note": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "habitRepeat(\"1\",{\"auto_rating\":1,\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_habit_repeat · 缺 habit",
+  "tool": "learnhub_habit_repeat",
+  "args": {
+   "auto_rating": 1,
+   "note": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"habit\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_habit_archive · 全参",
+  "tool": "learnhub_habit_archive",
+  "args": {
+   "habit": "1",
+   "archived": true
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "habitArchive(\"1\",true)"
+  ]
+ },
+ {
+  "id": "learnhub_habit_archive · 缺 habit",
+  "tool": "learnhub_habit_archive",
+  "args": {
+   "archived": true
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"habit\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_habit_archive · 缺 archived",
+  "tool": "learnhub_habit_archive",
+  "args": {
+   "habit": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"archived\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_open · 全参",
+  "tool": "learnhub_kata_open",
+  "args": {
+   "week_start": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "kataOpen(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_kata_save · 全参",
+  "tool": "learnhub_kata_save",
+  "args": {
+   "week_start": "1",
+   "answers": {
+    "answer": "1"
+   }
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "kataSave(\"1\",{\"answer\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_kata_save · 缺 week_start",
+  "tool": "learnhub_kata_save",
+  "args": {
+   "answers": {
+    "answer": "1"
+   }
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"week_start\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_save · 缺 answers",
+  "tool": "learnhub_kata_save",
+  "args": {
+   "week_start": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"answers\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_convert_experiment · 全参",
+  "tool": "learnhub_kata_convert_experiment",
+  "args": {
+   "week_start": "1",
+   "template": "1",
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "kataToExperiment(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_kata_convert_experiment · 缺 week_start",
+  "tool": "learnhub_kata_convert_experiment",
+  "args": {
+   "template": "1",
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"week_start\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_convert_experiment · 缺 template",
+  "tool": "learnhub_kata_convert_experiment",
+  "args": {
+   "week_start": "1",
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"template\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_convert_intention · 全参",
+  "tool": "learnhub_kata_convert_intention",
+  "args": {
+   "week_start": "1",
+   "course": "1",
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "kataToIntention(\"1\",{\"course\":\"1\",\"node\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_kata_convert_intention · 缺 week_start",
+  "tool": "learnhub_kata_convert_intention",
+  "args": {
+   "course": "1",
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"week_start\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_convert_intention · 缺 course",
+  "tool": "learnhub_kata_convert_intention",
+  "args": {
+   "week_start": "1",
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_convert_intention · 缺 node",
+  "tool": "learnhub_kata_convert_intention",
+  "args": {
+   "week_start": "1",
+   "course": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_convert_intention · 缺 cue",
+  "tool": "learnhub_kata_convert_intention",
+  "args": {
+   "week_start": "1",
+   "course": "1",
+   "node": "1",
+   "action": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"cue\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_kata_convert_intention · 缺 action",
+  "tool": "learnhub_kata_convert_intention",
+  "args": {
+   "week_start": "1",
+   "course": "1",
+   "node": "1",
+   "cue": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"action\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_experiment_templates · 全参",
+  "tool": "learnhub_experiment_templates",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "experimentTemplates()"
+  ]
+ },
+ {
+  "id": "learnhub_experiment_propose · 全参",
+  "tool": "learnhub_experiment_propose",
+  "args": {
+   "template": "1",
+   "course": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "experimentPropose(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_experiment_propose · 缺 template",
+  "tool": "learnhub_experiment_propose",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"template\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_experiment_apply · 全参",
+  "tool": "learnhub_experiment_apply",
+  "args": {
+   "id": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "experimentApply(1)"
+  ]
+ },
+ {
+  "id": "learnhub_experiment_stop · 全参",
+  "tool": "learnhub_experiment_stop",
+  "args": {
+   "id": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "experimentStop(1)"
+  ]
+ },
+ {
+  "id": "learnhub_experiment_report · 全参",
+  "tool": "learnhub_experiment_report",
+  "args": {
+   "id": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "experimentReport(1)"
+  ]
+ },
+ {
+  "id": "learnhub_thermostat · 全参",
+  "tool": "learnhub_thermostat",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "thermostatView()"
+  ]
+ },
+ {
+  "id": "learnhub_thermostat_apply · 全参",
+  "tool": "learnhub_thermostat_apply",
+  "args": {
+   "suggestion": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "thermostatApply(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_thermostat_apply · 缺 suggestion",
+  "tool": "learnhub_thermostat_apply",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"suggestion\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_sandbox · 全参",
+  "tool": "learnhub_sandbox",
+  "args": {
+   "minutes_per_day": 1,
+   "weeks": 1,
+   "course": "1",
+   "nodes": [
+    "1"
+   ]
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
+  ]
+ },
+ {
+  "id": "learnhub_sandbox · 缺 minutes_per_day",
+  "tool": "learnhub_sandbox",
+  "args": {
+   "weeks": 1,
+   "course": "1",
+   "nodes": [
+    "1"
+   ]
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"minutes_per_day\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_note_source_register · 全参",
+  "tool": "learnhub_note_source_register",
+  "args": {
+   "path": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "noteSourceRegister(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_note_source_register · 缺 path",
+  "tool": "learnhub_note_source_register",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"path\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_note_source_list · 全参",
+  "tool": "learnhub_note_source_list",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "noteSourceList()"
+  ]
+ },
+ {
+  "id": "learnhub_note_source_unregister · 全参",
+  "tool": "learnhub_note_source_unregister",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "noteSourceUnregister(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_note_source_unregister · 缺 id",
+  "tool": "learnhub_note_source_unregister",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_note_source_relink · 全参",
+  "tool": "learnhub_note_source_relink",
+  "args": {
+   "id": "1",
+   "path": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "noteSourceRelink(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_note_source_relink · 缺 id",
+  "tool": "learnhub_note_source_relink",
+  "args": {
+   "path": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_note_source_relink · 缺 path",
+  "tool": "learnhub_note_source_relink",
+  "args": {
+   "id": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"path\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_note_source_exclude · 全参",
+  "tool": "learnhub_note_source_exclude",
+  "args": {
+   "path": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "noteSourceExclude(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_note_source_exclude · 缺 path",
+  "tool": "learnhub_note_source_exclude",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"path\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_note_source_unexclude · 全参",
+  "tool": "learnhub_note_source_unexclude",
+  "args": {
+   "path": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "noteSourceUnexclude(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_note_source_unexclude · 缺 path",
+  "tool": "learnhub_note_source_unexclude",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"path\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_note_source_generate · 全参",
+  "tool": "learnhub_note_source_generate",
+  "args": {
+   "id": "1",
+   "count": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "noteSourceGenerate(\"1\",1,async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+  ]
+ },
+ {
+  "id": "learnhub_note_source_generate · 缺 id",
+  "tool": "learnhub_note_source_generate",
+  "args": {
+   "count": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"id\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_anki_export · 全参",
+  "tool": "learnhub_anki_export",
+  "args": {
+   "endpoint": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "ankiExportPush({\"endpoint\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_anki_import · 全参",
+  "tool": "learnhub_anki_import",
+  "args": {
+   "endpoint": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "ankiImportEvents({\"endpoint\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_anki_status · 全参",
+  "tool": "learnhub_anki_status",
+  "args": {
+   "endpoint": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "ankiStatus({\"endpoint\":\"1\"})"
+  ]
+ },
+ {
+  "id": "learnhub_data_check · 全参",
+  "tool": "learnhub_data_check",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "dataCheck()"
+  ]
+ },
+ {
+  "id": "learnhub_probation · 全参",
+  "tool": "learnhub_probation",
+  "args": {
+   "action": "1",
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: \"action\" must be one of [\"status\",\"settle\"]",
+  "calls": []
+ },
+ {
+  "id": "learnhub_rebuild · 全参",
+  "tool": "learnhub_rebuild",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "calls": [
+   "rebuild(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_feedback · 全参",
+  "tool": "learnhub_feedback",
+  "args": {
+   "path": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "submitFeedback(\"«vault»\",\"学习中心\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_feedback · 缺 path",
+  "tool": "learnhub_feedback",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"path\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_note_resolve · 全参",
+  "tool": "learnhub_note_resolve",
+  "args": {
+   "path": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "resolveNote(\"«vault»\",\"1\",\"学习中心\")"
+  ]
+ },
+ {
+  "id": "learnhub_note_resolve · 缺 path",
+  "tool": "learnhub_note_resolve",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"path\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_course_reset · 全参",
+  "tool": "learnhub_course_reset",
+  "args": {
+   "course": "1"
+  },
+  "queued": true,
+  "text": "",
+  "error": "Cannot read properties of undefined (reading 'order')",
+  "calls": []
+ },
+ {
+  "id": "learnhub_course_reset · 缺 course",
+  "tool": "learnhub_course_reset",
+  "args": {},
+  "queued": true,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_course_delete · 全参",
+  "tool": "learnhub_course_delete",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "{\"message\":\"已删除「undefined」（整课目录移入 .trash，可手工恢复）。沉淀层波及：undefined\"}",
+  "calls": [
+   "courseDelete(\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_course_delete · 缺 course",
+  "tool": "learnhub_course_delete",
+  "args": {},
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_optimize_params · 全参",
+  "tool": "learnhub_optimize_params",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "optimizeFsrsParams()"
+  ]
+ },
+ {
+  "id": "learnhub_content_check · 全参",
+  "tool": "learnhub_content_check",
+  "args": {
+   "course": "1",
+   "node": "1"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "contentCheck(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "learnhub_content_check · 缺 course",
+  "tool": "learnhub_content_check",
+  "args": {
+   "node": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_content_check · 缺 node",
+  "tool": "learnhub_content_check",
+  "args": {
+   "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ }
+]
