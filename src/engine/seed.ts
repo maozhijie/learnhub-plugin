@@ -195,7 +195,7 @@ export interface SeedProposalSpec {
   starts: SeedNodeSpec[]
   /** 块工作表：goal_type=coverage 必带；capability 拒收。 */
   worksheet?: Array<{ block: string; note?: string; done?: boolean }>
-  /** 铸名块（#141 同一契约，与图 apply 同事务落盘）。 */
+  /** 铸名块（#141 同一契约，随图 apply 的写入单元落盘）。 */
   concepts?: ConceptEntry[]
   reason?: string
 }

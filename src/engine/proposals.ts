@@ -64,8 +64,8 @@ export interface EditOp {
 
 /** 生长批 note 区（#145 裁决产物面）：算子标签 + 理由 + 分歧声明（可选）。生长批仍是
  * kind=edit 提案（不新增提案 kind）；note 在场即生长批——ops 允许为空（裁决=暂不产
- * 结构，罗盘重写照走同事务）。#146 起插入批随批预注册复诊（note.recheck：恰一枚
- * 可机判 metric + 复诊期缺省 10 学习日 clamp [5,20]），apply 同事务登记边实验账本。 */
+ * 结构，罗盘重写随写入单元落盘）。#146 起插入批随批预注册复诊（note.recheck：恰一枚
+ * 可机判 metric + 复诊期缺省 10 学习日 clamp [5,20]），apply 随写入单元登记边实验账本。 */
 export interface GrowthNote {
   operator: GrowthOperator
   reason: string
@@ -86,13 +86,13 @@ const RETIRED_OP_KEYS = ['origin', 'status', 'probation'] as const
 export interface EditProposalSpec {
   course: string
   reason?: string
-  /** 铸名块（#141 登记机械化）：随生长批提案铸名入册，与图 apply 同事务落盘；
+  /** 铸名块（#141 登记机械化）：随生长批提案铸名入册，随图 apply 的写入单元落盘；
    * 提案被拒则登记不落盘。省略 = 本批零铸名。 */
   concepts?: ConceptEntry[]
   ops: EditOp[]
   /** 生长批 note 区（#145）：在场 = 生长批（教练回合裁决产物）；缺席 = 普通 edit 提案。 */
   note?: GrowthNote
-  /** 罗盘批内重写（#145）：「剩余路线」段新正文，与图 apply 同事务落盘——提案被拒
+  /** 罗盘批内重写（#145）：「剩余路线」段新正文，随图 apply 的写入单元落盘——提案被拒
    * 罗盘不落盘。唯一写权属生长批（note 在场）；普通 edit 提案携带即拒收。 */
   route?: string
 }
@@ -196,7 +196,7 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
   }
   const ops: EditOp[] = []
   if (d.ops === undefined && note) {
-    // 生长批允许零操作（裁决=暂不产结构；罗盘重写与批留痕照走同事务）
+    // 生长批允许零操作（裁决=暂不产结构；罗盘重写与批留痕照走写入单元）
   } else if (!Array.isArray(d.ops)) {
     errors.push('ops: 必须是列表（普通提案至少一条操作；生长批裁决不产结构时写空列表 ops: []）')
   } else if (!d.ops.length && !note) {
@@ -361,7 +361,7 @@ export function consolidationGateErrors(
   return errors
 }
 
-/** 种子提案全部概念引用（起点/终点节点的概念字段组；铸名随种子提案同事务落盘）。 */
+/** 种子提案全部概念引用（起点/终点节点的概念字段组；铸名随种子提案的写入单元落盘）。 */
 function conceptRefsOfSeed(spec: SeedProposalSpec): ConceptRef[] {
   const refs: ConceptRef[] = []
   for (const [where, node] of [...spec.starts.map((s, i) => [`starts.${i}`, s] as const), ['endpoint', spec.endpoint] as const]) {
@@ -563,7 +563,7 @@ export class GraphProposals {
     if (gateErrors.length) {
       throw new Error(`[propose-edit] 生长闸门拒绝受理（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
-    // 罗盘重写预检（#145 同事务：提案被拒罗盘不落盘——route 门在受理时就走一遍，
+    // 罗盘重写预检（#145 写入单元门：提案被拒罗盘不落盘——route 门在受理时就走一遍，
     // 不给坏路线落 pending 的机会）
     if (spec.route !== undefined) {
       const routeErrors = await this.routeGate(course.root, spec.route)
@@ -611,8 +611,8 @@ export class GraphProposals {
     return errors
   }
 
-  /** graph apply-edit：概念对表复验 → 铸名与图同事务落盘 + 改名/移动/删除联动课程
-   * 笔记 + 罗盘批内重写（#145：route 在场时与图 apply 同事务——路线门/巩固门全过
+  /** graph apply-edit：概念对表复验 → 铸名与图随写入单元落盘 + 改名/移动/删除联动课程
+   * 笔记 + 罗盘批内重写（#145：route 在场时随图 apply 的写入单元——路线门/巩固门全过
    * 才开始任何写盘，提案被拒罗盘不落盘）+ 快照。登记表先写（孤儿条目合法、悬空引用
    * 违约），graph 落盘在后。 */
   async applyEdit(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<Record<string, unknown>> {
@@ -648,7 +648,7 @@ export class GraphProposals {
     if (consolidationErrors.length) {
       throw new Error(`[apply-edit] 巩固门拒绝写入——巩固节点只引已教概念。\n${consolidationErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
-    // 罗盘重写预检（#145 同事务最后一道门）：路线门与锚复验不过 = 零写盘。
+    // 罗盘重写预检（#145 写入单元最后一道门）：路线门与锚复验不过 = 零写盘。
     let compassRoute: string | null = null
     if (spec.route !== undefined) {
       const routeErrors = await this.routeGate(root, spec.route)
@@ -698,7 +698,7 @@ export class GraphProposals {
       journal: rec => this.store.appendJournal(rec),
       steps: [
         {
-          // 同事务第一笔照旧：此后任一步失败，登记表至多多出孤儿条目（合法态）——
+          // 写序第一笔照旧：此后任一步失败，登记表至多多出孤儿条目（合法态）——
           // 反过来图先写会让引用悬空；铸名幂等已在上方 applyConceptMints 门内
           name: '铸名落概念登记表',
           run: async () => {
@@ -944,7 +944,7 @@ export class GraphProposals {
       journal: rec => this.store.appendJournal(rec),
       steps: [
         {
-          // 同事务第一笔照旧：登记表先写，图在后——铸名幂等已在上方 applyConceptMints 门内
+          // 写序第一笔照旧：登记表先写，图在后——铸名幂等已在上方 applyConceptMints 门内
           name: '铸名落概念登记表',
           run: async () => {
             if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)

@@ -1333,7 +1333,7 @@ export class LearnhubEngine {
   ): Promise<string> {
     return this.growth2.coachContextPack(courseKey, opts)
   }
-  // ---- 生长批受理（#145 / ADR-0033 滚动教练：教练回合裁决 → edit 提案 → 同事务罗盘）----
+  // ---- 生长批受理（#145 / ADR-0033 滚动教练：教练回合裁决 → edit 提案 → 罗盘随批写入单元）----
 
   async coachGrowthBatch(
     courseKey: string, agent: AgentSeam,

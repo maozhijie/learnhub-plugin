@@ -2,7 +2,7 @@
  * 边实验账本与复诊（#146 / ADR-0033 插入提案生命周期）。
  *
  * 插入边的完整一生：插入=生长批 edit 提案（operator=插入）+ 复诊预注册随提案落字
- * （note.recheck：metric 恰一枚 + days 缺省 10 clamp [5,20]）→ apply 同事务登记进
+ * （note.recheck：metric 恰一枚 + days 缺省 10 clamp [5,20]）→ apply 随写入单元登记进
  * 边实验账本（state/边实验.jsonl，每课程一份追加只增：条目 {node, pre, proposal,
  * due, outcome?, decided_at?}，状态集 {probation→proven｜剪除}，confirmed 不设）→
  * 到期由引擎结算钩子自动裁决：达标 proven、不达标自动剪（del_node 归档+恢复原粗边），

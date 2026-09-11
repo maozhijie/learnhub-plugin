@@ -7,7 +7,7 @@
  * 条目禁删只并入：合并 = 名字并集，被并入条目的 canonical 降级为别名，旧地址经别名
  * 续解析——沉淀层档案坐标系（ADR-0034）的语义底座，登记表跨宣告式断裂存活。
  *
- * 登记机械化无人审：铸名随生长批提案（edit 提案 concepts 块）与图 apply 同事务落盘，
+ * 登记机械化无人审：铸名随生长批提案（edit 提案 concepts 块）随图 apply 的写入单元落盘，
  * 人的领域判断只在合并/改名时行使。
  */
 import { readFile } from 'node:fs/promises'

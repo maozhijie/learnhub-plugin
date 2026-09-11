@@ -1205,7 +1205,7 @@ export class ProjectSubsystem {
     // pair**（联动守卫从落盘那一刻生效——任一时刻崩溃都不会留下可单边 apply 的无守卫
     // 计划半区）；最后补种子半区的 pair 指认（此窗口内计划已被守卫保护，种子半区单边
     // apply 无害——计划未落盘就无悬空引用可言）。概念引用在 proposeSeed 受理门对
-    // 登记表（铸名随种子 apply 同事务落盘）。
+    // 登记表（铸名随种子 apply 的写入单元落盘）。
     let seedId: number | null = null
     let planProposal: Awaited<ReturnType<Projects['proposePlan']>> | null = null
     try {

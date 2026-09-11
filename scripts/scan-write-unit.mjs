@@ -15,12 +15,13 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-/** 七站点的最低调用数（键 = src/engine/ 下的文件名）。 */
+/** 七站点的最低调用数（键 = 相对 src/ 的 posix 路径——不能用文件名：
+ * views/proposals.ts 与 engine/proposals.ts 同名，按名计数会互相覆盖）。 */
 export const WRITE_UNIT_SITES = {
-  'proposals.ts': 3,
-  'sched-subsystem.ts': 2,
-  'nof1.ts': 1,
-  'growth-subsystem.ts': 1,
+  'engine/proposals.ts': 3,
+  'engine/sched-subsystem.ts': 2,
+  'engine/nof1.ts': 1,
+  'engine/growth-subsystem.ts': 1,
 }
 
 export function srcFilesOf(root) {
@@ -42,12 +43,13 @@ export function sameTransactionHits(files) {
   return files.filter(f => readFileSync(f, 'utf8').includes('同事务'))
 }
 
-/** 各文件的 runWriteUnit 调用数（只看 src/engine/ 下的站点文件）。 */
-export function writeUnitCallCounts(files) {
+/** 各文件的 runWriteUnit 调用数（键 = 相对 src/ 的 posix 路径）。 */
+export function writeUnitCallCounts(files, srcRoot = 'src') {
   const out = {}
   for (const f of files) {
-    const base = f.split(/[\\/]/).pop()
-    if (base in WRITE_UNIT_SITES) out[base] = (readFileSync(f, 'utf8').match(/\brunWriteUnit\s*\(/g) ?? []).length
+    const i = f.lastIndexOf(srcRoot)
+    const rel = (i === -1 ? f : f.slice(i + srcRoot.length + 1)).split(/[\\/]/).join('/')
+    if (rel in WRITE_UNIT_SITES) out[rel] = (readFileSync(f, 'utf8').match(/\brunWriteUnit\s*\(/g) ?? []).length
   }
   return out
 }

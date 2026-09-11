@@ -235,7 +235,7 @@ export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<n
 /** 生长批任务键（课程级任务，node 槽放「生长批」标签；队列 phase=生长，#145）。 */
 const GROWTH_JOB_NODE = '生长批'
 
-/** 入队一个生长批任务（#145）：教练回合裁决 → kind=edit 提案 → 同事务罗盘重写。
+/** 入队一个生长批任务（#145）：教练回合裁决 → kind=edit 提案 → 罗盘随批写入单元重写。
  * 阻尼防泵循环（否则「失败→排空→检查点→入队」立即成环）：同课已有生长批在途不重入；
  * 上一批失败/取消不自动重试——从生成页人工重试，或终态保留期（24h）过后自然恢复；
  * 上一批以 idle/no_structure 收尾也不重拉——教练停摆与「暂不产结构」都是裁决，
@@ -428,7 +428,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
         .map(s => `${{ light: '轻', full: '全', arbitration: '双沙盘仲裁', repair: '回灌重裁' }[s.tier] ?? s.tier}${s.disagreement ? '↑分歧升级' : ''}(${s.operator})`)
         .join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
-        + `${a.compass_rewritten ? '；罗盘已同事务重写' : ''}｜${tierNote}｜理由：${p.reason}`
+        + `${a.compass_rewritten ? '；罗盘已随批重写' : ''}｜${tierNote}｜理由：${p.reason}`
       // 受理批可含 del_node/rename（ADR-0039 写侧联动）：先清扫悬空任务记录再入队正文
       if (a.ops > 0) await sweepGenJobs(rt)
       // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）
