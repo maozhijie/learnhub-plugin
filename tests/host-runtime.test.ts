@@ -32,7 +32,7 @@ import {
   sweepGenJobs,
   waitForQuizJob,
 } from '../src/host/jobs.ts'
-import { registerTools } from '../src/host/tools.ts'
+import { AGENT_GUIDE, registerTools } from '../src/host/tools.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const tmpVaults: string[] = []
@@ -356,6 +356,26 @@ test('工具面快照：111 个工具的名称/描述/schema 与重构前基线�
     assert.equal(out?.schema?.type, 'string', `${t.name} 的 output schema 漂移`)
     assert.deepEqual(out?.render?.(undefined, 'x'), [{ type: 'text', text: 'x' }], `${t.name} 的 output render 漂移`)
   }
+})
+
+test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册（ADR-0045 的受检投影·前半）', () => {
+  // ADR-0045 记：「AGENT_GUIDE（22 条手写）从未与 111 个工具对账过」。后半（「通道分类与该
+  // 命令一致」）要等注册表落地才能断言；前半（工具名 ∈ 工具面）今天就能钉住。
+  const rt = makeRuntime()
+  const captured: Array<{ name?: string }> = []
+  registerTools(fakeCtx(captured), rt)
+  const toolNames = new Set(captured.map(t => t.name))
+  // 面板页签词表（tools.ts 的 AGENT_GUIDE 头注释）：page 只准取这几个
+  const pages = new Set(['learn', 'graph', 'bank', 'stats', 'lab', 'generate', 'practice', 'projects', 'global'])
+  const seen = new Set<string>()
+  for (const g of AGENT_GUIDE) {
+    assert.ok(toolNames.has(g.tool), `指南里的 ${g.tool} 不在工具面（${toolNames.size} 个工具）——分流纪律的受检投影断了`)
+    assert.ok(pages.has(g.page), `指南页签非法：${g.page}`)
+    assert.ok(g.text.trim() && (g.prompt ?? '').trim(), `${g.tool} 的文案/prompt 为空（指南是教学性文字，不许留空）`)
+    assert.ok(!seen.has(g.tool), `指南重复条目：${g.tool}`)
+    seen.add(g.tool)
+  }
+  assert.equal(AGENT_GUIDE.length, 22, '指南条目数（22 条手写，增减要显式）')
 })
 
 test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、路由独有 49（ADR-0045 迁移回归网）', () => {

@@ -45,6 +45,15 @@ interface CommandSpec {
 - **注册表的实现施工不在本窗**（#165 已裁定另开票）；本 ADR 只定形状与纪律。
 - **投递侧前置已落地（#168，2026-09-11）**：路由从 990 行 if 链变成数据表（`host/route-table.ts` 表项形状 + `host/routes.ts`／`routes-post.ts` 两段表 + `host/api.ts` 查表分发），并**已按本 ADR 的表项形状预留字段位**（`id·summary·args·engine·output·channels`，只留位不消费）。参数守卫的语义已收进一处（`host/params.ts`：`need` 迁入 + `required*`/`opt*`/`pick`），21 处内联 `missing required field:` 与 51 处手写 `typeof body.x` 归零——**但今天可选参数的实现是「非法即当省略」**（比本 ADR 的「省略或合法」更宽松）；#169 把守卫改成注册表声明驱动时若收紧成 fail loud，须在票面登记这条行为变更。行为逐字不变的证据是 464 条探针快照（`tests/host-routes.test.ts`），不是通读代码。
 - **`api.ts` 的物理位置在 #168 再分了一层**（`route-table.ts`／`routes.ts`／`routes-post.ts`），理由是 ADR-0047 的 G5 棘轮不许单文件继续长而 #169 还要往表项里填字段；本 ADR 的表项**形状**不变，只是表的**存放**分了段。
+
+### #169 施工前需裁的四个问题（#168 收尾时实测登记；登记而非就地裁）
+
+1. **`engine` 对队列型命令不成立（ADR 的字面在这里有洞）。** 实测 `src/host/jobs.ts`：队列命令的引擎面是**多方法管线**而非单个入口——正文管线依次调 `contentPack` → `contentTierOf` → `loadPrompt` → `contentSectionsView` → `contentOutline` → `questionGenerateSections` → `questionGenerate`；图域任务按 phase 分叉（种子 `seedPropose`／罗盘 `compassPaint`／反编译 `projectDecompile`／计划 `projectPlanPropose`／里程碑 `projectMilestoneWrite`／生长 `coachGrowthBatch`）。而队列型命令有十余条（`/generate`、`/generate/section`、`/course/reset`、`/question-generate`、`/coach/growth`、`/coach/compass`、`/seed/propose`、`/project/plan|milestone|decompile` 及各对应工具）。「`engine` 必填 + 门断言它存在」按字面施加不到这批命令上：要么把字段改成**按 phase／按通道**的形态，要么承认队列型命令的入口是 host 侧入队函数（此时本字段对它为空、门转为断言**入队函数**存在）。
+2. **`args` schema 不含「参数 → 引擎实参」的映射。** 111 个工具的取值表达式是逐条手写的（`need`/`opt*`/嵌套对象/`Number()` 换算/条件透传），注册表只有声明式 `args`，没有表达「引擎第 k 个位置传哪个参数、哪些是嵌套负载」。因此「表项先只是声明、适配器后接」在**同步且单入口**的命令上可机械化，其余命令需要一个新字段（如 `bind`）或明确保留手写 handler——ADR 未裁，「两个 `as never` 逐条退役」的节奏也取决于它。
+3. **单文件注册表与 G5 棘轮冲突。** 236 条命令的声明（含 111 条英文 description 与 SDK schema；工具面快照实测 **112KB**）落成一份 `src/commands.ts` 远超「宿主单文件 ≤900 行」的目标；而本 ADR 又否决了「按域拆成多份注册表」（唯一性要全局视角）。三条落法需选一：① 规模门白名单（照 `engine/types.ts`「共享类型与枚举大表」的先例，理由是长度不是病灶信号）；② 域分组作为**表内字段**的同文件分段；③ 改裁「表可分段、唯一致性由门跨段断言」——等于承认可以拆表。
+4. **配对口径要从「引擎入口」落到「命令」。** 本 ADR 的 84／26／49 是**引擎入口**口径；命令数是 111 工具 + 125 路由表项，其中 46 条可机械配对（另有三类例外：截断／单复数／域名词），但**一个引擎入口对多条命令**是常态（如 pin/unpin 各一条命令共享同一引擎域）。注册表要求「一条命令一个 `id`」，所以施工前必须把配对规则写成清单（哪条工具与哪条路由是同一条命令），否则 `channels` 的合并与唯一性门都无从下手——这是 236 条命令里最费判断的一步。
+
+已可断言的部分（不等注册表）：**AGENT_GUIDE 的工具名 ∈ 工具面**（`tests/host-runtime.test.ts`：22 条指南 × 111 个工具的对账，本 ADR 记的「从未对账过」至此有门）；后半「通道分类与该命令一致」仍需注册表。`(method, path)` 与工具名的唯一性今天已在门内（路由表测试与工具面快照各自断言）。`engine` 存在性在**路由面**今天由 G7（tsc 的 TS2339）覆盖，注册表落地后才是字段级断言。
 - **「门面转发层消失或自动生成」**（消费方直连子系统）是终极形态，牵动 host/UI/测试全部调用点，**另开票**，本 ADR 不裁。
 - `ui/` 的 151 处类型错与它自己的 tsconfig／vite 构建**不在本 ADR 范围**。
 - 不引 zod／ajv／代码生成器／运行时输出校验；不新增任何依赖。

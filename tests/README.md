@@ -80,6 +80,7 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 - **`createHostRuntime(ctx, config): HostRuntime` 是宿主唯一装配缝**：显式 runtime 对象承载全部可变态（`engine`／`vault`／`centerRel`／`jobs.genJobs`／`jobs.quizJobResults`／`flags.queuePaused·pumping·lastSessionStartAt`），技术层函数（队列泵/路由/工具面/伺服）一律收 runtime 参数。测试造 runtime = 临时 vault + 假 ctx + 引擎方法影子化（实例属性覆盖原型），零模块级状态、并行测试互不污染。
 - 断言面：队列泵状态机（入队 → 执行 → 终态 → 保留期清扫与 delayMs 补挂）、暂停/恢复（`resumeQueue`）、`quizJobResults` 等待语义（`waitForQuizJob` 超时/消失 fail loud）、runtime 构造校验与首启 seed（#138 盖戳在构造路径）。
 - **工具面快照**：`tests/fixtures/host-tools-snapshot.json` 由重构前的 `src/index.ts` mock-apply 捕获（111 个工具的 name/description/parameters），断言按域分组重排后逐工具逐字不变。
+- **AGENT_GUIDE 受检投影·前半**（#169 的 AC 之一提前落地）：22 条指南的 `tool` 名必须 ∈ 111 个工具（ADR-0045 记的「22 条手写、从未与 111 个工具对账过」至此有门）、`page` ∈ 面板页签词表、文案/prompt 非空、无重复条目。后半（「通道分类与该命令一致」）要等命令注册表落地。
 - **「路由 ↔ 工具」对账基线**：`tests/fixtures/host-face-baseline.json`（口径＝工具注册区 vs 工具区外全部，ADR-0045 实测）：共享引擎入口 **84**、工具独有 **26**、路由独有 **49**——命令注册表迁移的回归网。
 
 路由表与参数守卫（2026-09-11 新增，#168 / ADR-0045／ADR-0048；`tests/host-routes.test.ts` + `tests/helpers/routes-probe.ts`）：
