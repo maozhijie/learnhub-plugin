@@ -813,7 +813,7 @@ export class GrowthSubsystem {
             continue
           }
           const due = recheckDue(frame.learningDays, day, entry.due)
-          if (!due.due) {
+          if (due.due === false) {
             skipped.push({ node: entry.node, reason: `复诊期推进中（${due.elapsed}/${entry.due} 学习日）` })
             continue
           }

@@ -1,5 +1,4 @@
 import type { PracticeRec, ErratumRec } from './types.ts'
-import type { AlloKind } from './types.ts'
 /**
  * 判卷与作答记录。
  *

@@ -2,6 +2,7 @@
  * graph 域视图类型（#152 刀归档；叶子文件，只引类型层）。
  */
 import type { ContentStatus, EncEdge, GrowthOperator, Stage } from '../types.ts'
+import type { GraphProposeResult } from './proposals.ts'
 
 /** 富化提案受理（proposeEnrich，覆盖层通道）：files = 指纹锚定的正典文件数。 */
 

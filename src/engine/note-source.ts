@@ -36,6 +36,7 @@ import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { QuestionBank, BankDoc, BankQuestion } from './question-bank.ts'
 import type { FSRS } from 'ts-fsrs'
+import type { AnkiStatusDoc, NoteSourceDoc, NoteSourceRegisterResult } from './views/channels.ts'
 import { dayOfTs, nowIso } from './dates.ts'
 import { readDayCutoff, xpForAnswer } from './xp.ts'
 

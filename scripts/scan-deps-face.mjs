@@ -6,6 +6,7 @@
  *   missing 用了却未声明（运行期 undefined 调用的前兆）
  *   unwired 声明了但门面接线没给（装配缺件 → 运行期 undefined）
  *   surplus 接线给了但 deps 没声明（多余接线；其中门面上不存在同名成员的＝ phantom）
+ * 四个方向**都是硬门 0**（surplus／phantom 在 #171 清理到 0 后由棘轮转硬门，不进基线）。
  *
  * 第三方向只取接线字面量的 **brace-depth-1** 键：ChannelsSubsystem 的
  * `registry: { load, loadNoteSources, save, get }` 是嵌套窄子面（ChannelsDeps 以结构化
@@ -169,14 +170,19 @@ export function wiringKeys(facadeSrc, cls) {
 /** 受控量（基线形状的**单一出处**）：加一个新受控量只改这里，门与基线自动跟上。 */
 export const FACE_SCALARS = ['declared', 'used', 'wired']
 export const FACE_SLOTS = ['handles', 'facade', 'fns']
-export const FACE_LISTS = ['surplus', 'phantom']
+
+/**
+ * `surplus`／`phantom` **不进基线**（#171 清理后转硬门 0，与 dead／missing／unwired 同档）：
+ * 基线是「可以棘轮化的债」的形状，而多余接线清到 0 后没有任何一条是合法的——一个恒须为空的
+ * 清单留在基线里只会沉淀成幽灵条目；且「接了一条没声明的线」本该直接失败，不该走「顺手改基线」。
+ * 这正是 ADR-0047「清理后转硬门 0」的落地；判定在 `arch-baseline.mjs` 的 assemblyViolations。
+ */
 
 /** 单个子系统的受控量快照（基线里存的就是它）。 */
 export function faceSnapshot(face) {
   const snap = {}
   for (const k of FACE_SCALARS) snap[k] = face[k === 'declared' ? 'declaredCount' : k === 'used' ? 'usedCount' : 'wiredCount']
   snap.slots = face.slots
-  for (const k of FACE_LISTS) snap[k] = face[k]
   return snap
 }
 
@@ -235,26 +241,41 @@ export function scanDepsFaces(root = process.cwd(), dir = ENGINE_DIR, facadeFile
   return out
 }
 
+/**
+ * 四个「装配」方向（dead／missing／unwired／surplus）是**装配断裂**，不是可棘轮化的债：
+ * 它们必须恒为 0，不进基线。**门（`arch-baseline.mjs` / `arch-guards.test.ts`）与 CLI
+ * （本文件）共用这一处判定**，免得两处各写一套四向清单与文案（会漂）。
+ * `surplus` 在 #171 把 30 条多余接线清到 0 后由棘轮转本档（ADR-0047「清理后转硬门 0」）：
+ * 一个恒须为空的清单留在基线里只会沉淀成幽灵条目。
+ */
+export function faceViolations(faces) {
+  const bad = []
+  for (const f of faces) {
+    if (f.dead.length) bad.push(`[硬门] ${f.deps} dead（声明未用）: ${f.dead.join(', ')}`)
+    if (f.missing.length) bad.push(`[硬门] ${f.deps} missing（用而未声明）: ${f.missing.join(', ')}`)
+    if (f.unwired.length) bad.push(`[硬门] ${f.deps} unwired（声明未接线）: ${f.unwired.join(', ')}`)
+    if (f.surplus.length) {
+      const phantom = f.phantom?.length ? `\n    其中 phantom（门面上根本没有这个成员）: ${f.phantom.join(', ')}` : ''
+      bad.push(`[硬门] ${f.deps} surplus（接了一条 deps 没声明的线）: ${f.surplus.join(', ')}${phantom}`)
+    }
+  }
+  return bad
+}
+
 if (process.argv[1] && process.argv[1].includes('scan-deps-face')) {
   const rows = scanDepsFaces()
   if (process.argv.includes('--json')) {
     console.log(JSON.stringify(rows, null, 2))
     process.exit(0)
   }
-  let hard = 0
   for (const r of rows) {
     console.log(`${r.cls}（${r.deps}）声明 ${r.declaredCount} ／ 实用 ${r.usedCount} ／ 接线 ${r.wiredCount}`)
     console.log(`  槽位 handles ${r.slots.handles} ／ facade ${r.slots.facade} ／ fns ${r.slots.fns}`)
-    if (r.dead.length) console.error(`  ✗ dead（声明未用）: ${r.dead.join(', ')}`)
-    if (r.missing.length) console.error(`  ✗ missing（用而未声明）: ${r.missing.join(', ')}`)
-    if (r.unwired.length) console.error(`  ✗ unwired（声明未接线）: ${r.unwired.join(', ')}`)
-    hard += r.dead.length + r.missing.length + r.unwired.length
-    if (r.surplus.length) console.log(`  · surplus（接线未声明）${r.surplus.length} 条: ${r.surplus.join(', ')}`)
-    if (r.phantom.length) console.log(`  · phantom（门面无此成员）${r.phantom.length} 条: ${r.phantom.join(', ')}`)
   }
-  if (hard) {
-    console.error(`\n✗ ${hard} 处装配断裂（dead／missing／unwired 都是硬门 0）`)
+  const bad = faceViolations(rows)
+  if (bad.length) {
+    console.error(`\n✗ ${bad.length} 处装配断裂（dead／missing／unwired／surplus 都是硬门 0）：\n${bad.map(b => `  · ${b}`).join('\n')}`)
     process.exit(1)
   }
-  console.log('\n· 多余接线按基线棘轮——对照与违规见：node scripts/arch-baseline.mjs')
+  console.log('\n✓ 四向装配一致（dead／missing／unwired／surplus 全 0）')
 }

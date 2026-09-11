@@ -158,6 +158,10 @@ export function decompileRepairPrompt(pack: string, previous: string, errors: st
   return `${pack}\n\n## 上一次输出未过双产物校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`
 }
 
+/** 里程碑计划条目（设计 §3 关键接口：#92 提案修订与 #95 目标反编译的共同产出形态）。
+ * est/nodes 可选（#93/#94 落地）：est = 过点定价申报（分钟）；nodes = 关联课程节点
+ * （检索点抽题与行为推断 enc 的挂靠点，ADR-0015 裁决 6——关联永不构成门禁）。
+ * 住本模块（projects.ts 经 re-export 供门面与 tests 的既有导入路径消费）。 */
 export interface PlanItem {
   id: string
   name: string

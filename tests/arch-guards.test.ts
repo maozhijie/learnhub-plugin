@@ -4,10 +4,11 @@
  * 门清单（全部零依赖、文本／加载层面、`node:test` 原生、随 `npm test` 全量执行）：
  *   G1 未定义标识符       —— 硬门 0（剥注释与字符串后「被当函数调用却未声明未导入」即失败）
  *   G2／G2b 宿主装配面    —— 硬门（动态 import 入口与技术层；入口三件套齐备、文件非空）
- *   G3 窄面三向一致       —— 缺件方向硬门 0 + 多余接线按基线棘轮（第三方向＝门面接线件）
+ *   G3 窄面三向一致       —— 四个装配方向（dead／missing／unwired／surplus）全为硬门 0（第三方向＝门面接线件）
  *   G4 窄面宽度（三槽位） —— 棘轮（handles／facade／fns 逐槽位卡基线）
  *   G5 文件规模           —— 棘轮（逐文件行数卡基线；views 叶子／types.ts 大表在白名单外）
  *   G6 顶层不变量         —— 硬门（除教练层 proposals.ts 外无模块调用图写原语）
+ *   G7 类型门             —— 棘轮（`tsc --noEmit` 逐文件错误数卡基线；扫描面 src/）
  *
  * 两条铁律（ADR-0047，两条都来自实测教训）：
  *   ① **带自检**：每个门构造一个必然违规的样本并断言门会失败；收集器类门另断言它能看见
@@ -21,10 +22,11 @@ import { readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scanUndefined } from '../scripts/undefined-scan.mjs'
-import { faceOf, scanDepsFaces, depthOneKeys } from '../scripts/scan-deps-face.mjs'
+import { faceOf, scanDepsFaces, depthOneKeys, faceViolations } from '../scripts/scan-deps-face.mjs'
 import { scanSizes, srcFiles, whitelistHits, SIZE_WHITELIST } from '../scripts/scan-budget.mjs'
 import { scanGraphWriters, graphWriteCallers, GRAPH_WRITE_WHITELIST } from '../scripts/scan-invariant.mjs'
-import { BASELINE_FILE, measure, readBaseline, depsFaceViolations, sizeViolations, missingDirectionViolations } from '../scripts/arch-baseline.mjs'
+import { BASELINE_FILE, measure, readBaseline, depsFaceViolations, sizeViolations, typeViolations } from '../scripts/arch-baseline.mjs'
+import { parseTscOutput, scanTypes, checkedSrc } from '../scripts/scan-types.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = join(ROOT, 'src')
@@ -128,12 +130,18 @@ test('G3 自检：嵌套子面不误计为顶层接线（扁平抽取会伪造 p
   assert.deepEqual(face.phantom, ['extraGhost'], 'phantom 应恰为 extraGhost——子面成员不得被误计成 phantom')
 })
 
-test('G3 自检：多余接线看得见（门不是恒过）', () => {
+test('G3 自检：多余接线是硬门 0（门不是恒过）', () => {
   const face = faceOf(FIXTURE_SRC, FIXTURE_FACADE, 'fixture.ts')
   assert.deepEqual(face?.surplus, ['extraGhost'], '接了一条 deps 没声明的线却看不见 = 门恒过')
   assert.deepEqual(face?.dead, [], '夹具里声明全部在用')
   assert.deepEqual(face?.missing, [], '夹具里实用全部已声明')
   assert.deepEqual(face?.unwired, [], '夹具里声明全部已接线')
+  // 硬门本体（#171 转档）：surplus 不再走基线，任何一条即失败
+  const bad = faceViolations([{ deps: 'DemoDeps', dead: [], missing: [], unwired: [], surplus: ['extraGhost'], phantom: ['extraGhost'] }])
+  assert.ok(bad.some(v => v.includes('surplus') && v.includes('extraGhost')), '多余接线必须被硬门直接抓住')
+  assert.ok(bad.some(v => v.includes('phantom')), 'phantom 明细要一并报出来（门面上根本没这个成员）')
+  assert.deepEqual(faceViolations([{ deps: 'DemoDeps', dead: [], missing: [], unwired: [], surplus: [], phantom: [] }]), [],
+    '四向全 0 则绿')
 })
 
 test('G3 自检：depthOneKeys 只认键位置（注释／字符串／三元的冒号都不误取），简写键也算', () => {
@@ -160,12 +168,12 @@ export class LearnhubEngine {
   assert.ok(face?.surplus.includes('rogueThing'), `简写形态的多余接线漏了：surplus=${JSON.stringify(face?.surplus)}`)
 })
 
-test('G3 窄面三向一致：缺件方向为 0，多余接线按基线', () => {
+test('G3 窄面三向一致：四个装配方向全为 0（多余接线已清、转硬门）', () => {
   const faces = scanDepsFaces(ROOT)
   // 收集器可见性自检：扫描面塌成空集时门会静默恒过
   assert.deepEqual(faces.map(f => f.deps).sort(), Object.keys(BASELINE.depsFace).sort(),
     '收集器找到的子系统与基线不一致（改名／新增／漏扫都会到这里）')
-  const bad = [...missingDirectionViolations(faces), ...depsFaceViolations(measure(ROOT).depsFace, BASELINE.depsFace)]
+  const bad = [...faceViolations(faces), ...depsFaceViolations(measure(ROOT).depsFace, BASELINE.depsFace)]
   assert.deepEqual(bad, [], `窄面三向一致门不符基线：\n${bad.join('\n')}`)
 })
 
@@ -178,14 +186,12 @@ test('G4 自检：三槽位按声明形式分组（值属性→handles／方法�
 })
 
 test('G4 自检：棘轮抓 depsFace 的每一类漂移与幽灵条目（门不是恒过）', () => {
-  const base = { A: { declared: 4, used: 4, wired: 5, slots: { handles: 2, facade: 1, fns: 1 }, surplus: ['x'], phantom: [] } }
+  const base = { A: { declared: 4, used: 4, wired: 5, slots: { handles: 2, facade: 1, fns: 1 } } }
   const now = (over: Record<string, unknown>) => ({ A: { ...base.A, ...over } })
   const at = (measured: Record<string, unknown>) => depsFaceViolations(measured, base)
   assert.ok(at(now({ declared: 5 })).some(v => v.includes('[棘轮] A.declared')), '声明数漂移必须失败')
   assert.ok(at(now({ wired: 6 })).some(v => v.includes('[棘轮] A.wired')), '接线数漂移必须失败')
   assert.ok(at(now({ slots: { handles: 3, facade: 1, fns: 1 } })).some(v => v.includes('[宽度棘轮] A.handles')), '宽度槽位漂移必须失败')
-  assert.ok(at(now({ wired: 4, surplus: [] })).some(v => v.includes('[棘轮] A.surplus')), '多余接线清掉未同步基线必须失败')
-  assert.ok(at(now({ phantom: ['x'] })).some(v => v.includes('[棘轮] A.phantom')), 'phantom 漂移必须失败')
   assert.ok(at({}).some(v => v.includes('[幽灵条目]') && v.includes('A')), '基线幽灵条目必须被抓')
   assert.ok(at({ ...now({}), B: base.A }).some(v => v.includes('[新受控对象] B')), '新受控对象必须显式登记')
   assert.deepEqual(at(now({})), [], '一致则绿')
@@ -255,4 +261,54 @@ test('G6 顶层不变量：只有教练层（proposals.ts）能调用图写原�
   assert.deepEqual(callers, [...GRAPH_WRITE_WHITELIST].sort(),
     `图写原语（\`data/*.yaml\` 的唯一写路径）的调用者只准是 ${GRAPH_WRITE_WHITELIST.join('、')}——`
     + '其余模块直调即绕过提案门改图（ADR-0044 顶层不变量）')
+})
+
+// ---------------------------------------------------------------- G7 类型门（tsc --noEmit）
+
+test('G7 自检：解析器看得见逐文件错误与错误码（门不是恒过）', () => {
+  const out = [
+    'src/a.ts(1,2): error TS2304: Cannot find name \'x\'.',
+    'src/a.ts(9,4): error TS2339: Property \'y\' does not exist.',
+    'src/b.ts(3,1): error TS1016: A required parameter cannot follow an optional parameter.',
+    'src/b.ts(3,1): warning TS9999: 警告不算错误（但也不能当错误计）',
+    'C:\\work\\repo\\src\\c.ts',
+    'C:\\work\\repo\\tests\\x.test.ts',
+    'C:\\elsewhere\\node_modules\\typescript\\lib\\lib.es2022.d.ts',
+    'C:\\work\\repo\\src\\d.ts',
+  ].join('\n')
+  const { counts, codes, checked, unpositioned } = parseTscOutput(out, 'C:\\work\\repo')
+  assert.deepEqual(counts, { 'src/a.ts': 2, 'src/b.ts': 1 }, '逐文件计数（含重复出现的文件、排除 warning）')
+  assert.deepEqual(codes, { TS2304: 1, TS2339: 1, TS1016: 1 })
+  assert.deepEqual(checked, ['src/c.ts', 'src/d.ts', 'tests/x.test.ts'],
+    '--listFiles 只收仓内文件（仓外路径在外）；src/ 之外的仓内文件由 checkedSrc 再筛')
+  assert.deepEqual(unpositioned, [])
+})
+
+test('G7 自检：无文件位置的 tsc 错误必须硬失败（否则塌掉的扫描面会静默变绿）', () => {
+  // tsconfig 坏掉时 tsc 只报一条无位置的错，解析结果为空——当成「全修好了」就是恒过门
+  const { counts, unpositioned } = parseTscOutput('error TS18003: No inputs were found in config file.', process.cwd())
+  assert.deepEqual(counts, {})
+  assert.equal(unpositioned.length, 1, '配置级错误要被单独识别出来（scanTypes 据此抛错）')
+})
+
+test('G7 自检：棘轮抓上涨、抓修好未同步、抓新涉错文件、抓幽灵条目', () => {
+  const base = { 'src/a.ts': 2, 'src/gone.ts': 1 }
+  const at = (counts: Record<string, number>) => typeViolations(counts, base)
+  assert.ok(at({ 'src/a.ts': 3, 'src/gone.ts': 1 }).some(v => v.includes('[类型棘轮] src/a.ts')), '错误变多必须失败')
+  assert.ok(at({ 'src/a.ts': 1, 'src/gone.ts': 1 }).some(v => v.includes('[类型棘轮] src/a.ts')), '减少未同步基线必须失败')
+  assert.ok(at({ 'src/a.ts': 2 }).some(v => v.includes('src/gone.ts')), '修好到 0 却没删基线条目必须失败（幽灵条目）')
+  assert.ok(at({ 'src/a.ts': 2, 'src/gone.ts': 1, 'src/new.ts': 1 }).some(v => v.includes('src/new.ts')), '新涉错文件必须显式登记')
+  assert.deepEqual(at({ 'src/a.ts': 2, 'src/gone.ts': 1 }), [], '一致则绿')
+})
+
+test('G7 类型门：逐文件错误数卡基线（扫描面 src/，存量债按基线棘轮）', () => {
+  const measured = scanTypes(ROOT)
+  // 收集器可见性自检：tsc 必须真的读到了整个 src/（扫成空集时门会静默恒过）
+  const srcOnDisk = srcFiles(ROOT)
+  assert.ok(srcOnDisk.length > 50, `受控面异常：src/ 只有 ${srcOnDisk.length} 个 .ts/.tsx`)
+  const missed = srcOnDisk.filter(f => !checkedSrc(measured).includes(f))
+  assert.deepEqual(missed, [],
+    `这些 src 文件没被 tsc 读到（tsconfig include 漏了它们，或扫描面塌了）：\n${missed.join('\n')}`)
+  const bad = typeViolations(measured.counts, BASELINE.typeErrors ?? {})
+  assert.deepEqual(bad, [], `类型门不符基线：\n${bad.join('\n')}`)
 })

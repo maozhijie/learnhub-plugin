@@ -35,7 +35,8 @@ import type { BrokenNote } from './notes.ts'
 import { asFm, loadNote, saveNote } from './notes.ts'
 import type { FSRS } from 'ts-fsrs'
 import { NOTE_SOURCE_COURSE } from './types.ts'
-import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, AdviceDismissRec, NoteSourceEntry, GRegion } from './types.ts'
+import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, NoteSourceEntry, GRegion } from './types.ts'
+import type { AdviceDismissRec } from './bank-advice.ts'
 import type { LlmComplete } from './llm.ts'
 import type { ExplainPoint } from './explain.ts'
 import { advanceStrict } from './advance.ts'
@@ -484,7 +485,7 @@ export interface BankDeps {
   saveNodeNote(path: string, fm: Fm, body: string): Promise<void>
   vaultPriorFor(graph: Graph, node: string): Promise<string>
   logGradingFailure(rec: { course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string }): Promise<void>
-  questionContext(courseKey: string | undefined, node: string, qid: string, op: string): Promise<Record<string, unknown>>
+  questionContext(courseKey: string | undefined, node: string, qid: string, op: string): Promise<{ c: CourseEntry; graph: Graph; q: BankQuestion; idx: number }>
   exerciseGated(c: CourseEntry, node: string): Promise<boolean>
   repairInvokesOnce(llm: LlmComplete, items: unknown[], scope: string[]): Promise<number>
   admitQuestion(root: string, node: string, q: Record<string, unknown>, stem: string, existingStems: Array<{ q: string; kind?: string; difficulty?: number }>): Promise<{ verdict: 'added' } | { verdict: 'duplicate'; against: string } | { verdict: 'invalid' }>
