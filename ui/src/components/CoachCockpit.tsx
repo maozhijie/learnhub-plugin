@@ -2,15 +2,26 @@
  * enc 回填与复诊卡片——图域命令从面板直接下发（入队即返回，进度/结果看生成页），
  * 不再依赖 dsh 会话里的 agent。产物一律走提案人审通道（生长批除外：受理门即门，
  * ADR-0003 维持「不把逐批人审修回来」）。 */
-import { Button, Card, Checkbox, Input, Message, Modal, Radio, Space, Tag, Typography } from '@arco-design/web-react'
+import { Button, Card, Checkbox, Input, Message, Modal, Radio, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { isActiveTab } from '../active-tab'
-import type { ProbationDoc } from '../types'
+import type { GenJobItem, ProbationDoc } from '../types'
 
 const { Text } = Typography
 
 const pct = (v: number | null): string => (v === null ? '—' : `${Math.round(v * 100)}%`)
+
+/** 图域任务状态 → 在途条标签/颜色（done 只在注册表留 30 分钟，failed 留 24h 供排查）。 */
+const JOB_STATUS: Partial<Record<GenJobItem['status'], { label: string; color: string }>> = {
+  queued: { label: '排队中', color: 'gray' },
+  running: { label: '进行中', color: 'arcoblue' },
+  cancelling: { label: '取消中', color: 'orange' },
+  done: { label: '已完成', color: 'green' },
+  partial: { label: '部分完成', color: 'purple' },
+  failed: { label: '失败', color: 'red' },
+  cancelled: { label: '已取消', color: 'gray' },
+}
 
 /** 建课/换终点表单（种子起草，phase=种子 队列任务 → 种子提案一次人审）。
  * 课程名/目标类型/块工作表是绑定字段（引擎以表单为准，不信模型照抄）。 */
@@ -52,7 +63,8 @@ function SeedFormModal({ visible, mode, course, onCancel }: {
         goalType, useVaultPrior: usePrior,
         worksheet: goalType === 'coverage' ? worksheet : [],
       })
-      Message.success(`${r.message}——提案页一次人审即开工`)
+      // 诚实版反馈：提案还不存在——起草完成后才落提案页（弹通知告知），别让人在提案页空等
+      Message.success(`${r.message}通常 1–3 分钟；完成后弹通知、提案页出现提案——期间可随意刷新或离开页面`)
       onCancel()
     } catch (err) {
       Message.error(err instanceof Error ? err.message : String(err))
@@ -97,7 +109,8 @@ function SeedFormModal({ visible, mode, course, onCancel }: {
           参考我的笔记定起点（Vault 先验检索：起点放在熟悉边界，已会内容不作起点）
         </Checkbox>
         <Text type='secondary' style={{ fontSize: 12 }}>
-          提交即入队起草（生成页看进度），产物是种子提案——1–3 起点 + 终点，一次人审即开工；
+          提交即入队起草（通常 1–3 分钟，队列 FIFO，可能排在内容生成之后）；**随时刷新或离开页面都不影响**——
+          任务在宿主执行，完成后弹通知、提案页出现提案。产物是种子提案：1–3 起点 + 终点，一次人审即开工；
           图的其余部分由教练回合随生长批生长，不预先铺满。
         </Text>
       </Space>
@@ -170,8 +183,8 @@ function ProbationCard({ course }: { course: string }) {
   )
 }
 
-/** 教练台入口卡片：course 为 null（空 vault）时只露出建课入口。 */
-export default function CoachCockpit({ course }: { course: string | null }) {
+/** 教练台入口卡片：course 为 null（空 vault）时只露出建课入口 + 在途任务条。 */
+export default function CoachCockpit({ course, jobs }: { course: string | null; jobs?: GenJobItem[] }) {
   const [seedForm, setSeedForm] = useState<null | 'new' | 'reseed'>(null)
   const [busy, setBusy] = useState<'growth' | 'compass' | 'backfill' | null>(null)
 
@@ -241,6 +254,25 @@ export default function CoachCockpit({ course }: { course: string | null }) {
           </>
         )}
       </Space>
+      {/* 在途条：图域任务的常驻可见性——提交动作和它的后果之间的那根线
+        * （排队/进行中/失败全显示；点击去生成页看全程，失败的死因在任务消息里）。 */}
+      {jobs && jobs.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <Space size={6} wrap align='center'>
+            <Text type='secondary' style={{ fontSize: 12 }}>图域任务（点击去生成页看全程）：</Text>
+            {jobs.map(j => {
+              const st = JOB_STATUS[j.status]
+              return (
+                <Tooltip key={j.key} content={j.message ?? ''}>
+                  <Tag size='small' color={st?.color ?? 'gray'} style={{ cursor: 'pointer' }}>
+                    {j.node}（{j.course}）· {st?.label ?? j.status}
+                  </Tag>
+                </Tooltip>
+              )
+            })}
+          </Space>
+        </div>
+      )}
       {course && <div style={{ marginTop: 10 }}><ProbationCard course={course} /></div>}
       <SeedFormModal visible={seedForm !== null} mode={seedForm ?? 'new'} course={course} onCancel={() => setSeedForm(null)} />
     </Card>

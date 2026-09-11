@@ -68,9 +68,9 @@ export default function App() {
 
   useEffect(() => { void reload() }, [reload])
 
-  // 教练通知（ADR-0038）：图域任务生命周期 + 复诊结算的 App 级轻轮询弹条（10s/60s），
-  // 点击「去生成页」跳队列视图；早退分支之前调用（hooks 顺序恒定）。
-  useCoachToasts(() => setTab('generate'))
+  // 教练通知（ADR-0038）：图域任务生命周期 + 复诊结算的 App 级轻轮询弹条（10s/60s）；
+  // 完成通知按钮按任务性质分流（提案产物→提案页，过程→生成页）。早退分支之前调用（hooks 顺序恒定）。
+  useCoachToasts({ generate: () => setTab('generate'), proposals: () => setTab('proposals') })
 
   // 页签保活（ADR-0027）：把当前页签广播给各页轮询——隐藏页签据此跳过取数
   useEffect(() => { setActiveTab(tab) }, [tab])
@@ -133,9 +133,13 @@ export default function App() {
         </Button>
       </div>
       <div className={`app-body${tab === 'graph' ? ' no-pad' : ''}`}>
-        {tab !== 'learn' && tab !== 'practice' && tab !== 'projects' && tab !== 'graph' && noCourse ? (
+        {/* 空课程守卫只拦「纯消费」页签：提案/生成是建课回路的一半（种子起草 → 生成页看进度
+         * → 提案页人审 → 才有课程），学习图/实践/项目自带空态入口，一律放行——否则死锁：
+         * 建课要靠提案页人审，提案页却被「没有课程」拦住。 */}
+        {tab !== 'learn' && tab !== 'practice' && tab !== 'projects' && tab !== 'graph'
+          && tab !== 'proposals' && tab !== 'generate' && noCourse ? (
           <div style={{ paddingTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-            <Empty description='还没有课程：到「学习图」页新建课程（种子提案一次人审即开工，图随教练回合生长）' />
+            <Empty description='还没有课程：到「学习图」页新建课程——种子起草后在「提案」页人审开工，等待时可在「生成」页看进度' />
             <Button type='primary' onClick={() => setTab('graph')}>去学习图页建课</Button>
           </div>
         ) : (

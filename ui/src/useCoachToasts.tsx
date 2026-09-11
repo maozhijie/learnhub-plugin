@@ -2,9 +2,9 @@
  * 复诊在途清单，把「系统在我的课程上动了手」浮出来——
  * - 图域任务（种子/生长/罗盘/反编译/计划/里程碑）入队与终态各弹一条（含触发语义与结果行）；
  *   内容类任务不弹（各页已有指示器）；被阻尼拒掉的重拉不产生注册表条目 → 自然不弹。
- * - 复诊结算（队列空闲钩子自动跑，宿主侧只有运行日志）：在途节点消失 = 已出结论，弹一条。
- * 通知内嵌「去生成页」按钮（Notification 配置无 onClick，按钮承载跳转）。首拍
- * （首次成功取数）只建快照——不回放打开页面前的历史。 */
+ * - 复诊结算（队列空闲钩子自动跑，宿主侧只有运行日志）：在途节点消失/三率增量 = 已出结论。
+ * 通知按钮按任务性质分流：产物是提案的（种子/反编译/计划/里程碑）→「去提案页」人审；
+ * 过程性的（生长/罗盘）→「去生成页」。首拍（首次成功取数）只建快照——不回放历史。 */
 import { Button, Notification } from '@arco-design/web-react'
 import { useEffect, useRef } from 'react'
 import { api } from './api'
@@ -18,26 +18,32 @@ const PHASE_TITLE: Record<string, string> = {
   计划: '里程碑计划草案',
   里程碑: '里程碑任务卡',
 }
+/** 产物是提案的任务：完成通知跳提案页（下一步动作是人审），其余跳生成页。 */
+const PROPOSAL_OUTPUT = new Set(['种子', '反编译', '计划', '里程碑'])
 
 interface JobSnap { status: string; phase?: string; message?: string }
 
-export function useCoachToasts(gotoGenerate: () => void): void {
+export function useCoachToasts(nav: { generate: () => void; proposals: () => void }): void {
   const prevJobsRef = useRef<Map<string, JobSnap> | null>(null)
-  const prevProbationRef = useRef<Map<string, Set<string>> | null>(null)
-  const navRef = useRef(gotoGenerate)
-  navRef.current = gotoGenerate
+  const prevProbationRef = useRef<Map<string, { nodes: Set<string>; proven: number; pruned: number }> | null>(null)
+  const navRef = useRef(nav)
+  navRef.current = nav
 
   useEffect(() => {
     let jobsPrimed = false
     let probationPrimed = false
 
-    const notify = (kind: 'info' | 'success' | 'error', title: string, text?: string) => {
+    const notify = (kind: 'info' | 'success' | 'error', title: string, text: string | undefined,
+      target: 'generate' | 'proposals' = 'generate') => {
       Notification[kind]({
         title,
         content: (
           <span>
             {text}
-            <Button size='mini' type='text' style={{ marginLeft: 6 }} onClick={() => navRef.current()}>去生成页</Button>
+            <Button size='mini' type='text' style={{ marginLeft: 6 }}
+              onClick={() => navRef.current[target]()}>
+              {target === 'proposals' ? '去提案页' : '去生成页'}
+            </Button>
           </span>
         ),
         duration: kind === 'error' ? 12 : 6,
@@ -67,9 +73,12 @@ export function useCoachToasts(gotoGenerate: () => void): void {
               notify('info', `${title}已触发`, cur.message ?? '已入队，生成页看进度')
             }
           } else if (old.status !== cur.status) {
-            if (cur.status === 'done') notify('success', `${title}完成`, cur.message)
-            else if (cur.status === 'partial') notify('info', `${title}部分完成`, cur.message)
-            else if (cur.status === 'failed' || cur.status === 'cancelled') {
+            if (cur.status === 'done') {
+              notify('success', `${title}完成`, cur.message,
+                PROPOSAL_OUTPUT.has(cur.phase ?? '') ? 'proposals' : 'generate')
+            } else if (cur.status === 'partial') {
+              notify('info', `${title}部分完成`, cur.message)
+            } else if (cur.status === 'failed' || cur.status === 'cancelled') {
               notify('error', `${title}${cur.status === 'failed' ? '失败' : '已取消'}`, cur.message)
             }
           }
