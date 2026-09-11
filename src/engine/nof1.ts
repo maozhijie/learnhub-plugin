@@ -27,6 +27,7 @@ import { NOF1_VARIABLE_WHITELIST } from './types.ts'
 import type { ExperimentDef, Nof1Variable } from './types.ts'
 import { YAML } from './yaml.ts'
 import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
+import { runWriteUnit } from './write-unit.ts'
 import { normalizeSleepAdvice } from './sleep.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from './thermostat.ts'
@@ -491,9 +492,10 @@ export class LabSubsystem {
 
   /** 手动停（ADR-0023：实验开停手动）。停 = 定稿（#150 结局落沉淀正典）：结局分析
    * 出生即写沉淀正典（kind=nof1_outcome、immediate 档；未达观察窗的如实进度态也落——
-   * 正典记录发生了什么，不造假结论），学习者档案投影重建。幂等护栏在前：同实验 id
-   * 已有结局事件则不再追加——追加写与停标志落盘任何顺序崩溃后重试都收敛，不产重复
-   * 结局事件。 */
+   * 正典记录发生了什么，不造假结论），学习者档案投影重建。
+   * 写入单元（#176）：步骤顺序照今天的声明——「结局事件 → 停标志落盘 → 投影重建」，
+   * 崩溃后重试收敛（结局步骤的 done 幂等判据 = 同实验 id 已有结局事件即续段）。
+   * 失败：任一步抛错上抛中止，不回滚不续跑（恢复走 dataCheck/doctor）。 */
   async experimentStop(id?: number): Promise<ExperimentDef> {
     const list = await this.e.store.loadExperiments()
     const hit = id !== undefined ? list.find(e => e.id === id) : list.find(e => e.status === 'running')
@@ -501,10 +503,18 @@ export class LabSubsystem {
     if (hit.status !== 'running') throw new Error(`[nof1-stop] 实验 #${hit.id} 已是 ${hit.status}。`)
     const { today } = await this.e.learningDay()
     const analysis = await this.nof1AnalysisOf(hit)
-    const fold = await this.e.sedimentFold()
-    const landed = fold.events.some(e => e.kind === 'nof1_outcome' && e.payload.experiment === hit.id)
-    if (!landed) {
-      await this.e.sedimentAppend('nof1_outcome', 'immediate', {
+    await runWriteUnit('experimentStop', {
+      clock: this.e.clock,
+      journal: rec => this.e.store.appendJournal(rec),
+      steps: [
+        {
+          name: '结局事件落沉淀正典',
+          done: async () => {
+            const fold = await this.e.sedimentFold()
+            return fold.events.some(e => e.kind === 'nof1_outcome' && e.payload.experiment === hit.id)
+          },
+          run: async () => {
+            await this.e.sedimentAppend('nof1_outcome', 'immediate', {
         experiment: hit.id,
         template: hit.template,
         variable: hit.variable,
@@ -522,12 +532,20 @@ export class LabSubsystem {
         ci95: analysis.ci95,
         p: analysis.p,
         message: analysis.message,
-      })
-    }
-    hit.status = 'stopped'
-    hit.stopped_day = today
-    await this.e.store.saveExperiments(list)
-    await this.e.sedimentRebuildProfile()
+            })
+          },
+        },
+        {
+          name: '实验清单停标志落盘',
+          run: async () => {
+            hit.status = 'stopped'
+            hit.stopped_day = today
+            await this.e.store.saveExperiments(list)
+          },
+        },
+        { name: '学习者档案投影重建', run: async () => { await this.e.sedimentRebuildProfile() } },
+      ],
+    })
     return hit
   }
 
