@@ -82,7 +82,7 @@ const PAST = '2024-01-01'
 const seeded = (due: string) => ({ stability: 5, difficulty: 5, due, last_review: due, reps: 2, lapses: 0 })
 
 test('memoryHealth：预报/分布立刻有数且与 reviewQueue 扫描口径一致；保留率只计真实到期复习', async () => {
-  const today = todayStr()
+  const today = todayStr(new Date())
   const day = (offset: number) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86400000).toISOString().slice(0, 10)
   await withVault({
     notes: { 入门: { stage: 'review' } },

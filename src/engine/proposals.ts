@@ -26,6 +26,7 @@ import {
   compassScaffold, withSectionText, parseCompass, sectionBody, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
 import { todayStr } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
 import { RECHECK_DAYS_DEFAULT } from './params.ts'
@@ -483,6 +484,8 @@ export class GraphProposals {
     /** 生长闸门（#146 插入/旁支调速）：受理与 apply 双门在 schema 门后调用——需要
      * 三率流水（账本/提案/练习），由门面注入（本类零流水依赖）；返回拒收行，空 = 放行。 */
     private growthGate?: (spec: EditProposalSpec) => Promise<string[]>,
+    /** 时钟端口（#175 阶段①）：decided/now 戳与学习日缺省都经它取时。 */
+    private clock?: Clock,
   ) {
     this.concepts = new ConceptRegistry(paths)
   }
@@ -734,7 +737,7 @@ export class GraphProposals {
       session: String(prop.id),
       detail,
     })
-    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
+    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `快照 v${version}` })
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
     const seedPhase = isSeedGraph(await readAnchor(this.paths.anchorPath(root)), new Graph(regions2))
     return {
@@ -893,7 +896,7 @@ export class GraphProposals {
     }
 
     // 3. 终点锚落盘（课程唯一结构承诺物；整份覆盖写——换终点走重新种子提案）
-    const declared = today ?? todayStr()
+    const declared = today ?? todayStr(new Date(this.clock!.nowMs()))
     const anchor = anchorFromSeed(spec, prop.id, declared)
     await writeAnchor(this.paths.anchorPath(root), anchor)
 
@@ -918,7 +921,7 @@ export class GraphProposals {
       detail: `种子（${spec.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'}）：起点 ${spec.starts.map(s => s.name).join('、')} → 终点 ${spec.endpoint.name}；占位边 ${spec.starts.length} 条`
         + (spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''),
     })
-    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `终点锚落盘；快照 v${version}` })
+    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `终点锚落盘；快照 v${version}` })
     const merged = new Graph(regions)
     const feed = await this.priorFeed(merged)
     // 种子图豁免：图仍 = 种子节点全集时健康分不设阈值（findings 不带 <80 提示）
@@ -1044,7 +1047,7 @@ export class GraphProposals {
       fileHashes.set(regionName, sha256(text))
     }
     // 覆盖层留痕（state/覆盖层.jsonl，追加只增；读侧只读正典，这里只是审计与出处）
-    const now = new Date().toISOString()
+    const now = new Date(this.clock!.nowMs()).toISOString()
     const lines = spec.fields.map(f => JSON.stringify({
       target: f.node,
       field: 'enc',
@@ -1061,7 +1064,7 @@ export class GraphProposals {
       course: course.name, node: '*', rating: null, kind: 'graph_enrich', elapsed_days: 0,
       session: String(prop.id), detail: spec.fields.map(f => `enc(${f.node})×${f.enc.length}`).join('；'),
     })
-    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date().toISOString(), decision_note: `快照 v${version}` })
+    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `快照 v${version}` })
     return {
       course: course.name,
       fields: spec.fields.length,
@@ -1130,12 +1133,12 @@ export class GraphProposals {
     const list = await this.store.loadProposals()
     const prop = list.find(p => p.id === pid)
     if (!prop || prop.status !== 'pending') throw new Error(`[reject] 提案 #${pid} 不存在或已决。`)
-    await this.store.updateProposal(pid, { status: 'rejected', decided: new Date().toISOString(), decision_note: note })
+    await this.store.updateProposal(pid, { status: 'rejected', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: note })
     if (prop.pair) {
       const sibling = list.find(p => p.id === prop.pair)
       if (sibling && sibling.status === 'pending') {
         await this.store.updateProposal(sibling.id, {
-          status: 'rejected', decided: new Date().toISOString(),
+          status: 'rejected', decided: new Date(this.clock!.nowMs()).toISOString(),
           decision_note: `同源双提案同退（#${pid} 已拒，联动拒绝）${note ? `：${note}` : ''}`,
         })
       }

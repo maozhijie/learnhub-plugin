@@ -734,7 +734,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "compassPaint(\"1\",{\"ports\":{},\"callSeq\":{}})"
+   "compassPaint(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}})"
   ]
  },
  {
@@ -1478,7 +1478,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"callSeq\":{}})"
+   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})"
   ]
  },
  {

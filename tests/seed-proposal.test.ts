@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Graph, GraphStore } from '../src/engine/graph.ts'
+import { todayStr } from '../src/engine/dates.ts'
+import { systemClock } from '../src/host/clock.ts'
 import { validateSeedProposal, seedNodeToGNode, readAnchor, foldCompletion } from '../src/engine/seed.ts'
 import { runAudit } from '../src/engine/audit.ts'
 import { dataCheck } from '../src/engine/data-check.ts'
@@ -145,7 +147,7 @@ ops:
     const endpoint = grown.flatMap(rg => rg.blocks.flatMap(b => b.nodes)).find(n => n.name === '用导数解决优化问题')!
     assert.deepEqual(endpoint.pre, ['求解一阶导数'], '生长批已消化粗占位边')
     // 图已生长（≠ 种子节点全集）→ 形状告警恢复：R1 浅叶子重新可见
-    const auditAfter = await runAudit(paths, '数学', '数学', new Graph(grown), grown)
+    const auditAfter = await runAudit(paths, '数学', '数学', new Graph(grown), grown, todayStr(new Date()))
     assert.ok(!auditAfter.failed)
     assert.ok(auditAfter.warns.some(w => w.startsWith('R1')), '生长后形状告警恢复（豁免翻转）')
   })
@@ -171,7 +173,7 @@ test('AC2 覆盖锚定带块工作表；能力锚定带工作表受理被拒；�
     // 种子审计豁免：种子图（= 锚的种子节点全集）无 R1/R8/R13 形状告警 + 豁免 INFO 行
     const regions = await new GraphStore(paths, paths.courseRoot('数学')).load()
     const graph = new Graph(regions)
-    const audit = await runAudit(paths, '数学', '数学', graph, regions)
+    const audit = await runAudit(paths, '数学', '数学', graph, regions, todayStr(new Date()))
     assert.ok(!audit.failed)
     assert.ok(!audit.warns.some(w => w.startsWith('R1') || w.startsWith('R8') || w.startsWith('R13')), '形状告警豁免')
     assert.ok(audit.infos.some(w => w.includes('种子图豁免生效')), '豁免显式可见不静默')
@@ -317,7 +319,7 @@ test('AC4 先验喂料分流：≥0.7 未回应进 warns+审计可见；已回�
     // 审计可见：R17 WARN 落在持久图审计上
     const regions = await new GraphStore(paths, paths.courseRoot('数学')).load()
     const graph = new Graph(regions)
-    const audit = await runAudit(paths, '数学', '数学', graph, regions)
+    const audit = await runAudit(paths, '数学', '数学', graph, regions, todayStr(new Date()))
     assert.ok(audit.warns.some(w => w.startsWith('R17') && w.includes('认识变化率 ~ 直观理解积分')), '审计 R17 可见')
     assert.ok(!audit.warns.some(w => w.includes('认识变化率 ~ 用导数解决优化问题')))
 
@@ -336,7 +338,7 @@ starts:
 `) as { id: number; prior_feed_unresponded: number; warns?: string[] }
     assert.equal(r2.prior_feed_unresponded, 0)
     assert.equal(r2.warns, undefined, '零先验零注入：无 warns')
-    const audit2 = await runAudit(paths, '数学', '数学', graph, regions)
+    const audit2 = await runAudit(paths, '数学', '数学', graph, regions, todayStr(new Date()))
     assert.ok(!audit2.warns.some(w => w.startsWith('R17')))
   })
 })
@@ -344,14 +346,14 @@ starts:
 test('data-check 终点锚盘点：未播种 Missing 全绿；在盘合法计数；悬空/坏档 Broken', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     // 未播种：Missing 合法（inventory 计数 0，零 endpoint_anchor finding）
-    const before = await dataCheck(paths)
+    const before = await dataCheck(paths, Date.now())
     assert.equal(before.inventory.endpointAnchors.present, 0)
     assert.ok(!before.findings.some(f => f.area === 'endpoint_anchor'))
 
     // 播种后：在盘且合法 → present=1 零 finding
     const r = await engine.graphPropose('seed', CAPABILITY_SEED) as { id: number }
     await engine.graphApply('seed', r.id)
-    const after = await dataCheck(paths)
+    const after = await dataCheck(paths, Date.now())
     assert.equal(after.inventory.endpointAnchors.present, 1)
     assert.ok(!after.findings.some(f => f.area === 'endpoint_anchor'))
 
@@ -360,7 +362,7 @@ test('data-check 终点锚盘点：未播种 Missing 全绿；在盘合法计数
     const raw = JSON.parse(await readFile(anchorPath, 'utf8')) as { endpoint: string }
     raw.endpoint = '幽灵终点'
     await writeFile(anchorPath, JSON.stringify(raw), 'utf8')
-    const dangling = await dataCheck(paths)
+    const dangling = await dataCheck(paths, Date.now())
     const finding = dangling.findings.find(f => f.reason === 'endpoint_anchor_dangling')
     assert.ok(finding, '锚悬空 Broken 可见')
     assert.match(finding!.detail ?? '', /换终点走重新种子提案/)
@@ -464,7 +466,7 @@ test('seedPropose：目标起草种子提案——受理 pending、绑定字段�
       assert.ok(prompt.includes('- 目标类型：capability'), '目标类型进上下文')
       assert.ok(!prompt.includes('只读检索所得'), '未选配先验不附检索注入段')
       return 'course: 完全不相干的错名\n' + SEED_LLM_OK('x').slice('course: x\n'.length)
-    } })
+    } }, systemClock)
     const r = await engine.seedPropose({ course: '微积分', goal: '学会用微积分解决优化问题' }, fake)
     assert.equal(calls, 1)
     assert.equal(r.course, '微积分', '课程名以表单为准（模型照抄错也被绑定覆盖）')
@@ -485,11 +487,11 @@ test('seedPropose：首轮 YAML 违约回灌修复一轮；两轮仍违约拒收
       n++
       if (n === 2) assert.ok(prompt.includes('种子校验门'), '修复轮带校验清单')
       return n === 1 ? broken : SEED_LLM_OK('微积分')
-    } })
+    } }, systemClock)
     const r = await engine.seedPropose({ course: '微积分', goal: '学会微积分' }, flaky)
     assert.equal(n, 2)
     assert.equal(r.repaired, true)
-    const alwaysBad = new AgentSeam({ complete: async () => broken })
+    const alwaysBad = new AgentSeam({ complete: async () => broken }, systemClock)
     await assert.rejects(
       () => engine.seedPropose({ course: '微积分', goal: '学会微积分' }, alwaysBad),
       (err: Error & { code?: string }) => err.code === 'SEED_GATE_FAILED',
@@ -502,7 +504,7 @@ test('seedPropose：coverage 绑定表单工作表（不信模型）；空工作
     const cov = new AgentSeam({ complete: async prompt => {
       assert.ok(prompt.includes('块工作表'), 'coverage 工作表进上下文')
       return 'course: 历史\nmode: new\nreason: x\ngoal_type: coverage\nworksheet:\n  - block: 模型瞎写的块\nendpoint:\n  name: 完成考纲综述\n  region: 基础\n  block: 收束\nstarts:\n  - name: 通读考纲\n    region: 基础\n    block: 起点块\n    basis: baseline\n'
-    } })
+    } }, systemClock)
     const r = await engine.seedPropose(
       { course: '历史', goal: '过一遍考纲', goalType: 'coverage', worksheet: [{ block: '代数' }, { block: '几何' }] }, cov)
     const seed = (await engine.store.loadProposals()).find(p => p.kind === 'seed' && p.id === r.id)

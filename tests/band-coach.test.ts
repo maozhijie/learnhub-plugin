@@ -42,7 +42,7 @@ test('withinCoachWindow：7 天窗口（按本地日，未来与过期都算窗�
 })
 
 test('coachFeedback：全简单 + 有该会的到期难题 → 温和点出；全挑战反复失败 → 回前置/成分技能；低数据静默', () => {
-  const today = todayStr()
+  const today = todayStr(new Date())
   const easy: BandRec[] = Array.from({ length: COACH_MIN_SESSIONS }, () =>
     ({ date: today, course: '数学', node: '入门', band: 'easy', answered: 4, correct: 4 }))
   // 触发 ①：总选简单 + 有该会的到期难题

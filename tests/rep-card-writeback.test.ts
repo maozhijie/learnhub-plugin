@@ -39,7 +39,7 @@ test('练习流答对推进后：fm.fsrs 回刷为该题新卡，稳定度分量
     assert.equal(fs.reps, '6', '代表卡回刷为该题推进后的新卡')
     assert.equal(fs.due, r.due, '回刷 due 与题目新卡一致')
     assert.ok(Number(fs.stability) > qCard.stability, 'Good 推进后稳定度增长')
-    assert.equal(fs.last_review, todayStr(), '回刷 last_review 为本次推进日')
+    assert.equal(fs.last_review, todayStr(new Date()), '回刷 last_review 为本次推进日')
   })
 })
 

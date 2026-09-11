@@ -32,7 +32,8 @@ import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import { loadNote } from './notes.ts'
 import type { FSRS } from 'ts-fsrs'
-import { todayStr, dayOfTs, nowIso } from './dates.ts'
+import { todayStr, dayOfTs, nowIsoOf } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { nodeKeyOf } from './types.ts'
 import { round2 } from './grading.ts'
 import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
@@ -184,8 +185,10 @@ export function validateLearnerCards(doc: unknown, expectedNode?: string): { err
 
 export class LearnerCards {
   private paths: Paths
-  constructor(paths: Paths) {
+  private clock: Clock
+  constructor(paths: Paths, clock: Clock) {
     this.paths = paths
+    this.clock = clock
   }
 
   cardPath(courseRoot: string, node: string): string {
@@ -314,6 +317,8 @@ export class LearnerCards {
 
 /** Learner 域对门面的结构化窄面（门面构造时传 this，只列本域消费的成员）。 */
 export interface LearnerDeps {
+  /** 时钟端口（#175 阶段①）：习惯重复 ts 戳。 */
+  clock: Clock
   store: Pick<Store, 'appendBandRec' | 'appendEArchive' | 'appendHabitRepeat' | 'appendJournal' | 'appendReview' | 'bandRecsAll' | 'habitRepeatsAll' | 'journalTail' | 'loadPins' | 'practiceAll' | 'receiptsAll' | 'reviewLogAll' | 'savePins'>
   paths: Paths
   registry: Pick<Registry, 'resolve'>
@@ -729,7 +734,7 @@ export class LearnerSubsystem {
     const body = assembleKataDoc({ weekStart, weekEnd, created, reality, answers: sections })
     await writeOutputArtifact(this.e.paths, {
       kind: '周复盘', file: `${weekStart}.md`,
-      fm: { kind: KATA_KIND, week_start: weekStart, week_end: weekEnd, created, updated: todayStr() },
+      fm: { kind: KATA_KIND, week_start: weekStart, week_end: weekEnd, created, updated: todayStr(new Date(this.e.clock.nowMs())) },
       body,
     })
   }
@@ -740,7 +745,7 @@ export class LearnerSubsystem {
     const { fm, sections } = await this.kataReadDoc(path)
     const reality = sections['现状']
     sections['下一实验'] = `${sections['下一实验'].trim()}\n\n${line}`.trim()
-    await this.kataPersist(path, weekStart, reality, sections, String(fm.created ?? todayStr()))
+    await this.kataPersist(path, weekStart, reality, sections, String(fm.created ?? todayStr(new Date(this.e.clock.nowMs()))))
   }
 
   /** 难度带会话记录（会话结束反馈点调用，ReviewSession 收尾时带上当次带选择与
@@ -1188,6 +1193,7 @@ export class LearnerSubsystem {
       kind, material,
       points,
       today,
+      nowMs: this.e.clock.nowMs(),
       forceFull: input.force_full === true,
       fm: note.fm,
       saveFm: async fm => { await this.e.saveNodeNote(note.path, fm, note.body) },
@@ -1314,7 +1320,7 @@ export class LearnerSubsystem {
     }
     const { today } = await this.e.learningDay()
     return this.e.store.appendHabitRepeat({
-      ts: nowIso(),
+      ts: nowIsoOf(this.e.clock.nowMs()),
       habit: doc.habit,
       day: today,
       ...(rating !== undefined ? { auto_rating: rating } : {}),

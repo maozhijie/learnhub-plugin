@@ -237,6 +237,8 @@ export async function readVaultLinksCache(path: string): Promise<VaultLinksDoc |
 
 export interface VaultLinkScanOptions {
   vaultRoot: string
+  /** 当前时刻（#175 阶段①：时钟经 Clock 端口由调用方注入，本模块零时钟直读）。 */
+  nowMs: number
   /** 学习中心相对段（整体排除——引擎管理区不是先验来源）。 */
   centerRel: string
   /** 目录段排除（内置清单或 learnhub.json vault_link_excludes 替换后的清单）。 */
@@ -283,7 +285,7 @@ export async function scanVaultLinks(opts: VaultLinkScanOptions): Promise<VaultL
 
   const doc: VaultLinksDoc = {
     version: 1,
-    generated_at: new Date().toISOString(),
+    generated_at: new Date(opts.nowMs).toISOString(),
     scanned_files: files.length,
     truncated: files.length >= maxFiles,
     links_seen: 0,

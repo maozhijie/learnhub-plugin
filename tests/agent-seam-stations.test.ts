@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { createHostRuntime } from '../src/host/runtime.ts'
+import { systemClock } from '../src/host/clock.ts'
 import type { HostRuntime } from '../src/host/runtime.ts'
 import { generateProjectMilestone, generateProjectPlan } from '../src/host/jobs.ts'
 import { AgentSeam } from '../src/engine/index.ts'
@@ -47,7 +48,7 @@ function scriptedSeam(rt: HostRuntime, replies: string[]) {
     if (!replies.length) throw new Error('脚本化补全端口：应答已耗尽')
     return replies.shift()!
   }
-  rt.agent = new AgentSeam({ complete: port })
+  rt.agent = new AgentSeam({ complete: port }, systemClock)
   return Object.assign(rt.agent, { calls })
 }
 

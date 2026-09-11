@@ -55,7 +55,7 @@ test('#150 第七类 nof1_outcome：合法 kind 进折叠与档案投影（「�
   ])
   assert.equal(fold.counts.nof1_outcome, 1)
   assert.equal(fold.latest.nof1_outcome?.payload.experiment, 1)
-  const profile = renderLearnerProfile(fold)
+  const profile = renderLearnerProfile(fold, Date.now())
   assert.ok(profile.includes('## 实验结局（N-of-1）'))
   assert.ok(profile.includes('"experiment":1'))
 })
@@ -245,7 +245,7 @@ test('学习者档案：纯派生投影，手编被重建覆盖', async () => {
     const md1 = await engine.sedimentRebuildProfile()
     assert.match(md1, /校准画像/)
     const fold = await engine.sedimentFold()
-    assert.equal(md1, renderLearnerProfile(fold), '投影 = 折叠的纯渲染')
+    assert.equal(md1, renderLearnerProfile(fold, Date.now()), '投影 = 折叠的纯渲染')
 
     await writeFile(engine.paths.learnerProfilePath, '手编内容', 'utf8')
     const md2 = await engine.sedimentRebuildProfile()

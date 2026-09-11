@@ -25,6 +25,7 @@ export { validatePlanItems, validatePlanArtifact } from './project-decompile.ts'
 import type { PlanItem } from './project-decompile.ts'
 import { validatePlanItems, validatePlanArtifact } from './project-decompile.ts'
 import { todayStr } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { appendProbationEntry, readProbationLedger, foldProbation, recheckVerdict, recheckDue, learningDaysOf, growthRates, growthGate } from './probation.ts'
 import { Store } from './store.ts'
 import { atomicWrite } from './io.ts'
@@ -50,7 +51,7 @@ import type { ExecutionEvidence } from './skills.ts'
 import { ratingFromEvidence } from './skills.ts'
 import type { SkillDoc } from './skills.ts'
 import { difficultyCalibration, milestonePrice } from './xp.ts'
-import { dayOfTs, nowIso } from './dates.ts'
+import { dayOfTs, nowIsoOf } from './dates.ts'
 import { CROSS_AXIS_THRESHOLD, TIER_REC_DEMOTE_SCORE, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, XP_PER_MILESTONE_DEFAULT } from './params.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
@@ -267,9 +268,11 @@ export class Projects {
   // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
   private paths: Paths
   private store: Store
-  constructor(paths: Paths, store: Store) {
+  private clock: Clock
+  constructor(paths: Paths, store: Store, clock: Clock) {
     this.paths = paths
     this.store = store
+    this.clock = clock
   }
 
   /** 全部项目（按目录名序）。目录存在但项目.md 缺失 = 跳过（半建状态不算 Broken）。 */
@@ -307,7 +310,7 @@ export class Projects {
     if (!id || id.includes('..')) throw new Error(`[project-create] id 非法：${id}`)
     const p = this.paths.projectNotePath(id)
     if (existsSync(p)) throw new Error(`[project-create] 项目「${id}」已存在（${p}）。`)
-    const today = todayStr()
+    const today = todayStr(new Date(this.clock.nowMs()))
     const fm: ProjectFm = { id, name, lifecycle: 'active', tier, goal, plan: [], created: today, updated: today }
     await mkdir(this.paths.projectDir(id), { recursive: true })
     await mkdir(this.paths.projectMilestoneDir(id), { recursive: true })
@@ -320,7 +323,7 @@ export class Projects {
     const p = this.paths.projectNotePath(id)
     if (!existsSync(p)) throw new Error(`[projects] 项目「${id}」不存在（Missing）。`)
     const { body } = await loadNote(p)
-    await saveNote(p, { ...fm, updated: todayStr() } as unknown as Record<string, unknown>, body)
+    await saveNote(p, { ...fm, updated: todayStr(new Date(this.clock.nowMs())) } as unknown as Record<string, unknown>, body)
   }
 
   /** 项目视图：计划 × 产物落盘状态 + 遗留文件。 */
@@ -396,7 +399,7 @@ export class Projects {
     // 涨 streak——违反 ADR-0015 裁决 7「节点消费者对 Project 不可见」。留痕 = 提案记录本身
     // （pending/applied + decision_note 带快照路径）。
     await this.store.updateProposal(prop.id, {
-      status: 'applied', decided: new Date().toISOString(),
+      status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(),
       decision_note: snapshot ? `快照 ${snapshot}` : '初次规划（无旧计划，无快照）',
     })
     return { kind: 'project_plan', project: project.id, milestones: v.plan.length, snapshot }
@@ -456,7 +459,7 @@ export class Projects {
     await atomicWrite(snapshot, await readFile(path, 'utf8'))
     await atomicWrite(path, v.md.trimEnd() + '\n')
     await this.store.updateProposal(prop.id, {
-      status: 'applied', decided: new Date().toISOString(), decision_note: `快照 ${snapshot}`,
+      status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: `快照 ${snapshot}`,
     })
     return { kind: 'project_milestone', project: project.id, milestone: v.milestone, file, snapshot }
   }
@@ -565,9 +568,10 @@ export interface ProjectDeps {
   noteManifest: Pick<NoteSourceManifest, 'load' | 'save'>
   /** vault 根目录。 */
   vaultRoot: string
-  /** JOL 抽查的随机源（可注入播种）。 */
   /** 取当前 JOL 随机源（可注入播种；经访问器惰性取，测试注入后构造期不锁定）。 */
   jolRng(): () => number
+  /** 时钟端口（#175 阶段①）：检索点/执行流水 ts 与回看窗口终点。 */
+  clock: Clock
   learningDay(): Promise<{ today: string; cutoff: number }>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   enabledCourses(): Promise<CourseEntry[]>
@@ -794,7 +798,7 @@ export class ProjectSubsystem {
     }
     const drawn = drawRecallQuestions(pools.map(p => ({ course: p.course.name, node: p.node, questions: p.questions })), opts.limit ?? 5, this.e.jolRng())
     await appendRecallRec(this.e.paths, id, {
-      ts: nowIso(), kind: 'draw', milestone: milestoneId, file: delivered.file,
+      ts: nowIsoOf(this.e.clock.nowMs()), kind: 'draw', milestone: milestoneId, file: delivered.file,
       nodes: specs, questions: drawn,
     })
     const questions = drawn.map(d => {
@@ -812,7 +816,7 @@ export class ProjectSubsystem {
     if (!trimmed) throw new Error('[project-recall] 自述不能为空（关键决策口述原文）。')
     const fm = await this.e.projects.load(id)
     this.planItemOf(fm, milestoneId, 'project-recall')
-    await appendRecallRec(this.e.paths, id, { ts: nowIso(), kind: 'reflect', milestone: milestoneId, narration: trimmed })
+    await appendRecallRec(this.e.paths, id, { ts: nowIsoOf(this.e.clock.nowMs()), kind: 'reflect', milestone: milestoneId, narration: trimmed })
     return { project: id, milestone: milestoneId, recorded: true }
   }
 
@@ -900,7 +904,7 @@ export class ProjectSubsystem {
     }
 
     await appendExecRec(this.e.paths, id, {
-      ts: nowIso(), day: today, rating: v.rating, source: v.source,
+      ts: nowIsoOf(this.e.clock.nowMs()), day: today, rating: v.rating, source: v.source,
       nodes: v.nodes, tier: fm.tier, ...(v.note ? { note: v.note } : {}),
     })
     backflow.sort((a, b) => a.course.localeCompare(b.course) || a.node.localeCompare(b.node))
@@ -978,7 +982,7 @@ export class ProjectSubsystem {
     const fm = await this.e.projects.load(id)
     const days = Math.min(90, Math.max(1, Math.round(opts.window_days ?? 14)))
     const minCo = Math.max(1, Math.round(opts.min_co ?? 2))
-    let endMs = Date.now()
+    let endMs = this.e.clock.nowMs()
     if (opts.milestone !== undefined) {
       const rec = await this.e.projects.milestoneSettleRec(id, opts.milestone)
       if (!rec) {

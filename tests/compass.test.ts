@@ -4,6 +4,7 @@ import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { withVault, localDay } from './helpers/vault.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
+import { systemClock } from '../src/host/clock.ts'
 import type { Paths } from '../src/engine/paths.ts'
 import { SANDBOX_WORDING } from '../src/engine/sandbox.ts'
 import { weekStartOf } from '../src/engine/kata.ts'
@@ -54,7 +55,7 @@ function replayFake(reply: string) {
       calls.push({ prompt, system, effort: opts?.effort })
       return reply
     },
-  })
+  }, systemClock)
   return Object.assign(seam, { calls })
 }
 

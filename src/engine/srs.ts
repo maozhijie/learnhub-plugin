@@ -60,12 +60,13 @@ export async function getScheduler(paths: Paths, courseRoot: string | null = nul
   }))
 }
 
-/** 状态 dict → ts-fsrs Card。无复习记录（fsrs 空或 reps=0）返回新卡。 */
-export function cardFromFm(fm: Fm | null): Card {
+/** 状态 dict → ts-fsrs Card。无复习记录（fsrs 空或 reps=0）返回新卡。
+ * now = due 块损坏时的回退时刻（#175 阶段①：回退值由调用方经时钟端口给，本模块零时钟直读）。 */
+export function cardFromFm(fm: Fm | null, now: Date): Card {
   const fs = fm?.fsrs
   if (!fs || !fs.reps) return createEmptyCard()
   return {
-    due: parseDay(fs.due) ?? new Date(),
+    due: parseDay(fs.due) ?? now,
     stability: fs.stability,
     difficulty: fs.difficulty,
     elapsed_days: 0,
@@ -94,8 +95,8 @@ export function fmFromCard(card: Card, fsOld: FsrsBlock | null, today: string): 
 export function retrievability(sched: FSRS, fm: Fm | null | undefined, today: string): number {
   const fs = fm?.fsrs
   if (!fs || !fs.reps) return 1.0
-  const now = parseDay(today) ?? new Date()
-  return sched.get_retrievability(cardFromFm(fm ?? null), now, false)
+  const now = parseDay(today)! // today 由 learningDay() 贯穿（analysis 同款断言）
+  return sched.get_retrievability(cardFromFm(fm ?? null, now), now, false)
 }
 
 /** 题卡级可提取性（复习队列 #56 与复习日志 #60 共用的 R）：fsrs 块直算，省去伪 Fm 包装。 */
@@ -107,7 +108,7 @@ export function retrievabilityBlock(sched: FSRS, fs: FsrsBlock | null | undefine
 export function applyRating(
   fm: Fm, ratingNum: number, today: string, sched: FSRS,
 ): { fs: FsrsBlock; meta: { kind: 'learn' | 'review' | 'relearn'; elapsed_days: number } } {
-  const card = cardFromFm(fm)
+  const card = cardFromFm(fm, parseDay(today)!)
   const wasReview = Boolean(fm.fsrs?.reps) && (fm.stage === 'review' || fm.stage === 'mastered')
   const fsOld = fm.fsrs
   let elapsed = 0
@@ -117,7 +118,7 @@ export function applyRating(
     if (lr && t) elapsed = Math.max(0, daysBetween(t, lr))
   }
   const rating = RATING_BY_NUM[Math.round(ratingNum)] ?? Rating.Good
-  const now = parseDay(today) ?? new Date()
+  const now = parseDay(today)! // today 由 learningDay() 贯穿
   const { card: newCard } = sched.next(card, now, rating)
   const fs = fmFromCard(newCard, fsOld ?? null, today)
   fs.reps = (fsOld?.reps ?? 0) + 1
@@ -154,9 +155,9 @@ export function applyRatingBlock(
 
 /** 预览某评分后的下次到期日（不落盘）：复习自评按钮的到期预览。 */
 export function previewDue(sched: FSRS, fsOld: FsrsBlock | null, ratingNum: number, today: string): string {
-  const card = cardFromFm({ fsrs: fsOld } as unknown as Fm)
+  const card = cardFromFm({ fsrs: fsOld } as unknown as Fm, parseDay(today)!)
   const rating = RATING_BY_NUM[Math.round(ratingNum)] ?? Rating.Good
-  const now = parseDay(today) ?? new Date()
+  const now = parseDay(today)! // today 由 learningDay() 贯穿
   const { card: next } = sched.next(card, now, rating)
   return fmtDay(next.due)
 }

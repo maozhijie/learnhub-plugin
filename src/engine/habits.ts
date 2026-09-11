@@ -23,6 +23,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { todayStr, parseDay, fmtDay } from './dates.ts'
+import type { Clock } from './clock.ts'
 import type { Paths } from './paths.ts'
 
 export type HabitStatus = 'active' | 'archived'
@@ -129,8 +130,10 @@ export function validateHabitDoc(raw: unknown, path: string): HabitDoc {
 
 export class Habits {
   private paths: Paths
-  constructor(paths: Paths) {
+  private clock: Clock
+  constructor(paths: Paths, clock: Clock) {
     this.paths = paths
+    this.clock = clock
   }
 
   /** 全部习惯（按 id 序）。坏档跳过并在 broken 报出（不阻塞清单）。 */
@@ -175,7 +178,7 @@ export class Habits {
     if (!id || id.includes('..')) throw new Error(`[habit-create] id 非法：${id}`)
     const p = this.paths.habitPath(id)
     if (existsSync(p)) throw new Error(`[habit-create] 习惯「${id}」已存在（${p}）。`)
-    const today = todayStr()
+    const today = todayStr(new Date(this.clock.nowMs()))
     const doc: HabitDoc = { habit: id, name, status: 'active', intention: { cue, action }, created: today, updated: today }
     await atomicWrite(p, YAML.stringify(doc))
     return doc
@@ -185,7 +188,7 @@ export class Habits {
   async save(id: string, doc: HabitDoc): Promise<void> {
     const p = this.paths.habitPath(id)
     if (!existsSync(p)) throw new Error(`[habits] 习惯「${id}」不存在（Missing）。`)
-    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr() }))
+    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr(new Date(this.clock.nowMs())) }))
   }
 
   /** 归档/恢复（可逆；无到期，archived 只是收纳标签）。 */

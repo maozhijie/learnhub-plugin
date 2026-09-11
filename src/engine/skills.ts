@@ -28,6 +28,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { todayStr, addDays, daysBetween, parseDay } from './dates.ts'
+import type { Clock } from './clock.ts'
 import type { FsrsBlock } from './types.ts'
 import type { AdvanceCard, AdvanceLog } from './advance.ts'
 import type { Paths } from './paths.ts'
@@ -168,8 +169,10 @@ export type SkillCard = SkillDoc & AdvanceCard
 
 export class Skills {
   private paths: Paths
-  constructor(paths: Paths) {
+  private clock: Clock
+  constructor(paths: Paths, clock: Clock) {
     this.paths = paths
+    this.clock = clock
   }
 
   /** 全部技能（按 id 序）。目录存在但文件读不了 = 跳过并在 broken 报出（不阻塞清单）。 */
@@ -211,7 +214,7 @@ export class Skills {
     const p = this.paths.skillPath(id)
     if (existsSync(p)) throw new Error(`[skill-create] 技能「${id}」已存在（${p}）。`)
     const maintenance = clampMaintenanceDays(input.maintenance_days, 'skill-create')
-    const today = todayStr()
+    const today = todayStr(new Date(this.clock.nowMs()))
     const doc: SkillDoc = { skill: id, name, status: 'active', maintenance_days: maintenance, created: today, updated: today }
     await atomicWrite(p, YAML.stringify(doc))
     return doc
@@ -221,7 +224,7 @@ export class Skills {
   async save(id: string, doc: SkillDoc): Promise<void> {
     const p = this.paths.skillPath(id)
     if (!existsSync(p)) throw new Error(`[skills] 技能「${id}」不存在（Missing）。`)
-    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr() }))
+    await atomicWrite(p, YAML.stringify({ ...doc, updated: todayStr(new Date(this.clock.nowMs())) }))
   }
 
   /** 归档/恢复（可逆；archived 只是收纳标签）。 */

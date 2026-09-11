@@ -23,6 +23,7 @@
  * 零改动。
  */
 import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmToolCall, LlmToolSpec } from './llm.ts'
+import type { Clock } from './clock.ts'
 
 /** 剥掉模型可能包住的整段 markdown 代码围栏：限 markdown/yaml/json 等数据类标签——
  * 正文类标签（svg/plot 等）本身是内容的一部分，剥掉会毁掉 ```svg/```plot 引用块。
@@ -80,7 +81,9 @@ export interface GateRepairSpec<T, U> {
 }
 
 export class AgentSeam {
-  constructor(private readonly ports: AgentSeamPorts) {}
+  /** clock = 时钟端口（#175 阶段①）：调用日志的耗时测量与 startedAt 经它取时——
+   * 装配点（createHostRuntime）给 systemClock，测试给固定时钟。 */
+  constructor(private readonly ports: AgentSeamPorts, private readonly clock: Clock) {}
 
   /** 本站本模式的底层调用序号（观测面用；实例态，缝随 runtime 每进程一份）。 */
   private callSeq = new Map<string, number>()
@@ -136,7 +139,7 @@ export class AgentSeam {
     const trajectory: string[] = []
     let toolRounds = 0
     for (;;) {
-      const startedAt = Date.now()
+      const startedAt = this.clock.nowMs()
       const r = await this.ports.stream({
         messages: turns,
         ...(req.system !== undefined ? { system: req.system } : {}),
@@ -170,7 +173,7 @@ export class AgentSeam {
 
   /** 底层调用的共用传输：端口调用 + 观测记录。 */
   private async call(station: string, mode: AgentCallMode, prompt: string, opts?: { system?: string; effort?: LlmEffort }): Promise<string> {
-    const startedAt = Date.now()
+    const startedAt = this.clock.nowMs()
     const raw = await this.ports.complete(
       prompt,
       opts?.system,
@@ -192,7 +195,7 @@ export class AgentSeam {
         callNo,
         promptChars,
         replyChars: reply.length,
-        durationMs: Date.now() - startedAt,
+        durationMs: this.clock.nowMs() - startedAt,
       })
     } catch {
       // 观测面故障不挡调用

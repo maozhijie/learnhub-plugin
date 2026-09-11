@@ -49,7 +49,7 @@ async function withVault(run: (engine: LearnhubEngine, paths: { noteAbs: string;
       '    q: 课程题占位？',
       '    options: ["A项", "B项", "C项", "D项"]',
       '    answer: A',
-      '    fsrs: { stability: 5, difficulty: 5, due: "' + todayStr() + '", last_review: "2026-09-01", reps: 1, lapses: 0 }',
+      '    fsrs: { stability: 5, difficulty: 5, due: "' + todayStr(new Date()) + '", last_review: "2026-09-01", reps: 1, lapses: 0 }',
     ].join('\n') },
     files: [
       { path: '我的笔记/费曼技巧.md', content: `${PERSONAL_NOTE}\n` },
@@ -138,7 +138,7 @@ test('注册 → 出题 → 复习全流程：用户笔记字节级零写入，�
     // 题卡初始化为明天起刷 → 今天不在队列；把 due 改到今天后进全局队列（course=笔记源）
     const q = await engine.reviewQueue()
     assert.equal(q.cards.filter(c => c.source === 'note').length, 0)
-    const today = todayStr()
+    const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
     })
@@ -225,7 +225,7 @@ test('删除/改名 = Missing：卡池挂起、不阻塞其他源、重注册可
   await withVault(async (engine, p) => {
     const reg = await engine.noteSourceRegister(p.noteAbs)
     await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
-    const today = todayStr()
+    const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
     })
@@ -303,7 +303,7 @@ test('源清单条目缺失（镜像不一致）= inconsistent：列表如实标
   await withVault(async (engine, p) => {
     await engine.noteSourceRegister(p.noteAbs)
     await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
-    const today = todayStr()
+    const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
     })
@@ -471,7 +471,7 @@ test('排除清单只管未来注册：先注册后排除不摘源、卡照常�
     await engine.noteSourceRegister(p.noteAbs)
     await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
     const before = await readFile(p.noteAbs, 'utf8')
-    const today = todayStr()
+    const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
     })
@@ -496,7 +496,7 @@ test('排除清单只管未来注册：先注册后排除不摘源、卡照常�
 test('卡池镜像（V-4 #108）：出题落 [[个人笔记]] backlink 镜像、解除随删、个人笔记字节不变', async () => {
   await withVault(async (engine, p) => {
     const before = await readFile(p.noteAbs, 'utf8')
-    const today = todayStr()
+    const today = todayStr(new Date())
     await engine.noteSourceRegister(p.noteAbs)
     await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
 
@@ -524,7 +524,7 @@ test('relink（V-6 #109）：改名后 Missing → 重连带卡池与调度恢�
   await withVault(async (engine, p) => {
     await engine.noteSourceRegister(p.noteAbs)
     await engine.noteSourceGenerate('note-1', undefined, async () => NOTE_BANK_YAML)
-    const today = todayStr()
+    const today = todayStr(new Date())
     await engine.bank.updateQuestionEvidence(engine.paths.noteSourceDir, 'note-1', 'q1', {
       fsrs: { stability: 5, difficulty: 5, due: today, last_review: '2026-09-01', reps: 1, lapses: 0 },
     })

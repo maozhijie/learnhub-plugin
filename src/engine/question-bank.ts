@@ -44,7 +44,8 @@ import { advanceStrict } from './advance.ts'
 import { sectionEntryOf } from './attribution.ts'
 import { nodeTierOf, perSectionQuizTarget, sectionTierLabel } from './complexity.ts'
 import { invokesTagged, invokesUnregistered, namesOf } from './concepts.ts'
-import { dayOfTs, nowIso } from './dates.ts'
+import { dayOfTs, nowIsoOf } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { DISPUTE_REVIEW_SYSTEM, PASS_SCORE, applyPracticeEvidence, evaluateAllo, parseDisputeReview, revealAnswer, netPracticeRecs } from './grading.ts'
 import { FSRS_DIFFICULTY_MID } from './params.ts'
 import { assertNoBrokenNotes, Sessions } from './sessions.ts'
@@ -446,6 +447,8 @@ export class QuestionBank {
 
 /** Bank 域对门面的结构化窄面（门面构造时传 this，只列本域消费的成员）。 */
 export interface BankDeps {
+  /** 时钟端口（#175 阶段①）：勘误/回收站戳与移入回收站的唯一性后缀。 */
+  clock: Clock
   /** store/registry/proposals 均为结构化窄面：question-bank 被通道域（note-source）
    * 反向 type-import，任何引向 store/registry/proposals 下游的类类型都会合拢成环（R7）。 */
   store: {
@@ -1070,7 +1073,7 @@ export class BankSubsystem {
     // FSRS 块不动
     const errata = await this.e.store.erratumAll()
     const pending: ErratumRec = {
-      ts: nowIso(), course: c.name, node, qid, target_ts: rec.ts,
+      ts: nowIsoOf(this.e.clock.nowMs()), course: c.name, node, qid, target_ts: rec.ts,
       verdict, xp: xpNet,
       ...(correctNow === true ? { correct: true } : {}),
       ...(resolution === 'rekey' ? { revision: opts?.revision ?? {} } : {}),
@@ -1424,7 +1427,7 @@ export class BankSubsystem {
     const rest = (await this.e.registry.load()).filter(x => x.name !== c.name && x.id !== c.id)
     await this.e.registry.save(rest)
     const src = this.e.paths.courseRoot(c.root)
-    const trash = `${this.e.paths.trashDir}/${c.root}-${Date.now()}`
+    const trash = `${this.e.paths.trashDir}/${c.root}-${this.e.clock.nowMs()}`
     if (existsSync(src)) {
       await mkdir(this.e.paths.trashDir, { recursive: true })
       await rename(src, trash)

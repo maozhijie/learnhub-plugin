@@ -15,7 +15,7 @@ import { STAGES } from './types.ts'
 import type { GRegion, Fm } from './types.ts'
 import type { Graph } from './graph.ts'
 import type { Paths } from './paths.ts'
-import { parseDay, todayStr, daysBetween } from './dates.ts'
+import { parseDay, daysBetween } from './dates.ts'
 import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import { Content } from './content.ts'
@@ -33,7 +33,7 @@ export interface AuditResult {
 
 export async function runAudit(
   paths: Paths, root: string, courseName: string, graph: Graph, regions: GRegion[],
-  today: string = todayStr(),
+  today: string,
 ): Promise<AuditResult> {
   const errors: string[] = []
   const warns: string[] = []

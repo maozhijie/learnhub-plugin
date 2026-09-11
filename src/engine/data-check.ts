@@ -692,7 +692,7 @@ async function scanProbationLedger(
 }
 
 /** 一次只读体检。注册表损坏时无法安全展开课程，因此只报告注册表本身。 */
-export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
+export async function dataCheck(paths: Paths, nowMs: number): Promise<DataCheckReport> {
   const findings: DataCheckFinding[] = []
   const inventory: DataCheckReport['inventory'] = {
     registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0, noteSourceBanks: 0,
@@ -766,7 +766,7 @@ export async function dataCheck(paths: Paths): Promise<DataCheckReport> {
     // 边实验账本（#146）：缺席 = 无插入实验合法空态零 finding；在盘 = 盘点在途与到期未决（hint）
     const cutoff = await readDayCutoff(paths)
     const probationScan = await scanProbationLedger(
-      findings, courseName, paths, String(course.root), cutoff, todayStr(new Date(), cutoff),
+      findings, courseName, paths, String(course.root), cutoff, todayStr(new Date(nowMs), cutoff),
     )
     if (probationScan.present) {
       inventory.probationLedgers.present++

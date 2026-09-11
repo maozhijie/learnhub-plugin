@@ -30,7 +30,7 @@ const NOTE = [
   '课程正文占位。',
 ].join('\n')
 
-const TODAY = todayStr()
+const TODAY = todayStr(new Date())
 
 function bankYaml(): string {
   // q1/q2 到期（due=今天）；q3 已归档且到期（导出必须排除，归档移除用例消费）

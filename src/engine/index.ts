@@ -93,7 +93,7 @@ import type { ExplainPoint} from './explain.ts'
 import { YAML} from './yaml.ts'
 import { Sessions} from './sessions.ts'
 import type { NodeStat, WindowStat} from './sessions.ts'
-import { todayStr, nowIso, fmtCutoff} from './dates.ts'
+import { todayStr, nowIsoOf, fmtCutoff} from './dates.ts'
 import { atomicWrite} from './io.ts'
 import { assertSchemaVersion} from './schema.ts'
 import type { SchemaBlock} from './schema.ts'
@@ -235,23 +235,24 @@ export class LearnhubEngine {
     // 同步读（构造函数无 await），先于任何惰性读盘——v1 库在第一次方法调用前就拒载。
     this.schema = assertSchemaVersion(this.paths.learnhubConfigPath)
     this.registry = new Registry(this.paths)
-    this.store = new Store(this.paths)
-    this.content = new Content(this.paths)
+    this.store = new Store(this.paths, this.clock)
+    this.content = new Content(this.paths, this.clock)
     this.bank = new QuestionBank(this.paths)
     this.concepts = new ConceptRegistry(this.paths)
-    this.learnerCards = new LearnerCards(this.paths)
+    this.learnerCards = new LearnerCards(this.paths, this.clock)
     this.errorCards = new ErrorCards(this.paths)
-    this.skills = new Skills(this.paths)
-    this.habits = new Habits(this.paths)
+    this.skills = new Skills(this.paths, this.clock)
+    this.habits = new Habits(this.paths, this.clock)
     this.noteManifest = new NoteSourceManifest(this.paths)
     this.ankiMirror = new AnkiMirror(this.paths)
     // 生长闸门注入（#146 插入/旁支调速）：三率流水在门面（账本/提案/练习），受理与
     // apply 双门经此回调消费同一份闸门判定。
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot,
-      spec => this.growthGateErrors(spec))
-    this.projects = new Projects(this.paths, this.store)
+      spec => this.growthGateErrors(spec), this.clock)
+    this.projects = new Projects(this.paths, this.store, this.clock)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course))
     this.lab = new LabSubsystem({
+      clock: this.clock,
       store: this.store, paths: this.paths, registry: this.registry,
       projects: this.projects, bank: this.bank,
       sched: courseRoot => this.sched(courseRoot),
@@ -264,6 +265,7 @@ export class LearnhubEngine {
       sedimentRebuildProfile: () => this.sedimentRebuildProfile(),
     })
     this.channels = new ChannelsSubsystem({
+      clock: this.clock,
       store: this.store, paths: this.paths, bank: this.bank,
       ankiMirror: this.ankiMirror, noteManifest: this.noteManifest, vaultRoot: this.vaultRoot,
       registry: {
@@ -283,6 +285,7 @@ export class LearnhubEngine {
       refreshRepCard: (c, graph, node) => this.refreshRepCard(c, graph, node),
     })
     this.learner = new LearnerSubsystem({
+      clock: this.clock,
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, projects: this.projects, habits: this.habits,
       skills: this.skills, learnerCards: this.learnerCards, noteManifest: this.noteManifest,
@@ -302,7 +305,7 @@ export class LearnhubEngine {
     this.project = new ProjectSubsystem({
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, proposals: this.proposals, projects: this.projects, noteManifest: this.noteManifest,
-      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng,
+      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock,
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
@@ -313,6 +316,7 @@ export class LearnhubEngine {
       saveNodeNote: (path, fm, body) => this.saveNodeNote(path, fm, body),
     })
     this.bank2 = new BankSubsystem({
+      clock: this.clock,
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, errorCards: this.errorCards, concepts: this.concepts,
       proposals: this.proposals, schedCache: this.schedCache,
@@ -335,6 +339,7 @@ export class LearnhubEngine {
       isNoteSourceCourse: courseKey => this.isNoteSourceCourse(courseKey),
     })
     this.graph = new GraphSubsystem({
+      clock: this.clock,
       store: this.store, paths: this.paths, projects: this.projects, proposals: this.proposals,
       concepts: this.concepts, registry: this.registry, bank: this.bank,
       noteManifest: this.noteManifest, vaultRoot: this.vaultRoot,
@@ -349,7 +354,7 @@ export class LearnhubEngine {
     this.content2 = new ContentSubsystem({
       store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
       content: this.content, sessions: this.sessions, learnerCards: this.learnerCards,
-      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng,
+      vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       bandDefault: () => this.bandDefault(),
       calibrationHintsConfig: () => this.calibrationHintsConfig(),
@@ -372,6 +377,7 @@ export class LearnhubEngine {
       updateNoteFm: (path, fm) => this.updateNoteFm(path, fm),
     })
     this.sched2 = new SchedSubsystem({
+      clock: this.clock,
       store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
       content: this.content, schedCache: this.schedCache,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
@@ -384,6 +390,7 @@ export class LearnhubEngine {
       sched: courseRoot => this.sched(courseRoot),
     })
     this.growth2 = new GrowthSubsystem({
+      clock: this.clock,
       store: this.store, paths: this.paths, registry: this.registry,
       concepts: this.concepts, content: this.content,
       enabledCourses: () => this.enabledCourses(),
@@ -405,7 +412,7 @@ export class LearnhubEngine {
    * 不属于学习口径，不经这里。 */
   private async learningDay(): Promise<{ today: string; cutoff: number }> {
     const cutoff = await readDayCutoff(this.paths)
-    return { today: todayStr(new Date(), cutoff), cutoff }
+    return { today: todayStr(new Date(this.clock.nowMs()), cutoff), cutoff }
   }
 
   // ---- 加载与解析 ----
@@ -483,7 +490,7 @@ export class LearnhubEngine {
 
   /** 只读数据体检：盘点 Missing/Broken，不做任何修复或清理。 */
   async dataCheck(): Promise<DataCheckReport> {
-    return dataCheck(this.paths)
+    return dataCheck(this.paths, this.clock.nowMs())
   }
   /** 题库内容体检（ADR-0029/0030 存量盘点）：只读扫描全部课程题库与笔记源镜像题库，
    * 按现行契约标出违规存量题——表达式/数字填空、记法违规（裸 ^/_/LaTeX 命令）、
@@ -631,7 +638,7 @@ export class LearnhubEngine {
         unknown,
       })
     }
-    return { generated_at: nowIso(), courses }
+    return { generated_at: nowIsoOf(this.clock.nowMs()), courses }
   }
 
   // ---- rebuild（audit + 就绪清单） ----

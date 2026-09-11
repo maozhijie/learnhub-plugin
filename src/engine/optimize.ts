@@ -68,7 +68,7 @@ export function trainingSequences(logs: ReviewRec[], cutoffMin = 0): TrainingSeq
       if (!day) continue
       if (day === lastDay) continue // 每卡每天只算第一条（防御性归一；引擎不变量本就至多一次）
       const delta = lastDay === null ? 0
-        : Math.max(0, daysBetween(parseDay(day) ?? new Date(), parseDay(lastDay) ?? new Date()))
+        : Math.max(0, daysBetween(parseDay(day)!, parseDay(lastDay)!)) // day/lastDay 已过 dayOfTs 守卫（上方 !day continue）
       reviews.push({ rating: rec.rating, delta_t: delta })
       lastDay = day
     }

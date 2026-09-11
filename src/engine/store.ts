@@ -12,7 +12,8 @@ import { mkdir, readFile, appendFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { atomicWrite, readJsonlLines } from './io.ts'
 import { netPracticeRecs } from './grading.ts'
-import { nowIso, dayOfTs } from './dates.ts'
+import { nowIsoOf, dayOfTs } from './dates.ts'
+import type { Clock } from './clock.ts'
 import type { JournalRec, PracticeRec, ProposalRec, ReviewRec, EArchiveRec, ErratumRec } from './types.ts'
 import type { ReceiptLogRec } from './receipts.ts'
 import type { HabitRepeatRec } from './habits.ts'
@@ -26,14 +27,14 @@ import type { Paths } from './paths.ts'
 export { netPracticeRecs } from './grading.ts'
 
 export class Store {
-  constructor(private paths: Paths) {}
+  constructor(private paths: Paths, private clock: Clock) {}
 
   // ---- journal ----
 
   /** 写一条 journal（JSONL 追加）→ 条目。 */
   async appendJournal(rec: Omit<JournalRec, 'ts'> & { ts?: string }): Promise<JournalRec> {
     const full: JournalRec = {
-      ts: rec.ts ?? nowIso(),
+      ts: rec.ts ?? nowIsoOf(this.clock.nowMs()),
       course: rec.course, node: rec.node, rating: rec.rating ?? null,
       kind: rec.kind, elapsed_days: Math.round(rec.elapsed_days ?? 0),
       session: rec.session ?? null, duration_s: rec.duration_s ?? null,
@@ -82,7 +83,7 @@ export class Store {
   /** 追加一条作答记录。 */
   async appendPractice(rec: Omit<PracticeRec, 'ts'> & { ts?: string }): Promise<PracticeRec> {
     const full: PracticeRec = {
-      ts: rec.ts ?? nowIso(),
+      ts: rec.ts ?? nowIsoOf(this.clock.nowMs()),
       course: rec.course, node: rec.node, ex: rec.ex, answer: rec.answer,
       correct: rec.correct === undefined ? null : rec.correct,
       judge: rec.judge,
@@ -108,7 +109,7 @@ export class Store {
    * event_kind/exec_source 仅执行事件行携带（rating_source='execution'，ADR-0018）。 */
   async appendReview(rec: Omit<ReviewRec, 'ts'> & { ts?: string }): Promise<ReviewRec> {
     const full: ReviewRec = {
-      ts: rec.ts ?? nowIso(),
+      ts: rec.ts ?? nowIsoOf(this.clock.nowMs()),
       course: rec.course, node: rec.node, qid: rec.qid,
       rating: rec.rating, rating_source: rec.rating_source,
       elapsed_days: Math.round(rec.elapsed_days ?? 0),
@@ -183,7 +184,7 @@ export class Store {
     const id = list.reduce((m, p) => Math.max(m, p.id), 0) + 1
     list.push({
       id, kind, course, status: 'pending', summary, artifact,
-      created: nowIso(), decided: null, decision_note: '',
+      created: nowIsoOf(this.clock.nowMs()), decided: null, decision_note: '',
     })
     await this.saveProposals(list)
     return id
@@ -329,7 +330,7 @@ export class Store {
   /** 追加一条 E 判词档案（JSONL）。判词只入档案：调用方不产生 XP、不写 canonical。 */
   async appendEArchive(rec: Omit<EArchiveRec, 'ts'> & { ts?: string }): Promise<EArchiveRec> {
     const full: EArchiveRec = {
-      ts: rec.ts ?? nowIso(),
+      ts: rec.ts ?? nowIsoOf(this.clock.nowMs()),
       course: rec.course, node: rec.node, kind: rec.kind,
       verdict: rec.verdict, tags: [...(rec.tags ?? [])],
       ...(rec.advice ? { advice: rec.advice } : {}),
@@ -447,7 +448,7 @@ export class Store {
    * 冲正是显式的抵消凭证，聚合账读侧按净值读。 */
   async appendErratum(rec: Omit<ErratumRec, 'ts'> & { ts?: string }): Promise<ErratumRec> {
     const full: ErratumRec = {
-      ts: rec.ts ?? nowIso(),
+      ts: rec.ts ?? nowIsoOf(this.clock.nowMs()),
       course: rec.course, node: rec.node, qid: rec.qid,
       target_ts: rec.target_ts, verdict: rec.verdict, xp: rec.xp,
       ...(rec.correct !== undefined ? { correct: rec.correct } : {}),

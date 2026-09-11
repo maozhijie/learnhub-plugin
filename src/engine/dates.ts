@@ -17,8 +17,10 @@ export function calendarDayOf(ts: string): string {
   return ts.slice(0, 10)
 }
 
-/** 本地今日 → 'YYYY-MM-DD'（学习日口径：减去日界后取本地日分量）。 */
-export function todayStr(now: Date = new Date(), cutoffMin = 0): string {
+/** 本地今日 → 'YYYY-MM-DD'（学习日口径：减去日界后取本地日分量）。now 必填
+ * （#175 阶段①：读「当前时刻」是适配器关注点——时钟经 Clock 端口注入后由调用方
+ * 把时间戳换成 Date；本模块只做纯日历运算，不读时钟）。 */
+export function todayStr(now: Date, cutoffMin = 0): string {
   const t = cutoffMin ? new Date(now.getTime() - cutoffMin * 60000) : now
   const y = t.getFullYear()
   const m = String(t.getMonth() + 1).padStart(2, '0')
@@ -85,9 +87,10 @@ export function addDays(s: string | null | undefined, n: number): string | null 
   return fmtDay(new Date(d.getTime() + n * DAY_MS))
 }
 
-/** ISO 时间戳（秒精度，journal/practice 流水用）。 */
-export function nowIso(): string {
-  const d = new Date()
+/** ISO 时间戳（秒精度，journal/practice 流水用）——从注入的时间戳渲染（#175 阶段①：
+ * 读时钟收口到 Clock 端口，本函数是纯格式化，引擎内零时钟直读）。 */
+export function nowIsoOf(ms: number): string {
+  const d = new Date(ms)
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }

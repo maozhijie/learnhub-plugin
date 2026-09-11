@@ -285,7 +285,7 @@ test('沉淀档案投影回归：「复诊结局」标题按正典 kind 渲染�
   const events: SedimentEvent[] = [
     { ts: '2026-09-09T10:00:00', kind: 'recheck_outcome', tier: 'immediate', payload: { verdict: 'proven' }, concept: '极限' },
   ]
-  const profile = renderLearnerProfile(foldSediment(events))
+  const profile = renderLearnerProfile(foldSediment(events), Date.now())
   assert.ok(profile.includes('## 复诊结局'))
   assert.ok(!profile.includes('undefined'))
 })

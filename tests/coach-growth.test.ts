@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { addDays, todayStr } from '../src/engine/dates.ts'
+import { systemClock } from '../src/host/clock.ts'
 import { parseCompass, sectionBody, SECTION_ROUTE, SECTION_ANNOTATIONS } from '../src/engine/compass.ts'
 import { withVault, noteText } from './helpers/vault.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
@@ -92,7 +93,7 @@ function scriptFake(replies: string[]) {
       calls.push({ prompt, system, effort: opts?.effort })
       return replies[Math.min(calls.length - 1, replies.length - 1)]!
     },
-  })
+  }, systemClock)
   return Object.assign(seam, { calls })
 }
 
@@ -346,7 +347,7 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
 
 test('停机转译：就绪深度满足时不拉回合（零调用）；force 越过后照常受理', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
-    const declared = todayStr()
+    const declared = todayStr(new Date())
     const r = await engine.graphPropose('seed', `course: 数学
 mode: new
 endpoint:
@@ -456,7 +457,7 @@ test('金样本回放闸：两族金样本首过（首过率对照、调用数�
 
 test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重裁请求），注入块随包进提示词', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
-    const declared = todayStr()
+    const declared = todayStr(new Date())
     const r = await engine.graphPropose('seed', `course: 数学
 mode: new
 endpoint:

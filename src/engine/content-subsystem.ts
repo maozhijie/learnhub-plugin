@@ -31,9 +31,12 @@ import type { Nof1Variable } from './types.ts'
 import type { BandPref } from './adaptive.ts'
 import type { ErrorCard } from './error-cards.ts'
 import type { FSRS } from 'ts-fsrs'
+import type { Clock } from './clock.ts'
 
 /** Content 域对门面的窄面：领域实例直接 import 类型，跨子系统方法走本面注入。 */
 export interface ContentDeps {
+  /** 时钟端口（#175 阶段①）：回收站目录戳与评分失败日志 ts。 */
+  clock: Clock
   store: Store
   paths: Paths
   registry: Registry
@@ -43,7 +46,8 @@ export interface ContentDeps {
   learnerCards: LearnerCards
   vaultRoot: string
   /** JOL 抽查随机源（可注入播种）。 */
-  jolRng: () => number
+  /** 取当前 JOL 随机源（getter 方法形，ProjectDeps 同款——调用点惰性取，测试播种后不锁定）。 */
+  jolRng(): () => number
   assertNoteOk(course: { root: string }, graph: Graph, broken: BrokenNote[], node: string, tool: string): void
   bandDefault(): Promise<BandPref | null>
   calibrationHintsConfig(): Promise<{ hints_enabled: boolean }>
@@ -223,7 +227,7 @@ export class ContentSubsystem {
     if (broken.length) {
       throw new Error(`[reset] 课程存在 Broken 笔记，拒绝整课重置（先修复或确认）:\n${broken.map(b => `  ✗ ${b.path} — ${b.reason}`).join('\n')}`)
     }
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    const stamp = new Date(this.e.clock.nowMs()).toISOString().replace(/[:.]/g, '-')
     const trashBase = `${this.e.paths.trashDir}/regenerate-${stamp}`
     const nodes: string[] = []
     for (const node of graph.order.length ? graph.order : graph.names) {
@@ -432,7 +436,7 @@ export class ContentSubsystem {
       section: q.section ?? null,
       ...(q.options?.length ? { options: q.options } : {}),
       ...(q.kind === 'matching' && Array.isArray(q.answer)
-        ? { pairOptions: shuffledWith([...new Set(q.answer as string[])], this.e.jolRng) } : {}),
+        ? { pairOptions: shuffledWith([...new Set(q.answer as string[])], this.e.jolRng()) } : {}),
       hasExplanation: Boolean(q.explanation),
       due: q.fsrs?.reps ? q.fsrs.due : null,
       attempts: q.stats?.attempts ?? 0,
@@ -629,7 +633,7 @@ export class ContentSubsystem {
         r: c.r as number,
         difficulty: c.difficulty as number | undefined,
       }))
-      const marks = pickJolTargets(candidates, this.e.jolRng, {
+      const marks = pickJolTargets(candidates, this.e.jolRng(), {
         rate: hintOn ? Math.max(jol.rate, CALIBRATION_BOOST_SAMPLE_RATE) : jol.rate,
         deviated,
       })
@@ -856,7 +860,7 @@ export class ContentSubsystem {
   }): Promise<void> {
     try {
       await mkdir(this.e.paths.centerStateDir, { recursive: true })
-      const line = JSON.stringify({ ts: new Date().toISOString(), ...rec, raw: rec.raw.slice(0, 2000) })
+      const line = JSON.stringify({ ts: new Date(this.e.clock.nowMs()).toISOString(), ...rec, raw: rec.raw.slice(0, 2000) })
       await appendFile(this.e.paths.gradingFailurePath, `${line}\n`, 'utf8')
     } catch {
       // 留痕失败不影响主流程

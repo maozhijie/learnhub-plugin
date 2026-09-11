@@ -10,7 +10,7 @@ import { effectiveStage } from './audit.ts'
 import { graphHealthScore, estSpreadNote } from './health.ts'
 import { floatNodes, jumpCandidates } from './quality.ts'
 import type { JumpCandidate } from './quality.ts'
-import { parseDay, todayStr, daysBetween } from './dates.ts'
+import { parseDay, daysBetween } from './dates.ts'
 import { round2 } from './grading.ts'
 import { masteryOfFm } from './srs.ts'
 import { hasReadyContent } from './notes.ts'
@@ -86,7 +86,7 @@ export interface GraphAnalysis {
 
 export async function analyzeGraph(
   courseName: string, graph: Graph, state: Record<string, Fm>, store: Store,
-  today: string = todayStr(),
+  today: string,
   vaultLinks: VaultLinkPrior = { scanned_at: null, mapped_total: 0, candidates: [] },
   /** 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，Float（missing_pre）建议豁免
    * ——种子本来就只有起点+终点几张节点（facade 按锚判定传入，analysis 保持无 IO）。 */
@@ -238,7 +238,7 @@ export async function analyzeGraph(
 }
 
 /** 逾期天数（状态视图用）。 */
-export function overdueDays(due: string, today = todayStr()): number {
+export function overdueDays(due: string, today: string): number {
   const d = parseDay(due)
   const t = parseDay(today)
   return d && t ? Math.max(0, daysBetween(t, d)) : 0

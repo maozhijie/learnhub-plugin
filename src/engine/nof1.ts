@@ -20,7 +20,8 @@
  * 抽样与聚合全部零依赖纯函数（complexity.ts 先例）；RNG 播种自实验 id，确定性可测。
  */
 import { readFile } from 'node:fs/promises'
-import { calendarDayOf, daysBetween, nowIso, parseDay } from './dates.ts'
+import { calendarDayOf, daysBetween, nowIsoOf, parseDay } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { nodeKeyOf, sourceKeyOf } from './types.ts'
 import { NOF1_VARIABLE_WHITELIST } from './types.ts'
 import type { ExperimentDef, Nof1Variable } from './types.ts'
@@ -331,6 +332,8 @@ export interface LabStore {
 }
 
 export interface LabDeps {
+  /** 时钟端口（#175 阶段①）：实验 started_ts/decided 戳。 */
+  clock: Clock
   store: LabStore
   paths: Paths
   registry: Pick<Registry, 'resolve'>
@@ -475,12 +478,12 @@ export class LabSubsystem {
         ? { kind: 'card', map: shuffleAssign(await this.nof1PoolKeys(doc.scope_course ?? null), doc.arms, mulberry32(1000 + prop.id)) }
         : { kind: 'batch', start_day: today, order: [doc.arms[0]!, doc.arms[1]!] },
       per_arm_min: doc.per_arm_min ?? NOF1_PER_ARM_MIN,
-      started_day: today, started_ts: nowIso(), status: 'running', proposal: prop.id,
+      started_day: today, started_ts: nowIsoOf(this.e.clock.nowMs()), status: 'running', proposal: prop.id,
     }
     list.push(def)
     await this.e.store.saveExperiments(list)
     await this.e.store.updateProposal(prop.id, {
-      status: 'applied', decided: new Date().toISOString(),
+      status: 'applied', decided: new Date(this.e.clock.nowMs()).toISOString(),
       decision_note: `实验 #${def.id} 开跑（今日臂 ${nof1ArmForDay(def, today)}）`,
     })
     return { id: def.id, title: def.title, arm_today: nof1ArmForDay(def, today) }

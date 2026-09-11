@@ -40,6 +40,8 @@ export interface OptimizeMeta {
 }
 
 export interface SchedDeps {
+  /** 时钟端口（#175 阶段①）：参数写回 trained_at 戳。 */
+  clock: Clock
   store: Store
   paths: Paths
   registry: Registry
@@ -59,6 +61,7 @@ export interface SchedDeps {
 import { effectiveStage } from './audit.ts'
 import { calibrationProfileView } from './calibration.ts'
 import { dayOfTs, fmtCutoff, inWeek, prevWeekStartOf, todayStr, weekEndOf } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { PASS_SCORE, netPracticeRecs, round2 } from './grading.ts'
 import { atomicWrite } from './io.ts'
 import { jolCalibration } from './jol.ts'
@@ -343,7 +346,7 @@ export class SchedSubsystem {
     }
     const newEval = await impl.evaluate(parameters, seqs)
     const meta = {
-      trained_at: todayStr(),
+      trained_at: todayStr(new Date(this.e.clock.nowMs())),
       params_version: 'FSRS-6',
       source: 'review-log',
       reviews: count,
@@ -360,21 +363,21 @@ export class SchedSubsystem {
       return { status: 'skipped', reason: `评估未优于${baselineLabel}参数（logLoss ${round4(newEval.logLoss)} ≥ 基线 ${round4(baselineEval.logLoss)}）——不写回`, meta }
     }
     // 正典在沉淀（出生即写），课程文件只作缓存镜像；随后本结算重建学习者档案投影。
-    await appendSedimentEvent(this.e.paths, { kind: 'fsrs_params', tier: 'immediate', payload: { parameters, meta } })
+    await appendSedimentEvent(this.e.paths, { kind: 'fsrs_params', tier: 'immediate', payload: { parameters, meta } }, this.e.clock.nowMs())
     const written: string[] = []
     for (const c of courses) {
       await atomicWrite(this.e.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n')
       written.push(c.name)
     }
     this.e.schedCache.clear() // 参数唯一写者在此：缓存调度器全部失效，后续推进用新参数
-    await rebuildLearnerProfile(this.e.paths, foldSediment(await readSedimentCanon(this.e.paths)))
+    await rebuildLearnerProfile(this.e.paths, foldSediment(await readSedimentCanon(this.e.paths)), this.e.clock.nowMs())
     return { status: 'written', written, meta }
   }
 
   /** 出生即写：追加一条沉淀事件（六类事件骨架的唯一写入口；校验在 sediment 模块）。
    * 永不自动删除——内容层任何不可逆操作不写这里。 */
   async sedimentAppend(kind: SedimentKind, tier: SedimentTier, payload: Record<string, unknown>, concept?: string): Promise<SedimentEvent> {
-    return appendSedimentEvent(this.e.paths, { kind, tier, payload, ...(concept !== undefined ? { concept } : {}) })
+    return appendSedimentEvent(this.e.paths, { kind, tier, payload, ...(concept !== undefined ? { concept } : {}) }, this.e.clock.nowMs())
   }
 
 
@@ -387,7 +390,7 @@ export class SchedSubsystem {
 
   /** 重建学习者档案投影（学习中心/沉淀/学习者档案.md；纯派生，手编必被覆盖）。 */
   async sedimentRebuildProfile(): Promise<string> {
-    return rebuildLearnerProfile(this.e.paths, await this.sedimentFold())
+    return rebuildLearnerProfile(this.e.paths, await this.sedimentFold(), this.e.clock.nowMs())
   }
 
 

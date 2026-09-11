@@ -37,7 +37,8 @@ import type { BrokenNote } from './notes.ts'
 import type { QuestionBank, BankDoc, BankQuestion } from './question-bank.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { AnkiStatusDoc, NoteSourceDoc, NoteSourceRegisterResult } from './views/channels.ts'
-import { dayOfTs, nowIso } from './dates.ts'
+import { dayOfTs, nowIsoOf } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { readDayCutoff, xpForAnswer } from './xp.ts'
 
 /** 复习队列里笔记源卡的伪课程名（questionAnswer/Rate/Forget 以它路由到镜像题库；
@@ -320,6 +321,8 @@ export class NoteSourceManifest {
 
 /** Channels 域对门面的结构化窄面（门面构造时传 this，只列本域消费的成员）。 */
 export interface ChannelsDeps {
+  /** 时钟端口（#175 阶段①）：镜像清单 last_push 戳与 Anki 导入视界。 */
+  clock: Clock
   /** store 结构化窄面：本域是低层模块（registry/vault-links 等反向依赖它），引 Store
    * 类型会把存储层拖成下游，成环（R7 实测 store→…→vault-links→note-source→store）。 */
   store: {
@@ -1040,7 +1043,7 @@ export class ChannelsSubsystem {
       kept.set(p.key, { key: p.key, note_id: noteId, fp: p.fp, deck: p.deckName })
     }
     await ankiDeleteNotes(transport, plan.removeNoteIds)
-    await this.e.ankiMirror.save({ last_push: nowIso(), last_import_ms: mirror.last_import_ms, notes: [...kept.values()] })
+    await this.e.ankiMirror.save({ last_push: nowIsoOf(this.e.clock.nowMs()), last_import_ms: mirror.last_import_ms, notes: [...kept.values()] })
     return { date: today, added: plan.add.length, updated: plan.update.length, removed: plan.removeNoteIds.length, total: payloads.length, decks }
   }
 
@@ -1074,7 +1077,7 @@ export class ChannelsSubsystem {
     const mirror = await this.e.ankiMirror.load()
     // 事件的学习日按 vault 自己的日界推（ADR-0020 裁决 5：不对齐 Anki rollover）
     const cutoff = await readDayCutoff(this.e.paths)
-    const rows = await ankiCardReviews(transport, mirror.last_import_ms, (opts?.nowMs ?? Date.now()) + 60_000)
+    const rows = await ankiCardReviews(transport, mirror.last_import_ms, (opts?.nowMs ?? this.e.clock.nowMs()) + 60_000)
     const events = rows
       .map(r => ({ ts: Number(r[0]), cardId: Number(r[1]), button: Number(r[3]), timeMs: Number(r[7]) }))
       .filter(e => Number.isFinite(e.ts) && Number.isFinite(e.cardId) && Number.isFinite(e.button))

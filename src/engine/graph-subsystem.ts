@@ -12,6 +12,7 @@ import { mkdir } from 'node:fs/promises'
 // ---- Graph 子系统（#152 刀 7 / ADR-0043）：图域五节。本文件只被门面引用，可自由
 // import 领域模块（枢纽领主 graph.ts 不被反向依赖）。
 
+import type { Clock } from './clock.ts'
 import type { Store } from './store.ts'
 import type { Paths } from './paths.ts'
 import type { Projects, ProjectApplyResult } from './projects.ts'
@@ -27,6 +28,8 @@ import type { Fm } from './types.ts'
 /** Graph 域对门面的窄面（门面构造时传 this）：领域类与纯函数直接 import，
  * 这里只列门面私有方法/字段——它们无法从模块导入。 */
 export interface GraphDeps {
+  /** 时钟端口（#175 阶段①）：vault 链接扫描 generated_at。 */
+  clock: Clock
   store: Store
   paths: Paths
   projects: Projects
@@ -149,6 +152,7 @@ export class GraphSubsystem {
       centerRel: this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1),
       dirExcludes,
       pathExcludes: await readNoteSourceExcludes(this.e.paths),
+      nowMs: this.e.clock.nowMs(),
     })
     await mkdir(this.e.paths.centerStateDir, { recursive: true })
     await atomicWrite(this.e.paths.vaultLinksPath, JSON.stringify(doc, null, 1) + '\n')

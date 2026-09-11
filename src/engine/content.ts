@@ -12,6 +12,7 @@ import { atomicWrite } from './io.ts'
 import { existsSync } from 'node:fs'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { normChoice, round2 } from './grading.ts'
@@ -43,8 +44,10 @@ export interface ExerciseMeta {
 export class Content {
   // 显式字段赋值（参数属性在 strip-only 单测模式下不可导入）
   private paths: Paths
-  constructor(paths: Paths) {
+  private clock: Clock
+  constructor(paths: Paths, clock: Clock) {
     this.paths = paths
+    this.clock = clock
   }
 
   // ---- 生成队列 ----
@@ -1338,7 +1341,7 @@ worksheet:
       content: {
         ...((fm.content as Record<string, unknown>) ?? {}),
         version,
-        generated_at: todayStr(),
+        generated_at: todayStr(new Date(this.clock.nowMs())),
         status: 'draft',
         sections: nextSections,
       },
@@ -1722,7 +1725,7 @@ worksheet:
       content: {
         ...fm.content,
         version,
-        generated_at: todayStr(),
+        generated_at: todayStr(new Date(this.clock.nowMs())),
         status: 'draft',
         // 节清单节点：整篇替换后 manifest 与正文重对齐（全部 ready、版本同步）
         ...(fm.content.sections ? { sections: Content.manifestFromBody(body, version) } : {}),

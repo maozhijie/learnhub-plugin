@@ -47,7 +47,7 @@ test('现状聚合的凌晨学习日归属：01:00 行为过日界归前一天�
 })
 
 test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔记源出链全部进「现状」段', async () => {
-  const weekStart = prevWeekStartOf(todayStr())!
+  const weekStart = prevWeekStartOf(todayStr(new Date()))!
   const weekEnd = weekEndOf(weekStart)!
   const mid = (offset: number): string => {
     const d = new Date(`${weekStart}T00:00:00Z`)
@@ -90,12 +90,12 @@ test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔�
 })
 
 test('#114 四问保存与重开：引擎段刷新、四问保留；answered 随四问齐备翻转', async () => {
-  const weekStart = prevWeekStartOf(todayStr())!
+  const weekStart = prevWeekStartOf(todayStr(new Date()))!
   await withVault({}, async ({ engine }) => {
     await assert.rejects(() => engine.kataSave(weekStart, { 目标条件: 'x' }), /先 learnhub_kata_open/)
     await engine.kataOpen(weekStart)
     await assert.rejects(() => engine.kataOpen('2026-09-02'), /周一/) // 非周一拒绝
-    await assert.rejects(() => engine.kataOpen(weekStartOf(todayStr())!), /最近的完整周/) // 本周未完，不预填未来
+    await assert.rejects(() => engine.kataOpen(weekStartOf(todayStr(new Date()))!), /最近的完整周/) // 本周未完，不预填未来
 
     await engine.kataSave(weekStart, { 目标条件: '稳定过 20 题/天', 障碍: '晚上总被杂事打断' })
     let doc = await engine.kataOpen(weekStart) // 重开：四问保留
@@ -112,7 +112,7 @@ test('#114 四问保存与重开：引擎段刷新、四问保留；answered 随
 })
 
 test('#114 「下一实验」出口：一键转 N-of-1 提案 / 执行意图，留痕进记录、全路径零 canonical 零 XP', async () => {
-  const weekStart = prevWeekStartOf(todayStr())!
+  const weekStart = prevWeekStartOf(todayStr(new Date()))!
   await withVault({ banks: { '入门': BANK } }, async ({ engine }) => {
     await engine.kataOpen(weekStart)
     await engine.kataSave(weekStart, { 下一实验: '试试挑战带', 目标条件: 'x', 障碍: 'y', 预期所学: 'z' })
@@ -143,7 +143,7 @@ test('#114 「下一实验」出口：一键转 N-of-1 提案 / 执行意图，�
 })
 
 test('#114 清单面：多周记录按周排列，answered 现判', async () => {
-  const w1 = prevWeekStartOf(todayStr())!
+  const w1 = prevWeekStartOf(todayStr(new Date()))!
   const d = new Date(`${w1}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() - 7)
   const w0 = weekStartOf(d.toISOString().slice(0, 10))!
@@ -163,7 +163,7 @@ test('#114 清单面：多周记录按周排列，answered 现判', async () => 
 // ---- #150 罗盘周 ETA 挂周复盘：现状区旁挂沙盘 ETA 摘要 ----
 
 test('#150 现状区旁挂沙盘 ETA：有锚课程逐课一行越阈参照（非承诺措辞）；未播种无此小节', async () => {
-  const weekStart = prevWeekStartOf(todayStr())!
+  const weekStart = prevWeekStartOf(todayStr(new Date()))!
   const SEED = `course: 数学
 mode: new
 concepts:

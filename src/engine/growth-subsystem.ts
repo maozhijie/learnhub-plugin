@@ -33,6 +33,8 @@ import type { ProbationCourseView, ProbationEntry, ProbationFold, ProbationOutco
 
 /** Growth 域对门面的窄面：领域实例直接 import 类型，跨子系统方法走本面注入。 */
 export interface GrowthDeps {
+  /** 时钟端口（#175 阶段①）：复诊结算 decidedAt 戳。 */
+  clock: Clock
   store: Store
   paths: Paths
   registry: Registry
@@ -57,7 +59,8 @@ import { arbitrationPopulations, behaviorDigest, readyDepthCheck, renderArbitrat
 import type { CompassEtaProbe } from './compass.ts'
 import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, GRAPH_NAMES_PREVIEW, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, parseCompass, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { resolveConcept } from './concepts.ts'
-import { dayOfTs, nowIso, weekStartOf } from './dates.ts'
+import { dayOfTs, nowIsoOf, weekStartOf } from './dates.ts'
+import type { Clock } from './clock.ts'
 import { netPracticeRecs } from './grading.ts'
 import { atomicWrite } from './io.ts'
 import type { JolPrediction } from './jol.ts'
@@ -892,7 +895,7 @@ export class GrowthSubsystem {
               settlePid = pid
             }
           }
-          const decidedAt = nowIso()
+          const decidedAt = nowIsoOf(this.e.clock.nowMs())
           await appendProbationEntry(this.e.paths, c.root, {
             ...entry, outcome, decided_at: decidedAt,
           })
@@ -987,10 +990,10 @@ export class GrowthSubsystem {
       for (const concept of taught) {
         await appendSedimentEvent(this.e.paths, {
           kind: 'recheck_outcome', tier: 'immediate', concept: canonicalOf(concept), payload: { ...payload },
-        })
+        }, this.e.clock.nowMs())
       }
     } else {
-      await appendSedimentEvent(this.e.paths, { kind: 'recheck_outcome', tier: 'immediate', payload })
+      await appendSedimentEvent(this.e.paths, { kind: 'recheck_outcome', tier: 'immediate', payload }, this.e.clock.nowMs())
     }
     if (entry.outcome === '剪除' && ctx.settlePid) {
       await appendSedimentEvent(this.e.paths, {
@@ -1001,7 +1004,7 @@ export class GrowthSubsystem {
           restored: (graph.succ[entry.node] ?? []).map(consumer => `${consumer} ← ${ctx.coarsePre.join('、')}`),
           concepts: taught.map(canonicalOf),
         },
-      })
+      }, this.e.clock.nowMs())
     }
     await this.e.store.appendJournal({
       course: c.name, node: entry.node, rating: null, kind: 'probation_settle', elapsed_days: 0,

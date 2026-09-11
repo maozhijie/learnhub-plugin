@@ -141,7 +141,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
           .catch(() => undefined)
       }
     },
-  })
+  }, systemClock)
   const rt: HostRuntime = {
     engine, agent,
     vault,

@@ -10,6 +10,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { decompileGoalOf, decompileRepairPrompt, decompileTerms, reconcilePlanNodes, splitDecompileDoc } from '../src/engine/project-decompile.ts'
+import { systemClock } from '../src/host/clock.ts'
 import { YAML } from '../src/engine/yaml.ts'
 import type { PlanItem } from '../src/engine/projects.ts'
 import { withVault } from './helpers/vault.ts'
@@ -105,7 +106,7 @@ function scriptFake(replies: string[]) {
       calls.push({ prompt, effort: opts?.effort })
       return replies[Math.min(calls.length - 1, replies.length - 1)]!
     },
-  })
+  }, systemClock)
   return Object.assign(seam, { calls })
 }
 

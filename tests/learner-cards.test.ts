@@ -362,7 +362,7 @@ test('我的卡队列与自评：新卡入队→首推到期→一卡一天一�
     // 首推（自评 Good）→ 明天到期；同日第二推拒绝
     const r = await engine.learnerCardRate('数学', '入门', 'c1', 3)
     assert.equal(r.scheduled, true)
-    assert.ok(String(r.due) > todayStr())
+    assert.ok(String(r.due) > todayStr(new Date()))
     await assert.rejects(() => engine.learnerCardRate('数学', '入门', 'c1', 2), /今天已推进过/)
     await assert.rejects(() => engine.learnerCardForget('数学', '入门', 'c1'), /今天已推进过/)
 
@@ -417,7 +417,7 @@ test('我的卡汇入复习队列（ADR-0021）：新卡队尾首推、到期卡
     assert.ok(qDir.band !== undefined)
 
     // 种一个 due=当前的调度块 → 进队且 R < 1；rate 结算走无绑定 XP（权重 1 × 难度 5）
-    const today = todayStr()
+    const today = todayStr(new Date())
     await engine.learnerCards.updateCardEvidence('math', '入门', 'c1', {
       fsrs: { stability: 3, difficulty: 5, due: today, last_review: '2026-09-08', reps: 1, lapses: 0 },
     })

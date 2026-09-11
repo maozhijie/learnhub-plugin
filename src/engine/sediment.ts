@@ -21,7 +21,7 @@
 import { mkdir, readFile, appendFile } from 'node:fs/promises'
 import { atomicWrite } from './io.ts'
 import { calendarDayOf, weekStartOf } from './dates.ts'
-import { nowIso } from './dates.ts'
+import { nowIsoOf } from './dates.ts'
 import type { Paths } from './paths.ts'
 
 /** 七类事件（#139 事件骨架；#150 增 N-of-1 实验结局——停=定稿，个体效应结论出生即写）。 */
@@ -57,7 +57,7 @@ export function isSedimentKind(v: unknown): v is SedimentKind {
 }
 
 /** 追加一条沉淀事件（出生即写的唯一入口）：落正典 + 确保 legacy 分区在盘。 */
-export async function appendSedimentEvent(paths: Paths, event: SedimentEventInput): Promise<SedimentEvent> {
+export async function appendSedimentEvent(paths: Paths, event: SedimentEventInput, nowMs: number): Promise<SedimentEvent> {
   if (!isSedimentKind(event.kind)) {
     throw new Error(`[sediment] 非法 kind: ${String(event.kind)}（允许 ${SEDIMENT_KINDS.join('/')}）`)
   }
@@ -71,7 +71,7 @@ export async function appendSedimentEvent(paths: Paths, event: SedimentEventInpu
     throw new Error('[sediment] concept（概念地址）缺席合法，给了就必须是非空字符串')
   }
   const full: SedimentEvent = {
-    ts: event.ts ?? nowIso(),
+    ts: event.ts ?? nowIsoOf(nowMs),
     kind: event.kind,
     tier: event.tier,
     payload: event.payload,
@@ -210,11 +210,11 @@ function section(kind: SedimentKind, fold: SedimentFold): string {
 }
 
 /** 学习者档案投影（纯函数）：沉淀折叠的人读汇总。 */
-export function renderLearnerProfile(fold: SedimentFold): string {
+export function renderLearnerProfile(fold: SedimentFold, nowMs: number): string {
   return [
     '---',
     'type: learner-profile',
-    `rebuilt_at: ${nowIso()}`,
+    `rebuilt_at: ${nowIsoOf(nowMs)}`,
     'source: 沉淀/沉淀.jsonl（正典投影——手编必被覆盖，改请改正典侧生产者）',
     '---',
     '',
@@ -228,8 +228,8 @@ export function renderLearnerProfile(fold: SedimentFold): string {
 }
 
 /** 重建投影（结算钩子的落盘出口）：fold → 写 学习者档案.md（原子替换；ADR-0046：手搓 tmp+rename 复制品改调唯一原语）。 */
-export async function rebuildLearnerProfile(paths: Paths, fold: SedimentFold): Promise<string> {
-  const md = renderLearnerProfile(fold)
+export async function rebuildLearnerProfile(paths: Paths, fold: SedimentFold, nowMs: number): Promise<string> {
+  const md = renderLearnerProfile(fold, nowMs)
   await atomicWrite(paths.learnerProfilePath, md)
   return md
 }

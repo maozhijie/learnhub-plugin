@@ -16,7 +16,7 @@
  * 落盘：state/回执.jsonl（append-only 证据流水）；Missing/Broken 纪律——文件缺失 =
  * 合法空态，损坏行 Broken 报出（流水带病读会数错渐退位置）。
  */
-import { nowIso } from './dates.ts'
+import { nowIsoOf } from './dates.ts'
 import { applyPracticeEvidence, clamp01 } from './grading.ts'
 import type { Fm } from './types.ts'
 import type { LlmComplete } from './llm.ts'
@@ -185,6 +185,8 @@ export async function submitReceipt(input: {
   /** 量表来源 = 挂载实践节点的内容要点（facade 的 explainPoints 同款抽取）。 */
   points: Array<{ title: string; md: string }>
   today: string
+  /** 当前时刻（#175 阶段①：时钟经 Clock 端口注入，回执 ts 由它生成）。 */
+  nowMs: number
   forceFull: boolean
   /** 当前节点 frontmatter。 */
   fm: Fm
@@ -209,7 +211,7 @@ export async function submitReceipt(input: {
   const review = parseReceiptReview(await input.llm(prompt, receiptReviewSystem(), { effort: 'deep' }))
   const rec: ReceiptLogRec = {
     id: `r${index}`,
-    ts: nowIso(),
+    ts: nowIsoOf(input.nowMs),
     course: input.course, node: input.node,
     day: input.today,
     kind: input.kind,

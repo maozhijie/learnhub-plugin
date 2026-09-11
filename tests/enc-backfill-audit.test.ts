@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { Content } from '../src/engine/content.ts'
+import { todayStr } from '../src/engine/dates.ts'
 import { Graph, GraphStore } from '../src/engine/graph.ts'
 import { runAudit } from '../src/engine/audit.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
@@ -59,7 +60,7 @@ const ENC_VAULT = {
 async function auditOf(engine: LearnhubEngine) {
   const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math')).load()
   const graph = new Graph(regions)
-  return runAudit(engine.paths, 'math', '数学', graph, regions)
+  return runAudit(engine.paths, 'math', '数学', graph, regions, todayStr(new Date()))
 }
 
 // ---- 纯函数：候选收集 / 提升 / 反哺 hints / 内容级审计 ----
