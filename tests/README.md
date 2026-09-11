@@ -77,3 +77,30 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 架构门（2026-09-11 新增，ADR-0042 / #152 刀 1；`tests/import-rules.test.ts`）：
 
 - 分层依赖规则执法，随 `npm test` 全量必跑：R1 host 的 engine 导入只走门面、R2 engine 禁引宿主、R3 engine 禁引 `@deepseek-ai/*`、R4 views 纯类型、R5 io.ts 零相对导入叶子、R6 门面唯一汇点（engine 子模块不回引 engine/index.ts）、R7 src 相对 import 全图零环（含 type-only 与动态导入边）。R3 带自检：收集器须能看见裸包/作用域包说明符（曾出现只收相对说明符致 R3 恒过的实测缺陷，自检锁死）。行级收集相对导入（静态/type/侧效/export-from/动态）+ DFS；说明符解析带 .ts 直用、否则补 .ts、否则补 /index.ts。刀 1 随门落地两处解环先例：receipts 用本地 ReceiptStore 结构化窄面（receipts 不 import store）、周折叠函数族归位 dates.ts（sediment 改引 dates，kata 原路径 re-export 保 S45 接缝）。
+
+架构门 G1–G6（2026-09-11 新增，#165 / ADR-0047；`tests/arch-guards.test.ts`）：
+
+把「约定只活在注释与 ADR 里」变成会失败的东西。全部零依赖、文本／加载层面、`node:test` 原生、随 `npm test` 全量执行。两条铁律：**每个门都带自检**（构造必然违规的样本并断言门会失败；收集器类门另断言它能看见目标形态——R3 曾因收集器只收相对说明符而**恒过**，恒过的门比没有门更坏）；**棘轮是精确匹配**（实际 == 基线，涨了失败、**降了但未同步下调基线也失败**＝过期即失败）。
+
+| 门 | 内容 | 档位 | 阈值来源（落笔实测） |
+|---|---|---|---|
+| G1 未定义标识符 | 剥注释与字符串后「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`） | 硬门 0 | 0（`shuffled` 修复后）。tsc 落地后由 TS2304 接管、本门退役 |
+| G2／G2b 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在、入口文件非空 | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径 |
+| G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。缺件方向（dead／missing／unwired）**硬门 0**；多余接线按基线棘轮 | 缺件硬门 0 ＋ 多余棘轮 | 声明 **167** ／ 实用 167 ／ 接线 **197** ／ 多余 **30**（含 **10** phantom，全在 growth 的门面接线里） |
+| G4 窄面宽度（三槽位） | `handles`／`facade`／`fns` 逐子系统卡基线；`handles ≤12／facade ≤20／fns ≤10` 是**非活动目标** | 棘轮 | 实测最大 handles **9**／facade **20**／fns **1**（对预算已绿；facade 已触上限，无余量） |
+| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件与宿主 `index.ts`（3029 行）全超 600／900，故活动门＝逐文件基线（**78** 个受控文件） |
+| G6 顶层不变量 | 除教练层 `proposals.ts` 外无模块调用图写原语（`GraphStore.writeRegionDoc`，`data/*.yaml` 的唯一写路径） | 硬门 | 绿（唯一调用者就是 `proposals.ts`） |
+
+门的三处实现事实（照着改时别踩）：
+
+- **G3 的第三方向只取接线字面量的 brace-depth-1 键**：`ChannelsSubsystem` 的接线里 `registry: { load, loadNoteSources, save, get }` 是嵌套窄子面（`ChannelsDeps` 正以结构化窄面声明它），按扁平正则抽取会把子面成员误计为顶层接线——实测会伪造出 **4 条不存在的 phantom**。G4 的「顶层成员计，嵌套子面不计」是同一条判据。自检：夹具有嵌套子面 + 一条多余接线，断言接线键恰 5 个、phantom 恰 1 条。
+- **G4 的槽位归属是声明形式规则**：值属性 → `handles`（领域实例与值）、方法签名（含 generator）→ `facade`（回引门面）、函数型属性（`jolRng: () => number`）→ `fns`（注入的纯函数）。规则写在 `scripts/scan-deps-face.mjs` 头注释里。
+- **G6 的白名单是紧的**：`graphApply('enrich')` 从 `growth-subsystem.ts`／`projects.ts` 直调 `proposals.*` 属提案门内的教练层行为，不触本门（ADR-0044 已登记）；原语定义处 `graph.ts` 不算调用者。自检：白名单外的调用（含解构别名）必须被看见。
+
+棘轮基线与操作（`scripts/arch-baseline.json` + `scripts/arch-baseline.mjs`）：
+
+- 基线记录每个受控量的实测值：逐子系统的声明／实用／接线数、三槽位计数、多余接线集与 phantom 集、逐文件行数。**基线只在清理提交里下调**；涨了先看这行长在哪、能不能不长。
+- 基线自身也自检**幽灵条目**：删了子系统／文件却留下基线条目 = 永不复活的门，一并失败。
+- 看当前实测与违规：`node scripts/arch-baseline.mjs`（违规退出 1）；单看窄面：`node scripts/scan-deps-face.mjs`；单看规模：`node scripts/scan-budget.mjs`；单看顶层不变量：`node scripts/scan-invariant.mjs`；按实测重写基线：`node scripts/arch-baseline.mjs --update`。
+- 三个「缺件」方向（dead 声明未用／missing 用而未声明／unwired 声明未接线）**不进基线**——它们必须是 0，由 G3 直接卡（这些是装配断裂，不是可以棘轮化的债）。
+

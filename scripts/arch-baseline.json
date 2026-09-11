@@ -1,0 +1,244 @@
+{
+  "$comment": [
+    "架构门基线（ADR-0047 棘轮：实际 == 基线；涨了失败、降了未同步下调也失败）。",
+    "只在清理提交里改这一份；改的理由写在同一个提交里。重写：node scripts/arch-baseline.mjs --update",
+    "三个缺件方向（dead 声明未用 / missing 用而未声明 / unwired 声明未接线）不进基线——它们必须是 0，由 tests/arch-guards.test.ts 直接卡。"
+  ],
+  "depsFace": {
+    "BankDeps": {
+      "declared": 25,
+      "used": 25,
+      "wired": 26,
+      "slots": {
+        "handles": 8,
+        "facade": 17,
+        "fns": 0
+      },
+      "surplus": [
+        "content"
+      ],
+      "phantom": []
+    },
+    "ChannelsDeps": {
+      "declared": 16,
+      "used": 16,
+      "wired": 16,
+      "slots": {
+        "handles": 7,
+        "facade": 9,
+        "fns": 0
+      },
+      "surplus": [],
+      "phantom": []
+    },
+    "ContentDeps": {
+      "declared": 29,
+      "used": 29,
+      "wired": 38,
+      "slots": {
+        "handles": 8,
+        "facade": 20,
+        "fns": 1
+      },
+      "surplus": [
+        "judgeBankAnswer",
+        "logGradingFailure",
+        "nodeNote",
+        "questionContext",
+        "questionView",
+        "refreshRepCard",
+        "resolveNote",
+        "saveNodeNote",
+        "vaultPriorFor"
+      ],
+      "phantom": []
+    },
+    "GraphDeps": {
+      "declared": 16,
+      "used": 16,
+      "wired": 16,
+      "slots": {
+        "handles": 9,
+        "facade": 7,
+        "fns": 0
+      },
+      "surplus": [],
+      "phantom": []
+    },
+    "GrowthDeps": {
+      "declared": 16,
+      "used": 16,
+      "wired": 31,
+      "slots": {
+        "handles": 5,
+        "facade": 11,
+        "fns": 0
+      },
+      "surplus": [
+        "coachCheckFor",
+        "coachContextPack",
+        "coachFrontier",
+        "compassEtaFold",
+        "compassRead",
+        "compassTail",
+        "growthGraphView",
+        "growthTallies",
+        "invokesResolver",
+        "parseGrowthVerdict",
+        "probationFrame",
+        "probationViewFor",
+        "pruneProbationNode",
+        "recheckMetricOf",
+        "recordRecheckOutcome"
+      ],
+      "phantom": [
+        "coachFrontier",
+        "compassEtaFold",
+        "growthGraphView",
+        "growthTallies",
+        "invokesResolver",
+        "parseGrowthVerdict",
+        "probationFrame",
+        "pruneProbationNode",
+        "recheckMetricOf",
+        "recordRecheckOutcome"
+      ]
+    },
+    "LabDeps": {
+      "declared": 13,
+      "used": 13,
+      "wired": 13,
+      "slots": {
+        "handles": 5,
+        "facade": 8,
+        "fns": 0
+      },
+      "surplus": [],
+      "phantom": []
+    },
+    "LearnerDeps": {
+      "declared": 21,
+      "used": 21,
+      "wired": 22,
+      "slots": {
+        "handles": 9,
+        "facade": 12,
+        "fns": 0
+      },
+      "surplus": [
+        "scanCourseBanks"
+      ],
+      "phantom": []
+    },
+    "ProjectDeps": {
+      "declared": 17,
+      "used": 17,
+      "wired": 18,
+      "slots": {
+        "handles": 8,
+        "facade": 9,
+        "fns": 0
+      },
+      "surplus": [
+        "refreshSourceFingerprints"
+      ],
+      "phantom": []
+    },
+    "SchedDeps": {
+      "declared": 14,
+      "used": 14,
+      "wired": 17,
+      "slots": {
+        "handles": 6,
+        "facade": 8,
+        "fns": 0
+      },
+      "surplus": [
+        "sedimentAppend",
+        "sedimentFold",
+        "sedimentRebuildProfile"
+      ],
+      "phantom": []
+    }
+  },
+  "sizes": {
+    "src/client/index.tsx": 155,
+    "src/engine/adaptive.ts": 81,
+    "src/engine/advance.ts": 106,
+    "src/engine/analysis.ts": 244,
+    "src/engine/anki.ts": 333,
+    "src/engine/attribution.ts": 244,
+    "src/engine/audit.ts": 317,
+    "src/engine/bank-advice.ts": 116,
+    "src/engine/bank-cleanup.ts": 28,
+    "src/engine/calibration.ts": 110,
+    "src/engine/coach-round.ts": 452,
+    "src/engine/coach.ts": 60,
+    "src/engine/compass.ts": 214,
+    "src/engine/complexity.ts": 267,
+    "src/engine/concepts.ts": 293,
+    "src/engine/content-subsystem.ts": 1023,
+    "src/engine/content.ts": 1809,
+    "src/engine/data-check.ts": 824,
+    "src/engine/dates.ts": 114,
+    "src/engine/error-cards.ts": 351,
+    "src/engine/explain.ts": 105,
+    "src/engine/goals.ts": 51,
+    "src/engine/grading.ts": 423,
+    "src/engine/graph-subsystem.ts": 581,
+    "src/engine/graph.ts": 507,
+    "src/engine/growth-subsystem.ts": 979,
+    "src/engine/habits.ts": 198,
+    "src/engine/health.ts": 94,
+    "src/engine/index.ts": 1831,
+    "src/engine/io.ts": 52,
+    "src/engine/jol.ts": 77,
+    "src/engine/kata.ts": 318,
+    "src/engine/learner-cards.ts": 1325,
+    "src/engine/llm.ts": 22,
+    "src/engine/memory.ts": 117,
+    "src/engine/nof1.ts": 759,
+    "src/engine/note-source.ts": 1237,
+    "src/engine/notes.ts": 334,
+    "src/engine/optimize.ts": 139,
+    "src/engine/output.ts": 68,
+    "src/engine/params.ts": 58,
+    "src/engine/paths.ts": 186,
+    "src/engine/probation.ts": 414,
+    "src/engine/project-decompile.ts": 245,
+    "src/engine/project-enc.ts": 72,
+    "src/engine/project-exec.ts": 273,
+    "src/engine/project-recall.ts": 88,
+    "src/engine/projects.ts": 1415,
+    "src/engine/proposals.ts": 1356,
+    "src/engine/quality.ts": 60,
+    "src/engine/question-bank.ts": 1480,
+    "src/engine/question-dedup.ts": 84,
+    "src/engine/question-hygiene.ts": 246,
+    "src/engine/receipts.ts": 232,
+    "src/engine/registry.ts": 153,
+    "src/engine/sandbox.ts": 219,
+    "src/engine/sched-subsystem.ts": 459,
+    "src/engine/schema.ts": 79,
+    "src/engine/sediment.ts": 237,
+    "src/engine/seed.ts": 480,
+    "src/engine/self-note.ts": 50,
+    "src/engine/sessions.ts": 551,
+    "src/engine/shuffle.ts": 20,
+    "src/engine/skills.ts": 255,
+    "src/engine/sleep.ts": 41,
+    "src/engine/srs.ts": 189,
+    "src/engine/store.ts": 472,
+    "src/engine/thermostat.ts": 136,
+    "src/engine/vault-links.ts": 446,
+    "src/engine/vault-prior.ts": 138,
+    "src/engine/views.ts": 356,
+    "src/engine/xp.ts": 182,
+    "src/engine/yaml.ts": 23,
+    "src/generation-jobs.ts": 116,
+    "src/host/http.ts": 61,
+    "src/host/llm.ts": 129,
+    "src/index.ts": 3029,
+    "src/tool-contracts.ts": 54
+  }
+}

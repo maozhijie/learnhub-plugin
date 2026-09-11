@@ -13,16 +13,19 @@
 | **G1** 未定义标识符 | 剥注释与字符串后，「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`，已落地） | **硬门** | **0**（`shuffled` 修复后）。tsc 落地后由 TS2304 接管、本门退役 |
 | **G2／G2b** 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套齐备、技术层导出在、入口文件非空（已落地） | **硬门** | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径 |
 | **顶层不变量** | 只有教练层能调用图写原语；白名单＝`proposals.ts` | **硬门** | **绿**（`writeRegionDoc` 的唯一调用者就是 `proposals.ts`） |
-| **窄面三向一致** | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({...})` 提供的键，任一方向多出或缺失即失败 | **棘轮，基线 30**（其中 **10 条 phantom**） | 声明 **167** ／ 接线 **188** ／ **多余 30**。清理后转硬门 0 |
-| **窄面宽度** | 按三槽位卡上限（**顶层成员计，嵌套子面不计**） | **棘轮**；声明预算 `handles ≤12 / facade ≤20 / fns ≤10` 是**非活动目标** | 实测最大 handles ≈10／facade ≈14／fns ≤3（对预算已绿）。活动门＝逐子系统实测基线 |
-| **文件规模** | `src/engine/*.ts` ≤600 行、宿主单文件 ≤900 行；白名单 `views/*.ts` 叶子、`types.ts`、生成／枚举大表 | **棘轮**；600／900 是**非活动目标** | **不可作活动阈值**：8 个 engine 文件全超 600（content 1809／question-bank 1480／projects 1415／proposals 1356／learner-cards 1325／note-source 1237／content-subsystem 1023／growth-subsystem 979），宿主 `index.ts` 3029 超 900。活动门＝逐文件基线（冻结在现状不涨） |
+| **窄面三向一致** | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({...})` 提供的键，任一方向多出或缺失即失败 | **缺件方向（dead／missing／unwired）硬门 0**；**多余接线棘轮，基线 30**（其中 **10 条 phantom**） | 声明 **167** ／ 接线 **197** ／ **多余 30**。清理后转硬门 0 |
+| **窄面宽度** | 按三槽位卡上限（**顶层成员计，嵌套子面不计**） | **棘轮**；声明预算 `handles ≤12 / facade ≤20 / fns ≤10` 是**非活动目标** | 实测最大 handles **9**／facade **20**／fns **1**（对预算已绿；facade 已触上限、无余量）。活动门＝逐子系统实测基线 |
+| **文件规模** | `src/`（`.ts`／`.tsx`）逐文件行数；目标 `src/engine/*.ts` ≤600 行、宿主单文件 ≤900 行；白名单 `engine/views/` 叶子（类型面）、`engine/types.ts`（共享类型与枚举大表） | **棘轮**；600／900 是**非活动目标** | **不可作活动阈值**：8 个 engine 文件全超 600（content 1809／question-bank 1480／projects 1415／proposals 1356／learner-cards 1325／note-source 1237／content-subsystem 1023／growth-subsystem 979），宿主 `index.ts` 3029 超 900。活动门＝逐文件基线（冻结在现状不涨；受控面 78 个文件） |
 | **类型门** | `tsc --noEmit` 按**文件**错误数棘轮；`strict:false`（`noImplicitAny:false`）起步 | **棘轮** | `src/` **204**（宽松）／**218**（严格）。tsconfig + devDep + `typecheck` 脚本另开票 |
 
-- **棘轮机制（刚性）**：一份仓内基线文件记录每个受控量的实测值；门要求**实际 == 基线**——涨了失败，**降了但未同步下调基线也失败**（**过期即失败**）。基线只在清理提交里下调。理由：单侧棘轮（只拦上涨）的基线会沉淀成**永久余量**、逐条恒过，与 R3 恒过的教训同构；精确匹配是唯一不会腐烂的形状，而代价只是每次清理顺手改一行。
-- **窄面三向一致门当前的真实缺口（必须写进票面）**：`scripts/scan-deps-face.mjs` 今天**退出 0**——它只比了「deps 声明 ↔ 类体实用」两个方向（两者今天的实测都是 0：无死成员、无未声明使用），而**第三个方向（门面接线提供的键）尚未实现**，所以对 **30 条多余接线与其中的 10 条 phantom 完全不可见**。补第三方向时必须**只取接线字面量的 brace-depth-1 键**：`ChannelsSubsystem` 的接线里 `registry: { load, loadNoteSources, save, get }` 是**嵌套窄子面**（`ChannelsDeps` 正以结构化窄面声明它），按扁平正则抽取会把子面成员误计为顶层接线——实测会伪造出 4 条不存在的 phantom。这条同样适用于宽度门的「嵌套子面不计」。
+- **落地实测（#166，2026-09-11；门已进 `npm test`）**：脚本 `scripts/scan-deps-face.mjs`（G3／G4）、`scripts/scan-budget.mjs`（G5）、`scripts/scan-invariant.mjs`（G6），基线 `scripts/arch-baseline.json` + `scripts/arch-baseline.mjs`，门体 `tests/arch-guards.test.ts`。实测把本 ADR 落笔时的两处口径修正到可实现值：① 接线总数 **197**（原文 188 系早期手数口径的偏差；多余 30 ／ phantom 10 两项不变，与本 ADR 的清单逐条吻合）；② 宽度实测最大 **9／20／1**（原文 ≈10／≈14／≤3 是手数，且「facade ≈14」恰等于 content 20 个回引方法里的 14 个 private——按本 ADR 的槽位定义（门面方法与回引，不区分 public／private）应为 20；**facade 预算 ≤20 已触上限、无余量**，这正是接缝三槽位票要解决的问题）。槽位归属规则与「嵌套子面不计」的判据写在 `scripts/scan-deps-face.mjs` 头注释里。
+- **G3 的第三方向已实现**（本 ADR 落笔时是缺口）：门面 `new XSubsystem({...})` 的接线键现在参与比对，只取 **brace-depth-1** 键；`unwired`（声明了但门面没接线）作为第三个缺件方向一并进硬门 0。
+
+- **棘轮机制（刚性）**：一份仓内基线文件记录每个受控量的实测值；门要求**实际 == 基线**——涨了失败，**降了但未同步下调基线也失败**（**过期即失败**）。基线只在清理提交里下调。理由：单侧棘轮（只拦上涨）的基线会沉淀成**永久余量**、逐条恒过，与 R3 恒过的教训同构；精确匹配是唯一不会腐烂的形状，而代价只是每次清理顺手改一行。**落地形态**：`scripts/arch-baseline.json`（受控量：逐子系统 声明／实用／接线数、三槽位计数、多余接线集、phantom 集、逐文件行数）＋ `scripts/arch-baseline.mjs`（比较与重写；`--update` 只在清理提交里用）。三个**缺件**方向（dead／missing／unwired）不进基线：它们是装配断裂而非可棘轮化的债，由 G3 直接卡 0。
+- **窄面三向一致门补第三方向时的判据（#166 已落地，留作教训）**：落地前 `scripts/scan-deps-face.mjs` **退出 0**——它只比了「deps 声明 ↔ 类体实用」两个方向（两者今天都是 0），而**第三个方向（门面接线提供的键）**对 **30 条多余接线与其中的 10 条 phantom 完全不可见**。补该方向时**只取接线字面量的 brace-depth-1 键**：`ChannelsSubsystem` 的接线里 `registry: { load, loadNoteSources, save, get }` 是**嵌套窄子面**（`ChannelsDeps` 正以结构化窄面声明它），按扁平正则抽取会把子面成员误计为顶层接线——实测会伪造出 4 条不存在的 phantom。这条同样适用于宽度门的「嵌套子面不计」。**自检锁死**：夹具含嵌套子面 + 一条多余接线，断言接线键恰 5 个、phantom 恰 1 条，并先断言「扁平抽取确实会误取子面成员」（否则该自检没在测东西）。
 - **10 条 phantom 的清单（供清理票验收）**：全在 `growth-subsystem.ts` 的门面接线（`engine/index.ts:390` 起）——`coachFrontier`、`compassEtaFold`、`growthGraphView`、`growthTallies`、`invokesResolver`、`parseGrowthVerdict`、`probationFrame`、`pruneProbationNode`、`recheckMetricOf`、`recordRecheckOutcome`。它们的 `this.X` 在门面上不存在，**且子系统也从不使用这些键**（所以 710 个测试全绿、也不会在运行时炸）——它们是纯粹的死接线。类型门会把这 10 条报成 TS2339（属性不存在），它们**同时是类型门第二阶段的首批清理对象**。
 - **另 20 条多余接线（门面上存在、子系统从不使用）**：content 9 条（`judgeBankAnswer`／`logGradingFailure`／`nodeNote`／`questionContext`／`questionView`／`refreshRepCard`／`resolveNote`／`saveNodeNote`／`vaultPriorFor`）、growth 5 条（`coachCheckFor`／`coachContextPack`／`compassRead`／`compassTail`／`probationViewFor`）、learner 1（`scanCourseBanks`）、project 1（`refreshSourceFingerprints`）、bank 1（`content`）、sched 3（`sedimentAppend`／`sedimentFold`／`sedimentRebuildProfile`）。
-- **每条阈值都进 ADR 与票面并标注来源**：三向基线 30／10、宽度实测 10／14／3、规模逐文件基线——全部来自本 ADR 落笔时的实测量。**#165 正文的门段写「当前会报 32 条多余接线」，实测为 30 条多余／10 条 phantom**；「10 条指向不存在的方法」实测成立。#165 正文另一处「本轮已清掉 31 个死成员」对应的是 **dead 方向（声明未用）**，实测已归 0——两个方向不要混。
+- **每条阈值都进 ADR 与票面并标注来源**：三向基线 30／10、宽度实测 9／20／1、规模逐文件基线——全部来自本 ADR 落笔与 #166 落地时的实测量（口径修正见上条）。**#165 正文的门段写「当前会报 32 条多余接线」，实测为 30 条多余／10 条 phantom**；「10 条指向不存在的方法」实测成立。#165 正文另一处「本轮已清掉 31 个死成员」对应的是 **dead 方向（声明未用）**，实测已归 0——两个方向不要混。
 - **时序（与顶层重划的关系）**：① 止血门先行（G1、G2、顶层不变量、三向、宽度、规模）→ ② 宿主 runtime → ③ 接缝三槽位 → ④ 收紧阈值。**顶层重划落地前，门只降不升。**
 - **与顶层重划冲突的门 → 记入 ADR 并标注「重划后重推阈值」，不就地改阈值**。已知需重推的项：**文件规模**（重划会改文件归属）、**窄面宽度**（三槽位分组会改成员的槽位归属）、**窄面三向**（子系统边界可能变）。600／900／12／20／10 因此在本 ADR 里**只是目标与记录，不是活动阈值**——用旧形状的阈值去绑定新边界，正是 #165 顶层判断要避免的事。
 - **不做「零死导出」门**：实测零引用导出 **0 条**（`sessions.ts::nodeLink` 是零引用**方法**、非导出，可随手清），此面无需门。
@@ -30,12 +33,13 @@
 
 边界：
 
-- **门的实现落点**：规则族进 `tests/import-rules.test.ts`（R1–R7，已有）与 `tests/arch-guards.test.ts`（G1／G2／G2b，已落地）同族文件；新增门（三向、宽度、规模、不变量）同族同形态，`tests/README.md` 架构门段同步登记（#165 纪律：接缝与 `tests/README` 同步）。
+- **门的实现落点**：规则族进 `tests/import-rules.test.ts`（R1–R7，已有）与 `tests/arch-guards.test.ts`（G1／G2／G2b／**G3 三向／G4 宽度／G5 规模／G6 不变量**，#166 已齐）；测量在 `scripts/scan-deps-face.mjs`／`scan-budget.mjs`／`scan-invariant.mjs`，基线在 `scripts/arch-baseline.json`，`tests/README.md` 架构门段同步登记（#165 纪律：接缝与 `tests/README` 同步）。**每门带自检**（构造必然违规样本 → 断言门会失败；收集器类门另断言能看见目标形态）。
 - **不为门引入任何依赖**：不引 eslint／dependency-cruiser／prettier／zod（ADR-0042 替代方案段已否决）。
 - **`tests/` 与 `ui/` 的类型面不在类型门首期扫描面**（各自配置另开步）；`ui/` 有自己的 tsconfig 与 vite 构建。
 - 不设「零死导出」门（实测无债）。
 - 本 ADR 不裁宿主 runtime 的设计（见 ADR-0048），只裁门的清单与刚性。
-- 基线文件本身需要**自检**：门要断言「基线里的每一项都对应一个受控对象」（防止删除对象后基线条目变成永不复位的幽灵条目）。
+- 基线文件本身需要**自检**：门要断言「基线里的每一项都对应一个受控对象」（防止删除对象后基线条目变成永不复位的幽灵条目）。已落地：子系统条目、受控文件条目、规模白名单条目三类各有自检。
+- **门的自检不止「违规会失败」**：收集器类门还要断言**扫描面没塌**（如 G3 断言收集到的 `XDeps` 集合与基线一致、G5 断言受控文件数 > 50）——R3 恒过的根因正是收集器静默收空。
 
 替代方案（否决）：
 
