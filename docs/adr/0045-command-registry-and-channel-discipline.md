@@ -93,7 +93,7 @@ interface CommandSpec {
 | ④ | handler 覆盖 | **已落地**：`host/handlers.ts` 键（method+path）== 没有 bind 的 panel 通道集合；`host/tool-handlers.ts` 键（工具名）== 没有 bind 的 agent 通道集合（无孤儿、无死代码） |
 | 8 | 声明与面一致 | 注册表 agent 通道的 `(tool, args, summary)` 与工具面快照逐字一致；panel 通道的 `(method, path)` 与路由清单逐字一致 |
 
-- **「门面转发层消失或自动生成」**（消费方直连子系统）是终极形态，牵动 host/UI/测试全部调用点，**另开票**，本 ADR 不裁。
+- **「门面转发层消失或自动生成」**（消费方直连子系统）是终极形态，牵动 host/UI/测试全部调用点，**另开票**，本 ADR 不裁。**（已由 ADR-0049 定案，2026-09-11：终态取 C 形态——hub 降级为纯容器、公开面改 `engine.<子系统>.<方法>`、199 个转发体删除；施工票 #182。本 ADR 当初"牵动 host／UI／测试全部调用点"的估量已被 #169 改写：host 生成路径现为 `rt.engine[engine](...args)` 字符串查表，"全部消费方"实测塌缩为 tests 直调 1086 处／host 例外直调 164 处／注册表 154 条 `engine` 字段／接线箭头函数 108 条；UI 从不经过门面。）**
 - `ui/` 的 151 处类型错与它自己的 tsconfig／vite 构建**不在本 ADR 范围**。
 - 不引 zod／ajv／代码生成器／运行时输出校验；不新增任何依赖。
 - `src/tool-contracts.ts` 是运行时**守卫函数**模块（6 个导出解析器 + 1 个常量，54 行）、**不是契约表**，也不枚举任何工具；`tests/explicit-tool-contracts.test.ts` 亦不列举工具名或路由路径。它贡献的是**校验语义**，注册表不复用它的形状。
