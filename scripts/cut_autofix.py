@@ -41,7 +41,8 @@ def imported_names(h):
 have = imported_names(head)
 locals_ = set(re.findall(r'^\s{2}(?:private |protected )?(?:readonly )?(?:async )?\*?(\w+)\s*[(:=]', cls, re.M))
 members = set(re.findall(r'this\.\w+\.(\w+)', cls))          # 窄面成员名，不算模块符号
-used = set(re.findall(r'(?<![\w.$])([A-Za-z_]\w{2,})(?![\w$])', cls))
+# 展开运算符的省略号会挡住其后的标识符：扫描前先剥掉
+used = set(re.findall(r'(?<![\w$])([A-Za-z_]\w{2,})(?![\w$])', cls.replace('...', '')))
 
 missing = {}
 alias_fix = []

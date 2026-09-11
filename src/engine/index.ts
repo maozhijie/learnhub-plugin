@@ -19,6 +19,7 @@ import { GraphSubsystem } from './graph-subsystem.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter, hasReadyContent } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import { getScheduler, applyRatingBlock, masteryOfFm, previewDue, retrievabilityBlock, resolveFsrsParams } from './srs.ts'
+import { SchedSubsystem } from './sched-subsystem.ts'
 import { advance, advancePending, advanceStrict, alreadyAdvanced } from './advance.ts'
 import type { FSRS } from 'ts-fsrs'
 import { bandOffset, combinedDifficulty, startBand, sessionOrder } from './adaptive.ts'
@@ -171,10 +172,6 @@ function shuffled<T>(items: T[]): T[] {
   return out
 }
 
-/** 评估指标等小数的 4 位舍入（落盘元数据与文案共用）。 */
-function round4(x: number): number {
-  return Math.round(x * 10000) / 10000
-}
 
 /** 周复盘的周参数校验（周一锚定；非法 fail loud）。 */
 function kataMonday(weekStart: string): string {
@@ -228,6 +225,8 @@ export class LearnhubEngine {
   private graph: GraphSubsystem
   /** Content 子系统（内容管线域，#152 刀 8）：窄面注入构造，见 constructor 尾部。 */
   private content2: ContentSubsystem
+  /** Sched 子系统（调度域，#152 刀 9）：窄面注入构造，见 constructor 尾部。 */
+  private sched2: SchedSubsystem
   /** vault 根目录（笔记源注册路径归一用；posix 规范形态）。 */
   readonly vaultRoot: string
   /** schema 版本块（#138 启动硬门的解析产物；breaks 断裂史为纯档案，引擎零消费）。 */
@@ -405,6 +404,21 @@ export class LearnhubEngine {
       sched: courseRoot => this.sched(courseRoot),
       updateNoteFm: (path, fm) => this.updateNoteFm(path, fm),
       vaultPriorFor: (graph, node) => this.vaultPriorFor(graph, node),
+    })
+    this.sched2 = new SchedSubsystem({
+      store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
+      content: this.content, schedCache: this.schedCache,
+      assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
+      coachCheckFor: (c, today) => this.coachCheckFor(c, today),
+      enabledCourses: () => this.enabledCourses(),
+      ensureNote: (root, graph, node) => this.ensureNote(root, graph, node),
+      learningDay: () => this.learningDay(),
+      loadView: course => this.loadView(course),
+      scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
+      sched: courseRoot => this.sched(courseRoot),
+      sedimentAppend: (kind, tier, payload, concept) => this.sedimentAppend(kind, tier, payload, concept),
+      sedimentFold: () => this.sedimentFold(),
+      sedimentRebuildProfile: () => this.sedimentRebuildProfile(),
     })
   }
 
@@ -1128,232 +1142,37 @@ export class LearnhubEngine {
   }
   // ---- 节点跳过 / 完成确认 ----
 
-  /** 跳过（已有基础）：stage 置 skipped，调度视同已通过；取消跳过回 ready。
-   * 跳过即归档（ADR-0032）：该节点全部未归档题记原因 skip 后归档——跳过的语义是
-   * 「视同已通过、退出推荐与阻塞」，其题库随之整体退场（休眠题不再占软上限额度、
-   * 已调度题不再制造题库噪音）；取消跳过不自动恢复，恢复是显式动作
-   * （题库管理面按原因 skip 筛出恢复）。 */
+  // 以下 跳过/完成确认、XP 账本、记忆健康、优化器、沉淀层 五节方法体住 SchedSubsystem（sched-subsystem.ts，#152 刀 9 聚合+转发）
+
   async nodeSkip(courseKey: string | undefined, node: string, skipped: boolean): Promise<{ course: string; node: string; stage: Stage; archived?: number }> {
-    const c = await this.registry.resolve(courseKey)
-    const { graph, state, broken } = await this.loadView(c)
-    if (!graph.nset.has(node)) throw new Error(`[skip] 节点「${node}」不在图内。`)
-    this.assertNoteOk(c, graph, broken, node, 'skip')
-    if (!state[node]) await this.ensureNote(c.root, graph, node)
-    const stage: Stage = skipped ? 'skipped' : 'ready'
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
-    const fm = asFm(rawFm)
-    if (fm) await saveNote(path, { ...fm, stage } as unknown as Record<string, unknown>, body)
-    let archived: number | undefined
-    if (skipped) {
-      const courseRoot = this.paths.courseRoot(c.root)
-      const bank = await this.bank.load(courseRoot, node)
-      const n = await this.bank.archiveQuestions(
-        courseRoot, node,
-        bank.questions.filter(q => !q.archived).map(q => q.id),
-        true, 'skip')
-      archived = n || undefined
-    }
-    return { course: c.name, node, stage, ...(archived !== undefined ? { archived } : {}) }
+    return this.sched2.nodeSkip(courseKey, node, skipped)
   }
 
-  /** 完成确认（Math Academy 语义的 lesson 通过判定）：
-   * 正确率（题库 stats 聚合）< 及格线且作答次数足够时默认拒绝——不推进 stage、
-   * 不初始化复习卡，返回 accepted=false 供前端引导复习（force=true 旁路）。
-   * 通过时：全部未归档题目纳入复习循环（已作答的按各自 FSRS 调度到期复习，
-   * 没作答的初始化为明天起刷），节点 stage→review；全部做过且全对 → 满分
-   * bonus XP（journal 流水）。节点 frontmatter 同步写一份「聚合代表」fsrs
-   * （全部题里到期最早的那张卡）：审计 E5 要求 review 有 fsrs，且 R_gate 的
-   * 可提取性仍从节点状态读。 */
   async nodeComplete(courseKey: string | undefined, node: string, force = false): Promise<{
     accepted: boolean; accuracy: number | null; course: string; node: string
     stage?: Stage; initialized?: number; due?: string | null; reason?: string
     coach?: CoachCheck
   }> {
-    const c = await this.registry.resolve(courseKey)
-    const { graph, state, broken } = await this.loadView(c)
-    if (!graph.nset.has(node)) throw new Error(`[complete] 节点「${node}」不在图内。`)
-    this.assertNoteOk(c, graph, broken, node, 'complete')
-    if (!state[node]) await this.ensureNote(c.root, graph, node)
-    const courseRoot = this.paths.courseRoot(c.root)
-    const bank = await this.bank.load(courseRoot, node)
-    let attempts = 0
-    let correct = 0
-    for (const q of bank.questions) {
-      if (q.archived) continue
-      attempts += q.stats?.attempts ?? 0
-      correct += q.stats?.correct ?? 0
-    }
-    const accuracy = attempts ? Math.round((correct / attempts) * 100) / 100 : null
-    if (state[node]?.stage === 'mastered' || state[node]?.stage === 'skipped') {
-      return { accepted: true, accuracy, course: c.name, node, stage: state[node].stage, initialized: 0, due: null }
-    }
-    if (!force && attempts >= 3 && accuracy !== null && accuracy < PASS_SCORE) {
-      return {
-        accepted: false, accuracy, course: c.name, node,
-        reason: `正确率 ${Math.round(accuracy * 100)}% 低于及格线（${PASS_SCORE}），建议明天再来或先复习前置概念。`,
-      }
-    }
-    const sched = await this.sched(courseRoot)
-    const { today } = await this.learningDay()
-    let initialized = 0
-    let due: string | null = null
-    let repCard: FsrsBlock | null = null
-    for (const q of bank.questions) {
-      if (q.archived) continue
-      if (q.fsrs?.reps) {
-        const d = q.fsrs.due
-        if (d && (!due || d < due)) { due = d; repCard = q.fsrs }
-        continue
-      }
-      const { fs } = applyRatingBlock(null, 3, today, sched)
-      await this.bank.updateQuestionEvidence(courseRoot, node, q.id, { fsrs: fs })
-      // 复习日志：合成首复习是调度初始化不是真实作答 → rating_source='synthetic'、
-      // 无「复习前」状态（快照三字段 null），诚实度统计（#61）不算它。
-      await this.store.appendReview({
-        course: c.name, node, qid: q.id,
-        rating: 3, rating_source: 'synthetic', elapsed_days: 0,
-        stability_before: null, difficulty_before: null, r_pred: null,
-      })
-      initialized++
-      if (!due || fs.due < due) { due = fs.due; repCard = fs }
-    }
-    // 满分 bonus：本节点全部题都做过且全对 → 额外 XP（journal 流水，kind='xp_bonus'）。
-    // 预算制下它是过程信号——下面的 xp_settle 对账会把它吸收进完成定价。
-    if (attempts > 0 && correct === attempts) {
-      await this.store.appendJournal({
-        course: c.name, node, rating: null, kind: 'xp_bonus', elapsed_days: 0,
-        xp: XP_PERFECT_BONUS, detail: `满分完成 +${XP_PERFECT_BONUS} XP`,
-      })
-    }
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
-    const fm = asFm(rawFm)
-    if (fm && fm.stage !== 'review') {
-      const next: Fm = { ...fm, stage: 'review' }
-      if (repCard) next.fsrs = repCard
-      await saveNote(path, next as unknown as Record<string, unknown>, body)
-      const { state: stateNow } = await this.loadView(c)
-      await this.content.onStageChange(c.root, graph, stateNow, node, 'review')
-      // XP 预算制完成对账：净 XP 收敛到完成时刻的 N = N₀ × k（est 内容定价 × FSRS 难度校准），
-      // 并就此锁定（重复完成与后续复习作答不再改定价；乱猜/满分 bonus 等过程信号被对账吸收）。
-      const activeQs = bank.questions.filter(q => !q.archived)
-      const budget = Math.round(nominalBudget(graph.estOf[node], activeQs) * difficultyCalibration(activeQs))
-      let earned = 0
-      for (const rec of await this.store.practiceAll()) {
-        if (rec.course === c.name && rec.node === node) earned += rec.xp ?? 0
-      }
-      for (const rec of await this.store.journalTail(c.name, Number.MAX_SAFE_INTEGER)) {
-        if (rec.node === node) earned += rec.xp ?? 0
-      }
-      const delta = budget - earned
-      if (delta !== 0) {
-        await this.store.appendJournal({
-          course: c.name, node, rating: null, kind: 'xp_settle', elapsed_days: 0,
-          xp: delta,
-          detail: `XP 预算对账：N₀=${nominalBudget(graph.estOf[node], activeQs)} × k=${difficultyCalibration(activeQs).toFixed(2)} = ${budget}，过程净 ${earned}`,
-        })
-      }
-    }
-    // 教练回合触发点·节点完成（#144）：完成落定后拉起就绪深度检查，随完成结果带出
-    // （读侧感知，零写副作用；生长批裁决归 #145）。
-    const coach = await this.coachCheckFor(c, today)
-    return { accepted: true, accuracy, course: c.name, node, stage: 'review', initialized, due, coach }
+    return this.sched2.nodeComplete(courseKey, node, force)
   }
-
   // ---- XP 时间账本（Math Academy 语义：1 XP ≈ 1 分钟有效专注） ----
 
-  /** XP 视图：今日 XP / streak / 每日目标 / 每课程 ETA。
-   * ETA 预算制：剩余工作量 = Σ(未完成节点 N₀×k)——est 内容定价 × FSRS 难度校准，
-   * 随作答证据积累自动校准；days = 剩余预算 ÷ 每日目标。 */
   async xpStatus(): Promise<XpStatus> {
-    const { today, cutoff } = await this.learningDay()
-    const [rawPractice, journal, activity, goal] = await Promise.all([
-      this.store.practiceAll(),
-      this.store.journalTail(null, Number.MAX_SAFE_INTEGER),
-      this.store.activityCounts(cutoff),
-      readDailyGoal(this.paths),
-    ])
-    // 勘误冲正按净值入 XP 账（ADR-0031）：streak 口径不变（行为条数，原流水仍在），
-    // XP 值按冲正后的净值替换（作废归零、改判按对题补记）
-    const practice = netPracticeRecs(rawPractice, await this.store.erratumAll())
-    const eta: Array<{ course: string; remaining: number; done: number; per_node: number; days: number }> = []
-    for (const c of await this.enabledCourses()) {
-      const { graph, state, broken } = await this.loadView(c)
-      assertNoBrokenNotes('eta', broken)
-      const counts = { unseen: 0, ready: 0, learning: 0, review: 0, mastered: 0, skipped: 0 } as Record<Stage, number>
-      for (const n of graph.names) counts[effectiveStage(state, n)]++
-      const remaining = counts.unseen + counts.ready + counts.learning
-      const done = counts.review + counts.mastered + counts.skipped
-      let remainingXp = 0
-      for (const n of graph.names) {
-        const st = effectiveStage(state, n)
-        if (st !== 'unseen' && st !== 'ready' && st !== 'learning') continue
-        const bankDoc = await this.bank.load(this.paths.courseRoot(c.root), n)
-        const activeQs = bankDoc.questions.filter(q => !q.archived)
-        remainingXp += nominalBudget(graph.estOf[n], activeQs) * difficultyCalibration(activeQs)
-      }
-      const per = remaining ? Math.max(1, Math.round(remainingXp / remaining)) : 0
-      eta.push({
-        course: c.name, remaining, done, per_node: per,
-        days: remainingXp > 0 ? Math.ceil(remainingXp / Math.max(1, goal)) : 0,
-      })
-    }
-    return { date: today, day_cutoff: fmtCutoff(cutoff), today_xp: sumXp(practice, journal, today, cutoff), goal, streak: streakFrom(activity, today), streak_grace_days: XP_STREAK_GRACE_DAYS, eta }
+    return this.sched2.xpStatus()
   }
 
-  /** 调整每日 XP 目标（state/learnhub.json）。 */
   async setDailyGoal(goal: number): Promise<{ goal: number }> {
-    return { goal: await writeDailyGoal(this.paths, goal) }
+    return this.sched2.setDailyGoal(goal)
   }
 
-  /** 调整日界（state/learnhub.json 的 day_cutoff；ADR-0020）→ 生效 'HH:mm'。 */
   async setDayCutoff(value: string): Promise<{ day_cutoff: string }> {
-    return { day_cutoff: await writeDayCutoff(this.paths, value) }
+    return this.sched2.setDayCutoff(value)
   }
-
   // ---- 记忆健康仪表盘（#61 A2 / ADR-0012）----
 
-  /** 统计页四面板聚合（xpStatus 的姊妹方法，只读）：每日负载预报（扫全部启用课程
-   * 题库 q.fsrs.due，Anki Forecast 语义）、记忆状态分布（Stability/Difficulty/当前
-   * 可回忆度直方图；R 复用 reviewQueue 的 retrievabilityBlock 口径按各课程参数现算）、
-   * 真实保留率 + 预测对照 + 遗忘曲线（#60 review-log：只计 auto+self 的到期复习，
-   * synthetic 与首学推进不计入）。无数据给空态（rate=null / 计数 0），不造假数据。 */
   async memoryHealth(today?: string): Promise<MemoryHealthDoc> {
-    const { today: learningToday, cutoff } = await this.learningDay()
-    today ??= learningToday
-    const dues: string[] = []
-    const samples: Array<{ stability: number | null; difficulty: number | null; r: number }> = []
-    for (const c of await this.enabledCourses()) {
-      const sched = await this.sched(this.paths.courseRoot(c.root))
-      await this.scanCourseBanks(c, async (_node, bank) => {
-        for (const q of bank.questions) {
-          if (q.archived || !q.fsrs?.reps || !q.fsrs.due) continue
-          dues.push(q.fsrs.due)
-          samples.push({
-            stability: q.fsrs.stability,
-            difficulty: q.fsrs.difficulty,
-            r: retrievabilityBlock(sched, q.fsrs, today),
-          })
-        }
-      })
-    }
-    const dueReviews = dueReviewFirstPushes(await this.store.reviewLogAll(), cutoff)
-    return {
-      date: today,
-      forecast: { horizon_days: FORECAST_DAYS, ...forecast(dues, today) },
-      state: { scheduled: samples.length, ...stateHistograms(samples) },
-      retention: trueRetention(dueReviews),
-      calibration: calibrationBins(dueReviews),
-      forgetting: forgettingCurve(dueReviews),
-      // 预测-校准（#66 E4）：学习者 JOL vs 实际——与 FSRS 自预测校准（calibration）正交；
-      // 配对数不足门槛时为 null（不显示）。只展示，不喂 canonical。
-      jol: jolCalibration(await this.store.practiceAll()),
-    }
+    return this.sched2.memoryHealth(today)
   }
-
   // ---- E4 JOL 抽查配置（state/learnhub.json 的 jol 字段；默认开、约 1/3）----
 
   async jolConfig(): Promise<{ enabled: boolean; rate: number }> {
@@ -2542,13 +2361,6 @@ export class LearnhubEngine {
   }
   // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----
 
-  /** 手动触发 FSRS-6 个人参数重训：数据 = 中心级跨课程复习日志的真实推进（排除
-   * synthetic、每卡每天第一条）；门禁 = 真实条数 ≥400（官方口径）且训练后评估
-   * （in-sample logLoss，新参/基线同协议对照）优于现参或默认参数，否则不写并返回
-   * 跳过原因。参数是学习者级一套：正典写沉淀（fsrs_params 事件，出生即写）+ 每个
-   * 启用课程的 fsrs参数.json 作缓存写回（#139 降级：删缓存不丢事实，getScheduler
-   * 落沉淀折叠取回）。impl 接缝供测试注入假优化器。本优化即一次结算：写正典后
-   * 重建学习者档案投影。 */
   async optimizeFsrsParams(
     impl: OptimizerImpl = bindingImpl,
   ): Promise<{
@@ -2557,149 +2369,30 @@ export class LearnhubEngine {
     written?: string[]
     meta?: Record<string, unknown>
   }> {
-    const seqs = trainingSequences(await this.store.reviewLogAll(), await readDayCutoff(this.paths))
-    const count = sequenceReviews(seqs)
-    if (count < OPTIMIZE_MIN_REVIEWS) {
-      return { status: 'skipped', reason: `真实复习日志 ${count} 条，不足 ${OPTIMIZE_MIN_REVIEWS} 条——保持现参不训练（synthetic 已排除，每卡每天只计第一条）` }
-    }
-    const courses = await this.enabledCourses()
-    if (!courses.length) return { status: 'skipped', reason: '没有启用课程，参数无处写回' }
-    // 基线 = 现参（学习者级一套），走 resolveFsrsParams 唯一口径：沉淀正典（事实源）
-    // → 任一启用课程的参数缓存 → 官方默认。对照基线必须与调度此刻实际生效的同一套，
-    // 不因基线读取阻塞训练。
-    const baseline = await resolveFsrsParams(this.paths, courses.map(c => c.root))
-    let baselineParams = baseline.parameters ?? defaultParams()
-    const baselineSource = baseline.source
-    const baselineEval = await impl.evaluate(baselineParams, seqs)
-    const { parameters, splitEval } = await impl.train(seqs)
-    if (parameters.length !== FSRS6_PARAM_COUNT) {
-      return { status: 'skipped', reason: `训练产出 ${parameters.length} 个参数，不是 FSRS-6 的 ${FSRS6_PARAM_COUNT} 个——拒绝写回` }
-    }
-    const newEval = await impl.evaluate(parameters, seqs)
-    const meta = {
-      trained_at: todayStr(),
-      params_version: 'FSRS-6',
-      source: 'review-log',
-      reviews: count,
-      cards: seqs.length,
-      baseline_source: baselineSource,
-      baseline_log_loss: round4(baselineEval.logLoss),
-      log_loss: round4(newEval.logLoss),
-      rmse_bins: round4(newEval.rmseBins),
-      split_log_loss: splitEval ? round4(splitEval.logLoss) : null,
-      split_rmse_bins: splitEval ? round4(splitEval.rmseBins) : null,
-    }
-    if (!(newEval.logLoss < baselineEval.logLoss)) {
-      const baselineLabel = baselineSource === 'default' ? '默认' : '现'
-      return { status: 'skipped', reason: `评估未优于${baselineLabel}参数（logLoss ${round4(newEval.logLoss)} ≥ 基线 ${round4(baselineEval.logLoss)}）——不写回`, meta }
-    }
-    // 正典在沉淀（出生即写），课程文件只作缓存镜像；随后本结算重建学习者档案投影。
-    await appendSedimentEvent(this.paths, { kind: 'fsrs_params', tier: 'immediate', payload: { parameters, meta } })
-    const written: string[] = []
-    for (const c of courses) {
-      await atomicWrite(this.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n')
-      written.push(c.name)
-    }
-    this.schedCache.clear() // 参数唯一写者在此：缓存调度器全部失效，后续推进用新参数
-    await rebuildLearnerProfile(this.paths, foldSediment(await readSedimentCanon(this.paths)))
-    return { status: 'written', written, meta }
+    return this.sched2.optimizeFsrsParams(impl)
   }
-
   // ---- 沉淀层（#139 / ADR-0034：学习模型状态第四存储域）----
 
-  /** 出生即写：追加一条沉淀事件（六类事件骨架的唯一写入口；校验在 sediment 模块）。
-   * 永不自动删除——内容层任何不可逆操作不写这里。 */
   async sedimentAppend(kind: SedimentKind, tier: SedimentTier, payload: Record<string, unknown>, concept?: string): Promise<SedimentEvent> {
-    return appendSedimentEvent(this.paths, { kind, tier, payload, ...(concept !== undefined ? { concept } : {}) })
+    return this.sched2.sedimentAppend(kind, tier, payload, concept)
   }
 
-  /** 读侧单向的唯一消费口径：读正典 → 折叠（两次折叠同输入同输出）。教练折叠
-   * （#144）等后续消费方一律从这里取，禁止再读内容层旧居所。 */
   async sedimentFold(): Promise<SedimentFold> {
-    return foldSediment(await readSedimentCanon(this.paths))
+    return this.sched2.sedimentFold()
   }
 
-  /** 重建学习者档案投影（学习中心/沉淀/学习者档案.md；纯派生，手编必被覆盖）。 */
   async sedimentRebuildProfile(): Promise<string> {
-    return rebuildLearnerProfile(this.paths, await this.sedimentFold())
+    return this.sched2.sedimentRebuildProfile()
   }
 
-  /** 沉淀结算：从行为流水蒸馏校准画像与速度韧性的周档事件（出生即写；窗口 =
-   * 上一完整学习周，与周复盘同口径）→ 重建学习者档案投影。数据不足门槛的 kind
-   * 静默跳过（不造假数据）；复诊结局/图修复史/内容质量结论的生产者由后续票接线
-   * （#146 边实验结算、#145 生长批）。 */
   async sedimentSettle(): Promise<{
     week: string | null
     wrote: SedimentKind[]
     skipped: Array<{ kind: SedimentKind; reason: string }>
     profile: string
   }> {
-    const { today, cutoff } = await this.learningDay()
-    const weekStart = prevWeekStartOf(today)
-    const weekEnd = weekStart ? weekEndOf(weekStart) : null
-    const wrote: SedimentKind[] = []
-    const skipped: Array<{ kind: SedimentKind; reason: string }> = []
-    if (weekStart && weekEnd) {
-      // 同周幂等：该学习周已有同 kind 周档 → 不重写（追加正典不吃重复结算）
-      const fold = await this.sedimentFold()
-      const settled = (kind: SedimentKind): boolean =>
-        (fold.weekly[kind] ?? []).some(g => g.week === weekStart)
-      const inWeek = (ts: string | undefined): boolean => {
-        const d = ts ? dayOfTs(ts, cutoff) : null
-        return d !== null && d >= weekStart && d <= weekEnd
-      }
-      const practice = await this.store.practiceAll()
-      const weekPractice = practice.filter(r => inWeek(r.ts))
-
-      // 校准画像：JOL 预测配对样本（predicted 字段）；无配对静默
-      const paired = weekPractice.filter(r => r.predicted != null && typeof r.correct === 'boolean')
-      if (settled('calibration')) {
-        skipped.push({ kind: 'calibration', reason: `学习周 ${weekStart} 已结算` })
-      } else if (paired.length) {
-        const view = calibrationProfileView(weekPractice)
-        await this.sedimentAppend('calibration', 'weekly', {
-          week: weekStart,
-          pairs: paired.length,
-          view,
-        })
-        wrote.push('calibration')
-      } else {
-        skipped.push({ kind: 'calibration', reason: '上一学习周无 JOL 预测配对样本' })
-      }
-
-      // 速度韧性：作答耗时（est vs 实际的节奏面）+ 到期复习真实保留率
-      const elapsed = weekPractice.map(r => r.elapsed_s).filter((s): s is number => typeof s === 'number' && s > 0)
-      const dueReviews = dueReviewFirstPushes(await this.store.reviewLogAll(), cutoff)
-        .filter(r => inWeek(r.ts))
-      const retention = trueRetention(dueReviews)
-      if (settled('speed_resilience')) {
-        skipped.push({ kind: 'speed_resilience', reason: `学习周 ${weekStart} 已结算` })
-      } else if (elapsed.length || dueReviews.length) {
-        elapsed.sort((a, b) => a - b)
-        const mid = Math.floor(elapsed.length / 2)
-        const median = elapsed.length % 2
-          ? elapsed[mid]!
-          : Math.round(((elapsed[mid - 1]! + elapsed[mid]!) / 2) * 10) / 10
-        await this.sedimentAppend('speed_resilience', 'weekly', {
-          week: weekStart,
-          answers: weekPractice.length,
-          median_elapsed_s: elapsed.length ? median : null,
-          due_reviews: dueReviews.length,
-          true_retention: retention.rate,
-          lapses: retention.fail,
-        })
-        wrote.push('speed_resilience')
-      } else {
-        skipped.push({ kind: 'speed_resilience', reason: '上一学习周无作答耗时与到期复习记录' })
-      }
-    } else {
-      skipped.push({ kind: 'calibration', reason: '学习日不可解析' })
-      skipped.push({ kind: 'speed_resilience', reason: '学习日不可解析' })
-    }
-    const profile = await this.sedimentRebuildProfile()
-    return { week: weekStart, wrote, skipped, profile }
+    return this.sched2.sedimentSettle()
   }
-
   // ---- 生成任务持久化（host 的 genJobs 内存态落盘出口；D14：文件读写收口 engine）----
 
   /** 全量写入生成任务注册表（host 在每次任务状态变更时调用）。 */
