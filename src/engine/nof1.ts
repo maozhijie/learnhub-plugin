@@ -25,6 +25,7 @@ import type { Clock } from './clock.ts'
 import { nodeKeyOf, sourceKeyOf } from './types.ts'
 import { NOF1_VARIABLE_WHITELIST } from './types.ts'
 import type { ExperimentDef, Nof1Variable } from './types.ts'
+import type { JournalRec } from './types.ts'
 import { YAML } from './yaml.ts'
 import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import { runWriteUnit } from './write-unit.ts'
@@ -330,6 +331,8 @@ export interface LabStore {
   takePending(kind: ProposalRec['kind'], pid?: number): Promise<ProposalRec>
   reviewLogAll(): Promise<ReviewRec[]>
   bandRecsAll(): Promise<BandRec[]>
+  /** 写入单元的 journal sink（#176：experimentStop 末尾的 write_unit 条目）。 */
+  appendJournal(rec: JournalRec): Promise<JournalRec>
 }
 
 export interface LabDeps {

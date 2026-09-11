@@ -42,8 +42,8 @@ export async function runWriteUnit(
     /** 受影响课程（journal 的 course 维度；跨课程/无课程缺省 '*'）。 */
     course?: string
     clock: Clock
-    /** journal sink——全部步骤成功后恰调用一次。 */
-    journal: (rec: JournalRec) => Promise<void>
+    /** journal sink——全部步骤成功后恰调用一次（返回值忽略；store.appendJournal 直通可用）。 */
+    journal: (rec: JournalRec) => Promise<unknown>
     steps: readonly WriteStep[]
   },
 ): Promise<WriteUnitReport> {

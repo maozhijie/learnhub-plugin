@@ -873,56 +873,104 @@ export class GraphProposals {
       }
     }
 
-    // 1. 铸名随种子落盘（同事务第一笔：登记表先写，图在后——孤儿条目合法、悬空引用违约）
-    if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
-
-    // 2. data/*.yaml 落图（既有区按块名合并；新区新建文件）
-    const written: string[] = []
-    for (const region of seedRegions) {
-      const path = existingFiles[region.name]
-      if (path) {
-        const current = loadRegionDoc(YAML.parse(await readFile(path, 'utf8')), path)
-        const byName = new Map(current.blocks.map(b => [b.name, b]))
-        for (const nb of region.blocks) {
-          const hit = byName.get(nb.name)
-          if (hit) hit.nodes.push(...nb.nodes)
-          else current.blocks.push(nb)
-        }
-        await store.writeRegionDoc(path, current)
-      } else {
-        const idx = Object.keys(existingFiles).length + written.length
-        await store.writeRegionDoc(`${this.paths.dataDir(root)}/${String(idx).padStart(2, '0')}_${region.name}.yaml`, region)
-      }
-      written.push(region.name)
-    }
-
-    // 3. 终点锚落盘（课程唯一结构承诺物；整份覆盖写——换终点走重新种子提案）
+    // 写入单元（#176）：写序照今天的声明——「铸名 → 图区落盘 → 终点锚 → 罗盘 →
+    // 快照 → 笔记骨架 → journal(graph_seed) → 提案 applied」。铸名孤儿条目合法、
+    // 悬空引用违约（登记表先写、图在后）；块合并无去重，重放靠上方 structureCheck
+    // 重名拒收（门拦，不靠续段）。失败上抛中止，不回滚不续跑，失败不写 journal。
+    let regions: Awaited<ReturnType<GraphStore['load']>> = []
+    let version = 0
+    let anchor: ReturnType<typeof anchorFromSeed>
     const declared = today ?? todayStr(new Date(this.clock!.nowMs()))
-    const anchor = anchorFromSeed(spec, prop.id, declared)
-    await writeAnchor(this.paths.anchorPath(root), anchor)
-
-    // 4. 罗盘常驻（#143 / ADR-0033 透明度装置）：种子 apply 落罗盘——新建 = 脚手架
-    //    （路线/ETA 待初画与周挂载接管）；reseed（换终点）= 批注区字节保留，路线与
-    //    ETA 重置占位（旧路线锚在旧终点上，初画重画后周挂载回填）。零 LLM 依赖，
-    //    apply 永不被透明度装置挡住。
+    const written: string[] = []
+    // 罗盘现状读取（在写序第一笔前读与第四步读等价——本单元内无更早的罗盘写入）
     const compassPath = this.paths.compassPath(root)
     const existingCompass = existsSync(compassPath) ? await readFile(compassPath, 'utf8') : null
     const compassNext = existingCompass
       ? withSectionText(withSectionText(existingCompass, SECTION_ROUTE, ROUTE_PENDING), SECTION_ETA, ETA_PENDING)
       : compassScaffold(course.name)
-    await atomicWrite(compassPath, compassNext)
-
-    const regions = await store.load()
-    const version = (await this.store.latestSnapshotVersion(course.name)) + 1
-    await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions))
-    await this.ensureNotesFor(root, regions)
-    await this.store.appendJournal({
-      course: course.name, node: '*', rating: null, kind: 'graph_seed', elapsed_days: 0,
-      session: String(prop.id),
-      detail: `种子（${spec.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'}）：起点 ${spec.starts.map(s => s.name).join('、')} → 终点 ${spec.endpoint.name}；占位边 ${spec.starts.length} 条`
-        + (spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''),
+    await runWriteUnit('applySeed', {
+      clock: this.clock!,
+      journal: rec => this.store.appendJournal(rec),
+      steps: [
+        {
+          // 同事务第一笔照旧：登记表先写，图在后——铸名幂等已在上方 applyConceptMints 门内
+          name: '铸名落概念登记表',
+          run: async () => {
+            if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
+          },
+        },
+        {
+          // data/*.yaml 落图（既有区按块名合并；新区新建文件）
+          name: '图区落盘',
+          run: async () => {
+            for (const region of seedRegions) {
+              const path = existingFiles[region.name]
+              if (path) {
+                const current = loadRegionDoc(YAML.parse(await readFile(path, 'utf8')), path)
+                const byName = new Map(current.blocks.map(b => [b.name, b]))
+                for (const nb of region.blocks) {
+                  const hit = byName.get(nb.name)
+                  if (hit) hit.nodes.push(...nb.nodes)
+                  else current.blocks.push(nb)
+                }
+                await store.writeRegionDoc(path, current)
+              } else {
+                const idx = Object.keys(existingFiles).length + written.length
+                await store.writeRegionDoc(`${this.paths.dataDir(root)}/${String(idx).padStart(2, '0')}_${region.name}.yaml`, region)
+              }
+              written.push(region.name)
+            }
+          },
+        },
+        {
+          // 课程唯一结构承诺物；整份覆盖写——换终点走重新种子提案
+          name: '终点锚落盘',
+          run: async () => {
+            anchor = anchorFromSeed(spec, prop.id, declared)
+            await writeAnchor(this.paths.anchorPath(root), anchor)
+          },
+        },
+        {
+          // 罗盘常驻（#143 / ADR-0033 透明度装置）：新建 = 脚手架（路线/ETA 待初画与
+          // 周挂载接管）；reseed（换终点）= 批注区字节保留，路线与 ETA 重置占位。
+          // 零 LLM 依赖，apply 永不被透明度装置挡住。
+          name: '罗盘常驻',
+          run: async () => {
+            await atomicWrite(compassPath, compassNext)
+          },
+        },
+        {
+          name: '快照',
+          run: async () => {
+            regions = await store.load()
+            version = (await this.store.latestSnapshotVersion(course.name)) + 1
+            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions))
+          },
+        },
+        {
+          // 逐节点 existsSync 跳过（步骤内幂等：已有笔记的节点不覆盖）
+          name: '笔记骨架补齐',
+          run: async () => { await this.ensureNotesFor(root, regions) },
+        },
+        {
+          name: 'journal graph_seed',
+          run: async () => {
+            await this.store.appendJournal({
+              course: course.name, node: '*', rating: null, kind: 'graph_seed', elapsed_days: 0,
+              session: String(prop.id),
+              detail: `种子（${spec.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'}）：起点 ${spec.starts.map(s => s.name).join('、')} → 终点 ${spec.endpoint.name}；占位边 ${spec.starts.length} 条`
+                + (spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''),
+            })
+          },
+        },
+        {
+          name: '提案 applied',
+          run: async () => {
+            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `终点锚落盘；快照 v${version}` })
+          },
+        },
+      ],
     })
-    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `终点锚落盘；快照 v${version}` })
     const merged = new Graph(regions)
     const feed = await this.priorFeed(merged)
     // 种子图豁免：图仍 = 种子节点全集时健康分不设阈值（findings 不带 <80 提示）
