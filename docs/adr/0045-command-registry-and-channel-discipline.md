@@ -43,6 +43,8 @@ interface CommandSpec {
 边界：
 
 - **注册表的实现施工不在本窗**（#165 已裁定另开票）；本 ADR 只定形状与纪律。
+- **投递侧前置已落地（#168，2026-09-11）**：路由从 990 行 if 链变成数据表（`host/route-table.ts` 表项形状 + `host/routes.ts`／`routes-post.ts` 两段表 + `host/api.ts` 查表分发），并**已按本 ADR 的表项形状预留字段位**（`id·summary·args·engine·output·channels`，只留位不消费）。参数守卫的语义已收进一处（`host/params.ts`：`need` 迁入 + `required*`/`opt*`/`pick`），21 处内联 `missing required field:` 与 51 处手写 `typeof body.x` 归零——**但今天可选参数的实现是「非法即当省略」**（比本 ADR 的「省略或合法」更宽松）；#169 把守卫改成注册表声明驱动时若收紧成 fail loud，须在票面登记这条行为变更。行为逐字不变的证据是 464 条探针快照（`tests/host-routes.test.ts`），不是通读代码。
+- **`api.ts` 的物理位置在 #168 再分了一层**（`route-table.ts`／`routes.ts`／`routes-post.ts`），理由是 ADR-0047 的 G5 棘轮不许单文件继续长而 #169 还要往表项里填字段；本 ADR 的表项**形状**不变，只是表的**存放**分了段。
 - **「门面转发层消失或自动生成」**（消费方直连子系统）是终极形态，牵动 host/UI/测试全部调用点，**另开票**，本 ADR 不裁。
 - `ui/` 的 151 处类型错与它自己的 tsconfig／vite 构建**不在本 ADR 范围**。
 - 不引 zod／ajv／代码生成器／运行时输出校验；不新增任何依赖。

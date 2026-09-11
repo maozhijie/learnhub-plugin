@@ -1,0 +1,961 @@
+[
+ {
+  "method": "GET",
+  "route": "/status",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/courses",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/lesson",
+  "keys": [
+   "node",
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/recommend",
+  "keys": [
+   "limit"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/queue",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/courses/tree",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/questions",
+  "keys": [
+   "node",
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/file",
+  "keys": [
+   "path"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/vendor/",
+  "prefix": true,
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/interactive",
+  "keys": [
+   "path"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/note",
+  "keys": [
+   "path"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/graph",
+  "keys": [
+   "course",
+   "elements"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/proposals",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/doctor",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/questions-all",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/review-queue",
+  "keys": [
+   "course",
+   "node",
+   "band"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/xp",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/probation",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/memory",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/jol",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/calibration/profile",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/calibration/hints",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/coach",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/sleep",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/thermostat",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/experiments",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/generate/status",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/prompts",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/discuss-pack",
+  "keys": [
+   "node",
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/explain-pack",
+  "keys": [
+   "node",
+   "qid",
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/explain-back-pack",
+  "keys": [
+   "node",
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/note-sources",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/anki/status",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/difficulty-advice",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/agent-guide",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/question-audit",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/bank-cleanup",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/learner-queue",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/error-queue",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/skills",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/habits",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/habit",
+  "keys": [
+   "habit"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/projects",
+  "keys": []
+ },
+ {
+  "method": "GET",
+  "route": "/project/cross",
+  "keys": [
+   "id"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/project/log",
+  "keys": [
+   "id"
+  ]
+ },
+ {
+  "method": "GET",
+  "route": "/kata",
+  "keys": [
+   "week_start"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/habits/create",
+  "keys": [
+   "name",
+   "cue",
+   "action"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/habits/repeat",
+  "keys": [
+   "habit",
+   "auto_rating",
+   "note"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/habits/archive",
+  "keys": [
+   "habit",
+   "archived"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/skills/archive",
+  "keys": [
+   "skill",
+   "archived"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/skills/maintenance",
+  "keys": [
+   "skill",
+   "days"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/rebuild",
+  "keys": []
+ },
+ {
+  "method": "POST",
+  "route": "/node/skip",
+  "keys": [
+   "course",
+   "node",
+   "skipped"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/node/pin",
+  "keys": [
+   "course",
+   "node",
+   "pinned"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/node/complete",
+  "keys": [
+   "course",
+   "node",
+   "force"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/feedback",
+  "keys": [
+   "path"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/proposals/apply",
+  "keys": [
+   "kind",
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/proposals/reject",
+  "keys": [
+   "id",
+   "note"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/thermostat/apply",
+  "keys": [
+   "suggestion"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/experiments/propose",
+  "keys": [
+   "template",
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/experiments/apply",
+  "keys": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/experiments/stop",
+  "keys": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/sandbox/run",
+  "keys": [
+   "minutes_per_day",
+   "weeks",
+   "course",
+   "nodes"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/generate",
+  "keys": [
+   "course",
+   "node",
+   "style"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/generate/resume",
+  "keys": []
+ },
+ {
+  "method": "POST",
+  "route": "/generate/section",
+  "keys": [
+   "course",
+   "node",
+   "section"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/course/reset",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/interactive/settle",
+  "keys": [
+   "course",
+   "node",
+   "section",
+   "score",
+   "detail"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/tutor",
+  "keys": [
+   "course",
+   "node",
+   "messages"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/explain-back",
+  "keys": [
+   "course",
+   "node",
+   "messages"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/explain-feedback",
+  "keys": [
+   "course",
+   "node",
+   "transcript"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/explain-archive",
+  "keys": [
+   "course",
+   "node",
+   "content",
+   "kind",
+   "prompt",
+   "section"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/note-source/register",
+  "keys": [
+   "path"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/note-source/unregister",
+  "keys": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/note-source/exclude",
+  "keys": [
+   "path"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/note-source/unexclude",
+  "keys": [
+   "path"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/note-source/relink",
+  "keys": [
+   "id",
+   "path"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/note-source/generate",
+  "keys": [
+   "id",
+   "count"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/anki/export",
+  "keys": []
+ },
+ {
+  "method": "POST",
+  "route": "/anki/import",
+  "keys": []
+ },
+ {
+  "method": "POST",
+  "route": "/optimize-params",
+  "keys": []
+ },
+ {
+  "method": "POST",
+  "route": "/learner-rate",
+  "keys": [
+   "course",
+   "node",
+   "card",
+   "rating"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/learner-forget",
+  "keys": [
+   "course",
+   "node",
+   "card"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/error-answer",
+  "keys": [
+   "course",
+   "node",
+   "card",
+   "choice"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/error-generate",
+  "keys": [
+   "course",
+   "node",
+   "max"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/error-archive",
+  "keys": [
+   "course",
+   "node",
+   "card",
+   "archived"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/learner-add",
+  "keys": [
+   "course",
+   "node",
+   "content",
+   "kind",
+   "prompt",
+   "section"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/learner-archive",
+  "keys": [
+   "course",
+   "node",
+   "card",
+   "archived"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-generate",
+  "keys": [
+   "course",
+   "node",
+   "section",
+   "instruction",
+   "count"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/review",
+  "keys": [
+   "course",
+   "node"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-save",
+  "keys": [
+   "course",
+   "node",
+   "yaml"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-answer",
+  "keys": [
+   "course",
+   "node",
+   "qid",
+   "answer",
+   "elapsed_s",
+   "defer_schedule",
+   "predicted"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-rate",
+  "keys": [
+   "course",
+   "node",
+   "qid",
+   "rating"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-forget",
+  "keys": [
+   "course",
+   "node",
+   "qid",
+   "elapsed_s",
+   "predicted"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-dispute/review",
+  "keys": [
+   "course",
+   "node",
+   "qid"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-dispute/apply",
+  "keys": [
+   "course",
+   "node",
+   "qid",
+   "resolution",
+   "revision",
+   "target_ts",
+   "reason"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/band-session",
+  "keys": [
+   "course",
+   "node",
+   "band",
+   "answered",
+   "correct"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-add",
+  "keys": [
+   "course",
+   "node",
+   "question"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/question-archive",
+  "keys": [
+   "course",
+   "node",
+   "qid",
+   "archived",
+   "reason"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/difficulty-advice-dismiss",
+  "keys": [
+   "course",
+   "node",
+   "qid",
+   "undo",
+   "all"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/bank-cleanup/apply",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/course/delete",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/generate/cancel",
+  "keys": [
+   "course",
+   "node"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/coach/growth",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/coach/compass",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/graph/backfill",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/seed/propose",
+  "keys": [
+   "course",
+   "goal",
+   "worksheet",
+   "mode",
+   "goalType",
+   "useVaultPrior"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/probation/settle",
+  "keys": []
+ },
+ {
+  "method": "POST",
+  "route": "/project/create",
+  "keys": [
+   "name",
+   "goal",
+   "tier"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/project/lifecycle",
+  "keys": [
+   "id",
+   "lifecycle"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/project/tier",
+  "keys": [
+   "id",
+   "tier"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/project/plan/generate",
+  "keys": [
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/project/milestone/generate",
+  "keys": [
+   "id",
+   "milestone"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/project/decompile",
+  "keys": [
+   "id",
+   "goal",
+   "course",
+   "notes"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/project/exec",
+  "keys": [
+   "id",
+   "source",
+   "evidence",
+   "rating",
+   "nodes",
+   "note"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/project/log",
+  "keys": [
+   "id",
+   "text"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/kata/save",
+  "keys": [
+   "week_start",
+   "answers"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/kata/convert/experiment",
+  "keys": [
+   "week_start",
+   "template",
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/kata/convert/intention",
+  "keys": [
+   "week_start",
+   "course",
+   "node",
+   "cue",
+   "action"
+  ]
+ },
+ {
+  "method": "PUT",
+  "route": "/daily-goal",
+  "keys": [
+   "goal"
+  ]
+ },
+ {
+  "method": "PUT",
+  "route": "/day-cutoff",
+  "keys": [
+   "value"
+  ]
+ },
+ {
+  "method": "PUT",
+  "route": "/jol",
+  "keys": [
+   "enabled",
+   "rate"
+  ]
+ },
+ {
+  "method": "PUT",
+  "route": "/calibration/hints",
+  "keys": [
+   "hints_enabled"
+  ]
+ },
+ {
+  "method": "PUT",
+  "route": "/sleep",
+  "keys": [
+   "enabled"
+  ]
+ },
+ {
+  "method": "PUT",
+  "route": "/question-update",
+  "keys": [
+   "course",
+   "node",
+   "qid",
+   "patch"
+  ]
+ }
+]

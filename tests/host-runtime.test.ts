@@ -12,7 +12,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -361,10 +361,13 @@ test('工具面快照：111 个工具的名称/描述/schema 与重构前基线�
 test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、路由独有 49（ADR-0045 迁移回归网）', () => {
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
-  // 工具面 = tools.ts；路由面 = 其余宿主技术层（与基线口径一致：工具注册区 vs 工具区外全部）
+  // 工具面 = tools.ts；路由面 = 其余宿主技术层（与基线口径一致：工具注册区 vs 工具区外全部）。
+  // **动态发现**（#168：路由表拆成 route-table/routes/routes-post 后，硬编码清单会让
+  // 新文件静默逃出对账网——正是 R3「收集器收空」的同族缺陷）
+  const hostFiles = readdirSync(join(ROOT, 'src', 'host')).filter(f => f.endsWith('.ts') && f !== 'tools.ts').sort()
+  assert.ok(hostFiles.length >= 8, `路由面受控文件只剩 ${hostFiles.length} 个（扫描面塌了）`)
   const toolFace = faceOf(read('src/host/tools.ts'))
-  const routeFace = faceOf(['src/host/runtime.ts', 'src/host/jobs.ts', 'src/host/api.ts', 'src/host/static.ts', 'src/index.ts']
-    .map(read).join('\n'))
+  const routeFace = faceOf([...hostFiles.map(f => `src/host/${f}`), 'src/index.ts'].map(read).join('\n'))
   const base = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-face-baseline.json'), 'utf8')) as {
     shared: string[]; toolOnly: string[]; routeOnly: string[]
   }

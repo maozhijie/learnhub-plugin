@@ -39,13 +39,6 @@ export async function readJson(req: IncomingMessage): Promise<Record<string, unk
   return text ? (JSON.parse(text) as Record<string, unknown>) : {}
 }
 
-/** 字符串参数取值；缺失即抛 400 语义错误。 */
-export function need(body: Record<string, unknown>, key: string): string {
-  const v = body[key]
-  if (typeof v !== 'string' || !v.trim()) throw new Error(`missing required field: ${key}`)
-  return v.trim()
-}
-
 /** 交互件伺服时注入 vendored KaTeX 自动渲染（检测到公式定界符且未自带 katex 才注入；
  * 存量交互件免重生成即获得公式渲染）。定界符与正文一致：$…$/$$…$$。 */
 export function injectKatexIfMathed(html: string): string {

@@ -172,12 +172,16 @@
     "src/engine/xp.ts": 182,
     "src/engine/yaml.ts": 23,
     "src/generation-jobs.ts": 116,
-    "src/host/api.ts": 999,
-    "src/host/http.ts": 61,
+    "src/host/api.ts": 60,
+    "src/host/http.ts": 54,
     "src/host/jobs.ts": 784,
     "src/host/llm.ts": 129,
+    "src/host/params.ts": 152,
+    "src/host/route-table.ts": 74,
+    "src/host/routes-post.ts": 585,
+    "src/host/routes.ts": 263,
     "src/host/runtime.ts": 176,
-    "src/host/static.ts": 123,
+    "src/host/static.ts": 122,
     "src/host/tools.ts": 1040,
     "src/index.ts": 90,
     "src/tool-contracts.ts": 54
@@ -191,8 +195,8 @@
     "src/engine/note-source.ts": 2,
     "src/engine/proposals.ts": 1,
     "src/engine/question-bank.ts": 4,
-    "src/host/api.ts": 7,
     "src/host/jobs.ts": 3,
+    "src/host/routes-post.ts": 2,
     "src/host/tools.ts": 2
   }
 }

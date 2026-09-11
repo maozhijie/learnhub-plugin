@@ -82,6 +82,14 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 - **工具面快照**：`tests/fixtures/host-tools-snapshot.json` 由重构前的 `src/index.ts` mock-apply 捕获（111 个工具的 name/description/parameters），断言按域分组重排后逐工具逐字不变。
 - **「路由 ↔ 工具」对账基线**：`tests/fixtures/host-face-baseline.json`（口径＝工具注册区 vs 工具区外全部，ADR-0045 实测）：共享引擎入口 **84**、工具独有 **26**、路由独有 **49**——命令注册表迁移的回归网。
 
+路由表与参数守卫（2026-09-11 新增，#168 / ADR-0045／ADR-0048；`tests/host-routes.test.ts` + `tests/helpers/routes-probe.ts`）：
+
+- **路由从 if 链变成数据表**：`host/routes.ts`（GET 46 + PUT 6）／`host/routes-post.ts`（POST 子表 73）／`host/route-table.ts`（表项形状 `{method, route, handler}` + ADR-0045 注册表字段位 `id·summary·args·engine·output·channels`，本票只留位）／`host/api.ts`（装配 + 一次查表分发）。`handleApi` 保留两处**逐字不动**的今天语义：POST/PUT **先读体再查表**（非法 JSON 的未知路由今天也是 500）、404 文案带原始方法与剥前缀后的路由名。
+- **参数守卫收成一处的语义**：`host/params.ts` 是唯一出处（`need` 自 `http.ts` 迁来）——必填 `need`／`needQuery`／`requireString`／`requireBoolean`／`requireNumber`／`requireObject`／`requireOneOf`，可选 `opt*`（查询串 `optQuery`）与 `pick(key, value)`（＝今天 `...(cond ? {k:v} : {})`）。**21 处内联 `missing required field:` 与 51 处手写 `typeof body.x` 归零**，错误消息与状态码逐字不变。今天可选参数的语义是「非法即当省略」（比 ADR-0045 的「省略或合法」更宽松），本票原样保留；#169 若收紧成 fail loud 须在票面登记。
+- **对账清单**：`tests/fixtures/host-routes-baseline.json` ＝重构前实测的 125 条（GET 46 / POST 73 / PUT 6；120 条不同精确路径 + 1 条前缀路由），逐条断言表项无增删改名改方法，且每条都被探针覆盖。
+- **行为快照**：`tests/fixtures/host-routes-snapshot.json` ＝**464 条探针**（每条路由 × 空参／全参／逐个缺参 + 分发纪律样本）在重构前实测的 `{status, res, 引擎调用序列}`，重构后逐字重放比对——「120 条路由的方法／路径／响应形状逐字不变」与「守卫错误消息逐字不变」的证据。探针驱动见 `tests/helpers/routes-probe.ts`：每次探针一个全新 runtime、引擎方法影子化为录制替身、`res.end` 即冻结（响应后的 fire-and-forget 不入快照；vault 路径与 ISO 时刻换占位符，快照不钉机器与时钟）。
+- 守卫收口另有两道文本门：`src/host/` 下 `typeof body.` 与守卫消息（`params.ts` 之外）清零；`sendJson` 状态码分布 200×122／404×4／500×1（404 的另三处来自 `static.ts` 的伺服未命中）。
+
 架构门（2026-09-11 新增，ADR-0042 / #152 刀 1；`tests/import-rules.test.ts`）：
 
 - 分层依赖规则执法，随 `npm test` 全量必跑：R1 host 的 engine 导入只走门面、R2 engine 禁引宿主、R3 engine 禁引 `@deepseek-ai/*`、R4 views 纯类型、R5 io.ts 零相对导入叶子、R6 门面唯一汇点（engine 子模块不回引 engine/index.ts）、R7 src 相对 import 全图零环（含 type-only 与动态导入边）。R3 带自检：收集器须能看见裸包/作用域包说明符（曾出现只收相对说明符致 R3 恒过的实测缺陷，自检锁死）。行级收集相对导入（静态/type/侧效/export-from/动态）+ DFS；说明符解析带 .ts 直用、否则补 .ts、否则补 /index.ts。刀 1 随门落地两处解环先例：receipts 用本地 ReceiptStore 结构化窄面（receipts 不 import store）、周折叠函数族归位 dates.ts（sediment 改引 dates，kata 原路径 re-export 保 S45 接缝）。
@@ -95,12 +103,12 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 | 门 | 内容 | 档位 | 阈值来源（实测） |
 |---|---|---|---|
 | G1 未定义标识符 | 剥注释与字符串后「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`） | 硬门 0 | 0（`shuffled` 修复后）。**已由 G7 的 TS2304 接管**（同一形态的编译期权威判据），本门留作零依赖兜底 |
-| G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在、入口文件非空；G2c＝宿主除常量外零模块级 `let`（`scripts/scan-host-state.mjs`，受控面**动态发现**＝index.ts + host/**/*.ts；ADR-0048） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径。G2c 受控面 8 个文件、模块级 let 0 |
+| G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在（#168 起 `need` 归 `host/params.ts`、路由表归 `host/route-table.ts`／`routes.ts`／`routes-post.ts`）、入口文件非空；G2c＝宿主除常量外零模块级 `let`（`scripts/scan-host-state.mjs`，受控面**动态发现**＝index.ts + host/**/*.ts；ADR-0048） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径。G2c 受控面 12 个文件、模块级 let 0 |
 | G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。**四个方向全为硬门 0**（dead／missing／unwired／surplus） | 硬门 0 | 声明 **167** ／ 实用 167 ／ 接线 **167** ／ 多余 **0**（#171 清掉 30 条多余接线——10 phantom + 20 未使用——后由棘轮转硬门） |
 | G4 窄面宽度（三槽位） | `handles`／`facade`／`fns` 逐子系统卡基线；`handles ≤12／facade ≤20／fns ≤10` 是**非活动目标** | 棘轮 | 实测最大 handles **9**／facade **20**／fns **1**（对预算已绿；facade 已触上限，无余量） |
-| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件超 600；宿主 `index.ts` 3029 → **91**（#167 拆成薄入口后回到目标内），但拆出的 `host/api.ts` **998**／`host/tools.ts` **1044** 接过超限项，故活动门＝逐文件基线（#167 后 **83** 个受控文件） |
+| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件超 600；宿主 `index.ts` 3029 → **91**（#167 薄入口），拆出的 `host/api.ts` 998 于 **#168 数据化归位**：`api.ts` **60**（分发）+ `routes-post.ts` **585**／`routes.ts` **263**／`params.ts` **152**／`route-table.ts` **74**（宿主单文件全部回到 900 目标内；超限项只剩 `host/tools.ts` **1040**）。活动门＝逐文件基线（#168 后 **87** 个受控文件） |
 | G6 顶层不变量 | 除教练层 `proposals.ts` 外无模块调用图写原语（`GraphStore.writeRegionDoc`，`data/*.yaml` 的唯一写路径） | 硬门 | 绿（唯一调用者就是 `proposals.ts`） |
-| G7 类型门 | `tsc --noEmit`（根 `tsconfig.json`；`module`／`moduleResolution` = `nodenext`、`noEmit`、`strict: false` 起步）逐文件错误数卡基线 | 棘轮 | 扫描面 `src/`：**80 处 / 9 个涉错文件**。实测链：main **196 处 / 17 个涉错文件**（未清理）→ #171 清 30 条接线后 **181** → #170 清掉 TS2304 40／TS2339 26／TS2305 20／TS2300 6／TS1361 5／TS2835 6／TS2552+TS2484+TS2440 3（共 106 处真缺陷；修准窄面类型后新暴露 5 处净增）→ **80**。受控面 88 个文件 |
+| G7 类型门 | `tsc --noEmit`（根 `tsconfig.json`；`module`／`moduleResolution` = `nodenext`、`noEmit`、`strict: false` 起步）逐文件错误数卡基线 | 棘轮 | 扫描面 `src/`：**75 处 / 11 个涉错文件**（#168 起：路由数据化顺带修好 `api.ts` 的 7 处 `unknown` 传参——`requireBoolean`/`requireString` 给回类型——并随守卫搬移到 `routes-post.ts` 2 处）。实测链：main **196 处 / 17 个涉错文件**（未清理）→ #171 清 30 条接线后 **181** → #170 清掉 TS2304 40／TS2339 26／TS2305 20／TS2300 6／TS1361 5／TS2835 6／TS2552+TS2484+TS2440 3（共 106 处真缺陷；修准窄面类型后新暴露 5 处净增）→ **80** → #168 **75** |
 
 门的三处实现事实（照着改时别踩）：
 

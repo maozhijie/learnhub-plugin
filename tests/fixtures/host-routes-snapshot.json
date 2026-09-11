@@ -1,0 +1,6479 @@
+[
+ {
+  "id": "GET /status · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/status",
+  "status": 200,
+  "res": {
+   "llm": {
+    "provider": "deepseek-official",
+    "model": "deepseek-v4-flash",
+    "fast_effort": "off",
+    "deep_effort": "low"
+   }
+  },
+  "calls": [
+   "coachCheckpoint(\"session_start\",undefined)",
+   "statusJson()"
+  ]
+ },
+ {
+  "id": "GET /courses · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/courses",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "enabledCourses()"
+  ]
+ },
+ {
+  "id": "GET /lesson · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/lesson",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /lesson · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/lesson?node=1&course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "lesson(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "GET /lesson · 缺 node",
+  "method": "GET",
+  "url": "/learnhub/api/lesson?course=1",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /lesson · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/lesson?node=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "lesson(undefined,\"1\")"
+  ]
+ },
+ {
+  "id": "GET /recommend · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/recommend",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "recommend(5)"
+  ]
+ },
+ {
+  "id": "GET /recommend · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/recommend?limit=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "recommend(1)"
+  ]
+ },
+ {
+  "id": "GET /recommend · 缺 limit",
+  "method": "GET",
+  "url": "/learnhub/api/recommend",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "recommend(5)"
+  ]
+ },
+ {
+  "id": "GET /queue · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/queue",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "queueItemsAll()"
+  ]
+ },
+ {
+  "id": "GET /courses/tree · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/courses/tree",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "coursesTree(undefined)"
+  ]
+ },
+ {
+  "id": "GET /courses/tree · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/courses/tree?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "coursesTree(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /courses/tree · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/courses/tree",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "coursesTree(undefined)"
+  ]
+ },
+ {
+  "id": "GET /questions · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/questions",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /questions · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/questions?node=1&course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questions(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "GET /questions · 缺 node",
+  "method": "GET",
+  "url": "/learnhub/api/questions?course=1",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /questions · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/questions?node=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questions(undefined,\"1\")"
+  ]
+ },
+ {
+  "id": "GET /file · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/file",
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /file · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/file?path=1",
+  "status": 500,
+  "res": {
+   "error": "unsupported file type: 1"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /file · 缺 path",
+  "method": "GET",
+  "url": "/learnhub/api/file",
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /vendor/ · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/vendor/1",
+  "status": 500,
+  "res": {
+   "error": "unsupported vendor file type: 1"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /interactive · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/interactive",
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /interactive · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/interactive?path=1",
+  "status": 500,
+  "res": {
+   "error": "interactive 不在任何启用课程的根内: 1"
+  },
+  "calls": [
+   "enabledCourses()"
+  ]
+ },
+ {
+  "id": "GET /interactive · 缺 path",
+  "method": "GET",
+  "url": "/learnhub/api/interactive",
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /note · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/note",
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /note · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/note?path=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "resolveNote(\"«vault»\",\"1\",\"学习中心\")"
+  ]
+ },
+ {
+  "id": "GET /note · 缺 path",
+  "method": "GET",
+  "url": "/learnhub/api/note",
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /graph · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/graph",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graphAnalyze(undefined,false)"
+  ]
+ },
+ {
+  "id": "GET /graph · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/graph?course=1&elements=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graphAnalyze(\"1\",true)"
+  ]
+ },
+ {
+  "id": "GET /graph · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/graph?elements=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graphAnalyze(undefined,true)"
+  ]
+ },
+ {
+  "id": "GET /graph · 缺 elements",
+  "method": "GET",
+  "url": "/learnhub/api/graph?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graphAnalyze(\"1\",false)"
+  ]
+ },
+ {
+  "id": "GET /proposals · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/proposals",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graphProposals()"
+  ]
+ },
+ {
+  "id": "GET /doctor · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/doctor",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "doctor()"
+  ]
+ },
+ {
+  "id": "GET /questions-all · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/questions-all",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionsAll(undefined)"
+  ]
+ },
+ {
+  "id": "GET /questions-all · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/questions-all?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionsAll(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /questions-all · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/questions-all",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionsAll(undefined)"
+  ]
+ },
+ {
+  "id": "GET /review-queue · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/review-queue",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "reviewQueue(undefined,undefined,undefined,undefined)"
+  ]
+ },
+ {
+  "id": "GET /review-queue · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/review-queue?course=1&node=1&band=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "reviewQueue(\"1\",\"1\",undefined,undefined)"
+  ]
+ },
+ {
+  "id": "GET /review-queue · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/review-queue?node=1&band=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "reviewQueue(undefined,\"1\",undefined,undefined)"
+  ]
+ },
+ {
+  "id": "GET /review-queue · 缺 node",
+  "method": "GET",
+  "url": "/learnhub/api/review-queue?course=1&band=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "reviewQueue(\"1\",undefined,undefined,undefined)"
+  ]
+ },
+ {
+  "id": "GET /review-queue · 缺 band",
+  "method": "GET",
+  "url": "/learnhub/api/review-queue?course=1&node=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "reviewQueue(\"1\",\"1\",undefined,undefined)"
+  ]
+ },
+ {
+  "id": "GET /xp · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/xp",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "xpStatus()"
+  ]
+ },
+ {
+  "id": "GET /probation · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/probation",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "probationStatus(undefined)"
+  ]
+ },
+ {
+  "id": "GET /probation · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/probation?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "probationStatus(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /probation · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/probation",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "probationStatus(undefined)"
+  ]
+ },
+ {
+  "id": "GET /memory · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/memory",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "memoryHealth()"
+  ]
+ },
+ {
+  "id": "GET /jol · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/jol",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "jolConfig()"
+  ]
+ },
+ {
+  "id": "GET /calibration/profile · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/calibration/profile",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "calibrationProfile()"
+  ]
+ },
+ {
+  "id": "GET /calibration/hints · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/calibration/hints",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "calibrationHintsConfig()"
+  ]
+ },
+ {
+  "id": "GET /coach · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/coach",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "coachAdvice()"
+  ]
+ },
+ {
+  "id": "GET /sleep · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/sleep",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "sleepAdviceConfig()"
+  ]
+ },
+ {
+  "id": "GET /thermostat · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/thermostat",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "thermostatView()"
+  ]
+ },
+ {
+  "id": "GET /experiments · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/experiments",
+  "status": 200,
+  "res": {
+   "templates": [],
+   "experiments": [],
+   "report": null
+  },
+  "calls": [
+   "experimentList()",
+   "experimentTemplates()"
+  ]
+ },
+ {
+  "id": "GET /generate/status · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/generate/status",
+  "status": 200,
+  "res": {
+   "jobs": [],
+   "queuePaused": false,
+   "queuedCount": 0
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /prompts · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/prompts",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "promptKinds()"
+  ]
+ },
+ {
+  "id": "GET /discuss-pack · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/discuss-pack",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /discuss-pack · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/discuss-pack?node=1&course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "discussionPack(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "GET /discuss-pack · 缺 node",
+  "method": "GET",
+  "url": "/learnhub/api/discuss-pack?course=1",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /discuss-pack · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/discuss-pack?node=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "discussionPack(undefined,\"1\")"
+  ]
+ },
+ {
+  "id": "GET /explain-pack · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/explain-pack",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node/qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /explain-pack · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/explain-pack?node=1&qid=1&course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorExplainPack(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "GET /explain-pack · 缺 node",
+  "method": "GET",
+  "url": "/learnhub/api/explain-pack?qid=1&course=1",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node/qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /explain-pack · 缺 qid",
+  "method": "GET",
+  "url": "/learnhub/api/explain-pack?node=1&course=1",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node/qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /explain-pack · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/explain-pack?node=1&qid=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorExplainPack(undefined,\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "GET /explain-back-pack · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/explain-back-pack",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /explain-back-pack · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/explain-back-pack?node=1&course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainBackPack(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "GET /explain-back-pack · 缺 node",
+  "method": "GET",
+  "url": "/learnhub/api/explain-back-pack?course=1",
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /explain-back-pack · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/explain-back-pack?node=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainBackPack(undefined,\"1\")"
+  ]
+ },
+ {
+  "id": "GET /note-sources · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/note-sources",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "noteSourceList()"
+  ]
+ },
+ {
+  "id": "GET /anki/status · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/anki/status",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "ankiStatus({\"endpoint\":\"http://127.0.0.1:8765\"})"
+  ]
+ },
+ {
+  "id": "GET /difficulty-advice · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/difficulty-advice",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "difficultyAdvice(undefined)"
+  ]
+ },
+ {
+  "id": "GET /difficulty-advice · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/difficulty-advice?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "difficultyAdvice(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /difficulty-advice · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/difficulty-advice",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "difficultyAdvice(undefined)"
+  ]
+ },
+ {
+  "id": "GET /agent-guide · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/agent-guide",
+  "status": 200,
+  "res": [
+   {
+    "tool": "learnhub_pin_today",
+    "page": "learn",
+    "text": "「今天学它」：把节点置顶为今日推荐榜首（可挂执行意图），只影响今天、次日自动失效。",
+    "prompt": "用 learnhub_pin_today 把「<节点>」设为今天的学习目标"
+   },
+   {
+    "tool": "learnhub_unpin",
+    "page": "learn",
+    "text": "取消今天的「今天学它」置顶。",
+    "prompt": "取消「<节点>」的今日置顶"
+   },
+   {
+    "tool": "learnhub_goal_intention",
+    "page": "learn",
+    "text": "在今日 pin 上写/清「在【线索】之后就【行动】」的执行意图（随 pin 当日过期）。",
+    "prompt": "给今天「<节点>」的 pin 挂一个执行意图：晚饭后就在书桌前学完它"
+   },
+   {
+    "tool": "learnhub_note_source_exclude",
+    "page": "learn",
+    "text": "把个人笔记文件/目录加入排除清单（未来不再被自动注册为复习源）。",
+    "prompt": "把「<笔记路径>」加入笔记源排除清单"
+   },
+   {
+    "tool": "learnhub_note_source_unexclude",
+    "page": "learn",
+    "text": "从笔记源排除清单移除（恢复可注册资格）。",
+    "prompt": "把「<笔记路径>」移出笔记源排除清单"
+   },
+   {
+    "tool": "learnhub_graph_node",
+    "page": "graph",
+    "text": "单节点深查：前置/后继/enc 边/生成状态/健康问题一次看全。",
+    "prompt": "用 learnhub_graph_node 深查「<节点>」"
+   },
+   {
+    "tool": "learnhub_graph_browse",
+    "page": "graph",
+    "text": "按区/块浏览课程图结构。",
+    "prompt": "按区块浏览「<课程>」的图结构"
+   },
+   {
+    "tool": "learnhub_graph_path",
+    "page": "graph",
+    "text": "查询两节点之间的先修链（学 B 之前要过哪些节点）。",
+    "prompt": "查一下从「<节点A>」到「<节点B>」的先修链"
+   },
+   {
+    "tool": "learnhub_question_audit",
+    "page": "bank",
+    "text": "题库契约只读体检：表达式/数字填空、记法违规、转义损坏、超长解析——只盘点不修复。",
+    "prompt": "跑一次题库体检，把违规存量题列给我"
+   },
+   {
+    "tool": "learnhub_question_get",
+    "page": "bank",
+    "text": "读单题全文（含答案与解析）——改题/审题前先看原题。",
+    "prompt": "把「<节点>」题库里 q1 的完整题目读给我看"
+   },
+   {
+    "tool": "learnhub_bank_cleanup",
+    "page": "bank",
+    "text": "一键清理题库：跳过节点的全部未归档题 + 已完成节点的休眠题（从未调度），预览确认后归档（可逆，不删除）。",
+    "prompt": "预览一下题库清理会归档哪些题，我确认后再执行"
+   },
+   {
+    "tool": "learnhub_content_check",
+    "page": "generate",
+    "text": "只跑正文质检门不落盘——在 vault 手改笔记后自检违规。",
+    "prompt": "对「<节点>」跑一次正文质检"
+   },
+   {
+    "tool": "learnhub_data_check",
+    "page": "global",
+    "text": "只读数据体检：盘点注册表/图/笔记/题库的 Missing 与 Broken，不修复不写入。",
+    "prompt": "跑一次数据体检，告诉我有没有 Broken"
+   },
+   {
+    "tool": "learnhub_rebuild",
+    "page": "global",
+    "text": "重建就绪清单等派生文件（过审计门；数据文件坏了后的修复入口）。",
+    "prompt": "重建一遍就绪清单"
+   },
+   {
+    "tool": "learnhub_note_resolve",
+    "page": "global",
+    "text": "把 vault 笔记路径解析到所属课程/节点（查归属用）。",
+    "prompt": "「<笔记路径>」属于哪个课程节点？"
+   },
+   {
+    "tool": "learnhub_skill_create",
+    "page": "practice",
+    "text": "创建技能条目（乐器/运动/编程等持续技能的调度 lane 载体）。",
+    "prompt": "创建技能条目「<技能名>」"
+   },
+   {
+    "tool": "learnhub_execution_log",
+    "page": "practice",
+    "text": "记一条技能执行事件（表现评级 1-4 + 真实专注时长；入 XP 账本与 streak）。",
+    "prompt": "记一条执行事件：今天练了「<技能>」40 分钟，自评 3 分"
+   },
+   {
+    "tool": "learnhub_receipt_submit",
+    "page": "practice",
+    "text": "提交外部练习回执（描述/图片/导出皆可；AI 量表评审，零 XP、不推调度）。",
+    "prompt": "提交一份回执：<练习内容描述>"
+   },
+   {
+    "tool": "learnhub_receipt_list",
+    "page": "practice",
+    "text": "查看已提交的回执清单。",
+    "prompt": "列出我提交过的回执"
+   },
+   {
+    "tool": "learnhub_project_milestone_pass",
+    "page": "projects",
+    "text": "里程碑显式通过结算：按 est 定价锁定 XP（对账动作，不是删除）。",
+    "prompt": "「<项目>」的里程碑 m1 通过了，帮我结算"
+   },
+   {
+    "tool": "learnhub_project_milestone_recall",
+    "page": "projects",
+    "text": "里程碑回溯会话：过点前对关联节点抽题+自述（检索点练习）。",
+    "prompt": "为「<项目>」的里程碑 m1 发起回溯会话"
+   },
+   {
+    "tool": "learnhub_project_enc_candidates",
+    "page": "projects",
+    "text": "从项目执行行为推断成分技能边候选，生成待人审图提案（面板回填按钮走的是作答记录推断，这是项目执行流推断——两条通道）。",
+    "prompt": "从「<项目>」的执行记录里找成分技能边候选"
+   }
+  ],
+  "calls": []
+ },
+ {
+  "id": "GET /question-audit · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/question-audit",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionAudit()"
+  ]
+ },
+ {
+  "id": "GET /bank-cleanup · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/bank-cleanup",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "bankCleanupPreview(undefined)"
+  ]
+ },
+ {
+  "id": "GET /bank-cleanup · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/bank-cleanup?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "bankCleanupPreview(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /bank-cleanup · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/bank-cleanup",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "bankCleanupPreview(undefined)"
+  ]
+ },
+ {
+  "id": "GET /learner-queue · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/learner-queue",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerQueue(undefined)"
+  ]
+ },
+ {
+  "id": "GET /learner-queue · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/learner-queue?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerQueue(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /learner-queue · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/learner-queue",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerQueue(undefined)"
+  ]
+ },
+ {
+  "id": "GET /error-queue · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/error-queue",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardQueue(undefined)"
+  ]
+ },
+ {
+  "id": "GET /error-queue · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/error-queue?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardQueue(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /error-queue · 缺 course",
+  "method": "GET",
+  "url": "/learnhub/api/error-queue",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardQueue(undefined)"
+  ]
+ },
+ {
+  "id": "GET /skills · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/skills",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "skillList()"
+  ]
+ },
+ {
+  "id": "GET /habits · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/habits",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "habitList()"
+  ]
+ },
+ {
+  "id": "GET /habit · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/habit",
+  "status": 500,
+  "res": {
+   "error": "missing required field: habit"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /habit · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/habit?habit=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "habitShow(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /habit · 缺 habit",
+  "method": "GET",
+  "url": "/learnhub/api/habit",
+  "status": 500,
+  "res": {
+   "error": "missing required field: habit"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /projects · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/projects",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectList()"
+  ]
+ },
+ {
+  "id": "GET /project/cross · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/project/cross",
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /project/cross · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/project/cross?id=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectCrossView(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /project/cross · 缺 id",
+  "method": "GET",
+  "url": "/learnhub/api/project/cross",
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /project/log · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/project/log",
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /project/log · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/project/log?id=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectLog(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /project/log · 缺 id",
+  "method": "GET",
+  "url": "/learnhub/api/project/log",
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /kata · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/kata",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "kataOpen(undefined)"
+  ]
+ },
+ {
+  "id": "GET /kata · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/kata?week_start=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "kataOpen(\"1\")"
+  ]
+ },
+ {
+  "id": "GET /kata · 缺 week_start",
+  "method": "GET",
+  "url": "/learnhub/api/kata",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "kataOpen(undefined)"
+  ]
+ },
+ {
+  "id": "POST /habits/create · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/habits/create",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: name"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /habits/create · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/habits/create",
+  "body": {
+   "name": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "habitCreate({\"name\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /habits/create · 缺 name",
+  "method": "POST",
+  "url": "/learnhub/api/habits/create",
+  "body": {
+   "cue": "1",
+   "action": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: name"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /habits/create · 缺 cue",
+  "method": "POST",
+  "url": "/learnhub/api/habits/create",
+  "body": {
+   "name": "1",
+   "action": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: cue"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /habits/create · 缺 action",
+  "method": "POST",
+  "url": "/learnhub/api/habits/create",
+  "body": {
+   "name": "1",
+   "cue": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: action"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /habits/repeat · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/habits/repeat",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: habit"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /habits/repeat · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/habits/repeat",
+  "body": {
+   "habit": "1",
+   "auto_rating": 1,
+   "note": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "habitRepeat(\"1\",{\"auto_rating\":1,\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /habits/repeat · 缺 habit",
+  "method": "POST",
+  "url": "/learnhub/api/habits/repeat",
+  "body": {
+   "auto_rating": 1,
+   "note": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: habit"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /habits/repeat · 缺 auto_rating",
+  "method": "POST",
+  "url": "/learnhub/api/habits/repeat",
+  "body": {
+   "habit": "1",
+   "note": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "habitRepeat(\"1\",{\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /habits/repeat · 缺 note",
+  "method": "POST",
+  "url": "/learnhub/api/habits/repeat",
+  "body": {
+   "habit": "1",
+   "auto_rating": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "habitRepeat(\"1\",{\"auto_rating\":1})"
+  ]
+ },
+ {
+  "id": "POST /habits/archive · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/habits/archive",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: archived"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /habits/archive · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/habits/archive",
+  "body": {
+   "habit": "1",
+   "archived": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "habitArchive(\"1\",true)"
+  ]
+ },
+ {
+  "id": "POST /habits/archive · 缺 habit",
+  "method": "POST",
+  "url": "/learnhub/api/habits/archive",
+  "body": {
+   "archived": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: habit"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /habits/archive · 缺 archived",
+  "method": "POST",
+  "url": "/learnhub/api/habits/archive",
+  "body": {
+   "habit": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: archived"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /skills/archive · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/skills/archive",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: archived"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /skills/archive · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/skills/archive",
+  "body": {
+   "skill": "1",
+   "archived": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "skillArchive(\"1\",true)"
+  ]
+ },
+ {
+  "id": "POST /skills/archive · 缺 skill",
+  "method": "POST",
+  "url": "/learnhub/api/skills/archive",
+  "body": {
+   "archived": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: skill"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /skills/archive · 缺 archived",
+  "method": "POST",
+  "url": "/learnhub/api/skills/archive",
+  "body": {
+   "skill": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: archived"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /skills/maintenance · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/skills/maintenance",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: skill"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /skills/maintenance · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/skills/maintenance",
+  "body": {
+   "skill": "1",
+   "days": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "skillSetMaintenance(\"1\",1)"
+  ]
+ },
+ {
+  "id": "POST /skills/maintenance · 缺 skill",
+  "method": "POST",
+  "url": "/learnhub/api/skills/maintenance",
+  "body": {
+   "days": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: skill"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /skills/maintenance · 缺 days",
+  "method": "POST",
+  "url": "/learnhub/api/skills/maintenance",
+  "body": {
+   "skill": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "skillSetMaintenance(\"1\",null)"
+  ]
+ },
+ {
+  "id": "POST /rebuild · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/rebuild",
+  "body": {},
+  "status": 200,
+  "res": {},
+  "calls": [
+   "rebuild()"
+  ]
+ },
+ {
+  "id": "POST /node/skip · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/node/skip",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/skip · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/node/skip",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "skipped": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "[learnhub_skip] skipped 参数必填：显式 true 表示跳过、false 表示取消跳过；省略会被拒绝。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/skip · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/node/skip",
+  "body": {
+   "node": "1",
+   "skipped": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/skip · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/node/skip",
+  "body": {
+   "course": "1",
+   "skipped": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/skip · 缺 skipped",
+  "method": "POST",
+  "url": "/learnhub/api/node/skip",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "[learnhub_skip] skipped 参数必填：显式 true 表示跳过、false 表示取消跳过；省略会被拒绝。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/pin · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/node/pin",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: pinned"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/pin · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/node/pin",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "pinned": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "pinToday(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /node/pin · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/node/pin",
+  "body": {
+   "node": "1",
+   "pinned": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/pin · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/node/pin",
+  "body": {
+   "course": "1",
+   "pinned": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/pin · 缺 pinned",
+  "method": "POST",
+  "url": "/learnhub/api/node/pin",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: pinned"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/complete · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/node/complete",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/complete · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/node/complete",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "force": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "nodeComplete(\"1\",\"1\",true)",
+   "coachCheckpoint(\"node_complete\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /node/complete · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/node/complete",
+  "body": {
+   "node": "1",
+   "force": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/complete · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/node/complete",
+  "body": {
+   "course": "1",
+   "force": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /node/complete · 缺 force",
+  "method": "POST",
+  "url": "/learnhub/api/node/complete",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "nodeComplete(\"1\",\"1\",false)",
+   "coachCheckpoint(\"node_complete\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /feedback · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/feedback",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /feedback · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/feedback",
+  "body": {
+   "path": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": []
+  },
+  "calls": [
+   "submitFeedback(\"«vault»\",\"学习中心\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /feedback · 缺 path",
+  "method": "POST",
+  "url": "/learnhub/api/feedback",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /proposals/apply · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/apply",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: kind"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /proposals/apply · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/apply",
+  "body": {
+   "kind": "1",
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "[apply] 提案 id 必须是正整数（收到 1）；省略 id 才表示该 kind 最新 pending。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /proposals/apply · 缺 kind",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/apply",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: kind"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /proposals/apply · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/apply",
+  "body": {
+   "kind": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "proposalApply(\"1\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /proposals/reject · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/reject",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "[reject] 提案 id 必须是正整数（收到 undefined）。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /proposals/reject · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/reject",
+  "body": {
+   "id": "1",
+   "note": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "[reject] 提案 id 必须是正整数（收到 1）。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /proposals/reject · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/reject",
+  "body": {
+   "note": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "[reject] 提案 id 必须是正整数（收到 undefined）。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /proposals/reject · 缺 note",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/reject",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "[reject] 提案 id 必须是正整数（收到 1）。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /thermostat/apply · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/thermostat/apply",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: suggestion"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /thermostat/apply · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/thermostat/apply",
+  "body": {
+   "suggestion": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "thermostatApply(\"1\")"
+  ]
+ },
+ {
+  "id": "POST /thermostat/apply · 缺 suggestion",
+  "method": "POST",
+  "url": "/learnhub/api/thermostat/apply",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: suggestion"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /experiments/propose · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/propose",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: template"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /experiments/propose · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/propose",
+  "body": {
+   "template": "1",
+   "course": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "experimentPropose(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /experiments/propose · 缺 template",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/propose",
+  "body": {
+   "course": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: template"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /experiments/propose · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/propose",
+  "body": {
+   "template": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "experimentPropose(\"1\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /experiments/apply · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/apply",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "experimentApply(undefined)"
+  ]
+ },
+ {
+  "id": "POST /experiments/apply · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/apply",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "[apply] 提案 id 必须是正整数（收到 1）；省略 id 才表示该 kind 最新 pending。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /experiments/apply · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/apply",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "experimentApply(undefined)"
+  ]
+ },
+ {
+  "id": "POST /experiments/stop · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/stop",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "experimentStop(undefined)"
+  ]
+ },
+ {
+  "id": "POST /experiments/stop · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/stop",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "[apply] 提案 id 必须是正整数（收到 1）；省略 id 才表示该 kind 最新 pending。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /experiments/stop · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/experiments/stop",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "experimentStop(undefined)"
+  ]
+ },
+ {
+  "id": "POST /sandbox/run · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/sandbox/run",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: minutes_per_day"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /sandbox/run · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/sandbox/run",
+  "body": {
+   "minutes_per_day": 1,
+   "weeks": 1,
+   "course": "1",
+   "nodes": [
+    "1"
+   ]
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
+  ]
+ },
+ {
+  "id": "POST /sandbox/run · 缺 minutes_per_day",
+  "method": "POST",
+  "url": "/learnhub/api/sandbox/run",
+  "body": {
+   "weeks": 1,
+   "course": "1",
+   "nodes": [
+    "1"
+   ]
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: minutes_per_day"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /sandbox/run · 缺 weeks",
+  "method": "POST",
+  "url": "/learnhub/api/sandbox/run",
+  "body": {
+   "minutes_per_day": 1,
+   "course": "1",
+   "nodes": [
+    "1"
+   ]
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "sandboxRun({\"minutesPerDay\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
+  ]
+ },
+ {
+  "id": "POST /sandbox/run · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/sandbox/run",
+  "body": {
+   "minutes_per_day": 1,
+   "weeks": 1,
+   "nodes": [
+    "1"
+   ]
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"nodes\":[\"1\"]})"
+  ]
+ },
+ {
+  "id": "POST /sandbox/run · 缺 nodes",
+  "method": "POST",
+  "url": "/learnhub/api/sandbox/run",
+  "body": {
+   "minutes_per_day": 1,
+   "weeks": 1,
+   "course": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /generate · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/generate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/generate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "style": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」已入队，将在后台按序生成（进度见生成页）。",
+   "queued": true
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
+   "contentPack(\"1\",\"1\")",
+   "contentTierOf(\"1\",\"1\")",
+   "loadPrompt(\"课程节生成-1\")",
+   "contentSectionsView(\"1\",\"1\")",
+   "loadPrompt(\"课程大纲\")",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /generate · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/generate",
+  "body": {
+   "node": "1",
+   "style": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/generate",
+  "body": {
+   "course": "1",
+   "style": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate · 缺 style",
+  "method": "POST",
+  "url": "/learnhub/api/generate",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」已入队，将在后台按序生成（进度见生成页）。",
+   "queued": true
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
+   "contentPack(\"1\",\"1\")",
+   "contentTierOf(\"1\",\"1\")",
+   "loadPrompt(\"课程节生成\")",
+   "contentSectionsView(\"1\",\"1\")",
+   "loadPrompt(\"课程大纲\")",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /generate/resume · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/generate/resume",
+  "body": {},
+  "status": 200,
+  "res": {
+   "paused": false,
+   "resumed": 0
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate/section · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/generate/section",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate/section · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/generate/section",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "section": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "「1」没有节「1」——先运行大纲。"
+  },
+  "calls": [
+   "contentPack(\"1\",\"1\")",
+   "contentSectionsView(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /generate/section · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/generate/section",
+  "body": {
+   "node": "1",
+   "section": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate/section · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/generate/section",
+  "body": {
+   "course": "1",
+   "section": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate/section · 缺 section",
+  "method": "POST",
+  "url": "/learnhub/api/generate/section",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: section"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /course/reset · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/course/reset",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /course/reset · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/course/reset",
+  "body": {
+   "course": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "Cannot read properties of undefined (reading 'order')"
+  },
+  "calls": [
+   "resolveCourse(\"1\")",
+   "loadView([])",
+   "contentReset(undefined)",
+   "saveGenJobs([])"
+  ]
+ },
+ {
+  "id": "POST /course/reset · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/course/reset",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /interactive/settle · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/interactive/settle",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /interactive/settle · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/interactive/settle",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "section": "1",
+   "score": 1,
+   "detail": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "interactiveSettle(\"1\",\"1\",\"1\",1,\"1\")"
+  ]
+ },
+ {
+  "id": "POST /interactive/settle · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/interactive/settle",
+  "body": {
+   "node": "1",
+   "section": "1",
+   "score": 1,
+   "detail": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /interactive/settle · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/interactive/settle",
+  "body": {
+   "course": "1",
+   "section": "1",
+   "score": 1,
+   "detail": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /interactive/settle · 缺 section",
+  "method": "POST",
+  "url": "/learnhub/api/interactive/settle",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "score": 1,
+   "detail": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: section"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /interactive/settle · 缺 score",
+  "method": "POST",
+  "url": "/learnhub/api/interactive/settle",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "section": "1",
+   "detail": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "interactiveSettle(\"1\",\"1\",\"1\",0,\"1\")"
+  ]
+ },
+ {
+  "id": "POST /interactive/settle · 缺 detail",
+  "method": "POST",
+  "url": "/learnhub/api/interactive/settle",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "section": "1",
+   "score": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "interactiveSettle(\"1\",\"1\",\"1\",1,undefined)"
+  ]
+ },
+ {
+  "id": "POST /tutor · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/tutor",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /tutor · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/tutor",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "messages": [
+    {
+     "role": "user",
+     "content": "1"
+    }
+   ]
+  },
+  "status": 500,
+  "res": {
+   "error": "Cannot read properties of undefined (reading 'stream')"
+  },
+  "calls": [
+   "discussionPack(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /tutor · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/tutor",
+  "body": {
+   "node": "1",
+   "messages": [
+    {
+     "role": "user",
+     "content": "1"
+    }
+   ]
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /tutor · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/tutor",
+  "body": {
+   "course": "1",
+   "messages": [
+    {
+     "role": "user",
+     "content": "1"
+    }
+   ]
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /tutor · 缺 messages",
+  "method": "POST",
+  "url": "/learnhub/api/tutor",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "tutor 对话历史必须以学习者的提问结尾。"
+  },
+  "calls": [
+   "discussionPack(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /explain-back · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/explain-back",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-back · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/explain-back",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "messages": [
+    {
+     "role": "user",
+     "content": "1"
+    }
+   ]
+  },
+  "status": 500,
+  "res": {
+   "error": "Cannot read properties of undefined (reading 'stream')"
+  },
+  "calls": [
+   "explainBackPack(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /explain-back · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/explain-back",
+  "body": {
+   "node": "1",
+   "messages": [
+    {
+     "role": "user",
+     "content": "1"
+    }
+   ]
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-back · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/explain-back",
+  "body": {
+   "course": "1",
+   "messages": [
+    {
+     "role": "user",
+     "content": "1"
+    }
+   ]
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-back · 缺 messages",
+  "method": "POST",
+  "url": "/learnhub/api/explain-back",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "讲解对话历史必须以学习者的讲稿/回答结尾。"
+  },
+  "calls": [
+   "explainBackPack(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /explain-feedback · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/explain-feedback",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-feedback · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/explain-feedback",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "transcript": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainBackFeedback(\"1\",\"1\",\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "POST /explain-feedback · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/explain-feedback",
+  "body": {
+   "node": "1",
+   "transcript": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-feedback · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/explain-feedback",
+  "body": {
+   "course": "1",
+   "transcript": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-feedback · 缺 transcript",
+  "method": "POST",
+  "url": "/learnhub/api/explain-feedback",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainBackFeedback(\"1\",\"1\",\"\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "POST /explain-archive · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/explain-archive",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-archive · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/explain-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /explain-archive · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/explain-archive",
+  "body": {
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-archive · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/explain-archive",
+  "body": {
+   "course": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /explain-archive · 缺 content",
+  "method": "POST",
+  "url": "/learnhub/api/explain-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainArchiveCard(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /explain-archive · 缺 kind",
+  "method": "POST",
+  "url": "/learnhub/api/explain-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /explain-archive · 缺 prompt",
+  "method": "POST",
+  "url": "/learnhub/api/explain-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "section": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /explain-archive · 缺 section",
+  "method": "POST",
+  "url": "/learnhub/api/explain-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /note-source/register · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/register",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/register · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/register",
+  "body": {
+   "path": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "noteSourceRegister(\"1\")"
+  ]
+ },
+ {
+  "id": "POST /note-source/register · 缺 path",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/register",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/unregister · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/unregister",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/unregister · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/unregister",
+  "body": {
+   "id": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "noteSourceUnregister(\"1\")"
+  ]
+ },
+ {
+  "id": "POST /note-source/unregister · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/unregister",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/exclude · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/exclude",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/exclude · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/exclude",
+  "body": {
+   "path": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "noteSourceExclude(\"1\")"
+  ]
+ },
+ {
+  "id": "POST /note-source/exclude · 缺 path",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/exclude",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/unexclude · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/unexclude",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/unexclude · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/unexclude",
+  "body": {
+   "path": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "noteSourceUnexclude(\"1\")"
+  ]
+ },
+ {
+  "id": "POST /note-source/unexclude · 缺 path",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/unexclude",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/relink · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/relink",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/relink · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/relink",
+  "body": {
+   "id": "1",
+   "path": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "noteSourceRelink(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /note-source/relink · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/relink",
+  "body": {
+   "path": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/relink · 缺 path",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/relink",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: path"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/generate · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/generate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/generate · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/generate",
+  "body": {
+   "id": "1",
+   "count": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "noteSourceGenerate(\"1\",1,async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+  ]
+ },
+ {
+  "id": "POST /note-source/generate · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/generate",
+  "body": {
+   "count": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /note-source/generate · 缺 count",
+  "method": "POST",
+  "url": "/learnhub/api/note-source/generate",
+  "body": {
+   "id": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "noteSourceGenerate(\"1\",6,async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+  ]
+ },
+ {
+  "id": "POST /anki/export · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/anki/export",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "ankiExportPush({\"endpoint\":\"http://127.0.0.1:8765\"})"
+  ]
+ },
+ {
+  "id": "POST /anki/import · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/anki/import",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "ankiImportEvents({\"endpoint\":\"http://127.0.0.1:8765\"})"
+  ]
+ },
+ {
+  "id": "POST /optimize-params · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/optimize-params",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "optimizeFsrsParams()"
+  ]
+ },
+ {
+  "id": "POST /learner-rate · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/learner-rate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-rate · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/learner-rate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1",
+   "rating": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerCardRate(\"1\",\"1\",\"1\",1)"
+  ]
+ },
+ {
+  "id": "POST /learner-rate · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/learner-rate",
+  "body": {
+   "node": "1",
+   "card": "1",
+   "rating": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-rate · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/learner-rate",
+  "body": {
+   "course": "1",
+   "card": "1",
+   "rating": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-rate · 缺 card",
+  "method": "POST",
+  "url": "/learnhub/api/learner-rate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "rating": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: card"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-rate · 缺 rating",
+  "method": "POST",
+  "url": "/learnhub/api/learner-rate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerCardRate(\"1\",\"1\",\"1\",null)"
+  ]
+ },
+ {
+  "id": "POST /learner-forget · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/learner-forget",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-forget · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/learner-forget",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerCardForget(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /learner-forget · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/learner-forget",
+  "body": {
+   "node": "1",
+   "card": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-forget · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/learner-forget",
+  "body": {
+   "course": "1",
+   "card": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-forget · 缺 card",
+  "method": "POST",
+  "url": "/learnhub/api/learner-forget",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: card"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-answer · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/error-answer",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-answer · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/error-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1",
+   "choice": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardAnswer(\"1\",\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /error-answer · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/error-answer",
+  "body": {
+   "node": "1",
+   "card": "1",
+   "choice": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-answer · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/error-answer",
+  "body": {
+   "course": "1",
+   "card": "1",
+   "choice": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-answer · 缺 card",
+  "method": "POST",
+  "url": "/learnhub/api/error-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "choice": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: card"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-answer · 缺 choice",
+  "method": "POST",
+  "url": "/learnhub/api/error-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardAnswer(\"1\",\"1\",\"1\",\"\")"
+  ]
+ },
+ {
+  "id": "POST /error-generate · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/error-generate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-generate · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/error-generate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "max": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardGenerate(\"1\",{\"node\":\"1\",\"max\":1},async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+  ]
+ },
+ {
+  "id": "POST /error-generate · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/error-generate",
+  "body": {
+   "node": "1",
+   "max": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-generate · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/error-generate",
+  "body": {
+   "course": "1",
+   "max": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardGenerate(\"1\",{\"max\":1},async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+  ]
+ },
+ {
+  "id": "POST /error-generate · 缺 max",
+  "method": "POST",
+  "url": "/learnhub/api/error-generate",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardGenerate(\"1\",{\"node\":\"1\"},async (prompt)=>stripFences(await llmSeam(ctx)(prompt)))"
+  ]
+ },
+ {
+  "id": "POST /error-archive · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/error-archive",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-archive · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/error-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1",
+   "archived": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardArchive(\"1\",\"1\",\"1\",true)"
+  ]
+ },
+ {
+  "id": "POST /error-archive · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/error-archive",
+  "body": {
+   "node": "1",
+   "card": "1",
+   "archived": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-archive · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/error-archive",
+  "body": {
+   "course": "1",
+   "card": "1",
+   "archived": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-archive · 缺 card",
+  "method": "POST",
+  "url": "/learnhub/api/error-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "archived": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: card"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /error-archive · 缺 archived",
+  "method": "POST",
+  "url": "/learnhub/api/error-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "errorCardArchive(\"1\",\"1\",\"1\",false)"
+  ]
+ },
+ {
+  "id": "POST /learner-add · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/learner-add",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-add · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/learner-add",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "POST /learner-add · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/learner-add",
+  "body": {
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-add · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/learner-add",
+  "body": {
+   "course": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-add · 缺 content",
+  "method": "POST",
+  "url": "/learnhub/api/learner-add",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "kind": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "POST /learner-add · 缺 kind",
+  "method": "POST",
+  "url": "/learnhub/api/learner-add",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "prompt": "1",
+   "section": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "POST /learner-add · 缺 prompt",
+  "method": "POST",
+  "url": "/learnhub/api/learner-add",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "section": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "POST /learner-add · 缺 section",
+  "method": "POST",
+  "url": "/learnhub/api/learner-add",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "content": "1",
+   "kind": "1",
+   "prompt": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+  ]
+ },
+ {
+  "id": "POST /learner-archive · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/learner-archive",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: archived"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-archive · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/learner-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1",
+   "archived": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "learnerCardArchive(\"1\",\"1\",\"1\",true)"
+  ]
+ },
+ {
+  "id": "POST /learner-archive · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/learner-archive",
+  "body": {
+   "node": "1",
+   "card": "1",
+   "archived": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-archive · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/learner-archive",
+  "body": {
+   "course": "1",
+   "card": "1",
+   "archived": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-archive · 缺 card",
+  "method": "POST",
+  "url": "/learnhub/api/learner-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "archived": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: card"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /learner-archive · 缺 archived",
+  "method": "POST",
+  "url": "/learnhub/api/learner-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "card": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: archived"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-generate · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-generate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-generate · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-generate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "section": {
+    "id": "1",
+    "title": "1"
+   },
+   "instruction": "1",
+   "count": 1
+  },
+  "status": 200,
+  "res": {
+   "key": "1/1",
+   "message": "「1」出题任务已入队，将在后台按序生成（进度见生成页）。",
+   "queued": true
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
+   "questionGenerate(\"1\",\"1\",1,async (prompt)=>stripFences(await complete(prompt)),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /question-generate · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-generate",
+  "body": {
+   "node": "1",
+   "section": {
+    "id": "1",
+    "title": "1"
+   },
+   "instruction": "1",
+   "count": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-generate · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-generate",
+  "body": {
+   "course": "1",
+   "section": {
+    "id": "1",
+    "title": "1"
+   },
+   "instruction": "1",
+   "count": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-generate · 缺 section",
+  "method": "POST",
+  "url": "/learnhub/api/question-generate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "instruction": "1",
+   "count": 1
+  },
+  "status": 200,
+  "res": {
+   "key": "1/1",
+   "message": "「1」出题任务已入队，将在后台按序生成（进度见生成页）。",
+   "queued": true
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在按学习者意见重出新题…\"}])",
+   "questionGenerate(\"1\",\"1\",1,async (prompt)=>stripFences(await complete(prompt)),{\"instruction\":\"1\"})",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /question-generate · 缺 instruction",
+  "method": "POST",
+  "url": "/learnhub/api/question-generate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "section": {
+    "id": "1",
+    "title": "1"
+   },
+   "count": 1
+  },
+  "status": 200,
+  "res": {
+   "key": "1/1",
+   "message": "「1」出题任务已入队，将在后台按序生成（进度见生成页）。",
+   "queued": true
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
+   "questionGenerate(\"1\",\"1\",1,async (prompt)=>stripFences(await complete(prompt)),{\"section\":{\"id\":\"1\",\"title\":\"1\"}})",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /question-generate · 缺 count",
+  "method": "POST",
+  "url": "/learnhub/api/question-generate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "section": {
+    "id": "1",
+    "title": "1"
+   },
+   "instruction": "1"
+  },
+  "status": 200,
+  "res": {
+   "key": "1/1",
+   "message": "「1」出题任务已入队，将在后台按序生成（进度见生成页）。",
+   "queued": true
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
+   "questionGenerate(\"1\",\"1\",undefined,async (prompt)=>stripFences(await complete(prompt)),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /review · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/review",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /review · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/review",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": []
+  },
+  "calls": [
+   "contentReview(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /review · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/review",
+  "body": {
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /review · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/review",
+  "body": {
+   "course": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-save · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-save",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-save · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-save",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "yaml": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionSave(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /question-save · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-save",
+  "body": {
+   "node": "1",
+   "yaml": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-save · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-save",
+  "body": {
+   "course": "1",
+   "yaml": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-save · 缺 yaml",
+  "method": "POST",
+  "url": "/learnhub/api/question-save",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: yaml"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-answer · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-answer · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "answer": "1",
+   "elapsed_s": 1,
+   "defer_schedule": true,
+   "predicted": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /question-answer · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {
+   "node": "1",
+   "qid": "1",
+   "answer": "1",
+   "elapsed_s": 1,
+   "defer_schedule": true,
+   "predicted": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-answer · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {
+   "course": "1",
+   "qid": "1",
+   "answer": "1",
+   "elapsed_s": 1,
+   "defer_schedule": true,
+   "predicted": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-answer · 缺 qid",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "answer": "1",
+   "elapsed_s": 1,
+   "defer_schedule": true,
+   "predicted": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-answer · 缺 answer",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "elapsed_s": 1,
+   "defer_schedule": true,
+   "predicted": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /question-answer · 缺 elapsed_s",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "answer": "1",
+   "defer_schedule": true,
+   "predicted": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",null,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /question-answer · 缺 defer_schedule",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "answer": "1",
+   "elapsed_s": 1,
+   "predicted": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"predicted\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /question-answer · 缺 predicted",
+  "method": "POST",
+  "url": "/learnhub/api/question-answer",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "answer": "1",
+   "elapsed_s": 1,
+   "defer_schedule": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true})"
+  ]
+ },
+ {
+  "id": "POST /question-rate · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-rate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-rate · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-rate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "rating": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionRate(\"1\",\"1\",\"1\",1)"
+  ]
+ },
+ {
+  "id": "POST /question-rate · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-rate",
+  "body": {
+   "node": "1",
+   "qid": "1",
+   "rating": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-rate · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-rate",
+  "body": {
+   "course": "1",
+   "qid": "1",
+   "rating": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-rate · 缺 qid",
+  "method": "POST",
+  "url": "/learnhub/api/question-rate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "rating": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-rate · 缺 rating",
+  "method": "POST",
+  "url": "/learnhub/api/question-rate",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionRate(\"1\",\"1\",\"1\",null)"
+  ]
+ },
+ {
+  "id": "POST /question-forget · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-forget",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-forget · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-forget",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "elapsed_s": 1,
+   "predicted": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionForget(\"1\",\"1\",\"1\",1,\"1\")"
+  ]
+ },
+ {
+  "id": "POST /question-forget · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-forget",
+  "body": {
+   "node": "1",
+   "qid": "1",
+   "elapsed_s": 1,
+   "predicted": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-forget · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-forget",
+  "body": {
+   "course": "1",
+   "qid": "1",
+   "elapsed_s": 1,
+   "predicted": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-forget · 缺 qid",
+  "method": "POST",
+  "url": "/learnhub/api/question-forget",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "elapsed_s": 1,
+   "predicted": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-forget · 缺 elapsed_s",
+  "method": "POST",
+  "url": "/learnhub/api/question-forget",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "predicted": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionForget(\"1\",\"1\",\"1\",null,\"1\")"
+  ]
+ },
+ {
+  "id": "POST /question-forget · 缺 predicted",
+  "method": "POST",
+  "url": "/learnhub/api/question-forget",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "elapsed_s": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionForget(\"1\",\"1\",\"1\",1,null)"
+  ]
+ },
+ {
+  "id": "POST /question-dispute/review · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/review",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/review · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/review",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionDisputeReview((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /question-dispute/review · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/review",
+  "body": {
+   "node": "1",
+   "qid": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/review · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/review",
+  "body": {
+   "course": "1",
+   "qid": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/review · 缺 qid",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/review",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/apply · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing/invalid required field: resolution（rekey|void|overridden）"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/apply · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "resolution": "rekey",
+   "revision": {},
+   "target_ts": "1",
+   "reason": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"revision\":{},\"reason\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /question-dispute/apply · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {
+   "node": "1",
+   "qid": "1",
+   "resolution": "rekey",
+   "revision": {},
+   "target_ts": "1",
+   "reason": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/apply · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {
+   "course": "1",
+   "qid": "1",
+   "resolution": "rekey",
+   "revision": {},
+   "target_ts": "1",
+   "reason": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/apply · 缺 qid",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "resolution": "rekey",
+   "revision": {},
+   "target_ts": "1",
+   "reason": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/apply · 缺 resolution",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "revision": {},
+   "target_ts": "1",
+   "reason": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing/invalid required field: resolution（rekey|void|overridden）"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-dispute/apply · 缺 revision",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "resolution": "rekey",
+   "target_ts": "1",
+   "reason": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"reason\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /question-dispute/apply · 缺 target_ts",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "resolution": "rekey",
+   "revision": {},
+   "reason": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"revision\":{},\"reason\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /question-dispute/apply · 缺 reason",
+  "method": "POST",
+  "url": "/learnhub/api/question-dispute/apply",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "resolution": "rekey",
+   "revision": {},
+   "target_ts": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"revision\":{}})"
+  ]
+ },
+ {
+  "id": "POST /band-session · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/band-session",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /band-session · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/band-session",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "band": "1",
+   "answered": 1,
+   "correct": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "logBandSession({\"course\":\"1\",\"node\":\"1\",\"band\":\"1\",\"answered\":1,\"correct\":1})"
+  ]
+ },
+ {
+  "id": "POST /band-session · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/band-session",
+  "body": {
+   "node": "1",
+   "band": "1",
+   "answered": 1,
+   "correct": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /band-session · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/band-session",
+  "body": {
+   "course": "1",
+   "band": "1",
+   "answered": 1,
+   "correct": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /band-session · 缺 band",
+  "method": "POST",
+  "url": "/learnhub/api/band-session",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "answered": 1,
+   "correct": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "logBandSession({\"course\":\"1\",\"node\":\"1\",\"band\":\"standard\",\"answered\":1,\"correct\":1})"
+  ]
+ },
+ {
+  "id": "POST /band-session · 缺 answered",
+  "method": "POST",
+  "url": "/learnhub/api/band-session",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "band": "1",
+   "correct": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "logBandSession({\"course\":\"1\",\"node\":\"1\",\"band\":\"1\",\"answered\":0,\"correct\":1})"
+  ]
+ },
+ {
+  "id": "POST /band-session · 缺 correct",
+  "method": "POST",
+  "url": "/learnhub/api/band-session",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "band": "1",
+   "answered": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "logBandSession({\"course\":\"1\",\"node\":\"1\",\"band\":\"1\",\"answered\":1,\"correct\":0})"
+  ]
+ },
+ {
+  "id": "POST /question-add · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-add",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: question"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-add · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-add",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "question": {}
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionAdd(\"1\",\"1\",{})"
+  ]
+ },
+ {
+  "id": "POST /question-add · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-add",
+  "body": {
+   "node": "1",
+   "question": {}
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-add · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-add",
+  "body": {
+   "course": "1",
+   "question": {}
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-add · 缺 question",
+  "method": "POST",
+  "url": "/learnhub/api/question-add",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: question"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-archive · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/question-archive",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-archive · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/question-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "archived": true,
+   "reason": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionArchive(\"1\",\"1\",\"1\",true,\"1\")"
+  ]
+ },
+ {
+  "id": "POST /question-archive · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/question-archive",
+  "body": {
+   "node": "1",
+   "qid": "1",
+   "archived": true,
+   "reason": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-archive · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/question-archive",
+  "body": {
+   "course": "1",
+   "qid": "1",
+   "archived": true,
+   "reason": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-archive · 缺 qid",
+  "method": "POST",
+  "url": "/learnhub/api/question-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "archived": true,
+   "reason": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /question-archive · 缺 archived",
+  "method": "POST",
+  "url": "/learnhub/api/question-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "reason": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionArchive(\"1\",\"1\",\"1\",false,\"1\")"
+  ]
+ },
+ {
+  "id": "POST /question-archive · 缺 reason",
+  "method": "POST",
+  "url": "/learnhub/api/question-archive",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "archived": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionArchive(\"1\",\"1\",\"1\",true,undefined)"
+  ]
+ },
+ {
+  "id": "POST /difficulty-advice-dismiss · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/difficulty-advice-dismiss",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "adviceDismiss(\"\",\"\",undefined,false,false)"
+  ]
+ },
+ {
+  "id": "POST /difficulty-advice-dismiss · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/difficulty-advice-dismiss",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "undo": true,
+   "all": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "adviceDismiss(\"1\",\"1\",\"1\",true,true)"
+  ]
+ },
+ {
+  "id": "POST /difficulty-advice-dismiss · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/difficulty-advice-dismiss",
+  "body": {
+   "node": "1",
+   "qid": "1",
+   "undo": true,
+   "all": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "adviceDismiss(\"\",\"1\",\"1\",true,true)"
+  ]
+ },
+ {
+  "id": "POST /difficulty-advice-dismiss · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/difficulty-advice-dismiss",
+  "body": {
+   "course": "1",
+   "qid": "1",
+   "undo": true,
+   "all": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "adviceDismiss(\"1\",\"\",\"1\",true,true)"
+  ]
+ },
+ {
+  "id": "POST /difficulty-advice-dismiss · 缺 qid",
+  "method": "POST",
+  "url": "/learnhub/api/difficulty-advice-dismiss",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "undo": true,
+   "all": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "adviceDismiss(\"1\",\"1\",undefined,true,true)"
+  ]
+ },
+ {
+  "id": "POST /difficulty-advice-dismiss · 缺 undo",
+  "method": "POST",
+  "url": "/learnhub/api/difficulty-advice-dismiss",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "all": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "adviceDismiss(\"1\",\"1\",\"1\",false,true)"
+  ]
+ },
+ {
+  "id": "POST /difficulty-advice-dismiss · 缺 all",
+  "method": "POST",
+  "url": "/learnhub/api/difficulty-advice-dismiss",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "undo": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "adviceDismiss(\"1\",\"1\",\"1\",true,false)"
+  ]
+ },
+ {
+  "id": "POST /bank-cleanup/apply · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/bank-cleanup/apply",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "bankCleanupApply(undefined)"
+  ]
+ },
+ {
+  "id": "POST /bank-cleanup/apply · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/bank-cleanup/apply",
+  "body": {
+   "course": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "bankCleanupApply(\"1\")"
+  ]
+ },
+ {
+  "id": "POST /bank-cleanup/apply · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/bank-cleanup/apply",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "bankCleanupApply(undefined)"
+  ]
+ },
+ {
+  "id": "POST /course/delete · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/course/delete",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /course/delete · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/course/delete",
+  "body": {
+   "course": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "courseDelete(\"1\")"
+  ]
+ },
+ {
+  "id": "POST /course/delete · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/course/delete",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate/cancel · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/generate/cancel",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate/cancel · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/generate/cancel",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 200,
+  "res": {
+   "cancelled": false
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate/cancel · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/generate/cancel",
+  "body": {
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /generate/cancel · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/generate/cancel",
+  "body": {
+   "course": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /coach/growth · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/coach/growth",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /coach/growth · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/coach/growth",
+  "body": {
+   "course": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」生长批已入队（面板下发（显式重新裁决））。",
+   "queued": true
+  },
+  "calls": [
+   "coachCheckpoint(\"panel_dispatch\",\"1\")",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\"}])",
+   "coachGrowthBatch(\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),{})",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /coach/growth · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/coach/growth",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /coach/compass · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/coach/compass",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /coach/compass · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/coach/compass",
+  "body": {
+   "course": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」罗盘已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘初画中（deep 档一次调用）…\"}])",
+   "compassPaint(\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /coach/compass · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/coach/compass",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /graph/backfill · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/graph/backfill",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graphEncBackfill(undefined)"
+  ]
+ },
+ {
+  "id": "POST /graph/backfill · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/graph/backfill",
+  "body": {
+   "course": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graphEncBackfill(\"1\")"
+  ]
+ },
+ {
+  "id": "POST /graph/backfill · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/graph/backfill",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graphEncBackfill(undefined)"
+  ]
+ },
+ {
+  "id": "POST /seed/propose · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/seed/propose",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /seed/propose · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/seed/propose",
+  "body": {
+   "course": "1",
+   "goal": "1",
+   "worksheet": [
+    {
+     "block": "1"
+    }
+   ],
+   "mode": "1",
+   "goalType": "1",
+   "useVaultPrior": true
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /seed/propose · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/seed/propose",
+  "body": {
+   "goal": "1",
+   "worksheet": [
+    {
+     "block": "1"
+    }
+   ],
+   "mode": "1",
+   "goalType": "1",
+   "useVaultPrior": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /seed/propose · 缺 goal",
+  "method": "POST",
+  "url": "/learnhub/api/seed/propose",
+  "body": {
+   "course": "1",
+   "worksheet": [
+    {
+     "block": "1"
+    }
+   ],
+   "mode": "1",
+   "goalType": "1",
+   "useVaultPrior": true
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: goal"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /seed/propose · 缺 worksheet",
+  "method": "POST",
+  "url": "/learnhub/api/seed/propose",
+  "body": {
+   "course": "1",
+   "goal": "1",
+   "mode": "1",
+   "goalType": "1",
+   "useVaultPrior": true
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
+   "seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /seed/propose · 缺 mode",
+  "method": "POST",
+  "url": "/learnhub/api/seed/propose",
+  "body": {
+   "course": "1",
+   "goal": "1",
+   "worksheet": [
+    {
+     "block": "1"
+    }
+   ],
+   "goalType": "1",
+   "useVaultPrior": true
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /seed/propose · 缺 goalType",
+  "method": "POST",
+  "url": "/learnhub/api/seed/propose",
+  "body": {
+   "course": "1",
+   "goal": "1",
+   "worksheet": [
+    {
+     "block": "1"
+    }
+   ],
+   "mode": "1",
+   "useVaultPrior": true
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /seed/propose · 缺 useVaultPrior",
+  "method": "POST",
+  "url": "/learnhub/api/seed/propose",
+  "body": {
+   "course": "1",
+   "goal": "1",
+   "worksheet": [
+    {
+     "block": "1"
+    }
+   ],
+   "mode": "1",
+   "goalType": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /probation/settle · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/probation/settle",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "settleRechecks()"
+  ]
+ },
+ {
+  "id": "POST /project/create · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/project/create",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: name"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/create · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/project/create",
+  "body": {
+   "name": "1",
+   "goal": "1",
+   "tier": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectCreate({\"name\":\"1\",\"goal\":\"1\",\"tier\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /project/create · 缺 name",
+  "method": "POST",
+  "url": "/learnhub/api/project/create",
+  "body": {
+   "goal": "1",
+   "tier": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: name"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/create · 缺 goal",
+  "method": "POST",
+  "url": "/learnhub/api/project/create",
+  "body": {
+   "name": "1",
+   "tier": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: goal"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/create · 缺 tier",
+  "method": "POST",
+  "url": "/learnhub/api/project/create",
+  "body": {
+   "name": "1",
+   "goal": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectCreate({\"name\":\"1\",\"goal\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /project/lifecycle · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/project/lifecycle",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/lifecycle · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/project/lifecycle",
+  "body": {
+   "id": "1",
+   "lifecycle": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectSetLifecycle(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /project/lifecycle · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/project/lifecycle",
+  "body": {
+   "lifecycle": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/lifecycle · 缺 lifecycle",
+  "method": "POST",
+  "url": "/learnhub/api/project/lifecycle",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: lifecycle"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/tier · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/project/tier",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/tier · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/project/tier",
+  "body": {
+   "id": "1",
+   "tier": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectSetTier(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /project/tier · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/project/tier",
+  "body": {
+   "tier": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/tier · 缺 tier",
+  "method": "POST",
+  "url": "/learnhub/api/project/tier",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: tier"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/plan/generate · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/project/plan/generate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/plan/generate · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/project/plan/generate",
+  "body": {
+   "id": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」计划草案已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
+   "projectPlanPack(\"1\")",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /project/plan/generate · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/project/plan/generate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/milestone/generate · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/project/milestone/generate",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/milestone/generate · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/project/milestone/generate",
+  "body": {
+   "id": "1",
+   "milestone": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」里程碑草案(1)已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "projectMilestonePack(\"1\",\"1\")",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /project/milestone/generate · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/project/milestone/generate",
+  "body": {
+   "milestone": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/milestone/generate · 缺 milestone",
+  "method": "POST",
+  "url": "/learnhub/api/project/milestone/generate",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: milestone"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/decompile · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/project/decompile",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/decompile · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/project/decompile",
+  "body": {
+   "id": "1",
+   "goal": "1",
+   "course": "1",
+   "notes": [
+    "1"
+   ]
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」反编译已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /project/decompile · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/project/decompile",
+  "body": {
+   "goal": "1",
+   "course": "1",
+   "notes": [
+    "1"
+   ]
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/decompile · 缺 goal",
+  "method": "POST",
+  "url": "/learnhub/api/project/decompile",
+  "body": {
+   "id": "1",
+   "course": "1",
+   "notes": [
+    "1"
+   ]
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」反编译已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "projectDecompile(\"1\",{\"course\":\"1\",\"notes\":[\"1\"]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /project/decompile · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/project/decompile",
+  "body": {
+   "id": "1",
+   "goal": "1",
+   "notes": [
+    "1"
+   ]
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」反编译已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "projectDecompile(\"1\",{\"goal\":\"1\",\"notes\":[\"1\"]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /project/decompile · 缺 notes",
+  "method": "POST",
+  "url": "/learnhub/api/project/decompile",
+  "body": {
+   "id": "1",
+   "goal": "1",
+   "course": "1"
+  },
+  "status": 200,
+  "res": {
+   "message": "「1」反编译已入队（生成队列 FIFO）。"
+  },
+  "calls": [
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /project/exec · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/project/exec",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/exec · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/project/exec",
+  "body": {
+   "id": "1",
+   "source": "1",
+   "evidence": {},
+   "rating": 1,
+   "nodes": [
+    "1"
+   ],
+   "note": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"nodes\":[\"1\"],\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /project/exec · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/project/exec",
+  "body": {
+   "source": "1",
+   "evidence": {},
+   "rating": 1,
+   "nodes": [
+    "1"
+   ],
+   "note": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/exec · 缺 source",
+  "method": "POST",
+  "url": "/learnhub/api/project/exec",
+  "body": {
+   "id": "1",
+   "evidence": {},
+   "rating": 1,
+   "nodes": [
+    "1"
+   ],
+   "note": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: source"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/exec · 缺 evidence",
+  "method": "POST",
+  "url": "/learnhub/api/project/exec",
+  "body": {
+   "id": "1",
+   "source": "1",
+   "rating": 1,
+   "nodes": [
+    "1"
+   ],
+   "note": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"nodes\":[\"1\"],\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /project/exec · 缺 rating",
+  "method": "POST",
+  "url": "/learnhub/api/project/exec",
+  "body": {
+   "id": "1",
+   "source": "1",
+   "evidence": {},
+   "nodes": [
+    "1"
+   ],
+   "note": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectExecLog(\"1\",{\"source\":\"1\",\"evidence\":{},\"nodes\":[\"1\"],\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /project/exec · 缺 nodes",
+  "method": "POST",
+  "url": "/learnhub/api/project/exec",
+  "body": {
+   "id": "1",
+   "source": "1",
+   "evidence": {},
+   "rating": 1,
+   "note": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"note\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /project/exec · 缺 note",
+  "method": "POST",
+  "url": "/learnhub/api/project/exec",
+  "body": {
+   "id": "1",
+   "source": "1",
+   "evidence": {},
+   "rating": 1,
+   "nodes": [
+    "1"
+   ]
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"nodes\":[\"1\"]})"
+  ]
+ },
+ {
+  "id": "POST /project/log · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/project/log",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/log · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/project/log",
+  "body": {
+   "id": "1",
+   "text": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "projectLogAppend(\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /project/log · 缺 id",
+  "method": "POST",
+  "url": "/learnhub/api/project/log",
+  "body": {
+   "text": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: id"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /project/log · 缺 text",
+  "method": "POST",
+  "url": "/learnhub/api/project/log",
+  "body": {
+   "id": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: text"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/save · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/kata/save",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: week_start"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/save · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/kata/save",
+  "body": {
+   "week_start": "1",
+   "answers": {}
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "kataSave(\"1\",{})"
+  ]
+ },
+ {
+  "id": "POST /kata/save · 缺 week_start",
+  "method": "POST",
+  "url": "/learnhub/api/kata/save",
+  "body": {
+   "answers": {}
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: week_start"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/save · 缺 answers",
+  "method": "POST",
+  "url": "/learnhub/api/kata/save",
+  "body": {
+   "week_start": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "kataSave(\"1\",{})"
+  ]
+ },
+ {
+  "id": "POST /kata/convert/experiment · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/experiment",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: week_start"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/convert/experiment · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/experiment",
+  "body": {
+   "week_start": "1",
+   "template": "1",
+   "course": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "kataToExperiment(\"1\",\"1\",\"1\")"
+  ]
+ },
+ {
+  "id": "POST /kata/convert/experiment · 缺 week_start",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/experiment",
+  "body": {
+   "template": "1",
+   "course": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: week_start"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/convert/experiment · 缺 template",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/experiment",
+  "body": {
+   "week_start": "1",
+   "course": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: template"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/convert/experiment · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/experiment",
+  "body": {
+   "week_start": "1",
+   "template": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "kataToExperiment(\"1\",\"1\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /kata/convert/intention · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/intention",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: week_start"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/convert/intention · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/intention",
+  "body": {
+   "week_start": "1",
+   "course": "1",
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "kataToIntention(\"1\",{\"course\":\"1\",\"node\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
+  ]
+ },
+ {
+  "id": "POST /kata/convert/intention · 缺 week_start",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/intention",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: week_start"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/convert/intention · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/intention",
+  "body": {
+   "week_start": "1",
+   "node": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/convert/intention · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/intention",
+  "body": {
+   "week_start": "1",
+   "course": "1",
+   "cue": "1",
+   "action": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/convert/intention · 缺 cue",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/intention",
+  "body": {
+   "week_start": "1",
+   "course": "1",
+   "node": "1",
+   "action": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: cue"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /kata/convert/intention · 缺 action",
+  "method": "POST",
+  "url": "/learnhub/api/kata/convert/intention",
+  "body": {
+   "week_start": "1",
+   "course": "1",
+   "node": "1",
+   "cue": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: action"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /daily-goal · 空参",
+  "method": "PUT",
+  "url": "/learnhub/api/daily-goal",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: goal"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /daily-goal · 全参",
+  "method": "PUT",
+  "url": "/learnhub/api/daily-goal",
+  "body": {
+   "goal": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setDailyGoal(1)"
+  ]
+ },
+ {
+  "id": "PUT /daily-goal · 缺 goal",
+  "method": "PUT",
+  "url": "/learnhub/api/daily-goal",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: goal"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /day-cutoff · 空参",
+  "method": "PUT",
+  "url": "/learnhub/api/day-cutoff",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: value"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /day-cutoff · 全参",
+  "method": "PUT",
+  "url": "/learnhub/api/day-cutoff",
+  "body": {
+   "value": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setDayCutoff(\"1\")"
+  ]
+ },
+ {
+  "id": "PUT /day-cutoff · 缺 value",
+  "method": "PUT",
+  "url": "/learnhub/api/day-cutoff",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: value"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /jol · 空参",
+  "method": "PUT",
+  "url": "/learnhub/api/jol",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setJolConfig({})"
+  ]
+ },
+ {
+  "id": "PUT /jol · 全参",
+  "method": "PUT",
+  "url": "/learnhub/api/jol",
+  "body": {
+   "enabled": true,
+   "rate": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setJolConfig({\"enabled\":true,\"rate\":1})"
+  ]
+ },
+ {
+  "id": "PUT /jol · 缺 enabled",
+  "method": "PUT",
+  "url": "/learnhub/api/jol",
+  "body": {
+   "rate": 1
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setJolConfig({\"rate\":1})"
+  ]
+ },
+ {
+  "id": "PUT /jol · 缺 rate",
+  "method": "PUT",
+  "url": "/learnhub/api/jol",
+  "body": {
+   "enabled": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setJolConfig({\"enabled\":true})"
+  ]
+ },
+ {
+  "id": "PUT /calibration/hints · 空参",
+  "method": "PUT",
+  "url": "/learnhub/api/calibration/hints",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: hints_enabled"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /calibration/hints · 全参",
+  "method": "PUT",
+  "url": "/learnhub/api/calibration/hints",
+  "body": {
+   "hints_enabled": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setCalibrationHints(true)"
+  ]
+ },
+ {
+  "id": "PUT /calibration/hints · 缺 hints_enabled",
+  "method": "PUT",
+  "url": "/learnhub/api/calibration/hints",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: hints_enabled"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /sleep · 空参",
+  "method": "PUT",
+  "url": "/learnhub/api/sleep",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setSleepAdviceConfig({})"
+  ]
+ },
+ {
+  "id": "PUT /sleep · 全参",
+  "method": "PUT",
+  "url": "/learnhub/api/sleep",
+  "body": {
+   "enabled": true
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setSleepAdviceConfig({\"enabled\":true})"
+  ]
+ },
+ {
+  "id": "PUT /sleep · 缺 enabled",
+  "method": "PUT",
+  "url": "/learnhub/api/sleep",
+  "body": {},
+  "status": 200,
+  "res": [],
+  "calls": [
+   "setSleepAdviceConfig({})"
+  ]
+ },
+ {
+  "id": "PUT /question-update · 空参",
+  "method": "PUT",
+  "url": "/learnhub/api/question-update",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /question-update · 全参",
+  "method": "PUT",
+  "url": "/learnhub/api/question-update",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1",
+   "patch": {}
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionUpdate(\"1\",\"1\",\"1\",{})"
+  ]
+ },
+ {
+  "id": "PUT /question-update · 缺 course",
+  "method": "PUT",
+  "url": "/learnhub/api/question-update",
+  "body": {
+   "node": "1",
+   "qid": "1",
+   "patch": {}
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: course"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /question-update · 缺 node",
+  "method": "PUT",
+  "url": "/learnhub/api/question-update",
+  "body": {
+   "course": "1",
+   "qid": "1",
+   "patch": {}
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: node"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /question-update · 缺 qid",
+  "method": "PUT",
+  "url": "/learnhub/api/question-update",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "patch": {}
+  },
+  "status": 500,
+  "res": {
+   "error": "missing required field: qid"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /question-update · 缺 patch",
+  "method": "PUT",
+  "url": "/learnhub/api/question-update",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "qid": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "questionUpdate(\"1\",\"1\",\"1\",{})"
+  ]
+ },
+ {
+  "id": "GET /nope · 未命中",
+  "method": "GET",
+  "url": "/learnhub/api/nope",
+  "status": 404,
+  "res": {
+   "error": "unknown route: GET /nope"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /nope · 未命中",
+  "method": "POST",
+  "url": "/learnhub/api/nope",
+  "body": {},
+  "status": 404,
+  "res": {
+   "error": "unknown route: POST /nope"
+  },
+  "calls": []
+ },
+ {
+  "id": "DELETE /status · 非三方法",
+  "method": "DELETE",
+  "url": "/learnhub/api/status",
+  "status": 404,
+  "res": {
+   "error": "unknown route: DELETE /status"
+  },
+  "calls": []
+ },
+ {
+  "id": "GET /node/pin · 方法不匹配（POST 路由）",
+  "method": "GET",
+  "url": "/learnhub/api/node/pin",
+  "status": 404,
+  "res": {
+   "error": "unknown route: GET /node/pin"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /status · 方法不匹配（GET 路由）",
+  "method": "POST",
+  "url": "/learnhub/api/status",
+  "body": {},
+  "status": 404,
+  "res": {
+   "error": "unknown route: POST /status"
+  },
+  "calls": []
+ },
+ {
+  "id": "PUT /status · 方法不匹配（GET 路由）",
+  "method": "PUT",
+  "url": "/learnhub/api/status",
+  "body": {},
+  "status": 404,
+  "res": {
+   "error": "unknown route: PUT /status"
+  },
+  "calls": []
+ }
+]

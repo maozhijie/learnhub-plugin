@@ -11,6 +11,15 @@
 - **技术层函数一律收 runtime 参数**（不在函数体内引用模块级状态），因此每个技术层函数在测试里都可用自造 runtime 直接调用。
 - **文件划分**：`runtime.ts`（构造与装配）／`jobs.ts`（入队、泵、保留期清扫、job runner）／`api.ts`（路由表 + 分发）／`static.ts`（面板与 vendor 伺服）／`tools.ts`（工具面注册）+ **薄 `index.ts`**（`apply` 只做装配）。
 - **路由表数据化为 runtime 的下一刀**：表项 `{ method, route, handler }`，**预留 ADR-0045 命令注册表投递侧的字段位**；POST 段的 73 个内嵌分支拆为子表。**120 条路由的行为与响应形状逐字不变**（公共面零改动）。路由表是 ADR-0045 骨架 A 的前置——数据化后应**直接演进为命令注册表的投递侧**，而不是先造一遍再改（#165 已如此裁定）。
+
+- **路由表数据化的落地形态（#168，2026-09-11）**：本 ADR 原写「`api.ts`（路由表 + 分发）」——落地时把**表项形状**再拆一层，因为 G5 棘轮不许 `api.ts` 从 999 行继续长，而 #169 还要往每条表项里填注册表字段（会更长）：
+  - `route-table.ts`（**表项形状**与构造器 `get/post/put/getPrefix`；零表项）——`RouteSpec` = `{method, route, handler}` + `RegistrySlots`（ADR-0045 的 `id·summary·args·engine·output·channels`，本票**只留位不消费**，填值在 #169，形状不必再改）；
+  - `routes.ts`（GET 46 + PUT 6）／`routes-post.ts`（POST 子表 73，含 `/tutor` 与 `/explain-back` 的面板会话 helper）——两段表分别成文件，避免 `routes-post → routes` 的装配环；
+  - `api.ts` 60 行：装配 `routes = [...getRoutes, ...postRoutes, ...putRoutes]` + `${method} ${route}` 索引 + 前缀项 + 唯一一个 404 回落与唯一一个 catch。
+  - **参数守卫另立 `params.ts`**（`need` 自 `http.ts` 迁来，G2 的导出断言随之改指）：必填 `need/needQuery/requireString/requireBoolean/requireNumber/requireObject/requireOneOf` + 可选 `opt*`/`pick`，21 处内联 `missing required field:` 与 51 处手写 `typeof body.x` 归零，错误消息与状态码逐字不变。
+  - **回归网**（这是「逐字不变」的证据而非声明）：125 条对账清单（`tests/fixtures/host-routes-baseline.json`，重构前实测）+ **464 条探针**在重构前捕获的 `{status, res, 引擎调用序列}` 快照（`host-routes-snapshot.json`，覆盖每条路由的空参／全参／逐个缺参）+ 分发纪律（404 文案、方法不匹配、POST 先读体）+ 状态码分布 200×122／404×4／500×1。
+  - **两处刻意的今天语义原样保留**（都在 `handleApi` 里写明）：POST/PUT **先读体再查表**（非法 JSON 的未知路由今天也走 500）、404 文案带原始方法名。趁重构顺手「修正」它们才是行为变更。
+  - 棘轮随之更新：受控文件 **83 → 87**，`host/api.ts` **999 → 60**（宿主单文件只剩 `host/tools.ts` 1040 超 900 目标），类型门 **80 → 75** 处（`api.ts` 的 7 处 `unknown` 传参被守卫的类型收口修好，2 处随搬移进 `routes-post.ts`）。
 - **工具面按域分组**：注册循环不变，**111 个工具名与 schema 逐字不变**；只把 941 行平铺改成按域（学习／图谱／题库／项目／学习者产出／实验室／通道／维护）的分组表。分组是**适配器的组织方式**，不改变工具面本身。
 - **宿主首次可测（本形态的直接收益）**：造 runtime 断言队列泵状态机（入队 → 执行 → 终态 → 保留期清扫）、暂停／恢复、`quizJobResults` 等待语义、路由表（表项唯一、方法／路径格式、未命中行为），以及**路由 ↔ 工具对账基线**（ADR-0045 实测：84 个共享引擎入口／工具独有 26／路由独有 49），作为命令注册表迁移的回归网。
 - **本形态是 #154 一批宿主类票的前置，且是双重身份**（#154 的更正评论已记）：既是重构前置，也是**测试前置**——#154 假设的「既有 HTTP 测试面」实测不存在（`tests/` 零命中 `handleApi`／`/learnhub/api`／`createServer`／`fetch`），唯一 HTTP 检查是手跑的 `scripts/smoke-panel.mjs`。因此按规格与 #154 的边：**本票阻塞 #157／#160／#161 的宿主侧部分**，与「路由表数据化」票（阻塞 #156／#158 的宿主侧部分）分开切票。

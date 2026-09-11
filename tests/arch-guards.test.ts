@@ -68,8 +68,15 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
     assert.equal(typeof llm[n], 'function', `host/llm.ts 缺导出 ${n}`)
   }
   const http = await import('../src/host/http.ts')
-  for (const n of ['sendJson', 'readJson', 'need', 'injectKatexIfMathed', 'PAGE_DIST', 'VENDOR_DIST', 'FILE_MIME', 'ASSET_MIME']) {
+  for (const n of ['sendJson', 'readJson', 'injectKatexIfMathed', 'PAGE_DIST', 'VENDOR_DIST', 'FILE_MIME', 'ASSET_MIME']) {
     assert.ok(http[n] !== undefined, `host/http.ts 缺导出 ${n}`)
+  }
+  // 参数守卫语义的唯一出处（#168：`need` 自 http.ts 迁来，21 处内联与 51 处手写 typeof 一并收口）
+  const params = await import('../src/host/params.ts')
+  for (const n of ['need', 'needQuery', 'optQuery', 'requireBoolean', 'requireNumber', 'requireString', 'requireObject',
+    'requireOneOf', 'optText', 'optTrimmed', 'optRaw', 'optString', 'optNumber', 'optFinite', 'optBoolean', 'optTrue',
+    'optObject', 'optList', 'pick']) {
+    assert.equal(typeof params[n], 'function', `host/params.ts 缺导出 ${n}`)
   }
 
   // 宿主技术层五文件（#167 / ADR-0048）：构造 / 队列 / 路由 / 伺服 / 工具面的关键导出在
@@ -84,7 +91,19 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   }
   const api = await import('../src/host/api.ts')
   assert.equal(typeof api.handleApi, 'function', 'host/api.ts 缺导出 handleApi')
+  assert.equal(typeof api.matchRoute, 'function', 'host/api.ts 缺导出 matchRoute（分发即查表）')
   assert.equal(api.API, '/learnhub/api', 'host/api.ts 路由前缀漂移')
+  assert.equal(api.routes.length, 125, 'host/api.ts 装配的路由表应为 125 条（GET 46 + POST 73 + PUT 6）')
+  // 路由表三段各自成模块（#168）：形状在 route-table.ts，GET/PUT 在 routes.ts，POST 子表在 routes-post.ts
+  const table = await import('../src/host/route-table.ts')
+  for (const n of ['get', 'post', 'put', 'getPrefix']) {
+    assert.equal(typeof table[n], 'function', `host/route-table.ts 缺表项构造器 ${n}`)
+  }
+  const routeSegments = await import('../src/host/routes.ts')
+  assert.equal(routeSegments.getRoutes.length, 46, 'host/routes.ts 的 GET 段应为 46 条')
+  assert.equal(routeSegments.putRoutes.length, 6, 'host/routes.ts 的 PUT 段应为 6 条')
+  const postSegment = await import('../src/host/routes-post.ts')
+  assert.equal(postSegment.postRoutes.length, 73, 'host/routes-post.ts 的 POST 子表应为 73 条')
   const staticSrv = await import('../src/host/static.ts')
   for (const n of ['panelPageHandler', 'serveVaultFile', 'serveVendor', 'serveInteractive']) {
     assert.equal(typeof staticSrv[n], 'function', `host/static.ts 缺导出 ${n}`)
@@ -96,7 +115,8 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
 })
 
 test('G2b src 下的入口文件存在且非空（防止误删/误移）', () => {
-  for (const rel of ['index.ts', 'host/llm.ts', 'host/http.ts',
+  for (const rel of ['index.ts', 'host/llm.ts', 'host/http.ts', 'host/params.ts', 'host/route-table.ts',
+    'host/routes.ts', 'host/routes-post.ts',
     'host/runtime.ts', 'host/jobs.ts', 'host/api.ts', 'host/static.ts', 'host/tools.ts', 'engine/index.ts']) {
     assert.ok(statSync(join(SRC, rel)).size > 0, `${rel} 缺失或为空`)
   }

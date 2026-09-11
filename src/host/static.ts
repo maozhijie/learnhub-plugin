@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve as resolvePath, sep } from 'node:path'
 import type { HostRuntime } from './runtime.ts'
 import { ASSET_MIME, FILE_MIME, PAGE_DIST, VENDOR_DIST, injectKatexIfMathed, sendJson } from './http.ts'
+import { needQuery } from './params.ts'
 
 /** 独立面板页面路由（伺服 web/dist）。 */
 export const PAGE = '/learnhub'
@@ -51,8 +52,7 @@ export async function panelPageHandler(req: IncomingMessage, res: ServerResponse
 
 /** GET /file：伺服 vault 内媒体文件（课程插图）；路径必须是 vault 相对且白名单扩展名。 */
 export async function serveVaultFile(rt: HostRuntime, url: URL, res: ServerResponse): Promise<void> {
-  const p = url.searchParams.get('path')
-  if (!p) throw new Error('missing required field: path')
+  const [p] = needQuery(url, 'path')
   const rel = p.replace(/\\/g, '/').replace(/^\/+/, '')
   if (rel.includes('..')) throw new Error('path traversal rejected')
   const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase()
@@ -94,8 +94,7 @@ export async function serveVendor(res: ServerResponse, route: string): Promise<v
  * default-src 'none' 封死），放开 'self' 后可从 /vendor 取 vendored katex/three、
  * 经 /file 引 vault 图片。 */
 export async function serveInteractive(rt: HostRuntime, url: URL, res: ServerResponse): Promise<void> {
-  const p = url.searchParams.get('path')
-  if (!p) throw new Error('missing required field: path')
+  const [p] = needQuery(url, 'path')
   const raw = p.replace(/\\/g, '/').replace(/^\/+/, '')
   if (raw.includes('..')) throw new Error('path traversal rejected')
   // 引用块存「学习中心相对路径」（<课程根>/交互/x.html），兼容 vault 相对（学习中心/…）——归一后再校验
