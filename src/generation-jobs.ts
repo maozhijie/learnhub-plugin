@@ -32,6 +32,55 @@ export function generationJobRetentionMs(status: GenJobStatus): number {
   return status === 'done' ? SUCCESS_KEEP_MS : DEBUG_KEEP_MS
 }
 
+/** 终态判定（queued 非终态、running/cancelling 活动态）：保留期清扫只作用于终态记录。 */
+export function isGenJobTerminal(status: GenJobStatus): boolean {
+  return status === 'done' || status === 'partial' || status === 'failed' || status === 'cancelled'
+}
+
+/** 内容锚定 phase：任务键是真实节点（内容管线三值 + 排队中尚未标注 phase 的内容任务）。
+ * 图域任务（种子/生长/富化/罗盘/反编译/计划/里程碑）是课程级任务，node 槽是标签
+ * （「生长批」「罗盘」…），不参与节点悬空判定。 */
+export function isNodeAnchoredPhase(phase: GenJobPhase | undefined): boolean {
+  return phase === undefined || phase === 'outline' || phase === 'sections' || phase === 'quiz'
+}
+
+/** 任务记录悬空判定的存在性输入（宿主用引擎的注册表与图解析结果喂入）。 */
+export interface GenJobExistence {
+  /** 课程已删（注册表精确匹配不到 name/id；停用不算缺失）。 */
+  courseMissing: boolean
+  /** 图上无此节点（已删/改名）；课程缺失时该值无意义。 */
+  nodeMissing: boolean
+}
+
+/** 单条任务记录的清扫裁决（纯函数，重启恢复与写侧联动共用，ADR-0039）：
+ * - 悬空（课程已删；或内容锚定任务的节点已删/改名）→ 'dangling'：唯一处置是清除、
+ *   不做墓碑——已删内容的讨论、重试与进度没有任何消费方；
+ * - 终态超保留期 → 'expired'：起算点 finishedAt（旧档无戳回退 startedAt），
+ *   保留期跨重启仍生效；
+ * - 其余（活动记录、窗口内终态）→ 'keep'。 */
+export function genJobSweepVerdict(
+  j: { status: GenJobStatus; startedAt: string; finishedAt?: string; phase?: GenJobPhase },
+  existence: GenJobExistence,
+  now: number,
+): 'dangling' | 'expired' | 'keep' {
+  if (existence.courseMissing) return 'dangling'
+  if (existence.nodeMissing && isNodeAnchoredPhase(j.phase)) return 'dangling'
+  if (isGenJobTerminal(j.status)) {
+    const ageMs = now - Date.parse(j.finishedAt ?? j.startedAt)
+    if (Number.isFinite(ageMs) && ageMs >= generationJobRetentionMs(j.status)) return 'expired'
+  }
+  return 'keep'
+}
+
+/** 终态记录的保留期剩余时长（重启恢复补挂定时器用）；已超期或时间戳不可解析返回 0。 */
+export function genJobRetentionRemainingMs(
+  j: { status: GenJobStatus; startedAt: string; finishedAt?: string },
+  now: number,
+): number {
+  const ageMs = now - Date.parse(j.finishedAt ?? j.startedAt)
+  return Math.max(0, generationJobRetentionMs(j.status) - (Number.isFinite(ageMs) ? ageMs : 0))
+}
+
 /** 内容管线异常 → 终态；取消旗标优先，其余正文失败不掩盖为 partial/done。
  * queued 不是可失败态：排队任务尚未开始执行。 */
 export function contentFailureStatus(jobStatus: GenJobStatus): Exclude<GenJobStatus, 'running' | 'cancelling' | 'queued'> {

@@ -223,3 +223,42 @@ test('#146: 教练回合模板 v2——插入批 note.recheck 预注册（metric
   assert.match(tpl, /插入批纪律|note\.recheck 必填/, '插入批必须预注册')
   assert.match(tpl, /不走复诊/, '旁支/巩固不走复诊')
 })
+
+// ---- v3 教练回合契约（ADR-0040）：生长纪律段——生成时质量自查回归提示词层 ----
+
+test('ADR-0040: 教练回合模板 v3——生长纪律（认知粒度/动作句/螺旋式/依赖充分性/边级自查）+ 上交前自查', () => {
+  const tpl = Content.PROMPT_KINDS['教练回合']!
+  assert.ok(Content.promptVersionOf(tpl) >= 3, '教练回合应带版本标记 v3+')
+  assert.match(tpl, /生长纪律/, '生成时质量段名（受理门只锁 schema 与结构事实）')
+  assert.match(tpl, /30 分钟/, '认知粒度 30 分钟自问')
+  assert.match(tpl, /动作句/, '动作句命名纪律')
+  assert.match(tpl, /螺旋式/, '螺旋式学习合法 + 名称可区分')
+  assert.match(tpl, /完整的直接前置集合/, '依赖充分性锚点')
+  assert.match(tpl, /真实依赖优先于难度曲线/, '依赖与难度的冲突序（跳跃=症状，留给插入）')
+  assert.match(tpl, /边级自查/, '逐边 verdict 纪律')
+  assert.match(tpl, /上交前/, 'pre-submit 自查清单锚点')
+})
+
+// ---- v2 种子提案契约（ADR-0040）：起点资格判据——单一行为单元 + 复合概念操作化判定 ----
+
+test('ADR-0040: 种子提案模板 v2——起点资格（单一行为单元/零复合概念/宁简勿繁）+ 操作化正反例', () => {
+  const tpl = Content.PROMPT_KINDS['种子提案']!
+  assert.ok(Content.promptVersionOf(tpl) >= 2, '种子提案应带版本标记 v2+')
+  assert.match(tpl, /起点资格/, '资格判据段名（受理门查不了，靠把关）')
+  assert.match(tpl, /单一行为单元/, '起点 = 单一行为单元')
+  assert.match(tpl, /零复合概念/, '复合概念禁令')
+  assert.match(tpl, /不放松起点资格/, '自述基础不放松资格（实测疼点：零基础自述下起点仍复合）')
+  assert.match(tpl, /宁简勿繁/, '不对称论证锚点（过简趋零代价 vs 过繁坡道断裂）')
+  assert.match(tpl, /「Python 基础语法」/, '复合泛称反例（allo 校勘范式：判据配正反例）')
+  assert.match(tpl, /装好环境并运行第一行代码/, '单一行为正例')
+})
+
+// ---- v9 反编译契约（ADR-0040）：seed 起点资格与种子提案同判据 + 上交前自查 ----
+
+test('ADR-0040: 项目目标反编译模板 v9——seed 起点资格同种子提案判据', () => {
+  const tpl = Content.PROMPT_KINDS['项目目标反编译']!
+  assert.ok(Content.promptVersionOf(tpl) >= 9, '项目目标反编译应升到 v9')
+  assert.match(tpl, /起点资格同种子提案/, '种子簇起点与种子提案同判据')
+  assert.match(tpl, /单一行为单元/, '起点 = 单一行为单元')
+  assert.match(tpl, /上交前自查/, 'pre-submit 自查锚点')
+})

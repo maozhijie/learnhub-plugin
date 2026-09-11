@@ -318,6 +318,12 @@ export class LearnhubEngine {
     return this.registry.resolve(key)
   }
 
+  /** 课程条目精确查找（name 或 id）：不存在返回 null，不抛——注册表清扫等存在性判定用
+   * （区别于 resolveCourse 的 fail loud）；停用课程不算缺失，内容仍在。 */
+  async courseByKey(key: string): Promise<CourseEntry | null> {
+    return this.registry.get(key)
+  }
+
   /** 跨课定位节点：「课程/节点」直接命中；否则在启用课程中搜唯一命中。 */
   async locateNode(nodeSpec: string): Promise<{ course: CourseEntry; node: string }> {
     if (nodeSpec.includes('/')) {

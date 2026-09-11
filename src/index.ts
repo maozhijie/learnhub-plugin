@@ -33,7 +33,10 @@ import { TIER_LABELS, tierIdxOf, genericQuizTarget } from './engine/complexity.t
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
 import {
   contentFailureStatus,
+  genJobRetentionRemainingMs,
+  genJobSweepVerdict,
   generationJobRetentionMs,
+  isGenJobTerminal,
   nextQueuedJob,
   quizFailureOutcome,
   quizSuccessOutcome,
@@ -141,6 +144,9 @@ interface GenJob {
   course: string
   node: string
   startedAt: string
+  /** 终态时刻（保留期起算点，随注册表落盘）：恢复清扫据此让保留期跨重启仍生效；
+   * 旧档无戳回退 startedAt（ADR-0039）。 */
+  finishedAt?: string
   status: GenJobStatus
   /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）；
    * 图域任务用 种子/生长/富化（#131 §5 / #140）。phase=quiz 且直接入队 = 纯出题任务
@@ -502,13 +508,57 @@ function waitForQuizJob(key: string, timeoutMs = 15 * 60_000): Promise<GenJob> {
   })
 }
 
-/** 任务终态保留期满后清出注册表（失败/取消留 24h 供排查与重试，成功留 30 分钟）。 */
-function scheduleJobRetention(key: string, status: GenJobStatus): void {
+/** 任务终态保留期满后清出注册表（失败/取消留 24h 供排查与重试，成功留 30 分钟）。
+ * 终态进入时盖 finishedAt 戳（保留期起算点落盘，ADR-0039）；delayMs 供重启恢复按
+ * 剩余时长补挂——进程内 setTimeout 随进程消失，恢复侧必须自己结算。 */
+function scheduleJobRetention(key: string, status: GenJobStatus, delayMs?: number): void {
+  const job = genJobs.get(key)
+  if (job && isGenJobTerminal(status) && !job.finishedAt) {
+    job.finishedAt = new Date().toISOString()
+    persistGenJobs()
+  }
   setTimeout(() => {
     const cur = genJobs.get(key)
     if (cur && cur.status !== 'running' && cur.status !== 'cancelling') genJobs.delete(key)
     persistGenJobs()
-  }, generationJobRetentionMs(status)).unref()
+  }, delayMs ?? generationJobRetentionMs(status)).unref()
+}
+
+/** 注册表清扫（ADR-0039 写侧联动出口）：课程已删，或内容锚定任务的节点已删/改名 →
+ * 记录悬空，唯一处置是清除（不做墓碑）；终态超保留期（finishedAt 起算）一并出册。
+ * running 记录先置取消旗标再出册——runner 持同一对象，下个检查点中止，而落盘序列化
+ * 取自 Map，已删条目的终态不会复活。存在性 = 注册表精确匹配 + 图节点名集；课程在而
+ * 图读不动（Broken）按存在性未知保守保留。courseDelete、删/改名节点的各 apply 出口
+ * 与重启恢复共用。返回清扫条数。 */
+async function sweepGenJobs(now = Date.now()): Promise<number> {
+  const perCourse = new Map<string, Promise<Set<string> | null | undefined>>()
+  const nodeNamesOf = (course: string): Promise<Set<string> | null | undefined> => {
+    let p = perCourse.get(course)
+    if (!p) {
+      p = (async (): Promise<Set<string> | null | undefined> => {
+        try {
+          const c = await engine.courseByKey(course)
+          if (!c) return null
+          return (await engine.loadView(c)).graph.nset
+        } catch {
+          return undefined
+        }
+      })()
+      perCourse.set(course, p)
+    }
+    return p
+  }
+  let swept = 0
+  for (const [key, j] of [...genJobs.entries()]) {
+    const names = await nodeNamesOf(j.course)
+    const verdict = genJobSweepVerdict(j, { courseMissing: names === null, nodeMissing: !!names && !names.has(j.node) }, now)
+    if (verdict === 'keep') continue
+    if (j.status === 'running') j.status = 'cancelling'
+    genJobs.delete(key)
+    swept++
+  }
+  if (swept) persistGenJobs()
+  return swept
 }
 
 /** 生长批任务键（课程级任务，node 槽放「生长批」标签；队列 phase=生长，#145）。 */
@@ -703,6 +753,8 @@ async function generateGrowthJob(ctx: Context, job: GenJob): Promise<void> {
       const tierNote = r.segments.map(s => `${s.tier}${s.disagreement ? '↑分歧升级' : ''}(${s.operator})`).join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
         + `${a.compass_rewritten ? '；罗盘已同事务重写' : ''}｜${tierNote}｜理由：${p.reason}`
+      // 受理批可含 del_node/rename（ADR-0039 写侧联动）：先清扫悬空任务记录再入队正文
+      if (a.ops > 0) await sweepGenJobs()
       // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）
       for (const node of a.ready_unbuilt) {
         try {
@@ -754,12 +806,16 @@ function pumpGeneration(ctx: Context): void {
             engine.settleRechecks())
           .then(r => {
             if (!r) return
+            let settledAny = false
             for (const c of r.courses) {
               if (!c.settled.length) continue
+              settledAny = true
               runLog('probation_settle', `「${c.course}」复诊结算：${c.settled.map(s =>
                 `${s.node}→${s.outcome}${s.metric ? `（${s.metric}）` : ''}`).join('；')}`)
                 .catch(() => undefined)
             }
+            // 复诊不达标自动剪除会删节点（无人审 del_node，ADR-0039 写侧联动）
+            if (settledAny) return sweepGenJobs()
           })
           .catch(err => runLog('coach_checkpoint(queue_idle)', `调用失败：${err instanceof Error ? err.message : String(err)}`))
       }
@@ -1486,6 +1542,8 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         // kind 必须显式照抄提案记录，未知 kind 引擎报错；
         // 计划修订触发的换线/补支生长批随后入队（#149）
         const applied = await engine.proposalApply(need(body, 'kind'), applyId(body.id))
+        // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
+        await sweepGenJobs()
         triggerPlanGrowth(ctx, applied as { kind?: string })
         sendJson(res, 200, applied)
         return
@@ -1841,7 +1899,10 @@ async function handleApi(ctx: Context, req: IncomingMessage, res: ServerResponse
         return
       }
       if (route === '/course/delete') {
-        sendJson(res, 200, await engine.courseDelete(need(body, 'course')))
+        const r = await engine.courseDelete(need(body, 'course'))
+        // 写侧联动（ADR-0039）：课程没了，注册表里它的任务记录（含排队/在途）随即出册
+        await sweepGenJobs()
+        sendJson(res, 200, r)
         return
       }
       if (route === '/generate/cancel') {
@@ -2083,14 +2144,12 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
 
   // 生成任务注册表恢复：running/cancelling 随进程消失标失败；queued 保留但队列置为
   // 暂停（不自动开跑——重启后静默烧 token 是惊吓，生成页一键恢复）
-  void engine.loadGenJobs().then(stale => {
-    let restoredQueued = 0
+  void engine.loadGenJobs().then(async stale => {
     for (const raw of stale) {
       const j = raw as Partial<GenJob>
       if (typeof j.course !== 'string' || typeof j.node !== 'string') continue
       const key = `${j.course}/${j.node}`
       const interrupted = j.status === 'running' || j.status === 'cancelling'
-      if (j.status === 'queued') restoredQueued++
       genJobs.set(key, {
         course: j.course, node: j.node,
         startedAt: typeof j.startedAt === 'string' ? j.startedAt : new Date().toISOString(),
@@ -2107,12 +2166,25 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
         ...(typeof j.instruction === 'string' ? { instruction: j.instruction } : {}),
         ...(typeof j.model === 'string' ? { model: j.model } : {}),
         message: interrupted ? '进程重启，任务中断——可重试' : (typeof j.message === 'string' ? j.message : undefined),
+        // 终态时刻随档恢复（保留期跨重启的起算点）；中断标失败的从恢复当下起算
+        ...(interrupted
+          ? { finishedAt: new Date().toISOString() }
+          : (typeof j.finishedAt === 'string' ? { finishedAt: j.finishedAt } : {})),
       })
     }
-    if (restoredQueued > 0) genQueuePaused = true
+    // 恢复清扫（ADR-0039）：内容已删的悬空记录清除（不做墓碑），终态超保留期一并出册
+    // ——重启前挂的保留期定时器已随进程消失，跨重启只能靠时间戳在这里结算
+    const swept = await sweepGenJobs()
+    // 幸存终态按剩余保留期补挂定时器
+    for (const [key, j] of genJobs) {
+      if (!isGenJobTerminal(j.status)) continue
+      scheduleJobRetention(key, j.status, genJobRetentionRemainingMs(j, Date.now()))
+    }
+    const aliveQueued = [...genJobs.values()].filter(j => j.status === 'queued').length
+    if (aliveQueued > 0) genQueuePaused = true
     persistGenJobs()
     if (stale.length) {
-      console.log(`[learnhub] gen-jobs restored: ${stale.length} (interrupted marked failed${restoredQueued ? `, ${restoredQueued} queued paused` : ''})`)
+      console.log(`[learnhub] gen-jobs restored: ${stale.length} (swept ${swept} dangling/expired${aliveQueued ? `, ${aliveQueued} queued paused` : ''})`)
     }
   })
 
@@ -2369,7 +2441,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
       JSON.stringify(await engine.graphPath(args.course, args.from, args.to))))
   tool('learnhub_graph_propose',
 
-    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=seed (#142) is the NEW-COURSE ENTRY: 1-3 start nodes + one endpoint node; the engine lands coarse placeholder edges (endpoint.pre = starts), one human review then the course starts. Seed nodes carry ZERO enc and ZERO est (rejected if declared); goal_type defaults to capability (completion = endpoint mastery + closure health) — coverage must be explicit AND carry a non-empty worksheet list ({block, note?, done?}; capability+worksheet is rejected). mode=new requires the course NOT be registered (the engine scaffolds the registry entry + dirs on apply); mode=reseed requires it — endpoint change / worksheet update of an existing course, the ONLY anchor-edit channel (no direct anchor writes; the endpoint-anchored node is also guarded: del_node/rename via kind=edit are rejected). Start entries may declare basis: baseline (common knowledge start) / vault (prior familiarity boundary) / project (decompiled cluster; goal decompilation #149 stamps it automatically on the starts it files). Seed node keys: name/region/block/note?/bloom?/difficulty?/teaches?/assumes?/misconceptions?. kind=edit (per batch) top-level keys: course; reason?; concepts? ([{canonical, aliases?, definition?}] — concept-registry minting block, #141: names land in 课程根/概念登记表.yaml with the SAME apply transaction, nothing written while the proposal is pending/rejected); ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Growth-batch note region (#145/#146): note{operator: 前进|插入|巩固|旁支|换向, reason, disagreement?, recheck?} marks the batch as a coach-round verdict; an insertion batch (operator=插入 with add_node ops) MUST preregister its recheck — note.recheck{metric: 前进恢复|卡点集中度降幅|保留率恢复 (exactly one, same source as the symptom), days? (learning days, default 10, clamped to [5,20] with a warn)} — the engine auto-adjudicates at expiry (proven, or auto-prune via del_node + coarse-edge restore, zero human review); recheck on non-insertion batches is rejected, and insertion batches are gate-throttled when the recheck pass rate bottoms out or the insertion/side-branch share exceeds its cap. Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Concept-reference gate (#141): every concept named in teaches/assumes/misconceptions must be registered in the course concept registry (canonical or alias, exact match) OR minted in the same proposal\'s concepts block — unregistered names are rejected with the missing list; minting a name that already exists is rejected too (reference the entry, or merge via learnhub_concept_merge after human confirmation). Prior feed (#142): vault-link candidates with w≥0.7 mapped to the proposal\'s nodes that the structure does NOT explicitly answer (no pre/enc edge between the pair) come back in warns (non-blocking) — answer them with real edges, or let a vault rescan drop them; zero priors is a legal normal path. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In growth batches apply edit proposals immediately after gates pass (anchor-review model, ADR-0003); seed proposals wait for the one human review.',
+    'Submit a graph proposal. Schema quick reference — write YAML strictly to this, wrong key names are rejected. kind=seed (#142) is the NEW-COURSE ENTRY: 1-3 start nodes + one endpoint node — starts must be SINGLE-BEHAVIOR units a zero-basis learner can step onto from common knowledge, with ZERO compound/blanket concepts (「Python 基础语法」-style blanket names fail as starts; compound content belongs to the growth path, ADR-0040); the engine lands coarse placeholder edges (endpoint.pre = starts), one human review then the course starts. Seed nodes carry ZERO enc and ZERO est (rejected if declared); goal_type defaults to capability (completion = endpoint mastery + closure health) — coverage must be explicit AND carry a non-empty worksheet list ({block, note?, done?}; capability+worksheet is rejected). mode=new requires the course NOT be registered (the engine scaffolds the registry entry + dirs on apply); mode=reseed requires it — endpoint change / worksheet update of an existing course, the ONLY anchor-edit channel (no direct anchor writes; the endpoint-anchored node is also guarded: del_node/rename via kind=edit are rejected). Start entries may declare basis: baseline (common knowledge start) / vault (prior familiarity boundary) / project (decompiled cluster; goal decompilation #149 stamps it automatically on the starts it files). Seed node keys: name/region/block/note?/bloom?/difficulty?/teaches?/assumes?/misconceptions?. kind=edit (per batch) top-level keys: course; reason?; concepts? ([{canonical, aliases?, definition?}] — concept-registry minting block, #141: names land in 课程根/概念登记表.yaml with the SAME apply transaction, nothing written while the proposal is pending/rejected); ops[] — add_node defines a new node via key `name` (unified with graph YAML in schema v2; the old `node` key is rejected): add_node{name, region, block, pre, est? (minutes, positive), bloom? (记忆/理解/应用/分析/评价/创造), difficulty? (1-5), type?: practice, note?, enc?, teaches? ({concept: 知道|会用|能教}, 1-8), assumes? ({concept: tier}, 3-10 when present), misconceptions? ([{concept, model}], ≤3 per concept course-wide)}; every other op targets an existing node via key `node`: set_pre{node, pre} replaces the whole pre set (pre is required, [] to clear); set_enc{node, enc} replaces the whole enc list ([skill] or [{node, w, note}]; enc is required, [] to clear); del_node{node}; rename{node, new}; move{node, region, block}; set_note{node, note}. Generation-time discipline the gates cannot check (ADR-0040): each add_node is ONE independent learning act — self-question whether a zero-basis learner could pick it up from its pre within 30 minutes, else split or add a prerequisite first; most names are action sentences (解/求/推导…, no「理解导数」-style level-unclear near-duplicates, no blanket compounds); pre is the COMPLETE direct-prerequisite set (no transitive padding); give every new pre edge a necessity verdict (delete-the-edge test: no concrete failure point = redundant, drop it). Edge-light rule: graph YAML carries ZERO edge metadata — candidate edges stay in the proposal, insertion origin derives from the proposal journal, probation lives in state/边实验.jsonl (fields like origin/status/probation are rejected). Growth-batch note region (#145/#146): note{operator: 前进|插入|巩固|旁支|换向, reason, disagreement?, recheck?} marks the batch as a coach-round verdict; an insertion batch (operator=插入 with add_node ops) MUST preregister its recheck — note.recheck{metric: 前进恢复|卡点集中度降幅|保留率恢复 (exactly one, same source as the symptom), days? (learning days, default 10, clamped to [5,20] with a warn)} — the engine auto-adjudicates at expiry (proven, or auto-prune via del_node + coarse-edge restore, zero human review); recheck on non-insertion batches is rejected, and insertion batches are gate-throttled when the recheck pass rate bottoms out or the insertion/side-branch share exceeds its cap. Batch `pre` may only reference existing nodes or nodes created earlier in the same batch. Concept-reference gate (#141): every concept named in teaches/assumes/misconceptions must be registered in the course concept registry (canonical or alias, exact match) OR minted in the same proposal\'s concepts block — unregistered names are rejected with the missing list; minting a name that already exists is rejected too (reference the entry, or merge via learnhub_concept_merge after human confirmation). Prior feed (#142): vault-link candidates with w≥0.7 mapped to the proposal\'s nodes that the structure does NOT explicitly answer (no pre/enc edge between the pair) come back in warns (non-blocking) — answer them with real edges, or let a vault rescan drop them; zero priors is a legal normal path. Keep pre-edge cognitive jumps (difficulty gap >= 2 or depth span >= 3) off the graph or expect R13 jump-candidate warnings. Schema + structure gates reject bad YAML with actionable errors (including dangling enc edges and misconception cap breaches). In growth batches apply edit proposals immediately after gates pass (anchor-review model, ADR-0003); seed proposals wait for the one human review.',
 
     {
       kind: { type: 'string', required: true, description: '"seed" (new-course entry or endpoint change — one human review) or "edit" (change ops) or "enrich" (overlay backfill)' },
@@ -2415,7 +2487,10 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
           await engine.graphReject(id, args.note ?? '')
           return `[reject] 提案 #${id} 已拒绝留痕。`
         }
-        return JSON.stringify(await engine.graphApply(graphKind(args.kind), applyId(args.id)))
+        const r = await engine.graphApply(graphKind(args.kind), applyId(args.id))
+        // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
+        await sweepGenJobs()
+        return JSON.stringify(r)
       }))
   tool('learnhub_concept_merge',
     'Merge one concept-registry entry into another (概念登记表 #141, human-decision surface): the absorbed entry disappears and ALL of its names (canonical + aliases) become aliases of the surviving entry, so every historical address keeps resolving — entries are never deleted, only merged. Use when the same concept was minted twice under different names (same meaning, confirmed by the learner); deepening a concept to a higher tier REUSES the same entry and is NOT a merge. Journal-tracked; the registry file is 课程根/概念登记表.yaml.',
@@ -2466,6 +2541,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     { course: { type: 'string', required: true, description: 'Course name' } },
     (args: { course: string }) => run('learnhub_course_delete', async () => {
       const r = await engine.courseDelete(args.course)
+      await sweepGenJobs() // 写侧联动（ADR-0039）：任务记录随课程删除出册
       return JSON.stringify({ message: `已删除「${r.removed}」（整课目录移入 .trash，可手工恢复）。沉淀层波及：${r.sediment}`, ...r })
     }))
   tool('learnhub_difficulty_advice',
