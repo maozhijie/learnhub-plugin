@@ -71,6 +71,7 @@ import { appendProbationEntry, foldProbation, growthGate, growthRates, learningD
 import { GraphProposals, addNodeCountOf, validateEditProposal } from './proposals.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from './sandbox.ts'
 import { appendSedimentEvent } from './sediment.ts'
+import { runWriteUnit } from './write-unit.ts'
 import { COMPLETION_MASTERY_THRESHOLD, readAnchor } from './seed.ts'
 import { readySet } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
@@ -895,12 +896,33 @@ export class GrowthSubsystem {
               settlePid = pid
             }
           }
+          // 写入单元（#176）：每条目的落盘写序照今天的声明——「账本结局行 → 结局落账
+          // （沉淀事件 + probation_settle journal）」。剪除管线（pruneProbationNode：
+          // propose→apply，内部自带 reject 补偿）已在其前面完成并被拒时整条目跳过
+          // （上方 continue）——与今天一致。失败上抛中止，不回滚不续跑，失败不写 journal；
+          // 「账本已决、沉淀未落」的部分态窗口照旧（恢复 = data-check 提示 + 重提）。
           const decidedAt = nowIsoOf(this.e.clock.nowMs())
-          await appendProbationEntry(this.e.paths, c.root, {
-            ...entry, outcome, decided_at: decidedAt,
-          })
-          await this.recordRecheckOutcome(c, { ...entry, outcome, decided_at: decidedAt }, {
-            metric, detail, settlePid, graph, coarsePre,
+          const settledEntry = { ...entry, outcome, decided_at: decidedAt }
+          await runWriteUnit('settleRechecks', {
+            clock: this.e.clock,
+            journal: rec => this.e.store.appendJournal(rec),
+            steps: [
+              {
+                // 账本追加只增，折叠口径每 (proposal, node) 取最后一行（读侧幂等）
+                name: `账本结局行#${entry.proposal}:${entry.node}`,
+                run: async () => {
+                  await appendProbationEntry(this.e.paths, c.root, settledEntry)
+                },
+              },
+              {
+                name: `结局落账#${entry.proposal}:${entry.node}`,
+                run: async () => {
+                  await this.recordRecheckOutcome(c, settledEntry, {
+                    metric, detail, settlePid, graph, coarsePre,
+                  })
+                },
+              },
+            ],
           })
           settled.push({ node: entry.node, outcome, metric, detail, ...(settlePid ? { proposal: settlePid } : {}) })
         }
