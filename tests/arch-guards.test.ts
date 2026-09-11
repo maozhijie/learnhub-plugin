@@ -17,7 +17,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scanUndefined } from '../scripts/undefined-scan.mjs'
@@ -67,12 +67,56 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   for (const n of ['sendJson', 'readJson', 'need', 'injectKatexIfMathed', 'PAGE_DIST', 'VENDOR_DIST', 'FILE_MIME', 'ASSET_MIME']) {
     assert.ok(http[n] !== undefined, `host/http.ts 缺导出 ${n}`)
   }
+
+  // 宿主技术层五文件（#167 / ADR-0048）：构造 / 队列 / 路由 / 伺服 / 工具面的关键导出在
+  const runtime = await import('../src/host/runtime.ts')
+  for (const n of ['createHostRuntime', 'runLog', 'run', 'apiRun', 'stripFences']) {
+    assert.equal(typeof runtime[n], 'function', `host/runtime.ts 缺导出 ${n}`)
+  }
+  const jobs = await import('../src/host/jobs.ts')
+  for (const n of ['pumpGeneration', 'enqueueGeneration', 'enqueueQuizGeneration', 'waitForQuizJob',
+    'scheduleJobRetention', 'sweepGenJobs', 'resumeQueue', 'restoreGenJobs']) {
+    assert.equal(typeof jobs[n], 'function', `host/jobs.ts 缺导出 ${n}`)
+  }
+  const api = await import('../src/host/api.ts')
+  assert.equal(typeof api.handleApi, 'function', 'host/api.ts 缺导出 handleApi')
+  assert.equal(api.API, '/learnhub/api', 'host/api.ts 路由前缀漂移')
+  const staticSrv = await import('../src/host/static.ts')
+  for (const n of ['panelPageHandler', 'serveVaultFile', 'serveVendor', 'serveInteractive']) {
+    assert.equal(typeof staticSrv[n], 'function', `host/static.ts 缺导出 ${n}`)
+  }
+  assert.equal(staticSrv.PAGE, '/learnhub', 'host/static.ts 页面前缀漂移')
+  const tools = await import('../src/host/tools.ts')
+  assert.equal(typeof tools.registerTools, 'function', 'host/tools.ts 缺导出 registerTools')
+  assert.ok(Array.isArray(tools.AGENT_GUIDE) && tools.AGENT_GUIDE.length > 0, 'host/tools.ts 缺 AGENT_GUIDE')
 })
 
 test('G2b src 下的入口文件存在且非空（防止误删/误移）', () => {
-  for (const rel of ['index.ts', 'host/llm.ts', 'host/http.ts', 'engine/index.ts']) {
+  for (const rel of ['index.ts', 'host/llm.ts', 'host/http.ts',
+    'host/runtime.ts', 'host/jobs.ts', 'host/api.ts', 'host/static.ts', 'host/tools.ts', 'engine/index.ts']) {
     assert.ok(statSync(join(SRC, rel)).size > 0, `${rel} 缺失或为空`)
   }
+})
+
+// ---------------------------------------------------------------- G2c 宿主模块级可变状态
+
+test('G2c 自检：模块级 let 会被看见、函数内 let 不误伤（门不是恒过）', () => {
+  const moduleLevelLets = (code: string) => [...code.matchAll(/^(export\s+)?let\s+/gm)].length
+  assert.equal(moduleLevelLets('let genJobs = new Map()\nfunction f() { let x = 1 }'), 1,
+    '列 0 的 let = 模块级，必须被抓；缩进的 let = 函数局部，不误伤')
+  assert.equal(moduleLevelLets("export let VAULT = ''"), 1, 'export let 同样被抓')
+  assert.equal(moduleLevelLets('const genJobs = new Map()'), 0, '常量放行（无运行时可变性声明）')
+})
+
+test('G2c 宿主模块级可变状态归零（ADR-0048：可变态全部进 HostRuntime）', () => {
+  const hostFiles = ['index.ts', 'host/runtime.ts', 'host/jobs.ts', 'host/api.ts', 'host/static.ts', 'host/tools.ts']
+  const bad: string[] = []
+  for (const rel of hostFiles) {
+    for (const m of readFileSync(join(SRC, rel), 'utf8').matchAll(/^(export\s+)?let\s+(\w+)/gm)) {
+      bad.push(`${rel}: ${m[2]}`)
+    }
+  }
+  assert.deepEqual(bad, [], `宿主出现模块级 let（可变态必须进 HostRuntime，ADR-0048）：\n${bad.join('\n')}`)
 })
 
 // ---------------------------------------------------------------- 自检夹具（三向／宽度）

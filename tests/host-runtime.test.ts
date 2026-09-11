@@ -1,0 +1,380 @@
+/**
+ * 宿主 runtime 单测（#167 / ADR-0048）——宿主第一次可测：
+ * 造一个 HostRuntime（临时 vault + 假 ctx + 影子引擎方法）即可断言：
+ *   - 队列泵状态机：入队 → 执行 → 终态 → 保留期清扫（进程内定时器与恢复补挂同语义）
+ *   - 暂停/恢复：重启暂停旗标挡泵，resumeQueue 清旗标并复泵
+ *   - quizJobResults 等待语义：agent 工具同步语义（入队 + 等终态 + 读结果表）、超时与消失 fail loud
+ *   - 工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变（tests/fixtures/host-tools-snapshot.json，
+ *     由重构前的 src/index.ts mock-apply 捕获）
+ *   - 「路由 ↔ 工具」对账基线：84 共享引擎入口 / 工具独有 26 / 路由独有 49
+ *     （tests/fixtures/host-face-baseline.json，ADR-0045 命令注册表迁移的回归网）
+ * 引擎方法用实例属性影子化（shadowing prototype），不依赖真实模型与真实课程数据。
+ */
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import type { IncomingMessage } from 'node:http'
+import type { Context } from '@deepseek-ai/cordis'
+import { LearnhubEngine } from '../src/engine/index.ts'
+import { createHostRuntime } from '../src/host/runtime.ts'
+import type { HostRuntime } from '../src/host/runtime.ts'
+import { handleApi } from '../src/host/api.ts'
+import {
+  cancelGeneration,
+  enqueueGeneration,
+  enqueueQuizGeneration,
+  pumpGeneration,
+  resumeQueue,
+  scheduleJobRetention,
+  sweepGenJobs,
+  waitForQuizJob,
+} from '../src/host/jobs.ts'
+import { registerTools } from '../src/host/tools.ts'
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const tmpVaults: string[] = []
+
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+
+/** 轮询直至条件成立；超时 fail loud（不用真等待，泵与定时器都是毫秒级）。 */
+async function until(cond: () => boolean, timeoutMs = 5000): Promise<void> {
+  const start = Date.now()
+  while (!cond()) {
+    if (Date.now() - start > timeoutMs) assert.fail('等待超时：条件未在时限内成立')
+    await sleep(10)
+  }
+}
+
+/** 假宿主 ctx：tools.register 捕获注册对象；effect/webServer 空转（createHostRuntime 不触 ctx）。 */
+function fakeCtx(captured?: unknown[]): Context {
+  return {
+    tools: { register: (t: unknown) => { captured?.push(t); return () => undefined } },
+    effect: () => undefined,
+    webServer: { register: () => undefined },
+  } as unknown as Context
+}
+
+/** 造一个隔离 runtime：临时 vault + 空旗标（并行测试互不污染——模块级状态归零的直接收益）。 */
+function makeRuntime(): HostRuntime {
+  const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-'))
+  tmpVaults.push(vault)
+  mkdirSync(join(vault, '学习中心'))
+  return createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心' })
+}
+
+/** 影子化引擎方法（实例属性覆盖原型方法），脚本化宿主依赖的引擎入口。 */
+function stub(rt: HostRuntime, methods: Record<string, unknown>): void {
+  for (const [k, fn] of Object.entries(methods)) {
+    ;(rt.engine as unknown as Record<string, unknown>)[k] = fn
+  }
+}
+
+/** 内容管线的确定性脚本：节清单直接 ready（跳过大纲与逐节正文），出题两段走固定结果；
+ * saveGenJobs 捕获每次落盘快照；coach/settle 静默（queue_idle 触点的消费方）。 */
+function stubContentPipeline(rt: HostRuntime, opts: { saved?: Array<Array<unknown>> } = {}): void {
+  stub(rt, {
+    contentPack: async () => '上下文包',
+    contentTierOf: async () => 1,
+    loadPrompt: async () => 'TPL',
+    contentSectionsView: async () => [{ id: 's1', title: '第一节', type: '概念', status: 'ready' }],
+    questionGenerateSections: async () => ({ added: 2 }),
+    questionGenerate: async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    courseByKey: async () => ({ name: '数学' }),
+    loadView: async () => ({ graph: { nset: new Set(['节点A', '节点B', '节点C']) } }),
+    saveGenJobs: async (jobs: Array<unknown>) => { opts.saved?.push(jobs) },
+    coachCheckpoint: async () => ({ courses: [] }),
+    settleRechecks: async () => null,
+  })
+}
+
+// ---------------------------------------------------------------- runtime 构造
+
+test('createHostRuntime：部署校验 fail loud（缺失/不存在不做静默兜底）', () => {
+  const ctx = fakeCtx()
+  assert.throws(() => createHostRuntime(ctx, {}), /config\.vault 缺失/)
+  assert.throws(() => createHostRuntime(ctx, { vault: join(tmpdir(), 'learnhub-不存在-vault') }), /config\.vault 目录不存在/)
+  const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-chk-'))
+  tmpVaults.push(vault)
+  assert.throws(() => createHostRuntime(ctx, { vault }), /学习中心目录不存在/)
+})
+
+test('createHostRuntime：新鲜库出生盖 v2 戳；已有 v2 learnhub.json 的库原样保留', () => {
+  const fresh = mkdtempSync(join(tmpdir(), 'learnhub-rt-fresh-'))
+  tmpVaults.push(fresh)
+  mkdirSync(join(fresh, '学习中心'))
+  createHostRuntime(fakeCtx(), { vault: fresh })
+  const stamped = JSON.parse(readFileSync(join(fresh, '学习中心', 'state', 'learnhub.json'), 'utf8'))
+  assert.deepEqual(stamped, { schema: { version: 2, formats: {} } }, '首启 seed 写入 runtime 构造路径（#138）')
+
+  const existing = mkdtempSync(join(tmpdir(), 'learnhub-rt-old-'))
+  tmpVaults.push(existing)
+  mkdirSync(join(existing, '学习中心', 'state'), { recursive: true })
+  const marker = '{"schema":{"version":2,"formats":{}},"marker":"已有库"}'
+  writeFileSync(join(existing, '学习中心', 'state', 'learnhub.json'), marker, 'utf8')
+  createHostRuntime(fakeCtx(), { vault: existing })
+  assert.equal(readFileSync(join(existing, '学习中心', 'state', 'learnhub.json'), 'utf8'), marker, '非新鲜库不重盖戳')
+})
+
+test('createHostRuntime：runtime 形状——引擎实例、路径归一、旗标清零、空任务表', () => {
+  const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-shape-'))
+  tmpVaults.push(vault)
+  mkdirSync(join(vault, '学习中心'))
+  const rt = createHostRuntime(fakeCtx(), { vault: `${vault}\\`, centerRel: '/学习中心/' })
+  assert.ok(rt.engine instanceof LearnhubEngine)
+  assert.equal(rt.vault, vault.replace(/\\/g, '/'), 'vault 反斜杠归一、尾分隔符剥掉')
+  assert.equal(rt.centerRel, '学习中心', 'centerRel 剥首尾分隔符')
+  assert.deepEqual(rt.flags, { queuePaused: false, pumping: false, lastSessionStartAt: 0 })
+  assert.equal(rt.jobs.genJobs.size, 0)
+  assert.equal(rt.jobs.quizJobResults.size, 0)
+})
+
+// ---------------------------------------------------------------- 队列泵状态机
+
+test('队列泵状态机：入队 → 执行 → 终态 done → 保留期清扫出册', async () => {
+  const rt = makeRuntime()
+  const saved: Array<Array<unknown>> = []
+  stubContentPipeline(rt, { saved })
+  const r = enqueueGeneration(rt, fakeCtx(), '数学', '节点A')
+  assert.equal(r.queued, true)
+  assert.match(r.message, /已入队/)
+  const key = '数学/节点A'
+  await until(() => rt.jobs.genJobs.get(key)?.status === 'done')
+  const job = rt.jobs.genJobs.get(key)!
+  assert.match(job.message, /正文完成（1 节）/, '正文完成 + 自动出题的终态消息')
+  assert.equal(job.phase, 'quiz', '管线收尾后 phase 停在出题段')
+  assert.equal(rt.flags.pumping, false, '跑完释放泵槽（全局单并发闸）')
+  assert.ok(saved.length >= 3, `状态变更逐次落盘（实得 ${saved.length} 次快照）`)
+  const last = saved.at(-1)![0] as { status: string }
+  assert.equal(last.status, 'done', '最后落盘即终态')
+  assert.ok(job.finishedAt, '终态盖 finishedAt 戳（保留期起算点落盘，ADR-0039）')
+
+  // 保留期清扫：done 留 30 分钟，超期出册（与恢复侧同一 sweepGenJobs 入口）
+  job.finishedAt = new Date(Date.now() - 31 * 60_000).toISOString()
+  const swept = await sweepGenJobs(rt)
+  assert.equal(swept, 1)
+  assert.equal(rt.jobs.genJobs.has(key), false)
+})
+
+test('队列泵状态机：running 重复入队拒绝；排队任务可取消（直接出队）', async () => {
+  const rt = makeRuntime()
+  let releasePack: (() => void) | undefined
+  const gate = new Promise<void>(r => { releasePack = r })
+  stub(rt, {
+    contentPack: () => gate, // 挂住管线，制造 running 窗口
+    saveGenJobs: async () => undefined,
+    coachCheckpoint: async () => ({ courses: [] }),
+    settleRechecks: async () => null,
+  })
+  const ctx = fakeCtx()
+  enqueueGeneration(rt, ctx, '数学', '节点A')
+  await until(() => rt.jobs.genJobs.get('数学/节点A')?.status === 'running')
+  assert.throws(() => enqueueGeneration(rt, ctx, '数学', '节点A'), /正在生成中/)
+  const cancelled = cancelGeneration(rt, '数学', '节点A')
+  assert.equal(cancelled.cancelled, true)
+  assert.equal(cancelled.status, 'cancelling', 'running 取消 = 置旗标，runner 下个检查点中止')
+  releasePack!()
+})
+
+test('队列暂停/恢复：暂停旗标挡泵（入队不开跑），resumeQueue 清旗标并复泵', async () => {
+  const rt = makeRuntime()
+  const hits = { pack: 0 }
+  stubContentPipeline(rt)
+  ;(rt.engine as unknown as Record<string, unknown>).contentPack = async () => { hits.pack++; return '上下文包' }
+  const ctx = fakeCtx()
+  rt.flags.queuePaused = true // 重启恢复后的暂停语义（restoreGenJobs 置位，生成页一键恢复）
+  enqueueGeneration(rt, ctx, '数学', '节点B')
+  await sleep(50)
+  assert.equal(rt.jobs.genJobs.get('数学/节点B')?.status, 'queued', '暂停期间不开跑（不静默烧 token）')
+  assert.equal(hits.pack, 0, '泵未触引擎')
+  const res = resumeQueue(rt, ctx)
+  assert.equal(res.paused, false)
+  assert.equal(res.resumed, 1, '恢复时在队任务数')
+  await until(() => rt.jobs.genJobs.get('数学/节点B')?.status === 'done')
+  assert.ok(hits.pack > 0, '恢复后泵跑完管线')
+})
+
+test('保留期定时器：delayMs 到点出册（恢复侧按剩余保留期补挂的同语义）', async () => {
+  const rt = makeRuntime()
+  stub(rt, { saveGenJobs: async () => undefined })
+  rt.jobs.genJobs.set('数学/节点D', {
+    course: '数学', node: '节点D', startedAt: new Date().toISOString(), status: 'failed',
+  })
+  scheduleJobRetention(rt, '数学/节点D', 'failed', 30)
+  assert.ok(rt.jobs.genJobs.get('数学/节点D')?.finishedAt, '终态进入时盖 finishedAt')
+  await until(() => !rt.jobs.genJobs.has('数学/节点D'), 2000)
+})
+
+test('泵直驱：未暂停但有排队任务时 pumpGeneration 拉起执行（恢复语义的底层出口）', async () => {
+  const rt = makeRuntime()
+  stubContentPipeline(rt)
+  const ctx = fakeCtx()
+  // 绕过 enqueue 的自动泵：手工置排队任务后直驱泵（等价 resumeQueue 的复泵动作）
+  rt.jobs.genJobs.set('数学/节点C', {
+    course: '数学', node: '节点C', startedAt: new Date().toISOString(), status: 'queued',
+    model: 'test', message: '排队等待生成…',
+  })
+  pumpGeneration(rt, ctx)
+  await until(() => rt.jobs.genJobs.get('数学/节点C')?.status === 'done')
+})
+
+// ---------------------------------------------------------------- quizJobResults 等待语义
+
+test('等待语义：入队 + 等终态 + 结果表读取（agent 工具同步语义）', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    questionGenerate: async () => ({ added: 4, total: 4, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async () => undefined,
+    coachCheckpoint: async () => ({ courses: [] }),
+    settleRechecks: async () => null,
+  })
+  const enq = enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点C', { count: 4 })
+  assert.equal(enq.queued, true)
+  const job = await waitForQuizJob(rt, enq.key)
+  assert.equal(job.status, 'done')
+  assert.match(job.message, /出题完成：新增 4 道（题库共 4）/)
+  assert.equal(rt.jobs.quizJobResults.get(enq.key)?.added, 4, '完整结果暂存结果表供工具读取')
+  rt.jobs.quizJobResults.delete(enq.key) // 工具读取后即删（learnhub_question_generate 的语义）
+})
+
+test('等待语义：超时与注册表消失 fail loud', async () => {
+  const rt = makeRuntime()
+  stub(rt, { saveGenJobs: async () => undefined })
+  rt.flags.queuePaused = true
+  enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点E', {})
+  await assert.rejects(waitForQuizJob(rt, '数学/节点E', 50), /等待出题任务超时/)
+  await assert.rejects(waitForQuizJob(rt, '数学/没有这个节点', 50), /已从注册表消失/)
+})
+
+// ---------------------------------------------------------------- 路由分发（static 抽离后行为不变）
+
+/** 假 res：捕获状态码/头/体（handleApi 只用到 writeHead 与 end）。 */
+function fakeRes() {
+  const out = { code: 0, headers: {} as Record<string, string>, body: '' }
+  return {
+    out,
+    writeHead: (code: number, headers: Record<string, string> = {}) => { out.code = code; out.headers = headers },
+    end: (data?: unknown) => { out.body = data === undefined ? '' : String(data) },
+  }
+}
+
+/** 假 req：GET 只需 method/url（handleApi 对 GET 不读体）；POST 需异步可迭代体（readJson 消费）。 */
+const get = (url: string) => ({ method: 'GET', url }) as unknown as IncomingMessage
+const post = (url: string, body: unknown) => ({
+  method: 'POST', url,
+  async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(body)) },
+}) as unknown as IncomingMessage
+
+test('路由分发：未知路由 404 带方法与前缀后的路由名（未命中行为）', async () => {
+  const rt = makeRuntime()
+  stub(rt, { saveGenJobs: async () => undefined })
+  for (const req of [get('/learnhub/api/nope'), post('/learnhub/api/nope', {})]) {
+    const res = fakeRes()
+    await handleApi(rt, fakeCtx(), req, res as never)
+    assert.equal(res.out.code, 404)
+    assert.deepEqual(JSON.parse(res.out.body), { error: `unknown route: ${req.method} /nope` })
+  }
+})
+
+test('路由分发：/agent-guide 直接回 AGENT_GUIDE 常量（不触引擎）', async () => {
+  const rt = makeRuntime()
+  const res = fakeRes()
+  await handleApi(rt, fakeCtx(), get('/learnhub/api/agent-guide'), res as never)
+  assert.equal(res.out.code, 200)
+  assert.equal(res.out.headers['cache-control'], 'no-store')
+  const body = JSON.parse(res.out.body) as Array<{ tool: string }>
+  assert.ok(Array.isArray(body) && body.length > 0)
+  assert.ok(body.some(e => e.tool === 'learnhub_pin_today'), 'AGENT_GUIDE 单源（tools.ts）')
+})
+
+test('路由分发：GET /status 附 llm 配置视图（模型透明；会话开始触点节流不挡响应）', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    statusJson: async () => ({ ok: true }),
+    saveGenJobs: async () => undefined,
+    coachCheckpoint: async () => ({ courses: [] }),
+  })
+  const res = fakeRes()
+  await handleApi(rt, fakeCtx(), get('/learnhub/api/status'), res as never)
+  assert.equal(res.out.code, 200)
+  const body = JSON.parse(res.out.body) as { ok: boolean; llm: { provider: string; model: string } }
+  assert.equal(body.ok, true)
+  assert.equal(typeof body.llm.provider, 'string')
+  assert.equal(typeof body.llm.model, 'string')
+})
+
+test('路由分发：static 抽离后 /file、/vendor、/interactive 的守卫行为逐字不变', async () => {
+  const rt = makeRuntime()
+  const cases: Array<{ url: string; error: RegExp }> = [
+    { url: '/learnhub/api/file', error: /missing required field: path/ },
+    { url: '/learnhub/api/file?path=../../etc/passwd', error: /path traversal rejected/ },
+    { url: '/learnhub/api/file?path=课程/图.exe', error: /unsupported file type: \.exe/ },
+    { url: '/learnhub/api/vendor/', error: /path traversal rejected/ },
+    { url: '/learnhub/api/vendor/katex/katex.exe', error: /unsupported vendor file type: \.exe/ },
+    { url: '/learnhub/api/interactive', error: /missing required field: path/ },
+    { url: '/learnhub/api/interactive?path=../x.html', error: /path traversal rejected/ },
+  ]
+  for (const c of cases) {
+    const res = fakeRes()
+    await handleApi(rt, fakeCtx(), get(c.url), res as never)
+    assert.equal(res.out.code, 500, `${c.url} 应走 500（路由抛错 → 统一 catch）`)
+    assert.match(String((JSON.parse(res.out.body) as { error: string }).error), c.error, c.url)
+  }
+  // POST 分支仍按 body 校验参数（need 的 400 语义经统一 catch 出口）
+  const res = fakeRes()
+  await handleApi(rt, fakeCtx(), post('/learnhub/api/generate', {}), res as never)
+  assert.equal(res.out.code, 500)
+  assert.match(String((JSON.parse(res.out.body) as { error: string }).error), /missing required field: course/)
+})
+
+// ---------------------------------------------------------------- 工具面快照 + 路由↔工具对账
+
+test('工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变', () => {
+  const rt = makeRuntime()
+  const captured: Array<{ name?: string; description?: string; parameters?: unknown }> = []
+  registerTools(fakeCtx(captured), rt)
+  assert.equal(captured.length, 111, '工具总数不变（注册顺序按域分组重排，逐工具逐字不变）')
+  const snapshot = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-snapshot.json'), 'utf8')) as
+    Array<{ name: string; description: string; parameters: unknown }>
+  assert.equal(snapshot.length, 111)
+  const byName = new Map(captured.map(t => [t.name, t]))
+  assert.equal(byName.size, 111, '工具名无重复')
+  for (const expect of snapshot) {
+    const got = byName.get(expect.name)
+    assert.ok(got, `缺工具 ${expect.name}`)
+    assert.deepEqual(
+      { description: got.description, parameters: got.parameters },
+      { description: expect.description, parameters: expect.parameters },
+      `工具 ${expect.name} 的描述/schema 相对重构前基线漂移`,
+    )
+  }
+})
+
+test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、路由独有 49（ADR-0045 迁移回归网）', () => {
+  const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*)\s*\(/g)].map(m => m[1]))
+  const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
+  // 工具面 = tools.ts；路由面 = 其余宿主技术层（与基线口径一致：工具注册区 vs 工具区外全部）
+  const toolFace = faceOf(read('src/host/tools.ts'))
+  const routeFace = faceOf(['src/host/runtime.ts', 'src/host/jobs.ts', 'src/host/api.ts', 'src/host/static.ts', 'src/index.ts']
+    .map(read).join('\n'))
+  const base = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-face-baseline.json'), 'utf8')) as {
+    shared: string[]; toolOnly: string[]; routeOnly: string[]
+  }
+  const shared = [...toolFace].filter(x => routeFace.has(x)).sort()
+  const toolOnly = [...toolFace].filter(x => !routeFace.has(x)).sort()
+  const routeOnly = [...routeFace].filter(x => !toolFace.has(x)).sort()
+  assert.deepEqual(shared, base.shared, '两面共享的引擎入口集漂移')
+  assert.deepEqual(toolOnly, base.toolOnly, '工具独有引擎入口集漂移')
+  assert.deepEqual(routeOnly, base.routeOnly, '路由独有引擎入口集漂移')
+  assert.equal(shared.length, 84)
+  assert.equal(toolOnly.length, 26)
+  assert.equal(routeOnly.length, 49)
+})
+
+// ---------------------------------------------------------------- 清理
+
+test.after(() => {
+  for (const v of tmpVaults) rmSync(v, { recursive: true, force: true })
+})

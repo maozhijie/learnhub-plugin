@@ -236,9 +236,14 @@
     "src/engine/xp.ts": 182,
     "src/engine/yaml.ts": 23,
     "src/generation-jobs.ts": 116,
+    "src/host/api.ts": 998,
     "src/host/http.ts": 61,
+    "src/host/jobs.ts": 784,
     "src/host/llm.ts": 129,
-    "src/index.ts": 3029,
+    "src/host/runtime.ts": 176,
+    "src/host/static.ts": 123,
+    "src/host/tools.ts": 1044,
+    "src/index.ts": 71,
     "src/tool-contracts.ts": 54
   }
 }

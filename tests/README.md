@@ -74,6 +74,14 @@
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 
 `analyzeGraph`/`runAudit` 只做薄接线，不在接缝清单内。
+
+宿主装配缝（2026-09-11 新增，#167 / ADR-0048；`tests/host-runtime.test.ts`）——宿主第一次可测：
+
+- **`createHostRuntime(ctx, config): HostRuntime` 是宿主唯一装配缝**：显式 runtime 对象承载全部可变态（`engine`／`vault`／`centerRel`／`jobs.genJobs`／`jobs.quizJobResults`／`flags.queuePaused·pumping·lastSessionStartAt`），技术层函数（队列泵/路由/工具面/伺服）一律收 runtime 参数。测试造 runtime = 临时 vault + 假 ctx + 引擎方法影子化（实例属性覆盖原型），零模块级状态、并行测试互不污染。
+- 断言面：队列泵状态机（入队 → 执行 → 终态 → 保留期清扫与 delayMs 补挂）、暂停/恢复（`resumeQueue`）、`quizJobResults` 等待语义（`waitForQuizJob` 超时/消失 fail loud）、runtime 构造校验与首启 seed（#138 盖戳在构造路径）。
+- **工具面快照**：`tests/fixtures/host-tools-snapshot.json` 由重构前的 `src/index.ts` mock-apply 捕获（111 个工具的 name/description/parameters），断言按域分组重排后逐工具逐字不变。
+- **「路由 ↔ 工具」对账基线**：`tests/fixtures/host-face-baseline.json`（口径＝工具注册区 vs 工具区外全部，ADR-0045 实测）：共享引擎入口 **84**、工具独有 **26**、路由独有 **49**——命令注册表迁移的回归网。
+
 架构门（2026-09-11 新增，ADR-0042 / #152 刀 1；`tests/import-rules.test.ts`）：
 
 - 分层依赖规则执法，随 `npm test` 全量必跑：R1 host 的 engine 导入只走门面、R2 engine 禁引宿主、R3 engine 禁引 `@deepseek-ai/*`、R4 views 纯类型、R5 io.ts 零相对导入叶子、R6 门面唯一汇点（engine 子模块不回引 engine/index.ts）、R7 src 相对 import 全图零环（含 type-only 与动态导入边）。R3 带自检：收集器须能看见裸包/作用域包说明符（曾出现只收相对说明符致 R3 恒过的实测缺陷，自检锁死）。行级收集相对导入（静态/type/侧效/export-from/动态）+ DFS；说明符解析带 .ts 直用、否则补 .ts、否则补 /index.ts。刀 1 随门落地两处解环先例：receipts 用本地 ReceiptStore 结构化窄面（receipts 不 import store）、周折叠函数族归位 dates.ts（sediment 改引 dates，kata 原路径 re-export 保 S45 接缝）。
@@ -85,7 +93,7 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 | 门 | 内容 | 档位 | 阈值来源（落笔实测） |
 |---|---|---|---|
 | G1 未定义标识符 | 剥注释与字符串后「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`） | 硬门 0 | 0（`shuffled` 修复后）。tsc 落地后由 TS2304 接管、本门退役 |
-| G2／G2b 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在、入口文件非空 | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径 |
+| G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在、入口文件非空；G2c＝宿主（index + host/*）除常量外零模块级 `let`（ADR-0048，带自检：模块级 let 被抓、函数内 let 不误伤） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径 |
 | G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。缺件方向（dead／missing／unwired）**硬门 0**；多余接线按基线棘轮 | 缺件硬门 0 ＋ 多余棘轮 | 声明 **167** ／ 实用 167 ／ 接线 **197** ／ 多余 **30**（含 **10** phantom，全在 growth 的门面接线里） |
 | G4 窄面宽度（三槽位） | `handles`／`facade`／`fns` 逐子系统卡基线；`handles ≤12／facade ≤20／fns ≤10` 是**非活动目标** | 棘轮 | 实测最大 handles **9**／facade **20**／fns **1**（对预算已绿；facade 已触上限，无余量） |
 | G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件与宿主 `index.ts`（3029 行）全超 600／900，故活动门＝逐文件基线（**78** 个受控文件） |
