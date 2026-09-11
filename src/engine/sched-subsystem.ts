@@ -42,7 +42,7 @@ export interface SchedDeps {
 import { effectiveStage } from './audit.ts'
 import { calibrationProfileView } from './calibration.ts'
 import { dayOfTs, fmtCutoff, inWeek, prevWeekStartOf, todayStr, weekEndOf } from './dates.ts'
-import { PASS_SCORE, netPracticeRecs } from './grading.ts'
+import { PASS_SCORE, netPracticeRecs, round2 } from './grading.ts'
 import { atomicWrite } from './io.ts'
 import { jolCalibration } from './jol.ts'
 import { FORECAST_DAYS, calibrationBins, dueReviewFirstPushes, forecast, forgettingCurve, stateHistograms, trueRetention } from './memory.ts'
@@ -124,7 +124,7 @@ export class SchedSubsystem {
       attempts += q.stats?.attempts ?? 0
       correct += q.stats?.correct ?? 0
     }
-    const accuracy = attempts ? Math.round((correct / attempts) * 100) / 100 : null
+    const accuracy = attempts ? round2(correct / attempts) : null
     if (state[node]?.stage === 'mastered' || state[node]?.stage === 'skipped') {
       return { accepted: true, accuracy, course: c.name, node, stage: state[node].stage, initialized: 0, due: null }
     }

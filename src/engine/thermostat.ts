@@ -11,6 +11,8 @@
  *
  * 零依赖纯函数（接口数据由门面注入）；阈值全部低数据静默。
  */
+import { round2, pctOf } from './grading.ts'
+import { DAY_MS, calendarDayOf } from './dates.ts'
 import type { BandPref } from './adaptive.ts'
 import type { BandRec } from './coach.ts'
 import type { ReviewRec } from './types.ts'
@@ -26,9 +28,9 @@ export const THERMOSTAT_MIN_RETENTION_N = 20
 /** 保留率带口径（只读仪表展示）：与期望保留率 0.9 对照的三段式。 */
 export function retentionBand(rate: number | null): { label: string; level: 'low' | 'mid' | 'high' | 'empty' } {
   if (rate === null) return { label: '无数据', level: 'empty' }
-  if (rate >= 0.95) return { label: `很高（${Math.round(rate * 100)}%）——难度余量大`, level: 'high' }
-  if (rate >= 0.75) return { label: `适中（${Math.round(rate * 100)}%）`, level: 'mid' }
-  return { label: `偏低（${Math.round(rate * 100)}%）——当心的困难变成了受伤的困难`, level: 'low' }
+  if (rate >= 0.95) return { label: `很高（${pctOf(rate)}）——难度余量大`, level: 'high' }
+  if (rate >= 0.75) return { label: `适中（${pctOf(rate)}）`, level: 'mid' }
+  return { label: `偏低（${pctOf(rate)}）——当心的困难变成了受伤的困难`, level: 'low' }
 }
 
 /** 难度带长期选择分布（窗口内）：会话数、作答量、各带占比。 */
@@ -36,15 +38,15 @@ export function bandDistribution(
   recs: BandRec[], today: string, days = THERMOSTAT_WINDOW_DAYS,
 ): { sessions: number; answered: number; shares: Record<BandPref, number> } {
   const inWin = recs.filter(r => today >= r.date
-    && (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${r.date}T00:00:00Z`)) / 86400000 < days)
+    && (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${r.date}T00:00:00Z`)) / DAY_MS < days)
   const answered = inWin.reduce((s, r) => s + r.answered, 0)
   const count: Record<BandPref, number> = { easy: 0, standard: 0, hard: 0 }
   for (const r of inWin) count[r.band]++
   const n = inWin.length
   const shares: Record<BandPref, number> = {
-    easy: n ? Math.round((count.easy / n) * 100) / 100 : 0,
-    standard: n ? Math.round((count.standard / n) * 100) / 100 : 0,
-    hard: n ? Math.round((count.hard / n) * 100) / 100 : 0,
+    easy: n ? round2(count.easy / n) : 0,
+    standard: n ? round2(count.standard / n) : 0,
+    hard: n ? round2(count.hard / n) : 0,
   }
   return { sessions: n, answered, shares }
 }
@@ -58,8 +60,8 @@ export function execRatingDistribution(logs: ReviewRec[], today: string, days = 
   let count = 0
   for (const rec of logs) {
     if ((rec.rating_source as string) !== 'execution') continue
-    const day = rec.ts.slice(0, 10)
-    if (today >= day && (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / 86400000 >= days) continue
+    const day = calendarDayOf(rec.ts) // 出处口径：事件时间戳的日历日（today 是学习日，窗口按日粒度比较）
+    if (today >= day && (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / DAY_MS >= days) continue
     count++
     by[rec.rating] = (by[rec.rating] ?? 0) + 1
   }
@@ -97,7 +99,7 @@ export function thermostatSuggestions(input: {
       id: 'band_default:standard',
       knob: 'band_default',
       title: '目标难度带默认值',
-      text: `最近 ${THERMOSTAT_WINDOW_DAYS} 天你的复习会话 ${Math.round(bands.shares.easy * 100)}% 都选了简单带，而到期复习的真实保留率高达 ${Math.round(retention.rate * 100)}%——「可用的困难」还有余量。要不要把会话的默认难度带设为「标准」？你随时可以在会话里显式选带覆盖默认。`,
+      text: `最近 ${THERMOSTAT_WINDOW_DAYS} 天你的复习会话 ${pctOf(bands.shares.easy)}% 都选了简单带，而到期复习的真实保留率高达 ${pctOf(retention.rate)}%——「可用的困难」还有余量。要不要把会话的默认难度带设为「标准」？你随时可以在会话里显式选带覆盖默认。`,
       apply: { config: 'band_default', value: 'standard' },
     })
   }
@@ -107,7 +109,7 @@ export function thermostatSuggestions(input: {
       id: 'band_default:standard',
       knob: 'band_default',
       title: '目标难度带默认值',
-      text: `最近 ${THERMOSTAT_WINDOW_DAYS} 天你的复习会话 ${Math.round(bands.shares.hard * 100)}% 都在挑战带，但到期复习的真实保留率只有 ${Math.round(retention.rate * 100)}%——当心的困难正在变成受伤的困难。要不要把会话的默认难度带回落到「标准」？先回补前置与成分技能的到期复习也会有帮助。`,
+      text: `最近 ${THERMOSTAT_WINDOW_DAYS} 天你的复习会话 ${pctOf(bands.shares.hard)}% 都在挑战带，但到期复习的真实保留率只有 ${pctOf(retention.rate)}%——当心的困难正在变成受伤的困难。要不要把会话的默认难度带回落到「标准」？先回补前置与成分技能的到期复习也会有帮助。`,
       apply: { config: 'band_default', value: 'standard' },
     })
   }

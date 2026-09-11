@@ -206,6 +206,34 @@ export interface ReviewRec {
 export const PROPOSAL_KINDS = ['edit', 'seed', 'enrich', 'project_plan', 'project_milestone', 'experiment'] as const
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
 
+/** 提案状态全集（store 全留痕：pending/applied/rejected；#172 起字面量数组收敛于此）。 */
+export const PROPOSAL_STATUSES = ['pending', 'applied', 'rejected'] as const
+export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number]
+
+// ---- 键标识（#172 复合键拼接收敛）：引擎复合键的唯一拼解码。住中立词汇层
+// （零依赖）才不成环——anki 原路径 re-export 保接缝，分析/优化/沙盘等叶子模块
+// 引此处不引入任何新依赖边。----
+
+/** learnhub 卡 id → 来源键 `课程/节点/题id`（解析时课程取第一个 /、题 id 取最后一个
+ * /——节点名允许含 /，题 id 是机器生成的安全段）。 */
+export function sourceKeyOf(course: string, node: string, qid: string): string {
+  return `${course}/${node}/${qid}`
+}
+
+/** 来源键 → { course, node, qid }；形态不合返回 null。 */
+export function parseSourceKey(key: string): { course: string; node: string; qid: string } | null {
+  const i = key.indexOf('/')
+  const j = key.lastIndexOf('/')
+  if (i <= 0 || j <= i) return null
+  const qid = key.slice(j + 1)
+  return qid ? { course: key.slice(0, i), node: key.slice(i + 1, j), qid } : null
+}
+
+/** 节点身份键 `课程/节点`（来源键去题段：卡分组、沙盘工作副本、计划节点清单共用）。 */
+export function nodeKeyOf(course: string, node: string): string {
+  return `${course}/${node}`
+}
+
 /** 生长算子集（#145 / ADR-0033 滚动教练）：停机规则转译进算子语义——前进=目标消费，
  * 插入=症状当场补过渡（复诊随边实验账本结算），巩固=足迹末端综合只引已教概念、
  * 旁支=教学消费支线（两者不走复诊），换向=批注/目标变化下重定路线（换终点走重新种子）。 */
@@ -218,7 +246,7 @@ export interface ProposalRec {
   id: number
   kind: ProposalKind
   course: string
-  status: 'pending' | 'applied' | 'rejected'
+  status: ProposalStatus
   summary: string
   artifact: string
   created: string

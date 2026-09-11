@@ -33,6 +33,8 @@ import type { BrokenNote } from './notes.ts'
 import { loadNote } from './notes.ts'
 import type { FSRS } from 'ts-fsrs'
 import { todayStr, dayOfTs, nowIso } from './dates.ts'
+import { nodeKeyOf } from './types.ts'
+import { round2 } from './grading.ts'
 import { readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import type { BandPref } from './adaptive.ts'
 import { combinedDifficulty } from './adaptive.ts'
@@ -522,7 +524,7 @@ export class LearnerSubsystem {
           node,
           due: dues.sort()[0] ?? null,
           count: dues.length,
-          accuracy: attempts ? Math.round((correct / attempts) * 100) / 100 : null,
+          accuracy: attempts ? round2(correct / attempts) : null,
           attempts,
         })
       })
@@ -1200,7 +1202,7 @@ export class LearnerSubsystem {
   private async mirrorReceiptToProjects(
     courseName: string, node: string, rec: ReceiptLogRec, material: string,
   ): Promise<string[]> {
-    const specs = new Set([node, `${courseName}/${node}`])
+    const specs = new Set([node, nodeKeyOf(courseName, node)])
     const out: string[] = []
     for (const p of await this.e.projects.list()) {
       if (!p.plan.some(m => (m.nodes ?? []).some(n => specs.has(n)))) continue

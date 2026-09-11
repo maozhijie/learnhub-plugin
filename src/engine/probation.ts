@@ -30,6 +30,7 @@ import {
   GROWTH_RESILIENCE_HIGH,
 } from './params.ts'
 import { dayOfTs } from './dates.ts'
+import { pctOf } from './grading.ts'
 import type { Paths } from './paths.ts'
 import type { PracticeRec, ReviewRec } from './types.ts'
 
@@ -214,7 +215,6 @@ export interface RecheckEvaluationInput {
 }
 
 const round4 = (x: number): number => Math.round(x * 10000) / 10000
-const pct = (x: number): string => `${Math.round(x * 100)}%`
 
 /** 窗口错误按 invokes 概念聚合的最大份额（无错误 = null）。 */
 function concentrationOf(recs: PracticeRec[], days: Set<string>, cutoff: number, invokesOf: (qid: string) => string | null): number | null {
@@ -260,11 +260,11 @@ export function recheckVerdict(input: RecheckEvaluationInput): RecheckVerdict {
     const pre = concentrationOf(input.practice, preDays, input.cutoff, input.invokesOf)
     const post = concentrationOf(input.practice, postDays, input.cutoff, input.invokesOf)
     if (pre === null) return { met: false, detail: '复诊前窗无错误作答——卡点前提不存在，降幅无从谈起' }
-    if (post === null) return { met: true, detail: `复诊窗内错误清零（复诊前集中度 ${pct(pre)}）` }
+    if (post === null) return { met: true, detail: `复诊窗内错误清零（复诊前集中度 ${pctOf(pre)}）` }
     const drop = round4(pre - post)
     return drop >= RECHECK_CONCENTRATION_DROP
-      ? { met: true, detail: `集中度 ${pct(pre)} → ${pct(post)}（降幅 ${pct(drop)} ≥ ${pct(RECHECK_CONCENTRATION_DROP)}）` }
-      : { met: false, detail: `集中度 ${pct(pre)} → ${pct(post)}（降幅 ${pct(drop)} < ${pct(RECHECK_CONCENTRATION_DROP)}）` }
+      ? { met: true, detail: `集中度 ${pctOf(pre)} → ${pctOf(post)}（降幅 ${pctOf(drop)} ≥ ${pctOf(RECHECK_CONCENTRATION_DROP)}）` }
+      : { met: false, detail: `集中度 ${pctOf(pre)} → ${pctOf(post)}（降幅 ${pctOf(drop)} < ${pctOf(RECHECK_CONCENTRATION_DROP)}）` }
   }
 
   // 保留率恢复
@@ -276,8 +276,8 @@ export function recheckVerdict(input: RecheckEvaluationInput): RecheckVerdict {
   }
   const gain = round4(post.rate! - pre.rate!)
   return gain >= RECHECK_RETENTION_RECOVER
-    ? { met: true, detail: `真实保留率 ${pct(pre.rate!)} → ${pct(post.rate!)}（回升 ${pct(gain)} ≥ ${pct(RECHECK_RETENTION_RECOVER)}）` }
-    : { met: false, detail: `真实保留率 ${pct(pre.rate!)} → ${pct(post.rate!)}（回升 ${pct(gain)} < ${pct(RECHECK_RETENTION_RECOVER)}）` }
+    ? { met: true, detail: `真实保留率 ${pctOf(pre.rate!)} → ${pctOf(post.rate!)}（回升 ${pctOf(gain)} ≥ ${pctOf(RECHECK_RETENTION_RECOVER)}）` }
+    : { met: false, detail: `真实保留率 ${pctOf(pre.rate!)} → ${pctOf(post.rate!)}（回升 ${pctOf(gain)} < ${pctOf(RECHECK_RETENTION_RECOVER)}）` }
 }
 
 /** 结算时点的到期判定（纯函数）：课程学习日序列中，登记日（含）之后的学习日数
@@ -393,20 +393,20 @@ export function growthGate(
     if (rates.recheck_pass_rate !== null && rates.decided >= GROWTH_RATE_MIN_SAMPLE
       && rates.recheck_pass_rate < GROWTH_RECHECK_PASS_FLOOR) {
       verdict.blocks.push(
-        `插入闸停：复诊通过率 ${pct(rates.recheck_pass_rate)} 低于闸门 ${pct(GROWTH_RECHECK_PASS_FLOOR)}`
+        `插入闸停：复诊通过率 ${pctOf(rates.recheck_pass_rate)} 低于闸门 ${pctOf(GROWTH_RECHECK_PASS_FLOOR)}`
         + `（近 ${rates.window_days} 学习日已决 ${rates.decided} 条，剪除 ${rates.pruned} 条）——先等在途复诊结算或窗口滑动，本轮生长改裁 前进/巩固`)
     }
     const share = (rates.inserted + batch.adds) / coachAfter
     if (rates.insert_rate !== null && share > GROWTH_INSERT_RATE_CAP) {
       verdict.blocks.push(
-        `插入率超限：本批后插入占生长新增 ${pct(share)} > 上限 ${pct(GROWTH_INSERT_RATE_CAP)}`
+        `插入率超限：本批后插入占生长新增 ${pctOf(share)} > 上限 ${pctOf(GROWTH_INSERT_RATE_CAP)}`
         + `（近 ${rates.window_days} 学习日生长新增 ${coachAfter} 节、插入 ${rates.inserted + batch.adds} 节）——先消化在途插入，本轮改裁 前进/巩固`)
     }
   } else {
     const share = (rates.sidebranch + batch.adds) / coachAfter
     if (rates.sidebranch_share !== null && share > cap) {
       verdict.blocks.push(
-        `旁支超限：本批后旁支占生长新增 ${pct(share)} > 上限 ${pct(cap)}`
+        `旁支超限：本批后旁支占生长新增 ${pctOf(share)} > 上限 ${pctOf(cap)}`
         + `（韧性${resilient === null ? '样本不足' : resilient ? '高·已放宽' : '低'}，近 ${rates.window_days} 学习日生长新增 ${coachAfter} 节）——主线优先，本轮改裁 前进/插入`)
     }
   }

@@ -23,7 +23,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
 import { YAML } from './yaml.ts'
-import { normChoice, numericOf } from './grading.ts'
+import { clamp01, normChoice, numericOf } from './grading.ts'
 import type { AlloKind } from './grading.ts'
 import type { FsrsBlock } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -1094,7 +1094,7 @@ export class BankSubsystem {
     const note = await this.e.nodeNote(c, graph, node)
     let fmAfter = note.fm
     if (note.fm && evidenceChange) {
-      const round3 = (x: number) => Math.round(Math.min(1, Math.max(0, x)) * 1000) / 1000
+      const round3 = (x: number) => Math.round(clamp01(x) * 1000) / 1000
       const practice = {
         attempts: Math.max(0, note.fm.practice.attempts + (resolution === 'rekey' ? 0 : -1)),
         correct: Math.max(0, note.fm.practice.correct + (correctNow ? 1 : 0)),
@@ -1389,7 +1389,7 @@ export class BankSubsystem {
     if (!graph.nset.has(node)) throw new Error(`[interactive] 节点「${node}」不在图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'interactive')
     if (!Number.isFinite(score)) throw new Error('[interactive] score 必须是数字。')
-    const clamped = Math.min(1, Math.max(0, score))
+    const clamped = clamp01(score)
     const qid = `interactive:${sectionId}`
     const { today, cutoff } = await this.e.learningDay()
     const played = (await this.e.store.practiceAll()).some(r =>

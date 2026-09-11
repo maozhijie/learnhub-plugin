@@ -14,6 +14,7 @@
  */
 import { parseSectionTitle } from '../../shared/content-renderers.ts'
 import { daysBetween, parseDay } from './dates.ts'
+import { round2 } from './grading.ts'
 import type { SectionManifest } from './types.ts'
 
 /** 门面暴露的诊断建议项 = 判定 + 课程/节点定位。 */
@@ -214,7 +215,7 @@ export function evaluateSectionSignals(input: SectionSignalInput): SectionVerdic
         escalate: false,
         fresh: !inCooldown && total > (prevOf.R2?.base ?? 0),
         reason: `本节答错集中（作答正确率 ${Math.round(accuracy * 100)}%，${total} 次作答）——建议重写这一节，或先讲解错题`,
-        evidence: { attempts: total, correct, accuracy: Math.round(accuracy * 100) / 100 },
+        evidence: { attempts: total, correct, accuracy: round2(accuracy) },
       })
     }
   }

@@ -17,7 +17,7 @@
  * 合法空态，损坏行 Broken 报出（流水带病读会数错渐退位置）。
  */
 import { nowIso } from './dates.ts'
-import { applyPracticeEvidence } from './grading.ts'
+import { applyPracticeEvidence, clamp01 } from './grading.ts'
 import type { Fm } from './types.ts'
 import type { LlmComplete } from './llm.ts'
 
@@ -94,7 +94,7 @@ export function parseReceiptReview(raw: string): ReceiptReviewDoc {
     throw new Error(`[receipt-review] AI 评审输出不是合法 JSON，回执未落盘。\n原始输出前 400 字：${raw.slice(0, 400)}`)
   }
   const d = doc as Record<string, unknown>
-  const score = typeof d.score === 'number' && Number.isFinite(d.score) ? Math.min(1, Math.max(0, d.score)) : NaN
+  const score = typeof d.score === 'number' && Number.isFinite(d.score) ? clamp01(d.score) : NaN
   if (Number.isNaN(score)) throw new Error('[receipt-review] AI 评审缺 0–1 的 score 字段，回执未落盘。')
   const verdict = typeof d.verdict === 'string' && d.verdict.trim() ? d.verdict.trim() : ''
   if (!verdict) throw new Error('[receipt-review] AI 评审缺 verdict 总评，回执未落盘。')

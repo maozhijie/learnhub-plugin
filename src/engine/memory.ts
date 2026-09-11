@@ -8,7 +8,8 @@
  * （True Retention = 到期复习中实际答对的比例）。零依赖纯函数（接缝 S26）。
  */
 import type { ReviewRec } from './types.ts'
-import { dayOfTs } from './dates.ts'
+import { DAY_MS, dayOfTs, fmtDay } from './dates.ts'
+import { sourceKeyOf } from './types.ts'
 
 /** 负载预报的时间窗（未来 N 日，Anki Forecast 语义；假设不再学新卡且不遗忘）。 */
 export const FORECAST_DAYS = 30
@@ -26,7 +27,7 @@ export function forecast(
   const per_day: Array<{ d: string; count: number }> = []
   const base = new Date(`${today}T00:00:00Z`)
   for (let i = 0; i < days; i++) {
-    const d = new Date(base.getTime() + i * 86400000).toISOString().slice(0, 10)
+    const d = fmtDay(new Date(base.getTime() + i * DAY_MS)) // 逐日桶标签：日历日
     per_day.push({ d, count: perDay.get(d) ?? 0 })
   }
   return { overdue, per_day }
@@ -67,7 +68,7 @@ export function dueReviewFirstPushes(logs: ReviewRec[], cutoffMin = 0): ReviewRe
     if (rec.stability_before === null || rec.stability_before === undefined) continue
     const day = typeof rec.ts === 'string' ? dayOfTs(rec.ts, cutoffMin) : ''
     if (!day) continue
-    const key = `${rec.course}/${rec.node}/${rec.qid}/${day}`
+    const key = `${sourceKeyOf(rec.course, rec.node, rec.qid)}/${day}`
     if (seen.has(key)) continue
     seen.add(key)
     out.push(rec)

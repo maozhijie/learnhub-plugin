@@ -15,6 +15,7 @@
 
 /** 「答错证据」口径与 A3 struggle 同源：作答正确率低于 sessions.STRUGGLE_ACCURACY。 */
 import { STRUGGLE_ACCURACY } from './sessions.ts'
+import { sourceKeyOf } from './types.ts'
 import { daysBetween, parseDay } from './dates.ts'
 
 /** 校准建议（低掌握半边）：节点 Mastery 低于该值才算「低迷」。
@@ -112,5 +113,5 @@ export function tooEasyAdvice(qs: Array<{
 export interface AdviceDismissRec { course: string; node: string; qid: string; date: string }
 
 export function adviceDismissKey(course: string, node: string, qid: string): string {
-  return `${course}/${node}/${qid}`
+  return sourceKeyOf(course, node, qid)
 }

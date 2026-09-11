@@ -70,7 +70,7 @@ import { effectiveStage } from './audit.ts'
 import { calibrationHintText, overconfidenceOf } from './calibration.ts'
 import type { ComplexityTier } from './complexity.ts'
 import { nodeTierOf, sectionTierLabel } from './complexity.ts'
-import { OPEN_QUESTION_GRADING_SYSTEM, PASS_SCORE, REFLECTION_GRADING_SYSTEM, answerDiff, applyPracticeEvidence, evaluateAllo, parseOpenGrading, parseReflectionGrading, revealAnswer } from './grading.ts'
+import { OPEN_QUESTION_GRADING_SYSTEM, PASS_SCORE, REFLECTION_GRADING_SYSTEM, answerDiff, applyPracticeEvidence, clamp01, evaluateAllo, parseOpenGrading, parseReflectionGrading, revealAnswer } from './grading.ts'
 import { safeFilename } from './graph.ts'
 import { jolDeviatedKeys, pickJolTargets } from './jol.ts'
 import type { LearnerCardDoc } from './learner-cards.ts'
@@ -80,6 +80,7 @@ import { asFm, loadNote, saveNote } from './notes.ts'
 import { CALIBRATION_BOOST_SAMPLE_RATE, FSRS_DIFFICULTY_MID, XP_GUESS_SECONDS } from './params.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
+import { sourceKeyOf } from './types.ts'
 import type { FsrsBlock, ReviewRec, SectionManifest } from './types.ts'
 import { priorSection, priorTerms, searchVaultPrior } from './vault-prior.ts'
 import type { AnswerResult, LessonDoc, QuestionForgetResult, QuestionRateResult, QuestionsDoc, QueueItem, ReviewQueueDoc, TreeDoc } from './views/content.ts'
@@ -626,7 +627,7 @@ export class ContentSubsystem {
       if (hintOn) calibrationHint = calibrationHintText(verdict)
       const deviated = jolDeviatedKeys(practice)
       const candidates = jolEligible.map(c => ({
-        key: `${c.course}/${c.node}/${String(c.id)}`,
+        key: sourceKeyOf(c.course, c.node, String(c.id)),
         r: c.r as number,
         difficulty: c.difficulty as number | undefined,
       }))
@@ -642,10 +643,10 @@ export class ContentSubsystem {
     // → 目标难度带，再叠加显式带偏移（挑战抬高/简单放宽）；初始顺序按距先验带
     // 距离升序（会话内流式调整由会话方以纯规则驱动）。
     if (node !== undefined) {
-      const band = Math.min(1, Math.max(0,
+      const band = clamp01(
         startBand(mastery) + bandOffset(bandPref
           ?? (expEffect?.variable === 'band_default' ? expEffect.arm as BandPref : undefined)
-          ?? defaultBand)))
+          ?? defaultBand))
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
         cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band),
         ...(calibrationHint ? { calibration_hint: calibrationHint } : {}) }

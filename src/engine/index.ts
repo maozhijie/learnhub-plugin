@@ -95,7 +95,7 @@ import { atomicWrite} from './io.ts'
 import { assertSchemaVersion} from './schema.ts'
 import type { SchemaBlock} from './schema.ts'
 import type { SedimentEvent, SedimentFold, SedimentKind, SedimentTier} from './sediment.ts'
-import { revealAnswer} from './grading.ts'
+import { revealAnswer, pctOf } from './grading.ts'
 import { auditQuestion} from './question-hygiene.ts'
 import type { QuestionAuditReport} from './question-hygiene.ts'
 import { parseSectionTitle} from '../../shared/content-renderers.ts'
@@ -1645,7 +1645,7 @@ export class LearnhubEngine {
     const mastery = masteryOfFm(fm)
     const lines: string[] = []
     lines.push(`# 课程上下文：${c.name} / ${node}`)
-    lines.push(`- 区/块：${graph.blockOf[node][1]} · ${graph.blockOf[node][2]}；深度 L${(graph.depth[node] ?? 0) + 1}；阶段：${fm?.stage ?? 'unknown'}；掌握度：${Math.round(mastery * 100)}%`)
+    lines.push(`- 区/块：${graph.blockOf[node][1]} · ${graph.blockOf[node][2]}；深度 L${(graph.depth[node] ?? 0) + 1}；阶段：${fm?.stage ?? 'unknown'}；掌握度：${pctOf(mastery)}%`)
     const note = graph.noteOf[node]
     if (note) lines.push(`- note：${note}`)
     const [, regionName] = graph.blockOf[node]

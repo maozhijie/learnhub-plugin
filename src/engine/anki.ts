@@ -12,6 +12,7 @@
  * 假 Anki，运行时 fetch 到 http://127.0.0.1:8765）。
  */
 import { readFile } from 'node:fs/promises'
+import { sourceKeyOf } from './types.ts'
 import { atomicWrite } from './io.ts'
 import { alreadyScheduledOn } from './advance.ts'
 import type { Paths } from './paths.ts'
@@ -47,21 +48,10 @@ export function sameDayAdvanced(
   return alreadyScheduledOn(q, day)
 }
 
-// ---- 纯函数缝：来源键（回写归属）----
+// ---- 纯函数缝：来源键（回写归属）——本体 #172 归位 types.ts 中立词汇层，
+// 原路径 re-export 保接缝（note-source 等既有导入不晃；ADR-0042 手法）。----
 
-/** learnhub 卡 id → 来源键 `课程/节点/题id`（解析时课程取第一个 /、题 id 取最后一个
- * /——节点名允许含 /，题 id 是机器生成的安全段）。 */
-export function sourceKeyOf(course: string, node: string, qid: string): string {
-  return `${course}/${node}/${qid}`
-}
-
-export function parseSourceKey(key: string): { course: string; node: string; qid: string } | null {
-  const i = key.indexOf('/')
-  const j = key.lastIndexOf('/')
-  if (i <= 0 || j <= i) return null
-  const qid = key.slice(j + 1)
-  return qid ? { course: key.slice(0, i), node: key.slice(i + 1, j), qid } : null
-}
+export { sourceKeyOf, parseSourceKey, nodeKeyOf } from './types.ts'
 
 // ---- 纯函数缝：导出负载与镜象 diff ----
 

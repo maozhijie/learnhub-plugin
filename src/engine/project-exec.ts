@@ -32,7 +32,7 @@
  */
 import { existsSync } from 'node:fs'
 import { mkdir, appendFile, readFile } from 'node:fs/promises'
-import { nextEma } from './grading.ts'
+import { nextEma, round2, pctOf } from './grading.ts'
 import { FADING_TIERS } from './types.ts'
 import type { FadingTier } from './types.ts'
 import { CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from './params.ts'
@@ -156,7 +156,7 @@ const QUADRANTS: Record<CrossQuadrantKey, { label: string; hint: string }> = {
 export function masteryAggregate(masteryList: readonly number[]): number | null {
   if (!masteryList.length) return null
   const mean = masteryList.reduce((a, b) => a + b, 0) / masteryList.length
-  return Math.round(mean * 100) / 100
+  return round2(mean)
 }
 
 /** Y 轴口径：执行事件分（execRatingScore 映射后 0-1）按 nextEma 滚动（首证取分，
@@ -202,13 +202,12 @@ export function recommendTier(
   const up = idx >= 0 ? FADING_TIERS[idx + 1] ?? null : null
   const down = idx > 0 ? FADING_TIERS[idx - 1] ?? null : null
   const enough = inTier.count >= TIER_REC_MIN_EVENTS && inTier.avg !== null
-  const pct = (v: number) => `${Math.round(v * 100)}%`
   if (enough && inTier.avg >= TIER_REC_PROMOTE_SCORE) {
     if (masteryAgg !== null && masteryAgg < CROSS_AXIS_THRESHOLD) {
       return {
         current, recommended: current, action: 'hold',
         reasons: [
-          `档内表现够升（${inTier.count} 次均分 ${pct(inTier.avg!)}），但知识底座均值 ${pct(masteryAgg)} < ${pct(CROSS_AXIS_THRESHOLD)}`,
+          `档内表现够升（${inTier.count} 次均分 ${pctOf(inTier.avg!)}），但知识底座均值 ${pctOf(masteryAgg)} < ${pctOf(CROSS_AXIS_THRESHOLD)}`,
           '先补底座再升档——不带底座升档会把项目推成「会用而不牢」',
         ],
       }
@@ -216,14 +215,14 @@ export function recommendTier(
     if (!up) {
       return {
         current, recommended: current, action: 'hold',
-        reasons: [`已是最高档「独立」——无更高档可升；档内表现好（${inTier.count} 次均分 ${pct(inTier.avg!)}）可提高里程碑自主度`],
+        reasons: [`已是最高档「独立」——无更高档可升；档内表现好（${inTier.count} 次均分 ${pctOf(inTier.avg!)}）可提高里程碑自主度`],
       }
     }
     return {
       current, recommended: up, action: 'promote',
       reasons: [
-        `档内表现：${inTier.count} 次执行均分 ${pct(inTier.avg!)} ≥ ${pct(TIER_REC_PROMOTE_SCORE)}（当前档吃得过饱）`,
-        `知识底座：关联节点掌握均值 ${masteryAgg === null ? '无关联节点' : pct(masteryAgg)}${masteryAgg !== null && masteryAgg >= CROSS_AXIS_THRESHOLD ? ' ≥ ' + pct(CROSS_AXIS_THRESHOLD) : '（未关联节点，不作约束）'}——升档不致「会用而不牢」`,
+        `档内表现：${inTier.count} 次执行均分 ${pctOf(inTier.avg!)} ≥ ${pctOf(TIER_REC_PROMOTE_SCORE)}（当前档吃得过饱）`,
+        `知识底座：关联节点掌握均值 ${masteryAgg === null ? '无关联节点' : pctOf(masteryAgg)}${masteryAgg !== null && masteryAgg >= CROSS_AXIS_THRESHOLD ? ' ≥ ' + pctOf(CROSS_AXIS_THRESHOLD) : '（未关联节点，不作约束）'}——升档不致「会用而不牢」`,
       ],
     }
   }
@@ -231,18 +230,18 @@ export function recommendTier(
     if (!down) {
       return {
         current, recommended: current, action: 'hold',
-        reasons: [`已是最低档「骨架」——无更低档可降；档内吃力（${inTier.count} 次均分 ${pct(inTier.avg!)}）考虑回关联节点补底座`],
+        reasons: [`已是最低档「骨架」——无更低档可降；档内吃力（${inTier.count} 次均分 ${pctOf(inTier.avg!)}）考虑回关联节点补底座`],
       }
     }
     return {
       current, recommended: down, action: 'demote',
-      reasons: [`档内表现吃力：${inTier.count} 次执行均分 ${pct(inTier.avg!)} < ${pct(TIER_REC_DEMOTE_SCORE)}（支持不足）`, '降一档加厚给定与支持，挑战点回到可完成区'],
+      reasons: [`档内表现吃力：${inTier.count} 次执行均分 ${pctOf(inTier.avg!)} < ${pctOf(TIER_REC_DEMOTE_SCORE)}（支持不足）`, '降一档加厚给定与支持，挑战点回到可完成区'],
     }
   }
   return {
     current, recommended: current, action: 'hold',
     reasons: [enough
-      ? `档内均分 ${pct(inTier.avg!)} 处于目标带（${pct(TIER_REC_DEMOTE_SCORE)}–${pct(TIER_REC_PROMOTE_SCORE)}）——当前档位合适`
+      ? `档内均分 ${pctOf(inTier.avg!)} 处于目标带（${pctOf(TIER_REC_DEMOTE_SCORE)}–${pctOf(TIER_REC_PROMOTE_SCORE)}）——当前档位合适`
       : `档内样本不足：${inTier.count} 次 < ${TIER_REC_MIN_EVENTS}（样本攒够前维持现状）`],
   }
 }

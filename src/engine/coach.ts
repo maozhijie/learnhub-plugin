@@ -8,6 +8,7 @@
  */
 
 /** 难度带偏好（E5）：简单 = 放宽 A1 目标带，挑战 = 抬高；标准/不选 = 纯 A1。 */
+import { DAY_MS } from './dates.ts'
 import type { BandPref } from './adaptive.ts'
 
 /** 一条难度带会话记录（会话结束落盘；band 是该次会话学习者选的带）。 */
@@ -32,7 +33,7 @@ export const COACH_STRUGGLE_ACCURACY = 0.6
 
 /** 记录是否落在教练的近期窗口内（按本地日）。 */
 export function withinCoachWindow(date: string, today: string, days = COACH_WINDOW_DAYS): boolean {
-  return today >= date && (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86400000 < days
+  return today >= date && (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / DAY_MS < days
 }
 
 /** 教练反馈（#65）：7 天窗口内全部会话都在同一非标准带且作答量足够时触发——

@@ -22,6 +22,7 @@
  */
 import { readdir, readFile } from 'node:fs/promises'
 import { fingerprintOf, stripFrontmatter } from './note-source.ts'
+import { clamp01 } from './grading.ts'
 
 /** 一条候选关联对（无向：a/b 为字典序较小的路径在前）。 */
 export interface VaultLinkEdge {
@@ -191,7 +192,7 @@ export function linkScore(count: number, files: number, bidirectional: boolean):
   const w = Math.min(count, 5) / 5 * 0.5
     + Math.min(files, 3) / 3 * 0.3
     + (bidirectional ? 0.2 : 0)
-  return Math.round(Math.min(1, w) * 1000) / 1000
+  return Math.round(clamp01(w) * 1000) / 1000
 }
 
 /** 分层：≥0.7 进提案；0.4–0.7 进 analyze 建议段待裁决；<0.4 只落扫描报告。 */

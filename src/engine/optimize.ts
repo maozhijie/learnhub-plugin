@@ -19,6 +19,7 @@
  */
 import { generatorParameters } from 'ts-fsrs'
 import { daysBetween, parseDay, dayOfTs } from './dates.ts'
+import { sourceKeyOf } from './types.ts'
 import type { ReviewRec } from './types.ts'
 
 /** 写回门禁：真实复习日志条数下限（官方口径：Anki 24.04 要求 ≥400，月频重训足够）。 */
@@ -52,7 +53,7 @@ export function trainingSequences(logs: ReviewRec[], cutoffMin = 0): TrainingSeq
     const ok = rec.rating_source === 'auto' || rec.rating_source === 'self'
       || (allowExecution && rec.rating_source === 'execution')
     if (!ok) continue
-    const key = `${rec.course}/${rec.node}/${rec.qid}`
+    const key = sourceKeyOf(rec.course, rec.node, rec.qid)
     const list = byCard.get(key) ?? []
     list.push(rec)
     byCard.set(key, list)

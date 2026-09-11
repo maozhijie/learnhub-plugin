@@ -19,7 +19,7 @@
  * #145 生长批），concept 字段缺席合法。
  */
 import { mkdir, readFile, appendFile, writeFile, rename } from 'node:fs/promises'
-import { weekStartOf } from './dates.ts'
+import { calendarDayOf, weekStartOf } from './dates.ts'
 import { nowIso } from './dates.ts'
 import type { Paths } from './paths.ts'
 
@@ -161,7 +161,7 @@ export function foldSediment(events: SedimentEvent[]): SedimentFold {
       // 缺席按事件 ts 的学习日归桶——「写时刻」不等于「所述周」
       const rawDay = typeof e.payload.week === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(e.payload.week)
         ? e.payload.week
-        : e.ts.slice(0, 10)
+        : calendarDayOf(e.ts)
       const week = weekStartOf(rawDay) ?? 'unknown'
       const bucket = buckets.get(week)
       if (bucket) bucket.push(e)

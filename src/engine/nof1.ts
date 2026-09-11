@@ -20,7 +20,8 @@
  * 抽样与聚合全部零依赖纯函数（complexity.ts 先例）；RNG 播种自实验 id，确定性可测。
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { parseDay, daysBetween, nowIso } from './dates.ts'
+import { calendarDayOf, daysBetween, nowIso, parseDay } from './dates.ts'
+import { nodeKeyOf, sourceKeyOf } from './types.ts'
 import { NOF1_VARIABLE_WHITELIST } from './types.ts'
 import type { ExperimentDef, Nof1Variable } from './types.ts'
 import { YAML } from './yaml.ts'
@@ -303,7 +304,7 @@ export function nof1Outcomes(logs: ReviewRec[], expId: number): Nof1OutcomeRec[]
     if (rec.rating_source !== 'auto' && rec.rating_source !== 'self') continue
     if (rec.stability_before === null || rec.stability_before === undefined) continue
     if (!rec.exp || rec.exp.id !== expId) continue
-    const key = `${rec.course}/${rec.node}/${rec.qid}/${rec.ts.slice(0, 10)}`
+    const key = `${sourceKeyOf(rec.course, rec.node, rec.qid)}/${calendarDayOf(rec.ts)}` // 去重桶：出处时间戳的日历日
     if (seen.has(key)) continue
     seen.add(key)
     out.push({ arm: rec.exp.arm, pass: rec.rating >= 2 })
@@ -383,7 +384,7 @@ export class LabSubsystem {
     if (!exp) return null
     if (exp.scope_course && exp.scope_course !== courseName) return null
     if (exp.assignment.kind === 'card') {
-      const arm = exp.assignment.map[`${courseName}/${node}/${qid}`]
+      const arm = exp.assignment.map[sourceKeyOf(courseName, node, qid)]
       return arm ? { id: exp.id, arm } : null
     }
     return { id: exp.id, arm: nof1ArmForDay(exp, today) }
@@ -736,7 +737,7 @@ export class LabSubsystem {
   ): { curve: SandboxCurvePoint[]; map: Array<{ node: string; p50: number; p80: number }> } {
     return aggregateRuns(
       this.mcRuns(plan, cards, nodes, today, scheds, fallbackCourse),
-      nodes.map(n => `${n.course}/${n.node}`), plan.weeks,
+      nodes.map(n => nodeKeyOf(n.course, n.node)), plan.weeks,
     )
   }
 

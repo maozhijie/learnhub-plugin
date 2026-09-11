@@ -13,7 +13,7 @@ import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
 import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
-import { normChoice } from './grading.ts'
+import { normChoice, round2 } from './grading.ts'
 import { invokesTagged } from './concepts.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../shared/content-renderers.ts'
@@ -1547,7 +1547,7 @@ worksheet:
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([holder, cnt]) => ({
         node: holder,
-        w: Math.round((cnt / total) * 100) / 100,
+        w: round2(cnt / total),
         note: `invokes 投影 ${cnt}/${total}`,
       }))
   }
