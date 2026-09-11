@@ -425,3 +425,4 @@ test('G8 适配器面：engine 内时钟/随机直读与 node:fs 依赖按基线
   const bad = adapterFaceViolations(measured, BASELINE.adapterFace ?? {})
   assert.deepEqual(bad, [], `适配器面棘轮不符基线：\n${bad.join('\n')}\n（Clock/Rng 走 engine/clock.ts 端口、fs 走 vault 存储端口；io.ts 的 atomicWrite tmp 命名是登记过的例外）`)
 })
+

@@ -181,6 +181,7 @@
     "src/engine/vault-links.ts": 449,
     "src/engine/vault-prior.ts": 138,
     "src/engine/views.ts": 357,
+    "src/engine/write-unit.ts": 71,
     "src/engine/xp.ts": 182,
     "src/engine/yaml.ts": 23,
     "src/generation-jobs.ts": 138,
