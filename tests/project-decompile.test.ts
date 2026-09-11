@@ -13,7 +13,7 @@ import { decompileGoalOf, decompileRepairPrompt, decompileTerms, reconcilePlanNo
 import { YAML } from '../src/engine/yaml.ts'
 import type { PlanItem } from '../src/engine/projects.ts'
 import { withVault } from './helpers/vault.ts'
-import type { LlmComplete } from '../src/engine/llm.ts'
+import { AgentSeam } from '../src/engine/agent.ts'
 
 const TWO_NODE_GRAPH = [
   'region: 基础',
@@ -96,14 +96,17 @@ function replayFake(reply: string) {
   return scriptFake([reply])
 }
 
-/** 脚本化假实现：按调用序回放（第 i 次调用回 replies[i]，越界取最后一条）。 */
+/** 脚本化假实现（#162 起注入 AgentSeam）：脚本化补全端口进缝，调用记录留在端口层
+ * （prompt/语义档经缝直通）。按调用序回放（第 i 次调用回 replies[i]，越界取最后一条）。 */
 function scriptFake(replies: string[]) {
   const calls: Array<{ prompt: string; effort?: string }> = []
-  const fn: LlmComplete = async (prompt, _system, opts) => {
-    calls.push({ prompt, effort: opts?.effort })
-    return replies[Math.min(calls.length - 1, replies.length - 1)]!
-  }
-  return Object.assign(fn, { calls })
+  const seam = new AgentSeam({
+    complete: async (prompt, _system, opts) => {
+      calls.push({ prompt, effort: opts?.effort })
+      return replies[Math.min(calls.length - 1, replies.length - 1)]!
+    },
+  })
+  return Object.assign(seam, { calls })
 }
 
 async function projectOf(engine: Awaited<ReturnType<typeof withVault>>['engine'], goal = GOAL): Promise<void> {

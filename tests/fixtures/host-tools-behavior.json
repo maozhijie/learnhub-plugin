@@ -734,7 +734,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "compassPaint(\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "compassPaint(\"1\",{\"ports\":{},\"callSeq\":{}})"
   ]
  },
  {
@@ -1478,7 +1478,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"callSeq\":{}})"
   ]
  },
  {

@@ -62,7 +62,7 @@ import { netPracticeRecs } from './grading.ts'
 import { atomicWrite } from './io.ts'
 import type { JolPrediction } from './jol.ts'
 import { JOL_PREDICTIONS } from './jol.ts'
-import type { LlmComplete } from './llm.ts'
+import type { AgentSeam, GateVerdict } from './agent.ts'
 import { hasReadyContent } from './notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
 import { GraphProposals, addNodeCountOf, validateEditProposal } from './proposals.ts'
@@ -144,8 +144,9 @@ export class GrowthSubsystem {
   /** 罗盘初画/重画（learnhub_compass_paint；「罗盘初画」模板 v1，deep 档一次调用）：
    * 终点锚缺失 fail loud（初画锚在终点上）；路线门（非空/无标题/限长）首过即落盘——
    * 只重写「剩余路线」段，批注区字节保留，ETA 重置待刷新（旧带是旧结构的推演）。
-   * 金样本回放闸：调用数恒 1、无修复轮（首过率对照在测试锚定）。 */
-  async compassPaint(courseKey: string | undefined, llm: LlmComplete): Promise<{
+   * 金样本回放闸：调用数恒 1、无修复轮（首过率对照在测试锚定）。调用经统一 agent 缝
+   * （#162：剥围栏/语义档/调用日志在缝里内建）。 */
+  async compassPaint(courseKey: string | undefined, agent: AgentSeam): Promise<{
     course: string; path: string; route_lines: number; annotations_preserved: boolean; repainted: boolean
   }> {
     const c = await this.e.registry.resolve(courseKey)
@@ -172,7 +173,7 @@ export class GrowthSubsystem {
       graphNames: graph.names,
       annotations,
     })
-    const raw = await llm(prompt, undefined, { effort: 'deep' })
+    const raw = await agent.complete('罗盘', prompt, { effort: 'deep' })
     const body = stripWrappingFence(raw)
     const errors = validateRouteBody(body)
     if (errors.length) {
@@ -546,9 +547,10 @@ export class GrowthSubsystem {
    * 请求——check.ok 不再短路停摆（裁决仍可能产出零操作批）。裁决语义在提示词；本
    * 方法只保证组装、schema 与同事务纪律。金样本回放闸锚调用数基线：显然步恒 1 次、
    * 分歧升级恒 2 次、双沙盘仲裁恒 3 次（沙盘推演是读侧计算，不计调用数）；
-   * 受理门拒收加回灌重裁段恰 +1 次（#157）。 */
+   * 受理门拒收加回灌重裁段恰 +1 次（#157）。各段调用经统一 agent 缝（#162：单发走
+   * complete、回灌重裁走 repair，语义档与调用日志沿缝贯通可观测）。 */
   async coachGrowthBatch(
-    courseKey: string, llm: LlmComplete,
+    courseKey: string, agent: AgentSeam,
     opts: { force?: boolean; today?: string; inject?: string } = {},
   ): Promise<{
     course: string
@@ -572,19 +574,20 @@ export class GrowthSubsystem {
     const view = this.growthGraphView(graph, state)
     const template = await this.e.content.loadPrompt('教练回合')
     const segments: CoachGrowthSegment[] = []
-    const runSegment = async (tier: 'light' | 'full'): Promise<{ spec: EditProposalSpec; yaml: string; note: GrowthNote }> => {
+    type GrowthVerdict = { spec: EditProposalSpec; yaml: string; note: GrowthNote }
+    const runSegment = async (tier: 'light' | 'full'): Promise<GrowthVerdict> => {
       const pack = await this.coachContextPack(c.name, { lightweight: tier === 'light', today })
       const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}`
         + (opts.inject !== undefined ? `\n\n---\n\n## 里程碑计划修订注入（项目消费拉动的生长请求）\n\n${opts.inject.trimEnd()}\n\n换线 = 激活图上已有节点（内容生成/接入路线），补支 = 朝新里程碑长最小必要分支；你的裁决仍走五算子与既定纪律，判断注入与就绪深度后照常产出（含零操作批）。` : '')
         + `\n\n---\n\n${view.trimEnd()}\n`
-      const raw = await llm(prompt, undefined, { effort: tier === 'light' ? 'fast' : 'deep' })
+      const raw = await agent.complete('教练生长', prompt, { effort: tier === 'light' ? 'fast' : 'deep' })
       const verdict = this.parseGrowthVerdict(raw)
       segments.push({ tier, effort: tier === 'light' ? 'fast' : 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
       return verdict
     }
     // 双沙盘仲裁段（#150）：现状照走 vs 含本批候选节点照走——同种子配对推演（读侧
     // 计算，零写侧），两份分位带并排进终审 prompt；终审结论即最终裁决，不再升级。
-    const runArbitration = async (contested: { spec: EditProposalSpec; note: GrowthNote }): Promise<{ spec: EditProposalSpec; yaml: string; note: GrowthNote }> => {
+    const runArbitration = async (contested: { spec: EditProposalSpec; note: GrowthNote }): Promise<GrowthVerdict> => {
       const added = contested.spec.ops
         .filter(o => o.op === 'add_node' && o.name)
         .map(o => ({ name: o.name!, est: o.est }))
@@ -604,7 +607,7 @@ export class GrowthSubsystem {
       })
       const pack = await this.coachContextPack(c.name, { today, packLabel: '仲裁段——全量包+双沙盘推演参照' })
       const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n\n---\n\n${evidence.trimEnd()}\n`
-      const raw = await llm(prompt, undefined, { effort: 'deep' })
+      const raw = await agent.complete('教练生长', prompt, { effort: 'deep' })
       const verdict = this.parseGrowthVerdict(raw)
       segments.push({ tier: 'arbitration', effort: 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
       return verdict
@@ -613,43 +616,50 @@ export class GrowthSubsystem {
     // 回灌重裁段（#157）：受理门拒收后的修复轮——拒绝原因原文 + 被拒裁决原文随全量包
     // 与图面回灌，deep 档重裁一次；重裁结论即终审（分歧声明只作可观测留痕，不再升级
     // 仲裁段——重裁本身已是加深的一轮，「恰一轮」封顶防重试风暴）。
-    const runRepair = async (feedback: string, previousYaml: string): Promise<{ spec: EditProposalSpec; yaml: string; note: GrowthNote }> => {
+    const runRepair = async (feedback: string, previousYaml: string): Promise<GrowthVerdict> => {
       const pack = await this.coachContextPack(c.name, { today, packLabel: '回灌重裁段——上一版裁决被受理门拒收' })
       const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n\n---\n\n`
         + `## 受理门反馈（上一版裁决未过受理门——被拒批次零落盘，图未改动）\n\n${feedback.trim()}\n\n`
         + `上一版裁决原文：\n\n\`\`\`yaml\n${previousYaml.trim()}\n\`\`\`\n\n`
         + `请对照拒绝原因逐条修正后，按模板重新产出完整裁决（course + note + route + ops）：`
         + `区/块与节点名、pre 引用必须逐字来自上方图面，概念必须已在登记表或本批 concepts 铸名。`
-      const raw = await llm(prompt, undefined, { effort: 'deep' })
+      const raw = await agent.repair('教练生长', prompt, { effort: 'deep' })
       const verdict = this.parseGrowthVerdict(raw)
       segments.push({ tier: 'repair', effort: 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
       return verdict
     }
 
-    let final = await runSegment('light')
-    if (final.note.disagreement) {
-      final = await runSegment('full')
-      if (final.note.disagreement) final = await runArbitration(final)
-    }
-
-    // 回灌止血（#157）：受理门拒收 = 教练一次产出畸形（引用不存在的区、概念未铸名、
-    // pre 引用不存在的节点…），门错误回灌教练重裁一次——一版定生死会让批次直接 failed，
-    // 而失败后自动触点全被阻尼，课程静默停止生长。只包 propose 侧的门（结构/概念对表/
-    // 锚保护/巩固门/生长闸门/路线门）；schema 门在 parseGrowthVerdict 已先行（模板钉死
-    // 产物形状，畸形率低）。重裁段的任何失败（模型调用/解析/仍被拒）都带两轮死因抛出。
+    // 回灌止血（#157 的轮形态随缝收口为共享能力，#162）：受理门拒收 = 教练一次产出
+    // 畸形（引用不存在的区、概念未铸名、pre 引用不存在的节点…），门错误回灌教练重裁
+    // 恰一次（缝的 gateRepairRound；修复轮任何失败带两轮死因抛出）。propose 是受理式
+    // 门：过门即落 pending 提案，产物经 GateVerdict.result 随行交还。只包 propose 侧的
+    // 门（结构/概念对表/锚保护/巩固门/生长闸门/路线门）；schema 门在 parseGrowthVerdict
+    // 已先行（模板钉死产物形状，畸形率低）。
     // apply 失败是竞态非畸形，沿用下方「自清后原样抛错」不重裁。
-    let prop: GraphEditProposalResult
-    try {
-      prop = await this.e.graphPropose('edit', final.yaml) as GraphEditProposalResult
-    } catch (firstErr) {
-      const fmt = (e: unknown): string => e instanceof Error ? e.message : String(e)
-      try {
-        final = await runRepair(fmt(firstErr), final.yaml)
-        prop = await this.e.graphPropose('edit', final.yaml) as GraphEditProposalResult
-      } catch (repairErr) {
-        throw new Error(`[coach-growth] 生长批受理门拒收（回灌重裁一轮仍未通过——零落盘）。\n【首轮】${fmt(firstErr)}\n【重裁】${fmt(repairErr)}`)
-      }
-    }
+    const fmt = (e: unknown): string => e instanceof Error ? e.message : String(e)
+    const round = await agent.gateRepairRound<GrowthVerdict, GraphEditProposalResult>('教练生长', {
+      first: async () => {
+        let verdict = await runSegment('light')
+        if (verdict.note.disagreement) {
+          verdict = await runSegment('full')
+          if (verdict.note.disagreement) verdict = await runArbitration(verdict)
+        }
+        return verdict
+      },
+      gate: async (verdict): Promise<GateVerdict<GraphEditProposalResult>> => {
+        try {
+          const prop = await this.e.graphPropose('edit', verdict.yaml) as GraphEditProposalResult
+          return { errors: [], result: prop }
+        } catch (err) {
+          return { errors: [fmt(err)] }
+        }
+      },
+      repair: (gateErrors, rejected) => runRepair(gateErrors.join('\n'), rejected.yaml),
+      fatal: (firstErrors, repairDeath) => new Error(
+        `[coach-growth] 生长批受理门拒收（回灌重裁一轮仍未通过——零落盘）。\n【首轮】${firstErrors.join('\n')}\n【重裁】${repairDeath.join('\n')}`),
+    })
+    const final = round.candidate
+    const prop = round.result
     let applied: GraphApplyEditResult
     try {
       applied = await this.e.graphApply('edit', prop.id) as GraphApplyEditResult

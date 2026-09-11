@@ -64,9 +64,17 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   assert.equal(typeof host.apply, 'function')
 
   const llm = await import('../src/host/llm.ts')
-  for (const n of ['llmComplete', 'llmSeam', 'llmStreamOnce', 'llmView', 'contentEffort']) {
+  for (const n of ['llmComplete', 'llmSeam', 'llmStreamSeam', 'llmStreamOnce', 'llmView', 'contentEffort']) {
     assert.equal(typeof llm[n], 'function', `host/llm.ts 缺导出 ${n}`)
   }
+  // 统一 agent 缝（#162 / ADR-0041/0044）：应用层端口消费者 + 随缝归位的 stripFences
+  const agentSeam = await import('../src/engine/agent.ts')
+  assert.equal(typeof agentSeam.AgentSeam, 'function', 'engine/agent.ts 缺 AgentSeam')
+  assert.equal(typeof agentSeam.stripFences, 'function', 'engine/agent.ts 缺 stripFences（补全后处理随缝归位）')
+  assert.equal(agentSeam.AGENT_LOOP_MAX_TOOL_ROUNDS, 6, '回路预算 K≤6（ADR-0041）')
+  assert.equal(typeof agentSeam.AgentSeam.prototype.complete, 'function', '缝缺单发模式 complete()')
+  assert.equal(typeof agentSeam.AgentSeam.prototype.agentLoop, 'function', '缝缺回路模式 agentLoop()')
+  assert.equal(typeof agentSeam.AgentSeam.prototype.gateRepairRound, 'function', '缝缺门错修复轮 gateRepairRound()')
   const http = await import('../src/host/http.ts')
   for (const n of ['sendJson', 'readJson', 'injectKatexIfMathed', 'PAGE_DIST', 'VENDOR_DIST', 'FILE_MIME', 'ASSET_MIME']) {
     assert.ok(http[n] !== undefined, `host/http.ts 缺导出 ${n}`)
@@ -80,8 +88,9 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   }
 
   // 宿主技术层五文件（#167 / ADR-0048）：构造 / 队列 / 路由 / 伺服 / 工具面的关键导出在
+  // （stripFences 已随缝归位 engine/agent.ts，#162——宿主不再拥有补全后处理）
   const runtime = await import('../src/host/runtime.ts')
-  for (const n of ['createHostRuntime', 'runLog', 'run', 'apiRun', 'stripFences']) {
+  for (const n of ['createHostRuntime', 'runLog', 'run', 'apiRun']) {
     assert.equal(typeof runtime[n], 'function', `host/runtime.ts 缺导出 ${n}`)
   }
   const jobs = await import('../src/host/jobs.ts')
@@ -121,7 +130,8 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
 test('G2b src 下的入口文件存在且非空（防止误删/误移）', () => {
   for (const rel of ['index.ts', 'host/llm.ts', 'host/http.ts', 'host/params.ts', 'host/route-table.ts',
     'host/handlers.ts',
-    'host/runtime.ts', 'host/jobs.ts', 'host/api.ts', 'host/static.ts', 'host/tools.ts', 'engine/index.ts']) {
+    'host/runtime.ts', 'host/jobs.ts', 'host/api.ts', 'host/static.ts', 'host/tools.ts', 'engine/index.ts',
+    'engine/agent.ts']) {
     assert.ok(statSync(join(SRC, rel)).size > 0, `${rel} 缺失或为空`)
   }
 })

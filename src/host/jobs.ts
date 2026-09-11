@@ -5,8 +5,8 @@
  * 读写，本文件零模块级可变状态；队列语义零改动（FIFO、可取消、重启可恢复、阻尼）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, TIER_LABELS, genericQuizTarget, tierIdxOf } from '../engine/index.ts'
-import type { CoachTrigger, LearnhubEngine, LlmComplete } from '../engine/index.ts'
+import { Content, TIER_LABELS, genericQuizTarget, tierIdxOf, stripFences } from '../engine/index.ts'
+import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete } from '../engine/index.ts'
 import {
   contentFailureStatus,
   genJobRetentionRemainingMs,
@@ -21,7 +21,7 @@ import {
   type GenJobStatus,
 } from '../generation-jobs.ts'
 import { contentEffort, llmCfg, llmSeam } from './llm.ts'
-import { runLog, stripFences } from './runtime.ts'
+import { runLog } from './runtime.ts'
 import type { GenJob, HostRuntime } from './runtime.ts'
 
 /** AI 出题管线：节点正文 → 出题提示词 → llm → validateBank 门禁逐题落盘。
@@ -361,14 +361,14 @@ async function generateGraphJob(rt: HostRuntime, ctx: Context, job: GenJob): Pro
         course: job.course, goal: job.seedPayload.goal, mode: job.seedPayload.mode,
         goalType: job.seedPayload.goalType, useVaultPrior: job.seedPayload.useVaultPrior,
         worksheet: job.seedPayload.worksheet,
-      }, llmSeam(ctx))
+      }, rt.agent)
       job.status = 'done'
       job.message = `种子提案 #${r.id} 待人审：${r.starts} 起点 → 终点「${r.endpoint}」`
         + `${r.prior_hits ? `；先验命中 ${r.prior_hits}` : ''}${r.repaired ? '；修复轮一次' : ''}——提案页一次人审即开工`
     } else if (job.phase === '罗盘') {
       job.message = '罗盘初画中（deep 档一次调用）…'
       persistGenJobs(rt)
-      const r = await rt.engine.compassPaint(job.course, llmSeam(ctx))
+      const r = await rt.engine.compassPaint(job.course, rt.agent)
       job.status = 'done'
       job.message = `罗盘已重画：${r.route_lines} 条路线${r.annotations_preserved ? '（学习者批注原样保留）' : ''}`
     } else if (job.phase === '反编译' && job.decompilePayload) {
@@ -379,18 +379,18 @@ async function generateGraphJob(rt: HostRuntime, ctx: Context, job: GenJob): Pro
         ...(p.goal ? { goal: p.goal } : {}),
         ...(p.course ? { course: p.course } : {}),
         ...(p.notes?.length ? { notes: p.notes } : {}),
-      }, llmSeam(ctx))
+      }, rt.agent)
       job.status = 'done'
       job.message = `反编译双提案待联合人审：计划 #${r.pair.plan}${r.pair.seed ? ` + 种子 #${r.pair.seed}` : ''}（先验命中 ${r.prior_hits}）——提案页同进同退`
     } else if (job.phase === '计划' && job.planPayload) {
       job.message = '里程碑计划草案生成中…'
       persistGenJobs(rt)
-      job.message = await generateProjectPlan(rt, ctx, job.planPayload.project)
+      job.message = await generateProjectPlan(rt, job.planPayload.project)
       job.status = 'done'
     } else if (job.phase === '里程碑' && job.milestonePayload) {
       job.message = '里程碑任务卡生成中…'
       persistGenJobs(rt)
-      job.message = await generateProjectMilestone(rt, ctx, job.milestonePayload.project, job.milestonePayload.milestone)
+      job.message = await generateProjectMilestone(rt, job.milestonePayload.project, job.milestonePayload.milestone)
       job.status = 'done'
     } else {
       throw new Error(`图域任务负载缺失或 phase 未知：${String(job.phase)}`)
@@ -414,7 +414,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
   job.message = '教练回合裁决中（轻量段）…'
   persistGenJobs(rt)
   try {
-    const r = await rt.engine.coachGrowthBatch(job.course, llmSeam(ctx), job.growthInject ? { inject: job.growthInject } : {})
+    const r = await rt.engine.coachGrowthBatch(job.course, rt.agent, job.growthInject ? { inject: job.growthInject } : {})
     if (r.state === 'idle') {
       job.growthOutcome = 'idle'
       job.status = 'done'
@@ -641,33 +641,41 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
   return `[section] 「${r.title}」v${r.version} 落盘。`
 }
 
-/** 项目里程碑计划生成（P 区 #92）：计划提示词包 → 模型 → 提案受理（人审后 apply 带快照生效）。 */
-export async function generateProjectPlan(rt: HostRuntime, ctx: Context, id: string): Promise<string> {
+/** 项目里程碑计划生成（P 区 #92）：计划提示词包 → 缝 complete（fast 档，#162 计划站
+ * 迁入缝）→ 提案受理（人审后 apply 带快照生效）。受理门在 projectPlanPropose——
+ * 计划草案一次成型、无修复轮（修订走提案快照的人审语义，草案不自动重试）。 */
+export async function generateProjectPlan(rt: HostRuntime, id: string): Promise<string> {
   const prompt = await rt.engine.projectPlanPack(id)
-  const yaml = stripFences(await llmSeam(ctx)(prompt, undefined, { effort: 'fast' }))
+  const yaml = await rt.agent.complete('计划草案', prompt, { effort: 'fast' })
   const prop = await rt.engine.projectPlanPropose(id, yaml)
   return `[project-plan] 提案 #${prop.id} 已受理（${prop.initial ? '初次规划' : '计划修订'}：${prop.milestones} 个里程碑）——人审后 learnhub_project_apply 生效（apply 带旧计划快照）。`
 }
 
-/** 项目里程碑产物生成：任务卡提示词包 → 模型 → 轻量结构门（未过回灌修复一轮）
- * → 首生直落 / 已生成自动转重生成提案（带快照，不静默覆盖）。 */
-export async function generateProjectMilestone(rt: HostRuntime, ctx: Context, id: string, milestoneId: string): Promise<string> {
-  const complete = llmSeam(ctx)
+/** 项目里程碑产物生成：任务卡提示词包 → 缝 complete（fast 档）→ 轻量结构门（未过经
+ * 缝的门错修复轮回灌重产恰一次，deep 档）→ 首生直落 / 已生成自动转重生成提案（带快照，
+ * 不静默覆盖）。写盘是受理式门：过门即落产物，经 GateVerdict.result 随行交还。 */
+export async function generateProjectMilestone(rt: HostRuntime, id: string, milestoneId: string): Promise<string> {
+  const agent = rt.agent
   const prompt = await rt.engine.projectMilestonePack(id, milestoneId)
   const write = (md: string) => rt.engine.projectMilestoneWrite(id, milestoneId, md)
-  let md = stripFences(await complete(prompt, undefined, { effort: 'fast' }))
-  let out: Awaited<ReturnType<typeof write>>
-  try {
-    out = await write(md)
-  } catch (err) {
-    const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
-    if (code !== 'MILESTONE_GATE_FAILED') throw err
-    md = stripFences(await complete(
-      Content.sectionRepairPrompt(prompt, md, err instanceof Error ? err.message : String(err)),
-      undefined, { effort: 'deep' },
-    ))
-    out = await write(md)
-  }
+  type MilestoneWriteResult = Awaited<ReturnType<typeof write>>
+  const round = await agent.gateRepairRound<string, MilestoneWriteResult>('里程碑草案', {
+    first: () => agent.complete('里程碑草案', prompt, { effort: 'fast' }),
+    gate: async (md): Promise<GateVerdict<MilestoneWriteResult>> => {
+      try {
+        return { errors: [], result: await write(md) }
+      } catch (err) {
+        const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
+        if (code !== 'MILESTONE_GATE_FAILED') throw err
+        return { errors: [err instanceof Error ? err.message : String(err)] }
+      }
+    },
+    repair: (gateErrors, rejected) =>
+      agent.repair('里程碑草案', Content.sectionRepairPrompt(prompt, rejected, gateErrors.join('\n')), { effort: 'deep' }),
+    // 修复轮仍败：原样以门错误抛出（与旧直抛形态同文案同码，零提案落盘语义不变）
+    fatal: (_firstErrors, repairErrors) => Object.assign(new Error(repairErrors.join('\n')), { code: 'MILESTONE_GATE_FAILED' }),
+  })
+  const out = round.result
   return 'written' in out
     ? `[project-milestone] 「${out.written}」已落盘（档位 ${out.tier}）。`
     : `[project-milestone] 「${out.file}」已生成过——按档重生成走提案 #${out.proposed}，人审后 learnhub_project_apply 生效（旧文带快照）。`

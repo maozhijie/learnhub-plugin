@@ -11,7 +11,7 @@ import {
   SECTION_ROUTE, SECTION_ANNOTATIONS, SECTION_ETA, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,
   ETA_MARKER_PREFIX, parseCompass, sectionBody, withSectionText, validateRouteBody, etaMarkerOf,
 } from '../src/engine/compass.ts'
-import type { LlmComplete } from '../src/engine/llm.ts'
+import { AgentSeam } from '../src/engine/agent.ts'
 
 // 罗盘（#143 / ADR-0033 透明度装置）：课程根常驻的非承诺路线草图（罗盘.md）。
 // - 种子 apply 落罗盘脚手架；罗盘初画（模板 v1、deep 档、单次调用）产出剩余路线初稿，
@@ -45,14 +45,17 @@ const GOLD_ROUTE = [
 
 const GOLD_ROUTE_2 = GOLD_ROUTE + '\n- **换向预留**：学习者批注提到的应用优先先立占位。'
 
-/** 录制型假实现（同 llm-seam.test.ts 口径）：记 prompt/system/语义档，固定回放同一应答。 */
+/** 录制型假实现（#162 起注入 AgentSeam）：脚本化补全端口进缝，调用记录留在端口层
+ * （prompt/system/语义档经缝直通），固定回放同一应答。 */
 function replayFake(reply: string) {
   const calls: Array<{ prompt: string; system?: string; effort?: string }> = []
-  const fn: LlmComplete = async (prompt, system, opts) => {
-    calls.push({ prompt, system, effort: opts?.effort })
-    return reply
-  }
-  return Object.assign(fn, { calls })
+  const seam = new AgentSeam({
+    complete: async (prompt, system, opts) => {
+      calls.push({ prompt, system, effort: opts?.effort })
+      return reply
+    },
+  })
+  return Object.assign(seam, { calls })
 }
 
 async function seedApplied(

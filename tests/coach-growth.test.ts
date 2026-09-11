@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { addDays, todayStr } from '../src/engine/dates.ts'
 import { parseCompass, sectionBody, SECTION_ROUTE, SECTION_ANNOTATIONS } from '../src/engine/compass.ts'
 import { withVault, noteText } from './helpers/vault.ts'
-import type { LlmComplete } from '../src/engine/llm.ts'
+import { AgentSeam } from '../src/engine/agent.ts'
 
 // 生长批受理（#145/#150 / ADR-0033 滚动教练的裁决产物面）：
 // - 教练回合三段式 effort：显然步轻量段（fast，行为摘要+罗盘+图面）恒 1 次调用；
@@ -83,14 +83,17 @@ function replayFake(reply: string) {
   return scriptFake([reply])
 }
 
-/** 脚本化假实现：按调用序回放（第 i 次调用回 replies[i]，越界取最后一条）。 */
+/** 脚本化假实现：脚本化补全端口注入 AgentSeam（#162 起站点收缝），调用记录留在端口层
+ * （prompt/system/语义档经缝直通）。按调用序回放（第 i 次调用回 replies[i]，越界取最后一条）。 */
 function scriptFake(replies: string[]) {
   const calls: Array<{ prompt: string; system?: string; effort?: string }> = []
-  const fn: LlmComplete = async (prompt, system, opts) => {
-    calls.push({ prompt, system, effort: opts?.effort })
-    return replies[Math.min(calls.length - 1, replies.length - 1)]!
-  }
-  return Object.assign(fn, { calls })
+  const seam = new AgentSeam({
+    complete: async (prompt, system, opts) => {
+      calls.push({ prompt, system, effort: opts?.effort })
+      return replies[Math.min(calls.length - 1, replies.length - 1)]!
+    },
+  })
+  return Object.assign(seam, { calls })
 }
 
 async function seedApplied(engine: Awaited<ReturnType<typeof withVault>>['engine']): Promise<void> {

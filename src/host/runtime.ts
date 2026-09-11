@@ -1,17 +1,20 @@
 /**
  * 宿主技术层·runtime（#167 自 src/index.ts 分装；ADR-0048）：
- * 显式 runtime 对象承载宿主全部可变态——engine（门面实例）、vault/centerRel（部署路径）、
- * jobs（生成任务注册表 + 出题结果表）与 flags（queuePaused/pumping/lastSessionStartAt）。
- * 技术层函数一律收 runtime 参数（不在函数体内引用模块级状态），因此每个技术层函数在
- * 测试里都可用自造 runtime 直接调用——宿主第一次可测。除常量外宿主模块级 let 归零。
- * 本文件同时承载跨技术层共享的纯工具（运行日志、stripFences）与部署路径校验/首启 seed。
+ * 显式 runtime 对象承载宿主全部可变态——engine（门面实例）、agent（统一 agent 缝实例，
+ * #162：投递层构造并注入双端口适配，应用层 engine/agent.ts 消费）、vault/centerRel
+ * （部署路径）、jobs（生成任务注册表 + 出题结果表）与 flags
+ * （queuePaused/pumping/lastSessionStartAt）。技术层函数一律收 runtime 参数（不在函数
+ * 体内引用模块级状态），因此每个技术层函数在测试里都可用自造 runtime 直接调用——宿主
+ * 第一次可测。除常量外宿主模块级 let 归零。本文件同时承载跨技术层共享的运行日志工具
+ * （stripFences 已随缝归位 engine/agent.ts）与部署路径校验/首启 seed。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir } from 'node:fs/promises'
-import { LearnhubEngine } from '../engine/index.ts'
+import { AgentSeam, LearnhubEngine } from '../engine/index.ts'
 import type { SeedDraftRequest } from '../engine/index.ts'
 import type { GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
+import { llmSeam, llmStreamSeam } from './llm.ts'
 
 /** apply 时的行 config：部署路径与 AI 路由，均可在 profile patch 覆盖。 */
 export interface LearnhubConfig {
@@ -86,9 +89,13 @@ export interface HostFlags {
 }
 
 /** 宿主运行时：全部可变态的显式落点（ADR-0048）。类型可命名、可导出、可被测试构造；
- * ctx 不驻留其上（投递层与宿主 API 的耦合面只留在 apply 与适配器文件）。 */
+ * ctx 不驻留其上（投递层与宿主 API 的耦合面只留在 apply 与适配器文件——agent 缝持有
+ * 的只是 host/llm.ts 适配器产出的端口闭包，不是 ctx 本身）。 */
 export interface HostRuntime {
   engine: LearnhubEngine
+  /** 统一 agent 缝（#162 / ADR-0041/0044）：六个策略站的调用面。站点方法以它为
+   * llm 注入参——投递层构造一次、逐调用传入（#137 注入缝纪律沿袭：测试换假端口）。 */
+  agent: AgentSeam
   vault: string
   centerRel: string
   jobs: HostJobs
@@ -96,8 +103,8 @@ export interface HostRuntime {
 }
 
 /** 构造宿主 runtime（apply 装配的第一步）：部署路径校验（缺失/不存在直接失败，不做
- * 静默兜底）→ 新鲜库出生盖戳（#138）→ 构造引擎与空任务表。ctx 按 ADR-0048 只经
- * apply 传入、不驻留 runtime（保持投递层耦合面在一个装配点上）。 */
+ * 静默兜底）→ 新鲜库出生盖戳（#138）→ 构造引擎、agent 缝与空任务表。ctx 按 ADR-0048
+ * 只在装配点消费（适配器闭包捕获），不驻留 runtime。 */
 export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): HostRuntime {
   // —— 部署路径（机器级 config）——
   const vault = typeof config?.vault === 'string' ? config.vault.replace(/\\/g, '/').replace(/\/+$/, '') : ''
@@ -118,13 +125,31 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     mkdirSync(`${center}/state`, { recursive: true })
     writeFileSync(freshConfigPath, JSON.stringify({ schema: { version: 2, formats: {} } }, null, 1) + '\n', 'utf8')
   }
-  return {
-    engine: new LearnhubEngine({ vault, centerRel }),
+  const engine = new LearnhubEngine({ vault, centerRel })
+  // —— 统一 agent 缝装配（#162）：端口适配住 host/llm.ts 唯一适配文件，投递层只构造
+  // 与注入；调用日志沿缝贯通、注入侧可观测（console + 运行日志）。 ——
+  let rtRef: HostRuntime | undefined
+  const agent = new AgentSeam({
+    complete: llmSeam(ctx),
+    stream: llmStreamSeam(ctx),
+    onCall: r => {
+      console.info(`[learnhub:agent] ${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符`)
+      if (rtRef) {
+        void runLog(rtRef, 'llm_call',
+          `${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符`)
+          .catch(() => undefined)
+      }
+    },
+  })
+  const rt: HostRuntime = {
+    engine, agent,
     vault,
     centerRel,
     jobs: { genJobs: new Map(), quizJobResults: new Map() },
     flags: { queuePaused: false, pumping: false, lastSessionStartAt: 0 },
   }
+  rtRef = rt
+  return rt
 }
 
 /** 单条运行日志输出截断上限（与 OB 插件同源）。 */
@@ -168,9 +193,3 @@ export async function apiRun<T>(rt: HostRuntime, tool: string, fn: () => Promise
   return out
 }
 
-/** 剥掉模型可能包住的整段 markdown 代码围栏：限 markdown/yaml/json 等数据类标签——
- * 正文类标签（svg/plot 等）本身是内容的一部分，剥掉会毁掉 ```svg/```plot 引用块。 */
-export function stripFences(body: string): string {
-  const m = body.match(/^```(?:markdown|md|yaml|yml|json)?\s*\n([\s\S]*?)\n```\s*$/)
-  return m ? m[1] : body
-}

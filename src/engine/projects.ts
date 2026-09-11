@@ -40,7 +40,7 @@ import type { ProjectCrossDoc, ProjectExecBackflow, ProjectExecResult } from './
 import { declaredEncOf } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { CourseEntry, Fm } from './types.ts'
-import type { LlmComplete } from './llm.ts'
+import type { AgentSeam, GateVerdict } from './agent.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
 import { runAudit } from './audit.ts'
 import { graphHealthScore } from './health.ts'
@@ -1086,11 +1086,13 @@ export class ProjectSubsystem {
    *   计划后落盘），单边 apply 被守卫拒、单边 reject 联动拒另一半（同退的动态半）。
    * 显式目标课程 = 已播种课程的新计划半区（nodes 引用既有节点名，对账门收紧到既有
    * 图；新知识需要走计划修订驱动的教练补支）；省略 course = 种子簇充当新课程种子。
-   * 检索面复用 Vault 先验（只读）；apply 前零 canonical 写入（ADR-0015 裁决 6）。 */
+   * 检索面复用 Vault 先验（只读）；apply 前零 canonical 写入（ADR-0015 裁决 6）。
+   * 调用经统一 agent 缝（#162）：剥围栏/调用日志在缝里内建，双产物门未过经缝的门错
+   * 修复轮回灌重产恰一次（修复轮语义档 deep——回灌重裁是值得多思考一轮的高难调用）。 */
   async projectDecompile(
     id: string,
     opts: { goal?: string; course?: string; notes?: string[] } = {},
-    llm: LlmComplete,
+    agent: AgentSeam,
   ): Promise<{
     project: string
     prior_hits: number
@@ -1148,9 +1150,9 @@ export class ProjectSubsystem {
       ? YAML.stringify({ plan: fm.plan })
       : '（空——本项目还没有里程碑计划，本次为初次规划）'
     const pack = `${tpl}\n\n---\n\n## 目标项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 渐退档：${fm.tier}\n- 目标描述（目标项目描述原文）：\n\n${goal}\n\n## 现状计划（给出完整新版本，不保守微调）\n\n${current}\n\n## 注册笔记（Vault 先验的检索来源）\n\n${notesList}\n\n## 知识子图落点\n\n${courseBlock}${prior ? `\n\n---\n\n${prior}` : ''}`
-    // 模型产出 → 双产物校验门 + 名字对账门（未过回灌修复一轮，对齐「生成→门禁→修复
-    // 一轮」机械）。对账域 = 种子簇 ∪ 全部启用课程的图节点名（与消费面 locateNode 的
-    // 跨课解析同域——裸名歧义/悬空在受理前拦下，不留到消费面才炸）。
+    // 模型产出 → 双产物校验门 + 名字对账门（未过经缝的门错修复轮回灌重产恰一次，对齐
+    // 「生成→门禁→修复一轮」机械）。对账域 = 种子簇 ∪ 全部启用课程的图节点名（与消费面
+    // locateNode 的跨课解析同域——裸名歧义/悬空在受理前拦下，不留到消费面才炸）。
     const reconcileErrors = async (doc: DecompileDoc | undefined): Promise<string[]> => {
       if (!doc) return []
       const existingByCourse = new Map<string, Set<string>>()
@@ -1175,25 +1177,26 @@ export class ProjectSubsystem {
         existingByCourse,
       })]
     }
-    let raw = await llm(pack)
-    let gate = splitDecompileDoc(YAML.parseModel(raw), fm.id, { expectSeed: !target })
-    let reconcile = await reconcileErrors(gate.result)
-    let repaired = false
-    if (gate.errors.length || reconcile.length) {
-      repaired = true
-      raw = await llm(decompileRepairPrompt(pack, raw, [...gate.errors, ...reconcile].map(e => `  ✗ ${e}`)))
-      gate = splitDecompileDoc(YAML.parseModel(raw), fm.id, { expectSeed: !target })
-      reconcile = await reconcileErrors(gate.result)
+    const judgeOnce = async (raw: string): Promise<GateVerdict<DecompileDoc>> => {
+      const gate = splitDecompileDoc(YAML.parseModel(raw), fm.id, { expectSeed: !target })
+      const reconcile = await reconcileErrors(gate.result)
+      const errors = [...gate.errors, ...reconcile].map(x => `  ✗ ${x}`)
+      return errors.length || !gate.result ? { errors } : { errors, result: gate.result }
     }
-    if (gate.errors.length || reconcile.length || !gate.result) {
-      const e: Error & { code?: string } = new Error(
-        `[project-decompile] 模型产出未过双产物校验门（已自动修复重试一轮，提案未受理）：\n`
-        + [...gate.errors, ...reconcile].map(x => `  ✗ ${x}`).join('\n'))
-      e.code = 'DECOMPILE_GATE_FAILED'
-      throw e
-    }
-    const doc: DecompileDoc = gate.result
-    // 名字对账门已在修复环内跑过（reconcile 为空 = 通过）——此处直接受理。
+    const round = await agent.gateRepairRound<string, DecompileDoc>('目标反编译', {
+      first: () => agent.complete('目标反编译', pack),
+      gate: judgeOnce,
+      repair: (gateErrors, rejected) =>
+        agent.repair('目标反编译', decompileRepairPrompt(pack, rejected, gateErrors), { effort: 'deep' }),
+      fatal: (_firstErrors, repairErrors) => {
+        const e: Error & { code?: string } = new Error(
+          `[project-decompile] 模型产出未过双产物校验门（已自动修复重试一轮，提案未受理）：\n${repairErrors.join('\n')}`)
+        e.code = 'DECOMPILE_GATE_FAILED'
+        return e
+      },
+    })
+    const doc: DecompileDoc = round.result
+    // 名字对账门已在修复环内跑过（judgeOnce 过门 = 对账为空）——此处直接受理。
     // 双提案受理（先种子后计划）：种子提案先落（重门已预检通过）；计划提案**出生即带
     // pair**（联动守卫从落盘那一刻生效——任一时刻崩溃都不会留下可单边 apply 的无守卫
     // 计划半区）；最后补种子半区的 pair 指认（此窗口内计划已被守卫保护，种子半区单边
@@ -1221,7 +1224,7 @@ export class ProjectSubsystem {
       project: fm.id,
       prior_hits: hits.length,
       notes: picked.map(p => p.path),
-      repaired,
+      repaired: round.repaired,
       plan_proposal: planProposal!,
       seed_proposal: seedProposal,
       pair: { plan: planProposal!.id, seed: seedProposal?.id ?? null },

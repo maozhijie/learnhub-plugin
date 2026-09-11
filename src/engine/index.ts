@@ -48,6 +48,7 @@ import type { ComplexityTier} from './complexity.ts'
 import { GraphProposals} from './proposals.ts'
 import type { ApplyAudit, EditProposalSpec} from './proposals.ts'
 import type { LlmComplete} from './llm.ts'
+import type { AgentSeam} from './agent.ts'
 import { Projects, ProjectSubsystem} from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult} from './projects.ts'
 import type { RecallQuestion, RecallRec} from './project-recall.ts'
@@ -123,7 +124,10 @@ import type {
 export { Content } from './content.ts'
 export { ANKI_ENDPOINT, AnkiConnectClient } from './anki.ts'
 export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './complexity.ts'
-export type { LlmComplete, LlmEffort } from './llm.ts'
+export type { LlmComplete, LlmEffort, LlmStream, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
+/** 统一 agent 缝（#162 / ADR-0041/0044）：类随门面出（宿主构造注入），类型随缝出。 */
+export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
+export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
 
 /** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
 function shuffled<T>(items: T[]): T[] {
@@ -710,9 +714,9 @@ export class LearnhubEngine {
 
   async seedPropose(
     input: SeedDraftRequest,
-    llm: LlmComplete,
+    agent: AgentSeam,
   ): Promise<{ id: number; course: string; mode: 'new' | 'reseed'; goal_type: string; endpoint: string; starts: number; prior_hits: number; repaired: boolean }> {
-    return this.graph.seedPropose(input, llm)
+    return this.graph.seedPropose(input, agent)
   }
 
   async conceptMerge(courseKey: string, from: string, into: string): Promise<{ course: string; into: string; names: string[] }> {
@@ -839,7 +843,7 @@ export class LearnhubEngine {
   async projectDecompile(
     id: string,
     opts: { goal?: string; course?: string; notes?: string[] } = {},
-    llm: LlmComplete,
+    agent: AgentSeam,
   ): Promise<{
     project: string
     prior_hits: number
@@ -849,7 +853,7 @@ export class LearnhubEngine {
     seed_proposal: { id: number; kind: 'seed'; course: string; endpoint: string; starts: number } | null
     pair: { plan: number; seed: number | null }
   }> {
-    return this.project.projectDecompile(id, opts, llm)
+    return this.project.projectDecompile(id, opts, agent)
   }
 
   async projectDecompileApply(planPid: number, seedPid: number): Promise<{
@@ -1283,10 +1287,10 @@ export class LearnhubEngine {
     return this.growth2.compassTail(courseKey)
   }
 
-  async compassPaint(courseKey: string | undefined, llm: LlmComplete): Promise<{
+  async compassPaint(courseKey: string | undefined, agent: AgentSeam): Promise<{
     course: string; path: string; route_lines: number; annotations_preserved: boolean; repainted: boolean
   }> {
-    return this.growth2.compassPaint(courseKey, llm)
+    return this.growth2.compassPaint(courseKey, agent)
   }
 
   async compassRewrite(
@@ -1320,7 +1324,7 @@ export class LearnhubEngine {
   // ---- 生长批受理（#145 / ADR-0033 滚动教练：教练回合裁决 → edit 提案 → 同事务罗盘）----
 
   async coachGrowthBatch(
-    courseKey: string, llm: LlmComplete,
+    courseKey: string, agent: AgentSeam,
     opts: { force?: boolean; today?: string; inject?: string } = {},
   ): Promise<{
     course: string
@@ -1330,7 +1334,7 @@ export class LearnhubEngine {
     proposal: { id: number; ops: number; operator: string; reason: string; disagreement: boolean } | null
     applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[]; ready_unbuilt: string[] } | null
   }> {
-    return this.growth2.coachGrowthBatch(courseKey, llm, opts)
+    return this.growth2.coachGrowthBatch(courseKey, agent, opts)
   }
   // ---- 边实验账本与复诊（#146 / 插入提案生命周期：预注册→登记→到期结算→proven｜自动剪除）----
 

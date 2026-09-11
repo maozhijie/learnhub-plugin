@@ -8,10 +8,10 @@
  * 键是工具名（与注册表 agent 通道同源）；门④·agent 侧断言键集合恰等于没有 bind 的 agent 通道集合。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
+import { ANKI_ENDPOINT, AnkiConnectClient, stripFences } from '../engine/index.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
 import { llmSeam, llmView } from './llm.ts'
-import { run, stripFences } from './runtime.ts'
+import { run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import {
   enqueueGeneration, enqueueQuizGeneration, generateProjectMilestone, generateProjectPlan,
@@ -67,7 +67,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         return JSON.stringify(r)
       }),
   'learnhub_compass_paint': (args: { course?: string }) => run(rt, 'learnhub_compass_paint', async () =>
-      JSON.stringify(await rt.engine.compassPaint(args.course, llmSeam(ctx)))),
+      JSON.stringify(await rt.engine.compassPaint(args.course, rt.agent))),
   'learnhub_question_audit': () => run(rt, 'learnhub_question_audit', async () => JSON.stringify(await rt.engine.questionAudit())),
   'learnhub_question_generate': (args: { course: string; node: string; count?: number }) => run(rt, 'learnhub_question_generate', async () => {
       const n = questionCount(args.count)
@@ -111,9 +111,9 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         ...(args.tier !== undefined ? { tier: args.tier as never } : {}),
       }))),
   'learnhub_project_list': () => run(rt, 'learnhub_project_list', async () => JSON.stringify(await rt.engine.projectList())),
-  'learnhub_project_plan_generate': (args: { id: string }) => run(rt, 'learnhub_project_plan_generate', () => generateProjectPlan(rt, ctx, args.id)),
+  'learnhub_project_plan_generate': (args: { id: string }) => run(rt, 'learnhub_project_plan_generate', () => generateProjectPlan(rt, args.id)),
   'learnhub_project_milestone_generate': (args: { id: string; milestone: string }) => run(rt, 'learnhub_project_milestone_generate', () =>
-      generateProjectMilestone(rt, ctx, args.id, args.milestone)),
+      generateProjectMilestone(rt, args.id, args.milestone)),
   'learnhub_project_apply': (args: { id: number }) => run(rt, 'learnhub_project_apply', async () => {
       const result = await rt.engine.projectApply(args.id)
       triggerPlanGrowth(rt, ctx, result)
@@ -131,7 +131,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
           ...(args.course !== undefined ? { course: args.course } : {}),
           ...(args.notes !== undefined ? { notes: args.notes } : {}),
         },
-        llmSeam(ctx),
+        rt.agent,
       ))),
   'learnhub_project_exec_log': (args: { id: string; source: string; rating?: number; evidence?: { accuracy?: number; self_help?: number }; nodes?: string[]; note?: string }) => run(rt, 'learnhub_project_exec_log', async () =>
       JSON.stringify(await rt.engine.projectExecLog(args.id, {

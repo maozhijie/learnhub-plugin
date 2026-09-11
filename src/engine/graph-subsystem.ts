@@ -51,7 +51,7 @@ import { effectiveStage, runAudit } from './audit.ts'
 import { Content } from './content.ts'
 import { declaredEncOf } from './graph.ts'
 import { atomicWrite } from './io.ts'
-import type { LlmComplete } from './llm.ts'
+import type { AgentSeam } from './agent.ts'
 import { readNoteSourceExcludes } from './note-source.ts'
 import { hasReadyContent, loadNote } from './notes.ts'
 import { decompileTerms } from './project-decompile.ts'
@@ -408,13 +408,14 @@ export class GraphSubsystem {
 
   /** 面板下发的种子起草（学习图页建课/换终点表单入口）：目标描述 + 模式 + 目标类型
    * （coverage 附块工作表）→「种子提案」提示词组装（vault 先验选配——熟悉边界定位）→
-   * llm → 种子 YAML 干跑校验门（validateSeedProposal 直跑，未过回灌修复一轮）→
-   * proposeSeed 权威受理（schema/注册表对账/结构/概念对表在受理侧重跑全量），一次人审
-   * 即开工。课程名/模式/目标类型/工作表是表单绑定字段——以输入为准，不信模型照抄。
-   * llm 为注入缝（#137）。 */
+   * 缝 complete → 种子 YAML 干跑校验门（validateSeedProposal 直跑，未过经缝的门错修复
+   * 轮回灌重产恰一次）→ proposeSeed 权威受理（schema/注册表对账/结构/概念对表在受理侧
+   * 重跑全量），一次人审即开工。课程名/模式/目标类型/工作表是表单绑定字段——以输入为
+   * 准，不信模型照抄。agent 为统一 agent 缝（#162 首站竖直验证：剥围栏/语义档/调用日志
+   * 与门错修复轮都来自缝，站点只声明门与修复提示词）。 */
   async seedPropose(
     input: SeedDraftRequest,
-    llm: LlmComplete,
+    agent: AgentSeam,
   ): Promise<{ id: number; course: string; mode: 'new' | 'reseed'; goal_type: string; endpoint: string; starts: number; prior_hits: number; repaired: boolean }> {
     const course = input.course.trim()
     const goal = input.goal.trim()
@@ -455,28 +456,31 @@ export class GraphSubsystem {
       const v = validateSeedProposal(doc)
       return { errors: v.errors ?? [], spec: v.spec ?? null }
     }
-    let raw = await llm(pack)
-    let gate = gateOnce(raw)
-    let repaired = false
-    if (gate.errors.length) {
-      repaired = true
-      raw = await llm(seedRepairPrompt(pack, raw, gate.errors.map(x => `  ✗ ${x}`)))
-      gate = gateOnce(raw)
-    }
-    if (gate.errors.length || !gate.spec) {
-      const e: Error & { code?: string } = new Error(
-        `[seed-propose] 模型产出未过种子校验门（已自动修复重试一轮，提案未受理）：\n${gate.errors.map(x => `  ✗ ${x}`).join('\n')}`)
-      e.code = 'SEED_GATE_FAILED'
-      throw e
-    }
-    const spec = gate.spec
+    // 干跑校验门 + 门错修复轮（缝的共享能力，#162）：首轮未过 → 门错误清单 + 被拒原文
+    // 回灌修复提示词重产恰一次；仍败 SEED_GATE_FAILED 零受理（两轮死因在 fatal 汇齐）。
+    const round = await agent.gateRepairRound<string, SeedProposalSpec>('种子起草', {
+      first: () => agent.complete('种子起草', pack),
+      gate: raw => {
+        const g = gateOnce(raw)
+        return { errors: g.errors.map(x => `  ✗ ${x}`), ...(g.spec ? { result: g.spec } : {}) }
+      },
+      repair: (gateErrors, rejected) =>
+        agent.repair('种子起草', seedRepairPrompt(pack, rejected, gateErrors), { effort: 'deep' }),
+      fatal: (_firstErrors, repairErrors) => {
+        const e: Error & { code?: string } = new Error(
+          `[seed-propose] 模型产出未过种子校验门（已自动修复重试一轮，提案未受理）：\n${repairErrors.join('\n')}`)
+        e.code = 'SEED_GATE_FAILED'
+        return e
+      },
+    })
+    const spec = round.result
     spec.course = course
     spec.mode = mode
     spec.goal_type = goalType
     if (goalType === 'coverage') spec.worksheet = worksheet
     else delete spec.worksheet
     const r = await this.graphPropose('seed', YAML.stringify(spec)) as { id: number; endpoint: string; starts: number }
-    return { id: r.id, course, mode, goal_type: goalType, endpoint: r.endpoint, starts: r.starts, prior_hits: priorHits, repaired }
+    return { id: r.id, course, mode, goal_type: goalType, endpoint: r.endpoint, starts: r.starts, prior_hits: priorHits, repaired: round.repaired }
   }
 
 

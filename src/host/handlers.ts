@@ -11,14 +11,14 @@
  * 注册表里**没有 bind 的 panel 通道**集合。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
+import { ANKI_ENDPOINT, AnkiConnectClient, stripFences } from '../engine/index.ts'
 import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
 import { sendJson } from './http.ts'
 import {
   need, needQuery, optBoolean, optFinite, optList, optNumber, optObject, optQuery, optRaw, optString, optText, optTrimmed,
   optTrue, pick, requireBoolean, requireNumber, requireObject, requireOneOf, requireString,
 } from './params.ts'
-import { apiRun, runLog, stripFences } from './runtime.ts'
+import { apiRun, runLog } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import type { RouteHandler } from './route-table.ts'
 import { llmComplete, llmSeam, llmView } from './llm.ts'
