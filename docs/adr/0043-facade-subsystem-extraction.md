@@ -16,17 +16,18 @@ engine/index.ts（7,200+ 行、约 240 方法、52 个 `// ----` 分节）的拆
   - **project**（住 projects.ts）：项目域 P 区、过点对账/检索点/行为推断 enc、执行事件流 2×2、目标反编译
   - **bank**（住 question-bank.ts）：C-3 错误对比卡、学习面板题目管理、B2 难度感知回流、题库一键清理、瑕疵题勘误冲正
   - **graph**（住 graph-subsystem.ts——枢纽领主例外）：graph analyze、Vault 链接先验、图探索、提案门禁包装、enc 覆盖层回填
-  - **content**（住 content.ts）：内容管线、note resolve/反馈区、P4 课程工作区与题库
-  - **sched**（住 srs.ts）：节点跳过/完成确认、XP 时间账本、记忆健康仪表盘、FSRS 参数优化器、沉淀层
+  - **content**（住 content-subsystem.ts——枢纽领主例外，content.ts 被 14 模块引用）：内容管线、note resolve/反馈区、P4 课程工作区与题库
+  - **sched**（住 sched-subsystem.ts——枢纽领主例外，srs.ts 被 30 模块引用）：节点跳过/完成确认、XP 时间账本、记忆健康仪表盘、FSRS 参数优化器、沉淀层
   - **registry**（住 registry.ts）：概念注册表管理、课程删除清扫
-  - **growth**（住 compass.ts）：罗盘、教练回合感知面、生长批受理、边实验账本与复诊
+  - **growth**（住 growth-subsystem.ts——枢纽领主例外，compass.ts 被 12 模块引用）：罗盘、教练回合感知面、生长批受理、边实验账本与复诊
   - **留门面（装配域，不设子系统）**：加载与解析、status/recommend、doctor、rebuild、生成任务持久化（宿主队列落盘臂）、utils 私有 helper 归位
-- **门面验收形态**：纯转发 + 装配 + 私有 helper 归位，目标 ≤800 行；转发含少量私有（门面内部跨域调用点所用），同为逐行转发。
-- **枢纽领主例外（刀 7 落地时补充）**：领主文件被大量 engine 模块引用时（graph.ts 被 17 个模块引用，含 type-only 边），把子系统类放进领主会迫使它反向依赖 proposals/projects/analysis/audit/content 等全部下游——结构化的窄面得膨胀到四十余个成员，且每加一个纯函数都要过门面，反而模糊了域边界。此类「枢纽领主」改用**同域新文件**承载子系统类（`graph-subsystem.ts`），该文件只被门面引用，可自由 import 领域模块；「零既有模块搬移、接缝路径不晃」的原则不变。判定线：领主文件的 importer 数（≥5 个 engine 模块即按枢纽处理）。
+- **门面验收形态**：纯转发 + 装配 + 私有 helper 归位；转发含少量私有（门面内部跨域调用点所用），同为逐行转发。
+- **行数现实（刀 11 后实测）**：门面 1830 行中，198 个转发方法占 815 行（多行签名 + 类型标注，非每方法一行）——「≤800 行」的原估算假设一行一转发，签名展开后不可达。验收实质是**内容**而非行数：门面只剩转发 + 装配 + 装配域分节（加载解析/status/doctor/rebuild/生成任务持久化/utils），无领域方法体。
+- **枢纽领主例外（刀 7 落地时补充，刀 8/9/11 沿用）**：领主文件被大量 engine 模块引用时（graph.ts 17 个、srs.ts 30 个、content.ts 14 个、compass.ts 12 个模块引用，含 type-only 边），把子系统类放进领主会迫使它反向依赖 proposals/projects/analysis/audit 等全部下游——结构化窄面得膨胀到四十余个成员，且每加一个纯函数都要过门面，反而模糊域边界。此类「枢纽领主」改用**同域新文件**承载子系统类（`graph-subsystem.ts` / `sched-subsystem.ts` / `content-subsystem.ts` / `growth-subsystem.ts`），该文件只被门面引用，可自由 import 领域模块；「零既有模块搬移、接缝路径不晃」的原则不变。判定线：领主文件的 importer ≥5 个 engine 模块即按枢纽处理（本域实测：lab→nof1.ts 3 个、channels→note-source.ts 4 个、bank→question-bank.ts 6 个仍住领主，graph 及以上全部走新文件）。
 
 边界：
 - 跨子系统调用一律经门面转发链（`this.e.<方法>` 注入窄面），子系统间零横向 import。
-- views/ 子目录只做类型归档，视图聚合逻辑仍在门面方法内；R4 执法面扩到 views.ts 与 views/*.ts 的 barrel 形态。
+- views/ 子目录只做类型归档，视图聚合逻辑仍在（子系统方法内）；R4 只约束 views.ts 自身的导入形态（`import type` 且无值导出），views/*.ts 叶子文件不受此条约束（它们本就是类型层，须引 types/paths 等）。
 - ADR-0013 测试缝（tests 直 import 引擎模块、engine.store）不受影响——子系统类的公共方法签名与领主文件纯函数面都原样保留。
 
 替代方案（否决）：

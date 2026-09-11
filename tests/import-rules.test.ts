@@ -33,14 +33,19 @@ function* walk(dir: string): Generator<string> {
   }
 }
 
+/** 全部说明符（含裸包名与 @scoped：R3 需要看见 @deepseek-ai/*；其余规则只用相对项）。 */
+function allSpecs(code: string): string[] {
+  const specs: string[] = []
+  for (const m of code.matchAll(/from\s*['"]([^'"]+)['"]/g)) specs.push(m[1])
+  for (const m of code.matchAll(/^\s*import\s*['"]([^'"]+)['"]/gm)) specs.push(m[1])
+  for (const m of code.matchAll(/\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) specs.push(m[1])
+  return specs
+}
+
 /** 相对导入收集（说明符原文）：静态（含 import type）与 export … from 的
  * `from '<spec>'` 形态 + 侧效 `import '<spec>'` + 动态 `import('<spec>')`。 */
 function relativeSpecs(code: string): string[] {
-  const specs: string[] = []
-  for (const m of code.matchAll(/from\s*['"](\.[^'"]+)['"]/g)) specs.push(m[1])
-  for (const m of code.matchAll(/^\s*import\s*['"](\.[^'"]+)['"]/gm)) specs.push(m[1])
-  for (const m of code.matchAll(/\bimport\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g)) specs.push(m[1])
-  return specs
+  return allSpecs(code).filter(s => s.startsWith('.'))
 }
 
 /** 相对说明符解析：带 .ts 直用 → 否则补 .ts → 否则补 /index.ts（兼容 views.ts 的
@@ -58,6 +63,7 @@ const inDir = (file: string, dir: string) => file.startsWith(dir + sep)
 const display = (file: string) => file.slice(SRC.length + 1)
 
 const files = [...walk(SRC)]
+const allSpecsOf = new Map(files.map(f => [f, allSpecs(String(readFileSync(f, 'utf8')))]))
 const importsOf = new Map(files.map(f => [f, relativeSpecs(String(readFileSync(f, 'utf8')))]))
 
 function resolvedEdges(file: string): Array<{ spec: string; resolved: string }> {
@@ -88,9 +94,13 @@ test('R2 engine 禁 import 宿主', () => {
 })
 
 test('R3 engine 禁 import @deepseek-ai/*', () => {
+  // 自检：收集器必须真能看见裸包/作用域包——否则本规则恒过（等于没执法，实测曾如此）
+  assert.ok(allSpecs("import { x } from '@deepseek-ai/dsh-llm'").includes('@deepseek-ai/dsh-llm'),
+    '[R3 自检] 说明符收集漏掉裸包名，规则形同虚设')
+  assert.equal(relativeSpecs("import { x } from '@deepseek-ai/dsh-llm'").length, 0, '[R3 自检] 相对收集不应含裸包名')
   for (const file of files) {
     if (!inDir(file, ENGINE)) continue
-    for (const spec of importsOf.get(file) ?? []) {
+    for (const spec of allSpecsOf.get(file) ?? []) {
       assert.ok(!spec.startsWith('@deepseek-ai/'), `[R3] ${display(file)} ← '${spec}'：引擎零宿主私有依赖（缝型自带）`)
     }
   }

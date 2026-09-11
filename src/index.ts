@@ -16,17 +16,15 @@
  * - D15：评分只经工作单 → settle 入库；UI 自动写回也只写工作单评分行。
  * - 每次工具/路由调用追加 state/运行日志.md（LOG_LIMIT 截断）。
  */
-import type { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import { defineTool } from '@deepseek-ai/dsh-tools'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { readFile, unlink, writeFile, appendFile, mkdir } from 'node:fs/promises'
-import type { IncomingMessage, ServerResponse } from 'node:http'
-import { join, resolve as resolvePath, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { ANKI_ENDPOINT, AnkiConnectClient, Content, LearnhubEngine, TIER_LABELS, genericQuizTarget, tierIdxOf } from './engine/index.ts'
-import type { CoachTrigger, LlmComplete, LlmEffort, SeedDraftRequest } from './engine/index.ts'
-import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from './tool-contracts.ts'
+import type { Context} from '@deepseek-ai/cordis'
+import { defineTool} from '@deepseek-ai/dsh-tools'
+import { existsSync, mkdirSync, writeFileSync} from 'node:fs'
+import { readFile, appendFile, mkdir} from 'node:fs/promises'
+import type { IncomingMessage, ServerResponse} from 'node:http'
+import { join, sep} from 'node:path'
+import { ANKI_ENDPOINT, AnkiConnectClient, Content, LearnhubEngine, TIER_LABELS, genericQuizTarget, tierIdxOf} from './engine/index.ts'
+import type { CoachTrigger, LlmComplete, SeedDraftRequest} from './engine/index.ts'
+import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection} from './tool-contracts.ts'
 import {
   contentFailureStatus,
   genJobRetentionRemainingMs,
