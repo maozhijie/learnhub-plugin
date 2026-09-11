@@ -664,10 +664,6 @@ export class GraphProposals {
       throw new Error(`[apply-edit] 生长闸门拒绝写入（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
 
-    // 1. 铸名随生长批落盘（同事务第一笔：此后任一步失败，登记表至多多出孤儿条目——
-    //    合法态；反过来图先写会让引用悬空）
-    if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
-
     const createdBlocks = new Set<string>()
     for (const op of spec.ops) {
       if (op.op !== 'add_node') continue
@@ -684,61 +680,116 @@ export class GraphProposals {
       else if (op.op === 'del_node') dels.push(op.node!)
     }
 
-    // 2. data/*.yaml 重写
+    // 2. data/*.yaml 重写（内存侧应用 ops；落盘动作进下方写入单元）
     applyOpsToRegions(regions, spec.ops)
     const files = await store.regionFiles()
-    for (const region of regions) {
-      if (region.name in files) await store.writeRegionDoc(files[region.name], region)
-    }
 
-    // 3. 改名/移动/删除联动课程笔记（用 ops 应用前的图定位旧文件位置；
-    //    graphAfter 里旧名已不存在/位置已变，会让联动静默失效）
-    for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(root, graph, oldName, newName, undefined)
-    for (const [node, regionName] of moves) await this.relocateNote(root, graph, node, undefined, regionName)
-    for (const node of dels) await this.archiveNote(root, graph, node, prop.id)
-
-    // 3.5 罗盘批内重写（#145 同事务）：路线门已过、只换「剩余路线」段，批注区/ETA
-    //     字节保留；罗盘缺席落脚手架打底（与 compassRewrite 同语义）。
+    // 写入单元（#176）：写序照今天的声明——「铸名 → 图区重写 → 笔记联动 → 罗盘批内
+    // 重写 → 边实验账本 → 快照 → 笔记骨架 → journal(graph_edit) → 提案 applied」。
+    // 铸名孤儿条目合法、悬空引用违约（登记表先写、图在后）；路线门/巩固门/生长闸全过
+    // 才进写序（罗盘被拒不落盘）。失败上抛中止，不回滚不续跑，失败不写 journal；
+    // 重放被 takePending/simulateOps 门拦住（重放不保证收敛，靠门不靠续段）。
     let compassRewritten = false
-    if (compassRoute !== null) {
-      const compassPath = this.paths.compassPath(root)
-      const base = existsSync(compassPath) ? await readFile(compassPath, 'utf8') : compassScaffold(course.name)
-      await atomicWrite(compassPath, withSectionText(base, SECTION_ROUTE, compassRoute))
-      compassRewritten = true
-    }
-
-    // 3.6 边实验账本登记（#146 同事务）：插入批的每个 add_node 登记一条在途复诊
-    //     （node/pre = 登记快照、proposal = 本批提案 id、due = 预注册学习日数）——
-    //     到期结算钩子据此自动裁决（proven｜自动剪除），零人审。
     const probationRegistered: string[] = []
-    if (spec.note?.operator === '插入' && spec.note.recheck) {
-      const due = spec.note.recheck.days ?? RECHECK_DAYS_DEFAULT
-      for (const op of spec.ops) {
-        if (op.op !== 'add_node') continue
-        await appendProbationEntry(this.paths, root, {
-          node: op.name!, pre: [...(op.pre ?? [])], proposal: prop.id, due,
-        })
-        probationRegistered.push(op.name!)
-      }
-    }
-
-    const regions2 = await store.load()
-    const version = (await this.store.latestSnapshotVersion(course.name)) + 1
-    await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
-    await this.ensureNotesFor(root, regions2)
-    // detail 三段：操作清单（add_node 显示 name，其余显示 node）→ 铸名 → 生长批裁决；
-    // 零操作批（裁决暂不产结构）也要留痕可读
-    const opList = spec.ops.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('；')
-    const mintList = spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''
-    const detail = (opList || `（零操作${spec.route !== undefined ? '，罗盘重写' : '，裁决留痕'}）`)
-      + mintList
-      + (spec.note ? `；生长批（${spec.note.operator}）：${spec.note.reason}` : '')
-    await this.store.appendJournal({
-      course: course.name, node: '*', rating: null, kind: 'graph_edit', elapsed_days: 0,
-      session: String(prop.id),
-      detail,
+    let regions2: Awaited<ReturnType<GraphStore['load']>> = []
+    let version = 0
+    await runWriteUnit('applyEdit', {
+      clock: this.clock!,
+      journal: rec => this.store.appendJournal(rec),
+      steps: [
+        {
+          // 同事务第一笔照旧：此后任一步失败，登记表至多多出孤儿条目（合法态）——
+          // 反过来图先写会让引用悬空；铸名幂等已在上方 applyConceptMints 门内
+          name: '铸名落概念登记表',
+          run: async () => {
+            if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
+          },
+        },
+        {
+          name: '图区重写',
+          run: async () => {
+            for (const region of regions) {
+              if (region.name in files) await store.writeRegionDoc(files[region.name], region)
+            }
+          },
+        },
+        {
+          // 3. 改名/移动/删除联动课程笔记（用 ops 应用前的图定位旧文件位置；
+          //    graphAfter 里旧名已不存在/位置已变，会让联动静默失效）
+          name: '笔记联动（改名/移动/归档）',
+          run: async () => {
+            for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(root, graph, oldName, newName, undefined)
+            for (const [node, regionName] of moves) await this.relocateNote(root, graph, node, undefined, regionName)
+            for (const node of dels) await this.archiveNote(root, graph, node, prop.id)
+          },
+        },
+        {
+          // 3.5 罗盘批内重写（#145）：路线门已过、只换「剩余路线」段，批注区/ETA
+          //     字节保留；罗盘缺席落脚手架打底（与 compassRewrite 同语义）。
+          name: '罗盘批内重写',
+          run: async () => {
+            if (compassRoute === null) return
+            const compassPath = this.paths.compassPath(root)
+            const base = existsSync(compassPath) ? await readFile(compassPath, 'utf8') : compassScaffold(course.name)
+            await atomicWrite(compassPath, withSectionText(base, SECTION_ROUTE, compassRoute))
+            compassRewritten = true
+          },
+        },
+        {
+          // 3.6 边实验账本登记（#146）：插入批的每个 add_node 登记一条在途复诊
+          //     （node/pre = 登记快照、proposal = 本批提案 id、due = 预注册学习日数）——
+          //     到期结算钩子据此自动裁决（proven｜自动剪除），零人审。
+          name: '边实验账本登记',
+          run: async () => {
+            if (!(spec.note?.operator === '插入' && spec.note.recheck)) return
+            const due = spec.note.recheck.days ?? RECHECK_DAYS_DEFAULT
+            for (const op of spec.ops) {
+              if (op.op !== 'add_node') continue
+              await appendProbationEntry(this.paths, root, {
+                node: op.name!, pre: [...(op.pre ?? [])], proposal: prop.id, due,
+              })
+              probationRegistered.push(op.name!)
+            }
+          },
+        },
+        {
+          name: '快照',
+          run: async () => {
+            regions2 = await store.load()
+            version = (await this.store.latestSnapshotVersion(course.name)) + 1
+            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
+          },
+        },
+        {
+          // 逐节点 existsSync 跳过（步骤内幂等：已有笔记的节点不覆盖）
+          name: '笔记骨架补齐',
+          run: async () => { await this.ensureNotesFor(root, regions2) },
+        },
+        {
+          // detail 三段：操作清单（add_node 显示 name，其余显示 node）→ 铸名 → 生长批裁决；
+          // 零操作批（裁决暂不产结构）也要留痕可读
+          name: '操作 journal',
+          run: async () => {
+            const opList = spec.ops.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('；')
+            const mintList = spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''
+            const detail = (opList || `（零操作${spec.route !== undefined ? '，罗盘重写' : '，裁决留痕'}）`)
+              + mintList
+              + (spec.note ? `；生长批（${spec.note.operator}）：${spec.note.reason}` : '')
+            await this.store.appendJournal({
+              course: course.name, node: '*', rating: null, kind: 'graph_edit', elapsed_days: 0,
+              session: String(prop.id),
+              detail,
+            })
+          },
+        },
+        {
+          name: '提案 applied',
+          run: async () => {
+            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `快照 v${version}` })
+          },
+        },
+      ],
     })
-    await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock!.nowMs()).toISOString(), decision_note: `快照 v${version}` })
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
     const seedPhase = isSeedGraph(await readAnchor(this.paths.anchorPath(root)), new Graph(regions2))
     return {
@@ -953,7 +1004,7 @@ export class GraphProposals {
           run: async () => { await this.ensureNotesFor(root, regions) },
         },
         {
-          name: 'journal graph_seed',
+          name: '操作 journal',
           run: async () => {
             await this.store.appendJournal({
               course: course.name, node: '*', rating: null, kind: 'graph_seed', elapsed_days: 0,
@@ -1134,7 +1185,7 @@ export class GraphProposals {
           },
         },
         {
-          name: 'journal graph_enrich',
+          name: '操作 journal',
           run: async () => {
             await this.store.appendJournal({
               course: course.name, node: '*', rating: null, kind: 'graph_enrich', elapsed_days: 0,
