@@ -71,6 +71,7 @@ import type { OptimizerImpl } from './optimize.ts'
 import { FSRS6_PARAM_COUNT, OPTIMIZE_MIN_REVIEWS, bindingImpl, defaultParams, sequenceReviews, trainingSequences } from './optimize.ts'
 import { XP_PERFECT_BONUS, XP_STREAK_GRACE_DAYS } from './params.ts'
 import { appendSedimentEvent, foldSediment, readSedimentCanon, rebuildLearnerProfile } from './sediment.ts'
+import { runWriteUnit } from './write-unit.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { applyRatingBlock, getScheduler, resolveFsrsParams, retrievabilityBlock } from './srs.ts'
 import type { FsrsBlock, Stage } from './types.ts'
@@ -363,14 +364,42 @@ export class SchedSubsystem {
       return { status: 'skipped', reason: `评估未优于${baselineLabel}参数（logLoss ${round4(newEval.logLoss)} ≥ 基线 ${round4(baselineEval.logLoss)}）——不写回`, meta }
     }
     // 正典在沉淀（出生即写），课程文件只作缓存镜像；随后本结算重建学习者档案投影。
-    await appendSedimentEvent(this.e.paths, { kind: 'fsrs_params', tier: 'immediate', payload: { parameters, meta } }, this.e.clock.nowMs())
+    // 写入单元（#176）：步骤顺序照今天的声明——「正典 → 逐课程缓存镜像 → 缓存失效
+    // → 投影重建」。正典与镜像双写的崩溃窗口是设计内降级（#139：缺缓存回落正典，
+    // 收敛）；失败上抛中止，不回滚不续跑。
     const written: string[] = []
-    for (const c of courses) {
-      await atomicWrite(this.e.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n')
-      written.push(c.name)
-    }
-    this.e.schedCache.clear() // 参数唯一写者在此：缓存调度器全部失效，后续推进用新参数
-    await rebuildLearnerProfile(this.e.paths, foldSediment(await readSedimentCanon(this.e.paths)), this.e.clock.nowMs())
+    await runWriteUnit('optimizeFsrsParams', {
+      clock: this.e.clock,
+      journal: rec => this.e.store.appendJournal(rec),
+      steps: [
+        {
+          name: 'fsrs_params 落沉淀正典',
+          run: async () => {
+            await appendSedimentEvent(this.e.paths, { kind: 'fsrs_params', tier: 'immediate', payload: { parameters, meta } }, this.e.clock.nowMs())
+          },
+        },
+        {
+          name: '逐课程参数缓存镜像',
+          run: async () => {
+            for (const c of courses) {
+              await atomicWrite(this.e.paths.fsrsParamsPath(c.root), JSON.stringify({ parameters, meta }, null, 1) + '\n')
+              written.push(c.name)
+            }
+          },
+        },
+        {
+          // 参数唯一写者在此：缓存调度器全部失效，后续推进用新参数
+          name: '调度器缓存失效',
+          run: async () => { this.e.schedCache.clear() },
+        },
+        {
+          name: '学习者档案投影重建',
+          run: async () => {
+            await rebuildLearnerProfile(this.e.paths, foldSediment(await readSedimentCanon(this.e.paths)), this.e.clock.nowMs())
+          },
+        },
+      ],
+    })
     return { status: 'written', written, meta }
   }
 
