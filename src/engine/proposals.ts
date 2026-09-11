@@ -932,8 +932,8 @@ export class GraphProposals {
     // 重名拒收（门拦，不靠续段）。失败上抛中止，不回滚不续跑，失败不写 journal。
     let regions: Awaited<ReturnType<GraphStore['load']>> = []
     let version = 0
-    let anchor: ReturnType<typeof anchorFromSeed>
     const declared = today ?? todayStr(new Date(this.clock.nowMs()))
+    const anchor = anchorFromSeed(spec, prop.id, declared)
     const written: string[] = []
     // 罗盘现状读取（在写序第一笔前读与第四步读等价——本单元内无更早的罗盘写入）
     const compassPath = this.paths.compassPath(root)
@@ -979,7 +979,6 @@ export class GraphProposals {
           // 课程唯一结构承诺物；整份覆盖写——换终点走重新种子提案
           name: '终点锚落盘',
           run: async () => {
-            anchor = anchorFromSeed(spec, prop.id, declared)
             await writeAnchor(this.paths.anchorPath(root), anchor, this.fs)
           },
         },

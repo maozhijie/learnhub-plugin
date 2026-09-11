@@ -1026,7 +1026,7 @@ export class LearnhubEngine {
   private async judgeBankAnswer(
     llmComplete: LlmComplete,
     q: BankQuestion, answer: string, op = 'question',
-    ref: { course: string; node: string; qid: string },
+    ref?: { course: string; node: string; qid: string },
   ): Promise<{ score: number; feedback: string }> {
     return this.content2.judgeBankAnswer(llmComplete, q, answer, op, ref)
   }

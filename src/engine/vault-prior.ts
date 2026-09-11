@@ -63,7 +63,7 @@ export function excerptAround(body: string, term: string, chars: number): string
 /** 纯扫描检索：vault 根下全部 .md（排除学习中心与点目录），按检索词命中粗分排序。
  * 只读——不写任何文件、不改任何状态。找不到检索词命中时返回 []（生成面零注入）。 */
 export async function searchVaultPrior(
-  vaultRoot: string, centerRel: string, terms: string[], opts: VaultPriorOptions = {}, fs?: VaultFs,
+  vaultRoot: string, centerRel: string, terms: string[], opts: VaultPriorOptions = {}, fs: VaultFs,
 ): Promise<VaultPriorHit[]> {
   if (!terms.length) return []
   const limit = opts.limit ?? 3

@@ -201,7 +201,7 @@ export function recommendTier(
   const up = idx >= 0 ? FADING_TIERS[idx + 1] ?? null : null
   const down = idx > 0 ? FADING_TIERS[idx - 1] ?? null : null
   const enough = inTier.count >= TIER_REC_MIN_EVENTS && inTier.avg !== null
-  if (enough && inTier.avg >= TIER_REC_PROMOTE_SCORE) {
+  if (inTier.avg !== null && inTier.count >= TIER_REC_MIN_EVENTS && inTier.avg >= TIER_REC_PROMOTE_SCORE) {
     if (masteryAgg !== null && masteryAgg < CROSS_AXIS_THRESHOLD) {
       return {
         current, recommended: current, action: 'hold',
@@ -225,7 +225,7 @@ export function recommendTier(
       ],
     }
   }
-  if (enough && inTier.avg < TIER_REC_DEMOTE_SCORE) {
+  if (inTier.avg !== null && inTier.count >= TIER_REC_MIN_EVENTS && inTier.avg < TIER_REC_DEMOTE_SCORE) {
     if (!down) {
       return {
         current, recommended: current, action: 'hold',

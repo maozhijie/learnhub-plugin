@@ -64,7 +64,7 @@ async function applySectionWithRepair(
   } catch (err) {
     const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
     if (code !== 'GATE_FAILED') throw err
-    gateReport = err.message
+    gateReport = err instanceof Error ? err.message : String(err)
   }
   const repairEffort = { effort: contentEffort(opts?.highTier === true) }
   // 块级局部修补：全部 ✗ 都能定位到具体违规块才走（混入任何非块级 finding 时
@@ -80,7 +80,7 @@ async function applySectionWithRepair(
       } catch (err) {
         const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
         if (code !== 'GATE_FAILED') throw err
-        gateReport = err.message // 带最新清单回退整节修复
+        gateReport = err instanceof Error ? err.message : String(err) // 带最新清单回退整节修复
       }
     }
   }
@@ -464,7 +464,7 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
     ? generateQuizJob(rt, ctx, next)
     : next.phase === '生长'
       ? generateGrowthJob(rt, ctx, next)
-      : GRAPH_JOB_PHASES.has(next.phase)
+      : next.phase !== undefined && GRAPH_JOB_PHASES.has(next.phase)
         ? generateGraphJob(rt, ctx, next)
         : generateContent(rt, ctx, next.course, next.node, next.style)
   void task

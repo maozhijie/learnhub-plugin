@@ -411,9 +411,12 @@ export function revealAnswer(q: { kind: AlloKind; answer: string | boolean | str
   switch (q.kind) {
     case 'multi_choice': return Array.isArray(q.answer) ? q.answer.join('') : String(q.answer)
     case 'ordering': return Array.isArray(q.answer) ? q.answer.join(' → ') : String(q.answer)
-    case 'matching': return Array.isArray(q.answer) && q.options?.length
-      ? q.options.map((o, i) => `${o} → ${q.answer[i] ?? '?'}`).join('；')
-      : Array.isArray(q.answer) ? q.answer.join(' / ') : String(q.answer)
+    case 'matching': {
+      const ans = q.answer
+      return Array.isArray(ans) && q.options?.length
+        ? q.options.map((o, j) => `${o} → ${ans[j] ?? '?'}`).join('；')
+        : Array.isArray(ans) ? ans.join(' / ') : String(ans)
+    }
     case 'fill_in_blank': return Array.isArray(q.answer) ? q.answer.join(' / ') : String(q.answer)
     default: return String(q.answer)
   }

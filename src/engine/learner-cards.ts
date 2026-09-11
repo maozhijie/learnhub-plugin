@@ -574,7 +574,7 @@ export class LearnerSubsystem {
   /** 读复盘记录 → frontmatter + 五问各问（读侧收口，三个写点共用）。 */
   private async kataReadDoc(path: string): Promise<{ fm: Record<string, unknown>; sections: Record<KataQuestion, string> }> {
     const { fm, body } = await loadNote(path, this.e.fs)
-    return { fm, sections: parseKataBody(body) }
+    return { fm: fm ?? {}, sections: parseKataBody(body) }
   }
 
 

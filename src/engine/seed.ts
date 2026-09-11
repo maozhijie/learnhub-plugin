@@ -270,7 +270,7 @@ export function validateSeedProposal(doc: unknown, warns?: string[]): { errors?:
   if (d.endpoint === undefined) {
     errors.push('endpoint: 缺失（种子提案必须声明终点节点——课程唯一结构承诺物）')
   }
-  const endpoint = d.endpoint === undefined ? null : parseSeedNode(d.endpoint, 'endpoint', errors, warns)
+  const endpoint = d.endpoint === undefined ? null : parseSeedNode(d.endpoint, 'endpoint', errors, warns ?? [])
   if (!Array.isArray(d.starts) || !d.starts.length) {
     errors.push('starts: 缺失或为空（种子 = 1–3 个起点节点 + 终点）')
   }
@@ -280,7 +280,7 @@ export function validateSeedProposal(doc: unknown, warns?: string[]): { errors?:
       errors.push(`starts: 有 ${d.starts.length} 条（上限 3）——种子只铺起点，其余由教练生长批沿症状与消费生长`)
     }
     d.starts.forEach((raw, i) => {
-      const s = parseSeedNode(raw, `starts.${i}`, errors, warns)
+      const s = parseSeedNode(raw, `starts.${i}`, errors, warns ?? [])
       if (s) starts.push(s)
     })
   }

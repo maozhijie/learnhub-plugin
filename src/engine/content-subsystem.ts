@@ -649,7 +649,7 @@ export class ContentSubsystem {
       const band = clamp01(
         startBand(mastery) + bandOffset(bandPref
           ?? (expEffect?.variable === 'band_default' ? expEffect.arm as BandPref : undefined)
-          ?? defaultBand))
+          ?? defaultBand ?? undefined))
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
         cards: sessionOrder(cards, band),
         ...(calibrationHint ? { calibration_hint: calibrationHint } : {}) }
@@ -716,7 +716,7 @@ export class ContentSubsystem {
     // XP 时间账本：同日重复作答不记账（防刷）；乱猜（耗时过短且答错）负 XP。
     // 乱猜作答同时不推进 FSRS——难度证据（k 校准）只由认真作答驱动，防乱猜推高节点定价。
     const { today } = await this.e.learningDay()
-    const guessed = !correct && elapsedS !== null && elapsedS < XP_GUESS_SECONDS
+    const guessed = !correct && elapsedS != null && elapsedS < XP_GUESS_SECONDS
     // 同日重复判定（ADR-0014 真实推进口径）：挂起作答（deferSchedule 只记账不推卡）
     // 之后的当日再作答也算重复——旧口径会绕过重复判定再推卡并静默丢弃 pending 标记。
     const repeated = guessed || alreadyAdvanced(q, today)
@@ -824,7 +824,7 @@ export class ContentSubsystem {
   async judgeBankAnswer(
     llmComplete: LlmComplete,
     q: BankQuestion, answer: string, op = 'question',
-    ref: { course: string; node: string; qid: string },
+    ref?: { course: string; node: string; qid: string },
   ): Promise<{ score: number; feedback: string }> {
     if (q.kind === 'reflection' || q.kind === 'open_question') {
       const isOpen = q.kind === 'open_question'
@@ -857,7 +857,7 @@ export class ContentSubsystem {
   /** 判卷失败留痕（#116）：原始模型输出截断到 2000 字符附题目定位落 JSONL；
    * 留痕失败静默——debug 通道不能反过来弄垮作答主流程。 */
   async logGradingFailure(rec: {
-    course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string
+    course?: string; node?: string; qid?: string; kind: string; attempt: number; error: string; raw: string
   }): Promise<void> {
     try {
       await this.e.fs.mkdir(this.e.paths.centerStateDir)

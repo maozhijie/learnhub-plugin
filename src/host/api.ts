@@ -15,6 +15,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { BY_ROUTE, COMMAND_LIST } from '../commands/index.ts'
 import type { ChannelSpec, CommandSpec } from '../commands/index.ts'
 import { readJson, sendJson } from './http.ts'
+import type { LearnhubEngine } from '../engine/index.ts'
 import { readArgs } from './params.ts'
 import { apiRun } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
@@ -63,7 +64,7 @@ export async function handleApi(rt: HostRuntime, ctx: Context, req: IncomingMess
     if (command.engine !== undefined && channel.bind !== undefined) {
       const engine = command.engine
       const args = readArgs(command.args, channel, hasBody ? { kind: 'body', body } : { kind: 'query', url }, channel.bind)
-      const call = () => rt.engine[engine](...args)
+      const call = async () => (rt.engine[engine as keyof LearnhubEngine] as (...a: unknown[]) => unknown)(...args)
       const out = channel.log === false ? await call() : await apiRun(rt, `api${channel.route?.path ?? route}`, call)
       sendJson(res, 200, out)
       return

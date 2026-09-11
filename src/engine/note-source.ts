@@ -368,7 +368,6 @@ export class ChannelsSubsystem {
 // ---- 门面原分节：C2 ----
 
 
-  private noteManifest: NoteSourceManifest
 
   /** 笔记源路由判定：course=「笔记源」伪课程（真实课程同名时课程优先，不触发路由）。 */
   async isNoteSourceCourse(courseKey: string | undefined): Promise<boolean> {
@@ -804,14 +803,14 @@ export class ChannelsSubsystem {
       const item = itemById.get(e.id)
       const { status, title } = await this.sourceStatusOf(e, item)
       if (status === 'missing') {
-        suspended.push({ id: e.id, path: e.path, reason: sourceHint('missing') })
+        suspended.push({ id: e.id, path: e.path ?? '', reason: sourceHint('missing') ?? '' })
         continue
       }
       if (status === 'drifted') {
-        drifted.push({ id: e.id, path: e.path, hint: sourceHint('drifted') })
+        drifted.push({ id: e.id, path: e.path ?? '', hint: sourceHint('drifted') ?? '' })
       }
       if (status === 'inconsistent') {
-        drifted.push({ id: e.id, path: e.path, hint: sourceHint('inconsistent') })
+        drifted.push({ id: e.id, path: e.path ?? '', hint: sourceHint('inconsistent') ?? '' })
       }
       const bankPath = this.e.bank.bankPath(this.e.paths.noteSourceDir, e.id)
       if (!this.e.fs.exists(bankPath)) continue // 尚未出题：合法空卡池
@@ -969,7 +968,6 @@ export class ChannelsSubsystem {
     }
   }
 
-  private ankiMirror: AnkiMirror
 
   /** 到期卡导出负载：全部启用课程「未归档且 due ≤ 今日」的已调度题（复用
    * reviewQueue 的到期语义与 questionView 的题面视图；答案/解析上背面）。

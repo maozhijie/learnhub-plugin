@@ -597,7 +597,7 @@ export class LabSubsystem {
       throw new Error(`[band-default] band 只能是 easy/standard/hard 或 null（收到 ${String(band)}）。`)
     }
     const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs)
-    const next = { ...prev, band_default: band }
+    const next = { ...prev, band_default: band } as typeof prev & { band_default?: typeof band }
     if (band === null) delete next.band_default
     await writeLearnhubConfig(this.e.paths.learnhubConfigPath, next, this.e.fs)
     return { band_default: band as BandPref | null }

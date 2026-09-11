@@ -335,7 +335,7 @@ export class Sessions {
         id: c.id, name: c.name,
         total: graph.names.length, counts: st.counts,
         due_today: dueNodes.length,
-        overdue: overdueNodes.map(o => ({ node: o.node, since: o.due, count: o.count, path: this.notePath(c.root, graph, o.node) })),
+        overdue: overdueNodes.map(o => ({ node: o.node, since: o.due as string, count: o.count, path: this.notePath(c.root, graph, o.node) })),
         ready: st.ready.map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
         gated: st.gated.map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
         // 软闸建议项（#54 R 半）：被 R-gate 拦下的候选 → {前置, R, 前置到期题数, 直达入口}
