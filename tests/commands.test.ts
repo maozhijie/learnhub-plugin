@@ -16,7 +16,7 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { BY_ROUTE, BY_TOOL, COMMANDS } from '../src/commands/index.ts'
+import { BY_ROUTE, BY_TOOL, COMMAND_LIST, COMMANDS, DOMAIN_SIZES } from '../src/commands/index.ts'
 import { GEN_JOB_PHASES, isNodeAnchoredPhase } from '../src/generation-jobs.ts'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { AGENT_GUIDE, sdkParameters } from '../src/host/tools.ts'
@@ -51,7 +51,7 @@ test('门① engine 存在性：声明值 ∈ 门面原型方法；留空的逐�
   const proto = LearnhubEngine.prototype as unknown as Record<string, unknown>
   const bad: string[] = []
   const unlisted: string[] = []
-  for (const c of COMMANDS) {
+  for (const c of COMMAND_LIST) {
     if (c.engine === undefined) {
       if (!NO_ENGINE[c.id]) unlisted.push(c.id)
       continue
@@ -61,11 +61,11 @@ test('门① engine 存在性：声明值 ∈ 门面原型方法；留空的逐�
   assert.deepEqual(bad, [], `这些命令的 engine 在门面上不存在（接线指向空气）：\n${bad.join('\n')}`)
   assert.deepEqual(unlisted, [], `这些命令没有 engine 又不在白名单里（留空要逐条有理由）：\n${unlisted.join('\n')}`)
   // 白名单自检：不许沉淀成幽灵条目（登记了 id，注册表里却没有）
-  const ids = new Set(COMMANDS.map(c => c.id))
+  const ids = new Set(COMMAND_LIST.map(c => c.id))
   const ghosts = Object.keys(NO_ENGINE).filter(id => !ids.has(id))
   assert.deepEqual(ghosts, [], `白名单里的这些 id 在注册表里不存在（幽灵条目）：\n${ghosts.join('\n')}`)
   // 生成路径的命令必须真的声明了 bind（否则适配器无从装配实参）
-  const generic = COMMANDS.filter(c => c.channels.some(x => x.bind !== undefined))
+  const generic = COMMAND_LIST.filter(c => c.channels.some(x => x.bind !== undefined))
   assert.ok(generic.length >= 65, `走生成路径的命令只剩 ${generic.length} 条（实测 agent 45 ∪ panel 49 ≈ 70，塌了就说明声明退化）`)
 })
 
@@ -75,7 +75,7 @@ test('门② 队列阶段：phase ∈ GEN_JOB_PHASES，且 runner 认得它', ()
   const jobs = read('src/host/jobs.ts')
   const bad: string[] = []
   let queued = 0
-  for (const c of COMMANDS) {
+  for (const c of COMMAND_LIST) {
     for (const ch of c.channels) {
       if (ch.mode !== 'queued') continue
       queued++
@@ -92,12 +92,12 @@ test('门② 队列阶段：phase ∈ GEN_JOB_PHASES，且 runner 认得它', ()
 // ---------------------------------------------------------------- ③ 唯一性
 
 test('门③ 唯一性：id／tool 名／(method, path) 各自唯一，索引没被静默覆盖', () => {
-  const ids = COMMANDS.map(c => c.id)
+  const ids = COMMAND_LIST.map(c => c.id)
   assert.equal(new Set(ids).size, ids.length, 'id 有重复')
-  const tools = COMMANDS.flatMap(c => c.channels.filter(x => x.tool).map(x => x.tool!))
+  const tools = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.tool).map(x => x.tool!))
   assert.equal(new Set(tools).size, tools.length, 'tool 名有重复')
   assert.equal(tools.length, 111, `agent 通道应恰 111 条，实得 ${tools.length}`)
-  const routeKeys = COMMANDS.flatMap(c => c.channels.filter(x => x.route).map(x => `${x.route!.method} ${x.route!.path}`))
+  const routeKeys = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route).map(x => `${x.route!.method} ${x.route!.path}`))
   assert.equal(new Set(routeKeys).size, routeKeys.length, '(method, path) 有重复')
   assert.equal(routeKeys.length, 125, `panel 通道应恰 125 条，实得 ${routeKeys.length}`)
   assert.equal(BY_TOOL.size, tools.length, 'BY_TOOL 索引吞了条目（有重复 tool 名被 Map 覆盖）')
@@ -138,7 +138,7 @@ test('门⑥ 零运行时依赖：src/commands/ 只允许 import type，禁 node
 
 test('门⑧ 声明与面一致：agent 通道投影后与工具面快照逐字相同', () => {
   const snapshot = json<Array<{ name: string; description: string; parameters: unknown }>>('tests/fixtures/host-tools-snapshot.json')
-  const byTool = new Map(COMMANDS.flatMap(c => c.channels.filter(x => x.tool).map(x => [x.tool!, c] as const)))
+  const byTool = new Map(COMMAND_LIST.flatMap(c => c.channels.filter(x => x.tool).map(x => [x.tool!, c] as const)))
   const diffs: string[] = []
   for (const snap of snapshot) {
     const c = byTool.get(snap.name)
@@ -165,7 +165,7 @@ test('门⑧ 声明与面一致：agent 通道投影后与工具面快照逐字�
 test('门⑧ 声明与面一致：panel 通道的 (method, path) 与路由清单逐字相同', () => {
   const baseline = json<Array<{ method: string; route: string; prefix?: boolean }>>('tests/fixtures/host-routes-baseline.json')
   const shape = (r: { method: string; route: string; prefix?: boolean }) => `${r.method} ${r.route}${r.prefix ? '（前缀）' : ''}`
-  const fromRegistry = COMMANDS.flatMap(c => c.channels.filter(x => x.route)
+  const fromRegistry = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route)
     .map(x => shape({ method: x.route!.method, route: x.route!.path, ...(x.prefix ? { prefix: true } : {}) })))
     .sort()
   assert.deepEqual(fromRegistry, baseline.map(shape).sort(), 'panel 通道的路由清单与重构前实测漂移')
@@ -174,7 +174,7 @@ test('门⑧ 声明与面一致：panel 通道的 (method, path) 与路由清单
 // ---------------------------------------------------------------- ④ handler 覆盖
 
 test('门④ handler 覆盖：handlers.ts 的键集合 == 没有 bind 的 panel 通道集合', () => {
-  const panel = COMMANDS.flatMap(c => c.channels.filter(ch => ch.route).map(ch => ({ command: c, channel: ch })))
+  const panel = COMMAND_LIST.flatMap(c => c.channels.filter(ch => ch.route).map(ch => ({ command: c, channel: ch })))
   const generic = panel.filter(x => x.channel.bind !== undefined)
   const handled = panel.filter(x => x.channel.bind === undefined)
   const keys = new Set(Object.keys(HANDLERS))
@@ -189,4 +189,15 @@ test('门④ handler 覆盖：handlers.ts 的键集合 == 没有 bind 的 panel 
   const badBind = panel.filter(x => (x.channel.bind ?? []).some(k => k !== null && !(k in x.command.args)))
     .map(x => x.command.id)
   assert.deepEqual(badBind, [], `这些命令的 bind 引用了未声明的键：\n${badBind.join('\n')}`)
+})
+
+test('门③·装配：按 id 键的装配没被跨文件重名吃掉（键数 == 各域之和）', () => {
+  const sum = Object.values(DOMAIN_SIZES).reduce((a, b) => a + b, 0)
+  assert.equal(Object.keys(COMMANDS).length, sum,
+    `装配表键数 ${Object.keys(COMMANDS).length} != 各域之和 ${sum}——有命令在两个域文件里重名，后者静默覆盖了前者`)
+  assert.equal(COMMAND_LIST.length, sum)
+  // 声明里的 id 必须与它的键一致（键是主键，id 字段是冗余的人读副本）
+  for (const [key, spec] of Object.entries(COMMANDS)) {
+    assert.equal(spec.id, key, `键 ${key} 与声明里的 id ${spec.id} 不一致`)
+  }
 })

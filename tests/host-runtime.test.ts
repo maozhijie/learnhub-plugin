@@ -33,7 +33,7 @@ import {
   waitForQuizJob,
 } from '../src/host/jobs.ts'
 import { AGENT_GUIDE, registerTools } from '../src/host/tools.ts'
-import { COMMANDS } from '../src/commands/index.ts'
+import { COMMAND_LIST } from '../src/commands/index.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const tmpVaults: string[] = []
@@ -390,12 +390,12 @@ test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、�
   assert.ok(hostFiles.length >= 8, `路由面受控文件只剩 ${hostFiles.length} 个（扫描面塌了）`)
   // #169：两面都改成「源码直调 ∪ 注册表声明」——生成路径的调用住在声明里（src/commands/），
   // 源码里只剩例外 handler（host/tool-handlers.ts、host/handlers.ts）
-  const agentDeclared = new Set(COMMANDS.filter(c => c.channels.some(ch => ch.tool))
+  const agentDeclared = new Set(COMMAND_LIST.filter(c => c.channels.some(ch => ch.tool))
     .map(c => c.engine).filter((e): e is string => !!e))
   const toolFace = new Set([...faceOf(read('src/host/tools.ts') + read('src/host/tool-handlers.ts')), ...agentDeclared])
   // #169：路由面的引擎入口 = **注册表 panel 通道的声明** ∪ 宿主源码里的直调。生成路径的调用
   // 现在住在声明里（src/commands/），不在任何 .ts 文件里——只扫源码会让大部分 route-only 凭空消失。
-  const declared = new Set(COMMANDS.filter(c => c.channels.some(ch => ch.route))
+  const declared = new Set(COMMAND_LIST.filter(c => c.channels.some(ch => ch.route))
     .map(c => c.engine).filter((e): e is string => !!e))
   const routeFace = new Set([...faceOf([...hostFiles.map(f => `src/host/${f}`), 'src/index.ts'].map(read).join('\n')), ...declared])
   const base = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-face-baseline.json'), 'utf8')) as {

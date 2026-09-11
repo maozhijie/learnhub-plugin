@@ -14,6 +14,12 @@
  * - `output` 类型引用（编译期幻影字段，运行时不写）。
  */
 import type { GenJobPhase } from '../generation-jobs.ts'
+import type { LearnhubEngine } from '../engine/index.ts'
+
+/** 门面上「方法型」的入口名（`output` 从它派生，故非方法的键排除在外）。 */
+type EngineMethod = {
+  [K in keyof LearnhubEngine]: LearnhubEngine[K] extends (...a: never[]) => unknown ? K : never
+}[keyof LearnhubEngine]
 
 /** 面板路由今天实际在用的三种方法。 */
 export type HttpMethod = 'GET' | 'POST' | 'PUT'
@@ -68,19 +74,32 @@ export interface ChannelSpec {
   log?: boolean
 }
 
-/** 一条命令。 */
-export interface CommandSpec {
+/** 一条命令（`E` = 声明的引擎入口；`output` 由它派生）。 */
+export interface CommandSpec<E extends string = string> {
   id: string
   /** 工具面 description 的单一出处（逐字）；仅面板通道的命令可缺（待面板文案票，ADR-0045 裁定 3）。 */
   summary?: string
   args: ParameterSchemaSpec
   /** 引擎入口（门面方法名）；留空须进白名单（逐条理由，见 tests/commands.test.ts）。 */
-  engine?: string
-  /** 输出形状：引擎视图类型的类型引用（编译期幻影字段，零运行时）。 */
-  output?: unknown
+  engine?: E
+  /**
+   * 输出形状：**引擎入口返回类型的类型引用**（编译期幻影字段，运行时不写）。
+   * 由 `E` 派生而非手写——UI 侧的响应类型（`CommandOutput<id>`）与 `ui/src/types.ts` 的
+   * 别名都从它来，这就是「响应类型派生自 output、引擎形状镜像消失」的机制（#169）。
+   * 引擎入口留空的命令（队列型/按参分派型/无引擎型）→ `unknown`（UI 侧无对应端点或另有 handler）。
+   */
+  output?: E extends EngineMethod ? Awaited<ReturnType<LearnhubEngine[E]>> : unknown
   domain: CommandDomain
   channels: ChannelSpec[]
 }
 
-/** 表项构造器：给声明一个统一的写法（形状即 ADR-0045，不做运行时加工）。 */
-export const command = (spec: CommandSpec): CommandSpec => spec
+/**
+ * 表项构造器（形状即 ADR-0045，不做运行时加工）：`engine` 是字面量时推断出 `E`，
+ * `output` 随之派生——154 条声明**零手写输出类型**（这正是把 output 做成声明的一部分的理由）。
+ * 引擎入口留空的命令走第二个重载（`output` = unknown）。
+ */
+export function command<E extends EngineMethod>(spec: Omit<CommandSpec<E>, 'output'> & { engine: E }): CommandSpec<E>
+export function command(spec: Omit<CommandSpec<string>, 'output'>): CommandSpec<string>
+export function command(spec: Omit<CommandSpec<string>, 'output'>): CommandSpec<string> {
+  return spec as CommandSpec<string>
+}

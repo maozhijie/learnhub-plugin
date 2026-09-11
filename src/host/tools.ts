@@ -14,7 +14,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { COMMANDS } from '../commands/index.ts'
+import { COMMAND_LIST } from '../commands/index.ts'
 import type { CommandSpec } from '../commands/index.ts'
 import { run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
@@ -101,7 +101,7 @@ export function registerTools(ctx: Context, rt: HostRuntime): void {
     render: (_args: unknown, value: unknown) => [{ type: 'text' as const, text: String(value) }],
   }
   const handlers = toolHandlers(rt, ctx)
-  for (const c of COMMANDS) {
+  for (const c of COMMAND_LIST) {
     const channel = c.channels.find(ch => ch.channel === 'agent')
     if (!channel?.tool) continue
     const tool = channel.tool

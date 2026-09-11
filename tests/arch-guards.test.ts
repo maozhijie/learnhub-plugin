@@ -102,7 +102,8 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   // #169：路由表演进为命令注册表（routes.ts／routes-post.ts 的 125 条表项 → src/commands/ 的声明，
   // 例外 handler 落 host/handlers.ts）
   const commands = await import('../src/commands/index.ts')
-  assert.equal(commands.COMMANDS.length, 154, '注册表应为 154 条命令')
+  assert.equal(commands.COMMAND_LIST.length, 154, '注册表应为 154 条命令')
+  assert.equal(Object.keys(commands.COMMANDS).length, 154, '按 id 键的装配表应为 154 个键')
   assert.equal(commands.BY_TOOL.size, 111, 'agent 通道索引应为 111 条工具')
   assert.equal(commands.BY_ROUTE.size, 125, 'panel 通道索引应为 125 条路由')
   const handlers = await import('../src/host/handlers.ts')

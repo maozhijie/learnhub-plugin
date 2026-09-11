@@ -7,8 +7,8 @@
 import { command } from './types.ts'
 import type { CommandSpec } from './types.ts'
 
-export const 维护域: CommandSpec[] = [
-  command({
+export const 维护域 = {
+  'content-check': command({
     id: "content-check",
     summary: "Run the automated content quality gates (out-of-scope references, alias consistency, unregistered code-block languages, interactive file existence) on an existing course note without applying anything. Run this after manually editing a course note in the vault; fix every reported finding.",
     args: {
@@ -26,7 +26,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'course-delete': command({
     id: "course-delete",
     summary: "Delete one course: remove it from the course registry and move the whole course directory into 学习中心/.trash/ (recoverable by hand). Learning progress lives inside the course directory, so it goes too. Destructive — confirm with the user before calling; for a content-only redo prefer learnhub_course_reset (keeps the graph and progress).",
     args: {
@@ -47,7 +47,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'course-reset': command({
     id: "course-reset",
     summary: "Reset one course for full regeneration: all node notes are backed up into .trash/regenerate-<ts>/ and rewritten as ungenerated skeletons; the question bank, interactive artifacts, and generated-image dirs move into the same backup. The graph, learning progress, and prompt snapshots are kept. Regeneration then runs as a background chain over all nodes in graph topological order (each node: outline → sections → quiz) and this call returns immediately with the queued count; progress shows in the panel generate tab. Refuses while generation tasks are running. Destructive but recoverable — confirm with the user before calling. The sediment layer (learner-model state: FSRS params, calibration profile) is NEVER touched — surface that as its own separate confirmation item (#139).",
     args: {
@@ -69,7 +69,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'data-check': command({
     id: "data-check",
     summary: "Run a read-only Data Check across the registry, graph YAML, course notes/frontmatter, and question banks. Return JSON findings that distinguish Missing (legal absence) from Broken (present but invalid); it never repairs or writes vault data.",
     args: {},
@@ -83,7 +83,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'doctor': command({
     id: "doctor",
     args: {},
     engine: "doctor",
@@ -97,7 +97,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'feedback': command({
     id: "feedback",
     summary: "Submit content feedback of a course note: reads the note「内容反馈」section and marks the node flagged + regeneration queue.",
     args: {
@@ -114,7 +114,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'interactive': command({
     id: "interactive",
     args: {},
     domain: "维护",
@@ -126,7 +126,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'interactive-settle': command({
     id: "interactive-settle",
     args: {
       course: { type: "string", required: true },
@@ -144,7 +144,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'note-resolve': command({
     id: "note-resolve",
     summary: "Resolve a course note: read its frontmatter node and map the path to its enabled course via 课程注册表.yaml.",
     args: {
@@ -166,7 +166,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'optimize-params': command({
     id: "optimize-params",
     summary: "Manually trigger FSRS-6 personal parameter optimization (A2, never automatic — like Anki): retrains the 21 scheduling parameters from the learner's real review log (synthetic initializations excluded, first push per card per day) across all enabled courses. Gates: at least 400 real review pushes are required, and the trained parameters must evaluate strictly better than the current/default parameters (same-protocol logLoss comparison) — otherwise nothing is written and the skip reason is returned with the metrics. On success the one learner-level parameter set is written to every enabled course's fsrs参数.json with full training metadata (count/date/metrics); the scheduler picks it up with zero changes. Expect ~a few seconds of training.",
     args: {},
@@ -186,7 +186,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'probation': command({
     id: "probation",
     summary: "Insertion-edge probation (recheck) status and settlement, #146. action=status (default): per-course view of insertion edges under probation (nodes the panel marks 实验中/under experiment), overdue-but-undecided entries, the three throttle rates over the rolling 30 learning days (insertion rate / prune rate / recheck pass rate) and the resilience gate state (side-branch cap 20%→30% when resilient; insertion batches are rejected at the gate when the pass rate bottoms out). action=settle: run the settlement hook now — due entries are auto-adjudicated with zero human review: metric met → proven (insertion becomes permanent); not met → the engine proposes and auto-applies del_node with coarse-edge restoration (settleRechecks). Settlement also writes recheck_outcome / graph_repair events to the sediment canon.",
     args: {
@@ -207,7 +207,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'rebuild': command({
     id: "rebuild",
     summary: "Run audit gate + ready-list regeneration for all enabled courses, or one course.",
     args: {
@@ -228,7 +228,7 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-  command({
+  'tutor': command({
     id: "tutor",
     args: {
       messages: { type: "array" },
@@ -244,4 +244,4 @@ export const 维护域: CommandSpec[] = [
       }
     ]
   }),
-]
+}

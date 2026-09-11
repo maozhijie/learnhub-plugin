@@ -17,10 +17,10 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { API, handleApi, matchRoute } from '../src/host/api.ts'
-import { BY_ROUTE, COMMANDS } from '../src/commands/index.ts'
+import { BY_ROUTE, COMMAND_LIST } from '../src/commands/index.ts'
 
 /** 表项视图：panel 通道拉平（方法与路径都是分发键）。 */
-const routes = COMMANDS.flatMap(c => c.channels.filter(ch => ch.route)
+const routes = COMMAND_LIST.flatMap(c => c.channels.filter(ch => ch.route)
   .map(ch => ({ command: c, method: ch.route!.method, route: ch.route!.path, prefix: ch.prefix, bind: ch.bind })))
 import { cleanupProbeVault, runProbes } from './helpers/routes-probe.ts'
 import type { ProbeSpec } from './helpers/routes-probe.ts'

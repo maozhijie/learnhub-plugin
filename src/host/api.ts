@@ -12,7 +12,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { BY_ROUTE, COMMANDS } from '../commands/index.ts'
+import { BY_ROUTE, COMMAND_LIST } from '../commands/index.ts'
 import type { ChannelSpec, CommandSpec } from '../commands/index.ts'
 import { readJson, sendJson } from './http.ts'
 import { readArgs } from './params.ts'
@@ -26,7 +26,7 @@ export const API = '/learnhub/api'
 
 /** 前缀路由（今天唯一一条：GET /vendor/）——精确键之外的第二张网。 */
 const PREFIX_ROUTES: Array<{ method: string; path: string; command: CommandSpec; channel: ChannelSpec }> =
-  COMMANDS.flatMap(c => c.channels
+  COMMAND_LIST.flatMap(c => c.channels
     .filter(ch => ch.route && ch.prefix)
     .map(ch => ({ method: ch.route!.method, path: ch.route!.path, command: c, channel: ch })))
 
