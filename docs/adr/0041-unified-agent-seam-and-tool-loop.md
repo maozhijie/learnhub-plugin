@@ -19,3 +19,6 @@
 - **宿主会话路线**（插件创建并监控 dsh 会话、按会话限工具）——作为缝的后路保留而非首途，理由见关键裁决第四条。
 - **维持散装调用点+各站自带修复**——碎片现状即反证：回灌逻辑三站两样、生长批漏配，死后无自愈、课程静默停摆。
 - **文本协议工具调用**（XML/标记块自发明协议）——宿主 llm.stream 的 GenerateOptions 原生 `tools` 字段直通 provider function calling，无需脆弱解析。
+
+**归属补记（ADR-0044）**：本 ADR 定了缝的**形状**，但未定它**住哪一层、谁拥有 dsh 耦合**。该归属已由 ADR-0044 裁完，本 ADR 的形状裁决不变：端口住应用层（`engine/llm.ts` 的 `LlmComplete` + 照同形新增的 `LlmStream`）、`engine/agent.ts` 是应用层的端口消费者（`complete()` 与 `agentLoop()` 都住这里，含只读引擎视图白名单与 K 轮预算）、dsh 耦合 100% 收在 `host/llm.ts` 这一个适配器文件、投递层只做构造与注入；R3「engine 禁 import `@deepseek-ai/*`」因此成为应用层与适配器的分界线。
+
