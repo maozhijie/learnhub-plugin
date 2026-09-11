@@ -187,7 +187,7 @@ test('维持复活：帽到期事件记 maintenance，推完后生效到期 = �
     // 手工摆 lane 状态：上次事件 10 天前、FSRS due 还远（间隔增长淹没不了维持帽）
     const doc = await h.engine.skills.load('吉他')
     await h.engine.skills.save('吉他', { ...doc, fsrs: fsBlock({ due: addDays(TODAY, 90)!, last_review: addDays(TODAY, -10)! }) })
-    const list = await h.engine.skillList()
+    const list = await h.engine.learner.skillList()
     assert.equal(list.skills[0].due, addDays(TODAY, -3)) // (今天-10) + 7 维持帽
     assert.equal(list.skills[0].due_kind, 'maintenance')
 
@@ -204,13 +204,13 @@ test('红线：执行事件不复用题目卡、不进复习队列、不写练�
   await withVault({ tag: 'exec-redline' }, async h => {
     await h.engine.skillCreate('吉他')
     await h.engine.executionLog('吉他', { source: 'self', rating: 3, minutes: 20 })
-    await h.engine.skillArchive('吉他', true)
+    await h.engine.learner.skillArchive('吉他', true)
     await assert.rejects(
       () => h.engine.executionLog('吉他', { source: 'self', rating: 3, minutes: 20 }),
       /已归档/,
     )
     // 恢复后同日守门仍然生效（归档不能绕过一 lane 一日一次）
-    await h.engine.skillArchive('吉他', false)
+    await h.engine.learner.skillArchive('吉他', false)
     await assert.rejects(
       () => h.engine.executionLog('吉他', { source: 'self', rating: 4, minutes: 5 }),
       /一 lane 一学习日一次/,
@@ -230,11 +230,11 @@ test('技能清单：Missing/Broken 语义 + 维持帽设置', async () => {
   await withVault({ tag: 'exec-list' }, async h => {
     await assert.rejects(() => h.engine.skills.load('不存在'), /Missing/)
     await h.engine.skillCreate('吉他')
-    await h.engine.skillSetMaintenance('吉他', 14)
+    await h.engine.learner.skillSetMaintenance('吉他', 14)
     assert.equal((await h.engine.skills.load('吉他')).maintenance_days, 14)
-    await h.engine.skillSetMaintenance('吉他', null)
+    await h.engine.learner.skillSetMaintenance('吉他', null)
     assert.equal((await h.engine.skills.load('吉他')).maintenance_days, null)
-    await assert.rejects(() => h.engine.skillSetMaintenance('吉他', 3), /7–365/)
+    await assert.rejects(() => h.engine.learner.skillSetMaintenance('吉他', 3), /7–365/)
     // 坏档 = Broken 报出，不阻塞清单其他技能
     await h.engine.skillCreate('钢琴')
     const { writeFile } = await import('node:fs/promises')

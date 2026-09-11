@@ -144,14 +144,14 @@ test('纯函数缝：讲解包拼装与判词解析（不可解析抛错、tags 
 
 test('讲解包：面板/宿主通道取到要点+图位置+初学者人设指令；未知节点 fail loud', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
-    const pack = await engine.explainBackPack('数学', '入门')
+    const pack = await engine.learner.explainBackPack('数学', '入门')
     assert.match(pack, /### 概念：定义/)
     assert.match(pack, /### 例题：应用/)
     assert.match(pack, /前置：前置概念/)
     assert.match(pack, /S1 等差数列/)
     // 练习节不进要点（lessonSections 语义）
     assert.doesNotMatch(pack, /练习占位/)
-    await assert.rejects(() => engine.explainBackPack('数学', '不存在'), /不在课程/)
+    await assert.rejects(() => engine.learner.explainBackPack('数学', '不存在'), /不在课程/)
   })
 })
 
@@ -300,7 +300,7 @@ test('加我的理解：AI 对照该节要点给定位反馈 → 判词入 E 档
       assert.match(prompt, /本节还没有可对照的正文要点/)
       return VALID_JSON
     })
-    const q = await engine.learnerQueue('数学')
+    const q = await engine.learner.learnerQueue('数学')
     assert.equal(q.total, 4)
     assert.ok(q.cards.every(c => c.due === null), '新卡未调度，从「我的卡」队列首推')
 
@@ -334,11 +334,11 @@ test('加我的理解：AI 判词不可解析 → 卡与判词零落盘（ADR-00
 test('我的卡管理面：归档/恢复（E 池内部动作，canonical 零写入）', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
     const r = await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A。' })
-    await engine.learnerCardArchive('数学', '入门', r.id, true)
-    let q = await engine.learnerQueue('数学')
+    await engine.learner.learnerCardArchive('数学', '入门', r.id, true)
+    let q = await engine.learner.learnerQueue('数学')
     assert.equal(q.total, 0, '归档卡出队')
-    await engine.learnerCardArchive('数学', '入门', r.id, false)
-    q = await engine.learnerQueue('数学')
+    await engine.learner.learnerCardArchive('数学', '入门', r.id, false)
+    q = await engine.learner.learnerQueue('数学')
     assert.equal(q.total, 1)
     assert.ok(!existsSync(engine.paths.practicePath))
     assert.ok(!existsSync(engine.paths.journalPath))
@@ -353,29 +353,29 @@ test('我的卡队列与自评：新卡入队→首推到期→一卡一天一�
     await engine.explainArchiveCard('数学', '入门', { content: '讲稿 B：末项公式的来历。' })
 
     // 新卡（从未调度）入队，due 为空
-    const q1 = await engine.learnerQueue('数学')
+    const q1 = await engine.learner.learnerQueue('数学')
     assert.equal(q1.total, 2)
     assert.equal(q1.due_count, 0)
     assert.equal(q1.cards.filter(c => c.due === null).length, 2)
     assert.match(String(q1.cards[0]!.prompt), /再讲一遍/)
 
     // 首推（自评 Good）→ 明天到期；同日第二推拒绝
-    const r = await engine.learnerCardRate('数学', '入门', 'c1', 3)
+    const r = await engine.learner.learnerCardRate('数学', '入门', 'c1', 3)
     assert.equal(r.scheduled, true)
     assert.ok(String(r.due) > todayStr(new Date()))
-    await assert.rejects(() => engine.learnerCardRate('数学', '入门', 'c1', 2), /今天已推进过/)
-    await assert.rejects(() => engine.learnerCardForget('数学', '入门', 'c1'), /今天已推进过/)
+    await assert.rejects(() => engine.learner.learnerCardRate('数学', '入门', 'c1', 2), /今天已推进过/)
+    await assert.rejects(() => engine.learner.learnerCardForget('数学', '入门', 'c1'), /今天已推进过/)
 
     // 忘记申报（rating=1）→ 另一张卡当日推进
-    const f = await engine.learnerCardForget('数学', '入门', 'c2')
+    const f = await engine.learner.learnerCardForget('数学', '入门', 'c2')
     assert.equal(f.rating, 1)
-    const q2 = await engine.learnerQueue()
+    const q2 = await engine.learner.learnerQueue()
     assert.equal(q2.due_count, 0) // 都推到明天了
     assert.equal(q2.total, 2)
 
     // 档位契约：rate 只收 2/3/4；未知卡 fail loud
-    await assert.rejects(() => engine.learnerCardRate('数学', '入门', 'c3', 3), /没有 c3/)
-    await assert.rejects(() => engine.learnerCardRate('数学', '入门', 'c1', 5), /自评档位/)
+    await assert.rejects(() => engine.learner.learnerCardRate('数学', '入门', 'c3', 3), /没有 c3/)
+    await assert.rejects(() => engine.learner.learnerCardRate('数学', '入门', 'c1', 5), /自评档位/)
 
     // 测量面零掺入（ADR-0021 裁决 2）：不写复习日志/practice，节点 frontmatter 未被动；
     // XP 走无绑定行（journal，ADR-0021）：c1 自评 Good = max(1, round(难度 5)) = 5，c2 忘记 = 0
@@ -425,7 +425,7 @@ test('我的卡汇入复习队列（ADR-0021）：新卡队尾首推、到期卡
     assert.equal(q2.total, 1)
     assert.equal(String(q2.cards[0]!.due), today)
     assert.ok((q2.cards[0]!.r as number) < 1)
-    const r = await engine.learnerCardRate('数学', '入门', 'c1', 3)
+    const r = await engine.learner.learnerCardRate('数学', '入门', 'c1', 3)
     assert.equal(r.xp, 5)
 
     // 推到明天 → 出队；无绑定行已落 journal，复习日志/practice 零掺入

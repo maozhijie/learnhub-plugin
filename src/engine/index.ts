@@ -241,7 +241,7 @@ export class LearnhubEngine {
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
-      scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
+      scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
       sedimentAppend: (kind, tier, payload, concept) => this.sedimentAppend(kind, tier, payload, concept),
       sedimentFold: () => this.sedimentFold(),
       sedimentRebuildProfile: () => this.sedimentRebuildProfile(),
@@ -260,7 +260,7 @@ export class LearnhubEngine {
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
-      scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
+      scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
       loadPrompt: kind => this.loadPrompt(kind),
       questionView: (q, i, opts) => this.questionView(q, i, opts),
       judgeBankAnswer: (llmComplete, q, answer, op, ref) => this.judgeBankAnswer(llmComplete, q, answer, op, ref),
@@ -307,7 +307,7 @@ export class LearnhubEngine {
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       enabledCourses: () => this.enabledCourses(),
-      scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
+      scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
       loadPrompt: kind => this.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       nodeNote: (c, graph, node) => this.nodeNote(c, graph, node),
@@ -318,7 +318,7 @@ export class LearnhubEngine {
       exerciseGated: (c, node) => this.exerciseGated(c, node),
       repairInvokesOnce: (llm, items, scope) => this.repairInvokesOnce(llm, items, scope),
       admitQuestion: (root, node, q, stem, existingStems) => this.admitQuestion(root, node, q, stem, existingStems),
-      explainPoints: (c, graph, node) => this.explainPoints(c, graph, node),
+      explainPoints: (c, graph, node) => this.learner.explainPoints(c, graph, node),
       isNoteSourceCourse: courseKey => this.isNoteSourceCourse(courseKey),
     })
     this.graph = new GraphSubsystem({
@@ -369,7 +369,7 @@ export class LearnhubEngine {
       ensureNote: (root, graph, node) => this.ensureNote(root, graph, node),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
+      scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
       sched: courseRoot => this.sched(courseRoot),
     })
     this.growth2 = new GrowthSubsystem({
@@ -384,7 +384,7 @@ export class LearnhubEngine {
       loadView: course => this.loadView(course),
       mcAggregate: (plan, cards, nodes, today, scheds, fallbackCourse) => this.mcAggregate(plan, cards, nodes, today, scheds, fallbackCourse),
       sandboxPopulation: (courses, nodeFilter) => this.sandboxPopulation(courses, nodeFilter),
-      scanCourseBanks: (c, fn) => this.scanCourseBanks(c, fn),
+      scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
       sedimentFold: () => this.sedimentFold(),
       sedimentRebuildProfile: () => this.sedimentRebuildProfile(),
     })
@@ -538,7 +538,7 @@ export class LearnhubEngine {
 
   async statusJson(): Promise<StatusDoc> {
     const { today, cutoff } = await this.learningDay()
-    const [stats, diagnostics] = await Promise.all([this.bankSnapshot(today), this.diagnosticsAdvice(today)])
+    const [stats, diagnostics] = await Promise.all([this.learner.bankSnapshot(today), this.learner.diagnosticsAdvice(today)])
     const courses = await this.enabledCourses()
     const doc = await this.sessions.statusJson(courses, stats, today, fmtCutoff(cutoff))
     // 内容诊断建议项（#69 B1）：每课程附 diagnostics（信号/理由/证据 + 重写与讲解直达入口）
@@ -566,7 +566,7 @@ export class LearnhubEngine {
   async recommend(limit = 5): Promise<RecommendDoc> {
     const { today } = await this.learningDay()
     const [stats, window, diagnostics, pins, sleep] = await Promise.all([
-      this.bankSnapshot(today), this.struggleWindow(today), this.diagnosticsAdvice(today), this.store.loadPins(),
+      this.learner.bankSnapshot(today), this.learner.struggleWindow(today), this.learner.diagnosticsAdvice(today), this.store.loadPins(),
       this.sleepAdviceConfig(),
     ])
     const events = await this.sessions.recommendEvents(await this.enabledCourses(), stats, today, limit, window, diagnostics, pins, sleep.enabled)
@@ -589,21 +589,6 @@ export class LearnhubEngine {
     return this.learner.unpinToday(courseKey, node, today)
   }
 
-  async diagnosticsAdvice(today?: string): Promise<DiagnosticItem[]> {
-    return this.learner.diagnosticsAdvice(today)
-  }
-
-  private async struggleWindow(today: string): Promise<Map<string, Map<string, WindowStat>>> {
-    return this.learner.struggleWindow(today)
-  }
-
-  private async scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void> {
-    await this.learner.scanCourseBanks(c, fn)
-  }
-
-  private async bankSnapshot(today: string): Promise<Map<string, NodeStat[]>> {
-    return this.learner.bankSnapshot(today)
-  }
   // ---- doctor（fm schema 对账） ----
 
   async doctor(): Promise<DoctorDoc> {
@@ -1202,19 +1187,6 @@ export class LearnhubEngine {
 
   // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）----
 
-  /** 周复盘记录的盘上路径（tests 直接消费，S45 接缝；#182 公开面随子系统迁移）。 */
-  kataPath(weekStart: string): string {
-    return this.learner.kataPath(weekStart)
-  }
-
-  async kataOpen(weekStart?: string): Promise<KataDoc> {
-    return this.learner.kataOpen(weekStart)
-  }
-
-  async kataSave(weekStart: string, answers: Partial<Record<KataAnswer, string>>): Promise<KataDoc> {
-    return this.learner.kataSave(weekStart, answers)
-  }
-
   async kataToExperiment(weekStart: string, templateId: string, course?: string): Promise<{ proposal: number; title: string; week_start: string }> {
     return this.learner.kataToExperiment(weekStart, templateId, course)
   }
@@ -1379,10 +1351,6 @@ export class LearnhubEngine {
   }
   // ---- Self-Calibration 自评校准画像（ADR-0022 #104；分源自省面 + 显式呈现层提示）----
 
-  async calibrationProfile(): Promise<CalibrationProfileDoc> {
-    return this.learner.calibrationProfile()
-  }
-
   async calibrationHintsConfig(): Promise<{ hints_enabled: boolean }> {
     return this.learner.calibrationHintsConfig()
   }
@@ -1411,14 +1379,6 @@ export class LearnhubEngine {
   }
   // ---- E2「讲给我听」（#68 / ADR-0009 Learner Output：判词只入 E 档案，零 XP）----
 
-  private async explainPoints(c: CourseEntry, graph: Graph, node: string): Promise<ExplainPoint[]> {
-    return this.learner.explainPoints(c, graph, node)
-  }
-
-  async explainBackPack(courseKey: string | undefined, node: string): Promise<string> {
-    return this.learner.explainBackPack(courseKey, node)
-  }
-
   async explainBackFeedback(
     courseKey: string | undefined, node: string, transcript: string,
     llm: LlmComplete,
@@ -1434,22 +1394,6 @@ export class LearnhubEngine {
   }
   // ---- E1「我的卡」复习（#45 schema / #68 存档目标；#70 落节级入口与管理面）----
 
-  async learnerQueue(courseKey?: string, today?: string): Promise<LearnerQueueDoc> {
-    return this.learner.learnerQueue(courseKey, today)
-  }
-
-  async learnerCardRate(
-    courseKey: string | undefined, node: string, cardId: string, rating: number,
-  ): Promise<LearnerRateResult> {
-    return this.learner.learnerCardRate(courseKey, node, cardId, rating)
-  }
-
-  async learnerCardForget(
-    courseKey: string | undefined, node: string, cardId: string,
-  ): Promise<LearnerForgetResult> {
-    return this.learner.learnerCardForget(courseKey, node, cardId)
-  }
-
   async learnerNoteAdd(
     courseKey: string | undefined, node: string,
     opts: { content: string; kind?: LearnerCard['kind']; prompt?: string; section?: string },
@@ -1462,11 +1406,6 @@ export class LearnhubEngine {
     return this.learner.learnerNoteAdd(courseKey, node, opts, llm)
   }
 
-  async learnerCardArchive(
-    courseKey: string | undefined, node: string, cardId: string, archived: boolean,
-  ): Promise<LearnerArchiveResult> {
-    return this.learner.learnerCardArchive(courseKey, node, cardId, archived)
-  }
   // ---- C-3 错误对比卡（#82：错误库→对比案例卡）----
 
   // 以下 错误对比卡/学习面板题目管理/B2 回流/一键清理/勘误冲正 五节方法体住 BankSubsystem（question-bank.ts，#152 刀 6 聚合+转发）
@@ -1509,18 +1448,6 @@ export class LearnhubEngine {
     return this.learner.skillCreate(name, opts)
   }
 
-  async skillList(today?: string): Promise<SkillsListDoc> {
-    return this.learner.skillList(today)
-  }
-
-  async skillSetMaintenance(id: string, days: number | null): Promise<SkillDoc> {
-    return this.learner.skillSetMaintenance(id, days)
-  }
-
-  async skillArchive(id: string, archived: boolean): Promise<SkillDoc> {
-    return this.learner.skillArchive(id, archived)
-  }
-
   async executionLog(
     skillId: string,
     input: { source: ExecutionSource; minutes: number; rating?: number; evidence?: ExecutionEvidence; note?: string },
@@ -1551,21 +1478,10 @@ export class LearnhubEngine {
     return this.learner.habitCreate(input)
   }
 
-  async habitList(today?: string): Promise<HabitsListDoc> {
-    return this.learner.habitList(today)
-  }
-
-  async habitShow(habitId: string, today?: string): Promise<HabitShowDoc> {
-    return this.learner.habitShow(habitId, today)
-  }
-
   async habitRepeat(habitId: string, input: { auto_rating?: number; note?: string }): Promise<HabitRepeatRec> {
     return this.learner.habitRepeat(habitId, input)
   }
 
-  async habitArchive(habitId: string, archived: boolean): Promise<HabitDoc> {
-    return this.learner.habitArchive(habitId, archived)
-  }
   // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----
 
   async optimizeFsrsParams(

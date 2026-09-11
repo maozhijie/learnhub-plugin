@@ -129,14 +129,14 @@ const SIX_DUE = {
 
 test('calibrationProfile 门面:过信流水 → 分源可读、全局带警戒;门槛前该源为 null', async () => {
   await withVault(SIX_DUE, async ({ engine }) => {
-    const empty = await engine.calibrationProfile()
+    const empty = await engine.learner.calibrationProfile()
     assert.equal(empty.sources[0]!.calibration, null, '无配对不显示')
     assert.equal(empty.sources[0]!.first_ts, null, '零配对区间 ts 为 null')
     assert.equal(empty.sources[0]!.last_pair_ts, null)
     assert.equal(empty.global.calibration, null)
 
     await seedOverconfident(engine)
-    const doc = await engine.calibrationProfile()
+    const doc = await engine.learner.calibrationProfile()
     const jol = doc.sources[0]!
     assert.equal(jol.source, 'jol')
     assert.equal(jol.calibration?.pairs, 12)
@@ -159,7 +159,7 @@ test('reviewQueue:过信检出且提示开 → 抽样 1/3→1/2 加强 + 队列�
     assert.equal(r.cards.filter(c => c.jol).length, 3, '6 张 × 1/2(加强密度)= 3')
     assert.match(r.calibration_hint ?? '', /「会」/)
     assert.match(r.calibration_hint ?? '', /保守/)
-    assert.equal(r.calibration_hint, calibrationHintText((await engine.calibrationProfile()).sources[0]!.overconfidence),
+    assert.equal(r.calibration_hint, calibrationHintText((await engine.learner.calibrationProfile()).sources[0]!.overconfidence),
       '队列提示 = 引擎文案决策,单一出处')
 
     // 定向(单节点)队列同样带出
@@ -234,7 +234,7 @@ test('红线:画像/提示/密度全开——读路径零写入;复习自评档�
     // 画像全开后的全部读路径:vault 字节级不变(零 canonical 写入)
     const before = await snapshot(root)
     const xpBefore = await engine.xpStatus()
-    await engine.calibrationProfile()
+    await engine.learner.calibrationProfile()
     await engine.reviewQueue('数学')
     await engine.reviewQueue('数学', '入门')
     assert.deepEqual(await snapshot(root), before, '画像/队列读路径零落盘(含题库 fsrs、笔记 frontmatter、流水)')

@@ -52,7 +52,7 @@ async function tutorChat(rt: HostRuntime, ctx: Context, course: string, node: st
  * 指令）做 system，前端携带多轮对话历史（学习者的讲稿/回答 + AI 追问）。与 /tutor
  * 同层：只对话不落盘，判词存档只在显式的 /explain-feedback 收尾回合发生。 */
 async function explainBackTurn(rt: HostRuntime, ctx: Context, course: string, node: string, history: unknown[]): Promise<string> {
-  const system = await rt.engine.explainBackPack(course, node)
+  const system = await rt.engine.learner.explainBackPack(course, node)
   const turns = history
     .map(h => h as { role?: unknown; content?: unknown })
     .filter(h => (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string' && h.content.trim())
@@ -192,17 +192,17 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /habits/archive': async ({ rt, body, res }) => {
     const archived = requireBoolean(body, 'archived')
     sendJson(res, 200, await apiRun(rt, 'api/habits/archive', () =>
-      rt.engine.habitArchive(need(body, 'habit'), archived)))
+      rt.engine.learner.habitArchive(need(body, 'habit'), archived)))
   },
   'POST /skills/archive': async ({ rt, body, res }) => {
     const archived = requireBoolean(body, 'archived')
     sendJson(res, 200, await apiRun(rt, 'api/skills/archive', () =>
-      rt.engine.skillArchive(need(body, 'skill'), archived)))
+      rt.engine.learner.skillArchive(need(body, 'skill'), archived)))
   },
   'POST /skills/maintenance': async ({ rt, body, res }) => {
     // 维持节拍帽（#89）：天数或 null（关闭）
     sendJson(res, 200, await apiRun(rt, 'api/skills/maintenance', () =>
-      rt.engine.skillSetMaintenance(need(body, 'skill'), body.days == null ? null : requireNumber(body, 'days'))))
+      rt.engine.learner.skillSetMaintenance(need(body, 'skill'), body.days == null ? null : requireNumber(body, 'days'))))
   },
   'POST /rebuild': async ({ rt, res }) => {
     sendJson(res, 200, { message: (await rt.engine.rebuild()).message })
@@ -351,7 +351,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /learner-rate': async ({ rt, body, res }) => {
     // 「我的卡」自评结算（E1/#68）：一卡一天一次推进，隔离自调度
-    sendJson(res, 200, await apiRun(rt, 'api/learner-rate', () => rt.engine.learnerCardRate(
+    sendJson(res, 200, await apiRun(rt, 'api/learner-rate', () => rt.engine.learner.learnerCardRate(
       need(body, 'course'), need(body, 'node'), need(body, 'card'), Number(body.rating))))
   },
   'POST /error-answer': async ({ rt, body, res }) => {
@@ -385,7 +385,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /learner-archive': async ({ rt, body, res }) => {
     const archived = requireBoolean(body, 'archived')
-    sendJson(res, 200, await apiRun(rt, 'api/learner-archive', () => rt.engine.learnerCardArchive(
+    sendJson(res, 200, await apiRun(rt, 'api/learner-archive', () => rt.engine.learner.learnerCardArchive(
       need(body, 'course'), need(body, 'node'), need(body, 'card'), archived)))
   },
   'POST /question-generate': async ({ rt, ctx, body, res }) => {
@@ -599,7 +599,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 周复盘四问保存（U-4 #114）：patch 语义，现状引擎段不可写
     const answers = optObject(body, 'answers') ?? {}
     sendJson(res, 200, await apiRun(rt, 'api/kata/save', () =>
-      rt.engine.kataSave(need(body, 'week_start'), answers as never)))
+      rt.engine.learner.kataSave(need(body, 'week_start'), answers as never)))
   },
   'POST /kata/convert/intention': async ({ rt, body, res }) => {
     // 「下一实验」一键转执行意图挂今日目标偏好（U-4↔C-5）

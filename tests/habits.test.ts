@@ -95,7 +95,7 @@ test('习惯全链：建档 → 自报重复（可选自评）→ 清单派生�
     await assert.rejects(() => h.engine.habitRepeat('晨间音阶', { auto_rating: 6 }), /1-5/)
     await assert.rejects(() => h.engine.habitRepeat('不存在', {}), /Missing/)
 
-    const list = await h.engine.habitList()
+    const list = await h.engine.learner.habitList()
     assert.equal(list.habits.length, 1)
     const view = list.habits[0]
     assert.equal(view.total_repeats, 3)
@@ -103,7 +103,7 @@ test('习惯全链：建档 → 自报重复（可选自评）→ 清单派生�
     assert.equal(view.latest_rating, 4)
     assert.equal(view.intention.cue, '早上刷完牙后')
 
-    const show = await h.engine.habitShow('晨间音阶')
+    const show = await h.engine.learner.habitShow('晨间音阶')
     assert.equal(show.curve.length, 2) // 只取带自评的点
     assert.equal(show.curve[1].repeats, 3)
     assert.equal(show.recent.length, 3)
@@ -114,14 +114,14 @@ test('习惯全链：建档 → 自报重复（可选自评）→ 清单派生�
 test('归档可逆；无到期语义——引擎侧没有任何催办字段', async () => {
   await withVault({ tag: 'habit-arch', registry: null, graph: null }, async h => {
     await h.engine.habitCreate({ name: '散步', cue: '午饭后', action: '出门走十分钟' })
-    await h.engine.habitArchive('散步', true)
+    await h.engine.learner.habitArchive('散步', true)
     assert.equal((await h.engine.habits.load('散步')).status, 'archived')
     // 归档只是收纳标签：仍可自报（无门禁），也可恢复
     await h.engine.habitRepeat('散步', {})
-    await h.engine.habitArchive('散步', false)
+    await h.engine.learner.habitArchive('散步', false)
     assert.equal((await h.engine.habits.load('散步')).status, 'active')
     // 归档参数必须显式
-    await assert.rejects(() => h.engine.habitArchive('散步', undefined as never), /显式/)
+    await assert.rejects(() => h.engine.learner.habitArchive('散步', undefined as never), /显式/)
   })
 })
 
@@ -130,7 +130,7 @@ test('红线：习惯域全路径零 canonical 写入（journal/practice/review-
     await h.engine.habitCreate({ name: '冥想', cue: '到工位坐下后', action: '闭眼呼吸三分钟' })
     await h.engine.habitRepeat('冥想', { auto_rating: 3 })
     await h.engine.habitRepeat('冥想', { auto_rating: 3 })
-    await h.engine.habitArchive('冥想', true)
+    await h.engine.learner.habitArchive('冥想', true)
     // 学习账本零触碰：习惯重复不进 XP、不进 streak、不进任何调度面（ADR-0017 三边界）
     assert.equal((await h.store.journalTail()).length, 0)
     assert.equal((await h.store.practiceAll()).length, 0)

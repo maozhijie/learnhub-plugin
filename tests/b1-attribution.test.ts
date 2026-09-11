@@ -255,7 +255,7 @@ test('门面：R1 冷却后二次命中 → escalate 转人工，不再给重写
       detail: formatSignalDetail({ sectionId: 's1', signal: 'R1', base: 3 }, '概念：定义', 'qid=q1 lapses=3'),
       ts: `${daysAgoIso(10)}T09:00:00`,
     })
-    const [d] = await engine.diagnosticsAdvice()
+    const [d] = await engine.learner.diagnosticsAdvice()
     assert.ok(d)
     assert.equal(d.signal, 'R1')
     assert.equal(d.escalate, true)
@@ -267,12 +267,12 @@ test('门面：R1 冷却后二次命中 → escalate 转人工，不再给重写
 test('门面：单节重写落盘（content_section 留痕）→ R2 窗口归零 + 进入冷却', async () => {
   await withVault(b1Vault(), async ({ engine }) => {
     await seedR2Evidence(engine)
-    assert.equal((await engine.diagnosticsAdvice()).length, 1)
+    assert.equal((await engine.learner.diagnosticsAdvice()).length, 1)
     // 重写落盘 = 节版本 +1 的留痕（today）→ 证据全部出窗 + 冷却
     await engine.store.appendJournal({
       course: '数学', node: '入门', rating: null, kind: 'content_section', elapsed_days: 0,
       detail: '节「概念：定义」v2 落盘',
     })
-    assert.deepEqual(await engine.diagnosticsAdvice(), [])
+    assert.deepEqual(await engine.learner.diagnosticsAdvice(), [])
   })
 })

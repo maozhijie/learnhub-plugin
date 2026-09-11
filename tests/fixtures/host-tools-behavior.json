@@ -450,7 +450,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "calibrationProfile()"
+   "learner.calibrationProfile()"
   ]
  },
  {
@@ -1621,7 +1621,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "explainBackPack(\"1\",\"1\")"
+   "learner.explainBackPack(\"1\",\"1\")"
   ]
  },
  {
@@ -1961,7 +1961,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "learnerCardArchive(\"1\",\"1\",\"1\",true)"
+   "learner.learnerCardArchive(\"1\",\"1\",\"1\",true)"
   ]
  },
  {
@@ -2220,7 +2220,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "skillList()"
+   "learner.skillList()"
   ]
  },
  {
@@ -2233,7 +2233,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "skillSetMaintenance(\"1\",1)"
+   "learner.skillSetMaintenance(\"1\",1)"
   ]
  },
  {
@@ -2257,7 +2257,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "skillArchive(\"1\",true)"
+   "learner.skillArchive(\"1\",true)"
   ]
  },
  {
@@ -2516,7 +2516,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "habitList()"
+   "learner.habitList()"
   ]
  },
  {
@@ -2576,7 +2576,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "habitArchive(\"1\",true)"
+   "learner.habitArchive(\"1\",true)"
   ]
  },
  {
@@ -2625,7 +2625,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "kataSave(\"1\",{\"answer\":\"1\"})"
+   "learner.kataSave(\"1\",{\"answer\":\"1\"})"
   ]
  },
  {

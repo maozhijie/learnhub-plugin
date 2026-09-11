@@ -311,7 +311,7 @@ content:
 test('AC3 挂周复盘：kataOpen 触发罗盘 ETA 挂载', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     await seedApplied(engine)
-    await engine.kataOpen()
+    await engine.learner.kataOpen()
     const doc = parseCompass(await readFile(paths.compassPath('数学'), 'utf8'))
     assert.equal(etaMarkerOf(sectionBody(doc, SECTION_ETA)), weekStartOf(localDay()!), '周复盘打开即挂载当周 ETA')
   })

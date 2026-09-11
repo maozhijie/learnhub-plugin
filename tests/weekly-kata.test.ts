@@ -70,7 +70,7 @@ test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔�
     await engine.projectApply(prop.id)
     await engine.store.appendJournal({ ts: mid(4), course: '吉他翻新', node: 'm1', rating: null, kind: 'milestone_settle', elapsed_days: 0, xp: 60, detail: '里程碑「换弦」过点：x' })
 
-    const doc = await engine.kataOpen(weekStart)
+    const doc = await engine.learner.kataOpen(weekStart)
     assert.equal(doc.created, true)
     assert.ok(doc.path.replace(/\\/g, '/').includes(`/我的产出/周复盘/${weekStart}.md`), '#107 输出区约定落盘')
     assert.equal(doc.answered, false)
@@ -92,20 +92,20 @@ test('#114 现状自动填：XP/作答/保留率/项目过点/习惯/技能/笔�
 test('#114 四问保存与重开：引擎段刷新、四问保留；answered 随四问齐备翻转', async () => {
   const weekStart = prevWeekStartOf(todayStr(new Date()))!
   await withVault({}, async ({ engine }) => {
-    await assert.rejects(() => engine.kataSave(weekStart, { 目标条件: 'x' }), /先 learnhub_kata_open/)
-    await engine.kataOpen(weekStart)
-    await assert.rejects(() => engine.kataOpen('2026-09-02'), /周一/) // 非周一拒绝
-    await assert.rejects(() => engine.kataOpen(weekStartOf(todayStr(new Date()))!), /最近的完整周/) // 本周未完，不预填未来
+    await assert.rejects(() => engine.learner.kataSave(weekStart, { 目标条件: 'x' }), /先 learnhub_kata_open/)
+    await engine.learner.kataOpen(weekStart)
+    await assert.rejects(() => engine.learner.kataOpen('2026-09-02'), /周一/) // 非周一拒绝
+    await assert.rejects(() => engine.learner.kataOpen(weekStartOf(todayStr(new Date()))!), /最近的完整周/) // 本周未完，不预填未来
 
-    await engine.kataSave(weekStart, { 目标条件: '稳定过 20 题/天', 障碍: '晚上总被杂事打断' })
-    let doc = await engine.kataOpen(weekStart) // 重开：四问保留
+    await engine.learner.kataSave(weekStart, { 目标条件: '稳定过 20 题/天', 障碍: '晚上总被杂事打断' })
+    let doc = await engine.learner.kataOpen(weekStart) // 重开：四问保留
     assert.equal(doc.created, false)
     assert.equal(doc.sections['目标条件'], '稳定过 20 题/天')
     assert.equal(doc.sections['障碍'], '晚上总被杂事打断')
     assert.equal(doc.answered, false, '还差两问')
     assert.equal(doc.sections['现状'].includes('### 总览'), true, '引擎段保持')
 
-    await engine.kataSave(weekStart, { 下一实验: '把复习放在早上', 预期所学: '保留率上升' })
+    await engine.learner.kataSave(weekStart, { 下一实验: '把复习放在早上', 预期所学: '保留率上升' })
     doc = await engine.kataList().then(l => l[0])
     assert.equal(doc.answered, true, '四问齐备')
   })
@@ -114,8 +114,8 @@ test('#114 四问保存与重开：引擎段刷新、四问保留；answered 随
 test('#114 「下一实验」出口：一键转 N-of-1 提案 / 执行意图，留痕进记录、全路径零 canonical 零 XP', async () => {
   const weekStart = prevWeekStartOf(todayStr(new Date()))!
   await withVault({ banks: { '入门': BANK } }, async ({ engine }) => {
-    await engine.kataOpen(weekStart)
-    await engine.kataSave(weekStart, { 下一实验: '试试挑战带', 目标条件: 'x', 障碍: 'y', 预期所学: 'z' })
+    await engine.learner.kataOpen(weekStart)
+    await engine.learner.kataSave(weekStart, { 下一实验: '试试挑战带', 目标条件: 'x', 障碍: 'y', 预期所学: 'z' })
 
     // canonical 字节快照：复盘全路径（open/save/转换）零 journal/practice/review-log 写入、零 XP
     const snap = async (): Promise<[string, string, string, string]> => [
@@ -136,7 +136,7 @@ test('#114 「下一实验」出口：一键转 N-of-1 提案 / 执行意图，�
 
     const after = await snap()
     assert.deepEqual(after, before, 'journal/practice/review-log/课程笔记逐字节原样——零 canonical、零 XP')
-    const text = await readFile(engine.kataPath(weekStart), 'utf8')
+    const text = await readFile(engine.learner.kataPath(weekStart), 'utf8')
     assert.match(text, /已转 N-of-1 实验提案 #\d+/)
     assert.match(text, /已挂今日执行意图（入门/)
   })
@@ -148,9 +148,9 @@ test('#114 清单面：多周记录按周排列，answered 现判', async () => 
   d.setUTCDate(d.getUTCDate() - 7)
   const w0 = weekStartOf(d.toISOString().slice(0, 10))!
   await withVault({}, async ({ engine, paths }) => {
-    await engine.kataOpen(w1)
-    await engine.kataSave(w1, { 目标条件: 'a', 障碍: 'b', 下一实验: 'c', 预期所学: 'd' })
-    await engine.kataOpen(w0)
+    await engine.learner.kataOpen(w1)
+    await engine.learner.kataSave(w1, { 目标条件: 'a', 障碍: 'b', 下一实验: 'c', 预期所学: 'd' })
+    await engine.learner.kataOpen(w0)
     const list = await engine.kataList()
     assert.deepEqual(list.map(x => x.week_start), [w0, w1])
     assert.equal(list[0].answered, false)
@@ -182,13 +182,13 @@ starts:
 `
   await withVault({ registry: null, graph: null }, async ({ engine }) => {
     // 未播种：无 ETA 小节（合法空态——透明度装置锚在终点锚上）
-    const bare = await engine.kataOpen(weekStart)
+    const bare = await engine.learner.kataOpen(weekStart)
     assert.doesNotMatch(bare.reality, /### 沙盘 ETA/)
 
     // 播种（终点锚在位）→ 打开复盘即旁挂 ETA 摘要
     const r = await engine.graphPropose('seed', SEED) as { id: number }
     await engine.graphApply('seed', r.id)
-    const doc = await engine.kataOpen(weekStart)
+    const doc = await engine.learner.kataOpen(weekStart)
     assert.match(doc.reality, /### 沙盘 ETA/)
     assert.match(doc.reality, /数学 → 终点「用导数解决优化问题」：p50/)
     assert.match(doc.reality, /p80/)

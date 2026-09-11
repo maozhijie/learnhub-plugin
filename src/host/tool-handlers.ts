@@ -45,7 +45,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_section_rewrite': (args: { course: string; node: string; section: string }) => run(rt, 'learnhub_section_rewrite', async () =>
       generateSection(rt, ctx, args.course, args.node, args.section)),
   'learnhub_coach': () => run(rt, 'learnhub_coach', async () => JSON.stringify(await rt.engine.coachAdvice())),
-  'learnhub_calibration_profile': () => run(rt, 'learnhub_calibration_profile', async () => JSON.stringify(await rt.engine.calibrationProfile())),
+  'learnhub_calibration_profile': () => run(rt, 'learnhub_calibration_profile', async () => JSON.stringify(await rt.engine.learner.calibrationProfile())),
   'learnhub_sleep_config': (args: { enabled?: boolean }) => run(rt, 'learnhub_sleep_config', async () =>
       JSON.stringify(args.enabled === undefined
         ? await rt.engine.sleepAdviceConfig()
@@ -142,7 +142,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         ...(args.note !== undefined ? { note: args.note } : {}),
       }))),
   'learnhub_explain_back_pack': (args: { course: string; node: string }) => run(rt, 'learnhub_explain_back_pack', () =>
-      rt.engine.explainBackPack(args.course, args.node)),
+      rt.engine.learner.explainBackPack(args.course, args.node)),
   'learnhub_explain_feedback': (args: { course: string; node: string; transcript: string }) => run(rt, 'learnhub_explain_feedback', async () =>
       JSON.stringify(await rt.engine.explainBackFeedback(args.course, args.node, args.transcript, llmSeam(ctx)))),
   'learnhub_learner_card_add': (args: { course: string; node: string; content: string; kind?: string; prompt?: string; section?: string }) => run(rt, 'learnhub_learner_card_add', async () => {
@@ -165,7 +165,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
     }),
   'learnhub_learner_card_archive': (args: { course: string; node: string; card: string; archived?: boolean }) => run(rt, 'learnhub_learner_card_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[learner-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
-      return JSON.stringify(await rt.engine.learnerCardArchive(args.course, args.node, args.card, args.archived))
+      return JSON.stringify(await rt.engine.learner.learnerCardArchive(args.course, args.node, args.card, args.archived))
     }),
   'learnhub_error_card_generate': (args: { course: string; node?: string; max?: number }) => run(rt, 'learnhub_error_card_generate', async () =>
       JSON.stringify(await rt.engine.errorCardGenerate(args.course, {
@@ -180,12 +180,12 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.skillCreate(args.name, {
         ...(args.maintenance_days !== undefined ? { maintenance_days: args.maintenance_days } : {}),
       }))),
-  'learnhub_skill_list': () => run(rt, 'learnhub_skill_list', async () => JSON.stringify(await rt.engine.skillList())),
+  'learnhub_skill_list': () => run(rt, 'learnhub_skill_list', async () => JSON.stringify(await rt.engine.learner.skillList())),
   'learnhub_skill_maintenance': (args: { skill: string; days?: number | null }) => run(rt, 'learnhub_skill_maintenance', async () =>
-      JSON.stringify(await rt.engine.skillSetMaintenance(args.skill, args.days ?? null))),
+      JSON.stringify(await rt.engine.learner.skillSetMaintenance(args.skill, args.days ?? null))),
   'learnhub_skill_archive': (args: { skill: string; archived?: boolean }) => run(rt, 'learnhub_skill_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[skill-archive] archived 必须显式给出（true 归档 / false 恢复）。')
-      return JSON.stringify(await rt.engine.skillArchive(args.skill, args.archived))
+      return JSON.stringify(await rt.engine.learner.skillArchive(args.skill, args.archived))
     }),
   'learnhub_execution_log': (args: { skill: string; source: string; minutes: number; rating?: number; evidence?: { accuracy?: number; self_help?: number }; note?: string }) =>
       run(rt, 'learnhub_execution_log', async () =>
@@ -205,7 +205,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       }),
   'learnhub_habit_create': (args: { name: string; cue: string; action: string }) => run(rt, 'learnhub_habit_create', async () =>
       JSON.stringify(await rt.engine.habitCreate(args))),
-  'learnhub_habit_list': () => run(rt, 'learnhub_habit_list', async () => JSON.stringify(await rt.engine.habitList())),
+  'learnhub_habit_list': () => run(rt, 'learnhub_habit_list', async () => JSON.stringify(await rt.engine.learner.habitList())),
   'learnhub_habit_repeat': (args: { habit: string; auto_rating?: number; note?: string }) => run(rt, 'learnhub_habit_repeat', async () =>
       JSON.stringify(await rt.engine.habitRepeat(args.habit, {
         ...(args.auto_rating !== undefined ? { auto_rating: args.auto_rating } : {}),
@@ -213,10 +213,10 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       }))),
   'learnhub_habit_archive': (args: { habit: string; archived?: boolean }) => run(rt, 'learnhub_habit_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[habit-archive] archived 必须显式给出（true 归档 / false 恢复）。')
-      return JSON.stringify(await rt.engine.habitArchive(args.habit, args.archived))
+      return JSON.stringify(await rt.engine.learner.habitArchive(args.habit, args.archived))
     }),
   'learnhub_kata_save': (args: { week_start: string; answers: Record<string, string> }) => run(rt, 'learnhub_kata_save', async () =>
-      JSON.stringify(await rt.engine.kataSave(args.week_start, args.answers as never))),
+      JSON.stringify(await rt.engine.learner.kataSave(args.week_start, args.answers as never))),
   'learnhub_kata_convert_intention': (args: { week_start: string; course: string; node: string; cue: string; action: string }) => run(rt, 'learnhub_kata_convert_intention', async () =>
       JSON.stringify(await rt.engine.kataToIntention(args.week_start,
         { course: args.course, node: args.node, cue: args.cue, action: args.action }))),
