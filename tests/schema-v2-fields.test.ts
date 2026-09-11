@@ -198,7 +198,7 @@ ops:
     const r = await engine.graph.graphPropose('edit', yaml) as { id: number; warns?: string[] }
     assert.ok(r.warns?.some(w => /teaches 仅 1 条（窄节点提示/.test(w)), '窄节点提示随受理回执返回')
     assert.ok(r.warns?.some(w => /assumes 仅 2 条/.test(w)))
-    await engine.graphApply('edit', r.id)
+    await engine.graph.graphApply('edit', r.id)
     // 出生层落图：概念字段组随 add_node 写进正典 data/*.yaml
     const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '基础.yaml'), 'utf8')
     assert.match(dataYaml, /teaches:/)

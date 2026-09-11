@@ -13,7 +13,7 @@
    }
   },
   "calls": [
-   "coachCheckpoint(\"session_start\",undefined)",
+   "growth2.coachCheckpoint(\"session_start\",undefined)",
    "statusJson()"
   ]
  },
@@ -436,7 +436,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "probationStatus(undefined)"
+   "growth2.probationStatus(undefined)"
   ]
  },
  {
@@ -446,7 +446,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "probationStatus(\"1\")"
+   "growth2.probationStatus(\"1\")"
   ]
  },
  {
@@ -456,7 +456,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "probationStatus(undefined)"
+   "growth2.probationStatus(undefined)"
   ]
  },
  {
@@ -1596,8 +1596,8 @@
   "status": 200,
   "res": [],
   "calls": [
-   "nodeComplete(\"1\",\"1\",true)",
-   "coachCheckpoint(\"node_complete\",\"1\")"
+   "sched2.nodeComplete(\"1\",\"1\",true)",
+   "growth2.coachCheckpoint(\"node_complete\",\"1\")"
   ]
  },
  {
@@ -1639,8 +1639,8 @@
   "status": 200,
   "res": [],
   "calls": [
-   "nodeComplete(\"1\",\"1\",false)",
-   "coachCheckpoint(\"node_complete\",\"1\")"
+   "sched2.nodeComplete(\"1\",\"1\",false)",
+   "growth2.coachCheckpoint(\"node_complete\",\"1\")"
   ]
  },
  {
@@ -1964,7 +1964,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
+   "lab.sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
   ]
  },
  {
@@ -1998,7 +1998,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "sandboxRun({\"minutesPerDay\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
+   "lab.sandboxRun({\"minutesPerDay\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
   ]
  },
  {
@@ -2015,7 +2015,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"nodes\":[\"1\"]})"
+   "lab.sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"nodes\":[\"1\"]})"
   ]
  },
  {
@@ -2030,7 +2030,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\"})"
+   "lab.sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\"})"
   ]
  },
  {
@@ -2068,7 +2068,7 @@
    "content2.loadPrompt(\"课程大纲\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -2122,7 +2122,7 @@
    "content2.loadPrompt(\"课程大纲\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -2624,7 +2624,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
+   "learner.explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
   ]
  },
  {
@@ -2675,7 +2675,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "explainArchiveCard(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
+   "learner.explainArchiveCard(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
   ]
  },
  {
@@ -2692,7 +2692,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
+   "learner.explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
   ]
  },
  {
@@ -2709,7 +2709,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"})"
+   "learner.explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"})"
   ]
  },
  {
@@ -2726,7 +2726,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"})"
+   "learner.explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"})"
   ]
  },
  {
@@ -3001,7 +3001,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "optimizeFsrsParams()"
+   "sched2.optimizeFsrsParams()"
   ]
  },
  {
@@ -3269,7 +3269,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardGenerate(\"1\",{\"node\":\"1\",\"max\":1},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
+   "bank2.errorCardGenerate(\"1\",{\"node\":\"1\",\"max\":1},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -3297,7 +3297,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardGenerate(\"1\",{\"max\":1},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
+   "bank2.errorCardGenerate(\"1\",{\"max\":1},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -3311,7 +3311,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "errorCardGenerate(\"1\",{\"node\":\"1\"},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
+   "bank2.errorCardGenerate(\"1\",{\"node\":\"1\"},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -3427,7 +3427,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
   ]
  },
  {
@@ -3478,7 +3478,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
   ]
  },
  {
@@ -3495,7 +3495,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
   ]
  },
  {
@@ -3512,7 +3512,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
   ]
  },
  {
@@ -3529,7 +3529,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
   ]
  },
  {
@@ -3653,10 +3653,10 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -3716,10 +3716,10 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在按学习者意见重出新题…\"}])",
-   "questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"instruction\":\"1\"})",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"instruction\":\"1\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -3744,10 +3744,10 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"}})",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -3772,10 +3772,10 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "questionGenerate(\"1\",\"1\",undefined,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
+   "bank2.questionGenerate(\"1\",\"1\",undefined,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -3926,7 +3926,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -3998,7 +3998,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4016,7 +4016,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",null,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",null,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4034,7 +4034,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4052,7 +4052,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true})"
   ]
  },
  {
@@ -4345,7 +4345,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"revision\":{},\"reason\":\"1\"})"
+   "bank2.questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"revision\":{},\"reason\":\"1\"})"
   ]
  },
  {
@@ -4435,7 +4435,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"reason\":\"1\"})"
+   "bank2.questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"reason\":\"1\"})"
   ]
  },
  {
@@ -4453,7 +4453,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"revision\":{},\"reason\":\"1\"})"
+   "bank2.questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"revision\":{},\"reason\":\"1\"})"
   ]
  },
  {
@@ -4471,7 +4471,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"revision\":{}})"
+   "bank2.questionDisputeApply(\"1\",\"1\",\"1\",\"rekey\",{\"targetTs\":\"1\",\"revision\":{}})"
   ]
  },
  {
@@ -5011,13 +5011,13 @@
    "queued": true
   },
   "calls": [
-   "coachCheckpoint(\"panel_dispatch\",\"1\")",
+   "growth2.coachCheckpoint(\"panel_dispatch\",\"1\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\"}])",
-   "coachGrowthBatch(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}},{})",
+   "growth2.coachGrowthBatch(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}},{})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5057,10 +5057,10 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘初画中（deep 档一次调用）…\"}])",
-   "compassPaint(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
+   "growth2.compassPaint(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5147,7 +5147,7 @@
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5214,7 +5214,7 @@
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5243,7 +5243,7 @@
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5272,7 +5272,7 @@
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5301,7 +5301,7 @@
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5312,7 +5312,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "settleRechecks()"
+   "growth2.settleRechecks()"
   ]
  },
  {
@@ -5514,7 +5514,7 @@
    "project.projectPlanPack(\"1\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5558,7 +5558,7 @@
    "project.projectMilestonePack(\"1\",\"1\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5618,10 +5618,10 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
+   "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5660,10 +5660,10 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "projectDecompile(\"1\",{\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
+   "project.projectDecompile(\"1\",{\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5685,10 +5685,10 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
-   "projectDecompile(\"1\",{\"goal\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
+   "project.projectDecompile(\"1\",{\"goal\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5708,10 +5708,10 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
-   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\"},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
+   "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\"},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
-   "coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5742,7 +5742,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"nodes\":[\"1\"],\"note\":\"1\"})"
+   "project.projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"nodes\":[\"1\"],\"note\":\"1\"})"
   ]
  },
  {
@@ -5799,7 +5799,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"nodes\":[\"1\"],\"note\":\"1\"})"
+   "project.projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"nodes\":[\"1\"],\"note\":\"1\"})"
   ]
  },
  {
@@ -5818,7 +5818,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectExecLog(\"1\",{\"source\":\"1\",\"evidence\":{},\"nodes\":[\"1\"],\"note\":\"1\"})"
+   "project.projectExecLog(\"1\",{\"source\":\"1\",\"evidence\":{},\"nodes\":[\"1\"],\"note\":\"1\"})"
   ]
  },
  {
@@ -5835,7 +5835,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"note\":\"1\"})"
+   "project.projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"note\":\"1\"})"
   ]
  },
  {
@@ -5854,7 +5854,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"nodes\":[\"1\"]})"
+   "project.projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{},\"nodes\":[\"1\"]})"
   ]
  },
  {
@@ -6052,7 +6052,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "kataToIntention(\"1\",{\"course\":\"1\",\"node\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
+   "learner.kataToIntention(\"1\",{\"course\":\"1\",\"node\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
   ]
  },
  {

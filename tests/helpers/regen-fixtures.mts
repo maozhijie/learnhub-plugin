@@ -1,4 +1,5 @@
-// 快照再生成（#182 各批次随删转发演进；提交前删除本文件）
+// 行为快照再生成（#182 常驻工具）：结构性迁移后重录 calls 记名；输出 diff 必须逐条人审，
+// status/text/error 漂移零容忍。与 tests/tools-face.test.ts、host-routes.test.ts 的快照门配套。
 import { readFileSync, writeFileSync } from 'node:fs'
 import { runToolProbes } from './tools-probe.ts'
 import { runProbes } from './routes-probe.ts'

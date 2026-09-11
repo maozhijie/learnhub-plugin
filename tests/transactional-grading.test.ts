@@ -44,7 +44,7 @@ test('#9 reflection: unparseable AI grading output fails before any learning sid
   }, async ({ engine, paths }) => {
     const before = await evidenceSnapshot(paths)
     await assert.rejects(
-      () => engine.questionAnswer(async () => '这不是 JSON', '数学', '入门', 'a1', '我的完整回答', 30),
+      () => engine.content2.questionAnswer(async () => '这不是 JSON', '数学', '入门', 'a1', '我的完整回答', 30),
       /AI 判卷输出不可用.*未记录/s,
     )
     const after = await evidenceSnapshot(paths)
@@ -63,7 +63,7 @@ test('#9 reflection: empty AI output and malformed score also fail without fallb
   }, async ({ engine, paths }) => {
     const before = await evidenceSnapshot(paths)
     for (const raw of ['', '{"feedback":"只有反馈"}', '{"score":99,"feedback":"x"}']) {
-      await assert.rejects(() => engine.questionAnswer(async () => raw, '数学', '入门', 'a1', '非空回答', 30))
+      await assert.rejects(() => engine.content2.questionAnswer(async () => raw, '数学', '入门', 'a1', '非空回答', 30))
     }
     const after = await evidenceSnapshot(paths)
     assert.deepEqual(after, before)
@@ -77,7 +77,7 @@ test('#9 open_question: unparseable 0-10 grading output is transactional', async
   }, async ({ engine, paths }) => {
     const before = await evidenceSnapshot(paths)
     await assert.rejects(
-      () => engine.questionAnswer(async () => '{"score":"high","feedback":"x"}', '数学', '入门', 'a1', '回答', 30),
+      () => engine.content2.questionAnswer(async () => '{"score":"high","feedback":"x"}', '数学', '入门', 'a1', '回答', 30),
       /AI 判卷输出不可用/,
     )
     const after = await evidenceSnapshot(paths)
@@ -90,8 +90,8 @@ test('#9 a later valid grading proceeds normally and writes the same evidence ch
     notes: { 入门: READY_NOTE },
     banks: { 入门: `${bankText('reflection', '要点')}\n` },
   }, async ({ engine, paths }) => {
-    await assert.rejects(() => engine.questionAnswer(async () => 'bad', '数学', '入门', 'a1', '第一次尝试', 30))
-    const ok = await engine.questionAnswer(
+    await assert.rejects(() => engine.content2.questionAnswer(async () => 'bad', '数学', '入门', 'a1', '第一次尝试', 30))
+    const ok = await engine.content2.questionAnswer(
       async () => JSON.stringify({ score: 0.8, feedback: '覆盖了核心概念，建议再给一个反例。' }),
       '数学', '入门', 'a1', '第二次尝试', 30,
     )

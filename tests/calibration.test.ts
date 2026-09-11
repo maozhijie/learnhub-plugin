@@ -218,7 +218,7 @@ test('红线:画像/提示/密度全开——读路径零写入;复习自评档�
     const llm = async () => { throw new Error('不应调用 LLM') }
 
     // 复习流自评通道原样工作:预测「会」+ deferSchedule 答对挂起 → 自评 Good 结算推 FSRS
-    const ans = await engine.questionAnswer(llm, '数学', '入门', 'q1', 'true', 30,
+    const ans = await engine.content2.questionAnswer(llm, '数学', '入门', 'q1', 'true', 30,
       { deferSchedule: true, predicted: '会' }) as { pendingRating?: boolean; previews?: { good: string } }
     assert.equal(ans.pendingRating, true)
     const rated = await engine.content2.questionRate('数学', '入门', 'q1', 3) as { scheduled?: boolean; due?: string }

@@ -69,7 +69,7 @@ test('#116 重问成功：第一次解析失败自动重判一次，成功后正
     banks: { 入门: `${bankText('reflection', '评分要点')}\n` },
   }, async ({ engine, paths }) => {
     const calls: string[] = []
-    const ok = await engine.questionAnswer(async prompt => {
+    const ok = await engine.content2.questionAnswer(async prompt => {
       calls.push(prompt)
       if (calls.length === 1) return '抱歉，我无法以 JSON 输出。'
       return '```json\n{"score": 0.8, "feedback": "第二次判卷通过。",}\n```'
@@ -97,7 +97,7 @@ test('#116 两次全失败：零落盘（事务性不变）+ 两次原始输出�
     const before = await evidenceSnapshot(paths)
     let calls = 0
     await assert.rejects(
-      () => engine.questionAnswer(async () => {
+      () => engine.content2.questionAnswer(async () => {
         calls++
         return '这是被 max-tokens 截断的断尾 JSON：{"score": 1'
       }, '数学', '入门', 'a1', '开放题回答', 30),
@@ -132,7 +132,7 @@ test('#116 规则判卷题型不受影响（不触发重问与留痕）', async 
     ].join('\n') },
   }, async ({ engine, paths }) => {
     let calls = 0
-    const r = await engine.questionAnswer(async () => {
+    const r = await engine.content2.questionAnswer(async () => {
       calls++
       return '不应被调用'
     }, '数学', '入门', 'a1', 'true', 30)

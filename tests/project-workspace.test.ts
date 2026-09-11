@@ -81,7 +81,7 @@ test('#113 项目日志：追加带学习日条目、文件头只落一次、未
 test('#113 回执镜像：关联节点回执落项目工作区可读副本；canonical 流水与 EMA 语义不变', async () => {
   await withVault({ graph: PRACTICE_GRAPH, notes: { '练琴': `${NOTE}\n` } }, async ({ engine }) => {
     await seedProject(engine, ['练琴'])
-    const r = await engine.receiptSubmit('数学', '练琴', { kind: 'text', material: '今天完整换了四根弦，用时 20 分钟。' }, REVIEW_LLM)
+    const r = await engine.learner.receiptSubmit('数学', '练琴', { kind: 'text', material: '今天完整换了四根弦，用时 20 分钟。' }, REVIEW_LLM)
     assert.equal(r.review_mode, 'full')
     assert.ok((r as unknown as { mirrored_projects?: string[] }).mirrored_projects?.includes('吉他翻新'))
     const mirror = join(engine.paths.projectReceiptDir('吉他翻新'), `数学-练琴-${r.receipt.id}.md`)
@@ -95,7 +95,7 @@ test('#113 回执镜像：关联节点回执落项目工作区可读副本；can
     const before = await engine.store.receiptsAll()
     assert.equal(before.length, 1)
     await seedProject2(engine)
-    const r2 = await engine.receiptSubmit('数学', '练琴', { kind: 'text', material: '第二次回执。' }, REVIEW_LLM)
+    const r2 = await engine.learner.receiptSubmit('数学', '练琴', { kind: 'text', material: '第二次回执。' }, REVIEW_LLM)
     assert.deepEqual((r2 as unknown as { mirrored_projects?: string[] }).mirrored_projects, ['吉他翻新'],
       '只有计划声明了该节点的项目才收到镜像')
   })

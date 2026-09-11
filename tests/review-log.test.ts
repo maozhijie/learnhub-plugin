@@ -62,7 +62,7 @@ test('复习流自评：挂起作答不落日志，questionRate(Hard) 落 self/2
 
 test('完成学习合成初始化：synthetic/3、elapsed=0、快照三字段 null；重复完成不重复落', async () => {
   await withVault({ banks: { 入门: [tfQuestion('a1'), tfQuestion('a2')] } }, async ({ engine }) => {
-    const done = await engine.nodeComplete('数学', '入门') as Record<string, unknown>
+    const done = await engine.sched2.nodeComplete('数学', '入门') as Record<string, unknown>
     assert.equal(done.accepted, true)
     assert.equal(done.initialized, 2)
     const recs = await engine.store.reviewLogAll() as ReviewRec[]
@@ -77,7 +77,7 @@ test('完成学习合成初始化：synthetic/3、elapsed=0、快照三字段 nu
     }
     assert.deepEqual(recs.map(r => r.qid).sort(), ['a1', 'a2'])
 
-    await engine.nodeComplete('数学', '入门')
+    await engine.sched2.nodeComplete('数学', '入门')
     assert.equal((await engine.store.reviewLogAll()).length, 2, '重复完成不再初始化、不再落日志')
   })
 })

@@ -115,7 +115,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'GET /probation': async ({ rt, url, res }) => {
     // 插入实验面（#146）：在途插入节点（「实验中」标记取数）、到期未决、三率
     // （滚动 30 学习日）与韧性闸门现势；course 缺省 = 全部启用课程
-    sendJson(res, 200, await apiRun(rt, 'api/probation', () => rt.engine.probationStatus(optQuery(url, 'course'))))
+    sendJson(res, 200, await apiRun(rt, 'api/probation', () => rt.engine.growth2.probationStatus(optQuery(url, 'course'))))
   },
   'GET /experiments': async ({ rt, res }) => {
     // D-1 N-of-1 实验（#110 ADR-0023）：模板库 + 实验清单 + 报告（无实验时 report=null）
@@ -227,7 +227,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /node/complete': async ({ rt, ctx, body, res }) => {
     // 完成 = 教练回合触发点之一（五点接线）：自动触点走阻尼；路由返回后 fire-and-forget
     const done = await apiRun(rt, 'api/node/complete', () =>
-      rt.engine.nodeComplete(need(body, 'course'), need(body, 'node'), optTrue(body, 'force')))
+      rt.engine.sched2.nodeComplete(need(body, 'course'), need(body, 'node'), optTrue(body, 'force')))
     coachTriggerDetached(rt, ctx, 'node_complete', need(body, 'course'))
     sendJson(res, 200, done)
   },
@@ -265,7 +265,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     const weeks = body.weeks === undefined ? undefined : Number(body.weeks)
     const course = optTrimmed(body, 'course')
     const nodes = optList(body, 'nodes')?.filter((n): n is string => typeof n === 'string')
-    sendJson(res, 200, await apiRun(rt, 'api/sandbox/run', () => rt.engine.sandboxRun({
+    sendJson(res, 200, await apiRun(rt, 'api/sandbox/run', () => rt.engine.lab.sandboxRun({
       minutesPerDay: minutes,
       ...pick('weeks', weeks !== undefined && Number.isFinite(weeks) ? weeks : undefined),
       ...pick('course', course),
@@ -323,7 +323,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /explain-archive': async ({ rt, body, res }) => {
     // E2 存档（#68）：把这版讲稿存成 E1 自注卡（再讲一遍/挖空重述两档）
-    sendJson(res, 200, await apiRun(rt, 'api/explain-archive', () => rt.engine.explainArchiveCard(
+    sendJson(res, 200, await apiRun(rt, 'api/explain-archive', () => rt.engine.learner.explainArchiveCard(
       need(body, 'course'), need(body, 'node'), {
         content: optString(body, 'content'),
         ...pick('kind', optRaw(body, 'kind') as 'recall_cue' | 'cloze_rewrite' | undefined),
@@ -361,7 +361,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /error-generate': async ({ rt, ctx, body, res }) => {
     // 「错误对比卡」生成（C-3/#82）：挖矿 → 模型出卡 → schema 门禁落盘
-    sendJson(res, 200, await apiRun(rt, 'api/error-generate', () => rt.engine.errorCardGenerate(
+    sendJson(res, 200, await apiRun(rt, 'api/error-generate', () => rt.engine.bank2.errorCardGenerate(
       need(body, 'course'),
       {
         ...pick('node', optText(body, 'node')),
@@ -375,7 +375,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /learner-add': async ({ rt, ctx, body, res }) => {
     // E1「加我的理解」（#70）：写注当下 AI 对照该节要点给是非+定位反馈；判词入 E 档案
-    sendJson(res, 200, await apiRun(rt, 'api/learner-add', () => rt.engine.learnerNoteAdd(
+    sendJson(res, 200, await apiRun(rt, 'api/learner-add', () => rt.engine.learner.learnerNoteAdd(
       need(body, 'course'), need(body, 'node'), {
         content: optString(body, 'content'),
         ...pick('kind', optText(body, 'kind') as never),
@@ -418,7 +418,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     sendJson(res, 200, { message: await rt.engine.content2.contentReview(need(body, 'course'), need(body, 'node')) })
   },
   'POST /question-answer': async ({ rt, ctx, body, res }) => {
-    sendJson(res, 200, await apiRun(rt, 'api/question-answer', () => rt.engine.questionAnswer(
+    sendJson(res, 200, await apiRun(rt, 'api/question-answer', () => rt.engine.content2.questionAnswer(
       llmSeam(ctx),
       need(body, 'course'), need(body, 'node'), need(body, 'qid'),
       optString(body, 'answer'),
@@ -453,7 +453,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     sendJson(res, 200, await apiRun(rt, 'api/question-dispute/apply', () => {
       const resolution = requireOneOf(body, 'resolution', ['rekey', 'void', 'overridden'] as const)
       const rawRevision = body.revision as { answer?: unknown; explanation?: unknown } | undefined
-      return rt.engine.questionDisputeApply(
+      return rt.engine.bank2.questionDisputeApply(
         need(body, 'course'), need(body, 'node'), need(body, 'qid'), resolution, {
           ...pick('targetTs', optRaw(body, 'target_ts')),
           ...(typeof rawRevision === 'object' && rawRevision !== null
@@ -507,7 +507,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 触发五点的检查点观测（读侧感知留运行日志）——入队本身不受检查结果闸：
     // 显式请求恒产一轮，就绪满足由教练回合停机转译为 idle。
     const growthCourse = need(body, 'course')
-    void rt.engine.coachCheckpoint('panel_dispatch', growthCourse)
+    void rt.engine.growth2.coachCheckpoint('panel_dispatch', growthCourse)
       .then(r => runLog(rt, 'coach_checkpoint(panel_dispatch)',
         r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}`).join('；')))
       .catch(() => undefined)
@@ -587,7 +587,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // evidence（auto 来源的可观测证据）与 nodes 原样透传——校验收口在门面
     // validateExecEvent/ratingFromEvidence（fail loud），路由不做静默变形。
     const evidence = optObject(body, 'evidence')
-    sendJson(res, 200, await apiRun(rt, 'api/project/exec', () => rt.engine.projectExecLog(need(body, 'id'), {
+    sendJson(res, 200, await apiRun(rt, 'api/project/exec', () => rt.engine.project.projectExecLog(need(body, 'id'), {
       source: need(body, 'source'),
       ...pick('rating', optNumber(body, 'rating')),
       ...pick('evidence', evidence),
@@ -604,7 +604,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /kata/convert/intention': async ({ rt, body, res }) => {
     // 「下一实验」一键转执行意图挂今日目标偏好（U-4↔C-5）
     sendJson(res, 200, await apiRun(rt, 'api/kata/convert/intention', () =>
-      rt.engine.kataToIntention(need(body, 'week_start'), {
+      rt.engine.learner.kataToIntention(need(body, 'week_start'), {
         course: need(body, 'course'), node: need(body, 'node'),
         cue: need(body, 'cue'), action: need(body, 'action'),
       })))

@@ -102,7 +102,7 @@ test('行为推断 enc：共现窗口 → 单个 pending enrich 提案 → 人�
     await engine.graph.projectApply(p1.id)
     await seedCoActivity(engine, [1, 2, 3])
 
-    const r = await engine.projectEncCandidates('练琴计划', { min_co: 2 })
+    const r = await engine.project.projectEncCandidates('练琴计划', { min_co: 2 })
     assert.ok(r.events >= 6)
     assert.equal(r.proposals.length, 1, '单课程单提案（enc_backfill 先例）')
     assert.equal(r.proposals[0].course, '数学')
@@ -112,7 +112,7 @@ test('行为推断 enc：共现窗口 → 单个 pending enrich 提案 → 人�
     assert.equal(r.candidates[0].w, 1.0, '共现 3 天')
 
     // 人审：走既有 graphApply（含审计门；行为推断 enc 属覆盖层，kind=enrich，#140）
-    const applied = await engine.graphApply('enrich', r.proposals[0].id)
+    const applied = await engine.graph.graphApply('enrich', r.proposals[0].id)
     assert.equal(applied.course, '数学')
     assert.equal(applied.fields, 1)
     const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '基础.yaml'), 'utf8')
@@ -120,7 +120,7 @@ test('行为推断 enc：共现窗口 → 单个 pending enrich 提案 → 人�
     assert.match(dataYaml, /name: 进阶[\s\S]*enc:[\s\S]*node: 入门/)
 
     // 既有声明 enc 保留 + 已声明边不重复提名
-    const r2 = await engine.projectEncCandidates('练琴计划', { min_co: 1 })
+    const r2 = await engine.project.projectEncCandidates('练琴计划', { min_co: 1 })
     assert.equal(r2.proposals.length, 0, '已落边不重复提名')
     assert.equal(r2.skipped_declared, 1)
     const node = await engine.graph.graphNode('数学', '进阶')
@@ -139,20 +139,20 @@ test('行为推断 enc 边界：窗口锚定里程碑过点时刻（过点后行
     await engine.project.projectCreate({ name: '练琴计划', goal: '三个月弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', ENC_PLAN('练琴计划'))
     await engine.graph.projectApply(p1.id)
-    await engine.projectMilestoneWrite('练琴计划', 'm1',
+    await engine.project.projectMilestoneWrite('练琴计划', 'm1',
       '## 给定\n\n起点。\n\n## 待办\n\n做。\n\n## 验收清单\n\n- [ ] 完成\n\n## 支持\n\n提示。')
     await engine.project.projectMilestonePass('练琴计划', 'm1')
     // 过点「之后」的共现行为（此刻）不落在「过点前窗口」内
     await seedCoActivity(engine, [0])
-    const r = await engine.projectEncCandidates('练琴计划', { milestone: 'm1' })
+    const r = await engine.project.projectEncCandidates('练琴计划', { milestone: 'm1' })
     assert.equal(r.events, 0)
     assert.equal(r.proposals.length, 0)
     // 同一批事件对「现在」窗口可见；共现 1 天，min_co=2 时不出候选
-    const now = await engine.projectEncCandidates('练琴计划')
+    const now = await engine.project.projectEncCandidates('练琴计划')
     assert.ok(now.events >= 2)
     assert.equal(now.proposals.length, 0)
     // min_co=1 放行：pre 闭包方向 + w=0.6
-    const loose = await engine.projectEncCandidates('练琴计划', { min_co: 1 })
+    const loose = await engine.project.projectEncCandidates('练琴计划', { min_co: 1 })
     assert.equal(loose.proposals.length, 1)
     assert.equal(loose.candidates[0].w, 0.6)
     assert.equal(loose.candidates[0].holder, '进阶')
@@ -190,7 +190,7 @@ test('行为推断 enc 红线：跨课程关联不成边；直接写 data 的路
       await engine.store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: 'a', correct: true, judge: 'allo', ts })
       await engine.store.appendPractice({ course: '英语', node: '入门', ex: 1, answer: 'a', correct: true, judge: 'allo', ts })
     }
-    const r = await engine.projectEncCandidates('混合计划', { min_co: 2 })
+    const r = await engine.project.projectEncCandidates('混合计划', { min_co: 2 })
     assert.equal(r.candidates.length, 0, '跨课程对不成边（enc 边不可跨图）')
     assert.equal(r.proposals.length, 0)
   })
@@ -215,7 +215,7 @@ test('行为推断 enc 红线：synthetic 复习推进不算行为证据', async
         elapsed_days: 0, stability_before: null, difficulty_before: null, r_pred: null, ts,
       })
     }
-    const r = await engine.projectEncCandidates('练琴计划', { min_co: 1 })
+    const r = await engine.project.projectEncCandidates('练琴计划', { min_co: 1 })
     assert.equal(r.events, 0, 'synthetic 初始化不是真实翻卡')
     assert.equal(r.proposals.length, 0)
   })
@@ -245,7 +245,7 @@ test('行为推断 enc 闭包契约：无 pre 关系的共现对不硬提边（E
       await engine.store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: 'a', correct: true, judge: 'allo', ts })
       await engine.store.appendPractice({ course: '数学', node: '平行', ex: 1, answer: 'a', correct: true, judge: 'allo', ts })
     }
-    const r = await engine.projectEncCandidates('练琴计划', { min_co: 2 })
+    const r = await engine.project.projectEncCandidates('练琴计划', { min_co: 2 })
     assert.equal(r.candidates.length, 0, '闭包外不成边')
     assert.equal(r.proposals.length, 0)
     assert.equal(r.blocked_no_pre.length, 1)
@@ -264,7 +264,7 @@ test('行为推断 enc 守卫：无关联节点/过点锚点缺失 fail loud', a
     const noNodes = `project: 练琴计划\nplan:\n  - id: m1\n    name: 里程碑一\n    task_class: 简\n    acceptance_hints: 达标\n`
     const p1 = await engine.project.projectPlanPropose('练琴计划', noNodes)
     await engine.graph.projectApply(p1.id)
-    await assert.rejects(engine.projectEncCandidates('练琴计划'), /没有关联节点/)
-    await assert.rejects(engine.projectEncCandidates('练琴计划', { milestone: 'm1' }), /没有过点记录/)
+    await assert.rejects(engine.project.projectEncCandidates('练琴计划'), /没有关联节点/)
+    await assert.rejects(engine.project.projectEncCandidates('练琴计划', { milestone: 'm1' }), /没有过点记录/)
   })
 })

@@ -129,7 +129,7 @@ test('生成→落盘→复习队列汇入：指定课程产出错误对比卡�
     assert.equal(mine.candidates.length, 1)
     assert.equal(mine.candidates[0]!.qid, 'q1')
 
-    const result = await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
+    const result = await h.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     assert.equal(result.generated.length, 1)
     assert.deepEqual(result.generated[0]!.ids, ['c1'])
     const cardPath = join(h.paths.errorCardsDir('math'), '入门.yaml')
@@ -153,15 +153,15 @@ test('生成→落盘→复习队列汇入：指定课程产出错误对比卡�
 test('生成去重与证据不足：已建卡的题不再重复出卡；无候选时明确报错', async () => {
   await withVault({ tag: 'learnhub-error-dup-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
-    await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
+    await h.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     await assert.rejects(
-      () => h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML),
+      () => h.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML),
       /没有可挖的新错误模式/,
     )
     // 空流水课程同样明确报错（而非静默空产出）
     await withVault({ tag: 'learnhub-error-empty-' }, async h2 => {
       await assert.rejects(
-        () => h2.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML),
+        () => h2.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML),
         /没有可挖的新错误模式/,
       )
     })
@@ -173,7 +173,7 @@ test('生成事务性：模型产出 (node,source_q) 不在候选清单 → 零�
     await seedWrongAttempts(h)
     const forged = VALID_YAML.replace('source_q: q1', 'source_q: q99')
     await assert.rejects(
-      () => h.engine.errorCardGenerate('数学', undefined, async () => forged),
+      () => h.engine.bank2.errorCardGenerate('数学', undefined, async () => forged),
       /候选对照门/,
     )
     assert.ok(!existsSync(h.paths.errorCardsDir('math')))
@@ -183,7 +183,7 @@ test('生成事务性：模型产出 (node,source_q) 不在候选清单 → 零�
 test('作答判分：选对=3 推进+无绑定 XP；选错=1 且 0 XP；复习日志与 practice 零掺入', async () => {
   await withVault({ tag: 'learnhub-error-answer-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
-    await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
+    await h.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     const reviewLogBefore = (await h.store.reviewLogAll()).length
     const practiceBefore = (await h.store.practiceAll()).length
 
@@ -260,7 +260,7 @@ test('选对路径：昨日已推进的卡今日再答选对 → rating 3 + 无�
 test('队列排除归档卡；errorCardQueue 管理面带全卡面供人工抽查', async () => {
   await withVault({ tag: 'learnhub-error-arch-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
-    await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
+    await h.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     await h.engine.bank2.errorCardArchive('数学', '入门', 'c1', true)
     const q = await h.engine.content2.reviewQueue()
     assert.ok(!q.cards.some(c => c.source === 'error'))
@@ -277,9 +277,9 @@ test('队列排除归档卡；errorCardQueue 管理面带全卡面供人工抽�
 test('归档后原题重新可挖（covered 只算活跃卡）', async () => {
   await withVault({ tag: 'learnhub-error-remining-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
-    await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
+    await h.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     await h.engine.bank2.errorCardArchive('数学', '入门', 'c1', true)
-    const result = await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
+    const result = await h.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     assert.equal(result.generated[0]!.ids[0], 'c2')
     const doc = await new ErrorCards(h.paths, nodeVaultFs).load('math', '入门')
     assert.equal(doc.cards.length, 2)
@@ -289,7 +289,7 @@ test('归档后原题重新可挖（covered 只算活跃卡）', async () => {
 test('单节点定向复习入口：node 过滤命中错误卡；跨课程拼错节点照旧 fail loud', async () => {
   await withVault({ tag: 'learnhub-error-node-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
-    await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
+    await h.engine.bank2.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     const q = await h.engine.content2.reviewQueue('数学', '入门')
     assert.equal(q.cards.filter(c => c.source === 'error').length, 1)
     await assert.rejects(() => h.engine.content2.reviewQueue('数学', '不存在'), /不在/)

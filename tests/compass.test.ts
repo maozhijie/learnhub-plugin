@@ -63,7 +63,7 @@ async function seedApplied(
   engine: LearnhubEngine,
 ): Promise<{ compass: { state: string; annotations_preserved: boolean } }> {
   const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-  return await engine.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
+  return await engine.graph.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
 }
 
 /** 测试用最小罗盘正文（与 compassScaffold 同构）。 */
@@ -112,7 +112,7 @@ test('AC1 种子 apply 落罗盘脚手架；金样本初画全链：单次 deep 
 
     // 金样本初画：一次 deep 调用、上下文带终点锚/起点、首过落盘
     const fake = replayFake(GOLD_ROUTE)
-    const painted = await engine.compassPaint('数学', fake)
+    const painted = await engine.growth2.compassPaint('数学', fake)
     assert.equal(fake.calls.length, 1, '调用数基线：初画恒一次调用（无修复轮）')
     assert.equal(fake.calls[0]!.effort, 'deep')
     assert.match(fake.calls[0]!.prompt, /罗盘初画/)
@@ -137,7 +137,7 @@ test('AC1 金样本回放确定性：同种子 vault 两次初画，罗盘字节
   for (let i = 0; i < 2; i++) {
     await withVault(SEED_VAULT, async ({ engine, paths }) => {
       await seedApplied(engine)
-      await engine.compassPaint('数学', replayFake(GOLD_ROUTE))
+      await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
       texts.push(await readFile(paths.compassPath('数学'), 'utf8'))
     })
   }
@@ -147,19 +147,19 @@ test('AC1 金样本回放确定性：同种子 vault 两次初画，罗盘字节
 test('初画路线门负路径：坏产物 fail loud 且罗盘零改动；围栏包裹的合法产物剥壳收下', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     await seedApplied(engine)
-    await engine.compassPaint('数学', replayFake(GOLD_ROUTE))
+    await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
     const before = await readFile(paths.compassPath('数学'), 'utf8')
 
     // 空产物 / 标题劫持：fail loud，罗盘保持原样
-    await assert.rejects(() => engine.compassPaint('数学', replayFake('   ')), /路线门[\s\S]*为空/)
+    await assert.rejects(() => engine.growth2.compassPaint('数学', replayFake('   ')), /路线门[\s\S]*为空/)
     await assert.rejects(
-      () => engine.compassPaint('数学', replayFake('## 剩余路线\n\n- 冒充整页')),
+      () => engine.growth2.compassPaint('数学', replayFake('## 剩余路线\n\n- 冒充整页')),
       /路线门[\s\S]*标题/,
     )
     assert.equal(await readFile(paths.compassPath('数学'), 'utf8'), before)
 
     // 围栏包裹会被剥壳（金样本回放里模型爱包围栏）
-    await engine.compassPaint('数学', replayFake('```markdown\n' + GOLD_ROUTE_2 + '\n```'))
+    await engine.growth2.compassPaint('数学', replayFake('```markdown\n' + GOLD_ROUTE_2 + '\n```'))
     const after = await readFile(paths.compassPath('数学'), 'utf8')
     assert.equal(sectionBody(parseCompass(after), SECTION_ROUTE)?.trim(), GOLD_ROUTE_2)
   })
@@ -168,7 +168,7 @@ test('初画路线门负路径：坏产物 fail loud 且罗盘零改动；围栏
 test('AC2 批注区是软输入：初画附进上下文；写权重写保批注；手编路线被覆盖且完成判据零读罗盘', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     await seedApplied(engine)
-    await engine.compassPaint('数学', replayFake(GOLD_ROUTE))
+    await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
 
     // 学习者手编：批注区写真话、路线乱写、外加一段自留备忘
     const p = paths.compassPath('数学')
@@ -180,7 +180,7 @@ test('AC2 批注区是软输入：初画附进上下文；写权重写保批注�
 
     // 软输入进上下文：下一次初画的 prompt 带上批注原文（提议非指令由模板锁）
     const fake = replayFake(GOLD_ROUTE_2)
-    const repainted = await engine.compassPaint('数学', fake)
+    const repainted = await engine.growth2.compassPaint('数学', fake)
     assert.match(fake.calls[0]!.prompt, /我想快点走到优化应用，跳过证明类的块。/)
     assert.match(fake.calls[0]!.prompt, /软输入/)
     assert.equal(repainted.annotations_preserved, true)
@@ -219,11 +219,11 @@ test('reseed：批注区跨换终点保留，路线与 ETA 重置待初画/待�
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     await seedApplied(engine)
     const p = paths.compassPath('数学')
-    await engine.compassPaint('数学', replayFake(GOLD_ROUTE))
+    await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
     // 批注 + ETA 先挂上（模拟已运行一周）
     const withAnn = (await readFile(p, 'utf8')).replace(ANNOTATION_GUIDE, '多来点应用题。')
     await writeFile(p, withAnn, 'utf8')
-    await engine.compassEtaRefresh('数学')
+    await engine.growth2.compassEtaRefresh('数学')
 
     const reseed = `course: 数学
 mode: reseed
@@ -237,7 +237,7 @@ starts:
     block: 起点块
 `
     const r = await engine.graph.graphPropose('seed', reseed) as { id: number }
-    const applied = await engine.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
+    const applied = await engine.graph.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
     assert.equal(applied.compass.state, 'reseeded')
     assert.equal(applied.compass.annotations_preserved, true)
 
@@ -253,11 +253,11 @@ starts:
 test('AC3 沙盘 ETA 每周挂载：措辞锁死、标记周幂等、越阈分位带、未播种跳过', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     // 未播种课程跳过（此时还没有任何课程）
-    const before = await engine.compassEtaRefresh()
+    const before = await engine.growth2.compassEtaRefresh()
     assert.deepEqual(before, [])
 
     await seedApplied(engine)
-    const r1 = await engine.compassEtaRefresh('数学')
+    const r1 = await engine.growth2.compassEtaRefresh('数学')
     assert.deepEqual(r1.map(x => x.state), ['refreshed'])
     const p = paths.compassPath('数学')
     const text1 = await readFile(p, 'utf8')
@@ -273,7 +273,7 @@ test('AC3 沙盘 ETA 每周挂载：措辞锁死、标记周幂等、越阈分�
     assert.equal(sectionBody(doc1, SECTION_ROUTE)?.trim(), ROUTE_PENDING)
 
     // 同周幂等：第二次挂载 current，文件字节不变
-    const r2 = await engine.compassEtaRefresh('数学')
+    const r2 = await engine.growth2.compassEtaRefresh('数学')
     assert.deepEqual(r2.map(x => x.state), ['current'])
     assert.equal(await readFile(p, 'utf8'), text1)
 
@@ -300,7 +300,7 @@ content:
 ---
 # 用导数解决优化问题
 `, 'utf8')
-    await engine.compassEtaRefresh('数学', { force: true })
+    await engine.growth2.compassEtaRefresh('数学', { force: true })
     const eta2 = sectionBody(parseCompass(await readFile(p, 'utf8')), SECTION_ETA)!
     assert.match(eta2, /p50 口径≤ 4 周/, '已掌握终点在首个探测档即越阈')
     assert.match(eta2, /p80 口径≤ 4 周/)
@@ -319,12 +319,12 @@ test('AC3 挂周复盘：kataOpen 触发罗盘 ETA 挂载', async () => {
 
 test('罗盘缺席的读侧：compassRead/compassTail 合法空态；未播种初画 fail loud', async () => {
   await withVault({}, async ({ engine }) => {
-    const read = await engine.compassRead('数学')
+    const read = await engine.growth2.compassRead('数学')
     assert.equal(read.missing, true)
     assert.equal(read.route, null)
     assert.equal(read.endpoint, null, '未播种课程锚缺席 = null')
     assert.equal(await engine.growth2.compassTail('数学'), '', '罗盘缺席 = 空段（组装方整段省略）')
     // 未播种初画 fail loud（锚在终点上）
-    await assert.rejects(() => engine.compassPaint('数学', replayFake(GOLD_ROUTE)), /未播种[\s\S]*种子提案/)
+    await assert.rejects(() => engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE)), /未播种[\s\S]*种子提案/)
   })
 })

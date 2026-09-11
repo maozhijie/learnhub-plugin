@@ -230,7 +230,7 @@ test('门面 v8：双提案 pair 互相指认、种子起点铸 project、概念
   await withVault(DECOMPILE_VAULT, async ({ engine }) => {
     await projectOf(engine)
     const llm = replayFake(decompileYaml('练琴计划'))
-    const r = await engine.projectDecompile('练琴计划', {}, llm)
+    const r = await engine.project.projectDecompile('练琴计划', {}, llm)
     assert.equal(r.repaired, false)
     assert.equal(r.pair.plan, r.plan_proposal.id)
     assert.equal(r.pair.seed, r.seed_proposal!.id)
@@ -254,7 +254,7 @@ test('对账失败 = 零提案（同进同退的静态半；修复一轮后仍�
     const bad = decompileYaml('练琴计划').replace('吉他/音阶爬格', '吉他/弹唱编配')
     const llm = replayFake(bad)
     await assert.rejects(
-      engine.projectDecompile('练琴计划', {}, llm),
+      engine.project.projectDecompile('练琴计划', {}, llm),
       (e: Error & { code?: string }) => {
         assert.equal(e.code, 'DECOMPILE_GATE_FAILED')
         assert.match(e.message, /双产物校验门/)
@@ -271,11 +271,11 @@ test('对账失败 = 零提案（同进同退的静态半；修复一轮后仍�
 test('单边 apply 守卫（apply 时序缺口回归钉）：pair 在场时计划/种子单独 apply 都拒收', async () => {
   await withVault(DECOMPILE_VAULT, async ({ engine }) => {
     await projectOf(engine)
-    const r = await engine.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
+    const r = await engine.project.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
     // 计划先 apply = 计划引用悬空节点炸消费面——守卫拒收并指向联合入口
     await assert.rejects(engine.graph.projectApply(r.plan_proposal.id), /同进同退/)
     await assert.rejects(engine.graph.projectApply(r.plan_proposal.id), /decompile_apply/)
-    await assert.rejects(engine.graphApply('seed', r.seed_proposal!.id), /同进同退/)
+    await assert.rejects(engine.graph.graphApply('seed', r.seed_proposal!.id), /同进同退/)
     // 两提案都还 pending（守卫发生在任何写盘前）
     const list = await engine.store.loadProposals()
     assert.ok(list.every(p => p.status === 'pending'))
@@ -285,8 +285,8 @@ test('单边 apply 守卫（apply 时序缺口回归钉）：pair 在场时计�
 test('联合 apply：种子先落图（锚+簇节点+笔记脚手架）、计划后落盘；stub 行使回流 EMA 可用', async () => {
   await withVault(DECOMPILE_VAULT, async ({ engine, paths }) => {
     await projectOf(engine)
-    const r = await engine.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
-    const out = await engine.projectDecompileApply(r.pair.plan, r.pair.seed!)
+    const r = await engine.project.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
+    const out = await engine.project.projectDecompileApply(r.pair.plan, r.pair.seed!)
     assert.ok(out.seed, '种子半区已生效')
     assert.equal((out.plan as { kind: string }).kind, 'project_plan')
     // 终点锚落盘、簇节点进图、笔记脚手架就位（消费面可解析）
@@ -299,11 +299,11 @@ test('联合 apply：种子先落图（锚+簇节点+笔记脚手架）、计划
     const { graph } = await engine.loadView(course!)
     assert.ok(graph.nset.has('持琴与手型'))
     // 计划引用先有图可解析：stub（种子簇节点）行使即回流 EMA——时序缺口的消费面回归钉
-    const exec = await engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['吉他/音阶爬格'] })
+    const exec = await engine.project.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['吉他/音阶爬格'] })
     assert.equal(exec.backflow.length, 1)
     assert.equal(exec.backflow[0]!.ema_after, 0.8)
     // 联合 apply 幂等重放：两半区已决 → 跳过不炸（崩溃恢复语义）
-    const replay = await engine.projectDecompileApply(r.pair.plan, r.pair.seed!)
+    const replay = await engine.project.projectDecompileApply(r.pair.plan, r.pair.seed!)
     assert.equal(replay.seed, null)
     assert.equal(replay.plan, null)
   })
@@ -312,7 +312,7 @@ test('联合 apply：种子先落图（锚+簇节点+笔记脚手架）、计划
 test('reject 联动：任一半区被拒，pending 的另一半同退', async () => {
   await withVault(DECOMPILE_VAULT, async ({ engine }) => {
     await projectOf(engine)
-    const r = await engine.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
+    const r = await engine.project.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
     await engine.graph.graphReject(r.pair.plan, '不想要这个方向')
     const list = await engine.store.loadProposals()
     const plan = list.find(p => p.id === r.pair.plan)!
@@ -344,7 +344,7 @@ plan:
   starts: [{ name: 持琴与手型, region: 演奏, block: 入手块 }]
 `
     const llm = scriptFake([bad, planOnly])
-    const r = await engine.projectDecompile('练琴计划', { course: '数学' }, llm)
+    const r = await engine.project.projectDecompile('练琴计划', { course: '数学' }, llm)
     assert.equal(r.repaired, true)
     assert.equal(r.seed_proposal, null)
     assert.equal(r.pair.seed, null)

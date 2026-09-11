@@ -90,7 +90,7 @@ function stubContentPipeline(rt: HostRuntime, opts: { saved?: Array<Array<unknow
     'content2.loadPrompt': async () => 'TPL',
     'content2.contentSectionsView': async () => [{ id: 's1', title: '第一节', type: '概念', status: 'ready' }],
     'bank2.questionGenerateSections': async () => ({ added: 2 }),
-    questionGenerate: async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
     'registry.get': async () => ({ name: '数学' }),
     loadView: async () => ({ graph: { nset: new Set(['节点A', '节点B', '节点C']) } }),
     saveGenJobs: async (jobs: Array<unknown>) => { opts.saved?.push(jobs) },
@@ -234,7 +234,7 @@ test('泵直驱：未暂停但有排队任务时 pumpGeneration 拉起执行（�
 test('等待语义：入队 + 等终态 + 结果表读取（agent 工具同步语义）', async () => {
   const rt = makeRuntime()
   stub(rt, {
-    questionGenerate: async () => ({ added: 4, total: 4, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    'bank2.questionGenerate': async () => ({ added: 4, total: 4, duplicates: [], rejected: [], skipped: [], enc: {} }),
     saveGenJobs: async () => undefined,
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
@@ -264,7 +264,7 @@ test('生长批失败终态：教练回合抛错 → failed 带死因；自动�
   const ctx = fakeCtx()
   let calls = 0
   stub(rt, {
-    coachGrowthBatch: async () => {
+    'growth2.coachGrowthBatch': async () => {
       calls++
       throw new Error('[coach-growth] 生长批受理门拒收（回灌重裁一轮仍未过——零落盘）。\n【首轮】…区不存在: 幻区…\n【重裁】…')
     },

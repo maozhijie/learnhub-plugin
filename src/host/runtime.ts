@@ -80,7 +80,7 @@ export interface GenJob {
 /** 任务注册表 + 纯出题结果表（agent 工具等待完成后读取；结果不进持久化注册表）。 */
 export interface HostJobs {
   genJobs: Map<string, GenJob>
-  quizJobResults: Map<string, Awaited<ReturnType<LearnhubEngine['questionGenerate']>>>
+  quizJobResults: Map<string, Awaited<ReturnType<LearnhubEngine['bank2']['questionGenerate']>>>
 }
 
 /** 运行旗标：重启恢复暂停 / 泵单并发闸 / 会话开始触点节流戳。 */
@@ -157,7 +157,6 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
 /** 单条运行日志输出截断上限（与 OB 插件同源）。 */
 const LOG_LIMIT = 1500
 
-/** 运行日志：每次引擎调用的记录（工具名 + 输出摘要）。 */
 /** 注册表 engine 字段 → 可调用引擎入口（ADR-0049 C 形态）：
  * 子系统方法写 `<子系统>.<方法>` 点路径，hub 装配域方法保留裸名。
  * 仅此一处做字符串查表；调用方仍以 (...args) 展开传参。 */
@@ -174,6 +173,7 @@ export function resolveEngineEntry(rt: HostRuntime, engine: string): (...a: neve
   return fn as (...a: never[]) => unknown
 }
 
+/** 运行日志：每次引擎调用的记录（工具名 + 输出摘要）。 */
 export async function runLog(rt: HostRuntime, tool: string, output: string): Promise<void> {
   const path = `${rt.engine.paths.centerStateDir}/运行日志.md`
   try {

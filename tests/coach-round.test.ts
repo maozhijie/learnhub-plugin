@@ -367,7 +367,7 @@ starts:
 
 async function seedApplied(engine: LearnhubEngine): Promise<void> {
   const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-  await engine.graphApply('seed', r.id)
+  await engine.graph.graphApply('seed', r.id)
 }
 
 const READY_SECTIONS = ['    - { id: s1, title: 第一节, type: 讲授, status: ready, version: 1 }']
@@ -388,7 +388,7 @@ test('门面：全量包六区块定序稳定；轻量包恰两件（行为摘�
   await withVault({ registry: null, graph: null }, async ({ engine }) => {
     await seedApplied(engine)
     const today = localDay(0)
-    const pack = await engine.coachContextPack('数学', { today })
+    const pack = await engine.growth2.coachContextPack('数学', { today })
     const titles = [...pack.matchAll(/^## (.+)$/gm)].map(m => m[1])
     assert.deepEqual(titles, [
       '终点锚',
@@ -403,7 +403,7 @@ test('门面：全量包六区块定序稳定；轻量包恰两件（行为摘�
     assert.ok(pack.includes('罗盘缺席或尚无已画路线'), '罗盘未初画 = 合法空态')
     assert.ok(pack.includes('轻量段') === false)
 
-    const light = await engine.coachContextPack('数学', { today, lightweight: true })
+    const light = await engine.growth2.coachContextPack('数学', { today, lightweight: true })
     const lightTitles = [...light.matchAll(/^## (.+)$/gm)].map(m => m[1])
     assert.deepEqual(lightTitles, [
       '行为摘要（窗=最近 7 学习日或 10 节取大；即算即用不落盘）',
@@ -431,7 +431,7 @@ test('门面：登记表档位/误解目录取前沿视野（可学∪在学）�
       中继: { stage: 'ready', content: { sections: READY_SECTIONS } },
     },
   }, async ({ engine }) => {
-    const pack = await engine.coachContextPack('数学', { today: localDay(0) })
+    const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
     assert.ok(pack.includes('（未播种——终点锚 Missing 是合法空态'), '无锚课程照常组装')
     assert.ok(pack.includes('概念登记表：Missing（合法空态'), '登记表 Missing 合法空态')
     assert.ok(pack.includes('可学/在学节点 1 个'), 'review 中的起点不在前沿视野')
@@ -451,7 +451,7 @@ test('门面：coachCheckpoint 三个触发点同核——就绪存量只数「�
     },
   }, async ({ engine }) => {
     for (const trigger of ['node_complete', 'session_start', 'queue_idle'] as const) {
-      const r = await engine.coachCheckpoint(trigger)
+      const r = await engine.growth2.coachCheckpoint(trigger)
       assert.equal(r.trigger, trigger)
       assert.equal(r.courses.length, 1)
       const check = r.courses[0]!
@@ -494,7 +494,7 @@ test('门面：就绪核算剔除终点——尾段非终点前沿清空判据�
       }),
     }],
   }, async ({ engine }) => {
-    const r = await engine.coachCheckpoint('queue_idle', '数学')
+    const r = await engine.growth2.coachCheckpoint('queue_idle', '数学')
     const check = r.courses[0]!
     assert.equal(check.ready, 0, '终点有正文也不入就绪存量（锚点不是课程节点）')
     assert.equal(check.ok, true, '除终点外前沿清空 → 判据自然通过')
@@ -505,7 +505,7 @@ test('门面：就绪核算剔除终点——尾段非终点前沿清空判据�
 test('门面：种子 apply 后冷启动生效（锚声明日 = 学习日）；种子图无正文 → ready=0 告警', async () => {
   await withVault({ registry: null, graph: null }, async ({ engine }) => {
     await seedApplied(engine)
-    const r = await engine.coachCheckpoint('session_start', '数学')
+    const r = await engine.growth2.coachCheckpoint('session_start', '数学')
     const check = r.courses[0]!
     assert.equal(check.cold_start, true)
     assert.equal(check.required, 5)
@@ -519,7 +519,7 @@ test('门面：nodeComplete 结果携带 coach 字段；statusJson 附会话开�
   await withVault({
     notes: { 入门: { stage: 'ready', content: { sections: READY_SECTIONS } } },
   }, async ({ engine }) => {
-    const done = await engine.nodeComplete('数学', '入门') as { accepted: boolean; coach?: { ready: number; course: string } }
+    const done = await engine.sched2.nodeComplete('数学', '入门') as { accepted: boolean; coach?: { ready: number; course: string } }
     assert.equal(done.accepted, true)
     assert.equal(done.coach?.course, '数学')
     assert.equal(done.coach?.ready, 0, '完成后节点进入 review，存量清零')

@@ -114,7 +114,7 @@ test('过点进账本与 streak 口径：today_xp 计入对账行；除对账行
     await engine.project.projectCreate({ name: '练耳日记', goal: '听辨音程' })
     const p1 = await engine.project.projectPlanPropose('练耳日记', PLAN_WITH_NODES('练耳日记'))
     await engine.graph.projectApply(p1.id)
-    await engine.projectMilestoneWrite('练耳日记', 'm1',
+    await engine.project.projectMilestoneWrite('练耳日记', 'm1',
       '## 给定\n\n空工程模板。\n\n## 待办\n\n安装依赖并运行。\n\n## 验收清单\n\n- [ ] 能运行 hello world\n\n## 支持\n\n命令清单。')
     await engine.project.projectSetTier('练耳日记', '骨架')
 

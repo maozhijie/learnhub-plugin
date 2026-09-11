@@ -21,15 +21,14 @@ import { GraphSubsystem } from './graph-subsystem.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './notes.ts'
 import type { BrokenNote } from './notes.ts'
 import { getScheduler, masteryOfFm } from './srs.ts'
-import type { OptimizeMeta } from './sched-subsystem.ts'
+import { ErrorCards } from './error-cards.ts'
+import { YAML } from './yaml.ts'
+import { dataCheck } from './data-check.ts'
+import { readDayCutoff } from './xp.ts'
 import { SchedSubsystem } from './sched-subsystem.ts'
 import { GrowthSubsystem } from './growth-subsystem.ts'
 import type { FSRS } from 'ts-fsrs'
-import type { JolPrediction } from './jol.ts'
 import { LabSubsystem } from './nof1.ts'
-import type { SandboxDoc } from './sandbox.ts'
-import { bindingImpl } from './optimize.ts'
-import type { OptimizerImpl } from './optimize.ts'
 import { sectionEntryOf } from './attribution.ts'
 import { diagnosticView } from './attribution.ts'
 import { runAudit } from './audit.ts'
@@ -37,51 +36,33 @@ import { Content } from './content.ts'
 import { ContentSubsystem } from './content-subsystem.ts'
 import { GraphProposals } from './proposals.ts'
 import type { ApplyAudit } from './proposals.ts'
-import type { LlmComplete } from './llm.ts'
 import type { Clock, Rng } from './clock.ts'
 
-import type { AgentSeam } from './agent.ts'
 import { Projects, ProjectSubsystem } from './projects.ts'
-import type { FadingTier, ProjectApplyResult } from './projects.ts'
-import type { RecallQuestion } from './project-recall.ts'
-import type { VaultLinksDoc } from './vault-links.ts'
 import { readAnchor, foldCompletion } from './seed.ts'
 import type { CompletionFold } from './seed.ts'
-import type { CompassEta } from './compass.ts'
-import type { CoachCheck, CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
 
 /** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。 */
 export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
 export type { GateVerdict } from './agent.ts'
 export type { SeedDraftRequest } from './seed.ts'
-import type { ProbationOutcome, ProbationCourseView, RecheckMetric } from './probation.ts'
 import { QuestionBank, validateBank, BankSubsystem } from './question-bank.ts'
-import type { BankQuestion } from './question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem } from './note-source.ts'
 import { LearnerCards, LearnerSubsystem } from './learner-cards.ts'
-import type { LearnerCard } from './learner-cards.ts'
-import { ErrorCards } from './error-cards.ts'
-import type { ErrorCard } from './error-cards.ts'
 import { Skills } from './skills.ts'
-import type { ExecutionSource, ExecutionEvidence, ExecutionLogResult } from './skills.ts'
 import { Habits } from './habits.ts'
-import type { ReceiptLogRec, ReceiptKind, ReceiptSubmitResult } from './receipts.ts'
 import { AnkiMirror } from './anki.ts'
-import { YAML } from './yaml.ts'
 import { Sessions } from './sessions.ts'
 import { todayStr, nowIsoOf, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './io.ts'
 import { assertSchemaVersion } from './schema.ts'
 import type { SchemaBlock } from './schema.ts'
-import type { SedimentKind } from './sediment.ts'
 import { revealAnswer, pctOf } from './grading.ts'
 import { auditQuestion } from './question-hygiene.ts'
 import type { QuestionAuditReport } from './question-hygiene.ts'
-import { readDayCutoff } from './xp.ts'
-import type { CourseEntry, EArchiveRec, EncEdge, Fm, Stage } from './types.ts'
-import { dataCheck } from './data-check.ts'
+import type { CourseEntry, Fm } from './types.ts'
 import type { DataCheckReport } from './data-check.ts'
-import type { AnswerResult, DisputeApplyResult, DoctorDoc, GraphApplyResult, ErrorGenerateResult, RecommendDoc, StatusDoc, ProjectExecResult } from './views.ts'
+import type { DoctorDoc, RecommendDoc, StatusDoc } from './views.ts'
 
 /** 宿主取值走门面（D14 收口，#152 刀 1 / ADR-0042）：re-export 门只供应纯函数、
  * 常量与缝型——数据访问仍只走门面方法，门不是数据旁路。 */
@@ -238,7 +219,7 @@ export class LearnhubEngine {
       scanCourseBanks: (c, fn) => this.learner.scanCourseBanks(c, fn),
       loadPrompt: kind => this.content2.loadPrompt(kind),
       questionView: (q, i, opts) => this.content2.questionView(q, i, opts),
-      judgeBankAnswer: (llmComplete, q, answer, op, ref) => this.judgeBankAnswer(llmComplete, q, answer, op, ref),
+      judgeBankAnswer: (llmComplete, q, answer, op, ref) => this.content2.judgeBankAnswer(llmComplete, q, answer, op, ref),
       refreshRepCard: (c, graph, node) => this.content2.refreshRepCard(c, graph, node),
     })
     this.learner = new LearnerSubsystem({
@@ -254,8 +235,8 @@ export class LearnhubEngine {
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       nodeNote: (c, graph, node) => this.content2.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
-      sedimentSettle: () => this.sedimentSettle(),
-      compassEtaRefresh: (courseKey, opts) => this.compassEtaRefresh(courseKey, opts),
+      sedimentSettle: () => this.sched2.sedimentSettle(),
+      compassEtaRefresh: (courseKey, opts) => this.growth2.compassEtaRefresh(courseKey, opts),
       experimentPropose: (templateId, course) => this.lab.experimentPropose(templateId, course),
       refreshSourceFingerprints: absPaths => this.project.refreshSourceFingerprints(absPaths),
     })
@@ -268,7 +249,7 @@ export class LearnhubEngine {
       enabledCourses: () => this.registry.enabled(),
       loadPrompt: kind => this.content2.loadPrompt(kind),
       locateNode: nodeSpec => this.locateNode(nodeSpec),
-      graphApply: (kind, pid, opts) => this.graphApply(kind, pid, opts),
+      graphApply: (kind, pid, opts) => this.graph.graphApply(kind, pid, opts),
       graphPropose: (kind, yamlText) => this.graph.graphPropose(kind, yamlText),
       nodeNote: (c, graph, node) => this.content2.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
@@ -288,7 +269,7 @@ export class LearnhubEngine {
       nodeNote: (c, graph, node) => this.content2.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
       vaultPriorFor: (graph, node) => this.content2.vaultPriorFor(graph, node),
-      logGradingFailure: rec => this.logGradingFailure(rec),
+      logGradingFailure: rec => this.content2.logGradingFailure(rec),
       questionContext: (courseKey, node, qid, op) => this.content2.questionContext(courseKey, node, qid, op),
       exerciseGated: (c, node) => this.growth2.exerciseGated(c, node),
       repairInvokesOnce: (llm, items, scope) => this.channels.repairInvokesOnce(llm, items, scope),
@@ -306,7 +287,7 @@ export class LearnhubEngine {
       loadPrompt: kind => this.content2.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       seedAuditFor: (courseName, today) => this.seedAuditFor(courseName, today),
-      applyProjectPlanProposal: (pid, opts) => this.applyProjectPlanProposal(pid, opts),
+      applyProjectPlanProposal: (pid, opts) => this.project.applyProjectPlanProposal(pid, opts),
       experimentApply: pid => this.lab.experimentApply(pid),
     })
     this.content2 = new ContentSubsystem({
@@ -319,7 +300,7 @@ export class LearnhubEngine {
       collectNoteSourceCards: today => this.channels.collectNoteSourceCards(today),
       enabledCourses: () => this.registry.enabled(),
       ensureNote: (root, graph, node) => this.ensureNote(root, graph, node),
-      errorCardTriples: (courses, nodeFilter) => this.errorCardTriples(courses, nodeFilter),
+      errorCardTriples: (courses, nodeFilter) => this.bank2.errorCardTriples(courses, nodeFilter),
       exerciseGated: (c, node) => this.growth2.exerciseGated(c, node),
       expTag: (courseName, node, qid, today) => this.lab.expTag(courseName, node, qid, today),
       isNoteSourceCourse: courseKey => this.channels.isNoteSourceCourse(courseKey),
@@ -352,7 +333,7 @@ export class LearnhubEngine {
       store: this.store, paths: this.paths, registry: this.registry,
       concepts: this.concepts, content: this.content,
       enabledCourses: () => this.registry.enabled(),
-      graphApply: (kind, pid) => this.graphApply(kind, pid),
+      graphApply: (kind, pid) => this.graph.graphApply(kind, pid),
       graphPropose: (kind, yamlText) => this.graph.graphPropose(kind, yamlText),
       graphReject: (pid, note) => this.graph.graphReject(pid, note),
       learningDay: () => this.learningDay(),
@@ -583,42 +564,9 @@ export class LearnhubEngine {
 
   // ---- Vault 链接先验（V-2 #91：wikilink → 无向关联对 → analyze 展示 + 单提案人审）----
 
-  async vaultLinksScan(): Promise<{
-    generated_at: string
-    scanned_files: number
-    truncated: boolean
-    links_seen: number
-    unresolved: number
-    audit: VaultLinksDoc['audit']
-    tiers: { proposal: number; review: number; report: number }
-    edges: Array<{ a: string; b: string; count: number; files: number; w: number; tier: string }>
-    cache: string
-  }> {
-    return this.graph.vaultLinksScan()
-  }
-
-  async graphLinkBackfill(courseKey?: string): Promise<{
-    course: string
-    scanned_edges: number
-    mapped: number
-    ops: number
-    proposal: { id: number } | null
-    blocked_no_pre: Array<{ a: string; b: string; w: number; why: string }>
-    skipped_declared: number
-    message: string
-  }> {
-    return this.graph.graphLinkBackfill(courseKey)
-  }
   // ---- 图探索（agent 逐步查询，不拉全图）----
 
   // ---- 提案门禁包装（apply 前 audit 拦截） ----
-
-  async graphApply(
-    kind: 'edit' | 'seed' | 'enrich', pid?: number,
-    opts?: { pairApply?: boolean; today?: string },
-  ): Promise<GraphApplyResult> {
-    return this.graph.graphApply(kind, pid, opts)
-  }
 
   // ---- enc 覆盖层回填（kind=enrich，#140：出生/覆盖层分家；原 edit 通道随分家转富化）----
 
@@ -626,63 +574,11 @@ export class LearnhubEngine {
 
   // 以下 项目域/过点对账/执行事件流/目标反编译 四节方法体住 ProjectSubsystem（projects.ts，#152 刀 5 聚合+转发）
 
-  async projectMilestoneWrite(id: string, milestoneId: string, md: string): Promise<
-    { written: string; tier: FadingTier } | { proposed: number; kind: 'project_milestone'; file: string }
-  > {
-    return this.project.projectMilestoneWrite(id, milestoneId, md)
-  }
   // ---- 过点对账 / 检索点 / 行为推断 enc（P-3/P-4/P-6；#94/#93/#96）----
-
-  async projectMilestoneRecall(
-    id: string, milestoneId: string, opts: { nodes?: string[]; limit?: number } = {},
-  ): Promise<{ project: string; milestone: string; file: string; questions: Array<RecallQuestion & { answer: BankQuestion['answer']; options?: string[]; explanation?: string }> }> {
-    return this.project.projectMilestoneRecall(id, milestoneId, opts)
-  }
 
   // ---- 执行事件流 / Mastery 交叉 2×2（P-7 / #98 / ADR-0015 §3/§4/§8）----
 
-  async projectExecLog(
-    id: string,
-    input: { source: string; rating?: number; evidence?: ExecutionEvidence; nodes?: string[]; note?: string },
-  ): Promise<ProjectExecResult> {
-    return this.project.projectExecLog(id, input)
-  }
-
-  async projectEncCandidates(
-    id: string, opts: { milestone?: string; nodes?: string[]; window_days?: number; min_co?: number } = {},
-  ): Promise<{
-    project: string; window: { start: string; end: string; days: number }
-    events: number; candidates: Array<{ course: string; holder: string; skill: string; co: number; w: number }>
-    blocked_no_pre: Array<{ course: string; a: string; b: string; co: number; hint_skill: string; why: string }>
-    proposals: Array<{ course: string; id: number; ops: number }>; skipped_declared: number
-  }> {
-    return this.project.projectEncCandidates(id, opts)
-  }
   // ---- 目标反编译（P-5 / #95：逆向设计 + PjBL；v8 种子簇形态 #149）----
-
-  async projectDecompile(
-    id: string,
-    opts: { goal?: string; course?: string; notes?: string[] } = {},
-    agent: AgentSeam,
-  ): Promise<{
-    project: string
-    prior_hits: number
-    notes: string[]
-    repaired: boolean
-    plan_proposal: { id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }
-    seed_proposal: { id: number; kind: 'seed'; course: string; endpoint: string; starts: number } | null
-    pair: { plan: number; seed: number | null }
-  }> {
-    return this.project.projectDecompile(id, opts, agent)
-  }
-
-  async projectDecompileApply(planPid: number, seedPid: number): Promise<{
-    project: string
-    seed: GraphApplyResult | null
-    plan: ProjectApplyResult | null
-  }> {
-    return this.project.projectDecompileApply(planPid, seedPid)
-  }
 
   private async seedAuditFor(courseName: string, today: string): Promise<ApplyAudit> {
     const course = await this.registry.get(courseName)
@@ -695,11 +591,6 @@ export class LearnhubEngine {
     return audit
   }
 
-  async applyProjectPlanProposal(
-    pid?: number, opts: { pairApply?: boolean } = {},
-  ): Promise<ProjectApplyResult> {
-    return this.project.applyProjectPlanProposal(pid, opts)
-  }
   // ---- 内容管线 ----
 
   // 以下 内容管线/note resolve/课程工作区 三节方法体住 ContentSubsystem（content-subsystem.ts，#152 刀 8 聚合+转发）
@@ -707,29 +598,6 @@ export class LearnhubEngine {
   // ---- note resolve / 反馈区读取 ----
 
   // ---- P4：课程工作区（树形）与题库 ----
-
-  async questionAnswer(
-    llmComplete: LlmComplete,
-    courseKey: string | undefined, node: string, qid: string, answer: string,
-    elapsedS?: number | null,
-    opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null },
-  ): Promise<AnswerResult> {
-    return this.content2.questionAnswer(llmComplete, courseKey, node, qid, answer, elapsedS, opts)
-  }
-
-  private async judgeBankAnswer(
-    llmComplete: LlmComplete,
-    q: BankQuestion, answer: string, op = 'question',
-    ref?: { course: string; node: string; qid: string },
-  ): Promise<{ score: number; feedback: string }> {
-    return this.content2.judgeBankAnswer(llmComplete, q, answer, op, ref)
-  }
-
-  private async logGradingFailure(rec: {
-    course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string
-  }): Promise<void> {
-    await this.content2.logGradingFailure(rec)
-  }
 
   // ---- C1 笔记复习源（#59 / ADR-0010：只出题不动文，派生物落镜像区）----
 
@@ -748,13 +616,6 @@ export class LearnhubEngine {
 
   // 以下 跳过/完成确认、XP 账本、记忆健康、优化器、沉淀层 五节方法体住 SchedSubsystem（sched-subsystem.ts，#152 刀 9 聚合+转发）
 
-  async nodeComplete(courseKey: string | undefined, node: string, force = false): Promise<{
-    accepted: boolean; accuracy: number | null; course: string; node: string
-    stage?: Stage; initialized?: number; due?: string | null; reason?: string
-    coach?: CoachCheck
-  }> {
-    return this.sched2.nodeComplete(courseKey, node, force)
-  }
   // ---- XP 时间账本（Math Academy 语义：1 XP ≈ 1 分钟有效专注） ----
 
   // ---- 记忆健康仪表盘（#61 A2 / ADR-0012）----
@@ -765,102 +626,19 @@ export class LearnhubEngine {
 
   // ---- U4 周复盘 Weekly Kata（#114 / ADR-0026：Learner Output，零 XP 零 canonical）----
 
-  async kataToIntention(
-    weekStart: string, input: { course: string; node: string; cue: string; action: string },
-  ): Promise<{ course: string; node: string; week_start: string }> {
-    return this.learner.kataToIntention(weekStart, input)
-  }
-
-
   // ---- D2 挑战点恒温器（#111 / ADR-0024）——LabSubsystem 住 nof1.ts（#152 刀 2）----
 
   // ---- D3 沙盘（#112 / ADR-0025）——LabSubsystem 住 nof1.ts（#152 刀 2）----
-
-  async sandboxRun(input: {
-    minutesPerDay: number
-    weeks?: number
-    course?: string
-    nodes?: string[]
-  }): Promise<SandboxDoc> {
-    return this.lab.sandboxRun(input)
-  }
 
   // ---- 罗盘（#143 / ADR-0033 透明度装置：常驻非承诺路线草图）----
 
   // 以下 罗盘/教练回合/生长批受理/复诊 四节方法体住 GrowthSubsystem（growth-subsystem.ts，#152 刀 11 聚合+转发）
 
-  async compassRead(courseKey?: string): Promise<{
-    course: string
-    path: string
-    endpoint: string | null
-    goal_type: 'capability' | 'coverage' | null
-    missing: boolean
-    route: string | null
-    annotations: string | null
-    eta: string | null
-    eta_week: string | null
-  }> {
-    return this.growth2.compassRead(courseKey)
-  }
-
-  async compassPaint(courseKey: string | undefined, agent: AgentSeam): Promise<{
-    course: string; path: string; route_lines: number; annotations_preserved: boolean; repainted: boolean
-  }> {
-    return this.growth2.compassPaint(courseKey, agent)
-  }
-
-  async compassEtaRefresh(
-    courseKey?: string, opts: { today?: string; force?: boolean } = {},
-  ): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta }>> {
-    return this.growth2.compassEtaRefresh(courseKey, opts)
-  }
   // ---- 教练回合感知面（#144 / ADR-0033 滚动教练：触发三点 × 就绪深度 × 六区块上下文包）----
 
-  async coachCheckpoint(
-    trigger: CoachTrigger, courseKey?: string, opts: { today?: string } = {},
-  ): Promise<{ trigger: CoachTrigger; courses: CoachCheck[] }> {
-    return this.growth2.coachCheckpoint(trigger, courseKey, opts)
-  }
-
-  async coachContextPack(
-    courseKey?: string, opts: { lightweight?: boolean; today?: string; packLabel?: string } = {},
-  ): Promise<string> {
-    return this.growth2.coachContextPack(courseKey, opts)
-  }
   // ---- 生长批受理（#145 / ADR-0033 滚动教练：教练回合裁决 → edit 提案 → 罗盘随批写入单元）----
 
-  async coachGrowthBatch(
-    courseKey: string, agent: AgentSeam,
-    opts: { force?: boolean; today?: string; inject?: string } = {},
-  ): Promise<{
-    course: string
-    state: 'idle' | 'applied'
-    check: CoachCheck
-    segments: CoachGrowthSegment[]
-    proposal: { id: number; ops: number; operator: string; reason: string; disagreement: boolean } | null
-    applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[]; ready_unbuilt: string[] } | null
-  }> {
-    return this.growth2.coachGrowthBatch(courseKey, agent, opts)
-  }
   // ---- 边实验账本与复诊（#146 / 插入提案生命周期：预注册→登记→到期结算→proven｜自动剪除）----
-
-  async probationStatus(courseKey?: string): Promise<{
-    date: string
-    courses: Array<{ course: string } & ProbationCourseView>
-  }> {
-    return this.growth2.probationStatus(courseKey)
-  }
-
-  async settleRechecks(courseKey?: string, opts: { today?: string } = {}): Promise<{
-    date: string
-    courses: Array<{
-      course: string
-      settled: Array<{ node: string; outcome: ProbationOutcome; metric?: RecheckMetric; detail?: string; proposal?: number }>
-      skipped: Array<{ node: string; reason: string }>
-    }>
-  }> {
-    return this.growth2.settleRechecks(courseKey, opts)
-  }
 
   // ---- Self-Calibration 自评校准画像（ADR-0022 #104；分源自省面 + 显式呈现层提示）----
 
@@ -870,93 +648,22 @@ export class LearnhubEngine {
 
   // ---- E2「讲给我听」（#68 / ADR-0009 Learner Output：判词只入 E 档案，零 XP）----
 
-  async explainArchiveCard(
-    courseKey: string | undefined, node: string,
-    opts: { content: string; kind?: 'recall_cue' | 'cloze_rewrite'; prompt?: string; section?: string },
-  ): Promise<{ course: string; node: string; id: string; kind: LearnerCard['kind']; count: number }> {
-    return this.learner.explainArchiveCard(courseKey, node, opts)
-  }
   // ---- E1「我的卡」复习（#45 schema / #68 存档目标；#70 落节级入口与管理面）----
-
-  async learnerNoteAdd(
-    courseKey: string | undefined, node: string,
-    opts: { content: string; kind?: LearnerCard['kind']; prompt?: string; section?: string },
-    llm: LlmComplete,
-  ): Promise<{
-    course: string; node: string
-    card: { id: string; kind: LearnerCard['kind']; count: number }
-    verdict: EArchiveRec; reply: string
-  }> {
-    return this.learner.learnerNoteAdd(courseKey, node, opts, llm)
-  }
 
   // ---- C-3 错误对比卡（#82：错误库→对比案例卡）----
 
   // 以下 错误对比卡/学习面板题目管理/B2 回流/一键清理/勘误冲正 五节方法体住 BankSubsystem（question-bank.ts，#152 刀 6 聚合+转发）
 
-  private async *errorCardTriples(
-    courses: ReadonlyArray<{ name: string; root: string }>, nodeFilter?: string,
-  ): AsyncGenerator<{ course: string; node: string; card: ErrorCard }> {
-    yield* this.bank2.errorCardTriples(courses, nodeFilter)
-  }
-
-  async errorCardGenerate(
-    courseKey: string | undefined, opts: { node?: string; max?: number } | undefined,
-    llm: LlmComplete,
-  ): Promise<ErrorGenerateResult> {
-    return this.bank2.errorCardGenerate(courseKey, opts, llm)
-  }
-
   // ---- U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）----
 
-  async executionLog(
-    skillId: string,
-    input: { source: ExecutionSource; minutes: number; rating?: number; evidence?: ExecutionEvidence; note?: string },
-  ): Promise<ExecutionLogResult> {
-    return this.learner.executionLog(skillId, input)
-  }
   // ---- U 区·回执反馈环（#88 / ADR-0016）----
 
-  async receiptSubmit(
-    courseKey: string | undefined, node: string,
-    input: { kind: ReceiptKind; material: string; force_full?: boolean },
-    llm: LlmComplete,
-  ): Promise<ReceiptSubmitResult> {
-    return this.learner.receiptSubmit(courseKey, node, input, llm)
-  }
-
-  async receiptList(courseKey: string | undefined, node: string): Promise<{
-    course: string; node: string
-    receipts: ReceiptLogRec[]
-    total: number
-    next_full_in: number | null
-  }> {
-    return this.learner.receiptList(courseKey, node)
-  }
   // ---- U 区·习惯一等公民（#90 / ADR-0017：零 FSRS 语义、零 canonical 写入）----
 
   // ---- FSRS 参数优化器（#62 A2 / ADR-0012）----
 
-  async optimizeFsrsParams(
-    impl: OptimizerImpl = bindingImpl,
-  ): Promise<{
-    status: 'written' | 'skipped'
-    reason?: string
-    written?: string[]
-    meta?: OptimizeMeta
-  }> {
-    return this.sched2.optimizeFsrsParams(impl)
-  }
   // ---- 沉淀层（#139 / ADR-0034：学习模型状态第四存储域）----
 
-  async sedimentSettle(): Promise<{
-    week: string | null
-    wrote: SedimentKind[]
-    skipped: Array<{ kind: SedimentKind; reason: string }>
-    profile: string
-  }> {
-    return this.sched2.sedimentSettle()
-  }
   // ---- 生成任务持久化（host 的 genJobs 内存态落盘出口；D14：文件读写收口 engine）----
 
   /** 全量写入生成任务注册表（host 在每次任务状态变更时调用）。 */
@@ -1067,36 +774,6 @@ export class LearnhubEngine {
   // ---- 题库一键清理（ADR-0032）----
 
   // ---- 瑕疵题勘误与判罚冲正（ADR-0031）----
-
-  async questionDisputeApply(
-    courseKey: string | undefined, node: string, qid: string,
-    resolution: 'rekey' | 'void' | 'overridden',
-    opts?: { targetTs?: string; revision?: { answer?: unknown; explanation?: string }; reason?: string },
-  ): Promise<DisputeApplyResult> {
-    return this.bank2.questionDisputeApply(courseKey, node, qid, resolution, opts)
-  }
-
-  async questionGenerate(
-    courseKey: string | undefined, node: string, count: number | undefined,
-    llm: LlmComplete,
-    opts?: {
-      sections?: Array<{ id: string; title: string }>
-      generic?: boolean
-      section?: { id: string; title: string }
-      instruction?: string
-      isCancelled?: () => boolean
-    },
-  ): Promise<{
-    course: string; node: string; added: number; skipped: number; total: number
-    duplicates: Array<{ q: string; against: string }>
-    rejected: Array<{ q: string; reason: string }>
-    /** 转义损坏修复处数（ADR-0030：确定性修复留痕，不静默）。 */
-    escapesRepaired: number
-    /** invokes 覆盖率投影（#148）：节点全部在库题目的 enc 边候选（出生 w），随生长批 set_enc 写入。 */
-    enc: EncEdge[]
-  }> {
-    return this.bank2.questionGenerate(courseKey, node, count, llm, opts)
-  }
 
   // ---- utils ----
 

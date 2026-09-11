@@ -6,7 +6,7 @@
   "queued": false,
   "text": "{\"llm\":{\"provider\":\"deepseek-official\",\"model\":\"deepseek-v4-flash\",\"fast_effort\":\"off\",\"deep_effort\":\"low\"}}",
   "calls": [
-   "coachCheckpoint(\"session_start\",undefined)",
+   "growth2.coachCheckpoint(\"session_start\",undefined)",
    "statusJson()"
   ]
  },
@@ -71,7 +71,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "nodeComplete(\"1\",\"1\",true)"
+   "sched2.nodeComplete(\"1\",\"1\",true)"
   ]
  },
  {
@@ -289,7 +289,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",null,{\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",null,{\"predicted\":\"1\"})"
   ]
  },
  {
@@ -620,7 +620,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "vaultLinksScan()"
+   "graph.vaultLinksScan()"
   ]
  },
  {
@@ -632,7 +632,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "graphLinkBackfill(\"1\")"
+   "graph.graphLinkBackfill(\"1\")"
   ]
  },
  {
@@ -722,7 +722,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "compassRead(\"1\")"
+   "growth2.compassRead(\"1\")"
   ]
  },
  {
@@ -734,7 +734,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "compassPaint(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}})"
+   "growth2.compassPaint(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}})"
   ]
  },
  {
@@ -1326,7 +1326,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectMilestoneRecall(\"1\",\"1\",{\"nodes\":[\"1\"],\"limit\":1})"
+   "project.projectMilestoneRecall(\"1\",\"1\",{\"nodes\":[\"1\"],\"limit\":1})"
   ]
  },
  {
@@ -1445,7 +1445,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectEncCandidates(\"1\",{\"milestone\":\"1\",\"nodes\":[\"1\"],\"window_days\":1,\"min_co\":1})"
+   "project.projectEncCandidates(\"1\",{\"milestone\":\"1\",\"nodes\":[\"1\"],\"window_days\":1,\"min_co\":1})"
   ]
  },
  {
@@ -1478,7 +1478,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})"
+   "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})"
   ]
  },
  {
@@ -1506,7 +1506,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectDecompileApply(1,1)"
+   "project.projectDecompileApply(1,1)"
   ]
  },
  {
@@ -1549,7 +1549,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{\"answer\":\"1\"},\"nodes\":[\"1\"],\"note\":\"1\"})"
+   "project.projectExecLog(\"1\",{\"source\":\"1\",\"rating\":1,\"evidence\":{\"answer\":\"1\"},\"nodes\":[\"1\"],\"note\":\"1\"})"
   ]
  },
  {
@@ -1710,7 +1710,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
+   "learner.explainArchiveCard(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"})"
   ]
  },
  {
@@ -1772,7 +1772,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"section\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"section\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
   ]
  },
  {
@@ -2040,7 +2040,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "errorCardGenerate(\"1\",{\"node\":\"1\",\"max\":1},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
+   "bank2.errorCardGenerate(\"1\",{\"node\":\"1\",\"max\":1},async (prompt, system, opts)=>stripFences(await seam(prompt, system, opts)))"
   ]
  },
  {
@@ -2298,7 +2298,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "executionLog(\"1\",{\"source\":\"1\",\"minutes\":1,\"rating\":1,\"evidence\":{\"answer\":\"1\"},\"note\":\"1\"})"
+   "learner.executionLog(\"1\",{\"source\":\"1\",\"minutes\":1,\"rating\":1,\"evidence\":{\"answer\":\"1\"},\"note\":\"1\"})"
   ]
  },
  {
@@ -2365,7 +2365,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "receiptSubmit(\"1\",\"1\",{\"kind\":\"1\",\"material\":\"1\",\"force_full\":true},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.receiptSubmit(\"1\",\"1\",{\"kind\":\"1\",\"material\":\"1\",\"force_full\":true},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
   ]
  },
  {
@@ -2434,7 +2434,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "receiptList(\"1\",\"1\")"
+   "learner.receiptList(\"1\",\"1\")"
   ]
  },
  {
@@ -2703,7 +2703,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "kataToIntention(\"1\",{\"course\":\"1\",\"node\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
+   "learner.kataToIntention(\"1\",{\"course\":\"1\",\"node\":\"1\",\"cue\":\"1\",\"action\":\"1\"})"
   ]
  },
  {
@@ -2891,7 +2891,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
+   "lab.sandboxRun({\"minutesPerDay\":1,\"weeks\":1,\"course\":\"1\",\"nodes\":[\"1\"]})"
   ]
  },
  {
@@ -3221,7 +3221,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "optimizeFsrsParams()"
+   "sched2.optimizeFsrsParams()"
   ]
  },
  {

@@ -72,10 +72,10 @@ test('检索点门槛：产物未生成拒绝；生成后抽题落档（题干�
     const p1 = await engine.project.projectPlanPropose('练耳日记', RECALL_PLAN('练耳日记'))
     await engine.graph.projectApply(p1.id)
 
-    await assert.rejects(engine.projectMilestoneRecall('练耳日记', 'm1'), /产物尚未生成/)
+    await assert.rejects(engine.project.projectMilestoneRecall('练耳日记', 'm1'), /产物尚未生成/)
 
-    await engine.projectMilestoneWrite('练耳日记', 'm1', CARD)
-    const session = await engine.projectMilestoneRecall('练耳日记', 'm1', { limit: 2 })
+    await engine.project.projectMilestoneWrite('练耳日记', 'm1', CARD)
+    const session = await engine.project.projectMilestoneRecall('练耳日记', 'm1', { limit: 2 })
     assert.equal(session.questions.length, 2)
     for (const d of session.questions) {
       assert.equal(d.course, '数学')
@@ -103,7 +103,7 @@ test('检索点红线：零 XP/零 FSRS/零 practice/零 journal，题库文件�
     await engine.project.projectCreate({ name: '练耳日记', goal: '听辨音程' })
     const p1 = await engine.project.projectPlanPropose('练耳日记', RECALL_PLAN('练耳日记'))
     await engine.graph.projectApply(p1.id)
-    await engine.projectMilestoneWrite('练耳日记', 'm1', CARD)
+    await engine.project.projectMilestoneWrite('练耳日记', 'm1', CARD)
 
     const bankBefore = (await engine.bank.load(paths.courseRoot('math'), '入门')).questions
     const reviewBefore = await store.reviewLogAll()
@@ -111,7 +111,7 @@ test('检索点红线：零 XP/零 FSRS/零 practice/零 journal，题库文件�
     const journalBefore = await store.journalTail(null, 100)
     const xpBefore = JSON.stringify(await engine.sched2.xpStatus())
 
-    await engine.projectMilestoneRecall('练耳日记', 'm1')
+    await engine.project.projectMilestoneRecall('练耳日记', 'm1')
     await engine.project.projectRecallReflect('练耳日记', 'm1', '关键决策：先装 runtime 再配编辑器，避免权限坑。')
 
     assert.deepEqual((await engine.bank.load(paths.courseRoot('math'), '入门')).questions, bankBefore, '题库零写入')
@@ -134,15 +134,15 @@ test('检索点守卫：无关联节点 fail loud（调用参数可补）；自�
     const noNodes = `project: 练耳日记\nplan:\n  - id: m1\n    name: 过点\n    task_class: 简\n    acceptance_hints: 能跑\n`
     const p1 = await engine.project.projectPlanPropose('练耳日记', noNodes)
     await engine.graph.projectApply(p1.id)
-    await engine.projectMilestoneWrite('练耳日记', 'm1', CARD)
+    await engine.project.projectMilestoneWrite('练耳日记', 'm1', CARD)
 
-    await assert.rejects(engine.projectMilestoneRecall('练耳日记', 'm1'), /没有关联节点/)
+    await assert.rejects(engine.project.projectMilestoneRecall('练耳日记', 'm1'), /没有关联节点/)
     // 参数补充关联即可发起
-    const session = await engine.projectMilestoneRecall('练耳日记', 'm1', { nodes: ['入门'] })
+    const session = await engine.project.projectMilestoneRecall('练耳日记', 'm1', { nodes: ['入门'] })
     assert.equal(session.questions.length, 1)
 
     await assert.rejects(engine.project.projectRecallReflect('练耳日记', 'm1', '   '), /自述不能为空/)
-    await assert.rejects(engine.projectMilestoneRecall('练耳日记', 'm9'), /没有里程碑「m9」/)
+    await assert.rejects(engine.project.projectMilestoneRecall('练耳日记', 'm9'), /没有里程碑「m9」/)
     await assert.rejects(engine.project.projectRecallReflect('练耳日记', 'm9', '自述'), /没有里程碑「m9」/)
   })
 })

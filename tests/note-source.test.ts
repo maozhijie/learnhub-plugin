@@ -151,7 +151,7 @@ test('注册 → 出题 → 复习全流程：用户笔记字节级零写入，�
 
     // 复习自评语义全流程：答对挂起 → rate 结算（同日重复答不再推进）
     const neverLlm = async (): Promise<string> => { throw new Error('规则题型不应调用模型') }
-    const a = await engine.questionAnswer(neverLlm, '笔记源', 'note-1', 'q1', 'A', null, { deferSchedule: true })
+    const a = await engine.content2.questionAnswer(neverLlm, '笔记源', 'note-1', 'q1', 'A', null, { deferSchedule: true })
     assert.equal(a.correct, true)
     assert.equal(a.pendingRating, true)
     assert.equal(a.scheduled, false)

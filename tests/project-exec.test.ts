@@ -164,7 +164,7 @@ test('主链：一条执行事件走完 回流→practice EMA→mastery→2×2 �
     assert.equal(before['入门']?.practice_ema ?? 0, 0)
 
     // 一条执行事件：nodes 含 enc 边两端
-    const r = await engine.projectExecLog('练琴计划', {
+    const r = await engine.project.projectExecLog('练琴计划', {
       source: 'self', rating: 3, nodes: ['进阶', '入门'], note: '第一次合练',
     })
     assert.equal(r.score, 0.8)
@@ -217,7 +217,7 @@ test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / �
     await engine.graph.projectApply(p1.id)
 
     // 无 enc 边（#149 行使即回流的节点级修订）：节点照样回流 EMA——stub 语义的底座
-    const r = await engine.projectExecLog('练琴计划', { source: 'self', rating: 4, nodes: ['入门', '平行'] })
+    const r = await engine.project.projectExecLog('练琴计划', { source: 'self', rating: 4, nodes: ['入门', '平行'] })
     assert.equal(r.edges, 0, '零被行使 enc 边（只作观测）')
     assert.equal(r.backflow.length, 2, '行使即回流：两节点各一次')
     const after = await stateOf(engine)
@@ -225,7 +225,7 @@ test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / �
     assert.equal(after['平行']?.practice_ema, 0.95)
 
     // 空 nodes（文档化语义：只落项目流，零回流）
-    const r2 = await engine.projectExecLog('练琴计划', { source: 'ai', rating: 2 })
+    const r2 = await engine.project.projectExecLog('练琴计划', { source: 'ai', rating: 2 })
     assert.deepEqual(r2.nodes, [])
     assert.equal(r2.edges, 0)
     assert.equal(r2.backflow.length, 0)
@@ -233,16 +233,16 @@ test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / �
 
     // 评级越界 / 小数 / 未知来源 / 未知节点 fail loud，且不落流
     const recsBefore = (await engine.project.projectCrossView('练琴计划')).exec.count
-    await assert.rejects(engine.projectExecLog('练琴计划', { source: 'self', rating: 5 }), /1-4 的整数/)
-    await assert.rejects(engine.projectExecLog('练琴计划', { source: 'self', rating: 2.5 }), /1-4 的整数/)
-    await assert.rejects(engine.projectExecLog('练琴计划', { source: 'self', rating: 0 }), /1-4 的整数/)
-    await assert.rejects(engine.projectExecLog('练琴计划', { source: 'chat', rating: 3 }), /auto\/self\/ai/)
-    await assert.rejects(engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['不存在的节点'] }), /找不到节点/)
+    await assert.rejects(engine.project.projectExecLog('练琴计划', { source: 'self', rating: 5 }), /1-4 的整数/)
+    await assert.rejects(engine.project.projectExecLog('练琴计划', { source: 'self', rating: 2.5 }), /1-4 的整数/)
+    await assert.rejects(engine.project.projectExecLog('练琴计划', { source: 'self', rating: 0 }), /1-4 的整数/)
+    await assert.rejects(engine.project.projectExecLog('练琴计划', { source: 'chat', rating: 3 }), /auto\/self\/ai/)
+    await assert.rejects(engine.project.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['不存在的节点'] }), /找不到节点/)
     assert.equal((await engine.project.projectCrossView('练琴计划')).exec.count, recsBefore, '被拒事件不落流')
 
     // auto 来源必须带可观测证据（skills 先例）；带证据走确定性映射
-    await assert.rejects(engine.projectExecLog('练琴计划', { source: 'auto', rating: 3 }), /可观测证据/)
-    const r3 = await engine.projectExecLog('练琴计划', { source: 'auto', evidence: { accuracy: 0.95 } })
+    await assert.rejects(engine.project.projectExecLog('练琴计划', { source: 'auto', rating: 3 }), /可观测证据/)
+    const r3 = await engine.project.projectExecLog('练琴计划', { source: 'auto', evidence: { accuracy: 0.95 } })
     assert.equal(r3.rating, 4)
     assert.equal(r3.score, 0.95)
   })
@@ -269,13 +269,13 @@ starts:
     basis: project
 `
     const sp = await engine.graph.graphPropose('seed', seedYaml) as { id: number }
-    await engine.graphApply('seed', sp.id)
+    await engine.graph.graphApply('seed', sp.id)
     await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '数学/弹唱目标, 数学/音阶爬格'))
     await engine.graph.projectApply(p1.id)
 
     // 事件行使「终点 + 一个起点」：两节点间只有粗 pre 占位边（无 enc）
-    const r = await engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['数学/弹唱目标', '数学/音阶爬格'] })
+    const r = await engine.project.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['数学/弹唱目标', '数学/音阶爬格'] })
     assert.equal(r.edges, 0, '粗 pre 占位边不是 enc 边——零被行使边（只记流）')
     assert.equal(r.backflow.length, 2, '行使即回流：被行使节点各一次（粗 pre 关系不产生第三笔回流）')
     const course = await engine.registry.get('数学')
@@ -302,7 +302,7 @@ test('入档推荐全链：档内表现攒够 → 推荐升档但不落盘；改
     await engine.graph.projectApply(p1.id)
 
     for (let i = 0; i < 3; i++) {
-      await engine.projectExecLog('练琴计划', { source: 'self', rating: 4 })
+      await engine.project.projectExecLog('练琴计划', { source: 'self', rating: 4 })
     }
     const cross = await engine.project.projectCrossView('练琴计划')
     assert.equal(cross.recommendation.action, 'promote', '档内 3 次 0.95 + 底座 0.97 → 推荐升档')
@@ -336,7 +336,7 @@ test('红线：执行事件零 XP / 零 journal / 零 review-log / 零 practice 
     const reviewBefore = await store.reviewLogAll()
     const practiceBefore = await store.practiceAll()
 
-    await engine.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['入门', '进阶'] })
+    await engine.project.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['入门', '进阶'] })
 
     assert.equal(JSON.stringify(await engine.content2.reviewQueue()), queueBefore, '复习队列不动')
     assert.equal(JSON.stringify(await engine.sched2.xpStatus()), xpBefore, 'XP 账本不动（执行事件零 XP）')
@@ -358,14 +358,14 @@ test('红线：升档推荐不出现在任何门禁位——gateMilestone/passMi
 
     // 攒出一份「强烈推荐升档」的状态
     for (let i = 0; i < 3; i++) {
-      await engine.projectExecLog('练琴计划', { source: 'self', rating: 4 })
+      await engine.project.projectExecLog('练琴计划', { source: 'self', rating: 4 })
     }
     const cross = await engine.project.projectCrossView('练琴计划')
     assert.equal(cross.recommendation.action, 'promote')
 
     // 门禁位 1：轻量结构门照旧——与推荐无关的失败原样拒绝
     await assert.rejects(
-      engine.projectMilestoneWrite('练琴计划', 'm1', '## 待办\n\n缺三块。'),
+      engine.project.projectMilestoneWrite('练琴计划', 'm1', '## 待办\n\n缺三块。'),
       (err: unknown) => (err as { code?: string }).code === 'MILESTONE_GATE_FAILED',
     )
     // 门禁位 2：过点对账照旧——定价语义与推荐无关（无题池 → k=1，est 未申报 → 120）

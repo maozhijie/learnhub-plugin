@@ -314,7 +314,7 @@ ops:
 test('#141 同事务：apply 后图与登记表同时落盘（铸名随生长批生效）', async () => {
   await withVault({ tag: 'learnhub-mintapply-' }, async ({ engine, root }) => {
     const r = await engine.graph.graphPropose('edit', MINT_YAML) as { id: number }
-    await engine.graphApply('edit', r.id)
+    await engine.graph.graphApply('edit', r.id)
     const onDisk = readFileSync(registryPath(root), 'utf8')
     assert.match(onDisk, /行变换几何直觉/)
     assert.match(onDisk, /把行变换看成平面上的几何操作/)
@@ -368,13 +368,13 @@ const quizLlm = (invokes: string | null, label = '甲批') => async () => [
 test('#141 出题受理门：invokes 引用在册 → 入库；未在册 → 拒收并报告；缺席恒合法', async () => {
   await withVault({ ...registryVault(), notes: { 入门: { body: QUIZ_BODY.split('\n') } }, tag: 'learnhub-invokes-' },
     async ({ engine, paths }) => {
-      const r = await engine.questionGenerate('数学', '入门', 2, quizLlm('因式分解'))
+      const r = await engine.bank2.questionGenerate('数学', '入门', 2, quizLlm('因式分解'))
       assert.equal(r.added, 2, '在册引用与缺席都入库')
       const bank = await engine.bank.load(paths.courseRoot('math'), '入门')
       assert.equal(bank.questions[0]!.invokes, '因式分解')
       assert.equal(bank.questions[1]!.invokes, undefined, 'invokes 缺席恒合法 Missing')
 
-      const bad = await engine.questionGenerate('数学', '入门', 2, async () => [
+      const bad = await engine.bank2.questionGenerate('数学', '入门', 2, async () => [
         'node: 入门',
         'questions:',
         '  - kind: true_false',
@@ -395,7 +395,7 @@ test('#141 出题受理门：invokes 引用在册 → 入库；未在册 → 拒
 test('#141 出题受理门：invokes 别名引用合法解析；题库 schema 透传与形态门', async () => {
   await withVault({ ...registryVault(), notes: { 入门: { body: QUIZ_BODY.split('\n') } }, tag: 'learnhub-invalias-' },
     async ({ engine, paths }) => {
-      const r = await engine.questionGenerate('数学', '入门', 1, quizLlm('十字相乘法'))
+      const r = await engine.bank2.questionGenerate('数学', '入门', 1, quizLlm('十字相乘法'))
       assert.equal(r.added, 1)
       assert.equal(r.rejected.length, 0)
       const bank = await engine.bank.load(paths.courseRoot('math'), '入门')

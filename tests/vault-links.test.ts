@@ -158,7 +158,7 @@ async function withLinksVault(run: (v: LinksVault) => Promise<void>): Promise<vo
 test('扫描：去噪管线全绿、审计带命中计数、缓存落 state、个人笔记字节不变', async () => {
   await withLinksVault(async ({ engine, root, notePaths }) => {
     const before = await readFile(notePaths.入门!, 'utf8')
-    const r = await engine.vaultLinksScan()
+    const r = await engine.graph.vaultLinksScan()
 
     assert.equal(r.scanned_files, 5, '学习中心排除；根目录 5 篇个人笔记全扫')
     assert.equal(r.truncated, false, '未触文件数上限')
@@ -204,7 +204,7 @@ test('扫描排除区：学习中心/点目录/内置目录排除/用户排除�
     await writeFile(join(root, '私密区', '手记.md'), NOTE('手记', ['[[入门]]']), 'utf8')
     await engine.channels.noteSourceExclude('私密区')
 
-    const base = await engine.vaultLinksScan()
+    const base = await engine.graph.vaultLinksScan()
     assert.equal(base.scanned_files, 5, '99附件 与 私密区 不进扫描')
     assert.equal(base.edges.some(e => e.a.includes('附件') || e.b.includes('附件')), false)
 
@@ -212,7 +212,7 @@ test('扫描排除区：学习中心/点目录/内置目录排除/用户排除�
     const cfg = JSON.parse(await readFile(engine.paths.learnhubConfigPath, 'utf8')) as Record<string, unknown>
     await writeFile(engine.paths.learnhubConfigPath,
       JSON.stringify({ ...cfg, vault_link_excludes: ['私密区'] }, null, 1) + '\n', 'utf8')
-    const overridden = await engine.vaultLinksScan()
+    const overridden = await engine.graph.vaultLinksScan()
     assert.equal(overridden.scanned_files, 6, '99附件 不再被内置清单排除（私密区仍被新名单排除）')
     assert.equal(overridden.edges.some(e => e.a.endsWith('附件.md') || e.b.endsWith('附件.md')), true)
   })
@@ -227,7 +227,7 @@ test('analyze 建议段：候选映射到图节点（proposal/review 分层 + �
     assert.equal((before.vault_links as Record<string, unknown>).scanned_at, null)
     assert.match(String((before.vault_links as Record<string, unknown>).hint), /vault_links_scan/)
 
-    await engine.vaultLinksScan()
+    await engine.graph.vaultLinksScan()
     const doc = await engine.graph.graphAnalyze('数学') as Record<string, unknown>
     const cands = (doc.suggestions as Record<string, unknown>).vault_link_candidates as Array<Record<string, unknown>>
     assert.equal((doc.vault_links as Record<string, unknown>).scanned_at !== null, true)
@@ -247,8 +247,8 @@ test('analyze 建议段：候选映射到图节点（proposal/review 分层 + �
 
 test('链接先验回填：pre 闭包内成 enrich 单提案（既有 enc 保留、可重入）；闭包外降级 blocked_no_pre', async () => {
   await withLinksVault(async ({ engine }) => {
-    await engine.vaultLinksScan()
-    const r = await engine.graphLinkBackfill('数学')
+    await engine.graph.vaultLinksScan()
+    const r = await engine.graph.graphLinkBackfill('数学')
 
     assert.equal(r.ops, 1, '入门→进阶（pre 闭包内）成边；进阶↔未关联 无 pre 关系不硬提')
     assert.equal(r.proposal !== null, true)
@@ -271,14 +271,14 @@ test('链接先验回填：pre 闭包内成 enrich 单提案（既有 enc 保留
     assert.match(yamlText, /w: 0.9/)
 
     // 可重入：提案过审 apply 后，同一批候选不再重复提名（已声明边跳过）
-    await engine.graphApply('enrich', r.proposal!.id)
-    const r2 = await engine.graphLinkBackfill('数学')
+    await engine.graph.graphApply('enrich', r.proposal!.id)
+    const r2 = await engine.graph.graphLinkBackfill('数学')
     assert.equal(r2.ops, 0)
     assert.equal(r2.proposal, null)
     assert.equal(r2.skipped_declared, 1, '已落图边不再提名；blocked 对维持信号')
   })
 
   await makeVault({ tag: 'learnhub-vaultlinks-nocache-', graph: GRAPH, notes: { 入门: {} } }, async ({ engine }) => {
-    await assert.rejects(() => engine.graphLinkBackfill('数学'), /先跑 learnhub_vault_links_scan/)
+    await assert.rejects(() => engine.graph.graphLinkBackfill('数学'), /先跑 learnhub_vault_links_scan/)
   })
 })

@@ -106,7 +106,7 @@ test('作答/忘记携带预测落流水（逐条配对成立）；非法预测�
   }, async ({ engine }) => {
     const llm = async () => { throw new Error('不应调用 LLM') }
     // 复习流答对（挂起）+ 预测「会」
-    await engine.questionAnswer(llm, '数学', '入门', 'q1', 'true', null,
+    await engine.content2.questionAnswer(llm, '数学', '入门', 'q1', 'true', null,
       { deferSchedule: true, predicted: '会' })
     // 忘记申报 + 预测「不会」
     await engine.content2.questionForget('数学', '入门', 'q2', null, '不会')
@@ -119,7 +119,7 @@ test('作答/忘记携带预测落流水（逐条配对成立）；非法预测�
     const after = await engine.store.practiceAll()
     assert.equal(after.some(r => r.ex === 4 && r.predicted === undefined), true, '无预测不落 predicted 字段')
     await assert.rejects(
-      () => engine.questionAnswer(llm, '数学', '入门', 'q3', 'true', null, { predicted: '猜' as never }),
+      () => engine.content2.questionAnswer(llm, '数学', '入门', 'q3', 'true', null, { predicted: '猜' as never }),
       /预测只能是/,
     )
   })

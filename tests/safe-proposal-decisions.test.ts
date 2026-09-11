@@ -20,11 +20,11 @@ ops:
 `)
     const invalidIds: number[] = [0, -1, 2.5, Number.NaN]
     for (const id of invalidIds) {
-      await assert.rejects(() => engine.graphApply('edit', id), /提案 id 必须是正整数/, `id=${id}`)
+      await assert.rejects(() => engine.graph.graphApply('edit', id), /提案 id 必须是正整数/, `id=${id}`)
     }
     const pending = await engine.graph.graphProposals('pending', 'edit')
     assert.equal(pending.length, 1, 'failed explicit-id attempts must not consume the proposal')
-    const applied = await engine.graphApply('edit') as { created_blocks: string[] }
+    const applied = await engine.graph.graphApply('edit') as { created_blocks: string[] }
     assert.ok(Array.isArray(applied.created_blocks))
   })
 })
@@ -64,14 +64,14 @@ test('#11 add_node may create a block and apply reports created_blocks; later mo
 ops:
   - { op: add_node, name: 新块起点, region: 基础, block: 新块, pre: [入门], est: 15 }
 `) as { id: number }
-    const applied = await engine.graphApply('edit', add.id) as { created_blocks: string[] }
+    const applied = await engine.graph.graphApply('edit', add.id) as { created_blocks: string[] }
     assert.deepEqual(applied.created_blocks, ['新块'])
 
     const move = await engine.graph.graphPropose('edit', `course: 数学
 ops:
   - { op: move, node: 入门, region: 基础, block: 新块 }
 `) as { id: number }
-    const moved = await engine.graphApply('edit', move.id) as { created_blocks: string[] }
+    const moved = await engine.graph.graphApply('edit', move.id) as { created_blocks: string[] }
     assert.deepEqual(moved.created_blocks, [], 'move must not create blocks')
 
     const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
@@ -85,7 +85,7 @@ test('#11 存量 pending 未知 kind 提案：apply 统一拒收，reject 留痕
   await vaultWithCourse(async engine => {
     // 直接在提案流水里种一条旧时代的 pending 未知 kind 记录（现行引擎不再产生该形态）
     const legacy = await engine.store.createProposal('skeleton' as never, '数学', '遗留结构提案', 'state/proposals/legacy.yaml')
-    await assert.rejects(() => engine.graphApply('skeleton' as never, legacy), /非法 kind/)
+    await assert.rejects(() => engine.graph.graphApply('skeleton' as never, legacy), /非法 kind/)
     await engine.graph.graphReject(legacy, '旧记录拒绝留痕')
     const rejected = await engine.graph.graphProposals('rejected')
     assert.ok(rejected.some(p => p.id === legacy && (p as { kind?: string }).kind === 'skeleton'))

@@ -27,7 +27,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_skip': (args: { course: string; node: string; skipped?: boolean }) => run(rt, 'learnhub_skip', async () =>
       JSON.stringify(await rt.engine.sched2.nodeSkip(args.course, args.node, requireSkipDirection(args.skipped)))),
   'learnhub_complete': (args: { course: string; node: string; force?: boolean }) => run(rt, 'learnhub_complete', async () =>
-      JSON.stringify(await rt.engine.nodeComplete(args.course, args.node, args.force === true))),
+      JSON.stringify(await rt.engine.sched2.nodeComplete(args.course, args.node, args.force === true))),
   'learnhub_recommend': (args: { limit?: number }) => run(rt, 'learnhub_recommend', async () =>
       JSON.stringify(await rt.engine.recommend(args.limit === undefined ? 5 : args.limit))),
   'learnhub_pin_today': (args: { course: string; node: string; cue?: string; action?: string }) => run(rt, 'learnhub_pin_today', async () =>
@@ -37,7 +37,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_review_queue': (args: { course?: string; node?: string; band_pref?: string }) => run(rt, 'learnhub_review_queue', async () =>
       JSON.stringify(await rt.engine.content2.reviewQueue(args.course, args.node, undefined, bandPref(args.band_pref)))),
   'learnhub_question_answer': (args: { course: string; node: string; qid: string; answer: string; predicted?: string }) => run(rt, 'learnhub_question_answer', async () =>
-      JSON.stringify(await rt.engine.questionAnswer(
+      JSON.stringify(await rt.engine.content2.questionAnswer(
         llmSeam(ctx), args.course, args.node, args.qid, args.answer,
         null, { ...(args.predicted !== undefined ? { predicted: args.predicted as never } : {}) }))),
   'learnhub_generate': (args: { course: string; node: string; style?: string }) => run(rt, 'learnhub_generate',
@@ -53,7 +53,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_graph_propose': (args: { kind: string; yaml: string }) => run(rt, 'learnhub_graph_propose', async () =>
       JSON.stringify(await rt.engine.graph.graphPropose(graphKind(args.kind), args.yaml))),
   'learnhub_vault_links_scan': () => run(rt, 'learnhub_vault_links_scan', async () =>
-      JSON.stringify(await rt.engine.vaultLinksScan())),
+      JSON.stringify(await rt.engine.graph.vaultLinksScan())),
   'learnhub_graph_apply': async (args: { kind: string; id?: number; reject?: boolean; note?: string }) =>
       run(rt, 'learnhub_graph_apply', async () => {
         if (args.reject) {
@@ -61,13 +61,13 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
           await rt.engine.graph.graphReject(id, args.note ?? '')
           return `[reject] 提案 #${id} 已拒绝留痕。`
         }
-        const r = await rt.engine.graphApply(graphKind(args.kind), applyId(args.id))
+        const r = await rt.engine.graph.graphApply(graphKind(args.kind), applyId(args.id))
         // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
         await sweepGenJobs(rt)
         return JSON.stringify(r)
       }),
   'learnhub_compass_paint': (args: { course?: string }) => run(rt, 'learnhub_compass_paint', async () =>
-      JSON.stringify(await rt.engine.compassPaint(args.course, rt.agent))),
+      JSON.stringify(await rt.engine.growth2.compassPaint(args.course, rt.agent))),
   'learnhub_question_audit': () => run(rt, 'learnhub_question_audit', async () => JSON.stringify(await rt.engine.questionAudit())),
   'learnhub_question_generate': (args: { course: string; node: string; count?: number }) => run(rt, 'learnhub_question_generate', async () => {
       const n = questionCount(args.count)
@@ -120,11 +120,11 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       return JSON.stringify(result)
     }),
   'learnhub_project_milestone_recall': (args: { id: string; milestone: string; nodes?: string[]; limit?: number }) => run(rt, 'learnhub_project_milestone_recall', async () =>
-      JSON.stringify(await rt.engine.projectMilestoneRecall(args.id, args.milestone, { nodes: args.nodes, limit: args.limit }))),
+      JSON.stringify(await rt.engine.project.projectMilestoneRecall(args.id, args.milestone, { nodes: args.nodes, limit: args.limit }))),
   'learnhub_project_enc_candidates': (args: { id: string; milestone?: string; nodes?: string[]; window_days?: number; min_co?: number }) => run(rt, 'learnhub_project_enc_candidates', async () =>
-      JSON.stringify(await rt.engine.projectEncCandidates(args.id, { milestone: args.milestone, nodes: args.nodes, window_days: args.window_days, min_co: args.min_co }))),
+      JSON.stringify(await rt.engine.project.projectEncCandidates(args.id, { milestone: args.milestone, nodes: args.nodes, window_days: args.window_days, min_co: args.min_co }))),
   'learnhub_project_decompile': (args: { id: string; goal?: string; course?: string; notes?: string[] }) => run(rt, 'learnhub_project_decompile', async () =>
-      JSON.stringify(await rt.engine.projectDecompile(
+      JSON.stringify(await rt.engine.project.projectDecompile(
         args.id,
         {
           ...(args.goal !== undefined ? { goal: args.goal } : {}),
@@ -134,7 +134,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         rt.agent,
       ))),
   'learnhub_project_exec_log': (args: { id: string; source: string; rating?: number; evidence?: { accuracy?: number; self_help?: number }; nodes?: string[]; note?: string }) => run(rt, 'learnhub_project_exec_log', async () =>
-      JSON.stringify(await rt.engine.projectExecLog(args.id, {
+      JSON.stringify(await rt.engine.project.projectExecLog(args.id, {
         source: args.source,
         ...(args.rating !== undefined ? { rating: args.rating } : {}),
         ...(args.evidence !== undefined ? { evidence: args.evidence } : {}),
@@ -147,7 +147,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.learner.explainBackFeedback(args.course, args.node, args.transcript, llmSeam(ctx)))),
   'learnhub_learner_card_add': (args: { course: string; node: string; content: string; kind?: string; prompt?: string; section?: string }) => run(rt, 'learnhub_learner_card_add', async () => {
       if (!args.content?.trim()) throw new Error('[learner-card-add] content 必填——存的是学习者自己的话。')
-      return JSON.stringify(await rt.engine.explainArchiveCard(args.course, args.node, {
+      return JSON.stringify(await rt.engine.learner.explainArchiveCard(args.course, args.node, {
         content: args.content,
         ...(args.kind !== undefined ? { kind: args.kind as 'recall_cue' | 'cloze_rewrite' } : {}),
         ...(args.prompt !== undefined && args.prompt.trim() ? { prompt: args.prompt } : {}),
@@ -156,7 +156,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
     }),
   'learnhub_understanding_add': (args: { course: string; node: string; content: string; section?: string; kind?: string; prompt?: string }) => run(rt, 'learnhub_understanding_add', async () => {
       if (!args.content?.trim()) throw new Error('[understanding] content 必填——存的是学习者自己的话。')
-      return JSON.stringify(await rt.engine.learnerNoteAdd(args.course, args.node, {
+      return JSON.stringify(await rt.engine.learner.learnerNoteAdd(args.course, args.node, {
         content: args.content,
         ...(args.section !== undefined && args.section.trim() ? { section: args.section } : {}),
         ...(args.kind !== undefined ? { kind: args.kind as never } : {}),
@@ -168,7 +168,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       return JSON.stringify(await rt.engine.learner.learnerCardArchive(args.course, args.node, args.card, args.archived))
     }),
   'learnhub_error_card_generate': (args: { course: string; node?: string; max?: number }) => run(rt, 'learnhub_error_card_generate', async () =>
-      JSON.stringify(await rt.engine.errorCardGenerate(args.course, {
+      JSON.stringify(await rt.engine.bank2.errorCardGenerate(args.course, {
         ...(args.node ? { node: args.node } : {}),
         ...(args.max !== undefined ? { max: args.max } : {}),
       }, llmSeamStripped(ctx)))),
@@ -189,7 +189,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
     }),
   'learnhub_execution_log': (args: { skill: string; source: string; minutes: number; rating?: number; evidence?: { accuracy?: number; self_help?: number }; note?: string }) =>
       run(rt, 'learnhub_execution_log', async () =>
-        JSON.stringify(await rt.engine.executionLog(args.skill, {
+        JSON.stringify(await rt.engine.learner.executionLog(args.skill, {
           source: args.source as never, minutes: args.minutes,
           ...(args.rating !== undefined ? { rating: args.rating } : {}),
           ...(args.evidence ? { evidence: args.evidence } : {}),
@@ -197,7 +197,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         }))),
   'learnhub_receipt_submit': (args: { course?: string; node: string; kind: string; material: string; force_full?: boolean }) =>
       run(rt, 'learnhub_receipt_submit', async () => {
-        return JSON.stringify(await rt.engine.receiptSubmit(
+        return JSON.stringify(await rt.engine.learner.receiptSubmit(
           args.course, args.node,
           { kind: args.kind as never, material: args.material, ...(args.force_full !== undefined ? { force_full: args.force_full } : {}) },
           llmSeam(ctx),
@@ -218,7 +218,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_kata_save': (args: { week_start: string; answers: Record<string, string> }) => run(rt, 'learnhub_kata_save', async () =>
       JSON.stringify(await rt.engine.learner.kataSave(args.week_start, args.answers as never))),
   'learnhub_kata_convert_intention': (args: { week_start: string; course: string; node: string; cue: string; action: string }) => run(rt, 'learnhub_kata_convert_intention', async () =>
-      JSON.stringify(await rt.engine.kataToIntention(args.week_start,
+      JSON.stringify(await rt.engine.learner.kataToIntention(args.week_start,
         { course: args.course, node: args.node, cue: args.cue, action: args.action }))),
   'learnhub_experiment_templates': () => run(rt, 'learnhub_experiment_templates', async () =>
       JSON.stringify(await rt.engine.lab.experimentTemplates())),
@@ -227,7 +227,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_thermostat': () => run(rt, 'learnhub_thermostat', async () => JSON.stringify(await rt.engine.lab.thermostatView())),
   'learnhub_sandbox': (args: { minutes_per_day: number; weeks?: number; course?: string; nodes?: string[] }) =>
       run(rt, 'learnhub_sandbox', async () =>
-        JSON.stringify(await rt.engine.sandboxRun({
+        JSON.stringify(await rt.engine.lab.sandboxRun({
           minutesPerDay: args.minutes_per_day, weeks: args.weeks, course: args.course, nodes: args.nodes,
         }))),
   'learnhub_note_source_list': () => run(rt, 'learnhub_note_source_list', async () =>
@@ -245,8 +245,8 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_data_check': () => run(rt, 'learnhub_data_check', async () => JSON.stringify(await rt.engine.dataCheck())),
   'learnhub_probation': (args: { action?: 'status' | 'settle'; course?: string }) => run(rt, 'learnhub_probation', async () => {
       const a = (args ?? {}) as { action?: 'status' | 'settle'; course?: string }
-      if (a.action === 'settle') return JSON.stringify(await rt.engine.settleRechecks(a.course))
-      return JSON.stringify(await rt.engine.probationStatus(a.course))
+      if (a.action === 'settle') return JSON.stringify(await rt.engine.growth2.settleRechecks(a.course))
+      return JSON.stringify(await rt.engine.growth2.probationStatus(a.course))
     }),
   'learnhub_rebuild': (args: { course?: string }) => run(rt, 'learnhub_rebuild', async () =>
       (await rt.engine.rebuild(args.course)).message),
@@ -263,6 +263,6 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       return JSON.stringify({ message: `已删除「${r.removed}」（整课目录移入 .trash，可手工恢复）。沉淀层波及：${r.sediment}`, ...r })
     }),
   'learnhub_optimize_params': () => run(rt, 'learnhub_optimize_params', async () =>
-      JSON.stringify(await rt.engine.optimizeFsrsParams())),
+      JSON.stringify(await rt.engine.sched2.optimizeFsrsParams())),
   }
 }

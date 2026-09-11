@@ -146,11 +146,11 @@ test('FSRS 正典化：优化写沉淀正典 + 缓存镜像 + 档案投影；删
   await withVault({ registry: REGISTRY, graph: null }, async ({ engine }) => {
     await seedRealLogs(engine)
     const trained2 = TRAINED.map(x => x + 0.005)
-    const r1 = await engine.optimizeFsrsParams(fakeImpl(TRAINED))
+    const r1 = await engine.sched2.optimizeFsrsParams(fakeImpl(TRAINED))
     assert.equal(r1.status, 'written')
     assert.equal(r1.meta?.baseline_source, 'default', '首训无沉淀无缓存：基线 = 默认')
     // 二训：沉淀已有正典 → 基线取沉淀（先验连续的证据链）
-    const r = await engine.optimizeFsrsParams(fakeImpl(trained2))
+    const r = await engine.sched2.optimizeFsrsParams(fakeImpl(trained2))
     assert.equal(r.status, 'written')
     assert.equal(r.meta?.baseline_source, 'sediment')
 
@@ -181,7 +181,7 @@ test('断裂不变性：清空内容层后合成初始化仍取到沉淀先验�
   }, async ({ engine, root }) => {
     // ① 先练出先验：优化一次（正典在沉淀）
     await seedRealLogs(engine)
-    const r = await engine.optimizeFsrsParams(fakeImpl(TRAINED))
+    const r = await engine.sched2.optimizeFsrsParams(fakeImpl(TRAINED))
     assert.equal(r.status, 'written')
     // ② 断裂：课程树整树清空（内容层 + 卡级实例记忆 + 参数缓存全灭），注册表清空
     await rm(join(root, '学习中心', 'math'), { recursive: true, force: true })
@@ -227,7 +227,7 @@ test('断裂不变性：清空内容层后合成初始化仍取到沉淀先验�
     const bank = ['node: 入门', 'questions:', ...tfQuestion('q1', {})].join('\n') + '\n'
     await writeFile(join(course, '题库', '入门.yaml'), bank, 'utf8')
     // ④ 合成初始化：先验从沉淀折叠取回，不因内容层清空回落默认
-    const done = await engine.nodeComplete('数学', '入门', true)
+    const done = await engine.sched2.nodeComplete('数学', '入门', true)
     assert.equal(done.accepted, true)
     assert.equal(done.initialized, 1)
     const due = done.due
@@ -269,7 +269,7 @@ test('sedimentSettle：上一完整学习周的校准与速度韧性出生即写
       ts: `${week}T11:00:00`, course: '数学', node: '入门', ex: 'q', answer: 'b',
       correct: false, judge: 'quiz', predicted: '不会', elapsed_s: 40,
     })
-    const r = await engine.sedimentSettle()
+    const r = await engine.sched2.sedimentSettle()
     assert.deepEqual(r.wrote.sort(), ['calibration', 'speed_resilience'])
     const fold = await engine.sched2.sedimentFold()
     assert.equal(fold.weekly.calibration?.[0]?.week, weekOf(week))
@@ -279,7 +279,7 @@ test('sedimentSettle：上一完整学习周的校准与速度韧性出生即写
 
     // 同周幂等：重复结算不重写正典（kataOpen 每次打开都会触发结算）
     const before = (await engine.sched2.sedimentFold()).counts
-    const r2 = await engine.sedimentSettle()
+    const r2 = await engine.sched2.sedimentSettle()
     assert.deepEqual(r2.wrote, [])
     assert.ok(r2.skipped.every(x => /已结算/.test(x.reason)))
     const after = await engine.sched2.sedimentFold()

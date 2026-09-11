@@ -203,7 +203,7 @@ test('定位反馈：判词解析入 E 档案；解析失败零副作用；canon
 
 test('存成我的卡：默认再讲一遍；挖空重述需带 {{}}；同内容去重', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
-    const r1 = await engine.explainArchiveCard('数学', '入门', {
+    const r1 = await engine.learner.explainArchiveCard('数学', '入门', {
       content: '等差求和 = (a₁+aₙ)×n÷2，倒序相加每对和相等。',
       section: 's2',
     })
@@ -212,7 +212,7 @@ test('存成我的卡：默认再讲一遍；挖空重述需带 {{}}；同内容
     assert.match(String(await cardFile(engine)), /source_section: 例题：应用/)
 
     // 挖空重述：合法 {{}} 通过
-    const r2 = await engine.explainArchiveCard('数学', '入门', {
+    const r2 = await engine.learner.explainArchiveCard('数学', '入门', {
       kind: 'cloze_rewrite',
       content: '末项公式 {{a₁+(n−1)d}}——到第 1 个不加。',
     })
@@ -220,13 +220,13 @@ test('存成我的卡：默认再讲一遍；挖空重述需带 {{}}；同内容
 
     // 挖空缺 {{}} 拒绝；同内容重复拒绝
     await assert.rejects(
-      () => engine.explainArchiveCard('数学', '入门', { kind: 'cloze_rewrite', content: '没有挖空' }),
+      () => engine.learner.explainArchiveCard('数学', '入门', { kind: 'cloze_rewrite', content: '没有挖空' }),
       /挖空/)
     await assert.rejects(
-      () => engine.explainArchiveCard('数学', '入门', { content: '等差求和 = (a₁+aₙ)×n÷2，倒序相加每对和相等。' }),
+      () => engine.learner.explainArchiveCard('数学', '入门', { content: '等差求和 = (a₁+aₙ)×n÷2，倒序相加每对和相等。' }),
       /同内容卡已存在/)
     await assert.rejects(
-      () => engine.explainArchiveCard('数学', '入门', { content: '   ' }),
+      () => engine.learner.explainArchiveCard('数学', '入门', { content: '   ' }),
       /内容为空/)
   })
 })
@@ -256,7 +256,7 @@ test('纯函数缝：自注反馈指令与默认卡面提示（对照要点、�
 
 test('加我的理解：AI 对照该节要点给定位反馈 → 判词入 E 档案 + 成卡（节锚点）', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
-    const r = await engine.learnerNoteAdd('数学', '入门', {
+    const r = await engine.learner.learnerNoteAdd('数学', '入门', {
       content: '等差数列就是每一步加固定的数，比如 2、4、6。',
       kind: 'recall_cue',
       section: 's1',
@@ -285,15 +285,15 @@ test('加我的理解：AI 对照该节要点给定位反馈 → 判词入 E 档
     assert.match(archive[0]!.excerpt ?? '', /每一步加固定的数/)
 
     // 三种卡面至少一种可建已证；挖空卡与自注讲解卡同通道可建
-    await engine.learnerNoteAdd('数学', '入门', {
+    await engine.learner.learnerNoteAdd('数学', '入门', {
       content: '求和公式 {{(a₁+aₙ)×n÷2}} 是核心', kind: 'cloze_rewrite',
     }, async () => VALID_JSON)
-    await engine.learnerNoteAdd('数学', '入门', {
+    await engine.learner.learnerNoteAdd('数学', '入门', {
       content: '我理解这一节在讲把加法转成乘法。', kind: 'self_explain',
     }, async () => VALID_JSON)
 
     // 节锚点映射不上（坏节 id）：对照面为空并随 prompt 明示——不静默退化为全节要点
-    await engine.learnerNoteAdd('数学', '入门', {
+    await engine.learner.learnerNoteAdd('数学', '入门', {
       content: '锚点测试。', section: 's99',
     }, async (prompt) => {
       assert.match(prompt, /「s99」/)
@@ -316,16 +316,16 @@ test('加我的理解：AI 对照该节要点给定位反馈 → 判词入 E 档
 test('加我的理解：AI 判词不可解析 → 卡与判词零落盘（ADR-0004 事务性）；非法卡面拒绝', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
     await assert.rejects(
-      () => engine.learnerNoteAdd('数学', '入门', { content: '我的理解' }, async () => '模型抽风'),
+      () => engine.learner.learnerNoteAdd('数学', '入门', { content: '我的理解' }, async () => '模型抽风'),
       /未存档/)
     assert.ok(!existsSync(join(engine.paths.learnerCardsDir('math'), '入门.yaml')), '卡未落盘')
     assert.equal((await engine.store.eArchiveAll()).length, 0)
 
     await assert.rejects(
-      () => engine.learnerNoteAdd('数学', '入门', { content: 'x', kind: 'bad_kind' as never }, async () => VALID_JSON),
+      () => engine.learner.learnerNoteAdd('数学', '入门', { content: 'x', kind: 'bad_kind' as never }, async () => VALID_JSON),
       /卡面只能是/)
     await assert.rejects(
-      () => engine.learnerNoteAdd('数学', '入门', { content: '   ' }, async () => VALID_JSON),
+      () => engine.learner.learnerNoteAdd('数学', '入门', { content: '   ' }, async () => VALID_JSON),
       /内容为空|为空/)
     assert.equal((await engine.store.eArchiveAll()).length, 0)
   })
@@ -333,7 +333,7 @@ test('加我的理解：AI 判词不可解析 → 卡与判词零落盘（ADR-00
 
 test('我的卡管理面：归档/恢复（E 池内部动作，canonical 零写入）', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
-    const r = await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A。' })
+    const r = await engine.learner.explainArchiveCard('数学', '入门', { content: '讲稿 A。' })
     await engine.learner.learnerCardArchive('数学', '入门', r.id, true)
     let q = await engine.learner.learnerQueue('数学')
     assert.equal(q.total, 0, '归档卡出队')
@@ -349,8 +349,8 @@ test('我的卡管理面：归档/恢复（E 池内部动作，canonical 零写�
 
 test('我的卡队列与自评：新卡入队→首推到期→一卡一天一次；canonical 零掺入', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
-    await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A：求和公式的来历。' })
-    await engine.explainArchiveCard('数学', '入门', { content: '讲稿 B：末项公式的来历。' })
+    await engine.learner.explainArchiveCard('数学', '入门', { content: '讲稿 A：求和公式的来历。' })
+    await engine.learner.explainArchiveCard('数学', '入门', { content: '讲稿 B：末项公式的来历。' })
 
     // 新卡（从未调度）入队，due 为空
     const q1 = await engine.learner.learnerQueue('数学')
@@ -393,7 +393,7 @@ test('我的卡队列与自评：新卡入队→首推到期→一卡一天一�
 
 test('我的卡汇入复习队列（ADR-0021）：新卡队尾首推、到期卡入队、定向入口可见、复习日志零掺入', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
-    await engine.explainArchiveCard('数学', '入门', { content: '讲稿 A：求和公式的来历。' })
+    await engine.learner.explainArchiveCard('数学', '入门', { content: '讲稿 A：求和公式的来历。' })
 
     // 未调度新卡：due 空、R 满档落队尾，learner 字段随卡带出（UI 分面渲染依据）
     const q1 = await engine.content2.reviewQueue()

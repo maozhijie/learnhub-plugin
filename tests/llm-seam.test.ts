@@ -78,7 +78,7 @@ const NOTE_WITH_BODY = [
 test('金样本回放：固定回放假实现驱动出题全链，同种子 vault 产物确定性一致', async () => {
   const run = () => withVault({ tag: 'llm-seam-gold', notes: { 入门: NOTE_WITH_BODY } }, async ({ engine, paths }) => {
     const fake = replayFake(GOLD_BANK)
-    const r = await engine.questionGenerate('数学', '入门', undefined, fake)
+    const r = await engine.bank2.questionGenerate('数学', '入门', undefined, fake)
     // 拼装证据：提示词带内置模板、节点正文与难度锚定段——组装确实发生且可断言
     assert.equal(fake.calls.length, 1)
     assert.match(fake.calls[0].prompt, /金样本题一|自然数/)
@@ -116,7 +116,7 @@ test('脚本化应答：判卷解析失败自动重问一次走同一缝，第�
       '（模型这次答非所问，完全不是 JSON）',
       JSON.stringify({ score: 0.8, feedback: '要点都答到了；举例再具体些。' }),
     ])
-    const r = await engine.questionAnswer(fake, '数学', '入门', 'a1', '质数就是只能被 1 和自己整除的数，比如 2、3。', 30)
+    const r = await engine.content2.questionAnswer(fake, '数学', '入门', 'a1', '质数就是只能被 1 和自己整除的数，比如 2、3。', 30)
     assert.equal(fake.calls.length, 2, '解析失败恰好重问一次')
     assert.match(fake.calls[1].prompt, /重判要求/, '重问带纠偏指令')
     assert.equal(r.score, 80, '第二答应答定局（0.8 → 100 分制 80）')
@@ -155,7 +155,7 @@ test('档位沿缝可观测：加我的理解恒 fast 档、回执评审恒 deep
       advice: '可再举一个非质数的反例（如 4 = 2×2）对照。',
       reply: '**对**：定义准确。',
     }))
-    await engine.learnerNoteAdd('数学', '入门', { content: '质数是只有两个因数的数。', kind: 'recall_cue' }, fake)
+    await engine.learner.learnerNoteAdd('数学', '入门', { content: '质数是只有两个因数的数。', kind: 'recall_cue' }, fake)
     assert.equal(fake.calls.length, 1)
     assert.equal(fake.calls[0].effort, 'fast', '自注反馈 = 机械调用，缝上声明 fast 档')
   })
@@ -173,7 +173,7 @@ test('档位沿缝可观测：加我的理解恒 fast 档、回执评审恒 deep
       verdict: '节奏稳',
       errors: [{ point: '要点A', issue: '音程听反', advice: '先定基准音' }],
     }))
-    await engine.receiptSubmit('数学', '练耳', { kind: 'text', material: '今天练了 30 分钟音程听辨' }, fake)
+    await engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: '今天练了 30 分钟音程听辨' }, fake)
     assert.equal(fake.calls.length, 1)
     assert.equal(fake.calls[0].effort, 'deep', '回执评审带逐条拆解，缝上声明 deep 档')
   })

@@ -76,7 +76,7 @@ test('评审解析：严格 JSON、围栏剥离、score clamp、缺字段 fail l
 test('回执全链：一次乐器练习回执走完 回执→评审→EMA；mode=full 落拆解', async () => {
   await withVault({ tag: 'receipt-chain', graph: GRAPH_PRACTICE, notes: { 练耳: {}, 乐理: {} } }, async h => {
     const llm = fakeLlm(0.8)
-    const r = await h.engine.receiptSubmit('数学', '练耳', { kind: 'text', material: '今天练了 30 分钟音程听辨' }, llm)
+    const r = await h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: '今天练了 30 分钟音程听辨' }, llm)
     assert.equal(r.index, 1)
     assert.equal(r.review_mode, 'full') // 首份永远完整评审
     assert.equal(r.next_full_in, null)
@@ -93,7 +93,7 @@ test('回执全链：一次乐器练习回执走完 回执→评审→EMA；mode
     assert.equal(receipts[0].score, 0.8)
     assert.equal(receipts[0].errors?.length, 1)
     // 第二份（#2 恰好也是完整位）：EMA 接力 0.8*0.7 + 0.5*0.3
-    const r2 = await h.engine.receiptSubmit('数学', '练耳', { kind: 'image', material: '练耳 App 截图路径 /imgs/x.png' }, fakeLlm(0.5))
+    const r2 = await h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'image', material: '练耳 App 截图路径 /imgs/x.png' }, fakeLlm(0.5))
     assert.equal(r2.review_mode, 'full')
     assert.deepEqual(r2.practice_ema, Math.round((0.8 * 0.7 + 0.5 * 0.3) * 1000) / 1000)
   })
@@ -101,18 +101,18 @@ test('回执全链：一次乐器练习回执走完 回执→评审→EMA；mode
 
 test('渐退生效：#3 起简要评审；force_full 越过；brief 丢弃拆解并预告', async () => {
   await withVault({ tag: 'receipt-fade', graph: GRAPH_PRACTICE, notes: { 练耳: {} } }, async h => {
-    await h.engine.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x1' }, fakeLlm(0.9))
-    await h.engine.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x2' }, fakeLlm(0.9))
-    const brief = await h.engine.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x3' }, fakeLlm(0.9))
+    await h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x1' }, fakeLlm(0.9))
+    await h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x2' }, fakeLlm(0.9))
+    const brief = await h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x3' }, fakeLlm(0.9))
     assert.equal(brief.review_mode, 'brief')
     assert.equal(brief.next_full_in, 1) // 下一份（#4）就是完整评审
     const receipts = await h.store.receiptsAll()
     assert.equal(receipts[2].errors, undefined) // brief 不落拆解
     // 学习者主动要完整评审：越过渐退曲线
-    const forced = await h.engine.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x4', force_full: true }, fakeLlm(0.9))
+    const forced = await h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x4', force_full: true }, fakeLlm(0.9))
     assert.equal(forced.review_mode, 'full')
     // 渐退状态面：per 主体计数 + 预告
-    const list = await h.engine.receiptList('数学', '练耳')
+    const list = await h.engine.learner.receiptList('数学', '练耳')
     assert.equal(list.total, 4)
     assert.equal(list.next_full_in, 3) // 下一站 #7
     assert.equal(list.receipts.every(x => x.course === '数学' && x.node === '练耳'), true)
@@ -121,7 +121,7 @@ test('渐退生效：#3 起简要评审；force_full 越过；brief 丢弃拆解
 
 test('红线：回执零 XP、零 FSRS 推进、不进复习队列；非实践节点拒绝', async () => {
   await withVault({ tag: 'receipt-redline', graph: GRAPH_PRACTICE, notes: { 练耳: {}, 乐理: {} } }, async h => {
-    await h.engine.receiptSubmit('数学', '练耳', { kind: 'signoff', material: '教练签核：进度良好' }, fakeLlm(0.7))
+    await h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'signoff', material: '教练签核：进度良好' }, fakeLlm(0.7))
     // 账本红线：journal/practice/review-log 零行
     assert.equal((await h.store.journalTail()).length, 0)
     assert.equal((await h.store.practiceAll()).length, 0)
@@ -131,16 +131,16 @@ test('红线：回执零 XP、零 FSRS 推进、不进复习队列；非实践�
     assert.equal(q.cards.length, 0)
     // 非实践节点（普通节点乐理）拒绝——v1 载体 = 实践节点
     await assert.rejects(
-      () => h.engine.receiptSubmit('数学', '乐理', { kind: 'text', material: 'x' }, fakeLlm(0.5)),
+      () => h.engine.learner.receiptSubmit('数学', '乐理', { kind: 'text', material: 'x' }, fakeLlm(0.5)),
       /实践节点/,
     )
     // 材料形态枚举守门
     await assert.rejects(
-      () => h.engine.receiptSubmit('数学', '练耳', { kind: 'video' as never, material: 'x' }, fakeLlm(0.5)),
+      () => h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'video' as never, material: 'x' }, fakeLlm(0.5)),
       /kind 只能是/,
     )
     await assert.rejects(
-      () => h.engine.receiptSubmit('数学', '练耳', { kind: 'text', material: '   ' }, fakeLlm(0.5)),
+      () => h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: '   ' }, fakeLlm(0.5)),
       /material 不能为空/,
     )
   })
@@ -149,7 +149,7 @@ test('红线：回执零 XP、零 FSRS 推进、不进复习队列；非实践�
 test('事务性：AI 输出不可解析 → 回执与 EMA 零落盘；坏流水 Broken 报出', async () => {
   await withVault({ tag: 'receipt-tx', graph: GRAPH_PRACTICE, notes: { 练耳: {} } }, async h => {
     await assert.rejects(
-      () => h.engine.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x' }, async () => '模型胡言乱语'),
+      () => h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x' }, async () => '模型胡言乱语'),
       /不是合法 JSON/,
     )
     assert.equal((await h.store.receiptsAll()).length, 0) // 回执未落
@@ -160,9 +160,9 @@ test('事务性：AI 输出不可解析 → 回执与 EMA 零落盘；坏流水 
     // 坏流水 = Broken（不静默吞：渐退曲线会数错位置）
     const { appendFile } = await import('node:fs/promises')
     await appendFile(h.paths.receiptLogPath, '这不是JSON\n', 'utf8')
-    await assert.rejects(() => h.engine.receiptList('数学', '练耳'), /Broken/)
+    await assert.rejects(() => h.engine.learner.receiptList('数学', '练耳'), /Broken/)
     await assert.rejects(
-      () => h.engine.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x' }, fakeLlm(0.5)),
+      () => h.engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x' }, fakeLlm(0.5)),
       /Broken/,
     )
   })
@@ -181,7 +181,7 @@ test('提示词模板：回执评审入 PROMPT_KINDS（可编辑、带版本标�
 test('文件缺失 = 合法空态（不判 Broken、不判 Missing）', async () => {
   await withVault({ tag: 'receipt-empty', graph: GRAPH_PRACTICE, notes: { 练耳: {} } }, async h => {
     assert.equal(existsSync(h.paths.receiptLogPath), false)
-    const list = await h.engine.receiptList('数学', '练耳')
+    const list = await h.engine.learner.receiptList('数学', '练耳')
     assert.equal(list.total, 0)
     assert.equal(list.receipts.length, 0)
     assert.equal(list.next_full_in, 1) // 与纯函数同口径：首份回执即完整评审

@@ -16,7 +16,7 @@ test('#117 定向补题：产物强制绑节 id、提示词只附该节正文、
     notes: { 入门: { body: SECTION_BODY.split('\n') } },
   }, async ({ engine }) => {
     const prompts: string[] = []
-    const r = await engine.questionGenerate('数学', '入门', undefined, async prompt => {
+    const r = await engine.bank2.questionGenerate('数学', '入门', undefined, async prompt => {
       prompts.push(prompt)
       // 模型照抄节 id
       return [
@@ -43,7 +43,7 @@ test('#117 section 归一化回填：模型写节标题（带/不带类型前缀
   await withVault({
     notes: { 入门: { body: SECTION_BODY.split('\n') } },
   }, async ({ engine, paths }) => {
-    const r = await engine.questionGenerate('数学', '入门', 1, async () => [
+    const r = await engine.bank2.questionGenerate('数学', '入门', 1, async () => [
       'node: 入门',
       'questions:',
       // 模型照抄了正文标题原文（带类型前缀）→ 归一化回填 s1
@@ -63,7 +63,7 @@ test('#117 无法归类的题拒收并报告：不入库、fail loud 不兜底�
   await withVault({
     notes: { 入门: { body: SECTION_BODY.split('\n') } },
   }, async ({ engine, paths }) => {
-    const r = await engine.questionGenerate('数学', '入门', 3, async () => [
+    const r = await engine.bank2.questionGenerate('数学', '入门', 3, async () => [
       'node: 入门',
       'questions:',
       '  - kind: true_false',
@@ -94,7 +94,7 @@ test('#117 找不到节正文 fail loud，不静默附全文', async () => {
     notes: { 入门: { body: SECTION_BODY.split('\n') } },
   }, async ({ engine }) => {
     await assert.rejects(
-      () => engine.questionGenerate('数学', '入门', undefined, async () => 'node: 入门\nquestions: []',
+      () => engine.bank2.questionGenerate('数学', '入门', undefined, async () => 'node: 入门\nquestions: []',
         { section: { id: 's9', title: '不存在的节' } }),
       /找不到节「不存在的节」/,
     )
@@ -107,7 +107,7 @@ test('#117 取消旗标逐题生效：取消后停止入库并抛取消', async 
   }, async ({ engine, paths }) => {
     let cancelled = false
     await assert.rejects(
-      () => engine.questionGenerate('数学', '入门', 3, async () => {
+      () => engine.bank2.questionGenerate('数学', '入门', 3, async () => {
         cancelled = true // 模型产出落定后、逐题入库前取消生效
         return [
           'node: 入门',

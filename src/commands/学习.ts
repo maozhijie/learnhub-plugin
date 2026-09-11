@@ -123,7 +123,7 @@ export const 学习域 = {
       node: { type: "string", description: "Node name", required: true },
       force: { type: "boolean", description: "true to bypass the accuracy gate" }
     },
-    engine: "nodeComplete",
+    engine: "sched2.nodeComplete",
     domain: "学习",
     channels: [
       {
@@ -437,7 +437,7 @@ export const 学习域 = {
       },
       predicted: { type: "string", description: "Learner's pre-answer JOL prediction (E4): 会 / 不会 / 没把握", read: "raw" }
     },
-    engine: "questionAnswer",
+    engine: "content2.questionAnswer",
     domain: "学习",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_question_answer" },

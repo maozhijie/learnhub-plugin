@@ -112,7 +112,7 @@ test('#8 archive is a separate operation and both normal and archive paths prese
 
 test('#8 evidence writes from answering still go through the derived-state channel', async () => {
   await withVault({ notes: { 入门: NOTE }, banks: { 入门: `${BANK}\n` } }, async ({ engine }) => {
-    const r = await engine.questionAnswer(async () => { throw new Error('objective question must not call AI') }, '数学', '入门', 'q1', 'A')
+    const r = await engine.content2.questionAnswer(async () => { throw new Error('objective question must not call AI') }, '数学', '入门', 'q1', 'A')
     assert.equal(r.correct, true)
     const bank = await engine.bank.load(engine.paths.courseRoot('math'), '入门')
     const q1 = bank.questions.find(q => q.id === 'q1')

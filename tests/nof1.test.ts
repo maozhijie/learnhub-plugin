@@ -161,7 +161,7 @@ test('全链路：模板发起→确认→分臂→推进带臂标注→报告�
     await assert.rejects(() => engine.lab.experimentApply(), /没有 pending/)
 
     // 推进一张卡 → 复习日志带臂标注；报告未达窗只报进度
-    await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
+    await engine.content2.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
     const recs = await engine.store.reviewLogAll()
     assert.equal(recs.length, 1)
     assert.deepEqual(recs[0]!.exp, { id: 1, arm: 'standard' }, '臂标注进复习日志')
@@ -193,7 +193,7 @@ test('#150 结局落沉淀：停=定稿——结局分析出生即写 nof1_outco
     const prop = await engine.lab.experimentPropose('band_default_std_vs_hard')
     await engine.graph.proposalApply('experiment', prop.proposal)
     // 一次真实推进（臂标注在案）→ 未达观察窗就停：正典如实落进度态，不造假结论
-    await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
+    await engine.content2.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
 
     const stopped = await engine.lab.experimentStop()
     assert.equal(stopped.status, 'stopped')
@@ -237,7 +237,7 @@ test('实验不改推进语义：同流程在有/无实验两 vault 间账本一
       return JSON.stringify(rest)
     }).join('\n') : ''
   const flow = async (engine: import('../src/engine/index.ts').LearnhubEngine) => {
-    await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
+    await engine.content2.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
     await engine.content2.questionForget('数学', '入门', 'a2', 8)
     const note = readFileSync(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
     const practice = stripTs(existsSync(engine.paths.practicePath) ? readFileSync(engine.paths.practicePath, 'utf8') : '')

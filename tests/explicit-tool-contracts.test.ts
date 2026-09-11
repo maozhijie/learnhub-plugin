@@ -80,9 +80,9 @@ test('#12 engine facade rejects invalid question counts before invoking the mode
   await withVault(CONTRACT_VAULT, async ({ engine }) => {
     const llm = async (): Promise<string> => { throw new Error('model must not be called') }
     for (const bad of [0, -1, 2.5, Number.NaN]) {
-      await assert.rejects(() => engine.questionGenerate('数学', '甲一', bad, llm), /count 必须是正整数/, String(bad))
+      await assert.rejects(() => engine.bank2.questionGenerate('数学', '甲一', bad, llm), /count 必须是正整数/, String(bad))
     }
-    const r = await engine.questionGenerate('数学', '甲一', undefined, async () => sixQuestions())
+    const r = await engine.bank2.questionGenerate('数学', '甲一', undefined, async () => sixQuestions())
     assert.equal(r.added, 6, 'omitted count must keep the existing default of 6')
     assert.equal(r.total, 6)
   })

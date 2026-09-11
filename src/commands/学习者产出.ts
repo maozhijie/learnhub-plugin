@@ -64,7 +64,7 @@ export const 学习者产出域 = {
       node: { type: "string", description: "Node name to scope mining/generation", read: "text" },
       max: { type: "number", description: "Max cards this run (default 5, cap 5)" }
     },
-    engine: "errorCardGenerate",
+    engine: "bank2.errorCardGenerate",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_error_card_generate" },
@@ -128,7 +128,7 @@ export const 学习者产出域 = {
       evidence: { type: "object", description: "source=auto only: {accuracy: 0-1, self_help?: count}", additionalProperties: true },
       note: { type: "string", description: "Free note (e.g. what was practiced, receipt reference)" }
     },
-    engine: "executionLog",
+    engine: "learner.executionLog",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_execution_log" }
@@ -369,7 +369,7 @@ export const 学习者产出域 = {
       cue: { type: "string", description: "Stable cue (time/place anchor), e.g. 早上刷完牙后", required: true },
       action: { type: "string", description: "Single concrete action, e.g. 做 5 道到期复习", required: true }
     },
-    engine: "kataToIntention",
+    engine: "learner.kataToIntention",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_kata_convert_intention" },
@@ -447,7 +447,7 @@ export const 学习者产出域 = {
       prompt: { type: "string", description: "Front prompt; a default is generated per kind when omitted", read: "text" },
       section: { type: "string", description: "Section id to anchor the card to a specific section", read: "text" }
     },
-    engine: "explainArchiveCard",
+    engine: "learner.explainArchiveCard",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_learner_card_add" },
@@ -563,7 +563,7 @@ export const 学习者产出域 = {
       course: { type: "string", description: "Course name", required: true },
       node: { type: "string", description: "Practice node name", required: true }
     },
-    engine: "receiptList",
+    engine: "learner.receiptList",
     domain: "学习者产出",
     channels: [
       {
@@ -584,7 +584,7 @@ export const 学习者产出域 = {
       material: { type: "string", description: "Receipt material: description, image path, export data, or signoff reference", required: true },
       force_full: { type: "boolean", description: "Learner explicitly asks for a full error-specific review now" }
     },
-    engine: "receiptSubmit",
+    engine: "learner.receiptSubmit",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_receipt_submit" }
@@ -683,7 +683,7 @@ export const 学习者产出域 = {
       kind: { type: "string", description: "Card face: recall_cue (default) / cloze_rewrite / self_explain", read: "text" },
       prompt: { type: "string", description: "Front prompt; a default is generated per kind when omitted", read: "text" }
     },
-    engine: "learnerNoteAdd",
+    engine: "learner.learnerNoteAdd",
     domain: "学习者产出",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_understanding_add" },

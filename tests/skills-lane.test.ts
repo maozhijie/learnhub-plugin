@@ -116,7 +116,7 @@ test('优化器混训门：执行事件 <400 排除、≥400 与题目事件混�
 test('执行事件全链：lane 推进 + 复习日志行 + journal XP 行 + streak 口径', async () => {
   await withVault({ tag: 'exec-log' }, async h => {
     await h.engine.learner.skillCreate('吉他')
-    const r = await h.engine.executionLog('吉他', { source: 'self', rating: 3, minutes: 25 })
+    const r = await h.engine.learner.executionLog('吉他', { source: 'self', rating: 3, minutes: 25 })
     assert.equal(r.rating, 3)
     assert.equal(r.kind, 'acquisition') // fresh 首练
     assert.equal(r.xp, 25)
@@ -148,36 +148,36 @@ test('执行事件全链：lane 推进 + 复习日志行 + journal XP 行 + stre
 
     // 一 lane 一学习日一次
     await assert.rejects(
-      () => h.engine.executionLog('吉他', { source: 'self', rating: 4, minutes: 10 }),
+      () => h.engine.learner.executionLog('吉他', { source: 'self', rating: 4, minutes: 10 }),
       /一 lane 一学习日一次/,
     )
 
     // auto 来源：证据映射；auto 无证据拒绝
     // （换技能绕开当日守门）
     await h.engine.learner.skillCreate('游泳')
-    const auto = await h.engine.executionLog('游泳', {
+    const auto = await h.engine.learner.executionLog('游泳', {
       source: 'auto', minutes: 40, evidence: { accuracy: 0.92, self_help: 2 }, note: '自由泳 25 米 × 8',
     })
     assert.equal(auto.rating, 3) // 4 带 -1（求助 2 次）
     const journal2 = await h.store.journalTail()
     assert.match(journal2[0].detail ?? '', /自由泳 25 米 × 8/) // note 随 XP 行留档
     await assert.rejects(
-      () => h.engine.executionLog('吉他', { source: 'auto', minutes: 10 }),
+      () => h.engine.learner.executionLog('吉他', { source: 'auto', minutes: 10 }),
       /可观测证据/,
     )
     await assert.rejects(
-      () => h.engine.executionLog('吉他', { source: 'self', minutes: 10 }), // 缺 rating
+      () => h.engine.learner.executionLog('吉他', { source: 'self', minutes: 10 }), // 缺 rating
       /1-4/,
     )
     // 小数评级静默取整会让 FSRS 丢乘子（ADR-0018 分数直喂禁止的近邻）：拒收
     await assert.rejects(
-      () => h.engine.executionLog('游泳', { source: 'self', rating: 2.5, minutes: 10 }),
+      () => h.engine.learner.executionLog('游泳', { source: 'self', rating: 2.5, minutes: 10 }),
       /整数/,
     )
     // minutes 校验：0 / 超 24h / 小数
-    await assert.rejects(() => h.engine.executionLog('游泳', { source: 'self', rating: 3, minutes: 0 }), /1–1440/)
-    await assert.rejects(() => h.engine.executionLog('游泳', { source: 'self', rating: 3, minutes: 1441 }), /1–1440/)
-    await assert.rejects(() => h.engine.executionLog('游泳', { source: 'self', rating: 3, minutes: 12.5 }), /1–1440/)
+    await assert.rejects(() => h.engine.learner.executionLog('游泳', { source: 'self', rating: 3, minutes: 0 }), /1–1440/)
+    await assert.rejects(() => h.engine.learner.executionLog('游泳', { source: 'self', rating: 3, minutes: 1441 }), /1–1440/)
+    await assert.rejects(() => h.engine.learner.executionLog('游泳', { source: 'self', rating: 3, minutes: 12.5 }), /1–1440/)
   })
 })
 
@@ -191,7 +191,7 @@ test('维持复活：帽到期事件记 maintenance，推完后生效到期 = �
     assert.equal(list.skills[0].due, addDays(TODAY, -3)) // (今天-10) + 7 维持帽
     assert.equal(list.skills[0].due_kind, 'maintenance')
 
-    const r = await h.engine.executionLog('吉他', { source: 'self', rating: 2, minutes: 15 })
+    const r = await h.engine.learner.executionLog('吉他', { source: 'self', rating: 2, minutes: 15 })
     assert.equal(r.kind, 'maintenance')
     const log = await h.store.reviewLogAll()
     assert.equal(log[0].event_kind, 'maintenance')
@@ -203,16 +203,16 @@ test('维持复活：帽到期事件记 maintenance，推完后生效到期 = �
 test('红线：执行事件不复用题目卡、不进复习队列、不写练习流水；归档拒绝', async () => {
   await withVault({ tag: 'exec-redline' }, async h => {
     await h.engine.learner.skillCreate('吉他')
-    await h.engine.executionLog('吉他', { source: 'self', rating: 3, minutes: 20 })
+    await h.engine.learner.executionLog('吉他', { source: 'self', rating: 3, minutes: 20 })
     await h.engine.learner.skillArchive('吉他', true)
     await assert.rejects(
-      () => h.engine.executionLog('吉他', { source: 'self', rating: 3, minutes: 20 }),
+      () => h.engine.learner.executionLog('吉他', { source: 'self', rating: 3, minutes: 20 }),
       /已归档/,
     )
     // 恢复后同日守门仍然生效（归档不能绕过一 lane 一日一次）
     await h.engine.learner.skillArchive('吉他', false)
     await assert.rejects(
-      () => h.engine.executionLog('吉他', { source: 'self', rating: 4, minutes: 5 }),
+      () => h.engine.learner.executionLog('吉他', { source: 'self', rating: 4, minutes: 5 }),
       /一 lane 一学习日一次/,
     )
 

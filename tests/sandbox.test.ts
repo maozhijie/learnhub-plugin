@@ -87,7 +87,7 @@ test('行为：给定计划可出分布推演视图；全路径零 canonical 写
       review: snap(engine.paths.reviewLogPath),
       practice: snap(engine.paths.practicePath),
     }
-    const doc = await engine.sandboxRun({ minutesPerDay: 60, weeks: 6 })
+    const doc = await engine.lab.sandboxRun({ minutesPerDay: 60, weeks: 6 })
     assert.equal(doc.wording, SANDBOX_WORDING, '措辞锁死口径随输出走')
     assert.equal(doc.runs, SANDBOX_RUNS)
     assert.equal(doc.plan.weeks, SANDBOX_DEFAULT_WEEKS)
@@ -101,12 +101,12 @@ test('行为：给定计划可出分布推演视图；全路径零 canonical 写
     }
     assert.ok(doc.assumptions.some(a => /1 分钟/.test(a)), '诚实假设清单随输出')
     // 同输入同输出（播种确定）
-    const again = await engine.sandboxRun({ minutesPerDay: 60, weeks: 6 })
+    const again = await engine.lab.sandboxRun({ minutesPerDay: 60, weeks: 6 })
     assert.deepEqual(again, doc)
     // 节点子集过滤
-    const scoped = await engine.sandboxRun({ minutesPerDay: 60, weeks: 2, nodes: ['入门'] })
+    const scoped = await engine.lab.sandboxRun({ minutesPerDay: 60, weeks: 2, nodes: ['入门'] })
     assert.deepEqual(scoped.scope.nodes, 1)
-    await assert.rejects(() => engine.sandboxRun({ minutesPerDay: 0 }), /正数/)
+    await assert.rejects(() => engine.lab.sandboxRun({ minutesPerDay: 0 }), /正数/)
 
     // 零写侧：推演前后 canonical 全部逐字节不变
     assert.equal(snap(engine.paths.courseNotePath('math', '基础', '入门')), before.note, '课程笔记不动')

@@ -73,7 +73,7 @@ function insertionYaml(opts: {
 /** 插入批受理：propose + apply（返回 apply 结果）。 */
 async function applyInsertion(engine: Awaited<ReturnType<typeof withVault>>['engine'], yaml: string): Promise<Record<string, unknown>> {
   const prop = await engine.graph.graphPropose('edit', yaml) as { id: number }
-  return await engine.graphApply('edit', prop.id) as Record<string, unknown>
+  return await engine.graph.graphApply('edit', prop.id) as Record<string, unknown>
 }
 
 /** 学习日种子：练习流水即课程学习日（ts 用本地正午——dayOfTs 按本地时区折叠）。 */
@@ -330,7 +330,7 @@ test('AC1 插入批受理：预注册随提案落字、apply 同事务落账本�
     for (let d = -2; d <= 0; d++) await engine.store.appendPractice(pRec(d, '入门'))
     const prop = await engine.graph.graphPropose('edit', insertionYaml({ days: '100', withConcept: true })) as { id: number; recheck?: unknown }
     assert.ok(((prop as { warns?: string[] }).warns ?? []).some(w => w.includes('clamp')), 'clamp 落受理回执 warn')
-    const applied = await engine.graphApply('edit', prop.id) as Record<string, unknown>
+    const applied = await engine.graph.graphApply('edit', prop.id) as Record<string, unknown>
     assert.deepEqual(applied.probation_registered, ['过渡'])
     assert.deepEqual(applied.recheck, { metric: '前进恢复', due: 20 }, 'days 100 clamp 到 20')
 
@@ -347,7 +347,7 @@ test('AC1 插入批受理：预注册随提案落字、apply 同事务落账本�
     assert.match(artifact, /metric: 前进恢复/)
 
     // 面板/agent 可见：在途节点（「实验中」取数）与三率面（statusJson 与 probationStatus 同核）
-    const status = await engine.probationStatus('数学')
+    const status = await engine.growth2.probationStatus('数学')
     assert.deepEqual(status.courses[0]!.in_flight, ['过渡'])
     assert.deepEqual(status.courses[0]!.overdue, [])
     assert.equal(status.courses[0]!.rates.inserted, 1)
@@ -388,11 +388,11 @@ test('AC2 行使闸：probation 在途行使只记流不回流（EMA/计数不�
     const noLlm = async () => { throw new Error('规则题不该调模型') }
 
     // 在途：过渡上作答——流水照记、evidence_gated 标记、EMA/计数不动
-    const gated = await engine.questionAnswer(noLlm, '数学', '过渡', 'q1', 'true', 30)
+    const gated = await engine.content2.questionAnswer(noLlm, '数学', '过渡', 'q1', 'true', 30)
     assert.equal(gated.correct, true)
     assert.equal(gated.evidence_gated, true)
     // 前进节点不受闸：同款作答照常回流
-    const normal = await engine.questionAnswer(noLlm, '数学', '入门', 'q0', 'true', 30)
+    const normal = await engine.content2.questionAnswer(noLlm, '数学', '入门', 'q0', 'true', 30)
     assert.equal(normal.evidence_gated, undefined)
 
     const practice = await engine.store.practiceAll()
@@ -411,14 +411,14 @@ test('AC2 行使闸：probation 在途行使只记流不回流（EMA/计数不�
     // 复诊窗推进（days 5）+ 下游答对 → proven → 闸 lifts
     for (let d = 1; d <= 5; d++) await engine.store.appendPractice(pRec(d, '入门'))
     await engine.store.appendPractice(pRec(2, '进阶'))
-    const settled = await engine.settleRechecks('数学', { today: localDay(5) })
+    const settled = await engine.growth2.settleRechecks('数学', { today: localDay(5) })
     const entry = settled.courses[0]!.settled[0]
     assert.equal(entry!.node, '过渡')
     assert.equal(entry!.outcome, 'proven')
     assert.equal(entry!.metric, '前进恢复')
 
     // proven 后恢复：同款作答照常回流
-    const lifted = await engine.questionAnswer(noLlm, '数学', '过渡', 'q1', 'false', 30)
+    const lifted = await engine.content2.questionAnswer(noLlm, '数学', '过渡', 'q1', 'false', 30)
     assert.equal(lifted.evidence_gated, undefined)
     const liftedFm = await fmOf('过渡')
     assert.match(liftedFm, /attempts: 1/)
@@ -440,7 +440,7 @@ test('AC1 到期结算·自动剪除：不达标 del_node 归档 + 原粗边恢�
     // 复诊期推进（5 学习日），但下游消费节点始终没有答对 → 前进未恢复
     for (let d = 1; d <= 5; d++) await engine.store.appendPractice(pRec(d, '入门'))
 
-    const r = await engine.settleRechecks('数学', { today: localDay(5) })
+    const r = await engine.growth2.settleRechecks('数学', { today: localDay(5) })
     assert.equal(r.courses[0]!.settled[0]!.outcome, '剪除')
     const settlePid = r.courses[0]!.settled[0]!.proposal
     assert.ok(settlePid, '剪除走自动提案（留痕）')
@@ -479,7 +479,7 @@ test('AC1 到期结算·自动剪除：不达标 del_node 归档 + 原粗边恢�
     assert.ok(appliedProps.some(p => p.id === settlePid && (p.decision_note ?? '').includes('快照')))
 
     // 幂等：再次结算无在途可决
-    const again = await engine.settleRechecks('数学', { today: localDay(6) })
+    const again = await engine.growth2.settleRechecks('数学', { today: localDay(6) })
     assert.equal(again.courses[0]!.settled.length, 0)
     void root
   })
@@ -543,7 +543,7 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
       }, nodeVaultFs)
     }
     // 调速现势：通过率 1/3 < 0.5、插入率 4/7 > 0.5 → 插入批闸停；旁支 1 节（1/8=12.5%）放行
-    const view = await engine.probationStatus('数学')
+    const view = await engine.growth2.probationStatus('数学')
     assert.equal(view.courses[0]!.gate.insert_blocked, true)
     assert.match(view.courses[0]!.gate.insert_blocks.join(''), /复诊通过率/)
 
@@ -577,7 +577,7 @@ test('结算只遍历折叠后的在途条目：已决 (proposal,node) 的裁决
     await applyInsertion(engine, insertionYaml({ metric: '前进恢复', days: '5', withConcept: true }))
     for (let d = 1; d <= 5; d++) await engine.store.appendPractice(pRec(d, '入门'))
     await engine.store.appendPractice(pRec(2, '进阶'))
-    const first = await engine.settleRechecks('数学', { today: localDay(5) })
+    const first = await engine.growth2.settleRechecks('数学', { today: localDay(5) })
     assert.equal(first.courses[0]!.settled[0]!.outcome, 'proven')
 
     // 插入 B（过渡乙，卡点集中度降幅 days 5）：窗内错误持平 → 不达标剪除；
@@ -588,7 +588,7 @@ test('结算只遍历折叠后的在途条目：已决 (proposal,node) 的裁决
     const err = (d: number): PracticeRec => pRec(d, '入门', { qid: 'qE', correct: false })
     await engine.store.appendPractice(err(1))
     await engine.store.appendPractice(err(2))
-    const second = await engine.settleRechecks('数学', { today: localDay(5) })
+    const second = await engine.growth2.settleRechecks('数学', { today: localDay(5) })
     assert.deepEqual(second.courses[0]!.settled.map(s => [s.node, s.outcome]), [['过渡乙', '剪除']],
       '第二次结算只裁决 B——A 已决，不得复读重裁')
 

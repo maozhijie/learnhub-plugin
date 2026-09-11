@@ -94,7 +94,7 @@ test('AC1 种子全链：受理→人审→apply 落终点锚+目标类型，占
     const pending = await engine.graph.graphProposals('pending', 'seed')
     assert.equal(pending.length, 1)
 
-    const applied = await engine.graphApply('seed', r.id) as {
+    const applied = await engine.graph.graphApply('seed', r.id) as {
       course: string; endpoint: string; starts: string[]; declared: string; snapshot: number; findings: string[]
     }
     assert.equal(applied.endpoint, '用导数解决优化问题')
@@ -142,7 +142,7 @@ ops:
     pre: [求解一阶导数]
 `
     const gr = await engine.graph.graphPropose('edit', growth) as { id: number }
-    await engine.graphApply('edit', gr.id)
+    await engine.graph.graphApply('edit', gr.id)
     const store = new GraphStore(paths, paths.courseRoot('数学'), nodeVaultFs)
     const grown = await store.load()
     const endpoint = grown.flatMap(rg => rg.blocks.flatMap(b => b.nodes)).find(n => n.name === '用导数解决优化问题')!
@@ -164,7 +164,7 @@ test('AC2 覆盖锚定带块工作表；能力锚定带工作表受理被拒；�
     // coverage 全链
     const r = await engine.graph.graphPropose('seed', COVERAGE_SEED) as { id: number; worksheet?: number }
     assert.equal(r.worksheet, 2)
-    await engine.graphApply('seed', r.id)
+    await engine.graph.graphApply('seed', r.id)
     const anchor = await readAnchor(paths.anchorPath('数学'), nodeVaultFs)
     assert.equal(anchor!.goal_type, 'coverage')
     assert.equal(anchor!.worksheet.length, 2)
@@ -189,7 +189,7 @@ test('AC2 覆盖锚定带块工作表；能力锚定带工作表受理被拒；�
 test('AC3 完成判据读侧折叠：达标/不达标各一，宣告零写副作用；换终点只走种子提案、锚直改被拒', async () => {
   await withVault(SEED_VAULT, async ({ engine, root, paths }) => {
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-    await engine.graphApply('seed', r.id)
+    await engine.graph.graphApply('seed', r.id)
 
     // 不达标：终点未学（mastery 0）→ complete=false
     const before = await engine.courseCompletion({ name: '数学', root: '数学' })
@@ -268,7 +268,7 @@ starts:
 `
     const r2 = await engine.graph.graphPropose('seed', reseed) as { id: number; mode: string }
     assert.equal(r2.mode, 'reseed')
-    await engine.graphApply('seed', r2.id)
+    await engine.graph.graphApply('seed', r2.id)
     const anchor2 = await readAnchor(paths.anchorPath('数学'), nodeVaultFs)
     assert.equal(anchor2!.endpoint, '证明微积分基本定理')
     assert.equal(anchor2!.origin_proposal, r2.id)
@@ -316,7 +316,7 @@ test('AC4 先验喂料分流：≥0.7 未回应进 warns+审计可见；已回�
     assert.ok(r.warns?.some(w => w.includes('≥0.7 先验候选未被结构回应') && w.includes('认识变化率 ~ 直观理解积分')), '喂料分流可见非阻')
     assert.ok(!r.warns?.some(w => w.includes('认识变化率 ~ 用导数解决优化问题')), '占位边已回应的候选不告警')
 
-    await engine.graphApply('seed', r.id)
+    await engine.graph.graphApply('seed', r.id)
     // 审计可见：R17 WARN 落在持久图审计上
     const regions = await new GraphStore(paths, paths.courseRoot('数学'), nodeVaultFs).load()
     const graph = new Graph(regions)
@@ -353,7 +353,7 @@ test('data-check 终点锚盘点：未播种 Missing 全绿；在盘合法计数
 
     // 播种后：在盘且合法 → present=1 零 finding
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-    await engine.graphApply('seed', r.id)
+    await engine.graph.graphApply('seed', r.id)
     const after = await dataCheck(paths, Date.now(), nodeVaultFs)
     assert.equal(after.inventory.endpointAnchors.present, 1)
     assert.ok(!after.findings.some(f => f.area === 'endpoint_anchor'))

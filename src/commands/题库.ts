@@ -152,7 +152,7 @@ export const 题库域 = {
       target_ts: { type: "string", read: "raw" },
       reason: { type: "string", read: "raw" }
     },
-    engine: "questionDisputeApply",
+    engine: "bank2.questionDisputeApply",
     domain: "题库",
     channels: [
       {

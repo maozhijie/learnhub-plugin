@@ -77,7 +77,7 @@ test('#119 questionGenerate：注入已有题面；精确与近重复丢弃入�
     },
   }, async ({ engine, paths }) => {
     const prompts: string[] = []
-    const r = await engine.questionGenerate('数学', '入门', 3, async prompt => {
+    const r = await engine.bank2.questionGenerate('数学', '入门', 3, async prompt => {
       prompts.push(prompt)
       return [
         'node: 入门',

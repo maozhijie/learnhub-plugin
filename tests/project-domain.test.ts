@@ -224,20 +224,20 @@ test('里程碑产物流：首生直落；重生成自动转提案；apply 后�
     await engine.graph.projectApply(p1.id)
 
     const v1 = '## 给定\n\n空工程模板。\n\n## 待办\n\n安装依赖并运行。\n\n## 验收清单\n\n- [ ] 能运行 hello world\n\n## 支持\n\n命令清单见支持页。'
-    const w1 = await engine.projectMilestoneWrite('练耳日记', 'm1', v1)
+    const w1 = await engine.project.projectMilestoneWrite('练耳日记', 'm1', v1)
     assert.ok('written' in w1 && w1.written === '01-装好环境并跑通第一个程序.md')
     // 已生成后重复首生语义被拒（引导走提案）
     await assert.rejects(engine.projects.generateMilestone('练耳日记', 'm1', v1), /提案通道/)
 
     // 未过结构门 → MILESTONE_GATE_FAILED
     await assert.rejects(
-      engine.projectMilestoneWrite('练耳日记', 'm1', '## 待办\n\n缺三块。'),
+      engine.project.projectMilestoneWrite('练耳日记', 'm1', '## 待办\n\n缺三块。'),
       (err: unknown) => (err as { code?: string }).code === 'MILESTONE_GATE_FAILED',
     )
 
     // 重生成：已生成文件存在 → 自动转 pending 提案
     const v2 = v1.replace('空工程模板。', '空工程模板（v2 补充说明）。')
-    const w2 = await engine.projectMilestoneWrite('练耳日记', 'm1', v2)
+    const w2 = await engine.project.projectMilestoneWrite('练耳日记', 'm1', v2)
     assert.ok('proposed' in w2)
     const applied = await engine.graph.projectApply(w2.proposed)
     assert.equal(applied.kind, 'project_milestone')
@@ -260,7 +260,7 @@ test('红线：项目全路径零 canonical 写入——复习队列/XP 账本/�
     await engine.project.projectCreate({ name: '练耳日记', goal: '听辨音程' })
     const p1 = await engine.project.projectPlanPropose('练耳日记', PLAN_YAML('练耳日记'))
     await engine.graph.projectApply(p1.id)
-    await engine.projectMilestoneWrite('练耳日记', 'm1',
+    await engine.project.projectMilestoneWrite('练耳日记', 'm1',
       '## 给定\n\n空工程模板。\n\n## 待办\n\n安装依赖并运行。\n\n## 验收清单\n\n- [ ] 能运行 hello world\n\n## 支持\n\n命令清单。')
     await engine.project.projectSetTier('练耳日记', '骨架')
     await engine.project.projectSetLifecycle('练耳日记', 'paused')

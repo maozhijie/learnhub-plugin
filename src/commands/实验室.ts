@@ -120,7 +120,7 @@ export const 实验室域 = {
   'probation-settle': command({
     id: "probation-settle",
     args: {},
-    engine: "settleRechecks",
+    engine: "growth2.settleRechecks",
     domain: "实验室",
     channels: [
       {
@@ -144,7 +144,7 @@ export const 实验室域 = {
         items: { type: "string" }
       }
     },
-    engine: "sandboxRun",
+    engine: "lab.sandboxRun",
     domain: "实验室",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_sandbox" },

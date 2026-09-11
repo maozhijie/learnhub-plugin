@@ -12,7 +12,7 @@ test('未知提案 kind：受理门统一拒收且不落提案', async () => {
       /非法 kind/,
     )
     await assert.rejects(
-      engine.graphApply('skeleton' as never),
+      engine.graph.graphApply('skeleton' as never),
       /非法 kind/,
     )
     assert.deepEqual(await engine.store.loadProposals(), [])
@@ -131,7 +131,7 @@ starts:
     teaches: {变化率: 会用}
 `
     const seeded = await engine.graph.graphPropose('seed', seed) as { id: number }
-    await engine.graphApply('seed', seeded.id)
+    await engine.graph.graphApply('seed', seeded.id)
     const consolidate = (teaches: string, extraConcepts = ''): string => `course: 校验课
 note:
   operator: 巩固

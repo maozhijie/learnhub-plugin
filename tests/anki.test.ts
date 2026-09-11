@@ -292,7 +292,7 @@ test('导入回写：同日已在 vault 推进的题，其当日 Anki 事件跳�
     const anki = new FakeAnki()
     await engine.channels.ankiExportPush(anki)
     // 先在 vault 里推进 q1（练习流自动判卷答对 → rating 3）
-    const ans = await engine.questionAnswer(async () => { throw new Error('不该调模型') }, '数学', '入门', 'q1', 'A')
+    const ans = await engine.content2.questionAnswer(async () => { throw new Error('不该调模型') }, '数学', '入门', 'q1', 'A')
     assert.equal(ans.scheduled, true)
     const q1Before = await engine.bank2.questionGet('数学', '入门', 'q1')
     const fsrsBefore = (q1Before.question as { fsrs: { reps: number } }).fsrs

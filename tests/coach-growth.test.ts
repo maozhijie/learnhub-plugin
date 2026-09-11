@@ -99,7 +99,7 @@ function scriptFake(replies: string[]) {
 
 async function seedApplied(engine: Awaited<ReturnType<typeof withVault>>['engine']): Promise<void> {
   const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-  await engine.graphApply('seed', r.id)
+  await engine.graph.graphApply('seed', r.id)
 }
 
 /** 巩固门底座核对：种子的 teaches 已让「变化率」成为已教概念。 */
@@ -129,7 +129,7 @@ test('AC1 金样本全链：轻量段单次 fast 调用、提案应用、罗盘�
     await writeFile(compassPath, withAnn, 'utf8')
 
     const fake = replayFake(goldVerdict())
-    const r = await engine.coachGrowthBatch('数学', fake)
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
 
     // 组装与调用数基线：显然步恒 1 次调用、fast 档、轻量包（无终点锚/误解目录区块）
     assert.equal(fake.calls.length, 1, '调用数基线：显然步轻量段恒一次调用（无修复轮）')
@@ -174,7 +174,7 @@ test('AC2 两段式升级：分歧声明升级全量段（deep、六区块），
       goldVerdict({ disagreement: '轻量段看不到误解目录，插入判据不足——升级' }),
       goldVerdict({ operator: '插入', reason: '卡点集中度指向缺口，插入过渡节' }),
     ])
-    const r = await engine.coachGrowthBatch('数学', fake)
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
 
     // 升级路径可观测：恰两次调用（light/fast → full/deep），segments 逐步带算子
     // （全量段未再声明分歧——升级链到此为止，无仲裁段）
@@ -205,7 +205,7 @@ test('AC3 双沙盘仲裁：全量段仍真分歧 → 第三段带两份推演�
       goldVerdict({ operator: '插入', reason: '卡点集中度指向缺口', disagreement: '带着六区块仍然撕不动：插入补救 vs 直接前进' }),
       goldVerdict({ operator: '前进', reason: '推演代价可忽略，按教学判断沿终点推进' }),
     ])
-    const r = await engine.coachGrowthBatch('数学', fake)
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
 
     // 升级路径可观测：恰三次调用（light/fast → full/deep → arbitration/deep）；
     // 沙盘推演是读侧蒙特卡洛，不计 LLM 调用数
@@ -249,14 +249,14 @@ test('拒收零落盘：裁决未过受理门时罗盘与图零改动、零提�
       '  block: 起点块',
       '  pre: [不存在节点]',
     ] })
-    await assert.rejects(() => engine.coachGrowthBatch('数学', replayFake(bad)), /悬空|断边|不存在/)
+    await assert.rejects(() => engine.growth2.coachGrowthBatch('数学', replayFake(bad)), /悬空|断边|不存在/)
     assert.equal(await readFile(compassPath, 'utf8'), before, '提案被拒罗盘不落盘')
     assert.deepEqual(await engine.graph.graphProposals('pending'), [])
     assert.deepEqual(await engine.graph.graphProposals('applied', 'edit'), [], '零 edit 提案（种子提案除外）')
 
     // 路线门拒绝（route 带 "## " 标题劫持）：受理时就拒——零 pending、罗盘零改动
     const badRoute = goldVerdict({ route: '## 剩余路线\n\n- 冒充整页' })
-    await assert.rejects(() => engine.coachGrowthBatch('数学', replayFake(badRoute)), /路线门|标题/)
+    await assert.rejects(() => engine.growth2.coachGrowthBatch('数学', replayFake(badRoute)), /路线门|标题/)
     assert.equal(await readFile(compassPath, 'utf8'), before)
     assert.equal(
       await readFile(join(paths.centerRoot, 'state', 'journal.jsonl'), 'utf8'),
@@ -277,7 +277,7 @@ test('apply 失败自清：审计 ERROR 拦下 apply 时机器裁决不留 pendi
     const compassPath = paths.compassPath('数学')
     const before = await readFile(compassPath, 'utf8')
 
-    await assert.rejects(() => engine.coachGrowthBatch('数学', replayFake(goldVerdict())), /审计存在 ERROR/)
+    await assert.rejects(() => engine.growth2.coachGrowthBatch('数学', replayFake(goldVerdict())), /审计存在 ERROR/)
     assert.equal(await readFile(compassPath, 'utf8'), before, '罗盘零改动')
     const props = await engine.graph.graphProposals('rejected', 'edit')
     assert.equal(props.length, 1, 'apply 失败的机器裁决自清为 rejected')
@@ -306,7 +306,7 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
       concepts: ['- canonical: 极限'],
     })
     await assert.rejects(
-      () => engine.coachGrowthBatch('数学', replayFake(consolidateNew)),
+      () => engine.growth2.coachGrowthBatch('数学', replayFake(consolidateNew)),
       /巩固门|只引已教概念/,
     )
 
@@ -323,7 +323,7 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
         '  teaches: {变化率: 会用}',
       ],
     })
-    const ok = await engine.coachGrowthBatch('数学', replayFake(consolidateOk))
+    const ok = await engine.growth2.coachGrowthBatch('数学', replayFake(consolidateOk))
     assert.equal(ok.state, 'applied')
 
     // 前进批产新概念：不受巩固门限制（正常铸名通道）
@@ -339,7 +339,7 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
       ],
       concepts: ['- canonical: 极限'],
     })
-    const adv = await engine.coachGrowthBatch('数学', replayFake(advanceNew))
+    const adv = await engine.growth2.coachGrowthBatch('数学', replayFake(advanceNew))
     assert.equal(adv.state, 'applied')
     assert.equal(adv.applied!.created.join(','), '极限初步')
   })
@@ -365,7 +365,7 @@ starts:
     region: 基础
     block: 起点块
 `) as { id: number }
-    await engine.graphApply('seed', r.id)
+    await engine.graph.graphApply('seed', r.id)
     // 三个起点正文就绪（ready=3）；today 移出冷启动首周（required=3）→ 深度满足
     const { writeFile, mkdir } = await import('node:fs/promises')
     for (const node of ['认识变化率', '极限直觉', '函数图像']) {
@@ -383,13 +383,13 @@ starts:
       '  block: 起点块',
       '  pre: [认识变化率]',
     ] }))
-    const idle = await engine.coachGrowthBatch('数学', fake, { today: addDays(declared, 7)! })
+    const idle = await engine.growth2.coachGrowthBatch('数学', fake, { today: addDays(declared, 7)! })
     assert.equal(idle.state, 'idle')
     assert.equal(fake.calls.length, 0, '停摆是判据满足的自然结果——零调用')
     assert.ok(idle.check.ok)
 
     // force 越过停摆（测试/排障语义）：照常拉回合并受理
-    const forced = await engine.coachGrowthBatch('数学', fake, { force: true, today: addDays(declared, 7)! })
+    const forced = await engine.growth2.coachGrowthBatch('数学', fake, { force: true, today: addDays(declared, 7)! })
     assert.equal(forced.state, 'applied')
     assert.equal(fake.calls.length, 1)
     assert.match(await readFile(paths.compassPath('数学'), 'utf8'), /把变化率说成本质/)
@@ -404,7 +404,7 @@ test('零操作生长批：裁决=暂不产结构（ops: []）合法——罗盘
       reason: '结构已足，等内容生成跟上',
       ops: [],
     }))
-    const r = await engine.coachGrowthBatch('数学', fake)
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
     assert.equal(r.state, 'applied')
     assert.equal(r.applied!.ops, 0)
     assert.ok(r.applied!.compass_rewritten)
@@ -436,7 +436,7 @@ test('金样本回放闸：两族金样本首过（首过率对照、调用数�
     await seedApplied(engine)
     for (const verdict of [goldVerdict(), sideBranch]) {
       const fake = replayFake(verdict)
-      const r = await engine.coachGrowthBatch('数学', fake)
+      const r = await engine.growth2.coachGrowthBatch('数学', fake)
       assert.equal(fake.calls.length, 1, `首过基线：${r.proposal!.operator} 批一次调用过门`)
       assert.equal(r.state, 'applied')
     }
@@ -448,7 +448,7 @@ test('金样本回放闸：两族金样本首过（首过率对照、调用数�
     await withVault(SEED_VAULT, async ({ engine }) => {
       await seedApplied(engine)
       const fake = replayFake(goldVerdict())
-      await engine.coachGrowthBatch('数学', fake)
+      await engine.growth2.coachGrowthBatch('数学', fake)
       prompts.push(fake.calls[0]!.prompt)
     })
   }
@@ -475,7 +475,7 @@ starts:
     region: 基础
     block: 起点块
 `) as { id: number }
-    await engine.graphApply('seed', r.id)
+    await engine.graph.graphApply('seed', r.id)
     // 三个起点正文就绪（ready=3）；today 移出冷启动首周（required=3）→ 深度满足
     const { writeFile, mkdir } = await import('node:fs/promises')
     for (const node of ['认识变化率', '极限直觉', '函数图像']) {
@@ -494,12 +494,12 @@ starts:
       '  pre: [认识变化率]',
     ] })
     // 对照：就绪深度满足 + 无注入 → 停摆零调用
-    const idle = await engine.coachGrowthBatch('数学', replayFake(verdict), { today: addDays(declared, 7)! })
+    const idle = await engine.growth2.coachGrowthBatch('数学', replayFake(verdict), { today: addDays(declared, 7)! })
     assert.equal(idle.state, 'idle')
     // 计划修订注入 = 显式的重新裁决请求：check.ok 不短路，注入块随包进轻量段提示词
     const inject = '- 补支：里程碑 m2「双音听辨」关联「数学/即兴入门」图上尚无——沿足迹朝它长最小必要分支'
     const fake = replayFake(verdict)
-    const round = await engine.coachGrowthBatch('数学', fake, { today: addDays(declared, 7)!, inject })
+    const round = await engine.growth2.coachGrowthBatch('数学', fake, { today: addDays(declared, 7)!, inject })
     assert.equal(round.state, 'applied')
     assert.equal(fake.calls.length, 1, '注入回合照走两段式（显然步恒 1 次调用）')
     assert.match(fake.calls[0]!.prompt, /里程碑计划修订注入（项目消费拉动的生长请求）/)
@@ -532,7 +532,7 @@ test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错�
       goldVerdict({ ops: BAD_REGION_OPS }),
       goldVerdict(),
     ])
-    const r = await engine.coachGrowthBatch('数学', fake)
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
 
     // 调用数基线：轻量段 1 次 + 回灌重裁段恰 1 次（deep 档）
     assert.equal(fake.calls.length, 2, '受理门拒收后恰回灌重裁一次')
@@ -558,7 +558,7 @@ test('#157 回灌仍败：重裁产出再被受理门拒收 → 原样失败且�
     const malformed = goldVerdict({ ops: BAD_REGION_OPS })
     const fake = scriptFake([malformed, malformed])
     await assert.rejects(
-      engine.coachGrowthBatch('数学', fake),
+      engine.growth2.coachGrowthBatch('数学', fake),
       (err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
         assert.match(msg, /回灌重裁一轮仍未通过/, '失败显式声明死因形态')

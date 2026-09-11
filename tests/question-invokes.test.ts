@@ -79,7 +79,7 @@ const GOLD_MISSING = GOLD.replace('\n    invokes: 自然数', '')
 test('金样本回放：概念清单注入 + 出生打标入库 + invokes 覆盖率投影（出生 w）', async () => {
   await withVault(VAULT, async ({ engine }) => {
     const fake = replayFake(GOLD)
-    const r = await engine.questionGenerate('数学', '乙', undefined, fake)
+    const r = await engine.bank2.questionGenerate('数学', '乙', undefined, fake)
     // 拼装证据：提示词附概念清单（本节 teaches ∪ 前置闭包 teaches）
     assert.equal(fake.calls.length, 1, '全部题目已带 invokes → 不触发补标调用')
     assert.match(fake.calls[0].prompt, /## 概念清单/)
@@ -96,7 +96,7 @@ test('金样本回放：概念清单注入 + 出生打标入库 + invokes 覆盖
 test('修复一次：缺 invokes 的题经恰一次补标调用回填后入库', async () => {
   await withVault(VAULT, async ({ engine }) => {
     const fake = scriptFake([GOLD_MISSING, '1: 自然数'])
-    const r = await engine.questionGenerate('数学', '乙', undefined, fake)
+    const r = await engine.bank2.questionGenerate('数学', '乙', undefined, fake)
     assert.equal(fake.calls.length, 2, '主调用 + 恰一次补标调用')
     assert.match(fake.calls[1].prompt, /恰一枚/)
     assert.match(fake.calls[1].prompt, /概念清单/)
@@ -111,7 +111,7 @@ test('修复一次：缺 invokes 的题经恰一次补标调用回填后入库',
 test('负路径：修复一次仍空 → 拒收并报告；全军仍空 → 整批拒绝入库', async () => {
   await withVault(VAULT, async ({ engine }) => {
     const fake = scriptFake([GOLD_MISSING, '我标注不了'])
-    const r = await engine.questionGenerate('数学', '乙', undefined, fake)
+    const r = await engine.bank2.questionGenerate('数学', '乙', undefined, fake)
     assert.equal(fake.calls.length, 2, '修复恰好一次，不重试')
     assert.equal(r.added, 1, '已带 invokes 的题照常入库')
     assert.equal(r.rejected.length, 1)
@@ -122,7 +122,7 @@ test('负路径：修复一次仍空 → 拒收并报告；全军仍空 → 整�
     const allMissing = GOLD.replace('\n    invokes: 自然数', '').replace('\n    invokes: 质数', '')
     const fake = scriptFake([allMissing, '~'])
     await assert.rejects(
-      () => engine.questionGenerate('数学', '乙', undefined, fake),
+      () => engine.bank2.questionGenerate('数学', '乙', undefined, fake),
       /全部未过校验门/,
       '全军缺 invokes 且修复失败 → 一道都没入库',
     )
@@ -133,7 +133,7 @@ test('invokes 未在册 → 拒收（#141 同门）；清单缺席（无 teaches
   await withVault(VAULT, async ({ engine }) => {
     const unregistered = GOLD.replace('invokes: 自然数', 'invokes: 集合')
     const fake = replayFake(unregistered)
-    const r = await engine.questionGenerate('数学', '乙', undefined, fake)
+    const r = await engine.bank2.questionGenerate('数学', '乙', undefined, fake)
     assert.equal(r.added, 1, '在册的质数照常入库')
     assert.ok(r.rejected.some(x => /invokes 概念「集合」未在概念登记表在册/.test(x.reason)))
   })
@@ -143,7 +143,7 @@ test('invokes 未在册 → 拒收（#141 同门）；清单缺席（无 teaches
   }, async ({ engine }) => {
     const noInvokes = GOLD.replace(/\n    invokes: \S+/g, '')
     const fake = replayFake(noInvokes)
-    const r = await engine.questionGenerate('数学', '乙', undefined, fake)
+    const r = await engine.bank2.questionGenerate('数学', '乙', undefined, fake)
     assert.doesNotMatch(fake.calls[0].prompt, /## 概念清单（invokes 只能从这里选/, '无 teaches → 清单缺席 → 门不激活')
     assert.equal(r.added, 2, '清单缺席时 invokes 缺席合法（Missing），不拒收')
     assert.deepEqual(r.enc, [], '零 invokes → 零投影（合法空态）')

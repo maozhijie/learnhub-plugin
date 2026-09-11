@@ -99,7 +99,7 @@ test('优化器：<400 条真实日志 → 不训练不写回，返回原因', a
     let trained = 0
     const impl = fakeImpl({ parameters: defaultParams() })
     const spy: OptimizerImpl = { train: async s => { trained++; return impl.train(s) }, evaluate: impl.evaluate }
-    const r = await engine.optimizeFsrsParams(spy)
+    const r = await engine.sched2.optimizeFsrsParams(spy)
     assert.equal(r.status, 'skipped')
     assert.match(r.reason ?? '', /不足 400 条/)
     assert.equal(trained, 0)
@@ -111,7 +111,7 @@ test('优化器：评估优于默认参数 → 学习者级一套写回全部启
     await seedRealLogs(engine)
     const trained = Array.from({ length: FSRS6_PARAM_COUNT }, (_, i) => 1 + i * 0.1)
     const impl = fakeImpl({ parameters: trained })
-    const r = await engine.optimizeFsrsParams(impl)
+    const r = await engine.sched2.optimizeFsrsParams(impl)
     assert.equal(r.status, 'written')
     assert.deepEqual(r.written, ['数学', '物理'])
     for (const root of ['math', 'phys']) {
@@ -141,7 +141,7 @@ test('优化器：评估劣于现参 → 不写回（现参文件保持不动）
     // 新参评 0.9、基线（现参）评 0.7 → 更差
     const impl = fakeImpl({ parameters: defaultParams(), trainedMetrics: { logLoss: 0.9, rmseBins: 0.3 }, baselineMetrics: { logLoss: 0.7, rmseBins: 0.25 } })
     const before = await readFile(engine.paths.fsrsParamsPath('math'), 'utf8')
-    const r = await engine.optimizeFsrsParams(impl)
+    const r = await engine.sched2.optimizeFsrsParams(impl)
     assert.equal(r.status, 'skipped')
     assert.match(r.reason ?? '', /未优于现参数/)
     assert.equal(await readFile(engine.paths.fsrsParamsPath('math'), 'utf8'), before)
@@ -153,7 +153,7 @@ test('优化器：训练产出长度不是 21 → 拒绝写回', async () => {
   await withVault({ registry: REGISTRY, graph: null }, async ({ engine }) => {
     await seedRealLogs(engine)
     const impl = fakeImpl({ parameters: [1, 2, 3] })
-    const r = await engine.optimizeFsrsParams(impl)
+    const r = await engine.sched2.optimizeFsrsParams(impl)
     assert.equal(r.status, 'skipped')
     assert.match(r.reason ?? '', /不是 FSRS-6 的 21 个/)
   })

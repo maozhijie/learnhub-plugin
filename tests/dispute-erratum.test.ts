@@ -38,7 +38,7 @@ test('rekey：新键重判原作答 → 改判对，XP 补记、对错/EMA 修�
     notes: { 入门: { stage: 'ready', practice: { attempts: 0, correct: 0, ema: 0.7 } } },
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
-    const wrong = await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
+    const wrong = await engine.content2.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
     assert.equal(wrong.correct, false)
     assert.equal(wrong.diff, '漏选了 C，多选了 B')
 
@@ -46,7 +46,7 @@ test('rekey：新键重判原作答 → 改判对，XP 补记、对错/EMA 修�
     assert.equal(review.verdict, 'key_error')
     assert.ok(review.target_ts, '复核返回被冲正作答的 ts')
 
-    const r = await engine.questionDisputeApply('数学', '入门', 'q13', 'rekey', {
+    const r = await engine.bank2.questionDisputeApply('数学', '入门', 'q13', 'rekey', {
       targetTs: review.target_ts,
       revision: { answer: ['A', 'B'], explanation: '新解析。' },
     })
@@ -92,8 +92,8 @@ test('rekey：原作答也不符合新键 → 只修键，判罚与证据净零�
     notes: { 入门: { stage: 'ready', practice: { attempts: 0, correct: 0, ema: 0.7 } } },
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
-    await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
-    const r = await engine.questionDisputeApply('数学', '入门', 'q13', 'rekey', {
+    await engine.content2.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
+    const r = await engine.bank2.questionDisputeApply('数学', '入门', 'q13', 'rekey', {
       revision: { answer: ['B', 'C'] },
     })
     assert.equal(r.correct_now, false)
@@ -114,11 +114,11 @@ test('void：作答作废——XP 净值归零（乱猜罚返还）、attempts�
     notes: { 入门: { stage: 'ready', practice: { attempts: 0, correct: 0, ema: 0.7 } } },
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
-    const wrong = await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
+    const wrong = await engine.content2.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
     const before = (await engine.bank.load(engine.paths.courseRoot('math'), '入门')).questions[0]
     const fsBefore = before.fsrs
 
-    const r = await engine.questionDisputeApply('数学', '入门', 'q13', 'void', { reason: '题面超纲' })
+    const r = await engine.bank2.questionDisputeApply('数学', '入门', 'q13', 'void', { reason: '题面超纲' })
     assert.equal(r.verdict, 'defective')
     assert.equal(r.correct_now, null)
     assert.equal(r.xp, 0)
@@ -146,9 +146,9 @@ test('乱猜判错的 void 返还 −1 XP', async () => {
     notes: { 入门: { stage: 'ready' } },
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
-    const guessed = await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 2)
+    const guessed = await engine.content2.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 2)
     assert.equal(guessed.xp, -1)
-    await engine.questionDisputeApply('数学', '入门', 'q13', 'void', {})
+    await engine.bank2.questionDisputeApply('数学', '入门', 'q13', 'void', {})
     const xp = await engine.sched2.xpStatus()
     assert.equal(xp.today_xp, 0, '乱猜 −1 随作废返还')
   })
@@ -159,10 +159,10 @@ test('复核说题没问题仍可强制豁免（overridden），题保留在调�
     notes: { 入门: { stage: 'ready' } },
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
-    await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
+    await engine.content2.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
     const review = await engine.bank2.questionDisputeReview(async () => reviewReply('ok', undefined), '数学', '入门', 'q13')
     assert.equal(review.verdict, 'ok')
-    const r = await engine.questionDisputeApply('数学', '入门', 'q13', 'overridden', { reason: '仍不服' })
+    const r = await engine.bank2.questionDisputeApply('数学', '入门', 'q13', 'overridden', { reason: '仍不服' })
     assert.equal(r.verdict, 'overridden')
     assert.equal(r.correct_now, null)
     const errata = await engine.store.erratumAll()
@@ -177,7 +177,7 @@ test('复核输出不可解析：重试一次后 fail loud，不改任何数据'
     notes: { 入门: { stage: 'ready' } },
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
-    await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
+    await engine.content2.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
     let calls = 0
     await assert.rejects(
       () => engine.bank2.questionDisputeReview(async () => { calls++; return '模型胡言乱语' }, '数学', '入门', 'q13'),
@@ -206,13 +206,13 @@ test('AI 判卷题型不走申诉（Q8 裁定：评分异议走讲解通道）',
     banks: { 入门: `${bankTextReflection()}\n` },
   }, async ({ engine }) => {
     // reflection 判错（AI 判卷 0.2 分 < 0.6 及格线）
-    await engine.questionAnswer(async () => JSON.stringify({ score: 0.2, feedback: '不完整' }), '数学', '入门', 'a1', '我的回答', 30)
+    await engine.content2.questionAnswer(async () => JSON.stringify({ score: 0.2, feedback: '不完整' }), '数学', '入门', 'a1', '我的回答', 30)
     await assert.rejects(
       () => engine.bank2.questionDisputeReview(async () => reviewReply('ok'), '数学', '入门', 'a1'),
       /不走申诉/,
     )
     await assert.rejects(
-      () => engine.questionDisputeApply('数学', '入门', 'a1', 'void', {}),
+      () => engine.bank2.questionDisputeApply('数学', '入门', 'a1', 'void', {}),
       /不走申诉/,
     )
     assert.equal((await engine.store.erratumAll()).length, 0)
@@ -263,7 +263,7 @@ test('写入侧多选 ≥2 正确项门禁：addQuestion 拒收；生成路径�
       '    answer: ["A"]',
       '    difficulty: 1',
     ].join('\n')
-    const r = await engine.questionGenerate('数学', '入门', 2, async () => yaml)
+    const r = await engine.bank2.questionGenerate('数学', '入门', 2, async () => yaml)
     assert.equal(r.added, 1)
     assert.equal(r.rejected.length, 1)
     assert.match(r.rejected[0].reason, /至少 2 个/)

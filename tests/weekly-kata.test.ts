@@ -128,7 +128,7 @@ test('#114 「下一实验」出口：一键转 N-of-1 提案 / 执行意图，�
 
     const exp = await engine.learner.kataToExperiment(weekStart, 'band_default_std_vs_hard')
     assert.ok(exp.proposal >= 1)
-    const int = await engine.kataToIntention(weekStart, { course: '数学', node: '入门', cue: '早上刷完牙后', action: '做 5 道到期复习' })
+    const int = await engine.learner.kataToIntention(weekStart, { course: '数学', node: '入门', cue: '早上刷完牙后', action: '做 5 道到期复习' })
     assert.equal(int.node, '入门')
     // 执行意图确实挂上了今日 pin（既有 C-5 机制）
     const pins = await engine.store.loadPins()
@@ -187,7 +187,7 @@ starts:
 
     // 播种（终点锚在位）→ 打开复盘即旁挂 ETA 摘要
     const r = await engine.graph.graphPropose('seed', SEED) as { id: number }
-    await engine.graphApply('seed', r.id)
+    await engine.graph.graphApply('seed', r.id)
     const doc = await engine.learner.kataOpen(weekStart)
     assert.match(doc.reality, /### 沙盘 ETA/)
     assert.match(doc.reality, /数学 → 终点「用导数解决优化问题」：p50/)

@@ -34,7 +34,7 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
   instruction?: string
   isCancelled?: () => boolean
 }) {
-  return rt.engine.questionGenerate(course, node, count, async prompt => complete(prompt), opts)
+  return rt.engine.bank2.questionGenerate(course, node, count, async prompt => complete(prompt), opts)
 }
 
 /** 节生成提示词拼装：模板 + 本节任务（id/标题/类型/节段难度档）+ 上下文包。
@@ -291,7 +291,7 @@ export function triggerPlanGrowth(rt: HostRuntime, ctx: Context, result: { kind?
  * queue_idle（生成泵排空）、panel_dispatch（「生长一步」按钮直达入队，不走本函数的检查）。
  * 返回人读摘要（调用方留痕）。 */
 async function coachTrigger(rt: HostRuntime, ctx: Context, trigger: CoachTrigger, courseKey?: string, opts: { force?: boolean } = {}): Promise<string> {
-  const r = await rt.engine.coachCheckpoint(trigger, courseKey)
+  const r = await rt.engine.growth2.coachCheckpoint(trigger, courseKey)
   const lines: string[] = []
   for (const chk of r.courses) {
     lines.push(`${chk.course}：ready=${chk.ready}/${chk.required}${chk.ok ? '' : '（低于前瞻，已告警）'}`)
@@ -368,14 +368,14 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
     } else if (job.phase === '罗盘') {
       job.message = '罗盘初画中（deep 档一次调用）…'
       persistGenJobs(rt)
-      const r = await rt.engine.compassPaint(job.course, rt.agent)
+      const r = await rt.engine.growth2.compassPaint(job.course, rt.agent)
       job.status = 'done'
       job.message = `罗盘已重画：${r.route_lines} 条路线${r.annotations_preserved ? '（学习者批注原样保留）' : ''}`
     } else if (job.phase === '反编译' && job.decompilePayload) {
       job.message = '目标反编译中（计划 + 种子双提案）…'
       persistGenJobs(rt)
       const p = job.decompilePayload
-      const r = await rt.engine.projectDecompile(p.project, {
+      const r = await rt.engine.project.projectDecompile(p.project, {
         ...(p.goal ? { goal: p.goal } : {}),
         ...(p.course ? { course: p.course } : {}),
         ...(p.notes?.length ? { notes: p.notes } : {}),
@@ -414,7 +414,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
   job.message = '教练回合裁决中（轻量段）…'
   persistGenJobs(rt)
   try {
-    const r = await rt.engine.coachGrowthBatch(job.course, rt.agent, job.growthInject ? { inject: job.growthInject } : {})
+    const r = await rt.engine.growth2.coachGrowthBatch(job.course, rt.agent, job.growthInject ? { inject: job.growthInject } : {})
     if (r.state === 'idle') {
       job.growthOutcome = 'idle'
       job.status = 'done'
@@ -479,7 +479,7 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
           .then(() =>
             // 复诊结算钩子（#146）：队列空闲时自动结算到期插入边（零人审：proven｜
             // 自动剪除）；失败只留运行日志，不挡泵——到期未决由 data-check 提示类可见。
-            rt.engine.settleRechecks())
+            rt.engine.growth2.settleRechecks())
           .then(r => {
             if (!r) return
             let settledAny = false
@@ -657,7 +657,7 @@ export async function generateProjectPlan(rt: HostRuntime, id: string): Promise<
 export async function generateProjectMilestone(rt: HostRuntime, id: string, milestoneId: string): Promise<string> {
   const agent = rt.agent
   const prompt = await rt.engine.project.projectMilestonePack(id, milestoneId)
-  const write = (md: string) => rt.engine.projectMilestoneWrite(id, milestoneId, md)
+  const write = (md: string) => rt.engine.project.projectMilestoneWrite(id, milestoneId, md)
   type MilestoneWriteResult = Awaited<ReturnType<typeof write>>
   const round = await agent.gateRepairRound<string, MilestoneWriteResult>('里程碑草案', {
     first: () => agent.complete('里程碑草案', prompt, { effort: 'fast' }),

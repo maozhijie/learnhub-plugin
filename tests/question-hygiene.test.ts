@@ -109,7 +109,7 @@ const NOTE = ['# 入门', '', '## 概念：大三度', '', '大三度 = 4 个半
 
 test('管线集成：双引号转义损坏在入库前被确定性修复并计数（escapesRepaired 留痕）', async () => {
   await withVault({ notes: { 入门: { body: NOTE.split('\n') } } }, async ({ engine, paths }) => {
-    const r = await engine.questionGenerate('数学', '入门', 1, async () => [
+    const r = await engine.bank2.questionGenerate('数学', '入门', 1, async () => [
       'node: 入门',
       'questions:',
       '  - kind: single_choice',
@@ -128,7 +128,7 @@ test('管线集成：双引号转义损坏在入库前被确定性修复并计�
 
 test('管线集成：记法违规与数字填空被拒收并报告原因（ADR-0029/0030 门禁）', async () => {
   await withVault({ notes: { 入门: { body: NOTE.split('\n') } } }, async ({ engine }) => {
-    const r = await engine.questionGenerate('数学', '入门', 3, async () => [
+    const r = await engine.bank2.questionGenerate('数学', '入门', 3, async () => [
       'node: 入门',
       'questions:',
       '  - kind: single_choice',
@@ -151,7 +151,7 @@ test('管线集成：记法违规与数字填空被拒收并报告原因（ADR-0
 
 test('管线集成：修不掉的转义损坏拒收（unrepairable）', async () => {
   await withVault({ notes: { 入门: { body: NOTE.split('\n') } } }, async ({ engine }) => {
-    const r = await engine.questionGenerate('数学', '入门', 2, async () => [
+    const r = await engine.bank2.questionGenerate('数学', '入门', 2, async () => [
       'node: 入门',
       'questions:',
       '  - kind: single_choice',

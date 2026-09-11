@@ -25,7 +25,7 @@ export const 图谱域 = {
     args: {
       course: { type: "string", description: "Course name; omit when only one course is enabled" }
     },
-    engine: "compassRead",
+    engine: "growth2.compassRead",
     domain: "图谱",
     channels: [
       {
@@ -42,7 +42,7 @@ export const 图谱域 = {
     args: {
       course: { type: "string", description: "Course name; omit when only one course is enabled" }
     },
-    engine: "compassPaint",
+    engine: "growth2.compassPaint",
     domain: "图谱",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_compass_paint" }
@@ -152,7 +152,7 @@ export const 图谱域 = {
     args: {
       course: { type: "string", description: "Course name; omit when only one course is enabled" }
     },
-    engine: "graphLinkBackfill",
+    engine: "graph.graphLinkBackfill",
     domain: "图谱",
     channels: [
       {
@@ -275,7 +275,7 @@ export const 图谱域 = {
     id: "vault-links-scan",
     summary: "Scan the WHOLE vault (outside the learning center; dot-dirs, built-in attachment/archive dirs 99附件/05ob自定义/00类型/03属性/过时*, and the user note-source exclusion list skipped — the built-in list can be replaced via vault_link_excludes in learnhub.json) for [[wikilinks]] between personal notes and produce de-noised UNDIRECTED association pairs with confidence w∈[0,1] (enc-edge weight convention): embeds ![[…]], non-.md targets (.base/.png/…), diary date targets, unresolved targets, self-links and code-fence examples are filtered, each with a hit-count audit (nothing silently dropped). READ-ONLY on personal notes — the cache lands in the engine state dir (state/vault链接.json with per-file fingerprints for drift/rescan); pure file scanning, no host search API. Pair confidence tiers: w≥0.7 proposal-ready (learnhub_graph_link_backfill), 0.4–0.7 shown in learnhub_graph_analyze suggestions.vault_link_candidates for human adjudication, <0.4 report-only. Run before graph analysis to surface vault link priors.",
     args: {},
-    engine: "vaultLinksScan",
+    engine: "graph.vaultLinksScan",
     domain: "图谱",
     channels: [
       {

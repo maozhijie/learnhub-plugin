@@ -98,7 +98,7 @@ test('V-2 注入：出题提示词带先验段（综合与逐节同款），题�
     files: [{ path: '乐理/音程.md', content: '# 音程随记\n\n入门时我总把大三度听成小三度，直到用了「宽窄」口诀。' }],
   }, async ({ engine }) => {
     const prompts: string[] = []
-    const r = await engine.questionGenerate('数学', '入门', 1, async prompt => {
+    const r = await engine.bank2.questionGenerate('数学', '入门', 1, async prompt => {
       prompts.push(prompt)
       return 'node: 入门\nquestions:\n  - kind: true_false\n    q: 大三度比小三度宽（口诀「大=宽」）。\n    answer: true'
     })

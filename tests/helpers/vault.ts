@@ -223,7 +223,7 @@ export function answer(
   qid: string, response: string,
   opts: { node?: string; elapsedS?: number | null; deferSchedule?: boolean } = {},
 ): Promise<Record<string, unknown>> {
-  return engine.questionAnswer(
+  return engine.content2.questionAnswer(
     async () => 'unused', '数学', opts.node ?? '入门', qid, response,
     opts.elapsedS === undefined ? 30 : opts.elapsedS,
     opts.deferSchedule ? { deferSchedule: true } : undefined,

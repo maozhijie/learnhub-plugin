@@ -83,7 +83,7 @@ export const 项目域 = {
         items: { type: "string" }
       }
     },
-    engine: "projectDecompile",
+    engine: "project.projectDecompile",
     domain: "项目",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_project_decompile" },
@@ -102,7 +102,7 @@ export const 项目域 = {
       plan: { type: "number", description: "project_plan proposal id", required: true },
       seed: { type: "number", description: "seed proposal id (pair-linked with the plan)", required: true }
     },
-    engine: "projectDecompileApply",
+    engine: "project.projectDecompileApply",
     domain: "项目",
     channels: [
       {
@@ -127,7 +127,7 @@ export const 项目域 = {
       window_days: { type: "number", description: "Window length in days, 1-90 (default 14)" },
       min_co: { type: "number", description: "Minimum co-active days per pair (default 2)" }
     },
-    engine: "projectEncCandidates",
+    engine: "project.projectEncCandidates",
     domain: "项目",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_project_enc_candidates" }
@@ -148,7 +148,7 @@ export const 项目域 = {
       },
       note: { type: "string", description: "One-line note about this execution" }
     },
-    engine: "projectExecLog",
+    engine: "project.projectExecLog",
     domain: "项目",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_project_exec_log" },
@@ -309,7 +309,7 @@ export const 项目域 = {
       },
       limit: { type: "number", description: "Questions to draw (default 5)" }
     },
-    engine: "projectMilestoneRecall",
+    engine: "project.projectMilestoneRecall",
     domain: "项目",
     channels: [
       { channel: "agent", mode: "sync", tool: "learnhub_project_milestone_recall" }

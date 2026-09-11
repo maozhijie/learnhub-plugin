@@ -228,7 +228,7 @@ test('questionGenerate：提示词附「误解先验（干扰项材料）」段�
     files: REGISTRY,
   }, async ({ engine }) => {
     const fake = replayFake(GOLD_BANK)
-    const r = await engine.questionGenerate('数学', '入门', undefined, fake)
+    const r = await engine.bank2.questionGenerate('数学', '入门', undefined, fake)
     assert.equal(r.added, 1)
     assert.match(fake.calls[0]!.prompt, /## 误解先验（干扰项材料）/)
     assert.match(fake.calls[0]!.prompt, MIS_MODEL)
@@ -239,7 +239,7 @@ test('questionGenerate：提示词附「误解先验（干扰项材料）」段�
     files: REGISTRY,
   }, async ({ engine }) => {
     const fake = replayFake(GOLD_BANK)
-    await engine.questionGenerate('数学', '入门', undefined, fake)
+    await engine.bank2.questionGenerate('数学', '入门', undefined, fake)
     assert.doesNotMatch(fake.calls[0]!.prompt, /## 误解先验/, '无误解 → 注入段缺席（模板措辞含词条不算）')
   })
 })
@@ -299,7 +299,7 @@ test('errorCardGenerate：材料附「误解先验（出生期候选错法）」
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: 'B', correct: false, judge: 'single_choice', qid: 'q1', ts: '2026-09-07T10:00:00' })
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 2, answer: 'B', correct: false, judge: 'single_choice', qid: 'q1', ts: '2026-09-08T10:00:00' })
     const fake = replayFake(ERR_CARD_YAML)
-    const r = await engine.errorCardGenerate('数学', undefined, fake)
+    const r = await engine.bank2.errorCardGenerate('数学', undefined, fake)
     assert.equal(r.generated.length, 1)
     assert.match(fake.calls[0]!.prompt, /误解先验（出生期候选错法；「干扰做法」项可从中改编，mine 仍以学习者错答为准）/)
     assert.match(fake.calls[0]!.prompt, MIS_MODEL)

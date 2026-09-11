@@ -244,7 +244,7 @@ test('graphEncBackfill：Ready 节点补 enc 提案，apply 后覆盖销号，�
     assert.equal(prop.kind, 'enrich', 'enc 回填走富化覆盖层通道（#140 出生/覆盖层分家）')
 
     // apply 走 audit 门禁（R14 是 warn 不阻断）
-    const applied = await engine.graphApply('enrich', prop.id) as Record<string, unknown>
+    const applied = await engine.graph.graphApply('enrich', prop.id) as Record<string, unknown>
     assert.equal(applied.course, '数学')
 
     // apply 后审计不再报 R14（覆盖已销号）
@@ -310,7 +310,7 @@ test('graphEncBackfill：invokes 投影出生权重随 enrich 提案回填（#14
     const prop = r.proposal as { id: number; kind: string }
     assert.equal(prop.kind, 'enrich', '覆盖层通道（指纹、读侧只读正典，#140 已建通道照用）')
 
-    const applied = await engine.graphApply('enrich', prop.id) as Record<string, unknown>
+    const applied = await engine.graph.graphApply('enrich', prop.id) as Record<string, unknown>
     assert.equal(applied.course, '数学')
 
     // 正典生效：甲 w = 1/1（唯一带 invokes 的题），投影 note 留痕

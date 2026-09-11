@@ -169,7 +169,7 @@ export const 维护域 = {
     id: "optimize-params",
     summary: "Manually trigger FSRS-6 personal parameter optimization (A2, never automatic — like Anki): retrains the 21 scheduling parameters from the learner's real review log (synthetic initializations excluded, first push per card per day) across all enabled courses. Gates: at least 400 real review pushes are required, and the trained parameters must evaluate strictly better than the current/default parameters (same-protocol logLoss comparison) — otherwise nothing is written and the skip reason is returned with the metrics. On success the one learner-level parameter set is written to every enabled course's fsrs参数.json with full training metadata (count/date/metrics); the scheduler picks it up with zero changes. Expect ~a few seconds of training.",
     args: {},
-    engine: "optimizeFsrsParams",
+    engine: "sched2.optimizeFsrsParams",
     domain: "维护",
     channels: [
       {

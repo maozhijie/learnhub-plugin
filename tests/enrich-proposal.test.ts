@@ -57,7 +57,7 @@ fields:
     assert.match(artifact, /fingerprints:/)
     assert.match(artifact, /data\/基础\.yaml/)
 
-    const applied = await engine.graphApply('enrich', r.id) as { course: string; fields: number; snapshot: number; files: string[] }
+    const applied = await engine.graph.graphApply('enrich', r.id) as { course: string; fields: number; snapshot: number; files: string[] }
     assert.equal(applied.course, '数学')
     assert.equal(applied.fields, 1)
     assert.equal(applied.snapshot, 1, '快照落盘')
@@ -98,7 +98,7 @@ fields:
     await writeFile(dataPath, (await readFile(dataPath, 'utf8')).replace('est: 20', 'est: 22'), 'utf8')
 
     await assert.rejects(
-      () => engine.graphApply('enrich', r.id),
+      () => engine.graph.graphApply('enrich', r.id),
       /sha256 指纹不符，拒绝写入[\s\S]*reject 本提案后重新生成富化提案/,
     )
     // 拒收不改图：正典没有出现新 enc
@@ -118,7 +118,7 @@ test('手工构造的 enrich 提案（无指纹）apply 被拒；目标节点不
     await writeFile(path, YAML.stringify({ course: '数学', fields: [{ node: '进阶', enc: [{ node: '入门', w: 1 }] }] }), 'utf8')
     await engine.store.updateProposal(pid, { artifact: path })
     await assert.rejects(
-      () => engine.graphApply('enrich', pid),
+      () => engine.graph.graphApply('enrich', pid),
       /提案缺内容指纹.*重新生成/,
     )
 
@@ -137,7 +137,7 @@ fields:
     enc: [{ node: 入门, w: 0.6, note: 先验 }]
 `
     const r = await engine.graph.graphPropose('enrich', yamlText) as { id: number }
-    await engine.graphApply('enrich', r.id)
+    await engine.graph.graphApply('enrich', r.id)
     const store = new GraphStore(engine.paths, join(root, '学习中心', 'math'), nodeVaultFs)
     const regions = await store.load()
     const node = regions[0]!.blocks[0]!.nodes.find(n => n.name === '进阶')!
