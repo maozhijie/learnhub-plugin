@@ -135,7 +135,7 @@
     "src/engine/grading.ts": 439,
     "src/engine/graph-subsystem.ts": 591,
     "src/engine/graph.ts": 506,
-    "src/engine/growth-subsystem.ts": 1026,
+    "src/engine/growth-subsystem.ts": 1048,
     "src/engine/habits.ts": 201,
     "src/engine/health.ts": 94,
     "src/engine/index.ts": 1819,
