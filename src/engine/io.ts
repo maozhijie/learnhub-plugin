@@ -6,7 +6,10 @@
  */
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 
-/** 临时文件 + rename 原子写。 */
+/** 临时文件 + rename 原子写。tmp 名含 `Date.now()` 是**显式登记的例外**（#175 阶段①
+ * 适配器面门的基线钉住这一处）：tmp 命名属适配器关注点（ADR-0046 边界段），而 io.ts
+ * 是 R5 零相对导入叶子——不能反向 import clock 端口类型，故保留直读；engine 内唯一
+ * 有理由的时钟直读，除此之外 clockReads 目标归零。 */
 export async function atomicWrite(path: string, data: string): Promise<void> {
   await mkdir(path.replace(/[/\\][^/\\]+$/, ''), { recursive: true })
   const tmp = `${path}.tmp-${process.pid}-${Date.now()}`

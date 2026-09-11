@@ -121,6 +121,7 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 | G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | 8 个 engine 文件超 600；宿主 `index.ts` 3029 → **91**（#167 薄入口），拆出的 `host/api.ts` 998 于 **#168 数据化归位**：`api.ts` **60**（分发）+ `routes-post.ts` **585**／`routes.ts` **263**／`params.ts` **152**／`route-table.ts` **74**（宿主单文件全部回到 900 目标内；超限项只剩 `host/tools.ts` **1040**）。活动门＝逐文件基线（#168 后 **87** 个受控文件） |
 | G6 顶层不变量 | 除教练层 `proposals.ts` 外无模块调用图写原语（`GraphStore.writeRegionDoc`，`data/*.yaml` 的唯一写路径） | 硬门 | 绿（唯一调用者就是 `proposals.ts`） |
 | G7 类型门 | `tsc --noEmit`（根 `tsconfig.json`；`module`／`moduleResolution` = `nodenext`、`noEmit`、`strict: false` 起步）逐文件错误数卡基线 | 棘轮 | 扫描面 `src/`：**75 处 / 11 个涉错文件**（#168 起：路由数据化顺带修好 `api.ts` 的 7 处 `unknown` 传参——`requireBoolean`/`requireString` 给回类型——并随守卫搬移到 `routes-post.ts` 2 处）。实测链：main **196 处 / 17 个涉错文件**（未清理）→ #171 清 30 条接线后 **181** → #170 清掉 TS2304 40／TS2339 26／TS2305 20／TS2300 6／TS1361 5／TS2835 6／TS2552+TS2484+TS2440 3（共 106 处真缺陷；修准窄面类型后新暴露 5 处净增）→ **80** → #168 **75** |
+| G8 适配器面 | engine 内时钟直读（`Date.now(`＋无参 `new Date()`，含模板串插值）／`Math.random`／`node:fs` import 数／fs 调用点数四标量卡基线（`scripts/scan-adapter-face.mjs`；#175 阶段①起受控，阶段②按域棘轮下调 fs 两项） | 棘轮 | 落地实测 **clockReads 29／mathRandom 0／fsImports 49／fsCalls 233**（mathRandom 随 Rng 端口当场归零；clockReads 的目标 = io.ts 登记例外 1 处；带参 `new Date(ms)` 是纯日历换算不计数） |
 
 门的三处实现事实（照着改时别踩）：
 

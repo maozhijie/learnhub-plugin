@@ -19,7 +19,7 @@ import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
 import type { QuestionBank, BankQuestion } from './question-bank.ts'
 import { Content } from './content.ts'
-import { shuffled } from './shuffle.ts'
+import { shuffledWith } from './shuffle.ts'
 import type { Sessions } from './sessions.ts'
 import type { LearnerCards } from './learner-cards.ts'
 import type { Graph } from './graph.ts'
@@ -432,7 +432,7 @@ export class ContentSubsystem {
       section: q.section ?? null,
       ...(q.options?.length ? { options: q.options } : {}),
       ...(q.kind === 'matching' && Array.isArray(q.answer)
-        ? { pairOptions: shuffled([...new Set(q.answer as string[])]) } : {}),
+        ? { pairOptions: shuffledWith([...new Set(q.answer as string[])], this.e.jolRng) } : {}),
       hasExplanation: Boolean(q.explanation),
       due: q.fsrs?.reps ? q.fsrs.due : null,
       attempts: q.stats?.attempts ?? 0,

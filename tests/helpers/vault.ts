@@ -12,6 +12,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { LearnhubEngine } from '../../src/engine/index.ts'
+import type { Clock, Rng } from '../../src/engine/index.ts'
+import { systemClock, mathRng } from '../../src/host/clock.ts'
 import type { Paths } from '../../src/engine/paths.ts'
 import type { Store } from '../../src/engine/store.ts'
 
@@ -64,6 +66,11 @@ export interface VaultOptions {
   /** schema 版本戳覆盖（#138 硬门）：undefined = 盖当前 v2；给 version 可伪造旧/新
    * 版本测门。门本身的负路径（拒载文案）直接裸构造引擎测——工厂总是构造引擎。 */
   schema?: { version?: number; breaks?: unknown[] }
+  /** 时钟注入（#175 阶段①）：undefined = 真实系统时钟；固定时钟 + 定长随机流
+   * 让「同一输入同一输出」可断言。 */
+  clock?: Clock
+  /** 随机源注入：undefined = Math.random；引擎的 jolRng/洗牌同源。 */
+  rng?: Rng
   /** 逃生口：vault 相对路径任意文件。 */
   files?: Array<{ path: string; content: string }>
 }
@@ -122,7 +129,12 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
       day_cutoff: '00:00',
     }, null, 1) + '\n', 'utf8')
 
-    const engine = new LearnhubEngine(centerRel === '学习中心' ? { vault: root } : { vault: root, centerRel })
+    const engine = new LearnhubEngine({
+      vault: root,
+      ...(centerRel === '学习中心' ? {} : { centerRel }),
+      clock: options.clock ?? systemClock,
+      rng: options.rng ?? mathRng,
+    })
 
     if (options.reviewLog?.length) {
       await writeFile(engine.paths.reviewLogPath, options.reviewLog.join('\n') + '\n', 'utf8')

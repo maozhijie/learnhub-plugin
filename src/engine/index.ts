@@ -48,6 +48,7 @@ import type { ComplexityTier} from './complexity.ts'
 import { GraphProposals} from './proposals.ts'
 import type { ApplyAudit, EditProposalSpec} from './proposals.ts'
 import type { LlmComplete} from './llm.ts'
+import type { Clock, Rng} from './clock.ts'
 import type { AgentSeam} from './agent.ts'
 import { Projects, ProjectSubsystem} from './projects.ts'
 import type { ProjectFm, ProjectView, FadingTier, ProjectApplyResult} from './projects.ts'
@@ -125,20 +126,11 @@ export { Content } from './content.ts'
 export { ANKI_ENDPOINT, AnkiConnectClient } from './anki.ts'
 export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './complexity.ts'
 export type { LlmComplete, LlmEffort, LlmStream, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
+/** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */
+export type { Clock, Rng } from './clock.ts'
 /** 统一 agent 缝（#162 / ADR-0041/0044）：类随门面出（宿主构造注入），类型随缝出。 */
 export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
 export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
-
-/** Fisher–Yates 洗牌（返回新数组；matching 右列候选防按序泄题）。 */
-function shuffled<T>(items: T[]): T[] {
-  const out = [...items]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[out[i], out[j]] = [out[j], out[i]]
-  }
-  return out
-}
-
 
 /** 周复盘的周参数校验（周一锚定；非法 fail loud）。 */
 function kataMonday(weekStart: string): string {
@@ -161,6 +153,12 @@ export interface EngineConfig {
   vault: string
   /** 学习中心相对 vault 的路径（缺省「学习中心」）。 */
   centerRel?: string
+  /** 时钟端口（#175 阶段① / ADR-0044）：读「当前时刻」属适配器关注点，必填注入、
+   * 引擎内零回退直读——宿主给 systemClock，测试给固定时钟得「同一输入同一输出」。 */
+  clock: Clock
+  /** 随机源端口（#175 阶段①）：JOL 抽查（jolRng 的上游）与抽题洗牌共用；注入定长
+   * 随机流即可断言确定性。宿主给 mathRng。 */
+  rng: Rng
 }
 
 export class LearnhubEngine {
@@ -203,8 +201,12 @@ export class LearnhubEngine {
   readonly vaultRoot: string
   /** schema 版本块（#138 启动硬门的解析产物；breaks 断裂史为纯档案，引擎零消费）。 */
   readonly schema: SchemaBlock
-  /** JOL 抽查的随机源（#66 E4）：可注入播种（测试确定性；运行时 Math.random）。 */
-  jolRng: () => number = Math.random
+  /** 时钟/随机端口（#175 阶段①）：宿主装配注入；引擎内零直读（门棘轮）。
+   * jolRng 是 JOL 抽查的专用随机源（#66 E4 先例，public 可换——测试直接播种），缺省
+   * 随配置的 rng 走。 */
+  readonly clock: Clock
+  readonly rng: Rng
+  jolRng: () => number
 
   /** 课程调度器实例缓存（ADR-0014 附带）：参数文件唯一写者是 optimizeFsrsParams
    * （写回后显式失效）——每答一题重建 FSRS 并读一次参数盘是白付成本。
@@ -224,6 +226,9 @@ export class LearnhubEngine {
     const centerRel = (config.centerRel ?? '学习中心').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
     const vault = config.vault.replace(/\\/g, '/').replace(/\/+$/, '')
     const centerRoot = `${vault}/${centerRel}`
+    this.clock = config.clock
+    this.rng = config.rng
+    this.jolRng = config.rng
     this.vaultRoot = vault
     this.paths = new Paths(centerRoot)
     // schema 版本硬门（#138 / ADR-0034）：非当前主版本拒载，封死一切取用引擎的路径。

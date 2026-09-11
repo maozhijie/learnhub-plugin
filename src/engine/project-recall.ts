@@ -34,8 +34,9 @@ export interface RecallPool {
 
 /** 抽题（纯函数）：跨池轮转（多节点项目不被单一大库淹没）；池内排序 = 从未作答优先
  * → FSRS due 最早优先（该复习的先回到眼前）。归档题不进池；同序级内洗牌避免每次
- * 抽到同一批（不追求均匀——检索点不是测验）。 */
-export function drawRecallQuestions(pools: RecallPool[], limit: number, rng: () => number = Math.random): RecallQuestion[] {
+ * 抽到同一批（不追求均匀——检索点不是测验）。rng 必填（#175 阶段①：引擎内零
+ * Math.random 直读——调用方传 rng 端口，测试播种定长流）。 */
+export function drawRecallQuestions(pools: RecallPool[], limit: number, rng: () => number): RecallQuestion[] {
   const want = Math.max(1, Math.round(limit))
   const queues = pools.map(p => {
     const active = p.questions.filter(q => !q.archived)

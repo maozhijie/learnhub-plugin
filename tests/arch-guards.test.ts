@@ -28,6 +28,7 @@ import { scanSizes, srcFiles, whitelistHits, SIZE_WHITELIST } from '../scripts/s
 import { scanGraphWriters, graphWriteCallers, GRAPH_WRITE_WHITELIST } from '../scripts/scan-invariant.mjs'
 import { hostFiles, moduleLevelLets, scanHostLets } from '../scripts/scan-host-state.mjs'
 import { BASELINE_FILE, measure, readBaseline, depsFaceViolations, sizeViolations, typeViolations } from '../scripts/arch-baseline.mjs'
+import { countAdapterFace, adapterFaceTotals, adapterFaceViolations } from '../scripts/scan-adapter-face.mjs'
 import { parseTscOutput, scanTypes, checkedSrc } from '../scripts/scan-types.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -393,4 +394,34 @@ test('G7 类型门：逐文件错误数卡基线（扫描面 src/，存量债按
     `这些 src 文件没被 tsc 读到（tsconfig include 漏了它们，或扫描面塌了）：\n${missed.join('\n')}`)
   const bad = typeViolations(measured.counts, BASELINE.typeErrors ?? {})
   assert.deepEqual(bad, [], `类型门不符基线：\n${bad.join('\n')}`)
+})
+
+// ---------------------------------------------------------------- G8 适配器面（时钟/随机/fs）
+
+test('G8 自检：三种直读形态都被收集器看见（含模板串插值里的 Date.now）', () => {
+  const c = countAdapterFace([
+    'const a = Date.now()',
+    'const d = new Date()',
+    'const r = Math.random',
+    'const t = `${p}.tmp-${Date.now()}`', // atomicWrite 的例外形态——通用 strip 会把整段模板串吃掉（R3 恒过教训）
+    '// 注释里 Date.now() 与 new Date() 不算',
+    'const s = "new Date()"',
+    'const conv = new Date(ms)', // 带参换算是纯日历运算，不算时钟直读
+  ].join('\n'))
+  assert.equal(c.clockReads, 3, 'Date.now + 无参 new Date + 模板串插值各 1；注释/字符串/带参换算不计')
+  assert.equal(c.mathRandom, 1)
+})
+
+test('G8 自检：棘轮抓上涨、抓降了未同步基线（过期即失败）', () => {
+  const base = { clockReads: 1, mathRandom: 0, fsImports: 0, fsCalls: 0 }
+  assert.ok(adapterFaceViolations({ clockReads: 2, mathRandom: 0, fsImports: 0, fsCalls: 0 }, base).some(v => v.includes('clockReads')), '涨了必须失败')
+  assert.ok(adapterFaceViolations({ clockReads: 0, mathRandom: 0, fsImports: 0, fsCalls: 0 }, base).some(v => v.includes('clockReads')), '降了未同步基线必须失败（过期即失败）')
+  assert.deepEqual(adapterFaceViolations({ ...base }, base), [], '一致则绿')
+})
+
+test('G8 适配器面：engine 内时钟/随机直读与 node:fs 依赖按基线棘轮（#175 阶段①起受控）', () => {
+  const measured = adapterFaceTotals(ROOT)
+  assert.ok(measured.fsImports > 0, 'engine 的 node:fs 导入数为 0 但受控面没登记——扫描面塌了会静默恒过（外移完成后再把这条断言收紧为 == 0）')
+  const bad = adapterFaceViolations(measured, BASELINE.adapterFace ?? {})
+  assert.deepEqual(bad, [], `适配器面棘轮不符基线：\n${bad.join('\n')}\n（Clock/Rng 走 engine/clock.ts 端口、fs 走 vault 存储端口；io.ts 的 atomicWrite tmp 命名是登记过的例外）`)
 })

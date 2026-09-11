@@ -46,8 +46,8 @@ test('drawRecallQuestions：跨池轮转、从未作答优先、due 最早优先
 })
 
 test('drawRecallQuestions：limit 缺省下限 1；空池列表返回空', () => {
-  assert.equal(drawRecallQuestions([pool('x', [q('x1')])], 0).length, 1)
-  assert.equal(drawRecallQuestions([], 5).length, 0)
+  assert.equal(drawRecallQuestions([pool('x', [q('x1')])], 0, Math.random).length, 1)
+  assert.equal(drawRecallQuestions([], 5, Math.random).length, 0)
 })
 
 // ---- 行为：检索点会话流 ----

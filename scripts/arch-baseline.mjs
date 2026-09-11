@@ -25,6 +25,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { scanDepsFaces, faceSnapshot, faceViolations, FACE_SCALARS, FACE_SLOTS } from './scan-deps-face.mjs'
 import { scanSizes } from './scan-budget.mjs'
+import { adapterFaceTotals, adapterFaceViolations } from './scan-adapter-face.mjs'
 import { scanTypes } from './scan-types.mjs'
 
 export const BASELINE_FILE = 'scripts/arch-baseline.json'
@@ -33,7 +34,7 @@ export const BASELINE_FILE = 'scripts/arch-baseline.json'
 export function measure(root = process.cwd()) {
   const depsFace = {}
   for (const f of scanDepsFaces(root)) depsFace[f.deps] = faceSnapshot(f)
-  return { depsFace, sizes: scanSizes(root) }
+  return { depsFace, sizes: scanSizes(root), adapterFace: adapterFaceTotals(root) }
 }
 
 /** 全部受控量（含类型门；要跑一次 tsc）。 */
@@ -130,11 +131,12 @@ export function typeViolations(measuredCounts, baselineCounts) {
   return bad
 }
 
-/** 全部棘轮项（G3／G4／G5／G7 的并集）。 */
+/** 全部棘轮项（G3／G4／G5／G7／适配器面的并集）。 */
 export function ratchetViolations(measured, baseline) {
   return [...depsFaceViolations(measured.depsFace ?? {}, baseline.depsFace ?? {}),
     ...sizeViolations(measured.sizes ?? {}, baseline.sizes ?? {}),
-    ...typeViolations(measured.typeErrors ?? {}, baseline.typeErrors ?? {})]
+    ...typeViolations(measured.typeErrors ?? {}, baseline.typeErrors ?? {}),
+    ...adapterFaceViolations(measured.adapterFace ?? {}, baseline.adapterFace ?? {})]
 }
 
 /** 按受控量的形状渲染基线文本（排序稳定，diff 干净）。 */
@@ -155,6 +157,7 @@ export function renderBaseline(measured) {
     depsFace,
     sizes,
     typeErrors,
+    adapterFace: measured.adapterFace,
   }
   return `${JSON.stringify(body, null, 2)}\n`
 }
@@ -173,6 +176,7 @@ export function checkBaseline(root = process.cwd(), baseline = readBaseline(join
     ...depsFaceViolations(depsFace, baseline.depsFace ?? {}),
     ...sizeViolations(scanSizes(root), baseline.sizes ?? {}),
     ...typeViolations(scanTypes(root).counts, baseline.typeErrors ?? {}),
+    ...adapterFaceViolations(adapterFaceTotals(root), baseline.adapterFace ?? {}),
   ]
 }
 
