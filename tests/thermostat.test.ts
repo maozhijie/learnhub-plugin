@@ -86,7 +86,7 @@ test('行为：跨区仪表可读（课程区有数、无界区空态、项目�
     files: [{ path: '学习中心/state/难度带.jsonl', content: BULK_EASY.map(b => JSON.stringify(b)).join('\n') + '\n' }],
   }, async ({ engine }) => {
     const before = readFileSync(engine.paths.learnhubConfigPath, 'utf8')
-    const view = await engine.thermostatView()
+    const view = await engine.lab.thermostatView()
     assert.equal(view.course_region.retention.real, 20)
     assert.equal(view.course_region.retention_band.level, 'high', '20 次全对 → 保留率很高')
     assert.equal(view.course_region.band_choices.sessions, 8)
@@ -114,19 +114,19 @@ test('行为：建议逐条显式确认后生效——确认写默认带、复�
       stability_before: 4, difficulty_before: 5, r_pred: 0.8,
     })).join('\n') + '\n', 'utf8')
 
-    const view = await engine.thermostatView()
+    const view = await engine.lab.thermostatView()
     assert.equal(view.suggestions[0]!.id, 'band_default:standard')
 
     // 确认前默认带为 null；显式确认后写入并被队列消费（standard 偏移 0 = 纯 A1，带值不变）
-    assert.equal(await engine.bandDefault(), null)
+    assert.equal(await engine.lab.bandDefault(), null)
     const plainBand = (await engine.content2.reviewQueue('数学', '入门')).band
     const applied = await engine.thermostatApply('band_default:standard')
     assert.equal(applied.band_default, 'standard')
-    assert.equal(await engine.bandDefault(), 'standard')
+    assert.equal(await engine.lab.bandDefault(), 'standard')
     assert.equal((await engine.content2.reviewQueue('数学', '入门')).band, plainBand, '默认 standard = 纯 A1 语义（偏移 0）')
 
     // 建议已消化（同向沉默）→ 再确认同一 id 拒绝；伪造 id 拒绝
-    const after = await engine.thermostatView()
+    const after = await engine.lab.thermostatView()
     assert.deepEqual(after.suggestions, [], '当前默认已是目标值，不再重复建议')
     await assert.rejects(() => engine.thermostatApply('band_default:standard'), /不在当前建议清单/)
     await assert.rejects(() => engine.thermostatApply('retrieval_density:5'), /不在当前建议清单/, '不存在引擎侧参数调整路径')

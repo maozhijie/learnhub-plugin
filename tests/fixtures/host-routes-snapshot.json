@@ -540,8 +540,8 @@
    "report": null
   },
   "calls": [
-   "experimentList()",
-   "experimentTemplates()"
+   "lab.experimentList()",
+   "lab.experimentTemplates()"
   ]
  },
  {
@@ -1911,7 +1911,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "experimentStop(undefined)"
+   "lab.experimentStop(undefined)"
   ]
  },
  {
@@ -1935,7 +1935,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "experimentStop(undefined)"
+   "lab.experimentStop(undefined)"
   ]
  },
  {

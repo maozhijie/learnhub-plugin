@@ -173,10 +173,10 @@ test('全链路：模板发起→确认→分臂→推进带臂标注→报告�
     assert.equal(report.analysis.per_arm[0]!.n, 1, '刚才那次推进计入了今日臂')
 
     // 停止后报告定稿、标注停
-    const stopped = await engine.experimentStop()
+    const stopped = await engine.lab.experimentStop()
     assert.equal(stopped.status, 'stopped')
     assert.ok(stopped.stopped_day)
-    await assert.rejects(() => engine.experimentStop(), /没有可停的实验/)
+    await assert.rejects(() => engine.lab.experimentStop(), /没有可停的实验/)
   })
 })
 
@@ -195,7 +195,7 @@ test('#150 结局落沉淀：停=定稿——结局分析出生即写 nof1_outco
     // 一次真实推进（臂标注在案）→ 未达观察窗就停：正典如实落进度态，不造假结论
     await engine.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
 
-    const stopped = await engine.experimentStop()
+    const stopped = await engine.lab.experimentStop()
     assert.equal(stopped.status, 'stopped')
 
     const fold = await engine.sedimentFold()
@@ -224,7 +224,7 @@ test('#150 结局落沉淀：停=定稿——结局分析出生即写 nof1_outco
     const list = await engine.store.loadExperiments()
     list[0]!.status = 'running'
     await engine.store.saveExperiments(list)
-    await engine.experimentStop()
+    await engine.lab.experimentStop()
     const fold2 = await engine.sedimentFold()
     assert.equal(fold2.events.filter(e => e.kind === 'nof1_outcome').length, 1, '同 id 结局事件不重复')
   })
@@ -328,7 +328,7 @@ test('存储契约：实验文件条目不满足定义形状 → Broken 报出�
     const { mkdir, writeFile } = await import('node:fs/promises')
     await mkdir(engine.paths.centerStateDir, { recursive: true })
     await writeFile(engine.paths.experimentsPath, JSON.stringify([{ id: 'oops' }]), 'utf8')
-    await assert.rejects(() => engine.experimentList(), /不满足实验定义契约|Broken/, '形状损坏不是合法空态')
+    await assert.rejects(() => engine.lab.experimentList(), /不满足实验定义契约|Broken/, '形状损坏不是合法空态')
 
     // 练习侧结局（EMA）：预登记在案，分析器未实现——报告不假装能算
     await writeFile(engine.paths.experimentsPath, JSON.stringify([{

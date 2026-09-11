@@ -339,7 +339,7 @@ export class LearnhubEngine {
       content: this.content, sessions: this.sessions, learnerCards: this.learnerCards,
       vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
-      bandDefault: () => this.bandDefault(),
+      bandDefault: () => this.lab.bandDefault(),
       calibrationHintsConfig: () => this.calibrationHintsConfig(),
       collectNoteSourceCards: today => this.collectNoteSourceCards(today),
       enabledCourses: () => this.enabledCourses(),
@@ -1029,14 +1029,6 @@ export class LearnhubEngine {
   }
   // ---- D1 N-of-1 实验引擎（#110 / ADR-0023）——LabSubsystem 住 nof1.ts（#152 刀 2）----
 
-  experimentTemplates(): Promise<Nof1Template[]> {
-    return this.lab.experimentTemplates()
-  }
-
-  async experimentList(): Promise<ExperimentDef[]> {
-    return this.lab.experimentList()
-  }
-
   async experimentPropose(
     templateId: string, course?: string,
   ): Promise<{ proposal: number; template: string; title: string; pool: number; scope_course: string | null }> {
@@ -1045,10 +1037,6 @@ export class LearnhubEngine {
 
   async experimentApply(pid?: number): Promise<{ id: number; title: string; arm_today: string }> {
     return this.lab.experimentApply(pid)
-  }
-
-  async experimentStop(id?: number): Promise<ExperimentDef> {
-    return this.lab.experimentStop(id)
   }
 
   async experimentReport(id?: number): Promise<{ experiment: ExperimentDef; analysis: Nof1Analysis }> {
@@ -1085,16 +1073,8 @@ export class LearnhubEngine {
   }
   // ---- D2 挑战点恒温器（#111 / ADR-0024）——LabSubsystem 住 nof1.ts（#152 刀 2）----
 
-  async bandDefault(): Promise<BandPref | null> {
-    return this.lab.bandDefault()
-  }
-
   async setBandDefault(band: string | null): Promise<{ band_default: BandPref | null }> {
     return this.lab.setBandDefault(band)
-  }
-
-  async thermostatView(today?: string): Promise<ThermostatDoc> {
-    return this.lab.thermostatView(today)
   }
 
   async thermostatApply(suggestionId: string): Promise<{ applied: string; band_default: BandPref | null }> {

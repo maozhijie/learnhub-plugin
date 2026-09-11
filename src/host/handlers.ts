@@ -120,7 +120,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'GET /experiments': async ({ rt, res }) => {
     // D-1 N-of-1 实验（#110 ADR-0023）：模板库 + 实验清单 + 报告（无实验时 report=null）
     sendJson(res, 200, await apiRun(rt, 'api/experiments', async () => {
-      const experiments = await rt.engine.experimentList()
+      const experiments = await rt.engine.lab.experimentList()
       let report = null
       if (experiments.length) {
         try {
@@ -129,7 +129,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
           report = null
         }
       }
-      return { templates: await rt.engine.experimentTemplates(), experiments, report }
+      return { templates: await rt.engine.lab.experimentTemplates(), experiments, report }
     }))
   },
   'GET /generate/status': async ({ rt, res }) => {
@@ -257,7 +257,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /experiments/stop': async ({ rt, body, res }) => {
     // D-1 实验手动停止（开停手动，ADR-0023）
     const id = body.id === undefined || body.id === null ? undefined : applyId(body.id)
-    sendJson(res, 200, await apiRun(rt, 'api/experiments/stop', () => rt.engine.experimentStop(id)))
+    sendJson(res, 200, await apiRun(rt, 'api/experiments/stop', () => rt.engine.lab.experimentStop(id)))
   },
   'POST /sandbox/run': async ({ rt, body, res }) => {
     // D-3 沙盘（#112 ADR-0025）：只读蒙特卡洛推演，零写侧

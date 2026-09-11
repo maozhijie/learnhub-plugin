@@ -221,10 +221,10 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.kataToIntention(args.week_start,
         { course: args.course, node: args.node, cue: args.cue, action: args.action }))),
   'learnhub_experiment_templates': () => run(rt, 'learnhub_experiment_templates', async () =>
-      JSON.stringify(await rt.engine.experimentTemplates())),
+      JSON.stringify(await rt.engine.lab.experimentTemplates())),
   'learnhub_experiment_apply': (args: { id?: number }) => run(rt, 'learnhub_experiment_apply', async () =>
       JSON.stringify(await rt.engine.experimentApply(applyId(args.id)))),
-  'learnhub_thermostat': () => run(rt, 'learnhub_thermostat', async () => JSON.stringify(await rt.engine.thermostatView())),
+  'learnhub_thermostat': () => run(rt, 'learnhub_thermostat', async () => JSON.stringify(await rt.engine.lab.thermostatView())),
   'learnhub_sandbox': (args: { minutes_per_day: number; weeks?: number; course?: string; nodes?: string[] }) =>
       run(rt, 'learnhub_sandbox', async () =>
         JSON.stringify(await rt.engine.sandboxRun({
