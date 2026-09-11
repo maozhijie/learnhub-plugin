@@ -198,7 +198,7 @@ test('questionsAll 下发 due/lastReview（未调度新题为 null）', async ()
       tfQuestion('a2'),
     ] },
   }, async ({ engine }) => {
-    const r = await engine.questionsAll('数学') as { questions: Array<Record<string, unknown>> }
+    const r = await engine.bank2.questionsAll('数学') as { questions: Array<Record<string, unknown>> }
     const byId = Object.fromEntries(r.questions.map(x => [x.qid, x]))
     assert.equal(byId.a1.due, PAST)
     assert.equal(byId.a1.lastReview, PAST)

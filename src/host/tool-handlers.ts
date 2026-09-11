@@ -104,7 +104,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_bank_cleanup': (args: { course?: string; apply?: boolean }) => run(rt, 'learnhub_bank_cleanup', async () =>
       JSON.stringify(args.apply === true
         ? { applied: await rt.engine.bankCleanupApply(args.course) }
-        : await rt.engine.bankCleanupPreview(args.course))),
+        : await rt.engine.bank2.bankCleanupPreview(args.course))),
   'learnhub_project_create': (args: { name: string; goal: string; tier?: string }) => run(rt, 'learnhub_project_create', async () =>
       JSON.stringify(await rt.engine.projectCreate({
         name: args.name, goal: args.goal,
@@ -174,7 +174,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       }, llmSeamStripped(ctx)))),
   'learnhub_error_card_archive': (args: { course: string; node: string; card: string; archived?: boolean }) => run(rt, 'learnhub_error_card_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[error-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
-      return JSON.stringify(await rt.engine.errorCardArchive(args.course, args.node, args.card, args.archived))
+      return JSON.stringify(await rt.engine.bank2.errorCardArchive(args.course, args.node, args.card, args.archived))
     }),
   'learnhub_skill_create': (args: { name: string; maintenance_days?: number | null }) => run(rt, 'learnhub_skill_create', async () =>
       JSON.stringify(await rt.engine.skillCreate(args.name, {

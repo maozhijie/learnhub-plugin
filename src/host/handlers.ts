@@ -152,7 +152,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'GET /bank-cleanup': async ({ rt, url, res }) => {
     // 题库一键清理预览（ADR-0032，只读）：跳过节点全部未归档题 + 已完成节点休眠题
-    sendJson(res, 200, await apiRun(rt, 'api/bank-cleanup', () => rt.engine.bankCleanupPreview(optQuery(url, 'course'))))
+    sendJson(res, 200, await apiRun(rt, 'api/bank-cleanup', () => rt.engine.bank2.bankCleanupPreview(optQuery(url, 'course'))))
   },
   'PUT /jol': async ({ rt, body, res }) => {
     // JOL 抽查配置（#66 E4）：enabled 全局开关 + rate 抽样率（0<r≤1）
@@ -356,7 +356,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /error-answer': async ({ rt, body, res }) => {
     // 「错误对比卡」作答（C-3/#82）：三选一自动判分，一卡一天一次，无绑定 XP
-    sendJson(res, 200, await apiRun(rt, 'api/error-answer', () => rt.engine.errorCardAnswer(
+    sendJson(res, 200, await apiRun(rt, 'api/error-answer', () => rt.engine.bank2.errorCardAnswer(
       need(body, 'course'), need(body, 'node'), need(body, 'card'), String(body.choice ?? ''))))
   },
   'POST /error-generate': async ({ rt, ctx, body, res }) => {
@@ -370,7 +370,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
       llmSeamStripped(ctx))))
   },
   'POST /error-archive': async ({ rt, body, res }) => {
-    sendJson(res, 200, await apiRun(rt, 'api/error-archive', () => rt.engine.errorCardArchive(
+    sendJson(res, 200, await apiRun(rt, 'api/error-archive', () => rt.engine.bank2.errorCardArchive(
       need(body, 'course'), need(body, 'node'), need(body, 'card'), Boolean(body.archived))))
   },
   'POST /learner-add': async ({ rt, ctx, body, res }) => {
@@ -443,7 +443,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /question-dispute/review': async ({ rt, ctx, body, res }) => {
     // 瑕疵题申诉复核（ADR-0031）：LLM 两阶段复核三态裁定，只读不落盘
-    sendJson(res, 200, await apiRun(rt, 'api/question-dispute/review', () => rt.engine.questionDisputeReview(
+    sendJson(res, 200, await apiRun(rt, 'api/question-dispute/review', () => rt.engine.bank2.questionDisputeReview(
       llmSeam(ctx),
       need(body, 'course'), need(body, 'node'), need(body, 'qid'))))
   },

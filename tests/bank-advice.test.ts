@@ -125,7 +125,7 @@ test('review 期低掌握 + 答错证据 → 校准建议；调度证据全对�
       return out
     }
     const before = await snapshot()
-    const r = await engine.difficultyAdvice('数学') as { nodes: Array<Record<string, unknown>>; dismissed: number }
+    const r = await engine.bank2.difficultyAdvice('数学') as { nodes: Array<Record<string, unknown>>; dismissed: number }
     const after = await snapshot()
     assert.deepEqual(after, before, '只读检测：建议先行，库与笔记零写入')
 
@@ -153,23 +153,23 @@ test('忽略清单：dismiss 后建议不再出现（dismissed 计数带出）�
         ...Object.entries(easyFsrs()).map(([k, v]) => `      ${k}: ${v}`)],
     ] },
   }, async ({ engine }) => {
-    const r1 = await engine.difficultyAdvice('数学') as { nodes: unknown[]; dismissed: number }
+    const r1 = await engine.bank2.difficultyAdvice('数学') as { nodes: unknown[]; dismissed: number }
     assert.equal(r1.nodes.length, 1, '先出建议')
 
     await engine.adviceDismiss('数学', '入门', 'easy')
-    const r2 = await engine.difficultyAdvice('数学') as { nodes: Array<Record<string, unknown>>; dismissed: number }
+    const r2 = await engine.bank2.difficultyAdvice('数学') as { nodes: Array<Record<string, unknown>>; dismissed: number }
     assert.deepEqual(r2.nodes, [], '被忽略的建议不再出现')
     assert.equal(r2.dismissed, 1, 'dismissed 计数带出')
 
     await engine.adviceDismiss('数学', '入门', 'easy', true) // undo
-    const r3 = await engine.difficultyAdvice('数学') as { nodes: unknown[]; dismissed: number }
+    const r3 = await engine.bank2.difficultyAdvice('数学') as { nodes: unknown[]; dismissed: number }
     assert.equal(r3.nodes.length, 1, 'undo 后建议恢复')
     assert.equal(r3.dismissed, 0)
 
     // 同条幂等
     await engine.adviceDismiss('数学', '入门', 'easy')
     await engine.adviceDismiss('数学', '入门', 'easy')
-    const r4 = await engine.difficultyAdvice('数学') as { dismissed: number }
+    const r4 = await engine.bank2.difficultyAdvice('数学') as { dismissed: number }
     assert.equal(r4.dismissed, 1, '重复忽略不叠加')
   })
 })
@@ -181,7 +181,7 @@ test('新节点全对一次（mastery 低但作答量低于门槛）不误报；
     notes: { 入门: { stage: 'ready' } },
     banks: { 入门: [tfQuestion('a1', { attempts: 1, correct: 1 })] },
   }, async ({ engine }) => {
-    const r = await engine.difficultyAdvice() as { nodes: unknown[] }
+    const r = await engine.bank2.difficultyAdvice() as { nodes: unknown[] }
     assert.deepEqual(r.nodes, [], '低数据静默，不误报')
   })
   // learning 节点即使作答量够也静默（stage 守门）
@@ -190,7 +190,7 @@ test('新节点全对一次（mastery 低但作答量低于门槛）不误报；
     notes: { 入门: { stage: 'learning' } },
     banks: { 入门: [1, 2, 3, 4, 5, 6].map(i => tfQuestion(`w${i}`, { attempts: 1, correct: 0 })) },
   }, async ({ engine }) => {
-    const r = await engine.difficultyAdvice() as { nodes: unknown[] }
+    const r = await engine.bank2.difficultyAdvice() as { nodes: unknown[] }
     assert.deepEqual(r.nodes, [], 'learning 期低掌握是正常状态，不出校准建议')
   })
 })

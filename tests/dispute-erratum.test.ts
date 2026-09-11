@@ -42,7 +42,7 @@ test('rekey：新键重判原作答 → 改判对，XP 补记、对错/EMA 修�
     assert.equal(wrong.correct, false)
     assert.equal(wrong.diff, '漏选了 C，多选了 B')
 
-    const review = await engine.questionDisputeReview(async () => reviewReply('key_error', ['A', 'B']), '数学', '入门', 'q13')
+    const review = await engine.bank2.questionDisputeReview(async () => reviewReply('key_error', ['A', 'B']), '数学', '入门', 'q13')
     assert.equal(review.verdict, 'key_error')
     assert.ok(review.target_ts, '复核返回被冲正作答的 ts')
 
@@ -81,7 +81,7 @@ test('rekey：新键重判原作答 → 改判对，XP 补记、对错/EMA 修�
 
     // 同一条作答不能二次申诉
     await assert.rejects(
-      () => engine.questionDisputeReview(async () => reviewReply('ok'), '数学', '入门', 'q13'),
+      () => engine.bank2.questionDisputeReview(async () => reviewReply('ok'), '数学', '入门', 'q13'),
       /至多申诉一次/,
     )
   })
@@ -160,7 +160,7 @@ test('复核说题没问题仍可强制豁免（overridden），题保留在调�
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
     await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
-    const review = await engine.questionDisputeReview(async () => reviewReply('ok', undefined), '数学', '入门', 'q13')
+    const review = await engine.bank2.questionDisputeReview(async () => reviewReply('ok', undefined), '数学', '入门', 'q13')
     assert.equal(review.verdict, 'ok')
     const r = await engine.questionDisputeApply('数学', '入门', 'q13', 'overridden', { reason: '仍不服' })
     assert.equal(r.verdict, 'overridden')
@@ -180,7 +180,7 @@ test('复核输出不可解析：重试一次后 fail loud，不改任何数据'
     await engine.questionAnswer(async () => 'unused', '数学', '入门', 'q13', 'A,B', 30)
     let calls = 0
     await assert.rejects(
-      () => engine.questionDisputeReview(async () => { calls++; return '模型胡言乱语' }, '数学', '入门', 'q13'),
+      () => engine.bank2.questionDisputeReview(async () => { calls++; return '模型胡言乱语' }, '数学', '入门', 'q13'),
       /AI 复核输出不可用/,
     )
     assert.equal(calls, 2, '自动重问一次（#116 同款）')
@@ -194,7 +194,7 @@ test('没有判错记录的题不可申诉', async () => {
     banks: { 入门: MC_BANK },
   }, async ({ engine }) => {
     await assert.rejects(
-      () => engine.questionDisputeReview(async () => reviewReply('ok'), '数学', '入门', 'q13'),
+      () => engine.bank2.questionDisputeReview(async () => reviewReply('ok'), '数学', '入门', 'q13'),
       /没有可申诉的判错作答/,
     )
   })
@@ -208,7 +208,7 @@ test('AI 判卷题型不走申诉（Q8 裁定：评分异议走讲解通道）',
     // reflection 判错（AI 判卷 0.2 分 < 0.6 及格线）
     await engine.questionAnswer(async () => JSON.stringify({ score: 0.2, feedback: '不完整' }), '数学', '入门', 'a1', '我的回答', 30)
     await assert.rejects(
-      () => engine.questionDisputeReview(async () => reviewReply('ok'), '数学', '入门', 'a1'),
+      () => engine.bank2.questionDisputeReview(async () => reviewReply('ok'), '数学', '入门', 'a1'),
       /不走申诉/,
     )
     await assert.rejects(

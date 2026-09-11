@@ -1318,10 +1318,6 @@ export class LearnhubEngine {
 
   // 以下 错误对比卡/学习面板题目管理/B2 回流/一键清理/勘误冲正 五节方法体住 BankSubsystem（question-bank.ts，#152 刀 6 聚合+转发）
 
-  async errorCardMine(courseKey: string | undefined, node?: string): Promise<ErrorMineDoc> {
-    return this.bank2.errorCardMine(courseKey, node)
-  }
-
   private async *errorCardTriples(
     courses: ReadonlyArray<{ name: string; root: string }>, nodeFilter?: string,
   ): AsyncGenerator<{ course: string; node: string; card: ErrorCard }> {
@@ -1335,21 +1331,6 @@ export class LearnhubEngine {
     return this.bank2.errorCardGenerate(courseKey, opts, llm)
   }
 
-  async errorCardAnswer(
-    courseKey: string | undefined, node: string, cardId: string, choice: string,
-  ): Promise<ErrorAnswerResult> {
-    return this.bank2.errorCardAnswer(courseKey, node, cardId, choice)
-  }
-
-  async errorCardQueue(courseKey?: string, today?: string): Promise<ErrorQueueDoc> {
-    return this.bank2.errorCardQueue(courseKey, today)
-  }
-
-  async errorCardArchive(
-    courseKey: string | undefined, node: string, cardId: string, archived: boolean,
-  ): Promise<ErrorArchiveResult> {
-    return this.bank2.errorCardArchive(courseKey, node, cardId, archived)
-  }
   // ---- U 区·技能条目与执行事件通道（#89 / ADR-0018 + ADR-0019）----
 
   async skillCreate(name: string, opts?: { id?: string; maintenance_days?: number | null }): Promise<SkillDoc> {
@@ -1529,14 +1510,7 @@ export class LearnhubEngine {
 
   // ---- 学习面板扩展（题目管理/课程删除）----
 
-  async questionsAll(courseKey?: string): Promise<QuestionsAllDoc> {
-    return this.bank2.questionsAll(courseKey)
-  }
   // ---- B2 难度感知回流（决议 #41 / #58）----
-
-  async difficultyAdvice(courseKey?: string): Promise<DifficultyAdviceDoc> {
-    return this.bank2.difficultyAdvice(courseKey)
-  }
 
   async adviceDismiss(course: string, node: string, qid: string | undefined, undo = false, all = false): Promise<{ dismissed: AdviceDismissRec[] }> {
     return this.bank2.adviceDismiss(course, node, qid, undo, all)
@@ -1544,10 +1518,6 @@ export class LearnhubEngine {
 
   async questionAdd(courseKey: string, node: string, question: Record<string, unknown>): Promise<{ course: string; node: string; id: string; count: number }> {
     return this.bank2.questionAdd(courseKey, node, question)
-  }
-
-  async questionGet(courseKey: string | undefined, node: string, qid: string): Promise<QuestionGetDoc> {
-    return this.bank2.questionGet(courseKey, node, qid)
   }
 
   async questionUpdate(courseKey: string, node: string, qid: string, patch: Record<string, unknown>): Promise<{ course: string; node: string; qid: string }> {
@@ -1559,21 +1529,10 @@ export class LearnhubEngine {
   }
   // ---- 题库一键清理（ADR-0032）----
 
-  async bankCleanupPreview(courseKey?: string): Promise<CleanupPreviewDoc> {
-    return this.bank2.bankCleanupPreview(courseKey)
-  }
-
   async bankCleanupApply(courseKey?: string): Promise<{ course: string; node: string; archived: number }[]> {
     return this.bank2.bankCleanupApply(courseKey)
   }
   // ---- 瑕疵题勘误与判罚冲正（ADR-0031）----
-
-  async questionDisputeReview(
-    llmComplete: LlmComplete,
-    courseKey: string | undefined, node: string, qid: string,
-  ): Promise<DisputeReviewResult> {
-    return this.bank2.questionDisputeReview(llmComplete, courseKey, node, qid)
-  }
 
   async questionDisputeApply(
     courseKey: string | undefined, node: string, qid: string,

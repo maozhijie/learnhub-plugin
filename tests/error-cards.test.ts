@@ -125,7 +125,7 @@ test('生成→落盘→复习队列汇入：指定课程产出错误对比卡�
   await withVault({ tag: 'learnhub-error-gen-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
     // 挖矿预览：候选可人工抽查（q2 只答错一次，不够 MIN_ERROR_LAPSES 门槛）
-    const mine = await h.engine.errorCardMine('数学')
+    const mine = await h.engine.bank2.errorCardMine('数学')
     assert.equal(mine.candidates.length, 1)
     assert.equal(mine.candidates[0]!.qid, 'q1')
 
@@ -187,7 +187,7 @@ test('作答判分：选对=3 推进+无绑定 XP；选错=1 且 0 XP；复习�
     const reviewLogBefore = (await h.store.reviewLogAll()).length
     const practiceBefore = (await h.store.practiceAll()).length
 
-    const wrong = await h.engine.errorCardAnswer('数学', '入门', 'c1', '两直角边平方再开方')
+    const wrong = await h.engine.bank2.errorCardAnswer('数学', '入门', 'c1', '两直角边平方再开方')
     assert.equal(wrong.correct, false)
     assert.equal(wrong.rating, 1)
     assert.equal(wrong.xp, 0)
@@ -201,7 +201,7 @@ test('作答判分：选对=3 推进+无绑定 XP；选错=1 且 0 XP；复习�
 
     // 同一天第二次推进被拒（一卡一天一次）
     await assert.rejects(
-      () => h.engine.errorCardAnswer('数学', '入门', 'c1', '用勾股定理求斜边'),
+      () => h.engine.bank2.errorCardAnswer('数学', '入门', 'c1', '用勾股定理求斜边'),
       /一卡一天一次/,
     )
 
@@ -242,7 +242,7 @@ test('选对路径：昨日已推进的卡今日再答选对 → rating 3 + 无�
       ].join('\n') + '\n',
     }],
   }, async h => {
-    const right = await h.engine.errorCardAnswer('数学', '入门', 'c1', '用勾股定理求斜边')
+    const right = await h.engine.bank2.errorCardAnswer('数学', '入门', 'c1', '用勾股定理求斜边')
     assert.equal(right.correct, true)
     assert.equal(right.rating, 3)
     assert.ok(right.xp >= 1)
@@ -261,13 +261,13 @@ test('队列排除归档卡；errorCardQueue 管理面带全卡面供人工抽�
   await withVault({ tag: 'learnhub-error-arch-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
     await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
-    await h.engine.errorCardArchive('数学', '入门', 'c1', true)
+    await h.engine.bank2.errorCardArchive('数学', '入门', 'c1', true)
     const q = await h.engine.content2.reviewQueue()
     assert.ok(!q.cards.some(c => c.source === 'error'))
-    const list = await h.engine.errorCardQueue('数学')
+    const list = await h.engine.bank2.errorCardQueue('数学')
     assert.equal(list.total, 0)
-    await h.engine.errorCardArchive('数学', '入门', 'c1', false)
-    const list2 = await h.engine.errorCardQueue('数学')
+    await h.engine.bank2.errorCardArchive('数学', '入门', 'c1', false)
+    const list2 = await h.engine.bank2.errorCardQueue('数学')
     assert.equal(list2.total, 1)
     assert.equal(list2.cards[0]!.answer, '用勾股定理求斜边')
     assert.equal(list2.cards[0]!.mine, '把两直角边相加')
@@ -278,7 +278,7 @@ test('归档后原题重新可挖（covered 只算活跃卡）', async () => {
   await withVault({ tag: 'learnhub-error-remining-', banks: { 入门: BANK } }, async h => {
     await seedWrongAttempts(h)
     await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
-    await h.engine.errorCardArchive('数学', '入门', 'c1', true)
+    await h.engine.bank2.errorCardArchive('数学', '入门', 'c1', true)
     const result = await h.engine.errorCardGenerate('数学', undefined, async () => VALID_YAML)
     assert.equal(result.generated[0]!.ids[0], 'c2')
     const doc = await new ErrorCards(h.paths, nodeVaultFs).load('math', '入门')

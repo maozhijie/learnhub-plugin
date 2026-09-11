@@ -240,8 +240,8 @@ test('导入回写：Again/Hard/Good/Easy 按 vault ts-fsrs 重算 + 流水/复�
   await withVault(async engine => {
     const anki = new FakeAnki()
     await engine.ankiExportPush(anki)
-    const before = await engine.questionGet('数学', '入门', 'q1')
-    const beforeQ2 = await engine.questionGet('数学', '入门', 'q2')
+    const before = await engine.bank2.questionGet('数学', '入门', 'q1')
+    const beforeQ2 = await engine.bank2.questionGet('数学', '入门', 'q2')
     const q1Before = (before.question as { fsrs: { reps: number; due: string } }).fsrs
     const q2Before = (beforeQ2.question as { fsrs: { reps: number; due: string } }).fsrs
 
@@ -255,8 +255,8 @@ test('导入回写：Again/Hard/Good/Easy 按 vault ts-fsrs 重算 + 流水/复�
     assert.equal(r.skipped_unknown, 0)
 
     // vault 按 ts-fsrs 重算：reps+1、last_review=今天、due 由 vault 调度器给出（推进到未来）
-    const after = await engine.questionGet('数学', '入门', 'q1')
-    const afterQ2 = await engine.questionGet('数学', '入门', 'q2')
+    const after = await engine.bank2.questionGet('数学', '入门', 'q1')
+    const afterQ2 = await engine.bank2.questionGet('数学', '入门', 'q2')
     const q1After = (after.question as { fsrs: { reps: number; due: string; last_review: string } }).fsrs
     const q2After = (afterQ2.question as { fsrs: { reps: number; due: string; last_review: string; lapses: number } }).fsrs
     assert.equal(q1After.reps, q1Before.reps + 1)
@@ -294,7 +294,7 @@ test('导入回写：同日已在 vault 推进的题，其当日 Anki 事件跳�
     // 先在 vault 里推进 q1（练习流自动判卷答对 → rating 3）
     const ans = await engine.questionAnswer(async () => { throw new Error('不该调模型') }, '数学', '入门', 'q1', 'A')
     assert.equal(ans.scheduled, true)
-    const q1Before = await engine.questionGet('数学', '入门', 'q1')
+    const q1Before = await engine.bank2.questionGet('数学', '入门', 'q1')
     const fsrsBefore = (q1Before.question as { fsrs: { reps: number } }).fsrs
     const practiceBefore = (await engine.store.practiceAll()).length
     const reviewLogBefore = (await engine.store.reviewLogAll()).length
@@ -306,7 +306,7 @@ test('导入回写：同日已在 vault 推进的题，其当日 Anki 事件跳�
     assert.equal(r.skipped_same_day, 1)
     assert.equal(r.advanced, 0)
 
-    const q1After = await engine.questionGet('数学', '入门', 'q1')
+    const q1After = await engine.bank2.questionGet('数学', '入门', 'q1')
     assert.deepEqual((q1After.question as { fsrs: { reps: number } }).fsrs, fsrsBefore, '调度卡零写入')
     // 留档：practice 多一条（judge=review），复习日志零新增
     const practice = await engine.store.practiceAll()

@@ -62,7 +62,7 @@ test('bankCleanupPreview/Apply：skipped 节点收全部、review 节点只收�
       ],
     },
   }, async ({ engine, paths }) => {
-    const preview = await engine.bankCleanupPreview('数学')
+    const preview = await engine.bank2.bankCleanupPreview('数学')
     assert.equal(preview.total, 3, 'k1/k2（跳过节点）+ d1（休眠题）')
     const byNode = new Map(preview.groups.map(g => [g.node, g]))
     assert.deepEqual(byNode.get('入门'), {
@@ -90,7 +90,7 @@ test('bankCleanupPreview/Apply：skipped 节点收全部、review 节点只收�
     assert.doesNotMatch(restored, /archived_reason/, '恢复时归档原因一并清除')
 
     // 再跑预览：d1 恢复成在库休眠题重新成为候选；k1/k2/d3 已归档不再入候选
-    const after = await engine.bankCleanupPreview('数学')
+    const after = await engine.bank2.bankCleanupPreview('数学')
     assert.deepEqual(after.groups.map(g => g.node), ['进阶'], '只剩进阶的 d1 一个候选')
     assert.equal(after.groups[0]!.count, 1)
   })
@@ -124,7 +124,7 @@ test('nodeSkip：跳过时该节点全部未归档题自动归档（reason=skip�
     assert.match(after, /id: s1[\s\S]*?archived: true/, '取消跳过不自动恢复')
 
     // skipped 节点的题进一键清理预览（含未恢复的 s1/s2）
-    const preview = await engine.bankCleanupPreview('数学')
+    const preview = await engine.bank2.bankCleanupPreview('数学')
     assert.equal(preview.total, 0, 's1/s2 已归档，无新增候选；s3 已归档')
   })
 })

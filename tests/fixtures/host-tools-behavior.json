@@ -2134,7 +2134,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "errorCardArchive(\"1\",\"1\",\"1\",true)"
+   "bank2.errorCardArchive(\"1\",\"1\",\"1\",true)"
   ]
  },
  {

@@ -39,7 +39,7 @@ test('#8 present malformed bank blocks load/list and reports Broken without muta
     const courseRoot = engine.paths.courseRoot('math')
     await assert.rejects(() => engine.bank.load(courseRoot, '入门'), /题库 Broken.*入门\.yaml[\s\S]*impossible/s)
     await assert.rejects(() => engine.content2.questions('数学', '入门'), /题库 Broken/s)
-    await assert.rejects(() => engine.questionGet('数学', '入门', 'q1'), /题库 Broken/s)
+    await assert.rejects(() => engine.bank2.questionGet('数学', '入门', 'q1'), /题库 Broken/s)
     await assert.rejects(() => engine.questionUpdate('数学', '入门', 'q1', { q: '改写题干' }), /题库 Broken/s)
     await assert.rejects(() => engine.questionAdd('数学', '入门', { kind: 'true_false', q: 'x', answer: true }), /题库 Broken/s)
     const report = await engine.dataCheck()
@@ -86,7 +86,7 @@ test('#8 authoring fields remain editable and the whole bank revalidates', async
       tags: ['基础'],
       section: '通用',
     })
-    const got = await engine.questionGet('数学', '入门', 'q1')
+    const got = await engine.bank2.questionGet('数学', '入门', 'q1')
     assert.equal(got.question.q, '1+2=？')
     assert.equal(got.question.answer, 'B')
     assert.deepEqual(got.question.uses, ['加法'])
