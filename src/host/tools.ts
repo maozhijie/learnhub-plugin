@@ -16,6 +16,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { COMMAND_LIST } from '../commands/index.ts'
 import type { CommandSpec } from '../commands/index.ts'
+import type { ParamSpec, ParameterSchemaSpec } from '../commands/types.ts'
 import { run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import { toolHandlers } from './tool-handlers.ts'
@@ -71,7 +72,7 @@ export const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prom
  * defineTool 的注册形态 `{type: 'object', properties, required[]}`——与工具面快照逐字一致
  * （tests/commands.test.ts 的门⑧）。
  */
-export function sdkParameters(args: CommandSpec['args']): Record<string, unknown> {
+export function sdkParameters(args: CommandSpec['args']): ParameterSchemaSpec {
   const SDK_KEYS = new Set(['type', 'required', 'description', 'enum', 'items', 'additionalProperties'])
   const stripSpec = (spec: unknown): unknown => {
     if (Array.isArray(spec)) return spec.map(stripSpec)
@@ -85,8 +86,8 @@ export function sdkParameters(args: CommandSpec['args']): Record<string, unknown
     }
     return spec
   }
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(args)) out[k] = stripSpec(v)
+  const out: Record<string, ParamSpec> = {}
+  for (const [k, v] of Object.entries(args)) out[k] = stripSpec(v) as ParamSpec
   return out
 }
 
@@ -113,7 +114,7 @@ export function registerTools(ctx: Context, rt: HostRuntime): void {
     ctx.tools.register(defineTool({
       name: tool,
       description: c.summary!,
-      parameters: sdkParameters(c.args),
+      parameters: sdkParameters(c.args) as never,
       output: textOutput,
       execute: execute as never,
     }) as never)

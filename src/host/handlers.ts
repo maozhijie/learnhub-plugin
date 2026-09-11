@@ -202,7 +202,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /skills/maintenance': async ({ rt, body, res }) => {
     // 维持节拍帽（#89）：天数或 null（关闭）
     sendJson(res, 200, await apiRun(rt, 'api/skills/maintenance', () =>
-      rt.engine.skillSetMaintenance(need(body, 'skill'), body.days ?? null)))
+      rt.engine.skillSetMaintenance(need(body, 'skill'), body.days == null ? null : requireNumber(body, 'days'))))
   },
   'POST /rebuild': async ({ rt, res }) => {
     sendJson(res, 200, { message: (await rt.engine.rebuild()).message })
@@ -219,10 +219,10 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 「今天学它」pin（E3 #67）：显式方向——pinned=true 置顶当日推荐榜首（只改
     // 排序、保留就绪提示、次日自动失效），false 取消。
     const pinned = requireBoolean(body, 'pinned')
-    sendJson(res, 200, await apiRun(rt, 'api/node/pin', () =>
-      pinned
-        ? rt.engine.pinToday(need(body, 'course'), need(body, 'node'))
-        : rt.engine.unpinToday(need(body, 'course'), need(body, 'node'))))
+    const out = pinned
+      ? await rt.engine.pinToday(need(body, 'course'), need(body, 'node'))
+      : await rt.engine.unpinToday(need(body, 'course'), need(body, 'node'))
+    sendJson(res, 200, await apiRun(rt, 'api/node/pin', async () => out))
   },
   'POST /node/complete': async ({ rt, ctx, body, res }) => {
     // 完成 = 教练回合触发点之一（五点接线）：自动触点走阻尼；路由返回后 fire-and-forget

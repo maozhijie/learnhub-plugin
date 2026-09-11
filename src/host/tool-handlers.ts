@@ -40,8 +40,8 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.questionAnswer(
         llmSeam(ctx), args.course, args.node, args.qid, args.answer,
         null, { ...(args.predicted !== undefined ? { predicted: args.predicted as never } : {}) }))),
-  'learnhub_generate': (args: { course: string; node: string; style?: string }) => run(rt, 'learnhub_generate', () =>
-      enqueueGeneration(rt, ctx, args.course, args.node, args.style)),
+  'learnhub_generate': (args: { course: string; node: string; style?: string }) => run(rt, 'learnhub_generate',
+      async () => JSON.stringify(await enqueueGeneration(rt, ctx, args.course, args.node, args.style))),
   'learnhub_section_rewrite': (args: { course: string; node: string; section: string }) => run(rt, 'learnhub_section_rewrite', async () =>
       generateSection(rt, ctx, args.course, args.node, args.section)),
   'learnhub_coach': () => run(rt, 'learnhub_coach', async () => JSON.stringify(await rt.engine.coachAdvice())),

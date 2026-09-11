@@ -11,7 +11,7 @@ import { BLOOM_LEVELS, type BloomLevel } from './types.ts'
 export type ComplexityTier = 1 | 2 | 3
 
 /** 档位标签（CONTEXT.md Complexity Tier；prompt/日志/面板展示用）。 */
-export const TIER_LABELS: Record<ComplexityTier, string> = { 1: '低', 2: '中', 3: '高' }
+export const TIER_LABELS: Record<ComplexityTier, '低' | '中' | '高'> = { 1: '低', 2: '中', 3: '高' }
 
 /** 档位标签 → 序号（GenJob/manifest 存中文标签时转回）；未知回退中档。 */
 export const TIER_LABEL_TO_IDX: Record<string, ComplexityTier> = { 低: 1, 中: 2, 高: 3 }

@@ -35,7 +35,8 @@ import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { QuestionBank, BankDoc, BankQuestion } from './question-bank.ts'
 import type { FSRS } from 'ts-fsrs'
-import type { AnkiStatusDoc, NoteSourceDoc, NoteSourceRegisterResult } from './views/channels.ts'
+import type { AnkiStatusDoc, NoteSourceDoc, NoteSourceItem, NoteSourceRegisterResult } from './views/channels.ts'
+import type { AnswerResult, QuestionForgetResult, QuestionItem, QuestionRateResult, ReviewCard } from './views/content.ts'
 import { dayOfTs, nowIsoOf } from './dates.ts'
 import type { Clock } from './clock.ts'
 import { readDayCutoff, xpForAnswer } from './xp.ts'
@@ -352,7 +353,7 @@ export interface ChannelsDeps {
   enabledCourses(): Promise<CourseEntry[]>
   scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void>
   loadPrompt(kind: string): Promise<string>
-  questionView(q: BankQuestion, i: number, opts?: { today?: string }): Record<string, unknown>
+  questionView(q: BankQuestion, i: number, opts?: { today?: string }): QuestionItem
   judgeBankAnswer(llmComplete: LlmComplete, q: BankQuestion, answer: string, op?: string, ref?: { course: string; node: string; qid: string }): Promise<{ score: number; feedback: string }>
   refreshRepCard(c: CourseEntry, graph: Graph, node: string): Promise<Fm | null>
 }
@@ -483,7 +484,7 @@ export class ChannelsSubsystem {
     const entries = await this.e.registry.loadNoteSources()
     const manifest = await this.e.noteManifest.load()
     const itemById = new Map(manifest.sources.map(s => [s.id, s]))
-    const out: Array<Record<string, unknown>> = []
+    const out: NoteSourceItem[] = []
     for (const e of entries) {
       const { status, title } = await this.sourceStatusOf(e, itemById.get(e.id))
       const pool = await this.noteSourcePoolStats(e.id, today)
@@ -789,10 +790,10 @@ export class ChannelsSubsystem {
    * inconsistent（清单条目缺失）无法核对指纹：卡照常出，状态随响应带出。 */
   async collectNoteSourceCards(
     today: string,
-  ): Promise<{ cards: Array<Record<string, unknown>>; drifted: Array<Record<string, unknown>>; suspended: Array<Record<string, unknown>> }> {
-    const cards: Array<Record<string, unknown>> = []
-    const drifted: Array<Record<string, unknown>> = []
-    const suspended: Array<Record<string, unknown>> = []
+  ): Promise<{ cards: ReviewCard[]; drifted: Array<{ id: string; path: string; hint: string }>; suspended: Array<{ id: string; path: string; reason: string }> }> {
+    const cards: ReviewCard[] = []
+    const drifted: Array<{ id: string; path: string; hint: string }> = []
+    const suspended: Array<{ id: string; path: string; reason: string }> = []
     const entries = await this.e.registry.loadNoteSources()
     if (!entries.length) return { cards, drifted, suspended }
     const manifest = await this.e.noteManifest.load()
@@ -868,7 +869,7 @@ export class ChannelsSubsystem {
     llmComplete: LlmComplete,
     sourceId: string, qid: string, answer: string,
     opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null },
-  ): Promise<Record<string, unknown>> {
+  ): Promise<AnswerResult> {
     const bank = await this.e.bank.load(this.e.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
     if (!q) throw new Error(`[question] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
@@ -927,7 +928,7 @@ export class ChannelsSubsystem {
 
 
   /** 笔记源自评结算：挂起标记唯一准入，推卡 + 复习日志（self），无代表卡回刷。 */
-  async noteSourceRate(sourceId: string, qid: string, r: number): Promise<Record<string, unknown>> {
+  async noteSourceRate(sourceId: string, qid: string, r: number): Promise<QuestionRateResult> {
     const bank = await this.e.bank.load(this.e.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
     if (!q) throw new Error(`[question-rate] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
@@ -942,7 +943,7 @@ export class ChannelsSubsystem {
 
 
   /** 笔记源忘记申报：rating=1 推卡 + 复习日志（auto），当日已推进拒绝。 */
-  async noteSourceForget(sourceId: string, qid: string): Promise<Record<string, unknown>> {
+  async noteSourceForget(sourceId: string, qid: string): Promise<QuestionForgetResult> {
     const bank = await this.e.bank.load(this.e.paths.noteSourceDir, sourceId)
     const q = bank.questions.find(x => x.id === qid)
     if (!q) throw new Error(`[question-forget] 笔记源 ${sourceId} 的题库没有 ${qid}。`)
@@ -1219,7 +1220,7 @@ export class ChannelsSubsystem {
     const payloads = await this.collectAnkiDuePayloads(today)
     const byDeck = new Map<string, number>()
     for (const p of payloads) byDeck.set(p.deckName, (byDeck.get(p.deckName) ?? 0) + 1)
-    let anki: Record<string, unknown> | undefined
+    let anki: AnkiStatusDoc['anki'] | undefined
     if (transport) {
       try {
         await transport.invoke('version')

@@ -225,7 +225,23 @@ export function evaluateSectionSignals(input: SectionSignalInput): SectionVerdic
 /** 诊断建议项的对外形状（status 附带 / recommend 事件携带 / 工具面共用，单一出处）：
  * rewrite = 一键重写直达动作（既有单节重写管线，确认后才触发）；explain = Arc D
  * 讲解入口所在（节点学习页答错/忘记错误态的「讲解这道题」）。 */
-export function diagnosticView(d: DiagnosticItem): Record<string, unknown> {
+/** 内容诊断建议项（B1 #69；attribution.diagnosticView 的产出，status/recommend 附带）。 */
+export interface DiagnosticEntry {
+  node: string
+  section: string
+  sectionTitle: string
+  signal: 'R1' | 'R2'
+  escalate: boolean
+  fresh: boolean
+  reason: string
+  evidence: Record<string, number | string>
+  /** 重写此节的直达动作定位。 */
+  rewrite: { course: string; node: string; section: string }
+  /** 讲解此节的直达动作定位。 */
+  explain: { course: string; node: string }
+}
+
+export function diagnosticView(d: DiagnosticItem): DiagnosticEntry {
   return {
     node: d.node, section: d.sectionId, sectionTitle: d.sectionTitle,
     signal: d.signal, escalate: d.escalate, fresh: d.fresh,

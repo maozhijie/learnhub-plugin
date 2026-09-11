@@ -4,7 +4,7 @@
  * cytoscape 渲染元素（面板 DAG 视图消费）。
  */
 import type { Graph } from './graph.ts'
-import type { Fm } from './types.ts'
+import type { Fm, Stage } from './types.ts'
 import type { Store } from './store.ts'
 import { effectiveStage } from './audit.ts'
 import { graphHealthScore, estSpreadNote } from './health.ts'
@@ -65,7 +65,7 @@ export interface GraphAnalysis {
   }
   /** Vault 链接扫描元信息：未扫描时 scanned_at=null（带 hint 指路扫描工具）。 */
   vault_links: { scanned_at: string | null; mapped_total: number; hint?: string }
-  nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: string; opt: boolean; mastery: number; type?: string } }>
+  nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: Stage; opt: boolean; mastery: number; hasContent: boolean; type?: string } }>
   edges: Array<{ data: { id: string; source: string; target: string; kind: string; w?: number } }>
   /** 节点 schema 全量（pre/enc/est/bloom/difficulty/teaches/assumes/misconceptions/note…）
    * ——编辑规划与边级自查的数据依据；elementsOnly 模式不含。 */

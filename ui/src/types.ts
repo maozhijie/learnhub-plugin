@@ -44,7 +44,7 @@ export type {
   NoteSourceDoc, NoteSourceItem, NoteSourceRegisterResult, ProposalRec as PropItem,
   ProjectCrossDoc, ProjectExecRec, ProjectExecResult, ProjectLifecycle,
   QuestionForgetResult, QuestionGetDoc, QuestionItem, QuestionKind, QuestionRateResult,
-  QuestionsAllDoc, QuestionsDoc, QueueItem, RecEvent, RecEventType, RecommendDoc, ReviewCard,
+  QuestionsAllDoc, QuestionsDoc, QueueCard, QueueItem, RecEvent, RecEventType, RecommendDoc, ReviewCard,
   ReviewQueueDoc, SectionManifest as SectionManifestItem, SkillLaneItem, SkillsListDoc, StatusCourse,
   StatusDoc, TooEasyAdvice,
   TreeBlock, TreeCourse, TreeDoc, TreeRegion, TreeNode, XpStatus,

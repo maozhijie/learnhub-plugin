@@ -41,7 +41,8 @@ import { declaredEncOf } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { CourseEntry, Fm } from './types.ts'
 import type { AgentSeam, GateVerdict } from './agent.ts'
-import type { GraphApplyResult, GraphProposeResult } from './views/proposals.ts'
+import type { GraphApplyResult } from './views/graph.ts'
+import type { GraphProposeResult } from './views/proposals.ts'
 import { runAudit } from './audit.ts'
 import { graphHealthScore } from './health.ts'
 import { applyPracticeEvidence } from './grading.ts'
@@ -1247,7 +1248,7 @@ export class ProjectSubsystem {
    * （重新反编译产生新对）。 */
   async projectDecompileApply(planPid: number, seedPid: number): Promise<{
     project: string
-    seed: Record<string, unknown> | null
+    seed: GraphApplyResult | null
     plan: ProjectApplyResult | null
   }> {
     const list = await this.e.store.loadProposals()

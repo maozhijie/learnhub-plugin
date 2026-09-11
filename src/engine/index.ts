@@ -70,6 +70,7 @@ import type { CoachCheck, CoachGrowthSegment, CoachTrigger} from './coach-round.
 
 /** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。 */
 export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
+export type { GateVerdict } from './agent.ts'
 export type { SeedDraftRequest } from './seed.ts'
 import {
   appendProbationEntry, readProbationLedger, foldProbation, recheckVerdict, recheckDue,
@@ -118,7 +119,7 @@ import type {
   LearnerRateResult, LessonDoc, MemoryHealthDoc, NoteSourceDoc, NoteSourceItem,
   ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc, ErrorAnswerResult,
   NoteSourceRegisterResult, QuestionForgetResult, QuestionGetDoc, QuestionRateResult,
-  QuestionsAllDoc, QuestionsDoc, QueueItem, RecommendDoc, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
+  QuestionsAllDoc, QuestionsDoc, QueueItem, QuestionItem, RecommendDoc, ReviewCard, ReviewQueueDoc, SkillsListDoc, StatusDoc, TreeDoc,
   XpStatus, HabitsListDoc, HabitShowDoc, ProjectCrossDoc, ProjectExecResult, ProjectExecBackflow,
   KataDoc, CleanupGroup, CleanupPreviewDoc,
 } from './views.ts'
@@ -569,14 +570,14 @@ export class LearnhubEngine {
     const courses = await this.enabledCourses()
     const doc = await this.sessions.statusJson(courses, stats, today, fmtCutoff(cutoff))
     // 内容诊断建议项（#69 B1）：每课程附 diagnostics（信号/理由/证据 + 重写与讲解直达入口）
-    for (const course of doc.courses as Array<Record<string, unknown>>) {
+    for (const course of doc.courses) {
       const items = diagnostics.filter(d => d.course === course.name)
       if (items.length) course.diagnostics = items.map(d => diagnosticView(d))
     }
     // 完成宣告（#142 雾区条款上半）：完成判据读侧折叠（能力=终点 mastery≥阈值且闭包健康；
     // 覆盖=块工作表+终点），面板宣告——零写侧状态、零专门停机代码
     for (const entry of courses) {
-      const course = (doc.courses as Array<Record<string, unknown>>).find(c => c.name === entry.name)
+      const course = doc.courses.find(c => c.name === entry.name)
       if (!course) continue
       const completion = await this.courseCompletion(entry)
       if (completion) course.completion = completion
@@ -666,7 +667,7 @@ export class LearnhubEngine {
       const done = new Set(Object.entries(state).filter(([, f]) => ['review', 'mastered', 'skipped'].includes(f.stage)).map(([n]) => n))
       await writeReadyList(this.paths, c.root, graph, done, this.fs)
     }
-    if (failed, this.fs) throw new Error(`[rebuild] 审计存在 ERROR：\n${lines.join('\n')}`)
+    if (failed) throw new Error(`[rebuild] 审计存在 ERROR：\n${lines.join('\n')}`)
     return { message: `[rebuild] 完成：\n${lines.join('\n')}` }
   }
 
@@ -883,7 +884,7 @@ export class LearnhubEngine {
 
   async projectDecompileApply(planPid: number, seedPid: number): Promise<{
     project: string
-    seed: Record<string, unknown> | null
+    seed: GraphApplyResult | null
     plan: ProjectApplyResult | null
   }> {
     return this.project.projectDecompileApply(planPid, seedPid)
@@ -995,7 +996,7 @@ export class LearnhubEngine {
     return this.content2.coursesTree(courseKey)
   }
 
-  private questionView(q: BankQuestion, i: number, opts?: { today?: string }): Record<string, unknown> {
+  private questionView(q: BankQuestion, i: number, opts?: { today?: string }): QuestionItem {
     return this.content2.questionView(q, i, opts)
   }
 
@@ -1117,19 +1118,19 @@ export class LearnhubEngine {
     return this.channels.noteSourceGenerate(id, count, llm, today)
   }
 
-  private async collectNoteSourceCards( today: string, ): Promise<{ cards: Array<Record<string, unknown>>; drifted: Array<Record<string, unknown>>; suspended: Array<Record<string, unknown>> }> {
+  private async collectNoteSourceCards( today: string, ): Promise<{ cards: ReviewCard[]; drifted: Array<{ id: string; path: string; hint: string }>; suspended: Array<{ id: string; path: string; reason: string }> }> {
     return this.channels.collectNoteSourceCards(today)
   }
 
-  private async noteSourceAnswer( llmComplete: LlmComplete, sourceId: string, qid: string, answer: string, opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null }, ): Promise<Record<string, unknown>> {
+  private async noteSourceAnswer( llmComplete: LlmComplete, sourceId: string, qid: string, answer: string, opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null }, ): Promise<AnswerResult> {
     return this.channels.noteSourceAnswer(llmComplete, sourceId, qid, answer, opts)
   }
 
-  private async noteSourceRate(sourceId: string, qid: string, r: number): Promise<Record<string, unknown>> {
+  private async noteSourceRate(sourceId: string, qid: string, r: number): Promise<QuestionRateResult> {
     return this.channels.noteSourceRate(sourceId, qid, r)
   }
 
-  private async noteSourceForget(sourceId: string, qid: string): Promise<Record<string, unknown>> {
+  private async noteSourceForget(sourceId: string, qid: string): Promise<QuestionForgetResult> {
     return this.channels.noteSourceForget(sourceId, qid)
   }
   // ---- C2 Anki 通道（#63 / ADR-0011：Anki 纯作答通道，vault 唯一调度者）----
@@ -1786,7 +1787,7 @@ export class LearnhubEngine {
   }
 
   async questionGenerate(
-    courseKey: string | undefined, node: string, count?: number,
+    courseKey: string | undefined, node: string, count: number | undefined,
     llm: LlmComplete,
     opts?: {
       sections?: Array<{ id: string; title: string }>

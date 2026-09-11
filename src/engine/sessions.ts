@@ -17,7 +17,11 @@ import type { Graph } from './graph.ts'
 import type { Fm, Stage } from './types.ts'
 import type { Paths } from './paths.ts'
 import { DIAGNOSTIC_SCORE, diagnosticView } from './attribution.ts'
-import type { DiagnosticItem } from './attribution.ts'
+import type { DiagnosticEntry, DiagnosticItem } from './attribution.ts'
+import type { LessonDoc } from './views/content.ts'
+import type { CompletionFold } from './seed.ts'
+import type { ProbationCourseView } from './probation.ts'
+import type { CoachCheck } from './coach-round.ts'
 import { newLessonRationale, pinHeadScore, todayPins } from './goals.ts'
 import type { PinRec } from './goals.ts'
 import { reconsolidationAdvice, SLEEP_SCORE, SLEEP_STANDALONE_MAX } from './sleep.ts'
@@ -87,6 +91,84 @@ export function gateBlockers(graph: Graph, state: Record<string, Fm>, rValue: (n
  * （review-queue 的 node 过滤入口），due = 其当前到期题数，r = 该目标当前可提取性
  * R；w 仅 enc 回退带（成分技能调用强度）。 */
 export interface AdviceItem { node: string; w?: number; r: number; due: number }
+
+export type RecEventType = 'new' | 'review' | 'overdue' | 'learning' | 'struggle' | 'diagnostic' | 'pin' | 'sleep'
+
+/** 复习建议事件（recommend 输出）：本模块是生产者，views.ts 自此处转发导出。 */
+export interface RecEvent {
+  type: RecEventType
+  course: string
+  node: string
+  region: string
+  score: number
+  why: string
+  /** 节点课程笔记的 vault 相对路径（无笔记 = null）。 */
+  path: string | null
+  /** 已生成可读正文（点开有东西读；列表三态标识数据源）。 */
+  hasContent: boolean
+  /** A3 定向复习建议项（#54/#55）：软闸/enc 回退——先复习建议节点的到期题。 */
+  advice?: AdviceItem[]
+  /** 内容诊断建议项（B1 #69）：附着在学习事件上或独立 diagnostic 事件。 */
+  diagnostics?: DiagnosticEntry[]
+  /** 「今天学它」pin 标识（E3 #67）：当日课程内置顶，次日自动失效。 */
+  pinned?: true
+  /** 挂载的执行意图（C-5 #84）：if-then 计划（稳定线索 + 单一具体行动），随 pin 当日过期。 */
+  intention?: { cue: string; action: string }
+  /** D-4 睡眠耦合建议（#85）：重巩固型节点的「睡前练、醒后验」时段建议（可关）。 */
+  sleep?: SleepSuggestionEntry
+}
+
+/** 睡眠耦合建议条目（sleep.ts SleepSuggestion 的视图镜像）。 */
+export interface SleepSuggestionEntry {
+  /** 主建议：睡前练、醒后验（Walker 2002/2005 措辞）。 */
+  text: string
+  /** 可选心理演练附注（r≈0.13 小效应，预期管理措辞）。 */
+  rehearsal: string
+}
+
+export interface RecommendDoc { date: string; events: RecEvent[] }
+
+/** 软闸建议项（#54 R 半）：被 R-gate 拦下的候选节点 → 衰减前置清单（含直达复习入口）。 */
+export interface StatusGateAdvice {
+  /** 衰减前置节点名。 */
+  pre: string
+  /** 该前置当前可回忆度 R。 */
+  r: number
+  /** 该前置当前到期题数。 */
+  due: number
+  /** 直达复习入口（review-queue 的 node 过滤）。 */
+  entry: { course: string; node: string }
+}
+
+/** status 单课程汇总（sessions.statusJson 生产；facade 逐课程附 coach/completion/probation/diagnostics）。 */
+export interface StatusCourse {
+  /** 注册表 id（旧注册表条目可缺省）。 */
+  id?: string
+  name: string
+  total: number
+  counts: Record<Stage, number>
+  due_today: number
+  overdue: Array<{ node: string; since: string; count: number; path: string | null }>
+  ready: Array<{ node: string; path: string | null }>
+  gated: Array<{ node: string; path: string | null }>
+  blocked: Record<string, StatusGateAdvice[]>
+  /** 内容诊断建议项（#69 B1）：该课程命中时附带（facade 逐课程过滤 diagnosticsAdvice）。 */
+  diagnostics?: DiagnosticEntry[]
+  /** 完成宣告（#142 雾区条款上半，读侧折叠零写副作用）：有终点锚的课程附带。 */
+  completion?: CompletionFold
+  /** 插入实验面（#146）：在途插入节点、到期未决、三率与韧性闸门现势。 */
+  probation?: ProbationCourseView
+  /** 教练回合就绪深度检查（#144 会话开工触点；facade 逐课程附加）。 */
+  coach?: CoachCheck
+}
+
+export interface StatusDoc {
+  /** 当前学习日（ADR-0020；日界可配置，非必为日历日）。 */
+  date: string
+  /** 生效日界 'HH:mm'（配置三件套静默回落时的可见性补偿）。 */
+  day_cutoff: string
+  courses: StatusCourse[]
+}
 
 /** struggle 近期窗口的 (course,node) 聚合作答量（facade 从作答流水注入）。 */
 export interface WindowStat { attempts: number; correct: number }
@@ -236,8 +318,8 @@ export class Sessions {
     statsByCourse: Map<string, NodeStat[]>,
     today: string,
     dayCutoff: string,
-  ): Promise<Record<string, unknown>> {
-    const courses: Array<Record<string, unknown>> = []
+  ): Promise<StatusDoc> {
+    const courses: StatusCourse[] = []
     for (const c of enabled) {
       const { graph, state, broken } = await this.viewOf(c)
       assertNoBrokenNotes('status', broken)
@@ -282,8 +364,8 @@ export class Sessions {
     pins?: PinRec[],
     /** D-4 睡眠耦合建议层开关（#85；state/learnhub.json 的 sleep.enabled）。 */
     sleepAdvice?: boolean,
-  ): Promise<Array<Record<string, unknown>>> {
-    const events: Array<Record<string, unknown>> = []
+  ): Promise<RecEvent[]> {
+    const events: RecEvent[] = []
     const seen = new Set<string>()
     for (const c of enabled) {
       const { graph, state, broken } = await this.viewOf(c)
@@ -314,7 +396,7 @@ export class Sessions {
         return items.length ? items : null
       }
       const t = parseDay(today)!
-      const add = (etype: string, node: string, score: number, why: string, advice?: AdviceItem[]) => {
+      const add = (etype: RecEventType, node: string, score: number, why: string, advice?: AdviceItem[]) => {
         if (seen.has(node)) return
         seen.add(node)
         events.push({
@@ -516,7 +598,7 @@ export class Sessions {
   }
 
   /** 单节点课程学习包：分节正文 + 前置 + 推荐下一步。today = 学习日（ADR-0020），facade 注入。 */
-  async lesson(courseName: string, root: string, graph: Graph, state: Record<string, Fm>, node: string, today: string): Promise<Record<string, unknown>> {
+  async lesson(courseName: string, root: string, graph: Graph, state: Record<string, Fm>, node: string, today: string): Promise<LessonDoc> {
     if (!graph.nset.has(node)) throw new Error(`[lesson] 课程「${courseName}」中没有节点「${node}」。`)
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
@@ -540,6 +622,7 @@ export class Sessions {
       stage: effectiveStage(state, node),
       mastery: masteryOfFm(fm),
       sections,
+      manifest: state[node]?.content.sections ?? null,
       prereqs: [...graph.preOf[node]],
       suggest_next: [...unlocks, ...candidates.filter(n => !unlocks.includes(n))].slice(0, 8),
     }

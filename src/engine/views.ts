@@ -22,6 +22,11 @@ import type { AlloKind } from './grading.ts'
 import type { JolBin, JolPrediction } from './jol.ts'
 import type { CompletionFold } from './seed.ts'
 import type { ProbationCourseView } from './probation.ts'
+export type { DiagnosticEntry } from './attribution.ts'
+export type {
+  AdviceItem, RecommendDoc, RecEvent, RecEventType, SleepSuggestionEntry,
+  StatusCourse, StatusDoc, StatusGateAdvice,
+} from './sessions.ts'
 
 /** 提案记录（store/proposals 持久化条目）与节清单（frontmatter content.sections）
  * 的转发导出：graphReject/graphProposals 的返回与 LessonDoc.manifest 引用，
@@ -44,7 +49,7 @@ export type {
 
 // content 域视图类型归档 views/content.ts（#152）：叶子文件——领主直引它，不经本 barrel 牵进重模块（R7）。
 export type {
-  ErrorCardFace, LessonDoc, LessonSection, QuestionItem, QuestionsDoc, QueueItem, ReviewCard, ReviewQueueDoc, TreeBlock, TreeCourse, TreeDoc, TreeNode, TreeRegion,
+  ErrorCardFace, LessonDoc, LessonSection, QuestionItem, QuestionsDoc, QueueItem, QueueCard, ReviewCard, ReviewQueueDoc, TreeBlock, TreeCourse, TreeDoc, TreeNode, TreeRegion,
 } from './views/content.ts'
 
 
@@ -64,104 +69,15 @@ export type {
 
 // ---- status（GET /api/status、learnhub_status；statusJson）----
 
-/** 内容诊断建议项（B1 #69；attribution.diagnosticView 的产出，status/recommend 附带）。 */
-export interface DiagnosticEntry {
-  node: string
-  section: string
-  sectionTitle: string
-  signal: 'R1' | 'R2'
-  escalate: boolean
-  fresh: boolean
-  reason: string
-  evidence: Record<string, number | string>
-  /** 重写此节的直达动作定位。 */
-  rewrite: { course: string; node: string; section: string }
-  /** 讲解此节的直达动作定位。 */
-  explain: { course: string; node: string }
-}
 
-/** 软闸建议项（#54 R 半）：被 R-gate 拦下的候选节点 → 衰减前置清单（含直达复习入口）。 */
-export interface StatusGateAdvice {
-  /** 衰减前置节点名。 */
-  pre: string
-  /** 该前置当前可回忆度 R。 */
-  r: number
-  /** 该前置当前到期题数。 */
-  due: number
-  /** 直达复习入口（review-queue 的 node 过滤）。 */
-  entry: { course: string; node: string }
-}
 
-export interface StatusCourse {
-  /** 注册表 id（旧注册表条目可缺省）。 */
-  id?: string
-  name: string
-  total: number
-  counts: Record<Stage, number>
-  due_today: number
-  overdue: Array<{ node: string; since: string; count: number; path: string | null }>
-  ready: Array<{ node: string; path: string | null }>
-  gated: Array<{ node: string; path: string | null }>
-  blocked: Record<string, StatusGateAdvice[]>
-  /** 内容诊断建议项（#69 B1）：该课程命中时附带（facade 逐课程过滤 diagnosticsAdvice）。 */
-  diagnostics?: DiagnosticEntry[]
-  /** 完成宣告（#142 雾区条款上半，读侧折叠零写副作用）：有终点锚的课程附带——
-   * 能力锚定 = 终点 mastery≥阈值且闭包健康；覆盖锚定 = 块工作表+终点。零写侧状态。 */
-  completion?: CompletionFold
-  /** 插入实验面（#146）：在途插入节点（「实验中」标记取数）、到期未决、三率
-   * （滚动 30 学习日）与韧性闸门现势——插入积极性对学习者透明。 */
-  probation?: ProbationCourseView
-}
 
-export interface StatusDoc {
-  /** 当前学习日（ADR-0020；日界可配置，非必为日历日）。 */
-  date: string
-  /** 生效日界 'HH:mm'（配置三件套静默回落时的可见性补偿）。 */
-  day_cutoff: string
-  courses: StatusCourse[]
-}
 
 // ---- recommend（GET /api/recommend、learnhub_recommend；recommend → sessions.recommendEvents）----
 
-export type RecEventType = 'new' | 'review' | 'overdue' | 'learning' | 'struggle' | 'diagnostic' | 'pin' | 'sleep'
 
-/** A3 复习建议项（#54/#55；sessions.AdviceItem 的视图镜像——sessions 依赖 node:fs，
- * ui 侧 tsc 无法拉入该模块，故按其形状在本模块声明，改动需两处同步）。 */
-export interface AdviceItem { node: string; w?: number; r: number; due: number }
 
-export interface RecEvent {
-  type: RecEventType
-  course: string
-  node: string
-  region: string
-  score: number
-  why: string
-  /** 节点课程笔记的 vault 相对路径（无笔记 = null）。 */
-  path: string | null
-  /** 已生成可读正文（点开有东西读；列表三态标识数据源）。 */
-  hasContent: boolean
-  /** A3 定向复习建议项（#54/#55）：软闸/enc 回退——先复习建议节点的到期题。 */
-  advice?: AdviceItem[]
-  /** 内容诊断建议项（B1 #69）：附着在学习事件上或独立 diagnostic 事件。 */
-  diagnostics?: DiagnosticEntry[]
-  /** 「今天学它」pin 标识（E3 #67）：当日课程内置顶，次日自动失效。 */
-  pinned?: true
-  /** 挂载的执行意图（C-5 #84）：if-then 计划（稳定线索 + 单一具体行动），随 pin 当日过期。
-   * habits.ExecutionIntention 的视图镜像（habits.ts 依赖 node:fs，ui 侧无法拉入）。 */
-  intention?: { cue: string; action: string }
-  /** D-4 睡眠耦合建议（#85）：重巩固型节点的「睡前练、醒后验」时段建议（可关）。 */
-  sleep?: SleepSuggestionEntry
-}
 
-/** 睡眠耦合建议条目（sleep.ts SleepSuggestion 的视图镜像）。 */
-export interface SleepSuggestionEntry {
-  /** 主建议：睡前练、醒后验（Walker 2002/2005 措辞）。 */
-  text: string
-  /** 可选心理演练附注（r≈0.13 小效应，预期管理措辞）。 */
-  rehearsal: string
-}
-
-export interface RecommendDoc { date: string; events: RecEvent[] }
 
 // ---- doctor（GET /api/doctor；fm schema 对账，doctor）----
 

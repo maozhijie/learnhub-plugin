@@ -60,7 +60,7 @@ import type { ErrorCard } from './error-cards.ts'
 import { bankStemList, existingStemsPromptBlock, findDuplicateStem } from './question-dedup.ts'
 import { questionViolation, repairQuestionStrings, auditQuestion } from './question-hygiene.ts'
 import type {
-  CleanupGroup, CleanupPreviewDoc, DifficultyAdviceDoc, DisputeApplyResult, DisputeReviewResult,
+  BankEntry, CleanupGroup, CleanupPreviewDoc, DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult,
   ErrorAnswerResult, ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc,
   QuestionGetDoc, QuestionsAllDoc,
 } from './views/bank.ts'
@@ -114,7 +114,7 @@ function bankError(op: string, path: string, detail: string): Error {
 /** 写入侧答案形态门禁（prompt 约束的服务端兜底）：multi_choice 至少 2 个正确项。
  * 只拦写入（生成入库/修订），不做进 validateBank 的读取门禁——存量题库里
  * 历史生成的单正确项多选不该让整个题库读成 Broken（显式盘点修复，ADR-0004）。 */
-export function questionAnswerShapeError(q: { kind?: unknown; answer?: unknown; options?: unknown }): string | null {
+export function questionAnswerShapeError(q: { kind?: unknown; answer?: unknown; options?: unknown; [k: string]: unknown }): string | null {
   if (q.kind !== 'multi_choice') return null
   const options = Array.isArray(q.options) ? q.options : []
   const picks = Array.isArray(q.answer) ? q.answer : []
@@ -744,7 +744,7 @@ export class BankSubsystem {
   /** 全部题库条目（题目管理列表；不含答案，带到期与统计）。 */
   async questionsAll(courseKey?: string): Promise<QuestionsAllDoc> {
     const courses = courseKey ? [await this.e.registry.resolve(courseKey)] : await this.e.registry.enabled()
-    const out: Array<Record<string, unknown>> = []
+    const out: BankEntry[] = []
     for (const c of courses) {
       let files: string[] = []
       try {
@@ -786,7 +786,7 @@ export class BankSubsystem {
     const courses = courseKey ? [await this.e.registry.resolve(courseKey)] : await this.e.enabledCourses()
     const dismissedKeys = new Set((await this.e.store.loadAdviceDismissals()).map(d => adviceDismissKey(d.course, d.node, d.qid)))
     let dismissed = 0
-    const nodes: Array<Record<string, unknown>> = []
+    const nodes: DifficultyAdviceNode[] = []
     for (const c of courses) {
       const { graph, state, broken } = await this.e.loadView(c)
       assertNoBrokenNotes('difficulty-advice', broken)
@@ -1149,7 +1149,7 @@ export class BankSubsystem {
    *   初值，随生长批经 set_enc 写入）。
    * opts.isCancelled = 逐题检查的取消旗标（GenJob 取消语义，#118）。 */
   async questionGenerate(
-    courseKey: string | undefined, node: string, count?: number,
+    courseKey: string | undefined, node: string, count: number | undefined,
     llm: LlmComplete,
     opts?: {
       sections?: Array<{ id: string; title: string }>

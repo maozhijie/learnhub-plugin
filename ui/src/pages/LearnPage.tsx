@@ -24,7 +24,7 @@ import { api } from '../api'
 import type { AppFrame } from '../App'
 import type {
   AdviceItem, AnkiStatusDoc, DiagnosticEntry, LearnerCardItem, LearnerQueueDoc, NoteSourceDoc,
-  QuestionItem, RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, StatusCourse, XpStatus,
+  QueueCard, QuestionItem, RecEvent, RecommendDoc, ReviewCard, ReviewQueueDoc, StatusCourse, XpStatus,
 } from '../types'
 
 const { Text, Title } = Typography
@@ -328,7 +328,7 @@ function CourseCard(props: {
  * （困难教练数据源），并拉一次教练反馈附在小结里（只读信息性，无门禁）。
  * E4 JOL（#66）：抽查命中的题卡（jol 标记）在翻面前弹一档预测，随作答/忘记上报。 */
 function ReviewSession(props: {
-  queue: ReviewCard[]
+  queue: QueueCard[]
   /** Self-Calibration 过信轻提示（ADR-0022 #104）：队列载荷 calibration_hint 透传，
    * 在 JOL 预测出口非阻断展示一句；提示全局关或未检出时为空。 */
   calibrationHint?: string
@@ -345,7 +345,7 @@ function ReviewSession(props: {
   // base 为起点先验带（答错/忘记的降档回落点），total 为会话卡数（自适应模式下取重拉队列）。
   const singleNode = new Set(props.queue.map(c => `${c.course}/${c.node}`)).size === 1
   const [adaptive, setAdaptive] = useState(false)
-  const [pending, setPending] = useState<ReviewCard[]>(props.queue)
+  const [pending, setPending] = useState<QueueCard[]>(props.queue)
   const [total, setTotal] = useState(props.queue.length)
   const [band, setBand] = useState(0.5)
   const [streak, setStreak] = useState(0)
@@ -625,7 +625,8 @@ function ReviewSession(props: {
           <LearnerCardCard key={`${card.course}/${card.learner.node}/${card.learner.id}`}
             card={card.learner} onRate={rate} onForget={learnerForget} />
         ) : (
-          <QuestionCard key={card.id} course={card.course} node={card.node} question={card}
+/* 骨架卡在上方 error/learner 两分支消费；走到这里 = 题卡 */
+          <QuestionCard key={card.id} course={card.course} node={card.node} question={card as ReviewCard}
             variant='review' noRedo jolAsk={card.jol === true}
             calibrationHint={props.calibrationHint}
             submitter={(payload, elapsedS, predicted) => api.questionAnswer(
@@ -948,7 +949,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [rec, setRec] = useState<RecommendDoc | null>(null)
   const [xp, setXp] = useState<XpStatus | null>(null)
   const [reviewQ, setReviewQ] = useState<ReviewQueueDoc | null>(null)
-  const [session, setSession] = useState<ReviewCard[] | null>(null)
+  const [session, setSession] = useState<QueueCard[] | null>(null)
   // Self-Calibration 过信轻提示（ADR-0022 #104）：随会话启动的队列载荷带出
   const [calibrationHint, setCalibrationHint] = useState<string | undefined>(undefined)
   const [createVisible, setCreateVisible] = useState(false)

@@ -64,7 +64,7 @@ import { writeOutputArtifact } from './output.ts'
 import { execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import type {
-  CalibrationProfileDoc, HabitShowDoc, HabitsListDoc, KataDoc, LearnerQueueDoc, SkillsListDoc,
+  CalibrationProfileDoc, HabitShowDoc, HabitsListDoc, KataDoc, LearnerCardItem, LearnerQueueDoc, SkillsListDoc,
 } from './views/learner.ts'
 import type { LearnerArchiveResult, LearnerForgetResult, LearnerRateResult } from './views.ts'
 import { assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from './sessions.ts'
@@ -322,7 +322,7 @@ export interface LearnerDeps {
   clock: Clock
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
-  store: Pick<Store, 'appendBandRec' | 'appendEArchive' | 'appendHabitRepeat' | 'appendJournal' | 'appendReview' | 'bandRecsAll' | 'habitRepeatsAll' | 'journalTail' | 'loadPins' | 'practiceAll' | 'receiptsAll' | 'reviewLogAll' | 'savePins'>
+  store: Pick<Store, 'appendBandRec' | 'appendEArchive' | 'appendHabitRepeat' | 'appendJournal' | 'appendReceipt' | 'appendReview' | 'bandRecsAll' | 'habitRepeatsAll' | 'journalTail' | 'loadPins' | 'practiceAll' | 'receiptsAll' | 'reviewLogAll' | 'savePins'>
   paths: Paths
   registry: Pick<Registry, 'resolve'>
   bank: Pick<QuestionBank, 'load'>
@@ -871,7 +871,7 @@ export class LearnerSubsystem {
   async learnerQueue(courseKey?: string, today?: string): Promise<LearnerQueueDoc> {
     today ??= (await this.e.learningDay()).today
     const courses = courseKey ? [await this.e.registry.resolve(courseKey)] : await this.e.enabledCourses()
-    const cards: Array<Record<string, unknown>> = []
+    const cards: LearnerCardItem[] = []
     for (const c of courses) {
       const dir = this.e.paths.learnerCardsDir(c.root)
       let files: string[] = []
@@ -904,7 +904,7 @@ export class LearnerSubsystem {
 
   /** E 卡的作答视图：正面 = prompt（提示重述/挖空/自注主题），背面 = content（学习者
    * 自己的话）。content 随卡带出但 UI 在翻面前不展示——泄露面是学习者自己，且无判分。 */
-  private learnerCardView(course: string, node: string, card: LearnerCard): Record<string, unknown> {
+  private learnerCardView(course: string, node: string, card: LearnerCard): LearnerCardItem {
     return {
       course, node, id: card.id, kind: card.kind,
       prompt: card.prompt, content: card.content,
@@ -938,7 +938,7 @@ export class LearnerSubsystem {
     const { c, card } = await this.learnerCardContext(courseKey, node, cardId, 'learner-rate')
     const { today } = await this.e.learningDay()
     // ADR-0014 advanceStrict：守门即原 stats.last 检查（一卡一天一次），文案是测试契约
-    const pushed = advanceStrict(await this.e.sched(null), card, r, today,
+    const pushed = advanceStrict(await this.e.sched(null), card, r as 1 | 2 | 3 | 4, today,
       `[learner-rate] ${node}/${cardId} 今天已推进过（一卡一天一次）。`)
     await this.e.learnerCards.updateCardEvidence(c.root, node, cardId, { fsrs: pushed.fs, stats: pushed.stats })
     const diff = card.fsrs?.difficulty && card.fsrs.difficulty > 0 ? card.fsrs.difficulty : FSRS_DIFFICULTY_MID
@@ -1131,7 +1131,7 @@ export class LearnerSubsystem {
       if (typeof r !== 'number' || !Number.isInteger(r) || r < 1 || r > 4) {
         throw new Error(`[execution-log] ${source === 'self' ? '自评' : 'AI'} 评级必须是 1-4 的整数（收到 ${String(r)}）。`)
       }
-      rating = r
+      rating = r as 1 | 2 | 3 | 4
     }
     const minutes = input.minutes
     if (typeof minutes !== 'number' || !Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {

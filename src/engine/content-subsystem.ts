@@ -52,7 +52,7 @@ export interface ContentDeps {
   assertNoteOk(course: { root: string }, graph: Graph, broken: BrokenNote[], node: string, tool: string): void
   bandDefault(): Promise<BandPref | null>
   calibrationHintsConfig(): Promise<{ hints_enabled: boolean }>
-  collectNoteSourceCards(today: string): Promise<{ cards: Array<Record<string, unknown>>; drifted: Array<Record<string, unknown>>; suspended: Array<Record<string, unknown>> }>
+  collectNoteSourceCards(today: string): Promise<{ cards: ReviewCard[]; drifted: Array<{ id: string; path: string; hint: string }>; suspended: Array<{ id: string; path: string; reason: string }> }>
   enabledCourses(): Promise<CourseEntry[]>
   ensureNote(root: string, graph: Graph, node: string): Promise<Fm>
   errorCardTriples(courses: ReadonlyArray<{ name: string; root: string }>, nodeFilter?: string): AsyncGenerator<{ course: string; node: string; card: ErrorCard }>
@@ -64,9 +64,9 @@ export interface ContentDeps {
   learningDay(): Promise<{ today: string; cutoff: number }>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   nof1QueueEffect(today: string): Promise<{ id: number; variable: Nof1Variable; arm: string } | null>
-  noteSourceAnswer(llmComplete: LlmComplete, sourceId: string, qid: string, answer: string, opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null }): Promise<Record<string, unknown>>
-  noteSourceForget(sourceId: string, qid: string): Promise<Record<string, unknown>>
-  noteSourceRate(sourceId: string, qid: string, r: number): Promise<Record<string, unknown>>
+  noteSourceAnswer(llmComplete: LlmComplete, sourceId: string, qid: string, answer: string, opts?: { deferSchedule?: boolean; predicted?: JolPrediction | null; elapsed_s?: number | null }): Promise<AnswerResult>
+  noteSourceForget(sourceId: string, qid: string): Promise<QuestionForgetResult>
+  noteSourceRate(sourceId: string, qid: string, r: number): Promise<QuestionRateResult>
   sched(courseRoot: string | null): Promise<FSRS>
   updateNoteFm(path: string, fm: Fm): Promise<void>
 }
@@ -89,7 +89,7 @@ import { masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
 import { sourceKeyOf } from './types.ts'
 import type { FsrsBlock, ReviewRec, SectionManifest } from './types.ts'
 import { priorSection, priorTerms, searchVaultPrior } from './vault-prior.ts'
-import type { AnswerResult, LessonDoc, QuestionForgetResult, QuestionRateResult, QuestionsDoc, QueueItem, ReviewQueueDoc, TreeDoc } from './views/content.ts'
+import type { AnswerResult, LessonDoc, QuestionForgetResult, QuestionRateResult, QuestionsDoc, QueueItem, QuestionItem, QueueCard, ReviewCard, ReviewQueueDoc, TreeDoc } from './views/content.ts'
 import { xpForAnswer } from './xp.ts'
 import { YAML } from './yaml.ts'
 export class ContentSubsystem {
@@ -330,7 +330,7 @@ export class ContentSubsystem {
 
 
   async queueItemsAll(): Promise<QueueItem[]> {
-    const out: Array<Record<string, unknown>> = []
+    const out: QueueItem[] = []
     for (const c of await this.e.enabledCourses()) {
       for (const it of await this.e.content.queueItems(c.root)) {
         out.push({ ...it, course: c.name })
@@ -347,15 +347,15 @@ export class ContentSubsystem {
     this.e.assertNoteOk(c, graph, broken, node, 'lesson')
     const { today } = await this.e.learningDay()
     const lesson = await this.e.sessions.lesson(c.name, c.root, graph, state, node, today)
-    const view = lesson as Record<string, unknown>
+
     // mastery 由 sessions.lesson 按口径 B 派生（masteryOfFm），此处不再覆盖。
     // 节清单（逐节生成）：manifest 原样下发（前端按节 id 绑题、按 type 装配轮次），
     // 并给同名 sections 补 id/type；旧节点无清单，前端回退标题匹配。
-    const manifest = state[node]?.content.sections ?? null
-    view.manifest = manifest
+    const manifest = lesson.manifest
+    lesson.manifest = manifest
     if (manifest?.length) {
       const byTitle = new Map(manifest.map(s => [s.title, s]))
-      for (const s of (view.sections ?? []) as Array<{ title: string; id?: string; type?: string }>) {
+      for (const s of lesson.sections as Array<{ title: string; id?: string; type?: string }>) {
         const hit = byTitle.get(s.title)
         if (hit) { s.id = hit.id; s.type = hit.type }
       }
@@ -429,7 +429,7 @@ export class ContentSubsystem {
    * opts.today（questions 通道专属）= 当前学习日：本学习日已推进的题带出答案/解析
    * ——直通卡披露与作答响应同一披露边界（都发生在「当日额度已用掉」之后）；
    * 复习队列是主动回忆面，不传 today，永不带答案。 */
-  questionView(q: BankQuestion, i: number, opts?: { today?: string }): Record<string, unknown> {
+  questionView(q: BankQuestion, i: number, opts?: { today?: string }): QuestionItem {
     const advancedToday = opts?.today !== undefined && alreadyAdvanced(q, opts.today)
     return {
       id: q.id, kind: q.kind, q: q.q, no: i + 1,
@@ -511,7 +511,7 @@ export class ContentSubsystem {
     // A1 目标难度带默认值（#111 恒温器旋钮；配置层缺省 = 纯 A1）。
     const defaultBand = await this.e.bandDefault()
     const courses = courseKey ? [await this.e.registry.resolve(courseKey)] : await this.e.enabledCourses()
-    const cards: Array<Record<string, unknown>> = []
+    const cards: QueueCard[] = []
     let nodeFound = false
     let mastery = 0
     for (const c of courses) {
@@ -651,7 +651,7 @@ export class ContentSubsystem {
           ?? (expEffect?.variable === 'band_default' ? expEffect.arm as BandPref : undefined)
           ?? defaultBand))
       return { date: today, total: cards.length, band: Math.round(band * 1000) / 1000,
-        cards: sessionOrder(cards as Array<Record<string, unknown> & { d: number }>, band),
+        cards: sessionOrder(cards, band),
         ...(calibrationHint ? { calibration_hint: calibrationHint } : {}) }
     }
     // 笔记源卡池（C1 #59）：并入全局队列（带 source:'note' 标记，course=「笔记源」
@@ -752,7 +752,7 @@ export class ContentSubsystem {
     let pendingRating = false
     let advanced = false
     // 复习日志（#60 ADR-0012）：只有真实推进才落一条；记录复习前 R/S/D 快照
-    let reviewRec: Omit<ReviewRec, 'ts'> | null = null
+    let reviewRec: Omit<ReviewRec, 'ts' | 'course' | 'node' | 'qid'> | null = null
     let previews: { hard: string; good: string; easy: string } | undefined
     if (repeated) {
       fs = q.fsrs ?? null

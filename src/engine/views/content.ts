@@ -103,6 +103,29 @@ export interface ReviewCard extends QuestionItem {
   error?: ErrorCardFace
 }
 
+/** 复习队列「结算骨架」卡（我的卡 E1 / 错误对比卡 C-3，ADR-0021/#82）：
+ * 只带排序与结算所需字段（id/due/r/d + 各自卡面），不伪装题面字段——
+ * 卡面渲染走 learner/error 字段，不走 QuestionItem。 */
+export interface SkeletonCard {
+  course: string
+  node: string
+  id: string
+  due: string | null
+  r: number
+  d: number
+  difficulty?: number
+  attempts?: number
+  jol?: boolean
+  source: 'learner' | 'error'
+  title?: string
+  source_path?: string
+  source_abs?: string
+  learner?: LearnerCardItem
+  error?: ErrorCardFace
+}
+
+/** 复习队列卡全集：题卡（QuestionItem 全形，含笔记源卡）+ 结算骨架卡。 */
+export type QueueCard = ReviewCard | SkeletonCard
 /** 错误对比卡的复习队列卡面（C-3 #82）：只带题面与选项的泄露纪律子集。 */
 export interface ErrorCardFace {
   course: string
@@ -121,7 +144,7 @@ export interface ErrorCardFace {
 export interface ReviewQueueDoc {
   date: string
   total: number
-  cards: ReviewCard[]
+  cards: QueueCard[]
   /** 单节点定向复习会话的起点难度带（节点 Mastery 先验 + 显式带偏移）；仅 node 过滤时存在。 */
   band?: number
   /** N-of-1 实验当日生效臂（#110 ADR-0023，批次交替）：队列呈现正受实验影响时带出

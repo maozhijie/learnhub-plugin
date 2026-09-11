@@ -33,7 +33,9 @@ import { RECHECK_DAYS_DEFAULT } from './params.ts'
 import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
-import type { CourseEntry, ProposalKind } from './types.ts'
+import type { CourseEntry, ProposalKind, ProposalRec } from './types.ts'
+import type { GraphEditProposalResult, GraphSeedProposalResult, GraphEnrichProposalResult } from './views/proposals.ts'
+import type { GraphApplyEditResult, GraphApplySeedResult, GraphApplyEnrichResult } from './views/graph.ts'
 
 /** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。 */
 export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
@@ -483,7 +485,7 @@ export class GraphProposals {
     private centerRoot: string,
     /** 生长闸门（#146 插入/旁支调速）：受理与 apply 双门在 schema 门后调用——需要
      * 三率流水（账本/提案/练习），由门面注入（本类零流水依赖）；返回拒收行，空 = 放行。 */
-    private growthGate?: (spec: EditProposalSpec) => Promise<string[]>,
+    private growthGate: ((spec: EditProposalSpec) => Promise<string[]>) | undefined,
     /** 时钟端口（#175 阶段①）：decided/now 戳与学习日缺省都经它取时。 */
     private clock: Clock,
     private fs: VaultFs,
@@ -537,7 +539,7 @@ export class GraphProposals {
   /** graph propose-edit：在内存图上模拟执行 + 概念引用对表 + 终点锚保护 + 巩固门
    * （#145）→ pending。warns = 受理门的非阻提示（窄节点等概念字段组提示），随受理
    * 回执返给提案方。note 在场 = 生长批：summary 带算子标签与理由（每步可解释）。 */
-  async proposeEdit(yamlText: string): Promise<Record<string, unknown>> {
+  async proposeEdit(yamlText: string): Promise<GraphEditProposalResult> {
     const warns: string[] = []
     const v = validateEditProposal(YAML.parseModel(yamlText), warns)
     if (v.errors) throw new Error(`[propose-edit] schema 校验失败，提案未受理。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
@@ -615,7 +617,7 @@ export class GraphProposals {
    * 笔记 + 罗盘批内重写（#145：route 在场时随图 apply 的写入单元——路线门/巩固门全过
    * 才开始任何写盘，提案被拒罗盘不落盘）+ 快照。登记表先写（孤儿条目合法、悬空引用
    * 违约），graph 落盘在后。 */
-  async applyEdit(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<Record<string, unknown>> {
+  async applyEdit(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<GraphApplyEditResult> {
     if (!audit.ok) throw new Error('[apply-edit] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
     const prop = await this.store.takePending('edit', pid)
     const v = validateEditProposal(await this.loadArtifact(prop.artifact))
@@ -827,7 +829,7 @@ export class GraphProposals {
    * 注册表状态对账（new/reseed）→ 结构检查（投影图）→ 概念对表 → 先验喂料分流
    * （≥0.7 未被结构回应的候选进 warns，非阻——喂料分流取代人审分流）→ pending，
    * 一次人审即开工。 */
-  async proposeSeed(yamlText: string): Promise<Record<string, unknown>> {
+  async proposeSeed(yamlText: string): Promise<GraphSeedProposalResult> {
     const warns: string[] = []
     const v = validateSeedProposal(YAML.parseModel(yamlText), warns)
     if (v.errors) throw new Error(`[propose-seed] schema 校验失败，提案未受理。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
@@ -878,7 +880,7 @@ export class GraphProposals {
   async applySeed(
     pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }, today?: string,
     opts: { pairApply?: boolean } = {},
-  ): Promise<Record<string, unknown>> {
+  ): Promise<GraphApplySeedResult> {
     if (!audit.ok) throw new Error('[apply-seed] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
     const prop = await this.store.takePending('seed', pid)
     const pairBlock = Store.pairApplyBlock(prop, await this.store.loadProposals(), opts)
@@ -1060,7 +1062,7 @@ export class GraphProposals {
 
   /** graph propose-enrich（富化覆盖层，#140）：schema 门 → 目标节点在图核验 →
    * 受影响正典文件计 sha256 指纹（写入 artifact，apply 时复核）→ pending。 */
-  async proposeEnrich(yamlText: string): Promise<Record<string, unknown>> {
+  async proposeEnrich(yamlText: string): Promise<GraphEnrichProposalResult> {
     const v = validateEnrichProposal(YAML.parseModel(yamlText))
     if (v.errors) throw new Error(`[propose-enrich] schema 校验失败，提案未受理。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec!
@@ -1093,7 +1095,7 @@ export class GraphProposals {
   }
 
   /** graph apply-enrich：指纹复核 → 写正典（enc 整体替换）→ 覆盖层留痕 → journal + 快照。 */
-  async applyEnrich(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<Record<string, unknown>> {
+  async applyEnrich(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<GraphApplyEnrichResult> {
     if (!audit.ok) throw new Error('[apply-enrich] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
     const prop = await this.store.takePending('enrich', pid)
     const v = validateEnrichProposal(await this.loadArtifact(prop.artifact))
@@ -1262,7 +1264,7 @@ export class GraphProposals {
   /** graph reject。同源双提案联动（#149）：pair 在场的提案被拒时，pending 的另一半
    * 联动同拒（同进同退——反编译双提案是一个逻辑单元，半挂的 pending 只会误导人审）；
    * 已决的另一半不动（applied 不回滚、rejected 幂等）。 */
-  async reject(pid: number, note = ''): Promise<Record<string, unknown>> {
+  async reject(pid: number, note = ''): Promise<ProposalRec> {
     if (!Number.isInteger(pid) || pid <= 0) {
       throw new Error(`[reject] 提案 id 必须是正整数（收到 ${String(pid)}）；拒绝不能省略 id。`)
     }
@@ -1283,7 +1285,7 @@ export class GraphProposals {
   }
 
   /** 提案清单（status/kind 过滤可选）。kind 全集见 types PROPOSAL_KINDS（图谱域 + 项目域）。 */
-  async list(status?: string, kind?: string, limit = 100): Promise<Record<string, unknown>[]> {
+  async list(status?: string, kind?: string, limit = 100): Promise<ProposalRec[]> {
     let list = await this.store.loadProposals()
     if (status) {
       if (!(PROPOSAL_STATUSES as readonly string[]).includes(status)) {
@@ -1297,7 +1299,7 @@ export class GraphProposals {
       }
       list = list.filter(p => p.kind === kind)
     }
-    return list.slice(-limit).reverse() as unknown as Record<string, unknown>[]
+    return list.slice(-limit).reverse()
   }
 }
 

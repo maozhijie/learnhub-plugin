@@ -1455,7 +1455,7 @@ worksheet:
           const n = Number(v)
           if (Number.isFinite(n)) fields.tol = n
         } else {
-          ;(fields as Record<string, unknown>)[k] = v
+          ;Object.assign(fields, { [k]: v })
         }
       }
       out.push(fields)

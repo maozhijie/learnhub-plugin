@@ -572,13 +572,13 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
       const outlineEffort = contentEffort(highTier)
       // 大纲护栏未过（OUTLINE_BUDGET）时重跑一次并回灌节数与预期区间，仍失败才置 failed
       let outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: outlineEffort })
-      if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
+      if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
       try {
         await rt.engine.contentOutline(course, node, outlineYaml)
       } catch (err) {
         if (job.status === 'cancelling' || (err instanceof Error && (err as Error & { code?: string }).code !== 'OUTLINE_BUDGET')) throw err
         outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: outlineEffort })
-        if (job.status === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
+        if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
         await rt.engine.contentOutline(course, node, outlineYaml)
       }
       views = await rt.engine.contentSectionsView(course, node)
