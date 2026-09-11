@@ -16,7 +16,7 @@
  * - D15：评分只经工作单 → settle 入库；UI 自动写回也只写工作单评分行。
  * - 每次工具/路由调用追加 state/运行日志.md（LOG_LIMIT 截断）。
  */
-import type { Context} from '@deepseek-ai/cordis'
+import type { Context, Effect} from '@deepseek-ai/cordis'
 import { defineTool} from '@deepseek-ai/dsh-tools'
 import { existsSync, mkdirSync, writeFileSync} from 'node:fs'
 import { readFile, appendFile, mkdir} from 'node:fs/promises'
@@ -24,7 +24,7 @@ import type { IncomingMessage, ServerResponse} from 'node:http'
 import { join, resolve as resolvePath, sep} from 'node:path'
 import { ANKI_ENDPOINT, AnkiConnectClient, Content, LearnhubEngine, TIER_LABELS, genericQuizTarget, tierIdxOf} from './engine/index.ts'
 import type { CoachTrigger, LlmComplete, SeedDraftRequest} from './engine/index.ts'
-import { contentEffort, llmComplete, llmSeam, llmStreamOnce, llmView } from './host/llm.ts'
+import { contentEffort, llmCfg, llmComplete, llmSeam, llmStreamOnce, llmView } from './host/llm.ts'
 import { ASSET_MIME, FILE_MIME, PAGE_DIST, VENDOR_DIST, injectKatexIfMathed, need, readJson, sendJson } from './host/http.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection} from './tool-contracts.ts'
 import {
@@ -42,6 +42,24 @@ import {
 
 export const name = 'dsh-learnhub'
 export const inject = ['tools', 'webServer', 'llm']
+
+/**
+ * `webServer` 服务由宿主的 web 插件提供（dsh CLI 私有包，本仓库不依赖它，故类型不在册）：
+ * 按消费面补声明——本插件只用 `register({ kind: 'prefix', path, handler })` 两种前缀路由
+ * （ADR-0013 的结构化窄面：宽面由宿主定义，这里只登记自己用的那一格）。
+ * `llm` / `tools` 的类型由 dsh-llm / dsh-tools 各自的 `declare module` 提供，无需在此重述。
+ */
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    webServer: {
+      register(route: {
+        kind: 'prefix'
+        path: string
+        handler: (req: IncomingMessage, res: ServerResponse) => void | Promise<void>
+      }): Effect
+    }
+  }
+}
 
 /** apply 时的行 config：部署路径与 AI 路由，均可在 profile patch 覆盖。 */
 export interface LearnhubConfig {

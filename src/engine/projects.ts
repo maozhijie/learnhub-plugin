@@ -32,10 +32,11 @@ import { loadNote, saveNote } from './notes.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
-import type { QuestionBank } from './question-bank.ts'
+import type { QuestionBank, BankQuestion } from './question-bank.ts'
 import type { GraphProposals, ApplyAudit, EnrichFieldEntry } from './proposals.ts'
 import type { NoteSourceManifest } from './note-source.ts'
 import type { Graph } from './graph.ts'
+import type { ProjectCrossDoc, ProjectExecBackflow, ProjectExecResult } from './views/project.ts'
 import { declaredEncOf } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { CourseEntry, Fm } from './types.ts'
@@ -78,20 +79,6 @@ export function isProjectLifecycle(v: unknown): v is ProjectLifecycle {
 }
 export function isFadingTier(v: unknown): v is FadingTier {
   return (FADING_TIERS as string[]).includes(v as string)
-}
-
-/** 里程碑计划条目（设计 §3 关键接口：#92 提案修订与 #95 目标反编译的共同产出形态）。
- * est/nodes 可选（#93/#94 落地）：est = 过点定价申报（分钟）；nodes = 关联课程节点
- * （检索点抽题与行为推断 enc 的挂靠点，ADR-0015 裁决 6——关联永不构成门禁）。 */
-export interface PlanItem {
-  id: string
-  name: string
-  task_class: string
-  acceptance_hints: string
-  /** 过点定价申报（分钟，正数；缺省回落 XP_PER_MILESTONE_DEFAULT）。 */
-  est?: number
-  /** 关联课程节点（节点名或「课程/节点」；抽题/行为扫描按此解析，空 = 未关联）。 */
-  nodes?: string[]
 }
 
 /** 项目 frontmatter（项目.md；设计 §1 schema）。 */
@@ -575,7 +562,7 @@ export interface ProjectDeps {
   bank: Pick<QuestionBank, 'load'>
   proposals: Pick<GraphProposals, 'applySeed' | 'reject'>
   projects: Projects
-  noteManifest: Pick<NoteSourceManifest, 'load'>
+  noteManifest: Pick<NoteSourceManifest, 'load' | 'save'>
   /** vault 根目录。 */
   vaultRoot: string
   /** JOL 抽查的随机源（可注入播种）。 */
@@ -935,7 +922,7 @@ export class ProjectSubsystem {
     const linked = specs.length ? await this.resolveProjectNodes(specs) : []
     const linkedNodes: Array<{ course: string; node: string; mastery: number }> = []
     const masteryList: number[] = []
-    const viewCache = new Map<string, Awaited<ReturnType<LearnhubEngine['loadView']>>>()
+    const viewCache = new Map<string, Awaited<ReturnType<ProjectDeps['loadView']>>>()
     for (const { course, node } of linked) {
       let v = viewCache.get(course.name)
       if (!v) {
@@ -1056,7 +1043,7 @@ export class ProjectSubsystem {
           (from, to) => graph.nset.has(from) && graph.nset.has(to) && graph.isAncestor(from, to),
           node => firstDayByCourse.get(courseName)?.get(node),
         )
-        if (!dir.ok) {
+        if (dir.ok === false) {
           blockedNoPre.push({ course: courseName, a: pair.a, b: pair.b, co: pair.co, hint_skill: dir.hint_skill, why: dir.why })
           continue
         }
@@ -1213,7 +1200,7 @@ export class ProjectSubsystem {
     // apply 无害——计划未落盘就无悬空引用可言）。概念引用在 proposeSeed 受理门对
     // 登记表（铸名随种子 apply 同事务落盘）。
     let seedId: number | null = null
-    let planProposal: Awaited<ReturnType<LearnhubEngine['projects']['proposePlan']>> | null = null
+    let planProposal: Awaited<ReturnType<Projects['proposePlan']>> | null = null
     try {
       if (doc.seed) {
         seedId = ((await this.e.graphPropose('seed', YAML.stringify(doc.seed))) as { id: number }).id

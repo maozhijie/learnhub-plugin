@@ -16,8 +16,8 @@ console process globalThis require setTimeout clearTimeout setInterval clearInte
 AbortController Intl decodeURIComponent encodeURIComponent parseInt parseFloat isNaN isFinite
 structuredClone fetch ReadableStream`.split(/\s+/))
 
-/** 剥注释与字符串字面量（保留换行以维持行号不敏感的可读位置）。 */
-function strip(code) {
+/** 剥注释与字符串字面量（保留换行以维持行号不敏感的可读位置）。文本层门共用。 */
+export function strip(code) {
   let out = ''
   let i = 0
   while (i < code.length) {

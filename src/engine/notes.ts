@@ -277,7 +277,7 @@ export async function scanCourseNotes(courseDir: string): Promise<{
         continue
       }
       const parsed = parseFmBlock(text)
-      if (!parsed.ok) {
+      if (parsed.ok === false) {
         broken.push({ path, reason: parsed.reason })
         continue
       }

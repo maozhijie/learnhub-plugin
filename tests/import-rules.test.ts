@@ -48,8 +48,10 @@ function relativeSpecs(code: string): string[] {
   return allSpecs(code).filter(s => s.startsWith('.'))
 }
 
-/** 相对说明符解析：带 .ts 直用 → 否则补 .ts → 否则补 /index.ts（兼容 views.ts 的
- * 无扩展名 type import）。解析不到返回 null。 */
+/** 相对说明符解析：带 .ts 直用 → 否则补 .ts → 否则补 /index.ts。后两级是兜底（目录导入、
+ * 无扩展名写法）：`#170` 起 engine 内说明符一律带 `.ts`（nodenext 类型门的要求），
+ * 兜底留着好让写错扩展名的新文件仍被解析到、而不是被当成「无此依赖」静默放过。
+ * 解析不到返回 null。 */
 function resolveSpec(fromFile: string, spec: string): string | null {
   const abs = resolve(dirname(fromFile), spec)
   if (existsSync(abs) && statSync(abs).isFile()) return abs

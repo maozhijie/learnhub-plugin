@@ -198,7 +198,9 @@ export class GraphSubsystem {
     let skippedDeclared = 0
     for (const { edge, aNode, bNode } of proposalTier) {
       const dir = orientLinkPair(aNode, bNode, (from, to) => graph.nset.has(from) && graph.nset.has(to) && graph.isAncestor(from, to))
-      if (!dir.ok) {
+      // `=== false` 而非 `!dir.ok`：strictNullChecks 关时真假分支不参与字面量联合收窄
+      // （#170 类型门实测），显式比较在两种档位下都收窄。
+      if (dir.ok === false) {
         blockedNoPre.push({ a: aNode, b: bNode, w: edge.w, why: dir.why })
         continue
       }

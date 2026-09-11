@@ -1,0 +1,25 @@
+{
+  // 类型门（#170 / ADR-0047）：`tsc --noEmit` 按文件错误数棘轮，扫描面先只含 src/。
+  // `tests/` 与 `ui/` 各自用自身配置另开步骤（ui/tsconfig.json 已存在，且本就 strict）。
+  "compilerOptions": {
+    "target": "ES2022",
+    // DOM 是给 src/client/index.tsx（浏览器侧入口）的；宿主与引擎同用一个项目，
+    // 收紧到 strict 那一步再把 client 拆成自己的配置（它跑在不同的运行时上）。
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    // client 的 JSX 由宿主注入运行时（无 react 依赖），故只保留不清洗。
+    "jsx": "preserve",
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    // 起步档：strict: false（本配置首次测量 src/ 存量 196 处；#170 收工 80 处，见 ADR-0047）。
+    // 目标档 strict: true 另开票，只许逐阶段收紧：先清接线类错误，再把基线压到 0。
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src"]
+}
