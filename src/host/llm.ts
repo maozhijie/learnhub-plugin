@@ -9,7 +9,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { LlmComplete, LlmEffort } from '../engine/index.ts'
 
-const llmCfg = {
+export const llmCfg = {
   provider: 'deepseek-official', model: 'deepseek-v4-flash',
   fastEffort: 'off' as 'off' | 'low',
   deepEffort: 'low' as 'off' | 'low',
@@ -18,14 +18,14 @@ const llmCfg = {
 /** P4 分层 effort：机械调用统一走 fast 档；高复杂度节点的大纲/修复轮升 deep 档。
  * 调用点只声明语义档（注入侧可观测），翻译成部署的 fastEffort/deepEffort 收口在 llmSeam（#137）。
  * 名字留在 effort 词族——「档位」在 CONTEXT.md 语言表里专指复杂度档位（contentTierOf），不混用。 */
-function contentEffort(highTier: boolean): LlmEffort {
+export function contentEffort(highTier: boolean): LlmEffort {
   return highTier ? 'deep' : 'fast'
 }
 
 /** 当前 LLM 配置视图（模型透明，#? 与 /status、learnhub_status 一同带出，面板只读展示；
  * 切换模型 = 编辑 profile patch（cordis.patch.yml 的 dsh-learnhub 行 provider/model/
  * fastEffort/deepEffort）后重启宿主——插件不写宿主机器级配置）。 */
-function llmView() {
+export function llmView() {
   return {
     provider: llmCfg.provider, model: llmCfg.model,
     fast_effort: llmCfg.fastEffort, deep_effort: llmCfg.deepEffort,
@@ -39,15 +39,15 @@ function llmView() {
  * page = 面板页签（learn/graph/bank/stats/lab/generate/practice/projects/global）；
  * prompt = 可直接粘进 dsh 会话的示例指令。 */
 
-const LLM_IDLE_TIMEOUT_MS = 120_000
+export const LLM_IDLE_TIMEOUT_MS = 120_000
 /** max-tokens 截断重试（#116）的显式输出上限：截断是断尾 JSON/YAML 的常见诱因，
  * 原题提高输出上限重试一次（与引擎侧判卷重问相互独立、各限一次）。 */
-const LLM_TRUNCATION_RETRY_TOKENS = 8192
+export const LLM_TRUNCATION_RETRY_TOKENS = 8192
 
 /** dsh llm 一次性调用：收集 text-delta；终止块非 success 即抛错。
  * opts.effort 指定思考档（如 'off' 快速路径）；路由不支持该档位时
  * （UNSUPPORTED_REASONING_EFFORT）自动降级为部署默认重试一次。 */
-async function llmComplete(ctx: Context, prompt: string, system?: string, opts?: { effort?: 'off' | 'low' }): Promise<string> {
+export async function llmComplete(ctx: Context, prompt: string, system?: string, opts?: { effort?: 'off' | 'low' }): Promise<string> {
   const attempt = async (effort?: 'off' | 'low', maxTokens?: number): Promise<string> => {
     const r = await llmStreamOnce(ctx, prompt, system, effort, maxTokens)
     if (!r.truncated) return r.text
@@ -67,7 +67,7 @@ async function llmComplete(ctx: Context, prompt: string, system?: string, opts?:
  * fastEffort/deepEffort（不传档 = 部署默认），空闲超时/截断重试/档位降级都在底层
  * llmComplete。引擎侧生成/组装函数一律只认 LlmComplete 缝型——测试注入假实现
  * （固定回放/脚本化应答）即可不依赖真实模型确定性跑通金样本回放。 */
-function llmSeam(ctx: Context): LlmComplete {
+export function llmSeam(ctx: Context): LlmComplete {
   return (prompt, system, opts) => llmComplete(ctx, prompt, system,
     opts?.effort === 'fast' ? { effort: llmCfg.fastEffort }
       : opts?.effort === 'deep' ? { effort: llmCfg.deepEffort }
@@ -77,7 +77,7 @@ function llmSeam(ctx: Context): LlmComplete {
 /** llmComplete 的单次流式执行；effort 非空时显式指定思考档。
  * 空闲超时：每收到一个 chunk 重置计时，LLM_IDLE_TIMEOUT_MS 内无新输出即 abort（#118）。
  * 返回 truncated 标记（finish reason = max-tokens），截断重试由 llmComplete 处理。 */
-async function llmStreamOnce(ctx: Context, prompt: string, system?: string, effort?: 'off' | 'low', maxTokens?: number): Promise<{ text: string; truncated: boolean }> {
+export async function llmStreamOnce(ctx: Context, prompt: string, system?: string, effort?: 'off' | 'low', maxTokens?: number): Promise<{ text: string; truncated: boolean }> {
   const msg = createUserMessage({
     source: { kind: 'user' },
     content: [{ type: 'text', text: prompt }],

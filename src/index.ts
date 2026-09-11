@@ -21,9 +21,11 @@ import { defineTool} from '@deepseek-ai/dsh-tools'
 import { existsSync, mkdirSync, writeFileSync} from 'node:fs'
 import { readFile, appendFile, mkdir} from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse} from 'node:http'
-import { join, sep} from 'node:path'
+import { join, resolve as resolvePath, sep} from 'node:path'
 import { ANKI_ENDPOINT, AnkiConnectClient, Content, LearnhubEngine, TIER_LABELS, genericQuizTarget, tierIdxOf} from './engine/index.ts'
 import type { CoachTrigger, LlmComplete, SeedDraftRequest} from './engine/index.ts'
+import { contentEffort, llmComplete, llmSeam, llmStreamOnce, llmView } from './host/llm.ts'
+import { ASSET_MIME, FILE_MIME, PAGE_DIST, VENDOR_DIST, injectKatexIfMathed, need, readJson, sendJson } from './host/http.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection} from './tool-contracts.ts'
 import {
   contentFailureStatus,

@@ -5,17 +5,17 @@
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-const PAGE_DIST = fileURLToPath(new URL('../web/dist/', import.meta.url))
+export const PAGE_DIST = fileURLToPath(new URL('../web/dist/', import.meta.url))
 /** vendored 库目录（交互件沙箱 CSP 放开 'self' 后的唯一取库途径；build.mjs copyVendor 落盘）。 */
-const VENDOR_DIST = fileURLToPath(new URL('../web/vendor/', import.meta.url))
+export const VENDOR_DIST = fileURLToPath(new URL('../web/vendor/', import.meta.url))
 /** /file 路由允许伺服的二进制媒体扩展名 → MIME（课程插图等）。 */
-const FILE_MIME: Record<string, string> = {
+export const FILE_MIME: Record<string, string> = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
 }
 
 /** 面板 SPA 资产扩展名 → MIME。 */
-const ASSET_MIME: Record<string, string> = {
+export const ASSET_MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -23,7 +23,7 @@ const ASSET_MIME: Record<string, string> = {
   '.json': 'application/json; charset=utf-8', '.map': 'application/json; charset=utf-8',
 }
 
-function sendJson(res: ServerResponse, code: number, body: unknown): void {
+export function sendJson(res: ServerResponse, code: number, body: unknown): void {
   res.writeHead(code, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
@@ -32,7 +32,7 @@ function sendJson(res: ServerResponse, code: number, body: unknown): void {
 }
 
 /** 读取并解析 POST JSON 请求体。 */
-async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+export async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = []
   for await (const chunk of req) chunks.push(chunk as Buffer)
   const text = Buffer.concat(chunks).toString('utf8')
@@ -40,7 +40,7 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 }
 
 /** 字符串参数取值；缺失即抛 400 语义错误。 */
-function need(body: Record<string, unknown>, key: string): string {
+export function need(body: Record<string, unknown>, key: string): string {
   const v = body[key]
   if (typeof v !== 'string' || !v.trim()) throw new Error(`missing required field: ${key}`)
   return v.trim()
@@ -48,7 +48,7 @@ function need(body: Record<string, unknown>, key: string): string {
 
 /** 交互件伺服时注入 vendored KaTeX 自动渲染（检测到公式定界符且未自带 katex 才注入；
  * 存量交互件免重生成即获得公式渲染）。定界符与正文一致：$…$/$$…$$。 */
-function injectKatexIfMathed(html: string): string {
+export function injectKatexIfMathed(html: string): string {
   if (!/\$\$|\\\(|\\\[/.test(html) || /katex/i.test(html)) return html
   const inject = [
     '<link rel="stylesheet" href="/learnhub/api/vendor/katex/katex.min.css">',
