@@ -501,8 +501,9 @@ export const HANDLERS: Record<string, RouteHandler> = {
     sendJson(res, 200, cancelGeneration(rt, need(body, 'course'), need(body, 'node')))
   },
   'POST /coach/growth': async ({ rt, ctx, body, res }) => {
-    // 生长一步（面板下发 = 显式重新裁决，词条「生长批」）：即时入队、追加队尾、
-    // 豁免停摆/暂不产结构阻尼；被拒时 message 带原因（在途/失败）。
+    // 生长一步 / 失败重试（面板下发 = 显式重新裁决，词条「生长批」）：即时入队、追加队尾、
+    // 豁免停摆/暂不产结构与失败阻尼（#157：失败通知与生成页的「重试」走同一路由）；
+    // 被拒时 message 带原因（在途/已取消）。
     // 触发五点的检查点观测（读侧感知留运行日志）——入队本身不受检查结果闸：
     // 显式请求恒产一轮，就绪满足由教练回合停机转译为 idle。
     const growthCourse = need(body, 'course')

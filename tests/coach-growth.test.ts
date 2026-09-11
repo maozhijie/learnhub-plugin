@@ -503,3 +503,69 @@ starts:
     assert.match(fake.calls[0]!.prompt, /换线 = 激活图上已有节点/)
   })
 })
+
+// ---- 回灌止血（#157）：受理门拒收 → 门错误回灌教练重裁一次（仍败才 failed）----
+
+/** 引用图上不存在的区的畸形裁决（实机死法；过 schema 门、被 propose 受理门拒）。 */
+const BAD_REGION_OPS = [
+  '- op: add_node',
+  '  name: 平均变化率',
+  '  region: 幻区',
+  '  block: 起点块',
+  '  pre: [认识变化率]',
+  '  est: 15',
+  '  bloom: 理解',
+  '  difficulty: 2',
+  '  teaches: {变化率: 会用}',
+]
+
+test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错误回灌重裁段 → 合法产出进受理门', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    // 首轮裁决引用图上不存在的区（实机死法）：过 schema 门（区是自由字符串）、
+    // 被 propose 受理门拒（add_node 区不存在）；重裁段产出合法裁决 → 提案照常受理
+    const fake = scriptFake([
+      goldVerdict({ ops: BAD_REGION_OPS }),
+      goldVerdict(),
+    ])
+    const r = await engine.coachGrowthBatch('数学', fake)
+
+    // 调用数基线：轻量段 1 次 + 回灌重裁段恰 1 次（deep 档）
+    assert.equal(fake.calls.length, 2, '受理门拒收后恰回灌重裁一次')
+    assert.equal(fake.calls[1]!.effort, 'deep', '回灌重裁段恒 deep 档')
+    // 门错误与被拒原文都回灌进重裁段 prompt（教练拿得到死因与修正起点）
+    assert.match(fake.calls[1]!.prompt, /受理门反馈/)
+    assert.match(fake.calls[1]!.prompt, /区不存在: 幻区/, '首轮拒绝原因原样回灌')
+    assert.match(fake.calls[1]!.prompt, /region: 幻区/, '被拒裁决原文随包回灌')
+    assert.match(fake.calls[1]!.prompt, /当前图面/, '重裁段恒带图面（修正引用的取值域）')
+    // 重裁产出走完整受理链：提案应用、路径可观测（light → repair）
+    assert.equal(r.state, 'applied')
+    assert.deepEqual(r.segments.map(s => s.tier), ['light', 'repair'])
+    assert.equal(r.segments[1]!.tier, 'repair')
+    assert.equal(r.segments[1]!.effort, 'deep')
+    assert.equal(r.proposal!.operator, '前进')
+    assert.equal(r.applied!.created.join(','), '平均变化率')
+  })
+})
+
+test('#157 回灌仍败：重裁产出再被受理门拒收 → 原样失败且错误带两轮死因，零提案落盘', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    const malformed = goldVerdict({ ops: BAD_REGION_OPS })
+    const fake = scriptFake([malformed, malformed])
+    await assert.rejects(
+      engine.coachGrowthBatch('数学', fake),
+      (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        assert.match(msg, /回灌重裁一轮仍未通过/, '失败显式声明死因形态')
+        assert.match(msg, /【首轮】/, '带首轮拒绝原因')
+        assert.match(msg, /【重裁】/, '带重裁拒绝原因')
+        assert.match(msg, /区不存在: 幻区/)
+        return true
+      },
+    )
+    assert.equal(fake.calls.length, 2, '恰两轮调用（轻量段 + 回灌重裁段），不无限重试')
+    // 被拒批次零落盘：两轮都没到 saveArtifact，无 pending 提案残留
+    assert.equal((await engine.graphProposals('pending', 'edit')).length, 0)
+  })
+})

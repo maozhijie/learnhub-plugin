@@ -2,10 +2,12 @@
  * 复诊在途清单，把「系统在我的课程上动了手」浮出来——
  * - 图域任务（种子/生长/罗盘/反编译/计划/里程碑）入队与终态各弹一条（含触发语义与结果行）；
  *   内容类任务不弹（各页已有指示器）；被阻尼拒掉的重拉不产生注册表条目 → 自然不弹。
+ * - 生长批失败通知带「重试」按钮（#157）：点击重新下发面板生长命令（显式重新裁决，
+ *   豁免失败阻尼）——教练一次产出畸形不再让课程静默停止生长。
  * - 复诊结算（队列空闲钩子自动跑，宿主侧只有运行日志）：在途节点消失/三率增量 = 已出结论。
  * 通知按钮按任务性质分流：产物是提案的（种子/反编译/计划/里程碑）→「去提案页」人审；
  * 过程性的（生长/罗盘）→「去生成页」。首拍（首次成功取数）只建快照——不回放历史。 */
-import { Button, Notification } from '@arco-design/web-react'
+import { Button, Message, Notification } from '@arco-design/web-react'
 import { useEffect, useRef } from 'react'
 import { api } from './api'
 
@@ -21,7 +23,7 @@ const PHASE_TITLE: Record<string, string> = {
 /** 产物是提案的任务：完成通知跳提案页（下一步动作是人审），其余跳生成页。 */
 const PROPOSAL_OUTPUT = new Set(['种子', '反编译', '计划', '里程碑'])
 
-interface JobSnap { status: string; phase?: string; message?: string }
+interface JobSnap { course: string; status: string; phase?: string; message?: string }
 
 export function useCoachToasts(nav: { generate: () => void; proposals: () => void }): void {
   const prevJobsRef = useRef<Map<string, JobSnap> | null>(null)
@@ -33,14 +35,32 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
     let jobsPrimed = false
     let probationPrimed = false
 
+    /** 生长批失败通知的「重试」（#157）：重新下发面板生长命令（显式重新裁决，
+     * 服务端豁免失败阻尼重新入队）；结果以轻提示反馈，通知本体自动消散。 */
+    const retryGrowth = async (course: string): Promise<void> => {
+      try {
+        const r = await api.coachGrowth(course)
+        if (r.queued) Message.success(r.message)
+        else Message.warning(r.message)
+      } catch (err) {
+        Message.error(err instanceof Error ? err.message : String(err))
+      }
+    }
+
     const notify = (kind: 'info' | 'success' | 'error', title: string, text: string | undefined,
-      target: 'generate' | 'proposals' = 'generate') => {
+      target: 'generate' | 'proposals' = 'generate', onRetry?: () => void) => {
       Notification[kind]({
         title,
         content: (
           <span>
             {text}
-            <Button size='mini' type='text' style={{ marginLeft: 6 }}
+            {onRetry && (
+              <Button size='mini' type='text' status='warning' style={{ marginLeft: 6 }}
+                onClick={() => onRetry()}>
+                重试
+              </Button>
+            )}
+            <Button size='mini' type='text' style={{ marginLeft: onRetry ? 0 : 6 }}
               onClick={() => navRef.current[target]()}>
               {target === 'proposals' ? '去提案页' : '去生成页'}
             </Button>
@@ -58,7 +78,7 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
         snaps = new Map()
         for (const j of st.jobs) {
           if (!GRAPH_PHASES.has(j.phase ?? '')) continue
-          snaps.set(j.key, { status: j.status, phase: j.phase, message: j.message })
+          snaps.set(j.key, { course: j.course, status: j.status, phase: j.phase, message: j.message })
         }
       } catch {
         return // 宿主暂不可达：下轮再试（首拍未成不启用通知）
@@ -79,7 +99,8 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
             } else if (cur.status === 'partial') {
               notify('info', `${title}部分完成`, cur.message)
             } else if (cur.status === 'failed' || cur.status === 'cancelled') {
-              notify('error', `${title}${cur.status === 'failed' ? '失败' : '已取消'}`, cur.message)
+              notify('error', `${title}${cur.status === 'failed' ? '失败' : '已取消'}`, cur.message,
+                'generate', cur.status === 'failed' && cur.phase === '生长' ? () => void retryGrowth(cur.course) : undefined)
             }
           }
         }

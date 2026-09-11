@@ -9,7 +9,8 @@
  * 只会得到一堆与 UI 无关的存量债——所以本门只断言 `ui/src/` 下 0 错，
  * 依赖源码的错数照实报出（它们的严格化属于根类型门的事，另开票）。
  *
- * 另一半是「公共面零改动」：`api.<name>(` 调用点数量必须与迁移前一致（139 处）。
+ * 另一半是「公共面零改动」：`api.<name>(` 调用点数量必须与迁移前一致（迁移时 139 处），
+ * 有意增减要显式同步（#157 生长批失败重试：通知与生成页各 +1 处 api.coachGrowth → 141）。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -20,7 +21,10 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-test('UI 公共面零改动：api.<name>( 调用点数量不变（139 处，函数名与签名未动）', () => {
+/** 调用点棘轮（迁移回归网）；有意增减随提交同步（注释里给理由）。 */
+const API_CALLSITES = 141
+
+test(`UI 公共面零改动：api.<name>( 调用点数量不变（${API_CALLSITES} 处，函数名与签名未动）`, () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
     const p = join(dir, e.name)
     return e.isDirectory() ? walk(p) : /\.tsx?$/.test(e.name) ? [p] : []
@@ -28,7 +32,7 @@ test('UI 公共面零改动：api.<name>( 调用点数量不变（139 处，函�
   const callsites = walk(join(ROOT, 'ui', 'src'))
     .filter(f => !f.endsWith('api.ts'))
     .reduce((n, f) => n + [...readFileSync(f, 'utf8').matchAll(/\bapi\.[A-Za-z_]\w*\s*\(/g)].length, 0)
-  assert.equal(callsites, 139, `调用点从 139 漂到 ${callsites}（受影响的文件：${walk(join(ROOT, 'ui', 'src')).join(', ')}）`)
+  assert.equal(callsites, API_CALLSITES, `调用点从 ${API_CALLSITES} 漂到 ${callsites}（受影响的文件：${walk(join(ROOT, 'ui', 'src')).join(', ')}）`)
 })
 
 test('UI 形状收口：引擎形状手工镜像已清零（响应类型一律从注册表 output 派生）', () => {

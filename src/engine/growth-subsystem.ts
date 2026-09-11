@@ -545,7 +545,8 @@ export class GrowthSubsystem {
    * （#149 项目消费拉动的生长请求）：注入块随包进回合，且注入本身是显式的重新裁决
    * 请求——check.ok 不再短路停摆（裁决仍可能产出零操作批）。裁决语义在提示词；本
    * 方法只保证组装、schema 与同事务纪律。金样本回放闸锚调用数基线：显然步恒 1 次、
-   * 分歧升级恒 2 次、双沙盘仲裁恒 3 次（沙盘推演是读侧计算，不计调用数）。 */
+   * 分歧升级恒 2 次、双沙盘仲裁恒 3 次（沙盘推演是读侧计算，不计调用数）；
+   * 受理门拒收加回灌重裁段恰 +1 次（#157）。 */
   async coachGrowthBatch(
     courseKey: string, llm: LlmComplete,
     opts: { force?: boolean; today?: string; inject?: string } = {},
@@ -609,13 +610,46 @@ export class GrowthSubsystem {
       return verdict
     }
 
+    // 回灌重裁段（#157）：受理门拒收后的修复轮——拒绝原因原文 + 被拒裁决原文随全量包
+    // 与图面回灌，deep 档重裁一次；重裁结论即终审（分歧声明只作可观测留痕，不再升级
+    // 仲裁段——重裁本身已是加深的一轮，「恰一轮」封顶防重试风暴）。
+    const runRepair = async (feedback: string, previousYaml: string): Promise<{ spec: EditProposalSpec; yaml: string; note: GrowthNote }> => {
+      const pack = await this.coachContextPack(c.name, { today, packLabel: '回灌重裁段——上一版裁决被受理门拒收' })
+      const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n\n---\n\n`
+        + `## 受理门反馈（上一版裁决未过受理门——被拒批次零落盘，图未改动）\n\n${feedback.trim()}\n\n`
+        + `上一版裁决原文：\n\n\`\`\`yaml\n${previousYaml.trim()}\n\`\`\`\n\n`
+        + `请对照拒绝原因逐条修正后，按模板重新产出完整裁决（course + note + route + ops）：`
+        + `区/块与节点名、pre 引用必须逐字来自上方图面，概念必须已在登记表或本批 concepts 铸名。`
+      const raw = await llm(prompt, undefined, { effort: 'deep' })
+      const verdict = this.parseGrowthVerdict(raw)
+      segments.push({ tier: 'repair', effort: 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
+      return verdict
+    }
+
     let final = await runSegment('light')
     if (final.note.disagreement) {
       final = await runSegment('full')
       if (final.note.disagreement) final = await runArbitration(final)
     }
 
-    const prop = await this.e.graphPropose('edit', final.yaml) as GraphEditProposalResult
+    // 回灌止血（#157）：受理门拒收 = 教练一次产出畸形（引用不存在的区、概念未铸名、
+    // pre 引用不存在的节点…），门错误回灌教练重裁一次——一版定生死会让批次直接 failed，
+    // 而失败后自动触点全被阻尼，课程静默停止生长。只包 propose 侧的门（结构/概念对表/
+    // 锚保护/巩固门/生长闸门/路线门）；schema 门在 parseGrowthVerdict 已先行（模板钉死
+    // 产物形状，畸形率低）。重裁段的任何失败（模型调用/解析/仍被拒）都带两轮死因抛出。
+    // apply 失败是竞态非畸形，沿用下方「自清后原样抛错」不重裁。
+    let prop: GraphEditProposalResult
+    try {
+      prop = await this.e.graphPropose('edit', final.yaml) as GraphEditProposalResult
+    } catch (firstErr) {
+      const fmt = (e: unknown): string => e instanceof Error ? e.message : String(e)
+      try {
+        final = await runRepair(fmt(firstErr), final.yaml)
+        prop = await this.e.graphPropose('edit', final.yaml) as GraphEditProposalResult
+      } catch (repairErr) {
+        throw new Error(`[coach-growth] 生长批受理门拒收（回灌重裁一轮仍未通过——零落盘）。\n【首轮】${fmt(firstErr)}\n【重裁】${fmt(repairErr)}`)
+      }
+    }
     let applied: GraphApplyEditResult
     try {
       applied = await this.e.graphApply('edit', prop.id) as GraphApplyEditResult

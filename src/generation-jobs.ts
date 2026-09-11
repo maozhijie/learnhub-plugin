@@ -44,6 +44,28 @@ export function isNodeAnchoredPhase(phase: GenJobPhase | undefined): boolean {
   return phase === undefined || phase === 'outline' || phase === 'sections' || phase === 'quiz'
 }
 
+/** 图域任务执行所必需的负载键（#157；面板下发入队时随任务写入）：phase → GenJob 上
+ * 的负载字段。罗盘与生长零负载（course 键即全部入参，罗盘引擎自取课程、生长批只带
+ * 可选 inject）；键缺失的任务在重启恢复处明确标失败可重试，不进执行器才炸。 */
+export const GRAPH_JOB_REQUIRED_PAYLOAD: Partial<Record<GenJobPhase, 'seedPayload' | 'decompilePayload' | 'planPayload' | 'milestonePayload'>> = {
+  种子: 'seedPayload',
+  反编译: 'decompilePayload',
+  计划: 'planPayload',
+  里程碑: 'milestonePayload',
+}
+
+/** 图域任务可执行性裁决（纯函数，入队侧保证、重启恢复侧校验共用同一契约）：
+ * phase 要求的负载在场 → null（可执行）；要求且缺失 → 'payload_missing'
+ * （恢复侧明确标失败可重试，不再拖到执行器抛「负载缺失或 phase 未知」）。 */
+export function graphJobPayloadGap(
+  phase: GenJobPhase | undefined,
+  job: { seedPayload?: unknown; decompilePayload?: unknown; planPayload?: unknown; milestonePayload?: unknown },
+): 'payload_missing' | null {
+  const need = phase === undefined ? undefined : GRAPH_JOB_REQUIRED_PAYLOAD[phase]
+  if (!need) return null
+  return job[need] != null ? null : 'payload_missing'
+}
+
 /** 任务记录悬空判定的存在性输入（宿主用引擎的注册表与图解析结果喂入）。 */
 export interface GenJobExistence {
   /** 课程已删（注册表精确匹配不到 name/id；停用不算缺失）。 */

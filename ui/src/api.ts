@@ -307,7 +307,8 @@ export const api = {
     http<{ course: string; node: string; week_start: string }>('POST', '/kata/convert/intention',
       { week_start: weekStart, course, node, cue, action }),
   // ---- 图域命令（面板下发，学习图生命周期 UI 化）：入队即返回，进度/结果看生成页 ----
-  /** 生长一步：教练回合显式重新裁决（即时入队、豁免停摆阻尼；在途/失败仍拒）。 */
+  /** 生长一步 / 失败重试：教练回合显式重新裁决（即时入队，豁免停摆与失败阻尼——
+   * 失败通知与生成页的「重试」走同一路由；在途/已取消仍拒）。 */
   coachGrowth: (course: string) =>
     http<{ message: string; queued: boolean }>('POST', '/coach/growth', { course }),
   /** 罗盘初画/重画（LLM 一次调用，队列任务化）。 */

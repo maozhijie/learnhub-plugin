@@ -12,6 +12,7 @@ import {
   genJobRetentionRemainingMs,
   genJobSweepVerdict,
   generationJobRetentionMs,
+  graphJobPayloadGap,
   isGenJobTerminal,
   nextQueuedJob,
   quizFailureOutcome,
@@ -241,16 +242,20 @@ const GROWTH_JOB_NODE = '生长批'
  * 重拉要等新的队列活动带来新内容。自动拉批只在队列空闲检查点接线（另两点=感知面）。
  * inject（#149）= 计划修订的换线/补支注入：显式的重新裁决请求，豁免 idle/no_structure
  * 阻尼（计划改了目标，上一次停摆裁决不再代表现状）；在途/失败阻尼照旧。
- * force（面板下发）= 同 inject 的显式豁免（学习者点了「生长一步」就是重新裁决的意图）；
- * 在途/失败阻尼照旧——在途防重入，失败走生成页重试。 */
+ * force（面板下发）= 同 inject 的显式豁免（学习者点了「生长一步」/失败通知「重试」
+ * 就是重新裁决的意图，#157）：豁免停摆/暂不产结构与**失败**阻尼（终态记录覆盖重新
+ * 入队）；在途防重入与已取消（明确的中止意图）照旧。 */
 export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean } = {}): { message: string; queued: boolean } {
   const key = `${course}/${GROWTH_JOB_NODE}`
   const last = rt.jobs.genJobs.get(key)
   if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
     return { message: `「${course}」已有生长批任务在途，不重复入队。`, queued: false }
   }
-  if (last && (last.status === 'failed' || last.status === 'cancelled')) {
-    return { message: `「${course}」上一生长批${last.status === 'failed' ? '失败' : '已取消'}（${last.message ?? ''}），不自动重试——可从生成页重试或等下一次触发。`, queued: false }
+  if (last?.status === 'cancelled') {
+    return { message: `「${course}」上一生长批已取消（${last.message ?? ''}），不重拉——取消是明确的中止意图，可等下一次触发。`, queued: false }
+  }
+  if (last?.status === 'failed' && opts.force !== true) {
+    return { message: `「${course}」上一生长批失败（${last.message ?? ''}），不自动重试——可从生成页或失败通知重试，或等下一次触发。`, queued: false }
   }
   if (!inject && opts.force !== true && last && last.status === 'done' && last.growthOutcome !== 'applied') {
     return { message: `「${course}」上一生长批裁决为 ${last.growthOutcome === 'idle' ? '停摆' : '暂不产结构'}，不重拉。`, queued: false }
@@ -420,7 +425,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       job.growthOutcome = a.ops > 0 ? 'applied' : 'no_structure'
       job.status = 'done'
       const tierNote = r.segments
-        .map(s => `${{ light: '轻', full: '全', arbitration: '双沙盘仲裁' }[s.tier] ?? s.tier}${s.disagreement ? '↑分歧升级' : ''}(${s.operator})`)
+        .map(s => `${{ light: '轻', full: '全', arbitration: '双沙盘仲裁', repair: '回灌重裁' }[s.tier] ?? s.tier}${s.disagreement ? '↑分歧升级' : ''}(${s.operator})`)
         .join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
         + `${a.compass_rewritten ? '；罗盘已同事务重写' : ''}｜${tierNote}｜理由：${p.reason}`
@@ -736,7 +741,10 @@ export function resumeQueue(rt: HostRuntime, ctx: Context): { paused: boolean; r
 
 /** 生成任务注册表恢复（apply 装配步，fire-and-forget）：running/cancelling 随进程消失标失败；
  * queued 保留但队列置为暂停（不自动开跑——重启后静默烧 token 是惊吓，生成页一键恢复）；
- * 恢复清扫与幸存终态按剩余保留期补挂定时器（跨重启只能靠时间戳结算，ADR-0039）。 */
+ * 图域任务负载随档恢复（#157：种子/反编译/计划/里程碑的 payload 与生长批 inject/裁决
+ * 面板下发时随任务落盘，恢复缺失即无法执行——负载要求的 queued 任务在恢复处明确标
+ * 失败可重试，不拖到执行器抛「负载缺失或 phase 未知」）；恢复清扫与幸存终态按剩余
+ * 保留期补挂定时器（跨重启只能靠时间戳结算，ADR-0039）。 */
 export function restoreGenJobs(rt: HostRuntime): void {
   void rt.engine.loadGenJobs().then(async stale => {
     for (const raw of stale) {
@@ -744,7 +752,7 @@ export function restoreGenJobs(rt: HostRuntime): void {
       if (typeof j.course !== 'string' || typeof j.node !== 'string') continue
       const key = `${j.course}/${j.node}`
       const interrupted = j.status === 'running' || j.status === 'cancelling'
-      rt.jobs.genJobs.set(key, {
+      const restored: GenJob = {
         course: j.course, node: j.node,
         startedAt: typeof j.startedAt === 'string' ? j.startedAt : new Date().toISOString(),
         status: interrupted ? 'failed' : (j.status ?? 'failed'),
@@ -759,12 +767,31 @@ export function restoreGenJobs(rt: HostRuntime): void {
           ? { section: { id: (j.section as { id: string }).id, title: (j.section as { title: string }).title } } : {}),
         ...(typeof j.instruction === 'string' ? { instruction: j.instruction } : {}),
         ...(typeof j.model === 'string' ? { model: j.model } : {}),
+        // 生长批裁决面随档恢复（#157）：inject 是排队任务的执行负载，outcome 是
+        // 重拉阻尼的判据（恢复丢失会让「上批停摆/暂不产结构」的裁决被无声抹掉）
+        ...(typeof j.growthInject === 'string' ? { growthInject: j.growthInject } : {}),
+        ...(j.growthOutcome === 'idle' || j.growthOutcome === 'no_structure' || j.growthOutcome === 'applied'
+          ? { growthOutcome: j.growthOutcome } : {}),
+        // 图域任务负载随档恢复（#157）：形状由写入侧（面板下发）保证，这里只做
+        // 「非空对象」闸——损坏负载进执行器由引擎契约 fail loud，不做静默兜底
+        ...(j.seedPayload && typeof j.seedPayload === 'object' ? { seedPayload: j.seedPayload } : {}),
+        ...(j.decompilePayload && typeof j.decompilePayload === 'object' ? { decompilePayload: j.decompilePayload } : {}),
+        ...(j.planPayload && typeof j.planPayload === 'object' ? { planPayload: j.planPayload } : {}),
+        ...(j.milestonePayload && typeof j.milestonePayload === 'object' ? { milestonePayload: j.milestonePayload } : {}),
         message: interrupted ? '进程重启，任务中断——可重试' : (typeof j.message === 'string' ? j.message : undefined),
         // 终态时刻随档恢复（保留期跨重启的起算点）；中断标失败的从恢复当下起算
         ...(interrupted
           ? { finishedAt: new Date().toISOString() }
           : (typeof j.finishedAt === 'string' ? { finishedAt: j.finishedAt } : {})),
-      })
+      }
+      // 负载要求的排队图域任务恢复后缺负载（旧档案/未完整落盘）：明确标失败可重试，
+      // 不留 queued 假象——恢复队列一键开跑时才炸出「负载缺失或 phase 未知」是静默变形
+      if (restored.status === 'queued' && graphJobPayloadGap(restored.phase, restored) === 'payload_missing') {
+        restored.status = 'failed'
+        restored.message = '任务负载缺失（重启前未完整落盘），无法恢复执行——请从面板重新下发（可重试）。'
+        restored.finishedAt = new Date().toISOString()
+      }
+      rt.jobs.genJobs.set(key, restored)
     }
     // 恢复清扫（ADR-0039）：内容已删的悬空记录清除（不做墓碑），终态超保留期一并出册
     // ——重启前挂的保留期定时器已随进程消失，跨重启只能靠时间戳在这里结算

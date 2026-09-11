@@ -130,6 +130,21 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
     }
   }
 
+  // 生长批失败重试（#157）：重新下发面板生长命令（显式重新裁决，服务端豁免失败阻尼）
+  const retryGrowth = async (course: string) => {
+    setBusyKey(`${course}/生长批`)
+    try {
+      const r = await api.coachGrowth(course)
+      if (r.queued) Message.success(r.message)
+      else Message.warning(r.message)
+      await load()
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
   const generate = async (item: QueueItem) => {
     setBusyKey(`${item.course}/${item.node}`)
     try {
@@ -245,6 +260,11 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
                       {j.status === 'queued' ? '移出队列' : '取消'}
                     </Button>
                     : null}
+                  {(j.status === 'failed' && j.phase === '生长') && (
+                    <Button size='mini' type='text' status='warning'
+                      loading={busyKey === j.key}
+                      onClick={() => void retryGrowth(j.course)}>重试</Button>
+                  )}
                   {(j.status === 'failed' || j.status === 'partial') && (
                     <Button size='mini' type='text' onClick={() =>
                       discussInHost(j.course, j.node, `上次生成${j.status === 'partial' ? '部分完成，自动出题失败' : '失败'}：${j.message ?? '（无错误信息）'}。请分析原因并帮我修复，然后重试。`)

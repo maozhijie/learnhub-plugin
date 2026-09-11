@@ -306,11 +306,12 @@ export const COACH_COLD_START_EST_MULT = 1.5
  * 面板下发。跳过与面板下发是显式重新裁决——上一次停摆裁决不再代表现状（重拉阻尼豁免在宿主入队侧）。 */
 export type CoachTrigger = 'node_complete' | 'node_skip' | 'session_start' | 'queue_idle' | 'panel_dispatch'
 
-/** 教练回合单段装配的观测记录（#145 两段式 effort；#150 增仲裁段）：tier/effort 定档，
- * operator 为该段裁决产出的算子标签，disagreement = 该段是否声明真分歧（轻量段 true →
- * 升级全量段；全量段 true → 升级双沙盘仲裁段；仲裁段为终审，声明只作可观测留痕）。 */
+/** 教练回合单段装配的观测记录（#145 两段式 effort；#150 增仲裁段；#157 增回灌重裁段）：
+ * tier/effort 定档，operator 为该段裁决产出的算子标签，disagreement = 该段是否声明真分歧
+ * （轻量段 true → 升级全量段；全量段 true → 升级双沙盘仲裁段；仲裁段为终审，声明只作
+ * 可观测留痕）。repair = 受理门拒收后的回灌重裁段（门错误回灌教练重裁一次，恰一段）。 */
 export interface CoachGrowthSegment {
-  tier: 'light' | 'full' | 'arbitration'
+  tier: 'light' | 'full' | 'arbitration' | 'repair'
   effort: 'fast' | 'deep'
   operator: string
   disagreement: boolean

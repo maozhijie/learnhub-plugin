@@ -46,7 +46,7 @@ XP 例外：完成节点时有一次 `xp_settle` 对账（见「XP 预算制」�
 - 调度与学习：`learnhub_status / recommend / lesson / rebuild / feedback / note_resolve`
 - 节点操作：`learnhub_skip`（跳过/取消跳过，已有基础的节点）、`learnhub_complete`（完成确认，未答题入复习循环）
 - 图谱五面 + 逐步探索：`learnhub_graph_analyze / propose / proposals / apply`（analyze 返回图谱健康分 0-100、下一批建议 expand_blocks/missing_pre/unconverged 与每节点 schema 字段值 pre/enc/est/bloom/difficulty/note——边级自查的数据依据，建议条目上限随图规模伸缩；proposals 列 pending/历史提案；apply 返回 findings = audit warns 摘要 + 健康分基线提醒；propose 受理 edit/seed/enrich——seed（种子提案）为建课入口一次人审；edit ops 含 set_enc 成分技能边整体替换，add_node 支持可选 est/type/bloom/difficulty/enc）；探索三件套 `learnhub_graph_node`（单节点详情+前置传递闭包）/ `learnhub_graph_browse`（区/块过滤浏览）/ `learnhub_graph_path`（from 是否 to 的前置 + BFS 最短链）——不拉全图逐步查细节
-- 图谱质量机制：健康分 5 项（动作句命名/est 覆盖/前置完备/收敛度/结构卫生）进审计基线表；审计 R13 认知跨步（相邻 pre 边 |Δdifficulty|≥2 → warn，原 R11 口径并入）与 R12 认知-时长失配（info）；生长批质量由受理门把守（schema/结构检查/概念对表/终点锚保护/巩固门/插入批调速闸），批次节奏由教练回合提示词约束（每批 ≤8 操作、单算子方向，apply 后看清全图再裁下一批）；数量限定按图规模伸缩（健康分别名命中按节点数归一；R1 浅叶阈值随最大深度相对化；审计条目超 15 附溢出行）；正文落盘时 enc_candidates 引用非祖先节点 → 返回值附 hints 提醒补边（内容反哺图）
+- 图谱质量机制：健康分 5 项（动作句命名/est 覆盖/前置完备/收敛度/结构卫生）进审计基线表；审计 R13 认知跨步（相邻 pre 边 |Δdifficulty|≥2 → warn，原 R11 口径并入）与 R12 认知-时长失配（info）；生长批质量由受理门把守（schema/结构检查/概念对表/终点锚保护/巩固门/插入批调速闸），受理门拒收把门错误回灌教练重裁一轮（仍拒才失败，失败通知/生成页带「重试」；ADR-0050），批次节奏由教练回合提示词约束（每批 ≤8 操作、单算子方向，apply 后看清全图再裁下一批）；数量限定按图规模伸缩（健康分别名命中按节点数归一；R1 浅叶阈值随最大深度相对化；审计条目超 15 附溢出行）；正文落盘时 enc_candidates 引用非祖先节点 → 返回值附 hints 提醒补边（内容反哺图）
 - 题库（刷卡作答流）：`learnhub_question_list / question_save / question_answer`，`learnhub_question_generate`（模型出题管线，与自动出题同门禁）、`learnhub_question_get`（单题全量含答案，修订用——list 不带答案防作答流泄题）、`learnhub_question_update`（patch 合并重新校验，`{archived:true}` 隐藏题）
 - 生成：`learnhub_generate`（大纲 → 逐节正文 → 自动出题三段管线，断点续跑；缺笔记先补骨架，on-demand 课时语义；可选 `style` 节级风格变体作用于每节生成）、`learnhub_course_reset`（整课重置后台重跑，HTTP 与工具同通道）与 `learnhub_course_delete`（删课移入 .trash，可手工恢复）
 - 质检：`learnhub_content_check`（对现有课程笔记跑质检门——超纲引用/别名一致性/未注册代码块语言/interactive 引用文件存在；agent 手改正文后必须跑一遍并修掉全部 findings）
@@ -110,7 +110,7 @@ apply 时拆出 HTML 落盘 `<课程根>/交互/单摆.html`，正文替换为 `
 
 ### 会话化与答疑（面板 ↔ dsh 会话分层）
 
-- **生成任务 durable**：genJobs 每次状态变更原子落盘 `state/生成任务.json`；进程重启读入，遗留 running/cancelling 标 `failed`（「进程重启中断，可重试」），终态 `partial` 原样恢复。
+- **生成任务 durable**：genJobs 每次状态变更原子落盘 `state/生成任务.json`；进程重启读入，遗留 running/cancelling 标 `failed`（「进程重启中断，可重试」），终态 `partial` 原样恢复，图域任务负载（种子表单/反编译/计划/里程碑参数、生长批注入与裁决）随档恢复（#157：排队任务恢复队列后正常执行；缺负载的旧档在恢复处明确标失败可重试，不拖到执行器报「负载缺失」）。
 - **问 AI 老师**（面板内即时答疑）：`POST /learnhub/api/tutor`，body 携带本节点正文 + 题库摘要 + 掌握度的 system 与完整对话历史；只答不写，历史由前端持久。
 - **与 AI 讨论本课**（深度讨论/修订）：学习中心 tab 经 `window.opener` 发 `learnhub:discuss` → host 给出 `GET /learnhub/api/discuss-pack`（节点正文 + 题库摘要 + 掌握度 + 图位置）→ client 用 `sessions.create/open` 开新 dsh 会话并把上下文与用户意图作为首条 prompt 注入 → 应用窗口切回前台，学习中心 tab 保持打开（不打断学习进度；iframe 宿主形态下发 `parent`，行为等价）。agent 侧 SOP 见 `skills/learnhub-build`（何时直接回答、何时用 `learnhub_*` 工具、何时编辑课程笔记、图变更必须走 propose 人审）。
 

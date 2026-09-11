@@ -11,6 +11,7 @@ import {
   nextQueuedJob,
   quizFailureOutcome,
   quizSuccessOutcome,
+  graphJobPayloadGap,
 } from '../src/generation-jobs.ts'
 import type { GenJobPhase, GenJobStatus } from '../src/generation-jobs.ts'
 
@@ -116,4 +117,19 @@ test('保留期剩余时长：finishedAt 起算、超期归零（恢复补挂定
   assert.equal(genJobRetentionRemainingMs({ status: 'done', startedAt: '2026-09-11T05:00:00Z', finishedAt: twoHoursAgo }, now), 0)
   // 旧档无 finishedAt：回退 startedAt
   assert.equal(genJobRetentionRemainingMs({ status: 'failed', startedAt: twoHoursAgo }, now), 22 * HOUR)
+})
+
+test('图域任务负载契约（#157）：四类负载要求的 phase 缺负载判 payload_missing，罗盘/生长零负载', () => {
+  // 负载要求的 phase：在场 → null；缺失 → payload_missing（恢复侧明确标失败可重试）
+  assert.equal(graphJobPayloadGap('种子', { seedPayload: { goal: 'x' } }), null)
+  assert.equal(graphJobPayloadGap('种子', {}), 'payload_missing')
+  assert.equal(graphJobPayloadGap('种子', { seedPayload: undefined }), 'payload_missing')
+  assert.equal(graphJobPayloadGap('反编译', { decompilePayload: { project: 'p' } }), null)
+  assert.equal(graphJobPayloadGap('计划', { planPayload: { project: 'p' } }), null)
+  assert.equal(graphJobPayloadGap('里程碑', { milestonePayload: { project: 'p', milestone: 'm' } }), null)
+  // 零负载 phase 与内容管线 phase：恒可执行
+  assert.equal(graphJobPayloadGap('罗盘', {}), null)
+  assert.equal(graphJobPayloadGap('生长', {}), null)
+  assert.equal(graphJobPayloadGap('outline', {}), null)
+  assert.equal(graphJobPayloadGap(undefined, {}), null)
 })
