@@ -17,7 +17,7 @@ import type { ReceiptLogRec } from './receipts.ts'
 import type { HabitRepeatRec } from './habits.ts'
 import type { PinRec } from './goals.ts'
 import type { BandRec } from './coach.ts'
-import type { ExperimentDef } from './nof1.ts'
+import type { ExperimentDef } from './types.ts'
 import type { Paths } from './paths.ts'
 
 /** 勘误冲正的读侧净值（ADR-0031）：key_error 的作答按勘误记录替换 xp/对错；

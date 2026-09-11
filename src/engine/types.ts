@@ -251,3 +251,41 @@ export interface ErratumRec {
   /** 复核结论/申诉理由摘要。 */
   reason?: string
 }
+
+// ---- N-of-1 实验定义（D-1 #110 / ADR-0023；#152 刀 2 自 nof1.ts 归位——store 的
+// 实验存取反向 type-import 本定义，类型必须住中立词汇层才不成环）----
+
+/** 实验变量白名单（ADR-0023 裁决 1，红线）。调度核心参数永不入列。 */
+export const NOF1_VARIABLE_WHITELIST = [
+  'band_default',
+  'session_composition',
+  'ps_i_order',
+  'retrieval_point',
+  'ci_orchestration',
+] as const
+export type Nof1Variable = (typeof NOF1_VARIABLE_WHITELIST)[number]
+
+export interface ExperimentDef {
+  id: number
+  template: string
+  variable: Nof1Variable
+  title: string
+  question: string
+  outcome: 'true_retention' | 'practice_ema'
+  arms: [string, string]
+  arm_labels: Record<string, string>
+  unit: 'card' | 'batch'
+  /** 范围课程（null = 全部启用课程）。 */
+  scope_course: string | null
+  assignment:
+    | { kind: 'card'; map: Record<string, string> }
+    | { kind: 'batch'; start_day: string; order: [string, string] }
+  /** 最短观察窗：每臂 ≥N 次真实推进（ADR-0023 裁决 3，N 随交付票定 = 20）。 */
+  per_arm_min: number
+  started_day: string
+  started_ts: string
+  status: 'running' | 'stopped'
+  stopped_day?: string
+  /** 来源提案 id（留痕）。 */
+  proposal: number
+}
