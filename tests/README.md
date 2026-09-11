@@ -2,9 +2,17 @@
 
 `npm test` = `npm run typecheck`（类型门，G7）+ `node --experimental-transform-types --test tests/*.test.ts`（Node >=24 原生 TS + `--experimental-transform-types`，零测试框架依赖；facade 测试需要 transform 模式处理注入类的 constructor parameter properties，引擎门面测试直接实例化 `LearnhubEngine`）。单跑规则测试可用 `node --experimental-transform-types --test tests/`。
 
+## 门面 C 形态（#182 / ADR-0049，2026-09-12）
+
+hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engine.<子系统>.<方法>`**（子系统实例 = `learner`/`content2`/`project`/`bank2`/`channels`/`lab`/`graph`/`growth2`/`sched2`/`registry`/`proposals`/`projects`，全部公开 readonly 属性；hub 保留装配接线 + 装配域方法 statusJson/recommend/doctor/rebuild/saveGenJobs 等）。对测试的三点影响：
+
+- **直调写点路径**：`engine.learner.learnerQueue(...)` 而非 `engine.learnerQueue(...)`；hub 装配域方法保留裸名（`engine.statusJson()`）。注册表 `engine` 字段同口径（点路径 + hub 裸名），门① 断言子系统类原型。
+- **打桩按真实调用路径**：宿主泵/路由驱动的引擎调用走点路径，桩键写 `<子系统>.<方法>`（`tests/host-runtime.test.ts` 的 `stub()` 助手支持两种键）。
+- **快照记名**：工具面/路由面行为快照的 `calls` 以 `<子系统>.<方法>` 记名（探针 shadow 覆盖子系统实例方法）；`tests/helpers/regen-fixtures.mts` 与 `regen-face-baseline.mts` 是快照/基线的再生成工具（结构性迁移后使用，输出 diff 必须逐条人审——status/text/error 漂移零容忍）。
+
 ## 测试缝与 vault 工厂（ADR-0013，2026-09-09）
 
-- **`engine.store` 是正式测试缝**：D14「一切数据访问收口 engine 门面」是运行时纪律（工具/路由/UI 不得绕过）；测试侧的播种与断言走类型化的 `engine.store`（`reviewLogAll`/`appendPractice`/`loadPins` 等），这是文档化契约，不是后门。运行时代码零消费者（宿主/客户端/UI 均不触）。勿建 Probe 镜像、勿提议 store 私有化。
+- **`engine.store` 是正式测试缝**：D14「一切数据访问收口 engine 门面」是运行时纪律（工具/路由/UI 不得绕过）；测试侧的播种与断言走类型化的 `engine.store`（`reviewLogAll`/`appendPractice`/`loadPins` 等），这是文档化契约，不是后门。运行时代码零消费者（宿主/客户端/UI 均不触）。勿建 Probe 镜像、勿提议 store 私有化。C 形态下 store 仍是 hub 公开属性，此缝不变。
 - **`tests/helpers/vault.ts` 是共享 vault 工厂**：`withVault(options, run)` 声明式生成临时 vault + `LearnhubEngine`（默认 = 单课程「数学」/单节点「入门」基线；options 覆盖 registry/graph/notes/banks/state 种子/中心外文件）；`run` 收 `{ engine, root, paths, store }`，重载荷场景（假 Anki 传输器、故意损坏档、空 vault）用 `root` 逃生口自行写文件。共享 helpers：`tfQuestion(id, opts)`（true_false 题目 YAML 行）、`noteText(...)`（节点笔记 frontmatter）、`answer(engine, ...)`（作答包装）。
 
 接缝（2026-09-07 与用户确认）：
