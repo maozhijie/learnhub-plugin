@@ -166,7 +166,7 @@
     "src/engine/receipts.ts": 234,
     "src/engine/registry.ts": 153,
     "src/engine/sandbox.ts": 220,
-    "src/engine/sched-subsystem.ts": 508,
+    "src/engine/sched-subsystem.ts": 551,
     "src/engine/schema.ts": 79,
     "src/engine/sediment.ts": 235,
     "src/engine/seed.ts": 480,

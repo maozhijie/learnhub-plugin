@@ -160,63 +160,106 @@ export class SchedSubsystem {
     let initialized = 0
     let due: string | null = null
     let repCard: FsrsBlock | null = null
-    for (const q of bank.questions) {
-      if (q.archived) continue
-      if (q.fsrs?.reps) {
-        const d = q.fsrs.due
-        if (d && (!due || d < due)) { due = d; repCard = q.fsrs }
-        continue
-      }
-      const { fs } = applyRatingBlock(null, 3, today, sched)
-      await this.e.bank.updateQuestionEvidence(courseRoot, node, q.id, { fsrs: fs })
-      // 复习日志：合成首复习是调度初始化不是真实作答 → rating_source='synthetic'、
-      // 无「复习前」状态（快照三字段 null），诚实度统计（#61）不算它。
-      await this.e.store.appendReview({
-        course: c.name, node, qid: q.id,
-        rating: 3, rating_source: 'synthetic', elapsed_days: 0,
-        stability_before: null, difficulty_before: null, r_pred: null,
-      })
-      initialized++
-      if (!due || fs.due < due) { due = fs.due; repCard = fs }
-    }
-    // 满分 bonus：本节点全部题都做过且全对 → 额外 XP（journal 流水，kind='xp_bonus'）。
-    // 预算制下它是过程信号——下面的 xp_settle 对账会把它吸收进完成定价。
-    if (attempts > 0 && correct === attempts) {
-      await this.e.store.appendJournal({
-        course: c.name, node, rating: null, kind: 'xp_bonus', elapsed_days: 0,
-        xp: XP_PERFECT_BONUS, detail: `满分完成 +${XP_PERFECT_BONUS} XP`,
-      })
-    }
     const [, regionName] = graph.blockOf[node]
     const path = this.e.paths.courseNotePath(c.root, regionName, node)
-    const { fm: rawFm, body } = await loadNote(path)
-    const fm = asFm(rawFm)
-    if (fm && fm.stage !== 'review') {
-      const next: Fm = { ...fm, stage: 'review' }
-      if (repCard) next.fsrs = repCard
-      await saveNote(path, next as unknown as Record<string, unknown>, body)
-      const { state: stateNow } = await this.e.loadView(c)
-      await this.e.content.onStageChange(c.root, graph, stateNow, node, 'review')
-      // XP 预算制完成对账：净 XP 收敛到完成时刻的 N = N₀ × k（est 内容定价 × FSRS 难度校准），
-      // 并就此锁定（重复完成与后续复习作答不再改定价；乱猜/满分 bonus 等过程信号被对账吸收）。
-      const activeQs = bank.questions.filter(q => !q.archived)
-      const budget = Math.round(nominalBudget(graph.estOf[node], activeQs) * difficultyCalibration(activeQs))
-      let earned = 0
-      for (const rec of await this.e.store.practiceAll()) {
-        if (rec.course === c.name && rec.node === node) earned += rec.xp ?? 0
-      }
-      for (const rec of await this.e.store.journalTail(c.name, Number.MAX_SAFE_INTEGER)) {
-        if (rec.node === node) earned += rec.xp ?? 0
-      }
-      const delta = budget - earned
-      if (delta !== 0) {
-        await this.e.store.appendJournal({
-          course: c.name, node, rating: null, kind: 'xp_settle', elapsed_days: 0,
-          xp: delta,
-          detail: `XP 预算对账：N₀=${nominalBudget(graph.estOf[node], activeQs)} × k=${difficultyCalibration(activeQs).toFixed(2)} = ${budget}，过程净 ${earned}`,
-        })
-      }
+    // stage 守卫的幂等判据（声明给三步共用）：frontmatter 已是 review = 该块已落，续段跳过
+    const stageAlreadyReview = async () => {
+      const { fm: rawFm } = await loadNote(path)
+      const f = asFm(rawFm)
+      return Boolean(f && f.stage === 'review')
     }
+    // 写入单元（#176）：写序照今天的声明——「合成首刷 → 满分 bonus → stage→review
+    // → T1/T2 入队 → XP 对账」。后三步共用 stage 幂等判据（今天同款：转 review 后
+    // 重放时 4b/4c 被永久跳过，不收敛——照迁并登记）；满分 bonus 今天无存在检查，
+    // 重复完成可重复追加（照迁并登记）。失败上抛中止，不回滚不续跑，失败不写 journal。
+    await runWriteUnit('nodeComplete', {
+      clock: this.e.clock,
+      journal: rec => this.e.store.appendJournal(rec),
+      steps: [
+        {
+          // 逐题 fsrs?.reps 内部跳过（幂等在步骤内：合成首刷只发生一次）
+          name: '题卡合成首刷',
+          run: async () => {
+            for (const q of bank.questions) {
+              if (q.archived) continue
+              if (q.fsrs?.reps) {
+                const d = q.fsrs.due
+                if (d && (!due || d < due)) { due = d; repCard = q.fsrs }
+                continue
+              }
+              const { fs } = applyRatingBlock(null, 3, today, sched)
+              await this.e.bank.updateQuestionEvidence(courseRoot, node, q.id, { fsrs: fs })
+              // 复习日志：合成首复习是调度初始化不是真实作答 → rating_source='synthetic'、
+              // 无「复习前」状态（快照三字段 null），诚实度统计（#61）不算它。
+              await this.e.store.appendReview({
+                course: c.name, node, qid: q.id,
+                rating: 3, rating_source: 'synthetic', elapsed_days: 0,
+                stability_before: null, difficulty_before: null, r_pred: null,
+              })
+              initialized++
+              if (!due || fs.due < due) { due = fs.due; repCard = fs }
+            }
+          },
+        },
+        {
+          // 满分 bonus：本节点全部题都做过且全对 → 额外 XP（journal 流水，kind='xp_bonus'）。
+          // 预算制下它是过程信号——下面的 xp_settle 对账会把它吸收进完成定价。
+          name: '满分 bonus journal',
+          run: async () => {
+            if (attempts > 0 && correct === attempts) {
+              await this.e.store.appendJournal({
+                course: c.name, node, rating: null, kind: 'xp_bonus', elapsed_days: 0,
+                xp: XP_PERFECT_BONUS, detail: `满分完成 +${XP_PERFECT_BONUS} XP`,
+              })
+            }
+          },
+        },
+        {
+          name: '节点 frontmatter stage→review（含聚合代表卡）',
+          done: stageAlreadyReview,
+          run: async () => {
+            const { fm: rawFm, body } = await loadNote(path)
+            const fm = asFm(rawFm)
+            if (!(fm && fm.stage !== 'review')) return
+            const next: Fm = { ...fm, stage: 'review' }
+            if (repCard) next.fsrs = repCard
+            await saveNote(path, next as unknown as Record<string, unknown>, body)
+          },
+        },
+        {
+          name: 'T1/T2 生成队列入队',
+          done: stageAlreadyReview,
+          run: async () => {
+            await this.e.content.onStageChange(c.root, graph, (await this.e.loadView(c)).state, node, 'review')
+          },
+        },
+        {
+          // XP 预算制完成对账：净 XP 收敛到完成时刻的 N = N₀ × k（est 内容定价 × FSRS 难度校准），
+          // 并就此锁定（重复完成与后续复习作答不再改定价；乱猜/满分 bonus 等过程信号被对账吸收）。
+          name: 'XP 预算对账',
+          done: stageAlreadyReview,
+          run: async () => {
+            const activeQs = bank.questions.filter(q => !q.archived)
+            const budget = Math.round(nominalBudget(graph.estOf[node], activeQs) * difficultyCalibration(activeQs))
+            let earned = 0
+            for (const rec of await this.e.store.practiceAll()) {
+              if (rec.course === c.name && rec.node === node) earned += rec.xp ?? 0
+            }
+            for (const rec of await this.e.store.journalTail(c.name, Number.MAX_SAFE_INTEGER)) {
+              if (rec.node === node) earned += rec.xp ?? 0
+            }
+            const delta = budget - earned
+            if (delta !== 0) {
+              await this.e.store.appendJournal({
+                course: c.name, node, rating: null, kind: 'xp_settle', elapsed_days: 0,
+                xp: delta,
+                detail: `XP 预算对账：N₀=${nominalBudget(graph.estOf[node], activeQs)} × k=${difficultyCalibration(activeQs).toFixed(2)} = ${budget}，过程净 ${earned}`,
+              })
+            }
+          },
+        },
+      ],
+    })
     // 教练回合触发点·节点完成（#144）：完成落定后拉起就绪深度检查，随完成结果带出
     // （读侧感知，零写副作用；生长批裁决归 #145）。
     const coach = await this.e.coachCheckFor(c, today)
