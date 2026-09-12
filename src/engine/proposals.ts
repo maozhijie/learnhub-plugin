@@ -896,19 +896,10 @@ export class GraphProposals {
     const root = course?.root ?? spec.course
     // 建课提案（mode=new 且课程未注册）：图还不存在是正常态（应用即建课），按空图
     // 直算——读现图反而必然炸「数据目录不存在」（#61 现场确认框预览必然报错）
-    if (spec.mode === 'new' && !course) {
-      return {
-        course: spec.course,
-        mode: 'new',
-        new_nodes: [...spec.starts.map(s => s.name), spec.endpoint.name],
-        existing_nodes: [],
-        graph_nodes: 0,
-        current_anchor: null,
-        compass_reset: false,
-        ...(spec.worksheet?.length ? { worksheet_items: spec.worksheet.length } : {}),
-      }
-    }
-    const graph = new Graph(await new GraphStore(this.paths, this.paths.courseRoot(root), this.fs).load())
+    const regions = spec.mode === 'new' && !course
+      ? []
+      : await new GraphStore(this.paths, this.paths.courseRoot(root), this.fs).load()
+    const graph = new Graph(regions)
     const names = new Set(graph.names)
     const proposed = [...spec.starts.map(s => s.name), spec.endpoint.name]
     const anchor = course ? await readAnchor(this.paths.anchorPath(root), this.fs) : null
