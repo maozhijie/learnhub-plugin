@@ -152,7 +152,7 @@ export default function App() {
 
 /** 页签保活（ADR-0027）：首访后常驻、非激活隐藏——练习会话等页内状态跨页签存续；
  * 隐藏页签的后台轮询由 active-tab 信号自行跳过。 */
-const TAB_KEYS: TabKey[] = ['learn', 'graph', 'bank', 'stats', 'lab', 'generate', 'proposals', 'practice', 'guide']
+const TAB_KEYS: TabKey[] = ['learn', 'graph', 'bank', 'stats', 'lab', 'generate', 'proposals', 'practice', 'projects', 'guide']
 
 function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
   const [visited, setVisited] = useState<Set<TabKey>>(() => new Set([tab]))
