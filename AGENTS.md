@@ -12,6 +12,10 @@ Five canonical roles mapped to Chinese label strings (`待分类`、`待补充�
 
 Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### 架构与门
+
+`npm test` 先串行跑类型门，测试里还有分层规则（R1–R7）、架构门（G1–G9）与棘轮——**基线不匹配的失败是门在执法，不是 bug**（棘轮精确匹配：涨了失败，降了没同步下调基线也失败）。章程（门的地图、单跑脚本、加门/改阈值的纪律、行为变更登记）见 `docs/agents/architecture.md`；每道门阈值与实测链的唯一登记处是 `tests/README.md`（门册）。
+
 ## 本地启动 dsh 宿主
 
 编译后重启宿主才能生效（lib 是宿主启动时加载的，不热更新）：
