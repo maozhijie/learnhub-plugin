@@ -3,13 +3,27 @@
 /** 生成任务状态：queued 为排队待跑（非活动、非终态）；running/cancelling 为活动态，其余为终态。 */
 export type GenJobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
 
-/** 生成队列 phase 全集（#131 §5 / #140 + 面板下发扩展）：
+/** 生成队列 phase 全集（#131 §5 / #140 + 面板下发扩展；#185 起全表英文小写）：
  * - 节点内容管线（course/node 键）：outline 大纲 → sections 逐节正文 → quiz 自动出题（quiz 亦为纯出题任务的入队形态）。
- * - 图域任务（course 键）：种子（建课/换终点起草，引擎 seedPropose）/ 生长（教练回合生长批，#145）/
- *   富化（覆盖层回填）/ 罗盘（罗盘初画重画）/ 反编译（目标反编译双提案）/
- *   计划（里程碑计划草案）/ 里程碑（里程碑任务卡草案）。 */
-export const GEN_JOB_PHASES = ['outline', 'sections', 'quiz', '种子', '生长', '富化', '罗盘', '反编译', '计划', '里程碑'] as const
+ * - 图域任务（course 键）：seed 种子（建课/换终点起草，引擎 seedPropose）/ growth 生长（教练回合生长批，#145）/
+ *   enrich 富化（覆盖层回填；登记值，今天无入队点）/ compass 罗盘（罗盘初画重画）/ decompile 反编译（目标反编译双提案）/
+ *   plan 计划（里程碑计划草案）/ milestone 里程碑（里程碑任务卡草案）。 */
+export const GEN_JOB_PHASES = ['outline', 'sections', 'quiz', 'seed', 'growth', 'enrich', 'compass', 'decompile', 'plan', 'milestone'] as const
 export type GenJobPhase = (typeof GEN_JOB_PHASES)[number]
+
+/** #185 命名统一的读侧迁移别名：图域七值在 2026-09-12 前以中文持久化在
+ * state/生成任务.json（ADR-0045「阶段命名缺口」），恢复读入时映射为现值。
+ * 别名表只服务读侧归一——写侧（入队/执行/落盘）一律写现值，永不产生旧值。 */
+export const LEGACY_GEN_JOB_PHASES: Readonly<Record<string, GenJobPhase>> = {
+  种子: 'seed', 生长: 'growth', 富化: 'enrich', 罗盘: 'compass', 反编译: 'decompile', 计划: 'plan', 里程碑: 'milestone',
+}
+
+/** 持久化档读入的 phase 归一：现值原样、旧中文值映射为现值；未知值原样透传——
+ * 沿用今天的容忍（损坏档不在这里拒载），执行器对不认识的 phase 明确报「phase 未知」。 */
+export function normalizeGenJobPhase(v: string): GenJobPhase {
+  if ((GEN_JOB_PHASES as readonly string[]).includes(v)) return v as GenJobPhase
+  return LEGACY_GEN_JOB_PHASES[v] ?? (v as GenJobPhase)
+}
 
 /** 全局生成队列的 FIFO 选取：startedAt（入队时间）最早者先跑；无排队任务返回 null。
  * 纯函数——host 队列执行器与测试共用，保证「同时只跑一个」的选取语义单一。 */
@@ -48,10 +62,10 @@ export function isNodeAnchoredPhase(phase: GenJobPhase | undefined): boolean {
  * 的负载字段。罗盘与生长零负载（course 键即全部入参，罗盘引擎自取课程、生长批只带
  * 可选 inject）；键缺失的任务在重启恢复处明确标失败可重试，不进执行器才炸。 */
 export const GRAPH_JOB_REQUIRED_PAYLOAD: Partial<Record<GenJobPhase, 'seedPayload' | 'decompilePayload' | 'planPayload' | 'milestonePayload'>> = {
-  种子: 'seedPayload',
-  反编译: 'decompilePayload',
-  计划: 'planPayload',
-  里程碑: 'milestonePayload',
+  seed: 'seedPayload',
+  decompile: 'decompilePayload',
+  plan: 'planPayload',
+  milestone: 'milestonePayload',
 }
 
 /** 图域任务可执行性裁决（纯函数，入队侧保证、重启恢复侧校验共用同一契约）：

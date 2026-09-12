@@ -517,7 +517,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /coach/compass': async ({ rt, ctx, body, res }) => {
     // 罗盘初画/重画（#143 透明度装置）：LLM 一次调用进串行队列，不占请求
     sendJson(res, 200, await apiRun(rt, 'api/coach/compass', async () =>
-      enqueueGraphJob(rt, ctx, { course: need(body, 'course'), node: '罗盘', phase: '罗盘' })))
+      enqueueGraphJob(rt, ctx, { course: need(body, 'course'), node: '罗盘', phase: 'compass' })))
   },
   'POST /seed/propose': async ({ rt, ctx, body, res }) => {
     // 建课/换终点起草（面板下发，phase=种子）：表单绑定字段随任务携带进引擎
@@ -532,7 +532,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
       .filter(w => w.block.trim()) ?? []
     sendJson(res, 200, await apiRun(rt, 'api/seed/propose', async () =>
       enqueueGraphJob(rt, ctx, {
-        course: seedCourse, node: '种子起草', phase: '种子',
+        course: seedCourse, node: '种子起草', phase: 'seed',
         seedPayload: {
           goal,
           mode: body.mode === 'reseed' ? 'reseed' : 'new',
@@ -554,7 +554,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 计划草案任务化（面板下发）：LLM 起草进串行队列，不占请求
     const project = need(body, 'id')
     sendJson(res, 200, await apiRun(rt, 'api/project/plan/generate', async () =>
-      enqueueGraphJob(rt, ctx, { course: project, node: '计划草案', phase: '计划', planPayload: { project } })))
+      enqueueGraphJob(rt, ctx, { course: project, node: '计划草案', phase: 'plan', planPayload: { project } })))
   },
   'POST /project/milestone/generate': async ({ rt, ctx, body, res }) => {
     // 里程碑任务卡任务化（面板下发）
@@ -562,7 +562,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     const milestone = need(body, 'milestone')
     sendJson(res, 200, await apiRun(rt, 'api/project/milestone/generate', async () =>
       enqueueGraphJob(rt, ctx, {
-        course: project, node: `里程碑草案(${milestone})`, phase: '里程碑',
+        course: project, node: `里程碑草案(${milestone})`, phase: 'milestone',
         milestonePayload: { project, milestone },
       })))
   },
@@ -572,7 +572,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     const project = need(body, 'id')
     sendJson(res, 200, await apiRun(rt, 'api/project/decompile', async () =>
       enqueueGraphJob(rt, ctx, {
-        course: project, node: '反编译', phase: '反编译',
+        course: project, node: '反编译', phase: 'decompile',
         decompilePayload: {
           project,
           ...pick('goal', optText(body, 'goal')),

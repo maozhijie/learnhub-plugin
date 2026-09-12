@@ -23,12 +23,12 @@ const STATUS_TAG: Record<GenJobItem['status'], { label: string; color: string }>
 /** phase → 人读标签（图域任务 = 面板下发/教练回合产物的队列形态）。 */
 const PHASE_TAG: Partial<Record<NonNullable<GenJobItem['phase']>, { label: string; color: string }>> = {
   quiz: { label: '出题', color: 'cyan' },
-  种子: { label: '种子起草', color: 'lime' },
-  生长: { label: '生长批', color: 'orange' },
-  罗盘: { label: '罗盘初画', color: 'gold' },
-  反编译: { label: '目标反编译', color: 'purple' },
-  计划: { label: '计划草案', color: 'purple' },
-  里程碑: { label: '里程碑草案', color: 'purple' },
+  seed: { label: '种子起草', color: 'lime' },
+  growth: { label: '生长批', color: 'orange' },
+  compass: { label: '罗盘初画', color: 'gold' },
+  decompile: { label: '目标反编译', color: 'purple' },
+  plan: { label: '计划草案', color: 'purple' },
+  milestone: { label: '里程碑草案', color: 'purple' },
 }
 
 export default function GeneratePage({ frame }: { frame?: AppFrame }) {
@@ -260,7 +260,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
                       {j.status === 'queued' ? '移出队列' : '取消'}
                     </Button>
                     : null}
-                  {(j.status === 'failed' && j.phase === '生长') && (
+                  {(j.status === 'failed' && j.phase === 'growth') && (
                     <Button size='mini' type='text' status='warning'
                       loading={busyKey === j.key}
                       onClick={() => void retryGrowth(j.course)}>重试</Button>

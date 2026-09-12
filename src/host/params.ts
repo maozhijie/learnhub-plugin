@@ -17,10 +17,12 @@ import type { ParamSpec, ParameterSchemaSpec } from '../commands/types.ts'
  *   必填缺失/类型不符一律 `缺少必填参数：<key>`（`requireOneOf` 是唯一例外：
  *   `缺少或非法必填参数：<key>（允许：a|b|c）`），全部以 `ParamError` 抛出——
  *   `handleApi` 的统一 catch 据此追加 `（路由 <method> <route>）`，客户端报错可读可行动。
- * - **可选参数的今天语义是「非法即当省略」**（`typeof` 不过就不带出该键）。它与 ADR-0045
- *   「可选参数只允许『省略』或『合法』」同向，但比字面更宽松：非法值被静默丢弃而非拒绝。
- *   本票原样保留（120 条路由行为逐字不变是验收线）；#169 若收紧成 fail loud，必须在票面
- *   登记这条行为变更。
+ * - **可选参数的语义是「省略或合法」，非法即 fail loud（#185 裁决，ADR-0045 §修订）**：
+ *   键缺席 → 按各守卫的省略语义；键在场但类型不符 → 抛 `ParamError`（`非法可选参数：<key>（应为…）`）。
+ *   #169 之前的实现是「非法即当省略」（`typeof` 不过就不带出该键），比声明的语义更宽松、
+ *   会把调用方的类型 bug 静默吞掉；#185 收紧为拒绝，受影响命令清单登记在 #185 票面。
+ *   值级 convenience 不变：空白文本仍按省略（`optText`/`optTrimmed`）、显式 `false` 仍按
+ *   未设（`optTrue`）——它们是类型合法值上的既有语义，不是类型强转。
  * - 本模块零 I/O、不 import engine 与宿主状态：只认 `Record<string, unknown>` 与 `URL`。
  */
 
@@ -92,15 +94,23 @@ export function requireOneOf<T extends string>(body: Body, key: string, allowed:
 
 // ---------------------------------------------------------------- 可选参数
 
+/** fail loud（#185）：键在场但类型不符即抛——「省略或合法」的合法半边收紧为拒绝，
+ * 不再把调用方的类型 bug 静默当作省略。 */
+function illegalOpt(key: string, expected: string): never {
+  throw new ParamError(`非法可选参数：${key}（应为${expected}）`)
+}
+
 /** 可选文本：非空白的字符串，带出**原值**（今天 `...(typeof x === 'string' && x.trim() ? {k: x} : {})`）。 */
 export function optText(body: Body, key: string): string | undefined {
   const v = body[key]
+  if (v !== undefined && typeof v !== 'string') illegalOpt(key, '字符串')
   return typeof v === 'string' && v.trim() ? v : undefined
 }
 
 /** 可选文本（**带出 trim 值**）：今天 `...(typeof x === 'string' && x.trim() ? {k: x.trim()} : {})`。 */
 export function optTrimmed(body: Body, key: string): string | undefined {
   const v = body[key]
+  if (v !== undefined && typeof v !== 'string') illegalOpt(key, '字符串')
   return typeof v === 'string' && v.trim() ? v.trim() : undefined
 }
 
@@ -108,48 +118,57 @@ export function optTrimmed(body: Body, key: string): string | undefined {
  * 今天字面量联合字段（kind/predicted/band/reason/target_ts）的 `as never` 取值形态。 */
 export function optRaw(body: Body, key: string): string | undefined {
   const v = body[key]
+  if (v !== undefined && typeof v !== 'string') illegalOpt(key, '字符串')
   return typeof v === 'string' ? v : undefined
 }
 
 /** 可选字符串带缺省：今天 `typeof x === 'string' ? x : ''`。 */
 export function optString(body: Body, key: string, fallback = ''): string {
   const v = body[key]
+  if (v !== undefined && typeof v !== 'string') illegalOpt(key, '字符串')
   return typeof v === 'string' ? v : fallback
 }
 
 /** 可选数字：只要 `typeof === 'number'`（**不查有限性**，今天 auto_rating/rating 的形态）。 */
 export function optNumber(body: Body, key: string): number | undefined {
   const v = body[key]
+  if (v !== undefined && typeof v !== 'number') illegalOpt(key, '数字')
   return typeof v === 'number' ? v : undefined
 }
 
 /** 可选有限数字：今天 `typeof x === 'number' && Number.isFinite(x)` 的形态。 */
 export function optFinite(body: Body, key: string): number | undefined {
   const v = body[key]
+  if (v !== undefined && typeof v !== 'number') illegalOpt(key, '数字')
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined
 }
 
 /** 可选布尔（真布尔值）：今天 `typeof x === 'boolean'`。 */
 export function optBoolean(body: Body, key: string): boolean | undefined {
   const v = body[key]
+  if (v !== undefined && typeof v !== 'boolean') illegalOpt(key, '布尔')
   return typeof v === 'boolean' ? v : undefined
 }
 
 /** 可选显式方向旗标：仅 `=== true` 算真（今天 `body.defer_schedule === true` 一类；
  * 缺省/false/其他类型都算不来——「显式重新裁决」类参数的统一语义）。 */
 export function optTrue(body: Body, key: string): boolean {
-  return body[key] === true
+  const v = body[key]
+  if (v !== undefined && typeof v !== 'boolean') illegalOpt(key, '布尔')
+  return v === true
 }
 
 /** 可选对象：非空对象才带出（数组也算对象，与今天的 `typeof === 'object'` 判定一致）。 */
 export function optObject(body: Body, key: string): Record<string, unknown> | undefined {
   const v = body[key]
+  if (v !== undefined && (typeof v !== 'object' || v === null)) illegalOpt(key, '对象')
   return typeof v === 'object' && v !== null ? v as Record<string, unknown> : undefined
 }
 
 /** 可选数组：今天 `Array.isArray(x) ? x : undefined` 的形态。 */
 export function optList(body: Body, key: string): unknown[] | undefined {
   const v = body[key]
+  if (v !== undefined && !Array.isArray(v)) illegalOpt(key, '数组')
   return Array.isArray(v) ? v : undefined
 }
 

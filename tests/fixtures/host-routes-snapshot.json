@@ -5050,11 +5050,11 @@
   },
   "calls": [
    "growth2.coachCheckpoint(\"panel_dispatch\",\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\"}])",
    "growth2.coachGrowthBatch(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}},{})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"生长\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5092,12 +5092,12 @@
    "message": "「1」罗盘已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘初画中（deep 档一次调用）…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘初画中（deep 档一次调用）…\"}])",
    "growth2.compassPaint(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"罗盘\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5179,12 +5179,12 @@
    "message": "「1」种子起草已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5246,12 +5246,12 @@
    "message": "「1」种子起草已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5275,12 +5275,12 @@
    "message": "「1」种子起草已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5304,12 +5304,12 @@
    "message": "「1」种子起草已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5333,12 +5333,12 @@
    "message": "「1」种子起草已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（目标描述 → 模型）…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
    "graph.seedPropose({\"course\":\"1\",\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"种子\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案页一次人审即开工\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5546,12 +5546,12 @@
    "message": "「1」计划草案已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
    "project.projectPlanPack(\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"计划\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5590,12 +5590,12 @@
    "message": "「1」里程碑草案(1)已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "project.projectMilestonePack(\"1\",\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"里程碑\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5653,12 +5653,12 @@
    "message": "「1」反编译已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5695,12 +5695,12 @@
    "message": "「1」反编译已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5720,12 +5720,12 @@
    "message": "「1」反编译已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5743,12 +5743,12 @@
    "message": "「1」反编译已入队（生成队列 FIFO）。"
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\"},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"反编译\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },

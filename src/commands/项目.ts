@@ -91,7 +91,7 @@ export const 项目域 = {
         channel: "panel",
         mode: "queued",
         route: { method: "POST", path: "/project/decompile" },
-        phase: "反编译"
+        phase: "decompile"
       }
     ]
   }),
@@ -268,13 +268,13 @@ export const 项目域 = {
         channel: "agent",
         mode: "queued",
         tool: "learnhub_project_milestone_generate",
-        phase: "里程碑"
+        phase: "milestone"
       },
       {
         channel: "panel",
         mode: "queued",
         route: { method: "POST", path: "/project/milestone/generate" },
-        phase: "里程碑"
+        phase: "milestone"
       }
     ]
   }),
@@ -327,13 +327,13 @@ export const 项目域 = {
         channel: "agent",
         mode: "queued",
         tool: "learnhub_project_plan_generate",
-        phase: "计划"
+        phase: "plan"
       },
       {
         channel: "panel",
         mode: "queued",
         route: { method: "POST", path: "/project/plan/generate" },
-        phase: "计划"
+        phase: "plan"
       }
     ]
   }),

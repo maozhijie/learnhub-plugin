@@ -99,9 +99,27 @@ interface CommandSpec {
 - `src/tool-contracts.ts` 是运行时**守卫函数**模块（6 个导出解析器 + 1 个常量，54 行）、**不是契约表**，也不枚举任何工具；`tests/explicit-tool-contracts.test.ts` 亦不列举工具名或路由路径。它贡献的是**校验语义**，注册表不复用它的形状。
 - UI 侧的 `ui/src/types.ts` 今天有 83 个类型 re-export 自引擎、26 个本地手写（19 引擎形状镜像 + 4 宿主形状 + 3 UI 词汇）；本 ADR 只要求**新派生自注册表 `output`**、并随适配器票（ADR-0044）消掉引擎形状镜像的**成因**，不在此重排 UI 类型文件。
 
+### #185 裁决与落地（2026-09-12）：阶段命名统一 + 可选参数 fail loud
+
+裁定 1 的「阶段命名缺口」（本 ADR 裁定 1 末登记）与边界段「可选参数『非法即当省略』须登记行为变更」的敞口，由 #185 一并收口。两条裁决：
+
+- **`GEN_JOB_PHASES` 全表统一英文小写**：`种子→seed`、`生长→growth`、`富化→enrich`、`罗盘→compass`、`反编译→decompile`、`计划→plan`、`里程碑→milestone`（`outline`/`sections`/`quiz` 不动）。选英文方向的依据：词表已有半边是英文；phase 原值不直接示人（生成页 `PHASE_TAG`、通知 `PHASE_TITLE` 都是值→中文标签的映射表），改名不动用户可见文案；持久化值与工具/命令声明统一为 ASCII 标识符。`enrich` 是登记值但今天无入队点（覆盖层回填内联执行）——保留词表位，别名表照常接住旧档。
+- **迁移 = 读侧别名，不拒载**：`generation-jobs.ts` 新增 `LEGACY_GEN_JOB_PHASES`（恰七个中文别名）与 `normalizeGenJobPhase`，唯一应用点是宿主恢复缝（`host/jobs.ts::restoreGenJobs` 读 `state/生成任务.json` 处）——现值原样、旧中文值映射为现值、**未知值原样透传**（沿用今天的容忍，执行器对不认识的 phase 明确报「phase 未知」，不在读侧静默改道）。写侧（入队/执行/落盘）一律产现值，别名表不进任何执行路径；旧档恢复后首次落盘即归一。测试：`tests/generation-jobs.test.ts` 逐别名断言 + `tests/host-runtime.test.ts` 的旧档夹具（中文档喂 `loadGenJobs`，恢复后按新值执行）。
+
+**可选参数裁决：收紧为 fail loud。** `host/params.ts` 十个可选守卫（`optText`/`optTrimmed`/`optRaw`/`optString`/`optNumber`/`optFinite`/`optBoolean`/`optTrue`/`optObject`/`optList`）从「`typeof` 不过就不带出该键」改为「**键缺席 → 省略语义不变；键在场但类型不符 → 抛 `ParamError`：`非法可选参数：<key>（应为…）`**」。值级 convenience 保留：空白文本仍按省略（`optText`/`optTrimmed`）、显式 `false` 仍按未设（`optTrue`）、数组仍算对象（`optObject`）——类型合法值上的既有语义不是类型强转，不在收紧范围。`optNumber` 拒绝字符串数字（`'3'` 抛错）：必填侧 `requireNumber` 的 `Number()` 强转是 /daily-goal、/sandbox/run 的登记语义，**可选侧不 replicate**——声明类型是 number，非法即拒。查询串参数（`optQuery`）无类型非法形态，不涉及。
+
+**登记的行为变更（逐条）**：
+
+1. 可选参数传**类型不符**值：从静默当省略 → 500 `{error:"非法可选参数：<key>（应为…）（路由 <method> <route>）"}`。受影响命令 = 可选 body 参数确实流经守卫的 **47 条**（清单见 #185 票面关闭评论；口径：bind 生成路径的可选参数 + `handlers.ts` 直调 `opt*` 的 27 条例外路由；`tool-handlers.ts` 例外工具是裸透传不经守卫，不受影响；GET 查询串不涉及）。生成方式：注册表 `COMMAND_LIST` 逐通道按 `required` 差集枚举，可复现。
+2. 持久化 `state/生成任务.json` 与 `/generate/status` 等响应里的 phase 值：新任务为英文值；旧档在读侧归一（见上）。
+3. 面板/工具的**合法值行为、响应结构、工具名与 schema 逐字不变**；用户可见文案（phase 的中文标签）不变。
+
+证据基线随变更同提交迁移（ADR-0047 修订纪律）：路由探针快照重录后 **13 条 calls 变化**（`/seed/propose`×5、`/project/decompile`×4、`/coach/growth`、`/coach/compass`、`/project/plan/generate`、`/project/milestone/generate`——逐条审计均为 phase 值改名及其衍生串，无其他漂移）、**status 漂移 0**（探针从不传非法类型值，fail loud 不触达既有探针）、工具面快照 **0 变化**。规模棘轮同票同步：`generation-jobs.ts` 138→152（迁移机制）、`params.ts` 210→229（fail loud 分支）、`jobs.ts` 819→820（导入行）。
+
 替代方案（否决）：
 
 - **以命名规则当地基**（`learnhub_X` ↔ `/X` 作主键）——实测只覆盖 23/111（20.7%），另外三类例外要么被硬编码成规则表、要么漏掉；引擎入口覆盖 84/110。命名是**属性**，不是身份。
+- **命名统一迁到中文**（`outline→大纲` 等反向统一）——同收益但更差：三分之二的值要改、与引擎方法名（`seedPropose`/`compassPaint`）的既有英文词汇反向对齐。
 - **「允许通道」与「执行模型」拆成两个 per-command 字段**（贴 #165 正文的字面字段清单）——表达不了（命令, 通道）级分叉：要么把 `compass_paint` 压成单值（改行为），要么再加第三个「分流例外」清单字段（把分叉降级成待清零的债，而不是类型里的一等事实）。
 - **生成 `ui/src/api.ts`**——加 build 步骤；而调用点形状其实不必变（111 个函数名与签名可保留），生成物只多一层构建依赖与一份需要同步的产物。
 - **泛型 `invoke(id, args)` 直接取代 111 个手写函数**——收益最大但 139 处调用点要改，与「公共面零改动」相抵；属规格已明确另开票的终极形态。

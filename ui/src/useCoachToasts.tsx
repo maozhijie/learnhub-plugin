@@ -11,17 +11,17 @@ import { Button, Message, Notification } from '@arco-design/web-react'
 import { useEffect, useRef } from 'react'
 import { api } from './api'
 
-const GRAPH_PHASES = new Set(['种子', '生长', '罗盘', '反编译', '计划', '里程碑'])
+const GRAPH_PHASES = new Set(['seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'])
 const PHASE_TITLE: Record<string, string> = {
-  种子: '种子起草',
-  生长: '教练回合（生长批）',
-  罗盘: '罗盘初画',
-  反编译: '目标反编译',
-  计划: '里程碑计划草案',
-  里程碑: '里程碑任务卡',
+  seed: '种子起草',
+  growth: '教练回合（生长批）',
+  compass: '罗盘初画',
+  decompile: '目标反编译',
+  plan: '里程碑计划草案',
+  milestone: '里程碑任务卡',
 }
 /** 产物是提案的任务：完成通知跳提案页（下一步动作是人审），其余跳生成页。 */
-const PROPOSAL_OUTPUT = new Set(['种子', '反编译', '计划', '里程碑'])
+const PROPOSAL_OUTPUT = new Set(['seed', 'decompile', 'plan', 'milestone'])
 
 interface JobSnap { course: string; status: string; phase?: string; message?: string }
 
@@ -100,7 +100,7 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
               notify('info', `${title}部分完成`, cur.message)
             } else if (cur.status === 'failed' || cur.status === 'cancelled') {
               notify('error', `${title}${cur.status === 'failed' ? '失败' : '已取消'}`, cur.message,
-                'generate', cur.status === 'failed' && cur.phase === '生长' ? () => void retryGrowth(cur.course) : undefined)
+                'generate', cur.status === 'failed' && cur.phase === 'growth' ? () => void retryGrowth(cur.course) : undefined)
             }
           }
         }

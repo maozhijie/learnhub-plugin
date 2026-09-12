@@ -16,7 +16,7 @@ import type { BankEntry, GenJobItem, GraphDoc, RecommendDoc } from '../types'
 const { Text } = Typography
 
 /** 图域任务 phase 全集（与 useCoachToasts 同口径）：驾驶舱在途条与完成通知的消费面。 */
-const GRAPH_PHASES = new Set(['种子', '生长', '罗盘', '反编译', '计划', '里程碑'])
+const GRAPH_PHASES = new Set(['seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'])
 
 const REC_TYPE_COLOR: Record<string, string> = { review: 'green', overdue: 'red', ready: 'blue', new: 'cyan' }
 const REC_TYPE_LABEL: Record<string, string> = { review: '复习', overdue: '逾期', ready: '就绪', new: '新学' }

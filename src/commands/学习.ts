@@ -96,7 +96,7 @@ export const 学习域 = {
         channel: "panel",
         mode: "queued",
         route: { method: "POST", path: "/coach/compass" },
-        phase: "罗盘"
+        phase: "compass"
       }
     ]
   }),
@@ -111,7 +111,7 @@ export const 学习域 = {
         channel: "panel",
         mode: "queued",
         route: { method: "POST", path: "/coach/growth" },
-        phase: "生长"
+        phase: "growth"
       }
     ]
   }),
@@ -561,7 +561,7 @@ export const 学习域 = {
         channel: "panel",
         mode: "queued",
         route: { method: "POST", path: "/seed/propose" },
-        phase: "种子"
+        phase: "seed"
       }
     ]
   }),

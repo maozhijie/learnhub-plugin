@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   GEN_JOB_PHASES,
+  LEGACY_GEN_JOB_PHASES,
+  normalizeGenJobPhase,
   contentFailureStatus,
   genJobRetentionRemainingMs,
   genJobSweepVerdict,
@@ -17,11 +19,24 @@ import type { GenJobPhase, GenJobStatus } from '../src/generation-jobs.ts'
 
 const HOUR = 60 * 60_000
 
-test('队列 phase 十值（#131 §5 / #140 + 面板下发扩展）：节点内容管线三值 + 图域七值', () => {
+test('队列 phase 十值（#131 §5 / #140 + 面板下发扩展；#185 起全表英文）：节点内容管线三值 + 图域七值', () => {
   assert.deepEqual([...GEN_JOB_PHASES],
-    ['outline', 'sections', 'quiz', '种子', '生长', '富化', '罗盘', '反编译', '计划', '里程碑'])
-  const phases: GenJobPhase[] = ['outline', 'sections', 'quiz', '种子', '生长', '富化', '罗盘', '反编译', '计划', '里程碑']
+    ['outline', 'sections', 'quiz', 'seed', 'growth', 'enrich', 'compass', 'decompile', 'plan', 'milestone'])
+  const phases: GenJobPhase[] = ['outline', 'sections', 'quiz', 'seed', 'growth', 'enrich', 'compass', 'decompile', 'plan', 'milestone']
   assert.equal(phases.length, GEN_JOB_PHASES.length, '类型与值表同步（phase 联合不漂移）')
+})
+
+test('旧档 phase 归一（#185）：图域七值中文别名映射为现值，现值原样、未知值透传', () => {
+  // 旧 state/生成任务.json 里的中文值逐条可读
+  for (const [legacy, current] of Object.entries(LEGACY_GEN_JOB_PHASES)) {
+    assert.equal(normalizeGenJobPhase(legacy), current, `旧值 ${legacy} → ${current}`)
+  }
+  assert.deepEqual(Object.keys(LEGACY_GEN_JOB_PHASES).sort(),
+    ['罗盘', '生长', '种子', '计划', '里程碑', '反编译', '富化'].sort(), '别名恰七个（中文词表无遗漏）')
+  // 现值原样；未知值透传（执行器报「phase 未知」，不在读侧静默改道）
+  assert.equal(normalizeGenJobPhase('outline'), 'outline')
+  assert.equal(normalizeGenJobPhase('milestone'), 'milestone')
+  assert.equal(normalizeGenJobPhase('不认识的值'), '不认识的值')
 })
 
 test('生成任务保留：done 30 分钟，partial/failed/cancelled 保留 24h；queued 非终态不清理', () => {
@@ -74,7 +89,7 @@ test('终态判定与内容锚定 phase：活动记录不参与保留期清扫�
   for (const p of [undefined, 'outline', 'sections', 'quiz'] as (GenJobPhase | undefined)[]) {
     assert.equal(isNodeAnchoredPhase(p), true, `phase=${String(p)} 的任务键是真实节点`)
   }
-  for (const p of ['种子', '生长', '富化', '罗盘', '反编译', '计划', '里程碑'] as GenJobPhase[]) {
+  for (const p of ['seed', 'growth', 'enrich', 'compass', 'decompile', 'plan', 'milestone'] as GenJobPhase[]) {
     assert.equal(isNodeAnchoredPhase(p), false, `phase=${p} 是课程级任务，node 槽是标签`)
   }
 })
@@ -83,14 +98,14 @@ test('清扫裁决：悬空（课程删/节点删改名）一律 dangling，不�
   const now = Date.parse('2026-09-11T08:00:00Z')
   const base = { status: 'failed' as GenJobStatus, startedAt: '2026-09-11T01:00:00Z' }
   // 课程删了：任何 phase、任何状态都悬空（含排队）
-  assert.equal(genJobSweepVerdict({ ...base, phase: '生长' }, { courseMissing: true, nodeMissing: false }, now), 'dangling')
+  assert.equal(genJobSweepVerdict({ ...base, phase: 'growth' }, { courseMissing: true, nodeMissing: false }, now), 'dangling')
   assert.equal(genJobSweepVerdict({ ...base, status: 'queued', phase: 'quiz' }, { courseMissing: true, nodeMissing: false }, now), 'dangling')
   // 节点删/改名：内容锚定任务悬空（含排队中尚未标注 phase 的内容任务与在途记录）
   assert.equal(genJobSweepVerdict({ ...base, phase: 'quiz' }, { courseMissing: false, nodeMissing: true }, now), 'dangling')
   assert.equal(genJobSweepVerdict({ ...base, status: 'queued' }, { courseMissing: false, nodeMissing: true }, now), 'dangling')
   assert.equal(genJobSweepVerdict({ ...base, status: 'running', phase: 'sections' }, { courseMissing: false, nodeMissing: true }, now), 'dangling')
   // 课程级任务 node 槽是标签：节点缺失不构成悬空
-  assert.equal(genJobSweepVerdict({ ...base, phase: '罗盘' }, { courseMissing: false, nodeMissing: true }, now), 'keep')
+  assert.equal(genJobSweepVerdict({ ...base, phase: 'compass' }, { courseMissing: false, nodeMissing: true }, now), 'keep')
 })
 
 test('清扫裁决：终态超保留期 expired（finishedAt 起算，旧档回退 startedAt），活动记录不受保留期约束', () => {
@@ -121,15 +136,15 @@ test('保留期剩余时长：finishedAt 起算、超期归零（恢复补挂定
 
 test('图域任务负载契约（#157）：四类负载要求的 phase 缺负载判 payload_missing，罗盘/生长零负载', () => {
   // 负载要求的 phase：在场 → null；缺失 → payload_missing（恢复侧明确标失败可重试）
-  assert.equal(graphJobPayloadGap('种子', { seedPayload: { goal: 'x' } }), null)
-  assert.equal(graphJobPayloadGap('种子', {}), 'payload_missing')
-  assert.equal(graphJobPayloadGap('种子', { seedPayload: undefined }), 'payload_missing')
-  assert.equal(graphJobPayloadGap('反编译', { decompilePayload: { project: 'p' } }), null)
-  assert.equal(graphJobPayloadGap('计划', { planPayload: { project: 'p' } }), null)
-  assert.equal(graphJobPayloadGap('里程碑', { milestonePayload: { project: 'p', milestone: 'm' } }), null)
+  assert.equal(graphJobPayloadGap('seed', { seedPayload: { goal: 'x' } }), null)
+  assert.equal(graphJobPayloadGap('seed', {}), 'payload_missing')
+  assert.equal(graphJobPayloadGap('seed', { seedPayload: undefined }), 'payload_missing')
+  assert.equal(graphJobPayloadGap('decompile', { decompilePayload: { project: 'p' } }), null)
+  assert.equal(graphJobPayloadGap('plan', { planPayload: { project: 'p' } }), null)
+  assert.equal(graphJobPayloadGap('milestone', { milestonePayload: { project: 'p', milestone: 'm' } }), null)
   // 零负载 phase 与内容管线 phase：恒可执行
-  assert.equal(graphJobPayloadGap('罗盘', {}), null)
-  assert.equal(graphJobPayloadGap('生长', {}), null)
+  assert.equal(graphJobPayloadGap('compass', {}), null)
+  assert.equal(graphJobPayloadGap('growth', {}), null)
   assert.equal(graphJobPayloadGap('outline', {}), null)
   assert.equal(graphJobPayloadGap(undefined, {}), null)
 })

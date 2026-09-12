@@ -46,7 +46,7 @@ export interface GenJob {
   finishedAt?: string
   status: GenJobStatus
   /** 组合管线的当前阶段：大纲（outline）→ 逐节正文（sections）→ 自动出题（quiz）；
-   * 图域任务用 种子/生长/富化（#131 §5 / #140）。phase=quiz 且直接入队 = 纯出题任务
+   * 图域任务用 seed/growth/enrich（#131 §5 / #140；#185 起词表英文统一）。phase=quiz 且直接入队 = 纯出题任务
    * （#118 补生成任务化：/question-generate）。 */
   phase?: GenJobPhase
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */

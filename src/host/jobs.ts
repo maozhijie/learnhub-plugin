@@ -15,6 +15,7 @@ import {
   graphJobPayloadGap,
   isGenJobTerminal,
   nextQueuedJob,
+  normalizeGenJobPhase,
   quizFailureOutcome,
   quizSuccessOutcome,
   type GenJobPhase,
@@ -261,7 +262,7 @@ export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string
     return { message: `「${course}」上一生长批裁决为 ${last.growthOutcome === 'idle' ? '停摆' : '暂不产结构'}，不重拉。`, queued: false }
   }
   rt.jobs.genJobs.set(key, {
-    course, node: GROWTH_JOB_NODE, startedAt: new Date().toISOString(), status: 'queued', phase: '生长',
+    course, node: GROWTH_JOB_NODE, startedAt: new Date().toISOString(), status: 'queued', phase: 'growth',
     model: llmCfg.model, message: `排队等待教练回合（${why}）…`,
     ...(inject ? { growthInject: inject } : {}),
   })
@@ -347,14 +348,14 @@ export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: stri
   return { message: `「${j.course}」${j.node}已入队（生成队列 FIFO）。` }
 }
 
-/** 图域任务执行（面板下发）：种子/罗盘/反编译/计划/里程碑——引擎 LLM 方法一次受理，
+/** 图域任务执行（面板下发）：seed/compass/decompile/plan/milestone——引擎 LLM 方法一次受理，
  * 产物一律走提案人审通道（种子一次人审、反编译联合人审、计划 apply 带快照），任务
  * 只留受理摘要；失败落 failed 可从生成页重试。 */
 async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Promise<void> {
   job.status = 'running'
   persistGenJobs(rt)
   try {
-    if (job.phase === '种子' && job.seedPayload) {
+    if (job.phase === 'seed' && job.seedPayload) {
       job.message = '种子起草中（目标描述 → 模型）…'
       persistGenJobs(rt)
       const r = await rt.engine.graph.seedPropose({
@@ -365,13 +366,13 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
       job.status = 'done'
       job.message = `种子提案 #${r.id} 待人审：${r.starts} 起点 → 终点「${r.endpoint}」`
         + `${r.prior_hits ? `；先验命中 ${r.prior_hits}` : ''}${r.repaired ? '；修复轮一次' : ''}——提案页一次人审即开工`
-    } else if (job.phase === '罗盘') {
+    } else if (job.phase === 'compass') {
       job.message = '罗盘初画中（deep 档一次调用）…'
       persistGenJobs(rt)
       const r = await rt.engine.growth2.compassPaint(job.course, rt.agent)
       job.status = 'done'
       job.message = `罗盘已重画：${r.route_lines} 条路线${r.annotations_preserved ? '（学习者批注原样保留）' : ''}`
-    } else if (job.phase === '反编译' && job.decompilePayload) {
+    } else if (job.phase === 'decompile' && job.decompilePayload) {
       job.message = '目标反编译中（计划 + 种子双提案）…'
       persistGenJobs(rt)
       const p = job.decompilePayload
@@ -382,12 +383,12 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
       }, rt.agent)
       job.status = 'done'
       job.message = `反编译双提案待联合人审：计划 #${r.pair.plan}${r.pair.seed ? ` + 种子 #${r.pair.seed}` : ''}（先验命中 ${r.prior_hits}）——提案页同进同退`
-    } else if (job.phase === '计划' && job.planPayload) {
+    } else if (job.phase === 'plan' && job.planPayload) {
       job.message = '里程碑计划草案生成中…'
       persistGenJobs(rt)
       job.message = await generateProjectPlan(rt, job.planPayload.project)
       job.status = 'done'
-    } else if (job.phase === '里程碑' && job.milestonePayload) {
+    } else if (job.phase === 'milestone' && job.milestonePayload) {
       job.message = '里程碑任务卡生成中…'
       persistGenJobs(rt)
       job.message = await generateProjectMilestone(rt, job.milestonePayload.project, job.milestonePayload.milestone)
@@ -450,10 +451,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
 }
 
 /** 队列执行泵：空闲且未暂停时取队首排队任务跑管线；跑完（含失败）继续泵下一个。
- * phase=quiz 的纯出题任务走 generateQuizJob、phase=生长走 generateGrowthJob（#145）、
- * 图域任务（种子/罗盘/反编译/计划/里程碑）走 generateGraphJob（面板下发），其余按节点
+ * phase=quiz 的纯出题任务走 generateQuizJob、phase=growth 走 generateGrowthJob（#145）、
+ * 图域任务（seed/compass/decompile/plan/milestone）走 generateGraphJob（面板下发），其余按节点
  * 管线执行（#118）。 */
-const GRAPH_JOB_PHASES: ReadonlySet<GenJobPhase> = new Set<GenJobPhase>(['种子', '罗盘', '反编译', '计划', '里程碑'])
+const GRAPH_JOB_PHASES: ReadonlySet<GenJobPhase> = new Set<GenJobPhase>(['seed', 'compass', 'decompile', 'plan', 'milestone'])
 
 export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
   if (rt.flags.pumping || rt.flags.queuePaused) return
@@ -462,7 +463,7 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
   rt.flags.pumping = true
   const task = next.phase === 'quiz'
     ? generateQuizJob(rt, ctx, next)
-    : next.phase === '生长'
+    : next.phase === 'growth'
       ? generateGrowthJob(rt, ctx, next)
       : next.phase !== undefined && GRAPH_JOB_PHASES.has(next.phase)
         ? generateGraphJob(rt, ctx, next)
@@ -764,7 +765,7 @@ export function restoreGenJobs(rt: HostRuntime): void {
         course: j.course, node: j.node,
         startedAt: typeof j.startedAt === 'string' ? j.startedAt : new Date().toISOString(),
         status: interrupted ? 'failed' : (j.status ?? 'failed'),
-        ...(j.phase ? { phase: j.phase } : {}),
+        ...(j.phase ? { phase: normalizeGenJobPhase(j.phase as string) } : {}),
         ...(j.progress ? { progress: j.progress } : {}),
         ...(j.style ? { style: j.style } : {}),
         // 纯出题任务参数随注册表持久化，恢复后按原样重跑/继续（#118）
