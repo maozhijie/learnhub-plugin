@@ -93,6 +93,8 @@ export interface DoctorDoc { generated_at: string; courses: DoctorCourseReport[]
 export type {
   GraphEditProposalResult, GraphSeedProposalResult, GraphEnrichProposalResult, GraphProposeResult,
 } from './views/proposals.ts'
+// 种子提案影响预览（#159）：reseed/建课应用确认框的知识前置。
+export type { SeedImpactDoc } from './views/proposals.ts'
 // 图谱域：edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
 
 /** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。

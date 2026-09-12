@@ -21,8 +21,9 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-/** 调用点棘轮（迁移回归网）；有意增减随提交同步（注释里给理由）。 */
-const API_CALLSITES = 141
+/** 调用点棘轮（迁移回归网）；有意增减随提交同步（注释里给理由）。
+ * #159：+1（提案页 api.proposalImpact，reseed 影响预览）。 */
+const API_CALLSITES = 142
 
 test(`UI 公共面零改动：api.<name>( 调用点数量不变（${API_CALLSITES} 处，函数名与签名未动）`, () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {

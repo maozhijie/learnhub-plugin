@@ -155,6 +155,7 @@
   "project.projectMilestoneWrite",
   "project.projectPlanPack",
   "project.projectPlanPropose",
+  "proposals.proposalImpact",
   "registry.enabled",
   "registry.get",
   "registry.resolve",

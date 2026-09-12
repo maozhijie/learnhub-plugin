@@ -130,14 +130,14 @@ const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
           color: '#fff',
         }}>{data.gen === 'running' ? '生' : data.gen === 'queued' ? '队' : '文'}</span>
       )}
-      {/* hover 便捷生成：未生成「生成」/已生成「重新生成」；排队/生成中不出（角标已表达） */}
+      {/* hover 便捷生成：未生成「生成正文」/已生成「重新生成」（#158 口径统一）；排队/生成中不出（角标已表达） */}
       {data.onGenerate && !data.gen && (
         <span className='dag-toolbar' style={{ position: 'absolute', right: 3, bottom: 3, gap: 4 }}>
           <button type='button' onClick={e => { e.stopPropagation(); data.onGenerate?.() }}
             style={{
               fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4, border: 'none',
               cursor: 'pointer', background: 'var(--color-primary-6, #165dff)', color: '#fff',
-            }}>{data.hasContent ? '重新生成' : '生成'}</button>
+            }}>{data.hasContent ? '重新生成' : '生成正文'}</button>
         </span>
       )}
       <span style={{ width: 3, flexShrink: 0, backgroundColor: accent }} />

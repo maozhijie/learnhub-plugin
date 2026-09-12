@@ -1,9 +1,11 @@
 /** 教练台（学习图生命周期 UI 化，ADR-0038）：建课/换终点种子起草、生长一步、罗盘重画、
  * enc 回填与复诊卡片——图域命令从面板直接下发（入队即返回，进度/结果看生成页），
  * 不再依赖 dsh 会话里的 agent。产物一律走提案人审通道（生长批除外：受理门即门，
- * ADR-0003 维持「不把逐批人审修回来」）。 */
-import { Button, Card, Checkbox, Input, Message, Modal, Progress, Radio, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
+ * ADR-0003 维持「不把逐批人审修回来」）。建课/换终点表单是全面板唯一主动建课入口
+ * （#159），学习页空态直达的也是同一份表单组件（SeedFormModal）。 */
+import { Button, Card, Message, Modal, Progress, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
+import SeedFormModal from './SeedFormModal'
 import { api } from '../api'
 import { isActiveTab } from '../active-tab'
 import type { GenJobItem, ProbationDoc, StatusCourse } from '../types'
@@ -21,101 +23,6 @@ const JOB_STATUS: Partial<Record<GenJobItem['status'], { label: string; color: s
   partial: { label: '部分完成', color: 'purple' },
   failed: { label: '失败', color: 'red' },
   cancelled: { label: '已取消', color: 'gray' },
-}
-
-/** 建课/换终点表单（种子起草，phase=种子 队列任务 → 种子提案一次人审）。
- * 课程名/目标类型/块工作表是绑定字段（引擎以表单为准，不信模型照抄）。 */
-function SeedFormModal({ visible, mode, course, onCancel }: {
-  visible: boolean
-  mode: 'new' | 'reseed'
-  course: string | null
-  onCancel: () => void
-}) {
-  const [name, setName] = useState('')
-  const [goal, setGoal] = useState('')
-  const [goalType, setGoalType] = useState<'capability' | 'coverage'>('capability')
-  const [usePrior, setUsePrior] = useState(false)
-  const [worksheetText, setWorksheetText] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  useEffect(() => {
-    if (visible) {
-      setName(course ?? '')
-      setGoal('')
-      setGoalType('capability')
-      setUsePrior(false)
-      setWorksheetText('')
-    }
-  }, [visible, course])
-
-  const submit = async () => {
-    if (!name.trim()) { Message.warning('课程名必填'); return }
-    if (!goal.trim()) { Message.warning('给一句目标描述——种子起草只认学习者的目标'); return }
-    const worksheet = worksheetText.split('\n').map(x => x.trim()).filter(Boolean).map(block => ({ block }))
-    if (goalType === 'coverage' && !worksheet.length) {
-      Message.warning('覆盖锚定需要块工作表：每行一个块名')
-      return
-    }
-    setBusy(true)
-    try {
-      const r = await api.seedPropose({
-        course: name.trim(), goal: goal.trim(), mode,
-        goalType, useVaultPrior: usePrior,
-        worksheet: goalType === 'coverage' ? worksheet : [],
-      })
-      // 诚实版反馈：提案还不存在——起草完成后才落提案页（弹通知告知），别让人在提案页空等
-      Message.success(`${r.message}通常 1–3 分钟；完成后弹通知、提案页出现提案——期间可随意刷新或离开页面`)
-      onCancel()
-    } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal
-      title={mode === 'new' ? '新建课程（种子提案）' : `换终点/改工作表（${course}）`}
-      visible={visible}
-      onCancel={onCancel}
-      onOk={() => void submit()}
-      okText='起草种子提案'
-      confirmLoading={busy}
-      style={{ width: 560 }}
-      unmountOnExit
-    >
-      <Space direction='vertical' style={{ width: '100%' }} size={12}>
-        {mode === 'new' ? (
-          <Input placeholder='课程名（如：线性代数）' value={name} onChange={setName} />
-        ) : (
-          <Text type='secondary'>对既有课程重新种子：终点可换、起点通常保留（除非目标本身变了）。</Text>
-        )}
-        <Input.TextArea
-          placeholder='目标描述：学完这门课你想能做什么？（一段话即可，模型据此定起点与终点）'
-          value={goal} onChange={setGoal} autoSize={{ minRows: 3, maxRows: 6 }} />
-        <Space size={16}>
-          <Text type='secondary'>目标类型：</Text>
-          <Radio.Group value={goalType} onChange={v => setGoalType(v as 'capability' | 'coverage')}>
-            <Radio value='capability'>能力锚定（完成 = 终点掌握）</Radio>
-            <Radio value='coverage'>覆盖锚定（完成 = 块工作表 + 终点）</Radio>
-          </Radio.Group>
-        </Space>
-        {goalType === 'coverage' && (
-          <Input.TextArea
-            placeholder='块工作表：每行一个块名（完成判据的核对表）'
-            value={worksheetText} onChange={setWorksheetText} autoSize={{ minRows: 3, maxRows: 6 }} />
-        )}
-        <Checkbox checked={usePrior} onChange={setUsePrior}>
-          参考我的笔记定起点（Vault 先验检索：起点放在熟悉边界，已会内容不作起点）
-        </Checkbox>
-        <Text type='secondary' style={{ fontSize: 12 }}>
-          提交即入队起草（通常 1–3 分钟，队列 FIFO，可能排在内容生成之后）；**随时刷新或离开页面都不影响**——
-          任务在宿主执行，完成后弹通知、提案页出现提案。产物是种子提案：1–3 起点 + 终点，一次人审即开工；
-          图的其余部分由教练回合随生长批生长，不预先铺满。
-        </Text>
-      </Space>
-    </Modal>
-  )
 }
 
 /** 就绪深度卡（#161）：状态面 course.coach 直读——就绪存量对照前瞻需求的进度条 + 告警。
@@ -160,6 +67,7 @@ function ReadinessCard({ check }: { check: NonNullable<StatusCourse['coach']> })
     </Card>
   )
 }
+
 
 /** 复诊卡片（#146 插入实验面）：在途/到期未决/三率/闸门 + 立即结算（无确认步——
  * 它本来就是零人审自动行为的手动触发，按钮只提前同一件事）。 */

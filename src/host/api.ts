@@ -16,7 +16,7 @@ import { BY_ROUTE, COMMAND_LIST } from '../commands/index.ts'
 import type { ChannelSpec, CommandSpec } from '../commands/index.ts'
 import { readJson, sendJson } from './http.ts'
 import type { LearnhubEngine } from '../engine/index.ts'
-import { readArgs } from './params.ts'
+import { ParamError, readArgs } from './params.ts'
 import { apiRun, resolveEngineEntry } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import { HANDLERS } from './handlers.ts'
@@ -75,6 +75,9 @@ export async function handleApi(rt: HostRuntime, ctx: Context, req: IncomingMess
     const call: RouteCall = { rt, ctx, req, res, url, route, body }
     await handler(call)
   } catch (err) {
-    sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) })
+    // 参数守卫错误（#158）：中文消息 + 路由名——客户端报错可读可定位；引擎业务错误原样透传
+    const msg = err instanceof Error ? err.message : String(err)
+    const text = err instanceof ParamError ? `${msg}（路由 ${method} ${route}）` : msg
+    sendJson(res, 500, { error: text })
   }
 }

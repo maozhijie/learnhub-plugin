@@ -34,7 +34,7 @@ import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconce
 import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { CourseEntry, ProposalKind, ProposalRec } from './types.ts'
-import type { GraphEditProposalResult, GraphSeedProposalResult, GraphEnrichProposalResult } from './views/proposals.ts'
+import type { GraphEditProposalResult, GraphSeedProposalResult, GraphEnrichProposalResult, SeedImpactDoc } from './views/proposals.ts'
 import type { GraphApplyEditResult, GraphApplySeedResult, GraphApplyEnrichResult } from './views/graph.ts'
 
 /** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。 */
@@ -869,6 +869,46 @@ export class GraphProposals {
       ...(spec.worksheet?.length ? { worksheet: spec.worksheet.length } : {}),
       prior_feed_unresponded: feed.unresponded.length,
       ...(warns.length ? { warns } : {}),
+    }
+  }
+
+  /** 种子提案影响预览（#159）：reseed/建课应用确认框的知识前置——知情后再确认。
+   * 只读现势计算（提案产物 schema 复验 + 当前图 + 现锚 + 罗盘现势），只把引擎真会
+   * 做的事说清楚：新建哪些节点、覆盖什么锚、罗盘是否重置、什么全保留。 */
+  async proposalImpact(kind: string, pid?: number): Promise<SeedImpactDoc> {
+    if (kind !== 'seed') {
+      throw new Error(`[proposal-impact] 只有种子提案（kind=seed）有影响预览（收到 ${String(kind)}）。`)
+    }
+    const list = await this.store.loadProposals()
+    const prop = pid !== undefined
+      ? list.find(p => p.id === pid)
+      : [...list].reverse().find(p => p.status === 'pending' && p.kind === 'seed')
+    if (!prop || prop.kind !== 'seed' || prop.status !== 'pending') {
+      const label = pid !== undefined ? `#${pid}` : '（最新 pending）'
+      throw new Error(`[proposal-impact] 种子提案 ${label} 不存在或已决（预览只对 pending 提案有意义）。`)
+    }
+    const v = validateSeedProposal(await this.loadArtifact(prop.artifact))
+    if (v.errors || !v.spec) {
+      throw new Error(`[proposal-impact] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    const spec = v.spec
+    const course = await this.registry.get(spec.course)
+    const root = course?.root ?? spec.course
+    const graph = new Graph(await new GraphStore(this.paths, this.paths.courseRoot(root), this.fs).load())
+    const names = new Set(graph.names)
+    const proposed = [...spec.starts.map(s => s.name), spec.endpoint.name]
+    const anchor = course ? await readAnchor(this.paths.anchorPath(root), this.fs) : null
+    return {
+      course: spec.course,
+      mode: spec.mode,
+      new_nodes: proposed.filter(n => !names.has(n)),
+      existing_nodes: proposed.filter(n => names.has(n)),
+      graph_nodes: graph.names.length,
+      current_anchor: anchor
+        ? { endpoint: anchor.endpoint, declared: anchor.declared, origin_proposal: anchor.origin_proposal }
+        : null,
+      compass_reset: this.fs.exists(this.paths.compassPath(root)),
+      ...(spec.worksheet?.length ? { worksheet_items: spec.worksheet.length } : {}),
     }
   }
 

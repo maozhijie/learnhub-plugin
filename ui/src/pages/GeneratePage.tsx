@@ -174,7 +174,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
           来自 生成队列.md（agent 补内容建议 / 内容反馈自动入队）；一键生成后正文落盘 Obsidian，条目自动勾掉。
         </Text>
         {queue === null ? null : queue.length === 0 ? (
-          <Empty description='队列为空：在学习图页签对任意节点点「AI 生成正文」即可' />
+          <Empty description='队列为空：在「学习图」页或推荐卡对未生成节点点「生成正文」即可' />
         ) : (
           <Table size='small' data={queue} rowKey={q => `${q.course}/${q.node}`} pagination={false}
             columns={[
@@ -218,7 +218,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
             </Space>} />
         )}
         <Text type='secondary' style={{ display: 'block', marginBottom: 8 }}>
-          全局串行队列：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。课程图的种子提案与生长批在 dsh 对话里进行（agent 侧）。
+          全局串行队列：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。课程图的种子提案与生长批从「学习图」页教练台下发（入队即在本页看进度）。
         </Text>
         {jobs === null ? null : jobs.length === 0 ? (
           <Empty description='当前没有生成任务' />

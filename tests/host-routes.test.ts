@@ -4,7 +4,7 @@
  * 三件事：
  *   ① **对账清单**：代码里的表项集合必须与重构前（if 链）实测的清单逐条一致
  *      （tests/fixtures/host-routes-baseline.json，125 条 = GET 46 + POST 73 + PUT 6）。
- *   ② **行为快照**：464 条探针（每条路由 × 空参／全参／逐个缺参，外加分发纪律样本）
+ *   ② **行为快照**：467 条探针（每条路由 × 空参／全参／逐个缺参，外加分发纪律样本）
  *      逐字复现重构前捕获的 `{status, res, 引擎调用}`（tests/fixtures/host-routes-snapshot.json）。
  *      这是「120 条路由的方法／路径／响应形状逐字不变」与「参数守卫错误消息逐字不变」
  *      的证据，不是通读一遍代码后的相信。
@@ -59,7 +59,7 @@ test('对账清单：每条路由都被快照探针覆盖（快照漏了哪条�
 
 // ---------------------------------------------------------------- ② 行为快照（逐字不变）
 
-test('行为快照：464 条探针的状态码／响应体／引擎调用序列与重构前逐字一致', async () => {
+test('行为快照：467 条探针的状态码／响应体／引擎调用序列与基线逐字一致', async () => {
   const specs: ProbeSpec[] = SNAPSHOT.map(s => ({ id: s.id, method: s.method, url: s.url, ...(s.body ? { body: s.body } : {}) }))
   const got = await runProbes(specs)
   const diffs: string[] = []
@@ -75,9 +75,9 @@ test('行为快照：464 条探针的状态码／响应体／引擎调用序列�
   assert.deepEqual(diffs, [], `路由行为相对重构前漂移（${diffs.length} 条）：\n${diffs.join('\n')}`)
 })
 
-test('行为快照：状态码分布保持 200×222／404×6／500×236（探针口径）', () => {
+test('行为快照：状态码分布保持 200×224／404×6／500×237（探针口径）', () => {
   const dist = SNAPSHOT.reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.status]: (acc[s.status] ?? 0) + 1 }), {})
-  assert.deepEqual(dist, { 200: 222, 404: 6, 500: 236 })
+  assert.deepEqual(dist, { 200: 224, 404: 6, 500: 237 })
 })
 
 // ---------------------------------------------------------------- ③ 分发纪律
@@ -149,11 +149,12 @@ test('守卫收口：手写 `typeof body.x` 与内联 `missing required field:` 
   }
 })
 
-test('守卫收口：必填守卫的消息形状逐字不变（`missing required field: <key>`）', () => {
+test('守卫收口：必填守卫为中文 ParamError（#158：客户端不再见裸英文，分发层附路由名）', () => {
   const params = read(`${HOST_DIR}/params.ts`)
-  assert.match(params, /throw new Error\(`missing required field: \$\{key\}`\)/, '单键消息')
-  assert.match(params, /missing required field: \$\{keys\.join\('\/'\)\}/, '多键合并消息（node/qid）')
-  assert.match(params, /missing\/invalid required field: \$\{key\}（\$\{allowed\.join\('\|'\)\}）/, '枚举消息（resolution）')
+  assert.match(params, /export class ParamError extends Error/, '守卫错误是可识别类型（分发层据此附路由名）')
+  assert.match(params, /throw new ParamError\(`缺少必填参数：\$\{key\}`\)/, '单键消息')
+  assert.match(params, /缺少必填参数：\$\{keys\.join\('\/'\)\}/, '多键合并消息（node/qid）')
+  assert.match(params, /缺少或非法必填参数：\$\{key\}（允许：\$\{allowed\.join\('\|'\)\}）/, '枚举消息（resolution）')
   // 必填守卫的调用点：21 处内联清零后，全部经这几个入口（快照 ③ 已逐字钉住每条消息）
   const routesText = [read(`${HOST_DIR}/api.ts`), read(`${HOST_DIR}/handlers.ts`)].join('\n')
   assert.equal([...routesText.matchAll(/missing required field/g)].length, 0, '路由面不得再内联守卫消息')

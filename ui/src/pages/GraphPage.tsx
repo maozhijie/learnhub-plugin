@@ -1,10 +1,13 @@
 /** 图页 = 学习图驾驶舱（低频）：教练台（建课/生长一步/罗盘/回填/复诊）+ DAG 纵览
  * （区过滤/搜索/只看就绪 + 推荐星标）。点节点直接进学习视图（LessonView）；从学习
- * 视图「在图中查看」跳入时 focusNode 红描边定位。图本身不承载学习操作。 */
-import { Button, Card, Input, Message, Modal, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
+ * 视图「在图中查看」跳入时 focusNode 红描边定位。图本身不承载学习操作。
+ * #158 三态化：加载中/失败/空显式区分——宿主不可达显「加载失败 + 重试」，不再把
+ * 失败伪装成「还没有学习图」；#159 图缺失空态就地接教练台动作（重建种子直达）。 */
+import { Button, Card, Input, Message, Modal, Result, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CoachCockpit from '../components/CoachCockpit'
 import GraphDagView from '../components/GraphDagView'
+import SeedFormModal from '../components/SeedFormModal'
 import { api } from '../api'
 import { isActiveTab, onTabActive } from '../active-tab'
 import type { AppFrame } from '../App'
@@ -47,6 +50,10 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   const [banks, setBanks] = useState<BankEntry[] | null>(null)
   const [rec, setRec] = useState<RecommendDoc | null>(null)
   const [loading, setLoading] = useState(false)
+  /** #158 三态化：图加载失败显式记录（与「图缺失空态」分开——失败要给重试）。 */
+  const [graphError, setGraphError] = useState<string | null>(null)
+  /** #159：图缺失空态的就地教练台动作（重建种子表单）。 */
+  const [seedForm, setSeedForm] = useState(false)
   /** 排队/生成中的节点（节点名 → 阶段；角标与 hover 工具条消费）。 */
   const [genStates, setGenStates] = useState<Record<string, 'queued' | 'running'>>({})
   /** 全部图域任务（不限当前课程——空 vault 时种子起草的 course 是尚未存在的新课）。 */
@@ -60,14 +67,18 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
     if (!course) { setDoc(null); return }
     setLoading(true)
     try {
-      const [g, b, r] = await Promise.all([
-        api.graph(course).catch(() => null),
+      // 图是本页主数据：失败要冒泡进失败态；题库/推荐是次要数据，缺了按空处理
+      const g = await api.graph(course)
+      const [b, r] = await Promise.all([
         api.questionsAll(course).catch(() => ({ total: 0, questions: [] as BankEntry[] })),
         api.recommend(30).catch(() => ({ events: [] as RecommendDoc['events'] })),
       ])
       setDoc(g)
       setBanks(b.questions)
       setRec(r as RecommendDoc)
+      setGraphError(null)
+    } catch (err) {
+      setGraphError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
@@ -203,14 +214,33 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   if (loading && !doc) {
     return <Card><Text type='secondary'>加载学习图…</Text></Card>
   }
-  if (!doc || !filtered) {
+  // #158 首载失败：显式失败态 + 重试——失败不再伪装成「还没有学习图」
+  if (graphError && !doc) {
     return (
-      <Card>
-        <Space direction='vertical'>
-          <Text type='secondary'>课程「{course}」还没有学习图。</Text>
-          <Button onClick={() => frame.goto('generate')}>去生成页处理</Button>
-        </Space>
-      </Card>
+      <Result
+        status='error'
+        title='学习图加载失败'
+        subTitle={graphError}
+        extra={<Button type='primary' onClick={() => void load()}>重试</Button>}
+      />
+    )
+  }
+  if (!doc || !filtered || doc.nodes.length === 0) {
+    // #159 图缺失空态：引导就地落在教练台动作上（重建种子直达），不再只推去生成页
+    return (
+      <Space direction='vertical' style={{ width: '100%' }} size={12}>
+        <Card>
+          <Space direction='vertical' size={10}>
+            <Text type='secondary'>课程「{course}」还没有学习图：种子提案尚未应用（或图数据为空）。</Text>
+            <Space size={8}>
+              <Button type='primary' onClick={() => setSeedForm(true)}>重建种子（换终点/改工作表）</Button>
+              <Button onClick={() => frame.goto('generate')}>去生成页看任务</Button>
+            </Space>
+          </Space>
+        </Card>
+        <CoachCockpit course={course} jobs={graphJobs} />
+        {seedForm && <SeedFormModal visible={seedForm} mode='reseed' course={course} onCancel={() => setSeedForm(false)} />}
+      </Space>
     )
   }
 
