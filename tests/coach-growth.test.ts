@@ -79,22 +79,47 @@ function goldVerdict(opts: {
   ].join('\n') + '\n'
 }
 
-/** 录制型假实现：记 prompt/system/语义档，固定回放同一应答。 */
+/** 录制型假实现：固定回放同一应答（包装成「一轮收束」的回路会话）。 */
 function replayFake(reply: string) {
   return scriptFake([reply])
 }
 
-/** 脚本化假实现：脚本化补全端口注入 AgentSeam（#162 起站点收缝），调用记录留在端口层
- * （prompt/system/语义档经缝直通）。按调用序回放（第 i 次调用回 replies[i]，越界取最后一条）。 */
-function scriptFake(replies: string[]) {
+/** 会话脚本化假实现（#163 回路形态）：每段裁决走 agentLoop（stream 端口），sessions[i]
+ * 是第 i 个回路会话的助手轮脚本——字符串 = 单轮文本收束，数组 = 逐轮（带 toolCalls 的
+ * 轮请求工具、缝执行站点 runTool 后回灌继续）；回灌重裁段走 complete 端口按 repairReplies
+ * 回放。calls = 缝级调用观测（回路会话记会话首请求的 prompt/语义档、repair 记补全调用）
+ * ——既有调用数基线断言全部沿用；requests = 逐轮回路历史（工具回灌/白名单拒收断言用）。 */
+type LoopScriptTurn = { text: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }
+function scriptFake(
+  sessions: Array<string | LoopScriptTurn[]>,
+  repairReplies: string[] = [],
+) {
   const calls: Array<{ prompt: string; system?: string; effort?: string }> = []
+  const requests: Array<{
+    messages: Array<{ role: string; text?: string; toolCalls?: unknown; isError?: boolean }>
+    tools?: Array<{ name: string }>
+    effort?: string
+  }> = []
+  const queue = sessions.map(s => [...(typeof s === 'string' ? [{ text: s }] : s)] as LoopScriptTurn[])
+  let current: LoopScriptTurn[] = []
   const seam = new AgentSeam({
     complete: async (prompt, system, opts) => {
       calls.push({ prompt, system, effort: opts?.effort })
-      return replies[Math.min(calls.length - 1, replies.length - 1)]!
+      if (!repairReplies.length) throw new Error('脚本化补全端口：回灌重裁应答已耗尽')
+      return repairReplies.shift()!
+    },
+    stream: async req => {
+      if (!current.length) {
+        current = queue.shift()
+        if (!current) throw new Error('脚本化回路端口：会话脚本已耗尽')
+        calls.push({ prompt: req.messages[0]!.text, system: req.system, effort: req.effort })
+      }
+      requests.push({ messages: [...req.messages], tools: req.tools, effort: req.effort })
+      const next = current.shift()!
+      return { text: next.text, toolCalls: next.toolCalls ?? [] }
     },
   }, systemClock)
-  return Object.assign(seam, { calls })
+  return Object.assign(seam, { calls, requests })
 }
 
 async function seedApplied(engine: Awaited<ReturnType<typeof withVault>>['engine']): Promise<void> {
@@ -528,10 +553,7 @@ test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错�
     await seedApplied(engine)
     // 首轮裁决引用图上不存在的区（实机死法）：过 schema 门（区是自由字符串）、
     // 被 propose 受理门拒（add_node 区不存在）；重裁段产出合法裁决 → 提案照常受理
-    const fake = scriptFake([
-      goldVerdict({ ops: BAD_REGION_OPS }),
-      goldVerdict(),
-    ])
+    const fake = scriptFake([goldVerdict({ ops: BAD_REGION_OPS })], [goldVerdict()])
     const r = await engine.growth2.coachGrowthBatch('数学', fake)
 
     // 调用数基线：轻量段 1 次 + 回灌重裁段恰 1 次（deep 档）
@@ -555,8 +577,8 @@ test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错�
 test('#157 回灌仍败：重裁产出再被受理门拒收 → 原样失败且错误带两轮死因，零提案落盘', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
     await seedApplied(engine)
-    const malformed = goldVerdict({ ops: BAD_REGION_OPS })
-    const fake = scriptFake([malformed, malformed])
+  const malformed = goldVerdict({ ops: BAD_REGION_OPS })
+  const fake = scriptFake([malformed], [malformed])
     await assert.rejects(
       engine.growth2.coachGrowthBatch('数学', fake),
       (err: unknown) => {
@@ -571,5 +593,118 @@ test('#157 回灌仍败：重裁产出再被受理门拒收 → 原样失败且�
     assert.equal(fake.calls.length, 2, '恰两轮调用（轻量段 + 回灌重裁段），不无限重试')
     // 被拒批次零落盘：两轮都没到 saveArtifact，无 pending 提案残留
     assert.equal((await engine.graph.graphProposals('pending', 'edit')).length, 0)
+  })
+})
+
+// ---- 教练工具回路（#163 / ADR-0041）：只读白名单 + K 轮预算 + 取消传导 ----
+
+test('#163 AC 脚本化工具应答：教练裁决前经图视图核实名字，产出过受理门的批', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    // 脚本：轻量段先调 graph_view 核实「认识变化率」在图上（再调 concept_registry 对表
+    // 「变化率」），收到真实视图回灌后才产出裁决——裁决的名字取自工具回灌内容
+    const fake = scriptFake([[
+      { text: '裁决前先查图面核实起点名。', toolCalls: [{ id: 't1', name: 'graph_view', arguments: '{}' }] },
+      { text: '图面确认「认识变化率」在前沿，再对表登记表。', toolCalls: [{ id: 't2', name: 'concept_registry', arguments: '{"query":"变化率"}' }] },
+      { text: goldVerdict() },
+    ]])
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
+
+    // 批照常过受理门（回路产物过全部既有门，门零放松）：提案应用、罗盘同事务重写
+    assert.equal(r.state, 'applied')
+    assert.equal(r.proposal!.operator, '前进')
+    assert.ok(r.applied!.compass_rewritten)
+
+    // 工具真的被站点执行器跑过：结果回灌进回路历史（模型看到的是真图面）
+    const second = fake.requests[1]!
+    assert.equal((second.messages[2] as { role: string; text: string }).role, 'tool')
+    assert.match((second.messages[2] as { text: string }).text, /认识变化率/, 'graph_view 回灌真实图面')
+    const third = fake.requests[2]!
+    assert.match((third.messages[4] as { text: string }).text, /变化率/, 'concept_registry 回灌登记表内容')
+    // 白名单随请求（七件只读视图）
+    assert.equal(fake.requests[0]!.tools!.length, 7)
+
+    // 回路轨迹带段前缀进结果（宿主消费：任务消息），逐轮可观测
+    assert.equal(r.trajectory.length, 2)
+    assert.match(r.trajectory[0]!, /^\[轻量段\] graph_view\(2 字符参数\) → \d+ 字符$/)
+    assert.match(r.trajectory[1]!, /^\[轻量段\] concept_registry/)
+  })
+})
+
+test('#163 AC 白名单外调用被拒：isError 回灌模型可见，回路继续、裁决照常过门', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    // 脚本：模型先试图调写工具 graph_apply（白名单外）→ 被站点执行器拒收 →
+    // 拒收原因原样回灌 → 模型改走正道产出裁决（提案→受理门→apply）
+    const fake = scriptFake([[
+      { text: '我直接把节点写上图。', toolCalls: [{ id: 'w1', name: 'graph_apply', arguments: '{"kind":"edit"}' }] },
+      { text: '写工具被拒——只读工具面，走提案正道。', toolCalls: [{ id: 'w2', name: 'coach_growth', arguments: '{}' }] },
+      { text: goldVerdict() },
+    ]])
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
+
+    assert.equal(r.state, 'applied', '拒收不炸回路：模型改走正道后裁决照常受理')
+    // 两次白名单外调用都被拒，拒收原因原样回灌（模型可见）
+    const toolText = (req: { messages: Array<{ role: string; text?: string }> }) =>
+      (req.messages.filter(m => m.role === 'tool').at(-1) as { text: string }).text
+    assert.match(toolText(fake.requests[1]!), /白名单外工具「graph_apply」被拒/)
+    assert.match(toolText(fake.requests[2]!), /白名单外工具「coach_growth」被拒/)
+    // 图零直接改动：唯一的图变更来自 apply 出口（提案 id 留痕），无旁路写入
+    assert.equal(r.applied!.created.join(','), '平均变化率')
+  })
+})
+
+test('#163 AC 任务取消传导（站点级）：开局取消零调用；回路中取消即中止且已产裁决丢弃', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    // 开局取消：一次底层调用都不发生
+    const fake1 = replayFake(goldVerdict())
+    await assert.rejects(
+      () => engine.growth2.coachGrowthBatch('数学', fake1, { isCancelled: () => true }),
+      /任务已取消/,
+    )
+    assert.equal(fake1.calls.length, 0, '开局取消：回路零底层调用')
+    assert.equal((await engine.graph.graphProposals('pending', 'edit')).length, 0, '零提案落盘')
+
+    // 回路中取消：工具执行期间旗标翻真 → 下一轮前中止，裁决丢弃
+    let cancelled = false
+    const fake2 = scriptFake([[
+      { text: '查图面。', toolCalls: [{ id: 'c1', name: 'graph_view', arguments: '{}' }] },
+      { text: goldVerdict() },
+    ]])
+    // runTool 不是站点可控的——借 gate 前的 isCancelled 钩子：首次检查（first 前）放行，
+    // 工具回灌后的下一轮检查取消。用计数器模拟「取消发生在首轮工具执行后」。
+    let checks = 0
+    await assert.rejects(
+      () => engine.growth2.coachGrowthBatch('数学', fake2, {
+        isCancelled: () => {
+          checks++
+          return checks > 1 // first() 前的 assertAlive 放行，回路首轮工具执行后翻真
+        },
+      }).then(() => { cancelled = true }),
+      /任务已取消/,
+    )
+    assert.equal(cancelled, false)
+    assert.equal((await engine.graph.graphProposals('pending', 'edit')).length, 0, '取消批零提案落盘')
+  })
+})
+
+test('#163 AC 门错修复轮恰好一次不回归：拒收后恰回灌重裁一段（repair 单发），轨迹只来自回路段', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    // 首轮回路会话产出畸形裁决（引用幻区）被受理门拒收 → repair 单发重裁一次 → 过门
+    const fake = scriptFake(
+      [[
+        { text: '查一下图面再裁。', toolCalls: [{ id: 't1', name: 'graph_view', arguments: '{}' }] },
+        { text: goldVerdict({ ops: BAD_REGION_OPS }) },
+      ]],
+      [goldVerdict()],
+    )
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
+    assert.equal(r.state, 'applied')
+    assert.deepEqual(r.segments.map(s => s.tier), ['light', 'repair'], '恰一次门错修复轮（#157 语义不回归）')
+    // 轨迹只来自回路段（repair 是单发，无工具轮）；段前缀区分
+    assert.equal(r.trajectory.length, 1)
+    assert.match(r.trajectory[0]!, /^\[轻量段\] graph_view/)
   })
 })

@@ -46,17 +46,25 @@ const GOLD_ROUTE = [
 
 const GOLD_ROUTE_2 = GOLD_ROUTE + '\n- **换向预留**：学习者批注提到的应用优先先立占位。'
 
-/** 录制型假实现（#162 起注入 AgentSeam）：脚本化补全端口进缝，调用记录留在端口层
- * （prompt/system/语义档经缝直通），固定回放同一应答。 */
+/** 录制型假实现（#162 起注入 AgentSeam；#163 起罗盘初画走只读工具回路）：脚本化
+ * 回路端口进缝——单个应答包装成「一轮收束」的回路会话（无工具调用 = 文本产出即终）；
+ * 调用记录留在缝级（会话首请求的 prompt/system/语义档），既有调用数基线断言全部沿用。
+ * requests = 逐轮回路历史（工具回灌断言用）。 */
 function replayFake(reply: string) {
   const calls: Array<{ prompt: string; system?: string; effort?: string }> = []
+  const requests: Array<{ messages: Array<{ role: string; text?: string; isError?: boolean }>; tools?: Array<{ name: string }> }> = []
   const seam = new AgentSeam({
     complete: async (prompt, system, opts) => {
       calls.push({ prompt, system, effort: opts?.effort })
       return reply
     },
+    stream: async req => {
+      calls.push({ prompt: (req.messages[0] as { text: string }).text, system: req.system, effort: req.effort })
+      requests.push({ messages: [...req.messages], tools: req.tools })
+      return { text: reply, toolCalls: [] }
+    },
   }, systemClock)
-  return Object.assign(seam, { calls })
+  return Object.assign(seam, { calls, requests })
 }
 
 async function seedApplied(
@@ -129,6 +137,56 @@ test('AC1 种子 apply 落罗盘脚手架；金样本初画全链：单次 deep 
     assert.equal(sectionBody(paintedDoc, SECTION_ETA)?.trim(), ETA_PENDING)
     const journal = await readFile(join(paths.centerRoot, 'state', 'journal.jsonl'), 'utf8')
     assert.match(journal, /compass_paint/)
+  })
+})
+
+test('#163 罗盘重画经工具回路：裁决前查图自证名字（工具回灌进历史），轨迹随结果带出', async () => {
+  await withVault(SEED_VAULT, async ({ engine, paths }) => {
+    await seedApplied(engine)
+    // 脚本：先请求 graph_view（核实「认识变化率」在图上），收到图面回灌后再产出金路线
+    const scripted = (() => {
+      const calls: Array<{ prompt: string; system?: string; effort?: string }> = []
+      const requests: Array<{ messages: Array<{ role: string; text?: string; toolCalls?: unknown }>; tools?: Array<{ name: string }> }> = []
+      const seam = new AgentSeam({
+        complete: async prompt => { calls.push({ prompt }); return GOLD_ROUTE },
+    stream: async req => {
+      calls.push({ prompt: (req.messages[0] as { text: string }).text, effort: req.effort })
+      requests.push({ messages: [...req.messages], tools: req.tools })
+          if (requests.length === 1) {
+            return { text: '先查图面核实起点名。', toolCalls: [{ id: 't1', name: 'graph_view', arguments: '{}' }] }
+          }
+          return { text: GOLD_ROUTE, toolCalls: [] }
+        },
+      }, systemClock)
+      return Object.assign(seam, { calls, requests })
+    })()
+    const painted = await engine.growth2.compassPaint('数学', scripted)
+
+    // 回路面：白名单随请求、工具结果回灌进第二轮历史（教练真的看到了图面才裁决）
+    assert.equal(scripted.requests.length, 2)
+    assert.ok(scripted.requests[0]!.tools!.some(t => t.name === 'graph_view'), '白名单随请求')
+    const toolTurn = scripted.requests[1]!.messages[2] as { role: string; text: string }
+    assert.equal(toolTurn.role, 'tool')
+    assert.match(toolTurn.text, /认识变化率/, '图面回灌给模型（名字取值域在场）')
+    // 路线门照旧首过即落盘；轨迹随结果带出（任务消息消费）
+    const doc = parseCompass(await readFile(paths.compassPath('数学'), 'utf8'))
+    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), GOLD_ROUTE)
+    assert.equal(painted.trajectory.length, 1)
+    assert.match(painted.trajectory[0]!, /graph_view/)
+    assert.equal(scripted.calls[0]!.effort, 'deep')
+  })
+})
+
+test('#163 罗盘任务取消传导：旗标翻真即中止，罗盘零改动', async () => {
+  await withVault(SEED_VAULT, async ({ engine, paths }) => {
+    await seedApplied(engine)
+    const before = await readFile(paths.compassPath('数学'), 'utf8')
+    const fake = replayFake(GOLD_ROUTE)
+    await assert.rejects(
+      () => engine.growth2.compassPaint('数学', fake, { isCancelled: () => true }),
+      /任务已取消/,
+    )
+    assert.equal(await readFile(paths.compassPath('数学'), 'utf8'), before, '取消后罗盘零改动')
   })
 })
 

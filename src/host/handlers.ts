@@ -27,7 +27,7 @@ import { serveInteractive, serveVaultFile, serveVendor } from './static.ts'
 import {
   cancelGeneration, coachTriggerDetached, enqueueGeneration, enqueueGraphJob, enqueueGrowthBatch,
   enqueueQuizGeneration, generateSection, generationStatus, resetCourseChain, resumeQueue,
-  sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth,
+  sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth, triggerSeedContent,
 } from './jobs.ts'
 
 /** 面板内轻量答疑：节点上下文 system + 前端携带的对话历史（拼成单条 user 消息）→ llm。
@@ -237,11 +237,14 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /proposals/apply': async ({ rt, ctx, body, res }) => {
     // 提案统一 apply（图谱域 edit/seed/enrich + 项目域 project_plan/project_milestone）：
     // kind 必须显式照抄提案记录，未知 kind 引擎报错；
-    // 计划修订触发的换线/补支生长批随后入队（#149）
-    const applied = await rt.engine.graph.proposalApply(need(body, 'kind'), applyId(body.id))
+    // 计划修订触发的换线/补支生长批随后入队（#149）；
+    // 种子应用后起点正文自动入队（#160：提案一过、内容就在酿，生成页可见）
+    const applyKind = need(body, 'kind')
+    const applied = await rt.engine.graph.proposalApply(applyKind, applyId(body.id))
     // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
     await sweepGenJobs(rt)
     triggerPlanGrowth(rt, ctx, applied as { kind?: string })
+    if (applyKind === 'seed') await triggerSeedContent(rt, ctx, applied as unknown as { course: string; starts: string[] })
     sendJson(res, 200, applied)
   },
   'POST /proposals/reject': async ({ rt, body, res }) => {

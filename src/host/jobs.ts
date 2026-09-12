@@ -5,7 +5,7 @@
  * 读写，本文件零模块级可变状态；队列语义零改动（FIFO、可取消、重启可恢复、阻尼）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, TIER_LABELS, genericQuizTarget, tierIdxOf } from '../engine/index.ts'
+import { Content, TIER_LABELS, genericQuizTarget, hasReadyContent, tierIdxOf } from '../engine/index.ts'
 import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete } from '../engine/index.ts'
 import {
   contentFailureStatus,
@@ -286,6 +286,30 @@ export function triggerPlanGrowth(rt: HostRuntime, ctx: Context, result: { kind?
   }
 }
 
+/** 种子应用 → 起点正文自动入队（#160，镜像生长批「就绪缺口入队」语义）：种子提案
+ * apply 后对起点节点中「正文未生成」者逐个入队全局串行队列（FIFO、可取消、生成页
+ * 可见）——提案一过、内容就在酿，学习者不必逐节点手点生成再各等数分钟。幂等语义：
+ * enqueueGeneration 对排队任务去重（重复触发不产生重复任务），running/cancelling 的
+ * 同名任务拒绝时逐个跳过留痕、不挡其余起点。队列重启暂停语义不回归：入队只触发泵，
+ * queuePaused 旗标挡泵——暂停时起点任务安静排队，恢复队列才开跑。返回入队节点数。 */
+export async function triggerSeedContent(rt: HostRuntime, ctx: Context, applied: { course: string; starts: string[] }): Promise<number> {
+  const c = await rt.engine.registry.resolve(applied.course)
+  const { state } = await rt.engine.loadView(c)
+  const unbuilt = applied.starts.filter(n => !hasReadyContent(state[n]))
+  for (const node of unbuilt) {
+    try {
+      enqueueGeneration(rt, ctx, c.name, node)
+    } catch (err) {
+      void runLog(rt, 'seed_apply_enqueue', `「${c.name}」起点「${node}」自动入队跳过：${err instanceof Error ? err.message : String(err)}`)
+        .catch(() => undefined)
+    }
+  }
+  await runLog(rt, 'seed_apply_enqueue', `「${c.name}」种子应用：${unbuilt.length
+    ? `起点正文自动入队 ${unbuilt.length} 节（${unbuilt.join('、')}）`
+    : '全部起点正文已就绪，无需入队'}`).catch(() => undefined)
+  return unbuilt.length
+}
+
 /** 教练回合触发统一出口（五点接线，词条「教练回合」）：就绪深度检查 → 低于前瞻的课程
  * 入队生长批（自动触点走阻尼；显式触点 force 豁免停摆/暂不产结构——显式重新裁决）→
  * 运行日志。触发点：node_complete / node_skip（各自路由）、session_start（节流）、
@@ -367,11 +391,15 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
       job.message = `种子提案 #${r.id} 待人审：${r.starts} 起点 → 终点「${r.endpoint}」`
         + `${r.prior_hits ? `；先验命中 ${r.prior_hits}` : ''}${r.repaired ? '；修复轮一次' : ''}——提案页一次人审即开工`
     } else if (job.phase === 'compass') {
-      job.message = '罗盘初画中（deep 档一次调用）…'
+      job.message = '罗盘重画中（deep 档工具回路）…'
       persistGenJobs(rt)
-      const r = await rt.engine.growth2.compassPaint(job.course, rt.agent)
+      const r = await rt.engine.growth2.compassPaint(job.course, rt.agent, {
+        isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
+      })
       job.status = 'done'
       job.message = `罗盘已重画：${r.route_lines} 条路线${r.annotations_preserved ? '（学习者批注原样保留）' : ''}`
+      // 回路轨迹（#163）：重画前查了哪些只读视图，生成页逐条可查
+      if (r.trajectory?.length) job.message += `｜回路轨迹：${r.trajectory.join('；')}`
     } else if (job.phase === 'decompile' && job.decompilePayload) {
       job.message = '目标反编译中（计划 + 种子双提案）…'
       persistGenJobs(rt)
@@ -406,16 +434,20 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
   }
 }
 
-/** 生长批任务执行（#145）：coachGrowthBatch 两段式回合 + 受理接线；应用成功后对
+/** 生长批任务执行（#145）：coachGrowthBatch 工具回路回合 + 受理接线；应用成功后对
  * 「新建且正文未生成」的就绪缺口节点入队正文生成（生长-内容交替，永远 FIFO 不插队
- * ——生长批只在检查点之后入队，内容任务在它完成之后排队）。 */
+ * ——生长批只在检查点之后入队，内容任务在它完成之后排队）。取消旗标沿回合传入
+ * （#163 任务取消传导：回路每轮检查，取消即中止）；回路轨迹进任务消息（生成页可查）。 */
 async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Promise<void> {
   const key = `${job.course}/${GROWTH_JOB_NODE}`
   job.status = 'running'
   job.message = '教练回合裁决中（轻量段）…'
   persistGenJobs(rt)
   try {
-    const r = await rt.engine.growth2.coachGrowthBatch(job.course, rt.agent, job.growthInject ? { inject: job.growthInject } : {})
+    const r = await rt.engine.growth2.coachGrowthBatch(job.course, rt.agent, {
+      ...(job.growthInject ? { inject: job.growthInject } : {}),
+      isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
+    })
     if (r.state === 'idle') {
       job.growthOutcome = 'idle'
       job.status = 'done'
@@ -431,6 +463,8 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
         .join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
         + `${a.compass_rewritten ? '；罗盘已随批重写' : ''}｜${tierNote}｜理由：${p.reason}`
+      // 回路轨迹（#163）：裁决前查了哪些只读视图，生成页逐条可查
+      if (r.trajectory?.length) job.message += `｜回路轨迹：${r.trajectory.join('；')}`
       // 受理批可含 del_node/rename（ADR-0039 写侧联动）：先清扫悬空任务记录再入队正文
       if (a.ops > 0) await sweepGenJobs(rt)
       // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）

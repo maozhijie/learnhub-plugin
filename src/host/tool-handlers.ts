@@ -15,7 +15,7 @@ import { run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import {
   enqueueGeneration, enqueueQuizGeneration, generateProjectMilestone, generateProjectPlan,
-  generateSection, resetCourseChain, sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth, waitForQuizJob,
+  generateSection, resetCourseChain, sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth, triggerSeedContent, waitForQuizJob,
 } from './jobs.ts'
 
 export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (args: never) => Promise<string>> {
@@ -61,9 +61,12 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
           await rt.engine.graph.graphReject(id, args.note ?? '')
           return `[reject] 提案 #${id} 已拒绝留痕。`
         }
-        const r = await rt.engine.graph.graphApply(graphKind(args.kind), applyId(args.id))
+        const kind = graphKind(args.kind)
+        const r = await rt.engine.graph.graphApply(kind, applyId(args.id))
         // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
         await sweepGenJobs(rt)
+        // 种子应用 → 起点正文自动入队（#160，与面板 apply 出口同语义）
+        if (kind === 'seed') await triggerSeedContent(rt, ctx, r as unknown as { course: string; starts: string[] })
         return JSON.stringify(r)
       }),
   'learnhub_compass_paint': (args: { course?: string }) => run(rt, 'learnhub_compass_paint', async () =>

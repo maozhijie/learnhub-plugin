@@ -117,9 +117,23 @@ export function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, 
   )
 }
 
+/** 生成任务在推荐卡上的进度态（#160）：state = 排队/生成中；progress = 逐节进度
+ * （任务进入逐节正文阶段后由 /generate/status 带出，大纲/出题阶段缺席）。 */
+export interface RecGenState {
+  state: 'queued' | 'running'
+  progress?: { done: number; total: number; current?: string }
+}
+
+/** 进度态读法：「生成中 3/7」式逐节进度，而非只说在队列。 */
+function genLabel(gen: RecGenState): string {
+  if (gen.state === 'queued') return '排队中'
+  const p = gen.progress
+  return p && p.total > 0 ? `生成中 ${p.done}/${p.total}` : '生成中'
+}
+
 /** 推荐流大卡片：点开直接进 LessonView——主界面的核心动作；内联跳过（已有基础免学）。
- * 内容三态标识：已生成（点开有东西读）/ 生成中 / 排队中；未生成节点主按钮让给「生成正文」
- * （#158 口径统一：全面板同一动作同名，幽灵名清零）。
+ * 内容三态标识：已生成（点开有东西读）/ 生成中（带逐节进度，#160）/ 排队中；未生成节点
+ * 主按钮让给「生成正文」（#158 口径统一：全面板同一动作同名，幽灵名清零）。
  * 「今天学它」pin 无界面入口（对话走 agent 工具设置）：pinned 事件只带「你选了它」
  * 置顶标识，不给取消按钮（取消 = 对 agent 说，或次日自动失效）。
  * 事件携带 diagnostics（B1 #69）时内联「重写此节」直达动作——Popconfirm 确认后才走
@@ -128,14 +142,15 @@ export function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, 
  * enc 成分技能的到期题一键进目标节点刷卡会话（建议先行，不拦直接学）。 */
 export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
   e: RecEvent
-  gen?: 'queued' | 'running'
+  gen?: RecGenState
   onOpen: () => void
   onSkip: () => void
   onGenerate: () => void
   onAdvice: (a: AdviceItem) => void
 }) {
   const t = recTypeMeta(e.type)
-  const generating = gen === 'running' || gen === 'queued'
+  const generating = gen !== undefined
+  const genText = gen ? genLabel(gen) : ''
   const [rewriting, setRewriting] = useState<string | null>(null)
   const rewriteSection = async (d: DiagnosticEntry) => {
     setRewriting(d.rewrite.section)
@@ -156,8 +171,7 @@ export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
           <div style={{ minWidth: 0, flex: 1 }}>
           <Title heading={6} style={{ margin: 0 }}>
             {e.node}
-            {gen === 'running' && <Tag size='small' color='arcoblue' style={{ marginLeft: 8 }}>生成中</Tag>}
-            {gen === 'queued' && <Tag size='small' color='gray' style={{ marginLeft: 8 }}>排队中</Tag>}
+            {gen && <Tag size='small' color={gen.state === 'running' ? 'arcoblue' : 'gray'} style={{ marginLeft: 8 }}>{genText}</Tag>}
             {!generating && e.hasContent && <Tag size='small' color='green' style={{ marginLeft: 8 }}>已生成</Tag>}
           </Title>
           <Text type='secondary' style={{ fontSize: 12 }}>
@@ -174,9 +188,9 @@ export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
             生成正文
           </Button>
         ) : (
-          <Button size='mini' type='primary' loading={gen === 'running'} disabled={gen === 'queued'}
+          <Button size='mini' type='primary' loading={gen?.state === 'running'} disabled={gen?.state === 'queued'}
             onClick={ev => { ev.stopPropagation(); onOpen() }}>
-            {gen === 'running' ? '生成中' : gen === 'queued' ? '排队中' : e.type === 'review' || e.type === 'overdue' ? '去复习' : '去学习'}
+            {gen ? genText : e.type === 'review' || e.type === 'overdue' ? '去复习' : '去学习'}
           </Button>
         )}
         {/* span 拦截冒泡：卡片本体点击是打开学习，Popconfirm 触发不应进学习视图 */}

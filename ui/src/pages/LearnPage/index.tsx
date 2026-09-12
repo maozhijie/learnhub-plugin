@@ -23,6 +23,7 @@ import type { AppFrame } from '../../App'
 import type { AdviceItem, LearnerCardItem, QueueCard, RecEvent } from '../../types'
 import ReviewSession from './ReviewSession'
 import { CourseCard, RecCard, ReviewBanner, XpBar } from './LearnCards'
+import type { RecGenState } from './LearnCards'
 import NoteSourceDrawer from './NoteSourceDrawer'
 import LearnerCardManager from './LearnerCardManager'
 
@@ -52,8 +53,8 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [sourceDrawer, setSourceDrawer] = useState<{ open: boolean; focusId: string | null }>({ open: false, focusId: null })
   const [cardMgrOpen, setCardMgrOpen] = useState(false)
   const [recentArchived, setRecentArchived] = useState<LearnerCardItem[]>([])
-  /** 排队/生成中的节点（course/node → 阶段），推荐卡三态标识消费。 */
-  const [genMap, setGenMap] = useState<Record<string, 'queued' | 'running'>>({})
+  /** 排队/生成中的节点（course/node → 状态 + 逐节进度），推荐卡进度态消费（#160）。 */
+  const [genMap, setGenMap] = useState<Record<string, RecGenState>>({})
 
   // 各命令的 reload 稳定（useCommand 内部 useCallback），解构后作 deps 不抖动
   const { reload: reloadRec } = rec
@@ -78,10 +79,13 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     try {
       const st = await api.generateStatus()
       const active = st.jobs.filter(j => j.status === 'running' || j.status === 'cancelling')
-      const gen: Record<string, 'queued' | 'running'> = {}
+      const gen: Record<string, RecGenState> = {}
       for (const j of st.jobs) {
-        if (j.status === 'running' || j.status === 'cancelling') gen[`${j.course}/${j.node}`] = 'running'
-        else if (j.status === 'queued') gen[`${j.course}/${j.node}`] = 'queued'
+        if (j.status === 'running' || j.status === 'cancelling') {
+          gen[`${j.course}/${j.node}`] = { state: 'running', ...(j.progress ? { progress: j.progress } : {}) }
+        } else if (j.status === 'queued') {
+          gen[`${j.course}/${j.node}`] = { state: 'queued' }
+        }
       }
       const keys = new Set(active.map(j => j.key))
       const edge = [...activeKeysRef.current].some(k => !keys.has(k))

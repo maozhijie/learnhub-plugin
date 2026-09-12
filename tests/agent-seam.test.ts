@@ -233,3 +233,43 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤6 
   )
   assert.equal(AGENT_LOOP_MAX_TOOL_ROUNDS, 6, 'ADR-0041 回路预算 K≤6')
 })
+
+test('工具回路：任务取消传导（#163）——旗标翻真即中止，后续轮与工具执行不再发生', async () => {
+  // 旗标在首轮工具执行后翻真：第二轮底层调用不发生，抛错带取消语义（结果丢弃）
+  let cancelled = false
+  const stream = fakeStream([
+    { text: '查一下', toolCalls: [{ id: 'c1', name: 'graph_view', arguments: '{}' }] },
+    { text: '不该到达的终裁' },
+  ])
+  const agent = new AgentSeam({ complete: fakeComplete([]), stream }, systemClock)
+  const toolCalls: string[] = []
+  await assert.rejects(
+    () => agent.agentLoop({
+      station: '教练生长', prompt: '裁决', tools: [],
+      runTool: async call => {
+        toolCalls.push(call.name)
+        cancelled = true // 工具执行期间任务被取消（生成页取消旗标沿站点传入）
+        return '图面'
+      },
+      isCancelled: () => cancelled,
+    }),
+    /任务已取消——工具回路中止/,
+  )
+  assert.deepEqual(toolCalls, ['graph_view'], '取消前的工具执行照常完成（结果随后丢弃）')
+  assert.equal(stream.requests.length, 1, '旗标翻真后不再发生后续底层调用')
+
+  // 首轮调用前即取消：零底层调用零工具执行
+  const stream2 = fakeStream([{ text: 'x' }])
+  const agent2 = new AgentSeam({ complete: fakeComplete([]), stream: stream2 }, systemClock)
+  await assert.rejects(
+    () => agent2.agentLoop({ station: '罗盘', prompt: 'p', tools: [], runTool: async () => 'y', isCancelled: () => true }),
+    /任务已取消/,
+  )
+  assert.equal(stream2.requests.length, 0, '开局即取消：回路一次底层调用都不发生')
+
+  // 未取消：isCancelled 缺省语义不变（回路跑完）
+  const stream3 = fakeStream([{ text: '终裁' }])
+  const agent3 = new AgentSeam({ complete: fakeComplete([]), stream: stream3 }, systemClock)
+  const ok = await agent3.agentLoop({ station: '罗盘', prompt: 'p', tools: [], runTool: async () => 'y' })
+  assert.equal(ok.text, '终裁')
+})

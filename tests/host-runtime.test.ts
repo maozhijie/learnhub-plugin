@@ -32,6 +32,7 @@ import {
   resumeQueue,
   scheduleJobRetention,
   sweepGenJobs,
+  triggerSeedContent,
   waitForQuizJob,
 } from '../src/host/jobs.ts'
 import { AGENT_GUIDE, registerTools } from '../src/host/tools.ts'
@@ -268,6 +269,31 @@ test('等待语义：超时与注册表消失 fail loud', async () => {
 })
 
 // ---------------------------------------------------------------- 生长批失败终态与重试（#157）
+
+test('生长批任务消息带回路轨迹（#163）：生成页可查裁决前查了哪些只读视图', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    'growth2.coachGrowthBatch': async () => ({
+      course: '数学', state: 'applied',
+      check: { course: '数学', ready: 0, depth: 3, required: 3, cold_start: false, ok: false, exhausted: false, warnings: [] },
+      segments: [{ tier: 'light', effort: 'fast', operator: '前进', disagreement: false }],
+      trajectory: ['[轻量段] graph_view(2 字符参数) → 412 字符', '[轻量段] concept_registry(15 字符参数) → 88 字符'],
+      proposal: { id: 9, ops: 1, operator: '前进', reason: '前沿缺下一台阶', disagreement: false },
+      applied: { ops: 1, snapshot: 3, compass_rewritten: true, created: [], ready_unbuilt: [] },
+    }),
+    'registry.get': async () => ({ name: '数学' }),
+    loadView: async () => ({ graph: { nset: new Set(['生长批']) } }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const enq = enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  assert.equal(enq.queued, true)
+  await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
+  const msg = rt.jobs.genJobs.get('数学/生长批')!.message ?? ''
+  assert.match(msg, /回路轨迹：\[轻量段\] graph_view/, '轨迹带段前缀进任务消息')
+  assert.match(msg, /concept_registry/, '逐条工具轨迹可查')
+})
 
 test('生长批失败终态：教练回合抛错 → failed 带死因；自动触点阻尼不重拉、force（重试）豁免', async () => {
   const rt = makeRuntime()
@@ -579,6 +605,106 @@ test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、�
   assert.equal(shared.length, 84)
   assert.equal(toolOnly.length, 26)
   assert.equal(routeOnly.length, 50)
+})
+
+// ---------------------------------------------------------------- 种子应用 → 起点正文自动入队（#160）
+
+/** 种子 apply 的返回形状（GraphApplySeedResult 的宿主消费面）+ 镜像生长批的取数桩：
+ * 起点A 正文未生成（要入队）、起点B 正文已就绪（不入队）；loadView 同时供
+ * sweepGenJobs（nset）与 triggerSeedContent（state）消费。 */
+function stubSeedApply(rt: HostRuntime, opts: { applied?: Record<string, unknown> } = {}): void {
+  stubContentPipeline(rt)
+  stub(rt, {
+    'graph.proposalApply': async () => opts.applied ?? {
+      course: '数学', mode: 'new', goal_type: 'capability', endpoint: '终点',
+      starts: ['起点A', '起点B'], declared: '2026-09-12', regions: [], snapshot: 1,
+      created_blocks: [], compass: { state: 'scaffold', annotations_preserved: false },
+      prior_feed: { unresponded: 0 }, findings: [],
+    },
+    'registry.get': async () => ({ name: '数学' }),
+    'registry.resolve': async () => ({ name: '数学', root: '数学' }),
+    loadView: async () => ({
+      graph: { nset: new Set(['起点A', '起点B', '终点']) },
+      state: {
+        起点A: {},
+        起点B: { content: { sections: [{ id: 's1', status: 'ready' }] } },
+      },
+    }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+}
+
+test('种子应用 → 起点正文自动入队（#160）：路由出口入队「正文未生成」的起点，生成页可见', async () => {
+  const rt = makeRuntime()
+  stubSeedApply(rt)
+  const res = fakeRes()
+  await handleApi(rt, fakeCtx(), post('/learnhub/api/proposals/apply', { kind: 'seed', id: 3 }), res as never)
+  assert.equal(res.out.code, 200)
+  // 起点A（正文未生成）已入队；起点B（正文已就绪）不入队；队列泵把它跑完 = 全链真实
+  await until(() => rt.jobs.genJobs.get('数学/起点A')?.status === 'done')
+  assert.ok(rt.jobs.genJobs.get('数学/起点B') === undefined, '已就绪起点不重复入队')
+  // 幂等：重复触发不产生重复任务——同名键唯一（内容仍未生成时重复触发 = 合法重试路径）
+  const r2 = await triggerSeedContent(rt, fakeCtx(), { course: '数学', starts: ['起点A', '起点B'] })
+  assert.equal(r2, 1, '计数 = 需入队口径（起点A 仍未生成；起点B 已就绪不再入队）')
+  assert.equal([...rt.jobs.genJobs.values()].filter(j => j.node === '起点A').length, 1, '同名键唯一，不产生第二条任务')
+})
+
+test('种子应用幂等与跳过（#160）：排队任务去重不重复入队；同名 running 任务跳过不挡其余起点', async () => {
+  const rt = makeRuntime()
+  stubSeedApply(rt)
+  rt.flags.queuePaused = true // 挡泵：保持 queued 形态供断言
+  await triggerSeedContent(rt, fakeCtx(), { course: '数学', starts: ['起点A', '起点B'] })
+  assert.equal(rt.jobs.genJobs.get('数学/起点A')?.status, 'queued')
+  // 排队中重复触发：enqueueGeneration 走去重分支，不产生第二条记录
+  await triggerSeedContent(rt, fakeCtx(), { course: '数学', starts: ['起点A'] })
+  assert.equal([...rt.jobs.genJobs.values()].filter(j => j.node === '起点A').length, 1, '排队任务不重复入队')
+
+  // 同名 running：跳过留痕，不挡其余起点（起点C 仍入队；暂停旗标挡泵保形态）
+  const rt2 = makeRuntime()
+  stubSeedApply(rt2)
+  rt2.flags.queuePaused = true
+  rt2.jobs.genJobs.set('数学/起点A', {
+    course: '数学', node: '起点A', startedAt: new Date().toISOString(), status: 'running',
+  })
+  stub(rt2, { loadView: async () => ({
+    graph: { nset: new Set(['起点A', '起点C', '终点']) },
+    state: { 起点A: {}, 起点C: {} },
+  }) })
+  const queued = await triggerSeedContent(rt2, fakeCtx(), { course: '数学', starts: ['起点A', '起点C'] })
+  assert.equal(queued, 2, '计数按「需入队」口径（running 跳过发生在 enqueue 内部）')
+  assert.equal(rt2.jobs.genJobs.get('数学/起点A')?.status, 'running', 'running 任务不被覆盖')
+  assert.equal(rt2.jobs.genJobs.get('数学/起点C')?.status, 'queued', '其余起点照常入队')
+})
+
+test('种子应用与重启暂停语义（#160）：queuePaused 挡泵，起点任务安静排队；resume 才开跑', async () => {
+  const rt = makeRuntime()
+  stubSeedApply(rt)
+  rt.flags.queuePaused = true
+  const res = fakeRes()
+  await handleApi(rt, fakeCtx(), post('/learnhub/api/proposals/apply', { kind: 'seed', id: 3 }), res as never)
+  assert.equal(res.out.code, 200)
+  await sleep(30)
+  assert.equal(rt.jobs.genJobs.get('数学/起点A')?.status, 'queued', '暂停时入队不开跑（重启暂停语义不回归）')
+  resumeQueue(rt, fakeCtx())
+  await until(() => rt.jobs.genJobs.get('数学/起点A')?.status === 'done')
+})
+
+test('非种子 apply 不触发起点入队（#160 只挂种子出口）', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    'graph.proposalApply': async () => ({ kind: 'edit', course: '数学', ops: 1, snapshot: 2, compass_rewritten: true }),
+    'registry.get': async () => ({ name: '数学' }),
+    loadView: async () => ({ graph: { nset: new Set(['起点A']) }, state: { 起点A: {} } }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const res = fakeRes()
+  await handleApi(rt, fakeCtx(), post('/learnhub/api/proposals/apply', { kind: 'edit', id: 5 }), res as never)
+  assert.equal(res.out.code, 200)
+  assert.equal(rt.jobs.genJobs.size, 0, 'edit 提案 apply 不入队正文')
 })
 
 // ---------------------------------------------------------------- 清理

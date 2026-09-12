@@ -57,6 +57,8 @@ export interface GrowthDeps {
 import { effectiveStage } from './audit.ts'
 import type { CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
 import { arbitrationPopulations, behaviorDigest, readyDepthCheck, renderArbitrationEvidence, renderBehaviorDigest, renderSedimentForCoach } from './coach-round.ts'
+import { coachToolset, renderGrowthGraphView } from './coach-tools.ts'
+import type { CoachToolDeps } from './coach-tools.ts'
 import type { CompassEtaProbe } from './compass.ts'
 import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, parseCompass, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { resolveConcept } from './concepts.ts'
@@ -67,6 +69,7 @@ import { atomicWrite } from './io.ts'
 import type { JolPrediction } from './jol.ts'
 import { JOL_PREDICTIONS } from './jol.ts'
 import type { AgentSeam, GateVerdict } from './agent.ts'
+import type { LlmToolCall, LlmToolSpec } from './llm.ts'
 import { hasReadyContent } from './notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
 import { addNodeCountOf, validateEditProposal } from './proposals.ts'
@@ -146,13 +149,15 @@ export class GrowthSubsystem {
   }
 
 
-  /** 罗盘初画/重画（learnhub_compass_paint；「罗盘初画」模板 v1，deep 档一次调用）：
+  /** 罗盘初画/重画（learnhub_compass_paint；「罗盘初画」模板 v1，deep 档工具回路）：
    * 终点锚缺失 fail loud（初画锚在终点上）；路线门（非空/无标题/限长）首过即落盘——
    * 只重写「剩余路线」段，批注区字节保留，ETA 重置待刷新（旧带是旧结构的推演）。
-   * 金样本回放闸：调用数恒 1、无修复轮（首过率对照在测试锚定）。调用经统一 agent 缝
-   * （#162：剥围栏/语义档/调用日志在缝里内建）。 */
-  async compassPaint(courseKey: string | undefined, agent: AgentSeam): Promise<{
-    course: string; path: string; route_lines: number; annotations_preserved: boolean; repainted: boolean
+   * 金样本回放闸：回路会话数恒 1、无修复轮（首过率对照在测试锚定）。调用经统一
+   * agent 缝（#162：剥围栏/语义档/调用日志在缝里内建）；#163 起经只读工具回路——
+   * 教练重画路线前可查图自证节点名、对表登记表（既有门零放松：路线门照旧首过即落）。
+   * isCancelled（#163 任务取消传导）：队列任务的取消旗标沿缝传入回路。 */
+  async compassPaint(courseKey: string | undefined, agent: AgentSeam, opts: { isCancelled?: () => boolean } = {}): Promise<{
+    course: string; path: string; route_lines: number; annotations_preserved: boolean; repainted: boolean; trajectory: string[]
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const root = c.root
@@ -178,8 +183,13 @@ export class GrowthSubsystem {
       graphNames: graph.names,
       annotations,
     })
-    const raw = await agent.complete('罗盘', prompt, { effort: 'deep' })
-    const body = stripWrappingFence(raw)
+    const toolset = this.coachToolsetFor(c)
+    const loop = await agent.agentLoop({
+      station: '罗盘', prompt, effort: 'deep',
+      tools: toolset.tools, runTool: toolset.runTool,
+      ...(opts.isCancelled ? { isCancelled: opts.isCancelled } : {}),
+    })
+    const body = stripWrappingFence(loop.text)
     const errors = validateRouteBody(body)
     if (errors.length) {
       throw new Error(`[compass] 初画产物未过路线门（原样落盘会破坏罗盘结构），罗盘未改动：\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
@@ -201,6 +211,7 @@ export class GrowthSubsystem {
       route_lines: routeLines,
       annotations_preserved: Boolean(annotations),
       repainted: Boolean(priorRoute) && priorRoute !== ROUTE_PENDING,
+      trajectory: loop.trajectory,
     }
   }
 
@@ -413,25 +424,12 @@ export class GrowthSubsystem {
     }
 
     // ② 行为摘要五件套（读侧折叠即算即用；轻量包两件之一）
-    const entries = await this.e.concepts.load(c.root)
-    const invokesOfQ = await this.invokesResolver(c)
-    const masteryOf: Record<string, number> = {}
-    for (const n of graph.names) masteryOf[n] = masteryOfFm(state[n])
-    const digest = behaviorDigest({
-      course: c.name,
-      practice: netPracticeRecs(await this.e.store.practiceAll(), await this.e.store.erratumAll()),
-      reviews: await this.e.store.reviewLogAll(),
-      invokesOf: invokesOfQ,
-      estOf: graph.estOf,
-      misconceptionsOf: graph.misconceptionsOf,
-      masteryOf,
-      today,
-      cutoffMin: cutoff,
-    })
-    block('行为摘要（窗=最近 7 学习日或 10 节取大；即算即用不落盘）', renderBehaviorDigest(digest))
+    block('行为摘要（窗=最近 7 学习日或 10 节取大；即算即用不落盘）',
+      renderBehaviorDigest(await this.behaviorDigestOf(c, graph, state, today, cutoff)))
 
     if (!lightweight) {
       // ③ 登记表档位（前沿视野 = 可学 ∪ 在学节点的概念档位折叠；同概念取最高档）
+      const entries = await this.e.concepts.load(c.root)
       const tierRank = (t: ConceptTier): number => CONCEPT_TIERS.indexOf(t)
       const foldTiers = (pick: (n: string) => Record<string, ConceptTier> | undefined): Array<[string, ConceptTier]> => {
         const best = new Map<string, ConceptTier>()
@@ -478,48 +476,40 @@ export class GrowthSubsystem {
     return out.join('\n') + '\n'
   }
 
-  /** 图面全名单的预览上限（防生长后教练上下文失控）。比罗盘初画的 GRAPH_NAMES_PREVIEW
-   * (80) 宽：初画只需路标感，教练裁决的 pre 引用必须逐字命中既有节点名，名单截断会
-   * 直接造成受理门断边拒收——上限只防膨胀，不服务取值域完整性时才收紧。 */
-  private static readonly GROWTH_GRAPH_NAMES_CAP = 200
+  /** 教练只读工具面（#163 / ADR-0041 白名单七件）：图视图/节点卡/概念登记表/题库
+   * 概况/罗盘/终点锚的实现走 coach-tools 的通用执行器（deps 结构化注入，本子系统
+   * 天然满足）；行为摘要的取材口径（invokes 解析/掌握度折叠）是本子系统的私有折叠，
+   * 经 providers 注入复用（单一出处）。工具面零写侧、零队列触点。 */
+  private coachToolsetFor(c: CourseEntry): { tools: LlmToolSpec[]; runTool: (call: LlmToolCall) => Promise<string> } {
+    const deps: CoachToolDeps = this.e
+    return coachToolset(deps, c, {
+      behaviorDigestText: async () => {
+        const { today, cutoff } = await this.e.learningDay()
+        const { graph, state } = await this.e.loadView(c)
+        return renderBehaviorDigest(await this.behaviorDigestOf(c, graph, state, today, cutoff))
+      },
+    })
+  }
 
-  /** 图面（教练回合装配的第三块，两段共用）：结构事实源——裁决 ops 的节点名与 pre
-   * 引用的取值域。前沿与在学节点给细节行（区·块/pre/teaches/est/正文态），其余节点
-   * 给全名单（供 set_pre 等引用既有节点）。纯组装零写副作用。 */
-  private growthGraphView(graph: Graph, state: Record<string, Fm>): string {
-    const active = [...new Set([
-      ...this.coachFrontier(graph, state),
-      ...graph.names.filter(n => effectiveStage(state, n) === 'learning'),
-    ])].sort()
-    const activeSet = new Set(active)
-    const stageLabel = (n: string): string => {
-      const s = effectiveStage(state, n)
-      if (s === 'learning') return '在学'
-      if (s === 'mastered') return '已掌握'
-      if (s === 'review') return '复习中'
-      return hasReadyContent(state[n]) ? '未开始·正文已生成' : '未开始·待生成'
-    }
-    const lines: string[] = [
-      '## 当前图面（结构事实源——ops 的节点名与 pre 引用必须逐字来自这里）', '',
-      `- 节点共 ${graph.names.length} 个；前沿与在学 ${active.length} 个（带细节行）`,
-      '', '### 前沿与在学节点', '',
-    ]
-    for (const n of active) {
-      const [, region, block] = graph.blockOf[n]
-      const pres = graph.preOf[n]
-      const teaches = Object.entries(graph.teachesOf[n] ?? {}).map(([c, t]) => `${c} ${t}`)
-      const est = graph.estOf[n]
-      lines.push(`- ${n}（${region}·${block}｜${stageLabel(n)}${est ? `｜est ${est}′` : ''}）`
-        + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
-        + (teaches.length ? `｜teaches: ${teaches.join('、')}` : ''))
-    }
-    const rest = graph.names.filter(n => !activeSet.has(n)).sort()
-    if (rest.length) {
-      const shown = rest.slice(0, GrowthSubsystem.GROWTH_GRAPH_NAMES_CAP)
-      lines.push('', `### 其余节点（全部名单，供 pre 引用；共 ${rest.length} 个）`, '',
-        shown.join('、') + (rest.length > shown.length ? `……（超出预览上限 ${GrowthSubsystem.GROWTH_GRAPH_NAMES_CAP}，余 ${rest.length - shown.length} 个）` : ''))
-    }
-    return lines.join('\n') + '\n'
+  /** 行为摘要折叠（coachContextPack 与教练工具面 behavior_digest 共用的单次取材）：
+   * 登记表 canonical 解析后的 invokes 聚合 + masteryOfFm 折叠的掌握度。 */
+  private async behaviorDigestOf(
+    c: CourseEntry, graph: Graph, state: Record<string, Fm>, today: string, cutoff: number,
+  ): Promise<ReturnType<typeof behaviorDigest>> {
+    const invokesOfQ = await this.invokesResolver(c)
+    const masteryOf: Record<string, number> = {}
+    for (const n of graph.names) masteryOf[n] = masteryOfFm(state[n])
+    return behaviorDigest({
+      course: c.name,
+      practice: netPracticeRecs(await this.e.store.practiceAll(), await this.e.store.erratumAll()),
+      reviews: await this.e.store.reviewLogAll(),
+      invokesOf: invokesOfQ,
+      estOf: graph.estOf,
+      misconceptionsOf: graph.misconceptionsOf,
+      masteryOf,
+      today,
+      cutoffMin: cutoff,
+    })
   }
 
 
@@ -539,29 +529,36 @@ export class GrowthSubsystem {
   }
 
 
-  /** 生长批受理（#145/#150 裁决产物面）：三段式教练回合——轻量段（fast 档：行为摘要
-   * +罗盘+图面）先裁；note.disagreement 声明真分歧时升级全量段（deep 档：六区块包+图面）
-   * 重裁；全量段仍声明真分歧时升级双沙盘仲裁段（deep 档：六区块包+图面+两份沙盘推演
-   * 参照——现状照走 vs 含本批照走，同种子配对、零写侧、措辞照旧「模型推演，非承诺」），
-   * 仲裁段结论为终审。显然步免仲裁税，升级路径随 segments 可观测。最终裁决照 kind=edit
-   * 既有受理门（schema/结构/概念对表/锚保护/巩固门）propose→apply：罗盘重写与图 apply
-   * 写入单元纪律（提案被拒罗盘不落盘）、journal 挂提案 id、不新增提案 kind。
-   * 停机转译：就绪深度满足（check.ok）时不拉回合直接停摆——判据满足的自然结果，不是
-   * 新状态（force 供测试/手动排障越过）。opts.inject = 里程碑计划修订的换线/补支注入
-   * （#149 项目消费拉动的生长请求）：注入块随包进回合，且注入本身是显式的重新裁决
-   * 请求——check.ok 不再短路停摆（裁决仍可能产出零操作批）。裁决语义在提示词；本
-   * 方法只保证组装、schema 与写入单元纪律。金样本回放闸锚调用数基线：显然步恒 1 次、
-   * 分歧升级恒 2 次、双沙盘仲裁恒 3 次（沙盘推演是读侧计算，不计调用数）；
-   * 受理门拒收加回灌重裁段恰 +1 次（#157）。各段调用经统一 agent 缝（#162：单发走
-   * complete、回灌重裁走 repair，语义档与调用日志沿缝贯通可观测）。 */
+  /** 生长批受理（#145/#150 裁决产物面；#163 起各段经只读工具回路）：三段式教练回合
+   * ——轻量段（fast 档：行为摘要+罗盘+图面）先裁；note.disagreement 声明真分歧时升级
+   * 全量段（deep 档：六区块包+图面）重裁；全量段仍声明真分歧时升级双沙盘仲裁段（deep
+   * 档：六区块包+图面+两份沙盘推演参照——现状照走 vs 含本批照走，同种子配对、零写侧、
+   * 措辞照旧「模型推演，非承诺」），仲裁段结论为终审。显然步免仲裁税，升级路径随
+   * segments 可观测。各段的裁决产出经 `agentLoop`（ADR-0041 只读工具回路，K≤6 轮封顶）
+   * ——教练裁决前可查图自证名字、对表登记表/题库/罗盘（七件只读视图白名单），从源头
+   * 压「引用不存在的区/概念未铸名」死批；回路产物照过全部既有门，门零放松。最终裁决
+   * 照 kind=edit 既有受理门（schema/结构/概念对表/锚保护/巩固门）propose→apply：罗盘
+   * 重写与图 apply 写入单元纪律（提案被拒罗盘不落盘）、journal 挂提案 id、不新增提案
+   * kind。停机转译：就绪深度满足（check.ok）时不拉回合直接停摆——判据满足的自然结果，
+   * 不是新状态（force 供测试/手动排障越过）。opts.inject = 里程碑计划修订的换线/补支
+   * 注入（#149 项目消费拉动的生长请求）：注入块随包进回合，且注入本身是显式的重新
+   * 裁决请求——check.ok 不再短路停摆（裁决仍可能产出零操作批）。opts.isCancelled =
+   * 队列任务取消旗标（#163 传导：回路每轮与每次工具执行后检查，取消即中止）。
+   * 裁决语义在提示词；本方法只保证组装、schema 与写入单元纪律。金样本回放闸锚回路
+   * 会话数基线：显然步恒 1 会话、分歧升级恒 2、双沙盘仲裁恒 3（沙盘推演是读侧计算，
+   * 不计会话；会话内工具轮数受 K≤6 预算，不占会话数）；受理门拒收加回灌重裁段恰 +1
+   * （#157，重裁段走 repair 单发）。各段调用经统一 agent 缝（#162：回路走 loop、回灌
+   * 重裁走 repair，语义档与调用日志沿缝贯通可观测）；trajectory 逐会话累积工具轨迹
+   * （段前缀标注，#163 任务消息消费）。 */
   async coachGrowthBatch(
     courseKey: string, agent: AgentSeam,
-    opts: { force?: boolean; today?: string; inject?: string } = {},
+    opts: { force?: boolean; today?: string; inject?: string; isCancelled?: () => boolean } = {},
   ): Promise<{
     course: string
     state: 'idle' | 'applied'
     check: CoachCheck
     segments: CoachGrowthSegment[]
+    trajectory: string[]
     proposal: { id: number; ops: number; operator: string; reason: string; disagreement: boolean } | null
     applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[]; ready_unbuilt: string[] } | null
   }> {
@@ -573,22 +570,43 @@ export class GrowthSubsystem {
     const today = opts.today ?? (await this.e.learningDay()).today
     const check = await this.coachCheckFor(c, today)
     if (check.ok && !opts.force && opts.inject === undefined) {
-      return { course: c.name, state: 'idle', check, segments: [], proposal: null, applied: null }
+      return { course: c.name, state: 'idle', check, segments: [], trajectory: [], proposal: null, applied: null }
     }
     const { graph, state } = await this.e.loadView(c)
-    const view = this.growthGraphView(graph, state)
+    const view = renderGrowthGraphView(graph, state)
     const template = await this.e.content.loadPrompt('教练回合')
     const segments: CoachGrowthSegment[] = []
+    const trajectory: string[] = []
+    const toolset = this.coachToolsetFor(c)
+    const assertAlive = (): void => {
+      if (opts.isCancelled?.() === true) {
+        throw new Error(`[coach-growth] 「${c.name}」生长批任务已取消——回合中止（已产裁决丢弃）。`)
+      }
+    }
     type GrowthVerdict = { spec: EditProposalSpec; yaml: string; note: GrowthNote }
+    const TIER_LABEL = { light: '轻量段', full: '全量段', arbitration: '仲裁段' } as const
+    /** 单段裁决产出：经工具回路（deep/fast 档沿段声明），段内工具轨迹带段前缀累积。 */
+    const runVerdictLoop = async (
+      tier: 'light' | 'full' | 'arbitration', prompt: string,
+    ): Promise<GrowthVerdict> => {
+      assertAlive()
+      const effort = tier === 'light' ? 'fast' as const : 'deep' as const
+      const r = await agent.agentLoop({
+        station: '教练生长', prompt, effort,
+        tools: toolset.tools, runTool: toolset.runTool,
+        ...(opts.isCancelled ? { isCancelled: opts.isCancelled } : {}),
+      })
+      trajectory.push(...r.trajectory.map(t => `[${TIER_LABEL[tier]}] ${t}`))
+      const verdict = this.parseGrowthVerdict(r.text)
+      segments.push({ tier, effort, operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
+      return verdict
+    }
     const runSegment = async (tier: 'light' | 'full'): Promise<GrowthVerdict> => {
       const pack = await this.coachContextPack(c.name, { lightweight: tier === 'light', today })
       const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}`
         + (opts.inject !== undefined ? `\n\n---\n\n## 里程碑计划修订注入（项目消费拉动的生长请求）\n\n${opts.inject.trimEnd()}\n\n换线 = 激活图上已有节点（内容生成/接入路线），补支 = 朝新里程碑长最小必要分支；你的裁决仍走五算子与既定纪律，判断注入与就绪深度后照常产出（含零操作批）。` : '')
         + `\n\n---\n\n${view.trimEnd()}\n`
-      const raw = await agent.complete('教练生长', prompt, { effort: tier === 'light' ? 'fast' : 'deep' })
-      const verdict = this.parseGrowthVerdict(raw)
-      segments.push({ tier, effort: tier === 'light' ? 'fast' : 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
-      return verdict
+      return runVerdictLoop(tier, prompt)
     }
     // 双沙盘仲裁段（#150）：现状照走 vs 含本批候选节点照走——同种子配对推演（读侧
     // 计算，零写侧），两份分位带并排进终审 prompt；终审结论即最终裁决，不再升级。
@@ -612,16 +630,15 @@ export class GrowthSubsystem {
       })
       const pack = await this.coachContextPack(c.name, { today, packLabel: '仲裁段——全量包+双沙盘推演参照' })
       const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n\n---\n\n${evidence.trimEnd()}\n`
-      const raw = await agent.complete('教练生长', prompt, { effort: 'deep' })
-      const verdict = this.parseGrowthVerdict(raw)
-      segments.push({ tier: 'arbitration', effort: 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
-      return verdict
+      return runVerdictLoop('arbitration', prompt)
     }
 
     // 回灌重裁段（#157）：受理门拒收后的修复轮——拒绝原因原文 + 被拒裁决原文随全量包
     // 与图面回灌，deep 档重裁一次；重裁结论即终审（分歧声明只作可观测留痕，不再升级
-    // 仲裁段——重裁本身已是加深的一轮，「恰一轮」封顶防重试风暴）。
+    // 仲裁段——重裁本身已是加深的一轮，「恰一轮」封顶防重试风暴）。#163 起重裁段维持
+    // repair 单发（图面已随包回灌 = 修正取值域在场），不经回路。
     const runRepair = async (feedback: string, previousYaml: string): Promise<GrowthVerdict> => {
+      assertAlive()
       const pack = await this.coachContextPack(c.name, { today, packLabel: '回灌重裁段——上一版裁决被受理门拒收' })
       const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n\n---\n\n`
         + `## 受理门反馈（上一版裁决未过受理门——被拒批次零落盘，图未改动）\n\n${feedback.trim()}\n\n`
@@ -644,6 +661,7 @@ export class GrowthSubsystem {
     const fmt = (e: unknown): string => e instanceof Error ? e.message : String(e)
     const round = await agent.gateRepairRound<GrowthVerdict, GraphEditProposalResult>('教练生长', {
       first: async () => {
+        assertAlive()
         let verdict = await runSegment('light')
         if (verdict.note.disagreement) {
           verdict = await runSegment('full')
@@ -652,6 +670,7 @@ export class GrowthSubsystem {
         return verdict
       },
       gate: async (verdict): Promise<GateVerdict<GraphEditProposalResult>> => {
+        assertAlive()
         try {
           const prop = await this.e.graphPropose('edit', verdict.yaml) as GraphEditProposalResult
           return { errors: [], result: prop }
@@ -689,6 +708,7 @@ export class GrowthSubsystem {
       state: 'applied',
       check,
       segments,
+      trajectory,
       proposal: {
         id: prop.id, ops: final.spec.ops.length,
         operator: final.note.operator, reason: final.note.reason,

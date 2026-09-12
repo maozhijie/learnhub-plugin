@@ -61,6 +61,30 @@ test('LearnPage：主数据失败 = 整页失败态（次要不翻页），重�
   assert.ok(await screen.findByText('我的课程'), '次要区（课程卡）不受主数据失败影响')
 })
 
+test('LearnPage：生成中节点的推荐卡显示逐节进度态（#160），而非只会说在队列', async () => {
+  const { default: LearnPage } = await importUi('pages/LearnPage/index.tsx')
+  routes({
+    'GET /recommend': { date: '2026-09-12', events: [{
+      type: 'new', course: '数学', node: '入门', region: '', score: 1, why: '起点', path: null, hasContent: false,
+    }] },
+    'GET /xp': XP_FIXTURE,
+    'GET /review-queue': { total: 0, cards: [], calibration_hint: null, note_drifted: [], note_suspended: [] },
+    'GET /anki/status': { anki: null, due: { total: 0 }, mirror: {} },
+    // 该节点正文生成中、已好 3/7 节：卡片进度态来自任务注册表
+    'GET /generate/status': {
+      jobs: [{ key: '数学/入门', course: '数学', node: '入门', startedAt: '2026-09-12T10:00:00Z', status: 'running', phase: 'sections', progress: { done: 3, total: 7, current: '第二节' } }],
+      queuedCount: 0,
+    },
+    'GET /learner-queue': { cards: [] },
+  })
+  const { frame } = spyFrame()
+  render(React.createElement(LearnPage, { frame }))
+  assert.ok(await screen.findByText('接下来'), '推荐流加载后出现「接下来」卡')
+  const progress = await screen.findAllByText('生成中 3/7')
+  assert.ok(progress.length >= 1, '生成中节点带逐节进度（Tag 与按钮同一读数）')
+  assert.equal(screen.queryByText('生成正文'), null, '生成中不渲染「生成正文」按钮（动作诚实）')
+})
+
 // ---- StatsPage：XP 账本 + 每日目标保存 ----
 
 test('StatsPage：今日 XP 上账，保存每日目标 → PUT /daily-goal + 成功轻提示', async () => {

@@ -120,7 +120,9 @@ export class AgentSeam {
   /** 工具回路模式（有界多轮迭代 + 只读工具调用）：模型每轮可请求白名单内工具，
    * 缝执行 runTool 并把结果回灌继续；模型不再请求工具即以文本产出收束（剥围栏）。
    * K≤`AGENT_LOOP_MAX_TOOL_ROUNDS` 轮后仍请求工具即 fail loud——预算封顶防自激循环。
-   * trajectory 逐轮记录工具调用与结果摘要（#163 任务消息消费）。 */
+   * isCancelled（#163 任务取消传导）：每轮底层调用前与每次工具执行后检查，取消即抛错
+   * 中止——生成页取消旗标沿站点传入，回路不再空烧后续轮。trajectory 逐轮记录工具调用
+   * 与结果摘要（#163 任务消息消费）。 */
   async agentLoop(req: {
     station: string
     /** 回路首条用户消息（任务指令/上下文包）。 */
@@ -131,14 +133,22 @@ export class AgentSeam {
     tools: LlmToolSpec[]
     /** 工具执行器：缝只做回路与预算，不持有工具。 */
     runTool: (call: LlmToolCall) => Promise<string>
+    /** 取消检查（队列任务取消旗标；缺省不查）。true = 抛错中止，已产结果丢弃。 */
+    isCancelled?: () => boolean
   }): Promise<{ text: string; toolRounds: number; trajectory: string[] }> {
     if (!this.ports.stream) {
       throw new Error(`[agent-seam] 「${req.station}」需要工具回路，但注入侧未提供 LlmStream 端口（宿主适配器缺位）。`)
+    }
+    const assertAlive = (): void => {
+      if (req.isCancelled?.() === true) {
+        throw new Error(`[agent-seam] 「${req.station}」任务已取消——工具回路中止（已产结果丢弃）。`)
+      }
     }
     const turns: LlmLoopTurn[] = [{ role: 'user', text: req.prompt }]
     const trajectory: string[] = []
     let toolRounds = 0
     for (;;) {
+      assertAlive()
       const startedAt = this.clock.nowMs()
       const r = await this.ports.stream({
         messages: turns,
@@ -167,6 +177,7 @@ export class AgentSeam {
         }
         trajectory.push(`${call.name}(${call.arguments.length} 字符参数) → ${out.length} 字符${isError ? '（失败）' : ''}`)
         turns.push({ role: 'tool', callId: call.id, text: out, ...(isError ? { isError: true } : {}) })
+        assertAlive()
       }
     }
   }
