@@ -681,8 +681,11 @@ export class LearnhubEngine {
     let raw: string
     try {
       raw = await this.fs.readFile(this.paths.genJobsPath)
-    } catch {
-      return []
+    } catch (err) {
+      // 只认 ENOENT 为 Missing 合法空态——权限/锁等读错误静默回空表会让下一次入队
+      // 把原档全量覆盖（静默销毁现场），与 Broken 同口径上抛（#194）
+      if ((err as { code?: unknown }).code === 'ENOENT') return []
+      throw new Error(`[gen-jobs] ${this.paths.genJobsPath} 不可读（Broken）：${err instanceof Error ? err.message : String(err)}——修复后重启宿主再试。`)
     }
     let doc: unknown
     try {

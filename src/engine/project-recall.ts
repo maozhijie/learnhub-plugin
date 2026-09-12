@@ -10,6 +10,7 @@
  * 抽题只读课程题库：不出新题、不改题、不推进任何调度（与 learnhub_question_answer
  * 通道彻底分流——检索点的作答证据只留学习者与 agent 的会话里）。
  */
+import { readJsonlLines } from './io.ts'
 import type { VaultFs } from './io.ts'
 import type { BankQuestion } from './question-bank.ts'
 import type { Paths } from './paths.ts'
@@ -70,19 +71,8 @@ export async function appendRecallRec(paths: Paths, projectId: string, rec: Reca
   await fs.appendFile(paths.projectRecallPath(projectId), JSON.stringify(rec) + '\n')
 }
 
-/** 全部检索点流水（文件缺失 = 合法空态；消费方 = 复盘与视图）。 */
+/** 全部检索点流水（读侧契约归 readJsonlLines 原语，ADR-0053：缺失 = 合法空态、撕裂
+ * 尾行豁免、中段坏行 = Broken 报出——复盘与视图的检索证据不得静默丢行）。 */
 export async function recallRecsAll(paths: Paths, projectId: string, fs: VaultFs): Promise<RecallRec[]> {
-  const p = paths.projectRecallPath(projectId)
-  if (!fs.exists(p)) return []
-  const out: RecallRec[] = []
-  for (const line of (await fs.readFile(p)).split('\n')) {
-    const s = line.trim()
-    if (!s) continue
-    try {
-      out.push(JSON.parse(s) as RecallRec)
-    } catch {
-      // 跳过半行损坏（进程中断尾行），与 journal 同惯例
-    }
-  }
-  return out
+  return readJsonlLines<RecallRec>(paths.projectRecallPath(projectId), fs, 'recall')
 }

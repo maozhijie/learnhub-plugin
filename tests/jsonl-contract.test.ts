@@ -5,6 +5,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -63,10 +64,26 @@ test('Missing 合法空态不变：流水缺席返回 []，空行照旧跳过', 
   })
 })
 
-test('结构守卫：流读取路径零手写 parse 循环（JSONL 读侧必经 readJsonlLines 原语，ADR-0053）', async () => {
-  for (const f of ['engine/store.ts', 'engine/project-exec.ts', 'engine/probation.ts', 'engine/data-check.ts']) {
-    const src = await readFile(join(SRC, f), 'utf8')
-    assert.ok(!src.includes("split('\\n')"),
-      `${f} 出现手写行切分——JSONL 读侧必须经 readJsonlLines 原语（ADR-0053 单一实现）`)
+test('结构守卫：JSONL 读侧必经原语——src 全域 split("\\n") 只许出现在白名单（非 JSONL 文本处理）', async () => {
+  // 白名单 = 逐个核对过的非 JSONL 用法：io 原语本体；markdown/提示词/门禁清单的
+  // 文本行处理（compass/content/growth-subsystem）；答案文本归一的多行切分（grading）；
+  // mini-YAML 解析（yaml.ts）；路径与错误文案处理（note-source.ts）。白名单外出现
+  // split('\n') = 有人手写 JSONL parse 循环（ADR-0053 单一实现违约）。
+  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts'])
+  const files: string[] = []
+  function walk(dir: string): void {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name)
+      if (e.isDirectory()) walk(p)
+      else if (e.name.endsWith('.ts')) files.push(p)
+    }
+  }
+  walk(SRC)
+  assert.ok(files.length > 50, '扫描面非空（门必须能看见目标形态）')
+  for (const f of files) {
+    if (ALLOW.has(f.split(/[\\/]/).pop()!)) continue
+    const src = await readFile(f, 'utf8')
+    assert.ok(!src.includes("split('\\n')") && !src.includes('split(/\\n/)'),
+      `${f} 手写行切分——JSONL 读侧必须经 readJsonlLines 原语（ADR-0053 单一实现）`)
   }
 })

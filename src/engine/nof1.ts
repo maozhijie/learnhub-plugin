@@ -326,7 +326,7 @@ export function nof1Outcomes(logs: ReviewRec[], expId: number): Nof1OutcomeRec[]
 export interface LabStore {
   loadExperiments(): Promise<ExperimentDef[]>
   saveExperiments(list: ExperimentDef[]): Promise<void>
-  createProposal(kind: ProposalRec['kind'], course: string, summary: string, artifact: string | ((id: number) => string)): Promise<number>
+  createProposal(kind: ProposalRec['kind'], course: string, summary: string, artifact: string | ((id: number) => string), opts?: { pair?: number }): Promise<number>
   updateProposal(id: number, patch: Partial<ProposalRec>): Promise<ProposalRec | null>
   takePending(kind: ProposalRec['kind'], pid?: number): Promise<ProposalRec>
   reviewLogAll(): Promise<ReviewRec[]>

@@ -218,7 +218,13 @@ export function scheduleJobRetention(rt: HostRuntime, key: string, status: GenJo
  * 与重启恢复共用。返回清扫条数。broken 态（#194）跳过：清扫会触发注册表全量落盘，
  * 写回闸拒绝——宿主其余功能（含各 apply 出口）不受任务档损坏牵连，清扫延后到修档重启。 */
 export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<number> {
-  if (rt.flags.genQueueBroken) return 0
+  if (rt.flags.genQueueBroken) {
+    // 写回闸拒绝（#194）：清扫会触发注册表全量落盘——跳过并留痕（不抛：apply 出口
+    // 等调用方不被任务档损坏牵连，清扫延后到修档重启）
+    const why = rt.flags.genQueueBroken
+    void runLog(rt, 'gen_jobs_sweep', `任务档 broken，清扫跳过（修档重启后恢复）：${why}`).catch(() => undefined)
+    return 0
+  }
   const perCourse = new Map<string, Promise<Set<string> | null | undefined>>()
   const nodeNamesOf = (course: string): Promise<Set<string> | null | undefined> => {
     let p = perCourse.get(course)
@@ -831,73 +837,85 @@ export function resumeQueue(rt: HostRuntime, ctx: Context): { paused: boolean; r
  * ADR-0053）：队列置 broken 态——生成页显式报错 + 修复指引，写回闸拒绝一切落盘，
  * 宿主其余功能不受影响。 */
 export function restoreGenJobs(rt: HostRuntime): void {
-  void rt.engine.loadGenJobs().then(async stale => {
-    for (const raw of stale) {
-      const j = raw as Partial<GenJob>
-      if (typeof j.course !== 'string' || typeof j.node !== 'string') continue
-      const key = `${j.course}/${j.node}`
-      const interrupted = j.status === 'running' || j.status === 'cancelling'
-      const restored: GenJob = {
-        course: j.course, node: j.node,
-        startedAt: typeof j.startedAt === 'string' ? j.startedAt : new Date().toISOString(),
-        status: interrupted ? 'failed' : (j.status ?? 'failed'),
-        ...(j.phase ? { phase: normalizeGenJobPhase(j.phase as string) } : {}),
-        ...(j.progress ? { progress: j.progress } : {}),
-        ...(j.style ? { style: j.style } : {}),
-        // 纯出题任务参数随注册表持久化，恢复后按原样重跑/继续（#118）
-        ...(typeof j.count === 'number' ? { count: j.count } : {}),
-        ...(j.section && typeof j.section === 'object'
-          && typeof (j.section as { id?: unknown }).id === 'string'
-          && typeof (j.section as { title?: unknown }).title === 'string'
-          ? { section: { id: (j.section as { id: string }).id, title: (j.section as { title: string }).title } } : {}),
-        ...(typeof j.instruction === 'string' ? { instruction: j.instruction } : {}),
-        ...(typeof j.model === 'string' ? { model: j.model } : {}),
-        // 生长批裁决面随档恢复（#157）：inject 是排队任务的执行负载，outcome 是
-        // 重拉阻尼的判据（恢复丢失会让「上批停摆/暂不产结构」的裁决被无声抹掉）
-        ...(typeof j.growthInject === 'string' ? { growthInject: j.growthInject } : {}),
-        ...(j.growthOutcome === 'idle' || j.growthOutcome === 'no_structure' || j.growthOutcome === 'applied'
-          ? { growthOutcome: j.growthOutcome } : {}),
-        // 图域任务负载随档恢复（#157）：形状由写入侧（面板下发）保证，这里只做
-        // 「非空对象」闸——损坏负载进执行器由引擎契约 fail loud，不做静默兜底
-        ...(j.seedPayload && typeof j.seedPayload === 'object' ? { seedPayload: j.seedPayload } : {}),
-        ...(j.decompilePayload && typeof j.decompilePayload === 'object' ? { decompilePayload: j.decompilePayload } : {}),
-        ...(j.planPayload && typeof j.planPayload === 'object' ? { planPayload: j.planPayload } : {}),
-        ...(j.milestonePayload && typeof j.milestonePayload === 'object' ? { milestonePayload: j.milestonePayload } : {}),
-        message: interrupted ? '进程重启，任务中断——可重试' : (typeof j.message === 'string' ? j.message : undefined),
-        // 终态时刻随档恢复（保留期跨重启的起算点）；中断标失败的从恢复当下起算
-        ...(interrupted
-          ? { finishedAt: new Date().toISOString() }
-          : (typeof j.finishedAt === 'string' ? { finishedAt: j.finishedAt } : {})),
+  void rt.engine.loadGenJobs()
+    .catch(err => {
+      // 任务档 Broken（#194 / ADR-0053）：注册表不是学习事实源，不升格宿主硬失败
+      // ——队列置 broken 态：生成页显式报错 + 修复指引，写回闸拒绝一切落盘（坏档字节
+      // 原样保留，防下一次入队全量覆盖）。顺带补上此前缺失的拒绝处理（一抛即 unhandled）。
+      // 只罩读档：broken 语义 = 任务档损坏；恢复内环的意外错误归链尾 catch，不误锁写回闸。
+      rt.flags.genQueueBroken = err instanceof Error ? err.message : String(err)
+      console.error(`[learnhub] gen-jobs restore failed: ${rt.flags.genQueueBroken}`)
+      void runLog(rt, 'gen_jobs_restore', `生成任务档恢复失败，队列置 broken 态：${rt.flags.genQueueBroken}`).catch(() => undefined)
+      return null
+    })
+    .then(async stale => {
+      if (!stale) return
+      for (const raw of stale) {
+        const j = raw as Partial<GenJob>
+        if (typeof j.course !== 'string' || typeof j.node !== 'string') continue
+        const key = `${j.course}/${j.node}`
+        const interrupted = j.status === 'running' || j.status === 'cancelling'
+        const restored: GenJob = {
+          course: j.course, node: j.node,
+          startedAt: typeof j.startedAt === 'string' ? j.startedAt : new Date().toISOString(),
+          status: interrupted ? 'failed' : (j.status ?? 'failed'),
+          ...(j.phase ? { phase: normalizeGenJobPhase(j.phase as string) } : {}),
+          ...(j.progress ? { progress: j.progress } : {}),
+          ...(j.style ? { style: j.style } : {}),
+          // 纯出题任务参数随注册表持久化，恢复后按原样重跑/继续（#118）
+          ...(typeof j.count === 'number' ? { count: j.count } : {}),
+          ...(j.section && typeof j.section === 'object'
+            && typeof (j.section as { id?: unknown }).id === 'string'
+            && typeof (j.section as { title?: unknown }).title === 'string'
+            ? { section: { id: (j.section as { id: string }).id, title: (j.section as { title: string }).title } } : {}),
+          ...(typeof j.instruction === 'string' ? { instruction: j.instruction } : {}),
+          ...(typeof j.model === 'string' ? { model: j.model } : {}),
+          // 生长批裁决面随档恢复（#157）：inject 是排队任务的执行负载，outcome 是
+          // 重拉阻尼的判据（恢复丢失会让「上批停摆/暂不产结构」的裁决被无声抹掉）
+          ...(typeof j.growthInject === 'string' ? { growthInject: j.growthInject } : {}),
+          ...(j.growthOutcome === 'idle' || j.growthOutcome === 'no_structure' || j.growthOutcome === 'applied'
+            ? { growthOutcome: j.growthOutcome } : {}),
+          // 图域任务负载随档恢复（#157）：形状由写入侧（面板下发）保证，这里只做
+          // 「非空对象」闸——损坏负载进执行器由引擎契约 fail loud，不做静默兜底
+          ...(j.seedPayload && typeof j.seedPayload === 'object' ? { seedPayload: j.seedPayload } : {}),
+          ...(j.decompilePayload && typeof j.decompilePayload === 'object' ? { decompilePayload: j.decompilePayload } : {}),
+          ...(j.planPayload && typeof j.planPayload === 'object' ? { planPayload: j.planPayload } : {}),
+          ...(j.milestonePayload && typeof j.milestonePayload === 'object' ? { milestonePayload: j.milestonePayload } : {}),
+          message: interrupted ? '进程重启，任务中断——可重试' : (typeof j.message === 'string' ? j.message : undefined),
+          // 终态时刻随档恢复（保留期跨重启的起算点）；中断标失败的从恢复当下起算
+          ...(interrupted
+            ? { finishedAt: new Date().toISOString() }
+            : (typeof j.finishedAt === 'string' ? { finishedAt: j.finishedAt } : {})),
+        }
+        // 负载要求的排队图域任务恢复后缺负载（旧档案/未完整落盘）：明确标失败可重试，
+        // 不留 queued 假象——恢复队列一键开跑时才炸出「负载缺失或 phase 未知」是静默变形
+        if (restored.status === 'queued' && graphJobPayloadGap(restored.phase, restored) === 'payload_missing') {
+          restored.status = 'failed'
+          restored.message = '任务负载缺失（重启前未完整落盘），无法恢复执行——请从面板重新下发（可重试）。'
+          restored.finishedAt = new Date().toISOString()
+        }
+        rt.jobs.genJobs.set(key, restored)
       }
-      // 负载要求的排队图域任务恢复后缺负载（旧档案/未完整落盘）：明确标失败可重试，
-      // 不留 queued 假象——恢复队列一键开跑时才炸出「负载缺失或 phase 未知」是静默变形
-      if (restored.status === 'queued' && graphJobPayloadGap(restored.phase, restored) === 'payload_missing') {
-        restored.status = 'failed'
-        restored.message = '任务负载缺失（重启前未完整落盘），无法恢复执行——请从面板重新下发（可重试）。'
-        restored.finishedAt = new Date().toISOString()
+      // 恢复清扫（ADR-0039）：内容已删的悬空记录清除（不做墓碑），终态超保留期一并出册
+      // ——重启前挂的保留期定时器已随进程消失，跨重启只能靠时间戳在这里结算
+      const swept = await sweepGenJobs(rt)
+      // 幸存终态按剩余保留期补挂定时器
+      for (const [key, j] of rt.jobs.genJobs) {
+        if (!isGenJobTerminal(j.status)) continue
+        scheduleJobRetention(rt, key, j.status, genJobRetentionRemainingMs(j, Date.now()))
       }
-      rt.jobs.genJobs.set(key, restored)
-    }
-    // 恢复清扫（ADR-0039）：内容已删的悬空记录清除（不做墓碑），终态超保留期一并出册
-    // ——重启前挂的保留期定时器已随进程消失，跨重启只能靠时间戳在这里结算
-    const swept = await sweepGenJobs(rt)
-    // 幸存终态按剩余保留期补挂定时器
-    for (const [key, j] of rt.jobs.genJobs) {
-      if (!isGenJobTerminal(j.status)) continue
-      scheduleJobRetention(rt, key, j.status, genJobRetentionRemainingMs(j, Date.now()))
-    }
-    const aliveQueued = [...rt.jobs.genJobs.values()].filter(j => j.status === 'queued').length
-    if (aliveQueued > 0) rt.flags.queuePaused = true
-    persistGenJobs(rt)
-    if (stale.length) {
-      console.log(`[learnhub] gen-jobs restored: ${stale.length} (swept ${swept} dangling/expired${aliveQueued ? `, ${aliveQueued} queued paused` : ''})`)
-    }
-  }).catch(err => {
-    // loadGenJobs Broken（ADR-0053 / #194）：注册表不是学习事实源，不升格宿主硬失败
-    // ——队列置 broken 态：生成页显式报错 + 修复指引，写回闸拒绝一切落盘（坏档字节
-    // 原样保留，防下一次入队全量覆盖）。顺带补上此前缺失的拒绝处理（一抛即 unhandled）。
-    rt.flags.genQueueBroken = err instanceof Error ? err.message : String(err)
-    console.error(`[learnhub] gen-jobs restore failed: ${rt.flags.genQueueBroken}`)
-    void runLog(rt, 'gen_jobs_restore', `生成任务档恢复失败，队列置 broken 态：${rt.flags.genQueueBroken}`).catch(() => undefined)
-  })
+      const aliveQueued = [...rt.jobs.genJobs.values()].filter(j => j.status === 'queued').length
+      if (aliveQueued > 0) rt.flags.queuePaused = true
+      persistGenJobs(rt)
+      if (stale.length) {
+        console.log(`[learnhub] gen-jobs restored: ${stale.length} (swept ${swept} dangling/expired${aliveQueued ? `, ${aliveQueued} queued paused` : ''})`)
+      }
+    })
+    .catch(err => {
+      // 恢复内环意外失败（清扫/补挂等）：留痕不置 broken——broken 语义 = 任务档损坏，
+      // 内环错误与档无关，误标会把写回闸锁在非损坏态上
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[learnhub] gen-jobs restore error: ${msg}`)
+      void runLog(rt, 'gen_jobs_restore', `生成任务恢复内环失败：${msg}`).catch(() => undefined)
+    })
 }

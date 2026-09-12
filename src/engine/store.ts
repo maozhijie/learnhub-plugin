@@ -207,16 +207,20 @@ export class Store {
 
   /** 新建提案 → id（自增）。artifact 支持路径构造器形态（产物路径含自增 id）——注册表
    * 条目出生即完整，没有「先落空 artifact 再回填」的两段窗口（ADR-0053 契约下空
-   * artifact 是违约形态，注册表任何时刻落盘都必须可通过本类 loadProposals 读回）。 */
+   * artifact 是违约形态，注册表任何时刻落盘都必须可通过本类 loadProposals 读回）。
+   * opts.pair = 联动提案 id 出生即写（#149 反编译对：计划半区落盘那一刻就带联动，
+   * 任一时刻崩溃都不会留下可单边 apply 的无守卫半区）。 */
   async createProposal(
     kind: ProposalRec['kind'], course: string, summary: string,
     artifact: string | ((id: number) => string),
+    opts: { pair?: number } = {},
   ): Promise<number> {
     const list = await this.loadProposals()
     const id = list.reduce((m, p) => Math.max(m, p.id), 0) + 1
     list.push({
       id, kind, course, status: 'pending', summary,
       artifact: typeof artifact === 'function' ? artifact(id) : artifact,
+      ...(opts.pair !== undefined ? { pair: opts.pair } : {}),
       created: nowIsoOf(this.clock.nowMs()), decided: null, decision_note: '',
     })
     await this.saveProposals(list)

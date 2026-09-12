@@ -19,7 +19,7 @@
  * #145 生长批），concept 字段缺席合法。
  */
 import type { VaultFs } from './io.ts'
-import { atomicWrite } from './io.ts'
+import { atomicWrite, readJsonlLines } from './io.ts'
 import { calendarDayOf, weekStartOf } from './dates.ts'
 import { nowIsoOf } from './dates.ts'
 import type { Paths } from './paths.ts'
@@ -83,28 +83,17 @@ export async function appendSedimentEvent(paths: Paths, event: SedimentEventInpu
   return full
 }
 
-/** 读正典（缺文件 = 合法空态；跳过半行损坏——与行为流水同一 jsonl 容错惯例，
- * 追加写单行原子，中断最多留半行尾）。 */
+/** 读正典（读侧契约归 readJsonlLines 原语，ADR-0053：缺文件 = Missing 合法空态、
+ * 撕裂尾行豁免、中段坏行 = Broken 报出——追加正典是可重放事实，静默丢行即污染）。
+ * kind/tier/payload 的形状过滤保留在 parse 之外：行级 JSON 契约与字段形状是两层，
+ * 流水零 schema 的边界不动（ADR-0053 边界段）。 */
 export async function readSedimentCanon(paths: Paths, fs: VaultFs): Promise<SedimentEvent[]> {
-  let raw: string
-  try {
-    raw = await fs.readFile(paths.sedimentPath)
-  } catch {
-    return []
-  }
-  const out: SedimentEvent[] = []
-  for (const line of raw.split('\n')) {
-    const s = line.trim()
-    if (!s) continue
-    try {
-      const e = JSON.parse(s) as SedimentEvent
-      if (isSedimentKind(e.kind) && (e.tier === 'immediate' || e.tier === 'weekly')
-        && typeof e.payload === 'object' && e.payload !== null) out.push(e)
-    } catch {
-      // 半行损坏跳过（同 store.readJsonl 惯例）
-    }
-  }
-  return out
+  const lines = await readJsonlLines<unknown>(paths.sedimentPath, fs, 'sediment')
+  return lines.filter(e => {
+    const ev = e as SedimentEvent
+    return isSedimentKind(ev.kind) && (ev.tier === 'immediate' || ev.tier === 'weekly')
+      && typeof ev.payload === 'object' && ev.payload !== null
+  }) as SedimentEvent[]
 }
 
 /** 沉淀正典里的最新 FSRS 参数（读侧单向的唯一参数事实源）：课程参数文件退役为

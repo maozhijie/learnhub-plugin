@@ -366,14 +366,14 @@ export class Projects {
     }
     const initial = project.plan.length === 0
     // 注册表条目出生即完整（ADR-0053 契约下空 artifact 是违约形态）：路径经构造器形态
-    // 随条目一次落盘；pair 出生即写（#149 同源双提案）——任一时刻崩溃都不会留下可单边
-    // apply 的无守卫计划半区（时序缺口守卫从出生起生效）。
+    // 随条目一次落盘；pair 出生即写（#149 同源双提案——种子半区先建、号已知，计划半区
+    // 落盘那一刻就带联动，任一时刻崩溃都不会留下可单边 apply 的无守卫计划半区）。
     const pid = await this.store.createProposal('project_plan', projectId,
       `${initial ? '初次规划' : '计划修订'}：${v.plan.length} 个里程碑`,
-      id => this.paths.proposalArtifactPath(id, 'project_plan', projectId))
+      id => this.paths.proposalArtifactPath(id, 'project_plan', projectId),
+      opts.pair !== undefined ? { pair: opts.pair } : {})
     const path = this.paths.proposalArtifactPath(pid, 'project_plan', projectId)
     await atomicWrite(path, YAML.stringify(doc), this.fs)
-    if (opts.pair) await this.store.updateProposal(pid, { pair: opts.pair })
     return { id: pid, kind: 'project_plan', project: projectId, milestones: v.plan.length, initial }
   }
 

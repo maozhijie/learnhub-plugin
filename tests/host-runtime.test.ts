@@ -21,6 +21,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { createHostRuntime, resolveEngineEntry } from '../src/host/runtime.ts'
 import type { HostRuntime } from '../src/host/runtime.ts'
+import { mathRng, systemClock } from '../src/host/clock.ts'
+import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { handleApi } from '../src/host/api.ts'
 import {
   cancelGeneration,
@@ -504,6 +506,46 @@ test('任务档修复后重启：broken 清空，既有恢复语义零回归（�
   assert.equal(rt2.flags.genQueueBroken, null, '恢复成功不置 broken')
   const status = await generationStatus(rt2)
   assert.equal(status.broken, null)
+})
+
+test('broken 态清扫跳过：内存态不动、不落盘（清扫延后到修档重启；apply 出口不被牵连）', async () => {
+  const rt = makeRuntime()
+  rt.flags.genQueueBroken = '任务档损坏（测试注入）'
+  // 一条本应被清扫的悬空记录（课程缺失 → dangling）+ 破坏性 saveGenJobs 桩
+  rt.jobs.genJobs.set('已删课/节点A', {
+    course: '已删课', node: '节点A', startedAt: new Date().toISOString(), status: 'cancelled',
+  } as never)
+  stub(rt, {
+    'registry.get': async () => null,
+    loadView: async () => ({ graph: { nset: new Set<string>() } }),
+    saveGenJobs: async () => { throw new Error('broken 期间不得落盘') },
+  })
+  assert.equal(await sweepGenJobs(rt), 0, 'broken 期间清扫拒绝')
+  assert.ok(rt.jobs.genJobs.has('已删课/节点A'), '注册表内存态不动')
+})
+
+test('loadGenJobs 读错误（非 ENOENT）= Broken：不静默回空表——防权限/锁档被下一次入队覆盖', async () => {
+  const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-'))
+  tmpVaults.push(vault)
+  mkdirSync(join(vault, '学习中心'))
+  mkdirSync(join(vault, '学习中心', 'state'))
+  // 直构引擎要自备 v2 盖戳（createHostRuntime 的出生盖戳逻辑不经过这条路）
+  writeFileSync(join(vault, '学习中心', 'state', 'learnhub.json'),
+    JSON.stringify({ schema: { version: 2, formats: {} } }, null, 1) + '\n', 'utf8')
+  const base = nodeVaultFs
+  const engine = new LearnhubEngine({
+    vault, centerRel: '学习中心', clock: systemClock, rng: mathRng,
+    fs: {
+      ...base,
+      readFile: async (p: string) => {
+        if (p.endsWith('生成任务.json')) {
+          throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+        }
+        return base.readFile(p)
+      },
+    },
+  })
+  await assert.rejects(() => engine.loadGenJobs(), /\[gen-jobs\] .+生成任务\.json 不可读（Broken）/)
 })
 
 // ---------------------------------------------------------------- 路由分发（static 抽离后行为不变）
