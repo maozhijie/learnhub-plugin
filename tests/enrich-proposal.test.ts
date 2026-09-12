@@ -111,12 +111,12 @@ fields:
 
 test('手工构造的 enrich 提案（无指纹）apply 被拒；目标节点不在图内受理被拒', async () => {
   await withVault(ENRICH_VAULT, async ({ engine }) => {
-    // 手工落一条缺指纹的 pending enrich 提案
-    const pid = await engine.store.createProposal('enrich', '数学', '', '')
+    // 手工落一条缺指纹的 pending enrich 提案（注册表条目出生即带 artifact 路径，#193）
+    const pid = await engine.store.createProposal('enrich', '数学', '',
+      id => engine.paths.proposalArtifactPath(id, 'enrich', '数学'))
     const path = engine.paths.proposalArtifactPath(pid, 'enrich', '数学')
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, YAML.stringify({ course: '数学', fields: [{ node: '进阶', enc: [{ node: '入门', w: 1 }] }] }), 'utf8')
-    await engine.store.updateProposal(pid, { artifact: path })
     await assert.rejects(
       () => engine.graph.graphApply('enrich', pid),
       /提案缺内容指纹.*重新生成/,

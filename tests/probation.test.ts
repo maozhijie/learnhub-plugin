@@ -536,7 +536,8 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
     // 手工补 3 个已决复诊 + 3 个生长批出材（2 节插入 ×3），decided 在窗内：
     // coach_added = 1+6 = 7、inserted = 4、decided = 3（1 proven 2 剪除 → 通过率 1/3）
     for (let i = 0; i < 3; i++) {
-      const pid = await engine.store.createProposal('edit', '数学', `生长批（插入）：场景批 ${i}`, '')
+      const pid = await engine.store.createProposal('edit', '数学', `生长批（插入）：场景批 ${i}`,
+        id => paths.proposalArtifactPath(id, 'edit', '数学'))
       await writeFile(paths.proposalArtifactPath(pid, 'edit', '数学'),
         ['course: 数学', 'note:', '  operator: 插入', `  reason: 场景批 ${i}`, '  recheck:', '    metric: 前进恢复', 'ops:',
           '  - op: add_node', `    name: 场景节点${i}甲`, '    region: 基础', '    block: 入门块', '    pre: [入门]',

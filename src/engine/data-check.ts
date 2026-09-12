@@ -23,12 +23,13 @@ import { parseSchemaBlock } from './schema.ts'
 import { readProbationLedger, foldProbation, recheckDue, learningDaysOf } from './probation.ts'
 import { readDayCutoff } from './xp.ts'
 import { readJsonlLines } from './io.ts'
+import { proposalShapeErrors } from './store.ts'
 import { dayOfTs, todayStr } from './dates.ts'
-import type { CourseEntry, PracticeRec, ReviewRec } from './types.ts'
+import type { CourseEntry, PracticeRec, ProposalRec, ReviewRec } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger' | 'proposals'
 
 export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived' | 'hint'
 
@@ -72,6 +73,11 @@ export type DataCheckReason =
   | 'pre_v2_artifact'
   | 'probation_overdue'
   | 'probation_stream_broken'
+  | 'proposals_unreadable'
+  | 'proposals_json_parse'
+  | 'proposals_schema'
+  | 'proposals_pair_dangling'
+  | 'proposals_artifact_missing'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -639,18 +645,69 @@ async function scanArchive(
   return { present, files }
 }
 
+/** 提案注册表体检（#193 / ADR-0053 逐条最小形状契约）：文件缺失 = 合法空态（零
+ * finding）；JSON 损坏 / 非数组 / 逐条形状违约 / pair 悬空 / 悬空 artifact（提案记录的
+ * artifact 路径在盘上不存在——propose 落盘后产物被手工挪走或删除）= Broken finding，
+ * detail 带定位与原因。返回提案清单（损坏时 null：复诊对账的登记日无从取）——形状
+ * 违约条目不阻断其余条目的对账（体检收尽量多的可见性，收严语义归 store.loadProposals）。 */
+async function scanProposals(
+  findings: DataCheckFinding[],
+  paths: Paths, fs: VaultFs): Promise<ProposalRec[] | null> {
+  const where = `提案注册表 ${paths.proposalsPath}`
+  let text: string
+  try {
+    text = await fs.readFile(paths.proposalsPath)
+  } catch (err) {
+    const code = (err as { code?: unknown }).code
+    if (code === 'ENOENT') return [] // 合法空态：首次 propose 前不存在
+    push(findings, 'proposals', 'broken', 'proposals_unreadable', where, errorText(err))
+    return null
+  }
+  let doc: unknown
+  try {
+    doc = JSON.parse(text)
+  } catch (err) {
+    push(findings, 'proposals', 'broken', 'proposals_json_parse', where, errorText(err))
+    return null
+  }
+  if (!Array.isArray(doc)) {
+    push(findings, 'proposals', 'broken', 'proposals_schema', where, '不是清单数组。')
+    return null
+  }
+  const list = doc as ProposalRec[]
+  const ids = new Set(list.map(p => p.id))
+  for (const [i, e] of list.entries()) {
+    const errs = proposalShapeErrors(e)
+    if (errs.length) {
+      push(findings, 'proposals', 'broken', 'proposals_schema', where, `第 ${i} 条（提案 #${e.id}）：${errs.join('；')}。`)
+    }
+    if (e.pair !== undefined && !ids.has(e.pair)) {
+      push(findings, 'proposals', 'broken', 'proposals_pair_dangling', where,
+        `第 ${i} 条（提案 #${e.id}）pair 悬空：声明的联动提案 #${e.pair} 不在清单中（同源对账数据不一致）。`)
+    }
+    if (typeof e.artifact === 'string' && e.artifact.trim() && !fs.exists(e.artifact)) {
+      push(findings, 'proposals', 'broken', 'proposals_artifact_missing', `提案 #${e.id} 产物 ${e.artifact}`,
+        '提案记录的 artifact 路径在盘上不存在（产物被手工挪走或删除）——apply 前先恢复产物或删除该提案。')
+    }
+  }
+  return list
+}
+
 /** 边实验账本盘点（#146 / 词条「边实验账本」「复诊」）：到期未决是提示级（hint，
  * 第四类 level——既非 Missing 也非 Broken 也非 archived，不进 status）：结算钩子是
  * 幂等重试（队列空闲检查点/手动触发），「该决未决」只说明结算未跑到或剪除提案被拒，
  * 让它可见即体检的本分，不判损坏。学习日序列与结算钩子同口径（practice ∪ 到期
- * 复习首推，按日界折叠），保证提示与结算的到期判定不分叉。 */
+ * 复习首推，按日界折叠），保证提示与结算的到期判定不分叉。proposals 入参来自
+ * scanProposals（null = 注册表 Broken：登记日无从对账，overdue 不判——损坏本身已
+ * 由 proposals area 显式报出，不再静默）。 */
 async function scanProbationLedger(
   findings: DataCheckFinding[],
   courseName: string,
   paths: Paths,
   root: string,
   cutoff: number,
-  today: string, fs: VaultFs): Promise<{ present: boolean; entries: number; inFlight: number; overdue: number }> {
+  today: string,
+  proposals: ProposalRec[] | null, fs: VaultFs): Promise<{ present: boolean; entries: number; inFlight: number; overdue: number }> {
   const ledger = await readProbationLedger(paths, root, fs)
   if (!ledger.length) return { present: false, entries: 0, inFlight: 0, overdue: 0 }
   const fold = foldProbation(ledger)
@@ -669,15 +726,8 @@ async function scanProbationLedger(
     return { present: true, entries: ledger.length, inFlight: fold.inFlight.length, overdue: 0 }
   }
   const learningDays = learningDaysOf(practice, reviews, courseName, cutoff, today)
-  let proposals: Array<{ id?: unknown; decided?: unknown }> = []
-  try {
-    const doc = JSON.parse(await fs.readFile(paths.proposalsPath))
-    if (Array.isArray(doc)) proposals = doc
-  } catch {
-    // proposals 缺失/损坏：登记日无从对账，overdue 静默（提案盘点自身另有 finding）
-  }
   const regDay = new Map<number, string>()
-  for (const p of proposals) {
+  for (const p of proposals ?? []) {
     if (typeof p.id === 'number' && typeof p.decided === 'string') regDay.set(p.id, p.decided)
   }
   let overdue = 0
@@ -737,6 +787,9 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     }
   }
 
+  // 提案注册表（#193）：中心级单文件，课程循环前盘点一次；清单（或 null）供复诊对账
+  const proposals = await scanProposals(findings, paths, fs)
+
   for (const course of courses) {
     const courseName = String(course.name)
     const courseRoot = paths.courseRoot(String(course.root))
@@ -770,7 +823,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     // 边实验账本（#146）：缺席 = 无插入实验合法空态零 finding；在盘 = 盘点在途与到期未决（hint）
     const cutoff = await readDayCutoff(paths, fs)
     const probationScan = await scanProbationLedger(
-      findings, courseName, paths, String(course.root), cutoff, todayStr(new Date(nowMs), cutoff), fs,
+      findings, courseName, paths, String(course.root), cutoff, todayStr(new Date(nowMs), cutoff), proposals, fs,
     )
     if (probationScan.present) {
       inventory.probationLedgers.present++
@@ -809,6 +862,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     endpoint_anchor: emptyArea(),
     archive: emptyArea(),
     probation_ledger: emptyArea(),
+    proposals: emptyArea(),
   }
   for (const finding of findings) {
     byArea[finding.area][finding.level]++

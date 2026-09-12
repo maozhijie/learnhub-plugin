@@ -25,6 +25,24 @@ import type { Paths } from './paths.ts'
 // 模块反向 type-import，值依赖留原地会把存储层拖进下游成环）。
 export { netPracticeRecs } from './grading.ts'
 
+/** 提案逐条最小形状契约（ADR-0053；store 与 data-check 同一出处，防双纪律漂移）：
+ * id 正整数、status 三值、artifact 非空字符串（apply 的回读键）、pair 若在必须是正整数。
+ * pair 的**存在性**是清单级（指向列表中存在的 id），由 loadProposals 统一核。
+ * 返回错误列表（空 = 合格）。 */
+export function proposalShapeErrors(e: unknown): string[] {
+  const p = (e ?? {}) as Partial<ProposalRec>
+  const errs: string[] = []
+  if (!Number.isInteger(p.id) || (p.id as number) <= 0) errs.push('id 必须是正整数')
+  if (p.status !== 'pending' && p.status !== 'applied' && p.status !== 'rejected') {
+    errs.push(`status 必须是 pending/applied/rejected（收到 ${JSON.stringify(p.status ?? null)}）`)
+  }
+  if (typeof p.artifact !== 'string' || !p.artifact.trim()) errs.push('artifact 必须是非空字符串（apply 的回读键）')
+  if (p.pair !== undefined && (!Number.isInteger(p.pair) || (p.pair as number) <= 0)) {
+    errs.push('pair 必须是正整数（同源另一半提案 id）')
+  }
+  return errs
+}
+
 export class Store {
   constructor(private paths: Paths, private clock: Clock, private fs: VaultFs) {}
 
@@ -147,26 +165,58 @@ export class Store {
 
   // ---- proposals ----
 
+  /** 全部提案（ADR-0053 逐条最小形状契约）：文件缺失 = Missing 合法空态（[]）；存在但
+   * JSON 损坏 / 非数组 / 逐条形状违约 / pair 悬空 = Broken 报出（文案带路径与条目位置）
+   * ——pairApplyBlock 联动守卫与复诊对账吃这些字段的合法性，形状坏会把对账不一致
+   * 静默误判成正常单边。 */
   async loadProposals(): Promise<ProposalRec[]> {
+    let raw: string
     try {
-      const raw = await this.fs.readFile(this.paths.proposalsPath)
-      const doc = JSON.parse(raw)
-      return Array.isArray(doc) ? doc as ProposalRec[] : []
+      raw = await this.fs.readFile(this.paths.proposalsPath)
     } catch {
       return []
     }
+    let doc: unknown
+    try {
+      doc = JSON.parse(raw)
+    } catch (err) {
+      throw new Error(`[proposals] ${this.paths.proposalsPath} 不是合法 JSON（Broken）：修复或删除该文件后再试。${err instanceof Error ? ` ${err.message}` : ''}`)
+    }
+    if (!Array.isArray(doc)) {
+      throw new Error(`[proposals] ${this.paths.proposalsPath} 不是清单数组（Broken）：修复或删除该文件后再试。`)
+    }
+    for (const [i, e] of doc.entries()) {
+      const errs = proposalShapeErrors(e)
+      if (errs.length) {
+        throw new Error(`[proposals] ${this.paths.proposalsPath} 第 ${i} 条不满足提案契约（Broken：${errs.join('；')}）：修复或删除该条目后再试。`)
+      }
+    }
+    const ids = new Set(doc.map(p => (p as ProposalRec).id))
+    for (const [i, e] of doc.entries()) {
+      const pair = (e as ProposalRec).pair
+      if (pair !== undefined && !ids.has(pair)) {
+        throw new Error(`[proposals] ${this.paths.proposalsPath} 第 ${i} 条 pair 悬空（Broken：声明的联动提案 #${pair} 不在清单中）：修复或删除该条目后再试。`)
+      }
+    }
+    return doc as ProposalRec[]
   }
 
   async saveProposals(list: ProposalRec[]): Promise<void> {
     await atomicWrite(this.paths.proposalsPath, JSON.stringify(list, null, 1) + '\n', this.fs)
   }
 
-  /** 新建提案 → id（自增）。 */
-  async createProposal(kind: ProposalRec['kind'], course: string, summary: string, artifact: string): Promise<number> {
+  /** 新建提案 → id（自增）。artifact 支持路径构造器形态（产物路径含自增 id）——注册表
+   * 条目出生即完整，没有「先落空 artifact 再回填」的两段窗口（ADR-0053 契约下空
+   * artifact 是违约形态，注册表任何时刻落盘都必须可通过本类 loadProposals 读回）。 */
+  async createProposal(
+    kind: ProposalRec['kind'], course: string, summary: string,
+    artifact: string | ((id: number) => string),
+  ): Promise<number> {
     const list = await this.loadProposals()
     const id = list.reduce((m, p) => Math.max(m, p.id), 0) + 1
     list.push({
-      id, kind, course, status: 'pending', summary, artifact,
+      id, kind, course, status: 'pending', summary,
+      artifact: typeof artifact === 'function' ? artifact(id) : artifact,
       created: nowIsoOf(this.clock.nowMs()), decided: null, decision_note: '',
     })
     await this.saveProposals(list)

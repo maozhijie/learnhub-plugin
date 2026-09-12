@@ -522,12 +522,13 @@ export class GraphProposals {
     return created
   }
 
-  /** 提案产物 YAML 落盘（全留痕）→ artifact 路径。 */
+  /** 提案产物 YAML 落盘（全留痕）→ artifact 路径。注册表条目出生即带 artifact 路径
+   * （路径含自增 id，经 createProposal 构造器形态一次落盘，无「先空后填」两段窗口）。 */
   private async saveArtifact(kind: ProposalKind, course: string, doc: unknown): Promise<{ pid: number; path: string }> {
-    const pid = await this.store.createProposal(kind, course, '', '')
+    const pid = await this.store.createProposal(kind, course, '',
+      id => this.paths.proposalArtifactPath(id, kind, course))
     const path = this.paths.proposalArtifactPath(pid, kind, course)
     await atomicWrite(path, YAML.stringify(doc), this.fs)
-    await this.store.updateProposal(pid, { artifact: path })
     return { pid, path }
   }
 

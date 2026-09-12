@@ -326,7 +326,7 @@ export function nof1Outcomes(logs: ReviewRec[], expId: number): Nof1OutcomeRec[]
 export interface LabStore {
   loadExperiments(): Promise<ExperimentDef[]>
   saveExperiments(list: ExperimentDef[]): Promise<void>
-  createProposal(kind: ProposalRec['kind'], course: string, summary: string, artifact: string): Promise<number>
+  createProposal(kind: ProposalRec['kind'], course: string, summary: string, artifact: string | ((id: number) => string)): Promise<number>
   updateProposal(id: number, patch: Partial<ProposalRec>): Promise<ProposalRec | null>
   takePending(kind: ProposalRec['kind'], pid?: number): Promise<ProposalRec>
   reviewLogAll(): Promise<ReviewRec[]>
@@ -439,10 +439,10 @@ export class LabSubsystem {
       scope_course: course ?? null, per_arm_min: NOF1_PER_ARM_MIN, pool,
     }
     const scope = course ?? '全部课程'
-    const pid = await this.e.store.createProposal('experiment', scope, summary, '')
+    const pid = await this.e.store.createProposal('experiment', scope, summary,
+      id => this.e.paths.proposalArtifactPath(id, 'experiment', scope))
     const path = this.e.paths.proposalArtifactPath(pid, 'experiment', scope)
     await atomicWrite(path, YAML.stringify(doc), this.e.fs)
-    await this.e.store.updateProposal(pid, { artifact: path })
     return { proposal: pid, template: tpl.id, title: tpl.title, pool, scope_course: course ?? null }
   }
 

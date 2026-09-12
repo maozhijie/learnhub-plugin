@@ -365,16 +365,15 @@ export class Projects {
       throw new Error(`[project-plan-propose] schema 校验失败，提案未受理。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
     }
     const initial = project.plan.length === 0
+    // 注册表条目出生即完整（ADR-0053 契约下空 artifact 是违约形态）：路径经构造器形态
+    // 随条目一次落盘；pair 出生即写（#149 同源双提案）——任一时刻崩溃都不会留下可单边
+    // apply 的无守卫计划半区（时序缺口守卫从出生起生效）。
     const pid = await this.store.createProposal('project_plan', projectId,
-      `${initial ? '初次规划' : '计划修订'}：${v.plan.length} 个里程碑`, '')
+      `${initial ? '初次规划' : '计划修订'}：${v.plan.length} 个里程碑`,
+      id => this.paths.proposalArtifactPath(id, 'project_plan', projectId))
     const path = this.paths.proposalArtifactPath(pid, 'project_plan', projectId)
     await atomicWrite(path, YAML.stringify(doc), this.fs)
-    // pair 出生即写（#149 同源双提案）：计划提案落盘那一刻就带联动——任一时刻崩溃
-    // 都不会留下可单边 apply 的无守卫计划半区（时序缺口守卫从出生起生效）。
-    await this.store.updateProposal(pid, {
-      artifact: path,
-      ...(opts.pair ? { pair: opts.pair } : {}),
-    })
+    if (opts.pair) await this.store.updateProposal(pid, { pair: opts.pair })
     return { id: pid, kind: 'project_plan', project: projectId, milestones: v.plan.length, initial }
   }
 
@@ -440,10 +439,10 @@ export class Projects {
     this.gateOrFail(md, project.tier)
     const doc: MilestoneArtifact = { project: projectId, milestone: milestoneId, md }
     const pid = await this.store.createProposal('project_milestone', projectId,
-      `里程碑「${item.name}」按档「${project.tier}」重生成`, '')
+      `里程碑「${item.name}」按档「${project.tier}」重生成`,
+      id => this.paths.proposalArtifactPath(id, 'project_milestone', projectId))
     const artifactPath = this.paths.proposalArtifactPath(pid, 'project_milestone', projectId)
     await atomicWrite(artifactPath, YAML.stringify(doc), this.fs)
-    await this.store.updateProposal(pid, { artifact: artifactPath })
     return { id: pid, kind: 'project_milestone', project: projectId, milestone: milestoneId, file }
   }
 
