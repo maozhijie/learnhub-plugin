@@ -45,7 +45,7 @@ g.window = win
 g.document = win.document
 // Node ≥21 自带只读 getter 的 navigator，须 defineProperty 覆写
 Object.defineProperty(globalThis, 'navigator', { value: win.navigator, configurable: true })
-for (const k of ['HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'Element', 'Node', 'SVGElement',
+for (const k of ['HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLIFrameElement', 'Element', 'Node', 'SVGElement',
   'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'FocusEvent', 'InputEvent', 'UIEvent',
   'AnimationEvent', 'TransitionEvent', 'MutationObserver', 'getComputedStyle'] as const) {
   g[k] = (win as unknown as Record<string, unknown>)[k]
@@ -116,9 +116,9 @@ export function spyFrame(opts: { tree?: unknown } = {}) {
   const rec = (k: string) => (...args: unknown[]) => { (calls[k] ??= []).push(args) }
   return {
     frame: {
-      status: null, tree: opts.tree ?? null, course: null, lesson: null, focusNode: null,
+      status: null, tree: opts.tree ?? null, course: null, lesson: null, focusNode: null, focusJob: null,
       setCourse: rec('setCourse'), goto: rec('goto'), openLesson: rec('openLesson'),
-      closeLesson: rec('closeLesson'), locateInGraph: rec('locateInGraph'),
+      closeLesson: rec('closeLesson'), locateInGraph: rec('locateInGraph'), locateJob: rec('locateJob'),
       reload: async () => {}, loading: false,
     },
     calls,

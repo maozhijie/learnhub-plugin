@@ -12,6 +12,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
+import type { ProposalRec } from '../engine/types.ts'
 import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
 import { sendJson } from './http.ts'
 import {
@@ -64,6 +65,28 @@ async function explainBackTurn(rt: HostRuntime, ctx: Context, course: string, no
     .map(h => `${h.role === 'assistant' ? '[初学者]' : '[学习者]'} ${h.content}`)
     .join('\n\n')
   return llmComplete(ctx, `${transcript}\n\n（继续按你的角色追问或收尾。）`, system)
+}
+
+/** 反编译双提案的联合 apply 目标（#156）：kind 命中 seed/project_plan、目标提案带 pair
+ * 联动且仍 pending、另一半在 pending/applied（同进同退或崩溃续段）时返回联合入口的
+ * 两半 id；其余返回 null 走统一 apply 单边路径——无 pair 的普通提案、目标已决
+ * （takePending 的「已 applied」拒收语义要原样保留）、另一半已拒/缺失（单边守卫的
+ * 精确拒收文案不改写）都不拦。 */
+export function pairJointTarget(
+  proposals: ReadonlyArray<Pick<ProposalRec, 'id' | 'kind' | 'status' | 'pair'>>,
+  kind: string, pid?: number,
+): { planPid: number; seedPid: number } | null {
+  if (kind !== 'seed' && kind !== 'project_plan') return null
+  const target = pid !== undefined
+    ? proposals.find(p => p.id === pid)
+    : [...proposals].reverse().find(p => p.status === 'pending' && p.kind === kind)
+  if (!target || target.status !== 'pending' || !target.pair) return null
+  const sibling = proposals.find(p => p.id === target.pair)
+  if (!sibling || (sibling.status !== 'pending' && sibling.status !== 'applied')) return null
+  const plan = target.kind === 'project_plan' ? target : sibling
+  const seed = target.kind === 'seed' ? target : sibling
+  if (plan.kind !== 'project_plan' || seed.kind !== 'seed') return null
+  return { planPid: plan.id, seedPid: seed.id }
 }
 
 export const HANDLERS: Record<string, RouteHandler> = {
@@ -237,11 +260,22 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /proposals/apply': async ({ rt, ctx, body, res }) => {
     // 提案统一 apply（图谱域 edit/seed/enrich + 项目域 project_plan/project_milestone）：
     // kind 必须显式照抄提案记录，未知 kind 引擎报错；
-    // 计划修订触发的换线/补支生长批随后入队（#149）
-    const applied = await rt.engine.graph.proposalApply(need(body, 'kind'), applyId(body.id))
+    // 反编译双提案（pair 联动）检测到即自动走联合入口（#156）——纯面板用户不再被
+    // 「用 learnhub_project_decompile_apply」的拒收文案指向 agent 会话（ADR-0038 补完）；
+    // 计划修订触发的换线/补支生长批随后入队（#149；联合结果从 plan 半区取触发）
+    const kind = need(body, 'kind')
+    const id = applyId(body.id)
+    // pair 检测只对参与反编译对的 kind 取提案列表（其余 kind 不多打一次引擎）
+    const joint = kind === 'seed' || kind === 'project_plan'
+      ? pairJointTarget(await rt.engine.graph.graphProposals(), kind, id)
+      : null
+    const applied = joint
+      ? await rt.engine.project.projectDecompileApply(joint.planPid, joint.seedPid)
+      : await rt.engine.graph.proposalApply(kind, id)
     // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
     await sweepGenJobs(rt)
-    triggerPlanGrowth(rt, ctx, applied as { kind?: string })
+    const planPart = applied as { plan?: { kind?: string; growth?: Array<{ course: string; lines: string[] }> } }
+    triggerPlanGrowth(rt, ctx, planPart.plan ?? (applied as { kind?: string }))
     sendJson(res, 200, applied)
   },
   'POST /proposals/reject': async ({ rt, body, res }) => {

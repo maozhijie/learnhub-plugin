@@ -5,17 +5,17 @@ export type GenJobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'parti
 
 /** 生成队列 phase 全集（#131 §5 / #140 + 面板下发扩展；#185 起全表英文小写）：
  * - 节点内容管线（course/node 键）：outline 大纲 → sections 逐节正文 → quiz 自动出题（quiz 亦为纯出题任务的入队形态）。
- * - 图域任务（course 键）：seed 种子（建课/换终点起草，引擎 seedPropose）/ growth 生长（教练回合生长批，#145）/
- *   enrich 富化（覆盖层回填；登记值，今天无入队点）/ compass 罗盘（罗盘初画重画）/ decompile 反编译（目标反编译双提案）/
- *   plan 计划（里程碑计划草案）/ milestone 里程碑（里程碑任务卡草案）。 */
-export const GEN_JOB_PHASES = ['outline', 'sections', 'quiz', 'seed', 'growth', 'enrich', 'compass', 'decompile', 'plan', 'milestone'] as const
+ * - 图域任务（course 键）：seed 种子（建课/换终点起草）/ growth 生长（教练回合生长批）/ compass 罗盘 /
+ *   decompile 反编译（目标反编译双提案）/ plan 计划草案 / milestone 里程碑任务卡。富化不是队列 phase
+ *   （#155 剔除）：覆盖层回填只产 pending 提案走人审，从未入队——登记值只会误导执行面。 */
+export const GEN_JOB_PHASES = ['outline', 'sections', 'quiz', 'seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'] as const
 export type GenJobPhase = (typeof GEN_JOB_PHASES)[number]
 
-/** #185 命名统一的读侧迁移别名：图域七值在 2026-09-12 前以中文持久化在
+/** #185 命名统一的读侧迁移别名：图域六值在 2026-09-12 前以中文持久化在
  * state/生成任务.json（ADR-0045「阶段命名缺口」），恢复读入时映射为现值。
  * 别名表只服务读侧归一——写侧（入队/执行/落盘）一律写现值，永不产生旧值。 */
 export const LEGACY_GEN_JOB_PHASES: Readonly<Record<string, GenJobPhase>> = {
-  种子: 'seed', 生长: 'growth', 富化: 'enrich', 罗盘: 'compass', 反编译: 'decompile', 计划: 'plan', 里程碑: 'milestone',
+  种子: 'seed', 生长: 'growth', 罗盘: 'compass', 反编译: 'decompile', 计划: 'plan', 里程碑: 'milestone',
 }
 
 /** 持久化档读入的 phase 归一：现值原样、旧中文值映射为现值；未知值原样透传——

@@ -14,6 +14,14 @@ import { needQuery } from './params.ts'
 /** 独立面板页面路由（伺服 web/dist）。 */
 export const PAGE = '/learnhub'
 
+/** 文件名段（最后一个 / 之后）的扩展名（含点、小写）；无扩展名返回空串。
+ * 只看文件名段：目录名里的点（「v1.2 课程/插图」）不是扩展名（#155）。 */
+function extOf(rel: string): string {
+  const base = rel.slice(rel.lastIndexOf('/') + 1)
+  const dot = base.lastIndexOf('.')
+  return dot >= 0 ? base.slice(dot).toLowerCase() : ''
+}
+
 /** /learnhub 前缀伺服 SPA：index.html + assets/*，子路径全部伺服（命中失败回落 index.html）。 */
 export async function panelPageHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   try {
@@ -44,9 +52,10 @@ export async function panelPageHandler(req: IncomingMessage, res: ServerResponse
       'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-store',
     })
     res.end(data)
-  } catch (err) {
+  } catch {
+    // 报错不回显 err.message（ENOENT 带绝对 dist 路径，#155）——可行动的部分是构建指引
     res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' })
-    res.end(`learnhub panel missing (build ui/ first: npm run build): ${err instanceof Error ? err.message : String(err)}`)
+    res.end('learnhub panel missing (build ui/ first: npm run build)')
   }
 }
 
@@ -55,9 +64,10 @@ export async function serveVaultFile(rt: HostRuntime, url: URL, res: ServerRespo
   const [p] = needQuery(url, 'path')
   const rel = p.replace(/\\/g, '/').replace(/^\/+/, '')
   if (rel.includes('..')) throw new Error('path traversal rejected')
-  const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase()
+  const ext = extOf(rel)
   const mime = FILE_MIME[ext]
-  if (!mime) throw new Error(`unsupported file type: ${ext || '(none)'}`)
+  // 报错只报扩展名判定，不回显请求路径（#155）
+  if (!mime) throw new Error(ext ? `unsupported file type: ${ext}` : 'unsupported file type: 文件名无扩展名（仅限媒体文件）')
   let buf: Buffer
   try {
     buf = await readFile(`${rt.vault}/${rel}`)
@@ -74,9 +84,10 @@ export async function serveVaultFile(rt: HostRuntime, url: URL, res: ServerRespo
 export async function serveVendor(res: ServerResponse, route: string): Promise<void> {
   const rel = decodeURIComponent(route.slice('/vendor/'.length)).replace(/\\/g, '/')
   if (!rel || rel.includes('..')) throw new Error('path traversal rejected')
-  const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase()
+  const ext = extOf(rel)
   const mime = ASSET_MIME[ext]
-  if (!mime) throw new Error(`unsupported vendor file type: ${ext || '(none)'}`)
+  // 报错只报扩展名判定，不回显请求路径（#155）
+  if (!mime) throw new Error(ext ? `unsupported vendor file type: ${ext}` : 'unsupported vendor file type: 文件名无扩展名（仅限静态资产）')
   const file = resolvePath(VENDOR_DIST, rel)
   if (!(file + sep).startsWith(VENDOR_DIST)) throw new Error('path traversal rejected')
   let buf: Buffer

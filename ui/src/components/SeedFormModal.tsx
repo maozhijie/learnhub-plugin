@@ -5,7 +5,7 @@
 import { Checkbox, Input, Message, Modal, Radio, Space, Typography } from '@arco-design/web-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { errorMessage } from '../hooks/useCommand'
+import { errorMessage, notifyQueued } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -47,9 +47,12 @@ export default function SeedFormModal({ visible, mode, course, onCancel }: {
         goalType, useVaultPrior: usePrior,
         worksheet: goalType === 'coverage' ? worksheet : [],
       })
-      // 诚实版反馈：提案还不存在——起草完成后才落提案页（弹通知告知），别让人在提案页空等
-      Message.success(`${r.message}通常 1–3 分钟；完成后弹通知、提案页出现提案——期间可随意刷新或离开页面`)
-      onCancel()
+      // 诚实版反馈（#155）：按引擎真实返回着色，拒绝不收表单；提案还不存在——起草
+      // 完成后才落提案页（弹通知告知），别让人在提案页空等
+      notifyQueued(r, {
+        successMessage: `${r.message}通常 1–3 分钟；完成后弹通知、提案页出现提案——期间可随意刷新或离开页面`,
+        onQueued: onCancel,
+      })
     } catch (err) {
       Message.error(errorMessage(err))
     } finally {

@@ -28,12 +28,16 @@ export interface AppFrame {
   course: string | null
   lesson: LessonRef | null
   focusNode: string | null
+  /** 生成页定位目标（任务注册表 key）：教练台在途任务条点击后的落点（#155）。 */
+  focusJob: string | null
   setCourse: (c: string) => void
   goto: (tab: TabKey) => void
   openLesson: (course: string, node: string) => void
   closeLesson: () => void
   /** 跳到图页并高亮定位某节点。 */
   locateInGraph: (node: string) => void
+  /** 跳到生成页并定位某任务（教练台在途任务条点击）。 */
+  locateJob: (jobKey: string) => void
   reload: () => Promise<void>
   loading: boolean
 }
@@ -48,6 +52,7 @@ export default function App() {
   const [course, setCourse] = useState<string | null>(null)
   const [lesson, setLesson] = useState<LessonRef | null>(null)
   const [focusNode, setFocusNode] = useState<string | null>(null)
+  const [focusJob, setFocusJob] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [fatal, setFatal] = useState<string | null>(null)
 
@@ -112,12 +117,13 @@ export default function App() {
   }
 
   const frame: AppFrame = {
-    status, tree, course, lesson, focusNode,
+    status, tree, course, lesson, focusNode, focusJob,
     setCourse: c => setCourse(c),
     goto: go,
     openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); go('learn') },
     closeLesson: () => setLesson(null),
     locateInGraph: node => { setFocusNode(node); go('graph') },
+    locateJob: key => { setFocusJob(key); go('generate') },
     reload,
     loading,
   }
@@ -182,7 +188,7 @@ function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
           {k === 'stats' && <StatsPage frame={frame} />}
           {k === 'lab' && <LabPage frame={frame} />}
           {k === 'generate' && <GeneratePage frame={frame} />}
-          {k === 'proposals' && <ProposalsPage />}
+          {k === 'proposals' && <ProposalsPage frame={frame} />}
           {k === 'practice' && <PracticePage />}
           {k === 'projects' && <ProjectsPage />}
           {k === 'guide' && <GuidePage />}

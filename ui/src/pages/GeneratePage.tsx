@@ -2,12 +2,12 @@
  * 页面刷新后状态从这里恢复（服务端注册表是事实来源，allo 同语义）。
  * 生成支持提示词风格变体（课程节生成-<style>，作用于逐节生成）；失败任务可一键转 dsh 会话讨论。 */
 import { Alert, Button, Card, Empty, Message, Modal, Progress, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, discussInHost } from '../api'
 import { usePolling } from '../hooks/usePolling'
 import type { AppFrame } from '../App'
 import type { GenJobItem, QueueItem } from '../types'
-import { errorMessage } from '../hooks/useCommand'
+import { errorMessage, notifyQueued } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -116,6 +116,18 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
   // 挂载即取 + 5s 轮询（任务与队列同源刷新）；非激活页签跳过取数、切回即补（ADR-0027）
   usePolling(load, { tab: 'generate', intervalMs: 5000 })
 
+  // 任务定位（#155）：教练台在途任务条点击跳入时，focusJob 指到任务注册表 key——
+  // 目标行加高亮类并滚入视野；任务尚未出现在注册表时随下一次轮询数据到位再试。
+  const focusJob = frame?.focusJob ?? null
+  const focusedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!focusJob || focusedRef.current === focusJob) return
+    const el = document.querySelector('tr.gen-job-focused')
+    if (!el) return
+    focusedRef.current = focusJob
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [focusJob, jobs])
+
   const cancel = async (j: GenJobItem) => {
     try {
       await api.generateCancel(j.course, j.node)
@@ -130,9 +142,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
   const retryGrowth = async (course: string) => {
     setBusyKey(`${course}/生长批`)
     try {
-      const r = await api.coachGrowth(course)
-      if (r.queued) Message.success(r.message)
-      else Message.warning(r.message)
+      notifyQueued(await api.coachGrowth(course))
       await load()
     } catch (err) {
       Message.error(errorMessage(err))
@@ -220,6 +230,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
           <Empty description='当前没有生成任务' />
         ) : (
           <Table size='small' data={jobs} rowKey={j => j.key} pagination={false}
+            rowClassName={j => (j.key === focusJob ? 'gen-job-focused' : '')}
             columns={[
               { title: '节点', dataIndex: 'node', ellipsis: true, render: (_, j) => (
                 <Space size={6}>

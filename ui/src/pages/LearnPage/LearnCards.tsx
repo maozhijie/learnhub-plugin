@@ -1,6 +1,6 @@
 /** 学习页头部卡片组（页内子组件，就近维护）：XP 账本条 + 复习横幅 + 推荐流大卡 +
  * 课程卡。数据经 props 注入，动作回调上抛——本文件不持取数状态（缝在 index.tsx）。 */
-import { Button, Card, Message, Popconfirm, Progress, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
+import { Button, Card, Dropdown, Menu, Message, Popconfirm, Progress, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useState } from 'react'
 import { api } from '../../api'
 import { errorMessage } from '../../hooks/useCommand'
@@ -236,8 +236,11 @@ export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
   )
 }
 
-/** 课程卡（次要区）：进度 + 完成宣告 + 打开图/复习/删除。计数语义：未学 = unseen+ready。
- * 完成宣告（#142 雾区条款上半）：读侧折叠的宣告——完成判据满足时这里展示，零写侧状态。 */
+/** 课程卡（次要区）：进度 + 完成宣告 + 打开图/复习 + ⋯菜单（破坏性操作）。计数语义：
+ * 未学 = unseen+ready。完成宣告（#142 雾区条款上半）：读侧折叠的宣告——完成判据满足时
+ * 这里展示，零写侧状态。破坏性操作（重新生成/删除）与日常操作视觉隔离（#155）：收进
+ * 右侧「⋯」菜单并着 danger 色，与日常按钮不同排不同形；显式确认步在页内 handler
+ * （Modal.confirm）不省。 */
 export function CourseCard(props: {
   name: string
   counts: { unseen: number; ready: number; learning: number; review: number; mastered: number; skipped: number }
@@ -271,11 +274,26 @@ export function CourseCard(props: {
             </Tag>
           )}
         </Space>
-        <Space size={6}>
+        <Space size={6} style={{ width: '100%' }}>
           <Button size='mini' onClick={props.onOpen}>打开图</Button>
           <Button size='mini' onClick={props.onReview}>复习</Button>
-          <Button size='mini' type='text' status='warning' onClick={props.onRegenerate}>重新生成</Button>
-          <Button size='mini' type='text' status='danger' onClick={props.onDelete}>删除</Button>
+          <span style={{ marginLeft: 'auto' }}>
+            <Dropdown
+              trigger='click'
+              position='br'
+              droplist={
+                <Menu style={{ minWidth: 132 }}>
+                  <Menu.Item key='regenerate' style={{ color: 'var(--color-warning-6, #ff7d00)' }} onClick={props.onRegenerate}>
+                    重新生成…
+                  </Menu.Item>
+                  <Menu.Item key='delete' style={{ color: 'var(--color-danger-6, #f53f3f)' }} onClick={props.onDelete}>
+                    删除课程…
+                  </Menu.Item>
+                </Menu>
+              }>
+              <Button size='mini' type='text' style={{ padding: '0 6px' }}>…</Button>
+            </Dropdown>
+          </span>
         </Space>
       </div>
     </Card>

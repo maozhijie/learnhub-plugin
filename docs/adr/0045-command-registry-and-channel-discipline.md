@@ -127,3 +127,14 @@ interface CommandSpec {
 - **运行时输出校验**（引 schema 库检查响应形状）——与 ADR-0042 否决 zod/ajv 同源理由；输出形状是编译期事实，运行期再验一次买不到信任，只买到依赖。
 - **先让 120 条路由与 111 个工具一一对齐，再建表**（补齐 49 + 26 条对侧缺失入口）——那是新增可达性的 scope change，不是统一化。
 - **按域拆成多份注册表**（学习／图谱／题库／项目／实验室各一份）——「引擎入口必填 + 唯一性门」要求全局视角才能断言不冲突；多份表会把唯一性检查退回成跨表扫描。域分组是**表内字段**（或工具面适配器的组织方式，见 ADR-0048），不是表的分裂。
+
+### #155/#156 裁决与落地（2026-09-12）：面板诚实性响应旗标、报错卫生、enrich 词表位剔除与双提案联合 apply
+
+四条行为变更，证据基线（路由探针快照 + 「路由↔工具」对账基线 + 规模棘轮）随变更同提交迁移（ADR-0047 修订纪律）：
+
+1. **图域入队响应加 `queued` 旗标（#155 交互诚实性）**：`enqueueGraphJob` 系五条面板路由（`/seed/propose`、`/coach/compass`、`/project/plan/generate`、`/project/milestone/generate`、`/project/decompile`）响应从 `{message}` 变 `{message, queued}`——入队成功 `true`、「同键在途，不重复入队」拒绝 `false`。动机：拒绝重复入队此前只是消息文本不可分辨，面板一律弹成功样式（假成功）；旗标化后 UI 按旗标着色（`notifyQueued` 缝，种子表单被拒不收起）。`/coach/growth` 的 `queued` 是既有形状，本裁决把同语义推广到全部图域入队路由。
+2. **`GEN_JOB_PHASES` 剔除 `enrich`（推翻 §#185 「`enrich` 是登记值……保留词表位」）**：覆盖层回填（encBackfill 等）是同步受理产 pending 提案走人审的通道，从来没有队列形态——词表位与别名表只会误导执行面。`LEGACY_GEN_JOB_PHASES` 同步收窄（`富化` 别名移除）。理论上的旧档「富化」值（不存在入队点，故不应存在）按既有未知值透传：泵走内容支线、引擎对图上不存在的节点 fail loud 标 failed 可重试——不挂起、不静默变形。
+3. **静态伺服报错卫生（#155）**：`/file`、`/vendor` 的扩展名判定改从文件名段取（旧 `rel.slice(rel.lastIndexOf('.'))` 对目录名带点的无扩展名请求把「.b 目录/插图」整段回显进 500 错误消息）；报错只报扩展名判定、不回显请求路径。`/learnhub` 面板页 500 不再拼接 `err.message`（ENOENT 文本含绝对 dist 路径）。同族先例：#158 的守卫消息中文化（ADR-0047 §修订）。
+4. **`/proposals/apply` 检测反编译对自动走联合入口（#156 / ADR-0038「生命周期全流程进面板」补完）**：kind ∈ {seed, project_plan} 且目标提案带 pair 联动、目标 pending、另一半 pending/applied（崩溃续段）→ 路由 handler 直调 `project.projectDecompileApply` 联合入口（响应从「单边守卫 500 指向 agent 会话的文案」变联合结果 200）；联合结果的 plan 半区换线/补支触发照常入队（`triggerPlanGrowth` 从 `plan` 半区取）。另一半已拒/缺失、目标已决、其余 kind 的行为**逐字不变**（单边守卫与 takePending 的精确拒收文案保留）。`project.projectDecompileApply` 由此从工具独有变两面共享（对账基线 84/26/50 → 85/25/50）；裁决纯函数 `pairJointTarget`（`host/handlers.ts`，`tests/proposals-joint-apply.test.ts` 全分支 + 路由级影子引擎）。
+
+快照迁移明细：路由行为快照 14 条（12 条 200 响应加 `queued:true`、`GET /file·全参` 与 `GET /vendor/·空参` 报错文案）；`POST /proposals/apply·缺 id` 探针经 kind 收窄（非对类 kind 不多打 `graphProposals`）保持逐字不变；status 漂移 0。
