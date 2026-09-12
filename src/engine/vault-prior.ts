@@ -16,6 +16,7 @@
  * 无关）。学习中心/ 与点目录整体排除（引擎管理区不是先验来源）。
  */
 import type { VaultFs } from './io.ts'
+import { stripHtmlComments } from './html-comments.ts'
 import { stripFrontmatter, titleOfBody } from './note-source.ts'
 
 /** 一条 Vault 先验命中。 */
@@ -60,6 +61,16 @@ export function excerptAround(body: string, term: string, chars: number): string
   return body.slice(start, end).trim()
 }
 
+/** 正文剥机器块：正文管线把 `<!-- enc_candidates: … -->` 写在节正文末尾，个人笔记
+ * 抄录课程正文时会把机器块一并带进 vault。机器块是引擎元数据不是学习者的知识——
+ * 留在正文里既污染检索打分（引擎文本命中检索词），又经摘录注入提示词成为「输出长
+ * 这样」的活示范，串味进模型的 YAML 输出（大纲解析失败的曾见签名）。读入即剥；
+ * 只剥机器块——学习者自己写的其它 HTML 注释是笔记内容，原样保留（CONTEXT.md
+ * 「机器块」词条：机器块 ≠ 一般 HTML 注释）。 */
+function stripMachineBlocks(text: string): string {
+  return stripHtmlComments(text, { matching: body => body.trim().startsWith('enc_candidates') }).trim()
+}
+
 /** 纯扫描检索：vault 根下全部 .md（排除学习中心与点目录），按检索词命中粗分排序。
  * 只读——不写任何文件、不改任何状态。找不到检索词命中时返回 []（生成面零注入）。 */
 export async function searchVaultPrior(
@@ -100,7 +111,7 @@ export async function searchVaultPrior(
     } catch {
       continue
     }
-    const body = stripFrontmatter(raw)
+    const body = stripMachineBlocks(stripFrontmatter(raw))
     const title = titleOfBody(body, abs.split('/').pop() ?? abs)
     let score = 0
     let firstTerm = ''

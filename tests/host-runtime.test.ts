@@ -278,10 +278,62 @@ function overflowErr(sectionId = 's2', title = '演示：溢出节'): Error & { 
   return e
 }
 
+// ---------------------------------------------------------------- 大纲回灌修复轮（机器块串味 → 解析反馈）
+
+test('大纲解析失败 → 恰一回灌重产（解析反馈）、大纲用裁剪包，重产通过终态 done', async () => {
+  const rt = makeRuntime()
+  const prompts: string[] = []
+  const packCalls: Array<Record<string, unknown> | undefined> = []
+  let outlineCalls = 0
+  let views: Array<Record<string, unknown>> = []
+  stub(rt, {
+    'content2.contentPack': async (_c: unknown, _n: unknown, opts?: Record<string, unknown>) => {
+      packCalls.push(opts)
+      return '上下文包'
+    },
+    'content2.contentTierOf': async () => 1,
+    'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
+    'content2.contentSectionsView': async () => views,
+    'content2.contentOutline': async (_c: unknown, _n: unknown, _yaml: string) => {
+      outlineCalls++
+      if (outlineCalls === 1) {
+        const e = new Error('模型输出不是合法 YAML：Unexpected scalar at node end at line 33, column 25: <!-- enc_candidates: [] -->')
+        ;(e as Error & { code?: string }).code = 'MODEL_YAML'
+        throw e
+      }
+      views = [{ id: 's1', title: '概念：A', type: '概念', status: 'pending', tierLabel: '低' }]
+    },
+    'content2.contentSection': async () => ({ version: 1, title: 'x', hints: [] }),
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  // 应答脚本：大纲初跑（机器块串味）→ 回灌重产大纲 → 节正文
+  const ctx = scriptedCtx([
+    'node: X\nsections:\n  - id: s1\n    title: 概念：A  <!-- enc_candidates: [] -->',
+    'node: X\nsections:\n  - id: s1\n    title: 概念：A\n',
+    '## 概念：A\n\n正文',
+  ], prompts)
+  enqueueGeneration(rt, ctx, '数学', '节点A')
+  const key = '数学/节点A'
+  await until(() => rt.jobs.genJobs.get(key)?.status === 'done')
+  const job = rt.jobs.genJobs.get(key)!
+  assert.equal(outlineCalls, 2, '初跑解析失败 → 恰一回灌重产一次')
+  assert.match(job.message!, /正文完成（1 节）/)
+  assert.equal(job.failures, undefined)
+  assert.equal(packCalls[0]?.omitDeliverables, undefined, '逐节正文用全量包')
+  assert.equal(packCalls[1]?.omitDeliverables, true, '大纲调用用裁剪包（无 §8 交付要求）')
+  assert.ok(prompts[1]?.includes('## 解析反馈'), '回灌携带解析反馈段')
+  assert.ok(prompts[1]?.includes('MODEL_YAML') || prompts[1]?.includes('enc_candidates'), '回灌携带解析死因原文')
+})
+
 test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 → 子节照常生成 → done', async () => {
   const rt = makeRuntime()
   const prompts: string[] = []
   const saved: Array<Array<unknown>> = []
+  const packCalls: Array<Record<string, unknown> | undefined> = []
   const ready = { id: 's1', title: '概念：已就绪', type: '概念', status: 'ready' }
   const overflow = { id: 's2', title: '演示：溢出节', type: '演示', status: 'pending', tierLabel: '中' }
   const subs = [
@@ -291,7 +343,10 @@ test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 →
   let views = [ready, overflow]
   let splitRequested = false
   stub(rt, {
-    'content2.contentPack': async () => '上下文包',
+    'content2.contentPack': async (_c: unknown, _n: unknown, opts?: Record<string, unknown>) => {
+      packCalls.push(opts)
+      return '上下文包'
+    },
     'content2.contentTierOf': async () => 2,
     'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
     'content2.contentSectionsView': async () => views,
@@ -326,6 +381,8 @@ test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 →
   assert.equal(job.failures, undefined)
   assert.ok(prompts.some(p => p.includes('TPL:课程节拆分')), '拆节走专用提示词模板')
   assert.ok(prompts.some(p => p.includes('压缩到 ≤ 400 字')), '修复轮直说压缩目标（预算取自门禁错误的结构化字段）')
+  assert.equal(packCalls.at(-1)?.omitDeliverables, true, '拆节自取裁剪包（机器块指令不进拆节 YAML 调用）')
+  assert.equal(packCalls[0]?.omitDeliverables, undefined, '逐节正文照旧全量包')
   const last = saved.at(-1)![0] as { status: string }
   assert.equal(last.status, 'done')
 })

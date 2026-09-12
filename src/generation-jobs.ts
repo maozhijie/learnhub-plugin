@@ -161,6 +161,23 @@ export function isSectionOverflow(err: unknown): boolean {
     && err.message.includes('正文过长')
 }
 
+/** 大纲失败的可回灌裁决（纯函数）：可修复（护栏/形状/解析）返回回灌反馈段文本，
+ * 其余（取消、课程文件缺失等基础设施错）返回 null——调用方原样上抛。OUTLINE_BUDGET
+ * 回灌节数护栏反馈（既有语义），OUTLINE_SHAPE / MODEL_YAML 回灌解析死因——三类都
+ * 恰一轮重产（ADR-0041 门错修复轮在宿主大纲站的形态；解析死因含稳定码人话前缀，
+ * 模型据此自我修正，不回灌被拒原文：大纲从零重产的随机性足以越过偶发解析失败）。 */
+export function outlineRepairFeedback(err: unknown): string | null {
+  const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
+  const msg = err instanceof Error ? err.message : String(err)
+  if (code === 'OUTLINE_BUDGET') {
+    return `## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${msg}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`
+  }
+  if (code === 'OUTLINE_SHAPE' || code === 'MODEL_YAML') {
+    return `## 解析反馈\n\n上一次大纲输出未通过解析/结构校验：\n${msg}\n\n请重新输出完整 YAML 文档，修正全部问题；不要输出解释。`
+  }
+  return null
+}
+
 /** 自动出题终态：成功才 done；失败是 partial，但必须保留可读错误与重试指引。 */
 export interface QuizOutcome {
   status: 'done' | 'partial'

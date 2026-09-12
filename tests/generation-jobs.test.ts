@@ -11,6 +11,7 @@ import {
   isGenJobTerminal,
   isNodeAnchoredPhase,
   nextQueuedJob,
+  outlineRepairFeedback,
   quizFailureOutcome,
   quizSuccessOutcome,
   graphJobPayloadGap,
@@ -149,4 +150,22 @@ test('图域任务负载契约（#157）：四类负载要求的 phase 缺负载
   assert.equal(graphJobPayloadGap('growth', {}), null)
   assert.equal(graphJobPayloadGap('outline', {}), null)
   assert.equal(graphJobPayloadGap(undefined, {}), null)
+})
+
+test('大纲修复反馈裁决：护栏/形状/解析回灌各自反馈段，其余返回 null 原样上抛', () => {
+  const budget = new Error('[outline] 大纲护栏未过：\n  ✗ 节数 7 超出区间 3–5') as Error & { code?: string }
+  budget.code = 'OUTLINE_BUDGET'
+  assert.match(outlineRepairFeedback(budget)!, /## 大纲护栏反馈/)
+  assert.match(outlineRepairFeedback(budget)!, /§9 复杂度档案/)
+
+  const shape = new Error('[outline] sections.1.type「xx」不在节类型菜单') as Error & { code?: string }
+  shape.code = 'OUTLINE_SHAPE'
+  assert.match(outlineRepairFeedback(shape)!, /## 解析反馈/)
+
+  const parse = new Error('模型输出不是合法 YAML：Unexpected scalar at node end: <!-- enc_candidates: [] -->') as Error & { code?: string }
+  parse.code = 'MODEL_YAML'
+  assert.match(outlineRepairFeedback(parse)!, /enc_candidates/, '解析死因原文进回灌')
+
+  assert.equal(outlineRepairFeedback(new Error('[outline] 课程文件不存在')), null, '基础设施错不重产')
+  assert.equal(outlineRepairFeedback('字符串错误'), null)
 })

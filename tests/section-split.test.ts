@@ -34,6 +34,21 @@ test('拆节 YAML 解析：数量 1 或 4 拒收', () => {
   assert.throws(() => Content.parseSplitOutline('sections:\n  - title: 只有一步\n    type: 演示\n', 's1'), /2–3 个子节/)
   const four = ['sections:', ...[1, 2, 3, 4].map(i => `  - title: 子节${i}\n    type: 演示`)].join('\n')
   assert.throws(() => Content.parseSplitOutline(four, 's1'), /2–3 个子节/)
+  // 数量违规是 schema 形状错：挂 OUTLINE_SHAPE 稳定码（与大纲站修复轮同一分流词汇）
+  try {
+    Content.parseSplitOutline('sections:\n  - title: 只有一步\n    type: 演示\n', 's1')
+    assert.fail('应当抛出')
+  } catch (err) {
+    assert.equal((err as Error & { code?: string }).code, 'OUTLINE_SHAPE')
+  }
+})
+
+test('拆节 YAML 解析：onTolerated 透传（机器块串味救回留痕到拆节 journal）', () => {
+  const notes: string[] = []
+  const polluted = SPLIT_YAML + '\n<!-- enc_candidates: [] -->\n'
+  const subs = Content.parseSplitOutline(polluted, 's3', n => { notes.push(n) })
+  assert.deepEqual(subs.map(s => s.id), ['s3-1', 's3-2'])
+  assert.equal(notes.length, 1)
 })
 
 test('拆节清单替换：原位替换、pending 校验、上限护栏、id 冲突护栏', () => {

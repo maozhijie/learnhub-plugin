@@ -112,13 +112,13 @@ export class ContentSubsystem {
   }
 
 
-  async contentPack(courseKey: string | undefined, node: string): Promise<string> {
+  async contentPack(courseKey: string | undefined, node: string, opts?: { omitDeliverables?: boolean }): Promise<string> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[pack] 节点「${node}」不在图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'pack')
     const prior = await this.vaultPriorFor(graph, node)
-    const pack = this.e.content.contextPack(graph, state, node, c.name)
+    const pack = this.e.content.contextPack(graph, state, node, c.name, opts)
     return prior ? `${pack}\n\n---\n\n${prior}` : pack
   }
 
