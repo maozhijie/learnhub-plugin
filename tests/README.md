@@ -1,6 +1,8 @@
 # 测试
 
-`npm test` = `npm run typecheck`（类型门，G7）+ `node --experimental-transform-types --test tests/*.test.ts`（Node >=24 原生 TS + `--experimental-transform-types`，零测试框架依赖；facade 测试需要 transform 模式处理注入类的 constructor parameter properties，引擎门面测试直接实例化 `LearnhubEngine`）。单跑规则测试可用 `node --experimental-transform-types --test tests/`。
+`npm test` = `npm run typecheck`（类型门，G7）+ `node --experimental-transform-types --test --test-concurrency=3 tests/*.test.ts`（Node >=24 原生 TS + `--experimental-transform-types`，零测试框架依赖；facade 测试需要 transform 模式处理注入类的 constructor parameter properties，引擎门面测试直接实例化 `LearnhubEngine`）。单跑规则测试可用 `node --experimental-transform-types --test tests/`。
+
+**并发上限 3 是刻意的**（2026-09-12）：node:test 默认并行度 = 核数−1（本机 12 核 = 11 个测试进程同时起，每个都是完整 node 进程，DOM 类文件还各自加载 happy-dom + React + arco）。实测默认并发的 node 总内存峰值 ~1.5GB（限 3 后 ~0.8GB、墙钟时间不变——套件耗时由少数重文件主导），11 进程抢满 12 核叠加宿主/编辑器等常驻进程会把整机顶死（曾实测撞出 `RangeError: Array buffer allocation failed`）。别调高；机器更小就调低。
 
 ## 门面 C 形态（#182 / ADR-0049，2026-09-12）
 
