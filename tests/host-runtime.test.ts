@@ -314,12 +314,13 @@ test('生长批已取消：明确的中止意图不被 force 豁免（重试只�
 test('重启恢复：排队图域任务负载随档恢复，恢复队列后正常执行；生长批裁决面随档保留', async () => {
   const rt = makeRuntime()
   const seedCalls: Array<Record<string, unknown>> = []
+  const savedPhases: Array<Record<string, unknown>[]> = []
   stub(rt, {
     'graph.seedPropose': async (req: Record<string, unknown>) => {
       seedCalls.push(req)
       return { id: 7, starts: 1, endpoint: '终点', prior_hits: 0 }
     },
-    saveGenJobs: async () => undefined,
+    saveGenJobs: async (jobs: Array<Record<string, unknown>>) => { savedPhases.push(jobs) },
     loadGenJobs: async () => [
       { course: '数学', node: '种子起草', startedAt: new Date().toISOString(), status: 'queued',
         phase: '种子', model: 'test', message: '排队等待生成队列…',
@@ -348,6 +349,10 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
   assert.match(rt.jobs.genJobs.get('数学/种子起草')!.message ?? '', /种子提案 #7/)
   assert.equal(seedCalls.length, 1)
   assert.equal(seedCalls[0]!.goal, '会用导数解决优化问题', '负载随档恢复：表单字段原样进引擎')
+  // #185 落盘即归一：读侧别名只在恢复缝生效，写侧（含执行过程中的持久化）一律产现值
+  assert.ok(savedPhases.length > 0, '执行过程至少落盘一次')
+  const persistedSeed = savedPhases.at(-1)!.find(j => j.course === '数学')
+  assert.equal(persistedSeed?.phase, 'seed', '旧档 phase=种子 经恢复归一后落盘为现值')
 })
 
 test('重启恢复：负载要求的排队图域任务缺负载 → 恢复处明确标失败可重试（不拖到执行器）', async () => {
