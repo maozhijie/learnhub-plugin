@@ -10,6 +10,8 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withVault } from './helpers/vault.ts'
+import { EVIDENCE_STREAMS } from '../src/engine/evidence-streams.ts'
+import { Paths } from '../src/engine/paths.ts'
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src')
 
@@ -86,5 +88,37 @@ test('结构守卫：JSONL 读侧必经原语——src 全域 split("\\n") 只�
     const src = await readFile(f, 'utf8')
     assert.ok(!src.includes("split('\\n')") && !src.includes('split(/\\n/)'),
       `${f} 手写行切分——JSONL 读侧必须经 readJsonlLines 原语（ADR-0053 单一实现）`)
+  }
+})
+
+test('结构守卫：追加流水登记处对账——paths.ts 的 .jsonl 路径成员必须列册或显式豁免（#195 防盘点清单漂移）', async () => {
+  const pathsSrc = await readFile(join(SRC, 'engine', 'paths.ts'), 'utf8')
+  const jsonlGetters = new Set<string>()
+  for (const line of pathsSrc.split('\n')) {
+    if (!line.includes('.jsonl')) continue
+    const m = line.match(/(?:get\s+)?([A-Za-z]\w*)\s*\(/)
+    if (m) jsonlGetters.add(m[1]!)
+  }
+  assert.ok(jsonlGetters.size >= 12, '收集器看得见目标形态：paths.ts 上确有一批 .jsonl 路径成员')
+  // 豁免 = 无读侧的纯留痕流：覆盖层（只作审计与出处，读侧永不读）、判卷失败（专项留档）
+  const EXEMPT = new Set(['overlayPath', 'gradingFailurePath'])
+  const registered = new Set(EVIDENCE_STREAMS.map(d => d.getter))
+  assert.ok(registered.size >= 12, '登记处非空')
+  for (const g of jsonlGetters) {
+    assert.ok(registered.has(g) || EXEMPT.has(g),
+      `paths.ts 的 .jsonl 成员 ${g} 未列入 EVIDENCE_STREAMS 登记处（evidence-streams.ts），也未显式豁免——新增流水必须列册，盘点清单不得漂移`)
+  }
+  for (const d of EVIDENCE_STREAMS) {
+    assert.ok(jsonlGetters.has(d.getter), `登记处条目 ${d.getter} 在 paths.ts 上找不到对应 .jsonl 成员（登记处幽灵）`)
+    assert.ok(!EXEMPT.has(d.getter), '豁免流不得列册')
+  }
+  // 接线自检：pathOf 闭包与 paths 同名成员同源（防闭包写错路径；center 级是 getter
+  // 属性、course/project 级是带 id 的方法，两种形态都接）
+  const paths = new Paths('V')
+  for (const d of EVIDENCE_STREAMS) {
+    const member = (paths as unknown as Record<string, unknown>)[d.getter]
+    assert.ok(member !== undefined, `登记处条目 ${d.getter} 在 Paths 上不存在`)
+    const viaPaths = typeof member === 'function' ? (member as (id: string) => string).call(paths, 'R') : member as string
+    assert.equal(d.pathOf(paths, 'R'), viaPaths, `登记处条目 ${d.getter} 的 pathOf 与 paths 成员不同源`)
   }
 })

@@ -50,31 +50,50 @@ export async function writeLearnhubConfig(path: string, doc: Record<string, unkn
   await atomicWrite(path, JSON.stringify(doc, null, 1) + '\n', fs)
 }
 
+/** jsonl 只读详报（#195）：readJsonlLines 的详报形态，判据同一实现——额外回报撕裂
+ * 尾行的 1 起行号（无则 null）。dataCheck evidence_streams 靠它把撕裂尾行以 hint
+ * 浮出；豁免语义见 readJsonlLines。 */
+export interface JsonlReadReport<T> {
+  lines: T[]
+  /** 撕裂尾行（末行无换行且非法 JSON）的行号，1 起；无撕裂尾行 = null。 */
+  tornTailLine: number | null
+}
+
 /** jsonl 只读原语（ADR-0053：全流水读侧唯一实现，流读取路径的 JSON.parse 只存在于
  * 本函数）：换行结尾的行解析失败 = 中段损坏，抛 Broken（文案带流标签 + 路径 + 行号，
  * 沿用「（Broken）：修复或删除该行后再试」口径，label 由调用方传入）；文件末行不以
  * \n 结尾且解析失败 = 撕裂尾行，跳过——appendFile 一次写「整行+\n」，进程中断最多
  * 烂在末行、且必然不带换行，物理特征可机械判定（豁免只认末行）；文件缺失 =
  * Missing 合法空态（返回 []）；空行照旧跳过。 */
-export async function readJsonlLines<T>(path: string, fs: VaultFs, label: string): Promise<T[]> {
+export async function readJsonlLinesReport<T>(path: string, fs: VaultFs, label: string): Promise<JsonlReadReport<T>> {
   let raw: string
   try {
     raw = await fs.readFile(path)
   } catch {
-    return []
+    return { lines: [], tornTailLine: null }
   }
   const out: T[] = []
   const lines = raw.split('\n')
   const tornTail = !raw.endsWith('\n')
+  let tailLine: number | null = null
   for (const [i, line] of lines.entries()) {
     const s = line.trim()
     if (!s) continue
     try {
       out.push(JSON.parse(s) as T)
     } catch {
-      if (tornTail && i === lines.length - 1) continue // 撕裂尾行：进程中断的物理残留，合法可规范化
+      if (tornTail && i === lines.length - 1) { // 撕裂尾行：进程中断的物理残留，合法可规范化
+        tailLine = i + 1
+        continue
+      }
       throw new Error(`[${label}] ${path} 第 ${i + 1} 行不是合法 JSON（Broken）：修复或删除该行后再试。`)
     }
   }
-  return out
+  return { lines: out, tornTailLine: tailLine }
+}
+
+/** jsonl 只读（静默投影）：绝大多数消费方只吃合法行，撕裂尾行豁免即可；详报形态
+ * readJsonlLinesReport 供 dataCheck evidence_streams 回报尾行（#195）。 */
+export async function readJsonlLines<T>(path: string, fs: VaultFs, label: string): Promise<T[]> {
+  return (await readJsonlLinesReport<T>(path, fs, label)).lines
 }
