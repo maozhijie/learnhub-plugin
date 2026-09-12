@@ -94,6 +94,20 @@ test('上下文包：高难节点注入 §11 专家思维轨迹（含预测门�
   })
 })
 
+// ---- 上下文包裁剪：大纲消费不带 §8 交付要求 ----
+
+test('上下文包裁剪：omitDeliverables 剥掉 §8（机器块指令不进大纲调用），其余段保留', async () => {
+  await withVault({ tag: 'learnhub-expert-pack-', graph: GRAPH }, async ({ engine }) => {
+    const outline = await engine.content2.contentPack('数学', '平易节点', { omitDeliverables: true })
+    assert.doesNotMatch(outline, /## 8\. 交付要求/)
+    assert.doesNotMatch(outline, /enc_candidates/, '机器块指令是节正文契约，与大纲「只输出一个 YAML」冲突')
+    assert.match(outline, /## 5\. 禁止使用的概念/, '前置边界保留（大纲规划需要）')
+    assert.match(outline, /## 9\. 复杂度档案/, '节数/篇幅预算锚保留')
+    const full = await engine.content2.contentPack('数学', '平易节点')
+    assert.match(full, /## 8\. 交付要求/, '默认包不动（节正文照常带机器块指令）')
+  })
+})
+
 // ---- sectionApply 集成：思维节预测门必备 ----
 
 const NOTE_SECTIONS = [

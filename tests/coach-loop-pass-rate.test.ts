@@ -38,7 +38,8 @@ starts:
     teaches: {变化率: 会用}
 `
 
-/** 金样本裁决骨架（与 coach-growth 的金样本同形：前进批 + pre 引用 + teaches 对表）。 */
+/** 金样本裁决骨架（与 coach-growth 的金样本同形：前进批 + pre 引用 + teaches 对表；
+ * #198 主线批必接线终点——set_pre 替换语义随批接线新前沿）。 */
 function goldVerdict(): string {
   return [
     'course: 数学',
@@ -57,6 +58,9 @@ function goldVerdict(): string {
     '    bloom: 理解',
     '    difficulty: 2',
     '    teaches: {变化率: 会用}',
+    '  - op: set_pre',
+    '    node: 用导数解决优化问题',
+    '    pre: [平均变化率]',
   ].join('\n') + '\n'
 }
 
@@ -101,16 +105,19 @@ function bestMatch(bad: string, candidates: string[]): string {
 }
 
 /** 从工具回灌文本提取取值域并修正草稿（回路人格的裁前自查）。只对表**引用**——
- * pre 必须命中既有节点、region 必须命中既有区、teaches 必须命中登记表 canonical；
- * add_node 的 name 是新节点名，合法地不在图上，不作对表。 */
+ * pre 必须命中既有节点或本批更早创建的节点、region 必须命中既有区、teaches 必须命中
+ * 登记表 canonical；add_node 的 name 是新节点名，合法地不在图上，不作对表。 */
 function selfCheckCorrect(draft: string, graphView: string, registryText: string): string {
   const nodeNames = [...graphView.matchAll(/^- (.+?)（/gm)].map(m => m[1]!)
   const regions = [...new Set([...graphView.matchAll(/（(.+?)·.+?｜/gm)].map(m => m[1]!))]
   const concepts = [...registryText.matchAll(/^- (.+?)(?:（|：|$)/gm)].map(m => m[1]!)
+  // 本批新建节点是后续 op（终点接线 set_pre）的合法 pre 取值域（与受理门同口径）
+  const batchNames = [...draft.matchAll(/- op: add_node\n\s+name: (.+)/g)].map(m => m[1]!.trim())
+  const preTargets = [...nodeNames, ...batchNames]
   let out = draft
   // pre 引用对表节点名
   out = out.replace(/pre: \[(.+?)\]/g, (_m, inner: string) =>
-    'pre: [' + inner.split('、').map(x => nodeNames.includes(x.trim()) ? x.trim() : bestMatch(x.trim(), nodeNames)).join('、') + ']')
+    'pre: [' + inner.split('、').map(x => preTargets.includes(x.trim()) ? x.trim() : bestMatch(x.trim(), preTargets)).join('、') + ']')
   // region 对表区名
   out = out.replace(/^(\s*region: )(.+)$/gm, (_m, p: string, r: string) =>
     p + (regions.includes(r.trim()) ? r : bestMatch(r.trim(), regions)))

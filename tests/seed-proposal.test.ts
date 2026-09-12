@@ -191,17 +191,19 @@ test('AC3 完成判据读侧折叠：达标/不达标各一，宣告零写副作
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
     await engine.graph.graphApply('seed', r.id)
 
-    // 不达标：终点未学（mastery 0）→ complete=false
+    // 不达标：最后台阶（终点.pre=起点）未学（mastery 0）且未收尾 → complete=false
     const before = await engine.courseCompletion({ name: '数学', root: '数学' })
     assert.ok(before)
     assert.equal(before!.goal_type, 'capability')
     assert.equal(before!.complete, false)
-    assert.equal(before!.criteria.endpoint_mastery, 0)
+    assert.equal(before!.criteria.mastery_met, false)
+    assert.equal(before!.criteria.sealed, null)
+    assert.deepEqual(before!.criteria.last_steps.map(s => s.node), ['认识变化率'], '判据折叠自最后台阶（终点.pre 集）')
 
-    // 达标：终点 mastery ≥ 0.8（稳定度饱和 + 高练习证据）且闭包健康
-    const notePath = paths.courseNotePath('数学', '基础', '用导数解决优化问题')
+    // 达标：最后台阶 mastery ≥ 0.8（稳定度饱和 + 高练习证据）且闭包健康
+    const notePath = paths.courseNotePath('数学', '基础', '认识变化率')
     await writeFile(notePath, `---
-node: 用导数解决优化问题
+node: 认识变化率
 stage: mastered
 fsrs:
   stability: 60
@@ -219,12 +221,28 @@ content:
   generated_at: 2026-09-09T00:00:00.000Z
   status: reviewed
 ---
-# 用导数解决优化问题
+# 认识变化率
 `, 'utf8')
+    const mid = await engine.courseCompletion({ name: '数学', root: '数学' })
+    assert.equal(mid!.criteria.mastery_met, true)
+    assert.equal(mid!.criteria.sealed, null)
+    assert.equal(mid!.complete, false, '未收尾不判完成（ADR-0056：判据含 sealed）')
+    // 收尾接线批（零 add_node 纯 set_pre）apply → 锚写 sealed → 完成宣告成立
+    const closing = await engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 既有节点已满足终点要求，停摆前接线
+ops:
+  - op: set_pre
+    node: 用导数解决优化问题
+    pre: [认识变化率]
+`) as { id: number }
+    await engine.graph.graphApply('edit', closing.id)
     const after = await engine.courseCompletion({ name: '数学', root: '数学' })
     assert.equal(after!.criteria.mastery_met, true)
     assert.equal(after!.criteria.closure_healthy, true, '闭包健康（无重名/断边/环/enc 违约）')
-    assert.equal(after!.complete, true, '读侧宣告：终点掌握 + 闭包健康 = 完成')
+    assert.ok(after!.criteria.sealed, '收尾宣告落锚')
+    assert.equal(after!.complete, true, '读侧宣告：最后台阶掌握 + 闭包健康 + 已收尾 = 完成')
 
     // 面板宣告（status 折叠）且零写副作用：折叠前后锚文件与 journal 字节不变
     const anchorPath = paths.anchorPath('数学')

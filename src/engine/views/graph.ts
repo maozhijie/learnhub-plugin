@@ -75,8 +75,11 @@ export interface GraphBrowseNode {
 
 export interface GraphBrowseRegion { name: string; blocks: GraphBrowseBlock[] }
 
-/** 图分析全量视图（analysis.GraphAnalysis 的视图镜像；React Flow elements 格式）。 */
+/** 图分析全量视图（analysis.GraphAnalysis 的视图镜像 + 终点锚派生的终点标记；React Flow elements 格式）。 */
 export interface GraphDoc {
+  /** 锚定终点节点名（读侧从终点锚派生，#199 / ADR-0055；未播种 = null）。
+   * 消费面据此对终点关生成入口（终点纯标记化 ADR-0056）。 */
+  endpoint: string | null
   stats: {
     nodes: number
     edges: number

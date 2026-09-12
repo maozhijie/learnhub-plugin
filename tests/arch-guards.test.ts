@@ -19,7 +19,8 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, statSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scanUndefined } from '../scripts/undefined-scan.mjs'
@@ -55,6 +56,35 @@ test('G1 无未定义标识符（抽文件漏导出/漏导入的兜底门）', (
     .filter(r => r.missing.length)
     .map(r => `${r.file.slice(ROOT.length + 1)}: ${r.missing.join(', ')}`)
   assert.deepEqual(bad, [], `未定义标识符（运行时 ReferenceError 的静态前兆）：\n${bad.join('\n')}`)
+})
+
+test('G1 自检：可选形参 name? 不误报为未定义调用；真未定义调用仍拦截（门不是恒过）', () => {
+  // 实测教训：形参正则曾不认 `matching?`（? 不在字符类内），函数体内的裸调用被误报——
+  // 逼得调用方为绕门改签名。自检驱动扫描器本身跑两个夹具文件，正反两向都要过。
+  const dir = mkdtempSync(join(tmpdir(), 'g1-selfcheck-'))
+  try {
+    const good = join(dir, 'good.ts')
+    writeFileSync(good, [
+      'export function strip(src: string, matching?: (comment: string) => boolean): string {',
+      '  return matching ? matching(src) : src',
+      '}',
+    ].join('\n'))
+    assert.deepEqual(
+      scanUndefined([good]).map(r => r.missing),
+      [[]],
+      '可选形参 name? 是声明名，函数体内的裸调用不得误报',
+    )
+
+    const bad = join(dir, 'bad.ts')
+    writeFileSync(bad, 'export function f(): string { return missingHelper() }\n')
+    assert.deepEqual(
+      scanUndefined([bad]).map(r => r.missing),
+      [['missingHelper']],
+      '真未定义的调用仍要拦（正向失效 = 门腐烂）',
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 // ---------------------------------------------------------------- G2／G2b 宿主装配面

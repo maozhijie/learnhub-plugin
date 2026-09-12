@@ -155,6 +155,7 @@
   "learner.setJolConfig",
   "loadGenJobs",
   "loadView",
+  "paths.anchorPath",
   "project.projectMilestonePack",
   "project.projectMilestoneWrite",
   "project.projectPlanPack",

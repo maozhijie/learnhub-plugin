@@ -132,6 +132,23 @@ test('parseOutline：合法 tier 进清单，非法值丢弃（缺席推导，�
   assert.equal(ms[1]!.tier, undefined, '非法 tier 视为缺席')
 })
 
+test('parseOutline：schema 形状错带 OUTLINE_SHAPE 稳定码（宿主修复轮分流用）；机器块串味救回带留痕', () => {
+  try {
+    Content.parseOutline('node: x\nsections:\n  - title: 概念：A\n    type: 不存在的类型\n')
+    assert.fail('应当抛出')
+  } catch (err) {
+    assert.equal((err as Error & { code?: string }).code, 'OUTLINE_SHAPE')
+  }
+  // 串味救回：正文契约的机器块混进大纲 YAML，解析边界剥除后照常解析（onTolerated 留痕）
+  const notes: string[] = []
+  const ms = Content.parseOutline(
+    'node: x\nsections:\n  - id: s1\n    title: 概念：A\n    type: 概念\n<!-- enc_candidates: [] -->\n',
+    n => { notes.push(n) },
+  )
+  assert.equal(ms.length, 1)
+  assert.equal(notes.length, 1)
+})
+
 // ---- 视图：tierLabel 解析（清单值优先、缺席推导、不回填） ----
 
 test('contentSectionsView：tierLabel 清单值优先、缺席按位置推导，且不回填清单', async () => {

@@ -101,7 +101,7 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 - 断言面：队列泵状态机（入队 → 执行 → 终态 → 保留期清扫与 delayMs 补挂）、暂停/恢复（`resumeQueue`）、`quizJobResults` 等待语义（`waitForQuizJob` 超时/消失 fail loud）、runtime 构造校验与首启 seed（#138 盖戳在构造路径）。
 - **工具面快照**：`tests/fixtures/host-tools-snapshot.json` 由重构前的 `src/index.ts` mock-apply 捕获（112 个工具的 name/description/parameters，#203 +1：learnhub_receipt_review_mode），断言按域分组重排后逐工具逐字不变。
 - **AGENT_GUIDE 受检投影·前半**（#169 的 AC 之一提前落地）：23 条指南的 `tool` 名必须 ∈ 112 个工具（ADR-0045 记的「22 条手写、从未与 111 个工具对账过」至此有门；#203 +1：receipt-review-mode）、`page` ∈ 面板页签词表、文案/prompt 非空、无重复条目。后半（「通道分类与该命令一致」）要等命令注册表落地。
-- **「路由 ↔ 工具」对账基线**：`tests/fixtures/host-face-baseline.json`（口径＝工具注册区 vs 工具区外全部，ADR-0045 实测）：共享引擎入口 **86**、工具独有 **27**、路由独有 **50**（#203 +2：`lab.receiptReviewMode`／`lab.setReceiptReviewMode` 工具面直调、无 panel 路由）（#159 +1：`proposals.proposalImpact`；#156 +1：`project.projectDecompileApply` 从工具独有变两面共享——面板统一 apply 路由检测到反编译对自动走联合入口；#163：`registry.resolve` 进工具面，共享 85→86；#196/#197：`content2.contentSplit` 拆节 op 仅路由面管线消费，路由独有 49→50）——命令注册表迁移的回归网。
+- **「路由 ↔ 工具」对账基线**：`tests/fixtures/host-face-baseline.json`（口径＝工具注册区 vs 工具区外全部，ADR-0045 实测）：共享引擎入口 **86**、工具独有 **27**、路由独有 **50**（#203 +2：`lab.receiptReviewMode`／`lab.setReceiptReviewMode` 工具面直调、无 panel 路由；#159 +1：`proposals.proposalImpact`；#156 +1：`project.projectDecompileApply` 从工具独有变两面共享——面板统一 apply 路由检测到反编译对自动走联合入口；#163：`registry.resolve` 进工具面，共享 85→86；#196/#197：`content2.contentSplit` 拆节 op 仅路由面管线消费，路由独有 49→50；#198/#199：`paths.anchorPath` 生成门读锚拒终点仅路由面消费，50→51）——命令注册表迁移的回归网。
 
 路由表与参数守卫（2026-09-11 新增，#168 / ADR-0045／ADR-0048；`tests/host-routes.test.ts` + `tests/helpers/routes-probe.ts`）：
 - **路由从 if 链变成数据表**：`host/routes.ts`（GET 46 + PUT 6）／`host/routes-post.ts`（POST 子表 73）／`host/route-table.ts`（表项形状 `{method, route, handler}` + ADR-0045 注册表字段位 `id·summary·args·engine·output·channels`，本票只留位）／`host/api.ts`（装配 + 一次查表分发）。`handleApi` 保留两处**逐字不动**的今天语义：POST/PUT **先读体再查表**（非法 JSON 的未知路由今天也是 500）、404 文案带原始方法与剥前缀后的路由名。
@@ -150,7 +150,7 @@ UI 测试网与数据获取缝（2026-09-12 新增，#183 / ADR-0051／ADR-0052�
 
 | 门 | 内容 | 档位 | 阈值来源（实测） |
 |---|---|---|---|
-| G1 未定义标识符 | 剥注释与字符串后「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`） | 硬门 0 | 0（`shuffled` 修复后）。**已由 G7 的 TS2304 接管**（同一形态的编译期权威判据），本门留作零依赖兜底 |
+| G1 未定义标识符 | 剥注释与字符串后「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`） | 硬门 0 | 0（`shuffled` 修复后）。**已由 G7 的 TS2304 接管**（同一形态的编译期权威判据），本门留作零依赖兜底。2026-09-13 判据修订：形参正则认可可选形参 `name?`——曾把函数体内对可选形参的裸调用误报为未定义，逼调用方为绕门改签名；随修按铁律①补 G1 自检（可选形参夹具不误报 + 真未定义夹具仍拦截），章程 §3「门红了先裁决」由此立 |
 | G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在（#168 起 `need` 归 `host/params.ts`、路由表归 `host/route-table.ts`／`routes.ts`／`routes-post.ts`）、入口文件非空；G2c＝宿主除常量外零模块级 `let`（`scripts/scan-host-state.mjs`，受控面**动态发现**＝index.ts + host/**/*.ts；ADR-0048） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径。G2c 受控面 14 个文件、模块级 let 0 |
 | G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。**四个方向全为硬门 0**（dead／missing／unwired／surplus） | 硬门 0 | 声明 **187** ／ 实用 187 ／ 接线 **187** ／ 多余 **0**（9 个子系统；#171 曾清掉 30 条多余接线——10 phantom + 20 未使用——后由棘轮转硬门；落笔时三向 167，现值 187 随 #158/#159/#161 新增命令域与 #203 receiptReviewEffect 接线自然增长，基线同步） |
 | G4 窄面宽度（三槽位） | `handles`／`facade`／`fns` 逐子系统卡基线；`handles ≤12／facade ≤20／fns ≤10` 是**非活动目标** | 棘轮 | 实测最大 handles **11**／facade **21**／fns **0**（fns 对预算已绿；handles 11 贴 ≤12 上限；facade 21 已越 ≤20 非活动目标——目标是落笔时的愿望值，活动门是逐子系统基线，越线要靠重划解决而非就地收紧） |

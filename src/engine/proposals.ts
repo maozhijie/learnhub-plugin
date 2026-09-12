@@ -18,7 +18,7 @@ import { saveNote, defaultFrontmatter } from './notes.ts'
 import {
   validateSeedProposal, seedNodeToGNode, anchorFromSeed, readAnchor, writeAnchor, isSeedGraph,
 } from './seed.ts'
-import type { SeedProposalSpec } from './seed.ts'
+import type { SeedProposalSpec, EndpointAnchor } from './seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
 import type { PriorFeedVerdict } from './vault-links.ts'
 import {
@@ -551,14 +551,14 @@ export class GraphProposals {
     const graph = new Graph(regions)
     const errors = simulateOps(regions, graph, spec.ops)
     const conceptErrors = await this.conceptGateErrors(course.root, conceptRefsOfOps(spec.ops), spec.concepts ?? [])
-    // 终点锚保护（#142 雾区条款下半）：锚定的终点节点不可经 edit 直改——
-    // del_node/rename 会把锚悬空，换终点只走重新种子提案（kind=seed, mode=reseed）。
-    const anchorErrors = await this.anchorGuardErrors(course.root, spec.ops)
+    // 终点锚保护 + 生长方向不变式（#142/#198）：锚定的终点不可经 edit 直改，
+    // add_node 禁以终点为 pre、主线批必接线——换终点只走重新种子提案。
+    const endpointErrors = await this.endpointGuardErrors(course.root, spec)
     // 巩固门（#145）：operator=巩固 的 add_node 只引已教概念。
     const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
-    if (errors.length || conceptErrors.length || anchorErrors.length || consolidationErrors.length) {
+    if (errors.length || conceptErrors.length || endpointErrors.length || consolidationErrors.length) {
       throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n`
-        + [...errors, ...conceptErrors, ...anchorErrors, ...consolidationErrors].map(e => `  ✗ ${e}`).join('\n'))
+        + [...errors, ...conceptErrors, ...endpointErrors, ...consolidationErrors].map(e => `  ✗ ${e}`).join('\n'))
     }
     // 生长闸门（#146 插入/旁支调速）：三率超限/复诊通过率触底时插入与旁支闸停（低数据
     // 静默）——插入积极性的调速器在受理门就拦，不让超速批落 pending。
@@ -596,19 +596,50 @@ export class GraphProposals {
     return validateRouteBody(stripWrappingFence(routeMd))
   }
 
-  /** 终点锚保护（#142）：edit 提案不得 del/rename 锚定的终点节点——那是绕开
-   * 种子提案通道的锚直改。其余 op（set_pre/set_enc/move/set_note）不构成「换终点」，
-   * 不拦——结构生长照常。 */
-  private async anchorGuardErrors(root: string, ops: EditOp[]): Promise<string[]> {
+  /** 终点守卫（#142 锚保护 + #198 生长方向不变式 / ADR-0055）：edit 提案不得 del/rename
+   * 锚定的终点节点——那是绕开种子提案通道的锚直改。方向不变式三句：① 任何 add_node
+   * 以终点为 pre 直接拒——目标之后不是本课程的生长域，扩承诺走重新种子；② 主线批
+   * （前进/换向）含新节点时必须携带 set_pre { node: 终点, pre ⊇ 批内新前沿 }——替换
+   * 语义，真实坡道取代种子粗边；③ 收尾接线批（零 add_node 的纯 set_pre）合法——
+   * 停摆前把终点接在教练认定的最终台阶上。接线核查取「覆盖」而非「相等」：最后台阶
+   * 可以与既有台阶合流（多条支线同时汇入终点），新前沿全部在 wire 里就守住了不变式；
+   * 旧边在 set_pre 整体替换下只随显式再声明存活——教练把起点直连终点重新写回是可见
+   * 断言，不是遗留残边。旁支/巩固/插入豁免接线义务；未播种不设门。 */
+  private async endpointGuardErrors(root: string, spec: EditProposalSpec): Promise<string[]> {
     const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
     if (!anchor) return []
+    const endpoint = anchor.endpoint
     const errors: string[] = []
-    for (const [i, op] of ops.entries()) {
-      if (op.node !== anchor.endpoint) continue
+    for (const [i, op] of spec.ops.entries()) {
+      if (op.node !== endpoint) continue
       if (op.op === 'del_node') {
         errors.push(`ops.${i}: del_node 拒绝——「${op.node}」是终点锚锚定的终点（${anchor.declared} 声明，提案 #${anchor.origin_proposal}）。锚无直改通道，换终点走重新种子提案（kind=seed, mode=reseed）`)
       } else if (op.op === 'rename') {
         errors.push(`ops.${i}: rename 拒绝——「${op.node}」是终点锚锚定的终点（${anchor.declared} 声明，提案 #${anchor.origin_proposal}）。锚无直改通道，换终点走重新种子提案（kind=seed, mode=reseed）`)
+      }
+    }
+    // ① 禁以终点为 pre：add_node 把承诺物当前置 = 长过目标
+    for (const [i, op] of spec.ops.entries()) {
+      if (op.op === 'add_node' && (op.pre ?? []).includes(endpoint)) {
+        errors.push(`ops.${i}: add_node「${op.name}」以终点「${endpoint}」为 pre——目标之后不是本课程的生长域（禁长过目标）。扩承诺走重新种子提案（kind=seed, mode=reseed）`)
+      }
+    }
+    // ② 主线批必接线：前进/换向批含新节点时，终点 set_pre 必须覆盖批内新前沿
+    const adds = addNodeCountOf(spec.ops)
+    if (spec.note && (spec.note.operator === '前进' || spec.note.operator === '换向') && adds > 0) {
+      const newNames = spec.ops.filter(o => o.op === 'add_node').map(o => o.name!)
+      const consumed = new Set(spec.ops.flatMap(o => o.op === 'add_node' ? (o.pre ?? []) : []))
+      const frontier = newNames.filter(n => !consumed.has(n))
+      const wirings = spec.ops.filter(o => o.op === 'set_pre' && o.node === endpoint)
+      if (!wirings.length) {
+        errors.push(`生长批（${spec.note.operator}）含 ${adds} 个新节点但未接线终点——主线批必须携带 set_pre { node: ${endpoint}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre 恒指向教练当前认定的最后台阶，真实坡道取代种子粗边）`)
+      } else {
+        // apply 取最后一条 set_pre（整体替换语义后者生效）——接线核查同口径
+        const wired = new Set(wirings[wirings.length - 1]!.pre ?? [])
+        const missing = frontier.filter(n => !wired.has(n))
+        if (missing.length) {
+          errors.push(`set_pre(${endpoint}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 当前认定的最后台阶）`)
+        }
       }
     }
     return errors
@@ -640,11 +671,11 @@ export class GraphProposals {
     const graph = new Graph(regions)
     const errors = simulateOps(regions, graph, spec.ops) // 二次校验
     if (errors.length) throw new Error('[apply-edit] 提案已不适用当前图（被拒绝，可重提）。')
-    // 终点锚保护复验（#142）：受理与 apply 之间锚可能新落（种子 apply 并发），
+    // 终点锚保护复验（#142/#198）：受理与 apply 之间锚可能新落（种子 apply 并发），
     // 两门全过才开始任何写盘。
-    const anchorErrors = await this.anchorGuardErrors(root, spec.ops)
-    if (anchorErrors.length) {
-      throw new Error(`[apply-edit] 终点锚保护拒绝写入——换终点只走重新种子提案（kind=seed）。\n${anchorErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+    const endpointErrors = await this.endpointGuardErrors(root, spec)
+    if (endpointErrors.length) {
+      throw new Error(`[apply-edit] 终点锚保护拒绝写入——换终点只走重新种子提案（kind=seed）。\n${endpointErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     // 巩固门复验（#145）：受理与 apply 之间图可能变化，已教概念集在当前图上重算。
     const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
@@ -687,11 +718,11 @@ export class GraphProposals {
     applyOpsToRegions(regions, spec.ops)
     const files = await store.regionFiles()
 
-    // 写入单元（#176）：写序照今天的声明——「铸名 → 图区重写 → 笔记联动 → 罗盘批内
-    // 重写 → 边实验账本 → 快照 → 笔记骨架 → journal(graph_edit) → 提案 applied」。
-    // 铸名孤儿条目合法、悬空引用违约（登记表先写、图在后）；路线门/巩固门/生长闸全过
-    // 才进写序（罗盘被拒不落盘）。失败上抛中止，不回滚不续跑，失败不写 journal；
-    // 重放被 takePending/simulateOps 门拦住（重放不保证收敛，靠门不靠续段）。
+    // 写入单元（#176）：写序照今天的声明——「铸名 → 图区重写 → 终点锚 sealed 维护
+    // （#202）→ 笔记联动 → 罗盘批内重写 → 边实验账本 → 快照 → 笔记骨架 → journal(graph_edit)
+    // → 提案 applied」。铸名孤儿条目合法、悬空引用违约（登记表先写、图在后）；路线门/
+    // 巩固门/生长闸全过才进写序（罗盘被拒不落盘）。失败上抛中止，不回滚不续跑，失败不写
+    // journal；重放被 takePending/simulateOps 门拦住（重放不保证收敛，靠门不靠续段）。
     let compassRewritten = false
     const probationRegistered: string[] = []
     let regions2: Awaited<ReturnType<GraphStore['load']>> = []
@@ -714,6 +745,29 @@ export class GraphProposals {
             for (const region of regions) {
               if (region.name in files) await store.writeRegionDoc(files[region.name], region)
             }
+          },
+        },
+        {
+          // 3.1 终点锚 sealed 维护（ADR-0056）：收尾接线批 = 零 add_node 的**纯 set_pre 批**
+          //     （全部 op 都是 set_pre，恰有终点接线）→ 落 sealed 收尾宣告（收尾即宣告承诺
+          //     兑现）；含 add_node 的终点接线批 → 清除（教练重开主线 = 承诺重新在途，完成
+          //     宣告随之回到未完成）。夹带其他 op 的零新增批不构成收尾宣告、也不动 sealed。
+          //     读-改-写在一步内完成；未播种静默跳过；sealed 缺省不落盘（旧锚形状不变）。
+          name: '终点锚 sealed 维护',
+          run: async () => {
+            if (!spec.ops.some(o => o.op === 'set_pre')) return
+            const anchorPath = this.paths.anchorPath(root)
+            const anchor = await readAnchor(anchorPath, this.fs)
+            if (!anchor) return
+            if (!spec.ops.some(o => o.op === 'set_pre' && o.node === anchor.endpoint)) return
+            const adds = addNodeCountOf(spec.ops)
+            const next: EndpointAnchor | null = (adds === 0 && spec.ops.every(o => o.op === 'set_pre'))
+              ? { ...anchor, sealed: todayStr(new Date(this.clock.nowMs())) }
+              : adds > 0
+                ? { ...anchor, sealed: undefined }
+                : null
+            if (!next) return
+            await writeAnchor(anchorPath, next, this.fs)
           },
         },
         {

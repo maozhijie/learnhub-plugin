@@ -69,6 +69,29 @@ test('searchVaultPrior：命中中心外个人笔记；学习中心与点目录�
   })
 })
 
+test('searchVaultPrior：机器块不进摘录也不参与打分（笔记抄录课程正文的串味源）', async () => {
+  await withVault({
+    files: [
+      // 真摘录 + 尾部机器块：摘录保留正文、剥掉机器块
+      { path: '乐理/笔记甲.md', content: '# 大三度\n\n大三度是三和弦的底色。\n\n<!-- enc_candidates: [三和弦] -->' },
+      // 整条只剩机器块：剥除后无检索词命中 → score 0，不入结果
+      { path: '乐理/笔记乙.md', content: '# 杂记\n\n<!-- enc_candidates: [小三度] -->' },
+      // 学习者手写的跨行 HTML 注释是笔记内容：原样保留，不剥（机器块 ≠ 一般 HTML 注释）
+      { path: '乐理/笔记丙.md', content: '# 大三度听感\n\n<!-- 私人备忘：\n   这段先不给人看 -->\n大三度按起来很顺手。' },
+    ],
+  }, async ({ root }) => {
+    const vault = root.replace(/\\/g, '/')
+    const hits = await searchVaultPrior(vault, '学习中心', ['大三度', '小三度'], { limit: 5 }, nodeVaultFs)
+    const paths = hits.map(h => h.path)
+    assert.ok(!paths.includes('乐理/笔记乙.md'), '纯机器块笔记不打分（引擎元数据不算学习者知识）')
+    const 甲 = hits.find(h => h.path === '乐理/笔记甲.md')!
+    assert.match(甲.excerpt, /三和弦的底色/)
+    assert.doesNotMatch(甲.excerpt, /enc_candidates/, '机器块不进摘录（不当输出示范）')
+    const 丙 = hits.find(h => h.path === '乐理/笔记丙.md')!
+    assert.match(丙.excerpt, /私人备忘/, '学习者手写的跨行 HTML 注释原样保留（只剥机器块）')
+  })
+})
+
 // ---- 行为：生成入口注入 ----
 
 test('V-2 注入：contentPack 附「学习者已有理解」段；零命中不注入', async () => {

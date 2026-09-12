@@ -202,7 +202,8 @@ function layoutDag(
         practice: (n.data as { type?: string }).type === 'practice',
         hasContent: n.data.hasContent ?? false,
         gen: genStates[n.data.id],
-        ...(onGenerate ? { onGenerate: () => onGenerate(n.data.id) } : {}),
+        // 终点不挂生成入口（#199 生成门）：终点是承诺标记不被学习调度，hover 按钮不渲染
+        ...(onGenerate && n.data.id !== doc.endpoint ? { onGenerate: () => onGenerate(n.data.id) } : {}),
       },
     }
   })

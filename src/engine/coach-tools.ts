@@ -183,7 +183,8 @@ export async function renderCompassView(deps: CoachToolDeps, c: CourseEntry): Pr
 }
 
 /** 终点锚视图（endpoint_anchor）：课程唯一结构承诺物——终点/目标类型/声明日/块工作表
- * 核销进度。锚 Broken fail loud（承诺物损坏必须显式浮出，不静默折成未播种）。 */
+ * 核销进度/收尾宣告（ADR-0056）。锚 Broken fail loud（承诺物损坏必须显式浮出，不静默
+ * 折成未播种）。 */
 export async function renderEndpointAnchor(deps: CoachToolDeps, c: CourseEntry): Promise<string> {
   const anchor = await readAnchor(deps.paths.anchorPath(c.root), deps.fs)
   if (!anchor) return `## 终点锚：${c.name}\n\n（未播种——终点锚 Missing 是合法空态，先走种子提案 kind=seed。）\n`
@@ -192,6 +193,7 @@ export async function renderEndpointAnchor(deps: CoachToolDeps, c: CourseEntry):
     `- 终点节点：${anchor.endpoint}`,
     `- 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
     `- 声明日期：${anchor.declared}`,
+    `- 收尾宣告：${anchor.sealed ? `已收尾（${anchor.sealed} 宣告承诺兑现——完成判据折叠自终点.pre 集；重开主线接线批会自动清除）` : '未收尾（停摆前终点.pre 须指向你认定的最终台阶——零 add_node 的纯 set_pre 接线批即收尾宣告）'}`,
   ]
   if (anchor.worksheet.length) {
     lines.push(`- 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`

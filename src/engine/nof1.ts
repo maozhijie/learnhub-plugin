@@ -722,7 +722,7 @@ export class LabSubsystem {
       ? doc.band_default as BandPref : null
   }
 
-  /** 回执评审模式默认档（#203 / ADR-0056；state/learnhub.json 的 receipt_review_mode，
+  /** 回执评审模式默认档（#203 / ADR-0057；state/learnhub.json 的 receipt_review_mode，
    * 缺省 'ai' = ADR-0016 现状）。消费链：实验当日臂 > 此默认档。 */
   async receiptReviewMode(): Promise<'ai' | 'self'> {
     const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs) as {
@@ -742,7 +742,7 @@ export class LabSubsystem {
     return { mode }
   }
 
-  /** 回执评审模式当日成立（#203 / ADR-0056 的实验通道）：默认档 ← 在跑实验
+  /** 回执评审模式当日成立（#203 / ADR-0057 的实验通道）：默认档 ← 在跑实验
    * （variable=receipt_review_mode、批次交替、scope 含该课程）当日臂覆盖。返回模式
    * 与来源（experiment 时带实验 id 与臂），回执提交入口据此分派 ai/self。 */
   async receiptReviewEffect(input: { today: string; course: string | null }): Promise<{

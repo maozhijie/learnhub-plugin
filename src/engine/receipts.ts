@@ -39,7 +39,7 @@ export interface ReceiptLogRec {
   kind: ReceiptKind
   /** 评审深度：full 完整错误具体评审 / brief 只评分+总评（渐退）。 */
   review_mode: 'full' | 'brief'
-  /** 评分者（#203 / ADR-0056）：ai = AI 量表评审（缺省——旧流水无此字段，读侧视同
+  /** 评分者（#203 / ADR-0057）：ai = AI 量表评审（缺省——旧流水无此字段，读侧视同
    * ai）/ self = 学习者自评分（不调 LLM，review_mode 恒 brief）。 */
   source?: 'ai' | 'self'
   /** 量表分 0–1（同权进 EMA；永不回滚）。 */
@@ -177,7 +177,7 @@ interface ReceiptStore {
 }
 
 /** 回执提交（引擎侧收口）：按 mode 分派评审——ai = AI 量表评审（rubric = 实践节点
- * 内容要点，full/brief 渐退）；self = 学习者自评分入账（#203 / ADR-0056：不调 LLM，
+ * 内容要点，full/brief 渐退）；self = 学习者自评分入账（#203 / ADR-0057：不调 LLM，
  * review_mode 恒 brief，selfScore 必须是 0–1 数字）。两档同一落盘与 EMA 入账；评审
  * 解析失败/自评分缺失时回执与 EMA 零落盘（ADR-0004 事务性）；fsrs 块经 fm 原样透传
  * ——回执永不推进任何 FSRS 卡。mode 由调用方（learner-cards 入口）按当日生效档解析
@@ -208,7 +208,7 @@ export async function submitReceipt(input: {
 }): Promise<ReceiptSubmitResult> {
   const prior = (await input.store.receiptsAll()).filter(r => r.course === input.course && r.node === input.node)
   const idIndex = prior.length + 1
-  // 渐退位只数 AI 评审回执（#203 / ADR-0056）：自评回执不产 AI 反馈，不消耗 AI 反馈
+  // 渐退位只数 AI 评审回执（#203 / ADR-0057）：自评回执不产 AI 反馈，不消耗 AI 反馈
   // 频率位——臂交替下 AI 的 full/brief 节奏保持 ADR-0016 原样（旧流水缺 source 视同 ai）。
   const aiIndex = prior.filter(r => r.source !== 'self').length + 1
   let rec: ReceiptLogRec

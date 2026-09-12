@@ -339,7 +339,7 @@ export interface LearnerDeps {
   sedimentSettle(): Promise<{ week: string | null; wrote: SedimentKind[]; skipped: Array<{ kind: SedimentKind; reason: string }>; profile: string }>
   compassEtaRefresh(courseKey?: string, opts?: { today?: string; force?: boolean }): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta }>>
   experimentPropose(templateId: string, course?: string): Promise<{ proposal: number; template: string; title: string; pool: number; scope_course: string | null }>
-  /** 回执评审模式当日成立（#203 / ADR-0056；lab 解析：配置默认 ← 实验当日臂覆盖）。 */
+  /** 回执评审模式当日成立（#203 / ADR-0057；lab 解析：配置默认 ← 实验当日臂覆盖）。 */
   receiptReviewEffect(input: { today: string; course: string | null }): Promise<{
     mode: 'ai' | 'self'
     source: 'default' | 'experiment'
@@ -1169,7 +1169,7 @@ export class LearnerSubsystem {
     }
   }
 
-  /** 回执提交全链：按当日生效档分派评审模式（#203 / ADR-0056：实验当日臂 > 配置
+  /** 回执提交全链：按当日生效档分派评审模式（#203 / ADR-0057：实验当日臂 > 配置
    * 默认 ai）——ai 臂 = AI 量表评审（rubric = 实践节点内容要点，full/brief 渐退）；
    * self 臂 = 学习者对照量表自报 0–1 分、不调 AI（force_full 在自评臂日无意义，fail
    * loud；self_score 在 AI 臂日同样拒绝——两臂口径不混）。评审分同权进 practice_ema；
@@ -1277,7 +1277,7 @@ export class LearnerSubsystem {
     const c = await this.e.registry.resolve(courseKey)
     const all = await this.e.store.receiptsAll()
     const receipts = all.filter(r => r.course === c.name && r.node === node)
-    // 渐退位只数 AI 评审回执（#203 / ADR-0056）：自评回执不产 AI 反馈、不消耗频率位
+    // 渐退位只数 AI 评审回执（#203 / ADR-0057）：自评回执不产 AI 反馈、不消耗频率位
     const aiCount = receipts.filter(r => r.source !== 'self').length
     return {
       course: c.name, node, receipts,

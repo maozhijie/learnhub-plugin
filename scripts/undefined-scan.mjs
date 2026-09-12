@@ -56,8 +56,9 @@ function declaredNames(code) {
   add(/\bcatch\s*\(\s*(\w+)\s*\)/g)
   // 类方法 / 对象字面量方法 / 接口成员声明（行首 成员名( 或 成员名<）
   add(/^[ \t]*(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:private\s+|public\s+|protected\s+|static\s+|readonly\s+|async\s+|get\s+|set\s+|\*\s*)*([A-Za-z_]\w*)\s*[(<]/gm)
-  // 形参与解构名（宽松：任何 `( x:` / `, x:` / `{ x,` / `x =`）
-  add(/[(,{[]\s*(\w+)\s*[:=,}\]]/g)
+  // 形参与解构名（宽松：任何 `( x:` / `, x?:` / `{ x,` / `x =`；`?` 须在位——
+  // 可选形参 `name?` 此前漏声明，被当未定义调用误报）
+  add(/[(,{[]\s*(\w+)\??\s*[:=,}\]]/g)
   add(/^\s*(\w+)\s*[:=]/gm)
   // 解构声明：const { a, b: c } = x
   for (const m of code.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}\s*=/g)) {

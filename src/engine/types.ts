@@ -284,7 +284,7 @@ export interface ErratumRec {
 // 实验存取反向 type-import 本定义，类型必须住中立词汇层才不成环）----
 
 /** 实验变量白名单（ADR-0023 裁决 1，红线）。调度核心参数永不入列。
- * receipt_review_mode 是首个练习侧变量（#203 / ADR-0056：反馈/评审设计参数，
+ * receipt_review_mode 是首个练习侧变量（#203 / ADR-0057：反馈/评审设计参数，
  * 配 practice_ema 结局——结局侧跟干预侧）。 */
 export const NOF1_VARIABLE_WHITELIST = [
   'band_default',
