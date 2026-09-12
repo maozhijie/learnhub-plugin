@@ -203,7 +203,14 @@ export class GraphStore {
   /** 按文件名顺序加载 data 目录全部 .yaml → Region 列表。 */
   async load(): Promise<GRegion[]> {
     const files = await this.regionFilePaths()
-    if (!files.length) throw new SchemaError(`数据目录为空或不存在: ${this.dataDir}`)
+    if (!files.length) {
+      // 两类缺失分开报（#61 教训：合并成「为空或不存在」把排查带偏）——建课前目录
+      // 不存在是正常态（建课提案预览按此分流），目录在但零 .yaml 才是真异常
+      const missing = !(await this.fs.exists(this.dataDir))
+      throw new SchemaError(missing
+        ? `数据目录不存在: ${this.dataDir}`
+        : `数据目录为空（没有 .yaml 区文件）: ${this.dataDir}`)
+    }
     const out: GRegion[] = []
     for (const p of files) {
       out.push(loadRegionDoc(YAML.parse(await this.fs.readFile(p)), p))

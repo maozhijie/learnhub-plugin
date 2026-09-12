@@ -111,7 +111,7 @@ export default function ProposalsPage({ frame }: { frame?: AppFrame }) {
           {impact && <SeedImpactPreview impact={impact} />}
           {impactError && (
             <Alert type='warning' style={{ marginBottom: 8 }}
-              content={`影响预览取不到：${impactError}——应用前建议先刷新提案列表确认提案仍然有效。`} />
+              content={`影响预览失败：${impactError}`} />
           )}
           <Text type='secondary'>{p.summary}</Text>
         </Space>

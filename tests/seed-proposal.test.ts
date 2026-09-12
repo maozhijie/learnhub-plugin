@@ -576,6 +576,22 @@ starts:
   })
 })
 
+test('proposalImpact：mode=new 建课预览按空图直算——课程未注册、图还不存在是正常态', async () => {
+  // #61 现场：建课提案的应用确认框预览曾在此必然炸「数据目录为空或不存在」，
+  // 吓人又误导（应用本身照常成功）。建课的应有预览：全部节点=新建、无锚覆盖、罗盘不重置。
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
+    const impact = await engine.proposals.proposalImpact('seed', r.id)
+    assert.equal(impact.course, '数学')
+    assert.equal(impact.mode, 'new')
+    assert.deepEqual(impact.new_nodes, ['认识变化率', '用导数解决优化问题'])
+    assert.deepEqual(impact.existing_nodes, [])
+    assert.equal(impact.graph_nodes, 0, '现图不存在 = 0 节点，不是故障')
+    assert.equal(impact.current_anchor, null)
+    assert.equal(impact.compass_reset, false)
+  })
+})
+
 test('proposalImpact：非种子 kind 与不存在/已决提案拒预览；重名提案给出漂移信号', async () => {
   await withVault({}, async ({ engine }) => {
     await assert.rejects(() => engine.proposals.proposalImpact('edit'), /只有种子提案/)
