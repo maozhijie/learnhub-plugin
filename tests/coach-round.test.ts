@@ -238,10 +238,14 @@ test('就绪深度：ready=0 只告警不阻塞；低于前瞻一行告警；满
 test('就绪深度：exhausted（除终点外前沿清空）判据自然通过——尾段合法停摆零告警', () => {
   const tail = readyDepthCheck({ ready: 0, declared: null, today: TODAY, exhausted: true })
   assert.equal(tail.ok, true)
+  assert.equal(tail.exhausted, true, 'exhausted 出册（#161）：UI 据此区分「尾段合法停摆」与「刚播种的合法空态」')
   assert.deepEqual(tail.warnings, [])
   const coldTail = readyDepthCheck({ ready: 2, declared: '2026-09-07', today: TODAY, exhausted: true })
   assert.equal(coldTail.ok, true, '冷启动放大也不复活已清空的前沿')
+  assert.equal(coldTail.exhausted, true)
   assert.deepEqual(coldTail.warnings, [])
+  const normal = readyDepthCheck({ ready: 0, declared: null, today: TODAY })
+  assert.equal(normal.exhausted, false, '非尾段（含刚播种的 ready=0 空态）不标 exhausted')
 })
 
 // ---- 渲染：行为摘要区块体 / 沉淀折叠教练投影 ----

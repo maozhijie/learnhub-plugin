@@ -4,12 +4,18 @@
  *   内容类任务不弹（各页已有指示器）；被阻尼拒掉的重拉不产生注册表条目 → 自然不弹。
  * - 生长批失败通知带「重试」按钮（#157）：点击重新下发面板生长命令（显式重新裁决，
  *   豁免失败阻尼）——教练一次产出畸形不再让课程静默停止生长。
+ * - 生长批停摆（growthOutcome=idle）是判据满足的自然结果，不是成就（#161）：中性说明
+ *   文案，不弹绿色成功。
+ * - 通知回放（#161）：localStorage 记 last-seen 消费水位，面板打开首拍把「面板关闭
+ *   期间完成、水位未及」的终态任务补发出来（带「补发」前缀，失败批照带「重试」）——
+ *   不再因面板关闭错过结果。保留期外的终态（done 30 分钟）已被清扫，无从补发。
  * - 复诊结算（队列空闲钩子自动跑，宿主侧只有运行日志）：在途节点消失/三率增量 = 已出结论。
  * 通知按钮按任务性质分流：产物是提案的（种子/反编译/计划/里程碑）→「去提案页」人审；
- * 过程性的（生长/罗盘）→「去生成页」。首拍（首次成功取数）只建快照——不回放历史。 */
+ * 过程性的（生长/罗盘）→「去生成页」。 */
 import { Button, Message, Notification } from '@arco-design/web-react'
 import { useEffect, useRef } from 'react'
 import { api } from './api'
+import type { GenJobItem } from './types'
 
 const GRAPH_PHASES = new Set(['种子', '生长', '罗盘', '反编译', '计划', '里程碑'])
 const PHASE_TITLE: Record<string, string> = {
@@ -22,8 +28,29 @@ const PHASE_TITLE: Record<string, string> = {
 }
 /** 产物是提案的任务：完成通知跳提案页（下一步动作是人审），其余跳生成页。 */
 const PROPOSAL_OUTPUT = new Set(['种子', '反编译', '计划', '里程碑'])
+const TERMINAL = new Set(['done', 'partial', 'failed', 'cancelled'])
+/** 通知回放的消费水位（#161）：localStorage 键，值为已展示终态的最大 finishedAt 毫秒。 */
+const LAST_SEEN_KEY = 'learnhub-coach-notif-lastseen'
 
-interface JobSnap { course: string; status: string; phase?: string; message?: string }
+interface JobSnap {
+  course: string
+  status: string
+  phase?: string
+  message?: string
+  growthOutcome?: GenJobItem['growthOutcome']
+  startedAt: string
+  finishedAt?: string
+}
+
+const readLastSeen = (): number => {
+  const raw = Number(localStorage.getItem(LAST_SEEN_KEY))
+  return Number.isFinite(raw) && raw > 0 ? raw : 0
+}
+const writeLastSeen = (ts: number): void => {
+  if (Number.isFinite(ts) && ts > readLastSeen()) localStorage.setItem(LAST_SEEN_KEY, String(ts))
+}
+/** 终态消费水位：finishedAt 缺席（历史档案）回落 startedAt。 */
+const terminalTs = (j: JobSnap): number => Date.parse(j.finishedAt ?? j.startedAt) || 0
 
 export function useCoachToasts(nav: { generate: () => void; proposals: () => void }): void {
   const prevJobsRef = useRef<Map<string, JobSnap> | null>(null)
@@ -71,42 +98,69 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
       })
     }
 
-    const pollJobs = async (): Promise<void> => {
-      let snaps: Map<string, JobSnap>
-      try {
-        const st = await api.generateStatus()
-        snaps = new Map()
-        for (const j of st.jobs) {
-          if (!GRAPH_PHASES.has(j.phase ?? '')) continue
-          snaps.set(j.key, { course: j.course, status: j.status, phase: j.phase, message: j.message })
+    /** 终态通知（#161 抽出共用）：diff 边沿与首拍回放同一语义——停摆走中性说明，
+     * 失败的生长批照带「重试」，回放的标题带「补发」前缀。 */
+    const terminalNotify = (cur: JobSnap, replay: boolean): void => {
+      const title = `${PHASE_TITLE[cur.phase ?? ''] ?? '图域任务'}`
+      const prefix = replay ? '补发·' : ''
+      const target = PROPOSAL_OUTPUT.has(cur.phase ?? '') ? 'proposals' as const : 'generate' as const
+      if (cur.status === 'done') {
+        if (cur.phase === '生长' && cur.growthOutcome === 'idle') {
+          notify('info', `${prefix}${title}停摆`, cur.message, target)
+        } else {
+          notify('success', `${prefix}${title}完成`, cur.message, target)
         }
+      } else if (cur.status === 'partial') {
+        notify('info', `${prefix}${title}部分完成`, cur.message, target)
+      } else if (cur.status === 'failed' || cur.status === 'cancelled') {
+        notify('error', `${prefix}${title}${cur.status === 'failed' ? '失败' : '已取消'}`, cur.message,
+          target, cur.status === 'failed' && cur.phase === '生长' ? () => void retryGrowth(cur.course) : undefined)
+      }
+    }
+
+    const pollJobs = async (): Promise<void> => {
+      let jobs: GenJobItem[]
+      try {
+        jobs = (await api.generateStatus()).jobs
       } catch {
         return // 宿主暂不可达：下轮再试（首拍未成不启用通知）
+      }
+      const snaps = new Map<string, JobSnap>()
+      for (const j of jobs) {
+        if (!GRAPH_PHASES.has(j.phase ?? '')) continue
+        snaps.set(j.key, {
+          course: j.course, status: j.status, phase: j.phase, message: j.message,
+          growthOutcome: j.growthOutcome, startedAt: j.startedAt, finishedAt: j.finishedAt,
+        })
       }
       const prev = prevJobsRef.current
       if (jobsPrimed && prev) {
         for (const [key, cur] of snaps) {
           const old = prev.get(key)
-          const title = PHASE_TITLE[cur.phase ?? ''] ?? '图域任务'
           if (!old) {
             if (cur.status === 'queued' || cur.status === 'running') {
-              notify('info', `${title}已触发`, cur.message ?? '已入队，生成页看进度')
+              notify('info', `${PHASE_TITLE[cur.phase ?? ''] ?? '图域任务'}已触发`, cur.message ?? '已入队，生成页看进度')
+            } else if (TERMINAL.has(cur.status)) {
+              // 会话中途出生即终态的任务（两次轮询之间走完全程）：照常弹终态，不错过结果
+              terminalNotify(cur, false)
             }
-          } else if (old.status !== cur.status) {
-            if (cur.status === 'done') {
-              notify('success', `${title}完成`, cur.message,
-                PROPOSAL_OUTPUT.has(cur.phase ?? '') ? 'proposals' : 'generate')
-            } else if (cur.status === 'partial') {
-              notify('info', `${title}部分完成`, cur.message)
-            } else if (cur.status === 'failed' || cur.status === 'cancelled') {
-              notify('error', `${title}${cur.status === 'failed' ? '失败' : '已取消'}`, cur.message,
-                'generate', cur.status === 'failed' && cur.phase === '生长' ? () => void retryGrowth(cur.course) : undefined)
-            }
+          } else if (old.status !== cur.status && TERMINAL.has(cur.status)) {
+            terminalNotify(cur, false)
           }
+        }
+      } else {
+        // 首拍（#161 通知回放）：面板关闭期间完成、消费水位未及的终态补发出来
+        // （带「补发」前缀）——不再因面板关闭错过结果。
+        const lastSeen = readLastSeen()
+        for (const cur of snaps.values()) {
+          if (TERMINAL.has(cur.status) && terminalTs(cur) > lastSeen) terminalNotify(cur, true)
         }
       }
       prevJobsRef.current = snaps
       jobsPrimed = true
+      // 消费水位推进（#161）：本轮注册表里可见的终态都已展示（首拍补发 / 后续拍 diff 弹条）
+      const maxTs = Math.max(0, ...[...snaps.values()].filter(j => TERMINAL.has(j.status)).map(terminalTs))
+      if (maxTs > 0) writeLastSeen(maxTs)
     }
 
     const pollProbation = async (): Promise<void> => {

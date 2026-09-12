@@ -329,6 +329,9 @@ export interface ReadyDepthCheck {
   required: number
   cold_start: boolean
   ok: boolean
+  /** 除终点外就绪前沿已清空（课程尾段，词条「前瞻深度」）——判据自然通过，
+   * 剩下的路是学掉终点。UI 据此区分「尾段合法停摆」与「刚播种的合法空态」。 */
+  exhausted: boolean
   /** 只告警不阻塞：ready=0 与低于前瞻各出一行。 */
   warnings: string[]
 }
@@ -360,7 +363,7 @@ export function readyDepthCheck(input: {
   if (input.exhausted === true) {
     // 课程尾段：非终点前沿已清空——合法停摆，判据自然通过、零告警（词条「前瞻深度」：
     // 终点是锚点不是课程节点，剩下的路是学掉终点，不是继续生长）。
-    return { ready: input.ready, depth, required, cold_start, ok: true, warnings: [] }
+    return { ready: input.ready, depth, required, cold_start, ok: true, exhausted: true, warnings: [] }
   }
   const ok = input.ready >= required
   const warnings: string[] = []
@@ -369,7 +372,7 @@ export function readyDepthCheck(input: {
   } else if (!ok) {
     warnings.push(`就绪深度 ${input.ready} 低于前瞻需求 ${required}（深度 ${depth}${cold_start ? `，冷启动首周 ×${COACH_COLD_START_EST_MULT}` : ''}）——教练回合应裁决生长。`)
   }
-  return { ready: input.ready, depth, required, cold_start, ok, warnings }
+  return { ready: input.ready, depth, required, cold_start, ok, exhausted: false, warnings }
 }
 
 // ---- 双沙盘仲裁（#150：全量段仍真分歧 → 终审段的两份推演参照） ----

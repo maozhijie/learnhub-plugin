@@ -291,6 +291,27 @@ test('生长批失败终态：教练回合抛错 → failed 带死因；自动�
   await until(() => rt.jobs.genJobs.get(key)?.status === 'failed' && (calls === 2))
 })
 
+test('生长批停摆终态（#161）：就绪深度满足 → done 带中性说明（非成功样式）+ growthOutcome=idle 供通知分流', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    'growth2.coachGrowthBatch': async () => ({
+      course: '数学', state: 'idle',
+      check: { course: '数学', ready: 3, depth: 3, required: 3, cold_start: false, ok: true, exhausted: false, warnings: [] },
+      segments: [], proposal: null, applied: null,
+    }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const enq = enqueueGrowthBatch(rt, fakeCtx(), '数学', 'queue_idle 触发', undefined, { force: true })
+  assert.equal(enq.queued, true)
+  await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
+  const job = rt.jobs.genJobs.get('数学/生长批')!
+  assert.equal(job.growthOutcome, 'idle', '裁决面落档：面板通知据此走中性说明而非绿色成功')
+  assert.match(job.message ?? '', /教练判断暂不需长新内容（就绪 3\/3）/, '停摆文案是中性说明（#161 验收口径）')
+  assert.ok(job.finishedAt, '终态盖戳（保留期起算点）')
+})
+
 test('生长批已取消：明确的中止意图不被 force 豁免（重试只属于失败批）', async () => {
   const rt = makeRuntime()
   stub(rt, {
