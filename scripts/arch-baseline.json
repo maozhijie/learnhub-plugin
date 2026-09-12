@@ -143,6 +143,7 @@
     "src/engine/health.ts": 94,
     "src/engine/index.ts": 806,
     "src/engine/index.ts": 808,
+    "src/engine/html-comments.ts": 52,
     "src/engine/io.ts": 99,
     "src/engine/jol.ts": 78,
     "src/engine/kata.ts": 318,
