@@ -1,6 +1,6 @@
 /** 生成页：待生成队列（生成队列.md 人审产物）+ 进行中/近期生成任务（服务端任务注册表）。
  * 页面刷新后状态从这里恢复（服务端注册表是事实来源，allo 同语义）。
- * 生成支持提示词风格变体（课程节生成-<style>，作用于逐节生成）；失败任务可重试续跑（ADR-0053）
+ * 生成支持提示词风格变体（课程节生成-<style>，作用于逐节生成）；失败任务可重试续跑（ADR-0054）
  * 或一键转 dsh 会话讨论。 */
 import { Alert, Button, Card, Empty, Message, Modal, Progress, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -154,7 +154,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
     }
   }
 
-  // 内容/出题任务的重试（ADR-0053 续跑）：重新入队即断点续跑——已 ready 节跳过、只补
+  // 内容/出题任务的重试（ADR-0054 续跑）：重新入队即断点续跑——已 ready 节跳过、只补
   // 缺失/失败节；出题任务按 quiz phase 路由回出题队列。与生长批「重试」对齐。
   const retryJob = async (j: GenJobItem) => {
     setBusyKey(j.key)

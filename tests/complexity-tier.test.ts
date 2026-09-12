@@ -127,7 +127,7 @@ test('P0: 长度阈值从预算派生（warn=×1.3 上取整 / block=×2），�
 
 test('P0: 复杂度档案注入篇幅硬约束与可视化预算', () => {
   const lines = profileBlockLines(2).join('\n')
-  // 字数锚 2026-09-12 校准放宽（ADR-0053）：中档预算 400 → 警告 520 / 拒收 800
+  // 字数锚 2026-09-12 校准放宽（ADR-0054）：中档预算 400 → 警告 520 / 拒收 800
   assert.match(lines, /单节辅助文字 ≤400 字（硬约束：超 520 字警告、超 800 字拒收落盘）/)
   assert.match(lines, /可视化块（mermaid\/svg\/plot\/chart\/交互件合计）≤2 个/)
 })

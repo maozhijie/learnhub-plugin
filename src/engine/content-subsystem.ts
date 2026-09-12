@@ -273,7 +273,7 @@ export class ContentSubsystem {
   }
 
 
-  /** 拆节落盘（ADR-0053）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），返回子节清单。 */
+  /** 拆节落盘（ADR-0054）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），返回子节清单。 */
   async contentSplit(courseKey: string | undefined, node: string, sectionId: string, yamlText: string): Promise<SectionManifest[]> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, broken } = await this.e.loadView(c)

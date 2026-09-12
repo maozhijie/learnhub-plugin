@@ -245,7 +245,7 @@ test('泵直驱：未暂停但有排队任务时 pumpGeneration 拉起执行（�
   await until(() => rt.jobs.genJobs.get('数学/节点C')?.status === 'done')
 })
 
-// ---------------------------------------------------------------- 溢出修复阶梯与 continue→partial（#196/#197 ADR-0053）
+// ---------------------------------------------------------------- 溢出修复阶梯与 continue→partial（#196/#197 ADR-0054）
 
 /** 脚本化 llm 流：stream() 逐次消耗应答脚本（走真实 llmSeamStripped/streamDshTurn 通路，
  * 只是 provider 换成内存生成器）；prompts 捕获每次调用的提示词全文供断言。 */
@@ -278,7 +278,7 @@ function overflowErr(sectionId = 's2', title = '演示：溢出节'): Error & { 
   return e
 }
 
-test('溢出修复阶梯（ADR-0053）：压缩修复仍超 → 大纲拆节 → 子节照常生成 → done', async () => {
+test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 → 子节照常生成 → done', async () => {
   const rt = makeRuntime()
   const prompts: string[] = []
   const saved: Array<Array<unknown>> = []
@@ -370,7 +370,7 @@ test('拆节被护栏拒绝（MAX_SECTIONS）→ 失败节记录、余节照常�
   assert.match(job.failures?.[0]!.finding ?? '', /拆后总节数 9 超过上限 8/, '死因如实记录：护栏拒拆而非溢出本身')
 })
 
-test('continue→partial（ADR-0053）：单节非溢出失败不中止余节，失败清单随终态落盘', async () => {
+test('continue→partial（ADR-0054）：单节非溢出失败不中止余节，失败清单随终态落盘', async () => {
   const rt = makeRuntime()
   const saved: Array<Array<unknown>> = []
   const ready = { id: 's0', title: '概念：已就绪', type: '概念', status: 'ready' }

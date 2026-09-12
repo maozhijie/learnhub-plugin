@@ -5,7 +5,7 @@ import { MAX_SECTIONS } from '../src/engine/complexity.ts'
 import type { SectionManifest } from '../src/engine/types.ts'
 import { isSectionOverflow, sectionFailure } from '../src/generation-jobs.ts'
 
-// ---------------------------------------------------------------- 拆节纯函数（ADR-0053）
+// ---------------------------------------------------------------- 拆节纯函数（ADR-0054）
 
 const SPLIT_YAML = [
   'sections:',
@@ -52,7 +52,7 @@ test('拆节清单替换：原位替换、pending 校验、上限护栏、id 冲
   assert.throws(() => Content.applySplit(collision, 's2', subs, MAX_SECTIONS), /冲突/)
 })
 
-// ---------------------------------------------------------------- 溢出判定与结构化失败（ADR-0053）
+// ---------------------------------------------------------------- 溢出判定与结构化失败（ADR-0054）
 
 function gateError(message: string): Error & { code?: string } {
   const e: Error & { code?: string } = new Error(message)
@@ -81,7 +81,7 @@ test('sectionFailure：GATE_FAILED 取首条 ✗ 与错误自带节信息；普�
   }, '无码错误归 ERROR，调用方传入的当前节补位（定点重写不因错误形态缺席）')
 })
 
-// ---------------------------------------------------------------- 修复轮提示词（ADR-0053：显式压缩目标）
+// ---------------------------------------------------------------- 修复轮提示词（ADR-0054：显式压缩目标）
 
 const BASE = '课程节生成提示词'
 const OVERFLOW_REPORT = '质检清单：\n  ✗ 节「演示」正文过长（约 606 字 > 拒收线 500 字）\n'

@@ -141,7 +141,7 @@ test('LessonView：有正文无题 = 空态引导，点「AI 出题」入队任�
   assert.equal(calls.closeLesson!.length, 1, '返回收起学习视图')
 })
 
-test('LessonView：失败横幅动作（#196 / ADR-0053）——定点重写、重试续跑、关闭', async () => {
+test('LessonView：失败横幅动作（#196 / ADR-0054）——定点重写、重试续跑、关闭', async () => {
   const { default: LessonView } = await importUi('components/LessonView.tsx')
   routes({
     'GET /lesson': LESSON_FIXTURE,
@@ -185,7 +185,7 @@ test('LessonView：失败横幅动作（#196 / ADR-0053）——定点重写、�
   assert.equal(screen.queryByText(/上次生成失败/), null, '关闭隐藏横幅（视图状态，存 UI 本地）')
 })
 
-test('LessonView：失败横幅「转 AI 修复」（#196 / ADR-0053）——预填失败原文开讨论弹窗', async () => {
+test('LessonView：失败横幅「转 AI 修复」（#196 / ADR-0054）——预填失败原文开讨论弹窗', async () => {
   const { default: LessonView } = await importUi('components/LessonView.tsx')
   routes({
     'GET /lesson': LESSON_FIXTURE,

@@ -1106,7 +1106,7 @@ worksheet:
   }
 
   /** 修复轮 prompt：把上一次输出 + 质检清单（附定位）回灌。正文过长 finding 附显式
-   * 压缩目标与计数口径（ADR-0053：旧版只说「拆成多个节」，在「只输出一节」的修复轮里
+   * 压缩目标与计数口径（ADR-0054：旧版只说「拆成多个节」，在「只输出一节」的修复轮里
    * 不可执行，压到多少也从未直说）；拆节的出路归管线（大纲拆节），不劝模型拆。 */
   static sectionRepairPrompt(
     basePrompt: string, previousOutput: string, gateReport: string,
@@ -1302,7 +1302,7 @@ worksheet:
     return out
   }
 
-  // ---- 拆节（ADR-0053 修复阶梯末级：压缩修复仍溢出的节在大纲侧一拆为 2–3 个子节） ----
+  // ---- 拆节（ADR-0054 修复阶梯末级：压缩修复仍溢出的节在大纲侧一拆为 2–3 个子节） ----
 
   /** 拆节 YAML → 子节清单：复用 parseOutline 校验（title 必填、type ∈ 节类型菜单），
    * 模型的 id 字段一律忽略（引擎派生 `${parentId}-N` 防撞名），数量锁 2–3。 */
@@ -1359,7 +1359,7 @@ worksheet:
     return manifest
   }
 
-  /** 拆节落盘（ADR-0053）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），正文不动
+  /** 拆节落盘（ADR-0054）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），正文不动
    * （pending 节本就不进正文），journal 留痕。返回新插入的子节清单（管线据此逐子节生成）。 */
   async splitApply(
     root: string, graph: Graph, node: string, sectionId: string, yamlText: string,
@@ -1422,7 +1422,7 @@ worksheet:
       gate.findings.push('「思维轨迹」节必须至少设一处 ```learnhub-predict 预测门（关键转折处先预测再揭晓；格式见上下文包 §11）')
     }
     if (gate.findings.length || html.findings.length) {
-      // 结构化失败信息（ADR-0053）：sectionId/标题支撑续跑与定点重写，预算数字支撑
+      // 结构化失败信息（ADR-0054）：sectionId/标题支撑续跑与定点重写，预算数字支撑
       // 修复轮的显式压缩目标；message 仍是人读事实源（含 ✗ 清单）。
       const budget = TIER_ANCHORS[nodeTierOf(graph, node)].sectionWordBudget
       const e: Error & { code?: string; sectionId?: string; sectionTitle?: string; wordBudget?: number; wordBlock?: number }

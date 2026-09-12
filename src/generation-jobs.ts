@@ -123,7 +123,7 @@ export function contentFailureStatus(jobStatus: GenJobStatus): Exclude<GenJobSta
   return jobStatus === 'cancelling' ? 'cancelled' : 'failed'
 }
 
-/** 单节终局失败的结构化记录（ADR-0053）：失败横幅「定点重写失败节」与失败原因展示的
+/** 单节终局失败的结构化记录（ADR-0054）：失败横幅「定点重写失败节」与失败原因展示的
  * 消费面——sectionId 支撑单节重写（失败节在大纲里从未消失，只是面板按正文 ## 解析
  * 看不到它），finding 给人读的具体死因。磁盘子格式可选字段：恢复侧对缺字段旧档案
  * 按「无失败信息」读。 */
@@ -153,7 +153,7 @@ export function sectionFailure(err: unknown, section?: { id: string; title: stri
   }
 }
 
-/** 节正文溢出判定（ADR-0053 修复阶梯的分岔条件）：GATE_FAILED 且质检清单含
+/** 节正文溢出判定（ADR-0054 修复阶梯的分岔条件）：GATE_FAILED 且质检清单含
  * 「正文过长」——压缩修复一轮仍超长时触发大纲拆节；其余 finding 不拆。 */
 export function isSectionOverflow(err: unknown): boolean {
   return err instanceof Error

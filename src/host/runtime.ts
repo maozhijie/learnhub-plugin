@@ -52,7 +52,7 @@ export interface GenJob {
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
   progress?: { done: number; total: number; current?: string }
   message?: string
-  /** 单节终局失败清单（ADR-0053，结构化失败信息）：失败横幅「定点重写失败节」的
+  /** 单节终局失败清单（ADR-0054，结构化失败信息）：失败横幅「定点重写失败节」的
    * 消费面；partial/failed 终态时写入，成功与排队中无此字段（磁盘子格式可选字段，
    * 恢复侧对缺字段旧档案按「无失败信息」读）。 */
   failures?: GenJobFailure[]

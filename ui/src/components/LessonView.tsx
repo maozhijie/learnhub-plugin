@@ -8,7 +8,7 @@
  * 掌握度 = 口径 B 纯派生（masteryOfFm：0.7·记忆稳定度完成度 + 0.3·练习证据 EMA）。
  * #183：课文/题库/我的卡三路取数走 useCommand（任务在途 3s、空闲 15s 的自适应
  * 轮询走 usePolling——tick 返回下一次延迟），后台刷新失败保持旧数据不翻转。
- * 失败横幅（ADR-0053）：结构化失败清单 + 重试续跑/重写这一节/转 AI 修复/关闭四动作，
+ * 失败横幅（ADR-0054）：结构化失败清单 + 重试续跑/重写这一节/转 AI 修复/关闭四动作，
  * 「关闭」是视图状态存 UI 本地，不进任务账面。 */
 import { Button, Card, Collapse, Empty, Input, Message, Modal, Popconfirm, Space, Spin, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -65,7 +65,7 @@ export default function LessonView(props: { course: string; node: string; frame:
   const [staleNotice, setStaleNotice] = useState(false)
   useEffect(() => { setStaleNotice(false) }, [course, node])
 
-  // 失败横幅的「关闭」（ADR-0053）：视图状态存 UI 本地（任务注册表是账面、不掺视图状态），
+  // 失败横幅的「关闭」（ADR-0054）：视图状态存 UI 本地（任务注册表是账面、不掺视图状态），
   // 按任务记录粒度（startedAt）记忆——新一轮任务（重试续跑后）横幅照常出现。
   const failKey = job ? `learnhub:failHidden:${course}/${node}:${job.startedAt}` : null
   const [failHidden, setFailHidden] = useState(false)
@@ -369,7 +369,7 @@ export default function LessonView(props: { course: string; node: string; frame:
             </div>
           )}
           <Space size={8}>
-            {/* 续跑（ADR-0053）：重新入队即断点续跑——已就绪节跳过、只补缺失/失败节 */}
+            {/* 续跑（ADR-0054）：重新入队即断点续跑——已就绪节跳过、只补缺失/失败节 */}
             <Button size='mini' type='primary' loading={busy === 'generate'} onClick={() => void generate()}>重试续跑</Button>
             <Button size='mini' type='text' onClick={() => {
               setDiscussIntent(`上次生成${job.status === 'partial' ? '部分完成' : '失败'}：${job.message ?? '（无错误信息）'}。请分析原因并帮我修复，然后重试。`)

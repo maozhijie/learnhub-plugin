@@ -47,7 +47,7 @@ function sectionPrompt(tpl: string, pack: string, s: { id: string; title: string
   return `${tpl}\n\n## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}\n\n---\n\n${pack}`
 }
 
-/** 逐节生成共用出口（ADR-0053 修复阶梯）：初跑 fast 档 → 门禁失败先试块级局部修补
+/** 逐节生成共用出口（ADR-0054 修复阶梯）：初跑 fast 档 → 门禁失败先试块级局部修补
  * （#147：清单 ✗ 全部定位到具体违规块时只回灌这些块、只收替换块；正文过长不是块级
  * finding，天然落到整节修复）→ 整节压缩修复一轮（deep 档升一档——用与失败同档的
  * 配置盲试是已知死法；回灌块级修补**合并后**的原文防定位错位；长度 finding 附显式
@@ -119,7 +119,7 @@ async function applySectionWithRepair(
   }
 }
 
-/** 大纲拆节（ADR-0053 阶梯末级）：待拆节任务 + 上下文包 → 拆分 YAML（deep 档）→
+/** 大纲拆节（ADR-0054 阶梯末级）：待拆节任务 + 上下文包 → 拆分 YAML（deep 档）→
  * 引擎把该节原位替换为 2–3 个子节，返回子节清单（管线逐子节照常生成）。 */
 async function splitOverflowSection(
   rt: HostRuntime, complete: LlmComplete, course: string, node: string,
@@ -647,7 +647,7 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
  * → 逐节正文（每节一次模型调用；已 ready 节跳过 = 断点续跑）
  * → 逐节出题 + 综合出题。style 只替换节生成模板（课程节生成-<style>），
  * 大纲、断点续跑与门禁与默认管线同一路径；未知 style 在 loadPrompt fail loud。
- * 单节终局失败不中止余节（ADR-0053 continue→partial）：溢出节走「压缩修复→大纲拆节」
+ * 单节终局失败不中止余节（ADR-0054 continue→partial）：溢出节走「压缩修复→大纲拆节」
  * 阶梯（深度一层、总节数不越上限），其余失败记入结构化失败清单；有失败节时终态
  * partial、出题只对就绪节做出题循环自然跳过无内容节，练习页/失败提示可续跑。
  * 由队列执行泵驱动（pumpGeneration）；直接调用仅限已有 running 归属的路径。 */
@@ -658,7 +658,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     throw new Error(`「${node}」正在生成中，请稍候。`)
   }
   // 排队任务出队执行：沿用入队时间（FIFO 序与面板展示），覆盖为 running；清掉上一轮
-  // 失败清单（续跑语义——本轮终态重新累积，ADR-0053）
+  // 失败清单（续跑语义——本轮终态重新累积，ADR-0054）
   const job: GenJob = existing?.status === 'queued'
     ? { ...existing, status: 'running', phase: 'outline', failures: undefined }
     : { course, node, startedAt: new Date().toISOString(), status: 'running', phase: 'outline', ...(style ? { style } : {}) }
@@ -800,7 +800,7 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
   if (!s) throw new Error(`「${node}」没有节「${sectionId}」——先运行大纲。`)
   const sectionTpl = await rt.engine.content2.loadPrompt('课程节生成')
   const highTier = TIER_LABELS[await rt.engine.content2.contentTierOf(course, node)] === '高'
-  // 与管线同款剥围栏缝（管线产出口对 ``` 围栏容忍，重写通道此前裸缝更脆，ADR-0053）；
+  // 与管线同款剥围栏缝（管线产出口对 ``` 围栏容忍，重写通道此前裸缝更脆，ADR-0054）；
   // allowSplit:false——「重写这一节」的意图是重写本节，不自动改大纲结构（溢出即如实报错）
   const r = await applySectionWithRepair(rt, llmSeamStripped(ctx), course, node, s, sectionTpl, pack, { highTier, allowSplit: false })
   return `[section] 「${r.title}」v${r.version} 落盘。`

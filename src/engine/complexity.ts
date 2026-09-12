@@ -217,7 +217,7 @@ export function nodeProfileLines(g: GraphSignalsSource, node: string): string[] 
 }
 
 /** 单档锚点（初值 2026-09-07；字数锚 2026-09-12 按「一节 = 学习页 1–2 屏 ≈ 400–800 字」
- * 实测校准放宽——初值 150/250/400 只够半屏，属拍脑袋数（ADR-0053）；测试只锁方向与上下限形状）。 */
+ * 实测校准放宽——初值 150/250/400 只够半屏，属拍脑袋数（ADR-0054）；测试只锁方向与上下限形状）。 */
 export interface TierAnchors {
   /** 节段数目标区间 [min, max]（prompt 锚定，非硬校验）。 */
   sections: [number, number]
