@@ -67,9 +67,10 @@ test('Missing 合法空态不变：流水缺席返回 []，空行照旧跳过', 
 test('结构守卫：JSONL 读侧必经原语——src 全域 split("\\n") 只许出现在白名单（非 JSONL 文本处理）', async () => {
   // 白名单 = 逐个核对过的非 JSONL 用法：io 原语本体；markdown/提示词/门禁清单的
   // 文本行处理（compass/content/growth-subsystem）；答案文本归一的多行切分（grading）；
-  // mini-YAML 解析（yaml.ts）；路径与错误文案处理（note-source.ts）。白名单外出现
-  // split('\n') = 有人手写 JSONL parse 循环（ADR-0053 单一实现违约）。
-  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts'])
+  // mini-YAML 解析（yaml.ts）；路径与错误文案处理（note-source/generation-jobs 的
+  // sectionFailure 切错误消息取首条 ✗）。白名单外出现 split('\n') = 有人手写 JSONL
+  // parse 循环（ADR-0053 单一实现违约）。
+  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts', 'generation-jobs.ts'])
   const files: string[] = []
   function walk(dir: string): void {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
