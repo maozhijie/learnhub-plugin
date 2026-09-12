@@ -102,6 +102,8 @@
   "graph.projectApply",
   "graph.vaultLinksScan",
   "growth2.compassRead",
+  "lab.receiptReviewMode",
+  "lab.setReceiptReviewMode",
   "learner.executionLog",
   "learner.receiptList",
   "learner.receiptSubmit",

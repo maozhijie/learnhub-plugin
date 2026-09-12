@@ -133,6 +133,18 @@ export const NOF1_TEMPLATES: Nof1Template[] = [
     unlocked: false,
     unlock_note: '随 #93 检索点会话落地解锁',
   },
+  {
+    id: 'receipt_review_ai_vs_self',
+    variable: 'receipt_review_mode',
+    title: '回执评审模式：AI 量表评审 vs 学习者自评',
+    question: '回执改由我自己对照量表评分（不靠 AI 评审）时，我的练习评分会更好还是更松？',
+    arms: ['ai', 'self'],
+    arm_labels: { ai: 'AI 量表评审', self: '学习者自评' },
+    unit: 'batch',
+    outcome: 'practice_ema',
+    description: '回执的评审者按学习日在「AI 量表评审（现状）/学习者自评」间轮换（批次交替）：AI 臂照旧按量表评审（含渐退反馈），自评臂由你对照量表自报 0–1 分、不调 AI。两臂评分同权进练习证据 EMA。如实说明：自评臂的分数出自你自己——臂间差同时包含评分口径差（自评通常偏宽）与练习行为差，这是你身上的联合效应，不是纯干预效应。',
+    unlocked: true,
+  },
 ]
 
 export function nof1Template(id: string): Nof1Template | null {
@@ -708,6 +720,48 @@ export class LabSubsystem {
     }
     return ['easy', 'standard', 'hard'].includes(doc.band_default ?? '')
       ? doc.band_default as BandPref : null
+  }
+
+  /** 回执评审模式默认档（#203 / ADR-0056；state/learnhub.json 的 receipt_review_mode，
+   * 缺省 'ai' = ADR-0016 现状）。消费链：实验当日臂 > 此默认档。 */
+  async receiptReviewMode(): Promise<'ai' | 'self'> {
+    const doc = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs) as {
+      receipt_review_mode?: string
+    }
+    return doc.receipt_review_mode === 'self' ? 'self' : 'ai'
+  }
+
+  /** 写回执评审模式默认档（原子替换，保留配置文件其他字段；实验在跑时当日臂仍覆盖它）。
+   * 非法档 fail loud（与 setBandDefault 同形态——省略是读、写入必须显式合法）。 */
+  async setReceiptReviewMode(mode: 'ai' | 'self'): Promise<{ mode: 'ai' | 'self' }> {
+    if (mode !== 'ai' && mode !== 'self') {
+      throw new Error(`[receipt-review-mode] mode 只能是 ai/self（收到 ${String(mode)}）。`)
+    }
+    const prev = await readLearnhubConfig(this.e.paths.learnhubConfigPath, this.e.fs)
+    await writeLearnhubConfig(this.e.paths.learnhubConfigPath, { ...prev, receipt_review_mode: mode }, this.e.fs)
+    return { mode }
+  }
+
+  /** 回执评审模式当日成立（#203 / ADR-0056 的实验通道）：默认档 ← 在跑实验
+   * （variable=receipt_review_mode、批次交替、scope 含该课程）当日臂覆盖。返回模式
+   * 与来源（experiment 时带实验 id 与臂），回执提交入口据此分派 ai/self。 */
+  async receiptReviewEffect(input: { today: string; course: string | null }): Promise<{
+    mode: 'ai' | 'self'
+    source: 'default' | 'experiment'
+    experiment?: number
+    arm?: string
+  }> {
+    const exp = await this.nof1Active()
+    if (exp && exp.variable === 'receipt_review_mode'
+      && exp.assignment.kind === 'batch'
+      && (!exp.scope_course || exp.scope_course === input.course)) {
+      const arm = nof1ArmForDay(exp, input.today)
+      if (arm !== 'ai' && arm !== 'self') {
+        throw new Error(`[nof1] 实验 #${exp.id} 的臂「${arm}」不是 ai/self——回执评审模式实验的臂已固定，定义疑似被手工改动。`)
+      }
+      return { mode: arm, source: 'experiment', experiment: exp.id, arm }
+    }
+    return { mode: await this.receiptReviewMode(), source: 'default' }
   }
 
   /** 写默认带（既有配置入口——恒温器建议显式确认后落到这里；null = 清除回纯 A1）。 */

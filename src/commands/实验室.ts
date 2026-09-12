@@ -105,6 +105,21 @@ export const 实验室域 = {
       }
     ]
   }),
+  'receipt-review-mode': command({
+    id: "receipt-review-mode",
+    summary: "Get or set the DEFAULT receipt review mode (#203 / ADR-0056): ai = AI rubric review on submit (ADR-0016 default, fading full/brief feedback); self = the learner self-scores 0-1 against the rubric, no LLM call. A running receipt-review N-of-1 experiment (variable receipt_review_mode, practice_ema outcome) overrides this default with the day's arm — batch alternation switches the reviewer by learning day. force_full is ai-arm-only (rejected on self days); self_score is self-arm-only. Omit mode to read the current default.",
+    args: {
+      mode: { type: "string", description: "ai / self to set the default; omit to read current config" }
+    },
+    domain: "实验室",
+    channels: [
+      {
+        channel: "agent",
+        mode: "sync",
+        tool: "learnhub_receipt_review_mode"
+      }
+    ]
+  }),
   'experiments': command({
     id: "experiments",
     args: {},

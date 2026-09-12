@@ -339,6 +339,13 @@ export interface LearnerDeps {
   sedimentSettle(): Promise<{ week: string | null; wrote: SedimentKind[]; skipped: Array<{ kind: SedimentKind; reason: string }>; profile: string }>
   compassEtaRefresh(courseKey?: string, opts?: { today?: string; force?: boolean }): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta }>>
   experimentPropose(templateId: string, course?: string): Promise<{ proposal: number; template: string; title: string; pool: number; scope_course: string | null }>
+  /** 回执评审模式当日成立（#203 / ADR-0056；lab 解析：配置默认 ← 实验当日臂覆盖）。 */
+  receiptReviewEffect(input: { today: string; course: string | null }): Promise<{
+    mode: 'ai' | 'self'
+    source: 'default' | 'experiment'
+    experiment?: number
+    arm?: string
+  }>
   refreshSourceFingerprints(absPaths: string[]): Promise<void>
 }
 
@@ -1162,12 +1169,14 @@ export class LearnerSubsystem {
     }
   }
 
-  /** 回执提交全链：材料 → AI 量表评审（rubric = 实践节点内容要点）→ 评审分同权进
-   * practice_ema；渐退反馈 per 主体（完整评审位置 = wantsFullReview 曲线，学习者可
-   * force_full 越过）。零 XP、不推进任何 FSRS 卡；v1 只挂实践节点（type=practice）。 */
+  /** 回执提交全链：按当日生效档分派评审模式（#203 / ADR-0056：实验当日臂 > 配置
+   * 默认 ai）——ai 臂 = AI 量表评审（rubric = 实践节点内容要点，full/brief 渐退）；
+   * self 臂 = 学习者对照量表自报 0–1 分、不调 AI（force_full 在自评臂日无意义，fail
+   * loud；self_score 在 AI 臂日同样拒绝——两臂口径不混）。评审分同权进 practice_ema；
+   * 零 XP、不推进任何 FSRS 卡；v1 只挂实践节点（type=practice）。 */
   async receiptSubmit(
     courseKey: string | undefined, node: string,
-    input: { kind: ReceiptKind; material: string; force_full?: boolean },
+    input: { kind: ReceiptKind; material: string; force_full?: boolean; self_score?: number; self_verdict?: string },
     llm: LlmComplete,
   ): Promise<ReceiptSubmitResult> {
     const kind = input.kind
@@ -1185,8 +1194,16 @@ export class LearnerSubsystem {
     }
     const note = await this.e.nodeNote(c, graph, node)
     if (!note.fm) throw new Error('[receipt-submit] 节点笔记缺 frontmatter，无法入练习证据 EMA。')
-    const points = await this.explainPoints(c, graph, node)
     const { today } = await this.e.learningDay()
+    const effect = await this.e.receiptReviewEffect({ today, course: c.name })
+    if (effect.mode === 'self') {
+      if (input.force_full === true) {
+        throw new Error('[receipt-submit] 今日是自评臂（回执评审实验）——force_full 是 AI 评审深度的越级请求，自评日无 AI 评审可越。')
+      }
+    } else if (input.self_score !== undefined) {
+      throw new Error('[receipt-submit] 今日是 AI 评审臂（回执评审实验或默认档）——self_score 只在自评臂日受理，评分归 AI 量表评审。')
+    }
+    const points = await this.explainPoints(c, graph, node)
     const result = await submitReceipt({
       store: this.e.store,
       course: c.name, node,
@@ -1194,6 +1211,9 @@ export class LearnerSubsystem {
       points,
       today,
       nowMs: this.e.clock.nowMs(),
+      mode: effect.mode,
+      ...(input.self_score !== undefined ? { selfScore: input.self_score } : {}),
+      ...(input.self_verdict !== undefined ? { selfVerdict: input.self_verdict } : {}),
       forceFull: input.force_full === true,
       fm: note.fm,
       saveFm: async fm => { await this.e.saveNodeNote(note.path, fm, note.body) },

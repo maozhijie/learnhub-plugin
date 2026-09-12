@@ -39,6 +39,9 @@ export interface ReceiptLogRec {
   kind: ReceiptKind
   /** 评审深度：full 完整错误具体评审 / brief 只评分+总评（渐退）。 */
   review_mode: 'full' | 'brief'
+  /** 评分者（#203 / ADR-0056）：ai = AI 量表评审（缺省——旧流水无此字段，读侧视同
+   * ai）/ self = 学习者自评分（不调 LLM，review_mode 恒 brief）。 */
+  source?: 'ai' | 'self'
   /** 量表分 0–1（同权进 EMA；永不回滚）。 */
   score: number
   verdict: string
@@ -173,9 +176,12 @@ interface ReceiptStore {
   appendReceipt(rec: ReceiptLogRec): Promise<ReceiptLogRec>
 }
 
-/** 回执提交（引擎侧收口）：评审（llm seam 注入）→ 流水落盘 → EMA 入账。评审解析失败
- * 时回执与 EMA 零落盘（ADR-0004 事务性）；fsrs 块经 fm 原样透传——回执永不推进任何
- * FSRS 卡。 */
+/** 回执提交（引擎侧收口）：按 mode 分派评审——ai = AI 量表评审（rubric = 实践节点
+ * 内容要点，full/brief 渐退）；self = 学习者自评分入账（#203 / ADR-0056：不调 LLM，
+ * review_mode 恒 brief，selfScore 必须是 0–1 数字）。两档同一落盘与 EMA 入账；评审
+ * 解析失败/自评分缺失时回执与 EMA 零落盘（ADR-0004 事务性）；fsrs 块经 fm 原样透传
+ * ——回执永不推进任何 FSRS 卡。mode 由调用方（learner-cards 入口）按当日生效档解析
+ * 后传入——receipts 是叶子模块，不感知实验与配置（R7：nof1 反向 type-import 本域）。 */
 export async function submitReceipt(input: {
   store: ReceiptStore
   course: string
@@ -187,6 +193,12 @@ export async function submitReceipt(input: {
   today: string
   /** 当前时刻（#175 阶段①：时钟经 Clock 端口注入，回执 ts 由它生成）。 */
   nowMs: number
+  /** 评审模式（当日生效档；缺省 ai = ADR-0016 现状）。 */
+  mode?: 'ai' | 'self'
+  /** 自评分（mode='self' 必备）：学习者对照量表自报的 0–1 量表分。 */
+  selfScore?: number
+  /** 自评总评（mode='self' 可选一句话；缺省给中性占位）。 */
+  selfVerdict?: string
   forceFull: boolean
   /** 当前节点 frontmatter。 */
   fm: Fm
@@ -196,39 +208,59 @@ export async function submitReceipt(input: {
 }): Promise<ReceiptSubmitResult> {
   const prior = (await input.store.receiptsAll()).filter(r => r.course === input.course && r.node === input.node)
   const index = prior.length + 1
-  const mode: 'full' | 'brief' = input.forceFull || wantsFullReview(index) ? 'full' : 'brief'
-  const prompt = receiptReviewPrompt({
-    template: input.template,
-    course: input.course,
-    node: input.node,
-    kind: input.kind,
-    material: input.material,
-    points: input.points,
-    mode,
-    recentVerdicts: prior.map(p => p.verdict).filter(Boolean),
-  })
-  // 量表评审带错误逐条拆解，值得多思考一轮：恒走 deep 档（#137：档位沿缝声明，宿主适配器翻译成部署思考档）
-  const review = parseReceiptReview(await input.llm(prompt, receiptReviewSystem(), { effort: 'deep' }))
-  const rec: ReceiptLogRec = {
-    id: `r${index}`,
-    ts: nowIsoOf(input.nowMs),
-    course: input.course, node: input.node,
-    day: input.today,
-    kind: input.kind,
-    review_mode: mode,
-    score: review.score,
-    verdict: review.verdict,
-    ...(mode === 'full' && review.errors?.length ? { errors: review.errors } : {}),
+  let rec: ReceiptLogRec
+  if (input.mode === 'self') {
+    if (typeof input.selfScore !== 'number' || !Number.isFinite(input.selfScore)) {
+      throw new Error('[receipt-submit] 自评臂提交缺 0–1 的 self_score——学习者对照量表自报评分，回执未落盘。')
+    }
+    const score = Math.round(clamp01(input.selfScore) * 1000) / 1000
+    rec = {
+      id: `r${index}`,
+      ts: nowIsoOf(input.nowMs),
+      course: input.course, node: input.node,
+      day: input.today,
+      kind: input.kind,
+      review_mode: 'brief',
+      source: 'self',
+      score,
+      verdict: input.selfVerdict?.trim() || '学习者自评',
+    }
+  } else {
+    const mode: 'full' | 'brief' = input.forceFull || wantsFullReview(index) ? 'full' : 'brief'
+    const prompt = receiptReviewPrompt({
+      template: input.template,
+      course: input.course,
+      node: input.node,
+      kind: input.kind,
+      material: input.material,
+      points: input.points,
+      mode,
+      recentVerdicts: prior.map(p => p.verdict).filter(Boolean),
+    })
+    // 量表评审带错误逐条拆解，值得多思考一轮：恒走 deep 档（#137：档位沿缝声明，宿主适配器翻译成部署思考档）
+    const review = parseReceiptReview(await input.llm(prompt, receiptReviewSystem(), { effort: 'deep' }))
+    rec = {
+      id: `r${index}`,
+      ts: nowIsoOf(input.nowMs),
+      course: input.course, node: input.node,
+      day: input.today,
+      kind: input.kind,
+      review_mode: mode,
+      source: 'ai',
+      score: review.score,
+      verdict: review.verdict,
+      ...(mode === 'full' && review.errors?.length ? { errors: review.errors } : {}),
+    }
   }
   await input.store.appendReceipt(rec)
   // 同权进 EMA（旧 0.7 新 0.3）：复用既有 applyPracticeEvidence（ADR-0016 工程影响点名）
-  const nextFm = applyPracticeEvidence(input.fm, review.score)
+  const nextFm = applyPracticeEvidence(input.fm, rec.score)
   await input.saveFm(nextFm)
   return {
     receipt: rec,
     index,
-    review_mode: mode,
+    review_mode: rec.review_mode,
     practice_ema: nextFm.practice_ema ?? 0,
-    next_full_in: mode === 'brief' ? receiptsUntilNextFull(index) : null,
+    next_full_in: rec.review_mode === 'brief' ? receiptsUntilNextFull(index) : null,
   }
 }

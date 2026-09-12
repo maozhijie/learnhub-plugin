@@ -576,13 +576,15 @@ export const 学习者产出域 = {
   }),
   'receipt-submit': command({
     id: "receipt-submit",
-    summary: "File an external-practice receipt on a PRACTICE node (v1 carrier) and run the full loop: receipt → AI rubric review (rubric source = the node's content points; free-form questions are NOT answered) → the score enters the node's practice EMA (same weight, old 0.7/new 0.3). Self-reported = trusted (no anti-cheat gate); material is free-form (text description / image path / export / coach signoff). Receipts never earn XP, never push any FSRS card, and are never Broken. Feedback fades: full error-specific reviews follow a decreasing-frequency curve (receipt #1,2,4,7,11,16,… capped at every 5th); other receipts get score + one-line verdict only. The learner can always force a full review (force_full).",
+    summary: "File an external-practice receipt on a PRACTICE node (v1 carrier) and run the full loop: receipt → review → the score enters the node's practice EMA (same weight, old 0.7/new 0.3). The reviewer follows the day's effective receipt-review mode (#203 / ADR-0056): ai = AI rubric review (rubric source = the node's content points; free-form questions are NOT answered; fading full/brief feedback, force_full asks for a full review now) — the default; self = the learner self-scores against the rubric (self_score 0-1 required, no LLM; a running receipt-review N-of-1 experiment alternates the two arms by learning day and overrides the default, and each arm rejects the other's params). Self-reported = trusted (no anti-cheat gate); material is free-form (text description / image path / export / coach signoff). Receipts never earn XP, never push any FSRS card, and are never Broken.",
     args: {
       course: { type: "string", description: "Course name", required: true },
       node: { type: "string", description: "Practice node name (type=practice)", required: true },
       kind: { type: "string", description: "text / image / export / signoff", required: true },
       material: { type: "string", description: "Receipt material: description, image path, export data, or signoff reference", required: true },
-      force_full: { type: "boolean", description: "Learner explicitly asks for a full error-specific review now" }
+      force_full: { type: "boolean", description: "Learner explicitly asks for a full error-specific review now (ai arm only; rejected on self days)" },
+      self_score: { type: "number", description: "Learner's self-scored 0-1 rubric score (self arm only; rejected on ai days)" },
+      self_verdict: { type: "string", description: "One-line self-review note (self arm, optional)" }
     },
     engine: "learner.receiptSubmit",
     domain: "学习者产出",

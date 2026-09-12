@@ -858,7 +858,7 @@
    {
     "tool": "learnhub_receipt_submit",
     "page": "practice",
-    "text": "提交外部练习回执（描述/图片/导出皆可；AI 量表评审，零 XP、不推调度）。",
+    "text": "提交外部练习回执（描述/图片/导出皆可；评审模式按当日生效档 = 实验臂或默认 AI，零 XP、不推调度；自评臂带 self_score）。",
     "prompt": "提交一份回执：<练习内容描述>"
    },
    {
@@ -866,6 +866,12 @@
     "page": "practice",
     "text": "查看已提交的回执清单。",
     "prompt": "列出我提交过的回执"
+   },
+   {
+    "tool": "learnhub_receipt_review_mode",
+    "page": "practice",
+    "text": "读/设回执评审默认档（ai/self；回执评审实验在跑时当日臂覆盖默认）。",
+    "prompt": "把回执评审默认档改成自评"
    },
    {
     "tool": "learnhub_project_milestone_pass",

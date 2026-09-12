@@ -106,20 +106,24 @@ test('纯函数：结局提取——只取 auto/self 到期首推、按 exp id �
   ], 'synthetic/首学/无标注/他实验排除；同卡同日只取第一次')
 })
 
-test('纯函数：白名单与模板库口径——调度核心不入白名单，v1 只解锁已上线参数', () => {
+test('纯函数：白名单与模板库口径——调度核心不入白名单，练习侧变量 #203 起入列', () => {
   assert.deepEqual([...NOF1_VARIABLE_WHITELIST], [
     'band_default', 'session_composition', 'ps_i_order', 'retrieval_point', 'ci_orchestration',
+    'receipt_review_mode',
   ])
   for (const bad of ['fsrs_weights', 'desired_retention', 'advance_gate', 'xp_rates']) {
     assert.ok(!NOF1_VARIABLE_WHITELIST.includes(bad as never), `调度核心参数 ${bad} 不在白名单`)
   }
   for (const t of NOF1_TEMPLATES) {
     assert.ok(NOF1_VARIABLE_WHITELIST.includes(t.variable), `模板 ${t.id} 的变量必须在白名单`)
+    if (t.outcome === 'practice_ema') {
+      assert.equal(t.unit, 'batch', `练习侧模板 ${t.id} 必须批次交替（接口不变式）`)
+    }
   }
   assert.deepEqual(
     NOF1_TEMPLATES.filter(t => t.unlocked).map(t => t.variable).sort(),
-    ['band_default', 'session_composition'],
-    'v1 模板只收已上线参数（难度带默认、会话组成）',
+    ['band_default', 'receipt_review_mode', 'session_composition'],
+    '已解锁参数：难度带默认、会话组成（调度侧）+ 回执评审模式（练习侧，#203）',
   )
   assert.equal(NOF1_PER_ARM_MIN, 20)
 })
@@ -517,3 +521,91 @@ test('#135 练习侧结局：practice_ema 报告从 practice/回执/exec 三股�
   })
 })
 
+
+// ---- #203 回执评审模式（receipt_review_mode）：白名单增补 + 双变体通道 + 模板登记 ----
+
+const PRACTICE_GRAPH = [
+  'region: 基础',
+  'color: blue',
+  'blocks:',
+  '  - name: 入门块',
+  '    nodes:',
+  '      - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
+].join('\n')
+const LLM_THROWS = async (): Promise<string> => { throw new Error('LLM 不该被调用（自评臂不评审）') }
+
+test('#203 回执评审模式：配置默认档读写，自评臂不调 LLM、两臂互拒对方参数', async () => {
+  await withVault({ graph: PRACTICE_GRAPH, notes: { 练耳: {} } }, async ({ engine }) => {
+    assert.equal(await engine.lab.receiptReviewMode(), 'ai', '缺省 ai（ADR-0016 现状）')
+    await assert.rejects(() => engine.lab.setReceiptReviewMode('easy' as never), /ai\/self/, '非法档 fail loud')
+
+    // 默认 self：缺 self_score 拒绝；带 self_score 不调 LLM，source=self、brief、同权入 EMA
+    await engine.lab.setReceiptReviewMode('self')
+    await assert.rejects(
+      () => engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: '今天练了 30 分钟' }, LLM_THROWS),
+      /self_score/,
+    )
+    const r = await engine.learner.receiptSubmit(
+      '数学', '练耳', { kind: 'text', material: '今天练了 30 分钟', self_score: 0.7, self_verdict: '节奏还行' }, LLM_THROWS,
+    )
+    assert.equal(r.receipt.source, 'self')
+    assert.equal(r.receipt.review_mode, 'brief')
+    assert.equal(r.receipt.score, 0.7)
+    assert.equal(r.receipt.verdict, '节奏还行')
+    // force_full 是 AI 臂语义：自评档拒绝
+    await assert.rejects(
+      () => engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x', self_score: 0.5, force_full: true }, LLM_THROWS),
+      /force_full/,
+    )
+
+    // 默认 ai：self_score 拒绝；AI 评审路径照旧带 source=ai
+    await engine.lab.setReceiptReviewMode('ai')
+    await assert.rejects(
+      () => engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x', self_score: 0.5 }, LLM_THROWS),
+      /AI 评审臂/,
+    )
+    let llmCalls = 0
+    const r2 = await engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x' }, async () => {
+      llmCalls++
+      return JSON.stringify({ score: 0.8, verdict: '节奏稳' })
+    })
+    assert.equal(llmCalls, 1, 'AI 臂走量表评审')
+    assert.equal(r2.receipt.source, 'ai')
+    assert.equal(r2.receipt.score, 0.8)
+  })
+})
+
+test('#203 回执评审实验：模板可发起、当日臂覆盖配置默认、按学习日轮换评审者', async () => {
+  await withVault({ graph: PRACTICE_GRAPH, notes: { 练耳: {} } }, async ({ engine }) => {
+    // 默认档故意设为 self：实验 ai 臂日必须覆盖回 ai
+    await engine.lab.setReceiptReviewMode('self')
+
+    const prop = await engine.lab.experimentPropose('receipt_review_ai_vs_self')
+    const props = await engine.store.loadProposals()
+    assert.match(props.at(-1)!.summary, /主结局=练习评分/, '提案文案按模板 outcome 渲染（#135）')
+    assert.match(props.at(-1)!.summary, /次练习评分/, '观察窗措辞随结局')
+    const started = await engine.lab.experimentApply(prop.proposal)
+    assert.equal(started.arm_today, 'ai', '批次第一臂 = ai')
+
+    // 当日臂 ai：self_score 拒绝（尽管默认档是 self）——实验臂覆盖默认
+    await assert.rejects(
+      () => engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x', self_score: 0.5 }, LLM_THROWS),
+      /AI 评审臂/,
+    )
+
+    // 起点回拨一日 → 今日轮到 self 臂：自评照常入账
+    const list = await engine.store.loadExperiments()
+    const today = list[0]!.started_day
+    list[0]!.assignment = { kind: 'batch', start_day: addDays(today, -1)!, order: ['ai', 'self'] }
+    await engine.store.saveExperiments(list)
+    const r = await engine.learner.receiptSubmit(
+      '数学', '练耳', { kind: 'text', material: '今天练了 40 分钟', self_score: 0.6 }, LLM_THROWS,
+    )
+    assert.equal(r.receipt.source, 'self', '自评臂生效（实验覆盖默认档）')
+
+    // 练习侧分析器吃得到自评回执：报告进度含该评分
+    const report = await engine.lab.experimentReport()
+    assert.equal(report.analysis.per_arm[1]!.n, 1, 'self 臂 1 次练习评分（回执）')
+    assert.equal(report.analysis.per_arm[1]!.rate, 0.6)
+  })
+})

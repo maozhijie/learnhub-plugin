@@ -46,10 +46,10 @@ const NO_ENGINE: Record<string, '队列型' | '按参分派型' | '无引擎型'
   'generate': '队列型', 'section-rewrite': '队列型', 'course-reset': '队列型',
   'question-generate': '队列型', 'coach-growth': '队列型', 'coach-compass': '队列型',
   'seed-propose': '队列型', 'project-plan-generate': '队列型', 'project-milestone-generate': '队列型',
-  // ② 按参分派型 7：同一个命令的入口是实参的函数
+  // ② 按参分派型 8：同一个命令的入口是实参的函数
   'node-pin': '按参分派型', 'experiments': '按参分派型', 'graph-apply': '按参分派型',
   'question-update': '按参分派型', 'bank-cleanup': '按参分派型', 'probation': '按参分派型',
-  'sleep-config': '按参分派型',
+  'sleep-config': '按参分派型', 'receipt-review-mode': '按参分派型',
   // ③ 无引擎型 9：伺服、host 队列态、常量、LLM 会话
   'file': '无引擎型', 'vendor-': '无引擎型', 'interactive': '无引擎型',
   'generate-status': '无引擎型', 'generate-resume': '无引擎型', 'generate-cancel': '无引擎型',
@@ -127,7 +127,7 @@ test('门③ 唯一性：id／tool 名／(method, path) 各自唯一，索引没
   assert.equal(new Set(ids).size, ids.length, 'id 有重复')
   const tools = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.tool).map(x => x.tool!))
   assert.equal(new Set(tools).size, tools.length, 'tool 名有重复')
-  assert.equal(tools.length, 111, `agent 通道应恰 111 条，实得 ${tools.length}`)
+  assert.equal(tools.length, 112, `agent 通道应恰 112 条，实得 ${tools.length}（#203 +1：learnhub_receipt_review_mode）`)
   const routeKeys = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route).map(x => `${x.route!.method} ${x.route!.path}`))
   assert.equal(new Set(routeKeys).size, routeKeys.length, '(method, path) 有重复')
   assert.equal(routeKeys.length, 126, `panel 通道应恰 126 条，实得 ${routeKeys.length}（#159 +1：/proposals/impact）`)
@@ -140,7 +140,7 @@ test('门③ 唯一性：id／tool 名／(method, path) 各自唯一，索引没
 test('门⑤ AGENT_GUIDE 受检投影：每条指南的 tool 所属命令确实带 agent 通道', () => {
   const bad = AGENT_GUIDE.filter(g => !BY_TOOL.has(g.tool)).map(g => g.tool)
   assert.deepEqual(bad, [], `指南里的这些 tool 不在注册表的 agent 通道里（ADR-0045 受检投影）：\n${bad.join('\n')}`)
-  assert.equal(AGENT_GUIDE.length, 22, '指南条目数（增减要显式）')
+  assert.equal(AGENT_GUIDE.length, 23, '指南条目数（增减要显式）')
 })
 
 // ---------------------------------------------------------------- ⑥ 零运行时依赖

@@ -231,6 +231,13 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         { course: args.course, node: args.node, cue: args.cue, action: args.action }))),
   'learnhub_experiment_templates': () => run(rt, 'learnhub_experiment_templates', async () =>
       JSON.stringify(await rt.engine.lab.experimentTemplates())),
+  'learnhub_receipt_review_mode': (args: { mode?: string }) => run(rt, 'learnhub_receipt_review_mode', async () => {
+    if (args.mode === undefined) return JSON.stringify(await rt.engine.lab.receiptReviewMode())
+    if (args.mode !== 'ai' && args.mode !== 'self') {
+      throw new Error('[receipt-review-mode] mode 只能是 ai/self（收到 ' + String(args.mode) + '）；省略 mode = 读当前默认档。')
+    }
+    return JSON.stringify(await rt.engine.lab.setReceiptReviewMode(args.mode))
+  }),
   'learnhub_experiment_apply': (args: { id?: number }) => run(rt, 'learnhub_experiment_apply', async () =>
       JSON.stringify(await rt.engine.lab.experimentApply(applyId(args.id)))),
   'learnhub_thermostat': () => run(rt, 'learnhub_thermostat', async () => JSON.stringify(await rt.engine.lab.thermostatView())),

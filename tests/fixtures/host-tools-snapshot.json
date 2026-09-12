@@ -267,6 +267,19 @@
   }
  },
  {
+  "name": "learnhub_receipt_review_mode",
+  "description": "Get or set the DEFAULT receipt review mode (#203 / ADR-0056): ai = AI rubric review on submit (ADR-0016 default, fading full/brief feedback); self = the learner self-scores 0-1 against the rubric, no LLM call. A running receipt-review N-of-1 experiment (variable receipt_review_mode, practice_ema outcome) overrides this default with the day's arm — batch alternation switches the reviewer by learning day. force_full is ai-arm-only (rejected on self days); self_score is self-arm-only. Omit mode to read the current default.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "mode": {
+     "type": "string",
+     "description": "ai / self to set the default; omit to read current config"
+    }
+   }
+  }
+ },
+ {
   "name": "learnhub_experiment_propose",
   "description": "Propose an N-of-1 experiment from a preset template (D-1, proposal-confirmation flow, step 1): validates the template is unlocked and no experiment is running (v1 runs one at a time), previews the eligible card pool (scheduled, non-archived bank questions), and files a pending experiment proposal for the learner to confirm. Whitelist enforcement is structural: only template ids resolve; unknown ids and non-whitelist parameters fail loud. Never starts anything by itself.",
   "parameters": {
@@ -2081,7 +2094,7 @@
  },
  {
   "name": "learnhub_receipt_submit",
-  "description": "File an external-practice receipt on a PRACTICE node (v1 carrier) and run the full loop: receipt → AI rubric review (rubric source = the node's content points; free-form questions are NOT answered) → the score enters the node's practice EMA (same weight, old 0.7/new 0.3). Self-reported = trusted (no anti-cheat gate); material is free-form (text description / image path / export / coach signoff). Receipts never earn XP, never push any FSRS card, and are never Broken. Feedback fades: full error-specific reviews follow a decreasing-frequency curve (receipt #1,2,4,7,11,16,… capped at every 5th); other receipts get score + one-line verdict only. The learner can always force a full review (force_full).",
+  "description": "File an external-practice receipt on a PRACTICE node (v1 carrier) and run the full loop: receipt → review → the score enters the node's practice EMA (same weight, old 0.7/new 0.3). The reviewer follows the day's effective receipt-review mode (#203 / ADR-0056): ai = AI rubric review (rubric source = the node's content points; free-form questions are NOT answered; fading full/brief feedback, force_full asks for a full review now) — the default; self = the learner self-scores against the rubric (self_score 0-1 required, no LLM; a running receipt-review N-of-1 experiment alternates the two arms by learning day and overrides the default, and each arm rejects the other's params). Self-reported = trusted (no anti-cheat gate); material is free-form (text description / image path / export / coach signoff). Receipts never earn XP, never push any FSRS card, and are never Broken.",
   "parameters": {
    "type": "object",
    "properties": {
@@ -2103,7 +2116,15 @@
     },
     "force_full": {
      "type": "boolean",
-     "description": "Learner explicitly asks for a full error-specific review now"
+     "description": "Learner explicitly asks for a full error-specific review now (ai arm only; rejected on self days)"
+    },
+    "self_score": {
+     "type": "number",
+     "description": "Learner's self-scored 0-1 rubric score (self arm only; rejected on ai days)"
+    },
+    "self_verdict": {
+     "type": "string",
+     "description": "One-line self-review note (self arm, optional)"
     }
    },
    "required": [

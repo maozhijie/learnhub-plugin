@@ -240,6 +240,7 @@ export class LearnhubEngine {
       sedimentSettle: () => this.sched2.sedimentSettle(),
       compassEtaRefresh: (courseKey, opts) => this.growth2.compassEtaRefresh(courseKey, opts),
       experimentPropose: (templateId, course) => this.lab.experimentPropose(templateId, course),
+      receiptReviewEffect: (input: { today: string; course: string | null }) => this.lab.receiptReviewEffect(input),
       refreshSourceFingerprints: absPaths => this.project.refreshSourceFingerprints(absPaths),
     })
     this.project = new ProjectSubsystem({

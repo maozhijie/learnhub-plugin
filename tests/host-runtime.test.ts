@@ -791,16 +791,16 @@ test('路由分发：static 抽离后 /file、/vendor、/interactive 的守卫�
 
 // ---------------------------------------------------------------- 工具面快照 + 路由↔工具对账
 
-test('工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变', () => {
+test('工具面快照：112 个工具的名称/描述/schema 与重构前基线逐字不变（#203 +1）', () => {
   const rt = makeRuntime()
   const captured: Array<{ name?: string; description?: string; parameters?: unknown; output?: unknown }> = []
   registerTools(fakeCtx(captured), rt)
-  assert.equal(captured.length, 111, '工具总数不变（注册顺序按域分组重排，逐工具逐字不变）')
+  assert.equal(captured.length, 112, '工具总数不变（注册顺序按域分组重排，逐工具逐字不变；#203 +1 receipt_review_mode）')
   const snapshot = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-snapshot.json'), 'utf8')) as
     Array<{ name: string; description: string; parameters: unknown }>
-  assert.equal(snapshot.length, 111)
+  assert.equal(snapshot.length, 112)
   const byName = new Map(captured.map(t => [t.name, t]))
-  assert.equal(byName.size, 111, '工具名无重复')
+  assert.equal(byName.size, 112, '工具名无重复')
   for (const expect of snapshot) {
     const got = byName.get(expect.name)
     assert.ok(got, `缺工具 ${expect.name}`)
@@ -835,7 +835,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
     assert.ok(!seen.has(g.tool), `指南重复条目：${g.tool}`)
     seen.add(g.tool)
   }
-  assert.equal(AGENT_GUIDE.length, 22, '指南条目数（22 条手写，增减要显式）')
+  assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
 test('路由↔工具对账基线：86 共享引擎入口、工具独有 25、路由独有 49（终态点路径口径；ADR-0045 迁移回归网）', () => {
@@ -871,7 +871,7 @@ test('路由↔工具对账基线：86 共享引擎入口、工具独有 25、�
   // 进工具面 → 86 共享／路由独有 49（#156 已把工具面一条入口收编共享：25/49；
   // #196/#197 拆节 op content2.contentSplit 仅路由面管线消费 → 25/50）
   assert.equal(shared.length, 86)
-  assert.equal(toolOnly.length, 25)
+  assert.equal(toolOnly.length, 27, '#203 +2：lab.receiptReviewMode / lab.setReceiptReviewMode（工具面直调，无 panel 路由）')
   assert.equal(routeOnly.length, 50)
 })
 
