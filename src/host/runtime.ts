@@ -83,11 +83,14 @@ export interface HostJobs {
   quizJobResults: Map<string, Awaited<ReturnType<LearnhubEngine['bank2']['questionGenerate']>>>
 }
 
-/** 运行旗标：重启恢复暂停 / 泵单并发闸 / 会话开始触点节流戳。 */
+/** 运行旗标：重启恢复暂停 / 泵单并发闸 / 会话开始触点节流戳 / 生成任务档 broken 态
+ * （#194 / ADR-0053：任务档 Broken 时置错误文案——生成页显式报错 + 修复指引，
+ * broken 期间写回闸拒绝一切注册表全量落盘，防下一次入队把坏档全量覆盖）。 */
 export interface HostFlags {
   queuePaused: boolean
   pumping: boolean
   lastSessionStartAt: number
+  genQueueBroken: string | null
 }
 
 /** 宿主运行时：全部可变态的显式落点（ADR-0048）。类型可命名、可导出、可被测试构造；
@@ -148,7 +151,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     vault,
     centerRel,
     jobs: { genJobs: new Map(), quizJobResults: new Map() },
-    flags: { queuePaused: false, pumping: false, lastSessionStartAt: 0 },
+    flags: { queuePaused: false, pumping: false, lastSessionStartAt: 0, genQueueBroken: null },
   }
   rtRef = rt
   return rt

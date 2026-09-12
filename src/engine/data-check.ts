@@ -29,7 +29,7 @@ import type { CourseEntry, PracticeRec, ProposalRec, ReviewRec } from './types.t
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger' | 'proposals'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger' | 'proposals' | 'gen_jobs'
 
 export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived' | 'hint'
 
@@ -78,6 +78,9 @@ export type DataCheckReason =
   | 'proposals_schema'
   | 'proposals_pair_dangling'
   | 'proposals_artifact_missing'
+  | 'gen_jobs_unreadable'
+  | 'gen_jobs_json_parse'
+  | 'gen_jobs_schema'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -645,6 +648,36 @@ async function scanArchive(
   return { present, files }
 }
 
+/** 生成任务注册表体检（#194 / ADR-0053）：文件缺失 = 合法空态（零 finding）；JSON
+ * 损坏 / 非数组 = Broken finding（host 恢复处已把队列置 broken 态，体检负责盘点可见
+ * ——两处口径同源：同一份档，一处挡写回、一处给定位）。悬空记录不报：归 ADR-0039
+ * 恢复清扫处置，避免双重处置。 */
+async function scanGenJobs(
+  findings: DataCheckFinding[],
+  paths: Paths, fs: VaultFs): Promise<void> {
+  const where = `生成任务注册表 ${paths.genJobsPath}`
+  let text: string
+  try {
+    text = await fs.readFile(paths.genJobsPath)
+  } catch (err) {
+    const code = (err as { code?: unknown }).code
+    if (code === 'ENOENT') return // 合法空态：首次入队前不存在
+    push(findings, 'gen_jobs', 'broken', 'gen_jobs_unreadable', where, errorText(err))
+    return
+  }
+  let doc: unknown
+  try {
+    doc = JSON.parse(text)
+  } catch (err) {
+    push(findings, 'gen_jobs', 'broken', 'gen_jobs_json_parse', where,
+      `${errorText(err)}——修复或删除该文件后重启宿主；broken 期间入队/开跑被拒绝（坏档不会被覆盖）。`)
+    return
+  }
+  if (!Array.isArray(doc)) {
+    push(findings, 'gen_jobs', 'broken', 'gen_jobs_schema', where, '不是清单数组。')
+  }
+}
+
 /** 提案注册表体检（#193 / ADR-0053 逐条最小形状契约）：文件缺失 = 合法空态（零
  * finding）；JSON 损坏 / 非数组 / 逐条形状违约 / pair 悬空 / 悬空 artifact（提案记录的
  * artifact 路径在盘上不存在——propose 落盘后产物被手工挪走或删除）= Broken finding，
@@ -789,6 +822,8 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
 
   // 提案注册表（#193）：中心级单文件，课程循环前盘点一次；清单（或 null）供复诊对账
   const proposals = await scanProposals(findings, paths, fs)
+  // 生成任务注册表（#194）：中心级单文件；悬空记录归 ADR-0039 恢复清扫，此处只盘点损坏
+  await scanGenJobs(findings, paths, fs)
 
   for (const course of courses) {
     const courseName = String(course.name)
@@ -863,6 +898,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     archive: emptyArea(),
     probation_ledger: emptyArea(),
     proposals: emptyArea(),
+    gen_jobs: emptyArea(),
   }
   for (const finding of findings) {
     byArea[finding.area][finding.level]++

@@ -673,14 +673,27 @@ export class LearnhubEngine {
     await atomicWrite(this.paths.genJobsPath, JSON.stringify(jobs, null, 1) + '\n', this.fs)
   }
 
-  /** 读入生成任务注册表；文件缺失/损坏返回空表。 */
+  /** 读入生成任务注册表（ADR-0053）：文件缺失 = Missing 合法空态（[]）；存在但 JSON
+   * 损坏 / 非数组 = Broken 抛出——注册表不是学习事实源（任务可重新下发），爆炸半径
+   * 收在队列级：host 恢复处捕获置队列 broken 态（生成页显式报错 + 修复指引、broken
+   * 期间拒绝一切写回），不升格为宿主硬失败。 */
   async loadGenJobs(): Promise<Array<Record<string, unknown>>> {
+    let raw: string
     try {
-      const doc = JSON.parse(await this.fs.readFile(this.paths.genJobsPath)) as unknown
-      return Array.isArray(doc) ? doc as Array<Record<string, unknown>> : []
+      raw = await this.fs.readFile(this.paths.genJobsPath)
     } catch {
       return []
     }
+    let doc: unknown
+    try {
+      doc = JSON.parse(raw)
+    } catch (err) {
+      throw new Error(`[gen-jobs] ${this.paths.genJobsPath} 不是合法 JSON（Broken）：修复或删除该文件后重启宿主再试。${err instanceof Error ? ` ${err.message}` : ''}`)
+    }
+    if (!Array.isArray(doc)) {
+      throw new Error(`[gen-jobs] ${this.paths.genJobsPath} 不是清单数组（Broken）：修复或删除该文件后重启宿主再试。`)
+    }
+    return doc as Array<Record<string, unknown>>
   }
 
   /** 「与 AI 讨论本课」上下文包：节点元信息 + 正文 + 题库摘要 + 图位置（面板 → dsh 会话的首条消息原料）。 */

@@ -100,14 +100,26 @@ async function applySectionWithRepair(
 
 // ---- 全局生成队列：任意入口入队（面板/agent/整课链），同一时刻只执行一个节点管线 ----
 
-/** 注册表落盘（fire-and-forget；D14：文件 IO 收口 engine）。 */
+/** 队列写回闸（#194 / ADR-0053）：任务档 Broken 期间拒绝一切会改动并全量落盘注册表
+ * 的交互路径（入队/整课重置/恢复队列）——否则下一次入队会把坏档全量覆盖（静默销毁
+ * 现场）。文案自带 broken 原因（含路径与修复指引）。 */
+function assertQueueWritable(rt: HostRuntime): void {
+  if (rt.flags.genQueueBroken) {
+    throw new Error(`生成任务档损坏，队列处于 broken 态，已拒绝该操作——${rt.flags.genQueueBroken}`)
+  }
+}
+
+/** 注册表落盘（fire-and-forget；D14：文件 IO 收口 engine）。写回闸兜底：broken 期间
+ * 一律跳过（坏档字节原样保留），交互路径的拒绝由 assertQueueWritable 在入口给出。 */
 function persistGenJobs(rt: HostRuntime): void {
+  if (rt.flags.genQueueBroken) return
   void rt.engine.saveGenJobs([...rt.jobs.genJobs.values()].map(j => ({ ...j })))
     .catch(() => { /* 落盘失败不影响内存态（下次变更重试） */ })
 }
 
 /** 入队一个节点的生成任务（FIFO；重复入队幂等）。同一节点 running/cancelling 时拒绝。 */
 export function enqueueGeneration(rt: HostRuntime, ctx: Context, course: string, node: string, style?: string): { message: string; queued: boolean } {
+  assertQueueWritable(rt)
   const key = `${course}/${node}`
   const existing = rt.jobs.genJobs.get(key)
   if (existing && (existing.status === 'running' || existing.status === 'cancelling')) {
@@ -134,6 +146,7 @@ export function enqueueQuizGeneration(
   rt: HostRuntime, ctx: Context, course: string, node: string,
   opts?: { count?: number; section?: { id: string; title: string }; instruction?: string },
 ): { key: string; message: string; queued: boolean } {
+  assertQueueWritable(rt)
   const key = `${course}/${node}`
   const existing = rt.jobs.genJobs.get(key)
   if (existing && (existing.status === 'running' || existing.status === 'cancelling')) {
@@ -202,8 +215,10 @@ export function scheduleJobRetention(rt: HostRuntime, key: string, status: GenJo
  * running 记录先置取消旗标再出册——runner 持同一对象，下个检查点中止，而落盘序列化
  * 取自 Map，已删条目的终态不会复活。存在性 = 注册表精确匹配 + 图节点名集；课程在而
  * 图读不动（Broken）按存在性未知保守保留。courseDelete、删/改名节点的各 apply 出口
- * 与重启恢复共用。返回清扫条数。 */
+ * 与重启恢复共用。返回清扫条数。broken 态（#194）跳过：清扫会触发注册表全量落盘，
+ * 写回闸拒绝——宿主其余功能（含各 apply 出口）不受任务档损坏牵连，清扫延后到修档重启。 */
 export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<number> {
+  if (rt.flags.genQueueBroken) return 0
   const perCourse = new Map<string, Promise<Set<string> | null | undefined>>()
   const nodeNamesOf = (course: string): Promise<Set<string> | null | undefined> => {
     let p = perCourse.get(course)
@@ -248,6 +263,7 @@ const GROWTH_JOB_NODE = '生长批'
  * 就是重新裁决的意图，#157）：豁免停摆/暂不产结构与**失败**阻尼（终态记录覆盖重新
  * 入队）；在途防重入与已取消（明确的中止意图）照旧。 */
 export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean } = {}): { message: string; queued: boolean } {
+  assertQueueWritable(rt)
   const key = `${course}/${GROWTH_JOB_NODE}`
   const last = rt.jobs.genJobs.get(key)
   if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
@@ -367,6 +383,7 @@ export function sessionStartCheckpoint(rt: HostRuntime, ctx: Context): void {
  * （单发起草，重按 = 重来）。返回 queued 旗标 + 消息给路由留痕——拒绝重复入队是
  * 非成功语义，面板按旗标着色、不得弹成功样式（#155 交互诚实性）。 */
 export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: string; node: string; phase: GenJobPhase } & Partial<Pick<GenJob, 'seedPayload' | 'decompilePayload' | 'planPayload' | 'milestonePayload'>>): { message: string; queued: boolean } {
+  assertQueueWritable(rt)
   const key = `${j.course}/${j.node}`
   const last = rt.jobs.genJobs.get(key)
   if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
@@ -506,7 +523,9 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
 const GRAPH_JOB_PHASES: ReadonlySet<GenJobPhase> = new Set<GenJobPhase>(['seed', 'compass', 'decompile', 'plan', 'milestone'])
 
 export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
-  if (rt.flags.pumping || rt.flags.queuePaused) return
+  // broken 态不开跑（#194）：任务执行会反复全量落盘注册表——写回闸拒绝（静默，与
+  // queuePaused 同款泵闸；交互入口的拒绝文案由 assertQueueWritable 给出）
+  if (rt.flags.pumping || rt.flags.queuePaused || rt.flags.genQueueBroken) return
   const next = nextQueuedJob([...rt.jobs.genJobs.values()])
   if (!next) return
   rt.flags.pumping = true
@@ -735,6 +754,7 @@ export async function generateProjectMilestone(rt: HostRuntime, id: string, mile
  * contentReset 备份旧产物并重写 draft → 清掉该课程遗留任务（含排队）→ 按拓扑序逐节点入队全局队列。
  * 立即返回 { reset, queued }；进度由任务注册表展示。课程有 running 任务时拒绝。 */
 export async function resetCourseChain(rt: HostRuntime, ctx: Context, courseKey: string): Promise<{ reset: Awaited<ReturnType<LearnhubEngine['content2']['contentReset']>>; queued: number }> {
+  assertQueueWritable(rt)
   const running = [...rt.jobs.genJobs.values()].filter(j => j.course === courseKey && (j.status === 'running' || j.status === 'cancelling'))
   if (running.length) throw new Error(`课程「${courseKey}」有 ${running.length} 个生成任务进行中，先取消或等完成再重生成。`)
   const c = await rt.engine.registry.resolve(courseKey)
@@ -752,11 +772,13 @@ export async function resetCourseChain(rt: HostRuntime, ctx: Context, courseKey:
   return { reset, queued }
 }
 
-/** 任务注册表视图（附各任务节点的内容版本：面板据此做增量刷新）+ 全局队列状态。 */
+/** 任务注册表视图（附各任务节点的内容版本：面板据此做增量刷新）+ 全局队列状态。
+ * broken = 生成任务档损坏文案（#194：生成页显式报错 + 修复指引）。 */
 export async function generationStatus(rt: HostRuntime): Promise<{
   jobs: Array<GenJob & { key: string; contentVersion?: number }>
   queuePaused: boolean
   queuedCount: number
+  broken: string | null
 }> {
   const jobs: Array<GenJob & { key: string; contentVersion?: number }> = []
   for (const [key, j] of rt.jobs.genJobs.entries()) {
@@ -772,6 +794,7 @@ export async function generationStatus(rt: HostRuntime): Promise<{
     jobs,
     queuePaused: rt.flags.queuePaused,
     queuedCount: jobs.filter(j => j.status === 'queued').length,
+    broken: rt.flags.genQueueBroken,
   }
 }
 
@@ -788,8 +811,10 @@ export function cancelGeneration(rt: HostRuntime, course: string, node: string):
   return { cancelled: true, status: job.status }
 }
 
-/** 恢复重启后暂停的队列（/generate/resume 出口）：清暂停旗标并复泵；返回恢复时在队任务数。 */
+/** 恢复重启后暂停的队列（/generate/resume 出口）：清暂停旗标并复泵；返回恢复时在队任务数。
+ * broken 态（#194）拒绝：队列不可开跑（写回闸），先修复任务档再重启宿主。 */
 export function resumeQueue(rt: HostRuntime, ctx: Context): { paused: boolean; resumed: number } {
+  assertQueueWritable(rt)
   const resumed = [...rt.jobs.genJobs.values()].filter(j => j.status === 'queued').length
   rt.flags.queuePaused = false
   pumpGeneration(rt, ctx)
@@ -802,7 +827,9 @@ export function resumeQueue(rt: HostRuntime, ctx: Context): { paused: boolean; r
  * 图域任务负载随档恢复（#157：种子/反编译/计划/里程碑的 payload 与生长批 inject/裁决
  * 面板下发时随任务落盘，恢复缺失即无法执行——负载要求的 queued 任务在恢复处明确标
  * 失败可重试，不拖到执行器抛「负载缺失或 phase 未知」）；恢复清扫与幸存终态按剩余
- * 保留期补挂定时器（跨重启只能靠时间戳结算，ADR-0039）。 */
+ * 保留期补挂定时器（跨重启只能靠时间戳结算，ADR-0039）。任务档 Broken（#194 / 
+ * ADR-0053）：队列置 broken 态——生成页显式报错 + 修复指引，写回闸拒绝一切落盘，
+ * 宿主其余功能不受影响。 */
 export function restoreGenJobs(rt: HostRuntime): void {
   void rt.engine.loadGenJobs().then(async stale => {
     for (const raw of stale) {
@@ -865,5 +892,12 @@ export function restoreGenJobs(rt: HostRuntime): void {
     if (stale.length) {
       console.log(`[learnhub] gen-jobs restored: ${stale.length} (swept ${swept} dangling/expired${aliveQueued ? `, ${aliveQueued} queued paused` : ''})`)
     }
+  }).catch(err => {
+    // loadGenJobs Broken（ADR-0053 / #194）：注册表不是学习事实源，不升格宿主硬失败
+    // ——队列置 broken 态：生成页显式报错 + 修复指引，写回闸拒绝一切落盘（坏档字节
+    // 原样保留，防下一次入队全量覆盖）。顺带补上此前缺失的拒绝处理（一抛即 unhandled）。
+    rt.flags.genQueueBroken = err instanceof Error ? err.message : String(err)
+    console.error(`[learnhub] gen-jobs restore failed: ${rt.flags.genQueueBroken}`)
+    void runLog(rt, 'gen_jobs_restore', `生成任务档恢复失败，队列置 broken 态：${rt.flags.genQueueBroken}`).catch(() => undefined)
   })
 }

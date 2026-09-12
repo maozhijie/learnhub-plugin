@@ -163,3 +163,30 @@ test('复诊扫描读坏流不炸：Broken 降级为 finding、该课程 overdue
     assert.equal(report.status, 'broken')
   })
 })
+
+test('Data Check gen_jobs area：坏档报 broken finding；合法档的悬空记录不报（归 ADR-0039 清扫）', async () => {
+  await withVault({
+    files: [{ path: '学习中心/state/生成任务.json', content: '{broken' }],
+  }, async ({ engine }) => {
+    const report = await engine.dataCheck()
+    const gj = report.findings.filter(f => f.area === 'gen_jobs')
+    assert.equal(gj.length, 1)
+    assert.equal(gj[0]!.reason, 'gen_jobs_json_parse')
+    assert.match(gj[0]!.detail ?? '', /修复或删除该文件后重启宿主/)
+    assert.equal(report.status, 'broken')
+  })
+})
+
+test('Data Check gen_jobs area：合法 JSON 数组（含悬空记录）零 finding——悬空归恢复清扫', async () => {
+  await withVault({
+    files: [{
+      path: '学习中心/state/生成任务.json',
+      content: JSON.stringify([
+        { course: '已删课程', node: '幽灵节点', startedAt: '2026-09-12T10:00:00+08:00', status: 'done' },
+      ]) + '\n',
+    }],
+  }, async ({ engine }) => {
+    const report = await engine.dataCheck()
+    assert.equal(report.findings.filter(f => f.area === 'gen_jobs').length, 0, '悬空记录不报（避免与 ADR-0039 清扫双重处置）')
+  })
+})

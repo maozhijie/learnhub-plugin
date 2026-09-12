@@ -552,7 +552,8 @@
   "res": {
    "jobs": [],
    "queuePaused": false,
-   "queuedCount": 0
+   "queuedCount": 0,
+   "broken": null
   },
   "calls": []
  },

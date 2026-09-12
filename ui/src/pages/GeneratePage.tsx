@@ -36,6 +36,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
   const [jobs, setJobs] = useState<GenJobItem[] | null>(null)
   const [queuePaused, setQueuePaused] = useState(false)
   const [queuedCount, setQueuedCount] = useState(0)
+  const [broken, setBroken] = useState<string | null>(null)
   const [queue, setQueue] = useState<QueueItem[] | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [styles, setStyles] = useState<string[]>([])
@@ -88,6 +89,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
       }))
       setQueuePaused(st.queuePaused)
       setQueuedCount(st.queuedCount)
+      setBroken(st.broken ?? null)
       setQueue(q)
     } catch (err) {
       Message.error(errorMessage(err))
@@ -215,6 +217,11 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
           )}
         </Space>
       } style={{ borderRadius: 10 }}>
+        {broken && (
+          <Alert
+            type='error' style={{ marginBottom: 8 }}
+            content={<>生成任务注册表损坏，队列已停止接受新任务（防止坏档被覆盖）：<Text bold>{broken}</Text></>} />
+        )}
         {queuePaused && queuedCount > 0 && (
           <Alert
             type='warning' style={{ marginBottom: 8 }}

@@ -27,7 +27,10 @@ import {
   enqueueGeneration,
   enqueueGrowthBatch,
   enqueueQuizGeneration,
+  enqueueGraphJob,
+  generationStatus,
   pumpGeneration,
+  resetCourseChain,
   restoreGenJobs,
   resumeQueue,
   scheduleJobRetention,
@@ -146,7 +149,7 @@ test('createHostRuntime：runtime 形状——引擎实例、路径归一、旗�
   assert.ok(rt.engine instanceof LearnhubEngine)
   assert.equal(rt.vault, vault.replace(/\\/g, '/'), 'vault 反斜杠归一、尾分隔符剥掉')
   assert.equal(rt.centerRel, '学习中心', 'centerRel 剥首尾分隔符')
-  assert.deepEqual(rt.flags, { queuePaused: false, pumping: false, lastSessionStartAt: 0 })
+  assert.deepEqual(rt.flags, { queuePaused: false, pumping: false, lastSessionStartAt: 0, genQueueBroken: null })
   assert.equal(rt.jobs.genJobs.size, 0)
   assert.equal(rt.jobs.quizJobResults.size, 0)
 })
@@ -440,6 +443,67 @@ test('重启恢复：负载要求的排队图域任务缺负载 → 恢复处明
   assert.equal(resumeQueue(rt, fakeCtx()).resumed, 0)
   await sleep(30)
   assert.equal(executed, false)
+})
+
+// ---------------------------------------------------------------- 任务档 Broken（#194 / ADR-0053）
+
+test('任务档 Broken 启动：队列 broken、生成页可见报错与指引、入队/开跑被拒且坏档字节原样保留', async () => {
+  const rt = makeRuntime()
+  // 真引擎真档：写坏任务档后 restoreGenJobs 走真实 loadGenJobs（真 vault 无需打桩）
+  const genJobsPath = rt.engine.paths.genJobsPath
+  const corrupt = '{oops 不是合法 JSON'
+  writeFileSync(genJobsPath, corrupt, 'utf8')
+  restoreGenJobs(rt)
+  await until(() => rt.flags.genQueueBroken !== null)
+  assert.match(rt.flags.genQueueBroken!, /\[gen-jobs\] .+生成任务\.json 不是合法 JSON（Broken）：修复或删除该文件后重启宿主再试/)
+
+  // 生成页可见报错与修复指引（generationStatus 透传 broken 文案）
+  const status = await generationStatus(rt)
+  assert.equal(status.broken, rt.flags.genQueueBroken)
+
+  // 入队四口 + 整课重置全部被拒，提示先修复
+  assert.throws(() => enqueueGeneration(rt, fakeCtx(), '数学', '节点A'), /broken 态，已拒绝该操作/)
+  assert.throws(() => enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点A'), /broken 态/)
+  assert.throws(() => enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试'), /broken 态/)
+  assert.throws(() => enqueueGraphJob(rt, fakeCtx(), { course: '数学', node: '罗盘', phase: 'compass' }), /broken 态/)
+  await assert.rejects(() => resetCourseChain(rt, fakeCtx(), '数学'), /broken 态/)
+  // 开跑被拒：恢复队列拒绝（泵闸静默，交互口给文案）
+  assert.throws(() => resumeQueue(rt, fakeCtx()), /broken 态/)
+
+  // 坏档字节原样保留（防下一次入队把坏档全量覆盖，静默销毁现场）
+  assert.equal(readFileSync(genJobsPath, 'utf8'), corrupt)
+  // 宿主其余功能不受影响：任务注册表照常可读、无可跑任务假象
+  assert.equal(status.jobs.length, 0)
+})
+
+test('任务档修复后重启：broken 清空，既有恢复语义零回归（中断标失败、队列暂停旗标）', async () => {
+  const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-'))
+  tmpVaults.push(vault)
+  mkdirSync(join(vault, '学习中心'))
+  const build = () => createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心' })
+  const rt = build()
+  writeFileSync(rt.engine.paths.genJobsPath, '{oops', 'utf8')
+  restoreGenJobs(rt)
+  await until(() => rt.flags.genQueueBroken !== null)
+
+  // 修档（重写合法注册表，带一条重启时 running 的中断任务）→ 重启 = 新 runtime
+  writeFileSync(rt.engine.paths.genJobsPath, JSON.stringify([
+    { course: '数学', node: '节点A', startedAt: new Date().toISOString(), status: 'running', model: 'test' },
+  ]), 'utf8')
+  const rt2 = build()
+  assert.equal(rt2.flags.genQueueBroken, null, '新进程 broken 态从零开始')
+  stub(rt2, {
+    'registry.get': async (key: string) => ({ name: key }),
+    loadView: async () => ({ graph: { nset: new Set(['节点A']) } }),
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  restoreGenJobs(rt2)
+  await until(() => rt2.jobs.genJobs.get('数学/节点A')?.status === 'failed')
+  assert.match(rt2.jobs.genJobs.get('数学/节点A')!.message ?? '', /进程重启，任务中断/)
+  assert.equal(rt2.flags.genQueueBroken, null, '恢复成功不置 broken')
+  const status = await generationStatus(rt2)
+  assert.equal(status.broken, null)
 })
 
 // ---------------------------------------------------------------- 路由分发（static 抽离后行为不变）
