@@ -3,12 +3,12 @@
  * 不再依赖 dsh 会话里的 agent。产物一律走提案人审通道（生长批除外：受理门即门，
  * ADR-0003 维持「不把逐批人审修回来」）。建课/换终点表单是全面板唯一主动建课入口
  * （#159），学习页空态直达的也是同一份表单组件（SeedFormModal）。 */
-import { Button, Card, Message, Modal, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
+import { Button, Card, Message, Modal, Progress, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import SeedFormModal from './SeedFormModal'
 import { api } from '../api'
 import { isActiveTab } from '../active-tab'
-import type { GenJobItem, ProbationDoc } from '../types'
+import type { GenJobItem, ProbationDoc, StatusCourse } from '../types'
 
 const { Text } = Typography
 
@@ -24,6 +24,50 @@ const JOB_STATUS: Partial<Record<GenJobItem['status'], { label: string; color: s
   failed: { label: '失败', color: 'red' },
   cancelled: { label: '已取消', color: 'gray' },
 }
+
+/** 就绪深度卡（#161）：状态面 course.coach 直读——就绪存量对照前瞻需求的进度条 + 告警。
+ * 冷启动首周需求 ×1.5 后 ceil；exhausted（除终点外前沿清空，词条「前瞻深度」）= 判据
+ * 自然通过——剩下的路是学掉终点，不是继续生长，与「刚播种的合法空态」区分开。 */
+function ReadinessCard({ check }: { check: NonNullable<StatusCourse['coach']> }) {
+  const tight = !check.ok
+  // exhausted（尾段前沿清空）判据自然通过：进度条显满格，不因 ready=0 显 0% 绿条
+  const ratio = check.exhausted || check.required <= 0
+    ? 100
+    : Math.min(100, Math.round((check.ready / check.required) * 100))
+  return (
+    <Card size='small' title='就绪深度（教练回合判据）' style={{ borderRadius: 10 }}
+      extra={
+        <Space size={8}>
+          {check.cold_start && <Tag size='small' color='orange'>冷启动首周</Tag>}
+          {check.exhausted
+            ? <Tag size='small' color='gray'>尾段·前沿已清空</Tag>
+            : (tight ? <Tag size='small' color='red'>低于前瞻</Tag> : <Tag size='small' color='green'>达标</Tag>)}
+        </Space>
+      }>
+      <Space direction='vertical' size={4} style={{ width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Progress size='small' style={{ flex: 1 }} percent={ratio} showText={false}
+            status={tight ? 'error' : 'success'} />
+          <Text style={{ fontSize: 12, flexShrink: 0 }}>就绪 {check.ready}/{check.required}</Text>
+        </div>
+        {check.exhausted ? (
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            除终点外就绪前沿已清空——判据自然通过、零告警：剩下的路是学掉终点，不是继续生长。
+          </Text>
+        ) : (
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            前瞻需求 {check.required}（前瞻深度 {check.depth}{check.cold_start ? '，冷启动首周放宽后取整' : ''}）；
+            就绪 = 前置已达成、正文已生成的未开始节点。
+          </Text>
+        )}
+        {tight && check.warnings.map(w => (
+          <Text key={w} type='warning' style={{ fontSize: 12 }}>{w}</Text>
+        ))}
+      </Space>
+    </Card>
+  )
+}
+
 
 /** 复诊卡片（#146 插入实验面）：在途/到期未决/三率/闸门 + 立即结算（无确认步——
  * 它本来就是零人审自动行为的手动触发，按钮只提前同一件事）。 */
@@ -90,8 +134,13 @@ function ProbationCard({ course }: { course: string }) {
   )
 }
 
-/** 教练台入口卡片：course 为 null（空 vault）时只露出建课入口 + 在途任务条。 */
-export default function CoachCockpit({ course, jobs }: { course: string | null; jobs?: GenJobItem[] }) {
+/** 教练台入口卡片：course 为 null（空 vault）时只露出建课入口 + 在途任务条；
+ * coach = 状态面该课程的就绪深度检查（#161，缺席不显卡）。 */
+export default function CoachCockpit({ course, jobs, coach }: {
+  course: string | null
+  jobs?: GenJobItem[]
+  coach?: StatusCourse['coach'] | null
+}) {
   const [seedForm, setSeedForm] = useState<null | 'new' | 'reseed'>(null)
   const [busy, setBusy] = useState<'growth' | 'compass' | 'backfill' | null>(null)
 
@@ -180,6 +229,7 @@ export default function CoachCockpit({ course, jobs }: { course: string | null; 
           </Space>
         </div>
       )}
+      {course && coach && <div style={{ marginTop: 10 }}><ReadinessCard check={coach} /></div>}
       {course && <div style={{ marginTop: 10 }}><ProbationCard course={course} /></div>}
       <SeedFormModal visible={seedForm !== null} mode={seedForm ?? 'new'} course={course} onCancel={() => setSeedForm(null)} />
     </Card>

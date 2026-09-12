@@ -9,7 +9,7 @@ import CoachCockpit from '../components/CoachCockpit'
 import GraphDagView from '../components/GraphDagView'
 import SeedFormModal from '../components/SeedFormModal'
 import { api } from '../api'
-import { isActiveTab } from '../active-tab'
+import { isActiveTab, onTabActive } from '../active-tab'
 import type { AppFrame } from '../App'
 import type { BankEntry, GenJobItem, GraphDoc, RecommendDoc } from '../types'
 
@@ -45,6 +45,7 @@ function Legend() {
 
 export default function GraphPage({ frame }: { frame: AppFrame }) {
   const course = frame.course
+  const reloadFrame = frame.reload
   const [doc, setDoc] = useState<GraphDoc | null>(null)
   const [banks, setBanks] = useState<BankEntry[] | null>(null)
   const [rec, setRec] = useState<RecommendDoc | null>(null)
@@ -85,6 +86,11 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
 
   useEffect(() => { void load() }, [load])
 
+  // 页签激活重取（#161）：keep-alive 下组件不重挂，「切回图页」补一次取数——
+  // 隐藏期间错过的图变化与状态面变化（就绪深度/复诊）在切回时刷新。
+  useEffect(() => onTabActive('graph', () => { void load(); void reloadFrame() }),
+    [load, reloadFrame])
+
   // 生成队列轮询：角标随排队/生成点亮；活动任务出现终态边沿 → 重拉图（hasContent 点亮）
   const activeKeysRef = useRef<Set<string>>(new Set())
   useEffect(() => {
@@ -102,7 +108,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
         const edge = [...activeKeysRef.current].some(k => !active.has(k))
         activeKeysRef.current = active
         setGenStates(gen)
-        if (edge) void load()
+        // 终态边沿连状态面一并刷新：就绪深度/完成宣告等读侧折叠跟随生成结果更新（#161）
+        if (edge) { void load(); void reloadFrame() }
       } catch {
         setGenStates({})
       }
@@ -111,7 +118,7 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
     // 页签保活（ADR-0027）：非激活页签跳过取数，定时器只保留节拍
     const timer = setInterval(() => { if (isActiveTab('graph')) void poll() }, 5000)
     return () => clearInterval(timer)
-  }, [course, load])
+  }, [course, load, reloadFrame])
 
   // 过滤：裁出子图（端点不在集合内的边一并裁掉）
   const filtered = useMemo(() => {
@@ -160,6 +167,12 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   const regions = useMemo(
     () => [...new Set(doc?.nodes.map(n => n.data.region) ?? [])].sort(),
     [doc],
+  )
+  /** 全部启用课程（课程切换器选项）与当前课程的就绪深度检查（状态面直读，#161）。 */
+  const courseNames = useMemo(() => frame.tree?.courses.map(c => c.name) ?? [], [frame.tree])
+  const coach = useMemo(
+    () => frame.status?.courses.find(c => c.name === course)?.coach ?? null,
+    [frame.status, course],
   )
 
   const onSelect = (nodeId: string) => {
@@ -243,6 +256,12 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
           <Tag size='small' color='gray'>全局总览 · 点节点进入学习</Tag>
         </Space>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* 课程切换器（#161）：多课程时图页直接换课（教练台/图/题库/推荐随课重取） */}
+          {courseNames.length > 1 && (
+            <Select size='small' value={course} style={{ width: 160 }}
+              onChange={v => frame.setCourse(v)}
+              options={courseNames.map(c => ({ label: c, value: c }))} />
+          )}
           <Select
             size='small' placeholder='全区' style={{ width: 160 }} allowClear
             value={region || undefined} onChange={v => setRegion(v ?? '')}
@@ -257,8 +276,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
         </div>
       </div>
 
-      {/* 教练台：图域命令面板下发（ADR-0038） */}
-      <CoachCockpit course={course} jobs={graphJobs} />
+      {/* 教练台：图域命令面板下发（ADR-0038）；就绪深度卡随课直读状态面（#161） */}
+      <CoachCockpit course={course} jobs={graphJobs} coach={coach} />
 
       {/* 推荐条（琥珀=下一步推荐；点击卡片直接进学习视图） */}
       {(rec?.events ?? []).filter(e => e.course === course).length > 0 && (

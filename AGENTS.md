@@ -40,4 +40,6 @@ node scripts/link-peers.mjs
 
 ## 并行会话用 worktree 隔离
 
-ZCode 没有会话级分支/worktree 隔离：同目录开多个会话共享同一 checkout 和当前分支，未提交改动与 switch/rebase 会互相踩。并行做多个任务时，每个任务建一个 git worktree、每个 worktree 开一个会话；同一会话内的并行 subagent 共享工作目录，配置隔离不了，只能按文件范围拆分或改走多 worktree。命令与注意事项见 `docs/agents/parallel-sessions.md`。
+ZCode 没有会话级分支/worktree 隔离：同目录开多个会话共享同一 checkout 和当前分支，未提交改动与 switch/rebase 会互相踩。并行做多个任务时，每个任务建一个 git worktree、每个 worktree 开一个会话；同一会话内的并行 subagent 共享工作目录，配置隔离不了，只能按文件范围拆分或改走多 worktree。
+
+新 worktree 的依赖要装**两处**：根目录与 `ui/` 子包各自 `npm install`（`ui/` 有自己的 package.json，node_modules 不共享）——只装根的话 `npm test` 会在 `tests/md-chain.test.ts` 炸 `Cannot find package 'remark-gfm'`，ui 的 typecheck/build 同样失败。命令与其余注意事项见 `docs/agents/parallel-sessions.md`。

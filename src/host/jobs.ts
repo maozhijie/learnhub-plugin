@@ -419,7 +419,8 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
     if (r.state === 'idle') {
       job.growthOutcome = 'idle'
       job.status = 'done'
-      job.message = `就绪深度满足（ready ${r.check.ready}/${r.check.required}）——教练停摆，无批可产。`
+      // 停摆是判据满足的自然结果，不是成就（#161）：中性说明文案，面板通知与生成页共用
+      job.message = `教练判断暂不需长新内容（就绪 ${r.check.ready}/${r.check.required}）。`
     } else {
       const p = r.proposal!
       const a = r.applied!
