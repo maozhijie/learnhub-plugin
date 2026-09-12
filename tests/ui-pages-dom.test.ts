@@ -1,16 +1,14 @@
 /**
  * L3 三大页关键交互测试（#188 / #187 决议·Testing Decisions）：LearnPage /
- * StatsPage / LessonView 各至少一条用户可见交互 + 页签表完整性必测项（Exhibit A：
- * #158 的项目页签修复漏了 TAB_KEYS 键项，按钮在、键表缺，点击渲染空白——三层
- * 验收全未拦截，本门自此锁死该缺陷类）。只测外部行为：点击后出现什么、调了哪个
- * 端点；不断言内部状态。取数走 fetch 桩（api.ts 全链路真实，网络是假的），
+ * StatsPage / LessonView 各至少一条用户可见交互。只测外部行为：点击后出现什么、
+ * 调了哪个端点；不断言内部状态。取数走 fetch 桩（api.ts 全链路真实，网络是假的），
  * 未登记端点 404 → 次要数据按缝级三态显式失败——不翻页正是该缝的承诺。
+ * 页签表完整性（Exhibit A，#187 曾列为 U2 必测项）由 tests/ui-router.test.ts 的
+ * 三表对账门独家执法（#189 落地后 TAB_KEYS 唯一出处 = lib/router.ts，该门直接
+ * 消费权威导出且断言面是超集；本文件的初版同门已收敛退役，留两道=双份漂移税）。
  */
 import test, { afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { render, screen, fireEvent, act, cleanup, waitFor, routes, stubCalls, importUi, uiImport, arco, spyFrame } from './helpers/ui-dom.ts'
 
 afterEach(() => {
@@ -18,78 +16,7 @@ afterEach(() => {
   arco.Message.clear()
 })
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const React = (await uiImport('react')).default
-
-// ---- 页签表完整性（Exhibit A 必测项）：三张表互为镜像 ----
-// 三张表的宿主文件不写死（#189 会把 TAB_KEYS/路由表挪进 lib/router）：在 ui/src
-// 全树扫描各自唯一的定义处——表残缺、改名未同步、抽取面塌掉，任一发生即红。
-
-/** 三表抽取 + 互为镜像校验（纯函数，供本门与自检复用）。 */
-function extractKeys(src: string) {
-  return {
-    paneKeys: [...src.matchAll(/TabPane key='([^']+)'/g)].map(m => m[1]!),
-    tabKeys: (src.match(/const TAB_KEYS[^=]*= \[([^\]]*)\]/)?.[1] ?? '')
-      .split(',').map(s => s.trim().replaceAll("'", '')).filter(Boolean),
-    branchKeys: [...src.matchAll(/k === '([^']+)'/g)].map(m => m[1]!),
-  }
-}
-
-function mirrorViolations(keys: { paneKeys: string[]; tabKeys: string[]; branchKeys: string[] }) {
-  const { paneKeys, tabKeys, branchKeys } = keys
-  return [
-    { extra: paneKeys.filter(k => !tabKeys.includes(k)), what:
-      'TabPane 有按钮而 TAB_KEYS 缺键 = 点击渲染空白（a6fea08 之前的缺陷形状，本门禁止复活）' },
-    { extra: tabKeys.filter(k => !paneKeys.includes(k)), what:
-      'TAB_KEYS 有键而 TabPane 无按钮 = 不可见的幽灵保活页签' },
-    { extra: branchKeys.filter(k => !tabKeys.includes(k)), what:
-      'TabBody 有渲染分支而 TAB_KEYS 缺键 = 分支永挂载（keep-alive 表残缺）' },
-    { extra: tabKeys.filter(k => !branchKeys.includes(k)), what:
-      'TAB_KEYS 有键而 TabBody 无分支 = 页签切过去是白屏' },
-  ]
-}
-
-test('页签表完整性：TabPane 键、TAB_KEYS、TabBody 分支三表一致（Exhibit A 锁死）', () => {
-  const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
-    const p = join(dir, e.name)
-    return e.isDirectory() ? walk(p) : /\.tsx?$/.test(e.name) ? [p] : []
-  })
-  const sources = walk(join(ROOT, 'ui', 'src')).map(p => [p, readFileSync(p, 'utf8')] as const)
-  const pick = (pattern: RegExp, what: string): { file: string; src: string } => {
-    const hits = sources.filter(([, src]) => pattern.test(src))
-    assert.equal(hits.length, 1, `${what} 的定义处应恰有一个文件，实得 ${hits.length}（表被挪动后未同步本门）：${hits.map(([f]) => f).join(', ') || '零'}`)
-    return { file: hits[0]![0]!, src: hits[0]![1]! }
-  }
-  const pane = pick(/TabPane key='/, 'TabPane 键表（页签按钮）')
-  const keys = pick(/const TAB_KEYS[^=]*= \[/, 'TAB_KEYS 键表（页签保活）')
-  const body = pick(/TAB_KEYS\.filter/, 'TabBody 分支表（按键挂载）')
-
-  const keys3 = extractKeys(`${pane.src}\n${keys.src}\n${body.src}`)
-  assert.ok(keys3.paneKeys.length > 0 && keys3.tabKeys.length > 0 && keys3.branchKeys.length > 0,
-    '三表任一为空 = 抽取面塌了（表形状改变后未同步本门）')
-  for (const { extra, what } of mirrorViolations(keys3)) {
-    assert.deepEqual(extra, [], `${what}（TabPane 在 ${pane.file}，TAB_KEYS 在 ${keys.file}，TabBody 在 ${body.file}）`)
-  }
-})
-
-test('门自检：页签表残缺样本必须被抓住（恒过的门比没有门更坏）', () => {
-  // Exhibit A 原样缺陷：TabPane 与分支都有 projects，TAB_KEYS 键表漏了它
-  const rotten = `
-    <Tabs.TabPane key='learn' title='学习' /><Tabs.TabPane key='projects' title='项目' />
-    const TAB_KEYS: TabKey[] = ['learn']
-    {k === 'learn' && <LearnPage />}{k === 'projects' && <ProjectsPage />}
-  `
-  const keys = extractKeys(rotten)
-  assert.deepEqual(keys, { paneKeys: ['learn', 'projects'], tabKeys: ['learn'], branchKeys: ['learn', 'projects'] },
-    '抽取器对残缺样本失明 = 抽取面塌了')
-  const violations = mirrorViolations(keys).filter(v => v.extra.length > 0)
-  assert.deepEqual(violations.map(v => v.extra), [['projects'], ['projects']],
-    '残缺样本恰被两条镜像断言看见（缺键方向各一），其余两向干净')
-  assert.equal(mirrorViolations(extractKeys(`
-    <Tabs.TabPane key='learn' />{k === 'learn' && <LearnPage />}
-    const TAB_KEYS: TabKey[] = ['learn']`)).filter(v => v.extra.length > 0).length, 0,
-  '齐备样本零违规（自检不带自伤）')
-})
 
 // ---- 共享夹具 ----
 
