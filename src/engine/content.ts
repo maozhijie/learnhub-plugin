@@ -132,8 +132,11 @@ export class Content {
 
   // ---- 上下文包 ----
 
-  /** 组装生成上下文包 → Markdown 文本。 */
-  contextPack(graph: Graph, state: Record<string, Fm>, node: string, course?: string): string {
+  /** 组装生成上下文包 → Markdown 文本。omitDeliverables：剥掉 §8 交付要求——大纲
+   * 消费（逐节管线的 outline 站）不需要机器块/出题渠道指令，它们是节正文契约，混进
+   * 大纲包会与大纲模板「只输出一个 YAML 文档」冲突：模型把 <!-- enc_candidates -->
+   * 追加进大纲 YAML，解析即炸（生成任务注册表两连败的签名）。 */
+  contextPack(graph: Graph, state: Record<string, Fm>, node: string, course?: string, opts?: { omitDeliverables?: boolean }): string {
     const [, region, block] = graph.blockOf[node]
     const pres = graph.preOf[node]
     const succs = graph.succ[node] ?? []
@@ -191,14 +194,16 @@ export class Content {
     out.push('- enc = 本课练习真实调用、且位于本节点 pre 闭包内的成分技能（ADR-0008）。')
     out.push('- 练习调用的前置技能请在练习元数据 `uses:` 里如实标注——引擎会把闭包内候选提升为 enc 边，供将来失败回退路由；不存在的候选宁缺毋滥。')
     out.push('')
-    out.push('## 8. 交付要求')
-    if (isPractice) {
-      out.push(Content.interactiveSpecBlock())
-      out.push('- 末尾机器块：`<!-- enc_candidates: [] -->`（交互实践不出练习题）')
-    } else {
-      out.push('- 练习题以题组 YAML 经 learnhub_exercises_gen 写入（不再直接写进正文练习区）；数值题给 tol 容差')
-      out.push('- 题型优先 single_choice / true_false / numeric（可机器判卷）；fill_in_blank 只考唯一写法的术语（数字与代数式不进填空，ADR-0029）；开放性问答题用 reflection 并在 answer 写评分要点')
-      out.push('- 末尾机器块：`<!-- enc_candidates: [本课练习真实调用的前置技能（须在本节点 pre 闭包内；落盘后据此提升为 enc 边）] -->`')
+    if (!opts?.omitDeliverables) {
+      out.push('## 8. 交付要求')
+      if (isPractice) {
+        out.push(Content.interactiveSpecBlock())
+        out.push('- 末尾机器块：`<!-- enc_candidates: [] -->`（交互实践不出练习题）')
+      } else {
+        out.push('- 练习题以题组 YAML 经 learnhub_exercises_gen 写入（不再直接写进正文练习区）；数值题给 tol 容差')
+        out.push('- 题型优先 single_choice / true_false / numeric（可机器判卷）；fill_in_blank 只考唯一写法的术语（数字与代数式不进填空，ADR-0029）；开放性问答题用 reflection 并在 answer 写评分要点')
+        out.push('- 末尾机器块：`<!-- enc_candidates: [本课练习真实调用的前置技能（须在本节点 pre 闭包内；落盘后据此提升为 enc 边）] -->`')
+      }
     }
     out.push('')
     out.push('## 9. 复杂度档案（本节点内容规模的锚点；别注水也别压扁）')
@@ -1294,11 +1299,20 @@ worksheet:
 
   // ---- 节清单（逐节生成管线） ----
 
-  /** 大纲 YAML → 节清单（id 唯一、type ∈ 节类型菜单、title 非空；全 pending）。 */
-  static parseOutline(yamlText: string): SectionManifest[] {
-    const doc = YAML.parseModel(yamlText) as { sections?: unknown } | null
+  /** schema 形状错（大纲/拆节共用）：稳定码供宿主修复轮分流，消息原样人读。 */
+  private static shapeErr(msg: string): Error & { code: string } {
+    const e = new Error(msg) as Error & { code: string }
+    e.code = 'OUTLINE_SHAPE'
+    return e
+  }
+
+  /** 大纲 YAML → 节清单（id 唯一、type ∈ 节类型菜单、title 非空；全 pending）。
+   * schema 形状错统一 code=OUTLINE_SHAPE——宿主大纲站的修复轮据此与基础设施错
+   * （课程文件缺失）分流；onTolerated 接收解析边界的剥注释留痕（写 journal 用）。 */
+  static parseOutline(yamlText: string, onTolerated?: (note: string) => void): SectionManifest[] {
+    const doc = YAML.parseModel(yamlText, { onTolerated }) as { sections?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.sections) || !doc.sections.length) {
-      throw new Error('[outline] 模型没有产出可用大纲（sections 为空）。')
+      throw Content.shapeErr('[outline] 模型没有产出可用大纲（sections 为空）。')
     }
     const out: SectionManifest[] = []
     const ids = new Set<string>()
@@ -1307,10 +1321,10 @@ worksheet:
       const id = typeof e.id === 'string' && e.id.trim() ? e.id.trim() : `s${i + 1}`
       const title = String(e.title ?? '').trim()
       const type = String(e.type ?? '').trim() || parseSectionTitle(title).type.prefix
-      if (!title) throw new Error(`[outline] sections.${i + 1}.title 不能为空`)
-      if (ids.has(id)) throw new Error(`[outline] sections.${i + 1}.id「${id}」重复`)
+      if (!title) throw Content.shapeErr(`[outline] sections.${i + 1}.title 不能为空`)
+      if (ids.has(id)) throw Content.shapeErr(`[outline] sections.${i + 1}.id「${id}」重复`)
       if (!SECTION_TYPES.some(t => t.prefix === type)) {
-        throw new Error(`[outline] sections.${i + 1}.type「${type}」不在节类型菜单（${SECTION_TYPES.map(t => t.prefix).join('/')}）`)
+        throw Content.shapeErr(`[outline] sections.${i + 1}.type「${type}」不在节类型菜单（${SECTION_TYPES.map(t => t.prefix).join('/')}）`)
       }
       ids.add(id)
       const points = typeof e.points === 'string' ? e.points.trim() : ''
@@ -1325,11 +1339,12 @@ worksheet:
   // ---- 拆节（ADR-0054 修复阶梯末级：压缩修复仍溢出的节在大纲侧一拆为 2–3 个子节） ----
 
   /** 拆节 YAML → 子节清单：复用 parseOutline 校验（title 必填、type ∈ 节类型菜单），
-   * 模型的 id 字段一律忽略（引擎派生 `${parentId}-N` 防撞名），数量锁 2–3。 */
-  static parseSplitOutline(yamlText: string, parentId: string): SectionManifest[] {
-    const subs = Content.parseOutline(yamlText)
+   * 模型的 id 字段一律忽略（引擎派生 `${parentId}-N` 防撞名），数量锁 2–3。
+   * onTolerated 同 parseOutline（解析边界剥注释留痕，拆节站写 journal 用）。 */
+  static parseSplitOutline(yamlText: string, parentId: string, onTolerated?: (note: string) => void): SectionManifest[] {
+    const subs = Content.parseOutline(yamlText, onTolerated)
     if (subs.length < 2 || subs.length > 3) {
-      throw new Error(`[split] 拆节要求 2–3 个子节，模型给出 ${subs.length} 个。`)
+      throw Content.shapeErr(`[split] 拆节要求 2–3 个子节，模型给出 ${subs.length} 个。`)
     }
     return subs.map((s, i) => ({ ...s, id: `${parentId}-${i + 1}`, status: 'pending' as const, version: 0 }))
   }
@@ -1359,7 +1374,8 @@ worksheet:
     root: string, graph: Graph, node: string, yamlText: string,
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
   ): Promise<SectionManifest[]> {
-    const manifest = Content.parseOutline(yamlText)
+    const tolerated: string[] = []
+    const manifest = Content.parseOutline(yamlText, note => { tolerated.push(note) })
     const budget = outlineBudgetForNode(graph, node, manifest.length)
     if (budget.length) {
       const e: Error & { code?: string } = new Error(`[outline] 大纲护栏未过：\n${budget.map(f => `  ✗ ${f}`).join('\n')}`)
@@ -1375,7 +1391,7 @@ worksheet:
     // PS-I 顺序变体随大纲留痕（#81：只改生成顺序，调度/门禁不读它）
     const psi = graph.typeOf[node] !== 'practice' && nodeProblemFirstOf(graph, node)
     await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: manifest, tier } }, body, this.fs)
-    await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending；档位 ${tier}${psi ? '；PS-I 先做后教' : ''}）` })
+    await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending；档位 ${tier}${psi ? '；PS-I 先做后教' : ''}${tolerated.length ? `；${tolerated.join('；')}` : ''}）` })
     return manifest
   }
 
@@ -1390,7 +1406,8 @@ worksheet:
     const { fm, body } = await loadNote(path, this.fs)
     if (!fm || typeof fm.node !== 'string') throw new Error(`[split] 课程文件不存在: ${node}`)
     const sections = ((fm.content as { sections?: SectionManifest[] } | undefined)?.sections) ?? []
-    const subs = Content.parseSplitOutline(yamlText, sectionId)
+    const tolerated: string[] = []
+    const subs = Content.parseSplitOutline(yamlText, sectionId, note => { tolerated.push(note) })
     let next: SectionManifest[]
     try {
       next = Content.applySplit(sections, sectionId, subs, MAX_SECTIONS)
@@ -1401,7 +1418,7 @@ worksheet:
     }
     const parent = sections.find(m => m.id === sectionId)!
     await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: next } }, body, this.fs)
-    await journal({ course: '', node, rating: null, kind: 'content_split', elapsed_days: 0, detail: `节「${parent.title}」正文溢出，拆为 ${subs.map(s => `「${s.title}」`).join('、')}` })
+    await journal({ course: '', node, rating: null, kind: 'content_split', elapsed_days: 0, detail: `节「${parent.title}」正文溢出，拆为 ${subs.map(s => `「${s.title}」`).join('、')}${tolerated.length ? `；${tolerated.join('；')}` : ''}` })
     return subs
   }
 

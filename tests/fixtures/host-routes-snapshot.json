@@ -2106,6 +2106,7 @@
    "content2.loadPrompt(\"课程节生成-1\")",
    "content2.contentSectionsView(\"1\",\"1\")",
    "content2.loadPrompt(\"课程大纲\")",
+   "content2.contentPack(\"1\",\"1\",{\"omitDeliverables\":true})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
@@ -2161,6 +2162,7 @@
    "content2.loadPrompt(\"课程节生成\")",
    "content2.contentSectionsView(\"1\",\"1\")",
    "content2.loadPrompt(\"课程大纲\")",
+   "content2.contentPack(\"1\",\"1\",{\"omitDeliverables\":true})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"

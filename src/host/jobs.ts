@@ -17,6 +17,7 @@ import {
   isSectionOverflow,
   nextQueuedJob,
   normalizeGenJobPhase,
+  outlineRepairFeedback,
   quizFailureOutcome,
   quizSuccessOutcome,
   sectionFailure,
@@ -119,13 +120,16 @@ async function applySectionWithRepair(
   }
 }
 
-/** 大纲拆节（ADR-0054 阶梯末级）：待拆节任务 + 上下文包 → 拆分 YAML（deep 档）→
- * 引擎把该节原位替换为 2–3 个子节，返回子节清单（管线逐子节照常生成）。 */
+/** 大纲拆节（ADR-0054 阶梯末级）：待拆节任务 + 裁剪上下文包 → 拆分 YAML（deep 档）→
+ * 引擎把该节原位替换为 2–3 个子节，返回子节清单（管线逐子节照常生成）。
+ * 包自取且无 §8 交付要求——拆节输出是 YAML，机器块指令不得混入（同大纲站，理由见
+ * content.ts contextPack）；断点续跑时大纲块被跳过，自取保证裁剪包在此必然在场。 */
 async function splitOverflowSection(
   rt: HostRuntime, complete: LlmComplete, course: string, node: string,
-  s: { id: string; title: string; type: string }, pack: string,
+  s: { id: string; title: string; type: string },
 ): Promise<void> {
   const tpl = await rt.engine.content2.loadPrompt('课程节拆分')
+  const pack = await rt.engine.content2.contentPack(course, node, { omitDeliverables: true })
   const yaml = await complete(
     `${tpl}\n\n## 待拆分的节\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}\n\n---\n\n${pack}`,
     undefined, { effort: 'deep' },
@@ -697,14 +701,20 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
       const outlineTpl = await rt.engine.content2.loadPrompt('课程大纲')
       // P4：高复杂度节点的大纲轮升 deep 档
       const outlineEffort = contentEffort(highTier)
-      // 大纲护栏未过（OUTLINE_BUDGET）时重跑一次并回灌节数与预期区间，仍失败才置 failed
-      let outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${pack}`, undefined, { effort: outlineEffort })
+      // 大纲用裁剪包（无 §8 交付要求，与逐节正文的全量包分开取）——机器块指令不进
+      // YAML 输出调用，完整理由见 content.ts contextPack
+      const packOutline = await rt.engine.content2.contentPack(course, node, { omitDeliverables: true })
+      // 大纲失败恰一轮回灌重产（outlineRepairFeedback 裁决：护栏/形状/解析可修，其余
+      // 原样上抛）；重产仍败直接冒泡置 failed
+      let outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${packOutline}`, undefined, { effort: outlineEffort })
       if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
       try {
         await rt.engine.content2.contentOutline(course, node, outlineYaml)
       } catch (err) {
-        if (job.status === 'cancelling' || (err instanceof Error && (err as Error & { code?: string }).code !== 'OUTLINE_BUDGET')) throw err
-        outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${pack}\n\n## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${err instanceof Error ? err.message : String(err)}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`, undefined, { effort: outlineEffort })
+        if (job.status === 'cancelling') throw err
+        const feedback = outlineRepairFeedback(err)
+        if (!feedback) throw err
+        outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${packOutline}\n\n${feedback}`, undefined, { effort: outlineEffort })
         if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
         await rt.engine.content2.contentOutline(course, node, outlineYaml)
       }
@@ -728,7 +738,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
         if (isSectionOverflow(err)) {
           // 溢出阶梯末级：大纲拆节（深度一层——子节生成带 allowSplit:false 不再拆）
           try {
-            await splitOverflowSection(rt, complete, course, node, s, pack)
+            await splitOverflowSection(rt, complete, course, node, s)
             const freshViews = await rt.engine.content2.contentSectionsView(course, node)
             const subViews = freshViews.filter(v => v.id.startsWith(`${s.id}-`))
             job.progress = {
