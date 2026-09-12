@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 import { setActiveTab } from './active-tab'
 import { errorMessage } from './hooks/useCommand'
+import { navigate, onRouteChange, parseHash, readHash, syncHash, TAB_KEYS } from './lib/router'
+import type { TabKey } from './lib/router'
 import BankPage from './pages/BankPage'
 import GeneratePage from './pages/GeneratePage'
 import GraphPage from './pages/GraphPage'
@@ -15,8 +17,6 @@ import ProposalsPage from './pages/ProposalsPage'
 import StatsPage from './pages/StatsPage'
 import type { StatusWithLlm, TreeDoc } from './types'
 import { useCoachToasts } from './useCoachToasts'
-
-export type TabKey = 'learn' | 'graph' | 'bank' | 'stats' | 'generate' | 'proposals' | 'practice' | 'projects' | 'lab' | 'guide'
 
 /** 打开中的节点学习视图（学习页二级视图）；focusNode = 图页定位高亮目标。 */
 export interface LessonRef { course: string; node: string }
@@ -39,7 +39,10 @@ export interface AppFrame {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<TabKey>('learn')
+  // 路由状态（#189 / ADR-0052）：location.hash 是导航权威，渲染态是它的投影——
+  // 初始从 hash 解析（刷新/深链直达），跳转经 go() 同步写两侧，hashchange 回灌外部导航
+  //（前进/后退/手改 hash）。
+  const [tab, setTab] = useState<TabKey>(() => parseHash(readHash()))
   const [status, setStatus] = useState<StatusWithLlm | null>(null)
   const [tree, setTree] = useState<TreeDoc | null>(null)
   const [course, setCourse] = useState<string | null>(null)
@@ -69,11 +72,20 @@ export default function App() {
 
   useEffect(() => { void reload() }, [reload])
 
+  /** 一切页签跳转的唯一写点：渲染态立即翻转（保持既有同步语义——openLesson 等同批
+   * 多重更新一次成形）+ 写 URL 权威；hashchange 回灌对同值 setTab 是无操作。 */
+  const go = useCallback((t: TabKey) => { setTab(t); navigate(t) }, [])
+
   // 教练通知（ADR-0038）：图域任务生命周期 + 复诊结算的 App 级轻轮询弹条（10s/60s）；
   // 完成通知按钮按任务性质分流（提案产物→提案页，过程→生成页）。早退分支之前调用（hooks 顺序恒定）。
-  useCoachToasts({ generate: () => setTab('generate'), proposals: () => setTab('proposals') })
+  useCoachToasts({ generate: () => go('generate'), proposals: () => go('proposals') })
 
-  // 页签保活（ADR-0027）：把当前页签广播给各页轮询——隐藏页签据此跳过取数
+  // 外部导航（前进/后退/手改 hash）→ 路由事件回灌渲染态；同步把漂移的 hash 规范化
+  //（回落默认页签时 URL 不留非法形——setTab 同值被 React 跳过也不影响规范化）
+  useEffect(() => onRouteChange(t => { setTab(t); syncHash(t) }), [])
+  // 渲染态 → URL 规范化：初始空 hash、手改非法 hash 收敛规范形（replaceState 无历史条目）
+  useEffect(() => { syncHash(tab) }, [tab])
+  // 页签保活（ADR-0027）：路由变化桥接给各页轮询——隐藏页签据此跳过取数（桥接取舍见 active-tab.ts）
   useEffect(() => { setActiveTab(tab) }, [tab])
 
   // 夜间模式：arco-theme 切换（跟随系统默认，手动选择存 localStorage）
@@ -102,10 +114,10 @@ export default function App() {
   const frame: AppFrame = {
     status, tree, course, lesson, focusNode,
     setCourse: c => setCourse(c),
-    goto: t => setTab(t),
-    openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); setTab('learn') },
+    goto: go,
+    openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); go('learn') },
     closeLesson: () => setLesson(null),
-    locateInGraph: node => { setFocusNode(node); setTab('graph') },
+    locateInGraph: node => { setFocusNode(node); go('graph') },
     reload,
     loading,
   }
@@ -114,7 +126,7 @@ export default function App() {
   return (
     <div className='app-shell'>
       <div style={{ display: 'flex', alignItems: 'flex-start', borderBottom: '1px solid var(--color-border-2,#e5e6eb)' }}>
-        <Tabs activeTab={tab} onChange={k => setTab(k as TabKey)} type='capsule' size='small'
+        <Tabs activeTab={tab} onChange={k => go(k as TabKey)} type='capsule' size='small'
           style={{ flex: 1, padding: '8px 12px 0' }}>
           <Tabs.TabPane key='learn' title='学习' />
           <Tabs.TabPane key='graph' title='学习图' />
@@ -141,7 +153,7 @@ export default function App() {
           && tab !== 'proposals' && tab !== 'generate' && noCourse ? (
           <div style={{ paddingTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
             <Empty description='还没有课程：到「学习图」页教练台新建课程——种子起草后在「提案」页人审开工，等待时可在「生成」页看进度' />
-            <Button type='primary' onClick={() => setTab('graph')}>去学习图页建课</Button>
+            <Button type='primary' onClick={() => go('graph')}>去学习图页建课</Button>
           </div>
         ) : (
           <TabBody tab={tab} frame={frame} />
@@ -152,8 +164,8 @@ export default function App() {
 }
 
 /** 页签保活（ADR-0027）：首访后常驻、非激活隐藏——练习会话等页内状态跨页签存续；
- * 隐藏页签的后台轮询由 active-tab 信号自行跳过。 */
-const TAB_KEYS: TabKey[] = ['learn', 'graph', 'bank', 'stats', 'lab', 'generate', 'proposals', 'practice', 'projects', 'guide']
+ * 隐藏页签的后台轮询由 active-tab 信号自行跳过。键表住 lib/router（TAB_KEYS，
+ * 与 TabPane 键/路由解析三表对账由 tests/ui-router.test.ts 执法）。 */
 
 function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
   const [visited, setVisited] = useState<Set<TabKey>>(() => new Set([tab]))

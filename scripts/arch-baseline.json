@@ -194,7 +194,7 @@
     "src/host/llm.ts": 238,
     "src/host/params.ts": 229,
     "src/host/route-table.ts": 74,
-    "src/host/runtime.ts": 213,
+    "src/host/runtime.ts": 216,
     "src/host/static.ts": 122,
     "src/host/tool-handlers.ts": 268,
     "src/host/tools.ts": 123,
