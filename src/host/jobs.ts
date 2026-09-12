@@ -5,7 +5,7 @@
  * 读写，本文件零模块级可变状态；队列语义零改动（FIFO、可取消、重启可恢复、阻尼）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, TIER_LABELS, genericQuizTarget, hasReadyContent, tierIdxOf } from '../engine/index.ts'
+import { Content, TIER_LABELS, genericQuizTarget, hasReadyContent, readAnchor, tierIdxOf } from '../engine/index.ts'
 import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete } from '../engine/index.ts'
 import {
   contentFailureStatus,
@@ -152,9 +152,18 @@ function persistGenJobs(rt: HostRuntime): void {
     .catch(() => { /* 落盘失败不影响内存态（下次变更重试） */ })
 }
 
-/** 入队一个节点的生成任务（FIFO；重复入队幂等）。同一节点 running/cancelling 时拒绝。 */
-export function enqueueGeneration(rt: HostRuntime, ctx: Context, course: string, node: string, style?: string): { message: string; queued: boolean } {
+/** 入队一个节点的生成任务（FIFO；重复入队幂等）。同一节点 running/cancelling 时拒绝。
+ * 终点恒拒（#199 / ADR-0055 生成门，经 ADR-0056 修订）：终点是承诺标记不被学习调度，
+ * 不看就绪状态、手动与自动通道同认这道门。 */
+export async function enqueueGeneration(rt: HostRuntime, ctx: Context, course: string, node: string, style?: string): Promise<{ message: string; queued: boolean }> {
   assertQueueWritable(rt)
+  const c = await rt.engine.registry.get(course)
+  if (c?.root) {
+    const anchor = await readAnchor(rt.engine.paths.anchorPath(c.root), rt.engine.fs)
+    if (anchor && anchor.endpoint === node) {
+      throw new Error(`「${node}」是课程「${course}」的终点——终点是承诺标记，不被学习调度（生成门恒拒，不看就绪状态）：终点零正文零题库，完成判据折叠自它的最后台阶（终点.pre 集）。`)
+    }
+  }
   const key = `${course}/${node}`
   const existing = rt.jobs.genJobs.get(key)
   if (existing && (existing.status === 'running' || existing.status === 'cancelling')) {
@@ -357,7 +366,7 @@ export async function triggerSeedContent(rt: HostRuntime, ctx: Context, applied:
   let enqueued = 0
   for (const node of unbuilt) {
     try {
-      enqueueGeneration(rt, ctx, c.name, node)
+      await enqueueGeneration(rt, ctx, c.name, node)
       enqueued++
     } catch (err) {
       void runLog(rt, 'seed_apply_enqueue', `「${c.name}」起点「${node}」自动入队跳过：${err instanceof Error ? err.message : String(err)}`)
@@ -542,7 +551,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）
       for (const node of a.ready_unbuilt) {
         try {
-          enqueueGeneration(rt, ctx, job.course, node)
+          await enqueueGeneration(rt, ctx, job.course, node)
         } catch { /* 同节点已在队列（去重），跳过 */ }
       }
       if (a.ready_unbuilt.length) job.message += `；正文生成已入队 ${a.ready_unbuilt.length} 节`
@@ -862,8 +871,13 @@ export async function resetCourseChain(rt: HostRuntime, ctx: Context, courseKey:
   rt.flags.queuePaused = false
   let queued = 0
   for (const node of graph.order.length ? graph.order : graph.names) {
-    enqueueGeneration(rt, ctx, c.name, node)
-    queued++
+    try {
+      await enqueueGeneration(rt, ctx, c.name, node)
+      queued++
+    } catch (err) {
+      // 终点不进链（#199 生成门）：终点是承诺标记不被学习调度——跳过，其余入队错误照常上抛
+      if (!(err instanceof Error && err.message.includes('终点是承诺标记'))) throw err
+    }
   }
   return { reset, queued }
 }

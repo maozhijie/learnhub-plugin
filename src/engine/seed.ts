@@ -6,9 +6,10 @@
  * - 终点锚 = 课程唯一结构承诺物（state/终点锚.json：终点节点+目标类型+声明日期），
  *   种子 apply 一次落盘；此后唯一的合法写通道是重新种子提案（换终点），锚不提供
  *   任何直改 API——edit 提案对终点节点的 del/rename 在受理门被拒（锚保护）。
- * - 完成 = 读侧宣告（雾区条款上半）：完成判据由 foldCompletion 折叠——能力锚定 =
- *   终点 mastery ≥ 阈值且闭包健康；覆盖锚定 = 块工作表全部核销且终点 mastery 达标。
- *   零写侧状态、零专门停机代码；锚文件缺失 = 未播种（Missing 合法，null 折叠）。
+ * - 完成 = 读侧宣告（雾区条款上半）：完成判据由 foldCompletion 折叠（ADR-0056 终点纯
+ *   标记化）——mastery 折叠自最后台阶（终点.pre 集全部 ≥ 阈值）+ 已收尾（锚 sealed）；
+ *   能力锚定另要求闭包健康；覆盖锚定另要求块工作表全部核销。零写侧状态、零专门停机
+ *   代码；锚文件缺失 = 未播种（Missing 合法，null 折叠）。
  */
 import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
@@ -46,6 +47,10 @@ export interface EndpointAnchor {
   start_basis: Record<string, StartBasis>
   /** 块工作表（仅覆盖锚定课程携带；计划层核对表，图结构层零块承诺）。 */
   worksheet: Array<{ block: string; note?: string; done: boolean }>
+  /** 收尾宣告（ADR-0056，YYYY-MM-DD）：收尾接线批 apply 时由引擎落盘——终点.pre 已指向
+   * 教练认定的最终台阶、承诺兑现宣告成立。教练重开主线接线批（含 add_node）时清除。
+   * 旧锚无此字段 = 未收尾（合法，照读）。 */
+  sealed?: string
 }
 
 /** 块工作表条目的共用解析+归一（validateAnchor 与 validateSeedProposal 同一契约）：
@@ -86,7 +91,7 @@ export function validateAnchor(doc: unknown): { errors: string[]; anchor?: Endpo
     return { errors: ['(顶层): 必须是映射'] }
   }
   const d = doc as Record<string, unknown>
-  const allowed = ['version', 'endpoint', 'goal_type', 'declared', 'origin_proposal', 'seed_nodes', 'start_basis', 'worksheet']
+  const allowed = ['version', 'endpoint', 'goal_type', 'declared', 'origin_proposal', 'seed_nodes', 'start_basis', 'worksheet', 'sealed']
   const unknown = Object.keys(d).filter(k => !allowed.includes(k))
   if (unknown.length) errors.push(`(顶层) 含未知字段 ${JSON.stringify(unknown)}（只允许 ${allowed.join('/')}）`)
   if (d.version !== 1) errors.push(`version: 必须是 1（收到 ${JSON.stringify(d.version)}）`)
@@ -96,6 +101,10 @@ export function validateAnchor(doc: unknown): { errors: string[]; anchor?: Endpo
   }
   if (typeof d.declared !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d.declared)) {
     errors.push('declared: 必须是 YYYY-MM-DD 日期')
+  }
+  // sealed 是引擎写侧字段（收尾接线批 apply 落盘），读侧只验形状不放写通道
+  if (d.sealed !== undefined && (typeof d.sealed !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d.sealed))) {
+    errors.push('sealed: 必须是 YYYY-MM-DD 日期（收尾宣告；缺省 = 未收尾）')
   }
   if (!Number.isInteger(d.origin_proposal) || (d.origin_proposal as number) <= 0) {
     errors.push('origin_proposal: 必须是正整数（落盘来源提案 id）')
@@ -134,6 +143,7 @@ export function validateAnchor(doc: unknown): { errors: string[]; anchor?: Endpo
       seed_nodes: (d.seed_nodes as string[]).map(n => n.trim()),
       start_basis: startBasis,
       worksheet,
+      ...(typeof d.sealed === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.sealed) ? { sealed: d.sealed } : {}),
     },
   }
 }
@@ -162,7 +172,8 @@ export async function readAnchor(path: string, fs: VaultFs): Promise<EndpointAnc
   return v.anchor
 }
 
-/** 写锚（唯一调用方 = 种子 apply；整份覆盖——换终点/换工作表都走种子提案人审）。 */
+/** 写锚（调用方 = 种子 apply 整份覆盖 + 收尾接线批的 sealed 写/清——ADR-0056：
+ * sealed 是 apply 写入单元内的锚字段维护，其余字段仍只走种子提案人审）。 */
 export async function writeAnchor(path: string, anchor: EndpointAnchor, fs: VaultFs): Promise<void> {
   await atomicWrite(path, JSON.stringify(anchor, null, 1) + '\n', fs)
 }
@@ -355,9 +366,15 @@ export interface CompletionFold {
   criteria: {
     /** 终点节点在图内（锚悬空 = false，可见不炸面板）。 */
     endpoint_in_graph: boolean
-    endpoint_mastery: number
+    /** ADR-0056 终点纯标记化：完成判据折叠自最后台阶（终点.pre 集）——终点是承诺
+     * 标记不是课程节点，自身零 mastery 零调度；每条最后台阶 = {节点, 掌握度, 达标}。 */
+    last_steps: Array<{ node: string; mastery: number; met: boolean }>
     mastery_threshold: number
+    /** 全部最后台阶达标（pre 集为空 = 悬空/未接线，不达标）。 */
     mastery_met: boolean
+    /** 收尾宣告（ADR-0056）：锚上的 sealed 日期；null = 未收尾——两种 goal_type 都
+     * 要求已收尾才判完成。 */
+    sealed: string | null
     /** 仅能力锚定：终点前置闭包健康（无重名/断边/环/enc 违约）。 */
     closure_healthy?: boolean
     closure_errors?: string[]
@@ -411,22 +428,31 @@ export function isSeedGraph(anchor: EndpointAnchor | null, graph: Graph): boolea
 }
 
 /** 完成判据折叠（读侧宣告，零写副作用）：锚缺失返回 null（未播种 = 无从宣告）。
- * 能力锚定 = 终点 mastery ≥ 阈值 且闭包健康；覆盖锚定 = 工作表全部核销 且终点 mastery 达标
- * （覆盖课程允许跳跃推进，闭包健康不进判据）。锚悬空（终点不在图内）→ complete=false 可见。 */
+ * ADR-0056 终点纯标记化：mastery 读数折叠自最后台阶（终点.pre 集，全部 ≥ 阈值）——
+ * 终点自身不再被读 mastery（它是承诺标记不是可教可考的课程节点）；两种 goal_type 都
+ * 要求已收尾（锚 sealed）。能力锚定另要求闭包健康（不动）；覆盖锚定另要求工作表全部
+ * 核销（不动）。锚悬空（终点不在图内）或 pre 集为空（未接线）→ mastery_met=false 可见。 */
 export function foldCompletion(
   graph: Graph, state: Record<string, Fm>, anchor: EndpointAnchor | null,
 ): CompletionFold | null {
   if (!anchor) return null
   const inGraph = graph.nset.has(anchor.endpoint)
-  const mastery = inGraph ? masteryOfFm(state[anchor.endpoint]) : 0
-  const masteryMet = mastery >= COMPLETION_MASTERY_THRESHOLD
+  const lastSteps = inGraph
+    ? graph.preOf[anchor.endpoint].map(n => {
+        const mastery = masteryOfFm(state[n])
+        return { node: n, mastery, met: mastery >= COMPLETION_MASTERY_THRESHOLD }
+      })
+    : []
+  const masteryMet = lastSteps.length > 0 && lastSteps.every(s => s.met)
+  const sealed = anchor.sealed ?? null
   const criteria: CompletionFold['criteria'] = {
     endpoint_in_graph: inGraph,
-    endpoint_mastery: mastery,
+    last_steps: lastSteps,
     mastery_threshold: COMPLETION_MASTERY_THRESHOLD,
     mastery_met: masteryMet,
+    sealed,
   }
-  let complete = inGraph && masteryMet
+  let complete = inGraph && masteryMet && sealed !== null
   if (anchor.goal_type === 'capability') {
     const closureErrors = closureHealthErrors(graph, anchor.endpoint)
     criteria.closure_healthy = closureErrors.length === 0

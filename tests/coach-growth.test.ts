@@ -38,7 +38,9 @@ starts:
 `
 
 /** 画面里的金样本裁决（模板输出契约：course + note + route + ops [+ concepts]）。
- * ops 缺省 = 默认前进批；ops = [] 显式零操作（ops: []）；concepts = 顶层铸名块。 */
+ * ops 缺省 = 默认前进批；ops = [] 显式零操作（ops: []）；concepts = 顶层铸名块。
+ * #198 生长方向不变式：前进批含 add_node 必接线终点（set_pre 替换语义），否则被
+ * 受理门拒收回灌——金样本一律带接线，调用数基线（首过恒 1）不回归。 */
 function goldVerdict(opts: {
   operator?: string
   reason?: string
@@ -57,6 +59,9 @@ function goldVerdict(opts: {
     '  bloom: 理解',
     '  difficulty: 2',
     '  teaches: {变化率: 会用}',
+    '- op: set_pre',
+    '  node: 用导数解决优化问题',
+    '  pre: [平均变化率]',
   ]
   const routeLines = (opts.route
     ? opts.route.split('\n')
@@ -351,7 +356,7 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
     const ok = await engine.growth2.coachGrowthBatch('数学', replayFake(consolidateOk))
     assert.equal(ok.state, 'applied')
 
-    // 前进批产新概念：不受巩固门限制（正常铸名通道）
+    // 前进批产新概念：不受巩固门限制（正常铸名通道）；主线批带终点接线（#198）
     const advanceNew = goldVerdict({
       operator: '前进',
       ops: [
@@ -361,6 +366,9 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
         '  block: 起点块',
         '  pre: [认识变化率]',
         '  teaches: {极限: 知道}',
+        '- op: set_pre',
+        '  node: 用导数解决优化问题',
+        '  pre: [极限初步]',
       ],
       concepts: ['- canonical: 极限'],
     })
@@ -407,6 +415,9 @@ starts:
       '  region: 基础',
       '  block: 起点块',
       '  pre: [认识变化率]',
+      '- op: set_pre',
+      '  node: 用导数解决优化问题',
+      '  pre: [平均变化率]',
     ] }))
     const idle = await engine.growth2.coachGrowthBatch('数学', fake, { today: addDays(declared, 7)! })
     assert.equal(idle.state, 'idle')
@@ -517,6 +528,9 @@ starts:
       '  region: 基础',
       '  block: 起点块',
       '  pre: [认识变化率]',
+      '- op: set_pre',
+      '  node: 用导数解决优化问题',
+      '  pre: [平均变化率]',
     ] })
     // 对照：就绪深度满足 + 无注入 → 停摆零调用
     const idle = await engine.growth2.coachGrowthBatch('数学', replayFake(verdict), { today: addDays(declared, 7)! })

@@ -23,7 +23,9 @@
       learnhub_exercises_gen 负责笔记练习区出题，learnhub_generate 负责课时生成（缺笔记先补骨架）。
       所有图谱与题目变更都走「提案 → 门禁 → apply」，
       门禁拒绝时把原因讲给用户并修正后重新提案。建课由你在对话里直接提交种子提案
-      （learnhub_graph_propose kind=seed，一次人审即开工）；出题、复盘的重活，
+      （learnhub_graph_propose kind=seed，一次人审即开工）：起点是单一行为单元，
+      终点是承诺句——它要覆盖目标的全部分面（装不下就显式取舍写进 reason，禁静默丢弃
+      与窄化限定词），不是一节可教可考的课；出题、复盘的重活，
       优先委派给对应的专职子代理（subagent_exercise_gen / subagent_reviewer）。
       技能库里有 learnhub-graph-optimize / learnhub-study / learnhub-review
       三个技能，遇到对应任务先读技能再动手。

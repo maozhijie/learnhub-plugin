@@ -162,7 +162,7 @@ test('队列泵状态机：入队 → 执行 → 终态 done → 保留期清扫
   const rt = makeRuntime()
   const saved: Array<Array<unknown>> = []
   stubContentPipeline(rt, { saved })
-  const r = enqueueGeneration(rt, fakeCtx(), '数学', '节点A')
+  const r = await enqueueGeneration(rt, fakeCtx(), '数学', '节点A')
   assert.equal(r.queued, true)
   assert.match(r.message, /已入队/)
   const key = '数学/节点A'
@@ -194,9 +194,9 @@ test('队列泵状态机：running 重复入队拒绝；排队任务可取消（
     'growth2.settleRechecks': async () => null,
   })
   const ctx = fakeCtx()
-  enqueueGeneration(rt, ctx, '数学', '节点A')
+  await enqueueGeneration(rt, ctx, '数学', '节点A')
   await until(() => rt.jobs.genJobs.get('数学/节点A')?.status === 'running')
-  assert.throws(() => enqueueGeneration(rt, ctx, '数学', '节点A'), /正在生成中/)
+  await assert.rejects(() => enqueueGeneration(rt, ctx, '数学', '节点A'), /正在生成中/)
   const cancelled = cancelGeneration(rt, '数学', '节点A')
   assert.equal(cancelled.cancelled, true)
   assert.equal(cancelled.status, 'cancelling', 'running 取消 = 置旗标，runner 下个检查点中止')
@@ -210,7 +210,7 @@ test('队列暂停/恢复：暂停旗标挡泵（入队不开跑），resumeQueu
   stub(rt, { 'content2.contentPack': async () => { hits.pack++; return '上下文包' } })
   const ctx = fakeCtx()
   rt.flags.queuePaused = true // 重启恢复后的暂停语义（restoreGenJobs 置位，生成页一键恢复）
-  enqueueGeneration(rt, ctx, '数学', '节点B')
+  await enqueueGeneration(rt, ctx, '数学', '节点B')
   await sleep(50)
   assert.equal(rt.jobs.genJobs.get('数学/节点B')?.status, 'queued', '暂停期间不开跑（不静默烧 token）')
   assert.equal(hits.pack, 0, '泵未触引擎')
@@ -317,7 +317,7 @@ test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 →
     'sections:\n  - title: 演示：溢出节（上）\n    type: 演示\n  - title: 演示：溢出节（下）\n    type: 演示\n',
     '子节一', '子节二',
   ], prompts)
-  enqueueGeneration(rt, ctx, '数学', '节点A')
+  await enqueueGeneration(rt, ctx, '数学', '节点A')
   const key = '数学/节点A'
   await until(() => rt.jobs.genJobs.get(key)?.status === 'done')
   const job = rt.jobs.genJobs.get(key)!
@@ -359,7 +359,7 @@ test('拆节被护栏拒绝（MAX_SECTIONS）→ 失败节记录、余节照常�
     'sections:\n  - title: 演示：溢出节（上）\n    type: 演示\n  - title: 演示：溢出节（下）\n    type: 演示\n',
     '正常节正文',
   ])
-  enqueueGeneration(rt, ctx, '数学', '节点B')
+  await enqueueGeneration(rt, ctx, '数学', '节点B')
   const key = '数学/节点B'
   await until(() => rt.jobs.genJobs.get(key)?.status === 'partial')
   const job = rt.jobs.genJobs.get(key)!
@@ -392,7 +392,7 @@ test('continue→partial（ADR-0054）：单节非溢出失败不中止余节，
     'growth2.settleRechecks': async () => null,
   })
   const ctx = scriptedCtx(['坏节正文', '好节正文'])
-  enqueueGeneration(rt, ctx, '数学', '节点E')
+  await enqueueGeneration(rt, ctx, '数学', '节点E')
   const key = '数学/节点E'
   await until(() => rt.jobs.genJobs.get(key)?.status === 'partial')
   const job = rt.jobs.genJobs.get(key)!
@@ -624,7 +624,7 @@ test('任务档 Broken 启动：队列 broken、生成页可见报错与指引�
   assert.equal(status.broken, rt.flags.genQueueBroken)
 
   // 入队四口 + 整课重置全部被拒，提示先修复
-  assert.throws(() => enqueueGeneration(rt, fakeCtx(), '数学', '节点A'), /broken 态，已拒绝该操作/)
+  await assert.rejects(() => enqueueGeneration(rt, fakeCtx(), '数学', '节点A'), /broken 态，已拒绝该操作/)
   assert.throws(() => enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点A'), /broken 态/)
   assert.throws(() => enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试'), /broken 态/)
   assert.throws(() => enqueueGraphJob(rt, fakeCtx(), { course: '数学', node: '罗盘', phase: 'compass' }), /broken 态/)
@@ -869,10 +869,11 @@ test('路由↔工具对账基线：86 共享引擎入口、工具独有 25、�
   assert.deepEqual(routeOnly, base.routeOnly, '路由独有引擎入口集漂移')
   // #163：罗盘重画 agent 工具改走生成队列（回路只在队列任务内运行），registry.resolve
   // 进工具面 → 86 共享／路由独有 49（#156 已把工具面一条入口收编共享：25/49；
-  // #196/#197 拆节 op content2.contentSplit 仅路由面管线消费 → 25/50）
+  // #196/#197 拆节 op content2.contentSplit 仅路由面管线消费 → 25/50；
+  // #199 生成门 enqueueGeneration 经 paths.anchorPath 读锚拒终点 → 25/51）
   assert.equal(shared.length, 86)
   assert.equal(toolOnly.length, 25)
-  assert.equal(routeOnly.length, 50)
+  assert.equal(routeOnly.length, 51)
 })
 
 // ---------------------------------------------------------------- 种子应用 → 起点正文自动入队（#160）

@@ -173,6 +173,18 @@ test('#143: 罗盘初画模板 v1——非承诺措辞、批注软输入、路�
   assert.match(tpl, /块工作表/, '覆盖锚定课程按工作表块组织')
 })
 
+// ---- v5 教练回合契约（#198 / ADR-0055+0056）：主线批必接线终点 + 收尾接线批 ----
+
+test('#198: 教练回合模板 v5——主线批接线义务（set_pre 替换语义）与收尾接线批（收尾即宣告承诺兑现）', () => {
+  const tpl = Content.PROMPT_KINDS['教练回合']!
+  assert.ok(Content.promptVersionOf(tpl) >= 5, '教练回合应带版本标记 v5+')
+  assert.match(tpl, /主线批必接线/, '前进批接线义务锚点')
+  assert.match(tpl, /收尾即宣告承诺兑现/, '收尾批 = 承诺兑现宣告（ADR-0056）')
+  assert.match(tpl, /零 add_node 的纯 set_pre 接线批/, '收尾批形态（停摆前接线）')
+  assert.match(tpl, /禁长过目标/, '禁以终点为 pre')
+  assert.match(tpl, /豁免接线义务/, '旁支/巩固/插入豁免')
+})
+
 // ---- v2 教练回合契约（#150）：三段式分歧纪律——轻量→全量→双沙盘仲裁终审 ----
 
 test('#150: 教练回合模板 v2——真分歧升级双沙盘仲裁（终审、非承诺措辞照旧）', () => {
@@ -264,6 +276,21 @@ test('ADR-0040: 种子提案模板 v2——起点资格（单一行为单元/零
   assert.match(tpl, /宁简勿繁/, '不对称论证锚点（过简趋零代价 vs 过繁坡道断裂）')
   assert.match(tpl, /「Python 基础语法」/, '复合泛称反例（allo 校勘范式：判据配正反例）')
   assert.match(tpl, /装好环境并运行第一行代码/, '单一行为正例')
+})
+
+// ---- v3 种子提案契约（#202 / ADR-0056）：终点资格与起点资格分家 ----
+
+test('#202: 种子提案模板 v3——终点资格（承诺句/面向覆盖/禁窄化/可兑现）+ 操作化反例', () => {
+  const tpl = Content.PROMPT_KINDS['种子提案']!
+  assert.ok(Content.promptVersionOf(tpl) >= 3, '种子提案应带版本标记 v3+')
+  assert.match(tpl, /终点资格/, '终点资格段名（与起点资格分家）')
+  assert.match(tpl, /承诺句/, '终点 = 承诺句不是台阶句')
+  assert.match(tpl, /禁止静默丢弃/, '面向覆盖纪律（禁静默丢弃）')
+  assert.match(tpl, /窄化限定词/, '禁窄化限定词（「或/A 者 B」措辞）')
+  assert.match(tpl, /可兑现/, '可兑现性判据（空泛口号不合格）')
+  assert.match(tpl, /机器学习/, '操作化反例 = 「数学」课四面向实测案例')
+  assert.match(tpl, /不受「单一行为单元」约束/, '终点不吃起点资格判据')
+  assert.match(tpl, /定位与取舍/, 'reason 扩「定位与取舍」')
 })
 
 // ---- v9 反编译契约（ADR-0040）：seed 起点资格与种子提案同判据 + 上交前自查 ----

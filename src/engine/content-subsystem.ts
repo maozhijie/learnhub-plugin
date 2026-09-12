@@ -83,6 +83,7 @@ import type { LearnerCardDoc } from './learner-cards.ts'
 import { interleaveBySource } from './nof1.ts'
 import { NOTE_SOURCE_COURSE } from './note-source.ts'
 import { asFm, loadNote, saveNote } from './notes.ts'
+import { readAnchor } from './seed.ts'
 import { CALIBRATION_BOOST_SAMPLE_RATE, FSRS_DIFFICULTY_MID, XP_GUESS_SECONDS } from './params.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
@@ -116,6 +117,12 @@ export class ContentSubsystem {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[pack] 节点「${node}」不在图内。`)
+    // 生成门（#199 / ADR-0055+0056 终点纯标记化）：不为终点组装产料上下文——
+    // 终点是承诺标记，零正文零题库零调度，入队门在宿主，这里是管线侧兜底。
+    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
+    if (anchor && anchor.endpoint === node) {
+      throw new Error(`[pack] 「${node}」是课程「${c.name}」的终点——终点是承诺标记，不被学习调度（生成门恒拒，不看就绪状态）：它零正文零题库，完成判据折叠自它的最后台阶（终点.pre 集）。`)
+    }
     this.e.assertNoteOk(c, graph, broken, node, 'pack')
     const prior = await this.vaultPriorFor(graph, node)
     const pack = this.e.content.contextPack(graph, state, node, c.name)

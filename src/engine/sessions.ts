@@ -19,6 +19,7 @@ import type { Paths } from './paths.ts'
 import { DIAGNOSTIC_SCORE, diagnosticView } from './attribution.ts'
 import type { DiagnosticEntry, DiagnosticItem } from './attribution.ts'
 import type { LessonDoc } from './views/content.ts'
+import { readAnchor } from './seed.ts'
 import type { CompletionFold } from './seed.ts'
 import type { ProbationCourseView } from './probation.ts'
 import type { CoachCheck } from './coach-round.ts'
@@ -331,13 +332,17 @@ export class Sessions {
       const withDue = [...statByNode.values()].filter(s => s.due !== null)
       const overdueNodes = withDue.filter(s => (parseDay(s.due ?? '')?.getTime() ?? t.getTime()) < t.getTime())
       const dueNodes = withDue.filter(s => s.due === today)
+      // 学习者账剔终点（#199 / ADR-0056 终点纯标记化）：就绪存量与就绪/软闸清单不列
+      // 终点——终点是承诺标记不被学习调度，带正文也不会出现在任何「今天学什么」面上。
+      const anchor = await readAnchor(this.paths.anchorPath(c.root), this.fs)
+      const endpoint = anchor?.endpoint ?? null
       courses.push({
         id: c.id, name: c.name,
         total: graph.names.length, counts: st.counts,
         due_today: dueNodes.length,
         overdue: overdueNodes.map(o => ({ node: o.node, since: o.due as string, count: o.count, path: this.notePath(c.root, graph, o.node) })),
-        ready: st.ready.map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
-        gated: st.gated.map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
+        ready: st.ready.filter(n => n !== endpoint).map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
+        gated: st.gated.filter(n => n !== endpoint).map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
         // 软闸建议项（#54 R 半）：被 R-gate 拦下的候选 → {前置, R, 前置到期题数, 直达入口}
         blocked: Object.fromEntries(Object.entries(st.advice).map(([n, items]) =>
           [n, items.map(a => ({
@@ -446,10 +451,13 @@ export class Sessions {
       }
       // 新课：解锁后继数 + 分区轮转；被 R-gate 拦下的候选（#54 R 半）在 new 事件上
       // 前置展示软闸建议项——文案引导「先复习 P 的 n 道到期题」，评分抬一档排在
-      // 普通新课之前，但不阻止直接学 N（软闸语义，无新增拦截）
+      // 普通新课之前，但不阻止直接学 N（软闸语义，无新增拦截）。
+      // 推荐面剔终点（#199 / ADR-0056）：终点不出现在「今天学什么」推荐流里。
+      const anchor = await readAnchor(this.paths.anchorPath(c.root), this.fs)
+      const endpoint = anchor?.endpoint ?? null
       const lru = regionLru(graph, state)
       const lruBonus = new Map(lru.map((r0, i) => [r0, Math.max(0, 8 - i * 2)]))
-      const ready = readySet(graph, state, rValue)
+      const ready = readySet(graph, state, rValue).filter(n => n !== endpoint)
       const done = doneSet(graph, state)
       const started = new Set([...done, ...learningSet(graph, state)])
       // 「学好可解锁 N 个后继」的真实语义：学会本节后，那些唯一卡在本节的未开始

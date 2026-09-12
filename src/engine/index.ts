@@ -71,6 +71,7 @@ export { ANKI_ENDPOINT, AnkiConnectClient } from './anki.ts'
 export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './complexity.ts'
 /** 正文就绪判定（#160 宿主种子链消费的纯函数：起点「正文未生成」口径与生长批一致）。 */
 export { hasReadyContent } from './notes.ts'
+export { readAnchor } from './seed.ts'
 export type { LlmComplete, LlmEffort, LlmStream, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
 /** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */
 export type { Clock, Rng } from './clock.ts'
@@ -471,7 +472,8 @@ export class LearnhubEngine {
   }
 
 
-  /** 完成宣告折叠（#142 雾区条款上半，读侧零写副作用）：终点锚缺失 = null
+  /** 完成宣告折叠（#142 雾区条款上半，读侧零写副作用；#202 / ADR-0056 判据折叠自
+   * 最后台阶 = 终点.pre 集全部 ≥ 阈值 + 已收尾 sealed）：终点锚缺失 = null
    * （未播种，无从宣告）；锚 Broken fail loud——锚无直改通道，手改损坏必须显式浮出。 */
   async courseCompletion(course: { name: string; root: string }): Promise<CompletionFold | null> {
     const anchor = await readAnchor(this.paths.anchorPath(course.root), this.fs)
