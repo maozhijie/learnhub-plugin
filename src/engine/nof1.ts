@@ -25,12 +25,12 @@ import type { Clock } from './clock.ts'
 import { nodeKeyOf, sourceKeyOf } from './types.ts'
 import { NOF1_VARIABLE_WHITELIST } from './types.ts'
 import type { ExperimentDef, Nof1Variable } from './types.ts'
-import type { JournalRec, PracticeRec } from './types.ts'
+import type { JournalRec, PracticeRec, ErratumRec } from './types.ts'
 import type { ReceiptLogRec } from './receipts.ts'
 import { execRatingScore } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import { execRecsAll } from './project-exec.ts'
-import { clamp01 } from './grading.ts'
+import { clamp01, netPracticeRecs } from './grading.ts'
 import { YAML } from './yaml.ts'
 import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import { runWriteUnit } from './write-unit.ts'
@@ -316,8 +316,8 @@ export function analyzeNof1(
   boots.sort((a, b) => a - b)
   const q = (x: number) => boots[Math.min(boots.length - 1, Math.max(0, Math.round(x * (boots.length - 1))))]!
   const ci95: [number, number] = [round4(q(0.025)), round4(q(0.975))]
-  const pct = Math.round(Math.abs(obsDiff) * 10000) / 100
   const fmt = (x: number) => Math.round(x * 10000) / 100
+  const pct = fmt(Math.abs(obsDiff))
   const dir = obsDiff > 0
     ? `「${def.arm_labels[armB!] ?? armB}」期间你的${wording.subject}比「${def.arm_labels[armA!] ?? armA}」高 ${pct} ${wording.unit}`
     : obsDiff < 0
@@ -373,22 +373,26 @@ export function nof1TemplateViolation(
 
 /** 练习侧结局采集（纯读侧派生，免新增写侧标注——expTag 只管复习日志，裁决 5 不动）：
  * 三股练习评分流 → 逐次 0–1 评分事件，按**事件发生学习日**（过日界，ADR-0020）归
- * 当日臂。各股分值即写侧折叠进 EMA 的原值：
+ * 当日臂。各股分值即写侧折叠进 EMA 的原值（净值口径）：
  * - 作答：对错二元（content-subsystem 折叠 correct?1:0——连续判卷分不进 EMA，无失真）；
- *   judge='review' 的 anki 回放行是调度入账、不折叠节点 EMA，不入局。
+ *   judge='review' 的 anki 回放行是调度入账、不折叠节点 EMA，不入局。传入前先过
+ *   netPracticeRecs 勘误净值（聚合账通例，ADR-0031：作废/改判的作答已回撤 EMA）。
  * - 回执：量表分 0–1 原值（receipts.fold 同权入 EMA）。
  * - 执行事件回流：评级映射 execRatingScore（与 projects 回流同一映射）；一事件一
- *   评分（回流到 k 个节点是同一分数的复制，逐节点计数会伪重复膨胀样本）。
+ *   评分（回流到 k 个节点是同一分数的复制，逐节点计数会伪重复膨胀样本）；nodes 为空
+ *   的行使照落项目流但不回流（projects 文档化语义），不入局。
  * 窗口 = started_day 起、stopped_day 止（定稿后事件不入局）；scope_course 只约束
- * 课程附着流（作答/回执）——执行事件跨课程无课程归属，不受该过滤。 */
+ * 课程附着流（作答/回执）——执行事件跨课程无课程归属，不受该过滤。
+ * 已知读侧局限：probation 在途闸与节点缺 frontmatter 的「只记流不回流」行读侧不可
+ * 辨（需要图与戒渐账本重放），按折叠计——批次臂按日轮转使残余噪声臂对称，不作偏倚。 */
 export function nof1PracticeOutcomes(
-  def: Pick<ExperimentDef, 'assignment' | 'scope_course' | 'started_day' | 'stopped_day'>,
+  def: Pick<ExperimentDef, 'id' | 'assignment' | 'scope_course' | 'started_day' | 'stopped_day'>,
   streams: Nof1PracticeStreams,
   cutoffMin = 0,
 ): Nof1OutcomeRec[] {
   const endDay = def.stopped_day ?? null
   const inWindow = (day: string) => day >= def.started_day && (!endDay || day <= endDay)
-  const armOf = (day: string) => nof1ArmForDay(def as ExperimentDef, day)
+  const armOf = (day: string) => nof1ArmForDay(def, day)
   const inScope = (course: string) => !def.scope_course || course === def.scope_course
   const out: Nof1OutcomeRec[] = []
   for (const r of streams.practice) {
@@ -405,6 +409,7 @@ export function nof1PracticeOutcomes(
     out.push({ arm: armOf(r.day), value: clamp01(r.score) })
   }
   for (const r of streams.exec) {
+    if (!r.nodes?.length) continue
     if (!inWindow(r.day)) continue
     out.push({ arm: armOf(r.day), value: execRatingScore(r.rating) })
   }
@@ -430,6 +435,8 @@ export interface LabStore {
   /** 练习侧结局的两股课程附着流（#135；执行事件流走 paths+fs+projects.list）。 */
   practiceAll(): Promise<PracticeRec[]>
   receiptsAll(): Promise<ReceiptLogRec[]>
+  /** 勘误冲正流水（练习侧结局按净值读的净化输入，ADR-0031）。 */
+  erratumAll(): Promise<ErratumRec[]>
   /** 写入单元的 journal sink（#176：experimentStop 末尾的 write_unit 条目）。 */
   appendJournal(rec: JournalRec): Promise<JournalRec>
 }
@@ -568,8 +575,7 @@ export class LabSubsystem {
     }
     const tpl = doc.template ? nof1Template(doc.template) : null
     if (!tpl || tpl.variable !== doc.variable || !NOF1_VARIABLE_WHITELIST.includes(doc.variable as Nof1Variable)
-      || (doc.outcome !== 'true_retention' && doc.outcome !== 'practice_ema') || doc.outcome !== tpl.outcome
-      || doc.unit !== tpl.unit
+      || doc.outcome !== tpl.outcome || doc.unit !== tpl.unit
       || !Array.isArray(doc.arms) || doc.arms.length !== 2 || doc.arms[0] !== tpl.arms[0] || doc.arms[1] !== tpl.arms[1]
       || !doc.title) {
       throw new Error(`[nof1-apply] 提案产物与模板不一致或白名单校验失败（template=${String(doc.template)} variable=${String(doc.variable)} outcome=${String(doc.outcome)}）。预登记口径（含结局）不可在确认环节被偷换（#135）。`)
@@ -670,7 +676,7 @@ export class LabSubsystem {
         exec.push(...await execRecsAll(this.e.paths, p.id, this.e.fs))
       }
       const recs = nof1PracticeOutcomes(hit, {
-        practice: await this.e.store.practiceAll(),
+        practice: netPracticeRecs(await this.e.store.practiceAll(), await this.e.store.erratumAll()),
         receipts: await this.e.store.receiptsAll(),
         exec,
       }, cutoff)

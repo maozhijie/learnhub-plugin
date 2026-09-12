@@ -60,7 +60,7 @@ test('纯函数：混排把非题卡均匀摊进题卡序列，两列各自保�
 
 // ---- 纯函数：统计口径 ----
 
-const rec = (arm: string, pass: boolean): Nof1OutcomeRec => ({ arm, value: pass ? 1 : 0 })
+const rec = (arm: string, ok: boolean): Nof1OutcomeRec => ({ arm, value: ok ? 1 : 0 })
 const bulk = (arm: string, n: number, passes: number): Nof1OutcomeRec[] =>
   Array.from({ length: n }, (_, i) => rec(arm, i < passes))
 
@@ -198,6 +198,7 @@ test('纯函数：练习侧结局采集——三股流合并、按事件学习�
     ],
     exec: [
       { ts: '2026-09-04T12:00:00', day: '2026-09-04', rating: 4 as const, source: 'ai' as const, nodes: ['入门'], tier: '骨架' as const },
+      { ts: '2026-09-03T12:00:00', day: '2026-09-03', rating: 3 as const, source: 'self' as const, nodes: [], tier: '骨架' as const },
     ],
   }
   const out = nof1PracticeOutcomes(def, streams, 0)
@@ -206,7 +207,7 @@ test('纯函数：练习侧结局采集——三股流合并、按事件学习�
     { arm: 'self', value: 0 },
     { arm: 'self', value: 0.8 },
     { arm: 'self', value: 0.95 },
-  ], '窗前作答/anki 回放/scope 外课程/停后回执全部不入局；执行事件按评级映射 0–1（09-04 当日臂 = self）')
+  ], '窗前作答/anki 回放/scope 外课程/停后回执/无关联行使（nodes=[]）全部不入局；执行事件按评级映射 0–1（09-04 当日臂 = self）')
 })
 
 test('纯函数：练习侧结局采集——过日界换算（凌晨作答归前一学习日）与卡级定义 fail loud', () => {
@@ -466,9 +467,10 @@ test('#135 练习侧结局：practice_ema 报告从 practice/回执/exec 三股�
       assignment: { kind: 'batch', start_day: yday, order: ['ai', 'self'] },
       started_day: yday,
     }]), 'utf8')
-    // 三股练习评分流：昨日 ai 臂（作答对 1 + 回执 0.8 → 均分 0.9）、今日 self 臂（作答错 0 + 回执 0.4 → 均分 0.2）
+    // 三股练习评分流：昨日 ai 臂（作答对 1，随后被勘误作废 → 净值不入局 + 回执 0.8）、
+    // 今日 self 臂（作答错 0 + 回执 0.4）；anki 回放行（judge=review）不折叠不入局
     await writeFile(engine.paths.practicePath, [
-      JSON.stringify({ ts: `${yday}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice' }),
+      JSON.stringify({ ts: `${yday}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice', qid: 'q1' }),
       JSON.stringify({ ts: `${today}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '错', correct: false, judge: 'single_choice' }),
       JSON.stringify({ ts: `${today}T11:00:00`, course: '数学', node: '入门', ex: 2, answer: '对', correct: true, judge: 'review' }),
     ].join('\n') + '\n', 'utf8')
@@ -476,25 +478,27 @@ test('#135 练习侧结局：practice_ema 报告从 practice/回执/exec 三股�
       JSON.stringify({ id: 'r1', ts: `${yday}T12:00:00`, course: '数学', node: '入门', day: yday, kind: 'text', review_mode: 'full', score: 0.8, verdict: '好' }),
       JSON.stringify({ id: 'r2', ts: `${today}T12:00:00`, course: '数学', node: '入门', day: today, kind: 'text', review_mode: 'brief', score: 0.4, verdict: '一般' }),
     ].join('\n') + '\n', 'utf8')
+    await writeFile(engine.paths.erratumLogPath, JSON.stringify({
+      ts: `${today}T09:00:00`, course: '数学', node: '入门', qid: 'q1',
+      target_ts: `${yday}T10:00:00`, verdict: 'defective', xp: 0, reason: '瑕疵题作废',
+    }), 'utf8')
 
     const report = await engine.lab.experimentReport(1)
-    assert.equal(report.analysis.ready, false, '每臂 1 组样本 < 20，未达观察窗')
+    assert.equal(report.analysis.ready, false, '样本 < 20，未达观察窗')
     assert.deepEqual(report.analysis.per_arm, [
-      { arm: 'ai', label: 'AI 评审', n: 2, rate: 0.9 },
+      { arm: 'ai', label: 'AI 评审', n: 1, rate: 0.8 },
       { arm: 'self', label: '学习者自评', n: 2, rate: 0.2 },
-    ], '练习侧 rate = 均分：作答二元分 + 回执量表分按日折进当日臂')
+    ], '练习侧 rate = 均分：勘误作废的作答按净值剔除、回执量表分按日折进当日臂、anki 回放排除')
 
     // 灌满观察窗：两侧各补足 20 条同分布评分（回执流清零，让均分数字干净）→ 定稿出均值差
     await writeFile(engine.paths.receiptLogPath, '', 'utf8')
     const fill = (day: string, correct: boolean) =>
-      Array.from({ length: 19 }, (_, i) => JSON.stringify({
+      Array.from({ length: 20 }, (_, i) => JSON.stringify({
         ts: `${day}T13:${String(i).padStart(2, '0')}:00`, course: '数学', node: '入门',
         ex: i + 3, answer: 'x', correct, judge: 'single_choice',
       }))
     await writeFile(engine.paths.practicePath, [
-      JSON.stringify({ ts: `${yday}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice' }),
       ...fill(yday, true),
-      JSON.stringify({ ts: `${today}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '错', correct: false, judge: 'single_choice' }),
       ...fill(today, false),
     ].join('\n') + '\n', 'utf8')
 

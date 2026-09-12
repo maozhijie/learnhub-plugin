@@ -148,7 +148,7 @@
     "src/engine/learner-cards.ts": 1337,
     "src/engine/llm.ts": 54,
     "src/engine/memory.ts": 118,
-    "src/engine/nof1.ts": 898,
+    "src/engine/nof1.ts": 904,
     "src/engine/note-source.ts": 1242,
     "src/engine/notes.ts": 334,
     "src/engine/optimize.ts": 140,
