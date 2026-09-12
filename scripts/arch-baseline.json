@@ -141,7 +141,7 @@
     "src/engine/growth-subsystem.ts": 1069,
     "src/engine/habits.ts": 202,
     "src/engine/health.ts": 94,
-    "src/engine/html-comments.ts": 56,
+    "src/engine/html-comments.ts": 52,
     "src/engine/index.ts": 805,
     "src/engine/io.ts": 99,
     "src/engine/jol.ts": 78,

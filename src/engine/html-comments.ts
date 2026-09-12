@@ -4,16 +4,12 @@
  * 两类消费方（策略见各自调用点，本模块只管机制）：
  * - 模型 YAML 输出（yaml.ts parseModel）：串入的任何 HTML 注释都是噪音，全剥；
  * - vault 先验正文（vault-prior.ts）：只剥机器块（enc_candidates，CONTEXT.md「机器块」
- *   词条），个人笔记手写的其它 HTML 注释原样保留——经 opts.matching 过滤声明。
+ *   词条），个人笔记手写的其它 HTML 注释原样保留——经 matching 过滤声明。
  */
 
 /** 行内引号配对判定：引号计数为偶（不在引号内）遇到的 `<!--` 才算注释起点；散撇号
- * （英文 it's 之类）按行隔离，不跨行污染配对判定。 */
-export function stripHtmlComments(
-  src: string,
-  opts?: { matching?: (comment: string) => boolean },
-): string {
-  const matching = opts?.matching
+ * （英文 it's 之类）按行隔离，不跨行污染配对判定。matching 缺席 = 全剥。 */
+export function stripHtmlComments(src: string, matching?: (comment: string) => boolean): string {
   let out = ''
   let sq = 0
   let dq = 0

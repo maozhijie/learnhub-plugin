@@ -68,7 +68,7 @@ export function excerptAround(body: string, term: string, chars: number): string
  * 只剥机器块——学习者自己写的其它 HTML 注释是笔记内容，原样保留（CONTEXT.md
  * 「机器块」词条：机器块 ≠ 一般 HTML 注释）。 */
 function stripMachineBlocks(text: string): string {
-  return stripHtmlComments(text, { matching: body => body.trim().startsWith('enc_candidates') }).trim()
+  return stripHtmlComments(text, body => body.trim().startsWith('enc_candidates')).trim()
 }
 
 /** 纯扫描检索：vault 根下全部 .md（排除学习中心与点目录），按检索词命中粗分排序。
