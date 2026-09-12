@@ -553,12 +553,12 @@ export class GraphProposals {
     const conceptErrors = await this.conceptGateErrors(course.root, conceptRefsOfOps(spec.ops), spec.concepts ?? [])
     // 终点锚保护 + 生长方向不变式（#142/#198）：锚定的终点不可经 edit 直改，
     // add_node 禁以终点为 pre、主线批必接线——换终点只走重新种子提案。
-    const anchorErrors = await this.anchorGuardErrors(course.root, spec)
+    const endpointErrors = await this.endpointGuardErrors(course.root, spec)
     // 巩固门（#145）：operator=巩固 的 add_node 只引已教概念。
     const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
-    if (errors.length || conceptErrors.length || anchorErrors.length || consolidationErrors.length) {
+    if (errors.length || conceptErrors.length || endpointErrors.length || consolidationErrors.length) {
       throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n`
-        + [...errors, ...conceptErrors, ...anchorErrors, ...consolidationErrors].map(e => `  ✗ ${e}`).join('\n'))
+        + [...errors, ...conceptErrors, ...endpointErrors, ...consolidationErrors].map(e => `  ✗ ${e}`).join('\n'))
     }
     // 生长闸门（#146 插入/旁支调速）：三率超限/复诊通过率触底时插入与旁支闸停（低数据
     // 静默）——插入积极性的调速器在受理门就拦，不让超速批落 pending。
@@ -596,13 +596,16 @@ export class GraphProposals {
     return validateRouteBody(stripWrappingFence(routeMd))
   }
 
-  /** 终点锚保护（#142）+ 生长方向不变式（#198 / ADR-0055）：edit 提案不得 del/rename
+  /** 终点守卫（#142 锚保护 + #198 生长方向不变式 / ADR-0055）：edit 提案不得 del/rename
    * 锚定的终点节点——那是绕开种子提案通道的锚直改。方向不变式三句：① 任何 add_node
    * 以终点为 pre 直接拒——目标之后不是本课程的生长域，扩承诺走重新种子；② 主线批
    * （前进/换向）含新节点时必须携带 set_pre { node: 终点, pre ⊇ 批内新前沿 }——替换
    * 语义，真实坡道取代种子粗边；③ 收尾接线批（零 add_node 的纯 set_pre）合法——
-   * 停摆前把终点接在教练认定的最终台阶上。旁支/巩固/插入豁免接线义务；未播种不设门。 */
-  private async anchorGuardErrors(root: string, spec: EditProposalSpec): Promise<string[]> {
+   * 停摆前把终点接在教练认定的最终台阶上。接线核查取「覆盖」而非「相等」：最后台阶
+   * 可以与既有台阶合流（多条支线同时汇入终点），新前沿全部在 wire 里就守住了不变式；
+   * 旧边在 set_pre 整体替换下只随显式再声明存活——教练把起点直连终点重新写回是可见
+   * 断言，不是遗留残边。旁支/巩固/插入豁免接线义务；未播种不设门。 */
+  private async endpointGuardErrors(root: string, spec: EditProposalSpec): Promise<string[]> {
     const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
     if (!anchor) return []
     const endpoint = anchor.endpoint
@@ -670,9 +673,9 @@ export class GraphProposals {
     if (errors.length) throw new Error('[apply-edit] 提案已不适用当前图（被拒绝，可重提）。')
     // 终点锚保护复验（#142/#198）：受理与 apply 之间锚可能新落（种子 apply 并发），
     // 两门全过才开始任何写盘。
-    const anchorErrors = await this.anchorGuardErrors(root, spec)
-    if (anchorErrors.length) {
-      throw new Error(`[apply-edit] 终点锚保护拒绝写入——换终点只走重新种子提案（kind=seed）。\n${anchorErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+    const endpointErrors = await this.endpointGuardErrors(root, spec)
+    if (endpointErrors.length) {
+      throw new Error(`[apply-edit] 终点锚保护拒绝写入——换终点只走重新种子提案（kind=seed）。\n${endpointErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     // 巩固门复验（#145）：受理与 apply 之间图可能变化，已教概念集在当前图上重算。
     const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
@@ -745,23 +748,25 @@ export class GraphProposals {
           },
         },
         {
-          // 3.1 终点锚 sealed 维护（ADR-0056）：收尾接线批（零 add_node + 终点 set_pre）
-          //     落 sealed 收尾宣告（收尾即宣告承诺兑现）；含 add_node 的终点接线批清除
-          //     （教练重开主线 = 承诺重新在途，完成宣告随之回到未完成）。读-改-写在一步
-          //     内完成；未播种静默跳过；sealed 缺省不落盘（旧锚形状不变）。
+          // 3.1 终点锚 sealed 维护（ADR-0056）：收尾接线批 = 零 add_node 的**纯 set_pre 批**
+          //     （全部 op 都是 set_pre，恰有终点接线）→ 落 sealed 收尾宣告（收尾即宣告承诺
+          //     兑现）；含 add_node 的终点接线批 → 清除（教练重开主线 = 承诺重新在途，完成
+          //     宣告随之回到未完成）。夹带其他 op 的零新增批不构成收尾宣告、也不动 sealed。
+          //     读-改-写在一步内完成；未播种静默跳过；sealed 缺省不落盘（旧锚形状不变）。
           name: '终点锚 sealed 维护',
           run: async () => {
-            const wiringOps = spec.ops.filter(o => o.op === 'set_pre')
-            if (!wiringOps.length) return
+            if (!spec.ops.some(o => o.op === 'set_pre')) return
             const anchorPath = this.paths.anchorPath(root)
             const anchor = await readAnchor(anchorPath, this.fs)
             if (!anchor) return
-            const touchesEndpoint = wiringOps.some(o => o.node === anchor.endpoint)
-            if (!touchesEndpoint) return
-            const closing = addNodeCountOf(spec.ops) === 0
-            const next: EndpointAnchor = closing
+            if (!spec.ops.some(o => o.op === 'set_pre' && o.node === anchor.endpoint)) return
+            const adds = addNodeCountOf(spec.ops)
+            const next: EndpointAnchor | null = (adds === 0 && spec.ops.every(o => o.op === 'set_pre'))
               ? { ...anchor, sealed: todayStr(new Date(this.clock.nowMs())) }
-              : { ...anchor, sealed: undefined }
+              : adds > 0
+                ? { ...anchor, sealed: undefined }
+                : null
+            if (!next) return
             await writeAnchor(anchorPath, next, this.fs)
           },
         },

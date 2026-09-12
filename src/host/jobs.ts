@@ -154,14 +154,18 @@ function persistGenJobs(rt: HostRuntime): void {
 
 /** 入队一个节点的生成任务（FIFO；重复入队幂等）。同一节点 running/cancelling 时拒绝。
  * 终点恒拒（#199 / ADR-0055 生成门，经 ADR-0056 修订）：终点是承诺标记不被学习调度，
- * 不看就绪状态、手动与自动通道同认这道门。 */
+ * 不看就绪状态、手动与自动通道同认这道门；拒绝带 ENDPOINT_GENERATION_FORBIDDEN 码，
+ * 整课重生成链据此跳过终点（不靠错误文案判别）。 */
 export async function enqueueGeneration(rt: HostRuntime, ctx: Context, course: string, node: string, style?: string): Promise<{ message: string; queued: boolean }> {
   assertQueueWritable(rt)
   const c = await rt.engine.registry.get(course)
   if (c?.root) {
     const anchor = await readAnchor(rt.engine.paths.anchorPath(c.root), rt.engine.fs)
     if (anchor && anchor.endpoint === node) {
-      throw new Error(`「${node}」是课程「${course}」的终点——终点是承诺标记，不被学习调度（生成门恒拒，不看就绪状态）：终点零正文零题库，完成判据折叠自它的最后台阶（终点.pre 集）。`)
+      throw Object.assign(
+        new Error(`「${node}」是课程「${course}」的终点——终点是承诺标记，不被学习调度（生成门恒拒，不看就绪状态）：终点零正文零题库，完成判据折叠自它的最后台阶（终点.pre 集）。`),
+        { code: 'ENDPOINT_GENERATION_FORBIDDEN' },
+      )
     }
   }
   const key = `${course}/${node}`
@@ -875,8 +879,8 @@ export async function resetCourseChain(rt: HostRuntime, ctx: Context, courseKey:
       await enqueueGeneration(rt, ctx, c.name, node)
       queued++
     } catch (err) {
-      // 终点不进链（#199 生成门）：终点是承诺标记不被学习调度——跳过，其余入队错误照常上抛
-      if (!(err instanceof Error && err.message.includes('终点是承诺标记'))) throw err
+      // 终点不进链（#199 生成门）：跳过；其余入队错误照常上抛
+      if ((err as { code?: unknown }).code !== 'ENDPOINT_GENERATION_FORBIDDEN') throw err
     }
   }
   return { reset, queued }

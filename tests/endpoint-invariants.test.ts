@@ -264,7 +264,6 @@ ops:
     assert.ok(afterReopen)
     assert.equal(afterReopen!.criteria.mastery_met, false, '新最后台阶（更高台阶）未达标')
     assert.equal(afterReopen!.complete, false, '清 sealed 后回到未完成')
-    void sealed
 
     // 旁支批（不含终点 set_pre）apply 不动 sealed：先收尾再长旁支
     const reseal = await engine.graph.graphPropose('edit', `course: 数学
@@ -320,6 +319,47 @@ test('#202 折叠语义：未收尾不判完成 / 收尾后达标判完成 / 旧
     assert.equal(dangling!.criteria.endpoint_in_graph, false)
     assert.equal(dangling!.criteria.mastery_met, false)
     assert.equal(dangling!.complete, false)
+  })
+})
+
+test('#202 sealed 落盘口径：夹带非 set_pre op 的零新增批不构成收尾宣告；非终点接线不动 sealed', async () => {
+  await withVault({
+    ...SEALED_VAULT,
+    notes: {
+      入门: { stage: 'ready' },
+      中间台阶: { stage: 'ready' },
+      终点: { stage: 'ready', content: { version: 1, status: 'reviewed' } },
+    },
+    files: [{ path: join('学习中心', 'math', 'state', '终点锚.json'), content: anchorDoc('终点', '2026-09-10') }],
+  }, async ({ engine, paths }) => {
+    const anchorPath = paths.anchorPath('math')
+    const readSealed = async () => (await readAnchor(anchorPath, (await import('../src/host/vault-fs.ts')).nodeVaultFs))?.sealed
+    // 起点：已收尾
+    assert.equal(await readSealed(), '2026-09-10')
+    // 零 add_node 但夹带 set_note（非纯 set_pre 批）→ sealed 不写也不清
+    const mixed = await engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 只改备注不接线
+ops:
+  - op: set_note
+    node: 中间台阶
+    note: 备注微调
+`) as { id: number }
+    await engine.graph.graphApply('edit', mixed.id)
+    assert.equal(await readSealed(), '2026-09-10', '非接线批不动 sealed')
+    // 纯 set_pre 批但接线的是别的节点（不触终点）→ sealed 不动
+    const otherTarget = await engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 重接中间台阶前置
+ops:
+  - op: set_pre
+    node: 中间台阶
+    pre: [入门]
+`) as { id: number }
+    await engine.graph.graphApply('edit', otherTarget.id)
+    assert.equal(await readSealed(), '2026-09-10', '非终点接线不动 sealed')
   })
 })
 

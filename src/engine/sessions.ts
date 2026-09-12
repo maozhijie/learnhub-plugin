@@ -344,7 +344,8 @@ export class Sessions {
         ready: st.ready.filter(n => n !== endpoint).map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
         gated: st.gated.filter(n => n !== endpoint).map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
         // 软闸建议项（#54 R 半）：被 R-gate 拦下的候选 → {前置, R, 前置到期题数, 直达入口}
-        blocked: Object.fromEntries(Object.entries(st.advice).map(([n, items]) =>
+        // （键集合与就绪清单同源，同样剔终点——#199 学习者账）
+        blocked: Object.fromEntries(Object.entries(st.advice).filter(([n]) => n !== endpoint).map(([n, items]) =>
           [n, items.map(a => ({
             pre: a.node, r: a.r, due: a.due,
             entry: { course: c.name, node: a.node },
@@ -622,7 +623,10 @@ export class Sessions {
     const sections = Sessions.lessonSections(body)
     const sched = await getScheduler(this.paths, this.paths.courseRoot(root), this.fs)
     const rValue = (n: string) => retrievability(sched, state[n], today)
-    const candidates = readySet(graph, state, rValue).filter(n => n !== node)
+    // 学习者面剔终点（#199）：学习包的「推荐下一步」同样不出现终点
+    const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
+    const endpoint = anchor?.endpoint ?? null
+    const candidates = readySet(graph, state, rValue).filter(n => n !== node && n !== endpoint)
     const unlocks = candidates.filter(n => graph.preOf[n].includes(node))
     return {
       course: courseName, node,
