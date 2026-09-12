@@ -78,6 +78,14 @@ html, body, #root {
 /* 日历热力图 */
 .heat-cell { width: 100%; aspect-ratio: 1; border-radius: 3px; }
 
+/* 生成页任务定位高亮（#155）：教练台在途任务条点击跳转后，目标行短暂描边提示落点 */
+@keyframes gen-job-flash {
+  0%, 60% { background: var(--color-fill-2, #f2f3f5); box-shadow: inset 3px 0 0 var(--color-primary-6, #165dff); }
+  100% { background: transparent; }
+}
+tr.gen-job-focused > td { animation: gen-job-flash 3s ease-out forwards; }
+
+
 /* 判卷反馈/直通卡解析块（quiz-feedback）：解析走块级 markdown（三段分点+块级公式），
  * 字号与段距比正文收一档，读起来不挤 */
 .md-body.quiz-feedback { font-size: 14px; line-height: 1.75; }

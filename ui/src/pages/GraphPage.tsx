@@ -204,7 +204,7 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
     return (
       <Space direction='vertical' style={{ width: '100%' }} size={12}>
         <Card><Text type='secondary'>还没有课程——在这里新建：种子一次人审即开工，图随教练回合沿真实的需要生长。</Text></Card>
-        <CoachCockpit course={null} jobs={graphJobs} />
+        <CoachCockpit course={null} jobs={graphJobs} onOpenJob={j => frame.locateJob(j.key)} />
       </Space>
     )
   }
@@ -235,7 +235,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
             </Space>
           </Space>
         </Card>
-        <CoachCockpit course={course} jobs={graphJobs} />
+        {/* 图缺失 = 未播种：生长一步禁用（必然失败的操作），种子直达按钮在上面（#155） */}
+        <CoachCockpit course={course} jobs={graphJobs} seeded={false} onOpenJob={j => frame.locateJob(j.key)} />
         {seedForm && <SeedFormModal visible={seedForm} mode='reseed' course={course} onCancel={() => setSeedForm(false)} />}
       </Space>
     )
@@ -273,8 +274,9 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
         </div>
       </div>
 
-      {/* 教练台：图域命令面板下发（ADR-0038）；就绪深度卡随课直读状态面（#161） */}
-      <CoachCockpit course={course} jobs={graphJobs} coach={coach} />
+      {/* 教练台：图域命令面板下发（ADR-0038）；就绪深度卡随课直读状态面（#161）；
+       * 有图 = 已播种，生长一步可用；任务条点击落生成页对应任务（#155） */}
+      <CoachCockpit course={course} jobs={graphJobs} coach={coach} onOpenJob={j => frame.locateJob(j.key)} />
 
       {/* 推荐条（琥珀=下一步推荐；点击卡片直接进学习视图） */}
       {(rec?.events ?? []).filter(e => e.course === course).length > 0 && (

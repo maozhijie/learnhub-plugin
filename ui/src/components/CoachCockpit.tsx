@@ -9,7 +9,7 @@ import SeedFormModal from './SeedFormModal'
 import { api } from '../api'
 import { usePolling } from '../hooks/usePolling'
 import type { GenJobItem, ProbationDoc, StatusCourse } from '../types'
-import { errorMessage } from '../hooks/useCommand'
+import { errorMessage, notifyQueued } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -133,14 +133,19 @@ function ProbationCard({ course }: { course: string }) {
 }
 
 /** 教练台入口卡片：course 为 null（空 vault）时只露出建课入口 + 在途任务条；
- * coach = 状态面该课程的就绪深度检查（#161，缺席不显卡）。 */
-export default function CoachCockpit({ course, jobs, coach }: {
+ * coach = 状态面该课程的就绪深度检查（#161，缺席不显卡）；
+ * seeded = 课程已播种（图存在）——未播种时「生长一步」必然失败，禁用并说明先走
+ * 种子提案（#155 交互诚实性）；jobs 点击经 onOpenJob 落到生成页对应任务。 */
+export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpenJob }: {
   course: string | null
   jobs?: GenJobItem[]
   coach?: StatusCourse['coach'] | null
+  seeded?: boolean
+  onOpenJob?: (job: GenJobItem) => void
 }) {
   const [seedForm, setSeedForm] = useState<null | 'new' | 'reseed'>(null)
   const [busy, setBusy] = useState<'growth' | 'compass' | 'backfill' | null>(null)
+  const unseeded = course !== null && !seeded
 
   const growth = (c: string) => {
     Modal.confirm({
@@ -150,9 +155,7 @@ export default function CoachCockpit({ course, jobs, coach }: {
       onOk: async () => {
         setBusy('growth')
         try {
-          const r = await api.coachGrowth(c)
-          if (r.queued) Message.success(r.message)
-          else Message.warning(r.message)
+          notifyQueued(await api.coachGrowth(c))
         } catch (err) {
           Message.error(errorMessage(err))
         } finally {
@@ -165,8 +168,8 @@ export default function CoachCockpit({ course, jobs, coach }: {
   const compass = async (c: string) => {
     setBusy('compass')
     try {
-      const r = await api.compassPaint(c)
-      Message.success(r.message)
+      // queued=false = 在途拒绝重复入队，非成功语义（#155 交互诚实性）
+      notifyQueued(await api.compassPaint(c))
     } catch (err) {
       Message.error(errorMessage(err))
     } finally {
@@ -201,15 +204,25 @@ export default function CoachCockpit({ course, jobs, coach }: {
         <Button type='primary' size='small' onClick={() => setSeedForm('new')}>新建课程</Button>
         {course && (
           <>
-            <Button size='small' loading={busy === 'growth'} onClick={() => growth(course)}>生长一步</Button>
+            {/* 未播种禁用（#155）：没有图就「生长」是必然失败的操作——按钮说明先走种子提案 */}
+            <Tooltip content={unseeded ? '本课程未播种（还没有学习图）：先起草种子提案并应用，图落地后才能生长' : ''}>
+              <Button size='small' disabled={unseeded} loading={busy === 'growth'} onClick={() => growth(course)}>生长一步</Button>
+            </Tooltip>
             <Button size='small' loading={busy === 'compass'} onClick={() => void compass(course)}>罗盘重画</Button>
             <Button size='small' loading={busy === 'backfill'} onClick={() => backfill(course)}>回填成分技能边</Button>
             <Button size='small' type='outline' onClick={() => setSeedForm('reseed')}>换终点/改工作表</Button>
           </>
         )}
       </Space>
+      {unseeded && (
+        <div style={{ marginTop: 6 }}>
+          <Text type='secondary' style={{ fontSize: 12 }}>
+            「{course}」未播种：先走种子提案（「新建课程」或上方「重建种子」），提案页人审应用后图才落地、教练才能生长。
+          </Text>
+        </div>
+      )}
       {/* 在途条：图域任务的常驻可见性——提交动作和它的后果之间的那根线
-        * （排队/进行中/失败全显示；点击去生成页看全程，失败的死因在任务消息里）。 */}
+        * （排队/进行中/失败全显示；点击落生成页定位该任务，失败的死因在任务消息里）。 */}
       {jobs && jobs.length > 0 && (
         <div style={{ marginTop: 10 }}>
           <Space size={6} wrap align='center'>
@@ -218,7 +231,8 @@ export default function CoachCockpit({ course, jobs, coach }: {
               const st = JOB_STATUS[j.status]
               return (
                 <Tooltip key={j.key} content={j.message ?? ''}>
-                  <Tag size='small' color={st?.color ?? 'gray'} style={{ cursor: 'pointer' }}>
+                  <Tag size='small' color={st?.color ?? 'gray'} style={{ cursor: 'pointer' }}
+                    onClick={() => onOpenJob?.(j)}>
                     {j.node}（{j.course}）· {st?.label ?? j.status}
                   </Tag>
                 </Tooltip>

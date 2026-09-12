@@ -193,7 +193,7 @@
   "url": "/learnhub/api/file?path=1",
   "status": 500,
   "res": {
-   "error": "unsupported file type: 1"
+   "error": "unsupported file type: 文件名无扩展名（仅限媒体文件）"
   },
   "calls": []
  },
@@ -213,7 +213,7 @@
   "url": "/learnhub/api/vendor/1",
   "status": 500,
   "res": {
-   "error": "unsupported vendor file type: 1"
+   "error": "unsupported vendor file type: 文件名无扩展名（仅限静态资产）"
   },
   "calls": []
  },
@@ -5089,7 +5089,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」罗盘已入队（生成队列 FIFO）。"
+   "message": "「1」罗盘已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
@@ -5176,7 +5177,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+   "message": "「1」种子起草已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
@@ -5243,7 +5245,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+   "message": "「1」种子起草已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
@@ -5272,7 +5275,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+   "message": "「1」种子起草已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
@@ -5301,7 +5305,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+   "message": "「1」种子起草已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
@@ -5330,7 +5335,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。"
+   "message": "「1」种子起草已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goal\":\"1\",\"mode\":\"new\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
@@ -5543,7 +5549,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」计划草案已入队（生成队列 FIFO）。"
+   "message": "「1」计划草案已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
@@ -5587,7 +5594,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」里程碑草案(1)已入队（生成队列 FIFO）。"
+   "message": "「1」里程碑草案(1)已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
@@ -5650,7 +5658,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」反编译已入队（生成队列 FIFO）。"
+   "message": "「1」反编译已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
@@ -5692,7 +5701,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」反编译已入队（生成队列 FIFO）。"
+   "message": "「1」反编译已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
@@ -5717,7 +5727,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」反编译已入队（生成队列 FIFO）。"
+   "message": "「1」反编译已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
@@ -5740,7 +5751,8 @@
   },
   "status": 200,
   "res": {
-   "message": "「1」反编译已入队（生成队列 FIFO）。"
+   "message": "「1」反编译已入队（生成队列 FIFO）。",
+   "queued": true
   },
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",

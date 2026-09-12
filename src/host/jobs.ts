@@ -314,11 +314,12 @@ export async function triggerSeedContent(rt: HostRuntime, ctx: Context, applied:
 }
 
 /** 图 apply 出口的注册表联动（面板路由与 agent 工具共用，#160 收口一处防漂移）：
- * 编辑批可含 del_node/rename（ADR-0039 写侧联动）→ 清扫悬空任务记录；种子应用后
- * 起点正文自动入队（kind 已在出口处判定，非种子零动作）。 */
-export async function afterGraphApply(rt: HostRuntime, ctx: Context, kind: string, applied: unknown): Promise<void> {
+ * 编辑批可含 del_node/rename（ADR-0039 写侧联动）→ 清扫悬空任务记录；种子应用
+ * （单发种子，或反编译联合入口的种子半区，#156）后起点正文自动入队——seed 为
+ * null = 本批无种子半区，零种子动作。 */
+export async function afterGraphApply(rt: HostRuntime, ctx: Context, seed: { course: string; starts: string[] } | null): Promise<void> {
   await sweepGenJobs(rt)
-  if (kind === 'seed') await triggerSeedContent(rt, ctx, applied as { course: string; starts: string[] })
+  if (seed) await triggerSeedContent(rt, ctx, seed)
 }
 
 /** 教练回合触发统一出口（五点接线，词条「教练回合」）：就绪深度检查 → 低于前瞻的课程
@@ -363,12 +364,13 @@ export function sessionStartCheckpoint(rt: HostRuntime, ctx: Context): void {
 }
 
 /** 图域任务入队（面板下发共用）：键 = course/node 标签；同键在途不重入，终态即覆盖
- * （单发起草，重按 = 重来）。返回消息给路由留痕。 */
-export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: string; node: string; phase: GenJobPhase } & Partial<Pick<GenJob, 'seedPayload' | 'decompilePayload' | 'planPayload' | 'milestonePayload'>>): { message: string } {
+ * （单发起草，重按 = 重来）。返回 queued 旗标 + 消息给路由留痕——拒绝重复入队是
+ * 非成功语义，面板按旗标着色、不得弹成功样式（#155 交互诚实性）。 */
+export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: string; node: string; phase: GenJobPhase } & Partial<Pick<GenJob, 'seedPayload' | 'decompilePayload' | 'planPayload' | 'milestonePayload'>>): { message: string; queued: boolean } {
   const key = `${j.course}/${j.node}`
   const last = rt.jobs.genJobs.get(key)
   if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
-    return { message: `「${j.course}」${j.node}任务已在途，不重复入队。` }
+    return { message: `「${j.course}」${j.node}任务已在途，不重复入队。`, queued: false }
   }
   rt.jobs.genJobs.set(key, {
     course: j.course, node: j.node, startedAt: new Date().toISOString(),
@@ -380,7 +382,7 @@ export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: stri
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
-  return { message: `「${j.course}」${j.node}已入队（生成队列 FIFO）。` }
+  return { message: `「${j.course}」${j.node}已入队（生成队列 FIFO）。`, queued: true }
 }
 
 /** 图域任务执行（面板下发）：seed/compass/decompile/plan/milestone——引擎 LLM 方法一次受理，

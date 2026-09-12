@@ -1,10 +1,15 @@
 /** 提案页：agent 图构建的 seed/edit/enrich 提案（gen 已退役），人审后应用或拒绝（全留痕）。
  * 列表常驻新鲜（8s 轮询 + 手动刷新）——起草完成后提案才出现，人审队列不能是死数据。
- * #159：种子提案应用前先取影响预览（将新建什么、覆盖什么、什么保留），知情后再确认。 */
+ * #159：种子提案应用前先取影响预览（将新建什么、覆盖什么、什么保留），知情后再确认。
+ * #156 应用闭环：应用成功触发全局课程树刷新（frame.reload——新课程不刷新浏览器即可见，
+ * 跨页流经 learnhub:reload 补拉），并给「查看结果」按钮按提案类型分流（种子→图页、
+ * 富化→题库、反编译→项目页）；不强制跳页、可连续处理。 */
 import { Alert, Button, Card, Empty, Message, Modal, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useState } from 'react'
 import { api } from '../api'
 import { usePolling } from '../hooks/usePolling'
+import type { AppFrame } from '../App'
+import type { TabKey } from '../lib/router'
 import type { PropItem, SeedImpactDoc } from '../types'
 import { errorMessage } from '../hooks/useCommand'
 
@@ -52,9 +57,21 @@ const KIND_LABELS: Record<string, { label: string; color: string }> = {
 }
 const kindLabel = (kind: string) => KIND_LABELS[kind] ?? { label: kind, color: 'orange' }
 
-export default function ProposalsPage() {
+/** 「查看结果」按提案类型分流（#156）：种子→图页、富化→题库、反编译双提案→项目页；
+ * 编辑批落图页、项目域落项目页、实验落实验室。返回页签 + 需要预置的课程名。 */
+function resultTarget(p: PropItem): { tab: TabKey; course?: string } {
+  if (p.kind === 'enrich') return { tab: 'bank', course: p.course }
+  if (p.kind === 'project_plan' || p.kind === 'project_milestone') return { tab: 'projects' }
+  if (p.kind === 'experiment') return { tab: 'lab' }
+  if (p.kind === 'seed' && p.pair != null) return { tab: 'projects' }
+  return { tab: 'graph', course: p.course }
+}
+
+export default function ProposalsPage({ frame }: { frame?: AppFrame }) {
   const [items, setItems] = useState<PropItem[] | null>(null)
   const [busy, setBusy] = useState(false)
+  /** 本次会话内最近应用的提案（「查看结果」按钮挂它身上；不强制跳页）。 */
+  const [applied, setApplied] = useState<PropItem | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -67,6 +84,13 @@ export default function ProposalsPage() {
   // 挂载即取 + 8s 轮询（页签保活：非激活跳过取数、切回即补）——起草任务完成、
   // 教练回合产批后提案自动浮现
   usePolling(load, { tab: 'proposals', intervalMs: 8000 })
+
+  /** 应用成功后的全局刷新（#156）：App 的状态面 + 课程树重拉（学习页课程卡、图页
+   * 课程切换器即时可见新课程）；已挂载页的页内流（推荐/统计）经 learnhub:reload 补拉。 */
+  const refreshAll = async () => {
+    await Promise.all([load(), frame?.reload() ?? Promise.resolve()])
+    window.dispatchEvent(new Event('learnhub:reload'))
+  }
 
   const apply = async (p: PropItem) => {
     // 种子提案先取影响预览（#159）：知情后再确认；预览取不到不拦人审，
@@ -98,7 +122,8 @@ export default function ProposalsPage() {
         try {
           await api.proposalApply(p.kind, p.id)
           Message.success(`提案 #${p.id} 已应用`)
-          await load()
+          setApplied(p)
+          await refreshAll()
         } catch (err) {
           Message.error(errorMessage(err))
         } finally {
@@ -113,12 +138,18 @@ export default function ProposalsPage() {
     try {
       await api.proposalReject(p.id, '面板拒绝')
       Message.success(`提案 #${p.id} 已拒绝留痕`)
-      await load()
+      await refreshAll()
     } catch (err) {
       Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }
+  }
+
+  const gotoResult = (p: PropItem) => {
+    const t = resultTarget(p)
+    if (t.course && (t.tab === 'graph' || t.tab === 'bank')) frame?.setCourse(t.course)
+    frame?.goto(t.tab)
   }
 
   return (
@@ -144,11 +175,14 @@ export default function ProposalsPage() {
                 return <Tag size='small' color={color}>{label}</Tag>
               } },
               { title: '创建', dataIndex: 'created', width: 150, render: v => new Date(v).toLocaleString() },
-              { title: '操作', width: 140, render: (_, p) => p.status === 'pending' ? (
+              { title: '操作', width: 150, render: (_, p) => p.status === 'pending' ? (
                 <Space size={4}>
                   <Button size='mini' type='primary' disabled={busy} onClick={() => void apply(p)}>应用</Button>
                   <Button size='mini' type='text' status='danger' disabled={busy} onClick={() => void reject(p)}>拒绝</Button>
                 </Space>
+              ) : applied?.id === p.id ? (
+                /* 应用闭环的落点（#156）：按类型分流，点击才跳——不强制离页、可连续处理 */
+                <Button size='mini' type='outline' onClick={() => gotoResult(p)}>查看结果</Button>
               ) : null },
             ]} />
         )}

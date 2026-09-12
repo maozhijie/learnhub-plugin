@@ -65,7 +65,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         const kind = graphKind(args.kind)
         const r = await rt.engine.graph.graphApply(kind, applyId(args.id))
         // apply 出口联动与面板路由同源（#160）：清扫悬空任务记录 + 种子应用后起点正文入队
-        await afterGraphApply(rt, ctx, kind, r)
+        await afterGraphApply(rt, ctx, kind === 'seed' ? r as { course: string; starts: string[] } : null)
         return JSON.stringify(r)
       }),
   'learnhub_compass_paint': (args: { course?: string }) => run(rt, 'learnhub_compass_paint', async () => {

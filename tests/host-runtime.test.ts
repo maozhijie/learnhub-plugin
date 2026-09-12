@@ -572,8 +572,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 22, '指南条目数（22 条手写，增减要显式）')
 })
 
-test('路由↔工具对账基线：85 共享引擎入口、工具独有 26、路由独有 49（终态点路径口径；ADR-0045 迁移回归网）', () => {
-  // C 形态（ADR-0049）：入口名 = `<子系统>.<方法>` 点路径或 hub 装配域裸名，
+test('路由↔工具对账基线：86 共享引擎入口、工具独有 25、路由独有 49（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -603,9 +602,9 @@ test('路由↔工具对账基线：85 共享引擎入口、工具独有 26、�
   assert.deepEqual(toolOnly, base.toolOnly, '工具独有引擎入口集漂移')
   assert.deepEqual(routeOnly, base.routeOnly, '路由独有引擎入口集漂移')
   // #163：罗盘重画 agent 工具改走生成队列（回路只在队列任务内运行），registry.resolve
-  // 进工具面 → 85 共享（原 84）／路由独有 49（原 50）
-  assert.equal(shared.length, 85)
-  assert.equal(toolOnly.length, 26)
+  // 进工具面 → 86 共享／路由独有 49（#156 已把工具面一条入口收编共享：25/49）
+  assert.equal(shared.length, 86)
+  assert.equal(toolOnly.length, 25)
   assert.equal(routeOnly.length, 49)
 })
 

@@ -9,6 +9,7 @@
  * - **空态由调用方派生**：缝只供给 data/loading/error 三态，业务空态在渲染层判。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Message } from '@arco-design/web-react'
 import { ApiError } from '../api'
 
 /** 错误消息单点提取（#183 错误提示收敛）：ApiError 已在 api.ts 携带服务端 error 字段，
@@ -17,6 +18,22 @@ import { ApiError } from '../api'
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message
   return err instanceof Error ? err.message : String(err)
+}
+
+/** 队列下发结果的诚实着色（#155 交互诚实性，四处同形的归一）：引擎返回
+ * `{message, queued}`——queued=false 是「已在途、拒绝重复入队」类拒绝语义，
+ * 弹 warning 不弹成功；成功侧可换更长的指引文案（successMessage）、
+ * onQueued 只在真入队后走（如种子表单收起）。 */
+export function notifyQueued(
+  r: { message: string; queued: boolean },
+  opts: { successMessage?: string; onQueued?: () => void } = {},
+): void {
+  if (r.queued) {
+    Message.success(opts.successMessage ?? r.message)
+    opts.onQueued?.()
+  } else {
+    Message.warning(r.message)
+  }
 }
 
 export interface Command<T> {

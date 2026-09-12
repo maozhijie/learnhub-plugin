@@ -314,16 +314,17 @@ export const api = {
    * 失败通知与生成页的「重试」走同一路由；在途/已取消仍拒）。 */
   coachGrowth: (course: string) =>
     http<{ message: string; queued: boolean }>('POST', '/coach/growth', { course }),
-  /** 罗盘初画/重画（LLM 一次调用，队列任务化）。 */
+  /** 罗盘初画/重画（LLM 一次调用，队列任务化）。queued=false = 在途拒绝，非成功语义。 */
   compassPaint: (course: string) =>
-    http<{ message: string }>('POST', '/coach/compass', { course }),
+    http<{ message: string; queued: boolean }>('POST', '/coach/compass', { course }),
   /** 成分技能边回填（确定性推断，同步受理 → 富化提案待人审）。 */
   encBackfill: (course?: string) =>
     http<Record<string, unknown>>('POST', '/graph/backfill', { ...(course ? { course } : {}) }),
   /** 建课/换终点种子起草（phase=种子队列任务，产物 = 种子提案待人审）。
-   * 请求契约 = 引擎 SeedDraftRequest（绑定字段以表单为准）。 */
+   * 请求契约 = 引擎 SeedDraftRequest（绑定字段以表单为准）。
+   * queued=false = 「已在途、拒绝重复入队」，非成功语义（表单按旗标着色，#155）。 */
   seedPropose: (input: import('../../src/engine/seed').SeedDraftRequest) =>
-    http<{ message: string }>('POST', '/seed/propose', {
+    http<{ message: string; queued: boolean }>('POST', '/seed/propose', {
       course: input.course, goal: input.goal,
       ...(input.mode ? { mode: input.mode } : {}),
       ...(input.goalType ? { goalType: input.goalType } : {}),
