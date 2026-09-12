@@ -13,9 +13,10 @@ import type { ParamSpec, ParameterSchemaSpec } from '../commands/types.ts'
  *     `pick(key, value)`——`{k: v}` 或 `{}`，即今天 `...(cond ? {k:v} : {})` 的等价形式。
  *
  * 纪律：
- * - **错误消息与状态码逐字不变**：必填缺失/类型不符一律 `missing required field: <key>`
- *   （`requireOneOf` 是唯一例外，照抄今天的 `missing/invalid required field: <key>（a|b|c）`），
- *   经路由统一 catch 出口成 500——`sendJson` 单次序列化的约定不受影响。
+ * - **状态码不变（统一 500 出口）**；错误消息自 #158 起改中文并由分发层附路由名：
+ *   必填缺失/类型不符一律 `缺少必填参数：<key>`（`requireOneOf` 是唯一例外：
+ *   `缺少或非法必填参数：<key>（允许：a|b|c）`），全部以 `ParamError` 抛出——
+ *   `handleApi` 的统一 catch 据此追加 `（路由 <method> <route>）`，客户端报错可读可行动。
  * - **可选参数的今天语义是「非法即当省略」**（`typeof` 不过就不带出该键）。它与 ADR-0045
  *   「可选参数只允许『省略』或『合法』」同向，但比字面更宽松：非法值被静默丢弃而非拒绝。
  *   本票原样保留（120 条路由行为逐字不变是验收线）；#169 若收紧成 fail loud，必须在票面
@@ -26,10 +27,14 @@ import type { ParamSpec, ParameterSchemaSpec } from '../commands/types.ts'
 /** 参数来源的两副形状：JSON 体与查询串。 */
 type Body = Record<string, unknown>
 
+/** 参数守卫错误（#158）：可识别类型——分发层统一 catch 据此追加 `（路由 <method> <route>）`，
+ * 客户端报错中文且可定位；引擎自身的业务错误不是 ParamError，原样透传。 */
+export class ParamError extends Error {}
+
 /** 必填字符串（`need`）：缺失、非字符串或全空白即抛；带出 **trim 值**。 */
 export function need(body: Body, key: string): string {
   const v = body[key]
-  if (typeof v !== 'string' || !v.trim()) throw new Error(`missing required field: ${key}`)
+  if (typeof v !== 'string' || !v.trim()) throw new ParamError(`缺少必填参数：${key}`)
   return v.trim()
 }
 
@@ -37,7 +42,7 @@ export function need(body: Body, key: string): string {
  * 多键时一次校验、消息按 `a/b` 合并（今天的 `missing required field: node/qid`）。 */
 export function needQuery(url: URL, ...keys: string[]): string[] {
   const values = keys.map(k => url.searchParams.get(k))
-  if (values.some(v => !v)) throw new Error(`missing required field: ${keys.join('/')}`)
+  if (values.some(v => !v)) throw new ParamError(`缺少必填参数：${keys.join('/')}`)
   return values as string[]
 }
 
@@ -49,14 +54,14 @@ export function optQuery(url: URL, key: string): string | undefined {
 /** 必填字符串（**不 trim、允许空串**）：今天 PUT /day-cutoff 的 `typeof !== 'string'` 语义。 */
 export function requireString(body: Body, key: string): string {
   const v = body[key]
-  if (typeof v !== 'string') throw new Error(`missing required field: ${key}`)
+  if (typeof v !== 'string') throw new ParamError(`缺少必填参数：${key}`)
   return v
 }
 
 /** 必填布尔：今天 5 处 `typeof body.x !== 'boolean'` 的同一条语义。 */
 export function requireBoolean(body: Body, key: string): boolean {
   const v = body[key]
-  if (typeof v !== 'boolean') throw new Error(`missing required field: ${key}`)
+  if (typeof v !== 'boolean') throw new ParamError(`缺少必填参数：${key}`)
   return v
 }
 
@@ -64,14 +69,14 @@ export function requireBoolean(body: Body, key: string): boolean {
  * 字符串数字算合法，NaN/缺省/无穷即错）。 */
 export function requireNumber(body: Body, key: string): number {
   const n = Number(body[key])
-  if (!Number.isFinite(n)) throw new Error(`missing required field: ${key}`)
+  if (!Number.isFinite(n)) throw new ParamError(`缺少必填参数：${key}`)
   return n
 }
 
 /** 必填对象：今天 `/question-add` 的 `typeof q !== 'object' || q === null` 语义。 */
 export function requireObject(body: Body, key: string): Record<string, unknown> {
   const v = body[key]
-  if (typeof v !== 'object' || v === null) throw new Error(`missing required field: ${key}`)
+  if (typeof v !== 'object' || v === null) throw new ParamError(`缺少必填参数：${key}`)
   return v as Record<string, unknown>
 }
 
@@ -80,7 +85,7 @@ export function requireObject(body: Body, key: string): Record<string, unknown> 
 export function requireOneOf<T extends string>(body: Body, key: string, allowed: readonly T[]): T {
   const v = body[key]
   if (typeof v !== 'string' || !(allowed as readonly string[]).includes(v)) {
-    throw new Error(`missing/invalid required field: ${key}（${allowed.join('|')}）`)
+    throw new ParamError(`缺少或非法必填参数：${key}（允许：${allowed.join('|')}）`)
   }
   return v as T
 }
@@ -199,7 +204,7 @@ export function readArgs(
   return bind.map(key => {
     if (key === null) return undefined
     const spec = args[key]
-    if (!spec) throw new Error(`missing required field: ${key}`) // 声明漏键（门⑧ 该拦下）
+    if (!spec) throw new ParamError(`缺少必填参数：${key}`) // 声明漏键（门⑧ 该拦下）
     return readOne(key, spec, source, required.has(key))
   })
 }

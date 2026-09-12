@@ -374,6 +374,14 @@
  },
  {
   "method": "POST",
+  "route": "/proposals/impact",
+  "keys": [
+   "kind",
+   "id"
+  ]
+ },
+ {
+  "method": "POST",
   "route": "/proposals/reject",
   "keys": [
    "id",

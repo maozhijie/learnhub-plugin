@@ -1,10 +1,43 @@
 /** 提案页：agent 图构建的 seed/edit/enrich 提案（gen 已退役），人审后应用或拒绝（全留痕）。
- * 列表常驻新鲜（8s 轮询 + 手动刷新）——起草完成后提案才出现，人审队列不能是死数据。 */
-import { Alert, Button, Card, Empty, Message, Modal, Space, Table, Tag } from '@arco-design/web-react'
+ * 列表常驻新鲜（8s 轮询 + 手动刷新）——起草完成后提案才出现，人审队列不能是死数据。
+ * #159：种子提案应用前先取影响预览（将新建什么、覆盖什么、什么保留），知情后再确认。 */
+import { Alert, Button, Card, Empty, Message, Modal, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { isActiveTab } from '../active-tab'
-import type { PropItem } from '../types'
+import type { PropItem, SeedImpactDoc } from '../types'
+
+const { Text } = Typography
+
+/** 种子提案影响预览（人话）：只说引擎真会做的事——新建节点、覆盖锚、罗盘重置、全保留项。 */
+function SeedImpactPreview({ impact }: { impact: SeedImpactDoc }) {
+  const reseed = impact.mode === 'reseed'
+  return (
+    <Alert type={reseed ? 'warning' : 'info'} style={{ marginBottom: 8 }} content={
+      <Space direction='vertical' size={2}>
+        {reseed && impact.current_anchor && (
+          <Text>
+            现终点「{impact.current_anchor.endpoint}」（提案 #{impact.current_anchor.origin_proposal} · {impact.current_anchor.declared} 声明）将被新终点覆盖。
+          </Text>
+        )}
+        {impact.new_nodes.length > 0 && (
+          <Text>将新建 {impact.new_nodes.length} 个节点：{impact.new_nodes.join('、')}。</Text>
+        )}
+        {impact.existing_nodes.length > 0 && (
+          <Text type='warning'>
+            「{impact.existing_nodes.join('、')}」与现有图重名：应用会被拒（提案已不适用当前图）——建议拒绝后重提。
+          </Text>
+        )}
+        {impact.compass_reset && <Text>罗盘路线与预计耗时将重置为待初画（你的批注保留）。</Text>}
+        {impact.graph_nodes > 0 && (
+          <Text type='secondary'>
+            现有图 {impact.graph_nodes} 个节点连同学习进度、题库与调度全部保留——本轮不删除、不作废任何已有内容。
+          </Text>
+        )}
+      </Space>
+    } />
+  )
+}
 
 /** 提案 kind → 人读标签（gen 仅存量留痕展示）。 */
 const KIND_LABELS: Record<string, { label: string; color: string }> = {
@@ -38,10 +71,17 @@ export default function ProposalsPage() {
     return () => clearInterval(timer)
   }, [load])
 
-  const apply = (p: PropItem) => {
+  const apply = async (p: PropItem) => {
+    // 种子提案先取影响预览（#159）：知情后再确认；预览取不到不拦人审（退回摘要）
+    const impact = p.kind === 'seed' ? await api.proposalImpact('seed', p.id).catch(() => null) : null
     Modal.confirm({
       title: `应用提案 #${p.id}（${kindLabel(p.kind).label}）？`,
-      content: p.summary,
+      content: (
+        <Space direction='vertical' size={4} style={{ width: '100%' }}>
+          {impact && <SeedImpactPreview impact={impact} />}
+          <Text type='secondary'>{p.summary}</Text>
+        </Space>
+      ),
       style: { width: 620 },
       onOk: async () => {
         setBusy(true)
@@ -96,7 +136,7 @@ export default function ProposalsPage() {
               { title: '创建', dataIndex: 'created', width: 150, render: v => new Date(v).toLocaleString() },
               { title: '操作', width: 140, render: (_, p) => p.status === 'pending' ? (
                 <Space size={4}>
-                  <Button size='mini' type='primary' disabled={busy} onClick={() => apply(p)}>应用</Button>
+                  <Button size='mini' type='primary' disabled={busy} onClick={() => void apply(p)}>应用</Button>
                   <Button size='mini' type='text' status='danger' disabled={busy} onClick={() => void reject(p)}>拒绝</Button>
                 </Space>
               ) : null },

@@ -33,7 +33,7 @@
   "url": "/learnhub/api/lesson",
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 GET /lesson）"
   },
   "calls": []
  },
@@ -53,7 +53,7 @@
   "url": "/learnhub/api/lesson?course=1",
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 GET /lesson）"
   },
   "calls": []
  },
@@ -143,7 +143,7 @@
   "url": "/learnhub/api/questions",
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 GET /questions）"
   },
   "calls": []
  },
@@ -163,7 +163,7 @@
   "url": "/learnhub/api/questions?course=1",
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 GET /questions）"
   },
   "calls": []
  },
@@ -183,7 +183,7 @@
   "url": "/learnhub/api/file",
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 GET /file）"
   },
   "calls": []
  },
@@ -203,7 +203,7 @@
   "url": "/learnhub/api/file",
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 GET /file）"
   },
   "calls": []
  },
@@ -223,7 +223,7 @@
   "url": "/learnhub/api/interactive",
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 GET /interactive）"
   },
   "calls": []
  },
@@ -245,7 +245,7 @@
   "url": "/learnhub/api/interactive",
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 GET /interactive）"
   },
   "calls": []
  },
@@ -255,7 +255,7 @@
   "url": "/learnhub/api/note",
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 GET /note）"
   },
   "calls": []
  },
@@ -275,7 +275,7 @@
   "url": "/learnhub/api/note",
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 GET /note）"
   },
   "calls": []
  },
@@ -572,7 +572,7 @@
   "url": "/learnhub/api/discuss-pack",
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 GET /discuss-pack）"
   },
   "calls": []
  },
@@ -592,7 +592,7 @@
   "url": "/learnhub/api/discuss-pack?course=1",
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 GET /discuss-pack）"
   },
   "calls": []
  },
@@ -612,7 +612,7 @@
   "url": "/learnhub/api/explain-pack",
   "status": 500,
   "res": {
-   "error": "missing required field: node/qid"
+   "error": "缺少必填参数：node/qid（路由 GET /explain-pack）"
   },
   "calls": []
  },
@@ -632,7 +632,7 @@
   "url": "/learnhub/api/explain-pack?qid=1&course=1",
   "status": 500,
   "res": {
-   "error": "missing required field: node/qid"
+   "error": "缺少必填参数：node/qid（路由 GET /explain-pack）"
   },
   "calls": []
  },
@@ -642,7 +642,7 @@
   "url": "/learnhub/api/explain-pack?node=1&course=1",
   "status": 500,
   "res": {
-   "error": "missing required field: node/qid"
+   "error": "缺少必填参数：node/qid（路由 GET /explain-pack）"
   },
   "calls": []
  },
@@ -662,7 +662,7 @@
   "url": "/learnhub/api/explain-back-pack",
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 GET /explain-back-pack）"
   },
   "calls": []
  },
@@ -682,7 +682,7 @@
   "url": "/learnhub/api/explain-back-pack?course=1",
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 GET /explain-back-pack）"
   },
   "calls": []
  },
@@ -1013,7 +1013,7 @@
   "url": "/learnhub/api/habit",
   "status": 500,
   "res": {
-   "error": "missing required field: habit"
+   "error": "缺少必填参数：habit（路由 GET /habit）"
   },
   "calls": []
  },
@@ -1033,7 +1033,7 @@
   "url": "/learnhub/api/habit",
   "status": 500,
   "res": {
-   "error": "missing required field: habit"
+   "error": "缺少必填参数：habit（路由 GET /habit）"
   },
   "calls": []
  },
@@ -1053,7 +1053,7 @@
   "url": "/learnhub/api/project/cross",
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 GET /project/cross）"
   },
   "calls": []
  },
@@ -1073,7 +1073,7 @@
   "url": "/learnhub/api/project/cross",
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 GET /project/cross）"
   },
   "calls": []
  },
@@ -1083,7 +1083,7 @@
   "url": "/learnhub/api/project/log",
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 GET /project/log）"
   },
   "calls": []
  },
@@ -1103,7 +1103,7 @@
   "url": "/learnhub/api/project/log",
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 GET /project/log）"
   },
   "calls": []
  },
@@ -1144,7 +1144,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: name"
+   "error": "缺少必填参数：name（路由 POST /habits/create）"
   },
   "calls": []
  },
@@ -1173,7 +1173,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: name"
+   "error": "缺少必填参数：name（路由 POST /habits/create）"
   },
   "calls": []
  },
@@ -1187,7 +1187,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: cue"
+   "error": "缺少必填参数：cue（路由 POST /habits/create）"
   },
   "calls": []
  },
@@ -1201,7 +1201,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: action"
+   "error": "缺少必填参数：action（路由 POST /habits/create）"
   },
   "calls": []
  },
@@ -1212,7 +1212,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: habit"
+   "error": "缺少必填参数：habit（路由 POST /habits/repeat）"
   },
   "calls": []
  },
@@ -1241,7 +1241,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: habit"
+   "error": "缺少必填参数：habit（路由 POST /habits/repeat）"
   },
   "calls": []
  },
@@ -1280,7 +1280,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: archived"
+   "error": "缺少必填参数：archived（路由 POST /habits/archive）"
   },
   "calls": []
  },
@@ -1307,7 +1307,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: habit"
+   "error": "缺少必填参数：habit（路由 POST /habits/archive）"
   },
   "calls": []
  },
@@ -1320,7 +1320,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: archived"
+   "error": "缺少必填参数：archived（路由 POST /habits/archive）"
   },
   "calls": []
  },
@@ -1331,7 +1331,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: archived"
+   "error": "缺少必填参数：archived（路由 POST /skills/archive）"
   },
   "calls": []
  },
@@ -1358,7 +1358,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: skill"
+   "error": "缺少必填参数：skill（路由 POST /skills/archive）"
   },
   "calls": []
  },
@@ -1371,7 +1371,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: archived"
+   "error": "缺少必填参数：archived（路由 POST /skills/archive）"
   },
   "calls": []
  },
@@ -1382,7 +1382,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: skill"
+   "error": "缺少必填参数：skill（路由 POST /skills/maintenance）"
   },
   "calls": []
  },
@@ -1409,7 +1409,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: skill"
+   "error": "缺少必填参数：skill（路由 POST /skills/maintenance）"
   },
   "calls": []
  },
@@ -1444,7 +1444,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /node/skip）"
   },
   "calls": []
  },
@@ -1473,7 +1473,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /node/skip）"
   },
   "calls": []
  },
@@ -1487,7 +1487,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /node/skip）"
   },
   "calls": []
  },
@@ -1512,7 +1512,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: pinned"
+   "error": "缺少必填参数：pinned（路由 POST /node/pin）"
   },
   "calls": []
  },
@@ -1541,7 +1541,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /node/pin）"
   },
   "calls": []
  },
@@ -1555,7 +1555,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /node/pin）"
   },
   "calls": []
  },
@@ -1569,7 +1569,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: pinned"
+   "error": "缺少必填参数：pinned（路由 POST /node/pin）"
   },
   "calls": []
  },
@@ -1580,7 +1580,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /node/complete）"
   },
   "calls": []
  },
@@ -1610,7 +1610,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /node/complete）"
   },
   "calls": []
  },
@@ -1624,7 +1624,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /node/complete）"
   },
   "calls": []
  },
@@ -1650,7 +1650,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /feedback）"
   },
   "calls": []
  },
@@ -1676,7 +1676,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /feedback）"
   },
   "calls": []
  },
@@ -1687,7 +1687,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: kind"
+   "error": "缺少必填参数：kind（路由 POST /proposals/apply）"
   },
   "calls": []
  },
@@ -1714,7 +1714,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: kind"
+   "error": "缺少必填参数：kind（路由 POST /proposals/apply）"
   },
   "calls": []
  },
@@ -1729,6 +1729,44 @@
   "res": [],
   "calls": [
    "graph.proposalApply(\"1\",undefined)"
+  ]
+ },
+ {
+  "id": "POST /proposals/impact · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/impact",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "缺少必填参数：kind（路由 POST /proposals/impact）"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /proposals/impact · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/impact",
+  "body": {
+   "kind": "seed",
+   "id": 3
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "proposals.proposalImpact(\"seed\",3)"
+  ]
+ },
+ {
+  "id": "POST /proposals/impact · 缺id",
+  "method": "POST",
+  "url": "/learnhub/api/proposals/impact",
+  "body": {
+   "kind": "seed"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "proposals.proposalImpact(\"seed\",undefined)"
   ]
  },
  {
@@ -1789,7 +1827,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: suggestion"
+   "error": "缺少必填参数：suggestion（路由 POST /thermostat/apply）"
   },
   "calls": []
  },
@@ -1813,7 +1851,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: suggestion"
+   "error": "缺少必填参数：suggestion（路由 POST /thermostat/apply）"
   },
   "calls": []
  },
@@ -1824,7 +1862,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: template"
+   "error": "缺少必填参数：template（路由 POST /experiments/propose）"
   },
   "calls": []
  },
@@ -1851,7 +1889,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: template"
+   "error": "缺少必填参数：template（路由 POST /experiments/propose）"
   },
   "calls": []
  },
@@ -1945,7 +1983,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: minutes_per_day"
+   "error": "缺少必填参数：minutes_per_day（路由 POST /sandbox/run）"
   },
   "calls": []
  },
@@ -1980,7 +2018,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: minutes_per_day"
+   "error": "缺少必填参数：minutes_per_day（路由 POST /sandbox/run）"
   },
   "calls": []
  },
@@ -2040,7 +2078,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /generate）"
   },
   "calls": []
  },
@@ -2081,7 +2119,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /generate）"
   },
   "calls": []
  },
@@ -2095,7 +2133,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /generate）"
   },
   "calls": []
  },
@@ -2144,7 +2182,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /generate/section）"
   },
   "calls": []
  },
@@ -2176,7 +2214,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /generate/section）"
   },
   "calls": []
  },
@@ -2190,7 +2228,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /generate/section）"
   },
   "calls": []
  },
@@ -2204,7 +2242,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: section"
+   "error": "缺少必填参数：section（路由 POST /generate/section）"
   },
   "calls": []
  },
@@ -2215,7 +2253,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /course/reset）"
   },
   "calls": []
  },
@@ -2244,7 +2282,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /course/reset）"
   },
   "calls": []
  },
@@ -2255,7 +2293,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /interactive/settle）"
   },
   "calls": []
  },
@@ -2288,7 +2326,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /interactive/settle）"
   },
   "calls": []
  },
@@ -2304,7 +2342,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /interactive/settle）"
   },
   "calls": []
  },
@@ -2320,7 +2358,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: section"
+   "error": "缺少必填参数：section（路由 POST /interactive/settle）"
   },
   "calls": []
  },
@@ -2363,7 +2401,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /tutor）"
   },
   "calls": []
  },
@@ -2404,7 +2442,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /tutor）"
   },
   "calls": []
  },
@@ -2423,7 +2461,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /tutor）"
   },
   "calls": []
  },
@@ -2450,7 +2488,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /explain-back）"
   },
   "calls": []
  },
@@ -2491,7 +2529,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /explain-back）"
   },
   "calls": []
  },
@@ -2510,7 +2548,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /explain-back）"
   },
   "calls": []
  },
@@ -2537,7 +2575,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /explain-feedback）"
   },
   "calls": []
  },
@@ -2566,7 +2604,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /explain-feedback）"
   },
   "calls": []
  },
@@ -2580,7 +2618,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /explain-feedback）"
   },
   "calls": []
  },
@@ -2605,7 +2643,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /explain-archive）"
   },
   "calls": []
  },
@@ -2640,7 +2678,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /explain-archive）"
   },
   "calls": []
  },
@@ -2657,7 +2695,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /explain-archive）"
   },
   "calls": []
  },
@@ -2736,7 +2774,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /note-source/register）"
   },
   "calls": []
  },
@@ -2760,7 +2798,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /note-source/register）"
   },
   "calls": []
  },
@@ -2771,7 +2809,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /note-source/unregister）"
   },
   "calls": []
  },
@@ -2795,7 +2833,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /note-source/unregister）"
   },
   "calls": []
  },
@@ -2806,7 +2844,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /note-source/exclude）"
   },
   "calls": []
  },
@@ -2830,7 +2868,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /note-source/exclude）"
   },
   "calls": []
  },
@@ -2841,7 +2879,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /note-source/unexclude）"
   },
   "calls": []
  },
@@ -2865,7 +2903,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /note-source/unexclude）"
   },
   "calls": []
  },
@@ -2876,7 +2914,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /note-source/relink）"
   },
   "calls": []
  },
@@ -2903,7 +2941,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /note-source/relink）"
   },
   "calls": []
  },
@@ -2916,7 +2954,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: path"
+   "error": "缺少必填参数：path（路由 POST /note-source/relink）"
   },
   "calls": []
  },
@@ -2927,7 +2965,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /note-source/generate）"
   },
   "calls": []
  },
@@ -2954,7 +2992,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /note-source/generate）"
   },
   "calls": []
  },
@@ -3011,7 +3049,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /learner-rate）"
   },
   "calls": []
  },
@@ -3042,7 +3080,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /learner-rate）"
   },
   "calls": []
  },
@@ -3057,7 +3095,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /learner-rate）"
   },
   "calls": []
  },
@@ -3072,7 +3110,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: card"
+   "error": "缺少必填参数：card（路由 POST /learner-rate）"
   },
   "calls": []
  },
@@ -3098,7 +3136,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /learner-forget）"
   },
   "calls": []
  },
@@ -3127,7 +3165,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /learner-forget）"
   },
   "calls": []
  },
@@ -3141,7 +3179,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /learner-forget）"
   },
   "calls": []
  },
@@ -3155,7 +3193,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: card"
+   "error": "缺少必填参数：card（路由 POST /learner-forget）"
   },
   "calls": []
  },
@@ -3166,7 +3204,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /error-answer）"
   },
   "calls": []
  },
@@ -3197,7 +3235,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /error-answer）"
   },
   "calls": []
  },
@@ -3212,7 +3250,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /error-answer）"
   },
   "calls": []
  },
@@ -3227,7 +3265,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: card"
+   "error": "缺少必填参数：card（路由 POST /error-answer）"
   },
   "calls": []
  },
@@ -3253,7 +3291,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /error-generate）"
   },
   "calls": []
  },
@@ -3282,7 +3320,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /error-generate）"
   },
   "calls": []
  },
@@ -3321,7 +3359,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /error-archive）"
   },
   "calls": []
  },
@@ -3352,7 +3390,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /error-archive）"
   },
   "calls": []
  },
@@ -3367,7 +3405,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /error-archive）"
   },
   "calls": []
  },
@@ -3382,7 +3420,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: card"
+   "error": "缺少必填参数：card（路由 POST /error-archive）"
   },
   "calls": []
  },
@@ -3408,7 +3446,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /learner-add）"
   },
   "calls": []
  },
@@ -3443,7 +3481,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /learner-add）"
   },
   "calls": []
  },
@@ -3460,7 +3498,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /learner-add）"
   },
   "calls": []
  },
@@ -3539,7 +3577,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: archived"
+   "error": "缺少必填参数：archived（路由 POST /learner-archive）"
   },
   "calls": []
  },
@@ -3570,7 +3608,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /learner-archive）"
   },
   "calls": []
  },
@@ -3585,7 +3623,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /learner-archive）"
   },
   "calls": []
  },
@@ -3600,7 +3638,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: card"
+   "error": "缺少必填参数：card（路由 POST /learner-archive）"
   },
   "calls": []
  },
@@ -3615,7 +3653,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: archived"
+   "error": "缺少必填参数：archived（路由 POST /learner-archive）"
   },
   "calls": []
  },
@@ -3626,7 +3664,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-generate）"
   },
   "calls": []
  },
@@ -3674,7 +3712,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-generate）"
   },
   "calls": []
  },
@@ -3693,7 +3731,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-generate）"
   },
   "calls": []
  },
@@ -3785,7 +3823,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /review）"
   },
   "calls": []
  },
@@ -3814,7 +3852,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /review）"
   },
   "calls": []
  },
@@ -3827,7 +3865,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /review）"
   },
   "calls": []
  },
@@ -3838,7 +3876,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-save）"
   },
   "calls": []
  },
@@ -3867,7 +3905,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-save）"
   },
   "calls": []
  },
@@ -3881,7 +3919,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-save）"
   },
   "calls": []
  },
@@ -3895,7 +3933,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: yaml"
+   "error": "缺少必填参数：yaml（路由 POST /question-save）"
   },
   "calls": []
  },
@@ -3906,7 +3944,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-answer）"
   },
   "calls": []
  },
@@ -3943,7 +3981,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-answer）"
   },
   "calls": []
  },
@@ -3961,7 +3999,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-answer）"
   },
   "calls": []
  },
@@ -3979,7 +4017,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: qid"
+   "error": "缺少必填参数：qid（路由 POST /question-answer）"
   },
   "calls": []
  },
@@ -4062,7 +4100,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-rate）"
   },
   "calls": []
  },
@@ -4093,7 +4131,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-rate）"
   },
   "calls": []
  },
@@ -4108,7 +4146,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-rate）"
   },
   "calls": []
  },
@@ -4123,7 +4161,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: qid"
+   "error": "缺少必填参数：qid（路由 POST /question-rate）"
   },
   "calls": []
  },
@@ -4149,7 +4187,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-forget）"
   },
   "calls": []
  },
@@ -4182,7 +4220,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-forget）"
   },
   "calls": []
  },
@@ -4198,7 +4236,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-forget）"
   },
   "calls": []
  },
@@ -4214,7 +4252,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: qid"
+   "error": "缺少必填参数：qid（路由 POST /question-forget）"
   },
   "calls": []
  },
@@ -4257,7 +4295,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-dispute/review）"
   },
   "calls": []
  },
@@ -4286,7 +4324,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-dispute/review）"
   },
   "calls": []
  },
@@ -4300,7 +4338,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-dispute/review）"
   },
   "calls": []
  },
@@ -4314,7 +4352,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: qid"
+   "error": "缺少必填参数：qid（路由 POST /question-dispute/review）"
   },
   "calls": []
  },
@@ -4325,7 +4363,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing/invalid required field: resolution（rekey|void|overridden）"
+   "error": "缺少或非法必填参数：resolution（允许：rekey|void|overridden）（路由 POST /question-dispute/apply）"
   },
   "calls": []
  },
@@ -4362,7 +4400,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-dispute/apply）"
   },
   "calls": []
  },
@@ -4380,7 +4418,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-dispute/apply）"
   },
   "calls": []
  },
@@ -4398,7 +4436,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: qid"
+   "error": "缺少必填参数：qid（路由 POST /question-dispute/apply）"
   },
   "calls": []
  },
@@ -4416,7 +4454,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing/invalid required field: resolution（rekey|void|overridden）"
+   "error": "缺少或非法必填参数：resolution（允许：rekey|void|overridden）（路由 POST /question-dispute/apply）"
   },
   "calls": []
  },
@@ -4481,7 +4519,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /band-session）"
   },
   "calls": []
  },
@@ -4514,7 +4552,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /band-session）"
   },
   "calls": []
  },
@@ -4530,7 +4568,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /band-session）"
   },
   "calls": []
  },
@@ -4589,7 +4627,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: question"
+   "error": "缺少必填参数：question（路由 POST /question-add）"
   },
   "calls": []
  },
@@ -4618,7 +4656,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-add）"
   },
   "calls": []
  },
@@ -4632,7 +4670,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-add）"
   },
   "calls": []
  },
@@ -4646,7 +4684,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: question"
+   "error": "缺少必填参数：question（路由 POST /question-add）"
   },
   "calls": []
  },
@@ -4657,7 +4695,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-archive）"
   },
   "calls": []
  },
@@ -4690,7 +4728,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /question-archive）"
   },
   "calls": []
  },
@@ -4706,7 +4744,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /question-archive）"
   },
   "calls": []
  },
@@ -4722,7 +4760,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: qid"
+   "error": "缺少必填参数：qid（路由 POST /question-archive）"
   },
   "calls": []
  },
@@ -4908,7 +4946,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /course/delete）"
   },
   "calls": []
  },
@@ -4932,7 +4970,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /course/delete）"
   },
   "calls": []
  },
@@ -4943,7 +4981,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /generate/cancel）"
   },
   "calls": []
  },
@@ -4970,7 +5008,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /generate/cancel）"
   },
   "calls": []
  },
@@ -4983,7 +5021,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /generate/cancel）"
   },
   "calls": []
  },
@@ -4994,7 +5032,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /coach/growth）"
   },
   "calls": []
  },
@@ -5027,7 +5065,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /coach/growth）"
   },
   "calls": []
  },
@@ -5038,7 +5076,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /coach/compass）"
   },
   "calls": []
  },
@@ -5070,7 +5108,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /coach/compass）"
   },
   "calls": []
  },
@@ -5116,7 +5154,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /seed/propose）"
   },
   "calls": []
  },
@@ -5167,7 +5205,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /seed/propose）"
   },
   "calls": []
  },
@@ -5188,7 +5226,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: goal"
+   "error": "缺少必填参数：goal（路由 POST /seed/propose）"
   },
   "calls": []
  },
@@ -5322,7 +5360,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: name"
+   "error": "缺少必填参数：name（路由 POST /project/create）"
   },
   "calls": []
  },
@@ -5351,7 +5389,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: name"
+   "error": "缺少必填参数：name（路由 POST /project/create）"
   },
   "calls": []
  },
@@ -5365,7 +5403,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: goal"
+   "error": "缺少必填参数：goal（路由 POST /project/create）"
   },
   "calls": []
  },
@@ -5390,7 +5428,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/lifecycle）"
   },
   "calls": []
  },
@@ -5417,7 +5455,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/lifecycle）"
   },
   "calls": []
  },
@@ -5430,7 +5468,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: lifecycle"
+   "error": "缺少必填参数：lifecycle（路由 POST /project/lifecycle）"
   },
   "calls": []
  },
@@ -5441,7 +5479,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/tier）"
   },
   "calls": []
  },
@@ -5468,7 +5506,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/tier）"
   },
   "calls": []
  },
@@ -5481,7 +5519,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: tier"
+   "error": "缺少必填参数：tier（路由 POST /project/tier）"
   },
   "calls": []
  },
@@ -5492,7 +5530,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/plan/generate）"
   },
   "calls": []
  },
@@ -5524,7 +5562,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/plan/generate）"
   },
   "calls": []
  },
@@ -5535,7 +5573,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/milestone/generate）"
   },
   "calls": []
  },
@@ -5570,7 +5608,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/milestone/generate）"
   },
   "calls": []
  },
@@ -5583,7 +5621,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: milestone"
+   "error": "缺少必填参数：milestone（路由 POST /project/milestone/generate）"
   },
   "calls": []
  },
@@ -5594,7 +5632,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/decompile）"
   },
   "calls": []
  },
@@ -5637,7 +5675,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/decompile）"
   },
   "calls": []
  },
@@ -5721,7 +5759,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/exec）"
   },
   "calls": []
  },
@@ -5760,7 +5798,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/exec）"
   },
   "calls": []
  },
@@ -5779,7 +5817,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: source"
+   "error": "缺少必填参数：source（路由 POST /project/exec）"
   },
   "calls": []
  },
@@ -5864,7 +5902,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/log）"
   },
   "calls": []
  },
@@ -5891,7 +5929,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: id"
+   "error": "缺少必填参数：id（路由 POST /project/log）"
   },
   "calls": []
  },
@@ -5904,7 +5942,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: text"
+   "error": "缺少必填参数：text（路由 POST /project/log）"
   },
   "calls": []
  },
@@ -5915,7 +5953,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: week_start"
+   "error": "缺少必填参数：week_start（路由 POST /kata/save）"
   },
   "calls": []
  },
@@ -5942,7 +5980,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: week_start"
+   "error": "缺少必填参数：week_start（路由 POST /kata/save）"
   },
   "calls": []
  },
@@ -5966,7 +6004,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: week_start"
+   "error": "缺少必填参数：week_start（路由 POST /kata/convert/experiment）"
   },
   "calls": []
  },
@@ -5995,7 +6033,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: week_start"
+   "error": "缺少必填参数：week_start（路由 POST /kata/convert/experiment）"
   },
   "calls": []
  },
@@ -6009,7 +6047,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: template"
+   "error": "缺少必填参数：template（路由 POST /kata/convert/experiment）"
   },
   "calls": []
  },
@@ -6034,7 +6072,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: week_start"
+   "error": "缺少必填参数：week_start（路由 POST /kata/convert/intention）"
   },
   "calls": []
  },
@@ -6067,7 +6105,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: week_start"
+   "error": "缺少必填参数：week_start（路由 POST /kata/convert/intention）"
   },
   "calls": []
  },
@@ -6083,7 +6121,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 POST /kata/convert/intention）"
   },
   "calls": []
  },
@@ -6099,7 +6137,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 POST /kata/convert/intention）"
   },
   "calls": []
  },
@@ -6115,7 +6153,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: cue"
+   "error": "缺少必填参数：cue（路由 POST /kata/convert/intention）"
   },
   "calls": []
  },
@@ -6131,7 +6169,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: action"
+   "error": "缺少必填参数：action（路由 POST /kata/convert/intention）"
   },
   "calls": []
  },
@@ -6142,7 +6180,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: goal"
+   "error": "缺少必填参数：goal（路由 PUT /daily-goal）"
   },
   "calls": []
  },
@@ -6166,7 +6204,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: goal"
+   "error": "缺少必填参数：goal（路由 PUT /daily-goal）"
   },
   "calls": []
  },
@@ -6177,7 +6215,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: value"
+   "error": "缺少必填参数：value（路由 PUT /day-cutoff）"
   },
   "calls": []
  },
@@ -6201,7 +6239,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: value"
+   "error": "缺少必填参数：value（路由 PUT /day-cutoff）"
   },
   "calls": []
  },
@@ -6263,7 +6301,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: hints_enabled"
+   "error": "缺少必填参数：hints_enabled（路由 PUT /calibration/hints）"
   },
   "calls": []
  },
@@ -6287,7 +6325,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: hints_enabled"
+   "error": "缺少必填参数：hints_enabled（路由 PUT /calibration/hints）"
   },
   "calls": []
  },
@@ -6333,7 +6371,7 @@
   "body": {},
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 PUT /question-update）"
   },
   "calls": []
  },
@@ -6364,7 +6402,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: course"
+   "error": "缺少必填参数：course（路由 PUT /question-update）"
   },
   "calls": []
  },
@@ -6379,7 +6417,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: node"
+   "error": "缺少必填参数：node（路由 PUT /question-update）"
   },
   "calls": []
  },
@@ -6394,7 +6432,7 @@
   },
   "status": 500,
   "res": {
-   "error": "missing required field: qid"
+   "error": "缺少必填参数：qid（路由 PUT /question-update）"
   },
   "calls": []
  },

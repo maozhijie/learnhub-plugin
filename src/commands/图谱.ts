@@ -256,6 +256,23 @@ export const 图谱域 = {
       }
     ]
   }),
+  'proposals-impact': command({
+    id: "proposals-impact",
+    args: {
+      kind: { type: "string", required: true, description: "Only \"seed\" carries an impact preview" },
+      id: { type: "number", description: "Pending seed proposal id (default: the latest pending seed proposal)" }
+    },
+    engine: "proposals.proposalImpact",
+    domain: "图谱",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/proposals/impact" },
+        bind: ["kind", "id"]
+      }
+    ]
+  }),
   'proposals-reject': command({
     id: "proposals-reject",
     args: {

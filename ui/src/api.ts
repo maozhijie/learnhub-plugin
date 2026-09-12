@@ -222,6 +222,9 @@ export const api = {
   proposalApply: (kind: import('./types').PropItem['kind'], id?: number) =>
     http<import('./types').GraphApplyResult | Record<string, unknown>>('POST', '/proposals/apply', { kind, id }),
   proposalReject: (id: number, note = '') => http<{ message: string }>('POST', '/proposals/reject', { id, note }),
+  /** 种子提案影响预览（#159）：reseed/建课应用确认框的知识前置——知情后再确认。 */
+  proposalImpact: (kind: 'seed', id?: number) =>
+    http<import('./types').SeedImpactDoc>('POST', '/proposals/impact', { kind, ...(id !== undefined ? { id } : {}) }),
   doctor: () => http<import('./types').DoctorDoc>('GET', '/doctor'),
   questionsAll: (course?: string) =>
     http<{ total: number; questions: import('./types').BankEntry[] }>('GET', `/questions-all${q({ course })}`),

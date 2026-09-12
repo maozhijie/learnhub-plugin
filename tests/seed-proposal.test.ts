@@ -517,3 +517,92 @@ test('seedPropose：coverage 绑定表单工作表（不信模型）；空工作
     )
   })
 })
+
+// ---- 种子提案影响预览（proposalImpact，#159）：reseed/建课应用确认框的知识前置 ----
+// 预览 = 只读现势计算：新建哪些节点、覆盖什么锚、罗盘是否重置、什么全保留；
+// 引擎 reseed 语义不动，预览说的是真会发生的事。
+
+test('proposalImpact：reseed 预览如实区分新建节点/现锚覆盖/罗盘重置/全保留', async () => {
+  // 默认 vault：课程「数学」已注册（root=math），图上已有节点「入门」——
+  // 入手态即「可 reseed」的真实场景
+  await withVault({}, async ({ engine }) => {
+    const first = `course: 数学
+mode: reseed
+endpoint:
+  name: 用导数解决优化问题
+  region: 基础
+  block: 终点块
+starts:
+  - name: 认识变化率
+    region: 基础
+    block: 起点块
+    basis: baseline
+`
+    const r = await engine.graph.graphPropose('seed', first) as { id: number }
+    // 未播种：无锚、无罗盘——预览不说「覆盖」「重置」
+    const impact = await engine.proposals.proposalImpact('seed', r.id)
+    assert.equal(impact.course, '数学')
+    assert.equal(impact.mode, 'reseed')
+    assert.deepEqual(impact.new_nodes, ['认识变化率', '用导数解决优化问题'])
+    assert.deepEqual(impact.existing_nodes, [], '提案与图无重名（重名会被受理门拒收）')
+    assert.equal(impact.graph_nodes, 1, '当前图只有「入门」')
+    assert.equal(impact.current_anchor, null)
+    assert.equal(impact.compass_reset, false)
+
+    // 应用后再提一轮换终点：预览翻转——现锚带出、罗盘重置为真
+    await engine.graph.graphApply('seed', r.id)
+    const second = `course: 数学
+mode: reseed
+endpoint:
+  name: 证明微积分基本定理
+  region: 基础
+  block: 终点块
+starts:
+  - name: 直观理解积分
+    region: 基础
+    block: 起点块
+    basis: vault
+`
+    const r2 = await engine.graph.graphPropose('seed', second) as { id: number }
+    const impact2 = await engine.proposals.proposalImpact('seed', r2.id)
+    assert.ok(impact2.current_anchor, '现锚带出')
+    assert.equal(impact2.current_anchor!.endpoint, '用导数解决优化问题')
+    assert.equal(impact2.current_anchor!.origin_proposal, r.id)
+    assert.equal(impact2.compass_reset, true, '罗盘已存在：路线与 ETA 将重置')
+    assert.equal(impact2.graph_nodes, 3, '现有图 3 节点全保留（入门 + 首轮种子 2 个）')
+    // 省略 id = 最新 pending 种子提案（确认框从提案行直达时的形态）
+    const impact3 = await engine.proposals.proposalImpact('seed')
+    assert.deepEqual(impact3.new_nodes, ['直观理解积分', '证明微积分基本定理'])
+  })
+})
+
+test('proposalImpact：非种子 kind 与不存在/已决提案拒预览；重名提案给出漂移信号', async () => {
+  await withVault({}, async ({ engine }) => {
+    await assert.rejects(() => engine.proposals.proposalImpact('edit'), /只有种子提案/)
+    await assert.rejects(() => engine.proposals.proposalImpact('seed', 999), /不存在或已决/)
+    // 提案受理后图上长出了同名节点（漂移）→ existing_nodes 非空 = 应用必败的提前示警
+    const seed = `course: 数学
+mode: reseed
+endpoint:
+  name: 用导数解决优化问题
+  region: 基础
+  block: 终点块
+starts:
+  - name: 认识变化率
+    region: 基础
+    block: 起点块
+    basis: baseline
+`
+    const r = await engine.graph.graphPropose('seed', seed) as { id: number }
+    await engine.graph.graphApply('seed', r.id)
+    const r2 = await engine.graph.graphPropose('seed', seed.replace('认识变化率', '直观理解积分').replace('用导数解决优化问题', '证明微积分基本定理')) as { id: number }
+    // 受理后手工把同名节点放进图（模拟另一条通道先落了同名节点）
+    const gstore = new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs)
+    const files = await gstore.regionFiles()
+    const regions = await gstore.load()
+    regions[0]!.blocks[0]!.nodes.push({ name: '直观理解积分', pre: [], opt: false, note: '', enc: [], est: 20 })
+    await gstore.writeRegionDoc(Object.values(files)[0]!, regions[0]!)
+    const impact = await engine.proposals.proposalImpact('seed', r2.id)
+    assert.deepEqual(impact.existing_nodes, ['直观理解积分'])
+  })
+})

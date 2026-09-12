@@ -122,7 +122,7 @@ export default function App() {
           <Tabs.TabPane key='lab' title='实验室' />
           <Tabs.TabPane key='generate' title='生成' />
           <Tabs.TabPane key='proposals' title='提案' />
-          <Tabs.TabPane key='practice' title='实践' />
+          <Tabs.TabPane key='practice' title='无界实践区' />
           <Tabs.TabPane key='projects' title='项目' />
           <Tabs.TabPane key='guide' title='指南' />
         </Tabs>
@@ -139,7 +139,7 @@ export default function App() {
         {tab !== 'learn' && tab !== 'practice' && tab !== 'projects' && tab !== 'graph'
           && tab !== 'proposals' && tab !== 'generate' && noCourse ? (
           <div style={{ paddingTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-            <Empty description='还没有课程：到「学习图」页新建课程——种子起草后在「提案」页人审开工，等待时可在「生成」页看进度' />
+            <Empty description='还没有课程：到「学习图」页教练台新建课程——种子起草后在「提案」页人审开工，等待时可在「生成」页看进度' />
             <Button type='primary' onClick={() => setTab('graph')}>去学习图页建课</Button>
           </div>
         ) : (

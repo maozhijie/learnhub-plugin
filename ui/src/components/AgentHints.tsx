@@ -11,7 +11,7 @@ const { Text } = Typography
 /** 页面键 → 展示名（与宿主 AGENT_GUIDE.page 约定一致）。 */
 export const GUIDE_PAGE_LABEL: Record<string, string> = {
   learn: '学习', graph: '学习图', bank: '题目管理', stats: '统计', lab: '实验室',
-  generate: '生成', proposals: '提案', practice: '实践', projects: '项目', global: '全局',
+  generate: '生成', proposals: '提案', practice: '无界实践区', projects: '项目', global: '全局',
 }
 
 let cache: AgentGuideItem[] | null = null
