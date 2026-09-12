@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CoachCockpit from '../components/CoachCockpit'
 import GraphDagView from '../components/GraphDagView'
 import { api } from '../api'
-import { isActiveTab } from '../active-tab'
+import { isActiveTab, onTabActive } from '../active-tab'
 import type { AppFrame } from '../App'
 import type { BankEntry, GenJobItem, GraphDoc, RecommendDoc } from '../types'
 
@@ -77,15 +77,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
 
   // 页签激活重取（#161）：keep-alive 下组件不重挂，「切回图页」补一次取数——
   // 隐藏期间错过的图变化与状态面变化（就绪深度/复诊）在切回时刷新。
-  useEffect(() => {
-    const h = (e: Event) => {
-      if ((e as CustomEvent).detail !== 'graph') return
-      void load()
-      void reloadFrame()
-    }
-    window.addEventListener('learnhub:tab', h)
-    return () => window.removeEventListener('learnhub:tab', h)
-  }, [load, reloadFrame])
+  useEffect(() => onTabActive('graph', () => { void load(); void reloadFrame() }),
+    [load, reloadFrame])
 
   // 生成队列轮询：角标随排队/生成点亮；活动任务出现终态边沿 → 重拉图（hasContent 点亮）
   const activeKeysRef = useRef<Set<string>>(new Set())

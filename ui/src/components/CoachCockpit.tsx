@@ -123,12 +123,15 @@ function SeedFormModal({ visible, mode, course, onCancel }: {
  * 自然通过——剩下的路是学掉终点，不是继续生长，与「刚播种的合法空态」区分开。 */
 function ReadinessCard({ check }: { check: NonNullable<StatusCourse['coach']> }) {
   const tight = !check.ok
-  const ratio = check.required > 0 ? Math.min(100, Math.round((check.ready / check.required) * 100)) : 100
+  // exhausted（尾段前沿清空）判据自然通过：进度条显满格，不因 ready=0 显 0% 绿条
+  const ratio = check.exhausted || check.required <= 0
+    ? 100
+    : Math.min(100, Math.round((check.ready / check.required) * 100))
   return (
     <Card size='small' title='就绪深度（教练回合判据）' style={{ borderRadius: 10 }}
       extra={
         <Space size={8}>
-          {check.cold_start && <Tag size='small' color='orange'>冷启动首周 ×1.5</Tag>}
+          {check.cold_start && <Tag size='small' color='orange'>冷启动首周</Tag>}
           {check.exhausted
             ? <Tag size='small' color='gray'>尾段·前沿已清空</Tag>
             : (tight ? <Tag size='small' color='red'>低于前瞻</Tag> : <Tag size='small' color='green'>达标</Tag>)}
@@ -146,7 +149,7 @@ function ReadinessCard({ check }: { check: NonNullable<StatusCourse['coach']> })
           </Text>
         ) : (
           <Text type='secondary' style={{ fontSize: 12 }}>
-            前瞻需求 {check.required}（前瞻深度 {check.depth}{check.cold_start ? ' ×冷启动首周 1.5 后取整' : ''}）；
+            前瞻需求 {check.required}（前瞻深度 {check.depth}{check.cold_start ? '，冷启动首周放宽后取整' : ''}）；
             就绪 = 前置已达成、正文已生成的未开始节点。
           </Text>
         )}

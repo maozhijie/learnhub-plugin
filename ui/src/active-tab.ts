@@ -15,3 +15,13 @@ export function setActiveTab(t: TabKey): void {
 export function isActiveTab(t: TabKey): boolean {
   return current === t
 }
+
+/** 页签激活钩子（页签保活 ADR-0027 配套）：keep-alive 下组件不重挂，「切回该页签」
+ * 的取数语义（激活重取/完成边沿补判）统一挂这里——回调只在 detail 命中时触发。 */
+export function onTabActive(t: TabKey, fn: () => void): () => void {
+  const h = (e: Event) => {
+    if ((e as CustomEvent).detail === t) fn()
+  }
+  window.addEventListener('learnhub:tab', h)
+  return () => window.removeEventListener('learnhub:tab', h)
+}

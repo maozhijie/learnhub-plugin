@@ -15,6 +15,7 @@
 import { Button, Message, Notification } from '@arco-design/web-react'
 import { useEffect, useRef } from 'react'
 import { api } from './api'
+import { isGenJobTerminal } from '../../src/generation-jobs'
 import type { GenJobItem } from './types'
 
 const GRAPH_PHASES = new Set(['种子', '生长', '罗盘', '反编译', '计划', '里程碑'])
@@ -28,19 +29,13 @@ const PHASE_TITLE: Record<string, string> = {
 }
 /** 产物是提案的任务：完成通知跳提案页（下一步动作是人审），其余跳生成页。 */
 const PROPOSAL_OUTPUT = new Set(['种子', '反编译', '计划', '里程碑'])
-const TERMINAL = new Set(['done', 'partial', 'failed', 'cancelled'])
 /** 通知回放的消费水位（#161）：localStorage 键，值为已展示终态的最大 finishedAt 毫秒。 */
 const LAST_SEEN_KEY = 'learnhub-coach-notif-lastseen'
 
-interface JobSnap {
-  course: string
-  status: string
-  phase?: string
-  message?: string
-  growthOutcome?: GenJobItem['growthOutcome']
-  startedAt: string
-  finishedAt?: string
-}
+/** 通知消费的快照字段（GenJobItem 子集，零手工镜像）。 */
+type JobSnap = Pick<GenJobItem, 'course' | 'status' | 'phase' | 'message' | 'growthOutcome' | 'startedAt' | 'finishedAt'>
+
+const phaseTitleOf = (j: JobSnap): string => PHASE_TITLE[j.phase ?? ''] ?? '图域任务'
 
 const readLastSeen = (): number => {
   const raw = Number(localStorage.getItem(LAST_SEEN_KEY))
@@ -99,9 +94,10 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
     }
 
     /** 终态通知（#161 抽出共用）：diff 边沿与首拍回放同一语义——停摆走中性说明，
-     * 失败的生长批照带「重试」，回放的标题带「补发」前缀。 */
+     * 失败的生长批照带「重试」，回放的标题带「补发」前缀。终态判定与宿主同源
+     * （isGenJobTerminal，生成任务契约单一出处）。 */
     const terminalNotify = (cur: JobSnap, replay: boolean): void => {
-      const title = `${PHASE_TITLE[cur.phase ?? ''] ?? '图域任务'}`
+      const title = phaseTitleOf(cur)
       const prefix = replay ? '补发·' : ''
       const target = PROPOSAL_OUTPUT.has(cur.phase ?? '') ? 'proposals' as const : 'generate' as const
       if (cur.status === 'done') {
@@ -139,12 +135,12 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
           const old = prev.get(key)
           if (!old) {
             if (cur.status === 'queued' || cur.status === 'running') {
-              notify('info', `${PHASE_TITLE[cur.phase ?? ''] ?? '图域任务'}已触发`, cur.message ?? '已入队，生成页看进度')
-            } else if (TERMINAL.has(cur.status)) {
+              notify('info', `${phaseTitleOf(cur)}已触发`, cur.message ?? '已入队，生成页看进度')
+            } else if (isGenJobTerminal(cur.status)) {
               // 会话中途出生即终态的任务（两次轮询之间走完全程）：照常弹终态，不错过结果
               terminalNotify(cur, false)
             }
-          } else if (old.status !== cur.status && TERMINAL.has(cur.status)) {
+          } else if (old.status !== cur.status && isGenJobTerminal(cur.status)) {
             terminalNotify(cur, false)
           }
         }
@@ -153,13 +149,14 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
         // （带「补发」前缀）——不再因面板关闭错过结果。
         const lastSeen = readLastSeen()
         for (const cur of snaps.values()) {
-          if (TERMINAL.has(cur.status) && terminalTs(cur) > lastSeen) terminalNotify(cur, true)
+          if (isGenJobTerminal(cur.status) && terminalTs(cur) > lastSeen) terminalNotify(cur, true)
         }
       }
       prevJobsRef.current = snaps
       jobsPrimed = true
       // 消费水位推进（#161）：本轮注册表里可见的终态都已展示（首拍补发 / 后续拍 diff 弹条）
-      const maxTs = Math.max(0, ...[...snaps.values()].filter(j => TERMINAL.has(j.status)).map(terminalTs))
+      const terminal = [...snaps.values()].filter(j => isGenJobTerminal(j.status))
+      const maxTs = terminal.length ? Math.max(...terminal.map(terminalTs)) : 0
       if (maxTs > 0) writeLastSeen(maxTs)
     }
 
