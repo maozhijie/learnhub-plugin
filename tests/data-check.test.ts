@@ -145,3 +145,21 @@ test('Data Check does not write or mutate Vault files', async () => {
     assert.deepEqual(after, before)
   })
 })
+
+test('复诊扫描读坏流不炸：Broken 降级为 finding、该课程 overdue 结算降级为 0（#192 / ADR-0053）', async () => {
+  await withVault({
+    graph: GRAPH, notes: { 入门: NOTE }, banks: { 入门: BANK },
+    files: [
+      { path: '学习中心/math/state/边实验.jsonl', content: '{"node":"入门","pre":[],"proposal":1,"due":5}\n' },
+      { path: '学习中心/state/practice.jsonl', content: '{"ts":"2024-01-01T10:00:00+08:00","course":"数学","node":"入门","ex":"e","answer":"a","correct":true,"judge":"auto"}\n{broken\n' },
+    ],
+  }, async ({ engine }) => {
+    const report = await engine.dataCheck()
+    const reasons = byReason(report)
+
+    assert.equal(reasons.get('probation_stream_broken'), 1, '坏流浮出 finding（体检的本分是可见性）')
+    assert.equal(report.inventory.probationLedgers.present, 1, '账本本身在盘，盘点照常')
+    assert.equal(report.inventory.probationLedgers.overdue, 0, '行为流水损坏 → overdue 结算降级为 0')
+    assert.equal(report.status, 'broken')
+  })
+})

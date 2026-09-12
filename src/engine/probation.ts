@@ -73,10 +73,11 @@ function entryErrors(e: unknown, where: string): string[] {
   return errors
 }
 
-/** 读账本（缺文件 = Missing 合法空态；行内容经 entryErrors 校验，坏形状/损坏行跳过
- * ——与行为流水同一 jsonl 容错惯例，形状校验比裸 JSON.parse 多一道账本契约）。 */
+/** 读账本（缺文件 = Missing 合法空态；JSONL 行级契约归 readJsonlLines 原语，ADR-0053：
+ * 撕裂尾行豁免、中段坏行 = Broken；行内容另经 entryErrors 校验，坏形状行跳过——形状
+ * 校验比裸 JSON.parse 多一道账本契约，与行级损坏是两层）。 */
 export async function readProbationLedger(paths: Paths, root: string, fs: VaultFs): Promise<ProbationEntry[]> {
-  const lines = await readJsonlLines<unknown>(paths.probationLedgerPath(root), fs)
+  const lines = await readJsonlLines<unknown>(paths.probationLedgerPath(root), fs, 'probation')
   const out: ProbationEntry[] = []
   for (const e of lines) {
     if (entryErrors(e, '').length) continue

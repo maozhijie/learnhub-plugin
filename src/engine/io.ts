@@ -50,9 +50,13 @@ export async function writeLearnhubConfig(path: string, doc: Record<string, unkn
   await atomicWrite(path, JSON.stringify(doc, null, 1) + '\n', fs)
 }
 
-/** jsonl 只读（跳过半行损坏——追加写单行原子，中断最多留半行尾；store 与无依赖
- * 读侧扫描器共用的唯一实现，#146 起从私有方法提升为模块函数）。 */
-export async function readJsonlLines<T>(path: string, fs: VaultFs): Promise<T[]> {
+/** jsonl 只读原语（ADR-0053：全流水读侧唯一实现，流读取路径的 JSON.parse 只存在于
+ * 本函数）：换行结尾的行解析失败 = 中段损坏，抛 Broken（文案带流标签 + 路径 + 行号，
+ * 沿用「（Broken）：修复或删除该行后再试」口径，label 由调用方传入）；文件末行不以
+ * \n 结尾且解析失败 = 撕裂尾行，跳过——appendFile 一次写「整行+\n」，进程中断最多
+ * 烂在末行、且必然不带换行，物理特征可机械判定（豁免只认末行）；文件缺失 =
+ * Missing 合法空态（返回 []）；空行照旧跳过。 */
+export async function readJsonlLines<T>(path: string, fs: VaultFs, label: string): Promise<T[]> {
   let raw: string
   try {
     raw = await fs.readFile(path)
@@ -60,13 +64,16 @@ export async function readJsonlLines<T>(path: string, fs: VaultFs): Promise<T[]>
     return []
   }
   const out: T[] = []
-  for (const line of raw.split('\n')) {
+  const lines = raw.split('\n')
+  const tornTail = !raw.endsWith('\n')
+  for (const [i, line] of lines.entries()) {
     const s = line.trim()
     if (!s) continue
     try {
       out.push(JSON.parse(s) as T)
     } catch {
-      // 跳过半行损坏（进程中断可能留下未写完的尾行）
+      if (tornTail && i === lines.length - 1) continue // 撕裂尾行：进程中断的物理残留，合法可规范化
+      throw new Error(`[${label}] ${path} 第 ${i + 1} 行不是合法 JSON（Broken）：修复或删除该行后再试。`)
     }
   }
   return out

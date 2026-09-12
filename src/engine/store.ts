@@ -47,13 +47,13 @@ export class Store {
 
   /** 最近 N 条 journal（course 过滤可选）。 */
   async journalTail(course: string | null = null, limit = 50): Promise<JournalRec[]> {
-    const lines = await this.readJsonl<JournalRec>(this.paths.journalPath)
+    const lines = await this.readJsonl<JournalRec>(this.paths.journalPath, 'journal')
     const hit = course ? lines.filter(r => r.course === course) : lines
     return hit.slice(-limit).reverse()
   }
 
   async journalCount(course?: string): Promise<number> {
-    const lines = await this.readJsonl<JournalRec>(this.paths.journalPath)
+    const lines = await this.readJsonl<JournalRec>(this.paths.journalPath, 'journal')
     return course ? lines.filter(r => r.course === course).length : lines.length
   }
 
@@ -61,8 +61,8 @@ export class Store {
    * 打卡/日历热力图与 streak 的数据源——行为流水即事实，零新增文件。 */
   async activityCounts(cutoffMin = 0): Promise<Record<string, { journal: number; practice: number; total: number }>> {
     const [journal, practice] = await Promise.all([
-      this.readJsonl<JournalRec>(this.paths.journalPath),
-      this.readJsonl<PracticeRec>(this.paths.practicePath),
+      this.readJsonl<JournalRec>(this.paths.journalPath, 'journal'),
+      this.readJsonl<PracticeRec>(this.paths.practicePath, 'practice'),
     ])
     const byDay: Record<string, { journal: number; practice: number; total: number }> = {}
     const bump = (ts: string | undefined, key: 'journal' | 'practice') => {
@@ -99,7 +99,7 @@ export class Store {
 
   /** 全部作答记录（节点/课程过滤由调用方做；量级小，全读可接受）。 */
   async practiceAll(): Promise<PracticeRec[]> {
-    return this.readJsonl<PracticeRec>(this.paths.practicePath)
+    return this.readJsonl<PracticeRec>(this.paths.practicePath, 'practice')
   }
 
   // ---- review-log（ADR-0012 逐次复习日志）----
@@ -124,26 +124,10 @@ export class Store {
     return full
   }
 
-  /** 全部复习日志。消费契约：文件缺失 = Missing 合法空态（返回 []）；
-   * 逐行损坏 = Broken 报出（不静默吞——仪表盘/优化器的统计口径不能带病数据）。 */
+  /** 全部复习日志（读侧契约归 readJsonlLines 原语，ADR-0053：缺失 = Missing 合法空态、
+   * 中段坏行 = Broken 报出——仪表盘/优化器的统计口径不能带病数据、撕裂尾行豁免）。 */
   async reviewLogAll(): Promise<ReviewRec[]> {
-    let raw: string
-    try {
-      raw = await this.fs.readFile(this.paths.reviewLogPath)
-    } catch {
-      return []
-    }
-    const out: ReviewRec[] = []
-    for (const [i, line] of raw.split('\n').entries()) {
-      const s = line.trim()
-      if (!s) continue
-      try {
-        out.push(JSON.parse(s) as ReviewRec)
-      } catch {
-        throw new Error(`[review-log] ${this.paths.reviewLogPath} 第 ${i + 1} 行不是合法 JSON（Broken）：修复或删除该行后再试。`)
-      }
-    }
-    return out
+    return readJsonlLines<ReviewRec>(this.paths.reviewLogPath, this.fs, 'review-log')
   }
 
   /** 节点作答统计（attempts/judged/correct/accuracy + 正确率）。勘误冲正按净值计
@@ -320,7 +304,7 @@ export class Store {
 
   /** 全部难度带会话记录（文件缺失 = Missing 合法空态）。 */
   async bandRecsAll(): Promise<BandRec[]> {
-    return this.readJsonl<BandRec>(this.paths.bandLogPath)
+    return this.readJsonl<BandRec>(this.paths.bandLogPath, 'band-log')
   }
 
   // ---- E 档案（ADR-0009 Learner Output 判词存档；#68 E2）----
@@ -339,25 +323,10 @@ export class Store {
     return full
   }
 
-  /** 全部 E 判词档案（文件缺失 = Missing 合法空态；损坏行 = Broken 报出，学习者数据不得无声降级）。 */
+  /** 全部 E 判词档案（读侧契约归 readJsonlLines 原语，ADR-0053：缺失 = Missing 合法
+   * 空态、中段坏行 = Broken 报出——学习者数据不得无声降级）。 */
   async eArchiveAll(): Promise<EArchiveRec[]> {
-    let raw: string
-    try {
-      raw = await this.fs.readFile(this.paths.eArchivePath)
-    } catch {
-      return []
-    }
-    const out: EArchiveRec[] = []
-    for (const [i, line] of raw.split('\n').entries()) {
-      const s = line.trim()
-      if (!s) continue
-      try {
-        out.push(JSON.parse(s) as EArchiveRec)
-      } catch {
-        throw new Error(`[e-archive] ${this.paths.eArchivePath} 第 ${i + 1} 行不是合法 JSON（Broken）：修复或删除该行后再试。`)
-      }
-    }
-    return out
+    return readJsonlLines<EArchiveRec>(this.paths.eArchivePath, this.fs, 'e-archive')
   }
 
   // ---- N-of-1 实验定义（D-1 #110 / ADR-0023；whole-file 原子写）----
@@ -405,26 +374,10 @@ export class Store {
     return rec
   }
 
-  /** 全部回执（调用方按主体过滤）。损坏行 = Broken 报出（同 review-log：证据流水
-   * 不能带病读——静默吞行会让「渐退曲线数错了第几份」）。 */
+  /** 全部回执（调用方按主体过滤；读侧契约归 readJsonlLines 原语，ADR-0053：中段坏行
+   * = Broken 报出——证据流水不能带病读，静默吞行会让「渐退曲线数错了第几份」）。 */
   async receiptsAll(): Promise<ReceiptLogRec[]> {
-    let raw: string
-    try {
-      raw = await this.fs.readFile(this.paths.receiptLogPath)
-    } catch {
-      return []
-    }
-    const out: ReceiptLogRec[] = []
-    for (const [i, line] of raw.split('\n').entries()) {
-      const s = line.trim()
-      if (!s) continue
-      try {
-        out.push(JSON.parse(s) as ReceiptLogRec)
-      } catch {
-        throw new Error(`[receipts] ${this.paths.receiptLogPath} 第 ${i + 1} 行不是合法 JSON（Broken）：修复或删除该行后再试。`)
-      }
-    }
-    return out
+    return readJsonlLines<ReceiptLogRec>(this.paths.receiptLogPath, this.fs, 'receipts')
   }
 
   /** 追加一条习惯重复（自报即事实，无门禁；引擎侧零派生写入）。 */
@@ -434,10 +387,10 @@ export class Store {
     return rec
   }
 
-  /** 全部习惯重复（文件缺失 = Missing 合法空态；损坏行跳过同 journal——重复流是
-   * 展示原料，坏一行不值得一档Broken 拦住全部曲线）。 */
+  /** 全部习惯重复（读侧契约归 readJsonlLines 原语，ADR-0053 一刀切无展示原料例外：
+   * 撕裂尾行豁免已精确覆盖中断场景，中段损坏没有任何无责解释）。 */
   async habitRepeatsAll(): Promise<HabitRepeatRec[]> {
-    return this.readJsonl<HabitRepeatRec>(this.paths.habitRepeatLogPath)
+    return this.readJsonl<HabitRepeatRec>(this.paths.habitRepeatLogPath, 'habit-repeats')
   }
 
   // ---- 勘误冲正流水（ADR-0031）----
@@ -460,12 +413,12 @@ export class Store {
 
   /** 全部勘误冲正记录（文件缺失 = Missing 合法空态）。 */
   async erratumAll(): Promise<ErratumRec[]> {
-    return this.readJsonl<ErratumRec>(this.paths.erratumLogPath)
+    return this.readJsonl<ErratumRec>(this.paths.erratumLogPath, 'erratum')
   }
 
   // ---- utils ----
 
-  private async readJsonl<T>(path: string): Promise<T[]> {
-    return readJsonlLines<T>(path, this.fs)
+  private async readJsonl<T>(path: string, label: string): Promise<T[]> {
+    return readJsonlLines<T>(path, this.fs, label)
   }
 }

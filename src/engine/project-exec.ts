@@ -30,6 +30,7 @@
  * 自评/ai 照收（ADR-0016 自报即可信精神）。零 XP、零 journal、零 review-log、
  * 零 sessions/srs（ADR-0015 §7：节点消费者对 Project 不可见）。
  */
+import { readJsonlLines } from './io.ts'
 import type { VaultFs } from './io.ts'
 import { nextEma, round2, pctOf } from './grading.ts'
 import { FADING_TIERS } from './types.ts'
@@ -253,19 +254,8 @@ export async function appendExecRec(paths: Paths, projectId: string, rec: Projec
   await fs.appendFile(paths.projectExecPath(projectId), JSON.stringify(rec) + '\n')
 }
 
-/** 全部执行事件（文件缺失 = 合法空态；半行损坏跳过，与 journal 同惯例）。 */
+/** 全部执行事件（读侧契约归 readJsonlLines 原语，ADR-0053：缺失 = 合法空态、撕裂尾行
+ * 豁免、中段坏行 = Broken 报出——exec.jsonl 喂练习证据回流，静默丢行是污染场景）。 */
 export async function execRecsAll(paths: Paths, projectId: string, fs: VaultFs): Promise<ProjectExecRec[]> {
-  const p = paths.projectExecPath(projectId)
-  if (!fs.exists(p)) return []
-  const out: ProjectExecRec[] = []
-  for (const line of (await fs.readFile(p)).split('\n')) {
-    const s = line.trim()
-    if (!s) continue
-    try {
-      out.push(JSON.parse(s) as ProjectExecRec)
-    } catch {
-      // 跳过半行损坏（进程中断尾行），与 journal 同惯例
-    }
-  }
-  return out
+  return readJsonlLines<ProjectExecRec>(paths.projectExecPath(projectId), fs, 'exec')
 }

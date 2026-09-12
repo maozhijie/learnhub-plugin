@@ -115,7 +115,7 @@ test('recheckPreregOf：metric 恰一枚枚举锁死、未知键拒收、days �
 
 // ---- 纯函数层：账本 IO 与折叠 ----
 
-test('边实验账本：追加只增、Missing 合法空态、损坏行跳过、写侧坏形状 fail loud', async () => {
+test('边实验账本：追加只增、Missing 合法空态、撕裂尾行豁免、中段坏行 Broken、写侧坏形状 fail loud', async () => {
   await withVault({ graph: TWO_NODE_GRAPH }, async ({ paths }) => {
     // Missing = 合法空态
     assert.deepEqual(await readProbationLedger(paths, 'math', nodeVaultFs), [])
@@ -134,10 +134,16 @@ test('边实验账本：追加只增、Missing 合法空态、损坏行跳过、
       () => appendProbationEntry(paths, 'math', { node: '过渡', pre: [], proposal: -1, due: 10 }, nodeVaultFs),
       /proposal/)
 
-    // 损坏行跳过（手工半行）
+    // 撕裂尾行（末行无换行）跳过——进程中断的物理残留，ADR-0053
     const p = paths.probationLedgerPath('math')
-    await writeFile(p, await readFile(p, 'utf8') + '{broken\n', 'utf8')
+    await writeFile(p, await readFile(p, 'utf8') + '{broken', 'utf8')
     assert.equal((await readProbationLedger(paths, 'math', nodeVaultFs)).length, 2)
+
+    // 中段坏行（换行结尾）= Broken 报出，带路径与行号
+    await writeFile(p, await readFile(p, 'utf8') + '\n{broken\n', 'utf8')
+    await assert.rejects(
+      () => readProbationLedger(paths, 'math', nodeVaultFs),
+      /\[probation\] .+边实验\.jsonl 第 3 行不是合法 JSON（Broken）/)
   })
 })
 

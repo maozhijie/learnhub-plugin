@@ -71,6 +71,7 @@ export type DataCheckReason =
   | 'pre_v2_archive'
   | 'pre_v2_artifact'
   | 'probation_overdue'
+  | 'probation_stream_broken'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -653,8 +654,20 @@ async function scanProbationLedger(
   const ledger = await readProbationLedger(paths, root, fs)
   if (!ledger.length) return { present: false, entries: 0, inFlight: 0, overdue: 0 }
   const fold = foldProbation(ledger)
-  const practice = await readJsonlLines<PracticeRec>(paths.practicePath, fs)
-  const reviews = await readJsonlLines<ReviewRec>(paths.reviewLogPath, fs)
+  // 复诊扫描读 practice/review-log 两条行为流水（ADR-0053：读侧原语中段坏行抛 Broken）：
+  // dataCheck 是钦定的唯一例外形态——读坏流不炸，Broken 报成 finding、该课程 overdue
+  // 结算降级为 0（学习日序列无从计算），体检的本分是可见性，不是第一个被阻断的消费方。
+  let practice: PracticeRec[]
+  let reviews: ReviewRec[]
+  try {
+    practice = await readJsonlLines<PracticeRec>(paths.practicePath, fs, 'practice')
+    reviews = await readJsonlLines<ReviewRec>(paths.reviewLogPath, fs, 'review-log')
+  } catch (err) {
+    push(findings, 'probation_ledger', 'broken', 'probation_stream_broken',
+      `课程「${courseName}」边实验账本复诊扫描 ${paths.probationLedgerPath(root)}`,
+      `${errorText(err)}——行为流水损坏，本课程复诊到期结算降级为 0。`)
+    return { present: true, entries: ledger.length, inFlight: fold.inFlight.length, overdue: 0 }
+  }
   const learningDays = learningDaysOf(practice, reviews, courseName, cutoff, today)
   let proposals: Array<{ id?: unknown; decided?: unknown }> = []
   try {
