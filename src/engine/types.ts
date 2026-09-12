@@ -308,7 +308,8 @@ export interface ExperimentDef {
   assignment:
     | { kind: 'card'; map: Record<string, string> }
     | { kind: 'batch'; start_day: string; order: [string, string] }
-  /** 最短观察窗：每臂 ≥N 次真实推进（ADR-0023 裁决 3，N 随交付票定 = 20）。 */
+  /** 最短观察窗：每臂 ≥N 次真实推进（ADR-0023 裁决 3，N 随交付票定 = 20）；
+   * 练习侧结局（practice_ema）语义 = 每臂 ≥N 次练习评分事件（#135）。 */
   per_arm_min: number
   started_day: string
   started_ts: string

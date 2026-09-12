@@ -10,9 +10,9 @@
  *    无法配置：propose 只收模板 id，模板只从白名单登记。
  * 2. v1 随机化 = 卡级随机化（card=交换单位）与会话级参数的批次交替（按学习日轮臂）；
  *    不建 ABAB/洗脱期等序列设计。
- * 3. 主结局预登记（调度侧 = 真实保留率）；分析 = 臂间比较 + 置换检验 + 效应量区间
- *    （自助法百分位）；报告用直白话；不做序贯监控；最短观察窗 = 每臂 ≥N 次真实推进；
- *    实验开停手动。
+ * 3. 主结局预登记（调度侧 = 真实保留率，练习侧 = EMA 逐次练习评分）；分析 = 臂间
+ *    比较 + 置换检验 + 效应量区间（自助法百分位）；报告用直白话；不做序贯监控；
+ *    最短观察窗 = 每臂 ≥N 次（口径随结局：真实推进 / 练习评分事件）；实验开停手动。
  * 4. 启动走提案-确认制：模板发起 → 引擎给合格卡池与参数 → 学习者逐项确认后开跑。
  * 5. 数据边界：臂标注进复习日志（exp 字段，归因留痕）；零 XP；不进 Mastery/任何
  *    canonical 度量；FSRS 参数优化器默认混训不特判（标注已在，过滤留给未来）。
@@ -20,12 +20,17 @@
  * 抽样与聚合全部零依赖纯函数（complexity.ts 先例）；RNG 播种自实验 id，确定性可测。
  */
 import type { VaultFs } from './io.ts'
-import { calendarDayOf, daysBetween, nowIsoOf, parseDay } from './dates.ts'
+import { calendarDayOf, daysBetween, nowIsoOf, parseDay, dayOfTs } from './dates.ts'
 import type { Clock } from './clock.ts'
 import { nodeKeyOf, sourceKeyOf } from './types.ts'
 import { NOF1_VARIABLE_WHITELIST } from './types.ts'
 import type { ExperimentDef, Nof1Variable } from './types.ts'
-import type { JournalRec } from './types.ts'
+import type { JournalRec, PracticeRec } from './types.ts'
+import type { ReceiptLogRec } from './receipts.ts'
+import { execRatingScore } from './project-exec.ts'
+import type { ProjectExecRec } from './project-exec.ts'
+import { execRecsAll } from './project-exec.ts'
+import { clamp01 } from './grading.ts'
 import { YAML } from './yaml.ts'
 import { atomicWrite, readLearnhubConfig, writeLearnhubConfig } from './io.ts'
 import { runWriteUnit } from './write-unit.ts'
@@ -55,8 +60,11 @@ import type { ThermostatDoc } from './thermostat.ts'
 export { NOF1_VARIABLE_WHITELIST } from './types.ts'
 export type { Nof1Variable, ExperimentDef } from './types.ts'
 
-/** 一条预置实验模板。unlocked=false = 参数未上线/无双变体通道，模板可见不可发起。 */
-export interface Nof1Template {
+/** 一条预置实验模板。unlocked=false = 参数未上线/无双变体通道，模板可见不可发起。
+ * 接口不变式（#135 / ADR-0023 2026-09-13 修订）：练习侧结局是节点 EMA 口径的**跨卡
+ * 折叠**——卡级分臂会把同一张卡的练习分落进单臂（两臂全被污染），类型面直接收窄
+ * practice_ema ⇒ unit=batch；运行时由 nof1TemplateViolation 在 propose/apply 复查。 */
+interface Nof1TemplateBase {
   id: string
   variable: Nof1Variable
   title: string
@@ -64,15 +72,13 @@ export interface Nof1Template {
   question: string
   arms: [string, string]
   arm_labels: Record<string, string>
-  /** card = 卡级随机化；batch = 会话级参数按学习日交替（ADR-0023 裁决 2）。 */
-  unit: 'card' | 'batch'
-  /** 预登记主结局（ADR-0023 裁决 3）：调度侧 = 真实保留率（v1 模板全部此项）；
-   * 练习侧 = EMA（#88/#89 证据通道已上线，分析器与练习侧模板登记待后票）。 */
-  outcome: 'true_retention' | 'practice_ema'
   description: string
   unlocked: boolean
   unlock_note?: string
 }
+export type Nof1Template = Nof1TemplateBase & (
+  | { outcome: 'true_retention'; unit: 'card' | 'batch' }
+  | { outcome: 'practice_ema'; unit: 'batch' })
 
 /** v1 模板库：只收录已上线参数（难度带默认、会话组成）；PS-I/检索点模板随
  * #81/#93 的双变体内容通道解锁（参数本身已在白名单）。 */
@@ -136,7 +142,8 @@ export function nof1Template(id: string): Nof1Template | null {
 // ---- 实验定义与状态（state/实验.json，whole-file 原子写）----
 
 /** 实验定义（apply 提案时生成，start 后不再变动——分臂与结局登记是预注册的）。 */
-/** v1 最短观察窗：每臂 20 次真实推进（到期复习口径）。 */
+/** v1 最短观察窗：每臂 20 次（调度侧 = 真实推进/到期复习口径；练习侧 = 练习评分
+ * 事件，#135——两个口径共用同一 N，语义随预登记结局）。 */
 export const NOF1_PER_ARM_MIN = 20
 
 // ---- 确定性 RNG 与分臂 ----
@@ -166,8 +173,11 @@ export function shuffleAssign(poolKeys: string[], arms: string[], rng: () => num
   return out
 }
 
-/** 批次交替的当日臂：按学习日序数对臂序取模（determinstic、无状态、无需计数器）。 */
-export function nof1ArmForDay(def: ExperimentDef, today: string): string {
+/** 批次交替的当日臂：按学习日序数对臂序取模（determinstic、无状态、无需计数器）。
+ * 参数收窄到实际消费的字段——练习侧结局采集（纯读侧派生）用派生定义调用同一分臂。 */
+export function nof1ArmForDay(
+  def: Pick<ExperimentDef, 'id' | 'assignment' | 'started_day'>, today: string,
+): string {
   if (def.assignment.kind !== 'batch') {
     throw new Error(`[nof1] 实验 #${def.id} 是卡级分臂，没有批次臂。`)
   }
@@ -203,16 +213,18 @@ export function interleaveBySource<T extends { source?: string }>(cards: T[]): T
 
 export interface Nof1ArmStats { arm: string; label: string; n: number; rate: number }
 
-/** 单实验的分析输入：每条一次真实推进的二元结局（1 = 过，0 = 败）与其臂。 */
-export interface Nof1OutcomeRec { arm: string; pass: boolean }
+/** 单实验的分析输入：每条一次评分事件的 0–1 归一结局与其臂。调度侧二元口径
+ * value ∈ {0,1}（真实保留率的过/败）；练习侧连续口径 value ∈ [0,1]（练习评分原值，
+ * #135）。统计机器同一套——「二元比例差」是 0–1 均值差的特例。 */
+export interface Nof1OutcomeRec { arm: string; value: number }
 
 export interface Nof1Analysis {
   ready: boolean
   per_arm: Nof1ArmStats[]
   need_per_arm: number
-  /** 臂间差（臂 B − 臂 A，比例差；未达观察窗为 null）。 */
+  /** 臂间差（臂 B − 臂 A；二元 = 比例差、练习侧 = 均值差；未达观察窗为 null）。 */
   diff: number | null
-  /** 差的 95% 自助法百分位区间（比例差；未达观察窗为 null）。 */
+  /** 差的 95% 自助法百分位区间（口径随结局；未达观察窗为 null）。 */
   ci95: [number, number] | null
   /** 置换检验双侧 p（（含观测）重排比例；未达观察窗为 null）。 */
   p: number | null
@@ -224,15 +236,34 @@ const PERM_ITERS = 9999
 const BOOT_ITERS = 9999
 const round4 = (x: number) => Math.round(x * 10000) / 10000
 
+/** 练习侧结局的措辞件（报告按预登记结局分派，口径数字同一套换算）。 */
+const OUTCOME_WORDING = {
+  true_retention: {
+    subject: '真实保留率',
+    unit: '个百分点',
+    event: '次真实推进',
+    closing: '保留率受多因素影响',
+  },
+  practice_ema: {
+    subject: '练习评分',
+    unit: '分',
+    event: '次练习评分',
+    closing: '练习评分受多因素影响',
+  },
+} as const
+
 /** 主分析（纯函数，播种确定）：臂间比较 + 置换检验 + 自助法 95% 区间；未达
- * 最短观察窗时 ready=false，只给进度不给效应判断（ADR-0023：不做序贯监控）。 */
+ * 最短观察窗时 ready=false，只给进度不给效应判断（ADR-0023：不做序贯监控）。
+ * #135 起按预登记结局分派措辞：二元 = 比例差（百分点），练习侧 = 0–1 均值差
+ * （0–100 分口径）；置换与自助机器同构复用，播种惯例（9000+id）不变。 */
 export function analyzeNof1(
   recs: Nof1OutcomeRec[],
-  def: Pick<ExperimentDef, 'arms' | 'arm_labels' | 'per_arm_min'>,
+  def: Pick<ExperimentDef, 'arms' | 'arm_labels' | 'per_arm_min' | 'outcome'>,
   seed: number,
 ): Nof1Analysis {
   const [armA, armB] = def.arms
-  const vals = (arm: string) => recs.filter(r => r.arm === arm).map(r => (r.pass ? 1 : 0))
+  const wording = OUTCOME_WORDING[def.outcome]
+  const vals = (arm: string) => recs.filter(r => r.arm === arm).map(r => r.value)
   const va = vals(armA!)
   const vb = vals(armB!)
   const rate = (v: number[]) => (v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0)
@@ -250,7 +281,7 @@ export function analyzeNof1(
     p: null as number | null,
     message: '',
   }
-  const progress = `还在积累数据：${def.arm_labels[armA!] ?? armA} ${va.length}/${def.per_arm_min} 次、${def.arm_labels[armB!] ?? armB} ${vb.length}/${def.per_arm_min} 次真实推进。样本到了再看结论。`
+  const progress = `还在积累数据：${def.arm_labels[armA!] ?? armA} ${va.length}/${def.per_arm_min} 次、${def.arm_labels[armB!] ?? armB} ${vb.length}/${def.per_arm_min} ${wording.event}。样本到了再看结论。`
   if (!ready) {
     return { ...base, message: progress }
   }
@@ -285,15 +316,16 @@ export function analyzeNof1(
   boots.sort((a, b) => a - b)
   const q = (x: number) => boots[Math.min(boots.length - 1, Math.max(0, Math.round(x * (boots.length - 1))))]!
   const ci95: [number, number] = [round4(q(0.025)), round4(q(0.975))]
-  const pp = Math.round(Math.abs(obsDiff) * 10000) / 100
+  const pct = Math.round(Math.abs(obsDiff) * 10000) / 100
+  const fmt = (x: number) => Math.round(x * 10000) / 100
   const dir = obsDiff > 0
-    ? `「${def.arm_labels[armB!] ?? armB}」期间你的真实保留率比「${def.arm_labels[armA!] ?? armA}」高 ${pp} 个百分点`
+    ? `「${def.arm_labels[armB!] ?? armB}」期间你的${wording.subject}比「${def.arm_labels[armA!] ?? armA}」高 ${pct} ${wording.unit}`
     : obsDiff < 0
-      ? `「${def.arm_labels[armB!] ?? armB}」期间你的真实保留率比「${def.arm_labels[armA!] ?? armA}」低 ${pp} 个百分点`
-      : '两臂的真实保留率基本持平'
-  const ciText = `95% 区间 ${Math.round(ci95[0]! * 10000) / 100}～${Math.round(ci95[1]! * 10000) / 100} 个百分点`
-  const message = `${dir}（${ciText}；置换检验 p=${round4(p)}；每臂各 ${def.per_arm_min}+ 次真实推进）。`
-    + '这是你身上的个体效应（N-of-1），不是人群结论；保留率受多因素影响，别把差异全归给这一个参数。'
+      ? `「${def.arm_labels[armB!] ?? armB}」期间你的${wording.subject}比「${def.arm_labels[armA!] ?? armA}」低 ${pct} ${wording.unit}`
+      : `两臂的${wording.subject}基本持平`
+  const ciText = `95% 区间 ${fmt(ci95[0]!)}～${fmt(ci95[1]!)} ${wording.unit}`
+  const message = `${dir}（${ciText}；置换检验 p=${round4(p)}；每臂各 ${def.per_arm_min}+ ${wording.event}）。`
+    + `这是你身上的个体效应（N-of-1），不是人群结论；${wording.closing}，别把差异全归给这一个参数。`
   return { ...base, diff: round4(obsDiff), ci95, p: round4(p), message }
 }
 
@@ -310,7 +342,71 @@ export function nof1Outcomes(logs: ReviewRec[], expId: number): Nof1OutcomeRec[]
     const key = `${sourceKeyOf(rec.course, rec.node, rec.qid)}/${calendarDayOf(rec.ts)}` // 去重桶：出处时间戳的日历日
     if (seen.has(key)) continue
     seen.add(key)
-    out.push({ arm: rec.exp.arm, pass: rec.rating >= 2 })
+    out.push({ arm: rec.exp.arm, value: rec.rating >= 2 ? 1 : 0 })
+  }
+  return out
+}
+
+// ---- 练习侧结局（practice_ema）采集：#135 / ADR-0023 2026-09-13 修订 ----
+
+/** 练习侧结局的三股读侧输入（凡折叠进节点 practice_ema 的逐次评分，#88/#89 通道）。 */
+export interface Nof1PracticeStreams {
+  /** 交互作答流水（state/practice.jsonl）。 */
+  practice: PracticeRec[]
+  /** 回执量表评审流水（state/回执.jsonl）。 */
+  receipts: ReceiptLogRec[]
+  /** 项目执行事件回流（projects/<id>/exec.jsonl 全项目汇总）。 */
+  exec: ProjectExecRec[]
+}
+
+/** 模板接口不变式（#135 / ADR-0023 2026-09-13 修订）的运行时复查：返回违规文案或
+ * null。类型面已把 practice_ema ⇒ unit=batch 收窄进 Nof1Template，此处防的是手工
+ * 构造的模板形状（NOF1_TEMPLATES 之外的调用方）与 apply 环节的产物偷换。 */
+export function nof1TemplateViolation(
+  tpl: Pick<Nof1Template, 'id' | 'outcome' | 'unit'>,
+): string | null {
+  if (tpl.outcome === 'practice_ema' && tpl.unit !== 'batch') {
+    return `模板「${tpl.id}」违反接口不变式：练习侧结局（practice_ema）是节点 EMA 口径的跨卡折叠，只配批次交替（unit=batch）——卡级分臂会把同一张卡的练习分落进单臂，两臂全被污染。`
+  }
+  return null
+}
+
+/** 练习侧结局采集（纯读侧派生，免新增写侧标注——expTag 只管复习日志，裁决 5 不动）：
+ * 三股练习评分流 → 逐次 0–1 评分事件，按**事件发生学习日**（过日界，ADR-0020）归
+ * 当日臂。各股分值即写侧折叠进 EMA 的原值：
+ * - 作答：对错二元（content-subsystem 折叠 correct?1:0——连续判卷分不进 EMA，无失真）；
+ *   judge='review' 的 anki 回放行是调度入账、不折叠节点 EMA，不入局。
+ * - 回执：量表分 0–1 原值（receipts.fold 同权入 EMA）。
+ * - 执行事件回流：评级映射 execRatingScore（与 projects 回流同一映射）；一事件一
+ *   评分（回流到 k 个节点是同一分数的复制，逐节点计数会伪重复膨胀样本）。
+ * 窗口 = started_day 起、stopped_day 止（定稿后事件不入局）；scope_course 只约束
+ * 课程附着流（作答/回执）——执行事件跨课程无课程归属，不受该过滤。 */
+export function nof1PracticeOutcomes(
+  def: Pick<ExperimentDef, 'assignment' | 'scope_course' | 'started_day' | 'stopped_day'>,
+  streams: Nof1PracticeStreams,
+  cutoffMin = 0,
+): Nof1OutcomeRec[] {
+  const endDay = def.stopped_day ?? null
+  const inWindow = (day: string) => day >= def.started_day && (!endDay || day <= endDay)
+  const armOf = (day: string) => nof1ArmForDay(def as ExperimentDef, day)
+  const inScope = (course: string) => !def.scope_course || course === def.scope_course
+  const out: Nof1OutcomeRec[] = []
+  for (const r of streams.practice) {
+    if (r.judge === 'review') continue
+    if (r.correct !== true && r.correct !== false) continue
+    if (!inScope(r.course)) continue
+    const day = dayOfTs(r.ts, cutoffMin)
+    if (!inWindow(day)) continue
+    out.push({ arm: armOf(day), value: r.correct ? 1 : 0 })
+  }
+  for (const r of streams.receipts) {
+    if (!inScope(r.course)) continue
+    if (!inWindow(r.day)) continue
+    out.push({ arm: armOf(r.day), value: clamp01(r.score) })
+  }
+  for (const r of streams.exec) {
+    if (!inWindow(r.day)) continue
+    out.push({ arm: armOf(r.day), value: execRatingScore(r.rating) })
   }
   return out
 }
@@ -331,6 +427,9 @@ export interface LabStore {
   takePending(kind: ProposalRec['kind'], pid?: number): Promise<ProposalRec>
   reviewLogAll(): Promise<ReviewRec[]>
   bandRecsAll(): Promise<BandRec[]>
+  /** 练习侧结局的两股课程附着流（#135；执行事件流走 paths+fs+projects.list）。 */
+  practiceAll(): Promise<PracticeRec[]>
+  receiptsAll(): Promise<ReceiptLogRec[]>
   /** 写入单元的 journal sink（#176：experimentStop 末尾的 write_unit 条目）。 */
   appendJournal(rec: JournalRec): Promise<JournalRec>
 }
@@ -414,7 +513,8 @@ export class LabSubsystem {
   }
 
   /** 提案-确认制第一步：模板发起 → pending experiment 提案（参数与合格卡池随提案
-   * 给学习者过目）。白名单外/未解锁模板 fail loud；已有实验在跑拒绝（v1 单实验）。 */
+   * 给学习者过目）。白名单外/未解锁模板 fail loud；已有实验在跑拒绝（v1 单实验）；
+   * 模板接口不变式（practice_ema ⇒ batch）运行时复查（#135）。 */
   async experimentPropose(
     templateId: string, course?: string,
   ): Promise<{ proposal: number; template: string; title: string; pool: number; scope_course: string | null }> {
@@ -425,6 +525,8 @@ export class LabSubsystem {
     if (!tpl.unlocked) {
       throw new Error(`[nof1] 模板「${tpl.title}」未解锁：${tpl.unlock_note ?? '参数未上线'}。`)
     }
+    const violation = nof1TemplateViolation(tpl)
+    if (violation) throw new Error(`[nof1] ${violation}`)
     if (course) await this.e.registry.resolve(course)
     const running = await this.nof1Active()
     if (running) {
@@ -432,7 +534,8 @@ export class LabSubsystem {
     }
     const pool = (await this.nof1PoolKeys(course ?? null)).length
     const armText = tpl.arms.map(a => tpl.arm_labels[a] ?? a).join(' / ')
-    const summary = `${tpl.title}（N-of-1 提案）：主结局=真实保留率；臂 ${armText}；${tpl.unit === 'batch' ? '按学习日轮臂（批次交替）' : '卡级随机分臂'}；合格卡池 ${pool} 张；最短观察窗每臂 ${NOF1_PER_ARM_MIN} 次真实推进。确认后开跑。`
+    const wording = OUTCOME_WORDING[tpl.outcome]
+    const summary = `${tpl.title}（N-of-1 提案）：主结局=${wording.subject}；臂 ${armText}；${tpl.unit === 'batch' ? '按学习日轮臂（批次交替）' : '卡级随机分臂'}；合格卡池 ${pool} 张；最短观察窗每臂 ${NOF1_PER_ARM_MIN} ${wording.event}。确认后开跑。`
     const doc = {
       template: tpl.id, variable: tpl.variable, title: tpl.title, question: tpl.question,
       outcome: tpl.outcome, arms: tpl.arms, arm_labels: tpl.arm_labels, unit: tpl.unit,
@@ -465,12 +568,14 @@ export class LabSubsystem {
     }
     const tpl = doc.template ? nof1Template(doc.template) : null
     if (!tpl || tpl.variable !== doc.variable || !NOF1_VARIABLE_WHITELIST.includes(doc.variable as Nof1Variable)
-      || (doc.outcome !== 'true_retention' && doc.outcome !== 'practice_ema')
+      || (doc.outcome !== 'true_retention' && doc.outcome !== 'practice_ema') || doc.outcome !== tpl.outcome
       || doc.unit !== tpl.unit
       || !Array.isArray(doc.arms) || doc.arms.length !== 2 || doc.arms[0] !== tpl.arms[0] || doc.arms[1] !== tpl.arms[1]
       || !doc.title) {
-      throw new Error(`[nof1-apply] 提案产物与模板不一致或白名单校验失败（template=${String(doc.template)} variable=${String(doc.variable)}）。`)
+      throw new Error(`[nof1-apply] 提案产物与模板不一致或白名单校验失败（template=${String(doc.template)} variable=${String(doc.variable)} outcome=${String(doc.outcome)}）。预登记口径（含结局）不可在确认环节被偷换（#135）。`)
     }
+    const violation = nof1TemplateViolation(tpl)
+    if (violation) throw new Error(`[nof1-apply] ${violation}`)
     const { today } = await this.e.learningDay()
     const list = await this.e.store.loadExperiments()
     const def: ExperimentDef = {
@@ -554,23 +659,31 @@ export class LabSubsystem {
     return hit
   }
 
-  /** 实验结局分析（report 与 stop 共用的唯一口径，#150）：调度侧二元结局可析
-   * （种子约定 9000+id 与报告一致）；练习侧（EMA）分析器待后票，占位结论如实落档。 */
+  /** 实验结局分析（report 与 stop 共用的唯一口径，#150）：按预登记结局分派——
+   * 调度侧 = 复习日志 exp 标注的二元真实保留率；练习侧（#135）= 三股练习评分流的
+   * 逐次 0–1 评分（nof1PracticeOutcomes 纯读侧派生），播种惯例 9000+id 两侧一致。 */
   private async nof1AnalysisOf(hit: ExperimentDef): Promise<Nof1Analysis> {
-    if (hit.outcome !== 'true_retention') {
-      return {
-        ready: false, per_arm: [], need_per_arm: hit.per_arm_min,
-        diff: null, ci95: null, p: null,
-        message: '该实验预登记了练习侧结局（EMA）：EMA 分析器与练习侧模板登记待后票落地；臂标注已在积累。',
+    if (hit.outcome === 'practice_ema') {
+      const { cutoff } = await this.e.learningDay()
+      const exec: ProjectExecRec[] = []
+      for (const p of await this.e.projects.list()) {
+        exec.push(...await execRecsAll(this.e.paths, p.id, this.e.fs))
       }
+      const recs = nof1PracticeOutcomes(hit, {
+        practice: await this.e.store.practiceAll(),
+        receipts: await this.e.store.receiptsAll(),
+        exec,
+      }, cutoff)
+      return analyzeNof1(recs, hit, 9000 + hit.id)
     }
     const recs = nof1Outcomes(await this.e.store.reviewLogAll(), hit.id)
     return analyzeNof1(recs, hit, 9000 + hit.id)
   }
 
   /** 直白话报告（臂间比较+置换检验+效应量区间；ADR-0023 裁决 3）。未达最短观察窗
-   * 只报进度不做效应判断；running = 期中读数，stopped = 定稿。练习侧结局（EMA）
-   * 的证据通道已上线（#88/#89），登记在案但 v1 分析器只支持调度侧二元结局。 */
+   * 只报进度不做效应判断；running = 期中读数，stopped = 定稿。练习侧结局（EMA，
+   * #88/#89 证据通道）自 #135 起与调度侧同一分析器：0–1 均值差口径、按事件学习日
+   * 归当日臂（纯读侧派生）。 */
   async experimentReport(id?: number): Promise<{ experiment: ExperimentDef; analysis: Nof1Analysis }> {
     const list = await this.e.store.loadExperiments()
     const hit = id !== undefined

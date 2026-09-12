@@ -4,7 +4,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import type { ReviewRec } from '../src/engine/types.ts'
 import {
   NOF1_TEMPLATES, NOF1_VARIABLE_WHITELIST, NOF1_PER_ARM_MIN,
-  shuffleAssign, nof1ArmForDay, interleaveBySource, analyzeNof1, nof1Outcomes, mulberry32,
+  shuffleAssign, nof1ArmForDay, interleaveBySource, analyzeNof1, nof1Outcomes, nof1PracticeOutcomes,
+  nof1TemplateViolation, mulberry32,
 } from '../src/engine/nof1.ts'
 import type { ExperimentDef, Nof1OutcomeRec } from '../src/engine/nof1.ts'
 import { readFile } from 'node:fs/promises'
@@ -59,7 +60,7 @@ test('纯函数：混排把非题卡均匀摊进题卡序列，两列各自保�
 
 // ---- 纯函数：统计口径 ----
 
-const rec = (arm: string, pass: boolean): Nof1OutcomeRec => ({ arm, pass })
+const rec = (arm: string, pass: boolean): Nof1OutcomeRec => ({ arm, value: pass ? 1 : 0 })
 const bulk = (arm: string, n: number, passes: number): Nof1OutcomeRec[] =>
   Array.from({ length: n }, (_, i) => rec(arm, i < passes))
 
@@ -100,8 +101,8 @@ test('纯函数：结局提取——只取 auto/self 到期首推、按 exp id �
   ]
   const out = nof1Outcomes(log, 1)
   assert.deepEqual(out, [
-    { arm: 'standard', pass: true },
-    { arm: 'hard', pass: true },
+    { arm: 'standard', value: 1 },
+    { arm: 'hard', value: 1 },
   ], 'synthetic/首学/无标注/他实验排除；同卡同日只取第一次')
 })
 
@@ -122,6 +123,111 @@ test('纯函数：白名单与模板库口径——调度核心不入白名单�
   )
   assert.equal(NOF1_PER_ARM_MIN, 20)
 })
+
+// ---- #135 练习侧结局（practice_ema）：0–1 均值差口径 ----
+
+const val = (arm: string, values: number[]): Nof1OutcomeRec[] => values.map(v => ({ arm, value: v }))
+const PRACTICE_DEF = {
+  ...BATCH_DEF,
+  outcome: 'practice_ema' as const,
+  arms: ['ai', 'self'] as [string, string],
+  arm_labels: { ai: 'AI 评审', self: '学习者自评' },
+}
+
+test('纯函数：练习侧连续口径——均值差同一套置换+自助机器，rate 语义为均分、措辞换算成分', () => {
+  const recs = [...val('ai', [0.2, 0.4, 0.6, 0.2, 0.4, 0.6]), ...val('self', [0.8, 0.6, 0.8, 0.6, 0.8, 0.6])]
+  const def = { ...PRACTICE_DEF, per_arm_min: 6 }
+  const a = analyzeNof1(recs, def, 42)
+  assert.equal(a.ready, true)
+  assert.equal(a.per_arm[0]!.rate, 0.4, 'rate 在练习侧语义为均分')
+  assert.equal(a.per_arm[1]!.rate, 0.7)
+  assert.equal(a.diff, 0.3)
+  assert.ok(a.p! < 0.05, `p=${a.p}`)
+  assert.match(a.message, /高 30 分/, '效应差按 0–100 分口径渲染')
+  assert.match(a.message, /练习评分/)
+  assert.match(a.message, /个体效应（N-of-1）/)
+  assert.match(a.message, /不是人群结论/)
+  assert.deepEqual(a, analyzeNof1(recs, def, 42), '同种子同报告（播种确定）')
+  // 大数信噪：显著且区间在正侧
+  const strong = analyzeNof1(
+    [...val('ai', Array.from({ length: 20 }, () => 0.3)), ...val('self', Array.from({ length: 20 }, () => 0.7))],
+    def, 42,
+  )
+  assert.ok(strong.ci95![0]! > 0, '区间整体在正侧')
+})
+
+test('纯函数：练习侧未达观察窗只报进度——措辞为「次练习评分」；二元口径措辞不变', () => {
+  const interim = analyzeNof1(val('ai', [0.8]), { ...PRACTICE_DEF, per_arm_min: 20 }, 7)
+  assert.equal(interim.ready, false)
+  assert.equal(interim.diff, null)
+  assert.match(interim.message, /还在积累数据/)
+  assert.match(interim.message, /1\/20 次、.*0\/20 次练习评分/)
+  const binaryInterim = analyzeNof1([...bulk('standard', 5, 4), ...bulk('hard', 3, 1)], BATCH_DEF, 7)
+  assert.match(binaryInterim.message, /3\/20 次真实推进/, '调度侧口径措辞保持原样')
+})
+
+test('纯函数：模板接口不变式——practice_ema 只配 batch（卡级分臂必污染跨卡折叠）', () => {
+  assert.equal(nof1TemplateViolation({ id: 't', outcome: 'true_retention', unit: 'card' }), null)
+  assert.equal(nof1TemplateViolation({ id: 't', outcome: 'true_retention', unit: 'batch' }), null)
+  assert.equal(nof1TemplateViolation({ id: 't', outcome: 'practice_ema', unit: 'batch' }), null)
+  assert.match(
+    nof1TemplateViolation({ id: 't', outcome: 'practice_ema', unit: 'card' }) ?? '',
+    /practice_ema.*batch|批次/,
+  )
+})
+
+test('纯函数：练习侧结局采集——三股流合并、按事件学习日归当日臂、窗口与范围过滤', () => {
+  // 09-01 → ai、09-02 → self、09-03 → ai、09-04 → self（order 原样）
+  const def = {
+    ...PRACTICE_DEF,
+    scope_course: '数学' as string | null,
+    assignment: { kind: 'batch' as const, start_day: '2026-09-01', order: ['ai', 'self'] as [string, string] },
+    started_day: '2026-09-01', stopped_day: '2026-09-04',
+  }
+  const streams = {
+    practice: [
+      { ts: '2026-09-01T10:00:00', course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice' },
+      { ts: '2026-09-02T10:00:00', course: '数学', node: '入门', ex: 1, answer: '', correct: false, judge: 'forget' },
+      { ts: '2026-08-31T10:00:00', course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice' },
+      { ts: '2026-09-03T10:00:00', course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'review' },
+      { ts: '2026-09-03T11:00:00', course: '物理', node: '力学', ex: 1, answer: '错', correct: false, judge: 'single_choice' },
+    ],
+    receipts: [
+      { id: 'r1', ts: '2026-09-02T12:00:00', course: '数学', node: '入门', day: '2026-09-02', kind: 'text' as const, review_mode: 'full' as const, score: 0.8, verdict: '好' },
+      { id: 'r2', ts: '2026-09-05T12:00:00', course: '数学', node: '入门', day: '2026-09-05', kind: 'text' as const, review_mode: 'brief' as const, score: 0.9, verdict: '好' },
+    ],
+    exec: [
+      { ts: '2026-09-04T12:00:00', day: '2026-09-04', rating: 4 as const, source: 'ai' as const, nodes: ['入门'], tier: '骨架' as const },
+    ],
+  }
+  const out = nof1PracticeOutcomes(def, streams, 0)
+  assert.deepEqual(out, [
+    { arm: 'ai', value: 1 },
+    { arm: 'self', value: 0 },
+    { arm: 'self', value: 0.8 },
+    { arm: 'self', value: 0.95 },
+  ], '窗前作答/anki 回放/scope 外课程/停后回执全部不入局；执行事件按评级映射 0–1（09-04 当日臂 = self）')
+})
+
+test('纯函数：练习侧结局采集——过日界换算（凌晨作答归前一学习日）与卡级定义 fail loud', () => {
+  const def = {
+    ...PRACTICE_DEF,
+    assignment: { kind: 'batch' as const, start_day: '2026-09-01', order: ['ai', 'self'] as [string, string] },
+    started_day: '2026-09-01', stopped_day: undefined,
+  }
+  const lateNight = nof1PracticeOutcomes(def, {
+    practice: [{ ts: '2026-09-02T00:30:00', course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice' }],
+    receipts: [], exec: [],
+  }, 120)
+  assert.deepEqual(lateNight, [{ arm: 'ai', value: 1 }], 'cutoff 120 分钟：09-02 凌晨 00:30 归 09-01 的臂')
+  const oneRow = { ts: '2026-09-01T10:00:00', course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice' }
+  assert.throws(
+    () => nof1PracticeOutcomes({ ...def, assignment: { kind: 'card' as const, map: {} } }, { practice: [oneRow], receipts: [], exec: [] }, 0),
+    /卡级分臂/,
+    '卡级练习侧定义结构上已被 apply 拒绝，防御性 fail loud',
+  )
+})
+
 
 // ---- 行为：提案-确认制全链路 ----
 
@@ -323,20 +429,87 @@ test('会组成实验：混排臂在全局队列带出 exp 标注；报告从预
   })
 })
 
-test('存储契约：实验文件条目不满足定义形状 → Broken 报出不静默；练习侧结局登记后报告如实说未解锁', async () => {
+test('存储契约：实验文件条目不满足定义形状 → Broken 报出不静默；apply 拒绝改写预登记结局', async () => {
   await withVault({}, async ({ engine }) => {
     const { mkdir, writeFile } = await import('node:fs/promises')
     await mkdir(engine.paths.centerStateDir, { recursive: true })
     await writeFile(engine.paths.experimentsPath, JSON.stringify([{ id: 'oops' }]), 'utf8')
     await assert.rejects(() => engine.lab.experimentList(), /不满足实验定义契约|Broken/, '形状损坏不是合法空态')
 
-    // 练习侧结局（EMA）：预登记在案，分析器未实现——报告不假装能算
-    await writeFile(engine.paths.experimentsPath, JSON.stringify([{
-      ...BATCH_DEF, outcome: 'practice_ema', status: 'stopped', stopped_day: '2026-09-09',
-    }]), 'utf8')
-    const report = await engine.lab.experimentReport(1)
-    assert.equal(report.experiment.outcome, 'practice_ema')
-    assert.equal(report.analysis.ready, false)
-    assert.match(report.analysis.message, /练习侧结局（EMA）|#88\/#89/)
+    // 手工改写提案产物把结局从 true_retention 换成 practice_ema：apply 校验拒绝
+    // （产物必须与模板逐字段一致——预登记口径不可在确认环节被偷换，#135）
+    await writeFile(engine.paths.experimentsPath, '[]', 'utf8')
+    const prop = await engine.lab.experimentPropose('band_default_std_vs_hard')
+    const artifactPath = engine.paths.proposalArtifactPath(prop.proposal, 'experiment', '全部课程')
+    const artifact = await readFile(artifactPath, 'utf8')
+    await writeFile(artifactPath, artifact.replace('true_retention', 'practice_ema'), 'utf8')
+    await assert.rejects(() => engine.lab.experimentApply(prop.proposal), /practice_ema|不一致/)
   })
 })
+
+// ---- #135 练习侧结局全链路：三股流读侧派生 → 报告解锁 → 停机正典带均值差 ----
+
+test('#135 练习侧结局：practice_ema 报告从 practice/回执/exec 三股流出真实分析，停机正典 payload 结构零改动', async () => {
+  await withVault({
+    banks: { 入门: [tfQuestion('a1', { fsrs: { stability: 5, difficulty: 5, due: '2024-01-01', last_review: '2024-01-01', reps: 3, lapses: 0 } })] },
+  }, async ({ engine }) => {
+    const { mkdir, writeFile } = await import('node:fs/promises')
+    await mkdir(engine.paths.centerStateDir, { recursive: true })
+    const today = (await engine.content2.reviewQueue('数学', '入门')).date
+    const yday = addDays(today, -1)!
+    // 手写一个 practice_ema 批次实验（模板登记归 #203；本票解锁分析器与报告）
+    await writeFile(engine.paths.experimentsPath, JSON.stringify([{
+      ...BATCH_DEF,
+      outcome: 'practice_ema',
+      arms: ['ai', 'self'],
+      arm_labels: { ai: 'AI 评审', self: '学习者自评' },
+      assignment: { kind: 'batch', start_day: yday, order: ['ai', 'self'] },
+      started_day: yday,
+    }]), 'utf8')
+    // 三股练习评分流：昨日 ai 臂（作答对 1 + 回执 0.8 → 均分 0.9）、今日 self 臂（作答错 0 + 回执 0.4 → 均分 0.2）
+    await writeFile(engine.paths.practicePath, [
+      JSON.stringify({ ts: `${yday}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice' }),
+      JSON.stringify({ ts: `${today}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '错', correct: false, judge: 'single_choice' }),
+      JSON.stringify({ ts: `${today}T11:00:00`, course: '数学', node: '入门', ex: 2, answer: '对', correct: true, judge: 'review' }),
+    ].join('\n') + '\n', 'utf8')
+    await writeFile(engine.paths.receiptLogPath, [
+      JSON.stringify({ id: 'r1', ts: `${yday}T12:00:00`, course: '数学', node: '入门', day: yday, kind: 'text', review_mode: 'full', score: 0.8, verdict: '好' }),
+      JSON.stringify({ id: 'r2', ts: `${today}T12:00:00`, course: '数学', node: '入门', day: today, kind: 'text', review_mode: 'brief', score: 0.4, verdict: '一般' }),
+    ].join('\n') + '\n', 'utf8')
+
+    const report = await engine.lab.experimentReport(1)
+    assert.equal(report.analysis.ready, false, '每臂 1 组样本 < 20，未达观察窗')
+    assert.deepEqual(report.analysis.per_arm, [
+      { arm: 'ai', label: 'AI 评审', n: 2, rate: 0.9 },
+      { arm: 'self', label: '学习者自评', n: 2, rate: 0.2 },
+    ], '练习侧 rate = 均分：作答二元分 + 回执量表分按日折进当日臂')
+
+    // 灌满观察窗：两侧各补足 20 条同分布评分（回执流清零，让均分数字干净）→ 定稿出均值差
+    await writeFile(engine.paths.receiptLogPath, '', 'utf8')
+    const fill = (day: string, correct: boolean) =>
+      Array.from({ length: 19 }, (_, i) => JSON.stringify({
+        ts: `${day}T13:${String(i).padStart(2, '0')}:00`, course: '数学', node: '入门',
+        ex: i + 3, answer: 'x', correct, judge: 'single_choice',
+      }))
+    await writeFile(engine.paths.practicePath, [
+      JSON.stringify({ ts: `${yday}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '对', correct: true, judge: 'single_choice' }),
+      ...fill(yday, true),
+      JSON.stringify({ ts: `${today}T10:00:00`, course: '数学', node: '入门', ex: 1, answer: '错', correct: false, judge: 'single_choice' }),
+      ...fill(today, false),
+    ].join('\n') + '\n', 'utf8')
+
+    const stopped = await engine.lab.experimentStop(1)
+    assert.equal(stopped.status, 'stopped')
+    const fold = await engine.sched2.sedimentFold()
+    const payload = fold.events.find(e => e.kind === 'nof1_outcome')!.payload as Record<string, unknown>
+    assert.equal(payload.outcome, 'practice_ema')
+    assert.equal(payload.ready, true, '每臂 20 次练习评分达窗')
+    assert.equal(payload.diff, -1, 'diff = 臂B−臂A = self 臂均分 0 − ai 臂均分 1')
+    assert.deepEqual(payload.per_arm, [
+      { arm: 'ai', label: 'AI 评审', n: 20, rate: 1 },
+      { arm: 'self', label: '学习者自评', n: 20, rate: 0 },
+    ], '停机正典 payload 结构与调度侧零改动，diff 语义随结局变为均值差')
+    assert.match(String(payload.message), /低 100 分/)
+  })
+})
+
