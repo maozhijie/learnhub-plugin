@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 import type { IncomingMessage } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import { LearnhubEngine } from '../src/engine/index.ts'
-import { createHostRuntime } from '../src/host/runtime.ts'
+import { createHostRuntime, resolveEngineEntry } from '../src/host/runtime.ts'
 import type { HostRuntime } from '../src/host/runtime.ts'
 import { handleApi } from '../src/host/api.ts'
 import {
@@ -100,6 +100,16 @@ function stubContentPipeline(rt: HostRuntime, opts: { saved?: Array<Array<unknow
 }
 
 // ---------------------------------------------------------------- runtime 构造
+
+test('resolveEngineEntry：抽函数展开调用必须携带接收者（#190——真引擎组合缝）', async () => {
+  // 路由/工具探针把引擎方法影子化为录制替身——替身不用 this，unbound 缺陷对快照
+  // 不可见（#182 批A 引入抽函数裸调用后面板注册表路由全 500，三层验收全数穿透）。
+  // 本测试用真引擎补上「分发器 ↔ 真引擎」的组合缝：点路径绑子系统实例、裸名绑 hub。
+  const rt = makeRuntime()
+  const tree = await (resolveEngineEntry(rt, 'content2.coursesTree') as () => Promise<{ courses: unknown[] }> )()
+  assert.ok(Array.isArray(tree.courses), '点路径引擎入口丢 this（子系统方法 this.e undefined）')
+  await (resolveEngineEntry(rt, 'statusJson') as () => Promise<unknown>)()
+})
 
 test('createHostRuntime：部署校验 fail loud（缺失/不存在不做静默兜底）', () => {
   const ctx = fakeCtx()

@@ -159,18 +159,21 @@ const LOG_LIMIT = 1500
 
 /** 注册表 engine 字段 → 可调用引擎入口（ADR-0049 C 形态）：
  * 子系统方法写 `<子系统>.<方法>` 点路径，hub 装配域方法保留裸名。
- * 仅此一处做字符串查表；调用方仍以 (...args) 展开传参。 */
+ * 仅此一处做字符串查表；调用方仍以 (...args) 展开传参。
+ * 返回前必须 bind 接收者（#190）：调用点是裸函数展开调用，类方法的 `this.e`
+ * 门面引用依赖绑定——抽函数不绑定 = 凡用 this 的引擎入口全 500（桩替身不用
+ * this，探针快照看不见该缺陷）。 */
 export function resolveEngineEntry(rt: HostRuntime, engine: string): (...a: never[]) => unknown {
   const dot = engine.indexOf('.')
   if (dot < 0) {
     const fn = (rt.engine as unknown as Record<string, unknown>)[engine]
     if (typeof fn !== 'function') throw new Error(`[engine] 门面没有引擎入口 ${engine}`)
-    return fn as (...a: never[]) => unknown
+    return (fn as (...a: never[]) => unknown).bind(rt.engine)
   }
   const sub = (rt.engine as unknown as Record<string, unknown>)[engine.slice(0, dot)]
   const fn = sub ? (sub as Record<string, unknown>)[engine.slice(dot + 1)] : undefined
   if (typeof fn !== 'function') throw new Error(`[engine] 引擎入口不存在：${engine}`)
-  return fn as (...a: never[]) => unknown
+  return (fn as (...a: never[]) => unknown).bind(sub)
 }
 
 /** 运行日志：每次引擎调用的记录（工具名 + 输出摘要）。 */
