@@ -1200,8 +1200,8 @@ export class LearnerSubsystem {
       if (input.force_full === true) {
         throw new Error('[receipt-submit] 今日是自评臂（回执评审实验）——force_full 是 AI 评审深度的越级请求，自评日无 AI 评审可越。')
       }
-    } else if (input.self_score !== undefined) {
-      throw new Error('[receipt-submit] 今日是 AI 评审臂（回执评审实验或默认档）——self_score 只在自评臂日受理，评分归 AI 量表评审。')
+    } else if (input.self_score !== undefined || input.self_verdict !== undefined) {
+      throw new Error('[receipt-submit] 今日是 AI 评审臂（回执评审实验或默认档）——self_score/self_verdict 只在自评臂日受理，评分归 AI 量表评审。')
     }
     const points = await this.explainPoints(c, graph, node)
     const result = await submitReceipt({
@@ -1277,11 +1277,13 @@ export class LearnerSubsystem {
     const c = await this.e.registry.resolve(courseKey)
     const all = await this.e.store.receiptsAll()
     const receipts = all.filter(r => r.course === c.name && r.node === node)
+    // 渐退位只数 AI 评审回执（#203 / ADR-0056）：自评回执不产 AI 反馈、不消耗频率位
+    const aiCount = receipts.filter(r => r.source !== 'self').length
     return {
       course: c.name, node, receipts,
       total: receipts.length,
       // 空态 = 1：首份回执即完整评审（与纯函数 receiptsUntilNextFull 同一口径）
-      next_full_in: receiptsUntilNextFull(receipts.length),
+      next_full_in: receiptsUntilNextFull(aiCount),
     }
   }
 

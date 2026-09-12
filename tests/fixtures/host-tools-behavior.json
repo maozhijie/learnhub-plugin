@@ -466,6 +466,28 @@
   ]
  },
  {
+  "id": "learnhub_receipt_review_mode · 全参",
+  "tool": "learnhub_receipt_review_mode",
+  "args": {
+   "mode": "self"
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "lab.setReceiptReviewMode(\"self\")"
+  ]
+ },
+ {
+  "id": "learnhub_receipt_review_mode · 缺 mode",
+  "tool": "learnhub_receipt_review_mode",
+  "args": {},
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "lab.receiptReviewMode()"
+  ]
+ },
+ {
   "id": "learnhub_graph_analyze · 全参",
   "tool": "learnhub_graph_analyze",
   "args": {

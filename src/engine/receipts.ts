@@ -207,15 +207,19 @@ export async function submitReceipt(input: {
   template: string
 }): Promise<ReceiptSubmitResult> {
   const prior = (await input.store.receiptsAll()).filter(r => r.course === input.course && r.node === input.node)
-  const index = prior.length + 1
+  const idIndex = prior.length + 1
+  // 渐退位只数 AI 评审回执（#203 / ADR-0056）：自评回执不产 AI 反馈，不消耗 AI 反馈
+  // 频率位——臂交替下 AI 的 full/brief 节奏保持 ADR-0016 原样（旧流水缺 source 视同 ai）。
+  const aiIndex = prior.filter(r => r.source !== 'self').length + 1
   let rec: ReceiptLogRec
   if (input.mode === 'self') {
-    if (typeof input.selfScore !== 'number' || !Number.isFinite(input.selfScore)) {
-      throw new Error('[receipt-submit] 自评臂提交缺 0–1 的 self_score——学习者对照量表自报评分，回执未落盘。')
+    if (typeof input.selfScore !== 'number' || !Number.isFinite(input.selfScore)
+      || input.selfScore < 0 || input.selfScore > 1) {
+      throw new Error('[receipt-submit] 自评臂提交需要 0–1 的 self_score（学习者对照量表自报）；缺省/越界一律拒绝，不静默改写。')
     }
-    const score = Math.round(clamp01(input.selfScore) * 1000) / 1000
+    const score = Math.round(input.selfScore * 1000) / 1000
     rec = {
-      id: `r${index}`,
+      id: `r${idIndex}`,
       ts: nowIsoOf(input.nowMs),
       course: input.course, node: input.node,
       day: input.today,
@@ -226,7 +230,7 @@ export async function submitReceipt(input: {
       verdict: input.selfVerdict?.trim() || '学习者自评',
     }
   } else {
-    const mode: 'full' | 'brief' = input.forceFull || wantsFullReview(index) ? 'full' : 'brief'
+    const mode: 'full' | 'brief' = input.forceFull || wantsFullReview(aiIndex) ? 'full' : 'brief'
     const prompt = receiptReviewPrompt({
       template: input.template,
       course: input.course,
@@ -240,7 +244,7 @@ export async function submitReceipt(input: {
     // 量表评审带错误逐条拆解，值得多思考一轮：恒走 deep 档（#137：档位沿缝声明，宿主适配器翻译成部署思考档）
     const review = parseReceiptReview(await input.llm(prompt, receiptReviewSystem(), { effort: 'deep' }))
     rec = {
-      id: `r${index}`,
+      id: `r${idIndex}`,
       ts: nowIsoOf(input.nowMs),
       course: input.course, node: input.node,
       day: input.today,
@@ -258,9 +262,11 @@ export async function submitReceipt(input: {
   await input.saveFm(nextFm)
   return {
     receipt: rec,
-    index,
+    index: idIndex,
     review_mode: rec.review_mode,
     practice_ema: nextFm.practice_ema ?? 0,
-    next_full_in: rec.review_mode === 'brief' ? receiptsUntilNextFull(index) : null,
+    // 渐退预期只在 AI 评审回执上有意义（自评回执 null——本次没有 AI 反馈位）
+    next_full_in: rec.source === 'self' ? null
+      : rec.review_mode === 'brief' ? receiptsUntilNextFull(aiIndex) : null,
   }
 }

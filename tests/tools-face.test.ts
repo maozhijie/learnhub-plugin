@@ -1,8 +1,8 @@
 /**
- * 工具面行为探针（#169 的门⑦·agent 侧）：111 个工具的**行为**（返回文本 + 响应前的引擎
+ * 工具面行为探针（#169 的门⑦·agent 侧）：112 个工具的**行为**（返回文本 + 响应前的引擎
  * 调用序列）相对注册表切面之前逐字不变。
  *
- * 快照 tests/fixtures/host-tools-behavior.json 由切面前的实现捕获（259 条探针：每个工具
+ * 快照 tests/fixtures/host-tools-behavior.json 由切面前的实现捕获（261 条探针：每个工具
  * 全参一次 + 逐个缺必填一次），与路由面的 464 条探针同款：注册表切面后必须逐字复现。
  * 队列型工具只比文本（响应后的 fire-and-forget 调用序列不钉，见 helpers/tools-probe.ts）。
  */
@@ -18,7 +18,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SNAPSHOT = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-behavior.json'), 'utf8')) as
   Array<ToolProbe & { text: string; error?: string; calls: string[] }>
 
-test('门⑦·agent 侧：259 条工具探针的文本与引擎调用序列与切面之前逐字一致', async () => {
+test('门⑦·agent 侧：261 条工具探针的文本与引擎调用序列与切面之前逐字一致（#203 +2）', async () => {
   assert.ok(SNAPSHOT.length >= 250, `探针快照只剩 ${SNAPSHOT.length} 条（扫描面塌了）`)
   const probes: ToolProbe[] = SNAPSHOT.map(s => ({ id: s.id, tool: s.tool, args: s.args, queued: s.queued }))
   const got = await runToolProbes(probes)

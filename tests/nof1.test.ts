@@ -545,6 +545,11 @@ test('#203 回执评审模式：配置默认档读写，自评臂不调 LLM、�
       () => engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: '今天练了 30 分钟' }, LLM_THROWS),
       /self_score/,
     )
+    // 越界 self_score 拒绝，不静默钳制（工具参数通则：只允许缺省与合法值）
+    await assert.rejects(
+      () => engine.learner.receiptSubmit('数学', '练耳', { kind: 'text', material: 'x', self_score: 1.7 }, LLM_THROWS),
+      /self_score/,
+    )
     const r = await engine.learner.receiptSubmit(
       '数学', '练耳', { kind: 'text', material: '今天练了 30 分钟', self_score: 0.7, self_verdict: '节奏还行' }, LLM_THROWS,
     )
