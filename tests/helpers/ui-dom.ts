@@ -14,8 +14,9 @@
  * 未登记路由返回 404（ApiError），页面按缝级三态显式失败——次要数据失败不翻页
  * 正是该缝的承诺，桩不需要为每个次要端点备数据。
  *
- * RTL 自动清理依赖全局 afterEach（node:test 没有全局钩子），清理由测试文件用
- * `t.after(cleanup)` 显式做。
+ * RTL 自动清理依赖全局 afterEach（node:test 没有全局钩子），清理由各测试文件自带
+ * `afterEach(() => { cleanup(); arco.Message.clear() })`——页面挂 usePolling 的测试
+ * 漏 cleanup 会因保活定时器挂住进程。
  */
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -78,13 +79,14 @@ export const importUi = async (rel: string): Promise<AnyRecord> =>
 
 export interface StubCall { method: string; path: string; body: unknown }
 
-const stubState: { routes: Map<string, { status: number; json: unknown }>; calls: StubCall[] } = {
+const stubState: { routes: Map<string, unknown>; calls: StubCall[] } = {
   routes: new Map(), calls: [],
 }
 
-/** 登记本测试的路由表：键 = `'GET /xp'`，值 = 响应 JSON。每次调用整体替换。 */
+/** 登记本测试的路由表：键 = `'GET /xp'`，值 = 响应 JSON（登记即 200；未登记 404）。
+ * 每次调用整体替换。 */
 export function routes(table: Record<string, unknown>): void {
-  stubState.routes = new Map(Object.entries(table).map(([k, json]) => [k, { status: 200, json }]))
+  stubState.routes = new Map(Object.entries(table))
   stubState.calls = []
 }
 
@@ -101,9 +103,9 @@ const stubFetch = (async (input: unknown, init?: { method?: string; body?: strin
   if (typeof init?.body === 'string') { try { body = JSON.parse(init.body) } catch { body = init.body } }
   stubState.calls.push({ method, path, body })
   const hit = stubState.routes.get(`${method} ${path}`)
-  const status = hit?.status ?? 404
-  const json = hit?.json ?? { error: `测试桩未登记路由：${method} ${path}` }
-  return { ok: status >= 200 && status < 300, status, json: async () => json } as Response
+  const status = hit === undefined ? 404 : 200
+  const json = hit ?? { error: `测试桩未登记路由：${method} ${path}` }
+  return { ok: status === 200, status, json: async () => json } as Response
 }) as typeof fetch
 globalThis.fetch = stubFetch
 
