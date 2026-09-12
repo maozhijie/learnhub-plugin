@@ -1,8 +1,16 @@
 /** 当前激活页签信号（页签保活 ADR-0027 的配套）：App 写，各页定时器读——
- * 组件常驻不卸载，隐藏页签的轮询据此跳过取数，只保留定时节拍。 */
-import type { TabKey } from './App'
+ * 组件常驻不卸载，隐藏页签的轮询据此跳过取数，只保留定时节拍。
+ *
+ * #189 与路由的关系——**桥接**（备选「isActiveTab 改为即时解析路由」被否）：
+ * 初始值从路由解析（深链/刷新直达页签时，子组件先于 App effect 挂载，首拍 beat
+ * 不再落 'learn' 假窗而错失首次取数）；此后 App 在路由变化时经 setActiveTab 镜像。
+ * isActiveTab 门与 learnhub:tab 切回事件语义零变化，六处 usePolling 消费方零改动。
+ * 否决理由：即时解析每次轮询碰 DOM 且时序反而更松（hashchange 异步于 React 提交），
+ * 换不来删掉这 10 行模块态。 */
+import { parseHash, readHash } from './lib/router'
+import type { TabKey } from './lib/router'
 
-let current: TabKey = 'learn'
+let current: TabKey = parseHash(readHash())
 
 export function setActiveTab(t: TabKey): void {
   if (t === current) return

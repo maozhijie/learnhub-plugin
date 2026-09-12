@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef } from 'react'
 import { isActiveTab } from '../active-tab'
-import type { TabKey } from '../App'
+import type { TabKey } from '../lib/router'
 
 export function usePolling(
   tick: () => Promise<number | void>,

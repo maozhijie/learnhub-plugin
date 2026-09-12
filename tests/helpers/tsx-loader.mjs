@@ -8,6 +8,7 @@
  * 一件事被翻译，与 node --experimental-transform-types 的职责互补。
  *
  * 只拦截 ui/src 下的 .tsx；其余（.ts、依赖包）一律走默认链。消费方 tests/ui-smoke.test.ts
+ * 与 tests/ui-router.test.ts（resolve 钩子：ui/src 相对导入不带扩展名，node ESM 补后缀）
  * 用 node:module 的 register() 挂载（只影响其后发生的动态 import，故被测模块必须动态加载）；
  * 转译正确性由该门的自检探针（必然崩溃样本 + 12 项真实渲染）逐次全量行使。
  */
