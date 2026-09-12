@@ -45,6 +45,8 @@ g.window = win
 g.document = win.document
 // Node ≥21 自带只读 getter 的 navigator，须 defineProperty 覆写
 Object.defineProperty(globalThis, 'navigator', { value: win.navigator, configurable: true })
+// localStorage（#196 失败横幅「关闭」的视图状态存 UI 本地，面板真机浏览器自带、测试抄 happy-dom 的）
+g.localStorage = win.localStorage
 for (const k of ['HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLIFrameElement', 'Element', 'Node', 'SVGElement',
   'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'FocusEvent', 'InputEvent', 'UIEvent',
   'AnimationEvent', 'TransitionEvent', 'MutationObserver', 'getComputedStyle'] as const) {

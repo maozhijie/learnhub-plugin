@@ -7,7 +7,9 @@
  * 该节要点给是非+定位反馈 → 存为「我的卡」（Learner Output：零 XP 零 canonical）。
  * 掌握度 = 口径 B 纯派生（masteryOfFm：0.7·记忆稳定度完成度 + 0.3·练习证据 EMA）。
  * #183：课文/题库/我的卡三路取数走 useCommand（任务在途 3s、空闲 15s 的自适应
- * 轮询走 usePolling——tick 返回下一次延迟），后台刷新失败保持旧数据不翻转。 */
+ * 轮询走 usePolling——tick 返回下一次延迟），后台刷新失败保持旧数据不翻转。
+ * 失败横幅（ADR-0053）：结构化失败清单 + 重试续跑/重写这一节/转 AI 修复/关闭四动作，
+ * 「关闭」是视图状态存 UI 本地，不进任务账面。 */
 import { Button, Card, Collapse, Empty, Input, Message, Modal, Popconfirm, Space, Spin, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import MdView from './MdView'
@@ -62,6 +64,19 @@ export default function LessonView(props: { course: string; node: string; frame:
   /** 会话期间后台内容有更新（冻结不打断）：轻提示横幅；本课结束后重进生效。 */
   const [staleNotice, setStaleNotice] = useState(false)
   useEffect(() => { setStaleNotice(false) }, [course, node])
+
+  // 失败横幅的「关闭」（ADR-0053）：视图状态存 UI 本地（任务注册表是账面、不掺视图状态），
+  // 按任务记录粒度（startedAt）记忆——新一轮任务（重试续跑后）横幅照常出现。
+  const failKey = job ? `learnhub:failHidden:${course}/${node}:${job.startedAt}` : null
+  const [failHidden, setFailHidden] = useState(false)
+  useEffect(() => {
+    setFailHidden(false)
+    if (failKey && localStorage.getItem(failKey) === '1') setFailHidden(true)
+  }, [failKey])
+  const dismissFailure = () => {
+    if (failKey) { try { localStorage.setItem(failKey, '1') } catch { /* 隐私模式等：本次会话内仍生效 */ } }
+    setFailHidden(true)
+  }
 
   // 重拉三路数据。缝在失败时保持旧数据不翻转（区别于旧版非 silent 清空重来的闪断：
   // 会话存续冻结语义 ADR-0027 由「数据不置空」更强的保证承载）。
@@ -330,12 +345,38 @@ export default function LessonView(props: { course: string; node: string; frame:
             }}>取消</Button>
         </div>
       )}
-      {!active && job && (job.status === 'failed' || job.message?.includes('失败')) && (
+      {!active && job && (job.status === 'failed' || job.status === 'partial' || job.message?.includes('失败')) && !failHidden && (
         <div style={{
           border: '1px solid var(--color-danger-3,#f76560)', background: 'var(--color-danger-light-1,#ffece8)',
-          borderRadius: 8, padding: '10px 14px',
+          borderRadius: 8, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8,
         }}>
           <Text>{job.status === 'failed' ? '上次生成失败' : '部分完成'}：{job.message}</Text>
+          {(job.failures ?? []).length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {(job.failures ?? []).map((f, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 0 }}>
+                    ✗ {f.sectionTitle ?? f.sectionId ?? '未知节'}{f.finding ? `：${f.finding}` : ''}
+                  </Text>
+                  {f.sectionId && (
+                    <Tooltip content='只重新生成这一节（过质检门后落盘），不动其余节'>
+                      <Button size='mini' type='text' loading={busy === `section:${f.sectionId}`}
+                        onClick={() => void rewriteSection(f.sectionId!)}>重写这一节</Button>
+                    </Tooltip>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <Space size={8}>
+            {/* 续跑（ADR-0053）：重新入队即断点续跑——已就绪节跳过、只补缺失/失败节 */}
+            <Button size='mini' type='primary' loading={busy === 'generate'} onClick={() => void generate()}>重试续跑</Button>
+            <Button size='mini' type='text' onClick={() => {
+              setDiscussIntent(`上次生成${job.status === 'partial' ? '部分完成' : '失败'}：${job.message ?? '（无错误信息）'}。请分析原因并帮我修复，然后重试。`)
+              setDiscussOpen(true)
+            }}>转 AI 修复</Button>
+            <Button size='mini' type='text' onClick={dismissFailure}>关闭</Button>
+          </Space>
         </div>
       )}
 

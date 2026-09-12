@@ -99,7 +99,7 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 - 断言面：队列泵状态机（入队 → 执行 → 终态 → 保留期清扫与 delayMs 补挂）、暂停/恢复（`resumeQueue`）、`quizJobResults` 等待语义（`waitForQuizJob` 超时/消失 fail loud）、runtime 构造校验与首启 seed（#138 盖戳在构造路径）。
 - **工具面快照**：`tests/fixtures/host-tools-snapshot.json` 由重构前的 `src/index.ts` mock-apply 捕获（111 个工具的 name/description/parameters），断言按域分组重排后逐工具逐字不变。
 - **AGENT_GUIDE 受检投影·前半**（#169 的 AC 之一提前落地）：22 条指南的 `tool` 名必须 ∈ 111 个工具（ADR-0045 记的「22 条手写、从未与 111 个工具对账过」至此有门）、`page` ∈ 面板页签词表、文案/prompt 非空、无重复条目。后半（「通道分类与该命令一致」）要等命令注册表落地。
-- **「路由 ↔ 工具」对账基线**：`tests/fixtures/host-face-baseline.json`（口径＝工具注册区 vs 工具区外全部，ADR-0045 实测）：共享引擎入口 **85**、工具独有 **25**、路由独有 **50**（#159 +1：`proposals.proposalImpact`；#156 +1：`project.projectDecompileApply` 从工具独有变两面共享——面板统一 apply 路由检测到反编译对自动走联合入口）——命令注册表迁移的回归网。
+- **「路由 ↔ 工具」对账基线**：`tests/fixtures/host-face-baseline.json`（口径＝工具注册区 vs 工具区外全部，ADR-0045 实测）：共享引擎入口 **86**、工具独有 **25**、路由独有 **50**（#159 +1：`proposals.proposalImpact`；#156 +1：`project.projectDecompileApply` 从工具独有变两面共享——面板统一 apply 路由检测到反编译对自动走联合入口；#163：`registry.resolve` 进工具面，共享 85→86；#196/#197：`content2.contentSplit` 拆节 op 仅路由面管线消费，路由独有 49→50）——命令注册表迁移的回归网。
 
 路由表与参数守卫（2026-09-11 新增，#168 / ADR-0045／ADR-0048；`tests/host-routes.test.ts` + `tests/helpers/routes-probe.ts`）：
 - **路由从 if 链变成数据表**：`host/routes.ts`（GET 46 + PUT 6）／`host/routes-post.ts`（POST 子表 73）／`host/route-table.ts`（表项形状 `{method, route, handler}` + ADR-0045 注册表字段位 `id·summary·args·engine·output·channels`，本票只留位）／`host/api.ts`（装配 + 一次查表分发）。`handleApi` 保留两处**逐字不动**的今天语义：POST/PUT **先读体再查表**（非法 JSON 的未知路由今天也是 500）、404 文案带原始方法与剥前缀后的路由名。
@@ -114,7 +114,7 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 - **八道门**（1-6 硬门、7 既有快照、8 一致性锁）：① `engine` ∈ 门面原型方法（留空的 25 条逐条登记理由：队列型 9／按参分派型 7／无引擎型 9）② 队列通道 `phase` ∈ `GEN_JOB_PHASES` 且 runner 认得（节点锚定阶段或 `jobs.ts` 里有字面分支）③ `id`／`tool` 名／`(method, path)` 唯一（并断言索引没被静默覆盖）④ handler 覆盖（待适配器切面）⑤ `AGENT_GUIDE` 每条 tool ∈ 注册表的 agent 通道 ⑥ `src/commands/` 零对外运行时依赖（只允许同目录相对 import 与 `import type`）⑦ 零行为漂移：**工具面 259 条行为探针**（`tests/fixtures/host-tools-behavior.json`，每个工具全参 + 逐个缺必填）+ 路由面 467 条探针快照 ⑧ 声明与面一致：agent 通道 `args` 经 `sdkParameters` 投影后与工具面快照**逐字相同**、panel 通道 `(method, path)` 与路由清单逐字相同。
 - **`bind`／`required`／`phase` 住通道**（ADR-0045 裁定）：实参绑定 `Array<string|null>`＝引擎实参位置序、`required` 表达「必填是（命令,通道）对的事实」（实测 9 处两面不一致）、`phase` 是队列通道的入口阶段。`args` 的 `read` 键是投递层取值语义（trimmed／text／raw／fallback／finite／query），下发工具面前由 `sdkParameters` 剥掉——**工具面 schema 逐字不变是硬约束**，门⑧ 就是它的锁。
 - 声明由重构前的两个投递面实测生成（生成器一次性，不入库）；此后手改会被门⑧ 打回。
-- **UI 同源派生**（`tests/ui-types.test.ts` + `scripts/scan-ui-types.mjs`）：响应类型从注册表 `output` 派生（`CommandOutput<id>`，镜像已清零）、调用点棘轮现值 **142**（#159 +1：`api.proposalImpact`；有意增减随提交同步）；UI 类型门只断言 `ui/src` 自身 0 错（依赖源码的存量债归根类型门），另有一条「UI 写出的 snake_case 线名必须在声明里」的权威门。
+- **UI 同源派生**（`tests/ui-types.test.ts` + `scripts/scan-ui-types.mjs`）：响应类型从注册表 `output` 派生（`CommandOutput<id>`，镜像已清零）、调用点棘轮现值 **144**（#159 +1：`api.proposalImpact`；#196 +2：生成页失败行「重试」——`retryJob` 调 `api.generate` 与 `api.questionGenerate`；有意增减随提交同步）；UI 类型门只断言 `ui/src` 自身 0 错（依赖源码的存量债归根类型门），另有一条「UI 写出的 snake_case 线名必须在声明里」的权威门。
 - **两个适配器已切到声明**：panel 面 = `host/api.ts`（查表 → 有 `bind` 走生成路径 49/125 → 否则 `host/handlers.ts` 的 76 条例外 handler）；agent 面 = `host/tools.ts`（1039 → 127 行注册循环 + `sdkParameters` 投影 → 例外 66 条在 `host/tool-handlers.ts`）。`routes.ts`／`routes-post.ts` 退役。
 - **零漂移的三张网**：工具面 schema 快照（111 条 name/description/parameters）+ 工具面 259 条行为探针（文本 + 引擎调用序列）+ 路由面 464 条探针，切面前捕获、切面后逐字复现。
 
