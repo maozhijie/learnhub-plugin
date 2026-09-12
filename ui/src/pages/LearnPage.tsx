@@ -960,19 +960,21 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [genMap, setGenMap] = useState<Record<string, 'queued' | 'running'>>({})
 
   const load = useCallback(async () => {
+    // 推荐流是本页主数据：它失败 = 页面失败态（#158）；横幅类次要数据失败按空处理，
+    // 不让单点故障把整页翻成错误（既有语义）
     try {
-      const [r, x, rq, ak] = await Promise.all([api.recommend(12), api.xp(), api.reviewQueue(), api.ankiStatus()])
-      setRec(r)
-      setXp(x)
-      setReviewQ(rq)
-      setAnki(ak)
+      setRec(await api.recommend(12))
       setLoadError(null)
       setLoadPhase('ready')
     } catch (err) {
       // 首载失败 = 显式失败态；已有数据后的刷新失败不翻转（旧数据继续展示）
       setLoadError(err instanceof Error ? err.message : String(err))
       setLoadPhase(p => (p === 'loading' ? 'error' : p))
+      return
     }
+    setXp(await api.xp().catch(() => null))
+    setReviewQ(await api.reviewQueue().catch(() => null))
+    setAnki(await api.ankiStatus().catch(() => null))
   }, [])
 
   useEffect(() => { void load() }, [load])

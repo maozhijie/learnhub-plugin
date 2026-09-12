@@ -53,7 +53,8 @@ export interface SeedImpactDoc {
   graph_nodes: number
   /** 现终点锚（reseed 时将被新锚整份覆盖；未播种为 null）。 */
   current_anchor: { endpoint: string; declared: string; origin_proposal: number } | null
-  /** 罗盘影响：reseed = 路线与 ETA 重置为待初画（批注区保留）；new = 脚手架初建。 */
+  /** 罗盘在场 = apply 写序会把路线与 ETA 重置为待初画（批注区保留）；
+   * 不在场 = 随本提案脚手架初建。按罗盘文件现势计算，与 mode 解耦。 */
   compass_reset: boolean
   worksheet_items?: number
 }

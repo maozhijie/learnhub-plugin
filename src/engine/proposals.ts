@@ -884,7 +884,8 @@ export class GraphProposals {
       ? list.find(p => p.id === pid)
       : [...list].reverse().find(p => p.status === 'pending' && p.kind === 'seed')
     if (!prop || prop.kind !== 'seed' || prop.status !== 'pending') {
-      throw new Error(`[proposal-impact] 种子提案 #${String(pid)} 不存在或已决（预览只对 pending 提案有意义）。`)
+      const label = pid !== undefined ? `#${pid}` : '（最新 pending）'
+      throw new Error(`[proposal-impact] 种子提案 ${label} 不存在或已决（预览只对 pending 提案有意义）。`)
     }
     const v = validateSeedProposal(await this.loadArtifact(prop.artifact))
     if (v.errors || !v.spec) {

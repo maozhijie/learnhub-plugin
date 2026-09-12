@@ -72,13 +72,26 @@ export default function ProposalsPage() {
   }, [load])
 
   const apply = async (p: PropItem) => {
-    // 种子提案先取影响预览（#159）：知情后再确认；预览取不到不拦人审（退回摘要）
-    const impact = p.kind === 'seed' ? await api.proposalImpact('seed', p.id).catch(() => null) : null
+    // 种子提案先取影响预览（#159）：知情后再确认；预览取不到不拦人审，
+    // 但在确认框里明说（面板说真话——不静默退回摘要）
+    let impact: SeedImpactDoc | null = null
+    let impactError: string | null = null
+    if (p.kind === 'seed') {
+      try {
+        impact = await api.proposalImpact('seed', p.id)
+      } catch (err) {
+        impactError = err instanceof Error ? err.message : String(err)
+      }
+    }
     Modal.confirm({
       title: `应用提案 #${p.id}（${kindLabel(p.kind).label}）？`,
       content: (
         <Space direction='vertical' size={4} style={{ width: '100%' }}>
           {impact && <SeedImpactPreview impact={impact} />}
+          {impactError && (
+            <Alert type='warning' style={{ marginBottom: 8 }}
+              content={`影响预览取不到：${impactError}——应用前建议先刷新提案列表确认提案仍然有效。`} />
+          )}
           <Text type='secondary'>{p.summary}</Text>
         </Space>
       ),
