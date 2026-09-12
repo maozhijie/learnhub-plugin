@@ -732,9 +732,16 @@
    "course": "1"
   },
   "queued": false,
-  "text": "[]",
+  "text": "{\"status\":\"done\",\"message\":\"罗盘已重画：undefined 条路线\"}",
   "calls": [
-   "growth2.compassPaint(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}})"
+   "registry.resolve(\"1\")",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘路线绘制中（deep 档工具回路）…\"}])",
+   "growth2.compassPaint(undefined,{\"ports\":{},\"clock\":{},\"callSeq\":{}},{})",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\"}])",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {

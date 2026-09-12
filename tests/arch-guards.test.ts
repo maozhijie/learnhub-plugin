@@ -96,7 +96,7 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
     assert.equal(typeof runtime[n], 'function', `host/runtime.ts 缺导出 ${n}`)
   }
   const jobs = await import('../src/host/jobs.ts')
-  for (const n of ['pumpGeneration', 'enqueueGeneration', 'enqueueQuizGeneration', 'waitForQuizJob',
+  for (const n of ['pumpGeneration', 'enqueueGeneration', 'enqueueQuizGeneration', 'waitForGenJob',
     'scheduleJobRetention', 'sweepGenJobs', 'resumeQueue', 'restoreGenJobs']) {
     assert.equal(typeof jobs[n], 'function', `host/jobs.ts 缺导出 ${n}`)
   }

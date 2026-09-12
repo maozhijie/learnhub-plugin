@@ -25,9 +25,9 @@ import { llmComplete, llmSeam, llmSeamStripped, llmView } from './llm.ts'
 import { AGENT_GUIDE } from './tools.ts'
 import { serveInteractive, serveVaultFile, serveVendor } from './static.ts'
 import {
-  cancelGeneration, coachTriggerDetached, enqueueGeneration, enqueueGraphJob, enqueueGrowthBatch,
-  enqueueQuizGeneration, generateSection, generationStatus, resetCourseChain, resumeQueue,
-  sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth, triggerSeedContent,
+  afterGraphApply, cancelGeneration, coachTriggerDetached, enqueueGeneration, enqueueGraphJob,
+  enqueueGrowthBatch, enqueueQuizGeneration, generateSection, generationStatus, resetCourseChain,
+  resumeQueue, sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth,
 } from './jobs.ts'
 
 /** 面板内轻量答疑：节点上下文 system + 前端携带的对话历史（拼成单条 user 消息）→ llm。
@@ -241,10 +241,8 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 种子应用后起点正文自动入队（#160：提案一过、内容就在酿，生成页可见）
     const applyKind = need(body, 'kind')
     const applied = await rt.engine.graph.proposalApply(applyKind, applyId(body.id))
-    // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
-    await sweepGenJobs(rt)
     triggerPlanGrowth(rt, ctx, applied as { kind?: string })
-    if (applyKind === 'seed') await triggerSeedContent(rt, ctx, applied as unknown as { course: string; starts: string[] })
+    await afterGraphApply(rt, ctx, applyKind, applied)
     sendJson(res, 200, applied)
   },
   'POST /proposals/reject': async ({ rt, body, res }) => {

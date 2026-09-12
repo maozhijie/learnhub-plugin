@@ -33,7 +33,7 @@ import {
   scheduleJobRetention,
   sweepGenJobs,
   triggerSeedContent,
-  waitForQuizJob,
+  waitForGenJob,
 } from '../src/host/jobs.ts'
 import { AGENT_GUIDE, registerTools } from '../src/host/tools.ts'
 import { COMMAND_LIST } from '../src/commands/index.ts'
@@ -252,7 +252,7 @@ test('等待语义：入队 + 等终态 + 结果表读取（agent 工具同步�
   })
   const enq = enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点C', { count: 4 })
   assert.equal(enq.queued, true)
-  const job = await waitForQuizJob(rt, enq.key)
+  const job = await waitForGenJob(rt, enq.key)
   assert.equal(job.status, 'done')
   assert.match(job.message, /出题完成：新增 4 道（题库共 4）/)
   assert.equal(rt.jobs.quizJobResults.get(enq.key)?.added, 4, '完整结果暂存结果表供工具读取')
@@ -264,8 +264,8 @@ test('等待语义：超时与注册表消失 fail loud', async () => {
   stub(rt, { saveGenJobs: async () => undefined })
   rt.flags.queuePaused = true
   enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点E', {})
-  await assert.rejects(waitForQuizJob(rt, '数学/节点E', 50), /等待出题任务超时/)
-  await assert.rejects(waitForQuizJob(rt, '数学/没有这个节点', 50), /已从注册表消失/)
+  await assert.rejects(waitForGenJob(rt, '数学/节点E', 50), /等待生成任务超时/)
+  await assert.rejects(waitForGenJob(rt, '数学/没有这个节点', 50), /已从注册表消失/)
 })
 
 // ---------------------------------------------------------------- 生长批失败终态与重试（#157）
@@ -572,7 +572,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 22, '指南条目数（22 条手写，增减要显式）')
 })
 
-test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、路由独有 50（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：85 共享引擎入口、工具独有 26、路由独有 49（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // C 形态（ADR-0049）：入口名 = `<子系统>.<方法>` 点路径或 hub 装配域裸名，
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
@@ -602,9 +602,11 @@ test('路由↔工具对账基线：84 共享引擎入口、工具独有 26、�
   assert.deepEqual(shared, base.shared, '两面共享的引擎入口集漂移')
   assert.deepEqual(toolOnly, base.toolOnly, '工具独有引擎入口集漂移')
   assert.deepEqual(routeOnly, base.routeOnly, '路由独有引擎入口集漂移')
-  assert.equal(shared.length, 84)
+  // #163：罗盘重画 agent 工具改走生成队列（回路只在队列任务内运行），registry.resolve
+  // 进工具面 → 85 共享（原 84）／路由独有 49（原 50）
+  assert.equal(shared.length, 85)
   assert.equal(toolOnly.length, 26)
-  assert.equal(routeOnly.length, 50)
+  assert.equal(routeOnly.length, 49)
 })
 
 // ---------------------------------------------------------------- 种子应用 → 起点正文自动入队（#160）
@@ -647,7 +649,7 @@ test('种子应用 → 起点正文自动入队（#160）：路由出口入队�
   assert.ok(rt.jobs.genJobs.get('数学/起点B') === undefined, '已就绪起点不重复入队')
   // 幂等：重复触发不产生重复任务——同名键唯一（内容仍未生成时重复触发 = 合法重试路径）
   const r2 = await triggerSeedContent(rt, fakeCtx(), { course: '数学', starts: ['起点A', '起点B'] })
-  assert.equal(r2, 1, '计数 = 需入队口径（起点A 仍未生成；起点B 已就绪不再入队）')
+  assert.equal(r2, 1, '实入队数：起点A 重试入队（内容仍未生成）；起点B 已就绪不再入队')
   assert.equal([...rt.jobs.genJobs.values()].filter(j => j.node === '起点A').length, 1, '同名键唯一，不产生第二条任务')
 })
 
@@ -673,7 +675,7 @@ test('种子应用幂等与跳过（#160）：排队任务去重不重复入队�
     state: { 起点A: {}, 起点C: {} },
   }) })
   const queued = await triggerSeedContent(rt2, fakeCtx(), { course: '数学', starts: ['起点A', '起点C'] })
-  assert.equal(queued, 2, '计数按「需入队」口径（running 跳过发生在 enqueue 内部）')
+  assert.equal(queued, 1, '返回实入队数：起点C 入队，起点A running 跳过不计入')
   assert.equal(rt2.jobs.genJobs.get('数学/起点A')?.status, 'running', 'running 任务不被覆盖')
   assert.equal(rt2.jobs.genJobs.get('数学/起点C')?.status, 'queued', '其余起点照常入队')
 })

@@ -14,8 +14,9 @@ import { llmSeam, llmSeamStripped, llmView } from './llm.ts'
 import { run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import {
-  enqueueGeneration, enqueueQuizGeneration, generateProjectMilestone, generateProjectPlan,
-  generateSection, resetCourseChain, sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth, triggerSeedContent, waitForQuizJob,
+  afterGraphApply, enqueueGeneration, enqueueGraphJob, enqueueQuizGeneration, generateProjectMilestone,
+  generateProjectPlan, generateSection, resetCourseChain, sessionStartCheckpoint, sweepGenJobs,
+  triggerPlanGrowth, waitForGenJob,
 } from './jobs.ts'
 
 export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (args: never) => Promise<string>> {
@@ -63,19 +64,24 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         }
         const kind = graphKind(args.kind)
         const r = await rt.engine.graph.graphApply(kind, applyId(args.id))
-        // 编辑批可含 del_node/rename（ADR-0039 写侧联动）：apply 出口同步清扫注册表
-        await sweepGenJobs(rt)
-        // 种子应用 → 起点正文自动入队（#160，与面板 apply 出口同语义）
-        if (kind === 'seed') await triggerSeedContent(rt, ctx, r as unknown as { course: string; starts: string[] })
+        // apply 出口联动与面板路由同源（#160）：清扫悬空任务记录 + 种子应用后起点正文入队
+        await afterGraphApply(rt, ctx, kind, r)
         return JSON.stringify(r)
       }),
-  'learnhub_compass_paint': (args: { course?: string }) => run(rt, 'learnhub_compass_paint', async () =>
-      JSON.stringify(await rt.engine.growth2.compassPaint(args.course, rt.agent))),
+  'learnhub_compass_paint': (args: { course?: string }) => run(rt, 'learnhub_compass_paint', async () => {
+      // 罗盘重画经生成队列（#163 / ADR-0041「回路只在生成队列任务内运行」）：初画走
+      // 工具回路后面板与 agent 两入口必须同源入队；agent 侧同步等待终态（一次调用即
+      // 结果），取消可从生成页下发（任务取消沿回合传导）。
+      const c = await rt.engine.registry.resolve(args.course)
+      enqueueGraphJob(rt, ctx, { course: c.name, node: '罗盘', phase: 'compass' })
+      const job = await waitForGenJob(rt, `${c.name}/罗盘`)
+      return JSON.stringify({ course: c.name, status: job.status, message: job.message })
+    }),
   'learnhub_question_audit': () => run(rt, 'learnhub_question_audit', async () => JSON.stringify(await rt.engine.questionAudit())),
   'learnhub_question_generate': (args: { course: string; node: string; count?: number }) => run(rt, 'learnhub_question_generate', async () => {
       const n = questionCount(args.count)
       const { key } = enqueueQuizGeneration(rt, ctx, args.course, args.node, { count: n })
-      const job = await waitForQuizJob(rt, key)
+      const job = await waitForGenJob(rt, key)
       if (job.status === 'cancelled') return JSON.stringify({ status: 'cancelled', message: job.message })
       if (job.status !== 'done') throw new Error(job.message || `出题任务终态 ${job.status}`)
       const r = rt.jobs.quizJobResults.get(key)

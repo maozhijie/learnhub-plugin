@@ -57,6 +57,8 @@ function activeLabel(state: Record<string, Fm>, n: string): string {
  * （区·块/pre/teaches/est/正文态），其余节点给全名单（供 set_pre 等引用既有节点）。
  * 纯组装零写副作用。 */
 export function renderGrowthGraphView(graph: Graph, state: Record<string, Fm>): string {
+  // 前沿 = readySet（未开始且非 opt 前置全部达成）；rValue 恒 1 = R 软闸不改变可学性、
+  // 故不带门——与教练回合检查点的前沿口径同源（GrowthSubsystem.coachFrontier 同款）。
   const active = [...new Set([
     ...readySet(graph, state, () => 1),
     ...graph.names.filter(n => effectiveStage(state, n) === 'learning'),

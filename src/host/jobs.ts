@@ -156,19 +156,20 @@ export function enqueueQuizGeneration(
 }
 
 
-/** 等待一个出题任务到终态（agent 工具同步语义：入队 + 等完成 + 返回结果）。 */
-export function waitForQuizJob(rt: HostRuntime, key: string, timeoutMs = 15 * 60_000): Promise<GenJob> {
+/** 等待一个生成任务到终态（agent 工具同步语义：入队 + 等完成 + 返回结果）。
+ * 罗盘重画的 agent 路径同样经此等待（#163：回路只在生成队列任务内运行）。 */
+export function waitForGenJob(rt: HostRuntime, key: string, timeoutMs = 15 * 60_000): Promise<GenJob> {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now()
     const tick = () => {
       const job = rt.jobs.genJobs.get(key)
       if (!job) {
-        reject(new Error('出题任务已从注册表消失（可能刚被清理），请重试。'))
+        reject(new Error('生成任务已从注册表消失（可能刚被清理），请重试。'))
         return
       }
       if (job.status === 'queued' || job.status === 'running' || job.status === 'cancelling') {
         if (Date.now() - startedAt > timeoutMs) {
-          reject(new Error('等待出题任务超时——任务仍在后台执行，可稍后在生成页查看结果。'))
+          reject(new Error('等待生成任务超时——任务仍在后台执行，可稍后在生成页查看结果。'))
           return
         }
         setTimeout(tick, 1000)
@@ -291,23 +292,33 @@ export function triggerPlanGrowth(rt: HostRuntime, ctx: Context, result: { kind?
  * 可见）——提案一过、内容就在酿，学习者不必逐节点手点生成再各等数分钟。幂等语义：
  * enqueueGeneration 对排队任务去重（重复触发不产生重复任务），running/cancelling 的
  * 同名任务拒绝时逐个跳过留痕、不挡其余起点。队列重启暂停语义不回归：入队只触发泵，
- * queuePaused 旗标挡泵——暂停时起点任务安静排队，恢复队列才开跑。返回入队节点数。 */
+ * queuePaused 旗标挡泵——暂停时起点任务安静排队，恢复队列才开跑。返回实入队节点数。 */
 export async function triggerSeedContent(rt: HostRuntime, ctx: Context, applied: { course: string; starts: string[] }): Promise<number> {
   const c = await rt.engine.registry.resolve(applied.course)
   const { state } = await rt.engine.loadView(c)
   const unbuilt = applied.starts.filter(n => !hasReadyContent(state[n]))
+  let enqueued = 0
   for (const node of unbuilt) {
     try {
       enqueueGeneration(rt, ctx, c.name, node)
+      enqueued++
     } catch (err) {
       void runLog(rt, 'seed_apply_enqueue', `「${c.name}」起点「${node}」自动入队跳过：${err instanceof Error ? err.message : String(err)}`)
         .catch(() => undefined)
     }
   }
   await runLog(rt, 'seed_apply_enqueue', `「${c.name}」种子应用：${unbuilt.length
-    ? `起点正文自动入队 ${unbuilt.length} 节（${unbuilt.join('、')}）`
+    ? `起点正文自动入队 ${enqueued}/${unbuilt.length} 节（${unbuilt.join('、')}）`
     : '全部起点正文已就绪，无需入队'}`).catch(() => undefined)
-  return unbuilt.length
+  return enqueued
+}
+
+/** 图 apply 出口的注册表联动（面板路由与 agent 工具共用，#160 收口一处防漂移）：
+ * 编辑批可含 del_node/rename（ADR-0039 写侧联动）→ 清扫悬空任务记录；种子应用后
+ * 起点正文自动入队（kind 已在出口处判定，非种子零动作）。 */
+export async function afterGraphApply(rt: HostRuntime, ctx: Context, kind: string, applied: unknown): Promise<void> {
+  await sweepGenJobs(rt)
+  if (kind === 'seed') await triggerSeedContent(rt, ctx, applied as { course: string; starts: string[] })
 }
 
 /** 教练回合触发统一出口（五点接线，词条「教练回合」）：就绪深度检查 → 低于前瞻的课程
@@ -391,7 +402,8 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
       job.message = `种子提案 #${r.id} 待人审：${r.starts} 起点 → 终点「${r.endpoint}」`
         + `${r.prior_hits ? `；先验命中 ${r.prior_hits}` : ''}${r.repaired ? '；修复轮一次' : ''}——提案页一次人审即开工`
     } else if (job.phase === 'compass') {
-      job.message = '罗盘重画中（deep 档工具回路）…'
+      // 初画/重画共用一条队列通道（repainted 由引擎结果区分），措辞不预设哪一种
+      job.message = '罗盘路线绘制中（deep 档工具回路）…'
       persistGenJobs(rt)
       const r = await rt.engine.growth2.compassPaint(job.course, rt.agent, {
         isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
