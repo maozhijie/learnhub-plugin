@@ -123,6 +123,44 @@ export function contentFailureStatus(jobStatus: GenJobStatus): Exclude<GenJobSta
   return jobStatus === 'cancelling' ? 'cancelled' : 'failed'
 }
 
+/** 单节终局失败的结构化记录（ADR-0053）：失败横幅「定点重写失败节」与失败原因展示的
+ * 消费面——sectionId 支撑单节重写（失败节在大纲里从未消失，只是面板按正文 ## 解析
+ * 看不到它），finding 给人读的具体死因。磁盘子格式可选字段：恢复侧对缺字段旧档案
+ * 按「无失败信息」读。 */
+export interface GenJobFailure {
+  code: string
+  sectionId?: string
+  sectionTitle?: string
+  finding?: string
+}
+
+/** 从节级错误构造结构化失败记录：code 取错误的稳定码（无码归 ERROR），finding 取
+ * 质检清单第一条 ✗（人读死因；非门禁错误取整段消息）。section 信息优先取错误自带
+ * （引擎 GATE_FAILED 附带），缺席回退调用方传入的当前节——逐节循环里失败节永远已知，
+ * 「定点重写」按钮不因错误形态而缺席。纯函数，host 与测试共用。 */
+export function sectionFailure(err: unknown, section?: { id: string; title: string }): GenJobFailure {
+  const e = err as (Error & { code?: string; sectionId?: string; sectionTitle?: string }) | undefined
+  const raw = err instanceof Error ? err.message : String(err)
+  const finding = (raw.split('\n').find(ln => ln.trim().startsWith('✗')) ?? raw)
+    .replace(/^\s*✗\s*/, '').slice(0, 300)
+  const sectionId = e?.sectionId ?? section?.id
+  const sectionTitle = e?.sectionTitle ?? section?.title
+  return {
+    code: e?.code ?? 'ERROR',
+    ...(sectionId ? { sectionId } : {}),
+    ...(sectionTitle ? { sectionTitle } : {}),
+    finding,
+  }
+}
+
+/** 节正文溢出判定（ADR-0053 修复阶梯的分岔条件）：GATE_FAILED 且质检清单含
+ * 「正文过长」——压缩修复一轮仍超长时触发大纲拆节；其余 finding 不拆。 */
+export function isSectionOverflow(err: unknown): boolean {
+  return err instanceof Error
+    && (err as Error & { code?: string }).code === 'GATE_FAILED'
+    && err.message.includes('正文过长')
+}
+
 /** 自动出题终态：成功才 done；失败是 partial，但必须保留可读错误与重试指引。 */
 export interface QuizOutcome {
   status: 'done' | 'partial'

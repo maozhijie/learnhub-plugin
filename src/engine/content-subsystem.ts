@@ -273,6 +273,16 @@ export class ContentSubsystem {
   }
 
 
+  /** 拆节落盘（ADR-0053）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），返回子节清单。 */
+  async contentSplit(courseKey: string | undefined, node: string, sectionId: string, yamlText: string): Promise<SectionManifest[]> {
+    const c = await this.e.registry.resolve(courseKey)
+    const { graph, broken } = await this.e.loadView(c)
+    if (!graph.nset.has(node)) throw new Error(`[split] 节点「${node}」不在图内。`)
+    this.e.assertNoteOk(c, graph, broken, node, 'split')
+    return this.e.content.splitApply(c.root, graph, node, sectionId, yamlText, rec => this.e.store.appendJournal({ ...rec, course: c.name }))
+  }
+
+
   /** 节清单视图：manifest + 每节现正文 + 解析后的节段难度档 tierLabel（清单 tier 在场用
    * 清单值，缺席按节位置+节点难度推导——不回填清单；面板节进度/单节重写/生成管线的
    * 本节任务注入共用；无清单旧节点回退为整篇重导出，全部 ready）。 */

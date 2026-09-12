@@ -14,10 +14,13 @@ import {
   generationJobRetentionMs,
   graphJobPayloadGap,
   isGenJobTerminal,
+  isSectionOverflow,
   nextQueuedJob,
   normalizeGenJobPhase,
   quizFailureOutcome,
   quizSuccessOutcome,
+  sectionFailure,
+  type GenJobFailure,
   type GenJobPhase,
   type GenJobStatus,
 } from '../generation-jobs.ts'
@@ -44,58 +47,90 @@ function sectionPrompt(tpl: string, pack: string, s: { id: string; title: string
   return `${tpl}\n\n## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}\n\n---\n\n${pack}`
 }
 
-/** 逐节生成共用出口：模型产出 → sectionApply；质检门未过时先试块级局部修补
- * （#147：清单 ✗ 全部定位到具体违规块时只回灌这些块、只收替换块，其余内容零重跑），
- * 块级不可定位/修补产出不可拼接/修补后仍未过 → 回退整节修复一轮；仍未过则带说明抛出。
- * fast 档模型偶发违反硬约束（### 子标题/超长正文/非 JSON plot），一次盲跑定生死会让
- * 管线反复卡在同一节。P4：正文初跑恒 fast 档；修补/修复轮按 highTier 升 deep 档
- * （复杂节点值得多思考一轮）。complete 为注入的补全缝（#137）。isCancelled 在每次
- * 模型产出后检查，取消即丢结果。 */
+/** 逐节生成共用出口（ADR-0053 修复阶梯）：初跑 fast 档 → 门禁失败先试块级局部修补
+ * （#147：清单 ✗ 全部定位到具体违规块时只回灌这些块、只收替换块；正文过长不是块级
+ * finding，天然落到整节修复）→ 整节压缩修复一轮（deep 档升一档——用与失败同档的
+ * 配置盲试是已知死法；回灌块级修补**合并后**的原文防定位错位；长度 finding 附显式
+ * 压缩目标与计数口径，「拆节」的出路归管线不劝模型）→ 压缩仍溢出且允许拆节时原样
+ * 抛溢出错误（调用方跑大纲拆节阶梯），其余失败带说明抛出。complete 为注入的补全缝
+ * （#137）。isCancelled 在每次模型产出后检查，取消即丢结果。 */
 async function applySectionWithRepair(
   rt: HostRuntime, complete: LlmComplete, course: string, node: string,
   s: { id: string; title: string; type: string; tierLabel?: string }, tpl: string, pack: string,
-  opts?: { isCancelled?: () => boolean; highTier?: boolean },
+  opts?: { isCancelled?: () => boolean; highTier?: boolean; allowSplit?: boolean },
 ): Promise<{ version: number; title: string; hints: string[] }> {
   const cancelled = () => opts?.isCancelled?.() ?? false
   const first = await complete(sectionPrompt(tpl, pack, s), undefined, { effort: 'fast' })
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   let gateReport = ''
+  let current = first
+  let wordBudget: number | undefined
+  const readGate = (err: unknown): string => {
+    const e = err as Error & { wordBudget?: number }
+    if (typeof e.wordBudget === 'number') wordBudget = e.wordBudget
+    return e.message
+  }
   try {
     return await rt.engine.content2.contentSection(course, node, s.id, first)
   } catch (err) {
     const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
     if (code !== 'GATE_FAILED') throw err
-    gateReport = err instanceof Error ? err.message : String(err)
+    gateReport = readGate(err)
   }
-  const repairEffort = { effort: contentEffort(opts?.highTier === true) }
   // 块级局部修补：全部 ✗ 都能定位到具体违规块才走（混入任何非块级 finding 时
   // fail-safe 回整节修复）；替换块数量对不上或拼接失败同样回退。
   const plan = Content.blockPatchPlan(first, gateReport)
   if (plan) {
-    const patched = await complete(Content.blockPatchPrompt(plan), undefined, repairEffort)
+    const patched = await complete(Content.blockPatchPrompt(plan), undefined, { effort: contentEffort(opts?.highTier === true) })
     if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
     const merged = Content.applyBlockPatch(first, plan, Content.extractFencedBlocks(patched))
     if (merged !== null) {
+      current = merged
       try {
         return await rt.engine.content2.contentSection(course, node, s.id, merged)
       } catch (err) {
         const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
         if (code !== 'GATE_FAILED') throw err
-        gateReport = err instanceof Error ? err.message : String(err) // 带最新清单回退整节修复
+        gateReport = readGate(err) // 带最新清单回退整节修复
       }
     }
   }
+  // 整节压缩修复一轮：deep 档（升一档）；回灌 current（块级修补合并后的原文——回灌
+  // 初跑原文会与合并清单的定位错位）；长度 finding 由 sectionRepairPrompt 附压缩目标。
   const repaired = await complete(
-    Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s), first, gateReport),
-    undefined, repairEffort,
+    Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s), current, gateReport, { wordBudget }),
+    undefined, { effort: 'deep' },
   )
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   try {
     return await rt.engine.content2.contentSection(course, node, s.id, repaired)
   } catch (err) {
+    const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
+    if (code !== 'GATE_FAILED') throw err
+    if (isSectionOverflow(err) && opts?.allowSplit !== false) throw err // 交调用方跑拆节阶梯
+    const src = err as Error & { sectionId?: string; sectionTitle?: string }
     const msg = err instanceof Error ? err.message : String(err)
-    throw new Error(`${msg}\n（已按门禁清单自动修复重试一轮，仍未通过——可对单节重写或在面板人工修正后 learnhub_content_check）`)
+    const e: Error & { code?: string; sectionId?: string; sectionTitle?: string } = new Error(
+      `${msg}\n（已按门禁清单自动修复重试一轮仍未通过——可在失败提示中「重试续跑」或「重写这一节」，也可转 AI 修复）`)
+    e.code = 'GATE_FAILED'
+    e.sectionId = src.sectionId
+    e.sectionTitle = src.sectionTitle
+    throw e
   }
+}
+
+/** 大纲拆节（ADR-0053 阶梯末级）：待拆节任务 + 上下文包 → 拆分 YAML（deep 档）→
+ * 引擎把该节原位替换为 2–3 个子节，返回子节清单（管线逐子节照常生成）。 */
+async function splitOverflowSection(
+  rt: HostRuntime, complete: LlmComplete, course: string, node: string,
+  s: { id: string; title: string; type: string }, pack: string,
+): Promise<void> {
+  const tpl = await rt.engine.content2.loadPrompt('课程节拆分')
+  const yaml = await complete(
+    `${tpl}\n\n## 待拆分的节\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}\n\n---\n\n${pack}`,
+    undefined, { effort: 'deep' },
+  )
+  await rt.engine.content2.contentSplit(course, node, s.id, yaml)
 }
 
 // ---- 全局生成队列：任意入口入队（面板/agent/整课链），同一时刻只执行一个节点管线 ----
@@ -587,7 +622,9 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
  * → 逐节正文（每节一次模型调用；已 ready 节跳过 = 断点续跑）
  * → 逐节出题 + 综合出题。style 只替换节生成模板（课程节生成-<style>），
  * 大纲、断点续跑与门禁与默认管线同一路径；未知 style 在 loadPrompt fail loud。
- * 出题失败不回滚正文：任务标记 partial 并在 message 里说明，练习页可单独重试出题。
+ * 单节终局失败不中止余节（ADR-0053 continue→partial）：溢出节走「压缩修复→大纲拆节」
+ * 阶梯（深度一层、总节数不越上限），其余失败记入结构化失败清单；有失败节时终态
+ * partial、出题只对就绪节做出题循环自然跳过无内容节，练习页/失败提示可续跑。
  * 由队列执行泵驱动（pumpGeneration）；直接调用仅限已有 running 归属的路径。 */
 async function generateContent(rt: HostRuntime, ctx: Context, course: string, node: string, style?: string): Promise<string> {
   const key = `${course}/${node}`
@@ -595,13 +632,15 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
   if (existing && (existing.status === 'running' || existing.status === 'cancelling')) {
     throw new Error(`「${node}」正在生成中，请稍候。`)
   }
-  // 排队任务出队执行：沿用入队时间（FIFO 序与面板展示），覆盖为 running
+  // 排队任务出队执行：沿用入队时间（FIFO 序与面板展示），覆盖为 running；清掉上一轮
+  // 失败清单（续跑语义——本轮终态重新累积，ADR-0053）
   const job: GenJob = existing?.status === 'queued'
-    ? { ...existing, status: 'running', phase: 'outline' }
+    ? { ...existing, status: 'running', phase: 'outline', failures: undefined }
     : { course, node, startedAt: new Date().toISOString(), status: 'running', phase: 'outline', ...(style ? { style } : {}) }
   rt.jobs.genJobs.set(key, job)
   persistGenJobs(rt)
   const complete = llmSeamStripped(ctx)
+  const failures: GenJobFailure[] = []
   try {
     const pack = await rt.engine.content2.contentPack(course, node)
     // 档位元数据（GenJob 记录；quiz 量分发与后续弹性评估用）
@@ -638,19 +677,67 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     job.progress = { done: views.filter(s => s.status === 'ready').length, total: views.length }
     persistGenJobs(rt)
 
-    // —— 逐节正文：每节一次模型调用（门禁未过自动修复一轮）；取消置旗标后丢结果 ——
+    // —— 逐节正文：每节一次模型调用；单节终局失败不中止余节（continue→partial）——
     for (const s of views) {
       if (s.status === 'ready') continue
       job.progress = { ...job.progress!, current: s.title }
       persistGenJobs(rt)
-      await applySectionWithRepair(rt, complete, course, node, s, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier })
-      job.progress = { done: job.progress!.done + 1, total: job.progress!.total }
+      try {
+        await applySectionWithRepair(rt, complete, course, node, s, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier })
+        job.progress = { ...job.progress!, done: job.progress!.done + 1 }
+      } catch (err) {
+        if (job.status === 'cancelling') throw err
+        if (isSectionOverflow(err)) {
+          // 溢出阶梯末级：大纲拆节（深度一层——子节生成带 allowSplit:false 不再拆）
+          try {
+            await splitOverflowSection(rt, complete, course, node, s, pack)
+            const freshViews = await rt.engine.content2.contentSectionsView(course, node)
+            const subViews = freshViews.filter(v => v.id.startsWith(`${s.id}-`))
+            job.progress = {
+              done: freshViews.filter(v => v.status === 'ready').length,
+              total: freshViews.length,
+              current: s.title,
+            }
+            for (const sub of subViews) {
+              if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
+              job.progress = { ...job.progress!, current: sub.title }
+              persistGenJobs(rt)
+              try {
+                await applySectionWithRepair(rt, complete, course, node, sub, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier, allowSplit: false })
+                job.progress = { ...job.progress!, done: job.progress!.done + 1 }
+              } catch (subErr) {
+                if ((job.status as GenJobStatus) === 'cancelling') throw subErr
+                failures.push(sectionFailure(subErr, sub))
+              }
+            }
+          } catch (splitErr) {
+            if ((job.status as GenJobStatus) === 'cancelling') throw splitErr
+            failures.push(sectionFailure(splitErr, s))
+          }
+        } else {
+          failures.push(sectionFailure(err, s))
+        }
+      }
       persistGenJobs(rt)
     }
-    return await finishWithQuiz(rt, complete, job, `「${node}」正文完成（${job.progress!.total} 节）`)
+    const done = job.progress!.total - failures.length
+    const failedTitles = failures.map(f => `「${f.sectionTitle ?? f.sectionId ?? '?'}」`).join('、')
+    const contentMsg = failures.length
+      ? `「${node}」正文部分完成（${done}/${job.progress!.total} 节；未完成：${failedTitles}——失败提示可「重试续跑」或定点重写）`
+      : `「${node}」正文完成（${job.progress!.total} 节）`
+    const msg = await finishWithQuiz(rt, complete, job, contentMsg)
+    if (failures.length) {
+      // 出题成功也不掩盖节失败：partial = 未完成全部必需阶段（Partial 词条语义）
+      job.status = 'partial'
+      job.message = msg
+      job.failures = failures
+      persistGenJobs(rt)
+    }
+    return msg
   } catch (err) {
     job.status = contentFailureStatus(job.status)
     job.message = err instanceof Error ? err.message : String(err)
+    if (failures.length) job.failures = failures
     persistGenJobs(rt)
     throw err
   } finally {
@@ -679,7 +766,8 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   return job.message
 }
 
-/** 单节重写：节任务上下文 → 模型 → sectionApply（与管线共用同一拼装、门禁与修复回路）。 */
+/** 单节重写：节任务上下文 → 模型 → sectionApply（与管线共用同一拼装、门禁与修复回路；
+ * 剥围栏缝同管线；allowSplit:false——重写不改大纲结构，溢出如实报错）。 */
 export async function generateSection(rt: HostRuntime, ctx: Context, course: string, node: string, sectionId: string): Promise<string> {
   const pack = await rt.engine.content2.contentPack(course, node)
   const views = await rt.engine.content2.contentSectionsView(course, node)
@@ -687,7 +775,9 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
   if (!s) throw new Error(`「${node}」没有节「${sectionId}」——先运行大纲。`)
   const sectionTpl = await rt.engine.content2.loadPrompt('课程节生成')
   const highTier = TIER_LABELS[await rt.engine.content2.contentTierOf(course, node)] === '高'
-  const r = await applySectionWithRepair(rt, llmSeam(ctx), course, node, s, sectionTpl, pack, { highTier })
+  // 与管线同款剥围栏缝（管线产出口对 ``` 围栏容忍，重写通道此前裸缝更脆，ADR-0053）；
+  // allowSplit:false——「重写这一节」的意图是重写本节，不自动改大纲结构（溢出即如实报错）
+  const r = await applySectionWithRepair(rt, llmSeamStripped(ctx), course, node, s, sectionTpl, pack, { highTier, allowSplit: false })
   return `[section] 「${r.title}」v${r.version} 落盘。`
 }
 

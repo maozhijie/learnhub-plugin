@@ -12,7 +12,7 @@ import { atomicWrite } from './io.ts'
 import { YAML } from './yaml.ts'
 import { todayStr } from './dates.ts'
 import type { Clock } from './clock.ts'
-import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
+import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, MAX_SECTIONS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
 import { round2 } from './grading.ts'
 import { invokesTagged } from './concepts.ts'
@@ -178,7 +178,7 @@ export class Content {
     out.push('- 风格：成人自学者；直觉先于严格、具体先于抽象、技能先于形式化')
     out.push(isPractice
       ? '- 篇幅：说明文字 ≤ 400 字；核心交付物是交互模拟（规范见 §8）'
-      : '- 篇幅：正文 ≤ 2500 字')
+      : '- 篇幅：单节正文以 §9 复杂度档案的单节篇幅预算为准（超 1.3 倍警告、2 倍拒收）——整课没有独立的总字数指标')
     out.push('- 小节：类型前缀 + 实际标题（类型菜单见提示词）；节的划分、顺序与类型配比完全由你按内容与风格判断，不设固定栏目与固定收尾段（可选保留 ## 内容反馈 区收集学习者建议）')
     out.push('')
     out.push('## 7. 既有 enc 边（练习必须真实调用它们）')
@@ -402,6 +402,29 @@ sections:
 ## 输出
 
 只输出本节正文（## 标题 + 内容），不要附加解释。
+`,
+    课程节拆分: `\
+<!-- learnhub:prompt/v9 -->
+# 课程节拆分提示词（用户可编辑；系统附上：待拆节的任务与上下文包）
+
+你是 learnhub 学习系统的课程设计师。一个已规划的节在生成时正文超出了单节篇幅预算（压缩修复仍未通过），请把它拆成 2–3 个依次学习的小节——每个子节之后会单独生成正文。
+
+## 要求
+
+1. 只拆不扩：子节合起来覆盖原节的内容范围，不引入原节之外的新主题、不新增原节没有的知识点。
+2. 每个子节仍是一节 = 学习页 1–2 屏（单个知识点/单道例题/一次演示）；上下文包 §9 的篇幅与可视化预算对每个子节同样成立。
+3. 标题描述该子节的具体内容（可用「（上）（下）」收尾或按子内容命名，不用栏目化通名）；类型从节类型菜单选（概念/例题/演示/小结/练习/交互/思维）；相邻子节要有学习上的递进关系。
+4. 每个子节给 tier（低/中/高），可省略（省略时系统按节位置推导）。
+
+## 输出
+
+只输出一个 YAML 文档（不要代码围栏、不要任何解释），结构如下：
+
+sections:
+  - title: <子节标题>
+    type: <节类型>
+    points: <本节要点（一句话，可选）>
+    tier: 低|中|高（可选）
 `,
     题目生成: `\
 <!-- learnhub:prompt/v11 -->
@@ -903,9 +926,9 @@ worksheet:
         .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/\s+/g, '')
       if (prose.length > block) {
-        findings.push(`节「${title}」正文过长（约 ${prose.length} 字 > 拒收线 ${block} 字 = 单节预算 ${sectionWordBudget}×2）：一节 = 学习页 1–2 屏，把内容拆成多个节`)
+        findings.push(`节「${title}」正文过长（约 ${prose.length} 字 > 拒收线 ${block} 字 = 单节预算 ${sectionWordBudget}×2；字数按去空白、去公式与可视化/交互块后的正文字数计——公式与图不占预算）：一节 = 学习页 1–2 屏，把内容拆成多个节（管线可自动拆）或压缩文字`)
       } else if (prose.length > warn) {
-        warns.push(`节「${title}」正文偏长（约 ${prose.length} 字 > 警告线 ${warn} 字 = 单节预算 ${sectionWordBudget}×1.3）：可视化为主、文字为辅，建议压缩或拆节`)
+        warns.push(`节「${title}」正文偏长（约 ${prose.length} 字 > 警告线 ${warn} 字 = 单节预算 ${sectionWordBudget}×1.3；字数按去空白、去公式与可视化/交互块后的正文字数计）：可视化为主、文字为辅，建议压缩或拆节`)
       }
     }
     return { findings, warns }
@@ -1082,12 +1105,24 @@ worksheet:
     return excerpt ? `${finding}\n       （违规定位：该块内容以 "${excerpt}" 开头）` : finding
   }
 
-  /** 修复轮 prompt：把上一次输出 + 质检清单（附定位）回灌，只要求局部重写违规块。 */
-  static sectionRepairPrompt(basePrompt: string, previousOutput: string, gateReport: string): string {
+  /** 修复轮 prompt：把上一次输出 + 质检清单（附定位）回灌。正文过长 finding 附显式
+   * 压缩目标与计数口径（ADR-0053：旧版只说「拆成多个节」，在「只输出一节」的修复轮里
+   * 不可执行，压到多少也从未直说）；拆节的出路归管线（大纲拆节），不劝模型拆。 */
+  static sectionRepairPrompt(
+    basePrompt: string, previousOutput: string, gateReport: string,
+    opts?: { wordBudget?: number },
+  ): string {
     const locatedLines = gateReport.split('\n')
       .map(ln => Content.locateFinding(previousOutput, ln))
       .join('\n')
-    return `${basePrompt}\n\n## 上一次输出未过质检门（只重写下列 ✗ 项定位到的违规局部，其余内容原样保留；不要整节重新发挥）\n\n上次输出：\n\n${previousOutput}\n\n质检清单：\n\n${locatedLines}\n`
+    const overflow = gateReport.includes('正文过长')
+    const headline = overflow
+      ? '## 上一次输出未过质检门（✗ 项必须全部修复；正文过长的修复 = 压缩文字，不是删结构）'
+      : '## 上一次输出未过质检门（只重写下列 ✗ 项定位到的违规局部，其余内容原样保留；不要整节重新发挥）'
+    const budgetBlock = overflow && opts?.wordBudget
+      ? `\n## 压缩目标\n\n- 把超长节的正文压缩到 ≤ ${opts.wordBudget} 字（安全余量：目标 ${Math.ceil(opts.wordBudget * 1.3)} 字以内必过）。字数按去空白、去公式与可视化/交互块后的**纯文字数**计——公式、mermaid/svg/plot/chart 图、交互件不占预算，先删冗余解说与重复示例，可视化方案保留。\n- 拆成多个节由生成管线自动处理，本调用不需要也不会接受拆节——只输出压缩后的一节。\n`
+      : ''
+    return `${basePrompt}\n\n${headline}\n\n上次输出：\n\n${previousOutput}\n\n质检清单：\n\n${locatedLines}\n${budgetBlock}`
   }
 
   // ---- 修复轮·块级局部修补（#147：不再整节重跑） ----
@@ -1267,6 +1302,37 @@ worksheet:
     return out
   }
 
+  // ---- 拆节（ADR-0053 修复阶梯末级：压缩修复仍溢出的节在大纲侧一拆为 2–3 个子节） ----
+
+  /** 拆节 YAML → 子节清单：复用 parseOutline 校验（title 必填、type ∈ 节类型菜单），
+   * 模型的 id 字段一律忽略（引擎派生 `${parentId}-N` 防撞名），数量锁 2–3。 */
+  static parseSplitOutline(yamlText: string, parentId: string): SectionManifest[] {
+    const subs = Content.parseOutline(yamlText)
+    if (subs.length < 2 || subs.length > 3) {
+      throw new Error(`[split] 拆节要求 2–3 个子节，模型给出 ${subs.length} 个。`)
+    }
+    return subs.map((s, i) => ({ ...s, id: `${parentId}-${i + 1}`, status: 'pending' as const, version: 0 }))
+  }
+
+  /** 拆节的清单替换核心（纯函数）：只有 pending 节可拆（ready 节有已落盘正文，拆节会
+   * 孤儿化内容），拆后总节数不越上限；位次原位替换，返回新清单（原清单不变）。 */
+  static applySplit(sections: SectionManifest[], sectionId: string, subs: SectionManifest[], maxSections: number): SectionManifest[] {
+    const idx = sections.findIndex(m => m.id === sectionId)
+    if (idx < 0) throw new Error(`[split] 节清单里没有「${sectionId}」。`)
+    if (sections[idx]!.status !== 'pending') {
+      throw new Error(`[split] 只有未落盘的节才能拆（「${sections[idx]!.title}」已是 ready）。`)
+    }
+    const total = sections.length - 1 + subs.length
+    if (total > maxSections) {
+      throw new Error(`[split] 拆后总节数 ${total} 超过上限 ${maxSections}——不拆，按失败节处理。`)
+    }
+    const out = [...sections.slice(0, idx), ...subs, ...sections.slice(idx + 1)]
+    if (new Set(out.map(m => m.id)).size !== out.length) {
+      throw new Error('[split] 子节 id 与既有节 id 冲突。')
+    }
+    return out
+  }
+
   /** 大纲落盘：manifest 写入 frontmatter content.sections（全 pending），正文不动。
    * fm 现读（逐节连续落盘时调用方的 stateMap 已过期）。 */
   async outlineApply(
@@ -1291,6 +1357,32 @@ worksheet:
     await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: manifest, tier } }, body, this.fs)
     await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending；档位 ${tier}${psi ? '；PS-I 先做后教' : ''}）` })
     return manifest
+  }
+
+  /** 拆节落盘（ADR-0053）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），正文不动
+   * （pending 节本就不进正文），journal 留痕。返回新插入的子节清单（管线据此逐子节生成）。 */
+  async splitApply(
+    root: string, graph: Graph, node: string, sectionId: string, yamlText: string,
+    journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
+  ): Promise<SectionManifest[]> {
+    const [, regionName] = graph.blockOf[node]
+    const path = this.paths.courseNotePath(root, regionName, node)
+    const { fm, body } = await loadNote(path, this.fs)
+    if (!fm || typeof fm.node !== 'string') throw new Error(`[split] 课程文件不存在: ${node}`)
+    const sections = ((fm.content as { sections?: SectionManifest[] } | undefined)?.sections) ?? []
+    const subs = Content.parseSplitOutline(yamlText, sectionId)
+    let next: SectionManifest[]
+    try {
+      next = Content.applySplit(sections, sectionId, subs, MAX_SECTIONS)
+    } catch (err) {
+      const e: Error & { code?: string } = new Error(err instanceof Error ? err.message : String(err))
+      e.code = 'SPLIT_FAILED'
+      throw e
+    }
+    const parent = sections.find(m => m.id === sectionId)!
+    await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: next } }, body, this.fs)
+    await journal({ course: '', node, rating: null, kind: 'content_split', elapsed_days: 0, detail: `节「${parent.title}」正文溢出，拆为 ${subs.map(s => `「${s.title}」`).join('、')}` })
+    return subs
   }
 
   /** 单节落盘：交互件标记块先拆出落盘 → QC 格式类程序化修复（别名，#147）→ 节级质检门 →
@@ -1330,8 +1422,16 @@ worksheet:
       gate.findings.push('「思维轨迹」节必须至少设一处 ```learnhub-predict 预测门（关键转折处先预测再揭晓；格式见上下文包 §11）')
     }
     if (gate.findings.length || html.findings.length) {
-      const e: Error & { code?: string } = new Error(`[section] 「${entry.title}」质检门未过：\n${[...gate.findings, ...html.findings].map(x => `  ✗ ${x}`).join('\n')}\n${[...gate.warns, ...html.warns].map(w => `  ⚠ ${w}`).join('\n')}`)
+      // 结构化失败信息（ADR-0053）：sectionId/标题支撑续跑与定点重写，预算数字支撑
+      // 修复轮的显式压缩目标；message 仍是人读事实源（含 ✗ 清单）。
+      const budget = TIER_ANCHORS[nodeTierOf(graph, node)].sectionWordBudget
+      const e: Error & { code?: string; sectionId?: string; sectionTitle?: string; wordBudget?: number; wordBlock?: number }
+        = new Error(`[section] 「${entry.title}」质检门未过：\n${[...gate.findings, ...html.findings].map(x => `  ✗ ${x}`).join('\n')}\n${[...gate.warns, ...html.warns].map(w => `  ⚠ ${w}`).join('\n')}`)
       e.code = 'GATE_FAILED'
+      e.sectionId = entry.id
+      e.sectionTitle = entry.title
+      e.wordBudget = budget
+      e.wordBlock = sectionLengthThresholds(budget).block
       throw e
     }
     const nextSections = sections.map(m => (m.id === sectionId ? { ...m, status: 'ready' as const, version: m.version + 1 } : m))

@@ -240,6 +240,166 @@ test('泵直驱：未暂停但有排队任务时 pumpGeneration 拉起执行（�
   await until(() => rt.jobs.genJobs.get('数学/节点C')?.status === 'done')
 })
 
+// ---------------------------------------------------------------- 溢出修复阶梯与 continue→partial（#196/#197 ADR-0053）
+
+/** 脚本化 llm 流：stream() 逐次消耗应答脚本（走真实 llmSeamStripped/streamDshTurn 通路，
+ * 只是 provider 换成内存生成器）；prompts 捕获每次调用的提示词全文供断言。 */
+function scriptedCtx(responses: string[], prompts?: string[]): Context {
+  const queue = [...responses]
+  return {
+    tools: { register: () => () => undefined },
+    effect: () => undefined,
+    webServer: { register: () => undefined },
+    llm: {
+      stream: async function* (req: { messages: Array<{ content?: Array<{ text?: string }> }> }) {
+        const text = queue.shift() ?? ''
+        prompts?.push((req.messages ?? []).map(m => (m.content ?? []).map(c => c.text ?? '').join('')).join('\n'))
+        yield { type: 'text-delta', text }
+        yield { type: 'finish', reason: { kind: 'stop' } }
+      },
+    },
+  } as unknown as Context
+}
+
+/** 溢出门禁错误（与引擎 sectionApply 同形状：code + 结构化节信息 + 预算）。 */
+function overflowErr(sectionId = 's2', title = '演示：溢出节'): Error & { code?: string; sectionId?: string; sectionTitle?: string; wordBudget?: number; wordBlock?: number } {
+  const e: Error & { code?: string; sectionId?: string; sectionTitle?: string; wordBudget?: number; wordBlock?: number }
+    = new Error(`[section] 「${title}」质检门未过：\n  ✗ 节「${title}」正文过长（约 906 字 > 拒收线 800 字 = 单节预算 400×2；字数按去空白、去公式与可视化/交互块后的正文字数计）：一节 = 学习页 1–2 屏，把内容拆成多个节（管线可自动拆）或压缩文字`)
+  e.code = 'GATE_FAILED'
+  e.sectionId = sectionId
+  e.sectionTitle = title
+  e.wordBudget = 400
+  e.wordBlock = 800
+  return e
+}
+
+test('溢出修复阶梯（ADR-0053）：压缩修复仍超 → 大纲拆节 → 子节照常生成 → done', async () => {
+  const rt = makeRuntime()
+  const prompts: string[] = []
+  const saved: Array<Array<unknown>> = []
+  const ready = { id: 's1', title: '概念：已就绪', type: '概念', status: 'ready' }
+  const overflow = { id: 's2', title: '演示：溢出节', type: '演示', status: 'pending', tierLabel: '中' }
+  const subs = [
+    { id: 's2-1', title: '演示：溢出节（上）', type: '演示', status: 'pending', tierLabel: '中' },
+    { id: 's2-2', title: '演示：溢出节（下）', type: '演示', status: 'pending', tierLabel: '中' },
+  ]
+  let views = [ready, overflow]
+  let splitRequested = false
+  stub(rt, {
+    'content2.contentPack': async () => '上下文包',
+    'content2.contentTierOf': async () => 2,
+    'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
+    'content2.contentSectionsView': async () => views,
+    'content2.contentSection': async (_c: unknown, _n: unknown, sectionId: string) => {
+      if (sectionId === 's2') throw overflowErr()
+      return { version: 1, title: 'x', hints: [] }
+    },
+    'content2.contentSplit': async (_c: unknown, _n: unknown, sectionId: string) => {
+      splitRequested = true
+      assert.equal(sectionId, 's2')
+      views = [ready, ...subs]
+      return subs
+    },
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async (jobs: Array<unknown>) => { saved.push(jobs) },
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  // 应答脚本：s2 初跑 → s2 压缩修复 → 拆节 YAML → 两个子节
+  const ctx = scriptedCtx([
+    '初跑正文', '压缩后正文',
+    'sections:\n  - title: 演示：溢出节（上）\n    type: 演示\n  - title: 演示：溢出节（下）\n    type: 演示\n',
+    '子节一', '子节二',
+  ], prompts)
+  enqueueGeneration(rt, ctx, '数学', '节点A')
+  const key = '数学/节点A'
+  await until(() => rt.jobs.genJobs.get(key)?.status === 'done')
+  const job = rt.jobs.genJobs.get(key)!
+  assert.equal(splitRequested, true, '压缩修复仍溢出触发大纲拆节')
+  assert.match(job.message!, /正文完成（3 节）/, '拆节后总节数进进度，全部就绪终态 done')
+  assert.equal(job.failures, undefined)
+  assert.ok(prompts.some(p => p.includes('TPL:课程节拆分')), '拆节走专用提示词模板')
+  assert.ok(prompts.some(p => p.includes('压缩到 ≤ 400 字')), '修复轮直说压缩目标（预算取自门禁错误的结构化字段）')
+  const last = saved.at(-1)![0] as { status: string }
+  assert.equal(last.status, 'done')
+})
+
+test('拆节被护栏拒绝（MAX_SECTIONS）→ 失败节记录、余节照常、终态 partial', async () => {
+  const rt = makeRuntime()
+  const ready = { id: 's1', title: '概念：已就绪', type: '概念', status: 'ready' }
+  const overflow = { id: 's2', title: '演示：溢出节', type: '演示', status: 'pending', tierLabel: '中' }
+  const normal = { id: 's3', title: '概念：正常节', type: '概念', status: 'pending', tierLabel: '中' }
+  let views = [ready, overflow, normal]
+  stub(rt, {
+    'content2.contentPack': async () => '上下文包',
+    'content2.contentTierOf': async () => 2,
+    'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
+    'content2.contentSectionsView': async () => views,
+    'content2.contentSection': async (_c: unknown, _n: unknown, sectionId: string) => {
+      if (sectionId === 's2') throw overflowErr('s2')
+      return { version: 1, title: 'x', hints: [] }
+    },
+    'content2.contentSplit': async () => {
+      throw new Error('[split] 拆后总节数 9 超过上限 8——不拆，按失败节处理。')
+    },
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const ctx = scriptedCtx([
+    '初跑正文', '压缩后正文',
+    'sections:\n  - title: 演示：溢出节（上）\n    type: 演示\n  - title: 演示：溢出节（下）\n    type: 演示\n',
+    '正常节正文',
+  ])
+  enqueueGeneration(rt, ctx, '数学', '节点B')
+  const key = '数学/节点B'
+  await until(() => rt.jobs.genJobs.get(key)?.status === 'partial')
+  const job = rt.jobs.genJobs.get(key)!
+  assert.match(job.message!, /正文部分完成（2\/3 节；未完成：「演示：溢出节」——/)
+  assert.match(job.message!, /可「重试续跑」或定点重写/)
+  assert.equal(job.failures?.length, 1)
+  assert.equal(job.failures?.[0]!.sectionId, 's2')
+  assert.match(job.failures?.[0]!.finding ?? '', /拆后总节数 9 超过上限 8/, '死因如实记录：护栏拒拆而非溢出本身')
+})
+
+test('continue→partial（ADR-0053）：单节非溢出失败不中止余节，失败清单随终态落盘', async () => {
+  const rt = makeRuntime()
+  const saved: Array<Array<unknown>> = []
+  const ready = { id: 's0', title: '概念：已就绪', type: '概念', status: 'ready' }
+  const s1 = { id: 's1', title: '概念：坏节', type: '概念', status: 'pending', tierLabel: '中' }
+  const s2 = { id: 's2', title: '概念：好节', type: '概念', status: 'pending', tierLabel: '中' }
+  stub(rt, {
+    'content2.contentPack': async () => '上下文包',
+    'content2.contentTierOf': async () => 2,
+    'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
+    'content2.contentSectionsView': async () => [ready, s1, s2],
+    'content2.contentSection': async (_c: unknown, _n: unknown, sectionId: string) => {
+      if (sectionId === 's1') throw new Error('[section] 模型产出解析失败（示例死因）')
+      return { version: 1, title: 'x', hints: [] }
+    },
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async (jobs: Array<unknown>) => { saved.push(jobs) },
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const ctx = scriptedCtx(['坏节正文', '好节正文'])
+  enqueueGeneration(rt, ctx, '数学', '节点E')
+  const key = '数学/节点E'
+  await until(() => rt.jobs.genJobs.get(key)?.status === 'partial')
+  const job = rt.jobs.genJobs.get(key)!
+  assert.match(job.message!, /正文部分完成（2\/3 节；未完成：「概念：坏节」——/)
+  assert.equal(job.failures?.length, 1)
+  assert.equal(job.failures?.[0]!.code, 'ERROR')
+  assert.equal(job.failures?.[0]!.sectionId, 's1')
+  const last = saved.at(-1)![0] as { failures?: Array<{ sectionId?: string }> }
+  assert.equal(last.failures?.[0]!.sectionId, 's1', '失败清单随任务记录落盘（恢复/重启后横幅仍可消费）')
+})
+
+
 // ---------------------------------------------------------------- quizJobResults 等待语义
 
 test('等待语义：入队 + 等终态 + 结果表读取（agent 工具同步语义）', async () => {
@@ -602,10 +762,11 @@ test('路由↔工具对账基线：86 共享引擎入口、工具独有 25、�
   assert.deepEqual(toolOnly, base.toolOnly, '工具独有引擎入口集漂移')
   assert.deepEqual(routeOnly, base.routeOnly, '路由独有引擎入口集漂移')
   // #163：罗盘重画 agent 工具改走生成队列（回路只在队列任务内运行），registry.resolve
-  // 进工具面 → 86 共享／路由独有 49（#156 已把工具面一条入口收编共享：25/49）
+  // 进工具面 → 86 共享／路由独有 49（#156 已把工具面一条入口收编共享：25/49；
+  // #196/#197 拆节 op content2.contentSplit 仅路由面管线消费 → 25/50）
   assert.equal(shared.length, 86)
   assert.equal(toolOnly.length, 25)
-  assert.equal(routeOnly.length, 49)
+  assert.equal(routeOnly.length, 50)
 })
 
 // ---------------------------------------------------------------- 种子应用 → 起点正文自动入队（#160）

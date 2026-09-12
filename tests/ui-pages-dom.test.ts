@@ -14,6 +14,7 @@ import { render, screen, fireEvent, act, cleanup, waitFor, routes, stubCalls, im
 afterEach(() => {
   cleanup()
   arco.Message.clear()
+  localStorage.clear() // #196 失败横幅「关闭」是持久视图状态（按任务记录记忆），跨测试必须清
 })
 
 const React = (await uiImport('react')).default
@@ -138,4 +139,80 @@ test('LessonView：有正文无题 = 空态引导，点「AI 出题」入队任�
   assert.ok(document.body.textContent!.includes('出题任务已入队'), '入队轻提示可见')
   await click(screen.getByText('← 返回'))
   assert.equal(calls.closeLesson!.length, 1, '返回收起学习视图')
+})
+
+test('LessonView：失败横幅动作（#196 / ADR-0053）——定点重写、重试续跑、关闭', async () => {
+  const { default: LessonView } = await importUi('components/LessonView.tsx')
+  routes({
+    'GET /lesson': LESSON_FIXTURE,
+    'GET /questions': { course: '数学', node: '入门', mastery: 0.4, questions: [] },
+    'GET /learner-queue': { cards: [] },
+    'GET /generate/status': {
+      jobs: [{
+        key: '数学/入门', course: '数学', node: '入门', startedAt: '2026-09-12T10:00:00Z',
+        status: 'failed', phase: 'sections', tier: '中',
+        message: '[section] 「演示：溢出节」质检门未过：\n  ✗ 节「演示：溢出节」正文过长（约 906 字 > 拒收线 800 字 = 单节预算 400×2）\n（已按门禁清单自动修复重试一轮仍未通过——可在失败提示中「重试续跑」或「重写这一节」，也可转 AI 修复）',
+        failures: [{
+          code: 'GATE_FAILED', sectionId: 's2', sectionTitle: '演示：溢出节',
+          finding: '节「演示：溢出节」正文过长（约 906 字 > 拒收线 800 字 = 单节预算 400×2）',
+        }],
+      }],
+      queuedCount: 0,
+    },
+    'POST /generate': { message: '「入门」已入队，将在后台按序生成', queued: true },
+    'POST /generate/section': { message: '[section] 「演示：溢出节」v2 落盘。' },
+  })
+  const { frame } = spyFrame()
+  render(React.createElement(LessonView, { course: '数学', node: '入门', frame }))
+  assert.ok(await screen.findByText(/上次生成失败/), '失败横幅可见（不再是一句话死横幅）')
+  assert.ok(screen.getByText(/✗ 演示：溢出节：/), '结构化失败清单：节标题 + 死因')
+
+  await click(screen.getByText('重写这一节'))
+  await waitFor(() => {
+    const rw = stubCalls().find(c => c.method === 'POST' && c.path === '/generate/section')
+    assert.ok(rw, '定点重写失败节（失败节在大纲里从未消失）')
+    assert.deepEqual(rw.body, { course: '数学', node: '入门', section: 's2' })
+  })
+
+  await click(screen.getByText('重试续跑'))
+  await waitFor(() => {
+    const gen = stubCalls().find(c => c.method === 'POST' && c.path === '/generate')
+    assert.ok(gen, '重试续跑 = 重新入队（断点续跑语义在服务端）')
+    assert.deepEqual(gen.body, { course: '数学', node: '入门' })
+  })
+
+  await click(screen.getByText('关闭'))
+  assert.equal(screen.queryByText(/上次生成失败/), null, '关闭隐藏横幅（视图状态，存 UI 本地）')
+})
+
+test('LessonView：失败横幅「转 AI 修复」（#196 / ADR-0053）——预填失败原文开讨论弹窗', async () => {
+  const { default: LessonView } = await importUi('components/LessonView.tsx')
+  routes({
+    'GET /lesson': LESSON_FIXTURE,
+    'GET /questions': { course: '数学', node: '入门', mastery: 0.4, questions: [] },
+    'GET /learner-queue': { cards: [] },
+    'GET /generate/status': {
+      jobs: [{
+        key: '数学/入门', course: '数学', node: '入门', startedAt: '2026-09-12T10:00:00Z',
+        status: 'failed', phase: 'sections', tier: '中',
+        message: '[section] 「演示：溢出节」质检门未过：正文过长示例',
+        failures: [{
+          code: 'GATE_FAILED', sectionId: 's2', sectionTitle: '演示：溢出节',
+          finding: '节「演示：溢出节」正文过长（约 906 字 > 拒收线 800 字 = 单节预算 400×2）',
+        }],
+      }],
+      queuedCount: 0,
+    },
+  })
+  const { frame } = spyFrame()
+  render(React.createElement(LessonView, { course: '数学', node: '入门', frame }))
+  assert.ok(await screen.findByText(/上次生成失败/), '失败横幅可见')
+  await click(screen.getByText('转 AI 修复'))
+  assert.ok(await screen.findByText('与 AI 讨论本课 · 入门'), '预填讨论弹窗打开')
+  const textarea = document.querySelector('.arco-modal textarea') as HTMLTextAreaElement | null
+  assert.ok(textarea && textarea.value.includes('上次生成失败：'), '意图已预填失败原文')
+  // 关掉弹窗收尾（意图已预填，「开始讨论」交还给用户决定）
+  const closeBtn = document.querySelector('.arco-modal-close-icon')
+  assert.ok(closeBtn, '弹窗可关闭')
+  await click(closeBtn as HTMLElement)
 })
