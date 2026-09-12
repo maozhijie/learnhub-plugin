@@ -9,7 +9,9 @@ import CoachCockpit from '../components/CoachCockpit'
 import GraphDagView from '../components/GraphDagView'
 import SeedFormModal from '../components/SeedFormModal'
 import { api } from '../api'
-import { isActiveTab, onTabActive } from '../active-tab'
+import { onTabActive } from '../active-tab'
+import { usePolling } from '../hooks/usePolling'
+import { errorMessage } from '../hooks/useCommand'
 import type { AppFrame } from '../App'
 import type { BankEntry, GenJobItem, GraphDoc, RecommendDoc } from '../types'
 
@@ -78,7 +80,7 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
       setRec(r as RecommendDoc)
       setGraphError(null)
     } catch (err) {
-      setGraphError(err instanceof Error ? err.message : String(err))
+      setGraphError(errorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -91,34 +93,29 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
   useEffect(() => onTabActive('graph', () => { void load(); void reloadFrame() }),
     [load, reloadFrame])
 
-  // 生成队列轮询：角标随排队/生成点亮；活动任务出现终态边沿 → 重拉图（hasContent 点亮）
+  // 生成队列轮询：角标随排队/生成点亮；活动任务出现终态边沿 → 重拉图（hasContent 点亮）。
+  // 边沿检测是页面逻辑，节拍样板（挂载即取/激活门/切回即补/卸载清理）在 usePolling。
   const activeKeysRef = useRef<Set<string>>(new Set())
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const st = await api.generateStatus()
-        setGraphJobs(st.jobs.filter(j => GRAPH_PHASES.has(j.phase ?? '')))
-        const gen: Record<string, 'queued' | 'running'> = {}
-        const active = new Set<string>()
-        for (const j of st.jobs) {
-          if (j.course !== course) continue
-          if (j.status === 'running' || j.status === 'cancelling') { gen[j.node] = 'running'; active.add(j.key) }
-          else if (j.status === 'queued') gen[j.node] = 'queued'
-        }
-        const edge = [...activeKeysRef.current].some(k => !active.has(k))
-        activeKeysRef.current = active
-        setGenStates(gen)
-        // 终态边沿连状态面一并刷新：就绪深度/完成宣告等读侧折叠跟随生成结果更新（#161）
-        if (edge) { void load(); void reloadFrame() }
-      } catch {
-        setGenStates({})
+  usePolling(async () => {
+    try {
+      const st = await api.generateStatus()
+      setGraphJobs(st.jobs.filter(j => GRAPH_PHASES.has(j.phase ?? '')))
+      const gen: Record<string, 'queued' | 'running'> = {}
+      const active = new Set<string>()
+      for (const j of st.jobs) {
+        if (j.course !== course) continue
+        if (j.status === 'running' || j.status === 'cancelling') { gen[j.node] = 'running'; active.add(j.key) }
+        else if (j.status === 'queued') gen[j.node] = 'queued'
       }
+      const edge = [...activeKeysRef.current].some(k => !active.has(k))
+      activeKeysRef.current = active
+      setGenStates(gen)
+      // 终态边沿连状态面一并刷新：就绪深度/完成宣告等读侧折叠跟随生成结果更新（#161）
+      if (edge) { void load(); void reloadFrame() }
+    } catch {
+      setGenStates({})
     }
-    void poll()
-    // 页签保活（ADR-0027）：非激活页签跳过取数，定时器只保留节拍
-    const timer = setInterval(() => { if (isActiveTab('graph')) void poll() }, 5000)
-    return () => clearInterval(timer)
-  }, [course, load, reloadFrame])
+  }, { tab: 'graph', intervalMs: 5000 })
 
   // 过滤：裁出子图（端点不在集合内的边一并裁掉）
   const filtered = useMemo(() => {
@@ -187,7 +184,7 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
     const run = () => {
       void api.generate(course, nodeId)
         .then(r => { Message.success(r.message); void load() })
-        .catch(err => Message.error(err instanceof Error ? err.message : String(err)))
+        .catch(err => Message.error(errorMessage(err)))
     }
     if (has) {
       Modal.confirm({

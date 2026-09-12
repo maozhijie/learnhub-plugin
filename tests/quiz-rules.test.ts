@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MAX_ASK_PER_ROUND, PASS_STREAK, passStreakFor } from '../ui/src/components/quiz-rules.ts'
+import { MAX_ASK_PER_ROUND, PASS_STREAK, passStreakFor } from '../ui/src/lib/quiz-rules.ts'
 
 // ---- passStreakFor：连对目标随轮内题量收缩 ----
 // 回归背景：面板曾固定 PASS_STREAK=2，而出题侧锚点调整前的低档节点每节仅 1 题，

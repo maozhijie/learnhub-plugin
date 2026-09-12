@@ -17,6 +17,7 @@ import { useEffect, useRef } from 'react'
 import { api } from './api'
 import { isGenJobTerminal } from '../../src/generation-jobs'
 import type { GenJobItem } from './types'
+import { errorMessage } from './hooks/useCommand'
 
 const GRAPH_PHASES = new Set(['seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'])
 const PHASE_TITLE: Record<string, string> = {
@@ -65,7 +66,7 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
         if (r.queued) Message.success(r.message)
         else Message.warning(r.message)
       } catch (err) {
-        Message.error(err instanceof Error ? err.message : String(err))
+        Message.error(errorMessage(err))
       }
     }
 

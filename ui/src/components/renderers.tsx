@@ -10,7 +10,7 @@ import { useContext, useEffect, useRef, useState } from 'react'
 import { Message, Tag } from '@arco-design/web-react'
 import { api } from '../api'
 import { RENDERERS } from '../../../shared/content-renderers'
-import { SettleContext } from './settle-context'
+import { SettleContext } from '../lib/settle-context'
 import { ChartBlock, PlotBlock, SvgBlock } from './visual-blocks'
 import { useWidgetBus } from './widget-bus'
 

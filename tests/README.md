@@ -35,9 +35,9 @@ hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engin
 - S12 `content.ts::PROMPT_KINDS` —— 内置模板版本标记与 §9 复杂度档案锚点（`tests/prompt-contract.test.ts`）
 - S13 `health.ts::estSpreadNote` —— est 分布压缩 advisor 提示（不改健康分；`tests/health.test.ts`）
 - S14 `notes.ts::validateNoteFrontmatter` —— `content.tier` 枚举校验与保留（`tests/strict-note-state.test.ts`）
-- S15 `ui/src/components/svg-uri.ts::SVG_URI` —— SVG 清洗 URI 白名单（DOMPurify 逐属性值筛查语义；`tests/svg-uri.test.ts`）
-- S16 `ui/src/components/quiz-rules.ts::passStreakFor` —— 练习轮连对目标随组内题量收缩（`tests/quiz-rules.test.ts`）
-- S17 `ui/src/components/md-chain.ts::MD_HTML_POLICY` —— markdown 链 skipHtml 策略（机器注释不显示；`tests/md-chain.test.ts`）
+- S15 `ui/src/lib/svg-uri.ts::SVG_URI` —— SVG 清洗 URI 白名单（DOMPurify 逐属性值筛查语义；`tests/svg-uri.test.ts`）
+- S16 `ui/src/lib/quiz-rules.ts::passStreakFor` —— 练习轮连对目标随组内题量收缩（`tests/quiz-rules.test.ts`）
+- S17 `ui/src/lib/md-chain.ts::MD_HTML_POLICY` —— markdown 链 skipHtml 策略（机器注释不显示；`tests/md-chain.test.ts`）
 - S18 `generation-jobs.ts::nextQueuedJob` —— 全局生成队列 FIFO 选取（queued 非终态不清理；`tests/generation-jobs.test.ts`）
 - S19 `notes.ts::hasReadyContent` —— 「已生成」三态标识数据源（任一节 ready；`tests/has-ready-content.test.ts`）
 - S20 `content.ts::candidateCallSites / encPromotion / invokesProjection` —— enc 反哺候选收集、闭包内提升与 invokes 覆盖率投影（权重=invokes 覆盖率投影、无数据落缺省 1，#148 调用站阶梯退役；`tests/enc-backfill-audit.test.ts`）
@@ -81,6 +81,9 @@ hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engin
 
 - S56 `agent.ts::AgentSeam / stripFences / AGENT_LOOP_MAX_TOOL_ROUNDS` —— 统一 agent 缝（#162 / ADR-0041 形状 / ADR-0044 归属）：应用层端口消费者（消费 S49 双端口），双模式 `complete()` 单发 + `agentLoop()` 工具回路（K≤6 轮预算封顶、工具白名单外调用由 runTool 拒、LlmStream 缺位 fail loud）、门错修复轮 `gateRepairRound()` 共享能力（门错误+被拒候选原文回灌重产**恰一次**，仍败以站点 fatal 抛两轮死因；#157 生长批回灌重裁的形态由此收口）、调用日志 `onCall` 注入侧可观测（站/模式/档/轮次/字数）、stripFences 补全后处理随缝归位（原散投递层 9 处接线收口一处，机械站暂由投递层导入复用）；宿主装配收口 createHostRuntime（HostRuntime.agent，console+运行日志双观测面）；`tests/agent-seam.test.ts`；六策略站（种子起草/罗盘/教练生长/目标反编译/计划草案/里程碑草案）金样本回放假实现（脚本化补全端口注入 AgentSeam）经缝走 facade，机械站（出卡/判卷/自注反馈）仍收裸 LlmComplete 择机迁
 
+- S57 `ui/src/lib/rounds.ts::buildRounds` —— mastery 会话轮次计划（#183 自 PracticeFlow 抽出的纯逻辑）：manifest 驱动节序列（内容节 read+quiz 成对、练习节一等化无阅读轮、交互节 md 存在才出轮）、旧节点标题归一化回退、manifest 分支排除「通用」标注题、未落节题收综合轮；`tests/rounds.test.ts`
+- S58 `ui/src/lib/rec-events.ts::sortRecEvents / recTypeMeta` —— 学习页推荐流词汇与排序（#183 自 LearnPage 抽出的纯逻辑）：pin 置顶 → 类型展示序 → 稳定原序、未知类型灰显殿后；`tests/rec-events.test.ts`
+
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 
 `analyzeGraph`/`runAudit` 只做薄接线，不在接缝清单内。
@@ -110,6 +113,16 @@ A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node �
 - **UI 同源派生**（`tests/ui-types.test.ts` + `scripts/scan-ui-types.mjs`）：响应类型从注册表 `output` 派生（`CommandOutput<id>`，镜像已清零）、调用点棘轮现值 **142**（#159 +1：`api.proposalImpact`；有意增减随提交同步）；UI 类型门只断言 `ui/src` 自身 0 错（依赖源码的存量债归根类型门），另有一条「UI 写出的 snake_case 线名必须在声明里」的权威门。
 - **两个适配器已切到声明**：panel 面 = `host/api.ts`（查表 → 有 `bind` 走生成路径 49/125 → 否则 `host/handlers.ts` 的 76 条例外 handler）；agent 面 = `host/tools.ts`（1039 → 127 行注册循环 + `sdkParameters` 投影 → 例外 66 条在 `host/tool-handlers.ts`）。`routes.ts`／`routes-post.ts` 退役。
 - **零漂移的三张网**：工具面 schema 快照（111 条 name/description/parameters）+ 工具面 259 条行为探针（文本 + 引擎调用序列）+ 路由面 464 条探针，切面前捕获、切面后逐字复现。
+
+UI 测试网与数据获取缝（2026-09-12 新增，#183 / ADR-0051／ADR-0052；四层形状 = `lib/` 纯逻辑 + `hooks/` 数据获取 + `pages/<Page>/` 页面条目与页内子组件 + `components/` 跨页组件）：
+
+- **lib/**：md-chain／quiz-rules／svg-uri 自 components/ 迁入（S15–S17 接缝路径已同步，语义零变化）；`settle-context.ts` 同批迁入——它 import react 的 `createContext`（上下文对象，非组件、零 DOM、node:test 可直测），是 ADR-0052「lib 零 React」的**登记例外**（该 ADR 的迁移名单本身点名了它）。**L1 豁免**：它是 React 原语而非可断言逻辑，无独立单测，由 L2 的 LearnPage@lesson 变体（PracticeFlow 交互轮消费 SettleContext.Provider）传递覆盖；`md.ts`（54 行手写 md→HTML）全仓零引用，**已删除**。新增 S57 rounds／S58 rec-events 两个抽离纯模块。
+- **数据获取缝 `ui/src/hooks/useCommand.ts`**（#187 决议④）：单命令即请求、无缓存无去重、latest-wins（seq 守卫丢迟到旧响应）、失败只写 error 不翻转 data、空态由调用方派生；`errorMessage()` 是全 ui/src 唯一错误→消息提取点（ApiError 单点，散落手写提取已归零），App.tsx 的 `toastError` 孤儿随之删除；`usePolling.ts` 收编六处手搓 `setInterval + isActiveTab + learnhub:tab` 样板（LearnPage/GraphPage/LessonView 自适应 3s/15s/GeneratePage/ProposalsPage/CoachCockpit 复诊卡 30s；useCoachToasts 的 App 级轮询按决议④豁免）；三态呈现组件 `components/CommandBoundary.tsx`（加载/失败/内容一个长相，页变体 Result、卡变体内联重试）。
+- **L1 接缝单测**：`tests/rounds.test.ts` + `tests/rec-events.test.ts`（挂 node:test 全量）。
+- **ui 规模预算门**（`tests/ui-budget.test.ts`，独立于 arch-guards 的 G 家族）：ui/src 单文件 **≤500 行硬预算**——超线即红，不是可涨棘轮；现超线 0（原 4 文件已收敛：LearnPage 1292→目录化 5 文件、StatsPage 821→5 文件、LessonView 580→445+UnderstandingEntry、PracticeFlow 554→458+lib/rounds）。未来确需超线 = 票面登记理由后改门（BUDGET/豁免），不许静默养大。自检照 ADR-0047：注入必然超线样本断言门会红。
+- **L2 冒烟渲染门**（`tests/ui-smoke.test.ts` + `tests/helpers/tsx-loader.mjs`）：`react-dom/server` 把每个页面条目渲染成非空静态标记——import 崩溃/首渲染崩溃在 `npm test` 即红。**技术前提实测**：Node 24.14 原生 TS 直跑不支持 JSX（.tsx → ERR_UNKNOWN_FILE_EXTENSION），故 loader 用 devDependencies 里已锁版本的 typescript 包做内存转译（零新增依赖、零构建步骤；.css 空模块替代、bundler 风格无扩展名导入在 resolve 钩子补后缀）；react/react-dom 经 `createRequire(ui/package.json)` 取自 ui 依赖树，与被测模块同一实例。**裸跑约束**：本门必须带 `--experimental-transform-types` 旗标跑（api.ts 的参数属性超出 strip-only 语法面，裸 `node --test` 即红）——官方 `npm test` 自带该旗标，单独手跑本文件时别省。**冻结表即棘轮**：render 12 项（App + 10 页 + LearnPage@lesson 变体——覆盖 LessonView/PracticeFlow 挂载）每项必须渲染成功；exempt 暂空；新页面不在两表 = 红（逼迫显式归类）；修好的页面从 exempt 挪进 render 后不得挪出。
+- **lint（ADR-0051 第二层首例，不进门家族）**：`ui/` devDeps = eslint + eslint-plugin-react-hooks + @typescript-eslint/parser（仅作 parser——hooks 规则须 AST 解析 TS，不引入其规则集；许可考量：三者皆本地 devDep、零运行时产物、秒级执行，worktree 双份安装代价有限）；`cd ui && npm run lint`，规则仅 rules-of-hooks=error + exhaustive-deps=warn（现值 0 警 0 错），无任何风格规则。
+- **调用点棘轮现值 142 不变**（结构性收敛全部以 `() => api.x(...)` 包装保持调用点形状）；`api.ts` 端点名与签名零改动。
 
 架构门（2026-09-11 新增，ADR-0042 / #152 刀 1；`tests/import-rules.test.ts`）：
 

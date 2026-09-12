@@ -4,9 +4,10 @@
 import { Alert, Button, Card, Empty, Message, Modal, Progress, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api, discussInHost } from '../api'
-import { isActiveTab } from '../active-tab'
+import { usePolling } from '../hooks/usePolling'
 import type { AppFrame } from '../App'
 import type { GenJobItem, QueueItem } from '../types'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -69,7 +70,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
           await load()
           frame?.reload()
         } catch (err) {
-          Message.error(err instanceof Error ? err.message : String(err))
+          Message.error(errorMessage(err))
         }
       },
     })
@@ -89,7 +90,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
       setQueuedCount(st.queuedCount)
       setQueue(q)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }, [])
 
@@ -100,18 +101,10 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
       Message.success(`队列已恢复（${r.resumed} 个排队任务将按序执行）`)
       await load()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }
 
-  useEffect(() => {
-    void load()
-    // 生成中 5s 轮询（任务与队列同源刷新）；页签保活（ADR-0027）：非激活跳过取数
-    const timer = setInterval(() => { if (isActiveTab('generate')) void load() }, 5000)
-    return () => clearInterval(timer)
-  }, [load])
-
-  // 风格清单 = 「课程节生成」前缀的提示词类型（默认/内置变体/自建）——作用于逐节生成
   useEffect(() => {
     void api.prompts().then(kinds => {
       setStyles(kinds
@@ -120,13 +113,16 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
     }).catch(() => setStyles([]))
   }, [])
 
+  // 挂载即取 + 5s 轮询（任务与队列同源刷新）；非激活页签跳过取数、切回即补（ADR-0027）
+  usePolling(load, { tab: 'generate', intervalMs: 5000 })
+
   const cancel = async (j: GenJobItem) => {
     try {
       await api.generateCancel(j.course, j.node)
       Message.success(j.status === 'queued' ? '已移出队列' : '已请求取消（结果会被丢弃）')
       await load()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }
 
@@ -139,7 +135,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
       else Message.warning(r.message)
       await load()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusyKey(null)
     }
@@ -152,7 +148,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
       Message.success(res.message)
       await Promise.all([load(), frame?.reload()])
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusyKey(null)
     }

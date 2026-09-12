@@ -4,6 +4,7 @@
 import { Button, Drawer, Input, Message, Space, Tag, Typography } from '@arco-design/web-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -57,7 +58,7 @@ export default function QuestionEditDrawer(props: {
       Message.success('已保存（validateBank 门禁通过）')
       props.onSaved()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }

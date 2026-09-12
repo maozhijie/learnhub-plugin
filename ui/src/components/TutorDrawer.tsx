@@ -8,6 +8,7 @@ import { api } from '../api'
 import MdView from './MdView'
 import { useWidgetBus } from './widget-bus'
 import type { TeacherAction } from './widget-bus'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -77,7 +78,7 @@ export default function TutorDrawer(props: {
       const r = await api.tutor(props.course, props.node, next)
       setMessages(m => [...m, { role: 'assistant', content: r.answer }])
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
       setMessages(messages) // 失败回滚到提问前（输入框已清，错误已提示）
     } finally {
       setBusy(false)

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import type { HabitCurvePoint, HabitListItem, SkillLaneItem } from '../types'
 import AgentHints from '../components/AgentHints'
+import { errorMessage } from '../hooks/useCommand'
 
 /** 自动化自评 1-5 的文案（SRBAI 语义：这个行为有多「自动」）。 */
 const RATING_LABEL: Record<number, string> = {
@@ -46,7 +47,7 @@ export default function PracticePage() {
       setHabits(h.habits)
       setSkills(s.skills)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }, [])
 
@@ -74,7 +75,7 @@ export default function PracticePage() {
           Message.success(`「${h.name}」+1（${rating ? RATING_LABEL[rating] : '仅记重复'}）`)
           await load()
         } catch (err) {
-          Message.error(err instanceof Error ? err.message : String(err))
+          Message.error(errorMessage(err))
         } finally {
           setBusy(false)
         }
@@ -104,7 +105,7 @@ export default function PracticePage() {
           Message.success('习惯已立（去 agent 对话或这里自报重复）')
           await load()
         } catch (err) {
-          Message.error(err instanceof Error ? err.message : String(err))
+          Message.error(errorMessage(err))
         } finally {
           setBusy(false)
         }
@@ -118,7 +119,7 @@ export default function PracticePage() {
       const doc = await api.habit(h.id)
       setCurve({ habit: h.name, curve: doc.curve })
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -134,7 +135,7 @@ export default function PracticePage() {
           await api.habitArchive(h.id, true)
           await load()
         } catch (err) {
-          Message.error(err instanceof Error ? err.message : String(err))
+          Message.error(errorMessage(err))
         } finally {
           setBusy(false)
         }

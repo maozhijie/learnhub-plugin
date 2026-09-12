@@ -5,6 +5,7 @@
 import { Checkbox, Input, Message, Modal, Radio, Space, Typography } from '@arco-design/web-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -50,7 +51,7 @@ export default function SeedFormModal({ visible, mode, course, onCancel }: {
       Message.success(`${r.message}通常 1–3 分钟；完成后弹通知、提案页出现提案——期间可随意刷新或离开页面`)
       onCancel()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }

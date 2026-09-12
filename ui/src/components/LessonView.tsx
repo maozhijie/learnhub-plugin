@@ -5,19 +5,24 @@
  * AI 出题）；生成/出题进行中轮询任务状态；「在图中查看」低频跳转。
  * 每节正文后「加我的理解」入口（E1 #70）：用自己的话写解释/例子/助记 → AI 对照
  * 该节要点给是非+定位反馈 → 存为「我的卡」（Learner Output：零 XP 零 canonical）。
- * 掌握度 = 口径 B 纯派生（masteryOfFm：0.7·记忆稳定度完成度 + 0.3·练习证据 EMA）。 */
-import { Button, Card, Collapse, Empty, Input, Message, Modal, Popconfirm, Select, Space, Spin, Tag, Tooltip, Typography } from '@arco-design/web-react'
+ * 掌握度 = 口径 B 纯派生（masteryOfFm：0.7·记忆稳定度完成度 + 0.3·练习证据 EMA）。
+ * #183：课文/题库/我的卡三路取数走 useCommand（任务在途 3s、空闲 15s 的自适应
+ * 轮询走 usePolling——tick 返回下一次延迟），后台刷新失败保持旧数据不翻转。 */
+import { Button, Card, Collapse, Empty, Input, Message, Modal, Popconfirm, Space, Spin, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import MdView from './MdView'
 import PracticeFlow from './PracticeFlow'
 import TutorDrawer from './TutorDrawer'
 import ExplainDrawer from './ExplainDrawer'
+import UnderstandingEntry from './UnderstandingEntry'
 import { WidgetBusProvider } from './widget-bus'
-import { QUIZ_SOFT_CAP } from './quiz-rules'
+import { CommandBoundary } from './CommandBoundary'
+import { QUIZ_SOFT_CAP } from '../lib/quiz-rules'
 import { api, discussInHost } from '../api'
-import { isActiveTab } from '../active-tab'
+import { useCommand, errorMessage } from '../hooks/useCommand'
+import { usePolling } from '../hooks/usePolling'
 import type { AppFrame } from '../App'
-import type { GenJobItem, LearnerCardItem, LessonSection, QuestionItem, SectionManifestItem, UnderstandingResult } from '../types'
+import type { GenJobItem } from '../types'
 
 const { Text, Title } = Typography
 
@@ -30,127 +35,18 @@ const STAGE_LABEL: Record<string, { label: string; color: string }> = {
   skipped: { label: '已跳过', color: 'purple' },
 }
 
-const NOTE_KINDS = [
-  { value: 'recall_cue', label: '提示重述' },
-  { value: 'cloze_rewrite', label: '挖空重述' },
-  { value: 'self_explain', label: '自注讲解' },
-] as const
-
-const VERDICT_TAG: Record<string, { color: string }> = {
-  对: { color: 'green' },
-  部分对: { color: 'orange' },
-  错: { color: 'red' },
-}
-
-/** 「加我的理解」节级入口（E1 #70）：写一句自己的解释/例子/助记 → AI 对照该节
- * 要点给是非 + 定位（含糊/跳跃/说错）+ 可怎么补 → 存为「我的卡」（独立域自调度，
- * 零 XP、不进掌握度）。判词反馈就地展示；同节可多次写（同内容去重在引擎侧）。 */
-function UnderstandingEntry(props: {
-  course: string
-  node: string
-  sectionId: string
-  existingCount: number
-  onAdded: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [kind, setKind] = useState<'recall_cue' | 'cloze_rewrite' | 'self_explain'>('recall_cue')
-  const [text, setText] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<UnderstandingResult | null>(null)
-
-  const save = async () => {
-    setBusy(true)
-    try {
-      const r = await api.understandingAdd(props.course, props.node, text.trim(), {
-        kind,
-        section: props.sectionId,
-      })
-      setResult(r)
-      setText('')
-      setOpen(false)
-      Message.success('已存入「我的卡」（可在学习中心页复习）')
-      props.onAdded()
-    } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const clozeMissing = kind === 'cloze_rewrite' && !/\{\{[^{}]+\}\}/.test(text)
-
-  return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        {!open && (
-          <Button size='mini' type='text' status='success' onClick={() => setOpen(true)}>
-            ＋ 加我的理解
-          </Button>
-        )}
-        {props.existingCount > 0 && (
-          <Tooltip content='这一节你已写过的理解（在「我的卡」队列复习）'>
-            <Tag size='small' color='green'>我的卡 ×{props.existingCount}</Tag>
-          </Tooltip>
-        )}
-      </div>
-      {open && (
-        <div style={{
-          border: '1px solid var(--color-success-3,#00d0b6)', background: 'var(--color-fill-1,#f7f8fa)',
-          borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 680,
-        }}>
-          <Space size={6} wrap>
-            <Select value={kind} onChange={v => setKind(v as typeof kind)} size='mini' style={{ width: 120 }}>
-              {NOTE_KINDS.map(k => <Select.Option key={k.value} value={k.value}>{k.label}</Select.Option>)}
-            </Select>
-            <Text type='secondary' style={{ fontSize: 12 }}>
-              用你的话写一句这一节的解释 / 例子 / 助记；挖空重述请用 {'{{…}}'} 标出挖空。保存后 AI 会对照该节要点给反馈。
-            </Text>
-          </Space>
-          <Input.TextArea
-            value={text} onChange={setText}
-            placeholder='如：等差数列就是每一步加固定的数……'
-            autoSize={{ minRows: 2, maxRows: 6 }} />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <Button size='small' type='text' onClick={() => setOpen(false)}>收起</Button>
-            <Button size='small' type='primary' status='success' loading={busy}
-              disabled={!text.trim() || clozeMissing} onClick={() => void save()}>
-              保存并获取反馈
-            </Button>
-          </div>
-        </div>
-      )}
-      {result && (
-        <div style={{
-          borderLeft: `3px solid var(--color-${VERDICT_TAG[result.verdict.verdict]?.color ?? 'gray'}-6,#86909c)`,
-          background: 'var(--color-fill-1,#f7f8fa)', borderRadius: '0 6px 6px 0',
-          padding: '8px 12px', marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 680,
-        }}>
-          <Space size={6} wrap>
-            <Tag size='small' color={VERDICT_TAG[result.verdict.verdict]?.color}>{result.verdict.verdict}</Tag>
-            {result.verdict.tags.map(t => <Tag key={t} size='small' color='orange'>{t}</Tag>)}
-            {result.verdict.advice && <Text type='secondary' style={{ fontSize: 12 }}>可怎么补：{result.verdict.advice}</Text>}
-          </Space>
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}><MdView md={result.reply} /></div>
-          <Text type='secondary' style={{ fontSize: 12 }}>
-            这条理解已存为「我的卡」（{NOTE_KINDS.find(k => k.value === result.card.kind)?.label}），判词只入档案——不计 XP、不影响掌握度。
-          </Text>
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function LessonView(props: { course: string; node: string; frame: AppFrame }) {
   const { course, node, frame } = props
-  const [sections, setSections] = useState<LessonSection[] | null>(null)
-  const [manifest, setManifest] = useState<SectionManifestItem[] | null>(null)
-  const [stage, setStage] = useState<string | null>(null)
-  const [mastery, setMastery] = useState(0)
-  const [questions, setQuestions] = useState<QuestionItem[] | null>(null)
-  const [myCards, setMyCards] = useState<LearnerCardItem[]>([])
+  const lessonCmd = useCommand(() => api.lesson(node, course), [node, course])
+  const bankCmd = useCommand(() => api.questions(course, node), [node, course])
+  const cardsCmd = useCommand(() => api.learnerQueue(course), [course, node])
+  const sections = lessonCmd.data?.sections ?? []
+  const manifest = lessonCmd.data?.manifest ?? null
+  const stage = lessonCmd.data?.stage ?? null
+  const mastery = bankCmd.data?.mastery ?? 0
+  const myCards = (cardsCmd.data?.cards ?? []).filter(c => c.node === node)
   const [busy, setBusy] = useState<string | null>(null)
   const [job, setJob] = useState<GenJobItem | null>(null)
-  const [reloadTick, setReloadTick] = useState(0)
   /** mastery 会话是否走完全部节（走完才放行「完成学习」）。 */
   const [sessionPassed, setSessionPassed] = useState(false)
   const [tutorOpen, setTutorOpen] = useState(false)
@@ -162,36 +58,20 @@ export default function LessonView(props: { course: string; node: string; frame:
   const lastVersionRef = useRef<number | null>(null)
   /** 练习会话存续中（PracticeFlow 挂载）——冻结语义开关的每次渲染镜像（ADR-0027）。 */
   const sessionActiveRef = useRef(false)
-  sessionActiveRef.current = questions !== null && questions.length > 0
+  sessionActiveRef.current = (bankCmd.data?.questions?.length ?? 0) > 0
   /** 会话期间后台内容有更新（冻结不打断）：轻提示横幅；本课结束后重进生效。 */
   const [staleNotice, setStaleNotice] = useState(false)
   useEffect(() => { setStaleNotice(false) }, [course, node])
 
-  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
-    // silent：作答后的统计刷新——保留旧内容直接覆盖，不闪 Spin（提交不整页刷新）
-    // 非 silent 在会话存续中同样不置空（ADR-0027）：任何数据刷新不得卸载练习会话
-    if (!opts?.silent && !sessionActiveRef.current) { setSections(null); setQuestions(null) }
-    try {
-      const [lesson, bank, cards] = await Promise.all([
-        api.lesson(node, course).catch(() => null),
-        api.questions(course, node).catch(() => null),
-        api.learnerQueue(course).catch(() => null),
-      ])
-      setSections(lesson?.sections ?? [])
-      setManifest(lesson?.manifest ?? null)
-      setStage(lesson?.stage ?? null)
-      setMastery(bank?.mastery ?? 0)
-      setQuestions(bank?.questions ?? [])
-      setMyCards((cards?.cards ?? []).filter(c => c.node === node))
-    } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
-    }
-  }, [course, node])
+  // 重拉三路数据。缝在失败时保持旧数据不翻转（区别于旧版非 silent 清空重来的闪断：
+  // 会话存续冻结语义 ADR-0027 由「数据不置空」更强的保证承载）。
+  // 只被事件回调消费，不做 useCallback（reload 本身稳定，重复点击安全）。
+  const refresh = async () => {
+    await Promise.all([lessonCmd.reload(), bankCmd.reload(), cardsCmd.reload()])
+  }
 
-  useEffect(() => { void refresh() }, [refresh])
-
-  // 生成/出题进行中：轮询本节点任务（running 时 3s，空闲 15s）
-  const poll = useCallback(async () => {
+  // 生成/出题进行中：轮询本节点任务（running 时 3s，空闲 15s；非激活页签 15s 节拍不取数）
+  const poll = useCallback(async (): Promise<GenJobItem | null> => {
     try {
       const jobs = (await api.generateStatus()).jobs
       const mine = jobs.find(j =>
@@ -205,48 +85,29 @@ export default function LessonView(props: { course: string; node: string; frame:
     }
   }, [course, node])
 
-  useEffect(() => {
-    let stopped = false
-    let timer: ReturnType<typeof setTimeout>
-    let wasActive = false
-    const tick = async () => {
-      clearTimeout(timer)
-      // 页签保活：非激活页签跳过取数（组件常驻，定时器只保留节拍）
-      if (!isActiveTab('learn')) { timer = setTimeout(() => void tick(), 15000); return }
-      const mine = await poll()
-      if (stopped) return
-      const active = !!mine && (mine.status === 'running' || mine.status === 'cancelling')
-      // 任务完成边沿（running→终态）：出题任务（phase=quiz）的新题增量并入当前会话
-      // （ADR-0027 增量并入语义，静默刷新不打断作答）；内容管线的正文/结构变化仍冻结
-      // 到本课结束后重进生效，只留轻提示。
-      if (wasActive && !active) {
-        wasActive = false
-        void frame.reload()
-        if (mine?.phase === 'quiz') void refresh({ silent: true })
-        else if (sessionActiveRef.current) setStaleNotice(true)
-        else void refresh()
-      } else if (active) wasActive = true
-      // 增量刷新：正文版本变化（dsh 会话里 agent 修订了正文）→ 静默刷新当前视图
-      const v = mine?.contentVersion
-      if (v !== undefined && lastVersionRef.current !== null && v !== lastVersionRef.current) {
-        if (sessionActiveRef.current) setStaleNotice(true)
-        else void refresh({ silent: true })
-      }
-      if (v !== undefined) lastVersionRef.current = v
-      timer = setTimeout(() => void tick(), active ? 3000 : 15000)
+  const wasActiveRef = useRef(false)
+  usePolling(async () => {
+    const mine = await poll()
+    const active = !!mine && (mine.status === 'running' || mine.status === 'cancelling')
+    // 任务完成边沿（running→终态）：出题任务（phase=quiz）的新题增量并入当前会话
+    // （ADR-0027 增量并入语义，静默刷新不打断作答）；内容管线的正文/结构变化仍冻结
+    // 到本课结束后重进生效，只留轻提示。
+    if (wasActiveRef.current && !active) {
+      wasActiveRef.current = false
+      void frame.reload()
+      if (mine?.phase === 'quiz') void refresh()
+      else if (sessionActiveRef.current) setStaleNotice(true)
+      else void refresh()
+    } else if (active) wasActiveRef.current = true
+    // 增量刷新：正文版本变化（dsh 会话里 agent 修订了正文）→ 静默刷新当前视图
+    const v = mine?.contentVersion
+    if (v !== undefined && lastVersionRef.current !== null && v !== lastVersionRef.current) {
+      if (sessionActiveRef.current) setStaleNotice(true)
+      else void refresh()
     }
-    // 切回学习页签即补一次 tick：隐藏期间错过的完成边沿在这里补判（ADR-0027）
-    const onTabActive = (e: Event) => {
-      if ((e as CustomEvent).detail === 'learn') void tick()
-    }
-    window.addEventListener('learnhub:tab', onTabActive)
-    void tick()
-    return () => {
-      stopped = true
-      clearTimeout(timer)
-      window.removeEventListener('learnhub:tab', onTabActive)
-    }
-  }, [poll, refresh, frame.reload, reloadTick])
+    if (v !== undefined) lastVersionRef.current = v
+    return active ? 3000 : 15000
+  }, { tab: 'learn', intervalMs: 3000, idleMs: 15000 })
 
   const generate = async () => {
     setBusy('generate')
@@ -254,9 +115,9 @@ export default function LessonView(props: { course: string; node: string; frame:
       const res = await api.generate(course, node)
       Message.success(res.message)
       await Promise.all([refresh(), frame.reload()])
-      setReloadTick(t => t + 1)
+      void poll()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
       await Promise.all([poll(), refresh()])
     } finally {
       setBusy(null)
@@ -284,7 +145,7 @@ export default function LessonView(props: { course: string; node: string; frame:
       Message.info(r.message)
       await poll()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(null)
     }
@@ -298,7 +159,7 @@ export default function LessonView(props: { course: string; node: string; frame:
       Message.info(r.message)
       await poll()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(null)
     }
@@ -325,7 +186,7 @@ export default function LessonView(props: { course: string; node: string; frame:
       window.dispatchEvent(new Event('learnhub:reload'))
       frame.closeLesson()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(null)
     }
@@ -341,7 +202,7 @@ export default function LessonView(props: { course: string; node: string; frame:
         : '已取消跳过（此前跳过时归档的题不会自动恢复，可在题库按原因 skip 筛出恢复）')
       await Promise.all([refresh(), frame.reload()])
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(null)
     }
@@ -357,13 +218,14 @@ export default function LessonView(props: { course: string; node: string; frame:
       if (sessionActiveRef.current) setStaleNotice(true)
       else await refresh()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(null)
     }
   }
 
-  const hasContent = !!sections?.length
+  const hasContent = sections.length > 0
+  const questions = bankCmd.data?.questions ?? null
   const hasQuestions = !!questions?.length
   // 未归档题软上限（#117）：questions 视图只含未归档题，length 即未归档数
   const quizSoftCapReached = (questions?.length ?? 0) >= QUIZ_SOFT_CAP
@@ -464,7 +326,7 @@ export default function LessonView(props: { course: string; node: string; frame:
                 await api.generateCancel(course, node)
                 Message.success('已请求取消')
                 void poll()
-              } catch (err) { Message.error(err instanceof Error ? err.message : String(err)) }
+              } catch (err) { Message.error(errorMessage(err)) }
             }}>取消</Button>
         </div>
       )}
@@ -490,22 +352,26 @@ export default function LessonView(props: { course: string; node: string; frame:
         </div>
       )}
 
-      {/* 主体：mastery 会话即学习界面——按节推进阅读与练习；manifest 驱动节序列（练习节一等化） */}
-      {questions === null ? <Card size='small' style={{ borderRadius: 10 }}><Spin dot /></Card>
-        : questions.length === 0
-          ? (hasContent && !active && (
-            <Empty description='还没有题目：点上方「AI 出题」生成一组混合题型练习' />
-          ))
-          : (
-            <PracticeFlow key={`${course}/${node}`} course={course} node={node}
-              sections={sections ?? []} manifest={manifest} questions={questions}
-              onSettled={() => void refresh({ silent: true })}
-              onNeedMore={s => makeSectionQuestions(s)}
-              quizPending={quizPending}
-              quizSoftCap={quizSoftCapReached}
-              onQuestionsMutated={() => void refresh({ silent: true })}
-              onPassChange={setSessionPassed} />
-          )}
+      {/* 主体：mastery 会话即学习界面——按节推进阅读与练习；manifest 驱动节序列（练习节一等化）；
+      题库三态（首载 Spin / 失败重试 / 内容）由缝统一供给 */}
+      <CommandBoundary cmd={bankCmd} loadingNode={<Card size='small' style={{ borderRadius: 10 }}><Spin dot /></Card>}>
+        {bank => (
+          bank.questions.length === 0
+            ? (hasContent && !active && (
+              <Empty description='还没有题目：点上方「AI 出题」生成一组混合题型练习' />
+            ))
+            : (
+              <PracticeFlow key={`${course}/${node}`} course={course} node={node}
+                sections={sections} manifest={manifest} questions={bank.questions}
+                onSettled={() => void refresh()}
+                onNeedMore={s => makeSectionQuestions(s)}
+                quizPending={quizPending}
+                quizSoftCap={quizSoftCapReached}
+                onQuestionsMutated={() => void refresh()}
+                onPassChange={setSessionPassed} />
+            )
+        )}
+      </CommandBoundary>
 
       {/* 整课正文（折叠）：会话内已按节推进阅读；这里留给自由回看与单节重写 */}
       {hasContent && (
@@ -549,7 +415,7 @@ export default function LessonView(props: { course: string; node: string; frame:
                         <UnderstandingEntry
                           course={course} node={node} sectionId={sid}
                           existingCount={myCards.filter(c => c.source_section === s.title).length}
-                          onAdded={() => void refresh({ silent: true })} />
+                          onAdded={() => void refresh()} />
                       )}
                     </div>
                   )

@@ -8,6 +8,7 @@ import { Button, Input, Message, Modal, Popconfirm, Space, Tag, Typography } fro
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import { InlineMd } from './MdView'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -59,7 +60,7 @@ export default function DisputeModal(props: {
       const r = await api.questionDisputeReview(props.target.course, props.target.node, props.target.qid)
       if (runId === runIdRef.current) setReview(r)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       if (runId === runIdRef.current) {
         setReviewError(msg)
         setFallbackable(msg.includes('AI 复核输出不可用'))
@@ -102,7 +103,7 @@ export default function DisputeModal(props: {
       props.onSettled?.({ resolution, correctNow: r.correct_now, xp: r.xp, reason: reason.trim() })
       props.onClose()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setApplying(false)
     }

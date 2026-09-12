@@ -11,6 +11,7 @@ import { api } from '../api'
 import QuestionEditDrawer from '../components/QuestionEditDrawer'
 import type { AppFrame } from '../App'
 import type { BankEntry, CleanupPreviewDoc, DifficultyAdviceNode, QuestionAuditReport } from '../types'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -53,7 +54,7 @@ function CreateQuestionForm(props: { course: string; nodes: string[]; onDone: ()
       Message.success(`已添加 ${r.id}（题库共 ${r.count} 题）`)
       props.onDone()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -129,7 +130,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
       const r = await api.questionsAll(filterCourse)
       setEntries(r.questions)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }, [filterCourse])
 
@@ -164,7 +165,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
       await api.questionArchive(e.course, e.node, e.qid, archived)
       await load()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }
 
@@ -191,7 +192,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
       }
       await Promise.all([load(), loadAdvice()])
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setRecalibrating(null)
     }
@@ -204,7 +205,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
       Message.success(`已归档 ${qid}`)
       await Promise.all([load(), loadAdvice()])
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }
 
@@ -214,7 +215,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
       await api.adviceDismiss(n.course, n.node, qid)
       await loadAdvice()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }
   const doRestoreDismissed = async () => {
@@ -223,7 +224,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
       await loadAdvice()
       Message.success('已恢复全部被忽略的建议')
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }
 
@@ -240,7 +241,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     try {
       setAudit(await api.questionAudit())
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setAuditBusy(false)
     }
@@ -252,7 +253,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
     try {
       setCleanup(await api.bankCleanupPreview(filterCourse))
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setCleanupBusy(false)
     }
@@ -266,7 +267,7 @@ export default function BankPage({ frame }: { frame: AppFrame }) {
       setCleanup(null)
       await Promise.all([load(), loadAdvice()])
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setCleanupBusy(false)
     }

@@ -9,7 +9,7 @@
 import { Alert, Button, Card, InputNumber, Message, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
-import { toastError } from '../App'
+import { errorMessage } from '../hooks/useCommand'
 import type { AppFrame } from '../App'
 import type { ExperimentsDoc, SandboxDoc, SleepConfig, ThermostatDoc } from '../types'
 
@@ -54,7 +54,7 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
       setExp(e)
       setThermo(t)
     } catch (err) {
-      toastError(err)
+      Message.error(errorMessage(err))
     }
   }, [])
 
@@ -67,7 +67,7 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
       if (ok) Message.success(ok)
       await reload()
     } catch (err) {
-      toastError(err)
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -78,7 +78,7 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
     try {
       setSandbox(await api.sandboxRun(minutes, weeks, course))
     } catch (err) {
-      toastError(err)
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }

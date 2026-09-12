@@ -7,6 +7,7 @@ import { Button, Drawer, Empty, Input, Message, Radio, Spin, Tag, Typography } f
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api'
 import MdView from './MdView'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -57,7 +58,7 @@ export default function ExplainDrawer(props: {
       const r = await api.explainBack(props.course, props.node, next)
       setMessages(m => [...m, { role: 'assistant', content: r.answer }])
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
       setMessages(messages)
     } finally {
       setBusy(false)
@@ -75,7 +76,7 @@ export default function ExplainDrawer(props: {
       const v = await api.explainFeedback(props.course, props.node, transcript)
       setFeedback(v)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setFeedbackBusy(false)
     }
@@ -91,7 +92,7 @@ export default function ExplainDrawer(props: {
       Message.success(`已存为我的卡 ${r.id}（E 池独立复习，不碰掌握度/XP）`)
       setArchiveOpen(false)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setArchiveBusy(false)
     }

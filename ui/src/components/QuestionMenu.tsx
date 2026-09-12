@@ -12,6 +12,7 @@ import { api } from '../api'
 import DisputeModal, { isRuleKind } from './DisputeModal'
 import type { DisputeSettled } from './DisputeModal'
 import QuestionEditDrawer from './QuestionEditDrawer'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -50,7 +51,7 @@ export default function QuestionMenu(props: {
       Message.success(`已归档 ${props.target.qid}（可在题目管理页恢复）`)
       props.onMutated()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -71,7 +72,7 @@ export default function QuestionMenu(props: {
       setFeedbackOpen(false)
       props.onMutated()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }

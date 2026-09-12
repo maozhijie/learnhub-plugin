@@ -6,6 +6,7 @@ import { Card, Empty, Message, Space, Spin, Tag, Typography } from '@arco-design
 import { useEffect, useState } from 'react'
 import { fetchGuide, GUIDE_PAGE_LABEL } from '../components/AgentHints'
 import type { AgentGuideItem } from '../types'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -13,7 +14,7 @@ export default function GuidePage() {
   const [items, setItems] = useState<AgentGuideItem[] | null>(null)
   useEffect(() => {
     void fetchGuide().then(setItems).catch(err => {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
       setItems([])
     })
   }, [])

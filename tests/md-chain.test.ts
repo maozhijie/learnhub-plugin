@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { MD_HTML_POLICY, REHYPE_PLUGINS, REMARK_PLUGINS } from '../ui/src/components/md-chain.ts'
+import { MD_HTML_POLICY, REHYPE_PLUGINS, REMARK_PLUGINS } from '../ui/src/lib/md-chain.ts'
 
 // ---- markdown 渲染链 HTML 策略 ----
 // 回归背景：react-markdown 默认把 html 节点按转义文本渲染，笔记末尾的机器块

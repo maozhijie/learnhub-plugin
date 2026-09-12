@@ -2,10 +2,11 @@
  * 列表常驻新鲜（8s 轮询 + 手动刷新）——起草完成后提案才出现，人审队列不能是死数据。
  * #159：种子提案应用前先取影响预览（将新建什么、覆盖什么、什么保留），知情后再确认。 */
 import { Alert, Button, Card, Empty, Message, Modal, Space, Table, Tag, Typography } from '@arco-design/web-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { api } from '../api'
-import { isActiveTab } from '../active-tab'
+import { usePolling } from '../hooks/usePolling'
 import type { PropItem, SeedImpactDoc } from '../types'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -59,17 +60,13 @@ export default function ProposalsPage() {
     try {
       setItems(await api.proposals())
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }, [])
 
-  useEffect(() => { void load() }, [load])
-
-  // 8s 轮询（页签保活纪律：非激活跳过取数）——起草任务完成、教练回合产批后提案自动浮现
-  useEffect(() => {
-    const timer = setInterval(() => { if (isActiveTab('proposals')) void load() }, 8000)
-    return () => clearInterval(timer)
-  }, [load])
+  // 挂载即取 + 8s 轮询（页签保活：非激活跳过取数、切回即补）——起草任务完成、
+  // 教练回合产批后提案自动浮现
+  usePolling(load, { tab: 'proposals', intervalMs: 8000 })
 
   const apply = async (p: PropItem) => {
     // 种子提案先取影响预览（#159）：知情后再确认；预览取不到不拦人审，
@@ -80,7 +77,7 @@ export default function ProposalsPage() {
       try {
         impact = await api.proposalImpact('seed', p.id)
       } catch (err) {
-        impactError = err instanceof Error ? err.message : String(err)
+        impactError = errorMessage(err)
       }
     }
     Modal.confirm({
@@ -103,7 +100,7 @@ export default function ProposalsPage() {
           Message.success(`提案 #${p.id} 已应用`)
           await load()
         } catch (err) {
-          Message.error(err instanceof Error ? err.message : String(err))
+          Message.error(errorMessage(err))
         } finally {
           setBusy(false)
         }
@@ -118,7 +115,7 @@ export default function ProposalsPage() {
       Message.success(`提案 #${p.id} 已拒绝留痕`)
       await load()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }

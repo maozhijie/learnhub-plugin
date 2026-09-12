@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { SVG_URI } from '../ui/src/components/svg-uri.ts'
+import { SVG_URI } from '../ui/src/lib/svg-uri.ts'
 
 // ---- SVG_URI 白名单（DOMPurify ALLOWED_URI_REGEXP 语义）----
 // 该正则被 DOMPurify 用来筛查**每一个**属性值：值不匹配 → 属性被整体剥掉。

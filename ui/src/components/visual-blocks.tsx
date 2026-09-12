@@ -8,8 +8,9 @@
 import DOMPurify from 'dompurify'
 import { compile } from 'mathjs/number'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { SVG_URI } from './svg-uri'
+import { SVG_URI } from '../lib/svg-uri'
 import 'mafs/core.css'
+import { errorMessage } from '../hooks/useCommand'
 
 /** 渲染失败/校验不过时的源码降级块。 */
 function Fallback(props: { cls: string; code: string }) {
@@ -133,7 +134,7 @@ function compilePlotSpec(spec: PlotSpec): Compiled[] {
           console.warn(`[learnhub] plot 元素类型「${type}」未注册，已跳过`)
       }
     } catch (err) {
-      console.warn(`[learnhub] plot 元素「${type}」求值失败已跳过: ${err instanceof Error ? err.message : String(err)}`)
+      console.warn(`[learnhub] plot 元素「${type}」求值失败已跳过: ${errorMessage(err)}`)
     }
   }
   return out

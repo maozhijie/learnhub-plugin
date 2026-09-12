@@ -1,7 +1,8 @@
-import { Button, Empty, Message, Result, Spin, Tabs } from '@arco-design/web-react'
+import { Button, Empty, Result, Spin, Tabs } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api'
 import { setActiveTab } from './active-tab'
+import { errorMessage } from './hooks/useCommand'
 import BankPage from './pages/BankPage'
 import GeneratePage from './pages/GeneratePage'
 import GraphPage from './pages/GraphPage'
@@ -60,7 +61,7 @@ export default function App() {
       })
       setFatal(null)
     } catch (err) {
-      setFatal(err instanceof Error ? err.message : String(err))
+      setFatal(errorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -177,7 +178,3 @@ function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
       ))}
     </>
   )}
-
-export function toastError(err: unknown) {
-  Message.error(err instanceof Error ? err.message : String(err))
-}

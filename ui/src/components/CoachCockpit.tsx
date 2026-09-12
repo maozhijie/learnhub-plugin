@@ -4,11 +4,12 @@
  * ADR-0003 维持「不把逐批人审修回来」）。建课/换终点表单是全面板唯一主动建课入口
  * （#159），学习页空态直达的也是同一份表单组件（SeedFormModal）。 */
 import { Button, Card, Message, Modal, Progress, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import SeedFormModal from './SeedFormModal'
 import { api } from '../api'
-import { isActiveTab } from '../active-tab'
+import { usePolling } from '../hooks/usePolling'
 import type { GenJobItem, ProbationDoc, StatusCourse } from '../types'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -84,11 +85,8 @@ function ProbationCard({ course }: { course: string }) {
     }
   }, [course])
 
-  useEffect(() => {
-    void load()
-    const timer = setInterval(() => { if (isActiveTab('graph')) void load() }, 30_000)
-    return () => clearInterval(timer)
-  }, [load])
+  // 挂载即取 + 30s 低频轮询（页签保活：非激活跳过取数、切回即补）
+  usePolling(load, { tab: 'graph', intervalMs: 30_000 })
 
   if (!doc) return null
   const hasAnything = doc.in_flight.length > 0 || doc.overdue.length > 0
@@ -101,7 +99,7 @@ function ProbationCard({ course }: { course: string }) {
       else Message.success(`复诊结算：${mine.settled.map(s => `${s.node}→${s.outcome}`).join('；')}`)
       await load()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -156,7 +154,7 @@ export default function CoachCockpit({ course, jobs, coach }: {
           if (r.queued) Message.success(r.message)
           else Message.warning(r.message)
         } catch (err) {
-          Message.error(err instanceof Error ? err.message : String(err))
+          Message.error(errorMessage(err))
         } finally {
           setBusy(null)
         }
@@ -170,7 +168,7 @@ export default function CoachCockpit({ course, jobs, coach }: {
       const r = await api.compassPaint(c)
       Message.success(r.message)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(null)
     }
@@ -188,7 +186,7 @@ export default function CoachCockpit({ course, jobs, coach }: {
           const s = JSON.stringify(r)
           Message.success(s.length > 120 ? `${s.slice(0, 120)}…——见提案页` : `${s}——见提案页`)
         } catch (err) {
-          Message.error(err instanceof Error ? err.message : String(err))
+          Message.error(errorMessage(err))
         } finally {
           setBusy(null)
         }

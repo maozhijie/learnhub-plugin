@@ -22,6 +22,7 @@ import { api, explainInHost } from '../api'
 import DisputeModal, { isRuleKind } from './DisputeModal'
 import type { DisputeSettled } from './DisputeModal'
 import type { QuestionItem } from '../types'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -212,7 +213,7 @@ export default function QuestionCard(props: {
       setOutcome(res)
       props.onDone?.(res)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       if (msg.includes('AI 判卷输出不可用')) setGradingFails(f => f + 1)
       Message.error(msg)
     } finally {
@@ -230,7 +231,7 @@ export default function QuestionCard(props: {
       setOutcome(oc)
       props.onDone?.(oc)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setForgetting(false)
     }

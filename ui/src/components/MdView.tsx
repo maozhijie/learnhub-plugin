@@ -12,7 +12,7 @@ import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import 'katex/contrib/mhchem' // \ce 等化学宏注册进 rehype-katex 共享的 katex 实例
 import 'katex/dist/katex.min.css'
-import { MD_HTML_POLICY, REHYPE_PLUGINS, REMARK_PLUGINS } from './md-chain'
+import { MD_HTML_POLICY, REHYPE_PLUGINS, REMARK_PLUGINS } from '../lib/md-chain'
 import { renderBlock, verifyRendererCoverage } from './renderers'
 import { splitPredictSegments } from '../../../shared/content-renderers'
 import type { PredictBlock } from '../../../shared/content-renderers'

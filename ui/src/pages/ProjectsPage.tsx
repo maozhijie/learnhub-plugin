@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import type { FadingTier, ProjectCrossDoc, ProjectFm } from '../types'
 import AgentHints from '../components/AgentHints'
+import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
@@ -67,7 +68,7 @@ export default function ProjectsPage() {
       setProjects(list)
       setSelected(prev => (prev && list.some(p => p.id === prev) ? prev : list[0]?.id ?? null))
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }, [])
 
@@ -76,7 +77,7 @@ export default function ProjectsPage() {
       setCross(await api.projectCross(id))
     } catch (err) {
       setCross(null)
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     }
   }, [])
 
@@ -101,7 +102,7 @@ export default function ProjectsPage() {
       setNodesText('')
       await loadCross(selected)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -116,7 +117,7 @@ export default function ProjectsPage() {
       await loadCross(selected)
       await loadList()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setBusy(false)
     }
@@ -137,7 +138,7 @@ export default function ProjectsPage() {
       setDcGoal('')
       await loadList()
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setDcBusy(false)
     }
@@ -153,7 +154,7 @@ export default function ProjectsPage() {
           : await api.projectMilestoneGenerate(selected, kind.slice('milestone:'.length))
       Message.success(`${r.message}（生成页看进度）`)
     } catch (err) {
-      Message.error(err instanceof Error ? err.message : String(err))
+      Message.error(errorMessage(err))
     } finally {
       setDraftBusy(null)
     }
