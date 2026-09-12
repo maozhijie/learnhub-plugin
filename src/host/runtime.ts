@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { AgentSeam, LearnhubEngine } from '../engine/index.ts'
 import type { SeedDraftRequest } from '../engine/index.ts'
-import type { GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
+import type { GenJobFailure, GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
 import { mathRng, systemClock } from './clock.ts'
 import { nodeVaultFs } from './vault-fs.ts'
@@ -52,6 +52,10 @@ export interface GenJob {
   /** 逐节进度：done=已就绪节数 total=总节数 current=正在生成的节标题。 */
   progress?: { done: number; total: number; current?: string }
   message?: string
+  /** 单节终局失败清单（ADR-0053，结构化失败信息）：失败横幅「定点重写失败节」的
+   * 消费面；partial/failed 终态时写入，成功与排队中无此字段（磁盘子格式可选字段，
+   * 恢复侧对缺字段旧档案按「无失败信息」读）。 */
+  failures?: GenJobFailure[]
   /** 节生成提示词风格变体（缺省默认「课程节生成」）。 */
   style?: string
   /** 节点复杂度档位（低/中/高；生成入口算好写入，面板进度与弹性评估可读）。 */

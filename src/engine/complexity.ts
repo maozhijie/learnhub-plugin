@@ -216,11 +216,12 @@ export function nodeProfileLines(g: GraphSignalsSource, node: string): string[] 
   return profileBlockLines(nodeTierOf(g, node))
 }
 
-/** 单档锚点（收敛记录 2026-09-07；初值实现时可按实测校准，测试只锁方向与上下限形状）。 */
+/** 单档锚点（初值 2026-09-07；字数锚 2026-09-12 按「一节 = 学习页 1–2 屏 ≈ 400–800 字」
+ * 实测校准放宽——初值 150/250/400 只够半屏，属拍脑袋数（ADR-0053）；测试只锁方向与上下限形状）。 */
 export interface TierAnchors {
   /** 节段数目标区间 [min, max]（prompt 锚定，非硬校验）。 */
   sections: [number, number]
-  /** 单节辅助文字上限（可视化为主、文字为辅的篇幅预算）。 */
+  /** 单节辅助文字上限（可视化为主、文字为辅的篇幅预算；按去空白/公式/可视化块后的正文字数计）。 */
   sectionWordBudget: number
   /** 每内容节段目标题量（无练习节时；有练习节 -1，练习/交互节段 0）。
    * 地板 2：题量随档位增（复杂多、简单少），但简单课程不压到 1——节段数才是档位的主伸缩轴，
@@ -231,9 +232,9 @@ export interface TierAnchors {
 }
 
 export const TIER_ANCHORS: Record<ComplexityTier, TierAnchors> = {
-  1: { sections: [1, 3], sectionWordBudget: 150, perSectionQuestions: 2, genericQuizCount: 2 },
-  2: { sections: [3, 5], sectionWordBudget: 250, perSectionQuestions: 3, genericQuizCount: 3 },
-  3: { sections: [4, 6], sectionWordBudget: 400, perSectionQuestions: 4, genericQuizCount: 4 },
+  1: { sections: [1, 3], sectionWordBudget: 250, perSectionQuestions: 2, genericQuizCount: 2 },
+  2: { sections: [3, 5], sectionWordBudget: 400, perSectionQuestions: 3, genericQuizCount: 3 },
+  3: { sections: [4, 6], sectionWordBudget: 600, perSectionQuestions: 4, genericQuizCount: 4 },
 }
 
 /** 节段数总上限（任意档 >8 即拦；与旧"通常 3–8 节"口径一致）。 */
