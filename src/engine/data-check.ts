@@ -22,14 +22,15 @@ import { YAML } from './yaml.ts'
 import { parseSchemaBlock } from './schema.ts'
 import { readProbationLedger, foldProbation, recheckDue, learningDaysOf } from './probation.ts'
 import { readDayCutoff } from './xp.ts'
-import { readJsonlLines } from './io.ts'
+import { readJsonlLines, readJsonlLinesReport } from './io.ts'
 import { proposalShapeErrors } from './store.ts'
+import { EVIDENCE_STREAMS } from './evidence-streams.ts'
 import { dayOfTs, todayStr } from './dates.ts'
 import type { CourseEntry, PracticeRec, ProposalRec, ReviewRec } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger' | 'proposals' | 'gen_jobs'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger' | 'proposals' | 'gen_jobs' | 'evidence_streams'
 
 export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived' | 'hint'
 
@@ -81,6 +82,8 @@ export type DataCheckReason =
   | 'gen_jobs_unreadable'
   | 'gen_jobs_json_parse'
   | 'gen_jobs_schema'
+  | 'evidence_stream_broken'
+  | 'evidence_stream_torn_tail'
 
 export interface DataCheckFinding {
   area: DataCheckArea
@@ -119,6 +122,10 @@ export interface DataCheckReport {
     /** 边实验账本盘点（#146）：present = 在册课程数；entries/inFlight/overdue = 账本
      * 行数、在途复诊与到期未决（overdue 是 hint 提示类，不进 status）。 */
     probationLedgers: { present: number; entries: number; inFlight: number; overdue: number }
+    /** 追加流水盘点（#195 / ADR-0053）：全部有读侧的追加流水（清单单点登记处
+     * evidence-streams.ts）逐流 present + 条目数；Missing = 合法空态（present:false
+     * 零 finding），撕裂尾行以 hint 浮出（不进 status）。 */
+    evidenceStreams: Array<{ stream: string; path: string; present: boolean; entries: number }>
   }
   findings: DataCheckFinding[]
 }
@@ -776,6 +783,54 @@ async function scanProbationLedger(
   return { present: true, entries: ledger.length, inFlight: fold.inFlight.length, overdue }
 }
 
+/** 追加流水体检（#195 / ADR-0053）：dataCheck 是钦定的唯一例外形态——读坏流不炸，
+ * 体检的本分是可见性，不是第一个被阻断的消费方。流清单单点登记处（EVIDENCE_STREAMS，
+ * 中心/课程/项目三个展开半径）逐流经读侧原语 try/catch 转 finding：中段坏行 → Broken
+ * finding（原语文案自带路径与行号）；撕裂尾行 → hint finding（不进 status，与
+ * archived/hint 先例同款）；文件缺失 = Missing 合法空态，零 finding。返回逐流盘点
+ * （present + 条目数；坏流的条目数无从取，记 0、行号在 detail）。 */
+async function scanEvidenceStreams(
+  findings: DataCheckFinding[],
+  paths: Paths,
+  courseRoots: string[], fs: VaultFs): Promise<DataCheckReport['inventory']['evidenceStreams']> {
+  const out: DataCheckReport['inventory']['evidenceStreams'] = []
+  const projectIds: string[] = []
+  let projectEntries: Array<{ name: string; directory: boolean }>
+  try {
+    projectEntries = await fs.readdirTypes(paths.projectsDir)
+  } catch {
+    projectEntries = [] // 没有项目区：项目半径零流水
+  }
+  for (const e of projectEntries) {
+    if (e.directory) projectIds.push(e.name)
+  }
+  projectIds.sort((a, b) => a.localeCompare(b))
+  for (const def of EVIDENCE_STREAMS) {
+    const ids = def.scope === 'center' ? [''] : def.scope === 'course' ? courseRoots : projectIds
+    for (const id of ids) {
+      const path = def.pathOf(paths, id)
+      if (!fs.exists(path)) {
+        out.push({ stream: def.stream, path, present: false, entries: 0 })
+        continue
+      }
+      try {
+        const report = await readJsonlLinesReport<unknown>(path, fs, def.stream)
+        out.push({ stream: def.stream, path, present: true, entries: report.lines.length })
+        if (report.tornTailLine !== null) {
+          push(findings, 'evidence_streams', 'hint', 'evidence_stream_torn_tail',
+            `追加流水「${def.stream}」${path}`,
+            `第 ${report.tornTailLine} 行是撕裂尾行（末行不带换行的进程中断残留，合法可规范化；读侧已豁免）。`)
+        }
+      } catch (err) {
+        out.push({ stream: def.stream, path, present: true, entries: 0 })
+        push(findings, 'evidence_streams', 'broken', 'evidence_stream_broken',
+          `追加流水「${def.stream}」${path}`, errorText(err))
+      }
+    }
+  }
+  return out
+}
+
 /** 一次只读体检。注册表损坏时无法安全展开课程，因此只报告注册表本身。 */
 export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promise<DataCheckReport> {
   const findings: DataCheckFinding[] = []
@@ -786,6 +841,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     conceptRegistries: { present: 0, entries: 0 },
     endpointAnchors: { present: 0 },
     probationLedgers: { present: 0, entries: 0, inFlight: 0, overdue: 0 },
+    evidenceStreams: [],
   }
   const registryWhere = `课程注册表 ${paths.registryPath}`
 
@@ -884,6 +940,10 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
   }
   inventory.archive = await scanArchive(findings, paths, breaks, fs)
 
+  // 追加流水（#195）：中心/课程/项目三个半径逐流盘点；读侧原语 try/catch 转 finding，
+  // 体检自身永不因坏流炸场（ADR-0053「dataCheck 是唯一例外形态」）
+  inventory.evidenceStreams = await scanEvidenceStreams(findings, paths, courses.map(c => String(c.root)), fs)
+
   const emptyArea = () => ({ missing: 0, broken: 0, archived: 0, hint: 0 })
   const byArea: DataCheckReport['byArea'] = {
     registry: emptyArea(),
@@ -899,6 +959,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     probation_ledger: emptyArea(),
     proposals: emptyArea(),
     gen_jobs: emptyArea(),
+    evidence_streams: emptyArea(),
   }
   for (const finding of findings) {
     byArea[finding.area][finding.level]++

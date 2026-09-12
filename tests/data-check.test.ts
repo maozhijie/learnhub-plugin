@@ -190,3 +190,98 @@ test('Data Check gen_jobs area：合法 JSON 数组（含悬空记录）零 find
     assert.equal(report.findings.filter(f => f.area === 'gen_jobs').length, 0, '悬空记录不报（避免与 ADR-0039 清扫双重处置）')
   })
 })
+
+// ---- evidence_streams area（#195 / ADR-0053）：逐流盘点 + 撕裂尾行 hint ----
+
+const REC = '{"ts":"2024-01-01T10:00:00+08:00","course":"数学","node":"入门","ex":"e","answer":"a","correct":true,"judge":"auto"}'
+
+test('Data Check evidence_streams area：中段坏行 → broken finding（带路径与行号），status 吃 broken', async () => {
+  await withVault({
+    files: [{ path: '学习中心/state/勘误.jsonl', content: `${REC}\n{broken\n${REC}\n` }],
+  }, async ({ engine }) => {
+    const report = await engine.dataCheck()
+    const hits = report.findings.filter(f => f.area === 'evidence_streams')
+    assert.equal(hits.length, 1, '逐流出 finding：一条坏行一条，不遮蔽其余流')
+    assert.equal(hits[0]!.level, 'broken')
+    assert.equal(hits[0]!.reason, 'evidence_stream_broken')
+    assert.match(hits[0]!.location, /勘误\.jsonl/, 'location 带路径')
+    assert.match(hits[0]!.detail ?? '', /第 2 行/, 'detail 带行号')
+    assert.equal(report.byArea.evidence_streams.broken, 1)
+    assert.equal(report.status, 'broken', 'status 汇总吃 broken')
+  })
+})
+
+test('Data Check evidence_streams area：撕裂尾行 → hint finding（不进 status，与 archived/hint 先例同款）', async () => {
+  await withVault({
+    notes: { 入门: NOTE }, banks: { 入门: BANK },
+    files: [{ path: '学习中心/state/practice.jsonl', content: `${REC}\n{"ts":"2024-01-02T1` }],
+  }, async ({ engine }) => {
+    const report = await engine.dataCheck()
+    const hits = report.findings.filter(f => f.area === 'evidence_streams')
+    assert.equal(hits.length, 1)
+    assert.equal(hits[0]!.level, 'hint')
+    assert.equal(hits[0]!.reason, 'evidence_stream_torn_tail')
+    assert.match(hits[0]!.location, /practice\.jsonl/)
+    assert.match(hits[0]!.detail ?? '', /第 2 行/)
+    assert.equal(report.byArea.evidence_streams.hint, 1)
+    assert.equal(report.counts.hint, 1)
+    assert.equal(report.status, 'ok', 'hint 不进 status：只剩撕裂尾行时体检整体仍 ok')
+    const row = report.inventory.evidenceStreams.find(s => s.stream === 'practice')!
+    assert.equal(row.present, true)
+    assert.equal(row.entries, 1, '条目数只数合法行，撕裂残行不计入')
+  })
+})
+
+test('Data Check evidence_streams area：文件缺失 = Missing 合法空态零 finding，盘点仍记在场 false', async () => {
+  await withVault({ notes: { 入门: NOTE }, banks: { 入门: BANK } }, async ({ engine }) => {
+    const report = await engine.dataCheck()
+    assert.equal(report.findings.filter(f => f.area === 'evidence_streams').length, 0, '缺失不报')
+    const row = report.inventory.evidenceStreams.find(s => s.stream === 'habit-repeats')!
+    assert.equal(row.present, false)
+    assert.equal(row.entries, 0)
+    assert.equal(report.status, 'ok')
+  })
+})
+
+test('Data Check evidence_streams area：issue 点名十条全覆盖 + 项目 exec 逐项目盘点（#195）', async () => {
+  await withVault({
+    notes: { 入门: NOTE }, banks: { 入门: BANK },
+    files: [
+      { path: '学习中心/projects/毕业设计/exec.jsonl', content: `${REC}\n${REC}\n` },
+      { path: '学习中心/math/state/边实验.jsonl', content: '{"node":"入门","pre":[],"proposal":1,"due":5}\n' },
+    ],
+  }, async ({ engine }) => {
+    const report = await engine.dataCheck()
+    const streams = report.inventory.evidenceStreams
+    // issue #195 点名十条（band→band-log、habit→habit-repeats、边实验账本→probation，
+    // 流名与各消费方读侧 label 同串）；sediment/recall 是 #192 评审收口并入原语的两条
+    const named = ['practice', 'journal', 'review-log', 'receipts', 'e-archive', 'erratum', 'band-log', 'habit-repeats', 'probation', 'exec']
+    for (const key of named) assert.ok(streams.some(s => s.stream === key), `点名流水「${key}」在盘点清单中`)
+    const exec = streams.filter(s => s.stream === 'exec')
+    assert.equal(exec.length, 1)
+    assert.equal(exec[0]!.present, true)
+    assert.equal(exec[0]!.entries, 2)
+    assert.match(exec[0]!.path, /projects[/\\]毕业设计[/\\]exec\.jsonl$/)
+    const probation = streams.find(s => s.stream === 'probation')!
+    assert.equal(probation.entries, 1)
+  })
+})
+
+test('Data Check evidence_streams area：多流同时坏不炸、逐流出 finding', async () => {
+  await withVault({
+    files: [
+      { path: '学习中心/state/勘误.jsonl', content: `${REC}\n{broken\n` },
+      { path: '学习中心/state/回执.jsonl', content: '{broken\n' },
+      { path: '学习中心/projects/p1/exec.jsonl', content: `${REC}\n{broken\n` },
+    ],
+  }, async ({ engine }) => {
+    const report = await engine.dataCheck() // 能 resolve 即「不炸」
+    const hits = report.findings.filter(f => f.area === 'evidence_streams' && f.level === 'broken')
+    assert.equal(hits.length, 3, '中心与项目半径逐流各一条，互不遮蔽')
+    assert.ok(hits.some(f => f.location.includes('勘误.jsonl')))
+    assert.ok(hits.some(f => f.location.includes('回执.jsonl')))
+    assert.ok(hits.some(f => f.location.includes('exec.jsonl')))
+    assert.equal(report.byArea.evidence_streams.broken, 3)
+    assert.equal(report.status, 'broken')
+  })
+})
