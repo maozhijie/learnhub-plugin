@@ -31,6 +31,11 @@ export const QUEUE_REGEN = '重生成'
 /** 可视化块围栏语言（单节合计受 SECTION_VISUAL_CAP 约束；interactive 为落盘后的引用块）。 */
 const SECTION_VISUAL_LANGS: ReadonlySet<string> = new Set(['mermaid', 'svg', 'plot', 'chart', 'interactive'])
 
+/** 上下文包 §5「禁止使用的概念」条数上限（#147 起的 200 条实测值，#218 复核保留为显式
+ * 常量并配截断告知）。深度降序 → 截掉的是最靠前的浅层节点，留下的是最不该提前教的深层
+ * 节点；上限本身是排版预算（200 条名 ≈ 1–2k 字），不是语义判据。 */
+const FORBIDDEN_CONCEPT_CAP = 200
+
 export interface ExerciseMeta {
   ex: number
   q?: string
@@ -178,13 +183,20 @@ export class Content {
     out.push('## 4. 领域边界')
     const scope = `本课属于${course ? `课程「${course}」的` : ''}`
     out.push(`${scope}「${region} · ${block}」区块。只讲本节点范围内的内容；后继节点至多在自然收尾处一句话带过，不展开、不提前教；是否提及由你判断。`)
-    const forbidden = Object.keys(graph.nset)
+    const allForbidden = Object.keys(graph.nset)
       .filter(n => n !== node && n.length >= 2 && (graph.depth[n] ?? 0) > dSelf)
       .sort((a, b) => (graph.depth[b] ?? 0) - (graph.depth[a] ?? 0))
-      .slice(0, 200)
+    // #218 稀释治理裁决：**位置保留**（§5 是 §4 领域边界的展开，挪走要把 §6–§13 全部
+    // 重编号，而模板按号引用 §8/§9/§10/§11——重编号会改掉那些锚点，收益无实测支撑）；
+    // **截断策略改为显式**：按深度降序（最深=最不该提前教）截 200 条，截断时如实告知，
+    // 免得模型把清单读成穷举、以为没列出的名字就可以用。
+    const forbidden = allForbidden.slice(0, FORBIDDEN_CONCEPT_CAP)
     out.push('')
     out.push('## 5. 禁止使用的概念（未学，不得出现、不得引用其结论）')
     out.push(forbidden.length ? forbidden.join('、') : '（无：本节点已是图内最深）')
+    if (allForbidden.length > forbidden.length) {
+      out.push(`（本清单按图深度降序截取前 ${FORBIDDEN_CONCEPT_CAP} 条，共 ${allForbidden.length} 条未学节点；**未列出的节点同样未学**，同样不得出现或引用其结论。）`)
+    }
     out.push('')
     out.push('## 6. 规范约束')
     out.push('- 别名统一表：鸽巢原理（非抽屉原理）、勾股定理（非毕达哥拉斯定理）、余弦定理（非阿尔·卡西定理）——完整表见 理念与规范.md §8')
@@ -310,7 +322,7 @@ export class Content {
     // 风格变体作用于「课程节生成」（课程节生成-<风格>）；整课版「课程生成*」已随
     // 大纲→逐节管线退役——旧 vault 快照文件不再被读取，可手工清理。
     课程大纲: `\
-<!-- learnhub:prompt/v10 -->
+<!-- learnhub:prompt/v11 -->
 # 课程大纲提示词（用户可编辑；生成时上下文包自动附在本模板之后）
 
 你是 learnhub 学习系统的课程设计师。根据附后的上下文包，把目标节点的一课拆成依次学习的「节」清单；每节之后会单独生成正文。
@@ -332,11 +344,34 @@ export class Content {
 node: <节点名>
 sections:
   - id: s1
-    title: 概念：整数与自然数的分界
+    title: 概念：甲与乙的分界
     type: 概念
     points: 本节要点（一句话）
     tier: 低|中|高（可选；省略时系统按节位置推导）
     visual: 公式|mermaid|图片|交互|示意图|函数图|图表 之一（本节的讲解主体可视化——学习页文字宜少、公式/图/交互宜多，几乎每节都有，确无才写「无」；示意图=\`\`\`svg、函数图=\`\`\`plot、图表=\`\`\`chart）
+
+### 格式示例（**占位域素材**：只照格式与粒度——示例里的节点名、节标题、要点、视觉类型全是占位值，不是本课内容，**不得**把示例值回填进你的输出）
+
+node: 示例节点
+sections:
+  - id: s1
+    title: 概念：甲与乙的分界
+    type: 概念
+    points: 甲与乙各自成立的条件与两者的边界
+    tier: 低
+    visual: 示意图
+  - id: s2
+    title: 演示：用甲算一次丙
+    type: 演示
+    points: 从已知条件推出丙的三步
+    tier: 中
+    visual: 公式
+  - id: s3
+    title: 练习：甲与乙的判定
+    type: 练习
+    points: 区分甲与乙的四道判定
+    tier: 高
+    visual: 无
 `,
     课程节生成: `\
 <!-- learnhub:prompt/v11 -->
@@ -442,7 +477,7 @@ sections:
     tier: 低|中|高（可选）
 `,
     题目生成: `\
-<!-- learnhub:prompt/v13 -->
+<!-- learnhub:prompt/v14 -->
 # 题目生成提示词（用户可编辑；节点正文由系统附在本模板之后）
 
 你是 learnhub 学习系统的出题老师。根据附后的节点正文出一组练习题，覆盖正文的核心概念、易错点与典型应用。
@@ -485,11 +520,44 @@ questions:
     answer: A
     explanation: 解析
     difficulty: 1
-    section: 概念：定义与性质
+    section: <节标注清单中的节 id（无清单时照抄正文节标题；跨节综合题写「通用」）>
     invokes: <概念清单中的名字>
     uses: [用到的前置概念]
 
 YAML 写法注意：含反斜杠（LaTeX 命令）、冒号或特殊字符的标量一律用**单引号**包裹（如 q: '$3.14\\times57 + 3.14\\times43$'）；**禁用双引号**——双引号里 \\t \\n 会被 YAML 解释成控制字符，吃掉公式里的反斜杠（\\times 会损坏成 tab+imes）。
+
+### 格式示例（**占位域素材**：只照格式与粒度——示例里的题干、选项、解析、概念名与节 id 全是占位值，不是本课内容，**不得**把示例值回填进你的输出）
+
+node: 示例节点
+questions:
+  - id: q1
+    kind: single_choice
+    q: 下列哪个式子表示甲式？
+    options: ['$甲 + 乙$', '$甲 \\times 乙$', '$甲 - 乙$', '$甲 \\div 乙$']
+    answer: B
+    explanation: 甲式的定义就是甲与乙的乘积，逐个比对定义即可。关键一步是把「甲式」还原成它的定义式再排除。最易错点是把甲式与乙式的差别记反，选了除法那一项。
+    difficulty: 1
+    section: s1
+    invokes: 甲式
+    uses: [乙式]
+  - id: q2
+    kind: fill_in_blank
+    q: 甲与乙相乘所得的量，其标准名称是____。
+    answer: [甲式, 甲的乘积式]
+    explanation: 该唯一的定义式只有这一个标准叫法，没有第二种写法。关键一步是认出题面描述的就是定义本身。最易错点是写成乙式。
+    difficulty: 1
+    section: s1
+    invokes: 甲式
+  - id: q3
+    kind: numeric
+    q: 已知甲为 3、乙为 4，甲式的值是多少？
+    answer: 12
+    tol: 0.01
+    explanation: 甲式 = 甲与乙的乘积，代入即 3 乘 4。关键一步是先写定义式再代入。最易错点是把甲式当成两者之和。
+    difficulty: 2
+    section: s1
+    invokes: 甲式
+    uses: [乙式]
 `,
     笔记出题: `\
 <!-- learnhub:prompt/v9 -->

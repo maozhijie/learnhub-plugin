@@ -40,6 +40,7 @@ import {
   triggerSeedContent,
   waitForGenJob,
 } from '../src/host/jobs.ts'
+import { contractOf } from '../src/engine/output-contracts.ts'
 import { AGENT_GUIDE, registerTools } from '../src/host/tools.ts'
 import { COMMAND_LIST } from '../src/commands/index.ts'
 
@@ -330,6 +331,10 @@ test('大纲解析失败 → 恰一回灌重产（解析反馈）、大纲用裁
   assert.equal(packCalls[1]?.omitDeliverables, true, '大纲调用用裁剪包（无 §8 交付要求）')
   assert.ok(prompts[1]?.includes('## 解析反馈'), '回灌携带解析反馈段')
   assert.ok(prompts[1]?.includes('MODEL_YAML') || prompts[1]?.includes('enc_candidates'), '回灌携带解析死因原文')
+  // #217 修复策略 ↔ 实现一致性（行为侧）：大纲站调用数 = 1 + 注册表 rounds——注册表把
+  // rounds 写成 2，这条就红；实现偷偷多跑一轮，这条也红。
+  assert.equal(outlineCalls, contractOf('课程大纲')!.repair.rounds + 1, '大纲调用数 = 1 + 注册表登记轮数')
+  assert.equal(prompts.length, 3, '大纲两轮 + 节正文一轮；第三次重产不存在（注册表 rounds=1）')
 })
 
 test('节间连贯注入（#227）：节清单标 i/N、非首节附前节结尾窗口、首节无前节段', async () => {

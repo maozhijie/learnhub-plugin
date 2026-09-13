@@ -1144,12 +1144,25 @@ export class ProjectSubsystem {
     const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
     const hits = terms.length ? await searchVaultPrior(this.e.vaultRoot, centerRel, terms, {}, this.e.fs) : []
     const prior = priorSection(hits)
-    // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出
+    // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出。
+    // 节点名清单按「区 · 块」**分段**（#218 稀释治理）：它是名字对账的取值域，**不截断**
+    // ——截断会让真实存在的名字在模型眼里不存在（对账门拿全集判，模型却按子集选），
+    // 换来的是拒收-回灌；分段保住完备性的同时把千行平铺名单变成可扫读的结构。
     let courseBlock: string
     if (target) {
       const { graph } = await this.e.loadView(target)
-      const names = graph.names.slice().sort()
-      courseBlock = `- 目标课程：${target.name}（已播种/既有课程——**不产 seed 半区**，只给 plan）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形）：\n${names.map(n => `  - ${n}`).join('\n') || '  -（空图）'}`
+      const groups = new Map<string, string[]>()
+      for (const n of graph.names.slice().sort()) {
+        const [, region, block] = graph.blockOf[n] ?? []
+        const key = region && block ? `${region} · ${block}` : '（未分块）'
+        const list = groups.get(key) ?? []
+        list.push(n)
+        groups.set(key, list)
+      }
+      const listed = groups.size
+        ? [...groups.entries()].map(([key, names]) => `  - ${key}（${names.length}）：${names.join('、')}`).join('\n')
+        : '  -（空图）'
+      courseBlock = `- 目标课程：${target.name}（已播种/既有课程——**不产 seed 半区**，只给 plan）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形；按「区 · 块」分组，括号内是该组节点数）：\n${listed}`
     } else {
       courseBlock = '- 未指定目标课程：seed 半区必出（自拟新课程名写进 seed.course，子图簇 = 该新课程的种子：1–3 起点 + 终点）；plan.nodes 引用种子簇节点名（写「课程名/节点名」全形）'
     }

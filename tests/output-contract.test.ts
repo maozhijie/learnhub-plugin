@@ -9,12 +9,13 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { Content } from '../src/engine/content.ts'
 import {
-  OUTPUT_CONTRACTS, OUT_OF_SCOPE_STATIONS, contractOf, validateByContract,
+  OUTPUT_CONTRACTS, OUT_OF_SCOPE_STATIONS, PROMPT_CHANGELOG, contractOf, validateByContract,
 } from '../src/engine/output-contracts.ts'
-import type { OutputContract } from '../src/engine/output-contracts.ts'
+import type { OutputContract, PromptBump } from '../src/engine/output-contracts.ts'
+import { splitContractSection, withContractLast } from '../src/engine/prompt-assembly.ts'
 import { DISPUTE_REVIEW_SYSTEM, OPEN_QUESTION_GRADING_SYSTEM, REFLECTION_GRADING_SYSTEM } from '../src/engine/grading.ts'
 import { receiptReviewSystem } from '../src/engine/receipts.ts'
 import { solverPromptFor } from '../src/engine/question-audit.ts'
@@ -245,4 +246,165 @@ test('CONTEXT.md「输出契约」词条承诺的敏感度词表在册（机械�
   for (const s of ['机械评审', '规划', '推理创意']) {
     assert.ok(sensitivities.has(s as never), `敏感度「${s}」应在注册表中有真实使用者`)
   }
+})
+
+// ---- #218 契约后置：契约句必须在最终 prompt 的末段（模板形状门 + 拼装缝门 + 变更登记门）----
+
+/** 模板里位于契约段起始标题之后的全部 `## ` 一级标题（不含起始那一节本身）。 */
+function headingsAfterContract(tpl: string): string[] {
+  const hits = [...tpl.matchAll(/^## 输出[^\n]*$/gm)]
+  const start = hits[hits.length - 1]?.index
+  if (start === undefined) return []
+  return [...tpl.slice(start).matchAll(/^## [^\n]*$/gm)].slice(1).map(m => m[0].slice(3).trim())
+}
+
+/** 契约段形状门本体（可注入 = 自检可改坏样本）。四条不变式：
+ * ① 每个模板键都有一段以最后一个 `## 输出…` 标题起的契约段——拼装缝据此切分；
+ * ② 该站的契约句落在**契约段里**（不是「模板里任何地方出现过」——那是旧判据，恰好漏掉
+ *    「schema 被挪回中段」这个本次要治的形态）；
+ * ③ 契约段里除注册表声明的输出结构块（markdown-blocks 四块）外**不得再有别的 `## ` 一节**
+ *    ——这条正是「材料拖在契约之后」的机器判据；
+ * ④ 契约后置拼装的产物以契约段收尾，且材料在它之前。 */
+function runContractLastGate(
+  kinds: Record<string, string>,
+  entries: readonly OutputContract[],
+): void {
+  const covered = new Set<string>()
+  for (const c of entries) for (const t of c.templates ?? []) covered.add(t)
+  for (const c of entries) {
+    if (c.contractLocation === 'system') continue // 回执评审：契约住 system 提示词（全仓先例）
+    // 输出结构块（四块任务卡）是契约段的合法内容——它描述的是**产出**的一级节，不是模板
+    // 的节，故不与「材料不得拖在契约后」冲突；允许集来自注册表 shape，不硬编码。
+    const structBlocks = new Set(c.shape.kind === 'markdown-blocks' ? c.shape.blocks : [])
+    for (const t of c.templates ?? []) {
+      const tpl = kinds[t]
+      assert.ok(tpl !== undefined, `契约「${c.station}」的模板键「${t}」不在 PROMPT_KINDS`)
+      covered.add(t)
+      const { contract } = splitContractSection(tpl)
+      assert.ok(contract, `模板「${t}」没有可后置的契约段（末节须由 \`## 输出…\` 起，#218）`)
+      for (const clause of c.clause) {
+        assert.ok(
+          contract.includes(clause),
+          `「${c.station}」契约句不在末段（模板「${t}」）：须落在最后一个 \`## 输出…\` 节里——`
+          + '「模板里出现过」不是判据，「在最终 prompt 的末段」才是（#218）',
+        )
+      }
+      for (const h of headingsAfterContract(tpl)) {
+        assert.ok(
+          structBlocks.has(h),
+          `模板「${t}」在契约段之后还有一节「## ${h}」——契约段必须是最后一节（#218）`,
+        )
+      }
+      const composed = withContractLast(tpl, 'PROBE-MATERIALS-占位材料')
+      assert.ok(composed.trimEnd().endsWith(contract), `模板「${t}」拼装后未以契约段收尾（#218）`)
+      assert.ok(
+        composed.indexOf('PROBE-MATERIALS-占位材料') < composed.indexOf(contract),
+        `模板「${t}」的材料未被插到契约段之前（#218）`,
+      )
+    }
+  }
+  // 契约段形状门的覆盖面 = PROMPT_KINDS 全集（新模板既不在册也不被声明的形态直接红）
+  assert.deepEqual(
+    [...covered].sort(), Object.keys(kinds).sort(),
+    '契约段形状门的覆盖面与 PROMPT_KINDS 全集不一致（新模板未接入 / 幽灵键）',
+  )
+}
+
+test('#218 契约后置：15 模板键各有契约段，各站契约句落在末段（漂移即红）', () => {
+  runContractLastGate(Content.PROMPT_KINDS, OUTPUT_CONTRACTS)
+})
+
+test('自检：契约段之后又加一节（或契约挪回中段）门必须变红', () => {
+  const kinds = { ...Content.PROMPT_KINDS }
+  kinds['错误对比卡'] = `${kinds['错误对比卡']!.trimEnd()}\n\n## 附注\n\n（本节加在契约段之后）\n`
+  assert.throws(() => runContractLastGate(kinds, OUTPUT_CONTRACTS), /契约段之后还有一节|契约句不在末段/)
+  const renamed = { ...Content.PROMPT_KINDS }
+  renamed['错误对比卡'] = renamed['错误对比卡']!.replace(/^## 输出$/m, '## 产物说明')
+  assert.throws(() => runContractLastGate(renamed, OUTPUT_CONTRACTS), /没有可后置的契约段|契约段之后还有一节/)
+})
+
+// ---- 拼装缝门：src/ 里不得残留「模板变量直接拼进 prompt」的旧形态 ----
+
+/** 旧形态的签名：字符串字面量里插值一个提示词模板变量（`` `${tpl…`` / `` `${template…``）。
+ * 属性访问（`${tpl.title}`）不算。收集面 = src/ 全量 .ts。 */
+const RAW_TEMPLATE_INTERPOLATION = /`\$\{(tpl|template|outlineTpl|sectionTpl|baseTpl)(?![.\w])/g
+
+function rawTemplateInterpolations(sources: Record<string, string>): string[] {
+  const out: string[] = []
+  for (const [file, text] of Object.entries(sources)) {
+    text.split('\n').forEach((line, i) => {
+      for (const m of line.matchAll(RAW_TEMPLATE_INTERPOLATION)) out.push(`${file}:${i + 1}: ${m[0]}`)
+    })
+  }
+  return out
+}
+
+test('#218 拼装缝：src/ 零「模板变量直接拼进 prompt」（一律经 Content.withContractLast）', () => {
+  const sources: Record<string, string> = {}
+  const walk = (dir: URL): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const child = new URL(`${e.name}${e.isDirectory() ? '/' : ''}`, dir)
+      if (e.isDirectory()) walk(child)
+      else if (e.name.endsWith('.ts')) sources[child.pathname] = readFileSync(child, 'utf8')
+    }
+  }
+  walk(new URL('../src/', import.meta.url))
+  assert.ok(Object.keys(sources).length > 50, `收集面太小（${Object.keys(sources).length} 个文件）——门会恒过`)
+  assert.deepEqual(rawTemplateInterpolations(sources), [])
+})
+
+test('自检：直接插值模板变量的旧形态会被抓（门不是恒过）', () => {
+  const bad = { 'x.ts': 'const p = `${tpl}\\n\\n---\\n\\n${pack}`\n' }
+  assert.equal(rawTemplateInterpolations(bad).length, 1)
+  assert.deepEqual(rawTemplateInterpolations({ 'y.ts': 'const s = `${tpl.title} 提案`\n' }), [])
+})
+
+// ---- 变更登记门（#220 字段格式手工落位，#218 的版本 bump 首次登记）----
+
+/** 登记门本体：覆盖完备（键 = PROMPT_KINDS 全集）+ 字段齐备 + 无幽灵键 + 最高登记版本
+ * 与模板头版本标记一致（bump 了模板却没补条目 = 红）。 */
+function runChangelogGate(
+  kinds: Record<string, string>,
+  changelog: Readonly<Record<string, readonly PromptBump[]>>,
+  versionOf: (text: string) => number,
+): void {
+  assert.deepEqual(
+    Object.keys(changelog).sort(), Object.keys(kinds).sort(),
+    '变更登记表键与 PROMPT_KINDS 全集必须一一对应（新模板未登记 / 幽灵键）',
+  )
+  for (const [kind, entries] of Object.entries(changelog)) {
+    assert.ok(entries.length > 0, `「${kind}」的登记条目为空`)
+    const versions = entries.map(e => e.version)
+    assert.equal(new Set(versions).size, versions.length, `「${kind}」登记版本重复`)
+    for (const e of entries) {
+      assert.ok(
+        e.date.trim() && e.changeType.trim() && e.expectedDelta.trim(),
+        `「${kind}」v${e.version} 登记字段不齐（date/changeType/expectedDelta）`,
+      )
+      assert.ok(e.version <= versionOf(kinds[kind]!), `「${kind}」登记版本 v${e.version} 超过模板现行版本`)
+    }
+    assert.equal(
+      Math.max(...versions), versionOf(kinds[kind]!),
+      `「${kind}」最高登记版本与模板现行版本不一致——bump 模板必须同提交补登记条目（#220/#218）`,
+    )
+  }
+}
+
+test('#218/#220 变更登记：键覆盖 PROMPT_KINDS 全集，最高登记版本 == 模板现行版本', () => {
+  runChangelogGate(Content.PROMPT_KINDS, PROMPT_CHANGELOG, Content.promptVersionOf)
+})
+
+test('自检：bump 模板不补条目 / 登记超版本 / 幽灵键 / 缺键，门都必须变红', () => {
+  assert.throws(
+    () => runChangelogGate(Content.PROMPT_KINDS, PROMPT_CHANGELOG, () => 999),
+    /最高登记版本与模板现行版本不一致|超过模板现行版本/,
+  )
+  const ghosts = {
+    ...PROMPT_CHANGELOG,
+    幽灵模板: [{ version: 1, date: 'x', changeType: 'y', expectedDelta: 'z' }],
+  }
+  assert.throws(() => runChangelogGate(Content.PROMPT_KINDS, ghosts, Content.promptVersionOf), /一一对应/)
+  const short: Record<string, readonly PromptBump[]> = { ...PROMPT_CHANGELOG }
+  delete short['罗盘初画']
+  assert.throws(() => runChangelogGate(Content.PROMPT_KINDS, short, Content.promptVersionOf), /一一对应/)
 })
