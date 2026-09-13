@@ -29,7 +29,7 @@ function Legend() {
     ['⚑ 终点（承诺标记）', '#f5319d'],
   ]
   return (
-    <Space size={12} wrap align='center' style={{ fontSize: 12 }}>
+    <Space size={12} wrap align='center' className='lh-t-12'>
       {items.map(([label, color]) => (
         <Space key={label} size={4}>
           <span style={{ width: 10, height: 10, borderRadius: 2, background: color, display: 'inline-block' }} />
@@ -188,7 +188,7 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
   if (!doc || !filtered || doc.nodes.length === 0) {
     // #159 图缺失空态：引导就地落在重建种子 + 教练台分栏（生长一步在教练台）
     return (
-      <Space direction='vertical' style={{ width: '100%' }} size={12}>
+      <Space direction='vertical' className='lh-full' size={12}>
         <Card>
           <Space direction='vertical' size={10}>
             <Text type='secondary'>课程「{course}」还没有学习图：种子提案尚未应用（或图数据为空）。</Text>
@@ -206,8 +206,8 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
 
   const s = { nodes: doc.nodes.length, edges: doc.edges.length }
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={12}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+    <Space direction='vertical' className='lh-full' size={12}>
+      <div className='lh-row lh-gap-10 lh-wrap'>
         <Space size={4} wrap>
           <Tag size='small'>{s.nodes} 节点</Tag>
           <Tag size='small'>{s.edges} 依赖</Tag>
@@ -216,15 +216,15 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
           <Tag size='small' color='magenta'>主线深度 {doc.stats.max_depth}</Tag>
           <Tag size='small' color='gray'>全局总览 · 点节点进入学习</Tag>
         </Space>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className='lh-ml-auto lh-gap-8 lh-row lh-wrap'>
           <Select
-            size='small' placeholder='全区' style={{ width: 160 }} allowClear
+            size='small' placeholder='全区' className='lh-w-160' allowClear
             value={region || undefined} onChange={v => setRegion(v ?? '')}
             options={regions.map(r => ({ label: r, value: r }))} />
-          <Input.Search size='small' placeholder='搜索节点名' style={{ width: 180 }}
+          <Input.Search size='small' placeholder='搜索节点名' className='lh-w-180'
             value={search} onChange={setSearch} allowClear />
           <Space size={6}>
-            <Text style={{ fontSize: 12 }} type='secondary'>只看进行中</Text>
+            <Text className='lh-t-12' type='secondary'>只看进行中</Text>
             <Switch size='small' checked={readyOnly} onChange={setReadyOnly} />
           </Space>
           <Button size='small' loading={loading} onClick={() => void load()}>刷新</Button>
@@ -239,7 +239,7 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
         <Space size={6} wrap>
           {(rec?.events ?? []).filter(e => e.course === course).slice(0, 8).map((e, i) => (
             <Tag key={i} color={recTypeMeta(e.type).color}
-              style={{ cursor: 'pointer' }}
+              className='lh-click'
               onClick={() => frame.openLesson(e.course, e.node)}>
               {e.node}（{recTypeMeta(e.type).label}）
             </Tag>

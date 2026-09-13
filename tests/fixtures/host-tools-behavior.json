@@ -357,7 +357,7 @@
    "style": "1"
   },
   "queued": true,
-  "text": "{\"message\":\"「1」已入队，将在后台按序生成（进度见生成页）。\",\"queued\":true}",
+  "text": "{\"message\":\"「1」已入队，将在后台按序生成（进度见生成队列）。\",\"queued\":true}",
   "calls": []
  },
  {

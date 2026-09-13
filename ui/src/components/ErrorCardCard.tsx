@@ -42,32 +42,29 @@ export default function ErrorCardCard(props: {
   }
 
   return (
-    <div style={{
-      border: '1px solid var(--color-border-2,#e5e6eb)', borderRadius: 8,
-      padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10,
-    }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+    <div className='lh-border lh-r-md lh-p-10px-12px lh-col lh-gap-10'>
+      <div className='lh-gap-8 lh-row lh-wrap'>
         <Tag size='small' color='orange'>错误对比卡</Tag>
-        <Text type='secondary' style={{ fontSize: 12 }}>{card.course} · {card.node}</Text>
-        {card.source_section && <Text type='secondary' style={{ fontSize: 12 }}>· {card.source_section}</Text>}
+        <Text type='secondary' className='lh-t-12'>{card.course} · {card.node}</Text>
+        {card.source_section && <Text type='secondary' className='lh-t-12'>· {card.source_section}</Text>}
         {card.due && <Tag size='small'>到期 {card.due}</Tag>}
         {card.attempts > 0 && <Tag size='small'>推进过 {card.attempts} 次</Tag>}
       </div>
 
-      <div style={{ fontSize: 15, lineHeight: 1.75 }}>
+      <div className='lh-t-15 lh-lh-1p75'>
         <InlineMd text={card.q} />
       </div>
 
       {!reveal ? (
         <>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             三个做法里只有一个是正确的——其中另一个正是你上次的错法。凭直觉选，选错不加罚。
           </Text>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className='lh-col lh-gap-8'>
             {card.options.map((opt, i) => (
-              <Button key={i} long size='default' disabled={busy} style={{ justifyContent: 'flex-start', textAlign: 'left' }}
+              <Button key={i} long size='default' disabled={busy} className='lh-justify-start lh-text-left'
                 onClick={() => void pick(opt)}>
-                <span style={{ fontWeight: 600, marginRight: 8 }}>{LETTERS[i]}</span>
+                <span className='lh-strong lh-mr-8'>{LETTERS[i]}</span>
                 <InlineMd text={opt} />
               </Button>
             ))}
@@ -75,7 +72,7 @@ export default function ErrorCardCard(props: {
         </>
       ) : (
         <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className='lh-col lh-gap-6'>
             {card.options.map((opt, i) => {
               const st = optionState(opt)
               return (
@@ -86,22 +83,19 @@ export default function ErrorCardCard(props: {
                     : st === 'mine' ? 'var(--color-warning-light-1,#fff7e8)' : 'transparent',
                   opacity: st === 'plain' ? 0.75 : 1,
                 }}>
-                  <span style={{ fontWeight: 600, marginRight: 8 }}>{LETTERS[i]}</span>
+                  <span className='lh-strong lh-mr-8'>{LETTERS[i]}</span>
                   <InlineMd text={opt} />
-                  {st === 'correct' && <Tag size='small' color='green' style={{ marginLeft: 8 }}>正确做法</Tag>}
-                  {st === 'mine' && <Tag size='small' color='orange' style={{ marginLeft: 8 }}>你的错法</Tag>}
+                  {st === 'correct' && <Tag size='small' color='green' className='lh-ml-8'>正确做法</Tag>}
+                  {st === 'mine' && <Tag size='small' color='orange' className='lh-ml-8'>你的错法</Tag>}
                   {picked === opt && !reveal.correct && st !== 'correct' && st !== 'mine'
-                    && <Tag size='small' style={{ marginLeft: 8 }}>你选的</Tag>}
+                    && <Tag size='small' className='lh-ml-8'>你选的</Tag>}
                 </div>
               )
             })}
           </div>
           <Alert type={reveal.correct ? 'success' : 'warning'}
             content={reveal.correct ? '辨对了——错法已被你识破。' : '选到了错法（或干扰项）——正好把它再认清一遍。'} />
-          <div style={{
-            borderLeft: '3px solid var(--color-primary-6,#165dff)', background: 'var(--color-fill-1,#f7f8fa)',
-            borderRadius: '0 6px 6px 0', padding: '8px 12px', fontSize: 14, lineHeight: 1.8,
-          }}>
+          <div className='lh-quote lh-quote-lg'>
             <InlineMd text={reveal.explanation} />
           </div>
         </>

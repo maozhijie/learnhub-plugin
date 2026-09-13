@@ -117,11 +117,7 @@ const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
         position: 'relative', borderRadius: 6, border, background: bg, opacity: data.locked ? 0.55 : 1,
       }}>
       {data.stage === 'skipped' && (
-        <span style={{
-          position: 'absolute', top: 0, right: 0, fontSize: 9, lineHeight: '13px',
-          padding: '0 4px', borderBottomLeftRadius: 6,
-          background: 'var(--color-purple-6, #722ed1)', color: '#fff',
-        }}>跳</span>
+        <span className='lh-node-badge-tr'>跳</span>
       )}
       {data.isEndpoint && (
         <span style={{
@@ -150,30 +146,17 @@ const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
       )}
       {/* hover 便捷生成：未生成「生成正文」/已生成「重新生成」（#158 口径统一）；排队/生成中不出（角标已表达） */}
       {data.onGenerate && !data.gen && (
-        <span className='dag-toolbar' style={{ position: 'absolute', right: 3, bottom: 3, gap: 4 }}>
+        <span className='dag-toolbar lh-absolute lh-right-3 lh-bottom-3 lh-gap-4'>
           <button type='button' onClick={e => { e.stopPropagation(); data.onGenerate?.() }}
-            style={{
-              fontSize: 10, lineHeight: '16px', padding: '0 6px', borderRadius: 4, border: 'none',
-              cursor: 'pointer', background: 'var(--color-primary-6, #165dff)', color: '#fff',
-            }}>{data.hasContent ? '重新生成' : '生成正文'}</button>
+            className='lh-node-action'>{data.hasContent ? '重新生成' : '生成正文'}</button>
         </span>
       )}
       <span style={{ width: 3, flexShrink: 0, backgroundColor: accent }} />
-      <div style={{
-        display: 'flex', minWidth: 0, flex: 1, flexDirection: 'column',
-        justifyContent: 'center', gap: 1, padding: '3px 6px', textAlign: 'left',
-      }}>
-        <span style={{
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-          overflow: 'hidden', fontSize: 12, lineHeight: '15px', fontWeight: 500,
-          color: 'var(--color-text-1, #1d2129)',
-        }}>{data.title}</span>
-        <span style={{
-          display: 'flex', alignItems: 'center', gap: 4, fontSize: 10,
-          lineHeight: '12px', color: 'var(--color-text-3, #86909c)', flexShrink: 0,
-        }}>
-          <span style={{ fontWeight: 500, color: 'var(--color-text-2, #4e5969)' }}>L{data.depth + 1}</span>
-          {data.recommended && <span style={{ color: 'var(--color-warning-6, #ff7d00)' }}>★</span>}
+      <div className='lh-grow lh-col lh-center lh-gap-1 lh-p-3px-6px lh-text-left'>
+        <span className='lh-clamp-2 lh-t-12 lh-lh-15px lh-medium lh-text-1'>{data.title}</span>
+        <span className='lh-row lh-gap-4 lh-t-10 lh-lh-12px lh-muted lh-noshrink'>
+          <span className='lh-medium lh-text-2'>L{data.depth + 1}</span>
+          {data.recommended && <span className='lh-text-warn'>★</span>}
           <span>{STAGE_LABEL[data.stage]}</span>
           {data.hasBank && <span>·题</span>}
           {(data.stage === 'review' || data.stage === 'mastered' || data.stage === 'learning') && (
@@ -182,9 +165,9 @@ const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
         </span>
       </div>
       <Handle type='target' id='dag-target' position={Position.Bottom} isConnectable={false}
-        style={{ opacity: 0, pointerEvents: 'none' }} />
+        className='lh-hidden-soft' />
       <Handle type='source' id='dag-source' position={Position.Top} isConnectable={false}
-        style={{ opacity: 0, pointerEvents: 'none' }} />
+        className='lh-hidden-soft' />
     </div>
   )
 }
@@ -311,7 +294,7 @@ const GraphDagViewInner: React.FC<GraphDagViewProps> = ({ doc, recommended, lock
         <Controls showInteractive={false} />
         <MiniMap pannable zoomable nodeStrokeWidth={2}
           maskColor='var(--color-mask-bg, rgba(29,33,41,0.4))'
-          style={{ borderRadius: 6 }}
+          className='lh-r-6'
           nodeColor={node => {
             const d = (node as DagNode).data
             if (d.isEndpoint) return ENDPOINT_COLOR

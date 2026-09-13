@@ -51,17 +51,17 @@ export default function LearnerCardManager(props: {
   return (
     <Drawer width={560} visible={props.open} footer={null} unmountOnExit
       title='我的卡管理（你自己的理解卡）' onCancel={props.onClose}>
-      <Space direction='vertical' style={{ width: '100%' }} size={10}>
-        <Alert type='info' style={{ fontSize: 12 }}
+      <Space direction='vertical' className='lh-full' size={10}>
+        <Alert type='info' className='lh-t-12'
           content='归档后卡片不再进「我的卡」队列，历史保留在卡文件里；本次学习页会话里归档的卡可在此恢复。' />
         {q === null ? <Text type='secondary'>加载中…</Text>
           : q.cards.length === 0 ? <Empty description='没有在库卡：在节学习页「加我的理解」，或把「讲给我听」的讲稿存档' />
             : q.cards.map(c => (
-              <div key={`${c.course}/${c.node}/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div key={`${c.course}/${c.node}/${c.id}`} className='lh-row lh-gap-8'>
                 <Tag size='small' color='arcoblue'>{kindLabel(c.kind)}</Tag>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <Text style={{ fontSize: 13, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.prompt}</Text>
-                  <Text type='secondary' style={{ fontSize: 12 }}>
+                <div className='lh-grow'>
+                  <Text className='lh-ellipsis lh-t-13 lh-block'>{c.prompt}</Text>
+                  <Text type='secondary' className='lh-t-12'>
                     {c.node} · {c.due ? `到期 ${c.due}` : '未调度'} · 做过 {c.attempts} 次
                   </Text>
                 </div>
@@ -74,11 +74,11 @@ export default function LearnerCardManager(props: {
             ))}
         {props.archived.length > 0 && (
           <>
-            <Text type='secondary' style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>本次已归档（可恢复）</Text>
+            <Text type='secondary' className='lh-t-12 lh-strong lh-mt-4'>本次已归档（可恢复）</Text>
             {props.archived.map(c => (
-              <div key={`archived-${c.course}/${c.node}/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.7 }}>
+              <div key={`archived-${c.course}/${c.node}/${c.id}`} className='lh-dim lh-row lh-gap-8'>
                 <Tag size='small'>{kindLabel(c.kind)}</Tag>
-                <Text type='secondary' style={{ fontSize: 13, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.prompt}</Text>
+                <Text type='secondary' className='lh-ellipsis lh-t-13 lh-flex-1'>{c.prompt}</Text>
                 <Button size='mini' type='text' disabled={busy} onClick={() => void toggleArchive(c, false)}>恢复</Button>
               </div>
             ))}

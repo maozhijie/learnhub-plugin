@@ -90,7 +90,7 @@ export default function MdView(props: { md: string; className?: string }) {
  * renderBlock——题干/解析可携带 svg/plot/chart 图。 */
 export function InlineMd(props: { text: string }) {
   return (
-    <span style={{ whiteSpace: 'pre-wrap' }}>
+    <span className='lh-prewrap'>
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}

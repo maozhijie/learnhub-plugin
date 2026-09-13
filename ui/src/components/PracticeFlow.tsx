@@ -33,7 +33,7 @@ function Stepper(props: {
   goto: (roundIdx: number) => void
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+    <div className='lh-row lh-gap-4'>
       {props.steps.map((st, i) => {
         const done = props.isDone(st)
         const current = i === props.currentIdx
@@ -304,9 +304,9 @@ export default function PracticeFlow(props: {
   const body = (): ReactNode => {
     if (roundIdx >= rounds.length) {
       return (
-        <Card size='small' style={{ borderRadius: 10, background: 'var(--color-success-light-1,#e8ffea)' }}>
-          <Space direction='vertical' size={6} style={{ width: '100%' }}>
-            <Title heading={6} style={{ margin: 0 }}>练习通过</Title>
+        <Card size='small' className='lh-card-ok'>
+          <Space direction='vertical' size={6} className='lh-full'>
+            <Title heading={6} className='lh-m-0'>练习通过</Title>
             <Text type='secondary'>全部小节已过关。下方「完成学习」把本节题目纳入复习循环；明天起按间隔重复安排复习。</Text>
           </Space>
         </Card>
@@ -317,14 +317,14 @@ export default function PracticeFlow(props: {
     // ---- 阅读轮 ----
     if (round.type === 'read') {
       return (
-        <Card size='small' style={{ borderRadius: 10 }} bodyStyle={{ padding: '20px 24px 22px' }}>
-          <Space direction='vertical' size={12} style={{ width: '100%' }}>
+        <Card size='small' className='lh-card' bodyStyle={{ padding: '20px 24px 22px' }}>
+          <Space direction='vertical' size={12} className='lh-full'>
             <Space size={8}>
               <Tag color='arcoblue'>{round.typeLabel}</Tag>
-              <Title heading={6} style={{ margin: 0 }}>{round.title}</Title>
+              <Title heading={6} className='lh-m-0'>{round.title}</Title>
             </Space>
             <MdView md={round.md ?? ''} />
-            <Space size={8} style={{ alignSelf: 'flex-end' }}>
+            <Space size={8} className='lh-self-end'>
               {roundIdx > 0 && <Button size='small' onClick={prevRound}>上一步</Button>}
               <Button type='primary' onClick={nextRound}>继续</Button>
             </Space>
@@ -336,15 +336,15 @@ export default function PracticeFlow(props: {
     // ---- 交互节轮：交互件轮渲染（SettleContext 供 InteractiveBlock 上报结算） ----
     if (round.type === 'interactive') {
       return (
-        <Card size='small' style={{ borderRadius: 10 }} bodyStyle={{ padding: '16px 20px 18px' }}>
+        <Card size='small' className='lh-card' bodyStyle={{ padding: '16px 20px 18px' }}>
           <SettleContext.Provider value={{ course: props.course, node: props.node, sectionId: round.sectionId ?? '' }}>
-            <Space direction='vertical' size={12} style={{ width: '100%' }}>
+            <Space direction='vertical' size={12} className='lh-full'>
               <Space size={8}>
                 <Tag color='purple'>{round.typeLabel}</Tag>
-                <Title heading={6} style={{ margin: 0 }}>{round.title}</Title>
+                <Title heading={6} className='lh-m-0'>{round.title}</Title>
               </Space>
               <MdView md={round.md ?? ''} />
-              <Space size={8} style={{ alignSelf: 'flex-end' }}>
+              <Space size={8} className='lh-self-end'>
                 {roundIdx > 0 && <Button size='small' onClick={prevRound}>上一步</Button>}
                 <Button type='primary' onClick={nextRound}>继续</Button>
               </Space>
@@ -358,17 +358,17 @@ export default function PracticeFlow(props: {
     if (doneRounds.has(round.key)) {
       const right = qs.filter(q => outcomes[q.id] === true).length
       return (
-        <Card size='small' style={{ borderRadius: 10 }} bodyStyle={{ padding: '16px 20px 18px' }}>
-          <Space direction='vertical' size={12} style={{ width: '100%' }}>
+        <Card size='small' className='lh-card' bodyStyle={{ padding: '16px 20px 18px' }}>
+          <Space direction='vertical' size={12} className='lh-full'>
             <Space size={8} wrap>
               <Tag color='arcoblue'>{round.typeLabel}</Tag>
-              <Title heading={6} style={{ margin: 0 }}>{round.title}</Title>
+              <Title heading={6} className='lh-m-0'>{round.title}</Title>
               <Tag size='small' color='green'>已过关</Tag>
             </Space>
-            <Text type='secondary' style={{ fontSize: 13, lineHeight: 1.7 }}>
+            <Text type='secondary' className='lh-t-13 lh-lh-1p7'>
               本组共 {qs.length} 题，本次学习答对 {right} 题；每道题一次学习只作答一次，回看不再重答。
             </Text>
-            <Space size={8} style={{ alignSelf: 'flex-end' }}>
+            <Space size={8} className='lh-self-end'>
               {roundIdx > 0 && <Button size='small' onClick={prevRound}>上一步</Button>}
               <Button type='primary' size='small' onClick={nextRound}>继续往下</Button>
             </Space>
@@ -388,8 +388,8 @@ export default function PracticeFlow(props: {
         </Button>
       )
       return (
-        <Card size='small' style={{ borderRadius: 10 }}>
-          <Space direction='vertical' size={10} style={{ width: '100%' }}>
+        <Card size='small' className='lh-card'>
+          <Space direction='vertical' size={10} className='lh-full'>
             <Alert
               type='warning'
               content={props.quizPending
@@ -421,12 +421,12 @@ export default function PracticeFlow(props: {
 
     // ---- 练习轮：单题 ----
     return (
-      <Card size='small' style={{ borderRadius: 10 }} bodyStyle={{ padding: '16px 20px 18px' }}>
-        <Space direction='vertical' size={12} style={{ width: '100%' }}>
+      <Card size='small' className='lh-card' bodyStyle={{ padding: '16px 20px 18px' }}>
+        <Space direction='vertical' size={12} className='lh-full'>
           <Space size={8} wrap>
             <Tag color='arcoblue'>{round.typeLabel}</Tag>
-            <Title heading={6} style={{ margin: 0 }}>{round.title}</Title>
-            <Text type='secondary' style={{ fontSize: 12 }}>
+            <Title heading={6} className='lh-m-0'>{round.title}</Title>
+            <Text type='secondary' className='lh-t-12'>
               第 {qIdx + 1}/{qs.length} 题 · 连对 {streak}/{passTarget}
             </Text>
           </Space>
@@ -438,7 +438,7 @@ export default function PracticeFlow(props: {
               onDisputeSettled={handleDisputeSettled} />
           ))}
           {!revealPending && (answered || roundIdx > 0) && (
-            <Space size={8} style={{ alignSelf: 'flex-end' }}>
+            <Space size={8} className='lh-self-end'>
               {roundIdx > 0 && <Button size='small' onClick={prevRound}>上一步</Button>}
               {answered && (
                 <Button type='primary' size='small' onClick={advance}>
@@ -453,7 +453,7 @@ export default function PracticeFlow(props: {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className='lh-col lh-gap-10'>
       {stepperEl}
       {body()}
     </div>

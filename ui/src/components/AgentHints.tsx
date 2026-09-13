@@ -30,17 +30,17 @@ export default function AgentHints(props: { page: string }) {
   }, [props.page])
   if (!items || items.length === 0) return null
   return (
-    <Collapse bordered={false} style={{ marginTop: 8 }}>
+    <Collapse bordered={false} className='lh-mt-8'>
       <Collapse.Item name='agent' header='这些事可以找 agent 做（对话直达）'>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className='lh-col lh-gap-6'>
           {items.map(x => (
             <div key={x.tool}>
-              <Text style={{ fontSize: 12 }}>{x.text}</Text>
+              <Text className='lh-t-12'>{x.text}</Text>
               <div>
-                <Text type='secondary' style={{ fontSize: 11 }}>工具 {x.tool}</Text>
+                <Text type='secondary' className='lh-t-11'>工具 {x.tool}</Text>
                 {x.prompt && (
                   <Text copyable={{ onCopy: () => Message.success('指令已复制，粘贴到 dsh 会话即可') }}
-                    style={{ fontSize: 11, marginLeft: 6 }}>示例：{x.prompt}</Text>
+                    className='lh-t-11 lh-ml-6'>示例：{x.prompt}</Text>
                 )}
               </div>
             </div>

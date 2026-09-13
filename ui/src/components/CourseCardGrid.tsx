@@ -1,5 +1,4 @@
-/** 课程卡网格（#208 / ADR-0058：课程卡列表迁出今日；T4 暂住课程区学习图页首屏，
- * T5 落位「我的课程」正式形态后本组件即其主体）。自包含取数：复习队列是次要数据
+/** 课程卡网格（「我的课程」首屏主体，#208 迁出今日 / #209 落位）：自包含取数：复习队列是次要数据
  * （失败按空处理不翻页），跨页流经 learnhub:reload 补拉；逐课「复习」在本组件内
  * 拉起 ReviewSession（按课程过滤到期卡）。破坏性操作（重新生成/删除）与日常操作
  * 视觉隔离（#155）：收进「⋯」菜单并着 danger 色；显式确认步在页内 handler。 */
@@ -32,9 +31,9 @@ export function CourseCard(props: {
   const percent = props.total ? Math.round((done / props.total) * 100) : 0
   const goalLabel = props.completion?.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'
   return (
-    <Card size='small' hoverable style={{ borderRadius: 10 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Title heading={6} style={{ margin: 0 }}>{props.name}</Title>
+    <Card size='small' hoverable className='lh-card'>
+      <div className='lh-col lh-gap-8'>
+        <Title heading={6} className='lh-m-0'>{props.name}</Title>
         <Progress percent={percent} showText size='small' />
         <Space size={4} wrap>
           <Tag size='small' color='gray'>未学 {notStarted}</Tag>
@@ -49,24 +48,24 @@ export function CourseCard(props: {
             </Tag>
           )}
         </Space>
-        <Space size={6} style={{ width: '100%' }}>
+        <Space size={6} className='lh-full'>
           <Button size='mini' onClick={props.onOpen}>打开图</Button>
           <Button size='mini' onClick={props.onReview}>复习</Button>
-          <span style={{ marginLeft: 'auto' }}>
+          <span className='lh-ml-auto'>
             <Dropdown
               trigger='click'
               position='br'
               droplist={
-                <Menu style={{ minWidth: 132 }}>
-                  <Menu.Item key='regenerate' style={{ color: 'var(--color-warning-6, #ff7d00)' }} onClick={props.onRegenerate}>
+                <Menu className='lh-minw-132'>
+                  <Menu.Item key='regenerate' className='lh-text-warn' onClick={props.onRegenerate}>
                     重新生成…
                   </Menu.Item>
-                  <Menu.Item key='delete' style={{ color: 'var(--color-danger-6, #f53f3f)' }} onClick={props.onDelete}>
+                  <Menu.Item key='delete' className='lh-text-danger' onClick={props.onDelete}>
                     删除课程…
                   </Menu.Item>
                 </Menu>
               }>
-              <Button size='mini' type='text' style={{ padding: '0 6px' }}>…</Button>
+              <Button size='mini' type='text' className='lh-p-0-6px'>…</Button>
             </Dropdown>
           </span>
         </Space>
@@ -103,14 +102,14 @@ export default function CourseCardGrid({ frame }: { frame: AppFrame }) {
     })
   }
 
-  // 整课重生成（与生成页同一 /course/reset 通道，进度在生成队列看）
+  // 整课重生成（与生成队列页同一 /course/reset 通道，进度在生成队列看）
   const regenerateCourse = (name: string) => {
     Modal.confirm({
       title: `重新生成课程「${name}」？`,
       content: (
-        <div style={{ lineHeight: 1.9 }}>
+        <div className='lh-lh-1p9'>
           <div>将删除该课程的：全部节正文与节清单、全部练习题、全部交互件与生成的图片。</div>
-          <div style={{ marginTop: 8, color: 'var(--color-text-3)' }}>
+          <div className='lh-mt-8 lh-muted'>
             旧内容备份到 .trash（可恢复）；课程图谱、学习进度与掌握度保留。删除后按学习顺序逐节点重新生成（每个节点需数分钟），进度在「生成」入口实时展示。
           </div>
         </div>
@@ -141,8 +140,8 @@ export default function CourseCardGrid({ frame }: { frame: AppFrame }) {
   if (courses.length === 0) return null
   return (
     <>
-      <Card size='small' title='我的课程' style={{ borderRadius: 10 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 12 }}>
+      <Card size='small' title='我的课程' className='lh-card'>
+        <div className='lh-grid-cards'>
           {courses.map(c => {
             const s = frame.status?.courses.find(x => x.name === c.name)
             return (
@@ -157,7 +156,7 @@ export default function CourseCardGrid({ frame }: { frame: AppFrame }) {
             )
           })}
         </div>
-        <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+        <Text type='secondary' className='lh-t-12 lh-block lh-mt-8'>
           点「打开图」进入该课的单课工作台（罗盘与图首屏）。
         </Text>
       </Card>

@@ -9,7 +9,7 @@ export function AssetsMenu({ onOpenSources, onManage }: {
 }) {
   return (
     <Dropdown trigger='click' position='br' droplist={
-      <Menu style={{ minWidth: 168 }}>
+      <Menu className='lh-minw-168'>
         <Menu.Item key='sources' onClick={onOpenSources}>笔记源管理…</Menu.Item>
         <Menu.Item key='cards' onClick={onManage}>我的卡管理…</Menu.Item>
       </Menu>

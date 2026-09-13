@@ -3,7 +3,10 @@
  *
  * 灰阶与语义色 = arco 调色板变量的**语义别名**（body[arco-theme='dark'] 翻转 arco
  * 变量时自动跟随，无第二套色值要维护）；字面量只作为 arco 变量缺失时的兜底值存在
- * ——全 ui 硬编码色值只许出现在本文件（tests/ui-budget.test.ts 的壳级视觉纪律门执法）。
+ * ——硬编码色值的**执法面**是壳级文件（App + shell 组件，tests/ui-budget.test.ts 的壳级
+ * 视觉纪律门执法）与壳规则；页面内容的色值一律取自本表的 --lh-* 语义别名，仅
+ * global.css 的语义 class 层（#211）里保留少量字面量兜底（#fff 强调面、arco 缺省色
+ * 的 fallback）——那是消费侧而非第二套色板。
  * 壳级组件（App/ShellTopBar/ZoneBody/HelpDrawer/global.css 的壳规则）只准消费 --lh-*。
  *
  * 声明在 body 而非 :root：自定义属性里的 var() 在**声明元素**处完成替换——arco 的
@@ -20,17 +23,22 @@ body {
   --lh-space-6: 24px;
   --lh-space-8: 32px;
 
-  /* 字号阶梯（面板基准 14，正文阅读排版在 md-body 单独 16） */
+  /* 字号阶梯（面板基准 14，正文阅读排版在 md-body 单独 16；11/18 是面板既有步进，
+   * #211 内联 style 收敛时补进 token 层——小注脚与读数数字） */
+  --lh-font-2xs: 11px;
   --lh-font-xs: 12px;
   --lh-font-sm: 13px;
   --lh-font-md: 14px;
   --lh-font-lg: 16px;
+  --lh-font-2xl: 18px;
   --lh-font-xl: 20px;
 
   /* 圆角 */
   --lh-radius-sm: 4px;
   --lh-radius-md: 8px;
   --lh-radius-lg: 12px;
+  /* 面板卡片圆角（Arco Card 统一观感；#211 自内联 10px 收编） */
+  --lh-radius-card: 10px;
 
   /* 动效：统一 CSS 过渡（主题切换 / 悬浮态） */
   --lh-motion-fast: 0.2s ease;

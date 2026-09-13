@@ -45,7 +45,7 @@ export default function AnkiChannelCard() {
 
   const doc = st.data
   return (
-    <Card size='small' title='Anki 通道' style={{ borderRadius: 10 }}
+    <Card size='small' title='Anki 通道' className='lh-card'
       extra={doc?.anki && (
         <Tooltip content={doc.anki.connected ? 'AnkiConnect 已连通（桌面 Anki 在线）' : doc.anki.error}>
           <Tag size='small' color={doc.anki.connected ? 'green' : 'red'}>
@@ -55,18 +55,18 @@ export default function AnkiChannelCard() {
       )}>
       <CommandBoundary cmd={st} loadingNode={<Text type='secondary'>加载中…</Text>}>
         {doc => (
-          <Space direction='vertical' style={{ width: '100%' }} size={10}>
+          <Space direction='vertical' className='lh-full' size={10}>
             <Space size={24} wrap>
               <div>
-                <Text style={{ fontWeight: 600, fontSize: 18 }}>{doc.mirror.entries}</Text>
-                <Text type='secondary' style={{ fontSize: 12 }}> 张镜象卡（Anki 侧 learnhub 卡组）</Text>
+                <Text className='lh-strong lh-t-18'>{doc.mirror.entries}</Text>
+                <Text type='secondary' className='lh-t-12'> 张镜象卡（Anki 侧 learnhub 卡组）</Text>
               </div>
               <div>
-                <Text style={{ fontWeight: 600, fontSize: 18 }}>{doc.due.total}</Text>
-                <Text type='secondary' style={{ fontSize: 12 }}> 张 vault 到期卡待推送</Text>
+                <Text className='lh-strong lh-t-18'>{doc.due.total}</Text>
+                <Text type='secondary' className='lh-t-12'> 张 vault 到期卡待推送</Text>
               </div>
             </Space>
-            <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
+            <Text type='secondary' className='lh-t-12 lh-block'>
               上次导出：{doc.mirror.last_push ?? '从未'} · 上次回写：{doc.mirror.last_import ?? '从未'}
               {doc.mirror.decks.length > 0 && <> · 镜象卡组：{doc.mirror.decks.join('、')}</>}
             </Text>
@@ -81,10 +81,10 @@ export default function AnkiChannelCard() {
               <Button size='small' type='text' onClick={() => void st.reload()}>刷新</Button>
             </Space>
             {lastImport && lastImport.unknown.length > 0 && (
-              <Alert type='warning' style={{ fontSize: 12 }}
+              <Alert type='warning' className='lh-t-12'
                 content={`有 ${lastImport.skipped_unknown} 条事件无法归属（已跳过不猜）：${lastImport.unknown.join('；')}`} />
             )}
-            <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
+            <Text type='secondary' className='lh-t-12 lh-block'>
               Anki 是纯作答通道：先「导出到 Anki」把到期卡推进镜象卡组，在 Anki 里作答后再「导入回写」——vault 按自己的调度器重算（回写先于下次导出，刚答过的卡不会被重复推送）。
             </Text>
           </Space>

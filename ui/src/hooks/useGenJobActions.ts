@@ -1,4 +1,4 @@
-/** 生成任务动作缝（#209 评审收拢）：供给卡（今日页）与生成页（全局面/本课切片）
+/** 生成任务动作缝（#209 评审收拢）：供给卡（今日页）与生成队列（全局面/本课切片）
  * 对任务注册表的同形动作共用一份实现——失败重试三路由（生长批 → coach/growth 显式
  * 重新裁决；出题 → question-generate；内容 → generate 断点续跑，语义在服务端）、
  * 停摆恢复（重启后排队任务不自动开跑，恢复影响整条全局队列）、图域 phase 词汇
@@ -12,7 +12,7 @@ import type { GenJobItem } from '../types'
 /** 图域任务 phase 全集（教练回合/面板下发的队列形态；与引擎 GEN_JOB_PHASES 同口径）。 */
 export const GRAPH_PHASES = new Set(['seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'])
 
-/** phase → 人读标签+展示色（生成页任务表与供给卡失败行共用，单一出处）。 */
+/** phase → 人读标签+展示色（生成队列任务表与供给卡失败行共用，单一出处）。 */
 export const GEN_PHASE_META: Partial<Record<NonNullable<GenJobItem['phase']>, { label: string; color: string }>> = {
   quiz: { label: '出题', color: 'cyan' },
   seed: { label: '种子起草', color: 'lime' },

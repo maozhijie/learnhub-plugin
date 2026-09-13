@@ -1379,7 +1379,7 @@ export class ProjectSubsystem {
       let target = c.course
       if (!target && !c.node.includes('/') && anchored.size === 1) target = [...anchored][0]
       if (!target) {
-        warnings.push(`里程碑「${c.name}」（${c.milestone}）的补支引用「${c.node}」无法确定锚定课程（多门或无锚定）——未入生长触发，请显式写「课程/节点」或人工在生成页拉批。`)
+        warnings.push(`里程碑「${c.name}」（${c.milestone}）的补支引用「${c.node}」无法确定锚定课程（多门或无锚定）——未入生长触发，请显式写「课程/节点」或人工在生成队列拉批。`)
         continue
       }
       const lines = byCourse.get(target) ?? []

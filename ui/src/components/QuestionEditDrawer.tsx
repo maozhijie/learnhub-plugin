@@ -68,7 +68,7 @@ export default function QuestionEditDrawer(props: {
     <Drawer width={480} visible={!!props.target} footer={null} unmountOnExit
       title={`编辑 ${props.target?.qid ?? ''} · ${props.target?.node ?? ''}`} onCancel={props.onClose}>
       {props.target && (
-        <Space direction='vertical' style={{ width: '100%' }} size={10}>
+        <Space direction='vertical' className='lh-full' size={10}>
           <Text type='secondary'>
             {props.target.kind === 'true_false' ? '答案 true/false'
               : props.target.kind === 'numeric' ? '数值答案（tol 保留原值）'

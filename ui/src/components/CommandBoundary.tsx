@@ -27,8 +27,8 @@ export function CommandBoundary<T>({ cmd, onRetry, variant = 'card', title = '�
   if (loading) {
     if (loadingNode) return <>{loadingNode}</>
     return variant === 'page'
-      ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spin dot /></div>
-      : <span style={{ color: 'var(--color-text-3,#86909c)' }}>{loadingText}</span>
+      ? <div className='lh-flex lh-center lh-p-40'><Spin dot /></div>
+      : <span className='lh-muted'>{loadingText}</span>
   }
   if (variant === 'page') {
     return (
@@ -37,7 +37,7 @@ export function CommandBoundary<T>({ cmd, onRetry, variant = 'card', title = '�
     )
   }
   return (
-    <span style={{ color: 'var(--color-danger-6,#f53f3f)' }}>
+    <span className='lh-text-danger'>
       {error ?? '加载失败'}{' '}
       <Button size='mini' type='text' onClick={retry}>重试</Button>
     </span>
