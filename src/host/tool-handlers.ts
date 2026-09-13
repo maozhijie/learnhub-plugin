@@ -92,6 +92,8 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         ...(r ? {
           course: r.course, node: r.node, added: r.added, skipped: r.skipped, total: r.total,
           duplicates: r.duplicates, rejected: r.rejected, enc: r.enc,
+          // 多样性三指标（#230 / ADR-0064）：批内 + 题库累计两范围，随任务结果同路出面板
+          diversity: r.diversity,
         } : {}),
       })
     }),

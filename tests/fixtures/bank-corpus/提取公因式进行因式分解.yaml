@@ -1,0 +1,977 @@
+node: 提取公因式进行因式分解
+questions:
+  - kind: single_choice
+    q: 演示中把 ax + ay 改写成 a(x + y)，这个变形属于什么？
+    options:
+      - 展开括号，把乘积的形式化成和的形式
+      - 提取公因式，把和的形式改写成乘积的形式
+      - 合并同类项，把多项式化简
+      - 去分母，使等式更简洁
+    answer: B
+    explanation: 演示倒着用分配律，把公共因子 a 从每一项中“提”到括号外，使 ax + ay 从“和的形式”变成 a(x + y) 的“乘积的形式”，这是因式分解的雏形。选项 A 方向相反，是展开；选项 C、D 与这里的恒等变形不是同一回事。
+    difficulty: 1
+    section: s1
+    uses:
+      - 分配律
+      - 公因式
+    id: q1
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+  - kind: fill_in_blank
+    q: 提取公因式（要求提干净）：$12a^3b^2 - 8a^2b^3 =$ ______
+    answer:
+      - 4a^2b^2(3a - 2b)
+      - 4a^2b^2(3a-2b)
+      - 4a²b²(3a−2b)
+      - 4a²b²(3a-2b)
+    explanation: 系数 12 与 8 的最大公因数是 4；字母部分 a、b 都共有，次数取较低次，所以取 a² 和 b²。公因式为 4a²b²。用 4a²b² 分别除原式两项：12a³b² ÷ 4a²b² = 3a，8a²b³ ÷
+      4a²b² = 2b，所以结果是 4a²b²(3a − 2b)。乘回去可以验证：4a²b²(3a − 2b) = 12a³b² − 8a²b³。
+    difficulty: 2
+    section: s1
+    uses:
+      - 最大公因数
+      - 同底数幂
+      - 分配律
+    id: q2
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+  - kind: single_choice
+    q: 多项式 6x^3 y + 4x^2 y^2 - 2x^2 y 的公因式是（ ）
+    options:
+      - 2x^2 y
+      - 2xy
+      - x^2 y
+      - 2x^2 y^2
+    answer: A
+    explanation: 找公因式时，系数 6、4、2 的最大公因数是 2；字母 x 的最低次幂是 x^2，字母 y 的最低次幂是 y，所以公因式是 2x^2 y。选 2xy 错在字母 x 的幂没有取最低的公共幂；选 x^2 y
+      漏掉了系数公因数 2；选 2x^2 y^2 错在 y 的指数 2 并不被第一项中的 y^1 包含。
+    difficulty: 1
+    section: s2
+    uses:
+      - 最大公因数
+      - 幂的意义
+    id: q3
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: numeric
+    q: 利用提取公因式法简便计算：7.8 × 45 + 7.8 × 55 = （填写计算结果）
+    answer: 780
+    tol: 0.01
+    explanation: 逆用分配律，提取公因式 7.8，得 7.8 × (45 + 55) = 7.8 × 100 = 780。
+    difficulty: 2
+    section: s2
+    uses:
+      - 分配律
+    id: q4
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: true_false
+    q: 分解 $4ab+6ac$ 时，最大公因式可以取 $2abc$。
+    answer: 错
+    explanation: 字母必须同时出现在每一个项才算公因式。$4ab+6ac$ 中 $b$ 只出现在第一项，$c$ 只出现在第二项，不是各项共有的字母；系数最大公因数为 $2$，所以最大公因式是 $2a$，不是 $2abc$。
+    difficulty: 1
+    section: s3
+    uses:
+      - 最大公因数
+      - 公因式
+    id: q5
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: single_choice
+    q: 对 $12x^3y^2-18x^2y^3+6x^2y^2$ 提取最大公因式，正确结果是（　）。
+    options:
+      - $6x^2y^2(2x-3y+1)$
+      - $6xy(2x^2y-3xy^2+xy)$
+      - $6x^2y^2(2x-3y)$
+      - $6x^2y^2(2x^2y-3xy^2+1)$
+    answer: A
+    explanation: 系数的最大公因数是 $\gcd(12,18,6)=6$，$x$、$y$ 的最低次数分别为 $2$、$2$，所以应提取 $6x^2y^2$。括号内依次为 $2x$、$-3y$、$1$，其中最后的 $+1$ 来自
+      $6x^2y^2\div6x^2y^2=1$，不能漏写。B 只提取了 $6xy$，括号内仍有公因式 $xy$，不是最大公因式；C 漏写 $+1$，展开后缺少 $6x^2y^2$ 项；D 括号内指数写错，展开后与原式不符。
+    difficulty: 2
+    section: s3
+    uses:
+      - 最大公因数
+      - 最低次数
+      - 分配律
+    id: q6
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: single_choice
+    q: 按“括号内首项保持为正”的规范，因式分解 $-3x^2+6x$，正确结果是：
+    options:
+      - $-3x(x-2)$
+      - $-3x(x+2)$
+      - $3x(-x+2)$
+      - $3x(x-2)$
+    answer: A
+    explanation: 先提负号：$-3x^2+6x=-(3x^2-6x)$，再提 $3x$ 得 $-3x(x-2)$。检验：$-3x(x-2)=-3x^2+6x$。选项 C 虽也等于原式，但括号内首项为负，不符合本节规范；选项 B、D
+      展开后与原式不一致。
+    difficulty: 1
+    section: s4
+    uses:
+      - 提取公因式
+    id: q7
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: fill_in_blank
+    q: 提取系数公因数和最低次幂，对 $2(x-y)^3+8(x-y)^2$ 因式分解：$2(x-y)^3+8(x-y)^2 =$ ______
+    answer:
+      - 2(x-y)^2(x-y+4)
+      - 2(x-y)^2[(x-y)+4]
+    explanation: 系数公因数为 2，$(x-y)$ 的最低次幂为 $(x-y)^2$，所以公因式是 $2(x-y)^2$。$2(x-y)^3 \div 2(x-y)^2 = x-y$，$8(x-y)^2 \div 2(x-y)^2
+      = 4$，剩余部分相加得 $x-y+4$，因此原式 $=2(x-y)^2(x-y+4)$。注意提取的是 $(x-y)^2$，不是 $(x-y)^3$，且剩余部分中 $(x-y)$ 不能丢。
+    difficulty: 2
+    section: s4
+    uses:
+      - 整体提取公因式
+      - 最低次幂
+    id: q8
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: single_choice
+    q: 用提取公因式法分解整式 $6x^2+9x$，要求把最大公因式一次提净，正确的是（ ）
+    options:
+      - $3x(2x+3)$
+      - $3(2x^2+3x)$
+      - $x(6x+9)$
+      - $3x(2x^2+3)$
+    answer: A
+    explanation: 先找最大公因式：系数 6、9 的最大公因数为 3；公共字母最低次幂为 x，所以公因式为 $3x$。$6x^2 ÷ 3x = 2x$，$9x ÷ 3x = 3$，故 $6x^2+9x=3x(2x+3)$。B、C
+      只是部分提取，括号内仍有公因式；D 展开为 $6x^3+9x$，与原式不符。
+    difficulty: 1
+    section: 通用
+    uses:
+      - 乘法分配律
+      - 最大公因数
+    id: q9
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: fill_in_blank
+    q: 把 $-8a^3b^2+12a^2b^3-4a^2b$ 分解因式：____
+    answer:
+      - -4a^2b(2ab-3b^2+1)
+      - -4a^2b(2ab - 3b^2 + 1)
+      - -4a²b(2ab - 3b² + 1)
+      - 4a^2b(-2ab+3b^2-1)
+      - 4a²b(-2ab+3b²-1)
+    explanation: 系数 8、12、4 的最大公因数为 4；字母 a、b 的最低次幂分别为 $a^2$、$b$，所以最大公因式为 $4a^2b$。原式首项为负，提出 $-4a^2b$：$-8a^3b^2 ÷
+      (-4a^2b)=2ab$，$12a^2b^3 ÷ (-4a^2b)=-3b^2$，$-4a^2b ÷ (-4a^2b)=1$。注意最后一项提取后剩 1，不能省略，结果为 $-4a^2b(2ab-3b^2+1)$。
+    difficulty: 2
+    section: 通用
+    uses:
+      - 最大公因数
+      - 符号处理
+    id: q10
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: multi_choice
+    q: 下列变形中，属于正确因式分解的有（ ）
+    options:
+      - $2x(a+b)-3y(a+b)=(a+b)(2x-3y)$
+      - $-3x^2+6x=-3x(x-2)$
+      - $(x-y)^3+4(x-y)^2=(x-y)^2(x-y+4)$
+      - $-2a(x+1)+6b(x+1)=2(x+1)(a-3b)$
+    answer:
+      - A
+      - B
+      - C
+    explanation: A 把重复出现的 $a+b$ 看作整体，提出后剩 $2x$ 与 $-3y$，正确。B 首项为负，提 $-3x$ 后各项符号正确：$-3x(x-2)=-3x^2+6x$，正确。C 提出最低次幂
+      $(x-y)^2$，余下 $(x-y)+4$ 即 $x-y+4$，正确。D 是符号陷阱：原式提出 $(x+1)$ 后括号内为 $-2a+6b$，可写成 $-2(x+1)(a-3b)$ 或 $2(x+1)(3b-a)$，不是
+      $2(x+1)(a-3b)$。
+    difficulty: 3
+    section: 通用
+    uses:
+      - 整体提取公因式
+      - 符号处理
+    id: q11
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: single_choice
+    q: 用提取公因式法分解 $3x^2+6xy$，结果正确的是（　）
+    options:
+      - $3x^2+6xy=3x(x+2y)$
+      - $3x^2+6xy=x(3x+6y)$
+      - $3x^2+6xy=3(x^2+2xy)$
+      - $3x^2+6xy=3x\cdot x+3x\cdot 2y$
+    answer: A
+    explanation: 系数 $3,6$ 的最大公因数是 $3$，字母部分公共的是 $x$，所以公因式是 $3x$：$3x^2+6xy=3x(x+2y)$。B 提出 $x$ 后括号内仍有公因数 $3$；C 提出 $3$ 后括号内仍有公因式
+      $x$；D 只是把两项改写成了含有公因式的和，没有化为乘积形式。
+    difficulty: 1
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 乘法分配律
+      - 最大公因数
+    id: q12
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: multi_choice
+    q: 对多项式 $4a^3b-8a^2b^2+2ab$，下列说法正确的有（　）
+    options:
+      - 三项系数的最大公因数是 $2$。
+      - 各项的公因式是 $2ab$。
+      - 提取公因式后括号内为 $2a^2-4ab$。
+      - 分解结果是 $2ab(2a^2-4ab+1)$。
+    answer:
+      - A
+      - B
+      - D
+    explanation: 系数 $4,8,2$ 的最大公因数是 $2$；$a$ 的最低次数是 $1$，$b$ 的最低次数是 $1$，所以公因式是
+      $2ab$。逐项相除：$4a^3b\div2ab=2a^2$，$-8a^2b^2\div2ab=-4ab$，$2ab\div2ab=1$。C 漏掉了最后一项的 $1$，展开回去会少原来的 $2ab$。
+    difficulty: 1
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 最大公因数
+      - 分配律
+    id: q13
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: fill_in_blank
+    q: 将 $-8a^3b^2+12a^2b^3-4a^2b$ 分解因式（结果按“括号内首项为正”的习惯书写）：________
+    answer:
+      - -4a^2b(2ab - 3b^2 + 1)
+      - -4a^2b(2ab-3b^2+1)
+      - -4a^2b(2ab -3b^2 +1)
+      - -4a^2b(2ab - 3b^2+1)
+      - -4a^2b(2ab-3b^2 + 1)
+    explanation: 系数 $8,12,4$ 的最大公因数是 $4$；字母 $a$ 的最低次数是 $2$，$b$ 的最低次数是 $1$。首项为负，因此提取
+      $-4a^2b$：$-8a^3b^2\div(-4a^2b)=2ab$，$12a^2b^3\div(-4a^2b)=-3b^2$，$-4a^2b\div(-4a^2b)=1$。结果是
+      $-4a^2b(2ab-3b^2+1)$，注意不能漏写最后一项 $1$。
+    difficulty: 2
+    section: 例题：提取公因式分解各项系数与字母
+    uses:
+      - 最大公因数
+      - 分配律
+    id: q14
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: true_false
+    q: 判断：$-3x^2+6x$ 提取公因式 $-3x$ 后应写成 $-3x(x+2)$。
+    answer: 错
+    explanation: 若写成 $-3x(x+2)$，展开是 $-3x^2-6x$，第二项符号与原式 $+6x$ 相反。正确结果是 $-3x(x-2)$，因为 $-3x\cdot
+      x=-3x^2$，$-3x\cdot(-2)=6x$。提取带负号的公因式时，括号内每一项都要变号。
+    difficulty: 2
+    section: 概念：首项为负与整体提取公因式的处理
+    uses:
+      - 提取公因式法
+      - 符号法则
+    id: q15
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: matching
+    q: 把左边的多项式与它的最大公因式配对。
+    options:
+      - $3x^2+6xy$
+      - $4a^3b-8a^2b^2$
+      - $6x^2y+9xy^2$
+      - $12x^3y^2-18x^2y^3+6x^2y^2$
+    answer:
+      - 3x
+      - 4a^2b
+      - 3xy
+      - 6x^2y^2
+    explanation: 逐个按“系数取最大公因数、字母取共有字母的最低次幂”找：$3x^2+6xy=3x(x+2y)$；$4a^3b-8a^2b^2=4a^2b(a-2b)$；$6x^2y+9xy^2=3xy(2x+3y)$；$12x^3y^2-18x^2y^3+6x^2y^2=6x^2y^2(2x-3y+1)$。
+    difficulty: 2
+    section: 通用
+    uses:
+      - 最大公因数
+      - 提取公因式法
+    id: q16
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+    archived: true
+  - kind: single_choice
+    q: 因式分解 $(x-y)^3+4(x-y)^2$，下列结果正确的是（　）
+    options:
+      - $(x-y)^2[(x-y)+4]$
+      - $(x-y)^2(x-y)+4$
+      - $(x-y)^2[4-(x-y)]$
+      - $(x-y)^2(x+y+4)$
+    answer: A
+    explanation: 公因式是 $(x-y)^2$（两项中 $(x-y)$ 的最低次幂）。提取后第一项剩 $(x-y)$，第二项剩 $4$，所以结果为 $(x-y)^2[(x-y)+4]$，也可写成 $(x-y)^2(x-y+4)$。B
+      变成 $(x-y)^3+4$，不是原式；C 的符号反了；D 中的 $x+y+4$ 不是提取后剩下的部分。
+    difficulty: 3
+    section: 概念：首项为负与整体提取公因式的处理
+    uses:
+      - 整体视角
+      - 提取公因式法
+    id: q17
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+    archived: true
+  - kind: single_choice
+    q: 多项式 $3x^2+6xy$ 用提取公因式法分解时，应提取的公因式是（ ）
+    options:
+      - $3$
+      - $x$
+      - $3x$
+      - $3x^2$
+    answer: C
+    explanation: 系数 $3$ 与 $6$ 的最大公因数为 $3$；两项都含有的字母只有 $x$，取最低次幂 $x^1$，所以公因式为 $3x$。$y$ 不在第一项中，$x^2$ 也不是第二项 $6xy$ 的因子。
+    difficulty: 1
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 最大公因数
+      - 乘法分配律
+    id: q18
+    archived: true
+  - kind: numeric
+    q: 利用提取公因数简便计算：$3.14 \\times 57 + 3.14 \\times 43 =$____
+    answer: 314
+    tol: 0.01
+    explanation: 原式 $=3.14\\times(57+43)=3.14\\times100=314$。
+    difficulty: 1
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 乘法分配律
+      - 提取公因数
+    id: q19
+    archived: true
+  - kind: true_false
+    q: 判断：$12x^3y^2-18x^2y^3+6x^2y^2=3x^2y^2(4x-6y+2)$，所以这个多项式已分解完毕。
+    answer: 错
+    explanation: 等式虽然成立，但提取的不是最大公因式：系数 $12,18,6$ 的最大公因数是 $6$，不是 $3$，括号内各项仍含公因数 $2$。应继续提为 $6x^2y^2(2x-3y+1)$，因此不能说“分解完毕”。
+    difficulty: 2
+    section: 例题：提取公因式分解各项系数与字母
+    uses:
+      - 最大公因式
+      - 因式分解
+    id: q20
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: multi_choice
+    q: 用整体法或提负号提取公因式，下列变形中正确的有（ ）
+    options:
+      - $x(a+b)+y(a+b)=(a+b)(x+y)$
+      - $(x-y)^3+4(x-y)^2=(x-y)^2(x-y+4)$
+      - $-(x-y)+3(x-y)=-2(x-y)$
+      - $-2a(x+1)+6b(x+1)=-2(x+1)(a-3b)$
+    answer:
+      - A
+      - B
+      - D
+    explanation: A、B 都是把重复出现的括号整体当作公因式提取；D 先提 $x+1$，再提 $-2$，展开可还原；C 错在第一项系数应为 $-1$，所以 $-(x-y)+3(x-y)=(-1+3)(x-y)=2(x-y)$，不是
+      $-2(x-y)$。
+    difficulty: 2
+    section: 概念：首项为负与整体提取公因式的处理
+    uses:
+      - 整体思想
+      - 符号处理
+    id: q21
+  - kind: ordering
+    q: 将用提取公因式法分解 $4a^3b-8a^2b^2+2ab$ 的步骤按正确顺序排列。
+    options:
+      - 写出结果 $2ab(2a^2 - 4ab + 1)$
+      - 逐项除以 $2ab$，得 $2a^2$、$-4ab$、$1$
+      - 确定公因式 $2ab$
+      - 用乘法展开，检验能还原原式
+    answer:
+      - 确定公因式 $2ab$
+      - 逐项除以 $2ab$，得 $2a^2$、$-4ab$、$1$
+      - 写出结果 $2ab(2a^2 - 4ab + 1)$
+      - 用乘法展开，检验能还原原式
+    explanation: 先找公因式：系数 $4,8,2$ 的最大公因数为 $2$，$a$、$b$ 都取最低一次幂，得 $2ab$；再用原式逐项除以 $2ab$，注意最后一项余 $1$；然后写成公因式乘括号；最后展开验算。
+    difficulty: 2
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 最大公因式
+      - 整式除法
+    id: q22
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: open_question
+    q: 本课把乘法分配律反过来用，就把“和的形式”改写成了“乘积的形式”。请结合具体例子（如
+      $6x^2y+9xy^2$）说明：①为什么说提取公因式是乘法分配律的逆用；②公因式如何确定；③提取后如何检验；④这种“乘积形式”对简便计算有什么帮助。
+    answer: 要点：① 乘法分配律是 $a(b+c)=ab+ac$，反过来 $ab+ac=a(b+c)$ 就是提取公因式；例如 $6x^2y+9xy^2=3xy(2x+3y)$。② 公因式 = 系数最大公因数 × 公共字母最低次幂：$6$
+      和 $9$ 的最大公因数是 $3$，$x$、$y$ 都出现且最低各 1 次，故公因式为 $3xy$。③ 提完后用乘法展开，看能否还原为 $6x^2y+9xy^2$，并检查括号内 $2x$ 与 $3y$ 没有公共因式。④
+      乘积形式把公共部分集中，如 $3.14\\times57+3.14\\times43=3.14\\times100=314$ 可简便计算；这种结构也为后续约分、解方程提供方便。
+    difficulty: 3
+    section: 通用
+    uses:
+      - 乘法分配律
+      - 最大公因数
+      - 提取公因式
+    id: q23
+  - kind: single_choice
+    q: 多项式 \(6x^3y-9x^2y^2+3x^2y\) 各项的最大公因式是（ ）。
+    options:
+      - \(3x^2y\)
+      - \(3xy\)
+      - \(3x^2y^2\)
+      - \(6x^2y\)
+    answer: A
+    explanation: 系数取 \(\gcd(6,9,3)=3\)；三个项都含 \(x\) 和 \(y\)，且 \(x\) 的最低次数是 2、\(y\) 的最低次数是 1，所以最大公因式为 \(3x^2y\)。\(3xy\)
+      虽是公因式但不是最大公因式；其余选项不能整除所有项。
+    difficulty: 1
+    section: 练习：提取公因式分解整式
+    id: q24
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: multi_choice
+    q: 下列提取公因式变形中，正确的有（ ）。
+    options:
+      - \(6x^2+9x=3x(2x+3)\)
+      - \(4a^3b-8a^2b^2=4a^2b(a-2b)\)
+      - \(4a^3b-8a^2b^2+2ab=2ab(2a^2-4ab)\)
+      - \(3x^2+6xy=3x(x+2y)\)
+    answer:
+      - A
+      - B
+      - D
+    explanation: A、B、D 都可乘回去验证：\(3x(2x+3)=6x^2+9x\)，\(4a^2b(a-2b)=4a^3b-8a^2b^2\)，\(3x(x+2y)=3x^2+6xy\)。C 展开
+      \(2ab(2a^2-4ab)=4a^3b-8a^2b^2\)，漏掉了原式中的 \(+2ab\) 项；因为 \(2ab\div 2ab=1\)，括号内最后一项应为 \(+1\)。
+    difficulty: 2
+    section: 例题：提取公因式分解各项系数与字母
+    id: q25
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: true_false
+    q: 判断：把 \(x(a+b)+y(a+b)\) 分解为 \((a+b)(x+y)\)，是利用了把 \(a+b\) 看作一个整体字母来提取公因式。
+    answer: 对
+    explanation: 把 \(a+b\) 看作整体 \(t\)，原式变为 \(xt+yt=t(x+y)\)，代回 \(t=a+b\) 即得 \((a+b)(x+y)\)。
+    difficulty: 2
+    section: 概念：首项为负与整体提取公因式的处理
+    id: q26
+  - kind: fill_in_blank
+    q: 填空：\(-8a^3b^2+12a^2b^3-4a^2b=-4a^2b(\quad)\)。
+    answer:
+      - 2ab-3b^2+1
+      - 2ab - 3b^2 + 1
+      - -3b^2+2ab+1
+    explanation: 公因式取
+      \(-4a^2b\)。逐项相除：\(-8a^3b^2\div(-4a^2b)=2ab\)，\(12a^2b^3\div(-4a^2b)=-3b^2\)，\(-4a^2b\div(-4a^2b)=1\)，所以括号内为
+      \(2ab-3b^2+1\)，不能漏写 \(+1\)。
+    difficulty: 2
+    section: 概念：首项为负与整体提取公因式的处理
+    id: q27
+  - kind: numeric
+    q: 利用分配律的逆用简便计算：\(3.14\times57+3.14\times43\)，结果是多少？
+    answer: 314
+    tol: 0.01
+    explanation: \(3.14\times57+3.14\times43=3.14\times(57+43)=3.14\times100=314\)。
+    difficulty: 2
+    section: 概念：公因式与提取公因式法
+    id: q28
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: open_question
+    q: 小明说：“既然 \(3x(-x+2)=-3x^2+6x\) 成立，那么把 \(-3x^2+6x\) 分解为 \(3x(-x+2)\) 就已经完成，写成 \(-3x(x-2)\)
+      没必要。”你同意吗？请结合提取公因式的检验方法，以及“括号内首项保持为正”的约定，评价小明的说法并写出规范的分解结果。
+    answer: 不完全同意。小明的变形 \(3x(-x+2)=-3x^2+6x\)
+      本身可由乘法分配律验证，数值上并没有错；但书写约定提倡提出公因式后括号内首项为正。原式首项为负，宜把负号一并提出：\(3x(-x+2)=-3x(x-2)\)。规范结果是 \(-3x^2+6x=-3x(x-2)\)，展开
+      \(-3x(x-2)=-3x^2+6x\) 可完成检验。
+    explanation: 开放题，评分要点见 answer；能准确说明数值变形成立，同时指出规范写法并要求括号内首项为正即可。
+    difficulty: 3
+    section: 通用
+    id: q29
+  - kind: single_choice
+    q: 下列选项中，用最大公因式对 $6x^2+9x$ 进行因式分解的结果是（ ）
+    options:
+      - $3x(2x+3)$
+      - $3x(2x+9)$
+      - $6x(x+3)$
+      - $x(6x+9)$
+    answer: A
+    explanation: 系数 $6,9$ 的最大公因数是 $3$；公共字母为 $x$，最低次数是 1，所以最大公因式是 $3x$。$6x^2+9x=3x\cdot2x+3x\cdot3=3x(2x+3)$。D 虽与原式恒等，但只提取了
+      $x$，括号内仍有公因数 $3$，不是最大公因式。
+    difficulty: 1
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 最大公因数
+      - 乘法分配律
+    id: q30
+  - kind: multi_choice
+    q: 下列有关公因式的说法，正确的有（ ）
+    options:
+      - $4a^3b$ 与 $8a^2b^2$ 的最大公因式是 $4a^2b$
+      - $6x^2y$ 与 $-9xy^2$ 的最大公因式是 $3xy$
+      - $12xy$ 与 $18x^2yz$ 的最大公因式是 $6xy$
+      - 若多项式首项为负，应先提出负号，再提取公因式，括号内各项不变号
+    answer:
+      - A
+      - B
+      - C
+    explanation: A：系数最大公因数为 $4$，$a$ 的最低次数为 2，$b$ 的最低次数为 1，正确。B：系数最大公因数为 $3$，公共字母 $x,y$ 均取 1 次，正确。C：$z$ 只在 $18x^2yz$
+      中出现，不属于公因式，故公因式为 $6xy$，正确。D：提出负号相当于各项乘 $-1$，括号内每项都要变号，不是不变号，错误。
+    difficulty: 1
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 最大公因数
+    id: q31
+  - kind: numeric
+    q: 用提取公因式法简便计算：$3.14\times57+3.14\times43$ 的结果是多少？
+    answer: 314
+    tol: 0.01
+    explanation: 两项都含公因数 $3.14$，逆用分配律：$3.14\times57+3.14\times43=3.14\times(57+43)=3.14\times100=314$。
+    difficulty: 2
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 乘法分配律
+    id: q32
+  - kind: fill_in_blank
+    q: 对 $2x(a+b)-3y(a+b)$ 提取公因式后，另一个因式是____。
+    answer:
+      - 2x-3y
+      - 2x - 3y
+      - (2x-3y)
+      - (2x - 3y)
+    explanation: 把 $a+b$ 看成一个整体 $t$，原式化为 $2xt-3yt=t(2x-3y)$。代回 $t=a+b$，得 $(a+b)(2x-3y)$，所以另一个因式是 $2x-3y$。
+    difficulty: 2
+    section: 概念：首项为负与整体提取公因式的处理
+    uses:
+      - 乘法分配律
+    id: q33
+  - kind: ordering
+    q: 用提取公因式法分解 $12a^3b^2-8a^2b^3$ 时，请将下列步骤按正确顺序排列。
+    options:
+      - 用公因式去除每一项
+      - 字母取各项共有字母的最低次数
+      - 写成公因式与剩余部分的乘积并检验
+      - 系数取最大公因数
+    answer:
+      - 系数取最大公因数
+      - 字母取各项共有字母的最低次数
+      - 用公因式去除每一项
+      - 写成公因式与剩余部分的乘积并检验
+    explanation: 应先把系数与字母分开找最大公因式：系数取 $\\gcd(12,8)=4$；字母 $a,b$ 都取各项中的最低次数，得 $a^2b^2$，所以公因式为 $4a^2b^2$。然后用它去除每一项，得
+      $3a-2b$，最后写为 $4a^2b^2(3a-2b)$ 并展开检验。
+    difficulty: 2
+    section: 例题：提取公因式分解各项系数与字母
+    uses:
+      - 最大公因数
+    id: q34
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: matching
+    q: 将左边的多项式与它提取公因式后的结果配对。
+    options:
+      - $-2a(x+1)+6b(x+1)$
+      - $-(x-y)+3(x-y)$
+      - $3m(a-b)+2n(a-b)$
+      - $(x-y)^3+4(x-y)^2$
+    answer:
+      - $-2(x+1)(a-3b)$
+      - $2(x-y)$
+      - $(a-b)(3m+2n)$
+      - $(x-y)^2(x-y+4)$
+    explanation: ①把 $x+1$ 当整体：$-2at+6bt=t(-2a+6b)=-2t(a-3b)$。②第一项系数是 $-1$：$-t+3t=2t$。③把 $a-b$ 当整体：$3mt+2nt=t(3m+2n)$。④公因式取
+      $(x-y)^2$，剩余 $(x-y)+4=x-y+4$。
+    difficulty: 3
+    section: 概念：首项为负与整体提取公因式的处理
+    uses:
+      - 乘法分配律
+    id: q35
+  - kind: single_choice
+    q: 多项式 $3x^2 + 6xy$ 的各项公因式是（ ）。
+    options:
+      - $3x$
+      - $3xy$
+      - $3x^2$
+      - $x^2y$
+    answer: A
+    explanation: 系数 $3$ 与 $6$ 的最大公因数是 $3$；字母部分只有 $x$ 同时出现在两项中，且最低次数是 $1$，所以公因式为 $3x$。$y$ 不在第一项中，$x^2$ 不能整除第二项，因此不能选。
+    difficulty: 1
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 最大公因数
+      - 分配律
+    id: q36
+  - kind: true_false
+    q: 判断下式是否正确：$-4x^3y+6x^2y^2 = -2x^2y(2x-3y)$。
+    answer: 对
+    explanation: 展开右边：$-2x^2y\cdot 2x=-4x^3y$，$-2x^2y\cdot(-3y)=6x^2y^2$，与原式相同，所以正确。
+    difficulty: 1
+    section: 概念：首项为负与整体提取公因式的处理
+    uses:
+      - 分配律
+      - 符号运算
+    id: q37
+  - kind: multi_choice
+    q: 下列用提取公因式法进行的分解，正确的有（多选）。
+    options:
+      - $12x^3y^2-18x^2y^3+6x^2y^2=6x^2y^2(2x-3y+1)$
+      - $-2m^2n+6mn^2-4mn=-2mn(m-3n+2)$
+      - $(x-y)^3+4(x-y)^2=(x-y)^2(x-y+4)$
+      - $-3x^2+6x=-3x(x+2)$
+    answer:
+      - A
+      - B
+      - C
+    explanation: A、B、C 展开后都能还原成原式。D 错在符号：$-3x(x+2)=-3x^2-6x$，不等于 $-3x^2+6x$；应为 $-3x(x-2)$。
+    difficulty: 2
+    section: 例题：提取公因式分解各项系数与字母
+    uses:
+      - 提取公因式
+      - 符号处理
+    id: q38
+    stats:
+      attempts: 1
+      correct: 0
+      last: 2026-09-09
+      last_correct: false
+  - kind: fill_in_blank
+    q: 用提取公因式法分解 $12x^3y^2-18x^2y^3+6x^2y^2$，提取 $6x^2y^2$ 后，括号内的因式是 ______。
+    answer:
+      - 2x - 3y + 1
+      - 2x-3y+1
+    explanation: 系数部分 $\gcd(12,18,6)=6$；字母部分 $x$ 最低取 $2$ 次，$y$ 最低取 $2$ 次，所以公因式是 $6x^2y^2$。逐项除以公因式得 $2x$、$-3y$、$1$，括号内为 $2x-3y+1$。
+    difficulty: 2
+    section: 例题：提取公因式分解各项系数与字母
+    uses:
+      - 最大公因数
+      - 同底数幂除法
+    id: q39
+  - kind: numeric
+    q: 利用提取公因式巧算：$3.14\times57 + 3.14\times43 = $ ______。
+    answer: 314
+    tol: 0.01
+    explanation: $3.14\times57+3.14\times43=3.14\times(57+43)=3.14\times100=314$。
+    difficulty: 2
+    section: 概念：公因式与提取公因式法
+    uses:
+      - 分配律
+    id: q40
+  - kind: matching
+    q: 把左列各式与右列中对应的提取公因式结果配对。
+    options:
+      - $-3x^2+6x$
+      - $-(x-y)+3(x-y)$
+      - $(x-y)^3+4(x-y)^2$
+      - $3m(a-b)+2n(a-b)$
+    answer:
+      - $-3x(x-2)$
+      - $2(x-y)$
+      - $(x-y)^2(x-y+4)$
+      - $(a-b)(3m+2n)$
+    explanation: ① $-3x^2+6x=-3x(x-2)$；② $-(x-y)+3(x-y)=(x-y)(-1+3)=2(x-y)$；③
+      $(x-y)^3+4(x-y)^2=(x-y)^2[(x-y)+4]=(x-y)^2(x-y+4)$；④ $3m(a-b)+2n(a-b)=(a-b)(3m+2n)$。
+    difficulty: 3
+    section: 概念：首项为负与整体提取公因式的处理
+    uses:
+      - 整体思想
+      - 提取公因式
+      - 符号处理
+    id: q41
+  - kind: single_choice
+    q: 下列等式中，按从左到右的变形方向看，属于把“和的形式”改写成“乘积的形式”的是（ ）
+    options:
+      - \(a(x+y)=ax+ay\)
+      - \(ax+ay=a(x+y)\)
+      - \(a(x+y)+b=ax+ay+b\)
+      - \(a(x-y)=ax-ay\)
+    answer: B
+    explanation: 从左到右看，只有 \(ax+ay=a(x+y)\) 把两项的和改写成了“公因式 × 另一个因式”的乘积形式，是分配律的逆用。A、D 是正向展开；C 只是把其中的乘积项展开，右边仍是和的形式，并没有变成整体乘积。
+    difficulty: 1
+    section: s1
+    uses:
+      - 分配律
+      - 整式恒等变形
+    id: q42
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: fill_in_blank
+    q: 用提取公因式法分解：\(15a^2b^2-20ab=\)______
+    answer:
+      - 5ab(3ab-4)
+      - 5ab(3ab - 4)
+      - -5ab(4-3ab)
+      - -5ab(4 - 3ab)
+    explanation: 系数取 \(\gcd(15,20)=5\)，相同字母取较低次数，所以最大正公因式为 \(5ab\)；括号内得 \(3ab-4\)，通常写作 \(5ab(3ab-4)\)。若提取 \(-5ab\)，等价形式为
+      \(-5ab(4-3ab)\)。检查：\(5ab(3ab-4)=15a^2b^2-20ab\)。
+    difficulty: 2
+    section: s1
+    uses:
+      - 公因式
+      - 最大公因数
+      - 相同字母取最低次数
+    id: q43
+    archived: true
+  - kind: multi_choice
+    q: 小华对 \(12x^2y+6xy^2\) 提取公因式，写出了三个结果：\(2xy(6x+3y)\)、\(3xy(4x+2y)\)、\(6xy(2x+y)\)。下列判断正确的有（多选）
+    options:
+      - \(2xy(6x+3y)=12x^2y+6xy^2\) 成立
+      - \(2xy(6x+3y)\) 已将公因式提取干净
+      - 三个结果中，只有 \(6xy(2x+y)\) 是把公因式提取干净的形式
+      - 前两个结果都能继续从括号内再提公因数，所以不是最彻底的形式
+    answer:
+      - A
+      - C
+      - D
+    explanation: A 乘开确实得 \(12x^2y+6xy^2\)，这是最基本的检验；但 B 错，因为括号内 \(6x+3y\) 还有公因数 3，可继续化为 \(3(2x+y)\)，故第一个结果并没有提干净。同理，第二个括号内
+      \(4x+2y\) 还有公因数 2，也不彻底。最彻底的公因式是 \(6xy\)，最终应为 \(6xy(2x+y)\)，所以选 A、C、D。
+    difficulty: 3
+    section: s1
+    uses:
+      - 提取公因式
+      - 检验方法
+      - 提干净的标准
+    id: q44
+    archived: true
+  - kind: single_choice
+    q: 根据正文关于因式分解的“本质理解”，将 6x²y + 9xy² 改写为 3xy(2x + 3y)，最重要的意义在于？
+    options:
+      - 使它不再是多项式，而变成一个具体的数
+      - 让隐藏的公共因子显现出来，方便后续约分、解方程、判断整除性等操作
+      - 使式子的值变大，便于比较计算结果
+      - 使括号内项的次数都变小，从而改变原式的值
+    answer: B
+    explanation: 提取公因式是恒等变形，改写前后式子的值不变，所以 A、C、D 都错。B 对应正文中的“本质理解”：因式分解让公共结构（如公共因子 3xy）显露出来，便于后续处理乘积形式的问题。
+    difficulty: 2
+    section: s1
+    uses:
+      - 分配律
+      - 公因式
+      - 恒等变形
+    id: q45
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+      last_correct: true
+  - kind: single_choice
+    q: 小华将 $\frac{2}{3}x^2y-\frac{4}{9}xy^2$ 分解为 $xy(\frac{2}{3}x-\frac{4}{9}y)$。下列判断正确的是：
+    options:
+      - 小华正确，因为已经写成“公因式乘括号”的形式，完成提取公因式
+      - 小华正确，因为展开 $xy(\frac{2}{3}x-\frac{4}{9}y)$ 后与原式相等
+      - 小华不正确，因为 $\frac{2}{3}$ 和 $\frac{4}{9}$ 是分数，不能作为公因式的一部分
+      - 小华提得不干净，还应提取系数部分的公因式 $\frac{2}{9}$，得 $\frac{2}{9}xy(3x-2y)$
+    answer: D
+    explanation: 先看字母：两项都含 $x$、$y$，$xy$ 是字母部分的公因式。但系数也应先提取最大公因数：$\frac{2}{3}=\frac{6}{9}$，$-\frac{4}{9}=-\frac{4}{9}$，分子 $6$
+      和 $4$ 的最大公因数是 $2$，所以系数部分还有公因数 $\frac{2}{9}$。因此最大公因式是 $\frac{2}{9}xy$，完整结果是 $\frac{2}{9}xy(3x-2y)$。小华只提出
+      $xy$，属于提不干净；分数系数同样可以提取公因式。
+    difficulty: 2
+    section: s2
+    uses:
+      - 分配律
+      - 最大公因数
+    id: q46

@@ -81,6 +81,8 @@ export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } f
 /** 出题第二意见门（#223）：站标签与缺省抽样率随门面出（宿主 STATIONS/配置对齐用）。 */
 export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
 export type { SecondOpinionReport, SecondOpinionOptions } from './question-audit.ts'
+/** 出题多样性仪表（#230 / ADR-0064）：报告类型随门面出（宿主任务消息、工具面、基线脚本消费）。 */
+export type { QuestionDiversityReport, DiversityMetrics, DiversityReading, DistractorReading } from './question-diversity.ts'
 
 
 
