@@ -153,6 +153,7 @@
     "src/engine/note-source.ts": 1242,
     "src/engine/notes.ts": 334,
     "src/engine/optimize.ts": 140,
+    "src/engine/output-contracts.ts": 432,
     "src/engine/output.ts": 68,
     "src/engine/params.ts": 58,
     "src/engine/paths.ts": 190,
