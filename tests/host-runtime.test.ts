@@ -452,6 +452,26 @@ test('正文初跑档位（#228）：高难节点初跑升 deep、低难维持 f
 })
 
 test('#213 语料容忍补标：大纲解析容忍命中 → 大纲站当次捕获随终态改判 tolerated 落盘', async () => {
+  const rt = makeRuntime()
+  const prompts: string[] = []
+  let views: Array<Record<string, unknown>> = []
+  stub(rt, {
+    'content2.contentPack': async () => '上下文包',
+    'content2.contentTierOf': async () => 1,
+    'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
+    'content2.contentSectionsView': async () => views,
+    'content2.contentOutline': async (_c: unknown, _n: unknown, _yaml: string) => {
+      views = [{ id: 's1', title: '概念：A', type: '概念', status: 'pending', tierLabel: '低' }]
+      // 解析边界剥注释重试过的容忍形态（outlineApply 的 tolerated 返回通道）
+      return { sections: views, tolerated: ['模型输出串入机器块，已剥除后解析'] }
+    },
+    'content2.contentSection': async () => ({ version: 1, title: 'x', hints: [] }),
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
   const ctx = scriptedCtx([
     'node: X\nsections:\n  - id: s1\n    title: 概念：A\n',
     '## 概念：A\n\n正文',
