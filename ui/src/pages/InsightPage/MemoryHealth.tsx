@@ -36,7 +36,7 @@ function DayBars({ perDay }: { perDay: Array<{ d: string; count: number }> }) {
     <div className='lh-flex lh-items-end lh-gap-2 lh-h-84'>
       {perDay.map(p => (
         <div key={p.d} title={`${p.d}：${p.count} 道到期`}
-          className='lh-flex-1 lh-h-100% lh-flex lh-items-end lh-minw-3'>
+          className='lh-flex-1 lh-h-full lh-flex lh-items-end lh-minw-3'>
           <div style={{
             width: '100%', height: `${Math.max(p.count ? 4 : 1, (p.count / max) * 100)}%`,
             background: p.count ? 'var(--color-primary-4,#4080ff)' : 'var(--color-fill-2,#f2f3f5)',

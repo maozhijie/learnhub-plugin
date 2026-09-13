@@ -155,3 +155,49 @@ test('门自检：静态内联样本必须被抓住，动态值样本不误咬�
     rmSync(tmp, { force: true })
   }
 })
+
+/** 语义 class 层的引用 ↔ 定义对账（#211）：className 里写出的 .lh-* 必须在
+ * global.css 有定义，且类名只能是 [a-z0-9-]（值名工具类把百分比写成 pct/full——
+ * `lh-h-100%` 这类含 `%` 的名字是**非法 CSS 选择器**，浏览器整条规则丢弃、
+ * 样式静默失效，是本层最容易踩的坑）。 */
+export function classViolations(srcRoot: string, cssText?: string): string[] {
+  const BS = String.fromCharCode(92)
+  const css = cssText ?? readFileSync(join(srcRoot, 'global.css'), 'utf8')
+  const defined = new Set([...css.matchAll(/^\.([a-zA-Z0-9_-]+)[\s,{]/gm)].map(m => m[1]!))
+  const violations: string[] = []
+  for (const p of walk(srcRoot)) {
+    if (!p.endsWith('.tsx')) continue
+    const rel = p.split(BS).join('/').split('/ui/src/')[1]!
+    for (const m of readFileSync(p, 'utf8').matchAll(/className=(?:'([^']*)'|"([^"]*)"|\{`([^`]*)`\})/g)) {
+      for (const token of ((m[1] ?? m[2] ?? m[3]) ?? '').split(/\s+/)) {
+        if (!token.startsWith('lh-')) continue
+        if (!/^lh-[a-z0-9-]+$/.test(token)) violations.push(`${rel}: 类名含非法字符「${token}」——CSS 选择器无效，样式会静默失效`)
+        else if (!defined.has(token)) violations.push(`${rel}: 引用未定义的类「${token}」（class 层定义在 ui/src/global.css）`)
+      }
+    }
+  }
+  return violations
+}
+
+test('语义 class 层：className 引用的 .lh-* 必须有定义且类名合法（#211）', () => {
+  const violations = classViolations(join(ROOT, 'ui', 'src'))
+  assert.deepEqual(violations, [], `class 层引用/定义断裂：\n${violations.join('\n')}`)
+})
+
+test('门自检：未定义类与非法类名样本必须被抓住（ADR-0047）', () => {
+  const tmp = join(ROOT, 'ui', 'src', '__class_probe__.tsx')
+  try {
+    writeFileSync(tmp, [
+      "export const A = () => <div className='lh-muted lh-made-up' />",
+      'export const B = () => <div className="lh-h-100%" />',
+      "export const C = () => <div className='lh-muted lh-row' />",
+    ].join('\n'), 'utf8')
+    const v = classViolations(join(ROOT, 'ui', 'src'))
+    const probe = v.filter(x => x.startsWith('__class_probe__.tsx'))
+    assert.equal(probe.length, 2, `探针模块的两处违规必须都被看见（实得 ${probe.length}）：${probe.join(' | ')}`)
+    assert.ok(probe.some(x => x.includes('lh-made-up') && x.includes('未定义')), '未定义类未被抓到')
+    assert.ok(probe.some(x => x.includes('lh-h-100%') && x.includes('非法字符')), '非法类名未被抓到')
+  } finally {
+    rmSync(tmp, { force: true })
+  }
+})
