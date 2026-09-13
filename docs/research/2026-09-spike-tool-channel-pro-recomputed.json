@@ -1,0 +1,2776 @@
+{
+ "reconstructedFrom": "docs/research/spike-216-corpus-pro",
+ "caveat": "格式/成本轴为运行时读数（frontmatter）；内容/多样性轴为语料复算（回复面，未经受理门过滤）",
+ "rows": [
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 1,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 2490,
+   "outputTokens": 6193,
+   "durationMs": 85027,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "例题",
+     "概念"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是一个带名字的盒子",
+     "演示：同一个名字，值可以换",
+     "例题：哪些是变量，哪些是固定量",
+     "概念：变量让我们描述未知和变化"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 2,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 8319,
+   "durationMs": 113632,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 5,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "例题",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ],
+    "titles": [
+     "概念：变量是贴着名字的盒子",
+     "概念：变量名的基本规则",
+     "演示：不变的名字，会变的值",
+     "例题：读到变量名就换成当前值",
+     "练习：辨认变量名并读取当前值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 3,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 3645,
+   "durationMs": 51394,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "例题",
+     "交互"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是一个贴了名字标签的盒子",
+     "演示：同一个名字，值可以被换掉",
+     "例题：在生活场景里找出变量名与当前值",
+     "交互：拖动滑块，看变量值换掉但名字还在"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 4,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 4085,
+   "durationMs": 56294,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是给值贴上的名字",
+     "演示：把值放进变量盒子",
+     "概念：同一个变量名可以先后装不同值",
+     "练习：追踪变量盒子的当前值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 5,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 6051,
+   "durationMs": 82772,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是给值起名字的容器",
+     "概念：同一个变量名可以先后装不同值",
+     "交互：动手试试“变量盒子”",
+     "练习：找出变量、变量名与值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 6,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 4585,
+   "durationMs": 70468,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了名字的盒子",
+     "概念：变量名与变量值不是一回事",
+     "演示：盒子里的内容会变，名字不变",
+     "练习：识别变量名、当前值与变化"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 7,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 3184,
+   "durationMs": 44976,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是给值起的名字",
+     "概念：变量名与值不是一回事",
+     "演示：用变量名取用值",
+     "练习：辨认变量、名字与值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 8,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 4561,
+   "durationMs": 66217,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 5,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "例题",
+     "思维"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ],
+    "titles": [
+     "概念：从“会变的量”到程序变量",
+     "概念：变量名、当前值、存储位置",
+     "演示：同一个名字先后指向不同值",
+     "例题：找出变量名与当前值",
+     "思维：把变量看作“贴标签的盒子”"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 9,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 6427,
+   "durationMs": 84466,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "交互",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了名字的盒子",
+     "演示：标签不变，内容可换",
+     "交互：观察不同变量的当前值",
+     "练习：辨认变量名与当前值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 1,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4437,
+   "durationMs": 57791,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "变量是一个有名字的存储位置",
+     "变量名与值是两个不同的东西",
+     "交互：观察盒子里的值变化",
+     "练习：辨别变量名、值与存储位置"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 2,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4440,
+   "durationMs": 59988,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 5,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ],
+    "titles": [
+     "概念：数据需要一个名字——变量就是名字",
+     "演示：读变量就是读名字对应的当前值",
+     "概念：一个变量有三个部分——名字、值、盒子",
+     "交互：点击变量名，读取当前值",
+     "练习：识别变量名与当前值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 3,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 7178,
+   "durationMs": 95110,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "交互",
+     "概念",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是给值贴上的标签",
+     "交互：同一个变量名下的值可以换",
+     "概念：变量名与当前值要分开看",
+     "练习：判断变量当前保存的值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 4,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 3505,
+   "durationMs": 45448,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是值身上的名字标签",
+     "概念：同一个名字同一时刻只贴一个值",
+     "演示：看同一个名字换贴到不同值",
+     "练习：判断标签当前贴在哪个值上"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 5,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4249,
+   "durationMs": 61795,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "例题",
+     "交互"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：给值贴标签——变量是有名字的容器",
+     "演示：同一个名字，不同的时刻——变量的“变”",
+     "例题：追踪标签下的当前值",
+     "交互：亲手给值贴标签并更换标签"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 6,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 3872,
+   "durationMs": 53161,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是给数据贴上的名字",
+     "概念：变量名和变量值是两回事",
+     "交互：换掉盒子里的内容，名字不变",
+     "练习：从游戏界面认出名字与值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 7,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4937,
+   "durationMs": 67823,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是给值贴上的名字标签",
+     "演示：同一个变量名，里面的值可以换成另一个",
+     "概念：变量名的合法性与可读性",
+     "练习：识别变量、当前值与合法命名"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 8,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4737,
+   "durationMs": 65461,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 5,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习",
+     "思维"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ],
+    "titles": [
+     "概念：变量像一个贴了名字的盒子",
+     "演示：给变量重新放值会覆盖旧值",
+     "概念：变量名与变量值不是一回事",
+     "练习：跟踪简单放值操作中的当前值",
+     "思维：为什么用变量代替具体数字"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 9,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 3816,
+   "durationMs": 54390,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "交互",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是一个有名字的存储盒",
+     "演示：同一个变量名，先后放入不同值",
+     "交互：打开盒子，替换里面的值",
+     "练习：快速辨别变量名与当前值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 1,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 3203,
+   "durationMs": 35443,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了名字的存储盒",
+     "概念：变量名是标签，值是内容",
+     "演示：盒子换内容，标签不换",
+     "练习：认出变量名、值与变化结果"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 2,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 4958,
+   "durationMs": 63436,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "交互"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了标签的盒子",
+     "概念：名字是标签，值是内容",
+     "演示：名字不变，值可以换",
+     "交互：给变量贴标签"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 3,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 2827,
+   "durationMs": 38606,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "思维",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了名字的盒子",
+     "演示：看到一个变量时读出名字与值",
+     "思维：名字、值与字面量如何区分",
+     "练习：圈出变量名与当前值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 4,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 1821,
+   "durationMs": 24348,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "交互",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是给数据起名字的容器",
+     "演示：同一个名字，值可以换",
+     "交互：动手给盒子贴标签",
+     "练习：分清名字、值与可变"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 5,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 4585,
+   "durationMs": 54535,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了名字的盒子",
+     "概念：名字与值是两回事",
+     "演示：从写死的数到有名字的量",
+     "练习：指认变量与它的值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 6,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 3849,
+   "durationMs": 53400,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "例题",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了标签的储物格",
+     "演示：标签不动，格子里换东西",
+     "例题：在场景里标出变量名与当前值",
+     "练习：你来标一标"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 7,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 3066,
+   "durationMs": 35078,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：值先存在，变量是给它贴上的名字",
+     "概念：一个变量由名字和值两部分组成",
+     "演示：名字可以指向不同种类的值",
+     "练习：辨认变量里的名字与值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 8,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 2813,
+   "durationMs": 32526,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴着标签的盒子",
+     "概念：变量名与变量值是两回事",
+     "演示：同一个盒子的值换了几次",
+     "练习：辨认变量名、值与变化"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 9,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 3299,
+   "durationMs": 36824,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "交互",
+     "概念",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是一只有名字标签的盒子",
+     "交互：给盒子换一个值，名字不变",
+     "概念：变量名和变量值是两回事",
+     "练习：从场景里认出变量名和值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 1,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 3019,
+   "outputTokens": 3852,
+   "durationMs": 45630,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "交互"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了名字的盒子",
+     "概念：名字在外，值在内",
+     "演示：值会换，名字不变",
+     "交互：动手换值，体会“变”字"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 2,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 2159,
+   "durationMs": 31623,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是一个贴着名字的容器",
+     "演示：同一个名字，不同时刻的值",
+     "概念：一次只装一个值",
+     "练习：分辨变量名与变量值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 3,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 5557,
+   "durationMs": 65475,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是一个贴了标签的盒子",
+     "概念：名字与值是两回事",
+     "演示：同一个盒子先后装不同的值",
+     "练习：辨一辨名字、值与变化"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 4,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 4056,
+   "durationMs": 50458,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了标签的盒子",
+     "概念：名字不变，值可以换",
+     "演示：一张\"名字 → 值\"的变量表",
+     "练习：认出变量、起好名字"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 5,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 2948,
+   "durationMs": 43099,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "交互"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是命名的存储位置",
+     "概念：变量名与变量值是两回事",
+     "演示：变量的值会变，名字不变",
+     "交互：识别名字、值与合法命名"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 6,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 3613,
+   "durationMs": 44303,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了标签的盒子",
+     "演示：快递柜——柜号是名字，包裹是值",
+     "概念：变量名不等于变量值",
+     "练习：认出变量、名字与值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 7,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 9242,
+   "durationMs": 106207,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴着名字的盒子",
+     "概念：名字与值是两回事",
+     "演示：没有变量，值用完就丢",
+     "练习：认出盒子的名字与值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 8,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 2355,
+   "durationMs": 34251,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是一个贴了名字的盒子",
+     "概念：名字和值是两回事",
+     "交互：给盒子贴上变量名",
+     "练习：圈出变量名与值"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 9,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 4385,
+   "durationMs": 49581,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "交互"
+    ],
+    "ids": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "titles": [
+     "概念：变量是贴了标签的盒子",
+     "概念：标签不变，内容可变——变量名与值",
+     "演示：一个变量从创建到换值的轨迹",
+     "交互：动手创建并改变一个变量"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 1,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 2917,
+   "outputTokens": 8087,
+   "durationMs": 95546,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 11.166666666666666,
+    "selfBleu": 0.1318540468907987,
+    "stemSimilarity": 0.016665654172488508,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 2,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 10632,
+   "durationMs": 124011,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 12.333333333333334,
+    "selfBleu": 0.10963218134033179,
+    "stemSimilarity": 0.0059486753821678074,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 3,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 8862,
+   "durationMs": 107078,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "multi_choice": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 12.833333333333332,
+    "selfBleu": 0.06191259673730005,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 4,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 8154,
+   "durationMs": 100201,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "true_false": 1,
+     "single_choice": 1,
+     "matching": 1,
+     "numeric": 1
+    },
+    "entropy": 2,
+    "distractor": 10.833333333333334,
+    "selfBleu": 0.04983883511069534,
+    "stemSimilarity": 0.0029178338001867414,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 5,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 10716,
+   "durationMs": 132287,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "fill_in_blank": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 13.75,
+    "selfBleu": 0.26757872235539454,
+    "stemSimilarity": 0.036630036630036625,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 6,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 13655,
+   "durationMs": 159878,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "open_question": 1
+    },
+    "entropy": 2,
+    "distractor": 20.333333333333332,
+    "selfBleu": 0.06387927135666394,
+    "stemSimilarity": 0.0022101449275362317,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 7,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 8189,
+   "durationMs": 96848,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "multi_choice": 1,
+     "matching": 1
+    },
+    "entropy": 2,
+    "distractor": 11.333333333333334,
+    "selfBleu": 0.09323329653025123,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 8,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 7704,
+   "durationMs": 92480,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 12.5,
+    "selfBleu": 0.12982949808416985,
+    "stemSimilarity": 0.010728450924529356,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 9,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 9226,
+   "durationMs": 112506,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "multi_choice": 1,
+     "matching": 1,
+     "true_false": 1
+    },
+    "entropy": 2,
+    "distractor": 11.25,
+    "selfBleu": 0.13467019806356023,
+    "stemSimilarity": 0.007596371882086168,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 1,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 5255,
+   "durationMs": 63400,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "matching": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 8.666666666666666,
+    "selfBleu": 0.0764551038932664,
+    "stemSimilarity": 0.0035822021116138766,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 2,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 6804,
+   "durationMs": 79683,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 11.583333333333334,
+    "selfBleu": 0.08057227314482335,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 3,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 7489,
+   "durationMs": 84530,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 15.75,
+    "selfBleu": 0.1763604315256308,
+    "stemSimilarity": 0.04133991247393309,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 4,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 7571,
+   "durationMs": 92558,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "true_false": 1,
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 11.333333333333332,
+    "selfBleu": 0.10222518000827838,
+    "stemSimilarity": 0.0036238918009448007,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 5,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 9192,
+   "durationMs": 112011,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "numeric": 1
+    },
+    "entropy": 2,
+    "distractor": 14,
+    "selfBleu": 0.06830968325032037,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 6,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 9888,
+   "durationMs": 113360,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 2,
+     "true_false": 1,
+     "ordering": 1
+    },
+    "entropy": 1.5,
+    "distractor": 10.416666666666666,
+    "selfBleu": 0.11124738009356963,
+    "stemSimilarity": 0.007013251783893986,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 7,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 5302,
+   "durationMs": 64806,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "fill_in_blank": 1,
+     "multi_choice": 1,
+     "single_choice": 1,
+     "true_false": 1
+    },
+    "entropy": 2,
+    "distractor": 13.916666666666666,
+    "selfBleu": 0.07849259000888004,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 8,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 10984,
+   "durationMs": 129355,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "matching": 1,
+     "true_false": 1,
+     "single_choice": 1,
+     "ordering": 1
+    },
+    "entropy": 2,
+    "distractor": 16.833333333333332,
+    "selfBleu": 0.07760700439450915,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 9,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 5364,
+   "durationMs": 64492,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 11.916666666666666,
+    "selfBleu": 0.0727180694614669,
+    "stemSimilarity": 0.00764163372859025,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 1,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 7890,
+   "durationMs": 82127,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 9.833333333333334,
+    "selfBleu": 0.06792954162023283,
+    "stemSimilarity": 0.003680699332873246,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 2,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 6186,
+   "durationMs": 65211,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 9.833333333333334,
+    "selfBleu": 0.07351262948142717,
+    "stemSimilarity": 0.002908514013749339,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 3,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 4580,
+   "durationMs": 49378,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "ordering": 1
+    },
+    "entropy": 2,
+    "distractor": 4.833333333333333,
+    "selfBleu": 0.1990687710342094,
+    "stemSimilarity": 0.030166830492538776,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 4,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 6079,
+   "durationMs": 65798,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "matching": 1,
+     "true_false": 1
+    },
+    "entropy": 2,
+    "distractor": 15.833333333333334,
+    "selfBleu": 0.0732326124431834,
+    "stemSimilarity": 0.005299707602339182,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 5,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 4685,
+   "durationMs": 49816,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 17.666666666666668,
+    "selfBleu": 0.15216169656517206,
+    "stemSimilarity": 0.018387181507748884,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 6,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 5781,
+   "durationMs": 61191,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 10.833333333333332,
+    "selfBleu": 0.13113113969025184,
+    "stemSimilarity": 0.02314814814814815,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 7,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 7744,
+   "durationMs": 85255,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "matching": 1,
+     "open_question": 1
+    },
+    "entropy": 2,
+    "distractor": 18,
+    "selfBleu": 0.10076702591486146,
+    "stemSimilarity": 0.0070156380835992484,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 8,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 9335,
+   "durationMs": 101323,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "matching": 1,
+     "single_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 18.166666666666668,
+    "selfBleu": 0.11617639271527092,
+    "stemSimilarity": 0.006862922160014448,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 9,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 6738,
+   "durationMs": 68882,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "matching": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 17,
+    "selfBleu": 0.38366362590682146,
+    "stemSimilarity": 0.07149532710280374,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 1,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 3491,
+   "outputTokens": 6772,
+   "durationMs": 77194,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "matching": 1
+    },
+    "entropy": 2,
+    "distractor": 5.833333333333333,
+    "selfBleu": 0.16892425189694113,
+    "stemSimilarity": 0.031902664652079415,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 2,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 8030,
+   "durationMs": 93615,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "numeric": 1
+    },
+    "entropy": 2,
+    "distractor": 15.166666666666666,
+    "selfBleu": 0.1716456424404321,
+    "stemSimilarity": 0.018878101402373247,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 3,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 6989,
+   "durationMs": 73310,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 7.666666666666666,
+    "selfBleu": 0.12893693244959,
+    "stemSimilarity": 0.023484169653524494,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 4,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 5602,
+   "durationMs": 64998,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 14,
+    "selfBleu": 0.17991323142380783,
+    "stemSimilarity": 0.03669441874807278,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 5,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 5496,
+   "durationMs": 62715,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 10.916666666666666,
+    "selfBleu": 0.11838061702326717,
+    "stemSimilarity": 0.02577319587628866,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 6,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 12544,
+   "durationMs": 133033,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "matching": 1,
+     "numeric": 1,
+     "true_false": 1
+    },
+    "entropy": 2,
+    "distractor": 15.666666666666666,
+    "selfBleu": 0.18577750152615174,
+    "stemSimilarity": 0.017996379838485104,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 7,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 5432,
+   "durationMs": 60611,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 15.583333333333334,
+    "selfBleu": 0.1386758562781801,
+    "stemSimilarity": 0.01621574586837215,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 8,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 9357,
+   "durationMs": 102113,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "fill_in_blank": 1,
+     "open_question": 1
+    },
+    "entropy": 2,
+    "distractor": 17,
+    "selfBleu": 0.07196211700080164,
+    "stemSimilarity": 0.004113710321115,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 9,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 8080,
+   "durationMs": 83833,
+   "promptChars": 0,
+   "quoteRounds": 1,
+   "extract": {
+    "questions": 4,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 11.833333333333334,
+    "selfBleu": 0.1814175288763496,
+    "stemSimilarity": 0.022088888888888887,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  }
+ ],
+ "cells": [
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 0,
+   "hitRate": null,
+   "schemaRate": 1,
+   "inputTokens": 2954,
+   "outputTokens": 47050,
+   "promptChars": 0,
+   "meanDurationMs": 72805,
+   "quality": {
+    "sections": 4.2222,
+    "questions": null,
+    "entropy": null,
+    "distractor": null,
+    "selfBleu": null,
+    "stemSimilarity": null,
+    "distinctStems": null,
+    "invokesTagged": null,
+    "invokesDistinct": null
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 0,
+   "hitRate": null,
+   "schemaRate": 1,
+   "inputTokens": 702,
+   "outputTokens": 41171,
+   "promptChars": 0,
+   "meanDurationMs": 62330,
+   "quality": {
+    "sections": 4.2222,
+    "questions": null,
+    "entropy": null,
+    "distractor": null,
+    "selfBleu": null,
+    "stemSimilarity": null,
+    "distinctStems": null,
+    "invokesTagged": null,
+    "invokesDistinct": null
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 9,
+   "hitRate": 1,
+   "schemaRate": 1,
+   "inputTokens": 657,
+   "outputTokens": 30421,
+   "promptChars": 0,
+   "meanDurationMs": 41577,
+   "quality": {
+    "sections": 4,
+    "questions": null,
+    "entropy": null,
+    "distractor": null,
+    "selfBleu": null,
+    "stemSimilarity": null,
+    "distinctStems": null,
+    "invokesTagged": null,
+    "invokesDistinct": null
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 9,
+   "hitRate": 1,
+   "schemaRate": 1,
+   "inputTokens": 3619,
+   "outputTokens": 38167,
+   "promptChars": 0,
+   "meanDurationMs": 52292,
+   "quality": {
+    "sections": 4,
+    "questions": null,
+    "entropy": null,
+    "distractor": null,
+    "selfBleu": null,
+    "stemSimilarity": null,
+    "distinctStems": null,
+    "invokesTagged": null,
+    "invokesDistinct": null
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 0,
+   "hitRate": null,
+   "schemaRate": 1,
+   "inputTokens": 3725,
+   "outputTokens": 85225,
+   "promptChars": 0,
+   "meanDurationMs": 113426,
+   "quality": {
+    "sections": null,
+    "questions": 4,
+    "entropy": 2,
+    "distractor": 12.9259,
+    "selfBleu": 0.1158,
+    "stemSimilarity": 0.0092,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 0,
+   "hitRate": null,
+   "schemaRate": 1,
+   "inputTokens": 1089,
+   "outputTokens": 67849,
+   "promptChars": 0,
+   "meanDurationMs": 89355,
+   "quality": {
+    "sections": null,
+    "questions": 4,
+    "entropy": 1.9444,
+    "distractor": 12.713,
+    "selfBleu": 0.0938,
+    "stemSimilarity": 0.007,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 9,
+   "hitRate": 1,
+   "schemaRate": 1,
+   "inputTokens": 297,
+   "outputTokens": 59018,
+   "promptChars": 0,
+   "meanDurationMs": 69887,
+   "quality": {
+    "sections": null,
+    "questions": 4,
+    "entropy": 2,
+    "distractor": 13.5556,
+    "selfBleu": 0.1442,
+    "stemSimilarity": 0.0188,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 9,
+   "hitRate": 1,
+   "schemaRate": 1,
+   "inputTokens": 3771,
+   "outputTokens": 68302,
+   "promptChars": 0,
+   "meanDurationMs": 83491,
+   "quality": {
+    "sections": null,
+    "questions": 4,
+    "entropy": 2,
+    "distractor": 12.6296,
+    "selfBleu": 0.1495,
+    "stemSimilarity": 0.0219,
+    "distinctStems": 4,
+    "invokesTagged": 4,
+    "invokesDistinct": 1
+   }
+  }
+ ],
+ "armSummary": [
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "runs": 18,
+   "delivered": 18,
+   "deliveryRate": 1,
+   "deliveryCi": [
+    0.8241154494176252,
+    1
+   ],
+   "hitRate": null,
+   "hitCi": null,
+   "inputTokens": 3656,
+   "outputTokens": 88221
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "runs": 18,
+   "delivered": 18,
+   "deliveryRate": 1,
+   "deliveryCi": [
+    0.8241154494176252,
+    1
+   ],
+   "hitRate": 1,
+   "hitCi": [
+    0.8241154494176252,
+    1
+   ],
+   "inputTokens": 4276,
+   "outputTokens": 68588
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "runs": 18,
+   "delivered": 18,
+   "deliveryRate": 1,
+   "deliveryCi": [
+    0.8241154494176252,
+    1
+   ],
+   "hitRate": null,
+   "hitCi": null,
+   "inputTokens": 4814,
+   "outputTokens": 153074
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "runs": 18,
+   "delivered": 18,
+   "deliveryRate": 1,
+   "deliveryCi": [
+    0.8241154494176252,
+    1
+   ],
+   "hitRate": 1,
+   "hitCi": [
+    0.8241154494176252,
+    1
+   ],
+   "inputTokens": 4068,
+   "outputTokens": 127320
+  }
+ ],
+ "qualityDiffs": [
+  {
+   "station": "课程大纲",
+   "metric": "sections",
+   "control": 4.2222,
+   "tool": 4,
+   "diff": -0.2222,
+   "ci": [
+    -0.4198,
+    -0.0246
+   ],
+   "n": [
+    18,
+    18
+   ]
+  },
+  {
+   "station": "题目生成",
+   "metric": "questions",
+   "control": 4,
+   "tool": 4,
+   "diff": 0,
+   "ci": [
+    0,
+    0
+   ],
+   "n": [
+    18,
+    18
+   ]
+  },
+  {
+   "station": "题目生成",
+   "metric": "entropy",
+   "control": 1.9722,
+   "tool": 2,
+   "diff": 0.0278,
+   "ci": [
+    -0.0266,
+    0.0822
+   ],
+   "n": [
+    18,
+    18
+   ]
+  },
+  {
+   "station": "题目生成",
+   "metric": "distractor",
+   "control": 12.8194,
+   "tool": 13.0926,
+   "diff": 0.2732,
+   "ci": [
+    -2.0601,
+    2.6065
+   ],
+   "n": [
+    18,
+    18
+   ]
+  },
+  {
+   "station": "题目生成",
+   "metric": "selfBleu",
+   "control": 0.1048,
+   "tool": 0.1468,
+   "diff": 0.042,
+   "ci": [
+    0.0006,
+    0.0834
+   ],
+   "n": [
+    18,
+    18
+   ]
+  },
+  {
+   "station": "题目生成",
+   "metric": "stemSimilarity",
+   "control": 0.0081,
+   "tool": 0.0203,
+   "diff": 0.0122,
+   "ci": [
+    0.0027,
+    0.0217
+   ],
+   "n": [
+    18,
+    18
+   ]
+  },
+  {
+   "station": "题目生成",
+   "metric": "distinctStems",
+   "control": 4,
+   "tool": 4,
+   "diff": 0,
+   "ci": [
+    0,
+    0
+   ],
+   "n": [
+    18,
+    18
+   ]
+  },
+  {
+   "station": "题目生成",
+   "metric": "invokesTagged",
+   "control": 4,
+   "tool": 4,
+   "diff": 0,
+   "ci": [
+    0,
+    0
+   ],
+   "n": [
+    18,
+    18
+   ]
+  },
+  {
+   "station": "题目生成",
+   "metric": "invokesDistinct",
+   "control": 1,
+   "tool": 1,
+   "diff": 0,
+   "ci": [
+    0,
+    0
+   ],
+   "n": [
+    18,
+    18
+   ]
+  }
+ ],
+ "totals": {
+  "inputTokens": 16814,
+  "outputTokens": 437203
+ }
+}

@@ -1,0 +1,3249 @@
+{
+ "startedAt": "2026-09-13T10:53:44.188Z",
+ "durationMs": 5268359,
+ "provider": "deepseek-official",
+ "model": "deepseek-v4-pro",
+ "config": {
+  "runsPerCell": 9,
+  "stations": [
+   "课程大纲",
+   "题目生成"
+  ],
+  "quizCount": 4,
+  "temperature": 1,
+  "variants": {
+   "control": [
+    "现状",
+    "重申契约"
+   ],
+   "tool": [
+    "指令式",
+    "口令式"
+   ]
+  }
+ },
+ "cells": [
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 0,
+   "hitRate": null,
+   "schemaOk": 9,
+   "schemaRate": 1,
+   "inputTokens": 2954,
+   "outputTokens": 47050,
+   "toolSchemaChars": 0,
+   "meanDurationMs": 72805
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 0,
+   "hitRate": null,
+   "schemaOk": 9,
+   "schemaRate": 1,
+   "inputTokens": 702,
+   "outputTokens": 41171,
+   "toolSchemaChars": 0,
+   "meanDurationMs": 62330
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 9,
+   "hitRate": 1,
+   "schemaOk": 9,
+   "schemaRate": 1,
+   "inputTokens": 3619,
+   "outputTokens": 38167,
+   "toolSchemaChars": 6057,
+   "meanDurationMs": 52292
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 9,
+   "hitRate": 1,
+   "schemaOk": 9,
+   "schemaRate": 1,
+   "inputTokens": 657,
+   "outputTokens": 30421,
+   "toolSchemaChars": 6057,
+   "meanDurationMs": 41577
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 0,
+   "hitRate": null,
+   "schemaOk": 9,
+   "schemaRate": 1,
+   "inputTokens": 3725,
+   "outputTokens": 85225,
+   "toolSchemaChars": 0,
+   "meanDurationMs": 113426
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 0,
+   "hitRate": null,
+   "schemaOk": 9,
+   "schemaRate": 1,
+   "inputTokens": 1089,
+   "outputTokens": 67849,
+   "toolSchemaChars": 0,
+   "meanDurationMs": 89355
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 9,
+   "hitRate": 1,
+   "schemaOk": 9,
+   "schemaRate": 1,
+   "inputTokens": 3771,
+   "outputTokens": 68302,
+   "toolSchemaChars": 7821,
+   "meanDurationMs": 83491
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "runs": 9,
+   "delivered": 9,
+   "deliveryRate": 1,
+   "toolHits": 9,
+   "hitRate": 1,
+   "schemaOk": 9,
+   "schemaRate": 1,
+   "inputTokens": 297,
+   "outputTokens": 59018,
+   "toolSchemaChars": 7821,
+   "meanDurationMs": 69887
+  }
+ ],
+ "arms": [
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "runs": 18,
+   "delivered": 18,
+   "deliveryRate": 1,
+   "deliveryCi": [
+    0.8241154494176252,
+    1
+   ],
+   "hitRate": null,
+   "hitCi": null,
+   "inputTokens": 3656,
+   "outputTokens": 88221,
+   "toolSchemaChars": 0
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "runs": 18,
+   "delivered": 18,
+   "deliveryRate": 1,
+   "deliveryCi": [
+    0.8241154494176252,
+    1
+   ],
+   "hitRate": 1,
+   "hitCi": [
+    0.8241154494176252,
+    1
+   ],
+   "inputTokens": 4276,
+   "outputTokens": 68588,
+   "toolSchemaChars": 12114
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "runs": 18,
+   "delivered": 18,
+   "deliveryRate": 1,
+   "deliveryCi": [
+    0.8241154494176252,
+    1
+   ],
+   "hitRate": null,
+   "hitCi": null,
+   "inputTokens": 4814,
+   "outputTokens": 153074,
+   "toolSchemaChars": 0
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "runs": 18,
+   "delivered": 18,
+   "deliveryRate": 1,
+   "deliveryCi": [
+    0.8241154494176252,
+    1
+   ],
+   "hitRate": 1,
+   "hitCi": [
+    0.8241154494176252,
+    1
+   ],
+   "inputTokens": 4068,
+   "outputTokens": 127320,
+   "toolSchemaChars": 15642
+  }
+ ],
+ "verdict": {
+  "formatPass": true,
+  "lines": [
+   "【课程大纲】交付成功率 对照 100.0%（18/18，CI 82–100%） vs 工具 100.0%（18/18，CI 82–100%）｜命中率 100.0%（CI 82–100%）｜预注册线（交付 ≥ 对照 且 命中 ≥95%）：达标",
+   "【题目生成】交付成功率 对照 100.0%（18/18，CI 82–100%） vs 工具 100.0%（18/18，CI 82–100%）｜命中率 100.0%（CI 82–100%）｜预注册线（交付 ≥ 对照 且 命中 ≥95%）：达标"
+  ],
+  "decision": "格式达标线已过 → 继续读多样性轴与成本轴（税若存在应出现在多样性轴——预注册核心线）"
+ },
+ "quality": [
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "runs": 18,
+   "metrics": {
+    "sections": 4.2222
+   },
+   "types": {
+    "概念": 32,
+    "演示": 14,
+    "例题": 5,
+    "练习": 14,
+    "交互": 9,
+    "思维": 2
+   },
+   "tiers": {
+    "低": 31,
+    "中": 41,
+    "高": 4
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "runs": 18,
+   "metrics": {
+    "sections": 4
+   },
+   "types": {
+    "概念": 33,
+    "演示": 16,
+    "交互": 7,
+    "练习": 14,
+    "思维": 1,
+    "例题": 1
+   },
+   "tiers": {
+    "低": 32,
+    "中": 40
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "runs": 18,
+   "metrics": {
+    "added": 3.9444,
+    "skipped": 0.0556,
+    "rejected": 0,
+    "duplicates": 0,
+    "entropy": 1.9492,
+    "distractor": 12.8194,
+    "selfBleu": 0.105,
+    "stemSimilarity": 0.0084,
+    "selfBleuP10": 0.0639,
+    "selfBleuP50": 0.0932,
+    "selfBleuP90": 0.1347,
+    "simP10": 0,
+    "simP50": 0.0036,
+    "simP90": 0.0167,
+    "distinctStems": 3.9444
+   },
+   "kinds": {
+    "single_choice": 19,
+    "true_false": 17,
+    "numeric": 4,
+    "multi_choice": 10,
+    "ordering": 6,
+    "reflection": 3,
+    "matching": 5,
+    "fill_in_blank": 6,
+    "open_question": 1
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "runs": 18,
+   "metrics": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "entropy": 2,
+    "distractor": 13.0926,
+    "selfBleu": 0.1468,
+    "stemSimilarity": 0.0203,
+    "selfBleuP10": 0.0732,
+    "selfBleuP50": 0.1387,
+    "selfBleuP90": 0.1858,
+    "simP10": 0.0041,
+    "simP50": 0.0189,
+    "simP90": 0.0319,
+    "distinctStems": 4
+   },
+   "kinds": {
+    "single_choice": 18,
+    "true_false": 18,
+    "numeric": 11,
+    "matching": 6,
+    "fill_in_blank": 5,
+    "multi_choice": 6,
+    "open_question": 2,
+    "reflection": 4,
+    "ordering": 2
+   }
+  }
+ ],
+ "rows": [
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 1,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 2490,
+   "outputTokens": 6193,
+   "durationMs": 85027,
+   "promptChars": 4303,
+   "replyChars": 576,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: \"变量是什么\"\nsections:\n  - id: \"s1\"\n    title: \"概念：变量是一个带名字的盒子\"\n    type: \"概念\"\n    points: \"用“贴标签的盒子”建立变量名与当前值的直观图像，变量由名字和值两部分组成。\"\n    tier: \"低\"\n    visual: \"示意图\"\n  - id: \"s2\"\n    title: \"演示：同一个名字，值可以换\"\n    type: \"演示\"\n    points: \"观察同一变量名在不同时刻对应不同值，变量“变”的是值而不是名字。\"\n    tier: \"低\"\n    visual: \"示意图\"\n  - id: \"s3\"\n    title: \"例题：哪些是变量，哪些是固定量\"\n    type: \"例题\"\n    points: \"在生活场景中判断“今天气温”“出生年份”“账户余额”等是否随情境变化。\"\n    tier: \"中\"\n    visual: \"图表\"\n  - id: \"s4\"\n    title: \"概念：变量让我们描述未知和变化\"\n    type: \"概念\"\n    points: \"理解为什么需要一个名字来代表一类会变化的值，而不是每次都写具体数。\"\n    tier: \"中\"\n    visual: \"mermaid\""
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "例题",
+     "概念"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 2,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 8319,
+   "durationMs": 113632,
+   "promptChars": 4303,
+   "replyChars": 650,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: \"概念：变量是贴着名字的盒子\"\n    type: 概念\n    points: \"建立直觉：变量用名字指代一个可以存放值的位置，名字与值分离。\"\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: \"概念：变量名的基本规则\"\n    type: 概念\n    points: \"知道变量名通常由字母、数字、下划线组成，不能以数字开头，也不能包含空格。\"\n    tier: 低\n    visual: mermaid\n  - id: s3\n    title: \"演示：不变的名字，会变的值\"\n    type: 演示\n    points: \"看到同一个变量名在不同时刻可以指向不同的值，变量“变”的是值而不是名字。\"\n    tier: 中\n    visual: mermaid\n  - id: s4\n    title: \"例题：读到变量名就换成当前值\"\n    type: 例题\n    points: \"学会在表达式中遇到变量名时，用当前值替换后再计算结果。\"\n    tier: 中\n    visual: 公式\n  - id: s5\n    title: \"练习：辨认变量名并读取当前值\"\n    type: 练习\n    points: \"通过小题集中练习合法变量名判断与变量当前值读取。\"\n    tier: 中\n    visual: 交互"
+   ],
+   "extract": {
+    "sections": 5,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "例题",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 3,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 3645,
+   "durationMs": 51394,
+   "promptChars": 4303,
+   "replyChars": 507,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: \"概念：变量是一个贴了名字标签的盒子\"\n    type: 概念\n    points: \"用盒子加标签建立变量名指向存储值的直觉模型\"\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: \"演示：同一个名字，值可以被换掉\"\n    type: 演示\n    points: \"区分变量名标签与当前值，名字不变而盒中内容可变\"\n    tier: 低\n    visual: mermaid\n  - id: s3\n    title: \"例题：在生活场景里找出变量名与当前值\"\n    type: 例题\n    points: \"从温度、电量、购物车数量等例子辨认名字和当前值\"\n    tier: 中\n    visual: 图表\n  - id: s4\n    title: \"交互：拖动滑块，看变量值换掉但名字还在\"\n    type: 交互\n    points: \"亲手改变同一个变量的当前值，体会名字恒定、值可变\"\n    tier: 中\n    visual: 交互"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "例题",
+     "交互"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 4,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 4085,
+   "durationMs": 56294,
+   "promptChars": 4303,
+   "replyChars": 519,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：变量是给值贴上的名字\n    type: 概念\n    points: \"用“贴了标签的盒子”建立变量直觉：一个名字指向当前装着的那个值。\"\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 演示：把值放进变量盒子\n    type: 演示\n    points: \"观察一条赋值语句如何让变量获得当前值，盒子从空变有内容。\"\n    tier: 中\n    visual: mermaid\n  - id: s3\n    title: 概念：同一个变量名可以先后装不同值\n    type: 概念\n    points: \"变量的“变”来自后放入的值覆盖旧值，读取时总是得到最新值。\"\n    tier: 中\n    visual: 示意图\n  - id: s4\n    title: 练习：追踪变量盒子的当前值\n    type: 练习\n    points: \"给定连续赋值与读取，判断每个变量在每一时刻的值，内化覆盖规则。\"\n    tier: 高\n    visual: mermaid"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "高"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 5,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 6051,
+   "durationMs": 82772,
+   "promptChars": 4303,
+   "replyChars": 515,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：变量是给值起名字的容器\n    type: 概念\n    points: 建立“变量=名字+可放入一个值的容器”的直觉，变量名用来指代其中的值。\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 概念：同一个变量名可以先后装不同值\n    type: 概念\n    points: 区分变量名与当前值；同一个变量名对应值可以变化，名字与值不是一回事。\n    tier: 中\n    visual: 示意图\n  - id: s3\n    title: 交互：动手试试“变量盒子”\n    type: 交互\n    points: 通过换值操作观察变量名不变、当前值变化，巩固“名”与“值”的分离。\n    tier: 中\n    visual: 交互\n  - id: s4\n    title: 练习：找出变量、变量名与值\n    type: 练习\n    points: 在具体例子里识别变量、变量名和当前值，综合检验变量概念。\n    tier: 中\n    visual: 示意图"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 6,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 4585,
+   "durationMs": 70468,
+   "promptChars": 4303,
+   "replyChars": 465,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：变量是贴了名字的盒子\n    type: 概念\n    points: 用“有名字的盒子”建立变量保存值的直观图景\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 概念：变量名与变量值不是一回事\n    type: 概念\n    points: 区分盒子上的名字和盒子里此刻的内容\n    tier: 中\n    visual: 示意图\n  - id: s3\n    title: 演示：盒子里的内容会变，名字不变\n    type: 演示\n    points: 观察同一个变量在不同时刻可以保存不同值\n    tier: 中\n    visual: 交互\n  - id: s4\n    title: 练习：识别变量名、当前值与变化\n    type: 练习\n    points: 在简单情境中辨认名字、值以及是否会发生变化\n    tier: 中\n    visual: 示意图"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 7,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 3184,
+   "durationMs": 44976,
+   "promptChars": 4303,
+   "replyChars": 414,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：变量是给值起的名字\n    points: 用“贴标签的盒子”建立变量绑定值的直觉\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 概念：变量名与值不是一回事\n    points: 区分变量名、值和绑定关系，避免把名字当成值本身\n    tier: 低\n    visual: mermaid\n  - id: s3\n    title: 演示：用变量名取用值\n    points: 展示每次使用变量名都指向其绑定的值，铺垫读取概念\n    tier: 中\n    visual: 示意图\n  - id: s4\n    title: 练习：辨认变量、名字与值\n    points: 通过小练习确认能识别变量以及它的名字和当前值\n    tier: 中\n    visual: 无"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 8,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 4561,
+   "durationMs": 66217,
+   "promptChars": 4303,
+   "replyChars": 653,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：从“会变的量”到程序变量\n    type: 概念\n    points: 用生活中的“名字 + 当前状态”建立变量直觉：名字不变，内容可变。\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 概念：变量名、当前值、存储位置\n    type: 概念\n    points: 明确变量由变量名、存储位置、当前值三要素组成，避免把名字和值混为一谈。\n    tier: 低\n    visual: 示意图\n  - id: s3\n    title: 演示：同一个名字先后指向不同值\n    type: 演示\n    points: 用连续快照展示变量名不变而当前值可被替换，为“赋值”建立直观印象而不展开语法。\n    tier: 中\n    visual: mermaid\n  - id: s4\n    title: 例题：找出变量名与当前值\n    type: 例题\n    points: 在变量卡片与映射表示中辨认变量名、当前值和“会变”的部分。\n    tier: 中\n    visual: 公式\n  - id: s5\n    title: 思维：把变量看作“贴标签的盒子”\n    type: 思维\n    points: 强化“盒子 + 标签”心智模型，说明后续赋值与读取将在这个模型上展开。\n    tier: 高\n    visual: 示意图"
+   ],
+   "extract": {
+    "sections": 5,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "例题",
+     "思维"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中",
+     "高"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "现状",
+   "run": 9,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 58,
+   "outputTokens": 6427,
+   "durationMs": 84466,
+   "promptChars": 4303,
+   "replyChars": 527,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: \"概念：变量是贴了名字的盒子\"\n    type: \"概念\"\n    points: \"用“标签 + 盒子”的比喻建立变量作为命名存储位置的直觉。\"\n    tier: \"低\"\n    visual: \"示意图\"\n  - id: s2\n    title: \"演示：标签不变，内容可换\"\n    type: \"演示\"\n    points: \"直观看到同一个变量名下先后放入不同内容，变量的值可以变化。\"\n    tier: \"低\"\n    visual: \"示意图\"\n  - id: s3\n    title: \"交互：观察不同变量的当前值\"\n    type: \"交互\"\n    points: \"在模拟器中查看变量名及其盒中值，建立查看当前值的直觉。\"\n    tier: \"中\"\n    visual: \"交互\"\n  - id: s4\n    title: \"练习：辨认变量名与当前值\"\n    type: \"练习\"\n    points: \"根据变量状态图判断名字、当前值以及“值可变”的例子。\"\n    tier: \"中\"\n    visual: \"无\""
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "交互",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 1,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4437,
+   "durationMs": 57791,
+   "promptChars": 4338,
+   "replyChars": 548,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: \"变量是什么\"\nsections:\n  - id: \"s1\"\n    title: \"变量是一个有名字的存储位置\"\n    type: \"概念\"\n    points: \"变量是程序用来存放数据的位置，名字方便以后找到它。\"\n    tier: \"低\"\n    visual: \"示意图\"\n  - id: \"s2\"\n    title: \"变量名与值是两个不同的东西\"\n    type: \"概念\"\n    points: \"区分变量名（像标签）和它当前指向的值；同一个名字可以关联不同的值。\"\n    tier: \"低\"\n    visual: \"mermaid\"\n  - id: \"s3\"\n    title: \"交互：观察盒子里的值变化\"\n    type: \"交互\"\n    points: \"通过拖拽或点击改变变量盒子里的内容，直观感受变量可变。\"\n    tier: \"中\"\n    visual: \"交互\"\n  - id: \"s4\"\n    title: \"练习：辨别变量名、值与存储位置\"\n    type: \"练习\"\n    points: \"在具体情境中识别变量名和当前值，判断变量是否发生了变化。\"\n    tier: \"中\"\n    visual: \"示意图\""
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 2,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4440,
+   "durationMs": 59988,
+   "promptChars": 4338,
+   "replyChars": 654,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：数据需要一个名字——变量就是名字\n    type: 概念\n    points: 用“给物品贴标签”类比，理解变量是给当前数据起的名字，方便反复使用。\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 演示：读变量就是读名字对应的当前值\n    type: 演示\n    points: 展示多个变量名与当前值的对应关系，说明读名字得到当前值且不会改变它。\n    tier: 低\n    visual: mermaid\n  - id: s3\n    title: 概念：一个变量有三个部分——名字、值、盒子\n    type: 概念\n    points: 区分变量名、当前值与存储位置，名字不变，盒子里装的值可以更换。\n    tier: 中\n    visual: 示意图\n  - id: s4\n    title: 交互：点击变量名，读取当前值\n    type: 交互\n    points: 在交互中反复“取用”变量，观察只读不写，变量名与当前值保持对应。\n    tier: 中\n    visual: 交互\n  - id: s5\n    title: 练习：识别变量名与当前值\n    type: 练习\n    points: 在标签、盒子和简单片段中判断变量名、当前值以及哪些标签是变量。\n    tier: 中\n    visual: 示意图"
+   ],
+   "extract": {
+    "sections": 5,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 3,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 7178,
+   "durationMs": 95110,
+   "promptChars": 4338,
+   "replyChars": 515,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: \"概念：变量是给值贴上的标签\"\n    type: 概念\n    points: \"变量是一个有名字的存储位置，用来保存一个值，方便稍后找到它。\"\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: \"交互：同一个变量名下的值可以换\"\n    type: 交互\n    points: \"变量名保持不变时，它保存的值可以换成另一个值。\"\n    tier: 低\n    visual: 交互\n  - id: s3\n    title: \"概念：变量名与当前值要分开看\"\n    type: 概念\n    points: \"变量名只是标签，值才是实际保存的内容；同一个名字先后可能对应不同的值。\"\n    tier: 中\n    visual: mermaid\n  - id: s4\n    title: \"练习：判断变量当前保存的值\"\n    type: 练习\n    points: \"根据变量状态图判断变量名、当前值与变化后的新值。\"\n    tier: 中\n    visual: 示意图"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "交互",
+     "概念",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 4,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 3505,
+   "durationMs": 45448,
+   "promptChars": 4338,
+   "replyChars": 505,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：变量是值身上的名字标签\n    type: 概念\n    points: 把变量理解为贴在值上的名字标签，而不是装值的盒子。\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 概念：同一个名字同一时刻只贴一个值\n    type: 概念\n    points: 变量名与值是一对一的当前关联；换贴后，名字不再指向旧值。\n    tier: 低\n    visual: mermaid\n  - id: s3\n    title: 演示：看同一个名字换贴到不同值\n    type: 演示\n    points: 通过画面上贴标签的换贴过程，体验“名字不变、所指的值可变”。\n    tier: 中\n    visual: 交互\n  - id: s4\n    title: 练习：判断标签当前贴在哪个值上\n    type: 练习\n    points: 根据一组换贴步骤，判断变量名当前指向的值，巩固名字与值的分离。\n    tier: 中\n    visual: 无"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 5,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4249,
+   "durationMs": 61795,
+   "promptChars": 4338,
+   "replyChars": 504,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: \"概念：给值贴标签——变量是有名字的容器\"\n    type: 概念\n    points: \"用带名字的盒子建立“变量 = 名字 + 当前值”的直觉。\"\n    tier: 低\n    visual: 示意图\n\n  - id: s2\n    title: \"演示：同一个名字，不同的时刻——变量的“变”\"\n    type: 演示\n    points: \"展示名字不变、但指向的值可以更换。\"\n    tier: 低\n    visual: mermaid\n\n  - id: s3\n    title: \"例题：追踪标签下的当前值\"\n    type: 例题\n    points: \"通过连续场景判断变量在各时刻指向的值。\"\n    tier: 中\n    visual: 示意图\n\n  - id: s4\n    title: \"交互：亲手给值贴标签并更换标签\"\n    type: 交互\n    points: \"动手体验变量名字与值之间的指向关系及变化。\"\n    tier: 中\n    visual: 交互"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "例题",
+     "交互"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 6,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 3872,
+   "durationMs": 53161,
+   "promptChars": 4338,
+   "replyChars": 510,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：变量是给数据贴上的名字\n    type: 概念\n    points: 用“贴标签的盒子”建立直觉：变量名指向一个具体数据。\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 概念：变量名和变量值是两回事\n    type: 概念\n    points: 名字只是标签，值才是被指到的数据；改标签不改变数据本身。\n    tier: 低\n    visual: mermaid\n  - id: s3\n    title: 交互：换掉盒子里的内容，名字不变\n    type: 交互\n    points: 观察同一变量名在不同时刻指向不同的值，理解“变”的是值而不是名字。\n    tier: 中\n    visual: 交互\n  - id: s4\n    title: 练习：从游戏界面认出名字与值\n    type: 练习\n    points: 集中辨析变量名、当前值与“名字不是值”，为后续赋值与读取留出钩子。\n    tier: 中\n    visual: 示意图"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 7,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4937,
+   "durationMs": 67823,
+   "promptChars": 4338,
+   "replyChars": 512,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：变量是给值贴上的名字标签\n    points: 区分“值”与“名字”，变量让一个值可以被反复引用。\n    type: 概念\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 演示：同一个变量名，里面的值可以换成另一个\n    points: 通过具体例子看到名字不变、值可变；换值操作下一课展开。\n    type: 演示\n    tier: 中\n    visual: 示意图\n  - id: s3\n    title: 概念：变量名的合法性与可读性\n    points: 合法变量名由字母、数字、下划线组成且不以数字开头，好名字能说明值的含义。\n    type: 概念\n    tier: 中\n    visual: mermaid\n  - id: s4\n    title: 练习：识别变量、当前值与合法命名\n    points: 在具体场景中判断变量名是否合法、标签当前指向哪个值。\n    type: 练习\n    tier: 中\n    visual: 交互"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 8,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 4737,
+   "durationMs": 65461,
+   "promptChars": 4338,
+   "replyChars": 633,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: 概念：变量像一个贴了名字的盒子\n    type: 概念\n    points: 变量是命名的存储位置，可以往里放一个值，名字用来找到它。\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: 演示：给变量重新放值会覆盖旧值\n    type: 演示\n    points: 变量一次只保存一个值，放入新值后旧值被覆盖，变量名不变。\n    tier: 低\n    visual: mermaid\n  - id: s3\n    title: 概念：变量名与变量值不是一回事\n    type: 概念\n    points: 变量名是固定标签，值是可以更换的内容；同一名字在不同时刻可以对应不同值。\n    tier: 中\n    visual: 示意图\n  - id: s4\n    title: 练习：跟踪简单放值操作中的当前值\n    type: 练习\n    points: 阅读一组按顺序执行的放值操作，确定变量最终保存的值。\n    tier: 中\n    visual: 公式\n  - id: s5\n    title: 思维：为什么用变量代替具体数字\n    type: 思维\n    points: 变量让同一段逻辑可以作用于不同数据，为后续赋值与读取做铺垫。\n    tier: 高\n    visual: 示意图"
+   ],
+   "extract": {
+    "sections": 5,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习",
+     "思维"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中",
+     "高"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 9,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 78,
+   "outputTokens": 3816,
+   "durationMs": 54390,
+   "promptChars": 4338,
+   "replyChars": 520,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nsections:\n  - id: s1\n    title: \"概念：变量是一个有名字的存储盒\"\n    type: 概念\n    points: 变量是“名字 + 可放一个值的格子”，名字用来指代格子里的当前值。\n    tier: 低\n    visual: 示意图\n  - id: s2\n    title: \"演示：同一个变量名，先后放入不同值\"\n    type: 演示\n    points: 变量值可以被替换，名字保持不动，变量当前的值是最近放入的那个。\n    tier: 中\n    visual: mermaid\n  - id: s3\n    title: \"交互：打开盒子，替换里面的值\"\n    type: 交互\n    points: 操作模拟盒子，感受变量名保持不变而值被新值覆盖。\n    tier: 中\n    visual: 交互\n  - id: s4\n    title: \"练习：快速辨别变量名与当前值\"\n    type: 练习\n    points: 通过小练习区分“名字是什么”和“当前值是什么”，并识别变量的可变性。\n    tier: 高\n    visual: 无"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "交互",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "高"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 1,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 3019,
+   "outputTokens": 3852,
+   "durationMs": 45630,
+   "promptChars": 4366,
+   "replyChars": 524,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了名字的盒子\", \"type\": \"概念\", \"points\": \"用“贴标签的盒子”理解变量：标签是名字，盒子里装着当前的值\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：名字在外，值在内\", \"type\": \"概念\", \"points\": \"变量名与值是两个角色：名字固定可寻，值是可以换进换出的内容\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：值会换，名字不变\", \"type\": \"演示\", \"points\": \"沿时间看同一个变量名先后对应不同值，体会“变”指的是值\", \"tier\": \"中\", \"visual\": \"图表\"}, {\"id\": \"s4\", \"title\": \"交互：动手换值，体会“变”字\", \"type\": \"交互\", \"points\": \"亲手给盒子换值，确认名字不动、只有内容在动\", \"tier\": \"中\", \"visual\": \"交互\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "交互"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 2,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 2159,
+   "durationMs": 31623,
+   "promptChars": 4366,
+   "replyChars": 535,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是一个贴着名字的容器\", \"type\": \"概念\", \"points\": \"把值想象成装进盒子里的东西，变量名就是盒子上贴的标签。\", \"tier\": \"低\", \"visual\": \"svg\"}, {\"id\": \"s2\", \"title\": \"演示：同一个名字，不同时刻的值\", \"type\": \"演示\", \"points\": \"用同一张标签在不同时刻指向不同内容，说明“变”体现在值上而不是名字上。\", \"tier\": \"低\", \"visual\": \"svg\"}, {\"id\": \"s3\", \"title\": \"概念：一次只装一个值\", \"type\": \"概念\", \"points\": \"变量在任一时刻只保存一个当前值，新内容会替换旧内容。\", \"tier\": \"中\", \"visual\": \"svg\"}, {\"id\": \"s4\", \"title\": \"练习：分辨变量名与变量值\", \"type\": \"练习\", \"points\": \"在具体例子中判断哪个是名字、哪个是值，并读出当前值。\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 3,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 5557,
+   "durationMs": 65475,
+   "promptChars": 4366,
+   "replyChars": 528,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是一个贴了标签的盒子\", \"type\": \"概念\", \"points\": \"用“贴了标签的盒子”建立直觉：变量名是标签，值装在盒子里。\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：名字与值是两回事\", \"type\": \"概念\", \"points\": \"变量名定位盒子，值是盒子里的内容，二者不能混淆。\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：同一个盒子先后装不同的值\", \"type\": \"演示\", \"points\": \"观察同一个变量名在不同时刻装下不同值，理解“变量”的可变含义。\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"练习：辨一辨名字、值与变化\", \"type\": \"练习\", \"points\": \"用几道小题检查对变量名、值、可变性的辨析。\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 4,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 4056,
+   "durationMs": 50458,
+   "promptChars": 4366,
+   "replyChars": 583,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了标签的盒子\", \"type\": \"概念\", \"points\": \"用\\\"贴标签的盒子\\\"建立直觉：变量 = 名字（标签）+ 当前值（盒子里装的内容）\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：名字不变，值可以换\", \"type\": \"概念\", \"points\": \"名字由你起且保持不变，盒子里装的值可以换成别的数据——这正是\\\"变量\\\"的含义\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：一张\\\"名字 → 值\\\"的变量表\", \"type\": \"演示\", \"points\": \"在游戏状态里展示多个变量：每个变量都是一行\\\"名字 → 当前值\\\"\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"练习：认出变量、起好名字\", \"type\": \"练习\", \"points\": \"判断哪些量该设为变量，并为它们起清晰、可读的名字（如 score、player_name）\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 5,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 2948,
+   "durationMs": 43099,
+   "promptChars": 4366,
+   "replyChars": 532,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是命名的存储位置\", \"type\": \"概念\", \"points\": \"用储物格与标签的比喻建立变量=名字+存储位置的直觉\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：变量名与变量值是两回事\", \"type\": \"概念\", \"points\": \"名字只是标签，内容才是值；同一标签可以指向不同内容\", \"tier\": \"低\", \"visual\": \"mermaid\"}, {\"id\": \"s3\", \"title\": \"演示：变量的值会变，名字不变\", \"type\": \"演示\", \"points\": \"通过时间线展示同一变量在不同时刻装不同内容，理解“变”的含义\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"交互：识别名字、值与合法命名\", \"type\": \"交互\", \"points\": \"动手区分变量名、变量值与普通文字，练习命名直觉\", \"tier\": \"中\", \"visual\": \"交互\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "交互"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 6,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 3613,
+   "durationMs": 44303,
+   "promptChars": 4366,
+   "replyChars": 562,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了标签的盒子\", \"type\": \"概念\", \"points\": \"用「贴标签的盒子」建立变量的核心直觉：变量 = 名字（标签）+ 内容（值）+ 存储位置\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"演示：快递柜——柜号是名字，包裹是值\", \"type\": \"演示\", \"points\": \"用快递柜类比直观展示：柜号不变时包裹可以更换，名字与值天然分离\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"概念：变量名不等于变量值\", \"type\": \"概念\", \"points\": \"强调名字只是标识：改名字不影响内容，内容相同也不代表是同一个变量\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"练习：认出变量、名字与值\", \"type\": \"练习\", \"points\": \"在具体场景中辨认变量、变量名和当前值，巩固「名字与值分离」的理解\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "概念",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 7,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 9242,
+   "durationMs": 106207,
+   "promptChars": 4366,
+   "replyChars": 561,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴着名字的盒子\", \"type\": \"概念\", \"points\": \"用「贴着名字标签的盒子」建立直觉：一个变量 = 一个名字 + 一个当前装着的值\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：名字与值是两回事\", \"type\": \"概念\", \"points\": \"名字只是标签、值才是盒里的内容；同一个值可装进不同盒子，名字不变、内容可变\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：没有变量，值用完就丢\", \"type\": \"演示\", \"points\": \"对比「算完即丢」与「存进盒子随时取用」，体会变量让值可复用的意义\", \"tier\": \"中\", \"visual\": \"mermaid\"}, {\"id\": \"s4\", \"title\": \"练习：认出盒子的名字与值\", \"type\": \"练习\", \"points\": \"给出一组盒子场景，辨认变量名与变量值，巩固「名字 ≠ 值」\", \"tier\": \"中\", \"visual\": \"示意图\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 8,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 2355,
+   "durationMs": 34251,
+   "promptChars": 4366,
+   "replyChars": 549,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是一个贴了名字的盒子\", \"type\": \"概念\", \"points\": \"用带标签的盒子类比，变量 = 一个名字 + 里面可放入的一个值。\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：名字和值是两回事\", \"type\": \"概念\", \"points\": \"变量名是标签，值是标签下的内容；程序通过名字找到值，而不是把名字和值混为一谈。\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"交互：给盒子贴上变量名\", \"type\": \"交互\", \"points\": \"通过拖拽把名字标签与值内容配对，体会“先有名字，再有可访问的值”。\", \"tier\": \"中\", \"visual\": \"交互\"}, {\"id\": \"s4\", \"title\": \"练习：圈出变量名与值\", \"type\": \"练习\", \"points\": \"在迷你场景中判断哪个是变量名、哪个是值，强化名字与值的区分。\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "交互",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 9,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 75,
+   "outputTokens": 4385,
+   "durationMs": 49581,
+   "promptChars": 4366,
+   "replyChars": 573,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了标签的盒子\", \"type\": \"概念\", \"points\": \"变量是一个有名字的存储位置，像贴了标签的盒子：名字定位它，盒子里装着值\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：标签不变，内容可变——变量名与值\", \"type\": \"概念\", \"points\": \"变量名与值是两回事：名字是固定的标签，值是可以随时更换的内容\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：一个变量从创建到换值的轨迹\", \"type\": \"演示\", \"points\": \"跟踪变量 score 先后装下 0、10、20 的过程，直观看到同一个名字下值的变化\", \"tier\": \"中\", \"visual\": \"mermaid\"}, {\"id\": \"s4\", \"title\": \"交互：动手创建并改变一个变量\", \"type\": \"交互\", \"points\": \"亲手输入变量名与值，创建盒子并换装内容，验证对变量结构的理解\", \"tier\": \"中\", \"visual\": \"交互\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "交互"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 1,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 3203,
+   "durationMs": 35443,
+   "promptChars": 4358,
+   "replyChars": 515,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了名字的存储盒\", \"type\": \"概念\", \"points\": \"变量就是一个有名字的存储位置，里面装着某个值。\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：变量名是标签，值是内容\", \"type\": \"概念\", \"points\": \"变量名与它装的值是两个东西，读值要通过名字。\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：盒子换内容，标签不换\", \"type\": \"演示\", \"points\": \"同一个变量可以先后装不同的值，名字保持不变。\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"练习：认出变量名、值与变化结果\", \"type\": \"练习\", \"points\": \"通过小练习辨认变量名、当前值以及换值后的结果。\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 2,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 4958,
+   "durationMs": 63436,
+   "promptChars": 4358,
+   "replyChars": 518,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了标签的盒子\", \"type\": \"概念\", \"points\": \"用「贴标签的盒子」建立变量的心智模型：变量=名字+值\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：名字是标签，值是内容\", \"type\": \"概念\", \"points\": \"区分变量名与变量值：名字是固定记号，值才是被存的内容\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：名字不变，值可以换\", \"type\": \"演示\", \"points\": \"标签保持不动而内容被替换，展示「变量」可变的本质\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"交互：给变量贴标签\", \"type\": \"交互\", \"points\": \"动手匹配变量名与变量值，在操作中体会「名字不是值」\", \"tier\": \"中\", \"visual\": \"交互\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "交互"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 3,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 2827,
+   "durationMs": 38606,
+   "promptChars": 4358,
+   "replyChars": 544,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了名字的盒子\", \"type\": \"概念\", \"points\": \"用「贴标签的盒子」建立直觉：变量名是标签，盒子里放当前值。\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"演示：看到一个变量时读出名字与值\", \"type\": \"演示\", \"points\": \"通过一个已存在的变量，展示名字与当前值的对应关系。\", \"tier\": \"低\", \"visual\": \"mermaid\"}, {\"id\": \"s3\", \"title\": \"思维：名字、值与字面量如何区分\", \"type\": \"思维\", \"points\": \"专家读变量时先分三层：名字是称呼，当前值是内容，字面量只是写出来的数。\", \"tier\": \"中\", \"visual\": \"mermaid\"}, {\"id\": \"s4\", \"title\": \"练习：圈出变量名与当前值\", \"type\": \"练习\", \"points\": \"给出变量状态，辨认名字、当前值与字面量。\", \"tier\": \"中\", \"visual\": \"示意图\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "思维",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 4,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 1821,
+   "durationMs": 24348,
+   "promptChars": 4358,
+   "replyChars": 518,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是给数据起名字的容器\", \"type\": \"概念\", \"points\": \"用一个名字把值装进“盒子”，之后用名字就能找到它\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"演示：同一个名字，值可以换\", \"type\": \"演示\", \"points\": \"观察变量重新赋值后，旧值被新值替换、名字保持不变\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"交互：动手给盒子贴标签\", \"type\": \"交互\", \"points\": \"在模拟里创建变量、放入值并读出，体验“名字—值”的对应\", \"tier\": \"中\", \"visual\": \"交互\"}, {\"id\": \"s4\", \"title\": \"练习：分清名字、值与可变\", \"type\": \"练习\", \"points\": \"通过小练习辨认变量名、当前值以及重新赋值后的结果\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "交互",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 5,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 4585,
+   "durationMs": 54535,
+   "promptChars": 4358,
+   "replyChars": 537,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了名字的盒子\", \"type\": \"概念\", \"points\": \"用盒子与标签建立变量心智模型：变量名是标签，值是盒子里此刻装的内容\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：名字与值是两回事\", \"type\": \"概念\", \"points\": \"标签可以换而内容不变，同一个值也可以装进不同盒子\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：从写死的数到有名字的量\", \"type\": \"演示\", \"points\": \"对比硬编码数字与有名字的量的写法，直观感受变量的可读与复用价值\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"练习：指认变量与它的值\", \"type\": \"练习\", \"points\": \"在示例中指出变量名与当前值，判断多处出现是否属于同一个变量\", \"tier\": \"中\", \"visual\": \"示意图\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 6,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 3849,
+   "durationMs": 53400,
+   "promptChars": 4358,
+   "replyChars": 528,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴了标签的储物格\", \"type\": \"概念\", \"points\": \"用“带标签的盒子”建立直觉：变量 = 名字标签 + 格子里当前放的值\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"演示：标签不动，格子里换东西\", \"type\": \"演示\", \"points\": \"同一个变量名在不同时刻可以对应不同值，值会变而名字不变\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"例题：在场景里标出变量名与当前值\", \"type\": \"例题\", \"points\": \"用一个具体例子示范如何区分“变量名”与“变量的值”\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"练习：你来标一标\", \"type\": \"练习\", \"points\": \"给出新场景，让学习者指出变量名和它此刻的值\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "演示",
+     "例题",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 7,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 3066,
+   "durationMs": 35078,
+   "promptChars": 4358,
+   "replyChars": 539,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：值先存在，变量是给它贴上的名字\", \"type\": \"概念\", \"points\": \"程序算出的值需要被记住、复用，变量就是给值起的名字\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：一个变量由名字和值两部分组成\", \"type\": \"概念\", \"points\": \"名字是我们写下的入口，值是被指向的内容，二者合起来才是一个变量\", \"tier\": \"低\", \"visual\": \"mermaid\"}, {\"id\": \"s3\", \"title\": \"演示：名字可以指向不同种类的值\", \"type\": \"演示\", \"points\": \"变量能装数字、文字、真假等不同种类的值，靠名字区分它们\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"练习：辨认变量里的名字与值\", \"type\": \"练习\", \"points\": \"给定情境判断哪些是变量、分别指出名字和值\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 8,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 2813,
+   "durationMs": 32526,
+   "promptChars": 4358,
+   "replyChars": 516,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是贴着标签的盒子\", \"type\": \"概念\", \"points\": \"变量是用来存放数据、并按名字取用的「带标签盒子」\", \"tier\": \"低\", \"visual\": \"示意图\"}, {\"id\": \"s2\", \"title\": \"概念：变量名与变量值是两回事\", \"type\": \"概念\", \"points\": \"标签（名字）保持不动，盒子里装的内容（值）可以替换\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s3\", \"title\": \"演示：同一个盒子的值换了几次\", \"type\": \"演示\", \"points\": \"观察同一个变量在不同时刻先后持有不同值的过程\", \"tier\": \"中\", \"visual\": \"示意图\"}, {\"id\": \"s4\", \"title\": \"练习：辨认变量名、值与变化\", \"type\": \"练习\", \"points\": \"通过找名字、读值、说变化，巩固变量的心智模型\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "概念",
+     "演示",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "中",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "课程大纲",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 9,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 73,
+   "outputTokens": 3299,
+   "durationMs": 36824,
+   "promptChars": 4358,
+   "replyChars": 542,
+   "toolSchemaChars": 673,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"sections\": [{\"id\": \"s1\", \"title\": \"概念：变量是一只有名字标签的盒子\", \"type\": \"概念\", \"points\": \"用贴标签的盒子建立直觉：变量是一块有名字、能装一个值的存储空间\", \"tier\": \"低\", \"visual\": \"svg\"}, {\"id\": \"s2\", \"title\": \"交互：给盒子换一个值，名字不变\", \"type\": \"交互\", \"points\": \"亲手更换盒中的值，体会“变”的是值、不是名字\", \"tier\": \"低\", \"visual\": \"交互\"}, {\"id\": \"s3\", \"title\": \"概念：变量名和变量值是两回事\", \"type\": \"概念\", \"points\": \"名字是标签（怎么称呼），值是内容（里面是什么）；用名字找到盒子，读出来的是值\", \"tier\": \"中\", \"visual\": \"svg\"}, {\"id\": \"s4\", \"title\": \"练习：从场景里认出变量名和值\", \"type\": \"练习\", \"points\": \"在例子中辨认哪些是变量名、哪些是值、哪些不是变量\", \"tier\": \"中\", \"visual\": \"无\"}]}"
+   ],
+   "extract": {
+    "sections": 4,
+    "types": [
+     "概念",
+     "交互",
+     "概念",
+     "练习"
+    ],
+    "tiers": [
+     "低",
+     "低",
+     "中",
+     "中"
+    ],
+    "sectionIds": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 1,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 2917,
+   "outputTokens": 8087,
+   "durationMs": 95546,
+   "promptChars": 5207,
+   "replyChars": 1266,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: '变量是什么'\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '关于“变量”的理解，下列哪一项最准确？'\n    options:\n      - '变量是给一个会变的值起的名字'\n      - '变量的名字和它的值都不能改变'\n      - '变量一旦被赋值，它的值就不能再变'\n      - '变量被读取后，原来的值就被清空了'\n    answer: A\n    explanation: '对：变量是给会变的值起的名字，名字稳定、值随时可变。关键：把“名字”和“值”分开看。易错点：误以为读取会清空原值或赋值后不能再变。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '读取变量时，拿到的是这个变量“此刻”的值，而不是它第一次被赋值时写下的值。'\n    answer: 对\n    explanation: '对：读取按当前值返回。关键：同一变量即使被重新赋值过，读取也只看“此刻”的新值。易错点：把“第一次赋值时的值”当作读取结果。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n  - id: q3\n    kind: numeric\n    q: '账户余额是一个变量。早间它被赋值为 50，中午读取一次，晚间被赋值为 20。晚间赋值后再次读取，读到的值是多少？'\n    answer: 20\n    tol: 0.01\n    explanation: '对：读取返回当前值。关键：晚间赋值后当前值变为 20，所以再读取得到 20。易错点：把早间 50 当作最终读取结果。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []\n  - id: q4\n    kind: multi_choice\n    q: '关于变量的名字、值、赋值与读取，下列说法正确的有哪些？'\n    options:\n      - '同一变量在不同时刻可以取不同的值'\n      - '赋值是把一个值写进变量名'\n      - '读取会改变变量的当前值'\n      - '读取变量时拿到的是当前值'\n    answer: ['A', 'B', 'D']\n    explanation: '对：A、B、D 符合“名字稳定、值可变”，也符合“赋值写入、读取取当前值”。关键：逐项判断，读取不改变变量。易错点：误以为读取会修改变量值（C）。'\n    difficulty: 3\n    section: '通用'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 11.166666666666666,
+    "selfBleu": 0.1318540468907987,
+    "stemSimilarity": 0.016665654172488508,
+    "distinctStems": 4,
+    "stems": [
+     "关于“变量”的理解，下列哪一项最准确？",
+     "读取变量时，拿到的是这个变量“此刻”的值，而不是它第一次被赋值时写下的值。",
+     "账户余额是一个变量。早间它被赋值为 50，中午读取一次，晚间被赋值为 20。晚间赋值后再次读取，读到的值是多少？",
+     "关于变量的名字、值、赋值与读取，下列说法正确的有哪些？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 2,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 10632,
+   "durationMs": 124011,
+   "promptChars": 5207,
+   "replyChars": 1494,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: '变量是什么'\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '下列关于变量的说法，正确的是？'\n    options: ['变量是固定不变的数字，名字会变', '变量是给会变的值起的名字，名字稳定、值随时可变', '变量一旦赋值，名字和值都不能再变', '变量的名字和值都会随时变化']\n    answer: B\n    explanation: '变量把名字和值分开：名字稳定，值随时可变。关键步骤：固定名字指向当前值，同一变量在不同时刻可有不同值。最易错点：误以为变量的名字也随值改变。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '“$\\text{余额} = 50$”是赋值；“查看余额”是读取。读取时拿到的是此刻的值，而不是写下它时的值。'\n    answer: 对\n    explanation: '赋值是写入，读取是取出当前值。关键步骤：$\\text{余额} = 50$ 写入 $50$；之后若值变为 $20$，读取得到 $20$。最易错点：读取不是回到写下时的旧值。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n  - id: q3\n    kind: ordering\n    q: '请按“赋值 → 读取 → 再赋值 → 再读取”的过程，排列下面余额操作。'\n    options: ['夜里查看余额', '早上 $\\text{余额} = 50$', '晚上 $\\text{余额} = 20$', '中午查看余额']\n    answer: ['早上 $\\text{余额} = 50$', '中午查看余额', '晚上 $\\text{余额} = 20$', '夜里查看余额']\n    explanation: '必须先赋值，读取才有值可读；再赋值后，再读取得到新值。关键步骤：先写入 $\\text{余额} = 50$，读取 $50$；再写入 $\\text{余额} = 20$，读取 $20$。最易错点：把“查看余额”误当赋值，或以为第二次读取仍为 $50$。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []\n  - id: q4\n    kind: reflection\n    q: '请解释：为什么“早上余额 $50$ 元”和“晚上余额 $20$ 元”是同一个变量？结合“名字稳定、值可变、赋值与读取成对出现”来说明。'\n    answer: '评分要点：指出“余额”这个名字始终不变；说明 $50$ 和 $20$ 是同一变量在不同时刻的取值；指出早上“$\\text{余额} = 50$”、晚上“$\\text{余额} = 20$”是赋值；指出查看余额是读取，读取得到当时的值。'\n    explanation: '评分时看是否区分名字与值：余额是名字，$50$ 和 $20$ 是不同时刻的值。赋值写入、读取取当前值。最易错点：把两个不同时刻的值当成两个变量。'\n    difficulty: 3\n    section: '通用'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 12.333333333333334,
+    "selfBleu": 0.10963218134033179,
+    "stemSimilarity": 0.0059486753821678074,
+    "distinctStems": 4,
+    "stems": [
+     "下列关于变量的说法，正确的是？",
+     "“$\\text{余额} = 50$”是赋值；“查看余额”是读取。读取时拿到的是此刻的值，而不是写下它时的值。",
+     "请按“赋值 → 读取 → 再赋值 → 再读取”的过程，排列下面余额操作。",
+     "请解释：为什么“早上余额 $50$ 元”和“晚上余额 $20$ 元”是同一个变量？结合“名字稳定、值可变、赋值与读取成对出现”来说明。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 3,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 8862,
+   "durationMs": 107078,
+   "promptChars": 5207,
+   "replyChars": 1298,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: '变量是什么'\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '哪一项最准确地说明了“变量”的含义？'\n    options: ['给一个会变的值起的名字', '一个固定不变的数值', '某次读取时拿到的具体值', '只能用来表示当前余额的名称']\n    answer: A\n    explanation: '正确理解：变量是给会变的值起的名字。关键：名字稳定，值可随时变化。最易错点：误把某次具体取值或固定数值当成变量本身。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '判断：同一个变量在不同时刻可以取不同的值，但它的名字不需要随值变化。'\n    answer: 对\n    explanation: '正确理解：名字是稳定标签，值是会变的内容。关键：“余额”这个名字不变，早上为 50 元、晚上为 20 元。最易错点：误以为名字要跟着值一起变。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q3\n    kind: multi_choice\n    q: '关于“赋值”和“读取”，下列说法正确的有：'\n    options: ['赋值是把某个值写进名字（例如把 50 写进余额）', '读取时拿到的是赋值那一刻写下的值', '读取时拿到的是此刻的值', '赋值和读取常常成对出现']\n    answer: ['A', 'C', 'D']\n    explanation: '正确理解：赋值是写入值，读取是取出当前值，二者常成对。关键：值可能被再次赋值改变，因此读取要取“此刻”的值。最易错点：把读取当成取回第一次写下的值。'\n    difficulty: 2\n    section: '概念：赋值与读取'\n    invokes: 变量\n    uses: []\n  - id: q4\n    kind: reflection\n    q: '请结合“早上余额 50 元、晚上余额 20 元”的例子解释：为什么读取变量时拿到的是此刻的值，而不是赋值那一刻写下的值？'\n    answer: '评分要点：①说出变量是给会变的值起的名字，名字稳定、值可变；②说明读取是用名字换回当前值；③结合例子：早上赋值 50 后读取为 50，晚上赋值 20 后读取为 20；若晚上尚未重新赋值就读取，应为 50。'\n    explanation: '正确理解：要区分“赋值”和“读取”。关键：名字“余额”不变，值从 50 变为 20，读取结果随时刻而变。最易错点：把读取误解为回到首次赋值。'\n    difficulty: 3\n    section: 通用\n    invokes: 变量\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "multi_choice": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 12.833333333333332,
+    "selfBleu": 0.06191259673730005,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "stems": [
+     "哪一项最准确地说明了“变量”的含义？",
+     "判断：同一个变量在不同时刻可以取不同的值，但它的名字不需要随值变化。",
+     "关于“赋值”和“读取”，下列说法正确的有：",
+     "请结合“早上余额 50 元、晚上余额 20 元”的例子解释：为什么读取变量时拿到的是此刻的值，而不是赋值那一刻写下的值？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 4,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 8154,
+   "durationMs": 100201,
+   "promptChars": 5207,
+   "replyChars": 1249,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: true_false\n    q: '变量一旦被赋值后，它的值就不能再改变。'\n    answer: '错'\n    explanation: '变量名字稳定，值随时可变；如余额从 50 元变为 20 元，仍是同一个变量。最易错点是误以为“赋值”会锁定值，实际每次赋值只是写入一个新值。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q2\n    kind: single_choice\n    q: '早上余额是 50 元，晚上余额变成 20 元。这两个不同的数都是同一个变量的不同取值，这最能说明变量的哪个特点？'\n    options: ['变量名会随值改变', '值随时可变，名字保持稳定', '变量只能减少不能增加', '读取操作会自动修改变量的值']\n    answer: 'B'\n    explanation: '变量是给会变的值起的名字，名字稳定、值随时可变；50 和 20 是同一变量在不同时刻的取值。最易错点是混淆“变量名”与“变量的值”，名字并不随值改变。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q3\n    kind: matching\n    q: '请把左侧操作与它的分类配对。'\n    options: ['余额 = 50', '查看余额显示 50']\n    answer: ['赋值', '读取']\n    explanation: '赋值是把某个值写进名字，读取是拿名字换回当前的值。第一项用等号把 50 写入余额，第二项只是查看当前值。最易错点是见到“= 50”就当作读取；在赋值语境里“=”表示写入，不是判断相等。'\n    difficulty: 2\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n  - id: q4\n    kind: numeric\n    q: '变量 score 先被赋值为 80；接下来执行“读取 score”并显示结果；然后再把 score 重新赋值为 90。问刚才显示的结果是多少？'\n    answer: 80\n    tol: 0.01\n    explanation: '读取动作发生在重新赋值之前，读到的应是“那一刻”的当前值 80。赋值 90 是后续动作，不会改变已经发生的显示结果。最易错点是误把后来赋的 90 当作显示结果；读取只返回当前值，不是之后的值。'\n    difficulty: 3\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "true_false": 1,
+     "single_choice": 1,
+     "matching": 1,
+     "numeric": 1
+    },
+    "entropy": 2,
+    "distractor": 10.833333333333334,
+    "selfBleu": 0.04983883511069534,
+    "stemSimilarity": 0.0029178338001867414,
+    "distinctStems": 4,
+    "stems": [
+     "变量一旦被赋值后，它的值就不能再改变。",
+     "早上余额是 50 元，晚上余额变成 20 元。这两个不同的数都是同一个变量的不同取值，这最能说明变量的哪个特点？",
+     "请把左侧操作与它的分类配对。",
+     "变量 score 先被赋值为 80；接下来执行“读取 score”并显示结果；然后再把 score 重新赋值为 90。问刚才显示的结果是多少？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 5,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 10716,
+   "durationMs": 132287,
+   "promptChars": 5207,
+   "replyChars": 1144,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: '变量是什么'\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '下列关于“变量”的说法，正确的是（ ）'\n    options: ['变量是某个固定不变的值', '变量是给一个会变的值起的名字', '变量只能存数字，不能存余额这样的数', '变量运行时名字会不断变化']\n    answer: B\n    explanation: '变量的定义是“给一个会变的值起的名字”。名字是稳定的，值才随时可变。最易错点是误把“变”当作名字在变。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '读取变量时，拿到的是“此刻”的值，而不是写下它时的值。'\n    answer: 对\n    explanation: '正文明确：读的时候拿到的永远是“此刻”的值，不是写下它时的值。最易错点是误记为“拿到上一次写入的值”。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: 变量\n    uses: []\n  - id: q3\n    kind: fill_in_blank\n    q: '把某个值写进名字的动作称为______。'\n    answer: ['赋值']\n    explanation: '正文直接定义：赋值是把某个值写进名字。读取才是拿名字换回当前的值。最易错点是“赋值”与“读取”互换。'\n    difficulty: 2\n    section: '概念：赋值与读取'\n    invokes: 变量\n    uses: []\n  - id: q4\n    kind: multi_choice\n    q: '关于变量、赋值与读取，下列说法正确的有（ ）'\n    options: ['变量是给一个会变的值起的名字', '同一个变量的名字稳定，值可以随时改变', '读取变量时拿到的是上一次赋值写下的值', '赋值与读取常常成对出现']\n    answer: ['A', 'B', 'D']\n    explanation: 'A、B、D 均与正文一致：变量是给会变的值起的名字；名字稳定、值可变；赋值与读取常成对出现。C 错在读取拿到的是“此刻”的值，不是上一次赋值写下的值。最易错点是把“读取”误当成回到上次写入时的值。'\n    difficulty: 3\n    section: 通用\n    invokes: 变量\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "fill_in_blank": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 13.75,
+    "selfBleu": 0.26757872235539454,
+    "stemSimilarity": 0.036630036630036625,
+    "distinctStems": 4,
+    "stems": [
+     "下列关于“变量”的说法，正确的是（ ）",
+     "读取变量时，拿到的是“此刻”的值，而不是写下它时的值。",
+     "把某个值写进名字的动作称为______。",
+     "关于变量、赋值与读取，下列说法正确的有（ ）"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 6,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 13655,
+   "durationMs": 159878,
+   "promptChars": 5207,
+   "replyChars": 1350,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '关于变量，以下哪项理解是正确的？'\n    options:\n      - '变量是给一个会变的值起的名字；名字保持不变，值可以随时改变'\n      - '变量一旦写下某个值，这个值就固定下来，不能再变化'\n      - '变量就是一个具体的数字，例如 $50$'\n      - '读取变量时，变量的名字会变成当前的值'\n    answer: A\n    explanation: '为什么对：变量把“名字”和“值”分开，名字稳定、值随时可变。关键步骤：余额从 $50$ 变为 $20$ 时，名字仍叫余额，变的只是当前值。最易错点：把“值会变”误解为名字会变。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q2\n    kind: fill_in_blank\n    q: '在 $\\text{余额}=50$ 中，把 $50$ 写进名字「余额」的动作称为______。'\n    answer: ['赋值']\n    explanation: '为什么对：赋值就是把值写入名字。关键步骤：读取是拿名字换回当前值，与赋值方向相反。最易错点：不要与“读取”混淆。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: 变量\n    uses: []\n  - id: q3\n    kind: true_false\n    q: '早上余额为 $50$ 元，晚上余额变为 $20$ 元。小明说：晚上读取余额时，读到的是 $20$，因为读取拿到的是“此刻”的值。这个说法对吗？'\n    answer: 对\n    explanation: '为什么对：读取按“此刻”的值返回，而不是写下它时的值。关键步骤：晚上余额已变为 $20$，所以读取得到 $20$。最易错点：不能用早上写入的 $50$ 代替晚上读取结果。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: 变量\n    uses: []\n  - id: q4\n    kind: open_question\n    q: '请以正文中的余额为例（或自选一个生活中的变量），描述它在两个不同时刻各发生了一次赋值或读取；然后说明：为什么读取时不能返回之前写入的值？请用你举的例子解释。'\n    answer: '参考要点：能说明变量名保持不变、当前值可改变；能区分赋值（写入值）和读取（取回当前值）；能指出余额从 $50$ 变为 $20$ 后，读取得到 $20$ 而不是先前写入的 $50$。'\n    explanation: '评分要点：有具体的两个时刻；赋值与读取动作描述正确；强调读取以读的时刻为准。最易错点：把写入时的旧值当成读取结果。'\n    difficulty: 3\n    section: 通用\n    invokes: 变量\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "open_question": 1
+    },
+    "entropy": 2,
+    "distractor": 20.333333333333332,
+    "selfBleu": 0.06387927135666394,
+    "stemSimilarity": 0.0022101449275362317,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量，以下哪项理解是正确的？",
+     "在 $\\text{余额}=50$ 中，把 $50$ 写进名字「余额」的动作称为______。",
+     "早上余额为 $50$ 元，晚上余额变为 $20$ 元。小明说：晚上读取余额时，读到的是 $20$，因为读取拿到的是“此刻”的值。这个说法对吗？",
+     "请以正文中的余额为例（或自选一个生活中的变量），描述它在两个不同时刻各发生了一次赋值或读取；然后说明：为什么读取时不能返回之前写入的值？请用你举的例子解释。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 7,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 8189,
+   "durationMs": 96848,
+   "promptChars": 5207,
+   "replyChars": 1231,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: '变量是什么'\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '“变量”最准确的含义是什么？'\n    options: ['一个固定不变的数值', '给一个会变的值起的名字', '一个只能读取的值', '一个不能重新赋值的量']\n    answer: 'B'\n    explanation: '变量是给一个会变的值起的名字，名字稳定、值可变。关键步骤：把“名字”和“值”分开理解。最易错点：不要把它当成固定不变的数值。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n  - id: q2\n    kind: fill_in_blank\n    q: '把 50 写进“余额”这个名字的动作称为____。'\n    answer: ['赋值']\n    explanation: '把某个值写进名字的动作叫赋值，读取是拿名字换回当前值。关键步骤：记清“赋值”与“读取”两个动作名称。最易错点：把读取与赋值混淆。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: '变量'\n  - id: q3\n    kind: multi_choice\n    q: '关于变量，下列说法正确的有哪些？'\n    options: ['名字稳定，值可以随时变化', '读取变量时拿到的是写下它那个时刻的值', '赋值是把某个值写进名字', '同一个变量在不同时刻可以有不同的值']\n    answer: ['A', 'C', 'D']\n    explanation: '正确项 A、C、D 都符合变量与赋值/读取的定义；B 错在读取应拿到“此刻”的值。关键步骤：赋值写进名字，读取换回当前值。最易错点：把读取误解为返回历史值。'\n    difficulty: 2\n    section: '概念：赋值与读取'\n    invokes: '变量'\n  - id: q4\n    kind: matching\n    q: '下面是一次余额的两个时刻记录，请为每个动作配对它的类型或读到的值。'\n    options: ['把余额赋值为 50', '读取余额', '把余额赋值为 20', '再次读取余额']\n    answer: ['赋值，余额变为 50', '读取，得到 50', '赋值，余额变为 20', '读取，得到 20']\n    explanation: '等号出现处是赋值，其余是读取；第二次读取时变量已变成 20。关键步骤：先赋值 50，读到 50；再赋值 20，读到 20。最易错点：第二次读取误拿历史值 50。'\n    difficulty: 3\n    section: '练习：两个时刻'\n    invokes: '变量'"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "multi_choice": 1,
+     "matching": 1
+    },
+    "entropy": 2,
+    "distractor": 11.333333333333334,
+    "selfBleu": 0.09323329653025123,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "stems": [
+     "“变量”最准确的含义是什么？",
+     "把 50 写进“余额”这个名字的动作称为____。",
+     "关于变量，下列说法正确的有哪些？",
+     "下面是一次余额的两个时刻记录，请为每个动作配对它的类型或读到的值。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 8,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 7704,
+   "durationMs": 92480,
+   "promptChars": 5207,
+   "replyChars": 1200,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '关于“变量”，下列说法正确的是？'\n    options: ['变量的名字会随着取值变化而改变', '变量的值一旦定下就不能再改', '名字稳定，值随时可变', '变量每次赋值后都会变成一个新名字']\n    answer: C\n    explanation: '正确的是“名字稳定，值随时可变”。变量把名字和值分开看，名字稳定，值可以随赋值变化。最易错点：误以为名字随值一起变。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '把 $50$ 写进名字“余额”这个动作，是在读取余额当前的值。'\n    answer: '错'\n    explanation: '这个动作是把 $50$ 写进“余额”，属于赋值；读取是拿“余额”换回当前值，方向相反。最易错点：看到“余额”就当成读取，忽略了写入方向。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n  - id: q3\n    kind: numeric\n    q: '账户余额变量在上午被赋值为 $80$，下午被赋值为 $35$。傍晚读取余额，读到的数值是多少？'\n    answer: 35\n    tol: 0.01\n    explanation: '读取拿到的始终是“此刻”的值。下午赋值后余额已变为 $35$，傍晚读取就是 $35$。最易错点：错把上午的 $80$ 当成读取结果。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []\n  - id: q4\n    kind: reflection\n    q: '用自己的话说明：为什么“读取”变量时可能和“赋值”时看到的数字不一样？请举一个小例子。'\n    answer: ['能指出读取拿到的是当前值，而非曾经写入的值', '例子体现同一变量在不同时刻取值可不同', '能区分赋值动作与读取动作']\n    explanation: '回答应区分赋值与读取：赋值写入新值，读取取回当前值。关键步骤：例子中先赋值 $50$、再赋值 $20$，读取应得到 $20$ 而不是 $50$。最易错点：只说“值变了”，未点明读取时点决定结果。'\n    difficulty: 3\n    section: '通用'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 3,
+    "skipped": 1,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1
+    },
+    "entropy": 1.584962500721156,
+    "distractor": 12.5,
+    "selfBleu": 0.13423571965666956,
+    "stemSimilarity": 0.016339869281045753,
+    "distinctStems": 3,
+    "stems": [
+     "关于“变量”，下列说法正确的是？",
+     "把 $50$ 写进名字“余额”这个动作，是在读取余额当前的值。",
+     "账户余额变量在上午被赋值为 $80$，下午被赋值为 $35$。傍晚读取余额，读到的数值是多少？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "现状",
+   "run": 9,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 101,
+   "outputTokens": 9226,
+   "durationMs": 112506,
+   "promptChars": 5207,
+   "replyChars": 1368,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '“余额”在早上是 $50$ 元、晚上是 $20$ 元。这里的“余额”最准确地说是？'\n    options:\n      - '给一个会变的值起的名字'\n      - '给一个固定值起的名字'\n      - '把值写进名字的动作'\n      - '拿名字换回当前值的动作'\n    answer: A\n    explanation: '变量是给会变的值起的名字；名字“余额”稳定，值从 $50$ 变为 $20$。选项 C 是赋值、D 是读取。最易错点：把“会变的值”误当成“固定值”。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q2\n    kind: multi_choice\n    q: '关于变量、赋值与读取，下列说法正确的有？'\n    options:\n      - '同一个变量在不同时刻可以取不同的值'\n      - '赋值是把某个值写进名字'\n      - '读取时拿到的是写下这个值时的值'\n      - '读取一个变量会改变变量的当前值'\n    answer: ['A', 'B']\n    explanation: 'A、B 符合正文：变量取值可变，赋值是写入。C 错在读取拿到的是“此刻”的值，不是写下时的值；D 错在读取不会改变当前值。最易错点：把写下时的值与此刻的值混为一谈。'\n    difficulty: 2\n    section: '概念：赋值与读取'\n    invokes: 变量\n    uses: []\n  - id: q3\n    kind: matching\n    q: '将左侧概念与右侧说明一一配对。'\n    options:\n      - '变量'\n      - '赋值'\n      - '读取'\n    answer:\n      - '给一个会变的值起的名字'\n      - '把某个值写进名字'\n      - '拿名字换回当前的值'\n    explanation: '变量是名字，赋值是写入值，读取是取回当前值。最易错点：把“读取”理解成“回到写入时的旧值”。'\n    difficulty: 2\n    section: 通用\n    invokes: 变量\n    uses: []\n  - id: q4\n    kind: true_false\n    q: '早上给变量“余额”赋值为 $50$ 元，中午读取它。读取拿到的是写下时的值，所以读到的值一定是 $50$ 元。'\n    answer: '错'\n    explanation: '读取拿到的是“此刻”的值，不是写下时的值；若读取前变量已被重新赋值（如变为 $20$），读到的就不是 $50$。只有在没有其他赋值时才会读到 $50$。最易错点：把赋值时的值误认为读取时的值。'\n    difficulty: 3\n    section: '练习：两个时刻'\n    invokes: 变量\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "multi_choice": 1,
+     "matching": 1,
+     "true_false": 1
+    },
+    "entropy": 2,
+    "distractor": 11.25,
+    "selfBleu": 0.13467019806356023,
+    "stemSimilarity": 0.007596371882086168,
+    "distinctStems": 4,
+    "stems": [
+     "“余额”在早上是 $50$ 元、晚上是 $20$ 元。这里的“余额”最准确地说是？",
+     "关于变量、赋值与读取，下列说法正确的有？",
+     "将左侧概念与右侧说明一一配对。",
+     "早上给变量“余额”赋值为 $50$ 元，中午读取它。读取拿到的是写下时的值，所以读到的值一定是 $50$ 元。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 1,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 5255,
+   "durationMs": 63400,
+   "promptChars": 5242,
+   "replyChars": 1206,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: '变量是什么'\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '关于变量，下列说法正确的是？'\n    options: ['变量是一个固定的值', '变量是给一个会变的值起的名字', '变量名字会随值变化', '变量只能在余额中使用']\n    answer: B\n    explanation: '变量是给会变的值起的名字；名字稳定，值可变。关键判断：选项 B 直接对应定义。最易错点：把变量当作某个固定值，或以为名字会随值变化。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n\n  - id: q2\n    kind: true_false\n    q: '读取变量时，拿到的是写下这个变量时的值，而不是当前值。'\n    answer: '错'\n    explanation: '读取时拿到的是当前值，不是过去写下时的值。关键步骤：赋值后值可能被再次修改，读取发生在“此刻”。最易错点：把“写下”的时刻误认为读取结果永远不变。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n\n  - id: q3\n    kind: matching\n    q: '把左边的动作与右边对应的含义配对。'\n    options: ['赋值', '读取']\n    answer: ['把某个值写进名字', '拿名字换回当前的值']\n    explanation: '赋值与读取是变量的两个基本动作。关键配对：赋值对应“把某个值写进名字”，读取对应“拿名字换回当前的值”。最易错点：把读取误认为会保存最初的值。'\n    difficulty: 2\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n\n  - id: q4\n    kind: reflection\n    q: '请用自己的话解释：为什么同一个变量在不同时刻可能取不同的值？并举一个生活中的例子，说明哪一步是赋值、哪一步是读取。'\n    answer: '评分要点：①说明变量名稳定、值可变；②举出生活例子并出现一次赋值、一次读取；③能指出读取得到的是读取时刻的值。'\n    explanation: '评分要点：①说明变量名稳定、值可变；②举出生活例子并出现一次赋值、一次读取；③能指出读取得到的是读取时刻的值。最易错点：例子中没有正确区分赋值和读取，或认为值不可变。'\n    difficulty: 3\n    section: '通用'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "matching": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 8.666666666666666,
+    "selfBleu": 0.0764551038932664,
+    "stemSimilarity": 0.0035822021116138766,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量，下列说法正确的是？",
+     "读取变量时，拿到的是写下这个变量时的值，而不是当前值。",
+     "把左边的动作与右边对应的含义配对。",
+     "请用自己的话解释：为什么同一个变量在不同时刻可能取不同的值？并举一个生活中的例子，说明哪一步是赋值、哪一步是读取。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 2,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 6804,
+   "durationMs": 79683,
+   "promptChars": 5242,
+   "replyChars": 1204,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '小明早上的余额是 $50$ 元，晚上的余额是 $20$ 元。这里的“余额”最适合看作？'\n    options: ['一个固定不变的数', '一个会变的值，名字固定为“余额”', '两个不同的名字：“早余额”和“晚余额”', '一个具体的值 $50$']\n    answer: B\n    explanation: '为什么对：变量是给会变的值起的名字，名字稳定、值随时可变。关键步骤：把“余额”看作名字，把 $50$ 元、$20$ 元看作同一名字的两个取值。最易错点：把某个具体取值当成变量本身。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q2\n    kind: fill_in_blank\n    q: '“把某个值写进名字”这一动作的名称是______。'\n    answer: ['赋值']\n    explanation: '为什么对：把值写进名字的动作叫赋值。关键步骤：赋值=写；读取=读。最易错点：把赋值与读取的名称互换。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: 变量\n    uses: []\n  - id: q3\n    kind: true_false\n    q: '读取变量时，拿到的是它被写入那一刻的值，而不是当前值。'\n    answer: 错\n    explanation: '为什么对：读取变量拿到的永远是“此刻”的值。关键步骤：先写入 $50$、后又写入 $20$，再读取会得到 $20$。最易错点：把“写入时的旧值”误认为读取结果。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: 变量\n    uses: []\n  - id: q4\n    kind: multi_choice\n    q: '关于变量的名字与值，下列说法正确的有（ ）。'\n    options: ['名字稳定，值随时可变', '赋值是拿名字换回当前的值', '同一个变量在不同时刻可以有不同的取值', '读取变量时拿到的是此刻的值']\n    answer: ['A', 'C', 'D']\n    explanation: '为什么对：A、C、D 都是变量的核心性质；B 把“赋值”和“读取”的定义写反了。关键步骤：赋值=写，读取=读。最易错点：赋值与读取两个术语互换。'\n    difficulty: 3\n    section: 通用\n    invokes: 变量\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 11.583333333333334,
+    "selfBleu": 0.08057227314482335,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "stems": [
+     "小明早上的余额是 $50$ 元，晚上的余额是 $20$ 元。这里的“余额”最适合看作？",
+     "“把某个值写进名字”这一动作的名称是______。",
+     "读取变量时，拿到的是它被写入那一刻的值，而不是当前值。",
+     "关于变量的名字与值，下列说法正确的有（ ）。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 3,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 7489,
+   "durationMs": 84530,
+   "promptChars": 5242,
+   "replyChars": 1546,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '关于变量，下列说法正确的是（ ）。'\n    options:\n      - '变量是给一个固定的值起的名字'\n      - '变量的名字稳定，但值随时可变'\n      - '变量一旦被赋值，值就不能再改变'\n      - '变量的名字会随着值的改变而改变'\n    answer: 'B'\n    explanation: '为什么对：变量名字稳定，值随时可变。关键步骤：把名字和值分开看——名字稳定，值随时可变。最易错点：误以为变量值固定，其实同一变量可多次赋值。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '早上把变量“余额”赋值为 50，晚上又赋值为 20。此时读取余额，会得到 50。这个说法对吗？'\n    answer: '错'\n    explanation: '为什么错：读取拿到的是“此刻”的值，不是最早写入的 50。关键步骤：余额从 50 变为 20，当前值是 20，读取应得到 20。最易错点：把“写下它时的值”误当成读取结果。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n  - id: q3\n    kind: ordering\n    q: '下面是关于变量“余额”的四个操作步骤，请按实际发生的时间顺序排列（从先到后）。'\n    options:\n      - '给余额赋值为 50'\n      - '读取余额，得到 20'\n      - '给余额赋值为 20'\n      - '读取余额，得到 50'\n    answer:\n      - '给余额赋值为 50'\n      - '读取余额，得到 50'\n      - '给余额赋值为 20'\n      - '读取余额，得到 20'\n    explanation: '为什么对：先赋值 50 后读取得到 50；再赋值 20 后读取得到 20。关键步骤：50 → 读 50 → 20 → 读 20。最易错点：读取必须发生在对应赋值之后，且读到的是最近一次赋值的值。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []\n  - id: q4\n    kind: multi_choice\n    q: '关于赋值与读取，下列说法正确的有（ ）。'\n    options:\n      - '赋值是把某个值写进名字；读取是拿名字换回当前的值'\n      - '读取时得到的永远是写下它时的值'\n      - '变量名字稳定，但同一个变量在不同时刻可以有不同的值'\n      - '赋值与读取是两个完全无关的动作，可以随意交换顺序'\n    answer: ['A', 'C']\n    explanation: '为什么对：赋值写入值，读取取当前值；变量名字稳定、值可变。关键步骤：读的时候拿到的永远是“此刻”的值，不是写下它时的值。最易错点：B 把“此刻的值”偷换成“写下它时的值”；D 忽略赋值和读取常常成对出现。'\n    difficulty: 3\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 15.75,
+    "selfBleu": 0.1763604315256308,
+    "stemSimilarity": 0.04133991247393309,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量，下列说法正确的是（ ）。",
+     "早上把变量“余额”赋值为 50，晚上又赋值为 20。此时读取余额，会得到 50。这个说法对吗？",
+     "下面是关于变量“余额”的四个操作步骤，请按实际发生的时间顺序排列（从先到后）。",
+     "关于赋值与读取，下列说法正确的有（ ）。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 4,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 7571,
+   "durationMs": 92558,
+   "promptChars": 5242,
+   "replyChars": 1282,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: true_false\n    q: '变量是给一个会变的值起的名字；名字是稳定的，但值随时可变。'\n    answer: 对\n    explanation: '为什么对：变量把“名字”和“值”分开，名字只是标签，不随取值改变。关键步骤：余额这个变量早上 $50$ 元、晚上 $20$ 元，变的是值。最易错点：误以为变量名也随值改变。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q2\n    kind: single_choice\n    q: '早上账户余额是 $50$ 元，晚上变成 $20$ 元。“余额”这个变量发生了怎样的变化？'\n    options: ['变量名字从“早上余额”变成“晚上余额”', '变量名字不变，值从 $50$ 元变为 $20$ 元', '变量名字和值都变了', '变量名字和值都没变']\n    answer: B\n    explanation: '为什么对：变量名字是稳定标签，只有值随时刻改变。关键步骤：从 $50$ 元到 $20$ 元，变化的是变量的值。最易错点：误把不同时刻的取值当成不同变量名。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q3\n    kind: fill_in_blank\n    q: '把某个值写进名字的动作（例如把 $50$ 元写进“余额”）称为什么？'\n    answer: ['赋值']\n    explanation: '为什么对：赋值就是把某个值写进名字，读取才是拿名字换回值。关键步骤：把 $50$ 元写进“余额”这个动作就是赋值。最易错点：把赋值与读取两个动作混淆。'\n    difficulty: 2\n    section: '概念：赋值与读取'\n    invokes: 变量\n    uses: []\n  - id: q4\n    kind: multi_choice\n    q: '关于变量、赋值与读取，下列说法正确的有？（多选）'\n    options: ['变量名字是稳定的，但值可以随时变化', '变量值是稳定的，但名字可以随时变化', '读取变量时拿到的是当前时刻的值', '对同一变量再次赋值后，名字对应的值会改变']\n    answer: ['A', 'C', 'D']\n    explanation: '为什么对：A、C、D 分别对应“名字稳定值可变”“读取当前值”“再次赋值改变值”。关键步骤：逐项判断，B 把名字与值的关系颠倒，因此错误。最易错点：多选时漏选 D，或误把 B 当成正确。'\n    difficulty: 3\n    section: 通用\n    invokes: 变量\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "true_false": 1,
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 11.333333333333332,
+    "selfBleu": 0.10222518000827838,
+    "stemSimilarity": 0.0036238918009448007,
+    "distinctStems": 4,
+    "stems": [
+     "变量是给一个会变的值起的名字；名字是稳定的，但值随时可变。",
+     "早上账户余额是 $50$ 元，晚上变成 $20$ 元。“余额”这个变量发生了怎样的变化？",
+     "把某个值写进名字的动作（例如把 $50$ 元写进“余额”）称为什么？",
+     "关于变量、赋值与读取，下列说法正确的有？（多选）"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 5,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 9192,
+   "durationMs": 112011,
+   "promptChars": 5242,
+   "replyChars": 1498,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '关于变量，下列说法正确的是？'\n    options: ['变量的名字稳定，值在不同时刻可以变化', '变量的值一旦写入就不能改变', '变量只能表示数字，不能表示余额', '每次读取变量都会改变变量的名字']\n    answer: A\n    explanation: '为什么对：变量是给会变的值起的名字，名字固定而值可变。关键步骤：把名字和值分开看，例如余额从 $50$ 元变到 $20$ 元。最易错点：把“变量”理解成“永远不变”。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '程序中先写“余额 = 50”，再写“显示(余额)”；第二次写的是赋值操作。'\n    answer: '错'\n    explanation: '为什么对：第二步只是把名字换回当前的值，属于读取。关键步骤：第一次“余额 = 50”是赋值；第二次“显示(余额)”是读取。最易错点：看到名字出现就当作赋值。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n  - id: q3\n    kind: ordering\n    q: '下面是某账户余额变量在一天中的四项记录，请按时间先后排序。'\n    options: ['睡前读取余额，得到 20', '早上把余额赋值为 50', '晚上把余额改成 20', '中午读取余额，得到 50']\n    answer: ['早上把余额赋值为 50', '中午读取余额，得到 50', '晚上把余额改成 20', '睡前读取余额，得到 20']\n    explanation: '为什么对：余额先从 $50$ 开始，中午读取仍为 $50$；晚上改成 $20$ 后，睡前读取为 $20$。关键步骤：先赋值 $50$，再读取 $50$，再赋值 $20$，最后读取 $20$。最易错点：把“改成 20”排在“读到 20”之后。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []\n  - id: q4\n    kind: numeric\n    q: '变量 $x$ 先赋值为 $10$；第二步把 $x$ 赋值为 $x+5$；第三步把变量 $y$ 赋值为 $x$ 此刻的值；第四步把 $x$ 赋值为 $2$。最后 $y$ 的值是多少？'\n    answer: 15\n    tol: 0.01\n    explanation: |\n      为什么对：第三步读取时 $x$ 已经是 $15$，所以 $y$ 拿到 $15$；之后 $x$ 变 $2$ 不影响 $y$。\n      关键步骤：\n      $$x=10 \\rightarrow x=x+5=15 \\rightarrow y=x=15 \\rightarrow x=2$$\n      最易错点：误以为 $y$ 会跟随 $x$ 之后的变化变为 $2$。\n    difficulty: 3\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "numeric": 1
+    },
+    "entropy": 2,
+    "distractor": 14,
+    "selfBleu": 0.06830968325032037,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量，下列说法正确的是？",
+     "程序中先写“余额 = 50”，再写“显示(余额)”；第二次写的是赋值操作。",
+     "下面是某账户余额变量在一天中的四项记录，请按时间先后排序。",
+     "变量 $x$ 先赋值为 $10$；第二步把 $x$ 赋值为 $x+5$；第三步把变量 $y$ 赋值为 $x$ 此刻的值；第四步把 $x$ 赋值为 $2$。最后 "
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 6,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 9888,
+   "durationMs": 113360,
+   "promptChars": 5242,
+   "replyChars": 1451,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '变量把“名字”和“值”分开看。下列哪种关系是正确的？'\n    options:\n      - '名字稳定，值随时可变'\n      - '名字随值一起变'\n      - '名字稳定，值也稳定'\n      - '值稳定，名字随时可变'\n    answer: A\n    explanation: '变量是给会变的值起的名字，因此名字只是标签，值才会随不同时刻变化。关键判断：值可变，但名字不需要改变。最易错点：误以为改变值就要换一个变量名。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: 变量\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '读取变量时，得到的是这个名字当前的值，而不是它第一次被赋值时的值。'\n    answer: 对\n    explanation: '正文指出：读的时候拿到的永远是“此刻”的值，不是写下它时的值。第一次赋的值可能早已被后续赋值覆盖。最易错点：把“第一次赋值”误当成读取结果。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: 变量\n    uses: []\n  - id: q3\n    kind: ordering\n    q: '“余额”依次经历以下操作，请按合理的先后顺序排列：'\n    options:\n      - '读取余额，得到 $50$'\n      - '给余额赋值 $20$'\n      - '给余额赋值 $50$'\n      - '读取余额，得到 $20$'\n    answer: ['给余额赋值 $50$', '读取余额，得到 $50$', '给余额赋值 $20$', '读取余额，得到 $20$']\n    explanation: '先赋值再读取，才能读到刚写入的值。顺序为：给余额赋值 $50$，读取得到 $50$；再给余额赋值 $20$，读取得到 $20$。最易错点：把读取放在赋值之前。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: 变量\n    uses: []\n  - id: q4\n    kind: single_choice\n    q: '某变量“余额”早上被赋值为 $50$ 元，晚上被赋值为 $20$ 元。关于这两个时刻，下列说法正确的是：'\n    options:\n      - '早上和晚上是两个不同的变量'\n      - '晚上读取余额时，得到的仍是早上的 $50$ 元'\n      - '同一个变量在不同时刻可以取不同的值'\n      - '变量名“余额”晚上应该改成“余额20”'\n    answer: C\n    explanation: '变量名稳定，值随时可变；同一变量在不同时刻取不同值正是变量的意义。赋值 $20$ 后当前值变为 $20$，所以晚上读取得到 $20$ 元。最易错点：把不同时刻的值误当成不同变量，或认为读取会回到历史值。'\n    difficulty: 3\n    section: '练习：两个时刻'\n    invokes: 变量\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 2,
+     "true_false": 1,
+     "ordering": 1
+    },
+    "entropy": 1.5,
+    "distractor": 10.416666666666666,
+    "selfBleu": 0.11124738009356963,
+    "stemSimilarity": 0.007013251783893986,
+    "distinctStems": 4,
+    "stems": [
+     "变量把“名字”和“值”分开看。下列哪种关系是正确的？",
+     "读取变量时，得到的是这个名字当前的值，而不是它第一次被赋值时的值。",
+     "“余额”依次经历以下操作，请按合理的先后顺序排列：",
+     "某变量“余额”早上被赋值为 $50$ 元，晚上被赋值为 $20$ 元。关于这两个时刻，下列说法正确的是："
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 7,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 5302,
+   "durationMs": 64806,
+   "promptChars": 5242,
+   "replyChars": 1294,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: '变量是什么'\nquestions:\n  - id: q1\n    kind: fill_in_blank\n    q: '如果某个值会发生变化，我们通常给这个会变的值起一个名字，这个名字称为____。'\n    answer: ['变量']\n    explanation: '变量就是给会变的值起的名字；名字稳定，值随时可变。最易错点：把“变量”当成某个固定数值。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q2\n    kind: multi_choice\n    q: '以下哪些操作是在“读取”变量当前的值？'\n    options:\n      - '收银台显示当前余额'\n      - '把余额改成 $30$ 元'\n      - '根据当前余额判断能否购买一支笔'\n      - '把余额改名为“零花钱”'\n    answer: ['A', 'C']\n    explanation: '读取是用名字把当前值取出来使用；A、C 都在使用当前余额，属于读取。关键步骤：B 是改值，属于赋值；D 是改名，不是读取。最易错点：读取是“拿值来用”，不是“把值写进去”。'\n    difficulty: 2\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n  - id: q3\n    kind: single_choice\n    q: '早上余额为 $50$ 元，晚上变成 $20$ 元。下面的说法正确的是？'\n    options:\n      - '“余额”早上是一个变量，晚上是另一个变量'\n      - '早上和晚上是同一个变量在两个时刻的不同取值'\n      - '余额从 $50$ 变成 $20$，说明变量名发生了改变'\n      - '余额一旦赋值 $50$，之后读取都应是 $50$'\n    answer: B\n    explanation: '同一个变量名“余额”可以先后取不同值，$50$ 和 $20$ 只是两个时刻的取值。关键步骤：名字固定是“余额”，值分别为 $50$ 与 $20$。最易错点：误以为值变了就是变量名变了。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []\n  - id: q4\n    kind: true_false\n    q: '因为变量名是稳定的，所以每次读取同一个变量名时，得到的值也必然相同。'\n    answer: 错\n    explanation: '名字稳定不等于值固定；值可以随时改变，读取拿到的是当前值。最易错点：把“名字不变”误当成“值也不变”。'\n    difficulty: 3\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "fill_in_blank": 1,
+     "multi_choice": 1,
+     "single_choice": 1,
+     "true_false": 1
+    },
+    "entropy": 2,
+    "distractor": 13.916666666666666,
+    "selfBleu": 0.07849259000888004,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "stems": [
+     "如果某个值会发生变化，我们通常给这个会变的值起一个名字，这个名字称为____。",
+     "以下哪些操作是在“读取”变量当前的值？",
+     "早上余额为 $50$ 元，晚上变成 $20$ 元。下面的说法正确的是？",
+     "因为变量名是稳定的，所以每次读取同一个变量名时，得到的值也必然相同。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 8,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 10984,
+   "durationMs": 129355,
+   "promptChars": 5242,
+   "replyChars": 1452,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: '变量是什么'\nquestions:\n  - id: q1\n    kind: matching\n    q: '请把左侧的概念与其对应的说法配对。'\n    options: ['变量', '名字', '值']\n    answer: ['给一个会变的值起的名字', '稳定不变', '随时可变']\n    explanation: '为什么对：变量是给会变的值起的名字，名字稳定，值随时可变。关键步骤：按正文“把名字和值分开看”一一对应即可。最易错点：把“名字”和“值”的稳定性记反。'\n    difficulty: 1\n    section: '概念：变量是什么'\n    invokes: '变量'\n    uses: []\n  - id: q2\n    kind: true_false\n    q: '判断：读变量时，拿到的是这个名字在写下（赋值）那一刻保存的值。'\n    answer: '错'\n    explanation: '为什么对：读取拿到的是“此刻”的值，不是写下时的值。关键步骤：若 $余额=50$ 后又赋值 $余额=20$，则此刻读取得到 $20$。最易错点：把赋值那刻的值当成固定值，忽略了后续赋值。'\n    difficulty: 1\n    section: '概念：赋值与读取'\n    invokes: '变量'\n    uses: []\n  - id: q3\n    kind: single_choice\n    q: '早上余额 $50$ 元，晚上余额 $20$ 元。对“余额”这个变量而言，下列说法正确的是？'\n    options:\n      - '早上和晚上是两个不同的变量'\n      - '变量名“余额”变了，所以值从 $50$ 变成 $20$'\n      - '同一个变量“余额”在不同时刻取了 $50$ 和 $20$ 两个值'\n      - '一旦赋值 $50$，晚上读取还是 $50$'\n    answer: C\n    explanation: '为什么对：变量是给一个会变的值起的名字，名字稳定、值随时可变。关键步骤：早上 $余额=50$，晚上 $余额=20$。最易错点：把不同时刻的取值当成两个变量，或以为名字变化导致值变化。'\n    difficulty: 2\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []\n  - id: q4\n    kind: ordering\n    q: '某程序按顺序执行：先给变量“余额”赋值为 $50$，随后读取并显示，再赋值为 $20$，最后读取并显示。请把每次写/读到的值按执行顺序排序。'\n    options: ['读到 $20$', '写到 $50$', '读到 $50$', '写到 $20$']\n    answer: ['写到 $50$', '读到 $50$', '写到 $20$', '读到 $20$']\n    explanation: '为什么对：赋值是写入值，读取返回此刻值。关键步骤：写入 $50$ 后立刻读到 $50$；再写入 $20$ 后此刻读到 $20$。最易错点：读取永远看“此刻”，不能把第一次读到的 $50$ 留到最后。'\n    difficulty: 3\n    section: '练习：两个时刻'\n    invokes: '变量'\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "matching": 1,
+     "true_false": 1,
+     "single_choice": 1,
+     "ordering": 1
+    },
+    "entropy": 2,
+    "distractor": 16.833333333333332,
+    "selfBleu": 0.07760700439450915,
+    "stemSimilarity": 0,
+    "distinctStems": 4,
+    "stems": [
+     "请把左侧的概念与其对应的说法配对。",
+     "判断：读变量时，拿到的是这个名字在写下（赋值）那一刻保存的值。",
+     "早上余额 $50$ 元，晚上余额 $20$ 元。对“余额”这个变量而言，下列说法正确的是？",
+     "某程序按顺序执行：先给变量“余额”赋值为 $50$，随后读取并显示，再赋值为 $20$，最后读取并显示。请把每次写/读到的值按执行顺序排序。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "control",
+   "variant": "重申契约",
+   "run": 9,
+   "toolCalled": false,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 121,
+   "outputTokens": 5364,
+   "durationMs": 64492,
+   "promptChars": 5242,
+   "replyChars": 1481,
+   "toolSchemaChars": 0,
+   "replies": [
+    "node: 变量是什么\nquestions:\n  - id: q1\n    kind: single_choice\n    q: '下列说法中，最符合“变量”含义的是？'\n    options:\n      - '名字和值都固定不变'\n      - '名字稳定，但值可以随时变化'\n      - '名字必须随着值一起变化'\n      - '变量只能取两个不同时刻的值'\n    answer: B\n    explanation: '变量是给会变的值起的名字，名字稳定，值可变。早上 $50$ 元、晚上 $20$ 元，就是同一个变量在两个时刻的不同取值。易错点是把值的变化误当成名字的变化。'\n    difficulty: 1\n    section: 概念：变量是什么\n    invokes: 变量\n    uses: []\n\n  - id: q2\n    kind: true_false\n    q: '早晨余额是 $50$ 元，晚上余额变成 $20$ 元。这时应理解成“‘余额’这个名字变了”。'\n    answer: 错\n    explanation: '变化的不是名字“余额”，而是变量当前的值。同一个名字在两个时刻分别取 $50$ 和 $20$。易错点是把“值变了”说成“名字变了”。'\n    difficulty: 1\n    section: 概念：变量是什么\n    invokes: 变量\n    uses: []\n\n  - id: q3\n    kind: ordering\n    q: '小夏在程序中写下三行：$\\text{余额}=50$；$\\text{余额}=\\text{余额}-15$；显示余额。请按实际执行顺序排列下列动作。'\n    options:\n      - '把 $50$ 写入名字余额'\n      - '读取余额此刻的值'\n      - '把减后的 $35$ 写回余额'\n      - '显示余额此刻的值'\n    answer:\n      - '把 $50$ 写入名字余额'\n      - '读取余额此刻的值'\n      - '把减后的 $35$ 写回余额'\n      - '显示余额此刻的值'\n    explanation: '第一行先赋值，把 $50$ 写入余额；第二行先读取当前值 $50$，计算后把 $35$ 写回；最后读取并显示。易错点是不理解“计算再写回”中读取先于赋值。'\n    difficulty: 2\n    section: 练习：两个时刻\n    invokes: 变量\n    uses: []\n\n  - id: q4\n    kind: multi_choice\n    q: '关于赋值与读取，下列说法正确的有？'\n    options:\n      - '读取拿到的是变量此刻的值'\n      - '赋值会改变变量的名字'\n      - '对同一个变量多次赋值后，读取会返回最早写入的值'\n      - '读取动作不会改变变量此刻的值'\n    answer: ['A', 'D']\n    explanation: '读取是按名字取当前值，不会改值；赋值只改变值，不改变名字。多次赋值后，读取返回最近一次写入的值，而不是最早写入的值。易错点是把“赋值的修改作用”与“读取的无修改作用”混在一起。'\n    difficulty: 2\n    section: 概念：赋值与读取\n    invokes: 变量\n    uses: []"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 11.916666666666666,
+    "selfBleu": 0.0727180694614669,
+    "stemSimilarity": 0.00764163372859025,
+    "distinctStems": 4,
+    "stems": [
+     "下列说法中，最符合“变量”含义的是？",
+     "早晨余额是 $50$ 元，晚上余额变成 $20$ 元。这时应理解成“‘余额’这个名字变了”。",
+     "小夏在程序中写下三行：$\\text{余额}=50$；$\\text{余额}=\\text{余额}-15$；显示余额。请按实际执行顺序排列下列动作。",
+     "关于赋值与读取，下列说法正确的有？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 1,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 3491,
+   "outputTokens": 6772,
+   "durationMs": 77194,
+   "promptChars": 5270,
+   "replyChars": 1155,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于变量「余额」的名字与它的值，下列说法正确的是？\", \"options\": [\"名字稳定，值随时可变\", \"名字随值一起改变\", \"值稳定，名字随时可变\", \"名字和值都始终不变\"], \"answer\": \"A\", \"explanation\": \"变量名是稳定的标签，值会随时间变化。\\n关键步骤：名字「余额」不变，取值从 $50$ 变为 $20$。\\n最易错点：误以为名字会跟着值一起变。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是它“此刻”的值，而不是当初写入时的值。\", \"answer\": true, \"explanation\": \"读取的语义是取当前存储的值。\\n关键步骤：先赋 $50$、后赋 $20$ 再读取，结果为 $20$。\\n最易错点：把当初写入的 $50$ 当成读取结果。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"变量「余额」早上被赋值为 $50$，晚上被赋值为 $20$。晚上赋值之后读取「余额」，得到多少？\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"读取发生在晚上赋值之后，应返回此刻的值。\\n关键步骤：\\n$$余额 = 20$$\\n读取结果即 $20$。\\n最易错点：不要返回早上的 $50$。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"matching\", \"q\": \"下面是关于变量「余额」的两个时刻记录，请把左边的动作与右边对应的动作类型配对。\", \"options\": [\"早上：写下 余额 $=50$\", \"晚上：查看余额，显示 $20$\"], \"answer\": [\"赋值\", \"读取\"], \"explanation\": \"写值是赋值，查看显示是读取。\\n关键步骤：早上“余额 $=50$”把值写进名字；晚上“显示 $20$”取回当前值。\\n最易错点：看到等号就以为是读取，或看到显示就以为是赋值。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "matching": 1
+    },
+    "entropy": 2,
+    "distractor": 5.833333333333333,
+    "selfBleu": 0.16892425189694113,
+    "stemSimilarity": 0.031902664652079415,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量「余额」的名字与它的值，下列说法正确的是？",
+     "读取变量时，拿到的是它“此刻”的值，而不是当初写入时的值。",
+     "变量「余额」早上被赋值为 $50$，晚上被赋值为 $20$。晚上赋值之后读取「余额」，得到多少？",
+     "下面是关于变量「余额」的两个时刻记录，请把左边的动作与右边对应的动作类型配对。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 2,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 8030,
+   "durationMs": 93615,
+   "promptChars": 5270,
+   "replyChars": 1225,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于「变量」的说法，下列正确的是？\", \"options\": [\"变量一旦命名，它的值就不能再改变\", \"变量是给一个会变的值起的名字，名字稳定而值随时可变\", \"变量的值变了，名字也要跟着变\", \"变量就是一个具体的值，比如 $50$ 元\"], \"answer\": \"B\", \"explanation\": \"为什么对：变量是“会变的值”的名字，名字稳定、值随时可变，所以 B 正确。关键步骤：名字是“余额”，值是 $50$ 元、$20$ 元这些具体数字。最易错点：把变量当成某个固定值（D），或以为值变了名字也要变（C）。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"fill_in_blank\", \"q\": \"把某个值写进名字的动作，称为____。\", \"answer\": [\"赋值\"], \"explanation\": \"为什么对：正文把“把值写进名字”定义为赋值。关键步骤：如“余额 $= 50$”中的等号，就是在执行赋值。最易错点：要和“读取”——拿名字换回当前值——区分开。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"true_false\", \"q\": \"早上余额为 $50$ 元，晚上为 $20$ 元。因为值变了，所以“余额”这个变量名字也必须改成别的名字。\", \"answer\": false, \"explanation\": \"为什么对：变量要“把名字和值分开看”，名字稳定、值随时可变。关键步骤：$$50 \\\\to 20$$，变的是值，名字“余额”不变。最易错点：把值的变化误当成名字的变化。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"numeric\", \"q\": \"余额这个变量最初是 $50$ 元。先执行“余额 $= 80$”，再执行“余额 $= 20$”。现在读取余额，得到的值是多少？\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"为什么对：读取拿的是“此刻”的值，所以最后写入的 $20$ 才是答案。关键步骤：$$50 \\\\to 80 \\\\to 20$$，最终值取 $20$。最易错点：误以为读到的是第一次写入的 $80$ 或最初的 $50$。\", \"difficulty\": 3, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "numeric": 1
+    },
+    "entropy": 2,
+    "distractor": 15.166666666666666,
+    "selfBleu": 0.1716456424404321,
+    "stemSimilarity": 0.018878101402373247,
+    "distinctStems": 4,
+    "stems": [
+     "关于「变量」的说法，下列正确的是？",
+     "把某个值写进名字的动作，称为____。",
+     "早上余额为 $50$ 元，晚上为 $20$ 元。因为值变了，所以“余额”这个变量名字也必须改成别的名字。",
+     "余额这个变量最初是 $50$ 元。先执行“余额 $= 80$”，再执行“余额 $= 20$”。现在读取余额，得到的值是多少？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 3,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 6989,
+   "durationMs": 73310,
+   "promptChars": 5270,
+   "replyChars": 1380,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于变量，下列说法正确的是？\", \"options\": [\"变量是给一个会变的值起的名字\", \"变量是一个永远不变的数字\", \"变量是存放文件的文件夹\", \"变量只能存放整数\"], \"answer\": \"A\", \"explanation\": \"- 为什么对：变量的定义是给会变的值起名字；名字稳定，值随时可变。\\n- 关键步骤：名字（如 $b$）不变，值（如 $50$、$20$）可变。\\n- 最易错点：把变量误当成固定数字或容器，混淆了名字与值。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"同一个变量的名字稳定不变，而它的值可以随时变化。\", \"answer\": \"对\", \"explanation\": \"- 为什么对：名字是稳定引用，值才是会变的当前内容。\\n- 关键步骤：$$b=50$$ 与 $$b=20$$ 中，名字都是 $b$，只是值不同。\\n- 最易错点：以为名字不变值也不变——其实值随时可被重新赋值。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"变量 $b$ 早上被赋值为 $50$ 元。中午先读取 $b$，随后把 $b$ 重新赋值为 $20$ 元。问：中午读取时得到多少元？\", \"answer\": 50, \"tol\": 0.01, \"explanation\": \"- 为什么对：读取发生在重新赋值之前，拿到的应是此刻的值 $50$ 元。\\n- 关键步骤：读取时 $$b=50$$，所以返回 $50$；之后 $$b=20$$ 不影响已读到的结果。\\n- 最易错点：把读取误当成拿「最后的值」——读取只认当前时刻的值。\", \"difficulty\": 2, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"multi_choice\", \"q\": \"某账户余额用变量 $b$ 表示，今天四步记录如下：① 存入后 $b=50$；② 查看 $b$；③ 存入后 $b=20$；④ 查看 $b$。下列说法正确的是？\", \"options\": [\"① 和 ③ 是赋值\", \"② 和 ④ 是读取\", \"② 查看时得到 $20$\", \"④ 查看时得到 $50$\"], \"answer\": [\"A\", \"B\"], \"explanation\": \"- 为什么对：①③把新值写进 $b$，是赋值；②④拿回 $b$ 当前值，是读取。\\n- 关键步骤：② 查看时 $$b=50$$，④ 查看时 $$b=20$$。\\n- 最易错点：把「查看」与「存入」混为一谈，或把不同时刻的值张冠李戴——读取只认当时的值。\", \"difficulty\": 3, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 7.666666666666666,
+    "selfBleu": 0.12893693244959,
+    "stemSimilarity": 0.023484169653524494,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量，下列说法正确的是？",
+     "同一个变量的名字稳定不变，而它的值可以随时变化。",
+     "变量 $b$ 早上被赋值为 $50$ 元。中午先读取 $b$，随后把 $b$ 重新赋值为 $20$ 元。问：中午读取时得到多少元？",
+     "某账户余额用变量 $b$ 表示，今天四步记录如下：① 存入后 $b=50$；② 查看 $b$；③ 存入后 $b=20$；④ 查看 $b$。下列说法正确的是？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 4,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 5602,
+   "durationMs": 64998,
+   "promptChars": 5270,
+   "replyChars": 1202,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于「变量是什么」，下列说法正确的是（　）\", \"options\": [\"一个固定不变的数字\", \"给一个会变的值起的名字\", \"程序里的一行代码\", \"只能使用一次的记录\"], \"answer\": \"B\", \"explanation\": \"变量是给一个会变的值起的名字；正文把早上 $50$ 元、晚上 $20$ 元视为同一变量在不同时刻的取值。名字稳定，值随时可变。最易错点是误把变量当成某个具体数字。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是当初赋值时写下的值，而不是它此刻的值。\", \"answer\": \"错\", \"explanation\": \"读取变量拿的是「此刻」的值，不是当初写下的值。正文明确指出：读的时候拿到的永远是当前值，不是写下它时的值。最易错点是误以为读取返回赋值那一刻的值。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"变量「余额」早上取值 $50$ 元，晚上取值 $20$ 元。这一天余额从早到晚共减少了多少元？\", \"answer\": 30, \"tol\": 0.01, \"explanation\": \"早上和晚上是同一个变量「余额」的两个取值，求减少量要用早值减晚值。$$50-20=30$$ 全天减少了 $30$ 元。最易错点是拿晚上的 $20$ 元直接当答案。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"multi_choice\", \"q\": \"关于变量与赋值、读取，下列说法正确的有（多选）：\", \"options\": [\"变量的名字是稳定的，值可以随时变化\", \"读取变量时拿到的是它「此刻」的值\", \"变量的名字也可以随时改变，改完仍代表同一个变量\", \"赋值是把某个值写进名字，读取是拿名字换回当前的值\"], \"answer\": [\"A\", \"B\", \"D\"], \"explanation\": \"A、B、D 均与正文一致：名字稳定、读取取当前值、赋值与读取成对。C 与「名字稳定，值随时可变」相矛盾，名字不能随便改。最易错点是记反名字与值哪个可变。\", \"difficulty\": 3, \"section\": \"通用\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 14,
+    "selfBleu": 0.17991323142380783,
+    "stemSimilarity": 0.03669441874807278,
+    "distinctStems": 4,
+    "stems": [
+     "关于「变量是什么」，下列说法正确的是（　）",
+     "读取变量时，拿到的是当初赋值时写下的值，而不是它此刻的值。",
+     "变量「余额」早上取值 $50$ 元，晚上取值 $20$ 元。这一天余额从早到晚共减少了多少元？",
+     "关于变量与赋值、读取，下列说法正确的有（多选）："
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 5,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 5496,
+   "durationMs": 62715,
+   "promptChars": 5270,
+   "replyChars": 1199,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于变量，下列说法正确的是（ ）\", \"options\": [\"名字稳定，值可以随时改变\", \"名字会随值一起改变\", \"值一旦确定就不能再变\", \"变量就是固定不变的数\"], \"answer\": \"A\", \"explanation\": \"变量是给会变的值起的名字，名字只是稳定的称呼，值才随时间变化。关键区分：名字稳定、值可变。最易错点：把「变量」误当成永远不变的数。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是「此刻」的值，而不是当初写下这个值时的值。\", \"answer\": true, \"explanation\": \"正文明确指出：读的时候拿到的永远是「此刻」的值，不是写下它时的值。因此该判断正确。最易错点：把「此刻的值」记成「当初写入的值」。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"余额是一个变量。早上记录余额为 $50$，晚上记录余额为 $20$。若在晚上记录之后立刻读取余额，读到的值是____。\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"晚上记录余额为 $20$ 是一次赋值，之后变量的「此刻」值就是 $20$。读取拿名字换回当前值，故读到 $20$。最易错点：误以为读到的是早上写下的 $50$。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"multi_choice\", \"q\": \"关于赋值与读取，下列说法正确的有（ ）\", \"options\": [\"赋值是把某个值写进名字\", \"读取是拿名字换回当前的值\", \"读取时拿到的是写下它时的值\", \"赋值与读取必须严格成对出现，缺一不可\"], \"answer\": [\"A\", \"B\"], \"explanation\": \"赋值是把值写进名字，读取是拿名字换回此刻的值，故 A、B 正确。正文说二者「常常成对出现」，并非必须严格成对，故 D 错；读取返回的是此刻值而非写下时的值，故 C 错。最易错点：把「常常」夸大为「必须」，或把读取误当作返回历史值。\", \"difficulty\": 3, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 10.916666666666666,
+    "selfBleu": 0.11838061702326717,
+    "stemSimilarity": 0.02577319587628866,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量，下列说法正确的是（ ）",
+     "读取变量时，拿到的是「此刻」的值，而不是当初写下这个值时的值。",
+     "余额是一个变量。早上记录余额为 $50$，晚上记录余额为 $20$。若在晚上记录之后立刻读取余额，读到的值是____。",
+     "关于赋值与读取，下列说法正确的有（ ）"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 6,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 12544,
+   "durationMs": 133033,
+   "promptChars": 5270,
+   "replyChars": 1317,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"早上你的账户余额是 $50$ 元，晚上变成 $20$ 元。关于“余额”的说法，正确的是？\", \"options\": [\"“余额”是变量的名字，$50$ 和 $20$ 是同一个变量在不同时刻的值\", \"$50$ 和 $20$ 是两个不同的变量\", \"“余额”是变量的值，$50$ 和 $20$ 是变量的名字\", \"变量一旦被赋值，值就不能再改变\"], \"answer\": \"A\", \"explanation\": \"- 为什么对：变量是给会变的值起的名字，“余额”是名字，$50$ 和 $20$ 是同一个变量在不同时刻的取值。\\n- 关键步骤：名字保持稳定，值随时可变。\\n- 最易错点：把名字与值混为一谈。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"matching\", \"q\": \"把左边的动作与右边的说明一一配对。\", \"options\": [\"赋值\", \"读取\"], \"answer\": [\"把某个值写进变量名字\", \"用变量名字换回当前的值\"], \"explanation\": \"- 为什么对：赋值是写入、读取是取出，正好配对。\\n- 关键步骤：赋值对应“写进值”，读取对应“换回当前值”。\\n- 最易错点：两个动作常成对出现，但方向不能颠倒。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"程序先给变量“余额”赋值为 $50$，再给它赋值为 $20$。现在读取“余额”，读到的数值是多少？\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"- 为什么对：读取拿到的是此刻的值，而不是第一次写入的值。\\n- 关键步骤：最后一次赋值把值写成 $20$，所以读到的数是 $20$。\\n- 最易错点：误以为会返回最早写进去的 $50$。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"true_false\", \"q\": \"程序有两步：第一步是“输出‘余额’的当前值”，第二步是“给‘余额’赋值为 $20$”。有人说：第一步是赋值，第二步是读取。这个说法是否正确？\", \"answer\": \"错\", \"explanation\": \"- 为什么对：第一步“输出当前值”是读取，第二步“赋值为 $20$”是赋值，题干说反了。\\n- 关键步骤：输出取当前值属于读取，写入新值属于赋值。\\n- 最易错点：把“输出”误当赋值、把“赋值”误当读取。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "matching": 1,
+     "numeric": 1,
+     "true_false": 1
+    },
+    "entropy": 2,
+    "distractor": 15.666666666666666,
+    "selfBleu": 0.18577750152615174,
+    "stemSimilarity": 0.017996379838485104,
+    "distinctStems": 4,
+    "stems": [
+     "早上你的账户余额是 $50$ 元，晚上变成 $20$ 元。关于“余额”的说法，正确的是？",
+     "把左边的动作与右边的说明一一配对。",
+     "程序先给变量“余额”赋值为 $50$，再给它赋值为 $20$。现在读取“余额”，读到的数值是多少？",
+     "程序有两步：第一步是“输出‘余额’的当前值”，第二步是“给‘余额’赋值为 $20$”。有人说：第一步是赋值，第二步是读取。这个说法是否正确？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 7,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 5432,
+   "durationMs": 60611,
+   "promptChars": 5270,
+   "replyChars": 1279,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于“变量”，下列哪一种说法是正确的？\", \"options\": [\"变量是给一个会变的值起的名字，名字稳定，值随时可变\", \"变量是一个永远不能改变的数\", \"变量一旦被赋值，这个名字就永远固定为那个值\", \"变量只能表示钱数，不能表示其他量\"], \"answer\": \"A\", \"explanation\": \"正文把变量定义为“给一个会变的值起的名字”，并强调名字稳定、值随时可变，因此 A 对。例如“余额”这个名字不变，早上是 $50$，晚上可以是 $20$。最易错点：把“值可变”误读成“变量是不变的数”。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取一个变量时，拿到的是“此刻”的值，而不是最初写下它时的值。\", \"answer\": \"对\", \"explanation\": \"正文明确说：读的时候拿到的永远是“此刻”的值，不是写下它时的值，所以判断为对。赋值与读取是两个动作：赋值写值、读取取当前值。最易错点：把读取当成返回历史写入值。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"小明的余额变量在早上被赋值为 $50$，晚上被重新赋值为 $20$。此时读取余额变量，拿到的值是多少？\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"读取拿到的是“此刻”的值，晚上最后一次赋值把余额写成了 $20$，因此答案是 $20$。步骤：早上赋值 $50$ → 晚上重新赋值 $20$ → 读取得 $20$。最易错点：误读成早上写下的 $50$。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"multi_choice\", \"q\": \"关于变量与赋值、读取，下列说法正确的有哪些？\", \"options\": [\"变量是给一个会变的值起的名字\", \"同一个变量在不同时刻可以取不同的值\", \"读取时拿到的是最初写下它时的值\", \"赋值是把某个值写进名字的动作\"], \"answer\": [\"A\", \"B\", \"D\"], \"explanation\": \"A、B、D 均符合正文：变量是名字、值随时可变、赋值是写值动作；C 错在读取返回“此刻”值而非最初写入值。关键判断：读取结果 $=$ 当前值。最易错点：把读取与历史赋值混淆。\", \"difficulty\": 3, \"section\": \"通用\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 15.583333333333334,
+    "selfBleu": 0.1386758562781801,
+    "stemSimilarity": 0.01621574586837215,
+    "distinctStems": 4,
+    "stems": [
+     "关于“变量”，下列哪一种说法是正确的？",
+     "读取一个变量时，拿到的是“此刻”的值，而不是最初写下它时的值。",
+     "小明的余额变量在早上被赋值为 $50$，晚上被重新赋值为 $20$。此时读取余额变量，拿到的值是多少？",
+     "关于变量与赋值、读取，下列说法正确的有哪些？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 8,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 9357,
+   "durationMs": 102113,
+   "promptChars": 5270,
+   "replyChars": 1311,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"kind\": \"single_choice\", \"q\": \"早上的钱包余额是 50 元，晚上变成 20 元。用「余额」这个变量记录时，下列说法正确的是？\", \"options\": [\"「余额」是名字，50 元和 20 元是它在不同时刻的值\", \"50 元和 20 元分别是两个不同变量的名字\", \"名字会随值改变，所以晚上要换一个名字\", \"变量只能存一个值，晚上必须新建变量\"], \"answer\": \"A\", \"explanation\": \"变量是给会变的值起的名字，名字稳定而值随时可变。「余额」始终是同一个名字，50 元和 20 元只是它在早晨和晚上的取值。最易错点：把值的变化误认为要更换变量名。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"kind\": \"true_false\", \"q\": \"对变量执行一次赋值后，它的值就固定下来；以后每次读取都会拿到当初写入的那个值。\", \"answer\": \"错\", \"explanation\": \"读取拿到的永远是「此刻」的值，而不是最初写入时的值。变量可被反复赋值；若中途再次赋值，读取就会返回新值，因此「固定下来」的说法不成立。最易错点：把读取误解为返回历史记录。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"kind\": \"fill_in_blank\", \"q\": \"在程序中写下「余额 = 50」，把 50 这个值放进「余额」这个名字里。这个动作叫作____。\", \"answer\": [\"赋值\", \"赋值操作\"], \"explanation\": \"把某个值写进名字的动作称为赋值，拿名字换回当前值的动作称为读取。「余额 = 50」是把 50 写入「余额」，属于赋值。最易错点：赋值是写入、读取是取出，两者方向不要记反。\", \"difficulty\": 2, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"kind\": \"open_question\", \"q\": \"小明的游戏分数用变量「分数」记录：第一局结束他把分数设为 30，第二局结束把分数设为 55。请指出这个过程中哪里是赋值、哪里是读取；若第二局结束后读取「分数」，得到多少？为什么？\", \"answer\": \"参考要点：第一局结束「设为 30」和第二局结束「设为 55」都是赋值；查看分数时才发生读取。第二局结束后读取「分数」得到 55，因为读取返回的是此刻的值，而此刻变量已被重新赋值为 55。\", \"explanation\": \"赋值发生在两局结束时写入分数的动作，读取发生在查看分数的动作。第二局结束读取到 55，因为读取返回「此刻」值，此刻变量已是 55。最易错点：读取返回当前值，而不是历史上第一次赋的 30。\", \"difficulty\": 3, \"section\": \"通用\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "fill_in_blank": 1,
+     "open_question": 1
+    },
+    "entropy": 2,
+    "distractor": 17,
+    "selfBleu": 0.07196211700080164,
+    "stemSimilarity": 0.004113710321115,
+    "distinctStems": 4,
+    "stems": [
+     "早上的钱包余额是 50 元，晚上变成 20 元。用「余额」这个变量记录时，下列说法正确的是？",
+     "对变量执行一次赋值后，它的值就固定下来；以后每次读取都会拿到当初写入的那个值。",
+     "在程序中写下「余额 = 50」，把 50 这个值放进「余额」这个名字里。这个动作叫作____。",
+     "小明的游戏分数用变量「分数」记录：第一局结束他把分数设为 30，第二局结束把分数设为 55。请指出这个过程中哪里是赋值、哪里是读取；若第二局结束后读取「分数」，"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "指令式",
+   "run": 9,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 35,
+   "outputTokens": 8080,
+   "durationMs": 83833,
+   "promptChars": 5270,
+   "replyChars": 1178,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于「变量」，下列说法正确的是？\", \"options\": [\"一个值在某一时刻的具体大小\", \"给一个会变的值起的名字\", \"一旦写下就固定不变的存储位置\", \"只能存放数字的盒子\"], \"answer\": \"B\", \"explanation\": \"为什么对：变量把名字与值分开，名字稳定、值随时可变，所以变量本质是给会变的值起的名字。关键步骤：早上余额 $50$ 元、晚上 $20$ 元，都是同一个变量「余额」在不同时刻的取值。最易错点：不要把变量与它在某一时刻的具体取值混为一谈。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"判断：同一个变量「余额」早上是 $50$ 元、晚上变成 $20$ 元，说明变量的名字和值都变了。\", \"answer\": \"错\", \"explanation\": \"为什么错：这个说法把名字和值混为一谈，名字「余额」始终稳定，变的只是值。关键步骤：早上取值 $50$，晚上取值 $20$，名字没变、值变了。最易错点：值随时可变，不等于变量本身变了。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"早晨把变量「余额」赋值为 $50$（元），中午它被改成 $20$（元）。晚上程序读取「余额」，得到的值是多少？\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"为什么对：读取拿到的是「此刻」的值，而不是当初写入时的值。关键步骤：此刻余额为 $20$，所以读取结果是 $20$。最易错点：不要误拿最早写入的 $50$。\", \"difficulty\": 2, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"reflection\", \"q\": \"请用自己的话说说「赋值」与「读取」的区别，并解释为什么「读的时候拿到的永远是此刻的值」这句话很重要。\", \"answer\": \"能说出赋值是把某个值写进名字、读取是用名字换回当前的值；能举例说明两次读取之间值被修改后，后一次读取得到的是新值；能点明读取的是此刻的值，而非最初写入时的值。\", \"difficulty\": 3, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 11.833333333333334,
+    "selfBleu": 0.1814175288763496,
+    "stemSimilarity": 0.022088888888888887,
+    "distinctStems": 4,
+    "stems": [
+     "关于「变量」，下列说法正确的是？",
+     "判断：同一个变量「余额」早上是 $50$ 元、晚上变成 $20$ 元，说明变量的名字和值都变了。",
+     "早晨把变量「余额」赋值为 $50$（元），中午它被改成 $20$（元）。晚上程序读取「余额」，得到的值是多少？",
+     "请用自己的话说说「赋值」与「读取」的区别，并解释为什么「读的时候拿到的永远是此刻的值」这句话很重要。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 1,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 7890,
+   "durationMs": 82127,
+   "promptChars": 5262,
+   "replyChars": 1030,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于「变量」，下列说法正确的是？\", \"options\": [\"变量是给一个会变的值起的名字\", \"变量是一个永远不变的数\", \"变量只能用来表示余额\", \"变量的名字会随着值一起变\"], \"answer\": \"A\", \"explanation\": \"变量是给会变的值起的名字；名字稳定，值随时可变。最易错：把名字和值混为一谈——变的是值，不是名字。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"fill_in_blank\", \"q\": \"把某个值写进名字的动作叫做____。\", \"answer\": [\"赋值\"], \"explanation\": \"赋值是把值写进名字；读取是拿名字换回当前的值。两者常成对出现。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"true_false\", \"q\": \"早上余额是 50 元，晚上余额是 20 元。晚上读取「余额」这个变量时，读到的值是 50 元。\", \"answer\": \"错\", \"explanation\": \"读取拿到的是「此刻」的值。晚上此刻余额是 20 元，所以读到 20 元；50 元只是早上写下时的值。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"reflection\", \"q\": \"用自己的话解释「名字稳定，值随时可变」，并举一个生活中的例子，说明同一个变量在不同时刻可以取不同的值。\", \"answer\": \"评分要点：①能指出名字保持不变、值会随时间改变；②举出同一个变量在不同时刻取不同值的合理例子；③不把名字与值混为一谈。\", \"explanation\": \"本题考察对「名字稳定，值随时可变」的理解。评分时关注是否把名字与值分开，例子是否体现同一变量在不同时刻取值不同。\", \"difficulty\": 2, \"section\": \"通用\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 9.833333333333334,
+    "selfBleu": 0.06792954162023283,
+    "stemSimilarity": 0.003680699332873246,
+    "distinctStems": 4,
+    "stems": [
+     "关于「变量」，下列说法正确的是？",
+     "把某个值写进名字的动作叫做____。",
+     "早上余额是 50 元，晚上余额是 20 元。晚上读取「余额」这个变量时，读到的值是 50 元。",
+     "用自己的话解释「名字稳定，值随时可变」，并举一个生活中的例子，说明同一个变量在不同时刻可以取不同的值。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 2,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 6186,
+   "durationMs": 65211,
+   "promptChars": 5262,
+   "replyChars": 1201,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于「变量」的说法，下列哪一项是正确的？\", \"options\": [\"变量是固定不变的数\", \"变量是给一个会变的值起的名字\", \"变量只能用来表示钱的余额\", \"变量的名字会随着值一起变\"], \"answer\": \"B\", \"explanation\": \"变量把「名字」与「值」分开：名字稳定，值随时可变。题干余额从 50 元变为 20 元，名字仍是「余额」。最易错点是误以为名字也会跟着值变。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是它「此刻」的值，而不是当初写入时留下的值。\", \"answer\": \"对\", \"explanation\": \"读取是拿名字换回当前值，所以总反映最新一次赋值后的状态。例如晚上余额赋值为 20 元后，读取余额得到 20 元而不是早上的 50 元。最易错点是误以为读取会返回历史旧值。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"ordering\", \"q\": \"对「早上余额 50 元，晚上余额 20 元」这一天的记录，按时间先后排列下列步骤。\", \"options\": [\"读取余额，得到 20\", \"早上给余额赋值 50\", \"晚上给余额赋值 20\", \"读取余额，得到 50\"], \"answer\": [\"早上给余额赋值 50\", \"读取余额，得到 50\", \"晚上给余额赋值 20\", \"读取余额，得到 20\"], \"explanation\": \"先早上赋值 50，读取得到 50；晚上重新赋值 20，再读取得到 20。同一变量在不同时刻取值不同，读取总返回当前值。最易错点是弄错读取发生的时间与对应值。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"reflection\", \"q\": \"用自己的话解释：为什么说变量的「名字稳定、值随时可变」？请举一个不是钱数余额的例子，并指出其中一次赋值和一次读取。\", \"answer\": \"评分要点：能说出名字是固定称呼、值可以不断被重新赋值；举例合理（如步数、温度、分数等）；能正确指出赋值动作与读取动作；能说明读取得到的是当前值。\", \"difficulty\": 3, \"section\": \"通用\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "ordering": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 9.833333333333334,
+    "selfBleu": 0.07351262948142717,
+    "stemSimilarity": 0.002908514013749339,
+    "distinctStems": 4,
+    "stems": [
+     "关于「变量」的说法，下列哪一项是正确的？",
+     "读取变量时，拿到的是它「此刻」的值，而不是当初写入时留下的值。",
+     "对「早上余额 50 元，晚上余额 20 元」这一天的记录，按时间先后排列下列步骤。",
+     "用自己的话解释：为什么说变量的「名字稳定、值随时可变」？请举一个不是钱数余额的例子，并指出其中一次赋值和一次读取。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 3,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 4580,
+   "durationMs": 49378,
+   "promptChars": 5262,
+   "replyChars": 1298,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于变量的「名字」和「值」，下列说法正确的是？\", \"options\": [\"名字稳定，值随时可变\", \"名字和值都随时可变\", \"值稳定，名字随时可变\", \"名字和值都一直不变\"], \"answer\": \"A\", \"explanation\": \"变量是给会变的值起的名字：名字用来稳定地指代，值会随时刻改变。早上 $50$ 元、晚上 $20$ 元，就是同一个变量在不同时刻的取值。\\n最易错点：把名字和值混为一谈，误以为名字也会随值一起变。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是当初写入这个变量的值，而不是「此刻」的值。\", \"answer\": \"错\", \"explanation\": \"读取是拿名字换回当前的值，所以读到的一定是「此刻」的值；即使之前写入过 $50$，后来改成了 $20$，再读就是 $20$。\\n最易错点：把「写入时的值」当成读取结果，忽略了变量会被更新。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"某账户余额变量先赋值为 $50$ 元，随后又赋值为 $20$ 元。此刻读取这个变量，得到多少元？\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"读取拿到的是当前的值；最后一次赋值把余额写成了 $20$，所以此刻读出 $20$ 元。\\n关键步骤：先赋值 $50$，再赋值 $20$，当前值被覆盖为 $20$。\\n最易错点：误读成第一次写入的 $50$，忽略了后来的覆盖。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"ordering\", \"q\": \"把下面关于「余额」变量的操作按正确的时间顺序排列。\", \"options\": [\"晚上给余额赋值 $20$\", \"结账时读取余额，得到 $20$\", \"早上给余额赋值 $50$\"], \"answer\": [\"早上给余额赋值 $50$\", \"晚上给余额赋值 $20$\", \"结账时读取余额，得到 $20$\"], \"explanation\": \"按时间线，早上先写入 $50$，晚上覆盖为 $20$，最后读取时拿到当前值 $20$。\\n关键步骤：两次赋值后当前值被覆盖为 $20$；读取返回的是当前值。\\n最易错点：把读取结果误当成第一次写入的 $50$。\", \"difficulty\": 3, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "ordering": 1
+    },
+    "entropy": 2,
+    "distractor": 4.833333333333333,
+    "selfBleu": 0.1990687710342094,
+    "stemSimilarity": 0.030166830492538776,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量的「名字」和「值」，下列说法正确的是？",
+     "读取变量时，拿到的是当初写入这个变量的值，而不是「此刻」的值。",
+     "某账户余额变量先赋值为 $50$ 元，随后又赋值为 $20$ 元。此刻读取这个变量，得到多少元？",
+     "把下面关于「余额」变量的操作按正确的时间顺序排列。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 4,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 6079,
+   "durationMs": 65798,
+   "promptChars": 5262,
+   "replyChars": 1221,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于「变量」，下列说法正确的是（ ）。\", \"options\": [\"变量是固定不变的数\", \"变量是给会变的值起的名字，名字稳定，值随时可变\", \"变量的名字会随着值的改变而改变\", \"同一个变量在同一时刻可以有多个值\"], \"answer\": \"B\", \"explanation\": \"- 为什么对：变量是给会变的值起的名字，名字与值分离，名字稳定、值随时可变。\\n- 关键步骤：余额从 $50$ 元变成 $20$ 元，名字还是「余额」，变的只是值。\\n- 最易错点：误以为变量本身是固定不变的数。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"fill_in_blank\", \"q\": \"把某个值写进名字的动作叫作______。\", \"answer\": [\"赋值\"], \"explanation\": \"- 为什么对：「赋值」是正文中把值写进名字的标准术语。\\n- 关键步骤：例如余额 $= 50$ 就是一次赋值。\\n- 最易错点：不要把它与「读取」混淆——读取是拿名字换回当前值。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"matching\", \"q\": \"将左边的动作与右边对应的含义配对。\", \"options\": [\"赋值\", \"读取\"], \"answer\": [\"把某个值写进名字\", \"拿名字换回当前的值\"], \"explanation\": \"- 为什么对：赋值是写入，读取是取回，两者方向相反、常常成对出现。\\n- 关键步骤：赋值改变名字里的值；读取拿到的是此刻的值。\\n- 最易错点：把两个动作写反——读取不负责写入新值。\", \"difficulty\": 2, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"true_false\", \"q\": \"余额早上被赋值为 $50$ 元，晚上被赋值为 $20$ 元。判断：晚上读取余额得到的是 $50$ 元。\", \"answer\": \"错\", \"explanation\": \"- 为什么对：读取拿到的永远是「此刻」的值，而不是第一次写入的值。\\n- 关键步骤：晚上此刻余额是 $20$ 元，所以读取结果是 $20$ 元。\\n- 最易错点：用早上写入的 $50$ 元替代当前值 $20$ 元。\", \"difficulty\": 3, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "fill_in_blank": 1,
+     "matching": 1,
+     "true_false": 1
+    },
+    "entropy": 2,
+    "distractor": 15.833333333333334,
+    "selfBleu": 0.0732326124431834,
+    "stemSimilarity": 0.005299707602339182,
+    "distinctStems": 4,
+    "stems": [
+     "关于「变量」，下列说法正确的是（ ）。",
+     "把某个值写进名字的动作叫作______。",
+     "将左边的动作与右边对应的含义配对。",
+     "余额早上被赋值为 $50$ 元，晚上被赋值为 $20$ 元。判断：晚上读取余额得到的是 $50$ 元。"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 5,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 4685,
+   "durationMs": 49816,
+   "promptChars": 5262,
+   "replyChars": 1281,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于「变量」，下列说法最准确的是哪一项？\", \"options\": [\"变量是给一个会变的值起的名字，名字稳定、值随时可变\", \"变量是给一个固定不变的值起的名字\", \"变量是一个只能存数字、存进去就不能再改的格子\", \"变量每次被读取后都会自动加 $1$\"], \"answer\": \"A\", \"explanation\": \"对：变量是给会变的值起的名字，名字稳定、值随时可变。关键：把名字和值分开看——名字保持不变，值在不同时刻可以不同。最易错点：把变量误解成固定不变的常量，或只能存数字的盒子。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是变量「此刻」的值，而不是当初写下它时的值。\", \"answer\": \"对\", \"explanation\": \"对：读取是拿名字换回当前的值，读到的永远是「此刻」的值。关键步骤：例如早上赋值 $50$、晚上改为 $20$ 后再读取，得到 $20$。最易错点：误以为读取会返回最早写入的历史值。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"早上给变量「余额」赋值 $50$ 元，晚上又给它赋值 $20$ 元。此时读取「余额」，得到多少元？\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"读的是最后一次赋值后的当前值。关键步骤：最后一次赋值是 $20$，所以读取结果为 $20$。最易错点：误答 $50$，把第一次赋值当成了永远的值。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"multi_choice\", \"q\": \"关于变量、赋值与读取，下列说法正确的有哪些？\", \"options\": [\"同一个变量可以在不同时刻取不同的值\", \"赋值是把某个值写进名字，读取是拿名字换回当前的值\", \"变量一旦被赋值，它的名字也会跟着值一起改变\", \"读取变量时返回的是变量当前保存的值\"], \"answer\": [\"A\", \"B\", \"D\"], \"explanation\": \"A、B、D 均正确：变量是给会变的值起的名字；赋值是写入、读取是取回当前值；读取返回此刻的值。关键：名字稳定，只有值随时可变，故 C 错。最易错点：把「名字」和「值」混为一谈，以为名字会随值改变。\", \"difficulty\": 3, \"section\": \"通用\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 17.666666666666668,
+    "selfBleu": 0.15216169656517206,
+    "stemSimilarity": 0.018387181507748884,
+    "distinctStems": 4,
+    "stems": [
+     "关于「变量」，下列说法最准确的是哪一项？",
+     "读取变量时，拿到的是变量「此刻」的值，而不是当初写下它时的值。",
+     "早上给变量「余额」赋值 $50$ 元，晚上又给它赋值 $20$ 元。此时读取「余额」，得到多少元？",
+     "关于变量、赋值与读取，下列说法正确的有哪些？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 6,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 5781,
+   "durationMs": 61191,
+   "promptChars": 5262,
+   "replyChars": 1155,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于变量，下列说法正确的是？\", \"options\": [\"变量是给一个会变的值起的名字\", \"变量的名字会随取值改变而改变\", \"变量只能存储整数\", \"变量的值一旦写入就永远不变\"], \"answer\": \"A\", \"explanation\": \"变量是给会变的值起的名字，名字稳定、值随时可变。选项 B 把「名字稳定」记反；C 无端限制数据类型；D 忽略了重新赋值。最易错点：误以为变量的值也稳定不变。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是当初写入时的那个值。\", \"answer\": \"错\", \"explanation\": \"读取拿到的是「此刻」的值，而不是写入那一刻的历史值。若期间变量被重新赋值，读取结果就是最新的值。最易错点：把读取理解成回到写入时的旧值。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"numeric\", \"q\": \"某余额变量早上被赋值为 50 元，晚上被重新赋值为 20 元。晚上这次赋值完成后立刻读取余额，得到的数值是多少？\", \"answer\": 20, \"tol\": 0.01, \"explanation\": \"读取拿到的是此刻的值，晚上刚重新赋值为 20，此刻值就是 20。步骤：早 50 → 晚重新赋值 20 → 立刻读取得 20。最易错点：误取早上的 50。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"multi_choice\", \"q\": \"关于「赋值」与「读取」两个动作，下列说法正确的有哪些？\", \"options\": [\"赋值是把某个值写进名字\", \"读取是拿名字换回当前的值\", \"赋值会从名字里取出旧值并显示\", \"读取会把新值写进名字\"], \"answer\": [\"A\", \"B\"], \"explanation\": \"赋值是写入，读取是取出，两者方向相反。A、B 分别正确描述了赋值与读取。C 把赋值当成读取，D 把读取当成赋值。最易错点：赋值与读取的方向混淆。\", \"difficulty\": 3, \"section\": \"通用\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "numeric": 1,
+     "multi_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 10.833333333333332,
+    "selfBleu": 0.13113113969025184,
+    "stemSimilarity": 0.02314814814814815,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量，下列说法正确的是？",
+     "读取变量时，拿到的是当初写入时的那个值。",
+     "某余额变量早上被赋值为 50 元，晚上被重新赋值为 20 元。晚上这次赋值完成后立刻读取余额，得到的数值是多少？",
+     "关于「赋值」与「读取」两个动作，下列说法正确的有哪些？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 7,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 7744,
+   "durationMs": 85255,
+   "promptChars": 5262,
+   "replyChars": 1204,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"下面关于「变量」的说法，正确的是哪一项？\", \"options\": [\"变量是给一个会变的值起的名字，名字稳定、值随时可变\", \"变量是固定不变的数，赋值之后就不能再改\", \"变量的名字会随取值不同而变化\", \"同一个变量在同一时刻可以同时有两个不同的值\"], \"answer\": \"A\", \"explanation\": \"正确项点明变量由「名字」和「值」两部分组成：名字稳定、值随时可变。关键：把名字与值分开看，名字只是标签。最易错点：把变量误当成固定不变的数。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是变量「此刻」的值，而不是最初写入它时的值。\", \"answer\": \"对\", \"explanation\": \"读取是拿名字换回当前值，所以读到的是此刻的值。若变量在读取前被重新赋值过，读到的就是最新值。最易错点：误以为读取会返回第一次写入的值。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"matching\", \"q\": \"把左边每项操作与对应的动作类型配对。\", \"options\": [\"早上的记录：给余额写入 50\", \"晚上的记录：给余额写入 20\", \"结账时查看余额\"], \"answer\": [\"赋值\", \"赋值\", \"读取\"], \"explanation\": \"「给余额写入 50」「给余额写入 20」都是把值写进名字，属于赋值；「查看余额」是拿名字换回当前值，属于读取。最易错点：把「查看」误判为赋值。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"open_question\", \"q\": \"请用自己的例子说明：同一个变量在两个时刻被赋成两个不同的值，第三次读取时得到的是哪个值？为什么？\", \"answer\": \"评分要点：① 能用同一个变量名（如余额）写出两次赋值；② 能指出读取得到的是最近一次赋的值；③ 能说明名字稳定、值随时可变。\", \"explanation\": \"本题综合考察变量、赋值与读取：读取拿的是「此刻」的值，所以得到的是最近一次赋值的结果。最易错点：把最早写入的值当作读取结果。\", \"difficulty\": 3, \"section\": \"通用\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "matching": 1,
+     "open_question": 1
+    },
+    "entropy": 2,
+    "distractor": 18,
+    "selfBleu": 0.10076702591486146,
+    "stemSimilarity": 0.0070156380835992484,
+    "distinctStems": 4,
+    "stems": [
+     "下面关于「变量」的说法，正确的是哪一项？",
+     "读取变量时，拿到的是变量「此刻」的值，而不是最初写入它时的值。",
+     "把左边每项操作与对应的动作类型配对。",
+     "请用自己的例子说明：同一个变量在两个时刻被赋成两个不同的值，第三次读取时得到的是哪个值？为什么？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 8,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 9335,
+   "durationMs": 101323,
+   "promptChars": 5262,
+   "replyChars": 1384,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"fill_in_blank\", \"q\": \"把「会变的值」和「名字」分开看：给这个会变的值起的名字，术语上叫作____。\", \"answer\": [\"变量\"], \"explanation\": \"为什么对：变量是给会变的值起的名字，名字稳定、值随时可变。关键步骤：早上余额的值是 $50$，晚上余额的值是 $20$，名字「余额」不变，值在变。最易错点：把「变量」理解成那个具体数值本身。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是最初赋值时写下的那个值，而不是当前的最新值。\", \"answer\": false, \"explanation\": \"为什么错：读的时候拿到的永远是「此刻」的值，不是写下它时的值。关键步骤：早上余额的值是 $50$，晚上改为 $20$ 后再读取，得到 $20$ 而不是 $50$。最易错点：把赋值时的旧值当成读取结果，忽略了之后的重新赋值。\", \"difficulty\": 2, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"matching\", \"q\": \"下面是变量「余额」的一天记录。请把每一条记录与它对应的动作配对。\", \"options\": [\"早上把 $50$ 写进余额\", \"中午查看余额，屏幕显示 $50$\", \"晚上把余额改成 $20$\", \"睡前查看余额，屏幕显示 $20$\"], \"answer\": [\"赋值\", \"读取\", \"赋值\", \"读取\"], \"explanation\": \"为什么对：把值写进名字是赋值，用名字换回当前值是读取。关键步骤：两次「写进/改成」是赋值，两次「查看显示」是读取。最易错点：屏幕显示数字只是读取，不会改变变量的值。\", \"difficulty\": 2, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"single_choice\", \"q\": \"变量「余额」早上被赋值为 $50$，晚上又被赋值为 $20$。下列说法正确的是？\", \"options\": [\"晚上读取余额会得到 $20$，因为读的是「此刻」的值\", \"晚上读取余额会得到 $50$，因为 $50$ 是最初写下的值\", \"余额这个变量只能等于 $50$，$20$ 必须换一个新变量来存\", \"读取余额这个动作会把余额的值从 $20$ 改回 $50$\"], \"answer\": \"A\", \"explanation\": \"为什么对：同一个变量在不同时刻可以取不同值，读取返回的是「此刻」的值。关键步骤：早上余额的值是 $50$，晚上余额的值是 $20$，晚上读取得到 $20$ 而不是 $50$。最易错点：误以为读取会返回最初写下的值，或误以为读取会改变变量值。\", \"difficulty\": 3, \"section\": \"练习：两个时刻\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "fill_in_blank": 1,
+     "true_false": 1,
+     "matching": 1,
+     "single_choice": 1
+    },
+    "entropy": 2,
+    "distractor": 18.166666666666668,
+    "selfBleu": 0.11617639271527092,
+    "stemSimilarity": 0.006862922160014448,
+    "distinctStems": 4,
+    "stems": [
+     "把「会变的值」和「名字」分开看：给这个会变的值起的名字，术语上叫作____。",
+     "读取变量时，拿到的是最初赋值时写下的那个值，而不是当前的最新值。",
+     "下面是变量「余额」的一天记录。请把每一条记录与它对应的动作配对。",
+     "变量「余额」早上被赋值为 $50$，晚上又被赋值为 $20$。下列说法正确的是？"
+    ]
+   }
+  },
+  {
+   "station": "题目生成",
+   "arm": "tool",
+   "variant": "口令式",
+   "run": 9,
+   "toolCalled": true,
+   "delivered": true,
+   "schemaOk": true,
+   "inputTokens": 33,
+   "outputTokens": 6738,
+   "durationMs": 68882,
+   "promptChars": 5262,
+   "replyChars": 1464,
+   "toolSchemaChars": 869,
+   "replies": [
+    "{\"node\": \"变量是什么\", \"questions\": [{\"id\": \"q1\", \"kind\": \"single_choice\", \"q\": \"关于变量，下列说法正确的是？\", \"options\": [\"变量是固定不变的数值\", \"变量是给一个会变的值起的名字，名字稳定、值随时可变\", \"变量只能存放整数，不能存放 $20$ 元这样的金额\", \"变量每被读取一次，它的名字就会改变\"], \"answer\": \"B\", \"explanation\": \"为什么对：变量是给会变的值起的名字，名字稳定、值随时可变。关键步骤：同一个余额变量，早上为 $50$ 元、晚上为 $20$ 元，名字没变，值变了。最易错点：别把「值会变」误认为「名字会变」。\", \"difficulty\": 1, \"section\": \"概念：变量是什么\", \"invokes\": \"变量\"}, {\"id\": \"q2\", \"kind\": \"true_false\", \"q\": \"读取变量时，拿到的是这个变量「此刻」的值，而不是当初写下它时的值。\", \"answer\": \"对\", \"explanation\": \"为什么对：读取是拿名字换回当前的值，所以读到的是此刻的值。关键步骤：若余额早上被赋值为 $50$ 元、晚上被赋值为 $20$ 元，晚上读取余额得到 $20$ 元，而不是早上的 $50$ 元。最易错点：不要误以为读取会返回写入时的旧值。\", \"difficulty\": 1, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q3\", \"kind\": \"matching\", \"q\": \"把左边的动作与「赋值」或「读取」配对。\", \"options\": [\"早上把余额记录为 $50$ 元\", \"晚上查看余额是多少\", \"把新的余额 $20$ 元写进余额\", \"把余额念出来使用\"], \"answer\": [\"赋值\", \"读取\", \"赋值\", \"读取\"], \"explanation\": \"为什么对：赋值是把值写进名字，读取是拿名字换回当前的值。关键步骤：「记录为 $50$ 元」「写进 $20$ 元」是把值写入，属于赋值；「查看余额」「念出来使用」是取出当前值，属于读取。最易错点：看动作是「写进」还是「取出」，不要受数字大小干扰。\", \"difficulty\": 2, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}, {\"id\": \"q4\", \"kind\": \"reflection\", \"q\": \"请用自己的话解释：为什么读取变量时得到的是「此刻」的值，而不是当初写下它时的值？并结合余额的变化，说明赋值和读取的区别。\", \"answer\": \"评分要点：能说出变量是给会变的值起的名字、值随时可变；能说明读取返回当前值而不是写入时的旧值；能正确区分赋值（把值写进名字）与读取（拿名字换回当前值）；例子合理，如余额早上 $50$ 元、晚上 $20$ 元，晚上读取得到 $20$ 元。\", \"explanation\": \"为什么对：赋值与读取的区别在于写值与取值，读取总是取此刻的值。关键步骤：余额早上赋值为 $50$ 元、晚上赋值为 $20$ 元，晚上读取得到 $20$ 元，说明值已被更新。最易错点：把「写入时的值」当成读取结果。\", \"difficulty\": 3, \"section\": \"概念：赋值与读取\", \"invokes\": \"变量\"}]}"
+   ],
+   "extract": {
+    "added": 4,
+    "skipped": 0,
+    "rejected": 0,
+    "duplicates": 0,
+    "kinds": {
+     "single_choice": 1,
+     "true_false": 1,
+     "matching": 1,
+     "reflection": 1
+    },
+    "entropy": 2,
+    "distractor": 17,
+    "selfBleu": 0.38366362590682146,
+    "stemSimilarity": 0.07149532710280374,
+    "distinctStems": 4,
+    "stems": [
+     "关于变量，下列说法正确的是？",
+     "读取变量时，拿到的是这个变量「此刻」的值，而不是当初写下它时的值。",
+     "把左边的动作与「赋值」或「读取」配对。",
+     "请用自己的话解释：为什么读取变量时得到的是「此刻」的值，而不是当初写下它时的值？并结合余额的变化，说明赋值和读取的区别。"
+    ]
+   }
+  }
+ ],
+ "corpus": {
+  "dir": "D:/learnhub-smoke/docs/research/spike-216-corpus-pro",
+  "files": 72
+ },
+ "notes": [
+  "每格 9 次 × 2 变体 = 每臂 18 次（预注册 N=15–20 区间内）",
+  "采样温度统一设 1（两臂同值：控制变量；#219 端口是执行手段）",
+  "出题站第二意见门关闭（auditRate=0）、逐题修复轮（#148）与门错回滚仍在：它们是受理语义的一部分",
+  "工具臂未命中即回落文本走现行解析（协议预注册的「失败无害回落」）",
+  "小样本诚实读数：比例一律带 Wilson 95% CI；点估计不做显著性宣称",
+  "成本口径：prompt 字符数零噪音可对照（两臂同生产提示词，差只在变体后缀与工具 schema）；provider 报的输入 token 受前缀缓存影响（同站同前缀，越靠后的调用越便宜），故 token 差只作量级参考，工具占额以 toolSchemaChars 为准",
+  "distinct 题面数按 normalizeStem 去重自算（#230 更正说明：仪表不含该计数）",
+  "reasoner 与 chat 分开报：本报告是单个模型的一次运行；换模型需另起宿主（配置决定模型）重跑一次并单独留档"
+ ]
+}
