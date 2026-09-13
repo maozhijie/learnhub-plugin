@@ -6,7 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Content, TIER_LABELS, genericQuizTarget, hasReadyContent, readAnchor, tierIdxOf } from '../engine/index.ts'
-import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, QuestionDiversityReport } from '../engine/index.ts'
+import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport } from '../engine/index.ts'
 import {
   contentFailureStatus,
   genJobRetentionRemainingMs,
@@ -86,14 +86,16 @@ function auditNoteOf(r: { secondOpinion?: { sampled: number; discarded: number; 
 /** 出题多样性注记（#230 / ADR-0064）：三指标 + 各自的样本量。
  * 数字取「题库累计」范围（含本批）——批内读数在批小时退化（1 道题报不出 self-BLEU），
  * 题库读数是同轴可比的那一份；每项带样本量，避免把 2 道题算出来的 0.4 读成 30 道题的值。
- * 指标缺席（无测量对象）如实写「无样本」，不用 0 冒充（0 是「测到了、确实趋同」）。 */
+ * 指标缺席（无测量对象）如实写「无样本」，不用 0 冒充（0 是「测到了、确实趋同」）。
+ * 注意 self-BLEU 随参考集题量单调偏高（见 question-diversity.ts 头注实测），
+ * 跨批比趋势看平均对相似度那一项。 */
 function diversityNoteOf(r: { diversity?: QuestionDiversityReport }): string {
   const d = r.diversity?.bank
   if (!d || !d.sample) return ''
-  const bits = (v: number | undefined, sample: number, digits: number) =>
-    v === undefined ? '无样本' : `${v.toFixed(digits)}（n=${sample}）`
-  return `；多样性 熵 ${bits(d.entropy.value, d.entropy.sample, 2)} / 干扰项距离 `
-    + `${bits(d.distractor?.value, d.distractor?.sample ?? 0, 1)} / self-BLEU ${bits(d.selfBleu?.value, d.selfBleu?.sample ?? 0, 2)}`
+  const bits = (m: DiversityReading | undefined, digits: number) =>
+    m === undefined ? '无样本' : `${m.value.toFixed(digits)}（n=${m.sample}）`
+  return `；多样性 熵 ${bits(d.entropy, 2)} / 干扰项距离 ${bits(d.distractor, 1)}`
+    + ` / self-BLEU ${bits(d.selfBleu, 2)} / 相似度 ${bits(d.stemSimilarity, 3)}`
 }
 
 /** 前节尾部窗口（#227）：相邻前节末尾约 300 字，截窗对齐行首（残半行不入窗）。

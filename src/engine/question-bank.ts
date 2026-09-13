@@ -58,7 +58,7 @@ import type { CleanupReason } from './bank-cleanup.ts'
 import { ERROR_CARD_BATCH_MAX, mineErrorPatterns, validateErrorCards } from './error-cards.ts'
 import type { ErrorCard } from './error-cards.ts'
 import { bankStemList, existingStemsPromptBlock } from './question-dedup.ts'
-import { questionDiversityReportOf } from './question-diversity.ts'
+import { diversityQuestionOf, questionDiversityReportOf } from './question-diversity.ts'
 import type { DiversityQuestion, QuestionDiversityReport } from './question-diversity.ts'
 import { questionViolation, repairQuestionStrings } from './question-hygiene.ts'
 import { runSecondOpinion, mergeSecondOpinionReports, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
@@ -1312,7 +1312,7 @@ export class BankSubsystem {
         duplicates.push({ q: stem.slice(0, 80), against: verdict.against.slice(0, 80) })
       } else if (verdict.verdict === 'added') {
         added++
-        accepted.push({ kind: typeof q.kind === 'string' ? q.kind : undefined, q: stem, options: q.options })
+        accepted.push(diversityQuestionOf({ ...q, q: stem }))
       } else {
         skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
       }
@@ -1438,7 +1438,7 @@ export class BankSubsystem {
         if (verdict.verdict === 'duplicate') duplicates++
         else if (verdict.verdict === 'added') {
           added++ // 单题非法（invalid）不毁整批
-          accepted.push({ kind: typeof q.kind === 'string' ? q.kind : undefined, q: stem, options: q.options })
+          accepted.push(diversityQuestionOf({ ...q, q: stem }))
         }
       }
     }

@@ -99,10 +99,12 @@ for (const e of readdirSync(outDir)) {
   if (e === 'MANIFEST.json' || !e.endsWith('.yaml')) continue
   if (!byName.has(e)) rmSync(join(outDir, e))
 }
-// 清单只记可复核的事实（来源路径/题量/字节数）；不记时间戳——重抽必须逐字节同结果
+// 清单只记可复核的事实（来源路径/题量/字节数）；**不记 vault 绝对路径**——那是机器级
+// 配置（AGENTS.md：vault 路径不进仓库），记了会让重抽在不同机器上逐字节不同；也不记
+// 时间戳（同上）。重抽必须逐字节同结果，`--check` 才立得住。
 writeFileSync(join(outDir, 'MANIFEST.json'), JSON.stringify({
   note: '题库语料快照（#230 多样性基线输入）：只读原始 YAML，勿手改；重抽走 scripts/bank-corpus-extract.mts',
-  vault,
+  source: 'vault 存档区「存档/<版本>/<课程>/题库/」下各节点题库 YAML（.trash 与 学习中心 之外的文件不入）',
   files: entries.sort((a, b) => a.node.localeCompare(b.node)),
 }, null, 2) + '\n')
 console.log(`抽取 ${files.length} 个题库文件 → ${relative(repo, outDir)}`)

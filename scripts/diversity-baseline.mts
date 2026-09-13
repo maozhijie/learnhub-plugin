@@ -21,7 +21,7 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { YAML } from '../src/engine/yaml.ts'
-import { diversityMetricsOf } from '../src/engine/question-diversity.ts'
+import { diversityMetricsOf, diversityQuestionOf } from '../src/engine/question-diversity.ts'
 import type { DiversityMetrics, DiversityQuestion } from '../src/engine/question-diversity.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -29,7 +29,8 @@ const repo = dirname(here)
 const corpusDir = join(repo, 'tests/fixtures/bank-corpus')
 const outPath = join(repo, 'tests/fixtures/diversity-baseline.json')
 
-/** 一份题库文件 → 题目清单（非归档、形状合格的题；文件不可解析即抛，基线不接受「跳过」）。 */
+/** 一份题库文件 → 题目清单（非归档、形状合格的题；文件不可解析即抛，基线不接受「跳过」）。
+ * 投影与运行时同一个 `diversityQuestionOf`——基线读的就是引擎读的那三样字段。 */
 function questionsOf(path: string): DiversityQuestion[] {
   const doc = YAML.parse(readFileSync(path, 'utf8')) as { node?: unknown; questions?: unknown } | null
   if (!doc || typeof doc !== 'object' || !Array.isArray(doc.questions)) {
@@ -38,11 +39,7 @@ function questionsOf(path: string): DiversityQuestion[] {
   return doc.questions
     .filter((q): q is Record<string, unknown> => !!q && typeof q === 'object')
     .filter(q => q.archived !== true)
-    .map(q => ({
-      kind: typeof q.kind === 'string' ? q.kind : undefined,
-      q: typeof q.q === 'string' ? q.q : undefined,
-      options: q.options,
-    }))
+    .map(diversityQuestionOf)
 }
 
 /** 读数 → 定长截断的展示串（人读用；JSON 里保留全精度）。 */

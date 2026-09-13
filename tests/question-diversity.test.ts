@@ -18,7 +18,7 @@ import test from 'node:test'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { YAML } from '../src/engine/yaml.ts'
 import {
-  distractorDistanceOf, diversityMetricsOf, entropyOf, levenshteinDistance,
+  distractorDistanceOf, diversityMetricsOf, diversityQuestionOf, entropyOf, levenshteinDistance,
   meanStemSimilarityOf, questionDiversityReportOf, selfBleuOf, trigramOverlap,
 } from '../src/engine/question-diversity.ts'
 import type { DiversityMetrics, DiversityQuestion } from '../src/engine/question-diversity.ts'
@@ -121,8 +121,9 @@ test('#230 干扰项距离：题内两两均值，标点差异被归一化吃掉
   assert.equal(distractorDistanceOf(['ab']), null, '单选项无对可测（缺席，不是 0）')
   assert.equal(distractorDistanceOf(['ab', 'ab']), 0, '完全相同的两项 = 0：测到了，就是没差距')
   assert.equal(distractorDistanceOf(['ab', 'ab!']), 0, '归一化剥标点后同形 = 0')
-  assert.equal(distractorDistanceOf(['aa', 'bb', 'cc']), 2, '1+1+2=4 / 3 对')
-  assert.equal(distractorDistanceOf(['2xy', '6xy', '2x^2y', '4xy']), 4 / 3)
+  assert.equal(distractorDistanceOf(['aa', 'bb', 'cc']), 2, '三对等长距离各 2，全异时即时汉明距离')
+  assert.equal(distractorDistanceOf(['ab', 'bc', 'cd']), 2, '等长替换仍是逐位计（1+2+1）/3 = 4/3 之下界示例')
+  assert.equal(distractorDistanceOf(['2xy', '6xy', '2x^2y', '4xy']), 4 / 3, '六对均值 4/3')
 })
 
 test('#230 self-BLEU：单题缺席、复读批为 1、无关题串趋 0、平滑不让 4-gram 零匹配清分', () => {
@@ -229,12 +230,7 @@ test('#230 逐节出题路同款在场；归档题不入题库累计读数', asy
 })
 
 test('#230 基线回放：语料快照复算逐值等于入库基线（口径改了必须重测并人审）', () => {
-  const baseline = JSON.parse(readFileSync(join(here, 'fixtures/diversity-baseline.json'), 'utf8')) as {
-    corpus: string[]
-    total: number
-    aggregate: DiversityMetrics
-    perBatch: Record<string, DiversityMetrics>
-  }
+  const baseline = readBaseline()
   const names = readdirSync(corpusDir).filter(f => f.endsWith('.yaml')).sort()
   assert.deepEqual(
     names.map(n => `tests/fixtures/bank-corpus/${n}`),
@@ -246,11 +242,7 @@ test('#230 基线回放：语料快照复算逐值等于入库基线（口径改
     const doc = YAML.parse(readFileSync(join(corpusDir, name), 'utf8')) as { questions?: Array<Record<string, unknown>> }
     const qs = (doc.questions ?? [])
       .filter(q => q.archived !== true)
-      .map(q => ({
-        kind: typeof q.kind === 'string' ? q.kind : undefined,
-        q: typeof q.q === 'string' ? q.q : undefined,
-        options: q.options,
-      }))
+      .map(diversityQuestionOf)
     all.push(...qs)
     const want = baseline.perBatch[name]
     assert.ok(want, `基线缺 ${name} 的读数`)
@@ -260,12 +252,13 @@ test('#230 基线回放：语料快照复算逐值等于入库基线（口径改
   sameMetrics(diversityMetricsOf(all), baseline.aggregate, '全语料聚合')
 })
 
+/** 读入库基线（回放与真事实两段共用；路径写死为仓库内固定位置）。 */
+function readBaseline(): { corpus: string[]; total: number; aggregate: DiversityMetrics; perBatch: Record<string, DiversityMetrics> } {
+  return JSON.parse(readFileSync(join(here, 'fixtures/diversity-baseline.json'), 'utf8'))
+}
+
 test('#230 基线数字是人读得懂的真事实（防基线被「改成恒过」）', () => {
-  const b = JSON.parse(readFileSync(join(here, 'fixtures/diversity-baseline.json'), 'utf8')) as {
-    total: number
-    aggregate: DiversityMetrics
-    perBatch: Record<string, DiversityMetrics>
-  }
+  const b = readBaseline()
   assert.equal(b.total, 65, 'YAML 现状基线题量（2026-09-10 存档课程语料）')
   assert.equal(Object.keys(b.perBatch).length, 4)
   // 三指标都得是有意义的实数：熵>0（题型不止一种）、self-BLEU 在 (0,1)、干扰项距离为正
@@ -276,6 +269,38 @@ test('#230 基线数字是人读得懂的真事实（防基线被「改成恒过
   // 最差一题的干扰项距离是点名事实（0 = 选项归一化后同形，语料里真实存在）
   assert.equal(b.aggregate.distractor!.min, 0)
   assert.ok(b.aggregate.distractor!.minQ)
+})
+
+test('#230 回放锁自检：口径漂移/基线被改都会被 sameMetrics 抓住（恒过的门比没有门更坏，ADR-0047）', () => {
+  const b = readBaseline()
+  const want = b.perBatch[readdirSync(corpusDir).filter(f => f.endsWith('.yaml'))[0]!]
+  assert.ok(want, '取一份读数作自检基样')
+  // 真相样本不报错
+  sameMetrics(want, structuredClone(want), '自检：同值')
+  // 任一指标动一点：读数被改（基线漂移）必须红
+  for (const [label, mutate] of [
+    ['熵', (m: DiversityMetrics) => { m.entropy.value += 0.01 }],
+    ['干扰项距离', (m: DiversityMetrics) => { m.distractor!.value += 0.01 }],
+    ['self-BLEU', (m: DiversityMetrics) => { m.selfBleu!.value += 0.01 }],
+    ['样本量', (m: DiversityMetrics) => { m.sample += 1 }],
+  ] as Array<[string, (m: DiversityMetrics) => void]>) {
+    const drifted = structuredClone(want)
+    mutate(drifted)
+    assert.throws(() => sameMetrics(drifted, want, `自检：${label}漂移`), /读数与基线逐值不符/, `${label} 漂移未被抓住`)
+  }
+})
+
+test('#230 题目投影：三轴字段照搬、多余字段不入测量面（投影是基线与运行时的同一把尺）', () => {
+  assert.deepEqual(
+    diversityQuestionOf({ kind: 'single_choice', q: '题面', options: ['a', 'b'], answer: 'A', id: 'q9', explanation: '解析' }),
+    { kind: 'single_choice', q: '题面', options: ['a', 'b'] },
+    '答案/解析/编号不进测量输入',
+  )
+  assert.deepEqual(
+    diversityQuestionOf({ kind: 7, q: null, options: undefined }),
+    { kind: undefined, q: undefined, options: undefined },
+    '坏形态退化为缺席，不抛错（题库文件可能手编）',
+  )
 })
 
 test('#230 出题两条路之外的调用点不受影响（零行为改动：门禁判定不消费多样性）', async () => {

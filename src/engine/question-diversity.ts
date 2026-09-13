@@ -19,6 +19,12 @@
  *    把分数机械压到 0）、标准 brevity penalty（参考长度 = 其余题面平均长度）；
  *    批内按题面长度加权平均。1 = 全批一个模子，0 = 彼此无共现。
  *
+ * **读数与题量（实测，别读错）**：BLEU 逐 gram 取各参考的最大计数（多参考定义），
+ * 于是**参考集越大、命中越容易**——同一份语料取前 k 道实测 self-BLEU k=2→0.061、
+ * k=12→0.370、k=40→0.505，而长度加权的平均对相似度同区间只从 0.000 走到 0.036。
+ * 所以：**跨批比较的漂移读数用平均对相似度**（对题量不敏感的第二读数），批内/题库的
+ * self-BLEU 是**同量级样本**之间才可比的读数；报告随身带样本量就是为这件事。
+ *
  * 解读约束（票面明写）：多样性 ≠ 质量——高分只说明「不趋同」，不与量规评分（#221/#222）
  * 合并成单一分数，判断须与评审抽样池交叉看。
  */
@@ -35,6 +41,20 @@ export interface DiversityQuestion {
   kind?: string
   q?: string
   options?: unknown
+}
+
+/** 任意题目形状 → 测量输入（引擎入库题、题库文件、测试样本三处共用**同一个投影**）：
+ * 测量只看这三样，多出来的字段（id/答案/解析/调度）不参与读数——要加轴再扩这里。 */
+export function diversityQuestionOf(q: {
+  kind?: unknown
+  q?: unknown
+  options?: unknown
+}): DiversityQuestion {
+  return {
+    kind: typeof q.kind === 'string' ? q.kind : undefined,
+    q: typeof q.q === 'string' ? q.q : undefined,
+    options: q.options,
+  }
 }
 
 /** 一条读数 + 样本量：样本量恒与读数一起走，「0.5 是 2 道题算的还是 30 道题算的」不留歧义。 */
@@ -224,9 +244,10 @@ export function meanStemSimilarityOf(stems: readonly string[]): number | null {
 /**
  * 单一范围的多样性指标（纯函数）：传入题目子集（已按范围筛好），返回三指标读数。
  * 每项读数只在自己有样本时报出——1 道题的批不报熵以外的任何东西，不拿 0 冒充单题。
+ * 输入是内建产物（DiversityQuestion 由 `diversityQuestionOf` 投影而来），此处不再过滤形状。
  */
 export function diversityMetricsOf(questions: readonly DiversityQuestion[]): DiversityMetrics {
-  const items = questions.filter(q => q && typeof q === 'object')
+  const items = questions
   const kinds: Record<string, number> = {}
   for (const q of items) {
     const k = typeof q.kind === 'string' && q.kind ? q.kind : 'unknown'
