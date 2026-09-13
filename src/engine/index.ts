@@ -88,6 +88,30 @@ export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.t
 export type { SecondOpinionReport, SecondOpinionOptions } from './question-audit.ts'
 /** 出题多样性仪表（#230 / ADR-0064）：报告类型随门面出（宿主任务消息、工具面、基线脚本消费）。 */
 export type { QuestionDiversityReport, DiversityMetrics, DiversityReading, DistractorReading } from './question-diversity.ts'
+/** 质量量规注册表（#221 / ADR-0062）：量规随门面出——离线评审运行器（#222）按站取量规、
+ * 报告带分层法庭元数据，评审器不重写判据（判定标准先于判定器）。 */
+export { QUALITY_RUBRICS, RUBRIC_COURTS, rubricOf, allCriteria } from './quality-rubrics.ts'
+export type { QualityRubric, RubricDimension, RubricCriterion } from './quality-rubrics.ts'
+/** 离线批量评审器（#222 / ADR-0070）：站标签 + 固定温度 + 抽样/提示词/解析/聚合/渲染
+ * 全部随门面出——宿主运行器（host/quality-review.ts）只经门面消费（R1：host 的
+ * engine 导入只走门面）。 */
+export {
+  QUALITY_REVIEW_STATION, REVIEW_TEMPERATURE, REVIEW_EFFORT, REVIEW_SCORE_LABELS, LOW_SCORE_THRESHOLD,
+  DEFAULT_SAMPLE_QUOTA, QUALITY_REVIEW_SYSTEM, templateVersionOf, isScoreable, equidistantIndices,
+  sampleQualitySamples, rubricForStation, rubricStations, dimensionNameOf, reviewBlindPrompt,
+  reviewReconcilePrompt, parseReviewDoc, parseDimensionScores, evidenceLocated, finalScores,
+  scoreStats, lowScoreItems, versionComparison, stabilityOf,
+} from './quality-review.ts'
+export type {
+  ReviewSample, SampleQuota, ReviewScore, DimensionScore, SampleReview, DimensionStat, LowScoreItem,
+  VersionStat, StabilityStat,
+} from './quality-review.ts'
+/** 报告形态与渲染（#222）：与测量面分开住——交付面（人读排版）与测量面（口径）变的原因不同。 */
+export { renderQualityReviewReport } from './quality-review-report.ts'
+export type { QualityReviewReport, SystemicCandidate, ReportRenderOptions } from './quality-review-report.ts'
+/** 图质量面审计抽样（#224 / ADR-0070）：审计面清单 + 系统性发现候选随门面出。 */
+export { AUDIT_AXES, SYSTEMIC_MIN_SAMPLES, SYSTEMIC_LOW_RATE, auditScopeLines, systemicCandidates } from './quality-audit.ts'
+export type { AuditAxis } from './quality-audit.ts'
 
 
 

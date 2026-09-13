@@ -18,7 +18,7 @@
  * - 站名是受控词表（PROMPT_KINDS ∪ AgentSeam 六站，无斜杠），ref 的 split('/') 依赖它。
  */
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { QUIZ_SOLVER_STATION } from '../engine/index.ts'
+import { QUIZ_SOLVER_STATION, QUALITY_REVIEW_STATION } from '../engine/index.ts'
 import type { LlmTokenUsage } from '../engine/index.ts'
 
 /** 成功样本环形封顶（每站）。 */
@@ -80,6 +80,9 @@ export const STATIONS = {
   receipt: '回执评审',
   judge: '判卷',
   dispute: '申诉判卷',
+  /** 离线评审器的判定应答（#222 / ADR-0070）：评审调用本身进语料——评审器也要能被评
+   * （判读稳定性/引文是否实，见评审报告），且它是「换模型/换供应商」时最该先看的标本。 */
+  qualityReview: QUALITY_REVIEW_STATION,
   explainFeedback: '讲解反馈',
   selfNote: '自注反馈',
   tutor: '老师辅导',
@@ -91,6 +94,41 @@ export const STATIONS = {
   plan: '计划草案',
   milestone: '里程碑草案',
 } as const
+
+/** 语料文件 frontmatter 解析（行级键值，只取首个 `---` 围栏内的 `键: 值` 行；值不做引号/
+ * 类型解析，嵌套流式值原样保留）。读侧单一出处：冒烟汇总（host/smoke）与质量评审抽样
+ * （host/quality-review）同用——格式漂移只可能漂一处，两处各解析一遍必然分叉。 */
+export function parseCorpusFrontmatter(body: string): Record<string, string> {
+  const lines = body.split('\n')
+  const end = lines.indexOf('---', 1)
+  const out: Record<string, string> = {}
+  if (end < 0) return out
+  for (const line of lines.slice(1, end)) {
+    const i = line.indexOf(': ')
+    if (i > 0) out[line.slice(0, i)] = line.slice(i + 2)
+  }
+  return out
+}
+
+/** 空输出在语料里的渲染态（renderMd 的占位串）——读侧还原为空串（「空输出」是渲染占位，
+ * 不是产物内容；评审器据此判「不可评分」，见 engine isScoreable）。 */
+export const EMPTY_OUTPUT_PLACEHOLDER = '（空输出）'
+
+/** 语料文件全文解析：frontmatter + `## 提示词` 段 + `## 原始输出` 段。**提示词与原始输出
+ * 的原文原样返回**（质量评审的一期受评对象就是原始输出原文、二期对账材料是提示词原文；
+ * 任何清洗都会让「证据引用可否定位」的核对失真）。段标记缺席（非本格式文件）时对应段返回
+ * 空串——调用方按空串走「不可评/材料缺席」，不猜内容。 */
+export function parseCorpusFile(body: string): { frontmatter: Record<string, string>; prompt: string; output: string } {
+  const frontmatter = parseCorpusFrontmatter(body)
+  const lines = body.split('\n')
+  const start = (marker: string): number => lines.findIndex(l => l.trim() === marker)
+  const promptAt = start('## 提示词')
+  const outputAt = start('## 原始输出')
+  const prompt = promptAt >= 0 ? lines.slice(promptAt + 1, outputAt > promptAt ? outputAt : undefined).join('\n') : ''
+  const raw = outputAt >= 0 ? lines.slice(outputAt + 1).join('\n') : ''
+  const output = raw.trim() === EMPTY_OUTPUT_PLACEHOLDER ? '' : raw
+  return { frontmatter, prompt: prompt.replace(/^\n+|\n+$/g, ''), output: output.replace(/^\n+|\n+$/g, '') }
+}
 
 export function createCorpusCapture(corpusDir: string): CorpusCapture {
   const root = corpusDir.replace(/[/\\]+$/, '')

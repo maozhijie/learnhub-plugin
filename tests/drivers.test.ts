@@ -1,5 +1,6 @@
 /**
- * 驱动脚本冒烟（#215/#216 code-review 补门）：`scripts/gen-smoke.mjs` 与 `scripts/spike.mjs`
+ * 驱动脚本冒烟（#215/#216 code-review 补门；#222 起含 `scripts/quality-review.mjs`）：
+ * `scripts/gen-smoke.mjs`、`scripts/spike.mjs` 与 `scripts/quality-review.mjs`
  * 必须能真的跑起来——起一个**桩宿主**（node:http，按路由回两份最小报告），以子进程跑驱动，
  * 断言退出码与人读渲染的关键面。
  *
@@ -22,7 +23,8 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-/** 桩宿主：POST /learnhub/api/smoke → 最小冒烟报告；POST /learnhub/api/spike → 最小 spike 报告。 */
+/** 桩宿主：POST /learnhub/api/smoke → 最小冒烟报告；POST /learnhub/api/spike → 最小 spike 报告；
+ * POST /learnhub/api/quality-review → 最小评审报告（markdown + 结构化报告 + 落盘路径）。 */
 async function stubHost(): Promise<{ base: string; close: () => Promise<void>; bodies: unknown[] }> {
   const bodies: unknown[] = []
   const server = createServer((req, res) => {
@@ -31,7 +33,20 @@ async function stubHost(): Promise<{ base: string; close: () => Promise<void>; b
     req.on('end', () => {
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
       bodies.push({ url: req.url, body })
-      const out = req.url === '/learnhub/api/smoke'
+      const out = req.url === '/learnhub/api/quality-review'
+        ? {
+          report: {
+            startedAt: '2026-09-13T00:00:00.000Z', durationMs: 4321, temperature: 0, repeats: 2,
+            rubricIds: ['教练回合'],
+            sampling: { corpusDir: 'C:/桩/生成语料', stations: ['教练生长'], pool: 4, selected: 3, quota: { bad: 3, ok: 2 } },
+            reviews: [], unscoreable: [], stats: [], lowScores: [], versions: [], stability: [],
+            cost: { calls: 6, inputTokens: 111, outputTokens: 22 },
+            court: { ai: 'AI 评分是提议', human: '人审是终审', outcome: '结果法院各守其领域' },
+          },
+          markdown: '# 质量评审报告（离线批量评审器 #222）\n\n## 各站逐维度分数分布\n\n### 教练生长\n\n桩报告正文',
+          reportPath: 'C:/桩/vault/学习中心/state/质量评审/桩.md',
+        }
+        : req.url === '/learnhub/api/smoke'
         ? {
           verdict: 'ok', startedAt: '2026-09-13T00:00:00.000Z', durationMs: 1234,
           course: '桩课', node: '桩节点',
@@ -85,6 +100,27 @@ test('驱动冒烟：gen-smoke.mjs 对桩宿主跑通并渲染报告（漏导入
     assert.match(r.out, /课程大纲/, '站行应渲染（含 12\/7 token 这类数字）')
     assert.match(r.out, /大纲节清单/, '产物断言段应渲染')
     assert.equal(host.bodies.length, 1, '应恰好发一次请求')
+  } finally {
+    await host.close()
+  }
+})
+
+test('驱动冒烟：quality-review.mjs 对桩宿主跑通并渲染人读报告（#222）', async () => {
+  const host = await stubHost()
+  try {
+    const out = join(ROOT, 'docs', 'research', '.tmp-driver-test-review.json')
+    const r = await runDriver('scripts/quality-review.mjs', ['--base', host.base, '--stations', '教练生长', '--bad', '2', '--ok', '1', '--out', out])
+    assert.equal(r.code, 0, `驱动应跑通（exit 0），实得 ${r.code}：
+${r.out.slice(0, 800)}`)
+    assert.match(r.out, /质量评审报告/, '人读报告标题应渲染')
+    assert.match(r.out, /各站逐维度分数分布/, '报告正文应渲染')
+    assert.match(r.out, /报告已落盘：C:\/桩\/vault/, '落盘路径应回报')
+    const { readFileSync, rmSync } = await import('node:fs')
+    const written = JSON.parse(readFileSync(out, 'utf8')) as { temperature: number }
+    assert.equal(written.temperature, 0, '机器可读报告落盘（温度留痕）')
+    rmSync(out, { force: true })
+    assert.equal(host.bodies.length, 1, '应恰好发一次请求')
+    assert.deepEqual((host.bodies[0] as { body: Record<string, unknown> }).body.stations, ['教练生长'], '站过滤参数随请求发出')
   } finally {
     await host.close()
   }

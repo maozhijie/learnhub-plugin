@@ -19,6 +19,7 @@ import { splitContractSection, withContractLast } from '../src/engine/prompt-ass
 import { DISPUTE_REVIEW_SYSTEM, OPEN_QUESTION_GRADING_SYSTEM, REFLECTION_GRADING_SYSTEM } from '../src/engine/grading.ts'
 import { receiptReviewSystem } from '../src/engine/receipts.ts'
 import { solverPromptFor } from '../src/engine/question-audit.ts'
+import { QUALITY_REVIEW_SYSTEM } from '../src/engine/quality-review.ts'
 import { STATIONS } from '../src/host/corpus.ts'
 
 /** 锚文本解析表：判别名 → 系统提示词原文；规范块判别名 → 引擎拼装块原文。 */
@@ -27,6 +28,7 @@ const SYSTEM_TEXTS: Record<string, string> = {
   open: OPEN_QUESTION_GRADING_SYSTEM,
   dispute: DISPUTE_REVIEW_SYSTEM,
   receipt: receiptReviewSystem(),
+  qualityReview: QUALITY_REVIEW_SYSTEM,
 }
 const SPEC_BLOCK_TEXTS: Record<string, string> = {
   interactiveSpecBlock: Content.interactiveSpecBlock(),

@@ -981,7 +981,8 @@
    "course",
    "quizCount",
    "quizAuditRate",
-   "jobTimeoutMs"
+   "jobTimeoutMs",
+   "corpusDir"
   ]
  },
  {
@@ -993,6 +994,19 @@
    "quizCount",
    "temperature",
    "corpusDir"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/quality-review",
+  "keys": [
+   "corpusDir",
+   "stations",
+   "badQuota",
+   "okQuota",
+   "repeats",
+   "outDir",
+   "systemic"
   ]
  }
 ]

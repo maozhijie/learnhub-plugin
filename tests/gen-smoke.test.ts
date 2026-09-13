@@ -11,6 +11,9 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { runGenerationSmoke } from '../src/host/smoke.ts'
 
@@ -99,4 +102,22 @@ test('冒烟解析回归现形：大纲应答非法 → 报告指认站/失败�
   const outlineCheck = report.artifacts.find(a => a.name === '大纲节清单')
   assert.ok(outlineCheck && !outlineCheck.ok, '产物断言应失败（节清单缺席）')
   assert.notEqual(report.pipeline.jobStatus, 'done', '管线不该被记为成功')
+})
+
+test('冒烟语料可外落（--corpus）：站表读的是外落目录、语料文件留在盘上（#222 实跑抽样池）', async () => {
+  // 这一条是 #222 实跑抓出的回归：临时 vault 随跑随删，语料给了外落目录后**报告站表仍读
+  // 临时 vault 的空目录**，站表恒 0 行（语料写外面、报告读里面，两边各说各话）。
+  const dir = mkdtempSync(join(tmpdir(), 'learnhub-smoke-corpus-'))
+  try {
+    const report = await runGenerationSmoke(routingCtx(GOOD_OUTLINE, []), { corpusDir: dir })
+    assert.equal(report.corpusDir, dir.replace(/\\/g, '/'), '报告语料目录 = 外落目录')
+    assert.ok(report.stations.length >= 4, `站表应读外落目录：实得 ${report.stations.length} 站`)
+    assert.ok(report.stations.every(s => s.calls > 0), '各站调用数 > 0')
+    const outlineDir = join(dir, '课程大纲')
+    assert.ok(existsSync(outlineDir), '外落目录里有大纲站的捕获文件')
+    const f = readdirSync(outlineDir)[0]!
+    assert.ok(readFileSync(join(outlineDir, f), 'utf8').includes('## 原始输出'), '捕获文件是本格式（frontmatter + 提示词 + 原始输出）')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

@@ -362,6 +362,27 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     notes: '规则题型（单选/判断/填空/多选/数值/排序/配对）不走模型判卷——evaluateAllo 确定性判卷',
   },
   {
+    station: '质量评审',
+    systemAnchors: ['qualityReview'],
+    format: 'json',
+    clause: ['JSON only，不带 Markdown 围栏、不带任何解释性文字'],
+    contractLocation: 'system',
+    allowed: ['一个 JSON 对象（dimensions 数组：逐维度 id + score 1–4 或 null + evidence 引文数组 + notes；二期另带 revised 与 contract_note）'],
+    forbidden: ['Markdown 围栏', '解释性文字', '跨维度总分（量规无总分档——维度正交）'],
+    repair: {
+      rounds: 0,
+      mechanism: 'none',
+      feedback: '无修复轮——评分应答不可解析即记该件「评审失败」并在报告单列（评审不是产站：坏应答不重试以免成本翻倍；评审失败不得被读成低分）',
+    },
+    tolerance: '剥围栏 → 取首个 {...} → 去尾逗号（parseReviewDoc 容错，与判卷族同款机械）',
+    failureCodes: [],
+    sensitivity: '机械评审',
+    structuredEligible: true,
+    shape: { kind: 'json-top', keys: [{ key: 'dimensions', shape: 'array' }] },
+    notes: '评审器（#222 / ADR-0070）的判定应答：契约住 system（判卷族同款——判定器不是产站，'
+      + '判据在质量量规注册表 #221，本条目只锁应答形态与「无总分」禁令）。一期盲评/二期对账两段式（防锚定，照搬申诉复核形态）。',
+  },
+  {
     station: '申诉判卷',
     systemAnchors: ['dispute'],
     format: 'json',

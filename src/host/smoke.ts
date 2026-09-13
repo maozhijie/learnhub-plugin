@@ -27,7 +27,7 @@ import { contractOf, hasReadyContent, validateByContract } from '../engine/index
 import { createHostRuntime } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import { afterGraphApply, cancelGeneration, pumpGeneration, waitForGenJob } from './jobs.ts'
-import { STATIONS } from './corpus.ts'
+import { STATIONS, parseCorpusFrontmatter } from './corpus.ts'
 
 /** 冒烟入参（路由可覆盖，缺省即最小成本档）。 */
 export interface SmokeRequest {
@@ -41,6 +41,10 @@ export interface SmokeRequest {
   quizAuditRate?: number
   /** 正文管线等待上限毫秒（缺省 10 分钟）。 */
   jobTimeoutMs?: number
+  /** 语料落盘目录覆盖（绝对路径；缺省 = 临时 vault 内的 `state/生成语料`，随 vault 一起删）。
+   * 给一个持久目录 = 把本轮真模型调用的提示词与产出留在盘上，供离线评审器抽样（#222/#224
+   * 的实跑样本来源；与 spike 的 --corpus 同形态）。 */
+  corpusDir?: string
 }
 
 /** 一站（语料桶）的汇总：成功率与失败码分布 + token 计量。 */
@@ -106,19 +110,6 @@ const BY = {
   quiz: 'output-contracts.validateByContract（题目生成契约 shape）+ engine.bank.load（validateBank 读回）',
   note: 'engine.loadView（笔记 frontmatter 读）',
 } as const
-
-/** 语料 frontmatter 解析（#213 捕获文件：--- 围栏内的行级键值）。 */
-function parseCorpusFrontmatter(body: string): Record<string, string> {
-  const lines = body.split('\n')
-  const end = lines.indexOf('---', 1)
-  const out: Record<string, string> = {}
-  if (end < 0) return out
-  for (const line of lines.slice(1, end)) {
-    const i = line.indexOf(': ')
-    if (i > 0) out[line.slice(0, i)] = line.slice(i + 2)
-  }
-  return out
-}
 
 /** usage 行形如 `usage: { input_tokens: 10, output_tokens: 5, reasoning_tokens: 2 }`。 */
 function usageOf(fm: Record<string, string>): { input: number; output: number; reasoning: number } {
@@ -281,12 +272,18 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
   const quizCount = req.quizCount ?? 4
   const jobTimeoutMs = req.jobTimeoutMs ?? 10 * 60_000
   const root = mkdtempSync(join(tmpdir(), 'learnhub-gen-smoke-')).replace(/\\/g, '/')
+  // 语料落点：给了 corpusDir 就写外面（临时 vault 随跑随删，语料留不下来），
+  // 报告站表与 corpusDir 字段都读这个实际落点（#222 实测抓出：两边各说各话）
+  const corpusDir = req.corpusDir ? req.corpusDir.replace(/\\/g, '/') : `${root}/学习中心/state/生成语料`
   let rt: HostRuntime | null = null
   try {
     mkdirSync(join(root, '学习中心'), { recursive: true })
     // 临时 runtime（#167 唯一装配缝）：同一套宿主技术层与真 provider 适配器，只是
     // 部署路径指向 tmp；quizAuditRate 显式 0（冒烟不背第二意见成本）
-    rt = createHostRuntime(ctx, { vault: root, centerRel: '学习中心', quizAuditRate: req.quizAuditRate ?? 0 })
+    rt = createHostRuntime(ctx, {
+      vault: root, centerRel: '学习中心', quizAuditRate: req.quizAuditRate ?? 0,
+      ...(req.corpusDir ? { corpusDir: req.corpusDir } : {}),
+    })
     const runner = rt
 
     // 管线终局面累加器：任何一站死掉都照出报告（诊断面不给 500），只有「拿不到宿主
@@ -349,7 +346,9 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
     // 语料写盘是异步 fire-and-forget（生产纪律：观测面不挡主流程）——读站统计前放干，
     // 否则刚补标的失败样本可能还在链上，报告会把它读成 ok
     await runner.corpus.flush()
-    const stations = collectStations(runner.engine.paths.corpusDir)
+    // 站统计读**本轮实际的语料落点**（#222 实测抓出：给了 corpusDir 时还读临时 vault 的
+    // 空目录，报告站表恒 0 行——语料写在外面、报告读在里面，两边各说各话）
+    const stations = collectStations(corpusDir)
     const artifacts = node ? await checkArtifacts(runner, course, node) : []
     return {
       verdict: verdictOf(pipeline, artifacts),
@@ -360,7 +359,7 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
       pipeline,
       stations,
       artifacts,
-      corpusDir: runner.engine.paths.corpusDir,
+      corpusDir,
       hints: [
         `题量目标 ${quizCount}（成本闸只封综合批；逐节批按档位默认）`,
         '要复现「解析回归能在报告里现形」：临时把 src/engine/yaml.ts 的 parseModel 改成抛错 → npm run build → 重启宿主 → 重跑 npm run smoke；'

@@ -6581,7 +6581,8 @@
    "course": "1",
    "quizCount": 1,
    "quizAuditRate": 0,
-   "jobTimeoutMs": 1
+   "jobTimeoutMs": 1,
+   "corpusDir": "1"
   },
   "status": 500,
   "res": {
@@ -6616,6 +6617,41 @@
   "status": 500,
   "res": {
    "error": "[spike] 宿主 ctx 没有 llm——工具通道 spike 必须在宿主进程内跑（真 provider 只在宿主）。先在仓库根 npm run build，再 npx @deepseek-ai/dsh web 起宿主。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /quality-review · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/quality-review",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "[quality-review] 宿主 ctx 没有 llm——离线评审必须在宿主进程内跑（真 provider 只在宿主）。先在仓库根 npm run build，再 npx @deepseek-ai/dsh web 起宿主。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /quality-review · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/quality-review",
+  "body": {
+   "corpusDir": "1",
+   "stations": [
+    "教练生长"
+   ],
+   "badQuota": 1,
+   "okQuota": 1,
+   "repeats": 1,
+   "outDir": "1",
+   "systemic": {
+    "minSamples": 1,
+    "lowRate": 0.5
+   }
+  },
+  "status": 500,
+  "res": {
+   "error": "[quality-review] 宿主 ctx 没有 llm——离线评审必须在宿主进程内跑（真 provider 只在宿主）。先在仓库根 npm run build，再 npx @deepseek-ai/dsh web 起宿主。"
   },
   "calls": []
  }

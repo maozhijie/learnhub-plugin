@@ -33,6 +33,7 @@ import {
 } from './jobs.ts'
 import { runGenerationSmoke } from './smoke.ts'
 import { runToolChannelSpike } from './spike.ts'
+import { runQualityReview } from './quality-review.ts'
 
 /** 面板内轻量答疑：节点上下文 system + 前端携带的对话历史（拼成单条 user 消息）→ llm。
  * 与 dsh 会话分层：这里只答不写，深度讨论/修订走「与 AI 讨论本课」开的会话。 */
@@ -190,6 +191,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
       ...(quizCount !== undefined ? { quizCount } : {}),
       ...(quizAuditRate !== undefined ? { quizAuditRate } : {}),
       ...(jobTimeoutMs !== undefined ? { jobTimeoutMs } : {}),
+      ...pick('corpusDir', optText(body, 'corpusDir')?.replace(/\\/g, '/')),
     })))
   },
   'POST /spike': async ({ rt, ctx, body, res }) => {
@@ -210,6 +212,37 @@ export const HANDLERS: Record<string, RouteHandler> = {
       ...(quizCount !== undefined ? { quizCount } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
       ...(corpusDir !== undefined ? { corpusDir: corpusDir.replace(/\\/g, '/') } : {}),
+    })))
+  },
+  'POST /quality-review': async ({ rt, ctx, body, res }) => {
+    // 离线批量评审器（#222；图质量面审计 #224）：从生成语料抽样、按质量量规逐维度评分、
+    // 落人读报告到 state/质量评审。同步阻塞整轮（分钟级，逐件两段式评审 + 重复次数），
+    // 驱动脚本 scripts/quality-review.mjs 按长超时调用。显式给非法类型一律拒（诊断面，
+    // 宁可报错不可静默换参数）。
+    const badQuota = optNumber(body, 'badQuota')
+    const okQuota = optNumber(body, 'okQuota')
+    const repeats = optNumber(body, 'repeats')
+    for (const [key, v] of [['badQuota', badQuota], ['okQuota', okQuota], ['repeats', repeats]] as const) {
+      if (v !== undefined && (!Number.isInteger(v) || v < 0)) throw new ParamError(`${key} 必须是非负整数`)
+    }
+    if (repeats === 0) throw new ParamError('repeats 至少为 1（0 次评审没有意义；关稳定性读数用 1）')
+    const stations = optList(body, 'stations')?.filter((s): s is string => typeof s === 'string')
+    if (stations !== undefined && !stations.length) throw new ParamError('stations 必须是非空字符串数组（要看的语料站；缺省 = 全部有量规的站）')
+    const rawSystemic = optObject(body, 'systemic')
+    const minSamples = rawSystemic ? optNumber(rawSystemic, 'minSamples') : undefined
+    const lowRate = rawSystemic ? optNumber(rawSystemic, 'lowRate') : undefined
+    if (minSamples !== undefined && (!Number.isInteger(minSamples) || minSamples < 1)) throw new ParamError('systemic.minSamples 必须是正整数')
+    if (lowRate !== undefined && !(lowRate >= 0 && lowRate <= 1)) throw new ParamError('systemic.lowRate 必须在 0–1')
+    sendJson(res, 200, await apiRun(rt, 'api/quality-review', () => runQualityReview(ctx, rt, {
+      ...pick('corpusDir', optText(body, 'corpusDir')?.replace(/\\/g, '/')),
+      ...(stations !== undefined ? { stations } : {}),
+      ...(badQuota !== undefined ? { badQuota } : {}),
+      ...(okQuota !== undefined ? { okQuota } : {}),
+      ...(repeats !== undefined ? { repeats } : {}),
+      ...pick('outDir', optText(body, 'outDir')?.replace(/\\/g, '/')),
+      ...(minSamples !== undefined || lowRate !== undefined
+        ? { systemic: { ...(minSamples !== undefined ? { minSamples } : {}), ...(lowRate !== undefined ? { lowRate } : {}) } }
+        : {}),
     })))
   },
   'GET /agent-guide': async ({ res }) => {

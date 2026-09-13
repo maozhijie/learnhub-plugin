@@ -2,6 +2,9 @@
  * 生成冒烟驱动（#215）：一条命令在临时 vault 跑通全管线并打印结构断言报告。
  *
  *   npm run smoke            # 缺省最小成本档（1 节点 / 综合题 4 道 / 第二意见门关）
+ *   npm run smoke -- --corpus <目录>   # 语料留在该目录（缺省随临时 vault 一起删）——离线评审
+ *                                      # 的抽样池来源（#222/#224）：冒烟跑的是真模型，语料留
+ *                                      # 下来才有「对真实生成产出打分」的样本
  *
  * 管线本体住宿主（真 provider 只在宿主 ctx 上，见 src/host/smoke.ts），本脚本只做三件事：
  *   ① 找到宿主（--base 或 LEARNHUB_BASE，缺省 http://127.0.0.1:3080）；
@@ -15,6 +18,7 @@
  * 注意：本脚本走真实 provider 与用户配额——单次成本压在几次调用内，不要挂循环。
  */
 import { request as httpRequest } from 'node:http'
+import { resolve } from 'node:path'
 
 /** 长任务 POST：用 node:http 而非 fetch——fetch（undici）默认 headersTimeout 300s，
  * 「宿主同步跑完整轮再回」的调用会被 5 分钟掐断（#216 首轮实验实测：语料跑齐 72 格次，
@@ -57,6 +61,9 @@ for (const [flag, key, cast] of [
   ['goal', 'goal', String], ['course', 'course', String],
   ['quiz-count', 'quizCount', Number], ['quiz-audit-rate', 'quizAuditRate', Number],
   ['job-timeout-ms', 'jobTimeoutMs', Number],
+  // 语料目录由**宿主进程**写盘：相对路径会落在宿主的 cwd 里而不是本脚本的 cwd（#216 实测踩过），
+  // 故一律解析成本脚本视角的绝对路径再发过去
+  ['corpus', 'corpusDir', v => resolve(v)],
 ]) {
   const v = opt(flag, undefined)
   if (v !== undefined) body[key] = cast(v)

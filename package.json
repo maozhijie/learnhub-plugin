@@ -41,6 +41,7 @@
     "prepare": "node scripts/link-peers.mjs",
     "smoke": "node scripts/gen-smoke.mjs",
     "spike": "node scripts/spike.mjs",
+    "quality-review": "node scripts/quality-review.mjs",
     "typecheck": "node scripts/arch-baseline.mjs --types && node scripts/scan-ui-types.mjs",
     "test": "npm run typecheck && node --experimental-transform-types --test --test-concurrency=3 tests/*.test.ts"
   },

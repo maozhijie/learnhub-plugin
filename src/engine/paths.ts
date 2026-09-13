@@ -54,6 +54,10 @@ export class Paths {
    * 存档（frontmatter+提示词+原始输出），解析器回归 fixture 源 / 质量评审抽样池 /
    * 模型更换格式漂移体检标本。写侧住 host/corpus（捕获器），engine 侧只登记路径。 */
   get corpusDir(): string { return `${this.centerStateDir}/生成语料` }
+  /** 质量评审报告（#222 / ADR-0070）：`state/质量评审/`——离线评审器的人读报告落点
+   * （报告不进 canonical、不写沉淀层；「内容质量结论」事件另行落地）。与生成语料同属
+   * state 观测面：写侧住 host/quality-review（评审运行器），engine 侧只登记路径。 */
+  get qualityReviewDir(): string { return `${this.centerStateDir}/质量评审` }
   get learnhubConfigPath(): string { return `${this.centerStateDir}/learnhub.json` }
   /** Vault 链接先验缓存（V-2 #91）：state/vault链接.json——全库 wikilink 扫描产物
    * （候选边 + 命中率审计 + 源文件指纹）；只写引擎 state 区，个人笔记零写入。 */

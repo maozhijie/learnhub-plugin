@@ -37,6 +37,10 @@ export interface LearnhubConfig {
   /** 出题第二意见门抽样率（#223）：0–1，0 = 关门；缺省 0.25（起步低）。
    * 高难度题（difficulty 3）恒入样；非 0–1 数值在装配时 fail loud。 */
   quizAuditRate?: number
+  /** 生成语料落盘目录覆盖（#222 起：冒烟把临时 vault 的语料写到外面的持久目录，供离线
+   * 评审抽样——临时 vault 随跑随删，不覆盖的话冒烟的语料一件都留不下）。缺省 = 本 vault
+   * 的 `state/生成语料`。 */
+  corpusDir?: string
 }
 
 /** 课程生成任务注册表（course/node 键）：面板「生成」页签的状态源，
@@ -155,7 +159,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
   const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng, fs: nodeVaultFs })
   // —— 生成语料捕获器（#213 / ADR-0060）：缝出口全量落盘的 sink，构造先于 agent 缝
   //（llmSeam/llmStreamSeam 装配时接它）。写盘异步 fire-and-forget、故障静默。 ——
-  const corpus = createCorpusCapture(engine.paths.corpusDir)
+  const corpus = createCorpusCapture(config?.corpusDir ? config.corpusDir.replace(/\\/g, '/') : engine.paths.corpusDir)
   // —— 统一 agent 缝装配（#162）：端口适配住 host/llm.ts 唯一适配文件，投递层只构造
   // 与注入；调用日志沿缝贯通、注入侧可观测（console + 运行日志）。 ——
   let rtRef: HostRuntime | undefined

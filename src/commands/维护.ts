@@ -268,7 +268,8 @@ export const 维护域 = {
       course: { type: "string" },
       quizCount: { type: "number" },
       quizAuditRate: { type: "number" },
-      jobTimeoutMs: { type: "number" }
+      jobTimeoutMs: { type: "number" },
+      corpusDir: { type: "string" }
     },
     domain: "维护",
     channels: [
@@ -276,6 +277,26 @@ export const 维护域 = {
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/smoke" }
+      }
+    ]
+  }),
+  'quality-review': command({
+    id: "quality-review",
+    args: {
+      corpusDir: { type: "string" },
+      stations: { type: "array", items: { type: "string" } },
+      badQuota: { type: "number" },
+      okQuota: { type: "number" },
+      repeats: { type: "number" },
+      outDir: { type: "string" },
+      systemic: { type: "object", additionalProperties: true }
+    },
+    domain: "维护",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/quality-review" }
       }
     ]
   }),
