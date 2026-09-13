@@ -1376,7 +1376,7 @@ worksheet:
   /** 大纲落盘：manifest 写入 frontmatter content.sections（全 pending），正文不动。
    * fm 现读（逐节连续落盘时调用方的 stateMap 已过期）。
    * 返回 tolerated（#213）：解析容忍命中清单随返回值出引擎——宿主语料捕获据此把
-   * 大纲站当次调用补标 tolerated（容忍样本必存语义，ADR-0059）。 */
+   * 大纲站当次调用补标 tolerated（容忍样本必存语义，ADR-0060）。 */
   async outlineApply(
     root: string, graph: Graph, node: string, yamlText: string,
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,

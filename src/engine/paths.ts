@@ -50,7 +50,7 @@ export class Paths {
   get recoveryStatePath(): string { return `${this.centerStateDir}/recovery_state.json` }
   get runLogPath(): string { return `${this.centerStateDir}/运行日志.md` }
   get promptDir(): string { return `${this.centerStateDir}/提示词` }
-  /** 生成语料（#213 / ADR-0059）：`state/生成语料/<站>/`——真实模型调用的原始产出
+  /** 生成语料（#213 / ADR-0060）：`state/生成语料/<站>/`——真实模型调用的原始产出
    * 存档（frontmatter+提示词+原始输出），解析器回归 fixture 源 / 质量评审抽样池 /
    * 模型更换格式漂移体检标本。写侧住 host/corpus（捕获器），engine 侧只登记路径。 */
   get corpusDir(): string { return `${this.centerStateDir}/生成语料` }

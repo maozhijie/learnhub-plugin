@@ -6,7 +6,7 @@
  * 与路由/队列/工具面无关的纯技术层：本文件只依赖 cordis Context、dsh-llm 与
  * host/corpus 的捕获缝，不碰 engine 状态。ADR-0044：`@deepseek-ai/dsh-llm` /
  * `cordis` 的引擎侧引用点不增加——dsh 耦合 100% 收在本文件。
- * 捕获（#213 / ADR-0059）：所有真模型调用（补全 + 工具回路 + 教练讲解直调）在缝出口
+ * 捕获（#213 / ADR-0060）：所有真模型调用（补全 + 工具回路 + 教练讲解直调）在缝出口
  * 落语料——成功记 ok（截断/usage 随行），调用级失败记 failed+稳定错误码后原样上抛；
  * 解析级失败/容忍由宿主 catch 点经 capture.annotateLast 补标。站标签（station/kind）
  * 来自端口 opts（AgentSeam 贯通）或工厂闭包（单站注入点）。

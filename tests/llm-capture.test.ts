@@ -1,5 +1,5 @@
 /**
- * 缝出口生成语料捕获（#213 / ADR-0059）。
+ * 缝出口生成语料捕获（#213 / ADR-0060）。
  *
  * - 适配器捕获：假 ctx.llm.stream（脚本 chunk 流）驱动 llmSeam/llmStreamSeam——
  *   ok 记录带站/档/usage/truncated，调用级失败记 failed+稳定码后原样上抛；

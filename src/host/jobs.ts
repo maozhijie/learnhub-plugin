@@ -36,7 +36,7 @@ function errorCodeOf(err: unknown): string {
 
 /** 语料补标（#213）：站最近一条捕获改判 failed+失败码，返回任务失败详情的语料引用
  * （无捕获 = undefined——引用只在真有语料文件时带出）。站内对齐语义：队列泵单并发 +
- * catch 紧随该站调用，「最近一条」即死因样本（ADR-0059）。 */
+ * catch 紧随该站调用，「最近一条」即死因样本（ADR-0060）。 */
 function failCorpus(rt: HostRuntime, station: string, err: unknown): string | undefined {
   return rt.corpus.annotateLast(station, { outcome: 'failed', code: errorCodeOf(err) })
 }
