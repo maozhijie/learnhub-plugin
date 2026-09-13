@@ -2602,7 +2602,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.explainBackFeedback(\"1\",\"1\",\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.explainBackFeedback(\"1\",\"1\",\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
   ]
  },
  {
@@ -2644,7 +2644,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.explainBackFeedback(\"1\",\"1\",\"\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.explainBackFeedback(\"1\",\"1\",\"\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
   ]
  },
  {
@@ -3476,7 +3476,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
   ]
  },
  {
@@ -3527,7 +3527,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
   ]
  },
  {
@@ -3544,7 +3544,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
   ]
  },
  {
@@ -3561,7 +3561,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
   ]
  },
  {
@@ -3578,7 +3578,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
   ]
  },
  {
@@ -3703,7 +3703,7 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
    "content2.contentTierOf(\"1\",\"1\")",
-   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n            effort: opts?.effort\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"effort\":\"fast\"})",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n                effort: opts?.effort,\n                station: STATIONS.quiz\n            }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"effort\":\"fast\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
@@ -3767,7 +3767,7 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在按学习者意见重出新题…\"}])",
    "content2.contentTierOf(\"1\",\"1\")",
-   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n            effort: opts?.effort\n        }),{\"instruction\":\"1\",\"effort\":\"fast\"})",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n                effort: opts?.effort,\n                station: STATIONS.quiz\n            }),{\"instruction\":\"1\",\"effort\":\"fast\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
@@ -3796,7 +3796,7 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
    "content2.contentTierOf(\"1\",\"1\")",
-   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n            effort: opts?.effort\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"effort\":\"fast\"})",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n                effort: opts?.effort,\n                station: STATIONS.quiz\n            }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"effort\":\"fast\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
@@ -3825,7 +3825,7 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
    "content2.contentTierOf(\"1\",\"1\")",
-   "bank2.questionGenerate(\"1\",\"1\",undefined,async (prompt)=>complete(prompt, undefined, {\n            effort: opts?.effort\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"effort\":\"fast\"})",
+   "bank2.questionGenerate(\"1\",\"1\",undefined,async (prompt)=>complete(prompt, undefined, {\n                effort: opts?.effort,\n                station: STATIONS.quiz\n            }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"effort\":\"fast\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
@@ -3979,7 +3979,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4051,7 +4051,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4069,7 +4069,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",null,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",null,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4087,7 +4087,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4105,7 +4105,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true})"
   ]
  },
  {
@@ -4326,7 +4326,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "bank2.questionDisputeReview((prompt, system, opts)=>llmComplete(ctx, prompt, system, opts?.effort === 'fast' ? {\n            effort: llmCfg.fastEffort\n        } : opts?.effort === 'deep' ? {\n            effort: llmCfg.deepEffort\n        } : undefined),\"1\",\"1\",\"1\")"
+   "bank2.questionDisputeReview((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\")"
   ]
  },
  {
@@ -5572,8 +5572,8 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
    "project.projectPlanPack(\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5617,8 +5617,8 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "project.projectMilestonePack(\"1\",\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },

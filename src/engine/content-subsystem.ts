@@ -214,8 +214,9 @@ export class ContentSubsystem {
 
 
   /** 大纲落盘：节清单 YAML → 校验 → frontmatter content.sections（全 pending），正文不动。
-   * 骨架节点先建占位文件（allo on-demand：大纲即时）。 */
-  async contentOutline(courseKey: string | undefined, node: string, yamlText: string): Promise<SectionManifest[]> {
+   * 骨架节点先建占位文件（allo on-demand：大纲即时）。tolerated 随返回值出引擎（#213
+   * 容忍补标通道）。 */
+  async contentOutline(courseKey: string | undefined, node: string, yamlText: string): Promise<{ sections: SectionManifest[]; tolerated: string[] }> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[outline] 节点「${node}」不在图内。`)
@@ -281,8 +282,9 @@ export class ContentSubsystem {
   }
 
 
-  /** 拆节落盘（ADR-0054）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），返回子节清单。 */
-  async contentSplit(courseKey: string | undefined, node: string, sectionId: string, yamlText: string): Promise<SectionManifest[]> {
+  /** 拆节落盘（ADR-0054）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），返回
+   * 子节清单与 tolerated（#213 容忍补标通道）。 */
+  async contentSplit(courseKey: string | undefined, node: string, sectionId: string, yamlText: string): Promise<{ sections: SectionManifest[]; tolerated: string[] }> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[split] 节点「${node}」不在图内。`)

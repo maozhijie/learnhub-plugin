@@ -14,11 +14,31 @@
 /** 语义思考档。 */
 export type LlmEffort = 'fast' | 'deep'
 
-/** 补全缝：prompt 必带；system 可选（人设/判卷约束）；opts.effort 语义档。 */
+/** Token 计量投影（#213）：适配器从 provider usage 块投影的端口中立三值；
+ * reasoningTokens 缺省 = 路由不上报推理税。 */
+export interface LlmTokenUsage {
+  inputTokens: number
+  outputTokens: number
+  reasoningTokens?: number
+}
+
+/** 调用形态（#213 语料站标签的 kind 半边，对齐 AgentCallMode）：complete 单发 /
+ * repair 门错修复轮 / loop 工具回路轮。 */
+export type LlmCallKind = 'complete' | 'repair' | 'loop'
+
+/** 补全缝：prompt 必带；system 可选（人设/判卷约束）；opts.effort 语义档。
+ * opts.station/kind 是语料捕获的站标签（#213）：AgentSeam 传站名与调用形态，裸缝站
+ * 由注入点工厂闭包带站名；opts.usageSink 是 token 计量回程（AgentCallRecord 观测面），
+ * 适配器拿到 usage 块后回调。测试假端口可整体忽略新增 opts。 */
 export type LlmComplete = (
   prompt: string,
   system?: string,
-  opts?: { effort?: LlmEffort },
+  opts?: {
+    effort?: LlmEffort
+    station?: string
+    kind?: LlmCallKind
+    usageSink?: (usage: LlmTokenUsage) => void
+  },
 ) => Promise<string>
 
 // ---- 工具回路端口（#162 / ADR-0041 双模式的回路半）：端口中立形态，适配器翻译成
@@ -45,10 +65,12 @@ export type LlmLoopTurn =
   | { role: 'tool'; callId: string; text: string; isError?: boolean }
 
 /** 工具回路缝：一次流式请求（整段回路历史 + 可选工具白名单），返回助手轮
- * （文本 + 工具调用）。空闲超时/截断重试/档位降级与补全缝同一套适配器机械。 */
+ * （文本 + 工具调用 + 可选 token 计量）。req.station 是语料捕获的站标签（#213，
+ * AgentSeam 沿调用贯通）；空闲超时/截断重试/档位降级与补全缝同一套适配器机械。 */
 export type LlmStream = (req: {
   messages: LlmLoopTurn[]
   system?: string
   effort?: LlmEffort
+  station?: string
   tools?: LlmToolSpec[]
-}) => Promise<{ text: string; toolCalls: LlmToolCall[] }>
+}) => Promise<{ text: string; toolCalls: LlmToolCall[]; usage?: LlmTokenUsage }>

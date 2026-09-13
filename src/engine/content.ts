@@ -1374,11 +1374,13 @@ worksheet:
   }
 
   /** 大纲落盘：manifest 写入 frontmatter content.sections（全 pending），正文不动。
-   * fm 现读（逐节连续落盘时调用方的 stateMap 已过期）。 */
+   * fm 现读（逐节连续落盘时调用方的 stateMap 已过期）。
+   * 返回 tolerated（#213）：解析容忍命中清单随返回值出引擎——宿主语料捕获据此把
+   * 大纲站当次调用补标 tolerated（容忍样本必存语义，ADR-0060）。 */
   async outlineApply(
     root: string, graph: Graph, node: string, yamlText: string,
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
-  ): Promise<SectionManifest[]> {
+  ): Promise<{ sections: SectionManifest[]; tolerated: string[] }> {
     const tolerated: string[] = []
     const manifest = Content.parseOutline(yamlText, note => { tolerated.push(note) })
     const budget = outlineBudgetForNode(graph, node, manifest.length)
@@ -1397,15 +1399,16 @@ worksheet:
     const psi = graph.typeOf[node] !== 'practice' && nodeProblemFirstOf(graph, node)
     await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: manifest, tier } }, body, this.fs)
     await journal({ course: '', node, rating: null, kind: 'content_outline', elapsed_days: 0, detail: `节清单 ${manifest.length} 节落盘（全 pending；档位 ${tier}${psi ? '；PS-I 先做后教' : ''}${tolerated.length ? `；${tolerated.join('；')}` : ''}）` })
-    return manifest
+    return { sections: manifest, tolerated }
   }
 
   /** 拆节落盘（ADR-0054）：溢出的 pending 节原位替换为 2–3 个子节（模型 YAML），正文不动
-   * （pending 节本就不进正文），journal 留痕。返回新插入的子节清单（管线据此逐子节生成）。 */
+   * （pending 节本就不进正文），journal 留痕。返回新插入的子节清单（管线据此逐子节生成）
+   * 与 tolerated（#213，同 outlineApply 的容忍补标通道）。 */
   async splitApply(
     root: string, graph: Graph, node: string, sectionId: string, yamlText: string,
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
-  ): Promise<SectionManifest[]> {
+  ): Promise<{ sections: SectionManifest[]; tolerated: string[] }> {
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
     const { fm, body } = await loadNote(path, this.fs)
@@ -1424,7 +1427,7 @@ worksheet:
     const parent = sections.find(m => m.id === sectionId)!
     await saveNote(path, { ...fm, content: { ...((fm.content as Record<string, unknown>) ?? {}), sections: next } }, body, this.fs)
     await journal({ course: '', node, rating: null, kind: 'content_split', elapsed_days: 0, detail: `节「${parent.title}」正文溢出，拆为 ${subs.map(s => `「${s.title}」`).join('、')}${tolerated.length ? `；${tolerated.join('；')}` : ''}` })
-    return subs
+    return { sections: subs, tolerated }
   }
 
   /** 单节落盘：交互件标记块先拆出落盘 → QC 格式类程序化修复（别名，#147）→ 节级质检门 →

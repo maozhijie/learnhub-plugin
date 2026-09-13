@@ -76,9 +76,13 @@ export function cleanupProbeVault(): void {
 /**
  * 把录制到的调用摘成**可复现**的形状：临时 vault 路径与 ISO 时刻都是进程级噪音
  * （mkdtemp 随机后缀、`new Date()`），换成占位符——快照只该钉行为，不该钉机器与时钟。
+ * 语料文件名（#213，`bad-2026-09-13T06-28-19-642Z-0001.md` 形——冒号已换连字符，
+ * 标准 ISO 规则认不出）同样是时钟噪音，一并换占位符。
  */
 function scrub(call: string): string {
-  return call.split(probeVault()).join('«vault»').replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+Z/g, '«ts»')
+  return call.split(probeVault()).join('«vault»')
+    .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+Z/g, '«ts»')
+    .replace(/(?:ok|bad)-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z-\d{4}\.md/g, '«corpus-file»')
 }
 
 /** 假宿主 ctx（与 host-runtime.test.ts 同款）：无 llm —— LLM 路径确定性 fail loud。 */

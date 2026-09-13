@@ -15,6 +15,8 @@ import { AgentSeam, LearnhubEngine } from '../engine/index.ts'
 import type { SeedDraftRequest } from '../engine/index.ts'
 import type { GenJobFailure, GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
+import { createCorpusCapture } from './corpus.ts'
+import type { CorpusCapture } from './corpus.ts'
 import { mathRng, systemClock } from './clock.ts'
 import { nodeVaultFs } from './vault-fs.ts'
 
@@ -105,6 +107,9 @@ export interface HostRuntime {
   /** 统一 agent 缝（#162 / ADR-0041/0044）：六个策略站的调用面。站点方法以它为
    * llm 注入参——投递层构造一次、逐调用传入（#137 注入缝纪律沿袭：测试换假端口）。 */
   agent: AgentSeam
+  /** 生成语料捕获器（#213 / ADR-0060）：缝出口全量落盘（经 host/llm.ts 接线）+
+   * 失败/容忍补标（jobs.ts 等宿主 catch 点）+ 任务失败详情的语料引用来源。 */
+  corpus: CorpusCapture
   vault: string
   centerRel: string
   jobs: HostJobs
@@ -135,23 +140,27 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     writeFileSync(freshConfigPath, JSON.stringify({ schema: { version: 2, formats: {} } }, null, 1) + '\n', 'utf8')
   }
   const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng, fs: nodeVaultFs })
+  // —— 生成语料捕获器（#213 / ADR-0060）：缝出口全量落盘的 sink，构造先于 agent 缝
+  //（llmSeam/llmStreamSeam 装配时接它）。写盘异步 fire-and-forget、故障静默。 ——
+  const corpus = createCorpusCapture(engine.paths.corpusDir)
   // —— 统一 agent 缝装配（#162）：端口适配住 host/llm.ts 唯一适配文件，投递层只构造
   // 与注入；调用日志沿缝贯通、注入侧可观测（console + 运行日志）。 ——
   let rtRef: HostRuntime | undefined
   const agent = new AgentSeam({
-    complete: llmSeam(ctx),
-    stream: llmStreamSeam(ctx),
+    complete: llmSeam(ctx, corpus.record),
+    stream: llmStreamSeam(ctx, corpus.record),
     onCall: r => {
-      console.info(`[learnhub:agent] ${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符`)
+      const usage = r.usage ? ` · tok ${r.usage.inputTokens}/${r.usage.outputTokens}${r.usage.reasoningTokens !== undefined ? `+${r.usage.reasoningTokens}` : ''}` : ''
+      console.info(`[learnhub:agent] ${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符${usage}`)
       if (rtRef) {
         void runLog(rtRef, 'llm_call',
-          `${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符`)
+          `${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符${usage}`)
           .catch(() => undefined)
       }
     },
   }, systemClock)
   const rt: HostRuntime = {
-    engine, agent,
+    engine, agent, corpus,
     vault,
     centerRel,
     jobs: { genJobs: new Map(), quizJobResults: new Map() },
