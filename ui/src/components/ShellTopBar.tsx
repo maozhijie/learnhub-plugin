@@ -26,26 +26,37 @@ export function ShellTopBar(props: {
   onOpenHelp: () => void
 }) {
   return (
-    <div className='shell-topbar'>
-      <Tabs className='shell-zones' activeTab={props.zone} onChange={k => props.onZone(k as ZoneKey)} type='capsule' size='small'>
-        <Tabs.TabPane key='today' title='今日' />
-        <Tabs.TabPane key='courses' title='课程' />
-        <Tabs.TabPane key='insight' title='洞察' />
-        <Tabs.TabPane key='projects' title='项目' />
-        <Tabs.TabPane key='practice' title='无界实践区' />
-      </Tabs>
-      <div className='shell-controls'>
-        {/* 铃铛通知中心：壳位预留（ADR-0058），实现属 #164 池票——不可用态带说明 */}
-        <Tooltip content='通知中心在建：升级落地前此处留位（属池票 #164）'>
-          <Button size='mini' type='text' disabled aria-label='通知中心（未开放）'
-            icon={<Badge dot><IconNotification /></Badge>} />
-        </Tooltip>
-        <Button size='mini' type='text' onClick={props.onOpenHelp} aria-label='能力指南'
-          icon={<IconQuestionCircle />}>指南</Button>
-        <Button size='mini' type='text' onClick={props.onToggleTheme}
-          aria-label={props.theme === 'dark' ? '切到亮色' : '切到暗色'}
-          icon={props.theme === 'dark' ? <IconSun /> : <IconMoon />} />
+    <div>
+      <div className='shell-topbar'>
+        <Tabs className='shell-zones' activeTab={props.zone} onChange={k => props.onZone(k as ZoneKey)} type='capsule' size='small'>
+          <Tabs.TabPane key='today' title='今日' />
+          <Tabs.TabPane key='courses' title='课程' />
+          <Tabs.TabPane key='insight' title='洞察' />
+          <Tabs.TabPane key='projects' title='项目' />
+          <Tabs.TabPane key='practice' title='无界实践区' />
+        </Tabs>
+        <div className='shell-controls'>
+          {/* 铃铛通知中心：壳位预留（ADR-0058），实现属 #164 池票——不可用态带说明 */}
+          <Tooltip content='通知中心在建：升级落地前此处留位（属池票 #164）'>
+            <Button size='mini' type='text' disabled aria-label='通知中心（未开放）'
+              icon={<Badge dot><IconNotification /></Badge>} />
+          </Tooltip>
+          <Button size='mini' type='text' onClick={props.onOpenHelp} aria-label='能力指南'
+            icon={<IconQuestionCircle />}>指南</Button>
+          <Button size='mini' type='text' onClick={props.onToggleTheme}
+            aria-label={props.theme === 'dark' ? '切到亮色' : '切到暗色'}
+            icon={props.theme === 'dark' ? <IconSun /> : <IconMoon />} />
+        </div>
       </div>
+      {/* 课程区子导航（T1 四入口；T5 成型三入口时随 COURSE_SUB_ITEMS 重塑）：
+       * 必须真实渲染——#206 曾在重构中删掉本块而三表门恒绿（表在、入口不在的
+       * Exhibit A 反向形态），门的对账面现含「表须被渲染消费」检查。 */}
+      {props.zone === 'courses' && (
+        <Tabs className='shell-subnav' activeTab={props.courseSub} onChange={k => props.onCourseSub(k as CourseSub)}
+          type='text' size='small'>
+          {COURSE_SUB_ITEMS.map(it => <Tabs.TabPane key={it.key} title={it.title} />)}
+        </Tabs>
+      )}
     </div>
   )
 }

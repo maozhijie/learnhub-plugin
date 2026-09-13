@@ -8,7 +8,8 @@ import type { AgentGuideItem } from '../types'
 
 const { Text } = Typography
 
-/** 页面键 → 展示名（与宿主 AGENT_GUIDE.page 约定一致）。 */
+/** 页面键 → 展示名（与宿主 AGENT_GUIDE.page 词表同构，键集 = lib/router ZONE_KEYS
+ * 投影 + global；三处增删须同步，审查登记：无机械对账，靠本注释锚住）。 */
 export const GUIDE_PAGE_LABEL: Record<string, string> = {
   today: '今日', courses: '课程', insight: '洞察', projects: '项目', practice: '无界实践区', global: '全局',
 }

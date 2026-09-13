@@ -62,8 +62,8 @@ function toEntry(header: string, avoidRaw: string[]): GlossaryEntry {
 
 /** 解析 CONTEXT.md 的 Language 词条表：`**词条**:` 行开条目，`_Avoid_: …` 行收
  * 词表；正文散文不参与。每测试进程解析一次即可（词条文件在会话中不变）。 */
-export function loadGlossary(rel = 'CONTEXT.md'): GlossaryEntry[] {
-  const text = readFileSync(join(ROOT, rel), 'utf8')
+export function loadGlossary(): GlossaryEntry[] {
+  const text = readFileSync(join(ROOT, 'CONTEXT.md'), 'utf8')
   const entries: GlossaryEntry[] = []
   let current: { header: string; avoidRaw: string[] } | null = null
   for (const raw of text.split(/\r?\n/)) {
