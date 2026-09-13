@@ -93,7 +93,7 @@ import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
 import { sourceKeyOf } from './types.ts'
 import type { FsrsBlock, ReviewRec, SectionManifest } from './types.ts'
-import { priorQueryTerms, priorSection, queryEntriesFor, searchVaultPrior } from './vault-prior.ts'
+import { priorSection, runPriorSearch } from './vault-prior.ts'
 import type { AnswerResult, LessonDoc, QuestionForgetResult, QuestionRateResult, QuestionsDoc, QueueItem, QuestionItem, QueueCard, ReviewCard, ReviewQueueDoc, TreeDoc } from './views/content.ts'
 import { xpForAnswer } from './xp.ts'
 export class ContentSubsystem {
@@ -111,11 +111,12 @@ export class ContentSubsystem {
    * 返回注入段 + **检索审计**（零命中/两种截断/命中清单，见 VaultPriorAudit）：调用方
    * 经 opts.onPrior 折进任务记录，不让「个性化缺席」静默（ADR-0004）。 */
   async vaultPriorFor(c: { root: string }, graph: Graph, node: string): Promise<{ section: string; audit: VaultPriorAudit }> {
-    const { entries, error } = await queryEntriesFor(this.e.concepts, c.root)
-    const query = priorQueryTerms([node, ...(graph.preOf[node] ?? [])], entries)
-    const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-    const { hits, audit } = await searchVaultPrior(this.e.vaultRoot, centerRel, query, {}, this.e.fs)
-    return { section: priorSection(hits), audit: error ? { ...audit, expansionError: error } : audit }
+    const found = await runPriorSearch({
+      registry: this.e.concepts, courseRoot: c.root,
+      vaultRoot: this.e.vaultRoot, centerRel: this.e.paths.centerRelOf(this.e.vaultRoot),
+      raw: [node, ...(graph.preOf[node] ?? [])], fs: this.e.fs,
+    })
+    return { section: priorSection(found.hits), audit: found.audit }
   }
 
 

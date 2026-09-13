@@ -56,7 +56,7 @@ import { CROSS_AXIS_THRESHOLD, TIER_REC_DEMOTE_SCORE, TIER_REC_MIN_EVENTS, TIER_
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import type { ConceptRegistry } from './concepts.ts'
-import { priorQueryTerms, priorSection, queryEntriesFor, searchVaultPrior } from './vault-prior.ts'
+import { priorSection, runPriorSearch } from './vault-prior.ts'
 
 import { decompileGoalOf, decompileTerms, splitDecompileDoc, decompileRepairPrompt, reconcilePlanNodes, splitNodeSpec } from './project-decompile.ts'
 import type { DecompileDoc } from './project-decompile.ts'
@@ -1146,13 +1146,12 @@ export class ProjectSubsystem {
     }
     // Vault 先验（只读检索）注入反编译上下文。#229：检索词经概念登记表扩展（显式目标
     // 课程时才有登记表可读；种子簇充当新课程时无表，扩展为空操作），审计随返回值带出。
-    const { entries, error } = target
-      ? await queryEntriesFor(this.e.concepts, target.root)
-      : { entries: [], error: undefined }
-    const query = priorQueryTerms(decompileTerms(goal, picked.map(p => p.title)), entries)
-    const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-    const found = await searchVaultPrior(this.e.vaultRoot, centerRel, query, {}, this.e.fs)
-    const priorAudit: VaultPriorAudit = error ? { ...found.audit, expansionError: error } : found.audit
+    const found = await runPriorSearch({
+      registry: this.e.concepts, courseRoot: target?.root ?? null,
+      vaultRoot: this.e.vaultRoot, centerRel: this.e.paths.centerRelOf(this.e.vaultRoot),
+      raw: decompileTerms(goal, picked.map(p => p.title)), fs: this.e.fs,
+    })
+    const priorAudit = found.audit
     const prior = priorSection(found.hits)
     // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出。
     // 节点名清单按「区 · 块」**分段**（#218 稀释治理）：它是名字对账的取值域，**不截断**

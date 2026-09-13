@@ -649,3 +649,43 @@ starts:
     assert.deepEqual(impact.existing_nodes, ['直观理解积分'])
   })
 })
+
+// ---- #229 先验检索换核：登记表扩词与审计（code-review 抓出种子站曾拿课程名当课程根读表）----
+
+test('seedPropose（#229）：先验检索按**课程根**读登记表——name≠root 时别名扩词仍生效、审计随返回值带出', async () => {
+  // 默认 vault 的课程是 name=数学 / root=math（两个字段不同）：登记表只可能住在 math 目录下，
+  // 旧实现拿课程名去读 → 静默零扩展。检索词取自目标描述（decompileTerms），故目标里放规范词
+  // 「导数」，笔记里只写别名「变化率」——扩词命中与否就是这个测试的读数。
+  await withVault({
+    files: [
+      { path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: 导数\n    aliases: [变化率]\n' },
+      { path: '笔记/我的理解.md', content: '# 变化率随记\n\n我一直把变化率理解成「走得快不快」。' },
+    ],
+  }, async ({ engine }) => {
+    let seen = ''
+    const fake = new AgentSeam({ complete: async prompt => {
+      seen = prompt
+      return SEED_LLM_OK('数学')
+    } }, systemClock)
+    const r = await engine.graph.seedPropose({
+      course: '数学', goal: '导数 与它的直观', mode: 'reseed', useVaultPrior: true,
+    }, fake)
+    assert.ok(r.prior, '选配先验即产审计（缺席 = 没检索，与零命中两件事）')
+    assert.ok(r.prior.expanded.includes('变化率'), '登记表别名并入检索词（按课程根读到表）')
+    assert.equal(r.prior.expansionError, undefined, '表读到了就不该有降级痕迹')
+    assert.deepEqual(r.prior.hitPaths, ['笔记/我的理解.md'], '只写别名的笔记被召回（不扩词则零命中）')
+    assert.ok(seen.includes('变化率随记'), '命中进注入段（标题即正文首个一级标题）')
+    assert.equal(r.prior.zeroHit, false)
+  })
+})
+
+test('seedPropose（#229）：mode=new 课程还不存在 → 无表可读，扩展为空操作且**不留**降级痕迹', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    const fake = new AgentSeam({ complete: async () => SEED_LLM_OK('全新课') }, systemClock)
+    const r = await engine.graph.seedPropose({ course: '全新课', goal: '学会用导数求最值', useVaultPrior: true }, fake)
+    assert.ok(r.prior)
+    assert.deepEqual(r.prior.expanded, [], '新课程没有登记表 → 零扩展')
+    assert.equal(r.prior.expansionError, undefined, '「没有表」（Missing 合法）不是「表坏了」——不留降级痕迹')
+    assert.equal(r.prior.zeroHit, true, '没记过笔记 = 零命中，照样留痕')
+  })
+})

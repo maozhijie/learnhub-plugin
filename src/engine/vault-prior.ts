@@ -165,8 +165,36 @@ export async function queryEntriesFor(
   }
 }
 
-/** 词面出现次数（非重叠计数；CJK 子串整体匹配，与旧核同口径的字符串匹配语义）。 */
-function occurrences(hay: string, needle: string): number {
+/** 一次检索的完整请求（三个入口共用同一实现）。 */
+export interface PriorSearchRequest {
+  /** 概念登记表读侧（查询扩展用；课程根，Missing 合法空表）。 */
+  registry: Pick<ConceptRegistry, 'load'>
+  /** 课程根（登记表所在课程的**目录名**，即 CourseEntry.root）；无课程（新课程/未播种/
+   * 未指定目标课程）传 null——此时不做扩展（没有登记表可读），与「登记表 Broken」是两件事，
+   * 后者要留痕。 */
+  courseRoot: string | null
+  vaultRoot: string
+  /** 中心相对路径（`centerRoot` 相对 vault 根；调用方算好，本函数不碰 Paths）。 */
+  centerRel: string
+  /** 原始检索材料（未分词、未扩展）。 */
+  raw: string[]
+  fs: VaultFs
+  opts?: VaultPriorOptions
+}
+
+/** 检索入口的**唯一实现**（登记表扩词 → BM25 扫描 → 审计合并）：三处各写一遍这段形状必然
+ * 漂移——#229 code-review 实测抓出种子站曾拿课程**名**去读课程**根**的登记表（`name`「数学」
+ * 与 `root`「math」是两个字段），扩展静默失效且无痕。合并到一处后「读哪张表、扩哪些词、
+ * 错了怎么留痕」只有一个答案。 */
+export async function runPriorSearch(req: PriorSearchRequest): Promise<VaultPriorSearch> {
+  const { entries, error } = req.courseRoot === null
+    ? { entries: [] as ConceptEntry[], error: undefined as string | undefined }
+    : await queryEntriesFor(req.registry, req.courseRoot)
+  const found = await searchVaultPrior(req.vaultRoot, req.centerRel, priorQueryTerms(req.raw, entries), req.opts ?? {}, req.fs)
+  return error ? { hits: found.hits, audit: { ...found.audit, expansionError: error } } : found
+}
+
+/** 词面出现次数（非重叠计数；CJK 子串整体匹配，与旧核同口径的字符串匹配语义）。 */function occurrences(hay: string, needle: string): number {
   if (!needle || !hay) return 0
   let n = 0
   let at = hay.indexOf(needle)

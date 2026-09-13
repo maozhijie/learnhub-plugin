@@ -50,8 +50,15 @@ Vault 先验（`src/engine/vault-prior.ts`）是「生成尊重学习者已有�
 
 - **G3/G4 窄面棘轮**：`ContentDeps`/`ProjectDeps` 各 +1 声明/实用/接线/`handles`（`concepts: Pick<ConceptRegistry,'load'>`——查询扩展要读课程登记表），同提交迁移基线。
 - **G5 文件规模**：`vault-prior.ts` 149→347（新核与审计主体）、`content-subsystem.ts` 1046→1057、`projects.ts` 1413→1423、`question-bank.ts` 1558→1568、`graph-subsystem.ts` 604→608、`host/jobs.ts` 1212→1241（注记函数 + 五站接线）、`io.ts`/`vault-fs.ts`/`index.ts` 各 +1～3。
-- **行为快照**：`host-routes-snapshot.json` **3 条探针**的引擎调用参数变化（`content2.contentPack("1","1")` → `content2.contentPack("1","1",{})`——注记回调被探针序列化丢弃），status/响应体**逐字不变**，diff 逐条人审；`host-tools-behavior.json` 零变化。**工具面/路由面调用点与响应形状零改动**（审计不走返回值）。
+- **行为快照**：`host-routes-snapshot.json` **3 条探针**的引擎调用参数变化（`content2.contentPack("1","1")` → `content2.contentPack("1","1",{})`——注记回调被探针序列化丢弃），status/响应体**逐字不变**，diff 逐条人审；`host-tools-behavior.json` 零变化。
+- **一处快照看不见的行为变更（如实登记）**：`seedPropose` / `projectDecompile` 的**返回字段** `prior_hits: number` → `prior: VaultPriorAudit`（结构审计）。`projectDecompile` 是 agent 工具（`host/tool-handlers.ts` 原样序列化整个结果），故工具结果 JSON 随之变化；**行为快照探针以桩引擎取值**（该工具的桩返回固定文本），看不到这一面——这也是为什么它只能靠**这里**登记：调用点、状态码、面板路由响应形状都没动，UI 无 `prior_hits` 消费点（全仓 grep 零命中），故以「返回字段升级 + ADR 登记」结案，不迁移快照。
 - **未做**：嵌入/混合检索（宿主 API 未提供，换核接口已留）、块索引缓存（非当前主要矛盾）——同 #229 票面「明确不做」。
+
+## 后续（本票遗留登记）
+
+- **提示词变更登记**：本票改变最终 prompt（「学习者已有理解」段的内容随 BM25 排序与登记表扩词变化，模板文本一字未动）——按 #220 章程 §8 记**同版本号第二条登记**：`PROMPT_CHANGELOG` 课程大纲 v11 第三条（受影响的是注入先验的全部站：大纲/节生成三变体/拆节/出题二路/种子起草/目标反编译；按 #218 先例挂主消费者名下）。
+- **两处渲染是有意分居**：`priorSection`（节点口径「与本节点相关」）与种子站的 bespoke 块（目标口径「与目标相关」+ 起点定位要求）措辞不同——两个站面对的是不同的定位任务，不是同一段文字的两份实现。code-review 的「Duplicated Code」判据在此**不适用**（判据：两份渲染的读者不同）。
+- **code-review 修复（两轴）**：① 种子站的登记表路径曾拿课程**名**当课程**根**（`name`「数学」 vs `root`「math」）→ 扩展静默失效且无痕，修为按 `registry.get(course)?.root` 解析、课程不存在时 `courseRoot=null`（「没有表」≠「表坏了」，不留 `expansionError`）；② 三处检索入口的重复形状收成**唯一实现** `runPriorSearch`（含 `paths.centerRelOf` 抽出的中心相对路径）；③ 补上「随生成回执带出」的**宿主侧测试**（种子/纯出题/正文三条路径的消息注记，含零命中态）——原先只有引擎审计有测试，宿主注记面是空的。
 
 ## 验收链
 
@@ -60,3 +67,5 @@ Vault 先验（`src/engine/vault-prior.ts`）是「生成尊重学习者已有�
 - 审计：无词（零扫描）、零命中（有扫描面读数）、结果面截断、扫描面截断 + **mtime 优先实跑**（`utimes` 拉开时间戳断言取到新文件）、扩展词清单、Broken 错误带出。
 - 入口贯通：`contentPack` / `questionGenerate` / `questionGenerateSections` 的 `onPrior` 审计（含登记表别名在生成入口生效的端到端样本）。
 - ADR-0010：个人笔记零写入断言照旧（既有测试保留）。
+- **种子站与课程根**（code-review 修复的回归钉）：name≠root 的 vault 上别名扩词仍生效（修复前必红——按课程名读表则零扩展）；`mode=new` 未注册课程 = 零扩展且不留降级痕迹。
+- **宿主注记面**：`tests/host-runtime.test.ts` 三条——种子起草任务（零命中 + 扫描面 + 扩词数）、纯出题任务（命中清单）、正文管线（命中清单 + 扫描面 + 扩词数）。

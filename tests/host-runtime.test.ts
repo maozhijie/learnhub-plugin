@@ -659,6 +659,69 @@ test('continue→partial（ADR-0054）：单节非溢出失败不中止余节，
 })
 
 
+/** 先验审计桩（#229）：零命中/有命中两态可调（形状 = engine VaultPriorAudit）。 */
+function priorAudit(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    terms: ['导数'], expanded: ['变化率'], scanned: 3, matched: 0,
+    scanTruncated: false, hitsTrimmed: false, zeroHit: true, hitPaths: [], ...over,
+  }
+}
+
+test('先验审计随任务记录带出（#229）：零命中不静默——种子起草任务消息带扫描面与扩词读数', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    'graph.seedPropose': async () => ({ id: 7, starts: 1, endpoint: '终点', prior: priorAudit(), repaired: false }),
+    saveGenJobs: async () => undefined,
+    loadGenJobs: async () => [{
+      course: '数学', node: '种子起草', startedAt: new Date().toISOString(), status: 'queued', phase: '种子',
+      model: 'test', message: '排队等待生成…',
+      seedPayload: { goal: '会用导数解决优化问题', mode: 'new', goalType: 'capability', useVaultPrior: true, worksheet: [] },
+    }],
+    'registry.get': async (key: string) => ({ name: key }),
+    loadView: async () => ({ graph: { nset: new Set<string>() } }),
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  restoreGenJobs(rt)
+  await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'queued') // 恢复是异步链
+  resumeQueue(rt, fakeCtx())
+  await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'done')
+  const msg = rt.jobs.genJobs.get('数学/种子起草')!.message ?? ''
+  assert.match(msg, /先验 0 命中（扫 3 篇、登记表扩词 1）/, '零命中 + 扫描面 + 扩词数一起带出（旧实现读不出「检索过没有」）')
+  assert.doesNotMatch(msg, /先验命中 0/, '零命中与「有命中」是两种措辞，不混')
+})
+
+test('先验审计随任务记录带出（#229）：纯出题任务把命中清单写进终态消息', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    'bank2.questionGenerate': async (_c: unknown, _n: unknown, _count: unknown, _llm: unknown, opts?: { onPrior?: (a: unknown) => void }) => {
+      opts?.onPrior?.(priorAudit({ scanned: 5, matched: 2, zeroHit: false, hitPaths: ['笔记/音程.md', '笔记/和弦.md'] }))
+      return { added: 4, total: 4, duplicates: [], rejected: [], skipped: [], enc: {} }
+    },
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const enq = enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点C', { count: 4 })
+  const job = await waitForGenJob(rt, enq.key)
+  assert.match(job.message ?? '', /先验命中 2（笔记\/音程\.md、笔记\/和弦\.md）（扫 5 篇、登记表扩词 1）/, '纯出题也要说得清这次读了哪几篇笔记')
+})
+
+test('先验审计随任务记录带出（#229）：正文管线把审计折进终态消息', async () => {
+  const rt = makeRuntime()
+  stubContentPipeline(rt)
+  stub(rt, {
+    'content2.contentPack': async (_c: unknown, _n: unknown, opts?: { onPrior?: (a: unknown) => void }) => {
+      opts?.onPrior?.(priorAudit({ scanned: 7, matched: 1, zeroHit: false, hitPaths: ['笔记/音程.md'] }))
+      return '上下文包'
+    },
+  })
+  await enqueueGeneration(rt, fakeCtx(), '数学', '节点B')
+  await until(() => rt.jobs.genJobs.get('数学/节点B')?.status === 'done')
+  const msg = rt.jobs.genJobs.get('数学/节点B')!.message ?? ''
+  assert.match(msg, /先验命中 1（笔记\/音程\.md）（扫 7 篇、登记表扩词 1）/, '正文任务消息带命中清单、扫描面与扩词数')
+})
+
 // ---------------------------------------------------------------- quizJobResults 等待语义
 
 test('等待语义：入队 + 等终态 + 结果表读取（agent 工具同步语义）', async () => {
@@ -794,7 +857,7 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
   stub(rt, {
     'graph.seedPropose': async (req: Record<string, unknown>) => {
       seedCalls.push(req)
-      return { id: 7, starts: 1, endpoint: '终点', prior_hits: 0 }
+      return { id: 7, starts: 1, endpoint: '终点', prior: priorAudit({ scanned: 1 }), repaired: false }
     },
     saveGenJobs: async (jobs: Array<Record<string, unknown>>) => { savedPhases.push(jobs) },
     loadGenJobs: async () => [

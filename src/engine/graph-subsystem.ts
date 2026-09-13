@@ -66,12 +66,11 @@ import type { SeedDraftRequest, SeedProposalSpec } from './seed.ts'
 import { isSeedGraph, readAnchor, seedRepairPrompt, validateSeedProposal } from './seed.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
-import type { GNode, ProposalRec } from './types.ts'
-import type { VaultPriorAudit } from './types.ts'
+import type { GNode, ProposalRec, VaultPriorAudit } from './types.ts'
 import { PROPOSAL_KINDS } from './types.ts'
 import type { VaultLinkCandidateView, VaultLinksDoc } from './vault-links.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLinks, scoreTier } from './vault-links.ts'
-import { priorQueryTerms, queryEntriesFor, searchVaultPrior } from './vault-prior.ts'
+import { runPriorSearch } from './vault-prior.ts'
 import type { GraphApplyResult, GraphBrowseDoc, GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult } from './views/graph.ts'
 import type { ExperimentStartResult } from './views/lab.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
@@ -450,11 +449,15 @@ export class GraphSubsystem {
     if (input.useVaultPrior === true) {
       const manifest = await this.e.noteManifest.load()
       const titles = manifest.sources.map(s => s.title ?? s.path.split('/').pop()!.replace(/\.md$/i, ''))
-      const { entries, error } = await queryEntriesFor(this.e.concepts, this.e.paths.courseRoot(course))
-      const query = priorQueryTerms(decompileTerms(goal, titles), entries)
-      const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-      const found = await searchVaultPrior(this.e.vaultRoot, centerRel, query, {}, this.e.fs)
-      priorAudit = error ? { ...found.audit, expansionError: error } : found.audit
+      // 登记表按**课程根**读：mode=reseed 时课程在册（取其 root），mode=new 时课程还不存在
+      // （courseRoot=null，扩展为空操作——「没有表」不是「表坏了」，不留 expansionError）
+      const existing = await this.e.registry.get(course)
+      const found = await runPriorSearch({
+        registry: this.e.concepts, courseRoot: existing?.root ?? null,
+        vaultRoot: this.e.vaultRoot, centerRel: this.e.paths.centerRelOf(this.e.vaultRoot),
+        raw: decompileTerms(goal, titles), fs: this.e.fs,
+      })
+      priorAudit = found.audit
       if (found.hits.length) {
         const items = found.hits.map(h => `- 《${h.title}》（${h.path}）\n  > ${h.excerpt.replaceAll('\n', '\n  > ')}`).join('\n')
         priorBlock = `## 学习者已有理解（Vault 先验）\n\n以下是学习者个人 Vault 里与目标相关的笔记摘录（只读检索所得）：\n\n${items}\n\n起点定位要求：把起点放在熟悉边界——笔记已稳定覆盖的内容不作起点（那是可快速略过的地形，在 reason 里点一句）；摘录只是他记过的东西，只读，永不改写。`
