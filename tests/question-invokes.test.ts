@@ -170,3 +170,25 @@ test('逐节出题同门：清单注入、出生打标入库、投影返回', as
     assert.deepEqual(r.enc, [{ node: '甲', w: 0.5, note: 'invokes 投影 1/2' }])
   })
 })
+
+// ---- 易混对注入（#232）：登记表 confusable 随概念清单进提示词，缺席静默降级 ----
+
+const REGISTRY_CONFUSABLE = 'concepts:\n  - canonical: 自然数\n    confusable: [质数]\n  - canonical: 质数\n'
+
+test('#232 出题提示词附易混对段（登记表在册）；登记表缺席时该段静默降级不报错', async () => {
+  await withVault({
+    ...VAULT,
+    files: [{ path: '学习中心/math/概念登记表.yaml', content: REGISTRY_CONFUSABLE }],
+  }, async ({ engine }) => {
+    const fake = replayFake(GOLD)
+    const r = await engine.bank2.questionGenerate('数学', '乙', undefined, fake)
+    assert.match(fake.calls[0].prompt, /## 易混对（登记表在册，跨概念对比题候选）/, '易混对段随概念清单注入')
+    assert.match(fake.calls[0].prompt, /- 自然数 ↔ 质数/, '候选对名字精确（canonical）')
+    assert.equal(r.added, 2, '注入不改变受理结果（validateBank 照常）')
+  })
+  await withVault(VAULT, async ({ engine }) => {
+    const fake = replayFake(GOLD)
+    await engine.bank2.questionGenerate('数学', '乙', undefined, fake)
+    assert.ok(!fake.calls[0].prompt.includes('## 易混对'), '登记表无 confusable → 段缺席（静默降级）')
+  })
+})

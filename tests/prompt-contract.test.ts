@@ -320,3 +320,15 @@ test('#227: 大纲/节生成三变体升 v10——节清单+前节结尾注入�
     assert.match(tpl, /仅供衔接参考，不复述/, `${kind} 带衔接参考不复述指令`)
   }
 })
+
+// ---- v12 题目生成契约（#232）：收尾跨概念对比题 + 易混对段条件条款 ----
+
+test('#232: 题目生成模板 v12——收尾易混对比题条款（易混对段缺席静默降级、invokes 记主概念）', () => {
+  const tpl = Content.PROMPT_KINDS['题目生成']!
+  assert.ok(Content.promptVersionOf(tpl) >= 12, '题目生成 应升到 v12')
+  assert.match(tpl, /易混对/, '条款 conditioned on 易混对段在场')
+  assert.match(tpl, /跨概念对比题/, '收尾槽位对比题指令')
+  assert.match(tpl, /干扰项取其易混概念或典型混淆做法/, '干扰项取易混概念/做法')
+  assert.match(tpl, /被区分的主概念/, '对比题 invokes 记被区分的主概念（恰一枚不破）')
+  assert.match(tpl, /缺席时本条不适用/, '静默降级：不硬造对比题')
+})
