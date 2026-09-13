@@ -150,6 +150,9 @@ export class Paths {
 
   // ---- 课程级 ----
   courseRoot(root: string): string { return `${this.centerRoot}/${root}` }
+  /** 中心目录相对 vault 根的 posix 路径（「排除学习中心」的消费面用：vault 先验检索、
+   * 笔记源扫描一类）；三处检索入口原先各写一遍 `centerRoot.slice(vaultRoot.length + 1)`。 */
+  centerRelOf(vaultRoot: string): string { return this.centerRoot.slice(vaultRoot.length + 1) }
   /** 概念登记表（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml——每课程一份受控
    * 词表，沉淀层档案坐标系。跨宣告式断裂存活：不在 cutover 归档清单（课程根整树
    * 移入存档时豁免，迁移脚本同款约定）。 */

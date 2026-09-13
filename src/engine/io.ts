@@ -22,6 +22,9 @@ export interface VaultFs {
   unlink(path: string): Promise<void>
   /** note-source 的递归 walk 只消费 isFile 判定，端口按最小面给。 */
   statIsFile(path: string): Promise<boolean>
+  /** 修改时刻（ms）——vault 先验 maxFiles 截断的「mtime 优先」排序用（#229）；
+   * 其余场景一律不读（端口面按消费面长，不预留）。 */
+  statMtimeMs(path: string): Promise<number>
 }
 
 /** 临时文件 + rename 原子写。tmp 名含 `Date.now()` 是**显式登记的例外**（#175 阶段①

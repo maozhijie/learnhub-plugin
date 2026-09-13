@@ -336,3 +336,33 @@ export const FADING_TIERS: FadingTier[] = ['骨架', '补全', '独立']
 /** 笔记源伪课程名（C1 #59；#152 刀 6 自 note-source.ts 归位中立层——题库域消费它，
  * 经 note-source 会与该域的低层消费者合拢成环）。 */
 export const NOTE_SOURCE_COURSE = '笔记源'
+
+/**
+ * Vault 先验检索审计（#229 / ADR-0071）：零命中与两种截断都留痕，命中文件清单可查。
+ * 每次检索**必产**一份——它是「个性化这次有没有到场」的唯一信号，不得静默（ADR-0004）。
+ *
+ * 形状住中立词汇层（本文件）而非检索核（vault-prior.ts）的理由：它同时被检索核与消费
+ * 子系统引用，而 question-bank → note-source 已有边——形状若住检索核就成环
+ * （note-source → question-bank → vault-prior → note-source，R7 执法）。形状与实现分居
+ * 两处是本仓既有形态：types.ts 承载共享形状，行为住各领域模块。
+ */
+export interface VaultPriorAudit {
+  /** 基础检索词（priorTerms 派生）。 */
+  terms: string[]
+  /** 登记表扩展词（别名 + 易混概念，低权重并入）。 */
+  expanded: string[]
+  /** 实际读出内容的文件数（扫描面）。 */
+  scanned: number
+  /** 打分 > 0 的命中文件数（可能大于注入条数）。 */
+  matched: number
+  /** 扫描面被截：vault 的 .md 数超出收集窗口或 maxFiles 上限（截断必留痕）。 */
+  scanTruncated: boolean
+  /** 结果面被截：命中数超 limit，注入面只带前 limit 条。 */
+  hitsTrimmed: boolean
+  /** 零命中（注入面整体缺席）。检索词为空也是零命中——两条静默路径合流到同一个读数。 */
+  zeroHit: boolean
+  /** 命中文件清单（相对路径，按分数降序，至多 limit 条 = 实际进注入面的那些）。 */
+  hitPaths: string[]
+  /** 概念登记表读侧降级（Broken）：扩展跳过，如实带出——由调用方填（见 vaultPriorFor）。 */
+  expansionError?: string
+}

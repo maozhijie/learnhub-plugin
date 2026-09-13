@@ -1,5 +1,7 @@
 import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
+import type { ConceptRegistry } from './concepts.ts'
+import type { VaultPriorAudit } from './types.ts'
 /**
  * Content 子系统（#152 刀 8 / ADR-0043）：内容管线、笔记 resolve/反馈区、课程工作区
  * 与题库树。
@@ -41,6 +43,8 @@ export interface ContentDeps {
   store: Store
   paths: Paths
   registry: Registry
+  /** 概念登记表（#229 查询扩展：检索词按别名/易混概念低权重扩词）。 */
+  concepts: Pick<ConceptRegistry, 'load'>
   bank: QuestionBank
   content: Content
   sessions: Sessions
@@ -89,7 +93,7 @@ import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
 import { sourceKeyOf } from './types.ts'
 import type { FsrsBlock, ReviewRec, SectionManifest } from './types.ts'
-import { priorSection, priorTerms, searchVaultPrior } from './vault-prior.ts'
+import { priorSection, runPriorSearch } from './vault-prior.ts'
 import type { AnswerResult, LessonDoc, QuestionForgetResult, QuestionRateResult, QuestionsDoc, QueueItem, QuestionItem, QueueCard, ReviewCard, ReviewQueueDoc, TreeDoc } from './views/content.ts'
 import { xpForAnswer } from './xp.ts'
 export class ContentSubsystem {
@@ -100,20 +104,27 @@ export class ContentSubsystem {
 // ---- 门面原分节：tree ----
 
 
-  /** Vault 先验注入段（V-2 / #106；生成面共用，零命中返回 ''）：检索词 = 节点名 +
-   * 直接前置名，纯扫描 vault 个人笔记（排除学习中心；ADR-0010 只读纪律——检索
-   * 永不写个人笔记）。宿主无检索/嵌入 API（探测结论见 vault-prior.ts 头注），走
-   * #78 推荐的纯扫描降级路径。 */
-  async vaultPriorFor(graph: Graph, node: string): Promise<string> {
-    const terms = priorTerms([node, ...(graph.preOf[node] ?? [])])
-    if (!terms.length) return ''
-    const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-    const hits = await searchVaultPrior(this.e.vaultRoot, centerRel, terms, {}, this.e.fs)
-    return priorSection(hits)
+  /** Vault 先验注入段（V-2 / #106；#229 检索换核——注入段形态与位置不变）：检索词 =
+   * 节点名 + 直接前置名，经概念登记表扩展（别名/易混概念低权重并入），纯扫描 vault
+   * 个人笔记（排除学习中心；ADR-0010 只读纪律——检索永不写个人笔记）。宿主无检索/嵌入
+   * API（探测结论见 vault-prior.ts 头注），走 #78 推荐的纯扫描降级路径。
+   * 返回注入段 + **检索审计**（零命中/两种截断/命中清单，见 VaultPriorAudit）：调用方
+   * 经 opts.onPrior 折进任务记录，不让「个性化缺席」静默（ADR-0004）。 */
+  async vaultPriorFor(c: { root: string }, graph: Graph, node: string): Promise<{ section: string; audit: VaultPriorAudit }> {
+    const found = await runPriorSearch({
+      registry: this.e.concepts, courseRoot: c.root,
+      vaultRoot: this.e.vaultRoot, centerRel: this.e.paths.centerRelOf(this.e.vaultRoot),
+      raw: [node, ...(graph.preOf[node] ?? [])], fs: this.e.fs,
+    })
+    return { section: priorSection(found.hits), audit: found.audit }
   }
 
 
-  async contentPack(courseKey: string | undefined, node: string, opts?: { omitDeliverables?: boolean }): Promise<string> {
+  /** 上下文包（生成面唯一入口）：包 = 上下文包本体 + 先验注入段（零命中则无该段）。
+   * `opts.onPrior` 是**注记回调**（onTolerated/usageSink 同族）：检索审计经它带出，
+   * 不占返回值——`contentPack` 的字符串返回面被路由/工具探针与 12 处宿主桩固化，
+   * 改形状要迁移整张网，而审计是观测面不是产物（#229 落法，登记在 ADR-0071）。 */
+  async contentPack(courseKey: string | undefined, node: string, opts?: { omitDeliverables?: boolean; onPrior?: (audit: VaultPriorAudit) => void }): Promise<string> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[pack] 节点「${node}」不在图内。`)
@@ -124,10 +135,11 @@ export class ContentSubsystem {
       throw new Error(`[pack] 「${node}」是课程「${c.name}」的终点——终点是承诺标记，不被学习调度（生成门恒拒，不看就绪状态）：它零正文零题库，完成判据折叠自它的最后台阶（终点.pre 集）。`)
     }
     this.e.assertNoteOk(c, graph, broken, node, 'pack')
-    const prior = await this.vaultPriorFor(graph, node)
+    const prior = await this.vaultPriorFor(c, graph, node)
+    opts?.onPrior?.(prior.audit)
     // endpoint 随锚入包（#200）：后继预告的终点措辞读锚现算，普通前沿叶子不再被误标终点
-    const pack = this.e.content.contextPack(graph, state, node, c.name, { ...opts, endpoint: anchor?.endpoint ?? null })
-    return prior ? `${pack}\n\n---\n\n${prior}` : pack
+    const pack = this.e.content.contextPack(graph, state, node, c.name, { omitDeliverables: opts?.omitDeliverables, endpoint: anchor?.endpoint ?? null })
+    return prior.section ? `${pack}\n\n---\n\n${prior.section}` : pack
   }
 
 

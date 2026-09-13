@@ -2127,7 +2127,7 @@
    "registry.get(\"1\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
-   "content2.contentPack(\"1\",\"1\")",
+   "content2.contentPack(\"1\",\"1\",{})",
    "content2.contentTierOf(\"1\",\"1\")",
    "content2.loadPrompt(\"课程节生成-1\")",
    "content2.contentSectionsView(\"1\",\"1\")",
@@ -2183,7 +2183,7 @@
    "registry.get(\"1\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
-   "content2.contentPack(\"1\",\"1\")",
+   "content2.contentPack(\"1\",\"1\",{})",
    "content2.contentTierOf(\"1\",\"1\")",
    "content2.loadPrompt(\"课程节生成\")",
    "content2.contentSectionsView(\"1\",\"1\")",
@@ -2231,7 +2231,7 @@
    "error": "「1」没有节「1」——先运行大纲。"
   },
   "calls": [
-   "content2.contentPack(\"1\",\"1\")",
+   "content2.contentPack(\"1\",\"1\",{})",
    "content2.contentSectionsView(\"1\",\"1\")"
   ]
  },

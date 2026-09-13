@@ -29,6 +29,7 @@ import type { FsrsBlock } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { ErrorCards } from './error-cards.ts'
 import type { ConceptRegistry } from './concepts.ts'
+
 import { Content } from './content.ts'
 import { withContractLast } from './prompt-assembly.ts'
 import type { Graph } from './graph.ts'
@@ -36,7 +37,7 @@ import type { BrokenNote } from './notes.ts'
 import { asFm, loadNote, saveNote } from './notes.ts'
 import type { FSRS } from 'ts-fsrs'
 import { NOTE_SOURCE_COURSE } from './types.ts'
-import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, NoteSourceEntry, GRegion } from './types.ts'
+import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, NoteSourceEntry, GRegion, VaultPriorAudit } from './types.ts'
 import type { AdviceDismissRec } from './bank-advice.ts'
 import type { LlmComplete } from './llm.ts'
 import type { ExplainPoint } from './explain.ts'
@@ -491,7 +492,8 @@ export interface BankDeps {
   assertNoteOk(course: { root: string }, graph: Graph, broken: BrokenNote[], node: string, tool: string): void
   nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }>
   saveNodeNote(path: string, fm: Fm, body: string): Promise<void>
-  vaultPriorFor(graph: Graph, node: string): Promise<string>
+  /** Vault 先验注入段 + 检索审计（#229）；课程根供概念登记表查询扩展用。 */
+  vaultPriorFor(c: { root: string }, graph: Graph, node: string): Promise<{ section: string; audit: VaultPriorAudit }>
   logGradingFailure(rec: { course: string; node: string; qid: string; kind: string; attempt: number; error: string; raw: string }): Promise<void>
   questionContext(courseKey: string | undefined, node: string, qid: string, op: string): Promise<{ c: CourseEntry; graph: Graph; q: BankQuestion; idx: number }>
   exerciseGated(c: CourseEntry, node: string): Promise<boolean>
@@ -1164,6 +1166,9 @@ export class BankSubsystem {
       instruction?: string
       isCancelled?: () => boolean
       secondOpinion?: { rate?: number }
+      /** Vault 先验检索审计注记（#229）：零命中/截断随任务记录带出（ADR-0004）。审计走
+       * 注记回调不占返回值——返回面被宿主桩与路由/工具探针固化，而审计是观测面不是产物。 */
+      onPrior?: (audit: VaultPriorAudit) => void
     },
   ): Promise<{
     course: string; node: string; added: number; skipped: number; total: number
@@ -1196,7 +1201,8 @@ export class BankSubsystem {
     if (!body) throw new Error(`[quiz] 「${node}」还没有正文——先「生成正文」再出题。`)
     const tpl = await this.e.loadPrompt('题目生成')
     const tier = nodeTierOf(graph, node)
-    const prior = await this.e.vaultPriorFor(graph, node)
+    const prior = await this.e.vaultPriorFor(c, graph, node)
+    opts?.onPrior?.(prior.audit)
     // 已有题面（#119）：注入提示词 + 查重基线（归档题不参与——归档旧题后按意见重出同题面是合法意图）
     const bankBefore = await this.e.bank.load(this.e.paths.courseRoot(c.root), node)
     const existingStems = bankStemList(bankBefore)
@@ -1231,7 +1237,7 @@ export class BankSubsystem {
     const conceptBlock = Content.conceptListBlock(conceptScope)
       + Content.confusablePairsBlock(confusablePairsOf(conceptEntries, new Set(conceptScope)))
     const raw = await llm(withContractLast(tpl,
-      `${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`))
+      `${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n${contentBody}${prior.section ? `\n\n---\n\n${prior.section}` : ''}`))
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
@@ -1346,6 +1352,8 @@ export class BankSubsystem {
     opts?: {
       isCancelled?: () => boolean
       secondOpinion?: { rate?: number }
+      /** Vault 先验检索审计注记（#229）：同 questionGenerate。 */
+      onPrior?: (audit: VaultPriorAudit) => void
     },
   ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[]; secondOpinion?: SecondOpinionReport; diversity: QuestionDiversityReport }> {
     const c = await this.e.registry.resolve(courseKey)
@@ -1368,8 +1376,9 @@ export class BankSubsystem {
     }
     const tpl = await this.e.loadPrompt('题目生成')
     const tier = nodeTierOf(graph, node)
-    const prior = await this.e.vaultPriorFor(graph, node)
-    const priorBlock = prior ? `\n\n---\n\n${prior}` : ''
+    const prior = await this.e.vaultPriorFor(c, graph, node)
+    opts?.onPrior?.(prior.audit)
+    const priorBlock = prior.section ? `\n\n---\n\n${prior.section}` : ''
     // 已有题面（#119）：注入 + 查重基线（本批新收题也进基线，批内互查）
     const bankBefore = await this.e.bank.load(this.e.paths.courseRoot(c.root), node)
     const existingStems = bankStemList(bankBefore)
