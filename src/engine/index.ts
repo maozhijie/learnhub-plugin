@@ -591,7 +591,9 @@ export class LearnhubEngine {
     if (course && this.fs.exists(this.paths.dataDir(course.root))) {
       const { graph } = await this.loadView(course)
       const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, today, this.fs)
-      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph).score }
+      // 健康分与审计同口径剔终点（#200 / ADR-0055）：读锚现算，种子 apply 落的锚即刻生效
+      const anchor = await readAnchor(this.paths.anchorPath(course.root), this.fs)
+      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph, { endpoint: anchor?.endpoint ?? null }).score }
     }
     return audit
   }

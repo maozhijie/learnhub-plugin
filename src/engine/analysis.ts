@@ -65,7 +65,7 @@ export interface GraphAnalysis {
   }
   /** Vault 链接扫描元信息：未扫描时 scanned_at=null（带 hint 指路扫描工具）。 */
   vault_links: { scanned_at: string | null; mapped_total: number; hint?: string }
-  nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: Stage; opt: boolean; mastery: number; hasContent: boolean; type?: string } }>
+  nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: Stage; opt: boolean; mastery: number; hasContent: boolean; isEndpoint: boolean; type?: string } }>
   edges: Array<{ data: { id: string; source: string; target: string; kind: string; w?: number } }>
   /** 节点 schema 全量（pre/enc/est/bloom/difficulty/teaches/assumes/misconceptions/note…）
    * ——编辑规划与边级自查的数据依据；elementsOnly 模式不含。 */
@@ -91,6 +91,9 @@ export async function analyzeGraph(
   /** 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，Float（missing_pre）建议豁免
    * ——种子本来就只有起点+终点几张节点（facade 按锚判定传入，analysis 保持无 IO）。 */
   seedPhase = false,
+  /** 终点节点名（ADR-0055 读侧单源派生，#200）：节点载荷据此标 isEndpoint，
+   * stats.leaves 与 missing_pre（空降建议）剔终点——终点是承诺标记不是课程节点。 */
+  endpoint: string | null = null,
 ): Promise<GraphAnalysis> {
   void parseDay(today)
 
@@ -130,6 +133,7 @@ export async function analyzeGraph(
 
   // cytoscape 元素：渲染用边 = 传递约简后的 pre 边 + enc 成分技能边（kind 区分）
   // 节点掌握度 = 派生展示值（稳定度完成度 + 练习 EMA；作答与复习实时反映，不因一次全对饱和）
+  // isEndpoint = 读锚现算的终点标记（#200 / ADR-0055：特殊性不存储，恒标终点）
   const nodes = graph.names.map(n => {
     const fm = state[n]
     return {
@@ -143,6 +147,7 @@ export async function analyzeGraph(
         mastery: masteryOfFm(fm),
         /** 已生成可读正文（列表/图三态标识：点开有东西读）。 */
         hasContent: hasReadyContent(fm),
+        isEndpoint: n === endpoint,
         ...(graph.typeOf[n] ? { type: graph.typeOf[n] } : {}),
       },
     }
@@ -189,7 +194,8 @@ export async function analyzeGraph(
     .slice(0, cap)
     .map(({ region, block, nodes }) => ({ region, block, nodes }))
   const expandBlocks = topBlocks(blocks, b => b.nodes < 5, sugCap)
-  const missingPre = seedPhase ? [] : floatNodes(graph).slice(0, sugCap)
+  // 空降建议剔终点（#200）：终点没有 pre 是接线待完成（方向不变式管），不是空降缺陷
+  const missingPre = seedPhase ? [] : floatNodes(graph).filter(n => n !== endpoint).slice(0, sugCap)
   const jumps = jumpCandidates(graph)
   const mergeBlocks = topBlocks(blocks, b => b.nodes < 3, sugCap)
   const unconverged = blocks
@@ -205,7 +211,9 @@ export async function analyzeGraph(
       edges: graph.edgeCount(),
       enc_edges: Object.values(graph.encOf).reduce((s, v) => s + v.length, 0),
       roots: graph.roots.length,
-      leaves: graph.leaves.length,
+      // 口径豁免（#200 / ADR-0055）：leaves 剔终点——设计上的收敛点是承诺标记，不是缺陷叶子
+      leaves: graph.leaves.filter(n => n !== endpoint).length,
+      // 主线深度（原 max_depth，正名不改字段名）：终点计入——课程长到哪里的进度读数
       max_depth: Object.keys(graph.depth).length ? Math.max(...Object.values(graph.depth)) : 0,
       components: graph.components.length,
       has_cycle: graph.hasCycle,
@@ -213,7 +221,7 @@ export async function analyzeGraph(
     unreachable,
     bottlenecks,
     lapse_hotspots: lapseHotspots,
-    health: { ...graphHealthScore(graph), est_note: estSpreadNote(graph) },
+    health: { ...graphHealthScore(graph, { endpoint }), est_note: estSpreadNote(graph) },
     suggestions: {
       expand_blocks: expandBlocks,
       missing_pre: missingPre,

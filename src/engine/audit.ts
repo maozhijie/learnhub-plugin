@@ -59,12 +59,15 @@ export async function runAudit(
   // 豁免（生长批进入后自动恢复）；E 级照查，种子也有真错误。
   const anchor = await readAnchor(paths.anchorPath(root), fs)
   const seedPhase = isSeedGraph(anchor, graph)
+  // 终点节点名（#200 / ADR-0055 口径豁免的读锚出处；未播种 = null）
+  const endpoint = anchor?.endpoint ?? null
 
   // R1 / R2 —— R1 阈值随图最大深度相对化（大图 depth>20 时 depth≤5 的旁支叶子是正常收尾），
   // 条目多时只列前 15 条附溢出行，避免淹没报告里的其他发现
+  // R1 豁免终点（#200）：设计上的收敛点是承诺标记，浅叶子告警不适用于它
   const maxDepth = names.length ? Math.max(...names.map(n => depth[n] ?? 0)) : 0
   const r1Depth = hasCycle ? 5 : Math.max(5, Math.round(maxDepth / 4))
-  const r1 = graph.leaves.filter(n => !hasCycle && (depth[n] ?? 0) <= r1Depth)
+  const r1 = graph.leaves.filter(n => n !== endpoint && !hasCycle && (depth[n] ?? 0) <= r1Depth)
   if (!seedPhase) {
     for (const n of r1.slice(0, 15)) warns.push(`R1 浅叶子: [${name2region[n]}] ${n}（depth=${depth[n]}，阈值 ${r1Depth}）`)
     if (r1.length > 15) warns.push(`R1 浅叶子另有多 ${r1.length - 15} 处未列出`)
@@ -266,15 +269,16 @@ export async function runAudit(
     有向边: graph.edgeCount(),
     'enc 边': Object.values(graph.encOf).reduce((s, v) => s + v.length, 0),
     '根节点（无前置）': graph.roots.length,
-    '叶子（无后继）': graph.leaves.length,
-    最大深度: Object.keys(depth).length ? Math.max(...Object.values(depth)) : '-',
+    // 口径豁免（#200）：leaves 剔终点；主线深度（原「最大深度」正名）保留终点——进度读数
+    '叶子（无后继，不含终点）': graph.leaves.filter(n => n !== endpoint).length,
+    主线深度: Object.keys(depth).length ? Math.max(...Object.values(depth)) : '-',
     '课程文件（已纳管）': Object.keys(found).length,
     未生成豁免: exempt.length,
     终点锚: anchor
       ? `${anchor.endpoint}（${anchor.goal_type === 'coverage' ? '覆盖' : '能力'}锚定，${anchor.declared} 声明）`
       : '未播种',
     '概念字段（teaches/assumes/误解）': `${teachesNodes} / ${assumesNodes} / ${misCount}`,
-    图谱健康分: graphHealthScore(graph).score,
+    图谱健康分: graphHealthScore(graph, { endpoint }).score,
     'ERROR / WARN / INFO': `${errors.length} / ${warns.length} / ${infos.length}`,
   }
 

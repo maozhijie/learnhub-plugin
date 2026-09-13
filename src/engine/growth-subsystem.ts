@@ -402,6 +402,11 @@ export class GrowthSubsystem {
     const out: string[] = [
       `# 教练回合上下文包：${c.name}（${opts.packLabel ?? (lightweight ? '轻量段——只带行为摘要与罗盘' : '全量六区块')}）`,
     ]
+    // 终点恒标（#200 / ADR-0055 裁决 3）：轻量段不注入终点锚区块，但一行终点名的 token
+    // 代价换裁决不盲——轻量/全量都在包头带终点行；终点标记的完整语义随图面进每段。
+    out.push('', anchor
+      ? `- ⚑ 终点：${anchor.endpoint}（承诺标记——生长须汇入它；零正文零题库不被调度）`
+      : '- （未播种——终点锚 Missing，先走种子提案 kind=seed）')
     const block = (title: string, body: string): void => {
       out.push('', `## ${title}`, '', body)
     }
@@ -410,7 +415,7 @@ export class GrowthSubsystem {
       // ① 终点锚（课程唯一结构承诺物——教练回合的目标视野）
       if (anchor) {
         const lines = [
-          `- 终点节点：${anchor.endpoint}`,
+          `- 终点节点：${anchor.endpoint}（承诺标记，不可 del/rename；换终点走 reseed）`,
           `- 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
           `- 声明日期：${anchor.declared}`,
         ]
@@ -573,7 +578,7 @@ export class GrowthSubsystem {
       return { course: c.name, state: 'idle', check, segments: [], trajectory: [], proposal: null, applied: null }
     }
     const { graph, state } = await this.e.loadView(c)
-    const view = renderGrowthGraphView(graph, state)
+    const view = renderGrowthGraphView(graph, state, anchor.endpoint)
     const template = await this.e.content.loadPrompt('教练回合')
     const segments: CoachGrowthSegment[] = []
     const trajectory: string[] = []

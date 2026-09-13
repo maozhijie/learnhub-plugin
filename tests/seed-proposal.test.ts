@@ -127,7 +127,8 @@ test('AC1 种子全链：受理→人审→apply 落终点锚+目标类型，占
     const snapshot = await readFile(join(root, '学习中心', 'state', 'snapshots', '数学-v1.json'), 'utf8')
     assert.ok(snapshot.includes('认识变化率'))
 
-    // 占位边可被生长批消费：edit 提案细化终点前置（补中间节点+重接 pre）
+    // 占位边可被生长批消费：edit 提案细化终点前置（补中间节点+重接 pre）+ 一条旁支叶子
+    // （#200 起 R1 豁免终点——生长后的链条终点不再是可告警叶子，旁支浅叶承担「告警恢复」样本）
     const growth = `course: 数学
 reason: 生长批细化占位边
 ops:
@@ -137,6 +138,12 @@ ops:
     block: 中间块
     pre: [认识变化率]
     est: 20
+  - op: add_node
+    name: 变化率旁支
+    region: 基础
+    block: 中间块
+    pre: [认识变化率]
+    est: 10
   - op: set_pre
     node: 用导数解决优化问题
     pre: [求解一阶导数]
@@ -151,6 +158,8 @@ ops:
     const auditAfter = await runAudit(paths, '数学', '数学', new Graph(grown), grown, todayStr(new Date()), nodeVaultFs)
     assert.ok(!auditAfter.failed)
     assert.ok(auditAfter.warns.some(w => w.startsWith('R1')), '生长后形状告警恢复（豁免翻转）')
+    assert.ok(auditAfter.warns.filter(w => w.startsWith('R1')).every(w => !w.includes('用导数解决优化问题')),
+      '#200：R1 豁免终点——恢复的浅叶子告警只打旁支')
   })
 })
 

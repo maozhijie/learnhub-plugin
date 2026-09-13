@@ -43,20 +43,26 @@ export function estSpreadNote(g: EstSpreadSource): string | null {
   return `⚠ est 分布压缩（p10-p90 = ${p10}-${p90} 分钟，仅差 ${p90 - p10} 分钟）：est 已成"档位感常数"，对内容规模无区分度——下次图标注让 est 跨更宽取值（见 ADR-0005）`
 }
 
-/** 图谱健康分：score ∈ [0,100]；breakdown 各项均为 0-20 的原始得分。 */
-export function graphHealthScore(graph: Graph): { score: number; breakdown: Record<string, number> } {
-  const names = graph.names
+/** 图谱健康分：score ∈ [0,100]；breakdown 各项均为 0-20 的原始得分。
+ * endpoint：终点节点名（ADR-0055 口径豁免）——终点是承诺标记不是课程节点，
+ * 前置完备项的空降清单与其分母都不计它（终点 pre 接线与否是方向不变式的事，不是空降缺陷）。 */
+export function graphHealthScore(
+  graph: Graph, opts: { endpoint?: string | null } = {},
+): { score: number; breakdown: Record<string, number> } {
+  const endpoint = opts.endpoint ?? null
+  const names = endpoint ? graph.names.filter(n => n !== endpoint) : graph.names
 
   // a) 动作句比例 ×20
   const actionHits = names.filter(n => ACTION_WORDS.some(w => n.includes(w))).length
   const actionNaming = names.length ? (actionHits / names.length) * 20 : 0
 
   // b) est 覆盖率 ×20
-  const estCoverage = names.length ? (Object.keys(graph.estOf).length / names.length) * 20 : 0
+  const estCoverage = names.length ? (Object.keys(graph.estOf).filter(n => n !== endpoint).length / names.length) * 20 : 0
 
   // c) 前置完备 ×20：空降节点（region 序靠后且 pre 为空）越少越好
   //    （旧口径 depth>1 && pre 为空是死条件——pre 派生深度下无 pre 必为 0，见 quality.ts floatNodes）
-  const floats = floatNodes(graph).length
+  //    终点不入清单不计分母（承诺标记：锚定的目标位置没有 pre 是接线待完成，不是空降）
+  const floats = floatNodes(graph).filter(n => n !== endpoint).length
   const preCompleteness = names.length ? (1 - floats / names.length) * 20 : 0
 
   // d) 收敛度 ×20：非根节点平均 pre 数（≥2 满分、=1 零分线性插值；环/无内点 = 0）

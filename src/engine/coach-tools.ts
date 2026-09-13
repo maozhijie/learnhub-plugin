@@ -55,8 +55,11 @@ function activeLabel(state: Record<string, Fm>, n: string): string {
 /** 图面（教练回路 graph_view 与生长批上下文包第三块共用同一折叠；自 growth-subsystem
  * 归位）：结构事实源——裁决 ops 的节点名与 pre 引用的取值域。前沿与在学节点给细节行
  * （区·块/pre/teaches/est/正文态），其余节点给全名单（供 set_pre 等引用既有节点）。
- * 纯组装零写副作用。 */
-export function renderGrowthGraphView(graph: Graph, state: Record<string, Fm>): string {
+ * endpoint：终点恒标（#200 / ADR-0055）——图面头部带终点行，终点节点细节行带标记；
+ * 轻量段同吃这份图面，裁决不盲。纯组装零写副作用。 */
+export function renderGrowthGraphView(
+  graph: Graph, state: Record<string, Fm>, endpoint: string | null = null,
+): string {
   // 前沿 = readySet（未开始且非 opt 前置全部达成）；rValue 恒 1 = R 软闸不改变可学性、
   // 故不带门——与教练回合检查点的前沿口径同源（GrowthSubsystem.coachFrontier 同款）。
   const active = [...new Set([
@@ -67,6 +70,9 @@ export function renderGrowthGraphView(graph: Graph, state: Record<string, Fm>): 
   const lines: string[] = [
     '## 当前图面（结构事实源——ops 的节点名与 pre 引用必须逐字来自这里）', '',
     `- 节点共 ${graph.names.length} 个；前沿与在学 ${active.length} 个（带细节行）`,
+    ...(endpoint
+      ? [`- ⚑ 终点：${endpoint}（承诺标记——一切生长须汇入它；不可 del/rename，零正文零题库不被调度，主线批须 set_pre 接线到新前沿）`]
+      : ['（未播种——终点锚 Missing，先走种子提案 kind=seed）']),
     '', '### 前沿与在学节点', '',
   ]
   for (const n of active) {
@@ -74,7 +80,7 @@ export function renderGrowthGraphView(graph: Graph, state: Record<string, Fm>): 
     const pres = graph.preOf[n]
     const teaches = Object.entries(graph.teachesOf[n] ?? {}).map(([c, t]) => `${c} ${t}`)
     const est = graph.estOf[n]
-    lines.push(`- ${n}（${region}·${block}｜${activeLabel(state, n)}${est ? `｜est ${est}′` : ''}）`
+    lines.push(`- ${n}${n === endpoint ? ' ⚑' : ''}（${region}·${block}｜${activeLabel(state, n)}${est ? `｜est ${est}′` : ''}）`
       + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
       + (teaches.length ? `｜teaches: ${teaches.join('、')}` : ''))
   }
@@ -88,8 +94,11 @@ export function renderGrowthGraphView(graph: Graph, state: Record<string, Fm>): 
 }
 
 /** 节点卡（node_card）：单节点的结构档与内容态——区·块、阶段、pre/teaches/assumes、
- * est、下游消费、误解先验。未知节点 fail loud（graph_view 取逐字名单），不静默编空卡。 */
-export function renderNodeCard(graph: Graph, state: Record<string, Fm>, node: string): string {
+ * est、下游消费、误解先验。未知节点 fail loud（graph_view 取逐字名单），不静默编空卡。
+ * endpoint：终点卡恒标（#200）——下游消费与调度措辞按承诺标记口径。 */
+export function renderNodeCard(
+  graph: Graph, state: Record<string, Fm>, node: string, endpoint: string | null = null,
+): string {
   if (!graph.nset.has(node)) {
     throw new Error(`节点「${node}」不在图上——用 graph_view 取逐字名单后重试（引用必须逐字命中）。`)
   }
@@ -99,14 +108,15 @@ export function renderNodeCard(graph: Graph, state: Record<string, Fm>, node: st
   const assumes = Object.entries(graph.assumesOf[node] ?? {})
   const mis = graph.misconceptionsOf[node] ?? []
   const consumers = graph.succ[node] ?? []
+  const isEndpoint = node === endpoint
   return [
-    `## 节点卡：${node}`, '',
+    `## 节点卡：${node}${isEndpoint ? ' ⚑ 终点（承诺标记）' : ''}`, '',
     `- 区·块：${region} · ${block}`,
-    `- 阶段：${activeLabel(state, node)}${graph.typeOf[node] === 'practice' ? '（交互实践节点）' : ''}${graph.estOf[node] ? `｜est ${graph.estOf[node]}′` : ''}`,
+    `- 阶段：${activeLabel(state, node)}${isEndpoint ? '（终点——零正文零题库不被学习调度，ADR-0056）' : graph.typeOf[node] === 'practice' ? '（交互实践节点）' : ''}${graph.estOf[node] ? `｜est ${graph.estOf[node]}′` : ''}`,
     `- pre：${pres.length ? pres.join('、') : '（根）'}`,
     `- teaches：${teaches.length ? teaches.map(([c, t]) => `${c} ${t}`).join('、') : '（无）'}`,
     `- assumes：${assumes.length ? assumes.map(([c, t]) => `${c} ${t}`).join('、') : '（无）'}`,
-    `- 下游消费：${consumers.length ? consumers.join('、') : '（无——叶子节点）'}`,
+    `- 下游消费：${consumers.length ? consumers.join('、') : isEndpoint ? '（无——终点是全局收敛点，后继不该存在；出现即异常态，走对账恢复）' : '（无——叶子节点）'}`,
     `- 误解先验：${mis.length ? mis.map(m => `${m.concept}：${m.model}`).join('；') : '（无）'}`,
   ].join('\n') + '\n'
 }
@@ -251,16 +261,19 @@ export function coachToolExecutor(
     }
   }
   return async call => {
+    // 终点恒标的读锚出处（#200 / ADR-0055）：图面与节点卡现算终点标记，不落盘不漂移
+    const endpointOf = async (): Promise<string | null> =>
+      (await readAnchor(deps.paths.anchorPath(c.root), deps.fs))?.endpoint ?? null
     switch (call.name as CoachToolName) {
       case 'graph_view': {
         const { graph, state } = await deps.loadView(c)
-        return renderGrowthGraphView(graph, state)
+        return renderGrowthGraphView(graph, state, await endpointOf())
       }
       case 'node_card': {
         const node = argsOf(call).node
         if (typeof node !== 'string' || !node.trim()) throw new Error('node_card 需要 node 参数（逐字节点名）。')
         const { graph, state } = await deps.loadView(c)
-        return renderNodeCard(graph, state, node.trim())
+        return renderNodeCard(graph, state, node.trim(), await endpointOf())
       }
       case 'concept_registry': {
         const q = argsOf(call).query

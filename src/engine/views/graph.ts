@@ -121,6 +121,9 @@ export interface GraphDoc {
     mastery: number
     /** 已生成可读正文（列表/图三态标识：点开有东西读）。 */
     hasContent: boolean
+    /** 终点标记（#200 / ADR-0055 读锚现算）：true = 本节点是锚定的终点——承诺标记，
+     * 不被学习调度不产料（ADR-0056），图上按终点样式 + 图例呈现。 */
+    isEndpoint: boolean
     /** practice = 交互实践节点（「练」角标）。 */
     type?: string
   } }>

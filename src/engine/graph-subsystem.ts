@@ -93,10 +93,12 @@ export class GraphSubsystem {
     // 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，Float（missing_pre）建议豁免
     const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
     const seedPhase = isSeedGraph(anchor, graph)
-    const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase)
+    const endpoint = anchor?.endpoint ?? null
+    // 终点标记随锚走（#200 / ADR-0055 读侧单源派生）：节点载荷标 isEndpoint、
+    // leaves/空降建议/健康分口径剔终点，UI 图面据此渲染终点样式并关终点生成入口
+    const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase, endpoint)
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
-    // 终点标记随锚走（#199 / ADR-0055 读侧单源派生）：UI 图面据此关终点生成入口
-    return { ...doc, endpoint: anchor?.endpoint ?? null }
+    return { ...doc, endpoint }
   }
 
   /** 读链接先验缓存（Missing = null 合法空态；坏档 fail loud——它是引擎 state 契约文件）。 */

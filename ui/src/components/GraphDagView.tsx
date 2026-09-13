@@ -70,6 +70,9 @@ interface DagNodeData extends Record<string, unknown> {
   practice: boolean
   /** 已生成可读正文（「文」角标；点开有东西读）。 */
   hasContent: boolean
+  /** 终点承诺标记（#200 / ADR-0055+0056）：品红双描边 + 「⚑终」角标；
+   * 不被学习调度不产料——是锚定的承诺位置，不是图上待学的课程节点。 */
+  isEndpoint: boolean
   /** 生成队列阶段（「生」角标 + 工具条隐藏；queued「队」）。 */
   gen?: 'queued' | 'running'
   /** hover 工具条的入队动作（父级闭包，已含课程与重生成确认）。 */
@@ -77,26 +80,34 @@ interface DagNodeData extends Record<string, unknown> {
 }
 type DagNode = Node<DagNodeData, 'dagNode'>
 
+/** 终点承诺标记的专属色（Arco magenta-6；与五态色板/推荐琥珀/定位红均不撞）。 */
+const ENDPOINT_COLOR = 'var(--color-magenta-6, #f5319d)'
+
 /** 节点卡片：左侧状态色条 + 标题 + 层级/区/题库元信息；推荐琥珀描边、定位红描边、
- * 锁定半透明虚线；底色 = 状态浅色 × 掌握度深浅（作答 EMA 实时反映）；跳过 = 紫底 + 「跳」角标。 */
+ * 锁定半透明虚线；底色 = 状态浅色 × 掌握度深浅（作答 EMA 实时反映）；跳过 = 紫底 + 「跳」角标；
+ * 终点 = 品红双描边 + 「⚑终」角标（#200，识别优先级最高——承诺标记不被任何状态色吞掉）。 */
 const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
-  const accent = data.focused
-    ? 'var(--color-danger-6, #f53f3f)'
-    : data.recommended
-      ? 'var(--color-warning-6, #ff7d00)'
-      : data.locked
-        ? 'var(--color-text-4, #c9cdd4)'
-        : STAGE_COLOR[data.stage]
-  const border = data.focused
-    ? '2px solid var(--color-danger-6, #f53f3f)'
-    : data.recommended
-      ? '1px solid var(--color-warning-6, #ff7d00)'
-      : data.locked
-        ? '1px dashed var(--color-border-2, #e5e6eb)'
-        : '1px solid var(--color-border-2, #e5e6eb)'
+  const accent = data.isEndpoint
+    ? ENDPOINT_COLOR
+    : data.focused
+      ? 'var(--color-danger-6, #f53f3f)'
+      : data.recommended
+        ? 'var(--color-warning-6, #ff7d00)'
+        : data.locked
+          ? 'var(--color-text-4, #c9cdd4)'
+          : STAGE_COLOR[data.stage]
+  const border = data.isEndpoint
+    ? `3px double ${ENDPOINT_COLOR}`
+    : data.focused
+      ? '2px solid var(--color-danger-6, #f53f3f)'
+      : data.recommended
+        ? '1px solid var(--color-warning-6, #ff7d00)'
+        : data.locked
+          ? '1px dashed var(--color-border-2, #e5e6eb)'
+          : '1px solid var(--color-border-2, #e5e6eb)'
   const tint = masteryTint(data.stage, data.mastery)
   const bg = tint ?? 'var(--color-bg-2, #fff)'
-  const tooltip = `${data.title}${data.locked ? '（前置未完成）' : ''}`
+  const tooltip = `${data.title}${data.isEndpoint ? '（⚑ 终点 · 承诺标记——不被学习调度、不产料，ADR-0056）' : ''}${data.locked ? '（前置未完成）' : ''}`
     + (data.stage === 'review' || data.stage === 'mastered' || data.stage === 'learning'
       ? `（掌握度 ${Math.round(data.mastery * 100)}%）` : '')
   return (
@@ -112,9 +123,16 @@ const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
           background: 'var(--color-purple-6, #722ed1)', color: '#fff',
         }}>跳</span>
       )}
-      {data.practice && (
+      {data.isEndpoint && (
         <span style={{
           position: 'absolute', top: 0, left: 0, fontSize: 9, lineHeight: '13px',
+          padding: '0 4px', borderBottomRightRadius: 6,
+          background: ENDPOINT_COLOR, color: '#fff',
+        }}>⚑终</span>
+      )}
+      {data.practice && (
+        <span style={{
+          position: 'absolute', top: data.isEndpoint ? 13 : 0, left: 0, fontSize: 9, lineHeight: '13px',
           padding: '0 4px', borderBottomRightRadius: 6,
           background: 'var(--color-teal-6, #14c9c9)', color: '#fff',
         }}>练</span>
@@ -201,9 +219,12 @@ function layoutDag(
         mastery: n.data.mastery ?? 0,
         practice: (n.data as { type?: string }).type === 'practice',
         hasContent: n.data.hasContent ?? false,
+        // 终点标记（#200 / ADR-0055 读锚派生）：载荷 isEndpoint 优先，旧载荷回退顶层 endpoint 对账
+        isEndpoint: (n.data as { isEndpoint?: boolean }).isEndpoint === true || n.data.id === doc.endpoint,
         gen: genStates[n.data.id],
-        // 终点不挂生成入口（#199 生成门）：终点是承诺标记不被学习调度，hover 按钮不渲染
-        ...(onGenerate && n.data.id !== doc.endpoint ? { onGenerate: () => onGenerate(n.data.id) } : {}),
+        // 终点不挂生成入口（#199/#200 生成门恒拒）：终点是承诺标记不被学习调度，hover 按钮不渲染
+        ...(onGenerate && !(n.data as { isEndpoint?: boolean }).isEndpoint && n.data.id !== doc.endpoint
+          ? { onGenerate: () => onGenerate(n.data.id) } : {}),
       },
     }
   })
@@ -293,6 +314,7 @@ const GraphDagViewInner: React.FC<GraphDagViewProps> = ({ doc, recommended, lock
           style={{ borderRadius: 6 }}
           nodeColor={node => {
             const d = (node as DagNode).data
+            if (d.isEndpoint) return ENDPOINT_COLOR
             if (d.locked) return 'var(--color-text-4, #c9cdd4)'
             return d.recommended ? 'var(--color-warning-6, #ff7d00)' : STAGE_COLOR[d.stage]
           }} />

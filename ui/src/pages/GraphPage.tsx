@@ -23,7 +23,8 @@ const GRAPH_PHASES = new Set(['seed', 'growth', 'compass', 'decompile', 'plan', 
 const REC_TYPE_COLOR: Record<string, string> = { review: 'green', overdue: 'red', ready: 'blue', new: 'cyan' }
 const REC_TYPE_LABEL: Record<string, string> = { review: '复习', overdue: '逾期', ready: '就绪', new: '新学' }
 
-/** 图例：状态色点 + 掌握度深浅说明。 */
+/** 图例：状态色点 + 掌握度深浅说明。终点条目按 ADR-0056 修订注明「承诺标记」语义——
+ * 终点不被学习调度、不产料，不是图上待学的课程节点（#200 / ADR-0055）。 */
 function Legend() {
   const items: Array<[string, string]> = [
     ['未学', '#c9cdd4'],
@@ -31,6 +32,7 @@ function Legend() {
     ['复习/掌握', '#00b42a'],
     ['已跳过', '#722ed1'],
     ['推荐下一步', '#ff7d00'],
+    ['⚑ 终点（承诺标记）', '#f5319d'],
   ]
   return (
     <Space size={12} wrap align='center' style={{ fontSize: 12 }}>
@@ -41,6 +43,7 @@ function Legend() {
         </Space>
       ))}
       <Text type='secondary'>同色底越深 = 掌握度越高（悬停看数值）</Text>
+      <Text type='secondary'>终点是锚定的承诺位置：不被学习调度、不产料（ADR-0056）</Text>
     </Space>
   )
 }
@@ -251,6 +254,8 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
           <Tag size='small'>{s.nodes} 节点</Tag>
           <Tag size='small'>{s.edges} 依赖</Tag>
           <Tag size='small'>{bankSet.size} 有题库</Tag>
+          {/* 主线深度（原 max_depth 正名，#200 / ADR-0055）：终点计入——课程长到哪里的进度读数 */}
+          <Tag size='small' color='magenta'>主线深度 {doc.stats.max_depth}</Tag>
           <Tag size='small' color='gray'>全局总览 · 点节点进入学习</Tag>
         </Space>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>

@@ -125,7 +125,8 @@ export class ContentSubsystem {
     }
     this.e.assertNoteOk(c, graph, broken, node, 'pack')
     const prior = await this.vaultPriorFor(graph, node)
-    const pack = this.e.content.contextPack(graph, state, node, c.name, opts)
+    // endpoint 随锚入包（#200）：后继预告的终点措辞读锚现算，普通前沿叶子不再被误标终点
+    const pack = this.e.content.contextPack(graph, state, node, c.name, { ...opts, endpoint: anchor?.endpoint ?? null })
     return prior ? `${pack}\n\n---\n\n${prior}` : pack
   }
 
