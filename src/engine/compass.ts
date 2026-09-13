@@ -122,6 +122,56 @@ export function validateRouteBody(body: string): string[] {
   return errors
 }
 
+/** 路线条目的候选标注（初画/重写模板的硬约束②：未落图的台阶「一律标注（候选）」）。 */
+export const ROUTE_CANDIDATE_MARKER = '候选'
+
+/** 路线对账读数（#231 / ADR-0074）：零模型、零写侧的**结构对账**——「剩余路线」条目
+ * 与图面节点名集合的粗 diff。诚实边界：只按名字粗比（不做语义解析），故三态里「有锚」
+ * 与「标候选」都算合法，唯独**无锚**是漂移——被当作确定路标写出来、图面却无从核对。 */
+export interface RouteReconcile {
+  /** 条目数（非空行）。 */
+  entries: number
+  /** 有锚条目数：正文引用了图面在册节点名（模板硬约束②的「确定路标」）。 */
+  anchored: number
+  /** 标候选条目数：自带「候选」标注——未落图台阶的合法形态。 */
+  proposed: number
+  /** 无锚条目名（漂移证据行原料；空 = 与图面一致）。 */
+  unmoored: string[]
+}
+
+/** 条目名提取：模板行是 `- **阶段名**：一句话` ——取粗体段；无粗体时退回「行首标记后、
+ * 第一个分隔符前」的一段，再退回整行（对账只要一个可读的证据名，不做语义解析）。 */
+function routeEntryName(line: string): string {
+  const bold = /\*\*(.+?)\*\*/.exec(line)
+  if (bold) return bold[1]!.trim()
+  const body = line.replace(/^\s*(?:[-*+]|\d+[.、)])\s*/, '').trim()
+  const cut = body.search(/[：:（(]/)
+  return ((cut > 0 ? body.slice(0, cut) : body).trim() || body || line)
+}
+
+/** 「剩余路线」条目 vs 图面节点名的粗 diff（#231）：逐条判三态——有锚 / 标候选 / 无锚
+ * （= 漂移）。纯函数：不读 fs、不改罗盘、不进门禁、不触发重画（词条「罗盘」的非权威
+ * 纪律——对账是读数，不是新的权威面）。输入须是**已画的路线正文**：待初画占位由调用方
+ * 用 hasPaintedRoute 挡在门外（占位文案不是条目，进来会装成一个巨大的「漂移条目」）。 */
+export function reconcileRoute(routeBody: string, graphNames: readonly string[]): RouteReconcile {
+  const names = graphNames.map(n => n.trim()).filter(n => n.length > 0)
+  const lines = routeBody.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+  const out: RouteReconcile = { entries: lines.length, anchored: 0, proposed: 0, unmoored: [] }
+  for (const line of lines) {
+    if (names.some(n => line.includes(n))) out.anchored++
+    else if (line.includes(ROUTE_CANDIDATE_MARKER)) out.proposed++
+    else out.unmoored.push(routeEntryName(line))
+  }
+  return out
+}
+
+/** 路线段是否已画（占位/空白 = 未画 → 无对账对象；判据与 ROUTE_PENDING 同源，
+ * 与 hasLearnerAnnotations 同族）。 */
+export function hasPaintedRoute(body: string | null): boolean {
+  const t = body?.trim() ?? ''
+  return Boolean(t) && t !== ROUTE_PENDING
+}
+
 /** ETA 段机器标记 → 周一日期（无标记 = null，视为待刷新）。 */
 export function etaMarkerOf(etaBody: string | null): string | null {
   if (!etaBody) return null

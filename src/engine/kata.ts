@@ -21,7 +21,7 @@ import { obsidianLink } from './output.ts'
 import { execRatingScore } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import { crossingText, etaHorizonOf } from './compass.ts'
-import type { CompassEta } from './compass.ts'
+import type { CompassEta, RouteReconcile } from './compass.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import type { PracticeRec, JournalRec, ReviewRec } from './types.ts'
 import type { HabitRepeatRec } from './habits.ts'
@@ -211,10 +211,24 @@ export function kataEtaSummary(course: string, eta: CompassEta): KataEtaSummary 
   }
 }
 
+/** 罗盘路线对账摘要（#231 / ADR-0074）：周复盘挂 ETA 的**同一挂载点**顺带算的结构对账
+ * （路线条目 vs 图面节点，零模型粗 diff）。旁挂而非权威：不改罗盘、不进门禁、不触发
+ * 重画，「剩余路线」的写权仍唯教练随批重写。 */
+export interface KataRouteReconcile extends RouteReconcile {
+  course: string
+}
+
+/** RouteReconcile → 摘要的唯一映射（kataOpen 消费；字段名与读数同源，不做二次加工）。 */
+export function kataRouteReconcile(course: string, r: RouteReconcile): KataRouteReconcile {
+  return { course, ...r }
+}
+
 /** 现状段渲染（markdown 行；空态诚实留痕，不造假数据）。etas = 罗盘周 ETA 旁挂
  * （#150）：非空时在「有界 · 课程」后附「沙盘 ETA」小节——每周随罗盘挂载刷新，
- * 分位带参照、非承诺措辞照旧（ADR-0025 纪律不动）。 */
-export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = []): string {
+ * 分位带参照、非承诺措辞照旧（ADR-0025 纪律不动）。reconciles = 罗盘路线对账
+ * （#231）：只在有已画路线的课程上出现，零漂移只留一行结论（不列证据 = 零噪音），
+ * 漂移才给告警 + 证据条目名；措辞沿罗盘非承诺纪律。 */
+export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = [], reconciles: KataRouteReconcile[] = []): string {
   const lines: string[] = ['### 总览', '']
   const overview = [`学习 ${r.days} 天`, `XP +${r.xp}`, `作答 ${r.answers} 次${r.accuracy !== null ? `（作答正确率 ${pctOf(r.accuracy)}）` : ''}`]
   if (r.due_reviews > 0) {
@@ -230,6 +244,16 @@ export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = []): 
   if (etas.length) {
     lines.push('### 沙盘 ETA', '')
     lines.push(...etas.map(e => `- ${e.course} → 终点「${e.endpoint}」：p50${crossingText(e.p50_week, e.horizon)}；p80${crossingText(e.p80_week, e.horizon)}（每日约 ${e.minutes_per_day} 分钟口径；${e.wording}）`))
+    lines.push('')
+  }
+
+  // 罗盘路线对账（#231）：只以结论进现状区——一致留一行（不列条目 = 零漂移零噪音），
+  // 漂移才点名证据条目；措辞沿罗盘非承诺纪律（草图非权威、只告警不动图）
+  if (reconciles.length) {
+    lines.push('### 罗盘对账', '')
+    lines.push(...reconciles.map(x => x.unmoored.length
+      ? `- ${x.course}：路线漂移 ${x.unmoored.length} 条——${x.unmoored.map(n => `「${n}」`).join('')}在图面无对应节点、也未标「（候选）」。路线是草图非权威：此处只告警，不改罗盘、不触发重画。`
+      : `- ${x.course}：路线 ${x.entries} 条条目与图面一致（${x.anchored} 条有锚${x.proposed ? ` · ${x.proposed} 条标「（候选）」` : ''}）。`))
     lines.push('')
   }
 

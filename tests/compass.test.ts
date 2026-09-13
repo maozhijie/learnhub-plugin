@@ -11,6 +11,7 @@ import { weekStartOf } from '../src/engine/kata.ts'
 import {
   SECTION_ROUTE, SECTION_ANNOTATIONS, SECTION_ETA, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,
   ETA_MARKER_PREFIX, parseCompass, sectionBody, withSectionText, validateRouteBody, etaMarkerOf,
+  reconcileRoute, hasPaintedRoute,
 } from '../src/engine/compass.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
 
@@ -384,5 +385,90 @@ test('罗盘缺席的读侧：compassRead/compassTail 合法空态；未播种�
     assert.equal(await engine.growth2.compassTail('数学'), '', '罗盘缺席 = 空段（组装方整段省略）')
     // 未播种初画 fail loud（锚在终点上）
     await assert.rejects(() => engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE)), /未播种[\s\S]*种子提案/)
+  })
+})
+
+// ---- #231 罗盘路线对账：条目 vs 图面节点名的粗 diff（零模型、零写侧、非权威） ----
+
+test('#231 对账三态：有锚（引用到图面节点名）/ 标候选（模板允许的未落图台阶）/ 无锚（漂移）', () => {
+  const names = ['认识变化率', '用导数解决优化问题']
+  const r = reconcileRoute([
+    '- **认识变化率**：把变化率说成本质。',
+    '- **补割线过渡台阶**（候选）：落图由生长批裁决。',
+    '- **合成优化视角**：把导数接到极值判断，通向终点「用导数解决优化问题」。',
+  ].join('\n'), names)
+  assert.equal(r.entries, 3)
+  assert.equal(r.anchored, 2, '引用起点名与终点名都算有锚（终点也是图面节点）')
+  assert.equal(r.proposed, 1)
+  assert.deepEqual(r.unmoored, [], '三条都有落法 = 零漂移')
+
+  const drifted = reconcileRoute('- **合成优化视角**：把导数接到极值判断。', names)
+  assert.deepEqual(drifted.unmoored, ['合成优化视角'], '既无引用也无候选标注 = 漂移，按条目名报出')
+  assert.equal(drifted.anchored, 0)
+  assert.equal(reconcileRoute('', names).entries, 0, '空路线 = 零条目')
+  assert.equal(reconcileRoute('- 某条路线', []).unmoored.length, 1, '空图面 = 无从核对（全无锚）')
+})
+
+test('#231 条目名提取：粗体段优先，无粗体退回行首标记后的短名，再退回整行', () => {
+  const r = reconcileRoute([
+    '- **粗体名**：说明',
+    '- 无粗体但很长的条目：说明在后面',
+    '1. 编号条目（候选）注记',
+    '**只有粗体**',
+  ].join('\n'), [])
+  assert.equal(r.proposed, 1, '第三条带「候选」→ 标候选（不进无锚）')
+  assert.deepEqual(r.unmoored, ['粗体名', '无粗体但很长的条目', '只有粗体'])
+})
+
+test('#231 已画路线判据：待初画占位/空白 = 无对账对象（占位文案不得装成漂移条目）', () => {
+  assert.equal(hasPaintedRoute(ROUTE_PENDING), false)
+  assert.equal(hasPaintedRoute(''), false)
+  assert.equal(hasPaintedRoute('   \n  '), false)
+  assert.equal(hasPaintedRoute('- 一条路线'), true)
+  // 反向证据：占位文案直接进对账会被当成一条巨大的「漂移条目」——所以调用方必须先挡
+  assert.equal(reconcileRoute(ROUTE_PENDING, ['x']).unmoored.length, 1)
+})
+
+test('#231 挂载点顺带对账：compassEtaRefresh 随行携带 reconcile；未画路线无对账对象', async () => {
+  await withVault(SEED_VAULT, async ({ engine, paths }) => {
+    await seedApplied(engine)
+    const r0 = await engine.growth2.compassEtaRefresh('数学')
+    assert.equal(r0[0]!.reconcile, undefined, '待初画 = 无对账对象（占位不是条目）')
+
+    await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
+    const routeBefore = sectionBody(parseCompass(await readFile(paths.compassPath('数学'), 'utf8')), SECTION_ROUTE)
+    const r1 = await engine.growth2.compassEtaRefresh('数学')
+    const rec = r1[0]!.reconcile!
+    assert.equal(rec.entries, 3, '金样本三条条目')
+    assert.equal(rec.anchored, 1, '第三条引用终点名')
+    assert.equal(rec.proposed, 1, '第二条标（候选）')
+    assert.deepEqual(rec.unmoored, ['把变化率说成本质'], '第一条被当成确定路标写出、图面却无从核对')
+    // 非权威：对账只在读侧算，路线段字节不动（写侧仍唯教练随批重写）
+    assert.equal(sectionBody(parseCompass(await readFile(paths.compassPath('数学'), 'utf8')), SECTION_ROUTE), routeBefore)
+
+    // 标记周幂等早退（current）也不丢对账读数
+    const r2 = await engine.growth2.compassEtaRefresh('数学')
+    assert.equal(r2[0]!.state, 'current')
+    assert.equal(r2[0]!.reconcile?.entries, 3)
+  })
+})
+
+test('#231 周复盘现状区含对账结论：未画路线零小节；画了即出结论（漂移带证据条目名）', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    const bare = await engine.learner.kataOpen()
+    assert.doesNotMatch(bare.reality, /### 罗盘对账/, '未画路线 = 零小节（零漂移零噪音）')
+
+    await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
+    const doc = await engine.learner.kataOpen()
+    assert.match(doc.reality, /### 罗盘对账/, '周复盘现状区含对账结论')
+    assert.match(doc.reality, /- 数学：路线漂移 1 条——「把变化率说成本质」在图面无对应节点、也未标「（候选）」。/)
+    assert.match(doc.reality, /不改罗盘、不触发重画/, '措辞沿罗盘非权威纪律')
+
+    // 零漂移的路线：只剩一行结论、不出现告警行（零噪音）
+    await engine.growth2.compassRewrite('数学', '- **认识变化率**：先立直觉。\n- **用导数解决优化问题**：接到终点。')
+    const clean = await engine.learner.kataOpen()
+    assert.match(clean.reality, /- 数学：路线 2 条条目与图面一致（2 条有锚）。/)
+    assert.doesNotMatch(clean.reality, /路线漂移/)
   })
 })

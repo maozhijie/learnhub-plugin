@@ -109,6 +109,8 @@ hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engin
 
 - S73 `scripts/prompt-bump.mts::parseLogDiff / markerVersionsOf / bumpViolations / scanBumps / disciplineStartRef / replayCorpus / replayViolations / compareReviewReports / REPLAY_FACE / REPLAY_OUT_OF_SCOPE` + `tests/prompt-changelog.test.ts` —— 提示词变更过门装置（#220 / ADR-0072）：把「改模板＝改生产行为」变成会失败的东西，三子命令对应票面三条——① `check`（**提交级登记门**）：模板版本 bump 的提交必须同提交补 `PROMPT_CHANGELOG` 条目；走 git 历史（纪律起点**动态发现** = `PROMPT_CHANGELOG` 首次出现的提交，不写死 sha），两段式扫描（一次 `git log -p -U0` 找触及模板/登记表的提交 → 只对候选做 `git show` 取版本集合差——`newVersions` 是**集合差不是 diff 行**：标记挪位/新增同版本模板都不算 bump）；② `replay`（**语料回放**）：站 → 离线解析面注册表（大纲/拆节 = `Content.parseOutline·parseSplitOutline`、出题 = `validateBank`、种子 = `validateSeedProposal`、教练 = `validateEditProposal`+note 区、反编译/计划 = `splitDecompileDoc·validatePlanArtifact`（跨产物一致性按**自指口径**旁路）、错误卡 = `validateErrorCards`、罗盘 = `validateRouteBody`、回执 = `parseReceiptReview`），语料存的是**剥围栏前**原始输出故回放照做剥围栏（seam 后处理同款）；判据只认「**基线通过 → 回放失败**」（基线本就 failed 的不重复计入），零样本按失败处理；`REPLAY_OUT_OF_SCOPE` 是**显式清单**（会话式站/判定器站/要引擎上下文的 markdown 站各给理由，与契约注册表 OUT_OF_SCOPE 同款纪律）；③ `compare`（**评审对照**）：两份 `quality-review --out` 报告在**同源样本**（ref 集合一致）上逐（站 × 维度）均值不降，同源/维度集合一致/非零样本是硬前提，不满足即**拒绝比对**；测试面四组——纯函数合成自检、**真 git 历史必须绿 + 临时仓库造「bump 不补登记」必须红**（验收原文两态，临仓库按真文件排版合成登记表）、**回放面忠实性对真语料**（#216 spike corpus 的 control 臂原始应答逐件复现当时生产的 delivered/schema_ok，含 3 件当时被拒的样本）、评审对照四态（不降/下降/非同源/零样本）
 
+- S74 `compass.ts::reconcileRoute / hasPaintedRoute / ROUTE_CANDIDATE_MARKER` + `growth-subsystem.ts::compassEtaRefresh`（返回随行 `reconcile`）+ `kata.ts::KataRouteReconcile / kataRouteReconcile / renderKataReality`（第三参） —— 罗盘路线对账（#231 / ADR-0074）：**周复盘挂 ETA 的同一挂载点顺带**把「剩余路线」条目与图面节点名做**零模型粗 diff**（三态：有锚=条目正文引用到图面在册节点名／标候选=自带「候选」标注（初画/重写模板硬约束②允许的未落图台阶）／无锚=**漂移**——被当作确定路标写出来、图面却无从核对），结论只以一行进现状区「罗盘对账」小节（一致留一行结论、零漂移零证据噪音；漂移点名证据条目名并声明「只告警，不改罗盘、不触发重画」）；**非权威不阻塞**——罗盘写权仍唯教练随批重写、不进门禁、不触发重画、零 canonical；对账在 ETA **标记周早退之前**算（同周重开也看得见漂移），只在已画路线（`hasPaintedRoute` 挡待初画占位——占位文案不是条目，直接进对账会装成一个巨大的「漂移条目」）且图面加载成功时出结论，单课失败归 `skipped` 不挡 ETA；`tests/compass.test.ts`（三态／条目名提取三档回退／占位反向证据／挂载点随行含标记周早退／`kataOpen` 现状区结论与零漂移零告警）、`tests/weekly-kata.test.ts`（渲染：一致一行、漂移告警 + 证据、空注入零小节、旁挂次序）
+
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 
 `analyzeGraph`/`runAudit` 只做薄接线，不在接缝清单内。
@@ -223,6 +225,14 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | #220 | **评审对照装置**：同源样本上逐（站 × 维度）均值不降（两份 `quality-review --out` 报告对照）；同源/维度集合/非零样本是硬前提 | `scripts/prompt-bump.mts compare <before.json> <after.json>` | 四态样本（不降 / 下降 / 非同源 / 零样本）各自断言；零样本必须**拒绝比对**而不是通过 |
 
 章程条款：`docs/agents/architecture.md` §8（登记四件套 + 两门 + 过门两条 + 「取不到就不假装」）。
+
+## 罗盘路线对账旁挂（#231 / ADR-0074）：行为变更登记
+
+| 票 | 变更 | 落点 | 自检（ADR-0047） |
+|---|---|---|---|
+| #231 | **新增读侧旁挂读数**（无新门）：`compassEtaRefresh` 返回增可选 `reconcile`——**不暴露给任何路由/命令**（宿主与面板都不消费，唯一消费方是 `kataOpen`），故路由清单/探针/状态码/工具面/行为快照**零漂移**；周复盘现状区新增 `### 罗盘对账` 小节（`###` 级不参与 `parseKataBody` 的 `## ` 段切分——现状段解析与四问读写不受影响） | `engine/compass.ts`／`engine/kata.ts`／`engine/growth-subsystem.ts`／`engine/learner-cards.ts`（门面零改动：`CompassEta` 同类读数本来就不过门面） | `tests/compass.test.ts` +5、`tests/weekly-kata.test.ts` +1（见 S74 条目） |
+| #231 | **边界登记（非权威不阻塞）**：不改罗盘写权（`compassRewrite` 仍是唯一写口、调用方仍是生长批受理）、不进门禁、不触发重画（`learnhub_compass_paint` 仍纯手动）、零 canonical 写入；对账只在读侧算，路线段字节不动（测试断言画出路线后对账前后路线段逐字不变） | 同上；词条「罗盘」的非权威纪律不动 | `tests/compass.test.ts`「挂载点顺带对账」一条内断言路线段字节不变 |
+| #231 | **G5 逐文件规模迁移**：`compass.ts 214→264`（对账核 + 三态/判据文档）、`kata.ts 318→342`（摘要类型 + 映射 + 渲染小节）、`growth-subsystem.ts 1088→1099`（挂载点接入）、`learner-cards.ts 1359→1365`（接线 + 接口签名）——涨的行全是本票净增内容 | `scripts/arch-baseline.json`（同提交迁移） | 棘轮精确匹配（涨了失败、降了未同步也失败） |
 
 **旧键深链**：`#/learn`、`#/courses/graph`、`#/stats`、`#/lab` 等平铺/子路由旧键按 ADR-0058 登记为**自用工具可接受的已知断裂**——`parseHash` 回落默认页签，规范化经 `syncHash` 走 replaceState（不留非法形、不产生历史条目）。断言常驻 `tests/ui-router.test.ts` 的 parseHash 用例（旧键样例逐条列举）与 syncHash 用例（旧键 hash 规范化）。
 

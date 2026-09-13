@@ -23,7 +23,7 @@ import type { BrokenNote } from './notes.ts'
 import type { Fm, CourseEntry, ProposalRec } from './types.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { CoachCheck } from './coach-round.ts'
-import type { CompassEta } from './compass.ts'
+import type { CompassEta, RouteReconcile } from './compass.ts'
 import type { GraphApplyResult } from './views/graph.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
 import type { EditProposalSpec, GrowthNote } from './proposals.ts'
@@ -61,7 +61,7 @@ import { arbitrationPopulations, behaviorDigest, readyDepthCheck, renderArbitrat
 import { coachToolset, renderGrowthGraphView } from './coach-tools.ts'
 import type { CoachToolDeps } from './coach-tools.ts'
 import type { CompassEtaProbe } from './compass.ts'
-import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, parseCompass, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
+import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, reconcileRoute, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { resolveConcept } from './concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from './dates.ts'
 import type { Clock } from './clock.ts'
@@ -248,16 +248,20 @@ export class GrowthSubsystem {
    * 逐启用课程——未播种跳过、罗盘缺席先落脚手架、当前周已挂 current、否则探测带
    * 折叠后重写「沙盘 ETA」段（措辞锁死「模型推演，非承诺」）。透明度装置：单课失败
    * 不挡其他课，更不挡周复盘。折叠每课都算（周频成本，同周进程内走备忘）：结果随行
-   * 携带 eta——周复盘现状区的 ETA 旁挂（#150）取同一份数据，不二次蒙特卡洛。 */
+   * 携带 eta——周复盘现状区的 ETA 旁挂（#150）取同一份数据，不二次蒙特卡洛。
+   * 顺带做**路线对账**（#231 / ADR-0074）：同一挂载点、同一份已读的罗盘文本，把
+   * 「剩余路线」条目与图面节点名做零模型粗 diff，结果随行携带 reconcile——周复盘现状区
+   * 只以结论呈现。**非权威**：不改罗盘（写权仍唯教练随批重写）、不进门禁、不触发重画；
+   * 未画路线（待初画占位）没有对账对象，不出结论。 */
   async compassEtaRefresh(
     courseKey?: string, opts: { today?: string; force?: boolean } = {},
-  ): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta }>> {
+  ): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; reconcile?: RouteReconcile }>> {
     const { today: learningToday } = await this.e.learningDay()
     const today = opts.today ?? learningToday
     const weekStart = weekStartOf(today)
     if (!weekStart) throw new Error(`[compass] today 不是合法日期：${String(today)}`)
     const courses = courseKey ? [await this.e.registry.resolve(courseKey)] : await this.e.enabledCourses()
-    const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta }> = []
+    const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; reconcile?: RouteReconcile }> = []
     for (const c of courses) {
       try {
         const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
@@ -267,17 +271,24 @@ export class GrowthSubsystem {
         }
         const path = this.e.paths.compassPath(c.root)
         const existing = this.e.fs.exists(path) ? await this.e.fs.readFile(path) : compassScaffold(c.name)
+        const doc = parseCompass(existing)
+        // 对账在 ETA 早退之前算（与标记周无关——路线什么时候漂移都要看得见）；
+        // 只按名字粗比、只读图面，图面加载失败由外层 catch 归 skipped（不挡 ETA）
+        const routeBody = sectionBody(doc, SECTION_ROUTE)
+        const reconcile = hasPaintedRoute(routeBody)
+          ? reconcileRoute(routeBody!, [...(await this.e.loadView(c)).graph.nset])
+          : undefined
         const memoed = this.etaMemo.get(c.name)
         const eta = !opts.force && memoed?.week === weekStart
           ? memoed.eta
           : await this.compassEtaFold(c, anchor, today, weekStart)
         this.etaMemo.set(c.name, { week: weekStart, eta })
-        if (!opts.force && etaMarkerOf(sectionBody(parseCompass(existing), SECTION_ETA)) === weekStart) {
-          out.push({ course: c.name, state: 'current', eta })
+        if (!opts.force && etaMarkerOf(sectionBody(doc, SECTION_ETA)) === weekStart) {
+          out.push({ course: c.name, state: 'current', eta, ...(reconcile ? { reconcile } : {}) })
           continue
         }
         await atomicWrite(path, withSectionText(existing, SECTION_ETA, renderEtaBody(eta)), this.e.fs)
-        out.push({ course: c.name, state: 'refreshed', eta })
+        out.push({ course: c.name, state: 'refreshed', eta, ...(reconcile ? { reconcile } : {}) })
       } catch (err) {
         out.push({ course: c.name, state: 'skipped', detail: err instanceof Error ? err.message : String(err) })
       }

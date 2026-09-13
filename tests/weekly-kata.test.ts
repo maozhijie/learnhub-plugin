@@ -215,3 +215,33 @@ test('#150 ETA 旁挂渲染：注入摘要逐课一行、周次未及如实说�
   assert.ok(md.indexOf('### 沙盘 ETA') < md.indexOf('### 有界 · 项目'))
   assert.doesNotMatch(renderKataReality(reality), /### 沙盘 ETA/, '空注入 = 零小节（缺席降级）')
 })
+
+// ---- #231 罗盘对账旁挂：结论进现状区，零漂移零噪音 ----
+
+test('#231 对账渲染：一致留一行结论（无证据噪音）；漂移给告警 + 证据条目名；空注入零小节', () => {
+  const reality = buildKataReality({
+    weekStart: '2026-09-07', weekEnd: '2026-09-13', cutoffMin: 0,
+    practice: [], journal: [], reviewLog: [], habitRepeats: [],
+    projects: [], projectExec: {}, noteSources: {}, habitNames: {}, skillNames: {},
+  })
+  const etas = [{
+    course: '数学', endpoint: '用导数解决优化问题', minutes_per_day: 30,
+    p50_week: { at: 8, from: 4 }, p80_week: null, horizon: 24, wording: '模型推演，非承诺',
+  }]
+  const clean = renderKataReality(reality, etas, [{ course: '数学', entries: 3, anchored: 2, proposed: 1, unmoored: [] }])
+  assert.ok(clean.includes('### 罗盘对账'))
+  assert.ok(clean.includes('- 数学：路线 3 条条目与图面一致（2 条有锚 · 1 条标「（候选）」）。'))
+  assert.ok(!clean.includes('路线漂移'), '零漂移不出告警行（零噪音）')
+  assert.ok(clean.indexOf('### 沙盘 ETA') < clean.indexOf('### 罗盘对账'), '对账旁挂在沙盘 ETA 之后（同一挂载点顺带）')
+  assert.ok(clean.indexOf('### 罗盘对账') < clean.indexOf('### 有界 · 项目'))
+
+  const drift = renderKataReality(reality, [], [
+    { course: '数学', entries: 1, anchored: 1, proposed: 0, unmoored: [] },
+    { course: '物理', entries: 2, anchored: 0, proposed: 0, unmoored: ['补极限过渡', '换向预留'] },
+  ])
+  assert.ok(drift.includes('- 物理：路线漂移 2 条——「补极限过渡」「换向预留」在图面无对应节点、也未标「（候选）」。'))
+  assert.ok(drift.includes('路线是草图非权威：此处只告警，不改罗盘、不触发重画。'), '措辞沿非权威纪律（不给承诺语义）')
+  assert.ok(drift.includes('- 数学：路线 1 条条目与图面一致（1 条有锚）。'), '逐课一行，一致与漂移同屏')
+
+  assert.doesNotMatch(renderKataReality(reality), /### 罗盘对账/, '空注入 = 零小节（未画路线的课不出结论）')
+})
