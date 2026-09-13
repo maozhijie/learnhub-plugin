@@ -76,6 +76,9 @@ export default function KataCard({ courseNames, onOpenInbox }: { courseNames: st
       Message.success(`实验提案 #${r.proposal} 已发起——到提案收件箱确认后开跑`)
       setConverted(r.proposal)
       setExpModal(false)
+      // 新提案落地 = 跨卡事实变化（照收件箱应用后的先例广播）：同页 N-of-1 卡的
+      // 「待确认」入口即时现身，不必等切页签或下一拍
+      window.dispatchEvent(new Event('learnhub:reload'))
       await kata.reload()
     } catch (err) {
       Message.error(errorMessage(err))

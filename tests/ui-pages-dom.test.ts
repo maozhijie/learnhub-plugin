@@ -386,33 +386,63 @@ test('洞察区·待确认实验提案：卡上可见并直达提案收件箱（
 })
 
 test('周复盘「下一实验」：转出提案后留回执并直达提案收件箱（#210 动线第一跳）', async () => {
-  const { default: KataCard } = await importUi('pages/InsightPage/KataCard.tsx')
-  routes({
-    'GET /kata': KATA_FIXTURE,
-    'GET /experiments': {
-      templates: [{ id: 'retrieval', title: '检索点位置与密度', question: '检索点放哪更划算？', description: '说明', unlocked: true }],
-      experiments: [], report: null,
-    },
+  const { default: InsightPage } = await importUi('pages/InsightPage/index.tsx')
+  // 提案列表桩体随转换换新（响应对象要换引用：同一数组原地改会被 React 的
+  // 同引用早退挡在重渲染之外，那是夹具假象不是产品行为）——转出后 N-of-1 卡的
+  // 「待确认」入口应即时现身（同页刷新，不必等切页签）
+  const experimentsRoute = {
+    templates: [{ id: 'retrieval', title: '检索点位置与密度', question: '检索点放哪更划算？', description: '说明', unlocked: true }],
+    experiments: [], report: null,
+  }
+  routes(INSIGHT_ROUTES({
+    'GET /experiments': experimentsRoute,
     'POST /kata/convert/experiment': { proposal: 7, title: '检索点位置与密度', week_start: '2026-09-07' },
-  })
-  let inboxOpened = 0
-  render(React.createElement(KataCard, { courseNames: ['数学'], onOpenInbox: () => { inboxOpened += 1 } }))
+    'GET /proposals': [],
+  }))
+  const { frame, calls } = spyFrame()
+  render(React.createElement(InsightPage, { frame }))
   const next = await screen.findByPlaceholderText('下周试一个小改变')
   await act(async () => { fireEvent.change(next, { target: { value: '把检索点挪到节首试试' } }) })
   await click(screen.getByText('转 N-of-1 提案'))
   assert.ok(await screen.findByText(/到提案收件箱确认后才开跑/), '弹窗指路收件箱（不再指实验室页）')
   // Arco Select：点开下拉再选模板（模板解锁态才可选；弹窗里的那个 select，不是卡片头的选周）
   await act(async () => { fireEvent.click(document.querySelector('.arco-modal .arco-select-view') as Element) })
-  await click(await screen.findByText('检索点位置与密度'))
-  await click(screen.getByText('发起提案'))
+  // 模板名在「N-of-1 卡模板表」与「弹窗下拉项」都出现：按弹窗内选项定位（.arco-select-option）
+  const option = await (async () => {
+    for (let i = 0; i < 20 && !document.querySelector('.arco-modal .arco-select-option'); i++) {
+      await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    }
+    return document.querySelector('.arco-modal .arco-select-option') as HTMLElement | null
+  })()
+  assert.ok(option, '模板下拉打开')
+  await click(option!)
+  await click(document.querySelector('.arco-modal button.arco-btn-primary') as HTMLElement)
   await waitFor(() => {
     const c = stubCalls().find(x => x.method === 'POST' && x.path === '/kata/convert/experiment')
     assert.ok(c, '转实验提案走 /kata/convert/experiment')
     assert.deepEqual(c.body, { week_start: '2026-09-07', template: 'retrieval' }, '周与模板照传')
   })
-  assert.ok(await screen.findByText(/确认开跑在提案收件箱/), '卡上留常驻回执（含提案号）')
-  await click(screen.getByText('去提案收件箱确认'))
-  assert.equal(inboxOpened, 1, '回执按钮直达收件箱')
+  assert.ok(await screen.findByText(/确认开跑在提案收件箱/), '周复盘卡留常驻回执（含提案号）')
+  // 同页 N-of-1 卡：待确认入口随提案落地现身（两条直达收件箱的入口：回执 + N-of-1 卡）
+  routes(INSIGHT_ROUTES({
+    'GET /experiments': experimentsRoute,
+    'POST /kata/convert/experiment': { proposal: 7, title: '检索点位置与密度', week_start: '2026-09-07' },
+    'GET /proposals': [{
+      id: 7, kind: 'experiment', course: '全部课程', status: 'pending',
+      summary: '检索点位置与密度（N-of-1 提案）', artifact: 'x', created: '2026-09-13T00:00:00Z',
+    }],
+  }))
+  await act(async () => {
+    window.dispatchEvent(new Event('learnhub:reload'))
+    await new Promise(r => setTimeout(r, 50))
+  })
+  await waitFor(() => {
+    assert.ok(screen.getAllByText('去提案收件箱确认').length >= 2,
+      `提案落地后同页两条待确认入口都在（实得 ${screen.getAllByText('去提案收件箱确认').length} 条）`)
+  })
+  const entries = screen.getAllByText('去提案收件箱确认')
+  await click(entries[entries.length - 1]!)
+  assert.deepEqual(calls.goto, [['courses.proposals']], '确认动作落在提案收件箱（人审唯一处）')
 })
 
 // ---- 文案语义锁（#207 / ADR-0058 门册判据修订）：正断言 canonical 词条词 +
