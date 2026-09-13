@@ -302,3 +302,21 @@ test('ADR-0040: 项目目标反编译模板 v9——seed 起点资格同种子�
   assert.match(tpl, /单一行为单元/, '起点 = 单一行为单元')
   assert.match(tpl, /上交前自查/, 'pre-submit 自查锚点')
 })
+
+// ---- v10 节间连贯契约（#227）：模板声称与注入成分对齐——空头承诺清零 ----
+
+test('#227: 大纲/节生成三变体升 v10——节清单+前节结尾注入后，声称与实际成分一一对应', () => {
+  for (const kind of ['课程大纲', '课程节生成', '课程节生成-苏格拉底', '课程节生成-费曼'] as const) {
+    const tpl = Content.PROMPT_KINDS[kind]!
+    assert.ok(Content.promptVersionOf(tpl) >= 10, `${kind} 应升到 v10`)
+    // 空头承诺清零：注入的实态是「前节结尾窗口 + 节清单」，不是「前节已生成正文」全文
+    assert.doesNotMatch(tpl, /前节已生成正文/, `${kind} 不再声称注入前节已生成正文全文`)
+  }
+  assert.match(Content.PROMPT_KINDS['课程大纲']!, /注入节清单与前节结尾保证连贯/, '大纲递进原则指向实际注入成分')
+  for (const kind of ['课程节生成', '课程节生成-苏格拉底', '课程节生成-费曼'] as const) {
+    const tpl = Content.PROMPT_KINDS[kind]!
+    assert.match(tpl, /前节结尾（非首节）/, `${kind} 头注声明的附带成分与实际一致`)
+    assert.match(tpl, /与「前节结尾」自然衔接/, `${kind} 衔接约束指向注入块名`)
+    assert.match(tpl, /仅供衔接参考，不复述/, `${kind} 带衔接参考不复述指令`)
+  }
+})
