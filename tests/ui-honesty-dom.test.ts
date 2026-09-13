@@ -70,7 +70,7 @@ test('CoachCockpit：在途任务条点击 → onOpenJob 带任务 key（落生�
     course: '数学', jobs: [JOB_FIXTURE], coach: null, seeded: true,
     onOpenJob: (j: { key: string }) => seen.push(j.key),
   }))
-  assert.ok(screen.getByText(/点击去生成页看全程/), '在途条可见')
+  assert.ok(screen.getByText(/看全程/), '在途条可见')
   await click(screen.getByText(/种子起草（数学）/))
   assert.deepEqual(seen, ['数学/种子起草'], '点击回调带任务注册表 key')
 })
@@ -101,7 +101,7 @@ test('SeedFormModal：入队成功 = 成功提示且表单收起', async () => {
 test('SeedFormModal：已在途拒绝 = 非成功样式（warning），表单不收起', async () => {
   await fillAndSubmit(false)
   await waitFor(() => {
-    assert.ok(document.body.textContent!.includes('不重复入队'), '拒绝消息可见')
+    assert.ok(document.body.textContent!.includes('不重复'), '拒绝消息可见（锚词）')
   })
 })
 

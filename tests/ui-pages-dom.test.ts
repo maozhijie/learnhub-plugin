@@ -10,6 +10,7 @@
 import test, { afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { render, screen, fireEvent, act, cleanup, waitFor, routes, stubCalls, importUi, uiImport, arco, spyFrame } from './helpers/ui-dom.ts'
+import { lockCopy } from './helpers/copy-lock.ts'
 
 afterEach(() => {
   cleanup()
@@ -45,9 +46,9 @@ test('LearnPage：推荐卡点「去学习」→ frame.openLesson 打开该节�
   })
   const { frame, calls } = spyFrame()
   render(React.createElement(LearnPage, { frame }))
-  assert.ok(await screen.findByText('接下来'), '推荐流加载后出现「接下来」卡')
+  assert.ok(await screen.findByText(/接下来/), '推荐流加载后出现「接下来」卡')
   assert.ok(screen.getByText('入门'), '推荐事件按节点名渲染')
-  await click(screen.getByText('去学习'))
+  await click(screen.getByText(/去学习/))
   assert.deepEqual(calls.openLesson, [['数学', '入门']], '点开直接进该节点的学习视图')
 })
 
@@ -56,10 +57,10 @@ test('LearnPage：主数据失败 = 整页失败态（次要不翻页），重�
   routes({ 'GET /xp': XP_FIXTURE }) // /recommend 未登记 → 404：主数据失败
   const { frame } = spyFrame()
   render(React.createElement(LearnPage, { frame }))
-  assert.ok(await screen.findByText('学习页加载失败'), '推荐流失败进 page 变体失败态')
+  assert.ok(await screen.findByText(/加载失败/), '推荐流失败进 page 变体失败态')
   assert.ok(screen.getByText('重试'))
-  assert.equal(screen.queryByText('接下来'), null, '失败态不渲染主数据区')
-  assert.ok(await screen.findByText('我的课程'), '次要区（课程卡）不受主数据失败影响')
+  assert.equal(screen.queryByText(/接下来/), null, '失败态不渲染主数据区')
+  assert.ok(await screen.findByText(/我的课程/), '次要区（课程卡）不受主数据失败影响')
 })
 
 test('LearnPage：生成中节点的推荐卡显示逐节进度态（#160），而非只会说在队列', async () => {
@@ -80,10 +81,11 @@ test('LearnPage：生成中节点的推荐卡显示逐节进度态（#160），�
   })
   const { frame } = spyFrame()
   render(React.createElement(LearnPage, { frame }))
-  assert.ok(await screen.findByText('接下来'), '推荐流加载后出现「接下来」卡')
-  const progress = await screen.findAllByText('生成中 3/7')
-  assert.ok(progress.length >= 1, '生成中节点带逐节进度（Tag 与按钮同一读数）')
-  assert.equal(screen.queryByText('生成正文'), null, '生成中不渲染「生成正文」按钮（动作诚实）')
+  assert.ok(await screen.findByText(/接下来/), '推荐流加载后出现「接下来」卡')
+  const progress = await screen.findAllByText(/生成中/)
+  assert.ok(progress.length >= 1 && document.body.textContent!.includes('3/7'),
+    '生成中节点带逐节进度（Tag 与按钮同一读数；锚词+读数，不锁整句）')
+  assert.equal(screen.queryByText('生成正文'), null, '生成中不渲染「生成正文」按钮（动作诚实锁，见门册登记）')
 })
 
 // ---- StatsPage：XP 账本 + 每日目标保存 ----
@@ -103,7 +105,8 @@ test('StatsPage：今日 XP 上账，保存每日目标 → PUT /daily-goal + �
     assert.ok(goal, '保存发出 PUT /daily-goal')
     assert.deepEqual(goal.body, { goal: 30 }, '回传当前目标值')
   })
-  assert.ok(document.body.textContent!.includes('每日目标已调整为 30 XP'), '成功轻提示可见')
+  assert.ok(document.body.textContent!.includes('每日目标') && document.body.textContent!.includes('30'),
+    '成功轻提示可见（锚词+数值，不锁整句措辞）')
 })
 
 // ---- LessonView：无题引导 + AI 出题 + 返回 ----
@@ -125,19 +128,19 @@ test('LessonView：有正文无题 = 空态引导，点「AI 出题」入队任�
   })
   const { frame, calls } = spyFrame()
   render(React.createElement(LessonView, { course: '数学', node: '入门', frame }))
-  assert.ok(await screen.findByText('进行中'), '节点状态标签可见')
-  assert.ok(screen.getByText('整课正文（自由阅读）'), '正文折叠卡可见（内容懒渲染）')
+  assert.ok(await screen.findByText(/进行中/), '节点状态标签可见')
+  assert.ok(screen.getByText(/整课正文/), '正文折叠卡可见（内容懒渲染）')
   assert.ok(screen.getByText(/还没有题目/), '无题空态引导可见')
-  await click(screen.getByText('展开完整正文'))
+  await click(screen.getByText(/展开完整正文/))
   assert.ok(await screen.findByText('第一节'), '折叠展开后按节渲染正文')
-  await click(screen.getByText('AI 出题（6 道混合题型）'))
+  await click(screen.getByRole('button', { name: /AI 出题/ }))
   await waitFor(() => {
     const gen = stubCalls().find(c => c.method === 'POST' && c.path === '/question-generate')
     assert.ok(gen, '出题任务化入队')
     assert.deepEqual(gen.body, { course: '数学', node: '入门', count: 6 })
   })
-  assert.ok(document.body.textContent!.includes('出题任务已入队'), '入队轻提示可见')
-  await click(screen.getByText('← 返回'))
+  assert.ok(document.body.textContent!.includes('入队'), '入队轻提示可见（锚词）')
+  await click(screen.getByRole('button', { name: /返回/ }))
   assert.equal(calls.closeLesson!.length, 1, '返回收起学习视图')
 })
 
@@ -167,21 +170,21 @@ test('LessonView：失败横幅动作（#196 / ADR-0054）——定点重写、�
   assert.ok(await screen.findByText(/上次生成失败/), '失败横幅可见（不再是一句话死横幅）')
   assert.ok(screen.getByText(/✗ 演示：溢出节：/), '结构化失败清单：节标题 + 死因')
 
-  await click(screen.getByText('重写这一节'))
+  await click(screen.getByRole('button', { name: /重写/ }))
   await waitFor(() => {
     const rw = stubCalls().find(c => c.method === 'POST' && c.path === '/generate/section')
     assert.ok(rw, '定点重写失败节（失败节在大纲里从未消失）')
     assert.deepEqual(rw.body, { course: '数学', node: '入门', section: 's2' })
   })
 
-  await click(screen.getByText('重试续跑'))
+  await click(screen.getByRole('button', { name: /续跑/ }))
   await waitFor(() => {
     const gen = stubCalls().find(c => c.method === 'POST' && c.path === '/generate')
     assert.ok(gen, '重试续跑 = 重新入队（断点续跑语义在服务端）')
     assert.deepEqual(gen.body, { course: '数学', node: '入门' })
   })
 
-  await click(screen.getByText('关闭'))
+  await click(screen.getByRole('button', { name: /关闭/ }))
   assert.equal(screen.queryByText(/上次生成失败/), null, '关闭隐藏横幅（视图状态，存 UI 本地）')
 })
 
@@ -207,12 +210,53 @@ test('LessonView：失败横幅「转 AI 修复」（#196 / ADR-0054）——预
   const { frame } = spyFrame()
   render(React.createElement(LessonView, { course: '数学', node: '入门', frame }))
   assert.ok(await screen.findByText(/上次生成失败/), '失败横幅可见')
-  await click(screen.getByText('转 AI 修复'))
-  assert.ok(await screen.findByText('与 AI 讨论本课 · 入门'), '预填讨论弹窗打开')
+  await click(screen.getByRole('button', { name: /AI 修复/ }))
+  assert.ok(await screen.findByText(/与 AI 讨论本课/), '预填讨论弹窗打开')
   const textarea = document.querySelector('.arco-modal textarea') as HTMLTextAreaElement | null
-  assert.ok(textarea && textarea.value.includes('上次生成失败：'), '意图已预填失败原文')
+  assert.ok(textarea && textarea.value.includes('失败'), '意图已预填失败原文')
   // 关掉弹窗收尾（意图已预填，「开始讨论」交还给用户决定）
   const closeBtn = document.querySelector('.arco-modal-close-icon')
   assert.ok(closeBtn, '弹窗可关闭')
   await click(closeBtn as HTMLElement)
+})
+
+// ---- 文案语义锁（#207 / ADR-0058 门册判据修订）：正断言 canonical 词条词 +
+// Avoid 词反断言，词表唯一出处 = CONTEXT.md（判据与自检见 tests/copy-lock.test.ts
+// 与门册「L3 文案语义锁」段）。三条样例常驻：沙盘非承诺 / 掌握度语境 / 休眠题列名。 ----
+
+test('文案语义锁·沙盘：非承诺措辞必现，Avoid 词（预测沙盘/可行性判定）不得出现', async () => {
+  const { default: LabPage } = await importUi('pages/LabPage.tsx')
+  const { frame } = spyFrame()
+  render(React.createElement(LabPage, { frame }))
+  await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+  lockCopy(document.body.textContent ?? '', { canonical: ['沙盘', '非承诺'], glossary: '沙盘（Sandbox）' })
+})
+
+test('文案语义锁·掌握度语境：呈现区不得出现 Avoid 词（熟练度/正确率等）', async () => {
+  const { default: LessonView } = await importUi('components/LessonView.tsx')
+  routes({
+    'GET /lesson': LESSON_FIXTURE,
+    'GET /questions': { course: '数学', node: '入门', mastery: 0.4, questions: [] },
+    'GET /learner-queue': { cards: [] },
+    'GET /generate/status': { jobs: [], queuedCount: 0 },
+  })
+  const { frame } = spyFrame()
+  const { container } = render(React.createElement(LessonView, { course: '数学', node: '入门', frame }))
+  assert.ok(await screen.findByText(/掌握度/), '掌握度呈现区渲染')
+  lockCopy(container.textContent ?? '', { canonical: ['掌握度'], glossary: 'Mastery（掌握度）' })
+})
+
+test('文案语义锁·休眠题：列名「未调度」词条明文许可，Avoid 词（死题/未调度题）不得出现', async () => {
+  const { default: BankPage } = await importUi('pages/BankPage.tsx')
+  routes({
+    'GET /questions-all': { total: 2, questions: [
+      { course: '数学', node: '入门', qid: 'q1', kind: 'true_false', q: '1+1=?', due: null },
+      { course: '数学', node: '入门', qid: 'q2', kind: 'true_false', q: '2+2=?', due: '2026-09-20' },
+    ] },
+    'GET /difficulty-advice': { nodes: [], date: '2026-09-13', dismissed: 0 },
+  })
+  const { frame } = spyFrame()
+  render(React.createElement(BankPage, { frame }))
+  assert.ok(await screen.findByText('未调度'), '休眠题的到期列名「未调度」渲染（词条明文许可）')
+  lockCopy(document.body.textContent ?? '', { canonical: ['休眠题'], glossary: '休眠题（Dormant Question）' })
 })
