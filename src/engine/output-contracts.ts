@@ -172,15 +172,29 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['代码围栏', '解释性文字', 'YAML 双引号（吃掉 LaTeX 反斜杠）', 'ASCII 数学记号'],
     repair: {
       rounds: 0,
-      feedback: '无整批修复轮（#214 现状）；invokes 缺席有逐题补标调用恰一次（repairInvokesOnce，#148）',
-      note: '整批修复轮评估归 #217；逐题门（转义/答案形态/invokes 在册/查重）拒收走报告面',
+      feedback: '门错无整批修复轮（#214 现状，评估归 #217）；逐题补标恰一次（repairInvokesOnce，#148）；第二意见审计不一致题恰一次回灌修复（#223 question-audit，deep 档，修复再审计仍败弃题）',
+      note: '整批门错修复轮评估归 #217；逐题门（转义/答案形态/invokes 在册/查重）拒收走报告面',
     },
     tolerance: 'repairQuestionStrings 转义损坏确定性修复（计数留痕），修不好拒收',
     failureCodes: ['MODEL_YAML'],
     sensitivity: '推理创意',
     structuredEligible: false,
     shape: { kind: 'yaml-top', keys: [{ key: 'questions', shape: 'array' }] },
-    notes: '逐题门拒收无稳定码（rejected 数组报告）；单题非法不毁整批',
+    notes: '逐题门拒收无稳定码（rejected 数组报告）；单题非法不毁整批；全弃光沿用既有「一道都没入库」fail loud 语义',
+  },
+  {
+    station: '独立解题',
+    specBlocks: ['solverPrompt'],
+    format: 'json',
+    clause: ['只输出一个 JSON 对象（不要代码围栏、不要任何解释）'],
+    allowed: ['一个 JSON 对象（answer 按题型形态 + steps 关键步骤一两句）'],
+    forbidden: ['代码围栏', '解释性文字'],
+    repair: { rounds: 0, feedback: '无修复轮——应答不可解析按审计失败保守放行（unresolved，不弃题不重试）' },
+    failureCodes: [],
+    sensitivity: '机械评审',
+    structuredEligible: true,
+    shape: { kind: 'any' },
+    notes: '#223 第二意见门的盲解调用：只看题干与选项、零答案键零解析（answer 形态按题型：字母/字母数组/布尔/术语/数值/数组）；对账比较器 = evaluateAllo（判卷同款）',
   },
   {
     station: '笔记出题',
@@ -377,13 +391,6 @@ export const OUT_OF_SCOPE_STATIONS: readonly { station: string; reason: string }
 /** 按站取契约（同站多交付面用 surface 区分；缺省返回正文/唯一面）。 */
 export function contractOf(station: string, surface?: string): OutputContract | undefined {
   return OUTPUT_CONTRACTS.find(c => c.station === station && (surface === undefined || c.surface === surface))
-}
-
-/** 全部模板键的覆盖视图（文本锚门的完备性对账用）。 */
-export function coveredTemplates(): Set<string> {
-  const out = new Set<string>()
-  for (const c of OUTPUT_CONTRACTS) for (const t of c.templates ?? []) out.add(t)
-  return out
 }
 
 /** phase 1 格式级校验：解析产物按注册表 shape 校验（对齐现状语义，不改行为——

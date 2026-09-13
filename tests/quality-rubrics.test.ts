@@ -27,7 +27,8 @@ function resolveSource(source: string): string | null {
   }
   if (source.startsWith('词条:')) {
     const name = source.slice('词条:'.length)
-    return CONTEXT.includes(`**${name}**`) ? CONTEXT : null
+    // 词条头两种形态：**名字**: 与 **名字（English名）**:
+    return new RegExp(`\\*\\*${name}(（|\\*\\*)`).test(CONTEXT) ? CONTEXT : null
   }
   if (source.startsWith('引擎:')) {
     const file = source.slice('引擎:'.length)
@@ -105,6 +106,17 @@ test('自检：加「总分」维度 / 换掉法庭元数据，元数据门必�
   const noCourt = QUALITY_RUBRICS.map(r =>
     r.id === '种子·终点' ? { ...r, court: { ai: '', human: '', outcome: '' } } : r)
   assert.throws(() => runRubricGate(noCourt), /RUBRIC_COURTS/)
+})
+
+test('出处解析四族都有真实使用者（词条/ADR 分支非死代码）', () => {
+  // ADR 族：种子·终点的资格判据引用 ADR-0040/0056（#221 来源承诺）
+  const seed = rubricOf('种子·终点')!
+  const sources = new Set(seed.dimensions.flatMap(d => d.criteria).map(c => c.source))
+  assert.ok(sources.has('ADR-0040') && sources.has('ADR-0056') && [...sources].some(s => s.startsWith('模板:')),
+    '种子·终点量规应同时消费 ADR 与模板两族出处')
+  // 词条族：解析器对真实词条可用（判据尚未引用时不强制入库——分支由本断言保活）
+  assert.ok(resolveSource('词条:生成站')?.includes('**生成站（Generation Station）**'))
+  assert.equal(resolveSource('词条:不存在的词条'), null)
 })
 
 // ---- #221 增补条款的落地锚 ----

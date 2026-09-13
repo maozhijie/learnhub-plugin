@@ -12,11 +12,12 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Content } from '../src/engine/content.ts'
 import {
-  OUTPUT_CONTRACTS, OUT_OF_SCOPE_STATIONS, contractOf, coveredTemplates, validateByContract,
+  OUTPUT_CONTRACTS, OUT_OF_SCOPE_STATIONS, contractOf, validateByContract,
 } from '../src/engine/output-contracts.ts'
 import type { OutputContract } from '../src/engine/output-contracts.ts'
 import { DISPUTE_REVIEW_SYSTEM, OPEN_QUESTION_GRADING_SYSTEM, REFLECTION_GRADING_SYSTEM } from '../src/engine/grading.ts'
 import { receiptReviewSystem } from '../src/engine/receipts.ts'
+import { solverPromptFor } from '../src/engine/question-audit.ts'
 import { STATIONS } from '../src/host/corpus.ts'
 
 /** 锚文本解析表：判别名 → 系统提示词原文；规范块判别名 → 引擎拼装块原文。 */
@@ -28,6 +29,7 @@ const SYSTEM_TEXTS: Record<string, string> = {
 }
 const SPEC_BLOCK_TEXTS: Record<string, string> = {
   interactiveSpecBlock: Content.interactiveSpecBlock(),
+  solverPrompt: solverPromptFor({ kind: 'true_false', q: '（示例题干）', answer: true }),
 }
 
 /** 文本锚门本体（可注入 = 自检可改坏样本）：契约句族漂移、机器块禁令、覆盖完备性、
@@ -38,7 +40,8 @@ function runContractGate(
   kinds: Record<string, string>,
   stations: ReadonlySet<string>,
 ): void {
-  // —— 覆盖完备性：注册表模板键 = PROMPT_KINDS 全集，且一键至多一站声明 ——
+  // —— 覆盖完备性（双向）：注册表模板键 = PROMPT_KINDS 全集且一键至多一站声明；
+  // 语料站词表每个值要么在注册表、要么在明示不在册清单（防新站漏登静默放过）——
   const seen = new Map<string, string>()
   for (const c of contracts) {
     for (const t of c.templates ?? []) {
@@ -47,18 +50,24 @@ function runContractGate(
       seen.set(t, c.station)
     }
   }
-  const covered = coveredTemplatesOf(contracts)
+  const covered = new Set<string>()
+  for (const c of contracts) for (const t of c.templates ?? []) covered.add(t)
   assert.deepEqual(
     [...covered].sort(), Object.keys(kinds).sort(),
     '注册表模板键与 PROMPT_KINDS 全集必须一一对应（漂移 = 新站未登记或旧站漏登）',
   )
-  // —— 站名对账：注册表与明示不在册清单的站名都必须是语料站名词表在册值 ——
+  // —— 站名对账（双向）：注册表与明示不在册清单的站名都必须在语料词表；
+  // 词表里的每个站也必须有归属（在册或明示不在册）——
   for (const c of contracts) {
     assert.ok(stations.has(c.station), `契约站名「${c.station}」不在语料站名词表（host STATIONS）`)
   }
   for (const x of outOfScope) {
     assert.ok(stations.has(x.station), `不在册站名「${x.station}」不在语料站名词表——幽灵站名`)
     assert.ok(x.reason.trim(), `不在册站「${x.station}」必须给理由`)
+  }
+  const claimed = new Set([...contracts.map(c => c.station), ...outOfScope.map(x => x.station)])
+  for (const s of stations) {
+    assert.ok(claimed.has(s), `语料站「${s}」既无契约条目也不在明示不在册清单——新站接入时必须二选一登记（#214）`)
   }
   // —— 逐契约：锚源至少一族、契约句族全部命中、格式 sanity、机器块禁令、结构化资格 ——
   for (const c of contracts) {
@@ -114,13 +123,7 @@ function runContractGate(
   }
 }
 
-function coveredTemplatesOf(contracts: readonly OutputContract[]): Set<string> {
-  const out = new Set<string>()
-  for (const c of contracts) for (const t of c.templates ?? []) out.add(t)
-  return out
-}
-
-test('文本锚门：14 模板站 + 判卷族 + 交互件面与注册表全量对账（漂移即红）', () => {
+test('文本锚门：14 模板站 + 判卷族 + 交互件/独立解题面与注册表全量对账（漂移即红）', () => {
   runContractGate(OUTPUT_CONTRACTS, OUT_OF_SCOPE_STATIONS, Content.PROMPT_KINDS, new Set(Object.values(STATIONS)))
 })
 

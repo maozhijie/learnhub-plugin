@@ -1411,7 +1411,6 @@ export class BankSubsystem {
           isCancelled: opts?.isCancelled,
         })
         sectionItems = audit.items
-        doc.questions = audit.items
         auditReport = auditReport ? mergeSecondOpinionReports(auditReport, audit.report) : audit.report
       }
       for (const rawQ of sectionItems) {

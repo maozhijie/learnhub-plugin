@@ -42,12 +42,22 @@ function failCorpus(rt: HostRuntime, station: string, err: unknown): string | un
   return rt.corpus.annotateLast(station, { outcome: 'failed', code: errorCodeOf(err) })
 }
 
+/** 出题站的补全缝转发闭包（generateQuiz/finishWithQuiz 共用，#223）：调用级
+ * station/kind/effort 沿 callOpts 贯通（第二意见的解题调用标「独立解题」站、修复
+ * 调用标 repair——语料站标正确），缺省钉题目生成站与管线声明的语义档。 */
+function quizSeam(complete: LlmComplete, fallbackEffort: LlmEffort | undefined): LlmComplete {
+  return (prompt, _system, callOpts) => complete(prompt, undefined, {
+    effort: callOpts?.effort ?? fallbackEffort,
+    station: callOpts?.station ?? STATIONS.quiz,
+    ...(callOpts?.kind !== undefined ? { kind: callOpts.kind } : {}),
+  })
+}
+
 /** AI 出题管线：节点正文 → 出题提示词 → llm → validateBank 门禁逐题落盘。
  * complete 为注入的补全缝（#137）。opts 透传节标注清单/综合题模式（逐节管线的出题段）、
  * 定向补节与生成指令（#117/#120）、语义档（#228：出题站显式声明 effort，不留部署默认）。
- * 出题缝闭包转发调用级 station/kind/effort（#223：第二意见门的解题调用标「独立解题」站、
- * 修复调用标 repair——站名缺省钉题目生成站），门禁失败经语料补标（题目生成站，#213）。
- * 第二意见门抽样率随 rt.quizAuditRate 传入（#223；0 = 关门）。 */
+ * 第二意见门抽样率随 rt.quizAuditRate 传入（#223；0 = 关门），门禁失败经语料补标
+ * （题目生成站，#213）。 */
 async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: string, node: string, count: number | undefined, opts?: {
   sections?: Array<{ id: string; title: string }>
   generic?: boolean
@@ -57,16 +67,10 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
   effort?: LlmEffort
 }) {
   try {
-    return await rt.engine.bank2.questionGenerate(course, node, count,
-      (prompt, _system, callOpts) => complete(prompt, undefined, {
-        effort: callOpts?.effort ?? opts?.effort,
-        station: callOpts?.station ?? STATIONS.quiz,
-        ...(callOpts?.kind !== undefined ? { kind: callOpts.kind } : {}),
-      }),
-      {
-        ...opts,
-        ...(rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : {}),
-      })
+    return await rt.engine.bank2.questionGenerate(course, node, count, quizSeam(complete, opts?.effort), {
+      ...opts,
+      ...(rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : {}),
+    })
   } catch (err) {
     failCorpus(rt, STATIONS.quiz, err)
     throw err
@@ -933,12 +937,7 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   persistGenJobs(rt)
   const quizEffort = contentEffort(job.tier === '高')
   try {
-    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node,
-      (prompt, _system, callOpts) => complete(prompt, undefined, {
-        effort: callOpts?.effort ?? quizEffort,
-        station: callOpts?.station ?? STATIONS.quiz,
-        ...(callOpts?.kind !== undefined ? { kind: callOpts.kind } : {}),
-      }),
+    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, quizSeam(complete, quizEffort),
       rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : undefined)
     const quiz = await generateQuiz(rt, complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)

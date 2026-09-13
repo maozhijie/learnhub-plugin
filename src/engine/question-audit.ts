@@ -76,7 +76,7 @@ export interface SecondOpinionResult {
   rejected: Array<{ q: string; reason: string }>
 }
 
-/** 合并两份报告（逐节出题跨节聚合）。 */
+/** 合并两份报告（逐节出题跨节聚合）。rate 取后者——两段同配率恒同值（门开一次一率）。 */
 export function mergeSecondOpinionReports(a: SecondOpinionReport, b: SecondOpinionReport): SecondOpinionReport {
   return {
     rate: b.rate,

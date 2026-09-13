@@ -379,17 +379,17 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
           {
             id: '单一行为单元', criterion: '起点是坡道第一级台阶，任何情况下必须是单一行为单元：名字连缀两个可独立教学对象（与/和/及）或要先解释名字本身的行话泛称不合格',
             evidence: '引起点名对照正反例（「装好环境并运行第一行代码」✓ vs「Python 基础语法」✗）',
-            source: '模板:种子提案', anchor: '单一行为单元',
+            source: 'ADR-0040', anchor: '单一行为单元',
           },
           {
             id: '常识起步', criterion: '零基础学习者从常识直接可起步（不依赖未教概念）；学习者自述的基础只写进 reason，不放松起点资格',
             evidence: '引起点 pre 依赖面（应为零）与 reason 措辞对照',
-            source: '模板:种子提案', anchor: '不放松起点资格',
+            source: 'ADR-0040', anchor: '零基础学习者从常识直接可起步',
           },
           {
             id: '宁简勿繁', criterion: '起点过简代价趋零、过繁代价是整条坡道断裂——拿不准取更简的',
             evidence: '引起点粒度与首个生长台阶推演对照',
-            source: '模板:种子提案', anchor: '宁简勿繁',
+            source: 'ADR-0040', anchor: '宁简勿繁',
           },
         ],
       },
@@ -399,17 +399,17 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
           {
             id: '承诺句', criterion: '终点名是承诺句（学习者兑现了什么承诺的合成处），不是一节可教可考的台阶句；不受「单一行为单元」约束',
             evidence: '引终点名判断句式（台阶句/主题句点名）',
-            source: '模板:种子提案', anchor: '终点名用承诺句',
+            source: 'ADR-0056', anchor: '终点是承诺句不是台阶句',
           },
           {
             id: '面向覆盖', criterion: '目标有几个面向，终点句就合成几个面向：禁止静默丢弃、禁止窄化限定词（「或/A 者 B」）；确实装不下显式取舍写进 reason',
             evidence: '引目标描述面向分解与终点句对照（#202 机器学习四面向反例同款审法）',
-            source: '模板:种子提案', anchor: '禁止静默丢弃',
+            source: 'ADR-0056', anchor: '禁静默丢弃',
           },
           {
             id: '可兑现', criterion: '教练能从起点沿真实的需要长出通往终点的主线、并能在既有节点齐备时据它裁决收尾；「成为大师」类空泛口号不合格',
             evidence: '引终点句推演最后台阶的可辨认性；推演不出收尾判据的点名',
-            source: '模板:种子提案', anchor: '可兑现',
+            source: 'ADR-0056', anchor: '可兑现性判据',
           },
         ],
       },
