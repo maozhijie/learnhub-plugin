@@ -24,6 +24,10 @@
  * 跑集（check/replay 有自检与夹具，见 tests/prompt-changelog.test.ts），它是**变更当下**跑的
  * 手工门：真实语料目录、真模型报告都取不到时，如实登记「未过门」而不是假装过了。
  *
+ * 覆盖面是**双向清单**：语料里出现的站必须在 `REPLAY_FACE`（回放）或 `REPLAY_OUT_OF_SCOPE`
+ * （明示不在回放面 + 理由）里有说法——两处都不在即「新站漏登」，按失败处理（静默不覆盖
+ * 比没有回放更坏；与输出契约注册表的站表双向对账同款纪律）。
+ *
  * 单跑：
  *   node --experimental-transform-types scripts/prompt-bump.mts check
  *   node --experimental-transform-types scripts/prompt-bump.mts replay --corpus tests/fixtures/quality-corpus
@@ -273,13 +277,23 @@ export function replayCorpus(dir: string, opts: { stations?: readonly string[] }
       continue
     }
     const parse = REPLAY_FACE[station]
+    // 覆盖面双向对账（防恒过）：语料里的站在回放面或缺席清单里必须**有说法**——两处都不在
+    // = 新站漏登，按失败处理（与输出契约注册表的站表双向对账同款纪律：静默不覆盖比没有回放更坏）。
+    const undeclared = !parse && !(station in REPLAY_OUT_OF_SCOPE)
     for (const file of files) {
       const parsed = parseCorpusFile(readFileSync(join(dir, station, file), 'utf8'))
       const fm = parsed.frontmatter
       const baseline = fm.outcome === 'failed' || fm.outcome === 'tolerated' ? fm.outcome : 'ok'
       const ref = `${station}/${file}`
       if (!parse) {
-        out.push({ ref, station, baseline, replay: null, regression: false, errors: [] })
+        out.push({
+          ref, station, baseline,
+          replay: undeclared ? 'failed' : null,
+          regression: undeclared,
+          errors: undeclared
+            ? [`站「${station}」既不在回放面（REPLAY_FACE）也不在缺席清单（REPLAY_OUT_OF_SCOPE）——新站漏登，按回放失败处理`]
+            : [],
+        })
         continue
       }
       const errors = parse(parsed.output)

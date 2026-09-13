@@ -247,6 +247,20 @@ test('#220 语料回放 CLI：夹具语料走通全链（含「不在回放面�
   }
 })
 
+test('#220 语料回放：语料里的站在回放面与缺席清单都无说法 = 新站漏登，按失败处理（防静默不覆盖）', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'prompt-replay-undeclared-'))
+  try {
+    writeCorpus(dir, '课程大纲', 'ok-a.md', 'ok', 'node: 甲\nsections:\n  - id: s1\n    title: 概念：甲\n    type: 概念\n    points: 一点。')
+    writeCorpus(dir, '未登记新站', 'ok-b.md', 'ok', '管它是什么。')
+    const r = cli(['replay', '--corpus', dir])
+    assert.equal(r.code, 1, `漏登必须红：
+${r.out}`)
+    assert.match(r.out, /未登记新站.*既不在回放面.*也不在缺席清单/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 // ---------------------------------------------------------------- ③ 评审对照
 
 const stat = (station: string, dimension: string, dimensionName: string, counts: number[]): Record<string, unknown> =>

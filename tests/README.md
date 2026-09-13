@@ -206,8 +206,8 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 
 | 票 | 新增 | 落点 | 自检（ADR-0047） |
 |---|---|---|---|
-| #220 | **提交级登记门**：模板版本 bump 的提交必须同提交补 `PROMPT_CHANGELOG` 条目（状态级完备性仍由 `output-contract.test.ts::runChangelogGate` 执法；两门互补：一个管时序、一个管完备性） | `scripts/prompt-bump.mts check`（`npm run prompt-bump -- check`） | 真 git 历史必须绿；**临时仓库**造「bump 不补登记」提交必须红、补上条目后单独看该提交必须绿；纯函数按合成 diff 自检（bump 无条目 / 合规 / 标记挪位三类）；扫描面读数必须出现（防恒过） |
-| #220 | **语料回放装置**：把语料里存的真实输出重新过本站解析面，「基线通过 → 回放失败」即回归；不在回放面的站给**显式清单**（会话式/判定器/要引擎上下文） | `scripts/prompt-bump.mts replay --corpus <dir>` | 合成语料测回归检出与假阳性（合法输出不得误判）；**真实输出忠实性**：对 `docs/research/spike-216-corpus/` control 臂逐件复现当时生产的 `delivered/schema_ok`（含当时被拒的 3 件——「回放能看见失败」也被测到）；零样本按失败处理 |
+| #220 | **提交级登记门**：模板版本 bump 的提交必须同提交补 `PROMPT_CHANGELOG` 条目（状态级完备性仍由 `output-contract.test.ts::runChangelogGate` 执法；两门互补：一个管时序、一个管完备性。**边界**：两门都只认版本号——「同版本号下的 prompt 变化」不执法，靠纪律与人审，见章程 §8 末段） | `scripts/prompt-bump.mts check`（`npm run prompt-bump -- check`） | 真 git 历史必须绿；**临时仓库**造「bump 不补登记」提交必须红、补上条目后单独看该提交必须绿；纯函数按合成 diff 自检（bump 无条目 / 合规 / 标记挪位三类）；扫描面读数必须出现（防恒过） |
+| #220 | **语料回放装置**：把语料里存的真实输出重新过本站解析面，「基线通过 → 回放失败」即回归；**覆盖面双向对账**——不在回放面的站必须进缺席清单（会话式/判定器/要引擎上下文），两处都无说法 = 新站漏登按失败处理 | `scripts/prompt-bump.mts replay --corpus <dir>` | 合成语料测回归检出与假阳性（合法输出不得误判）；**真实输出忠实性**：对 `docs/research/spike-216-corpus/` control 臂逐件复现当时生产的 `delivered/schema_ok`（含当时被拒的 3 件——「回放能看见失败」也被测到）；零样本按失败处理 |
 | #220 | **评审对照装置**：同源样本上逐（站 × 维度）均值不降（两份 `quality-review --out` 报告对照）；同源/维度集合/非零样本是硬前提 | `scripts/prompt-bump.mts compare <before.json> <after.json>` | 四态样本（不降 / 下降 / 非同源 / 零样本）各自断言；零样本必须**拒绝比对**而不是通过 |
 
 章程条款：`docs/agents/architecture.md` §8（登记四件套 + 两门 + 过门两条 + 「取不到就不假装」）。
