@@ -356,7 +356,7 @@ test('文案语义锁·掌握度语境：呈现区不得出现 Avoid 词（熟�
 })
 
 test('文案语义锁·休眠题：列名「未调度」词条明文许可，Avoid 词（死题/未调度题）不得出现', async () => {
-  const { default: BankPage } = await importUi('pages/BankPage.tsx')
+  const { default: BankColumn } = await importUi('pages/WorkbenchPage/BankColumn.tsx')
   routes({
     'GET /questions-all': { total: 2, questions: [
       { course: '数学', node: '入门', qid: 'q1', kind: 'true_false', q: '1+1=?', due: null },
@@ -365,7 +365,7 @@ test('文案语义锁·休眠题：列名「未调度」词条明文许可，Avo
     'GET /difficulty-advice': { nodes: [], date: '2026-09-13', dismissed: 0 },
   })
   const { frame } = spyFrame()
-  render(React.createElement(BankPage, { frame }))
+  render(React.createElement(BankColumn, { frame, course: '数学' }))
   assert.ok(await screen.findByText('未调度'), '休眠题的到期列名「未调度」渲染（词条明文许可）')
   lockCopy(document.body.textContent ?? '', { canonical: ['休眠题'], glossary: '休眠题（Dormant Question）' })
 })

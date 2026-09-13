@@ -1,6 +1,13 @@
 [
  {
   "method": "GET",
+  "route": "/compass",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "GET",
   "route": "/status",
   "keys": []
  },

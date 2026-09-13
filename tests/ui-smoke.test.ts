@@ -62,9 +62,8 @@ const FROZEN: {
 } = {
   render: [
     'App',
-    'BankPage',
+    'CoursesPage',
     'GeneratePage',
-    'GraphPage',
     'GuidePage',
     'LabPage',
     'TodayPage',
@@ -73,6 +72,7 @@ const FROZEN: {
     'ProjectsPage',
     'ProposalsPage',
     'StatsPage',
+    'WorkbenchPage', // #209：单课工作台（无 courseId 深链 = 显式空态——SSR 走守卫分支）
   ],
   exempt: {
     // Arco Drawer 是 Portal 组件（挂 document.body），react-dom/server 静态渲染恒为空——

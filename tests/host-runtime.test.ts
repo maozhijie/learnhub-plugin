@@ -895,7 +895,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：86 共享引擎入口、工具独有 25、路由独有 49（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、路由独有 51（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -928,8 +928,8 @@ test('路由↔工具对账基线：86 共享引擎入口、工具独有 25、�
   // 进工具面 → 86 共享／路由独有 49（#156 已把工具面一条入口收编共享：25/49；
   // #196/#197 拆节 op content2.contentSplit 仅路由面管线消费 → 25/50；
   // #199 生成门 enqueueGeneration 经 paths.anchorPath 读锚拒终点 → 25/51）
-  assert.equal(shared.length, 86)
-  assert.equal(toolOnly.length, 27, '#203 +2：lab.receiptReviewMode / lab.setReceiptReviewMode（工具面直调，无 panel 路由）')
+  assert.equal(shared.length, 87)
+  assert.equal(toolOnly.length, 26, '#209：growth2.compassRead 得 panel 路由（GET /compass），工具独有 27→26')
   assert.equal(routeOnly.length, 51)
 })
 

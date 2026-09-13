@@ -1,7 +1,10 @@
 /** 生成页：待生成队列（生成队列.md 人审产物）+ 进行中/近期生成任务（服务端任务注册表）。
  * 页面刷新后状态从这里恢复（服务端注册表是事实来源，allo 同语义）。
  * 生成支持提示词风格变体（课程节生成-<style>，作用于逐节生成）；失败任务可重试续跑（ADR-0054）
- * 或一键转 dsh 会话讨论。 */
+ * 或一键转 dsh 会话讨论。
+ * 双形态（#209 / ADR-0058）：不带 course = 全局面（课程区「生成队列」入口，整册视野
+ * 含整课重生成）；带 course = 单课工作台「生长与队列」分栏的本课切片——同一注册表
+ * 过滤出本课任务，全局暂停/恢复语义不变（恢复影响整条队列，切片内如实提示）。 */
 import { Alert, Button, Card, Empty, Message, Modal, Progress, Select, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, discussInHost } from '../api'
@@ -33,7 +36,7 @@ const PHASE_TAG: Partial<Record<NonNullable<GenJobItem['phase']>, { label: strin
   milestone: { label: '里程碑草案', color: 'purple' },
 }
 
-export default function GeneratePage({ frame }: { frame?: AppFrame }) {
+export default function GeneratePage({ frame, course }: { frame?: AppFrame; course?: string }) {
   const [jobs, setJobs] = useState<GenJobItem[] | null>(null)
   const [queuePaused, setQueuePaused] = useState(false)
   const [queuedCount, setQueuedCount] = useState(0)
@@ -43,10 +46,11 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
   const [styles, setStyles] = useState<string[]>([])
   const [style, setStyle] = useState<string | undefined>(undefined)
   const [resetSel, setResetSel] = useState<string>('')
+  const sliced = course !== undefined
 
   // 整课重生成课程清单直接复用 App 已加载的课程树
   const courses = frame?.tree?.courses.map(c => c.name) ?? []
-  const resetTarget = resetSel || frame?.course || courses[0] || ''
+  const resetTarget = sliced ? course! : (resetSel || frame?.course || courses[0] || '')
 
   const confirmReset = () => {
     if (!resetTarget) return
@@ -84,18 +88,20 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
         api.generateStatus(),
         api.queue().catch(() => [] as QueueItem[]),
       ])
-      setJobs([...st.jobs].sort((a, b) => {
+      // 切片形态只看本课任务（全局注册表是事实源，切片是视图过滤不做账面裁剪）
+      const mine = st.jobs.filter(j => !sliced || j.course === course)
+      setJobs([...mine].sort((a, b) => {
         const rank = (x: GenJobItem) => (x.status === 'running' || x.status === 'cancelling' ? 0 : x.status === 'queued' ? 1 : 2)
         return rank(a) - rank(b) || a.startedAt.localeCompare(b.startedAt)
       }))
       setQueuePaused(st.queuePaused)
-      setQueuedCount(st.queuedCount)
+      setQueuedCount(mine.filter(j => j.status === 'queued').length)
       setBroken(st.broken ?? null)
-      setQueue(q)
+      setQueue(sliced ? q.filter(i => i.course === course) : q)
     } catch (err) {
       Message.error(errorMessage(err))
     }
-  }, [])
+  }, [sliced, course])
 
   // 恢复重启后暂停的队列（遗留排队任务不自动开跑，防静默烧 token）
   const resumeQueue = async () => {
@@ -116,8 +122,9 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
     }).catch(() => setStyles([]))
   }, [])
 
-  // 挂载即取 + 5s 轮询（任务与队列同源刷新）；非激活页签跳过取数、切回即补（ADR-0027）
-  usePolling(load, { tab: 'courses.queue', intervalMs: 5000 })
+  // 挂载即取 + 5s 轮询（任务与队列同源刷新）；非激活页签跳过取数、切回即补（ADR-0027）。
+  // 切片形态挂在工作台视图下，轮询门认 'courses.course'。
+  usePolling(load, { tab: sliced ? 'courses.course' : 'courses.queue', intervalMs: 5000 })
 
   // 任务定位（#155）：教练台在途任务条点击跳入时，focusJob 指到任务注册表 key——
   // 目标行加高亮类并滚入视野；任务尚未出现在注册表时随下一次轮询数据到位再试。
@@ -188,7 +195,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
       <Card size='small' title={
         <Space size={10}>
-          <span>待生成队列</span>
+          <span>{sliced ? `待生成队列（${course}）` : '待生成队列'}</span>
           {styles.length > 1 && (
             <Select value={style ?? ''} onChange={v => setStyle(v || undefined)} size='mini' style={{ width: 130 }}>
               {styles.map(s => <Select.Option key={s || '默认'} value={s}>{s ? `风格：${s}` : '默认风格'}</Select.Option>)}
@@ -198,9 +205,10 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
       } style={{ borderRadius: 10 }}>
         <Text type='secondary' style={{ display: 'block', marginBottom: 8 }}>
           来自 生成队列.md（agent 补内容建议 / 内容反馈自动入队）；一键生成后正文落盘 Obsidian，条目自动勾掉。
+          {sliced && ' 此处只显本课条目，全局队列在「生成队列」入口。'}
         </Text>
         {queue === null ? null : queue.length === 0 ? (
-          <Empty description='队列为空：在「学习图」页或推荐卡对未生成节点点「生成正文」即可' />
+          <Empty description={sliced ? '本课没有待生成条目' : '队列为空：在推荐卡或学习图对未生成节点点「生成正文」即可'} />
         ) : (
           <Table size='small' data={queue} rowKey={q => `${q.course}/${q.node}`} pagination={false}
             columns={[
@@ -213,10 +221,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
                 <Space size={4}>
                   <Button size='mini' type='primary' loading={busyKey === `${q.course}/${q.node}`}
                     onClick={() => void generate(q)}>生成正文</Button>
-                  <Button size='mini' type='text' onClick={() => {
-                    frame?.setCourse(q.course)
-                    frame?.goto('courses.graph')
-                  }}>去学习图</Button>
+                  <Button size='mini' type='text' onClick={() => frame?.openCourse(q.course, 'graph')}>去罗盘与图</Button>
                 </Space>
               ) },
             ]} />
@@ -224,8 +229,8 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
       </Card>
       <Card size='small' title={
         <Space size={10}>
-          <span>生成任务</span>
-          {courses.length > 0 && (
+          <span>{sliced ? `生成任务（${course}）` : '生成任务'}</span>
+          {!sliced && courses.length > 0 && (
             <>
               <Select value={resetTarget} onChange={v => setResetSel(v)} size='mini' style={{ width: 170 }}>
                 {courses.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
@@ -244,12 +249,12 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
           <Alert
             type='warning' style={{ marginBottom: 8 }}
             content={<Space size={8}>
-              <Text>进程重启后有 {queuedCount} 个排队任务已暂停（不自动开跑）。</Text>
+              <Text>进程重启后有 {queuedCount} 个{sliced ? '本课' : ''}排队任务已暂停（不自动开跑；恢复影响整条全局队列）。</Text>
               <Button size='mini' type='primary' onClick={() => void resumeQueue()}>恢复队列</Button>
             </Space>} />
         )}
         <Text type='secondary' style={{ display: 'block', marginBottom: 8 }}>
-          全局串行队列：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。课程图的种子提案与生长批从「学习图」页教练台下发（入队即在本页看进度）。
+          全局串行队列{sliced ? '的本课切片' : ''}：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。{sliced ? '种子起草与生长批由教练台分栏下发。' : '课程图的种子提案与生长批从教练台下发（入队即在本页看进度）。'}
         </Text>
         {jobs === null ? null : jobs.length === 0 ? (
           <Empty description='当前没有生成任务' />

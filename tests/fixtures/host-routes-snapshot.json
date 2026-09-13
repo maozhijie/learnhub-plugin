@@ -510,6 +510,26 @@
   ]
  },
  {
+  "id": "GET /compass · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/compass",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "growth2.compassRead(undefined)"
+  ]
+ },
+ {
+  "id": "GET /compass · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/compass?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "growth2.compassRead(\"1\")"
+  ]
+ },
+ {
   "id": "GET /sleep · 空参",
   "method": "GET",
   "url": "/learnhub/api/sleep",

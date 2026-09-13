@@ -119,7 +119,7 @@ export function spyFrame(opts: { tree?: unknown } = {}) {
   return {
     frame: {
       status: null, tree: opts.tree ?? null, course: null, lesson: null, focusNode: null, focusJob: null,
-      setCourse: rec('setCourse'), goto: rec('goto'), openLesson: rec('openLesson'),
+      setCourse: rec('setCourse'), goto: rec('goto'), openCourse: rec('openCourse'), openLesson: rec('openLesson'),
       closeLesson: rec('closeLesson'), locateInGraph: rec('locateInGraph'), locateJob: rec('locateJob'),
       reload: async () => {}, loading: false,
     },

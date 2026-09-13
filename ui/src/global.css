@@ -20,6 +20,7 @@ html, body, #root {
 /* 壳顶栏（#206 token 驱动）：五区页签 + 课程子导航 + 右侧控制区 */
 .shell-topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   background: var(--lh-bg);
   border-bottom: 1px solid var(--lh-border);
@@ -33,9 +34,30 @@ html, body, #root {
   margin: var(--lh-space-2) var(--lh-space-3) 0 0;
   flex-shrink: 0;
 }
+/* 课程区子导航（#209 三入口）：顶栏第二行，flex-wrap 后整行占满 */
 .shell-subnav {
-  padding: var(--lh-space-1) var(--lh-space-3) 0;
-  border-bottom: 1px solid var(--lh-border-faint);
+  flex-basis: 100%;
+  display: flex;
+  gap: var(--lh-space-4);
+  padding: 0 var(--lh-space-3);
+  border-top: 1px solid var(--lh-border-faint);
+}
+.shell-subnav-item {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--lh-space-2) var(--lh-space-1);
+  font-size: var(--lh-font-md);
+  color: var(--lh-text-muted);
+  cursor: pointer;
+  transition: color var(--lh-motion-fast), border-color var(--lh-motion-fast);
+}
+.shell-subnav-item:hover { color: var(--lh-text); }
+.shell-subnav-item-active {
+  color: var(--lh-accent);
+  border-bottom-color: var(--lh-accent);
+  font-weight: 600;
 }
 
 /* 视图保活容器（ADR-0027）：首访常驻、非激活隐藏 */

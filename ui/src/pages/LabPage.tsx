@@ -2,16 +2,15 @@
  * - D-4 睡眠耦合建议开关（「睡前练、醒后验」时段建议层，默认开）
  * - D-1 N-of-1 实验引擎（ADR-0023）：模板库发起 → 确认开跑 → 直白话报告（个体
  *   效应口径）；开停手动；零 XP 不进 Mastery
- * - D-2 挑战点恒温器（ADR-0024）：跨区只读仪表 + 至多三条建议，逐条显式确认后
- *   生效——非自动控制器
  * - D-3 沙盘（ADR-0025）：现有 FSRS+mastery 模型蒙特卡洛推演，分布输出，
- *   措辞锁「模型推演，非承诺」；零写侧 */
+ *   措辞锁「模型推演，非承诺」；零写侧
+ * D-2 恒温器已迁往单课工作台教练台分栏（#209 / ADR-0058）。 */
 import { Alert, Button, Card, InputNumber, Message, Popconfirm, Select, Space, Switch, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api'
 import { errorMessage } from '../hooks/useCommand'
 import type { AppFrame } from '../App'
-import type { ExperimentsDoc, SandboxDoc, SleepConfig, ThermostatDoc } from '../types'
+import type { ExperimentsDoc, SandboxDoc, SleepConfig } from '../types'
 
 const { Text } = Typography
 
@@ -39,7 +38,6 @@ function CurveBars({ curve }: { curve: Array<{ week: number; p50: number; p80: n
 export default function LabPage({ frame }: { frame: AppFrame }) {
   const [sleep, setSleep] = useState<SleepConfig | null>(null)
   const [exp, setExp] = useState<ExperimentsDoc | null>(null)
-  const [thermo, setThermo] = useState<ThermostatDoc | null>(null)
   const [sandbox, setSandbox] = useState<SandboxDoc | null>(null)
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<{ proposal: number; title: string; pool: number } | null>(null)
@@ -49,10 +47,9 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
 
   const reload = useCallback(async () => {
     try {
-      const [s, e, t] = await Promise.all([api.sleep(), api.experiments(), api.thermostat()])
+      const [s, e] = await Promise.all([api.sleep(), api.experiments()])
       setSleep(s)
       setExp(e)
-      setThermo(t)
     } catch (err) {
       Message.error(errorMessage(err))
     }
@@ -105,7 +102,7 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
           <Text type='secondary' style={{ fontSize: 12 }}>运行环境信息随状态加载后展示。</Text>
         )}
       </Card>
-      <Alert type='info' content='实验室是「提议非指令」区：沙盘是模型推演非承诺；实验与恒温器的建议都要你逐条确认才生效；这里发生的一切零 XP、不进掌握度、不碰调度语义。' />
+      <Alert type='info' content='实验室是「提议非指令」区：沙盘是模型推演非承诺；实验的建议要你逐条确认才生效；这里发生的一切零 XP、不进掌握度、不碰调度语义。（恒温器在单课工作台的教练台分栏）' />
 
       {/* ---- D-3 沙盘 ---- */}
       <Card title='沙盘 · 计划推演' extra={<Text type='secondary'>模型推演，非承诺</Text>}>
@@ -232,67 +229,6 @@ export default function LabPage({ frame }: { frame: AppFrame }) {
         <Text type='secondary' style={{ fontSize: 11 }}>
           实验变量只允许引擎可控的内容/课程设计参数（调度核心永不作实验变量）；臂标注进复习日志；零 XP、不进 Mastery。
         </Text>
-      </Card>
-
-      {/* ---- D-2 挑战点恒温器 ---- */}
-      <Card title='挑战点恒温器 · 跨区观测（只读）'>
-        {thermo ? (
-          <div style={{ display: 'grid', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
-              <div>
-                <Text type='secondary' style={{ fontSize: 11 }}>课程区 · 真实保留率（{thermo.course_region.retention.real} 次到期复习）</Text>
-                <div><Text bold>{thermo.course_region.retention_band.label}</Text></div>
-              </div>
-              <div>
-                <Text type='secondary' style={{ fontSize: 11 }}>课程区 · 难度带长期选择（{thermo.course_region.band_choices.sessions} 次会话）</Text>
-                <Text style={{ fontSize: 12 }}>
-                  简单 {Math.round(thermo.course_region.band_choices.shares.easy * 100)}% ·
-                  标准 {Math.round(thermo.course_region.band_choices.shares.standard * 100)}% ·
-                  挑战 {Math.round(thermo.course_region.band_choices.shares.hard * 100)}%
-                </Text>
-              </div>
-              <div>
-                <Text type='secondary' style={{ fontSize: 11 }}>无界区 · 执行事件评级</Text>
-                <div><Text style={{ fontSize: 12 }}>{thermo.unbounded_region.execution_ratings.count
-                  ? `${thermo.unbounded_region.execution_ratings.count} 次`
-                  : '暂无数据（随执行事件通道上线）'}</Text></div>
-              </div>
-              <div>
-                <Text type='secondary' style={{ fontSize: 11 }}>项目区</Text>
-                <div><Text style={{ fontSize: 12 }}>{thermo.project_region.projects.length
-                  ? thermo.project_region.projects.map(p => `${p.name}（${p.tier}）`).join('、')
-                  : '后补：随 P-7 上线；当前无项目'}</Text></div>
-              </div>
-            </div>
-            <div style={{ display: 'grid', gap: 4 }}>
-              {thermo.knobs.map(k => (
-                <Text key={k.knob} style={{ fontSize: 12 }}>
-                  · <Text bold>{k.title}</Text>：{k.status}{k.current ? `（当前：${k.current}）` : ''}
-                </Text>
-              ))}
-            </div>
-            {thermo.suggestions.length ? (
-              <div style={{ display: 'grid', gap: 8 }}>
-                {thermo.suggestions.map(s => (
-                  <Alert
-                    key={s.id}
-                    type='warning'
-                    content={s.text}
-                    action={
-                      <Popconfirm title='确认采纳这条建议？（显式确认后才生效）' onOk={() => { void act(() => api.thermostatApply(s.id), '已确认生效') }}>
-                        <Button size='mini' type='primary' disabled={busy}>确认采纳</Button>
-                      </Popconfirm>
-                    }
-                  />
-                ))}
-              </div>
-            ) : (
-              <Text type='secondary' style={{ fontSize: 12 }}>暂无建议（低数据静默——观测足够后才会出现至多三条，逐条确认才生效；恒温器不是自动控制器）。</Text>
-            )}
-          </div>
-        ) : (
-          <Text type='secondary' style={{ fontSize: 12 }}>加载中…</Text>
-        )}
       </Card>
 
       {/* ---- D-4 睡眠耦合建议 ---- */}

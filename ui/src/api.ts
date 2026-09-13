@@ -45,6 +45,8 @@ export const api = {
   status: () => http<import('./types').StatusWithLlm>('GET', '/status'),
   coursesTree: () => http<import('./types').TreeDoc>('GET', '/courses/tree'),
   graph: (course?: string) => http<import('./types').GraphDoc>('GET', `/graph${q({ course })}`),
+  /** 罗盘读视图（#209 工作台首屏）：剩余路线 + 学习者批注（软输入）+ 沙盘 ETA（非承诺）。 */
+  compass: (course?: string) => http<import('./types').CompassDoc>('GET', `/compass${q({ course })}`),
   recommend: (limit = 8) => http<import('./types').RecommendDoc>('GET', `/recommend?limit=${limit}`),
   queue: () => http<import('./types').QueueItem[]>('GET', '/queue'),
   lesson: (node: string, course?: string) =>

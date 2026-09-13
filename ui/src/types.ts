@@ -75,6 +75,8 @@ export type KataDoc = CommandOutput<'kata-open'>
 // 同类例外（多入口命令）：`/probation` 与工具面合并后没有单一 `output`（settleRechecks|probationStatus），
 // 故从引擎入口直接派生——出处仍是引擎，只是不经注册表的 output。
 export type ProbationDoc = Awaited<ReturnType<LearnhubEngine['growth2']['probationStatus']>>
+/** 罗盘读视图（GET /compass，#209 工作台首屏）：engine compassRead 的返回原样透传。 */
+export type CompassDoc = Awaited<ReturnType<LearnhubEngine['growth2']['compassRead']>>
 export type ProjectFm = CommandOutput<'project-list'>[number]
 export type ProjectPlanItem = ProjectFm['plan'][number]
 

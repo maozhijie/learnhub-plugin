@@ -59,7 +59,7 @@ test('对账清单：每条路由都被快照探针覆盖（快照漏了哪条�
 
 // ---------------------------------------------------------------- ② 行为快照（逐字不变）
 
-test('行为快照：467 条探针的状态码／响应体／引擎调用序列与基线逐字一致', async () => {
+test('行为快照：469 条探针的状态码／响应体／引擎调用序列与基线逐字一致', async () => {
   const specs: ProbeSpec[] = SNAPSHOT.map(s => ({ id: s.id, method: s.method, url: s.url, ...(s.body ? { body: s.body } : {}) }))
   const got = await runProbes(specs)
   const diffs: string[] = []
@@ -75,9 +75,9 @@ test('行为快照：467 条探针的状态码／响应体／引擎调用序列�
   assert.deepEqual(diffs, [], `路由行为相对重构前漂移（${diffs.length} 条）：\n${diffs.join('\n')}`)
 })
 
-test('行为快照：状态码分布保持 200×224／404×6／500×237（探针口径）', () => {
+test('行为快照：状态码分布保持 200×226／404×6／500×237（探针口径；#209 +2×200）', () => {
   const dist = SNAPSHOT.reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.status]: (acc[s.status] ?? 0) + 1 }), {})
-  assert.deepEqual(dist, { 200: 224, 404: 6, 500: 237 })
+  assert.deepEqual(dist, { 200: 226, 404: 6, 500: 237 })
 })
 
 // ---------------------------------------------------------------- ③ 分发纪律
