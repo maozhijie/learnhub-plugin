@@ -50,6 +50,10 @@ export class Paths {
   get recoveryStatePath(): string { return `${this.centerStateDir}/recovery_state.json` }
   get runLogPath(): string { return `${this.centerStateDir}/运行日志.md` }
   get promptDir(): string { return `${this.centerStateDir}/提示词` }
+  /** 生成语料（#213 / ADR-0059）：`state/生成语料/<站>/`——真实模型调用的原始产出
+   * 存档（frontmatter+提示词+原始输出），解析器回归 fixture 源 / 质量评审抽样池 /
+   * 模型更换格式漂移体检标本。写侧住 host/corpus（捕获器），engine 侧只登记路径。 */
+  get corpusDir(): string { return `${this.centerStateDir}/生成语料` }
   get learnhubConfigPath(): string { return `${this.centerStateDir}/learnhub.json` }
   /** Vault 链接先验缓存（V-2 #91）：state/vault链接.json——全库 wikilink 扫描产物
    * （候选边 + 命中率审计 + 源文件指纹）；只写引擎 state 区，个人笔记零写入。 */

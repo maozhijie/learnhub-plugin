@@ -72,7 +72,7 @@ export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './complexity.ts'
 /** 正文就绪判定（#160 宿主种子链消费的纯函数：起点「正文未生成」口径与生长批一致）。 */
 export { hasReadyContent } from './notes.ts'
 export { readAnchor } from './seed.ts'
-export type { LlmComplete, LlmEffort, LlmStream, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
+export type { LlmCallKind, LlmComplete, LlmEffort, LlmStream, LlmTokenUsage, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
 /** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */
 export type { Clock, Rng } from './clock.ts'
 /** 统一 agent 缝（#162 / ADR-0041/0044）：类随门面出（宿主构造注入），类型随缝出。 */

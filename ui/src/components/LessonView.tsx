@@ -357,6 +357,7 @@ export default function LessonView(props: { course: string; node: string; frame:
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 0 }}>
                     ✗ {f.sectionTitle ?? f.sectionId ?? '未知节'}{f.finding ? `：${f.finding}` : ''}
+                    {f.corpusRef ? `（语料 ${f.corpusRef}）` : ''}
                   </Text>
                   {f.sectionId && (
                     <Tooltip content='只重新生成这一节（过质检门后落盘），不动其余节'>

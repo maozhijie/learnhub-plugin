@@ -304,6 +304,7 @@ test('大纲解析失败 → 恰一回灌重产（解析反馈）、大纲用裁
         throw e
       }
       views = [{ id: 's1', title: '概念：A', type: '概念', status: 'pending', tierLabel: '低' }]
+      return { sections: views, tolerated: [] } // #213 起容忍清单随返回值出引擎
     },
     'content2.contentSection': async () => ({ version: 1, title: 'x', hints: [] }),
     'bank2.questionGenerateSections': async () => ({ added: 2 }),
@@ -345,6 +346,7 @@ test('节间连贯注入（#227）：节清单标 i/N、非首节附前节结尾
         { id: 's1', title: '概念：A', type: '概念', status: 'pending', tierLabel: '低', points: '要点A' },
         { id: 's2', title: '概念：B', type: '概念', status: 'pending', tierLabel: '中', points: '要点B' },
       ]
+      return { sections: views, tolerated: [] } // #213 起容忍清单随返回值出引擎
     },
     'content2.contentSection': async () => ({ version: 1, title: 'x', hints: [] }),
     'bank2.questionGenerateSections': async () => ({ added: 2 }),
@@ -412,6 +414,7 @@ test('正文初跑档位（#228）：高难节点初跑升 deep、低难维持 f
     'content2.contentSectionsView': async () => views,
     'content2.contentOutline': async (_c: unknown, _n: unknown, _yaml: string) => {
       views.push({ id: 's1', title: '概念：A', type: '概念', status: 'pending', tierLabel: '高' })
+      return { sections: views, tolerated: [] } // #213 起容忍清单随返回值出引擎
     },
     'content2.contentSection': async () => ({ version: 1, title: 'x', hints: [] }),
     'bank2.questionGenerateSections': async () => ({ added: 2 }),
@@ -448,6 +451,22 @@ test('正文初跑档位（#228）：高难节点初跑升 deep、低难维持 f
   assert.equal(effortsLow[1], 'off', '低难节点正文初跑维持 fast（行为不变）')
 })
 
+test('#213 语料容忍补标：大纲解析容忍命中 → 大纲站当次捕获随终态改判 tolerated 落盘', async () => {
+  const ctx = scriptedCtx([
+    'node: X\nsections:\n  - id: s1\n    title: 概念：A\n',
+    '## 概念：A\n\n正文',
+  ], prompts)
+  enqueueGeneration(rt, ctx, '数学', '节点A')
+  const key = '数学/节点A'
+  await until(() => rt.jobs.genJobs.get(key)?.status === 'done')
+  await rt.corpus.flush()
+  const ref = rt.corpus.lastRef('课程大纲')
+  assert.ok(ref, '大纲站捕获在案')
+  const body = readFileSync(join(rt.vault, '学习中心', 'state', '生成语料', ref!), 'utf8')
+  assert.match(body, /^---\n[\s\S]*outcome: tolerated/, '捕获初标 ok 被管线补标 tolerated（失败·容忍必存）')
+  assert.match(body, /station: 课程大纲/)
+})
+
 test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 → 子节照常生成 → done', async () => {
   const rt = makeRuntime()
   const prompts: string[] = []
@@ -477,7 +496,7 @@ test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 →
       splitRequested = true
       assert.equal(sectionId, 's2')
       views = [ready, ...subs]
-      return subs
+      return { sections: subs, tolerated: [] } // #213 起容忍清单随返回值出引擎
     },
     'bank2.questionGenerateSections': async () => ({ added: 2 }),
     'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
