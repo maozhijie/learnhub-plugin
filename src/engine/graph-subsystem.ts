@@ -456,9 +456,12 @@ export class GraphSubsystem {
       }
     }
     const tpl = await this.e.loadPrompt('种子提案')
-    const pack = `${tpl}\n\n---\n\n## 目标描述（学习者原文）\n\n${goal}\n\n## 模式与绑定（照抄，不自拟）\n\n- 课程名：${course}\n- 模式：${mode}\n- 目标类型：${goalType}`
+    // 模板与材料分开收（#218 契约后置）：材料在前、模板的输出契约段置尾；修复轮经
+    // seedRepairPrompt 复拼（同一材料块），契约在修复轮仍居尾。
+    const materials = `## 目标描述（学习者原文）\n\n${goal}\n\n## 模式与绑定（照抄，不自拟）\n\n- 课程名：${course}\n- 模式：${mode}\n- 目标类型：${goalType}`
       + (goalType === 'coverage' ? `\n- 块工作表（照抄块名）：\n${worksheet.map(w => `  - block: ${w.block}`).join('\n')}` : '')
       + (prior ? `\n\n---\n\n${prior}` : '')
+    const pack = Content.withContractLast(tpl, materials)
     const gateOnce = (raw: string): { errors: string[]; spec: SeedProposalSpec | null } => {
       let doc: unknown
       try {
@@ -478,7 +481,7 @@ export class GraphSubsystem {
         return { errors: g.errors.map(x => `  ✗ ${x}`), ...(g.spec ? { result: g.spec } : {}) }
       },
       repair: (gateErrors, rejected) =>
-        agent.repair('种子起草', seedRepairPrompt(pack, rejected, gateErrors), { effort: 'deep' }),
+        agent.repair('种子起草', seedRepairPrompt(tpl, materials, rejected, gateErrors), { effort: 'deep' }),
       fatal: (_firstErrors, repairErrors) => {
         const e: Error & { code?: string } = new Error(
           `[seed-propose] 模型产出未过种子校验门（已自动修复重试一轮，提案未受理）：\n${repairErrors.join('\n')}`)

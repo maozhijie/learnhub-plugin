@@ -15,7 +15,7 @@ import type { Store } from './store.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
 import type { ConceptRegistry } from './concepts.ts'
-import type { Content } from './content.ts'
+import { Content } from './content.ts'
 import type { BankDoc } from './question-bank.ts'
 import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
@@ -173,7 +173,7 @@ export class GrowthSubsystem {
       ? sectionBody(doc!, SECTION_ANNOTATIONS)
       : null
     const template = await this.e.content.loadPrompt('罗盘初画')
-    const prompt = template + compassPaintContext({
+    const prompt = Content.withContractLast(template, compassPaintContext({
       courseName: c.name,
       anchor,
       starts: anchor.seed_nodes.filter(n => n !== anchor.endpoint).map(n => ({
@@ -182,7 +182,7 @@ export class GrowthSubsystem {
       })),
       graphNames: graph.names,
       annotations,
-    })
+    }))
     const toolset = this.coachToolsetFor(c)
     const loop = await agent.agentLoop({
       station: '罗盘', prompt, effort: 'deep',
@@ -606,11 +606,21 @@ export class GrowthSubsystem {
       segments.push({ tier, effort, operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
       return verdict
     }
+    /** 教练回合材料块拼装（#218 契约后置）：上下文包 + 图面 + 段特有块（注入/沙盘参照/
+     * 回灌反馈）全在前，模板的输出契约段经 Content.withContractLast 置尾——三段式与修复
+     * 重裁的同构形态，模型最后读到的始终是 note/route/ops 契约。 */
+    const coachPrompt = (...blocks: Array<string | undefined>): string =>
+      Content.withContractLast(template, blocks
+        .filter((b): b is string => Boolean(b?.trim()))
+        .map(b => b.trim())
+        .join('\n\n---\n\n'))
     const runSegment = async (tier: 'light' | 'full'): Promise<GrowthVerdict> => {
       const pack = await this.coachContextPack(c.name, { lightweight: tier === 'light', today })
-      const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}`
-        + (opts.inject !== undefined ? `\n\n---\n\n## 里程碑计划修订注入（项目消费拉动的生长请求）\n\n${opts.inject.trimEnd()}\n\n换线 = 激活图上已有节点（内容生成/接入路线），补支 = 朝新里程碑长最小必要分支；你的裁决仍走五算子与既定纪律，判断注入与就绪深度后照常产出（含零操作批）。` : '')
-        + `\n\n---\n\n${view.trimEnd()}\n`
+      const prompt = coachPrompt(
+        pack,
+        opts.inject !== undefined ? `## 里程碑计划修订注入（项目消费拉动的生长请求）\n\n${opts.inject.trimEnd()}\n\n换线 = 激活图上已有节点（内容生成/接入路线），补支 = 朝新里程碑长最小必要分支；你的裁决仍走五算子与既定纪律，判断注入与就绪深度后照常产出（含零操作批）。` : undefined,
+        view,
+      )
       return runVerdictLoop(tier, prompt)
     }
     // 双沙盘仲裁段（#150）：现状照走 vs 含本批候选节点照走——同种子配对推演（读侧
@@ -634,7 +644,7 @@ export class GrowthSubsystem {
         after: curves(pops.after),
       })
       const pack = await this.coachContextPack(c.name, { today, packLabel: '仲裁段——全量包+双沙盘推演参照' })
-      const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n\n---\n\n${evidence.trimEnd()}\n`
+      const prompt = coachPrompt(pack, view, evidence)
       return runVerdictLoop('arbitration', prompt)
     }
 
@@ -645,11 +655,14 @@ export class GrowthSubsystem {
     const runRepair = async (feedback: string, previousYaml: string): Promise<GrowthVerdict> => {
       assertAlive()
       const pack = await this.coachContextPack(c.name, { today, packLabel: '回灌重裁段——上一版裁决被受理门拒收' })
-      const prompt = `${template.trimEnd()}\n\n---\n\n${pack.trimEnd()}\n\n---\n\n${view.trimEnd()}\n\n---\n\n`
-        + `## 受理门反馈（上一版裁决未过受理门——被拒批次零落盘，图未改动）\n\n${feedback.trim()}\n\n`
+      const prompt = coachPrompt(
+        pack,
+        view,
+        `## 受理门反馈（上一版裁决未过受理门——被拒批次零落盘，图未改动）\n\n${feedback.trim()}\n\n`
         + `上一版裁决原文：\n\n\`\`\`yaml\n${previousYaml.trim()}\n\`\`\`\n\n`
         + `请对照拒绝原因逐条修正后，按模板重新产出完整裁决（course + note + route + ops）：`
-        + `区/块与节点名、pre 引用必须逐字来自上方图面，概念必须已在登记表或本批 concepts 铸名。`
+        + `区/块与节点名、pre 引用必须逐字来自上方图面，概念必须已在登记表或本批 concepts 铸名。`,
+      )
       const raw = await agent.repair('教练生长', prompt, { effort: 'deep' })
       const verdict = this.parseGrowthVerdict(raw)
       segments.push({ tier: 'repair', effort: 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })

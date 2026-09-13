@@ -632,7 +632,7 @@ export class BankSubsystem {
       throw new Error(`[error-card-generate] 候选的原题全部缺失/归档，无法生成：${skipped.join('；')}`)
     }
     const tpl = await this.e.loadPrompt('错误对比卡')
-    const prompt = `${tpl}\n\n## 挖出的错误模式（${mats.length} 个候选，每个候选出一张卡）\n\n${mats.map(m => m.material).join('\n\n')}`
+    const prompt = Content.withContractLast(tpl, `## 挖出的错误模式（${mats.length} 个候选，每个候选出一张卡）\n\n${mats.map(m => m.material).join('\n\n')}`)
     // 机械出卡调用恒走 fast 档（#137：档位沿缝声明，宿主适配器翻译成部署思考档）
     const raw = await llm(prompt, undefined, { effort: 'fast' })
     const doc = YAML.parseModel(raw) as { cards?: unknown } | null
@@ -1225,7 +1225,8 @@ export class BankSubsystem {
     const conceptScope = Content.conceptScopeOf(graph, node)
     const conceptBlock = Content.conceptListBlock(conceptScope)
       + Content.confusablePairsBlock(confusablePairsOf(conceptEntries, new Set(conceptScope)))
-    const raw = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`)
+    const raw = await llm(Content.withContractLast(tpl,
+      `${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n${contentBody}${prior ? `\n\n---\n\n${prior}` : ''}`))
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
@@ -1393,7 +1394,8 @@ export class BankSubsystem {
         : tierLabel === '高'
           ? '本节难度档：高——允许 1-2 道 difficulty: 3 的易错/综合题。'
           : '本节难度档：中——难度递进到 2 即可（收尾至多 1 道 difficulty: 3）。'
-      const raw = await llm(`${tpl}${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`)
+      const raw = await llm(Content.withContractLast(tpl,
+        `${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`))
       let doc: { questions?: unknown } | null = null
       try {
         doc = YAML.parseModel(raw) as { questions?: unknown } | null

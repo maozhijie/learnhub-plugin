@@ -19,6 +19,7 @@ import type { ConceptEntry } from './concepts.ts'
 import type { Fm, GNode, ConceptTier, Misconception, BloomLevel } from './types.ts'
 import { BLOOM_LEVELS } from './types.ts'
 import { masteryOfFm } from './srs.ts'
+import { withContractLast } from './prompt-assembly.ts'
 import type { Graph } from './graph.ts'
 
 /** 目标类型二分（#136）：能力锚定默认；覆盖锚定显式选择且必须带块工作表。 */
@@ -500,7 +501,10 @@ export interface SeedDraftRequest {
 }
 
 /** 种子起草修复轮提示词（面板下发的 seedPropose 用，decompileRepairPrompt 同款机械）：
- * 上一次输出未过干跑校验门 → 附校验清单重出完整 YAML。 */
-export function seedRepairPrompt(pack: string, previous: string, errors: string[]): string {
-  return `${pack}\n\n## 上一次输出未过种子校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`
+ * 上一次输出未过干跑校验门 → 附校验清单重出完整 YAML。模板与材料分开收（#218 契约后
+ * 置）：修复反馈是材料，拼在模板的输出契约段之前——修复轮里模型最后读到的依旧是
+ * 「只输出一个 YAML 文档」，校验清单不占契约的位置。 */
+export function seedRepairPrompt(tpl: string, materials: string, previous: string, errors: string[]): string {
+  return withContractLast(tpl,
+    `${materials.trimEnd()}\n\n## 上一次输出未过种子校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`)
 }

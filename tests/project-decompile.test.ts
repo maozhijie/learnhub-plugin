@@ -10,11 +10,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { decompileGoalOf, decompileRepairPrompt, decompileTerms, reconcilePlanNodes, splitDecompileDoc } from '../src/engine/project-decompile.ts'
+import { Content } from '../src/engine/content.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { YAML } from '../src/engine/yaml.ts'
 import type { PlanItem } from '../src/engine/projects.ts'
 import { withVault } from './helpers/vault.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
+
+/** 模板原文（契约后置的修复轮断言用：#218 起 decompileRepairPrompt 收模板与材料两半）。 */
+const TPL = Content.PROMPT_KINDS['项目目标反编译']!
 
 const TWO_NODE_GRAPH = [
   'region: 基础',
@@ -215,13 +219,15 @@ test('reconcilePlanNodes：名字对账门——引用必须有 种子簇∪既�
   assert.match(explicitOnly[0]!, /数学\/即兴/)
 })
 
-test('decompileRepairPrompt：修复轮携带原包 + 上次输出 + 逐条门禁清单', () => {
-  const p = decompileRepairPrompt('原始包', '上次产出', ['  ✗ plan.1.name: 不能为空', '  ✗ seed: 缺失'])
-  assert.match(p, /原始包/)
+test('decompileRepairPrompt：修复轮携带原材料 + 上次输出 + 逐条门禁清单，契约段仍居尾（#218）', () => {
+  const p = decompileRepairPrompt(TPL, '原材料', '上次产出', ['  ✗ plan.1.name: 不能为空', '  ✗ seed: 缺失'])
+  assert.match(p, /原材料/)
   assert.match(p, /上次产出/)
   assert.match(p, /上一次输出未过双产物校验门/)
   assert.match(p, /plan\.1\.name/)
   assert.match(p, /seed/)
+  // 契约后置（#218）：回灌反馈是材料，模板的输出契约段仍是最终 prompt 的末段
+  assert.ok(p.indexOf('只输出一个 YAML 文档') > p.indexOf('上一次输出未过双产物校验门'), '契约段在反馈块之后')
 })
 
 // ---- 门面：双提案受理 + 同源同进同退 ----

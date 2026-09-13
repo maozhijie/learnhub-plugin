@@ -23,6 +23,7 @@
 import { validateSeedProposal } from './seed.ts'
 import type { SeedProposalSpec } from './seed.ts'
 import { priorTerms } from './vault-prior.ts'
+import { withContractLast } from './prompt-assembly.ts'
 
 /** 反编译文档过门后的双半区规格。 */
 export interface DecompileDoc {
@@ -151,11 +152,13 @@ export function reconcilePlanNodes(
   return errors
 }
 
-/** 修复轮提示词：原包 + 上次输出 + 门禁清单回灌，要求整体重出完整 YAML（模型高频
+/** 修复轮提示词：原材料 + 上次输出 + 门禁清单回灌，要求整体重出完整 YAML（模型高频
  * 违反输出契约——缺字段/漏半区；一次盲跑定生死会让入口反复失败，对齐既有
- * 「生成→门禁→修复一轮」机械）。 */
-export function decompileRepairPrompt(pack: string, previous: string, errors: string[]): string {
-  return `${pack}\n\n## 上一次输出未过双产物校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`
+ * 「生成→门禁→修复一轮」机械）。#218 契约后置：模板与材料分开收，回灌块属材料——
+ * 修复轮里模型最后读到的依旧是模板的输出契约段，校验清单不占契约的位置。 */
+export function decompileRepairPrompt(tpl: string, materials: string, previous: string, errors: string[]): string {
+  return withContractLast(tpl,
+    `${materials.trimEnd()}\n\n## 上一次输出未过双产物校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`)
 }
 
 /** 里程碑计划条目（设计 §3 关键接口：#92 提案修订与 #95 目标反编译的共同产出形态）。

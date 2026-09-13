@@ -27,6 +27,7 @@ import { advance, advancePending, alreadyAdvanced } from './advance.ts'
 import { applyRatingBlock, getScheduler, previewDue, retrievabilityBlock } from './srs.ts'
 import { combinedDifficulty } from './adaptive.ts'
 import { invokesTagged } from './concepts.ts'
+import { Content } from './content.ts'
 import { PASS_SCORE, revealAnswer } from './grading.ts'
 import { findDuplicateStem, existingStemsPromptBlock, bankStemList } from './question-dedup.ts'
 import type { LlmComplete } from './llm.ts'
@@ -732,7 +733,8 @@ export class ChannelsSubsystem {
     const tpl = await this.e.loadPrompt('笔记出题')
     const bankBefore = await this.e.bank.load(this.e.paths.noteSourceDir, id)
     const existingStems = bankStemList(bankBefore)
-    const rawOut = await llm(`${tpl}${existingStemsPromptBlock(existingStems)}\n\n## 题目数量\n\n${requested} 道\n\n---\n\n${body}`)
+    const rawOut = await llm(Content.withContractLast(tpl,
+      `${existingStemsPromptBlock(existingStems)}\n\n## 题目数量\n\n${requested} 道\n\n---\n\n${body}`))
     const doc = YAML.parseModel(rawOut) as { questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[note-quiz] 模型没有产出可用题目（questions 为空）。')

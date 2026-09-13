@@ -136,7 +136,7 @@ test('repair: plot finding 附带违规定位（块号 + 行摘录）', () => {
 test('repair: 修复 prompt 是「局部重写」指令并带定位，而非整节重写', () => {
   const first = '## 概念：图\n\n一段说明。\n\n```plot\n{"a": 1,}\n```\n'
   const gateText = '✗ ```plot 第 1 块不是合法 JSON 对象（面板会降级为源码显示）\n⚠ 节「概念：图」正文偏长'
-  const prompt = Content.sectionRepairPrompt('## 任务模板', first, gateText)
+  const prompt = Content.sectionRepairPrompt('## 任务模板\n\n## 输出\n\n只输出本节正文', '## 任务档案', first, gateText)
   assert.match(prompt, /只重写/)
   assert.match(prompt, /第 1 块/)
   assert.doesNotMatch(prompt, /重新输出本节正文/)

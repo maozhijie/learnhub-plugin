@@ -101,13 +101,13 @@ interface SectionCoherence {
   prevTail?: string
 }
 
-/** 节生成提示词拼装：模板 + 本节任务（id/标题/类型/节段难度档）+ 节间连贯注入（#227：
- * 完整节清单标 i/N + 非首节的前节尾部窗口）+ 上下文包。tierLabel 来自节清单视图
- * （清单 tier 在场用清单值，缺席按节位置+节点难度推导，#147）；节清单与前节尾部由
- * 调用方从节清单视图取——前节正文缺席（首节/断点续跑前节未生成）时窗口段整体省略。
- * 修复回灌复用本函数（同一拼装），连贯注入在修复轮同构在场。 */
-function sectionPrompt(
-  tpl: string, pack: string,
+/** 节生成材料块：本节任务（id/标题/类型/节段难度档）+ 节间连贯注入（#227：完整节清单
+ * 标 i/N + 非首节的前节尾部窗口）+ 上下文包。tierLabel 来自节清单视图（清单 tier 在场
+ * 用清单值，缺席按节位置+节点难度推导，#147）；节清单与前节尾部由调用方从节清单视图取
+ * ——前节正文缺席（首节/断点续跑前节未生成）时窗口段整体省略。契约段不在这里：由
+ * `sectionPrompt` / `sectionRepairPrompt` 经 Content.withContractLast 后置（#218）。 */
+function sectionMaterials(
+  pack: string,
   s: { id: string; title: string; type: string; tierLabel?: string },
   coherence?: SectionCoherence,
 ): string {
@@ -119,7 +119,18 @@ function sectionPrompt(
     : ''
   const tail = coherence?.prevTail?.trim()
   const tailBlock = tail ? `\n\n## 前节结尾（仅供衔接参考，不复述前节内容）\n\n${tail}` : ''
-  return `${tpl}\n\n## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}${listBlock}${tailBlock}\n\n---\n\n${pack}`
+  return `## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}${listBlock}${tailBlock}\n\n---\n\n${pack}`
+}
+
+/** 节生成提示词拼装（#218 契约后置）：材料块在前、模板的输出契约段置尾——「只输出本节
+ * 正文」落在最终 prompt 末段（离生成点最近）。修复回灌经同一材料块拼装（sectionRepairPrompt
+ * 内部再走一次 withContractLast），连贯注入在修复轮同构在场。 */
+function sectionPrompt(
+  tpl: string, pack: string,
+  s: { id: string; title: string; type: string; tierLabel?: string },
+  coherence?: SectionCoherence,
+): string {
+  return Content.withContractLast(tpl, sectionMaterials(pack, s, coherence))
 }
 
 /** 逐节生成共用出口（ADR-0054 修复阶梯）：初跑档随节点难度声明（#228：高复杂度 deep、
@@ -182,7 +193,7 @@ async function applySectionWithRepair(
   // 整节压缩修复一轮：deep 档（升一档）；回灌 current（块级修补合并后的原文——回灌
   // 初跑原文会与合并清单的定位错位）；长度 finding 由 sectionRepairPrompt 附压缩目标。
   const repaired = await complete(
-    Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s, opts?.coherence), current, gateReport, { wordBudget }),
+    Content.sectionRepairPrompt(tpl, sectionMaterials(pack, s, opts?.coherence), current, gateReport, { wordBudget }),
     undefined, { effort: 'deep', station: STATIONS.section, kind: 'repair' },
   )
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
@@ -214,7 +225,7 @@ async function splitOverflowSection(
   const tpl = await rt.engine.content2.loadPrompt('课程节拆分')
   const pack = await rt.engine.content2.contentPack(course, node, { omitDeliverables: true })
   const yaml = await complete(
-    `${tpl}\n\n## 待拆分的节\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}\n\n---\n\n${pack}`,
+    Content.withContractLast(tpl, `## 待拆分的节\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}\n\n---\n\n${pack}`),
     undefined, { effort: 'deep', station: STATIONS.split },
   )
   const r = await rt.engine.content2.contentSplit(course, node, s.id, yaml)
@@ -813,7 +824,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
       // 大纲失败恰一轮回灌重产（outlineRepairFeedback 裁决：护栏/形状/解析可修，其余
       // 原样上抛）；重产仍败直接冒泡置 failed。两轮解析失败都补标语料（大纲站，#213），
       // 容忍命中（剥注释重试过解析）补标 tolerated——失败/容忍样本必存。
-      let outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${packOutline}`, undefined, { effort: outlineEffort, station: STATIONS.outline })
+      let outlineYaml = await complete(Content.withContractLast(outlineTpl, packOutline), undefined, { effort: outlineEffort, station: STATIONS.outline })
       if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
       const applyOutline = async (yaml: string) => {
         const applied = await rt.engine.content2.contentOutline(course, node, yaml)
@@ -829,7 +840,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
           if (outlineRef && err instanceof Error) err.message += `｜语料 生成语料/${outlineRef}`
           throw err
         }
-        outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${packOutline}\n\n${feedback}`, undefined, { effort: outlineEffort, station: STATIONS.outline, kind: 'repair' })
+        outlineYaml = await complete(Content.withContractLast(outlineTpl, `${packOutline}\n\n${feedback}`), undefined, { effort: outlineEffort, station: STATIONS.outline, kind: 'repair' })
         if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
         try {
           await applyOutline(outlineYaml)
@@ -1001,7 +1012,7 @@ export async function generateProjectMilestone(rt: HostRuntime, id: string, mile
       }
     },
     repair: (gateErrors, rejected) =>
-      agent.repair('里程碑草案', Content.sectionRepairPrompt(prompt, rejected, gateErrors.join('\n')), { effort: 'deep' }),
+      agent.repair('里程碑草案', Content.withContractLast(prompt, Content.sectionRepairBody(rejected, gateErrors.join('\n'))), { effort: 'deep' }),
     // 修复轮仍败：原样以门错误抛出（与旧直抛形态同文案同码，零提案落盘语义不变）
     fatal: (_firstErrors, repairErrors) => Object.assign(new Error(repairErrors.join('\n')), { code: 'MILESTONE_GATE_FAILED' }),
   })
