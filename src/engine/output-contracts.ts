@@ -24,14 +24,104 @@ export type OutputFormat = 'yaml' | 'markdown-blocks' | 'json' | 'route-text'
  * 默认不迁结构化通道。 */
 export type FormatSensitivity = '机械评审' | '规划' | '推理创意'
 
-/** 修复策略（对齐现状登记，不是目标态）：rounds = 门错回灌重产轮数（0 = 无修复轮）；
- * feedback = 回灌反馈的形状；escalate = 修复轮升档/出路规则。 */
+/** 一条修复机制的登记：`file` = 相对 `src/` 的 posix 路径（**精确匹配**——同名文件靠
+ * basename 兜底会解析到任一个，把「登记指对文件」悄悄变成运气）；`witness` = 该文件里
+ * 真实存在的稳定串，**全部命中**才算对上（逐级阶梯多见证串缺一不可）；`what` = 这条
+ * 回路做什么，人读面与门面共用。 */
+export interface RepairMechanismSpec {
+  file: string
+  witness: string[]
+  what: string
+}
+
+/** 修复轮机制注册表（#217 / ADR-0066）：每条策略必须**点名持有该回路的机制**，机制名只许
+ * 取本表的键。门（tests/repair-policy.test.ts）拿 `file` + `witness` 与实现对账——登记一个
+ * 不存在的回路、或回路改名后登记没跟上，都会红。没有这张表，`repair` 列就只是散文：
+ * 「罗盘 0 轮」「出题无整批轮」这类断言无从执法，改了实现也没人提醒登记失真。
+ *
+ * 本表只证明「这条回路存在」；「本站的 mechanism 字段指的就是它」由 `REPAIR_ROUND_LOCKS`
+ * 的行为锁与逐站人工审查兜底——这条覆盖边界写在门里，不假装已全覆盖（ADR-0066 §1）。 */
+export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = {
+  outlineRepairFeedback: {
+    file: 'generation-jobs.ts', witness: ['export function outlineRepairFeedback'],
+    what: '大纲/拆节站：可修死因（OUTLINE_BUDGET/OUTLINE_SHAPE/MODEL_YAML）回灌恰一轮，其余原样上抛',
+  },
+  sectionRepairLadder: {
+    file: 'host/jobs.ts', witness: ['Content.blockPatchPrompt', 'Content.sectionRepairBody', 'splitOverflowSection'],
+    what: '节正文修复阶梯三档：块级局部修补 → 整节压缩（deep 升档）→ 溢出交大纲拆节',
+  },
+  gateRepairRound: {
+    file: 'engine/agent.ts', witness: ['async gateRepairRound'],
+    what: '缝的共享门错修复轮：门错误 + 被拒原文回灌重产恰一次，仍败以站点 fatal 抛两轮死因',
+  },
+  seedRepairPrompt: {
+    file: 'engine/seed.ts', witness: ['export function seedRepairPrompt'],
+    what: '种子起草：干跑校验门未过 → 回灌重出完整 YAML 恰一次',
+  },
+  decompileRepairPrompt: {
+    file: 'engine/project-decompile.ts', witness: ['export function decompileRepairPrompt'],
+    what: '目标反编译：双产物校验/名字对账死因回灌恰一次',
+  },
+  invokesOncePerQuestion: {
+    file: 'engine/note-source.ts', witness: ['async repairInvokesOnce'],
+    what: '出题逐题回路：清单在场且有题缺 invokes → 恰一次补标调用（不是整批重产）',
+  },
+  auditRepairOncePerQuestion: {
+    file: 'engine/question-audit.ts', witness: ['出题修复（第二意见抽查发现答案键不一致）'],
+    what: '出题第二意见（#223）：不一致题恰一次回灌修复、修复题原位替换再审计、仍败弃题',
+  },
+  gradingReaskOnce: {
+    file: 'engine/content-subsystem.ts', witness: ['[重判要求]'],
+    what: '判卷：解析失败自动重问一次，仍失败零落盘抛「AI 判卷输出不可用」',
+  },
+  disputeReaskOnce: {
+    file: 'engine/question-bank.ts', witness: ['[重判要求]'],
+    what: '申诉判卷：同判卷重判轮，仍失败抛「AI 复核输出不可用」',
+  },
+  milestoneStructureRepair: {
+    file: 'host/jobs.ts', witness: ['MILESTONE_GATE_FAILED', 'gateRepairRound<string, MilestoneWriteResult>'],
+    what: '里程碑产物：轻量结构门未过 → gateRepairRound 回灌重产恰一次',
+  },
+}
+
+/** 修复策略（单源，对齐现状登记：rounds = 整批门错回灌重产轮数，0 = 无整批修复轮）。
+ * feedback = 回灌反馈的形状；mechanism = 持有这 rounds 轮回路的机制（0 轮必须是 'none'，
+ * 由 tests/repair-policy.test.ts 强制）；perItem = **不属于「几轮」范畴**的逐题/逐项回路
+ * （出题站的两个恰一次回路从此有名字，不再只活在 feedback 散文里）；escalate = 升档/出路
+ * 规则；note = 形态补充（块级修补 fail-safe、三段式回合等）。 */
 export interface RepairPolicy {
   rounds: number
   feedback: string
+  mechanism: RepairMechanism
+  perItem?: RepairMechanism[]
   escalate?: string
-  /** 形态补充（块级修补 fail-safe、三段式回合等不属于「几轮」的事实）。 */
   note?: string
+}
+
+/** 修复机制名 = 注册表键 ∪ 'none'（无整批修复回路，失败即断或零落盘）。 */
+export type RepairMechanism = 'none' | keyof typeof REPAIR_MECHANISMS
+
+/** 行为侧「几轮」的锁覆盖登记（#217）：站 → 断言该站模型调用数的测试文件；`null` =
+ * **显式登记的缺口**（还没数过调用数，不假装已覆盖）。门断言两件事：① rounds > 0 的站
+ * 必须在本表内（有锁或显式缺口——漏登即红）；② 有锁的站其测试文件必须真实存在。
+ *
+ * 为什么需要这张表：机制登记只证明「这个回路在 src/ 里存在」，**不证明「本站的
+ * mechanism 字段指的是它」**——#217 逐站审查时正是靠人读实现抓出课程节拆分登记失真
+ * （旧散文声称与大纲站同款回灌，实现对不上）。把「哪些站已经被数过调用数」变成数据，
+ * 缺口就不会静默存在。 */
+export const REPAIR_ROUND_LOCKS: Readonly<Record<string, string | null>> = {
+  课程大纲: 'host-runtime.test.ts',
+  课程节拆分: 'host-runtime.test.ts',
+  题目生成: 'repair-policy.test.ts',
+  回执评审: 'repair-policy.test.ts',
+  罗盘: 'compass.test.ts',
+  课程节生成: 'section-split.test.ts',
+  种子起草: 'seed-proposal.test.ts',
+  目标反编译: null,
+  教练生长: null,
+  里程碑草案: null,
+  判卷: null,
+  申诉判卷: null,
 }
 
 /** phase 1 格式级形状声明（validateByContract 的判据）。深结构门（逐题形态、候选
@@ -90,6 +180,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['代码围栏', '解释性文字', '机器块（enc_candidates 等节正文契约成分）'],
     repair: {
       rounds: 1,
+      mechanism: 'outlineRepairFeedback',
       feedback: '解析/形状/护栏死因回灌（outlineRepairFeedback：OUTLINE_SHAPE、MODEL_YAML、节数护栏三类可修，其余原样上抛不回灌）',
       escalate: '大纲轮语义档随节点难度声明（高复杂度节点 deep）',
       note: '恰一回灌修复轮；重产仍败直接置 failed',
@@ -114,6 +205,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['frontmatter', '多节输出', '解释性文字', '### 子标题（warn）', '正文自设练习环节'],
     repair: {
       rounds: 2,
+      mechanism: 'sectionRepairLadder',
       feedback: '质检清单回灌（✗ 项定位 + 块级修补给原文；长度 finding 附显式压缩目标与计数口径）',
       escalate: '整节修复轮升 deep 档；压缩仍溢出交管线跑大纲拆节阶梯（深度一层，子节不再拆）',
       note: '块级修补（#147）：清单 ✗ 全部定位到具体违规块才走，混入非块级 finding fail-safe 回整节修复',
@@ -135,6 +227,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['外部 CDN 与网络请求', '解释性文字'],
     repair: {
       rounds: 2,
+      mechanism: 'sectionRepairLadder',
       feedback: '交互件契约 finding 随节质检清单回灌（块级修补不支持交互件块，走整节修复）',
       escalate: '随课程节生成站修复阶梯（整节修复轮 deep 档）',
     },
@@ -152,8 +245,13 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     allowed: ['单个 YAML 文档（sections 2–3 子节：title/type/points/tier）'],
     forbidden: ['代码围栏', '解释性文字', '原节之外的新主题（只拆不扩）'],
     repair: {
-      rounds: 1,
-      feedback: '同大纲站（OUTLINE_SHAPE/MODEL_YAML 死因回灌）',
+      // #217 逐站审查抓出的登记失真（#214 继承的旧散文声称「同大纲站的死因回灌」）：
+      // 实现对 splitOverflowSection 只发**一次**调用，解析失败原样上抛、由管线记入失败
+      // 清单——`outlineRepairFeedback` 的唯一调用点在 jobs.ts 的大纲轮，拆节站没有它。
+      // 登记按实现改（不是反过来）：拆节是节正文修复阶梯的**末级**，它自己不再有下一级。
+      rounds: 0,
+      mechanism: 'none',
+      feedback: '无修复轮——拆分 YAML 解析失败原样上抛（管线记入该节失败清单，可「重试续跑」再走一遍；阶梯末级之下没有下一级）',
       escalate: '恒 deep 档（溢出拆节是修复阶梯末级）',
     },
     tolerance: '同大纲站（parseModel 剥围栏/注释重试，tolerated 留痕）',
@@ -172,8 +270,10 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['代码围栏', '解释性文字', 'YAML 双引号（吃掉 LaTeX 反斜杠）', 'ASCII 数学记号'],
     repair: {
       rounds: 0,
-      feedback: '门错无整批修复轮（#214 现状，评估归 #217）；逐题补标恰一次（repairInvokesOnce，#148）；第二意见审计不一致题恰一次回灌修复（#223 question-audit，deep 档，修复再审计仍败弃题）',
-      note: '整批门错修复轮评估归 #217；逐题门（转义/答案形态/invokes 在册/查重）拒收走报告面',
+      mechanism: 'none',
+      perItem: ['invokesOncePerQuestion', 'auditRepairOncePerQuestion'],
+      feedback: '门错无整批修复轮（#214 现状，#217 复核裁决维持——理由与预注册触发条件见 ADR-0066 §3）；逐题补标恰一次（repairInvokesOnce，#148）；第二意见审计不一致题恰一次回灌修复（#223 question-audit，deep 档，修复再审计仍败弃题）',
+      note: '逐题门（转义/答案形态/invokes 在册/查重）拒收走报告面；整批修复轮的裁决与预注册触发条件见 ADR-0066 §3',
     },
     tolerance: 'repairQuestionStrings 转义损坏确定性修复（计数留痕），修不好拒收',
     failureCodes: ['MODEL_YAML'],
@@ -189,7 +289,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     clause: ['只输出一个 JSON 对象（不要代码围栏、不要任何解释）'],
     allowed: ['一个 JSON 对象（answer 按题型形态 + steps 关键步骤一两句）'],
     forbidden: ['代码围栏', '解释性文字'],
-    repair: { rounds: 0, feedback: '无修复轮——应答不可解析按审计失败保守放行（unresolved，不弃题不重试）' },
+    repair: { rounds: 0, mechanism: 'none', feedback: '无修复轮——应答不可解析按审计失败保守放行（unresolved，不弃题不重试）' },
     failureCodes: [],
     sensitivity: '机械评审',
     structuredEligible: true,
@@ -203,7 +303,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     clause: YAML_CLAUSE,
     allowed: ['单个 YAML 文档（node + questions，题型收敛子集：单选/判断/填空/数值/反思）'],
     forbidden: ['代码围栏', '解释性文字', 'YAML 双引号', 'ordering/matching/multi_choice/open_question（笔记源 v1 题型收敛）'],
-    repair: { rounds: 0, feedback: '无修复轮（同题目生成站现状）' },
+    repair: { rounds: 0, mechanism: 'none', feedback: '无修复轮（同题目生成站现状）' },
     tolerance: '同题目生成站（转义修复留痕）',
     failureCodes: ['MODEL_YAML'],
     sensitivity: '推理创意',
@@ -217,7 +317,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     clause: YAML_CLAUSE,
     allowed: ['单个 YAML 文档（cards，每候选恰一张卡：node/source_q 照抄 + options 三项 + answer/mine）'],
     forbidden: ['代码围栏', '解释性文字', '候选清单之外的 (node, source_q)'],
-    repair: { rounds: 0, feedback: '无修复轮——候选对照门/schema 门未过零落盘抛错' },
+    repair: { rounds: 0, mechanism: 'none', feedback: '无修复轮——候选对照门/schema 门未过零落盘抛错' },
     failureCodes: [],
     sensitivity: '机械评审',
     structuredEligible: false,
@@ -233,7 +333,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     contractLocation: 'system',
     allowed: ['一个 JSON 对象（score 0–1 + verdict 总评 + errors 逐条拆解，brief 时 errors 空数组）'],
     forbidden: ['代码围栏', '解释性文字'],
-    repair: { rounds: 0, feedback: '无修复轮（ADR-0004 事务性：解析失败回执与 EMA 零落盘）' },
+    repair: { rounds: 0, mechanism: 'none', feedback: '无修复轮（ADR-0004 事务性：解析失败回执与 EMA 零落盘）' },
     failureCodes: [],
     sensitivity: '机械评审',
     structuredEligible: true,
@@ -250,6 +350,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['Markdown 围栏', '注释与外层散文'],
     repair: {
       rounds: 1,
+      mechanism: 'gradingReaskOnce',
       feedback: '解析失败自动重问一次（[重判要求] 只输出一个 JSON 对象）',
       note: '仍失败抛「AI 判卷输出不可用」——本次作答边界失败零落盘，原始输出留痕判卷失败.jsonl（#116 逃生门）',
     },
@@ -268,7 +369,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     contractLocation: 'system',
     allowed: ['一个 JSON 对象（verdict 三态 + reasoning；key_error 必附 suggested_answer）'],
     forbidden: ['Markdown 围栏', '注释与外层散文'],
-    repair: { rounds: 1, feedback: '解析失败自动重问一次（同判卷重判轮）', note: '仍失败抛「AI 复核输出不可用」，UI 放行直接豁免降级入口' },
+    repair: { rounds: 1, mechanism: 'disputeReaskOnce', feedback: '解析失败自动重问一次（同判卷重判轮）', note: '仍失败抛「AI 复核输出不可用」，UI 放行直接豁免降级入口' },
     tolerance: '同判卷（parseGradingDoc 容错）',
     failureCodes: [],
     sensitivity: '机械评审',
@@ -285,6 +386,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['代码围栏', '解释性文字', 'est/enc/pre 等种子骨架外字段（粗占位边引擎落）', 'capability 携带 worksheet'],
     repair: {
       rounds: 1,
+      mechanism: 'seedRepairPrompt',
       feedback: '受理门错误原文 + 被拒候选原文回灌（seedRepairPrompt，gateRepairRound 恰一次）',
       escalate: '修复轮 deep 档',
     },
@@ -303,6 +405,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['代码围栏', '解释性文字', '终点出现在 add_node 的 pre 里（禁长过目标）', '非插入批携带 recheck'],
     repair: {
       rounds: 1,
+      mechanism: 'gateRepairRound',
       feedback: '受理门反馈 + 被拒裁决原文随全量包回灌重裁（repair 单发，恰一次）',
       escalate: '重裁段恒 deep 档',
       note: '三段式回合：轻量段 fast 恒 1 调用 → 分歧升级全量段 deep → 仍真分歧双沙盘仲裁段；每段经 agentLoop 工具回路（K≤6）',
@@ -320,7 +423,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     clause: ['只输出「剩余路线」一节的正文', '不带 "## " 标题、不带代码围栏、不要解释'],
     allowed: ['「剩余路线」一节正文（3–7 个阶段条目，每条一行 - **阶段名**：一句话）'],
     forbidden: ['"## " 段级标题', '代码围栏', '时间估算与进度百分比（非承诺措辞）'],
-    repair: { rounds: 0, feedback: '无修复轮——路线门首过即落盘（金样本锚定恒 1 会话，首过率在测试锚定）' },
+    repair: { rounds: 0, mechanism: 'none', feedback: '无修复轮——路线门首过即落盘（金样本锚定恒 1 调用，调用数在 tests/compass.test.ts 锚定）' },
     tolerance: 'stripWrappingFence（剥整段包裹围栏）',
     failureCodes: [],
     sensitivity: '推理创意',
@@ -337,6 +440,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['代码围栏', '解释性文字', '计划引用种子簇与既有结构之外的节点名（名字对账）'],
     repair: {
       rounds: 1,
+      mechanism: 'decompileRepairPrompt',
       feedback: '双产物拆分校验/名字对账死因回灌（decompileRepairPrompt，gateRepairRound 恰一次）',
       escalate: '修复轮 deep 档',
     },
@@ -353,7 +457,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     clause: YAML_CLAUSE,
     allowed: ['单个 YAML 文档（project + plan 3–8 里程碑：id/name/task_class/acceptance_hints/est/nodes）'],
     forbidden: ['代码围栏', '解释性文字', '每里程碑档位（渐退档是项目属性）'],
-    repair: { rounds: 0, feedback: '无修复轮——计划草案一次成型；修订走提案快照的人审语义，草案不自动重试' },
+    repair: { rounds: 0, mechanism: 'none', feedback: '无修复轮——计划草案一次成型；修订走提案快照的人审语义，草案不自动重试' },
     failureCodes: [],
     sensitivity: '规划',
     structuredEligible: false,
@@ -368,6 +472,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     forbidden: ['解释性文字', '题目与题库字段（能力核对只走验收清单）', '其他里程碑的任务卡'],
     repair: {
       rounds: 1,
+      mechanism: 'milestoneStructureRepair',
       feedback: '轻量结构门错误回灌（sectionRepairPrompt 同款机械，gateRepairRound 复用）',
       escalate: '修复轮 deep 档',
     },
@@ -391,6 +496,93 @@ export const OUT_OF_SCOPE_STATIONS: readonly { station: string; reason: string }
 /** 按站取契约（同站多交付面用 surface 区分；缺省返回正文/唯一面）。 */
 export function contractOf(station: string, surface?: string): OutputContract | undefined {
   return OUTPUT_CONTRACTS.find(c => c.station === station && (surface === undefined || c.surface === surface))
+}
+
+/** 一次模板版本变更的登记（#220 的字段格式：version / date / change type / **预期输出
+ * 增量**）。`version` = 变更后的模板版本标记；`expectedDelta` = 这次改动**预期模型输出
+ * 发生什么变化**——语料回放（#213）与评审对照（#222）据此对账「变了没有、变得对不对」，
+ * 也是 #220「改模板必须带预期增量」过门条件的登记面。 */
+export interface PromptBump {
+  version: number
+  date: string
+  changeType: string
+  expectedDelta: string
+}
+
+/** 提示词变更登记表（键 = PROMPT_KINDS 键，覆盖完备性由 tests/output-contract.test.ts
+ * 对账）。**本表自 #218 起计**：#218 之前的历史版本线未回填（那时没有登记面，编不出一份
+ * 诚实的表）；#220 落地后按同字段格式接管完整纪律，本表随之并入。
+ *
+ * 不变式（门在执法，不是注释）：每个模板键的**最高**登记版本 == 模板头
+ * `<!-- learnhub:prompt/vN -->` 的现行版本——**bump 了模板却没补登记条目 = 红**。同一
+ * 版本号下允许第二条登记：模板文本没动、但最终 prompt 变了（拼装侧重排、上下文包变更）
+ * 也是「预期输出增量」要覆盖的变更，记在同一版本号下并写明变更面，不冒充版本 bump。 */
+export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> = {
+  课程大纲: [{
+    version: 11, date: '2026-09-13', changeType: '拼装侧契约后置 + 完整输出示例（占位域）+ 示例值占位化',
+    expectedDelta: '输出段落尾（契约句是最终 prompt 的最后一段）；YAML 结构、节数与配比不变；示例不再把「整数与自然数的分界」一类真实内容带进输出（旧版示例值可被回填，占位化后不可）',
+  }, {
+    // 非模板变更（同一版本号下的第二条登记）：上下文包的实现 bug 修复。受影响的是消费
+    // 上下文包的三站（大纲/节生成/拆节），登记挂在主消费者（大纲）名下并在 ADR-0065 §6 说明。
+    version: 11, date: '2026-09-13', changeType: '上下文包 §5「禁止使用的概念」复活（实现 bug 修复，模板文本未动）',
+    expectedDelta: '大纲/节生成/拆节三站的 prompt 多出「§5 禁止使用的概念」清单（旧实现 Object.keys(Set) 恒空 → §5 恒渲染「（无：本节点已是图内最深）」）：最多 200 个更深节点名 + 超限时的截断告知。预期效果是「不提前教」的负向约束恢复生效；代价是 prompt 增长 1–2k 字。此项**未做真模型对照**（见 ADR-0065 §6）——若观察到幻觉/跑题上升，回退点就是这一行',
+  }],
+  课程节生成: [{
+    version: 11, date: '2026-09-13', changeType: '拼装侧契约后置（模板文本未动）',
+    expectedDelta: '契约句（只输出本节正文）从 prompt 中段移到末段；正文结构与学理约束不变',
+  }],
+  '课程节生成-苏格拉底': [{
+    version: 11, date: '2026-09-13', changeType: '拼装侧契约后置（模板文本未动）',
+    expectedDelta: '同上（风格变体同构）',
+  }],
+  '课程节生成-费曼': [{
+    version: 11, date: '2026-09-13', changeType: '拼装侧契约后置（模板文本未动）',
+    expectedDelta: '同上（风格变体同构）',
+  }],
+  课程节拆分: [{
+    version: 9, date: '2026-09-13', changeType: '拼装侧契约后置（模板文本未动）',
+    expectedDelta: '契约句移到末段；拆分 YAML 形态不变',
+  }],
+  题目生成: [{
+    version: 14, date: '2026-09-13', changeType: '拼装侧契约后置 + 完整输出示例（占位域）+ section 示例占位化',
+    expectedDelta: '契约句移到末段（查重块/概念清单/全节点正文等材料都在它之前）；题型与答案形态契约不变；示例值占位化后不会被回填成题干',
+  }],
+  笔记出题: [{
+    version: 9, date: '2026-09-13', changeType: '拼装侧契约后置（模板文本未动）',
+    expectedDelta: '契约句移到末段；题型收敛子集不变',
+  }],
+  项目里程碑计划: [{
+    version: 8, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
+    expectedDelta: '契约句与 plan schema 从「硬约束 1」移到模板末段；里程碑条目形态不变',
+  }],
+  项目里程碑产物: [{
+    version: 7, date: '2026-09-13', changeType: '输出结构段移到模板末尾并更名 `## 输出` + 拼装侧契约后置',
+    expectedDelta: '四块任务卡的契约句与块清单落在末段；渐退三档配比指令提前（仍是同一份约束文本）',
+  }],
+  项目目标反编译: [{
+    version: 10, date: '2026-09-13', changeType: '输出段与硬约束段换序（契约置尾）+ 拼装侧契约后置 + 现有节点名清单按区·块分段',
+    expectedDelta: '契约句与双产物 schema 落在末段；plan/seed 字段形态不变；节点名清单从平铺千行改为按「区 · 块」分组（取值域不变、不截断）',
+  }],
+  回执评审: [{
+    version: 6, date: '2026-09-13', changeType: '拼装侧：契约本就在 system 提示词（全仓先例，未动）',
+    expectedDelta: '无变化——该站早就是「契约离生成点最近」的形态，是本次改版的参照物',
+  }],
+  错误对比卡: [{
+    version: 8, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
+    expectedDelta: 'cards schema 从「硬约束 1」移到模板末段；卡片字段形态不变',
+  }],
+  罗盘初画: [{
+    version: 2, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
+    expectedDelta: '路线正文契约句从「硬约束 1」移到末段；3–7 条阶段条目与措辞纪律不变',
+  }],
+  教练回合: [{
+    version: 6, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
+    expectedDelta: 'note/route/ops schema 从「硬约束 1」移到末段（回灌重裁段同构）；算子语义与批规模纪律不变',
+  }],
+  种子提案: [{
+    version: 4, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
+    expectedDelta: '种子 schema 从「硬约束 1」移到末段（修复轮同构）；起点/终点资格判据文本不变',
+  }],
 }
 
 /** phase 1 格式级校验：解析产物按注册表 shape 校验（对齐现状语义，不改行为——

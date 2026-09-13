@@ -1,5 +1,5 @@
 /**
- * 工具调用通道 spike 装置（#216 / ADR-0067）：用生产数据裁决「自愿调用工具」是否值得
+ * 工具调用通道 spike 装置（#216 / ADR-0069）：用生产数据裁决「自愿调用工具」是否值得
  * 铺开——双臂（现行 YAML 契约 vs 同提示词 + 必须调 submit 工具）在**大纲**与**出题**
  * 两站上各跑 N 次，同输入源，收三组指标（格式 / 内容·多样性 / 成本）。
  *
@@ -25,7 +25,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { normalizeStem } from '../engine/index.ts'
+import { Content, normalizeStem } from '../engine/index.ts'
 import { llmComplete, llmStreamSeam, llmView } from './llm.ts'
 import { createHostRuntime } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
@@ -533,7 +533,9 @@ export async function runToolChannelSpike(ctx: Context, req: SpikeRequest = {}):
               if (station === '课程大纲') {
                 const tpl = await rt.engine.content2.loadPrompt('课程大纲')
                 const pack = await rt.engine.content2.contentPack(COURSE, NODE, { omitDeliverables: true })
-                const yaml = await seam(`${tpl}\n\n---\n\n${pack}`)
+                // 生产拼装出口（#218 契约后置）：装置不自己写 `${tpl}\n---\n${pack}`——
+                // 那正是 #218 判据修订要消灭的旧形态，且会让实验测一个生产已不发的 prompt
+                const yaml = await seam(Content.withContractLast(tpl, pack))
                 const applied = await rt.engine.content2.contentOutline(COURSE, NODE, yaml)
                 delivered = true
                 schemaOk = true

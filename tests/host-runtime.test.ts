@@ -40,6 +40,7 @@ import {
   triggerSeedContent,
   waitForGenJob,
 } from '../src/host/jobs.ts'
+import { contractOf } from '../src/engine/output-contracts.ts'
 import { AGENT_GUIDE, registerTools } from '../src/host/tools.ts'
 import { COMMAND_LIST } from '../src/commands/index.ts'
 
@@ -330,6 +331,10 @@ test('大纲解析失败 → 恰一回灌重产（解析反馈）、大纲用裁
   assert.equal(packCalls[1]?.omitDeliverables, true, '大纲调用用裁剪包（无 §8 交付要求）')
   assert.ok(prompts[1]?.includes('## 解析反馈'), '回灌携带解析反馈段')
   assert.ok(prompts[1]?.includes('MODEL_YAML') || prompts[1]?.includes('enc_candidates'), '回灌携带解析死因原文')
+  // #217 修复策略 ↔ 实现一致性（行为侧）：大纲站调用数 = 1 + 注册表 rounds——注册表把
+  // rounds 写成 2，这条就红；实现偷偷多跑一轮，这条也红。
+  assert.equal(outlineCalls, contractOf('课程大纲')!.repair.rounds + 1, '大纲调用数 = 1 + 注册表登记轮数')
+  assert.equal(prompts.length, 3, '大纲两轮 + 节正文一轮；第三次重产不存在（注册表 rounds=1）')
 })
 
 test('节间连贯注入（#227）：节清单标 i/N、非首节附前节结尾窗口、首节无前节段', async () => {
@@ -583,6 +588,40 @@ test('拆节被护栏拒绝（MAX_SECTIONS）→ 失败节记录、余节照常�
   assert.equal(job.failures?.length, 1)
   assert.equal(job.failures?.[0]!.sectionId, 's2')
   assert.match(job.failures?.[0]!.finding ?? '', /拆后总节数 9 超过上限 8/, '死因如实记录：护栏拒拆而非溢出本身')
+})
+
+test('#217 拆节站 rounds=0 行为锁：拆分产物不可用 → 恰一次拆节调用，无回灌重产', async () => {
+  // #217 逐站审查抓出的登记失真就在这里：旧登记声称拆节站「同大纲站的死因回灌」，实现
+  // 只发一次调用。登记已按实现改（rounds 0 / mechanism none），本条把改动锁住。
+  const rt = makeRuntime()
+  const ready = { id: 's1', title: '概念：已就绪', type: '概念', status: 'ready' }
+  const overflow = { id: 's2', title: '演示：溢出节', type: '演示', status: 'pending', tierLabel: '中' }
+  stub(rt, {
+    'content2.contentPack': async () => '上下文包',
+    'content2.contentTierOf': async () => 2,
+    'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
+    'content2.contentSectionsView': async () => [ready, overflow],
+    'content2.contentSection': async (_c: unknown, _n: unknown, sectionId: string) => {
+      if (sectionId === 's2') throw overflowErr('s2')
+      return { version: 1, title: 'x', hints: [] }
+    },
+    'content2.contentSplit': async () => { throw new Error('[split] 模型产出未过拆分校验门（yaml 不可解析）') },
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const prompts: string[] = []
+  const ctx = scriptedCtx(['初跑正文', '压缩后正文', '这不是可解析的拆分 YAML'], prompts)
+  await enqueueGeneration(rt, ctx, '数学', '节点B')
+  await until(() => rt.jobs.genJobs.get('数学/节点B')?.status === 'partial')
+  const splitPrompts = prompts.filter(p => p.startsWith('TPL:课程节拆分'))
+  assert.equal(splitPrompts.length, 1, '拆节站 rounds=0：产出不可用即断，无回灌重产')
+  assert.equal(
+    splitPrompts.length, contractOf('课程节拆分')!.repair.rounds + 1,
+    '拆节调用数 = 1 + 注册表 rounds（登记与实现对账，任一侧变了这条就红）',
+  )
 })
 
 test('continue→partial（ADR-0054）：单节非溢出失败不中止余节，失败清单随终态落盘', async () => {

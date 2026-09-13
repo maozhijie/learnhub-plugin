@@ -56,6 +56,24 @@ export interface ProbeResult {
 /** 引擎哨兵：空数组——`.map/.filter/.length` 可当列表用、`JSON.stringify` 稳定。 */
 const SENTINEL: unknown[] = []
 
+/** 文本返回型方法的哨兵（#218 判据修订）：`loadPrompt` 真实返回字符串，宿主侧把它喂给
+ * 提示词拼装器（`Content.withContractLast`）。拿空数组当替身会让拼装在「无 llm」这个
+ * 该 fail loud 的点之前先抛类型错——快照里钉下的就成了一句与拼接实现内部形状绑定的
+ * 报错文案（实现一动文案就漂），而这条探针要钉的是「无 llm 时 LLM 路径确定性 fail loud」。
+ * 空串让拼装原样走通、在真正该失败处失败，快照对拼装实现保持不敏感。 */
+const TEXT_SENTINEL = ''
+const TEXT_RETURNING = new Set([
+  // 提示词装载与包拼装类（宿主把它们喂给 Content.withContractLast）
+  'loadPrompt', 'contentPack', 'coachContextPack',
+  'projectPlanPack', 'projectMilestonePack',
+])
+
+/** 方法名的最后一段（`content2.loadPrompt` → `loadPrompt`）；裸名原样返回。 */
+function methodNameOf(label: string): string {
+  const dot = label.lastIndexOf('.')
+  return dot >= 0 ? label.slice(dot + 1) : label
+}
+
 let sharedVault: string | undefined
 
 /** 探针共用的临时 vault（省掉每条探针一次 mkdtemp；引擎不读它，见头注释 ①）。 */
@@ -106,7 +124,7 @@ function shadowEngine(rt: HostRuntime): { calls: string[]; stop: () => void } {
     if (recording) {
       calls.push(scrub(`${label}(${args.map(a => JSON.stringify(a) ?? String(a)).join(',')})`))
     }
-    return Promise.resolve(SENTINEL)
+    return Promise.resolve(TEXT_RETURNING.has(methodNameOf(label)) ? TEXT_SENTINEL : SENTINEL)
   }
   // hub 装配域方法（裸名）：覆盖在门面实例上
   const proto = LearnhubEngine.prototype as unknown as Record<string, unknown>

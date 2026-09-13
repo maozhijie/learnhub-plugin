@@ -24,6 +24,7 @@ export { validatePlanItems, validatePlanArtifact } from './project-decompile.ts'
 import type { PlanItem } from './project-decompile.ts'
 import { validatePlanItems, validatePlanArtifact } from './project-decompile.ts'
 import { todayStr } from './dates.ts'
+import { withContractLast } from './prompt-assembly.ts'
 import type { Clock } from './clock.ts'
 import { readProbationLedger, foldProbation } from './probation.ts'
 import { Store } from './store.ts'
@@ -681,7 +682,7 @@ export class ProjectSubsystem {
     const current = fm.plan.length
       ? YAML.stringify({ plan: fm.plan })
       : '（空——本项目还没有里程碑计划，本次为初次规划）'
-    return `${tpl}\n\n---\n\n## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 渐退档：${fm.tier}\n- 目标描述：\n\n${fm.goal}\n\n## 现状计划（修订时给出完整新版本，不保守微调）\n\n${current}`
+    return withContractLast(tpl, `## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 渐退档：${fm.tier}\n- 目标描述：\n\n${fm.goal}\n\n## 现状计划（修订时给出完整新版本，不保守微调）\n\n${current}`)
   }
 
 
@@ -702,7 +703,7 @@ export class ProjectSubsystem {
     const planTable = view.milestones
       .map((m, i) => `${i + 1}. ${m.id}｜${m.name}｜任务类：${m.task_class}${m.generated ? '｜已生成' : ''}`)
       .join('\n')
-    return `${tpl}\n\n---\n\n## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 目标描述：\n\n${fm.goal}\n\n## 里程碑计划（本里程碑的位置）\n\n${planTable}\n\n## 本里程碑任务\n\n- 里程碑 id：${hit.id}\n- 名称：${hit.name}\n- 任务类：${hit.task_class}\n- 验收要点草案：${hit.acceptance_hints}\n- 当前档位：${fm.tier}（产物按此档生成，只写这一档）\n${hit.generated ? `- 注意：该里程碑已有产物，本次是按档重生成——将走提案通道，apply 前旧文有快照。\n` : ''}`
+    return withContractLast(tpl, `## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 目标描述：\n\n${fm.goal}\n\n## 里程碑计划（本里程碑的位置）\n\n${planTable}\n\n## 本里程碑任务\n\n- 里程碑 id：${hit.id}\n- 名称：${hit.name}\n- 任务类：${hit.task_class}\n- 验收要点草案：${hit.acceptance_hints}\n- 当前档位：${fm.tier}（产物按此档生成，只写这一档）\n${hit.generated ? `- 注意：该里程碑已有产物，本次是按档重生成——将走提案通道，apply 前旧文有快照。\n` : ''}`)
   }
 
 
@@ -1143,12 +1144,25 @@ export class ProjectSubsystem {
     const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
     const hits = terms.length ? await searchVaultPrior(this.e.vaultRoot, centerRel, terms, {}, this.e.fs) : []
     const prior = priorSection(hits)
-    // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出
+    // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出。
+    // 节点名清单按「区 · 块」**分段**（#218 稀释治理）：它是名字对账的取值域，**不截断**
+    // ——截断会让真实存在的名字在模型眼里不存在（对账门拿全集判，模型却按子集选），
+    // 换来的是拒收-回灌；分段保住完备性的同时把千行平铺名单变成可扫读的结构。
     let courseBlock: string
     if (target) {
       const { graph } = await this.e.loadView(target)
-      const names = graph.names.slice().sort()
-      courseBlock = `- 目标课程：${target.name}（已播种/既有课程——**不产 seed 半区**，只给 plan）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形）：\n${names.map(n => `  - ${n}`).join('\n') || '  -（空图）'}`
+      const groups = new Map<string, string[]>()
+      for (const n of graph.names.slice().sort()) {
+        const [, region, block] = graph.blockOf[n] ?? []
+        const key = region && block ? `${region} · ${block}` : '（未分块）'
+        const list = groups.get(key) ?? []
+        list.push(n)
+        groups.set(key, list)
+      }
+      const listed = groups.size
+        ? [...groups.entries()].map(([key, names]) => `  - ${key}（${names.length}）：${names.join('、')}`).join('\n')
+        : '  -（空图）'
+      courseBlock = `- 目标课程：${target.name}（已播种/既有课程——**不产 seed 半区**，只给 plan）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形；按「区 · 块」分组，括号内是该组节点数）：\n${listed}`
     } else {
       courseBlock = '- 未指定目标课程：seed 半区必出（自拟新课程名写进 seed.course，子图簇 = 该新课程的种子：1–3 起点 + 终点）；plan.nodes 引用种子簇节点名（写「课程名/节点名」全形）'
     }
@@ -1157,7 +1171,10 @@ export class ProjectSubsystem {
     const current = fm.plan.length
       ? YAML.stringify({ plan: fm.plan })
       : '（空——本项目还没有里程碑计划，本次为初次规划）'
-    const pack = `${tpl}\n\n---\n\n## 目标项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 渐退档：${fm.tier}\n- 目标描述（目标项目描述原文）：\n\n${goal}\n\n## 现状计划（给出完整新版本，不保守微调）\n\n${current}\n\n## 注册笔记（Vault 先验的检索来源）\n\n${notesList}\n\n## 知识子图落点\n\n${courseBlock}${prior ? `\n\n---\n\n${prior}` : ''}`
+    // 模板与材料分开收（#218 契约后置）：材料在前、输出契约段置尾；修复轮回灌走
+    // decompileRepairPrompt（同一材料块），契约在修复轮仍居尾。
+    const materials = `## 目标项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 渐退档：${fm.tier}\n- 目标描述（目标项目描述原文）：\n\n${goal}\n\n## 现状计划（给出完整新版本，不保守微调）\n\n${current}\n\n## 注册笔记（Vault 先验的检索来源）\n\n${notesList}\n\n## 知识子图落点\n\n${courseBlock}${prior ? `\n\n---\n\n${prior}` : ''}`
+    const pack = withContractLast(tpl, materials)
     // 模型产出 → 双产物校验门 + 名字对账门（未过经缝的门错修复轮回灌重产恰一次，对齐
     // 「生成→门禁→修复一轮」机械）。对账域 = 种子簇 ∪ 全部启用课程的图节点名（与消费面
     // locateNode 的跨课解析同域——裸名歧义/悬空在受理前拦下，不留到消费面才炸）。
@@ -1195,7 +1212,7 @@ export class ProjectSubsystem {
       first: () => agent.complete('目标反编译', pack),
       gate: judgeOnce,
       repair: (gateErrors, rejected) =>
-        agent.repair('目标反编译', decompileRepairPrompt(pack, rejected, gateErrors), { effort: 'deep' }),
+        agent.repair('目标反编译', decompileRepairPrompt(tpl, materials, rejected, gateErrors), { effort: 'deep' }),
       fatal: (_firstErrors, repairErrors) => {
         const e: Error & { code?: string } = new Error(
           `[project-decompile] 模型产出未过双产物校验门（已自动修复重试一轮，提案未受理）：\n${repairErrors.join('\n')}`)

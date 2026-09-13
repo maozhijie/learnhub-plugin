@@ -99,11 +99,13 @@ test('sectionFailure：GATE_FAILED 取首条 ✗ 与错误自带节信息；普�
 // ---------------------------------------------------------------- 修复轮提示词（ADR-0054：显式压缩目标）
 
 const BASE = '课程节生成提示词'
+/** 节生成模板原文（#218：sectionRepairPrompt 收模板与材料两半，契约段在模板里）。 */
+const TPL = Content.PROMPT_KINDS['课程节生成']!
 const OVERFLOW_REPORT = '质检清单：\n  ✗ 节「演示」正文过长（约 606 字 > 拒收线 500 字）\n'
 const BLOCK_REPORT = '质检清单：\n  ✗ ```plot 第 1 块不是合法 JSON\n'
 
 test('修复轮提示词：长度 finding 附显式压缩目标与计数口径，拆节归管线', () => {
-  const p = Content.sectionRepairPrompt(BASE, '上次输出', OVERFLOW_REPORT, { wordBudget: 400 })
+  const p = Content.sectionRepairPrompt(TPL, BASE, '上次输出', OVERFLOW_REPORT, { wordBudget: 400 })
   assert.match(p, /压缩到 ≤ 400 字/)
   assert.match(p, /纯文字数/, '计数口径直说：去空白/公式/可视化块后计')
   assert.match(p, /拆成多个节由生成管线自动处理/, '不再劝模型在节内拆节（不可执行）')
@@ -111,9 +113,17 @@ test('修复轮提示词：长度 finding 附显式压缩目标与计数口径�
 })
 
 test('修复轮提示词：非长度 finding 保持局部重写纪律，不附压缩目标', () => {
-  const p = Content.sectionRepairPrompt(BASE, '上次输出', BLOCK_REPORT)
+  const p = Content.sectionRepairPrompt(TPL, BASE, '上次输出', BLOCK_REPORT)
   assert.match(p, /只重写下列 ✗ 项定位到的违规局部/)
   assert.doesNotMatch(p, /压缩到 ≤/)
+})
+
+test('#218 契约后置：修复轮里契约段仍是最终 prompt 的末段（反馈是材料不是交付契约）', () => {
+  const p = Content.sectionRepairPrompt(TPL, BASE, '上次输出', OVERFLOW_REPORT, { wordBudget: 400 })
+  const at = (s: string): number => p.indexOf(s)
+  assert.ok(at('只输出本节正文') > at('质检清单：'), '契约句在质检清单之后')
+  assert.ok(at('只输出本节正文') > at('压缩目标'), '契约句在压缩目标之后')
+  assert.equal(p.trimEnd().endsWith('只输出本节正文（## 标题 + 内容），不要附加解释。'), true, '契约段是最后一节')
 })
 
 // ---------------------------------------------------------------- 计数口径（交互件行数永不计入篇幅）
