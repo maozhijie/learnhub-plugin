@@ -59,6 +59,8 @@ import { ERROR_CARD_BATCH_MAX, mineErrorPatterns, validateErrorCards } from './e
 import type { ErrorCard } from './error-cards.ts'
 import { bankStemList, existingStemsPromptBlock } from './question-dedup.ts'
 import { questionViolation, repairQuestionStrings } from './question-hygiene.ts'
+import { runSecondOpinion, mergeSecondOpinionReports, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
+import type { SecondOpinionReport } from './question-audit.ts'
 import type {
   BankEntry, CleanupGroup, CleanupPreviewDoc, DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult,
   ErrorAnswerResult, ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc,
@@ -1145,7 +1147,10 @@ export class BankSubsystem {
    *   invokes——缺席先走一次补标调用（修复一次），仍空拒收并报告；清单缺席（存量/手编
    *   图）invokes 恒合法 Missing。返回的 enc = 题目 invokes 覆盖率投影（出生 w 作回退
    *   初值，随生长批经 set_enc 写入）。
-   * opts.isCancelled = 逐题检查的取消旗标（GenJob 取消语义，#118）。 */
+   * opts.isCancelled = 逐题检查的取消旗标（GenJob 取消语义，#118）。
+   * opts.secondOpinion（#223）：出题第二意见门——抽样让模型只看题面独立解题、与答案
+   *   键确定性对账（rate ≤0/缺席 = 关门）；不一致题恰一次回灌修复、仍败弃题不阻塞
+   *   整批，弃题并入 rejected；报告随返回值带出（抽样率与成本可见）。 */
   async questionGenerate(
     courseKey: string | undefined, node: string, count: number | undefined,
     llm: LlmComplete,
@@ -1155,6 +1160,7 @@ export class BankSubsystem {
       section?: { id: string; title: string }
       instruction?: string
       isCancelled?: () => boolean
+      secondOpinion?: { rate?: number }
     },
   ): Promise<{
     course: string; node: string; added: number; skipped: number; total: number
@@ -1164,6 +1170,8 @@ export class BankSubsystem {
     escapesRepaired: number
     /** invokes 覆盖率投影（#148）：节点全部在库题目的 enc 边候选（出生 w），随生长批 set_enc 写入。 */
     enc: EncEdge[]
+    /** 第二意见门报告（#223；门未开 = 缺席）。 */
+    secondOpinion?: SecondOpinionReport
   }> {
     if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
       throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认。`)
@@ -1233,7 +1241,20 @@ export class BankSubsystem {
     let escapesRepaired = 0
     const duplicates: Array<{ q: string; against: string }> = []
     const rejected: Array<{ q: string; reason: string }> = []
-    for (const item of doc.questions.slice(0, requested)) {
+    // 第二意见门（#223）：抽样独立解题对账先行——不一致题恰一次回灌修复、仍败弃题
+    // （弃题并入 rejected 报告面）；修复题原位替换后再走既有逐题门。
+    let pending = doc.questions.slice(0, requested)
+    let auditReport: SecondOpinionReport | undefined
+    if (opts?.secondOpinion) {
+      const audit = await runSecondOpinion(llm, pending as Array<Record<string, unknown>>, {
+        rate: opts.secondOpinion.rate ?? DEFAULT_QUIZ_AUDIT_RATE,
+        isCancelled: opts?.isCancelled,
+      })
+      pending = audit.items
+      auditReport = audit.report
+      rejected.push(...audit.rejected)
+    }
+    for (const item of pending) {
       if (opts?.isCancelled?.()) throw new Error('生成已取消，结果已丢弃。')
       const q = { ...(item as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有题数自动编号，避免与既有 q1 冲突
@@ -1289,9 +1310,16 @@ export class BankSubsystem {
         skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
       }
     }
-    if (!added) throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/记法违规/重复/无法归节/invokes 缺失），一道都没入库。')
+    if (!added) {
+      throw new Error('[quiz] 模型产出的题目全部未过校验门（题型/答案格式不符/记法违规/重复/无法归节/invokes 缺失'
+        + `${auditReport ? '/第二意见不一致弃题' : ''}），一道都没入库。`)
+    }
     const bank = await this.e.bank.load(this.e.paths.courseRoot(c.root), node)
-    return { course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected, escapesRepaired, enc: Content.invokesProjection(graph, node, bank.questions) }
+    return {
+      course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected, escapesRepaired,
+      enc: Content.invokesProjection(graph, node, bank.questions),
+      ...(auditReport ? { secondOpinion: auditReport } : {}),
+    }
   }
 
 
@@ -1300,11 +1328,16 @@ export class BankSubsystem {
    * 练习/交互节跳过，正文未生成的节（断点续跑）跳过。防相似（#119）：提示词注入
    * 节点已有题面 ≤15 条，生成后逐题查重，命中的丢弃并计入 duplicates。
    * 出生打标（#148）：与 questionGenerate 同一门——概念清单在场逐题恰一枚 invokes，
-   * 缺席修复一次仍空即弃（不入库）；返回 enc = invokes 覆盖率投影（出生 w 作回退初值）。 */
+   * 缺席修复一次仍空即弃（不入库）；返回 enc = invokes 覆盖率投影（出生 w 作回退初值）。
+   * opts.secondOpinion（#223）：第二意见门随节生效，报告跨节聚合随返回值带出。 */
   async questionGenerateSections(
     courseKey: string | undefined, node: string,
     llm: LlmComplete,
-  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[] }> {
+    opts?: {
+      isCancelled?: () => boolean
+      secondOpinion?: { rate?: number }
+    },
+  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[]; secondOpinion?: SecondOpinionReport }> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -1345,6 +1378,7 @@ export class BankSubsystem {
     let sections = 0
     let duplicates = 0
     let escapesRepaired = 0
+    let auditReport: SecondOpinionReport | undefined
     for (const [si, s] of manifest.entries()) {
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
@@ -1369,7 +1403,18 @@ export class BankSubsystem {
       if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions)) continue
       // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用，仍空由下方门弃
       if (conceptScope.length) await this.e.repairInvokesOnce(llm, doc.questions, conceptScope)
-      for (const rawQ of doc.questions) {
+      // 第二意见门（#223）随节生效：不一致题恰一次修复、仍败弃题；报告跨节聚合
+      let sectionItems = doc.questions as Array<Record<string, unknown>>
+      if (opts?.secondOpinion) {
+        const audit = await runSecondOpinion(llm, sectionItems, {
+          rate: opts.secondOpinion.rate ?? DEFAULT_QUIZ_AUDIT_RATE,
+          isCancelled: opts?.isCancelled,
+        })
+        sectionItems = audit.items
+        doc.questions = audit.items
+        auditReport = auditReport ? mergeSecondOpinionReports(auditReport, audit.report) : audit.report
+      }
+      for (const rawQ of sectionItems) {
         const q: Record<string, unknown> = { ...((rawQ ?? {}) as Record<string, unknown>), section: s.id }
         delete q.id
         // 题目卫生（ADR-0029/0030）：转义修复留痕，修不好或记法/边界违规的题丢弃；
@@ -1386,7 +1431,11 @@ export class BankSubsystem {
       }
     }
     const bank = await this.e.bank.load(this.e.paths.courseRoot(c.root), node)
-    return { course: c.name, node, added, sections, duplicates, escapesRepaired, enc: Content.invokesProjection(graph, node, bank.questions) }
+    return {
+      course: c.name, node, added, sections, duplicates, escapesRepaired,
+      enc: Content.invokesProjection(graph, node, bank.questions),
+      ...(auditReport ? { secondOpinion: auditReport } : {}),
+    }
   }
 
 

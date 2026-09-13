@@ -18,6 +18,7 @@
  * - 站名是受控词表（PROMPT_KINDS ∪ AgentSeam 六站，无斜杠），ref 的 split('/') 依赖它。
  */
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { QUIZ_SOLVER_STATION } from '../engine/index.ts'
 import type { LlmTokenUsage } from '../engine/index.ts'
 
 /** 成功样本环形封顶（每站）。 */
@@ -65,13 +66,15 @@ export interface CorpusCapture {
 }
 
 /** 语料站名词表（#213 受控词表单一出处，ADR-0060）：PROMPT_KINDS 生成站 ∪ 判卷/讲解
- * 等交互站 ∪ AgentSeam 六策略站。接线处（缝工厂参/管线 opts/补标映射）一律引用本表，
- * 站内对齐（调用点站名 ↔ annotateLast 站名）靠共享常量而非字面相等。 */
+ * 等交互站 ∪ AgentSeam 六策略站 ∪ 出题第二意见解题站（#223）。接线处（缝工厂参/管线
+ * opts/补标映射）一律引用本表，站内对齐（调用点站名 ↔ annotateLast 站名）靠共享常量
+ * 而非字面相等；quizSolver 引门面常量（引擎侧单一出处，R1 走门面）。 */
 export const STATIONS = {
   outline: '课程大纲',
   section: '课程节生成',
   split: '课程节拆分',
   quiz: '题目生成',
+  quizSolver: QUIZ_SOLVER_STATION,
   noteQuiz: '笔记出题',
   errorCards: '错误对比卡',
   receipt: '回执评审',

@@ -45,7 +45,9 @@ function failCorpus(rt: HostRuntime, station: string, err: unknown): string | un
 /** AI 出题管线：节点正文 → 出题提示词 → llm → validateBank 门禁逐题落盘。
  * complete 为注入的补全缝（#137）。opts 透传节标注清单/综合题模式（逐节管线的出题段）、
  * 定向补节与生成指令（#117/#120）、语义档（#228：出题站显式声明 effort，不留部署默认）。
- * 门禁失败经语料补标（题目生成站，#213）。 */
+ * 出题缝闭包转发调用级 station/kind/effort（#223：第二意见门的解题调用标「独立解题」站、
+ * 修复调用标 repair——站名缺省钉题目生成站），门禁失败经语料补标（题目生成站，#213）。
+ * 第二意见门抽样率随 rt.quizAuditRate 传入（#223；0 = 关门）。 */
 async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: string, node: string, count: number | undefined, opts?: {
   sections?: Array<{ id: string; title: string }>
   generic?: boolean
@@ -55,11 +57,26 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
   effort?: LlmEffort
 }) {
   try {
-    return await rt.engine.bank2.questionGenerate(course, node, count, async prompt => complete(prompt, undefined, { effort: opts?.effort, station: STATIONS.quiz }), opts)
+    return await rt.engine.bank2.questionGenerate(course, node, count,
+      (prompt, _system, callOpts) => complete(prompt, undefined, {
+        effort: callOpts?.effort ?? opts?.effort,
+        station: callOpts?.station ?? STATIONS.quiz,
+        ...(callOpts?.kind !== undefined ? { kind: callOpts.kind } : {}),
+      }),
+      {
+        ...opts,
+        ...(rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : {}),
+      })
   } catch (err) {
     failCorpus(rt, STATIONS.quiz, err)
     throw err
   }
+}
+
+/** 出题管线的第二意见注记（#223：抽样率与成本在任务消息可见）。 */
+function auditNoteOf(r: { secondOpinion?: { sampled: number; discarded: number; repaired: number } }): string {
+  const a = r.secondOpinion
+  return a && a.sampled > 0 ? `；第二意见抽样 ${a.sampled}（拦 ${a.discarded} 修 ${a.repaired}）` : ''
 }
 
 /** 前节尾部窗口（#227）：相邻前节末尾约 300 字，截窗对齐行首（残半行不入窗）。
@@ -731,7 +748,7 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
     const dupNote = r.duplicates.length ? `；判重丢弃 ${r.duplicates.length} 道` : ''
     const rejNote = r.rejected.length ? `；无法归节拒收 ${r.rejected.length} 道` : ''
     job.status = 'done'
-    job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}`
+    job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}${auditNoteOf(r)}`
   } catch (err) {
     const corpusRef = failCorpus(rt, STATIONS.quiz, err)  // generateQuiz 内已补标，此处取 ref 进失败详情
     job.status = contentFailureStatus(job.status)
@@ -916,11 +933,18 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   persistGenJobs(rt)
   const quizEffort = contentEffort(job.tier === '高')
   try {
-    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, async prompt => complete(prompt, undefined, { effort: quizEffort, station: STATIONS.quiz }))
+    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node,
+      (prompt, _system, callOpts) => complete(prompt, undefined, {
+        effort: callOpts?.effort ?? quizEffort,
+        station: callOpts?.station ?? STATIONS.quiz,
+        ...(callOpts?.kind !== undefined ? { kind: callOpts.kind } : {}),
+      }),
+      rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : undefined)
     const quiz = await generateQuiz(rt, complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status
     job.message = outcome.message
+      + (auditNoteOf(per) + auditNoteOf(quiz) || '')
   } catch (quizErr) {
     const outcome = quizFailureOutcome(contentMsg, quizErr)
     job.status = outcome.status

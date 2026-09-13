@@ -11,7 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir } from 'node:fs/promises'
-import { AgentSeam, LearnhubEngine } from '../engine/index.ts'
+import { AgentSeam, LearnhubEngine, DEFAULT_QUIZ_AUDIT_RATE } from '../engine/index.ts'
 import type { SeedDraftRequest } from '../engine/index.ts'
 import type { GenJobFailure, GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
@@ -34,6 +34,9 @@ export interface LearnhubConfig {
   fastEffort?: 'off' | 'low'
   /** 高复杂度节点（难度≥4/深节点）的大纲与修复轮的思考档（缺省 low；P4 分层 effort）。 */
   deepEffort?: 'off' | 'low'
+  /** 出题第二意见门抽样率（#223）：0–1，0 = 关门；缺省 0.25（起步低）。
+   * 高难度题（difficulty 3）恒入样；非 0–1 数值在装配时 fail loud。 */
+  quizAuditRate?: number
 }
 
 /** 课程生成任务注册表（course/node 键）：面板「生成」页签的状态源，
@@ -114,6 +117,9 @@ export interface HostRuntime {
   centerRel: string
   jobs: HostJobs
   flags: HostFlags
+  /** 出题第二意见门抽样率（#223）：config 缺省 0.25（DEFAULT_QUIZ_AUDIT_RATE），0 = 关门；
+   * 出题管线（generateQuiz/finishWithQuiz）沿 opts.secondOpinion 传入引擎。 */
+  quizAuditRate: number
 }
 
 /** 构造宿主 runtime（apply 装配的第一步）：部署路径校验（缺失/不存在直接失败，不做
@@ -131,6 +137,11 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
   const centerRel = (config?.centerRel ?? '学习中心').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
   const center = `${vault}/${centerRel}`
   if (!existsSync(center)) throw new Error(`[learnhub] 学习中心目录不存在：${center}`)
+  // 出题第二意见门抽样率（#223）：配置错误在装配时 fail loud，不静默改写（#12 口径）
+  const quizAuditRate = config?.quizAuditRate ?? DEFAULT_QUIZ_AUDIT_RATE
+  if (!(quizAuditRate >= 0 && quizAuditRate <= 1)) {
+    throw new Error(`[learnhub] config.quizAuditRate 必须是 0–1 的数（收到 ${String(config?.quizAuditRate)}）；0 = 关门。`)
+  }
   // 新鲜库出生盖戳（#138）：learnhub.json 与课程注册表都还不存在的全新 vault 直接
   // 盖 v2（免跑已退役的迁移脚本）；任何 v1 痕迹（两者之一在）都交版本硬门判定——
   // 盖戳只发生在真正的一无所有，不掩盖任何旧库。
@@ -165,6 +176,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     centerRel,
     jobs: { genJobs: new Map(), quizJobResults: new Map() },
     flags: { queuePaused: false, pumping: false, lastSessionStartAt: 0, genQueueBroken: null },
+    quizAuditRate,
   }
   rtRef = rt
   return rt

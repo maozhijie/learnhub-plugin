@@ -78,6 +78,9 @@ export type { Clock, Rng } from './clock.ts'
 /** 统一 agent 缝（#162 / ADR-0041/0044）：类随门面出（宿主构造注入），类型随缝出。 */
 export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
 export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
+/** 出题第二意见门（#223）：站标签与缺省抽样率随门面出（宿主 STATIONS/配置对齐用）。 */
+export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
+export type { SecondOpinionReport, SecondOpinionOptions } from './question-audit.ts'
 
 
 
