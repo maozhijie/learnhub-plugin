@@ -25,7 +25,7 @@ export function ZoneBody({ view, frame }: { view: ViewKey; frame: AppFrame }) {
   return (
     <>
       {VIEW_KEYS.filter(k => visited.has(k)).map(k => (
-        <div key={k} style={{ display: k === view ? undefined : 'none' }}>
+        <div key={k} className={`zone-view${k === view ? ' zone-view-active' : ''}`}>
           {k === 'today' && <LearnPage frame={frame} />}
           {k === 'courses.graph' && <GraphPage frame={frame} />}
           {k === 'courses.queue' && <GeneratePage frame={frame} />}

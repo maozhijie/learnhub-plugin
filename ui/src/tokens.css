@@ -1,0 +1,54 @@
+/* 设计 token 层（#206 / ADR-0058「Arco 留守 + 自建 token 层」）：间距 4px 基尺 /
+ * 字号阶梯 / 灰阶 / 圆角 / 亮暗双主题 / 动效统一 CSS 过渡。
+ *
+ * 灰阶与语义色 = arco 调色板变量的**语义别名**（body[arco-theme='dark'] 翻转 arco
+ * 变量时自动跟随，无第二套色值要维护）；字面量只作为 arco 变量缺失时的兜底值存在
+ * ——全 ui 硬编码色值只许出现在本文件（tests/ui-budget.test.ts 的壳级视觉纪律门执法）。
+ * 壳级组件（App/ShellTopBar/ZoneBody/HelpDrawer/global.css 的壳规则）只准消费 --lh-*。
+ *
+ * 声明在 body 而非 :root：自定义属性里的 var() 在**声明元素**处完成替换——arco 的
+ * 亮/暗变量表分别挂 :root 与 body[arco-theme='dark']，若挂 :root，--lh-* 会把 :root
+ * 的亮色值替换定型后整体继承下去，暗色切换永远吃不到（实测抓过：壳全白）。
+ */
+body {
+  /* 间距：4px 基尺 */
+  --lh-space-1: 4px;
+  --lh-space-2: 8px;
+  --lh-space-3: 12px;
+  --lh-space-4: 16px;
+  --lh-space-5: 20px;
+  --lh-space-6: 24px;
+  --lh-space-8: 32px;
+
+  /* 字号阶梯（面板基准 14，正文阅读排版在 md-body 单独 16） */
+  --lh-font-xs: 12px;
+  --lh-font-sm: 13px;
+  --lh-font-md: 14px;
+  --lh-font-lg: 16px;
+  --lh-font-xl: 20px;
+
+  /* 圆角 */
+  --lh-radius-sm: 4px;
+  --lh-radius-md: 8px;
+  --lh-radius-lg: 12px;
+
+  /* 动效：统一 CSS 过渡（主题切换 / 悬浮态） */
+  --lh-motion-fast: 0.2s ease;
+  --lh-motion: 0.3s ease;
+
+  /* 语义面：亮色（兜底字面量 = arco light 缺省值） */
+  --lh-bg: var(--color-bg-1, #ffffff);
+  --lh-surface: var(--color-bg-2, #ffffff);
+  --lh-surface-muted: var(--color-fill-1, #f7f8fa);
+  --lh-border: var(--color-border-2, #e5e6eb);
+  --lh-border-faint: var(--color-border-1, #f2f3f5);
+  --lh-text: var(--color-text-1, #1d2129);
+  --lh-text-muted: var(--color-text-3, #86909c);
+  --lh-accent: var(--color-primary-6, #165dff);
+  --lh-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* 暗色面：arco 变量整体翻转，语义别名自动跟随；只补 arco 没有的阴影 */
+body[arco-theme='dark'] {
+  --lh-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}

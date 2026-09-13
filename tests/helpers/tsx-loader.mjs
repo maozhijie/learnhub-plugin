@@ -42,10 +42,17 @@ export async function load(url, context, nextLoad) {
 const SUFFIXES = ['.tsx', '.ts', '/index.tsx', '/index.ts']
 
 export async function resolve(specifier, context, nextResolve) {
-  if (!specifier.startsWith('.')) return nextResolve(specifier, context)
   try {
     return await nextResolve(specifier, context)
   } catch (err) {
+    // bare 目录导入（@arco-design/web-react/icon 等）：node ESM 不做目录索引解析，补 /index.js
+    if (!specifier.startsWith('.')) {
+      try {
+        return await nextResolve(specifier + '/index.js', context)
+      } catch {
+        // 落回相对导入的后缀补齐
+      }
+    }
     for (const suffix of SUFFIXES) {
       try {
         return await nextResolve(specifier + suffix, context)
