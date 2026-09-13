@@ -3702,7 +3702,8 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
+   "content2.contentTierOf(\"1\",\"1\")",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n            effort: opts?.effort\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"effort\":\"fast\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
@@ -3765,7 +3766,8 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在按学习者意见重出新题…\"}])",
-   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"instruction\":\"1\"})",
+   "content2.contentTierOf(\"1\",\"1\")",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n            effort: opts?.effort\n        }),{\"instruction\":\"1\",\"effort\":\"fast\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
@@ -3793,7 +3795,8 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"}})",
+   "content2.contentTierOf(\"1\",\"1\")",
+   "bank2.questionGenerate(\"1\",\"1\",1,async (prompt)=>complete(prompt, undefined, {\n            effort: opts?.effort\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"effort\":\"fast\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
@@ -3821,7 +3824,8 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
-   "bank2.questionGenerate(\"1\",\"1\",undefined,async (prompt)=>complete(prompt),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\"})",
+   "content2.contentTierOf(\"1\",\"1\")",
+   "bank2.questionGenerate(\"1\",\"1\",undefined,async (prompt)=>complete(prompt, undefined, {\n            effort: opts?.effort\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"effort\":\"fast\"})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"

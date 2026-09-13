@@ -6,7 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Content, TIER_LABELS, genericQuizTarget, hasReadyContent, readAnchor, tierIdxOf } from '../engine/index.ts'
-import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete } from '../engine/index.ts'
+import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort } from '../engine/index.ts'
 import {
   contentFailureStatus,
   genJobRetentionRemainingMs,
@@ -31,15 +31,16 @@ import type { GenJob, HostRuntime } from './runtime.ts'
 
 /** AI 出题管线：节点正文 → 出题提示词 → llm → validateBank 门禁逐题落盘。
  * complete 为注入的补全缝（#137）。opts 透传节标注清单/综合题模式（逐节管线的出题段）、
- * 定向补节与生成指令（#117/#120）。 */
+ * 定向补节与生成指令（#117/#120）、语义档（#228：出题站显式声明 effort，不留部署默认）。 */
 async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: string, node: string, count: number | undefined, opts?: {
   sections?: Array<{ id: string; title: string }>
   generic?: boolean
   section?: { id: string; title: string }
   instruction?: string
   isCancelled?: () => boolean
+  effort?: LlmEffort
 }) {
-  return rt.engine.bank2.questionGenerate(course, node, count, async prompt => complete(prompt), opts)
+  return rt.engine.bank2.questionGenerate(course, node, count, async prompt => complete(prompt, undefined, { effort: opts?.effort }), opts)
 }
 
 /** 前节尾部窗口（#227）：相邻前节末尾约 300 字，截窗对齐行首（残半行不入窗）。
@@ -81,7 +82,8 @@ function sectionPrompt(
   return `${tpl}\n\n## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}${listBlock}${tailBlock}\n\n---\n\n${pack}`
 }
 
-/** 逐节生成共用出口（ADR-0054 修复阶梯）：初跑 fast 档 → 门禁失败先试块级局部修补
+/** 逐节生成共用出口（ADR-0054 修复阶梯）：初跑档随节点难度声明（#228：高复杂度 deep、
+ * 否则 fast——正文是最长产出，固定 fast 对高难节点不足）→ 门禁失败先试块级局部修补
  * （#147：清单 ✗ 全部定位到具体违规块时只回灌这些块、只收替换块；正文过长不是块级
  * finding，天然落到整节修复）→ 整节压缩修复一轮（deep 档升一档——用与失败同档的
  * 配置盲试是已知死法；回灌块级修补**合并后**的原文防定位错位；长度 finding 附显式
@@ -102,7 +104,7 @@ async function applySectionWithRepair(
   },
 ): Promise<{ version: number; title: string; hints: string[]; md: string }> {
   const cancelled = () => opts?.isCancelled?.() ?? false
-  const first = await complete(sectionPrompt(tpl, pack, s, opts?.coherence), undefined, { effort: 'fast' })
+  const first = await complete(sectionPrompt(tpl, pack, s, opts?.coherence), undefined, { effort: contentEffort(opts?.highTier === true) })
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   let gateReport = ''
   let current = first
@@ -668,7 +670,9 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
 }
 
 /** 纯出题任务执行（#118）：单次 questionGenerate（定向补节/指令/题量随任务携带），
- * 取消旗标逐题生效；终态与保留期与节点管线同语义。 */
+ * 取消旗标逐题生效；终态与保留期与节点管线同语义。出题档位显式声明（#228）：
+ * 随节点难度 contentEffort（高复杂度 deep、否则 fast），不再走部署默认；档位缺失
+ * 折叠 fast（同管线兜底口径），运行日志留档位记录供成本对照。 */
 async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Promise<void> {
   const key = `${job.course}/${job.node}`
   job.status = 'running'
@@ -678,11 +682,19 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
       ? '正在按学习者意见重出新题…'
       : '正在出题…'
   persistGenJobs(rt)
+  let quizEffort: LlmEffort = 'fast'
+  try {
+    job.tier = TIER_LABELS[await rt.engine.content2.contentTierOf(job.course, job.node)]
+    quizEffort = contentEffort(job.tier === '高')
+  } catch {
+    // 档位缺失不阻塞出题（difficulty/bloom 全缺时折叠兜底中档=非高，同管线口径）
+  }
   try {
     const r = await generateQuiz(rt, llmSeam(ctx), job.course, job.node, job.count, {
       ...(job.section ? { section: job.section } : {}),
       ...(job.instruction ? { instruction: job.instruction } : {}),
       isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
+      effort: quizEffort,
     })
     if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
     rt.jobs.quizJobResults.set(key, r)
@@ -696,6 +708,7 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
+    void runLog(rt, 'quiz_job', `「${job.course}/${job.node}」${job.message}（节点档位 ${job.tier ?? '?'}；出题 effort=${quizEffort}）`).catch(() => undefined)
     // 结果暂存（agent 工具读取用）随终态保留期一并清理
     setTimeout(() => rt.jobs.quizJobResults.delete(key), generationJobRetentionMs(job.status)).unref()
   }
@@ -841,17 +854,21 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
   } finally {
     // 终态保留：失败/取消/部分完成留 24h 供排查与重试，成功留 30 分钟；之后清出注册表
     scheduleJobRetention(rt, key, job.status)
+    // 档位记录（#228）：正文初跑与两路出题的 effort 都随节点难度声明，运行日志留痕供成本对照
+    void runLog(rt, 'content_job', `「${course}/${node}」${job.message ?? ''}（节点档位 ${job.tier ?? '?'}；正文/出题 effort=${contentEffort(job.tier === '高')}）`).catch(() => undefined)
   }
 }
 
-/** 管线收尾：逐节出题（每内容节按档位目标题量，绑节 id）+ 综合题（通用随档位），汇总任务终态。 */
+/** 管线收尾：逐节出题（每内容节按档位目标题量，绑节 id）+ 综合题（通用随档位），汇总任务终态。
+ * 两路出题都显式声明语义档（#228）：随节点难度 contentEffort（高复杂度 deep、否则 fast）。 */
 async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJob, contentMsg: string): Promise<string> {
   job.phase = 'quiz'
   job.message = `${contentMsg}；自动出题中…`
   persistGenJobs(rt)
+  const quizEffort = contentEffort(job.tier === '高')
   try {
-    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, async prompt => complete(prompt))
-    const quiz = await generateQuiz(rt, complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true })
+    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, async prompt => complete(prompt, undefined, { effort: quizEffort }))
+    const quiz = await generateQuiz(rt, complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status
     job.message = outcome.message

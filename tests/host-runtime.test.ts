@@ -248,17 +248,19 @@ test('泵直驱：未暂停但有排队任务时 pumpGeneration 拉起执行（�
 // ---------------------------------------------------------------- 溢出修复阶梯与 continue→partial（#196/#197 ADR-0054）
 
 /** 脚本化 llm 流：stream() 逐次消耗应答脚本（走真实 llmSeamStripped/streamDshTurn 通路，
- * 只是 provider 换成内存生成器）；prompts 捕获每次调用的提示词全文供断言。 */
-function scriptedCtx(responses: string[], prompts?: string[]): Context {
+ * 只是 provider 换成内存生成器）；prompts 捕获每次调用的提示词全文供断言；efforts 捕获
+ * 每次调用的部署档（reasoningEffort 'off'/'low'，#228 档位声明断言用，可选）。 */
+function scriptedCtx(responses: string[], prompts?: string[], efforts?: Array<string | undefined>): Context {
   const queue = [...responses]
   return {
     tools: { register: () => () => undefined },
     effect: () => undefined,
     webServer: { register: () => undefined },
     llm: {
-      stream: async function* (req: { messages: Array<{ content?: Array<{ text?: string }> }> }) {
+      stream: async function* (req: { reasoningEffort?: unknown; messages: Array<{ content?: Array<{ text?: string }> }> }) {
         const text = queue.shift() ?? ''
         prompts?.push((req.messages ?? []).map(m => (m.content ?? []).map(c => c.text ?? '').join('')).join('\n'))
+        efforts?.push(typeof req.reasoningEffort === 'string' ? req.reasoningEffort : undefined)
         yield { type: 'text-delta', text }
         yield { type: 'finish', reason: { kind: 'stop' } }
       },
@@ -370,6 +372,80 @@ test('节间连贯注入（#227）：节清单标 i/N、非首节附前节结尾
   assert.match(s2Prompt, /## 前节结尾（仅供衔接参考，不复述前节内容）/, '非首节注入前节结尾窗口')
   assert.ok(s2Prompt.includes('这一段是前节结尾的标志句。'), '窗口取的是本轮刚落盘的前节结尾')
   assert.ok(!s2Prompt.includes('前文铺垫句子'), '窗口从行首截取、只含结尾行，前节主体不入窗')
+})
+
+test('出题档位声明（#228）：出题 effort 随节点难度显式声明（高=deep/低=fast），运行日志留档位记录', async () => {
+  const rt = makeRuntime()
+  const efforts: Array<string | undefined> = []
+  let tier = 3
+  stub(rt, {
+    'content2.contentTierOf': async () => tier,
+    'bank2.questionGenerate': async (_c: unknown, _n: unknown, _count: unknown, llm: (p: string) => Promise<string>) => {
+      await llm('出题提示词') // 档位声明在缝上——穿过 llmSeam 到流请求才可观测
+      return { added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }
+    },
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const ctx = scriptedCtx(['YAML', 'YAML'], undefined, efforts) // 每次出题调用消耗一条应答
+  enqueueQuizGeneration(rt, ctx, '数学', '节点A')
+  await until(() => rt.jobs.genJobs.get('数学/节点A')?.status === 'done')
+  assert.equal(rt.jobs.genJobs.get('数学/节点A')!.tier, '高', '节点档位随任务记录')
+  assert.equal(efforts[0], 'low', '高复杂度节点出题 effort=deep（部署档 low，不再走部署默认）')
+  await until(() => {
+    try { return readFileSync(rt.engine.paths.runLogPath, 'utf8').includes('出题 effort=deep') } catch { return false }
+  }, 2000)
+
+  tier = 1
+  efforts.length = 0
+  enqueueQuizGeneration(rt, ctx, '数学', '节点B')
+  await until(() => rt.jobs.genJobs.get('数学/节点B')?.status === 'done')
+  assert.equal(efforts[0], 'off', '低复杂度节点出题 effort=fast（部署档 off，行为不变）')
+})
+
+test('正文初跑档位（#228）：高难节点初跑升 deep、低难维持 fast', async () => {
+  const pipelineStubs = (views: Array<Record<string, unknown>>, tier: number) => ({
+    'content2.contentPack': async () => '上下文包',
+    'content2.contentTierOf': async () => tier,
+    'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
+    'content2.contentSectionsView': async () => views,
+    'content2.contentOutline': async (_c: unknown, _n: unknown, _yaml: string) => {
+      views.push({ id: 's1', title: '概念：A', type: '概念', status: 'pending', tierLabel: '高' })
+    },
+    'content2.contentSection': async () => ({ version: 1, title: 'x', hints: [] }),
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  // 高复杂度：初跑（正文第一次调用）= deep 档
+  const rtHigh = makeRuntime()
+  const effortsHigh: Array<string | undefined> = []
+  const viewsHigh: Array<Record<string, unknown>> = []
+  stub(rtHigh, pipelineStubs(viewsHigh, 3))
+  const ctxHigh = scriptedCtx([
+    'node: X\nsections:\n  - id: s1\n    title: 概念：A',
+    '## 概念：A\n\n正文',
+  ], undefined, effortsHigh)
+  enqueueGeneration(rtHigh, ctxHigh, '数学', '节点A')
+  await until(() => rtHigh.jobs.genJobs.get('数学/节点A')?.status === 'done')
+  assert.equal(effortsHigh[0], 'low', '高难节点大纲 effort=deep（既有口径，对照位）')
+  assert.equal(effortsHigh[1], 'low', '高难节点正文初跑 effort=deep（#228：不再恒 fast）')
+  // 低复杂度：初跑维持 fast（部署档 off，行为不变）
+  const rtLow = makeRuntime()
+  const effortsLow: Array<string | undefined> = []
+  const viewsLow: Array<Record<string, unknown>> = []
+  stub(rtLow, pipelineStubs(viewsLow, 1))
+  const ctxLow = scriptedCtx([
+    'node: X\nsections:\n  - id: s1\n    title: 概念：A',
+    '## 概念：A\n\n正文',
+  ], undefined, effortsLow)
+  enqueueGeneration(rtLow, ctxLow, '数学', '节点A')
+  await until(() => rtLow.jobs.genJobs.get('数学/节点A')?.status === 'done')
+  assert.equal(effortsLow[0], 'off', '低难节点大纲 effort=fast（既有口径，对照位）')
+  assert.equal(effortsLow[1], 'off', '低难节点正文初跑维持 fast（行为不变）')
 })
 
 test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 → 子节照常生成 → done', async () => {

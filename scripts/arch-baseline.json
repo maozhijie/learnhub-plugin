@@ -193,7 +193,7 @@
     "src/host/clock.ts": 12,
     "src/host/handlers.ts": 651,
     "src/host/http.ts": 54,
-    "src/host/jobs.ts": 1092,
+    "src/host/jobs.ts": 1109,
     "src/host/llm.ts": 238,
     "src/host/params.ts": 229,
     "src/host/route-table.ts": 74,
