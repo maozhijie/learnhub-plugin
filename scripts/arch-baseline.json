@@ -164,6 +164,7 @@
     "src/engine/project-recall.ts": 78,
     "src/engine/projects.ts": 1396,
     "src/engine/proposals.ts": 1597,
+    "src/engine/quality-rubrics.ts": 454,
     "src/engine/quality.ts": 60,
     "src/engine/question-bank.ts": 1493,
     "src/engine/question-dedup.ts": 84,
