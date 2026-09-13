@@ -86,7 +86,7 @@ function ProbationCard({ course }: { course: string }) {
   }, [course])
 
   // 挂载即取 + 30s 低频轮询（页签保活：非激活跳过取数、切回即补）
-  usePolling(load, { tab: 'courses.graph', intervalMs: 30_000 })
+  usePolling(load, { tab: 'courses.course', intervalMs: 30_000 })
 
   if (!doc) return null
   const hasAnything = doc.in_flight.length > 0 || doc.overdue.length > 0

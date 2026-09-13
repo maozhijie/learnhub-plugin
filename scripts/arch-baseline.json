@@ -102,7 +102,7 @@
     "src/client/jsx.d.ts": 25,
     "src/commands/index.ts": 71,
     "src/commands/types.ts": 128,
-    "src/commands/图谱.ts": 305,
+    "src/commands/图谱.ts": 311,
     "src/commands/学习.ts": 687,
     "src/commands/学习者产出.ts": 700,
     "src/commands/实验室.ts": 216,

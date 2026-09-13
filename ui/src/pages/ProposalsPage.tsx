@@ -57,33 +57,37 @@ const KIND_LABELS: Record<string, { label: string; color: string }> = {
 }
 const kindLabel = (kind: string) => KIND_LABELS[kind] ?? { label: kind, color: 'orange' }
 
-/** 「查看结果」按提案类型分流（#156）：种子→图页、富化→题库、反编译双提案→项目页；
- * 编辑批落图页、项目域落项目页、实验落实验室。返回页签 + 需要预置的课程名。 */
-function resultTarget(p: PropItem): { tab: ViewKey; course?: string } {
-  if (p.kind === 'enrich') return { tab: 'courses.bank', course: p.course }
+/** 「查看结果」按提案类型分流（#156；落点接 #209 新结构）：种子→工作台罗盘与图、
+ * 富化→工作台题库分栏、反编译双提案→项目页；编辑批落工作台图、项目域落项目页、
+ * 实验落洞察。返回视图键 + 需要预置的课程名。 */
+function resultTarget(p: PropItem): { tab: ViewKey | 'wb.graph' | 'wb.bank'; course?: string } {
+  if (p.kind === 'enrich') return { tab: 'wb.bank', course: p.course }
   if (p.kind === 'project_plan' || p.kind === 'project_milestone') return { tab: 'projects' }
   if (p.kind === 'experiment') return { tab: 'insight' }
   if (p.kind === 'seed' && p.pair != null) return { tab: 'projects' }
-  return { tab: 'courses.graph', course: p.course }
+  return { tab: 'wb.graph', course: p.course }
 }
 
-export default function ProposalsPage({ frame }: { frame?: AppFrame }) {
+export default function ProposalsPage({ frame, course }: { frame?: AppFrame; course?: string }) {
   const [items, setItems] = useState<PropItem[] | null>(null)
   const [busy, setBusy] = useState(false)
   /** 本次会话内最近应用的提案（「查看结果」按钮挂它身上；不强制跳页）。 */
   const [applied, setApplied] = useState<PropItem | null>(null)
+  // 切片形态（#209）：单课工作台的提案分栏——同一收件箱按课过滤，人审动作同一处
+  const sliced = course !== undefined
 
   const load = useCallback(async () => {
     try {
-      setItems(await api.proposals())
+      const all = await api.proposals()
+      setItems(sliced ? all.filter(p => p.course === course) : all)
     } catch (err) {
       Message.error(errorMessage(err))
     }
-  }, [])
+  }, [sliced, course])
 
   // 挂载即取 + 8s 轮询（页签保活：非激活跳过取数、切回即补）——起草任务完成、
-  // 教练回合产批后提案自动浮现
-  usePolling(load, { tab: 'courses.proposals', intervalMs: 8000 })
+  // 教练回合产批后提案自动浮现；切片挂在工作台视图下，轮询门认 'courses.course'
+  usePolling(load, { tab: sliced ? 'courses.course' : 'courses.proposals', intervalMs: 8000 })
 
   /** 应用成功后的全局刷新（#156）：App 的状态面 + 课程树重拉（学习页课程卡、图页
    * 课程切换器即时可见新课程）；已挂载页的页内流（推荐/统计）经 learnhub:reload 补拉。 */
@@ -148,7 +152,12 @@ export default function ProposalsPage({ frame }: { frame?: AppFrame }) {
 
   const gotoResult = (p: PropItem) => {
     const t = resultTarget(p)
-    if (t.course && (t.tab === 'courses.graph' || t.tab === 'courses.bank')) frame?.setCourse(t.course)
+    if (t.tab === 'wb.graph' || t.tab === 'wb.bank') {
+      // openCourse 内部即含 setCourse，落工作台对应分栏
+      frame?.openCourse(t.course ?? p.course, t.tab === 'wb.graph' ? 'graph' : 'bank')
+      return
+    }
+    if (t.course) frame?.setCourse(t.course)
     frame?.goto(t.tab)
   }
 

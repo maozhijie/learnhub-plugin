@@ -18,8 +18,8 @@ import { api } from './api'
 import { isGenJobTerminal } from '../../src/generation-jobs'
 import type { GenJobItem } from './types'
 import { errorMessage } from './hooks/useCommand'
+import { GRAPH_PHASES } from './hooks/useGenJobActions'
 
-const GRAPH_PHASES = new Set(['seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'])
 const PHASE_TITLE: Record<string, string> = {
   seed: '种子起草',
   growth: '教练回合（生长批）',

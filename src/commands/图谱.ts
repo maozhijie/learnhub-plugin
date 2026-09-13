@@ -33,6 +33,12 @@ export const 图谱域 = {
         mode: "sync",
         tool: "learnhub_compass",
         bind: ["course"]
+      },
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "GET", path: "/compass" },
+        bind: ["course"]
       }
     ]
   }),

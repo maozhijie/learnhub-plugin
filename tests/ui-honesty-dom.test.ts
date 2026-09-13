@@ -141,8 +141,7 @@ test('ProposalsPage：应用成功出现「查看结果」，种子提案点击�
   proposalFix[0]!.status = 'applied'
   await refetchProposals()
   await click(await screen.findByText('查看结果'))
-  assert.deepEqual(calls.setCourse, [['数学']], '图页落点预置提案课程')
-  assert.deepEqual(calls.goto, [['courses.graph']], '种子提案 → 课程区学习图')
+  assert.deepEqual(calls.openCourse, [['数学', 'graph']], '种子提案 → 单课工作台罗盘与图，openCourse 自带课程预置（#209）')
 })
 
 test('ProposalsPage：富化提案「查看结果」落题库，反编译对（pair）落项目页', async () => {
@@ -163,7 +162,7 @@ test('ProposalsPage：富化提案「查看结果」落题库，反编译对（p
   proposalFix[0]!.status = 'applied'
   await refetchProposals()
   await click(await screen.findByText('查看结果'))
-  assert.deepEqual(calls.goto, [['courses.bank']], '富化 → 课程区题库')
+  assert.deepEqual(calls.openCourse, [['数学', 'bank']], '富化 → 单课工作台题库分栏（#209）')
   // 应用反编译种子半区 #9 → 查看结果 → projects（routes() 重注册清空调用记录，按 body.id 断言）
   await click(screen.getAllByText('应用')[0])
   await waitFor(() => {

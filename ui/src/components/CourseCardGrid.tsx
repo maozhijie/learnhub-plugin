@@ -150,7 +150,7 @@ export default function CourseCardGrid({ frame }: { frame: AppFrame }) {
                 key={c.name} name={c.name} total={s?.total ?? 0} due={s?.due_today ?? 0}
                 counts={s?.counts ?? { unseen: 0, ready: 0, learning: 0, review: 0, mastered: 0, skipped: 0 }}
                 completion={s?.completion}
-                onOpen={() => { frame.setCourse(c.name); frame.goto('courses.graph') }}
+                onOpen={() => frame.openCourse(c.name, 'graph')}
                 onRegenerate={() => regenerateCourse(c.name)}
                 onReview={() => startReview(c.name)}
                 onDelete={() => deleteCourse(c.name)} />
@@ -158,7 +158,7 @@ export default function CourseCardGrid({ frame }: { frame: AppFrame }) {
           })}
         </div>
         <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
-          点「打开图」进入该课的学习图与教练台。
+          点「打开图」进入该课的单课工作台（罗盘与图首屏）。
         </Text>
       </Card>
       {session && (

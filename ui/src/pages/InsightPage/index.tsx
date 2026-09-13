@@ -1,10 +1,15 @@
-/** 统计页：周复盘 Weekly Kata + 记忆健康仪表盘 + 自评校准画像 + Anki 通道
- * + XP 时间账本（今日 XP / streak / 每日目标编辑）+ 每课程预计完成天数
- * + 各课程阶段统计（未学 = unseen+ready；复习到期 = 有到期题目的节点）。
+/** 洞察区（#210 / ADR-0058 改版 T6·洞察区成型；#183 前身统计页）：周月循环的
+ * 观测与自我实验的家——周复盘 Weekly Kata + 记忆健康仪表盘 + 自评校准画像 + 沙盘
+ * + N-of-1 实验 + 睡眠耦合建议 + Anki 通道 + XP 时间账本（今日 XP / streak / 每日
+ * 目标编辑）+ 每课程预计完成天数 + 各课程阶段统计（未学 = unseen+ready；复习到期 =
+ * 有到期题目的节点）+ 运行环境（模型透明）。
  * 细分区块见同目录页内子组件（MemoryHealth／CalibrationProfileCard／KataCard／
- * AnkiChannelCard）。#183：六路取数全走 useCommand 缝——失败显式进三态
- * （旧版静默置空 = 永远「加载中」的假象不再有）；教练反馈是纯信息性横幅，
- * 失败按无内容处理（登记例外，见票面走查清单）。 */
+ * AnkiChannelCard／SandboxCard／Nof1Card／SleepCard／RuntimeCard）。
+ * 实验室页签退役（#210）：沙盘/N-of-1/睡眠三件就地入本区，恒温器已在 T5 随教练台
+ * 分栏安家——四个功能无一处丢失；实验开跑的**确认动作只在提案收件箱**（人审唯一处，
+ * 见 Nof1Card），本区只提供直达入口。
+ * #183：六路取数全走 useCommand 缝——失败显式进三态（旧版静默置空 = 永远「加载中」
+ * 的假象不再有）；教练反馈是纯信息性横幅，失败按无内容处理（登记例外，见票面走查清单）。 */
 import { Alert, Card, InputNumber, Button, Message, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useState } from 'react'
 import { CommandBoundary } from '../../components/CommandBoundary'
@@ -16,10 +21,14 @@ import { MemoryHealthBody } from './MemoryHealth'
 import CalibrationProfileCard from './CalibrationProfileCard'
 import KataCard from './KataCard'
 import AnkiChannelCard from './AnkiChannelCard'
+import SandboxCard from './SandboxCard'
+import Nof1Card from './Nof1Card'
+import SleepCard from './SleepCard'
+import RuntimeCard from './RuntimeCard'
 
 const { Text } = Typography
 
-export default function StatsPage({ frame }: { frame: AppFrame }) {
+export default function InsightPage({ frame }: { frame: AppFrame }) {
   const xp = useCommand(() => api.xp())
   const mem = useCommand(() => api.memory())
   const jol = useCommand(() => api.jol())
@@ -95,11 +104,13 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
 
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
+      <Alert type='info' content='洞察区是「提议非指令」区：沙盘是模型推演非承诺；实验的建议要你逐条确认才生效（确认在提案收件箱——人审唯一处）；这里发生的一切零 XP、不进掌握度、不碰调度语义。（恒温器在单课工作台的教练台分栏）' />
       {/* 可用的困难教练（#65 E5）：只读信息性反馈——低数据静默，触发才显示 */}
       {coach.data && coach.data.messages.length > 0 && (
         <Alert type='info' content={coach.data.messages.map(m => <div key={m}>{m}</div>)} />
       )}
-      <KataCard courseNames={frame.tree?.courses.map(c => c.name) ?? []} />
+      <KataCard courseNames={frame.tree?.courses.map(c => c.name) ?? []}
+        onOpenInbox={() => frame.goto('courses.proposals')} />
       <Card size='small' title='记忆健康' style={{ borderRadius: 10 }}
         extra={<Text type='secondary' style={{ fontSize: 12 }}>真实作答口径——合成首复习不计入</Text>}>
         <CommandBoundary cmd={mem}>
@@ -118,6 +129,9 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
       }>
         {p => <CalibrationProfileCard profile={p} />}
       </CommandBoundary>
+      <SandboxCard courseNames={frame.tree?.courses.map(c => c.name) ?? []} />
+      <Nof1Card frame={frame} />
+      <SleepCard />
       <AnkiChannelCard />
 
       <Card size='small' title='XP 时间账本' style={{ borderRadius: 10 }}
@@ -185,6 +199,8 @@ export default function StatsPage({ frame }: { frame: AppFrame }) {
           XP 记入作答流水：答对得题型权重 × 难度，提交过快且答错按乱猜扣分，同日重复作答不记账。
         </Text>
       </Card>
+
+      <RuntimeCard frame={frame} />
     </Space>
   )
 }

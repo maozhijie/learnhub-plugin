@@ -146,7 +146,7 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   assert.equal(commands.COMMAND_LIST.length, 156, '注册表应为 156 条命令（#203 +1：receipt-review-mode）')
   assert.equal(Object.keys(commands.COMMANDS).length, 156, '按 id 键的装配表应为 156 个键（#159 +1、#203 +1）')
   assert.equal(commands.BY_TOOL.size, 112, 'agent 通道索引应为 112 条工具（#203 +1）')
-  assert.equal(commands.BY_ROUTE.size, 126, 'panel 通道索引应为 126 条路由（#159 +1）')
+  assert.equal(commands.BY_ROUTE.size, 127, 'panel 通道索引应为 127 条路由（#209 +1：GET /compass）')
   const handlers = await import('../src/host/handlers.ts')
   assert.equal(typeof handlers.HANDLERS, 'object', 'host/handlers.ts 缺 HANDLERS')
   const staticSrv = await import('../src/host/static.ts')

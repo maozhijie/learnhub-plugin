@@ -6,10 +6,8 @@
  * 待审提案数（人审动作只在收件箱，今日只放计数——今日页边界），点击深链提案收件箱。
  * 失败重试与生成页同路由：生长批 → coach/growth（显式重新裁决，豁免失败阻尼），
  * 出题 → question-generate，内容 → generate（断点续跑语义在服务端）。 */
-import { Button, Card, Message, Tag, Typography } from '@arco-design/web-react'
-import { useState } from 'react'
-import { api } from '../../api'
-import { errorMessage, notifyQueued } from '../../hooks/useCommand'
+import { Button, Card, Tag, Typography } from '@arco-design/web-react'
+import { GEN_PHASE_META, useGenJobActions } from '../../hooks/useGenJobActions'
 import type { AppFrame } from '../../App'
 import type { GenJobItem } from '../../types'
 
@@ -26,12 +24,6 @@ export interface SupplySnapshot {
   broken: string | null
   /** 失败/部分完成任务（可重实行——与生成页「重试」同路由）。 */
   failed: GenJobItem[]
-}
-
-/** phase → 人读标签（与生成页 PHASE_TAG 同名同色，切片展示用）。 */
-const PHASE_LABEL: Partial<Record<NonNullable<GenJobItem['phase']>, string>> = {
-  quiz: '出题', seed: '种子起草', growth: '生长批', compass: '罗盘初画',
-  decompile: '目标反编译', plan: '计划草案', milestone: '里程碑草案',
 }
 
 /** 待审闸门计数卡：断粮时第一眼分清「闸门没审」还是「系统坏了」（#204 用户故事 4）。 */
@@ -63,39 +55,9 @@ export function SupplyCard({ frame, supply, onRefresh }: {
   supply: SupplySnapshot | null
   onRefresh: () => Promise<void>
 }) {
-  const [busyKey, setBusyKey] = useState<string | null>(null)
+  // 恢复/重试动作走共享缝（与生成页同实现，#209 评审收拢）
+  const { busyKey, retry, resumeQueue } = useGenJobActions({ onDone: onRefresh })
   const resuming = supply?.paused && (supply.queuedCount ?? 0) > 0
-
-  // 恢复队列：与生成页「恢复队列」同一路由（遗留排队任务按序开跑）
-  const resumeQueue = async () => {
-    try {
-      const r = await api.generateResume()
-      Message.success(`队列已恢复（${r.resumed} 个排队任务将按序执行）`)
-      await onRefresh()
-    } catch (err) {
-      Message.error(errorMessage(err))
-    }
-  }
-
-  // 失败重试：与生成页同路由（growth → 生长一步重裁决；quiz → 出题；内容 → 断点续跑）
-  const retry = async (j: GenJobItem) => {
-    setBusyKey(j.key)
-    try {
-      if (j.phase === 'growth') {
-        notifyQueued(await api.coachGrowth(j.course))
-      } else {
-        const r = j.phase === 'quiz'
-          ? await api.questionGenerate(j.course, j.node)
-          : await api.generate(j.course, j.node)
-        Message.info(r.message)
-      }
-      await onRefresh()
-    } catch (err) {
-      Message.error(errorMessage(err))
-    } finally {
-      setBusyKey(null)
-    }
-  }
 
   const brewing = supply?.running.length ?? 0
   const queued = supply?.queuedCount ?? 0
@@ -132,7 +94,7 @@ export function SupplyCard({ frame, supply, onRefresh }: {
           {failed.map(j => (
             <div key={j.key} className='today-supply-rowitem'>
               <Tag size='small' color='red'>{j.status === 'partial' ? '部分完成' : '失败'}</Tag>
-              {j.phase && PHASE_LABEL[j.phase] && <Tag size='small'>{PHASE_LABEL[j.phase]}</Tag>}
+              {j.phase && GEN_PHASE_META[j.phase] && <Tag size='small'>{GEN_PHASE_META[j.phase]!.label}</Tag>}
               <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 160 }}>
                 「{j.node}」（{j.course}）上次任务未完成{retryHint(j)}
               </Text>

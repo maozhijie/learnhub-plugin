@@ -1,13 +1,13 @@
 /** 今日页（#208 / ADR-0058 五区改版 T4，自学习页收窄成型）：学习日的全部——
  * XP/streak/每日目标、复习横幅、「接下来学/复习」推荐流（在酿节点带进度 chip）、
  * 供给卡（在酿 n/停摆恢复/失败重试）与待审闸门计数、「我的资产」菜单（我的卡/
- * 笔记源抽屉/导出到 Anki 收进去）。课程卡列表不进今日（住课程区，T4 暂住学习图页）；
- * 建课唯一主动入口在课程区教练台（#154/#159 既裁）。人审动作只在提案收件箱，
- * 今日只放计数；复习流/练习会话/申诉交互原样不动。
+ * 笔记源抽屉收进去；导出到 Anki 归洞察通道卡，#210）。课程卡列表不进今日（住课程区
+ * 「我的课程」）；建课唯一主动入口在课程区教练台（#154/#159 既裁）。人审动作只在
+ * 提案收件箱，今日只放计数；复习流/练习会话/申诉交互原样不动。
  * 二级视图 LessonView 承载正文/mastery 会话/完成。复习会话 = Anki 式刷卡队列：
  * 跨课程到期卡扁平排队，一卡一票（作答或满 5 秒申报忘记），背面自评 Hard/Good/Easy
  * 推进调度；我的卡（E1）按 ADR-0021 汇入同一队列。
- * #72 UI 入口史：横幅 C1/C2/E1 裸入口退役进资产菜单，推荐卡渲染 A3 定向复习建议项，
+ * #72 UI 入口史：横幅 C1/C2/E1 裸入口退役进资产菜单（Anki 出口随 #210 迁洞察通道卡），推荐卡渲染 A3 定向复习建议项，
  * 复习卡头部带 A1 可回忆度读数。
  * #183：取数走 useCommand 缝（推荐流是主数据、失败 = 页面失败态；横幅/供给/闸门等
  * 次要数据失败按空处理不翻整页——既有语义），任务轮询走 usePolling（生成状态 +
@@ -34,12 +34,11 @@ import LearnerCardManager from './LearnerCardManager'
 const { Text, Title } = Typography
 
 export default function TodayPage({ frame }: { frame: AppFrame }) {
-  // 推荐流是本页主数据：它失败 = 页面失败态（#158）；xp/复习横幅/Anki/供给/闸门是
+  // 推荐流是本页主数据：它失败 = 页面失败态（#158）；xp/复习横幅/供给/闸门是
   // 次要数据，失败按空处理（Command 不翻转 data、页面按 null 渲染缺省），不让单点故障翻整页
   const rec = useCommand(() => api.recommend(12))
   const xp = useCommand(() => api.xp())
   const reviewQ = useCommand(() => api.reviewQueue())
-  const anki = useCommand(() => api.ankiStatus())
   const [session, setSession] = useState<QueueCard[] | null>(null)
   // Self-Calibration 过信轻提示（ADR-0022 #104）：随会话启动的队列载荷带出
   const [calibrationHint, setCalibrationHint] = useState<string | undefined>(undefined)
@@ -61,10 +60,9 @@ export default function TodayPage({ frame }: { frame: AppFrame }) {
   const { reload: reloadRec } = rec
   const { reload: reloadXp } = xp
   const { reload: reloadReviewQ } = reviewQ
-  const { reload: reloadAnki } = anki
   const reloadAll = useCallback(() =>
-    Promise.all([reloadRec(), reloadXp(), reloadReviewQ(), reloadAnki()]).then(() => undefined),
-  [reloadRec, reloadXp, reloadReviewQ, reloadAnki])
+    Promise.all([reloadRec(), reloadXp(), reloadReviewQ()]).then(() => undefined),
+  [reloadRec, reloadXp, reloadReviewQ])
 
   // 从学习视图返回推荐流：XP/推荐流按最新数据重拉（作答结算发生在学习视图内）
   const prevLessonRef = useRef(frame.lesson)
@@ -167,17 +165,6 @@ export default function TodayPage({ frame }: { frame: AppFrame }) {
     }
   }
 
-  // C2 导出到 Anki（#63/#72）：资产菜单动作（T6 归洞察通道卡，其间在此保持可达）
-  const exportAnki = async () => {
-    try {
-      const r = await api.ankiExport()
-      Message.success(`已推送到 Anki：新增 ${r.added} · 更新 ${r.updated} · 移除 ${r.removed}（到期 ${r.total} 张）`)
-      await reloadAll()
-    } catch (err) {
-      Message.error(errorMessage(err))
-    }
-  }
-
   // C1 笔记源动作（#59/#72）：横幅状态行直达——漂移重新出题 / 缺失重新注册
   const regenerateSource = async (id: string) => {
     try {
@@ -223,7 +210,7 @@ export default function TodayPage({ frame }: { frame: AppFrame }) {
       <div className='today-head'>
         <Title heading={4} style={{ margin: 0 }}>今日</Title>
         <div className='today-head-assets'>
-          <AssetsMenu anki={anki.data} onExportAnki={() => void exportAnki()}
+          <AssetsMenu
             onOpenSources={() => setSourceDrawer({ open: true, focusId: null })}
             onManage={() => setCardMgrOpen(true)} />
         </div>

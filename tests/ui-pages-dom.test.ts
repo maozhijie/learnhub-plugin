@@ -1,8 +1,8 @@
 /**
  * L3 三大页关键交互测试（#188 / #187 决议·Testing Decisions）：TodayPage（#208 前身 LearnPage）/
- * StatsPage / LessonView 各至少一条用户可见交互。只测外部行为：点击后出现什么、
- * 调了哪个端点；不断言内部状态。取数走 fetch 桩（api.ts 全链路真实，网络是假的），
- * 未登记端点 404 → 次要数据按缝级三态显式失败——不翻页正是该缝的承诺。
+ * InsightPage（#210 前身 StatsPage）/ LessonView 各至少一条用户可见交互。只测外部行为：
+ * 点击后出现什么、调了哪个端点；不断言内部状态。取数走 fetch 桩（api.ts 全链路真实，
+ * 网络是假的），未登记端点 404 → 次要数据按缝级三态显式失败——不翻页正是该缝的承诺。
  * 页签表完整性（Exhibit A，#187 曾列为 U2 必测项）由 tests/ui-router.test.ts 的
  * 三表对账门独家执法（#189 落地后 TAB_KEYS 唯一出处 = lib/router.ts，该门直接
  * 消费权威导出且断言面是超集；本文件的初版同门已收敛退役，留两道=双份漂移税）。
@@ -175,32 +175,28 @@ test('今日闸门计数：待审提案实数一致，点击深链提案收件�
   assert.deepEqual(calls.goto, [['courses.proposals']], '深链落提案收件箱')
 })
 
-test('我的资产菜单：导出到 Anki 动作保持可达（C2 裸入口退役后）', async () => {
+test('我的资产菜单：Anki 出口已归洞察通道卡（#210），菜单只剩笔记源/我的卡', async () => {
   const { default: TodayPage } = await importUi('pages/TodayPage/index.tsx')
   routes({
     'GET /recommend': { date: '2026-09-12', events: [] },
     'GET /xp': XP_FIXTURE,
     'GET /review-queue': { total: 0, cards: [], calibration_hint: null, note_drifted: [], note_suspended: [] },
-    'GET /anki/status': { anki: null, due: { total: 4 }, mirror: {} },
     'GET /generate/status': { jobs: [], queuedCount: 0 },
     'GET /proposals': [],
     'GET /learner-queue': { cards: [] },
-    'POST /anki/export': { added: 1, updated: 2, removed: 0, total: 4 },
   })
   const { frame } = spyFrame()
   render(React.createElement(TodayPage, { frame }))
   await click(await screen.findByText('我的资产'))
-  const exportItem = await screen.findByText(/导出到 Anki（4）/)
-  await click(exportItem)
-  await waitFor(() => {
-    assert.ok(stubCalls().some(c => c.method === 'POST' && c.path === '/anki/export'), '导出动作从资产菜单发出')
-  })
+  assert.ok(await screen.findByText(/笔记源管理/), '笔记源入口在资产菜单')
+  assert.ok(screen.getByText(/我的卡管理/), '我的卡入口在资产菜单')
+  assert.equal(screen.queryByText(/导出到 Anki/), null, '今日不再留 Anki 过渡入口（通道卡是唯一出口，#210）')
 })
 
-// ---- StatsPage：XP 账本 + 每日目标保存 ----
+// ---- InsightPage（#210 前身 StatsPage）：XP 账本 + 每日目标保存 + 洞察六件可达 ----
 
-test('StatsPage：今日 XP 上账，保存每日目标 → PUT /daily-goal + 成功轻提示', async () => {
-  const { default: StatsPage } = await importUi('pages/StatsPage/index.tsx')
+test('InsightPage：今日 XP 上账，保存每日目标 → PUT /daily-goal + 成功轻提示', async () => {
+  const { default: StatsPage } = await importUi('pages/InsightPage/index.tsx')
   routes({
     'GET /xp': XP_FIXTURE,
     'PUT /daily-goal': { goal: 30, ok: true },
@@ -329,14 +325,136 @@ test('LessonView：失败横幅「转 AI 修复」（#196 / ADR-0054）——预
   await click(closeBtn as HTMLElement)
 })
 
+// ---- 洞察区成型（#210 / ADR-0058 T6）：六件同住洞察、待确认实验提案直达收件箱 ----
+
+const KATA_FIXTURE = {
+  date: '2026-09-13', week_start: '2026-09-07', week_end: '2026-09-13', path: 'x', created: false,
+  reality: '现状段', sections: {}, answered: false, list: [{ week_start: '2026-09-07', answered: false }],
+}
+
+/** 洞察区六件取数的完整桩表（Kata/记忆健康/校准画像/沙盘/N-of-1/睡眠/Anki 通道/XP）。 */
+const INSIGHT_ROUTES = (extra: Record<string, unknown> = {}) => ({
+  'GET /kata': KATA_FIXTURE,
+  'GET /memory': {
+    date: '2026-09-13', forecast: { horizon_days: 14, overdue: 0, per_day: [] },
+    state: { scheduled: 0, stability: [], difficulty: [], retrievability: [] },
+    retention: { pass: 0, fail: 0, rate: null, real: 0 },
+    calibration: [], forgetting: [], jol: null,
+  },
+  'GET /jol': { enabled: true, rate: 0.1 },
+  'GET /calibration/hints': { hints_enabled: true },
+  'GET /calibration/profile': { sources: [{ source: 'jol', first_ts: null, last_pair_ts: null, calibration: null, overconfidence: { overconfident: false, evidence: null } }], global: { calibration: null, warning: '' } },
+  'GET /coach': { messages: [], due_hard: 0 },
+  'GET /xp': XP_FIXTURE,
+  'GET /experiments': { templates: [], experiments: [], report: null },
+  'GET /sleep': { enabled: true },
+  'GET /anki/status': { anki: null, due: { total: 0, by_deck: [] }, mirror: { entries: 0, decks: [], last_push: null, last_import: null } },
+  'GET /proposals': [],
+  ...extra,
+})
+
+test('洞察区六件同住一页可达：周复盘/记忆健康/校准画像/沙盘/N-of-1 实验/睡眠/Anki 通道/运行环境', async () => {
+  const { default: InsightPage } = await importUi('pages/InsightPage/index.tsx')
+  routes(INSIGHT_ROUTES())
+  const { frame } = spyFrame()
+  render(React.createElement(InsightPage, { frame }))
+  // 六件 + 运行环境（实验室页退役后模型透明的家）：锚词逐件断言，不锁整句
+  assert.ok(await screen.findByText(/周复盘/), 'Kata 周复盘在册')
+  assert.ok(screen.getByText('记忆健康'), '记忆健康在册')
+  assert.ok(screen.getByText('自评校准画像'), '校准画像在册')
+  assert.ok(screen.getByText('沙盘 · 计划推演'), '沙盘在册')
+  assert.ok(screen.getByText(/N-of-1 实验/), 'N-of-1 实验在册')
+  assert.ok(screen.getByText('睡眠耦合排程建议'), '睡眠开关在册')
+  assert.ok(screen.getByText('Anki 通道'), 'Anki 通道卡在册')
+  assert.ok(screen.getByText('运行环境'), '运行环境（模型透明）随区安家')
+  assert.equal(screen.queryByText(/实验室/), null, '实验室页签形态零残留')
+})
+
+test('洞察区·待确认实验提案：卡上可见并直达提案收件箱（「下一实验」→收件箱动线）', async () => {
+  const { default: InsightPage } = await importUi('pages/InsightPage/index.tsx')
+  routes(INSIGHT_ROUTES({
+    'GET /proposals': [{
+      id: 7, kind: 'experiment', course: '全部课程', status: 'pending',
+      summary: '检索点位置与密度（N-of-1 提案）', artifact: 'x', created: '2026-09-13T00:00:00Z',
+    }],
+  }))
+  const { frame, calls } = spyFrame()
+  render(React.createElement(InsightPage, { frame }))
+  assert.ok(await screen.findByText(/待确认/), '待确认提案在洞察区 N-of-1 卡上可见（与收件箱同源 /proposals）')
+  await click(screen.getByText('去提案收件箱确认'))
+  assert.deepEqual(calls.goto, [['courses.proposals']], '直达收件箱——人审动作只在收件箱')
+})
+
+test('周复盘「下一实验」：转出提案后留回执并直达提案收件箱（#210 动线第一跳）', async () => {
+  const { default: InsightPage } = await importUi('pages/InsightPage/index.tsx')
+  // 提案列表桩体随转换换新（响应对象要换引用：同一数组原地改会被 React 的
+  // 同引用早退挡在重渲染之外，那是夹具假象不是产品行为）——转出后 N-of-1 卡的
+  // 「待确认」入口应即时现身（同页刷新，不必等切页签）
+  const experimentsRoute = {
+    templates: [{ id: 'retrieval', title: '检索点位置与密度', question: '检索点放哪更划算？', description: '说明', unlocked: true }],
+    experiments: [], report: null,
+  }
+  routes(INSIGHT_ROUTES({
+    'GET /experiments': experimentsRoute,
+    'POST /kata/convert/experiment': { proposal: 7, title: '检索点位置与密度', week_start: '2026-09-07' },
+    'GET /proposals': [],
+  }))
+  const { frame, calls } = spyFrame()
+  render(React.createElement(InsightPage, { frame }))
+  const next = await screen.findByPlaceholderText('下周试一个小改变')
+  await act(async () => { fireEvent.change(next, { target: { value: '把检索点挪到节首试试' } }) })
+  await click(screen.getByText('转 N-of-1 提案'))
+  assert.ok(await screen.findByText(/到提案收件箱确认后才开跑/), '弹窗指路收件箱（不再指实验室页）')
+  // Arco Select：点开下拉再选模板（模板解锁态才可选；弹窗里的那个 select，不是卡片头的选周）
+  await act(async () => { fireEvent.click(document.querySelector('.arco-modal .arco-select-view') as Element) })
+  // 模板名在「N-of-1 卡模板表」与「弹窗下拉项」都出现：按弹窗内选项定位（.arco-select-option）
+  const option = await (async () => {
+    for (let i = 0; i < 20 && !document.querySelector('.arco-modal .arco-select-option'); i++) {
+      await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    }
+    return document.querySelector('.arco-modal .arco-select-option') as HTMLElement | null
+  })()
+  assert.ok(option, '模板下拉打开')
+  await click(option!)
+  await click(document.querySelector('.arco-modal button.arco-btn-primary') as HTMLElement)
+  await waitFor(() => {
+    const c = stubCalls().find(x => x.method === 'POST' && x.path === '/kata/convert/experiment')
+    assert.ok(c, '转实验提案走 /kata/convert/experiment')
+    assert.deepEqual(c.body, { week_start: '2026-09-07', template: 'retrieval' }, '周与模板照传')
+  })
+  assert.ok(await screen.findByText(/确认开跑在提案收件箱/), '周复盘卡留常驻回执（含提案号）')
+  // 同页 N-of-1 卡：待确认入口随提案落地现身（两条直达收件箱的入口：回执 + N-of-1 卡）
+  routes(INSIGHT_ROUTES({
+    'GET /experiments': experimentsRoute,
+    'POST /kata/convert/experiment': { proposal: 7, title: '检索点位置与密度', week_start: '2026-09-07' },
+    'GET /proposals': [{
+      id: 7, kind: 'experiment', course: '全部课程', status: 'pending',
+      summary: '检索点位置与密度（N-of-1 提案）', artifact: 'x', created: '2026-09-13T00:00:00Z',
+    }],
+  }))
+  await act(async () => {
+    window.dispatchEvent(new Event('learnhub:reload'))
+    await new Promise(r => setTimeout(r, 50))
+  })
+  await waitFor(() => {
+    assert.ok(screen.getAllByText('去提案收件箱确认').length >= 2,
+      `提案落地后同页两条待确认入口都在（实得 ${screen.getAllByText('去提案收件箱确认').length} 条）`)
+  })
+  const entries = screen.getAllByText('去提案收件箱确认')
+  await click(entries[entries.length - 1]!)
+  assert.deepEqual(calls.goto, [['courses.proposals']], '确认动作落在提案收件箱（人审唯一处）')
+})
+
 // ---- 文案语义锁（#207 / ADR-0058 门册判据修订）：正断言 canonical 词条词 +
 // Avoid 词反断言，词表唯一出处 = CONTEXT.md（判据与自检见 tests/copy-lock.test.ts
 // 与门册「L3 文案语义锁」段）。三条样例常驻：沙盘非承诺 / 掌握度语境 / 休眠题列名。 ----
 
 test('文案语义锁·沙盘：非承诺措辞必现，Avoid 词（预测沙盘/可行性判定）不得出现', async () => {
-  const { default: LabPage } = await importUi('pages/LabPage.tsx')
+  // #210：沙盘随实验室页退役进洞察区——锁的作用域随页面搬家，判据不变
+  const { default: InsightPage } = await importUi('pages/InsightPage/index.tsx')
+  routes(INSIGHT_ROUTES())
   const { frame } = spyFrame()
-  render(React.createElement(LabPage, { frame }))
+  render(React.createElement(InsightPage, { frame }))
   await act(async () => { await new Promise(r => setTimeout(r, 20)) })
   lockCopy(document.body.textContent ?? '', { canonical: ['沙盘', '非承诺'], glossary: '沙盘（Sandbox）' })
 })
@@ -356,7 +474,7 @@ test('文案语义锁·掌握度语境：呈现区不得出现 Avoid 词（熟�
 })
 
 test('文案语义锁·休眠题：列名「未调度」词条明文许可，Avoid 词（死题/未调度题）不得出现', async () => {
-  const { default: BankPage } = await importUi('pages/BankPage.tsx')
+  const { default: BankColumn } = await importUi('pages/WorkbenchPage/BankColumn.tsx')
   routes({
     'GET /questions-all': { total: 2, questions: [
       { course: '数学', node: '入门', qid: 'q1', kind: 'true_false', q: '1+1=?', due: null },
@@ -365,7 +483,7 @@ test('文案语义锁·休眠题：列名「未调度」词条明文许可，Avo
     'GET /difficulty-advice': { nodes: [], date: '2026-09-13', dismissed: 0 },
   })
   const { frame } = spyFrame()
-  render(React.createElement(BankPage, { frame }))
+  render(React.createElement(BankColumn, { frame, course: '数学' }))
   assert.ok(await screen.findByText('未调度'), '休眠题的到期列名「未调度」渲染（词条明文许可）')
   lockCopy(document.body.textContent ?? '', { canonical: ['休眠题'], glossary: '休眠题（Dormant Question）' })
 })

@@ -6,8 +6,8 @@ import { errorMessage } from './hooks/useCommand'
 import { HelpDrawer } from './components/HelpDrawer'
 import { ShellTopBar } from './components/ShellTopBar'
 import { ZoneBody } from './components/ZoneBody'
-import { DEFAULT_COURSE_SUB, navigate, onRouteChange, parseHash, readHash, routeOfView, syncHash, viewOfRoute, zoneOfView } from './lib/router'
-import type { CourseSub, ViewKey, ZoneKey } from './lib/router'
+import { DEFAULT_COURSE_SUB, navigate, navigateCourse, onRouteChange, parseHash, readHash, routeOfView, syncHash, viewOfRoute, zoneOfView } from './lib/router'
+import type { CourseSub, ViewKey, WorkbenchSub, ZoneKey } from './lib/router' 
 import type { StatusWithLlm, TreeDoc } from './types'
 import { useCoachToasts } from './useCoachToasts'
 
@@ -25,20 +25,24 @@ export interface AppFrame {
   /** 生成视图定位目标（任务注册表 key）：教练台在途任务条点击后的落点（#155）。 */
   setCourse: (c: string) => void
   goto: (view: ViewKey) => void
+  /** 进单课工作台（#209 参数段路由）：写 `#/course/<id>/<wb>` 并预置当前课程。 */
+  openCourse: (course: string, wb?: WorkbenchSub) => void
   openLesson: (course: string, node: string) => void
   closeLesson: () => void
-  /** 跳到课程区学习图并高亮定位某节点。 */
+  /** 跳到单课工作台的学习图分栏并高亮定位某节点。 */
   locateInGraph: (node: string) => void
-  /** 跳到生成队列并定位某任务（教练台在途任务条点击）。 */
+  /** 跳到生成队列（全局面）并定位某任务（教练台在途任务条点击）。 */
   locateJob: (jobKey: string) => void
   reload: () => Promise<void>
   loading: boolean
 }
 
 /** 空课程守卫只拦「纯消费」视图：提案/生成是建课回路的一半（种子起草 → 生成看
- * 进度 → 提案人审 → 才有课程），学习图/实践/项目/今日自带空态入口，一律放行
- * ——否则死锁：建课要靠提案页人审，提案页却被「没有课程」拦住。 */
-const NO_COURSE_BLOCKED: ViewKey[] = ['courses.bank', 'insight']
+ * 进度 → 提案人审 → 才有课程），我的课程自带建课入口（教练台空课形态）、实践/
+ * 项目/今日自带空态入口，一律放行——否则死锁：建课要靠提案页人审，提案页却被
+ * 「没有课程」拦住。 */
+const NO_COURSE_BLOCKED: ViewKey[] = ['insight']
+
 
 export default function App() {
   // 路由状态（#189 / ADR-0052；#205 / ADR-0058 两级化）：location.hash 是导航权威，
@@ -81,17 +85,32 @@ export default function App() {
   useEffect(() => { lastViewByZone.current[zoneOfView(view)] = view }, [view])
   const go = useCallback((v: ViewKey) => { setView(v); navigate(v) }, [])
   const goZone = useCallback((z: ZoneKey) => {
-    go(lastViewByZone.current[z] ?? (z === 'courses' ? 'courses.graph' : z))
+    go(lastViewByZone.current[z] ?? (z === 'courses' ? 'courses.home' : z))
   }, [go])
   const goCourseSub = useCallback((s: CourseSub) => { go(`courses.${s}` as ViewKey) }, [go])
+  // 单课工作台（#209）：完整参数段路由——分栏切换也写 hash（前进后退在分栏间穿梭）
+  const openCourse = useCallback((c: string, wb: WorkbenchSub = 'graph') => {
+    setCourse(c)
+    setView('courses.course')
+    navigateCourse(c, wb)
+  }, [])
 
   // 教练通知（ADR-0038）：图域任务生命周期 + 复诊结算的 App 级轻轮询弹条（10s/60s）；
   // 完成通知按钮按任务性质分流（提案产物→提案收件箱，过程→生成队列）。早退分支之前调用（hooks 顺序恒定）。
   useCoachToasts({ generate: () => go('courses.queue'), proposals: () => go('courses.proposals') })
 
   // 外部导航（前进/后退/手改 hash/旧键深链）→ 路由事件回灌渲染态；同步把漂移的 hash
-  // 规范化（回落默认视图时 URL 不留非法形——setView 同值被 React 跳过也不影响规范化）
-  useEffect(() => onRouteChange(v => { setView(v); syncHash(v) }), [])
+  // 规范化（回落默认视图时 URL 不留非法形——setView 同值被 React 跳过也不影响规范化）。
+  // 工作台参数段（courseId）随 hash 回灌——深链 `#/course/<id>/<wb>` 刷新直达。
+  const [courseId, setCourseId] = useState<string | null>(() => {
+    const r = parseHash(readHash())
+    return r.zone === 'courses' ? r.courseId : null
+  })
+  useEffect(() => onRouteChange(v => {
+    setView(v); syncHash(v)
+    const r = parseHash(readHash())
+    setCourseId(r.zone === 'courses' ? r.courseId : null)
+  }), [])
   // 渲染态 → URL 规范化：初始空 hash、手改非法 hash 收敛规范形（replaceState 无历史条目）
   useEffect(() => { syncHash(view) }, [view])
   // 视图保活（ADR-0027）：路由变化桥接给各页轮询——隐藏视图据此跳过取数（桥接取舍见 active-tab.ts）
@@ -124,9 +143,14 @@ export default function App() {
     status, tree, course, lesson, focusNode, focusJob,
     setCourse: c => setCourse(c),
     goto: go,
-    openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); go('today') },
+    openCourse,
+    openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); setCourse(lcourse); go('today') },
     closeLesson: () => setLesson(null),
-    locateInGraph: node => { setFocusNode(node); go('courses.graph') },
+    locateInGraph: node => {
+      setFocusNode(node)
+      const c = course ?? tree?.courses[0]?.name
+      if (c) openCourse(c, 'graph')
+    },
     locateJob: key => { setFocusJob(key); go('courses.queue') },
     reload,
     loading,
@@ -140,14 +164,14 @@ export default function App() {
         onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
         onOpenHelp={() => setHelpOpen(true)} />
       <HelpDrawer visible={helpOpen} onClose={() => setHelpOpen(false)} />
-      <div className={`app-body${view === 'courses.graph' ? ' no-pad' : ''}`}>
+      <div className={`app-body${view === 'courses.course' ? ' no-pad' : ''}`}>
         {NO_COURSE_BLOCKED.includes(view) && noCourse ? (
           <div className='app-empty-hint'>
-            <Empty description='还没有课程：到「课程」区学习图的教练台新建课程——种子起草后在「提案」入口人审开工，等待时可在「生成」入口看进度' />
-            <Button type='primary' onClick={() => go('courses.graph')}>去课程区建课</Button>
+            <Empty description='还没有课程：到「课程」区「我的课程」的教练台新建课程——种子起草后在「提案收件箱」人审开工，等待时可在「生成队列」看进度' />
+            <Button type='primary' onClick={() => go('courses.home')}>去课程区建课</Button>
           </div>
         ) : (
-          <ZoneBody view={view} frame={frame} />
+          <ZoneBody view={view} courseId={courseId} frame={frame} />
         )}
       </div>
     </div>
