@@ -58,6 +58,8 @@ import type { CleanupReason } from './bank-cleanup.ts'
 import { ERROR_CARD_BATCH_MAX, mineErrorPatterns, validateErrorCards } from './error-cards.ts'
 import type { ErrorCard } from './error-cards.ts'
 import { bankStemList, existingStemsPromptBlock } from './question-dedup.ts'
+import { questionDiversityReportOf } from './question-diversity.ts'
+import type { DiversityQuestion, QuestionDiversityReport } from './question-diversity.ts'
 import { questionViolation, repairQuestionStrings } from './question-hygiene.ts'
 import { runSecondOpinion, mergeSecondOpinionReports, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
 import type { SecondOpinionReport } from './question-audit.ts'
@@ -1172,6 +1174,8 @@ export class BankSubsystem {
     enc: EncEdge[]
     /** 第二意见门报告（#223；门未开 = 缺席）。 */
     secondOpinion?: SecondOpinionReport
+    /** 多样性三指标（#230 / ADR-0064）：批内 = 本批入库题、题库累计 = 入库后全库非归档题。 */
+    diversity: QuestionDiversityReport
   }> {
     if (count !== undefined && (!Number.isInteger(count) || count <= 0)) {
       throw new Error(`[quiz] count 必须是正整数（收到 ${String(count)}）；省略才使用默认。`)
@@ -1241,6 +1245,8 @@ export class BankSubsystem {
     let escapesRepaired = 0
     const duplicates: Array<{ q: string; against: string }> = []
     const rejected: Array<{ q: string; reason: string }> = []
+    // 多样性仪表（#230）：只累计本批入库题——被查重/门禁丢掉的题不构成学习面
+    const accepted: DiversityQuestion[] = []
     // 第二意见门（#223）：抽样独立解题对账先行——不一致题恰一次回灌修复、仍败弃题
     // （弃题并入 rejected 报告面）；修复题原位替换后再走既有逐题门。
     let pending = doc.questions.slice(0, requested)
@@ -1306,6 +1312,7 @@ export class BankSubsystem {
         duplicates.push({ q: stem.slice(0, 80), against: verdict.against.slice(0, 80) })
       } else if (verdict.verdict === 'added') {
         added++
+        accepted.push({ kind: typeof q.kind === 'string' ? q.kind : undefined, q: stem, options: q.options })
       } else {
         skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
       }
@@ -1318,6 +1325,7 @@ export class BankSubsystem {
     return {
       course: c.name, node, added, skipped, total: bank.questions.length, duplicates, rejected, escapesRepaired,
       enc: Content.invokesProjection(graph, node, bank.questions),
+      diversity: questionDiversityReportOf(accepted, bank.questions.filter(q => !q.archived)),
       ...(auditReport ? { secondOpinion: auditReport } : {}),
     }
   }
@@ -1337,7 +1345,7 @@ export class BankSubsystem {
       isCancelled?: () => boolean
       secondOpinion?: { rate?: number }
     },
-  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[]; secondOpinion?: SecondOpinionReport }> {
+  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[]; secondOpinion?: SecondOpinionReport; diversity: QuestionDiversityReport }> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -1379,6 +1387,8 @@ export class BankSubsystem {
     let duplicates = 0
     let escapesRepaired = 0
     let auditReport: SecondOpinionReport | undefined
+    // 多样性仪表（#230）：只累计本批入库题（与 questionGenerate 同口径）
+    const accepted: DiversityQuestion[] = []
     for (const [si, s] of manifest.entries()) {
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
@@ -1426,13 +1436,17 @@ export class BankSubsystem {
         if (conceptScope.length && !invokesTagged(q)) continue
         const verdict = await this.e.admitQuestion(this.e.paths.courseRoot(c.root), node, q, stem, existingStems)
         if (verdict.verdict === 'duplicate') duplicates++
-        else if (verdict.verdict === 'added') added++ // 单题非法（invalid）不毁整批
+        else if (verdict.verdict === 'added') {
+          added++ // 单题非法（invalid）不毁整批
+          accepted.push({ kind: typeof q.kind === 'string' ? q.kind : undefined, q: stem, options: q.options })
+        }
       }
     }
     const bank = await this.e.bank.load(this.e.paths.courseRoot(c.root), node)
     return {
       course: c.name, node, added, sections, duplicates, escapesRepaired,
       enc: Content.invokesProjection(graph, node, bank.questions),
+      diversity: questionDiversityReportOf(accepted, bank.questions.filter(q => !q.archived)),
       ...(auditReport ? { secondOpinion: auditReport } : {}),
     }
   }

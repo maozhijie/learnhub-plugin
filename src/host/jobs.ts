@@ -6,7 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Content, TIER_LABELS, genericQuizTarget, hasReadyContent, readAnchor, tierIdxOf } from '../engine/index.ts'
-import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort } from '../engine/index.ts'
+import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, QuestionDiversityReport } from '../engine/index.ts'
 import {
   contentFailureStatus,
   genJobRetentionRemainingMs,
@@ -81,6 +81,19 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
 function auditNoteOf(r: { secondOpinion?: { sampled: number; discarded: number; repaired: number } }): string {
   const a = r.secondOpinion
   return a && a.sampled > 0 ? `；第二意见抽样 ${a.sampled}（拦 ${a.discarded} 修 ${a.repaired}）` : ''
+}
+
+/** 出题多样性注记（#230 / ADR-0064）：三指标 + 各自的样本量。
+ * 数字取「题库累计」范围（含本批）——批内读数在批小时退化（1 道题报不出 self-BLEU），
+ * 题库读数是同轴可比的那一份；每项带样本量，避免把 2 道题算出来的 0.4 读成 30 道题的值。
+ * 指标缺席（无测量对象）如实写「无样本」，不用 0 冒充（0 是「测到了、确实趋同」）。 */
+function diversityNoteOf(r: { diversity?: QuestionDiversityReport }): string {
+  const d = r.diversity?.bank
+  if (!d || !d.sample) return ''
+  const bits = (v: number | undefined, sample: number, digits: number) =>
+    v === undefined ? '无样本' : `${v.toFixed(digits)}（n=${sample}）`
+  return `；多样性 熵 ${bits(d.entropy.value, d.entropy.sample, 2)} / 干扰项距离 `
+    + `${bits(d.distractor?.value, d.distractor?.sample ?? 0, 1)} / self-BLEU ${bits(d.selfBleu?.value, d.selfBleu?.sample ?? 0, 2)}`
 }
 
 /** 前节尾部窗口（#227）：相邻前节末尾约 300 字，截窗对齐行首（残半行不入窗）。
@@ -752,7 +765,7 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
     const dupNote = r.duplicates.length ? `；判重丢弃 ${r.duplicates.length} 道` : ''
     const rejNote = r.rejected.length ? `；无法归节拒收 ${r.rejected.length} 道` : ''
     job.status = 'done'
-    job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}${auditNoteOf(r)}`
+    job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}${auditNoteOf(r)}${diversityNoteOf(r)}`
   } catch (err) {
     const corpusRef = failCorpus(rt, STATIONS.quiz, err)  // generateQuiz 内已补标，此处取 ref 进失败详情
     job.status = contentFailureStatus(job.status)
@@ -944,6 +957,8 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
     job.status = outcome.status
     job.message = outcome.message
       + (auditNoteOf(per) + auditNoteOf(quiz) || '')
+      // 多样性读数取综合出题那一次（题库累计含逐节批，两路共用一个题库）
+      + diversityNoteOf(quiz)
   } catch (quizErr) {
     const outcome = quizFailureOutcome(contentMsg, quizErr)
     job.status = outcome.status

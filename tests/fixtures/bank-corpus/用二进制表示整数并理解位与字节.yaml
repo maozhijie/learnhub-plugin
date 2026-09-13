@@ -1,0 +1,420 @@
+node: 用二进制表示整数并理解位与字节
+questions:
+  - kind: single_choice
+    q: 关于十进制与二进制的位权表示，下列说法正确的是（　）
+    options:
+      - 十进制与二进制都遵循“位权相加”的原理，只是位权的底数不同
+      - 二进制数 1101₂ 的值等于 1 + 1 + 0 + 1 = 3
+      - 二进制中允许出现数字 2，因为二进制也是逢十进一
+      - 4 个比特一共可以表示 2 × 4 = 8 种不同状态
+    answer: A
+    explanation: 位权原理指每一位的数字乘以该位对应的基数幂再求和。十进制位权是 10 的幂，二进制位权是 2 的幂，因此 A 正确。1101₂ 应按位权展开为 1×2³ + 1×2² + 0×2¹ + 1×2⁰ = 8+4+0+1
+      = 13，不是 3。二进制只有数字 0 和 1，逢二进一，没有数字 2。n 个比特能表示 2ⁿ 种状态，4 个比特应表示 2⁴ = 16 种状态。
+    difficulty: 1
+    section: s1
+    uses:
+      - 位权
+      - 二进制
+      - 十进制
+      - 比特
+    id: q1
+    fsrs:
+      reps: 2
+      lapses: 0
+      stability: 10.97
+      difficulty: 2.11
+      due: 2026-09-20
+      last_review: 2026-09-09
+    stats:
+      attempts: 4
+      correct: 4
+      last: 2026-09-09
+  - kind: single_choice
+    q: 用“除以 2、倒序读余数”的方法把十进制数 13 转换成二进制，正确结果是？
+    options:
+      - "1011"
+      - "1101"
+      - "1110"
+      - "1010"
+    answer: B
+    explanation: |
+      13 ÷ 2 = 6 余 1
+      6 ÷ 2 = 3 余 0
+      3 ÷ 2 = 1 余 1
+      1 ÷ 2 = 0 余 1
+      把余数从下往上倒序读出：1101。因此 13 的二进制表示是 1101。
+    difficulty: 1
+    section: s2
+    uses:
+      - 除2取余
+      - 倒序读余数
+    id: q2
+    fsrs:
+      reps: 2
+      lapses: 0
+      stability: 7.32
+      difficulty: 2.11
+      due: 2026-09-16
+      last_review: 2026-09-09
+    stats:
+      attempts: 4
+      correct: 4
+      last: 2026-09-09
+  - kind: single_choice
+    q: 在计算机中，1 字节（byte）由多少个二进制位（bit）组成？
+    options:
+      - 1 个
+      - 2 个
+      - 8 个
+      - 16 个
+    answer: C
+    explanation: 字节是计算机硬件中常见的组合单位，1 字节固定由 8 个二进制位组成。1 个二进制位只能表示 0 或 1 两种状态，而 8 个位组合起来共有 \(2^8=256\) 种模式，因此一个字节可以表示 0 到 255
+      的整数或一个英文字母的编码。
+    difficulty: 1
+    section: s3
+    uses:
+      - 位
+      - 字节
+    id: q3
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 3
+      correct: 3
+      last: 2026-09-09
+  - kind: multi_choice
+    q: 关于二进制数 $1101_2$，下列说法正确的有哪些？
+    options:
+      - 按位权展开为 $1\times2^3+1\times2^2+0\times2^1+1\times2^0$
+      - 如果把它当作十进制数，它表示一千一百零一
+      - 它的二进制表示是合法的，因为每一位只出现了 0 和 1
+      - 它对应的十进制数值是 13
+    answer:
+      - A
+      - C
+      - D
+    explanation: $1101_2$ 的下标 2
+      表示这是二进制数，不能按十进制读作“一千一百零一”。按位权展开：$1\times2^3+1\times2^2+0\times2^1+1\times2^0=8+4+0+1=13$。二进制中每一位只能是 0 或 1，所以选项 C
+      正确；选项 B 把二进制误当成了十进制数。
+    difficulty: 1
+    section: 通用
+    uses:
+      - 位权
+      - 二进制
+    id: q4
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 2
+      correct: 1
+      last: 2026-09-09
+  - kind: fill_in_blank
+    q: 用“不断除以 2、倒着读余数”的方法，把十进制 43 转换成二进制，结果是 ______。（只填写二进制数字本身）
+    answer:
+      - "101011"
+      - 101011₂
+      - 101011_2
+    explanation: 43 连续除以 2，得到余数依次为 1、1、0、1、0、1；余数倒序为 1、0、1、0、1、1，所以是
+      $101011_2$。验证：$1\times32+0\times16+1\times8+0\times4+1\times2+1\times1=43$。
+    difficulty: 2
+    section: 通用
+    uses:
+      - 除以2倒序读余数
+      - 位权
+    id: q5
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 2
+      correct: 1
+      last: 2026-09-09
+  - kind: single_choice
+    q: 二进制数 1101₂ 中，最左边（最高位）的 1 所对应的数值是多少？
+    options:
+      - "1"
+      - "2"
+      - "4"
+      - "8"
+    answer: D
+    explanation: 从右往左看，各位位权依次是 2⁰=1、2¹=2、2²=4、2³=8。最左边的 1 位于 2³ 位，因此它表示 8，而不是直接当作十进制中的“1”。
+    difficulty: 1
+    section: 概念：十进制与二进制的位权表示
+    uses:
+      - 位权
+      - 二进制
+    id: q6
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+  - kind: numeric
+    q: 将二进制数 10110₂ 按位权展开并转换成十进制，结果是多少？
+    answer: 22
+    tol: 0.01
+    explanation: 10110₂ = 1×16 + 0×8 + 1×4 + 1×2 + 0×1 = 16 + 4 + 2 = 22。
+    difficulty: 1
+    section: 概念：十进制与二进制的位权表示
+    uses:
+      - 位权展开
+      - 二进制转十进制
+    id: q7
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+  - kind: true_false
+    q: 4 个比特共有 2⁴ = 16 种组合，因此可以表示的整数范围是 0 到 16。
+    answer: true
+    explanation: 0到16，0算一个，1+16=17个数
+    difficulty: 2
+    section: 概念：位、字节与计算机中的整数存储
+    uses:
+      - 比特
+      - 组合数
+      - 整数范围
+    id: q8
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 0.21
+      difficulty: 6.41
+      due: 2026-09-10
+      last_review: 2026-09-09
+    stats:
+      attempts: 2
+      correct: 1
+      last: 2026-09-09
+  - kind: multi_choice
+    q: 关于比特和字节，下列说法正确的有（　）。
+    options:
+      - 一个字节由 8 个比特组成
+      - 一个字节能表示 256 种不同的状态
+      - 一个字节能容纳 0 到 255 的整数
+      - 位（bit）和字节（byte）是同一个概念，只是叫法不同
+    answer:
+      - A
+      - B
+      - C
+    explanation: A 正确，字节的定义就是 8 个比特；B 正确，8 个比特有 2⁸ = 256 种组合；C 正确，若表示非负整数，正好对应 0 到 255；D 错误，bit 是二进制位，byte 由 8 个 bit 组成，二者不是同一概念。
+    difficulty: 1
+    section: 概念：位、字节与计算机中的整数存储
+    uses:
+      - 位
+      - 字节
+      - 整数范围
+    id: q9
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+  - kind: fill_in_blank
+    q: 用“除以 2、倒序读余数”的方法，将十进制数 26 转换为二进制，结果是（只填二进制数字串，不写下标）：____₂
+    answer:
+      - "11010"
+    explanation: 26÷2=13 余 0，13÷2=6 余 1，6÷2=3 余 0，3÷2=1 余 1，1÷2=0 余 1；从下往上读余数得 11010。验证：16+8+2=26。
+    difficulty: 2
+    section: 演示：将十进制整数转换为二进制
+    uses:
+      - 十进制转二进制
+      - 除2取余
+    id: q10
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 2
+      correct: 2
+      last: 2026-09-09
+  - kind: open_question
+    q: 结合位权、二进制与比特/字节的知识解释：为什么计算机中的整数类型存在表示范围？为什么 8 个比特恰好能表示 0 到 255 的整数，而不是“0 到 256”？
+    answer: |-
+      参考要点：
+      1. 计算机用比特的两种物理状态表示 0 和 1，整数最终按二进制位权展开；
+      2. 存储整数的比特位数是有限的，因此只能产生有限的组合模式；
+      3. n 个比特共有 2ⁿ 种模式；若只表示非负整数，可表示的范围是 0 到 2ⁿ−1；
+      4. 1 字节 = 8 个比特，所以共有 2⁸ = 256 种状态，对应十进制整数 0, 1, 2, …, 255 共 256 个；0 到 256 实际上是 257 个数，因此超出 1 字节的表示范围。
+    difficulty: 2
+    section: 通用
+    uses:
+      - 位权
+      - 比特
+      - 字节
+      - 整数范围
+    id: q11
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+  - kind: single_choice
+    q: 按位权展开时，二进制数 $1101_2$ 各位的位权从左到右依次是什么？
+    options:
+      - 8、4、2、1
+      - 1、2、4、8
+      - 16、8、4、2
+      - 2、4、8、16
+    answer: A
+    explanation: 从右往左看，位权依次是 $2^0=1$、$2^1=2$、$2^2=4$、$2^3=8$，所以从左到右是 8、4、2、1。选项 B 是反序；选项 C 把最高位位权错当成 16；选项 D 既反序又错位。
+    difficulty: 1
+    section: 概念：十进制与二进制的位权表示
+    uses:
+      - 位权
+      - 二进制
+      - 十进制
+    id: q12
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+  - kind: true_false
+    q: 判断：像 $1102_2$ 这样的写法不是合法的二进制数。
+    answer: 对
+    explanation: 二进制逢二进一，每一位只能出现 0 或 1；出现数字 2 说明该位没有正确进位，因此 $1102_2$ 不是合法的二进制表示。
+    difficulty: 1
+    section: 概念：十进制与二进制的位权表示
+    uses:
+      - 二进制
+    id: q13
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+  - kind: ordering
+    q: 把下列“除 2 取余”的步骤按正确执行顺序排列。
+    options:
+      - 若商不为 0，则继续除以 2
+      - 记录当前数除以 2 的余数
+      - 把当前数更新为刚才得到的商
+      - 除到商为 0 后，把余数从下往上读出
+    answer:
+      - 记录当前数除以 2 的余数
+      - 把当前数更新为刚才得到的商
+      - 若商不为 0，则继续除以 2
+      - 除到商为 0 后，把余数从下往上读出
+    explanation: 转换时先记录余数，再用商替换当前数；只要商不为 0 就继续除；商为 0 时停止，并把记下的余数从下往上倒序读出，例如 13 转为二进制得到 1101。
+    difficulty: 2
+    section: 演示：将十进制整数转换为二进制
+    uses:
+      - 十进制
+      - 二进制
+      - 除 2 取余
+    id: q14
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+  - kind: numeric
+    q: 一个字节的二进制数 $10110110_2$ 对应的十进制数值是多少？
+    answer: 182
+    tol: 0.01
+    explanation: 按位权展开：$1\times128+0\times64+1\times32+1\times16+0\times8+1\times4+1\times2+0\times1=128+32+16+4+2=182$。
+    difficulty: 2
+    section: 概念：位、字节与计算机中的整数存储
+    uses:
+      - 二进制
+      - 位权
+      - 字节
+    id: q15
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+  - kind: multi_choice
+    q: 下列关于位、字节和二进制整数的说法，正确的有？
+    options:
+      - 一个字节由 8 个比特组成，能表示 $2^8=256$ 种不同的状态。
+      - 8 个比特能表示 0 到 255 之间的每个整数，但不能表示 256。
+      - 比特是二进制位的最小单位，其取值只有 0 和 1。
+      - 网络速率中的 1 Mbps 与文件大小中的 1 MB 是同一个单位。
+    answer:
+      - A
+      - B
+      - C
+    explanation: 1 字节 = 8 位，8 位共有 $2^8=256$ 种状态，正好对应非负整数 0 到 255，因此不能表示 256。比特只有 0、1 两种取值，是信息的最小单位。D 错：Mbps 中的 b 是
+      bit（比特），MB 中的 B 是 byte（字节），两者相差 8 倍，不是同一个单位。
+    difficulty: 2
+    section: 概念：位、字节与计算机中的整数存储
+    uses:
+      - 比特
+      - 字节
+      - 二进制位数范围
+    id: q16
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+  - kind: fill_in_blank
+    q: 把十进制数 $27$ 转换为二进制，结果是 ____（填二进制字符串）。
+    answer:
+      - "11011"
+      - 11011₂
+      - (11011)_2
+    explanation: 用“除以 2、倒序读余数”：$27\div2=13$ 余 1，$13\div2=6$ 余 1，$6\div2=3$ 余 0，$3\div2=1$ 余 1，$1\div2=0$ 余 1；倒序读出为
+      $11011_2$。也可验证 $16+8+2+1=27$。
+    difficulty: 2
+    section: 演示：将十进制整数转换为二进制
+    uses:
+      - 十进制
+      - 二进制
+      - 除 2 取余
+    id: q17
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
