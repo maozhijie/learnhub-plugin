@@ -1,0 +1,111 @@
+node: 判断命题真假并用与或非组合命题
+questions:
+  - kind: single_choice
+    q: 下列哪句话是命题？
+    options:
+      - 今天天气真好！
+      - 火星上有生命吗？
+      - 火星上有生命。
+      - 请打开窗户。
+    answer: C
+    explanation: 命题是“能判定真假的陈述句”。C 是陈述句，虽然目前没人知道火星上是否有生命，但它的真假客观存在且唯一，所以仍是命题。A 是感叹句，B 是疑问句，D 是祈使句，它们都不是能判定真假的陈述句，因此都不是命题。
+    difficulty: 1
+    section: s1
+    uses:
+      - 命题
+      - 真假判定
+    id: q1
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+  - kind: single_choice
+    q: 在逻辑学中，设命题 P：“周六下雨”，Q：“周日下雨”。若已知 P 为真、Q 也为真，那么复合命题“P 或 Q”（即 $P \lor Q$）的真值是什么？
+    options:
+      - 真，因为逻辑中的“或”只要求至少一个命题为真
+      - 假，因为“或”表示必须在两者中选一个
+      - 真，因为“或”和“且”在这里意思相同
+      - 无法确定，因为还要知道 $\lnot P$ 和 $\lnot Q$
+    answer: A
+    explanation: 逻辑中的“或”是兼或，$P \lor Q$ 在 P、Q 至少一个为真时为真；现在 P 和 Q 都为真，自然满足“至少一个为真”，所以结果为真。B 错在把日常“二选一”的排他或强加给逻辑或；C
+      错在“或”与“且”并非意思相同，只是本题中两者恰好都为真；D 错在 P、Q 已知为真时，$P \lor Q$ 的真值已经被唯一确定为真，不需要再考虑否定。
+    difficulty: 1
+    section: s2
+    uses:
+      - 命题
+      - 真值
+      - 逻辑联结词
+    id: q2
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+  - kind: single_choice
+    q: 下列句子中，属于命题的是（ ）
+    options:
+      - 今天真热啊！
+      - 请把门关上。
+      - 火星上有生命。
+      - 明天会下雨吗？
+    answer: C
+    explanation: 命题是能判定真假的陈述句。感叹句“今天真热啊！”、祈使句“请把门关上。”、疑问句“明天会下雨吗？”都不能判断真假，因此不是命题；火星上有生命虽目前真假未知，但客观上非真即假，因此是命题。
+    difficulty: 1
+    section: 通用
+    uses:
+      - 命题的判定标准
+      - 真假未知不等于不是命题
+    id: q3
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09
+  - kind: multi_choice
+    q: 已知命题 $p$ 为真，$q$ 为假，则下列复合命题中为真的有（ ）
+    options:
+      - $\lnot p \lor q$
+      - $p \land \lnot q$
+      - $\lnot(p \land q)$
+      - $p \lor q$
+    answer:
+      - B
+      - C
+      - D
+    explanation: 先算否定与括号：$\lnot p$ 为假，$\lnot q$ 为真。A：假∨假=假；B：真∧真=真；C：$\lnot(真∧假)=\lnot 假=真$；D：真∨假=真。故 B、C、D 为真。
+    difficulty: 2
+    section: 通用
+    uses:
+      - 与或非联结词
+      - 联结词的优先级
+    id: q4
+    fsrs:
+      reps: 1
+      lapses: 0
+      stability: 2.31
+      difficulty: 2.12
+      due: 2026-09-12
+      last_review: 2026-09-09
+    stats:
+      attempts: 1
+      correct: 1
+      last: 2026-09-09

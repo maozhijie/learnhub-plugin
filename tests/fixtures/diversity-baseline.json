@@ -1,0 +1,155 @@
+{
+  "note": "出题多样性基线（#230 / ADR-0064）：批 = 语料文件、bank = 全语料聚合；数字由 scripts/diversity-baseline.mts 用 src/engine/question-diversity.ts 同一函数复算，手改必被 tests/question-diversity.test.ts 打回",
+  "corpus": [
+    "tests/fixtures/bank-corpus/判断命题真假并用与或非组合命题.yaml",
+    "tests/fixtures/bank-corpus/提取公因式进行因式分解.yaml",
+    "tests/fixtures/bank-corpus/用二进制表示整数并理解位与字节.yaml",
+    "tests/fixtures/bank-corpus/用等式性质移项合并解一元一次方程.yaml"
+  ],
+  "total": 65,
+  "aggregate": {
+    "sample": 65,
+    "kinds": {
+      "single_choice": 22,
+      "multi_choice": 10,
+      "fill_in_blank": 10,
+      "numeric": 7,
+      "true_false": 8,
+      "ordering": 3,
+      "open_question": 3,
+      "matching": 2
+    },
+    "entropy": {
+      "value": 2.6422552443131018,
+      "sample": 65
+    },
+    "distractor": {
+      "value": 9.411458333333332,
+      "sample": 32,
+      "min": 0,
+      "minQ": "按“括号内首项保持为正”的规范，因式分解 $-3x^2+6x$，正确结果是："
+    },
+    "selfBleu": {
+      "value": 0.48843553679941104,
+      "sample": 65
+    },
+    "stemSimilarity": {
+      "value": 0.01871899917864485,
+      "sample": 65
+    }
+  },
+  "perBatch": {
+    "判断命题真假并用与或非组合命题.yaml": {
+      "sample": 4,
+      "kinds": {
+        "single_choice": 3,
+        "multi_choice": 1
+      },
+      "entropy": {
+        "value": 0.8112781244591328,
+        "sample": 4
+      },
+      "distractor": {
+        "value": 8.375,
+        "sample": 4,
+        "min": 5.5,
+        "minQ": "下列哪句话是命题？"
+      },
+      "selfBleu": {
+        "value": 0.1852531233753768,
+        "sample": 4
+      },
+      "stemSimilarity": {
+        "value": 0.021554341226472373,
+        "sample": 4
+      }
+    },
+    "提取公因式进行因式分解.yaml": {
+      "sample": 40,
+      "kinds": {
+        "single_choice": 12,
+        "fill_in_blank": 7,
+        "numeric": 4,
+        "true_false": 5,
+        "multi_choice": 6,
+        "ordering": 2,
+        "open_question": 2,
+        "matching": 2
+      },
+      "entropy": {
+        "value": 2.727166846341841,
+        "sample": 40
+      },
+      "distractor": {
+        "value": 9.101851851851853,
+        "sample": 18,
+        "min": 0,
+        "minQ": "按“括号内首项保持为正”的规范，因式分解 $-3x^2+6x$，正确结果是："
+      },
+      "selfBleu": {
+        "value": 0.5053946157845084,
+        "sample": 40
+      },
+      "stemSimilarity": {
+        "value": 0.03564884741334287,
+        "sample": 40
+      }
+    },
+    "用二进制表示整数并理解位与字节.yaml": {
+      "sample": 17,
+      "kinds": {
+        "single_choice": 5,
+        "multi_choice": 3,
+        "fill_in_blank": 3,
+        "numeric": 2,
+        "true_false": 2,
+        "open_question": 1,
+        "ordering": 1
+      },
+      "entropy": {
+        "value": 2.609850166028943,
+        "sample": 17
+      },
+      "distractor": {
+        "value": 12.249999999999998,
+        "sample": 8,
+        "min": 1,
+        "minQ": "二进制数 1101₂ 中，最左边（最高位）的 1 所对应的数值是多少？"
+      },
+      "selfBleu": {
+        "value": 0.4518543137557909,
+        "sample": 17
+      },
+      "stemSimilarity": {
+        "value": 0.05104054262329468,
+        "sample": 17
+      }
+    },
+    "用等式性质移项合并解一元一次方程.yaml": {
+      "sample": 4,
+      "kinds": {
+        "single_choice": 2,
+        "true_false": 1,
+        "numeric": 1
+      },
+      "entropy": {
+        "value": 1.5,
+        "sample": 4
+      },
+      "distractor": {
+        "value": 2.916666666666667,
+        "sample": 2,
+        "min": 2.5,
+        "minQ": "按“天平精神”解方程 3x + 5 = 20 时，第一步应该怎样操作？"
+      },
+      "selfBleu": {
+        "value": 0.20074916794599187,
+        "sample": 4
+      },
+      "stemSimilarity": {
+        "value": 0.0318220176655969,
+        "sample": 4
+      }
+    }
+  }
+}
