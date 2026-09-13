@@ -95,11 +95,19 @@ export const STATIONS = {
   milestone: '里程碑草案',
 } as const
 
+/** 行尾归一：语料文件住在用户 vault 里，Windows 侧编辑/同步/检出（git autocrlf）都会把
+ * LF 变 CRLF——围栏行会成 `---\r`，按字面比 `---` 的解析会静默失去整个 frontmatter
+ * （outcome 退回缺省 ok、站表恒空）。**读侧一律先归一**（code-review 后的合入验证抓出：
+ * 夹具在 Windows 检出后与工作区内的 LF 版本解析结果不同）。 */
+function normalizeNewlines(body: string): string {
+  return body.replace(/\r\n?/g, '\n').replace(/\n+$/, '\n')
+}
+
 /** 语料文件 frontmatter 解析（行级键值，只取首个 `---` 围栏内的 `键: 值` 行；值不做引号/
  * 类型解析，嵌套流式值原样保留）。读侧单一出处：冒烟汇总（host/smoke）与质量评审抽样
  * （host/quality-review）同用——格式漂移只可能漂一处，两处各解析一遍必然分叉。 */
 export function parseCorpusFrontmatter(body: string): Record<string, string> {
-  const lines = body.split('\n')
+  const lines = normalizeNewlines(body).split('\n')
   const end = lines.indexOf('---', 1)
   const out: Record<string, string> = {}
   if (end < 0) return out
@@ -120,7 +128,7 @@ export const EMPTY_OUTPUT_PLACEHOLDER = '（空输出）'
  * 空串——调用方按空串走「不可评/材料缺席」，不猜内容。 */
 export function parseCorpusFile(body: string): { frontmatter: Record<string, string>; prompt: string; output: string } {
   const frontmatter = parseCorpusFrontmatter(body)
-  const lines = body.split('\n')
+  const lines = normalizeNewlines(body).split('\n')
   const start = (marker: string): number => lines.findIndex(l => l.trim() === marker)
   const promptAt = start('## 提示词')
   const outputAt = start('## 原始输出')

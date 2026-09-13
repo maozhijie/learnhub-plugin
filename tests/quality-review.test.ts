@@ -11,6 +11,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -39,6 +40,7 @@ import {
 } from '../src/engine/index.ts'
 import type { DimensionScore, QualityReviewReport, ReviewSample, SampleReview } from '../src/engine/index.ts'
 import { readCorpusSamples } from '../src/host/quality-review.ts'
+import { parseCorpusFile, parseCorpusFrontmatter } from '../src/host/corpus.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CORPUS = join(ROOT, 'tests', 'fixtures', 'quality-corpus')
@@ -143,6 +145,19 @@ test('夹具语料：宿主读侧投影出站/版本/outcome/空输出，可直�
   assert.equal(seed.templateVersion, 3, '种子提案自带版本线 v3')
   const picked = sampleQualitySamples(samples, DEFAULT_SAMPLE_QUOTA)
   assert.ok(picked.some(s => s.outcome === 'tolerated'), '容忍命中件进样本（失败件优先）')
+})
+
+test('语料读侧行尾归一：CRLF（Windows 检出/编辑路径）与 LF 解析结果一致（合入验证抓出的静默失效）', () => {
+  const lf = readFileSync(join(CORPUS, '教练生长', 'bad-2026-09-13T07-24-45-938Z-0004.md'), 'utf8')
+  const crlf = lf.replace(/\n/g, '\r\n')
+  const a = parseCorpusFile(lf)
+  const b = parseCorpusFile(crlf)
+  assert.equal(a.frontmatter.outcome, 'failed', 'LF：frontmatter 解出 outcome')
+  assert.deepEqual(b.frontmatter, a.frontmatter, 'CRLF：frontmatter 逐字一致（围栏行不得因 CR 失配）')
+  assert.equal(b.output, a.output, 'CRLF：原始输出段一致')
+  assert.equal(b.prompt, a.prompt, 'CRLF：提示词段一致')
+  const raw = ['---', 'station: 桩', 'outcome: failed', '---', ''].join('\r\n')
+  assert.equal(parseCorpusFrontmatter(raw).outcome, 'failed', '裸 CRLF 围栏也解得出')
 })
 
 // ---------------------------------------------------------------- 两段式提示词（防锚定）

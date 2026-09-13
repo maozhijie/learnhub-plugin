@@ -199,7 +199,7 @@
     "src/generation-jobs.ts": 209,
     "src/host/api.ts": 83,
     "src/host/clock.ts": 12,
-    "src/host/corpus.ts": 283,
+    "src/host/corpus.ts": 291,
     "src/host/handlers.ts": 727,
     "src/host/http.ts": 54,
     "src/host/jobs.ts": 1212,
