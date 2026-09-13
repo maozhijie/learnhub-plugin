@@ -125,13 +125,15 @@ export function contentFailureStatus(jobStatus: GenJobStatus): Exclude<GenJobSta
 
 /** 单节终局失败的结构化记录（ADR-0054）：失败横幅「定点重写失败节」与失败原因展示的
  * 消费面——sectionId 支撑单节重写（失败节在大纲里从未消失，只是面板按正文 ## 解析
- * 看不到它），finding 给人读的具体死因。磁盘子格式可选字段：恢复侧对缺字段旧档案
- * 按「无失败信息」读。 */
+ * 看不到它），finding 给人读的具体死因。corpusRef（#213）是该节死因样本在生成语料区
+ * 的相对引用（`生成语料/<站>/<文件>`，回看死因用）；磁盘子格式可选字段：恢复侧对
+ * 缺字段旧档案按「无失败信息」读。 */
 export interface GenJobFailure {
   code: string
   sectionId?: string
   sectionTitle?: string
   finding?: string
+  corpusRef?: string
 }
 
 /** 从节级错误构造结构化失败记录：code 取错误的稳定码（无码归 ERROR），finding 取

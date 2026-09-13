@@ -1,8 +1,9 @@
 /**
- * 概念登记表（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml，每课程一份受控词表。
+ * 概念登记表（#141 / #122 契约 v0.1；v0.2 增可选 confusable 字段，#232——可选字段
+ * 子格式演进，非主版本断裂）：课程根/概念登记表.yaml，每课程一份受控词表。
  *
- * 条目 = canonical 名 + 别名[] + 选填定义；全部名字（canonical ∪ 别名）课程内联合唯一
- * ——一个名字至多属一条目，违约 Broken；文件缺失 Missing 合法空态。
+ * 条目 = canonical 名 + 别名[] + 选填定义 + 选填易混对；全部名字（canonical ∪ 别名）
+ * 课程内联合唯一——一个名字至多属一条目，违约 Broken；文件缺失 Missing 合法空态。
  * 身份=条目、名字=地址：引用解析 = 精确匹配在册名字（canonical 或别名），永不模糊匹配。
  * 条目禁删只并入：合并 = 名字并集，被并入条目的 canonical 降级为别名，旧地址经别名
  * 续解析——沉淀层档案坐标系（ADR-0034）的语义底座，登记表跨宣告式断裂存活。
@@ -16,14 +17,17 @@ import { atomicWrite } from './io.ts'
 import type { Paths } from './paths.ts'
 
 /** 登记表条目：canonical 主名；别名可选（名字并集后历史地址都在这）；定义选填
- * （同形异义与螺旋升档判断的依据，随注入切片给出）。 */
+ * （同形异义与螺旋升档判断的依据，随注入切片给出）；易混对选填（#232：同课程在册
+ * 概念名，出题时随概念清单注入作跨概念对比题候选；名字经精确解析归一，悬空引用
+ * 消费侧静默降级）。 */
 export interface ConceptEntry {
   canonical: string
   aliases?: string[]
   definition?: string
+  confusable?: string[]
 }
 
-const ENTRY_KEYS = new Set(['canonical', 'aliases', 'definition'])
+const ENTRY_KEYS = new Set(['canonical', 'aliases', 'definition', 'confusable'])
 
 /** 一处概念引用（受理门对表的错误行定位原料）：where 供拒收文案指位。 */
 export interface ConceptRef { where: string; concept: string }
@@ -39,17 +43,19 @@ function ownerMapOf(entries: ConceptEntry[]): Map<string, string> {
 }
 
 /** 单条目形态校验（登记表读侧与提案铸名块共用同一契约）：canonical 非空、aliases
- * 字符串列表可选、definition 字符串可选；未知键 fail loud（拼错键静默丢字段会让
- * 名字联合唯一出现假空位）。名字一律 trim。 */
+ * 字符串列表可选、definition 字符串可选、confusable 字符串列表可选（#232）；未知键
+ * fail loud（拼错键静默丢字段会让名字联合唯一出现假空位）。名字一律 trim。
+ * confusable 不做「在册」校验——登记表是单文件静态物，先写对再补被指条目的书写序
+ * 合法，悬空引用由消费侧（易混对候选提取）精确解析时静默降级。 */
 export function validateConceptEntry(raw: unknown, where: string): { errors: string[]; entry?: ConceptEntry } {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return { errors: [`${where}: 必须是映射（{canonical, aliases?, definition?}）`] }
+    return { errors: [`${where}: 必须是映射（{canonical, aliases?, definition?, confusable?}）`] }
   }
   const r = raw as Record<string, unknown>
   const errors: string[] = []
   const unknown = Object.keys(r).filter(k => !ENTRY_KEYS.has(k))
   if (unknown.length) {
-    errors.push(`${where} 含未知字段 ${JSON.stringify(unknown)}（条目只允许 canonical/aliases/definition）`)
+    errors.push(`${where} 含未知字段 ${JSON.stringify(unknown)}（条目只允许 canonical/aliases/definition/confusable）`)
   }
   const canonical = typeof r.canonical === 'string' ? r.canonical.trim() : ''
   if (!canonical) errors.push(`${where}.canonical: 不能为空`)
@@ -70,8 +76,37 @@ export function validateConceptEntry(raw: unknown, where: string): { errors: str
       definition = r.definition.trim()
     }
   }
+  let confusable: string[] | undefined
+  if (r.confusable !== undefined) {
+    if (!Array.isArray(r.confusable) || r.confusable.some(a => typeof a !== 'string')) {
+      errors.push(`${where}.confusable: 必须是字符串列表`)
+    } else {
+      const cleaned = (r.confusable as string[]).map(a => a.trim()).filter(Boolean)
+      if (cleaned.length) confusable = cleaned
+    }
+  }
   if (errors.length || !canonical) return { errors }
-  return { errors: [], entry: { canonical, ...(aliases ? { aliases } : {}), ...(definition ? { definition } : {}) } }
+  return { errors: [], entry: { canonical, ...(aliases ? { aliases } : {}), ...(definition ? { definition } : {}), ...(confusable ? { confusable } : {}) } }
+}
+
+/** 易混对候选提取（#232）：条目 confusable 名字经精确解析归一到所属条目 canonical，
+ * 只保留与本节概念清单（scope）相交的无序对（一端在清单内即可——对比题区分的是清单
+ * 内概念与它的易混邻居）；悬空引用与自指对静默跳过，去重保序。 */
+export function confusablePairsOf(entries: ConceptEntry[], scope: ReadonlySet<string>): Array<{ a: string; b: string }> {
+  const out: Array<{ a: string; b: string }> = []
+  const seen = new Set<string>()
+  for (const e of entries) {
+    for (const raw of e.confusable ?? []) {
+      const other = resolveConcept(entries, raw)
+      if (!other || other.canonical === e.canonical) continue
+      if (!scope.has(e.canonical) && !scope.has(other.canonical)) continue
+      const key = [e.canonical, other.canonical].sort().join('\u0000')
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ a: e.canonical, b: other.canonical })
+    }
+  }
+  return out
 }
 
 /** 登记表契约校验（读侧门禁与 data-check 共用同一口径）：concepts 列表 + 全部名字
@@ -234,6 +269,10 @@ export function mergeConceptEntries(
     ...dst,
     ...(aliases.length ? { aliases } : {}),
     ...(dst.definition === undefined && src.definition !== undefined ? { definition: src.definition } : {}),
+    // confusable 并集（#232）：并入不丢易混对数据；自指/悬空项由消费侧解析时降级
+    ...((dst.confusable?.length || src.confusable?.length)
+      ? { confusable: [...new Set([...(dst.confusable ?? []), ...(src.confusable ?? [])])] }
+      : {}),
   }
   const out = entries.filter((_, i) => i !== fromIdx && i !== intoIdx)
   out.push(merged) // 并入后的条目排在表尾：追加式演化，diff 友好

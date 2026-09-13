@@ -22,7 +22,7 @@
  * 查网）时，把注入的 LlmStream 换成 `ctx.agents.create` 的会话适配实现——调用点
  * 零改动。
  */
-import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmToolCall, LlmToolSpec } from './llm.ts'
+import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmTokenUsage, LlmToolCall, LlmToolSpec } from './llm.ts'
 import type { Clock } from './clock.ts'
 
 /** 剥掉模型可能包住的整段 markdown 代码围栏：限 markdown/yaml/json 等数据类标签——
@@ -51,6 +51,8 @@ export interface AgentCallRecord {
   promptChars: number
   replyChars: number
   durationMs: number
+  /** token 计量（#213）：适配器从 provider usage 块回传；缺省 = 路由未上报。 */
+  usage?: LlmTokenUsage
 }
 
 /** 缝的端口注入：complete 必带；stream 只在 agentLoop 消费；onCall 是观测面。 */
@@ -154,9 +156,10 @@ export class AgentSeam {
         messages: turns,
         ...(req.system !== undefined ? { system: req.system } : {}),
         ...(req.effort !== undefined ? { effort: req.effort } : {}),
+        station: req.station,
         tools: req.tools,
       })
-      this.emit(req.station, 'loop', req.effort, promptCharsOf(turns), r.text, startedAt)
+      this.emit(req.station, 'loop', req.effort, promptCharsOf(turns), r.text, startedAt, r.usage)
       const calls = r.toolCalls ?? []
       if (!calls.length) {
         return { text: stripFences(r.text), toolRounds, trajectory }
@@ -182,20 +185,22 @@ export class AgentSeam {
     }
   }
 
-  /** 底层调用的共用传输：端口调用 + 观测记录。 */
+  /** 底层调用的共用传输：端口调用（站标签/形态/usage 回程沿 opts 贯通，#213）+ 观测记录。 */
   private async call(station: string, mode: AgentCallMode, prompt: string, opts?: { system?: string; effort?: LlmEffort }): Promise<string> {
     const startedAt = this.clock.nowMs()
-    const raw = await this.ports.complete(
-      prompt,
-      opts?.system,
-      opts?.effort === undefined ? undefined : { effort: opts.effort },
-    )
-    this.emit(station, mode, opts?.effort, prompt.length, raw, startedAt)
+    let usage: LlmTokenUsage | undefined
+    const raw = await this.ports.complete(prompt, opts?.system, {
+      ...(opts?.effort === undefined ? {} : { effort: opts.effort }),
+      station,
+      kind: mode,
+      usageSink: u => { usage = u },
+    })
+    this.emit(station, mode, opts?.effort, prompt.length, raw, startedAt, usage)
     return stripFences(raw)
   }
 
   /** 观测面：记录产出后回放 onCall；观测面故障不挡调用。 */
-  private emit(station: string, mode: AgentCallMode, effort: LlmEffort | undefined, promptChars: number, reply: string, startedAt: number): void {
+  private emit(station: string, mode: AgentCallMode, effort: LlmEffort | undefined, promptChars: number, reply: string, startedAt: number, usage?: LlmTokenUsage): void {
     const key = `${station}·${mode}`
     const callNo = (this.callSeq.get(key) ?? 0) + 1
     this.callSeq.set(key, callNo)
@@ -207,6 +212,7 @@ export class AgentSeam {
         promptChars,
         replyChars: reply.length,
         durationMs: this.clock.nowMs() - startedAt,
+        ...(usage !== undefined ? { usage } : {}),
       })
     } catch {
       // 观测面故障不挡调用

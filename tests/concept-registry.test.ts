@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   applyConceptMints,
+  confusablePairsOf,
   conceptReferenceErrors,
   mergeConceptEntries,
   namesOf,
@@ -473,3 +474,55 @@ test('#141 登记表路径在课程根下（跨断裂存活的坐标位）', asy
     assert.deepEqual(await reg.load('math'), [{ canonical: '甲' }])
   })
 })
+
+// ---- 易混对（#232 / 契约 v0.2）：可选字段 + 候选对提取 ----
+
+test('#232 confusable 可选字段：字符串列表合法；非列表报错；未知键照旧 fail loud；缺席 = Missing', () => {
+  const ok = validateConceptRegistry({ concepts: [{ canonical: '甲', confusable: ['乙', ' 丙 '] }] })
+  assert.deepEqual(ok.errors, [])
+  assert.deepEqual(ok.entries[0]!.confusable, ['乙', '丙'], 'trim、空串剔除')
+
+  const notList = validateConceptRegistry({ concepts: [{ canonical: '甲', confusable: '乙' }] })
+  assert.match(notList.errors.join('\n'), /confusable: 必须是字符串列表/)
+
+  const mixedList = validateConceptRegistry({ concepts: [{ canonical: '甲', confusable: ['乙', 3] }] })
+  assert.match(mixedList.errors.join('\n'), /confusable: 必须是字符串列表/)
+
+  const unknownKey = validateConceptRegistry({ concepts: [{ canonical: '甲', confusabel: ['乙'] }] })
+  assert.match(unknownKey.errors.join('\n'), /含未知字段/, '拼错键名仍被未知键门拦住')
+
+  const absent = validateConceptRegistry({ concepts: [{ canonical: '甲' }] })
+  assert.deepEqual(absent.errors, [])
+  assert.equal(absent.entries[0]!.confusable, undefined, '字段缺席合法 Missing')
+})
+
+test('#232 confusablePairsOf：精确解析归一、scope 相交过滤、悬空/自指降级、去重保序', () => {
+  const entries = [
+    { canonical: '自然数', confusable: ['质数', '悬空名', '自然数'] },
+    { canonical: '质数', aliases: ['素数'], confusable: ['自然数'] },
+    { canonical: '整除' },
+  ]
+  // scope 含自然数与质数：自然数↔质数 双向登记去重成一对
+  assert.deepEqual(confusablePairsOf(entries, new Set(['自然数', '质数'])), [{ a: '自然数', b: '质数' }])
+  // scope 只含整除：无相交对 → 空
+  assert.deepEqual(confusablePairsOf(entries, new Set(['整除'])), [])
+  // 悬空名与自指对静默跳过（不炸、不产对）
+  assert.deepEqual(confusablePairsOf(entries, new Set(['自然数'])), [{ a: '自然数', b: '质数' }])
+  // 别名引用解析到 canonical
+  const viaAlias = [{ canonical: '甲', confusable: ['素数'] }, ...entries.slice(1)]
+  assert.deepEqual(confusablePairsOf(viaAlias, new Set(['甲'])), [{ a: '甲', b: '质数' }])
+})
+
+test('#232 合并不丢易混对：from 与 into 的 confusable 并集随并入条目保留', () => {
+  const merged = mergeConceptEntries(
+    [
+      { canonical: '甲', confusable: ['丙'] },
+      { canonical: '乙', confusable: ['丙', '丁'] },
+      { canonical: '丙' },
+    ],
+    '乙', '甲',
+  )
+  const dst = merged.entries.find(e => e.canonical === '甲')!
+  assert.deepEqual(dst.confusable, ['丙', '丁'], '并集去重（丙双写合一）')
+})
+

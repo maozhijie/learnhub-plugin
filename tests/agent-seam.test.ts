@@ -273,3 +273,29 @@ test('工具回路：任务取消传导（#163）——旗标翻真即中止，�
   const ok = await agent3.agentLoop({ station: '罗盘', prompt: 'p', tools: [], runTool: async () => 'y' })
   assert.equal(ok.text, '终裁')
 })
+
+test('#213 token 计量回程：端口 opts.usageSink 回调的 usage 进 AgentCallRecord（缺省缺席）', async () => {
+  const obs = collector()
+  // 假端口手动回填 usage（真实链路里适配器从 provider usage chunk 投影后回调）
+  const sinkFake: LlmComplete = async (_prompt, _system, opts) => {
+    opts?.usageSink?.({ inputTokens: 120, outputTokens: 45, reasoningTokens: 30 })
+    return '回复'
+  }
+  const agent = new AgentSeam({ complete: sinkFake, onCall: obs.onCall }, systemClock)
+  await agent.complete('种子起草', 'p')
+  assert.equal(obs.records.length, 1)
+  assert.deepEqual(obs.records[0].usage, { inputTokens: 120, outputTokens: 45, reasoningTokens: 30 })
+  // 站/形态沿端口 opts 下行（语料捕获贯通，#213）
+  const seen: Array<{ station?: string; kind?: string }> = []
+  const spy: LlmComplete = async (_p, _s, opts) => {
+    seen.push({ station: opts?.station, kind: opts?.kind })
+    return 'r'
+  }
+  const agent2 = new AgentSeam({ complete: spy }, systemClock)
+  await agent2.repair('教练生长', '回灌')
+  assert.deepEqual(seen, [{ station: '教练生长', kind: 'repair' }])
+  // 端口不回 usage：AgentCallRecord.usage 缺席（路由未上报的合法态）
+  const agent3 = new AgentSeam({ complete: fakeComplete(['x']), onCall: obs.onCall }, systemClock)
+  await agent3.complete('罗盘', 'p')
+  assert.equal(obs.records[1].usage, undefined)
+})

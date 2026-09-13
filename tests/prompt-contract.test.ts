@@ -320,3 +320,30 @@ test('#227: 大纲/节生成三变体升 v10——节清单+前节结尾注入�
     assert.match(tpl, /仅供衔接参考，不复述/, `${kind} 带衔接参考不复述指令`)
   }
 })
+
+// ---- v12 题目生成契约（#232）：收尾跨概念对比题 + 易混对段条件条款 ----
+
+test('#232: 题目生成模板 v12——收尾易混对比题条款（易混对段缺席静默降级、invokes 记主概念）', () => {
+  const tpl = Content.PROMPT_KINDS['题目生成']!
+  assert.ok(Content.promptVersionOf(tpl) >= 12, '题目生成 应升到 v12')
+  assert.match(tpl, /易混对/, '条款 conditioned on 易混对段在场')
+  assert.match(tpl, /跨概念对比题/, '收尾槽位对比题指令')
+  assert.match(tpl, /干扰项取其易混概念或典型混淆做法/, '干扰项取易混概念/做法')
+  assert.match(tpl, /被区分的主概念/, '对比题 invokes 记被区分的主概念（恰一枚不破）')
+  assert.match(tpl, /缺席时本条不适用/, '静默降级：不硬造对比题')
+})
+
+// ---- v11 节生成 / v13 题目生成契约（#233）：双重编码组合原则——软指令不进门禁 ----
+
+test('#233: 节生成三变体升 v11——硬约束 6 带图文互引半句；题目生成升 v13——解析配图升「应配」（软措辞）', () => {
+  for (const kind of ['课程节生成', '课程节生成-苏格拉底', '课程节生成-费曼'] as const) {
+    const tpl = Content.PROMPT_KINDS[kind]!
+    assert.ok(Content.promptVersionOf(tpl) >= 11, `${kind} 应升到 v11`)
+    assert.match(tpl, /文字与图互引——文字提及图、图内标注与正文术语一致/, `${kind} 图文互引半句在硬约束 6`)
+    assert.match(tpl, /防图文两张皮/, `${kind} 互引的目标（组合原则）点明`)
+  }
+  const quiz = Content.PROMPT_KINDS['题目生成']!
+  assert.ok(Content.promptVersionOf(quiz) >= 13, '题目生成 应升到 v13')
+  assert.match(quiz, /解析应配一个 ```svg 或 ```plot 代码块配图/, '几何/函数/数据类解析配图由「可用」升「应配」')
+  assert.match(quiz, /软性要求，不进门禁/, '保持软措辞——零新增门禁 finding（验收红线）')
+})
