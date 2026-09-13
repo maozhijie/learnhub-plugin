@@ -67,8 +67,8 @@ const FROZEN: {
     'GraphPage',
     'GuidePage',
     'LabPage',
-    'LearnPage',
-    'LearnPage@lesson', // 二级视图：frame.lesson 非空 → LessonView + PracticeFlow 空态
+    'TodayPage',
+    'TodayPage@lesson', // 二级视图：frame.lesson 非空 → LessonView + PracticeFlow 空态（#208 前身 LearnPage@lesson）
     'PracticePage',
     'ProjectsPage',
     'ProposalsPage',

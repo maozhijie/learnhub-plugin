@@ -6,6 +6,7 @@
 import { Button, Card, Input, Message, Modal, Result, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CoachCockpit from '../components/CoachCockpit'
+import CourseCardGrid from '../components/CourseCardGrid'
 import GraphDagView from '../components/GraphDagView'
 import SeedFormModal from '../components/SeedFormModal'
 import { api } from '../api'
@@ -278,6 +279,9 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
           <Button size='small' loading={loading} onClick={() => void load()}>刷新</Button>
         </div>
       </div>
+
+      {/* 课程卡列表（#208 自今日迁出；T5 落位「我的课程」前暂住课程区首屏） */}
+      <CourseCardGrid frame={frame} />
 
       {/* 教练台：图域命令面板下发（ADR-0038）；就绪深度卡随课直读状态面（#161）；
        * 有图 = 已播种，生长一步可用；任务条点击落生成页对应任务（#155） */}

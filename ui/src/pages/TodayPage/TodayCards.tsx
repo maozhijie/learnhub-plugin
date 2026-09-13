@@ -1,12 +1,15 @@
-/** 学习页头部卡片组（页内子组件，就近维护）：XP 账本条 + 复习横幅 + 推荐流大卡 +
- * 课程卡。数据经 props 注入，动作回调上抛——本文件不持取数状态（缝在 index.tsx）。 */
-import { Button, Card, Dropdown, Menu, Message, Popconfirm, Progress, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
+/** 今日页卡片组（页内子组件，就近维护）：XP 账本条 + 复习横幅 + 推荐流大卡
+ * （#208 / ADR-0058 今日页成型；课程卡已迁出今日——暂住 components/CourseCardGrid，
+ * T5 落位「我的课程」）。横幅 C1/C2/E1 裸入口退役：笔记源/我的卡/导出到 Anki 收进
+ * 「我的资产」菜单（AssetsMenu），漂移/挂起状态行与其直达动作保留。数据经 props
+ * 注入，动作回调上抛——本文件不持取数状态（缝在 index.tsx）。 */
+import { Button, Card, Message, Popconfirm, Progress, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useState } from 'react'
 import { api } from '../../api'
 import { errorMessage } from '../../hooks/useCommand'
 import { recTypeMeta } from '../../lib/rec-events'
 import type {
-  AdviceItem, AnkiStatusDoc, DiagnosticEntry, RecEvent, ReviewQueueDoc, StatusCourse, XpStatus,
+  AdviceItem, DiagnosticEntry, RecEvent, ReviewQueueDoc, XpStatus,
 } from '../../types'
 
 const { Text, Title } = Typography
@@ -35,29 +38,22 @@ export function XpBar({ xp, onEditGoal }: { xp: XpStatus; onEditGoal: () => void
 }
 
 /** 复习横幅：到期卡驱动（复习队列张数 + 开始复习）——队列已并入我的卡（ADR-0021），
- * 张数为题卡+自注卡合计。C2（#63/#72）：「导出到 Anki」按钮——把 vault 到期卡推送进
- * 桌面 Anki 的镜象卡组（AnkiConnect 未达也可点，引擎 fail loud 带指引）；按钮计数 =
- * Anki 通道当前到期分布（不含我的卡，ADR-0021 测量面不扩）。笔记源状态行（C1 #59/#72）：
- * 漂移 = 重新出题/归档旧题直达；挂起 = 重新注册。「我的卡管理」入口常驻（E1 #70）。
- * 动作全部面板内完成，不再只提示「去 dsh 里对 agent 说」。 */
-export function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, onOpenSources, onRegenerateSource, onReregister, onManage, onMineErrors, mining }: {
+ * 张数为题卡+自注卡合计。C1/C2/E1 裸入口退役（#208）：笔记源/我的卡/导出到 Anki
+ * 收进「我的资产」菜单，横幅只留学习动作（开始复习/挖错误卡）。笔记源状态行（C1
+ * #59/#72）保留：漂移 = 重新出题/归档旧题直达；挂起 = 重新注册/打开抽屉——这些是
+ * 复习队列的供给维护动作，不是资产管理入口。动作全部面板内完成。 */
+export function ReviewBanner({ reviewQ, onStart, onOpenSources, onRegenerateSource, onReregister, onMineErrors, mining }: {
   reviewQ: ReviewQueueDoc | null
-  anki: AnkiStatusDoc | null
   onStart: () => void
-  onExportAnki: () => void
-  exporting: boolean
   onOpenSources: (focusId?: string) => void
   onRegenerateSource: (id: string) => void
   onReregister: (path: string) => void
-  onManage: () => void
   onMineErrors: () => void
   mining: boolean
 }) {
   const dueCount = reviewQ?.total ?? 0
   const drifted = reviewQ?.note_drifted ?? []
   const suspended = reviewQ?.note_suspended ?? []
-  const ankiDue = anki?.due.total
-  const ankiOffline = anki?.anki != null && !anki.anki.connected
   return (
     <Card size='small' style={{ borderRadius: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
@@ -70,18 +66,9 @@ export function ReviewBanner({ reviewQ, anki, onStart, onExportAnki, exporting, 
           <Button type='primary' onClick={onStart} disabled={dueCount === 0}>
             开始复习（{dueCount}）
           </Button>
-          <Tooltip content={ankiOffline
-            ? `未连上 AnkiConnect：${anki?.anki?.error ?? '桌面 Anki 未打开'}`
-            : '把到期卡推送到桌面 Anki 的 learnhub 卡组（Anki 纯作答通道，调度仍在 vault）'}>
-            <Button onClick={onExportAnki} loading={exporting} status={ankiOffline ? 'warning' : 'default'}>
-              导出到 Anki{typeof ankiDue === 'number' ? `（${ankiDue}）` : ''}
-            </Button>
-          </Tooltip>
-          <Button onClick={() => onOpenSources()}>笔记源</Button>
           <Tooltip content='从你的错答流水挖高频错误模式，生成「三选一，其中一项是你的错法」辨别卡进复习队列（C-3）'>
             <Button onClick={onMineErrors} loading={mining}>挖错误卡</Button>
           </Tooltip>
-          <Button onClick={onManage}>我的卡管理</Button>
         </div>
       </div>
       {(drifted.length > 0 || suspended.length > 0) && (
@@ -246,70 +233,6 @@ export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
           ))}
         </div>
       ) : null}
-    </Card>
-  )
-}
-
-/** 课程卡（次要区）：进度 + 完成宣告 + 打开图/复习 + ⋯菜单（破坏性操作）。计数语义：
- * 未学 = unseen+ready。完成宣告（#142 雾区条款上半）：读侧折叠的宣告——完成判据满足时
- * 这里展示，零写侧状态。破坏性操作（重新生成/删除）与日常操作视觉隔离（#155）：收进
- * 右侧「⋯」菜单并着 danger 色，与日常按钮不同排不同形；显式确认步在页内 handler
- * （Modal.confirm）不省。 */
-export function CourseCard(props: {
-  name: string
-  counts: { unseen: number; ready: number; learning: number; review: number; mastered: number; skipped: number }
-  total: number
-  due: number
-  completion?: StatusCourse['completion']
-  onOpen: () => void
-  onReview: () => void
-  onRegenerate: () => void
-  onDelete: () => void
-}) {
-  const notStarted = props.counts.unseen + props.counts.ready
-  const done = props.counts.mastered
-  const percent = props.total ? Math.round((done / props.total) * 100) : 0
-  const goalLabel = props.completion?.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'
-  return (
-    <Card size='small' hoverable style={{ borderRadius: 10 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Title heading={6} style={{ margin: 0 }}>{props.name}</Title>
-        <Progress percent={percent} showText size='small' />
-        <Space size={4} wrap>
-          <Tag size='small' color='gray'>未学 {notStarted}</Tag>
-          <Tag size='small' color='arcoblue'>进行 {props.counts.learning}</Tag>
-          <Tag size='small' color='green'>复习 {props.counts.review}</Tag>
-          <Tag size='small' color='green'>掌握 {done}</Tag>
-          {props.counts.skipped > 0 && <Tag size='small' color='purple'>跳过 {props.counts.skipped}</Tag>}
-          {props.due > 0 && <Tag size='small' color='red'>到期 {props.due}</Tag>}
-          {props.completion?.complete && (
-            <Tag size='small' color='green'>
-              🎉 已完成（{goalLabel} · 终点「{props.completion.endpoint}」· {props.completion.declared} 宣告锚定）
-            </Tag>
-          )}
-        </Space>
-        <Space size={6} style={{ width: '100%' }}>
-          <Button size='mini' onClick={props.onOpen}>打开图</Button>
-          <Button size='mini' onClick={props.onReview}>复习</Button>
-          <span style={{ marginLeft: 'auto' }}>
-            <Dropdown
-              trigger='click'
-              position='br'
-              droplist={
-                <Menu style={{ minWidth: 132 }}>
-                  <Menu.Item key='regenerate' style={{ color: 'var(--color-warning-6, #ff7d00)' }} onClick={props.onRegenerate}>
-                    重新生成…
-                  </Menu.Item>
-                  <Menu.Item key='delete' style={{ color: 'var(--color-danger-6, #f53f3f)' }} onClick={props.onDelete}>
-                    删除课程…
-                  </Menu.Item>
-                </Menu>
-              }>
-              <Button size='mini' type='text' style={{ padding: '0 6px' }}>…</Button>
-            </Dropdown>
-          </span>
-        </Space>
-      </div>
     </Card>
   )
 }

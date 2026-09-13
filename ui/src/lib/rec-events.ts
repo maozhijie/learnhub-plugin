@@ -1,4 +1,4 @@
-/** 学习页推荐流的事件词汇与排序（LearnPage 消费）——零依赖纯模块，node:test 可直接消费。
+/** 今日页推荐流的事件词汇与排序（TodayPage 消费；#208 前身学习页）——零依赖纯模块，node:test 可直接消费。
  * 排序口径：置顶（「今天学它」pin，E3）→ 事件类型展示序（REC_TYPE.order）→ 原序稳定。 */
 
 export interface RecTypeMeta { label: string; color: string; order: number }

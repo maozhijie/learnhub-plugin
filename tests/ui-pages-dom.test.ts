@@ -1,5 +1,5 @@
 /**
- * L3 三大页关键交互测试（#188 / #187 决议·Testing Decisions）：LearnPage /
+ * L3 三大页关键交互测试（#188 / #187 决议·Testing Decisions）：TodayPage（#208 前身 LearnPage）/
  * StatsPage / LessonView 各至少一条用户可见交互。只测外部行为：点击后出现什么、
  * 调了哪个端点；不断言内部状态。取数走 fetch 桩（api.ts 全链路真实，网络是假的），
  * 未登记端点 404 → 次要数据按缝级三态显式失败——不翻页正是该缝的承诺。
@@ -30,10 +30,10 @@ const XP_FIXTURE = {
 
 const click = async (el: HTMLElement) => { await act(async () => { fireEvent.click(el) }) }
 
-// ---- LearnPage：推荐流主数据三态 + 点卡进学习视图 ----
+// ---- TodayPage（#208 前身 LearnPage）：推荐流主数据三态 + 点卡进学习视图 ----
 
-test('LearnPage：推荐卡点「去学习」→ frame.openLesson 打开该节点', async () => {
-  const { default: LearnPage } = await importUi('pages/LearnPage/index.tsx')
+test('TodayPage：推荐卡点「去学习」→ frame.openLesson 打开该节点', async () => {
+  const { default: TodayPage } = await importUi('pages/TodayPage/index.tsx')
   routes({
     'GET /recommend': { date: '2026-09-12', events: [{
       type: 'new', course: '数学', node: '入门', region: '', score: 1, why: '起点', path: null, hasContent: true,
@@ -42,29 +42,30 @@ test('LearnPage：推荐卡点「去学习」→ frame.openLesson 打开该节�
     'GET /review-queue': { total: 2, cards: [], calibration_hint: null, note_drifted: [], note_suspended: [] },
     'GET /anki/status': { anki: null, due: { total: 0 }, mirror: {} },
     'GET /generate/status': { jobs: [], queuedCount: 0 },
+    'GET /proposals': [],
     'GET /learner-queue': { cards: [] },
   })
   const { frame, calls } = spyFrame()
-  render(React.createElement(LearnPage, { frame }))
+  render(React.createElement(TodayPage, { frame }))
   assert.ok(await screen.findByText(/接下来/), '推荐流加载后出现「接下来」卡')
   assert.ok(screen.getByText('入门'), '推荐事件按节点名渲染')
   await click(screen.getByText(/去学习/))
   assert.deepEqual(calls.openLesson, [['数学', '入门']], '点开直接进该节点的学习视图')
 })
 
-test('LearnPage：主数据失败 = 整页失败态（次要不翻页），重试可点', async () => {
-  const { default: LearnPage } = await importUi('pages/LearnPage/index.tsx')
+test('TodayPage：主数据失败 = 整页失败态，重试可点；页头资产菜单不受影响', async () => {
+  const { default: TodayPage } = await importUi('pages/TodayPage/index.tsx')
   routes({ 'GET /xp': XP_FIXTURE }) // /recommend 未登记 → 404：主数据失败
   const { frame } = spyFrame()
-  render(React.createElement(LearnPage, { frame }))
+  render(React.createElement(TodayPage, { frame }))
   assert.ok(await screen.findByText(/加载失败/), '推荐流失败进 page 变体失败态')
   assert.ok(screen.getByText('重试'))
   assert.equal(screen.queryByText(/接下来/), null, '失败态不渲染主数据区')
-  assert.ok(await screen.findByText(/我的课程/), '次要区（课程卡）不受主数据失败影响')
+  assert.ok(screen.getByText('我的资产'), '页头资产菜单在失败态仍可达（#208 横幅裸入口退役后的家）')
 })
 
-test('LearnPage：生成中节点的推荐卡显示逐节进度态（#160），而非只会说在队列', async () => {
-  const { default: LearnPage } = await importUi('pages/LearnPage/index.tsx')
+test('TodayPage：生成中节点的推荐卡显示逐节进度态（#160），而非只会说在队列', async () => {
+  const { default: TodayPage } = await importUi('pages/TodayPage/index.tsx')
   routes({
     'GET /recommend': { date: '2026-09-12', events: [{
       type: 'new', course: '数学', node: '入门', region: '', score: 1, why: '起点', path: null, hasContent: false,
@@ -77,15 +78,123 @@ test('LearnPage：生成中节点的推荐卡显示逐节进度态（#160），�
       jobs: [{ key: '数学/入门', course: '数学', node: '入门', startedAt: '2026-09-12T10:00:00Z', status: 'running', phase: 'sections', progress: { done: 3, total: 7, current: '第二节' } }],
       queuedCount: 0,
     },
+    'GET /proposals': [],
     'GET /learner-queue': { cards: [] },
   })
   const { frame } = spyFrame()
-  render(React.createElement(LearnPage, { frame }))
+  render(React.createElement(TodayPage, { frame }))
   assert.ok(await screen.findByText(/接下来/), '推荐流加载后出现「接下来」卡')
   const progress = await screen.findAllByText(/生成中/)
   assert.ok(progress.length >= 1 && document.body.textContent!.includes('3/7'),
     '生成中节点带逐节进度（Tag 与按钮同一读数；锚词+读数，不锁整句）')
   assert.equal(screen.queryByText('生成正文'), null, '生成中不渲染「生成正文」按钮（动作诚实锁，见门册登记）')
+  assert.ok(document.body.textContent!.includes('在酿 1'), '供给卡同一拍显示在酿数（与推荐卡进度同源，#208）')
+})
+
+// ---- 今日供给卡 + 闸门计数（#208 / ADR-0058 今日页唯一新功能件） ----
+
+test('今日供给卡：重启停摆显中性原因，「恢复队列」走 /generate/resume', async () => {
+  const { default: TodayPage } = await importUi('pages/TodayPage/index.tsx')
+  routes({
+    'GET /recommend': { date: '2026-09-12', events: [] },
+    'GET /xp': XP_FIXTURE,
+    'GET /review-queue': { total: 0, cards: [], calibration_hint: null, note_drifted: [], note_suspended: [] },
+    'GET /anki/status': { anki: null, due: { total: 0 }, mirror: {} },
+    'GET /generate/status': { jobs: [], queuedCount: 3, queuePaused: true },
+    'GET /proposals': [],
+    'GET /learner-queue': { cards: [] },
+    'POST /generate/resume': { paused: false, resumed: 3 },
+  })
+  const { frame } = spyFrame()
+  render(React.createElement(TodayPage, { frame }))
+  assert.ok(await screen.findByText(/队列暂停/), '停摆态显中性原因（重启后的保护态，不是故障）')
+  assert.ok(document.body.textContent!.includes('3 个任务在排队'), '停摆原因带排队实数')
+  await click(screen.getByText('恢复队列'))
+  await waitFor(() => {
+    const resume = stubCalls().find(c => c.method === 'POST' && c.path === '/generate/resume')
+    assert.ok(resume, '恢复队列与生成页同一路由')
+  })
+})
+
+test('今日供给卡：失败任务就地重试——内容断点续跑、生长批重新裁决（与生成页同路由）', async () => {
+  const { default: TodayPage } = await importUi('pages/TodayPage/index.tsx')
+  routes({
+    'GET /recommend': { date: '2026-09-12', events: [] },
+    'GET /xp': XP_FIXTURE,
+    'GET /review-queue': { total: 0, cards: [], calibration_hint: null, note_drifted: [], note_suspended: [] },
+    'GET /anki/status': { anki: null, due: { total: 0 }, mirror: {} },
+    'GET /generate/status': {
+      jobs: [
+        { key: '数学/入门', course: '数学', node: '入门', startedAt: '2026-09-12T10:00:00Z', status: 'failed', phase: 'sections', message: '质检门未过' },
+        { key: '数学/生长批', course: '数学', node: '生长批', startedAt: '2026-09-12T10:01:00Z', status: 'failed', phase: 'growth', message: '受理门未过' },
+      ],
+      queuedCount: 0,
+    },
+    'GET /proposals': [],
+    'GET /learner-queue': { cards: [] },
+    'POST /generate': { message: '「入门」已入队，将从断点续跑', queued: true },
+    'POST /coach/growth': { message: '生长一步已入队', queued: true },
+  })
+  const { frame } = spyFrame()
+  render(React.createElement(TodayPage, { frame }))
+  assert.ok((await screen.findAllByText(/上次任务未完成/)).length === 2, '失败行可见')
+  const retries = screen.getAllByText('重试')
+  assert.equal(retries.length, 2, '两条失败行各带重试')
+  await click(retries[0]!) // sections → POST /generate（断点续跑）
+  await waitFor(() => {
+    const gen = stubCalls().find(c => c.method === 'POST' && c.path === '/generate')
+    assert.ok(gen && (gen.body as { course?: string }).course === '数学', '内容任务重试走 /generate')
+  })
+  await click(retries[1]!) // growth → POST /coach/growth（显式重新裁决）
+  await waitFor(() => {
+    const growth = stubCalls().find(c => c.method === 'POST' && c.path === '/coach/growth')
+    assert.ok(growth, '生长批失败重试走 /coach/growth（豁免失败阻尼语义在服务端）')
+  })
+})
+
+test('今日闸门计数：待审提案实数一致，点击深链提案收件箱（#204 用户故事 4）', async () => {
+  const { default: TodayPage } = await importUi('pages/TodayPage/index.tsx')
+  routes({
+    'GET /recommend': { date: '2026-09-12', events: [] },
+    'GET /xp': XP_FIXTURE,
+    'GET /review-queue': { total: 0, cards: [], calibration_hint: null, note_drifted: [], note_suspended: [] },
+    'GET /anki/status': { anki: null, due: { total: 0 }, mirror: {} },
+    'GET /generate/status': { jobs: [], queuedCount: 0 },
+    'GET /proposals': [
+      { id: 1, kind: 'seed', course: '数学', status: 'pending', summary: 's', artifact: '', created: '2026-09-12T00:00:00Z' },
+      { id: 2, kind: 'enrich', course: '数学', status: 'applied', summary: 's', artifact: '', created: '2026-09-12T00:00:00Z' },
+      { id: 3, kind: 'edit', course: '数学', status: 'rejected', summary: 's', artifact: '', created: '2026-09-12T00:00:00Z' },
+    ],
+    'GET /learner-queue': { cards: [] },
+  })
+  const { frame, calls } = spyFrame()
+  render(React.createElement(TodayPage, { frame }))
+  assert.ok(await screen.findByText('待审提案'), '闸门计数卡可见')
+  await screen.findByText('1', { selector: '.today-supply-num' })
+  await click(screen.getByText('去收件箱'))
+  assert.deepEqual(calls.goto, [['courses.proposals']], '深链落提案收件箱')
+})
+
+test('我的资产菜单：导出到 Anki 动作保持可达（C2 裸入口退役后）', async () => {
+  const { default: TodayPage } = await importUi('pages/TodayPage/index.tsx')
+  routes({
+    'GET /recommend': { date: '2026-09-12', events: [] },
+    'GET /xp': XP_FIXTURE,
+    'GET /review-queue': { total: 0, cards: [], calibration_hint: null, note_drifted: [], note_suspended: [] },
+    'GET /anki/status': { anki: null, due: { total: 4 }, mirror: {} },
+    'GET /generate/status': { jobs: [], queuedCount: 0 },
+    'GET /proposals': [],
+    'GET /learner-queue': { cards: [] },
+    'POST /anki/export': { added: 1, updated: 2, removed: 0, total: 4 },
+  })
+  const { frame } = spyFrame()
+  render(React.createElement(TodayPage, { frame }))
+  await click(await screen.findByText('我的资产'))
+  const exportItem = await screen.findByText(/导出到 Anki（4）/)
+  await click(exportItem)
+  await waitFor(() => {
+    assert.ok(stubCalls().some(c => c.method === 'POST' && c.path === '/anki/export'), '导出动作从资产菜单发出')
+  })
 })
 
 // ---- StatsPage：XP 账本 + 每日目标保存 ----

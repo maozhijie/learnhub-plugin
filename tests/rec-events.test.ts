@@ -1,5 +1,5 @@
 /** 推荐流事件词汇单测（L1，#183）：REC_TYPE 展示序、pin 置顶排序与复习/学习分面。
- * 被测模块：`ui/src/lib/rec-events.ts`（自 LearnPage 抽出的纯逻辑）。 */
+ * 被测模块：`ui/src/lib/rec-events.ts`（自学习页——今日页前身——抽出的纯逻辑）。 */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { REC_TYPE, recTypeMeta, sortRecEvents } from '../ui/src/lib/rec-events.ts'

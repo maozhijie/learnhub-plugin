@@ -64,6 +64,43 @@ html, body, #root {
   gap: var(--lh-space-4);
 }
 
+/* 今日页（#208 / ADR-0058 T4）：页头 + 供给行（课程供给卡 + 待审闸门计数）。
+ * 新结构走语义类消费 --lh-*；搬家具件（横幅/推荐卡等）的内联 style 留待收尾票。 */
+.today-head {
+  display: flex;
+  align-items: center;
+  gap: var(--lh-space-2);
+}
+.today-head-assets { margin-left: auto; }
+.today-supply-row {
+  display: flex;
+  gap: var(--lh-space-3);
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.today-supply-row > * { flex: 1; min-width: 320px; }
+.today-supply-line {
+  display: flex;
+  align-items: center;
+  gap: var(--lh-space-2);
+  flex-wrap: wrap;
+}
+.today-supply-num { font-size: var(--lh-font-xl); font-weight: 600; }
+.today-supply-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lh-space-1);
+  margin-top: var(--lh-space-2);
+}
+.today-supply-rowitem {
+  display: flex;
+  align-items: center;
+  gap: var(--lh-space-2);
+  background: var(--lh-surface-muted);
+  border-radius: var(--lh-radius-md);
+  padding: var(--lh-space-1) var(--lh-space-2);
+}
+
 /* React Flow 容器必须有确定高度：父级是 Arco Space（高度 auto），
    用视口高度兜底（减去页头与统计行约 230px），否则画布塌缩为 0、边与 fitView 全部失效。 */
 .dag-wrap {
