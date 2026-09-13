@@ -24,52 +24,62 @@ export type OutputFormat = 'yaml' | 'markdown-blocks' | 'json' | 'route-text'
  * 默认不迁结构化通道。 */
 export type FormatSensitivity = '机械评审' | '规划' | '推理创意'
 
-/** 修复轮机制注册表（#217 / ADR-0065）：每条策略必须**点名持有该回路的机制**，机制名只许
+/** 一条修复机制的登记：`file` = 相对 `src/` 的 posix 路径（**精确匹配**——同名文件靠
+ * basename 兜底会解析到任一个，把「登记指对文件」悄悄变成运气）；`witness` = 该文件里
+ * 真实存在的稳定串，**全部命中**才算对上（逐级阶梯多见证串缺一不可）；`what` = 这条
+ * 回路做什么，人读面与门面共用。 */
+export interface RepairMechanismSpec {
+  file: string
+  witness: string[]
+  what: string
+}
+
+/** 修复轮机制注册表（#217 / ADR-0066）：每条策略必须**点名持有该回路的机制**，机制名只许
  * 取本表的键。门（tests/repair-policy.test.ts）拿 `file` + `witness` 与实现对账——登记一个
  * 不存在的回路、或回路改名后登记没跟上，都会红。没有这张表，`repair` 列就只是散文：
  * 「罗盘 0 轮」「出题无整批轮」这类断言无从执法，改了实现也没人提醒登记失真。
  *
- * `witness` = 实现里真实存在的稳定串（函数名或该回路独有的一句文案），**全部命中**才算
- * 对上；多见证串用于逐级阶梯（三根横档缺一不可）。 */
-export const REPAIR_MECHANISMS: Readonly<Record<string, { file: string; witness: string[]; what: string }>> = {
+ * 本表只证明「这条回路存在」；「本站的 mechanism 字段指的就是它」由 `REPAIR_ROUND_LOCKS`
+ * 的行为锁与逐站人工审查兜底——这条覆盖边界写在门里，不假装已全覆盖（ADR-0066 §1）。 */
+export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = {
   outlineRepairFeedback: {
     file: 'generation-jobs.ts', witness: ['export function outlineRepairFeedback'],
     what: '大纲/拆节站：可修死因（OUTLINE_BUDGET/OUTLINE_SHAPE/MODEL_YAML）回灌恰一轮，其余原样上抛',
   },
   sectionRepairLadder: {
-    file: 'jobs.ts', witness: ['Content.blockPatchPrompt', 'Content.sectionRepairBody', 'splitOverflowSection'],
+    file: 'host/jobs.ts', witness: ['Content.blockPatchPrompt', 'Content.sectionRepairBody', 'splitOverflowSection'],
     what: '节正文修复阶梯三档：块级局部修补 → 整节压缩（deep 升档）→ 溢出交大纲拆节',
   },
   gateRepairRound: {
-    file: 'agent.ts', witness: ['async gateRepairRound'],
+    file: 'engine/agent.ts', witness: ['async gateRepairRound'],
     what: '缝的共享门错修复轮：门错误 + 被拒原文回灌重产恰一次，仍败以站点 fatal 抛两轮死因',
   },
   seedRepairPrompt: {
-    file: 'seed.ts', witness: ['export function seedRepairPrompt'],
+    file: 'engine/seed.ts', witness: ['export function seedRepairPrompt'],
     what: '种子起草：干跑校验门未过 → 回灌重出完整 YAML 恰一次',
   },
   decompileRepairPrompt: {
-    file: 'project-decompile.ts', witness: ['export function decompileRepairPrompt'],
+    file: 'engine/project-decompile.ts', witness: ['export function decompileRepairPrompt'],
     what: '目标反编译：双产物校验/名字对账死因回灌恰一次',
   },
   invokesOncePerQuestion: {
-    file: 'note-source.ts', witness: ['async repairInvokesOnce'],
+    file: 'engine/note-source.ts', witness: ['async repairInvokesOnce'],
     what: '出题逐题回路：清单在场且有题缺 invokes → 恰一次补标调用（不是整批重产）',
   },
   auditRepairOncePerQuestion: {
-    file: 'question-audit.ts', witness: ['出题修复（第二意见抽查发现答案键不一致）'],
+    file: 'engine/question-audit.ts', witness: ['出题修复（第二意见抽查发现答案键不一致）'],
     what: '出题第二意见（#223）：不一致题恰一次回灌修复、修复题原位替换再审计、仍败弃题',
   },
   gradingReaskOnce: {
-    file: 'content-subsystem.ts', witness: ['[重判要求]'],
+    file: 'engine/content-subsystem.ts', witness: ['[重判要求]'],
     what: '判卷：解析失败自动重问一次，仍失败零落盘抛「AI 判卷输出不可用」',
   },
   disputeReaskOnce: {
-    file: 'question-bank.ts', witness: ['[重判要求]'],
+    file: 'engine/question-bank.ts', witness: ['[重判要求]'],
     what: '申诉判卷：同判卷重判轮，仍失败抛「AI 复核输出不可用」',
   },
   milestoneStructureRepair: {
-    file: 'jobs.ts', witness: ['MILESTONE_GATE_FAILED', 'gateRepairRound<string, MilestoneWriteResult>'],
+    file: 'host/jobs.ts', witness: ['MILESTONE_GATE_FAILED', 'gateRepairRound<string, MilestoneWriteResult>'],
     what: '里程碑产物：轻量结构门未过 → gateRepairRound 回灌重产恰一次',
   },
 }
@@ -90,6 +100,29 @@ export interface RepairPolicy {
 
 /** 修复机制名 = 注册表键 ∪ 'none'（无整批修复回路，失败即断或零落盘）。 */
 export type RepairMechanism = 'none' | keyof typeof REPAIR_MECHANISMS
+
+/** 行为侧「几轮」的锁覆盖登记（#217）：站 → 断言该站模型调用数的测试文件；`null` =
+ * **显式登记的缺口**（还没数过调用数，不假装已覆盖）。门断言两件事：① rounds > 0 的站
+ * 必须在本表内（有锁或显式缺口——漏登即红）；② 有锁的站其测试文件必须真实存在。
+ *
+ * 为什么需要这张表：机制登记只证明「这个回路在 src/ 里存在」，**不证明「本站的
+ * mechanism 字段指的是它」**——#217 逐站审查时正是靠人读实现抓出课程节拆分登记失真
+ * （旧散文声称与大纲站同款回灌，实现对不上）。把「哪些站已经被数过调用数」变成数据，
+ * 缺口就不会静默存在。 */
+export const REPAIR_ROUND_LOCKS: Readonly<Record<string, string | null>> = {
+  课程大纲: 'host-runtime.test.ts',
+  课程节拆分: 'host-runtime.test.ts',
+  题目生成: 'repair-policy.test.ts',
+  回执评审: 'repair-policy.test.ts',
+  罗盘: 'compass.test.ts',
+  课程节生成: 'section-split.test.ts',
+  种子起草: 'seed-proposal.test.ts',
+  目标反编译: null,
+  教练生长: null,
+  里程碑草案: null,
+  判卷: null,
+  申诉判卷: null,
+}
 
 /** phase 1 格式级形状声明（validateByContract 的判据）。深结构门（逐题形态、候选
  * 对照、名字对账……）仍归各站解析器，本表只锁「解析产物像不像本站产物的形状」。 */
@@ -212,9 +245,13 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     allowed: ['单个 YAML 文档（sections 2–3 子节：title/type/points/tier）'],
     forbidden: ['代码围栏', '解释性文字', '原节之外的新主题（只拆不扩）'],
     repair: {
-      rounds: 1,
-      mechanism: 'outlineRepairFeedback',
-      feedback: '同大纲站（OUTLINE_SHAPE/MODEL_YAML 死因回灌）',
+      // #217 逐站审查抓出的登记失真（#214 继承的旧散文声称「同大纲站的死因回灌」）：
+      // 实现对 splitOverflowSection 只发**一次**调用，解析失败原样上抛、由管线记入失败
+      // 清单——`outlineRepairFeedback` 的唯一调用点在 jobs.ts 的大纲轮，拆节站没有它。
+      // 登记按实现改（不是反过来）：拆节是节正文修复阶梯的**末级**，它自己不再有下一级。
+      rounds: 0,
+      mechanism: 'none',
+      feedback: '无修复轮——拆分 YAML 解析失败原样上抛（管线记入该节失败清单，可「重试续跑」再走一遍；阶梯末级之下没有下一级）',
       escalate: '恒 deep 档（溢出拆节是修复阶梯末级）',
     },
     tolerance: '同大纲站（parseModel 剥围栏/注释重试，tolerated 留痕）',
@@ -235,8 +272,8 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
       rounds: 0,
       mechanism: 'none',
       perItem: ['invokesOncePerQuestion', 'auditRepairOncePerQuestion'],
-      feedback: '门错无整批修复轮（#214 现状，#217 复核裁决维持——理由与预注册触发条件见 ADR-0065 §3）；逐题补标恰一次（repairInvokesOnce，#148）；第二意见审计不一致题恰一次回灌修复（#223 question-audit，deep 档，修复再审计仍败弃题）',
-      note: '逐题门（转义/答案形态/invokes 在册/查重）拒收走报告面；整批修复轮的裁决与预注册触发条件见 ADR-0065 §3',
+      feedback: '门错无整批修复轮（#214 现状，#217 复核裁决维持——理由与预注册触发条件见 ADR-0066 §3）；逐题补标恰一次（repairInvokesOnce，#148）；第二意见审计不一致题恰一次回灌修复（#223 question-audit，deep 档，修复再审计仍败弃题）',
+      note: '逐题门（转义/答案形态/invokes 在册/查重）拒收走报告面；整批修复轮的裁决与预注册触发条件见 ADR-0066 §3',
     },
     tolerance: 'repairQuestionStrings 转义损坏确定性修复（计数留痕），修不好拒收',
     failureCodes: ['MODEL_YAML'],
@@ -476,14 +513,19 @@ export interface PromptBump {
  * 对账）。**本表自 #218 起计**：#218 之前的历史版本线未回填（那时没有登记面，编不出一份
  * 诚实的表）；#220 落地后按同字段格式接管完整纪律，本表随之并入。
  *
- * 不变式（门在执法，不是注释）：每个模板键的最高登记版本 == 模板头 `<!-- learnhub:prompt/vN -->`
- * 的现行版本——**bump 了模板却没补登记条目 = 红**。#218 的拼装侧重排（契约后置）改的是
- * 最终 prompt 的段序、模板文本未动，故那些站的登记版本 = 现行版本、changeType 注明
- * 「拼装侧」——不冒充一次模板内容变更。 */
+ * 不变式（门在执法，不是注释）：每个模板键的**最高**登记版本 == 模板头
+ * `<!-- learnhub:prompt/vN -->` 的现行版本——**bump 了模板却没补登记条目 = 红**。同一
+ * 版本号下允许第二条登记：模板文本没动、但最终 prompt 变了（拼装侧重排、上下文包变更）
+ * 也是「预期输出增量」要覆盖的变更，记在同一版本号下并写明变更面，不冒充版本 bump。 */
 export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> = {
   课程大纲: [{
     version: 11, date: '2026-09-13', changeType: '拼装侧契约后置 + 完整输出示例（占位域）+ 示例值占位化',
     expectedDelta: '输出段落尾（契约句是最终 prompt 的最后一段）；YAML 结构、节数与配比不变；示例不再把「整数与自然数的分界」一类真实内容带进输出（旧版示例值可被回填，占位化后不可）',
+  }, {
+    // 非模板变更（同一版本号下的第二条登记）：上下文包的实现 bug 修复。受影响的是消费
+    // 上下文包的三站（大纲/节生成/拆节），登记挂在主消费者（大纲）名下并在 ADR-0065 §6 说明。
+    version: 11, date: '2026-09-13', changeType: '上下文包 §5「禁止使用的概念」复活（实现 bug 修复，模板文本未动）',
+    expectedDelta: '大纲/节生成/拆节三站的 prompt 多出「§5 禁止使用的概念」清单（旧实现 Object.keys(Set) 恒空 → §5 恒渲染「（无：本节点已是图内最深）」）：最多 200 个更深节点名 + 超限时的截断告知。预期效果是「不提前教」的负向约束恢复生效；代价是 prompt 增长 1–2k 字。此项**未做真模型对照**（见 ADR-0065 §6）——若观察到幻觉/跑题上升，回退点就是这一行',
   }],
   课程节生成: [{
     version: 11, date: '2026-09-13', changeType: '拼装侧契约后置（模板文本未动）',

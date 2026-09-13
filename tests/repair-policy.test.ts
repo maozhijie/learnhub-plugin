@@ -1,5 +1,5 @@
 /**
- * 修复轮策略 ↔ 实现一致性门（#217 / ADR-0065）：注册表 `repair` 列是修复策略的**单源**，
+ * 修复轮策略 ↔ 实现一致性门（#217 / ADR-0066）：注册表 `repair` 列是修复策略的**单源**，
  * 本门把它从散文变成会失败的东西。
  *
  * 两层：
@@ -20,8 +20,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
-import { REPAIR_MECHANISMS, OUTPUT_CONTRACTS } from '../src/engine/output-contracts.ts'
-import type { OutputContract } from '../src/engine/output-contracts.ts'
+import { REPAIR_MECHANISMS, REPAIR_ROUND_LOCKS, OUTPUT_CONTRACTS } from '../src/engine/output-contracts.ts'
+import type { OutputContract, RepairMechanismSpec } from '../src/engine/output-contracts.ts'
 import type { LlmComplete } from '../src/engine/llm.ts'
 import { withVault } from './helpers/vault.ts'
 
@@ -60,11 +60,11 @@ function runMechanismGate(
   for (const [name, m] of Object.entries(mechanisms)) {
     assert.ok(m.what.trim(), `机制「${name}」缺 what（登记不许只有名字）`)
     assert.ok(m.witness.length > 0, `机制「${name}」缺见证串`)
-    // 见证串按「src/ 下某文件」声明；file 允许带目录前缀（如 engine/agent.ts）或不带
-    const hit = Object.entries(sources).find(([path]) => path === m.file || path.endsWith(`/${m.file}`))
-    assert.ok(hit, `机制「${name}」声明的实现文件「${m.file}」不在 src/ 下`)
+    // file 是相对 src/ 的 posix 路径，**精确匹配**（basename 兜底会让同名文件解析成任一个）
+    const text = sources[m.file]
+    assert.ok(text !== undefined, `机制「${name}」声明的实现文件「src/${m.file}」不在 src/ 下（要精确路径）`)
     for (const w of m.witness) {
-      assert.ok(hit![1].includes(w), `机制「${name}」的见证串「${w}」在 ${hit![0]} 里找不到——回路改名/删了，登记没跟上`)
+      assert.ok(text!.includes(w), `机制「${name}」的见证串「${w}」在 src/${m.file} 里找不到——回路改名/删了，登记没跟上`)
     }
   }
   for (const c of contracts) {
@@ -87,6 +87,51 @@ test('#217 修复策略单源：机制登记与实现对账 + 「0 轮＝无整�
   const sources = srcSources()
   assert.ok(Object.keys(sources).length > 50, `收集面太小（${Object.keys(sources).length} 个文件）——门会恒过`)
   runMechanismGate(REPAIR_MECHANISMS, OUTPUT_CONTRACTS, sources)
+})
+
+/** 行为锁覆盖门：rounds > 0 的站必须在 REPAIR_ROUND_LOCKS 里（有锁或**显式缺口**），
+ * 有锁的站其测试文件必须存在。缺口漏登即红——「还没数过调用数」是可以的，「没人知道
+ * 还没数过」不行。 */
+function runRoundLockCoverageGate(
+  contracts: readonly OutputContract[],
+  locks: Readonly<Record<string, string | null>>,
+  exists: (file: string) => boolean,
+): void {
+  for (const c of contracts) {
+    if (c.repair.rounds === 0) continue
+    const where = `${c.station}${c.surface ? '/' + c.surface : ''}`
+    assert.ok(
+      Object.hasOwn(locks, c.station),
+      `「${where}」有修复轮但不在行为锁登记表里——补锁或显式登记缺口（null）`,
+    )
+  }
+  for (const [station, file] of Object.entries(locks)) {
+    if (file === null) continue
+    assert.ok(exists(file), `「${station}」的锁登记指向不存在的测试文件「${file}」`)
+  }
+}
+
+test('#217 行为锁覆盖：有修复轮的站必须被数过调用数（或显式登记缺口）', () => {
+  const exists = (f: string): boolean => {
+    try {
+      readFileSync(join(process.cwd(), 'tests', f), 'utf8')
+      return true
+    } catch {
+      return false
+    }
+  }
+  runRoundLockCoverageGate(OUTPUT_CONTRACTS, REPAIR_ROUND_LOCKS, exists)
+})
+
+test('自检：有修复轮的站漏登行为锁 / 锁指向不存在的文件，都必须变红', () => {
+  const exists = (): boolean => true
+  const missing = { ...REPAIR_ROUND_LOCKS }
+  delete (missing as Record<string, unknown>)['课程大纲']
+  assert.throws(() => runRoundLockCoverageGate(OUTPUT_CONTRACTS, missing, exists), /不在行为锁登记表里/)
+  assert.throws(
+    () => runRoundLockCoverageGate(OUTPUT_CONTRACTS, { ...REPAIR_ROUND_LOCKS, 罗盘: '不存在的测试.ts' }, () => false),
+    /指向不存在的测试文件/,
+  )
 })
 
 test('自检：幽灵机制名 / 0 轮却点名机制 / 见证串改坏，三类都必须变红', () => {

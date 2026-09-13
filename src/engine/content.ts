@@ -17,7 +17,7 @@ import { loadNote, saveNote } from './notes.ts'
 import { readAnchor } from './seed.ts'
 import { round2 } from './grading.ts'
 import { invokesTagged } from './concepts.ts'
-import { splitContractSection, withContractLast } from './prompt-assembly.ts'
+import { withContractLast } from './prompt-assembly.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../shared/content-renderers.ts'
 import type { GRegion, GNode, SectionManifest, EncEdge } from './types.ts'
@@ -183,7 +183,12 @@ export class Content {
     out.push('## 4. 领域边界')
     const scope = `本课属于${course ? `课程「${course}」的` : ''}`
     out.push(`${scope}「${region} · ${block}」区块。只讲本节点范围内的内容；后继节点至多在自然收尾处一句话带过，不展开、不提前教；是否提及由你判断。`)
-    const allForbidden = Object.keys(graph.nset)
+    // #218 复核抓出的实现 bug（登记为行为变更）：本行原为 `Object.keys(graph.nset)`——
+    // nset 是 Set（graph.ts:305），`Object.keys` 对 Set 恒返回空数组，§5 因此**恒渲染
+    // 「（无：本节点已是图内最深）」**：#212 §四.4 讨论的「禁止概念 ≤200 是稀释点」在
+    // 真实 prompt 里根本不存在。修回 `[...graph.nset]` 后 §5 才真的列出未学节点。
+    // 证据与后果见 ADR-0065 §6（含预期输出增量），回归门见 tests/output-contract.test.ts。
+    const allForbidden = [...graph.nset]
       .filter(n => n !== node && n.length >= 2 && (graph.depth[n] ?? 0) > dSelf)
       .sort((a, b) => (graph.depth[b] ?? 0) - (graph.depth[a] ?? 0))
     // #218 稀释治理裁决：**位置保留**（§5 是 §4 领域边界的展开，挪走要把 §6–§13 全部
@@ -949,12 +954,9 @@ worksheet:
     return m ? Number(m[1]) : 0
   }
 
-  /** 契约段切分 / 契约后置拼装（#218）：实现住 prompt-assembly.ts 零依赖叶子（content →
-   * seed 已有边，切分逻辑住叶子才不形成环）；类上留入口，与 PROMPT_KINDS 同处调用。 */
-  static splitContractSection(tpl: string): { head: string; contract: string } {
-    return splitContractSection(tpl)
-  }
-
+  /** 契约后置拼装（#218）：宿主经门面走这里（R1：宿主只见门面，`src/host/jobs.ts` 是
+   * 唯一消费者）；引擎内部直接引 prompt-assembly.ts 的叶子函数——叶子零依赖、谁都能引，
+   * 不必绕类。切分函数不在这里露第二遍（只被叶子自用与门消费，露了就是无人调的中间人）。 */
   static withContractLast(tpl: string, materials: string): string {
     return withContractLast(tpl, materials)
   }

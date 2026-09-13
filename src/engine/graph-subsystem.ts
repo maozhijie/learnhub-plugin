@@ -54,6 +54,7 @@ import type { VaultLinkPrior } from './analysis.ts'
 import { analyzeGraph } from './analysis.ts'
 import { effectiveStage } from './audit.ts'
 import { Content } from './content.ts'
+import { withContractLast } from './prompt-assembly.ts'
 import { declaredEncOf } from './graph.ts'
 import { atomicWrite } from './io.ts'
 import type { AgentSeam } from './agent.ts'
@@ -461,7 +462,7 @@ export class GraphSubsystem {
     const materials = `## 目标描述（学习者原文）\n\n${goal}\n\n## 模式与绑定（照抄，不自拟）\n\n- 课程名：${course}\n- 模式：${mode}\n- 目标类型：${goalType}`
       + (goalType === 'coverage' ? `\n- 块工作表（照抄块名）：\n${worksheet.map(w => `  - block: ${w.block}`).join('\n')}` : '')
       + (prior ? `\n\n---\n\n${prior}` : '')
-    const pack = Content.withContractLast(tpl, materials)
+    const pack = withContractLast(tpl, materials)
     const gateOnce = (raw: string): { errors: string[]; spec: SeedProposalSpec | null } => {
       let doc: unknown
       try {

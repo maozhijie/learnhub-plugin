@@ -24,7 +24,7 @@ export { validatePlanItems, validatePlanArtifact } from './project-decompile.ts'
 import type { PlanItem } from './project-decompile.ts'
 import { validatePlanItems, validatePlanArtifact } from './project-decompile.ts'
 import { todayStr } from './dates.ts'
-import { Content } from './content.ts'
+import { withContractLast } from './prompt-assembly.ts'
 import type { Clock } from './clock.ts'
 import { readProbationLedger, foldProbation } from './probation.ts'
 import { Store } from './store.ts'
@@ -682,7 +682,7 @@ export class ProjectSubsystem {
     const current = fm.plan.length
       ? YAML.stringify({ plan: fm.plan })
       : '（空——本项目还没有里程碑计划，本次为初次规划）'
-    return Content.withContractLast(tpl, `## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 渐退档：${fm.tier}\n- 目标描述：\n\n${fm.goal}\n\n## 现状计划（修订时给出完整新版本，不保守微调）\n\n${current}`)
+    return withContractLast(tpl, `## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 渐退档：${fm.tier}\n- 目标描述：\n\n${fm.goal}\n\n## 现状计划（修订时给出完整新版本，不保守微调）\n\n${current}`)
   }
 
 
@@ -703,7 +703,7 @@ export class ProjectSubsystem {
     const planTable = view.milestones
       .map((m, i) => `${i + 1}. ${m.id}｜${m.name}｜任务类：${m.task_class}${m.generated ? '｜已生成' : ''}`)
       .join('\n')
-    return Content.withContractLast(tpl, `## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 目标描述：\n\n${fm.goal}\n\n## 里程碑计划（本里程碑的位置）\n\n${planTable}\n\n## 本里程碑任务\n\n- 里程碑 id：${hit.id}\n- 名称：${hit.name}\n- 任务类：${hit.task_class}\n- 验收要点草案：${hit.acceptance_hints}\n- 当前档位：${fm.tier}（产物按此档生成，只写这一档）\n${hit.generated ? `- 注意：该里程碑已有产物，本次是按档重生成——将走提案通道，apply 前旧文有快照。\n` : ''}`)
+    return withContractLast(tpl, `## 项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 生命周期：${fm.lifecycle}\n- 目标描述：\n\n${fm.goal}\n\n## 里程碑计划（本里程碑的位置）\n\n${planTable}\n\n## 本里程碑任务\n\n- 里程碑 id：${hit.id}\n- 名称：${hit.name}\n- 任务类：${hit.task_class}\n- 验收要点草案：${hit.acceptance_hints}\n- 当前档位：${fm.tier}（产物按此档生成，只写这一档）\n${hit.generated ? `- 注意：该里程碑已有产物，本次是按档重生成——将走提案通道，apply 前旧文有快照。\n` : ''}`)
   }
 
 
@@ -1174,7 +1174,7 @@ export class ProjectSubsystem {
     // 模板与材料分开收（#218 契约后置）：材料在前、输出契约段置尾；修复轮回灌走
     // decompileRepairPrompt（同一材料块），契约在修复轮仍居尾。
     const materials = `## 目标项目档案\n\n- 项目 id：${fm.id}\n- 项目名：${fm.name}\n- 渐退档：${fm.tier}\n- 目标描述（目标项目描述原文）：\n\n${goal}\n\n## 现状计划（给出完整新版本，不保守微调）\n\n${current}\n\n## 注册笔记（Vault 先验的检索来源）\n\n${notesList}\n\n## 知识子图落点\n\n${courseBlock}${prior ? `\n\n---\n\n${prior}` : ''}`
-    const pack = Content.withContractLast(tpl, materials)
+    const pack = withContractLast(tpl, materials)
     // 模型产出 → 双产物校验门 + 名字对账门（未过经缝的门错修复轮回灌重产恰一次，对齐
     // 「生成→门禁→修复一轮」机械）。对账域 = 种子簇 ∪ 全部启用课程的图节点名（与消费面
     // locateNode 的跨课解析同域——裸名歧义/悬空在受理前拦下，不留到消费面才炸）。

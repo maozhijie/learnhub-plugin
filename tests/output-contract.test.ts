@@ -248,6 +248,50 @@ test('CONTEXT.md「输出契约」词条承诺的敏感度词表在册（机械�
   }
 })
 
+// ---- #218 稀释治理：§5 截断如实告知（位置保留的理由见 ADR-0065 §4） ----
+
+/** 造一个「目标 + n 个更深节点」的图（更深 = 进 §5 禁止概念）。 */
+function graphWithDeeper(n: number): string {
+  const nodes = ['      - { name: 目标, pre: [], opt: false, note: "", est: 10 }']
+  for (let i = 0; i < n; i++) nodes.push(`      - { name: N${i}, pre: [目标], opt: false, note: "", est: 10 }`)
+  return ['region: 基础', 'color: blue', 'blocks:', '  - name: 入门块', '    nodes:', ...nodes].join('\n')
+}
+
+/** 取上下文包 §5 段的非空行（标题行被正则吃掉：行 0 = 名字清单，行 1 = 可选的截断告知）。 */
+function section5Lines(pack: string): string[] {
+  const sec = /## 5\. 禁止使用的概念[^\n]*\n([\s\S]*?)(?=\n## 6\.)/.exec(pack)
+  assert.ok(sec, '上下文包必须有 §5 段')
+  return sec![1]!.split('\n').map(l => l.trim()).filter(Boolean)
+}
+
+test('#218 稀释治理：§5 超过上限时截断如实告知（旧版静默截断，模型会读成穷举）', async () => {
+  const { withVault } = await import('./helpers/vault.ts')
+  await withVault({ graph: graphWithDeeper(260) }, async ({ engine }) => {
+    const c = await engine.registry.resolve('数学')
+    const pack = await engine.content2.contentPack(c.name, '目标')
+    assert.match(pack, /## 5\. 禁止使用的概念/, '§5 位置保留（挪走要重编号 §6–§13，而模板按号引用）')
+    const lines = section5Lines(pack)
+    assert.equal(lines[0]!.split('、').length, 200, '上限仍是实测的 200 条（FORBIDDEN_CONCEPT_CAP）')
+    assert.match(
+      lines[1] ?? '',
+      /本清单按图深度降序截取前 200 条，共 260 条未学节点；\*\*未列出的节点同样未学\*\*/,
+      '截断必须如实告知，否则模型把清单读成穷举',
+    )
+  })
+})
+
+test('#218 回归：§5 必须真的列出未学节点（旧实现 `Object.keys(Set)` 恒空 → §5 恒「（无）」）', async () => {
+  const { withVault } = await import('./helpers/vault.ts')
+  await withVault({ graph: graphWithDeeper(3) }, async ({ engine }) => {
+    const c = await engine.registry.resolve('数学')
+    const pack = await engine.content2.contentPack(c.name, '目标')
+    const lines = section5Lines(pack)
+    assert.doesNotMatch(lines.join('\n'), /（无：本节点已是图内最深）/, '§5 恒空是那条 bug 的签名')
+    for (const n of ['N0', 'N1', 'N2']) assert.ok(lines[0]!.includes(n), `更深节点「${n}」应在 §5 里`)
+    assert.doesNotMatch(lines.join('\n'), /截取前 \d+ 条/, '没到上限就不该声称截断')
+  })
+})
+
 // ---- #218 契约后置：契约句必须在最终 prompt 的末段（模板形状门 + 拼装缝门 + 变更登记门）----
 
 /** 模板里位于契约段起始标题之后的全部 `## ` 一级标题（不含起始那一节本身）。 */
@@ -325,15 +369,18 @@ test('自检：契约段之后又加一节（或契约挪回中段）门必须�
 
 // ---- 拼装缝门：src/ 里不得残留「模板变量直接拼进 prompt」的旧形态 ----
 
-/** 旧形态的签名：字符串字面量里插值一个提示词模板变量（`` `${tpl…`` / `` `${template…``）。
- * 属性访问（`${tpl.title}`）不算。收集面 = src/ 全量 .ts。 */
-const RAW_TEMPLATE_INTERPOLATION = /`\$\{(tpl|template|outlineTpl|sectionTpl|baseTpl)(?![.\w])/g
+/** 旧形态的签名：字符串字面量里插值一个**提示词模板变量**（名字含 tpl/template——
+ * 收集全部插值再按名字筛，不用写死变量名清单：新站的模板变量叫 `quizTpl`/`contentTpl`
+ * 也一样被看见）。属性访问（`${tpl.title}`——取值不是拼模板）不算。收集面 = src/ 全量 .ts。 */
+const TEMPLATE_VAR = /tpl|template/i
 
 function rawTemplateInterpolations(sources: Record<string, string>): string[] {
   const out: string[] = []
   for (const [file, text] of Object.entries(sources)) {
     text.split('\n').forEach((line, i) => {
-      for (const m of line.matchAll(RAW_TEMPLATE_INTERPOLATION)) out.push(`${file}:${i + 1}: ${m[0]}`)
+      for (const m of line.matchAll(/`\$\{([A-Za-z_$][\w$]*)(?![.\w])/g)) {
+        if (TEMPLATE_VAR.test(m[1]!)) out.push(`${file}:${i + 1}: ${m[0]}`)
+      }
     })
   }
   return out
@@ -353,9 +400,9 @@ test('#218 拼装缝：src/ 零「模板变量直接拼进 prompt」（一律经
   assert.deepEqual(rawTemplateInterpolations(sources), [])
 })
 
-test('自检：直接插值模板变量的旧形态会被抓（门不是恒过）', () => {
-  const bad = { 'x.ts': 'const p = `${tpl}\\n\\n---\\n\\n${pack}`\n' }
-  assert.equal(rawTemplateInterpolations(bad).length, 1)
+test('自检：直接插值模板变量的旧形态会被抓；换名的新站变量也被抓（门不是恒过）', () => {
+  assert.equal(rawTemplateInterpolations({ 'x.ts': 'const p = `${tpl}\\n\\n---\\n\\n${pack}`\n' }).length, 1)
+  assert.equal(rawTemplateInterpolations({ 'z.ts': 'const p = `${quizTpl}${body}`\n' }).length, 1, '新站换个变量名同样被抓')
   assert.deepEqual(rawTemplateInterpolations({ 'y.ts': 'const s = `${tpl.title} 提案`\n' }), [])
 })
 
@@ -374,8 +421,10 @@ function runChangelogGate(
   )
   for (const [kind, entries] of Object.entries(changelog)) {
     assert.ok(entries.length > 0, `「${kind}」的登记条目为空`)
+    // 同一版本号可有多条（模板未动但最终 prompt 变了：拼装线索、上下文包变更），
+    // 但版本号不得倒序——倒序说明表被写乱了，读的人无法判断哪条是最新一次。
     const versions = entries.map(e => e.version)
-    assert.equal(new Set(versions).size, versions.length, `「${kind}」登记版本重复`)
+    assert.deepEqual(versions, [...versions].sort((a, b) => a - b), `「${kind}」登记版本倒序（表写乱了）`)
     for (const e of entries) {
       assert.ok(
         e.date.trim() && e.changeType.trim() && e.expectedDelta.trim(),

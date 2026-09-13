@@ -1,5 +1,5 @@
 /**
- * 提示词契约后置拼装（#218 / ADR-0064）：全部生成站的最终 prompt 都由「材料」+「输出
+ * 提示词契约后置拼装（#218 / ADR-0065）：全部生成站的最终 prompt 都由「材料」+「输出
  * 契约段」构成，契约段置尾——契约与「只输出 X」硬指令落在最终 prompt 末段、离生成点
  * 最近（lost-in-middle 对策；回执评审把契约放进 system 提示词是全仓先例，#212 §四.1）。
  *
@@ -26,4 +26,17 @@ export function withContractLast(tpl: string, materials: string): string {
   const m = materials.trim()
   if (!contract) return m ? `${head}\n\n${m}\n` : `${head}\n`
   return m ? `${head}\n\n${m}\n\n---\n\n${contract}\n` : `${head}\n\n---\n\n${contract}\n`
+}
+
+/** 门错修复轮提示词（种子起草 / 目标反编译同款机械）：材料 + 回灌块（上次产出原文 + 逐条
+ * 校验清单）在前，模板的输出契约段置尾——修复轮里模型最后读到的仍是「只输出 X」，校验
+ * 清单不占契约的位置。`headline` 是这一族的死因标题（各站一句，含「重新输出完整 YAML」
+ * 的要求）。两站共用本函数：此前各写一份同形模板串，改措辞要改两处。 */
+export function repairRoundPrompt(
+  tpl: string, materials: string, headline: string, previous: string, errors: string[],
+): string {
+  return withContractLast(
+    tpl,
+    `${materials.trimEnd()}\n\n${headline}\n\n上一次输出：\n\n${previous}\n\n校验清单：\n\n${errors.join('\n')}\n`,
+  )
 }

@@ -15,7 +15,8 @@ import type { Store } from './store.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
 import type { ConceptRegistry } from './concepts.ts'
-import { Content } from './content.ts'
+import { withContractLast } from './prompt-assembly.ts'
+import type { Content } from './content.ts'
 import type { BankDoc } from './question-bank.ts'
 import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
@@ -173,7 +174,7 @@ export class GrowthSubsystem {
       ? sectionBody(doc!, SECTION_ANNOTATIONS)
       : null
     const template = await this.e.content.loadPrompt('罗盘初画')
-    const prompt = Content.withContractLast(template, compassPaintContext({
+    const prompt = withContractLast(template, compassPaintContext({
       courseName: c.name,
       anchor,
       starts: anchor.seed_nodes.filter(n => n !== anchor.endpoint).map(n => ({
@@ -610,7 +611,7 @@ export class GrowthSubsystem {
      * 回灌反馈）全在前，模板的输出契约段经 Content.withContractLast 置尾——三段式与修复
      * 重裁的同构形态，模型最后读到的始终是 note/route/ops 契约。 */
     const coachPrompt = (...blocks: Array<string | undefined>): string =>
-      Content.withContractLast(template, blocks
+      withContractLast(template, blocks
         .filter((b): b is string => Boolean(b?.trim()))
         .map(b => b.trim())
         .join('\n\n---\n\n'))
