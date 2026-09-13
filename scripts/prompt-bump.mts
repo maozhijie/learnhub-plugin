@@ -1,0 +1,482 @@
+/**
+ * 提示词变更过门装置（#220 / ADR-0072）：改模板＝改生产行为，一条命令回答「这次改模板能不能落地」。
+ *
+ * 三个子命令对应票面的三条过门（`docs/agents/architecture.md` §8 章程条款）：
+ *
+ *   check                            ① 登记门（提交级）：模板版本 bump 的提交必须同提交补
+ *                                        `PROMPT_CHANGELOG` 条目（version/date/changeType/
+ *                                        **预期输出增量**）。走 git 历史，不是在 HEAD 状态上看
+ *                                        ——状态级完备性由 output-contract.test.ts 的登记门执法。
+ *   replay --corpus <dir>            ② 语料回放（#213 语料 fixture 过解析回归）：把存下来的
+ *                                        原始输出重新过一遍本站解析面，**基线通过 → 回放失败**
+ *                                        即回归（解析容忍被改坏的机器判据）。零模型、确定性。
+ *   compare <before.json> <after.json> ③ 评审对照（#222 报告对照）：**同源样本**上逐（站 × 维度）
+ *                                        均值不降（改模板的预期输出增量要能兑现，不能把内容
+ *                                        质量改差）。需要真模型跑出来的两份报告（`npm run
+ *                                        quality-review -- --out <json>` 各一次，改前/改后）。
+ *
+ * 为什么三件住同一脚本：它们是**同一次变更的同一张门**，分开住会让「过门」变成三次手工对齐
+ * 路径的记忆负担；三条都读同一个「模板版本」概念（`<!-- learnhub:prompt/vN -->`），也就该由
+ * 同一处解释。
+ *
+ * 判读效力（分层法庭）：本装置只回答「回放没坏、评分没降」这类**机械读数**；内容质量是否变
+ * 好仍归人审（AI 评分是提议，人审是终审——ADR-0070 的分层法庭）。装置不进 `npm test` 的必
+ * 跑集（check/replay 有自检与夹具，见 tests/prompt-changelog.test.ts），它是**变更当下**跑的
+ * 手工门：真实语料目录、真模型报告都取不到时，如实登记「未过门」而不是假装过了。
+ *
+ * 单跑：
+ *   node --experimental-transform-types scripts/prompt-bump.mts check
+ *   node --experimental-transform-types scripts/prompt-bump.mts replay --corpus tests/fixtures/quality-corpus
+ */
+import { execFileSync } from 'node:child_process'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { stripFences } from '../src/engine/agent.ts'
+import { stripWrappingFence } from '../src/engine/compass.ts'
+import { Content } from '../src/engine/content.ts'
+import { YAML } from '../src/engine/yaml.ts'
+import { validateBank } from '../src/engine/question-bank.ts'
+import { validateSeedProposal } from '../src/engine/seed.ts'
+import { validateEditProposal } from '../src/engine/proposals.ts'
+import { splitDecompileDoc, validatePlanArtifact } from '../src/engine/project-decompile.ts'
+import { validateErrorCards } from '../src/engine/error-cards.ts'
+import { validateRouteBody } from '../src/engine/compass.ts'
+import { parseReceiptReview } from '../src/engine/receipts.ts'
+import { parseCorpusFile } from '../src/host/corpus.ts'
+
+/** 模板版本标记（`content.ts` 的每条模板头；与 PROMPT_CHANGELOG 的版本号同源）。 */
+export const MARKER_RE = /<!-- learnhub:prompt\/v(\d+) -->/g
+
+/** 登记表文件与模板文件（提交级门的两个受控面；路径相对仓库根）。 */
+export const TEMPLATE_FILE = 'src/engine/content.ts'
+export const CHANGELOG_FILE = 'src/engine/output-contracts.ts'
+
+// ---------------------------------------------------------------- ① 提交级登记门
+
+/** 一个提交的 diff 面读数（`parseLogDiff` 的产物；纯数据，测试直造）。 */
+export interface CommitDiffReading {
+  sha: string
+  subject: string
+  /** 本提交 diff 里**新增**的模板版本标记（`+<!-- learnhub:prompt/vN -->`）。 */
+  addedMarkers: number[]
+  /** 本提交 diff 里**新增**的登记条目版本行（`+    version: N,`）。 */
+  addedChangelogVersions: number[]
+}
+
+/** bump 提交的判定结果（`scanBumps` 的产物）。 */
+export interface BumpCommit {
+  sha: string
+  subject: string
+  /** 相对父提交**新出现在** templates 文件里的版本号（集合差，不是 diff 行——标记挪位/
+   * 新增一份同版本模板都不算 bump，理由见 ADR-0072）。 */
+  newVersions: number[]
+  /** 同一提交新增的登记条目版本号（diff 行）。 */
+  registeredVersions: number[]
+}
+
+/** 解析 `git log -p -U0` 的输出为逐提交读数（纯函数：测试直造 diff 文本，不需要 git）。 */
+export function parseLogDiff(log: string): CommitDiffReading[] {
+  const out: CommitDiffReading[] = []
+  let cur: CommitDiffReading | null = null
+  for (const line of log.split('\n')) {
+    if (line.startsWith('@@COMMIT ')) {
+      const rest = line.slice('@@COMMIT '.length)
+      const sha = rest.split(' ')[0] ?? ''
+      cur = { sha, subject: rest.slice(sha.length + 1).trim(), addedMarkers: [], addedChangelogVersions: [] }
+      out.push(cur)
+      continue
+    }
+    if (!cur || !line.startsWith('+') || line.startsWith('+++')) continue
+    for (const m of line.matchAll(MARKER_RE)) cur.addedMarkers.push(Number(m[1]))
+    const v = /^\+\s*version:\s*(\d+)\s*,/.exec(line)
+    if (v) cur.addedChangelogVersions.push(Number(v[1]))
+  }
+  return out
+}
+
+/** 一份模板文件里出现过的全部版本号（集合）。 */
+export function markerVersionsOf(templateText: string): Set<number> {
+  return new Set([...templateText.matchAll(MARKER_RE)].map(m => Number(m[1])))
+}
+
+/** 判定：每个新出现的版本号都必须在同一提交里有登记条目。违规行给出 sha/subject/版本。 */
+export function bumpViolations(bumps: readonly BumpCommit[]): string[] {
+  const out: string[] = []
+  for (const b of bumps) {
+    const registered = new Set(b.registeredVersions)
+    const missing = b.newVersions.filter(v => !registered.has(v)).sort((a, b2) => a - b2)
+    if (missing.length) {
+      out.push(`${b.sha.slice(0, 8)} ${b.subject}：模板版本 ${missing.map(v => `v${v}`).join('、')} 首次出现在本提交，`
+        + '但同提交没有对应版本的 PROMPT_CHANGELOG 登记条目——改模板必须带「预期输出增量」（version/date/changeType/expectedDelta）')
+    }
+  }
+  return out
+}
+
+/** 纪律起点（动态发现，不写死 sha）：`PROMPT_CHANGELOG` 首次出现的提交——此前没有登记面，
+ * 编不出一份诚实的回溯表（同 PROMPT_CHANGELOG 头注「本表自 #218 起计」）。 */
+export function disciplineStartRef(cwd: string): string {
+  const root = gitRoot(cwd)
+  const shas = git(['log', '-S', 'PROMPT_CHANGELOG', '--format=%H', '--', CHANGELOG_FILE], root).trim().split('\n').filter(Boolean)
+  const first = shas[shas.length - 1]
+  if (!first) throw new Error(`[prompt-bump] 找不到 PROMPT_CHANGELOG 的引入提交（${CHANGELOG_FILE}）——仓库历史里没有登记面？`)
+  return first
+}
+
+function gitRoot(cwd: string): string {
+  return git(['rev-parse', '--show-toplevel'], cwd).trim()
+}
+
+function git(args: string[], cwd: string): string {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+}
+
+/** 扫 git 历史取 bump 提交（`since..until`，缺省 since = 纪律起点、until = HEAD）。
+ * 两段式：先一次 `git log -p` 找出**候选提交**（diff 里出现版本标记），再对候选逐一看
+ * 模板文件的版本集合差——候选很少，故 `git show` 的开销可控。 */
+export function scanBumps(opts: { cwd: string; since?: string; until?: string }): { commits: number; bumps: BumpCommit[] } {
+  const root = gitRoot(opts.cwd)
+  const since = opts.since ?? disciplineStartRef(root)
+  const range = `${since}..${opts.until ?? 'HEAD'}`
+  const log = git(['log', '-p', '-U0', '--format=@@COMMIT %H %s', range, '--', TEMPLATE_FILE, CHANGELOG_FILE], root)
+  const readings = parseLogDiff(log)
+  const bumps: BumpCommit[] = []
+  for (const r of readings) {
+    if (!r.addedMarkers.length) continue
+    const now = markerVersionsOf(git(['show', `${r.sha}:${TEMPLATE_FILE}`], root))
+    const before = markerVersionsOf(git(['show', `${r.sha}^:${TEMPLATE_FILE}`], root))
+    const newVersions = [...now].filter(v => !before.has(v)).sort((a, b) => a - b)
+    if (newVersions.length) bumps.push({ sha: r.sha, subject: r.subject, newVersions, registeredVersions: r.addedChangelogVersions })
+  }
+  return { commits: readings.length, bumps }
+}
+
+// ---------------------------------------------------------------- ② 语料回放
+
+/** 回放面：站 → 本站**解析面**（离线可跑的那一半；受理侧的跨产物对账不在回放面，见各条注释）。
+ * 返回 null 表示通过，否则是失败原因清单。 */
+export const REPLAY_FACE: Record<string, (raw: string) => string[] | null> = {
+  // 大纲/拆节：站链 = llmSeamStripped（剥围栏，host/jobs.ts）→ Content.parseOutline(yamlText)。
+  // 语料存的是**剥围栏前**的原始输出，故回放照做剥围栏。
+  课程大纲: raw => throwsToErrors(() => { Content.parseOutline(stripFences(raw)) }),
+  课程节拆分: raw => throwsToErrors(() => { Content.parseSplitOutline(stripFences(raw), 's1') }),
+  // 题目批：站链 = 剥围栏 → YAML.parseModel → questions 非空 → 逐题 validateBank（受理门另有
+  // invokes/查重在回放面外——回放判**解析/形状**，不判查重与概念对表）
+  题目生成: raw => bankShape(raw),
+  笔记出题: raw => bankShape(raw),
+  // 种子提案：站链 = AgentSeam.complete（剥围栏）→ YAML.parseModel → validateSeedProposal
+  种子起草: raw => yamlThen(stripFences(raw), doc => validateSeedProposal(doc).errors),
+  // 教练回合：站链 = stripWrappingFence → parseModel → validateEditProposal → 必须有 note 区
+  // （growth-subsystem.coachGrowthBatch 的 parseGrowthVerdict，私有方法——镜像并注记）
+  教练生长: raw => throwsToErrors(() => {
+    const doc = YAML.parseModel(stripWrappingFence(raw))
+    const v = validateEditProposal(doc)
+    if (v.errors || !v.spec) throw new Error((v.errors ?? ['edit 提案 schema 未过']).join('；'))
+    if (!v.spec.note) throw new Error('缺 note 区——生长批必须携带算子标签与理由')
+  }),
+  // 目标反编译：站链 = AgentSeam.complete（剥围栏）→ YAML.parseModel → splitDecompileDoc。
+  // **跨产物一致性按自指口径旁路**：project 名取产物自身、expectSeed 关（「显式目标课程时
+  // seed 半区必须缺席」是受理侧知识，回放取不到输入面）
+  目标反编译: raw => yamlThen(stripFences(raw), doc => {
+    const project = (doc as { project?: unknown }).project
+    return splitDecompileDoc(doc, typeof project === 'string' ? project : '', { expectSeed: false }).errors
+  }),
+  // 计划草案：站链同上（validatePlanArtifact 的 project 一致性同款自指旁路）
+  计划草案: raw => yamlThen(stripFences(raw), doc => {
+    const project = (doc as { project?: unknown }).project
+    return validatePlanArtifact(doc, typeof project === 'string' ? project : '').errors
+  }),
+  // 错误对比卡：YAML + validateErrorCards（形状门）
+  错误对比卡: raw => yamlThen(stripFences(raw), doc => validateErrorCards(doc).errors),
+  // 罗盘：站链 = stripWrappingFence → validateRouteBody（无 YAML 层）
+  罗盘: raw => { const e = validateRouteBody(stripWrappingFence(raw)); return e.length ? e : null },
+  // 回执评审：parseReceiptReview 自带围栏处理（站是机械站，裸 LlmComplete 无剥围栏后处理）
+  回执评审: raw => throwsToErrors(() => { parseReceiptReview(raw) }),
+}
+
+/** 题目批形状：剥围栏 → 解析 → questions 非空 → validateBank（与 questionGenerate 的解析段同）
+ * 注：受理侧的 invokes 对表/查重/answer 形态逐题门不在回放面（回放判解析形状）。 */
+function bankShape(raw: string): string[] | null {
+  return yamlThen(stripFences(raw), doc => {
+    const questions = (doc as { questions?: unknown }).questions
+    if (!Array.isArray(questions) || !questions.length) return ['questions 为空——本批没有可用题目']
+    return validateBank(doc).errors
+  })
+}
+
+/** 明确**不在回放面**的站与理由（覆盖面是显式清单，不是漏登；与输出契约注册表的
+ * OUT_OF_SCOPE_STATIONS 同款纪律）。 */
+export const REPLAY_OUT_OF_SCOPE: Record<string, string> = {
+  课程节生成: '正文 markdown + 机器块的解析面要引擎/课程上下文（sectionApply 落盘），回放取不到',
+  '课程节生成-苏格拉底': '同上（风格变体共享节生成解析面）',
+  '课程节生成-费曼': '同上（风格变体共享节生成解析面）',
+  里程碑草案: '四块结构门要项目/里程碑上下文（里程碑档位与既有产物对账）',
+  独立解题: '第二意见门的解题应答不是产物契约（其结论由答案键对账判定）',
+  判卷: '判卷站产出判词 + 调度副作用，无独立产物契约',
+  申诉判卷: '同上（申诉复核两段式）',
+  质量评审: '评审器自身的判定应答——判读面不是产物面（不然就自己评自己）',
+  讲解反馈: '会话式自由文本（E2 档案面），无固定交付契约',
+  自注反馈: '会话式自由文本（E1 档案面），无固定交付契约',
+  老师辅导: '会话式对话形态，无固定交付契约',
+  讲给我听: '会话式费曼回讲，无固定交付契约',
+}
+
+function throwsToErrors(fn: () => unknown): string[] | null {
+  try {
+    fn()
+    return null
+  } catch (err) {
+    return [err instanceof Error ? err.message : String(err)]
+  }
+}
+
+function yamlThen(raw: string, check: (doc: unknown) => string[] | undefined): string[] | null {
+  let doc: unknown
+  try {
+    doc = YAML.parseModel(raw)
+  } catch (err) {
+    // 解析失败原样带出（parseModel 的容忍面在站侧，回放只判「能不能解析」）
+    return [err instanceof Error ? err.message : String(err)]
+  }
+  const errors = check(doc) ?? []
+  return errors.length ? errors : null
+}
+
+export interface ReplayReading {
+  ref: string
+  station: string
+  /** 语料记录的判定（ok / tolerated / failed）。 */
+  baseline: 'ok' | 'tolerated' | 'failed'
+  /** 回放判定：passed / failed（不在回放面的站为 null）。 */
+  replay: 'passed' | 'failed' | null
+  /** 回归：基线通过（ok/tolerated）而回放失败——**这是要拦的那一类**。 */
+  regression: boolean
+  errors: string[]
+}
+
+/** 读语料目录（`<dir>/<站>/*.md`，格式解析复用 host/corpus.ts 的单一出处）并按站回放。 */
+export function replayCorpus(dir: string, opts: { stations?: readonly string[] } = {}): ReplayReading[] {
+  const wanted = opts.stations?.length ? opts.stations : null
+  const out: ReplayReading[] = []
+  let stations: string[]
+  try {
+    stations = readdirSync(dir).sort()
+  } catch (err) {
+    throw new Error(`[prompt-bump] 语料目录读不到：${dir}（${err instanceof Error ? err.message : String(err)}）`)
+  }
+  for (const station of stations) {
+    if (wanted && !wanted.includes(station)) continue
+    let files: string[]
+    try {
+      files = readdirSync(join(dir, station)).filter(f => f.endsWith('.md')).sort()
+    } catch {
+      continue
+    }
+    const parse = REPLAY_FACE[station]
+    for (const file of files) {
+      const parsed = parseCorpusFile(readFileSync(join(dir, station, file), 'utf8'))
+      const fm = parsed.frontmatter
+      const baseline = fm.outcome === 'failed' || fm.outcome === 'tolerated' ? fm.outcome : 'ok'
+      const ref = `${station}/${file}`
+      if (!parse) {
+        out.push({ ref, station, baseline, replay: null, regression: false, errors: [] })
+        continue
+      }
+      const errors = parse(parsed.output)
+      const replay = errors ? 'failed' : 'passed'
+      out.push({ ref, station, baseline, replay, regression: replay === 'failed' && baseline !== 'failed', errors: errors ?? [] })
+    }
+  }
+  return out
+}
+
+/** 回放违规（回归件）——只有「基线通过 → 回放失败」算，基线本就失败的不重复计入。 */
+export function replayViolations(readings: readonly ReplayReading[]): string[] {
+  return readings.filter(r => r.regression)
+    .map(r => `${r.ref}：基线 ${r.baseline} → 回放 failed（${r.errors[0] ?? '解析面变化'}）`)
+}
+
+// ---------------------------------------------------------------- ③ 评审对照
+
+interface ReportStat { station: string; dimension: string; dimensionName: string; counts: number[]; na: number; scored: number }
+interface ReportShape {
+  stats?: ReportStat[]
+  reviews?: Array<{ ref: string; station: string }>
+  sampling?: { corpusDir?: string; selected?: number }
+}
+
+export interface CompareRow {
+  key: string
+  station: string
+  dimensionName: string
+  before: number
+  after: number
+  delta: number
+}
+
+export interface CompareResult {
+  rows: CompareRow[]
+  /** 不可比/不通过的硬问题（同源样本不成立、维度集合变化、分数下降）。 */
+  problems: string[]
+}
+
+function meanOf(s: ReportStat): number | null {
+  if (!s.scored) return null
+  const sum = s.counts.reduce((acc, c, i) => acc + c * (i + 1), 0)
+  return sum / s.scored
+}
+
+function refsOf(r: ReportShape): string[] {
+  return [...new Set((r.reviews ?? []).map(x => x.ref))].sort()
+}
+
+/** 两份评审报告对照（纯函数，测试直造报告）：三条硬前提 + 一条判定。
+ * 硬前提（不满足即**拒绝**比对，不是「通过」）：① 同源样本（评审面 ref 集合一致）；
+ * ② 两侧都有可判档的（站 × 维度）读数；③ 维度集合一致（改模板不该改量规维度）。
+ * 判定：逐（站 × 维度）均值不降（缺读数的一侧 = 该维度不可比，计入问题）。 */
+export function compareReviewReports(before: ReportShape, after: ReportShape): CompareResult {
+  const problems: string[] = []
+  const refsBefore = refsOf(before)
+  const refsAfter = refsOf(after)
+  if (!refsBefore.length || !refsAfter.length) problems.push('报告没有评审面样本（reviews 为空）——零样本对照会恒过，拒绝比对')
+  else if (refsBefore.join('|') !== refsAfter.join('|')) {
+    problems.push(`非同源样本：改前 ${refsBefore.length} 件 / 改后 ${refsAfter.length} 件且 ref 集合不同——对照必须落在同一批样本上`)
+  }
+  const index = (r: ReportShape): Map<string, ReportStat> => new Map((r.stats ?? []).map(s => [`${s.station}\u0000${s.dimension}`, s]))
+  const b = index(before)
+  const a = index(after)
+  if (!b.size || !a.size) problems.push('报告没有维度读数（stats 为空）——对照无对象')
+  const keys = [...new Set([...b.keys(), ...a.keys()])].sort()
+  const rows: CompareRow[] = []
+  for (const key of keys) {
+    const [station = '', dimensionName = ''] = key.split('\u0000')
+    const bs = b.get(key)
+    const as = a.get(key)
+    const bm = bs ? meanOf(bs) : null
+    const am = as ? meanOf(as) : null
+    if (bm === null || am === null) {
+      problems.push(`「${station} / ${dimensionName}」有一侧无可判档读数（已判档 ${bs?.scored ?? 0} → ${as?.scored ?? 0}）——不可比`)
+      continue
+    }
+    rows.push({ key, station, dimensionName, before: bm, after: am, delta: am - bm })
+    if (am < bm) problems.push(`「${station} / ${dimensionName}」均值下降 ${bm.toFixed(2)} → ${am.toFixed(2)}——改模板不得把内容质量改差（或显式登记例外与回退点）`)
+  }
+  return { rows, problems }
+}
+
+// ---------------------------------------------------------------- CLI
+
+function usage(): string {
+  return [
+    '提示词变更过门装置（#220 / ADR-0072）',
+    '',
+    '  node --experimental-transform-types scripts/prompt-bump.mts check [--since <ref>] [--until <ref>]',
+    '      ① 登记门：模板版本 bump 的提交必须同提交补 PROMPT_CHANGELOG 条目',
+    '  node --experimental-transform-types scripts/prompt-bump.mts replay --corpus <dir> [--stations a,b]',
+    '      ② 语料回放：基线通过的语料在回放里不得失败（解析回归）',
+    '  node --experimental-transform-types scripts/prompt-bump.mts compare <before.json> <after.json>',
+    '      ③ 评审对照：同源样本上逐（站 × 维度）均值不降（需两份 --out 报告）',
+  ].join('\n')
+}
+
+function opt(args: string[], name: string): string | undefined {
+  const i = args.indexOf(`--${name}`)
+  return i >= 0 && args[i + 1] ? args[i + 1] : undefined
+}
+
+function cmdCheck(args: string[]): number {
+  const cwd = process.cwd()
+  const since = opt(args, 'since')
+  const until = opt(args, 'until')
+  const { commits, bumps } = scanBumps({ cwd, ...(since ? { since } : {}), ...(until ? { until } : {}) })
+  console.log(`登记门（#220）：扫描 ${since ?? disciplineStartRef(cwd).slice(0, 8)}..${until ?? 'HEAD'} 的 ${commits} 个提交（触及模板/登记表的）`)
+  if (!commits) {
+    console.log('· 区间内没有触及模板或登记表的提交——「扫到 0 个」是读数不是通过：确认 --since/--until 指向你要审的变更')
+  }
+  console.log(`· 其中模板版本 bump 提交 ${bumps.length} 个`)
+  const violations = bumpViolations(bumps)
+  if (violations.length) {
+    console.log(`✗ ${violations.length} 条违规：`)
+    for (const v of violations) console.log(`  · ${v}`)
+    return 1
+  }
+  console.log('✓ 无违规：每个新出现的模板版本号都在同一提交里补了登记条目')
+  return 0
+}
+
+function cmdReplay(args: string[]): number {
+  const corpus = opt(args, 'corpus')
+  if (!corpus) {
+    console.error('缺少 --corpus <语料目录>（宿主语料默认住 <中心>/state/生成语料；夹具可指向 tests/fixtures/quality-corpus）')
+    return 2
+  }
+  const dir = resolve(corpus)
+  const stations = opt(args, 'stations')?.split(',').map(s => s.trim()).filter(Boolean)
+  const readings = replayCorpus(dir, { ...(stations ? { stations } : {}) })
+  if (!readings.length) {
+    console.error(`✗ 语料目录里没有可回放的样本：${dir}——零样本回放会恒过，按失败处理（先跑一轮生成或指向夹具）`)
+    return 1
+  }
+  console.log(`语料回放（#220）：${dir}`)
+  for (const r of readings) {
+    const mark = r.replay === null ? '不在回放面' : r.regression ? '✗ 回归' : r.replay === 'passed' ? '✓' : '（基线本就失败，不计回归）'
+    console.log(`  · ${r.ref}：基线 ${r.baseline} → 回放 ${r.replay ?? '—'} ${mark}`)
+    if (r.regression && r.errors[0]) console.log(`      ${r.errors[0]}`)
+  }
+  const seen = new Set(readings.map(r => r.station))
+  for (const [station, reason] of Object.entries(REPLAY_OUT_OF_SCOPE)) {
+    if (!seen.has(station)) continue
+    console.log(`  · ${station}：${reason}`)
+  }
+  const violations = replayViolations(readings)
+  if (violations.length) {
+    console.log(`✗ ${violations.length} 件解析回归：`)
+    for (const v of violations) console.log(`  · ${v}`)
+    return 1
+  }
+  console.log('✓ 无解析回归（0 件「基线通过 → 回放失败」）')
+  return 0
+}
+
+function cmdCompare(args: string[]): number {
+  const [beforePath, afterPath] = args.filter(a => !a.startsWith('--'))
+  if (!beforePath || !afterPath) {
+    console.error('用法：compare <before.json> <after.json>（两份 quality-review --out 报告）')
+    return 2
+  }
+  const read = (p: string): ReportShape => {
+    try {
+      return JSON.parse(readFileSync(p, 'utf8')) as ReportShape
+    } catch (err) {
+      throw new Error(`报告读不到或不是 JSON：${p}（${err instanceof Error ? err.message : String(err)}）`)
+    }
+  }
+  const result = compareReviewReports(read(beforePath), read(afterPath))
+  console.log(`评审对照（#220）：改前 ${beforePath} ／ 改后 ${afterPath}`)
+  for (const row of result.rows) {
+    const sign = row.delta >= 0 ? '+' : ''
+    console.log(`  · ${row.station} / ${row.dimensionName}：${row.before.toFixed(2)} → ${row.after.toFixed(2)}（${sign}${row.delta.toFixed(2)}）${row.delta < 0 ? ' ✗' : ''}`)
+  }
+  if (result.problems.length) {
+    console.log(`✗ ${result.problems.length} 条问题：`)
+    for (const p of result.problems) console.log(`  · ${p}`)
+    return 1
+  }
+  console.log('✓ 同源样本上逐（站 × 维度）均值不降（AI 评分是提议，人审终审——本装置只出机械读数）')
+  return 0
+}
+
+const isMain = process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/').split('/').slice(-2).join('/'))
+if (isMain) {
+  const [cmd, ...rest] = process.argv.slice(2)
+  try {
+    const code = cmd === 'check' ? cmdCheck(rest)
+      : cmd === 'replay' ? cmdReplay(rest)
+        : cmd === 'compare' ? cmdCompare(rest)
+          : (console.log(usage()), cmd === undefined ? 0 : 2)
+    process.exit(code)
+  } catch (err) {
+    console.error(`[prompt-bump] ${err instanceof Error ? err.message : String(err)}`)
+    process.exit(1)
+  }
+}
