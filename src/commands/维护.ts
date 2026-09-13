@@ -243,6 +243,24 @@ export const 维护域 = {
       }
     ]
   }),
+  'spike': command({
+    id: "spike",
+    args: {
+      runsPerCell: { type: "number" },
+      stations: { type: "array", items: { type: "string" } },
+      quizCount: { type: "number" },
+      temperature: { type: "number" },
+      corpusDir: { type: "string" }
+    },
+    domain: "维护",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/spike" }
+      }
+    ]
+  }),
   'smoke': command({
     id: "smoke",
     args: {

@@ -32,6 +32,7 @@ import {
   resumeQueue, sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth,
 } from './jobs.ts'
 import { runGenerationSmoke } from './smoke.ts'
+import { runToolChannelSpike } from './spike.ts'
 
 /** 面板内轻量答疑：节点上下文 system + 前端携带的对话历史（拼成单条 user 消息）→ llm。
  * 与 dsh 会话分层：这里只答不写，深度讨论/修订走「与 AI 讨论本课」开的会话。 */
@@ -189,6 +190,26 @@ export const HANDLERS: Record<string, RouteHandler> = {
       ...(quizCount !== undefined ? { quizCount } : {}),
       ...(quizAuditRate !== undefined ? { quizAuditRate } : {}),
       ...(jobTimeoutMs !== undefined ? { jobTimeoutMs } : {}),
+    })))
+  },
+  'POST /spike': async ({ rt, ctx, body, res }) => {
+    // 工具调用通道 spike（#216）：双臂 × 两站 × 多变体各 N 次（真 provider），收三组
+    // 指标。同步阻塞到整轮结束（分钟级），驱动脚本 scripts/spike.mjs 按长超时调用。
+    const runsPerCell = optNumber(body, 'runsPerCell')
+    const quizCount = optNumber(body, 'quizCount')
+    const temperature = optNumber(body, 'temperature')
+    if (runsPerCell !== undefined && (!Number.isInteger(runsPerCell) || runsPerCell <= 0)) throw new ParamError('runsPerCell 必须是正整数')
+    if (quizCount !== undefined && (!Number.isInteger(quizCount) || quizCount <= 0)) throw new ParamError('quizCount 必须是正整数')
+    if (temperature !== undefined && !(temperature >= 0 && temperature <= 2)) throw new ParamError('temperature 必须在 0–2（provider 约定范围）')
+    const stations = optList(body, 'stations')?.filter((s): s is '课程大纲' | '题目生成' => s === '课程大纲' || s === '题目生成')
+    if (stations !== undefined && !stations.length) throw new ParamError('stations 只接受「课程大纲」/「题目生成」')
+    const corpusDir = optText(body, 'corpusDir')
+    sendJson(res, 200, await apiRun(rt, 'api/spike', () => runToolChannelSpike(ctx, {
+      ...(runsPerCell !== undefined ? { runsPerCell } : {}),
+      ...(stations !== undefined ? { stations } : {}),
+      ...(quizCount !== undefined ? { quizCount } : {}),
+      ...(temperature !== undefined ? { temperature } : {}),
+      ...(corpusDir !== undefined ? { corpusDir: corpusDir.replace(/\\/g, '/') } : {}),
     })))
   },
   'GET /agent-guide': async ({ res }) => {

@@ -983,5 +983,16 @@
    "quizAuditRate",
    "jobTimeoutMs"
   ]
+ },
+ {
+  "method": "POST",
+  "route": "/spike",
+  "keys": [
+   "runsPerCell",
+   "stations",
+   "quizCount",
+   "temperature",
+   "corpusDir"
+  ]
  }
 ]

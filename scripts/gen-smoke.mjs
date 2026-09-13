@@ -14,6 +14,34 @@
  *
  * 注意：本脚本走真实 provider 与用户配额——单次成本压在几次调用内，不要挂循环。
  */
+/** 长任务 POST：用 node:http 而非 fetch——fetch（undici）默认 headersTimeout 300s，
+ * 「宿主同步跑完整轮再回」的调用会被 5 分钟掐断（#216 首轮实验实测：语料跑齐 72 格次，
+ * 响应头未在 300s 内发出 → 驱动拿不到报告）。node:http 无隐式头超时。 */
+function postJson(url, body, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url)
+    const payload = JSON.stringify(body)
+    const req = httpRequest({
+      hostname: u.hostname,
+      port: u.port,
+      path: u.pathname,
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload) },
+    }, res => {
+      const chunks = []
+      res.on('data', c => chunks.push(c))
+      res.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8')
+        if (res.statusCode !== 200) reject(new Error(`宿主返回 ${res.statusCode}：${text}`))
+        else resolve(JSON.parse(text))
+      })
+    })
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`等待宿主超过 ${Math.round(timeoutMs / 60000)} 分钟`)))
+    req.on('error', reject)
+    req.end(payload)
+  })
+}
+
 const args = process.argv.slice(2)
 const opt = (name, fallback) => {
   const i = args.indexOf(`--${name}`)
@@ -51,21 +79,14 @@ function guidance(reason) {
 
 let report
 try {
-  const res = await fetch(`${base}/learnhub/api/smoke`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  })
-  const text = await res.text()
-  if (!res.ok) {
-    console.error(`宿主返回 ${res.status}：\n${text}`)
-    // 宿主在场但冒烟失败：把宿主给的死因放在指引之前（那是第一手信息）
+  report = await postJson(`${base}/learnhub/api/smoke`, body, timeoutMs)
+} catch (err) {
+  if (err instanceof Error && err.message.startsWith('宿主返回')) {
+    // 宿主在场但冒烟失败：死因是宿主给的第一手信息，放在指引之前
+    console.error(err.message)
     console.error('\n' + guidance('宿主在场但冒烟调用失败（死因见上）'))
     process.exit(1)
   }
-  report = JSON.parse(text)
-} catch (err) {
   console.error(guidance(err instanceof Error ? err.message : String(err)))
   process.exit(1)
 }
