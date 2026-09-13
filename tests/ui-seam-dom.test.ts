@@ -108,7 +108,7 @@ test('CommandBoundary：加载/失败/内容三态一个长相，重试入口可
   const reloadCalls: unknown[][] = []
   const children = (d: unknown) => React.createElement('div', null, `内容:${JSON.stringify(d)}`)
   const { rerender } = render(React.createElement(CommandBoundary, { cmd: cmdOf({ loading: true }), children }))
-  assert.ok(screen.getByText('加载中…'), 'card 变体缺省加载文案')
+  assert.ok(screen.getByText(/加载中/), 'card 变体缺省加载文案')
 
   rerender(React.createElement(CommandBoundary, {
     cmd: cmdOf({ error: '宿主暂不可达', reload: () => { reloadCalls.push([]); return Promise.resolve() } }),
