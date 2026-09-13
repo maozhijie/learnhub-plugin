@@ -17,7 +17,9 @@
  */
 
 /** 区键：五区页签，全 ui 唯一出处。区表（ZONE_KEYS）与壳顶栏页签、保活视图分支
- * 对账由 tests/ui-router.test.ts 执法（Exhibit A 纪律延续）。 */
+ * 对账由 tests/ui-router.test.ts 执法（Exhibit A 纪律延续）。区名的另外两份同构投影
+ * ——宿主 AGENT_GUIDE 的 page 词表（src/host/llm.ts 头注释）与面板页面词表
+ * （components/AgentHints.tsx GUIDE_PAGE_LABEL）——增删区键须三处同步。 */
 export const ZONE_KEYS = ['today', 'courses', 'insight', 'projects', 'practice'] as const
 
 export type ZoneKey = (typeof ZONE_KEYS)[number]

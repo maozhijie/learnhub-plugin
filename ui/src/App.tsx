@@ -6,7 +6,7 @@ import { errorMessage } from './hooks/useCommand'
 import { HelpDrawer } from './components/HelpDrawer'
 import { ShellTopBar } from './components/ShellTopBar'
 import { ZoneBody } from './components/ZoneBody'
-import { navigate, onRouteChange, parseHash, readHash, syncHash, viewOfRoute, zoneOfView } from './lib/router'
+import { DEFAULT_COURSE_SUB, navigate, onRouteChange, parseHash, readHash, routeOfView, syncHash, viewOfRoute, zoneOfView } from './lib/router'
 import type { CourseSub, ViewKey, ZoneKey } from './lib/router'
 import type { StatusWithLlm, TreeDoc } from './types'
 import { useCoachToasts } from './useCoachToasts'
@@ -135,7 +135,7 @@ export default function App() {
 
   return (
     <div className='app-shell'>
-      <ShellTopBar zone={zoneOfView(view)} courseSub={view.startsWith('courses.') ? view.slice(8) as CourseSub : 'graph'}
+      <ShellTopBar zone={zoneOfView(view)} courseSub={routeOfView(view).sub ?? DEFAULT_COURSE_SUB}
         theme={theme} onZone={goZone} onCourseSub={goCourseSub}
         onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
         onOpenHelp={() => setHelpOpen(true)} />
