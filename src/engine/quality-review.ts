@@ -112,10 +112,10 @@ export function equidistantIndices(count: number, k: number): number[] {
   return out
 }
 
-/** 按站抽样（环形池口径）：站内按 ref 逆序（语料文件名 = 时间序 + 站内序号，逆序即
- * 「新→旧」——环形池保留的是最近的样本，比较与召回都该从最近的说起）。bad 桶（失败 +
- * 容忍命中）定额取前 N；ok 桶等距取 M。返回按 ref 升序（= 时间序）稳定排列，便于人读
- * 与报告 diff。 */
+/** 按站抽样（环形池口径）：站内按 ref 逆序——语料文件名是 `<桶>-<ISO 时间戳>-<站内序号>`，
+ * 故逆序是「桶内新→旧」（桶前缀 ok-/bad- 排在时间之前，桶间不参与「谁更新」的比较；环形池
+ * 保留的正是各桶最近的样本，「从最近的说起」按桶内成立）。bad 桶（失败 + 容忍命中）定额取
+ * 最近 N 件；ok 桶等距取 M 件。返回按 ref 升序（桶内时间序）稳定排列，便于人读与报告 diff。 */
 export function sampleQualitySamples(
   samples: readonly ReviewSample[],
   quota: SampleQuota = DEFAULT_SAMPLE_QUOTA,
@@ -136,7 +136,6 @@ export function sampleQualitySamples(
       ...equidistantIndices(ok.length, Math.max(0, quota.ok)).map(i => ok[i]!),
     ]
     picked.push(...chosen.sort((a, b) => a.ref.localeCompare(b.ref)))
-    void station
   }
   return picked
 }
@@ -193,9 +192,12 @@ function rubricBlock(rubric: QualityRubric): string {
   ].join('\n')
 }
 
-/** 产物原文块（围栏不带语言标记：产物形态因站而异，标错语言反而误导）。 */
+/** 产物原文块（围栏不带语言标记：产物形态因站而异，标错语言反而误导）。**不写语料 ref**：
+ * ref 形如 `<站>/<ok|bad>-<时间戳>…`，站名与桶前缀（= outcome）都在里面——一期盲评印出来
+ * 就等于把锚定源交给评审（code-review 抓出：ADR 承诺「站/档/outcome 一律不给」，实现却随
+ * ref 一起给了）。语料锚只在二期与报告里出现。 */
 function artifactBlock(sample: ReviewSample): string {
-  return ['## 被评产物原文', '', `（语料：${sample.ref}）`, '', '```', sample.output.trim(), '```'].join('\n')
+  return ['## 被评产物原文', '', '```', sample.output.trim(), '```'].join('\n')
 }
 
 /** 一期·盲评提示词：只给量规与产物原文——生成提示词、站名/档位/outcome 等元数据一概不给
@@ -406,10 +408,26 @@ export interface SampleReview {
   durationMs: number
 }
 
-/** 终判读数（二期优先；二期缺席时退回一期并如实标注——见 renderQualityReviewReport 的
- * 「评审失败」分列）。 */
+/** 终判读数：二期优先，二期缺席（只跑了一期/二期应答坏）时退回一期。**评审失败件恒无终判**
+ * （`failure` 在场即 `undefined`）——失败的一期判读仍留档（附录里以「未采信」展示），但不进
+ * 任何分布与低分件清单（ADR-0070 §4「评审失败 ≠ 产物差」；code-review 抓出的反例：二期应答
+ * 坏时旧实现回退一期，同一件既列「评审失败」又计低分）。 */
 export function finalScores(review: SampleReview): DimensionScore[] | undefined {
+  if (review.failure) return undefined
   return review.reconciled ?? review.blind
+}
+
+/** 分布读数的取数单位 = **件**（不是评审记录）：重复评审（`repeats` > 1）只为稳定性读数存在，
+ * 同一件的多轮不得在分布/低分件/系统性候选里被数成多件（否则默认两轮下「一件低分」= 2/2 =
+ * 100%，直接越过系统性候选线——code-review 实测抓出）。每件取**首轮**（run 最小）为分布口径；
+ * 跨轮分歧归稳定性读数（temperature 固定下它测的是模型侧漂移，不是样本间差异）。 */
+export function canonicalReviews(reviews: readonly SampleReview[]): SampleReview[] {
+  const first = new Map<string, SampleReview>()
+  for (const r of reviews) {
+    const cur = first.get(r.ref)
+    if (!cur || r.run < cur.run) first.set(r.ref, r)
+  }
+  return [...first.values()]
 }
 
 // ---------------------------------------------------------------- 聚合读数
@@ -433,10 +451,11 @@ export interface DimensionStat {
   unlocated: number
 }
 
-/** 逐（站 × 维度）分布。只统计能判的件（failure / 空输出不进——缺席即缺席，不填 0）。 */
+/** 逐（站 × 维度）分布。只统计能判的**件**（评审失败件与空输出件不进——缺席即缺席，不填 0；
+ * 同一件的多轮重复评审按 `canonicalReviews` 取首轮，不重复计件）。 */
 export function scoreStats(reviews: readonly SampleReview[], rubrics: readonly QualityRubric[]): DimensionStat[] {
   const out = new Map<string, DimensionStat>()
-  for (const r of reviews) {
+  for (const r of canonicalReviews(reviews)) {
     const scores = finalScores(r)
     if (!scores) continue
     for (const d of scores) {
@@ -480,10 +499,10 @@ export interface LowScoreItem {
   revised: boolean
 }
 
-/** 低分件清单（按 ref + 维度排序，稳定可比）。 */
+/** 低分件清单（按 ref + 维度排序，稳定可比；件口径同 scoreStats——多轮不重复列同一件）。 */
 export function lowScoreItems(reviews: readonly SampleReview[], rubrics: readonly QualityRubric[]): LowScoreItem[] {
   const out: LowScoreItem[] = []
-  for (const r of reviews) {
+  for (const r of canonicalReviews(reviews)) {
     const scores = finalScores(r)
     if (!scores) continue
     for (const d of scores) {
@@ -557,8 +576,8 @@ export interface StabilityStat {
   pairs: number
   /** 完全一致的件数。 */
   agree: number
-  /** 平均绝对差（档位差，0 = 全一致）。 */
-  meanAbsDelta: number
+  /** 平均档差（各轮极差 max−min；两轮时即 |Δ|，>2 轮时是轮次极差——名字如实）。 */
+  meanRange: number
 }
 
 /** 稳定性聚合（repeats < 2 时返回空数组——无重复即无稳定性读数）。 */
@@ -586,11 +605,11 @@ export function stabilityOf(reviews: readonly SampleReview[]): StabilityStat[] {
       const a = acc.get(key) ?? { station: list[0]!.station, dimension: dim, pairs: 0, agree: 0, delta: 0 }
       a.pairs++
       if (scores.every(s => s === scores[0])) a.agree++
-      a.delta += (Math.max(...scores) - Math.min(...scores))
+      a.delta += Math.max(...scores) - Math.min(...scores)
       acc.set(key, a)
     }
   }
   return [...acc.values()]
-    .map(a => ({ station: a.station, dimension: a.dimension, pairs: a.pairs, agree: a.agree, meanAbsDelta: a.pairs ? a.delta / a.pairs : 0 }))
+    .map(a => ({ station: a.station, dimension: a.dimension, pairs: a.pairs, agree: a.agree, meanRange: a.pairs ? a.delta / a.pairs : 0 }))
     .sort((a, b) => a.station.localeCompare(b.station) || a.dimension.localeCompare(b.dimension))
 }

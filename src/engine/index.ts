@@ -100,7 +100,7 @@ export {
   DEFAULT_SAMPLE_QUOTA, QUALITY_REVIEW_SYSTEM, templateVersionOf, isScoreable, equidistantIndices,
   sampleQualitySamples, rubricForStation, rubricStations, dimensionNameOf, reviewBlindPrompt,
   reviewReconcilePrompt, parseReviewDoc, parseDimensionScores, evidenceLocated, finalScores,
-  scoreStats, lowScoreItems, versionComparison, stabilityOf,
+  scoreStats, lowScoreItems, versionComparison, stabilityOf, canonicalReviews,
 } from './quality-review.ts'
 export type {
   ReviewSample, SampleQuota, ReviewScore, DimensionScore, SampleReview, DimensionStat, LowScoreItem,
@@ -110,8 +110,8 @@ export type {
 export { renderQualityReviewReport } from './quality-review-report.ts'
 export type { QualityReviewReport, SystemicCandidate, ReportRenderOptions } from './quality-review-report.ts'
 /** 图质量面审计抽样（#224 / ADR-0070）：审计面清单 + 系统性发现候选随门面出。 */
-export { AUDIT_AXES, SYSTEMIC_MIN_SAMPLES, SYSTEMIC_LOW_RATE, auditScopeLines, systemicCandidates } from './quality-audit.ts'
-export type { AuditAxis } from './quality-audit.ts'
+export { AUDIT_AXES, SYSTEMIC_MIN_SAMPLES, SYSTEMIC_LOW_RATE, auditCriteriaOf, auditScopeLines, systemicCandidates } from './quality-audit.ts'
+export type { AuditAxis, CriterionRef } from './quality-audit.ts'
 
 
 

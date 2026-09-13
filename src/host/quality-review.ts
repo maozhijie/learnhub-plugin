@@ -23,6 +23,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import {
   AUDIT_AXES,
   DEFAULT_SAMPLE_QUOTA,
+  auditCriteriaOf,
   QUALITY_RUBRICS,
   QUALITY_REVIEW_STATION,
   REVIEW_EFFORT,
@@ -227,7 +228,7 @@ export async function runQualityReview(
   // 图质量面审计（#224）：范围含审计面站时算系统性候选——候选是提议，报告单列由人审裁决
   const auditStations = AUDIT_AXES.flatMap(a => a.stations)
   const inAuditScope = wanted.some(s => auditStations.includes(s))
-  if (inAuditScope) report.systemic = systemicCandidates(stats, lowScores, criteriaOfStation, opts?.systemic)
+  if (inAuditScope) report.systemic = systemicCandidates(stats, lowScores, auditCriteriaOf, opts?.systemic)
 
   const markdown = renderQualityReviewReport(report, { headerExtras: inAuditScope ? auditScopeLines(report) : [] })
   const outDir = (opts?.outDir ?? rt.engine.paths.qualityReviewDir).replace(/\\/g, '/')
@@ -236,13 +237,6 @@ export async function runQualityReview(
   atomicPut(reportPath, markdown)
   report.reportPath = reportPath
   return { report, markdown, reportPath }
-}
-
-/** 系统性候选的判据出处（站 → 量规 → 维度 → 判据 id/source；候选贴票时的定位锚）。 */
-function criteriaOfStation(station: string, dimension: string): Array<{ id: string; source: string }> {
-  const rubric = rubricForStation(station, QUALITY_RUBRICS)
-  const dim = rubric?.dimensions.find(d => d.id === dimension)
-  return (dim?.criteria ?? []).map(c => ({ id: c.id, source: c.source }))
 }
 
 /** 报告文件名：`<ts>-<站>.md`（ts 紧凑到秒；站名是受控词表、无斜杠）。同秒同范围重跑 = 同名

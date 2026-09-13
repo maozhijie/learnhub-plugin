@@ -30,6 +30,7 @@ import {
   rubricForStation,
   rubricStations,
   sampleQualitySamples,
+  canonicalReviews,
   scoreStats,
   stabilityOf,
   templateVersionOf,
@@ -160,6 +161,37 @@ test('一期盲评：给量规判据与产物原文，不给生成提示词（�
   assert.ok(recon.includes('生成提示词暗号'), '二期给生成提示词')
   assert.ok(recon.includes('模板版本：v5'), '二期给元数据（版本/站/档/outcome）')
   assert.ok(recon.includes('"revised"'), '二期的修正标记进输出契约')
+})
+
+test('一期盲评对产物匿名：不得出现语料 ref / 桶前缀 / outcome / 失败码 / 版本等样本级锚定源', () => {
+  const s = sample({ ref: '教练生长/bad-2026-09-13T07-24-45-938Z-0004.md', outcome: 'failed', code: 'ERROR' })
+  const blind = reviewBlindPrompt(COACH, s)
+  // 量规的 product 字段（「教练生长批…」）是判定对象类型，两期恒有、样本间无差别——不是
+  // 样本级锚定源，故只查样本自身的元数据与生成指令（code-review 抓出的真实泄漏：ref 里
+  // 带着站名与 ok-/bad- 桶前缀）。
+  for (const leak of [s.ref, '教练生长/', 'bad-', 'outcome：', 'failed', 'ERROR', '模板版本：v5', '生成提示词暗号']) {
+    assert.ok(!blind.includes(leak), `一期提示词泄漏锚定源「${leak}」（ADR-0070 §3：生成指令与元数据一律不给）`)
+  }
+  assert.ok(blind.includes(s.output.trim()), '产物原文照旧进一期')
+  const recon = reviewReconcilePrompt(COACH, s, COACH_DIMS.map(id => ({ id, score: 3, evidence: [], notes: 'n', unlocated: [] })))
+  assert.ok(recon.includes(s.ref) && recon.includes('outcome：failed'), '二期才给语料锚与元数据')
+})
+
+test('件口径：同一件的多轮重复评审在分布/低分件里只算一件（多轮只为稳定性读数存在）', () => {
+  const runs = [review({ run: 1 }), review({ run: 2 })]
+  const stats = scoreStats(runs, QUALITY_RUBRICS)
+  assert.equal(stats.find(s => s.dimension === COACH_DIMS[0])!.counts[1], 1, '两轮同名一件：2 分档只计一件')
+  assert.equal(lowScoreItems(runs, QUALITY_RUBRICS).length, 1, '低分件清单不重复列同一件')
+  assert.equal(canonicalReviews(runs).length, 1, '件口径 = 每件首轮')
+  assert.equal(canonicalReviews([review({ run: 2 }), review({ run: 1 })]).length, 1, '乱序也给同一件')
+})
+
+test('二期应答坏 = 评审失败件：既不进分布也不进低分件（一期判读留档但未采信）', () => {
+  const r = review({ blind: COACH_DIMS.map(id => ({ id, score: 1, evidence: ['q'], notes: '', unlocated: [] })), reconciled: undefined, failure: '评审应答缺 dimensions 数组' })
+  assert.equal(finalScores(r), undefined, '失败件无终判（一期判读未采信）')
+  assert.deepEqual(scoreStats([r], QUALITY_RUBRICS), [], '不进分布')
+  assert.deepEqual(lowScoreItems([r], QUALITY_RUBRICS), [], '不进低分件')
+  assert.equal(r.blind!.length, 3, '一期判读仍留档（附录以未采信展示）')
 })
 
 test('评审员系统提示词：判读纪律逐条在册（提议/证据必须原文/引不到判不可判/无总分/JSON only）', () => {
@@ -314,13 +346,13 @@ test('稳定性读数：同件两轮同判 = 100% 一致；一轮改判 = 档差
   for (const s of same) {
     assert.equal(s.pairs, 1)
     assert.equal(s.agree, 1)
-    assert.equal(s.meanAbsDelta, 0)
+    assert.equal(s.meanRange, 0)
   }
   const moved = stabilityOf([
     review({ run: 1 }),
     review({ run: 2, reconciled: COACH_DIMS.map((id, i) => ({ id, score: i === 0 ? 4 : 3, evidence: ['q'], notes: '', unlocated: [] })) }),
   ])
-  assert.equal(moved.find(s => s.dimension === COACH_DIMS[1])!.meanAbsDelta, 1, '3 vs 4 = 档差 1')
+  assert.equal(moved.find(s => s.dimension === COACH_DIMS[1])!.meanRange, 1, '3 vs 4 = 档差 1')
   assert.equal(moved.find(s => s.dimension === COACH_DIMS[1])!.agree, 0)
   assert.equal(stabilityOf([review({ run: 1 })]).length, 0, '单轮无稳定性读数（缺席）')
 })

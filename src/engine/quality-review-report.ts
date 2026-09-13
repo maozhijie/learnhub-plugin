@@ -14,7 +14,10 @@
  * - 评审失败件与未评分件（空输出）单列：**评审失败 ≠ 产物差**，不可混进分数分布。
  */
 import { RUBRIC_COURTS } from './quality-rubrics.ts'
-import { REVIEW_SCORE_LABELS, finalScores, type DimensionStat, type LowScoreItem, type SampleReview, type SampleQuota, type StabilityStat, type VersionStat } from './quality-review.ts'
+import {
+  REVIEW_SCORE_LABELS, canonicalReviews, finalScores,
+  type DimensionStat, type LowScoreItem, type SampleReview, type SampleQuota, type StabilityStat, type VersionStat,
+} from './quality-review.ts'
 
 /** 系统性发现候选（#224 图质量面）：某站某维度低分件占比越过阈值即入候选——「某算子被
  * 系统性误用」这类结论的候选形态。阈值是预注册线（quality-audit 里声明）。 */
@@ -107,9 +110,10 @@ export function renderQualityReviewReport(report: QualityReviewReport, opts?: Re
   for (const station of stations) {
     const rows = report.stats.filter(s => s.station === station)
     const reviewed = report.reviews.filter(r => r.station === station)
-    const failed = reviewed.filter(r => r.failure)
+    const scoreable = canonicalReviews(reviewed).filter(r => finalScores(r)).length
+    const failed = canonicalReviews(reviewed).filter(r => r.failure).length
     L.push(`### ${station}`, '')
-    L.push(`评审件数：${reviewed.length - failed.length}（重复 ${report.repeats} 次/件）｜评审失败：${failed.length}`
+    L.push(`评审件数：${scoreable}（件口径；${report.repeats} 轮/件，共 ${reviewed.length} 次评审）｜评审失败：${failed}`
       + `｜低分件：${report.lowScores.filter(x => x.station === station).length}`)
     L.push('')
     L.push('| 维度 | 1 未兑现 | 2 部分 | 3 基本 | 4 充分 | 不可判 | 已判 | 低分 | 评审面异常 |')
@@ -158,11 +162,11 @@ export function renderQualityReviewReport(report: QualityReviewReport, opts?: Re
   // —— 稳定性读数 ——
   if (report.repeats > 1) {
     L.push('## 稳定性读数（同输入重复评审；#222 验收「两次评审稳定性可观测」）', '')
-    L.push('| 站 | 维度 | 可对件数 | 完全一致 | 一致率 | 平均档差 |')
+    L.push('| 站 | 维度 | 可对件数 | 完全一致 | 一致率 | 平均档差（轮次极差） |')
     L.push('|---|---|---|---|---|---|')
     if (!report.stability.length) L.push('| （同件多轮都判了档的维度缺席） | — | 0 | — | — | — |')
     for (const s of report.stability) {
-      L.push(`| ${s.station} | ${s.dimension} | ${s.pairs} | ${s.agree} | ${pct(s.agree, s.pairs)} | ${s.meanAbsDelta.toFixed(2)} |`)
+      L.push(`| ${s.station} | ${s.dimension} | ${s.pairs} | ${s.agree} | ${pct(s.agree, s.pairs)} | ${s.meanRange.toFixed(2)} |`)
     }
     L.push('')
     L.push(`> 温度固定 ${report.temperature} 下的残余分歧即模型/供应商侧漂移信号；一致率低 = 该维度判读不稳，人审先看它。`, '')
@@ -190,8 +194,11 @@ export function renderQualityReviewReport(report: QualityReviewReport, opts?: Re
     L.push(`### ${r.ref}（第 ${r.run} 轮）`, '')
     L.push(`站：${r.station}｜模板版本：${r.templateVersion === null ? '未知' : `v${r.templateVersion}`}｜outcome：${r.outcome}`
       + `｜调用 ${r.calls} 次 / 入 ${r.inputTokens} 出 ${r.outputTokens} tok｜${(r.durationMs / 1000).toFixed(1)}s`)
-    if (r.failure) L.push(`**评审失败**：${r.failure}`)
+    if (r.failure) L.push(`**评审失败**：${r.failure}（本期判读未采信，不进任何分布）`)
     if (!scores) {
+      for (const d of r.blind ?? []) {
+        L.push(`- ${d.id} = ${d.score === null ? '不可判' : `${d.score} ${REVIEW_SCORE_LABELS[d.score]}`}（未采信）`)
+      }
       L.push('')
       continue
     }

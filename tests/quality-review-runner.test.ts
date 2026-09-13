@@ -140,7 +140,7 @@ test('稳定性读数：重复两次（桩两轮同判）→ 报告带稳定性�
   })
   assert.equal(result.report.reviews.length, 2, '一件两轮')
   assert.ok(result.report.stability.length >= 1, '稳定性读数在场')
-  assert.ok(result.report.stability.every(s => s.agree === s.pairs && s.meanAbsDelta === 0), '桩两轮同判 = 全一致')
+  assert.ok(result.report.stability.every(s => s.agree === s.pairs && s.meanRange === 0), '桩两轮同判 = 全一致')
   assert.equal(result.report.cost.calls, 4, '重复评审的成本如实计入（两次 × 两期）')
   assert.ok(result.markdown.includes('稳定性读数'))
 })

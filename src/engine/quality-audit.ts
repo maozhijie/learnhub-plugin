@@ -15,8 +15,25 @@
  * 纯函数、零副作用（同 quality-review.ts 的纪律）。审计的「发现回流」是人在票上做
  * （低分件 + 证据贴票、系统性候选蒸馏新票），本模块只保证这两样在报告里是现成的。
  */
+import { rubricForStation } from './quality-review.ts'
 import type { DimensionStat, LowScoreItem } from './quality-review.ts'
 import type { SystemicCandidate, QualityReviewReport } from './quality-review-report.ts'
+import { QUALITY_RUBRICS } from './quality-rubrics.ts'
+
+/** 判据引用（判据 id + 出处）：系统性候选与报告贴票行共用的一小片形状——四处各写一遍
+ * 匿名结构（引擎/宿主/两处测试）是 code-review 点名的 Data Clumps，收敛到这里一个名字。 */
+export interface CriterionRef {
+  id: string
+  source: string
+}
+
+/** 站 × 维度 → 本维度判据清单（贴票/改量规/开新票的定位锚）。候选与报告都走这一处，
+ * 不在宿主或测试里各自再查一遍量规表。 */
+export function auditCriteriaOf(station: string, dimension: string): CriterionRef[] {
+  const rubric = rubricForStation(station, QUALITY_RUBRICS)
+  const dim = rubric?.dimensions.find(d => d.id === dimension)
+  return (dim?.criteria ?? []).map(c => ({ id: c.id, source: c.source }))
+}
 
 /** 图质量面的一类审计：样本站 + 量规 + 要看的维度（票面两类审计的机器可读形态）。 */
 export interface AuditAxis {
@@ -83,7 +100,7 @@ export function auditScopeLines(report: Pick<QualityReviewReport, 'sampling' | '
 export function systemicCandidates(
   stats: readonly DimensionStat[],
   lowScores: readonly LowScoreItem[],
-  criteriaOf: (station: string, dimension: string) => Array<{ id: string; source: string }>,
+  criteriaOf: (station: string, dimension: string) => CriterionRef[] = auditCriteriaOf,
   opts?: { minSamples?: number; lowRate?: number },
 ): SystemicCandidate[] {
   const minSamples = opts?.minSamples ?? SYSTEMIC_MIN_SAMPLES
