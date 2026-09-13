@@ -71,6 +71,11 @@ export { ANKI_ENDPOINT, AnkiConnectClient } from './anki.ts'
 export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './complexity.ts'
 /** 正文就绪判定（#160 宿主种子链消费的纯函数：起点「正文未生成」口径与生长批一致）。 */
 export { hasReadyContent } from './notes.ts'
+/** 宿主侧实验工具（#215 冒烟复跑契约门 / #216 spike 题面去重）经门面消费的两个纯函数：
+ * R1「host 的 engine 导入只走门面」的直接后果——原实现从宿主直引子模块（越层），
+ * 由 code-review 两轴审查抓出并收口到门面。 */
+export { contractOf, validateByContract } from './output-contracts.ts'
+export { normalizeStem } from './question-dedup.ts'
 export { readAnchor } from './seed.ts'
 export type { LlmCallKind, LlmComplete, LlmEffort, LlmStream, LlmTokenUsage, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
 /** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */

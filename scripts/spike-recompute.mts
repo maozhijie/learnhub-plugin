@@ -89,6 +89,8 @@ function recompute(station: string, replies: string[]): { extract: Record<string
       parsed: questions.length > 0,
       extract: {
         questions: questions.length,
+        // 注意：回复面计数（未经受理门）；受理面的 added/skipped 见报告 JSON 的 extract
+
         kinds: metrics.kinds,
         entropy: metrics.entropy.value,
         distractor: metrics.distractor ? metrics.distractor.value : null,

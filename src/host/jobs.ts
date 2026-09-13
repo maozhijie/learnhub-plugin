@@ -946,8 +946,8 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
 
 /** 管线收尾：逐节出题（每内容节按档位目标题量，绑节 id）+ 综合题（通用随档位），汇总任务终态。
  * 两路出题都显式声明语义档（#228）：随节点难度 contentEffort（高复杂度 deep、否则 fast）。
- * quizCount（#215 冒烟成本闸）：给定时**两路出题**都按它出题（逐节题量封顶 + 综合题量），
- * 缺省 = 现状（逐节按档位目标、综合按 genericQuizTarget）。 */
+ * quizCount（#215 冒烟成本闸）：给定即**只封综合批**的题量（逐节批仍按档位目标——
+ * 逐节题量的入参面不在本票范围）；缺省 = 按档位 genericQuizTarget。 */
 async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJob, contentMsg: string, quizCount?: number): Promise<string> {
   job.phase = 'quiz'
   job.message = `${contentMsg}；自动出题中…`
@@ -956,6 +956,7 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   try {
     const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, quizSeam(complete, quizEffort),
       rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : undefined)
+    // 成本闸只落在综合批（冒烟实测：两批都会被真实调用，封综合批已把单次成本压到最小档）
     const quiz = await generateQuiz(rt, complete, job.course, job.node, quizCount ?? genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status

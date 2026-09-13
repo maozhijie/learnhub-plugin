@@ -25,8 +25,8 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { normalizeStem } from '../engine/question-dedup.ts'
-import { llmComplete, llmStreamSeam } from './llm.ts'
+import { normalizeStem } from '../engine/index.ts'
+import { llmComplete, llmStreamSeam, llmView } from './llm.ts'
 import { createHostRuntime } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 
@@ -47,8 +47,6 @@ export interface SpikeRequest {
   temperature?: number
   /** 语料落盘目录（绝对路径；缺省临时目录，随运行结束删除）。 */
   corpusDir?: string
-  /** 单次调用的空闲超时沿用适配器（120s），整轮无额外超时。 */
-  goal?: string
 }
 
 /** 一条调用记录（语料可回看的单位：提示词 + 原始应答 + 计量）。 */
@@ -139,7 +137,16 @@ export interface SpikeReport {
     decision: string
   }
   /** 多样性/内容面按臂聚合（批内范围读数：两臂各跑各的批）。 */
-  quality: Array<{ station: SpikeStation; arm: SpikeArm; runs: number; metrics: Record<string, number | null> }>
+  quality: Array<{
+    station: SpikeStation
+    arm: SpikeArm
+    runs: number
+    metrics: Record<string, number | null>
+    /** 出题：题型分布（逐轮计数求和）；大纲：节类型 / 难度档分布。 */
+    kinds?: Record<string, number>
+    types?: Record<string, number>
+    tiers?: Record<string, number>
+  }>
   /** 逐次原始行（语料可回看：提示词计量 + 每轮原始应答 + 行级提取）。 */
   rows: SpikeRow[]
   corpus: { dir: string | null; files: number }
@@ -363,6 +370,8 @@ interface CallRecord {
   reasoningTokens?: number
   durationMs: number
   promptChars: number
+  /** 本轮实际发出的提示词（生产拼装 + 变体后缀）——语料回看的输入面。 */
+  prompt: string
   reply: string
   toolCalled: boolean
 }
@@ -396,7 +405,7 @@ function makeCorpusWriter(dir: string | null) {
         '',
         '## 提示词（生产拼装 + 变体后缀）',
         '',
-        prompt,
+        prompt || '（缺：本轮没有发出提示词）',
         '',
         '## 原始应答（含修复轮，逐轮）',
         '',
@@ -427,6 +436,7 @@ async function callModel(
       ...(usage?.reasoningTokens !== undefined ? { reasoningTokens: usage.reasoningTokens } : {}),
       durationMs: Date.now() - startedAt,
       promptChars: sent.length,
+      prompt: sent,
       reply: text,
       toolCalled: false,
     })
@@ -447,6 +457,7 @@ async function callModel(
     ...(usage?.reasoningTokens !== undefined ? { reasoningTokens: usage.reasoningTokens } : {}),
     durationMs: Date.now() - startedAt,
     promptChars: sent.length,
+    prompt: sent,
     reply: call ? call.arguments : r.text,
     toolCalled: call !== undefined,
   })
@@ -459,6 +470,8 @@ async function callModel(
 /** 出题站的多样性/内容提取（#230 仪表 + 题面去重计数——票面更正确认 distinct 需自算）。 */
 function quizExtract(result: {
   added: number
+  /** 单题非法（超纲题型等）静默跳过的题数——受理门的第三个出口，必须入报告 */
+  skipped: number
   rejected: Array<{ q: string; reason: string }>
   duplicates: Array<{ q: string; against: string }>
   diversity?: { batch?: { sample: number; kinds: Record<string, number>; entropy?: { value: number; sample: number }; distractor?: { value: number; sample: number } | null; selfBleu?: { value: number; sample: number }; stemSimilarity?: { value: number; sample: number } } }
@@ -467,6 +480,7 @@ function quizExtract(result: {
   const distinct = new Set(bankStems.map(normalizeStem)).size
   return {
     added: result.added,
+    skipped: result.skipped,
     rejected: result.rejected.length,
     duplicates: result.duplicates.length,
     kinds: stats?.kinds ?? {},
@@ -523,11 +537,14 @@ export async function runToolChannelSpike(ctx: Context, req: SpikeRequest = {}):
                 const applied = await rt.engine.content2.contentOutline(COURSE, NODE, yaml)
                 delivered = true
                 schemaOk = true
-                const sections = (applied.sections ?? []) as Array<{ id?: string; type?: string; tierLabel?: string }>
+                const sections = (applied.sections ?? []) as Array<{ id?: string; type?: string }>
+                // 难度档在节清单视图里（contentOutline 返回的 manifest 不带 tierLabel）
+                const view = await rt.engine.content2.contentSectionsView(COURSE, NODE)
+                const tierOf = new Map(view.map(v => [v.id, v.tierLabel]))
                 extract = {
                   sections: sections.length,
                   types: sections.map(s => String(s.type ?? '?')),
-                  tiers: sections.map(s => String(s.tierLabel ?? '?')),
+                  tiers: sections.map(s => String(tierOf.get(String(s.id ?? '')) ?? '?')),
                   sectionIds: sections.map(s => String(s.id ?? '?')),
                 }
               } else {
@@ -542,8 +559,6 @@ export async function runToolChannelSpike(ctx: Context, req: SpikeRequest = {}):
               note = firstLine(err)
               schemaOk = false
             }
-            const prompt = ''  // 提示词在语料 writer 由行内首轮调用文本带入（见下）
-            void prompt
             const row: SpikeRow = {
               station, arm, variant: variant.id, run,
               toolCalled: calls.some(c => c.toolCalled),
@@ -560,7 +575,7 @@ export async function runToolChannelSpike(ctx: Context, req: SpikeRequest = {}):
               ...(extract ? { extract } : {}),
             }
             rows.push(row)
-            writer.write(row, `（每格每轮提示词同构：站模板 + 上下文包；逐轮实测 ${row.promptChars} 字符，变体后缀=${variant.suffix ? '有' : '无'}）`)
+            writer.write(row, calls[0]?.prompt ?? '')
             rmSync(root, { recursive: true, force: true })
           }
         }
@@ -637,15 +652,42 @@ function buildReport(o: {
       const v = nums(key)
       return v.length ? Number((v.reduce((a, b) => a + b, 0) / v.length).toFixed(4)) : null
     }
+    /** 分位读数（#216 协议要的是「分布」不只均值）：p10/p50/p90。 */
+    const quantile = (key: string, q: number): number | null => {
+      const v = rs.map(r => Number((r.extract ?? {})[key])).filter(Number.isFinite).sort((a, b) => a - b)
+      if (!v.length) return null
+      const idx = Math.min(v.length - 1, Math.max(0, Math.round(q * (v.length - 1))))
+      return Number(v[idx]!.toFixed(4))
+    }
+    /** 题型/节类型分布：逐轮计数求和（臂级词表）。 */
+    const distOf = (key: string): Record<string, number> => {
+      const out: Record<string, number> = {}
+      for (const r of rs) {
+        const xs = (r.extract ?? {})[key]
+        if (!Array.isArray(xs)) continue
+        for (const x of xs) out[String(x)] = (out[String(x)] ?? 0) + 1
+      }
+      return out
+    }
+    const kindsAgg: Record<string, number> = {}
+    for (const r of rs) {
+      const k = (r.extract ?? {}).kinds
+      if (k && typeof k === 'object') for (const [kind, n] of Object.entries(k as Record<string, number>)) kindsAgg[kind] = (kindsAgg[kind] ?? 0) + Number(n)
+    }
     const metrics: Record<string, number | null> = x.station === '题目生成'
       ? {
-        added: mean('added'), rejected: mean('rejected'), duplicates: mean('duplicates'),
+        added: mean('added'), skipped: mean('skipped'), rejected: mean('rejected'), duplicates: mean('duplicates'),
         entropy: mean('entropy'), distractor: mean('distractor'),
         selfBleu: mean('selfBleu'), stemSimilarity: mean('stemSimilarity'),
+        selfBleuP10: quantile('selfBleu', 0.1), selfBleuP50: quantile('selfBleu', 0.5), selfBleuP90: quantile('selfBleu', 0.9),
+        simP10: quantile('stemSimilarity', 0.1), simP50: quantile('stemSimilarity', 0.5), simP90: quantile('stemSimilarity', 0.9),
         distinctStems: mean('distinctStems'),
       }
       : { sections: mean('sections') }
-    return { station: x.station, arm: x.arm, runs: rs.length, metrics }
+    return {
+      station: x.station, arm: x.arm, runs: rs.length, metrics,
+      ...(x.station === '题目生成' ? { kinds: kindsAgg } : { types: distOf('types'), tiers: distOf('tiers') }),
+    }
   })
 
   const lines: string[] = []
@@ -666,11 +708,12 @@ function buildReport(o: {
   const decision = formatPass === false
     ? '格式达标线未过 → 按裁决树对未达标站关闭结构化通道（(b) 方向）'
     : '格式达标线已过 → 继续读多样性轴与成本轴（税若存在应出现在多样性轴——预注册核心线）'
+  const view = llmView()
   return {
     startedAt: o.startedAt,
     durationMs: Date.now() - o.startedAtMs,
-    provider: '由宿主配置决定（见 /status 的 llm 面）',
-    model: '由宿主配置决定（见 /status 的 llm 面）',
+    provider: view.provider,
+    model: view.model,
     config: {
       runsPerCell: o.runsPerCell, stations: o.stations, quizCount: o.quizCount, temperature: o.temperature,
       variants: { control: VARIANTS.control.map(v => v.id), tool: VARIANTS.tool.map(v => v.id) },

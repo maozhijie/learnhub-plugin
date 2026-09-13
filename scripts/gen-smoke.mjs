@@ -14,6 +14,8 @@
  *
  * 注意：本脚本走真实 provider 与用户配额——单次成本压在几次调用内，不要挂循环。
  */
+import { request as httpRequest } from 'node:http'
+
 /** 长任务 POST：用 node:http 而非 fetch——fetch（undici）默认 headersTimeout 300s，
  * 「宿主同步跑完整轮再回」的调用会被 5 分钟掐断（#216 首轮实验实测：语料跑齐 72 格次，
  * 响应头未在 300s 内发出 → 驱动拿不到报告）。node:http 无隐式头超时。 */

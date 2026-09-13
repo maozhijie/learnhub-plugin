@@ -50,8 +50,18 @@ dsh-llm 接口无 `response_format`、无 `tool_choice`（#212 §一）——结
 - `POST /learnhub/api/spike`（命令注册表 `spike`，无引擎型白名单）+ 驱动 `npm run spike`（`--runs/--stations/--corpus/--out`，退出码 2 = 格式达标线未过）。
 - 语料：一调用一文件（frontmatter 站/臂/变体/次/命中/交付/schema/token + 提示词计量 + 每一轮原始应答），目录由 `--corpus` 指定（缺省临时目录）。G9 裁决同 #213：单文件遥测写、无跨文件一致性 → 不入 `runWriteUnit` 站点表。
 - 报告 JSON 同时内嵌逐次行（`rows`），语料可回看不必依赖目录。
+- **数据产物（入库路径）**：
+  - 主轮（deepseek-v4-flash，装置修正后）：`docs/research/2026-09-spike-tool-channel.json` +
+    `docs/research/spike-216-corpus/`（72 份语料，一调用一文件：frontmatter 站/臂/变体/次/命中/交付/schema/token/**死因**
+    + **提示词原文** + 每轮原始应答）+ `docs/research/2026-09-spike-tool-channel-recomputed.json`（语料复算读数）；
+  - 前置轮（同模型，语料未含提示词原文，`skipped` 未提取）：`-run2.json` / `-run2-recomputed.json` 留档作复现对照；
+  - 模型轴（增补「reasoner 与 chat 分开报」；provider 无显式 reasoner 型号，取同 provider 更大模型 deepseek-v4-pro）：
+    `-pro.json` + `spike-216-corpus-pro/`。
+- **格式轴的实测发现（装置产出，非装置裁决）**：YAML 对照臂在出题站出现过 3/18 交付失败，死因同一类
+  ——模型把多行文本塞进单引号字符串导致 `Missing closing 'quote`（真语法错，非解析器缺陷）；工具臂参数走
+  JSON，该类失败结构性不可发生。「格式契约稳定」（#212 第一支柱）由此有了可测读数，登记进票面裁决。
 
-## 8. 首轮实测的两处装置缺陷（已修，登记在后）
+### 8. 首轮实测的两处装置缺陷（已修，登记在后）
 
 1. **工具 schema 描述诱导非法取值**：大纲 `submit` 的 `type` 描述里写了菜单外的「应用」，模型照抄 → 一次交付门失败（`sections.4.type「应用」不在节类型菜单`）。修正为逐字列菜单（概念/例题/演示/小结/练习/交互/思维）。**这条说明装置自身的文本也是实验处理的一部分**——描述里出现什么，模型就可能写什么。
 2. **驱动被 fetch 的 300s 头超时掐断**：`fetch`（undici）默认 `headersTimeout` 300s，「宿主同步跑完整轮再回」的调用在 5 分钟处断链（首轮 72 格次语料跑齐、报告丢）。两个装置（smoke/spike）的驱动改用 `node:http`（无隐式头超时）+ 语料目录绝对化（相对路径会落在宿主 cwd）。

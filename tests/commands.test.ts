@@ -50,7 +50,7 @@ const NO_ENGINE: Record<string, '队列型' | '按参分派型' | '无引擎型'
   'node-pin': '按参分派型', 'experiments': '按参分派型', 'graph-apply': '按参分派型',
   'question-update': '按参分派型', 'bank-cleanup': '按参分派型', 'probation': '按参分派型',
   'sleep-config': '按参分派型', 'receipt-review-mode': '按参分派型',
-  // ③ 无引擎型 9：伺服、host 队列态、常量、LLM 会话
+  // ③ 无引擎型 11：伺服、host 队列态、常量、LLM 会话、实验运行器（smoke/spike，#215/#216）
   'file': '无引擎型', 'vendor-': '无引擎型', 'interactive': '无引擎型',
   'generate-status': '无引擎型', 'generate-resume': '无引擎型', 'generate-cancel': '无引擎型',
   'agent-guide': '无引擎型', 'tutor': '无引擎型', 'explain-back': '无引擎型',
