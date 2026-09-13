@@ -10,7 +10,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -83,4 +83,75 @@ test('门自检：壳级色值/内联 style 样本必须被抓住；票号 #164 
     'App.tsx': '', 'components/ShellTopBar.tsx': '属池票 #164 与 #20', 'components/ZoneBody.tsx': '', 'components/HelpDrawer.tsx': '',
   })
   assert.deepEqual(ticketRef, [], '纯数字票号（#164/#20）被误判为色值')
+})
+
+// ---- 页面内联 style 门（#211 / ADR-0058 收尾）：静态样式一律语义类，内联只许动态值 ----
+
+/** 内联 style 站点（相对 ui/src 的 posix 路径 + 声明串）。括号/引号/模板串感知扫描：
+ * 只看 `style={{…}}` 块，逐块判定「纯字面量 = 静态」。 */
+function inlineStyleSites(srcRoot: string): Array<{ file: string; body: string; dynamic: boolean }> {
+  const BS = String.fromCharCode(92)
+  /** 顶层逗号切分（引号/模板串/括号感知）。 */
+  const splitTop = (b: string): string[] => {
+    const out: string[] = []; let cur = ''; let q: string | null = null; let depth = 0
+    for (let i = 0; i < b.length; i++) {
+      const c = b[i]!
+      if (q) { cur += c; if (c === q && b[i - 1] !== BS) q = null; continue }
+      if (c === "'" || c === '"' || c === '`') { q = c; cur += c; continue }
+      if (c === '(' || c === '[' || c === '{') depth++
+      if (c === ')' || c === ']' || c === '}') depth--
+      if (c === ',' && depth === 0) { out.push(cur); cur = ''; continue }
+      cur += c
+    }
+    if (cur.trim()) out.push(cur)
+    return out
+  }
+  const sites: Array<{ file: string; body: string; dynamic: boolean }> = []
+  for (const p of walk(srcRoot)) {
+    if (!p.endsWith('.tsx')) continue
+    const text = readFileSync(p, 'utf8')
+    for (const m of text.matchAll(/style=\{\{([\s\S]*?)\}\}/g)) {
+      const body = m[1]!.replace(/\s+/g, ' ').trim()
+      const dynamic = splitTop(body).map(x => x.trim()).filter(Boolean).some(part => {
+        const i = part.indexOf(':')
+        if (i < 0) return true
+        const v = part.slice(i + 1).trim()
+        const literal = /^-?\d+(\.\d+)?$/.test(v) || /^'[^']*'$/.test(v) || /^"[^"]*"$/.test(v)
+        return !literal
+      })
+      sites.push({ file: p.split(String.fromCharCode(92)).join('/').split('/ui/src/')[1]!, body, dynamic })
+    }
+  }
+  return sites
+}
+
+/** 登记的内联站点数（棘轮，精确匹配；#211 收敛后只剩动态值——进度条宽度、按数据着色等）。
+ * 增减随提交同步并在注释里给理由（照调用点棘轮纪律）。 */
+const INLINE_STYLE_SITES = 30
+
+test(`页面内联 style 只许动态值（现存 ${INLINE_STYLE_SITES} 处，全为动态值）`, () => {
+  const sites = inlineStyleSites(join(ROOT, 'ui', 'src'))
+  const staticSites = sites.filter(s => !s.dynamic)
+  assert.deepEqual(staticSites.map(s => `${s.file}: ${s.body}`), [],
+    `静态内联 style 一律迁 ui/src/global.css 的语义 class 层（.lh-*；值名工具类见该段头注释）：\n${staticSites.map(s => `  ${s.file}: ${s.body}`).join('\n')}`)
+  assert.equal(sites.length, INLINE_STYLE_SITES,
+    `内联站点从 ${INLINE_STYLE_SITES} 漂到 ${sites.length}（动态值增减随提交同步登记）：\n${sites.map(s => `  ${s.file}: ${s.body.slice(0, 80)}`).join('\n')}`)
+})
+
+test('门自检：静态内联样本必须被抓住，动态值样本不误咬（ADR-0047）', () => {
+  const tmp = join(ROOT, 'ui', 'src', '__inline_probe__.tsx')
+  try {
+    writeFileSync(tmp, [
+      "export const A = () => <div style={{ fontSize: 12, color: 'var(--color-text-3)' }} />",
+      'export const B = () => <div style={{ width: `${p}%` }} />',
+      'export const C = () => <div style={{ marginLeft: onRetry ? 0 : 6 }} />',
+    ].join('\n'), 'utf8')
+    const sites = inlineStyleSites(join(ROOT, 'ui', 'src'))
+    const probe = sites.filter(s => s.file === '__inline_probe__.tsx')
+    assert.equal(probe.length, 3, `探针模块必须被扫描面看见（实得 ${probe.length} 个站点）——收集器不看目标形态就是恒过的门`)
+    assert.equal(probe.filter(s => !s.dynamic).length, 1, '静态样本未被判定为静态')
+    assert.equal(probe.filter(s => s.dynamic).length, 2, '动态值样本被误判为静态（模板串/三元）')
+  } finally {
+    rmSync(tmp, { force: true })
+  }
 })

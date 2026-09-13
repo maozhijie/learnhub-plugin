@@ -19,9 +19,9 @@ const RATING_LABEL: Record<number, string> = {
 /** 自动化曲线迷你条形（x=累计重复次数，y=自评 1-5；无图表库，CSS 高度即分值）。 */
 function CurveBars({ curve }: { curve: HabitCurvePoint[] }) {
   const shown = curve.slice(-24)
-  if (!shown.length) return <span style={{ color: 'var(--color-text-3)' }}>还没有自评点</span>
+  if (!shown.length) return <span className='lh-muted'>还没有自评点</span>
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 40 }}>
+    <div className='lh-flex lh-items-end lh-gap-2 lh-h-40'>
       {shown.map((p, i) => (
         <Tooltip key={i} content={`第 ${p.repeats} 次 · ${RATING_LABEL[p.rating]}（${p.rating}/5）`}>
           <div style={{
@@ -57,9 +57,9 @@ export default function PracticePage() {
     Modal.confirm({
       title: `自报重复：${h.name}`,
       content: (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className='lh-col lh-gap-8'>
           <div>意图：{h.intention.cue} → {h.intention.action}</div>
-          <div style={{ color: 'var(--color-text-3)' }}>自报即入账（无门禁）——这次做了就报。可选带一个「自动化程度」自评：</div>
+          <div className='lh-muted'>自报即入账（无门禁）——这次做了就报。可选带一个「自动化程度」自评：</div>
           <Input
             id='habit-auto-rating'
             placeholder='自动化自评 1-5（可留空）：1=很刻意 … 5=不假思索'
@@ -90,11 +90,11 @@ export default function PracticePage() {
     Modal.confirm({
       title: '立一个习惯（执行意图：稳定线索 + 单一具体行动）',
       content: (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className='lh-col lh-gap-8'>
           <Input placeholder='习惯名（如：晨间音阶）' onChange={v => { name = v }} />
           <Input placeholder='稳定线索（时间/地点锚，如：早上刷完牙后）' onChange={v => { cue = v }} />
           <Input placeholder='单一具体行动（如：打开吉他弹一段音阶）' onChange={v => { action = v }} />
-          <div style={{ color: 'var(--color-text-3)' }}>无到期、无提醒——引擎只收自报、记重复、画曲线。</div>
+          <div className='lh-muted'>无到期、无提醒——引擎只收自报、记重复、画曲线。</div>
         </div>
       ),
       style: { width: 560 },
@@ -144,14 +144,14 @@ export default function PracticePage() {
   }
 
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={14}>
+    <Space direction='vertical' className='lh-full' size={14}>
       <Alert type='info' content='无界实践区：习惯（零到期、零 FSRS——自报重复、画曲线、宽容 streak）与技能条目（执行事件驱动调度 lane，与题目复习并行）。习惯重复永不进 XP 或掌握度；执行事件的评级与时长申报走 agent 对话（learnhub_execution_log）。' />
 
       <Card
         size='small'
         title='习惯'
         extra={<Button size='mini' type='primary' disabled={busy} onClick={create}>立一个习惯</Button>}
-        style={{ borderRadius: 10 }}
+        className='lh-card'
       >
         {habits === null ? null : habits.length === 0 ? (
           <Empty description='还没有习惯：线索 + 单一行动，比如「早上刷完牙后 → 打开吉他弹一段音阶」' />
@@ -164,7 +164,7 @@ export default function PracticePage() {
             columns={[
               { title: '习惯', dataIndex: 'name', width: 150 },
               { title: '执行意图', width: 300, render: (_, h) => (
-                <span style={{ color: 'var(--color-text-2)' }}>{h.intention.cue} → {h.intention.action}</span>
+                <span className='lh-text-2'>{h.intention.cue} → {h.intention.action}</span>
               ) },
               { title: '累计', dataIndex: 'total_repeats', width: 70, render: v => `${v} 次` },
               { title: '宽容streak', width: 100, render: (_, h) => (
@@ -174,7 +174,7 @@ export default function PracticePage() {
               ) },
               { title: '自动化', width: 110, render: (_, h) => h.latest_rating
                 ? <Tag size='small' color='green'>{RATING_LABEL[h.latest_rating]}（{h.latest_rating}/5）</Tag>
-                : <span style={{ color: 'var(--color-text-3)' }}>—</span> },
+                : <span className='lh-muted'>—</span> },
               { title: '', width: 230, render: (_, h) => (
                 <Space size={4}>
                   <Button size='mini' type='primary' disabled={busy} onClick={() => repeat(h)}>今天做了</Button>
@@ -187,7 +187,7 @@ export default function PracticePage() {
         )}
       </Card>
 
-      <Card size='small' title='技能条目（执行事件 lane）' style={{ borderRadius: 10 }}>
+      <Card size='small' title='技能条目（执行事件 lane）' className='lh-card'>
         {skills === null ? null : skills.length === 0 ? (
           <Empty description='还没有技能条目：在 agent 对话里 learnhub_skill_create（如吉他/游泳），执行事件驱动排期' />
         ) : (
@@ -200,7 +200,7 @@ export default function PracticePage() {
               { title: '技能', dataIndex: 'name', width: 150 },
               { title: 'lane 到期', width: 130, render: (_, s) => s.due
                 ? <Tag size='small' color={s.due_kind === 'maintenance' ? 'orange' : 'arcoblue'}>{s.due}</Tag>
-                : <span style={{ color: 'var(--color-text-3)' }}>未首练</span> },
+                : <span className='lh-muted'>未首练</span> },
               { title: '本次形态', width: 150, render: (_, s) => s.due_kind === 'maintenance'
                 ? <Tooltip content='维持节拍帽到期：迷你重做+回放，久置技能低频回血'><span>维持复活</span></Tooltip>
                 : s.due_kind === 'acquisition' ? '习得推进' : '—' },
@@ -219,15 +219,15 @@ export default function PracticePage() {
         visible={!!curve}
         footer={null}
         onCancel={() => setCurve(null)}
-        style={{ width: 560 }}
+        className='lh-w-560'
       >
         {curve && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ color: 'var(--color-text-3)' }}>
+          <div className='lh-col lh-gap-10'>
+            <div className='lh-muted'>
               横轴 = 累计重复次数，纵轴 = 自动化自评（1-5）。渐近增长、中断不衰减——漏几天曲线不会掉。
             </div>
             <CurveBars curve={curve.curve} />
-            <div style={{ color: 'var(--color-text-3)' }}>只展示给你自己：曲线与 streak 永不进掌握度、XP 或任何调度面。</div>
+            <div className='lh-muted'>只展示给你自己：曲线与 streak 永不进掌握度、XP 或任何调度面。</div>
           </div>
         )}
       </Modal>

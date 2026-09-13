@@ -8,19 +8,19 @@ const { Text } = Typography
 
 export default function RuntimeCard({ frame }: { frame: AppFrame }) {
   return (
-    <Card size='small' title='运行环境' style={{ borderRadius: 10 }}>
+    <Card size='small' title='运行环境' className='lh-card'>
       {frame.status?.llm ? (
         <Space size={8} wrap>
           <Tag size='small' color='arcoblue'>{frame.status.llm.provider} / {frame.status.llm.model}</Tag>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             思考档：常规 {frame.status.llm.fast_effort} · 高难 {frame.status.llm.deep_effort}；生成任务注册表逐条记录所用模型
           </Text>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             切换模型：编辑 ~/.dsh/profiles/web/cordis.patch.yml 的 dsh-learnhub 行（provider/model/fastEffort/deepEffort）后重启宿主生效
           </Text>
         </Space>
       ) : (
-        <Text type='secondary' style={{ fontSize: 12 }}>运行环境信息随状态加载后展示。</Text>
+        <Text type='secondary' className='lh-t-12'>运行环境信息随状态加载后展示。</Text>
       )}
     </Card>
   )

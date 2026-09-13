@@ -10,8 +10,8 @@
  *   期间完成、水位未及」的终态任务补发出来（带「补发」前缀，失败批照带「重试」）——
  *   不再因面板关闭错过结果。保留期外的终态（done 30 分钟）已被清扫，无从补发。
  * - 复诊结算（队列空闲钩子自动跑，宿主侧只有运行日志）：在途节点消失/三率增量 = 已出结论。
- * 通知按钮按任务性质分流：产物是提案的（种子/反编译/计划/里程碑）→「去提案页」人审；
- * 过程性的（生长/罗盘）→「去生成页」。 */
+ * 通知按钮按任务性质分流：产物是提案的（种子/反编译/计划/里程碑）→「去提案收件箱」人审；
+ * 过程性的（生长/罗盘）→「去生成队列」。 */
 import { Button, Message, Notification } from '@arco-design/web-react'
 import { useEffect, useRef } from 'react'
 import { api } from './api'
@@ -28,7 +28,7 @@ const PHASE_TITLE: Record<string, string> = {
   plan: '里程碑计划草案',
   milestone: '里程碑任务卡',
 }
-/** 产物是提案的任务：完成通知跳提案页（下一步动作是人审），其余跳生成页。 */
+/** 产物是提案的任务：完成通知跳提案收件箱（下一步动作是人审），其余跳生成队列。 */
 const PROPOSAL_OUTPUT = new Set(['seed', 'decompile', 'plan', 'milestone'])
 /** 通知回放的消费水位（#161）：localStorage 键，值为已展示终态的最大 finishedAt 毫秒。 */
 const LAST_SEEN_KEY = 'learnhub-coach-notif-lastseen'
@@ -78,14 +78,14 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
           <span>
             {text}
             {onRetry && (
-              <Button size='mini' type='text' status='warning' style={{ marginLeft: 6 }}
+              <Button size='mini' type='text' status='warning' className='lh-ml-6'
                 onClick={() => onRetry()}>
                 重试
               </Button>
             )}
             <Button size='mini' type='text' style={{ marginLeft: onRetry ? 0 : 6 }}
               onClick={() => navRef.current[target]()}>
-              {target === 'proposals' ? '去提案页' : '去生成页'}
+              {target === 'proposals' ? '去提案收件箱' : '去生成队列'}
             </Button>
           </span>
         ),
@@ -136,7 +136,7 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
           const old = prev.get(key)
           if (!old) {
             if (cur.status === 'queued' || cur.status === 'running') {
-              notify('info', `${phaseTitleOf(cur)}已触发`, cur.message ?? '已入队，生成页看进度')
+              notify('info', `${phaseTitleOf(cur)}已触发`, cur.message ?? '已入队，生成队列看进度')
             } else if (isGenJobTerminal(cur.status)) {
               // 会话中途出生即终态的任务（两次轮询之间走完全程）：照常弹终态，不错过结果
               terminalNotify(cur, false)

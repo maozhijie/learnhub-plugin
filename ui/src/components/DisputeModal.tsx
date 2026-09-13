@@ -116,9 +116,9 @@ export default function DisputeModal(props: {
       visible={visible}
       onCancel={props.onClose}
       footer={null}
-      style={{ width: 580 }}
+      className='lh-w-580'
       unmountOnExit>
-      <Space direction='vertical' style={{ width: '100%' }} size={10}>
+      <Space direction='vertical' className='lh-full' size={10}>
         <Input.TextArea
           value={reason} onChange={setReason}
           placeholder='你的理由（可选）：如「选项 A 说……但正文讲的是……」。留痕进勘误记录；作废重出时作为新题的生成指令'
@@ -130,7 +130,7 @@ export default function DisputeModal(props: {
 
         {reviewError && (
           <>
-            <Text type='error' style={{ fontSize: 13 }}>复核失败：{reviewError}</Text>
+            <Text type='error' className='lh-t-13'>复核失败：{reviewError}</Text>
             <Space size={8}>
               <Button size='small' loading={reviewing} onClick={() => void runReview()}>重试复核</Button>
               {fallbackable && (
@@ -151,19 +151,15 @@ export default function DisputeModal(props: {
               <Tag color={vt.color}>{vt.text}</Tag>
               <Button size='mini' type='text' loading={reviewing} onClick={() => { setReview(null); void runReview() }}>重新复核</Button>
             </Space>
-            <div style={{
-              borderLeft: '3px solid var(--color-border-3,#c9cdd4)', background: 'var(--color-fill-1,#f7f8fa)',
-              borderRadius: '0 6px 6px 0', padding: '8px 12px', fontSize: 13, lineHeight: 1.7,
-              maxHeight: 260, overflow: 'auto',
-            }}>
+            <div className='lh-quote-muted lh-quote-sm lh-maxh-260 lh-scroll'>
               <InlineMd text={review.reasoning} />
             </div>
-            <Text type='secondary' style={{ fontSize: 12 }}>
+            <Text type='secondary' className='lh-t-12'>
               当前答案键：{review.current_answer}
             </Text>
             {review.verdict === 'key_error' && (
-              <Space direction='vertical' size={6} style={{ width: '100%' }}>
-                <Text type='secondary' style={{ fontSize: 12 }}>
+              <Space direction='vertical' size={6} className='lh-full'>
+                <Text type='secondary' className='lh-t-12'>
                   建议新键：{Array.isArray(review.suggested_answer) ? review.suggested_answer.join('、') : String(review.suggested_answer)}
                   {review.suggested_explanation ? '（附新解析）' : ''}
                 </Text>
@@ -175,7 +171,7 @@ export default function DisputeModal(props: {
                     })}>
                     改键并重判我的作答
                   </Button>
-                  <Text type='secondary' style={{ fontSize: 12 }}>原作答符合新键则改判为对（补 XP）</Text>
+                  <Text type='secondary' className='lh-t-12'>原作答符合新键则改判为对（补 XP）</Text>
                 </Space>
               </Space>
             )}
@@ -197,7 +193,7 @@ export default function DisputeModal(props: {
                   onOk={() => void apply('overridden')}>
                   <Button size='small' status='warning' loading={applying}>仍要豁免本题（不得分）</Button>
                 </Popconfirm>
-                <Text type='secondary' style={{ fontSize: 12 }}>最终解释权在你——但豁免只是「不算」，不是「算你对」</Text>
+                <Text type='secondary' className='lh-t-12'>最终解释权在你——但豁免只是「不算」，不是「算你对」</Text>
               </Space>
             )}
           </>

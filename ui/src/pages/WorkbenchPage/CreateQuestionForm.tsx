@@ -62,11 +62,11 @@ export default function CreateQuestionForm(props: { course: string; nodes: strin
                   : '正确答案（选项字母）'
 
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={10}>
-      <Select value={node} onChange={setNode} placeholder='选择节点' style={{ width: '100%' }}>
+    <Space direction='vertical' className='lh-full' size={10}>
+      <Select value={node} onChange={setNode} placeholder='选择节点' className='lh-full'>
         {props.nodes.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
       </Select>
-      <Select value={kind} onChange={setKind} style={{ width: 160 }}>
+      <Select value={kind} onChange={setKind} className='lh-w-160'>
         {Object.entries(KIND_LABEL).map(([k, v]) => <Select.Option key={k} value={k}>{v}</Select.Option>)}
       </Select>
       <Input.TextArea value={q} onChange={setQ} placeholder='题干（支持 LaTeX 文本）' autoSize={{ minRows: 2, maxRows: 6 }} />
@@ -84,7 +84,7 @@ export default function CreateQuestionForm(props: { course: string; nodes: strin
       <Input value={explanation} onChange={setExplanation} placeholder='解析（可选）' />
       <Space size={10}>
         <Text>难度</Text>
-        <Select value={difficulty} onChange={setDifficulty} style={{ width: 90 }}>
+        <Select value={difficulty} onChange={setDifficulty} className='lh-w-90'>
           {[1, 2, 3].map(d => <Select.Option key={d} value={d}>{d}</Select.Option>)}
         </Select>
       </Space>

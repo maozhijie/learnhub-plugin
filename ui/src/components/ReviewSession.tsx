@@ -183,8 +183,8 @@ export default function ReviewSession(props: {
   const footer = (oc: AnswerOutcome): ReactNode => {
     if (oc.pendingRating && oc.previews) {
       return (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
-          <Text type='secondary' style={{ fontSize: 12 }}>记得多牢？自评推进调度（快捷键 2/3/4）</Text>
+        <div className='lh-gap-8 lh-end lh-row lh-wrap'>
+          <Text type='secondary' className='lh-t-12'>记得多牢？自评推进调度（快捷键 2/3/4）</Text>
           <Button size='small' onClick={() => void rate(2)}>Hard · {oc.previews!.hard}</Button>
           <Button size='small' type='primary' onClick={() => void rate(3)}>Good · {oc.previews!.good}</Button>
           <Button size='small' status='success' onClick={() => void rate(4)}>Easy · {oc.previews!.easy}</Button>
@@ -194,16 +194,16 @@ export default function ReviewSession(props: {
     if (oc.correct === true) {
       // 队列快照后该题被练习流答过（当日调度已推进）：无自评可出，仅记录并继续
       return (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-          <Text type='secondary' style={{ fontSize: 12 }}>今日已在学习中推进过调度，本次仅记录</Text>
+        <div className='lh-gap-8 lh-end lh-row'>
+          <Text type='secondary' className='lh-t-12'>今日已在学习中推进过调度，本次仅记录</Text>
           <Button size='small' type='primary' onClick={next}>下一张</Button>
         </div>
       )
     }
     if (oc.correct === false) {
       return (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+        <div className='lh-gap-8 lh-end lh-row'>
+          <Text type='secondary' className='lh-t-12'>
             {oc.judge === 'forget' ? '已按忘记调度，明天再见' : '已按答错调度（Again），明天再见'}
           </Text>
           <Button size='small' type='primary' onClick={next}>下一张</Button>
@@ -233,17 +233,17 @@ export default function ReviewSession(props: {
 
   if (done) {
     return (
-      <Modal title='复习完成' visible footer={null} unmountOnExit style={{ width: 480 }}
+      <Modal title='复习完成' visible footer={null} unmountOnExit className='lh-w-480'
         onCancel={() => { void finish() }}>
-        <Space direction='vertical' style={{ width: '100%' }} size={14}>
-          <Card size='small' style={{ borderRadius: 10 }}>
+        <Space direction='vertical' className='lh-full' size={14}>
+          <Card size='small' className='lh-card'>
             <Space direction='vertical' size={6}>
-              <Title heading={6} style={{ margin: 0 }}>本轮复习 {total} 张</Title>
+              <Title heading={6} className='lh-m-0'>本轮复习 {total} 张</Title>
               <Text type='secondary'>
                 答对 {tally.right}（Hard {tally.hard} / Good {tally.good} / Easy {tally.easy}）
                 · 忘记 {tally.forgot} · 答错 {tally.wrong}
               </Text>
-              <Text type='secondary' style={{ fontSize: 12 }}>
+              <Text type='secondary' className='lh-t-12'>
                 忘记与答错的卡明天到期再见；逐题流水与 XP 已实时入账——我的卡走无绑定
                 XP（只计总账，不进课程/节点账）。
               </Text>
@@ -262,8 +262,8 @@ export default function ReviewSession(props: {
 
   return (
     <Modal title={`复习 ${(adaptive ? total - pending.length : idx) + 1}/${total}`} visible footer={null} unmountOnExit
-      onCancel={() => { void finish() }} style={{ width: 680 }}>
-      <Space direction='vertical' style={{ width: '100%' }} size={12}>
+      onCancel={() => { void finish() }} className='lh-w-680'>
+      <Space direction='vertical' className='lh-full' size={12}>
         <Space size={8} wrap>
           <Text type='secondary'>{card.course} · </Text>
           {/* V-4（#108）：笔记源卡显示来源笔记标题（node 是机器 id，对学习者无意义），
@@ -272,7 +272,7 @@ export default function ReviewSession(props: {
           {card.source === 'note' && card.source_abs && (
             <Tooltip content={`在 Obsidian 中打开来源笔记：${card.source_path ?? ''}`}>
               <a href={`obsidian://open?path=${encodeURIComponent(card.source_abs)}`}
-                style={{ fontSize: 12, textDecoration: 'none' }}>↗ 来源笔记</a>
+                className='lh-t-12 lh-no-underline'>↗ 来源笔记</a>
             </Tooltip>
           )}
           {card.learner && <Tag size='small' color='purple'>{LEARNER_KIND_LABEL[card.learner.kind] ?? card.learner.kind}</Tag>}
@@ -293,7 +293,7 @@ export default function ReviewSession(props: {
         </Space>
         {/* E5 难度带（#65）：会话开始的选择入口——参与式、可关闭（收起 = 标准纯 A1）；
         首答后锁定为会话带（A1 带权偏好只在会话起点生效） */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div className='lh-row lh-gap-8 lh-wrap'>
           {answeredOnce || !bandRowOpen ? (
             <>
               <Tag size='small' color='gold'>难度带：{BAND_LABEL[bandPref]}</Tag>
@@ -303,13 +303,13 @@ export default function ReviewSession(props: {
             </>
           ) : (
             <>
-              <Text type='secondary' style={{ fontSize: 12 }}>难度带</Text>
+              <Text type='secondary' className='lh-t-12'>难度带</Text>
               <Space size={4}>
                 {(['easy', 'standard', 'hard'] as const).map(b => (
                   <Button key={b} size='mini' type={bandPref === b ? 'primary' : 'outline'}
                     onClick={() => setBandPref(b)}>{BAND_LABEL[b]}</Button>
                 ))}
-                <Text type='secondary' style={{ fontSize: 12 }}>挑战抬高目标带、简单放宽；答错仍会自动降回</Text>
+                <Text type='secondary' className='lh-t-12'>挑战抬高目标带、简单放宽；答错仍会自动降回</Text>
                 <Button size='mini' type='text' onClick={() => setBandRowOpen(false)}>收起</Button>
               </Space>
             </>
@@ -320,7 +320,7 @@ export default function ReviewSession(props: {
             <ErrorCardCard key={`${card.course}/${card.error.node}/${card.error.id}`}
               card={card.error} onAnswer={answerError} />
             {outcome && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <div className='lh-flex lh-end'>
                 <Button type='primary' size='small' onClick={next}>下一张</Button>
               </div>
             )}

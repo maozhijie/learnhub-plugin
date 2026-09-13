@@ -34,8 +34,8 @@ export default function CoachColumn({ frame, course, jobs }: {
 
   const coach = frame.status?.courses.find(c => c.name === course)?.coach ?? null
   return (
-    <Card size='small' title='教练台' style={{ borderRadius: 10 }}>
-      <Text type='secondary' style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+    <Card size='small' title='教练台' className='lh-card'>
+      <Text type='secondary' className='lh-t-12 lh-block lh-mb-8'>
         建课/生长的机器仪表：命令下发后进度在「生长与队列」分栏与全局生成队列可见。
       </Text>
       <CoachCockpit

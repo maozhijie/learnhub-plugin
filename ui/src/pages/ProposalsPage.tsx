@@ -19,7 +19,7 @@ const { Text } = Typography
 function SeedImpactPreview({ impact }: { impact: SeedImpactDoc }) {
   const reseed = impact.mode === 'reseed'
   return (
-    <Alert type={reseed ? 'warning' : 'info'} style={{ marginBottom: 8 }} content={
+    <Alert type={reseed ? 'warning' : 'info'} className='lh-mb-8' content={
       <Space direction='vertical' size={2}>
         {reseed && impact.current_anchor && (
           <Text>
@@ -111,10 +111,10 @@ export default function ProposalsPage({ frame, course }: { frame?: AppFrame; cou
     Modal.confirm({
       title: `应用提案 #${p.id}（${kindLabel(p.kind).label}）？`,
       content: (
-        <Space direction='vertical' size={4} style={{ width: '100%' }}>
+        <Space direction='vertical' size={4} className='lh-full'>
           {impact && <SeedImpactPreview impact={impact} />}
           {impactError && (
-            <Alert type='warning' style={{ marginBottom: 8 }}
+            <Alert type='warning' className='lh-mb-8'
               content={`影响预览失败：${impactError}`} />
           )}
           <Text type='secondary'>{p.summary}</Text>
@@ -162,9 +162,9 @@ export default function ProposalsPage({ frame, course }: { frame?: AppFrame; cou
   }
 
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={14}>
+    <Space direction='vertical' className='lh-full' size={14}>
       <Alert type='info' content='面板下发的种子/富化/反编译/项目草案与教练回合的生长批提案都汇集在这里人审 → 应用后图结构与 Obsidian 笔记联动落盘（生长批过受理门即自动应用，不在此排队——ADR-0003）。' />
-      <Card size='small' title='提案列表' style={{ borderRadius: 10 }}
+      <Card size='small' title='提案列表' className='lh-card'
         extra={<Button size='mini' onClick={() => void load()}>刷新</Button>}>
         {items === null ? null : items.length === 0 ? (
           <Empty description='没有提案：学习图页教练台可下发建课/回填/反编译，项目页可起草计划与里程碑；生长批随教练回合自动产生并直接应用' />

@@ -39,7 +39,7 @@ const QUADRANT_CELLS: Array<{ key: string; x: '低' | '高'; y: '高' | '低'; c
 function AxisValue({ label, value, caliber }: { label: string; value: number | null; caliber: string }) {
   return (
     <Tooltip content={caliber}>
-      <span style={{ color: 'var(--color-text-2)' }}>
+      <span className='lh-text-2'>
         {label}：<b>{value === null ? '无证据' : Math.round(value * 100) + '%'}</b>
       </span>
     </Tooltip>
@@ -133,7 +133,7 @@ export default function ProjectsPage() {
       const id = String((created as { id?: unknown }).id ?? '')
       if (!id) throw new Error('项目创建返回缺少 id')
       const r = await api.projectDecompile(id)
-      Message.success(`${r.message}（生成页看进度，提案页联合人审）`)
+      Message.success(`${r.message}（生成队列看进度，提案收件箱联合人审）`)
       setDcName('')
       setDcGoal('')
       await loadList()
@@ -152,7 +152,7 @@ export default function ProjectsPage() {
       const r = kind === 'decompile' ? await api.projectDecompile(selected)
         : kind === 'plan' ? await api.projectPlanGenerate(selected)
           : await api.projectMilestoneGenerate(selected, kind.slice('milestone:'.length))
-      Message.success(`${r.message}（生成页看进度）`)
+      Message.success(`${r.message}（生成队列看进度）`)
     } catch (err) {
       Message.error(errorMessage(err))
     } finally {
@@ -161,18 +161,18 @@ export default function ProjectsPage() {
   }
 
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={14}>
+    <Space direction='vertical' className='lh-full' size={14}>
       <Alert type='info' content='项目区（Course 的姊妹实体，以周/月计的真实实践）：这里看每个项目的 2×2 掌握交叉诊断——左边陈述性掌握（关联节点），下边项目执行证据。执行事件零 XP、零调度写入；入档推荐只是提议，改档是你的显式动作，推荐永不参与任何门禁。' />
 
-      <Card size='small' title='目标反编译（建课引导）' style={{ borderRadius: 10 }}>
-        <Space direction='vertical' size={8} style={{ width: '100%' }}>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+      <Card size='small' title='目标反编译（建课引导）' className='lh-card'>
+        <Space direction='vertical' size={8} className='lh-full'>
+          <Text type='secondary' className='lh-t-12'>
             从「目标项目描述」反推学习资产：里程碑计划草案 + 知识种子簇双提案（同进同退，提案页联合人审）；
             显式目标课程时只产计划半区。知识子图检索只读 Vault 先验，apply 前零写入。
           </Text>
           <Space size={8} wrap>
-            <Input style={{ width: 200 }} placeholder='项目名（如：三个月弹会小曲）' value={dcName} onChange={setDcName} />
-            <Input style={{ width: 360 }} placeholder='目标描述：做出什么、给谁、什么算成' value={dcGoal} onChange={setDcGoal} />
+            <Input className='lh-w-200' placeholder='项目名（如：三个月弹会小曲）' value={dcName} onChange={setDcName} />
+            <Input className='lh-w-360' placeholder='目标描述：做出什么、给谁、什么算成' value={dcGoal} onChange={setDcGoal} />
             <Button type='primary' size='small' loading={dcBusy} onClick={() => void createAndDecompile()}>
               创建项目并反编译
             </Button>
@@ -182,7 +182,7 @@ export default function ProjectsPage() {
 
       <AgentHints page='projects' />
 
-      <Card size='small' title='项目' style={{ borderRadius: 10 }}>
+      <Card size='small' title='项目' className='lh-card'>
         {projects === null ? null : projects.length === 0 ? (
           <Empty description='还没有项目：上面「目标反编译」建一个（真实在做的实践，如「三个月弹会小曲」）' />
         ) : (
@@ -201,14 +201,14 @@ export default function ProjectsPage() {
               { title: '生命周期', width: 100, render: (_, p) => <Tag size='small'>{LIFECYCLE_LABEL[p.lifecycle] ?? p.lifecycle}</Tag> },
               { title: '渐退档', dataIndex: 'tier', width: 90, render: v => <Tag size='small' color='arcoblue'>{v}</Tag> },
               { title: '里程碑', width: 80, render: (_, p) => `${p.plan.length} 个` },
-              { title: '目标', render: (_, p) => <span style={{ color: 'var(--color-text-3)' }}>{p.goal}</span> },
+              { title: '目标', render: (_, p) => <span className='lh-muted'>{p.goal}</span> },
             ]}
           />
         )}
       </Card>
 
       {selected && (
-        <Card size='small' title='AI 起草（提案-人审通道）' style={{ borderRadius: 10 }}>
+        <Card size='small' title='AI 起草（提案-人审通道）' className='lh-card'>
           <Space size={8} wrap>
             <Button size='small' loading={draftBusy === 'decompile'} onClick={() => void draft('decompile')}>目标反编译（双提案）</Button>
             <Button size='small' loading={draftBusy === 'plan'} onClick={() => void draft('plan')}>里程碑计划草案</Button>
@@ -219,7 +219,7 @@ export default function ProjectsPage() {
               </Button>
             ))}
           </Space>
-          <div style={{ marginTop: 6, color: 'var(--color-text-3)', fontSize: 12 }}>
+          <div className='lh-mt-6 lh-muted lh-t-12'>
             全部入队即返回（生成页看进度）；产物走提案页人审——计划 apply 带旧计划快照，里程碑已生成过则自动转重生成提案。
           </div>
         </Card>
@@ -234,12 +234,12 @@ export default function ProjectsPage() {
               <Space size={16}>
                 <AxisValue label='X 陈述性掌握' value={cross.x.value} caliber={cross.x.caliber} />
                 <AxisValue label='Y 项目执行证据' value={cross.y.value} caliber={cross.y.caliber} />
-                <span style={{ color: 'var(--color-text-3)' }}>高低分界 {Math.round(cross.thresholds.axis * 100)}%</span>
+                <span className='lh-muted'>高低分界 {Math.round(cross.thresholds.axis * 100)}%</span>
               </Space>
             }
-            style={{ borderRadius: 10 }}
+            className='lh-card'
           >
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className='lh-grid-2'>
               {QUADRANT_CELLS.map(cell => {
                 const active = cross.quadrant.key === cell.key
                 const label = active ? cross.quadrant.label : cell.key === 'applied_shaky' ? '会用而不牢'
@@ -253,10 +253,10 @@ export default function ProjectsPage() {
                   }}>
                     <Space size={8}>
                       <Tag size='small' color={cell.color}>{label}</Tag>
-                      <span style={{ color: 'var(--color-text-3)', fontSize: 12 }}>掌握{cell.x} × 执行{cell.y}</span>
+                      <span className='lh-muted lh-t-12'>掌握{cell.x} × 执行{cell.y}</span>
                       {active && <Tag size='small' color='arcoblue'>当前落位</Tag>}
                     </Space>
-                    <div style={{ marginTop: 6, color: 'var(--color-text-2)', fontSize: 13, lineHeight: 1.5 }}>
+                    <div className='lh-mt-6 lh-text-2 lh-t-13 lh-lh-1p5'>
                       {hint || '——'}
                     </div>
                   </div>
@@ -264,7 +264,7 @@ export default function ProjectsPage() {
               })}
             </div>
             {cross.linked_nodes.length > 0 && (
-              <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div className='lh-mt-10 lh-flex lh-wrap lh-gap-6'>
                 {cross.linked_nodes.map(n => (
                   <Tag key={`${n.course}/${n.node}`} size='small' color='gray'>
                     {n.node}（{Math.round(n.mastery * 100)}%）
@@ -274,7 +274,7 @@ export default function ProjectsPage() {
             )}
           </Card>
 
-          <Card size='small' title='入档推荐（challenge point，只读）' style={{ borderRadius: 10 }}>
+          <Card size='small' title='入档推荐（challenge point，只读）' className='lh-card'>
             <Space size={10} wrap>
               <Tag size='small' color={ACTION_LABEL[cross.recommendation.action]?.color}>
                 {ACTION_LABEL[cross.recommendation.action]?.text}
@@ -290,13 +290,13 @@ export default function ProjectsPage() {
                   改成「{cross.recommendation.recommended}」
                 </Button>
               )}
-              <Select size='mini' style={{ width: 120 }} value={cross.tier} disabled={busy}
+              <Select size='mini' className='lh-w-120' value={cross.tier} disabled={busy}
                 onChange={v => adoptTier(v as FadingTier)}
                 options={TIER_OPTIONS.map(t => ({ label: `改为 ${t}`, value: t }))} />
             </Space>
-            <ul style={{ margin: '8px 0 0', paddingLeft: 20, color: 'var(--color-text-2)', fontSize: 13, lineHeight: 1.7 }}>
+            <ul className='lh-m-8px-0-0 lh-pl-20 lh-text-2 lh-t-13 lh-lh-1p7'>
               {cross.recommendation.reasons.map((r, i) => <li key={i}>{r}</li>)}
-              <li style={{ color: 'var(--color-text-3)' }}>
+              <li className='lh-muted'>
                 判据：档内 ≥{cross.thresholds.promote_min_events} 次均分 ≥{Math.round(cross.thresholds.promote_score * 100)}%
                 升 / &lt;{Math.round(cross.thresholds.demote_score * 100)}% 降，且知识底座 ≥{Math.round(cross.thresholds.axis * 100)}%
                 ——引擎只提议，永不做门禁
@@ -304,25 +304,25 @@ export default function ProjectsPage() {
             </ul>
           </Card>
 
-          <Card size='small' title='记一次执行事件' style={{ borderRadius: 10 }}>
+          <Card size='small' title='记一次执行事件' className='lh-card'>
             <Space size={8} wrap>
-              <Select size='small' style={{ width: 110 }} value={source} onChange={v => setSource(v as 'self' | 'ai')}
+              <Select size='small' className='lh-w-110' value={source} onChange={v => setSource(v as 'self' | 'ai')}
                 options={[{ label: '自评（self）', value: 'self' }, { label: 'AI 评（ai）', value: 'ai' }]} />
-              <Select size='small' style={{ width: 130 }} value={rating} onChange={v => setRating(Number(v))}
+              <Select size='small' className='lh-w-130' value={rating} onChange={v => setRating(Number(v))}
                 options={[4, 3, 2, 1].map(r => ({ label: `${r}（${RATING_LABEL[r]}）`, value: r }))} />
-              <Input size='small' style={{ width: 240 }} placeholder='行使的关联节点，逗号分隔（可空）'
+              <Input size='small' className='lh-w-240' placeholder='行使的关联节点，逗号分隔（可空）'
                 value={nodesText} onChange={v => setNodesText(v)} />
-              <Input size='small' style={{ width: 200 }} placeholder='一句话备注（可空）'
+              <Input size='small' className='lh-w-200' placeholder='一句话备注（可空）'
                 value={note} onChange={v => setNote(v)} />
               <Button size='small' type='primary' disabled={busy} onClick={submitExec}>落流</Button>
             </Space>
-            <div style={{ marginTop: 6, color: 'var(--color-text-3)', fontSize: 12 }}>
+            <div className='lh-mt-6 lh-muted lh-t-12'>
               nodes 里给出关联节点时，两端都在其中的既有 enc 边算被行使——练习证据单向回流到边两端节点（零 XP、零调度写入）；
               自动证据来源（source=auto）需要可观测判据，走 agent 工具 learnhub_project_exec_log。
             </div>
           </Card>
 
-          <Card size='small' title={`执行事件（${cross.exec.count} 条）`} style={{ borderRadius: 10 }}>
+          <Card size='small' title={`执行事件（${cross.exec.count} 条）`} className='lh-card'>
             {cross.events.length === 0 ? (
               <Empty description='还没有执行事件：做完一次真活儿就记一条（评级 1-4 + 来源）' />
             ) : (
@@ -336,8 +336,8 @@ export default function ProjectsPage() {
                   { title: '档位', dataIndex: 'tier', width: 80 },
                   { title: '评级', width: 100, render: (_, e) => <Tag size='small' color={e.rating >= 3 ? 'green' : 'orange'}>{e.rating}（{RATING_LABEL[e.rating]}）</Tag> },
                   { title: '来源', width: 90, render: (_, e) => SOURCE_LABEL[e.source] ?? e.source },
-                  { title: '行使节点', render: (_, e) => e.nodes.length ? e.nodes.join('、') : <span style={{ color: 'var(--color-text-3)' }}>—</span> },
-                  { title: '备注', render: (_, e) => <span style={{ color: 'var(--color-text-3)' }}>{e.note ?? ''}</span> },
+                  { title: '行使节点', render: (_, e) => e.nodes.length ? e.nodes.join('、') : <span className='lh-muted'>—</span> },
+                  { title: '备注', render: (_, e) => <span className='lh-muted'>{e.note ?? ''}</span> },
                 ]}
               />
             )}

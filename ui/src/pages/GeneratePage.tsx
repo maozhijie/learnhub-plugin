@@ -47,12 +47,12 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
     Modal.confirm({
       title: '重新生成整课？',
       content: (
-        <div style={{ lineHeight: 1.9 }}>
+        <div className='lh-lh-1p9'>
           <div>将删除课程「{resetTarget}」的：</div>
           <div>· 全部节正文与节清单（学习页清空）</div>
           <div>· 全部练习题（题库）</div>
           <div>· 全部交互件与生成的图片</div>
-          <div style={{ marginTop: 8, color: 'var(--color-text-3)' }}>
+          <div className='lh-mt-8 lh-muted'>
             旧内容备份到 .trash（可恢复）；课程图谱、学习进度与掌握度保留。删除后按学习顺序逐节点重新生成，每个节点需数分钟，进度在本页实时展示。
           </div>
         </div>
@@ -144,18 +144,18 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
   }
 
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={14}>
+    <Space direction='vertical' className='lh-full' size={14}>
       <Card size='small' title={
         <Space size={10}>
           <span>{sliced ? `待生成队列（${course}）` : '待生成队列'}</span>
           {styles.length > 1 && (
-            <Select value={style ?? ''} onChange={v => setStyle(v || undefined)} size='mini' style={{ width: 130 }}>
+            <Select value={style ?? ''} onChange={v => setStyle(v || undefined)} size='mini' className='lh-w-130'>
               {styles.map(s => <Select.Option key={s || '默认'} value={s}>{s ? `风格：${s}` : '默认风格'}</Select.Option>)}
             </Select>
           )}
         </Space>
-      } style={{ borderRadius: 10 }}>
-        <Text type='secondary' style={{ display: 'block', marginBottom: 8 }}>
+      } className='lh-card'>
+        <Text type='secondary' className='lh-block lh-mb-8'>
           来自 生成队列.md（agent 补内容建议 / 内容反馈自动入队）；一键生成后正文落盘 Obsidian，条目自动勾掉。
           {sliced && ' 此处只显本课条目，全局队列在「生成队列」入口。'}
         </Text>
@@ -184,28 +184,28 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
           <span>{sliced ? `生成任务（${course}）` : '生成任务'}</span>
           {!sliced && courses.length > 0 && (
             <>
-              <Select value={resetTarget} onChange={v => setResetSel(v)} size='mini' style={{ width: 170 }}>
+              <Select value={resetTarget} onChange={v => setResetSel(v)} size='mini' className='lh-w-170'>
                 {courses.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
               </Select>
               <Button size='mini' status='danger' onClick={confirmReset}>重新生成整课</Button>
             </>
           )}
         </Space>
-      } style={{ borderRadius: 10 }}>
+      } className='lh-card'>
         {broken && (
           <Alert
-            type='error' style={{ marginBottom: 8 }}
+            type='error' className='lh-mb-8'
             content={<>生成任务注册表损坏，队列已停止接受新任务（防止坏档被覆盖）：<Text bold>{broken}</Text></>} />
         )}
         {queuePaused && queuedCount > 0 && (
           <Alert
-            type='warning' style={{ marginBottom: 8 }}
+            type='warning' className='lh-mb-8'
             content={<Space size={8}>
               <Text>进程重启后有 {queuedCount} 个{sliced ? '本课' : ''}排队任务已暂停（不自动开跑；恢复影响整条全局队列）。</Text>
               <Button size='mini' type='primary' onClick={() => void resumeQueue()}>恢复队列</Button>
             </Space>} />
         )}
-        <Text type='secondary' style={{ display: 'block', marginBottom: 8 }}>
+        <Text type='secondary' className='lh-block lh-mb-8'>
           全局串行队列{sliced ? '的本课切片' : ''}：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。{sliced ? '种子起草与生长批由教练台分栏下发。' : '课程图的种子提案与生长批从教练台下发（入队即在本页看进度）。'}
         </Text>
         {jobs === null ? null : jobs.length === 0 ? (
@@ -234,8 +234,8 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
                 if (!p || j.status !== 'running') return <Text type='secondary'>—</Text>
                 return (
                   <Space size={8}>
-                    <Progress size='mini' percent={p.total ? p.done / p.total : 0} style={{ width: 64 }} />
-                    <Text type='secondary' style={{ fontSize: 12, maxWidth: 100 }} ellipsis>
+                    <Progress size='mini' percent={p.total ? p.done / p.total : 0} className='lh-w-64' />
+                    <Text type='secondary' className='lh-t-12 lh-maxw-100' ellipsis>
                       {p.done}/{p.total}{p.current ? ` · ${p.current}` : ''}
                     </Text>
                   </Space>

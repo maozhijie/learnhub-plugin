@@ -1,6 +1,5 @@
 /** 今日页卡片组（页内子组件，就近维护）：XP 账本条 + 复习横幅 + 推荐流大卡
- * （#208 / ADR-0058 今日页成型；课程卡已迁出今日——暂住 components/CourseCardGrid，
- * T5 落位「我的课程」）。横幅 C1/C2/E1 裸入口退役：笔记源/我的卡/导出到 Anki 收进
+ * （#208 / ADR-0058 今日页成型；课程卡已迁出今日，住课程区「我的课程」的 CourseCardGrid）。横幅 C1/C2/E1 裸入口退役：笔记源/我的卡/导出到 Anki 收进
  * 「我的资产」菜单（AssetsMenu），漂移/挂起状态行与其直达动作保留。数据经 props
  * 注入，动作回调上抛——本文件不持取数状态（缝在 index.tsx）。 */
 import { Button, Card, Message, Popconfirm, Progress, Tag, Tooltip, Typography } from '@arco-design/web-react'
@@ -18,18 +17,18 @@ const { Text, Title } = Typography
 export function XpBar({ xp, onEditGoal }: { xp: XpStatus; onEditGoal: () => void }) {
   const percent = Math.min(100, Math.round((xp.today_xp / Math.max(1, xp.goal)) * 100))
   return (
-    <Card size='small' style={{ borderRadius: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+    <Card size='small' className='lh-card'>
+      <div className='lh-row lh-gap-20 lh-wrap'>
         <Progress type='circle' width={44} percent={percent} showText={false} />
         <div>
-          <Text style={{ fontWeight: 600, fontSize: 16 }}>{xp.today_xp} XP</Text>
-          <Text type='secondary' style={{ display: 'block', fontSize: 12 }}>今日 · 目标 {xp.goal} XP</Text>
+          <Text className='lh-strong lh-t-16'>{xp.today_xp} XP</Text>
+          <Text type='secondary' className='lh-block lh-t-12'>今日 · 目标 {xp.goal} XP</Text>
         </div>
         <div>
-          <Text style={{ fontWeight: 600, fontSize: 16 }}>{xp.streak} 天</Text>
-          <Text type='secondary' style={{ display: 'block', fontSize: 12 }}>连续学习</Text>
+          <Text className='lh-strong lh-t-16'>{xp.streak} 天</Text>
+          <Text type='secondary' className='lh-block lh-t-12'>连续学习</Text>
         </div>
-        <Button size='mini' type='text' style={{ marginLeft: 'auto' }} onClick={onEditGoal}>
+        <Button size='mini' type='text' className='lh-ml-auto' onClick={onEditGoal}>
           调整每日目标
         </Button>
       </div>
@@ -55,14 +54,14 @@ export function ReviewBanner({ reviewQ, onStart, onOpenSources, onRegenerateSour
   const drifted = reviewQ?.note_drifted ?? []
   const suspended = reviewQ?.note_suspended ?? []
   return (
-    <Card size='small' style={{ borderRadius: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+    <Card size='small' className='lh-card'>
+      <div className='lh-row lh-gap-24 lh-wrap'>
         <div>
-          <Text type='secondary' style={{ display: 'block', fontSize: 12 }}>待复习</Text>
-          <Text style={{ fontSize: 20, fontWeight: 600 }}>{dueCount}</Text>
-          <Text type='secondary' style={{ fontSize: 12 }}> 张卡到期</Text>
+          <Text type='secondary' className='lh-block lh-t-12'>待复习</Text>
+          <Text className='lh-t-20 lh-strong'>{dueCount}</Text>
+          <Text type='secondary' className='lh-t-12'> 张卡到期</Text>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className='lh-ml-auto lh-flex lh-gap-8 lh-wrap'>
           <Button type='primary' onClick={onStart} disabled={dueCount === 0}>
             开始复习（{dueCount}）
           </Button>
@@ -72,10 +71,10 @@ export function ReviewBanner({ reviewQ, onStart, onOpenSources, onRegenerateSour
         </div>
       </div>
       {(drifted.length > 0 || suspended.length > 0) && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div className='lh-mt-8 lh-col lh-gap-4'>
           {drifted.map(d => (
-            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Text type='warning' style={{ fontSize: 12, flex: 1, minWidth: 220 }}>
+            <div key={d.id} className='lh-row lh-gap-8 lh-wrap'>
+              <Text type='warning' className='lh-t-12 lh-flex-1 lh-minw-220'>
                 笔记源「{d.id}」{d.hint}
               </Text>
               <Popconfirm
@@ -88,8 +87,8 @@ export function ReviewBanner({ reviewQ, onStart, onOpenSources, onRegenerateSour
             </div>
           ))}
           {suspended.map(s => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Text type='error' style={{ fontSize: 12, flex: 1, minWidth: 220 }}>
+            <div key={s.id} className='lh-row lh-gap-8 lh-wrap'>
+              <Text type='error' className='lh-t-12 lh-flex-1 lh-minw-220'>
                 笔记源「{s.id}」{s.reason}
               </Text>
               <Tooltip content={`按原路径重新注册：${s.path}`}>
@@ -152,20 +151,20 @@ export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
   }
   return (
     <Card size='small' hoverable style={{ borderRadius: 10, cursor: 'pointer', borderLeft: `3px solid var(--color-${t.color === 'red' ? 'danger' : t.color === 'green' ? 'success' : t.color === 'arcoblue' ? 'arcoblue' : 'primary'}-6,#165dff)` }}>
-        <div onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div onClick={onOpen} className='lh-row lh-gap-12 lh-wrap'>
           <Tag color={t.color}>{t.label}</Tag>
           {e.pinned && <Tag size='small' color='gold'>你选了它</Tag>}
-          <div style={{ minWidth: 0, flex: 1 }}>
-          <Title heading={6} style={{ margin: 0 }}>
+          <div className='lh-grow'>
+          <Title heading={6} className='lh-m-0'>
             {e.node}
-            {gen && <Tag size='small' color={gen.state === 'running' ? 'arcoblue' : 'gray'} style={{ marginLeft: 8 }}>{genText}</Tag>}
-            {!generating && e.hasContent && <Tag size='small' color='green' style={{ marginLeft: 8 }}>已生成</Tag>}
+            {gen && <Tag size='small' color={gen.state === 'running' ? 'arcoblue' : 'gray'} className='lh-ml-8'>{genText}</Tag>}
+            {!generating && e.hasContent && <Tag size='small' color='green' className='lh-ml-8'>已生成</Tag>}
           </Title>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             {e.course}{e.region ? ` · ${e.region}` : ''}{e.why ? ` · ${e.why}` : ''}
           </Text>
           {e.intention && (
-            <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 2, color: 'var(--color-gold-6, #d48806)' }}>
+            <Text type='secondary' className='lh-t-12 lh-block lh-mt-2 lh-text-gold'>
               计划：在「{e.intention.cue}」之后，{e.intention.action}
             </Text>
           )}
@@ -191,14 +190,11 @@ export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
         </span>
       </div>
       {e.diagnostics?.length ? (
-        <div onClick={ev => ev.stopPropagation()} style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div onClick={ev => ev.stopPropagation()} className='lh-mt-8 lh-col lh-gap-4'>
           {e.diagnostics.map(d => (
-            <div key={d.section} style={{
-              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-              background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '6px 10px',
-            }}>
+            <div key={d.section} className='lh-row lh-gap-8 lh-wrap lh-surface-1 lh-r-6 lh-p-6px-10px'>
               <Tag size='small' color={d.signal === 'R1' ? 'red' : 'orange'}>{d.signal}</Tag>
-              <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 200 }}>「{d.sectionTitle}」{d.reason}</Text>
+              <Text type='secondary' className='lh-t-12 lh-flex-1 lh-minw-200'>「{d.sectionTitle}」{d.reason}</Text>
               {d.escalate ? (
                 <Tooltip content='重写后仍反复失败：问题可能不在正文——请人工审题、归档坏题或检查前置'>
                   <Tag size='small' color='purple'>转人工处理</Tag>
@@ -216,14 +212,11 @@ export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
         </div>
       ) : null}
       {e.advice?.length ? (
-        <div onClick={ev => ev.stopPropagation()} style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div onClick={ev => ev.stopPropagation()} className='lh-mt-8 lh-col lh-gap-4'>
           {e.advice.map(a => (
-            <div key={a.node} style={{
-              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-              background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '6px 10px',
-            }}>
+            <div key={a.node} className='lh-row lh-gap-8 lh-wrap lh-surface-1 lh-r-6 lh-p-6px-10px'>
               <Tag size='small' color='orange'>建议先复习</Tag>
-              <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 200 }}>
+              <Text type='secondary' className='lh-t-12 lh-flex-1 lh-minw-200'>
                 先复习「{a.node}」的 {a.due} 道到期题（当前可回忆度 {Math.round(a.r * 100)}%）再回来继续
               </Text>
               <Tooltip content='一键进入该节点的定向复习会话（单节点自适应排序）'>

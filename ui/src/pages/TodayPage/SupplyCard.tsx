@@ -29,18 +29,18 @@ export interface SupplySnapshot {
 /** 待审闸门计数卡：断粮时第一眼分清「闸门没审」还是「系统坏了」（#204 用户故事 4）。 */
 export function GateCard({ frame, pending }: { frame: AppFrame; pending: number | null }) {
   return (
-    <Card size='small' className='today-gate' hoverable style={{ borderRadius: 10, cursor: 'pointer' }}
+    <Card size='small' className='today-gate lh-card lh-click' hoverable
       onClick={() => frame.goto('courses.proposals')}>
       <div className='today-supply-line'>
         <div>
-          <Text type='secondary' style={{ display: 'block', fontSize: 12 }}>待审提案</Text>
+          <Text type='secondary' className='lh-block lh-t-12'>待审提案</Text>
           <Text className='today-supply-num'>{pending ?? '—'}</Text>
-          {pending === 0 && <Text type='secondary' style={{ fontSize: 12 }}> 收件箱清着，不欠人审</Text>}
+          {pending === 0 && <Text type='secondary' className='lh-t-12'> 收件箱清着，不欠人审</Text>}
           {pending != null && pending > 0 && (
-            <Text type='secondary' style={{ fontSize: 12 }}> 生长批/种子在等人审——审慢了课程断粮</Text>
+            <Text type='secondary' className='lh-t-12'> 生长批/种子在等人审——审慢了课程断粮</Text>
           )}
         </div>
-        <Button size='mini' style={{ marginLeft: 'auto' }} onClick={e => { e.stopPropagation(); frame.goto('courses.proposals') }}>
+        <Button size='mini' className='lh-ml-auto' onClick={e => { e.stopPropagation(); frame.goto('courses.proposals') }}>
           去收件箱
         </Button>
       </div>
@@ -63,11 +63,11 @@ export function SupplyCard({ frame, supply, onRefresh }: {
   const queued = supply?.queuedCount ?? 0
   const failed = supply?.failed ?? []
   return (
-    <Card size='small' title='课程供给' style={{ borderRadius: 10 }}
+    <Card size='small' title='课程供给' className='lh-card'
       extra={<Button size='mini' type='text' onClick={() => frame.goto('courses.queue')}>生成队列</Button>}>
       {supply?.broken ? (
         <div className='today-supply-line'>
-          <Text type='secondary' style={{ flex: 1, minWidth: 200 }}>
+          <Text type='secondary' className='lh-flex-1 lh-minw-200'>
             任务注册表损坏，队列已停止接受新任务（防止坏档被覆盖）：<Text bold>{supply.broken}</Text>
           </Text>
           <Button size='mini' onClick={() => frame.goto('courses.queue')}>去生成队列</Button>
@@ -75,7 +75,7 @@ export function SupplyCard({ frame, supply, onRefresh }: {
       ) : resuming ? (
         <div className='today-supply-line'>
           {/* 停摆中性文案：重启后的正常保护态，不是故障——恢复队列即续 */}
-          <Text style={{ flex: 1, minWidth: 200 }}>
+          <Text className='lh-flex-1 lh-minw-200'>
             队列暂停：进程重启后有 {supply!.queuedCount} 个任务在排队，不会自动开跑。
           </Text>
           <Button size='mini' type='primary' onClick={() => void resumeQueue()}>恢复队列</Button>
@@ -83,8 +83,8 @@ export function SupplyCard({ frame, supply, onRefresh }: {
       ) : (
         <div className='today-supply-line'>
           <Text className='today-supply-num'>{brewing > 0 ? `在酿 ${brewing}` : '暂无在酿'}</Text>
-          {queued > 0 && <Text type='secondary' style={{ fontSize: 12 }}>另有 {queued} 个排队</Text>}
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          {queued > 0 && <Text type='secondary' className='lh-t-12'>另有 {queued} 个排队</Text>}
+          <Text type='secondary' className='lh-t-12'>
             {brewing > 0 ? '正文在后台逐节生成，好了会出现在推荐流' : '需要新内容时从推荐卡或教练台入队'}
           </Text>
         </div>
@@ -95,7 +95,7 @@ export function SupplyCard({ frame, supply, onRefresh }: {
             <div key={j.key} className='today-supply-rowitem'>
               <Tag size='small' color='red'>{j.status === 'partial' ? '部分完成' : '失败'}</Tag>
               {j.phase && GEN_PHASE_META[j.phase] && <Tag size='small'>{GEN_PHASE_META[j.phase]!.label}</Tag>}
-              <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 160 }}>
+              <Text type='secondary' className='lh-t-12 lh-flex-1 lh-minw-160'>
                 「{j.node}」（{j.course}）上次任务未完成{retryHint(j)}
               </Text>
               <Button size='mini' type='text' status='warning' loading={busyKey === j.key}

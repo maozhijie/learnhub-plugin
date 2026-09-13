@@ -13,7 +13,7 @@ export default function CoursesPage({ frame }: { frame: AppFrame }) {
   const noCourses = !frame.tree || frame.tree.courses.length === 0
   if (noCourses) {
     return (
-      <Space direction='vertical' style={{ width: '100%' }} size={12}>
+      <Space direction='vertical' className='lh-full' size={12}>
         <Card>
           <Text type='secondary'>还没有课程——在这里新建：种子一次人审即开工，图随教练回合沿真实的需要生长。</Text>
         </Card>
@@ -23,7 +23,7 @@ export default function CoursesPage({ frame }: { frame: AppFrame }) {
     )
   }
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={12}>
+    <Space direction='vertical' className='lh-full' size={12}>
       <CourseCardGrid frame={frame} />
     </Space>
   )

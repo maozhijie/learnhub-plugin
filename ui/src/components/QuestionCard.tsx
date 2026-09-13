@@ -94,14 +94,11 @@ function OrderList({ items, order, onOrder, disabled }: {
     onOrder(next)
   }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    <div className='lh-col lh-gap-4'>
       {order.map((optIdx, pos) => (
-        <div key={optIdx} style={{
-          display: 'flex', alignItems: 'center', gap: 8, border: '1px solid var(--color-border-2,#e5e6eb)',
-          borderRadius: 6, padding: '4px 8px', background: 'var(--color-fill-1,#f7f8fa)',
-        }}>
-          <Text style={{ fontSize: 12, color: 'var(--color-text-3,#86909c)', width: 18 }}>{pos + 1}.</Text>
-          <Text style={{ flex: 1, fontSize: 13 }}><InlineMd text={items[optIdx]} /></Text>
+        <div key={optIdx} className='lh-row lh-gap-8 lh-border lh-r-6 lh-p-4px-8px lh-surface-1'>
+          <Text className='lh-t-12 lh-muted lh-w-18'>{pos + 1}.</Text>
+          <Text className='lh-flex-1 lh-t-13'><InlineMd text={items[optIdx]} /></Text>
           <Button size='mini' type='text' disabled={disabled || pos === 0} onClick={() => move(pos, -1)}>↑</Button>
           <Button size='mini' type='text' disabled={disabled || pos === order.length - 1} onClick={() => move(pos, 1)}>↓</Button>
         </div>
@@ -255,16 +252,13 @@ export default function QuestionCard(props: {
       : '写下你的综合应用回答（AI 按 10 分制批改，≥6 及格）'
 
   return (
-    <div style={{
-      border: '1px solid var(--color-border-2,#e5e6eb)', borderRadius: 8,
-      padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
-    }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div className='lh-border lh-r-md lh-p-10px-12px lh-col lh-gap-8'>
+      <div className='lh-gap-8 lh-row'>
         <Tag size='small' color='arcoblue'>{KIND_LABEL[q.kind]}</Tag>
-        <Text type='secondary' style={{ fontSize: 12 }}>难度 {q.difficulty} · #{q.no}</Text>
-        <span style={{ marginLeft: 'auto' }}>{props.menu}</span>
+        <Text type='secondary' className='lh-t-12'>难度 {q.difficulty} · #{q.no}</Text>
+        <span className='lh-ml-auto'>{props.menu}</span>
       </div>
-      <div style={{ fontSize: 16, lineHeight: 1.75 }}><InlineMd text={q.q} /></div>
+      <div className='lh-t-16 lh-lh-1p75'><InlineMd text={q.q} /></div>
 
       {isChoice && (
         q.kind === 'single_choice' ? (
@@ -282,7 +276,7 @@ export default function QuestionCard(props: {
       )}
 
       {isMulti && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div className='lh-col lh-gap-4'>
           {opts.map((opt, i) => {
             const letter = String.fromCharCode(65 + i)
             const checked = multi.includes(letter)
@@ -294,7 +288,7 @@ export default function QuestionCard(props: {
               }}>
                 <input type='checkbox' checked={checked} disabled={!!outcome}
                   onChange={() => setMulti(m => checked ? m.filter(x => x !== letter) : [...m, letter])} />
-                <Text style={{ fontSize: 13 }}>{letter}. <InlineMd text={opt} /></Text>
+                <Text className='lh-t-13'>{letter}. <InlineMd text={opt} /></Text>
               </label>
             )
           })}
@@ -304,7 +298,7 @@ export default function QuestionCard(props: {
       {isNumeric && (
         <Input
           value={text} onChange={setText} placeholder='输入数值（支持小数/分数/百分数）'
-          disabled={!!outcome} style={{ maxWidth: 280 }} />
+          disabled={!!outcome} className='lh-maxw-280' />
       )}
 
       {isOrdering && (
@@ -312,13 +306,13 @@ export default function QuestionCard(props: {
       )}
 
       {isMatching && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className='lh-col lh-gap-6'>
           {opts.map((opt, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Text style={{ fontSize: 13, minWidth: 100 }}><InlineMd text={opt} /></Text>
+            <div key={i} className='lh-row lh-gap-8'>
+              <Text className='lh-t-13 lh-minw-100'><InlineMd text={opt} /></Text>
               <Select
                 value={pairs[i]} placeholder='选择配对'
-                style={{ flex: 1, maxWidth: 320 }} disabled={!!outcome}
+                className='lh-flex-1 lh-maxw-320' disabled={!!outcome}
                 onChange={v => setPairs(p => ({ ...p, [i]: v as string }))}>
                 {(q.pairOptions ?? []).map((p, j) => <Select.Option key={j} value={p}><InlineMd text={p} /></Select.Option>)}
               </Select>
@@ -336,16 +330,13 @@ export default function QuestionCard(props: {
 
       {props.jolAsk && !outcome && (
         predicted ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div className='lh-row lh-gap-6'>
             <Tag size='small' color='gold'>你预测「{predicted}」</Tag>
             <Button size='mini' type='text' onClick={() => setPredicted(null)}>改</Button>
           </div>
         ) : (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-            background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '6px 10px',
-          }}>
-            <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 160 }}>
+          <div className='lh-row lh-gap-8 lh-wrap lh-surface-1 lh-r-6 lh-p-6px-10px'>
+            <Text type='secondary' className='lh-t-12 lh-flex-1 lh-minw-160'>
               先预测一下：这题你会吗？（凭直觉点一下即可，可跳过）
             </Text>
             {(['会', '不会', '没把握'] as const).map(p => (
@@ -357,11 +348,11 @@ export default function QuestionCard(props: {
 
       {/* 过信轻提示（ADR-0022 #104）：只随预测出口出现，非阻断、可全局关 */}
       {props.jolAsk && !outcome && props.calibrationHint && (
-        <Alert type='warning' style={{ fontSize: 12, padding: '4px 10px' }} content={props.calibrationHint} />
+        <Alert type='warning' className='lh-t-12 lh-p-4px-10px' content={props.calibrationHint} />
       )}
 
       {!outcome ? (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className='lh-gap-8 lh-end lh-row lh-wrap'>
           {/* 判卷逃生门（#116）：累计失败 2 次后放行——零落盘、按直通卡口径翻面 */}
           {props.onEscape && gradingFails >= 2 && (
             <Button size='small' status='warning' onClick={props.onEscape}>
@@ -378,15 +369,15 @@ export default function QuestionCard(props: {
             onClick={() => void submit()}>提交</Button>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className='lh-col lh-gap-6'>
+          <div className='lh-gap-8 lh-row lh-wrap'>
             {outcome.correct === true && <Tag color='green'>答对了</Tag>}
             {outcome.correct === false && (outcome.judge === 'forget'
               ? <Tag color='orange'>忘记了</Tag>
               : <Tag color='red'>答错了</Tag>)}
             {outcome.correct === null && <Tag>已记录</Tag>}
             <XpBadge xp={outcome.xp} reason={outcome.xp_reason} />
-            <Text type='secondary' style={{ fontSize: 12 }}>判卷：{outcome.judge}</Text>
+            <Text type='secondary' className='lh-t-12'>判卷：{outcome.judge}</Text>
             {outcome.correct === false && (
               <Tooltip content='新开一个 AI 会话，围绕这道题按「完整解法 → 半成品变式 → 独立重做」渐退讲解'>
                 <Button size='mini' type='text' onClick={() => explainInHost(props.course, props.node, q.id)}>
@@ -416,10 +407,10 @@ export default function QuestionCard(props: {
           {/* 正确答案 + 差异点名（ADR-0031）：判错必须让学习者对上自己的作答——
             * 只给静态解析、不公布键，学习者只能反推键是什么（q13 误诊的根源） */}
           {outcome.answer && (props.variant === 'review' || outcome.correct === false) && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap', fontSize: 13 }}>
+            <div className='lh-flex lh-gap-6 lh-items-baseline lh-wrap lh-t-13'>
               <Text type='secondary'>正确答案：</Text>
               <Text bold>{outcome.answer}</Text>
-              {outcome.diff && <Text type='secondary' style={{ fontSize: 12 }}>({outcome.diff})</Text>}
+              {outcome.diff && <Text type='secondary' className='lh-t-12'>({outcome.diff})</Text>}
             </div>
           )}
           {props.footer?.(outcome)}
@@ -456,38 +447,32 @@ export function RevealCard(props: {
 }) {
   const q = props.question
   return (
-    <div style={{
-      border: '1px solid var(--color-border-2,#e5e6eb)', borderRadius: 8,
-      padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8,
-    }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+    <div className='lh-border lh-r-md lh-p-10px-12px lh-col lh-gap-8'>
+      <div className='lh-gap-8 lh-row lh-wrap'>
         <Tag size='small' color='arcoblue'>{KIND_LABEL[q.kind]}</Tag>
         <Tag size='small' color='gray'>本学习日已推进 · 直通</Tag>
-        <Text type='secondary' style={{ fontSize: 12 }}>难度 {q.difficulty} · #{q.no}</Text>
-        <span style={{ marginLeft: 'auto' }}>{props.menu}</span>
+        <Text type='secondary' className='lh-t-12'>难度 {q.difficulty} · #{q.no}</Text>
+        <span className='lh-ml-auto'>{props.menu}</span>
       </div>
-      <div style={{ fontSize: 16, lineHeight: 1.75 }}><InlineMd text={q.q} /></div>
+      <div className='lh-t-16 lh-lh-1p75'><InlineMd text={q.q} /></div>
       {q.lastCorrect != null && (
-        <Text type='secondary' style={{ fontSize: 13 }}>
+        <Text type='secondary' className='lh-t-13'>
           最近一次作答：{q.lastCorrect ? '答对了' : '答错了'}
         </Text>
       )}
       {q.answer && (
-        <div style={{ fontSize: 13 }}>
+        <div className='lh-t-13'>
           <Text type='secondary'>正确答案：</Text>
           <Text bold>{q.answer}</Text>
         </div>
       )}
       {q.explanation && (
-        <div style={{
-          borderLeft: '3px solid var(--color-border-3,#c9cdd4)', background: 'var(--color-fill-1,#f7f8fa)',
-          borderRadius: '0 6px 6px 0', padding: '8px 12px',
-        }}>
+        <div className='lh-quote-muted'>
           <Text type='secondary'>解析：</Text>
           <MdView md={q.explanation} className='quiz-feedback' />
         </div>
       )}
-      <Space size={8} style={{ alignSelf: 'flex-end' }}>
+      <Space size={8} className='lh-self-end'>
         <Button type='primary' size='small' onClick={props.onNext}>下一题</Button>
       </Space>
     </div>

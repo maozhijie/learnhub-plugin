@@ -257,24 +257,24 @@ export default function LessonView(props: { course: string; node: string; frame:
 
   return (
     <WidgetBusProvider>
-    <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className='lh-maxw-720 lh-m-0-auto lh-col lh-gap-14'>
       {/* 头部两行制：标题行（返回+标题+状态+掌握度）；动作行（主 CTA 左、AI 工具与跳过右） */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <div className='lh-col lh-gap-10'>
+        <div className='lh-row lh-gap-10 lh-wrap'>
           <Button size='small' type='text' onClick={frame.closeLesson}>← 返回</Button>
-          <Title heading={4} style={{ margin: 0, fontSize: 20 }}>{node}</Title>
+          <Title heading={4} className='lh-m-0 lh-t-20'>{node}</Title>
           {stageInfo && <Tag color={stageInfo.color}>{stageInfo.label}</Tag>}
           <Tooltip content='掌握度 = 0.7×记忆稳定度完成度 + 0.3×练习证据 EMA（作答对错累积，复习推高稳定度）；题目作答正确率只用于完成门禁。点「完成学习」后全部题目进入复习循环：做过的按各自到期复习，没做过的明天开始。'>
-            <Text type='secondary' style={{ fontSize: 13, cursor: 'help' }}>掌握度 {(mastery * 100).toFixed(0)}% ⓘ</Text>
+            <Text type='secondary' className='lh-t-13 lh-help'>掌握度 {(mastery * 100).toFixed(0)}% ⓘ</Text>
           </Tooltip>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div className='lh-row lh-gap-8 lh-wrap'>
           {nextAction && (
             <Button type='primary' loading={nextAction.loading} onClick={nextAction.onClick}>
               {nextAction.label}
             </Button>
           )}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <div className='lh-row lh-gap-2 lh-wrap lh-ml-auto'>
             {/* E2「讲给我听」（#68）：学完出现（复习/已掌握态）、自愿可关——学习者讲、AI 听 */}
             {hasContent && (stage === 'review' || stage === 'mastered') && (
               <Button size='small' type='text' status='success' onClick={() => setExplainOpen(true)}>讲给我听</Button>
@@ -296,7 +296,7 @@ export default function LessonView(props: { course: string; node: string; frame:
         visible={discussOpen}
         onCancel={() => setDiscussOpen(false)}
         footer={null} unmountOnExit>
-        <Space direction='vertical' size={10} style={{ width: '100%' }}>
+        <Space direction='vertical' size={10} className='lh-full'>
           <Text type='secondary'>
             会在 dsh 里新开一个会话，自动带上本课上下文（正文/题库/掌握度/图位置）。
             适合：提修改意见让 AI 改正文、补题、调图结构等深度操作；答疑用「问 AI 老师」更快。
@@ -319,18 +319,15 @@ export default function LessonView(props: { course: string; node: string; frame:
 
       {/* 生成/出题进行中：阶段 + 逐节进度 + 耗时 + 取消 */}
       {active && job && (
-        <div style={{
-          border: '1px solid var(--color-primary-3,#94bfff)', background: 'var(--color-primary-light-1,#e8f3ff)',
-          borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12,
-        }}>
+        <div className='lh-callout-info'>
           <Spin size={20} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+          <div className='lh-grow lh-col lh-gap-2'>
             <Text>
               {job.phase === 'quiz' ? '自动出题中' : job.phase === 'outline' ? '生成课程大纲中' : '逐节生成正文中'}（已 {elapsed}s）——
               {job.phase === 'quiz' ? '出题完成后即可练习' : '完成后自动出题，可先离开稍后回来'}
             </Text>
             {job.progress && job.phase === 'sections' && (
-              <Text type='secondary' style={{ fontSize: 12 }}>
+              <Text type='secondary' className='lh-t-12'>
                 节进度 {job.progress.done}/{job.progress.total}{job.progress.current ? ` · 正在写「${job.progress.current}」` : ''}
               </Text>
             )}
@@ -346,16 +343,13 @@ export default function LessonView(props: { course: string; node: string; frame:
         </div>
       )}
       {!active && job && (job.status === 'failed' || job.status === 'partial' || job.message?.includes('失败')) && !failHidden && (
-        <div style={{
-          border: '1px solid var(--color-danger-3,#f76560)', background: 'var(--color-danger-light-1,#ffece8)',
-          borderRadius: 8, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8,
-        }}>
+        <div className='lh-callout-danger'>
           <Text>{job.status === 'failed' ? '上次生成失败' : '部分完成'}：{job.message}</Text>
           {(job.failures ?? []).length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className='lh-col lh-gap-4'>
               {(job.failures ?? []).map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 0 }}>
+                <div key={i} className='lh-row lh-gap-8 lh-wrap'>
+                  <Text type='secondary' className='lh-grow lh-t-12'>
                     ✗ {f.sectionTitle ?? f.sectionId ?? '未知节'}{f.finding ? `：${f.finding}` : ''}
                     {f.corpusRef ? `（语料 ${f.corpusRef}）` : ''}
                   </Text>
@@ -383,11 +377,8 @@ export default function LessonView(props: { course: string; node: string; frame:
 
       {/* 后台内容更新提示（ADR-0027 冻结语义）：不打断当前练习，本课结束后重进生效 */}
       {staleNotice && (
-        <div style={{
-          border: '1px solid var(--color-warning-3,#ffd257)', background: 'var(--color-warning-light-1,#fff7e8)',
-          borderRadius: 8, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10,
-        }}>
-          <Text type='secondary' style={{ fontSize: 13, flex: 1 }}>
+        <div className='lh-callout-warn'>
+          <Text type='secondary' className='lh-t-13 lh-flex-1'>
             本节点内容在后台有更新（正文/题目）。当前练习不受影响；本课结束后重进即见新版。
           </Text>
           <Button size='mini' type='text' onClick={() => setStaleNotice(false)}>知道了</Button>
@@ -396,7 +387,7 @@ export default function LessonView(props: { course: string; node: string; frame:
 
       {/* 主体：mastery 会话即学习界面——按节推进阅读与练习；manifest 驱动节序列（练习节一等化）；
       题库三态（首载 Spin / 失败重试 / 内容）由缝统一供给 */}
-      <CommandBoundary cmd={bankCmd} loadingNode={<Card size='small' style={{ borderRadius: 10 }}><Spin dot /></Card>}>
+      <CommandBoundary cmd={bankCmd} loadingNode={<Card size='small' className='lh-card'><Spin dot /></Card>}>
         {bank => (
           bank.questions.length === 0
             ? (hasContent && !active && (
@@ -417,7 +408,7 @@ export default function LessonView(props: { course: string; node: string; frame:
 
       {/* 整课正文（折叠）：会话内已按节推进阅读；这里留给自由回看与单节重写 */}
       {hasContent && (
-        <Card title='整课正文（自由阅读）' size='small' style={{ borderRadius: 10 }}
+        <Card title='整课正文（自由阅读）' size='small' className='lh-card'
           extra={!active && (quizSoftCapReached ? (
             <Popconfirm
               title={`本节点未归档题已达 ${QUIZ_SOFT_CAP} 道软上限`}
@@ -432,7 +423,7 @@ export default function LessonView(props: { course: string; node: string; frame:
           ))}>
           <Collapse>
             <Collapse.Item name='full' header='展开完整正文'>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 8 }}>
+              <div className='lh-col lh-gap-4 lh-pt-8'>
                 {sections.map((s, i) => {
                   const sid = s.id
                   return (
@@ -442,7 +433,7 @@ export default function LessonView(props: { course: string; node: string; frame:
                           display: 'flex', alignItems: 'center', gap: 6,
                           margin: `${i === 0 ? 0 : 22}px 0 8px`, maxWidth: 680,
                         }}>
-                          <h2 style={{ fontSize: 19, fontWeight: 600, lineHeight: 1.4, margin: 0 }}>{s.title}</h2>
+                          <h2 className='lh-t-19 lh-strong lh-lh-1p4 lh-m-0'>{s.title}</h2>
                           {sid && !active && (
                             <Tooltip content='让 AI 重新生成这一节（过质检门后落盘）'>
                               <Button size='mini' type='text' loading={busy === `section:${sid}`}
@@ -470,7 +461,7 @@ export default function LessonView(props: { course: string; node: string; frame:
 
       {/* 完成确认：mastery 会话全部节过关（或本节点无题）才放行；直接结算，拒绝由引擎门禁提示 */}
       {!active && hasContent && stage !== 'skipped' && stage !== 'mastered' && (sessionPassed || !hasQuestions) && (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <div className='lh-flex lh-center'>
           <Button type='primary' status='success' size='large' loading={busy === 'complete'}
             onClick={() => void complete()}>
             完成学习
@@ -478,7 +469,7 @@ export default function LessonView(props: { course: string; node: string; frame:
         </div>
       )}
       {!active && hasContent && hasQuestions && !sessionPassed && (
-        <Text type='secondary' style={{ fontSize: 12, textAlign: 'center' }}>
+        <Text type='secondary' className='lh-t-12 lh-text-center'>
           走完上面会话的全部小节后，这里会出现「完成学习」。
         </Text>
       )}

@@ -291,5 +291,5 @@ export function ChartBlock(props: { code: string }) {
     }
   }, [option])
   if (!option || failed) return <Fallback cls='md-chart-fallback' code={props.code} />
-  return <div ref={ref} className='md-chart' style={{ width: '100%', height: 340 }} />
+  return <div ref={ref} className='md-chart lh-full lh-h-340' />
 }

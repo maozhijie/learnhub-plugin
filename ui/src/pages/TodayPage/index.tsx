@@ -206,9 +206,9 @@ export default function TodayPage({ frame }: { frame: AppFrame }) {
   const noCourses = frame.tree && frame.tree.courses.length === 0
 
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={14}>
+    <Space direction='vertical' className='lh-full' size={14}>
       <div className='today-head'>
-        <Title heading={4} style={{ margin: 0 }}>今日</Title>
+        <Title heading={4} className='lh-m-0'>今日</Title>
         <div className='today-head-assets'>
           <AssetsMenu
             onOpenSources={() => setSourceDrawer({ open: true, focusId: null })}
@@ -217,7 +217,7 @@ export default function TodayPage({ frame }: { frame: AppFrame }) {
       </div>
       {/* 主数据三态（首载中/失败/内容——#158，缝级收口）：推荐流没到前其余区块不渲染 */}
       <CommandBoundary cmd={rec} variant='page' title='今日页加载失败'
-        loadingNode={<Card size='small' style={{ borderRadius: 10 }}><Text type='secondary'>加载推荐与复习队列…</Text></Card>}>
+        loadingNode={<Card size='small' className='lh-card'><Text type='secondary'>加载推荐与复习队列…</Text></Card>}>
         {() => (
           <>
             <XpBar xp={xp.data ?? { date: '', day_cutoff: '', today_xp: 0, goal: 30, streak: 0, streak_grace_days: 1, eta: [] }}
@@ -234,14 +234,14 @@ export default function TodayPage({ frame }: { frame: AppFrame }) {
 
             {/* 核心区：「接下来学/复习」推荐流——点开直接进学习视图 */}
             {noCourses ? (
-              <Card size='small' style={{ borderRadius: 10 }}>
-                <Space direction='vertical' size={12} style={{ width: '100%', display: 'flex', alignItems: 'center', padding: '16px 0' }}>
+              <Card size='small' className='lh-card'>
+                <Space direction='vertical' size={12} className='lh-full lh-row lh-p-16px-0'>
                   <Text type='secondary'>还没有课程：到课程区的教练台起草种子提案（1–3 个起点 + 终点锚），一次人审即开工。</Text>
                 </Space>
               </Card>
             ) : (events.length > 0 ? (
-              <Card size='small' title='接下来' style={{ borderRadius: 10 }}>
-                <Space direction='vertical' style={{ width: '100%' }} size={10}>
+              <Card size='small' title='接下来' className='lh-card'>
+                <Space direction='vertical' className='lh-full' size={10}>
                   {sortRecEvents(events).map((e, i) => (
                     <RecCard key={i} e={e} gen={genMap[`${e.course}/${e.node}`]}
                       onOpen={() => frame.openLesson(e.course, e.node)}
@@ -275,15 +275,10 @@ export default function TodayPage({ frame }: { frame: AppFrame }) {
           role='button' tabIndex={0}
           onClick={() => frame.goto('courses.queue')}
           onKeyDown={e => { if (e.key === 'Enter') frame.goto('courses.queue') }}
-          style={{
-            position: 'fixed', right: 20, bottom: 20, zIndex: 100, cursor: 'pointer',
-            background: 'var(--color-bg-2,#fff)', border: '1px solid var(--color-border-2,#e5e6eb)',
-            borderRadius: 20, boxShadow: 'var(--color-shadow-1, 0 4px 10px rgba(0,0,0,0.1))',
-            padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8,
-          }}>
-          <span style={{ color: 'var(--color-primary-6,#165dff)' }}>◌</span>
+          className='lh-float-hint'>
+          <span className='lh-text-accent'>◌</span>
           <Text>{runningJobs} 个正文生成中{queuedJobs > 0 ? ` · ${queuedJobs} 个排队` : ''}</Text>
-          <Text type='secondary' style={{ fontSize: 12 }}>点击查看</Text>
+          <Text type='secondary' className='lh-t-12'>点击查看</Text>
         </div>
       )}
     </Space>

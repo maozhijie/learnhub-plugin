@@ -58,8 +58,8 @@ export default function UnderstandingEntry(props: {
   const clozeMissing = kind === 'cloze_rewrite' && !/\{\{[^{}]+\}\}/.test(text)
 
   return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+    <div className='lh-mt-6'>
+      <div className='lh-row lh-gap-6 lh-wrap'>
         {!open && (
           <Button size='mini' type='text' status='success' onClick={() => setOpen(true)}>
             ＋ 加我的理解
@@ -72,15 +72,12 @@ export default function UnderstandingEntry(props: {
         )}
       </div>
       {open && (
-        <div style={{
-          border: '1px solid var(--color-success-3,#00d0b6)', background: 'var(--color-fill-1,#f7f8fa)',
-          borderRadius: 8, padding: 10, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 680,
-        }}>
+        <div className='lh-callout-ok'>
           <Space size={6} wrap>
-            <Select value={kind} onChange={v => setKind(v as typeof kind)} size='mini' style={{ width: 120 }}>
+            <Select value={kind} onChange={v => setKind(v as typeof kind)} size='mini' className='lh-w-120'>
               {NOTE_KINDS.map(k => <Select.Option key={k.value} value={k.value}>{k.label}</Select.Option>)}
             </Select>
-            <Text type='secondary' style={{ fontSize: 12 }}>
+            <Text type='secondary' className='lh-t-12'>
               用你的话写一句这一节的解释 / 例子 / 助记；挖空重述请用 {'{{…}}'} 标出挖空。保存后 AI 会对照该节要点给反馈。
             </Text>
           </Space>
@@ -88,7 +85,7 @@ export default function UnderstandingEntry(props: {
             value={text} onChange={setText}
             placeholder='如：等差数列就是每一步加固定的数……'
             autoSize={{ minRows: 2, maxRows: 6 }} />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <div className='lh-flex lh-gap-8 lh-end'>
             <Button size='small' type='text' onClick={() => setOpen(false)}>收起</Button>
             <Button size='small' type='primary' status='success' loading={busy}
               disabled={!text.trim() || clozeMissing} onClick={() => void save()}>
@@ -106,10 +103,10 @@ export default function UnderstandingEntry(props: {
           <Space size={6} wrap>
             <Tag size='small' color={VERDICT_TAG[result.verdict.verdict]?.color}>{result.verdict.verdict}</Tag>
             {result.verdict.tags.map(t => <Tag key={t} size='small' color='orange'>{t}</Tag>)}
-            {result.verdict.advice && <Text type='secondary' style={{ fontSize: 12 }}>可怎么补：{result.verdict.advice}</Text>}
+            {result.verdict.advice && <Text type='secondary' className='lh-t-12'>可怎么补：{result.verdict.advice}</Text>}
           </Space>
-          <div style={{ fontSize: 13, lineHeight: 1.7 }}><MdView md={result.reply} /></div>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <div className='lh-t-13 lh-lh-1p7'><MdView md={result.reply} /></div>
+          <Text type='secondary' className='lh-t-12'>
             这条理解已存为「我的卡」（{NOTE_KINDS.find(k => k.value === result.card.kind)?.label}），判词只入档案——不计 XP、不影响掌握度。
           </Text>
         </div>

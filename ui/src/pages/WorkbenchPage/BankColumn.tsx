@@ -185,22 +185,19 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
   }
 
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={12}>
+    <Space direction='vertical' className='lh-full' size={12}>
       {/* B2 难度建议区（#72）：只读检测有产出才显示，低数据静默；条目带题面摘录，
           点击定位表格行；误判走「忽略」（持久，可一键恢复） */}
       {advice !== null && (advice.length > 0 || dismissed > 0) && (
-        <Card size='small' title='难度建议（引擎检测，确认后才执行）' style={{ borderRadius: 10 }}>
-          <Space direction='vertical' style={{ width: '100%' }} size={8}>
+        <Card size='small' title='难度建议（引擎检测，确认后才执行）' className='lh-card'>
+          <Space direction='vertical' className='lh-full' size={8}>
             {advice.map(n => (
-              <div key={`${n.course}/${n.node}`} style={{
-                display: 'flex', flexDirection: 'column', gap: 4,
-                background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '8px 10px',
-              }}>
+              <div key={`${n.course}/${n.node}`} className='lh-col lh-gap-4 lh-surface-1 lh-r-6 lh-p-8px-10px'>
                 <Space size={8} wrap>
                   <Tag size='small' color='orange'>{n.course} · {n.node}</Tag>
                   {n.calibration && (
                     <>
-                      <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 220 }}>{n.calibration.reason}</Text>
+                      <Text type='secondary' className='lh-t-12 lh-flex-1 lh-minw-220'>{n.calibration.reason}</Text>
                       <Popconfirm
                         title={`校准重出「${n.node}」的题目？`}
                         content={n.calibration.instruction}
@@ -213,12 +210,12 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
                   )}
                 </Space>
                 {(n.too_easy ?? []).map(t => (
-                  <Space key={t.qid} size={8} wrap style={{ paddingLeft: 0 }}>
+                  <Space key={t.qid} size={8} wrap className='lh-pl-0'>
                     <Tag size='small' color='gray'>过于简单 · {t.qid}</Tag>
-                    <Text style={{ fontSize: 12, cursor: 'pointer', maxWidth: 360 }} ellipsis
+                    <Text className='lh-t-12 lh-click lh-maxw-360' ellipsis
                       onClick={() => locate(n, t.qid)}
                       title='点击在下方列表中定位这道题'>{t.stem || t.qid}</Text>
-                    <Text type='secondary' style={{ fontSize: 12, flex: 1, minWidth: 200 }}>{t.reason}</Text>
+                    <Text type='secondary' className='lh-t-12 lh-flex-1 lh-minw-200'>{t.reason}</Text>
                     <Popconfirm title={`归档「${t.qid}」？`}
                       content='归档后不再进复习队列；可在下方列表「显示已归档」里恢复。'
                       onOk={() => void doArchiveAdvice(n, t.qid)}>
@@ -232,7 +229,7 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
             ))}
             {dismissed > 0 && (
               <Space size={8}>
-                <Text type='secondary' style={{ fontSize: 12 }}>已忽略 {dismissed} 条建议（误判不再打扰）</Text>
+                <Text type='secondary' className='lh-t-12'>已忽略 {dismissed} 条建议（误判不再打扰）</Text>
                 <Button size='mini' type='text' onClick={() => void doRestoreDismissed()}>恢复全部</Button>
               </Space>
             )}
@@ -241,28 +238,28 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
       )}
 
       {/* 题库维护区（ADR-0032）：存量体检只读盘点 + 一键清理（归档式、可逆、不删除） */}
-      <Card size='small' title='题库维护（盘点只读，清理归档可逆）' style={{ borderRadius: 10 }}>
+      <Card size='small' title='题库维护（盘点只读，清理归档可逆）' className='lh-card'>
         <Space size={10} wrap>
           <Button size='small' loading={auditBusy} onClick={() => void doAudit()}>运行体检</Button>
           <Button size='small' status='warning' loading={cleanupBusy} onClick={() => void doCleanupPreview()}>一键清理休眠题</Button>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             清理范围：跳过节点的未归档题 + 学完后从未调度（休眠）的题——预览确认后才归档，随时可恢复
           </Text>
         </Space>
         {audit && (
-          <div style={{ paddingTop: 8 }}>
+          <div className='lh-pt-8'>
             {audit.flagged === 0 ? (
-              <Text type='secondary' style={{ fontSize: 12 }}>
+              <Text type='secondary' className='lh-t-12'>
                 体检通过：{audit.banks} 个题库、{audit.questions} 道题未发现契约违规。
               </Text>
             ) : (
               <>
-                <Text type='secondary' style={{ fontSize: 12 }}>
+                <Text type='secondary' className='lh-t-12'>
                   体检发现 {audit.flagged}/{audit.questions} 道题违规（{audit.banks} 个题库），可逐题归档或让 agent 校准重出：
                 </Text>
-                <div style={{ paddingTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div className='lh-pt-4 lh-col lh-gap-2'>
                   {audit.findings.filter(f => f.course === course).slice(0, 10).map(f => (
-                    <Text key={`${f.course}/${f.node}/${f.id}`} style={{ fontSize: 12 }}>
+                    <Text key={`${f.course}/${f.node}/${f.id}`} className='lh-t-12'>
                       <Tag size='small' color='orange'>{f.course} · {f.node} · {f.id}</Tag>
                       {f.issues.join('；')}
                     </Text>
@@ -289,14 +286,12 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
         {cleanup && (cleanup.total === 0
           ? <Empty description='没有可清理的题目：没有跳过节点的残留题，也没有学完后从未调度的休眠题。' />
           : (
-            <Space direction='vertical' style={{ width: '100%' }} size={8}>
-              <Text type='secondary' style={{ fontSize: 12 }}>
+            <Space direction='vertical' className='lh-full' size={8}>
+              <Text type='secondary' className='lh-t-12'>
                 归档不删除：归档题退出复习队列与统计，随时可在列表「显示已归档」里按原因恢复。
               </Text>
               {cleanup.groups.map(g => (
-                <div key={`${g.course}/${g.node}`} style={{
-                  background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '8px 10px',
-                }}>
+                <div key={`${g.course}/${g.node}`} className='lh-surface-1 lh-r-6 lh-p-8px-10px'>
                   <Space size={8} wrap>
                     <Tag size='small' color='orange'>{g.course} · {g.node}</Tag>
                     <Tag size='small'>{g.count} 道</Tag>
@@ -304,7 +299,7 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
                     {g.reasons.dormant_after_complete > 0 && <Tag size='small' color='gray'>学完后从未调度 {g.reasons.dormant_after_complete}</Tag>}
                   </Space>
                   {g.stems.map((s, i) => (
-                    <Text key={i} type='secondary' style={{ fontSize: 12, display: 'block', paddingLeft: 8 }}>· {s}</Text>
+                    <Text key={i} type='secondary' className='lh-t-12 lh-block lh-pl-8'>· {s}</Text>
                   ))}
                 </div>
               ))}
@@ -312,10 +307,10 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
           ))}
       </Modal>
 
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Input value={search} onChange={setSearch} placeholder='搜题干/节点' style={{ width: 220 }} allowClear />
+      <div className='lh-gap-10 lh-row lh-wrap'>
+        <Input value={search} onChange={setSearch} placeholder='搜题干/节点' className='lh-w-220' allowClear />
         <Space size={6}><Text>显示已归档</Text><Switch checked={showArchived} onChange={setShowArchived} /></Space>
-        <Button type='primary' size='small' style={{ marginLeft: 'auto' }} onClick={() => setCreating(true)}>自建题</Button>
+        <Button type='primary' size='small' className='lh-ml-auto' onClick={() => setCreating(true)}>自建题</Button>
       </div>
 
       {entries === null ? null : visible.length === 0 ? (
@@ -334,7 +329,7 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
                 title={e.lastReview ? `上次复习 ${e.lastReview}` : undefined}>
                 {e.due}
               </Tag>
-            ) : <Text type='secondary' style={{ fontSize: 12 }}>未调度</Text> },
+            ) : <Text type='secondary' className='lh-t-12'>未调度</Text> },
             { title: '状态', width: 80, render: (_, e) => e.archived
               ? <Tag size='small' color='gray'
                   title={e.archivedReason ? `归档原因：${e.archivedReason}（恢复时清除）` : undefined}>已归档{e.archivedReason ? '·' + e.archivedReason : ''}</Tag>

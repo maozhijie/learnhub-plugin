@@ -66,10 +66,10 @@ export default function Nof1Card({ frame }: { frame: AppFrame }) {
   const courseNames = frame.tree?.courses.map(c => c.name) ?? []
 
   return (
-    <Card title='N-of-1 实验 · 在自己身上做对照' style={{ borderRadius: 10 }}>
+    <Card title='N-of-1 实验 · 在自己身上做对照' className='lh-card'>
       {pending.length > 0 && (
         <Alert
-          style={{ marginBottom: 12 }}
+          className='lh-mb-12'
           type='warning'
           content={
             <Space size={8} wrap>
@@ -85,7 +85,7 @@ export default function Nof1Card({ frame }: { frame: AppFrame }) {
         />
       )}
       {running ? (
-        <div style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+        <div className='lh-grid lh-gap-8 lh-mb-12'>
           <Space wrap>
             <Tag color='arcoblue'>#{running.id} 进行中</Tag>
             <Text bold>{running.title}</Text>
@@ -93,9 +93,9 @@ export default function Nof1Card({ frame }: { frame: AppFrame }) {
           </Space>
           {doc?.report && doc.report.experiment.id === running.id ? (
             <>
-              <div style={{ display: 'grid', gap: 2 }}>
+              <div className='lh-grid lh-gap-2'>
                 {doc.report.analysis.per_arm.map(a => (
-                  <Text key={a.arm} style={{ fontSize: 12 }}>
+                  <Text key={a.arm} className='lh-t-12'>
                     {a.label}：{a.n} 次真实推进 · 真实保留率 {Math.round(a.rate * 100)}%
                   </Text>
                 ))}
@@ -112,7 +112,7 @@ export default function Nof1Card({ frame }: { frame: AppFrame }) {
       ) : null}
       {!running && doc?.report && doc.report.experiment.status === 'stopped' ? (
         <Alert
-          style={{ marginBottom: 12 }}
+          className='lh-mb-12'
           type='success'
           content={`最近实验 #${doc.report.experiment.id}（${doc.report.experiment.title}，已停止）：${doc.report.analysis.message}`}
         />
@@ -120,12 +120,12 @@ export default function Nof1Card({ frame }: { frame: AppFrame }) {
       <CommandBoundary cmd={exp} loadingNode={<Text type='secondary'>加载中…</Text>}>
         {d => (
           <>
-            <Space size={8} wrap style={{ marginBottom: 8 }}>
-              <Text type='secondary' style={{ fontSize: 12 }}>范围</Text>
-              <Select size='small' placeholder='全部课程' value={course} onChange={setCourse} style={{ width: 160 }} allowClear>
+            <Space size={8} wrap className='lh-mb-8'>
+              <Text type='secondary' className='lh-t-12'>范围</Text>
+              <Select size='small' placeholder='全部课程' value={course} onChange={setCourse} className='lh-w-160' allowClear>
                 {courseNames.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
               </Select>
-              <Text type='secondary' style={{ fontSize: 11 }}>发起提案时生效（确认前零副作用）</Text>
+              <Text type='secondary' className='lh-t-11'>发起提案时生效（确认前零副作用）</Text>
             </Space>
             <Table
               size='mini' pagination={false} rowKey='id'
@@ -136,8 +136,8 @@ export default function Nof1Card({ frame }: { frame: AppFrame }) {
                   title: '研究问题', dataIndex: 'question',
                   render: (v: string, row) => (
                     <div>
-                      <Text style={{ fontSize: 12 }}>{v}</Text>
-                      <div><Text type='secondary' style={{ fontSize: 11 }}>{row.description}</Text></div>
+                      <Text className='lh-t-12'>{v}</Text>
+                      <div><Text type='secondary' className='lh-t-11'>{row.description}</Text></div>
                       {!row.unlocked ? <Tag size='small'>未解锁：{row.unlock_note ?? '参数未上线'}</Tag> : null}
                     </div>
                   ),
@@ -157,7 +157,7 @@ export default function Nof1Card({ frame }: { frame: AppFrame }) {
                 },
               ]}
             />
-            <Text type='secondary' style={{ fontSize: 11 }}>
+            <Text type='secondary' className='lh-t-11'>
               实验变量只允许引擎可控的内容/课程设计参数（调度核心永不作实验变量）；臂标注进复习日志；零 XP、不进 Mastery。
               发起后到提案收件箱确认（确认前零副作用），停止即定稿。
             </Text>

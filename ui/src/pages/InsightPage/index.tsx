@@ -103,7 +103,7 @@ export default function InsightPage({ frame }: { frame: AppFrame }) {
   }
 
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={14}>
+    <Space direction='vertical' className='lh-full' size={14}>
       <Alert type='info' content='洞察区是「提议非指令」区：沙盘是模型推演非承诺；实验的建议要你逐条确认才生效（确认在提案收件箱——人审唯一处）；这里发生的一切零 XP、不进掌握度、不碰调度语义。（恒温器在单课工作台的教练台分栏）' />
       {/* 可用的困难教练（#65 E5）：只读信息性反馈——低数据静默，触发才显示 */}
       {coach.data && coach.data.messages.length > 0 && (
@@ -111,8 +111,8 @@ export default function InsightPage({ frame }: { frame: AppFrame }) {
       )}
       <KataCard courseNames={frame.tree?.courses.map(c => c.name) ?? []}
         onOpenInbox={() => frame.goto('courses.proposals')} />
-      <Card size='small' title='记忆健康' style={{ borderRadius: 10 }}
-        extra={<Text type='secondary' style={{ fontSize: 12 }}>真实作答口径——合成首复习不计入</Text>}>
+      <Card size='small' title='记忆健康' className='lh-card'
+        extra={<Text type='secondary' className='lh-t-12'>真实作答口径——合成首复习不计入</Text>}>
         <CommandBoundary cmd={mem}>
           {m => (
             <MemoryHealthBody mem={m} jol={jol.data} hints={hints.data}
@@ -123,7 +123,7 @@ export default function InsightPage({ frame }: { frame: AppFrame }) {
         </CommandBoundary>
       </Card>
       <CommandBoundary cmd={profile} loadingNode={
-        <Card size='small' title='自评校准画像' style={{ borderRadius: 10 }}>
+        <Card size='small' title='自评校准画像' className='lh-card'>
           <Text type='secondary'>加载中…</Text>
         </Card>
       }>
@@ -134,12 +134,12 @@ export default function InsightPage({ frame }: { frame: AppFrame }) {
       <SleepCard />
       <AnkiChannelCard />
 
-      <Card size='small' title='XP 时间账本' style={{ borderRadius: 10 }}
+      <Card size='small' title='XP 时间账本' className='lh-card'
         extra={xp.data && (
           <Space size={8}>
-            <Text type='secondary' style={{ fontSize: 12 }}>每日目标</Text>
+            <Text type='secondary' className='lh-t-12'>每日目标</Text>
             <InputNumber size='mini' mode='button' min={5} max={1000} step={5}
-              value={goal} onChange={v => setGoal(Number(v) ?? 30)} style={{ width: 110 }} />
+              value={goal} onChange={v => setGoal(Number(v) ?? 30)} className='lh-w-110' />
             <Button size='mini' type='primary' loading={saving} onClick={() => void saveGoal()}>保存</Button>
           </Space>
         )}>
@@ -147,23 +147,23 @@ export default function InsightPage({ frame }: { frame: AppFrame }) {
           {xpData => (
             <Space size={24} wrap>
               <div>
-                <Text style={{ fontWeight: 600, fontSize: 18 }}>{xpData.today_xp}</Text>
-                <Text type='secondary' style={{ fontSize: 12 }}>今日 XP（≈ 分钟专注）</Text>
+                <Text className='lh-strong lh-t-18'>{xpData.today_xp}</Text>
+                <Text type='secondary' className='lh-t-12'>今日 XP（≈ 分钟专注）</Text>
               </div>
               <div>
-                <Text style={{ fontWeight: 600, fontSize: 18 }}>{xpData.streak}</Text>
-                <Text type='secondary' style={{ fontSize: 12 }}>连续学习天数（漏 {xpData.streak_grace_days} 天不断）</Text>
+                <Text className='lh-strong lh-t-18'>{xpData.streak}</Text>
+                <Text type='secondary' className='lh-t-12'>连续学习天数（漏 {xpData.streak_grace_days} 天不断）</Text>
               </div>
               <div>
-                <Text style={{ fontWeight: 600, fontSize: 18 }}>{xpData.goal}</Text>
-                <Text type='secondary' style={{ fontSize: 12 }}>每日目标 XP</Text>
+                <Text className='lh-strong lh-t-18'>{xpData.goal}</Text>
+                <Text type='secondary' className='lh-t-12'>每日目标 XP</Text>
               </div>
             </Space>
           )}
         </CommandBoundary>
       </Card>
 
-      <Card size='small' title='课程状态总览' style={{ borderRadius: 10 }}>
+      <Card size='small' title='课程状态总览' className='lh-card'>
         <Table size='small' data={(frame.status?.courses ?? []) as StatusCourse[]} rowKey={c => c.id ?? c.name} pagination={false}
           columns={[
             { title: '课程', dataIndex: 'name' },
@@ -181,7 +181,7 @@ export default function InsightPage({ frame }: { frame: AppFrame }) {
           ]} />
       </Card>
 
-      <Card size='small' title='预计完成（按当前每日目标外推）' style={{ borderRadius: 10 }}>
+      <Card size='small' title='预计完成（按当前每日目标外推）' className='lh-card'>
         {xp.data === null || xp.data.eta.length === 0 ? <Text type='secondary'>暂无启用课程。</Text> : (
           <Table size='small' data={xp.data.eta} rowKey={e => e.course} pagination={false}
             columns={[
@@ -194,7 +194,7 @@ export default function InsightPage({ frame }: { frame: AppFrame }) {
               ) },
             ]} />
         )}
-        <Text type='secondary' style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+        <Text type='secondary' className='lh-t-12 lh-block lh-mt-8'>
           ETA = 剩余节点 × 每节点 XP（该课程历史 XP / 已完成节点数，无历史按 12 XP 估） ÷ 每日目标。
           XP 记入作答流水：答对得题型权重 × 难度，提交过快且答错按乱猜扣分，同日重复作答不记账。
         </Text>

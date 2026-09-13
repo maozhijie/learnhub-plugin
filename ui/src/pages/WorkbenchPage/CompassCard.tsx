@@ -31,13 +31,13 @@ export default function CompassCard({ course }: { course: string }) {
   }, [load])
 
   if (error) {
-    return <Card size='small' title='罗盘' style={{ borderRadius: 10 }}><Text type='secondary'>{error}</Text></Card>
+    return <Card size='small' title='罗盘' className='lh-card'><Text type='secondary'>{error}</Text></Card>
   }
   if (doc === null) {
-    return <Card size='small' title='罗盘' style={{ borderRadius: 10 }}><Text type='secondary'>加载罗盘…</Text></Card>
+    return <Card size='small' title='罗盘' className='lh-card'><Text type='secondary'>加载罗盘…</Text></Card>
   }
   return (
-    <Card size='small' title='罗盘' style={{ borderRadius: 10 }}
+    <Card size='small' title='罗盘' className='lh-card'
       extra={
         <Space size={8}>
           {doc.goal_type && <Tag size='small' color='magenta'>{doc.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'}</Tag>}
@@ -49,21 +49,21 @@ export default function CompassCard({ course }: { course: string }) {
       {doc.missing ? (
         <Empty description='罗盘还没有初画：种子提案应用后落「待初画」占位，教练台可下发罗盘初画（或随首个生长批自动重写）。' />
       ) : (
-        <Space direction='vertical' size={10} style={{ width: '100%' }}>
+        <Space direction='vertical' size={10} className='lh-full'>
           <div>
-            <Title heading={6} style={{ marginTop: 0, marginBottom: 4 }}>剩余路线（非承诺草图——方向感，不是承诺）</Title>
+            <Title heading={6} className='lh-mt-0 lh-mb-4'>剩余路线（非承诺草图——方向感，不是承诺）</Title>
             {doc.route
               ? <MdView md={doc.route} />
               : <Text type='secondary'>待初画：教练台的「罗盘重画」或首个生长批会写下路线。</Text>}
           </div>
           <div>
-            <Title heading={6} style={{ marginTop: 0, marginBottom: 4 }}>学习者批注（软输入——提议非指令）</Title>
+            <Title heading={6} className='lh-mt-0 lh-mb-4'>学习者批注（软输入——提议非指令）</Title>
             {doc.annotations
               ? <MdView md={doc.annotations} />
               : <Text type='secondary'>空：直接在 vault 的罗盘文件里写，教练回合裁决前会读它（不产生权威变更，重写后仍在）。</Text>}
           </div>
           <div>
-            <Title heading={6} style={{ marginTop: 0, marginBottom: 4 }}>
+            <Title heading={6} className='lh-mt-0 lh-mb-4'>
               沙盘 ETA（模型推演，非承诺{doc.eta_week ? `；第 ${doc.eta_week} 周` : ''}）
             </Title>
             {doc.eta

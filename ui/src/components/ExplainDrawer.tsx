@@ -106,11 +106,11 @@ export default function ExplainDrawer(props: {
       headerStyle={{ border: 'none' }}
       title={<Text>讲给我听 · {props.node}</Text>}
       onCancel={props.onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 'calc(100vh - 140px)' }}>
-        <Text type='secondary' style={{ fontSize: 12 }}>
+      <div className='lh-col lh-gap-10 lh-h-viewport-140'>
+        <Text type='secondary' className='lh-t-12'>
           用你自己的话把这节课讲明白，AI 扮完全不懂的初学者只追问、不评分；讲完点「定位反馈」看哪里含糊/跳跃/说错。自愿参与，随时关闭。
         </Text>
-        <div ref={listRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
+        <div ref={listRef} className='lh-flex-1 lh-scroll-y lh-col lh-gap-10 lh-pr-4'>
           {messages.length === 0 && (
             <Empty description='把这一课讲给我听吧——就当我是完全不懂的人。' />
           )}
@@ -121,35 +121,31 @@ export default function ExplainDrawer(props: {
               background: m.role === 'user' ? 'var(--color-primary-light-1,#e8f3ff)' : 'var(--color-fill-1,#f7f8fa)',
               borderRadius: 8, padding: '8px 12px',
             }}>
-              <Text type='secondary' style={{ fontSize: 11 }}>{m.role === 'user' ? '我' : '初学者'}</Text>
+              <Text type='secondary' className='lh-t-11'>{m.role === 'user' ? '我' : '初学者'}</Text>
               {m.role === 'user'
-                ? <Text style={{ whiteSpace: 'pre-wrap', display: 'block' }}>{m.content}</Text>
+                ? <Text className='lh-prewrap lh-block'>{m.content}</Text>
                 : <MdView md={m.content} />}
             </div>
           ))}
-          {busy && <Spin dot style={{ alignSelf: 'flex-start' }} />}
+          {busy && <Spin dot className='lh-self-start' />}
           {feedback && (
-            <div style={{
-              border: '1px solid var(--color-border-2,#e5e6eb)', borderRadius: 8,
-              padding: '10px 12px', background: 'var(--color-fill-2,#f2f3f5)',
-              display: 'flex', flexDirection: 'column', gap: 8,
-            }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <div className='lh-border lh-r-md lh-p-10px-12px lh-surface-2 lh-col lh-gap-8'>
+              <div className='lh-gap-6 lh-row'>
                 <Tag color={VERDICT_COLOR[feedback.verdict] ?? 'gray'}>对照要点：{feedback.verdict}</Tag>
                 {feedback.tags.map(t => <Tag key={t} color={TAG_COLOR[t] ?? 'gray'}>{t}</Tag>)}
               </div>
               <MdView md={feedback.reply} />
               {feedback.advice && (
-                <Text style={{ fontSize: 13 }}>可怎么补：{feedback.advice}</Text>
+                <Text className='lh-t-13'>可怎么补：{feedback.advice}</Text>
               )}
-              <Text type='secondary' style={{ fontSize: 11 }}>
+              <Text type='secondary' className='lh-t-11'>
                 判词只记入你的产出档案——零 XP、不进掌握度、不影响任何调度。
               </Text>
             </div>
           )}
         </div>
         {archiveOpen ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, border: '1px dashed var(--color-border-2,#e5e6eb)', borderRadius: 8, padding: 10 }}>
+          <div className='lh-col lh-gap-8 lh-border-dashed lh-r-md lh-p-10'>
             <Radio.Group value={archiveKind} onChange={v => setArchiveKind(v)} size='small'>
               <Radio value='recall_cue'>再讲一遍（默认）</Radio>
               <Radio value='cloze_rewrite'>挖空重述（内容需含 {'{{…}}'}）</Radio>
@@ -160,7 +156,7 @@ export default function ExplainDrawer(props: {
                 ? '把这版讲稿整理成挖空句，如：求和公式是 {{(a₁+aₙ)×n÷2}}，原因是…'
                 : '可再整理一版讲稿再存（留空 = 存最后一版原话）'}
               autoSize={{ minRows: 2, maxRows: 6 }} />
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className='lh-flex lh-gap-8'>
               <Button type='primary' size='small' loading={archiveBusy}
                 disabled={archiveKind === 'cloze_rewrite' && !(archiveText.trim() || lastLearnerText).includes('{{')}
                 onClick={() => void archive()}>存入我的卡</Button>
@@ -168,7 +164,7 @@ export default function ExplainDrawer(props: {
             </div>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div className='lh-flex lh-gap-8 lh-items-end'>
             <Input.TextArea
               value={input} onChange={setInput}
               placeholder='开讲（Enter 发送；讲完点右下「定位反馈」）'
@@ -177,7 +173,7 @@ export default function ExplainDrawer(props: {
               onPressEnter={e => {
                 if (!e.shiftKey) { e.preventDefault(); void send() }
               }} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className='lh-col lh-gap-6'>
               <Button type='primary' size='small' loading={busy} disabled={!input.trim()} onClick={() => void send()}>发送</Button>
               {messages.some(m => m.role === 'assistant') && (
                 <Button size='mini' type='text' disabled={busy} onClick={() => void send('换一种问')}>换一种问</Button>
@@ -185,7 +181,7 @@ export default function ExplainDrawer(props: {
             </div>
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <div className='lh-flex lh-gap-8 lh-end'>
           {!archiveOpen && (
             <Button size='small' disabled={!lastLearnerText} onClick={() => { setArchiveText(''); setArchiveOpen(true) }}>
               存成我的卡

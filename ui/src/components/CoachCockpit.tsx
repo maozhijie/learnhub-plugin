@@ -36,7 +36,7 @@ function ReadinessCard({ check }: { check: NonNullable<StatusCourse['coach']> })
     ? 100
     : Math.min(100, Math.round((check.ready / check.required) * 100))
   return (
-    <Card size='small' title='就绪深度（教练回合判据）' style={{ borderRadius: 10 }}
+    <Card size='small' title='就绪深度（教练回合判据）' className='lh-card'
       extra={
         <Space size={8}>
           {check.cold_start && <Tag size='small' color='orange'>冷启动首周</Tag>}
@@ -45,24 +45,24 @@ function ReadinessCard({ check }: { check: NonNullable<StatusCourse['coach']> })
             : (tight ? <Tag size='small' color='red'>低于前瞻</Tag> : <Tag size='small' color='green'>达标</Tag>)}
         </Space>
       }>
-      <Space direction='vertical' size={4} style={{ width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Progress size='small' style={{ flex: 1 }} percent={ratio} showText={false}
+      <Space direction='vertical' size={4} className='lh-full'>
+        <div className='lh-row lh-gap-10'>
+          <Progress size='small' className='lh-flex-1' percent={ratio} showText={false}
             status={tight ? 'error' : 'success'} />
-          <Text style={{ fontSize: 12, flexShrink: 0 }}>就绪 {check.ready}/{check.required}</Text>
+          <Text className='lh-t-12 lh-noshrink'>就绪 {check.ready}/{check.required}</Text>
         </div>
         {check.exhausted ? (
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             除终点外就绪前沿已清空——判据自然通过、零告警：剩下的路是学掉终点，不是继续生长。
           </Text>
         ) : (
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             前瞻需求 {check.required}（前瞻深度 {check.depth}{check.cold_start ? '，冷启动首周放宽后取整' : ''}）；
             就绪 = 前置已达成、正文已生成的未开始节点。
           </Text>
         )}
         {tight && check.warnings.map(w => (
-          <Text key={w} type='warning' style={{ fontSize: 12 }}>{w}</Text>
+          <Text key={w} type='warning' className='lh-t-12'>{w}</Text>
         ))}
       </Space>
     </Card>
@@ -106,7 +106,7 @@ function ProbationCard({ course }: { course: string }) {
   }
 
   return (
-    <Card size='small' title='复诊（插入边实验）' style={{ borderRadius: 10 }}
+    <Card size='small' title='复诊（插入边实验）' className='lh-card'
       extra={
         <Space size={8}>
           {doc.overdue.length > 0 && <Tag size='small' color='red'>到期未决 {doc.overdue.length}</Tag>}
@@ -114,15 +114,15 @@ function ProbationCard({ course }: { course: string }) {
         </Space>
       }>
       {hasAnything ? (
-        <Space direction='vertical' size={4} style={{ width: '100%' }}>
+        <Space direction='vertical' size={4} className='lh-full'>
           <Text>实验中：{doc.in_flight.length ? doc.in_flight.join('、') : '（无）'}</Text>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             近 30 学习日：插入率 {pct(doc.rates.insert_rate)}｜剪除率 {pct(doc.rates.prune_rate)}
             ｜复诊通过 {doc.rates.proven}/{doc.rates.decided}
             {doc.gate.resilient !== null ? `｜韧性闸门：${doc.gate.insert_blocked ? '插入已闸停' : '正常'}` : ''}
           </Text>
           {doc.gate.insert_blocked && doc.gate.insert_blocks.length > 0 && (
-            <Text type='secondary' style={{ fontSize: 12 }}>{doc.gate.insert_blocks.join('；')}</Text>
+            <Text type='secondary' className='lh-t-12'>{doc.gate.insert_blocks.join('；')}</Text>
           )}
         </Space>
       ) : (
@@ -150,7 +150,7 @@ export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpe
   const growth = (c: string) => {
     Modal.confirm({
       title: `生长一步「${c}」？`,
-      content: '教练回合将裁决下一步生长并产出一个生长批：过受理门即自动应用（罗盘随批重写），不逐批人审（ADR-0003）；裁决与结果在生成页可见。',
+      content: '教练回合将裁决下一步生长并产出一个生长批：过受理门即自动应用（罗盘随批重写），不逐批人审（ADR-0003）；裁决与结果在生成队列可见。',
       okText: '生长一步',
       onOk: async () => {
         setBusy('growth')
@@ -180,14 +180,14 @@ export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpe
   const backfill = (c: string) => {
     Modal.confirm({
       title: `回填「${c}」的成分技能边候选？`,
-      content: '依据真实作答记录推断缺失的 enc 边，产出富化提案——提案页人审后生效（确定性推断，不调模型）。',
+      content: '依据真实作答记录推断缺失的 enc 边，产出富化提案——提案收件箱人审后生效（确定性推断，不调模型）。',
       okText: '回填',
       onOk: async () => {
         setBusy('backfill')
         try {
           const r = await api.encBackfill(c)
           const s = JSON.stringify(r)
-          Message.success(s.length > 120 ? `${s.slice(0, 120)}…——见提案页` : `${s}——见提案页`)
+          Message.success(s.length > 120 ? `${s.slice(0, 120)}…——见提案收件箱` : `${s}——见提案收件箱`)
         } catch (err) {
           Message.error(errorMessage(err))
         } finally {
@@ -198,8 +198,8 @@ export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpe
   }
 
   return (
-    <Card size='small' title='教练台' style={{ borderRadius: 10 }}
-      extra={<Text type='secondary' style={{ fontSize: 12 }}>建课/换终点走种子提案（一次人审）；生长由教练回合裁决（过受理门自动应用）</Text>}>
+    <Card size='small' title='教练台' className='lh-card'
+      extra={<Text type='secondary' className='lh-t-12'>建课/换终点走种子提案（一次人审）；生长由教练回合裁决（过受理门自动应用）</Text>}>
       <Space size={8} wrap>
         <Button type='primary' size='small' onClick={() => setSeedForm('new')}>新建课程</Button>
         {course && (
@@ -215,23 +215,23 @@ export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpe
         )}
       </Space>
       {unseeded && (
-        <div style={{ marginTop: 6 }}>
-          <Text type='secondary' style={{ fontSize: 12 }}>
-            「{course}」未播种：先走种子提案（「新建课程」或上方「重建种子」），提案页人审应用后图才落地、教练才能生长。
+        <div className='lh-mt-6'>
+          <Text type='secondary' className='lh-t-12'>
+            「{course}」未播种：先走种子提案（「新建课程」或上方「重建种子」），提案收件箱人审应用后图才落地、教练才能生长。
           </Text>
         </div>
       )}
       {/* 在途条：图域任务的常驻可见性——提交动作和它的后果之间的那根线
         * （排队/进行中/失败全显示；点击落生成页定位该任务，失败的死因在任务消息里）。 */}
       {jobs && jobs.length > 0 && (
-        <div style={{ marginTop: 10 }}>
+        <div className='lh-mt-10'>
           <Space size={6} wrap align='center'>
-            <Text type='secondary' style={{ fontSize: 12 }}>图域任务（点击去生成页看全程）：</Text>
+            <Text type='secondary' className='lh-t-12'>图域任务（点击去生成队列看全程）：</Text>
             {jobs.map(j => {
               const st = JOB_STATUS[j.status]
               return (
                 <Tooltip key={j.key} content={j.message ?? ''}>
-                  <Tag size='small' color={st?.color ?? 'gray'} style={{ cursor: 'pointer' }}
+                  <Tag size='small' color={st?.color ?? 'gray'} className='lh-click'
                     onClick={() => onOpenJob?.(j)}>
                     {j.node}（{j.course}）· {st?.label ?? j.status}
                   </Tag>
@@ -241,8 +241,8 @@ export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpe
           </Space>
         </div>
       )}
-      {course && coach && <div style={{ marginTop: 10 }}><ReadinessCard check={coach} /></div>}
-      {course && <div style={{ marginTop: 10 }}><ProbationCard course={course} /></div>}
+      {course && coach && <div className='lh-mt-10'><ReadinessCard check={coach} /></div>}
+      {course && <div className='lh-mt-10'><ProbationCard course={course} /></div>}
       <SeedFormModal visible={seedForm !== null} mode={seedForm ?? 'new'} course={course} onCancel={() => setSeedForm(null)} />
     </Card>
   )

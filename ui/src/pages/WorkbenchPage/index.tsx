@@ -63,11 +63,11 @@ export default function WorkbenchPage({ frame, courseId }: { frame: AppFrame; co
   }
   const course = courseId
   return (
-    <Space direction='vertical' style={{ width: '100%' }} size={12}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <Typography.Title heading={4} style={{ margin: 0 }}>{course} · 单课工作台</Typography.Title>
+    <Space direction='vertical' className='lh-full' size={12}>
+      <div className='lh-row lh-gap-10 lh-wrap'>
+        <Typography.Title heading={4} className='lh-m-0'>{course} · 单课工作台</Typography.Title>
         <Button size='small' type='text' onClick={() => frame.goto('courses.home')}>← 我的课程</Button>
-        <Text type='secondary' style={{ fontSize: 12 }}>
+        <Text type='secondary' className='lh-t-12'>
           首屏是罗盘与图（这门课走到哪、还剩多远）；机器仪表住在教练台分栏。
         </Text>
       </div>

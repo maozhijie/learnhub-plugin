@@ -130,11 +130,11 @@ export default function NoteSourceDrawer(props: { open: boolean; focusId: string
   return (
     <Drawer width={560} visible={props.open} footer={null} unmountOnExit
       title='笔记源（个人笔记 → 复习题）' onCancel={props.onClose}>
-      <Space direction='vertical' style={{ width: '100%' }} size={12}>
-        <Alert type='info' style={{ fontSize: 12 }}
+      <Space direction='vertical' className='lh-full' size={12}>
+        <Alert type='info' className='lh-t-12'
           content='注册 vault 里的笔记（单篇 .md 或整个文件夹）：引擎只读笔记来出复习题，永不改动笔记本身；到期卡进复习队列（课程列显示「笔记源」）。' />
-        <Space size={8} style={{ width: '100%' }}>
-          <Input value={path} onChange={setPath} placeholder='笔记或文件夹路径（vault 相对/绝对）' style={{ flex: 1 }}
+        <Space size={8} className='lh-full'>
+          <Input value={path} onChange={setPath} placeholder='笔记或文件夹路径（vault 相对/绝对）' className='lh-flex-1'
             onPressEnter={() => void register()} />
           <Button type='primary' loading={busy} onClick={() => void register()}>注册</Button>
         </Space>
@@ -146,14 +146,14 @@ export default function NoteSourceDrawer(props: { open: boolean; focusId: string
           doc.sources.map(s => {
             const st = STATUS[s.status] ?? { label: s.status, color: 'gray' }
             return (
-              <Card size='small' key={s.id} style={{ borderRadius: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Card size='small' key={s.id} className='lh-r-md'>
+                <div className='lh-row lh-gap-8 lh-wrap'>
                   <Tag size='small' color={st.color}>{st.label}</Tag>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <Text style={{ fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div className='lh-grow'>
+                    <Text className='lh-ellipsis lh-strong lh-block'>
                       {s.title || s.path}
                     </Text>
-                    <Text type='secondary' style={{ fontSize: 12 }}>
+                    <Text type='secondary' className='lh-t-12'>
                       {s.id} · {s.cards} 张卡{s.due > 0 ? `（到期 ${s.due}）` : ''}
                     </Text>
                   </div>
@@ -172,12 +172,12 @@ export default function NoteSourceDrawer(props: { open: boolean; focusId: string
                   </Popconfirm>
                 </div>
                 {s.hint && (
-                  <Text type={s.status === 'missing' ? 'error' : 'warning'} style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+                  <Text type={s.status === 'missing' ? 'error' : 'warning'} className='lh-t-12 lh-block lh-mt-4'>
                     {s.hint}
                   </Text>
                 )}
                 {s.status === 'missing' && (
-                  <div style={{ marginTop: 6, display: 'flex', gap: 8 }}>
+                  <div className='lh-mt-6 lh-flex lh-gap-8'>
                     <Input size='mini' value={relinkPaths[s.id] ?? ''} onChange={v => setRelinkPaths(m => ({ ...m, [s.id]: v }))}
                       placeholder='改名/移动后的新路径（重连保留卡池与调度）'
                       onPressEnter={() => void relink(s.id)} />
@@ -185,13 +185,13 @@ export default function NoteSourceDrawer(props: { open: boolean; focusId: string
                   </div>
                 )}
                 {expanded === s.id && (
-                  <div style={{ marginTop: 8, borderTop: '1px solid var(--color-border-2,#e5e6eb)', paddingTop: 8 }}>
-                    {oldQs === null ? <Text type='secondary' style={{ fontSize: 12 }}>加载中…</Text>
-                      : oldQs.length === 0 ? <Text type='secondary' style={{ fontSize: 12 }}>没有在库旧题（都已归档；出题可补充新卡）</Text>
+                  <div className='lh-divider-top'>
+                    {oldQs === null ? <Text type='secondary' className='lh-t-12'>加载中…</Text>
+                      : oldQs.length === 0 ? <Text type='secondary' className='lh-t-12'>没有在库旧题（都已归档；出题可补充新卡）</Text>
                         : oldQs.map(q => (
-                          <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                          <div key={q.id} className='lh-row lh-gap-8 lh-p-4px-0'>
                             <Tag size='small' color='gray'>{q.id}</Tag>
-                            <Text style={{ fontSize: 12, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.q}</Text>
+                            <Text className='lh-ellipsis lh-grow lh-t-12'>{q.q}</Text>
                             <Popconfirm title={`归档「${q.id}」？`}
                               content='归档后不再进复习队列（笔记内容更新后重出题即可替换）。'
                               onOk={() => void archiveOne(s.id, q.id)}>

@@ -86,27 +86,24 @@ export default function LearnerCardCard(props: {
   const frontIsCloze = card.kind === 'cloze_rewrite'
 
   return (
-    <div style={{
-      border: '1px solid var(--color-border-2,#e5e6eb)', borderRadius: 8,
-      padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10,
-    }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+    <div className='lh-border lh-r-md lh-p-10px-12px lh-col lh-gap-10'>
+      <div className='lh-gap-8 lh-row lh-wrap'>
         <Tag size='small' color={kind.color}>{kind.label}</Tag>
-        <Text type='secondary' style={{ fontSize: 12 }}>{card.course} · {card.node}</Text>
-        {card.source_section && <Text type='secondary' style={{ fontSize: 12 }}>· {card.source_section}</Text>}
+        <Text type='secondary' className='lh-t-12'>{card.course} · {card.node}</Text>
+        {card.source_section && <Text type='secondary' className='lh-t-12'>· {card.source_section}</Text>}
         {card.due && <Tag size='small'>到期 {card.due}</Tag>}
         {card.attempts > 0 && <Tag size='small'>推进过 {card.attempts} 次</Tag>}
       </div>
 
       {!flipped ? (
         <>
-          <div style={{ fontSize: 16, lineHeight: 1.75 }}>
+          <div className='lh-t-16 lh-lh-1p75'>
             <InlineMd text={frontIsCloze ? clozeFront(card.content) : card.prompt} />
           </div>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+          <Text type='secondary' className='lh-t-12'>
             {frontIsCloze ? '心里补全你自己的挖空句，再翻面对照' : '在心里用你自己的话重述一遍，再翻面对照'}
           </Text>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+          <div className='lh-gap-8 lh-end lh-row'>
             <Button size='small' status='danger' disabled={forgetIn > 0 || busy} onClick={() => void forget()}>
               {forgetIn > 0 ? `忘记（${forgetIn}s 后可用）` : '忘记'}
             </Button>
@@ -115,14 +112,11 @@ export default function LearnerCardCard(props: {
         </>
       ) : (
         <>
-          <div style={{
-            borderLeft: '3px solid var(--color-primary-6,#165dff)', background: 'var(--color-fill-1,#f7f8fa)',
-            borderRadius: '0 6px 6px 0', padding: '8px 12px', fontSize: 14, lineHeight: 1.8,
-          }}>
+          <div className='lh-quote lh-quote-lg'>
             <InlineMd text={frontIsCloze ? clozeBack(card.content) : card.content} />
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Text type='secondary' style={{ fontSize: 12 }}>对照自己当初的表述——记得多牢？自评推进（快捷键 2/3/4）</Text>
+          <div className='lh-gap-8 lh-end lh-row lh-wrap'>
+            <Text type='secondary' className='lh-t-12'>对照自己当初的表述——记得多牢？自评推进（快捷键 2/3/4）</Text>
             <Button size='small' disabled={busy} onClick={() => void rate(2)}>Hard</Button>
             <Button size='small' type='primary' disabled={busy} onClick={() => void rate(3)}>Good</Button>
             <Button size='small' status='success' disabled={busy} onClick={() => void rate(4)}>Easy</Button>

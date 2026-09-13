@@ -50,14 +50,14 @@ function MediaBlock({ code }: { code: string }) {
   const lines = code.split('\n').map(s => s.trim()).filter(Boolean)
   if (!lines.length) return <pre><code>{code}</code></pre>
   return (
-    <div className='md-media' style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className='md-media lh-col lh-gap-8'>
       {lines.map((p, i) => {
         const ext = p.slice(p.lastIndexOf('.') + 1).toLowerCase()
         const kind = MEDIA_MIME[ext] ?? 'video'
         const src = `/learnhub/api/file?path=${encodeURIComponent(p.replace(/\\/g, '/'))}`
         return kind === 'audio'
-          ? <audio key={i} controls src={src} style={{ width: '100%' }} />
-          : <video key={i} controls src={src} style={{ maxWidth: '100%', borderRadius: 8 }} />
+          ? <audio key={i} controls src={src} className='lh-full' />
+          : <video key={i} controls src={src} className='lh-maxw-full lh-r-md' />
       })}
     </div>
   )
@@ -115,19 +115,15 @@ function InteractiveBlock({ code }: { code: string }) {
   if (!path) return <pre className='md-interactive-fallback'><code>{code}</code></pre>
   const src = `/learnhub/api/interactive?path=${encodeURIComponent(path.replace(/\\/g, '/'))}`
   return (
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div className='lh-relative lh-col lh-gap-6'>
       {note && (
-        <div style={{
-          position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 5,
-          background: 'var(--color-primary-6,#165dff)', color: '#fff', borderRadius: 8,
-          padding: '6px 12px', fontSize: 13, maxWidth: '90%', boxShadow: '0 4px 10px rgba(0,0,0,.25)',
-        }}>{note}</div>
+        <div className='lh-toast-pill'>{note}</div>
       )}
       <iframe
         ref={iframeRef}
         sandbox='allow-scripts' src={src} title='交互模拟' loading='lazy'
-        style={{ width: '100%', minHeight: 380, border: '1px solid var(--color-border-2,#e5e6eb)', borderRadius: 8 }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        className='lh-full lh-minh-380 lh-border lh-r-md' />
+      <div className='lh-row lh-gap-8'>
         {done
           ? <Tag size='small' color='green'>{result ? `交互已完成：${result}` : '交互已完成'}</Tag>
           : <Tag size='small' color='gray'>动手玩一玩上面的模拟（完成交互后这里会亮起）</Tag>}

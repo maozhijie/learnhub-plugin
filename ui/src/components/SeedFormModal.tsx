@@ -48,9 +48,9 @@ export default function SeedFormModal({ visible, mode, course, onCancel }: {
         worksheet: goalType === 'coverage' ? worksheet : [],
       })
       // 诚实版反馈（#155）：按引擎真实返回着色，拒绝不收表单；提案还不存在——起草
-      // 完成后才落提案页（弹通知告知），别让人在提案页空等
+      // 完成后才落提案收件箱（弹通知告知），别让人在提案收件箱空等
       notifyQueued(r, {
-        successMessage: `${r.message}通常 1–3 分钟；完成后弹通知、提案页出现提案——期间可随意刷新或离开页面`,
+        successMessage: `${r.message}通常 1–3 分钟；完成后弹通知、提案收件箱出现提案——期间可随意刷新或离开页面`,
         onQueued: onCancel,
       })
     } catch (err) {
@@ -68,10 +68,10 @@ export default function SeedFormModal({ visible, mode, course, onCancel }: {
       onOk={() => void submit()}
       okText='起草种子提案'
       confirmLoading={busy}
-      style={{ width: 560 }}
+      className='lh-w-560'
       unmountOnExit
     >
-      <Space direction='vertical' style={{ width: '100%' }} size={12}>
+      <Space direction='vertical' className='lh-full' size={12}>
         {mode === 'new' ? (
           <Input placeholder='课程名（如：线性代数）' value={name} onChange={setName} />
         ) : (
@@ -95,9 +95,9 @@ export default function SeedFormModal({ visible, mode, course, onCancel }: {
         <Checkbox checked={usePrior} onChange={setUsePrior}>
           参考我的笔记定起点（Vault 先验检索：起点放在熟悉边界，已会内容不作起点）
         </Checkbox>
-        <Text type='secondary' style={{ fontSize: 12 }}>
+        <Text type='secondary' className='lh-t-12'>
           提交即入队起草（通常 1–3 分钟，队列 FIFO，可能排在内容生成之后）；随时刷新或离开页面都不影响——
-          任务在宿主执行，完成后弹通知、提案页出现提案。产物是种子提案：1–3 起点 + 终点，一次人审即开工；
+          任务在宿主执行，完成后弹通知、提案收件箱出现提案。产物是种子提案：1–3 起点 + 终点，一次人审即开工；
           图的其余部分由教练回合随生长批生长，不预先铺满。
         </Text>
       </Space>

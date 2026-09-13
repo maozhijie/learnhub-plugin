@@ -48,7 +48,7 @@ export default function QuestionMenu(props: {
     setBusy(true)
     try {
       await api.questionArchive(props.target.course, props.target.node, props.target.qid, true)
-      Message.success(`已归档 ${props.target.qid}（可在题目管理页恢复）`)
+      Message.success(`已归档 ${props.target.qid}（可在单课工作台的题库分栏恢复）`)
       props.onMutated()
     } catch (err) {
       Message.error(errorMessage(err))
@@ -82,7 +82,7 @@ export default function QuestionMenu(props: {
   const confirmArchive = () => {
     Modal.confirm({
       title: `归档「${props.target.qid}」？`,
-      content: '归档后立即退出会话与复习调度，题目管理页可恢复。',
+      content: '归档后立即退出会话与复习调度，单课工作台的题库分栏可恢复。',
       okText: '归档',
       cancelText: '取消',
       onOk: () => doArchive(),
@@ -94,7 +94,7 @@ export default function QuestionMenu(props: {
       <Dropdown
         trigger='click'
         droplist={
-          <Menu style={{ minWidth: 148 }}>
+          <Menu className='lh-minw-148'>
             <Menu.Item key='edit' onClick={() => setEditing(true)}>编辑本题</Menu.Item>
             {isRuleKind(props.target.kind) && (
               <Menu.Item key='dispute' onClick={() => setDisputeTarget(true)}>题目有误（申诉）</Menu.Item>
@@ -105,7 +105,7 @@ export default function QuestionMenu(props: {
             <Menu.Item key='archive' onClick={confirmArchive}>归档本题</Menu.Item>
           </Menu>
         }>
-        <Button size='mini' type='text' loading={busy} style={{ padding: '0 6px' }}>…</Button>
+        <Button size='mini' type='text' loading={busy} className='lh-p-0-6px'>…</Button>
       </Dropdown>
 
       <QuestionEditDrawer
@@ -122,14 +122,14 @@ export default function QuestionMenu(props: {
         visible={feedbackOpen}
         onCancel={() => setFeedbackOpen(false)}
         footer={null} unmountOnExit>
-        <Space direction='vertical' style={{ width: '100%' }} size={10}>
+        <Space direction='vertical' className='lh-full' size={10}>
           <Text type='secondary'>
             旧题将归档（可逆），AI 按你的意见为本节重出一道新题。新题将重新开始复习调度
             （不继承旧题节奏）；恢复旧题即接续原节奏。
           </Text>
           <Space size={6} wrap>
             {FEEDBACK_INTENTS.map(intent => (
-              <Tag key={intent} size='small' color='arcoblue' style={{ cursor: 'pointer' }}
+              <Tag key={intent} size='small' color='arcoblue' className='lh-click'
                 onClick={() => setFeedback(intent)}> {intent}</Tag>
             ))}
           </Space>
@@ -137,7 +137,7 @@ export default function QuestionMenu(props: {
             value={feedback} onChange={setFeedback}
             placeholder='如：这道题题意含糊，请把条件说清楚；或：换一个更贴近实际应用的角度出'
             autoSize={{ minRows: 3, maxRows: 6 }} />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <div className='lh-flex lh-gap-8 lh-end'>
             <Button size='small' onClick={() => setFeedbackOpen(false)}>取消</Button>
             <Button size='small' type='primary' loading={busy}
               disabled={!feedback.trim()} onClick={() => void doFeedbackRegen()}>

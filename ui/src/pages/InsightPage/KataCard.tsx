@@ -99,10 +99,10 @@ export default function KataCard({ courseNames, onOpenInbox }: { courseNames: st
 
   return (
     <Card
-      size='small' title='周复盘 · 五问' style={{ borderRadius: 10 }}
+      size='small' title='周复盘 · 五问' className='lh-card'
       extra={doc && (
         <Space size={8}>
-          <Select size='mini' value={doc.week_start} onChange={v => setWeek(v)} style={{ width: 130 }}
+          <Select size='mini' value={doc.week_start} onChange={v => setWeek(v)} className='lh-w-130'
             placeholder='选择周'>
             {(doc.list.map(x => x.week_start).includes(doc.week_start)
               ? doc.list.map(x => x.week_start)
@@ -114,7 +114,7 @@ export default function KataCard({ courseNames, onOpenInbox }: { courseNames: st
       )}>
       <CommandBoundary cmd={kata} loadingNode={<Text type='secondary'>加载中…</Text>}>
         {doc => (
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div className='lh-grid lh-gap-10'>
             {converted !== null && (
               <Alert
                 type='warning'
@@ -126,19 +126,19 @@ export default function KataCard({ courseNames, onOpenInbox }: { courseNames: st
                 }
               />
             )}
-            <Text type='secondary' style={{ fontSize: 12 }}>
+            <Text type='secondary' className='lh-t-12'>
               复盘对象：{doc.week_start} ~ {doc.week_end}（上一完整学习周，凌晨学习日按日界归属）·
               记录落「我的产出/周复盘」，零 XP、可注册为复习源；无推送、缺勤不罚。
             </Text>
             <Collapse bordered={false} defaultActiveKey={['status']}>
               <Collapse.Item name='status' header='现状（引擎自动填）'>
-                <pre style={{ margin: 0, fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{doc.reality}</pre>
+                <pre className='lh-m-0 lh-t-12 lh-lh-1p7 lh-prewrap lh-font-inherit'>{doc.reality}</pre>
               </Collapse.Item>
             </Collapse>
             {KATA_ANSWER_KEYS.map(q => (
-              <div key={q} style={{ display: 'grid', gap: 4 }}>
-                <Text style={{ fontSize: 12, fontWeight: 600 }}>
-                  {q}{q === '下一实验' && <Text type='secondary' style={{ fontSize: 11 }}>（自由文本；可一键转实验提案或执行意图）</Text>}
+              <div key={q} className='lh-grid lh-gap-4'>
+                <Text className='lh-t-12 lh-strong'>
+                  {q}{q === '下一实验' && <Text type='secondary' className='lh-t-11'>（自由文本；可一键转实验提案或执行意图）</Text>}
                 </Text>
                 <Input.TextArea
                   value={answers[q] ?? ''}
@@ -160,16 +160,16 @@ export default function KataCard({ courseNames, onOpenInbox }: { courseNames: st
         title='「下一实验」转 N-of-1 实验提案' visible={expModal}
         onCancel={() => setExpModal(false)}
         footer={null}>
-        <div style={{ display: 'grid', gap: 10 }}>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+        <div className='lh-grid lh-gap-10'>
+          <Text type='secondary' className='lh-t-12'>
             发起的是待确认提案（提案-确认制）：到提案收件箱确认后才开跑（人审唯一处）。实验变量只允许引擎可控的内容参数。
           </Text>
-          <Select placeholder='选择实验模板' value={expTpl} onChange={setExpTpl} style={{ width: '100%' }}>
+          <Select placeholder='选择实验模板' value={expTpl} onChange={setExpTpl} className='lh-full'>
             {(exp?.templates ?? []).filter(t => t.unlocked).map(t => (
               <Select.Option key={t.id} value={t.id}>{t.title}</Select.Option>
             ))}
           </Select>
-          <Select placeholder='范围：全部课程' value={expCourse} onChange={setExpCourse} allowClear style={{ width: '100%' }}>
+          <Select placeholder='范围：全部课程' value={expCourse} onChange={setExpCourse} allowClear className='lh-full'>
             {courseNames.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
           </Select>
           <Button type='primary' disabled={!expTpl} onClick={() => void convertExperiment()}>发起提案</Button>
@@ -179,11 +179,11 @@ export default function KataCard({ courseNames, onOpenInbox }: { courseNames: st
         title='「下一实验」转执行意图' visible={intModal}
         onCancel={() => setIntModal(false)}
         footer={null}>
-        <div style={{ display: 'grid', gap: 10 }}>
-          <Text type='secondary' style={{ fontSize: 12 }}>
+        <div className='lh-grid lh-gap-10'>
+          <Text type='secondary' className='lh-t-12'>
             「在【稳定线索】之后做【单一具体行动】」——挂上今天的目标偏好（推荐榜首），随当前学习日过期（日界后失效）。
           </Text>
-          <Select placeholder='课程' value={iCourse} onChange={setICourse} style={{ width: '100%' }}>
+          <Select placeholder='课程' value={iCourse} onChange={setICourse} className='lh-full'>
             {courseNames.map(c => <Select.Option key={c} value={c}>{c}</Select.Option>)}
           </Select>
           <Input placeholder='节点名（如：入门）' value={iNode} onChange={setINode} />

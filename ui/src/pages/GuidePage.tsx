@@ -22,9 +22,9 @@ export default function GuidePage() {
     .map(([page, label]) => ({ page, label, list: (items ?? []).filter(x => x.page === page) }))
     .filter(g => g.list.length > 0)
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className='lh-maxw-860 lh-m-0-auto lh-p-12 lh-col lh-gap-12'>
       <Card size='small'>
-        <Text style={{ fontSize: 13 }}>
+        <Text className='lh-t-13'>
           面板覆盖日常学习流（今日 / 课程 / 洞察 / 项目 / 无界实践区）。
           更深或低频的操作——建项目、目标反编译、执行事件落账、回执、图查询与回填、数据体检等——
           由 dsh 会话里的 agent 调用 learnhub 工具完成：下面按页面列出这些能力，
@@ -32,26 +32,24 @@ export default function GuidePage() {
         </Text>
       </Card>
       {items === null ? (
-        <div style={{ paddingTop: 40, textAlign: 'center' }}><Spin dot /></div>
+        <div className='lh-pt-40 lh-text-center'><Spin dot /></div>
       ) : groups.length === 0 ? (
         <Empty description='指南清单为空（宿主 AGENT_GUIDE 未返回条目）' />
       ) : (
         groups.map(g => (
           <Card key={g.page} size='small' title={`${g.label}`}>
-            <Space direction='vertical' style={{ width: '100%' }} size={8}>
+            <Space direction='vertical' className='lh-full' size={8}>
               {g.list.map(x => (
-                <div key={x.tool} style={{
-                  background: 'var(--color-fill-1,#f7f8fa)', borderRadius: 6, padding: '8px 10px',
-                }}>
+                <div key={x.tool} className='lh-surface-1 lh-r-6 lh-p-8px-10px'>
                   <Space size={6} wrap>
                     <Tag size='small' color='arcoblue'>{x.tool}</Tag>
-                    <Text style={{ fontSize: 12 }}>{x.text}</Text>
+                    <Text className='lh-t-12'>{x.text}</Text>
                   </Space>
                   {x.prompt && (
                     <div>
                       <Text
                         copyable={{ onCopy: () => Message.success('指令已复制，粘贴到 dsh 会话即可') }}
-                        type='secondary' style={{ fontSize: 12 }}>示例指令：{x.prompt}</Text>
+                        type='secondary' className='lh-t-12'>示例指令：{x.prompt}</Text>
                     </div>
                   )}
                 </div>
@@ -61,15 +59,15 @@ export default function GuidePage() {
         ))
       )}
       <Card size='small' title='怎么跟 agent 协作'>
-        <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
+        <Text type='secondary' className='lh-t-12 lh-block'>
           1. 在 dsh 会话里用自然语言说需求（上面每条的示例指令可直接粘贴）；agent 调用 learnhub 工具完成动作，
           全部调用留痕在学习中心 state/运行日志.md。
         </Text>
-        <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
-          2. 改动走提案-确认或显式确认的通道（图提案在「提案」页人审；清理/归档在「题目管理」页确认），
-          agent 不会静默改你的学习数据。
+        <Text type='secondary' className='lh-t-12 lh-block'>
+          2. 改动走提案-确认或显式确认的通道（提案在「课程 → 提案收件箱」人审；清理/归档在单课工作台的
+          题库分栏确认），agent 不会静默改你的学习数据。
         </Text>
-        <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
+        <Text type='secondary' className='lh-t-12 lh-block'>
           3. 当前 AI 模型与思考档在「洞察 → 运行环境」只读展示；切换模型编辑
           ~/.dsh/profiles/web/cordis.patch.yml 的 dsh-learnhub 行后重启宿主。
         </Text>

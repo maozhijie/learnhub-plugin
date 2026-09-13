@@ -175,7 +175,7 @@ export const api = {
   /** FSRS 参数优化器手动触发（A2 #62）：门禁不满足时 skipped + 原因。 */
   optimizeParams: () =>
     http<import('./types').OptimizeResult>('POST', '/optimize-params'),
-  /** B2 难度失衡/过于简单只读建议（#58）：题目管理页建议区消费；被忽略的建议已过滤（dismissed 计数带出）。 */
+  /** B2 难度失衡/过于简单只读建议（#58）：单课工作台的题库分栏消费；被忽略的建议已过滤（dismissed 计数带出）。 */
   difficultyAdvice: (course?: string) =>
     http<import('./types').DifficultyAdviceDoc>('GET', `/difficulty-advice${q({ course })}`),
   /** B2 建议忽略/恢复：误判的持久忽略（undo 恢复单条，all 清空）。 */
@@ -192,7 +192,7 @@ export const api = {
     http<CommandOutput<'bank-cleanup-apply'>>('POST', '/bank-cleanup/apply', { ...(course ? { course } : {}) }),
   /** 能力指南（agent 独有工具的面板说明，单一事实源在宿主 AGENT_GUIDE）。 */
   agentGuide: () => http<import('./types').AgentGuideItem[]>('GET', '/agent-guide'),
-  /** 出题任务化（#118）：入队即返回（phase=quiz 全局队列），可取消、进度在生成页；
+  /** 出题任务化（#118）：入队即返回（phase=quiz 全局队列），可取消、进度在生成队列；
    * opts.section = 定向补节（#117，服务端缺省 3 题），opts.instruction = 学习者意见
    * 生成指令（#120 提意见重生成，建议 count=1）。 */
   questionGenerate: (course: string, node: string, count?: number,
@@ -311,7 +311,7 @@ export const api = {
   kataConvertIntention: (weekStart: string, course: string, node: string, cue: string, action: string) =>
     http<{ course: string; node: string; week_start: string }>('POST', '/kata/convert/intention',
       { week_start: weekStart, course, node, cue, action }),
-  // ---- 图域命令（面板下发，学习图生命周期 UI 化）：入队即返回，进度/结果看生成页 ----
+  // ---- 图域命令（面板下发，学习图生命周期 UI 化）：入队即返回，进度/结果看生成队列 ----
   /** 生长一步 / 失败重试：教练回合显式重新裁决（即时入队，豁免停摆与失败阻尼——
    * 失败通知与生成页的「重试」走同一路由；在途/已取消仍拒）。 */
   coachGrowth: (course: string) =>

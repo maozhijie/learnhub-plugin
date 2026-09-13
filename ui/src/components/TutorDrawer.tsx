@@ -91,8 +91,8 @@ export default function TutorDrawer(props: {
       headerStyle={{ border: 'none' }}
       title={<Text>问 AI 老师 · {props.node}</Text>}
       onCancel={props.onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: 'calc(100vh - 120px)' }}>
-        <div ref={listRef} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
+      <div className='lh-col lh-gap-10 lh-h-viewport-120'>
+        <div ref={listRef} className='lh-flex-1 lh-scroll-y lh-col lh-gap-10 lh-pr-4'>
           {messages.length === 0 && (
             <Empty description='问这道题为什么错、某个概念没看懂、公式怎么来的——老师只答本课范围' />
           )}
@@ -106,10 +106,10 @@ export default function TutorDrawer(props: {
                 borderRadius: 8, padding: '8px 12px',
               }}>
                 {m.role === 'user'
-                  ? <Text style={{ whiteSpace: 'pre-wrap' }}>{m.content}</Text>
+                  ? <Text className='lh-prewrap'>{m.content}</Text>
                   : <MdView md={parsed?.display || m.content} />}
                 {parsed && bus && parsed.actions.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  <div className='lh-flex lh-wrap lh-gap-6 lh-mt-6'>
                     {parsed.actions.map((a, j) => (
                       <Button key={j} size='mini' type='outline'
                         onClick={() => {
@@ -124,9 +124,9 @@ export default function TutorDrawer(props: {
               </div>
             )
           })}
-          {busy && <Spin dot style={{ alignSelf: 'flex-start' }} />}
+          {busy && <Spin dot className='lh-self-start' />}
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+        <div className='lh-flex lh-gap-8 lh-items-end'>
           <Input.TextArea
             value={input} onChange={setInput}
             placeholder='问 AI 老师…（Enter 发送）'
