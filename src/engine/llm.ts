@@ -29,7 +29,9 @@ export type LlmCallKind = 'complete' | 'repair' | 'loop'
 /** 补全缝：prompt 必带；system 可选（人设/判卷约束）；opts.effort 语义档。
  * opts.station/kind 是语料捕获的站标签（#213）：AgentSeam 传站名与调用形态，裸缝站
  * 由注入点工厂闭包带站名；opts.usageSink 是 token 计量回程（AgentCallRecord 观测面），
- * 适配器拿到 usage 块后回调。测试假端口可整体忽略新增 opts。 */
+ * 适配器拿到 usage 块后回调。opts.temperature（#219）直通 provider 采样温度——缺省
+ * = 宿主默认，全仓调用点一律不设值（旋钮只留给 spike 等显式消费方）。测试假端口
+ * 可整体忽略新增 opts。 */
 export type LlmComplete = (
   prompt: string,
   system?: string,
@@ -38,6 +40,7 @@ export type LlmComplete = (
     station?: string
     kind?: LlmCallKind
     usageSink?: (usage: LlmTokenUsage) => void
+    temperature?: number
   },
 ) => Promise<string>
 
@@ -66,11 +69,14 @@ export type LlmLoopTurn =
 
 /** 工具回路缝：一次流式请求（整段回路历史 + 可选工具白名单），返回助手轮
  * （文本 + 工具调用 + 可选 token 计量）。req.station 是语料捕获的站标签（#213，
- * AgentSeam 沿调用贯通）；空闲超时/截断重试/档位降级与补全缝同一套适配器机械。 */
+ * AgentSeam 沿调用贯通）；req.temperature（#219）直通 provider 采样温度，缺省 =
+ * 宿主默认（与补全缝同款纪律：调用点不设值）；空闲超时/截断重试/档位降级与补全缝
+ * 同一套适配器机械。 */
 export type LlmStream = (req: {
   messages: LlmLoopTurn[]
   system?: string
   effort?: LlmEffort
   station?: string
   tools?: LlmToolSpec[]
+  temperature?: number
 }) => Promise<{ text: string; toolCalls: LlmToolCall[]; usage?: LlmTokenUsage }>

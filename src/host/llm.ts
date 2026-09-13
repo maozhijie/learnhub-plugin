@@ -65,7 +65,8 @@ export const LLM_TRUNCATION_RETRY_TOKENS = 8192
  * opts.effort 指定思考档（如 'off' 快速路径）；路由不支持该档位时
  * （UNSUPPORTED_REASONING_EFFORT）自动降级为部署默认重试一次。
  * 语义档标签/站/形态/捕获缝/usage 回程随 opts 直通（#213）：捕获在缝出口
- * withCapture 统一组装——成功记 ok、调用级失败记 failed+稳定码后原样上抛。 */
+ * withCapture 统一组装——成功记 ok、调用级失败记 failed+稳定码后原样上抛。
+ * opts.temperature（#219）随行直通 provider（截断重试同一值）；不传 = 宿主默认。 */
 export async function llmComplete(ctx: Context, prompt: string, system?: string, opts?: {
   effort?: 'off' | 'low'
   /** 语义档标签（frontmatter 记语义档；部署档翻译不丢失原值）。 */
@@ -74,6 +75,8 @@ export async function llmComplete(ctx: Context, prompt: string, system?: string,
   kind?: LlmCallKind
   capture?: CorpusSink
   usageSink?: (usage: LlmTokenUsage) => void
+  /** 采样温度（#219）：缺省不传 = 宿主默认；调用点不设值。 */
+  temperature?: number
 }): Promise<string> {
   const r = await withCapture(opts?.capture, {
     station: opts?.station,
@@ -81,15 +84,16 @@ export async function llmComplete(ctx: Context, prompt: string, system?: string,
     effort: opts?.semanticEffort,
     usageSink: opts?.usageSink,
     prompt: () => prompt,
-    run: () => streamWithPolicies(
-      (effort, maxTokens) => streamDshTurn(ctx, {
-        messages: [userTurn(prompt)],
-        ...(system === undefined ? {} : { system }),
-        ...(effort === undefined ? {} : { effort }),
-        ...(maxTokens === undefined ? {} : { maxTokens }),
-      }),
-      opts?.effort,
-    ),
+      run: () => streamWithPolicies(
+        (effort, maxTokens) => streamDshTurn(ctx, {
+          messages: [userTurn(prompt)],
+          ...(system === undefined ? {} : { system }),
+          ...(effort === undefined ? {} : { effort }),
+          ...(maxTokens === undefined ? {} : { maxTokens }),
+          ...(opts?.temperature === undefined ? {} : { temperature: opts.temperature }),
+        }),
+        opts?.effort,
+      ),
   })
   return r.text
 }
@@ -162,6 +166,7 @@ export function llmSeam(ctx: Context, capture?: CorpusSink, station?: string): L
       ...(station !== undefined || opts?.station !== undefined ? { station: opts?.station ?? station } : {}),  // 端口 opts 优先，闭包兜底
       ...(opts?.kind !== undefined ? { kind: opts.kind } : {}),
       ...(opts?.usageSink !== undefined ? { usageSink: opts.usageSink } : {}),
+      ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
     })
 }
 
@@ -193,6 +198,7 @@ export function llmStreamSeam(ctx: Context, capture?: CorpusSink): LlmStream {
           ...(effort === undefined ? {} : { effort }),
           ...(maxTokens === undefined ? {} : { maxTokens }),
           ...(req.tools === undefined ? {} : { tools: req.tools.map(toDshTool) }),
+          ...(req.temperature === undefined ? {} : { temperature: req.temperature }),
         }),
         translateEffort(req.effort),
       ),
@@ -251,7 +257,9 @@ function translateEffort(effort?: LlmEffort): 'off' | 'low' | undefined {
 }
 
 /** 共享调用策略（#137/#162 同一套机械）：max-tokens 截断提高输出上限原题重试一次；
- * 路由不支持该档位（UNSUPPORTED_REASONING_EFFORT）自动降级为部署默认重试一次。 */
+ * 路由不支持该档位（UNSUPPORTED_REASONING_EFFORT）自动降级为部署默认重试一次。
+ * temperature（#219）不在本函数 — 它住在 run 闭包（重试是同一调用意图的重放，采样
+ * 旋钮不中途变）。 */
 async function streamWithPolicies<R extends { truncated: boolean }>(
   run: (effort?: 'off' | 'low', maxTokens?: number) => Promise<R>,
   effort?: 'off' | 'low',
@@ -275,12 +283,13 @@ async function streamWithPolicies<R extends { truncated: boolean }>(
  * 空闲超时：每收到一个 chunk 重置计时，LLM_IDLE_TIMEOUT_MS 内无新输出即 abort（#118）。
  * 返回 truncated 标记（finish reason = max-tokens）与 token 计量（#213，usage chunk
  * 恒在 finish 之前发出），截断重试由 llmComplete 处理。 */
-export async function llmStreamOnce(ctx: Context, prompt: string, system?: string, effort?: 'off' | 'low', maxTokens?: number): Promise<{ text: string; truncated: boolean; usage?: LlmTokenUsage }> {
+export async function llmStreamOnce(ctx: Context, prompt: string, system?: string, effort?: 'off' | 'low', maxTokens?: number, temperature?: number): Promise<{ text: string; truncated: boolean; usage?: LlmTokenUsage }> {
   const r = await streamDshTurn(ctx, {
     messages: [userTurn(prompt)],
     ...(system === undefined ? {} : { system }),
     ...(effort === undefined ? {} : { effort }),
     ...(maxTokens === undefined ? {} : { maxTokens }),
+    ...(temperature === undefined ? {} : { temperature }),
   })
   return { text: r.text, truncated: r.truncated, ...(r.usage ? { usage: r.usage } : {}) }
 }
@@ -294,6 +303,8 @@ async function streamDshTurn(ctx: Context, req: {
   effort?: 'off' | 'low'
   maxTokens?: number
   tools?: ToolSchema[]
+  /** 采样温度（#219）：直通 provider；缺省不传 = 宿主默认。 */
+  temperature?: number
 }): Promise<{ text: string; toolCalls: Array<{ id: string; name: string; arguments: string }>; truncated: boolean; usage?: LlmTokenUsage }> {
   const msg = req.messages
   let text = ''
@@ -316,8 +327,9 @@ async function streamDshTurn(ctx: Context, req: {
       provider: llmCfg.provider, model: llmCfg.model, messages: msg,
       ...req.system === undefined ? {} : { system: req.system },
       ...req.effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(req.effort) },
-      ...req.maxTokens === undefined ? {} : { maxTokens: req.maxTokens },
-      ...req.tools === undefined ? {} : { tools: req.tools },
+      ...(req.maxTokens === undefined ? {} : { maxTokens: req.maxTokens }),
+      ...(req.tools === undefined ? {} : { tools: req.tools }),
+      ...(req.temperature === undefined ? {} : { temperature: req.temperature }),
       signal: controller.signal,
     })
     for await (const chunk of stream) {
