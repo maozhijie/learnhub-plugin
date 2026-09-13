@@ -2622,7 +2622,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.explainBackFeedback(\"1\",\"1\",\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
+   "learner.explainBackFeedback(\"1\",\"1\",\"1\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }))"
   ]
  },
  {
@@ -2664,7 +2664,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.explainBackFeedback(\"1\",\"1\",\"\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
+   "learner.explainBackFeedback(\"1\",\"1\",\"\",(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }))"
   ]
  },
  {
@@ -3496,7 +3496,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }))"
   ]
  },
  {
@@ -3547,7 +3547,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"\",\"kind\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }))"
   ]
  },
  {
@@ -3564,7 +3564,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"prompt\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }))"
   ]
  },
  {
@@ -3581,7 +3581,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"section\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }))"
   ]
  },
  {
@@ -3598,7 +3598,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }))"
+   "learner.learnerNoteAdd(\"1\",\"1\",{\"content\":\"1\",\"kind\":\"1\",\"prompt\":\"1\"},(prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }))"
   ]
  },
  {
@@ -3999,7 +3999,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4071,7 +4071,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }),\"1\",\"1\",\"1\",\"\",1,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4089,7 +4089,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",null,{\"deferSchedule\":true,\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",null,{\"deferSchedule\":true,\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4107,7 +4107,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"predicted\":\"1\"})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"predicted\":\"1\"})"
   ]
  },
  {
@@ -4125,7 +4125,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true})"
+   "content2.questionAnswer((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }),\"1\",\"1\",\"1\",\"1\",1,{\"deferSchedule\":true})"
   ]
  },
  {
@@ -4346,7 +4346,7 @@
   "status": 200,
   "res": [],
   "calls": [
-   "bank2.questionDisputeReview((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {}\n        }),\"1\",\"1\",\"1\")"
+   "bank2.questionDisputeReview((prompt, system, opts)=>llmComplete(ctx, prompt, system, {\n            ...opts?.effort === 'fast' ? {\n                effort: llmCfg.fastEffort,\n                semanticEffort: 'fast'\n            } : opts?.effort === 'deep' ? {\n                effort: llmCfg.deepEffort,\n                semanticEffort: 'deep'\n            } : {},\n            ...capture ? {\n                capture\n            } : {},\n            ...station !== undefined || opts?.station !== undefined ? {\n                station: opts?.station ?? station\n            } : {},\n            ...opts?.kind !== undefined ? {\n                kind: opts.kind\n            } : {},\n            ...opts?.usageSink !== undefined ? {\n                usageSink: opts.usageSink\n            } : {},\n            ...opts?.temperature !== undefined ? {\n                temperature: opts.temperature\n            } : {}\n        }),\"1\",\"1\",\"1\")"
   ]
  },
  {
@@ -6558,6 +6558,34 @@
   "status": 404,
   "res": {
    "error": "unknown route: PUT /status"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /smoke · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/smoke",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "[smoke] 宿主 ctx 没有 llm——生成冒烟必须在宿主进程内跑（真 provider 只在宿主）。先在仓库根 npm run build，再 npx @deepseek-ai/dsh web 起宿主（本机 profile 已 link 本 checkout）。"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /smoke · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/smoke",
+  "body": {
+   "goal": "1",
+   "course": "1",
+   "quizCount": 1,
+   "quizAuditRate": 0,
+   "jobTimeoutMs": 1
+  },
+  "status": 500,
+  "res": {
+   "error": "[smoke] 宿主 ctx 没有 llm——生成冒烟必须在宿主进程内跑（真 provider 只在宿主）。先在仓库根 npm run build，再 npx @deepseek-ai/dsh web 起宿主（本机 profile 已 link 本 checkout）。"
   },
   "calls": []
  }

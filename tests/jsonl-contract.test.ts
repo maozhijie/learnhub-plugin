@@ -71,9 +71,10 @@ test('结构守卫：JSONL 读侧必经原语——src 全域 split("\\n") 只�
   // 文本行处理（compass/content/growth-subsystem）；答案文本归一的多行切分（grading）；
   // mini-YAML 解析（yaml.ts）；路径与错误文案处理（note-source/generation-jobs 的
   // sectionFailure 切错误消息取首条 ✗）；语料 frontmatter 行级补丁（#213 corpus 的
-  // applyPatch 只动 --- 围栏内 outcome/code 行，纯文本非数据流）。白名单外出现
+  // applyPatch 只动 --- 围栏内 outcome/code 行，纯文本非数据流；#215 smoke 的
+  // parseCorpusFrontmatter 读同一种捕获文件的 --- 围栏做报告统计，同族）。白名单外出现
   // split('\n') = 有人手写 JSONL parse 循环（ADR-0053 单一实现违约）。
-  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts', 'generation-jobs.ts', 'corpus.ts'])
+  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts', 'generation-jobs.ts', 'corpus.ts', 'smoke.ts'])
   const files: string[] = []
   function walk(dir: string): void {
     for (const e of readdirSync(dir, { withFileTypes: true })) {

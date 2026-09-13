@@ -702,7 +702,7 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
       ? generateGrowthJob(rt, ctx, next)
       : next.phase !== undefined && GRAPH_JOB_PHASES.has(next.phase)
         ? generateGraphJob(rt, ctx, next)
-        : generateContent(rt, ctx, next.course, next.node, next.style)
+        : generateContent(rt, ctx, next.course, next.node, next.style, next.quizCount)
   void task
     .catch(() => { /* 执行器已置 failed 留注册表可重试 */ })
     .finally(() => {
@@ -789,7 +789,7 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
  * 阶梯（深度一层、总节数不越上限），其余失败记入结构化失败清单；有失败节时终态
  * partial、出题只对就绪节做出题循环自然跳过无内容节，练习页/失败提示可续跑。
  * 由队列执行泵驱动（pumpGeneration）；直接调用仅限已有 running 归属的路径。 */
-async function generateContent(rt: HostRuntime, ctx: Context, course: string, node: string, style?: string): Promise<string> {
+async function generateContent(rt: HostRuntime, ctx: Context, course: string, node: string, style?: string, quizCount?: number): Promise<string> {
   const key = `${course}/${node}`
   const existing = rt.jobs.genJobs.get(key)
   if (existing && (existing.status === 'running' || existing.status === 'cancelling')) {
@@ -921,7 +921,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     const contentMsg = failures.length
       ? `「${node}」正文部分完成（${done}/${job.progress!.total} 节；未完成：${failedTitles}——失败提示可「重试续跑」或定点重写）`
       : `「${node}」正文完成（${job.progress!.total} 节）`
-    const msg = await finishWithQuiz(rt, complete, job, contentMsg)
+    const msg = await finishWithQuiz(rt, complete, job, contentMsg, quizCount)
     if (failures.length) {
       // 出题成功也不掩盖节失败：partial = 未完成全部必需阶段（Partial 词条语义）
       job.status = 'partial'
@@ -945,8 +945,10 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
 }
 
 /** 管线收尾：逐节出题（每内容节按档位目标题量，绑节 id）+ 综合题（通用随档位），汇总任务终态。
- * 两路出题都显式声明语义档（#228）：随节点难度 contentEffort（高复杂度 deep、否则 fast）。 */
-async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJob, contentMsg: string): Promise<string> {
+ * 两路出题都显式声明语义档（#228）：随节点难度 contentEffort（高复杂度 deep、否则 fast）。
+ * quizCount（#215 冒烟成本闸）：给定时**两路出题**都按它出题（逐节题量封顶 + 综合题量），
+ * 缺省 = 现状（逐节按档位目标、综合按 genericQuizTarget）。 */
+async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJob, contentMsg: string, quizCount?: number): Promise<string> {
   job.phase = 'quiz'
   job.message = `${contentMsg}；自动出题中…`
   persistGenJobs(rt)
@@ -954,7 +956,7 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   try {
     const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, quizSeam(complete, quizEffort),
       rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : undefined)
-    const quiz = await generateQuiz(rt, complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort })
+    const quiz = await generateQuiz(rt, complete, job.course, job.node, quizCount ?? genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status
     job.message = outcome.message

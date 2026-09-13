@@ -20,6 +20,7 @@
   "channels.noteSourceRelink",
   "channels.noteSourceUnexclude",
   "channels.noteSourceUnregister",
+  "content2.contentCheck",
   "content2.lesson",
   "content2.questionAnswer",
   "content2.questionSave",
@@ -91,7 +92,6 @@
  "toolOnly": [
   "bank2.errorCardMine",
   "bank2.questionGet",
-  "content2.contentCheck",
   "dataCheck",
   "graph.conceptMerge",
   "graph.graphApply",
@@ -117,6 +117,7 @@
   "project.projectShow"
  ],
  "routeOnly": [
+  "bank.load",
   "bank2.adviceDismiss",
   "bank2.interactiveSettle",
   "bank2.questionAdd",
@@ -156,6 +157,7 @@
   "loadGenJobs",
   "loadView",
   "paths.anchorPath",
+  "paths.courseRoot",
   "project.projectMilestonePack",
   "project.projectMilestoneWrite",
   "project.projectPlanPack",

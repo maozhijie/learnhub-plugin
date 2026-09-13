@@ -67,6 +67,8 @@ export interface GenJob {
   tier?: '低' | '中' | '高'
   /** 纯出题任务的参数（#118）：题量上限 / 定向补节（#117）/ 学习者生成指令（#120）。 */
   count?: number
+  /** 组合管线综合出题的题量覆盖（#215 生成冒烟成本闸：冒烟按小规模跑；缺省 = 按档位默认）。 */
+  quizCount?: number
   section?: { id: string; title: string }
   instruction?: string
   /** 入队时实际使用的模型名（模型透明：任务注册表与面板可审计每次生成用的是什么）。 */

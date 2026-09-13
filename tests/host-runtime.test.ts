@@ -1053,7 +1053,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、路由独有 51（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、路由独有 53（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -1086,9 +1086,11 @@ test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、�
   // 进工具面 → 86 共享／路由独有 49（#156 已把工具面一条入口收编共享：25/49；
   // #196/#197 拆节 op content2.contentSplit 仅路由面管线消费 → 25/50；
   // #199 生成门 enqueueGeneration 经 paths.anchorPath 读锚拒终点 → 25/51）
-  assert.equal(shared.length, 87)
-  assert.equal(toolOnly.length, 26, '#209：growth2.compassRead 得 panel 路由（GET /compass），工具独有 27→26')
-  assert.equal(routeOnly.length, 51)
+  // #215 生成冒烟（POST /smoke）复跑既有门 + 读产物：content2.contentCheck 自工具独有转
+  // 两面共享；bank.load 与 paths.courseRoot 进路由面（工具面不读这两条入口）
+  assert.equal(shared.length, 88)
+  assert.equal(toolOnly.length, 25, '#215：content2.contentCheck 转共享（冒烟复跑质检门），工具独有 26→25')
+  assert.equal(routeOnly.length, 53, '#215：+bank.load、+paths.courseRoot（冒烟读题库与课程根），路由独有 51→53')
 })
 
 // ---------------------------------------------------------------- 种子应用 → 起点正文自动入队（#160）

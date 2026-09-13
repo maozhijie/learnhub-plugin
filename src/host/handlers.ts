@@ -17,7 +17,7 @@ import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from
 import { sendJson } from './http.ts'
 import {
   need, needQuery, optBoolean, optFinite, optList, optNumber, optObject, optQuery, optRaw, optString, optText, optTrimmed,
-  optTrue, pick, requireBoolean, requireNumber, requireObject, requireOneOf, requireString,
+  optTrue, ParamError, pick, requireBoolean, requireNumber, requireObject, requireOneOf, requireString,
 } from './params.ts'
 import { apiRun, runLog } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
@@ -31,6 +31,7 @@ import {
   enqueueGrowthBatch, enqueueQuizGeneration, generateSection, generationStatus, resetCourseChain,
   resumeQueue, sessionStartCheckpoint, sweepGenJobs, triggerPlanGrowth,
 } from './jobs.ts'
+import { runGenerationSmoke } from './smoke.ts'
 
 /** 面板内轻量答疑：节点上下文 system + 前端携带的对话历史（拼成单条 user 消息）→ llm。
  * 与 dsh 会话分层：这里只答不写，深度讨论/修订走「与 AI 讨论本课」开的会话。 */
@@ -171,6 +172,24 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // + AnkiConnect 可达性（连接失败不抛，status.anki.connected=false 带原因）
     sendJson(res, 200, await apiRun(rt, 'api/anki/status', () =>
       rt.engine.channels.ankiStatus(new AnkiConnectClient(ANKI_ENDPOINT))))
+  },
+  'POST /smoke': async ({ rt, ctx, body, res }) => {
+    // 生成冒烟（#215）：临时 vault 跑通全管线（种子 → 大纲 → 逐节 → 出题）+ 结构断言
+    // 报告；同步阻塞到终态（分钟级），驱动脚本 scripts/gen-smoke.mjs 按长超时调用。
+    // 显式给非法类型一律拒（冒烟是诊断面，宁可报错不可静默换参数）。
+    const jobTimeoutMs = optNumber(body, 'jobTimeoutMs')
+    const quizCount = optNumber(body, 'quizCount')
+    const quizAuditRate = optNumber(body, 'quizAuditRate')
+    if (jobTimeoutMs !== undefined && !(jobTimeoutMs > 0)) throw new ParamError('jobTimeoutMs 必须是正数（毫秒）')
+    if (quizCount !== undefined && (!Number.isInteger(quizCount) || quizCount <= 0)) throw new ParamError('quizCount 必须是正整数')
+    if (quizAuditRate !== undefined && !(quizAuditRate >= 0 && quizAuditRate <= 1)) throw new ParamError('quizAuditRate 必须是 0–1 的数（0 = 关门）')
+    sendJson(res, 200, await apiRun(rt, 'api/smoke', () => runGenerationSmoke(ctx, {
+      ...pick('goal', optText(body, 'goal')),
+      ...pick('course', optText(body, 'course')),
+      ...(quizCount !== undefined ? { quizCount } : {}),
+      ...(quizAuditRate !== undefined ? { quizAuditRate } : {}),
+      ...(jobTimeoutMs !== undefined ? { jobTimeoutMs } : {}),
+    })))
   },
   'GET /agent-guide': async ({ res }) => {
     // 能力指南：agent 独有工具的面板说明锚点（AGENT_GUIDE 单一事实源）

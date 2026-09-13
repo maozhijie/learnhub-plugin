@@ -243,4 +243,22 @@ export const 维护域 = {
       }
     ]
   }),
+  'smoke': command({
+    id: "smoke",
+    args: {
+      goal: { type: "string" },
+      course: { type: "string" },
+      quizCount: { type: "number" },
+      quizAuditRate: { type: "number" },
+      jobTimeoutMs: { type: "number" }
+    },
+    domain: "维护",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/smoke" }
+      }
+    ]
+  }),
 }

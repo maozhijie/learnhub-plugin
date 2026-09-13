@@ -972,5 +972,16 @@
    "qid",
    "patch"
   ]
+ },
+ {
+  "method": "POST",
+  "route": "/smoke",
+  "keys": [
+   "goal",
+   "course",
+   "quizCount",
+   "quizAuditRate",
+   "jobTimeoutMs"
+  ]
  }
 ]
