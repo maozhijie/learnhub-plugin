@@ -15,13 +15,13 @@
 import { Alert, Button, Card, Message, Modal, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import QuestionCard, { type AnswerOutcome, type JolPick, toOutcome } from '../../components/QuestionCard'
-import LearnerCardCard from '../../components/LearnerCardCard'
-import ErrorCardCard from '../../components/ErrorCardCard'
-import { nextBand, pickNext } from '../../../../src/engine/adaptive'
-import { api } from '../../api'
-import { errorMessage } from '../../hooks/useCommand'
-import type { QueueCard, ReviewCard } from '../../types'
+import QuestionCard, { type AnswerOutcome, type JolPick, toOutcome } from './QuestionCard'
+import LearnerCardCard from './LearnerCardCard'
+import ErrorCardCard from './ErrorCardCard'
+import { nextBand, pickNext } from '../../../src/engine/adaptive'
+import { api } from '../api'
+import { errorMessage } from '../hooks/useCommand'
+import type { QueueCard, ReviewCard } from '../types'
 
 const { Text, Title } = Typography
 

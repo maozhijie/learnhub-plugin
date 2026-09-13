@@ -1,41 +1,41 @@
-/** 学习页（主界面）：XP 时间账本条 + 复习横幅 + 「接下来学/复习」
- * 推荐流（点开直接进 LessonView）+ 课程卡（次要区）。二级视图 LessonView 承载
- * 正文/mastery 会话/完成。复习会话 = Anki 式刷卡队列：跨课程到期卡扁平排队，
- * 一卡一票（作答或满 5 秒申报忘记），背面自评 Hard/Good/Easy 推进调度；
- * 我的卡（E1）按 ADR-0021 汇入同一队列——按卡种分面：题卡走作答+AI 判卷，
- * 自注卡走 重述 → 翻面对照 → 自评（无绑定 XP，只计总账不进课程/节点账）。
- * 「今天学它」pin 不设界面入口（对话经 agent 工具 learnhub_pin_today 设置，
- * pinned 行仍显「你选了它」置顶标识）。
- * #72 UI 入口补全：横幅区挂 C1 笔记源抽屉 / C2 导出到 Anki / E1 我的卡管理，
- * 推荐卡渲染 A3 定向复习建议项（一键进目标节点刷卡），复习卡头部带 A1 可回忆度读数。
- * #183：取数走 useCommand 缝（推荐流是主数据、失败 = 页面失败态；横幅类次要数据
- * 失败按空处理不翻整页——既有语义），任务轮询走 usePolling。 */
-import { Button, Card, Empty, Message, Modal, Space, Typography } from '@arco-design/web-react'
+/** 今日页（#208 / ADR-0058 五区改版 T4，自学习页收窄成型）：学习日的全部——
+ * XP/streak/每日目标、复习横幅、「接下来学/复习」推荐流（在酿节点带进度 chip）、
+ * 供给卡（在酿 n/停摆恢复/失败重试）与待审闸门计数、「我的资产」菜单（我的卡/
+ * 笔记源抽屉/导出到 Anki 收进去）。课程卡列表不进今日（住课程区，T4 暂住学习图页）；
+ * 建课唯一主动入口在课程区教练台（#154/#159 既裁）。人审动作只在提案收件箱，
+ * 今日只放计数；复习流/练习会话/申诉交互原样不动。
+ * 二级视图 LessonView 承载正文/mastery 会话/完成。复习会话 = Anki 式刷卡队列：
+ * 跨课程到期卡扁平排队，一卡一票（作答或满 5 秒申报忘记），背面自评 Hard/Good/Easy
+ * 推进调度；我的卡（E1）按 ADR-0021 汇入同一队列。
+ * #72 UI 入口史：横幅 C1/C2/E1 裸入口退役进资产菜单，推荐卡渲染 A3 定向复习建议项，
+ * 复习卡头部带 A1 可回忆度读数。
+ * #183：取数走 useCommand 缝（推荐流是主数据、失败 = 页面失败态；横幅/供给/闸门等
+ * 次要数据失败按空处理不翻整页——既有语义），任务轮询走 usePolling（生成状态 +
+ * 待审提案数同一拍，供给卡与生成队列页同一事实源）。 */
+import { Card, Empty, Message, Space, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import LessonView from '../../components/LessonView'
-import SeedFormModal from '../../components/SeedFormModal'
 import { CommandBoundary } from '../../components/CommandBoundary'
+import ReviewSession from '../../components/ReviewSession'
 import { useCommand, errorMessage } from '../../hooks/useCommand'
 import { usePolling } from '../../hooks/usePolling'
 import { sortRecEvents } from '../../lib/rec-events'
 import { api } from '../../api'
 import type { AppFrame } from '../../App'
 import type { AdviceItem, LearnerCardItem, QueueCard, RecEvent } from '../../types'
-import ReviewSession from './ReviewSession'
-import { CourseCard, RecCard, ReviewBanner, XpBar } from './LearnCards'
-import type { RecGenState } from './LearnCards'
+import { RecCard, ReviewBanner, XpBar } from './TodayCards'
+import type { RecGenState } from './TodayCards'
+import { SupplyRow } from './SupplyCard'
+import type { SupplySnapshot } from './SupplyCard'
+import { AssetsMenu } from './AssetsMenu'
 import NoteSourceDrawer from './NoteSourceDrawer'
 import LearnerCardManager from './LearnerCardManager'
 
 const { Text, Title } = Typography
 
-/** 建课引导（#159 退役）：学习页不再宣传「复制指令给 agent 建课」——唯一主动建课入口
- * 是教练台表单（SeedFormModal），空态按钮直达；agent 通道仍在册（工具照常受理），
- * 只是 UI 不再把它当作新手路径（ADR-0038 分流纪律）。 */
-
-export default function LearnPage({ frame }: { frame: AppFrame }) {
-  // 推荐流是本页主数据：它失败 = 页面失败态（#158）；xp/复习横幅/Anki 是次要数据，
-  // 失败按空处理（Command 不翻转 data、页面按 null 渲染缺省），不让单点故障翻整页
+export default function TodayPage({ frame }: { frame: AppFrame }) {
+  // 推荐流是本页主数据：它失败 = 页面失败态（#158）；xp/复习横幅/Anki/供给/闸门是
+  // 次要数据，失败按空处理（Command 不翻转 data、页面按 null 渲染缺省），不让单点故障翻整页
   const rec = useCommand(() => api.recommend(12))
   const xp = useCommand(() => api.xp())
   const reviewQ = useCommand(() => api.reviewQueue())
@@ -43,18 +43,19 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
   const [session, setSession] = useState<QueueCard[] | null>(null)
   // Self-Calibration 过信轻提示（ADR-0022 #104）：随会话启动的队列载荷带出
   const [calibrationHint, setCalibrationHint] = useState<string | undefined>(undefined)
-  /** 建课表单（教练台种子起草；#159 起唯一主动建课入口，CreateDialog 已退役）。 */
-  const [seedForm, setSeedForm] = useState(false)
-  const [runningJobs, setRunningJobs] = useState(0)
-  const [queuedJobs, setQueuedJobs] = useState(0)
-  const [exportingAnki, setExportingAnki] = useState(false)
-  /** #72 C1/E1：笔记源抽屉（focusId = 横幅「归档旧题」直达定位）与我的卡管理抽屉。
-   * recentArchived = 会话级「本次已归档」清单（E1 恢复入口；关抽屉再开不清空）。 */
+  /** #72 C1/E1：笔记源抽屉（focusId = 横幅「归档旧题」直达定位）与我的卡管理抽屉，
+   * 经「我的资产」菜单打开（#208）。recentArchived = 会话级「本次已归档」清单
+   * （E1 恢复入口；关抽屉再开不清空）。 */
   const [sourceDrawer, setSourceDrawer] = useState<{ open: boolean; focusId: string | null }>({ open: false, focusId: null })
   const [cardMgrOpen, setCardMgrOpen] = useState(false)
   const [recentArchived, setRecentArchived] = useState<LearnerCardItem[]>([])
   /** 排队/生成中的节点（course/node → 状态 + 逐节进度），推荐卡进度态消费（#160）。 */
   const [genMap, setGenMap] = useState<Record<string, RecGenState>>({})
+  /** 供给快照与待审提案数（#208）：与生成队列页同一事实源（/generate/status、/proposals）。 */
+  const [supply, setSupply] = useState<SupplySnapshot | null>(null)
+  const [pendingProps, setPendingProps] = useState<number | null>(null)
+  const [runningJobs, setRunningJobs] = useState(0)
+  const [queuedJobs, setQueuedJobs] = useState(0)
 
   // 各命令的 reload 稳定（useCommand 内部 useCallback），解构后作 deps 不抖动
   const { reload: reloadRec } = rec
@@ -72,10 +73,12 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     prevLessonRef.current = frame.lesson
   }, [frame.lesson, reloadAll])
 
-  // 后台生成悬浮指示条 + 队列状态轮询：活动任务集合出现终态边沿 → 重拉推荐流
-  //（对应节点的「已生成」标识随之点亮）。边沿检测是页面逻辑，节拍样板在 usePolling。
+  // 供给/闸门/进度一拍轮询：任务注册表 + 提案列表同源刷新；活动任务集合出现终态
+  // 边沿 → 重拉推荐流（对应节点的「已生成」标识随之点亮）。边沿检测是页面逻辑，
+  // 节拍样板在 usePolling；SupplyCard 的动作（恢复/重试）经本回调立即重拍。
   const activeKeysRef = useRef<Set<string>>(new Set())
-  usePolling(async () => {
+  const refreshSupply = useCallback(async () => {
+    let edge = false
     try {
       const st = await api.generateStatus()
       const active = st.jobs.filter(j => j.status === 'running' || j.status === 'cancelling')
@@ -88,44 +91,43 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
         }
       }
       const keys = new Set(active.map(j => j.key))
-      const edge = [...activeKeysRef.current].some(k => !keys.has(k))
+      edge = [...activeKeysRef.current].some(k => !keys.has(k))
       activeKeysRef.current = keys
       setRunningJobs(active.length)
       setQueuedJobs(st.queuedCount)
       setGenMap(gen)
-      if (edge) void reloadAll()
+      setSupply({
+        running: active,
+        queuedCount: st.queuedCount,
+        paused: st.queuePaused,
+        broken: st.broken ?? null,
+        failed: st.jobs.filter(j => j.status === 'failed' || j.status === 'partial'),
+      })
     } catch {
       setRunningJobs(0)
       setQueuedJobs(0)
       setGenMap({})
+      setSupply(null)
     }
-  }, { tab: 'today', intervalMs: 5000 })
+    try {
+      const props = await api.proposals()
+      setPendingProps(props.filter(p => p.status === 'pending').length)
+    } catch {
+      setPendingProps(null)
+    }
+    if (edge) void reloadAll()
+  }, [reloadAll])
+  usePolling(refreshSupply, { tab: 'today', intervalMs: 5000 })
 
   useEffect(() => {
-    const h = () => { void frame.reload(); void reloadAll() }
+    const h = () => { void frame.reload(); void reloadAll(); void refreshSupply() }
     window.addEventListener('learnhub:reload', h)
     return () => window.removeEventListener('learnhub:reload', h)
-  }, [frame, reloadAll])
+  }, [frame, reloadAll, refreshSupply])
 
   const recData = rec.data
   const dueCards = reviewQ.data?.cards ?? []
   const events = recData?.events ?? []
-
-  const deleteCourse = (name: string) => {
-    Modal.confirm({
-      title: `删除课程「${name}」？`,
-      content: '注册表移除，课程目录移入 学习中心/.trash/（可手工找回）。',
-      onOk: async () => {
-        try {
-          const r = await api.courseDelete(name)
-          Message.success(`已删除 ${r.removed}，目录在 ${r.trash}`)
-          await frame.reload()
-        } catch (err) {
-          Message.error(errorMessage(err))
-        }
-      },
-    })
-  }
 
   // 推荐卡便捷生成：入队全局队列（后台按序执行），卡片随轮询转为「排队中/生成中」
   const generateNode = async (e: RecEvent) => {
@@ -165,21 +167,18 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     }
   }
 
-  // C2 导出到 Anki（#63/#72）：横幅按钮直推到期卡（Anki 未开时引擎报错带指引）
+  // C2 导出到 Anki（#63/#72）：资产菜单动作（T6 归洞察通道卡，其间在此保持可达）
   const exportAnki = async () => {
-    setExportingAnki(true)
     try {
       const r = await api.ankiExport()
       Message.success(`已推送到 Anki：新增 ${r.added} · 更新 ${r.updated} · 移除 ${r.removed}（到期 ${r.total} 张）`)
       await reloadAll()
     } catch (err) {
       Message.error(errorMessage(err))
-    } finally {
-      setExportingAnki(false)
     }
   }
 
-  // C1 笔记源动作（#59/#72）：横幅提示行直达——漂移重新出题 / 缺失重新注册
+  // C1 笔记源动作（#59/#72）：横幅状态行直达——漂移重新出题 / 缺失重新注册
   const regenerateSource = async (id: string) => {
     try {
       const r = await api.noteSourceGenerate(id)
@@ -212,32 +211,6 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
     }
   }
 
-  // 课程卡入口的整课重生成（与生成页同一 /course/reset 通道，进度在生成页看）
-  const regenerateCourse = (name: string) => {
-    Modal.confirm({
-      title: `重新生成课程「${name}」？`,
-      content: (
-        <div style={{ lineHeight: 1.9 }}>
-          <div>将删除该课程的：全部节正文与节清单、全部练习题、全部交互件与生成的图片。</div>
-          <div style={{ marginTop: 8, color: 'var(--color-text-3)' }}>
-            旧内容备份到 .trash（可恢复）；课程图谱、学习进度与掌握度保留。删除后按学习顺序逐节点重新生成（每个节点需数分钟），进度在「生成」页签实时展示。
-          </div>
-        </div>
-      ),
-      okText: '重新生成',
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          const r = await api.resetCourse(name)
-          Message.success(`已重置「${name}」（${r.reset.nodes.length} 节点），${r.queued} 个节点已入队重新生成`)
-          await Promise.all([frame.reload(), reloadAll()])
-        } catch (err) {
-          Message.error(errorMessage(err))
-        }
-      },
-    })
-  }
-
   // 二级视图：节点学习（最大最丰富）
   if (frame.lesson) {
     return <LessonView course={frame.lesson.course} node={frame.lesson.node} frame={frame} />
@@ -247,34 +220,36 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
 
   return (
     <Space direction='vertical' style={{ width: '100%' }} size={14}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Title heading={4} style={{ margin: 0 }}>学习中心</Title>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <Button onClick={() => setSeedForm(true)}>新建课程</Button>
+      <div className='today-head'>
+        <Title heading={4} style={{ margin: 0 }}>今日</Title>
+        <div className='today-head-assets'>
+          <AssetsMenu anki={anki.data} onExportAnki={() => void exportAnki()}
+            onOpenSources={() => setSourceDrawer({ open: true, focusId: null })}
+            onManage={() => setCardMgrOpen(true)} />
         </div>
       </div>
       {/* 主数据三态（首载中/失败/内容——#158，缝级收口）：推荐流没到前其余区块不渲染 */}
-      <CommandBoundary cmd={rec} variant='page' title='学习页加载失败'
+      <CommandBoundary cmd={rec} variant='page' title='今日页加载失败'
         loadingNode={<Card size='small' style={{ borderRadius: 10 }}><Text type='secondary'>加载推荐与复习队列…</Text></Card>}>
         {() => (
           <>
             <XpBar xp={xp.data ?? { date: '', day_cutoff: '', today_xp: 0, goal: 30, streak: 0, streak_grace_days: 1, eta: [] }}
               onEditGoal={() => frame.goto('insight')} />
-            <ReviewBanner reviewQ={reviewQ.data} anki={anki.data}
+            <ReviewBanner reviewQ={reviewQ.data}
               onStart={() => { setCalibrationHint(reviewQ.data?.calibration_hint); setSession(dueCards) }}
-              onExportAnki={() => void exportAnki()} exporting={exportingAnki}
               onOpenSources={focusId => setSourceDrawer({ open: true, focusId: focusId ?? null })}
               onRegenerateSource={id => void regenerateSource(id)}
               onReregister={path => void reregisterSource(path)}
-              onManage={() => setCardMgrOpen(true)}
               onMineErrors={() => void mineErrors()} mining={mining} />
+
+            {/* 供给视野：课程供给（在酿/停摆/失败）+ 待审闸门（#208） */}
+            <SupplyRow frame={frame} supply={supply} pending={pendingProps} onRefresh={refreshSupply} />
 
             {/* 核心区：「接下来学/复习」推荐流——点开直接进学习视图 */}
             {noCourses ? (
               <Card size='small' style={{ borderRadius: 10 }}>
                 <Space direction='vertical' size={12} style={{ width: '100%', display: 'flex', alignItems: 'center', padding: '16px 0' }}>
-                  <Text type='secondary'>还没有课程。起草一份种子提案（1–3 个起点 + 终点锚），一次人审即开工；图由教练随生长批逐步生长。</Text>
-                  <Button type='primary' onClick={() => setSeedForm(true)}>新建课程（种子提案）</Button>
+                  <Text type='secondary'>还没有课程：到课程区的教练台起草种子提案（1–3 个起点 + 终点锚），一次人审即开工。</Text>
                 </Space>
               </Card>
             ) : (events.length > 0 ? (
@@ -290,35 +265,11 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
                 </Space>
               </Card>
             ) : (
-              <Empty description='暂无推荐：所有到期内容已处理。可在课程卡「打开图」里挑节点学习，或点右上角「新建课程」。' />
+              <Empty description='暂无推荐：所有到期内容已处理。可到课程区打开学习图挑节点学习。' />
             ))}
           </>
         )}
       </CommandBoundary>
-
-      {/* 课程卡（次要区） */}
-      <Card size='small' title='我的课程' style={{ borderRadius: 10 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 12 }}>
-          {frame.tree?.courses.map(c => {
-            const s = frame.status?.courses.find(x => x.name === c.name)
-            return (
-              <CourseCard
-                key={c.name} name={c.name} total={s?.total ?? 0} due={s?.due_today ?? 0}
-                counts={s?.counts ?? { unseen: 0, ready: 0, learning: 0, review: 0, mastered: 0, skipped: 0 }}
-                completion={s?.completion}
-                onOpen={() => { frame.setCourse(c.name); frame.goto('courses.graph') }}
-                onRegenerate={() => regenerateCourse(c.name)}
-                onReview={() => {
-                  const q = dueCards.filter(card => card.course === c.name)
-                  if (!q.length) { Message.info('该课程暂无到期复习'); return }
-                  setCalibrationHint(reviewQ.data?.calibration_hint)
-                  setSession(q)
-                }}
-                onDelete={() => deleteCourse(c.name)} />
-            )
-          })}
-        </div>
-      </Card>
 
       {session && session.length > 0 && (
         <ReviewSession queue={session} calibrationHint={calibrationHint}
@@ -326,7 +277,6 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
           onFinish={async () => { await Promise.all([frame.reload(), reloadAll()]) }}
           onSettled={reloadAll} />
       )}
-      {seedForm && <SeedFormModal visible={seedForm} mode='new' course={null} onCancel={() => setSeedForm(false)} />}
       <NoteSourceDrawer open={sourceDrawer.open} focusId={sourceDrawer.focusId}
         onClose={() => setSourceDrawer({ open: false, focusId: null })} onChanged={reloadAll} />
       <LearnerCardManager open={cardMgrOpen} onClose={() => setCardMgrOpen(false)} onChanged={reloadAll}

@@ -11,7 +11,7 @@ import BankPage from '../pages/BankPage'
 import GeneratePage from '../pages/GeneratePage'
 import GraphPage from '../pages/GraphPage'
 import LabPage from '../pages/LabPage'
-import LearnPage from '../pages/LearnPage'
+import TodayPage from '../pages/TodayPage'
 import PracticePage from '../pages/PracticePage'
 import ProjectsPage from '../pages/ProjectsPage'
 import ProposalsPage from '../pages/ProposalsPage'
@@ -26,7 +26,7 @@ export function ZoneBody({ view, frame }: { view: ViewKey; frame: AppFrame }) {
     <>
       {VIEW_KEYS.filter(k => visited.has(k)).map(k => (
         <div key={k} className={`zone-view${k === view ? ' zone-view-active' : ''}`}>
-          {k === 'today' && <LearnPage frame={frame} />}
+          {k === 'today' && <TodayPage frame={frame} />}
           {k === 'courses.graph' && <GraphPage frame={frame} />}
           {k === 'courses.queue' && <GeneratePage frame={frame} />}
           {k === 'courses.proposals' && <ProposalsPage frame={frame} />}

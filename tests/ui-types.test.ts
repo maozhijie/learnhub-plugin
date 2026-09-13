@@ -23,8 +23,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 /** 调用点棘轮（迁移回归网）；有意增减随提交同步（注释里给理由）。
  * #159：+1（提案页 api.proposalImpact，reseed 影响预览）。
- * #196：+2（生成页失败行「重试」——retryJob 调 api.generate 与 api.questionGenerate 各一处）。 */
-const API_CALLSITES = 144
+ * #196：+2（生成页失败行「重试」——retryJob 调 api.generate 与 api.questionGenerate 各一处）。
+ * #208：+6（今日页成型——供给卡 api.generateResume/重试三路由 api.generate·
+ * api.questionGenerate·api.coachGrowth、闸门计数 api.proposals；课程卡迁出今日暂住
+ * 学习图页，逐课复习自取 api.reviewQueue。courseDelete/resetCourse 随组件整体搬迁不计数）。 */
+const API_CALLSITES = 150
 
 test(`UI 公共面零改动：api.<name>( 调用点数量不变（${API_CALLSITES} 处，函数名与签名未动）`, () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
