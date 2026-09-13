@@ -146,6 +146,9 @@ export interface RouteTables {
   zonePanes: string[]
   /** 课程区子导航项键（ShellTopBar 字面量项表，顺序 = 可见序）。 */
   subItems: string[]
+  /** 子导航项表是否被渲染消费（COURSE_SUB_ITEMS.map 出现在 JSX 里）——表在、
+   * 入口不在是 Exhibit A 的反向形态（#206 实测回归），与键对账同权执法。 */
+  subNavRendered: boolean
   /** 保活容器的视图分支键（ZoneBody 字面量分支）。 */
   branches: string[]
 }
@@ -168,6 +171,7 @@ export function routeTableViolations(t: RouteTables): string[] {
   for (const s of t.subItems) {
     if (!t.courseSubs.includes(s)) v.push(`子导航项 '${s}' 不在子路由表（URL 无法直达该入口）`)
   }
+  if (!t.subNavRendered) v.push('子导航项表没有被渲染消费（表在、入口不在——Exhibit A 反向形态，#206 回归教训）')
   if (t.subItems.length === t.courseSubs.length
     && t.subItems.some((s, i) => s !== t.courseSubs[i])) {
     v.push('子导航项顺序与子路由表不一致（可见序漂移）')
@@ -194,6 +198,7 @@ const realTables = (): RouteTables => {
     courseSubs: COURSE_SUBS,
     zonePanes: [...topBar.matchAll(/<Tabs\.TabPane key='([a-z]+)'/g)].map(m => m[1]!),
     subItems: [...topBar.matchAll(/key: '([a-z]+)', title: '/g)].map(m => m[1]!),
+    subNavRendered: topBar.includes('COURSE_SUB_ITEMS.map'),
     branches: [...zoneBody.matchAll(/k === '([a-z.]+)'/g)].map(m => m[1]!),
   }
 }
@@ -222,4 +227,7 @@ test('门自检：缺区键 / 幽灵页签 / 缺保活分支 / 缺子导航项�
   assert.ok(noSub.some(x => x.includes('bank') && x.includes('子导航')), '缺子导航项未被抓到')
   const reordered = routeTableViolations({ ...base, subItems: [...base.subItems].reverse() })
   assert.ok(reordered.some(x => x.includes('顺序')), '子导航顺序漂移未被抓到')
+  // Exhibit A 反向形态：表在、渲染消费不在（#206 实测回归形态）必须被抓到
+  const notRendered = routeTableViolations({ ...base, subNavRendered: false })
+  assert.ok(notRendered.some(x => x.includes('渲染消费')), '子导航表未渲染样本未被抓到')
 })
