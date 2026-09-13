@@ -11,13 +11,15 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_SAMPLE_QUOTA,
   QUALITY_REVIEW_SYSTEM,
   REVIEW_SCORE_LABELS,
+  artifactTextOf,
   dimensionNameOf,
   equidistantIndices,
   evidenceLocated,
@@ -160,6 +162,69 @@ test('语料读侧行尾归一：CRLF（Windows 检出/编辑路径）与 LF 解
   assert.equal(b.prompt, a.prompt, 'CRLF：提示词段一致')
   const raw = ['---', 'station: 桩', 'outcome: failed', '---', ''].join('\r\n')
   assert.equal(parseCorpusFrontmatter(raw).outcome, 'failed', '裸 CRLF 围栏也解得出')
+})
+
+// ---------------------------------------------------------------- 工具调用载荷（#236）
+
+test('#236 可评分性：文本为空而工具调用载荷在场的件可评（产物在参数里，不是没有产物）', () => {
+  assert.equal(isScoreable(sample({ output: '', toolCalls: [{ name: 'submit_batch', arguments: '{"ops":[]}' }] })), true)
+  assert.equal(isScoreable(sample({ output: '   ', toolCalls: [{ name: 'submit_batch', arguments: '{}' }] })), true)
+  assert.equal(isScoreable(sample({ output: '', toolCalls: [] })), false, '两者皆空才不可评（调用级失败件）')
+  assert.equal(isScoreable(sample({ output: '' })), false, '无载荷字段的旧样本照旧不可评')
+})
+
+test('#236 受评对象合并视图：文本在前、工具调用逐条在后（两者皆空才是空串）', () => {
+  const both = sample({ output: 'note:\n  operator: 前进', toolCalls: [{ name: 'submit_batch', arguments: '{"ops":[]}' }] })
+  assert.equal(artifactTextOf(both), 'note:\n  operator: 前进\n\n[工具调用 submit_batch]\n{"ops":[]}')
+  const payloadOnly = artifactTextOf(sample({ output: '', toolCalls: [{ name: 'submit_batch', arguments: '{"ops":[]}' }] }))
+  assert.equal(payloadOnly, '[工具调用 submit_batch]\n{"ops":[]}', '文本缺席时载荷就是受评对象')
+  assert.equal(artifactTextOf(sample({ output: '' })), '', '无产物 = 空串')
+})
+
+test('#236 一期盲评：受评对象含工具调用载荷，但仍不给生成提示词（防锚定纪律不动）', () => {
+  const s = sample({ output: '', toolCalls: [{ name: 'submit_batch', arguments: '{"note":{"operator":"前进"}}' }] })
+  const blind = reviewBlindPrompt(COACH, s)
+  assert.ok(blind.includes('[工具调用 submit_batch]'), '载荷进一期受评对象')
+  assert.ok(blind.includes('"operator":"前进"'), 'arguments 原文进受评对象')
+  assert.ok(!blind.includes('生成提示词暗号'), '一期仍不给生成提示词')
+  assert.ok(!blind.includes('v5'), '一期仍不给版本等元数据（盲）')
+})
+
+test('#236 证据定位以合并视图为产物原文：引文落在工具调用载荷里也算定位成功', () => {
+  const s = sample({
+    output: '',
+    toolCalls: [{ name: 'submit_batch', arguments: '{"note":{"operator":"前进","reason":"补最靠近前沿的一级台阶"}}' }],
+  })
+  const dims = Object.fromEntries(COACH_DIMS.map(id => [id, 4]))
+  const evidence = Object.fromEntries(COACH_DIMS.map(id => [id, ['补最靠近前沿的一级台阶']]))
+  const raw = replyJson(dims, evidence)
+  const { scores } = parseDimensionScores(raw, COACH, artifactTextOf(s))
+  assert.ok(scores.every(d => d.unlocated.length === 0), '载荷里的原句定位成功')
+  // 对照：同一引文对纯文本侧定位失败——核对器不认载荷就抓不到证据
+  const { scores: textOnly } = parseDimensionScores(raw, COACH, s.output)
+  assert.ok(textOnly.every(d => d.unlocated.length === 1), '对照：不给载荷时引文定位不到')
+})
+
+test('#236 宿主读侧：工具调用段投影进样本并直通可评分判定；旧格式文件为空数组', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'learnhub-corpus-read-'))
+  try {
+    mkdirSync(join(dir, '教练生长'), { recursive: true })
+    writeFileSync(join(dir, '教练生长', 'ok-2026-09-13T09-00-00-000Z-0001.md'), [
+      '---', 'ts: 2026-09-13T09:00:00.000Z', 'station: 教练生长', 'kind: loop', 'effort: fast',
+      'outcome: ok', 'truncated: false', 'duration_ms: 900', 'provider: deepseek-official',
+      'model: deepseek-v4-flash', 'prompt_chars: 120', 'reply_chars: 0', '---', '',
+      '## 提示词', '', '<!-- learnhub:prompt/v6 -->', '# 教练回合提示词', '',
+      '## 原始输出', '', '（空输出）', '',
+      '## 工具调用', '', JSON.stringify({ name: 'submit_batch', arguments: '{"ops":[]}' }), '',
+    ].join('\n'), 'utf8')
+    const samples = readCorpusSamples(dir, ['教练生长'])
+    assert.equal(samples.length, 1)
+    assert.deepEqual(samples[0]!.toolCalls, [{ name: 'submit_batch', arguments: '{"ops":[]}' }])
+    assert.equal(samples[0]!.output, '', '文本侧仍如实地为空')
+    assert.equal(isScoreable(samples[0]!), true, '读侧投影后即可评（#224 可评率回升的机械）')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 // ---------------------------------------------------------------- 两段式提示词（防锚定）

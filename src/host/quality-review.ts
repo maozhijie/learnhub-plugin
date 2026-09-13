@@ -23,6 +23,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import {
   AUDIT_AXES,
   DEFAULT_SAMPLE_QUOTA,
+  artifactTextOf,
   auditCriteriaOf,
   QUALITY_RUBRICS,
   QUALITY_REVIEW_STATION,
@@ -102,6 +103,7 @@ export function readCorpusSamples(corpusDir: string, stations: readonly string[]
         templateVersion: templateVersionOf(parsed.prompt),
         prompt: parsed.prompt,
         output: parsed.output,
+        ...(parsed.toolCalls.length ? { toolCalls: parsed.toolCalls } : {}),
       })
     }
   }
@@ -182,14 +184,14 @@ export async function runQualityReview(
           effort: REVIEW_EFFORT, station: QUALITY_REVIEW_STATION, kind: 'complete',
           temperature: REVIEW_TEMPERATURE, usageSink,
         })
-        const blind = parseDimensionScores(blindRaw, rubric, sample.output)
+        const blind = parseDimensionScores(blindRaw, rubric, artifactTextOf(sample))
         record.blind = blind.scores
         // 二期：对账（给生成提示词 + 元数据，逐维度确认或修正）
         const reconRaw = await llm(reviewReconcilePrompt(rubric, sample, blind.scores), undefined, {
           effort: REVIEW_EFFORT, station: QUALITY_REVIEW_STATION, kind: 'complete',
           temperature: REVIEW_TEMPERATURE, usageSink,
         })
-        const reconciled = parseDimensionScores(reconRaw, rubric, sample.output)
+        const reconciled = parseDimensionScores(reconRaw, rubric, artifactTextOf(sample))
         record.reconciled = reconciled.scores
         if (reconciled.contractNote) record.contractNote = reconciled.contractNote
       } catch (err) {

@@ -20,7 +20,7 @@ import type { AgentCallRecord } from '../src/engine/agent.ts'
 import { createHostRuntime } from '../src/host/runtime.ts'
 import type { HostRuntime } from '../src/host/runtime.ts'
 import { llmSeam, llmStreamSeam } from '../src/host/llm.ts'
-import { createCorpusCapture } from '../src/host/corpus.ts'
+import { createCorpusCapture, parseCorpusFile } from '../src/host/corpus.ts'
 import type { CorpusCapture } from '../src/host/corpus.ts'
 import { systemClock } from '../src/host/clock.ts'
 
@@ -174,5 +174,74 @@ test('装配：createHostRuntime 接好 rt.corpus 与双缝——无 llm 假 ctx
     assert.equal(rt.corpus.lastRef('种子起草'), `种子起草/${files[0]}`)
   } finally {
     rmSync(vault, { recursive: true, force: true })
+  }
+})
+
+// ---- 工具调用载荷（#236）：回路轮的产物常常整个在 arguments 里 ----
+
+const TOOL_CALL_STREAM = [
+  { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_1', name: 'submit_batch', arguments: '{"note":{"operator":"前进"}}' } },
+  { type: 'usage', usage: { inputTokens: 20, outputTokens: 8 } },
+  { type: 'finish', reason: { kind: 'stop' } },
+]
+
+test('#236 回路轮：文本为空而工具调用在场 → 载荷落「工具调用」段，端口返回形状不变（id 仍随行）', async () => {
+  const { cap, root } = makeCap()
+  try {
+    const seam = llmStreamSeam(fakeLlmCtx(TOOL_CALL_STREAM), cap.record)
+    const r = await seam({ messages: [{ role: 'user', text: '回路任务' }], station: '教练生长', effort: 'deep', tools: [] })
+    assert.deepEqual(r.toolCalls, [{ id: 'call_1', name: 'submit_batch', arguments: '{"note":{"operator":"前进"}}' }],
+      '端口返回形状不变（id 是回路回灌所需，归档不带）')
+    await cap.flush()
+    const body = corpusBody(root, '教练生长')
+    assert.match(body, /station: 教练生长/)
+    assert.match(body, /kind: loop/)
+    assert.match(body, /reply_chars: 0/, '文本侧确实为空')
+    assert.ok(body.includes(JSON.stringify({ name: 'submit_batch', arguments: '{"note":{"operator":"前进"}}' })), '载荷原文落档')
+    const parsed = parseCorpusFile(body)
+    assert.equal(parsed.output, '', '文本缺席（空输出占位还原为空串）')
+    assert.deepEqual(parsed.toolCalls, [{ name: 'submit_batch', arguments: '{"note":{"operator":"前进"}}' }], '读侧可取回载荷')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('#236 回路提示词段：上一轮请求的工具参数随历史进下一轮提示词（只记名 = 裁决载荷在语料里消失）', async () => {
+  const { cap, root } = makeCap()
+  const expectedCall = JSON.stringify({ name: 'read_graph', arguments: '{"node":"起点"}' })
+  let turn = 0
+  const scripted = {
+    llm: {
+      stream: () => ({
+        [Symbol.asyncIterator]: async function* () {
+          turn++
+          if (turn === 1) {
+            yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: 'call_1', name: 'read_graph', arguments: '{"node":"起点"}' } }
+          } else {
+            yield { type: 'text-delta', index: 0, text: '收束文本' }
+          }
+          yield { type: 'finish', reason: { kind: 'stop' } }
+        },
+      }),
+    },
+  } as unknown as Context
+  const agent = new AgentSeam({ complete: async () => '', stream: llmStreamSeam(scripted, cap.record) }, systemClock)
+  try {
+    const r = await agent.agentLoop({
+      station: '教练生长', prompt: '回路任务', tools: [{ name: 'read_graph', description: '只读工具', parameters: {} }],
+      runTool: async () => '图面：起点',
+    })
+    assert.equal(r.text, '收束文本')
+    assert.equal(r.toolRounds, 1)
+    await cap.flush()
+    const dir = join(root, 'state', '生成语料', '教练生长')
+    const bodies = readdirSync(dir).map(f => readFileSync(join(dir, f), 'utf8'))
+    assert.equal(bodies.length, 2, '两轮 = 两条捕获')
+    const second = bodies.find(b => b.includes('【工具结果'))!
+    assert.ok(second.includes(expectedCall), '上一轮的工具调用带参数原文进提示词段')
+    const first = bodies.find(b => b.includes('## 工具调用'))!
+    assert.ok(first.includes(expectedCall), '本轮调用自身另在「工具调用」段落档（产物不是只在历史里）')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 })

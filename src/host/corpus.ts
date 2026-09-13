@@ -9,6 +9,9 @@
  *   适配器当场标）或解析级失败（宿主 catch 点经 annotateLast 补标）；tolerated=
  *   解析容忍命中（大纲/拆节站经 outlineApply/splitApply 的 tolerated 返回通道补标）。
  *   补标同时把文件在 ok/bad 两桶间迁名，保证桶前缀与 outcome 恒一致。
+ * - 工具调用段（#236）：一条调用的实质产物可能整个在工具调用参数里（文本为空、工具调用
+ *   在场）——`## 工具调用` 段逐条落 `{name, arguments}`，arguments 与「原始输出」同级
+ *   原文留档（不清洗、不截断）。
  * - 环形：失败与容忍必存但封顶（bad 桶 200/站），成功环形 25/站（ok 桶）——桶编码
  *   进文件名前缀（ok-/bad-，余段=ISO 时间戳+站内序号），修剪是纯目录操作零内容读。
  * - 写盘异步 fire-and-forget、故障静默（观测面纪律：语料故障不挡生成主流程）；
@@ -44,6 +47,9 @@ export interface CorpusRecordInput {
   model: string
   prompt: string
   output: string
+  /** 模型请求的工具调用（#236）：以工具调用承载实质产物的站（教练回合裁决 op、罗盘
+   *  画线、判卷之外的回路站）文本常为空——产物就在 arguments 原文里，不落档即空壳。 */
+  toolCalls?: Array<{ name: string; arguments: string }>
 }
 
 /** 补标补丁：改判 outcome（+失败码）。 */
@@ -122,20 +128,59 @@ export function parseCorpusFrontmatter(body: string): Record<string, string> {
  * 不是产物内容；评审器据此判「不可评分」，见 engine isScoreable）。 */
 export const EMPTY_OUTPUT_PLACEHOLDER = '（空输出）'
 
+/** 「工具调用」段标记（#236）：产物整个在工具调用参数里时，受评对象就是这一段——
+ * 读侧与质量评审的合并视图（引擎 artifactTextOf）都按它取载荷。 */
+export const TOOL_CALLS_MARKER = '## 工具调用'
+
+/** 工具调用段单行解析（一行一条 JSON）。坏行不静默丢：以「（未解析）」占位保留原文，
+ * 评审面照样看得见模型产出过什么——一条坏行不该让整件载荷从读侧消失。 */
+function parseToolCallLine(line: string): { name: string; arguments: string } | null {
+  const t = line.trim()
+  if (!t) return null
+  try {
+    const v = JSON.parse(t) as { name?: unknown; arguments?: unknown } | null
+    if (v && typeof v === 'object' && typeof v.name === 'string') {
+      return { name: v.name, arguments: typeof v.arguments === 'string' ? v.arguments : JSON.stringify(v.arguments ?? '') }
+    }
+  } catch { /* 落回原文占位 */ }
+  return { name: '（未解析）', arguments: t }
+}
+
 /** 语料文件全文解析：frontmatter + `## 提示词` 段 + `## 原始输出` 段。**提示词与原始输出
  * 的原文原样返回**（质量评审的一期受评对象就是原始输出原文、二期对账材料是提示词原文；
  * 任何清洗都会让「证据引用可否定位」的核对失真）。段标记缺席（非本格式文件）时对应段返回
  * 空串——调用方按空串走「不可评/材料缺席」，不猜内容。 */
-export function parseCorpusFile(body: string): { frontmatter: Record<string, string>; prompt: string; output: string } {
+export function parseCorpusFile(body: string): {
+  frontmatter: Record<string, string>
+  prompt: string
+  output: string
+  /** 工具调用载荷（#236；段缺席 = 空数组——旧语料不加段也照样读得出）。 */
+  toolCalls: Array<{ name: string; arguments: string }>
+} {
   const frontmatter = parseCorpusFrontmatter(body)
   const lines = normalizeNewlines(body).split('\n')
   const start = (marker: string): number => lines.findIndex(l => l.trim() === marker)
   const promptAt = start('## 提示词')
   const outputAt = start('## 原始输出')
-  const prompt = promptAt >= 0 ? lines.slice(promptAt + 1, outputAt > promptAt ? outputAt : undefined).join('\n') : ''
-  const raw = outputAt >= 0 ? lines.slice(outputAt + 1).join('\n') : ''
+  const toolCallsAt = start(TOOL_CALLS_MARKER)
+  // 段界 = 该段起点之后的最近一个段标记（新增的「工具调用」段必须在切分里算数：
+  // 否则它会整个被「原始输出」吞掉，工具调用载荷静默变成产物文本的一部分）
+  const endOf = (from: number): number | undefined => {
+    const next = [outputAt, toolCallsAt].filter(i => i > from)
+    return next.length ? Math.min(...next) : undefined
+  }
+  const prompt = promptAt >= 0 ? lines.slice(promptAt + 1, endOf(promptAt)).join('\n') : ''
+  const raw = outputAt >= 0 ? lines.slice(outputAt + 1, endOf(outputAt)).join('\n') : ''
   const output = raw.trim() === EMPTY_OUTPUT_PLACEHOLDER ? '' : raw
-  return { frontmatter, prompt: prompt.replace(/^\n+|\n+$/g, ''), output: output.replace(/^\n+|\n+$/g, '') }
+  const toolCalls = toolCallsAt >= 0
+    ? lines.slice(toolCallsAt + 1).map(parseToolCallLine).filter((c): c is { name: string; arguments: string } => c !== null)
+    : []
+  return {
+    frontmatter,
+    prompt: prompt.replace(/^\n+|\n+$/g, ''),
+    output: output.replace(/^\n+|\n+$/g, ''),
+    toolCalls,
+  }
 }
 
 export function createCorpusCapture(corpusDir: string): CorpusCapture {
@@ -208,6 +253,11 @@ export function createCorpusCapture(corpusDir: string): CorpusCapture {
       '',
       input.output || '（空输出）',
       '',
+      // 工具调用段只在有载荷时出现（#236）：无调用的站文件形态与 #213 逐字一致，
+      // 读侧「段缺席 = 空数组」承接旧语料
+      ...(input.toolCalls?.length
+        ? [TOOL_CALLS_MARKER, '', ...input.toolCalls.map(c => JSON.stringify({ name: c.name, arguments: c.arguments })), '']
+        : []),
     ].join('\n')
   }
 

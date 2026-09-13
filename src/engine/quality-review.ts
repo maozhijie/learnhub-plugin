@@ -78,8 +78,11 @@ export interface ReviewSample {
   templateVersion: number | null
   /** 渲染后提示词（二期对账材料）。 */
   prompt: string
-  /** 原始输出（一期受评对象；空输出 = 不可评，见 isScoreable）。 */
+  /** 原始输出（一期受评对象的一半；空输出且无工具调用 = 不可评，见 isScoreable）。 */
   output: string
+  /** 工具调用载荷（#236）：回路站的产物常整个在这里（arguments 原文）——与 output
+   *  合成受评对象（见 artifactTextOf），两者都为空的件才不可评。 */
+  toolCalls?: Array<{ name: string; arguments: string }>
 }
 
 /** 模板版本提取：渲染后提示词里的版本标记（`<!-- learnhub:prompt/vN -->` 随模板文本进
@@ -92,10 +95,21 @@ export function templateVersionOf(prompt: string): number | null {
   return m ? Number(m[1]) : null
 }
 
-/** 可评分件：产物原文非空。失败件若输出为空（调用级失败：流错误/超时）**不作评分**——
- * 它的审计价值是失败本身（失败码 + 语料），报告单列未评分件，零模型调用。 */
+/** 受评对象原文（#236）：文本 + 工具调用载荷的**合并视图**。以工具调用承载实质产物的
+ * 站（教练回合裁决 op、罗盘画线）文本常为空——只看 output 会把整轮的真实产物判成
+ * 「空壳不可评」；证据定位（evidenceLocated）与两期提示词都以此为产物原文。 */
+export function artifactTextOf(sample: ReviewSample): string {
+  const parts: string[] = []
+  if (sample.output.trim()) parts.push(sample.output.trim())
+  for (const c of sample.toolCalls ?? []) parts.push(`[工具调用 ${c.name}]\n${c.arguments}`)
+  return parts.join('\n\n')
+}
+
+/** 可评分件：受评对象（文本 + 工具调用载荷）非空。失败件若两者皆空（调用级失败：流错误/
+ * 超时）**不作评分**——它的审计价值是失败本身（失败码 + 语料），报告单列未评分件，零模型
+ * 调用。文本为空而工具调用在场的件**可评**（产物在参数里，不是没有产物）。 */
 export function isScoreable(sample: ReviewSample): boolean {
-  return sample.output.trim().length > 0
+  return artifactTextOf(sample).length > 0
 }
 
 // ---------------------------------------------------------------- 抽样
@@ -192,12 +206,13 @@ function rubricBlock(rubric: QualityRubric): string {
   ].join('\n')
 }
 
-/** 产物原文块（围栏不带语言标记：产物形态因站而异，标错语言反而误导）。**不写语料 ref**：
- * ref 形如 `<站>/<ok|bad>-<时间戳>…`，站名与桶前缀（= outcome）都在里面——一期盲评印出来
+/** 产物原文块（围栏不带语言标记：产物形态因站而异，标错语言反而误导）。产物 = 合并视图
+ * （文本 + 工具调用载荷，见 artifactTextOf）。**不写语料 ref**：ref 形如
+ * `<站>/<ok|bad>-<时间戳>…`，站名与桶前缀（= outcome）都在里面——一期盲评印出来
  * 就等于把锚定源交给评审（code-review 抓出：ADR 承诺「站/档/outcome 一律不给」，实现却随
  * ref 一起给了）。语料锚只在二期与报告里出现。 */
 function artifactBlock(sample: ReviewSample): string {
-  return ['## 被评产物原文', '', '```', sample.output.trim(), '```'].join('\n')
+  return ['## 被评产物原文', '', '```', artifactTextOf(sample), '```'].join('\n')
 }
 
 /** 一期·盲评提示词：只给量规与产物原文——生成提示词、站名/档位/outcome 等元数据一概不给

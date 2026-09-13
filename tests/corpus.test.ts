@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { mkdtempSync, readFileSync, rmSync, existsSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createCorpusCapture } from '../src/host/corpus.ts'
+import { createCorpusCapture, parseCorpusFile, TOOL_CALLS_MARKER } from '../src/host/corpus.ts'
 import type { CorpusRecordInput } from '../src/host/corpus.ts'
 
 function tmpCenter(): string {
@@ -173,4 +173,53 @@ test('语料捕获：lastRef 同步登记（写盘未 flush 时已可取）；�
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+})
+
+// ---- 工具调用载荷（#236）：以工具调用承载实质产物的站在语料里不得成空壳 ----
+
+test('语料捕获：工具调用段——文本为空而载荷在场时原文逐条落档，读侧按段还原（#236）', async () => {
+  const root = tmpCenter()
+  try {
+    const args = '{"note":{"operator":"前进"},"ops":[{"add_node":"把一个数字存进变量"}]}'
+    const c = createCorpusCapture(join(root, 'state', '生成语料'))
+    c.record(base('教练生长', {
+      kind: 'loop',
+      output: '',
+      toolCalls: [{ name: 'submit_batch', arguments: args }, { name: 'read_graph', arguments: '{}' }],
+    }))
+    c.record(base('教练生长', { kind: 'loop', output: '这一轮直接给了文本产出' }))
+    await c.flush()
+    const dir = join(root, 'state', '生成语料', '教练生长')
+    const bodies = readdirSync(dir).sort().map(f => readFileSync(join(dir, f), 'utf8'))
+    const withCalls = bodies.find(b => b.includes(TOOL_CALLS_MARKER))!
+    assert.ok(withCalls.includes('reply_chars: 0'), '文本侧确实为空（frontmatter 读数如实）')
+    assert.ok(withCalls.includes(JSON.stringify({ name: 'submit_batch', arguments: args })), 'arguments 原文进档（不清洗）')
+    const parsed = parseCorpusFile(withCalls)
+    assert.equal(parsed.output, '', '（空输出）占位还原为空串——载荷不在输出段里')
+    assert.deepEqual(parsed.toolCalls, [
+      { name: 'submit_batch', arguments: args },
+      { name: 'read_graph', arguments: '{}' },
+    ], '逐条 JSON 原样回读')
+    // 无工具调用的件形态与 #213 逐字同（段缺席），读侧空数组
+    const textOnly = bodies.find(b => !b.includes(TOOL_CALLS_MARKER))!
+    assert.deepEqual(parseCorpusFile(textOnly).toolCalls, [])
+    assert.equal(parseCorpusFile(textOnly).output, '这一轮直接给了文本产出')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('语料读侧：无工具调用段的旧格式照读；段内坏行以占位保留原文不静默丢（#236 兼容面）', () => {
+  const legacy = ['---', 'station: 种子起草', 'outcome: ok', '---', '', '## 提示词', '', 'P', '', '## 原始输出', '', 'O', ''].join('\n')
+  assert.deepEqual(parseCorpusFile(legacy).toolCalls, [], '段缺席 = 空数组（历史语料照读）')
+  assert.equal(parseCorpusFile(legacy).output, 'O', '旧格式的输出段不受新增段影响')
+  const broken = [
+    '---', 'station: 教练生长', '---', '',
+    '## 原始输出', '', '（空输出）', '',
+    TOOL_CALLS_MARKER, '', '{"name":"a","arguments":"{}"}', '这不是 JSON', '',
+  ].join('\n')
+  const parsed = parseCorpusFile(broken)
+  assert.deepEqual(parsed.toolCalls[0], { name: 'a', arguments: '{}' })
+  assert.equal(parsed.toolCalls.length, 2, '坏行不被静默丢')
+  assert.deepEqual(parsed.toolCalls[1], { name: '（未解析）', arguments: '这不是 JSON' }, '占位保留原文')
 })

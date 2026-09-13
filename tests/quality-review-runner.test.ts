@@ -11,7 +11,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -177,4 +177,29 @@ test('评审应答不可解析：记「评审失败」而非低分（报告单�
   assert.match(result.report.reviews[0]!.failure ?? '', /找不到 JSON/)
   assert.deepEqual(result.report.stats, [], '失败件不进分数分布（评审失败 ≠ 产物差）')
   assert.ok(result.markdown.includes('评审失败件'), '失败件在报告里单列')
+})
+
+test('#236 工具调用件端到端：文本为空而载荷在参数里 → 可评（合并视图进两期提示词，不列未评分件）', async () => {
+  const vault = tempVault(false)
+  const corpus = join(vault, '学习中心', 'state', '生成语料')
+  mkdirSync(join(corpus, '教练生长'), { recursive: true })
+  writeFileSync(join(corpus, '教练生长', 'ok-2026-09-13T08-00-00-000Z-0001.md'), [
+    '---', 'ts: 2026-09-13T08:00:00.000Z', 'station: 教练生长', 'kind: loop', 'effort: fast',
+    'outcome: ok', 'truncated: false', 'duration_ms: 900', 'provider: deepseek-official',
+    'model: deepseek-v4-flash', 'prompt_chars: 120', 'reply_chars: 0', '---', '',
+    '## 提示词', '', '<!-- learnhub:prompt/v6 -->', '# 教练回合提示词', '',
+    '## 原始输出', '', '（空输出）', '',
+    '## 工具调用', '', JSON.stringify({ name: 'submit_batch', arguments: '{"note":{"operator":"前进"}}' }), '',
+  ].join('\n'), 'utf8')
+  const { ctx, prompts } = stubCtx()
+  const rt = runtimeOf(ctx, vault)
+  const result = await runQualityReview(ctx, rt, {
+    repeats: 1, stations: ['教练生长'], badQuota: 0, okQuota: 5, corpusDir: corpus,
+  })
+  assert.equal(result.report.unscoreable.length, 0, '工具调用件不再落进未评分件（#224 的教练轴空壳）')
+  assert.equal(result.report.reviews.length, 1, '逐件两期评审照跑')
+  assert.ok(prompts[0]!.includes('[工具调用 submit_batch]'), '一期受评对象 = 文本 + 工具调用载荷合并视图')
+  assert.ok(prompts[0]!.includes('"operator":"前进"'), 'arguments 原文进受评对象')
+  assert.ok(!prompts[0]!.includes('教练回合提示词（用户可编辑'), '一期仍不给生成提示词（防锚定纪律不动）')
+  assert.ok(result.report.stats.length > 0, '照常进分数分布')
 })

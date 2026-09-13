@@ -9,7 +9,8 @@
  * 捕获（#213 / ADR-0060）：所有真模型调用（补全 + 工具回路 + 教练讲解直调）在缝出口
  * 落语料——成功记 ok（截断/usage 随行），调用级失败记 failed+稳定错误码后原样上抛；
  * 解析级失败/容忍由宿主 catch 点经 capture.annotateLast 补标。站标签（station/kind）
- * 来自端口 opts（AgentSeam 贯通）或工厂闭包（单站注入点）。
+ * 来自端口 opts（AgentSeam 贯通）或工厂闭包（单站注入点）。工具调用载荷随记录落档
+ * （#236 / ADR-0073）：回路轮的产物常整个在 arguments 里，文本侧看不到。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import {
@@ -20,7 +21,7 @@ import {
 } from '@deepseek-ai/dsh-llm'
 import type { Message, TokenUsage, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
 import { stripFences } from '../engine/index.ts'
-import type { LlmCallKind, LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmTokenUsage } from '../engine/index.ts'
+import type { LlmCallKind, LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmTokenUsage, LlmToolCall } from '../engine/index.ts'
 import type { CorpusRecordInput } from './corpus.ts'
 
 /** 语料捕获缝（适配器只消 record 一面；annotate/lastRef 由宿主失败处理经 rt.corpus 用）。 */
@@ -100,8 +101,16 @@ export async function llmComplete(ctx: Context, prompt: string, system?: string,
 
 /** 缝出口捕获（#213）：成功记 ok（truncated/usage 随行，usage 先行回调观测面），
  * 抛错记 failed + 稳定错误码（dsh failure.code / IDLE_TIMEOUT 等，无码归 LLM_ERROR）
- * 后原样上抛。捕获故障不挡调用（corpus.record 内部吞错）。 */
-async function withCapture<R extends { text: string; truncated: boolean; usage?: LlmTokenUsage }>(
+ * 后原样上抛。捕获故障不挡调用（corpus.record 内部吞错）。
+ * 工具调用随行（#236）：R 的 toolCalls 是回路轮的实际产物——文本为空而工具调用在场
+ * 的调用（教练裁决 op、罗盘画线）靠它才在语料里可见；调用 id 是会话内标识、不进档，
+ * 归档只留 {name, arguments}。 */
+async function withCapture<R extends {
+  text: string
+  truncated: boolean
+  usage?: LlmTokenUsage
+  toolCalls?: LlmToolCall[]
+}>(
   capture: CorpusSink | undefined,
   spec: {
     station?: string
@@ -129,6 +138,7 @@ async function withCapture<R extends { text: string; truncated: boolean; usage?:
       model: llmCfg.model,
       prompt: spec.prompt(),
       output: r.text,
+      ...(r.toolCalls?.length ? { toolCalls: r.toolCalls.map(c => ({ name: c.name, arguments: c.arguments })) } : {}),
     })
     return r
   } catch (err) {
@@ -207,13 +217,17 @@ export function llmStreamSeam(ctx: Context, capture?: CorpusSink): LlmStream {
   }
 }
 
-/** 回路历史的可读渲染（语料 frontmatter 之下的提示词段）：逐轮标注角色，工具调用
- * 只记名不展开参数全文。 */
+/** 回路历史的可读渲染（语料 frontmatter 之下的提示词段）：逐轮标注角色，工具调用带
+ * 参数原文逐条（#236：参数就是回路站的产物——只记名会让「模型要了什么」在语料里消失，
+ * 后续轮次的提示词段因此读不出上一轮的裁决载荷）。 */
 function renderLoopPrompt(turns: LlmLoopTurn[]): string {
   return turns.map(t => {
     if (t.role === 'user') return `【任务】\n${t.text}`
     if (t.role === 'assistant') {
-      return `【助手】\n${t.text}${t.toolCalls?.length ? `\n（请求工具：${t.toolCalls.map(c => c.name).join('、')}）` : ''}`
+      const calls = t.toolCalls?.length
+        ? `\n（请求工具：\n${t.toolCalls.map(c => JSON.stringify({ name: c.name, arguments: c.arguments })).join('\n')}）`
+        : ''
+      return `【助手】\n${t.text}${calls}`
     }
     return `【工具结果${t.isError ? '·失败' : ''}】\n${t.text}`
   }).join('\n\n')

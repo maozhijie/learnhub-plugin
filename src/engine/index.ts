@@ -105,7 +105,7 @@ export {
   DEFAULT_SAMPLE_QUOTA, QUALITY_REVIEW_SYSTEM, templateVersionOf, isScoreable, equidistantIndices,
   sampleQualitySamples, rubricForStation, rubricStations, dimensionNameOf, reviewBlindPrompt,
   reviewReconcilePrompt, parseReviewDoc, parseDimensionScores, evidenceLocated, finalScores,
-  scoreStats, lowScoreItems, versionComparison, stabilityOf, canonicalReviews,
+  scoreStats, lowScoreItems, versionComparison, stabilityOf, canonicalReviews, artifactTextOf,
 } from './quality-review.ts'
 export type {
   ReviewSample, SampleQuota, ReviewScore, DimensionScore, SampleReview, DimensionStat, LowScoreItem,
