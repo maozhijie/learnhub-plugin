@@ -46,7 +46,7 @@ const OK_STREAM = [
 /** 临时中心目录 + 捕获器（root 一并交还，测试收尾删）。 */
 function makeCap(): { cap: CorpusCapture; root: string } {
   const root = mkdtempSync(join(tmpdir(), 'learnhub-capture-'))
-  return { cap: createCorpusCapture(root), root }
+  return { cap: createCorpusCapture(join(root, 'state', '生成语料')), root }
 }
 
 function corpusBody(root: string, station: string): string {

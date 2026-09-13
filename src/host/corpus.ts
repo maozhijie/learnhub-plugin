@@ -64,8 +64,33 @@ export interface CorpusCapture {
   flush(): Promise<void>
 }
 
-export function createCorpusCapture(centerRoot: string): CorpusCapture {
-  const root = `${centerRoot.replace(/[/\\]+$/, '')}/state/生成语料`
+/** 语料站名词表（#213 受控词表单一出处，ADR-0060）：PROMPT_KINDS 生成站 ∪ 判卷/讲解
+ * 等交互站 ∪ AgentSeam 六策略站。接线处（缝工厂参/管线 opts/补标映射）一律引用本表，
+ * 站内对齐（调用点站名 ↔ annotateLast 站名）靠共享常量而非字面相等。 */
+export const STATIONS = {
+  outline: '课程大纲',
+  section: '课程节生成',
+  split: '课程节拆分',
+  quiz: '题目生成',
+  noteQuiz: '笔记出题',
+  errorCards: '错误对比卡',
+  receipt: '回执评审',
+  judge: '判卷',
+  dispute: '申诉判卷',
+  explainFeedback: '讲解反馈',
+  selfNote: '自注反馈',
+  tutor: '老师辅导',
+  explainBack: '讲给我听',
+  seed: '种子起草',
+  growth: '教练生长',
+  compass: '罗盘',
+  decompile: '目标反编译',
+  plan: '计划草案',
+  milestone: '里程碑草案',
+} as const
+
+export function createCorpusCapture(corpusDir: string): CorpusCapture {
+  const root = corpusDir.replace(/[/\\]+$/, '')
   const lastByName = new Map<string, string>()
   const seqByStation = new Map<string, number>()
   const inflight = new Set<Promise<unknown>>()
@@ -165,7 +190,8 @@ export function createCorpusCapture(centerRoot: string): CorpusCapture {
       const seq = (seqByStation.get(input.station) ?? 0) + 1
       seqByStation.set(input.station, seq)
       const bucket = input.outcome === 'ok' ? 'ok' : 'bad'
-      const name = `${bucket}-${input.ts.replace(/[:.]/g, '-')}-${seq}.md`
+      // seq 定宽（同毫秒多条时字典序仍是时间序+序数序，修剪不误删）
+      const name = `${bucket}-${input.ts.replace(/[:.]/g, '-')}-${String(seq).padStart(4, '0')}.md`
       lastByName.set(input.station, name)
       enqueue(input.station, async () => {
         await mkdir(`${root}/${input.station}`, { recursive: true })

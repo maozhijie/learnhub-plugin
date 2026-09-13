@@ -28,7 +28,7 @@ function base(station: string, patch: Partial<CorpusRecordInput> = {}): CorpusRe
 test('语料捕获：ok 记录落盘，frontmatter 字段完整，正文两段', async () => {
   const root = tmpCenter()
   try {
-    const c = createCorpusCapture(root)
+    const c = createCorpusCapture(join(root, 'state', '生成语料'))
     c.record(base('题目生成', {
       effort: 'fast',
       usage: { inputTokens: 123, outputTokens: 456, reasoningTokens: 78 },
@@ -62,7 +62,7 @@ test('语料捕获：ok 记录落盘，frontmatter 字段完整，正文两段',
 test('语料捕获：failed 记录进 bad 桶并带失败码；usage 缺省不出 usage 行', async () => {
   const root = tmpCenter()
   try {
-    const c = createCorpusCapture(root)
+    const c = createCorpusCapture(join(root, 'state', '生成语料'))
     c.record(base('判卷', { outcome: 'failed', code: 'AUTH' }))
     await c.flush()
     const dir = join(root, 'state', '生成语料', '判卷')
@@ -81,7 +81,7 @@ test('语料捕获：failed 记录进 bad 桶并带失败码；usage 缺省不�
 test('语料环形：成功桶封顶 25、失败桶封顶 200，删最旧', async () => {
   const root = tmpCenter()
   try {
-    const c = createCorpusCapture(root)
+    const c = createCorpusCapture(join(root, 'state', '生成语料'))
     for (let i = 0; i < 27; i++) {
       c.record(base('出题站', { ts: new Date(Date.UTC(2026, 8, 13, 12, 0, 0, i).valueOf() + i * 1000).toISOString(), output: `输出${i}` }))
     }
@@ -106,7 +106,7 @@ test('语料环形：成功桶封顶 25、失败桶封顶 200，删最旧', asyn
 test('语料补标：annotateLast 把 ok 改判 failed 并迁桶，返回新 ref；lastRef 跟随', async () => {
   const root = tmpCenter()
   try {
-    const c = createCorpusCapture(root)
+    const c = createCorpusCapture(join(root, 'state', '生成语料'))
     c.record(base('课程大纲'))
     const refBefore = c.lastRef('课程大纲')
     assert.ok(refBefore)
@@ -128,7 +128,7 @@ test('语料补标：annotateLast 把 ok 改判 failed 并迁桶，返回新 ref
 test('语料补标：该站无捕获时 annotateLast 静默返回 undefined；tolerated 同迁 bad 桶', async () => {
   const root = tmpCenter()
   try {
-    const c = createCorpusCapture(root)
+    const c = createCorpusCapture(join(root, 'state', '生成语料'))
     assert.equal(c.annotateLast('没这站', { outcome: 'failed', code: 'X' }), undefined)
     c.record(base('课程节拆分'))
     const ref = c.annotateLast('课程节拆分', { outcome: 'tolerated' })
@@ -145,7 +145,7 @@ test('语料补标：该站无捕获时 annotateLast 静默返回 undefined；to
 test('语料补标：annotate 按旧 ref 补标（文件已被 annotateLast 迁名后旧名静默跳过）', async () => {
   const root = tmpCenter()
   try {
-    const c = createCorpusCapture(root)
+    const c = createCorpusCapture(join(root, 'state', '生成语料'))
     c.record(base('种子起草'))
     const oldRef = c.lastRef('种子起草')!
     c.annotate(oldRef, { outcome: 'failed', code: 'SEED_GATE_FAILED' })
@@ -164,7 +164,7 @@ test('语料补标：annotate 按旧 ref 补标（文件已被 annotateLast 迁�
 test('语料捕获：lastRef 同步登记（写盘未 flush 时已可取）；空目录不建站目录', async () => {
   const root = tmpCenter()
   try {
-    const c = createCorpusCapture(root)
+    const c = createCorpusCapture(join(root, 'state', '生成语料'))
     c.record(base('里程碑草案', { kind: 'repair' }))
     assert.ok(c.lastRef('里程碑草案'))
     assert.ok(!existsSync(join(root, 'state', '生成语料', '里程碑草案')))

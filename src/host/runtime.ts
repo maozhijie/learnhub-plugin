@@ -142,7 +142,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
   const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng, fs: nodeVaultFs })
   // —— 生成语料捕获器（#213 / ADR-0060）：缝出口全量落盘的 sink，构造先于 agent 缝
   //（llmSeam/llmStreamSeam 装配时接它）。写盘异步 fire-and-forget、故障静默。 ——
-  const corpus = createCorpusCapture(center)
+  const corpus = createCorpusCapture(engine.paths.corpusDir)
   // —— 统一 agent 缝装配（#162）：端口适配住 host/llm.ts 唯一适配文件，投递层只构造
   // 与注入；调用日志沿缝贯通、注入侧可观测（console + 运行日志）。 ——
   let rtRef: HostRuntime | undefined

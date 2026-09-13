@@ -28,6 +28,7 @@ import {
 import { contentEffort, llmCfg, llmSeam, llmSeamStripped } from './llm.ts'
 import { runLog } from './runtime.ts'
 import type { GenJob, HostRuntime } from './runtime.ts'
+import { STATIONS } from './corpus.ts'
 
 /** 稳定失败码提取（#213 语料补标口径）：有 code 用 code，其余归 ERROR。 */
 function errorCodeOf(err: unknown): string {
@@ -54,9 +55,9 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
   effort?: LlmEffort
 }) {
   try {
-    return await rt.engine.bank2.questionGenerate(course, node, count, async prompt => complete(prompt, undefined, { effort: opts?.effort, station: '题目生成' }), opts)
+    return await rt.engine.bank2.questionGenerate(course, node, count, async prompt => complete(prompt, undefined, { effort: opts?.effort, station: STATIONS.quiz }), opts)
   } catch (err) {
-    failCorpus(rt, '题目生成', err)
+    failCorpus(rt, STATIONS.quiz, err)
     throw err
   }
 }
@@ -122,7 +123,7 @@ async function applySectionWithRepair(
   },
 ): Promise<{ version: number; title: string; hints: string[]; md: string }> {
   const cancelled = () => opts?.isCancelled?.() ?? false
-  const first = await complete(sectionPrompt(tpl, pack, s, opts?.coherence), undefined, { effort: contentEffort(opts?.highTier === true), station: '课程节生成' })
+  const first = await complete(sectionPrompt(tpl, pack, s, opts?.coherence), undefined, { effort: contentEffort(opts?.highTier === true), station: STATIONS.section })
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   let gateReport = ''
   let current = first
@@ -143,7 +144,7 @@ async function applySectionWithRepair(
   // fail-safe 回整节修复）；替换块数量对不上或拼接失败同样回退。
   const plan = Content.blockPatchPlan(first, gateReport)
   if (plan) {
-    const patched = await complete(Content.blockPatchPrompt(plan), undefined, { effort: contentEffort(opts?.highTier === true), station: '课程节生成' })
+    const patched = await complete(Content.blockPatchPrompt(plan), undefined, { effort: contentEffort(opts?.highTier === true), station: STATIONS.section, kind: 'repair' })
     if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
     const merged = Content.applyBlockPatch(first, plan, Content.extractFencedBlocks(patched))
     if (merged !== null) {
@@ -161,7 +162,7 @@ async function applySectionWithRepair(
   // 初跑原文会与合并清单的定位错位）；长度 finding 由 sectionRepairPrompt 附压缩目标。
   const repaired = await complete(
     Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s, opts?.coherence), current, gateReport, { wordBudget }),
-    undefined, { effort: 'deep', station: '课程节生成' },
+    undefined, { effort: 'deep', station: STATIONS.section, kind: 'repair' },
   )
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   try {
@@ -193,11 +194,11 @@ async function splitOverflowSection(
   const pack = await rt.engine.content2.contentPack(course, node, { omitDeliverables: true })
   const yaml = await complete(
     `${tpl}\n\n## 待拆分的节\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}\n\n---\n\n${pack}`,
-    undefined, { effort: 'deep', station: '课程节拆分' },
+    undefined, { effort: 'deep', station: STATIONS.split },
   )
   const r = await rt.engine.content2.contentSplit(course, node, s.id, yaml)
   // 拆分 YAML 解析容忍命中（#213）：拆节站当次捕获补标 tolerated（必存语义）
-  if (r.tolerated.length) rt.corpus.annotateLast('课程节拆分', { outcome: 'tolerated' })
+  if (r.tolerated.length) rt.corpus.annotateLast(STATIONS.split, { outcome: 'tolerated' })
 }
 
 // ---- 全局生成队列：任意入口入队（面板/agent/整课链），同一时刻只执行一个节点管线 ----
@@ -525,7 +526,8 @@ export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: stri
 
 /** 图域任务 phase → 语料站名（#213 失败补标映射；growth 在 generateGrowthJob 单列）。 */
 const GRAPH_JOB_STATIONS: Partial<Record<GenJobPhase, string>> = {
-  seed: '种子起草', compass: '罗盘', decompile: '目标反编译', plan: '计划草案', milestone: '里程碑草案',
+  seed: STATIONS.seed, compass: STATIONS.compass, decompile: STATIONS.decompile,
+  plan: STATIONS.plan, milestone: STATIONS.milestone,
 }
 
 /** 图域任务执行（面板下发）：seed/compass/decompile/plan/milestone——引擎 LLM 方法一次受理，
@@ -583,9 +585,9 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
     }
   } catch (err) {
     const station = job.phase ? GRAPH_JOB_STATIONS[job.phase] : undefined
-    if (station) failCorpus(rt, station, err)
+    const corpusRef = station ? failCorpus(rt, station, err) : undefined
     job.status = contentFailureStatus(job.status)
-    job.message = err instanceof Error ? err.message : String(err)
+    job.message = (err instanceof Error ? err.message : String(err)) + (corpusRef ? `｜语料 生成语料/${corpusRef}` : '')
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, `${job.course}/${job.node}`, job.status)
@@ -635,9 +637,9 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       if (a.ready_unbuilt.length) job.message += `；正文生成已入队 ${a.ready_unbuilt.length} 节`
     }
   } catch (err) {
-    failCorpus(rt, '教练生长', err)
+    const corpusRef = failCorpus(rt, STATIONS.growth, err)
     job.status = contentFailureStatus(job.status)
-    job.message = err instanceof Error ? err.message : String(err)
+    job.message = (err instanceof Error ? err.message : String(err)) + (corpusRef ? `｜语料 生成语料/${corpusRef}` : '')
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
@@ -731,8 +733,9 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
     job.status = 'done'
     job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}`
   } catch (err) {
+    const corpusRef = failCorpus(rt, STATIONS.quiz, err)  // generateQuiz 内已补标，此处取 ref 进失败详情
     job.status = contentFailureStatus(job.status)
-    job.message = err instanceof Error ? err.message : String(err)
+    job.message = (err instanceof Error ? err.message : String(err)) + (corpusRef ? `｜语料 生成语料/${corpusRef}` : '')
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
@@ -789,25 +792,29 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
       // 大纲失败恰一轮回灌重产（outlineRepairFeedback 裁决：护栏/形状/解析可修，其余
       // 原样上抛）；重产仍败直接冒泡置 failed。两轮解析失败都补标语料（大纲站，#213），
       // 容忍命中（剥注释重试过解析）补标 tolerated——失败/容忍样本必存。
-      let outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${packOutline}`, undefined, { effort: outlineEffort, station: '课程大纲' })
+      let outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${packOutline}`, undefined, { effort: outlineEffort, station: STATIONS.outline })
       if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
       const applyOutline = async (yaml: string) => {
         const applied = await rt.engine.content2.contentOutline(course, node, yaml)
-        if (applied.tolerated.length) rt.corpus.annotateLast('课程大纲', { outcome: 'tolerated' })
+        if (applied.tolerated.length) rt.corpus.annotateLast(STATIONS.outline, { outcome: 'tolerated' })
       }
       try {
         await applyOutline(outlineYaml)
       } catch (err) {
         if (job.status === 'cancelling') throw err
         const feedback = outlineRepairFeedback(err)
-        failCorpus(rt, '课程大纲', err)
-        if (!feedback) throw err
-        outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${packOutline}\n\n${feedback}`, undefined, { effort: outlineEffort, station: '课程大纲' })
+        const outlineRef = failCorpus(rt, STATIONS.outline, err)
+        if (!feedback) {
+          if (outlineRef && err instanceof Error) err.message += `｜语料 生成语料/${outlineRef}`
+          throw err
+        }
+        outlineYaml = await complete(`${outlineTpl}\n\n---\n\n${packOutline}\n\n${feedback}`, undefined, { effort: outlineEffort, station: STATIONS.outline, kind: 'repair' })
         if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
         try {
           await applyOutline(outlineYaml)
         } catch (repairErr) {
-          failCorpus(rt, '课程大纲', repairErr)
+          const outlineRef = failCorpus(rt, STATIONS.outline, repairErr)
+          if (outlineRef && repairErr instanceof Error) repairErr.message += `｜语料 生成语料/${outlineRef}`
           throw repairErr
         }
       }
@@ -857,17 +864,17 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
                 job.progress = { ...job.progress!, done: job.progress!.done + 1 }
               } catch (subErr) {
                 if ((job.status as GenJobStatus) === 'cancelling') throw subErr
-                const corpusRef = failCorpus(rt, '课程节生成', subErr)
+                const corpusRef = failCorpus(rt, STATIONS.section, subErr)
                 failures.push({ ...sectionFailure(subErr, sub), ...(corpusRef ? { corpusRef } : {}) })
               }
             }
           } catch (splitErr) {
             if ((job.status as GenJobStatus) === 'cancelling') throw splitErr
-            const corpusRef = failCorpus(rt, '课程节拆分', splitErr)
+            const corpusRef = failCorpus(rt, STATIONS.split, splitErr)
             failures.push({ ...sectionFailure(splitErr, s), ...(corpusRef ? { corpusRef } : {}) })
           }
         } else {
-          const corpusRef = failCorpus(rt, '课程节生成', err)
+          const corpusRef = failCorpus(rt, STATIONS.section, err)
           failures.push({ ...sectionFailure(err, s), ...(corpusRef ? { corpusRef } : {}) })
         }
       }
@@ -909,7 +916,7 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   persistGenJobs(rt)
   const quizEffort = contentEffort(job.tier === '高')
   try {
-    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, async prompt => complete(prompt, undefined, { effort: quizEffort, station: '题目生成' }))
+    const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, async prompt => complete(prompt, undefined, { effort: quizEffort, station: STATIONS.quiz }))
     const quiz = await generateQuiz(rt, complete, job.course, job.node, genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status

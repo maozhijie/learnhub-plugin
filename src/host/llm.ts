@@ -134,6 +134,7 @@ async function withCapture<R extends { text: string; truncated: boolean; usage?:
       kind: spec.kind,
       ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
       outcome: 'failed',
+      // LLM_ERROR = 调用级失败且无稳定码（与任务失败详情的 ERROR 归一口径有意区分：这是 llm 层非解析错误）
       code: (err as { code?: string }).code ?? 'LLM_ERROR',
       durationMs: Date.now() - startedAt,
       provider: llmCfg.provider,
@@ -158,7 +159,7 @@ export function llmSeam(ctx: Context, capture?: CorpusSink, station?: string): L
         : opts?.effort === 'deep' ? { effort: llmCfg.deepEffort, semanticEffort: 'deep' as const }
           : {}),
       ...(capture ? { capture } : {}),
-      ...(station !== undefined || opts?.station !== undefined ? { station: opts?.station ?? station } : {}),
+      ...(station !== undefined || opts?.station !== undefined ? { station: opts?.station ?? station } : {}),  // 端口 opts 优先，闭包兜底
       ...(opts?.kind !== undefined ? { kind: opts.kind } : {}),
       ...(opts?.usageSink !== undefined ? { usageSink: opts.usageSink } : {}),
     })

@@ -11,6 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
 import { llmSeam, llmSeamStripped, llmView } from './llm.ts'
+import { STATIONS } from './corpus.ts'
 import { run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import {
@@ -39,7 +40,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.content2.reviewQueue(args.course, args.node, undefined, bandPref(args.band_pref)))),
   'learnhub_question_answer': (args: { course: string; node: string; qid: string; answer: string; predicted?: string }) => run(rt, 'learnhub_question_answer', async () =>
       JSON.stringify(await rt.engine.content2.questionAnswer(
-        llmSeam(ctx, rt.corpus.record, '判卷'), args.course, args.node, args.qid, args.answer,
+        llmSeam(ctx, rt.corpus.record, STATIONS.judge), args.course, args.node, args.qid, args.answer,
         null, { ...(args.predicted !== undefined ? { predicted: args.predicted as never } : {}) }))),
   'learnhub_generate': (args: { course: string; node: string; style?: string }) => run(rt, 'learnhub_generate',
       async () => JSON.stringify(await enqueueGeneration(rt, ctx, args.course, args.node, args.style))),
@@ -153,7 +154,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_explain_back_pack': (args: { course: string; node: string }) => run(rt, 'learnhub_explain_back_pack', () =>
       rt.engine.learner.explainBackPack(args.course, args.node)),
   'learnhub_explain_feedback': (args: { course: string; node: string; transcript: string }) => run(rt, 'learnhub_explain_feedback', async () =>
-      JSON.stringify(await rt.engine.learner.explainBackFeedback(args.course, args.node, args.transcript, llmSeam(ctx, rt.corpus.record, '讲解反馈')))),
+      JSON.stringify(await rt.engine.learner.explainBackFeedback(args.course, args.node, args.transcript, llmSeam(ctx, rt.corpus.record, STATIONS.explainFeedback)))),
   'learnhub_learner_card_add': (args: { course: string; node: string; content: string; kind?: string; prompt?: string; section?: string }) => run(rt, 'learnhub_learner_card_add', async () => {
       if (!args.content?.trim()) throw new Error('[learner-card-add] content 必填——存的是学习者自己的话。')
       return JSON.stringify(await rt.engine.learner.explainArchiveCard(args.course, args.node, {
@@ -170,7 +171,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         ...(args.section !== undefined && args.section.trim() ? { section: args.section } : {}),
         ...(args.kind !== undefined ? { kind: args.kind as never } : {}),
         ...(args.prompt !== undefined && args.prompt.trim() ? { prompt: args.prompt } : {}),
-      }, llmSeam(ctx, rt.corpus.record, '自注反馈')))
+      }, llmSeam(ctx, rt.corpus.record, STATIONS.selfNote)))
     }),
   'learnhub_learner_card_archive': (args: { course: string; node: string; card: string; archived?: boolean }) => run(rt, 'learnhub_learner_card_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[learner-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
@@ -180,7 +181,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.bank2.errorCardGenerate(args.course, {
         ...(args.node ? { node: args.node } : {}),
         ...(args.max !== undefined ? { max: args.max } : {}),
-      }, llmSeamStripped(ctx, rt.corpus.record, '错误对比卡')))),
+      }, llmSeamStripped(ctx, rt.corpus.record, STATIONS.errorCards)))),
   'learnhub_error_card_archive': (args: { course: string; node: string; card: string; archived?: boolean }) => run(rt, 'learnhub_error_card_archive', async () => {
       if (typeof args.archived !== 'boolean') throw new Error('[error-card-archive] archived 必须显式给出（true 归档 / false 恢复）。')
       return JSON.stringify(await rt.engine.bank2.errorCardArchive(args.course, args.node, args.card, args.archived))
@@ -209,7 +210,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
         return JSON.stringify(await rt.engine.learner.receiptSubmit(
           args.course, args.node,
           { kind: args.kind as never, material: args.material, ...(args.force_full !== undefined ? { force_full: args.force_full } : {}) },
-          llmSeam(ctx, rt.corpus.record, '回执评审'),
+          llmSeam(ctx, rt.corpus.record, STATIONS.receipt),
         ))
       }),
   'learnhub_habit_create': (args: { name: string; cue: string; action: string }) => run(rt, 'learnhub_habit_create', async () =>
@@ -250,7 +251,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       JSON.stringify(await rt.engine.channels.noteSourceList())),
   'learnhub_note_source_generate': (args: { id: string; count?: number }) => run(rt, 'learnhub_note_source_generate', async () => {
       const n = questionCount(args.count)
-      return JSON.stringify(await rt.engine.channels.noteSourceGenerate(args.id, n, llmSeamStripped(ctx, rt.corpus.record, '笔记出题')))
+      return JSON.stringify(await rt.engine.channels.noteSourceGenerate(args.id, n, llmSeamStripped(ctx, rt.corpus.record, STATIONS.noteQuiz)))
     }),
   'learnhub_anki_export': (args: { endpoint?: string }) => run(rt, 'learnhub_anki_export', async () =>
       JSON.stringify(await rt.engine.channels.ankiExportPush(new AnkiConnectClient(args.endpoint ?? ANKI_ENDPOINT)))),
