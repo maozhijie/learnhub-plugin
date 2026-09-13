@@ -99,7 +99,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       setQueuedJobs(0)
       setGenMap({})
     }
-  }, { tab: 'learn', intervalMs: 5000 })
+  }, { tab: 'today', intervalMs: 5000 })
 
   useEffect(() => {
     const h = () => { void frame.reload(); void reloadAll() }
@@ -259,7 +259,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
         {() => (
           <>
             <XpBar xp={xp.data ?? { date: '', day_cutoff: '', today_xp: 0, goal: 30, streak: 0, streak_grace_days: 1, eta: [] }}
-              onEditGoal={() => frame.goto('stats')} />
+              onEditGoal={() => frame.goto('insight')} />
             <ReviewBanner reviewQ={reviewQ.data} anki={anki.data}
               onStart={() => { setCalibrationHint(reviewQ.data?.calibration_hint); setSession(dueCards) }}
               onExportAnki={() => void exportAnki()} exporting={exportingAnki}
@@ -306,7 +306,7 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
                 key={c.name} name={c.name} total={s?.total ?? 0} due={s?.due_today ?? 0}
                 counts={s?.counts ?? { unseen: 0, ready: 0, learning: 0, review: 0, mastered: 0, skipped: 0 }}
                 completion={s?.completion}
-                onOpen={() => { frame.setCourse(c.name); frame.goto('graph') }}
+                onOpen={() => { frame.setCourse(c.name); frame.goto('courses.graph') }}
                 onRegenerate={() => regenerateCourse(c.name)}
                 onReview={() => {
                   const q = dueCards.filter(card => card.course === c.name)
@@ -336,8 +336,8 @@ export default function LearnPage({ frame }: { frame: AppFrame }) {
       {runningJobs > 0 && !frame.lesson && (
         <div
           role='button' tabIndex={0}
-          onClick={() => frame.goto('generate')}
-          onKeyDown={e => { if (e.key === 'Enter') frame.goto('generate') }}
+          onClick={() => frame.goto('courses.queue')}
+          onKeyDown={e => { if (e.key === 'Enter') frame.goto('courses.queue') }}
           style={{
             position: 'fixed', right: 20, bottom: 20, zIndex: 100, cursor: 'pointer',
             background: 'var(--color-bg-2,#fff)', border: '1px solid var(--color-border-2,#e5e6eb)',

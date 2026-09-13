@@ -117,7 +117,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
   }, [])
 
   // 挂载即取 + 5s 轮询（任务与队列同源刷新）；非激活页签跳过取数、切回即补（ADR-0027）
-  usePolling(load, { tab: 'generate', intervalMs: 5000 })
+  usePolling(load, { tab: 'courses.queue', intervalMs: 5000 })
 
   // 任务定位（#155）：教练台在途任务条点击跳入时，focusJob 指到任务注册表 key——
   // 目标行加高亮类并滚入视野；任务尚未出现在注册表时随下一次轮询数据到位再试。
@@ -215,7 +215,7 @@ export default function GeneratePage({ frame }: { frame?: AppFrame }) {
                     onClick={() => void generate(q)}>生成正文</Button>
                   <Button size='mini' type='text' onClick={() => {
                     frame?.setCourse(q.course)
-                    frame?.goto('graph')
+                    frame?.goto('courses.graph')
                   }}>去学习图</Button>
                 </Space>
               ) },

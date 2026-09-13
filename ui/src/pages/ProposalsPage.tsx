@@ -9,7 +9,7 @@ import { useCallback, useState } from 'react'
 import { api } from '../api'
 import { usePolling } from '../hooks/usePolling'
 import type { AppFrame } from '../App'
-import type { TabKey } from '../lib/router'
+import type { ViewKey } from '../lib/router'
 import type { PropItem, SeedImpactDoc } from '../types'
 import { errorMessage } from '../hooks/useCommand'
 
@@ -59,12 +59,12 @@ const kindLabel = (kind: string) => KIND_LABELS[kind] ?? { label: kind, color: '
 
 /** 「查看结果」按提案类型分流（#156）：种子→图页、富化→题库、反编译双提案→项目页；
  * 编辑批落图页、项目域落项目页、实验落实验室。返回页签 + 需要预置的课程名。 */
-function resultTarget(p: PropItem): { tab: TabKey; course?: string } {
-  if (p.kind === 'enrich') return { tab: 'bank', course: p.course }
+function resultTarget(p: PropItem): { tab: ViewKey; course?: string } {
+  if (p.kind === 'enrich') return { tab: 'courses.bank', course: p.course }
   if (p.kind === 'project_plan' || p.kind === 'project_milestone') return { tab: 'projects' }
-  if (p.kind === 'experiment') return { tab: 'lab' }
+  if (p.kind === 'experiment') return { tab: 'insight' }
   if (p.kind === 'seed' && p.pair != null) return { tab: 'projects' }
-  return { tab: 'graph', course: p.course }
+  return { tab: 'courses.graph', course: p.course }
 }
 
 export default function ProposalsPage({ frame }: { frame?: AppFrame }) {
@@ -83,7 +83,7 @@ export default function ProposalsPage({ frame }: { frame?: AppFrame }) {
 
   // 挂载即取 + 8s 轮询（页签保活：非激活跳过取数、切回即补）——起草任务完成、
   // 教练回合产批后提案自动浮现
-  usePolling(load, { tab: 'proposals', intervalMs: 8000 })
+  usePolling(load, { tab: 'courses.proposals', intervalMs: 8000 })
 
   /** 应用成功后的全局刷新（#156）：App 的状态面 + 课程树重拉（学习页课程卡、图页
    * 课程切换器即时可见新课程）；已挂载页的页内流（推荐/统计）经 learnhub:reload 补拉。 */
@@ -148,7 +148,7 @@ export default function ProposalsPage({ frame }: { frame?: AppFrame }) {
 
   const gotoResult = (p: PropItem) => {
     const t = resultTarget(p)
-    if (t.course && (t.tab === 'graph' || t.tab === 'bank')) frame?.setCourse(t.course)
+    if (t.course && (t.tab === 'courses.graph' || t.tab === 'courses.bank')) frame?.setCourse(t.course)
     frame?.goto(t.tab)
   }
 

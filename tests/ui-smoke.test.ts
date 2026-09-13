@@ -52,8 +52,14 @@ const fakeFrame = {
 }
 
 /** 冻结表（棘轮）：render 的每一项每次必须渲染出非空标记；exempt 必须给出原因。
- * 页面修好后应从 exempt 挪进 render（挪出 render = 红，不许悄悄降级）。 */
-const FROZEN: { render: string[]; exempt: Record<string, string> } = {
+ * 页面修好后应从 exempt 挪进 render（挪出 render = 红，不许悄悄降级）。
+ * shell = 壳级组件（components/ 下，#205 / ADR-0058 五区壳）：同样必须渲染出
+ * 非空标记、显式归类——壳的新结构不进任何表 = 红。 */
+const FROZEN: {
+  render: string[]
+  exempt: Record<string, string>
+  shell: Array<{ name: string; rel: string; props: Record<string, unknown> }>
+} = {
   render: [
     'App',
     'BankPage',
@@ -68,7 +74,21 @@ const FROZEN: { render: string[]; exempt: Record<string, string> } = {
     'ProposalsPage',
     'StatsPage',
   ],
-  exempt: {},
+  exempt: {
+    // Arco Drawer 是 Portal 组件（挂 document.body），react-dom/server 静态渲染恒为空——
+    // 渲染为空不是「首渲染崩溃」信号；抽屉内容 GuidePage 已在 render 表单独执法。
+    HelpDrawer: 'Portal 组件 SSR 恒空（Arco Drawer），内容由 GuidePage 条目覆盖',
+  },
+  shell: [
+    {
+      name: 'ShellTopBar', rel: 'components/ShellTopBar.tsx',
+      props: {
+        zone: 'today', courseSub: 'graph', theme: 'light',
+        onZone: () => {}, onCourseSub: () => {}, onToggleTheme: () => {}, onOpenHelp: () => {},
+      },
+    },
+    { name: 'HelpDrawer', rel: 'components/HelpDrawer.tsx', props: { visible: true, onClose: () => {} } },
+  ],
 }
 
 const loadEntry = async (rel: string) => import(/* @vite-ignore */ `../ui/src/${rel}`)
@@ -76,13 +96,21 @@ const loadEntry = async (rel: string) => import(/* @vite-ignore */ `../ui/src/${
 test('页面冻结表与 ui/src/pages 实际条目一致（新页面必须显式归类）', () => {
   const names = entries.map(e => e.name)
   const classified = [...FROZEN.render, ...Object.keys(FROZEN.exempt)]
-  const unknown = classified.filter(n => !names.includes(n.split('@')[0]!) && n !== 'App')
+  const shellNames = FROZEN.shell.map(s => s.name)
+  const unknown = classified.filter(n => !names.includes(n.split('@')[0]!) && n !== 'App' && !shellNames.includes(n))
   assert.deepEqual(unknown, [], `冻结表里有 ui/src/pages 不存在的页面（改名后未同步）：${unknown.join(', ')}`)
   const unclassified = names.filter(n => !classified.includes(n) && !classified.some(c => c.split('@')[0] === n))
   assert.deepEqual(unclassified, [], `新页面未归类（能渲染进 render，渲染不了进 exempt 并写明原因）：${unclassified.join(', ')}`)
 })
 
-test(`冻结表里 render 的每个条目都渲染出非空标记（${FROZEN.render.length} 个）`, async () => {
+test('壳组件冻结表与 ui/src/components 实际文件一致（新壳组件必须显式归类）', () => {
+  const componentFiles = new Set(readdirSync(join(ROOT, 'ui', 'src', 'components')))
+  const unknown = FROZEN.shell.filter(s => !componentFiles.has(s.rel.split('/')[1]!))
+  assert.deepEqual(unknown.map(s => s.name), [],
+    `壳冻结表里有 ui/src/components 不存在的组件（改名后未同步）：${unknown.map(s => s.name).join(', ')}`)
+})
+
+test(`冻结表里 render 的每个条目都渲染出非空标记（${FROZEN.render.length + FROZEN.shell.length} 个）`, async () => {
   for (const name of FROZEN.render) {
     const [pageName, variant] = name.split('@')
     const entry = pageName === 'App'
@@ -98,7 +126,19 @@ test(`冻结表里 render 的每个条目都渲染出非空标记（${FROZEN.ren
     const html = renderToStaticMarkup(React.createElement(Page as React.FC<{ frame?: typeof frame }>, { frame }))
     assert.ok(html.length > 0, `${name} 渲染出空标记`)
   }
+  for (const s of FROZEN.shell.filter(x => !FROZEN.exempt[x.name])) {
+    const mod = await loadEntry(s.rel)
+    const Comp = (mod as { [k: string]: unknown })[exportNameOf(s.rel)]
+    assert.equal(typeof Comp, 'function', `${s.name} 缺具名导出组件`)
+    const html = renderToStaticMarkup(React.createElement(Comp as React.FC<Record<string, unknown>>, s.props))
+    assert.ok(html.length > 0, `壳组件 ${s.name} 渲染出空标记`)
+  }
 })
+
+/** 壳组件是具名导出（ShellTopBar/HelpDrawer），从 rel 推导导出名。 */
+function exportNameOf(rel: string): string {
+  return rel.split('/').pop()!.replace(/\.tsx$/, '')
+}
 
 test('门自检：渲染抛错必须被抓住（探针必然崩溃样本）', async () => {
   const Boom = (_props: unknown): never => { throw new Error('boom') }

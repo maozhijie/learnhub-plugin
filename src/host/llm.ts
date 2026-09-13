@@ -45,7 +45,7 @@ export function llmView() {
  * 指南页与各页「这些事可以找 agent」提示都从这里渲染——单一事实源防文案漂移）。
  * 分流纪律：面板已有控件的动作不进指南（UI 是默认通道，agent 是进阶路径）——
  * 建课/生长/罗盘/回填/反编译/项目草案/项目创建已随面板下发退出本清单。
- * page = 面板页签（learn/graph/bank/stats/lab/generate/practice/projects/global）；
+ * page = 面板区页签（#205 / ADR-0058 五区：today/courses/insight/projects/practice + global）；
  * prompt = 可直接粘进 dsh 会话的示例指令。 */
 
 export const LLM_IDLE_TIMEOUT_MS = 120_000

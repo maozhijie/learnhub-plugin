@@ -755,73 +755,73 @@
   "res": [
    {
     "tool": "learnhub_pin_today",
-    "page": "learn",
+    "page": "today",
     "text": "「今天学它」：把节点置顶为今日推荐榜首（可挂执行意图），只影响今天、次日自动失效。",
     "prompt": "用 learnhub_pin_today 把「<节点>」设为今天的学习目标"
    },
    {
     "tool": "learnhub_unpin",
-    "page": "learn",
+    "page": "today",
     "text": "取消今天的「今天学它」置顶。",
     "prompt": "取消「<节点>」的今日置顶"
    },
    {
     "tool": "learnhub_goal_intention",
-    "page": "learn",
+    "page": "today",
     "text": "在今日 pin 上写/清「在【线索】之后就【行动】」的执行意图（随 pin 当日过期）。",
     "prompt": "给今天「<节点>」的 pin 挂一个执行意图：晚饭后就在书桌前学完它"
    },
    {
     "tool": "learnhub_note_source_exclude",
-    "page": "learn",
+    "page": "today",
     "text": "把个人笔记文件/目录加入排除清单（未来不再被自动注册为复习源）。",
     "prompt": "把「<笔记路径>」加入笔记源排除清单"
    },
    {
     "tool": "learnhub_note_source_unexclude",
-    "page": "learn",
+    "page": "today",
     "text": "从笔记源排除清单移除（恢复可注册资格）。",
     "prompt": "把「<笔记路径>」移出笔记源排除清单"
    },
    {
     "tool": "learnhub_graph_node",
-    "page": "graph",
+    "page": "courses",
     "text": "单节点深查：前置/后继/enc 边/生成状态/健康问题一次看全。",
     "prompt": "用 learnhub_graph_node 深查「<节点>」"
    },
    {
     "tool": "learnhub_graph_browse",
-    "page": "graph",
+    "page": "courses",
     "text": "按区/块浏览课程图结构。",
     "prompt": "按区块浏览「<课程>」的图结构"
    },
    {
     "tool": "learnhub_graph_path",
-    "page": "graph",
+    "page": "courses",
     "text": "查询两节点之间的先修链（学 B 之前要过哪些节点）。",
     "prompt": "查一下从「<节点A>」到「<节点B>」的先修链"
    },
    {
     "tool": "learnhub_question_audit",
-    "page": "bank",
+    "page": "courses",
     "text": "题库契约只读体检：表达式/数字填空、记法违规、转义损坏、超长解析——只盘点不修复。",
     "prompt": "跑一次题库体检，把违规存量题列给我"
    },
    {
     "tool": "learnhub_question_get",
-    "page": "bank",
+    "page": "courses",
     "text": "读单题全文（含答案与解析）——改题/审题前先看原题。",
     "prompt": "把「<节点>」题库里 q1 的完整题目读给我看"
    },
    {
     "tool": "learnhub_bank_cleanup",
-    "page": "bank",
+    "page": "courses",
     "text": "一键清理题库：跳过节点的全部未归档题 + 已完成节点的休眠题（从未调度），预览确认后归档（可逆，不删除）。",
     "prompt": "预览一下题库清理会归档哪些题，我确认后再执行"
    },
    {
     "tool": "learnhub_content_check",
-    "page": "generate",
+    "page": "courses",
     "text": "只跑正文质检门不落盘——在 vault 手改笔记后自检违规。",
     "prompt": "对「<节点>」跑一次正文质检"
    },

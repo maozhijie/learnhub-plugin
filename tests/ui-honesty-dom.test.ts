@@ -22,7 +22,7 @@ const arcoAny = arco as any
 
 // ProposalsPage 的取数经 usePolling 的页签激活门（active-tab 模块态在首次 import 时
 // 从路由 hash 初始化）：预置 hash 到提案页签，激活门才放行首拍取数
-window.location.hash = '#/proposals'
+window.location.hash = '#/courses/proposals'
 
 const click = async (el: HTMLElement) => { await act(async () => { fireEvent.click(el) }) }
 
@@ -124,7 +124,7 @@ async function refetchProposals(): Promise<void> {
   routes({ 'GET /proposals': [...proposalFix], 'POST /proposals/apply': { message: '已应用' } })
   await act(async () => {
     await new Promise(r => setTimeout(r, 50))
-    window.dispatchEvent(new CustomEvent('learnhub:tab', { detail: 'proposals' }))
+    window.dispatchEvent(new CustomEvent('learnhub:tab', { detail: 'courses.proposals' }))
     await new Promise(r => setTimeout(r, 50))
   })
 }
@@ -142,7 +142,7 @@ test('ProposalsPage：应用成功出现「查看结果」，种子提案点击�
   await refetchProposals()
   await click(await screen.findByText('查看结果'))
   assert.deepEqual(calls.setCourse, [['数学']], '图页落点预置提案课程')
-  assert.deepEqual(calls.goto, [['graph']], '种子提案 → 图页')
+  assert.deepEqual(calls.goto, [['courses.graph']], '种子提案 → 课程区学习图')
 })
 
 test('ProposalsPage：富化提案「查看结果」落题库，反编译对（pair）落项目页', async () => {
@@ -163,7 +163,7 @@ test('ProposalsPage：富化提案「查看结果」落题库，反编译对（p
   proposalFix[0]!.status = 'applied'
   await refetchProposals()
   await click(await screen.findByText('查看结果'))
-  assert.deepEqual(calls.goto, [['bank']], '富化 → 题库')
+  assert.deepEqual(calls.goto, [['courses.bank']], '富化 → 课程区题库')
   // 应用反编译种子半区 #9 → 查看结果 → projects（routes() 重注册清空调用记录，按 body.id 断言）
   await click(screen.getAllByText('应用')[0])
   await waitFor(() => {

@@ -159,18 +159,18 @@ test('CommandBoundary：真实缝端到端——失败后点重试成功，内�
 
 test('usePolling：挂载即取数；learnhub:tab 命中本页签立即补取，非本页签不动', async () => {
   const { setActiveTab } = await importUi('active-tab.ts')
-  setActiveTab('learn')
+  setActiveTab('today')
   let ticks = 0
   function PollProbe() {
-    usePolling(async () => { ticks++ }, { tab: 'learn', intervalMs: 60_000 })
+    usePolling(async () => { ticks++ }, { tab: 'today', intervalMs: 60_000 })
     return null
   }
   render(React.createElement(PollProbe))
   await waitFor(() => assert.equal(ticks, 1, '挂载即取数（keep-alive 首次进入页签必激活）'))
   const win = globalThis.window as unknown as { dispatchEvent: (e: unknown) => boolean }
   const CustomEventCtor = globalThis.CustomEvent as unknown as new (t: string, init: { detail: string }) => unknown
-  await act(async () => { win.dispatchEvent(new CustomEventCtor('learnhub:tab', { detail: 'graph' })) })
+  await act(async () => { win.dispatchEvent(new CustomEventCtor('learnhub:tab', { detail: 'courses.graph' })) })
   assert.equal(ticks, 1, '非本页签的切回事件不触发')
-  await act(async () => { win.dispatchEvent(new CustomEventCtor('learnhub:tab', { detail: 'learn' })) })
+  await act(async () => { win.dispatchEvent(new CustomEventCtor('learnhub:tab', { detail: 'today' })) })
   assert.equal(ticks, 2, '切回本页签立即补取数')
 })

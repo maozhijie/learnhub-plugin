@@ -883,7 +883,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   registerTools(fakeCtx(captured), rt)
   const toolNames = new Set(captured.map(t => t.name))
   // 面板页签词表（tools.ts 的 AGENT_GUIDE 头注释）：page 只准取这几个
-  const pages = new Set(['learn', 'graph', 'bank', 'stats', 'lab', 'generate', 'practice', 'projects', 'global'])
+  const pages = new Set(['today', 'courses', 'insight', 'projects', 'practice', 'global'])
   const seen = new Set<string>()
   for (const g of AGENT_GUIDE) {
     assert.ok(toolNames.has(g.tool), `指南里的 ${g.tool} 不在工具面（${toolNames.size} 个工具）——分流纪律的受检投影断了`)

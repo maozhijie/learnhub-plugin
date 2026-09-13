@@ -122,7 +122,7 @@ export default function LessonView(props: { course: string; node: string; frame:
     }
     if (v !== undefined) lastVersionRef.current = v
     return active ? 3000 : 15000
-  }, { tab: 'learn', intervalMs: 3000, idleMs: 15000 })
+  }, { tab: 'today', intervalMs: 3000, idleMs: 15000 })
 
   const generate = async () => {
     setBusy('generate')

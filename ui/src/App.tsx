@@ -1,52 +1,50 @@
-import { Button, Empty, Result, Spin, Tabs } from '@arco-design/web-react'
-import { useCallback, useEffect, useState } from 'react'
+import { Button, Empty, Result, Spin } from '@arco-design/web-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { setActiveTab } from './active-tab'
 import { errorMessage } from './hooks/useCommand'
-import { navigate, onRouteChange, parseHash, readHash, syncHash, TAB_KEYS } from './lib/router'
-import type { TabKey } from './lib/router'
-import BankPage from './pages/BankPage'
-import GeneratePage from './pages/GeneratePage'
-import GraphPage from './pages/GraphPage'
-import GuidePage from './pages/GuidePage'
-import LabPage from './pages/LabPage'
-import LearnPage from './pages/LearnPage'
-import PracticePage from './pages/PracticePage'
-import ProjectsPage from './pages/ProjectsPage'
-import ProposalsPage from './pages/ProposalsPage'
-import StatsPage from './pages/StatsPage'
+import { HelpDrawer } from './components/HelpDrawer'
+import { ShellTopBar } from './components/ShellTopBar'
+import { ZoneBody } from './components/ZoneBody'
+import { navigate, onRouteChange, parseHash, readHash, syncHash, viewOfRoute, zoneOfView } from './lib/router'
+import type { CourseSub, ViewKey, ZoneKey } from './lib/router'
 import type { StatusWithLlm, TreeDoc } from './types'
 import { useCoachToasts } from './useCoachToasts'
 
 /** 打开中的节点学习视图（学习页二级视图）；focusNode = 图页定位高亮目标。 */
 export interface LessonRef { course: string; node: string }
 
-/** 全局共享态：状态总览 + 课程树 + 当前课程 + 页签/学习视图跳转。 */
+/** 全局共享态：状态总览 + 课程树 + 当前课程 + 视图/学习视图跳转。 */
 export interface AppFrame {
   status: StatusWithLlm | null
   tree: TreeDoc | null
   course: string | null
   lesson: LessonRef | null
   focusNode: string | null
-  /** 生成页定位目标（任务注册表 key）：教练台在途任务条点击后的落点（#155）。 */
   focusJob: string | null
+  /** 生成视图定位目标（任务注册表 key）：教练台在途任务条点击后的落点（#155）。 */
   setCourse: (c: string) => void
-  goto: (tab: TabKey) => void
+  goto: (view: ViewKey) => void
   openLesson: (course: string, node: string) => void
   closeLesson: () => void
-  /** 跳到图页并高亮定位某节点。 */
+  /** 跳到课程区学习图并高亮定位某节点。 */
   locateInGraph: (node: string) => void
-  /** 跳到生成页并定位某任务（教练台在途任务条点击）。 */
+  /** 跳到生成队列并定位某任务（教练台在途任务条点击）。 */
   locateJob: (jobKey: string) => void
   reload: () => Promise<void>
   loading: boolean
 }
 
+/** 空课程守卫只拦「纯消费」视图：提案/生成是建课回路的一半（种子起草 → 生成看
+ * 进度 → 提案人审 → 才有课程），学习图/实践/项目/今日自带空态入口，一律放行
+ * ——否则死锁：建课要靠提案页人审，提案页却被「没有课程」拦住。 */
+const NO_COURSE_BLOCKED: ViewKey[] = ['courses.bank', 'insight']
+
 export default function App() {
-  // 路由状态（#189 / ADR-0052）：location.hash 是导航权威，渲染态是它的投影——
-  // 初始从 hash 解析（刷新/深链直达），跳转经 go() 同步写两侧，hashchange 回灌外部导航
-  //（前进/后退/手改 hash）。
-  const [tab, setTab] = useState<TabKey>(() => parseHash(readHash()))
+  // 路由状态（#189 / ADR-0052；#205 / ADR-0058 两级化）：location.hash 是导航权威，
+  // 渲染态是它的投影——初始从 hash 解析（刷新/深链直达），跳转经 go() 同步写两侧，
+  // hashchange 回灌外部导航（前进/后退/手改 hash）。
+  const [view, setView] = useState<ViewKey>(() => viewOfRoute(parseHash(readHash())))
   const [status, setStatus] = useState<StatusWithLlm | null>(null)
   const [tree, setTree] = useState<TreeDoc | null>(null)
   const [course, setCourse] = useState<string | null>(null)
@@ -55,6 +53,7 @@ export default function App() {
   const [focusJob, setFocusJob] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [fatal, setFatal] = useState<string | null>(null)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const reload = useCallback(async () => {
     try {
@@ -77,21 +76,26 @@ export default function App() {
 
   useEffect(() => { void reload() }, [reload])
 
-  /** 一切页签跳转的唯一写点：渲染态立即翻转（保持既有同步语义——openLesson 等同批
-   * 多重更新一次成形）+ 写 URL 权威；hashchange 回灌对同值 setTab 是无操作。 */
-  const go = useCallback((t: TabKey) => { setTab(t); navigate(t) }, [])
+  // 区页签点击 = 回该区最近访问的视图（课程区记住子入口，其余区即区视图）
+  const lastViewByZone = useRef<Partial<Record<ZoneKey, ViewKey>>>({})
+  useEffect(() => { lastViewByZone.current[zoneOfView(view)] = view }, [view])
+  const go = useCallback((v: ViewKey) => { setView(v); navigate(v) }, [])
+  const goZone = useCallback((z: ZoneKey) => {
+    go(lastViewByZone.current[z] ?? (z === 'courses' ? 'courses.graph' : z))
+  }, [go])
+  const goCourseSub = useCallback((s: CourseSub) => { go(`courses.${s}` as ViewKey) }, [go])
 
   // 教练通知（ADR-0038）：图域任务生命周期 + 复诊结算的 App 级轻轮询弹条（10s/60s）；
-  // 完成通知按钮按任务性质分流（提案产物→提案页，过程→生成页）。早退分支之前调用（hooks 顺序恒定）。
-  useCoachToasts({ generate: () => go('generate'), proposals: () => go('proposals') })
+  // 完成通知按钮按任务性质分流（提案产物→提案收件箱，过程→生成队列）。早退分支之前调用（hooks 顺序恒定）。
+  useCoachToasts({ generate: () => go('courses.queue'), proposals: () => go('courses.proposals') })
 
-  // 外部导航（前进/后退/手改 hash）→ 路由事件回灌渲染态；同步把漂移的 hash 规范化
-  //（回落默认页签时 URL 不留非法形——setTab 同值被 React 跳过也不影响规范化）
-  useEffect(() => onRouteChange(t => { setTab(t); syncHash(t) }), [])
+  // 外部导航（前进/后退/手改 hash/旧键深链）→ 路由事件回灌渲染态；同步把漂移的 hash
+  // 规范化（回落默认视图时 URL 不留非法形——setView 同值被 React 跳过也不影响规范化）
+  useEffect(() => onRouteChange(v => { setView(v); syncHash(v) }), [])
   // 渲染态 → URL 规范化：初始空 hash、手改非法 hash 收敛规范形（replaceState 无历史条目）
-  useEffect(() => { syncHash(tab) }, [tab])
-  // 页签保活（ADR-0027）：路由变化桥接给各页轮询——隐藏页签据此跳过取数（桥接取舍见 active-tab.ts）
-  useEffect(() => { setActiveTab(tab) }, [tab])
+  useEffect(() => { syncHash(view) }, [view])
+  // 视图保活（ADR-0027）：路由变化桥接给各页轮询——隐藏视图据此跳过取数（桥接取舍见 active-tab.ts）
+  useEffect(() => { setActiveTab(view) }, [view])
 
   // 夜间模式：arco-theme 切换（跟随系统默认，手动选择存 localStorage）
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -120,10 +124,10 @@ export default function App() {
     status, tree, course, lesson, focusNode, focusJob,
     setCourse: c => setCourse(c),
     goto: go,
-    openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); go('learn') },
+    openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); go('today') },
     closeLesson: () => setLesson(null),
-    locateInGraph: node => { setFocusNode(node); go('graph') },
-    locateJob: key => { setFocusJob(key); go('generate') },
+    locateInGraph: node => { setFocusNode(node); go('courses.graph') },
+    locateJob: key => { setFocusJob(key); go('courses.queue') },
     reload,
     loading,
   }
@@ -131,68 +135,21 @@ export default function App() {
 
   return (
     <div className='app-shell'>
-      <div style={{ display: 'flex', alignItems: 'flex-start', borderBottom: '1px solid var(--color-border-2,#e5e6eb)' }}>
-        <Tabs activeTab={tab} onChange={k => go(k as TabKey)} type='capsule' size='small'
-          style={{ flex: 1, padding: '8px 12px 0' }}>
-          <Tabs.TabPane key='learn' title='学习' />
-          <Tabs.TabPane key='graph' title='学习图' />
-          <Tabs.TabPane key='bank' title='题目管理' />
-          <Tabs.TabPane key='stats' title='统计' />
-          <Tabs.TabPane key='lab' title='实验室' />
-          <Tabs.TabPane key='generate' title='生成' />
-          <Tabs.TabPane key='proposals' title='提案' />
-          <Tabs.TabPane key='practice' title='无界实践区' />
-          <Tabs.TabPane key='projects' title='项目' />
-          <Tabs.TabPane key='guide' title='指南' />
-        </Tabs>
-        <Button size='mini' type='text' style={{ margin: '10px 12px 0 0', flexShrink: 0 }}
-          onClick={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
-          title={theme === 'dark' ? '切到亮色' : '切到暗色'}>
-          {theme === 'dark' ? '☀ 亮色' : '☾ 暗色'}
-        </Button>
-      </div>
-      <div className={`app-body${tab === 'graph' ? ' no-pad' : ''}`}>
-        {/* 空课程守卫只拦「纯消费」页签：提案/生成是建课回路的一半（种子起草 → 生成页看进度
-         * → 提案页人审 → 才有课程），学习图/实践/项目自带空态入口，一律放行——否则死锁：
-         * 建课要靠提案页人审，提案页却被「没有课程」拦住。 */}
-        {tab !== 'learn' && tab !== 'practice' && tab !== 'projects' && tab !== 'graph'
-          && tab !== 'proposals' && tab !== 'generate' && noCourse ? (
+      <ShellTopBar zone={zoneOfView(view)} courseSub={view.startsWith('courses.') ? view.slice(8) as CourseSub : 'graph'}
+        theme={theme} onZone={goZone} onCourseSub={goCourseSub}
+        onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
+        onOpenHelp={() => setHelpOpen(true)} />
+      <HelpDrawer visible={helpOpen} onClose={() => setHelpOpen(false)} />
+      <div className={`app-body${view === 'courses.graph' ? ' no-pad' : ''}`}>
+        {NO_COURSE_BLOCKED.includes(view) && noCourse ? (
           <div style={{ paddingTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-            <Empty description='还没有课程：到「学习图」页教练台新建课程——种子起草后在「提案」页人审开工，等待时可在「生成」页看进度' />
-            <Button type='primary' onClick={() => go('graph')}>去学习图页建课</Button>
+            <Empty description='还没有课程：到「课程」区学习图的教练台新建课程——种子起草后在「提案」入口人审开工，等待时可在「生成」入口看进度' />
+            <Button type='primary' onClick={() => go('courses.graph')}>去课程区建课</Button>
           </div>
         ) : (
-          <TabBody tab={tab} frame={frame} />
+          <ZoneBody view={view} frame={frame} />
         )}
       </div>
     </div>
   )
 }
-
-/** 页签保活（ADR-0027）：首访后常驻、非激活隐藏——练习会话等页内状态跨页签存续；
- * 隐藏页签的后台轮询由 active-tab 信号自行跳过。键表住 lib/router（TAB_KEYS，
- * 与 TabPane 键/路由解析三表对账由 tests/ui-router.test.ts 执法）。 */
-
-function TabBody({ tab, frame }: { tab: TabKey; frame: AppFrame }) {
-  const [visited, setVisited] = useState<Set<TabKey>>(() => new Set([tab]))
-  useEffect(() => {
-    setVisited(v => (v.has(tab) ? v : new Set(v).add(tab)))
-  }, [tab])
-  return (
-    <>
-      {TAB_KEYS.filter(k => visited.has(k)).map(k => (
-        <div key={k} style={{ display: k === tab ? undefined : 'none' }}>
-          {k === 'learn' && <LearnPage frame={frame} />}
-          {k === 'graph' && <GraphPage frame={frame} />}
-          {k === 'bank' && <BankPage frame={frame} />}
-          {k === 'stats' && <StatsPage frame={frame} />}
-          {k === 'lab' && <LabPage frame={frame} />}
-          {k === 'generate' && <GeneratePage frame={frame} />}
-          {k === 'proposals' && <ProposalsPage frame={frame} />}
-          {k === 'practice' && <PracticePage />}
-          {k === 'projects' && <ProjectsPage />}
-          {k === 'guide' && <GuidePage />}
-        </div>
-      ))}
-    </>
-  )}

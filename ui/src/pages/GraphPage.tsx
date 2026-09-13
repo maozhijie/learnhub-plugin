@@ -93,7 +93,7 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
 
   // 页签激活重取（#161）：keep-alive 下组件不重挂，「切回图页」补一次取数——
   // 隐藏期间错过的图变化与状态面变化（就绪深度/复诊）在切回时刷新。
-  useEffect(() => onTabActive('graph', () => { void load(); void reloadFrame() }),
+  useEffect(() => onTabActive('courses.graph', () => { void load(); void reloadFrame() }),
     [load, reloadFrame])
 
   // 生成队列轮询：角标随排队/生成点亮；活动任务出现终态边沿 → 重拉图（hasContent 点亮）。
@@ -118,7 +118,7 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
     } catch {
       setGenStates({})
     }
-  }, { tab: 'graph', intervalMs: 5000 })
+  }, { tab: 'courses.graph', intervalMs: 5000 })
 
   // 过滤：裁出子图（端点不在集合内的边一并裁掉）
   const filtered = useMemo(() => {
@@ -234,7 +234,7 @@ export default function GraphPage({ frame }: { frame: AppFrame }) {
             <Text type='secondary'>课程「{course}」还没有学习图：种子提案尚未应用（或图数据为空）。</Text>
             <Space size={8}>
               <Button type='primary' onClick={() => setSeedForm(true)}>重建种子（换终点/改工作表）</Button>
-              <Button onClick={() => frame.goto('generate')}>去生成页看任务</Button>
+              <Button onClick={() => frame.goto('courses.queue')}>去生成页看任务</Button>
             </Space>
           </Space>
         </Card>

@@ -10,11 +10,11 @@
  */
 import { useEffect, useRef } from 'react'
 import { isActiveTab } from '../active-tab'
-import type { TabKey } from '../lib/router'
+import type { ViewKey } from '../lib/router'
 
 export function usePolling(
   tick: () => Promise<number | void>,
-  opts: { tab: TabKey; intervalMs: number; idleMs?: number },
+  opts: { tab: ViewKey; intervalMs: number; idleMs?: number },
 ): void {
   const { tab, intervalMs, idleMs = intervalMs } = opts
   // tick 每渲染重建（内部常闭包页面最新状态），经 ref 进循环——循环本身只按 opts 建一次
