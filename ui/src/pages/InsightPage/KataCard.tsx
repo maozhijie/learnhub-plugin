@@ -1,10 +1,12 @@
-/** 统计页·周复盘 Weekly Kata 卡（#114 U4 / ADR-0026；页内子组件）：全局每周一张的
- * 五问复盘。入口常驻（统计页 = 周视图家），无推送、缺勤不罚；现状引擎自动填
+/** 洞察区·周复盘 Weekly Kata 卡（#114 U4 / ADR-0026；页内子组件）：全局每周一张的
+ * 五问复盘。入口常驻（洞察区 = 周视图家），无推送、缺勤不罚；现状引擎自动填
  * （只读渲染），四问学习者作答；「下一实验」一键转 N-of-1 提案（提案-确认制）或
  * 执行意图挂今日偏好。Learner Output 域：零 XP、不进掌握度、不做 FSRS 卡。
+ * #210 人审收口：实验开跑的确认只在提案收件箱（人审唯一处）——转出提案后本卡留一条
+ * 常驻回执与「去提案收件箱确认」直达入口（onOpenInbox 未传时只有文字提示）。
  * #183：周文档取数走 useCommand（week 变化即重取），保存经 set 回填（不打断输入），
  * 转换动作后 reload（与旧行为一致：重取会按引擎现状重铺四问）。 */
-import { Button, Card, Collapse, Input, Message, Modal, Select, Space, Tag, Typography } from '@arco-design/web-react'
+import { Alert, Button, Card, Collapse, Input, Message, Modal, Select, Space, Tag, Typography } from '@arco-design/web-react'
 import { useEffect, useRef, useState } from 'react'
 import { CommandBoundary } from '../../components/CommandBoundary'
 import { api } from '../../api'
@@ -22,7 +24,7 @@ function seedAnswers(doc: KataDoc): Record<string, string> {
   return Object.fromEntries(KATA_ANSWER_KEYS.map(q => [q, doc.sections[q] === KATA_PLACEHOLDER ? '' : doc.sections[q] ?? '']))
 }
 
-export default function KataCard({ courseNames }: { courseNames: string[] }) {
+export default function KataCard({ courseNames, onOpenInbox }: { courseNames: string[]; onOpenInbox?: () => void }) {
   /** 当前查看的周（undefined = 缺省上一完整学习周；Select 切换即重取）。 */
   const [week, setWeek] = useState<string | undefined>(undefined)
   const kata = useCommand(() => api.kataOpen(week), [week])
@@ -50,6 +52,8 @@ export default function KataCard({ courseNames }: { courseNames: string[] }) {
   const [iNode, setINode] = useState('')
   const [iCue, setICue] = useState('')
   const [iAct, setIAct] = useState('')
+  /** 本次会话内转出的实验提案（常驻回执 + 收件箱直达入口；人审动作在收件箱）。 */
+  const [converted, setConverted] = useState<number | null>(null)
 
   const save = async () => {
     if (!doc) return
@@ -69,7 +73,8 @@ export default function KataCard({ courseNames }: { courseNames: string[] }) {
     if (!doc || !expTpl) return
     try {
       const r = await api.kataConvertExperiment(doc.week_start, expTpl, expCourse)
-      Message.success(`实验提案 #${r.proposal} 已发起——到实验室页确认后开跑`)
+      Message.success(`实验提案 #${r.proposal} 已发起——到提案收件箱确认后开跑`)
+      setConverted(r.proposal)
       setExpModal(false)
       await kata.reload()
     } catch (err) {
@@ -107,6 +112,17 @@ export default function KataCard({ courseNames }: { courseNames: string[] }) {
       <CommandBoundary cmd={kata} loadingNode={<Text type='secondary'>加载中…</Text>}>
         {doc => (
           <div style={{ display: 'grid', gap: 10 }}>
+            {converted !== null && (
+              <Alert
+                type='warning'
+                content={
+                  <Space size={8} wrap>
+                    <Text>实验提案 #{converted} 已发起：确认开跑在提案收件箱（人审唯一处），确认前零副作用。</Text>
+                    {onOpenInbox && <Button size='mini' type='primary' onClick={onOpenInbox}>去提案收件箱确认</Button>}
+                  </Space>
+                }
+              />
+            )}
             <Text type='secondary' style={{ fontSize: 12 }}>
               复盘对象：{doc.week_start} ~ {doc.week_end}（上一完整学习周，凌晨学习日按日界归属）·
               记录落「我的产出/周复盘」，零 XP、可注册为复习源；无推送、缺勤不罚。
@@ -143,7 +159,7 @@ export default function KataCard({ courseNames }: { courseNames: string[] }) {
         footer={null}>
         <div style={{ display: 'grid', gap: 10 }}>
           <Text type='secondary' style={{ fontSize: 12 }}>
-            发起的是待确认提案（提案-确认制）：到实验室页确认后才开跑。实验变量只允许引擎可控的内容参数。
+            发起的是待确认提案（提案-确认制）：到提案收件箱确认后才开跑（人审唯一处）。实验变量只允许引擎可控的内容参数。
           </Text>
           <Select placeholder='选择实验模板' value={expTpl} onChange={setExpTpl} style={{ width: '100%' }}>
             {(exp?.templates ?? []).filter(t => t.unlocked).map(t => (

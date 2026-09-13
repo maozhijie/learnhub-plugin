@@ -1,4 +1,4 @@
-/** 统计页·记忆健康区块（页内子组件）：横向直方图/逐日负载/保留率曲线三件纯展示图元
+/** 洞察区·记忆健康区块（页内子组件；#210 随统计页入洞察）：横向直方图/逐日负载/保留率曲线三件纯展示图元
  * + FSRS 参数优化器 + 记忆健康四面板（#61 A2：每日负载预报/记忆状态分布/真实保留率/
  * 遗忘曲线，另带 #66 E4 预测校准与 JOL/过信提示开关）。数据经 props 注入（缝在 index.tsx）。 */
 import { Button, InputNumber, Message, Space, Switch, Tag, Tooltip, Typography } from '@arco-design/web-react'

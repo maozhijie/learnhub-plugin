@@ -25,7 +25,7 @@ export default function GuidePage() {
     <div style={{ maxWidth: 860, margin: '0 auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Card size='small'>
         <Text style={{ fontSize: 13 }}>
-          面板覆盖日常学习流（学 / 复习 / 刷卡 / 出题 / 生成 / 提案人审 / 统计与实验室）。
+          面板覆盖日常学习流（今日 / 课程 / 洞察 / 项目 / 无界实践区）。
           更深或低频的操作——建项目、目标反编译、执行事件落账、回执、图查询与回填、数据体检等——
           由 dsh 会话里的 agent 调用 learnhub 工具完成：下面按页面列出这些能力，
           每条附可直接复制进 dsh 会话的指令；对应页面的「这些事可以找 agent 做」折叠块说的也是它们。
@@ -70,7 +70,7 @@ export default function GuidePage() {
           agent 不会静默改你的学习数据。
         </Text>
         <Text type='secondary' style={{ fontSize: 12, display: 'block' }}>
-          3. 当前 AI 模型与思考档在「实验室 → 运行环境」只读展示；切换模型编辑
+          3. 当前 AI 模型与思考档在「洞察 → 运行环境」只读展示；切换模型编辑
           ~/.dsh/profiles/web/cordis.patch.yml 的 dsh-learnhub 行后重启宿主。
         </Text>
       </Card>

@@ -30,8 +30,12 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  * #209：+2（工作台罗盘卡 api.compass，GET /compass 读视图；教练台播种态轻探针
  * api.graph——图存在才解锁「生长一步」，#155 诚实性门槛需要独立判据）。
  * #209 评审收拢 −4：重试三路由/恢复队列/phase 词汇收敛进 hooks/useGenJobActions
- * 单源（供给卡与生成页同实现），调用点随实现搬家净减四处。 */
-const API_CALLSITES = 148
+ * 单源（供给卡与生成页同实现），调用点随实现搬家净减四处。
+ * #210：−2（今日「我的资产」菜单的 Anki 出口归洞察通道卡——api.ankiStatus 的菜单
+ * 坏连提示与 api.ankiExport 的菜单动作随之离场）。洞察区搬迁本身**换手净零**：
+ * 实验室页 7 处 → 沙盘/N-of-1/睡眠三卡 7 处，其中实验确认动作收归收件箱（本地
+ * api.experimentApply 删）而 N-of-1 卡改读 api.proposals 显示待确认提案（人审唯一处）。 */
+const API_CALLSITES = 146
 
 test(`UI 公共面零改动：api.<name>( 调用点数量不变（${API_CALLSITES} 处，函数名与签名未动）`, () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
