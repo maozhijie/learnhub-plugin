@@ -110,7 +110,7 @@ test('壳组件冻结表与 ui/src/components 实际文件一致（新壳组件�
     `壳冻结表里有 ui/src/components 不存在的组件（改名后未同步）：${unknown.map(s => s.name).join(', ')}`)
 })
 
-test(`冻结表里 render 的每个条目都渲染出非空标记（${FROZEN.render.length + FROZEN.shell.length} 个）`, async () => {
+test(`冻结表里 render 的每个条目都渲染出非空标记（${FROZEN.render.length + FROZEN.shell.filter(x => !FROZEN.exempt[x.name]).length} 个）`, async () => {
   for (const name of FROZEN.render) {
     const [pageName, variant] = name.split('@')
     const entry = pageName === 'App'

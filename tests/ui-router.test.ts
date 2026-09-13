@@ -198,6 +198,9 @@ export interface RouteTables {
   subItems: string[]
   /** 工作台分栏项键（WorkbenchPage 字面量项表，顺序 = 可见序）。 */
   workbenchItems: string[]
+  /** 子导航项表是否被渲染消费（COURSE_SUB_ITEMS.map 出现在 JSX 里）——表在、
+   * 入口不在是 Exhibit A 的反向形态（#206 实测回归），与键对账同权执法。 */
+  subNavRendered: boolean
   /** 保活容器的视图分支键（ZoneBody 字面量分支）。 */
   branches: string[]
 }
@@ -207,6 +210,7 @@ export interface RouteTables {
  * WORKBENCH_SUBS 一一对应）。返回违约清单，空 = 绿。 */
 export function routeTableViolations(t: RouteTables): string[] {
   const v: string[] = []
+  if (!t.subNavRendered) v.push('子导航项表没有被渲染消费（表在、入口不在——Exhibit A 反向形态，#206 回归教训）')
   for (const z of t.zoneKeys) {
     if (!t.zonePanes.includes(z)) v.push(`区键 ${z} 没有对应顶栏页签（区不可见）`)
     if (!t.viewKeys.some(k => (k.split('.')[0] ?? k) === z)) v.push(`区键 ${z} 没有任何视图分支（点击渲染空白——Exhibit A 形态）`)
@@ -221,6 +225,7 @@ export function routeTableViolations(t: RouteTables): string[] {
   for (const s of t.subItems) {
     if (!t.courseSubs.includes(s)) v.push(`子导航项 '${s}' 不在子路由表（URL 无法直达该入口）`)
   }
+  if (!t.subNavRendered) v.push('子导航项表没有被渲染消费（表在、入口不在——Exhibit A 反向形态，#206 回归教训）')
   if (t.subItems.length === t.courseSubs.length
     && t.subItems.some((s, i) => s !== t.courseSubs[i])) {
     v.push('子导航项顺序与子路由表不一致（可见序漂移）')
@@ -260,6 +265,7 @@ const realTables = (): RouteTables => {
     zonePanes: [...topBar.matchAll(/<Tabs\.TabPane key='([a-z]+)'/g)].map(m => m[1]!),
     subItems: [...topBar.matchAll(/key: '([a-z]+)', title: '/g)].map(m => m[1]!),
     workbenchItems: [...workbench.matchAll(/key: '([a-z]+)', title: '/g)].map(m => m[1]!),
+    subNavRendered: topBar.includes('COURSE_SUB_ITEMS.map'),
     branches: [...zoneBody.matchAll(/k === '([a-z.]+)'/g)].map(m => m[1]!),
   }
 }
@@ -292,4 +298,7 @@ test('门自检：缺区键 / 幽灵页签 / 缺保活分支 / 缺子导航项 /
   // 缺工作台分栏项
   const noWb = routeTableViolations({ ...base, workbenchItems: base.workbenchItems.filter(s => s !== 'coach') })
   assert.ok(noWb.some(x => x.includes('coach') && x.includes('分栏')), '缺工作台分栏项未被抓到')
+  // Exhibit A 反向形态：表在、渲染消费不在（#206 实测回归形态）必须被抓到
+  const notRendered = routeTableViolations({ ...base, subNavRendered: false })
+  assert.ok(notRendered.some(x => x.includes('渲染消费')), '子导航表未渲染样本未被抓到')
 })

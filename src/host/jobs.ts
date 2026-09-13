@@ -42,10 +42,43 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
   return rt.engine.bank2.questionGenerate(course, node, count, async prompt => complete(prompt), opts)
 }
 
-/** 节生成提示词拼装：模板 + 本节任务（id/标题/类型/节段难度档）+ 上下文包。
- * tierLabel 来自节清单视图（清单 tier 在场用清单值，缺席按节位置+节点难度推导，#147）。 */
-function sectionPrompt(tpl: string, pack: string, s: { id: string; title: string; type: string; tierLabel?: string }): string {
-  return `${tpl}\n\n## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}\n\n---\n\n${pack}`
+/** 前节尾部窗口（#227）：相邻前节末尾约 300 字，截窗对齐行首（残半行不入窗）。
+ * 前节尚无正文（首节/断点续跑前节未生成）返回 undefined——注入面整体缺席，不报错。 */
+function sectionTailOf(md: string | null | undefined, chars = 300): string | undefined {
+  if (!md?.trim()) return undefined
+  const body = md.replace(/\s+$/, '')
+  if (body.length <= chars) return body
+  const window = body.slice(-chars)
+  const nl = window.indexOf('\n')
+  return (nl >= 0 && nl < window.length - 1 ? window.slice(nl + 1) : window).trim() || undefined
+}
+
+/** 节间连贯注入数据（#227）：完整节清单（节清单块按它标 i/N）+ 前节尾部窗口
+ * （首节/前节未生成时缺席）。 */
+interface SectionCoherence {
+  sections: Array<{ id: string; title: string; type: string; points?: string }>
+  prevTail?: string
+}
+
+/** 节生成提示词拼装：模板 + 本节任务（id/标题/类型/节段难度档）+ 节间连贯注入（#227：
+ * 完整节清单标 i/N + 非首节的前节尾部窗口）+ 上下文包。tierLabel 来自节清单视图
+ * （清单 tier 在场用清单值，缺席按节位置+节点难度推导，#147）；节清单与前节尾部由
+ * 调用方从节清单视图取——前节正文缺席（首节/断点续跑前节未生成）时窗口段整体省略。
+ * 修复回灌复用本函数（同一拼装），连贯注入在修复轮同构在场。 */
+function sectionPrompt(
+  tpl: string, pack: string,
+  s: { id: string; title: string; type: string; tierLabel?: string },
+  coherence?: SectionCoherence,
+): string {
+  const list = coherence?.sections
+  const idx = list ? list.findIndex(x => x.id === s.id) : -1
+  const listBlock = list && idx >= 0
+    ? `\n\n## 节清单（本课共 ${list.length} 节，本节为第 ${idx + 1} 节）\n\n${list.map((x, i) =>
+      `- ${i + 1}. ${x.id} ｜ ${x.title} ｜ ${x.type}${x.points ? ` ｜ ${x.points}` : ''}${i === idx ? '（本节）' : ''}`).join('\n')}`
+    : ''
+  const tail = coherence?.prevTail?.trim()
+  const tailBlock = tail ? `\n\n## 前节结尾（仅供衔接参考，不复述前节内容）\n\n${tail}` : ''
+  return `${tpl}\n\n## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}${listBlock}${tailBlock}\n\n---\n\n${pack}`
 }
 
 /** 逐节生成共用出口（ADR-0054 修复阶梯）：初跑 fast 档 → 门禁失败先试块级局部修补
@@ -54,14 +87,22 @@ function sectionPrompt(tpl: string, pack: string, s: { id: string; title: string
  * 配置盲试是已知死法；回灌块级修补**合并后**的原文防定位错位；长度 finding 附显式
  * 压缩目标与计数口径，「拆节」的出路归管线不劝模型）→ 压缩仍溢出且允许拆节时原样
  * 抛溢出错误（调用方跑大纲拆节阶梯），其余失败带说明抛出。complete 为注入的补全缝
- * （#137）。isCancelled 在每次模型产出后检查，取消即丢结果。 */
+ * （#137）。isCancelled 在每次模型产出后检查，取消即丢结果。coherence 为节间连贯
+ * 注入数据（#227，透传给两处 sectionPrompt 拼装）；md = 过门落盘的正文原文（引擎
+ * 落盘还会做别名等确定性微修，回灌给下一节当前节尾部足够同构），调用方据此刷新
+ * 节清单视图的后节前节窗口。 */
 async function applySectionWithRepair(
   rt: HostRuntime, complete: LlmComplete, course: string, node: string,
   s: { id: string; title: string; type: string; tierLabel?: string }, tpl: string, pack: string,
-  opts?: { isCancelled?: () => boolean; highTier?: boolean; allowSplit?: boolean },
-): Promise<{ version: number; title: string; hints: string[] }> {
+  opts?: {
+    isCancelled?: () => boolean
+    highTier?: boolean
+    allowSplit?: boolean
+    coherence?: SectionCoherence,
+  },
+): Promise<{ version: number; title: string; hints: string[]; md: string }> {
   const cancelled = () => opts?.isCancelled?.() ?? false
-  const first = await complete(sectionPrompt(tpl, pack, s), undefined, { effort: 'fast' })
+  const first = await complete(sectionPrompt(tpl, pack, s, opts?.coherence), undefined, { effort: 'fast' })
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   let gateReport = ''
   let current = first
@@ -72,7 +113,7 @@ async function applySectionWithRepair(
     return e.message
   }
   try {
-    return await rt.engine.content2.contentSection(course, node, s.id, first)
+    return { ...(await rt.engine.content2.contentSection(course, node, s.id, first)), md: first }
   } catch (err) {
     const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
     if (code !== 'GATE_FAILED') throw err
@@ -88,7 +129,7 @@ async function applySectionWithRepair(
     if (merged !== null) {
       current = merged
       try {
-        return await rt.engine.content2.contentSection(course, node, s.id, merged)
+        return { ...(await rt.engine.content2.contentSection(course, node, s.id, merged)), md: merged }
       } catch (err) {
         const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
         if (code !== 'GATE_FAILED') throw err
@@ -99,12 +140,12 @@ async function applySectionWithRepair(
   // 整节压缩修复一轮：deep 档（升一档）；回灌 current（块级修补合并后的原文——回灌
   // 初跑原文会与合并清单的定位错位）；长度 finding 由 sectionRepairPrompt 附压缩目标。
   const repaired = await complete(
-    Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s), current, gateReport, { wordBudget }),
+    Content.sectionRepairPrompt(sectionPrompt(tpl, pack, s, opts?.coherence), current, gateReport, { wordBudget }),
     undefined, { effort: 'deep' },
   )
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
   try {
-    return await rt.engine.content2.contentSection(course, node, s.id, repaired)
+    return { ...(await rt.engine.content2.contentSection(course, node, s.id, repaired)), md: repaired }
   } catch (err) {
     const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
     if (code !== 'GATE_FAILED') throw err
@@ -726,12 +767,20 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     persistGenJobs(rt)
 
     // —— 逐节正文：每节一次模型调用；单节终局失败不中止余节（continue→partial）——
-    for (const s of views) {
+    // 节间连贯注入（#227）：完整节清单标 i/N + 相邻前节尾部窗口；前节在本轮落盘后
+    // 就地刷新视图 md，后节窗口即取到刚生成的结尾（拆节后 freshViews 同口径，前节
+    // = 父内前子节或更早的已就绪节）。
+    const coherenceOf = (list: typeof views, id: string): SectionCoherence => {
+      const i = list.findIndex(v => v.id === id)
+      return { sections: list, prevTail: i > 0 ? sectionTailOf(list[i - 1]?.md) : undefined }
+    }
+    for (const [vi, s] of views.entries()) {
       if (s.status === 'ready') continue
       job.progress = { ...job.progress!, current: s.title }
       persistGenJobs(rt)
       try {
-        await applySectionWithRepair(rt, complete, course, node, s, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier })
+        const r = await applySectionWithRepair(rt, complete, course, node, s, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier, coherence: coherenceOf(views, s.id) })
+        views[vi] = { ...s, md: r.md }
         job.progress = { ...job.progress!, done: job.progress!.done + 1 }
       } catch (err) {
         if (job.status === 'cancelling') throw err
@@ -751,7 +800,8 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
               job.progress = { ...job.progress!, current: sub.title }
               persistGenJobs(rt)
               try {
-                await applySectionWithRepair(rt, complete, course, node, sub, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier, allowSplit: false })
+                const r = await applySectionWithRepair(rt, complete, course, node, sub, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier, allowSplit: false, coherence: coherenceOf(freshViews, sub.id) })
+                freshViews[freshViews.findIndex(v => v.id === sub.id)] = { ...sub, md: r.md }
                 job.progress = { ...job.progress!, done: job.progress!.done + 1 }
               } catch (subErr) {
                 if ((job.status as GenJobStatus) === 'cancelling') throw subErr
@@ -823,9 +873,12 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
   if (!s) throw new Error(`「${node}」没有节「${sectionId}」——先运行大纲。`)
   const sectionTpl = await rt.engine.content2.loadPrompt('课程节生成')
   const highTier = TIER_LABELS[await rt.engine.content2.contentTierOf(course, node)] === '高'
+  // 节间连贯注入与管线同构（#227）：views 刚读、前节 md 在场；重写中节的清单位次照旧
+  const sIdx = views.findIndex(v => v.id === sectionId)
+  const coherence: SectionCoherence = { sections: views, prevTail: sIdx > 0 ? sectionTailOf(views[sIdx - 1]?.md) : undefined }
   // 与管线同款剥围栏缝（管线产出口对 ``` 围栏容忍，重写通道此前裸缝更脆，ADR-0054）；
   // allowSplit:false——「重写这一节」的意图是重写本节，不自动改大纲结构（溢出即如实报错）
-  const r = await applySectionWithRepair(rt, llmSeamStripped(ctx), course, node, s, sectionTpl, pack, { highTier, allowSplit: false })
+  const r = await applySectionWithRepair(rt, llmSeamStripped(ctx), course, node, s, sectionTpl, pack, { highTier, allowSplit: false, coherence })
   return `[section] 「${r.title}」v${r.version} 落盘。`
 }
 

@@ -329,6 +329,49 @@ test('大纲解析失败 → 恰一回灌重产（解析反馈）、大纲用裁
   assert.ok(prompts[1]?.includes('MODEL_YAML') || prompts[1]?.includes('enc_candidates'), '回灌携带解析死因原文')
 })
 
+test('节间连贯注入（#227）：节清单标 i/N、非首节附前节结尾窗口、首节无前节段', async () => {
+  const rt = makeRuntime()
+  const prompts: string[] = []
+  let views: Array<Record<string, unknown>> = []
+  stub(rt, {
+    'content2.contentPack': async () => '上下文包',
+    'content2.contentTierOf': async () => 1,
+    'content2.loadPrompt': async (kind: string) => `TPL:${kind}`,
+    'content2.contentSectionsView': async () => views,
+    'content2.contentOutline': async (_c: unknown, _n: unknown, _yaml: string) => {
+      views = [
+        { id: 's1', title: '概念：A', type: '概念', status: 'pending', tierLabel: '低', points: '要点A' },
+        { id: 's2', title: '概念：B', type: '概念', status: 'pending', tierLabel: '中', points: '要点B' },
+      ]
+    },
+    'content2.contentSection': async () => ({ version: 1, title: 'x', hints: [] }),
+    'bank2.questionGenerateSections': async () => ({ added: 2 }),
+    'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  // 应答脚本：大纲 YAML → s1 正文（超一窗的长正文 + 标志结尾段）→ s2 正文
+  const ctx = scriptedCtx([
+    'node: X\nsections:\n  - id: s1\n    title: 概念：A\n  - id: s2\n    title: 概念：B',
+    `## 概念：A\n\n${'前文铺垫句子。'.repeat(60)}\n\n这一段是前节结尾的标志句。`,
+    '## 概念：B\n\n正文',
+  ], prompts)
+  enqueueGeneration(rt, ctx, '数学', '节点A')
+  await until(() => rt.jobs.genJobs.get('数学/节点A')?.status === 'done')
+  const s1Prompt = prompts.find(p => p.includes('节 id：s1'))!
+  const s2Prompt = prompts.find(p => p.includes('节 id：s2'))!
+  assert.ok(s1Prompt, 's1 的提示词被捕到')
+  assert.ok(s2Prompt, 's2 的提示词被捕到')
+  assert.match(s1Prompt, /## 节清单（本课共 2 节，本节为第 1 节）/, '节清单注入并标注 i/N')
+  assert.match(s1Prompt, /1\. s1 ｜ 概念：A ｜ 概念 ｜ 要点A/, '清单行带 id/标题/类型/要点')
+  assert.ok(!s1Prompt.includes('## 前节结尾'), '首节无前节结尾段')
+  assert.match(s2Prompt, /## 节清单（本课共 2 节，本节为第 2 节）/)
+  assert.match(s2Prompt, /## 前节结尾（仅供衔接参考，不复述前节内容）/, '非首节注入前节结尾窗口')
+  assert.ok(s2Prompt.includes('这一段是前节结尾的标志句。'), '窗口取的是本轮刚落盘的前节结尾')
+  assert.ok(!s2Prompt.includes('前文铺垫句子'), '窗口从行首截取、只含结尾行，前节主体不入窗')
+})
+
 test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 → 子节照常生成 → done', async () => {
   const rt = makeRuntime()
   const prompts: string[] = []

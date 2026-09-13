@@ -6,8 +6,8 @@ import { errorMessage } from './hooks/useCommand'
 import { HelpDrawer } from './components/HelpDrawer'
 import { ShellTopBar } from './components/ShellTopBar'
 import { ZoneBody } from './components/ZoneBody'
-import { navigate, navigateCourse, onRouteChange, parseHash, readHash, syncHash, viewOfRoute, zoneOfView } from './lib/router'
-import type { CourseSub, ViewKey, WorkbenchSub, ZoneKey } from './lib/router'
+import { DEFAULT_COURSE_SUB, navigate, navigateCourse, onRouteChange, parseHash, readHash, routeOfView, syncHash, viewOfRoute, zoneOfView } from './lib/router'
+import type { CourseSub, ViewKey, WorkbenchSub, ZoneKey } from './lib/router' 
 import type { StatusWithLlm, TreeDoc } from './types'
 import { useCoachToasts } from './useCoachToasts'
 
@@ -43,12 +43,6 @@ export interface AppFrame {
  * 「没有课程」拦住。 */
 const NO_COURSE_BLOCKED: ViewKey[] = ['insight']
 
-/** 视图键 → 课程区子导航高亮：三入口各归各；工作台是钻入层，高亮「我的课程」。 */
-const courseSubOfView = (v: ViewKey): CourseSub => {
-  if (!v.startsWith('courses.')) return 'home'
-  const rest = v.slice('courses.'.length)
-  return rest === 'course' ? 'home' : rest as CourseSub
-}
 
 export default function App() {
   // 路由状态（#189 / ADR-0052；#205 / ADR-0058 两级化）：location.hash 是导航权威，
@@ -165,7 +159,7 @@ export default function App() {
 
   return (
     <div className='app-shell'>
-      <ShellTopBar zone={zoneOfView(view)} courseSub={courseSubOfView(view)}
+      <ShellTopBar zone={zoneOfView(view)} courseSub={routeOfView(view).sub ?? DEFAULT_COURSE_SUB}
         theme={theme} onZone={goZone} onCourseSub={goCourseSub}
         onToggleTheme={() => setTheme(t => (t === 'dark' ? 'light' : 'dark'))}
         onOpenHelp={() => setHelpOpen(true)} />
