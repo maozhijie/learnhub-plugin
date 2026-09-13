@@ -109,11 +109,11 @@ export default function App() {
   }, [theme])
 
   if (loading && !status) {
-    return <div className='app-shell'><div style={{ margin: 'auto' }}><Spin dot /></div></div>
+    return <div className='app-shell'><div className='app-loading'><Spin dot /></div></div>
   }
   if (fatal && !status) {
     return (
-      <div className='app-shell' style={{ justifyContent: 'center' }}>
+      <div className='app-shell app-fatal'>
         <Result status='error' title='面板加载失败' subTitle={fatal}
           extra={<Button type='primary' onClick={() => { setLoading(true); void reload() }}>重试</Button>} />
       </div>
@@ -142,7 +142,7 @@ export default function App() {
       <HelpDrawer visible={helpOpen} onClose={() => setHelpOpen(false)} />
       <div className={`app-body${view === 'courses.graph' ? ' no-pad' : ''}`}>
         {NO_COURSE_BLOCKED.includes(view) && noCourse ? (
-          <div style={{ paddingTop: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <div className='app-empty-hint'>
             <Empty description='还没有课程：到「课程」区学习图的教练台新建课程——种子起草后在「提案」入口人审开工，等待时可在「生成」入口看进度' />
             <Button type='primary' onClick={() => go('courses.graph')}>去课程区建课</Button>
           </div>

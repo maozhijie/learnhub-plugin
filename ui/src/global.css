@@ -1,9 +1,11 @@
-/* 面板全局样式（面板运行在 dsh web 的 iframe 内，浅色为主） */
+/* 面板全局样式：壳级规则只准消费 tokens.css 的 --lh-*（硬编码色值只许住在 token 层，
+ * 由 tests/ui-budget.test.ts 的壳级视觉纪律门执法）；页面内容级规则（md-body 等）随
+ * 各区票收敛。面板运行在 dsh web 的 iframe 内。 */
 html, body, #root {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--color-bg-1, #fff);
+  background: var(--lh-bg);
 }
 
 .app-shell {
@@ -11,17 +13,55 @@ html, body, #root {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background: var(--lh-bg);
+  transition: background-color var(--lh-motion-fast);
 }
+
+/* 壳顶栏（#206 token 驱动）：五区页签 + 课程子导航 + 右侧控制区 */
+.shell-topbar {
+  display: flex;
+  align-items: flex-start;
+  background: var(--lh-bg);
+  border-bottom: 1px solid var(--lh-border);
+  transition: background-color var(--lh-motion-fast), border-color var(--lh-motion-fast);
+}
+.shell-zones { flex: 1; padding: var(--lh-space-2) var(--lh-space-3) 0; }
+.shell-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--lh-space-1);
+  margin: var(--lh-space-2) var(--lh-space-3) 0 0;
+  flex-shrink: 0;
+}
+.shell-subnav {
+  padding: var(--lh-space-1) var(--lh-space-3) 0;
+  border-bottom: 1px solid var(--lh-border-faint);
+}
+
+/* 视图保活容器（ADR-0027）：首访常驻、非激活隐藏 */
+.zone-view { display: none; }
+.zone-view-active { display: block; }
 
 .app-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 16px 20px 24px;
+  padding: var(--lh-space-4) var(--lh-space-5) var(--lh-space-6);
 }
 
 .app-body.no-pad {
   padding: 0;
+}
+
+/* 加载 / 致命态 / 空课程提示（壳级） */
+.app-shell.app-fatal { justify-content: center; }
+.app-loading { margin: auto; }
+.app-empty-hint {
+  padding-top: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lh-space-4);
 }
 
 /* React Flow 容器必须有确定高度：父级是 Arco Space（高度 auto），
