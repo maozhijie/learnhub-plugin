@@ -220,7 +220,7 @@ export function routeTableViolations(t: RouteTables): string[] {
   }
   for (const s of t.courseSubs) {
     if (!t.subItems.includes(s)) v.push(`子路由 ${s} 没有对应子导航项（入口不可见）`)
-    if (s !== 'home' && !t.viewKeys.includes(`courses.${s}`)) v.push(`子路由 ${s} 没有对应视图分支（点击渲染空白——Exhibit A 形态）`)
+    if (!t.viewKeys.includes(`courses.${s}`)) v.push(`子路由 ${s} 没有对应视图分支（点击渲染空白——Exhibit A 形态）`)
   }
   for (const s of t.subItems) {
     if (!t.courseSubs.includes(s)) v.push(`子导航项 '${s}' 不在子路由表（URL 无法直达该入口）`)

@@ -28,8 +28,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  * api.questionGenerate·api.coachGrowth、闸门计数 api.proposals；课程卡迁出今日暂住
  * 学习图页，逐课复习自取 api.reviewQueue。courseDelete/resetCourse 随组件整体搬迁不计数）。
  * #209：+2（工作台罗盘卡 api.compass，GET /compass 读视图；教练台播种态轻探针
- * api.graph——图存在才解锁「生长一步」，#155 诚实性门槛需要独立判据）。 */
-const API_CALLSITES = 152
+ * api.graph——图存在才解锁「生长一步」，#155 诚实性门槛需要独立判据）。
+ * #209 评审收拢 −4：重试三路由/恢复队列/phase 词汇收敛进 hooks/useGenJobActions
+ * 单源（供给卡与生成页同实现），调用点随实现搬家净减四处。 */
+const API_CALLSITES = 148
 
 test(`UI 公共面零改动：api.<name>( 调用点数量不变（${API_CALLSITES} 处，函数名与签名未动）`, () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {

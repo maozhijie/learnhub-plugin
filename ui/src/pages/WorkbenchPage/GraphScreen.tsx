@@ -7,6 +7,7 @@
 import { Button, Card, Input, Message, Modal, Result, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import GraphDagView from '../../components/GraphDagView'
+import { recTypeMeta } from '../../lib/rec-events'
 import SeedFormModal from '../../components/SeedFormModal'
 import CompassCard from './CompassCard'
 import { api } from '../../api'
@@ -15,9 +16,6 @@ import type { AppFrame } from '../../App'
 import type { BankEntry, GenJobItem, GraphDoc, RecommendDoc } from '../../types'
 
 const { Text } = Typography
-
-const REC_TYPE_COLOR: Record<string, string> = { review: 'green', overdue: 'red', ready: 'blue', new: 'cyan' }
-const REC_TYPE_LABEL: Record<string, string> = { review: '复习', overdue: '逾期', ready: '就绪', new: '新学' }
 
 /** 图例：状态色点 + 掌握度深浅说明。终点条目按 ADR-0056 修订注明「承诺标记」语义——
  * 终点不被学习调度、不产料，不是图上待学的课程节点（#200 / ADR-0055）。 */
@@ -240,10 +238,10 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
       {(rec?.events ?? []).filter(e => e.course === course).length > 0 && (
         <Space size={6} wrap>
           {(rec?.events ?? []).filter(e => e.course === course).slice(0, 8).map((e, i) => (
-            <Tag key={i} color={REC_TYPE_COLOR[e.type] ?? 'gray'}
+            <Tag key={i} color={recTypeMeta(e.type).color}
               style={{ cursor: 'pointer' }}
               onClick={() => frame.openLesson(e.course, e.node)}>
-              {e.node}（{REC_TYPE_LABEL[e.type] ?? e.type}）
+              {e.node}（{recTypeMeta(e.type).label}）
             </Tag>
           ))}
         </Space>

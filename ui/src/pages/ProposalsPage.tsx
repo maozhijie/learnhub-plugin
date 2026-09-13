@@ -153,7 +153,7 @@ export default function ProposalsPage({ frame, course }: { frame?: AppFrame; cou
   const gotoResult = (p: PropItem) => {
     const t = resultTarget(p)
     if (t.tab === 'wb.graph' || t.tab === 'wb.bank') {
-      if (t.course) frame?.setCourse(t.course)
+      // openCourse 内部即含 setCourse，落工作台对应分栏
       frame?.openCourse(t.course ?? p.course, t.tab === 'wb.graph' ? 'graph' : 'bank')
       return
     }

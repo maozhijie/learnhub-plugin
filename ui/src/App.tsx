@@ -144,7 +144,7 @@ export default function App() {
     setCourse: c => setCourse(c),
     goto: go,
     openCourse,
-    openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); go('today') },
+    openLesson: (lcourse, lnode) => { setLesson({ course: lcourse, node: lnode }); setCourse(lcourse); go('today') },
     closeLesson: () => setLesson(null),
     locateInGraph: node => {
       setFocusNode(node)

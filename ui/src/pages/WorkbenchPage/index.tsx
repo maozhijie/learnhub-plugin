@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../../api'
 import { onRouteChange, parseHash, readHash } from '../../lib/router'
 import { usePolling } from '../../hooks/usePolling'
+import { GRAPH_PHASES } from '../../hooks/useGenJobActions'
 import type { AppFrame } from '../../App'
 import type { GenJobItem } from '../../types'
 import type { WorkbenchSub } from '../../lib/router'
@@ -28,9 +29,6 @@ export const WORKBENCH_ITEMS: Array<{ key: WorkbenchSub; title: string }> = [
   { key: 'proposals', title: '提案' },
   { key: 'bank', title: '题库' },
 ]
-
-/** 图域任务 phase 全集（与 useCoachToasts 同口径）：教练台在途条的消费面。 */
-const GRAPH_PHASES = new Set(['seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'])
 
 export default function WorkbenchPage({ frame, courseId }: { frame: AppFrame; courseId: string | null }) {
   const [wb, setWb] = useState<WorkbenchSub>(() => parseHash(readHash()).wb)

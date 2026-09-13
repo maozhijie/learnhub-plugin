@@ -11,7 +11,8 @@ import { api, discussInHost } from '../api'
 import { usePolling } from '../hooks/usePolling'
 import type { AppFrame } from '../App'
 import type { GenJobItem, QueueItem } from '../types'
-import { errorMessage, notifyQueued } from '../hooks/useCommand'
+import { errorMessage } from '../hooks/useCommand'
+import { GEN_PHASE_META, useGenJobActions } from '../hooks/useGenJobActions'
 
 const { Text } = Typography
 
@@ -23,17 +24,6 @@ const STATUS_TAG: Record<GenJobItem['status'], { label: string; color: string }>
   partial: { label: '部分完成', color: 'purple' },
   failed: { label: '失败', color: 'red' },
   cancelled: { label: '已取消', color: 'gray' },
-}
-
-/** phase → 人读标签（图域任务 = 面板下发/教练回合产物的队列形态）。 */
-const PHASE_TAG: Partial<Record<NonNullable<GenJobItem['phase']>, { label: string; color: string }>> = {
-  quiz: { label: '出题', color: 'cyan' },
-  seed: { label: '种子起草', color: 'lime' },
-  growth: { label: '生长批', color: 'orange' },
-  compass: { label: '罗盘初画', color: 'gold' },
-  decompile: { label: '目标反编译', color: 'purple' },
-  plan: { label: '计划草案', color: 'purple' },
-  milestone: { label: '里程碑草案', color: 'purple' },
 }
 
 export default function GeneratePage({ frame, course }: { frame?: AppFrame; course?: string }) {
@@ -103,16 +93,8 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
     }
   }, [sliced, course])
 
-  // 恢复重启后暂停的队列（遗留排队任务不自动开跑，防静默烧 token）
-  const resumeQueue = async () => {
-    try {
-      const r = await api.generateResume()
-      Message.success(`队列已恢复（${r.resumed} 个排队任务将按序执行）`)
-      await load()
-    } catch (err) {
-      Message.error(errorMessage(err))
-    }
-  }
+  // 恢复/重试走共享生成任务动作缝（与今日供给卡同实现，#209 评审收拢）
+  const { busyKey: retryBusy, retry: retryShared, resumeQueue } = useGenJobActions({ onDone: load })
 
   useEffect(() => {
     void api.prompts().then(kinds => {
@@ -145,36 +127,6 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
       await load()
     } catch (err) {
       Message.error(errorMessage(err))
-    }
-  }
-
-  // 生长批失败重试（#157）：重新下发面板生长命令（显式重新裁决，服务端豁免失败阻尼）
-  const retryGrowth = async (course: string) => {
-    setBusyKey(`${course}/生长批`)
-    try {
-      notifyQueued(await api.coachGrowth(course))
-      await load()
-    } catch (err) {
-      Message.error(errorMessage(err))
-    } finally {
-      setBusyKey(null)
-    }
-  }
-
-  // 内容/出题任务的重试（ADR-0054 续跑）：重新入队即断点续跑——已 ready 节跳过、只补
-  // 缺失/失败节；出题任务按 quiz phase 路由回出题队列。与生长批「重试」对齐。
-  const retryJob = async (j: GenJobItem) => {
-    setBusyKey(j.key)
-    try {
-      const r = j.phase === 'quiz'
-        ? await api.questionGenerate(j.course, j.node)
-        : await api.generate(j.course, j.node)
-      Message.info(r.message)
-      await load()
-    } catch (err) {
-      Message.error(errorMessage(err))
-    } finally {
-      setBusyKey(null)
     }
   }
 
@@ -265,8 +217,8 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
               { title: '节点', dataIndex: 'node', ellipsis: true, render: (_, j) => (
                 <Space size={6}>
                   <span>{j.node}</span>
-                  {j.phase && PHASE_TAG[j.phase] && (
-                    <Tag size='small' color={PHASE_TAG[j.phase]!.color}>{PHASE_TAG[j.phase]!.label}</Tag>
+                  {j.phase && GEN_PHASE_META[j.phase] && (
+                    <Tag size='small' color={GEN_PHASE_META[j.phase]!.color}>{GEN_PHASE_META[j.phase]!.label}</Tag>
                   )}
                 </Space>
               ) },
@@ -297,15 +249,10 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
                       {j.status === 'queued' ? '移出队列' : '取消'}
                     </Button>
                     : null}
-                  {(j.status === 'failed' && j.phase === 'growth') && (
+                  {(j.status === 'failed' || j.status === 'partial') && (
                     <Button size='mini' type='text' status='warning'
-                      loading={busyKey === j.key}
-                      onClick={() => void retryGrowth(j.course)}>重试</Button>
-                  )}
-                  {(j.status === 'failed' || j.status === 'partial') && j.phase !== 'growth' && (
-                    <Button size='mini' type='text' status='warning'
-                      loading={busyKey === j.key}
-                      onClick={() => void retryJob(j)}>重试</Button>
+                      loading={retryBusy === j.key}
+                      onClick={() => void retryShared(j)}>重试</Button>
                   )}
                   {(j.status === 'failed' || j.status === 'partial') && (
                     <Button size='mini' type='text' onClick={() =>
