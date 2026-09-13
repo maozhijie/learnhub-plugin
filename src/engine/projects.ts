@@ -40,7 +40,7 @@ import type { Graph } from './graph.ts'
 import type { ProjectCrossDoc, ProjectExecBackflow, ProjectExecResult } from './views/project.ts'
 import { declaredEncOf } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
-import type { CourseEntry, Fm } from './types.ts'
+import type { CourseEntry, Fm, VaultPriorAudit } from './types.ts'
 import type { AgentSeam, GateVerdict } from './agent.ts'
 import type { GraphApplyResult } from './views/graph.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
@@ -55,7 +55,8 @@ import { dayOfTs, nowIsoOf } from './dates.ts'
 import { CROSS_AXIS_THRESHOLD, TIER_REC_DEMOTE_SCORE, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, XP_PER_MILESTONE_DEFAULT } from './params.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
-import { searchVaultPrior, priorSection } from './vault-prior.ts'
+import type { ConceptRegistry } from './concepts.ts'
+import { priorQueryTerms, priorSection, queryEntriesFor, searchVaultPrior } from './vault-prior.ts'
 
 import { decompileGoalOf, decompileTerms, splitDecompileDoc, decompileRepairPrompt, reconcilePlanNodes, splitNodeSpec } from './project-decompile.ts'
 import type { DecompileDoc } from './project-decompile.ts'
@@ -563,6 +564,8 @@ export interface ProjectDeps {
   store: Pick<Store, 'loadProposals' | 'practiceAll' | 'reviewLogAll' | 'updateProposal'>
   paths: Paths
   registry: Pick<Registry, 'get'>
+  /** 概念登记表（#229 查询扩展：反编译站检索词按别名/易混概念低权重扩词）。 */
+  concepts: Pick<ConceptRegistry, 'load'>
   bank: Pick<QuestionBank, 'load'>
   proposals: Pick<GraphProposals, 'reject'>
   /** 图 apply 包装（#175 阶段③归位：联合受理不再直调 applySeed）。 */
@@ -1104,7 +1107,9 @@ export class ProjectSubsystem {
     agent: AgentSeam,
   ): Promise<{
     project: string
-    prior_hits: number
+    /** Vault 先验检索审计（#229）：零命中/两种截断/命中清单随返回值带出（ADR-0004）——
+     * 旧实现只给 `prior_hits` 数字且零命中静默，读不出「检索过没有」。 */
+    prior: VaultPriorAudit
     notes: string[]
     repaired: boolean
     plan_proposal: { id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }
@@ -1139,11 +1144,16 @@ export class ProjectSubsystem {
       target = await this.e.registry.get(explicitCourse)
       if (!target) throw new Error(`[project-decompile] 注册表中没有课程「${explicitCourse}」（显式目标课程须先建课播种；省略 course 参数可让种子簇充当新课程）。`)
     }
-    // Vault 先验（只读检索）注入反编译上下文
-    const terms = decompileTerms(goal, picked.map(p => p.title))
+    // Vault 先验（只读检索）注入反编译上下文。#229：检索词经概念登记表扩展（显式目标
+    // 课程时才有登记表可读；种子簇充当新课程时无表，扩展为空操作），审计随返回值带出。
+    const { entries, error } = target
+      ? await queryEntriesFor(this.e.concepts, target.root)
+      : { entries: [], error: undefined }
+    const query = priorQueryTerms(decompileTerms(goal, picked.map(p => p.title)), entries)
     const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-    const hits = terms.length ? await searchVaultPrior(this.e.vaultRoot, centerRel, terms, {}, this.e.fs) : []
-    const prior = priorSection(hits)
+    const found = await searchVaultPrior(this.e.vaultRoot, centerRel, query, {}, this.e.fs)
+    const priorAudit: VaultPriorAudit = error ? { ...found.audit, expansionError: error } : found.audit
+    const prior = priorSection(found.hits)
     // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出。
     // 节点名清单按「区 · 块」**分段**（#218 稀释治理）：它是名字对账的取值域，**不截断**
     // ——截断会让真实存在的名字在模型眼里不存在（对账门拿全集判，模型却按子集选），
@@ -1247,7 +1257,7 @@ export class ProjectSubsystem {
       : null
     return {
       project: fm.id,
-      prior_hits: hits.length,
+      prior: priorAudit,
       notes: picked.map(p => p.path),
       repaired: round.repaired,
       plan_proposal: planProposal!,

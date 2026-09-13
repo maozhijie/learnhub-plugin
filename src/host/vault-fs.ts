@@ -20,4 +20,5 @@ export const nodeVaultFs: VaultFs = {
   rename: (from, to) => rename(from, to),
   unlink: path => unlink(path),
   statIsFile: async path => (await stat(path)).isFile(),
+  statMtimeMs: async path => (await stat(path)).mtimeMs,
 }

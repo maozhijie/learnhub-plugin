@@ -501,7 +501,7 @@ test('seedPropose：目标起草种子提案——受理 pending、绑定字段�
     assert.equal(r.endpoint, '用导数解决优化问题')
     assert.equal(r.starts, 1)
     assert.equal(r.repaired, false)
-    assert.equal(r.prior_hits, 0)
+    assert.equal(r.prior, undefined, '未选配先验 = 无审计（「没检索」与「检索了零命中」是两件事，不合并）')
     const seed = (await engine.store.loadProposals()).find(p => p.kind === 'seed' && p.id === r.id)
     assert.ok(seed && seed.status === 'pending', '提案 pending 等一次人审')
   })

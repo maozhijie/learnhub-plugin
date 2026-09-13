@@ -6,7 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Content, TIER_LABELS, genericQuizTarget, hasReadyContent, readAnchor, tierIdxOf } from '../engine/index.ts'
-import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport } from '../engine/index.ts'
+import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport, VaultPriorAudit } from '../engine/index.ts'
 import {
   contentFailureStatus,
   genJobRetentionRemainingMs,
@@ -65,6 +65,8 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
   instruction?: string
   isCancelled?: () => boolean
   effort?: LlmEffort
+  /** 先验检索审计注记（#229）：纯出题任务也要说得清这次读了哪几篇笔记（随 opts 透传）。 */
+  onPrior?: (audit: VaultPriorAudit) => void
 }) {
   try {
     return await rt.engine.bank2.questionGenerate(course, node, count, quizSeam(complete, opts?.effort), {
@@ -81,6 +83,21 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
 function auditNoteOf(r: { secondOpinion?: { sampled: number; discarded: number; repaired: number } }): string {
   const a = r.secondOpinion
   return a && a.sampled > 0 ? `；第二意见抽样 ${a.sampled}（拦 ${a.discarded} 修 ${a.repaired}）` : ''
+}
+
+/** Vault 先验检索注记（#229 / ADR-0071）：零命中与两种截断**不静默**（ADR-0004），
+ * 命中文件清单也随任务记录带出——「这次生成读了学习者哪几篇笔记」是生成回执该有的信息。
+ * 零命中时把扫描面读数一起给出：「扫了 N 篇没命中」（确实没记过）与「检索词为空」
+ * （没派生出词）是两件事，旧实现的空串把二者混成同一个静默。 */
+function priorNoteOf(a: VaultPriorAudit): string {
+  if (!a.terms.length && !a.expanded.length) return '；先验未检索（无检索词）'
+  const bits = [`扫 ${a.scanned} 篇`]
+  if (a.expanded.length) bits.push(`登记表扩词 ${a.expanded.length}`)
+  if (a.expansionError) bits.push('登记表 Broken 未扩词')
+  if (a.scanTruncated) bits.push('扫描面截断')
+  if (a.hitsTrimmed) bits.push(`命中 ${a.matched} 取前 ${a.hitPaths.length}`)
+  const head = a.zeroHit ? '先验 0 命中' : `先验命中 ${a.hitPaths.length}（${a.hitPaths.join('、')}）`
+  return `；${head}（${bits.join('、')}）`
 }
 
 /** 出题多样性注记（#230 / ADR-0064）：三指标 + 各自的样本量。
@@ -594,7 +611,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
       }, rt.agent)
       job.status = 'done'
       job.message = `种子提案 #${r.id} 待人审：${r.starts} 起点 → 终点「${r.endpoint}」`
-        + `${r.prior_hits ? `；先验命中 ${r.prior_hits}` : ''}${r.repaired ? '；修复轮一次' : ''}——提案收件箱一次人审即开工`
+        + `${r.prior ? priorNoteOf(r.prior) : ''}${r.repaired ? '；修复轮一次' : ''}——提案收件箱一次人审即开工`
     } else if (job.phase === 'compass') {
       // 初画/重画共用一条队列通道（repainted 由引擎结果区分），措辞不预设哪一种
       job.message = '罗盘路线绘制中（deep 档工具回路）…'
@@ -616,7 +633,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
         ...(p.notes?.length ? { notes: p.notes } : {}),
       }, rt.agent)
       job.status = 'done'
-      job.message = `反编译双提案待联合人审：计划 #${r.pair.plan}${r.pair.seed ? ` + 种子 #${r.pair.seed}` : ''}（先验命中 ${r.prior_hits}）——提案收件箱同进同退`
+      job.message = `反编译双提案待联合人审：计划 #${r.pair.plan}${r.pair.seed ? ` + 种子 #${r.pair.seed}` : ''}${priorNoteOf(r.prior)}——提案收件箱同进同退`
     } else if (job.phase === 'plan' && job.planPayload) {
       job.message = '里程碑计划草案生成中…'
       persistGenJobs(rt)
@@ -766,19 +783,22 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
   } catch {
     // 档位缺失不阻塞出题（difficulty/bloom 全缺时折叠兜底中档=非高，同管线口径）
   }
+  // 先验审计注记（#229）：纯出题任务不产正文包，审计从出题这一次检索取
+  let priorNote = ''
   try {
     const r = await generateQuiz(rt, llmSeam(ctx, rt.corpus.record), job.course, job.node, job.count, {
       ...(job.section ? { section: job.section } : {}),
       ...(job.instruction ? { instruction: job.instruction } : {}),
       isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
       effort: quizEffort,
+      onPrior: a => { priorNote ||= priorNoteOf(a) },
     })
     if ((job.status as GenJobStatus) === 'cancelling') throw new Error('生成已取消，结果已丢弃。')
     rt.jobs.quizJobResults.set(key, r)
     const dupNote = r.duplicates.length ? `；判重丢弃 ${r.duplicates.length} 道` : ''
     const rejNote = r.rejected.length ? `；无法归节拒收 ${r.rejected.length} 道` : ''
     job.status = 'done'
-    job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}${auditNoteOf(r)}${diversityNoteOf(r)}`
+    job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}${auditNoteOf(r)}${diversityNoteOf(r)}${priorNote}`
   } catch (err) {
     const corpusRef = failCorpus(rt, STATIONS.quiz, err)  // generateQuiz 内已补标，此处取 ref 进失败详情
     job.status = contentFailureStatus(job.status)
@@ -816,7 +836,12 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
   const complete = llmSeamStripped(ctx, rt.corpus.record)
   const failures: GenJobFailure[] = []
   try {
-    const pack = await rt.engine.content2.contentPack(course, node)
+    // 先验审计注记（#229）：零命中/两种截断随任务消息带出（ADR-0004）。取**第一次**读数
+    // 即可——同一节点同一检索，大纲裁剪包与正文包是同一份先验（见下方 packOutline 不挂）
+    let priorNote = ''
+    const pack = await rt.engine.content2.contentPack(course, node, {
+      onPrior: a => { priorNote ||= priorNoteOf(a) },
+    })
     // 档位元数据（GenJob 记录；quiz 量分发与后续弹性评估用）
     try {
       job.tier = TIER_LABELS[await rt.engine.content2.contentTierOf(course, node)]
@@ -932,7 +957,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     const contentMsg = failures.length
       ? `「${node}」正文部分完成（${done}/${job.progress!.total} 节；未完成：${failedTitles}——失败提示可「重试续跑」或定点重写）`
       : `「${node}」正文完成（${job.progress!.total} 节）`
-    const msg = await finishWithQuiz(rt, complete, job, contentMsg, quizCount)
+    const msg = await finishWithQuiz(rt, complete, job, contentMsg + priorNote, quizCount)
     if (failures.length) {
       // 出题成功也不掩盖节失败：partial = 未完成全部必需阶段（Partial 词条语义）
       job.status = 'partial'
@@ -987,7 +1012,11 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
 /** 单节重写：节任务上下文 → 模型 → sectionApply（与管线共用同一拼装、门禁与修复回路；
  * 剥围栏缝同管线；allowSplit:false——重写不改大纲结构，溢出如实报错）。 */
 export async function generateSection(rt: HostRuntime, ctx: Context, course: string, node: string, sectionId: string): Promise<string> {
-  const pack = await rt.engine.content2.contentPack(course, node)
+  // 先验审计注记（#229）：单节重写同样是「读到学习者哪几篇笔记」的一次生成，注记照带
+  let priorNote = ''
+  const pack = await rt.engine.content2.contentPack(course, node, {
+    onPrior: a => { priorNote ||= priorNoteOf(a) },
+  })
   const views = await rt.engine.content2.contentSectionsView(course, node)
   const s = views.find(v => v.id === sectionId)
   if (!s) throw new Error(`「${node}」没有节「${sectionId}」——先运行大纲。`)
@@ -999,7 +1028,7 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
   // 与管线同款剥围栏缝（管线产出口对 ``` 围栏容忍，重写通道此前裸缝更脆，ADR-0054）；
   // allowSplit:false——「重写这一节」的意图是重写本节，不自动改大纲结构（溢出即如实报错）
   const r = await applySectionWithRepair(rt, llmSeamStripped(ctx, rt.corpus.record), course, node, s, sectionTpl, pack, { highTier, allowSplit: false, coherence })
-  return `[section] 「${r.title}」v${r.version} 落盘。`
+  return `[section] 「${r.title}」v${r.version} 落盘。${priorNote}`
 }
 
 /** 项目里程碑计划生成（P 区 #92）：计划提示词包 → 缝 complete（fast 档，#162 计划站

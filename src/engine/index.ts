@@ -88,6 +88,11 @@ export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.t
 export type { SecondOpinionReport, SecondOpinionOptions } from './question-audit.ts'
 /** 出题多样性仪表（#230 / ADR-0064）：报告类型随门面出（宿主任务消息、工具面、基线脚本消费）。 */
 export type { QuestionDiversityReport, DiversityMetrics, DiversityReading, DistractorReading } from './question-diversity.ts'
+/** Vault 先验检索审计（#229 / ADR-0071）：检索核的审计类型随门面出（宿主在生成入口的
+ * onPrior 注记回调里消费，R1：host 的 engine 导入只走门面）。审计**形状**住中立词汇层
+ * types.ts（分居理由见那里：形状若住检索核会与 question-bank/note-source 成环，R7）。 */
+export type { VaultPriorHit, VaultPriorSearch, PriorQueryTerm } from './vault-prior.ts'
+export type { VaultPriorAudit } from './types.ts'
 /** 质量量规注册表（#221 / ADR-0062）：量规随门面出——离线评审运行器（#222）按站取量规、
  * 报告带分层法庭元数据，评审器不重写判据（判定标准先于判定器）。 */
 export { QUALITY_RUBRICS, RUBRIC_COURTS, rubricOf, allCriteria } from './quality-rubrics.ts'
@@ -280,7 +285,7 @@ export class LearnhubEngine {
     })
     this.project = new ProjectSubsystem({
       store: this.store, paths: this.paths, registry: this.registry,
-      bank: this.bank, proposals: this.proposals, projects: this.projects, noteManifest: this.noteManifest,
+      bank: this.bank, proposals: this.proposals, projects: this.projects, noteManifest: this.noteManifest, concepts: this.concepts,
       vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
@@ -306,7 +311,7 @@ export class LearnhubEngine {
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       nodeNote: (c, graph, node) => this.content2.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
-      vaultPriorFor: (graph, node) => this.content2.vaultPriorFor(graph, node),
+      vaultPriorFor: (c, graph, node) => this.content2.vaultPriorFor(c, graph, node),
       logGradingFailure: rec => this.content2.logGradingFailure(rec),
       questionContext: (courseKey, node, qid, op) => this.content2.questionContext(courseKey, node, qid, op),
       exerciseGated: (c, node) => this.growth2.exerciseGated(c, node),
@@ -329,7 +334,7 @@ export class LearnhubEngine {
       experimentApply: pid => this.lab.experimentApply(pid),
     })
     this.content2 = new ContentSubsystem({
-      store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
+      store: this.store, paths: this.paths, registry: this.registry, concepts: this.concepts, bank: this.bank,
       content: this.content, sessions: this.sessions, learnerCards: this.learnerCards,
       vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),

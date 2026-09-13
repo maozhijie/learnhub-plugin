@@ -67,10 +67,11 @@ import { isSeedGraph, readAnchor, seedRepairPrompt, validateSeedProposal } from 
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
 import type { GNode, ProposalRec } from './types.ts'
+import type { VaultPriorAudit } from './types.ts'
 import { PROPOSAL_KINDS } from './types.ts'
 import type { VaultLinkCandidateView, VaultLinksDoc } from './vault-links.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLinks, scoreTier } from './vault-links.ts'
-import { searchVaultPrior } from './vault-prior.ts'
+import { priorQueryTerms, queryEntriesFor, searchVaultPrior } from './vault-prior.ts'
 import type { GraphApplyResult, GraphBrowseDoc, GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult } from './views/graph.ts'
 import type { ExperimentStartResult } from './views/lab.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
@@ -430,7 +431,7 @@ export class GraphSubsystem {
   async seedPropose(
     input: SeedDraftRequest,
     agent: AgentSeam,
-  ): Promise<{ id: number; course: string; mode: 'new' | 'reseed'; goal_type: string; endpoint: string; starts: number; prior_hits: number; repaired: boolean }> {
+  ): Promise<{ id: number; course: string; mode: 'new' | 'reseed'; goal_type: string; endpoint: string; starts: number; prior?: VaultPriorAudit; repaired: boolean }> {
     const course = input.course.trim()
     const goal = input.goal.trim()
     if (!course) throw new Error('[seed-propose] 课程名必填（mode=new 自拟新名，mode=reseed 选既有课程）。')
@@ -441,19 +442,22 @@ export class GraphSubsystem {
     if (goalType === 'coverage' && !worksheet.length) {
       throw new Error('[seed-propose] 覆盖锚定必须携带非空块工作表（{block, note?} 列表）；能力锚定不需要。')
     }
-    // vault 先验选配（只读检索）：注册清单 Missing = 零命中合法，退化常识基线
-    let prior = ''
-    let priorHits = 0
+    // vault 先验选配（只读检索）：注册清单 Missing = 零命中合法，退化常识基线。
+    // #229：检索词经概念登记表扩展（别名/易混概念低权重并入），审计随返回值带出——
+    // 旧实现零命中静默（连「检索过没有」都读不出来，ADR-0004）。
+    let priorBlock = ''
+    let priorAudit: VaultPriorAudit | undefined
     if (input.useVaultPrior === true) {
       const manifest = await this.e.noteManifest.load()
       const titles = manifest.sources.map(s => s.title ?? s.path.split('/').pop()!.replace(/\.md$/i, ''))
-      const terms = decompileTerms(goal, titles)
+      const { entries, error } = await queryEntriesFor(this.e.concepts, this.e.paths.courseRoot(course))
+      const query = priorQueryTerms(decompileTerms(goal, titles), entries)
       const centerRel = this.e.paths.centerRoot.slice(this.e.vaultRoot.length + 1)
-      const hits = terms.length ? await searchVaultPrior(this.e.vaultRoot, centerRel, terms, {}, this.e.fs) : []
-      priorHits = hits.length
-      if (hits.length) {
-        const items = hits.map(h => `- 《${h.title}》（${h.path}）\n  > ${h.excerpt.replaceAll('\n', '\n  > ')}`).join('\n')
-        prior = `## 学习者已有理解（Vault 先验）\n\n以下是学习者个人 Vault 里与目标相关的笔记摘录（只读检索所得）：\n\n${items}\n\n起点定位要求：把起点放在熟悉边界——笔记已稳定覆盖的内容不作起点（那是可快速略过的地形，在 reason 里点一句）；摘录只是他记过的东西，只读，永不改写。`
+      const found = await searchVaultPrior(this.e.vaultRoot, centerRel, query, {}, this.e.fs)
+      priorAudit = error ? { ...found.audit, expansionError: error } : found.audit
+      if (found.hits.length) {
+        const items = found.hits.map(h => `- 《${h.title}》（${h.path}）\n  > ${h.excerpt.replaceAll('\n', '\n  > ')}`).join('\n')
+        priorBlock = `## 学习者已有理解（Vault 先验）\n\n以下是学习者个人 Vault 里与目标相关的笔记摘录（只读检索所得）：\n\n${items}\n\n起点定位要求：把起点放在熟悉边界——笔记已稳定覆盖的内容不作起点（那是可快速略过的地形，在 reason 里点一句）；摘录只是他记过的东西，只读，永不改写。`
       }
     }
     const tpl = await this.e.loadPrompt('种子提案')
@@ -461,7 +465,7 @@ export class GraphSubsystem {
     // seedRepairPrompt 复拼（同一材料块），契约在修复轮仍居尾。
     const materials = `## 目标描述（学习者原文）\n\n${goal}\n\n## 模式与绑定（照抄，不自拟）\n\n- 课程名：${course}\n- 模式：${mode}\n- 目标类型：${goalType}`
       + (goalType === 'coverage' ? `\n- 块工作表（照抄块名）：\n${worksheet.map(w => `  - block: ${w.block}`).join('\n')}` : '')
-      + (prior ? `\n\n---\n\n${prior}` : '')
+      + (priorBlock ? `\n\n---\n\n${priorBlock}` : '')
     const pack = withContractLast(tpl, materials)
     const gateOnce = (raw: string): { errors: string[]; spec: SeedProposalSpec | null } => {
       let doc: unknown
@@ -497,7 +501,7 @@ export class GraphSubsystem {
     if (goalType === 'coverage') spec.worksheet = worksheet
     else delete spec.worksheet
     const r = await this.graphPropose('seed', YAML.stringify(spec)) as { id: number; endpoint: string; starts: number }
-    return { id: r.id, course, mode, goal_type: goalType, endpoint: r.endpoint, starts: r.starts, prior_hits: priorHits, repaired: round.repaired }
+    return { id: r.id, course, mode, goal_type: goalType, endpoint: r.endpoint, starts: r.starts, prior: priorAudit, repaired: round.repaired }
   }
 
 
