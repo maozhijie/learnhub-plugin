@@ -42,6 +42,7 @@
     "smoke": "node scripts/gen-smoke.mjs",
     "spike": "node scripts/spike.mjs",
     "quality-review": "node scripts/quality-review.mjs",
+    "prompt-bump": "node --experimental-transform-types scripts/prompt-bump.mts",
     "typecheck": "node scripts/arch-baseline.mjs --types && node scripts/scan-ui-types.mjs",
     "test": "npm run typecheck && node --experimental-transform-types --test --test-concurrency=3 tests/*.test.ts"
   },
