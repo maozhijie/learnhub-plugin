@@ -97,7 +97,7 @@ export default function PracticePage() {
           <div className='lh-muted'>无到期、无提醒——引擎只收自报、记重复、画曲线。</div>
         </div>
       ),
-      style: { width: 560 },
+      className: 'lh-w-560',
       onOk: async () => {
         setBusy(true)
         try {

@@ -253,7 +253,7 @@ export async function enqueueGeneration(rt: HostRuntime, ctx: Context, course: s
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
-  return { message: `「${node}」已入队，将在后台按序生成（进度见生成页）。`, queued: true }
+  return { message: `「${node}」已入队，将在后台按序生成（进度见生成队列）。`, queued: true }
 }
 
 /** 入队一个纯出题任务（#118 补生成任务化）：复用全局队列与 GenJob 记录（phase=quiz），
@@ -281,7 +281,7 @@ export function enqueueQuizGeneration(
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
-  return { key, message: `「${node}」出题任务已入队，将在后台按序生成（进度见生成页）。`, queued: true }
+  return { key, message: `「${node}」出题任务已入队，将在后台按序生成（进度见生成队列）。`, queued: true }
 }
 
 
@@ -298,7 +298,7 @@ export function waitForGenJob(rt: HostRuntime, key: string, timeoutMs = 15 * 60_
       }
       if (job.status === 'queued' || job.status === 'running' || job.status === 'cancelling') {
         if (Date.now() - startedAt > timeoutMs) {
-          reject(new Error('等待生成任务超时——任务仍在后台执行，可稍后在生成页查看结果。'))
+          reject(new Error('等待生成任务超时——任务仍在后台执行，可稍后在生成队列查看结果。'))
           return
         }
         setTimeout(tick, 1000)
@@ -395,7 +395,7 @@ export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string
     return { message: `「${course}」上一生长批已取消（${last.message ?? ''}），不重拉——取消是明确的中止意图，可等下一次触发。`, queued: false }
   }
   if (last?.status === 'failed' && opts.force !== true) {
-    return { message: `「${course}」上一生长批失败（${last.message ?? ''}），不自动重试——可从生成页或失败通知重试，或等下一次触发。`, queued: false }
+    return { message: `「${course}」上一生长批失败（${last.message ?? ''}），不自动重试——可从生成队列或失败通知重试，或等下一次触发。`, queued: false }
   }
   if (!inject && opts.force !== true && last && last.status === 'done' && last.growthOutcome !== 'applied') {
     return { message: `「${course}」上一生长批裁决为 ${last.growthOutcome === 'idle' ? '停摆' : '暂不产结构'}，不重拉。`, queued: false }
@@ -547,7 +547,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
       }, rt.agent)
       job.status = 'done'
       job.message = `种子提案 #${r.id} 待人审：${r.starts} 起点 → 终点「${r.endpoint}」`
-        + `${r.prior_hits ? `；先验命中 ${r.prior_hits}` : ''}${r.repaired ? '；修复轮一次' : ''}——提案页一次人审即开工`
+        + `${r.prior_hits ? `；先验命中 ${r.prior_hits}` : ''}${r.repaired ? '；修复轮一次' : ''}——提案收件箱一次人审即开工`
     } else if (job.phase === 'compass') {
       // 初画/重画共用一条队列通道（repainted 由引擎结果区分），措辞不预设哪一种
       job.message = '罗盘路线绘制中（deep 档工具回路）…'
@@ -569,7 +569,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
         ...(p.notes?.length ? { notes: p.notes } : {}),
       }, rt.agent)
       job.status = 'done'
-      job.message = `反编译双提案待联合人审：计划 #${r.pair.plan}${r.pair.seed ? ` + 种子 #${r.pair.seed}` : ''}（先验命中 ${r.prior_hits}）——提案页同进同退`
+      job.message = `反编译双提案待联合人审：计划 #${r.pair.plan}${r.pair.seed ? ` + 种子 #${r.pair.seed}` : ''}（先验命中 ${r.prior_hits}）——提案收件箱同进同退`
     } else if (job.phase === 'plan' && job.planPayload) {
       job.message = '里程碑计划草案生成中…'
       persistGenJobs(rt)

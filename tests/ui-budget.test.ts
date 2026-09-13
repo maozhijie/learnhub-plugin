@@ -17,6 +17,9 @@ import { fileURLToPath } from 'node:url'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGET = 500
 
+/** Windows 路径 → posix（测试里的相对路径口径统一）。反斜杠经字符码构造：源码里不写转义。 */
+const slash = (p: string): string => p.split(String.fromCharCode(92)).join('/')
+
 const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
   const p = join(dir, e.name)
   return e.isDirectory() ? walk(p) : /\.tsx?$/.test(e.name) ? [p] : []
@@ -110,7 +113,12 @@ function inlineStyleSites(srcRoot: string): Array<{ file: string; body: string; 
   for (const p of walk(srcRoot)) {
     if (!p.endsWith('.tsx')) continue
     const text = readFileSync(p, 'utf8')
-    for (const m of text.matchAll(/style=\{\{([\s\S]*?)\}\}/g)) {
+    // 两种写法都算内联：属性形 style={{…}} 与选项对象形 style: {…}（Arco Modal.confirm 等）
+    const blocks = [
+      ...text.matchAll(/style=\{\{([\s\S]*?)\}\}/g),
+      ...text.matchAll(/(?:^|[\s,{])style:\s*\{([\s\S]*?)\}/gm),
+    ]
+    for (const m of blocks) {
       const body = m[1]!.replace(/\s+/g, ' ').trim()
       const dynamic = splitTop(body).map(x => x.trim()).filter(Boolean).some(part => {
         const i = part.indexOf(':')
@@ -119,15 +127,22 @@ function inlineStyleSites(srcRoot: string): Array<{ file: string; body: string; 
         const literal = /^-?\d+(\.\d+)?$/.test(v) || /^'[^']*'$/.test(v) || /^"[^"]*"$/.test(v)
         return !literal
       })
-      sites.push({ file: p.split(String.fromCharCode(92)).join('/').split('/ui/src/')[1]!, body, dynamic })
+      sites.push({ file: slash(p).split('/ui/src/')[1]!, body, dynamic })
     }
   }
   return sites
 }
 
-/** 登记的内联站点数（棘轮，精确匹配；#211 收敛后只剩动态值——进度条宽度、按数据着色等）。
- * 增减随提交同步并在注释里给理由（照调用点棘轮纪律）。 */
-const INLINE_STYLE_SITES = 30
+/**
+ * 登记的内联站点数（棘轮，精确匹配；#211 收敛后只剩动态值——进度条宽度、按数据着色等）。
+ * 增减随提交同步并在注释里给理由（照调用点棘轮纪律）。
+ * 扫描面 = 属性形 `style={{…}}` + 选项对象形 `style: {…}`（Arco Modal.confirm 一类）；
+ * 两条静态站点（PracticePage / ProposalsPage 的 Modal 宽度）已于 #211 迁 `.lh-w-560/620`，
+ * 余下 31 处逐条为动态：进度条百分比宽度、按数据/判定着色、React Flow 边样式对象等。
+ */
+const INLINE_STYLE_SITES = 31
+
+const NL = String.fromCharCode(10)
 
 test(`页面内联 style 只许动态值（现存 ${INLINE_STYLE_SITES} 处，全为动态值）`, () => {
   const sites = inlineStyleSites(join(ROOT, 'ui', 'src'))
@@ -160,14 +175,21 @@ test('门自检：静态内联样本必须被抓住，动态值样本不误咬�
  * global.css 有定义，且类名只能是 [a-z0-9-]（值名工具类把百分比写成 pct/full——
  * `lh-h-100%` 这类含 `%` 的名字是**非法 CSS 选择器**，浏览器整条规则丢弃、
  * 样式静默失效，是本层最容易踩的坑）。 */
-export function classViolations(srcRoot: string, cssText?: string): string[] {
-  const BS = String.fromCharCode(92)
+function classViolations(srcRoot: string, cssText?: string): string[] {
   const css = cssText ?? readFileSync(join(srcRoot, 'global.css'), 'utf8')
   const defined = new Set([...css.matchAll(/^\.([a-zA-Z0-9_-]+)[\s,{]/gm)].map(m => m[1]!))
   const violations: string[] = []
+  // 定义侧：选择器名含非法字符即违约（合法名 = 可选 .lh- 前缀 + [a-z0-9-]）。
+  // 这一侧必须独立成立——`lh-h-100%` 那种名字没有任何引用指向它，只查引用侧会恒过。
+  for (const m of css.matchAll(/^\.([^\s,{]+)/gm)) {
+    const name = m[1]!
+    if (name.startsWith('lh-') && !/^lh-[a-z0-9-]+$/.test(name)) {
+      violations.push(`global.css: 类定义「.${name}」含非法字符——CSS 选择器无效，规则被整条丢弃`)
+    }
+  }
   for (const p of walk(srcRoot)) {
     if (!p.endsWith('.tsx')) continue
-    const rel = p.split(BS).join('/').split('/ui/src/')[1]!
+    const rel = slash(p).split('/ui/src/')[1]!
     for (const m of readFileSync(p, 'utf8').matchAll(/className=(?:'([^']*)'|"([^"]*)"|\{`([^`]*)`\})/g)) {
       for (const token of ((m[1] ?? m[2] ?? m[3]) ?? '').split(/\s+/)) {
         if (!token.startsWith('lh-')) continue
@@ -197,6 +219,12 @@ test('门自检：未定义类与非法类名样本必须被抓住（ADR-0047）
     assert.equal(probe.length, 2, `探针模块的两处违规必须都被看见（实得 ${probe.length}）：${probe.join(' | ')}`)
     assert.ok(probe.some(x => x.includes('lh-made-up') && x.includes('未定义')), '未定义类未被抓到')
     assert.ok(probe.some(x => x.includes('lh-h-100%') && x.includes('非法字符')), '非法类名未被抓到')
+    // 定义侧：global.css 里的非法选择器名必须被看见（无人引用它，引用侧恒过）
+    const realCss = readFileSync(join(ROOT, 'ui', 'src', 'global.css'), 'utf8')
+    const defSide = classViolations(join(ROOT, 'ui', 'src'), realCss + NL + '.lh-h-100% { height: 100% }' + NL)
+    const defHits = defSide.filter(x => x.startsWith('global.css:')) // 引用侧消息里也提到 global.css，按行首前缀区分
+    assert.equal(defHits.length, 1, '定义侧非法选择器未被抓到：' + defHits.join(' | '))
+    assert.ok(defHits[0]!.includes('lh-h-100%'), '定义侧抓到的不是注入样本')
   } finally {
     rmSync(tmp, { force: true })
   }

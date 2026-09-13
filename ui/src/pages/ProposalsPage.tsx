@@ -120,7 +120,7 @@ export default function ProposalsPage({ frame, course }: { frame?: AppFrame; cou
           <Text type='secondary'>{p.summary}</Text>
         </Space>
       ),
-      style: { width: 620 },
+      className: 'lh-w-620',
       onOk: async () => {
         setBusy(true)
         try {

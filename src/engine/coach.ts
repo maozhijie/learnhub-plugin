@@ -53,8 +53,8 @@ export function coachFeedback(recs: BandRec[], dueHard: number, today: string): 
     const correct = hard.reduce((s, r) => s + r.correct, 0)
     const acc = answered ? correct / answered : 0
     if (acc < COACH_STRUGGLE_ACCURACY) {
-      // 复用 A3（#54/#55）建议语义：回补前置/成分技能的到期复习（学习页有直达入口），不设门禁
-      out.push(`挑战带最近连续受挫（正确率 ${Math.round(acc * 100)}%）。先回补前置与成分技能的到期复习（学习页有直达入口），再回来挑战会更稳。`)
+      // 复用 A3（#54/#55）建议语义：回补前置/成分技能的到期复习（今日页有直达入口），不设门禁
+      out.push(`挑战带最近连续受挫（正确率 ${Math.round(acc * 100)}%）。先回补前置与成分技能的到期复习（今日页有直达入口），再回来挑战会更稳。`)
     }
   }
   return out

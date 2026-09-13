@@ -195,10 +195,12 @@ tr.gen-job-focused > td { animation: gen-job-flash 3s ease-out forwards; }
 
 /* ============================================================================
  * 语义 class 层（#211 内联 style 收敛）：面板内容的样式词汇表——语义类按角色命名
- * （.lh-muted / .lh-quote / .lh-bar-track…），尺度工具类名即值（.lh-t-12 / .lh-gap-8 /
+ * （.lh-muted / .lh-quote / .lh-bar-track-md…），尺度工具类名即值（.lh-t-12 / .lh-gap-8 /
  * .lh-w-160，声明取 --lh-* token）。内联 style 只剩**动态值**（进度条宽度、按数据着色
  * 等，见 tests/ui-budget.test.ts 的内联 style 门）；静态样式一律走本段。
- * 声明与「迁移前的内联值」逐条等价（迁移时机器核对过，非目测）；新增类请按同一纪律。
+ * 声明与「迁移前的内联值」逐条等价：迁移由一次性脚本完成，每个类的声明并集与所替换的
+ * 内联声明逐条比对（值/属性完全一致才落盘），脚本未随仓提交（它只对迁移前的形态有效）；
+ * 本层即核对结果，新增类请按同一纪律核对后落盘。
  * ============================================================================ */
 
 /* ---- 文本 ---- */
@@ -324,7 +326,6 @@ tr.gen-job-focused > td { animation: gen-job-flash 3s ease-out forwards; }
 /* ---- 尺寸与定位 ---- */
 .lh-bottom-3 { bottom: 3px }
 .lh-h-10 { height: 10px }
-.lh-h-100% { height: 100% }
 .lh-h-340 { height: 340px }
 .lh-h-full { height: 100% }
 .lh-h-40 { height: 40px }
