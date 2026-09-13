@@ -148,7 +148,9 @@ test('夹具语料：宿主读侧投影出站/版本/outcome/空输出，可直�
 })
 
 test('语料读侧行尾归一：CRLF（Windows 检出/编辑路径）与 LF 解析结果一致（合入验证抓出的静默失效）', () => {
-  const lf = readFileSync(join(CORPUS, '教练生长', 'bad-2026-09-13T07-24-45-938Z-0004.md'), 'utf8')
+  // 先按本仓的读写口径归一，再构造 CRLF 对照——否则在 CRLF 检出（Windows autocrlf）下
+  // 这里拿到的是 CRLF 原文，"LF 组"其实成了 CR CRLF 双 CR（合入验证抓出的测试自身环境耦合）
+  const lf = readFileSync(join(CORPUS, '教练生长', 'bad-2026-09-13T07-24-45-938Z-0004.md'), 'utf8').replace(/\r\n?/g, '\n')
   const crlf = lf.replace(/\n/g, '\r\n')
   const a = parseCorpusFile(lf)
   const b = parseCorpusFile(crlf)
