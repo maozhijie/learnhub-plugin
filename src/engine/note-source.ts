@@ -41,6 +41,8 @@ import type { AnswerResult, QuestionForgetResult, QuestionItem, QuestionRateResu
 import { dayOfTs, nowIsoOf } from './dates.ts'
 import type { Clock } from './clock.ts'
 import { readDayCutoff, xpForAnswer } from './xp.ts'
+import { render } from './prompt-render.ts'
+import { INVOKES_BACKFILL_PROMPT } from './prompts/content.ts'
 
 /** 复习队列里笔记源卡的伪课程名（questionAnswer/Rate/Forget 以它路由到镜像题库；
  * 与真实课程重名时真实课程优先——同名课程存在则不触发笔记源路由）。 */
@@ -668,25 +670,13 @@ export class ChannelsSubsystem {
     const missing = items.filter((x): x is Record<string, unknown> =>
       typeof x === 'object' && x !== null && !invokesTagged(x as Record<string, unknown>))
     if (!missing.length) return 0
-    const prompt = [
-      '## 任务：为下列题目各补一枚 invokes 概念标注',
-      '',
-      '从概念清单中为每道题选**恰一枚**本题最主要考察的概念，名字精确照抄清单（一字不差）。只输出一个 YAML 映射（不要代码围栏、不要任何解释），键为题目序号、值为概念名：',
-      '',
-      '1: 概念名',
-      '2: 概念名',
-      '',
-      '## 概念清单',
-      '',
-      ...scope.map(c => `- ${c}`),
-      '',
-      '## 题目（按序号）',
-      '',
-      ...missing.map((it, i) => {
+    const prompt = render(INVOKES_BACKFILL_PROMPT, {
+      conceptList: scope.map(c => `- ${c}`).join('\n'),
+      questionList: missing.map((it, i) => {
         const stem = typeof it.q === 'string' ? it.q : ''
         return `${i + 1}. ${stem ? stem.slice(0, 80) : '（无题干）'}`
-      }),
-    ].join('\n')
+      }).join('\n'),
+    })
     let doc: unknown
     try {
       doc = YAML.parseModel(await llm(prompt))

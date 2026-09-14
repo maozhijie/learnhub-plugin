@@ -22,6 +22,10 @@ import {
 import type { Message, TokenUsage, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
 import { stripFences } from '../engine/index.ts'
 import type { LlmCallKind, LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmTokenUsage, LlmToolCall } from '../engine/index.ts'
+import { render } from '../engine/prompt-render.ts'
+import {
+  LOOP_PROMPT_ASSISTANT, LOOP_PROMPT_TASK, LOOP_PROMPT_TOOL_CALLS, LOOP_PROMPT_TOOL_ERROR_SUFFIX, LOOP_PROMPT_TOOL_RESULT,
+} from '../engine/prompts/host.ts'
 import type { CorpusRecordInput } from './corpus.ts'
 
 /** 语料捕获缝（适配器只消 record 一面；annotate/lastRef 由宿主失败处理经 rt.corpus 用）。 */
@@ -222,14 +226,14 @@ export function llmStreamSeam(ctx: Context, capture?: CorpusSink): LlmStream {
  * 后续轮次的提示词段因此读不出上一轮的裁决载荷）。 */
 function renderLoopPrompt(turns: LlmLoopTurn[]): string {
   return turns.map(t => {
-    if (t.role === 'user') return `【任务】\n${t.text}`
+    if (t.role === 'user') return render(LOOP_PROMPT_TASK, { text: t.text })
     if (t.role === 'assistant') {
       const calls = t.toolCalls?.length
-        ? `\n（请求工具：\n${t.toolCalls.map(c => JSON.stringify({ name: c.name, arguments: c.arguments })).join('\n')}）`
+        ? render(LOOP_PROMPT_TOOL_CALLS, { calls: t.toolCalls.map(c => JSON.stringify({ name: c.name, arguments: c.arguments })).join('\n') })
         : ''
-      return `【助手】\n${t.text}${calls}`
+      return render(LOOP_PROMPT_ASSISTANT, { text: t.text, calls })
     }
-    return `【工具结果${t.isError ? '·失败' : ''}】\n${t.text}`
+    return render(LOOP_PROMPT_TOOL_RESULT, { text: t.text, errorSuffix: t.isError ? LOOP_PROMPT_TOOL_ERROR_SUFFIX : '' })
   }).join('\n\n')
 }
 

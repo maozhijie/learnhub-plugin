@@ -226,6 +226,18 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 
 章程条款：`docs/agents/architecture.md` §8（登记四件套 + 两门 + 过门两条 + 「取不到就不假装」）。
 
+## 提示词文本单源（#237 / ADR-0075）：门改动登记
+
+**改的是提交级登记门的受控面**（`TEMPLATE_FILE` 单路径 → `TEMPLATE_FILES` 清单），判据本身（版本号集合差）不变：
+
+| 票 | 改动 | 落点 | 自检（ADR-0047） |
+|---|---|---|---|
+| #237 | **受控面改成清单**：模板自 `src/engine/content.ts` 迁到 `src/engine/prompts/templates.ts`，面里**保留历史路径** `content.ts`。理由：判据是版本号**集合差**，面里只留新路径会把一次纯搬迁读成十几个「首次出现」的新版本号，逼人给纯搬迁补假增量（实测：单路径面下 `check` 报 `v2、v4、v6、v7、v8、v9、v10、v11、v14 首次出现在本提交` 1 条违规；含历史路径时 0 条） | `scripts/prompt-bump.mts::TEMPLATE_FILES` / `versionsAt` / `refHasPath` | 新增临时仓库两态自检：① **纯搬迁提交必须绿**（把同一批标记从旧路径移到新路径、登记表一字不动——面只列新路径时这一条必红，即该规则的反样本）；② **搬迁后在新路径里 bump 且不补登记必须红**（防恒过：`git log -- <路径>` 过滤掉的路径等于看不见）。另加 `refHasPath`（`git cat-file -e`）容错「父提交尚无新路径」——旧实现直接 `git show <sha>^:<path>` 会抛 git 错把门崩在那次提交上 |
+| #237 | **行数棘轮白名单加一条**：`src/engine/prompts/`（先例 `src/engine/types.ts`「大表，行数不是病灶信号」）。不豁免的话每次手编提示词增删一行都要同提交下调基线，而人编提示词是高频动作；该面的版本与内容由 `PROMPT_CHANGELOG` 登记门对账。**只豁免文本**：渲染器（`src/engine/prompt-render.ts`）是要被量的代码，住前缀之外 | `scripts/scan-budget.mjs::SIZE_WHITELIST` | 白名单非幽灵断言（门自带：每条白名单至少命中一个真实文件）；`src/engine/prompts/*.ts` 实测落在受控面外、`prompt-render.ts` 实测进基线 |
+| #237 | **`REPAIR_MECHANISMS` 三条证人串换成代码级锚点**：`auditRepairOncePerQuestion` / `gradingReaskOnce` / `disputeReaskOnce` 的证人原本是提示词文本（`出题修复（第二意见抽查发现答案键不一致）`、两处 `[重判要求]`），随散文迁出原文件而漂移。换成**调用点锚点**（`const repairPrompt = render(QUIZ_AUDIT_REPAIR_PROMPT` / `render(GRADING_REASK_PROMPT` / `render(DISPUTE_REASK_SUFFIX`）——机制的实现是回路不是散文，指向调用点才能同时盯住「回路被删」与「常量改名」 | `src/engine/output-contracts.ts::REPAIR_MECHANISMS` | 既有门照旧执法（`tests/repair-policy.test.ts` 7 例绿：见证串必须在声明的 `src/` 文件里真实命中 + 幽灵机制/见证串改坏三类自检） |
+
+章程条款：`docs/agents/architecture.md` §8（提交级门的面口径）；收尾登记纪律见 `AGENTS.md` §提示词（无门，理由见 ADR-0075 §4）。
+
 ## 罗盘路线对账旁挂（#231 / ADR-0074）：行为变更登记
 
 | 票 | 变更 | 落点 | 自检（ADR-0047） |

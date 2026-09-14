@@ -13,6 +13,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
 import type { ProposalRec } from '../engine/types.ts'
+import { render } from '../engine/prompt-render.ts'
+import { TUTOR_SYSTEM_INSTRUCTIONS } from '../engine/prompts/host.ts'
 import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
 import { sendJson } from './http.ts'
 import {
@@ -49,7 +51,8 @@ async function tutorChat(rt: HostRuntime, ctx: Context, course: string, node: st
   const transcript = turns
     .map(h => `${h.role === 'assistant' ? '[AI 老师]' : '[学习者]'} ${h.content}`)
     .join('\n\n')
-  const system = `你是 learnhub 的 AI 老师，正在辅导学习者攻克一个课程节点。只依据下面的课程上下文与本课范围回答；超出范围的追问给一句概括并建议回到课程主线。回答用 Markdown，简洁直接，公式用 KaTeX（$...$）。\n\n若页面上有交互模拟件且演示能帮助理解，可在回答末尾附一个 learnhub-teacher 动作块（普通回答不要输出）：\n\`\`\`learnhub-teacher\n{ "action": "highlight|setState|reveal|annotate", "selector": "#元素CSS选择器", "state": {"变量名": 值}, "text": "批注文字" }\n\`\`\`\n面板会把块转成「在交互件上演示」按钮并广播给本页全部交互件；highlight/reveal 需 selector，annotate 需 text，setState 需 state（变量名与交互件滑杆一致）。\n\n${pack}`
+  // #237 / ADR-0075：指令散文在 prompts/host.ts（单源），上下文包是材料、在尾部拼接——不进变量面。
+  const system = render(TUTOR_SYSTEM_INSTRUCTIONS, {}) + `\n\n${pack}`
   return llmComplete(ctx, `${transcript}\n\n（请回答上面最后一条学习者的提问。）`, system,
     { capture: rt.corpus.record, station: STATIONS.tutor })
 }

@@ -16,6 +16,8 @@ import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
 import type { ConceptRegistry } from './concepts.ts'
 import { withContractLast } from './prompt-assembly.ts'
+import { render } from './prompt-render.ts'
+import { COACH_GATE_FEEDBACK_BLOCK, COACH_INJECT_BLOCK } from './prompts/projects.ts'
 import type { Content } from './content.ts'
 import type { BankDoc } from './question-bank.ts'
 import type { Graph } from './graph.ts'
@@ -620,7 +622,8 @@ export class GrowthSubsystem {
     }
     /** 教练回合材料块拼装（#218 契约后置）：上下文包 + 图面 + 段特有块（注入/沙盘参照/
      * 回灌反馈）全在前，模板的输出契约段经 Content.withContractLast 置尾——三段式与修复
-     * 重裁的同构形态，模型最后读到的始终是 note/route/ops 契约。 */
+     * 重裁的同构形态，模型最后读到的始终是 note/route/ops 契约。段特有块的指令散文住
+     * `prompts/projects.ts`（#237 / ADR-0075），本闭包只做过滤/去空/段间分隔的装配。 */
     const coachPrompt = (...blocks: Array<string | undefined>): string =>
       withContractLast(template, blocks
         .filter((b): b is string => Boolean(b?.trim()))
@@ -630,7 +633,7 @@ export class GrowthSubsystem {
       const pack = await this.coachContextPack(c.name, { lightweight: tier === 'light', today })
       const prompt = coachPrompt(
         pack,
-        opts.inject !== undefined ? `## 里程碑计划修订注入（项目消费拉动的生长请求）\n\n${opts.inject.trimEnd()}\n\n换线 = 激活图上已有节点（内容生成/接入路线），补支 = 朝新里程碑长最小必要分支；你的裁决仍走五算子与既定纪律，判断注入与就绪深度后照常产出（含零操作批）。` : undefined,
+        opts.inject !== undefined ? render(COACH_INJECT_BLOCK, { inject: opts.inject.trimEnd() }) : undefined,
         view,
       )
       return runVerdictLoop(tier, prompt)
@@ -670,10 +673,7 @@ export class GrowthSubsystem {
       const prompt = coachPrompt(
         pack,
         view,
-        `## 受理门反馈（上一版裁决未过受理门——被拒批次零落盘，图未改动）\n\n${feedback.trim()}\n\n`
-        + `上一版裁决原文：\n\n\`\`\`yaml\n${previousYaml.trim()}\n\`\`\`\n\n`
-        + `请对照拒绝原因逐条修正后，按模板重新产出完整裁决（course + note + route + ops）：`
-        + `区/块与节点名、pre 引用必须逐字来自上方图面，概念必须已在登记表或本批 concepts 铸名。`,
+        render(COACH_GATE_FEEDBACK_BLOCK, { feedback: feedback.trim(), previousYaml: previousYaml.trim() }),
       )
       const raw = await agent.repair('教练生长', prompt, { effort: 'deep' })
       const verdict = this.parseGrowthVerdict(raw)

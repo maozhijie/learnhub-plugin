@@ -1,0 +1,47 @@
+/**
+ * 宿主侧提示词文本（#237 / ADR-0075）：住 `src/host/*` 的模型可见散文的单源。
+ *
+ * **为什么住 engine 下**：本仓 `shared/` 是 UI 与 engine 的共享面，而宿主侧散文只有宿主与
+ * 引擎两侧需要；`src/engine/prompts/` 是提示词文本的统一落点，集中一处才好「一个地方找全」。
+ * 宿主深导入本文件（纯字符串常量、零运行期语义）——`engine/index.ts` 头注记了这条约定的
+ * 边界：host 深导入只准落在纯声明面。
+ *
+ * **范围口径**（与 ADR-0075 §1 一致）：只收**对模型说「做什么、怎么做」的散文**。序列化
+ * 调用方数据的材料块留在各自站点（`host/jobs.ts::sectionMaterials` 的节 id/标题标签、工具
+ * `description`、`shared/content-renderers.ts` 的渲染能力清单都不进来）——判据是「删掉这段
+ * 文字，模型的行为会不会变」，会变的才进这里。
+ *
+ * 渲染：取值走 `../prompt-render.ts::render`（`{{var}}` 占位符，缺变量与残留都抛）。
+ * **本文件不得整体送进 `render`**——占位符是按段声明的。
+ */
+
+/** 导师会话系统提示词（`/tutor`）：角色 + 范围纪律 + learnhub-teacher 动作块格式。
+ * 上下文包（discussionPack）由调用点在尾部拼接，不进变量面——它是材料，不是指令。 */
+export const TUTOR_SYSTEM_INSTRUCTIONS = `你是 learnhub 的 AI 老师，正在辅导学习者攻克一个课程节点。只依据下面的课程上下文与本课范围回答；超出范围的追问给一句概括并建议回到课程主线。回答用 Markdown，简洁直接，公式用 KaTeX（$...$）。\n\n若页面上有交互模拟件且演示能帮助理解，可在回答末尾附一个 learnhub-teacher 动作块（普通回答不要输出）：\n\`\`\`learnhub-teacher\n{ "action": "highlight|setState|reveal|annotate", "selector": "#元素CSS选择器", "state": {"变量名": 值}, "text": "批注文字" }\n\`\`\`\n面板会把块转成「在交互件上演示」按钮并广播给本页全部交互件；highlight/reveal 需 selector，annotate 需 text，setState 需 state（变量名与交互件滑杆一致）。`
+
+/** 回路历史渲染的四段骨架（语料 frontmatter 之下的提示词段；`host/llm.ts::renderLoopPrompt`）。
+ * 这是**记录面**的措辞：逐轮标注角色、工具调用带参数原文（#236 / ADR-0073）。改这里会让
+ * 后续轮次的提示词段与已存语料不再可比，故与生产提示词同口径登记。 */
+export const LOOP_PROMPT_TASK = '【任务】\n{{text}}'
+export const LOOP_PROMPT_ASSISTANT = '【助手】\n{{text}}{{calls}}'
+export const LOOP_PROMPT_TOOL_CALLS = '\n（请求工具：\n{{calls}}）'
+export const LOOP_PROMPT_TOOL_RESULT = '【工具结果{{errorSuffix}}】\n{{text}}'
+/** 工具结果失败标注（`LOOP_PROMPT_TOOL_RESULT` 的 `{{errorSuffix}}` 取值）。 */
+export const LOOP_PROMPT_TOOL_ERROR_SUFFIX = '·失败'
+
+/** 节生成材料块里的**前节结尾**段标题（`host/jobs.ts::sectionMaterials`）。整段就靠这句
+ * 约束模型的衔接行为（只参考、不复述），所以它是指令、不是标签；同段的 `## 本节任务`
+ * 与节 id/标题行是纯容器与数据标签，留在原站点。 */
+export const SECTION_PREV_TAIL_HEADING = '## 前节结尾（仅供衔接参考，不复述前节内容）'
+
+// ---------------------------------------------------------------- spike 装置专用（#216 / ADR-0069）
+// 下面三条是**工具通道 spike** 的措辞变体（FormatSpread 抗性检查），只被 `scripts/spike.mjs`
+// 与 `host/spike.ts` 的实验路径消费，不进生产调用链。放这里是为了「提示词单源」不留例外，
+// 但改动它们不影响任何生产站的产出——别把它们当成活的生产提示词。
+
+/** control 臂·重申契约（语义等价于现状，只把契约再强调一遍）。 */
+export const SPIKE_SUFFIX_RESTATE_CONTRACT = '\n\n（提醒：只输出一个 YAML 文档；不要代码围栏、不要任何解释。）'
+/** tool 臂·指令式（通道变更说明）。 */
+export const SPIKE_SUFFIX_TOOL_IMPERATIVE = '\n\n（本轮输出通道变更：必须调用 submit 工具提交结果，不要输出任何正文——把全部内容放进工具参数，参数是 JSON。）'
+/** tool 臂·口令式（同义的另一种说法）。 */
+export const SPIKE_SUFFIX_TOOL_PASSWORD = '\n\n（交卷方式：用 submit 工具。除工具调用外不要写任何文字；工具的参数就是你的完整 JSON 结果。）'

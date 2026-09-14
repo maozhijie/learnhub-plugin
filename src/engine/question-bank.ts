@@ -65,6 +65,13 @@ import type { DiversityQuestion, QuestionDiversityReport } from './question-dive
 import { questionViolation, repairQuestionStrings } from './question-hygiene.ts'
 import { runSecondOpinion, mergeSecondOpinionReports, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
 import type { SecondOpinionReport } from './question-audit.ts'
+import { render } from './prompt-render.ts'
+import {
+  DISPUTE_REASK_SUFFIX, DISPUTE_REVIEW_PROMPT, MISCONCEPTION_PRIOR_BLOCK,
+  QUIZ_COUNT_AND_ANCHOR, QUIZ_INSTRUCTION_BLOCK, QUIZ_NODE_ANCHOR_HIGH, QUIZ_NODE_ANCHOR_LOW, QUIZ_NODE_ANCHOR_MID,
+  QUIZ_SECTION_ANCHOR_HIGH, QUIZ_SECTION_ANCHOR_LOW, QUIZ_SECTION_ANCHOR_MID,
+  QUIZ_SECTION_LISTING_MULTI, QUIZ_SECTION_LISTING_SINGLE, QUIZ_SECTION_LISTING_SINGLE_BATCH,
+} from './prompts/quiz.ts'
 import type {
   BankEntry, CleanupGroup, CleanupPreviewDoc, DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult,
   ErrorAnswerResult, ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc,
@@ -978,28 +985,25 @@ export class BankSubsystem {
       ? Sessions.lessonSections(note.body).find(s => s.title === entry.title)?.md ?? null
       : null
     const forgot = rec.judge === 'forget'
-    const prompt = [
-      '# 复核一道练习题的申诉', '',
-      '学习者作答被判错并申诉「题目错了」。请严格按两阶段复核：',
-      '1. **独立解题**：只看题面自己完整解一遍（此阶段忽略下面给出的存储答案键），写出过程与你的答案；',
-      '2. **对账**：把你的独立结果与存储答案键/解析、以及学习者作答逐一比对；',
-      '3. 按系统提示的三态规则给出裁定。', '',
-      '## 题目', q.q,
-      ...(q.options?.length ? q.options.map((o, i) => `- ${String.fromCharCode(65 + i)}. ${o}`) : []),
-      '', `存储的答案键：${revealAnswer(q)}`,
-      ...(q.explanation ? ['', `存储的解析：${q.explanation}`] : []),
-      '', '## 学习者的作答',
-      forgot ? '（空——学习者按「忘记」翻面，未作答）' : (rec.answer || '（空作答）'),
-      '', '## 对应节正文（超纲判定依据）',
-      ...(entry && sectionMd
-        ? [`（来自节「${entry.title}」）`, '', sectionMd.slice(0, 4000)]
-        : ['（未能定位到具体节——以下为整课节选）', '', note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim().slice(0, 2500)]),
-    ].join('\n')
+    // 提示词散文住 prompts/quiz.ts（#237 / ADR-0075）：本处只组装材料值（题面/键/解析/
+    // 学习者作答/节正文取材）。
+    const prompt = render(DISPUTE_REVIEW_PROMPT, {
+      stem: q.q,
+      options: q.options?.length
+        ? `\n${q.options.map((o, i) => `- ${String.fromCharCode(65 + i)}. ${o}`).join('\n')}`
+        : '',
+      storedAnswer: revealAnswer(q),
+      explanation: q.explanation ? `\n\n存储的解析：${q.explanation}` : '',
+      learnerAnswer: forgot ? '（空——学习者按「忘记」翻面，未作答）' : (rec.answer || '（空作答）'),
+      sectionContext: entry && sectionMd
+        ? `（来自节「${entry.title}」）\n\n${sectionMd.slice(0, 4000)}`
+        : `（未能定位到具体节——以下为整课节选）\n\n${note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim().slice(0, 2500)}`,
+    })
     let lastError = ''
     for (let attempt = 1; attempt <= 2; attempt++) {
       const ask = attempt === 1
         ? prompt
-        : `${prompt}\n\n[重判要求] 上一次输出无法解析为复核结果。这一次只输出一个 JSON 对象（shape 见系统提示），不要任何其他文字、解释或代码围栏。`
+        : `${prompt}${render(DISPUTE_REASK_SUFFIX, {})}`
       const raw = await llmComplete(ask, DISPUTE_REVIEW_SYSTEM)
       try {
         const v = parseDisputeReview(raw)
@@ -1215,20 +1219,20 @@ export class BankSubsystem {
       const md = sectionMdOf(body, s.title)
       if (md === null) throw new Error(`[quiz] 正文里找不到节「${s.title}」——定向补题需要该节正文，请先确认节标题。`)
       contentBody = `## ${s.title}\n\n${md}`
-      listing = `\n\n## 节标注清单\n\n本批全部题目都属于这一节：section 字段必须精确写「${s.id}」（节标题：${s.title}），不要写「通用」或其他节。`
+      listing = render(QUIZ_SECTION_LISTING_SINGLE, { sectionId: s.id, sectionTitle: s.title })
     } else if (opts?.sections?.length) {
-      listing = `\n\n## 节标注清单\n\nsection 字段必须精确取自下列节 id（跨节综合题写「通用」）：\n${opts.sections.map(s => `- ${s.id} ｜ ${s.title}`).join('\n')}`
+      listing = render(QUIZ_SECTION_LISTING_MULTI, { lines: opts.sections.map(s => `- ${s.id} ｜ ${s.title}`).join('\n') })
     } else {
       listing = ''
     }
     const instruction = opts?.instruction?.trim()
-      ? `\n\n## 生成指令（学习者意见，优先遵循）\n\n${opts.instruction.trim()}`
+      ? render(QUIZ_INSTRUCTION_BLOCK, { instruction: opts.instruction.trim() })
       : ''
     const difficultyAnchor = tier === 1
-      ? '本节点为低复杂度：题目难度集中在 1-2，不出 difficulty: 3 的收尾难题。'
+      ? QUIZ_NODE_ANCHOR_LOW
       : tier === 3
-        ? '本节点为高复杂度：收尾可出 1-2 道 difficulty: 3 的综合/易错题。'
-        : '本节点为中复杂度：难度递进到 2，收尾至多 1 道 difficulty: 3。'
+        ? QUIZ_NODE_ANCHOR_HIGH
+        : QUIZ_NODE_ANCHOR_MID
     const misBlock = misconceptionPromptBlock(graph.misconceptionsOf[node], '干扰项材料')
     // 出生打标（#148）：概念清单 = 本节 teaches ∪ 前置闭包 teaches；空清单 = 门不激活。
     // 易混对候选（#232）：登记表 confusable 中与本节清单相交的对，随清单注入——
@@ -1237,7 +1241,7 @@ export class BankSubsystem {
     const conceptBlock = Content.conceptListBlock(conceptScope)
       + Content.confusablePairsBlock(confusablePairsOf(conceptEntries, new Set(conceptScope)))
     const raw = await llm(withContractLast(tpl,
-      `${existingStemsPromptBlock(existingStems)}${listing}${instruction}\n\n## 题目数量\n\n${requested} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n${contentBody}${prior.section ? `\n\n---\n\n${prior.section}` : ''}`))
+      `${existingStemsPromptBlock(existingStems)}${listing}${instruction}${render(QUIZ_COUNT_AND_ANCHOR, { count: requested, difficultyAnchor })}${misBlock}${conceptBlock}\n\n---\n\n${contentBody}${prior.section ? `\n\n---\n\n${prior.section}` : ''}`))
     const doc = YAML.parseModel(raw) as { node?: unknown; questions?: unknown } | null
     if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions) || !doc.questions.length) {
       throw new Error('[quiz] 模型没有产出可用题目（questions 为空）。')
@@ -1410,12 +1414,12 @@ export class BankSubsystem {
       // 节位置+节点难度推导）——替换写死的开头 d1/中间 d2/收尾 d3 模板口径。
       const tierLabel = sectionTierLabel(s.tier, graph.difficultyOf[node], graph.estOf[node], si + 1, manifest.length)
       const difficultyAnchor = tierLabel === '低'
-        ? '本节难度档：低——题目难度 1 为主（至多 1 道 2），不出 difficulty: 3。'
+        ? QUIZ_SECTION_ANCHOR_LOW
         : tierLabel === '高'
-          ? '本节难度档：高——允许 1-2 道 difficulty: 3 的易错/综合题。'
-          : '本节难度档：中——难度递进到 2 即可（收尾至多 1 道 difficulty: 3）。'
+          ? QUIZ_SECTION_ANCHOR_HIGH
+          : QUIZ_SECTION_ANCHOR_MID
       const raw = await llm(withContractLast(tpl,
-        `${stemBlock}\n\n## 节标注清单\n\nsection 字段必须精确写「${s.id}」（本批全部题目都属于这一节）。\n\n## 题目数量\n\n${perSection} 道\n\n## 难度锚定\n\n${difficultyAnchor}${misBlock}${conceptBlock}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`))
+        `${stemBlock}${render(QUIZ_SECTION_LISTING_SINGLE_BATCH, { sectionId: s.id })}${render(QUIZ_COUNT_AND_ANCHOR, { count: perSection, difficultyAnchor })}${misBlock}${conceptBlock}\n\n---\n\n## ${s.title}\n\n${sectionMd}${priorBlock}`))
       let doc: { questions?: unknown } | null = null
       try {
         doc = YAML.parseModel(raw) as { questions?: unknown } | null
@@ -1560,8 +1564,12 @@ function sectionMdOf(body: string, title: string): string | null {
 
 /** 误解先验注入段（#147 误解目录消费；节点无误解时返回 ''，Missing 合法空态）。
  * 生成期先验——真实错误检测归作答流水挖矿与申诉复核，有真实数据后先验让位，
- * 让位语义由各消费方模板措辞声明（干扰项以生成指令为准、错误卡 mine 以真实错答为准）。 */
+ * 让位语义由各消费方模板措辞声明（干扰项以生成指令为准、错误卡 mine 以真实错答为准）。
+ * 散文住 `prompts/quiz.ts`（#237 / ADR-0075）。 */
 function misconceptionPromptBlock(mis: Array<{ concept: string; model: string }> | undefined, use: string): string {
   if (!mis?.length) return ''
-  return `\n\n## 误解先验（${use}）\n\n- 本节点登记在册的误解先验（概念：错误模型）：\n${mis.map(m => `- ${m.concept}：${m.model}`).join('\n')}`
+  return render(MISCONCEPTION_PRIOR_BLOCK, {
+    use,
+    items: mis.map(m => `- ${m.concept}：${m.model}`).join('\n'),
+  })
 }

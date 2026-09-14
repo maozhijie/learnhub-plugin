@@ -15,7 +15,16 @@
  *
  * 落盘：state/回执.jsonl（append-only 证据流水）；Missing/Broken 纪律——文件缺失 =
  * 合法空态，损坏行 Broken 报出（流水带病读会数错渐退位置）。
+ *
+ * 评审指令散文住 `prompts/feedback.ts`（#237 / ADR-0075 惰性化）；vault 可编辑模板、回执
+ * 材料与节点要点是动态材料（含学习者自写内容），朴素拼装注入、不进 `render` 变量面。
  */
+import { render } from './prompt-render.ts'
+import {
+  RECEIPT_REVIEW_DEPTH_BRIEF, RECEIPT_REVIEW_DEPTH_FULL, RECEIPT_REVIEW_MATERIAL_HEADING,
+  RECEIPT_REVIEW_NO_POINTS, RECEIPT_REVIEW_RECENT_HEADING, RECEIPT_REVIEW_RUBRIC_HEADING,
+  RECEIPT_REVIEW_SYSTEM, RECEIPT_REVIEW_TARGET,
+} from './prompts/feedback.ts'
 import { nowIsoOf } from './dates.ts'
 import { applyPracticeEvidence, clamp01 } from './grading.ts'
 import type { Fm } from './types.ts'
@@ -121,39 +130,28 @@ export function receiptReviewPrompt(input: {
   mode: 'full' | 'brief'
   recentVerdicts: string[]
 }): string {
-  const lines: string[] = [input.template, '', `## 评审对象：${input.course} / ${input.node}`,
-    '', `## 回执材料（形态：${RECEIPT_KIND_LABEL[input.kind]}）`, '', input.material.slice(0, 6000),
-    '', '## 量表来源：本实践节点的正文/交互要点（评分只对照这些）']
+  const lines: string[] = [input.template, '',
+    render(RECEIPT_REVIEW_TARGET, { course: input.course, node: input.node }),
+    '', render(RECEIPT_REVIEW_MATERIAL_HEADING, { kindLabel: RECEIPT_KIND_LABEL[input.kind] }),
+    '', input.material.slice(0, 6000),
+    '', render(RECEIPT_REVIEW_RUBRIC_HEADING, {})]
   for (const s of input.points) {
     lines.push('', `### ${s.title}`, '', s.md.slice(0, 1200))
   }
   if (!input.points.length) {
-    lines.push('', '（该节点还没有可对照的正文要点——按回执材料的自洽性与完成度给分，并在 verdict 里注明量表缺依据。）')
+    lines.push('', render(RECEIPT_REVIEW_NO_POINTS, {}))
   }
   if (input.recentVerdicts.length) {
-    lines.push('', '## 近几次评审总评（供连续性参考，不必重复）', '', ...input.recentVerdicts.slice(-3).map(v => `- ${v}`))
+    lines.push('', render(RECEIPT_REVIEW_RECENT_HEADING, {}), '',
+      ...input.recentVerdicts.slice(-3).map(v => `- ${v}`))
   }
-  lines.push('', input.mode === 'full'
-    ? '## 本次评审深度：完整（full）——按量表逐要点对照，errors 给出错误逐条拆解。'
-    : '## 本次评审深度：简要（brief，渐退反馈）——只给 score 与一句话 verdict，errors 留空数组。')
+  lines.push('', render(input.mode === 'full' ? RECEIPT_REVIEW_DEPTH_FULL : RECEIPT_REVIEW_DEPTH_BRIEF, {}))
   return lines.join('\n')
 }
 
 /** 评审 system 指令（严格 JSON 输出契约）。 */
 export function receiptReviewSystem(): string {
-  return [
-    '你是 learnhub 的练习评审教练。学习者提交了一份真实练习的外部回执，你按量表给一次错误具体的定向评审。',
-    '这是回执触发的讲解（错误当下的定向反馈），不是自由答疑：只对照量表来源逐点评审，不扩展新主题。',
-    '语气直接、具体到错误本身；量表分诚实反映对照要点的达成度（0–1），不安慰性给分。',
-    '',
-    '## 输出（严格 JSON，不要代码围栏、不要任何额外解释）',
-    '{',
-    '  "score": 0.0,',
-    '  "verdict": "一句话总评",',
-    '  "errors": [ { "point": "对照的要点", "issue": "具体错误", "advice": "怎么改" } ]',
-    '}',
-    'brief 深度时 errors 必须是空数组。',
-  ].join('\n')
+  return render(RECEIPT_REVIEW_SYSTEM, {})
 }
 
 /** 一次回执提交的产出（engine.receiptSubmit 的返回）。 */

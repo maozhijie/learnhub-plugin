@@ -20,6 +20,8 @@ import type { Fm, GNode, ConceptTier, Misconception, BloomLevel } from './types.
 import { BLOOM_LEVELS } from './types.ts'
 import { masteryOfFm } from './srs.ts'
 import { repairRoundPrompt } from './prompt-assembly.ts'
+import { render } from './prompt-render.ts'
+import { SEED_REPAIR_HEADLINE } from './prompts/projects.ts'
 import type { Graph } from './graph.ts'
 
 /** 目标类型二分（#136）：能力锚定默认；覆盖锚定显式选择且必须带块工作表。 */
@@ -501,12 +503,13 @@ export interface SeedDraftRequest {
 }
 
 /** 种子起草修复轮提示词（面板下发的 seedPropose 用，与 decompileRepairPrompt 同一机械）：
- * 上一次输出未过干跑校验门 → 附校验清单重出完整 YAML。模板与材料分开收（#218 契约后
- * 置），共用 `repairRoundPrompt`（同族的另一站是目标反编译）。 */
+ * 上一次输出未过干跑校验门 → 附校验清单重出完整 YAML。模板与材料分开收（#218 契约后置），
+ * 共用 `repairRoundPrompt`（同族的另一站是目标反编译）；死因标题的散文住
+ * `prompts/projects.ts`（#237 / ADR-0075：散文与代码分家，标题经 `render` 取值）。 */
 export function seedRepairPrompt(tpl: string, materials: string, previous: string, errors: string[]): string {
   return repairRoundPrompt(
     tpl, materials,
-    '## 上一次输出未过种子校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）',
+    render(SEED_REPAIR_HEADLINE, {}),
     previous, errors,
   )
 }

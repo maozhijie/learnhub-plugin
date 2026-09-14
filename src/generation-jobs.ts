@@ -1,5 +1,8 @@
 /** 生成任务状态与保留期的单一契约：host 状态机与测试共用，避免字面量散落。 */
 
+import { render } from './engine/prompt-render.ts'
+import { OUTLINE_BUDGET_REPAIR_FEEDBACK, OUTLINE_PARSE_REPAIR_FEEDBACK } from './engine/prompts/content.ts'
+
 /** 生成任务状态：queued 为排队待跑（非活动、非终态）；running/cancelling 为活动态，其余为终态。 */
 export type GenJobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'partial' | 'failed' | 'cancelled'
 
@@ -172,10 +175,10 @@ export function outlineRepairFeedback(err: unknown): string | null {
   const code = err instanceof Error ? (err as Error & { code?: string }).code : undefined
   const msg = err instanceof Error ? err.message : String(err)
   if (code === 'OUTLINE_BUDGET') {
-    return `## 大纲护栏反馈\n\n上一次大纲未过护栏（节数与本节点复杂度不匹配）：\n${msg}\n\n请按上下文包 §9 复杂度档案的节段数区间重新规划。`
+    return render(OUTLINE_BUDGET_REPAIR_FEEDBACK, { errorMessage: msg })
   }
   if (code === 'OUTLINE_SHAPE' || code === 'MODEL_YAML') {
-    return `## 解析反馈\n\n上一次大纲输出未通过解析/结构校验：\n${msg}\n\n请重新输出完整 YAML 文档，修正全部问题；不要输出解释。`
+    return render(OUTLINE_PARSE_REPAIR_FEEDBACK, { errorMessage: msg })
   }
   return null
 }

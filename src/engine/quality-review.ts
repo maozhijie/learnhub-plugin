@@ -27,6 +27,12 @@
  * 不碰 fs（宿主侧读写与模型调用住 src/host/quality-review.ts）。
  */
 import { stripFences } from './agent.ts'
+import { render } from './prompt-render.ts'
+import {
+  QUALITY_REVIEW_BLIND_OUTPUT_SPEC,
+  QUALITY_REVIEW_BLIND_PROMPT,
+  QUALITY_REVIEW_RECONCILE_PROMPT,
+} from './prompts/grading.ts'
 import { RUBRIC_COURTS } from './quality-rubrics.ts'
 import type { QualityRubric, RubricDimension } from './quality-rubrics.ts'
 
@@ -172,21 +178,14 @@ export function dimensionNameOf(rubrics: readonly QualityRubric[], station: stri
 }
 
 // ---------------------------------------------------------------- 评审提示词（两段式防锚定）
+// 提示词文本住 `prompts/grading.ts`（#237 / ADR-0075：散文与代码分家）；本模块是调用点——
+// 量规块/产物原文块/元数据是**数据**（下面三个数据面函数），指令散文与段序由常量固定，
+// 取值一律经 `render`（缺变量与残留占位符都抛，见 prompt-render.ts 头注）。
 
-/** 评审员系统提示词：JSON-only 契约住在 system（#212 §四.1 的唯一先例是回执评审/判卷族
- * ——契约离生成点最近的位置；评审器是判定器，形态与判卷同族）。判读纪律逐条写死：证据
- * 必须是产物原文原句、引不到就判 null、无总分、不改写产物。 */
-export const QUALITY_REVIEW_SYSTEM = `你是 learnhub 学习系统的独立质量评审员：按给定的质量量规逐维度评审一份生成产物，逐维度判分并给出**可定位的原文证据**。
-
-分层法庭（不可越界）：你的评分是提议——附证据的判读，供人审对表；终审在人。你不改写产物、不提修复建议、不合成跨维度总分（维度正交，量规没有「总分」这一档）。
-
-判读纪律：
-- 证据必须是被评产物**原文里的原句**（照抄，不改写、不概括、不臆造）；一条证据引不到原文就换一条真在原文里的。
-- 引不到任何原文证据的维度，写 "score": null 并在 notes 里说明为什么该维度在产物本身不可判——不要为凑分数编证据。
-- 判分档（逐维度）：4 = 充分兑现；3 = 基本兑现（有小瑕疵）；2 = 部分兑现（有反例）；1 = 未兑现（明确违反或缺失）。
-- notes 写判分理由（引据哪条判据、为什么是这一档），不要复述产物内容。
-
-输出 JSON only，不带 Markdown 围栏、不带任何解释性文字。`
+/** 评审员系统提示词（文本住 `prompts/grading.ts`，本处 re-export 保持既有 import 面）。
+ * JSON-only 契约住在 system（#212 §四.1 的唯一先例是回执评审/判卷族——契约离生成点最近的
+ * 位置；评审器是判定器，形态与判卷同族）。 */
+export { QUALITY_REVIEW_SYSTEM } from './prompts/grading.ts'
 
 /** 量规块（两期共用）：逐维度列出判据与证据要求——判据原文来自量规表，评审器不重写。 */
 function rubricBlock(rubric: QualityRubric): string {
@@ -215,87 +214,51 @@ function artifactBlock(sample: ReviewSample): string {
   return ['## 被评产物原文', '', '```', artifactTextOf(sample), '```'].join('\n')
 }
 
-/** 一期·盲评提示词：只给量规与产物原文——生成提示词、站名/档位/outcome 等元数据一概不给
- * （锚定源先在的判读会让评审去「解释产物为什么长这样」，而不是「产物本身够不够好」）。 */
-export function reviewBlindPrompt(rubric: QualityRubric, sample: ReviewSample): string {
+/** 元数据块（二期对账的数据面）：语料锚、站与调用形态/档位/outcome、模板版本三行。**不是
+ * 提示词文本**——它是调用方数据的序列化（与 rubricBlock／artifactBlock 同族），故不进
+ * `prompts/grading.ts`；格式逐字节照旧。 */
+function metadataBlock(sample: ReviewSample): string {
   return [
-    '# 质量评审·一期（盲评）',
-    '',
-    '按下面的量规评这一份产物。你只看到产物本身：生成它的指令、上下文与它的元数据都不给你'
-    + '——先把产物读成它自己的样子，不要臆测「它本来可以长什么样」。',
-    '',
-    '## 量规',
-    '',
-    rubricBlock(rubric),
-    '',
-    artifactBlock(sample),
-    '',
-    ...blindOutputSpec(rubric),
+    `- 语料：${sample.ref}`,
+    `- 站：${sample.station}｜调用形态：${sample.kind}｜语义档：${sample.effort ?? '默认'}｜outcome：${sample.outcome}${sample.code ? `（${sample.code}）` : ''}${sample.truncated ? '｜输出被 max-tokens 截断' : ''}`,
+    `- 模板版本：${sample.templateVersion === null ? '无版本标记（非模板站或历史快照）' : `v${sample.templateVersion}`}`,
   ].join('\n')
 }
 
-/** 一期输出规格（维度 id 原样照抄是硬要求：id 是报告聚合的键，别名即失配）。 */
-function blindOutputSpec(rubric: QualityRubric): string[] {
-  return [
-    '## 输出',
-    '',
-    '只输出一个 JSON 对象（不要代码围栏、不要任何解释）：',
-    '',
-    '{"dimensions": [{"id": "<维度 id>", "score": 1|2|3|4|null, "evidence": ["<产物原文里的原句>"], "notes": "<判分理由>"}]}',
-    '',
-    `- 维度 id 必须与量规里的 ${rubric.dimensions.length} 个 id 完全一致（原样照抄、一个不多一个不少）。`,
-    '- 每个维度的 evidence 是产物原文原句的数组（可多条；判 null 时可以空）。',
-  ]
+/** 一期·盲评提示词：只给量规与产物原文——生成提示词、站名/档位/outcome 等元数据一概不给
+ * （锚定源先在的判读会让评审去「解释产物为什么长这样」，而不是「产物本身够不够好」）。
+ * 散文与段序住 `QUALITY_REVIEW_BLIND_PROMPT`，变量面 = 三个数据块。 */
+export function reviewBlindPrompt(rubric: QualityRubric, sample: ReviewSample): string {
+  return render(QUALITY_REVIEW_BLIND_PROMPT, {
+    rubric: rubricBlock(rubric),
+    artifact: artifactBlock(sample),
+    outputSpec: blindOutputSpec(rubric),
+  })
+}
+
+/** 一期输出规格（维度 id 原样照抄是硬要求：id 是报告聚合的键，别名即失配）。文本住
+ * `QUALITY_REVIEW_BLIND_OUTPUT_SPEC`，唯一变量 = 量规维度数。 */
+function blindOutputSpec(rubric: QualityRubric): string {
+  return render(QUALITY_REVIEW_BLIND_OUTPUT_SPEC, { dimensionCount: rubric.dimensions.length })
 }
 
 /** 二期·对账提示词：给出生成提示词（材料 + 输出契约）与元数据，让评审逐维度确认或修正
- * 一期判读——契约解释了产物形态时降档/升档都要说明依据（`revised` + `notes`）。 */
+ * 一期判读——契约解释了产物形态时降档/升档都要说明依据（`revised` + `notes`）。散文与段序
+ * 住 `QUALITY_REVIEW_RECONCILE_PROMPT`；变量面 = 数据块（量规／产物原文／一期判读 JSON／
+ * 元数据／生成提示词）+ 量规维度数。 */
 export function reviewReconcilePrompt(
   rubric: QualityRubric,
   sample: ReviewSample,
   blind: readonly DimensionScore[],
 ): string {
-  return [
-    '# 质量评审·二期（对账）',
-    '',
-    '下面给出这份产物的生成提示词（材料 + 输出契约）与它的元数据。逐维度复核你一期的判读：'
-    + '契约或材料里的哪一条解释了产物为什么长这样时，就地修正该维度判分并说明依据；'
-    + '解释不了的，维持原判。**不要因为「指令允许」就放过真正的缺项**——契约允许是底线，'
-    + '量规判据才是标准。',
-    '',
-    '## 量规',
-    '',
-    rubricBlock(rubric),
-    '',
-    artifactBlock(sample),
-    '',
-    '## 你的一期判读（盲评）',
-    '',
-    '```json',
-    JSON.stringify({ dimensions: blind.map(d => ({ id: d.id, score: d.score, evidence: d.evidence, notes: d.notes })) }, null, 1),
-    '```',
-    '',
-    '## 元数据',
-    '',
-    `- 语料：${sample.ref}`,
-    `- 站：${sample.station}｜调用形态：${sample.kind}｜语义档：${sample.effort ?? '默认'}｜outcome：${sample.outcome}${sample.code ? `（${sample.code}）` : ''}${sample.truncated ? '｜输出被 max-tokens 截断' : ''}`,
-    `- 模板版本：${sample.templateVersion === null ? '无版本标记（非模板站或历史快照）' : `v${sample.templateVersion}`}`,
-    '',
-    '## 生成提示词（渲染后原文）',
-    '',
-    '```',
-    sample.prompt.trim() || '（空提示词——语料未记录）',
-    '```',
-    '',
-    '## 输出',
-    '',
-    '只输出一个 JSON 对象（不要代码围栏、不要任何解释）：',
-    '',
-    '{"dimensions": [{"id": "<维度 id>", "score": 1|2|3|4|null, "evidence": ["<产物原文里的原句>"], "notes": "<判分理由>", "revised": true|false}], "contract_note": "<契约/材料对判读的影响，一句话；无影响写空串>"}',
-    '',
-    `- 维度 id 必须与量规里的 ${rubric.dimensions.length} 个 id 完全一致（原样照抄、一个不多一个不少）。`,
-    '- revised = 该维度判分相对一期是否改动（含 null ↔ 档位的改动）；改成 true 时 notes 必须点名契约/材料里的依据。',
-  ].join('\n')
+  return render(QUALITY_REVIEW_RECONCILE_PROMPT, {
+    rubric: rubricBlock(rubric),
+    artifact: artifactBlock(sample),
+    blindScores: JSON.stringify({ dimensions: blind.map(d => ({ id: d.id, score: d.score, evidence: d.evidence, notes: d.notes })) }, null, 1),
+    metadata: metadataBlock(sample),
+    generationPrompt: sample.prompt.trim() || '（空提示词——语料未记录）',
+    dimensionCount: rubric.dimensions.length,
+  })
 }
 
 // ---------------------------------------------------------------- 应答解析与证据核对
