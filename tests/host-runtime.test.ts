@@ -127,21 +127,21 @@ test('createHostRuntime：部署校验 fail loud（缺失/不存在不做静默�
   assert.throws(() => createHostRuntime(ctx, { vault }), /学习中心目录不存在/)
 })
 
-test('createHostRuntime：新鲜库出生盖 v2 戳；已有 v2 learnhub.json 的库原样保留', () => {
+test('createHostRuntime：新鲜库出生盖 v3 戳；已有旧版 learnhub.json 的库原样保留（交硬门判定）', () => {
   const fresh = mkdtempSync(join(tmpdir(), 'learnhub-rt-fresh-'))
   tmpVaults.push(fresh)
   mkdirSync(join(fresh, '学习中心'))
   createHostRuntime(fakeCtx(), { vault: fresh })
   const stamped = JSON.parse(readFileSync(join(fresh, '学习中心', 'state', 'learnhub.json'), 'utf8'))
-  assert.deepEqual(stamped, { schema: { version: 2, formats: {} } }, '首启 seed 写入 runtime 构造路径（#138）')
+  assert.deepEqual(stamped, { schema: { version: 3, formats: {} } }, '首启 seed 写入 runtime 构造路径（#138）')
 
   const existing = mkdtempSync(join(tmpdir(), 'learnhub-rt-old-'))
   tmpVaults.push(existing)
   mkdirSync(join(existing, '学习中心', 'state'), { recursive: true })
-  const marker = '{"schema":{"version":2,"formats":{}},"marker":"已有库"}'
+  const marker = '{"schema":{"version":3,"formats":{}},"marker":"已有库"}'
   writeFileSync(join(existing, '学习中心', 'state', 'learnhub.json'), marker, 'utf8')
   createHostRuntime(fakeCtx(), { vault: existing })
-  assert.equal(readFileSync(join(existing, '学习中心', 'state', 'learnhub.json'), 'utf8'), marker, '非新鲜库不重盖戳')
+  assert.equal(readFileSync(join(existing, '学习中心', 'state', 'learnhub.json'), 'utf8'), marker, '非新鲜库不重盖戳（旧版本库另由硬门拒载）')
 })
 
 test('createHostRuntime：runtime 形状——引擎实例、路径归一、旗标清零、空任务表', () => {
@@ -1008,7 +1008,7 @@ test('loadGenJobs 读错误（非 ENOENT）= Broken：不静默回空表——�
   mkdirSync(join(vault, '学习中心', 'state'))
   // 直构引擎要自备 v2 盖戳（createHostRuntime 的出生盖戳逻辑不经过这条路）
   writeFileSync(join(vault, '学习中心', 'state', 'learnhub.json'),
-    JSON.stringify({ schema: { version: 2, formats: {} } }, null, 1) + '\n', 'utf8')
+    JSON.stringify({ schema: { version: 3, formats: {} } }, null, 1) + '\n', 'utf8')
   const base = nodeVaultFs
   const engine = new LearnhubEngine({
     vault, centerRel: '学习中心', clock: systemClock, rng: mathRng,

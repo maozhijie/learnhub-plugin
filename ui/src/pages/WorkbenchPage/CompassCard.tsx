@@ -40,10 +40,11 @@ export default function CompassCard({ course }: { course: string }) {
     <Card size='small' title='罗盘' className='lh-card'
       extra={
         <Space size={8}>
-          {doc.goal_type && <Tag size='small' color='magenta'>{doc.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'}</Tag>}
-          {doc.endpoint
-            ? <Tag size='small' color='purple'>终点 · {doc.endpoint}</Tag>
-            : <Tag size='small' color='gray'>终点未锚定</Tag>}
+          {doc.anchors.some(a => a.goal_type === 'coverage')
+            && <Tag size='small' color='magenta'>覆盖锚定</Tag>}
+          {doc.anchors.length
+            ? doc.anchors.map(a => <Tag key={a.endpoint} size='small' color='purple'>终点 · {a.endpoint}</Tag>)
+            : <Tag size='small' color='gray'>还没有终点</Tag>}
         </Space>
       }>
       {doc.missing ? (

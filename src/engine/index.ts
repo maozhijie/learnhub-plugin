@@ -39,7 +39,7 @@ import type { ApplyAudit } from './proposals.ts'
 import type { Clock, Rng } from './clock.ts'
 
 import { Projects, ProjectSubsystem } from './projects.ts'
-import { readAnchor, foldCompletion } from './seed.ts'
+import { endpointNames, readAnchors, foldCompletion } from './seed.ts'
 import type { CompletionFold } from './seed.ts'
 
 /** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。
@@ -62,7 +62,7 @@ import { AnkiMirror } from './anki.ts'
 import { Sessions } from './sessions.ts'
 import { todayStr, nowIsoOf, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './io.ts'
-import { assertSchemaVersion } from './schema.ts'
+import { assertSchemaVersion, CURRENT_SCHEMA_VERSION } from './schema.ts'
 import type { SchemaBlock } from './schema.ts'
 import { revealAnswer, pctOf } from './grading.ts'
 import { auditQuestion } from './question-hygiene.ts'
@@ -83,7 +83,8 @@ export { hasReadyContent } from './notes.ts'
  * 由 code-review 两轴审查抓出并收口到门面。 */
 export { contractOf, validateByContract } from './output-contracts.ts'
 export { normalizeStem } from './question-dedup.ts'
-export { readAnchor } from './seed.ts'
+export { endpointNames, readAnchors } from './seed.ts'
+export { CURRENT_SCHEMA_VERSION } from './schema.ts'
 export type { LlmCallKind, LlmComplete, LlmEffort, LlmStream, LlmTokenUsage, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
 /** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */
 export type { Clock, Rng } from './clock.ts'
@@ -519,14 +520,15 @@ export class LearnhubEngine {
   }
 
 
-  /** 完成宣告折叠（#142 雾区条款上半，读侧零写副作用；#202 / ADR-0056 判据折叠自
-   * 最后台阶 = 终点.pre 集全部 ≥ 阈值 + 已收尾 sealed）：终点锚缺失 = null
-   * （未播种，无从宣告）；锚 Broken fail loud——锚无直改通道，手改损坏必须显式浮出。 */
-  async courseCompletion(course: { name: string; root: string }): Promise<CompletionFold | null> {
-    const anchor = await readAnchor(this.paths.anchorPath(course.root), this.fs)
-    if (!anchor) return null
+  /** 逐终点完成折叠（#142 雾区条款上半，读侧零写副作用；#202 / ADR-0056 判据折叠自
+   * 最后台阶 = 终点.pre 集全部 ≥ 阈值 + 该终点已收尾 sealed；#239 / ADR-0076 多终点化
+   * = 逐终点一条读数）：零终点 = 空数组（合法空态，无从宣告）；锚 Broken fail loud——
+   * 手改锚损坏必须显式浮出。 */
+  async courseCompletion(course: { name: string; root: string }): Promise<CompletionFold[]> {
+    const anchors = await readAnchors(this.paths.anchorPath(course.root), this.fs)
+    if (!anchors.length) return []
     const { graph, state } = await this.loadView(course)
-    return foldCompletion(graph, state, anchor)
+    return foldCompletion(graph, state, anchors)
   }
 
   async statusJson(): Promise<StatusDoc> {
@@ -539,13 +541,13 @@ export class LearnhubEngine {
       const items = diagnostics.filter(d => d.course === course.name)
       if (items.length) course.diagnostics = items.map(d => diagnosticView(d))
     }
-    // 完成宣告（#142 雾区条款上半）：完成判据读侧折叠（能力=终点 mastery≥阈值且闭包健康；
-    // 覆盖=块工作表+终点），面板宣告——零写侧状态、零专门停机代码
+    // 逐终点完成读数（#142 雾区条款上半 / #239 多终点化）：判据读侧折叠（能力=终点
+    // mastery≥阈值且闭包健康；覆盖=块工作表+终点），逐终点一条——零写侧状态、零专门停机代码
     for (const entry of courses) {
       const course = doc.courses.find(c => c.name === entry.name)
       if (!course) continue
-      const completion = await this.courseCompletion(entry)
-      if (completion) course.completion = completion
+      const completions = await this.courseCompletion(entry)
+      if (completions.length) course.completions = completions
       // 教练回合触发点·会话开始（#144）：learnhub_status / 面板 /api/status 是会话开工
       // 的汇总入口——逐课程附就绪深度检查（读侧感知，ready=0 只告警不阻塞）
       course.coach = await this.growth2.coachCheckFor(entry, today)
@@ -637,9 +639,9 @@ export class LearnhubEngine {
     if (course && this.fs.exists(this.paths.dataDir(course.root))) {
       const { graph } = await this.loadView(course)
       const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, today, this.fs)
-      // 健康分与审计同口径剔终点（#200 / ADR-0055）：读锚现算，种子 apply 落的锚即刻生效
-      const anchor = await readAnchor(this.paths.anchorPath(course.root), this.fs)
-      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph, { endpoint: anchor?.endpoint ?? null }).score }
+      // 健康分与审计同口径剔终点（#200 / ADR-0055；#239 多终点化）：读锚现算，起草 apply 落的锚即刻生效
+      const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(course.root), this.fs))
+      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph, { endpoints }).score }
     }
     return audit
   }

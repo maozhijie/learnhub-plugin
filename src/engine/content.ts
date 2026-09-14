@@ -14,7 +14,7 @@ import { todayStr } from './dates.ts'
 import type { Clock } from './clock.ts'
 import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf, TIER_LABELS, TIER_LABEL_TO_IDX, TIER_ANCHORS, MAX_SECTIONS, SECTION_VISUAL_CAP, sectionLengthThresholds } from './complexity.ts'
 import { loadNote, saveNote } from './notes.ts'
-import { readAnchor } from './seed.ts'
+import { endpointNames, readAnchors } from './seed.ts'
 import { round2 } from './grading.ts'
 import { invokesTagged } from './concepts.ts'
 import { withContractLast } from './prompt-assembly.ts'
@@ -112,18 +112,17 @@ export class Content {
   }
 
   /** T1/T2 触发：返回 (触发类型, 节点) 列表。终点不登记（#199 / ADR-0055+0056 生成门：
-   * 终点是承诺标记不被学习调度，零正文零题库——后继触发清单对终点恒跳过）。 */
+   * 终点是方向标记不被学习调度，零正文零题库——后继触发清单对终点恒跳过）。 */
   async onStageChange(
     root: string, graph: Graph, state: Record<string, Fm>, node: string, newStage: Fm['stage'],
   ): Promise<Array<['T1' | 'T2', string]>> {
     if (!['learning', 'review', 'mastered'].includes(newStage)) return []
-    const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
-    const endpoint = anchor?.endpoint ?? null
+    const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(root), this.fs))
     const added: Array<['T1' | 'T2', string]> = []
     const done = new Set(Object.entries(state).filter(([, f]) => f.stage === 'review' || f.stage === 'mastered').map(([n]) => n))
     done.add(node)
     for (const x of graph.succ[node] ?? []) {
-      if (x === endpoint) continue
+      if (endpoints.has(x)) continue
       const xs = state[x]?.stage
       if (xs === 'learning' || xs === 'review' || xs === 'mastered') continue
       const pres = graph.preOf[x].filter(p => !graph.opt.has(p))
@@ -143,10 +142,11 @@ export class Content {
    * 消费（逐节管线的 outline 站）不需要机器块/出题渠道指令，它们是节正文契约，混进
    * 大纲包会与大纲模板「只输出一个 YAML 文档」冲突：模型把 <!-- enc_candidates -->
    * 追加进大纲 YAML，解析即炸（生成任务注册表两连败的签名）。
-   * endpoint：终点节点名（#200 / ADR-0055 伪终点措辞废除）——「无后继即终点」的结构
-   * 启发式改读锚：只有锚定的终点才获终点措辞，普通前沿叶子不再被误标。 */
+   * endpoints：终点节点名集（#200 / ADR-0055 伪终点措辞废除；#239 多终点化）——
+   * 「无后继即终点」的结构启发式改读锚：只有锚定的终点才获终点措辞，普通前沿叶子
+   * 不再被误标。 */
   contextPack(graph: Graph, state: Record<string, Fm>, node: string, course?: string,
-    opts?: { omitDeliverables?: boolean; endpoint?: string | null }): string {
+    opts?: { omitDeliverables?: boolean; endpoints?: ReadonlySet<string> }): string {
     const [, region, block] = graph.blockOf[node]
     const pres = graph.preOf[node]
     const succs = graph.succ[node] ?? []
@@ -179,7 +179,7 @@ export class Content {
     out.push('')
     out.push('## 3. 后继预告（如需收尾衔接，可在自然结束处一句话带过；不设固定栏目）')
     out.push(succs.length ? succs.join('、')
-      : opts?.endpoint === node ? '（无后继——本节点是终点锚锚定的终点）' : '（无后继）')
+      : opts?.endpoints?.has(node) ? '（无后继——本节点是锚集合锚定的终点）' : '（无后继）')
     out.push('')
     out.push('## 4. 领域边界')
     const scope = `本课属于${course ? `课程「${course}」的` : ''}`

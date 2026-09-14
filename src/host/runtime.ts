@@ -11,7 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir } from 'node:fs/promises'
-import { AgentSeam, LearnhubEngine, DEFAULT_QUIZ_AUDIT_RATE } from '../engine/index.ts'
+import { AgentSeam, LearnhubEngine, DEFAULT_QUIZ_AUDIT_RATE, CURRENT_SCHEMA_VERSION } from '../engine/index.ts'
 import type { SeedDraftRequest } from '../engine/index.ts'
 import type { GenJobFailure, GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
@@ -149,12 +149,12 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     throw new Error(`[learnhub] config.quizAuditRate 必须是 0–1 的数（收到 ${String(config?.quizAuditRate)}）；0 = 关门。`)
   }
   // 新鲜库出生盖戳（#138）：learnhub.json 与课程注册表都还不存在的全新 vault 直接
-  // 盖 v2（免跑已退役的迁移脚本）；任何 v1 痕迹（两者之一在）都交版本硬门判定——
+  // 盖当前主版本戳（免跑迁移脚本）；任何旧库痕迹（两者之一在）都交版本硬门判定——
   // 盖戳只发生在真正的一无所有，不掩盖任何旧库。
   const freshConfigPath = `${center}/state/learnhub.json`
   if (!existsSync(freshConfigPath) && !existsSync(`${center}/课程注册表.yaml`)) {
     mkdirSync(`${center}/state`, { recursive: true })
-    writeFileSync(freshConfigPath, JSON.stringify({ schema: { version: 2, formats: {} } }, null, 1) + '\n', 'utf8')
+    writeFileSync(freshConfigPath, JSON.stringify({ schema: { version: CURRENT_SCHEMA_VERSION, formats: {} } }, null, 1) + '\n', 'utf8')
   }
   const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng, fs: nodeVaultFs })
   // —— 生成语料捕获器（#213 / ADR-0060）：缝出口全量落盘的 sink，构造先于 agent 缝

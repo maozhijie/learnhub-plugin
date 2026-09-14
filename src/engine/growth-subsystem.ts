@@ -79,7 +79,7 @@ import { addNodeCountOf, validateEditProposal } from './proposals.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from './sandbox.ts'
 import { appendSedimentEvent } from './sediment.ts'
 import { runWriteUnit } from './write-unit.ts'
-import { COMPLETION_MASTERY_THRESHOLD, readAnchor } from './seed.ts'
+import { COMPLETION_MASTERY_THRESHOLD, endpointNames, readAnchors } from './seed.ts'
 import { readySet } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
 import type { ConceptTier } from './types.ts'
@@ -98,13 +98,13 @@ export class GrowthSubsystem {
 
 
   /** 读罗盘（learnhub_compass / 教练上下文消费）：文件 Missing = null（合法空态——
-   * 未播种或未落盘）；终点锚随行携带（coach 的目标视野），锚 Broken fail loud
-   * （承诺物损坏必须显式浮出，不静默折成未播种）。 */
+   * 未落盘）；终点锚集合随行携带（coach 的目标视野，逐终点一条），锚 Broken fail loud
+   * （锚损坏必须显式浮出，不静默折成零终点）。 */
   async compassRead(courseKey?: string): Promise<{
     course: string
     path: string
-    endpoint: string | null
-    goal_type: 'capability' | 'coverage' | null
+    /** 锚定的终点（逐终点一行；零终点 = 空数组，合法空态）。 */
+    anchors: Array<{ endpoint: string; goal_type: 'capability' | 'coverage' }>
     missing: boolean
     route: string | null
     annotations: string | null
@@ -113,11 +113,12 @@ export class GrowthSubsystem {
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const path = this.e.paths.compassPath(c.root)
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
+    const anchors = (await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs))
+      .map(a => ({ endpoint: a.endpoint, goal_type: a.goal_type }))
     if (!this.e.fs.exists(path)) {
       return {
         course: c.name, path,
-        endpoint: anchor?.endpoint ?? null, goal_type: anchor?.goal_type ?? null,
+        anchors,
         missing: true, route: null, annotations: null, eta: null, eta_week: null,
       }
     }
@@ -125,7 +126,7 @@ export class GrowthSubsystem {
     const eta = sectionBody(doc, SECTION_ETA)
     return {
       course: c.name, path,
-      endpoint: anchor?.endpoint ?? null, goal_type: anchor?.goal_type ?? null,
+      anchors,
       missing: false,
       route: sectionBody(doc, SECTION_ROUTE),
       annotations: sectionBody(doc, SECTION_ANNOTATIONS),
@@ -164,9 +165,9 @@ export class GrowthSubsystem {
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const root = c.root
-    const anchor = await readAnchor(this.e.paths.anchorPath(root), this.e.fs)
-    if (!anchor) {
-      throw new Error(`[compass] 课程「${c.name}」未播种（终点锚 Missing）——罗盘初画锚在终点上，先走种子提案（kind=seed）。`)
+    const anchors = await readAnchors(this.e.paths.anchorPath(root), this.e.fs)
+    if (!anchors.length) {
+      throw new Error(`[compass] 课程「${c.name}」零终点（空锚是合法空态）——罗盘初画锚在终点上，先加一个终点。`)
     }
     const { graph } = await this.e.loadView(c)
     const path = this.e.paths.compassPath(root)
@@ -176,10 +177,11 @@ export class GrowthSubsystem {
       ? sectionBody(doc!, SECTION_ANNOTATIONS)
       : null
     const template = await this.e.content.loadPrompt('罗盘初画')
+    const endpoints = endpointNames(anchors)
     const prompt = withContractLast(template, compassPaintContext({
       courseName: c.name,
-      anchor,
-      starts: anchor.seed_nodes.filter(n => n !== anchor.endpoint).map(n => ({
+      anchors,
+      starts: [...new Set(anchors.flatMap(a => a.seed_nodes))].filter(n => !endpoints.has(n)).map(n => ({
         name: n,
         note: graph.noteOf[n] ?? '',
       })),
@@ -226,9 +228,9 @@ export class GrowthSubsystem {
     courseKey: string, routeMd: string,
   ): Promise<{ course: string; path: string; route_lines: number }> {
     const c = await this.e.registry.resolve(courseKey)
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
-    if (!anchor) {
-      throw new Error(`[compass] 课程「${c.name}」未播种（终点锚 Missing）——罗盘重写锚在终点上，先走种子提案（kind=seed）。`)
+    const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
+    if (!anchors.length) {
+      throw new Error(`[compass] 课程「${c.name}」零终点（空锚是合法空态）——罗盘重写锚在终点上，先加一个终点。`)
     }
     const body = stripWrappingFence(routeMd)
     const errors = validateRouteBody(body)
@@ -266,9 +268,9 @@ export class GrowthSubsystem {
     const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; reconcile?: RouteReconcile }> = []
     for (const c of courses) {
       try {
-        const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
-        if (!anchor) {
-          out.push({ course: c.name, state: 'skipped', detail: '未播种（终点锚 Missing）' })
+        const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
+        if (!anchors.length) {
+          out.push({ course: c.name, state: 'skipped', detail: '零终点（空锚是合法空态——没有方向就没有「还要多久」）' })
           continue
         }
         const path = this.e.paths.compassPath(c.root)
@@ -283,7 +285,7 @@ export class GrowthSubsystem {
         const memoed = this.etaMemo.get(c.name)
         const eta = !opts.force && memoed?.week === weekStart
           ? memoed.eta
-          : await this.compassEtaFold(c, anchor, today, weekStart)
+          : await this.compassEtaFold(c, anchors, today, weekStart)
         this.etaMemo.set(c.name, { week: weekStart, eta })
         if (!opts.force && etaMarkerOf(sectionBody(doc, SECTION_ETA)) === weekStart) {
           out.push({ course: c.name, state: 'current', eta, ...(reconcile ? { reconcile } : {}) })
@@ -301,10 +303,13 @@ export class GrowthSubsystem {
 
   /** 沙盘 ETA 折叠（罗盘 weekly；读侧即算即用，落盘的只有渲染段）：按每日 XP 目标
    * 分钟数取探测地平线逐档跑沙盘，读终点掌握度的 p50/p80 分位带；两口径首次越阈的
-   * 档 = 「还要多久」的诚实参照（阈值与完成判据同一常量）。 */
+   * 档 = 「还要多久」的诚实参照（阈值与完成判据同一常量）。
+   * #239 多终点化：调用方保证 ≥1 终点；逐终点分节读数随罗盘改版（#243）落地，
+   * 这里取首个终点（不再有无锚分支）。 */
   private async compassEtaFold(
-    c: CourseEntry, anchor: { endpoint: string }, today: string, weekStart: string,
+    c: CourseEntry, anchors: Array<{ endpoint: string }>, today: string, weekStart: string,
   ): Promise<CompassEta> {
+    const anchor = anchors[0]!
     const minutesPerDay = await readDailyGoal(this.e.paths, this.e.fs)
     const { cards, nodes, scheds } = await this.e.sandboxPopulation([c], null)
     const endpointKey = `${c.name}/${anchor.endpoint}`
@@ -341,23 +346,25 @@ export class GrowthSubsystem {
   }
 
 
-  /** 单课程就绪深度检查（coachCheckpoint 与 statusJson 共用核）：终点锚缺失 = 未播种
-   * （不判冷启动，合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。
-   * 就绪存量与前瞻需求都不计终点（词条「前瞻深度」：终点是锚点不是课程节点）——
-   * 课程尾段前沿只剩终点时判据永不可满足会让教练永不停摆；除终点外前沿清空 =
-   * exhausted，判据自然通过、零告警。 */
+  /** 单课程就绪深度检查（coachCheckpoint 与 statusJson 共用核）：零终点 = 不判冷启动
+   * （合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。
+   * 就绪存量与前瞻需求都不计终点（词条「前瞻深度」：终点是锚点不是课程节点；#239
+   * 多终点化：逐个终点剔除）——课程尾段前沿只剩终点时判据永不可满足会让教练永不停摆；
+   * 除终点外前沿清空 = exhausted，判据自然通过、零告警。冷启动周从**最早**的终点声明日
+   * 起算（课程成为课程的那一刻；后加的终点不重开冷启动）。 */
   async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
     const { graph, state } = await this.e.loadView(c)
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
-    const endpoint = anchor?.endpoint ?? null
-    const live = this.coachFrontier(graph, state).filter(n => n !== endpoint)
+    const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
+    const endpoints = endpointNames(anchors)
+    const live = this.coachFrontier(graph, state).filter(n => !endpoints.has(n))
+    const declared = anchors.map(a => a.declared).sort()[0] ?? null
     return {
       course: c.name,
       ...readyDepthCheck({
         ready: live.filter(n => hasReadyContent(state[n])).length,
-        declared: anchor?.declared ?? null,
+        declared,
         today,
-        exhausted: anchor !== null && live.length === 0,
+        exhausted: anchors.length > 0 && live.length === 0,
       }),
     }
   }
@@ -410,35 +417,41 @@ export class GrowthSubsystem {
     const { today: learningToday, cutoff } = await this.e.learningDay()
     const today = opts.today ?? learningToday
     const lightweight = opts.lightweight === true
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
+    const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
     const active = [...this.coachFrontier(graph, state), ...graph.names.filter(n => effectiveStage(state, n) === 'learning')]
 
     const out: string[] = [
       `# 教练回合上下文包：${c.name}（${opts.packLabel ?? (lightweight ? '轻量段——只带行为摘要与罗盘' : '全量六区块')}）`,
     ]
-    // 终点恒标（#200 / ADR-0055 裁决 3）：轻量段不注入终点锚区块，但一行终点名的 token
-    // 代价换裁决不盲——轻量/全量都在包头带终点行；终点标记的完整语义随图面进每段。
-    out.push('', anchor
-      ? `- ⚑ 终点：${anchor.endpoint}（承诺标记——生长须汇入它；零正文零题库不被调度）`
-      : '- （未播种——终点锚 Missing，先走种子提案 kind=seed）')
+    // 终点恒标（#200 / ADR-0055 裁决 3；#239 多终点化：逐终点一行）：轻量段不注入
+    // 终点锚区块，但每行终点名的 token 代价换裁决不盲——轻量/全量都在包头带终点行；
+    // 终点标记的完整语义随图面进每段。
+    out.push('', ...(anchors.length
+      ? anchors.map(a => `- ⚑ 终点：${a.endpoint}（方向标记——朝该方向的生长须汇入它；零正文零题库不被调度）${a.goal_note ? `｜目标描述：${a.goal_note}` : ''}`)
+      : ['- （零终点——空锚是合法空态，先加一个终点：教练回合无从裁决方向）']))
     const block = (title: string, body: string): void => {
       out.push('', `## ${title}`, '', body)
     }
 
     if (!lightweight) {
-      // ① 终点锚（课程唯一结构承诺物——教练回合的目标视野）
-      if (anchor) {
-        const lines = [
-          `- 终点节点：${anchor.endpoint}（承诺标记，不可 del/rename；换终点走 reseed）`,
-          `- 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
-          `- 声明日期：${anchor.declared}`,
-        ]
-        if (anchor.worksheet.length) {
-          lines.push(`- 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`)
+      // ① 终点锚集合（教练回合的方向视野——逐终点一条）
+      if (anchors.length) {
+        const lines: string[] = []
+        for (const anchor of anchors) {
+          lines.push(
+            `- 终点节点：${anchor.endpoint}（方向标记，不可 del/rename；接线 = 该主线批 set_pre 到它）`,
+            `  - 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
+            `  - 声明日期：${anchor.declared}`,
+            `  - 收尾宣告：${anchor.sealed ? `已铺通（${anchor.sealed}）` : '未铺通'}`,
+          )
+          if (anchor.goal_note) lines.push(`  - 目标描述：${anchor.goal_note}`)
+          if (anchor.worksheet.length) {
+            lines.push(`  - 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`)
+          }
         }
         block('终点锚', lines.join('\n'))
       } else {
-        block('终点锚', '（未播种——终点锚 Missing 是合法空态，但教练回合无从锚定目标；先走种子提案 kind=seed。）')
+        block('终点锚', '（零终点——空锚是合法空态，但教练回合无从裁决方向；先加一个终点。）')
       }
     }
 
@@ -582,9 +595,9 @@ export class GrowthSubsystem {
     applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[]; ready_unbuilt: string[] } | null
   }> {
     const c = await this.e.registry.resolve(courseKey)
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
-    if (!anchor) {
-      throw new Error(`[coach-growth] 课程「${c.name}」未播种（终点锚 Missing）——教练回合锚在终点上，先走种子提案（kind=seed）。`)
+    const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
+    if (!anchors.length) {
+      throw new Error(`[coach-growth] 课程「${c.name}」零终点（空锚是合法空态）——教练回合要有一个方向才能裁决：先加一个终点。`)
     }
     const today = opts.today ?? (await this.e.learningDay()).today
     const check = await this.coachCheckFor(c, today)
@@ -592,7 +605,7 @@ export class GrowthSubsystem {
       return { course: c.name, state: 'idle', check, segments: [], trajectory: [], proposal: null, applied: null }
     }
     const { graph, state } = await this.e.loadView(c)
-    const view = renderGrowthGraphView(graph, state, anchor.endpoint)
+    const view = renderGrowthGraphView(graph, state, endpointNames(anchors))
     const template = await this.e.content.loadPrompt('教练回合')
     const segments: CoachGrowthSegment[] = []
     const trajectory: string[] = []

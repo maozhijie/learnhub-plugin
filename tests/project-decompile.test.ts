@@ -297,9 +297,14 @@ test('联合 apply：种子先落图（锚+簇节点+笔记脚手架）、计划
     assert.equal((out.plan as { kind: string }).kind, 'project_plan')
     // 终点锚落盘、簇节点进图、笔记脚手架就位（消费面可解析）
     const { readFile } = await import('node:fs/promises')
-    const anchor = JSON.parse(await readFile(paths.anchorPath('吉他'), 'utf8'))
-    assert.equal(anchor.endpoint, '完整弹奏选段')
-    assert.ok(anchor.seed_nodes.includes('音阶爬格'))
+    const book = JSON.parse(await readFile(paths.anchorPath('吉他'), 'utf8')) as {
+      version: number
+      anchors: Array<{ endpoint: string; seed_nodes: string[] }>
+    }
+    assert.equal(book.version, 2, '锚容器 v2（#239 多终点化）')
+    assert.equal(book.anchors.length, 1)
+    assert.equal(book.anchors[0]!.endpoint, '完整弹奏选段')
+    assert.ok(book.anchors[0]!.seed_nodes.includes('音阶爬格'))
     const course = await engine.registry.get('吉他')
     assert.ok(course, 'mode=new 建课脚手架')
     const { graph } = await engine.loadView(course!)

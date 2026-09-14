@@ -419,7 +419,7 @@ test('门面：全量包六区块定序稳定；轻量包恰两件（行为摘�
   })
 })
 
-test('门面：登记表档位/误解目录取前沿视野（可学∪在学），未播种锚为合法空态行', async () => {
+test('门面：登记表档位/误解目录取前沿视野（可学∪在学），零终点锚为合法空态行', async () => {
   await withVault({
     graph: [
       'region: 基础',
@@ -436,7 +436,7 @@ test('门面：登记表档位/误解目录取前沿视野（可学∪在学）�
     },
   }, async ({ engine }) => {
     const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
-    assert.ok(pack.includes('（未播种——终点锚 Missing 是合法空态'), '无锚课程照常组装')
+    assert.ok(pack.includes('（零终点——空锚是合法空态'), '无锚课程照常组装')
     assert.ok(pack.includes('概念登记表：Missing（合法空态'), '登记表 Missing 合法空态')
     assert.ok(pack.includes('可学/在学节点 1 个'), 'review 中的起点不在前沿视野')
     assert.ok(pack.includes('前沿 teaches：极限 会用'), '同概念取视野内节点（中继）档位')
@@ -482,7 +482,7 @@ const TAIL_GRAPH = [
   '      - { name: 终点, pre: [中继], opt: false, note: "", est: 30 }',
 ].join('\n')
 
-test('门面：就绪核算剔除终点——尾段非终点前沿清空判据通过；终点正文不虚增存量', async () => {
+test('门面：就绪核算逐个剔除终点——尾段非终点前沿清空判据通过；终点正文不虚增存量', async () => {
   await withVault({
     graph: TAIL_GRAPH,
     notes: {
@@ -493,8 +493,11 @@ test('门面：就绪核算剔除终点——尾段非终点前沿清空判据�
     files: [{
       path: '学习中心/math/state/终点锚.json',
       content: JSON.stringify({
-        version: 1, endpoint: '终点', goal_type: 'capability', declared: localDay(-30),
-        origin_proposal: 1, seed_nodes: ['起点', '中继', '终点'], start_basis: { 起点: 'baseline' }, worksheet: [],
+        version: 2,
+        anchors: [{
+          endpoint: '终点', goal_type: 'capability', declared: localDay(-30),
+          origin_proposal: 1, seed_nodes: ['起点', '中继', '终点'], start_basis: { 起点: 'baseline' },
+        }],
       }),
     }],
   }, async ({ engine }) => {

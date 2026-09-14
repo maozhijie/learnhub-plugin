@@ -3,13 +3,14 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { readFile } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
-import { validateAnchor, readAnchor, foldCompletion } from '../src/engine/seed.ts'
+import { validateAnchorBook, validateEndpointAnchor, readAnchors, foldCompletion } from '../src/engine/seed.ts'
 import type { EndpointAnchor } from '../src/engine/seed.ts'
 import { createHostRuntime } from '../src/host/runtime.ts'
 import { enqueueGeneration } from '../src/host/jobs.ts'
 import { withVault, noteText, tfQuestion } from './helpers/vault.ts'
 
-// 终点性不变式（#198/#199/#202 / ADR-0055+0056）：
+// 终点性不变式（#198/#199/#202 / ADR-0055+0056；#239 / ADR-0076 多终点化：一律按
+// 锚集合读——生成门/就绪剔除/审计豁免/图面标记/收尾宣告逐终点判定）：
 // - #198 受理门：① 任何 add_node 以终点为 pre 拒（禁长过目标）；② 主线批（前进/换向）
 //   含新节点必须 set_pre 接线终点（替换语义，新前沿全部汇入终点闭包）；③ 收尾接线批
 //   （零 add_node 纯 set_pre）合法；旁支/巩固/插入豁免接线；锚保护既有范围不变。
@@ -30,19 +31,23 @@ const GRAPH = [
   '      - { name: 终点, pre: [入门], opt: false, note: "" }',
 ].join('\n')
 
-/** 锚文件原文（写侧通道只有种子 apply 与 sealed 维护；测试经 files 逃生口直接落盘）。 */
-function anchorDoc(endpoint = '终点', sealed?: string): string {
-  const doc: Record<string, unknown> = {
-    version: 1,
-    endpoint,
+/** 锚容器原文（写侧通道只有起草 apply 与逐终点 sealed 维护；测试经 files 逃生口直接落盘）。
+ * 逐条锚的缺省面 = capability + 起草留痕，覆写字段随条目并入。 */
+function anchorBook(entries: Array<Record<string, unknown> & { endpoint: string }>): string {
+  const anchors = entries.map(a => ({
     goal_type: 'capability',
     declared: '2026-09-01',
     origin_proposal: 1,
-    seed_nodes: ['入门', endpoint],
+    seed_nodes: ['入门', a.endpoint],
     start_basis: { 入门: 'baseline' },
-  }
-  if (sealed) doc.sealed = sealed
-  return JSON.stringify(doc, null, 1) + '\n'
+    ...a,
+  }))
+  return JSON.stringify({ version: 2, anchors }, null, 1) + '\n'
+}
+
+/** 单终点锚容器原文。 */
+function anchorDoc(endpoint = '终点', sealed?: string): string {
+  return anchorBook([{ endpoint, ...(sealed ? { sealed } : {}) }])
 }
 
 const SEALED_VAULT = {
@@ -211,12 +216,15 @@ test('#198/#202 apply 侧：收尾接线批写 sealed；主线接线批清 seale
     },
   }, async ({ engine, paths }) => {
     const anchorPath = paths.anchorPath('math')
-    // 起点：未收尾——pre 集全达标也不判完成（ mastery_met=true 但 sealed=null ）
-    const before = await engine.courseCompletion({ name: '数学', root: 'math' })
-    assert.ok(before)
-    assert.equal(before!.criteria.mastery_met, true, '最后台阶（终点.pre=入门）全达标')
-    assert.equal(before!.criteria.sealed, null)
-    assert.equal(before!.complete, false, '未收尾不判完成')
+    const readSealed = async (endpoint = '终点'): Promise<string | undefined> =>
+      (await readAnchors(anchorPath, (await import('../src/host/vault-fs.ts')).nodeVaultFs))
+        .find(a => a.endpoint === endpoint)?.sealed
+    // 起点：未收尾——pre 集全达标也不判已达成（mastery_met=true 但 sealed=null）
+    const before = (await engine.courseCompletion({ name: '数学', root: 'math' }))[0]!
+    assert.equal(before.criteria.mastery_met, true, '最后台阶（终点.pre=入门）全达标')
+    assert.equal(before.criteria.sealed, null)
+    assert.equal(before.status, 'unwired', '未收尾 = 未铺通')
+    assert.equal(before.complete, false, '未收尾不判达成')
 
     // 收尾接线批 apply → 锚写 sealed（收尾即宣告承诺兑现）
     const closing = await engine.graph.graphPropose('edit', `course: 数学
@@ -229,17 +237,16 @@ ops:
     pre: [中间台阶]
 `) as { id: number }
     await engine.graph.graphApply('edit', closing.id)
-    const sealedAnchor = await readAnchor(anchorPath, (await import('../src/host/vault-fs.ts')).nodeVaultFs)
-    assert.ok(sealedAnchor?.sealed, '收尾接线批 apply 落 sealed')
-    assert.match(sealedAnchor!.sealed!, /^\d{4}-\d{2}-\d{2}$/)
-    const sealed = sealedAnchor!.sealed!
+    const sealed = await readSealed()
+    assert.ok(sealed, '收尾接线批 apply 落 sealed')
+    assert.match(sealed!, /^\d{4}-\d{2}-\d{2}$/)
 
-    // 收尾 + 达标 + 闭包健康 → 完成宣告成立
-    const complete = await engine.courseCompletion({ name: '数学', root: 'math' })
-    assert.ok(complete)
-    assert.equal(complete!.complete, true, '收尾后达标判完成')
-    assert.deepEqual(complete!.criteria.last_steps.map(s => s.node), ['中间台阶'], '判据折叠自最后台阶（终点.pre 集）')
-    assert.equal(complete!.criteria.sealed, sealed)
+    // 收尾 + 达标 + 闭包健康 → 该终点达成
+    const complete = (await engine.courseCompletion({ name: '数学', root: 'math' }))[0]!
+    assert.equal(complete.complete, true, '收尾后达标判达成')
+    assert.equal(complete.status, 'reached')
+    assert.deepEqual(complete.criteria.last_steps.map(s => s.node), ['中间台阶'], '判据折叠自最后台阶（终点.pre 集）')
+    assert.equal(complete.criteria.sealed, sealed)
 
     // 主线接线批重开（前进 + add_node + 终点接线）→ sealed 清除，完成回到未完成
     const reopen = await engine.graph.graphPropose('edit', `course: 数学
@@ -258,12 +265,11 @@ ops:
     pre: [更高台阶]
 `) as { id: number }
     await engine.graph.graphApply('edit', reopen.id)
-    const reopened = await readAnchor(anchorPath, (await import('../src/host/vault-fs.ts')).nodeVaultFs)
-    assert.equal(reopened?.sealed, undefined, '主线批重开清 sealed')
-    const afterReopen = await engine.courseCompletion({ name: '数学', root: 'math' })
-    assert.ok(afterReopen)
-    assert.equal(afterReopen!.criteria.mastery_met, false, '新最后台阶（更高台阶）未达标')
-    assert.equal(afterReopen!.complete, false, '清 sealed 后回到未完成')
+    assert.equal(await readSealed(), undefined, '主线批重开清 sealed')
+    const afterReopen = (await engine.courseCompletion({ name: '数学', root: 'math' }))[0]!
+    assert.equal(afterReopen.criteria.mastery_met, false, '新最后台阶（更高台阶）未达标')
+    assert.equal(afterReopen.status, 'unwired', '清 sealed 后回到未铺通')
+    assert.equal(afterReopen.complete, false, '清 sealed 后不判达成')
 
     // 旁支批（不含终点 set_pre）apply 不动 sealed：先收尾再长旁支
     const reseal = await engine.graph.graphPropose('edit', `course: 数学
@@ -289,8 +295,7 @@ ops:
     est: 10
 `) as { id: number }
     await engine.graph.graphApply('edit', side.id)
-    const afterSide = await readAnchor(anchorPath, (await import('../src/host/vault-fs.ts')).nodeVaultFs)
-    assert.ok(afterSide?.sealed, '旁支批不动 sealed')
+    assert.ok(await readSealed(), '旁支批不动 sealed')
   })
 })
 
@@ -303,22 +308,28 @@ test('#202 折叠语义：未收尾不判完成 / 收尾后达标判完成 / 旧
       终点: { stage: 'ready', content: { version: 1, status: 'ready' } },
     },
   }, async ({ engine }) => {
-    // 旧锚形状（无 sealed 字段）读取与折叠不炸
-    const fold = await engine.courseCompletion({ name: '数学', root: 'math' })
-    assert.ok(fold)
-    assert.equal(fold!.criteria.sealed, null, '旧锚缺字段 = 未收尾')
-    assert.equal(fold!.complete, false)
-    assert.equal(fold!.criteria.endpoint_in_graph, true)
-    assert.ok(fold!.criteria.closure_healthy, '闭包健康判据不动')
-    assert.deepEqual(fold!.criteria.last_steps.map(s => [s.node, s.met]), [['入门', true]], '判据 = 终点.pre 集逐条达标')
+    // 无 sealed 字段的锚读取与折叠不炸
+    const fold = (await engine.courseCompletion({ name: '数学', root: 'math' }))[0]!
+    assert.equal(fold.criteria.sealed, null, '无 sealed 字段 = 未收尾')
+    assert.equal(fold.complete, false)
+    assert.equal(fold.status, 'unwired')
+    assert.equal(fold.criteria.endpoint_in_graph, true)
+    assert.ok(fold.criteria.closure_healthy, '闭包健康判据不动')
+    assert.deepEqual(fold.criteria.last_steps.map(s => [s.node, s.met]), [['入门', true]], '判据 = 终点.pre 集逐条达标')
+    // 闭包进度剔终点自身（方向标记不被学习）：只剩「入门」这一步
+    assert.deepEqual(fold.closure, { learned: 1, total: 1 }, '闭包进度：前置步数（终点自身不计）')
 
     // 悬空锚：终点不在图内 → mastery_met=false 可见不炸
     const { Graph } = await import('../src/engine/graph.ts')
-    const dangling = foldCompletion(new Graph([]), {}, { version: 1, endpoint: '不在图内', goal_type: 'capability', declared: '2026-09-01', origin_proposal: 1, seed_nodes: ['不在图内'] })
-    assert.ok(dangling)
-    assert.equal(dangling!.criteria.endpoint_in_graph, false)
-    assert.equal(dangling!.criteria.mastery_met, false)
-    assert.equal(dangling!.complete, false)
+    const dangling = foldCompletion(new Graph([]), {}, [{
+      endpoint: '不在图内', goal_type: 'capability', declared: '2026-09-01',
+      origin_proposal: 1, seed_nodes: ['不在图内'], worksheet: [], start_basis: {},
+    }])
+    assert.equal(dangling.length, 1)
+    assert.equal(dangling[0]!.criteria.endpoint_in_graph, false)
+    assert.equal(dangling[0]!.criteria.mastery_met, false)
+    assert.equal(dangling[0]!.status, 'unwired')
+    assert.equal(dangling[0]!.complete, false)
   })
 })
 
@@ -333,7 +344,7 @@ test('#202 sealed 落盘口径：夹带非 set_pre op 的零新增批不构成�
     files: [{ path: join('学习中心', 'math', 'state', '终点锚.json'), content: anchorDoc('终点', '2026-09-10') }],
   }, async ({ engine, paths }) => {
     const anchorPath = paths.anchorPath('math')
-    const readSealed = async () => (await readAnchor(anchorPath, (await import('../src/host/vault-fs.ts')).nodeVaultFs))?.sealed
+    const readSealed = async () => (await readAnchors(anchorPath, (await import('../src/host/vault-fs.ts')).nodeVaultFs))[0]?.sealed
     // 起点：已收尾
     assert.equal(await readSealed(), '2026-09-10')
     // 零 add_node 但夹带 set_note（非纯 set_pre 批）→ sealed 不写也不清
@@ -363,16 +374,40 @@ ops:
   })
 })
 
-test('#202 validateAnchor：sealed 可选字段合法放行、坏日期拒收；旧锚零 sealed 照读', () => {
-  const base = { version: 1, endpoint: '终点', goal_type: 'capability', declared: '2026-09-01', origin_proposal: 1, seed_nodes: ['入门', '终点'] }
-  const ok = validateAnchor({ ...base, sealed: '2026-09-13' })
+test('#202/#239 锚条目校验：sealed 可选字段合法放行、坏日期拒收；无 sealed 照读', () => {
+  const base = { endpoint: '终点', goal_type: 'capability', declared: '2026-09-01', origin_proposal: 1, seed_nodes: ['入门', '终点'] }
+  const ok = validateEndpointAnchor({ ...base, sealed: '2026-09-13' }, 'anchors.0')
   assert.deepEqual(ok.errors, [])
   assert.equal((ok.anchor as EndpointAnchor).sealed, '2026-09-13')
-  const legacy = validateAnchor(base)
-  assert.deepEqual(legacy.errors, [], '旧锚无 sealed 照读')
+  const legacy = validateEndpointAnchor(base, 'anchors.0')
+  assert.deepEqual(legacy.errors, [], '无 sealed 照读')
   assert.equal((legacy.anchor as EndpointAnchor).sealed, undefined)
-  const bad = validateAnchor({ ...base, sealed: '09/13/2026' })
+  const bad = validateEndpointAnchor({ ...base, sealed: '09/13/2026' }, 'anchors.0')
   assert.ok(bad.errors.some(e => e.includes('sealed: 必须是 YYYY-MM-DD 日期')))
+})
+
+test('#239 锚容器校验：空锚合法、未知键/版本门/终点重名拒收、逐条错误带条目定位', () => {
+  const empty = validateAnchorBook({ version: 2, anchors: [] })
+  assert.deepEqual(empty.errors, [], '零终点（空锚）是合法空态')
+  assert.deepEqual(empty.book!.anchors, [])
+
+  const entry = { endpoint: '终点', goal_type: 'capability', declared: '2026-09-01' }
+  const two = validateAnchorBook({ version: 2, anchors: [entry, { ...entry, endpoint: '另一终点' }] })
+  assert.deepEqual(two.errors, [])
+  assert.deepEqual(two.book!.anchors.map(a => a.endpoint), ['终点', '另一终点'])
+
+  const v1 = validateAnchorBook({ version: 1, endpoint: '终点' })
+  assert.ok(v1.errors.some(e => e.includes('version: 必须是 2')), '旧单锚形状（v1）拒收')
+  assert.ok(v1.errors.some(e => e.includes('anchors: 必须是列表')))
+
+  const unknownTop = validateAnchorBook({ version: 2, anchors: [entry], extra: 1 })
+  assert.ok(unknownTop.errors.some(e => e.includes('(顶层) 含未知字段')))
+
+  const dup = validateAnchorBook({ version: 2, anchors: [entry, { ...entry }] })
+  assert.ok(dup.errors.some(e => e.includes('终点重名')), '一个终点只许一条锚')
+
+  const badEntry = validateAnchorBook({ version: 2, anchors: [entry, { endpoint: '' }] })
+  assert.ok(badEntry.errors.some(e => e.startsWith('anchors.1.endpoint')), '逐条错误带条目定位')
 })
 
 test('#199 生成门：enqueueGeneration 对终点恒拒（不看就绪），非终点照常入队', async () => {
@@ -388,7 +423,7 @@ test('#199 生成门：enqueueGeneration 对终点恒拒（不看就绪），非
     // 终点恒拒——就绪与否都拒，文案可读
     await assert.rejects(
       () => enqueueGeneration(rt, ctx, '数学', '终点'),
-      /终点是承诺标记，不被学习调度/,
+      /终点是方向标记，不被学习调度/,
     )
     await assert.rejects(
       () => enqueueGeneration(rt, ctx, '数学', '终点'),
@@ -409,7 +444,7 @@ test('#199 生成门：contextPack 不为终点组装产料上下文（管线侧
   await withVault(SEALED_VAULT, async ({ engine }) => {
     await assert.rejects(
       () => engine.content2.contentPack('数学', '终点'),
-      /终点是承诺标记，不被学习调度/,
+      /终点是方向标记，不被学习调度/,
     )
     // 非终点照常组装
     const pack = await engine.content2.contentPack('数学', '入门')
@@ -455,5 +490,136 @@ test('#199 学习者账剔终点：status 就绪存量/清单与推荐面都不�
     const nodes = rec.events.filter(e => e.course === '数学').map(e => e.node)
     assert.ok(!nodes.includes('终点'), '推荐面不含终点')
     assert.ok(nodes.includes('中间台阶'), '普通就绪节点照常推荐')
+  })
+})
+
+// ---- #239 多终点化：逐终点收尾与接线门（票面验收：接线终点 A 只给 A 写 sealed） ----
+
+/** 两终点图：起点甲→终点甲、起点乙→终点乙（两条独立方向）。 */
+const TWO_ENDPOINT_GRAPH = [
+  'region: 基础',
+  'color: blue',
+  'blocks:',
+  '  - name: 入门块',
+  '    nodes:',
+  '      - { name: 起点甲, pre: [], opt: false, note: "", est: 20 }',
+  '      - { name: 起点乙, pre: [], opt: false, note: "", est: 20 }',
+  '      - { name: 终点甲, pre: [起点甲], opt: false, note: "" }',
+  '      - { name: 终点乙, pre: [起点乙], opt: false, note: "" }',
+].join('\n')
+
+const TWO_ENDPOINT_VAULT = {
+  graph: TWO_ENDPOINT_GRAPH,
+  files: [{
+    path: join('学习中心', 'math', 'state', '终点锚.json'),
+    content: anchorBook([
+      { endpoint: '终点甲', seed_nodes: ['起点甲', '终点甲'], start_basis: { 起点甲: 'baseline' } },
+      { endpoint: '终点乙', seed_nodes: ['起点乙', '终点乙'], start_basis: { 起点乙: 'baseline' } },
+    ]),
+  }],
+  notes: { 起点甲: MASTERED, 起点乙: MASTERED },
+}
+
+test('#239 逐终点收尾：接线终点甲只给甲写 sealed，乙不受影响；甲重开主线只清甲的 sealed', async () => {
+  await withVault(TWO_ENDPOINT_VAULT, async ({ engine, paths }) => {
+    const nodeVaultFs = (await import('../src/host/vault-fs.ts')).nodeVaultFs
+    const sealOf = async (endpoint: string): Promise<string | undefined> =>
+      (await readAnchors(paths.anchorPath('math'), nodeVaultFs)).find(a => a.endpoint === endpoint)?.sealed
+    // 起点：两条锚都未收尾（最后台阶已达标但没接线批宣告）
+    assert.equal(await sealOf('终点甲'), undefined)
+    assert.equal(await sealOf('终点乙'), undefined)
+
+    // 收尾接线批（零 add_node 纯 set_pre）只接甲 → 只有甲落 sealed
+    const closeA = await engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 甲方向已满足，停摆前接线
+ops:
+  - op: set_pre
+    node: 终点甲
+    pre: [起点甲]
+`) as { id: number }
+    await engine.graph.graphApply('edit', closeA.id)
+    const sealedA = await sealOf('终点甲')
+    assert.ok(sealedA, '接线的那一个终点落 sealed')
+    assert.equal(await sealOf('终点乙'), undefined, '未接线的终点不受影响（逐终点独立）')
+
+    // 逐终点读数：甲已达成、乙仍未接线
+    const folds = await engine.courseCompletion({ name: '数学', root: 'math' })
+    const byName = new Map(folds.map(f => [f.endpoint, f]))
+    assert.equal(byName.get('终点甲')!.status, 'reached')
+    assert.equal(byName.get('终点乙')!.status, 'unwired')
+    assert.equal(byName.get('终点乙')!.criteria.sealed, null)
+
+    // 甲重开主线（含 add_node 的接线批）→ 只清甲的 sealed，乙照旧
+    const reopenA = await engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 甲方向再进一级
+ops:
+  - op: add_node
+    name: 甲更高台阶
+    region: 基础
+    block: 入门块
+    pre: [起点甲]
+    est: 15
+  - op: set_pre
+    node: 终点甲
+    pre: [甲更高台阶]
+`) as { id: number }
+    await engine.graph.graphApply('edit', reopenA.id)
+    assert.equal(await sealOf('终点甲'), undefined, '该终点重开主线清 sealed')
+    assert.equal(await sealOf('终点乙'), undefined, '其他终点仍旧不受影响')
+    const afterReopen = await engine.courseCompletion({ name: '数学', root: 'math' })
+    assert.equal(afterReopen.find(f => f.endpoint === '终点甲')!.status, 'unwired', '甲回到未铺通（新最后台阶未达标）')
+  })
+})
+
+test('#239 接线门边界：多终点课程暂不设门（不把无关方向强行改扎到本批新台阶）', async () => {
+  await withVault(TWO_ENDPOINT_VAULT, async ({ engine, paths }) => {
+    // 只朝甲方向长：受理（「本批朝哪些终点长」的声明随 #244 落地，桥梁期不逼错接）
+    const growA = await engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 只朝甲方向长
+ops:
+  - op: add_node
+    name: 甲新台阶
+    region: 基础
+    block: 入门块
+    pre: [起点甲]
+    est: 15
+  - op: set_pre
+    node: 终点甲
+    pre: [甲新台阶]
+`) as { id: number }
+    assert.ok(growA.id > 0)
+    await engine.graph.graphApply('edit', growA.id)
+    // 乙的 pre 一字未动（没有被本批当成「批内新前沿」改扎过去）
+    const { GraphStore, Graph } = await import('../src/engine/graph.ts')
+    const nodeVaultFs = (await import('../src/host/vault-fs.ts')).nodeVaultFs
+    const graph = new Graph(await new GraphStore(paths, paths.courseRoot('math'), nodeVaultFs).load())
+    assert.deepEqual(graph.preOf['终点乙'], ['起点乙'], '无关方向的接线不因本批漂移')
+    assert.deepEqual(graph.preOf['终点甲'], ['甲新台阶'], '本批声明的方向照常接线')
+
+    // 单终点课程的接线义务照旧（既有用例已覆盖）；这里补一条对照：终点名集从 2 → 1 后门重新生效
+    const { writeAnchors } = await import('../src/engine/seed.ts')
+    const two = await (await import('../src/engine/seed.ts')).readAnchors(paths.anchorPath('math'), nodeVaultFs)
+    await writeAnchors(paths.anchorPath('math'), two.filter(a => a.endpoint === '终点甲'), nodeVaultFs)
+    await assert.rejects(
+      () => engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 单终点课程缺接线
+ops:
+  - op: add_node
+    name: 又一台阶
+    region: 基础
+    block: 入门块
+    pre: [甲新台阶]
+    est: 10
+`),
+      /未接线终点.*set_pre/s,
+    )
   })
 })

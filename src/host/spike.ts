@@ -25,7 +25,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, normalizeStem } from '../engine/index.ts'
+import { Content, CURRENT_SCHEMA_VERSION, normalizeStem } from '../engine/index.ts'
 import { SPIKE_SUFFIX_RESTATE_CONTRACT, SPIKE_SUFFIX_TOOL_IMPERATIVE, SPIKE_SUFFIX_TOOL_PASSWORD } from '../engine/prompts/host.ts'
 import { llmComplete, llmStreamSeam, llmView } from './llm.ts'
 import { createHostRuntime } from './runtime.ts'
@@ -332,7 +332,7 @@ function buildTemplate(): string {
   writeFileSync(`${center}/spike/data/基础.yaml`, GRAPH, 'utf8')
   writeFileSync(`${center}/spike/课程/基础/${NODE}.md`, NOTE, 'utf8')
   writeFileSync(`${center}/state/learnhub.json`,
-    JSON.stringify({ schema: { version: 2, formats: {} }, day_cutoff: '00:00' }, null, 1) + '\n', 'utf8')
+    JSON.stringify({ schema: { version: CURRENT_SCHEMA_VERSION, formats: {} }, day_cutoff: '00:00' }, null, 1) + '\n', 'utf8')
   return root
 }
 

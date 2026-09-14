@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { readAnchor } from '../src/engine/seed.ts'
+import { readAnchors } from '../src/engine/seed.ts'
 import { withVault } from './helpers/vault.ts'
 
 // 存量异常态恢复演练（#201 / ADR-0055 边界条款验收票）：
@@ -62,13 +62,15 @@ const STARTS = ['数与式运算', '方程与恒等变形', '图形与度量']
 
 function anchorDoc(): string {
   return JSON.stringify({
-    version: 1,
-    endpoint: ENDPOINT,
-    goal_type: 'capability',
-    declared: '2026-09-01',
-    origin_proposal: 1,
-    seed_nodes: [...STARTS, ENDPOINT],
-    start_basis: Object.fromEntries(STARTS.map(s => [s, 'baseline'])),
+    version: 2,
+    anchors: [{
+      endpoint: ENDPOINT,
+      goal_type: 'capability',
+      declared: '2026-09-01',
+      origin_proposal: 1,
+      seed_nodes: [...STARTS, ENDPOINT],
+      start_basis: Object.fromEntries(STARTS.map(s => [s, 'baseline'])),
+    }],
   }, null, 1) + '\n'
 }
 
@@ -116,14 +118,14 @@ test('#201 异常态恢复演练：接线批过受理门 → 复发预防对照 
     assert.equal(doc0.nodes.length, 16, '图上 16 节点：4 种子 + 12 生长（坡道 6 + 支线 5 + 综述 1）')
     assert.deepEqual(doc0.schema[OVERVIEW]!.pre, [ENDPOINT], '病二：综述节点以终点为 pre（长过目标）')
     assert.equal(await engine.content2.contentVersion('数学', ENDPOINT), 1, '病三：终点已被生成正文')
-    const completion0 = await engine.courseCompletion({ name: '数学', root: 'math' })
-    assert.ok(completion0)
-    assert.deepEqual(completion0!.criteria.last_steps.map(s => s.node), STARTS, '完成判据折叠自陈旧粗边（三起点）')
-    assert.equal(completion0!.criteria.mastery_met, false)
-    assert.equal(completion0!.criteria.sealed, null)
-    assert.equal(completion0!.complete, false)
+    const completion0 = (await engine.courseCompletion({ name: '数学', root: 'math' }))[0]!
+    assert.deepEqual(completion0.criteria.last_steps.map(s => s.node), STARTS, '完成判据折叠自陈旧粗边（三起点）')
+    assert.equal(completion0.criteria.mastery_met, false)
+    assert.equal(completion0.criteria.sealed, null)
+    assert.equal(completion0.status, 'unwired')
+    assert.equal(completion0.complete, false)
     // 生成门（未就绪形态：pre = 未掌握起点）——恒拒，不看就绪（ADR-0056 已取代票面原 step3 的「就绪后放行」）
-    await assert.rejects(() => engine.content2.contentPack('数学', ENDPOINT), /终点是承诺标记，不被学习调度/)
+    await assert.rejects(() => engine.content2.contentPack('数学', ENDPOINT), /终点是方向标记，不被学习调度/)
     trace.push('异常态盘点：终点深度 1、主线深度 6、综述以终点为 pre、终点有正文；生成门拒（未就绪形态）')
 
     // ---- 第 1 步：收尾接线批过 #198 新受理门（教练裁决：终点 = 真实前沿一线）----
@@ -140,8 +142,8 @@ ops:
     const wiringApplied = await engine.graph.graphApply('edit', wiring.id) as { ops: number; snapshot: number }
     assert.equal(wiringApplied.ops, 1)
     assert.equal(wiringApplied.snapshot, 1, '接线批 apply 留快照 v1（收尾接线批后图态）')
-    const anchorAfterWiring = await readAnchor(paths.anchorPath('math'), (await import('../src/host/vault-fs.ts')).nodeVaultFs)
-    assert.match(anchorAfterWiring!.sealed!, /^\d{4}-\d{2}-\d{2}$/, '纯 set_pre 接线批 apply 落 sealed 收尾宣告（#202）')
+    const anchorAfterWiring = (await readAnchors(paths.anchorPath('math'), (await import('../src/host/vault-fs.ts')).nodeVaultFs))[0]!
+    assert.match(anchorAfterWiring.sealed!, /^\d{4}-\d{2}-\d{2}$/, '纯 set_pre 接线批 apply 落 sealed 收尾宣告（#202）')
     trace.push(`提案 #${wiring.id}（收尾接线批 set_pre 终点 = 合成求解路径、答案检验）：受理门过 → apply 落快照 v1 + sealed`)
 
     // ---- 第 2 步：复发预防对照——add_node 以终点为 pre 被受理门拒（#198① 禁长过目标）----
@@ -202,12 +204,12 @@ ops:
     assert.equal(doc1.stats.max_depth, 7, '主线深度 6 → 7（保留终点计的进度读数）')
     assert.equal(doc1.stats.leaves, 2, 'stats.leaves 剔终点（#200）：处置后叶子 = 两条支线尾')
     assert.equal(doc1.nodes.find(n => n.data.id === OVERVIEW), undefined, '综述已不在图上')
-    const completion1 = await engine.courseCompletion({ name: '数学', root: 'math' })
-    assert.ok(completion1)
-    assert.deepEqual(completion1!.criteria.last_steps.map(s => s.node), ['合成求解路径', '答案检验'], '完成判据随接线改扎到最后台阶')
-    assert.equal(completion1!.criteria.mastery_met, true, '最后台阶（已练到位）全部达标')
-    assert.equal(completion1!.criteria.sealed, anchorAfterWiring!.sealed, '收尾宣告在锚上')
-    assert.equal(completion1!.complete, true, '已收尾 + 最后台阶掌握 → 完成宣告成立（无需教练再出手）')
+    const completion1 = (await engine.courseCompletion({ name: '数学', root: 'math' }))[0]!
+    assert.deepEqual(completion1.criteria.last_steps.map(s => s.node), ['合成求解路径', '答案检验'], '完成判据随接线改扎到最后台阶')
+    assert.equal(completion1.criteria.mastery_met, true, '最后台阶（已练到位）全部达标')
+    assert.equal(completion1.criteria.sealed, anchorAfterWiring.sealed, '收尾宣告在锚上')
+    assert.equal(completion1.status, 'reached')
+    assert.equal(completion1.complete, true, '已收尾 + 最后台阶掌握 → 达成读数成立（无需教练再出手）')
     // 学习者账：终点达标也不进就绪/推荐（#199 回归确认）
     const status = await engine.statusJson()
     const course = status.courses.find(c => c.name === '数学')!

@@ -4,7 +4,7 @@ import type { VaultFs } from './io.ts'
  * 指引一次性迁移脚本——零兼容代码（不迁移、无双读、不降级，断裂语义见 ADR）。
  *
  * 版本标记住在 `学习中心/state/learnhub.json` 的 `schema` 对象：
- *   schema: { version: 2, breaks: [...断裂史·纯档案], formats: {...子格式独立演变} }
+ *   schema: { version: 3, breaks: [...断裂史·纯档案], formats: {...子格式独立演变} }
  * - version：启动硬门，非当前版本（含缺失/损坏）即拒载。
  * - breaks：断裂史追加档案，引擎零消费；一次性迁移脚本落笔。
  * - formats：子格式版本表，主版本内自由演变；子格式的破坏性变更仍走主版本断裂。
@@ -14,7 +14,7 @@ import type { VaultFs } from './io.ts'
  */
 
 /** 当前引擎唯一认许的 schema 主版本。 */
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 /** 一次断裂的档案条目（迁移脚本落笔；引擎零消费）。 */
 export interface SchemaBreak {
@@ -73,7 +73,7 @@ export function assertSchemaVersion(configPath: string, fs: VaultFs): SchemaBloc
   throw new Error(
     `[learnhub] schema 版本硬门：learnhub.json 为 ${found}，引擎只认 v${CURRENT_SCHEMA_VERSION}`
     + `（宣告式断裂，ADR-0034：旧课程树整体入存档、零兼容代码）。\n`
-    + `  请先运行一次性迁移脚本：node scripts/migrate-v1.mjs "<vault根目录>"\n`
-    + `  （脚本已在 cutover 完成后退役为存根——本机库应已迁移；在其他机器遇到旧 v1 库时，`
-    + `脚本实现见 git 历史，存根文件头部有说明。）`)
+    + `  请先运行一次性迁移脚本：node scripts/migrate-v2.mjs "<vault根目录>"\n`
+    + `  （脚本执行断裂：现有课程树整体移入 学习中心/存档/pre-v<来源版本>/<日期>/、`
+    + `learnhub.json 戳 version: ${CURRENT_SCHEMA_VERSION} 并追加 breaks 记录、概念登记表豁免存活。）`)
 }

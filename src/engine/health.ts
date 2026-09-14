@@ -10,6 +10,9 @@ import type { Graph } from './graph.ts'
 import { floatNodes } from './quality.ts'
 import { clamp01 } from './grading.ts'
 
+/** 零终点（空锚是合法空态）：健康分口径的缺省读侧集合。 */
+const EMPTY_ENDPOINTS: ReadonlySet<string> = new Set<string>()
+
 /** 动作词表（动作句命名的机械化判定：节点名以这些动词性字眼开头/包含才算「动作句」）。 */
 const ACTION_WORDS = [
   '解', '求', '证明', '推导', '计算', '辨析', '建立', '比较', '判定', '构造',
@@ -44,25 +47,26 @@ export function estSpreadNote(g: EstSpreadSource): string | null {
 }
 
 /** 图谱健康分：score ∈ [0,100]；breakdown 各项均为 0-20 的原始得分。
- * endpoint：终点节点名（ADR-0055 口径豁免）——终点是承诺标记不是课程节点，
- * 前置完备项的空降清单与其分母都不计它（终点 pre 接线与否是方向不变式的事，不是空降缺陷）。 */
+ * endpoints：终点节点名集（ADR-0055 口径豁免，#239 多终点化）——终点是方向标记不是
+ * 课程节点，前置完备项的空降清单与其分母都不计它们（终点 pre 接线与否是方向不变式的事，
+ * 不是空降缺陷）。 */
 export function graphHealthScore(
-  graph: Graph, opts: { endpoint?: string | null } = {},
+  graph: Graph, opts: { endpoints?: ReadonlySet<string> } = {},
 ): { score: number; breakdown: Record<string, number> } {
-  const endpoint = opts.endpoint ?? null
-  const names = endpoint ? graph.names.filter(n => n !== endpoint) : graph.names
+  const endpoints = opts.endpoints ?? EMPTY_ENDPOINTS
+  const names = graph.names.filter(n => !endpoints.has(n))
 
   // a) 动作句比例 ×20
   const actionHits = names.filter(n => ACTION_WORDS.some(w => n.includes(w))).length
   const actionNaming = names.length ? (actionHits / names.length) * 20 : 0
 
   // b) est 覆盖率 ×20
-  const estCoverage = names.length ? (Object.keys(graph.estOf).filter(n => n !== endpoint).length / names.length) * 20 : 0
+  const estCoverage = names.length ? (Object.keys(graph.estOf).filter(n => !endpoints.has(n)).length / names.length) * 20 : 0
 
   // c) 前置完备 ×20：空降节点（region 序靠后且 pre 为空）越少越好
   //    （旧口径 depth>1 && pre 为空是死条件——pre 派生深度下无 pre 必为 0，见 quality.ts floatNodes）
-  //    终点不入清单不计分母（承诺标记：锚定的目标位置没有 pre 是接线待完成，不是空降）
-  const floats = floatNodes(graph).filter(n => n !== endpoint).length
+  //    终点不入清单不计分母（方向标记：锚定的目标位置没有 pre 是接线待完成，不是空降）
+  const floats = floatNodes(graph).filter(n => !endpoints.has(n)).length
   const preCompleteness = names.length ? (1 - floats / names.length) * 20 : 0
 
   // d) 收敛度 ×20：非根节点平均 pre 数（≥2 满分、=1 零分线性插值；环/无内点 = 0）

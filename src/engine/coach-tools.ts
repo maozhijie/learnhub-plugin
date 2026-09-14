@@ -22,7 +22,7 @@ import type { VaultFs } from './io.ts'
 import { hasReadyContent } from './notes.ts'
 import type { Paths } from './paths.ts'
 import type { BankDoc } from './question-bank.ts'
-import { readAnchor } from './seed.ts'
+import { endpointNames, readAnchors } from './seed.ts'
 import { readySet } from './sessions.ts'
 import type { CourseEntry, Fm } from './types.ts'
 import type { LlmToolCall, LlmToolSpec } from './llm.ts'
@@ -55,10 +55,10 @@ function activeLabel(state: Record<string, Fm>, n: string): string {
 /** 图面（教练回路 graph_view 与生长批上下文包第三块共用同一折叠；自 growth-subsystem
  * 归位）：结构事实源——裁决 ops 的节点名与 pre 引用的取值域。前沿与在学节点给细节行
  * （区·块/pre/teaches/est/正文态），其余节点给全名单（供 set_pre 等引用既有节点）。
- * endpoint：终点恒标（#200 / ADR-0055）——图面头部带终点行，终点节点细节行带标记；
- * 轻量段同吃这份图面，裁决不盲。纯组装零写副作用。 */
+ * endpoints：终点恒标（#200 / ADR-0055；#239 多终点化：**逐个终点**）——图面头部带
+ * 每个终点一行，终点节点细节行带标记；轻量段同吃这份图面，裁决不盲。纯组装零写副作用。 */
 export function renderGrowthGraphView(
-  graph: Graph, state: Record<string, Fm>, endpoint: string | null = null,
+  graph: Graph, state: Record<string, Fm>, endpoints: ReadonlySet<string> = new Set<string>(),
 ): string {
   // 前沿 = readySet（未开始且非 opt 前置全部达成）；rValue 恒 1 = R 软闸不改变可学性、
   // 故不带门——与教练回合检查点的前沿口径同源（GrowthSubsystem.coachFrontier 同款）。
@@ -70,9 +70,9 @@ export function renderGrowthGraphView(
   const lines: string[] = [
     '## 当前图面（结构事实源——ops 的节点名与 pre 引用必须逐字来自这里）', '',
     `- 节点共 ${graph.names.length} 个；前沿与在学 ${active.length} 个（带细节行）`,
-    ...(endpoint
-      ? [`- ⚑ 终点：${endpoint}（承诺标记——一切生长须汇入它；不可 del/rename，零正文零题库不被调度，主线批须 set_pre 接线到新前沿）`]
-      : ['（未播种——终点锚 Missing，先走种子提案 kind=seed）']),
+    ...(endpoints.size
+      ? [...endpoints].map(n => `- ⚑ 终点：${n}（方向标记——朝该方向的生长须汇入它；不可 del/rename，零正文零题库不被调度，主线批须 set_pre 接线到新前沿）`)
+      : ['（零终点——空锚是合法空态，先加一个终点：教练回合无从裁决方向）']),
     '', '### 前沿与在学节点', '',
   ]
   for (const n of active) {
@@ -80,7 +80,7 @@ export function renderGrowthGraphView(
     const pres = graph.preOf[n]
     const teaches = Object.entries(graph.teachesOf[n] ?? {}).map(([c, t]) => `${c} ${t}`)
     const est = graph.estOf[n]
-    lines.push(`- ${n}${n === endpoint ? ' ⚑' : ''}（${region}·${block}｜${activeLabel(state, n)}${est ? `｜est ${est}′` : ''}）`
+    lines.push(`- ${n}${endpoints.has(n) ? ' ⚑' : ''}（${region}·${block}｜${activeLabel(state, n)}${est ? `｜est ${est}′` : ''}）`
       + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
       + (teaches.length ? `｜teaches: ${teaches.join('、')}` : ''))
   }
@@ -95,9 +95,9 @@ export function renderGrowthGraphView(
 
 /** 节点卡（node_card）：单节点的结构档与内容态——区·块、阶段、pre/teaches/assumes、
  * est、下游消费、误解先验。未知节点 fail loud（graph_view 取逐字名单），不静默编空卡。
- * endpoint：终点卡恒标（#200）——下游消费与调度措辞按承诺标记口径。 */
+ * endpoints：终点卡恒标（#200）——下游消费与调度措辞按方向标记口径。 */
 export function renderNodeCard(
-  graph: Graph, state: Record<string, Fm>, node: string, endpoint: string | null = null,
+  graph: Graph, state: Record<string, Fm>, node: string, endpoints: ReadonlySet<string> = new Set<string>(),
 ): string {
   if (!graph.nset.has(node)) {
     throw new Error(`节点「${node}」不在图上——用 graph_view 取逐字名单后重试（引用必须逐字命中）。`)
@@ -108,9 +108,9 @@ export function renderNodeCard(
   const assumes = Object.entries(graph.assumesOf[node] ?? {})
   const mis = graph.misconceptionsOf[node] ?? []
   const consumers = graph.succ[node] ?? []
-  const isEndpoint = node === endpoint
+  const isEndpoint = endpoints.has(node)
   return [
-    `## 节点卡：${node}${isEndpoint ? ' ⚑ 终点（承诺标记）' : ''}`, '',
+    `## 节点卡：${node}${isEndpoint ? ' ⚑ 终点（方向标记）' : ''}`, '',
     `- 区·块：${region} · ${block}`,
     `- 阶段：${activeLabel(state, node)}${isEndpoint ? '（终点——零正文零题库不被学习调度，ADR-0056）' : graph.typeOf[node] === 'practice' ? '（交互实践节点）' : ''}${graph.estOf[node] ? `｜est ${graph.estOf[node]}′` : ''}`,
     `- pre：${pres.length ? pres.join('、') : '（根）'}`,
@@ -169,11 +169,11 @@ export async function renderBankOverview(
   return lines.join('\n') + '\n'
 }
 
-/** 罗盘视图（compass_read）：剩余路线 + 学习者批注（软输入——提议非指令）+ 沙盘 ETA
- * 的现势折叠。未播种给合法空态（终点锚同源判定）。 */
+/** 罗盘视图（compass_read）：终点集合 + 剩余路线 + 学习者批注（软输入——提议非指令）+
+ * 沙盘 ETA 的现势折叠。零终点给合法空态（锚集合同源判定）。 */
 export async function renderCompassView(deps: CoachToolDeps, c: CourseEntry): Promise<string> {
-  const anchor = await readAnchor(deps.paths.anchorPath(c.root), deps.fs)
-  if (!anchor) return `## 罗盘：${c.name}\n\n（未播种——终点锚 Missing 是合法空态，先走种子提案 kind=seed。）\n`
+  const anchors = await readAnchors(deps.paths.anchorPath(c.root), deps.fs)
+  if (!anchors.length) return `## 罗盘：${c.name}\n\n（零终点——空锚是合法空态，先加一个终点：罗盘按终点组织剩余路线。）\n`
   const path = deps.paths.compassPath(c.root)
   const doc: CompassDoc | null = deps.fs.exists(path) ? parseCompass(await deps.fs.readFile(path)) : null
   const route = (doc ? sectionBody(doc, SECTION_ROUTE)?.trim() : '') ?? ''
@@ -181,7 +181,7 @@ export async function renderCompassView(deps: CoachToolDeps, c: CourseEntry): Pr
   const annotations = doc ? sectionBody(doc, SECTION_ANNOTATIONS) : null
   const lines: string[] = [
     `## 罗盘：${c.name}`, '',
-    `- 终点：${anchor.endpoint}（${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定' : 'capability 能力锚定'}）`,
+    ...anchors.map(a => `- 终点：${a.endpoint}（${a.goal_type === 'coverage' ? 'coverage 覆盖锚定' : 'capability 能力锚定'}）${a.goal_note ? `——${a.goal_note}` : ''}`),
     `- 剩余路线：${route && route !== ETA_PENDING ? '已画（见下）' : '未画（占位/缺席）'}`,
   ]
   if (route && route !== ETA_PENDING) lines.push('', route)
@@ -192,22 +192,25 @@ export async function renderCompassView(deps: CoachToolDeps, c: CourseEntry): Pr
   return lines.join('\n') + '\n'
 }
 
-/** 终点锚视图（endpoint_anchor）：课程唯一结构承诺物——终点/目标类型/声明日/块工作表
- * 核销进度/收尾宣告（ADR-0056）。锚 Broken fail loud（承诺物损坏必须显式浮出，不静默
- * 折成未播种）。 */
+/** 终点锚视图（endpoint_anchor）：课程的方向锚集合——逐终点给目标类型/声明日/
+ * 目标描述/块工作表核销进度/收尾宣告（ADR-0056；#239 多终点化）。锚 Broken fail loud
+ * （锚损坏必须显式浮出，不静默折成零终点）。 */
 export async function renderEndpointAnchor(deps: CoachToolDeps, c: CourseEntry): Promise<string> {
-  const anchor = await readAnchor(deps.paths.anchorPath(c.root), deps.fs)
-  if (!anchor) return `## 终点锚：${c.name}\n\n（未播种——终点锚 Missing 是合法空态，先走种子提案 kind=seed。）\n`
-  const lines = [
-    `## 终点锚：${c.name}`, '',
-    `- 终点节点：${anchor.endpoint}`,
-    `- 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
-    `- 声明日期：${anchor.declared}`,
-    `- 收尾宣告：${anchor.sealed ? `已收尾（${anchor.sealed} 宣告承诺兑现——完成判据折叠自终点.pre 集；重开主线接线批会自动清除）` : '未收尾（停摆前终点.pre 须指向你认定的最终台阶——零 add_node 的纯 set_pre 接线批即收尾宣告）'}`,
-  ]
-  if (anchor.worksheet.length) {
-    lines.push(`- 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`
-      + `（${anchor.worksheet.map(w => `${w.block}${w.done ? '✓' : ''}`).join('、')}）`)
+  const anchors = await readAnchors(deps.paths.anchorPath(c.root), deps.fs)
+  if (!anchors.length) return `## 终点锚：${c.name}\n\n（零终点——空锚是合法空态，先加一个终点。）\n`
+  const lines = [`## 终点锚：${c.name}（${anchors.length} 个终点）`, '']
+  for (const anchor of anchors) {
+    lines.push(
+      `- 终点节点：${anchor.endpoint}`,
+      `- 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
+      `- 声明日期：${anchor.declared}`,
+      `- 收尾宣告：${anchor.sealed ? `已收尾（${anchor.sealed} 宣告坡道铺通——读数折叠自该终点.pre 集；该终点重开主线接线批会自动清除）` : '未收尾（停摆前该终点.pre 须指向你认定的最终台阶——零 add_node 的纯 set_pre 接线批即收尾宣告）'}`,
+    )
+    if (anchor.goal_note) lines.push(`- 目标描述：${anchor.goal_note}`)
+    if (anchor.worksheet.length) {
+      lines.push(`- 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`
+        + `（${anchor.worksheet.map(w => `${w.block}${w.done ? '✓' : ''}`).join('、')}）`)
+    }
   }
   return lines.join('\n') + '\n'
 }
@@ -240,8 +243,8 @@ export function coachToolSpecs(): LlmToolSpec[] {
     { name: 'concept_registry', description: '概念登记表：canonical/别名/定义。teaches/assumes/concepts 铸名对表的唯一权威——query 子串过滤可收窄。', parameters: obj({ query: { type: 'string', description: '可选子串（命中 canonical 或别名）' } }) },
     { name: 'behavior_digest', description: '行为摘要五件套（窗口=最近 7 学习日或 10 节取大）：掌握轨迹/卡点集中度/速度校准/误解活跃度/保留率。', parameters: obj({}) },
     { name: 'bank_overview', description: '题库概况：逐节点在库/归档/invokes 标注题数。巩固批与出题现势参照。', parameters: obj({}) },
-    { name: 'compass_read', description: '罗盘现势：剩余路线 + 学习者批注（软输入，提议非指令）+ 沙盘 ETA。', parameters: obj({}) },
-    { name: 'endpoint_anchor', description: '终点锚：终点节点/目标类型/声明日/块工作表核销进度。', parameters: obj({}) },
+    { name: 'compass_read', description: '罗盘现势：终点集合/剩余路线 + 学习者批注（软输入，提议非指令）+ 沙盘 ETA。', parameters: obj({}) },
+    { name: 'endpoint_anchor', description: '终点锚集合：逐终点的终点节点/目标类型/声明日/块工作表核销进度/收尾宣告。', parameters: obj({}) },
   ]
 }
 
@@ -261,19 +264,19 @@ export function coachToolExecutor(
     }
   }
   return async call => {
-    // 终点恒标的读锚出处（#200 / ADR-0055）：图面与节点卡现算终点标记，不落盘不漂移
-    const endpointOf = async (): Promise<string | null> =>
-      (await readAnchor(deps.paths.anchorPath(c.root), deps.fs))?.endpoint ?? null
+    // 终点恒标的读锚出处（#200 / ADR-0055；#239 多终点化）：图面与节点卡现算终点集合，不落盘不漂移
+    const endpointsOf = async (): Promise<Set<string>> =>
+      endpointNames(await readAnchors(deps.paths.anchorPath(c.root), deps.fs))
     switch (call.name as CoachToolName) {
       case 'graph_view': {
         const { graph, state } = await deps.loadView(c)
-        return renderGrowthGraphView(graph, state, await endpointOf())
+        return renderGrowthGraphView(graph, state, await endpointsOf())
       }
       case 'node_card': {
         const node = argsOf(call).node
         if (typeof node !== 'string' || !node.trim()) throw new Error('node_card 需要 node 参数（逐字节点名）。')
         const { graph, state } = await deps.loadView(c)
-        return renderNodeCard(graph, state, node.trim(), await endpointOf())
+        return renderNodeCard(graph, state, node.trim(), await endpointsOf())
       }
       case 'concept_registry': {
         const q = argsOf(call).query

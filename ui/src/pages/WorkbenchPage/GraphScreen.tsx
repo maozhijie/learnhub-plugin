@@ -17,7 +17,7 @@ import type { BankEntry, GenJobItem, GraphDoc, RecommendDoc } from '../../types'
 
 const { Text } = Typography
 
-/** 图例：状态色点 + 掌握度深浅说明。终点条目按 ADR-0056 修订注明「承诺标记」语义——
+/** 图例：状态色点 + 掌握度深浅说明。终点条目按 ADR-0056／ADR-0076 注明「方向标记」语义——
  * 终点不被学习调度、不产料，不是图上待学的课程节点（#200 / ADR-0055）。 */
 function Legend() {
   const items: Array<[string, string]> = [
@@ -26,7 +26,7 @@ function Legend() {
     ['复习/掌握', '#00b42a'],
     ['已跳过', '#722ed1'],
     ['推荐下一步', '#ff7d00'],
-    ['⚑ 终点（承诺标记）', '#f5319d'],
+    ['⚑ 终点（方向标记）', '#f5319d'],
   ]
   return (
     <Space size={12} wrap align='center' className='lh-t-12'>

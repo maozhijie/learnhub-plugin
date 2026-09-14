@@ -77,9 +77,9 @@ export interface GraphBrowseRegion { name: string; blocks: GraphBrowseBlock[] }
 
 /** 图分析全量视图（analysis.GraphAnalysis 的视图镜像 + 终点锚派生的终点标记；React Flow elements 格式）。 */
 export interface GraphDoc {
-  /** 锚定终点节点名（读侧从终点锚派生，#199 / ADR-0055；未播种 = null）。
-   * 消费面据此对终点关生成入口（终点纯标记化 ADR-0056）。 */
-  endpoint: string | null
+  /** 锚定终点节点名集（读侧从锚集合派生，#199 / ADR-0055；#239 多终点化：逐个终点）。
+   * 消费面据此对终点关生成入口（终点纯标记化 ADR-0056）；零终点 = 空数组。 */
+  endpoints: string[]
   stats: {
     nodes: number
     edges: number
@@ -121,7 +121,7 @@ export interface GraphDoc {
     mastery: number
     /** 已生成可读正文（列表/图三态标识：点开有东西读）。 */
     hasContent: boolean
-    /** 终点标记（#200 / ADR-0055 读锚现算）：true = 本节点是锚定的终点——承诺标记，
+    /** 终点标记（#200 / ADR-0055 读锚现算）：true = 本节点是锚定的终点——方向标记，
      * 不被学习调度不产料（ADR-0056），图上按终点样式 + 图例呈现。 */
     isEndpoint: boolean
     /** practice = 交互实践节点（「练」角标）。 */

@@ -134,9 +134,9 @@ export class Paths {
    * 状态集 {probation→proven｜剪除}，仅插入边持有；图 YAML 零边字段（边轻）。 */
   probationLedgerPath(root: string): string { return `${this.courseStateDir(root)}/边实验.jsonl` }
 
-  /** 终点锚（#142 / ADR-0033）：课程根/state/终点锚.json——课程唯一结构承诺物
-   * （终点节点+目标类型+声明日期），种子提案 apply 落盘；无直改通道，换终点走
-   * 重新种子提案（kind=seed）。 */
+  /** 终点锚（#142 / ADR-0033；#239 / ADR-0076 多终点化）：课程根/state/终点锚.json
+   * ——课程的**方向锚集合**（`{version: 2, anchors: [...]}`，逐个终点的终点节点+目标
+   * 类型+声明日期+选填收尾宣告），起草 apply 与终点增删动作落盘；锚不直改。 */
   anchorPath(root: string): string { return `${this.courseStateDir(root)}/终点锚.json` }
 
   /** 罗盘（#143 / ADR-0033 透明度装置）：课程根/罗盘.md——常驻的非承诺路线草图，

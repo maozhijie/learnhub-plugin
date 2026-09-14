@@ -19,7 +19,7 @@ import type { Paths } from './paths.ts'
 import { DIAGNOSTIC_SCORE, diagnosticView } from './attribution.ts'
 import type { DiagnosticEntry, DiagnosticItem } from './attribution.ts'
 import type { LessonDoc } from './views/content.ts'
-import { readAnchor } from './seed.ts'
+import { endpointNames, readAnchors } from './seed.ts'
 import type { CompletionFold } from './seed.ts'
 import type { ProbationCourseView } from './probation.ts'
 import type { CoachCheck } from './coach-round.ts'
@@ -141,7 +141,7 @@ export interface StatusGateAdvice {
   entry: { course: string; node: string }
 }
 
-/** status 单课程汇总（sessions.statusJson 生产；facade 逐课程附 coach/completion/probation/diagnostics）。 */
+/** status 单课程汇总（sessions.statusJson 生产；facade 逐课程附 coach/completions/probation/diagnostics）。 */
 export interface StatusCourse {
   /** 注册表 id（旧注册表条目可缺省）。 */
   id?: string
@@ -155,8 +155,9 @@ export interface StatusCourse {
   blocked: Record<string, StatusGateAdvice[]>
   /** 内容诊断建议项（#69 B1）：该课程命中时附带（facade 逐课程过滤 diagnosticsAdvice）。 */
   diagnostics?: DiagnosticEntry[]
-  /** 完成宣告（#142 雾区条款上半，读侧折叠零写副作用）：有终点锚的课程附带。 */
-  completion?: CompletionFold
+  /** 逐终点完成读数（#142 雾区条款上半 / #239 多终点化，读侧折叠零写副作用）：
+   * 逐终点一条——有终点的课程附带；零终点不出字段。 */
+  completions?: CompletionFold[]
   /** 插入实验面（#146）：在途插入节点、到期未决、三率与韧性闸门现势。 */
   probation?: ProbationCourseView
   /** 教练回合就绪深度检查（#144 会话开工触点；facade 逐课程附加）。 */
@@ -333,19 +334,19 @@ export class Sessions {
       const overdueNodes = withDue.filter(s => (parseDay(s.due ?? '')?.getTime() ?? t.getTime()) < t.getTime())
       const dueNodes = withDue.filter(s => s.due === today)
       // 学习者账剔终点（#199 / ADR-0056 终点纯标记化）：就绪存量与就绪/软闸清单不列
-      // 终点——终点是承诺标记不被学习调度，带正文也不会出现在任何「今天学什么」面上。
-      const anchor = await readAnchor(this.paths.anchorPath(c.root), this.fs)
-      const endpoint = anchor?.endpoint ?? null
+      // 终点（#239 多终点化：逐个终点判定）——终点是方向标记不被学习调度，带正文也
+      // 不会出现在任何「今天学什么」面上。
+      const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(c.root), this.fs))
       courses.push({
         id: c.id, name: c.name,
         total: graph.names.length, counts: st.counts,
         due_today: dueNodes.length,
         overdue: overdueNodes.map(o => ({ node: o.node, since: o.due as string, count: o.count, path: this.notePath(c.root, graph, o.node) })),
-        ready: st.ready.filter(n => n !== endpoint).map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
-        gated: st.gated.filter(n => n !== endpoint).map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
+        ready: st.ready.filter(n => !endpoints.has(n)).map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
+        gated: st.gated.filter(n => !endpoints.has(n)).map(n => ({ node: n, path: this.notePath(c.root, graph, n) })),
         // 软闸建议项（#54 R 半）：被 R-gate 拦下的候选 → {前置, R, 前置到期题数, 直达入口}
         // （键集合与就绪清单同源，同样剔终点——#199 学习者账）
-        blocked: Object.fromEntries(Object.entries(st.advice).filter(([n]) => n !== endpoint).map(([n, items]) =>
+        blocked: Object.fromEntries(Object.entries(st.advice).filter(([n]) => !endpoints.has(n)).map(([n, items]) =>
           [n, items.map(a => ({
             pre: a.node, r: a.r, due: a.due,
             entry: { course: c.name, node: a.node },
@@ -454,11 +455,10 @@ export class Sessions {
       // 前置展示软闸建议项——文案引导「先复习 P 的 n 道到期题」，评分抬一档排在
       // 普通新课之前，但不阻止直接学 N（软闸语义，无新增拦截）。
       // 推荐面剔终点（#199 / ADR-0056）：终点不出现在「今天学什么」推荐流里。
-      const anchor = await readAnchor(this.paths.anchorPath(c.root), this.fs)
-      const endpoint = anchor?.endpoint ?? null
+      const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(c.root), this.fs))
       const lru = regionLru(graph, state)
       const lruBonus = new Map(lru.map((r0, i) => [r0, Math.max(0, 8 - i * 2)]))
-      const ready = readySet(graph, state, rValue).filter(n => n !== endpoint)
+      const ready = readySet(graph, state, rValue).filter(n => !endpoints.has(n))
       const done = doneSet(graph, state)
       const started = new Set([...done, ...learningSet(graph, state)])
       // 「学好可解锁 N 个后继」的真实语义：学会本节后，那些唯一卡在本节的未开始
@@ -624,9 +624,8 @@ export class Sessions {
     const sched = await getScheduler(this.paths, this.paths.courseRoot(root), this.fs)
     const rValue = (n: string) => retrievability(sched, state[n], today)
     // 学习者面剔终点（#199）：学习包的「推荐下一步」同样不出现终点
-    const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
-    const endpoint = anchor?.endpoint ?? null
-    const candidates = readySet(graph, state, rValue).filter(n => n !== node && n !== endpoint)
+    const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(root), this.fs))
+    const candidates = readySet(graph, state, rValue).filter(n => n !== node && !endpoints.has(n))
     const unlocks = candidates.filter(n => graph.preOf[n].includes(node))
     return {
       course: courseName, node,

@@ -63,7 +63,7 @@ import { hasReadyContent, loadNote } from './notes.ts'
 import { decompileTerms } from './project-decompile.ts'
 import type { EnrichFieldEntry } from './proposals.ts'
 import type { SeedDraftRequest, SeedProposalSpec } from './seed.ts'
-import { isSeedGraph, readAnchor, seedRepairPrompt, validateSeedProposal } from './seed.ts'
+import { endpointNames, isSeedGraph, readAnchors, seedRepairPrompt, validateSeedProposal } from './seed.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
 import type { GNode, ProposalRec, VaultPriorAudit } from './types.ts'
@@ -91,15 +91,16 @@ export class GraphSubsystem {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state } = await this.e.loadView(c)
     const vaultLinks = await this.loadVaultLinkPrior(graph)
-    // 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，Float（missing_pre）建议豁免
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
-    const seedPhase = isSeedGraph(anchor, graph)
-    const endpoint = anchor?.endpoint ?? null
-    // 终点标记随锚走（#200 / ADR-0055 读侧单源派生）：节点载荷标 isEndpoint、
-    // leaves/空降建议/健康分口径剔终点，UI 图面据此渲染终点样式并关终点生成入口
-    const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase, endpoint)
+    // 种子图豁免（#142）：图仍 = 锚集合种子节点并集时，Float（missing_pre）建议豁免
+    const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
+    const seedPhase = isSeedGraph(anchors, graph)
+    const endpoints = endpointNames(anchors)
+    // 终点标记随锚走（#200 / ADR-0055 读侧单源派生；#239 多终点化：逐终点标记）：
+    // 节点载荷标 isEndpoint、leaves/空降建议/健康分口径剔终点，UI 图面据此渲染终点
+    // 样式并关终点生成入口
+    const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase, endpoints)
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
-    return { ...doc, endpoint }
+    return { ...doc, endpoints: [...endpoints] }
   }
 
   /** 读链接先验缓存（Missing = null 合法空态；坏档 fail loud——它是引擎 state 契约文件）。 */

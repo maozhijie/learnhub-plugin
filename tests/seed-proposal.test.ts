@@ -6,15 +6,16 @@ import { Graph, GraphStore } from '../src/engine/graph.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { todayStr } from '../src/engine/dates.ts'
 import { systemClock } from '../src/host/clock.ts'
-import { validateSeedProposal, seedNodeToGNode, readAnchor, foldCompletion } from '../src/engine/seed.ts'
+import { validateSeedProposal, seedNodeToGNode, readAnchors, foldCompletion } from '../src/engine/seed.ts'
 import { runAudit } from '../src/engine/audit.ts'
 import { dataCheck } from '../src/engine/data-check.ts'
 import { withVault } from './helpers/vault.ts'
 
-// 种子提案 + 终点锚 + 完成宣告 + 先验喂料分流（#142 / ADR-0033 生长式图）：
-// kind=seed 是课程唯一新入口——1–3 起点 + 终点 + 朝终点的粗占位边，
-// 一次人审即开工；apply 落终点锚（state/终点锚.json：终点+目标类型+声明日期）；
-// 完成 = 读侧宣告（零写侧状态）；换终点只走重新种子提案，锚无直改通道；
+// 种子提案 + 终点锚 + 完成读数 + 先验喂料分流（#142 / ADR-0033 生长式图；
+// #239 / ADR-0076 多终点化：锚是集合、读侧一律按集合读）：
+// kind=seed 是起草通道——1–3 起点 + 终点 + 朝终点的粗占位边，一次人审即开工；
+// apply 把锚**按终点并入**容器（state/终点锚.json：{version: 2, anchors: [...]}）；
+// 完成 = 读侧逐终点读数（零写侧状态）；终点增删走显式动作，锚不直改；
 // vault 链接先验 ≥0.7 喂料分流（未回应可见，零先验 Missing 非 Broken）。
 
 /** 未播种 vault：无注册表（mode=new 要求课程未注册，引擎建课脚手架负责落盘）。 */
@@ -114,13 +115,14 @@ test('AC1 种子全链：受理→人审→apply 落终点锚+目标类型，占
     assert.doesNotMatch(dataYaml, /est:/)
     assert.doesNotMatch(dataYaml, /enc:/)
     // 终点锚：终点 + 目标类型 + 声明日期 + 来源提案
-    const anchor = await readAnchor(paths.anchorPath('数学'), nodeVaultFs)
-    assert.ok(anchor)
-    assert.equal(anchor!.endpoint, '用导数解决优化问题')
-    assert.equal(anchor!.goal_type, 'capability')
-    assert.equal(anchor!.declared, applied.declared)
-    assert.equal(anchor!.origin_proposal, r.id)
-    assert.deepEqual(anchor!.seed_nodes, ['认识变化率', '用导数解决优化问题'])
+    const anchors = await readAnchors(paths.anchorPath('数学'), nodeVaultFs)
+    assert.equal(anchors.length, 1)
+    const anchor = anchors[0]!
+    assert.equal(anchor.endpoint, '用导数解决优化问题')
+    assert.equal(anchor.goal_type, 'capability')
+    assert.equal(anchor.declared, applied.declared)
+    assert.equal(anchor.origin_proposal, r.id)
+    assert.deepEqual(anchor.seed_nodes, ['认识变化率', '用导数解决优化问题'])
     // journal + 快照
     const journal = await readFile(join(root, '学习中心', 'state', 'journal.jsonl'), 'utf8')
     assert.match(journal, /graph_seed/)
@@ -174,11 +176,11 @@ test('AC2 覆盖锚定带块工作表；能力锚定带工作表受理被拒；�
     const r = await engine.graph.graphPropose('seed', COVERAGE_SEED) as { id: number; worksheet?: number }
     assert.equal(r.worksheet, 2)
     await engine.graph.graphApply('seed', r.id)
-    const anchor = await readAnchor(paths.anchorPath('数学'), nodeVaultFs)
-    assert.equal(anchor!.goal_type, 'coverage')
-    assert.equal(anchor!.worksheet.length, 2)
-    assert.equal(anchor!.worksheet[0]!.block, '极限与连续')
-    assert.equal(anchor!.worksheet[0]!.done, false)
+    const anchor = (await readAnchors(paths.anchorPath('数学'), nodeVaultFs))[0]!
+    assert.equal(anchor.goal_type, 'coverage')
+    assert.equal(anchor.worksheet.length, 2)
+    assert.equal(anchor.worksheet[0]!.block, '极限与连续')
+    assert.equal(anchor.worksheet[0]!.done, false)
 
     // 种子审计豁免：种子图（= 锚的种子节点全集）无 R1/R8/R13 形状告警 + 豁免 INFO 行
     const regions = await new GraphStore(paths, paths.courseRoot('数学'), nodeVaultFs).load()
@@ -201,13 +203,12 @@ test('AC3 完成判据读侧折叠：达标/不达标各一，宣告零写副作
     await engine.graph.graphApply('seed', r.id)
 
     // 不达标：最后台阶（终点.pre=起点）未学（mastery 0）且未收尾 → complete=false
-    const before = await engine.courseCompletion({ name: '数学', root: '数学' })
-    assert.ok(before)
-    assert.equal(before!.goal_type, 'capability')
-    assert.equal(before!.complete, false)
-    assert.equal(before!.criteria.mastery_met, false)
-    assert.equal(before!.criteria.sealed, null)
-    assert.deepEqual(before!.criteria.last_steps.map(s => s.node), ['认识变化率'], '判据折叠自最后台阶（终点.pre 集）')
+    const before = (await engine.courseCompletion({ name: '数学', root: '数学' }))[0]!
+    assert.equal(before.goal_type, 'capability')
+    assert.equal(before.complete, false)
+    assert.equal(before.criteria.mastery_met, false)
+    assert.equal(before.criteria.sealed, null)
+    assert.deepEqual(before.criteria.last_steps.map(s => s.node), ['认识变化率'], '判据折叠自最后台阶（终点.pre 集）')
 
     // 达标：最后台阶 mastery ≥ 0.8（稳定度饱和 + 高练习证据）且闭包健康
     const notePath = paths.courseNotePath('数学', '基础', '认识变化率')
@@ -232,10 +233,11 @@ content:
 ---
 # 认识变化率
 `, 'utf8')
-    const mid = await engine.courseCompletion({ name: '数学', root: '数学' })
-    assert.equal(mid!.criteria.mastery_met, true)
-    assert.equal(mid!.criteria.sealed, null)
-    assert.equal(mid!.complete, false, '未收尾不判完成（ADR-0056：判据含 sealed）')
+    const mid = (await engine.courseCompletion({ name: '数学', root: '数学' }))[0]!
+    assert.equal(mid.criteria.mastery_met, true)
+    assert.equal(mid.criteria.sealed, null)
+    assert.equal(mid.status, 'unwired', '最后台阶全达标但未收尾 = 还没铺通')
+    assert.equal(mid.complete, false, '未收尾不判达成（ADR-0056：判据含 sealed）')
     // 收尾接线批（零 add_node 纯 set_pre）apply → 锚写 sealed → 完成宣告成立
     const closing = await engine.graph.graphPropose('edit', `course: 数学
 note:
@@ -247,29 +249,30 @@ ops:
     pre: [认识变化率]
 `) as { id: number }
     await engine.graph.graphApply('edit', closing.id)
-    const after = await engine.courseCompletion({ name: '数学', root: '数学' })
-    assert.equal(after!.criteria.mastery_met, true)
-    assert.equal(after!.criteria.closure_healthy, true, '闭包健康（无重名/断边/环/enc 违约）')
-    assert.ok(after!.criteria.sealed, '收尾宣告落锚')
-    assert.equal(after!.complete, true, '读侧宣告：最后台阶掌握 + 闭包健康 + 已收尾 = 完成')
+    const after = (await engine.courseCompletion({ name: '数学', root: '数学' }))[0]!
+    assert.equal(after.criteria.mastery_met, true)
+    assert.equal(after.criteria.closure_healthy, true, '闭包健康（无重名/断边/环/enc 违约）')
+    assert.ok(after.criteria.sealed, '收尾宣告落锚')
+    assert.equal(after.status, 'reached')
+    assert.equal(after.complete, true, '读侧读数：最后台阶掌握 + 闭包健康 + 已收尾 = 达成')
 
     // 面板宣告（status 折叠）且零写副作用：折叠前后锚文件与 journal 字节不变
     const anchorPath = paths.anchorPath('数学')
     const anchorBefore = await readFile(anchorPath, 'utf8')
     const journalPath = join(root, '学习中心', 'state', 'journal.jsonl')
     const journalBefore = await readFile(journalPath, 'utf8')
-    const status = await engine.statusJson() as { courses: Array<{ name: string; completion?: { complete: boolean } }> }
-    assert.equal(status.courses.find(c => c.name === '数学')?.completion?.complete, true, 'status 携带完成宣告')
+    const status = await engine.statusJson() as { courses: Array<{ name: string; completions?: Array<{ complete: boolean }> }> }
+    assert.equal(status.courses.find(c => c.name === '数学')?.completions?.[0]?.complete, true, 'status 携带逐终点达成读数')
     assert.equal(await readFile(anchorPath, 'utf8'), anchorBefore, '锚文件零写副作用')
     assert.equal(await readFile(journalPath, 'utf8'), journalBefore, 'journal 零写副作用')
 
-    // 锚直改被拒：edit 提案 del/rename 终点节点 → 受理门拒绝并指路种子提案
+    // 锚直改被拒：edit 提案 del/rename 终点节点 → 受理门拒绝（终点增删走显式动作）
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 ops:
   - op: del_node
     node: 用导数解决优化问题
-`), /del_node 拒绝[\s\S]*换终点走重新种子提案/,
+`), /del_node 拒绝[\s\S]*终点增删走显式动作/,
     )
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
@@ -277,10 +280,10 @@ ops:
   - op: rename
     node: 用导数解决优化问题
     new: 换个名字
-`), /rename 拒绝[\s\S]*换终点走重新种子提案/,
+`), /rename 拒绝[\s\S]*终点增删走显式动作/,
     )
 
-    // 换终点只走种子提案通道：mode=reseed 人审后 apply → 锚整份覆盖
+    // 新方向只走起草通道：mode=reseed 人审后 apply → 锚按终点并入
     const reseed = `course: 数学
 mode: reseed
 endpoint:
@@ -296,20 +299,23 @@ starts:
     const r2 = await engine.graph.graphPropose('seed', reseed) as { id: number; mode: string }
     assert.equal(r2.mode, 'reseed')
     await engine.graph.graphApply('seed', r2.id)
-    const anchor2 = await readAnchor(paths.anchorPath('数学'), nodeVaultFs)
-    assert.equal(anchor2!.endpoint, '证明微积分基本定理')
-    assert.equal(anchor2!.origin_proposal, r2.id)
-    assert.equal(anchor2!.start_basis['直观理解积分'], 'vault')
-    // 换锚后旧终点不再受保护（coach 换向算子可消化）
-    const unguard = await engine.graph.graphPropose('edit', `course: 数学
+    const anchors2 = await readAnchors(paths.anchorPath('数学'), nodeVaultFs)
+    // 锚按终点并入：同名终点整份替换，其他终点的锚保留（#239 多终点化）
+    const anchor2 = anchors2.find(a => a.endpoint === '证明微积分基本定理')!
+    assert.equal(anchor2.origin_proposal, r2.id)
+    assert.equal(anchor2.start_basis['直观理解积分'], 'vault')
+    assert.ok(anchors2.some(a => a.endpoint === '用导数解决优化问题'), '前一条锚保留（并入语义：只增不减）')
+    // 并入新锚后旧终点仍受锚保护（#239：并入不是覆盖——旧方向的锚还在）
+    const stillGuarded = await engine.graph.graphPropose('edit', `course: 数学
 ops:
   - op: set_note
     node: 用导数解决优化问题
-    note: 旧终点，已被换向消化
+    note: 旧终点，仍在锚上（并入语义）
 `) as { id: number }
-    assert.ok(unguard.id)
+    assert.ok(stillGuarded.id)
     // 新锚的终点在图内
-    assert.ok((await engine.courseCompletion({ name: '数学', root: '数学' }))!.criteria.endpoint_in_graph)
+    const folds = await engine.courseCompletion({ name: '数学', root: '数学' })
+    assert.ok(folds.find(f => f.endpoint === '证明微积分基本定理')!.criteria.endpoint_in_graph)
   })
 })
 
@@ -371,7 +377,7 @@ starts:
   })
 })
 
-test('data-check 终点锚盘点：未播种 Missing 全绿；在盘合法计数；悬空/坏档 Broken', async () => {
+test('data-check 终点锚盘点：Missing 全绿；在盘合法计数；悬空/坏档 Broken', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     // 未播种：Missing 合法（inventory 计数 0，零 endpoint_anchor finding）
     const before = await dataCheck(paths, Date.now(), nodeVaultFs)
@@ -387,23 +393,23 @@ test('data-check 终点锚盘点：未播种 Missing 全绿；在盘合法计数
 
     // 锚悬空（手工把锚改到不存在的节点）→ data-check Broken；读侧折叠可见不炸
     const anchorPath = paths.anchorPath('数学')
-    const raw = JSON.parse(await readFile(anchorPath, 'utf8')) as { endpoint: string }
-    raw.endpoint = '幽灵终点'
+    const raw = JSON.parse(await readFile(anchorPath, 'utf8')) as { anchors: Array<{ endpoint: string }> }
+    raw.anchors[0]!.endpoint = '幽灵终点'
     await writeFile(anchorPath, JSON.stringify(raw), 'utf8')
     const dangling = await dataCheck(paths, Date.now(), nodeVaultFs)
     const finding = dangling.findings.find(f => f.reason === 'endpoint_anchor_dangling')
     assert.ok(finding, '锚悬空 Broken 可见')
-    assert.match(finding!.detail ?? '', /换终点走重新种子提案/)
+    assert.match(finding!.detail ?? '', /终点增删走显式动作/)
     assert.equal(dangling.status, 'broken')
-    const danglingFold = await engine.courseCompletion({ name: '数学', root: '数学' })
-    assert.equal(danglingFold!.criteria.endpoint_in_graph, false)
-    assert.equal(danglingFold!.complete, false, '悬空锚不宣告完成')
+    const danglingFold = (await engine.courseCompletion({ name: '数学', root: '数学' }))[0]!
+    assert.equal(danglingFold.criteria.endpoint_in_graph, false)
+    assert.equal(danglingFold.complete, false, '悬空锚不宣告达成')
 
-    // 锚坏档（契约违约）→ 读侧 fail loud，statusJson 拒绝按坏锚宣告
-    await writeFile(anchorPath, JSON.stringify({ endpoint: 123 }), 'utf8')
+    // 锚坏档（契约违约）→ 读侧 fail loud，statusJson 拒绝按坏锚折叠
+    await writeFile(anchorPath, JSON.stringify({ anchors: [{ endpoint: 123 }] }), 'utf8')
     await assert.rejects(
       () => engine.statusJson(),
-      /锚文件 Broken[\s\S]*换终点走种子提案/,
+      /锚文件 Broken[\s\S]*锚不直改/,
     )
   })
 })
@@ -417,7 +423,7 @@ test('seedNodeToGNode：零 enc 零 est、起点 pre 空、终点 pre=起点（�
   assert.deepEqual(endpoint.pre, ['S'])
 })
 
-test('foldCompletion：锚缺席返回 null（未播种无从宣告）；覆盖锚定按工作表折叠', () => {
+test('foldCompletion：零终点返回空列表；覆盖锚定按工作表折叠', () => {
   const regions = [{
     name: '区', color: '', blocks: [{ name: '块', nodes: [
       { name: '起点', pre: [], opt: false, note: '', enc: [] },
@@ -425,9 +431,8 @@ test('foldCompletion：锚缺席返回 null（未播种无从宣告）；覆盖�
     ] }],
   }]
   const graph = new Graph(regions)
-  assert.equal(foldCompletion(graph, {}, null), null)
+  assert.deepEqual(foldCompletion(graph, {}, []), [], '零终点 = 空读数（空锚是合法空态）')
   const anchor = {
-    version: 1 as const,
     endpoint: '终点',
     goal_type: 'coverage' as const,
     declared: '2026-09-10',
@@ -439,16 +444,19 @@ test('foldCompletion：锚缺席返回 null（未播种无从宣告）；覆盖�
       { block: '块B', done: false },
     ],
   }
-  const fold = foldCompletion(graph, {}, anchor)
-  assert.equal(fold!.complete, false)
-  assert.equal(fold!.criteria.worksheet!.done, 1)
-  assert.equal(fold!.criteria.worksheet!.total, 2)
-  assert.ok(fold!.criteria.closure_healthy === undefined, '覆盖锚定不要求闭包健康')
+  const fold = foldCompletion(graph, {}, [anchor])[0]!
+  assert.equal(fold.complete, false)
+  assert.equal(fold.criteria.worksheet!.done, 1)
+  assert.equal(fold.criteria.worksheet!.total, 2)
+  assert.ok(fold.criteria.closure_healthy === undefined, '覆盖锚定不要求闭包健康')
   // 能力锚定同图：终点 mastery=0 → 不达标（闭包健康但 mastery 未过阈）
-  const capFold = foldCompletion(graph, {}, { ...anchor, goal_type: 'capability', worksheet: [] })
-  assert.equal(capFold!.complete, false)
-  assert.equal(capFold!.criteria.closure_healthy, true)
-  assert.equal(capFold!.criteria.mastery_met, false)
+  const capFold = foldCompletion(graph, {}, [{ ...anchor, goal_type: 'capability', worksheet: [] }])[0]!
+  assert.equal(capFold.complete, false)
+  assert.equal(capFold.criteria.closure_healthy, true)
+  assert.equal(capFold.criteria.mastery_met, false)
+  // 逐终点读数：闭包步数（剔终点自身）与三档状态
+  assert.deepEqual(capFold.closure, { learned: 0, total: 1 }, '闭包 = 起点一步（终点自身不计）')
+  assert.equal(capFold.status, 'unwired')
 
   // 闭包口径：闭包之外远端节点的断边/enc 违约不拦终点的「闭包健康」
   const messy = new Graph([{
@@ -458,9 +466,9 @@ test('foldCompletion：锚缺席返回 null（未播种无从宣告）；覆盖�
       { name: '远端节点', pre: ['幽灵前置'], opt: false, note: '', enc: [{ node: '幽灵技能', w: 1 }] },
     ] }],
   }])
-  const messyFold = foldCompletion(messy, {}, { ...anchor, goal_type: 'capability', worksheet: [] })
-  assert.equal(messyFold!.criteria.closure_healthy, true, '闭包外的破损不进终点的闭包健康')
-  assert.equal(messyFold!.criteria.closure_errors!.length, 0)
+  const messyFold = foldCompletion(messy, {}, [{ ...anchor, goal_type: 'capability', worksheet: [] }])[0]!
+  assert.equal(messyFold.criteria.closure_healthy, true, '闭包外的破损不进终点的闭包健康')
+  assert.equal(messyFold.criteria.closure_errors!.length, 0)
 })
 
 // ---- 面板下发的种子起草（seedPropose）：目标描述 → 缝 → 干跑门 → proposeSeed 受理 ----
@@ -573,7 +581,7 @@ starts:
     assert.deepEqual(impact.new_nodes, ['认识变化率', '用导数解决优化问题'])
     assert.deepEqual(impact.existing_nodes, [], '提案与图无重名（重名会被受理门拒收）')
     assert.equal(impact.graph_nodes, 1, '当前图只有「入门」')
-    assert.equal(impact.current_anchor, null)
+    assert.deepEqual(impact.current_anchors, [])
     assert.equal(impact.compass_reset, false)
 
     // 应用后再提一轮换终点：预览翻转——现锚带出、罗盘重置为真
@@ -592,9 +600,9 @@ starts:
 `
     const r2 = await engine.graph.graphPropose('seed', second) as { id: number }
     const impact2 = await engine.proposals.proposalImpact('seed', r2.id)
-    assert.ok(impact2.current_anchor, '现锚带出')
-    assert.equal(impact2.current_anchor!.endpoint, '用导数解决优化问题')
-    assert.equal(impact2.current_anchor!.origin_proposal, r.id)
+    assert.equal(impact2.current_anchors.length, 1, '现锚带出')
+    assert.equal(impact2.current_anchors[0]!.endpoint, '用导数解决优化问题')
+    assert.equal(impact2.current_anchors[0]!.origin_proposal, r.id)
     assert.equal(impact2.compass_reset, true, '罗盘已存在：路线与 ETA 将重置')
     assert.equal(impact2.graph_nodes, 3, '现有图 3 节点全保留（入门 + 首轮种子 2 个）')
     // 省略 id = 最新 pending 种子提案（确认框从提案行直达时的形态）
@@ -614,7 +622,7 @@ test('proposalImpact：mode=new 建课预览按空图直算——课程未注册
     assert.deepEqual(impact.new_nodes, ['认识变化率', '用导数解决优化问题'])
     assert.deepEqual(impact.existing_nodes, [])
     assert.equal(impact.graph_nodes, 0, '现图不存在 = 0 节点，不是故障')
-    assert.equal(impact.current_anchor, null)
+    assert.deepEqual(impact.current_anchors, [])
     assert.equal(impact.compass_reset, false)
   })
 })

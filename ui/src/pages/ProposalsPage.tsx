@@ -15,15 +15,16 @@ import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
-/** 种子提案影响预览（人话）：只说引擎真会做的事——新建节点、覆盖锚、罗盘重置、全保留项。 */
+/** 种子提案影响预览（人话）：只说引擎真会做的事——新建节点、并入/替换哪条锚、罗盘重置、
+ * 全保留项（#239 多终点化：锚按终点并入，其他终点的锚保留）。 */
 function SeedImpactPreview({ impact }: { impact: SeedImpactDoc }) {
   const reseed = impact.mode === 'reseed'
   return (
     <Alert type={reseed ? 'warning' : 'info'} className='lh-mb-8' content={
       <Space direction='vertical' size={2}>
-        {reseed && impact.current_anchor && (
+        {reseed && impact.current_anchors.length > 0 && (
           <Text>
-            现终点「{impact.current_anchor.endpoint}」（提案 #{impact.current_anchor.origin_proposal} · {impact.current_anchor.declared} 声明）将被新终点覆盖。
+            现有终点「{impact.current_anchors.map(a => a.endpoint).join('、')}」：与本次同名的那条锚被新终点整份替换，其余终点的锚保留。
           </Text>
         )}
         {impact.new_nodes.length > 0 && (

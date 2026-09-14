@@ -138,7 +138,7 @@ test('视图内容：图面带节点取值域、节点卡带结构档、登记�
   })
 })
 
-test('合法空态与拒收语义：未播种锚给空态行；白名单外/坏参数 fail loud', async () => {
+test('合法空态与拒收语义：零终点锚给空态行；白名单外/坏参数 fail loud', async () => {
   await withVault({ registry: DEFAULT_REGISTRY, graph: null }, async ({ engine }) => {
     void engine
     const runTool = coachToolExecutor({
@@ -153,11 +153,11 @@ test('合法空态与拒收语义：未播种锚给空态行；白名单外/坏�
       loadView: async () => { throw new Error('不应取图') },
     }, course, { behaviorDigestText: async () => '摘要' })
 
-    // 未播种：罗盘/终点锚视图给合法空态（不炸、不静默编内容）
+    // 零终点（空锚）：罗盘/终点锚视图给合法空态（不炸、不静默编内容）
     const anchor = await runTool({ id: '1', name: 'endpoint_anchor', arguments: '' })
-    assert.match(anchor, /未播种/)
+    assert.match(anchor, /零终点/)
     const compass = await runTool({ id: '2', name: 'compass_read', arguments: '' })
-    assert.match(compass, /未播种/)
+    assert.match(compass, /零终点/)
 
     // 白名单外调用 fail loud（缝以 isError 回灌，模型可见拒收原因与唯一取值域）
     await assert.rejects(

@@ -270,7 +270,8 @@ test('AC2 批注区是软输入：初画附进上下文；写权重写保批注�
     await rm(p)
     const foldWithoutCompass = await engine.courseCompletion({ name: '数学', root: '数学' })
     assert.deepEqual(foldWithHandRoute, foldWithoutCompass)
-    assert.equal(foldWithoutCompass!.complete, false, '手编路线不产生完成宣告')
+    assert.equal(foldWithoutCompass!.length, 1)
+    assert.equal(foldWithoutCompass![0]!.complete, false, '手编路线不产生完成宣告')
   })
 })
 
@@ -309,9 +310,9 @@ starts:
   })
 })
 
-test('AC3 沙盘 ETA 每周挂载：措辞锁死、标记周幂等、越阈分位带、未播种跳过', async () => {
+test('AC3 沙盘 ETA 每周挂载：措辞锁死、标记周幂等、越阈分位带、零终点跳过', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
-    // 未播种课程跳过（此时还没有任何课程）
+    // 零终点课程跳过（此时还没有任何课程）
     const before = await engine.growth2.compassEtaRefresh()
     assert.deepEqual(before, [])
 
@@ -376,15 +377,15 @@ test('AC3 挂周复盘：kataOpen 触发罗盘 ETA 挂载', async () => {
   })
 })
 
-test('罗盘缺席的读侧：compassRead/compassTail 合法空态；未播种初画 fail loud', async () => {
+test('罗盘缺席的读侧：compassRead/compassTail 合法空态；零终点初画 fail loud', async () => {
   await withVault({}, async ({ engine }) => {
     const read = await engine.growth2.compassRead('数学')
     assert.equal(read.missing, true)
     assert.equal(read.route, null)
-    assert.equal(read.endpoint, null, '未播种课程锚缺席 = null')
+    assert.deepEqual(read.anchors, [], '零终点课程锚集合为空（合法空态）')
     assert.equal(await engine.growth2.compassTail('数学'), '', '罗盘缺席 = 空段（组装方整段省略）')
-    // 未播种初画 fail loud（锚在终点上）
-    await assert.rejects(() => engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE)), /未播种[\s\S]*种子提案/)
+    // 零终点初画 fail loud（罗盘按终点组织路线）
+    await assert.rejects(() => engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE)), /零终点[\s\S]*先加一个终点/)
   })
 })
 

@@ -20,7 +20,8 @@ export function CourseCard(props: {
   counts: { unseen: number; ready: number; learning: number; review: number; mastered: number; skipped: number }
   total: number
   due: number
-  completion?: StatusCourse['completion']
+  /** 逐终点完成读数（#239 多终点化）：达成（旧完成判据逐终点口径）的终点各一条。 */
+  completions?: StatusCourse['completions']
   onOpen: () => void
   onReview: () => void
   onRegenerate: () => void
@@ -29,7 +30,8 @@ export function CourseCard(props: {
   const notStarted = props.counts.unseen + props.counts.ready
   const done = props.counts.mastered
   const percent = props.total ? Math.round((done / props.total) * 100) : 0
-  const goalLabel = props.completion?.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'
+  // 逐终点读数（#239）：达成（旧「已完成」逐终点口径）的终点各挂一条横幅
+  const reached = (props.completions ?? []).filter(c => c.complete)
   return (
     <Card size='small' hoverable className='lh-card'>
       <div className='lh-col lh-gap-8'>
@@ -42,11 +44,11 @@ export function CourseCard(props: {
           <Tag size='small' color='green'>掌握 {done}</Tag>
           {props.counts.skipped > 0 && <Tag size='small' color='purple'>跳过 {props.counts.skipped}</Tag>}
           {props.due > 0 && <Tag size='small' color='red'>到期 {props.due}</Tag>}
-          {props.completion?.complete && (
-            <Tag size='small' color='green'>
-              🎉 已完成（{goalLabel} · 终点「{props.completion.endpoint}」· {props.completion.declared} 宣告锚定）
+          {reached.map(c => (
+            <Tag key={c.endpoint} size='small' color='green'>
+              🎉 已完成（{c.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'} · 终点「{c.endpoint}」· {c.declared} 宣告锚定）
             </Tag>
-          )}
+          ))}
         </Space>
         <Space size={6} className='lh-full'>
           <Button size='mini' onClick={props.onOpen}>打开图</Button>
@@ -148,7 +150,7 @@ export default function CourseCardGrid({ frame }: { frame: AppFrame }) {
               <CourseCard
                 key={c.name} name={c.name} total={s?.total ?? 0} due={s?.due_today ?? 0}
                 counts={s?.counts ?? { unseen: 0, ready: 0, learning: 0, review: 0, mastered: 0, skipped: 0 }}
-                completion={s?.completion}
+                completions={s?.completions}
                 onOpen={() => frame.openCourse(c.name, 'graph')}
                 onRegenerate={() => regenerateCourse(c.name)}
                 onReview={() => startReview(c.name)}

@@ -7,7 +7,7 @@
  *         R17 先验候选未被结构回应（w≥0.7 喂料分流，#142）
  * INFO : R5 跨区引用 / R9 疑似别名 / R18 概念字段组盘点（#147，档位零门禁零调度的审计面确认）
  * ERROR 存在时返回 failed=true（生成/结算门禁）。
- * 种子图豁免（#142）：图仍 = 终点锚种子节点全集时，R1/R2/R8/R13 豁免、健康分不设阈值
+ * 种子图豁免（#142）：图仍 = 锚集合种子节点并集时，R1/R2/R8/R13 豁免、健康分不设阈值
  * ——种子本来就只有起点+终点几张节点，形状告警与低健康分是噪音（生长批进入后恢复）。
  */
 import type { VaultFs } from './io.ts'
@@ -20,7 +20,7 @@ import { parseDay, daysBetween } from './dates.ts'
 import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import { Content } from './content.ts'
-import { readAnchor, isSeedGraph } from './seed.ts'
+import { endpointNames, isSeedGraph, readAnchors } from './seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
 
 export interface AuditResult {
@@ -55,19 +55,19 @@ export async function runAudit(
   // E3
   if (hasCycle) errors.push(`E3 存在环！涉及 ${graph.cycleNodes.length} 个节点，例如: ${graph.cycleNodes.slice(0, 5).join('、')}`)
 
-  // 种子图豁免（#142）：图仍 = 终点锚的种子节点全集 = 图还是种子本身——形状类告警
+  // 种子图豁免（#142）：图仍 = 锚集合的种子节点并集 = 图还是起草本身——形状类告警
   // 豁免（生长批进入后自动恢复）；E 级照查，种子也有真错误。
-  const anchor = await readAnchor(paths.anchorPath(root), fs)
-  const seedPhase = isSeedGraph(anchor, graph)
-  // 终点节点名（#200 / ADR-0055 口径豁免的读锚出处；未播种 = null）
-  const endpoint = anchor?.endpoint ?? null
+  const anchors = await readAnchors(paths.anchorPath(root), fs)
+  const seedPhase = isSeedGraph(anchors, graph)
+  // 终点节点名集（#200 / ADR-0055 口径豁免的读锚出处；#239 多终点化：逐处按集合读）
+  const endpoints = endpointNames(anchors)
 
   // R1 / R2 —— R1 阈值随图最大深度相对化（大图 depth>20 时 depth≤5 的旁支叶子是正常收尾），
   // 条目多时只列前 15 条附溢出行，避免淹没报告里的其他发现
-  // R1 豁免终点（#200）：设计上的收敛点是承诺标记，浅叶子告警不适用于它
+  // R1 豁免终点（#200）：设计上的收敛点是方向标记，浅叶子告警不适用于它
   const maxDepth = names.length ? Math.max(...names.map(n => depth[n] ?? 0)) : 0
   const r1Depth = hasCycle ? 5 : Math.max(5, Math.round(maxDepth / 4))
-  const r1 = graph.leaves.filter(n => n !== endpoint && !hasCycle && (depth[n] ?? 0) <= r1Depth)
+  const r1 = graph.leaves.filter(n => !endpoints.has(n) && !hasCycle && (depth[n] ?? 0) <= r1Depth)
   if (!seedPhase) {
     for (const n of r1.slice(0, 15)) warns.push(`R1 浅叶子: [${name2region[n]}] ${n}（depth=${depth[n]}，阈值 ${r1Depth}）`)
     if (r1.length > 15) warns.push(`R1 浅叶子另有多 ${r1.length - 15} 处未列出`)
@@ -252,7 +252,7 @@ export async function runAudit(
     }
   }
   if (seedPhase) {
-    infos.push(`种子图豁免生效：浅叶/多分量/认知跨步等形状告警豁免、健康分不设阈值（种子 = 终点「${anchor!.endpoint}」，${anchor!.declared} 声明；生长批进入后恢复）`)
+    infos.push(`种子图豁免生效：浅叶/多分量/认知跨步等形状告警豁免、健康分不设阈值（锚集合 = 终点 ${anchors.map(a => `「${a.endpoint}」（${a.declared} 声明）`).join('、')}；生长批进入后恢复）`)
   }
 
   // R18 概念字段组盘点（#147）：teaches/assumes 档位与误解先验的规模盘点。显式分工——
@@ -270,15 +270,15 @@ export async function runAudit(
     'enc 边': Object.values(graph.encOf).reduce((s, v) => s + v.length, 0),
     '根节点（无前置）': graph.roots.length,
     // 口径豁免（#200）：leaves 剔终点；主线深度（原「最大深度」正名）保留终点——进度读数
-    '叶子（无后继，不含终点）': graph.leaves.filter(n => n !== endpoint).length,
+    '叶子（无后继，不含终点）': graph.leaves.filter(n => !endpoints.has(n)).length,
     主线深度: Object.keys(depth).length ? Math.max(...Object.values(depth)) : '-',
     '课程文件（已纳管）': Object.keys(found).length,
     未生成豁免: exempt.length,
-    终点锚: anchor
-      ? `${anchor.endpoint}（${anchor.goal_type === 'coverage' ? '覆盖' : '能力'}锚定，${anchor.declared} 声明）`
-      : '未播种',
+    终点锚: anchors.length
+      ? anchors.map(a => `${a.endpoint}（${a.goal_type === 'coverage' ? '覆盖' : '能力'}锚定，${a.declared} 声明）`).join('、')
+      : '零终点（空锚是合法空态）',
     '概念字段（teaches/assumes/误解）': `${teachesNodes} / ${assumesNodes} / ${misCount}`,
-    图谱健康分: graphHealthScore(graph, { endpoint }).score,
+    图谱健康分: graphHealthScore(graph, { endpoints }).score,
     'ERROR / WARN / INFO': `${errors.length} / ${warns.length} / ${infos.length}`,
   }
 

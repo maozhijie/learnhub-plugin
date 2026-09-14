@@ -39,7 +39,7 @@ writeFileSync(
   'utf8',
 )
 // schema 版本戳（ADR-0034 硬门：v2 起出生的库由工厂/脚本盖版本戳，无版本即拒载）
-writeFileSync(join(dstCenter, 'state', 'learnhub.json'), JSON.stringify({ schema: { version: 2, breaks: [], formats: {} } }, null, 1), 'utf8')
+writeFileSync(join(dstCenter, 'state', 'learnhub.json'), JSON.stringify({ schema: { version: 3, breaks: [], formats: {} } }, null, 1), 'utf8')
 // 逐项手动复制：本机环境（Desktop 目录的云同步/过滤驱动 + Node fs.cpSync）会以
 // 0xC0000409 原生崩溃（基线 e2e 同样可复现），readFile/writeFile 路径不受影响
 function copyDir(src, dest) {

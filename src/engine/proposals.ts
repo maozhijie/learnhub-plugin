@@ -16,7 +16,7 @@ import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflic
 import type { ConceptEntry, ConceptRef } from './concepts.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
 import {
-  validateSeedProposal, seedNodeToGNode, anchorFromSeed, readAnchor, writeAnchor, isSeedGraph,
+  validateSeedProposal, seedNodeToGNode, anchorFromSeed, endpointNames, readAnchors, writeAnchors, isSeedGraph,
 } from './seed.ts'
 import type { SeedProposalSpec, EndpointAnchor } from './seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
@@ -589,56 +589,70 @@ export class GraphProposals {
   }
 
   /** 罗盘重写预检（propose 与 apply 双门共用；返回错误行，空 = 通过）：锚在终点上
-   * （未播种 fail loud）+ 路线门（非空/无标题/限长）。 compass.ts 的写权机械不变。 */
+   * （零终点 fail loud）+ 路线门（非空/无标题/限长）。 compass.ts 的写权机械不变。 */
   private async routeGate(root: string, routeMd: string): Promise<string[]> {
-    const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
-    if (!anchor) return ['课程未播种（终点锚 Missing）——罗盘重写锚在终点上，先走种子提案（kind=seed）。']
+    const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
+    if (!anchors.length) return ['课程零终点（空锚是合法空态）——罗盘重写锚在终点上，先加一个终点。']
     return validateRouteBody(stripWrappingFence(routeMd))
   }
 
-  /** 终点守卫（#142 锚保护 + #198 生长方向不变式 / ADR-0055）：edit 提案不得 del/rename
-   * 锚定的终点节点——那是绕开种子提案通道的锚直改。方向不变式三句：① 任何 add_node
-   * 以终点为 pre 直接拒——目标之后不是本课程的生长域，扩承诺走重新种子；② 主线批
-   * （前进/换向）含新节点时必须携带 set_pre { node: 终点, pre ⊇ 批内新前沿 }——替换
-   * 语义，真实坡道取代种子粗边；③ 收尾接线批（零 add_node 的纯 set_pre）合法——
-   * 停摆前把终点接在教练认定的最终台阶上。接线核查取「覆盖」而非「相等」：最后台阶
-   * 可以与既有台阶合流（多条支线同时汇入终点），新前沿全部在 wire 里就守住了不变式；
-   * 旧边在 set_pre 整体替换下只随显式再声明存活——教练把起点直连终点重新写回是可见
-   * 断言，不是遗留残边。旁支/巩固/插入豁免接线义务；未播种不设门。 */
+  /** 终点守卫（#142 锚保护 + #198 生长方向不变式 / ADR-0055；#239 / ADR-0076 多终点化：
+   * **每个**终点各跑同一套检查）：edit 提案不得 del/rename 锚定的终点节点——那是绕开
+   * 显式终点动作的锚直改。方向不变式三句：① 任何 add_node 以终点为 pre 直接拒——
+   * 目标之后不是本课程的生长域；② 主线批（前进/换向）含新节点时必须携带 set_pre
+   * { node: 终点, pre ⊇ 批内新前沿 }——替换语义，真实坡道取代起草粗边；③ 收尾接线批
+   * （零 add_node 的纯 set_pre）合法——停摆前把终点接在教练认定的最终台阶上。接线核查
+   * 取「覆盖」而非「相等」：最后台阶可以与既有台阶合流（多条支线同时汇入终点），新前沿
+   * 全部在 wire 里就守住了不变式；旧边在 set_pre 整体替换下只随显式再声明存活——教练把
+   * 起点直连终点重新写回是可见断言，不是遗留残边。旁支/巩固/插入豁免接线义务；零终点
+   * 不设门。 */
   private async endpointGuardErrors(root: string, spec: EditProposalSpec): Promise<string[]> {
-    const anchor = await readAnchor(this.paths.anchorPath(root), this.fs)
-    if (!anchor) return []
-    const endpoint = anchor.endpoint
+    const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
+    if (!anchors.length) return []
+    const endpoints = endpointNames(anchors)
+    const label = (name: string): string => {
+      const a = anchors.find(x => x.endpoint === name)!
+      return `${a.declared} 声明${a.origin_proposal !== undefined ? `，提案 #${a.origin_proposal}` : ''}`
+    }
     const errors: string[] = []
     for (const [i, op] of spec.ops.entries()) {
-      if (op.node !== endpoint) continue
+      if (!endpoints.has(op.node ?? '')) continue
       if (op.op === 'del_node') {
-        errors.push(`ops.${i}: del_node 拒绝——「${op.node}」是终点锚锚定的终点（${anchor.declared} 声明，提案 #${anchor.origin_proposal}）。锚无直改通道，换终点走重新种子提案（kind=seed, mode=reseed）`)
+        errors.push(`ops.${i}: del_node 拒绝——「${op.node}」是锚定的终点（${label(op.node!)}）。终点增删走显式动作，不直改锚`)
       } else if (op.op === 'rename') {
-        errors.push(`ops.${i}: rename 拒绝——「${op.node}」是终点锚锚定的终点（${anchor.declared} 声明，提案 #${anchor.origin_proposal}）。锚无直改通道，换终点走重新种子提案（kind=seed, mode=reseed）`)
+        errors.push(`ops.${i}: rename 拒绝——「${op.node}」是锚定的终点（${label(op.node!)}）。终点增删走显式动作，不直改锚`)
       }
     }
-    // ① 禁以终点为 pre：add_node 把承诺物当前置 = 长过目标
+    // ① 禁以终点为 pre：add_node 把方向锚当前置 = 长过目标
     for (const [i, op] of spec.ops.entries()) {
-      if (op.op === 'add_node' && (op.pre ?? []).includes(endpoint)) {
-        errors.push(`ops.${i}: add_node「${op.name}」以终点「${endpoint}」为 pre——目标之后不是本课程的生长域（禁长过目标）。扩承诺走重新种子提案（kind=seed, mode=reseed）`)
+      if (op.op === 'add_node' && (op.pre ?? []).some(p => endpoints.has(p))) {
+        const hit = (op.pre ?? []).filter(p => endpoints.has(p))
+        errors.push(`ops.${i}: add_node「${op.name}」以终点「${hit.join('、')}」为 pre——目标之后不是本课程的生长域（禁长过目标）`)
       }
     }
-    // ② 主线批必接线：前进/换向批含新节点时，终点 set_pre 必须覆盖批内新前沿
+    // ② 主线批必接线：前进/换向批含新节点时，终点 set_pre 必须覆盖批内新前沿。
+    //    **多终点课程暂不设这道门**（#239 的边界）：义务的对象是「本批朝哪些终点长」，
+    //    而该声明（note.target_endpoints）随教练回合多终点化（#244）才落地——在它之前
+    //    按「所有终点」核会把无关方向强行改扎到本批新台阶上（乙的 pre 指向甲的新台阶，
+    //    乙的读数被污染），比漏拦更坏。桥梁期宁可少拦一门，等 #244 把义务收窄到声明的
+    //    终点集；单终点课程（今天的常态）与本门原语义逐字一致。
     const adds = addNodeCountOf(spec.ops)
-    if (spec.note && (spec.note.operator === '前进' || spec.note.operator === '换向') && adds > 0) {
+    if (endpoints.size === 1
+      && spec.note && (spec.note.operator === '前进' || spec.note.operator === '换向') && adds > 0) {
       const newNames = spec.ops.filter(o => o.op === 'add_node').map(o => o.name!)
       const consumed = new Set(spec.ops.flatMap(o => o.op === 'add_node' ? (o.pre ?? []) : []))
       const frontier = newNames.filter(n => !consumed.has(n))
-      const wirings = spec.ops.filter(o => o.op === 'set_pre' && o.node === endpoint)
-      if (!wirings.length) {
-        errors.push(`生长批（${spec.note.operator}）含 ${adds} 个新节点但未接线终点——主线批必须携带 set_pre { node: ${endpoint}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre 恒指向教练当前认定的最后台阶，真实坡道取代种子粗边）`)
-      } else {
-        // apply 取最后一条 set_pre（整体替换语义后者生效）——接线核查同口径
-        const wired = new Set(wirings[wirings.length - 1]!.pre ?? [])
-        const missing = frontier.filter(n => !wired.has(n))
-        if (missing.length) {
-          errors.push(`set_pre(${endpoint}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 当前认定的最后台阶）`)
+      for (const endpoint of endpoints) {
+        const wirings = spec.ops.filter(o => o.op === 'set_pre' && o.node === endpoint)
+        if (!wirings.length) {
+          errors.push(`生长批（${spec.note.operator}）含 ${adds} 个新节点但未接线终点「${endpoint}」——主线批必须携带 set_pre { node: ${endpoint}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre 恒指向教练当前认定的最后台阶，真实坡道取代起草粗边）`)
+        } else {
+          // apply 取最后一条 set_pre（整体替换语义后者生效）——接线核查同口径
+          const wired = new Set(wirings[wirings.length - 1]!.pre ?? [])
+          const missing = frontier.filter(n => !wired.has(n))
+          if (missing.length) {
+            errors.push(`set_pre(${endpoint}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 当前认定的最后台阶）`)
+          }
         }
       }
     }
@@ -748,26 +762,29 @@ export class GraphProposals {
           },
         },
         {
-          // 3.1 终点锚 sealed 维护（ADR-0056）：收尾接线批 = 零 add_node 的**纯 set_pre 批**
-          //     （全部 op 都是 set_pre，恰有终点接线）→ 落 sealed 收尾宣告（收尾即宣告承诺
-          //     兑现）；含 add_node 的终点接线批 → 清除（教练重开主线 = 承诺重新在途，完成
-          //     宣告随之回到未完成）。夹带其他 op 的零新增批不构成收尾宣告、也不动 sealed。
-          //     读-改-写在一步内完成；未播种静默跳过；sealed 缺省不落盘（旧锚形状不变）。
+          // 3.1 终点锚 sealed 维护（ADR-0056；#239 / ADR-0076 多终点化：**逐终点独立**）：
+          //     只看**被本批接线的那一个终点**——收尾接线批 = 零 add_node 的纯 set_pre 批
+          //     → 给该终点落 sealed 收尾宣告（该终点的坡道已铺到最终台阶）；该终点被含
+          //     add_node 的主线批接线 → 清除（重开该终点主线 = 坡道重新在途）。其他终点
+          //     的 sealed 不受本批影响。夹带其他 op 的零新增批不构成收尾宣告、也不动 sealed。
+          //     读-改-写在一步内完成；零终点静默跳过；sealed 缺省不落盘（形状不变）。
           name: '终点锚 sealed 维护',
           run: async () => {
-            if (!spec.ops.some(o => o.op === 'set_pre')) return
+            const wires = new Set(spec.ops.filter(o => o.op === 'set_pre' && o.node).map(o => o.node!))
+            if (!wires.size) return
             const anchorPath = this.paths.anchorPath(root)
-            const anchor = await readAnchor(anchorPath, this.fs)
-            if (!anchor) return
-            if (!spec.ops.some(o => o.op === 'set_pre' && o.node === anchor.endpoint)) return
+            const anchors = await readAnchors(anchorPath, this.fs)
+            const touched = anchors.filter(a => wires.has(a.endpoint))
+            if (!touched.length) return
             const adds = addNodeCountOf(spec.ops)
-            const next: EndpointAnchor | null = (adds === 0 && spec.ops.every(o => o.op === 'set_pre'))
-              ? { ...anchor, sealed: todayStr(new Date(this.clock.nowMs())) }
-              : adds > 0
-                ? { ...anchor, sealed: undefined }
-                : null
-            if (!next) return
-            await writeAnchor(anchorPath, next, this.fs)
+            const sealing = adds === 0 && spec.ops.every(o => o.op === 'set_pre')
+            if (!sealing && adds === 0) return // 夹带其他 op 的零新增批：不收尾也不重开
+            const today = todayStr(new Date(this.clock.nowMs()))
+            const next: EndpointAnchor[] = anchors.map(a => {
+              if (!wires.has(a.endpoint)) return a
+              return sealing ? { ...a, sealed: today } : { ...a, sealed: undefined }
+            })
+            await writeAnchors(anchorPath, next, this.fs)
           },
         },
         {
@@ -848,7 +865,7 @@ export class GraphProposals {
       ],
     })
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
-    const seedPhase = isSeedGraph(await readAnchor(this.paths.anchorPath(root), this.fs), new Graph(regions2))
+    const seedPhase = isSeedGraph(await readAnchors(this.paths.anchorPath(root), this.fs), new Graph(regions2))
     return {
       course: course.name,
       ops: spec.ops.length,
@@ -957,16 +974,16 @@ export class GraphProposals {
     const graph = new Graph(regions)
     const names = new Set(graph.names)
     const proposed = [...spec.starts.map(s => s.name), spec.endpoint.name]
-    const anchor = course ? await readAnchor(this.paths.anchorPath(root), this.fs) : null
+    const anchors = course ? await readAnchors(this.paths.anchorPath(root), this.fs) : []
     return {
       course: spec.course,
       mode: spec.mode,
       new_nodes: proposed.filter(n => !names.has(n)),
       existing_nodes: proposed.filter(n => names.has(n)),
       graph_nodes: graph.names.length,
-      current_anchor: anchor
-        ? { endpoint: anchor.endpoint, declared: anchor.declared, origin_proposal: anchor.origin_proposal }
-        : null,
+      current_anchors: anchors.map(a => ({
+        endpoint: a.endpoint, declared: a.declared, ...(a.origin_proposal !== undefined ? { origin_proposal: a.origin_proposal } : {}),
+      })),
       compass_reset: this.fs.exists(this.paths.compassPath(root)),
       ...(spec.worksheet?.length ? { worksheet_items: spec.worksheet.length } : {}),
     }
@@ -1034,6 +1051,11 @@ export class GraphProposals {
     let version = 0
     const declared = today ?? todayStr(new Date(this.clock.nowMs()))
     const anchor = anchorFromSeed(spec, prop.id, declared)
+    // 锚集合按终点并入（#239 / ADR-0076 多终点化）：同名终点的锚被本次起草整份替换
+    // （换目标类型/工作表即此处），其他终点的锚保留——课程的方向集合只增不减
+    const anchorPath = this.paths.anchorPath(root)
+    const anchorsBefore = await readAnchors(anchorPath, this.fs)
+    const anchorsNext = [...anchorsBefore.filter(a => a.endpoint !== anchor.endpoint), anchor]
     const written: string[] = []
     // 罗盘现状读取（在写序第一笔前读与第四步读等价——本单元内无更早的罗盘写入）
     const compassPath = this.paths.compassPath(root)
@@ -1076,10 +1098,10 @@ export class GraphProposals {
           },
         },
         {
-          // 课程唯一结构承诺物；整份覆盖写——换终点走重新种子提案
+          // 方向锚集合：按终点并入（同名替换、其余保留）——一个终点的起草不动其他终点
           name: '终点锚落盘',
           run: async () => {
-            await writeAnchor(this.paths.anchorPath(root), anchor, this.fs)
+            await writeAnchors(anchorPath, anchorsNext, this.fs)
           },
         },
         {
@@ -1125,8 +1147,8 @@ export class GraphProposals {
     })
     const merged = new Graph(regions)
     const feed = await this.priorFeed(merged)
-    // 种子图豁免：图仍 = 种子节点全集时健康分不设阈值（findings 不带 <80 提示）
-    const seedPhase = isSeedGraph(anchor, merged)
+    // 种子图豁免：图仍 = 锚集合的种子节点并集时健康分不设阈值（findings 不带 <80 提示）
+    const seedPhase = isSeedGraph(anchorsNext, merged)
     return {
       course: course.name,
       mode: spec.mode,

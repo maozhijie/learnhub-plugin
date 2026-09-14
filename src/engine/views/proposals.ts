@@ -39,8 +39,9 @@ export interface GraphSeedProposalResult {
 }
 
 /** 种子提案影响预览（#159）：reseed/建课应用确认框的知识前置——知情后再确认。
- * 只读现势计算（提案产物 + 当前图 + 现锚），引擎 reseed 语义不动，预览必须说的是
- * 引擎真会做的事：新增哪些节点、覆盖什么锚、罗盘怎么重置、什么保留。 */
+ * 只读现势计算（提案产物 + 当前图 + 现锚），预览必须说的是引擎真会做的事：新增哪些
+ * 节点、并入/替换哪条锚、罗盘怎么重置、什么保留（#239 多终点化：锚按终点并入，
+ * 其他终点的锚不受影响）。 */
 export interface SeedImpactDoc {
   course: string
   mode: 'new' | 'reseed'
@@ -51,8 +52,8 @@ export interface SeedImpactDoc {
   existing_nodes: string[]
   /** 当前图节点总数（reseed 全保留：学习进度、题库与调度不动）。 */
   graph_nodes: number
-  /** 现终点锚（reseed 时将被新锚整份覆盖；未播种为 null）。 */
-  current_anchor: { endpoint: string; declared: string; origin_proposal: number } | null
+  /** 现终点锚集合（同名终点将被本次起草的锚替换、其余保留；零终点 = 空数组）。 */
+  current_anchors: Array<{ endpoint: string; declared: string; origin_proposal?: number }>
   /** 罗盘在场 = apply 写序会把路线与 ETA 重置为待初画（批注区保留）；
    * 不在场 = 随本提案脚手架初建。按罗盘文件现势计算，与 mode 解耦。 */
   compass_reset: boolean

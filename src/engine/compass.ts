@@ -227,26 +227,38 @@ export function renderEtaBody(eta: CompassEta): string {
   ].join('\n')
 }
 
-/** 初画上下文包（附在「罗盘初画」模板之后）：终点锚 + 种子与当前图 + 批注区软输入。 */
+/** 初画上下文包（附在「罗盘初画」模板之后）：终点锚集合 + 起草起点与当前图 + 批注区软输入。 */
 export function compassPaintContext(input: {
   courseName: string
-  anchor: EndpointAnchor
+  anchors: EndpointAnchor[]
   starts: Array<{ name: string; note: string }>
   graphNames: string[]
   annotations: string | null
 }): string {
   const lines: string[] = ['', '---', '', '## 终点锚', '',
-    `- 课程：${input.courseName}`,
-    `- 终点节点：${input.anchor.endpoint}`,
-    `- 目标类型：${input.anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
-    `- 声明日期：${input.anchor.declared}`]
-  if (input.anchor.worksheet.length) {
-    lines.push('- 块工作表（路线按块组织）：')
-    for (const w of input.anchor.worksheet) lines.push(`  - [${w.done ? 'x' : ' '}] ${w.block}${w.note ? `——${w.note}` : ''}`)
+    `- 课程：${input.courseName}`]
+  for (const anchor of input.anchors) {
+    lines.push(
+      `- 终点节点：${anchor.endpoint}`,
+      `  - 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
+      `  - 声明日期：${anchor.declared}`)
+    if (anchor.goal_note) lines.push(`  - 目标描述：${anchor.goal_note}`)
+    if (anchor.worksheet.length) {
+      lines.push('  - 块工作表（路线按块组织）：')
+      for (const w of anchor.worksheet) lines.push(`    - [${w.done ? 'x' : ' '}] ${w.block}${w.note ? `——${w.note}` : ''}`)
+    }
   }
-  lines.push('', '## 种子与当前图', '')
+  lines.push('', '## 起草起点与当前图', '')
+  // 起点定位按锚顺序首个命中（同一名字出现在多条锚的起草批次里时取先声明的那条）
+  const basisOf = (name: string): string | undefined => {
+    for (const a of input.anchors) {
+      const b = a.start_basis[name]
+      if (b) return b
+    }
+    return undefined
+  }
   for (const s of input.starts) {
-    const basis = input.anchor.start_basis[s.name]
+    const basis = basisOf(s.name)
     lines.push(`- 起点「${s.name}」${basis ? `（定位：${basis}）` : ''}${s.note ? `：${s.note}` : ''}`)
   }
   const shown = input.graphNames.slice(0, GRAPH_NAMES_PREVIEW)

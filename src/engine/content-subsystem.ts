@@ -89,7 +89,7 @@ import type { LearnerCardDoc } from './learner-cards.ts'
 import { interleaveBySource } from './nof1.ts'
 import { NOTE_SOURCE_COURSE } from './note-source.ts'
 import { asFm, loadNote, saveNote } from './notes.ts'
-import { readAnchor } from './seed.ts'
+import { endpointNames, readAnchors } from './seed.ts'
 import { CALIBRATION_BOOST_SAMPLE_RATE, FSRS_DIFFICULTY_MID, XP_GUESS_SECONDS } from './params.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
@@ -131,16 +131,17 @@ export class ContentSubsystem {
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[pack] 节点「${node}」不在图内。`)
     // 生成门（#199 / ADR-0055+0056 终点纯标记化）：不为终点组装产料上下文——
-    // 终点是承诺标记，零正文零题库零调度，入队门在宿主，这里是管线侧兜底。
-    const anchor = await readAnchor(this.e.paths.anchorPath(c.root), this.e.fs)
-    if (anchor && anchor.endpoint === node) {
-      throw new Error(`[pack] 「${node}」是课程「${c.name}」的终点——终点是承诺标记，不被学习调度（生成门恒拒，不看就绪状态）：它零正文零题库，完成判据折叠自它的最后台阶（终点.pre 集）。`)
+    // 终点是方向标记，零正文零题库零调度，入队门在宿主，这里是管线侧兜底。
+    // #239 多终点化：逐个终点判定（任一终点都恒拒）。
+    const endpoints = endpointNames(await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs))
+    if (endpoints.has(node)) {
+      throw new Error(`[pack] 「${node}」是课程「${c.name}」的终点——终点是方向标记，不被学习调度（生成门恒拒，不看就绪状态）：它零正文零题库，完成判据折叠自它的最后台阶（终点.pre 集）。`)
     }
     this.e.assertNoteOk(c, graph, broken, node, 'pack')
     const prior = await this.vaultPriorFor(c, graph, node)
     opts?.onPrior?.(prior.audit)
     // endpoint 随锚入包（#200）：后继预告的终点措辞读锚现算，普通前沿叶子不再被误标终点
-    const pack = this.e.content.contextPack(graph, state, node, c.name, { omitDeliverables: opts?.omitDeliverables, endpoint: anchor?.endpoint ?? null })
+    const pack = this.e.content.contextPack(graph, state, node, c.name, { omitDeliverables: opts?.omitDeliverables, endpoints })
     return prior.section ? `${pack}\n\n---\n\n${prior.section}` : pack
   }
 

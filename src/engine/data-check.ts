@@ -13,7 +13,7 @@ import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
 import { validateConceptRegistry } from './concepts.ts'
-import { validateAnchor } from './seed.ts'
+import { validateAnchorBook } from './seed.ts'
 import { classifySource, fingerprintOf, validateNoteSourceManifest } from './note-source.ts'
 import { validateLearnerCards } from './learner-cards.ts'
 import { validateErrorCards } from './error-cards.ts'
@@ -568,10 +568,10 @@ async function scanConceptRegistry(
   return { present: true, entries: checked.entries.length }
 }
 
-/** 终点锚体检（#142 / ADR-0033）：课程根/state/终点锚.json——文件缺失 = 未播种
- * （Missing 合法空态，零 finding，inventory 计数即盘点可见）；存在但不可读/JSON 坏/
- * 契约违约/锚悬空（终点节点不在图内——edit 直改被受理门拒绝后的残余形态）= Broken。
- * 锚无直改通道：换终点只走重新种子提案（kind=seed, mode=reseed）。 */
+/** 终点锚集合体检（#142 / ADR-0033；#239 / ADR-0076 多终点化）：课程根/state/终点锚.json
+ * ——文件缺失 = 零终点/未落盘（Missing 合法空态，零 finding，inventory 计数即盘点可见）；
+ * 存在但不可读/JSON 坏/契约违约/任一条锚悬空（终点节点不在图内——直改被受理门拒绝后的
+ * 残余形态）= Broken（逐条悬空各报一条，定位到具体终点）。终点增删走显式动作，锚不直改。 */
 async function scanEndpointAnchor(
   findings: DataCheckFinding[],
   courseName: string,
@@ -583,7 +583,7 @@ async function scanEndpointAnchor(
     text = await fs.readFile(path)
   } catch (err) {
     const code = (err as { code?: unknown }).code
-    if (code === 'ENOENT') return { present: false } // 合法空态：种子提案 apply 后出现
+    if (code === 'ENOENT') return { present: false } // 合法空态：课程还没有方向（文件由建课/起草/加终点落盘）
     push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_unreadable', where, errorText(err))
     return { present: true }
   }
@@ -592,25 +592,28 @@ async function scanEndpointAnchor(
     doc = JSON.parse(text)
   } catch (err) {
     push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_json_parse', where,
-      `${errorText(err)}——锚无直改通道，换终点走重新种子提案（kind=seed, mode=reseed）`)
+      `${errorText(err)}——终点增删走显式动作，锚不直改；手改破坏形状须先修复`)
     return { present: true }
   }
-  const checked = validateAnchor(doc)
-  if (checked.errors.length) {
+  const checked = validateAnchorBook(doc)
+  if (checked.errors.length || !checked.book) {
     push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_schema', where,
-      `${checked.errors.join('；')}——锚无直改通道，换终点走重新种子提案（kind=seed, mode=reseed）`)
+      `${checked.errors.join('；')}——终点增删走显式动作，锚不直改；手改破坏形状须先修复`)
     return { present: true }
   }
-  const anchor = checked.anchor!
-  if (!nodeNames.has(anchor.endpoint)) {
-    push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_dangling', where,
-      `终点节点「${anchor.endpoint}」不在图内——锚悬空；换终点走重新种子提案（kind=seed, mode=reseed），锚不直改`)
+  for (const anchor of checked.book.anchors) {
+    if (!nodeNames.has(anchor.endpoint)) {
+      push(findings, 'endpoint_anchor', 'broken', 'endpoint_anchor_dangling', where,
+        `终点节点「${anchor.endpoint}」不在图内——锚悬空；终点增删走显式动作（锚不直改），先修复这条锚`)
+    }
   }
   return { present: true }
 }
 
 /** 断裂存档区盘点（#138 / ADR-0034）：archived 是显式的第三类——既非 Missing 也非
- * Broken，不进 status、不校验内容，只数文件数并对照 learnhub.json 的断裂史。
+ * Broken，不进 status、不校验内容，只数文件总数并对照 learnhub.json 的断裂史。
+ * 存档区是**跨断裂累加**的（`存档/pre-v1/`、`存档/pre-v2/`… 各次断裂一个子目录，
+ * #239 v3 断裂入 pre-v2），故只报总量不按次拆分——断裂史（日期）随行走。
  * - pre_v2_archive：存档区在盘 → 信息级盘点一条（文件总数 + 断裂日期）。
  * - pre_v2_artifact：断裂史（schema.breaks）在档但存档区缺失——记录与实物对不上，
  *   提示级浮出（不判损坏：存档可能被学习者手工挪动，引擎读侧永不读取）。 */
@@ -647,7 +650,7 @@ async function scanArchive(
   if (present) {
     const dates = [...new Set(breaks.map(b => b.date).filter(Boolean))].join('、')
     push(findings, 'archive', 'archived', 'pre_v2_archive', `存档区 ${paths.archiveDir}`,
-      `pre-v2 存档 ${files} 个文件（只增不删、读侧永不读取）${dates ? `；断裂史：${dates}` : ''}`)
+      `存档 ${files} 个文件（各次断裂一个子目录；只增不删、读侧永不读取）${dates ? `；断裂史：${dates}` : ''}`)
   } else if (breaks.length) {
     push(findings, 'archive', 'archived', 'pre_v2_artifact', `存档区 ${paths.archiveDir}`,
       'learnhub.json 记有断裂史但存档区不在盘上（可能被手工挪动；引擎读侧永不读取，仅提示对账）。')

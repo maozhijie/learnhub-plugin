@@ -12,6 +12,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { LearnhubEngine } from '../../src/engine/index.ts'
+import { CURRENT_SCHEMA_VERSION } from '../../src/engine/schema.ts'
 import type { Clock, Rng } from '../../src/engine/index.ts'
 import { systemClock, mathRng } from '../../src/host/clock.ts'
 import { nodeVaultFs } from '../../src/host/vault-fs.ts'
@@ -64,7 +65,7 @@ export interface VaultOptions {
   banks?: Record<string, string | string[][]>
   /** 预置 state/review-log.jsonl（每元素一行 JSON）。 */
   reviewLog?: string[]
-  /** schema 版本戳覆盖（#138 硬门）：undefined = 盖当前 v2；给 version 可伪造旧/新
+  /** schema 版本戳覆盖（#138 硬门）：undefined = 盖当前 v3；给 version 可伪造旧/新
    * 版本测门。门本身的负路径（拒载文案）直接裸构造引擎测——工厂总是构造引擎。 */
   schema?: { version?: number; breaks?: unknown[] }
   /** 时钟注入（#175 阶段①）：undefined = 真实系统时钟；固定时钟 + 定长随机流
@@ -126,7 +127,7 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
     await mkdir(join(center, 'state'), { recursive: true })
     const schema = options.schema ?? {}
     await writeFile(configPath, JSON.stringify({
-      schema: { version: schema.version ?? 2, ...(schema.breaks ? { breaks: schema.breaks } : {}) },
+      schema: { version: schema.version ?? CURRENT_SCHEMA_VERSION, ...(schema.breaks ? { breaks: schema.breaks } : {}) },
       day_cutoff: '00:00',
     }, null, 1) + '\n', 'utf8')
 
