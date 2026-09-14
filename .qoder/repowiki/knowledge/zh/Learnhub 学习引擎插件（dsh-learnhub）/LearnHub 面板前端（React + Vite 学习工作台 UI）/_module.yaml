@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: ui
+title: LearnHub 面板前端（React + Vite 学习工作台 UI）
+scope:
+    - ui/
+source_files: []
+depends_on: []
+related_to:
+    - path: scripts
+    - path: tests

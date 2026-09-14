@@ -1,0 +1,14 @@
+schema_version: 1
+module_path: ""
+title: Learnhub 学习引擎插件（dsh-learnhub）
+scope:
+    - CONTEXT.md
+    - AGENTS.md
+    - .gitignore
+    - package.json
+    - tsconfig.json
+    - build.mjs
+    - cordis.patch.yml
+source_files: []
+depends_on: []
+related_to: []

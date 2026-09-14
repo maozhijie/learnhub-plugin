@@ -1,0 +1,79 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+nodes_managed: true
+exported_at: "2026-09-14T11:38:02Z"
+modules:
+    "":
+        dir_name: Learnhub 学习引擎插件（dsh-learnhub）
+        title: Learnhub 学习引擎插件（dsh-learnhub）
+        scope:
+            - CONTEXT.md
+            - AGENTS.md
+            - .gitignore
+            - package.json
+            - tsconfig.json
+            - build.mjs
+            - cordis.patch.yml
+        source_files: []
+        children:
+            - docs
+            - preset_skills
+            - scripts
+            - tests
+            - ui
+        depends_on: []
+        related_to: []
+    docs:
+        dir_name: 项目架构决策记录与研发文档
+        title: 项目架构决策记录与研发文档
+        scope:
+            - docs/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    preset_skills:
+        dir_name: Learnhub 学习伙伴 Preset 与技能库
+        title: Learnhub 学习伙伴 Preset 与技能库
+        scope:
+            - preset/
+            - skills/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    scripts:
+        dir_name: Learnhub 工程脚本集（构建_扫描_迁移_开发工具）
+        title: Learnhub 工程脚本集（构建/扫描/迁移/开发工具）
+        scope:
+            - scripts/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: tests
+            - path: ui
+    tests:
+        dir_name: 引擎与宿主测试套件（Node.js 原生 runner）
+        title: 引擎与宿主测试套件（Node.js 原生 runner）
+        scope:
+            - tests/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: scripts
+            - path: ui
+    ui:
+        dir_name: LearnHub 面板前端（React + Vite 学习工作台 UI）
+        title: LearnHub 面板前端（React + Vite 学习工作台 UI）
+        scope:
+            - ui/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: scripts
+            - path: tests

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: docs
+title: 项目架构决策记录与研发文档
+scope:
+    - docs/
+source_files: []
+depends_on: []
+related_to: []
