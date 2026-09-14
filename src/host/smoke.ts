@@ -26,7 +26,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { contractOf, hasReadyContent, validateByContract } from '../engine/index.ts'
 import { createHostRuntime } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
-import { afterGraphApply, cancelGeneration, pumpGeneration, waitForGenJob } from './jobs.ts'
+import { afterGraphApply, cancelGeneration, enqueueGeneration, pumpGeneration, waitForGenJob } from './jobs.ts'
 import { STATIONS, parseCorpusFrontmatter } from './corpus.ts'
 
 /** 冒烟入参（路由可覆盖，缺省即最小成本档）。 */
@@ -308,18 +308,19 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
       if (!starts.length) throw new Error('种子应用没有返回起点节点——无法继续正文管线（见语料「种子起草」死因）')
       pipeline.starts = starts
       node = starts[0]
-      // 宿主侧 apply 联动（与面板 POST /proposals/apply 同一条路径）：清扫悬空任务 +
-      // 起点正文自动入队（#160 triggerSeedContent）——漏了这步就是「任务不在注册表」
-      await afterGraphApply(runner, ctx, { course, starts })
+      // 宿主侧 apply 联动（清扫悬空任务）；正文不随 apply 入队（ADR-0078），冒烟在此
+      // 补一步显式下发（等价于面板「生成」按钮）——漏了入队就是「任务不在注册表」
+      await afterGraphApply(runner)
 
       // —— ② 正文管线（大纲 → 逐节 → 出题）：与面板「生成」入口同一条生产路径 ——
+      await enqueueGeneration(runner, ctx, course, node)
       const key = `${course}/${node}`
       const job0 = runner.jobs.genJobs.get(key)
       if (job0) job0.quizCount = quizCount
       pumpGeneration(runner, ctx)
       // 冒烟只跑生成四站：生成泵排空时会自动拉教练生长批（生产行为），那是另一笔真实
-      // 额度、还可能连锁再生成正文——**挡泵不挡在途**：暂停旗标让后续自动入队的批安静
-      // 排队（随临时目录一起丢弃），在跑的正文管线照常到终态。
+      // 额度（ADR-0078 后不再连锁生成正文）——**挡泵不挡在途**：暂停旗标让后续自动
+      // 入队的批安静排队（随临时目录一起丢弃），在跑的正文管线照常到终态。
       await waitUntilRunning(runner, key)
       runner.flags.queuePaused = true
       const job = await waitForGenJob(runner, key, jobTimeoutMs)

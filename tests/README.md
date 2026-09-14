@@ -229,6 +229,21 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 提示词 | **未动**（无需 `PROMPT_CHANGELOG`）：`src/engine/prompts/` 一字未改——本修正只改触发时机与豁免传导，教练回合模板、受理门与判据口径都没动 | — | `npm run prompt-bump -- check` 受控面无版本变化 |
 
 
+## 撤正文自动入队（#252 / ADR-0078，2026-09-14）：行为变更登记
+
+症状：建课/种子提案 apply 一过起点正文就自动排进生成队列开跑；生长批受理后新建的就绪缺口节点也被自动排进队列——学习者的结构动作顺带花掉模型额度，且队列队首不可预期。裁决：**正文生成一律显式下发**，两条自动链撤掉（与 ADR-0076「加终点纯声明」同一口径）。逐条登记：
+
+| 项 | 变更 | 落点 | 证据 |
+|---|---|---|---|
+| 行为 | **apply 只落结构**：`triggerSeedContent` 整体删除，`afterGraphApply` 退化为「清扫悬空任务」，签名由 `(rt, ctx, seed)` 收成 `(rt)`；种子、`learnhub_graph_apply`、反编译联合入口三条入口行为一致（过门即落盘，零入队） | `host/jobs.ts`／`host/handlers.ts`／`host/tool-handlers.ts` | `tests/host-runtime.test.ts`「种子 apply 不自动入队正文」：路由 200 且留时间窗后 `genJobs` 仍为空；「非种子 apply 同样不入队」照旧；「显式下发仍是唯一入队通道」：`/generate` 后节点为 `queued` |
+| 行为 | **生长批只落结构**：`generateGrowthJob` 撤掉 `ready_unbuilt` 入队循环与「正文生成已入队 N 节」消息；`coachGrowthBatch` 的 `applied` 去掉 `ready_unbuilt` 字段（连同它的 `loadView` + 前沿过滤一并撤除——唯一消费方就是被撤的循环） | `host/jobs.ts`／`engine/growth-subsystem.ts` | `tests/host-runtime.test.ts`「生长批任务消息带回路轨迹」加 `doesNotMatch(/正文生成已入队/)`；`tests/coach-growth.test.ts` 的 `applied.created` 断言不动（`created` 保留为读数） |
+| 行为 | **冒烟补齐显式下发**：`smoke.ts` 原本靠 `afterGraphApply` 的自动入队把任务放进注册表（漏了就是「任务不在注册表」），现改在 apply 后补一次 `enqueueGeneration`（语义等价面板「生成」按钮），生产路径覆盖不缩 | `host/smoke.ts` | `tests/gen-smoke.test.ts` 照旧驱动真路径 |
+| 受控量 | **G5 逐文件规模迁移**：`jobs.ts 1250→1219`（撤 `triggerSeedContent` 与入队循环）、`handlers.ts 746→741`（撤 seedHalf 分支）、`growth-subsystem.ts 1145→1138`（撤 `ready_unbuilt` 计算）、`smoke.ts 385→386`（显式入队一行） | `scripts/arch-baseline.json`（`--update`；typeErrors 仍 0） | 棘轮精确匹配；`tests/arch-guards.test.ts` G5 绿 |
+| 未改 | **T1/T2 阶段变更仍自动登记 `生成队列.md`**（给人看的清单，零机器执行挂载）；**队列空闲仍自动拉生长批**（入队的是结构不是正文）；**队列语义零改动**（FIFO／单并发／可取消／重启暂停／终态保留期） | `engine/content.ts`（`onStageChange`）／`host/jobs.ts`（`pumpGeneration` → `coachTrigger('queue_idle')`） | 既有测试零漂移；口径与理由见 ADR-0078 边界段 |
+| 提示词 | **未动**（无需 `PROMPT_CHANGELOG`）：`src/engine/prompts/` 一字未改——本票只改「谁往队列里放任务」，模板与契约面零变化 | — | `npm run prompt-bump -- check` 受控面无版本变化 |
+
+路由探针快照（`host-routes-snapshot.json`）与行为快照（`host-tools-behavior.json`）**零漂移**：apply 的响应体一直是引擎返回的 `applied`，入队只写运行日志与注册表，不进响应面。
+
 ## 提示词变更纪律（#220 / ADR-0072）：新门登记
 
 新门两道（一提交级、一过门装置），另有一处**新门-class 装置**（语料回放 / 评审对照）——都按章程 §5 带自检：
@@ -290,7 +305,7 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在（#168 起 `need` 归 `host/params.ts`、路由表归 `host/route-table.ts`／`routes.ts`／`routes-post.ts`）、入口文件非空；G2c＝宿主除常量外零模块级 `let`（`scripts/scan-host-state.mjs`，受控面**动态发现**＝index.ts + host/**/*.ts；ADR-0048） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径。G2c 受控面 14 个文件、模块级 let 0 |
 | G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。**四个方向全为硬门 0**（dead／missing／unwired／surplus） | 硬门 0 | 声明 **187** ／ 实用 187 ／ 接线 **187** ／ 多余 **0**（9 个子系统；#171 曾清掉 30 条多余接线——10 phantom + 20 未使用——后由棘轮转硬门；落笔时三向 167，现值 187 随 #158/#159/#161 新增命令域与 #203 receiptReviewEffect 接线自然增长，基线同步） |
 | G4 窄面宽度（三槽位） | `handles`／`facade`／`fns` 逐子系统卡基线；`handles ≤12／facade ≤20／fns ≤10` 是**非活动目标** | 棘轮 | 实测最大 handles **11**／facade **21**／fns **0**（fns 对预算已绿；handles 11 贴 ≤12 上限；facade 21 已越 ≤20 非活动目标——目标是落笔时的愿望值，活动门是逐子系统基线，越线要靠重划解决而非就地收紧） |
-| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | **12 个受控 engine 文件超 600**（content 1962、proposals 1597、question-bank 1493、projects 1396、learner-cards 1359、note-source 1242、growth-subsystem 1074、content-subsystem 1044、data-check 979、nof1 958、index 810、sessions 642）；宿主最大 `jobs.ts` **1109**（#161 合并入队钩子、#160 种子链 triggerSeedContent；#227 节间连贯注入 1039→1092、#228 出题档位声明 1092→1109），**无宿主文件超 900**（`index.ts` 3029 → 91 薄入口见 #167；`api.ts` 999 → 60 见 #168；`tools.ts` 1040 → 127 见 #169 agent 切面，#169 后表生成路径取代了 `routes.ts`／`routes-post.ts`，两文件已退役）。活动门＝逐文件基线（**118** 个受控文件；#163 新增 `engine/coach-tools.ts`，#195 新增 `engine/evidence-streams.ts`） |
+| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | **15 个受控 engine 文件超 600**（proposals 1802、question-bank 1575、content 1477、projects 1388、learner-cards 1365、note-source 1234、growth-subsystem 1138、content-subsystem 1061、data-check 982、nof1 958、index 858、output-contracts 699、graph-subsystem 648、sessions 641、seed 633）；宿主最大 `jobs.ts` **1219**（#161 合并入队钩子、#160 种子链 triggerSeedContent；#227 节间连贯注入 1039→1092、#228 出题档位声明 1092→1109；**#252/ADR-0078 撤两条正文自动入队链 1250→1219**），**无宿主文件超 900**（`index.ts` 3029 → 91 薄入口见 #167；`api.ts` 999 → 60 见 #168；`tools.ts` 1040 → 127 见 #169 agent 切面，#169 后表生成路径取代了 `routes.ts`／`routes-post.ts`，两文件已退役）。活动门＝逐文件基线（**119** 个受控文件；#163 新增 `engine/coach-tools.ts`，#195 新增 `engine/evidence-streams.ts`）。〔2026-09-14 重读实测刷新上列数字：原行停在 #237 提示词搬迁前（`content.ts` 的 485 行模板已迁出，故 1962→1477），超 600 口径随之由 12 文件变 15 文件、受控文件 118→119。〕 |
 | G6 顶层不变量 | 除教练层 `proposals.ts` 外无模块调用图写原语（`GraphStore.writeRegionDoc`，`data/*.yaml` 的唯一写路径） | 硬门 | 绿（唯一调用者就是 `proposals.ts`） |
 | G7 类型门 | `tsc --noEmit`（根 `tsconfig.json`；`module`／`moduleResolution` = `nodenext`、`noEmit`；#178 批3 起 `strict: true`）逐文件错误数卡基线 | 棘轮 | 扫描面 `src/`：**0 处 / 0 个涉错文件**（基线 `typeErrors` 空表）。实测链：main **196 处 / 17 个涉错文件**（未清理）→ #171 **181** → #170 **80 处 / 9 文件** → #168 **75 处 / 11 文件**（错误随代码搬移）→ **#178 四批清零**（批1 门面接线伸进子系统的 31 个 TS2341 放宽为公开面；批2 TS2322 全清 + 两处潜伏 bug；批3 根 tsconfig 转 `strict: true`、24 处残差清零；批4 ui 依赖侧 86 处清零）→ **0/0**。UI 类型门：`ui/src` 0 错、依赖侧存量债 **0 处**（`npm run typecheck` 串行跑） |
 | G8 适配器面 | engine 内时钟直读（`Date.now(`＋无参 `new Date()`，含模板串插值）／`Math.random`／`node:fs` import 数／fs 调用点数四标量卡基线（`scripts/scan-adapter-face.mjs`） | 棘轮 | 实测链：阶段①第一刀 **clockReads 29／mathRandom 0** → 时钟清扫 **clockReads 1**（唯一余量 = io.ts `atomicWrite` tmp 命名的登记例外；`tests/clock-rng-port.test.ts` 断言固定时钟+定长随机流下同输入同输出）→ 阶段② **fsImports 0／fsCalls 0**（engine 内零 node:fs——`VaultFs` 端口住 io.ts、实现住 host/vault-fs.ts、装配住 EngineConfig.fs） |

@@ -5,7 +5,7 @@
  * 读写，本文件零模块级可变状态；队列语义零改动（FIFO、可取消、重启可恢复、阻尼）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, TIER_LABELS, endpointNames, genericQuizTarget, hasReadyContent, readAnchors, tierIdxOf } from '../engine/index.ts'
+import { Content, TIER_LABELS, endpointNames, genericQuizTarget, readAnchors, tierIdxOf } from '../engine/index.ts'
 import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport, VaultPriorAudit } from '../engine/index.ts'
 import {
   contentFailureStatus,
@@ -493,39 +493,13 @@ export function triggerPlanGrowth(rt: HostRuntime, ctx: Context, result: { kind?
   }
 }
 
-/** 种子应用 → 起点正文自动入队（#160，镜像生长批「就绪缺口入队」语义）：种子提案
- * apply 后对起点节点中「正文未生成」者逐个入队全局串行队列（FIFO、可取消、生成页
- * 可见）——提案一过、内容就在酿，学习者不必逐节点手点生成再各等数分钟。幂等语义：
- * enqueueGeneration 对排队任务去重（重复触发不产生重复任务），running/cancelling 的
- * 同名任务拒绝时逐个跳过留痕、不挡其余起点。队列重启暂停语义不回归：入队只触发泵，
- * queuePaused 旗标挡泵——暂停时起点任务安静排队，恢复队列才开跑。返回实入队节点数。 */
-export async function triggerSeedContent(rt: HostRuntime, ctx: Context, applied: { course: string; starts: string[] }): Promise<number> {
-  const c = await rt.engine.registry.resolve(applied.course)
-  const { state } = await rt.engine.loadView(c)
-  const unbuilt = applied.starts.filter(n => !hasReadyContent(state[n]))
-  let enqueued = 0
-  for (const node of unbuilt) {
-    try {
-      await enqueueGeneration(rt, ctx, c.name, node)
-      enqueued++
-    } catch (err) {
-      void runLog(rt, 'seed_apply_enqueue', `「${c.name}」起点「${node}」自动入队跳过：${err instanceof Error ? err.message : String(err)}`)
-        .catch(() => undefined)
-    }
-  }
-  await runLog(rt, 'seed_apply_enqueue', `「${c.name}」种子应用：${unbuilt.length
-    ? `起点正文自动入队 ${enqueued}/${unbuilt.length} 节（${unbuilt.join('、')}）`
-    : '全部起点正文已就绪，无需入队'}`).catch(() => undefined)
-  return enqueued
-}
-
-/** 图 apply 出口的注册表联动（面板路由与 agent 工具共用，#160 收口一处防漂移）：
- * 编辑批可含 del_node/rename（ADR-0039 写侧联动）→ 清扫悬空任务记录；种子应用
- * （单发种子，或反编译联合入口的种子半区，#156）后起点正文自动入队——seed 为
- * null = 本批无种子半区，零种子动作。 */
-export async function afterGraphApply(rt: HostRuntime, ctx: Context, seed: { course: string; starts: string[] } | null): Promise<void> {
+/** 图 apply 出口的注册表联动（面板路由与 agent 工具共用，收口一处防漂移）：
+ * 编辑批可含 del_node/rename（ADR-0039 写侧联动）→ 清扫悬空任务记录。
+ * **不自动入队正文**（ADR-0078）：apply 只是落结构，正文生成一律由人/agent 显式下发
+ * （面板「生成」、`learnhub_question_generate` 同族的正文入口）。结构先定、内容后放行，
+ * 与 ADR-0076「加终点纯声明、第一次放行由学习者显式下发」同一口径。 */
+export async function afterGraphApply(rt: HostRuntime): Promise<void> {
   await sweepGenJobs(rt)
-  if (seed) await triggerSeedContent(rt, ctx, seed)
 }
 
 /** 教练回合触发统一出口（五点接线，词条「教练回合」）：就绪深度检查 → 低于前瞻的课程
@@ -663,10 +637,10 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
   }
 }
 
-/** 生长批任务执行（#145）：coachGrowthBatch 工具回路回合 + 受理接线；应用成功后对
- * 「新建且正文未生成」的就绪缺口节点入队正文生成（生长-内容交替，永远 FIFO 不插队
- * ——生长批只在检查点之后入队，内容任务在它完成之后排队）。取消旗标沿回合传入
- * （#163 任务取消传导：回路每轮检查，取消即中止）；回路轨迹进任务消息（生成页可查）。 */
+/** 生长批任务执行（#145）：coachGrowthBatch 工具回路回合 + 受理接线。取消旗标沿回合
+ * 传入（#163 任务取消传导：回路每轮检查，取消即中止）；回路轨迹进任务消息（生成页可查）。
+ * **不自动入队正文**（ADR-0078）：批受理成功只落结构，`ready_unbuilt`（新建且正文未生成
+ * 的就绪节点）不再自动排进生成队列——生长与内容解耦，内容由学习者显式下发。 */
 async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Promise<void> {
   const key = `${job.course}/${GROWTH_JOB_NODE}`
   job.status = 'running'
@@ -697,15 +671,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
         + `${a.compass_rewritten ? '；罗盘已随批重写' : ''}｜${tierNote}｜理由：${p.reason}`
       // 回路轨迹（#163）：裁决前查了哪些只读视图，生成页逐条可查
       if (r.trajectory?.length) job.message += `｜回路轨迹：${r.trajectory.join('；')}`
-      // 受理批可含 del_node/rename（ADR-0039 写侧联动）：先清扫悬空任务记录再入队正文
+      // 受理批可含 del_node/rename（ADR-0039 写侧联动）：清扫悬空任务记录。
+      // 就绪缺口（a.ready_unbuilt）已就绪但要生成正文的节点不再自动入队（ADR-0078）——
+      // 结构先落，正文等显式下发。
       if (a.ops > 0) await sweepGenJobs(rt)
-      // 生长→内容链：新建节点里的就绪缺口入队正文生成（T2 同款理由口径）
-      for (const node of a.ready_unbuilt) {
-        try {
-          await enqueueGeneration(rt, ctx, job.course, node)
-        } catch { /* 同节点已在队列（去重），跳过 */ }
-      }
-      if (a.ready_unbuilt.length) job.message += `；正文生成已入队 ${a.ready_unbuilt.length} 节`
     }
   } catch (err) {
     const corpusRef = failCorpus(rt, STATIONS.growth, err)

@@ -342,8 +342,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 反编译双提案（pair 联动）检测到即自动走联合入口（#156）——纯面板用户不再被
     // 「用 learnhub_project_decompile_apply」的拒收文案指向 agent 会话（ADR-0038 补完）；
     // 计划修订触发的换线/补支生长批随后入队（#149；联合结果从 plan 半区取触发）；
-    // 种子应用后起点正文自动入队（#160：提案一过、内容就在酿，生成页可见——
-    // 联合入口的种子半区同样触发）
+    // 正文不随 apply 入队（ADR-0078：apply 只落结构，内容由学习者显式下发）
     const kind = need(body, 'kind')
     const id = applyId(body.id)
     // pair 检测只对参与反编译对的 kind 取提案列表（其余 kind 不多打一次引擎）
@@ -355,11 +354,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
       : await rt.engine.graph.proposalApply(kind, id)
     const planPart = applied as { plan?: { kind?: string; growth?: Array<{ course: string; lines: string[] }> } }
     triggerPlanGrowth(rt, ctx, planPart.plan ?? (applied as { kind?: string }))
-    // 种子链（#160）：单发种子 = applied 本身；联合入口 = 种子半区（仅计划半区受理时为 null）
-    const seedHalf = joint
-      ? (applied as { seed?: { course: string; starts: string[] } | null }).seed ?? null
-      : kind === 'seed' ? applied as { course: string; starts: string[] } : null
-    await afterGraphApply(rt, ctx, seedHalf)
+    await afterGraphApply(rt)
     sendJson(res, 200, applied)
   },
   'POST /proposals/reject': async ({ rt, body, res }) => {
