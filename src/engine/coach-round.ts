@@ -23,6 +23,8 @@
  */
 import { dayOfTs, parseDay, daysBetween } from './dates.ts'
 import { pctOf } from './grading.ts'
+import { render } from './prompt-render.ts'
+import { ARBITRATION_EVIDENCE } from './prompts/projects.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import { SEDIMENT_KINDS } from './sediment.ts'
 import type { SedimentFold } from './sediment.ts'
@@ -410,7 +412,9 @@ export function arbitrationPopulations(
 
 /** 仲裁参照块渲染（终审段 prompt 末块）：两份计划的逐周总掌握分位带并排 + 读法一句
  * ——沙盘只模拟「记」的维持，本批的收益不在推演里，两带差异只读作预算/保留的代价
- * 参考；措辞锁死「模型推演，非承诺」（ADR-0025 照旧），终审归教练的教学判断。 */
+ * 参考；措辞锁死「模型推演，非承诺」（ADR-0025 照旧），终审归教练的教学判断。
+ * 散文骨架住 `prompts/projects.ts`（#237 / ADR-0075：本函数只算变量——分位带、新增
+ * 清单、分歧原文——再交 `render` 取值）；`band` 是逐周分位带的序列化，属动态材料。 */
 export function renderArbitrationEvidence(input: {
   /** 全量段的分歧声明（原话携带，仲裁段读得到撕的是什么）。 */
   disagreement: string
@@ -423,14 +427,14 @@ export function renderArbitrationEvidence(input: {
 }): string {
   const band = (xs: SandboxCurvePoint[]): string =>
     xs.map(p => `W${p.week} p50=${pctOf(p.p50)}/p80=${pctOf(p.p80)}`).join(' · ')
-  return [
-    '## 双沙盘推演（终审参照——模型推演，非承诺）', '',
-    `- 分歧声明（全量段）：${input.disagreement || '（未携带声明原文）'}`,
-    `- 推演基准：每日约 ${input.minutes_per_day} 分钟 × ${input.weeks} 周；两份推演同一总体、同一随机种子序列（配对比较）。`,
-    `- 计划一（现状照走）：${band(input.before)}`,
-    `- 计划二（含本批照走${input.added.length ? `，新增：${input.added.join('、')}` : '，本批无新增节点'}）：${band(input.after)}`,
-    '- 读法：沙盘只模拟「记」的维持——本批的收益不在推演里，两带差异只读作本批的预算/保留代价参考；终审归你的教学判断。',
-  ].join('\n') + '\n'
+  return render(ARBITRATION_EVIDENCE, {
+    disagreement: input.disagreement || '（未携带声明原文）',
+    minutesPerDay: input.minutes_per_day,
+    weeks: input.weeks,
+    beforeBand: band(input.before),
+    addedClause: input.added.length ? `，新增：${input.added.join('、')}` : '，本批无新增节点',
+    afterBand: band(input.after),
+  })
 }
 
 // ---- 沉淀折叠的教练投影（六区块包第 5 块「罗盘尾段」的沉淀半区） ----

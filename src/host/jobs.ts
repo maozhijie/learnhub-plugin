@@ -25,6 +25,7 @@ import {
   type GenJobPhase,
   type GenJobStatus,
 } from '../generation-jobs.ts'
+import { SECTION_PREV_TAIL_HEADING } from '../engine/prompts/host.ts'
 import { contentEffort, llmCfg, llmSeam, llmSeamStripped } from './llm.ts'
 import { runLog } from './runtime.ts'
 import type { GenJob, HostRuntime } from './runtime.ts'
@@ -150,7 +151,7 @@ function sectionMaterials(
       `- ${i + 1}. ${x.id} ｜ ${x.title} ｜ ${x.type}${x.points ? ` ｜ ${x.points}` : ''}${i === idx ? '（本节）' : ''}`).join('\n')}`
     : ''
   const tail = coherence?.prevTail?.trim()
-  const tailBlock = tail ? `\n\n## 前节结尾（仅供衔接参考，不复述前节内容）\n\n${tail}` : ''
+  const tailBlock = tail ? `\n\n${SECTION_PREV_TAIL_HEADING}\n\n${tail}` : ''
   return `## 本节任务\n\n- 节 id：${s.id}\n- 节标题：${s.title}\n- 节类型：${s.type}${s.tierLabel ? `\n- 节段难度档：${s.tierLabel}` : ''}${listBlock}${tailBlock}\n\n---\n\n${pack}`
 }
 

@@ -26,6 +26,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { Content, normalizeStem } from '../engine/index.ts'
+import { SPIKE_SUFFIX_RESTATE_CONTRACT, SPIKE_SUFFIX_TOOL_IMPERATIVE, SPIKE_SUFFIX_TOOL_PASSWORD } from '../engine/prompts/host.ts'
 import { llmComplete, llmStreamSeam, llmView } from './llm.ts'
 import { createHostRuntime } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
@@ -153,15 +154,16 @@ export interface SpikeReport {
   notes: string[]
 }
 
-/** 每臂每站的措辞变体（语义等价：同一契约、不同说法——FormatSpread 抗性检查）。 */
+/** 每臂每站的措辞变体（语义等价：同一契约、不同说法——FormatSpread 抗性检查）。
+ * #237 / ADR-0075：措辞文本住 `prompts/host.ts`（装置专用段），这里只留臂 × id 的结构。 */
 const VARIANTS: Record<SpikeArm, Array<{ id: string; suffix: string }>> = {
   control: [
     { id: '现状', suffix: '' },
-    { id: '重申契约', suffix: '\n\n（提醒：只输出一个 YAML 文档；不要代码围栏、不要任何解释。）' },
+    { id: '重申契约', suffix: SPIKE_SUFFIX_RESTATE_CONTRACT },
   ],
   tool: [
-    { id: '指令式', suffix: '\n\n（本轮输出通道变更：必须调用 submit 工具提交结果，不要输出任何正文——把全部内容放进工具参数，参数是 JSON。）' },
-    { id: '口令式', suffix: '\n\n（交卷方式：用 submit 工具。除工具调用外不要写任何文字；工具的参数就是你的完整 JSON 结果。）' },
+    { id: '指令式', suffix: SPIKE_SUFFIX_TOOL_IMPERATIVE },
+    { id: '口令式', suffix: SPIKE_SUFFIX_TOOL_PASSWORD },
   ],
 }
 

@@ -16,7 +16,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  CHANGELOG_FILE, MARKER_RE, TEMPLATE_FILE, bumpViolations, compareReviewReports, markerVersionsOf, parseLogDiff, replayCorpus, replayViolations,
+  CHANGELOG_FILE, MARKER_RE, TEMPLATE_FILES, bumpViolations, compareReviewReports, markerVersionsOf, parseLogDiff, replayCorpus, replayViolations,
 } from '../scripts/prompt-bump.mts'
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
@@ -47,7 +47,7 @@ function cli(args: string[], cwd = ROOT): { code: number; out: string } {
 test('#220 登记门：解析 diff 找到新增的版本标记与登记条目（纯函数按合成 diff 自检）', () => {
   const log = [
     '@@COMMIT aaaa1111 feat: bump 模板',
-    `+++ b/${TEMPLATE_FILE}`,
+    `+++ b/${TEMPLATE_FILES[0]}`,
     '+<!-- learnhub:prompt/v12 -->',
     '+<!-- learnhub:prompt/v12 -->',
     ' context line with <!-- learnhub:prompt/v11 -->',
@@ -103,14 +103,14 @@ test('#220 登记门（临时仓库）：bump 不补条目变红 → 补上条�
     git('config', 'user.email', 't@t')
     git('config', 'user.name', 't')
     // 起点：登记面已存在（纪律起点 = PROMPT_CHANGELOG 首次出现的提交，动态发现）
-    write(TEMPLATE_FILE, 'export class Content {\n  // <!-- learnhub:prompt/v11 -->\n}\n')
+    write(TEMPLATE_FILES[0]!, 'export class Content {\n  // <!-- learnhub:prompt/v11 -->\n}\n')
     write(CHANGELOG_FILE, changelogText([[11, 'x']]))
     git('add', '-A')
     git('commit', '-q', '-m', 'chore: 起点（登记面就位）')
     const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim()
 
     // 违规提交：bump 模板版本但不补条目
-    write(TEMPLATE_FILE, 'export class Content {\n  // <!-- learnhub:prompt/v12 -->\n}\n')
+    write(TEMPLATE_FILES[0]!, 'export class Content {\n  // <!-- learnhub:prompt/v12 -->\n}\n')
     git('add', '-A')
     git('commit', '-q', '-m', 'feat: bump 模板 v11→v12（无登记）')
     const red = cli(['check', '--since', base], dir)
@@ -120,7 +120,7 @@ test('#220 登记门（临时仓库）：bump 不补条目变红 → 补上条�
     assert.match(red.out, /预期输出增量/)
 
     // 合规提交：同提交补条目
-    write(TEMPLATE_FILE, 'export class Content {\n  // <!-- learnhub:prompt/v13 -->\n}\n')
+    write(TEMPLATE_FILES[0]!, 'export class Content {\n  // <!-- learnhub:prompt/v13 -->\n}\n')
     write(CHANGELOG_FILE, changelogText([[11, 'x'], [13, 'bump']]))
     git('add', '-A')
     git('commit', '-q', '-m', 'feat: bump 模板 v12→v13（带登记）')
@@ -129,6 +129,50 @@ test('#220 登记门（临时仓库）：bump 不补条目变红 → 补上条�
     const tail = cli(['check', '--since', execFileSync('git', ['rev-parse', 'HEAD~1'], { cwd: dir, encoding: 'utf8' }).trim()], dir)
     assert.equal(tail.code, 0, `合规提交单独看应绿：\n${tail.out}`)
     assert.match(tail.out, /✓ 无违规/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('#237 登记门（临时仓库）：模板面迁移不产生新版本号，且迁移后门仍看得见新路径', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'prompt-bump-move-'))
+  const git = (...args: string[]): void => { execFileSync('git', args, { cwd: dir, stdio: 'ignore' }) }
+  const write = (rel: string, body: string): void => {
+    mkdirSync(join(dir, rel.split('/').slice(0, -1).join('/')), { recursive: true })
+    writeFileSync(join(dir, rel), body, 'utf8')
+  }
+  const OLD = TEMPLATE_FILES[0]!
+  const NEW = TEMPLATE_FILES[TEMPLATE_FILES.length - 1]!
+  const head = (): string => execFileSync('git', ['rev-parse', 'HEAD'], { cwd: dir, encoding: 'utf8' }).trim()
+  try {
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.email', 't@t')
+    git('config', 'user.name', 't')
+    // 起点：模板在**旧路径**（面里的历史路径），登记面已存在
+    write(OLD, 'export class Content {\n  // <!-- learnhub:prompt/v11 -->\n  // <!-- learnhub:prompt/v4 -->\n}\n')
+    write(CHANGELOG_FILE, changelogText([[11, 'x']]))
+    git('add', '-A')
+    git('commit', '-q', '-m', 'chore: 起点（模板在旧路径）')
+    const base = head()
+
+    // 搬迁提交：同一批标记从旧路径移到新路径，登记表**一字不动**
+    // ——这是本门的核心反样本：面若只列新路径，父提交并集会读成空集、两个老版本号被误判
+    // 为「首次出现」而逼人补假增量；父提交没有新路径又必须不崩（refHasPath 的容错）。
+    write(OLD, 'export class Content {\n}\n')
+    write(NEW, 'export const TEMPLATES = {\n  // <!-- learnhub:prompt/v11 -->\n  // <!-- learnhub:prompt/v4 -->\n}\n')
+    git('add', '-A')
+    git('commit', '-q', '-m', 'refactor: 模板迁到 prompts/templates.ts（纯搬迁）')
+    const moved = cli(['check', '--since', base], dir)
+    assert.equal(moved.code, 0, `纯搬迁不得产生新版本号（应绿）：\n${moved.out}`)
+    assert.match(moved.out, /✓ 无违规/)
+
+    // 反向：搬迁后在新路径里 bump 不补登记 → 必须红（收集器得看得见新路径，否则是恒过的门）
+    write(NEW, 'export const TEMPLATES = {\n  // <!-- learnhub:prompt/v12 -->\n  // <!-- learnhub:prompt/v4 -->\n}\n')
+    git('add', '-A')
+    git('commit', '-q', '-m', 'feat: 新路径里 bump v11→v12（无登记）')
+    const red = cli(['check', '--since', head() + '~1'], dir)
+    assert.equal(red.code, 1, `新路径里的 bump 必须被看见：\n${red.out}`)
+    assert.match(red.out, /v12 首次出现在本提交/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

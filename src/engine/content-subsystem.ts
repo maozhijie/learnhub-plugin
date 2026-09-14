@@ -33,6 +33,8 @@ import type { BandPref } from './adaptive.ts'
 import type { ErrorCard } from './error-cards.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { Clock } from './clock.ts'
+import { render } from './prompt-render.ts'
+import { GRADING_OPEN_QUESTION_PROMPT, GRADING_OPEN_QUESTION_REFERENCE, GRADING_REASK_PROMPT, GRADING_REFLECTION_PROMPT } from './prompts/content.ts'
 
 /** Content 域对门面的窄面：领域实例直接 import 类型，跨子系统方法走本面注入。 */
 export interface ContentDeps {
@@ -861,14 +863,14 @@ export class ContentSubsystem {
       const isOpen = q.kind === 'open_question'
       const system = isOpen ? OPEN_QUESTION_GRADING_SYSTEM : REFLECTION_GRADING_SYSTEM
       const prompt = isOpen
-        ? `Lesson question (综合应用):\n${q.q}\n\nLearner's answer:\n${answer}`
-          + (String(q.answer).trim() ? `\n\nReference points (参考要点):\n${String(q.answer)}` : '')
-        : `Exercise prompt:\n${q.q}\n\nLearner's answer:\n${answer}\n\nGrading rubric (评分要点):\n${String(q.answer)}`
+        ? render(GRADING_OPEN_QUESTION_PROMPT, { question: q.q, learnerAnswer: answer })
+          + (String(q.answer).trim() ? render(GRADING_OPEN_QUESTION_REFERENCE, { referencePoints: String(q.answer) }) : '')
+        : render(GRADING_REFLECTION_PROMPT, { question: q.q, learnerAnswer: answer, rubric: String(q.answer) })
       let lastError = ''
       for (let attempt = 1; attempt <= 2; attempt++) {
         const ask = attempt === 1
           ? prompt
-          : `${prompt}\n\n[重判要求] 上一次输出无法解析为判卷结果。这一次只输出一个 JSON 对象（shape 见系统提示），不要任何其他文字、解释或代码围栏。`
+          : render(GRADING_REASK_PROMPT, { prompt })
         const raw = await llmComplete(ask, system)
         try {
           const v = isOpen ? parseOpenGrading(raw) : parseReflectionGrading(raw)

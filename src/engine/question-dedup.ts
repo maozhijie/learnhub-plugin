@@ -8,6 +8,9 @@
  * 纯函数模块（host 出题路径与测试共用）；命中的题丢弃不入库，由调用方报告。
  */
 
+import { render } from './prompt-render.ts'
+import { EXISTING_STEMS_BLOCK } from './prompts/quiz.ts'
+
 /** 近似重复判定阈值：trigram Jaccard 相似度 ≥ 该值判为高度相似。 */
 export const DUPLICATE_SIMILARITY_THRESHOLD = 0.8
 
@@ -70,7 +73,8 @@ export function findDuplicateStem(
   return null
 }
 
-/** 出题提示词的已有题注入清单（≤limit 条）：只题面+题型+难度，不含答案。 */
+/** 出题提示词的已有题注入清单（≤limit 条）：只题面+题型+难度，不含答案。
+ * 散文住 `prompts/quiz.ts`（#237 / ADR-0075）；无已有题时整段缺席（空串，不注入空标题）。 */
 export function existingStemsPromptBlock(
   existing: ReadonlyArray<StemLike & { kind?: string; difficulty?: number }>,
   limit = 15,
@@ -80,5 +84,5 @@ export function existingStemsPromptBlock(
     const meta = [e.kind, e.difficulty !== undefined ? `难度${e.difficulty}` : ''].filter(Boolean).join('｜')
     return `${i + 1}. [${meta}] ${e.q.replace(/\s+/g, ' ').slice(0, 120)}`
   })
-  return `\n\n## 题库已有题目（禁止重复出题）\n\n下面题目已在题库中，与它们重复或高度相似的题一律不要出：\n${lines.join('\n')}`
+  return render(EXISTING_STEMS_BLOCK, { lines: lines.join('\n') })
 }

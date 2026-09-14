@@ -14,6 +14,18 @@ import type { PracticeRec, ErratumRec } from './types.ts'
  */
 import type { Fm } from './types.ts'
 
+/**
+ * 判卷族提示词文本的单源（#237 / ADR-0075）：三条 system 提示词（反思判卷／开放题判卷／
+ * 申诉复核）的**文本**住 `prompts/grading.ts`——散文与代码分家（散文不再与代码共用 `${}`
+ * 语法），本模块只 re-export，取用方（content-subsystem、question-bank、测试）的 import 面
+ * 一字不动。判卷的解析/容错机械仍住本模块（那才是代码）。
+ */
+export {
+  REFLECTION_GRADING_SYSTEM,
+  OPEN_QUESTION_GRADING_SYSTEM,
+  DISPUTE_REVIEW_SYSTEM,
+} from './prompts/grading.ts'
+
 // ---------------------------------------------------------------- 数值工具（#172 单一出处）
 
 /** 两位舍入（原 15 处 `Math.round(x * 100) / 100` 的唯一实现：占比、正确率、S/D 值等展示值）。 */
@@ -195,24 +207,7 @@ function normalizeBool(v: unknown): boolean {
 }
 
 // ---------------------------------------------------------------- AI 反思判卷
-
-/** AI 反思判卷系统提示词（抄 allo REFLECTION_GRADING_SYSTEM，本地化为中文输出）。 */
-export const REFLECTION_GRADING_SYSTEM = `You are a strict but encouraging learning coach grading a learner's answer for a course exercise.
-
-Score the answer from 0.0 to 1.0 (0.6 is passing):
-- Correctness: does the answer align with the concepts this exercise targets?
-- Completeness: does it cover the key points of those concepts?
-
-Reply with ONLY one JSON object matching this shape:
-{
-  "score": 0.75,
-  "feedback": "markdown text"
-}
-Rules:
-- score must be a number between 0.0 and 1.0.
-- feedback must be Markdown with two parts: (1) an evaluation of the answer, (2) concrete improvement suggestions.
-- Write the feedback in the same language as the learner's answer.
-- Output JSON only, without Markdown fences or commentary.`
+// 反思判卷与开放题判卷的系统提示词文本住 `prompts/grading.ts`（顶部 re-export，见头注）。
 
 /** 剥掉判卷回复可能包住的整段 markdown 代码围栏（与出题路径 stripFences 同款）。 */
 function stripGradingFences(body: string): string {
@@ -247,24 +242,7 @@ export function parseReflectionGrading(raw: string): { score: number; feedback: 
   return { score, feedback: doc.feedback }
 }
 
-/** 开放题 AI 判卷系统提示词：0–10 分制，≥6 及格；批改 + 改进建议两段缺一不可。 */
-export const OPEN_QUESTION_GRADING_SYSTEM = `You are a strict but constructive examiner grading a learner's open-ended answer that applies an entire lesson's content.
-
-Score the answer from 0 to 10 (6 is passing):
-- Coverage: does it apply the lesson's core concepts across sections?
-- Correctness: are the applied concepts used accurately?
-- Depth: does it show integrated understanding rather than surface recall?
-
-Reply with ONLY one JSON object matching this shape:
-{
-  "score": 7,
-  "feedback": "markdown text"
-}
-Rules:
-- score must be an integer between 0 and 10.
-- feedback must be Markdown with two mandatory parts: (1) 逐点批改 — go through the learner's answer point by point, marking what is right and what is wrong or missing; (2) 改进建议 — concrete, actionable suggestions to reach full marks.
-- Write the feedback in the same language as the learner's answer.
-- Output JSON only, without Markdown fences or commentary.`
+/** 开放题与申诉复核的系统提示词文本住 `prompts/grading.ts`（顶部 re-export）。 */
 
 /** 从模型回复中提取开放题 {score 0-10, feedback}：容错同 reflection。 */
 export function parseOpenGrading(raw: string): { score: number; feedback: string } {
@@ -331,6 +309,8 @@ export function answerDiff(q: AlloQuestion, response: unknown): string | null {
   }
 }
 
+// 申诉复核系统提示词文本住 `prompts/grading.ts`（顶部 re-export）。
+
 /** 申诉复核三态裁定（瑕疵题勘误）：key_error = 答案键/解析与题面矛盾；defective = 题面
  * 含糊/自相矛盾/超纲；ok = 题与键都对、学习者确实答错。 */
 export type DisputeVerdict = 'key_error' | 'defective' | 'ok'
@@ -342,27 +322,6 @@ export interface DisputeReviewDoc {
   suggested_answer?: unknown
   suggested_explanation?: string
 }
-
-/** 申诉复核系统提示词：两阶段（先独立解题再对账）防锚定，三态裁定输出严格 JSON。 */
-export const DISPUTE_REVIEW_SYSTEM = `You are a meticulous examiner auditing a disputed practice question for a learning system.
-
-The learner's answer was marked wrong and they dispute it. Audit in two phases:
-- Phase 1: solve the question YOURSELF from the stem alone (ignore the stored answer key while solving). Show the full work.
-- Phase 2: compare your independent answer with the stored answer key and explanation, and the learner's submitted answer.
-
-Reply with ONLY one JSON object matching this shape:
-{
-  "verdict": "key_error" | "defective" | "ok",
-  "reasoning": "markdown text",
-  "suggested_answer": "<same shape as the question's answer field, only for key_error>",
-  "suggested_explanation": "markdown or null"
-}
-Verdict rules:
-- "key_error": the stem is self-consistent and within the lesson content, but the stored answer key or explanation contradicts your independent solution. Must provide suggested_answer (same shape as the stored answer: e.g. an array of option letters for multi_choice) and ideally suggested_explanation.
-- "defective": the stem itself is ambiguous, self-contradictory, or tests content the lesson never taught. Suggest voiding and regenerating.
-- "ok": both the stem and the answer key are correct; the learner's submission genuinely does not match.
-- Write reasoning in Chinese, Markdown: the phase 1 solution first, then the phase 2 reconciliation.
-- Output JSON only, without Markdown fences or commentary.`
 
 /** 从模型回复中提取申诉复核结果（容错同判卷：围栏/尾逗号/外层散文）。 */
 export function parseDisputeReview(raw: string): DisputeReviewDoc {

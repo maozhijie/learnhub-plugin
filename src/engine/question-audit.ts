@@ -20,6 +20,8 @@ import { YAML } from './yaml.ts'
 import { evaluateAllo, revealAnswer } from './grading.ts'
 import type { AlloKind, AlloQuestion } from './grading.ts'
 import type { LlmComplete } from './llm.ts'
+import { render } from './prompt-render.ts'
+import { QUIZ_AUDIT_REPAIR_ITEM, QUIZ_AUDIT_REPAIR_PROMPT, QUIZ_SOLVER_PROMPT } from './prompts/quiz.ts'
 
 /** 第二意见独立解题的语料站标签（host STATIONS.quizSolver 引门面同名常量对齐）。 */
 export const QUIZ_SOLVER_STATION = '独立解题'
@@ -105,23 +107,19 @@ export function sampleAuditIndices(count: number, rate: number, difficulties: Ar
   return [...set].sort((a, b) => a - b)
 }
 
-/** 独立解题提示词：只看题面与选项（零答案键零解析），按题型给定 answer 形态。 */
+/** 独立解题提示词：只看题面与选项（零答案键零解析），按题型给定 answer 形态。
+ * 文本住 `prompts/quiz.ts`（#237 / ADR-0075：散文与代码解耦，变量走 `{{}}` 渲染）。 */
 export function solverPromptFor(item: Record<string, unknown>): string {
   const kind = String(item.kind)
   const options = Array.isArray(item.options) ? item.options as unknown[] : []
-  return [
-    '# 独立解题（第二意见抽查）', '',
-    '只看下面的题目，把它当作考生独立解一遍——给出你自己的解答，不要臆测标准答案的写法。', '',
-    '## 题目', '',
-    `题型：${KIND_LABEL[kind] ?? kind}`,
-    `题干：${String(item.q ?? '').trim()}`,
-    ...(options.length
-      ? ['', '选项:', ...options.map((o, i) => `- ${String.fromCharCode(65 + i)}. ${String(o)}`)]
-      : []),
-    '', '## 输出', '',
-    '只输出一个 JSON 对象（不要代码围栏、不要任何解释）：',
-    '{"answer": <你的答案>, "steps": "<关键步骤一两句>"}',
-  ].join('\n')
+  const optionLines = options.length
+    ? `\n\n选项:\n${options.map((o, i) => `- ${String.fromCharCode(65 + i)}. ${String(o)}`).join('\n')}`
+    : ''
+  return render(QUIZ_SOLVER_PROMPT, {
+    kindLabel: KIND_LABEL[kind] ?? kind,
+    stem: String(item.q ?? '').trim(),
+    options: optionLines,
+  })
 }
 
 /** 容忍解析解题应答（剥围栏 → 取 {...} → 去尾逗号；不可解析抛错由调用方保守放行）。 */
@@ -227,23 +225,17 @@ export async function runSecondOpinion(
   if (!inconsistent.length) return { items: out, report, rejected }
 
   // 修复轮（gateRepairRound 形态：恰一次；修复调用走题目生成站 repair 形态——站名由
-  // 注入缝闭包钉住，这里只声明 kind/档位）。
+  // 注入缝闭包钉住，这里只声明 kind/档位）。清单与散文的形态见 prompts/quiz.ts。
   if (opts?.isCancelled?.()) throw new Error('生成已取消，结果已丢弃。')
-  const repairPrompt = [
-    '# 出题修复（第二意见抽查发现答案键不一致）', '',
-    '下列题目经「只看题面独立解题」抽查，独立解与答案键不一致。请逐题重新审视：先独立解题，再核对答案键、解析与题面三者——键错就改键（与解析一致），解析与键矛盾就改解析，题面含糊就改题面让它锁定唯一答案。只修列出的题，不要新出题、不要改动其它字段语义。', '',
-    '## 待修题目', '',
-    ...inconsistent.flatMap(({ item, reply }, n) => [
-      `### 题 ${n + 1}`, '',
-      `- 独立解题的答案：${JSON.stringify(reply.answer)}${typeof reply.steps === 'string' ? `（关键步骤：${reply.steps}）` : ''}`,
-      `- 存储的答案键：${revealAnswer({ kind: String(item.kind) as AlloKind, answer: item.answer as AlloQuestion['answer'], ...(Array.isArray(item.options) ? { options: item.options.map(String) } : {}) })}`,
-      '', '题目 YAML：', '', YAML.stringify(item),
-    ]),
-    '', '## 输出', '',
-    '只输出一个 YAML 文档（不要代码围栏、不要任何解释），结构如下：',
-    'questions:',
-    '  - <修正后的完整题目（字段与原题同构，按原题顺序，一道不多不少）>',
-  ].join('\n')
+  const repairPrompt = render(QUIZ_AUDIT_REPAIR_PROMPT, {
+    items: inconsistent.map(({ item, reply }, n) => render(QUIZ_AUDIT_REPAIR_ITEM, {
+      index: n + 1,
+      solverAnswer: JSON.stringify(reply.answer),
+      solverSteps: typeof reply.steps === 'string' ? `（关键步骤：${reply.steps}）` : '',
+      storedAnswer: revealAnswer({ kind: String(item.kind) as AlloKind, answer: item.answer as AlloQuestion['answer'], ...(Array.isArray(item.options) ? { options: item.options.map(String) } : {}) }),
+      yaml: YAML.stringify(item),
+    })).join('\n'),
+  })
   let repairedItems: Array<Record<string, unknown>> | null = null
   try {
     const raw = await llm(repairPrompt, undefined, { effort: 'deep', kind: 'repair' })

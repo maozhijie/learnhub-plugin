@@ -22,6 +22,11 @@ export const SRC_DIR = 'src'
 export const SIZE_WHITELIST = [
   { prefix: 'src/engine/views/', reason: 'views 叶子类型面（ADR-0043 归档形态）' },
   { exact: 'src/engine/types.ts', reason: '共享类型与枚举大表' },
+  // #237 / ADR-0075：提示词文本面——与 types.ts 同款「大表，行数不是病灶信号」。不豁免的话
+  // 每次手编提示词增删一行都要在同一提交里下调基线，而人编提示词是高频动作。该面的版本与
+  // 内容由 PROMPT_CHANGELOG 登记门对账，不由行数棘轮对账。**只豁免文本**：渲染器是要被量的
+  // 代码，住在 src/engine/prompt-render.ts（不在本前缀下）。
+  { prefix: 'src/engine/prompts/', reason: '提示词文本面（#237 / ADR-0075：文本大表，行数不是病灶信号）' },
 ]
 
 /** 行数口径＝`wc -l`。 */
