@@ -580,15 +580,19 @@ export class GrowthSubsystem {
 
   /** 裁决产物解析（纯函数语义：零写盘、失败零副作用）：剥围栏 → edit 提案 schema 门
    * （复用 validateEditProposal——生长批与 agent 手写提案同门）→ 生长批必须有 note 区
-   * （算子标签+理由；分歧声明可选）。 */
-  private parseGrowthVerdict(raw: string): { spec: EditProposalSpec; yaml: string; note: GrowthNote } {
+   * （算子标签+理由；分歧声明可选）。schema 错误作数据返回（不 throw）——调用方决定
+   * 消费方式：首轮走 gate 修复流、修复轮仍败才 throw（两轮死因）。 */
+  private parseGrowthVerdict(raw: string): { spec: EditProposalSpec; yaml: string; note: GrowthNote; _schemaErrors?: string[] } {
     const yaml = stripWrappingFence(raw)
     const v = validateEditProposal(YAML.parseModel(yaml))
+    // 占位 note（有 _schemaErrors 在场时消费方不读 note）——保持类型恒定，错误作数据流
+    const placeholder: GrowthNote = { operator: '前进', reason: '' }
     if (v.errors || !v.spec) {
-      throw new Error(`[coach-growth] 教练回合裁决未过 schema 门（零写盘）。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
+      const errors = (v.errors ?? ['YAML 解析失败（结构不合法）']).map(e => `  ✗ ${e}`)
+      return { spec: { course: '', reason: '', ops: [] }, yaml, note: placeholder, _schemaErrors: errors }
     }
     if (!v.spec.note) {
-      throw new Error('[coach-growth] 教练回合裁决缺 note 区——生长批必须携带算子标签与理由（note.operator/note.reason）。')
+      return { spec: v.spec, yaml, note: placeholder, _schemaErrors: ['[coach-growth] 教练回合裁决缺 note 区——生长批必须携带算子标签与理由（note.operator/note.reason）。'] }
     }
     return { spec: v.spec, yaml, note: v.spec.note }
   }
@@ -625,7 +629,7 @@ export class GrowthSubsystem {
     segments: CoachGrowthSegment[]
     trajectory: string[]
     proposal: { id: number; ops: number; operator: string; reason: string; disagreement: boolean } | null
-    applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[]; ready_unbuilt: string[] } | null
+    applied: { ops: number; snapshot: number; compass_rewritten: boolean; created: string[] } | null
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
@@ -648,7 +652,7 @@ export class GrowthSubsystem {
         throw new Error(`[coach-growth] 「${c.name}」生长批任务已取消——回合中止（已产裁决丢弃）。`)
       }
     }
-    type GrowthVerdict = { spec: EditProposalSpec; yaml: string; note: GrowthNote }
+    type GrowthVerdict = { spec: EditProposalSpec; yaml: string; note: GrowthNote; _schemaErrors?: string[] }
     const TIER_LABEL = { light: '轻量段', full: '全量段', arbitration: '仲裁段' } as const
     /** 单段裁决产出：经工具回路（deep/fast 档沿段声明），段内工具轨迹带段前缀累积。 */
     const runVerdictLoop = async (
@@ -663,7 +667,9 @@ export class GrowthSubsystem {
       })
       trajectory.push(...r.trajectory.map(t => `[${TIER_LABEL[tier]}] ${t}`))
       const verdict = this.parseGrowthVerdict(r.text)
-      segments.push({ tier, effort, operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
+      if (!verdict._schemaErrors) {
+        segments.push({ tier, effort, operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
+      }
       return verdict
     }
     /** 教练回合材料块拼装（#218 契约后置）：上下文包 + 图面 + 段特有块（注入/沙盘参照/
@@ -723,16 +729,20 @@ export class GrowthSubsystem {
       )
       const raw = await agent.repair('教练生长', prompt, { effort: 'deep' })
       const verdict = this.parseGrowthVerdict(raw)
+      // 修复轮仍过不了 schema 门 = 两轮死因（throw 被 gateRepairRound 捕获为 repair death）
+      if (verdict._schemaErrors) {
+        throw new Error(`[coach-growth] 回灌重裁段裁决仍未过 schema 门（零写盘）。\n${verdict._schemaErrors.join('\n')}`)
+      }
       segments.push({ tier: 'repair', effort: 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
       return verdict
     }
 
     // 回灌止血（#157 的轮形态随缝收口为共享能力，#162）：受理门拒收 = 教练一次产出
-    // 畸形（引用不存在的区、概念未铸名、pre 引用不存在的节点…），门错误回灌教练重裁
-    // 恰一次（缝的 gateRepairRound；修复轮任何失败带两轮死因抛出）。propose 是受理式
-    // 门：过门即落 pending 提案，产物经 GateVerdict.result 随行交还。只包 propose 侧的
-    // 门（结构/概念对表/锚保护/巩固门/生长闸门/路线门）；schema 门在 parseGrowthVerdict
-    // 已先行（模板钉死产物形状，畸形率低）。
+    // 畸形（引用不存在的区、概念未铸名、pre 引用不存在的节点、schema 不合法…），门错误
+    // 回灌教练重裁恰一次（缝的 gateRepairRound；修复轮任何失败带两轮死因抛出）。propose
+    // 是受理式门：过门即落 pending 提案，产物经 GateVerdict.result 随行交还。schema 门
+    // 与 propose 侧门（结构/概念对表/锚保护/巩固门/生长闸门/路线门）统一走 gate()——
+    // schema 错误作数据流过 first()、在 gate() 里拦截触发修复流。
     // apply 失败是竞态非畸形，沿用下方「自清后原样抛错」不重裁。
     const fmt = (e: unknown): string => e instanceof Error ? e.message : String(e)
     const round = await agent.gateRepairRound<GrowthVerdict, GraphEditProposalResult>('教练生长', {
@@ -747,6 +757,10 @@ export class GrowthSubsystem {
       },
       gate: async (verdict): Promise<GateVerdict<GraphEditProposalResult>> => {
         assertAlive()
+        // schema 门：parseGrowthVerdict 返回的 errors 作数据（不 throw），在此拦截触发修复流
+        if (verdict._schemaErrors) {
+          return { errors: [`[coach-growth] 教练回合裁决未过 schema 门（零写盘）。\n${verdict._schemaErrors.join('\n')}`] }
+        }
         try {
           const prop = await this.e.graphPropose('edit', verdict.yaml) as GraphEditProposalResult
           return { errors: [], result: prop }
@@ -770,15 +784,9 @@ export class GrowthSubsystem {
         .catch(() => undefined)
       throw err
     }
-    // 内容链补给（宿主消费）：本批新建节点中「前置已达成且正文未生成」者即就绪缺口——
-    // 宿主据此入队正文生成（生长-内容交替，FIFO 不插队）。
+    // 本批新建节点名（读数用）。正文生成**不由本批触发**（ADR-0078）：生长只落结构，
+    // 就绪缺口不再自动入队正文——故这里也不再算 ready_unbuilt（省一次 loadView）。
     const created = final.spec.ops.filter(o => o.op === 'add_node').map(o => o.name!)
-    let readyUnbuilt: string[] = []
-    if (created.length) {
-      const after = await this.e.loadView(c)
-      const frontierAfter = new Set(this.coachFrontier(after.graph, after.state))
-      readyUnbuilt = created.filter(n => frontierAfter.has(n) && !hasReadyContent(after.state[n]))
-    }
     return {
       course: c.name,
       state: 'applied',
@@ -795,7 +803,6 @@ export class GrowthSubsystem {
         snapshot: applied.snapshot,
         compass_rewritten: applied.compass_rewritten === true,
         created,
-        ready_unbuilt: readyUnbuilt,
       },
     }
   }

@@ -571,6 +571,70 @@ const BAD_REGION_OPS = [
   '  teaches: {变化率: 会用}',
 ]
 
+// 非插入批携带 recheck 的畸形裁决（实机死法 bad-2026-09-14T09-25-39-609Z-0021：过 YAML
+// 解析但被 schema 门跨字段规则拒收——note.recheck 只随插入批携带）。手工拼接保证
+// operator=前进 而 recheck 仍在场（goldVerdict 只在插入时写入 recheck 块）。
+const ADVANCE_WITH_RECHECK = [
+  'course: 数学',
+  'note:',
+  '  operator: 前进',
+  '  reason: 前沿缺下一台阶，沿终点推进',
+  '  target_endpoints: [用导数解决优化问题]',
+  '  recheck:',
+  '    metric: 前进恢复',
+  '    days: 10',
+  'route: |',
+  '  - **把变化率说成本质**：从日常速度出发建立「变化多快」的直觉。',
+  '  - **合成优化视角**：把导数接到极值判断，通向终点。',
+  'ops: []',
+].join('\n') + '\n'
+
+test('schema 门畸形（非插入批携带 recheck）也走回灌重裁：不再直接炸整轮（bad-2026-09-14-0021）', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    // 首轮裁决畸形（前进批携带 note.recheck——schema 门跨字段规则拒收的实机死法）：
+    // 旧实现 parseGrowthVerdict 直接 throw、绕过 gateRepairRound，修复轮永不触发；
+    // 修复后 schema 错误作数据流过 gate() → 回灌重裁恰一次 → 合法产出照常受理。
+    const fake = scriptFake([ADVANCE_WITH_RECHECK], [goldVerdict()])
+    const r = await engine.growth2.coachGrowthBatch('数学', fake)
+
+    // 调用数基线：轻量段 1 次 + 回灌重裁段恰 1 次（deep 档）
+    assert.equal(fake.calls.length, 2, 'schema 门畸形也恰回灌重裁一次')
+    assert.equal(fake.calls[1]!.effort, 'deep', '回灌重裁段恒 deep 档')
+    // schema 门错误回灌进重裁段 prompt（教练拿得到死因）
+    assert.match(fake.calls[1]!.prompt, /未过 schema 门/)
+    assert.match(fake.calls[1]!.prompt, /复诊预注册只随插入批携带/, 'schema 门拒收原因回灌')
+    assert.match(fake.calls[1]!.prompt, /operator: 前进/, '被拒裁决原文随包回灌')
+    // 重裁产出走完整受理链。segments 只登记有效裁决段：schema 畸形的轻量段零登记
+    //（无效裁决没有可登记的算子），重裁段是唯一有效段。
+    assert.equal(r.state, 'applied')
+    assert.deepEqual(r.segments.map(s => s.tier), ['repair'])
+    assert.equal(r.proposal!.operator, '前进')
+  })
+})
+
+test('schema 门畸形仍败：重裁产出仍未过 schema 门 → 原样失败且错误带两轮死因，零提案落盘', async () => {
+  await withVault(SEED_VAULT, async ({ engine }) => {
+    await seedApplied(engine)
+    // 首轮与重裁轮都产出同一畸形（前进批携带 recheck）：schema 门两轮死因
+    const fake = scriptFake([ADVANCE_WITH_RECHECK], [ADVANCE_WITH_RECHECK])
+    await assert.rejects(
+      engine.growth2.coachGrowthBatch('数学', fake),
+      (err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        assert.match(msg, /回灌重裁一轮仍未通过/, '失败显式声明死因形态')
+        assert.match(msg, /【首轮】/, '带首轮 schema 拒收原因')
+        assert.match(msg, /【重裁】/, '带重裁死因')
+        assert.match(msg, /仍未过 schema 门/, '重裁死因是 schema 门')
+        assert.match(msg, /复诊预注册只随插入批携带/)
+        return true
+      },
+    )
+    assert.equal(fake.calls.length, 2, '恰两轮调用，不无限重试')
+    assert.equal((await engine.graph.graphProposals('pending', 'edit')).length, 0, '零提案落盘')
+  })
+})
+
 test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错误回灌重裁段 → 合法产出进受理门', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
     await seedApplied(engine)
