@@ -25,7 +25,7 @@ import type { BrokenNote } from './notes.ts'
 import type { Fm, CourseEntry, ProposalRec } from './types.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { CoachCheck } from './coach-round.ts'
-import type { CompassEta, RouteReconcile } from './compass.ts'
+import type { CompassEta, CompassEtaRow, RouteReconcile } from './compass.ts'
 import type { GraphApplyResult } from './views/graph.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
 import type { EditProposalSpec, GrowthNote } from './proposals.ts'
@@ -79,7 +79,7 @@ import { addNodeCountOf, validateEditProposal } from './proposals.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from './sandbox.ts'
 import { appendSedimentEvent } from './sediment.ts'
 import { runWriteUnit } from './write-unit.ts'
-import { COMPLETION_MASTERY_THRESHOLD, endpointNames, readAnchors } from './seed.ts'
+import { COMPLETION_MASTERY_THRESHOLD, endpointNames, foldCompletion, junctionServes, readAnchors } from './seed.ts'
 import { readySet } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
 import type { ConceptTier } from './types.ts'
@@ -249,7 +249,7 @@ export class GrowthSubsystem {
   private etaMemo = new Map<string, { week: string; eta: CompassEta }>()
 
   /** 罗盘每周挂载沙盘 ETA（挂周复盘——kataOpen 触发；标记周幂等，force 可重算）：
-   * 逐启用课程——未播种跳过、罗盘缺席先落脚手架、当前周已挂 current、否则探测带
+   * 逐启用课程——零终点跳过、罗盘缺席先落脚手架、当前周已挂 current、否则探测带
    * 折叠后重写「沙盘 ETA」段（措辞锁死「模型推演，非承诺」）。透明度装置：单课失败
    * 不挡其他课，更不挡周复盘。折叠每课都算（周频成本，同周进程内走备忘）：结果随行
    * 携带 eta——周复盘现状区的 ETA 旁挂（#150）取同一份数据，不二次蒙特卡洛。
@@ -303,39 +303,38 @@ export class GrowthSubsystem {
 
   /** 沙盘 ETA 折叠（罗盘 weekly；读侧即算即用，落盘的只有渲染段）：按每日 XP 目标
    * 分钟数取探测地平线逐档跑沙盘，读终点掌握度的 p50/p80 分位带；两口径首次越阈的
-   * 档 = 「还要多久」的诚实参照（阈值与完成判据同一常量）。
-   * #239 多终点化：调用方保证 ≥1 终点；逐终点分节读数随罗盘改版（#243）落地，
-   * 这里取首个终点（不再有无锚分支）。 */
+   * 档 = 「还要多久」的诚实参照（阈值与完成判据同一常量）。逐终点独立探测（ADR-0076
+   * 罗盘多终点分节：越阈即提前停，各终点互不影响），调用方保证 ≥1 终点。 */
   private async compassEtaFold(
     c: CourseEntry, anchors: Array<{ endpoint: string }>, today: string, weekStart: string,
   ): Promise<CompassEta> {
-    const anchor = anchors[0]!
     const minutesPerDay = await readDailyGoal(this.e.paths, this.e.fs)
     const { cards, nodes, scheds } = await this.e.sandboxPopulation([c], null)
-    const endpointKey = `${c.name}/${anchor.endpoint}`
-    const probes: CompassEtaProbe[] = []
-    let p50Week: CompassEta['p50_week'] = null
-    let p80Week: CompassEta['p80_week'] = null
-    for (const weeks of COMPASS_ETA_PROBE_WEEKS) {
-      const plan: SandboxPlan = { minutesPerDay, weeks }
-      const { map } = this.e.mcAggregate(plan, cards, nodes, today, scheds, c.name)
-      const hit = map.find(m => m.node === endpointKey)
-      const p50 = hit?.p50 ?? 0
-      const p80 = hit?.p80 ?? 0
-      probes.push({ weeks, p50, p80 })
-      const from = probes.length > 1 ? COMPASS_ETA_PROBE_WEEKS[probes.length - 2]! : null
-      if (!p50Week && p50 >= COMPLETION_MASTERY_THRESHOLD) p50Week = { at: weeks, from }
-      if (!p80Week && p80 >= COMPLETION_MASTERY_THRESHOLD) p80Week = { at: weeks, from }
-      if (p50Week && p80Week) break
+    const rows: CompassEtaRow[] = []
+    for (const anchor of anchors) {
+      const endpointKey = `${c.name}/${anchor.endpoint}`
+      const probes: CompassEtaProbe[] = []
+      let p50Week: CompassEtaRow['p50_week'] = null
+      let p80Week: CompassEtaRow['p80_week'] = null
+      for (const weeks of COMPASS_ETA_PROBE_WEEKS) {
+        const plan: SandboxPlan = { minutesPerDay, weeks }
+        const { map } = this.e.mcAggregate(plan, cards, nodes, today, scheds, c.name)
+        const hit = map.find(m => m.node === endpointKey)
+        const p50 = hit?.p50 ?? 0
+        const p80 = hit?.p80 ?? 0
+        probes.push({ weeks, p50, p80 })
+        const from = probes.length > 1 ? COMPASS_ETA_PROBE_WEEKS[probes.length - 2]! : null
+        if (!p50Week && p50 >= COMPLETION_MASTERY_THRESHOLD) p50Week = { at: weeks, from }
+        if (!p80Week && p80 >= COMPLETION_MASTERY_THRESHOLD) p80Week = { at: weeks, from }
+        if (p50Week && p80Week) break
+      }
+      rows.push({ endpoint: anchor.endpoint, probes, p50_week: p50Week, p80_week: p80Week })
     }
     return {
       week_start: weekStart,
       minutes_per_day: minutesPerDay,
-      endpoint: anchor.endpoint,
       threshold: COMPLETION_MASTERY_THRESHOLD,
-      probes,
-      p50_week: p50Week,
-      p80_week: p80Week,
+      rows,
       wording: SANDBOX_WORDING,
     }
   }
@@ -349,22 +348,28 @@ export class GrowthSubsystem {
   /** 单课程就绪深度检查（coachCheckpoint 与 statusJson 共用核）：零终点 = 不判冷启动
    * （合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。
    * 就绪存量与前瞻需求都不计终点（词条「前瞻深度」：终点是锚点不是课程节点；#239
-   * 多终点化：逐个终点剔除）——课程尾段前沿只剩终点时判据永不可满足会让教练永不停摆；
-   * 除终点外前沿清空 = exhausted，判据自然通过、零告警。冷启动周从**最早**的终点声明日
-   * 起算（课程成为课程的那一刻；后加的终点不重开冷启动）。 */
+   * 多终点化：逐个终点剔除）——课程尾段前沿只剩终点时判据永不可满足会让教练永不停摆。
+   * 冷启动周从**最早**的终点声明日起算。
+   * 停摆判据（ADR-0076）= 就绪存量达标（前沿除终点外已清空）或 所有终点已达成
+   * （逐终点「已铺通 + 最后台阶全掌握」，foldCompletion 同一口径）；**零节点图**（刚建
+   * 的空课）同判停摆——不入任何自动触发点（第一次生长由学习者显式下发/加终点）。 */
   async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
     const { graph, state } = await this.e.loadView(c)
     const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
     const endpoints = endpointNames(anchors)
     const live = this.coachFrontier(graph, state).filter(n => !endpoints.has(n))
     const declared = anchors.map(a => a.declared).sort()[0] ?? null
+    // 停摆判据（ADR-0076）：存量达标（就绪前沿除终点外清空）或 所有终点已达成；
+    // 零节点图同判停摆（零节点闸）。零终点但有节点的课程不判停摆——没方向就要先加终点。
+    const folds = anchors.length ? foldCompletion(graph, state, anchors) : []
+    const allReached = anchors.length > 0 && folds.every(f => f.status === 'reached')
     return {
       course: c.name,
       ...readyDepthCheck({
         ready: live.filter(n => hasReadyContent(state[n])).length,
         declared,
         today,
-        exhausted: anchors.length > 0 && live.length === 0,
+        exhausted: graph.names.length === 0 || allReached || (anchors.length > 0 && live.length === 0),
       }),
     }
   }
@@ -419,36 +424,64 @@ export class GrowthSubsystem {
     const lightweight = opts.lightweight === true
     const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
     const active = [...this.coachFrontier(graph, state), ...graph.names.filter(n => effectiveStage(state, n) === 'learning')]
+    // 逐终点状态（ADR-0076：未接线/已铺通/已达成 + 闭包进度）与交汇读侧派生
+    const folds = anchors.length ? foldCompletion(graph, state, anchors) : []
+    const foldOf = new Map(folds.map(f => [f.endpoint, f]))
+    const serves = junctionServes(graph, anchors)
 
     const out: string[] = [
       `# 教练回合上下文包：${c.name}（${opts.packLabel ?? (lightweight ? '轻量段——只带行为摘要与罗盘' : '全量六区块')}）`,
     ]
-    // 终点恒标（#200 / ADR-0055 裁决 3；#239 多终点化：逐终点一行）：轻量段不注入
-    // 终点锚区块，但每行终点名的 token 代价换裁决不盲——轻量/全量都在包头带终点行；
-    // 终点标记的完整语义随图面进每段。
+    // 终点恒标（#200 / ADR-0055 裁决 3；#239 多终点化：逐终点一行；#240 逐终点状态）：
+    // 轻量段不注入终点锚区块，但每行终点名的 token 代价换裁决不盲——轻量/全量都在
+    // 包头带终点行（状态三档内联）；终点标记的完整语义随图面进每段。
+    const statusLabel = (f: (typeof folds)[number] | undefined): string =>
+      f === undefined ? '悬空锚（终点不在图内）'
+        : f.status === 'unwired' ? '未接线'
+        : f.status === 'reached' ? '已达成'
+        : '已铺通（未达成）'
     out.push('', ...(anchors.length
-      ? anchors.map(a => `- ⚑ 终点：${a.endpoint}（方向标记——朝该方向的生长须汇入它；零正文零题库不被调度）${a.goal_note ? `｜目标描述：${a.goal_note}` : ''}`)
+      ? anchors.map(a => {
+          const f = foldOf.get(a.endpoint)
+          return `- ⚑ 终点：${a.endpoint}（方向标记——朝该方向的生长须汇入它；零正文零题库不被调度）`
+            + `${a.goal_note ? `｜目标描述：${a.goal_note}` : ''}｜状态：${statusLabel(f)}`
+            + (f ? `｜闭包已学 ${f.closure.learned}/${f.closure.total}` : '')
+        })
       : ['- （零终点——空锚是合法空态，先加一个终点：教练回合无从裁决方向）']))
     const block = (title: string, body: string): void => {
       out.push('', `## ${title}`, '', body)
     }
 
     if (!lightweight) {
-      // ① 终点锚集合（教练回合的方向视野——逐终点一条）
+      // ① 终点锚集合（教练回合的方向视野——逐终点一条：状态三档 + 闭包进度 + 交汇）
       if (anchors.length) {
         const lines: string[] = []
         for (const anchor of anchors) {
+          const f = foldOf.get(anchor.endpoint)
           lines.push(
             `- 终点节点：${anchor.endpoint}（方向标记，不可 del/rename；接线 = 该主线批 set_pre 到它）`,
             `  - 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
             `  - 声明日期：${anchor.declared}`,
-            `  - 收尾宣告：${anchor.sealed ? `已铺通（${anchor.sealed}）` : '未铺通'}`,
+            `  - 状态：${f === undefined ? '悬空锚（终点不在图内）'
+              : f.status === 'reached' ? '已达成（已铺通且最后台阶全掌握）'
+              : f.status === 'sealed' ? '已铺通（未达成）'
+              : f.criteria.last_steps.length > 0 ? '未铺通（pre 非空、未收尾宣告）'
+              : '未接线（pre 空）——朝它长就要接线'}`,
           )
+          if (f) {
+            lines.push(`  - 闭包学习进度：已学 ${f.closure.learned} / 共 ${f.closure.total}`)
+            const lastSteps = f.criteria.last_steps.map(s => {
+              const other = serves.get(s.node)?.filter(e => e !== anchor.endpoint) ?? []
+              return other.length ? `${s.node}（同时服务：${other.join('、')}——交汇）` : s.node
+            })
+            lines.push(`  - 最后台阶：${lastSteps.length ? lastSteps.join('、') : '（pre 空——未接线）'}`)
+          }
           if (anchor.goal_note) lines.push(`  - 目标描述：${anchor.goal_note}`)
           if (anchor.worksheet.length) {
             lines.push(`  - 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`)
           }
         }
+        lines.push('- 裁决纪律：优先选能同时推进多个未达成终点的台阶（交汇优先）')
         block('终点锚', lines.join('\n'))
       } else {
         block('终点锚', '（零终点——空锚是合法空态，但教练回合无从裁决方向；先加一个终点。）')
@@ -493,7 +526,7 @@ export class GrowthSubsystem {
 
     // ⑤ 罗盘尾段（罗盘+沉淀折叠；轻量包只带罗盘半区）
     const tail = await this.compassTail(c.name)
-    const parts = ['### 罗盘', '', tail || '（罗盘缺席或尚无已画路线——合法空态：未播种/未初画时教练无从读路线。）']
+    const parts = ['### 罗盘', '', tail || '（罗盘缺席或尚无已画路线——合法空态：可运行 learnhub_compass_paint 初画；锚在终点上，零终点先加一个终点。）']
     if (!lightweight) {
       parts.push('', '### 沉淀折叠', '', renderSedimentForCoach(await this.e.sedimentFold()))
     }

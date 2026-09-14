@@ -260,6 +260,7 @@ tr.gen-job-focused > td { animation: gen-job-flash 3s ease-out forwards; }
 .lh-hidden-soft { opacity: 0; pointer-events: none }
 .lh-items-baseline { align-items: baseline }
 .lh-items-end { align-items: flex-end }
+.lh-items-start { align-items: flex-start }
 .lh-justify-start { justify-content: flex-start }
 .lh-m-0 { margin: 0 }
 .lh-m-0-auto { margin: 0 auto }
@@ -345,6 +346,7 @@ tr.gen-job-focused > td { animation: gen-job-flash 3s ease-out forwards; }
 .lh-w-200 { width: 200px }
 .lh-w-220 { width: 220px }
 .lh-w-240 { width: 240px }
+.lh-w-260 { width: 260px }
 .lh-w-28 { width: 28px }
 .lh-w-360 { width: 360px }
 .lh-w-44 { width: 44px }

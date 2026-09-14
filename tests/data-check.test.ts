@@ -285,3 +285,54 @@ test('Data Check evidence_streams area：多流同时坏不炸、逐流出 findi
     assert.equal(report.status, 'broken')
   })
 })
+
+test('删终点体检无 Broken（#240/ADR-0076）：锚与节点一并移除、收尾宣告随锚走，体检零 endpoint_anchor finding', async () => {
+  const ENDPOINT_GRAPH = [
+    'region: 基础',
+    'color: blue',
+    'blocks:',
+    '  - name: 入门块',
+    '    nodes:',
+    '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+    '      - { name: 中间台阶, pre: [入门], opt: false, note: "", est: 20 }',
+    '      - { name: 终点, pre: [入门], opt: false, note: "" }',
+  ].join('\n')
+  const ANCHORS = JSON.stringify({ version: 2, anchors: [{
+    endpoint: '终点', goal_type: 'capability', declared: '2026-09-01',
+    origin_proposal: 1, seed_nodes: ['入门', '终点'], start_basis: { 入门: 'baseline' },
+  }] }, null, 1) + '\n'
+  await withVault({
+    graph: ENDPOINT_GRAPH,
+    files: [{ path: '学习中心/math/state/终点锚.json', content: ANCHORS }],
+    notes: { 入门: {}, 中间台阶: {}, 终点: {} },
+  }, async ({ engine }) => {
+    // 手加第二个终点（零 pre 节点 + 锚追加），收尾接线批接线（apply 写 sealed）
+    await engine.graph.addEndpoint('数学', '手工终点', '一句目标描述')
+    const closing = await engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 停摆前把手工终点接上最后台阶
+ops:
+  - op: set_pre
+    node: 手工终点
+    pre: [中间台阶]
+`) as { id: number }
+    await engine.graph.graphApply('edit', closing.id)
+    const before = JSON.parse(await readFile(engine.paths.anchorPath('math'), 'utf8')) as {
+      anchors: Array<Record<string, unknown>>
+    }
+    assert.equal(before.anchors.length, 2, '手加锚已追加')
+    assert.ok(before.anchors.some(a => a.endpoint === '手工终点' && typeof a.sealed === 'string'), '收尾宣告落在手工终点的锚上')
+
+    const removed = await engine.graph.removeEndpoint('数学', '手工终点')
+    assert.deepEqual(removed.unhooked, [], '合法写通道从不把终点写进别人的 pre——摘除无勾连（禁长过目标的读侧证据）')
+
+    const report = await engine.dataCheck()
+    const anchorFindings = report.findings.filter(f => f.area === 'endpoint_anchor')
+    assert.deepEqual(anchorFindings, [], '删终点后体检零 endpoint_anchor finding：锚不悬空、sealed 随锚走、余锚形状合法')
+    const after = JSON.parse(await readFile(engine.paths.anchorPath('math'), 'utf8')) as {
+      anchors: Array<Record<string, unknown>>
+    }
+    assert.deepEqual(after.anchors.map(a => a.endpoint), ['终点'], '锚册恰剩起草终点')
+  })
+})

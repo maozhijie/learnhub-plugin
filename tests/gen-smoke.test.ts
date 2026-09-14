@@ -20,9 +20,11 @@ import { runGenerationSmoke } from '../src/host/smoke.ts'
 /** 路由式假 provider：按提示词形态分派应答（正文/题目/大纲/种子各一条规则）。 */
 function routingCtx(outlineYaml: string, calls: string[]): Context {
   const answer = (prompt: string): string => {
-    if (prompt.includes('## 目标描述（学习者原文）')) {
+    if (prompt.includes('## 起草方向')) {
+      // 种子起草（ADR-0076 种子降职）：给已注册课程起草结构——顶层键随 v5 契约
+      // （course/goal_type/endpoint/starts/…，不再有 mode；方向由锚定终点携带）
       return [
-        'course: 冒烟课', 'mode: new', 'reason: 冒烟验证',
+        'course: 冒烟课', 'goal_type: capability', 'reason: 冒烟验证',
         'endpoint:', '  name: 冒烟终点', '  region: 基础', '  block: 终点块',
         'starts:', '  - name: 冒烟起点', '    region: 基础', '    block: 起点块', '    basis: baseline',
       ].join('\n')

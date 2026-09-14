@@ -251,8 +251,8 @@ test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / �
 test('#149 stub 与粗 pre：种子簇节点行使回流 EMA（自身一次）；粗 pre 占位边只记流不回流', async () => {
   await withVault({ registry: null, graph: null }, async ({ engine, paths }) => {
     // 种子图（粗占位边：endpoint.pre = starts）+ 项目挂靠种子簇节点
+    await engine.graph.createCourse('数学')
     const seedYaml = `course: 数学
-mode: new
 goal_type: capability
 endpoint:
   name: 弹唱目标

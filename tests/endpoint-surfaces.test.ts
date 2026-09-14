@@ -125,7 +125,7 @@ test('#200 健康分：前置完备项的空降清单与分母剔终点', async 
   })
 })
 
-test('#200 审计：R1 豁免终点（对照旁支叶子照告）；基线叶子剔终点、最大深度正名主线深度', async () => {
+test('#200 审计：R1 豁免终点（对照旁支叶子照告）；基线叶子剔终点、深度读数正名图深度（ADR-0076 多终点无单一主线）', async () => {
   await withVault({
     graph: ANOMALY_GRAPH,
     files: [{ path: '学习中心/math/state/终点锚.json', content: anchorDoc() }],
@@ -137,7 +137,7 @@ test('#200 审计：R1 豁免终点（对照旁支叶子照告）；基线叶子
     assert.ok(r1.every(w => !w.includes('终点')), 'R1 不再对终点告警')
     assert.ok(r1.some(w => w.includes('旁支叶子')), '普通浅叶子照常告警（对照）')
     assert.equal(result.baseline['叶子（无后继，不含终点）'], 2, '基线叶子剔终点（终点/旁支叶子/生长台阶 − 终点）')
-    assert.equal(result.baseline['主线深度'], 1, '主线深度保留终点（陈旧接线下恒 1，正是异常态读数）')
+    assert.equal(result.baseline['图深度'], 1, '图深度保留终点（原「主线深度」正名——ADR-0076：多终点下没有单一主线可指，口径不变 = 全图最长路径）')
   })
 })
 
@@ -292,5 +292,20 @@ test('#239 零终点（空锚）：读侧一切面不炸，教练回合与罗盘
     // 空锚课程的罗盘读数：零终点（合法空态）
     const compass = await engine.growth2.compassRead('数学')
     assert.deepEqual(compass.anchors, [])
+  })
+})
+
+test('#240 零节点闸：名称建课的空图判停摆（不入自动触发点）——判据自然通过零告警', async () => {
+  await withVault({}, async ({ engine }) => {
+    const created = await engine.graph.createCourse('物理')
+    assert.deepEqual(created, { id: '物理-01', name: '物理', root: '物理', enabled: true }, '建课返回注册表条目')
+    const check = await engine.growth2.coachCheckFor(created, '2026-09-14')
+    assert.equal(check.exhausted, true, '零节点图同判停摆（零节点闸）——刚建课不入任何自动触发点')
+    assert.equal(check.ok, true, '停摆是判据满足的自然结果，不是故障')
+    assert.equal(check.cold_start, false, '零终点不判冷启动')
+    assert.deepEqual(check.warnings, [], '合法空态零告警（ready=0 不告警：exhausted 短路在前）')
+    // 脚手架齐活：空锚是合法空态（零终点、零悬空——体检口径的 Broken 不存在）
+    const book = JSON.parse(await nodeVaultFs.readFile(engine.paths.anchorPath('物理'), 'utf8')) as { anchors: unknown[] }
+    assert.deepEqual(book.anchors, [])
   })
 })

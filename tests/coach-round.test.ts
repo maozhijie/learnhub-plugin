@@ -356,7 +356,6 @@ import { withVault, localDay } from './helpers/vault.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 
 const CAPABILITY_SEED = `course: 数学
-mode: new
 reason: 常识基线起步的能力锚定课程
 endpoint:
   name: 用导数解决优化问题
@@ -370,6 +369,7 @@ starts:
 `
 
 async function seedApplied(engine: LearnhubEngine): Promise<void> {
+  await engine.graph.createCourse('数学')
   const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
   await engine.graph.graphApply('seed', r.id)
 }

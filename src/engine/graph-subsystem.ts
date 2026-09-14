@@ -63,10 +63,10 @@ import { hasReadyContent, loadNote } from './notes.ts'
 import { decompileTerms } from './project-decompile.ts'
 import type { EnrichFieldEntry } from './proposals.ts'
 import type { SeedDraftRequest, SeedProposalSpec } from './seed.ts'
-import { endpointNames, isSeedGraph, readAnchors, seedRepairPrompt, validateSeedProposal } from './seed.ts'
+import { endpointNames, isSeedGraph, junctionServes, readAnchors, seedRepairPrompt, validateSeedProposal } from './seed.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
-import type { GNode, ProposalRec, VaultPriorAudit } from './types.ts'
+import type { CourseEntry, GNode, ProposalRec, VaultPriorAudit } from './types.ts'
 import { PROPOSAL_KINDS } from './types.ts'
 import type { VaultLinkCandidateView, VaultLinksDoc } from './vault-links.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLinks, scoreTier } from './vault-links.ts'
@@ -99,8 +99,21 @@ export class GraphSubsystem {
     // 节点载荷标 isEndpoint、leaves/空降建议/健康分口径剔终点，UI 图面据此渲染终点
     // 样式并关终点生成入口
     const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase, endpoints)
+    // 交汇节点读侧派生（ADR-0076）：落在 ≥2 个终点前置闭包内的节点标 serves（仅交汇
+    // 节点携带）；逐终点最后台阶随行（UI 终点列表反向展示）
+    const serves = junctionServes(graph, anchors)
+    for (const n of doc.nodes) {
+      const s = serves.get(n.data.id)
+      if (s) n.data.serves = s
+    }
     if (elementsOnly) return { nodes: doc.nodes, edges: doc.edges }
-    return { ...doc, endpoints: [...endpoints] }
+    return {
+      ...doc,
+      endpoints: [...endpoints],
+      endpoint_steps: anchors
+        .filter(a => graph.nset.has(a.endpoint))
+        .map(a => ({ endpoint: a.endpoint, last_steps: graph.preOf[a.endpoint] })),
+    }
   }
 
   /** 读链接先验缓存（Missing = null 合法空态；坏档 fail loud——它是引擎 state 契约文件）。 */
@@ -407,7 +420,7 @@ export class GraphSubsystem {
       throw new Error(`[apply] 非法 kind: ${String(kind)}（图谱域只受理 edit/seed/enrich）`)
     }
     // audit 门禁：目标课程存在 ERROR 时拒绝 apply；warns 摘要 + 健康分随 findings 返回
-    // （mode=new 的种子提案课程尚未建 data 目录，audit 空跑——种子图豁免在 runAudit/applySeed 内按锚判）
+    // （种子起草只作用于已注册课程，data 目录必在；种子图豁免在 runAudit/applySeed 内按锚判）
     const pending = await this.e.store.takePending(kind, pid)
     const today = opts?.today ?? (await this.e.learningDay()).today
     const audit = await this.e.seedAuditFor(pending.course, today)
@@ -421,53 +434,56 @@ export class GraphSubsystem {
   }
 
 
-  /** 面板下发的种子起草（学习图页建课/换终点表单入口）：目标描述 + 模式 + 目标类型
-   * （coverage 附块工作表）→「种子提案」提示词组装（vault 先验选配——熟悉边界定位）→
-   * 缝 complete → 种子 YAML 干跑校验门（validateSeedProposal 直跑，未过经缝的门错修复
-   * 轮回灌重产恰一次）→ proposeSeed 权威受理（schema/注册表对账/结构/概念对表在受理侧
-   * 重跑全量），一次人审即开工。课程名/模式/目标类型/工作表是表单绑定字段——以输入为
-   * 准，不信模型照抄。agent 为统一 agent 缝（#162 首站竖直验证：剥围栏/语义档/调用日志
-   * 与门错修复轮都来自缝，站点只声明门与修复提示词）。 */
+  /** 面板/agent 下发的种子起草（ADR-0076 种子降职：给已注册课程起草结构，不再建课）：
+   * 课程必须已注册（未注册拒并指引先建课）；方向取自**已加终点的目标描述**（人是权威
+   * ——锚上的 goal_note 是起草的唯一方向输入，`goal` 字段已退役）→「种子提案」提示词
+   * 组装（vault 先验选配——熟悉边界定位）→ 缝 complete → 种子 YAML 干跑校验门
+   * （validateSeedProposal 直跑，未过经缝的门错修复轮回灌重产恰一次）→ proposeSeed
+   * 权威受理（schema/注册表对账/结构/概念对表在受理侧重跑全量），一次人审即开工。
+   * 目标类型/工作表是表单绑定字段——以输入为准，不信模型照抄。agent 为统一 agent 缝
+   * （#162：剥围栏/语义档/调用日志与门错修复轮都来自缝）。 */
   async seedPropose(
     input: SeedDraftRequest,
     agent: AgentSeam,
-  ): Promise<{ id: number; course: string; mode: 'new' | 'reseed'; goal_type: string; endpoint: string; starts: number; prior?: VaultPriorAudit; repaired: boolean }> {
+  ): Promise<{ id: number; course: string; goal_type: string; endpoint: string; starts: number; prior?: VaultPriorAudit; repaired: boolean }> {
     const course = input.course.trim()
-    const goal = input.goal.trim()
-    if (!course) throw new Error('[seed-propose] 课程名必填（mode=new 自拟新名，mode=reseed 选既有课程）。')
-    if (!goal) throw new Error('[seed-propose] 目标描述必填——种子起草只认学习者的目标，不猜。')
-    const mode = input.mode ?? 'new'
+    if (!course) throw new Error('[seed-propose] 课程名必填（起草只作用于已注册课程）。')
+    const registered = await this.e.registry.get(course)
+    if (!registered) {
+      throw new Error(`[seed-propose] 注册表中没有课程「${course}」——种子已降职为「给已注册课程起草结构」（ADR-0076）：先建课（名称即空图），再加终点。`)
+    }
+    const anchors = await readAnchors(this.e.paths.anchorPath(registered.root), this.e.fs)
+    if (!anchors.length) {
+      throw new Error(`[seed-propose] 课程「${course}」零终点——起草要有方向才能铺坡道：先加一个终点（终点由学习者手加，人是权威）。`)
+    }
     const goalType = input.goalType ?? 'capability'
     const worksheet = goalType === 'coverage' ? (input.worksheet ?? []).filter(w => typeof w.block === 'string' && w.block.trim()) : []
     if (goalType === 'coverage' && !worksheet.length) {
       throw new Error('[seed-propose] 覆盖锚定必须携带非空块工作表（{block, note?} 列表）；能力锚定不需要。')
     }
+    const direction = anchors.map(a => `「${a.endpoint}」${a.goal_note ? `：${a.goal_note}` : '（无目标描述——终点名即方向）'}`).join('\n')
     // vault 先验选配（只读检索）：注册清单 Missing = 零命中合法，退化常识基线。
-    // #229：检索词经概念登记表扩展（别名/易混概念低权重并入），审计随返回值带出——
-    // 旧实现零命中静默（连「检索过没有」都读不出来，ADR-0004）。
+    // #229：检索词经概念登记表扩展（别名/易混概念低权重并入），审计随返回值带出。
     let priorBlock = ''
     let priorAudit: VaultPriorAudit | undefined
     if (input.useVaultPrior === true) {
       const manifest = await this.e.noteManifest.load()
       const titles = manifest.sources.map(s => s.title ?? s.path.split('/').pop()!.replace(/\.md$/i, ''))
-      // 登记表按**课程根**读：mode=reseed 时课程在册（取其 root），mode=new 时课程还不存在
-      // （courseRoot=null，扩展为空操作——「没有表」不是「表坏了」，不留 expansionError）
-      const existing = await this.e.registry.get(course)
       const found = await runPriorSearch({
-        registry: this.e.concepts, courseRoot: existing?.root ?? null,
+        registry: this.e.concepts, courseRoot: registered.root,
         vaultRoot: this.e.vaultRoot, centerRel: this.e.paths.centerRelOf(this.e.vaultRoot),
-        raw: decompileTerms(goal, titles), fs: this.e.fs,
+        raw: decompileTerms(anchors.flatMap(a => a.goal_note ?? [a.endpoint]).join('；'), titles), fs: this.e.fs,
       })
       priorAudit = found.audit
       if (found.hits.length) {
         const items = found.hits.map(h => `- 《${h.title}》（${h.path}）\n  > ${h.excerpt.replaceAll('\n', '\n  > ')}`).join('\n')
-        priorBlock = `## 学习者已有理解（Vault 先验）\n\n以下是学习者个人 Vault 里与目标相关的笔记摘录（只读检索所得）：\n\n${items}\n\n起点定位要求：把起点放在熟悉边界——笔记已稳定覆盖的内容不作起点（那是可快速略过的地形，在 reason 里点一句）；摘录只是他记过的东西，只读，永不改写。`
+        priorBlock = `## 学习者已有理解（Vault 先验）\n\n以下是学习者个人 Vault 里与方向相关的笔记摘录（只读检索所得）：\n\n${items}\n\n起点定位要求：把起点放在熟悉边界——笔记已稳定覆盖的内容不作起点（那是可快速略过的地形，在 reason 里点一句）；摘录只是他记过的东西，只读，永不改写。`
       }
     }
     const tpl = await this.e.loadPrompt('种子提案')
     // 模板与材料分开收（#218 契约后置）：材料在前、模板的输出契约段置尾；修复轮经
     // seedRepairPrompt 复拼（同一材料块），契约在修复轮仍居尾。
-    const materials = `## 目标描述（学习者原文）\n\n${goal}\n\n## 模式与绑定（照抄，不自拟）\n\n- 课程名：${course}\n- 模式：${mode}\n- 目标类型：${goalType}`
+    const materials = `## 起草方向（已注册课程「${course}」的锚定终点——草稿朝它们铺坡道；终点名与图上既有节点一律不得重名）\n\n${direction}\n\n## 绑定（照抄，不自拟）\n\n- 课程名：${course}\n- 目标类型：${goalType}`
       + (goalType === 'coverage' ? `\n- 块工作表（照抄块名）：\n${worksheet.map(w => `  - block: ${w.block}`).join('\n')}` : '')
       + (priorBlock ? `\n\n---\n\n${priorBlock}` : '')
     const pack = withContractLast(tpl, materials)
@@ -500,12 +516,32 @@ export class GraphSubsystem {
     })
     const spec = round.result
     spec.course = course
-    spec.mode = mode
     spec.goal_type = goalType
     if (goalType === 'coverage') spec.worksheet = worksheet
     else delete spec.worksheet
     const r = await this.graphPropose('seed', YAML.stringify(spec)) as { id: number; endpoint: string; starts: number }
-    return { id: r.id, course, mode, goal_type: goalType, endpoint: r.endpoint, starts: r.starts, prior: priorAudit, repaired: round.repaired }
+    return { id: r.id, course, goal_type: goalType, endpoint: r.endpoint, starts: r.starts, prior: priorAudit, repaired: round.repaired }
+  }
+
+
+  /** 名称建课（ADR-0076 §一：建课 = 名称即空图）：只收一个课程名，一个写入单元落全部
+   * 脚手架（实现与门在 proposals.createCourse）。不自动初始化生成——零节点图不入任何
+   * 自动触发点，第一次生长由学习者显式下发或加终点触发。 */
+  async createCourse(name: string): Promise<CourseEntry> {
+    return this.e.proposals.createCourse(name)
+  }
+
+  /** 添加终点（ADR-0076 §三：终点由学习者手动增删，立即写盘不等生成队列）：建零 pre
+   * 新节点 + 落一条锚（实现与门在 proposals.addEndpoint）。落盘后的教练回合接线触发归
+   * 宿主入队侧（force 豁免停摆短路，同课程在途去重）。 */
+  async addEndpoint(courseKey: string, endpoint: string, goalNote?: string): Promise<{ course: string; endpoint: string }> {
+    return this.e.proposals.addEndpoint(courseKey, endpoint, goalNote)
+  }
+
+  /** 删除终点（ADR-0076 §三）：锚与节点一并移除，已铺台阶留在图上成为末端
+   * （实现与门在 proposals.removeEndpoint）。 */
+  async removeEndpoint(courseKey: string, endpoint: string): Promise<{ course: string; endpoint: string; unhooked: string[] }> {
+    return this.e.proposals.removeEndpoint(courseKey, endpoint)
   }
 
 

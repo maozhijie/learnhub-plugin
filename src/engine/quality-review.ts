@@ -33,7 +33,6 @@ import {
   QUALITY_REVIEW_BLIND_PROMPT,
   QUALITY_REVIEW_RECONCILE_PROMPT,
 } from './prompts/grading.ts'
-import { RUBRIC_COURTS } from './quality-rubrics.ts'
 import type { QualityRubric, RubricDimension } from './quality-rubrics.ts'
 
 /** 评审调用的语料站标签（宿主 STATIONS.qualityReview 引本常量对齐——站名对齐靠常量不靠字面）。 */
@@ -147,7 +146,7 @@ export function sampleQualitySamples(
     byStation.set(s.station, list)
   }
   const picked: ReviewSample[] = []
-  for (const [station, list] of [...byStation.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+  for (const [, list] of [...byStation.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const newestFirst = [...list].sort((a, b) => b.ref.localeCompare(a.ref))
     const bad = newestFirst.filter(s => s.outcome !== 'ok')
     const ok = newestFirst.filter(s => s.outcome === 'ok')

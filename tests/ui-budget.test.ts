@@ -137,7 +137,9 @@ function inlineStyleSites(srcRoot: string): Array<{ file: string; body: string; 
  * 登记的内联站点数（棘轮，精确匹配；#211 收敛后只剩动态值——进度条宽度、按数据着色等）。
  * 增减随提交同步并在注释里给理由（照调用点棘轮纪律）。
  * 扫描面 = 属性形 `style={{…}}` + 选项对象形 `style: {…}`（Arco Modal.confirm 一类）；
- * 两条静态站点（PracticePage / ProposalsPage 的 Modal 宽度）已于 #211 迁 `.lh-w-560/620`，
+ * 两条静态站点（PracticePage / ProposalsPage 的 Modal 宽度）已于 #211 迁 `.lh-w-560/620`；
+ * #240 改版换手（净持平）：终点面板行的静态 `alignItems: 'flex-start'` 迁
+ * `.lh-items-start`（−1），图屏改版带入 1 处新的动态站点（+1，图例色点按数据着色）。
  * 余下 31 处逐条为动态：进度条百分比宽度、按数据/判定着色、React Flow 边样式对象等。
  */
 const INLINE_STYLE_SITES = 31

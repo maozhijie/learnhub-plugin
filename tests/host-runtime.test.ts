@@ -6,8 +6,9 @@
  *   - quizJobResults 等待语义：agent 工具同步语义（入队 + 等终态 + 读结果表）、超时与消失 fail loud
  *   - 工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变（tests/fixtures/host-tools-snapshot.json，
  *     由重构前的 src/index.ts mock-apply 捕获）
- *   - 「路由 ↔ 工具」对账基线：84 共享引擎入口 / 工具独有 26 / 路由独有 50
- *     （tests/fixtures/host-face-baseline.json，ADR-0045 命令注册表迁移的回归网）
+ *   - 「路由 ↔ 工具」对账基线：88 共享引擎入口 / 工具独有 25 / 路由独有 56
+ *     （tests/fixtures/host-face-baseline.json，ADR-0045 命令注册表迁移的回归网；
+ *     #240 / ADR-0076 建课改模式后路由面 +3：graph.createCourse/addEndpoint/removeEndpoint）
  * 引擎方法用实例属性影子化（shadowing prototype），不依赖真实模型与真实课程数据。
  */
 import test from 'node:test'
@@ -848,6 +849,34 @@ test('生长批已取消：明确的中止意图不被 force 豁免（重试只�
   }
 })
 
+test('连加两终点一次入队（#240/ADR-0076）：在途去重不被 force 豁免——加第二个终点不重拉接线回合', async () => {
+  const rt = makeRuntime()
+  let release!: () => void
+  const gate = new Promise<void>(r => { release = r })
+  stub(rt, {
+    // 门闩桩：生长批停在执行中，模拟「第一个接线回合还在跑」的窗口
+    'growth2.coachGrowthBatch': () => gate.then(() => ({
+      course: '数学', state: 'idle',
+      check: { course: '数学', ready: 3, depth: 3, required: 3, cold_start: false, ok: true, exhausted: false, warnings: [] },
+      segments: [], proposal: null, applied: null,
+    })),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  // 第一次加终点：接线回合入队（endpoint-add handler 的形态：force 绕停摆短路）
+  const first = enqueueGrowthBatch(rt, fakeCtx(), '数学', '添加终点（接线回合）', undefined, { force: true })
+  assert.equal(first.queued, true)
+  await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'running')
+  // 第二次加终点：同课生长批在途 → 不重复入队——force 只豁免停摆/暂不产结构/失败阻尼，
+  // 不豁免在途去重（连加多个终点只跑一轮教练回合）
+  const second = enqueueGrowthBatch(rt, fakeCtx(), '数学', '添加终点（接线回合）', undefined, { force: true })
+  assert.equal(second.queued, false, '连加第二个终点不重复入队')
+  assert.match(second.message, /已有生长批任务在途，不重复入队/)
+  release()
+  await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
+})
+
 // ---------------------------------------------------------------- 重启负载恢复（#157）
 
 test('重启恢复：排队图域任务负载随档恢复，恢复队列后正常执行；生长批裁决面随档保留', async () => {
@@ -863,7 +892,7 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
     loadGenJobs: async () => [
       { course: '数学', node: '种子起草', startedAt: new Date().toISOString(), status: 'queued',
         phase: '种子', model: 'test', message: '排队等待生成队列…',
-        seedPayload: { goal: '会用导数解决优化问题', mode: 'new', goalType: 'capability', useVaultPrior: false, worksheet: [{ block: '会求导' }] } },
+        seedPayload: { goalType: 'capability', useVaultPrior: false, worksheet: [{ block: '会求导' }] } },
       { course: '物理', node: '生长批', startedAt: new Date().toISOString(), status: 'done',
         phase: '生长', finishedAt: new Date().toISOString(), growthOutcome: 'idle',
         model: 'test', message: '就绪深度满足——教练停摆，无批可产。' },
@@ -887,7 +916,11 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
   await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'done')
   assert.match(rt.jobs.genJobs.get('数学/种子起草')!.message ?? '', /种子提案 #7/)
   assert.equal(seedCalls.length, 1)
-  assert.equal(seedCalls[0]!.goal, '会用导数解决优化问题', '负载随档恢复：表单字段原样进引擎')
+  // ADR-0076 种子降职：seedPayload 不再有 goal/mode（方向由锚定终点携带），剩余表单
+  // 字段随档原样进引擎（jobs 执行器显式挑字段构造 req）
+  assert.deepEqual(seedCalls[0], {
+    course: '数学', goalType: 'capability', useVaultPrior: false, worksheet: [{ block: '会求导' }],
+  }, '负载随档恢复：seedPayload 剩余表单字段原样进引擎')
   // #185 落盘即归一：读侧别名只在恢复缝生效，写侧（含执行过程中的持久化）一律产现值
   assert.ok(savedPhases.length > 0, '执行过程至少落盘一次')
   const persistedSeed = savedPhases.at(-1)!.find(j => j.course === '数学')
@@ -1155,7 +1188,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、路由独有 53（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、路由独有 56（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -1190,9 +1223,11 @@ test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、�
   // #199 生成门 enqueueGeneration 经 paths.anchorPath 读锚拒终点 → 25/51）
   // #215 生成冒烟（POST /smoke）复跑既有门 + 读产物：content2.contentCheck 自工具独有转
   // 两面共享；bank.load 与 paths.courseRoot 进路由面（工具面不读这两条入口）
+  // #240 / ADR-0076 建课改模式：冒烟管线改走 createCourse→addEndpoint→seedPropose→apply
+  // （名称建课 + 手加终点），三条入口进路由面
   assert.equal(shared.length, 88)
   assert.equal(toolOnly.length, 25, '#215：content2.contentCheck 转共享（冒烟复跑质检门），工具独有 26→25')
-  assert.equal(routeOnly.length, 53, '#215：+bank.load、+paths.courseRoot（冒烟读题库与课程根），路由独有 51→53')
+  assert.equal(routeOnly.length, 56, '#240/ADR-0076：+graph.createCourse、+graph.addEndpoint、+graph.removeEndpoint（建课改模式三口仅路由/面板下发），路由独有 53→56')
 })
 
 // ---------------------------------------------------------------- 种子应用 → 起点正文自动入队（#160）

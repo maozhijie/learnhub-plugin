@@ -638,9 +638,9 @@ export const HANDLERS: Record<string, RouteHandler> = {
       enqueueGraphJob(rt, ctx, { course: need(body, 'course'), node: '罗盘', phase: 'compass' })))
   },
   'POST /seed/propose': async ({ rt, ctx, body, res }) => {
-    // 建课/换终点起草（面板下发，phase=种子）：表单绑定字段随任务携带进引擎
+    // 种子起草（ADR-0076 种子降职：给已注册课程起草结构，不再建课；方向取自已加终点
+    // 的目标描述——goal/mode 字段已退役）。表单绑定字段随任务携带进引擎
     const seedCourse = need(body, 'course')
-    const goal = need(body, 'goal')
     const worksheet = optList(body, 'worksheet')
       ?.filter((w): w is { block?: unknown; note?: unknown } => typeof w === 'object' && w !== null)
       .map(w => ({
@@ -652,13 +652,31 @@ export const HANDLERS: Record<string, RouteHandler> = {
       enqueueGraphJob(rt, ctx, {
         course: seedCourse, node: '种子起草', phase: 'seed',
         seedPayload: {
-          goal,
-          mode: body.mode === 'reseed' ? 'reseed' : 'new',
           goalType: body.goalType === 'coverage' ? 'coverage' : 'capability',
           useVaultPrior: optTrue(body, 'useVaultPrior'),
           worksheet,
         },
       })))
+  },
+  'POST /endpoint/add': async ({ rt, ctx, body, res }) => {
+    // 添加终点（ADR-0076 §三：终点由学习者手加，立即写盘不等生成队列）；落盘后立即
+    // 入队一次教练回合并走 force（绕过「就绪深度已满足即短路」）——同课程在途去重，
+    // 连加多个终点只跑一轮（入队阻尼的 queued 检查即去重点）
+    const course = need(body, 'course')
+    const endpoint = need(body, 'endpoint')
+    const goalNote = optTrimmed(body, 'goalNote')
+    sendJson(res, 200, await apiRun(rt, 'api/endpoint/add', async () => {
+      const added = await rt.engine.graph.addEndpoint(course, endpoint, goalNote)
+      const enq = enqueueGrowthBatch(rt, ctx, added.course, '添加终点（接线回合）', undefined, { force: true })
+      return { ...added, coach_round: enq }
+    }))
+  },
+  'POST /endpoint/remove': async ({ rt, ctx, body, res }) => {
+    // 删除终点（ADR-0076 §三）：锚与节点一并移除，已铺台阶留在图上成为末端
+    const course = need(body, 'course')
+    const endpoint = need(body, 'endpoint')
+    sendJson(res, 200, await apiRun(rt, 'api/endpoint/remove', () =>
+      rt.engine.graph.removeEndpoint(course, endpoint)))
   },
   'POST /project/create': async ({ rt, body, res }) => {
     // 项目创建（P 区 #92）：Project 是 Course 姊妹实体，零调度零 XP

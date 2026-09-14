@@ -165,7 +165,6 @@ test('#114 清单面：多周记录按周排列，answered 现判', async () => 
 test('#150 现状区旁挂沙盘 ETA：有锚课程逐课一行越阈参照（非承诺措辞）；未播种无此小节', async () => {
   const weekStart = prevWeekStartOf(todayStr(new Date()))!
   const SEED = `course: 数学
-mode: new
 concepts:
   - canonical: 变化率
 endpoint:
@@ -181,11 +180,13 @@ starts:
     teaches: {变化率: 会用}
 `
   await withVault({ registry: null, graph: null }, async ({ engine }) => {
-    // 未播种：无 ETA 小节（合法空态——透明度装置锚在终点锚上）
+    // 未播种（零锚）：无 ETA 小节（合法空态——透明度装置锚在终点锚上）
+    await engine.graph.createCourse('数学')
     const bare = await engine.learner.kataOpen(weekStart)
     assert.doesNotMatch(bare.reality, /### 沙盘 ETA/)
 
-    // 播种（终点锚在位）→ 打开复盘即旁挂 ETA 摘要
+    // 手加终点 + 播种（锚追加不覆盖：锚「导数方向」保留，起草终点新入锚册）→ ETA 逐终点
+    await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
     const r = await engine.graph.graphPropose('seed', SEED) as { id: number }
     await engine.graph.graphApply('seed', r.id)
     const doc = await engine.learner.kataOpen(weekStart)
@@ -204,8 +205,8 @@ test('#150 ETA 旁挂渲染：注入摘要逐课一行、周次未及如实说�
     projects: [], projectExec: {}, noteSources: {}, habitNames: {}, skillNames: {},
   })
   const etas = [{
-    course: '数学', endpoint: '用导数解决优化问题', minutes_per_day: 30,
-    p50_week: { at: 8, from: 4 }, p80_week: null, horizon: 24,
+    course: '数学', minutes_per_day: 30,
+    rows: [{ endpoint: '用导数解决优化问题', p50_week: { at: 8, from: 4 }, p80_week: null, horizon: 24 }],
     wording: '模型推演，非承诺',
   }]
   const md = renderKataReality(reality, etas)
@@ -225,8 +226,9 @@ test('#231 对账渲染：一致留一行结论（无证据噪音）；漂移给
     projects: [], projectExec: {}, noteSources: {}, habitNames: {}, skillNames: {},
   })
   const etas = [{
-    course: '数学', endpoint: '用导数解决优化问题', minutes_per_day: 30,
-    p50_week: { at: 8, from: 4 }, p80_week: null, horizon: 24, wording: '模型推演，非承诺',
+    course: '数学', minutes_per_day: 30,
+    rows: [{ endpoint: '用导数解决优化问题', p50_week: { at: 8, from: 4 }, p80_week: null, horizon: 24 }],
+    wording: '模型推演，非承诺',
   }]
   const clean = renderKataReality(reality, etas, [{ course: '数学', entries: 3, anchored: 2, proposed: 1, unmoored: [] }])
   assert.ok(clean.includes('### 罗盘对账'))

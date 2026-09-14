@@ -22,8 +22,7 @@ import type { SeedProposalSpec, EndpointAnchor } from './seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
 import type { PriorFeedVerdict } from './vault-links.ts'
 import {
-  SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, ROUTE_PENDING, ETA_PENDING,
-  compassScaffold, withSectionText, parseCompass, sectionBody, validateRouteBody, stripWrappingFence,
+  SECTION_ROUTE, compassScaffold, withSectionText, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
 import { todayStr } from './dates.ts'
 import type { Clock } from './clock.ts'
@@ -70,6 +69,11 @@ export interface EditOp {
 export interface GrowthNote {
   operator: GrowthOperator
   reason: string
+  /** 朝向声明（ADR-0076 教练回合多终点化）：本批朝哪些终点长（终点节点名列表）。
+   * 主线批（前进/换向）含 add_node 时必填非空——「主线批必接线」的覆盖检查对每个
+   * 声明的终点各跑一遍；声明终点必须是在册锚。同一个新节点可同时进多个终点的 pre
+   * （交汇节点，合法形态）。其他算子省略。 */
+  target_endpoints?: string[]
   /** 真分歧声明（disagreement）：轻量段裁决与上下文/批注存在实质分歧时声明，宿主
    * 升级全量段重裁（两段式 effort；显然步免仲裁税不声明）。字段名避让「申诉
    * （Dispute，ADR-0031）」词条——同名同义纪律。 */
@@ -151,15 +155,26 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
     } else {
       const n = d.note as Record<string, unknown>
       const noteErrors: string[] = []
-      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'disagreement', 'recheck'].includes(k))
+      const unknown = Object.keys(n).filter(k => !['operator', 'reason', 'target_endpoints', 'disagreement', 'recheck'].includes(k))
       if (unknown.length) {
-        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/disagreement/recheck；分歧声明写在 disagreement，复诊预注册写在 recheck）`)
+        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 operator/reason/target_endpoints/disagreement/recheck；朝向声明写在 target_endpoints，分歧声明写在 disagreement，复诊预注册写在 recheck）`)
       }
       if (!(GROWTH_OPERATORS as readonly string[]).includes(String(n.operator))) {
         noteErrors.push(`note.operator: 非法算子 ${JSON.stringify(String(n.operator))}（允许 ${GROWTH_OPERATORS.join('/')}）`)
       }
       if (typeof n.reason !== 'string' || !n.reason.trim()) {
         noteErrors.push('note.reason 不能为空（每步生长都带理由——可解释、可追问）')
+      }
+      // 朝向声明（ADR-0076）：列表形态在此门，跨字段规则（主线批必声明、声明终点必须是
+      // 在册锚、逐终点接线覆盖）在 endpointGuardErrors（需要锚集合与 ops 全貌）
+      let targetEndpoints: string[] | undefined
+      if (n.target_endpoints !== undefined) {
+        if (!Array.isArray(n.target_endpoints) || !n.target_endpoints.length
+          || n.target_endpoints.some((t: unknown) => typeof t !== 'string' || !t.trim())) {
+          noteErrors.push('note.target_endpoints: 必须是非空字符串列表（本批朝哪些终点长；省略 = 非主线批）')
+        } else {
+          targetEndpoints = (n.target_endpoints as string[]).map(t => t.trim())
+        }
       }
       if (n.disagreement !== undefined && (typeof n.disagreement !== 'string' || !n.disagreement.trim())) {
         noteErrors.push('note.disagreement: 分歧声明声明了就要写内容（真分歧才声明——显然步免仲裁税）')
@@ -177,6 +192,7 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
         note = {
           operator: String(n.operator) as GrowthOperator,
           reason: (n.reason as string).trim(),
+          ...(targetEndpoints ? { target_endpoints: targetEndpoints } : {}),
           ...(typeof n.disagreement === 'string' && n.disagreement.trim() ? { disagreement: n.disagreement.trim() } : {}),
           ...(recheck ? { recheck } : {}),
         }
@@ -599,16 +615,15 @@ export class GraphProposals {
   /** 终点守卫（#142 锚保护 + #198 生长方向不变式 / ADR-0055；#239 / ADR-0076 多终点化：
    * **每个**终点各跑同一套检查）：edit 提案不得 del/rename 锚定的终点节点——那是绕开
    * 显式终点动作的锚直改。方向不变式三句：① 任何 add_node 以终点为 pre 直接拒——
-   * 目标之后不是本课程的生长域；② 主线批（前进/换向）含新节点时必须携带 set_pre
-   * { node: 终点, pre ⊇ 批内新前沿 }——替换语义，真实坡道取代起草粗边；③ 收尾接线批
-   * （零 add_node 的纯 set_pre）合法——停摆前把终点接在教练认定的最终台阶上。接线核查
-   * 取「覆盖」而非「相等」：最后台阶可以与既有台阶合流（多条支线同时汇入终点），新前沿
-   * 全部在 wire 里就守住了不变式；旧边在 set_pre 整体替换下只随显式再声明存活——教练把
-   * 起点直连终点重新写回是可见断言，不是遗留残边。旁支/巩固/插入豁免接线义务；零终点
-   * 不设门。 */
+   * 目标之后不是本课程的生长域；② 主线批（前进/换向）含新节点时必须声明
+   * target_endpoints，接线覆盖检查对每个声明的终点各跑一遍——零终点课程同样不豁免
+   * （没有方向就没有前进）。③ 收尾接线批（零 add_node 的纯 set_pre）合法——停摆前
+   * 把终点接在教练认定的最终台阶上。接线核查取「覆盖」而非「相等」：最后台阶可以与
+   * 既有台阶合流（多条支线同时汇入终点，同一节点可同进多个终点的 pre——交汇），新前沿
+   * 全部在 wire 里就守住了不变式；旧边在 set_pre 整体替换下只随显式再声明存活。旁支/
+   * 巩固/插入豁免接线义务。 */
   private async endpointGuardErrors(root: string, spec: EditProposalSpec): Promise<string[]> {
     const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
-    if (!anchors.length) return []
     const endpoints = endpointNames(anchors)
     const label = (name: string): string => {
       const a = anchors.find(x => x.endpoint === name)!
@@ -630,28 +645,33 @@ export class GraphProposals {
         errors.push(`ops.${i}: add_node「${op.name}」以终点「${hit.join('、')}」为 pre——目标之后不是本课程的生长域（禁长过目标）`)
       }
     }
-    // ② 主线批必接线：前进/换向批含新节点时，终点 set_pre 必须覆盖批内新前沿。
-    //    **多终点课程暂不设这道门**（#239 的边界）：义务的对象是「本批朝哪些终点长」，
-    //    而该声明（note.target_endpoints）随教练回合多终点化（#244）才落地——在它之前
-    //    按「所有终点」核会把无关方向强行改扎到本批新台阶上（乙的 pre 指向甲的新台阶，
-    //    乙的读数被污染），比漏拦更坏。桥梁期宁可少拦一门，等 #244 把义务收窄到声明的
-    //    终点集；单终点课程（今天的常态）与本门原语义逐字一致。
+    // ② 主线批必接线（ADR-0076 教练回合多终点化）：前进/换向批含新节点时必须声明
+    //    note.target_endpoints（本批朝哪些终点长），接线覆盖检查对**每个声明的终点**
+    //    各跑一遍；声明终点必须是在册锚（锚由人手增删，提案不得凭空捏造方向）。
+    //    同一个新节点同时进多个终点的 pre 是合法形态（交汇节点，同一门下天然放行）。
     const adds = addNodeCountOf(spec.ops)
-    if (endpoints.size === 1
-      && spec.note && (spec.note.operator === '前进' || spec.note.operator === '换向') && adds > 0) {
+    if (spec.note && (spec.note.operator === '前进' || spec.note.operator === '换向') && adds > 0) {
+      const targets = spec.note.target_endpoints ?? []
+      if (!targets.length) {
+        errors.push(`生长批（${spec.note.operator}）含 ${adds} 个新节点但未声明朝向——note.target_endpoints 必填（本批朝哪些终点长；交汇优先，可声明多个）`)
+      }
       const newNames = spec.ops.filter(o => o.op === 'add_node').map(o => o.name!)
       const consumed = new Set(spec.ops.flatMap(o => o.op === 'add_node' ? (o.pre ?? []) : []))
       const frontier = newNames.filter(n => !consumed.has(n))
-      for (const endpoint of endpoints) {
-        const wirings = spec.ops.filter(o => o.op === 'set_pre' && o.node === endpoint)
+      for (const target of targets) {
+        if (!endpoints.has(target)) {
+          errors.push(`note.target_endpoints: 「${target}」不是在册终点——朝向只能声明锚上已声明的终点（锚由学习者手加，提案不得改）`)
+          continue
+        }
+        const wirings = spec.ops.filter(o => o.op === 'set_pre' && o.node === target)
         if (!wirings.length) {
-          errors.push(`生长批（${spec.note.operator}）含 ${adds} 个新节点但未接线终点「${endpoint}」——主线批必须携带 set_pre { node: ${endpoint}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre 恒指向教练当前认定的最后台阶，真实坡道取代起草粗边）`)
+          errors.push(`生长批（${spec.note.operator}）声明朝「${target}」长但未接线——主线批必须携带 set_pre { node: ${target}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre 恒指向教练当前认定的最后台阶，真实坡道取代起草粗边）`)
         } else {
           // apply 取最后一条 set_pre（整体替换语义后者生效）——接线核查同口径
           const wired = new Set(wirings[wirings.length - 1]!.pre ?? [])
           const missing = frontier.filter(n => !wired.has(n))
           if (missing.length) {
-            errors.push(`set_pre(${endpoint}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 当前认定的最后台阶）`)
+            errors.push(`set_pre(${target}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 当前认定的最后台阶）`)
           }
         }
       }
@@ -897,9 +917,9 @@ export class GraphProposals {
     return splitPriorFeed(cache.edges, graph.names, graph)
   }
 
-  /** graph propose-seed（#142）：课程新入口。schema 门 →
-   * 注册表状态对账（new/reseed）→ 结构检查（投影图）→ 概念对表 → 先验喂料分流
-   * （≥0.7 未被结构回应的候选进 warns，非阻——喂料分流取代人审分流）→ pending，
+  /** graph propose-seed（#142；ADR-0076 种子降职：给已注册课程起草结构，不再建课）：
+   * schema 门 → 课程已注册门（未注册拒并指引先建课）→ 终点撞锚门 → 结构检查（投影图）
+   * → 概念对表 → 先验喂料分流（≥0.7 未被结构回应的候选进 warns，非阻）→ pending，
    * 一次人审即开工。 */
   async proposeSeed(yamlText: string): Promise<GraphSeedProposalResult> {
     const warns: string[] = []
@@ -907,14 +927,16 @@ export class GraphProposals {
     if (v.errors) throw new Error(`[propose-seed] schema 校验失败，提案未受理。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec!
     const course = await this.registry.get(spec.course)
-    if (spec.mode === 'new' && course) {
-      throw new Error(`[propose-seed] mode=new 但课程「${spec.course}」已在注册表——重新种子/换终点写 mode=reseed。`)
+    if (!course) {
+      throw new Error(`[propose-seed] 注册表中没有课程「${spec.course}」——种子已降职为「给已注册课程起草结构」（ADR-0076）：先在面板建课（名称即空图），再来起草。`)
     }
-    if (spec.mode === 'reseed' && !course) {
-      throw new Error(`[propose-seed] mode=reseed 但注册表中没有课程「${spec.course}」——新课程入口写 mode=new。`)
+    const root = course.root
+    // 终点撞锚门：同名终点已有锚 = 换方向，那是学习者的显式动作（删终点再起草）——
+    // 起草不覆盖既有锚（reseed 的锚覆盖路径已随 ADR-0076 退役）
+    const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
+    if (anchors.some(a => a.endpoint === spec.endpoint.name)) {
+      throw new Error(`[propose-seed] 终点「${spec.endpoint.name}」已有锚记录——起草不覆盖既有锚；换方向由学习者删终点后重提。`)
     }
-    // 对表/检查用的课程根：新课程尚无注册表条目，root 约定 = 课程名（initCourse 同款）
-    const root = course?.root ?? spec.course
     const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
     const existingRegions: GRegion[] = []
     for (const path of Object.values(await store.regionFiles())) {
@@ -936,7 +958,7 @@ export class GraphProposals {
         + (spec.worksheet?.length ? `；块工作表 ${spec.worksheet.length} 项` : ''),
     })
     return {
-      id: pid, kind: 'seed', course: spec.course, mode: spec.mode,
+      id: pid, kind: 'seed', course: spec.course,
       goal_type: spec.goal_type, endpoint: spec.endpoint.name, starts: spec.starts.length,
       ...(spec.worksheet?.length ? { worksheet: spec.worksheet.length } : {}),
       prior_feed_unresponded: feed.unresponded.length,
@@ -944,9 +966,10 @@ export class GraphProposals {
     }
   }
 
-  /** 种子提案影响预览（#159）：reseed/建课应用确认框的知识前置——知情后再确认。
-   * 只读现势计算（提案产物 schema 复验 + 当前图 + 现锚 + 罗盘现势），只把引擎真会
-   * 做的事说清楚：新建哪些节点、覆盖什么锚、罗盘是否重置、什么全保留。 */
+  /** 种子提案影响预览（#159）：起草应用确认框的知识前置——知情后再确认（ADR-0076：
+   * 课程必须已注册，「按空图直算」的建课分支已删；对空图课程照常直算——全部节点=新建、
+   * 零锚可覆盖）。只读现势计算（提案产物 schema 复验 + 当前图 + 现锚），只把引擎真会
+   * 做的事说清楚：新建哪些节点、什么全保留。 */
   async proposalImpact(kind: string, pid?: number): Promise<SeedImpactDoc> {
     if (kind !== 'seed') {
       throw new Error(`[proposal-impact] 只有种子提案（kind=seed）有影响预览（收到 ${String(kind)}）。`)
@@ -965,35 +988,34 @@ export class GraphProposals {
     }
     const spec = v.spec
     const course = await this.registry.get(spec.course)
-    const root = course?.root ?? spec.course
-    // 建课提案（mode=new 且课程未注册）：图还不存在是正常态（应用即建课），按空图
-    // 直算——读现图反而必然炸「数据目录不存在」（#61 现场确认框预览必然报错）
-    const regions = spec.mode === 'new' && !course
-      ? []
-      : await new GraphStore(this.paths, this.paths.courseRoot(root), this.fs).load()
+    if (!course) {
+      throw new Error(`[proposal-impact] 注册表中没有课程「${spec.course}」——起草只作用于已注册课程（先建课，名称即空图）。`)
+    }
+    const root = course.root
+    const regions = await new GraphStore(this.paths, this.paths.courseRoot(root), this.fs).load()
     const graph = new Graph(regions)
     const names = new Set(graph.names)
     const proposed = [...spec.starts.map(s => s.name), spec.endpoint.name]
-    const anchors = course ? await readAnchors(this.paths.anchorPath(root), this.fs) : []
+    const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
     return {
       course: spec.course,
-      mode: spec.mode,
       new_nodes: proposed.filter(n => !names.has(n)),
       existing_nodes: proposed.filter(n => names.has(n)),
       graph_nodes: graph.names.length,
       current_anchors: anchors.map(a => ({
         endpoint: a.endpoint, declared: a.declared, ...(a.origin_proposal !== undefined ? { origin_proposal: a.origin_proposal } : {}),
       })),
-      compass_reset: this.fs.exists(this.paths.compassPath(root)),
+      compass_reset: !this.fs.exists(this.paths.compassPath(root)),
       ...(spec.worksheet?.length ? { worksheet_items: spec.worksheet.length } : {}),
     }
   }
 
-  /** graph apply-seed（#142）：概念对表复验 + 结构复验 →（mode=new 建课脚手架）→
-   * 落图（起点 + 终点 + 朝终点的粗占位边）→ 终点锚落盘（整份覆盖：换终点/换工作表
-   * 都只走种子提案人审，锚无直改通道）→ 铸名 + 快照 + 笔记脚手架 + journal。
-   * 同源双提案守卫（#149）：反编译 pair 联动的种子提案不得先于计划半区单独 apply
-   * （联合入口走 opts.pairApply 豁免；计划已生效的恢复续段放行）。 */
+  /** graph apply-seed（#142；ADR-0076 种子降职：只作用于已注册课程，不再建课）：
+   * 概念对表复验 + 结构复验 → 落图（起点 + 终点 + 朝终点的粗占位边）→ 终点锚落盘
+   * （逐条追加，不覆盖既有锚）→ 铸名 + 快照 + 笔记脚手架 + journal。罗盘只在缺席时
+   * 脚手架初建，绝不重置（reseed 重置路径已随 ADR-0076 退役）。同源双提案守卫（#149）：
+   * 反编译 pair 联动的种子提案不得先于计划半区单独 apply（联合入口走 opts.pairApply
+   * 豁免；计划已生效的恢复续段放行）。 */
   async applySeed(
     pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }, today?: string,
     opts: { pairApply?: boolean } = {},
@@ -1005,14 +1027,8 @@ export class GraphProposals {
     const v = validateSeedProposal(await this.loadArtifact(prop.artifact))
     if (v.errors || !v.spec) throw new Error(`[apply-seed] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
     const spec = v.spec
-    let course = await this.registry.get(spec.course)
-    if (spec.mode === 'new') {
-      if (course) {
-        throw new Error(`[apply-seed] mode=new 但课程「${spec.course}」已被注册（受理后状态变化）——reject 本提案后按 mode=reseed 重提。`)
-      }
-      course = await this.initCourse(spec.course)
-    }
-    if (!course) throw new Error(`[apply-seed] 注册表中没有课程「${spec.course}」。`)
+    const course = await this.registry.get(spec.course)
+    if (!course) throw new Error(`[apply-seed] 注册表中没有课程「${spec.course}」（受理后状态变化）——reject 本提案后先建课再重新起草。`)
     const root = course.root
     const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
     // 概念对表复验（#141 同款：受理与 apply 之间登记表可能变化；铸名侧幂等），两门全过才开始写盘
@@ -1051,18 +1067,20 @@ export class GraphProposals {
     let version = 0
     const declared = today ?? todayStr(new Date(this.clock.nowMs()))
     const anchor = anchorFromSeed(spec, prop.id, declared)
-    // 锚集合按终点并入（#239 / ADR-0076 多终点化）：同名终点的锚被本次起草整份替换
-    // （换目标类型/工作表即此处），其他终点的锚保留——课程的方向集合只增不减
+    // 锚集合逐条追加（ADR-0076：起草不覆盖既有锚——同名终点已在受理门拒绝，这里只防
+    // 受理与 apply 之间的竞态）：其他终点的锚原样保留
     const anchorPath = this.paths.anchorPath(root)
     const anchorsBefore = await readAnchors(anchorPath, this.fs)
-    const anchorsNext = [...anchorsBefore.filter(a => a.endpoint !== anchor.endpoint), anchor]
+    if (anchorsBefore.some(a => a.endpoint === anchor.endpoint)) {
+      throw new Error(`[apply-seed] 终点「${anchor.endpoint}」在受理后新落了锚（受理后状态变化）——reject 本提案后重提。`)
+    }
+    const anchorsNext = [...anchorsBefore, anchor]
     const written: string[] = []
     // 罗盘现状读取（在写序第一笔前读与第四步读等价——本单元内无更早的罗盘写入）
     const compassPath = this.paths.compassPath(root)
     const existingCompass = this.fs.exists(compassPath) ? await this.fs.readFile(compassPath) : null
-    const compassNext = existingCompass
-      ? withSectionText(withSectionText(existingCompass, SECTION_ROUTE, ROUTE_PENDING), SECTION_ETA, ETA_PENDING)
-      : compassScaffold(course.name)
+    // 罗盘只在缺席时脚手架初建；在场原样保留（批注区/路线/ETA 都不动——重置路径已退役）
+    const compassNext = existingCompass ?? compassScaffold(course.name)
     await runWriteUnit('applySeed', {
       clock: this.clock!,
       journal: rec => this.store.appendJournal(rec),
@@ -1105,11 +1123,11 @@ export class GraphProposals {
           },
         },
         {
-          // 罗盘常驻（#143 / ADR-0033 透明度装置）：新建 = 脚手架（路线/ETA 待初画与
-          // 周挂载接管）；reseed（换终点）= 批注区字节保留，路线与 ETA 重置占位。
-          // 零 LLM 依赖，apply 永不被透明度装置挡住。
+          // 罗盘常驻（#143 / ADR-0033 透明度装置）：缺席 = 脚手架初建（路线/ETA 待初画
+          // 与周挂载接管）；在场 = 原样保留。零 LLM 依赖，apply 永不被透明度装置挡住。
           name: '罗盘常驻',
           run: async () => {
+            if (existingCompass) return
             await atomicWrite(compassPath, compassNext, this.fs)
           },
         },
@@ -1151,7 +1169,6 @@ export class GraphProposals {
     const seedPhase = isSeedGraph(anchorsNext, merged)
     return {
       course: course.name,
-      mode: spec.mode,
       goal_type: spec.goal_type,
       endpoint: spec.endpoint.name,
       starts: spec.starts.map(s => s.name),
@@ -1160,25 +1177,191 @@ export class GraphProposals {
       regions: written,
       snapshot: version,
       created_blocks: [...createdBlocks],
-      compass: existingCompass
-        ? { state: 'reseeded' as const, annotations_preserved: Boolean(sectionBody(parseCompass(compassNext), SECTION_ANNOTATIONS)?.trim()) }
-        : { state: 'scaffold' as const, annotations_preserved: false },
+      compass: { state: 'scaffold' as const, annotations_preserved: false },
       prior_feed: { unresponded: feed.unresponded.length },
       findings: applyFindings(audit, seedPhase),
     }
   }
 
-  /** mode=new 的建课脚手架：注册表条目 + data/课程/state 目录（#142 随种子提案）。 */
-  private async initCourse(name: string): Promise<CourseEntry> {
+  /** 名称建课（ADR-0076 §一：建课 = 名称即空图）：面板只收一个课程名，一个写入单元
+   * 落全部脚手架——注册表条目（enabled）+ 课程根目录（data/课程/state）+
+   * `data/00_未分区.yaml`（零节点区，空图的合法载体：GraphStore.load 正常读取）+
+   * 空 `概念登记表.yaml`（concepts: []）+ `state/终点锚.json`（空锚，合法空态）+
+   * `罗盘.md` 脚手架。**不自动初始化生成**：零节点图不入任何自动触发点（零节点闸），
+   * 第一次生长由学习者显式下发或加终点触发。写序 = 脚手架在先、注册表条目在后：
+   * 半途失败最多留孤儿目录（无注册表条目，建课可重试），不会留下不能加载的死课。 */
+  async createCourse(name: string): Promise<CourseEntry> {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('[create-course] 课程名不能为空。')
+    const existing = await this.registry.get(trimmed)
+    if (existing) throw new Error(`[create-course] 课程「${trimmed}」已在注册表——建课拒绝重名（课程名是注册表主键）。`)
     const items = await this.registry.load()
-    const root = name
-    for (const sub of ['data', '课程', 'state']) {
-      await this.fs.mkdir(`${this.centerRoot}/${root}/${sub}`)
-    }
-    const entry: CourseEntry = { id: `${root}-01`, name, root, enabled: true }
-    items.push(entry)
-    await this.registry.save(items)
+    const root = trimmed
+    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
+    const anchorPath = this.paths.anchorPath(root)
+    const compassPath = this.paths.compassPath(root)
+    const zeroRegion: GRegion = { name: '未分区', color: '', blocks: [] }
+    const entry: CourseEntry = { id: `${root}-01`, name: trimmed, root, enabled: true }
+    await runWriteUnit('createCourse', {
+      course: trimmed,
+      clock: this.clock!,
+      journal: rec => this.store.appendJournal(rec),
+      steps: [
+        {
+          name: '课程脚手架（目录/零节点区/概念登记表/终点锚/罗盘）',
+          run: async () => {
+            for (const sub of ['data', '课程', 'state']) await this.fs.mkdir(`${this.centerRoot}/${root}/${sub}`)
+            await store.writeRegionDoc(`${this.paths.dataDir(root)}/00_未分区.yaml`, zeroRegion)
+            await this.concepts.save(root, [])
+            await writeAnchors(anchorPath, [], this.fs)
+            await atomicWrite(compassPath, compassScaffold(trimmed), this.fs)
+          },
+        },
+        {
+          name: '注册表条目',
+          run: async () => {
+            items.push(entry)
+            await this.registry.save(items)
+          },
+        },
+      ],
+    })
     return entry
+  }
+
+  /** 添加终点（ADR-0076 §三：终点由学习者手动增删，立即写盘不等生成队列）：建一个
+   * 零 pre 新节点（区/块 = 未分区）+ 落一条锚（可选一句目标描述给教练读；目标类型
+   * 默认能力锚定、不露表单）。人手加终点不过资格判据（人是权威），但结构门照旧：
+   * 课程必须已注册、图内不得重名（对已有正文/题库/调度/est 的节点名加终点一律拒）、
+   * 锚集合不得重名。不提供改名、不提供「把已有节点设为终点」（撞纯标记红线）。 */
+  async addEndpoint(courseName: string, endpointName: string, goalNote?: string): Promise<{ course: string; endpoint: string }> {
+    const course = await this.registry.get(courseName.trim())
+    if (!course) throw new Error(`[endpoint-add] 注册表中没有课程「${courseName.trim()}」——先建课（名称即空图）。`)
+    const name = endpointName.trim()
+    if (!name) throw new Error('[endpoint-add] 终点名不能为空。')
+    const root = course.root
+    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
+    const regions = await store.load()
+    const graph = new Graph(regions)
+    if (graph.nset.has(name)) {
+      throw new Error(`[endpoint-add] 图上已有节点「${name}」——不能把已有节点设为终点（撞纯标记红线：已有正文/题库/调度的节点不能被标成终点）；终点必须是新建的零 pre 节点。`)
+    }
+    const anchorPath = this.paths.anchorPath(root)
+    const anchors = await readAnchors(anchorPath, this.fs)
+    if (anchors.some(a => a.endpoint === name)) {
+      throw new Error(`[endpoint-add] 终点「${name}」已有锚记录——一个终点只许一条锚。`)
+    }
+    const declared = todayStr(new Date(this.clock.nowMs()))
+    const anchor: EndpointAnchor = {
+      endpoint: name,
+      ...(goalNote && goalNote.trim() ? { goal_note: goalNote.trim() } : {}),
+      goal_type: 'capability',
+      declared,
+      worksheet: [],
+      seed_nodes: [],
+      start_basis: {},
+    }
+    await runWriteUnit('addEndpoint', {
+      course: course.name,
+      clock: this.clock!,
+      journal: rec => this.store.appendJournal(rec),
+      steps: [
+        {
+          name: '终点节点落图（未分区，零 pre）',
+          run: async () => {
+            const regionName = '未分区'
+            const files = await store.regionFiles()
+            const path = files[regionName]
+            if (path) {
+              const current = loadRegionDoc(YAML.parse(await this.fs.readFile(path)), path)
+              let block = current.blocks.find(b => b.name === regionName)
+              if (!block) {
+                block = { name: regionName, nodes: [] }
+                current.blocks.push(block)
+              }
+              block.nodes.push({ name, pre: [], opt: false, note: '', enc: [] })
+              await store.writeRegionDoc(path, current)
+            } else {
+              const idx = Object.keys(files).length
+              const region: GRegion = { name: regionName, color: '', blocks: [{ name: regionName, nodes: [{ name, pre: [], opt: false, note: '', enc: [] }] }] }
+              await store.writeRegionDoc(`${this.paths.dataDir(root)}/${String(idx).padStart(2, '0')}_${regionName}.yaml`, region)
+            }
+          },
+        },
+        {
+          name: '终点锚落盘',
+          run: async () => {
+            await writeAnchors(anchorPath, [...anchors, anchor], this.fs)
+          },
+        },
+      ],
+    })
+    return { course: course.name, endpoint: name }
+  }
+
+  /** 删除终点（ADR-0076 §三）：锚记录与节点一并移除，已铺的台阶留在图上成为末端——
+   * 全图摘掉指向该终点的 pre 边（终点消失后引用悬空即断边），其余节点不动。已铺台阶
+   * 的正文/题库/调度全保留。UI 确认一次（已铺出来的台阶会留在图上）。 */
+  async removeEndpoint(courseName: string, endpointName: string): Promise<{ course: string; endpoint: string; unhooked: string[] }> {
+    const course = await this.registry.get(courseName.trim())
+    if (!course) throw new Error(`[endpoint-remove] 注册表中没有课程「${courseName.trim()}」。`)
+    const name = endpointName.trim()
+    if (!name) throw new Error('[endpoint-remove] 终点名不能为空。')
+    const root = course.root
+    const anchorPath = this.paths.anchorPath(root)
+    const anchors = await readAnchors(anchorPath, this.fs)
+    if (!anchors.some(a => a.endpoint === name)) {
+      throw new Error(`[endpoint-remove] 「${name}」不是课程「${course.name}」的终点（锚集合里没有它）。`)
+    }
+    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
+    const regions = await store.load()
+    // 内存侧先算好各区重写文本（摘终点节点 + 全图摘指向它的 pre 边；台阶留在图上成为末端）
+    const unhooked: string[] = []
+    const touched = new Map<string, string>()
+    for (const region of regions) {
+      let dirty = false
+      for (const b of region.blocks) {
+        const kept = b.nodes.filter(n => {
+          if (n.name === name) { dirty = true; return false }
+          return true
+        })
+        for (const n of kept) {
+          if (n.pre.includes(name)) {
+            n.pre = n.pre.filter(p => p !== name)
+            unhooked.push(n.name)
+            dirty = true
+          }
+        }
+        b.nodes = kept
+      }
+      if (dirty) touched.set(region.name, YAML.stringify(store.regionDoc(region)))
+    }
+    const anchorsNext = anchors.filter(a => a.endpoint !== name)
+    await runWriteUnit('removeEndpoint', {
+      course: course.name,
+      clock: this.clock!,
+      journal: rec => this.store.appendJournal(rec),
+      steps: [
+        {
+          name: '图区重写（摘终点节点与指向它的 pre 边）',
+          run: async () => {
+            const files = await store.regionFiles()
+            for (const [regionName, text] of touched) {
+              const abs = files[regionName]
+              if (!abs) throw new Error(`[endpoint-remove] 区「${regionName}」没有对应 data/*.yaml。`)
+              await atomicWrite(abs, text, this.fs)
+            }
+          },
+        },
+        {
+          name: '锚记录移除',
+          run: async () => {
+            await writeAnchors(anchorPath, anchorsNext, this.fs)
+          },
+        },
+      ],
+    })
+    return { course: course.name, endpoint: name, unhooked: [...new Set(unhooked)] }
   }
 
   /** graph propose-enrich（富化覆盖层，#140）：schema 门 → 目标节点在图核验 →

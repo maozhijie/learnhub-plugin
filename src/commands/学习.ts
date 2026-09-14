@@ -551,7 +551,7 @@ export const 学习域 = {
     id: "seed-propose",
     args: {
       course: { type: "string", required: true },
-      goal: { type: "string", required: true },
+      goalType: { type: "string" },
       worksheet: { type: "array" },
       useVaultPrior: { type: "boolean" }
     },
@@ -562,6 +562,56 @@ export const 学习域 = {
         mode: "queued",
         route: { method: "POST", path: "/seed/propose" },
         phase: "seed"
+      }
+    ]
+  }),
+  'course-create': command({
+    id: "course-create",
+    summary: "Create a course from its name only (ADR-0076: name = empty graph): one write unit lands the registry entry, the course root with data/00_未分区.yaml (zero-node region — the legal carrier of an empty graph), an empty concept registry, an empty endpoint-anchor book and the compass scaffold. NO generation is started: a zero-node graph never enters automatic coach triggers; the first growth comes from the learner adding an endpoint or dispatching a round explicitly.",
+    args: {
+      name: { type: "string", description: "Course name (the registry primary key; duplicates are rejected)", required: true }
+    },
+    engine: "graph.createCourse",
+    domain: "学习",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/course/create" },
+        bind: ["name"]
+      }
+    ]
+  }),
+  'endpoint-add': command({
+    id: "endpoint-add",
+    summary: "Add an endpoint (终点) to a course (ADR-0076: endpoints are learner-authored, any number, written to disk immediately — no generation queue): lands a zero-pre node (region 未分区) plus one anchor record {goal_type: capability, optional goal_note}. No AI qualification gate applies (the learner is the authority); structure gates still run (duplicate node names rejected — an existing node cannot be made an endpoint). After landing, ONE coach round is enqueued with force to wire the new endpoint onto relevant existing nodes; consecutive adds within the same course dedupe into one round.",
+    args: {
+      course: { type: "string", required: true },
+      endpoint: { type: "string", description: "Endpoint node name (must not collide with any existing node/anchor)", required: true },
+      goalNote: { type: "string", description: "Optional one-sentence direction note for the coach" }
+    },
+    domain: "学习",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/endpoint/add" }
+      }
+    ]
+  }),
+  'endpoint-remove': command({
+    id: "endpoint-remove",
+    summary: "Remove an endpoint (终点) from a course (ADR-0076): the anchor record and the node disappear in one write unit; already-laid steps stay on the graph as loose ends (pre edges pointing at the endpoint are unhooked). The endpoint is a direction marker with zero content/questions/scheduling, so nothing else is lost.",
+    args: {
+      course: { type: "string", required: true },
+      endpoint: { type: "string", required: true }
+    },
+    domain: "学习",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/endpoint/remove" }
       }
     ]
   }),

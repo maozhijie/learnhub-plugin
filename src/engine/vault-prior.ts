@@ -169,8 +169,8 @@ export async function queryEntriesFor(
 export interface PriorSearchRequest {
   /** 概念登记表读侧（查询扩展用；课程根，Missing 合法空表）。 */
   registry: Pick<ConceptRegistry, 'load'>
-  /** 课程根（登记表所在课程的**目录名**，即 CourseEntry.root）；无课程（新课程/未播种/
-   * 未指定目标课程）传 null——此时不做扩展（没有登记表可读），与「登记表 Broken」是两件事，
+  /** 课程根（登记表所在课程的**目录名**，即 CourseEntry.root）；无课程（未指定目标
+   * 课程）传 null——此时不做扩展（没有登记表可读），与「登记表 Broken」是两件事，
    * 后者要留痕。 */
   courseRoot: string | null
   vaultRoot: string

@@ -34,21 +34,20 @@ test('P2: 风格变体模板同步 v6 锚点（与默认模板同口径）', () 
   }
 })
 
-// ---- P-5 目标反编译模板（#95；v8 种子簇形态 #149）：版本标记 + plan/seed 双半区契约 + 对账与先验注入指令 ----
+// ---- P-5 目标反编译模板（#95；v11 plan-only 形态 #149/#240·ADR-0076 种子降职）：版本标记 + 单半区契约 + 对账与先验注入指令 ----
 
-test('#149: 项目目标反编译模板 v8——plan/seed 双半区契约、名字对账指令、Vault 先验注入、同进同退', () => {
+test('#149/#240: 项目目标反编译模板 v11——plan-only 契约（ADR-0076 种子降职）、名字对账指令、Vault 先验注入', () => {
   const tpl = Content.PROMPT_KINDS['项目目标反编译']!
-  assert.ok(Content.promptVersionOf(tpl) >= 8, '项目目标反编译 应升到 v8')
+  assert.ok(Content.promptVersionOf(tpl) >= 11, '项目目标反编译 应升到 v11')
   assert.match(tpl, /project: <项目 id/, 'plan 半区 = #92 的 PlanArtifact 契约')
   assert.match(tpl, /acceptance_hints/, '计划条目字段按设计 §3')
-  assert.match(tpl, /seed:/, '种子半区 = kind=seed 种子簇形态')
-  assert.match(tpl, /零 est 零 enc 零 pre/, '种子节点骨架模式（est/enc/pre 不进提案，粗占位边引擎落）')
-  assert.match(tpl, /1–3 起点/, '种子簇 = 1–3 起点 + 终点')
+  assert.doesNotMatch(tpl, /seed:/, '种子半区退役（ADR-0076：反编译不再自带建课能力，YAML 顶层只剩 project+plan）')
+  assert.match(tpl, /目标课程已注册/, '落点裁决进提示词（未注册拒并指引先建课）')
   assert.match(tpl, /名字对账/, '受理侧名字对账指令（计划引用悬空节点整体拒收）')
   assert.match(tpl, /沿用原 id/, '里程碑身份锚钉 id（修订沿用未变条目的 id）')
   assert.match(tpl, /学习者已有理解（Vault 先验）/, '先验段注入指令（尊重已有理解，不从零铺已会节点）')
-  assert.match(tpl, /提案/, '双产物走人审提案通道（apply 前零 canonical 写入）')
-  assert.match(tpl, /同进同退/, '双提案同进同退（一起生效或一起放弃）')
+  assert.match(tpl, /提案/, '产物走人审提案通道（apply 前零 canonical 写入）')
+  assert.match(tpl, /留给教练按计划修订补支生长/, '新知识缺口不硬凑名字（走计划修订驱动的教练补支）')
 })
 
 test('面板下发：种子提案模板 v1——起草契约（骨架模式/熟悉边界/绑定字段/目标类型二分）', () => {
@@ -173,13 +172,15 @@ test('#143: 罗盘初画模板 v1——非承诺措辞、批注软输入、路�
   assert.match(tpl, /块工作表/, '覆盖锚定课程按工作表块组织')
 })
 
-// ---- v5 教练回合契约（#198 / ADR-0055+0056）：主线批必接线终点 + 收尾接线批 ----
+// ---- v7 教练回合契约（#198 / ADR-0055+0056；ADR-0076 多终点化）：主线批朝向声明 + 逐终点接线 ----
 
-test('#198: 教练回合模板 v5——主线批接线义务（set_pre 替换语义）与收尾接线批（收尾即宣告承诺兑现）', () => {
+test('#198: 教练回合模板 v7——主线批朝向声明（note.target_endpoints + 交汇优先）与收尾接线批（收尾即宣告该终点坡道铺通）', () => {
   const tpl = Content.PROMPT_KINDS['教练回合']!
-  assert.ok(Content.promptVersionOf(tpl) >= 5, '教练回合应带版本标记 v5+')
-  assert.match(tpl, /主线批必接线/, '前进批接线义务锚点')
-  assert.match(tpl, /收尾即宣告承诺兑现/, '收尾批 = 承诺兑现宣告（ADR-0056）')
+  assert.ok(Content.promptVersionOf(tpl) >= 7, '教练回合应带版本标记 v7+')
+  assert.match(tpl, /主线批必声明朝向/, '前进批朝向声明锚点（ADR-0076 多终点化）')
+  assert.match(tpl, /note\.target_endpoints 必填/, '输出契约新增朝向声明字段（本批朝哪些终点长）')
+  assert.match(tpl, /交汇优先/, '多终点交汇节点合法且优先（能同时推进多个未达成终点）')
+  assert.match(tpl, /收尾即宣告该终点坡道铺通/, '收尾批 = 终点坡道铺通宣告（ADR-0056 / ADR-0076 多终点化）')
   assert.match(tpl, /零 add_node 的纯 set_pre 接线批/, '收尾批形态（停摆前接线）')
   assert.match(tpl, /禁长过目标/, '禁以终点为 pre')
   assert.match(tpl, /豁免接线义务/, '旁支/巩固/插入豁免')
@@ -211,7 +212,7 @@ test('#145: 教练回合模板 v1——五算子语义、停机转译、分歧�
   assert.match(tpl, /教学消费/, '旁支 = 教学消费')
   assert.match(tpl, /不走复诊/, '旁支/巩固不走复诊')
   assert.match(tpl, /只引已教概念/, '巩固只引已教概念')
-  assert.match(tpl, /重新种子提案/, '换终点不归教练（走重新种子人审）')
+  assert.match(tpl, /终点的增删归学习者/, '换向只裁决朝向，终点增删归学习者（图屏手加手删，锚不归提案管——ADR-0076）')
   // 两段式与分歧纪律
   assert.match(tpl, /轻量段/, '轻量段（显然步）')
   assert.match(tpl, /免仲裁税/, '显然步免仲裁税')
@@ -293,14 +294,14 @@ test('#202: 种子提案模板 v3——终点资格（承诺句/面向覆盖/禁
   assert.match(tpl, /定位与取舍/, 'reason 扩「定位与取舍」')
 })
 
-// ---- v9 反编译契约（ADR-0040）：seed 起点资格与种子提案同判据 + 上交前自查 ----
+// ---- v11 反编译契约（#240 / ADR-0076）：seed 起点资格随 seed 半区退役 + 上交前自查 ----
 
-test('ADR-0040: 项目目标反编译模板 v9——seed 起点资格同种子提案判据', () => {
+test('ADR-0076: 项目目标反编译模板 v11——seed 起点资格退役（判据归种子提案模板专有）', () => {
   const tpl = Content.PROMPT_KINDS['项目目标反编译']!
-  assert.ok(Content.promptVersionOf(tpl) >= 9, '项目目标反编译应升到 v9')
-  assert.match(tpl, /起点资格同种子提案/, '种子簇起点与种子提案同判据')
-  assert.match(tpl, /单一行为单元/, '起点 = 单一行为单元')
-  assert.match(tpl, /上交前自查/, 'pre-submit 自查锚点')
+  assert.ok(Content.promptVersionOf(tpl) >= 9, '项目目标反编译应升到 v9+')
+  assert.doesNotMatch(tpl, /起点资格/, 'seed 半区退役——起点资格判据不再进反编译模板（ADR-0076）')
+  assert.doesNotMatch(tpl, /单一行为单元/, '单一行为单元判据归种子提案模板专有')
+  assert.match(tpl, /上交前自查/, 'pre-submit 自查锚点（plan-only 形态自查 plan.nodes 对账）')
 })
 
 // ---- v10 节间连贯契约（#227）：模板声称与注入成分对齐——空头承诺清零 ----

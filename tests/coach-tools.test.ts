@@ -21,7 +21,6 @@ import type { CourseEntry } from '../src/engine/types.ts'
 const SEED_VAULT = { registry: null, graph: null }
 
 const CAPABILITY_SEED = `course: 数学
-mode: new
 concepts:
   - canonical: 变化率
     aliases: [rate of change]
@@ -80,6 +79,7 @@ test('白名单结构：恰 ADR-0041 七件只读视图，规格带描述与参�
 
 test('只读性：全白名单逐工具调用后 vault 字节级不变（零写侧、零队列触点的行为化断言）', async () => {
   await withVault(SEED_VAULT, async ({ engine, root }) => {
+    await engine.graph.createCourse('数学')
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
     await engine.graph.graphApply('seed', r.id)
     const course = await engine.registry.resolve('数学') as CourseEntry
@@ -98,6 +98,7 @@ test('只读性：全白名单逐工具调用后 vault 字节级不变（零写�
 
 test('视图内容：图面带节点取值域、节点卡带结构档、登记表 query 过滤、题库概况计数', async () => {
   await withVault(SEED_VAULT, async ({ engine, root }) => {
+    await engine.graph.createCourse('数学')
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
     await engine.graph.graphApply('seed', r.id)
     const course = await engine.registry.resolve('数学') as CourseEntry
