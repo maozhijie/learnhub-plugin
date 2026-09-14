@@ -324,9 +324,9 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
         id: '算子语义', name: '算子与结构语义',
         criteria: [
           {
-            id: '接线义务', criterion: '前进/换向批含 add_node 时必须携带 set_pre 接线终点（整体替换语义）；收尾走零 add_node 的纯 set_pre 接线批（收尾即宣告承诺兑现）；终点不出现在 add_node 的 pre 里',
-            evidence: '引批 ops 与终点 pre 现势对照；缺接线/终点当 pre 的批点名',
-            source: '模板:教练回合', anchor: '主线批必接线',
+            id: '接线义务', criterion: '前进/换向批含 add_node 时必须声明朝向（note.target_endpoints）并对每个声明终点携带 set_pre 接线（整体替换语义，交汇优先——同一新节点可进多个终点的 pre）；收尾走零 add_node 的纯 set_pre 接线批（收尾即宣告该终点坡道铺通）；终点不出现在 add_node 的 pre 里',
+            evidence: '引批 ops、note.target_endpoints 与终点 pre 现势对照；缺朝向声明/缺接线/终点当 pre 的批点名',
+            source: '模板:教练回合', anchor: '主线批必声明朝向',
           },
           {
             id: '插入预注册', criterion: '插入批 note.recheck 必填：metric 恰一枚可机判（与症状同源）、days 缺省 10 学习日；非插入批不得携带 recheck',
@@ -361,7 +361,7 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
           {
             id: '停机转译', criterion: '回合被拉起 = 就绪深度未满足：结构无需变化时写 ops: []（裁决=等内容跟上）；终点.pre 已达最终台阶时先出收尾接线批再停摆',
             evidence: '引就绪检查结果与裁决对照；无理由停摆或该收尾不收尾点名',
-            source: '模板:教练回合', anchor: '收尾即宣告承诺兑现',
+            source: '模板:教练回合', anchor: '收尾即宣告该终点坡道铺通',
           },
         ],
       },
@@ -369,8 +369,10 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
   },
   {
     id: '种子·终点',
-    product: '种子提案（起点 + 终点锚；含目标反编译的 seed 半区）',
-    stations: ['种子起草', '目标反编译'],
+    // #240 / ADR-0076 种子降职：种子不再建课、目标反编译不再产 seed 半区——本量规只剩
+    // 种子起草一站，终点锚由学习者手加（人是权威），量规只审种子起草自带的那个终点。
+    product: '种子提案（给已注册课程起草结构：起点 + 起草终点；方向取自锚定终点的目标描述）',
+    stations: ['种子起草'],
     court: RUBRIC_COURTS,
     dimensions: [
       {

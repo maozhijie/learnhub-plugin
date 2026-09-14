@@ -603,10 +603,10 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
   persistGenJobs(rt)
   try {
     if (job.phase === 'seed' && job.seedPayload) {
-      job.message = '种子起草中（目标描述 → 模型）…'
+      job.message = '种子起草中（锚定终点方向 → 模型）…'
       persistGenJobs(rt)
       const r = await rt.engine.graph.seedPropose({
-        course: job.course, goal: job.seedPayload.goal, mode: job.seedPayload.mode,
+        course: job.course,
         goalType: job.seedPayload.goalType, useVaultPrior: job.seedPayload.useVaultPrior,
         worksheet: job.seedPayload.worksheet,
       }, rt.agent)

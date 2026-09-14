@@ -322,17 +322,16 @@ export const api = {
   /** 成分技能边回填（确定性推断，同步受理 → 富化提案待人审）。 */
   encBackfill: (course?: string) =>
     http<Record<string, unknown>>('POST', '/graph/backfill', { ...(course ? { course } : {}) }),
-  /** 建课/换终点种子起草（phase=种子队列任务，产物 = 种子提案待人审）。
-   * 请求契约 = 引擎 SeedDraftRequest（绑定字段以表单为准）。
-   * queued=false = 「已在途、拒绝重复入队」，非成功语义（表单按旗标着色，#155）。 */
-  seedPropose: (input: import('../../src/engine/seed').SeedDraftRequest) =>
-    http<{ message: string; queued: boolean }>('POST', '/seed/propose', {
-      course: input.course, goal: input.goal,
-      ...(input.mode ? { mode: input.mode } : {}),
-      ...(input.goalType ? { goalType: input.goalType } : {}),
-      ...(input.useVaultPrior !== undefined ? { useVaultPrior: input.useVaultPrior } : {}),
-      ...(input.worksheet?.length ? { worksheet: input.worksheet } : {}),
-    }),
+  /** 名称建课（ADR-0076：建课 = 名称即空图，一个写入单元落全部脚手架，不自动生成）。 */
+  courseCreate: (name: string) =>
+    http<{ id?: string; name: string; root: string; enabled?: boolean }>('POST', '/course/create', { name }),
+  /** 添加终点（立即写盘；落盘后引擎自动入队一次教练接线回合，同课程去重）。 */
+  endpointAdd: (course: string, endpoint: string, goalNote?: string) =>
+    http<{ course: string; endpoint: string; coach_round: { message: string; queued: boolean } }>(
+      'POST', '/endpoint/add', { course, endpoint, ...(goalNote ? { goalNote } : {}) }),
+  /** 删除终点（锚与节点一并移除，已铺台阶留在图上成为末端）。 */
+  endpointRemove: (course: string, endpoint: string) =>
+    http<{ course: string; endpoint: string; unhooked: string[] }>('POST', '/endpoint/remove', { course, endpoint }),
   /** 插入实验面（#146）：在途/到期未决/三率/闸门。 */
   probation: (course?: string) =>
     http<import('./types').ProbationDoc>('GET', `/probation${q({ course })}`),
@@ -342,7 +341,7 @@ export const api = {
   /** 项目创建（反编译前奏；P 区创建从 agent 通道扩到面板）。 */
   projectCreate: (name: string, goal: string) =>
     http<Record<string, unknown>>('POST', '/project/create', { name, goal }),
-  /** 目标反编译（任务化）：计划+种子双提案联合人审。 */
+  /** 目标反编译（任务化）：目标课程必须已注册，产计划提案待人审。 */
   projectDecompile: (id: string, course?: string) =>
     http<{ message: string }>('POST', '/project/decompile', { id, ...(course ? { course } : {}) }),
   /** 里程碑计划草案（任务化）。 */

@@ -117,7 +117,7 @@ export interface DataCheckReport {
     /** 概念登记表盘点（#141）：present = 在盘课程数；entries = 条目总数（跨断裂
      * 存活的档案坐标系，与存档区互斥——登记表永不入存档清单）。 */
     conceptRegistries: { present: number; entries: number }
-    /** 终点锚盘点（#142）：present = 已播种课程数（锚在盘；缺席 = 未播种 Missing 合法）。 */
+    /** 终点锚盘点（#142）：present = 有锚文件的课程数（缺席 = 零终点合法空态）。 */
     endpointAnchors: { present: number }
     /** 边实验账本盘点（#146）：present = 在册课程数；entries/inFlight/overdue = 账本
      * 行数、在途复诊与到期未决（overdue 是 hint 提示类，不进 status）。 */
@@ -905,7 +905,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
       inventory.conceptRegistries.present++
       inventory.conceptRegistries.entries += regScan.entries
     }
-    // 终点锚（#142）：缺席 = 未播种 Missing 合法空态零 finding；在盘 = 校验形状与悬空
+    // 终点锚（#142）：缺席 = 零终点合法空态零 finding；在盘 = 校验形状与悬空
     const anchorScan = await scanEndpointAnchor(
       findings,
       courseName,

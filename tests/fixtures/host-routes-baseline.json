@@ -807,6 +807,30 @@
  },
  {
   "method": "POST",
+  "route": "/course/create",
+  "keys": [
+   "name"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/endpoint/add",
+  "keys": [
+   "course",
+   "endpoint",
+   "goalNote"
+  ]
+ },
+ {
+  "method": "POST",
+  "route": "/endpoint/remove",
+  "keys": [
+   "course",
+   "endpoint"
+  ]
+ },
+ {
+  "method": "POST",
   "route": "/graph/backfill",
   "keys": [
    "course"
@@ -817,9 +841,7 @@
   "route": "/seed/propose",
   "keys": [
    "course",
-   "goal",
    "worksheet",
-   "mode",
    "goalType",
    "useVaultPrior"
   ]

@@ -34,8 +34,11 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  * #210：−2（今日「我的资产」菜单的 Anki 出口归洞察通道卡——api.ankiStatus 的菜单
  * 坏连提示与 api.ankiExport 的菜单动作随之离场）。洞察区搬迁本身**换手净零**：
  * 实验室页 7 处 → 沙盘/N-of-1/睡眠三卡 7 处，其中实验确认动作收归收件箱（本地
- * api.experimentApply 删）而 N-of-1 卡改读 api.proposals 显示待确认提案（人审唯一处）。 */
-const API_CALLSITES = 146
+ * api.experimentApply 删）而 N-of-1 卡改读 api.proposals 显示待确认提案（人审唯一处）。
+ * #240：+2（名称建课 + 手动多终点，ADR-0076）：SeedFormModal 改调 api.courseCreate
+ * （api.seedPropose 随 goal 参数一并离场，−1），图屏终点面板新增 api.endpointAdd 与
+ * api.endpointRemove 各一处（+2）——净 +2。 */
+const API_CALLSITES = 148
 
 test(`UI 公共面零改动：api.<name>( 调用点数量不变（${API_CALLSITES} 处，函数名与签名未动）`, () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {
@@ -79,6 +82,7 @@ test('UI 请求体线名以声明为权威：UI 写出的每个 snake_case 键�
     arm_today: '响应字段（读侧，非请求键）',
     maintenance_days: '响应字段（读侧，非请求键）',
     defer_schedule: '面板独有键：工具面 schema 不含它（门⑧ 不许并进 args），由 /question-answer 的 handler 自读',
+    coach_round: '响应字段（读侧，非请求键；#240 endpointAdd 响应带的教练接线回合受理态）',
   }
   const bad = [...written].filter(k => !declared.has(k) && !(k in NOT_WIRE))
   assert.deepEqual(bad, [], `这些线名不在任何命令的声明里（映射与声明漂移）：${bad.join(', ')}`)

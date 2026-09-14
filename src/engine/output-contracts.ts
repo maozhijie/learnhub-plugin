@@ -595,6 +595,11 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
   项目目标反编译: [{
     version: 10, date: '2026-09-13', changeType: '输出段与硬约束段换序（契约置尾）+ 拼装侧契约后置 + 现有节点名清单按区·块分段',
     expectedDelta: '契约句与双产物 schema 落在末段；plan/seed 字段形态不变；节点名清单从平铺千行改为按「区 · 块」分组（取值域不变、不截断）',
+  }, {
+    // #240 / ADR-0076 第七节：种子降职后本站只产计划提案（seed 半区退役），且课程
+    // 必须已注册（未注册拒并指引先建课）——模板文本改写以对齐。
+    version: 11, date: '2026-09-14', changeType: 'plan-only（#240 / ADR-0076 种子降职）：删 seed 半区，课程未注册即拒',
+    expectedDelta: 'YAML 顶层只剩 project + plan（不再有 seed 键）；提示词立场从「一次调用双产物」变「只反推里程碑计划」，未引用节点的意图改走计划修订驱动的教练补支；已注册课程的行为不变',
   }],
   回执评审: [{
     version: 6, date: '2026-09-13', changeType: '拼装侧：契约本就在 system 提示词（全仓先例，未动）',
@@ -614,6 +619,11 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // 「起草起点与当前图」段的起点集改为全部锚的 seed_nodes 并集（剔终点）。
     version: 2, date: '2026-09-14', changeType: '锚集合注入（#239；模板文本未动，终点锚材料段改逐终点）',
     expectedDelta: '多终点课程的初画能看到全部方向（不再只画到一个终点）；单终点课程的净变化 = 终点行多两格缩进、起点段改名。零终点课程不走此站（fail loud「先加一个终点」）',
+  }, {
+    // #240 / ADR-0076 第四节：罗盘按终点分节（一节一个终点、节头 - **终点名**：，
+    // 不用标题），对账机器按节头切分（#231 对账语义不变）。
+    version: 3, date: '2026-09-14', changeType: '按终点分节（#240 / ADR-0076）：剩余路线一节一个终点，节头 - **终点名**：',
+    expectedDelta: '路线正文从单列改多节（每终点 3–7 条阶段条目）；节头带锚记录的终点名、明确禁用标题行；同节点可出现在多节（交汇常态）。单终点课程的条目形态不变、多一节头行',
   }],
   教练回合: [{
     version: 6, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
@@ -626,10 +636,20 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // 定位收缩：方向 + 停摆输入）。裁决语义与批规模纪律不变。
     version: 6, date: '2026-09-14', changeType: '锚集合注入（#239；模板文本未动，上下文包与图面改逐终点）',
     expectedDelta: '多终点课程：裁决视野从「一个方向」变「方向集合」，主线批接线义务按**每个**声明的终点核（受理门同步改，见 tests/README 门册 #239 段）。单终点课程输出无实质变化——预期增量只在措辞与「逐终点行」形态',
+  }, {
+    // #240 / ADR-0076 第五节：教练回合多终点化。模板文本改写：生长方向由上下文包逐
+    // 终点状态驱动（交汇优先），主线批接线义务声明 target_endpoints（受理门同步核）。
+    version: 7, date: '2026-09-14', changeType: '多终点裁决（#240 / ADR-0076）：note.target_endpoints 进输出契约 + 交汇优先 + 停摆判据改逐终点',
+    expectedDelta: '前进/换向含 add_node 的批多出 note.target_endpoints 字段（可多值），ops 必须对每个声明终点携带 set_pre；提示词新增交汇优先纪律与「同节点可进多个终点 pre」的合法性；route 改按终点分节。单终点课程：target_endpoints 仍必填（单元素），其余形态不变',
   }],
   种子提案: [{
     version: 4, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
     expectedDelta: '种子 schema 从「硬约束 1」移到末段（修复轮同构）；起点/终点资格判据文本不变',
+  }, {
+    // #240 / ADR-0076 第七节：种子降职为结构起草教练——不再建课（课程必须已注册），
+    // 方向取自锚定终点的目标描述，锚全保留、罗盘不重置。
+    version: 5, date: '2026-09-14', changeType: '种子降职（#240 / ADR-0076）：不再建课，方向取自锚定终点，锚全保留',
+    expectedDelta: 'YAML 不再有 mode/goal 相关键与「新课程」分支；提示词立场从「一次建模建课」变「给已注册课程的空图/既有图起草结构」；同终点名起草会被受理门拒（撞锚门）；已注册课程起草的节点 schema 不变',
   }],
 }
 

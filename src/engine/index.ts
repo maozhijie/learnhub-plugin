@@ -62,7 +62,7 @@ import { AnkiMirror } from './anki.ts'
 import { Sessions } from './sessions.ts'
 import { todayStr, nowIsoOf, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './io.ts'
-import { assertSchemaVersion, CURRENT_SCHEMA_VERSION } from './schema.ts'
+import { assertSchemaVersion } from './schema.ts'
 import type { SchemaBlock } from './schema.ts'
 import { revealAnswer, pctOf } from './grading.ts'
 import { auditQuestion } from './question-hygiene.ts'
@@ -293,7 +293,7 @@ export class LearnhubEngine {
     })
     this.project = new ProjectSubsystem({
       store: this.store, paths: this.paths, registry: this.registry,
-      bank: this.bank, proposals: this.proposals, projects: this.projects, noteManifest: this.noteManifest, concepts: this.concepts,
+      bank: this.bank, projects: this.projects, noteManifest: this.noteManifest, concepts: this.concepts,
       vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),

@@ -1,14 +1,12 @@
 /** 工作台首屏（#209 / ADR-0058）：罗盘（学习者的进度语义装置，含批注区与沙盘 ETA）
- * + 学习图 DAG 纵览。自 GraphPage 移植（T5 课程区成型后图页退役为工作台分栏）——
- * 教练台降为独立分栏，课程卡网格归「我的课程」。点节点直接进学习视图（LessonView）；
- * 从学习视图「在图中查看」跳入时 focusNode 红描边定位；图本身不承载学习操作。
- * #158 三态化：加载中/失败/空显式区分；#159 图缺失空态就地接重建种子（教练台分栏
- * 同款表单）。 */
+ * + 终点面板 + 学习图 DAG 纵览。终点由学习者手加/删（ADR-0076：立即写盘、加完自动
+ * 拉起教练接线回合）；点节点直接进学习视图（LessonView）；从学习视图「在图中查看」
+ * 跳入时 focusNode 红描边定位；图本身不承载学习操作。#158 三态化：加载中/失败/空
+ * 显式区分；空图（零节点）是合法空态——引导先加一个终点。 */
 import { Button, Card, Input, Message, Modal, Result, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import GraphDagView from '../../components/GraphDagView'
 import { recTypeMeta } from '../../lib/rec-events'
-import SeedFormModal from '../../components/SeedFormModal'
 import CompassCard from './CompassCard'
 import { api } from '../../api'
 import { errorMessage } from '../../hooks/useCommand'
@@ -37,8 +35,116 @@ function Legend() {
         </Space>
       ))}
       <Text type='secondary'>同色底越深 = 掌握度越高（悬停看数值）</Text>
-      <Text type='secondary'>终点是锚定的承诺位置：不被学习调度、不产料（ADR-0056）</Text>
+      <Text type='secondary'>终点是方向标记：不被学习调度、不产料（ADR-0056）</Text>
     </Space>
+  )
+}
+
+/** 终点面板（ADR-0076）：逐终点一行——名称、三档状态、闭包进度、服务于哪些终点
+ * （交汇）；最后台阶里的交汇节点点名。添加（名称 + 可选一句方向说明）与删除入口；
+ * 添加后引擎自动拉一次教练接线回合。 */
+function EndpointPanel({ frame, course, doc, onChanged }: {
+  frame: AppFrame
+  course: string
+  doc: GraphDoc
+  onChanged: () => void
+}) {
+  const completions = frame.status?.courses.find(c => c.name === course)?.completions ?? []
+  const statusOf = new Map(completions.map(c => [c.endpoint, c]))
+  const servesOf = new Map(doc.nodes.map(n => [n.data.id, n.data.serves ?? []]))
+  const stepsOf = new Map((doc.endpoint_steps ?? []).map(e => [e.endpoint, e.last_steps]))
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [goalNote, setGoalNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const add = async () => {
+    if (!name.trim()) { Message.warning('终点名必填'); return }
+    setBusy(true)
+    try {
+      const r = await api.endpointAdd(course, name.trim(), goalNote.trim() || undefined)
+      Message.success(r.coach_round.queued
+        ? `终点「${r.endpoint}」已落盘；教练接线回合已入队（把新终点接上相关既有节点）`
+        : `终点「${r.endpoint}」已落盘；${r.coach_round.message}`)
+      setAdding(false)
+      setName('')
+      setGoalNote('')
+      onChanged()
+    } catch (err) {
+      Message.error(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = (endpoint: string) => {
+    Modal.confirm({
+      title: `删除终点「${endpoint}」？`,
+      content: '锚记录与节点一并移除；已铺出来的台阶会留在图上成为末端（正文、题库、调度全保留）。',
+      okText: '删除终点',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await api.endpointRemove(course, endpoint)
+          Message.success(`终点「${endpoint}」已删除`)
+          onChanged()
+        } catch (err) {
+          Message.error(errorMessage(err))
+        }
+      },
+    })
+  }
+
+  const statusTag = (endpoint: string): { label: string; color: string } => {
+    const c = statusOf.get(endpoint)
+    if (!c) return { label: '悬空锚', color: 'red' }
+    if (c.status === 'reached') return { label: '已达成', color: 'green' }
+    if (c.status === 'sealed') return { label: '已铺通', color: 'blue' }
+    return { label: '未接线', color: 'gray' }
+  }
+
+  return (
+    <Card size='small' title='终点（方向）' className='lh-card'
+      extra={
+        <Button size='mini' type='primary' onClick={() => setAdding(a => !a)}>{adding ? '收起' : '添加终点'}</Button>
+      }>
+      <Space direction='vertical' size={8} className='lh-full'>
+        {adding && (
+          <Space size={8} wrap>
+            <Input size='small' placeholder='终点名（如：能即兴伴奏）' className='lh-w-220' value={name} onChange={setName} />
+            <Input size='small' placeholder='方向说明（可选，给教练读）' className='lh-w-260' value={goalNote} onChange={setGoalNote} />
+            <Button size='small' type='primary' loading={busy} onClick={() => void add()}>落盘并接线</Button>
+          </Space>
+        )}
+        {doc.endpoints.length === 0 && (
+          <Text type='secondary' className='lh-t-12'>
+            还没有终点：加一个（立即写盘，不等生成队列），教练回合会把它接上相关的既有节点。
+          </Text>
+        )}
+        {doc.endpoints.map(ep => {
+          const st = statusTag(ep)
+          const c = statusOf.get(ep)
+          const steps = stepsOf.get(ep) ?? []
+          const junctions = steps.filter(n => (servesOf.get(n)?.length ?? 0) >= 2)
+          const others = (servesOf.get(ep) ?? []).filter(x => x !== ep)
+          return (
+            <div key={ep} className='lh-row lh-gap-10 lh-wrap lh-items-start'>
+              <Space size={6} wrap>
+                <Tag size='small' color='magenta'>⚑ {ep}</Tag>
+                <Tag size='small' color={st.color}>{st.label}</Tag>
+                {c && <Text type='secondary' className='lh-t-12'>已学 {c.closure.learned}/{c.closure.total}</Text>}
+              </Space>
+              <Text type='secondary' className='lh-t-12 lh-flex-1'>
+                {steps.length ? `最后台阶：${steps.join('、')}` : 'pre 空——未接线'}
+                {junctions.length > 0 && `｜交汇：${junctions.join('、')}（同时服务其他终点）`}
+                {others.length > 0 && `｜该终点被服务：${others.join('、')}`}
+              </Text>
+              <Button size='mini' status='danger' onClick={() => remove(ep)}>删除</Button>
+            </div>
+          )
+        })}
+      </Space>
+    </Card>
   )
 }
 
@@ -48,10 +154,8 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
   const [banks, setBanks] = useState<BankEntry[] | null>(null)
   const [rec, setRec] = useState<RecommendDoc | null>(null)
   const [loading, setLoading] = useState(false)
-  /** #158 三态化：图加载失败显式记录（与「图缺失空态」分开——失败要给重试）。 */
+  /** #158 三态化：图加载失败显式记录（与「空图合法空态」分开——失败要给重试）。 */
   const [graphError, setGraphError] = useState<string | null>(null)
-  /** #159：图缺失空态的就地教练台动作（重建种子表单）。 */
-  const [seedForm, setSeedForm] = useState(false)
   /** 排队/生成中的节点（节点名 → 阶段；角标与 hover 工具条消费）。 */
   const [genStates, setGenStates] = useState<Record<string, 'queued' | 'running'>>({})
   // 总览过滤
@@ -185,21 +289,38 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
       />
     )
   }
-  if (!doc || !filtered || doc.nodes.length === 0) {
-    // #159 图缺失空态：引导就地落在重建种子 + 教练台分栏（生长一步在教练台）
+  if (!doc || !filtered) {
+    // 图缺失（理论上不会到这——零节点图也是合法 doc）：给刷新与教练台出口
     return (
       <Space direction='vertical' className='lh-full' size={12}>
         <Card>
           <Space direction='vertical' size={10}>
-            <Text type='secondary'>课程「{course}」还没有学习图：种子提案尚未应用（或图数据为空）。</Text>
+            <Text type='secondary'>课程「{course}」的学习图还没加载出来。</Text>
             <Space size={8}>
-              <Button type='primary' onClick={() => setSeedForm(true)}>重建种子（换终点/改工作表）</Button>
-              <Button onClick={() => frame.goto('courses.queue')}>去生成队列看任务</Button>
+              <Button type='primary' onClick={() => void load()}>刷新</Button>
               <Button onClick={() => frame.openCourse(course, 'coach')}>去教练台</Button>
             </Space>
           </Space>
         </Card>
-        {seedForm && <SeedFormModal visible={seedForm} mode='reseed' course={course} onCancel={() => setSeedForm(false)} />}
+      </Space>
+    )
+  }
+  if (doc.nodes.length === 0) {
+    // 零节点空课（ADR-0076 合法空态）：终点面板先行——加终点给方向，教练才能生长
+    return (
+      <Space direction='vertical' className='lh-full' size={12}>
+        <Card>
+          <Space direction='vertical' size={10}>
+            <Text>课程「{course}」是一门空课（零节点图）。</Text>
+            <Text type='secondary' className='lh-t-12'>
+              先添加终点给课程方向：终点立即写盘，加完教练回合会被自动拉起接线；
+              也可以在教练台显式下发「生长一步」。
+            </Text>
+          </Space>
+        </Card>
+        <EndpointPanel frame={frame} course={course} doc={doc} onChanged={() => { void load(); void reloadFrame() }} />
+        <CompassCard course={course} />
+        <Legend />
       </Space>
     )
   }
@@ -212,8 +333,8 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
           <Tag size='small'>{s.nodes} 节点</Tag>
           <Tag size='small'>{s.edges} 依赖</Tag>
           <Tag size='small'>{bankSet.size} 有题库</Tag>
-          {/* 主线深度（原 max_depth 正名，#200 / ADR-0055）：终点计入——课程长到哪里的进度读数 */}
-          <Tag size='small' color='magenta'>主线深度 {doc.stats.max_depth}</Tag>
+          {/* 图深度（原「主线深度」正名，ADR-0076：多终点下没有单一主线可指；口径不变） */}
+          <Tag size='small' color='magenta'>图深度 {doc.stats.max_depth}</Tag>
           <Tag size='small' color='gray'>全局总览 · 点节点进入学习</Tag>
         </Space>
         <div className='lh-ml-auto lh-gap-8 lh-row lh-wrap'>
@@ -233,6 +354,9 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
 
       {/* 罗盘（首屏上半）：路线草图 + 学习者批注 + 沙盘 ETA，语义零改动（#209） */}
       <CompassCard course={course} />
+
+      {/* 终点面板（ADR-0076）：手加/删终点 + 逐终点状态与交汇读数 */}
+      <EndpointPanel frame={frame} course={course} doc={doc} onChanged={() => { void load(); void reloadFrame() }} />
 
       {/* 推荐条（琥珀=下一步推荐；点击卡片直接进学习视图） */}
       {(rec?.events ?? []).filter(e => e.course === course).length > 0 && (

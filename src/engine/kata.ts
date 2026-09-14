@@ -185,16 +185,17 @@ export function buildKataReality(input: KataRealityInput): KataReality {
 
 /** 现状区旁挂的沙盘 ETA 摘要（#150 周复盘挂罗盘 ETA）：引擎 compassEtaRefresh 折叠
  * 后随行注入——与罗盘「沙盘 ETA」段同一份数据，零二次蒙特卡洛；此周复盘打开即附，
- * 与「现状」的上周聚合无关（推演是当下快照）。 */
+ * 与「现状」的上周聚合无关（推演是当下快照）。ADR-0076 罗盘多终点分节：逐终点一行。 */
 export interface KataEtaSummary {
   course: string
-  endpoint: string
   minutes_per_day: number
-  /** 首次越阈档（at=探测周，from=上一探测周；null = 推演时程内未及）。 */
-  p50_week: { at: number; from: number | null } | null
-  p80_week: { at: number; from: number | null } | null
-  /** 探测地平线上界（周；未及时如实说「N 周内未及」）。 */
-  horizon: number
+  /** 逐终点一行（每终点独立的越阈参照；未及时用该行地平线如实说）。 */
+  rows: Array<{
+    endpoint: string
+    p50_week: { at: number; from: number | null } | null
+    p80_week: { at: number; from: number | null } | null
+    horizon: number
+  }>
   wording: string
 }
 
@@ -202,11 +203,13 @@ export interface KataEtaSummary {
 export function kataEtaSummary(course: string, eta: CompassEta): KataEtaSummary {
   return {
     course,
-    endpoint: eta.endpoint,
     minutes_per_day: eta.minutes_per_day,
-    p50_week: eta.p50_week,
-    p80_week: eta.p80_week,
-    horizon: etaHorizonOf(eta),
+    rows: eta.rows.map(r => ({
+      endpoint: r.endpoint,
+      p50_week: r.p50_week,
+      p80_week: r.p80_week,
+      horizon: etaHorizonOf(r),
+    })),
     wording: eta.wording,
   }
 }
@@ -243,7 +246,7 @@ export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = [], r
 
   if (etas.length) {
     lines.push('### 沙盘 ETA', '')
-    lines.push(...etas.map(e => `- ${e.course} → 终点「${e.endpoint}」：p50${crossingText(e.p50_week, e.horizon)}；p80${crossingText(e.p80_week, e.horizon)}（每日约 ${e.minutes_per_day} 分钟口径；${e.wording}）`))
+        lines.push(...etas.flatMap(e => e.rows.map(row => `- ${e.course} → 终点「${row.endpoint}」：p50${crossingText(row.p50_week, row.horizon)}；p80${crossingText(row.p80_week, row.horizon)}（每日约 ${e.minutes_per_day} 分钟口径；${e.wording}）`)))
     lines.push('')
   }
 

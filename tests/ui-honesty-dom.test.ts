@@ -42,32 +42,32 @@ const JOB_FIXTURE = {
   startedAt: '2026-09-12T00:00:00Z', phase: 'seed',
 }
 
-// ---- CoachCockpit（#155）：未播种禁用生长 + 任务条点击定位 ----
+// ---- CoachCockpit（#155/#240）：零终点禁用生长/罗盘重画 + 任务条点击定位 ----
 
-test('CoachCockpit：未播种课程「生长一步」禁用并说明先走种子提案', async () => {
+test('CoachCockpit：零终点课程「生长一步」「罗盘重画」禁用并说明先到图屏加终点', async () => {
   const { default: CoachCockpit } = await importUi('components/CoachCockpit.tsx')
-  const { frame } = spyFrame()
-  render(React.createElement(CoachCockpit, { course: '数学', jobs: [], coach: null, seeded: false, onOpenJob: () => undefined, frame }))
+  render(React.createElement(CoachCockpit, { course: '数学', jobs: [], coach: null, endpointCount: 0, onOpenJob: () => undefined }))
   const growth = screen.getByText('生长一步').closest('button')
   assert.ok(growth, '生长一步按钮存在')
-  assert.equal(growth!.hasAttribute('disabled'), true, '未播种 = 必然失败的操作，按钮禁用')
-  assert.ok(document.body.textContent!.includes('未播种'), '禁用说明可见')
-  assert.ok(document.body.textContent!.includes('种子提案'), '说明指向先走种子提案')
+  assert.equal(growth!.hasAttribute('disabled'), true, '零终点 = 必然失败的操作（教练回合要有一个方向才能裁决），按钮禁用')
+  assert.equal(screen.getByText('罗盘重画').closest('button')!.hasAttribute('disabled'), true, '罗盘重画同禁：零终点没有可裁决的方向')
+  assert.ok(document.body.textContent!.includes('还没有终点'), '禁用说明可见')
+  assert.ok(document.body.textContent!.includes('添加终点'), '说明指向先到图屏「添加终点」给课程方向')
 })
 
-test('CoachCockpit：已播种课程「生长一步」可点', async () => {
+test('CoachCockpit：有终点的课程「生长一步」可点', async () => {
   const { default: CoachCockpit } = await importUi('components/CoachCockpit.tsx')
-  render(React.createElement(CoachCockpit, { course: '数学', jobs: [], coach: null, seeded: true, onOpenJob: () => undefined }))
+  render(React.createElement(CoachCockpit, { course: '数学', jobs: [], coach: null, endpointCount: 2, onOpenJob: () => undefined }))
   const growth = screen.getByText('生长一步').closest('button')
-  assert.equal(growth!.hasAttribute('disabled'), false, '已播种不禁用')
-  assert.equal(document.body.textContent!.includes('未播种：'), false, '不渲染未播种说明')
+  assert.equal(growth!.hasAttribute('disabled'), false, '有终点不禁用')
+  assert.equal(document.body.textContent!.includes('还没有终点'), false, '不渲染零终点说明')
 })
 
 test('CoachCockpit：在途任务条点击 → onOpenJob 带任务 key（落生成页定位该任务）', async () => {
   const { default: CoachCockpit } = await importUi('components/CoachCockpit.tsx')
   const seen: string[] = []
   render(React.createElement(CoachCockpit, {
-    course: '数学', jobs: [JOB_FIXTURE], coach: null, seeded: true,
+    course: '数学', jobs: [JOB_FIXTURE], coach: null, endpointCount: 2,
     onOpenJob: (j: { key: string }) => seen.push(j.key),
   }))
   assert.ok(screen.getByText(/看全程/), '在途条可见')
@@ -75,34 +75,39 @@ test('CoachCockpit：在途任务条点击 → onOpenJob 带任务 key（落生�
   assert.deepEqual(seen, ['数学/种子起草'], '点击回调带任务注册表 key')
 })
 
-// ---- SeedFormModal（#155）：按引擎真实返回着色 ----
+// ---- SeedFormModal（#155/#240）：建课表单只收一个课程名，按引擎真实返回着色 ----
 
-async function fillAndSubmit(queued: boolean): Promise<void> {
+/** 填名提交（ADR-0076：建课 = 名称即空图——没有目标描述/类型/工作表字段）。
+ * registered=true 登记成功路由；false 不登记，借桩的 404 通道模拟服务端拒绝
+ * （重名等校验失败 → ApiError → 错误提示、表单不收起）。 */
+async function fillAndSubmit(registered: boolean): Promise<{ cancelled: number[] }> {
   const { default: SeedFormModal } = await importUi('components/SeedFormModal.tsx')
-  routes({ 'POST /seed/propose': { message: queued ? '已入队' : '「线性代数」种子起草任务已在途，不重复入队。', queued } })
   const cancelled: number[] = []
+  routes(registered ? { 'POST /course/create': { name: '线性代数', root: '线性代数' } } : {})
   render(React.createElement(SeedFormModal, {
-    visible: true, mode: 'new', course: null,
+    visible: true, course: null,
     onCancel: () => { cancelled.push(1) },
   }))
   // 表单字段就绪（Modal 弹层异步挂载）：名字输入框出现后再填
   const nameInput = await screen.findByPlaceholderText(/课程名（如/)
   await act(async () => { fireEvent.change(nameInput, { target: { value: '线性代数' } }) })
-  await act(async () => { fireEvent.change(screen.getByPlaceholderText(/目标描述/), { target: { value: '会解线性方程组' } }) })
-  await click(screen.getByText('起草种子提案'))
-  await waitFor(() => { assert.ok(stubCalls().some(c => c.path === '/seed/propose'), '提交已发出') }, { timeout: 3000 })
+  await click(screen.getByText('建课'))
+  await waitFor(() => { assert.ok(stubCalls().some(c => c.path === '/course/create'), '提交已发出') }, { timeout: 3000 })
+  return { cancelled }
 }
 
-test('SeedFormModal：入队成功 = 成功提示且表单收起', async () => {
-  await fillAndSubmit(true)
-  assert.ok(document.body.textContent!.includes('已入队'), '成功提示可见')
+test('SeedFormModal：建课成功 = 成功提示且表单收起', async () => {
+  const { cancelled } = await fillAndSubmit(true)
+  assert.ok(document.body.textContent!.includes('已创建'), '成功提示可见（锚词）')
+  assert.ok(cancelled.length > 0, '表单收起（onCancel 已被调）')
 })
 
-test('SeedFormModal：已在途拒绝 = 非成功样式（warning），表单不收起', async () => {
+test('SeedFormModal：建课被拒 = 非成功样式（error），表单不收起', async () => {
   await fillAndSubmit(false)
   await waitFor(() => {
-    assert.ok(document.body.textContent!.includes('不重复'), '拒绝消息可见（锚词）')
+    assert.ok(document.body.textContent!.includes('未登记路由'), '拒绝消息可见（桩 404 通道的 ApiError 文案）')
   })
+  assert.ok(screen.getByPlaceholderText(/课程名（如/), '表单不收起：输入框仍在')
 })
 
 // ---- ProposalsPage（#156）：应用全局刷新 + 查看结果按类型分流 ----

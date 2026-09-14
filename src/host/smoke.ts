@@ -293,10 +293,13 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
     }
     let node: string | null = null
 
-    // —— ① 种子起草：真生成站（种子起草）+ 提案直通（脚本内人审等价：apply 即受理）——
+    // —— ① 建课 + 加终点 + 种子起草（ADR-0076：课程先注册、方向由锚携带）+ 提案直通
+    // （脚本内人审等价：apply 即受理）——
     try {
+      await runner.engine.graph.createCourse(course)
+      await runner.engine.graph.addEndpoint(course, `${course}目标`, goal)
       const seed = await runner.engine.graph.seedPropose(
-        { course, goal, mode: 'new', goalType: 'capability' }, runner.agent,
+        { course, goalType: 'capability' }, runner.agent,
       )
       pipeline.seedProposalId = seed.id
       pipeline.endpoint = seed.endpoint

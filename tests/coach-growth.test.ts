@@ -19,9 +19,9 @@ import { AgentSeam } from '../src/engine/agent.ts'
 
 const SEED_VAULT = { registry: null, graph: null }
 
-/** 种子提案：概念「变化率」随种子铸名、起点/终点 teaches 引用（巩固门的已教概念底座）。 */
+/** 种子提案：概念「变化率」随种子铸名、起点/终点 teaches 引用（巩固门的已教概念底座）。
+ * ADR-0076：mode 退役，课程先名称建课，方向由手加锚携带。 */
 const CAPABILITY_SEED = `course: 数学
-mode: new
 concepts:
   - canonical: 变化率
 endpoint:
@@ -74,6 +74,8 @@ function goldVerdict(opts: {
     'note:',
     `  operator: ${opts.operator ?? '前进'}`,
     `  reason: ${opts.reason ?? '前沿缺下一台阶，沿终点推进'}`,
+    // #240 / ADR-0076 接线门多终点化：主线批（前进/换向）含 add_node 必声明朝向
+    ...((opts.operator ?? '前进') === '前进' || opts.operator === '换向' ? ['  target_endpoints: [用导数解决优化问题]'] : []),
     ...(opts.disagreement ? [`  disagreement: ${opts.disagreement}`] : []),
     // #146 起插入批必须预注册复诊（metric 恰一枚 + days 缺省 10 学习日）
     ...(opts.operator === '插入' ? ['  recheck:', '    metric: 卡点集中度降幅', '    days: 10'] : []),
@@ -128,6 +130,9 @@ function scriptFake(
 }
 
 async function seedApplied(engine: Awaited<ReturnType<typeof withVault>>['engine']): Promise<void> {
+  // ADR-0076 种子降职：先建课（名称即空图）+ 手加终点（起草要有方向），锚追加不覆盖
+  await engine.graph.createCourse('数学')
+  await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
   const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
   await engine.graph.graphApply('seed', r.id)
 }
@@ -381,8 +386,10 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
 test('停机转译：就绪深度满足时不拉回合（零调用）；force 越过后照常受理', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     const declared = todayStr(new Date())
+    // ADR-0076：先建课再手加终点，种子只给已注册课程起草
+    await engine.graph.createCourse('数学')
+    await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
     const r = await engine.graph.graphPropose('seed', `course: 数学
-mode: new
 endpoint:
   name: 用导数解决优化问题
   region: 基础
@@ -494,8 +501,10 @@ test('金样本回放闸：两族金样本首过（首过率对照、调用数�
 test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重裁请求），注入块随包进提示词', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     const declared = todayStr(new Date())
+    // ADR-0076：先建课再手加终点，种子只给已注册课程起草
+    await engine.graph.createCourse('数学')
+    await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
     const r = await engine.graph.graphPropose('seed', `course: 数学
-mode: new
 endpoint:
   name: 用导数解决优化问题
   region: 基础

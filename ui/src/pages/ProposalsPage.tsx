@@ -15,16 +15,15 @@ import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
-/** 种子提案影响预览（人话）：只说引擎真会做的事——新建节点、并入/替换哪条锚、罗盘重置、
- * 全保留项（#239 多终点化：锚按终点并入，其他终点的锚保留）。 */
+/** 种子提案影响预览（人话，ADR-0076：课程必须已注册、起草不覆盖既有锚）：只说引擎真会
+ * 做的事——新建节点、现有锚全保留、罗盘仅在缺席时脚手架初建、全保留项。 */
 function SeedImpactPreview({ impact }: { impact: SeedImpactDoc }) {
-  const reseed = impact.mode === 'reseed'
   return (
-    <Alert type={reseed ? 'warning' : 'info'} className='lh-mb-8' content={
+    <Alert type='info' className='lh-mb-8' content={
       <Space direction='vertical' size={2}>
-        {reseed && impact.current_anchors.length > 0 && (
+        {impact.current_anchors.length > 0 && (
           <Text>
-            现有终点「{impact.current_anchors.map(a => a.endpoint).join('、')}」：与本次同名的那条锚被新终点整份替换，其余终点的锚保留。
+            现有终点「{impact.current_anchors.map(a => a.endpoint).join('、')}」全部保留——起草不覆盖既有锚（同名终点会在受理门被拒）。
           </Text>
         )}
         {impact.new_nodes.length > 0 && (
@@ -35,7 +34,7 @@ function SeedImpactPreview({ impact }: { impact: SeedImpactDoc }) {
             「{impact.existing_nodes.join('、')}」与现有图重名：应用会被拒（提案已不适用当前图）——建议拒绝后重提。
           </Text>
         )}
-        {impact.compass_reset && <Text>罗盘路线与预计耗时将重置为待初画（你的批注保留）。</Text>}
+        {impact.compass_reset && <Text>罗盘缺席：将随本提案脚手架初建（已有罗盘原样保留，不重置）。</Text>}
         {impact.graph_nodes > 0 && (
           <Text type='secondary'>
             现有图 {impact.graph_nodes} 个节点连同学习进度、题库与调度全部保留——本轮不删除、不作废任何已有内容。

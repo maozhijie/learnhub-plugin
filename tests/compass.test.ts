@@ -26,7 +26,6 @@ import { AgentSeam } from '../src/engine/agent.ts'
 const SEED_VAULT = { registry: null, graph: null }
 
 const CAPABILITY_SEED = `course: 数学
-mode: new
 reason: 常识基线起步的能力锚定课程
 endpoint:
   name: 用导数解决优化问题
@@ -71,6 +70,9 @@ function replayFake(reply: string) {
 async function seedApplied(
   engine: LearnhubEngine,
 ): Promise<{ compass: { state: string; annotations_preserved: boolean } }> {
+  // ADR-0076 种子降职：先建课（名称即空图）+ 手加终点（起草要有方向），种子只给已注册课程起草
+  await engine.graph.createCourse('数学')
+  await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
   const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
   return await engine.graph.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
 }
@@ -270,43 +272,35 @@ test('AC2 批注区是软输入：初画附进上下文；写权重写保批注�
     await rm(p)
     const foldWithoutCompass = await engine.courseCompletion({ name: '数学', root: '数学' })
     assert.deepEqual(foldWithHandRoute, foldWithoutCompass)
-    assert.equal(foldWithoutCompass!.length, 1)
+    assert.equal(foldWithoutCompass!.length, 2, 'fold 逐终点：锚册两条终点各一条折叠')
     assert.equal(foldWithoutCompass![0]!.complete, false, '手编路线不产生完成宣告')
   })
 })
 
-test('reseed：批注区跨换终点保留，路线与 ETA 重置待初画/待刷新', async () => {
+test('换终点（ADR-0076 §三）：removeEndpoint + addEndpoint——锚册与 fold 逐终点收缩，批注区字节保留，罗盘不自动重置', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     await seedApplied(engine)
     const p = paths.compassPath('数学')
     await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
-    // 批注 + ETA 先挂上（模拟已运行一周）
+    // 批注先写上（模拟学习者手编）
     const withAnn = (await readFile(p, 'utf8')).replace(ANNOTATION_GUIDE, '多来点应用题。')
     await writeFile(p, withAnn, 'utf8')
-    await engine.growth2.compassEtaRefresh('数学')
 
-    const reseed = `course: 数学
-mode: reseed
-endpoint:
-  name: 证明微积分基本定理
-  region: 基础
-  block: 新终点块
-starts:
-  - name: 直观理解积分
-    region: 基础
-    block: 起点块
-`
-    const r = await engine.graph.graphPropose('seed', reseed) as { id: number }
-    const applied = await engine.graph.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
-    assert.equal(applied.compass.state, 'reseeded')
-    assert.equal(applied.compass.annotations_preserved, true)
+    // 换掉手加的锚「导数方向」（零 pre 终点节点，摘除不勾谁），换入新终点
+    const removed = await engine.graph.removeEndpoint('数学', '导数方向')
+    assert.equal(removed.endpoint, '导数方向')
+    assert.deepEqual(removed.unhooked, [], '零 pre 终点被摘时无台阶被勾')
+    await engine.graph.addEndpoint('数学', '证明微积分基本定理', '能独立证明微积分基本定理')
 
+    // 批注区跨换终点字节保留；罗盘不自动重置——路线重写是教练的写权，机器不越权
     const text = await readFile(p, 'utf8')
     const doc = parseCompass(text)
     assert.equal(sectionBody(doc, SECTION_ANNOTATIONS)?.trim(), '多来点应用题。', '批注区跨换终点字节保留')
-    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), ROUTE_PENDING, '旧路线锚在旧终点上，重置待初画')
-    assert.equal(sectionBody(doc, SECTION_ETA)?.trim(), ETA_PENDING, '旧 ETA 是旧结构的推演，重置待刷新')
-    assert.equal(etaMarkerOf(sectionBody(doc, SECTION_ETA)), null)
+    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), GOLD_ROUTE, '罗盘不自动重置（旧路线由教练下轮重写）')
+
+    // 锚册逐终点：换后两条锚 = 起草锚 + 新锚
+    const anchorBook = JSON.parse(await readFile(paths.anchorPath('数学'), 'utf8')) as { anchors: Array<{ endpoint: string }> }
+    assert.deepEqual(anchorBook.anchors.map(a => a.endpoint).sort(), ['用导数解决优化问题', '证明微积分基本定理'])
   })
 })
 
@@ -408,6 +402,20 @@ test('#231 对账三态：有锚（引用到图面节点名）/ 标候选（模�
   assert.equal(drifted.anchored, 0)
   assert.equal(reconcileRoute('', names).entries, 0, '空路线 = 零条目')
   assert.equal(reconcileRoute('- 某条路线', []).unmoored.length, 1, '空图面 = 无从核对（全无锚）')
+})
+
+test('#240 罗盘多终点分节零假漂移：节头行（- **终点名**：）锚在图内终点上，不装成漂移条目', () => {
+  const names = ['认识变化率', '用导数解决优化问题', '证明微积分基本定理']
+  const r = reconcileRoute([
+    '- **用导数解决优化问题**：',
+    '- **认识变化率**：先立直觉。',
+    '- **证明微积分基本定理**：',
+    '- **平均变化率台阶**（候选）：落图由生长批裁决。',
+  ].join('\n'), names)
+  assert.equal(r.entries, 4, '对账口径逐行不变：两个分节节头也计条目')
+  assert.equal(r.anchored, 3, '两个节头（终点名在图内）+ 引用起点的条目都有锚')
+  assert.equal(r.proposed, 1, '标注（候选）的未落图台阶照旧走标候选')
+  assert.deepEqual(r.unmoored, [], '零假漂移：分节节头不产生假漂移证据行')
 })
 
 test('#231 条目名提取：粗体段优先，无粗体退回行首标记后的短名，再退回整行', () => {

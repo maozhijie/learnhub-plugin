@@ -12,17 +12,18 @@ import { dataCheck } from '../src/engine/data-check.ts'
 import { withVault } from './helpers/vault.ts'
 
 // 种子提案 + 终点锚 + 完成读数 + 先验喂料分流（#142 / ADR-0033 生长式图；
-// #239 / ADR-0076 多终点化：锚是集合、读侧一律按集合读）：
-// kind=seed 是起草通道——1–3 起点 + 终点 + 朝终点的粗占位边，一次人审即开工；
-// apply 把锚**按终点并入**容器（state/终点锚.json：{version: 2, anchors: [...]}）；
+// #239 / ADR-0076 多终点化：锚是集合、读侧一律按集合读；#240 / ADR-0076 种子降职）：
+// kind=seed 是起草通道——只给**已注册**课程起草结构（课程由名称建课先注册，锚集合
+// 非空由手加终点表达；mode/goal 键已退役）：1–3 起点 + 终点 + 朝终点的粗占位边，
+// 一次人审即开工；apply 把锚**追加**进容器（state/终点锚.json：{version: 2, anchors: [...]}，
+// 起草不覆盖既有锚）；罗盘只在缺席时脚手架初建、绝不重置（state 恒 'scaffold'）；
 // 完成 = 读侧逐终点读数（零写侧状态）；终点增删走显式动作，锚不直改；
 // vault 链接先验 ≥0.7 喂料分流（未回应可见，零先验 Missing 非 Broken）。
 
-/** 未播种 vault：无注册表（mode=new 要求课程未注册，引擎建课脚手架负责落盘）。 */
+/** 未播种 vault：无注册表（ADR-0076：先 createCourse 名称建课，种子只给已注册课程起草）。 */
 const SEED_VAULT = { registry: null, graph: null }
 
 const CAPABILITY_SEED = `course: 数学
-mode: new
 reason: 常识基线起步的能力锚定课程
 endpoint:
   name: 用导数解决优化问题
@@ -36,7 +37,6 @@ starts:
 `
 
 const COVERAGE_SEED = `course: 数学
-mode: new
 goal_type: coverage
 reason: 备考大纲清单式课程
 endpoint:
@@ -53,14 +53,14 @@ worksheet:
   - block: 微分中值定理
 `
 
-test('validateSeedProposal：schema 负路径（est/enc 拒收、上限、工作表互斥、重名）', () => {
+test('validateSeedProposal：schema 负路径（est/enc 拒收、上限、工作表互斥、重名、mode 退役）', () => {
   const node = { name: 'A', region: '区', block: '块' }
   // est/enc 是种子节点的禁区（零 enc 零 est；占位边由引擎落）
-  const v1 = validateSeedProposal({ course: '数学', mode: 'new', endpoint: { ...node, est: 20 }, starts: [node] })
+  const v1 = validateSeedProposal({ course: '数学', endpoint: { ...node, est: 20 }, starts: [node] })
   assert.ok(v1.errors?.some(e => e.includes('零 enc 零 est')), 'est/enc 字段拒收并指向纪律')
   // 起点超过 3 个
   const v2 = validateSeedProposal({
-    course: '数学', mode: 'new',
+    course: '数学',
     endpoint: node,
     starts: [
       { name: 'S1', region: '区', block: '块' }, { name: 'S2', region: '区', block: '块' },
@@ -69,20 +69,22 @@ test('validateSeedProposal：schema 负路径（est/enc 拒收、上限、工作
   })
   assert.ok(v2.errors?.some(e => e.includes('上限 3')), '起点 1–3 条')
   // capability + worksheet 拒收；coverage 无 worksheet 拒收
-  const v3 = validateSeedProposal({ course: '数学', mode: 'new', endpoint: node, starts: [node], worksheet: [{ block: 'B' }] })
+  const v3 = validateSeedProposal({ course: '数学', endpoint: node, starts: [node], worksheet: [{ block: 'B' }] })
   assert.ok(v3.errors?.some(e => e.includes('能力锚定课程不带块工作表')))
-  const v4 = validateSeedProposal({ course: '数学', mode: 'new', goal_type: 'coverage', endpoint: node, starts: [node] })
+  const v4 = validateSeedProposal({ course: '数学', goal_type: 'coverage', endpoint: node, starts: [node] })
   assert.ok(v4.errors?.some(e => e.includes('覆盖锚定（goal_type=coverage）必须携带块工作表')))
   // 起点/终点重名
-  const v5 = validateSeedProposal({ course: '数学', mode: 'new', endpoint: node, starts: [{ ...node }] })
+  const v5 = validateSeedProposal({ course: '数学', endpoint: node, starts: [{ ...node }] })
   assert.ok(v5.errors?.some(e => e.includes('种子节点重名')))
-  // mode 必填
-  const v6 = validateSeedProposal({ course: '数学', endpoint: node, starts: [node] })
-  assert.ok(v6.errors?.some(e => e.includes('mode: 缺失或非法')))
+  // mode/goal 键已退役（#240 / ADR-0076 种子降职）：顶层未知字段拒收
+  const v6 = validateSeedProposal({ course: '数学', mode: 'new', endpoint: node, starts: [node] })
+  assert.ok(v6.errors?.some(e => e.includes('含未知字段 ["mode"]')))
 })
 
-test('AC1 种子全链：受理→人审→apply 落终点锚+目标类型，占位边可被生长批消费', async () => {
+test('AC1 种子全链：名称建课→起草受理→人审→apply 落终点锚+目标类型，占位边可被生长批消费', async () => {
   await withVault(SEED_VAULT, async ({ engine, root, paths }) => {
+    // ADR-0076 种子降职：课程由名称建课先注册（空图 + 空锚是合法空态），种子只起草
+    await engine.graph.createCourse('数学')
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as {
       id: number; kind: string; goal_type: string; endpoint: string; starts: number; prior_feed_unresponded: number
     }
@@ -103,11 +105,12 @@ test('AC1 种子全链：受理→人审→apply 落终点锚+目标类型，占
     assert.ok(applied.declared, '声明日期落盘')
     assert.ok(!applied.findings.some(f => f.includes('健康分')), '种子图健康分不设阈值（findings 无 <80 提示）')
 
-    // 注册表 + 课程脚手架（mode=new 建课）
+    // 注册表条目由名称建课落盘（建课 = 名称即空图；起草不再建课）
     const registry = await readFile(join(root, '学习中心', '课程注册表.yaml'), 'utf8')
     assert.match(registry, /name: 数学/)
-    // 图落盘：起点 + 终点 + 朝终点的粗占位边（终点.pre = 起点）
-    const dataYaml = await readFile(join(root, '学习中心', '数学', 'data', '00_基础.yaml'), 'utf8')
+    // 图落盘：起点 + 终点 + 朝终点的粗占位边（终点.pre = 起点）；
+    // 建课已落 00_未分区.yaml（零节点区），起草的新区顺延为 01_基础.yaml
+    const dataYaml = await readFile(join(root, '学习中心', '数学', 'data', '01_基础.yaml'), 'utf8')
     assert.match(dataYaml, /name: 认识变化率/)
     assert.match(dataYaml, /name: 用导数解决优化问题/)
     assert.match(dataYaml, /pre:[\s\S]*认识变化率/)
@@ -167,6 +170,8 @@ ops:
 
 test('AC2 覆盖锚定带块工作表；能力锚定带工作表受理被拒；种子审计豁免生效', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
+    // ADR-0076 种子降职：先名称建课，再给已注册课程起草
+    await engine.graph.createCourse('数学')
     // capability + worksheet → 受理门拒收
     await assert.rejects(
       () => engine.graph.graphPropose('seed', CAPABILITY_SEED + 'worksheet:\n  - block: 多余清单\n'),
@@ -197,8 +202,10 @@ test('AC2 覆盖锚定带块工作表；能力锚定带工作表受理被拒；�
   })
 })
 
-test('AC3 完成判据读侧折叠：达标/不达标各一，宣告零写副作用；换终点只走种子提案、锚直改被拒', async () => {
+test('AC3 完成判据读侧折叠：达标/不达标各一，宣告零写副作用；新方向走追加起草、锚直改被拒', async () => {
   await withVault(SEED_VAULT, async ({ engine, root, paths }) => {
+    // ADR-0076 种子降职：先名称建课，再给已注册课程起草
+    await engine.graph.createCourse('数学')
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
     await engine.graph.graphApply('seed', r.id)
 
@@ -283,9 +290,9 @@ ops:
 `), /rename 拒绝[\s\S]*终点增删走显式动作/,
     )
 
-    // 新方向只走起草通道：mode=reseed 人审后 apply → 锚按终点并入
-    const reseed = `course: 数学
-mode: reseed
+    // 新方向只走起草通道（#240 / ADR-0076 种子降职：mode 已退役）：同名终点换方向被
+    // 撞锚门拒绝（删终点后重提）；不同名新终点起草 = 追加新锚
+    const secondDraft = `course: 数学
 endpoint:
   name: 证明微积分基本定理
   region: 基础
@@ -296,16 +303,16 @@ starts:
     block: 起点块
     basis: vault
 `
-    const r2 = await engine.graph.graphPropose('seed', reseed) as { id: number; mode: string }
-    assert.equal(r2.mode, 'reseed')
+    const r2 = await engine.graph.graphPropose('seed', secondDraft) as { id: number }
     await engine.graph.graphApply('seed', r2.id)
     const anchors2 = await readAnchors(paths.anchorPath('数学'), nodeVaultFs)
-    // 锚按终点并入：同名终点整份替换，其他终点的锚保留（#239 多终点化）
+    // 锚**追加**不覆盖（#239 多终点化 / ADR-0076）：起草终点作为新锚入册，既有锚保留
+    assert.equal(anchors2.length, 2, '锚册两条：起草锚 + 新锚')
     const anchor2 = anchors2.find(a => a.endpoint === '证明微积分基本定理')!
     assert.equal(anchor2.origin_proposal, r2.id)
     assert.equal(anchor2.start_basis['直观理解积分'], 'vault')
-    assert.ok(anchors2.some(a => a.endpoint === '用导数解决优化问题'), '前一条锚保留（并入语义：只增不减）')
-    // 并入新锚后旧终点仍受锚保护（#239：并入不是覆盖——旧方向的锚还在）
+    assert.ok(anchors2.some(a => a.endpoint === '用导数解决优化问题'), '前一条锚保留（追加语义：只增不减）')
+    // 并入新锚后旧终点仍受锚保护（#239：追加不是覆盖——旧方向的锚还在）
     const stillGuarded = await engine.graph.graphPropose('edit', `course: 数学
 ops:
   - op: set_note
@@ -321,6 +328,8 @@ ops:
 
 test('AC4 先验喂料分流：≥0.7 未回应进 warns+审计可见；已回应不告警；零先验全绿', async () => {
   await withVault(SEED_VAULT, async ({ engine, root, paths }) => {
+    // ADR-0076 种子降职：先名称建课，再给已注册课程起草
+    await engine.graph.createCourse('数学')
     // vault 链接先验缓存：一对落在两个起点之间（种子结构不回应）、一对落在起点→终点（占位边回应）
     const stateDir = join(root, '学习中心', 'state')
     await mkdir(stateDir, { recursive: true })
@@ -360,7 +369,6 @@ test('AC4 先验喂料分流：≥0.7 未回应进 warns+审计可见；已回�
     // 零先验（缓存移除 = Missing）：受理回执与审计全绿，不判 Broken
     await rm(join(stateDir, 'vault链接.json'))
     const r2 = await engine.graph.graphPropose('seed', `course: 数学
-mode: reseed
 endpoint:
   name: 大纲综合二
   region: 基础
@@ -384,7 +392,8 @@ test('data-check 终点锚盘点：Missing 全绿；在盘合法计数；悬空/
     assert.equal(before.inventory.endpointAnchors.present, 0)
     assert.ok(!before.findings.some(f => f.area === 'endpoint_anchor'))
 
-    // 播种后：在盘且合法 → present=1 零 finding
+    // 播种后：在盘且合法 → present=1 零 finding（ADR-0076：名称建课落空锚册，起草追加锚）
+    await engine.graph.createCourse('数学')
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
     await engine.graph.graphApply('seed', r.id)
     const after = await dataCheck(paths, Date.now(), nodeVaultFs)
@@ -471,13 +480,13 @@ test('foldCompletion：零终点返回空列表；覆盖锚定按工作表折叠
   assert.equal(messyFold.criteria.closure_errors!.length, 0)
 })
 
-// ---- 面板下发的种子起草（seedPropose）：目标描述 → 缝 → 干跑门 → proposeSeed 受理 ----
-// （#162 起站点收统一 agent 缝：脚本化补全端口注入 AgentSeam）
+// ---- 面板下发的种子起草（seedPropose）：锚上目标描述 → 缝 → 干跑门 → proposeSeed 受理 ----
+// （#162 起站点收统一 agent 缝：脚本化补全端口注入 AgentSeam；#240 / ADR-0076：
+//   goal/mode 键退役——方向取自手加终点锚上的 goal_note，课程必须已注册、锚集合非空）
 
 import { AgentSeam } from '../src/engine/agent.ts'
 
 const SEED_LLM_OK = (course: string): string => `course: ${course}
-mode: new
 reason: 常识基线起步
 goal_type: capability
 endpoint:
@@ -491,19 +500,22 @@ starts:
     basis: baseline
 `
 
-test('seedPropose：目标起草种子提案——受理 pending、绑定字段以表单为准、零先验合法', async () => {
+test('seedPropose：锚上目标描述起草种子提案——受理 pending、绑定字段以表单为准、零先验合法', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
+    // ADR-0076 种子降职：先名称建课 + 手加终点（起草要有方向，方向取自锚上 goal_note）
+    await engine.graph.createCourse('微积分')
+    await engine.graph.addEndpoint('微积分', '导数方向', '学会用微积分解决优化问题')
     let calls = 0
     const fake = new AgentSeam({ complete: async prompt => {
       calls++
-      assert.ok(prompt.includes('学会用微积分解决优化问题'), '目标描述进上下文')
+      assert.ok(prompt.includes('学会用微积分解决优化问题'), '锚上的目标描述进上下文（方向取自手加终点）')
+      assert.ok(prompt.includes('「导数方向」'), '手加终点名进上下文（朝它铺坡道）')
       assert.ok(prompt.includes('- 课程名：微积分'), '课程名绑定进上下文')
-      assert.ok(prompt.includes('- 模式：new'), '模式进上下文')
       assert.ok(prompt.includes('- 目标类型：capability'), '目标类型进上下文')
       assert.ok(!prompt.includes('只读检索所得'), '未选配先验不附检索注入段')
       return 'course: 完全不相干的错名\n' + SEED_LLM_OK('x').slice('course: x\n'.length)
     } }, systemClock)
-    const r = await engine.graph.seedPropose({ course: '微积分', goal: '学会用微积分解决优化问题' }, fake)
+    const r = await engine.graph.seedPropose({ course: '微积分' }, fake)
     assert.equal(calls, 1)
     assert.equal(r.course, '微积分', '课程名以表单为准（模型照抄错也被绑定覆盖）')
     assert.equal(r.endpoint, '用导数解决优化问题')
@@ -517,19 +529,22 @@ test('seedPropose：目标起草种子提案——受理 pending、绑定字段�
 
 test('seedPropose：首轮 YAML 违约回灌修复一轮；两轮仍违约拒收（SEED_GATE_FAILED）', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
-    const broken = 'course: 微积分\nmode: new\nreason: 缺终点\nstarts: []\n'
+    // ADR-0076：先名称建课 + 手加终点（零终点拒收在前：起草要有方向）
+    await engine.graph.createCourse('微积分')
+    await engine.graph.addEndpoint('微积分', '导数方向')
+    const broken = 'course: 微积分\nreason: 缺终点\nstarts: []\n'
     let n = 0
     const flaky = new AgentSeam({ complete: async prompt => {
       n++
       if (n === 2) assert.ok(prompt.includes('种子校验门'), '修复轮带校验清单')
       return n === 1 ? broken : SEED_LLM_OK('微积分')
     } }, systemClock)
-    const r = await engine.graph.seedPropose({ course: '微积分', goal: '学会微积分' }, flaky)
+    const r = await engine.graph.seedPropose({ course: '微积分' }, flaky)
     assert.equal(n, 2)
     assert.equal(r.repaired, true)
     const alwaysBad = new AgentSeam({ complete: async () => broken }, systemClock)
     await assert.rejects(
-      () => engine.graph.seedPropose({ course: '微积分', goal: '学会微积分' }, alwaysBad),
+      () => engine.graph.seedPropose({ course: '微积分' }, alwaysBad),
       (err: Error & { code?: string }) => err.code === 'SEED_GATE_FAILED',
     )
   })
@@ -537,32 +552,34 @@ test('seedPropose：首轮 YAML 违约回灌修复一轮；两轮仍违约拒收
 
 test('seedPropose：coverage 绑定表单工作表（不信模型）；空工作表拒收', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
+    // ADR-0076：先名称建课 + 手加终点（方向取自锚上目标描述）
+    await engine.graph.createCourse('历史')
+    await engine.graph.addEndpoint('历史', '考纲方向', '过一遍考纲')
     const cov = new AgentSeam({ complete: async prompt => {
       assert.ok(prompt.includes('块工作表'), 'coverage 工作表进上下文')
-      return 'course: 历史\nmode: new\nreason: x\ngoal_type: coverage\nworksheet:\n  - block: 模型瞎写的块\nendpoint:\n  name: 完成考纲综述\n  region: 基础\n  block: 收束\nstarts:\n  - name: 通读考纲\n    region: 基础\n    block: 起点块\n    basis: baseline\n'
+      return 'course: 历史\nreason: x\ngoal_type: coverage\nworksheet:\n  - block: 模型瞎写的块\nendpoint:\n  name: 完成考纲综述\n  region: 基础\n  block: 收束\nstarts:\n  - name: 通读考纲\n    region: 基础\n    block: 起点块\n    basis: baseline\n'
     } }, systemClock)
     const r = await engine.graph.seedPropose(
-      { course: '历史', goal: '过一遍考纲', goalType: 'coverage', worksheet: [{ block: '代数' }, { block: '几何' }] }, cov)
+      { course: '历史', goalType: 'coverage', worksheet: [{ block: '代数' }, { block: '几何' }] }, cov)
     const seed = (await engine.store.loadProposals()).find(p => p.kind === 'seed' && p.id === r.id)
     assert.ok(seed?.summary.includes('块工作表 2 项'), '绑定表单的两块工作表（模型的单块被覆盖）')
     await assert.rejects(
-      () => engine.graph.seedPropose({ course: '历史', goal: '过一遍考纲', goalType: 'coverage' }, cov),
+      () => engine.graph.seedPropose({ course: '历史', goalType: 'coverage' }, cov),
       /块工作表/,
       'coverage 缺工作表直接拒收',
     )
   })
 })
 
-// ---- 种子提案影响预览（proposalImpact，#159）：reseed/建课应用确认框的知识前置 ----
-// 预览 = 只读现势计算：新建哪些节点、覆盖什么锚、罗盘是否重置、什么全保留；
-// 引擎 reseed 语义不动，预览说的是真会发生的事。
+// ---- 种子提案影响预览（proposalImpact，#159）：起草应用确认框的知识前置 ----
+// 预览 = 只读现势计算：新建哪些节点、现锚带出、罗盘是否初建、什么全保留；
+// ADR-0076 后 mode 键退役，预览说的是真会发生的事（罗盘只在缺席时初建，绝不重置）。
 
-test('proposalImpact：reseed 预览如实区分新建节点/现锚覆盖/罗盘重置/全保留', async () => {
+test('proposalImpact：起草预览如实区分新建节点/现锚/罗盘状态/全保留（ADR-0076：mode 已退役）', async () => {
   // 默认 vault：课程「数学」已注册（root=math），图上已有节点「入门」——
-  // 入手态即「可 reseed」的真实场景
+  // 入手态即「给已注册课程再起草」的真实场景
   await withVault({}, async ({ engine }) => {
     const first = `course: 数学
-mode: reseed
 endpoint:
   name: 用导数解决优化问题
   region: 基础
@@ -574,20 +591,18 @@ starts:
     basis: baseline
 `
     const r = await engine.graph.graphPropose('seed', first) as { id: number }
-    // 未播种：无锚、无罗盘——预览不说「覆盖」「重置」
+    // 未播种锚、罗盘缺席：预览如实说「将初建」（零锚是合法空态，起草只追加）
     const impact = await engine.proposals.proposalImpact('seed', r.id)
     assert.equal(impact.course, '数学')
-    assert.equal(impact.mode, 'reseed')
     assert.deepEqual(impact.new_nodes, ['认识变化率', '用导数解决优化问题'])
     assert.deepEqual(impact.existing_nodes, [], '提案与图无重名（重名会被受理门拒收）')
     assert.equal(impact.graph_nodes, 1, '当前图只有「入门」')
     assert.deepEqual(impact.current_anchors, [])
-    assert.equal(impact.compass_reset, false)
+    assert.equal(impact.compass_reset, true, '罗盘缺席：apply 将初建脚手架（预览不装「无变化」）')
 
-    // 应用后再提一轮换终点：预览翻转——现锚带出、罗盘重置为真
+    // 应用后再提一轮换方向起草：预览翻转——现锚带出、罗盘在场不重置（ADR-0076：罗盘绝不重置）
     await engine.graph.graphApply('seed', r.id)
     const second = `course: 数学
-mode: reseed
 endpoint:
   name: 证明微积分基本定理
   region: 基础
@@ -603,7 +618,7 @@ starts:
     assert.equal(impact2.current_anchors.length, 1, '现锚带出')
     assert.equal(impact2.current_anchors[0]!.endpoint, '用导数解决优化问题')
     assert.equal(impact2.current_anchors[0]!.origin_proposal, r.id)
-    assert.equal(impact2.compass_reset, true, '罗盘已存在：路线与 ETA 将重置')
+    assert.equal(impact2.compass_reset, false, '罗盘在场：apply 原样保留（批注/路线/ETA 都不动）')
     assert.equal(impact2.graph_nodes, 3, '现有图 3 节点全保留（入门 + 首轮种子 2 个）')
     // 省略 id = 最新 pending 种子提案（确认框从提案行直达时的形态）
     const impact3 = await engine.proposals.proposalImpact('seed')
@@ -611,19 +626,26 @@ starts:
   })
 })
 
-test('proposalImpact：mode=new 建课预览按空图直算——课程未注册、图还不存在是正常态', async () => {
+test('proposalImpact：未注册课程起草被受理门拒并指引；已注册空图课程按空图直算（ADR-0076 建课=名称即空图）', async () => {
   // #61 现场：建课提案的应用确认框预览曾在此必然炸「数据目录为空或不存在」，
-  // 吓人又误导（应用本身照常成功）。建课的应有预览：全部节点=新建、无锚覆盖、罗盘不重置。
+  // 吓人又误导。ADR-0076 后建课由「名称即空图」显式动作完成；预览的对应义务 =
+  // 未注册给可读拒因、已注册空图（graph_nodes=0）照常直算不炸。
   await withVault(SEED_VAULT, async ({ engine }) => {
+    // 未注册课程：受理门拒绝并指引先建课（种子已降职为「给已注册课程起草结构」）
+    await assert.rejects(
+      () => engine.graph.graphPropose('seed', CAPABILITY_SEED),
+      /注册表中没有课程「数学」[\s\S]*先在面板建课/,
+    )
+    // 名称建课后（空图 + 空锚合法空态）：起草受理，预览按空图直算——全部节点=新建、无锚覆盖
+    await engine.graph.createCourse('数学')
     const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
     const impact = await engine.proposals.proposalImpact('seed', r.id)
     assert.equal(impact.course, '数学')
-    assert.equal(impact.mode, 'new')
     assert.deepEqual(impact.new_nodes, ['认识变化率', '用导数解决优化问题'])
     assert.deepEqual(impact.existing_nodes, [])
-    assert.equal(impact.graph_nodes, 0, '现图不存在 = 0 节点，不是故障')
+    assert.equal(impact.graph_nodes, 0, '现图为空（零节点区）= 0 节点，不是故障')
     assert.deepEqual(impact.current_anchors, [])
-    assert.equal(impact.compass_reset, false)
+    assert.equal(impact.compass_reset, false, '名称建课已落罗盘脚手架：罗盘在场不重置')
   })
 })
 
@@ -633,7 +655,6 @@ test('proposalImpact：非种子 kind 与不存在/已决提案拒预览；重�
     await assert.rejects(() => engine.proposals.proposalImpact('seed', 999), /不存在或已决/)
     // 提案受理后图上长出了同名节点（漂移）→ existing_nodes 非空 = 应用必败的提前示警
     const seed = `course: 数学
-mode: reseed
 endpoint:
   name: 用导数解决优化问题
   region: 基础
@@ -662,21 +683,23 @@ starts:
 
 test('seedPropose（#229）：先验检索按**课程根**读登记表——name≠root 时别名扩词仍生效、审计随返回值带出', async () => {
   // 默认 vault 的课程是 name=数学 / root=math（两个字段不同）：登记表只可能住在 math 目录下，
-  // 旧实现拿课程名去读 → 静默零扩展。检索词取自目标描述（decompileTerms），故目标里放规范词
-  // 「导数」，笔记里只写别名「变化率」——扩词命中与否就是这个测试的读数。
+  // 旧实现拿课程名去读 → 静默零扩展。检索词取自锚上目标描述（decompileTerms），故 goal_note
+  // 里放规范词「导数」，笔记里只写别名「变化率」——扩词命中与否就是这个测试的读数。
   await withVault({
     files: [
       { path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: 导数\n    aliases: [变化率]\n' },
       { path: '笔记/我的理解.md', content: '# 变化率随记\n\n我一直把变化率理解成「走得快不快」。' },
     ],
   }, async ({ engine }) => {
+    // ADR-0076：数学已在册（默认注册表），手加终点锚——起草的方向取自锚上 goal_note
+    await engine.graph.addEndpoint('数学', '导数方向', '导数 与它的直观')
     let seen = ''
     const fake = new AgentSeam({ complete: async prompt => {
       seen = prompt
       return SEED_LLM_OK('数学')
     } }, systemClock)
     const r = await engine.graph.seedPropose({
-      course: '数学', goal: '导数 与它的直观', mode: 'reseed', useVaultPrior: true,
+      course: '数学', useVaultPrior: true,
     }, fake)
     assert.ok(r.prior, '选配先验即产审计（缺席 = 没检索，与零命中两件事）')
     assert.ok(r.prior.expanded.includes('变化率'), '登记表别名并入检索词（按课程根读到表）')
@@ -687,13 +710,16 @@ test('seedPropose（#229）：先验检索按**课程根**读登记表——name
   })
 })
 
-test('seedPropose（#229）：mode=new 课程还不存在 → 无表可读，扩展为空操作且**不留**降级痕迹', async () => {
+test('seedPropose（#229）：名称建课的新课程只有空概念登记表（concepts: [] 脚手架）→ 零扩展且**不留**降级痕迹', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
+    // ADR-0076：mode=new 建课路径退役——先名称建课（脚手架含空概念登记表）再手加终点
+    await engine.graph.createCourse('全新课')
+    await engine.graph.addEndpoint('全新课', '导数方向', '学会用导数求最值')
     const fake = new AgentSeam({ complete: async () => SEED_LLM_OK('全新课') }, systemClock)
-    const r = await engine.graph.seedPropose({ course: '全新课', goal: '学会用导数求最值', useVaultPrior: true }, fake)
+    const r = await engine.graph.seedPropose({ course: '全新课', useVaultPrior: true }, fake)
     assert.ok(r.prior)
-    assert.deepEqual(r.prior.expanded, [], '新课程没有登记表 → 零扩展')
-    assert.equal(r.prior.expansionError, undefined, '「没有表」（Missing 合法）不是「表坏了」——不留降级痕迹')
+    assert.deepEqual(r.prior.expanded, [], '新课程的登记表是空脚手架 → 零扩展')
+    assert.equal(r.prior.expansionError, undefined, '「空表/没有表」（Missing 合法）不是「表坏了」——不留降级痕迹')
     assert.equal(r.prior.zeroHit, true, '没记过笔记 = 零命中，照样留痕')
   })
 })

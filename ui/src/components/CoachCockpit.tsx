@@ -1,8 +1,7 @@
-/** 教练台（学习图生命周期 UI 化，ADR-0038）：建课/换终点种子起草、生长一步、罗盘重画、
+/** 教练台（学习图生命周期 UI 化，ADR-0038）：建课（名称即空图）、生长一步、罗盘重画、
  * enc 回填与复诊卡片——图域命令从面板直接下发（入队即返回，进度/结果看生成页），
- * 不再依赖 dsh 会话里的 agent。产物一律走提案人审通道（生长批除外：受理门即门，
- * ADR-0003 维持「不把逐批人审修回来」）。建课/换终点表单是全面板唯一主动建课入口
- * （#159），学习页空态直达的也是同一份表单组件（SeedFormModal）。 */
+ * 不再依赖 dsh 会话里的 agent。终点由学习者在图屏手加（ADR-0076）；零终点时生长/
+ * 初画禁用并说明（教练回合要有一个方向才能裁决）。 */
 import { Button, Card, Message, Modal, Progress, Space, Tag, Tooltip, Typography } from '@arco-design/web-react'
 import { useCallback, useState } from 'react'
 import SeedFormModal from './SeedFormModal'
@@ -27,9 +26,10 @@ const JOB_STATUS: Partial<Record<GenJobItem['status'], { label: string; color: s
 }
 
 /** 就绪深度卡（#161）：状态面 course.coach 直读——就绪存量对照前瞻需求的进度条 + 告警。
- * 冷启动首周需求 ×1.5 后 ceil；exhausted（除终点外前沿清空，词条「前瞻深度」）= 判据
- * 自然通过——剩下的路是学掉终点，不是继续生长，与「刚播种的合法空态」区分开。 */
-function ReadinessCard({ check }: { check: NonNullable<StatusCourse['coach']> }) {
+ * 冷启动首周需求 ×1.5 后 ceil；exhausted（ADR-0076 停摆判据：前沿除终点外清空 /
+ * 零节点空课 / 所有终点已达成）= 判据自然通过——剩下的路是学掉终点或先加终点，
+ * 不是继续生长。 */
+function ReadinessCard({ check, noEndpoints }: { check: NonNullable<StatusCourse['coach']>; noEndpoints: boolean }) {
   const tight = !check.ok
   // exhausted（尾段前沿清空）判据自然通过：进度条显满格，不因 ready=0 显 0% 绿条
   const ratio = check.exhausted || check.required <= 0
@@ -53,7 +53,9 @@ function ReadinessCard({ check }: { check: NonNullable<StatusCourse['coach']> })
         </div>
         {check.exhausted ? (
           <Text type='secondary' className='lh-t-12'>
-            除终点外就绪前沿已清空——判据自然通过、零告警：剩下的路是学掉终点，不是继续生长。
+            {noEndpoints
+              ? '还没有终点——教练回合要有一个方向才能裁决：先到图屏「添加终点」。'
+              : '判据满足、教练暂时不用再长：可能是尾段前沿已清空，也可能是所有终点已达成。剩下的路是学掉终点（或加个新方向），不是继续生长。'}
           </Text>
         ) : (
           <Text type='secondary' className='lh-t-12'>
@@ -134,18 +136,19 @@ function ProbationCard({ course }: { course: string }) {
 
 /** 教练台入口卡片：course 为 null（空 vault）时只露出建课入口 + 在途任务条；
  * coach = 状态面该课程的就绪深度检查（#161，缺席不显卡）；
- * seeded = 课程已播种（图存在）——未播种时「生长一步」必然失败，禁用并说明先走
- * 种子提案（#155 交互诚实性）；jobs 点击经 onOpenJob 落到生成页对应任务。 */
-export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpenJob }: {
+ * endpointCount = 该课程的终点数（图屏手加，ADR-0076）——零终点时「生长一步」必然
+ * 失败，禁用并说明先加一个终点（#155 交互诚实性）；jobs 点击经 onOpenJob 落到生成页
+ * 对应任务。 */
+export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, onOpenJob }: {
   course: string | null
   jobs?: GenJobItem[]
   coach?: StatusCourse['coach'] | null
-  seeded?: boolean
+  endpointCount?: number
   onOpenJob?: (job: GenJobItem) => void
 }) {
-  const [seedForm, setSeedForm] = useState<null | 'new' | 'reseed'>(null)
+  const [seedForm, setSeedForm] = useState(false)
   const [busy, setBusy] = useState<'growth' | 'compass' | 'backfill' | null>(null)
-  const unseeded = course !== null && !seeded
+  const noEndpoints = course !== null && endpointCount === 0
 
   const growth = (c: string) => {
     Modal.confirm({
@@ -199,25 +202,24 @@ export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpe
 
   return (
     <Card size='small' title='教练台' className='lh-card'
-      extra={<Text type='secondary' className='lh-t-12'>建课/换终点走种子提案（一次人审）；生长由教练回合裁决（过受理门自动应用）</Text>}>
+      extra={<Text type='secondary' className='lh-t-12'>建课 = 名称即空图；终点由你在图屏手加；生长由教练回合裁决（过受理门自动应用）</Text>}>
       <Space size={8} wrap>
-        <Button type='primary' size='small' onClick={() => setSeedForm('new')}>新建课程</Button>
+        <Button type='primary' size='small' onClick={() => setSeedForm(true)}>新建课程</Button>
         {course && (
           <>
-            {/* 未播种禁用（#155）：没有图就「生长」是必然失败的操作——按钮说明先走种子提案 */}
-            <Tooltip content={unseeded ? '本课程未播种（还没有学习图）：先起草种子提案并应用，图落地后才能生长' : ''}>
-              <Button size='small' disabled={unseeded} loading={busy === 'growth'} onClick={() => growth(course)}>生长一步</Button>
+            {/* 零终点禁用（#155）：教练回合要有一个方向才能裁决——先到图屏加终点 */}
+            <Tooltip content={noEndpoints ? '本课程还没有终点：先到图屏「添加终点」，教练才有方向可裁' : ''}>
+              <Button size='small' disabled={noEndpoints} loading={busy === 'growth'} onClick={() => growth(course)}>生长一步</Button>
             </Tooltip>
-            <Button size='small' loading={busy === 'compass'} onClick={() => void compass(course)}>罗盘重画</Button>
+            <Button size='small' disabled={noEndpoints} loading={busy === 'compass'} onClick={() => void compass(course)}>罗盘重画</Button>
             <Button size='small' loading={busy === 'backfill'} onClick={() => backfill(course)}>回填成分技能边</Button>
-            <Button size='small' type='outline' onClick={() => setSeedForm('reseed')}>换终点/改工作表</Button>
           </>
         )}
       </Space>
-      {unseeded && (
+      {noEndpoints && (
         <div className='lh-mt-6'>
           <Text type='secondary' className='lh-t-12'>
-            「{course}」未播种：先走种子提案（「新建课程」或上方「重建种子」），提案收件箱人审应用后图才落地、教练才能生长。
+            「{course}」还没有终点：到图屏「添加终点」给课程方向；加完终点教练回合会被自动拉起，把新终点接上相关既有节点。
           </Text>
         </div>
       )}
@@ -241,9 +243,9 @@ export default function CoachCockpit({ course, jobs, coach, seeded = true, onOpe
           </Space>
         </div>
       )}
-      {course && coach && <div className='lh-mt-10'><ReadinessCard check={coach} /></div>}
+      {course && coach && <div className='lh-mt-10'><ReadinessCard check={coach} noEndpoints={noEndpoints} /></div>}
       {course && <div className='lh-mt-10'><ProbationCard course={course} /></div>}
-      <SeedFormModal visible={seedForm !== null} mode={seedForm ?? 'new'} course={course} onCancel={() => setSeedForm(null)} />
+      <SeedFormModal visible={seedForm} course={null} onCancel={() => setSeedForm(false)} onCreated={() => window.dispatchEvent(new Event('learnhub:reload'))} />
     </Card>
   )
 }
