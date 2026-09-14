@@ -953,9 +953,10 @@ export class Content {
   }
 
   /** 满编放行（ADR-0079）：节清单已到总上限时，「正文过长」的拒收没有修复阶梯可走
-   * （压缩修复轮已试败、拆节需要新增节会越上限）——此时长度 finding 降为 warn 放行落盘，
-   * journal 与任务 message 留痕，人工复核兑底。findings 混入任何非长度项（契约类）时
-   * 不降级——契约未兑现仍然拦。sectionCount < MAX_SECTIONS 时拆节阶梯仍有效，不动。 */
+   * （不再付整节压缩修复的 deep 轮——满编即交付、人审兑底；拆节需新增节会越上限）
+   * ——此时长度 finding 降为 warn 放行落盘，journal 与任务 message 留痕。findings 混入
+   * 任何非长度项（契约类）时不降级——契约未兑现仍然拦。sectionCount < MAX_SECTIONS 时
+   * 拆节阶梯仍有效，不动。 */
   static demoteCapLengthFindings(
     findings: readonly string[], warns: readonly string[], sectionCount: number,
   ): { findings: string[]; warns: string[]; lenient: string | null } {
@@ -965,7 +966,7 @@ export class Content {
     const demoted = findings.map(f => {
       const m = f.match(/节「(.+?)」正文过长（约 (\d+) 字 > 拒收线 (\d+) 字/)
       return m
-        ? `满编放行：节「${m[1]}」正文约 ${m[2]} 字超拒收线 ${m[3]} 字（节点已满编 ${MAX_SECTIONS} 节，压缩修复未过、拆节阶梯不可用；人工复核兑底）`
+        ? `满编放行：节「${m[1]}」正文约 ${m[2]} 字超拒收线 ${m[3]} 字（节点已满编 ${MAX_SECTIONS} 节，拆节阶梯不可用；人工复核兑底）`
         : `满编放行（节点已满编，长度 finding 降为警告；人工复核兑底）：${f}`
     })
     return { findings: [], warns: [...warns, ...demoted], lenient: demoted.join('；') }

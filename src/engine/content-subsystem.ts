@@ -288,7 +288,7 @@ export class ContentSubsystem {
 
 
   /** 单节正文落盘：门禁通过后按清单重组正文，该节置 ready/version+1；hints = enc 候选反哺提醒。 */
-  async contentSection(courseKey: string | undefined, node: string, sectionId: string, md: string): Promise<{ version: number; title: string; hints: string[] }> {
+  async contentSection(courseKey: string | undefined, node: string, sectionId: string, md: string): Promise<{ version: number; title: string; hints: string[]; lenient?: string }> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[section] 节点「${node}」不在图内。`)
