@@ -12,15 +12,15 @@ import type { QueueCard, ReviewQueueDoc, StatusCourse } from '../types'
 
 const { Text, Title } = Typography
 
-/** 课程卡：进度 + 完成宣告 + 打开图/复习 + ⋯菜单（破坏性操作）。计数语义：
- * 未学 = unseen+ready。完成宣告（#142 雾区条款上半）：读侧折叠的宣告——完成判据满足时
- * 这里展示，零写侧状态。 */
+/** 课程卡：进度 + 终点读数 + 打开图/复习 + ⋯菜单（破坏性操作）。计数语义：
+ * 未学 = unseen+ready。课程没有完成态（ADR-0076）：课程卡只报「N 个终点 · M 个已铺通」
+ * ——课程不再宣告「已完成」，只说还要不要继续长。 */
 export function CourseCard(props: {
   name: string
   counts: { unseen: number; ready: number; learning: number; review: number; mastered: number; skipped: number }
   total: number
   due: number
-  /** 逐终点完成读数（#239 多终点化）：达成（旧完成判据逐终点口径）的终点各一条。 */
+  /** 逐终点完成读数（#239 多终点化）：终点卡的读数源（status 三档 + closure）。 */
   completions?: StatusCourse['completions']
   onOpen: () => void
   onReview: () => void
@@ -30,8 +30,10 @@ export function CourseCard(props: {
   const notStarted = props.counts.unseen + props.counts.ready
   const done = props.counts.mastered
   const percent = props.total ? Math.round((done / props.total) * 100) : 0
-  // 逐终点读数（#239）：达成（旧「已完成」逐终点口径）的终点各挂一条横幅
-  const reached = (props.completions ?? []).filter(c => c.complete)
+  // 终点读数（ADR-0076）：N 个终点 · M 个已铺通（sealed 及以上；已达成另点名）
+  const completions = props.completions ?? []
+  const sealedCount = completions.filter(c => c.status === 'sealed' || c.status === 'reached').length
+  const reachedCount = completions.filter(c => c.status === 'reached').length
   return (
     <Card size='small' hoverable className='lh-card'>
       <div className='lh-col lh-gap-8'>
@@ -44,11 +46,9 @@ export function CourseCard(props: {
           <Tag size='small' color='green'>掌握 {done}</Tag>
           {props.counts.skipped > 0 && <Tag size='small' color='purple'>跳过 {props.counts.skipped}</Tag>}
           {props.due > 0 && <Tag size='small' color='red'>到期 {props.due}</Tag>}
-          {reached.map(c => (
-            <Tag key={c.endpoint} size='small' color='green'>
-              🎉 已完成（{c.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'} · 终点「{c.endpoint}」· {c.declared} 宣告锚定）
-            </Tag>
-          ))}
+          <Tag size='small' color='magenta'>
+            {completions.length} 个终点 · {sealedCount} 个已铺通{reachedCount > 0 ? ` · ${reachedCount} 个已达成` : ''}
+          </Tag>
         </Space>
         <Space size={6} className='lh-full'>
           <Button size='mini' onClick={props.onOpen}>打开图</Button>

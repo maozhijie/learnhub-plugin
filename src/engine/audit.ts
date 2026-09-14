@@ -269,9 +269,10 @@ export async function runAudit(
     有向边: graph.edgeCount(),
     'enc 边': Object.values(graph.encOf).reduce((s, v) => s + v.length, 0),
     '根节点（无前置）': graph.roots.length,
-    // 口径豁免（#200）：leaves 剔终点；主线深度（原「最大深度」正名）保留终点——进度读数
+    // 口径豁免（#200）：leaves 剔终点；图深度（原「主线深度」正名，ADR-0076：多终点下
+    // 没有单一主线可指；口径不变 = 全图最长路径）保留终点——进度读数
     '叶子（无后继，不含终点）': graph.leaves.filter(n => !endpoints.has(n)).length,
-    主线深度: Object.keys(depth).length ? Math.max(...Object.values(depth)) : '-',
+    图深度: Object.keys(depth).length ? Math.max(...Object.values(depth)) : '-',
     '课程文件（已纳管）': Object.keys(found).length,
     未生成豁免: exempt.length,
     终点锚: anchors.length

@@ -22,7 +22,6 @@ import { systemClock } from '../src/host/clock.ts'
 const SEED_VAULT = { registry: null, graph: null }
 
 const CAPABILITY_SEED = `course: 数学
-mode: new
 concepts:
   - canonical: 变化率
 endpoint:
@@ -46,6 +45,7 @@ function goldVerdict(): string {
     'note:',
     '  operator: 前进',
     '  reason: 前沿缺下一台阶，沿终点推进',
+    '  target_endpoints: [用导数解决优化问题]',
     'route: |',
     '  - **把变化率说成本质**：从日常速度出发建立「变化多快」的直觉。',
     'ops:',
@@ -162,6 +162,7 @@ test('受理门通过率对照（12 场景）：单发 0/12 vs 回路 12/12—�
   const seenTargets = new Set<string>()
   for (const sc of SCENARIOS) {
     await withVault(SEED_VAULT, async ({ engine }) => {
+      await engine.graph.createCourse('数学')
       const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
       await engine.graph.graphApply('seed', r.id)
 

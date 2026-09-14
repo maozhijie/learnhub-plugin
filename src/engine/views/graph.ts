@@ -33,12 +33,11 @@ export interface GraphApplyEnrichResult {
 
 export type GraphApplyResult = GraphApplyEditResult | GraphApplySeedResult | GraphApplyEnrichResult
 
-/** 种子提案 apply（#142）：终点锚落盘 + 起点/终点/占位边落图。
- * seedPhase 豁免生效时 findings 不带健康分提示（种子图健康分不设阈值）。
- * compass = 罗盘常驻随 apply 就位（#143）：scaffold 新建待初画 / reseed 批注区保留。 */
+/** 种子提案 apply（#142）：终点锚落盘 + 起点/终点/占位边落图（ADR-0076 种子降职：
+ * 只作用于已注册课程，不再建课）。seedPhase 豁免生效时 findings 不带健康分提示
+ * （种子图健康分不设阈值）。compass = 罗盘常驻随 apply 就位（#143）：scaffold 新建。 */
 export interface GraphApplySeedResult {
   course: string
-  mode: 'new' | 'reseed'
   goal_type: 'capability' | 'coverage'
   endpoint: string
   starts: string[]
@@ -47,7 +46,7 @@ export interface GraphApplySeedResult {
   regions: string[]
   snapshot: number
   created_blocks: string[]
-  compass: { state: 'scaffold' | 'reseeded'; annotations_preserved: boolean }
+  compass: { state: 'scaffold'; annotations_preserved: boolean }
   prior_feed: { unresponded: number }
   findings: string[]
 }
@@ -80,6 +79,9 @@ export interface GraphDoc {
   /** 锚定终点节点名集（读侧从锚集合派生，#199 / ADR-0055；#239 多终点化：逐个终点）。
    * 消费面据此对终点关生成入口（终点纯标记化 ADR-0056）；零终点 = 空数组。 */
   endpoints: string[]
+  /** 逐终点最后台阶（ADR-0076 读侧派生；终点.pre 集）。 UI 终点列表反向展示；
+   * 台阶中的交汇节点用 nodes[].data.serves 交叉判定。 */
+  endpoint_steps?: Array<{ endpoint: string; last_steps: string[] }>
   stats: {
     nodes: number
     edges: number
@@ -124,6 +126,9 @@ export interface GraphDoc {
     /** 终点标记（#200 / ADR-0055 读锚现算）：true = 本节点是锚定的终点——方向标记，
      * 不被学习调度不产料（ADR-0056），图上按终点样式 + 图例呈现。 */
     isEndpoint: boolean
+    /** 交汇节点读数（ADR-0076 读侧派生，仅交汇节点携带）：本节点服务于哪些终点
+     * （落在 ≥2 个终点的前置闭包内）；零写侧字段、不落盘。 */
+    serves?: string[]
     /** practice = 交互实践节点（「练」角标）。 */
     type?: string
   } }>

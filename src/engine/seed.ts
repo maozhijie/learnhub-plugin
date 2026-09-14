@@ -1,8 +1,9 @@
 /**
  * 种子与终点锚（#142 / ADR-0033 生长式图；#239 / ADR-0076 多终点化）：
  *
- * - 种子提案（kind=seed）是起草通道：1–3 起点 + 终点节点 + 朝终点的粗占位边
- *   （终点.pre = 起点），一次人审即开工；种子节点零 enc 零 est。
+ * - 种子提案（kind=seed）是**给已注册课程起草结构**的通道（ADR-0076 种子降职：不再建课）：
+ *   1–3 起点 + 终点节点 + 朝终点的粗占位边（终点.pre = 起点），一次人审即开工；
+ *   种子节点零 enc 零 est。课程本身由「名称建课」（建课 = 名称即空图）先注册。
  * - 终点锚是课程的方向锚**集合**（`state/终点锚.json` = `{version: 2, anchors: [...]}`）：
  *   一条锚 = 一个终点的方向与承诺（终点节点 + 选填目标描述 + 目标类型 + 声明日期 +
  *   选填收尾宣告 + 覆盖锚定的块工作表）。课程可有任意多条，`anchors: []` 是合法空态
@@ -273,8 +274,6 @@ export interface SeedNodeSpec {
 
 export interface SeedProposalSpec {
   course: string
-  /** new = 新课程入口（注册表不得已有同名课程）；reseed = 既有课程重新种子（换终点/换工作表）。 */
-  mode: 'new' | 'reseed'
   goal_type: GoalType
   endpoint: SeedNodeSpec
   starts: SeedNodeSpec[]
@@ -286,7 +285,7 @@ export interface SeedProposalSpec {
 }
 
 const SEED_NODE_KEYS = new Set(['name', 'region', 'block', 'note', 'bloom', 'difficulty', 'teaches', 'assumes', 'misconceptions', 'basis'])
-const SEED_TOP_KEYS = new Set(['course', 'mode', 'goal_type', 'endpoint', 'starts', 'worksheet', 'concepts', 'reason'])
+const SEED_TOP_KEYS = new Set(['course', 'goal_type', 'endpoint', 'starts', 'worksheet', 'concepts', 'reason'])
 
 /** 种子节点条目解析（起点/终点共用；seed 节点走 parseConceptFields 同一闸）。 */
 function parseSeedNode(raw: unknown, where: string, errors: string[], warns: string[]): SeedNodeSpec | null {
@@ -345,9 +344,6 @@ export function validateSeedProposal(doc: unknown, warns?: string[]): { errors?:
     errors.push(`(顶层) 含未知字段 ${JSON.stringify(unknownTop)}（只允许 ${[...SEED_TOP_KEYS].join('/')}）`)
   }
   if (typeof d.course !== 'string' || !d.course.trim()) errors.push('course: 不能为空')
-  if (d.mode !== 'new' && d.mode !== 'reseed') {
-    errors.push('mode: 缺失或非法（必填，new = 新课程入口 / reseed = 既有课程重新种子——换终点走这里）')
-  }
   if (d.goal_type !== undefined && d.goal_type !== 'capability' && d.goal_type !== 'coverage') {
     errors.push(`goal_type: 只允许 capability/coverage（缺省 = capability 能力锚定；coverage 覆盖锚定必须显式选择并带 worksheet）`)
   }
@@ -403,7 +399,6 @@ export function validateSeedProposal(doc: unknown, warns?: string[]): { errors?:
   return {
     spec: {
       course: (d.course as string).trim(),
-      mode: d.mode as 'new' | 'reseed',
       goal_type: goalType,
       endpoint: endpoint!,
       starts,
@@ -582,6 +577,24 @@ export function foldCompletion(
   })
 }
 
+/** 交汇节点读侧派生（ADR-0076 词条「交汇节点」）：节点落在 ≥2 个终点的前置闭包内
+ * 即交汇。返回 节点名 → 服务于哪些终点（**只收 ≥2 个的节点**——纯派生零写侧字段、
+ * 不落盘，与 Mastery 同款纪律；悬空锚不入算）。终点闭包内剔除终点自身（方向标记
+ * 互不为前置——禁长过目标）。 */
+export function junctionServes(graph: Graph, anchors: EndpointAnchor[]): Map<string, string[]> {
+  const serves = new Map<string, string[]>()
+  for (const anchor of anchors) {
+    if (!graph.nset.has(anchor.endpoint)) continue
+    for (const n of closureOf(graph, anchor.endpoint)) {
+      if (n === anchor.endpoint) continue
+      const list = serves.get(n) ?? []
+      list.push(anchor.endpoint)
+      serves.set(n, list)
+    }
+  }
+  return new Map([...serves].filter(([, list]) => list.length >= 2))
+}
+
 /** 写锚时的锚条目构造（起草 apply 用；起点/终点名与图内严格一致）。 */
 export function anchorFromSeed(
   spec: SeedProposalSpec, originProposal: number, declared: string,
@@ -597,12 +610,11 @@ export function anchorFromSeed(
   }
 }
 
-/** 面板下发的种子起草请求（ADR-0038）：绑定字段（课程名/模式/目标类型/块工作表）
- * 以表单为准，引擎受理前覆盖写入——模型照抄错误不影响绑定。 */
+/** 面板/agent 下发的种子起草请求（ADR-0038；ADR-0076 种子降职：`goal` 与 `mode` 已
+ * 退役——起草只作用于已注册课程，课程由「名称建课」先注册，方向由人手加终点表达）。
+ * 绑定字段（目标类型/块工作表）以表单为准，引擎受理前覆盖写入——模型照抄错误不影响绑定。 */
 export interface SeedDraftRequest {
   course: string
-  goal: string
-  mode?: 'new' | 'reseed'
   goalType?: 'capability' | 'coverage'
   useVaultPrior?: boolean
   worksheet?: Array<{ block: string; note?: string }>

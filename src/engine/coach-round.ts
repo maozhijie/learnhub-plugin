@@ -332,24 +332,24 @@ export interface ReadyDepthCheck {
   cold_start: boolean
   ok: boolean
   /** 除终点外就绪前沿已清空（课程尾段，词条「前瞻深度」）——判据自然通过，
-   * 剩下的路是学掉终点。UI 据此区分「尾段合法停摆」与「刚播种的合法空态」。 */
+   * 剩下的路是学掉终点。UI 据此区分「尾段合法停摆」与「刚建课的合法空态」。 */
   exhausted: boolean
   /** 只告警不阻塞：ready=0 与低于前瞻各出一行。 */
   warnings: string[]
 }
 
 /** 就绪深度检查（纯函数）：ready ≥ required 即满足——满足时教练回合自然无批可产
- * （停摆是判据满足的自然结果，不是新状态）；ready=0 只告警（合法空态：刚播种/
+ * （停摆是判据满足的自然结果，不是新状态）；ready=0 只告警（合法空态：刚建课/
  * 生长尚未跟上），永不阻塞、永不抛错。exhausted = 除终点外就绪前沿已清空（课程尾段，
  * 词条「前瞻深度」：终点是锚点不是课程节点）——判据自然通过，零告警：教练合法停摆，
  * 剩下的路是学掉终点，不是继续生长。 */
 export function readyDepthCheck(input: {
   ready: number
-  /** 终点锚声明日（null = 未播种，不判冷启动）。 */
+  /** 终点锚声明日（null = 零终点/空锚，不判冷启动）。 */
   declared: string | null
   today: string
   depth?: number | null
-  /** 除终点外就绪前沿已清空（仅已播种课程可能为 true）。 */
+  /** 除终点外就绪前沿已清空（含零节点图与所有终点已达成——ADR-0076 停摆判据）。 */
   exhausted?: boolean
 }): ReadyDepthCheck {
   const raw = input.depth ?? COACH_LOOKAHEAD_DEFAULT

@@ -50,13 +50,17 @@ const NO_ENGINE: Record<string, '队列型' | '按参分派型' | '无引擎型'
   'node-pin': '按参分派型', 'experiments': '按参分派型', 'graph-apply': '按参分派型',
   'question-update': '按参分派型', 'bank-cleanup': '按参分派型', 'probation': '按参分派型',
   'sleep-config': '按参分派型', 'receipt-review-mode': '按参分派型',
-  // ③ 无引擎型 12：伺服、host 队列态、常量、LLM 会话、实验运行器（smoke/spike，#215/#216；quality-review 评审器，#222/#224）
+  // ③ 无引擎型 14：伺服、host 队列态、常量、LLM 会话、实验运行器（smoke/spike，#215/#216；quality-review 评审器，#222/#224）、
+  // 终点手加/删（#240/ADR-0076：主体动作在 handler——一个写入单元直调引擎图域 add/removeEndpoint 立即落盘，
+  // add 顺带去重入队一个教练接线回合；不经命令队列的 runner，故不入 ① 队列型）
   'file': '无引擎型', 'vendor-': '无引擎型', 'interactive': '无引擎型',
   'generate-status': '无引擎型', 'generate-resume': '无引擎型', 'generate-cancel': '无引擎型',
   'agent-guide': '无引擎型', 'tutor': '无引擎型', 'explain-back': '无引擎型',
   'smoke': '无引擎型',
   'spike': '无引擎型',
   'quality-review': '无引擎型',
+  'endpoint-add': '无引擎型',
+  'endpoint-remove': '无引擎型',
 }
 
 // ---------------------------------------------------------------- ① engine 存在性
@@ -100,7 +104,7 @@ test('门① engine 存在性：点路径 ∈ 子系统原型 / 裸名 ∈ hub �
   assert.deepEqual(ghosts, [], `白名单里的这些 id 在注册表里不存在（幽灵条目）：\n${ghosts.join('\n')}`)
   // 生成路径的命令必须真的声明了 bind（否则适配器无从装配实参）
   const generic = COMMAND_LIST.filter(c => c.channels.some(x => x.bind !== undefined))
-  assert.ok(generic.length >= 65, `走生成路径的命令只剩 ${generic.length} 条（实测 agent 45 ∪ panel 49 ≈ 70，塌了就说明声明退化）`)
+  assert.ok(generic.length >= 66, `走生成路径的命令只剩 ${generic.length} 条（#240 +1：course-create 的 bind 通道进生成路径；塌了就说明声明退化）`)
 })
 
 // ---------------------------------------------------------------- ② 队列阶段
@@ -133,7 +137,7 @@ test('门③ 唯一性：id／tool 名／(method, path) 各自唯一，索引没
   assert.equal(tools.length, 112, `agent 通道应恰 112 条，实得 ${tools.length}（#203 +1：learnhub_receipt_review_mode）`)
   const routeKeys = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route).map(x => `${x.route!.method} ${x.route!.path}`))
   assert.equal(new Set(routeKeys).size, routeKeys.length, '(method, path) 有重复')
-  assert.equal(routeKeys.length, 130, `panel 通道应恰 130 条，实得 ${routeKeys.length}（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review）`)
+  assert.equal(routeKeys.length, 133, `panel 通道应恰 133 条，实得 ${routeKeys.length}（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove）`)
   assert.equal(BY_TOOL.size, tools.length, 'BY_TOOL 索引吞了条目（有重复 tool 名被 Map 覆盖）')
   assert.equal(BY_ROUTE.size, routeKeys.length, 'BY_ROUTE 索引吞了条目（有重复路由被 Map 覆盖）')
 })
@@ -218,7 +222,7 @@ test('门④ handler 覆盖：handlers.ts 的键集合 == 没有 bind 的 panel 
   assert.deepEqual(missing, [], `这些路由既没有 bind（生成路径）也没有 handler：\n${missing.join('\n')}`)
   assert.deepEqual(dead, [], `这些 handler 已被生成路径覆盖（死代码，该删）：\n${dead.join('\n')}`)
   assert.ok(generic.length >= 45, `生成路径只剩 ${generic.length} 条（装机率塌了）`)
-  assert.equal(generic.length + handled.length, 130, '面板通道总数应恰 130（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review）')
+  assert.equal(generic.length + handled.length, 133, '面板通道总数应恰 133（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove）')
   // bind 的每个键都必须在 args 里（否则取值器会抛「声明漏键」）
   const badBind = panel.filter(x => (x.channel.bind ?? []).some(k => k !== null && !(k in x.command.args)))
     .map(x => x.command.id)

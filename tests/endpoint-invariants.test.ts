@@ -11,9 +11,11 @@ import { withVault, noteText, tfQuestion } from './helpers/vault.ts'
 
 // 终点性不变式（#198/#199/#202 / ADR-0055+0056；#239 / ADR-0076 多终点化：一律按
 // 锚集合读——生成门/就绪剔除/审计豁免/图面标记/收尾宣告逐终点判定）：
-// - #198 受理门：① 任何 add_node 以终点为 pre 拒（禁长过目标）；② 主线批（前进/换向）
-//   含新节点必须 set_pre 接线终点（替换语义，新前沿全部汇入终点闭包）；③ 收尾接线批
-//   （零 add_node 纯 set_pre）合法；旁支/巩固/插入豁免接线；锚保护既有范围不变。
+// - #198 受理门（#239 / ADR-0076 多终点化）：① 任何 add_node 以终点为 pre 拒（禁长过
+//   目标）；② 主线批（前进/换向）含新节点必须声明 note.target_endpoints 且对每个声明
+//   终点 set_pre 接线（替换语义，新前沿全部汇入终点闭包；同一新节点可进多个终点的
+//   pre——交汇）；③ 收尾接线批（零 add_node 纯 set_pre）合法；旁支/巩固/插入豁免接线；
+//   锚保护既有范围不变。
 // - #199 生成门：终点 generate 恒拒（不看就绪）、contextPack 不为终点组装、T1/T2 不
 //   登记终点、学习者就绪清单与推荐面剔终点。
 // - #202 终点纯标记化：完成判据折叠自最后台阶（终点.pre 集全部 ≥ 阈值）+ 收尾事实
@@ -85,7 +87,7 @@ ops:
   })
 })
 
-test('#198② 主线批（前进）含新节点缺接线终点 → 受理门拒收（回灌语义的拒因可读）', async () => {
+test('#198② 主线批（前进）含新节点未声明朝向 → 受理门拒收（ADR-0076：target_endpoints 必填，拒因可读）', async () => {
   await withVault(SEALED_VAULT, async ({ engine }) => {
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
@@ -100,14 +102,15 @@ ops:
     pre: [入门]
     est: 15
 `),
-      /未接线终点.*set_pre/s,
+      /未声明朝向.*target_endpoints 必填/s,
     )
-    // 接线在场但未覆盖批内新前沿（新前沿 = 不被批内其他新节点消费的新节点）→ 同拒
+    // 声明朝向后接线未覆盖批内新前沿（新前沿 = 不被批内其他新节点消费的新节点）→ 同拒
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
   operator: 前进
   reason: 前沿缺下一台阶
+  target_endpoints: [终点]
 ops:
   - op: add_node
     name: 新台阶
@@ -119,9 +122,9 @@ ops:
     node: 终点
     pre: [入门]
 `),
-      /未覆盖批内新前沿.*新台阶/s,
+      /未覆盖批内新前沿：新台阶/s,
     )
-    // 换向批同受接线义务约束
+    // 换向批同受朝向声明义务约束
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
@@ -135,18 +138,19 @@ ops:
     pre: [入门]
     est: 15
 `),
-      /未接线终点/s,
+      /未声明朝向/s,
     )
   })
 })
 
 test('#198③ 主线批接线合规受理 + 收尾接线批（零 add_node 纯 set_pre）合法', async () => {
   await withVault(SEALED_VAULT, async ({ engine }) => {
-    // 前进批带完整接线：新前沿汇入终点闭包 → 受理
+    // 前进批带朝向声明 + 完整接线：新前沿汇入终点闭包 → 受理
     const mainline = await engine.graph.graphPropose('edit', `course: 数学
 note:
   operator: 前进
   reason: 前沿缺下一台阶
+  target_endpoints: [终点]
 ops:
   - op: add_node
     name: 新台阶
@@ -248,11 +252,12 @@ ops:
     assert.deepEqual(complete.criteria.last_steps.map(s => s.node), ['中间台阶'], '判据折叠自最后台阶（终点.pre 集）')
     assert.equal(complete.criteria.sealed, sealed)
 
-    // 主线接线批重开（前进 + add_node + 终点接线）→ sealed 清除，完成回到未完成
+    // 主线接线批重开（前进 + add_node + 声明朝向 + 终点接线）→ sealed 清除，完成回到未完成
     const reopen = await engine.graph.graphPropose('edit', `course: 数学
 note:
   operator: 前进
   reason: 目标扩了一级，重开主线
+  target_endpoints: [终点]
 ops:
   - op: add_node
     name: 更高台阶
@@ -551,11 +556,12 @@ ops:
     assert.equal(byName.get('终点乙')!.status, 'unwired')
     assert.equal(byName.get('终点乙')!.criteria.sealed, null)
 
-    // 甲重开主线（含 add_node 的接线批）→ 只清甲的 sealed，乙照旧
+    // 甲重开主线（前进 + add_node + 声明朝甲）→ 只清甲的 sealed，乙照旧
     const reopenA = await engine.graph.graphPropose('edit', `course: 数学
 note:
   operator: 前进
   reason: 甲方向再进一级
+  target_endpoints: [终点甲]
 ops:
   - op: add_node
     name: 甲更高台阶
@@ -575,13 +581,14 @@ ops:
   })
 })
 
-test('#239 接线门边界：多终点课程暂不设门（不把无关方向强行改扎到本批新台阶）', async () => {
+test('#239 接线门多终点化（ADR-0076）：声明朝向逐终点接线受理、交汇合法、未声明/不在册拒收', async () => {
   await withVault(TWO_ENDPOINT_VAULT, async ({ engine, paths }) => {
-    // 只朝甲方向长：受理（「本批朝哪些终点长」的声明随 #244 落地，桥梁期不逼错接）
+    // 声明朝甲方向长：target_endpoints=[终点甲] + 甲接线 → 受理；乙的 pre 一字未动
     const growA = await engine.graph.graphPropose('edit', `course: 数学
 note:
   operator: 前进
   reason: 只朝甲方向长
+  target_endpoints: [终点甲]
 ops:
   - op: add_node
     name: 甲新台阶
@@ -595,31 +602,73 @@ ops:
 `) as { id: number }
     assert.ok(growA.id > 0)
     await engine.graph.graphApply('edit', growA.id)
-    // 乙的 pre 一字未动（没有被本批当成「批内新前沿」改扎过去）
     const { GraphStore, Graph } = await import('../src/engine/graph.ts')
     const nodeVaultFs = (await import('../src/host/vault-fs.ts')).nodeVaultFs
-    const graph = new Graph(await new GraphStore(paths, paths.courseRoot('math'), nodeVaultFs).load())
-    assert.deepEqual(graph.preOf['终点乙'], ['起点乙'], '无关方向的接线不因本批漂移')
-    assert.deepEqual(graph.preOf['终点甲'], ['甲新台阶'], '本批声明的方向照常接线')
+    const graphOf = async (): Promise<Graph> =>
+      new Graph(await new GraphStore(paths, paths.courseRoot('math'), nodeVaultFs).load())
+    let graph = await graphOf()
+    assert.deepEqual(graph.preOf['终点乙'], ['起点乙'], '未声明方向的接线不因本批漂移')
+    assert.deepEqual(graph.preOf['终点甲'], ['甲新台阶'], '声明方向照常接线')
 
-    // 单终点课程的接线义务照旧（既有用例已覆盖）；这里补一条对照：终点名集从 2 → 1 后门重新生效
-    const { writeAnchors } = await import('../src/engine/seed.ts')
-    const two = await (await import('../src/engine/seed.ts')).readAnchors(paths.anchorPath('math'), nodeVaultFs)
-    await writeAnchors(paths.anchorPath('math'), two.filter(a => a.endpoint === '终点甲'), nodeVaultFs)
+    // 交汇合法：同一新节点同批声明两个朝向、各带 set_pre → 同时进多个终点的 pre
+    const junction = await engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 一级台阶同时服务两个方向（交汇）
+  target_endpoints: [终点甲, 终点乙]
+ops:
+  - op: add_node
+    name: 交汇台阶
+    region: 基础
+    block: 入门块
+    pre: [起点甲, 起点乙]
+    est: 15
+  - op: set_pre
+    node: 终点甲
+    pre: [交汇台阶]
+  - op: set_pre
+    node: 终点乙
+    pre: [交汇台阶]
+`) as { id: number }
+    assert.ok(junction.id > 0)
+    await engine.graph.graphApply('edit', junction.id)
+    graph = await graphOf()
+    assert.deepEqual(graph.preOf['终点甲'], ['交汇台阶'])
+    assert.deepEqual(graph.preOf['终点乙'], ['交汇台阶'], '同一新节点可进多个终点的 pre（交汇节点）')
+
+    // 声明不在册终点：拒收（锚由人手增删，提案不得凭空拼造方向）
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
   operator: 前进
-  reason: 单终点课程缺接线
+  reason: 朝不存在的方向长
+  target_endpoints: [不存在的终点]
 ops:
   - op: add_node
     name: 又一台阶
     region: 基础
     block: 入门块
-    pre: [甲新台阶]
+    pre: [起点甲]
     est: 10
 `),
-      /未接线终点.*set_pre/s,
+      /不是在册终点/,
+    )
+
+    // 未声明朝向：拒收（多终点化后不再有单锚桥梁期特例——没有方向就没有前进）
+    await assert.rejects(
+      () => engine.graph.graphPropose('edit', `course: 数学
+note:
+  operator: 前进
+  reason: 桥梁期的老写法
+ops:
+  - op: add_node
+    name: 又一台阶
+    region: 基础
+    block: 入门块
+    pre: [起点甲]
+    est: 10
+`),
+      /未声明朝向.*target_endpoints 必填/s,
     )
   })
 })

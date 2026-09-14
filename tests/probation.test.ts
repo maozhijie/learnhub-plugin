@@ -528,7 +528,22 @@ test('AC4 data-check 到期未决：hint 提示类（不进 status）+ inventory
   })
 })
 
-test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限时插入批被受理门拒收，前进/旁支照常', async () => {  await withVault({ graph: TWO_NODE_GRAPH }, async ({ engine, paths }) => {
+test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限时插入批被受理门拒收，前进/旁支照常', async () => {  await withVault({
+    graph: [
+      'region: 基础',
+      'color: blue',
+      'blocks:',
+      '  - name: 入门块',
+      '    nodes:',
+      '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+      '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
+      '      - { name: 终点, pre: [入门], opt: false, note: "" }',
+    ].join('\n'),
+    files: [{ path: join('学习中心', 'math', 'state', '终点锚.json'), content: JSON.stringify({
+      version: 2,
+      anchors: [{ endpoint: '终点', goal_type: 'capability', declared: '2026-09-01', origin_proposal: 1, seed_nodes: ['入门', '终点'], start_basis: { 入门: 'baseline' } }],
+    }, null, 1) + '\n' }],
+  }, async ({ engine, paths }) => {
     // 学习日底座（窗内取材）
     for (let d = -10; d <= 0; d++) await engine.store.appendPractice(pRec(d, '入门'))
     // 真实插入批 1：登记 1 节
@@ -561,10 +576,11 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
       ].join('\n') + '\n'),
       /生长闸门拒绝受理[\s\S]*复诊通过率/,
       '超速插入批在受理门就被拒收（构造超限场景验证调速）')
-    // 前进批不受闸（route 不携带——未播种课程没有罗盘重写通道，与本票无关）
+    // 前进批不受闸（ADR-0076 主线批必接线：声明终点 + set_pre 汇入批内新前沿；route 不携带——本批不重写罗盘）
     const fwd = await engine.graph.graphPropose('edit', [
-      'course: 数学', 'note:', '  operator: 前进', '  reason: 主线推进', 'ops:',
+      'course: 数学', 'note:', '  operator: 前进', '  reason: 主线推进', '  target_endpoints: [终点]', 'ops:',
       '  - op: add_node', '    name: 前进节点', '    region: 基础', '    block: 入门块', '    pre: [入门]',
+      '  - op: set_pre', '    node: 终点', '    pre: [前进节点]',
     ].join('\n') + '\n') as { id: number }
     assert.ok(fwd.id > 0)
     await engine.graph.graphReject(fwd.id)

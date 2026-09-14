@@ -1,11 +1,15 @@
 /**
- * 目标反编译（P-5 / #95，v8 种子簇形态 #149）：双提案 = 里程碑计划草案（project_plan）
- * + 知识子图种子簇（kind=seed，起点 basis 铸 project——种子三路之 project 路接线）。
+ * 目标反编译（P-5 / #95；ADR-0076 / #240 种子降职——plan-only 形态）：反编译不再自带
+ * 建课能力，目标课程必须已注册（未注册拒并指引先建课；课程入口 = 名称建课 + 手加终点），
+ * 只产计划半区——计划引用既有图节点名，朝尚不存在节点的意图走计划修订驱动的教练补支。
  * 本文件覆盖：
- * - 纯函数面：目标描述解析、检索词派生、双产物拆分校验（计划半区 = validatePlanArtifact、
- *   种子半区 = validateSeedProposal 骨架模式——零 enc 零 est 零 pre）、名字对账门、修复轮提示词；
- * - 同源同进同退：受理侧门禁全过才落提案（对账失败零提案），pair 联动的联合 apply
- *   （种子先落图、计划后落盘——apply 时序缺口回归钉）、单边 apply 守卫、reject 联动。
+ * - 纯函数面：目标描述解析、检索词派生、plan-only 拆分校验（计划半区 = validatePlanArtifact
+ *   同门；模型仍产 seed 半区即拒）、名字对账门（引用 ⊆ 既有课程图节点名）、修复轮提示词；
+ * - 门面：受理只落计划提案（seed_proposal/pair.seed 恒 null）、未指定/未注册课程拒 +
+ *   先建课手加终点后成功的正反两 scenario、对账失败零提案（DECOMPILE_GATE_FAILED）、
+ *   模型多产 seed 半区走修复轮摘除。
+ * （ADR-0076 前 v8 的双提案 pair 联动/联合 apply/reject 联动退役：存量 pending 对仍可走
+ * projectDecompileApply，但公开 API 不再产新对——动态半的回归面移交存量机制，此处不构造。）
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -54,8 +58,9 @@ const DECOMPILE_VAULT = {
   files: [...NOTE_FILES, { path: '学习中心/笔记源/源清单.yaml', content: NOTE_MANIFEST }],
 }
 
-/** 模型产出的反编译文档（plan + seed 双半区；合法形态——种子概念铸名覆盖 teaches 引用）。 */
-function decompileYaml(project: string, course = '吉他'): string {
+/** 模型产出的反编译文档（plan-only，ADR-0076：YAML 顶层只剩 project+plan）；计划
+ * 引用已注册课程的既有图节点名（默认挂「数学」的入门/进阶两节点）。 */
+function decompileYaml(project: string, course = '数学'): string {
   return `\
 project: ${project}
 plan:
@@ -64,35 +69,13 @@ plan:
     task_class: 简：照谱复现
     acceptance_hints: C 大调两个八度双手连贯
     est: 600
-    nodes: [${course}/音阶爬格]
+    nodes: [${course}/入门]
   - id: m2
     name: 完整弹会《野蜂飞舞》选段
     task_class: 繁：独立演绎
     acceptance_hints: 100 速度下完整弹完选段
     est: 900
-    nodes: [${course}/完整弹奏选段]
-seed:
-  course: ${course}
-  goal_type: capability
-  concepts:
-    - canonical: 吉他基础
-  endpoint:
-    name: 完整弹奏选段
-    region: 演奏
-    block: 终点块
-    note: 合成项目的最终能力
-    teaches: {吉他基础: 会用}
-  starts:
-    - name: 持琴与手型
-      region: 演奏
-      block: 入手块
-      note: 支撑 m1 的姿势底座
-      teaches: {吉他基础: 知道}
-    - name: 音阶爬格
-      region: 演奏
-      block: 入手块
-      note: 支撑 m1 与 m2 的 daily 热身
-      teaches: {吉他基础: 知道}
+    nodes: [${course}/进阶]
 `
 }
 
@@ -143,211 +126,166 @@ test('decompileTerms：目标描述与笔记标题同炉 priorTerms（去重保�
   assert.equal(new Set(terms).size, terms.length, '去重')
 })
 
-test('splitDecompileDoc：双半区各自过既有 schema 门；种子半区受理侧定写（mode=new、basis=project）', () => {
-  const good = splitDecompileDoc(YAML.parseModel(decompileYaml('练琴计划')), '练琴计划', { expectSeed: true })
+test('splitDecompileDoc：plan-only 拆分（计划半区过既有 schema 门）；模型仍产 seed 半区即拒（ADR-0076）', () => {
+  // plan-only 合法形态：计划半区过 validatePlanArtifact 同门，DecompileDoc 无 seed 域
+  const good = splitDecompileDoc(YAML.parseModel(decompileYaml('练琴计划')), '练琴计划')
   assert.equal(good.errors.length, 0)
   assert.equal(good.result!.plan.length, 2)
-  assert.equal(good.result!.seed!.course, '吉他')
-  assert.equal(good.result!.seed!.mode, 'new', 'mode 由引擎锁 new（不信模型）')
-  assert.ok(good.result!.seed!.starts.every(s => s.basis === 'project'), '起点 basis 铸 project（第三路接线）')
-  assert.equal(good.result!.seed!.starts.length, 2)
+  assert.equal(good.result!.seed, undefined, 'DecompileDoc 无 seed 域（plan-only）')
 
-  // 计划半区：project 不一致（先行拒绝）；条目缺字段走 validatePlanItems 错误行
-  const mismatch = splitDecompileDoc({ project: '别的项目', plan: [] }, '练琴计划', { expectSeed: true })
-  assert.ok(mismatch.errors.some(e => e.includes('project')))
-  const badPlan = splitDecompileDoc({ project: '练琴计划', plan: [{ id: '', name: '', task_class: '', acceptance_hints: '' }] }, '练琴计划', { expectSeed: true })
-  assert.ok(badPlan.errors.some(e => e.includes('plan.1.id')))
-
-  // 种子半区 = 骨架模式门：est/enc/pre 一律拒收（种子零 enc 零 est，粗占位边引擎落）
-  const fullNode = splitDecompileDoc({
+  // 带 seed 半区即拒：错误行指引先建课再反编译（新知识走计划修订驱动的教练补支）
+  const withSeed = splitDecompileDoc({
     project: '练琴计划',
     plan: [{ id: 'm1', name: '一', task_class: '简', acceptance_hints: '达标' }],
-    seed: {
-      course: '吉他', goal_type: 'capability',
-      endpoint: { name: '终点', region: '区', block: '块' },
-      starts: [{ name: '起点', region: '区', block: '块', est: 20, enc: [{ node: '终点', w: 0.8 }], pre: ['终点'] }],
-    },
-  }, '练琴计划', { expectSeed: true })
-  assert.ok(fullNode.errors.some(e => e.includes('未知字段') && e.includes('est')), 'est 拒收')
-  assert.ok(fullNode.errors.some(e => e.includes('未知字段') && e.includes('enc')), 'enc 拒收')
-  assert.ok(fullNode.errors.some(e => e.includes('未知字段') && e.includes('pre')), 'pre 拒收')
+    seed: { course: '吉他', goal_type: 'capability', endpoint: { name: '终点', region: '区', block: '块' } },
+  }, '练琴计划')
+  assert.equal(withSeed.result, undefined)
+  assert.ok(withSeed.errors.some(e => e.includes('seed: 反编译不再自带建课能力')))
+  assert.ok(withSeed.errors.some(e => e.includes('先建课再反编译')))
 
-  // 半区与落点模式互斥：显式课程 + seed 在场 = 拒；无课程 + seed 缺席 = 拒
-  const withSeed = splitDecompileDoc(YAML.parseModel(decompileYaml('练琴计划')), '练琴计划', { expectSeed: false })
-  assert.ok(withSeed.errors.some(e => e.includes('显式目标课程时不产种子半区')))
-  const noSeed = splitDecompileDoc({ project: '练琴计划', plan: [{ id: 'm1', name: '一', task_class: '简', acceptance_hints: '达标' }] }, '练琴计划', { expectSeed: true })
-  assert.ok(noSeed.errors.some(e => e.includes('种子半区必出')))
+  // 计划半区：project 不一致（先行拒绝）；条目缺字段走 validatePlanItems 错误行
+  const mismatch = splitDecompileDoc({ project: '别的项目', plan: [] }, '练琴计划')
+  assert.ok(mismatch.errors.some(e => e.includes('project')))
+  const badPlan = splitDecompileDoc({ project: '练琴计划', plan: [{ id: '', name: '', task_class: '', acceptance_hints: '' }] }, '练琴计划')
+  assert.ok(badPlan.errors.some(e => e.includes('plan.1.id')))
 
   // 顶层非映射
-  assert.ok(splitDecompileDoc('not a map', '练琴计划', { expectSeed: true }).errors.length > 0)
+  assert.ok(splitDecompileDoc('not a map', '练琴计划').errors.length > 0)
 })
 
-test('reconcilePlanNodes：名字对账门——引用必须有 种子簇∪既有图 着落；对账失败场景', () => {
-  const seed = { course: '吉他', nodeNames: new Set(['持琴与手型', '音阶爬格', '完整弹奏选段']) }
+test('reconcilePlanNodes：名字对账门——引用必须落在既有课程图节点（无歧义）；对账失败场景', () => {
   const existing = new Map<string, Set<string>>([['数学', new Set(['入门', '进阶'])]])
 
-  // 全着落：种子簇 + 既有课程
+  // 全着落：显式「课程/节点」引用既有图
   assert.deepEqual(
-    reconcilePlanNodes(planOf([['吉他/音阶爬格'], ['吉他/完整弹奏选段', '数学/入门']]), { seed, existingByCourse: existing }),
+    reconcilePlanNodes(planOf([['数学/入门'], ['数学/进阶']]), { existingByCourse: existing }),
     [],
   )
 
-  // 对账失败：引用不在种子簇也不在既有图（构造场景：模型把 m1 挂到了还没长的节点）
-  const dangling = reconcilePlanNodes(planOf([['吉他/弹唱编配']]), { seed, existingByCourse: existing })
+  // 对账失败：显式课程引用悬空节点（构造场景：模型把 m1 挂到了还没长的节点）
+  const dangling = reconcilePlanNodes(planOf([['数学/弹唱编配']]), { existingByCourse: existing })
   assert.equal(dangling.length, 1)
   assert.match(dangling[0]!, /弹唱编配/)
-  assert.match(dangling[0]!, /不在种子簇节点名/)
+  assert.match(dangling[0]!, /引用的节点不在课程「数学」图内/)
+  assert.match(dangling[0]!, /计划修订驱动的教练补支/)
 
-  // 裸名：恰一着落——种子簇唯一命中或恰一门课程命中都放行；歧义（多门命中/种子∩既有）
-  assert.deepEqual(reconcilePlanNodes(planOf([['音阶爬格']]), { seed, existingByCourse: existing }), [])
-  assert.deepEqual(reconcilePlanNodes(planOf([['入门']]), { seed, existingByCourse: new Map([['数学', new Set(['入门'])]]) }), [])
-  const bareMiss = reconcilePlanNodes(planOf([['不存在的节点']]), { seed, existingByCourse: existing })
-  assert.match(bareMiss[0]!, /未落在种子簇或既有图节点名/)
+  // 裸名：恰一着落放行；多门课程命中是歧义；零命中悬空
+  assert.deepEqual(reconcilePlanNodes(planOf([['入门']]), { existingByCourse: existing }), [])
+  const bareMiss = reconcilePlanNodes(planOf([['不存在的节点']]), { existingByCourse: existing })
+  assert.match(bareMiss[0]!, /未落在既有图节点名中/)
   const twoCourses = new Map<string, Set<string>>([['数学', new Set(['入门'])], ['物理', new Set(['入门'])]])
-  const ambiguous = reconcilePlanNodes(planOf([['入门']]), { seed, existingByCourse: twoCourses })
+  const ambiguous = reconcilePlanNodes(planOf([['入门']]), { existingByCourse: twoCourses })
   assert.match(ambiguous[0]!, /多门课程中命中/)
-  const bothHit = reconcilePlanNodes(planOf([['音阶爬格']]), { seed, existingByCourse: new Map([['数学', new Set(['音阶爬格'])]]) })
-  assert.match(bothHit[0]!, /同时落在种子簇/)
 
   // 未注册课程前缀
-  const noCourse = reconcilePlanNodes(planOf([['钢琴/入门']]), { seed, existingByCourse: existing })
+  const noCourse = reconcilePlanNodes(planOf([['钢琴/入门']]), { existingByCourse: existing })
   assert.match(noCourse[0]!, /课程「钢琴」不在注册表/)
-
-  // 显式课程（无种子半区）形态：对账域只有既有图
-  const explicitOnly = reconcilePlanNodes(planOf([['数学/进阶'], ['数学/即兴']]), { existingByCourse: existing })
-  assert.equal(explicitOnly.length, 1)
-  assert.match(explicitOnly[0]!, /数学\/即兴/)
 })
 
 test('decompileRepairPrompt：修复轮携带原材料 + 上次输出 + 逐条门禁清单，契约段仍居尾（#218）', () => {
-  const p = decompileRepairPrompt(TPL, '原材料', '上次产出', ['  ✗ plan.1.name: 不能为空', '  ✗ seed: 缺失'])
+  const p = decompileRepairPrompt(TPL, '原材料', '上次产出', [
+    '  ✗ plan.1.name: 不能为空',
+    '  ✗ plan.2.nodes.1「即兴」引用的节点不在课程「数学」图内——计划必须引用既有图节点（朝尚不存在节点的意图走计划修订驱动的教练补支）',
+  ])
   assert.match(p, /原材料/)
   assert.match(p, /上次产出/)
   assert.match(p, /上一次输出未过双产物校验门/)
   assert.match(p, /plan\.1\.name/)
-  assert.match(p, /seed/)
+  assert.match(p, /计划修订驱动的教练补支/)
   // 契约后置（#218）：回灌反馈是材料，模板的输出契约段仍是最终 prompt 的末段
   assert.ok(p.indexOf('只输出一个 YAML 文档') > p.indexOf('上一次输出未过双产物校验门'), '契约段在反馈块之后')
 })
 
-// ---- 门面：双提案受理 + 同源同进同退 ----
+// ---- 门面：plan-only 受理（种子降职后只产计划提案）----
 
-test('门面 v8：双提案 pair 互相指认、种子起点铸 project、概念铸名随种子提案', async () => {
+test('门面 plan-only（ADR-0076）：受理只落计划提案，seed_proposal/pair.seed 恒 null', async () => {
   await withVault(DECOMPILE_VAULT, async ({ engine }) => {
     await projectOf(engine)
     const llm = replayFake(decompileYaml('练琴计划'))
-    const r = await engine.project.projectDecompile('练琴计划', {}, llm)
+    const r = await engine.project.projectDecompile('练琴计划', { course: '数学' }, llm)
     assert.equal(r.repaired, false)
+    assert.equal(r.plan_proposal.kind, 'project_plan')
+    assert.equal(r.seed_proposal, null, '种子降职：反编译不再产种子提案')
     assert.equal(r.pair.plan, r.plan_proposal.id)
-    assert.equal(r.pair.seed, r.seed_proposal!.id)
-    assert.equal(r.seed_proposal!.course, '吉他')
-    assert.equal(r.seed_proposal!.starts, 2)
-    // 提案记录：pair 互指
+    assert.equal(r.pair.seed, null, 'pair 只剩计划半区')
+    // 提案记录：单提案、无 pair 联动
     const list = await engine.store.loadProposals()
+    assert.equal(list.filter(p => p.status === 'pending').length, 1, '只落计划提案')
     const plan = list.find(p => p.id === r.plan_proposal.id)!
-    const seed = list.find(p => p.id === r.seed_proposal!.id)!
     assert.equal(plan.kind, 'project_plan')
-    assert.equal(seed.kind, 'seed')
-    assert.equal(plan.pair, seed.id)
-    assert.equal(seed.pair, plan.id)
+    assert.equal(plan.pair, undefined, '单提案无 pair 联动')
   })
 })
 
-test('对账失败 = 零提案（同进同退的静态半；修复一轮后仍失败 DECOMPILE_GATE_FAILED）', async () => {
+test('门面落点裁决（ADR-0076）：未指定/未注册课程即拒并指引先建课；建课 + 手加终点后反编译成功', async () => {
   await withVault(DECOMPILE_VAULT, async ({ engine }) => {
     await projectOf(engine)
-    // m1 引用「吉他/弹唱编配」——种子簇没有这个节点，对账门两次都拦
-    const bad = decompileYaml('练琴计划').replace('吉他/音阶爬格', '吉他/弹唱编配')
-    const llm = replayFake(bad)
+    const llm = replayFake(decompileYaml('练琴计划'))
+    // 反一：未指定 course——反编译不再自带建课能力（旧「省略 course 自动建课」即拒）
     await assert.rejects(
       engine.project.projectDecompile('练琴计划', {}, llm),
-      (e: Error & { code?: string }) => {
-        assert.equal(e.code, 'DECOMPILE_GATE_FAILED')
-        assert.match(e.message, /双产物校验门/)
-        assert.match(e.message, /弹唱编配/)
-        assert.match(e.message, /不在种子簇节点名/)
-        return true
-      },
+      /未指定目标课程——反编译不再自带建课能力（ADR-0076）：先建课（名称即空图），再显式 course 参数指向它/,
     )
-    assert.equal(llm.calls.length, 2, '修复轮回灌一次（共两次调用）')
-    assert.equal((await engine.store.loadProposals()).length, 0, '双提案任一不受理——零提案同退')
-  })
-})
+    // 反二：course 未注册——注册表没有「吉他」
+    await assert.rejects(
+      engine.project.projectDecompile('练琴计划', { course: '吉他' }, llm),
+      /注册表中没有课程「吉他」——先建课（名称即空图）再反编译/,
+    )
+    assert.equal((await engine.store.loadProposals()).length, 0, '落点裁决拒在受理前——零提案')
+    assert.equal(llm.calls.length, 0, '落点裁决在模型调用之前（不烧 token）')
 
-test('单边 apply 守卫（apply 时序缺口回归钉）：pair 在场时计划/种子单独 apply 都拒收', async () => {
-  await withVault(DECOMPILE_VAULT, async ({ engine }) => {
-    await projectOf(engine)
-    const r = await engine.project.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
-    // 计划先 apply = 计划引用悬空节点炸消费面——守卫拒收并指向联合入口
-    await assert.rejects(engine.graph.projectApply(r.plan_proposal.id), /同进同退/)
-    await assert.rejects(engine.graph.projectApply(r.plan_proposal.id), /decompile_apply/)
-    await assert.rejects(engine.graph.graphApply('seed', r.seed_proposal!.id), /同进同退/)
-    // 两提案都还 pending（守卫发生在任何写盘前）
-    const list = await engine.store.loadProposals()
-    assert.ok(list.every(p => p.status === 'pending'))
-  })
-})
-
-test('联合 apply：种子先落图（锚+簇节点+笔记脚手架）、计划后落盘；stub 行使回流 EMA 可用', async () => {
-  await withVault(DECOMPILE_VAULT, async ({ engine, paths }) => {
-    await projectOf(engine)
-    const r = await engine.project.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
-    const out = await engine.project.projectDecompileApply(r.pair.plan, r.pair.seed!)
-    assert.ok(out.seed, '种子半区已生效')
-    assert.equal((out.plan as { kind: string }).kind, 'project_plan')
-    // 终点锚落盘、簇节点进图、笔记脚手架就位（消费面可解析）
-    const { readFile } = await import('node:fs/promises')
-    const book = JSON.parse(await readFile(paths.anchorPath('吉他'), 'utf8')) as {
-      version: number
-      anchors: Array<{ endpoint: string; seed_nodes: string[] }>
-    }
-    assert.equal(book.version, 2, '锚容器 v2（#239 多终点化）')
-    assert.equal(book.anchors.length, 1)
-    assert.equal(book.anchors[0]!.endpoint, '完整弹奏选段')
-    assert.ok(book.anchors[0]!.seed_nodes.includes('音阶爬格'))
-    const course = await engine.registry.get('吉他')
-    assert.ok(course, 'mode=new 建课脚手架')
-    const { graph } = await engine.loadView(course!)
-    assert.ok(graph.nset.has('持琴与手型'))
-    // 计划引用先有图可解析：stub（种子簇节点）行使即回流 EMA——时序缺口的消费面回归钉
-    const exec = await engine.project.projectExecLog('练琴计划', { source: 'self', rating: 3, nodes: ['吉他/音阶爬格'] })
-    assert.equal(exec.backflow.length, 1)
-    assert.equal(exec.backflow[0]!.ema_after, 0.8)
-    // 联合 apply 幂等重放：两半区已决 → 跳过不炸（崩溃恢复语义）
-    const replay = await engine.project.projectDecompileApply(r.pair.plan, r.pair.seed!)
-    assert.equal(replay.seed, null)
-    assert.equal(replay.plan, null)
-  })
-})
-
-test('reject 联动：任一半区被拒，pending 的另一半同退', async () => {
-  await withVault(DECOMPILE_VAULT, async ({ engine }) => {
-    await projectOf(engine)
-    const r = await engine.project.projectDecompile('练琴计划', {}, replayFake(decompileYaml('练琴计划')))
-    await engine.graph.graphReject(r.pair.plan, '不想要这个方向')
-    const list = await engine.store.loadProposals()
-    const plan = list.find(p => p.id === r.pair.plan)!
-    const seed = list.find(p => p.id === r.pair.seed)!
-    assert.equal(plan.status, 'rejected')
-    assert.equal(seed.status, 'rejected', '种子半区联动同拒')
-    assert.match(seed.decision_note ?? '', /同源双提案同退/)
-  })
-})
-
-test('显式目标课程：只产计划半区（nodes 对既有图对账）；模型多产 seed 半区走修复轮摘除', async () => {
-  await withVault(DECOMPILE_VAULT, async ({ engine }) => {
-    await projectOf(engine)
-    // 第一次带 seed 半区（显式课程下非法）→ 修复轮摘除 → 只落计划提案
+    // 正：先建课（名称即空图）→ 手加终点 → 显式 course 指向它 → 反编译成功
+    await engine.graph.createCourse('吉他')
+    await engine.graph.addEndpoint('吉他', '完整弹奏选段', '合成项目的最终能力')
     const planOnly = `\
 project: 练琴计划
 plan:
   - id: m1
-    name: 双手音阶连贯弹完
-    task_class: 简：照谱复现
-    acceptance_hints: C 大调两个八度双手连贯
-    est: 600
-    nodes: [数学/入门]
+    name: 完整弹会《野蜂飞舞》选段
+    task_class: 繁：独立演绎
+    acceptance_hints: 100 速度下完整弹完选段
+    est: 900
+    nodes: [吉他/完整弹奏选段]
 `
+    const llm2 = replayFake(planOnly)
+    const r = await engine.project.projectDecompile('练琴计划', { course: '吉他' }, llm2)
+    assert.equal(r.plan_proposal.milestones, 1)
+    assert.equal(r.seed_proposal, null)
+    assert.equal(r.pair.seed, null)
+    const list = await engine.store.loadProposals()
+    assert.equal(list.filter(p => p.status === 'pending').length, 1, '只落计划提案')
+    // 修订通道照常：apply 带 diff 触发面在 project-domain 测
+    const applied = await engine.graph.projectApply(r.plan_proposal.id)
+    assert.equal(applied.kind, 'project_plan')
+  })
+})
+
+test('对账失败 = 零提案（受理侧质量门的静态半；修复一轮后仍失败 DECOMPILE_GATE_FAILED）', async () => {
+  await withVault(DECOMPILE_VAULT, async ({ engine }) => {
+    await projectOf(engine)
+    // m1 引用「数学/弹唱编配」——数学图没有这个节点，对账门两次都拦
+    const bad = decompileYaml('练琴计划').replace('数学/入门', '数学/弹唱编配')
+    const llm = replayFake(bad)
+    await assert.rejects(
+      engine.project.projectDecompile('练琴计划', { course: '数学' }, llm),
+      (e: Error & { code?: string }) => {
+        assert.equal(e.code, 'DECOMPILE_GATE_FAILED')
+        assert.match(e.message, /双产物校验门/)
+        assert.match(e.message, /弹唱编配/)
+        assert.match(e.message, /引用的节点不在课程「数学」图内/)
+        return true
+      },
+    )
+    assert.equal(llm.calls.length, 2, '修复轮回灌一次（共两次调用）')
+    assert.equal((await engine.store.loadProposals()).length, 0, '对账不过不落提案——零提案同退')
+  })
+})
+
+test('模型多产 seed 半区：修复轮摘除（ADR-0076 即拒）→ 只落计划提案', async () => {
+  await withVault(DECOMPILE_VAULT, async ({ engine }) => {
+    await projectOf(engine)
+    const planOnly = decompileYaml('练琴计划')
+    // 第一次带 seed 半区（plan-only 形态下非法）→ 修复轮摘除 → 只落计划提案
     const bad = `${planOnly}seed:
   course: 吉他
   goal_type: capability

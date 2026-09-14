@@ -34,7 +34,7 @@ import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 import type { Registry } from './registry.ts'
 import type { QuestionBank, BankQuestion } from './question-bank.ts'
-import type { GraphProposals, EnrichFieldEntry } from './proposals.ts'
+import type { EnrichFieldEntry } from './proposals.ts'
 import type { NoteSourceManifest } from './note-source.ts'
 import type { Graph } from './graph.ts'
 import type { ProjectCrossDoc, ProjectExecBackflow, ProjectExecResult } from './views/project.ts'
@@ -567,7 +567,6 @@ export interface ProjectDeps {
   /** 概念登记表（#229 查询扩展：反编译站检索词按别名/易混概念低权重扩词）。 */
   concepts: Pick<ConceptRegistry, 'load'>
   bank: Pick<QuestionBank, 'load'>
-  proposals: Pick<GraphProposals, 'reject'>
   /** 图 apply 包装（#175 阶段③归位：联合受理不再直调 applySeed）。 */
   graphApply(kind: 'seed', pid?: number, opts?: { pairApply?: boolean; today?: string }): Promise<GraphApplyResult>
   projects: Projects
@@ -1136,29 +1135,29 @@ export class ProjectSubsystem {
         picked.push({ id: s.id, path: s.path, title: s.title ?? baseOf(s.path) })
       }
     }
-    // 落点裁决（受理前）：显式课程必须在册并取其既有节点名（对账域）；未给 = 种子簇
-    // 充当新课程种子（mode=new）
+    // 落点裁决（受理前，ADR-0076 种子降职）：目标课程必须显式指定且已注册——反编译
+    // 不再自带建课能力（先建课再反编译）；取其既有节点名（对账取值域）
     const explicitCourse = opts.course?.trim()
-    let target: CourseEntry | null = null
-    if (explicitCourse) {
-      target = await this.e.registry.get(explicitCourse)
-      if (!target) throw new Error(`[project-decompile] 注册表中没有课程「${explicitCourse}」（显式目标课程须先建课播种；省略 course 参数可让种子簇充当新课程）。`)
+    if (!explicitCourse) {
+      throw new Error(`[project-decompile] 未指定目标课程——反编译不再自带建课能力（ADR-0076）：先建课（名称即空图），再显式 course 参数指向它。`)
     }
-    // Vault 先验（只读检索）注入反编译上下文。#229：检索词经概念登记表扩展（显式目标
-    // 课程时才有登记表可读；种子簇充当新课程时无表，扩展为空操作），审计随返回值带出。
+    const target = await this.e.registry.get(explicitCourse)
+    if (!target) throw new Error(`[project-decompile] 注册表中没有课程「${explicitCourse}」——先建课（名称即空图）再反编译。`)
+    // Vault 先验（只读检索）注入反编译上下文。#229：检索词经概念登记表扩展，审计随
+    // 返回值带出。
     const found = await runPriorSearch({
-      registry: this.e.concepts, courseRoot: target?.root ?? null,
+      registry: this.e.concepts, courseRoot: target.root,
       vaultRoot: this.e.vaultRoot, centerRel: this.e.paths.centerRelOf(this.e.vaultRoot),
       raw: decompileTerms(goal, picked.map(p => p.title)), fs: this.e.fs,
     })
     const priorAudit = found.audit
     const prior = priorSection(found.hits)
-    // 子图落点上下文：显式课程给现有结构（对账取值域）；未给 → seed 半区必出。
+    // 子图落点上下文：目标课程的现有结构（对账取值域）。
     // 节点名清单按「区 · 块」**分段**（#218 稀释治理）：它是名字对账的取值域，**不截断**
     // ——截断会让真实存在的名字在模型眼里不存在（对账门拿全集判，模型却按子集选），
     // 换来的是拒收-回灌；分段保住完备性的同时把千行平铺名单变成可扫读的结构。
     let courseBlock: string
-    if (target) {
+    {
       const { graph } = await this.e.loadView(target)
       const groups = new Map<string, string[]>()
       for (const n of graph.names.slice().sort()) {
@@ -1170,10 +1169,8 @@ export class ProjectSubsystem {
       }
       const listed = groups.size
         ? [...groups.entries()].map(([key, names]) => `  - ${key}（${names.length}）：${names.join('、')}`).join('\n')
-        : '  -（空图）'
-      courseBlock = `- 目标课程：${target.name}（已播种/既有课程——**不产 seed 半区**，只给 plan）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形；按「区 · 块」分组，括号内是该组节点数）：\n${listed}`
-    } else {
-      courseBlock = '- 未指定目标课程：seed 半区必出（自拟新课程名写进 seed.course，子图簇 = 该新课程的种子：1–3 起点 + 终点）；plan.nodes 引用种子簇节点名（写「课程名/节点名」全形）'
+        : '  -（空图——计划引用的节点名必须先在图上；朝尚不存在节点的意图走计划修订驱动的教练补支）'
+      courseBlock = `- 目标课程：${target.name}（已注册——**不产 seed 半区**，只给 plan；反编译不再自带建课能力）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形；按「区 · 块」分组，括号内是该组节点数）：\n${listed}`
     }
     const tpl = await this.e.loadPrompt('项目目标反编译')
     const notesList = picked.length ? picked.map(p => `- 《${p.title}》（${p.path}）`).join('\n') : '-（无注册笔记）'
@@ -1198,21 +1195,10 @@ export class ProjectSubsystem {
         existingByCourse.set(courseName, new Set(graph.names))
       }
       for (const c of await this.e.enabledCourses()) await ensureNames(c.name)
-      const seedCourseNames = new Set<string>()
-      const extra: string[] = []
-      if (doc.seed) {
-        for (const n of [doc.seed.endpoint.name, ...doc.seed.starts.map(s => s.name)]) seedCourseNames.add(n)
-        if (await this.e.registry.get(doc.seed.course)) {
-          extra.push(`seed.course「${doc.seed.course}」已在注册表（mode=new 新课程入口撞名）——自拟一个新课程名，或显式 course 参数指向既有课程`)
-        }
-      }
-      return [...extra, ...reconcilePlanNodes(doc.plan, {
-        ...(doc.seed ? { seed: { course: doc.seed.course, nodeNames: seedCourseNames } } : {}),
-        existingByCourse,
-      })]
+      return reconcilePlanNodes(doc.plan, { existingByCourse })
     }
     const judgeOnce = async (raw: string): Promise<GateVerdict<DecompileDoc>> => {
-      const gate = splitDecompileDoc(YAML.parseModel(raw), fm.id, { expectSeed: !target })
+      const gate = splitDecompileDoc(YAML.parseModel(raw), fm.id)
       const reconcile = await reconcileErrors(gate.result)
       const errors = [...gate.errors, ...reconcile].map(x => `  ✗ ${x}`)
       return errors.length || !gate.result ? { errors } : { errors, result: gate.result }
@@ -1231,37 +1217,17 @@ export class ProjectSubsystem {
     })
     const doc: DecompileDoc = round.result
     // 名字对账门已在修复环内跑过（judgeOnce 过门 = 对账为空）——此处直接受理。
-    // 双提案受理（先种子后计划）：种子提案先落（重门已预检通过）；计划提案**出生即带
-    // pair**（联动守卫从落盘那一刻生效——任一时刻崩溃都不会留下可单边 apply 的无守卫
-    // 计划半区）；最后补种子半区的 pair 指认（此窗口内计划已被守卫保护，种子半区单边
-    // apply 无害——计划未落盘就无悬空引用可言）。概念引用在 proposeSeed 受理门对
-    // 登记表（铸名随种子 apply 的写入单元落盘）。
-    let seedId: number | null = null
-    let planProposal: Awaited<ReturnType<Projects['proposePlan']>> | null = null
-    try {
-      if (doc.seed) {
-        seedId = ((await this.e.graphPropose('seed', YAML.stringify(doc.seed))) as { id: number }).id
-      }
-      planProposal = await this.e.projects.proposePlan(fm.id, YAML.stringify({ project: fm.id, plan: doc.plan }), seedId !== null ? { pair: seedId } : {})
-      if (seedId !== null) await this.e.store.updateProposal(seedId, { pair: planProposal.id })
-    } catch (err) {
-      // 计划半区受理失败：种子半区联动退回（不留孤儿 pending），原样抛错
-      if (seedId !== null) {
-        await this.e.proposals.reject(seedId, `同源双提案受理失败联动退回：${err instanceof Error ? err.message : String(err)}`).catch(() => undefined)
-      }
-      throw err
-    }
-    const seedProposal = doc.seed
-      ? { id: seedId!, kind: 'seed' as const, course: doc.seed.course, endpoint: doc.seed.endpoint.name, starts: doc.seed.starts.length }
-      : null
+    // ADR-0076 种子降职：反编译只产计划提案（seed 半区退役；双提案 pair 联动与联合
+    // 入口 projectDecompileApply 保留给存量 pending 对，不再产新对）。
+    const planProposal = await this.e.projects.proposePlan(fm.id, YAML.stringify({ project: fm.id, plan: doc.plan }))
     return {
       project: fm.id,
       prior: priorAudit,
       notes: picked.map(p => p.path),
       repaired: round.repaired,
       plan_proposal: planProposal!,
-      seed_proposal: seedProposal,
-      pair: { plan: planProposal!.id, seed: seedProposal?.id ?? null },
+      seed_proposal: null,
+      pair: { plan: planProposal!.id, seed: null },
     }
   }
 

@@ -208,11 +208,12 @@ export const REPLAY_FACE: Record<string, (raw: string) => string[] | null> = {
     if (!v.spec.note) throw new Error('缺 note 区——生长批必须携带算子标签与理由')
   }),
   // 目标反编译：站链 = AgentSeam.complete（剥围栏）→ YAML.parseModel → splitDecompileDoc。
-  // **跨产物一致性按自指口径旁路**：project 名取产物自身、expectSeed 关（「显式目标课程时
-  // seed 半区必须缺席」是受理侧知识，回放取不到输入面）
+  // **跨产物一致性按自指口径旁路**：project 名取产物自身；#240/ADR-0076 种子降职后本站
+  // 只产计划——splitDecompileDoc 现对 seed 半区即拒（受理侧知识，回放同口径）。
+  // 旧语料（含 seed 半区）回放会红：那是降职语义在执法，不是回放面坏。
   目标反编译: raw => yamlThen(stripFences(raw), doc => {
     const project = (doc as { project?: unknown }).project
-    return splitDecompileDoc(doc, typeof project === 'string' ? project : '', { expectSeed: false }).errors
+    return splitDecompileDoc(doc, typeof project === 'string' ? project : '').errors
   }),
   // 计划草案：站链同上（validatePlanArtifact 的 project 一致性同款自指旁路）
   计划草案: raw => yamlThen(stripFences(raw), doc => {
