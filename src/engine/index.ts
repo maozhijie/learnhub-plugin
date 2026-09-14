@@ -42,7 +42,14 @@ import { Projects, ProjectSubsystem } from './projects.ts'
 import { readAnchor, foldCompletion } from './seed.ts'
 import type { CompletionFold } from './seed.ts'
 
-/** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。 */
+/** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。
+ *
+ * **这条约定的边界**（#237 / ADR-0075 补）：R1 实际只执法 `src/index.ts` 这一个入口文件的
+ * 边（`tests/import-rules.test.ts` 的 R1 迭代 `HOST = src/index.ts`），`src/host/**` 不在
+ * 受控面内；且既存先例 `host/handlers.ts` 已深导入 `engine/types.ts`（纯类型面）。因此
+ * 允许 host 深导入的只有**纯声明面**——纯类型，与纯字符串常量（`engine/prompts/*.ts` 的
+ * 提示词文本）。判据是「有行为吗」：纯声明面没有运行期语义，深导入不会把宿主焊到引擎内部
+ * 装配上；**带行为的引擎子模块仍只准走门面**。 */
 export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
 export type { GateVerdict } from './agent.ts'
 export type { SeedDraftRequest } from './seed.ts'

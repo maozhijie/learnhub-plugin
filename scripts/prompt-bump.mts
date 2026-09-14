@@ -48,11 +48,17 @@ import { validateRouteBody } from '../src/engine/compass.ts'
 import { parseReceiptReview } from '../src/engine/receipts.ts'
 import { parseCorpusFile } from '../src/host/corpus.ts'
 
-/** 模板版本标记（`content.ts` 的每条模板头；与 PROMPT_CHANGELOG 的版本号同源）。 */
+/** 模板版本标记（每条模板头；与 PROMPT_CHANGELOG 的版本号同源）。 */
 export const MARKER_RE = /<!-- learnhub:prompt\/v(\d+) -->/g
 
-/** 登记表文件与模板文件（提交级门的两个受控面；路径相对仓库根）。 */
-export const TEMPLATE_FILE = 'src/engine/content.ts'
+/**
+ * **模板面**（提交级门的受控路径集；路径相对仓库根）。是清单不是单文件：#237 / ADR-0075 把
+ * 模板从 `content.ts` 迁到 `prompts/templates.ts`，而门的判据是「版本号**集合差**」——面里
+ * 只留新路径的话，搬迁那一提交的父提交版本集合会读成空集，15 条老标记全被误判成「首次出现」，
+ * 门就会逼人给一次纯搬迁补 15 条假增量。历史路径因此**留在面里**（搬迁后它贡献空集、无害），
+ * 一次搬迁于是在门眼里是零 diff——这正是「标记挪位不算 bump」的原话（ADR-0072 §裁决 2）。
+ */
+export const TEMPLATE_FILES: readonly string[] = ['src/engine/content.ts', 'src/engine/prompts/templates.ts']
 export const CHANGELOG_FILE = 'src/engine/output-contracts.ts'
 
 // ---------------------------------------------------------------- ① 提交级登记门
@@ -71,8 +77,9 @@ export interface CommitDiffReading {
 export interface BumpCommit {
   sha: string
   subject: string
-  /** 相对父提交**新出现在** templates 文件里的版本号（集合差，不是 diff 行——标记挪位/
-   * 新增一份同版本模板都不算 bump，理由见 ADR-0072）。 */
+  /** 相对父提交**新出现在**模板面里的版本号（集合差，不是 diff 行——标记挪位/新增一份同
+   * 版本模板都不算 bump，理由见 ADR-0072 §裁决 2；面内的路径迁移按 ADR-0075 §2 也不产生
+   * 新版本号）。 */
   newVersions: number[]
   /** 同一提交新增的登记条目版本号（diff 行）。 */
   registeredVersions: number[]
@@ -135,20 +142,42 @@ function git(args: string[], cwd: string): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 }
 
+/** 路径在给定 ref 下是否存在（`git cat-file -e`）。不存在 = 该路径在此提交尚无内容，**不是
+ * 错误**——搬迁提交的父提交里就没有新路径，把它当 git 故障会让门在那一次提交上崩掉。 */
+function refHasPath(ref: string, path: string, root: string): boolean {
+  try {
+    execFileSync('git', ['cat-file', '-e', `${ref}:${path}`], { cwd: root, stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 某提交下**模板面**的版本号并集（面内不存在的路径按空集计）。取并集而非逐文件比对，是为了
+ * 让「标记从旧路径挪到新路径」在门眼里等于零变化：搬迁前后并集相同，自然不产生新版本号。 */
+function versionsAt(ref: string, root: string): Set<number> {
+  const out = new Set<number>()
+  for (const f of TEMPLATE_FILES) {
+    if (!refHasPath(ref, f, root)) continue
+    for (const v of markerVersionsOf(git(['show', `${ref}:${f}`], root))) out.add(v)
+  }
+  return out
+}
+
 /** 扫 git 历史取 bump 提交（`since..until`，缺省 since = 纪律起点、until = HEAD）。
  * 两段式：先一次 `git log -p` 找出**候选提交**（diff 里出现版本标记），再对候选逐一看
- * 模板文件的版本集合差——候选很少，故 `git show` 的开销可控。 */
+ * 模板面的版本集合差——候选很少，故 `git show` 的开销可控。 */
 export function scanBumps(opts: { cwd: string; since?: string; until?: string }): { commits: number; bumps: BumpCommit[] } {
   const root = gitRoot(opts.cwd)
   const since = opts.since ?? disciplineStartRef(root)
   const range = `${since}..${opts.until ?? 'HEAD'}`
-  const log = git(['log', '-p', '-U0', '--format=@@COMMIT %H %s', range, '--', TEMPLATE_FILE, CHANGELOG_FILE], root)
+  const log = git(['log', '-p', '-U0', '--format=@@COMMIT %H %s', range, '--', ...TEMPLATE_FILES, CHANGELOG_FILE], root)
   const readings = parseLogDiff(log)
   const bumps: BumpCommit[] = []
   for (const r of readings) {
     if (!r.addedMarkers.length) continue
-    const now = markerVersionsOf(git(['show', `${r.sha}:${TEMPLATE_FILE}`], root))
-    const before = markerVersionsOf(git(['show', `${r.sha}^:${TEMPLATE_FILE}`], root))
+    const now = versionsAt(r.sha, root)
+    const before = versionsAt(`${r.sha}^`, root)
     const newVersions = [...now].filter(v => !before.has(v)).sort((a, b) => a - b)
     if (newVersions.length) bumps.push({ sha: r.sha, subject: r.subject, newVersions, registeredVersions: r.addedChangelogVersions })
   }

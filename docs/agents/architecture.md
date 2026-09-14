@@ -52,7 +52,7 @@
 
 两道门执法，判据不同、都要绿：
 
-- **提交级**：`npm run prompt-bump -- check`（`scripts/prompt-bump.mts`）——模板版本 bump 的提交必须**同提交**补登记条目（走 git 历史；纪律起点动态发现 = `PROMPT_CHANGELOG` 首次出现的提交，不写死 sha）。测试面 `tests/prompt-changelog.test.ts`：真历史必须绿 + 临时仓库造「bump 不补登记」必须红（两态都是验收原文）。
+- **提交级**：`npm run prompt-bump -- check`（`scripts/prompt-bump.mts`）——模板版本 bump 的提交必须**同提交**补登记条目（走 git 历史；纪律起点动态发现 = `PROMPT_CHANGELOG` 首次出现的提交，不写死 sha）。测试面 `tests/prompt-changelog.test.ts`：真历史必须绿 + 临时仓库造「bump 不补登记」必须红（两态都是验收原文）。**模板面是清单不是单文件**（`TEMPLATE_FILES`，含历史路径 `src/engine/content.ts`）：判据是版本号**集合差**，面里只留当前路径会把一次纯搬迁读成十几个「首次出现」的新版本号，进而逼人补假增量（#237 / ADR-0075 §3）。
 - **状态级**：`tests/output-contract.test.ts::runChangelogGate`——每个模板键的最高登记版本 == 模板头 `<!-- learnhub:prompt/vN -->`、键集合 == `PROMPT_KINDS` 全集。
 
 两者互补：状态级管**完备性**（键覆盖、版本对齐），提交级管**时序**（bump 当次就带登记）。都带 ADR-0047 自检。
