@@ -26,7 +26,7 @@ import { readJsonlLines, readJsonlLinesReport } from './io.ts'
 import { proposalShapeErrors } from './store.ts'
 import { EVIDENCE_STREAMS } from './evidence-streams.ts'
 import { dayOfTs, todayStr } from './dates.ts'
-import type { CourseEntry, PracticeRec, ProposalRec, ReviewRec } from './types.ts'
+import type { CourseEntry, PracticeRec, PracticeStreamRow, ProposalRec, ReviewRec } from './types.ts'
 import { safeFilename } from './paths.ts'
 import type { Paths } from './paths.ts'
 
@@ -760,7 +760,10 @@ async function scanProbationLedger(
   let practice: PracticeRec[]
   let reviews: ReviewRec[]
   try {
-    practice = await readJsonlLines<PracticeRec>(paths.practicePath, fs, 'practice')
+    // 只取作答行（practiceAll 同款收窄，#248）：卡点自报/消费标记是同流水的独立 kind，
+    // 不进学习日序列（复诊到期判定不被零作答的自报提前）
+    const rows = await readJsonlLines<PracticeStreamRow>(paths.practicePath, fs, 'practice')
+    practice = rows.filter((r): r is PracticeRec => r.kind === undefined)
     reviews = await readJsonlLines<ReviewRec>(paths.reviewLogPath, fs, 'review-log')
   } catch (err) {
     push(findings, 'probation_ledger', 'broken', 'probation_stream_broken',

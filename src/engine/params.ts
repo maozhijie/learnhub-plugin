@@ -56,3 +56,7 @@ export const GROWTH_INSERT_RATE_CAP = 0.5       // 插入节点占生长新增�
 export const GROWTH_SIDEBRANCH_CAP = 0.2        // 旁支节点占生长新增上限（韧性低/样本不足）
 export const GROWTH_SIDEBRANCH_CAP_RESILIENT = 0.3 // 韧性高时放宽（20%→30%）
 export const GROWTH_RESILIENCE_HIGH = 0.8       // 复诊通过率达此（样本足）= 韧性高
+
+// ---- 卡点自报频控（#248 / ADR-0077；上限同时是教练回合触发上限，起点值实证后调）----
+export const STUCK_REPORT_PER_NODE_PER_DAY = 1 // 同节点每学习日自报上限（条）
+export const STUCK_REPORT_DAILY_COURSE_CAP = 5 // 全课程每日自报总量上限（条）

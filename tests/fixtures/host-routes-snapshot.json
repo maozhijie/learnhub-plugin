@@ -5087,6 +5087,7 @@
    "growth2.coachCheckpoint(\"panel_dispatch\",\"1\")",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\",\"growthForce\":true}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true}])",
+   "growth2.stuckPending(\"1\")",
    "growth2.coachGrowthBatch(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}},{\"force\":true})",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"finishedAt\":\"«ts»\"}])",
@@ -5103,6 +5104,77 @@
    "error": "缺少必填参数：course（路由 POST /coach/growth）"
   },
   "calls": []
+ }, {
+ 
+  "id": "POST /coach/stuck-report · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/coach/stuck-report",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "缺少必填参数：course（路由 POST /coach/stuck-report）"
+  },
+  "calls": []
+ 
+ },
+ {
+ 
+  "id": "POST /coach/stuck-report · 缺 node",
+  "method": "POST",
+  "url": "/learnhub/api/coach/stuck-report",
+  "body": {
+   "course": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "缺少必填参数：node（路由 POST /coach/stuck-report）"
+  },
+  "calls": []
+ 
+ },
+ {
+ 
+  "id": "POST /coach/stuck-report · 缺 text",
+  "method": "POST",
+  "url": "/learnhub/api/coach/stuck-report",
+  "body": {
+   "course": "1",
+   "node": "1"
+  },
+  "status": 500,
+  "res": {
+   "error": "缺少必填参数：text（路由 POST /coach/stuck-report）"
+  },
+  "calls": []
+ 
+ },
+ {
+ 
+  "id": "POST /coach/stuck-report · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/coach/stuck-report",
+  "body": {
+   "course": "1",
+   "node": "1",
+   "text": "卡住了"
+  },
+  "status": 200,
+  "res": {
+   "recorded": true,
+   "queued": true,
+   "message": "教练回合已启动：你的自报原话会随回合交给教练归因，建议稍后呈现。"
+  },
+  "calls": [
+   "growth2.stuckReportAppend(\"1\",\"1\",\"卡住了\")",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（卡点自报触发）…\",\"growthForce\":true}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true}])",
+   "growth2.stuckPending(\"1\")",
+   "growth2.coachGrowthBatch(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}},{\"force\":true})",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"finishedAt\":\"«ts»\"}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+  ]
+ 
  },
  {
   "id": "POST /coach/compass · 空参",

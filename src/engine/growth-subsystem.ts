@@ -22,7 +22,7 @@ import type { Content } from './content.ts'
 import type { BankDoc } from './question-bank.ts'
 import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
-import type { Fm, CourseEntry, ProposalRec } from './types.ts'
+import type { Fm, CourseEntry, ProposalRec, StuckReportFolded, StuckReportRec } from './types.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { CoachCheck } from './coach-round.ts'
 import type { CompassEta, CompassEtaRow, RouteReconcile } from './compass.ts'
@@ -66,6 +66,7 @@ import type { CompassEtaProbe } from './compass.ts'
 import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, reconcileRoute, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { resolveConcept } from './concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from './dates.ts'
+import { foldStuckReports, stuckReportGate } from './stuck-report.ts'
 import type { Clock } from './clock.ts'
 import { netPracticeRecs } from './grading.ts'
 import { atomicWrite } from './io.ts'
@@ -372,6 +373,45 @@ export class GrowthSubsystem {
         exhausted: graph.names.length === 0 || allReached || (anchors.length > 0 && live.length === 0),
       }),
     }
+  }
+
+  /** 卡点自报落账（#248 / ADR-0077）：原话逐字落 practice 流水独立 kind（零结构化、
+   * 零 XP、零 canonical 写入——唯一写点）。节点必须在图上（自报挂学习者正在读的
+   * 节点，名字是教练归因的取值域）；频控（同节点每学习日 + 全课程日总量，params）
+   * 不过即 fail loud——拒绝带原因，被拒的自报不落账也不触发回合。 */
+  async stuckReportAppend(courseKey: string, node: string, text: string): Promise<StuckReportRec> {
+    const c = await this.e.registry.resolve(courseKey)
+    const trimmed = text.trim()
+    if (!trimmed) throw new Error('[stuck-report] 自报原文为空——写点什么再提交。')
+    const { graph } = await this.e.loadView(c)
+    if (!graph.nset.has(node)) {
+      throw new Error(`[stuck-report] 节点「${node}」不在课程「${c.name}」的图上——卡点自报挂在学习者正在读的节点。`)
+    }
+    const { today, cutoff } = await this.e.learningDay()
+    const prior = (await this.e.store.stuckStreamAll())
+      .filter((r): r is StuckReportRec => r.kind === 'stuck_report' && r.course === c.name)
+      .map(r => ({ day: dayOfTs(r.ts, cutoff), node: r.node }))
+    const gate = stuckReportGate(prior, node, today)
+    if (!gate.ok) throw new Error(`[stuck-report] ${gate.reason}`)
+    return this.e.store.appendStuckReport({ course: c.name, node, text: trimmed })
+  }
+
+  /** 待消费自报（教练回合执行起点取数，#248 在途合并缝）：消费标记折叠后滤已消费。 */
+  async stuckPending(courseKey: string): Promise<StuckReportFolded[]> {
+    const c = await this.e.registry.resolve(courseKey)
+    return foldStuckReports(await this.e.store.stuckStreamAll())
+      .filter(r => r.course === c.name && !r.consumed)
+  }
+
+  /** 落消费标记（回合成功后的冲正）：只标仍待消费的自报行 id（幂等——重复标记无害），
+   * 返回实标条数。标记失败留账不拒：下一回合重复消费，无害。 */
+  async stuckMarkConsumed(courseKey: string, targets: string[]): Promise<number> {
+    const c = await this.e.registry.resolve(courseKey)
+    const pending = new Set((await this.stuckPending(courseKey)).map(r => r.id))
+    const fresh = [...new Set(targets)].filter(t => pending.has(t))
+    if (!fresh.length) return 0
+    await this.e.store.appendStuckConsumption({ course: c.name, targets: fresh })
+    return fresh.length
   }
 
 

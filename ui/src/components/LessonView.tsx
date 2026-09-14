@@ -17,6 +17,7 @@ import PracticeFlow from './PracticeFlow'
 import TutorDrawer from './TutorDrawer'
 import ExplainDrawer from './ExplainDrawer'
 import UnderstandingEntry from './UnderstandingEntry'
+import StuckReportEntry from './StuckReportEntry'
 import { WidgetBusProvider } from './widget-bus'
 import { CommandBoundary } from './CommandBoundary'
 import { QUIZ_SOFT_CAP } from '../lib/quiz-rules'
@@ -316,6 +317,10 @@ export default function LessonView(props: { course: string; node: string; frame:
       <TutorDrawer course={course} node={node} visible={tutorOpen} onClose={() => setTutorOpen(false)} />
 
       <ExplainDrawer course={course} node={node} visible={explainOpen} onClose={() => setExplainOpen(false)} />
+
+      {/* 卡点自报（ADR-0077 #248）：阅读页 t=0 受阻信号入口——自由文本原话逐字落账，
+      落账即触发 force 教练回合；回执与频控拒绝就地呈现 */}
+      <StuckReportEntry course={course} node={node} />
 
       {/* 生成/出题进行中：阶段 + 逐节进度 + 耗时 + 取消 */}
       {active && job && (

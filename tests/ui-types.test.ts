@@ -37,8 +37,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  * api.experimentApply 删）而 N-of-1 卡改读 api.proposals 显示待确认提案（人审唯一处）。
  * #240：+2（名称建课 + 手动多终点，ADR-0076）：SeedFormModal 改调 api.courseCreate
  * （api.seedPropose 随 goal 参数一并离场，−1），图屏终点面板新增 api.endpointAdd 与
- * api.endpointRemove 各一处（+2）——净 +2。 */
-const API_CALLSITES = 148
+ * api.endpointRemove 各一处（+2）——净 +2。
+ * #248：+1（阅读页卡点自报入口，ADR-0077）：LessonView 页内 StuckReportEntry 调
+ * api.stuckReport 一处——t=0 受阻信号录入，原话逐字落账并触发 force 教练回合。 */
+const API_CALLSITES = 149
 
 test(`UI 公共面零改动：api.<name>( 调用点数量不变（${API_CALLSITES} 处，函数名与签名未动）`, () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {

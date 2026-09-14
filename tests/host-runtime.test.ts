@@ -1212,7 +1212,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、路由独有 56（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、路由独有 59（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -1249,9 +1249,11 @@ test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、�
   // 两面共享；bank.load 与 paths.courseRoot 进路由面（工具面不读这两条入口）
   // #240 / ADR-0076 建课改模式：冒烟管线改走 createCourse→addEndpoint→seedPropose→apply
   // （名称建课 + 手加终点），三条入口进路由面
+  // #248 / ADR-0077 卡点自报：三个引擎写点（落账/待消费/消费标记）仅路由面（面板
+  // 通道 handler 与生长批执行器消费，agent 工具面不直接触卡点自报）
   assert.equal(shared.length, 88)
   assert.equal(toolOnly.length, 25, '#215：content2.contentCheck 转共享（冒烟复跑质检门），工具独有 26→25')
-  assert.equal(routeOnly.length, 56, '#240/ADR-0076：+graph.createCourse、+graph.addEndpoint、+graph.removeEndpoint（建课改模式三口仅路由/面板下发），路由独有 53→56')
+  assert.equal(routeOnly.length, 59, '#248：+growth2.stuckReportAppend、+growth2.stuckPending、+growth2.stuckMarkConsumed（卡点自报三口仅路由面），路由独有 56→59')
 })
 
 // ---------------------------------------------------------------- apply 不自动入队正文（ADR-0078）

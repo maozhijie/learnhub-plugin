@@ -807,6 +807,15 @@
  },
  {
   "method": "POST",
+  "route": "/coach/stuck-report",
+  "keys": [
+   "course",
+   "node",
+   "text"
+  ]
+ },
+ {
+  "method": "POST",
   "route": "/course/create",
   "keys": [
    "name"

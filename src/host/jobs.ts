@@ -647,8 +647,9 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
   job.message = '教练回合裁决中（轻量段）…'
   persistGenJobs(rt)
   // 卡点自报在途合并（#248 / ADR-0077）：执行起点取该课程全部未消费自报注入回合——
-  // 入队与执行之间的窗口、以及在线上回合期间新落的自报都在内（当次或下一次回合消费）。
-  // 读取失败不挡回合（自报留账）；回合成功（含 idle）才落消费标记，异常留账不丢。
+  // 入队与执行之间窗口的自报随本回合；线上回合执行期间新落的自报不在起点清单内，
+  // 留账待下一次回合（在途拒入队时由 queue_idle 或下一次显式触发补收）。读取失败
+  // 不挡回合（自报留账）；回合成功（含 idle）才落消费标记，异常留账不丢。
   let stuckTargets: string[] = []
   let inject: string | undefined = job.growthInject
   try {

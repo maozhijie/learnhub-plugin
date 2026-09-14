@@ -211,6 +211,10 @@ export const api = {
   /** 单节重写（LessonView 节重写入口；请求挂起至该节生成完成）。 */
   sectionRewrite: (course: string, node: string, section: string) =>
     http<{ message: string }>('POST', '/generate/section', { course, node, section }),
+  /** 卡点自报（#248 ADR-0077）：阅读页自由文本原话逐字落账；落账成功即触发一次
+   * force 教练回合（queued=false = 在途/失败阻尼，自报留账由当次或下一回合消费）。 */
+  stuckReport: (course: string, node: string, text: string) =>
+    http<{ recorded: boolean; ts: string; queued: boolean; message: string }>('POST', '/coach/stuck-report', { course, node, text }),
   /** 交互件成绩结算（LEARNHUB_COMPLETE；同节同日一次）。 */
   interactiveSettle: (course: string, node: string, section: string, score: number, detail?: string) =>
     http<{ settled: boolean; mastery: number }>('POST', '/interactive/settle', { course, node, section, score, detail }),

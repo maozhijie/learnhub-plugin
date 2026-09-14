@@ -13,7 +13,7 @@ import type { VaultFs } from './io.ts'
 import { netPracticeRecs } from './grading.ts'
 import { nowIsoOf, dayOfTs } from './dates.ts'
 import type { Clock } from './clock.ts'
-import type { JournalRec, PracticeRec, ProposalRec, ReviewRec, EArchiveRec, ErratumRec } from './types.ts'
+import type { JournalRec, PracticeRec, PracticeStreamRow, ProposalRec, ReviewRec, EArchiveRec, ErratumRec, StuckConsumptionRec, StuckReportRec } from './types.ts'
 import type { ReceiptLogRec } from './receipts.ts'
 import type { HabitRepeatRec } from './habits.ts'
 import type { PinRec } from './goals.ts'
@@ -24,6 +24,10 @@ import type { Paths } from './paths.ts'
 // netPracticeRecs 住 grading.ts（#152 刀 6 归位：题库域经 grading 取用；store 被低层
 // 模块反向 type-import，值依赖留原地会把存储层拖进下游成环）。
 export { netPracticeRecs } from './grading.ts'
+
+// 卡点自报 id 分配的串行链（#248）：「读 taken → 定 id → append」必须互斥，否则并发
+// 请求读到同一 taken 集会产出重复 id、击穿按 id 抵消语义。失败不链式传染（链只记完成）。
+let stuckAppendChain: Promise<void> = Promise.resolve()
 
 /** 提案逐条最小形状契约（ADR-0053；store 与 data-check 同一出处，防双纪律漂移）：
  * id 正整数、status 三值、artifact 非空字符串（apply 的回读键）、pair 若在必须是正整数。
@@ -78,10 +82,13 @@ export class Store {
   /** 学习行为按日聚合（journal + practice；ts 为本地时间 ISO，过日界推学习日，ADR-0020）。
    * 打卡/日历热力图与 streak 的数据源——行为流水即事实，零新增文件。 */
   async activityCounts(cutoffMin = 0): Promise<Record<string, { journal: number; practice: number; total: number }>> {
-    const [journal, practice] = await Promise.all([
+    const [journal, rows] = await Promise.all([
       this.readJsonl<JournalRec>(this.paths.journalPath, 'journal'),
-      this.readJsonl<PracticeRec>(this.paths.practicePath, 'practice'),
+      this.readJsonl<PracticeStreamRow>(this.paths.practicePath, 'practice'),
     ])
+    // 只聚合作答行（practiceAll 同款收窄）：卡点自报/消费标记是同流水的独立 kind，
+    // 不进打卡/streak/热力图（零激励的落地面——自报不应点亮任何激励读数）
+    const practice = rows.filter((r): r is PracticeRec => r.kind === undefined)
     const byDay: Record<string, { journal: number; practice: number; total: number }> = {}
     const bump = (ts: string | undefined, key: 'journal' | 'practice') => {
       if (!ts) return
@@ -115,9 +122,62 @@ export class Store {
     return full
   }
 
-  /** 全部作答记录（节点/课程过滤由调用方做；量级小，全读可接受）。 */
+  /** 全部作答记录（节点/课程过滤由调用方做；量级小，全读可接受）。卡点自报行是
+   * 同一 practice 流水里的独立 kind（ADR-0077 #248）：两个读侧投影互不可见——作答
+   * 统计/激励/聚合零感知（零 XP 零激励的落地面），卡点行由 stuckStreamAll 消费。 */
   async practiceAll(): Promise<PracticeRec[]> {
-    return this.readJsonl<PracticeRec>(this.paths.practicePath, 'practice')
+    const rows = await this.readJsonl<PracticeStreamRow>(this.paths.practicePath, 'practice')
+    return rows.filter((r): r is PracticeRec => r.kind === undefined)
+  }
+
+  // ---- 卡点自报（ADR-0077 #248；与 practice 同文件分条的独立 kind）----
+
+  /** 追加一条卡点自报（原话逐字；频控在引擎写点 stuckReportAppend，不在本层）。
+   * id 由本层拼装（消费标记的匹配 key）：`ts|node` + 碰撞后缀——ts 是流水约定的
+   * 秒精度，同秒多报时不足以定位到条，行内唯一标识由这里保证。「读 taken → 定 id
+   * → append」经模块级 promise 链串行化（并发请求读到同一 taken 集会产出重复 id，
+   * 击穿按 id 抵消语义）；与 appendPractice/消费标记行不互锁（单行 appendFile 互不
+   * 撕裂，它们也不参与 id 分配）。 */
+  appendStuckReport(rec: Omit<StuckReportRec, 'kind' | 'ts' | 'id'> & { ts?: string }): Promise<StuckReportRec> {
+    const run = (): Promise<StuckReportRec> => this.appendStuckReportInner(rec)
+    const done = stuckAppendChain.then(run, run)
+    stuckAppendChain = done.then(() => undefined, () => undefined)
+    return done
+  }
+
+  private async appendStuckReportInner(rec: Omit<StuckReportRec, 'kind' | 'ts' | 'id'> & { ts?: string }): Promise<StuckReportRec> {
+    const full: StuckReportRec = {
+      kind: 'stuck_report',
+      ts: rec.ts ?? nowIsoOf(this.clock.nowMs()),
+      course: rec.course, node: rec.node, text: rec.text,
+      id: '',
+    }
+    const taken = new Set((await this.stuckStreamAll()).map(r => r.kind === 'stuck_report' ? r.id : ''))
+    let id = `${full.ts}|${full.node}`
+    for (let n = 2; taken.has(id); n++) id = `${full.ts}|${full.node}#${n}`
+    full.id = id
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.practicePath, JSON.stringify(full) + '\n')
+    return full
+  }
+
+  /** 追加一条卡点自报消费标记（冲正式记录；原记录永不改写，读侧折叠）。 */
+  async appendStuckConsumption(rec: { course: string; targets: string[] }): Promise<StuckConsumptionRec> {
+    const full: StuckConsumptionRec = {
+      kind: 'stuck_report_consumed',
+      ts: nowIsoOf(this.clock.nowMs()),
+      course: rec.course, targets: [...rec.targets],
+    }
+    await this.fs.mkdir(this.paths.centerStateDir)
+    await this.fs.appendFile(this.paths.practicePath, JSON.stringify(full) + '\n')
+    return full
+  }
+
+  /** 全部卡点自报与消费标记行（折叠前的原始两 kind；折叠归 stuck-report.ts）。 */
+  async stuckStreamAll(): Promise<Array<StuckReportRec | StuckConsumptionRec>> {
+    const rows = await this.readJsonl<PracticeStreamRow>(this.paths.practicePath, 'practice')
+    return rows.filter((r): r is StuckReportRec | StuckConsumptionRec =>
+      r.kind === 'stuck_report' || r.kind === 'stuck_report_consumed')
   }
 
   // ---- review-log（ADR-0012 逐次复习日志）----

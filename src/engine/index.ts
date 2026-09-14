@@ -84,6 +84,8 @@ export { hasReadyContent } from './notes.ts'
 export { contractOf, validateByContract } from './output-contracts.ts'
 export { normalizeStem } from './question-dedup.ts'
 export { endpointNames, readAnchors } from './seed.ts'
+/** 卡点自报（#248 / ADR-0077）：注入块渲染随门面出——宿主在途合并缝（generateGrowthJob）消费。 */
+export { stuckReportInject } from './stuck-report.ts'
 export { CURRENT_SCHEMA_VERSION } from './schema.ts'
 export type { LlmCallKind, LlmComplete, LlmEffort, LlmStream, LlmTokenUsage, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
 /** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */

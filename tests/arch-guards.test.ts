@@ -143,10 +143,10 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   // #169：路由表演进为命令注册表（routes.ts／routes-post.ts 的 125 条表项 → src/commands/ 的声明，
   // 例外 handler 落 host/handlers.ts）
   const commands = await import('../src/commands/index.ts')
-  assert.equal(commands.COMMAND_LIST.length, 162, '注册表应为 162 条命令（#203 +1：receipt-review-mode；#215 +1：smoke；#216 +1：spike；#222 +1：quality-review；#240 +3：course-create、endpoint-add、endpoint-remove）')
-  assert.equal(Object.keys(commands.COMMANDS).length, 162, '按 id 键的装配表应为 162 个键（#159 +1、#203 +1、#215 +1、#216 +1、#222 +1、#240 +3）')
+  assert.equal(commands.COMMAND_LIST.length, 163, '注册表应为 163 条命令（#203 +1：receipt-review-mode；#215 +1：smoke；#216 +1：spike；#222 +1：quality-review；#240 +3：course-create、endpoint-add、endpoint-remove；#248 +1：stuck-report）')
+  assert.equal(Object.keys(commands.COMMANDS).length, 163, '按 id 键的装配表应为 163 个键（#159 +1、#203 +1、#215 +1、#216 +1、#222 +1、#240 +3、#248 +1）')
   assert.equal(commands.BY_TOOL.size, 112, 'agent 通道索引应为 112 条工具（#203 +1）')
-  assert.equal(commands.BY_ROUTE.size, 133, 'panel 通道索引应为 133 条路由（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove）')
+  assert.equal(commands.BY_ROUTE.size, 134, 'panel 通道索引应为 134 条路由（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report）')
   const handlers = await import('../src/host/handlers.ts')
   assert.equal(typeof handlers.HANDLERS, 'object', 'host/handlers.ts 缺 HANDLERS')
   const staticSrv = await import('../src/host/static.ts')

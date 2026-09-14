@@ -115,6 +115,22 @@ export const 学习域 = {
       }
     ]
   }),
+  'stuck-report': command({
+    id: "stuck-report",
+    args: {
+      course: { type: "string", required: true },
+      node: { type: "string", required: true },
+      text: { type: "string", required: true }
+    },
+    domain: "学习",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/coach/stuck-report" }
+      }
+    ]
+  }),
   'complete': command({
     id: "complete",
     summary: "Confirm a node has been learned this round. Accuracy below the passing line (0.6, with enough attempts) is rejected with accepted=false — review prerequisites or retry with force. On acceptance: unanswered bank questions get their FSRS card initialized (due tomorrow), the node stage moves to review, and a perfect-score completion earns bonus XP.",

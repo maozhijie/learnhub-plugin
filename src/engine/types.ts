@@ -144,8 +144,11 @@ export interface JournalRec {
   xp?: number
 }
 
-/** practice 作答流水条目（grading.record_attempt 同构；qid = 题库题目 id，可选）。 */
+/** practice 作答流水条目（grading.record_attempt 同构；qid = 题库题目 id，可选）。
+ * kind?: undefined：与卡点自报两 kind（ADR-0077 #248）构成判别联合——作答行无 kind，
+ * 读侧投影以 `r.kind === undefined` 收窄（practiceAll 只出作答）。 */
 export interface PracticeRec {
+  kind?: undefined
   ts: string
   course: string
   node: string
@@ -163,6 +166,48 @@ export interface PracticeRec {
    * 翻面前抽查命中时由学习者作答。老记录缺省（读侧视同 null，不报旧流水）；
    * 只作校准展示原料，不喂 canonical。 */
   predicted?: '会' | '不会' | '没把握' | null
+}
+
+/** practice 流水行的判别：作答记录缺 kind（读侧视作答），卡点自报两 kind 见各类型
+ * （ADR-0077 #248：同文件分条、两个互不可见的读侧投影——practiceAll 只出作答，
+ * stuckStreamAll 只出卡点行）。 */
+export type PracticeStreamRow = PracticeRec | StuckReportRec | StuckConsumptionRec
+
+/** 卡点自报（ADR-0077 #248）：practice 流水独立 kind——学习者阅读页自由文本原话
+ * 逐字、零结构化（唯一录入形态，原话是事实源）；零 XP、不进 canonical/Mastery/
+ * FSRS/完成判据。与 B1 的 diagnostic（引擎产出的内容诊断建议项）零共享代码路径。 */
+export interface StuckReportRec {
+  kind: 'stuck_report'
+  /** 行内唯一标识（消费标记的匹配 key）：ts 是流水约定的秒精度，同秒多报时
+   * 不足以定位到条——id 由 store 落账时拼装（`ts|node` + 碰撞后缀）。 */
+  id: string
+  ts: string
+  course: string
+  /** 自报发生时正在读的节点（教练归因的取值域）。 */
+  node: string
+  text: string
+}
+
+/** 卡点自报消费标记（冲正式记录，先例 erratum 冲正流水）：coach 回合成功消费后在
+ * practice 流水追加的抵消凭证——原记录永不改写（append-only，读侧折叠出消费态），
+ * 回合异常时自报自然留账不丢。 */
+export interface StuckConsumptionRec {
+  kind: 'stuck_report_consumed'
+  ts: string
+  course: string
+  /** 被本回合消费的自报行 id 列表（精确到条，StuckReportRec.id）。 */
+  targets: string[]
+}
+
+/** 卡点自报读侧折叠行（foldStuckReports 产出）：报告 + 消费态。 */
+export interface StuckReportFolded {
+  id: string
+  ts: string
+  course: string
+  node: string
+  text: string
+  consumed: boolean
+  consumed_ts?: string
 }
 
 /** 逐次复习日志条目（state/review-log.jsonl，ADR-0012）：调度事件流——只在真实

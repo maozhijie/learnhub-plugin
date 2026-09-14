@@ -627,6 +627,33 @@ export const HANDLERS: Record<string, RouteHandler> = {
     sendJson(res, 200, await apiRun(rt, 'api/coach/growth', async () =>
       enqueueGrowthBatch(rt, ctx, growthCourse, '面板下发（显式重新裁决）', undefined, { force: true })))
   },
+  'POST /coach/stuck-report': async ({ rt, ctx, body, res }) => {
+    // 卡点自报闭环（#248 / ADR-0077）：原话逐字落 practice 流水独立 kind（频控
+    // 拒绝带原因 fail loud——被拒的自报不落账也不触发回合）→ 落账成功立即入队一次
+    // force 教练回合（ADR-0076 添加终点同款先例；频控上限同时是回合触发上限）。
+    // 在途防重入语义由 enqueueGrowthBatch 给出：未入队的自报留账，由当次或下一次
+    // 回合消费；入队失败（队列不可写等）自报同样已留账不丢，回执如实呈现。
+    const course = need(body, 'course')
+    const node = need(body, 'node')
+    const text = need(body, 'text')
+    sendJson(res, 200, await apiRun(rt, 'api/coach/stuck-report', async () => {
+      const rec = await rt.engine.growth2.stuckReportAppend(course, node, text)
+      let round: { queued: boolean; message: string }
+      try {
+        round = enqueueGrowthBatch(rt, ctx, course, '卡点自报触发', undefined, { force: true })
+      } catch (err) {
+        round = { queued: false, message: `自报已留账；教练回合入队失败：${err instanceof Error ? err.message : String(err)}` }
+      }
+      return {
+        recorded: true as const,
+        ts: rec.ts,
+        queued: round.queued,
+        message: round.queued
+          ? '教练回合已启动：你的自报原话会随回合交给教练归因，建议稍后呈现。'
+          : round.message,
+      }
+    }))
+  },
   'POST /coach/compass': async ({ rt, ctx, body, res }) => {
     // 罗盘初画/重画（#143 透明度装置）：LLM 一次调用进串行队列，不占请求
     sendJson(res, 200, await apiRun(rt, 'api/coach/compass', async () =>
