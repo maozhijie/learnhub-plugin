@@ -506,14 +506,17 @@ export class Content {
   }
 
   /** 预测门块结构门（P-8 #97）：learnhub-predict 块逐块解析——字段齐全、options 2–4 项
-   * 互异、answer ∈ options。任何节里出现该块都须合法（MdView 会渲染成阅读流门）。 */
+   * 互异、answer ∈ options。任何节里出现该块都须合法（MdView 会渲染成阅读流门）。
+   * finding 附期望形态（ADR-0079 说明增强：修得动的拦才有意义；前缀保 BLOCK_FINDING_RE
+   * 的块号定位口径不变）。 */
   static checkPredictBlocks(body: string): string[] {
     const findings: string[] = []
     let i = 0
     for (const m of body.matchAll(predictBlockRe())) {
       i++
       const v = parsePredictBlock(m[1]!)
-      if ('error' in v) findings.push('```learnhub-predict 第 ' + i + ' 块不合法：' + v.error)
+      if ('error' in v) findings.push('```learnhub-predict 第 ' + i + ' 块不合法：' + v.error
+        + '；期望四行字段 q: <预测提问> / options: ["做法一", "做法二"]（2–4 项互异） / answer: <options 中一项的原文> / why: <可省>')
     }
     return findings
   }
@@ -527,33 +530,40 @@ export class Content {
     let i = 0
     for (const m of body.matchAll(/^```plot[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm)) {
       i++
-      if (!Content.isPlainJsonObject(m[1])) findings.push('```plot 第 ' + i + ' 块不是合法 JSON 对象（面板会降级为源码显示）')
+      const err = Content.plainJsonError(m[1])
+      if (err) findings.push(`\`\`\`plot 第 ${i} 块不是合法 JSON 对象（面板会降级为源码显示）：解析报错「${err}」；期望一个 JSON 对象，如 {"title":"示例","series":[1,2,3]}`)
     }
     i = 0
     for (const m of body.matchAll(/^```chart[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm)) {
       i++
-      if (!Content.isPlainJsonObject(m[1])) findings.push('```chart 第 ' + i + ' 块不是合法 JSON 对象（面板会降级为源码显示）')
+      const err = Content.plainJsonError(m[1])
+      if (err) findings.push(`\`\`\`chart 第 ${i} 块不是合法 JSON 对象（面板会降级为源码显示）：解析报错「${err}」；期望一个 JSON 对象，如 {"label":"示例","values":[1,2,3]}`)
     }
     i = 0
     for (const m of body.matchAll(/^```svg[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm)) {
       i++
-      if (!/^\s*<svg[\s>]/i.test(m[1])) findings.push('```svg 第 ' + i + ' 块必须以 <svg 开头（完整 SVG 片段）')
+      if (!/^\s*<svg[\s>]/i.test(m[1])) {
+        const head = m[1].trimStart().split('\n')[0]!.trim().slice(0, 40)
+        findings.push(`\`\`\`svg 第 ${i} 块必须以 <svg 开头（完整 SVG 片段）：块首行是「${head}」`)
+      }
     }
     return findings
   }
 
-  private static isPlainJsonObject(text: string): boolean {
-    const clean = (v: unknown): v is Record<string, unknown> =>
+  /** 富内容块 JSON 校验：合法 JSON 对象返回 null，否则返回给修复轮看的解析报错
+   * （ADR-0079 说明增强：给原始报错而非干巴巴的「不合法」，块级修补一次修对）。 */
+  private static plainJsonError(text: string): string | null {
+    const isObj = (v: unknown): v is Record<string, unknown> =>
       typeof v === 'object' && v !== null && !Array.isArray(v)
     try {
-      return clean(JSON.parse(text))
-    } catch {
+      return isObj(JSON.parse(text)) ? null : '解析成功但不是 JSON 对象'
+    } catch (e1) {
       // fast 档模型高频失误是尾随逗号:仅当原始解析失败时清洗重试,不改语义。
       // 误报面仅剩「字符串字面量内含 `,}` 且恰好是唯一语法错误」,可接受。
       try {
-        return clean(JSON.parse(text.replace(/,(\s*[}\]])/g, '$1')))
+        return isObj(JSON.parse(text.replace(/,(\s*[}\]])/g, '$1'))) ? null : '解析成功但不是 JSON 对象'
       } catch {
-        return false
+        return e1 instanceof Error ? e1.message : String(e1)
       }
     }
   }
@@ -942,14 +952,34 @@ export class Content {
     return { sections: subs, tolerated }
   }
 
+  /** 满编放行（ADR-0079）：节清单已到总上限时，「正文过长」的拒收没有修复阶梯可走
+   * （压缩修复轮已试败、拆节需要新增节会越上限）——此时长度 finding 降为 warn 放行落盘，
+   * journal 与任务 message 留痕，人工复核兑底。findings 混入任何非长度项（契约类）时
+   * 不降级——契约未兑现仍然拦。sectionCount < MAX_SECTIONS 时拆节阶梯仍有效，不动。 */
+  static demoteCapLengthFindings(
+    findings: readonly string[], warns: readonly string[], sectionCount: number,
+  ): { findings: string[]; warns: string[]; lenient: string | null } {
+    if (sectionCount < MAX_SECTIONS || !findings.length || !findings.every(f => f.includes('正文过长'))) {
+      return { findings: [...findings], warns: [...warns], lenient: null }
+    }
+    const demoted = findings.map(f => {
+      const m = f.match(/节「(.+?)」正文过长（约 (\d+) 字 > 拒收线 (\d+) 字/)
+      return m
+        ? `满编放行：节「${m[1]}」正文约 ${m[2]} 字超拒收线 ${m[3]} 字（节点已满编 ${MAX_SECTIONS} 节，压缩修复未过、拆节阶梯不可用；人工复核兑底）`
+        : `满编放行（节点已满编，长度 finding 降为警告；人工复核兑底）：${f}`
+    })
+    return { findings: [], warns: [...warns, ...demoted], lenient: demoted.join('；') }
+  }
+
   /** 单节落盘：交互件标记块先拆出落盘 → QC 格式类程序化修复（别名，#147）→ 节级质检门 →
    * 正文按清单手术重组 → 该节 status=ready/version+1、content.version+1（draft）；
-   * hints = enc 候选反哺图的补边提醒，repairs = 程序化修复明细（留痕用）。
+   * hints = enc 候选反哺图的补边提醒，repairs = 程序化修复明细、lenient = 满编放行摘要
+   * （留痕用）。
    * 门禁未过抛 code=GATE_FAILED 的错误（自动修复回路据此识别，其余错误原样传播）。 */
   async sectionApply(
     root: string, graph: Graph, node: string, sectionId: string, md: string,
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
-  ): Promise<{ version: number; title: string; hints: string[]; repairs: string[] }> {
+  ): Promise<{ version: number; title: string; hints: string[]; repairs: string[]; lenient?: string }> {
     const [, regionName] = graph.blockOf[node]
     const path = this.paths.courseNotePath(root, regionName, node)
     const { fm, body } = await loadNote(path, this.fs)
@@ -978,6 +1008,13 @@ export class Content {
     if (entry.type === '思维' && !Content.hasPredictBlock(sectionMd)) {
       gate.findings.push('「思维轨迹」节必须至少设一处 ```learnhub-predict 预测门（关键转折处先预测再揭晓；格式见上下文包 §11）')
     }
+    // 满编放行（ADR-0079）：只看 gate.findings；交互件契约 finding 在场时照常拦（混入
+    // 契约类不降级）。lenient 非空 = 本节以 warn 放行落盘，摘要进 journal 与返回值。
+    const cap = html.findings.length
+      ? { findings: gate.findings, warns: gate.warns, lenient: null as string | null }
+      : Content.demoteCapLengthFindings(gate.findings, gate.warns, sections.length)
+    gate.findings = cap.findings
+    gate.warns = cap.warns
     if (gate.findings.length || html.findings.length) {
       // 结构化失败信息（ADR-0054）：sectionId/标题支撑续跑与定点重写，预算数字支撑
       // 修复轮的显式压缩目标；message 仍是人读事实源（含 ✗ 清单）。
@@ -1004,10 +1041,10 @@ export class Content {
         sections: nextSections,
       },
     }, newBody, this.fs)
-    await journal({ course: '', node, rating: null, kind: 'content_section', elapsed_days: 0, detail: `节「${entry.title}」v${entry.version + 1} 落盘${aliasFix.fixed.length ? `（程序化修复：${aliasFix.fixed.join('、')}）` : ''}` })
+    await journal({ course: '', node, rating: null, kind: 'content_section', elapsed_days: 0, detail: `节「${entry.title}」v${entry.version + 1} 落盘${aliasFix.fixed.length ? `（程序化修复：${aliasFix.fixed.join('、')}）` : ''}${cap.lenient ? `；${cap.lenient}` : ''}` })
     // 反哺候选取自落盘后的整篇正文（enc_candidates 机器块可能在其它节末尾），
     // 这样单节落盘后也能对全文候选给出 enc/set_pre 反哺提醒
-    return { version, title: entry.title, hints: Content.encBackfeedHints(graph, node, newBody), repairs: aliasFix.fixed }
+    return { version, title: entry.title, hints: Content.encBackfeedHints(graph, node, newBody), repairs: aliasFix.fixed, ...(cap.lenient ? { lenient: cap.lenient } : {}) }
   }
 
   /** 模型按提示词自带 `## 标题` 首行，落盘时由 sectionApply 按清单统一包标题——

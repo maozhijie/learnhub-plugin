@@ -27,9 +27,10 @@ hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engin
 内容管线接缝（2026-09-07 新增，`content-gate.test.ts`；被测模块已改为显式字段赋值，strip-only 可导入）：
 
 - S5 `content.ts::checkSectionShape` —— 节形状门（### 子标题 warn、正文长度 warn/finding、公式与代码不占文字预算）
-- S6 `content.ts::checkVisualBlocks` —— 富内容块门（plot/chart 合法 JSON 对象含尾随逗号容错、svg 起始）
+- S6 `content.ts::checkVisualBlocks` —— 富内容块门（plot/chart 合法 JSON 对象含尾随逗号容错、svg 起始；finding 说明增强附解析报错/期望形态，BLOCK_FINDING_RE 定位口径不变，ADR-0079）
 - S6.5 `content.ts::fixRichBlocks` —— 程序性自动修复（plot/chart 尾随逗号/行注释清洗、svg 前导杂质裁剪、mermaid 自动补引号）
 - S7 `content.ts::checkInteractiveHtml` —— 交互件门（完成上报/外联/200KB finding，TEACHER 监听与 widget-config 缺失 warn）
+- S6+ `content.ts::demoteCapLengthFindings` —— 满编放行（ADR-0079：满编且仅长度 finding 降 warn 留痕、混入契约类不降级、未满编不动；`tests/section-split.test.ts`）
 - S8 `content.ts::parseOutline / assembleBody / stripLeadingSectionTitle` —— 节清单解析与正文重组
 - S9 `question-bank.ts::validateBank` —— 题库 schema（只管形状，不管数量）
 - S10 `content.ts::locateFinding / sectionRepairPrompt` —— 修复轮 findings 附定位、prompt 要求局部重写
@@ -243,6 +244,31 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 提示词 | **未动**（无需 `PROMPT_CHANGELOG`）：`src/engine/prompts/` 一字未改——本票只改「谁往队列里放任务」，模板与契约面零变化 | — | `npm run prompt-bump -- check` 受控面无版本变化 |
 
 路由探针快照（`host-routes-snapshot.json`）与行为快照（`host-tools-behavior.json`）**零漂移**：apply 的响应体一直是引擎返回的 `applied`，入队只写运行日志与注册表，不进响应面。
+
+## 节质检门分层：契约类硬拦 + 满编放行（ADR-0079，2026-09-14）：行为变更登记
+
+症状：节质检门的 finding/warn 无判据，「面板显示降级」与「字数略超」这类倾向性问题和契约问题同罪硬拦——一周运行日志里同一个节因 plot 非法 JSON 留下 4,149 次重复失败快照，低档节 606 字超 500 字拒收线在满编 8 节节点反复把任务卡死（拆节阶梯死路）。裁决：硬拦 = 输出契约的结构合法性，warn = 教学与预算倾向；满编时长度拒收降 warn 放行留痕。逐条登记：
+
+| 项 | 变更 | 落点 | 证据 |
+|---|---|---|---|
+| 行为 | **满编放行**：节清单 ≥ `MAX_SECTIONS` 且 findings 全部为「正文过长」时降 warn 落盘，摘要进 journal `content_section` 与任务 message；混入任何非长度项（契约类）照拦；未满编拆节阶梯不变 | `engine/content.ts`（`demoteCapLengthFindings` + `sectionApply` 接线）／`host/jobs.ts`（管线两处与单节重写的 message 留痕） | `tests/section-split.test.ts` 满编/混合/未满编三态；`tests/content-gate.test.ts` S6+ |
+| 行为 | **契约类 finding 说明增强**：plot/chart 附解析报错原文与期望形态、svg 附块首行原文、predict 附期望四行字段；前缀「```<lang> 第 N 块」逐字保留（块级修补定位不变） | `engine/content.ts`（`checkVisualBlocks`／`checkPredictBlocks`／`plainJsonError`） | `tests/content-gate.test.ts` S6+ 三条（含 `blockPatchPlan` 对增强后消息仍可定位） |
+| 未改 | **阈值全部不动**（可视化 ≤2、拒收线 = 预算 ×2、predict 结构门、别名、交互件契约）；修复轮 2 轮阶梯、`fixRichBlocks`、冒烟面板检查项、离线量规 lane、出题门禁 | — | 既有断言零漂移 |
+| 受控量 | **G5 逐文件规模迁移**：`content.ts`／`output-contracts.ts`／`jobs.ts` 增行（说明增强 + 接线 + 登记） | `scripts/arch-baseline.json`（`--update`；typeErrors 仍 0） | 棘轮精确匹配；`tests/arch-guards.test.ts` G5 绿 |
+| 提示词 | **删散文里的门禁机械规则**（1.3/2 倍阈值、可视化 ≤2 拒收句、### 子标题提示句）：四模板 bump v11→v12，`PROMPT_CHANGELOG` 同提交登记 | `src/engine/prompts/templates.ts`／`src/engine/output-contracts.ts` | `npm run prompt-bump -- check` 提交级绿；`output-contract.test.ts::runChangelogGate` 状态级绿 |
+
+## 卡点自报闭环（#248 / ADR-0077，2026-09-14）：行为变更登记
+
+学习者在阅读页卡住时可以**原话自报**（t=0 信号录入），宿主随即编排一次 force 教练回合消化它——与 B1 diagnostic 零共享代码路径、零语义混用（两条独立通道，理由见 ADR-0077）。逐条登记：
+
+| 项 | 变更 | 落点 | 证据 |
+|---|---|---|---|
+| 行为 | **流水新 kind `stuck_report` + 行内唯一 id**：practice.jsonl 新增独立行型（course／node／text 原话逐字／ts／id），`PracticeStreamRow` 判别联合加一支（`PracticeRec` 补 `kind?: undefined` 收窄）；`nowIsoOf` 秒精度约定不动，同秒多报由 store 拼装 `ts|node` + 碰撞后缀的 id 定位到条；读侧 `foldStuckReports` + 冲正式消费行 `stuck_report_consumed`（append-only，targets 按 id 精确抵消） | `engine/types.ts`／`engine/store.ts`（`appendStuckReport`／`stuckStreamAll`）／`engine/stuck-report.ts`／`engine/growth-subsystem.ts`（三方法）／`engine/params.ts`（频控） | `tests/stuck-report.test.ts` 13 例（流水读写、频控同节点 1 条 + 全课程日 5 条、消费折叠——**含「同秒两条自报按行 id 各自独立抵消」**） |
+| 行为 | **落账 → force 回合编排**：`/coach/stuck-report` 落账成功即入队 force 生长批（复用 ADR-0076 的 `growthForce` 执行侧豁免），`inject` 携带自报原文 + 在途未消费清单；在途期间自报只落账不重复入队；回合异常自报留账不丢（成功含 idle 才标消费）；回执三态（成功 queued／在途／拒绝带原因） | `host/handlers.ts`／`host/jobs.ts`（`generateGrowthJob` 起点读 `growth2.stuckPending` → inject 合并 → 成功后 `stuckMarkConsumed`） | `tests/stuck-report.test.ts` 13 例中的宿主 3 例（含「回合失败自报留账」「消费标记只抵消落账时点前的在途」——以 stub 进入与「已消费」消息作竞态定型信号） |
+| 行为 | **UI 自报入口 + 回执三态**：LessonView 内多行输入 + 提交按钮（新组件 `StuckReportEntry`），成功后输入清空面板收起、拒绝时**输入保留**；零 XP 零激励 | `ui/src/components/StuckReportEntry.tsx`／`ui/src/components/LessonView.tsx`／`ui/src/api.ts` | `tests/stuck-report-ui.test.ts` 3 例（成功含 POST body 断言 + 语义锁、在途、404 通道拒绝保输入）；`tests/ui-honesty-dom.test.ts` 照旧执法语义锁 |
+| 受控量 | **路由/工具面/快照四门迁移**：路由清单 +1（`POST /coach/stuck-report`，keys course/node/text）、routeOnly +3（`growth2.stuckReportAppend`／`stuckPending`／`stuckMarkConsumed` 仅路由面）、探针快照 +4 条（空参/缺 node/缺 text 500 缺参 + 全参 200 带 8 条 calls 序列）、`/coach/growth` 全参探针 calls 补 `stuckPending` 一条；分布 200:230／404:6／500:253、探针 489 条；G2 命令数 163、门③④ 134、`API_CALLSITES` 149 | `tests/fixtures/host-routes-baseline.json`／`host-routes-snapshot.json`（regen 重录 + 逐条补插）／`host-face-baseline.json`／`tests/host-runtime.test.ts`／`tests/host-routes.test.ts`／`tests/arch-guards.test.ts`／`tests/commands.test.ts`／`tests/ui-types.test.ts` | 棘轮精确匹配；受影响 7 个测试文件 112/112 绿 |
+| 受控量 | **G5 逐文件规模迁移**：`学习.ts 737→753`（stuck-report 命令声明）、`growth-subsystem.ts 1152→1192`（三方法 + 频控）、`index.ts 858→860`（路由接线）、`params.ts 58→62`（频控常量）、`handlers.ts 741→768`（路由 handler + 回执三态）、`jobs.ts 1219→1246`（起点读 stuckPending + inject 合并 + 消费标记）、`store.ts 478→521`（appendStuckReport + stuckStreamAll）；新受控文件 `stuck-report.ts`（82 行）显式登记；`types.ts` 在白名单不计 | `scripts/arch-baseline.json`（同提交迁移；typeErrors 仍 0） | `tests/arch-guards.test.ts` G5 绿 |
+| 提示词 | **未动**（无需 `PROMPT_CHANGELOG`）：`src/engine/prompts/` 一字未改——自报原文经 `inject` 携带进教练上下文（既有通道，ADR-0076 先例），模板与契约面零变化 | — | `npm run prompt-bump -- check` 受控面无版本变化 |
 
 ## 提示词变更纪律（#220 / ADR-0072）：新门登记
 

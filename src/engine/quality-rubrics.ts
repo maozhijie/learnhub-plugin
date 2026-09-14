@@ -208,7 +208,7 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
           {
             id: '篇幅预算', criterion: '一节 = 学习页 1–2 屏：文字不超 §9 预算（1.3 倍警告、2 倍拒收）；可视化块合计 ≤2；节内无 ### 子标题',
             evidence: '引去公式去图后的纯文字数与预算对照、可视化块计数',
-            source: '模板:课程节生成', anchor: '超预算 1.3 倍警告、2 倍拒收',
+            source: '模板:课程节生成', anchor: '字数额度见上下文包 §9 复杂度档案',
           },
           {
             id: '排版约定', criterion: '并列误区/注意/要点块用 blockquote（首行加粗标签）；关键结论用独立公式（$$…$$）；mermaid 节点文本特殊字符整体双引号',

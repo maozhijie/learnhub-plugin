@@ -139,3 +139,30 @@ test('S5: 交互/预测机器块行数再多不占文字预算；finding 自带�
   assert.equal(rf.findings.length, 1)
   assert.match(rf.findings[0]!, /字数按去空白、去公式与可视化\/交互块后的正文字数计/)
 })
+
+// ---------------------------------------------------------------- 满编放行（ADR-0079：拆节死路时长度拒收降 warn）
+
+const CAP_OVERFLOW = '节「演示」正文过长（约 606 字 > 拒收线 500 字 = 单节预算 250×2）：一节 = 学习页 1–2 屏，把内容拆成多个节（管线可自动拆）或压缩文字'
+
+test('demoteCapLengthFindings: 满编且仅长度 finding → 迁入 warns 并给留痕摘要', () => {
+  const r = Content.demoteCapLengthFindings([CAP_OVERFLOW], ['已有警告'], MAX_SECTIONS)
+  assert.deepEqual(r.findings, [], '长度拒收放行')
+  assert.equal(r.warns.length, 2)
+  assert.match(r.warns[1]!, /满编放行：节「演示」正文约 606 字超拒收线 500 字/)
+  assert.match(r.warns[1]!, /满编 8 节/)
+  assert.match(r.warns[1]!, /人工复核兑底/)
+  assert.equal(r.lenient, r.warns[1], 'lenient = 迁入 warn 的摘要，journal 与任务 message 留痕用')
+})
+
+test('demoteCapLengthFindings: 混入契约类 finding 不降级；未满编不降级；空 findings 不动', () => {
+  const mixed = [CAP_OVERFLOW, '```plot 第 1 块不是合法 JSON 对象（面板会降级为源码显示）']
+  const r1 = Content.demoteCapLengthFindings(mixed, [], MAX_SECTIONS)
+  assert.equal(r1.findings.length, 2, '契约类在场：整体照拦')
+  assert.equal(r1.lenient, null)
+  const r2 = Content.demoteCapLengthFindings([CAP_OVERFLOW], [], MAX_SECTIONS - 1)
+  assert.equal(r2.findings.length, 1, '未满编：拆节阶梯仍有效，不降级')
+  assert.equal(r2.lenient, null)
+  const r3 = Content.demoteCapLengthFindings([], [], MAX_SECTIONS)
+  assert.equal(r3.lenient, null)
+  assert.deepEqual(r3.findings, [])
+})

@@ -82,6 +82,33 @@ test('S6: svg 必须以 <svg 开头', () => {
   assert.match(r[0]!, /<svg/)
 })
 
+// ---- S6 说明增强（ADR-0079）：finding 给解析报错与期望形态，修得动的拦才有意义 ----
+
+test('S6+: plot 非法 JSON 的 finding 附解析报错原文与期望形态', () => {
+  const r = Content.checkVisualBlocks('```plot\n{"a":\n```\n')
+  assert.equal(r.length, 1)
+  assert.match(r[0]!, /第 1 块/) // 前缀保块号定位口径
+  assert.match(r[0]!, /解析报错「/) // 原始报错原文
+  assert.match(r[0]!, /期望一个 JSON 对象/)
+})
+
+test('S6+: 说明增强后 BLOCK_FINDING_RE 仍能定位块（块级修补不失效）', () => {
+  const body = '## 概念：图\n\n说明。\n\n```plot\n{"a":\n```\n'
+  const finding = Content.checkVisualBlocks(body)[0]!
+  const plan = Content.blockPatchPlan(body, '✗ ' + finding)
+  assert.ok(plan, '增强后的 finding 仍全部块级可定位')
+  assert.equal(plan![0]!.kind, 'plot')
+  assert.equal(plan![0]!.index, 1)
+})
+
+test('S6+: svg finding 附块首行原文；predict finding 附期望形态', () => {
+  const r = Content.checkVisualBlocks('```svg\n这不是svg\n```\n')
+  assert.match(r[0]!, /块首行是「这不是svg」/)
+  const p = Content.checkPredictBlocks('```learnhub-predict\nq: 下一步?\noptions: ["甲"]\nanswer: 甲\n```\n')
+  assert.equal(p.length, 1, 'options 1 项不合法')
+  assert.match(p[0]!, /期望四行字段/)
+})
+
 // ---- S6.5 fixRichBlocks:程序性自动修复（落盘前清洗，不再只是门禁容忍） ----
 
 test('S6.5: plot 尾随逗号在落盘前被改写为合法 JSON', () => {

@@ -5,7 +5,7 @@
  * 读写，本文件零模块级可变状态；队列语义零改动（FIFO、可取消、重启可恢复、阻尼）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, TIER_LABELS, endpointNames, genericQuizTarget, readAnchors, tierIdxOf } from '../engine/index.ts'
+import { Content, TIER_LABELS, endpointNames, genericQuizTarget, readAnchors, stuckReportInject, tierIdxOf } from '../engine/index.ts'
 import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport, VaultPriorAudit } from '../engine/index.ts'
 import {
   contentFailureStatus,
@@ -186,7 +186,7 @@ async function applySectionWithRepair(
     allowSplit?: boolean
     coherence?: SectionCoherence,
   },
-): Promise<{ version: number; title: string; hints: string[]; md: string }> {
+): Promise<{ version: number; title: string; hints: string[]; md: string; lenient?: string }> {
   const cancelled = () => opts?.isCancelled?.() ?? false
   const first = await complete(sectionPrompt(tpl, pack, s, opts?.coherence), undefined, { effort: contentEffort(opts?.highTier === true), station: STATIONS.section })
   if (cancelled()) throw new Error('生成已取消，结果已丢弃。')
@@ -646,9 +646,21 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
   job.status = 'running'
   job.message = '教练回合裁决中（轻量段）…'
   persistGenJobs(rt)
+  // 卡点自报在途合并（#248 / ADR-0077）：执行起点取该课程全部未消费自报注入回合——
+  // 入队与执行之间的窗口、以及在线上回合期间新落的自报都在内（当次或下一次回合消费）。
+  // 读取失败不挡回合（自报留账）；回合成功（含 idle）才落消费标记，异常留账不丢。
+  let stuckTargets: string[] = []
+  let inject: string | undefined = job.growthInject
+  try {
+    const pending = await rt.engine.growth2.stuckPending(job.course)
+    if (pending.length) {
+      stuckTargets = pending.map(p => p.id)
+      inject = [inject, stuckReportInject(pending)].filter(Boolean).join('\n\n') || undefined
+    }
+  } catch { /* 自报读取失败不挡回合（留账，下回合重试） */ }
   try {
     const r = await rt.engine.growth2.coachGrowthBatch(job.course, rt.agent, {
-      ...(job.growthInject ? { inject: job.growthInject } : {}),
+      ...(inject ? { inject } : {}),
       // 显式重新裁决的豁免随任务进执行侧（#240）：面板「生长一步」/失败重试点过的
       // 那一轮，就绪深度已满足也不短路成停摆——否则按钮在停摆图上恒空转
       ...(job.growthForce === true ? { force: true } : {}),
@@ -675,6 +687,16 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       // 就绪缺口（a.ready_unbuilt）已就绪但要生成正文的节点不再自动入队（ADR-0078）——
       // 结构先落，正文等显式下发。
       if (a.ops > 0) await sweepGenJobs(rt)
+    }
+    // 回合成功（含 idle）才消费：标记失败留账不拒（下一回合重复消费，无害）
+    if (stuckTargets.length) {
+      try {
+        const n = await rt.engine.growth2.stuckMarkConsumed(job.course, stuckTargets)
+        if (n > 0) {
+          job.message += `｜已消费卡点自报 ${n} 条`
+          void runLog(rt, 'stuck_report', `「${job.course}」教练回合已消费 ${n} 条卡点自报`)
+        }
+      } catch { /* 留账不丢，下一回合重新消费 */ }
     }
   } catch (err) {
     const corpusRef = failCorpus(rt, STATIONS.growth, err)
@@ -877,6 +899,8 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     // 节间连贯注入（#227）：完整节清单标 i/N + 相邻前节尾部窗口；前节在本轮落盘后
     // 就地刷新视图 md，后节窗口即取到刚生成的结尾（拆节后 freshViews 同口径，前节
     // = 父内前子节或更早的已就绪节）。
+    // 满编放行摘要收集（ADR-0079）：放行节进任务 message 留痕，人审兑底。
+    const lenientNotes: string[] = []
     const coherenceOf = (list: typeof views, id: string): SectionCoherence => {
       const i = list.findIndex(v => v.id === id)
       return { sections: list, prevTail: i > 0 ? sectionTailOf(list[i - 1]?.md) : undefined }
@@ -888,6 +912,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
       try {
         const r = await applySectionWithRepair(rt, complete, course, node, s, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier, coherence: coherenceOf(views, s.id) })
         views[vi] = { ...s, md: r.md }
+        if (r.lenient) lenientNotes.push(r.lenient)
         job.progress = { ...job.progress!, done: job.progress!.done + 1 }
       } catch (err) {
         if (job.status === 'cancelling') throw err
@@ -909,6 +934,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
               try {
                 const r = await applySectionWithRepair(rt, complete, course, node, sub, sectionTpl, pack, { isCancelled: () => job.status === 'cancelling', highTier, allowSplit: false, coherence: coherenceOf(freshViews, sub.id) })
                 freshViews[freshViews.findIndex(v => v.id === sub.id)] = { ...sub, md: r.md }
+                if (r.lenient) lenientNotes.push(r.lenient)
                 job.progress = { ...job.progress!, done: job.progress!.done + 1 }
               } catch (subErr) {
                 if ((job.status as GenJobStatus) === 'cancelling') throw subErr
@@ -930,9 +956,10 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     }
     const done = job.progress!.total - failures.length
     const failedTitles = failures.map(f => `「${f.sectionTitle ?? f.sectionId ?? '?'}」`).join('、')
-    const contentMsg = failures.length
+    const contentMsg = (failures.length
       ? `「${node}」正文部分完成（${done}/${job.progress!.total} 节；未完成：${failedTitles}——失败提示可「重试续跑」或定点重写）`
-      : `「${node}」正文完成（${job.progress!.total} 节）`
+      : `「${node}」正文完成（${job.progress!.total} 节）`)
+      + (lenientNotes.length ? `；${lenientNotes.join('；')}` : '')
     const msg = await finishWithQuiz(rt, complete, job, contentMsg + priorNote, quizCount)
     if (failures.length) {
       // 出题成功也不掩盖节失败：partial = 未完成全部必需阶段（Partial 词条语义）
@@ -1004,7 +1031,7 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
   // 与管线同款剥围栏缝（管线产出口对 ``` 围栏容忍，重写通道此前裸缝更脆，ADR-0054）；
   // allowSplit:false——「重写这一节」的意图是重写本节，不自动改大纲结构（溢出即如实报错）
   const r = await applySectionWithRepair(rt, llmSeamStripped(ctx, rt.corpus.record), course, node, s, sectionTpl, pack, { highTier, allowSplit: false, coherence })
-  return `[section] 「${r.title}」v${r.version} 落盘。${priorNote}`
+  return `[section] 「${r.title}」v${r.version} 落盘。${r.lenient ? `${r.lenient}。` : ''}${priorNote}`
 }
 
 /** 项目里程碑计划生成（P 区 #92）：计划提示词包 → 缝 complete（fast 档，#162 计划站
