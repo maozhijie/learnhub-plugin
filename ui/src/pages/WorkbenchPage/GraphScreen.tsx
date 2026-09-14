@@ -1,6 +1,6 @@
 /** 工作台首屏（#209 / ADR-0058）：罗盘（学习者的进度语义装置，含批注区与沙盘 ETA）
- * + 终点面板 + 学习图 DAG 纵览。终点由学习者手加/删（ADR-0076：立即写盘、加完自动
- * 拉起教练接线回合）；点节点直接进学习视图（LessonView）；从学习视图「在图中查看」
+ * + 终点面板 + 学习图 DAG 纵览。终点由学习者手加/删（ADR-0076：立即写盘、纯声明不触发
+ * 生成——方向声明完由教练台「生长一步」放行）；点节点直接进学习视图（LessonView）；从学习视图「在图中查看」
  * 跳入时 focusNode 红描边定位；图本身不承载学习操作。#158 三态化：加载中/失败/空
  * 显式区分；空图（零节点）是合法空态——引导先加一个终点。 */
 import { Button, Card, Input, Message, Modal, Result, Select, Space, Switch, Tag, Typography } from '@arco-design/web-react'
@@ -42,7 +42,7 @@ function Legend() {
 
 /** 终点面板（ADR-0076）：逐终点一行——名称、三档状态、闭包进度、服务于哪些终点
  * （交汇）；最后台阶里的交汇节点点名。添加（名称 + 可选一句方向说明）与删除入口；
- * 添加后引擎自动拉一次教练接线回合。 */
+ * 添加是纯声明：只落锚与节点、不触发生成，方向声明完再到教练台点「生长一步」放行。 */
 function EndpointPanel({ frame, course, doc, onChanged }: {
   frame: AppFrame
   course: string
@@ -63,9 +63,7 @@ function EndpointPanel({ frame, course, doc, onChanged }: {
     setBusy(true)
     try {
       const r = await api.endpointAdd(course, name.trim(), goalNote.trim() || undefined)
-      Message.success(r.coach_round.queued
-        ? `终点「${r.endpoint}」已落盘；教练接线回合已入队（把新终点接上相关既有节点）`
-        : `终点「${r.endpoint}」已落盘；${r.coach_round.message}`)
+      Message.success(`终点「${r.endpoint}」已落盘；方向先声明着，到教练台点「生长一步」放行教练接线`)
       setAdding(false)
       setName('')
       setGoalNote('')
@@ -313,8 +311,8 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
           <Space direction='vertical' size={10}>
             <Text>课程「{course}」是一门空课（零节点图）。</Text>
             <Text type='secondary' className='lh-t-12'>
-              先添加终点给课程方向：终点立即写盘，加完教练回合会被自动拉起接线；
-              也可以在教练台显式下发「生长一步」。
+              先添加终点给课程方向：终点立即写盘、不触发生成——想加几个加几个，
+              方向都声明完了，再到教练台点「生长一步」放行教练接线。
             </Text>
           </Space>
         </Card>

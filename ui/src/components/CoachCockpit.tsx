@@ -219,7 +219,8 @@ export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, o
       {noEndpoints && (
         <div className='lh-mt-6'>
           <Text type='secondary' className='lh-t-12'>
-            「{course}」还没有终点：到图屏「添加终点」给课程方向；加完终点教练回合会被自动拉起，把新终点接上相关既有节点。
+            「{course}」还没有终点：到图屏「添加终点」给课程方向（加终点只声明方向、
+            不触发生成，想加几个加几个）；方向声明完回来点「生长一步」，教练才接手接线。
           </Text>
         </div>
       )}

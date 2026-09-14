@@ -5085,11 +5085,11 @@
   },
   "calls": [
    "growth2.coachCheckpoint(\"panel_dispatch\",\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\"}])",
-   "growth2.coachGrowthBatch(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}},{})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\",\"growthForce\":true}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true}])",
+   "growth2.coachGrowthBatch(\"1\",{\"ports\":{},\"clock\":{},\"callSeq\":{}},{\"force\":true})",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5375,20 +5375,9 @@
    "goalNote": "1"
   },
   "status": 200,
-  "res": {
-   "coach_round": {
-    "message": "「undefined」生长批已入队（添加终点（接线回合））。",
-    "queued": true
-   }
-  },
+  "res": [],
   "calls": [
-   "graph.addEndpoint(\"1\",\"1\",\"1\")",
-   "saveGenJobs([{\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（添加终点（接线回合））…\"}])",
-   "saveGenJobs([{\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\"}])",
-   "growth2.coachGrowthBatch(undefined,{\"ports\":{},\"clock\":{},\"callSeq\":{}},{})",
-   "saveGenJobs([{\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\"}])",
-   "saveGenJobs([{\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "graph.addEndpoint(\"1\",\"1\",\"1\")"
   ]
  },
  {
@@ -5428,20 +5417,9 @@
    "endpoint": "1"
   },
   "status": 200,
-  "res": {
-   "coach_round": {
-    "message": "「undefined」生长批已入队（添加终点（接线回合））。",
-    "queued": true
-   }
-  },
+  "res": [],
   "calls": [
-   "graph.addEndpoint(\"1\",\"1\",undefined)",
-   "saveGenJobs([{\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（添加终点（接线回合））…\"}])",
-   "saveGenJobs([{\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\"}])",
-   "growth2.coachGrowthBatch(undefined,{\"ports\":{},\"clock\":{},\"callSeq\":{}},{})",
-   "saveGenJobs([{\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\"}])",
-   "saveGenJobs([{\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "graph.addEndpoint(\"1\",\"1\",undefined)"
   ]
  },
  {

@@ -448,7 +448,9 @@ const GROWTH_JOB_NODE = '生长批'
  * 阻尼（计划改了目标，上一次停摆裁决不再代表现状）；在途/失败阻尼照旧。
  * force（面板下发）= 同 inject 的显式豁免（学习者点了「生长一步」/失败通知「重试」
  * 就是重新裁决的意图，#157）：豁免停摆/暂不产结构与**失败**阻尼（终态记录覆盖重新
- * 入队）；在途防重入与已取消（明确的中止意图）照旧。 */
+ * 入队）；在途防重入与已取消（明确的中止意图）照旧。豁免随任务携带（`growthForce`）
+ * 进执行侧——就绪深度已满足时也不短路成停摆（#240 修：此前只在入队侧生效，
+ * 「生长一步」在停摆图上恒空转）。 */
 export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean } = {}): { message: string; queued: boolean } {
   assertQueueWritable(rt)
   const key = `${course}/${GROWTH_JOB_NODE}`
@@ -469,6 +471,7 @@ export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string
     course, node: GROWTH_JOB_NODE, startedAt: new Date().toISOString(), status: 'queued', phase: 'growth',
     model: llmCfg.model, message: `排队等待教练回合（${why}）…`,
     ...(inject ? { growthInject: inject } : {}),
+    ...(opts.force === true ? { growthForce: true } : {}),
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
@@ -672,6 +675,9 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
   try {
     const r = await rt.engine.growth2.coachGrowthBatch(job.course, rt.agent, {
       ...(job.growthInject ? { inject: job.growthInject } : {}),
+      // 显式重新裁决的豁免随任务进执行侧（#240）：面板「生长一步」/失败重试点过的
+      // 那一轮，就绪深度已满足也不短路成停摆——否则按钮在停摆图上恒空转
+      ...(job.growthForce === true ? { force: true } : {}),
       isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
     })
     if (r.state === 'idle') {
@@ -1192,8 +1198,10 @@ export function restoreGenJobs(rt: HostRuntime): void {
           ...(typeof j.instruction === 'string' ? { instruction: j.instruction } : {}),
           ...(typeof j.model === 'string' ? { model: j.model } : {}),
           // 生长批裁决面随档恢复（#157）：inject 是排队任务的执行负载，outcome 是
-          // 重拉阻尼的判据（恢复丢失会让「上批停摆/暂不产结构」的裁决被无声抹掉）
+          // 重拉阻尼的判据（恢复丢失会让「上批停摆/暂不产结构」的裁决被无声抹掉）；
+          // force 也是执行负载（#240：恢复后这一轮仍是显式重新裁决，不该被停摆短路）
           ...(typeof j.growthInject === 'string' ? { growthInject: j.growthInject } : {}),
+          ...(j.growthForce === true ? { growthForce: true } : {}),
           ...(j.growthOutcome === 'idle' || j.growthOutcome === 'no_structure' || j.growthOutcome === 'applied'
             ? { growthOutcome: j.growthOutcome } : {}),
           // 图域任务负载随档恢复（#157）：形状由写入侧（面板下发）保证，这里只做

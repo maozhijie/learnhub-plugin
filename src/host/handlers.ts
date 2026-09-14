@@ -658,18 +658,16 @@ export const HANDLERS: Record<string, RouteHandler> = {
         },
       })))
   },
-  'POST /endpoint/add': async ({ rt, ctx, body, res }) => {
-    // 添加终点（ADR-0076 §三：终点由学习者手加，立即写盘不等生成队列）；落盘后立即
-    // 入队一次教练回合并走 force（绕过「就绪深度已满足即短路」）——同课程在途去重，
-    // 连加多个终点只跑一轮（入队阻尼的 queued 检查即去重点）
+  'POST /endpoint/add': async ({ rt, body, res }) => {
+    // 添加终点（ADR-0076 §三：终点由学习者手加，立即写盘不等生成队列）。**纯声明**：
+    // 只落锚与零 pre 节点，不触发任何生成——学习者可以先把 n 个方向都声明完，再到
+    // 教练台点「生长一步」一次性放行教练（一轮回合看到全部方向，交汇优先才有得挑）。
+    // 逐终点各拉一轮既会中途开始生成，也让教练看不见还没声明完的方向（#240 修正）。
     const course = need(body, 'course')
     const endpoint = need(body, 'endpoint')
     const goalNote = optTrimmed(body, 'goalNote')
-    sendJson(res, 200, await apiRun(rt, 'api/endpoint/add', async () => {
-      const added = await rt.engine.graph.addEndpoint(course, endpoint, goalNote)
-      const enq = enqueueGrowthBatch(rt, ctx, added.course, '添加终点（接线回合）', undefined, { force: true })
-      return { ...added, coach_round: enq }
-    }))
+    sendJson(res, 200, await apiRun(rt, 'api/endpoint/add', () =>
+      rt.engine.graph.addEndpoint(course, endpoint, goalNote)))
   },
   'POST /endpoint/remove': async ({ rt, ctx, body, res }) => {
     // 删除终点（ADR-0076 §三）：锚与节点一并移除，已铺台阶留在图上成为末端

@@ -83,6 +83,10 @@ export interface GenJob {
   /** 里程碑计划修订注入（#149）：换线/补支注入块随任务携带进教练回合（注入即显式
    * 重新裁决请求——就绪深度满足也不短路停摆，见 coachGrowthBatch）。 */
   growthInject?: string
+  /** 显式重新裁决豁免（#157/#240）：面板「生长一步」与失败重试入队时带 `force`，
+   * 随任务进执行侧——就绪深度已满足（`check.ok`）时也不短路成停摆，照产一轮回合
+   * （教练仍可裁 `ops: []`）。自动触发点不带它（停摆与阻尼照旧生效）。 */
+  growthForce?: boolean
   /** 图域任务负载（面板下发，phase 决定形状）：种子=建课/换终点表单（SeedDraftRequest
    * 去 course——course 是任务键槽）；反编译=项目目标反编译；计划/里程碑=项目草案
    * （course 槽放项目 id）。 */

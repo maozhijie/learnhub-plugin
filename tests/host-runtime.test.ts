@@ -849,32 +849,56 @@ test('生长批已取消：明确的中止意图不被 force 豁免（重试只�
   }
 })
 
-test('连加两终点一次入队（#240/ADR-0076）：在途去重不被 force 豁免——加第二个终点不重拉接线回合', async () => {
+test('加终点是纯声明（#240/ADR-0076 修正）：落盘不动生成队列——方向先声明完，放行归「生长一步」', async () => {
   const rt = makeRuntime()
-  let release!: () => void
-  const gate = new Promise<void>(r => { release = r })
+  const added: string[] = []
   stub(rt, {
-    // 门闩桩：生长批停在执行中，模拟「第一个接线回合还在跑」的窗口
-    'growth2.coachGrowthBatch': () => gate.then(() => ({
-      course: '数学', state: 'idle',
-      check: { course: '数学', ready: 3, depth: 3, required: 3, cold_start: false, ok: true, exhausted: false, warnings: [] },
-      segments: [], proposal: null, applied: null,
-    })),
+    'graph.addEndpoint': async (course: string, endpoint: string) => {
+      added.push(`${course}/${endpoint}`)
+      return { course, endpoint }
+    },
     saveGenJobs: async () => undefined,
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
-  // 第一次加终点：接线回合入队（endpoint-add handler 的形态：force 绕停摆短路）
-  const first = enqueueGrowthBatch(rt, fakeCtx(), '数学', '添加终点（接线回合）', undefined, { force: true })
-  assert.equal(first.queued, true)
-  await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'running')
-  // 第二次加终点：同课生长批在途 → 不重复入队——force 只豁免停摆/暂不产结构/失败阻尼，
-  // 不豁免在途去重（连加多个终点只跑一轮教练回合）
-  const second = enqueueGrowthBatch(rt, fakeCtx(), '数学', '添加终点（接线回合）', undefined, { force: true })
-  assert.equal(second.queued, false, '连加第二个终点不重复入队')
-  assert.match(second.message, /已有生长批任务在途，不重复入队/)
-  release()
+  const res = fakeRes()
+  await handleApi(rt, fakeCtx(), post('/learnhub/api/endpoint/add', { course: '数学基础', endpoint: '软件开发' }), res as never)
+  assert.equal(res.out.code, 200)
+  assert.deepEqual(JSON.parse(res.out.body), { course: '数学基础', endpoint: '软件开发' },
+    '响应只有落盘结果——不再带教练回合受理态（接线回合这一概念已随本修正退役）')
+  assert.deepEqual(added, ['数学基础/软件开发'], '终点立即写盘')
+  assert.equal(rt.jobs.genJobs.has('数学基础/生长批'), false,
+    '不走生成队列：连加 n 个终点不产生任何生长批任务（第一个终点也不再开始生成）')
+})
+
+test('生长一步的 force 随任务进执行侧（#240 修）：停摆图上点「生长一步」不空转——引擎收到 force', async () => {
+  const rt = makeRuntime()
+  const forcedFlags: Array<boolean | undefined> = []
+  stub(rt, {
+    // 桩在拿到 opts 后立即回 idle：修的就是「就绪深度已满足即短路返回 idle」这条短路
+    // 不该吃掉显式放行——判据满足由回合自己裁（教练仍可裁 ops: []）
+    'growth2.coachGrowthBatch': async (_course: string, _agent: unknown, opts?: { force?: boolean }) => {
+      forcedFlags.push(opts?.force)
+      return {
+        course: '数学', state: 'idle',
+        check: { course: '数学', ready: 0, depth: 3, required: 5, cold_start: true, ok: true, exhausted: true, warnings: [] },
+        segments: [], proposal: null, applied: null,
+      }
+    },
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  // 面板「生长一步」/失败重试（handlers 的 /coach/growth）走 force
+  const forced = enqueueGrowthBatch(rt, fakeCtx(), '数学', '面板下发（显式重新裁决）', undefined, { force: true })
+  assert.equal(forced.queued, true)
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
+  // 自动触发点（就绪深度不足）不带 force——停摆短路与阻尼照旧生效
+  rt.jobs.genJobs.delete('数学/生长批')
+  const auto = enqueueGrowthBatch(rt, fakeCtx(), '数学', 'queue_idle 触发（就绪深度 0/5）')
+  assert.equal(auto.queued, true)
+  await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
+  assert.deepEqual(forcedFlags, [true, undefined], '显式放行到执行侧为 true、自动触发不带（两条路径可分辨）')
 })
 
 // ---------------------------------------------------------------- 重启负载恢复（#157）

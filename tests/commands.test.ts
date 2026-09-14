@@ -52,7 +52,7 @@ const NO_ENGINE: Record<string, '队列型' | '按参分派型' | '无引擎型'
   'sleep-config': '按参分派型', 'receipt-review-mode': '按参分派型',
   // ③ 无引擎型 14：伺服、host 队列态、常量、LLM 会话、实验运行器（smoke/spike，#215/#216；quality-review 评审器，#222/#224）、
   // 终点手加/删（#240/ADR-0076：主体动作在 handler——一个写入单元直调引擎图域 add/removeEndpoint 立即落盘，
-  // add 顺带去重入队一个教练接线回合；不经命令队列的 runner，故不入 ① 队列型）
+  // add 是纯声明、不触发生成（放行教练走 /coach/growth）；不经命令队列的 runner，故不入 ① 队列型）
   'file': '无引擎型', 'vendor-': '无引擎型', 'interactive': '无引擎型',
   'generate-status': '无引擎型', 'generate-resume': '无引擎型', 'generate-cancel': '无引擎型',
   'agent-guide': '无引擎型', 'tutor': '无引擎型', 'explain-back': '无引擎型',

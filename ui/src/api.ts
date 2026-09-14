@@ -325,9 +325,9 @@ export const api = {
   /** 名称建课（ADR-0076：建课 = 名称即空图，一个写入单元落全部脚手架，不自动生成）。 */
   courseCreate: (name: string) =>
     http<{ id?: string; name: string; root: string; enabled?: boolean }>('POST', '/course/create', { name }),
-  /** 添加终点（立即写盘；落盘后引擎自动入队一次教练接线回合，同课程去重）。 */
+  /** 添加终点（立即写盘；纯声明不触发生成——方向先声明完，再到教练台点「生长一步」放行）。 */
   endpointAdd: (course: string, endpoint: string, goalNote?: string) =>
-    http<{ course: string; endpoint: string; coach_round: { message: string; queued: boolean } }>(
+    http<{ course: string; endpoint: string }>(
       'POST', '/endpoint/add', { course, endpoint, ...(goalNote ? { goalNote } : {}) }),
   /** 删除终点（锚与节点一并移除，已铺台阶留在图上成为末端）。 */
   endpointRemove: (course: string, endpoint: string) =>

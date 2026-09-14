@@ -82,7 +82,6 @@ test('UI 请求体线名以声明为权威：UI 写出的每个 snake_case 键�
     arm_today: '响应字段（读侧，非请求键）',
     maintenance_days: '响应字段（读侧，非请求键）',
     defer_schedule: '面板独有键：工具面 schema 不含它（门⑧ 不许并进 args），由 /question-answer 的 handler 自读',
-    coach_round: '响应字段（读侧，非请求键；#240 endpointAdd 响应带的教练接线回合受理态）',
   }
   const bad = [...written].filter(k => !declared.has(k) && !(k in NOT_WIRE))
   assert.deepEqual(bad, [], `这些线名不在任何命令的声明里（映射与声明漂移）：${bad.join(', ')}`)
