@@ -20,6 +20,7 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 - **建票时**：`gh issue create --parent <父票号> --blocked-by <阻塞票号,...>`，反向声明用 `--blocking`。
 - **挂到已有票**：`gh issue edit <n> --parent <p>`、`--add-sub-issue <m,...>`、`--add-blocked-by <m,...>`、`--add-blocking <m,...>`，各有对应的 `--remove-parent` / `--remove-sub-issue` / `--remove-blocked-by` / `--remove-blocking`。
+- **粒度：执行票宜少不宜多。** 一张执行票应是一个会话能一次端到端做完的交付面，不要按技术层或文件清单再切。拆得越细，认领／依赖边／关闭的协调成本涨得比收益快，而纯串行链上的票并行度实际为零。判断标准：只有两票能真正并行（或独立验收）时才拆成两票，否则留在同一张里、用小节排内部顺序。实例：2026-09-14，#238 的 7 张执行票（#240–#246）被并回一张 #240——每票正文都在复述总纲与 ADR，依赖边是纯串行链，维护成本高于价值；合并操作是改承票标题与正文（分节收编）+ 关闭原票留指路注释 + 同步父票索引。
 
 ## Sandboxed execution and gh authentication
 
