@@ -30,9 +30,11 @@ Open one ZCode session per worktree directory. Commits, branch switches, and reb
 - **Never junction `node_modules` into a worktree.** Saving the double install with `mklink /J <worktree>/node_modules <checkout>/node_modules` works for running tests — and then `git worktree remove` **deletes through the junction and wipes the source checkout's `node_modules`**（实测 2026-09-13：#229/#220 两个 worktree 用联接省安装，remove 之后主检出的 root 与 `ui/` 依赖全空，`npm test` 与任何 import 真包的脚本当场 `ERR_MODULE_NOT_FOUND`）。修复 = 主检出重跑两处 `npm install`。联结是 Windows 上「看着像目录的链接」，递归删除工具（git 的 worktree 清理走的就是它）不会替你区分链接与目标——**这条省时技巧的代价是主检出的依赖**，按上一节老实装两份。
 - **dsh host testing only reflects the linked checkout.** The `web` profile installs this plugin via `link:` to one fixed path, so `npx @deepseek-ai/dsh web` always loads that checkout's build no matter which worktree the session runs in. To smoke-test a worktree's build in the host, re-point the profile's `link:` at the worktree first (and back afterwards).
 
-## Merge back: the session lands its own branch (default)
+## Merge back: only when the session runs on its own branch
 
-Landing is part of the task, not a separate handoff. The flow ends with the branch merged back, not with a pushed feature branch: unless the task explicitly says otherwise, the session that owns the worktree merges its branch back into **the branch it was cut from** (normally main) in the same session — commit → push → close issues (see `issue-tracker.md`) → merge back → verify → clean up. Do not stop and wait for the user to say "merge".
+**Read the scope first — this section is the worktree flow above, not a default every session must follow.** A single session working directly in the main checkout commits and pushes on the current branch, and that is already landing: nothing was cut, so there is nothing to merge back. Do not create a branch just to have one to merge.
+
+When it does apply (the task owns a `feature/*` branch in its own worktree): landing is part of the task, not a separate handoff, and the flow ends with the branch merged back, not with a pushed feature branch. Unless the task explicitly says otherwise, the session that owns the worktree merges its branch back into **the branch it was cut from** (normally main) in the same session — commit → push → close issues (see `issue-tracker.md`) → merge back → verify → clean up. Do not stop and wait for the user to say "merge".
 
 Run the merge in the source checkout (the integration point), never inside the task worktree:
 
