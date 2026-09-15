@@ -581,9 +581,9 @@ export class GrowthSubsystem {
     return out.join('\n') + '\n'
   }
 
-  /** 教练只读工具面（#163 / ADR-0041 白名单七件）：图视图/节点卡/概念登记表/题库
-   * 概况/罗盘/终点锚的实现走 coach-tools 的通用执行器（deps 结构化注入，本子系统
-   * 天然满足）；行为摘要的取材口径（invokes 解析/掌握度折叠）是本子系统的私有折叠，
+  /** 教练只读工具面（#163 / ADR-0041 形状；#249 / ADR-0077 八件）：图视图/节点卡/概念足迹/
+   * 上游图摘要/题库概况/罗盘/终点锚实现走 coach-tools 的通用执行器（deps 结构化注入，本
+   * 子系统天然满足）；行为摘要的取材口径（invokes 解析/掌握度折叠）是本子系统的私有折叠，
    * 经 providers 注入复用（单一出处）。工具面零写侧、零队列触点。 */
   private coachToolsetFor(c: CourseEntry): { tools: LlmToolSpec[]; runTool: (call: LlmToolCall) => Promise<string> } {
     const deps: CoachToolDeps = this.e
@@ -643,19 +643,21 @@ export class GrowthSubsystem {
    * 全量段（deep 档：六区块包+图面）重裁；全量段仍声明真分歧时升级双沙盘仲裁段（deep
    * 档：六区块包+图面+两份沙盘推演参照——现状照走 vs 含本批照走，同种子配对、零写侧、
    * 措辞照旧「模型推演，非承诺」），仲裁段结论为终审。显然步免仲裁税，升级路径随
-   * segments 可观测。各段的裁决产出经 `agentLoop`（ADR-0041 只读工具回路，K≤6 轮封顶）
-   * ——教练裁决前可查图自证名字、对表登记表/题库/罗盘（七件只读视图白名单），从源头
+   * segments 可观测。各段的裁决产出经 `agentLoop`（ADR-0041 只读工具回路；ADR-0077
+   * 上调至 K≤20 轮封顶）——教练裁决前可查图自证名字、对表概念足迹/题库/罗盘/上游图
+   * 摘要（八件只读视图白名单），从源头
    * 压「引用不存在的区/概念未铸名」死批；回路产物照过全部既有门，门零放松。最终裁决
    * 照 kind=edit 既有受理门（schema/结构/概念对表/锚保护/巩固门）propose→apply：罗盘
    * 重写与图 apply 写入单元纪律（提案被拒罗盘不落盘）、journal 挂提案 id、不新增提案
    * kind。停机转译：就绪深度满足（check.ok）时不拉回合直接停摆——判据满足的自然结果，
-   * 不是新状态（force 供测试/手动排障越过）。opts.inject = 里程碑计划修订的换线/补支
-   * 注入（#149 项目消费拉动的生长请求）：注入块随包进回合，且注入本身是显式的重新
-   * 裁决请求——check.ok 不再短路停摆（裁决仍可能产出零操作批）。opts.isCancelled =
+   * 不是新状态（force 供测试/手动排障越过）。opts.inject = 外部注入的请求材料（#149
+   * 项目消费拉动的换线/补支 + #248 卡点自报原文与在途清单，同一通道）：注入块随包进
+   * 回合（标题中立，性质由材料自带小标题读——ADR-0077），且注入本身是显式的重新裁决
+   * 请求——check.ok 不再短路停摆（裁决仍可能产出零操作批）。opts.isCancelled =
    * 队列任务取消旗标（#163 传导：回路每轮与每次工具执行后检查，取消即中止）。
    * 裁决语义在提示词；本方法只保证组装、schema 与写入单元纪律。金样本回放闸锚回路
    * 会话数基线：显然步恒 1 会话、分歧升级恒 2、双沙盘仲裁恒 3（沙盘推演是读侧计算，
-   * 不计会话；会话内工具轮数受 K≤6 预算，不占会话数）；受理门拒收加回灌重裁段恰 +1
+   * 不计会话；会话内工具轮数受 K≤20 预算，不占会话数）；受理门拒收加回灌重裁段恰 +1
    * （#157，重裁段走 repair 单发）。各段调用经统一 agent 缝（#162：回路走 loop、回灌
    * 重裁走 repair，语义档与调用日志沿缝贯通可观测）；trajectory 逐会话累积工具轨迹
    * （段前缀标注，#163 任务消息消费）。 */
@@ -682,7 +684,7 @@ export class GrowthSubsystem {
       return { course: c.name, state: 'idle', check, segments: [], trajectory: [], proposal: null, applied: null }
     }
     const { graph, state } = await this.e.loadView(c)
-    const view = renderGrowthGraphView(graph, state, endpointNames(anchors))
+    const view = renderGrowthGraphView(graph, state, endpointNames(anchors), { today })
     const template = await this.e.content.loadPrompt('教练回合')
     const segments: CoachGrowthSegment[] = []
     const trajectory: string[] = []

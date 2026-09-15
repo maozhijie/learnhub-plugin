@@ -103,7 +103,7 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   const agentSeam = await import('../src/engine/agent.ts')
   assert.equal(typeof agentSeam.AgentSeam, 'function', 'engine/agent.ts 缺 AgentSeam')
   assert.equal(typeof agentSeam.stripFences, 'function', 'engine/agent.ts 缺 stripFences（补全后处理随缝归位）')
-  assert.equal(agentSeam.AGENT_LOOP_MAX_TOOL_ROUNDS, 6, '回路预算 K≤6（ADR-0041）')
+  assert.equal(agentSeam.AGENT_LOOP_MAX_TOOL_ROUNDS, 20, '回路预算 K≤20（ADR-0077 上调自 ADR-0041 的 6）')
   assert.equal(typeof agentSeam.AgentSeam.prototype.complete, 'function', '缝缺单发模式 complete()')
   assert.equal(typeof agentSeam.AgentSeam.prototype.agentLoop, 'function', '缝缺回路模式 agentLoop()')
   assert.equal(typeof agentSeam.AgentSeam.prototype.gateRepairRound, 'function', '缝缺门错修复轮 gateRepairRound()')

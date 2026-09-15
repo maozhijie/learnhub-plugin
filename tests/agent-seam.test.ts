@@ -6,7 +6,7 @@
  *   仍败以 fatal 抛两轮死因、修复轮自身失败同葬、门内程序性抛错原样冒泡；
  *   受理式门（propose/写盘）的产物经 GateVerdict.result 随行交还。
  * - 工具回路模式：白名单工具执行与结果回灌、runTool 失败以 isError 回灌、
- *   K≤6 轮预算封顶 fail loud（不可被调用方抬高）、LlmStream 缺位 fail loud。
+ *   K≤20 轮预算封顶 fail loud（不可被调用方抬高）、LlmStream 缺位 fail loud。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -196,7 +196,7 @@ test('工具回路：白名单工具执行回灌继续、最终文本剥围栏�
   assert.deepEqual(obs.records.map(x => x.callNo), [1, 2])
 })
 
-test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤6 预算封顶 fail loud；stream 缺位 fail loud', async () => {
+test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤20 预算封顶 fail loud；stream 缺位 fail loud', async () => {
   // runTool 抛错 → 工具轮 isError
   const errStream = fakeStream([
     { text: '查', toolCalls: [{ id: 'e1', name: 'bank_view', arguments: '{}' }] },
@@ -211,8 +211,8 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤6 
   assert.equal(toolTurn.isError, true)
   assert.match(toolTurn.text, /白名单外工具/)
 
-  // 预算：K≤6 不可抬高——6 轮工具后第 7 轮仍请求工具 → fail loud（不无限回路）
-  const endless = fakeStream(Array.from({ length: 9 }, (_, i) => ({
+  // 预算：K≤20 不可抬高——20 轮工具后第 21 轮仍请求工具 → fail loud（不无限回路）
+  const endless = fakeStream(Array.from({ length: 23 }, (_, i) => ({
     text: `第${i}轮`, toolCalls: [{ id: `c${i}`, name: 'graph_view', arguments: '{}' }],
   })))
   const agent2 = new AgentSeam({ complete: fakeComplete([]), stream: endless }, systemClock)
@@ -221,9 +221,9 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤6 
       station: '教练生长', prompt: 'p', tools: [],
       runTool: async () => 'ok',
     }),
-    /工具回路预算耗尽（K≤6 轮后仍在请求工具）/,
+    /工具回路预算耗尽（K≤20 轮后仍在请求工具）/,
   )
-  assert.equal(endless.requests.length, 7, '第 K+1 轮发现仍在请求工具即中止')
+  assert.equal(endless.requests.length, 21, '第 K+1 轮发现仍在请求工具即中止')
 
   // LlmStream 端口缺位：fail loud 指向适配器缺位
   const agent3 = new AgentSeam({ complete: fakeComplete([]) }, systemClock)
@@ -231,7 +231,7 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤6 
     () => agent3.agentLoop({ station: '罗盘', prompt: 'p', tools: [], runTool: async () => 'x' }),
     /LlmStream 端口/,
   )
-  assert.equal(AGENT_LOOP_MAX_TOOL_ROUNDS, 6, 'ADR-0041 回路预算 K≤6')
+  assert.equal(AGENT_LOOP_MAX_TOOL_ROUNDS, 20, 'ADR-0077 回路预算 K≤20（上调自 ADR-0041 的 6）')
 })
 
 test('工具回路：任务取消传导（#163）——旗标翻真即中止，后续轮与工具执行不再发生', async () => {

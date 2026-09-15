@@ -22,11 +22,25 @@ Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `doc
 
 **改提示词 = 改生产行为**，走章程 §8 的「登记 + 过门」两步（同提交补 `PROMPT_CHANGELOG` 条目 + 跑 `prompt-bump` 的两条过门）；提交级登记门扫的就是这个目录与历史路径（`TEMPLATE_FILES`）。**例外**：只改措辞而不动版本号的那一类变更两门都不执法，靠人审兜（章程 §8 末段）。
 
-**收尾必须点名（纪律，不是门能拦住的形态）**：凡是这次任务**改动过提示词**，任务收尾必须报告——① 改了哪几条（常量名）；② `文件:行`；③ 新旧差异要点（改了什么语义）；④ 对应的 `PROMPT_CHANGELOG` 登记条目（或说明为何不需要）。理由是提示词的人工返工面就在这里：人要靠这份点名**快速找到 AI 这次动过哪些散文**再逐条复核，不点名等于让人自己 diff 全仓。收尾消息不在仓库里、机械不可判，故它是纪律而非门（ADR-0075 §4）。
+**收尾必须点名**：凡是这次任务**改动过提示词**，任务收尾必须报告——① 改了哪几条（常量名）；② `文件:行`；③ 新旧差异要点（改了什么语义）；④ 对应的 `PROMPT_CHANGELOG` 登记条目。理由是提示词的人工返工面就在这里：人要靠这份点名**快速找到 AI 这次动过哪些散文**再逐条复核，不点名等于让人自己 diff 全仓。（ADR-0075 §4）。
 
-### 代码索引（codebase-memory MCP）
+### 代码索引（codebase-memory MCP）*重要*
+详细内容，参考code-index.md
 
-本仓用 `codebase-memory-mcp` 建代码知识图谱（函数/调用边/复杂度），用 `search_graph`、`trace_path`、`get_architecture` 代替逐个读文件。**只给主检出索引一次，`mode: "moderate"`**——`fast` 不建语义边，`semantic_query` 会一条不返回。三个常用面：`trace_path(direction:"inbound")` 查改动影响面、`detect_changes` 收尾算 blast radius、`get_architecture(aspects:["clusters","cycles"])` 拿一份独立于手工门的分层读数。两条纪律：**图是 best-effort**（`index_status` 会报 `parse_partial`/`skipped`，做「没有 X」这类否定结论前先查覆盖）+ **ADR 归 `docs/adr/`**（别用 MCP 的 `manage_adr`，那是第二份真相源，且不是门读的那份）。用法、实测数字与反面清单见 `docs/agents/code-index.md`。
+尽可能使用以提升准确性和降低token消耗
+
+本仓用 `codebase-memory-mcp` 建代码知识图谱（函数/调用边/复杂度）。**探索代码应当先考虑图**：`search_graph`、`trace_path`、`get_architecture` 与逐个读文件是两条路，各有便宜处——图答的是**闭合性**问题（谁调用它、影响面到哪、模块怎么聚），grep 答的是**定位**（我知道名字/路径，找出它在哪）。**已确知路径的单点查证直接读文件更省**；问的是「还有谁」「会不会漏」这类问题时，图比 grep 可靠（实测先例：#249 改教练工具白名单，`trace_path(inbound, coachToolset)` 一次给出 3 个入边全在 `growth-subsystem`——这是 grep 给不出的闭合证据）。
+
+**几个顺手时机（建议，按任务取舍）**：
+
+- 改函数/常量/白名单/导出面之前，`trace_path(function_name="X", direction="inbound")` 看调用面——改公共面时特别值得，改叶子函数往往不必。
+- 跨文件找定义或实现、不知道标识符只记得「这件事在哪发生」时，`search_graph(query=…)` / `semantic_query=[…]`（跨用词，需 moderate/full 索引）/ `search_code`。
+- 要下「没有 X 调用它」这类否定或穷尽结论前，`index_status` / `check_index_coverage` 查一眼覆盖，并 grep 被 `parse_partial`/`skipped` 标记的行段——图是 best-effort，「图上没有」不等于「代码里没有」。
+- 任务收尾可以跑一次 `detect_changes(project=…)` 看 blast radius，作为自检的第二意见（注意：符号按**上一次索引**解析，新加的导出符号它还不知道）。
+
+**建议收尾点名**：动过 `src/` 的任务里，若跑过图查询，把它们（工具名 + 目标 + 结论）与 blast radius 一行写进收尾报告会省审阅者很多事；
+
+
 
 ## 本地启动 dsh 宿主
 

@@ -167,8 +167,16 @@ test('AC1 金样本全链：轻量段单次 fast 调用、提案应用、罗盘�
     assert.match(fake.calls[0]!.prompt, /当前图面/, '图面两段恒带（ops 的取值域）')
     assert.match(fake.calls[0]!.prompt, /认识变化率/, '图面细节行含前沿节点')
     assert.match(fake.calls[0]!.prompt, /变化率 会用/, '图面带 teaches 档位')
+    // #250 / ADR-0077 全图摘要：图面块 = 逐节点一行全图拓扑（不再是「前沿细节 + 其余名单」）
+    assert.match(fake.calls[0]!.prompt, /全图摘要——结构事实源/, '图面块已升级为全图摘要')
+    assert.match(fake.calls[0]!.prompt, /### 全图（逐节点一行，深度序——⚠ 弱掌握、⚑ 终点）/)
+    assert.match(fake.calls[0]!.prompt, /｜pre: .*（根）/, 'pre 邻接并入同行')
+    assert.match(fake.calls[0]!.prompt, /- ⚑ 终点：导数方向（方向标记/, '⚑ 终点逐终点标记')
+    assert.doesNotMatch(fake.calls[0]!.prompt, /### 其余节点（全部名单/, '旧「其余名单」截断面已消失')
     assert.doesNotMatch(fake.calls[0]!.prompt, /## 终点锚/, '轻量段不带终点锚区块')
     assert.doesNotMatch(fake.calls[0]!.prompt, /## 误解目录/, '轻量段不带误解目录区块')
+    // 轻量包的「恰两件」不因图面块升级而变：图面是包外独立块，两段恒带；包本身仍两件
+    assert.doesNotMatch(fake.calls[0]!.prompt, /## 登记表档位/, '轻量段不带登记表档位区块')
 
     // 受理结果：算子标签进结果、提案应用、罗盘同事务重写
     assert.equal(r.state, 'applied')
@@ -507,7 +515,7 @@ test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重�
     const round = await engine.growth2.coachGrowthBatch('数学', fake, { today: addDays(declared, 7)!, inject })
     assert.equal(round.state, 'applied')
     assert.equal(fake.calls.length, 1, '注入回合照走两段式（显然步恒 1 次调用）')
-    assert.match(fake.calls[0]!.prompt, /里程碑计划修订注入（项目消费拉动的生长请求）/)
+    assert.match(fake.calls[0]!.prompt, /## 外部注入（待裁决的请求材料）/, '注入块标题中立（#250：同一通道也载卡点自报，不预判性质）')
     assert.match(fake.calls[0]!.prompt, /即兴入门/)
     assert.match(fake.calls[0]!.prompt, /换线 = 激活图上已有节点/)
   })
@@ -645,11 +653,11 @@ test('#157 回灌仍败：重裁产出再被受理门拒收 → 原样失败且�
 test('#163 AC 脚本化工具应答：教练裁决前经图视图核实名字，产出过受理门的批', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
     await seedApplied(engine)
-    // 脚本：轻量段先调 graph_view 核实「认识变化率」在图上（再调 concept_registry 对表
-    // 「变化率」），收到真实视图回灌后才产出裁决——裁决的名字取自工具回灌内容
+    // 脚本：轻量段先调 graph_view 核实「认识变化率」在图上（再调 concept_footprint 查
+    // 「变化率」的词条档与足迹），收到真实视图回灌后才产出裁决——裁决的名字取自工具回灌内容
     const fake = scriptFake([[
       { text: '裁决前先查图面核实起点名。', toolCalls: [{ id: 't1', name: 'graph_view', arguments: '{}' }] },
-      { text: '图面确认「认识变化率」在前沿，再对表登记表。', toolCalls: [{ id: 't2', name: 'concept_registry', arguments: '{"query":"变化率"}' }] },
+      { text: '图面确认「认识变化率」在前沿，再查概念足迹。', toolCalls: [{ id: 't2', name: 'concept_footprint', arguments: '{"query":"变化率"}' }] },
       { text: goldVerdict() },
     ]])
     const r = await engine.growth2.coachGrowthBatch('数学', fake)
@@ -664,14 +672,14 @@ test('#163 AC 脚本化工具应答：教练裁决前经图视图核实名字，
     assert.equal((second.messages[2] as { role: string; text: string }).role, 'tool')
     assert.match((second.messages[2] as { text: string }).text, /认识变化率/, 'graph_view 回灌真实图面')
     const third = fake.requests[2]!
-    assert.match((third.messages[4] as { text: string }).text, /变化率/, 'concept_registry 回灌登记表内容')
-    // 白名单随请求（七件只读视图）
-    assert.equal(fake.requests[0]!.tools!.length, 7)
+    assert.match((third.messages[4] as { text: string }).text, /变化率/, 'concept_footprint 回灌词条档与足迹')
+    // 白名单随请求（八件只读视图，#249 起 concept_registry 已由 concept_footprint 吸收）
+    assert.equal(fake.requests[0]!.tools!.length, 8)
 
     // 回路轨迹带段前缀进结果（宿主消费：任务消息），逐轮可观测
     assert.equal(r.trajectory.length, 2)
     assert.match(r.trajectory[0]!, /^\[轻量段\] graph_view\(2 字符参数\) → \d+ 字符$/)
-    assert.match(r.trajectory[1]!, /^\[轻量段\] concept_registry/)
+    assert.match(r.trajectory[1]!, /^\[轻量段\] concept_footprint/)
   })
 })
 

@@ -19,7 +19,9 @@ index_repository(repo_path="C:/Users/test/Desktop/my/learnhub-plugin", mode="mod
 
 ## 本仓拿它做什么
 
-1. **改引擎或 host API 之前先算影响面。** `trace_path(function_name="X", direction="inbound")` 沿调用边传递地走调用方。模型仓实测：`gradeAnswer` ← `computeDueItems`（hop 1）← `run`（hop 2），报 `callers_total: 2`。它走的是解析出来的边而不是文本匹配，所以比手工 grep 调用点更便宜也更可靠——在动任何 111 个 agent 工具或端点面依赖的东西之前都值得跑一遍。
+**该用是约束，怎么用看情况**（`AGENTS.md` 的同一节是简版）：默认先考虑图，但「已确知路径的单点查证」直接读文件更省。下面每条给的是**顺手时机**与实测读数，不是必须动作——按任务取舍；问「还有谁 / 会不会漏」这类闭合性问题时它比 grep 可靠。
+
+1. **改引擎或 host API 之前先算影响面。** `trace_path(function_name="X", direction="inbound")` 沿调用边传递地走调用方。模型仓实测：`gradeAnswer` ← `computeDueItems`（hop 1）← `run`（hop 2），报 `callers_total: 2`。它走的是解析出来的边而不是文本匹配，所以比手工 grep 调用点更便宜也更可靠——在动任何 111 个 agent 工具或端点面依赖的东西之前都值得跑一遍。本仓实测（#249）：`coachToolset` 3 个入边、`renderGrowthGraphView` 3 个调用点，一次查询就锁定了「换白名单不会漏掉远端消费者」。
 2. **任务收尾算 blast radius。** `detect_changes(project=...)` 把工作区 diff 解析成改动的符号，列出传递的入向影响面加一份 `impacted_modules` 汇总。实测：1 个改动文件解析出 1 个种子符号、2 个受影响调用方、跨 2 个模块。**注意**：符号是按**上一次索引**解析的，所以任务里新加了导出符号的话，重索引之前别信它。
 3. **给分层拿一份独立读数。** `get_architecture(aspects=["clusters"])` 按调用/导入边把节点聚成事实上的模块（常常横切目录布局），`aspects=["cycles"]` 扫调用图里的环形 `CALLS` 依赖（size > 1 的强连通分量）。R1–R7 与 G1–G9 是手工写在 `tests/` 里的；这两个 aspect 是第二意见。不一致请当成一个待回答的问题，而不是自动违规——它和门本身也是不同轴的证据。
 4. **按意图找代码，不按名字找。** `search_graph(query="...")` 是对名字与 docstring 的 BM25；`semantic_query=[...]` 负责跨越用词（查 `score` / `evaluate` / `student`，命中了名为 `gradeAnswer`、正文里一个这些词都没有的函数）。当你知道「这件事在哪发生」却不知道标识符时用它。**`score` 不能当置信度读**——上面那些明确命中回来的值约 `-0.015`，即略负；只有相对排序有意义。

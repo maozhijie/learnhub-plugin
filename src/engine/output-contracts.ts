@@ -410,7 +410,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
       mechanism: 'gateRepairRound',
       feedback: '受理门反馈 + 被拒裁决原文随全量包回灌重裁（repair 单发，恰一次）',
       escalate: '重裁段恒 deep 档',
-      note: '三段式回合：轻量段 fast 恒 1 调用 → 分歧升级全量段 deep → 仍真分歧双沙盘仲裁段；每段经 agentLoop 工具回路（K≤6）',
+      note: '三段式回合：轻量段 fast 恒 1 调用 → 分歧升级全量段 deep → 仍真分歧双沙盘仲裁段；每段经 agentLoop 工具回路（K≤20，ADR-0077 上调）',
     },
     failureCodes: [],
     sensitivity: '推理创意',
@@ -431,7 +431,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     sensitivity: '推理创意',
     structuredEligible: false,
     shape: { kind: 'route-text' },
-    notes: '版本最老的模板（v1）；经只读工具回路（K≤6）自证节点名后画线',
+    notes: '版本最老的模板（v1）；经只读工具回路（K≤20）自证节点名后画线',
   },
   {
     station: '目标反编译',
@@ -632,6 +632,22 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // 终点状态驱动（交汇优先），主线批接线义务声明 target_endpoints（受理门同步核）。
     version: 7, date: '2026-09-14', changeType: '多终点裁决（#240 / ADR-0076）：note.target_endpoints 进输出契约 + 交汇优先 + 停摆判据改逐终点',
     expectedDelta: '前进/换向含 add_node 的批多出 note.target_endpoints 字段（可多值），ops 必须对每个声明终点携带 set_pre；提示词新增交汇优先纪律与「同节点可进多个终点 pre」的合法性；route 改按终点分节。单终点课程：target_endpoints 仍必填（单元素），其余形态不变',
+  }, {
+    // #250 / ADR-0077：感知面升级。模板新增两节（感知面读法 / 卡点自报的消费），外加
+    // 注入块标题中立化与图面块渲染侧升级（同一版本号下要覆盖的两类变更面）。
+    version: 8, date: '2026-09-15', changeType: '感知面升级（#250 / ADR-0077）：全图摘要读法 + 工具空结果语义与归因三层取材 + 卡点自报消费纪律',
+    expectedDelta: '新增两节散文——「感知面读法」（全图摘要按骨架/健康分布/接线靶三读法；八件只读工具；归因三层取材「概念面 → 无 query 全表 → query 收窄」，明写「空结果 ≠ 不存在」）与「卡点自报的消费」（解读后直接成立插入症状、免行为窗口聚合；归因映射分层与宽窄归属由教练裁；插入定位按概念足迹，足迹空默认挂当前节点前置；别名收编提议留人审；零激励）。裁决语义、五算子、输出契约与批规模纪律均不变，预期增量主要是**归因与插入定位的依据来源**变清楚（不再靠猜查询词、不再等窗口证据），以及复习类结论的定向锚点表述',
+  }, {
+    // 非模板变更（同一版本号下的第二条登记）：**注入块与图面块的形状变**（模板文本只动
+    // 了上面两节）。① `COACH_INJECT_BLOCK` 标题由「里程碑计划修订注入」改为中立的
+    // 「外部注入」——同一 inject 通道也载卡点自报（#248），旧标题会把一条自报读成换线/
+    // 补支请求、指向错误算子纪律；② 图面块 `renderGrowthGraphView` 由「前沿细节 + 其余
+    // 名单」升级为逐节点一行全图摘要（深度序/区·块/阶段/掌握度 + pre 邻接同行，⚠ 弱掌握、
+    // ⚑ 终点；超 200 节点降级为区/块聚合 + 前沿细节 + 溢出行，⚠/⚑ 例外不截）；③ 工具面
+    // 七件 → 八件（concept_registry 由 concept_footprint 吸收，新增 upstream_dag），
+    // 回路预算 K≤6 → K≤20（#249）。
+    version: 8, date: '2026-09-15', changeType: '注入块标题中立化 + 图面块升全图摘要 + 工具面 7→8 + 回路预算 K=20（#249/#250）',
+    expectedDelta: '① 注入块的标题与框架句不再预判材料性质（材料自带小标题成为性质判定依据）；② 每批提示词的图面块从「前沿细节行 + 其余名单一行」变为**逐节点一行**——把全部节点名/区·块/pre 邻接/掌握度/⚠/⚑ 直接摆在裁决视野里，预期减少工具调用轮数（全图摘要拉低平均轮次本身就是这次升级的目的之一），大图（>200 节点）改吃聚合行 + 溢出行；③ 工具描述与白名单换名（concept_footprint / upstream_dag 在册，concept_registry 拒收）；④ 回路预算上限 6→20，撞顶 fail loud 的阈值随之改变（观测面基线同步）。**此项未做真模型对照**——若观察到教练回合裁决质量下降或工具调用显著变多，回退点就是这一行',
   }],
 }
 

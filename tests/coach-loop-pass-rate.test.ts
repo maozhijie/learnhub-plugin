@@ -1,13 +1,13 @@
 /**
  * 受理门通过率对照实验（#163 AC3 / ADR-0041）：同一组「带幻觉的裁决草稿」，分别以
  * **单发形态**（#162 的盲盒上下文包——产裁决前无任何自查）与**工具回路形态**（#163——
- * 裁决前经 graph_view 核实节点/区名、concept_registry 对表概念）送入生长站，统计
+ * 裁决前经 graph_view 核实节点/区名、concept_footprint 对表概念）送入生长站，统计
  * 受理门（propose）通过率。
  *
  * 实验设计（确定性，无随机）：12 个场景 = 3 类幻觉目标（pre 断边引用 / 区名 / 概念名）
  * × 4 个「貌似合理但在图上不存在」的变体——幻觉形态来自实机死批证据（引用不存在的区
  * 「代数与函数」、概念未铸名）。回路人格的修正**全部派生自工具回灌内容**（从 graph_view
- * 提取逐字节点/区名、从 concept_registry 提取 canonical，按二元组最大相似度对表），
+ * 提取逐字节点/区名、从 concept_footprint 提取 canonical，按二元组最大相似度对表），
  * 不作弊携带真名——它演示的是回路机制的能力：工具访问让畸形草稿在裁决前有据可修。
  *
  * 口径声明：人格是脚本化的，本实验度量的是**机制能力**（给了工具与自查轮，幻觉能在
@@ -102,8 +102,10 @@ function bestMatch(bad: string, candidates: string[]): string {
  * 登记表 canonical；add_node 的 name 是新节点名，合法地不在图上，不作对表。 */
 function selfCheckCorrect(draft: string, graphView: string, registryText: string): string {
   const nodeNames = [...graphView.matchAll(/^- (.+?)（/gm)].map(m => m[1]!)
-  const regions = [...new Set([...graphView.matchAll(/（(.+?)·.+?｜/gm)].map(m => m[1]!))]
-  const concepts = [...registryText.matchAll(/^- (.+?)(?:（|：|$)/gm)].map(m => m[1]!)
+  // #250 起图面是逐节点一行（`- 名（dN｜区·块｜…`）——区名在深度段之后
+  const regions = [...new Set([...graphView.matchAll(/^- .+?（d\d+｜(.+?)·.+?｜/gm)].map(m => m[1]!))]
+  // #249 起概念面是 concept_footprint：词条档以 `### <canonical>` 分节
+  const concepts = [...registryText.matchAll(/^### (.+?)(?: *｜|$)/gm)].map(m => m[1]!)
   // 本批新建节点是后续 op（终点接线 set_pre）的合法 pre 取值域（与受理门同口径）
   const batchNames = [...draft.matchAll(/- op: add_node\n\s+name: (.+)/g)].map(m => m[1]!.trim())
   const preTargets = [...nodeNames, ...batchNames]
@@ -139,7 +141,7 @@ function loopFake(corrupted: string): AgentSeam {
     stream: async req => {
       requests.push({ messages: [...req.messages], tools: req.tools })
       if (requests.length === 1) return { text: '先查图面与登记表再裁。', toolCalls: [{ id: 'g1', name: 'graph_view', arguments: '{}' }] }
-      if (requests.length === 2) return { text: '对表概念登记表。', toolCalls: [{ id: 'c1', name: 'concept_registry', arguments: '{}' }] }
+      if (requests.length === 2) return { text: '对表概念登记表。', toolCalls: [{ id: 'c1', name: 'concept_footprint', arguments: '{}' }] }
       const graphView = requests[1]!.messages[2]!.text!
       const registry = requests[2]!.messages[4]!.text!
       return { text: selfCheckCorrect(corrupted, graphView, registry), toolCalls: [] }

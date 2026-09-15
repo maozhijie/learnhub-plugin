@@ -16,7 +16,7 @@
  *   原文回灌重产一次，仍败以站点死因抛出。#157 的生长批回灌重裁段即此形态的雏形，
  *   随缝收口共享（受理门本身零改动，ADR-0050 语义原样）。
  *
- * 回路预算（ADR-0041）：K≤6 次工具轮（`agentLoop` 强制，不设调用方覆盖）+ 1 次门错
+ * 回路预算（ADR-0041；ADR-0077 上调 6→20）：K≤20 次工具轮（`agentLoop` 强制，不设调用方覆盖）+ 1 次门错
  * 修复轮（`gateRepairRound` 强制）；回路只在生成队列任务内运行，工具实现禁止递归
  * 入队/触发教练。宿主会话适配位（后路）：教练未来需要全 agent 面（查 vault 笔记、
  * 查网）时，把注入的 LlmStream 换成 `ctx.agents.create` 的会话适配实现——调用点
@@ -33,8 +33,10 @@ export function stripFences(body: string): string {
   return m ? m[1] : body
 }
 
-/** 工具轮预算上限（ADR-0041 K≤6）：回路第 K 轮后仍请求工具即中止；不设调用方覆盖。 */
-export const AGENT_LOOP_MAX_TOOL_ROUNDS = 6
+/** 工具轮预算上限（ADR-0041 形状；ADR-0077 上调 6→20）：回路第 K 轮后仍请求工具即中止；
+ * 不设调用方覆盖（统一天花板不分档）——教练职责变重（归因/定位/插入裁决/在途自报消费）
+ * 要更深回路，撞顶照旧 fail loud（trajectory 工具轨迹补自激防线的观测面）。 */
+export const AGENT_LOOP_MAX_TOOL_ROUNDS = 20
 
 /** 调用模式（观测面词汇）：complete 单发 / repair 门错修复轮 / loop 工具回路轮。 */
 export type AgentCallMode = 'complete' | 'repair' | 'loop'
