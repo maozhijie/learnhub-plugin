@@ -325,7 +325,7 @@ test('拒收零落盘：裁决未过受理门时罗盘与图零改动、零提�
 })
 
 test('apply 失败自清：审计 ERROR 拦下 apply 时机器裁决不留 pending，罗盘零改动', async () => {
-  await withVault(SEED_VAULT, async ({ engine, paths }) => {
+  await withLoggedVault(async ({ engine, paths, log }) => {
     await seedApplied(engine)
     // 弄坏课程文件（E4 Broken → 审计 ERROR）：受理门不查审计，apply 门会拦
     const notePath = paths.courseNotePath('数学', '基础', '认识变化率')
@@ -340,6 +340,13 @@ test('apply 失败自清：审计 ERROR 拦下 apply 时机器裁决不留 pendi
     assert.equal(props.length, 1, 'apply 失败的机器裁决自清为 rejected')
     assert.match(props[0]!.decision_note ?? '', /生长批自动 apply 失败/)
     assert.deepEqual(await engine.graph.graphProposals('pending'), [])
+    // #253 / ADR-0080：apply 失败也有事件（ERROR，带提案 id 与死因）——受理过门但 apply
+    // 炸掉这条路径否则只有 journal 里的 rejected 记录，日志里看不见
+    const fail = log.nth('coach.round.apply_fail')!
+    assert.equal(fail.level, 'error')
+    assert.equal(fail.fields.proposal, props[0]!.id)
+    assert.equal(fail.fields.course, '数学')
+    assert.match(String(fail.fields.error), /审计存在 ERROR/)
   })
 })
 

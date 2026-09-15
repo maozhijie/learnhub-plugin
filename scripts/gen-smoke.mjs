@@ -109,7 +109,7 @@ console.log('')
 const VERDICT = { ok: '✓ 跑通', partial: '△ 部分完成（有节/出题失败，死因见下）', failed: '✗ 失败' }
 console.log(`判定：${VERDICT[report.verdict] ?? report.verdict}`)
 console.log(`耗时：${(report.durationMs / 1000).toFixed(1)}s｜课程：${report.course}｜节点：${report.node ?? '—'}`)
-console.log(`起点：${report.pipeline.starts.join('、') || '—'}｜终点：${report.pipeline.endpoint ?? '—'}`)
+console.log(`起点：${report.pipeline.start ?? '—'}｜终点：${report.pipeline.endpoint ?? '—'}`)
 console.log(`任务终态：${report.pipeline.jobStatus ?? '—'}｜${report.pipeline.jobMessage ?? ''}`)
 console.log('')
 

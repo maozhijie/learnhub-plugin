@@ -437,7 +437,8 @@ test('正文初跑档位（#228）：高难节点初跑升 deep、低难维持 f
     'growth2.settleRechecks': async () => null,
   })
   // 高复杂度：初跑（正文第一次调用）= deep 档
-  const rtHigh = makeRuntime()
+  const logHigh = memLogger()
+  const rtHigh = makeRuntime(logHigh)
   const effortsHigh: Array<string | undefined> = []
   const viewsHigh: Array<Record<string, unknown>> = []
   stub(rtHigh, pipelineStubs(viewsHigh, 3))
@@ -449,6 +450,14 @@ test('正文初跑档位（#228）：高难节点初跑升 deep、低难维持 f
   await until(() => rtHigh.jobs.genJobs.get('数学/节点A')?.status === 'done')
   assert.equal(effortsHigh[0], 'low', '高难节点大纲 effort=deep（既有口径，对照位）')
   assert.equal(effortsHigh[1], 'low', '高难节点正文初跑 effort=deep（#228：不再恒 fast）')
+  // #253 / ADR-0080 `content.job`（前身 content_job）：档位记录改结构化事件，
+  // course/node/tier/effort 四个字段可直接读，不再让人从一句话里抠
+  const cj = logHigh.nth('content.job')!
+  assert.equal(cj.level, 'info')
+  assert.equal(cj.fields.course, '数学')
+  assert.equal(cj.fields.node, '节点A')
+  assert.equal(cj.fields.tier, '高')
+  assert.equal(cj.fields.effort, 'deep', '声明的是语义档（高难=deep），不是部署解析后的实际档（low）——与旧 content_job 行同口径')
   // 低复杂度：初跑维持 fast（部署档 off，行为不变）
   const rtLow = makeRuntime()
   const effortsLow: Array<string | undefined> = []

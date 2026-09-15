@@ -219,9 +219,9 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
  * 拿到 `undefined`（旧 `runLog` 靠一个把 `output.length` 包进去的 try/catch 顺带容错，
  * 换代时那个隐式行为一度丢过——探针快照当场把它抓了出来）。**日志故障绝不上浮成主流程
  * 故障**是本票的硬纪律，故这里显式归一而不是靠调用方守规矩。 */
-export function logCall(rt: HostRuntime, tool: string, summary: string): void {
+export function logCall(rt: HostRuntime, tool: string, summary: string, chars = summary.length): void {
   const text = typeof summary === 'string' ? summary.trim() : ''
-  rt.logger.info('engine.call', { tool, chars: text.length, detail: [text || '（无输出）'] })
+  rt.logger.info('engine.call', { tool, chars, detail: [text || '（无输出）'] })
 }
 
 /** 输出摘要（不落原文：首行截断 + 行数索引）。行数用 `match` 数换行，**不按行切分**
@@ -236,10 +236,11 @@ function summarize(output: unknown): string {
   return lines > 1 ? `${head}…（共 ${lines} 行）` : head
 }
 
-/** D14 v3 唯一出口：engine 调用 + 调试日志留痕。 */
+/** D14 v3 唯一出口：engine 调用 + 调试日志留痕。`chars` 传**原文尺寸**（`out.length`）
+ * 而不是摘要尺寸——它是「这次调用吐了多大」的索引，摘要只是给人看的那一行。 */
 export async function run(rt: HostRuntime, tool: string, fn: () => Promise<string>): Promise<string> {
   const out = await fn()
-  logCall(rt, tool, summarize(out))
+  logCall(rt, tool, summarize(out), typeof out === 'string' ? out.length : 0)
   return out
 }
 
@@ -254,7 +255,8 @@ export async function apiRun<T>(rt: HostRuntime, tool: string, fn: () => Promise
     rt.logger.error('engine.call.fail', { tool, error: err instanceof Error ? err.message : String(err) })
     throw err
   }
-  logCall(rt, tool, summarize(typeof out === 'string' ? out : JSON.stringify(out) ?? ''))
+  const serialized = typeof out === 'string' ? out : JSON.stringify(out) ?? ''
+  logCall(rt, tool, summarize(serialized), serialized.length)
   return out
 }
 
