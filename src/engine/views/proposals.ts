@@ -24,3 +24,10 @@ export interface GraphEnrichProposalResult {
 }
 
 export type GraphProposeResult = GraphEditProposalResult | GraphEnrichProposalResult
+
+/** 概念层治理域提案的确认结果（#265 / ADR-0084）：合并（不可逆：只并入、不拆分）与
+ * 易混对候选入册（只写提案声明的方向——单向是待复核态）。两者都只从面板
+ * /proposals/apply 可达（确认门是人的动作）。 */
+export type ConceptApplyResult =
+  | { kind: 'concept_merge'; course: string; from: string; into: string; names: string[] }
+  | { kind: 'confusable_pair'; course: string; a: string; b: string; changed: boolean }

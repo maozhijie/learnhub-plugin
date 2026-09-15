@@ -176,6 +176,9 @@ export interface ErrorGenerateResult {
   generated: Array<{ node: string; ids: string[]; count: number }>
   /** 因原题缺失/归档被跳过的候选（node/qid + 原因）。 */
   skipped?: string[]
+  /** 生成期读到的**不在册**概念名（#264 在册对照的拦截报告）：误解先验里的这些名字被拦在
+   * 提示词材料之外（与节点三面、题目 invokes 同一在册口径），并如实报出而非静默降级。 */
+  unregistered_concepts?: Array<{ node: string; concept: string }>
 }
 
 /** 挖矿预览（errorCardMine）。 */

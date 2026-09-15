@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path'
 import { SchemaError, loadRegionDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
-import { validateConceptRegistry } from './concepts.ts'
+import { conceptMagnitudeFindings, validateConceptRegistry } from './concepts.ts'
 import { validateAnchorBook } from './seed.ts'
 import { classifySource, fingerprintOf, validateNoteSourceManifest } from './note-source.ts'
 import { validateLearnerCards } from './learner-cards.ts'
@@ -67,6 +67,7 @@ export type DataCheckReason =
   | 'concept_registry_unreadable'
   | 'concept_registry_yaml_parse'
   | 'concept_registry_schema'
+  | 'concept_registry_magnitude'
   | 'endpoint_anchor_unreadable'
   | 'endpoint_anchor_json_parse'
   | 'endpoint_anchor_schema'
@@ -576,6 +577,13 @@ async function scanConceptRegistry(
   if (checked.errors.length) {
     push(findings, 'concept_registry', 'broken', 'concept_registry_schema', where, checked.errors.join('；'))
     return { present: true, entries: 0 }
+  }
+  // 量级纪律（#264 / 父 #260）：超量别名 / 混淆对的条目报 hint（WARN/ERROR 带写进 detail）。
+  // **只报不拦**——别名是历史地址（断读才是违约，ADR-0084 ②），量级是「该收敛了」的信号；
+  // ERROR 带是更强的信号，但仍是 hint 而非 broken：登记表的地址全部照常解析，数据没坏。
+  for (const f of conceptMagnitudeFindings(checked.entries)) {
+    push(findings, 'concept_registry', 'hint', 'concept_registry_magnitude', where,
+      `${f.band === 'error' ? 'ERROR' : 'WARN'} 带：${f.message}`)
   }
   return { present: true, entries: checked.entries.length }
 }

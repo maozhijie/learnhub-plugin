@@ -114,26 +114,9 @@ test('#141 引用解析：canonical 与别名精确命中 → 条目；未命中
   })
 })
 
-// ---- 条目禁删只并入：合并 = 名字并集，旧地址经别名续解析 ----
-
-test('#141 并入：名字并集、from 条目移除、旧地址（canonical 与别名）续解析到 into', async () => {
-  await withVault(registryVault(), async ({ engine, root }) => {
-    const r = await engine.concepts.merge('math', '配方法', '因式分解')
-    assert.equal(r.into, '因式分解')
-    const entries = await engine.concepts.load('math')
-    assert.equal(entries.length, 1, 'from 条目移除（禁删指名字，名字并集后存活）')
-    const merged = entries[0]!
-    assert.equal(merged.canonical, '因式分解')
-    assert.ok(merged.aliases!.includes('配方法'), 'from canonical 降级为别名')
-    assert.ok(merged.aliases!.includes('十字相乘法'), '既有别名保留')
-    // 旧地址续解析：旧 canonical 与旧别名都解析到同一身份
-    assert.equal(resolveConcept(entries, '配方法')?.canonical, '因式分解')
-    assert.equal(resolveConcept(entries, '十字相乘法')?.canonical, '因式分解')
-    // 落盘可回读
-    const onDisk = readFileSync(registryPath(root), 'utf8')
-    assert.match(onDisk, /配方法/)
-  })
-})
+// ---- 条目禁删只并入（#265 起：合并从直写面改为「提案 + 人确认」两段式——
+// 直调面 ConceptRegistry.merge 已退役，引擎缝测试迁至 concept-governance.test.ts；
+// 纯函数语义（名字并集 / definition 回退 / 别名定位）仍在此直测）----
 
 test('#141 并入：definition 缺省回退（into 无定义时承继 from 的）', () => {
   const { errors, entries } = mergeConceptEntries(
@@ -144,15 +127,6 @@ test('#141 并入：definition 缺省回退（into 无定义时承继 from 的�
   assert.equal(entries.length, 1)
   assert.equal(entries[0]!.canonical, '甲')
   assert.equal(entries[0]!.definition, '乙的定义')
-})
-
-test('#141 并入负路径：并入自身、未在册名字 → 错误不落盘', async () => {
-  await withVault(registryVault(), async ({ engine, root }) => {
-    await assert.rejects(() => engine.concepts.merge('math', '因式分解', '因式分解'), /不能并入自身|同一/)
-    await assert.rejects(() => engine.concepts.merge('math', '不存在', '因式分解'), /不在登记表/)
-    await assert.rejects(() => engine.concepts.merge('math', '因式分解', '不存在'), /不在登记表/)
-    assert.equal(readFileSync(registryPath(root), 'utf8'), `${REGISTRY_YAML}\n`, '失败合并不改盘')
-  })
 })
 
 test('#141 并入经别名定位：用别名指称条目同样生效', () => {

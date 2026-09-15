@@ -12,8 +12,9 @@ import { Store } from './store.ts'
 import { atomicWrite } from './io.ts'
 import { runWriteUnit } from './write-unit.ts'
 import { Graph, GraphStore, loadRegionDoc, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from './graph.ts'
-import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflicts, namesOf, validateConceptEntry } from './concepts.ts'
-import type { ConceptEntry, ConceptRef } from './concepts.ts'
+import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from './concepts.ts'
+import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from './concepts.ts'
+import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from './concepts.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
 import { endpointNames, readAnchors, writeAnchors, isSeedGraph } from './seed.ts'
 import type { EndpointAnchor } from './seed.ts'
@@ -493,13 +494,21 @@ export class GraphProposals {
   /** 概念引用对表门（#141）：teaches/assumes/误解 的概念引用必须精确命中登记表
    * 在册名字（canonical 或别名）或提案铸名块的铸名；铸名与登记表撞名同样
    * 拒收。返回错误行列表（空 = 通过）。root 参数是课程 root（非路径）。
-   * edit 提案受理时用。 */
-  private async conceptGateErrors(root: string, refs: ConceptRef[], mints: ConceptEntry[]): Promise<string[]> {
+   * edit 提案受理时用。
+   * #264 增近似名预检与量级告警：都是**非阻提示**（精确撞名照旧硬拒）。 */
+  private async conceptGateErrors(
+    root: string, refs: ConceptRef[], mints: ConceptEntry[],
+  ): Promise<{ errors: string[]; warns: string[] }> {
     const existing = await this.concepts.load(root) // 登记表 Broken 在此抛错，apply 不落盘
     const errors = mintConflicts(mints, existing)
     const known = namesOf([...existing, ...mints])
     errors.push(...conceptReferenceErrors(refs, known))
-    return errors
+    // 近似名预检（#264，软提示）：本批铸名与在册名字字符级近似 → 候选清单随受理回执回报。
+    // 只对**本批新名**检测（存量近似名不是本批的事）；精确相等归 mintConflicts 的硬拒。
+    const warns = nearNameWarnings(nearNameCandidates(mints, existing))
+    // 量级告警（#264，非阻）：本批铸名落盘后的条目量级——别名堆叠与混淆对堆积在此可见。
+    if (mints.length) warns.push(...conceptMagnitudeWarnings(applyConceptMints(existing, mints).entries))
+    return { errors, warns }
   }
 
   /** 为图中缺笔记的节点补骨架文件（幂等）：apply 落图后调用。
@@ -547,7 +556,9 @@ export class GraphProposals {
     const regions = await new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs).load()
     const graph = new Graph(regions)
     const errors = simulateOps(regions, graph, spec.ops)
-    const conceptErrors = await this.conceptGateErrors(course.root, conceptRefsOfOps(spec.ops), spec.concepts ?? [])
+    const conceptGate = await this.conceptGateErrors(course.root, conceptRefsOfOps(spec.ops), spec.concepts ?? [])
+    const conceptErrors = conceptGate.errors
+    warns.push(...conceptGate.warns)
     // 终点锚保护 + 生长方向不变式（#142/#198）：锚定的终点不可经 edit 直改，
     // add_node 禁以终点为 pre、主线批必接线——换终点只走 removeEndpoint + addEndpoint。
     const endpointErrors = await this.endpointGuardErrors(course.root, spec)
@@ -1221,6 +1232,154 @@ export class GraphProposals {
       files: [...touched.keys()],
       findings: applyFindings(audit),
     }
+  }
+
+  // ---- 概念层治理回路（#265 / 父 #260）：合并提案 + 混淆对候选提案 ----
+
+  /** 合并提案（#265 两段式第一段）：**一个字都不落盘**——登记表在 apply（人确认）之前
+   * 保持原样。受理门：课程在册、from/into 都是登记表在册名字（canonical/别名精确匹配）
+   * 且属**不同**条目——与 concept-merge 的旧直写门同一判据，只是延后到确认后执行。
+   * 提案面显式带不可逆声明（CONCEPT_MERGE_IRREVERSIBLE）：合并只并入、不拆分。 */
+  async proposeConceptMerge(
+    courseKey: string, from: string, into: string, reason?: string,
+  ): Promise<{ id: number; kind: 'concept_merge'; course: string; from: string; into: string; names: string[]; irreversible: true; warns: string[] }> {
+    const course = await this.registry.get(courseKey.trim())
+    if (!course) throw new Error(`[concept-merge-propose] 注册表中没有课程「${courseKey.trim()}」。`)
+    const entries = await this.concepts.load(course.root)
+    const gate = mergeConceptEntries(entries, from.trim(), into.trim())
+    if (gate.errors.length) {
+      throw new Error(`[concept-merge-propose] 合并提案未受理。\n${gate.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    const src = resolveConcept(entries, from.trim())!
+    const dst = resolveConcept(entries, into.trim())!
+    const summary = `合并提案（不可逆：只并入、不拆分）：概念「${src.canonical}」并入「${dst.canonical}」`
+      + `${reason?.trim() ? `｜理由：${reason.trim()}` : ''}｜等待人确认——未确认不落盘`
+    const { pid } = await this.saveArtifact('concept_merge', course.name, {
+      course: course.name, from: src.canonical, into: dst.canonical,
+      ...(reason?.trim() ? { reason: reason.trim() } : {}), irreversible: true,
+      irreversible_note: CONCEPT_MERGE_IRREVERSIBLE,
+    })
+    await this.store.updateProposal(pid, { summary })
+    const mergedDst = resolveConcept(gate.entries, dst.canonical)!
+    return {
+      id: pid, kind: 'concept_merge', course: course.name,
+      from: src.canonical, into: dst.canonical,
+      names: [mergedDst.canonical, ...(mergedDst.aliases ?? [])],
+      irreversible: true,
+      warns: conceptMagnitudeWarnings(gate.entries),
+    }
+  }
+
+  /** 合并确认（#265 两段式第二段，**人的动作**：面板 /proposals/apply 触发）：产物复验
+   * （形态 + 在册双门，受理后登记表可能被手改/并入）→ 并入落盘 → journal。不可逆语义
+   * 在提案面已声明；这里只执行。 */
+  async applyConceptMerge(pid?: number): Promise<{ kind: 'concept_merge'; course: string; from: string; into: string; names: string[] }> {
+    const prop = await this.store.takePending('concept_merge', pid)
+    const v = validateConceptMergeProposal(await this.loadArtifact(prop.artifact))
+    if (v.errors || !v.spec) throw new Error(`[concept-merge-apply] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
+    const course = await this.registry.get(v.spec.course)
+    if (!course) throw new Error(`[concept-merge-apply] 注册表中没有课程「${v.spec.course}」。`)
+    const root = course.root
+    const entries = await this.concepts.load(root)
+    const merged = mergeConceptEntries(entries, v.spec.from, v.spec.into)
+    if (merged.errors.length) {
+      throw new Error(`[concept-merge-apply] 合并未执行（登记表保持原样——受理后登记表已变，reject 本提案重提）。\n${merged.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    const src = resolveConcept(entries, v.spec.from)!
+    await this.concepts.save(root, merged.entries)
+    const dst = resolveConcept(merged.entries, v.spec.into)!
+    const names = [dst.canonical, ...(dst.aliases ?? [])]
+    await this.store.appendJournal({
+      course: course.name, node: '*', rating: null, kind: 'concept_merge', elapsed_days: 0,
+      session: String(prop.id),
+      detail: `概念「${src.canonical}」并入「${dst.canonical}」（名字并集：${names.join('、')}；提案 #${prop.id} 人确认）`,
+    })
+    await this.store.updateProposal(prop.id, {
+      status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(),
+      decision_note: `并入「${dst.canonical}」（名字 ${names.length} 个）`,
+    })
+    return { kind: 'concept_merge', course: course.name, from: src.canonical, into: dst.canonical, names }
+  }
+
+  /** 混淆对候选提案（#265）：一条候选一条提案（人审一次一条），**不自动入册**。受理门：
+   * 课程在册、两端都是登记表在册**活跃**条目（废弃条目退出候选面，ADR-0084 ②）、
+   * 尚未声明过（幂等——重复派生不再堆提案）。共现证据随产物落盘，人审可查。 */
+  async proposeConfusableCandidate(
+    courseKey: string, pair: { a: string; b: string; evidence: string[] }, reason?: string,
+  ): Promise<{ id: number; kind: 'confusable_pair'; course: string; a: string; b: string; weight: number }> {
+    const course = await this.registry.get(courseKey.trim())
+    if (!course) throw new Error(`[concept-confusable-propose] 注册表中没有课程「${courseKey.trim()}」。`)
+    const entries = await this.concepts.load(course.root)
+    const ea = resolveConcept(entries, pair.a)
+    const eb = resolveConcept(entries, pair.b)
+    if (!ea || !eb) {
+      throw new Error(`[concept-confusable-propose] 候选（「${pair.a}」↔「${pair.b}」）有名字不在登记表在册——候选只从在册概念派生。`)
+    }
+    if (isDeprecated(ea) || isDeprecated(eb)) {
+      throw new Error(`[concept-confusable-propose] 候选（「${ea.canonical}」↔「${eb.canonical}」）含废弃条目——废弃条目退出候选面（ADR-0084 ②）。`)
+    }
+    if (ea.canonical === eb.canonical) {
+      throw new Error(`[concept-confusable-propose] 候选两端是同一个条目「${ea.canonical}」——易混对需要两个不同条目。`)
+    }
+    if (!pair.evidence.length) throw new Error('[concept-confusable-propose] 候选没有共现证据——候选必须有来源可查。')
+    const declared = addConfusablePair(entries, ea.canonical, eb.canonical)
+    if (declared.errors.length) throw new Error(`[concept-confusable-propose] ${declared.errors.join('；')}`)
+    if (!declared.changed) {
+      throw new Error(`[concept-confusable-propose] 「${ea.canonical}」↔「${eb.canonical}」已在登记表声明过（任一方向）——不必重复提名。`)
+    }
+    const pending = await this.store.loadProposals()
+    // pending 去重按**产物结构**比对（解析出的 a/b 无序对相等），不靠 summary 文本——
+    // 摘要是展示面，拿它当身份键会在措辞变化下静默失效
+    const dupKey = conceptPairKey(ea.canonical, eb.canonical)
+    for (const p of pending) {
+      if (p.kind !== 'confusable_pair' || p.status !== 'pending') continue
+      let spec: ConfusableCandidateProposalSpec | undefined
+      try {
+        spec = validateConfusableCandidateProposal(await this.loadArtifact(p.artifact)).spec
+      } catch {
+        continue // 产物缺失/损坏的旧提案不参与比对（它自己 apply 时会 fail loud）
+      }
+      if (spec && conceptPairKey(spec.a, spec.b) === dupKey) {
+        return { id: p.id, kind: 'confusable_pair', course: course.name, a: ea.canonical, b: eb.canonical, weight: pair.evidence.length }
+      }
+    }
+    const { pid } = await this.saveArtifact('confusable_pair', course.name, {
+      course: course.name, a: ea.canonical, b: eb.canonical, evidence: pair.evidence,
+      ...(reason?.trim() ? { reason: reason.trim() } : {}),
+    })
+    await this.store.updateProposal(pid, {
+      summary: `混淆对候选：概念「${ea.canonical}」→「${eb.canonical}」（共现证据 ${pair.evidence.length} 条）｜证据：${pair.evidence[0]}${pair.evidence.length > 1 ? ` 等 ${pair.evidence.length} 条` : ''}｜人审接受后才入册`,
+    })
+    return { id: pid, kind: 'confusable_pair', course: course.name, a: ea.canonical, b: eb.canonical, weight: pair.evidence.length }
+  }
+
+  /** 混淆对候选确认（#265，人的动作）：产物复验 + 两端仍在册活跃 + 尚未声明 → 只写
+   * a→b 一个方向入册（单向合法、是待复核态，ADR-0084 ③；写入侧不自动补双向）。 */
+  async applyConfusableCandidate(pid?: number): Promise<{ kind: 'confusable_pair'; course: string; a: string; b: string; changed: boolean }> {
+    const prop = await this.store.takePending('confusable_pair', pid)
+    const v = validateConfusableCandidateProposal(await this.loadArtifact(prop.artifact))
+    if (v.errors || !v.spec) throw new Error(`[concept-confusable-apply] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
+    const course = await this.registry.get(v.spec.course)
+    if (!course) throw new Error(`[concept-confusable-apply] 注册表中没有课程「${v.spec.course}」。`)
+    const root = course.root
+    const entries = await this.concepts.load(root)
+    const ea = resolveConcept(entries, v.spec.a)
+    const eb = resolveConcept(entries, v.spec.b)
+    if (!ea || !eb) throw new Error(`[concept-confusable-apply] 候选两端（「${v.spec.a}」「${v.spec.b}」）已不在登记表在册——reject 本提案重提。`)
+    if (isDeprecated(ea) || isDeprecated(eb)) {
+      throw new Error(`[concept-confusable-apply] 「${ea.canonical}」↔「${eb.canonical}」含废弃条目——废弃条目退出候选面。`)
+    }
+    const r = await this.concepts.addConfusable(root, ea.canonical, eb.canonical)
+    await this.store.appendJournal({
+      course: course.name, node: '*', rating: null, kind: 'concept_confusable', elapsed_days: 0,
+      session: String(prop.id),
+      detail: `易混对入册「${r.a}」→「${r.b}」${r.changed ? '' : '（已声明，幂等）'}（候选提案 #${prop.id} 人确认；单向是待复核态，ADR-0084 ③）`,
+    })
+    await this.store.updateProposal(prop.id, {
+      status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(),
+      decision_note: `易混对「${r.a}」→「${r.b}」入册`,
+    })
+    return { kind: 'confusable_pair', course: course.name, a: r.a, b: r.b, changed: r.changed }
   }
 
   /** 改名/移动联动课程笔记：搬文件 + 更新 fm.node + 题库随迁；无笔记静默跳过。 */

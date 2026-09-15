@@ -16,7 +16,7 @@ import { outlineBudgetForNode, nodeProfileLines, nodeTierOf, nodeProblemFirstOf,
 import { loadNote, saveNote } from './notes.ts'
 import { endpointNames, readAnchors } from './seed.ts'
 import { round2 } from './grading.ts'
-import { invokesTagged } from './concepts.ts'
+import { CONFUSABLE_INJECT_CAP, capConfusablePairs, invokesTagged } from './concepts.ts'
 import { withContractLast } from './prompt-assembly.ts'
 import { TEMPLATES } from './prompts/templates.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
@@ -1212,10 +1212,19 @@ export class Content {
 
   /** 易混对提示词块（#232）：登记表 confusable 候选对（confusablePairsOf 提取，与本节
    * 概念清单相交），出题提示词据此要求收尾槽位出跨概念对比题；无对 → 空串（指令
-   * 静默降级，不报错不硬造）。 */
+   * 静默降级，不报错不硬造）。
+   * #264 注入上限 + 截断披露：超 CONFUSABLE_INJECT_CAP 条按**稳定序**截断（序 =
+   * confusablePairsOf 的产出序，登记表文件序的纯函数——同输入恒同输出），并把「共几对、
+   * 截掉几对、为什么」如实写在注入文本内（披露纪律：不静默丢——静默截断会让模型以为
+   * 清单就是全部）。这是组装面文字，不是提示词常量 ⇒ 不触发 prompt-bump（#264 判据）。 */
   static confusablePairsBlock(pairs: Array<{ a: string; b: string }>): string {
     if (!pairs.length) return ''
-    return `\n\n## 易混对（登记表在册，跨概念对比题候选）\n\n${pairs.map(p => `- ${p.a} ↔ ${p.b}`).join('\n')}`
+    const { pairs: kept, total, truncated } = capConfusablePairs(pairs)
+    const body = kept.map(p => `- ${p.a} ↔ ${p.b}`).join('\n')
+    const disclosure = truncated
+      ? `\n\n> 本清单已截断：登记表命中共 ${total} 对，按登记表稳定序只注入前 ${kept.length} 对（注入上限 ${CONFUSABLE_INJECT_CAP} 对——超过这个量级就没有优先级可言）。未列出的对不是不存在，是该先把易混对声明收敛下来。`
+      : ''
+    return `\n\n## 易混对（登记表在册，跨概念对比题候选）\n\n${body}${disclosure}`
   }
 
   /** 题目 invokes 覆盖率投影（#148，enc 权重新语义）：节点题目集按一枚 invokes 概念

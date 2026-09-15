@@ -18,6 +18,8 @@ import type { Paths } from './paths.ts'
 import type { Projects, ProjectApplyResult } from './projects.ts'
 import type { GraphProposals, ApplyAudit } from './proposals.ts'
 import type { ConceptRegistry } from './concepts.ts'
+import { CONFUSABLE_CANDIDATE_MAX, conceptPairKey, confusableCandidates, declaredPairKeys } from './concepts.ts'
+import type { CooccurrenceNode } from './concepts.ts'
 import type { Registry } from './registry.ts'
 import type { QuestionBank } from './question-bank.ts'
 import type { Graph } from './graph.ts'
@@ -65,7 +67,7 @@ import type { VaultLinkCandidateView, VaultLinksDoc } from './vault-links.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLinks, scoreTier } from './vault-links.ts'
 import type { GraphApplyResult, GraphBrowseDoc, GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult } from './views/graph.ts'
 import type { ExperimentStartResult } from './views/lab.ts'
-import type { GraphProposeResult } from './views/proposals.ts'
+import type { GraphProposeResult, ConceptApplyResult } from './views/proposals.ts'
 import { YAML } from './yaml.ts'
 export class GraphSubsystem {
   constructor(private e: GraphDeps) {}
@@ -438,16 +440,73 @@ export class GraphSubsystem {
   }
 
 
-  /** 概念并入（#141 条目禁删只并入；human 领域判断的执行面）：from 整条并入 into，
-   * 名字并集，旧地址经别名续解析；journal 留痕。 */
-  async conceptMerge(courseKey: string, from: string, into: string): Promise<{ course: string; into: string; names: string[] }> {
+  /** 合并提案（#265 / ADR-0084：合并是这套系统里唯一的不可逆动作——走「提案 + 人确认」
+   * 两段式，与图变更提案同规格）：**未确认不落盘**。登记表在 apply（面板 /proposals/apply，
+   * 人的动作）之前一字不改；提案面显式声明不可逆语义（只并入、不拆分）。受理门与 apply
+   * 双门各自在册对表（提案可能基于旧登记表）。 */
+  async conceptMerge(courseKey: string, from: string, into: string, reason?: string): Promise<{
+    proposal: number; kind: 'concept_merge'; course: string; from: string; into: string
+    names: string[]; irreversible: true; warns: string[]
+  }> {
+    const r = await this.e.proposals.proposeConceptMerge(courseKey, from, into, reason)
+    return {
+      proposal: r.id, kind: r.kind, course: r.course, from: r.from, into: r.into,
+      names: r.names, irreversible: true, warns: r.warns,
+    }
+  }
+
+  /** 合并确认的执行面（面板 /proposals/apply，kind=concept_merge）：agent 无直调通道——
+   * 唯一许给人判断的动作必须有门（ADR-0084）。 */
+  async conceptMergeApply(pid?: number): Promise<{ kind: 'concept_merge'; course: string; from: string; into: string; names: string[] }> {
+    return this.e.proposals.applyConceptMerge(pid)
+  }
+
+  /** 混淆对候选派生（#265）：从**题目共现**挖候选（同一节点题目各自 invokes 的概念对、
+   * 错答先验与正答 invokes 的概念对），逐条产出**待审提案**（人审一次一条）——**不自动
+   * 入册**（对齐「别名自动收编永远人审」的同一纪律）。已声明过的对不重复提名，已有
+   * pending 提案的对不再堆；废弃条目退出候选面（ADR-0084 ②）。 */
+  async conceptConfusableCandidates(courseKey?: string, max?: number): Promise<{
+    course: string; scanned: number; filed: Array<{ id: number; a: string; b: string; weight: number }>
+    message: string
+  }> {
     const c = await this.e.registry.resolve(courseKey)
-    const r = await this.e.concepts.merge(c.root, from, into)
-    await this.e.store.appendJournal({
-      course: c.name, node: '*', rating: null, kind: 'concept_merge', elapsed_days: 0,
-      detail: `概念「${from}」并入「${r.into}」（名字并集：${r.names.join('、')}）`,
-    })
-    return { course: c.name, ...r }
+    const { graph } = await this.e.loadView(c)
+    const entries = await this.e.concepts.load(c.root)
+    const decl = declaredPairKeys(entries)
+    const nodes: CooccurrenceNode[] = []
+    for (const node of graph.order) {
+      let questions: Array<{ id?: string; q?: string; invokes?: unknown }> = []
+      try {
+        questions = (await this.e.bank.load(this.e.paths.courseRoot(c.root), node)).questions
+      } catch {
+        questions = [] // 题库 Broken/缺席不拦候选派生（其余节点照常挖；ADR-0071 宽容读取）
+      }
+      if (!questions.some(q => typeof q.invokes === 'string' && q.invokes.trim())) continue
+      nodes.push({ node, questions, misconceptions: graph.misconceptionsOf[node] ?? [] })
+    }
+    const candidates = confusableCandidates(nodes, entries)
+    // max 是位置参数（工具面 boundArgs 按 bind 序传参）：上限旋钮，缺省 CONFUSABLE_CANDIDATE_MAX，硬帽 50
+    const cap = Math.max(1, Math.min(max ?? CONFUSABLE_CANDIDATE_MAX, 50))
+    const filed: Array<{ id: number; a: string; b: string; weight: number }> = []
+    for (const cand of candidates) {
+      if (filed.length >= cap) break
+      // 纯函数已剔除已声明对；这里防御性再挡一道（登记表在两次读取之间被并发改动的窗口）
+      if (decl.has(conceptPairKey(cand.a, cand.b))) continue
+      const p = await this.e.proposals.proposeConfusableCandidate(c.name, cand)
+      filed.push({ id: p.id, a: p.a, b: p.b, weight: p.weight })
+    }
+    return {
+      course: c.name, scanned: nodes.length, filed,
+      message: filed.length
+        ? `已产出 ${filed.length} 条待审混淆对候选提案（人审一次一条；接受后才入册）；共扫 ${nodes.length} 个带 invokes 的节点`
+        : '没有新的混淆对候选：共现证据不足，或候选都已声明/已在待审队列（候选面不含废弃条目）',
+    }
+  }
+
+  /** 混淆对候选确认的执行面（面板 /proposals/apply，kind=confusable_pair）：只写提案
+   * 声明的那个方向（单向是待复核态，ADR-0084 ③）。 */
+  async conceptConfusableApply(pid?: number): Promise<{ kind: 'confusable_pair'; course: string; a: string; b: string; changed: boolean }> {
+    return this.e.proposals.applyConfusableCandidate(pid)
   }
 
   /** enc 覆盖层回填入口（#148 权重新语义）：对课程里已有 Ready 内容、且反哺候选或
@@ -514,17 +573,21 @@ export class GraphSubsystem {
   }
 
 
-  /** 提案统一 apply 入口（图谱域 + 项目域 + 实验域；面板 /proposals/apply 消费）。
-   * kind 显式照抄提案记录——未知 kind 报错，绝不静默归一成 gen。图谱域走 audit 门禁，
-   * 项目域无图审计（takePending 各自在 apply 内做）；project_plan 走引擎包装
-   * （修订快照 diff + 换线/补支触发随结果带出，#149）。 */
+  /** 提案统一 apply 入口（图谱域 + 项目域 + 实验域 + 概念层治理域；面板
+   * /proposals/apply 消费）。kind 显式照抄提案记录——未知 kind 报错，绝不静默归一成
+   * gen。图谱域走 audit 门禁，项目域无图审计（takePending 各自在 apply 内做）；
+   * project_plan 走引擎包装（修订快照 diff + 换线/补支触发随结果带出，#149）；
+   * concept_merge / confusable_pair（#265）是**概念层治理动作**——只从面板可达
+   * （agent 无直调通道）：合并不可逆、易混对候选不许自动入册，两条都要求人按一次。 */
   async proposalApply(
     kind: string, pid?: number,
-  ): Promise<GraphApplyResult | ProjectApplyResult | ExperimentStartResult> {
+  ): Promise<GraphApplyResult | ProjectApplyResult | ExperimentStartResult | ConceptApplyResult> {
     if (kind === 'experiment') return this.e.experimentApply(pid)
     if (kind === 'project_plan') return this.e.applyProjectPlanProposal(pid)
     if (kind === 'project_milestone') return this.e.projects.applyMilestone(pid)
     if (kind === 'edit' || kind === 'enrich') return this.graphApply(kind, pid)
+    if (kind === 'concept_merge') return this.conceptMergeApply(pid)
+    if (kind === 'confusable_pair') return this.conceptConfusableApply(pid)
     throw new Error(`[apply] 非法 kind: ${String(kind)}（允许 ${PROPOSAL_KINDS.join('/')}）`)
   }
 

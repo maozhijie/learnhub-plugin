@@ -6,7 +6,7 @@
  * （唯一性/配对/engine 存在性/阶段/指南投影/声明与面一致/可达性）。
  *
  * **表是「按 id 键的对象」而不是数组**：#169 把它当成类型可见形状用——`CommandId` /
- * `CommandOutput<id>` 让 UI 的 111 个端点从 `output` 派生响应类型（ADR-0045 裁定 7），
+ * `CommandOutput<id>` 让 UI 的 156 个端点从 `output` 派生响应类型（ADR-0045 裁定 7），
  * 数组形状做不到这件事（类型层按 id 取不到单条声明）。运行时的遍历面另给 `COMMAND_LIST`。
  */
 import { 学习域 } from './学习.ts'

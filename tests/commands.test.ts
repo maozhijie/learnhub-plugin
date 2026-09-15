@@ -213,7 +213,7 @@ test('门③ 唯一性：id／tool 名／(method, path) 各自唯一，索引没
   assert.equal(new Set(ids).size, ids.length, 'id 有重复')
   const tools = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.tool).map(x => x.tool!))
   assert.equal(new Set(tools).size, tools.length, 'tool 名有重复')
-  assert.equal(tools.length, 111, `agent 通道应恰 111 条，实得 ${tools.length}（#203 +1：learnhub_receipt_review_mode；#256 −1：learnhub_project_decompile_apply 随反编译 plan-only 退役）`)
+  assert.equal(tools.length, 112, `agent 通道应恰 112 条，实得 ${tools.length}（#265 +1：learnhub_concept_confusable_candidates；#203 +1：learnhub_receipt_review_mode；#256 −1：learnhub_project_decompile_apply 随反编译 plan-only 退役）`)
   const routeKeys = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route).map(x => `${x.route!.method} ${x.route!.path}`))
   assert.equal(new Set(routeKeys).size, routeKeys.length, '(method, path) 有重复')
   assert.equal(routeKeys.length, 127, `路由通道（panel+ops）应恰 127 条，实得 ${routeKeys.length}（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor 随 doctor 退役；#256 −6：GET /courses、POST /node/pin、/proposals/impact、/review、/seed/propose、PUT /day-cutoff 死路由退役）`)

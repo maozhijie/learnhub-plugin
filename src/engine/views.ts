@@ -76,7 +76,7 @@ export type {
 // Graph*ProposalResult 四型住 proposals.ts（提案域词汇，#152 刀 5 归位——projects 的
 // 窄面引用它们，经 views barrel 会绕出类型环）。
 export type {
-  GraphEditProposalResult, GraphEnrichProposalResult, GraphProposeResult,
+  GraphEditProposalResult, GraphEnrichProposalResult, GraphProposeResult, ConceptApplyResult,
 } from './views/proposals.ts'
 // 图谱域：edit（变更）与 enrich（富化覆盖层，#140）。
 

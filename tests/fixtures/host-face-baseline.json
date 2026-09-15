@@ -92,6 +92,7 @@
   "bank2.errorCardMine",
   "bank2.questionGet",
   "dataCheck",
+  "graph.conceptConfusableCandidates",
   "graph.conceptMerge",
   "graph.graphBrowse",
   "graph.graphLinkBackfill",

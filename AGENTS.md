@@ -34,10 +34,12 @@ Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `doc
 - 改动面**含公共面**（必填字段、导出面、白名单、配置形状、端口契约）→ **图查询是必做步骤，不是可选项**。漏一个构造点/消费方的代价是运行期 `undefined`；而 `rg` 只覆盖文本层、`trace_path` 又会把「解析不出来」返回成 `0`（见下），两者都会替你掩盖这个漏。
 - 问的是**定位**——已确知名字/路径，只想找出它在哪、或读某处实现 → **直接 `SearchCodebase`/`Grep`/`Read`，不必上图**。
 
+**判据跟着问题走，不跟着任务阶段走（防中途漂移）**：「先判」不是任务开头判一次就完——开局以定位起步完全合法（读 ADR、读要改的文件），但实现中途、收尾验证时**每一个新问题都重新过一遍上面的判据**。本仓实测的事故形态（#264/#265 会话，2026-09-15）：开局定位合法 → 设计定了之后继续用 `grep -rn`/`Read` 回答「谁还调用 merge / 谁消费 PROPOSAL_KINDS / 还有哪些注入面」这类闭合性问题 → 直到被用户点名才发现全程没跑过一次图查询。**发现自己正要拿 `grep -rn` 回答「还有谁 / 会不会漏 / 改这个面会不会破别处」，停——那一刻就是点火时机**，不要因为「我已经读过文件了」就把图当冗余验证。
+
 **何时点火（探索期与改动期都算）**：
 
 - 触达 `src/` 的只读探索/调研：当你要回答上面那类**闭合性问题**、或自己拿不准「这件事在哪发生」时，先跑一次图再进文件。
-- 改函数/常量/白名单/导出面**之前**：`trace_path(function_name="X", direction="inbound", project="C-Users-test-Desktop-my-learnhub-plugin")` 看调用面——改公共面特别值得。**但它只对自由函数可靠**：接收者是注入对象/参数的方法调用（`agent.gateRepairRound(...)`）在图上记成 `USAGE` 不是 `CALLS`，`trace_path` 会返回 `callers_total: 0` —— **这个 0 与「真的没有调用方」同形**（2026-09-15 实测：`gateRepairRound` 有 3 个生产调用点却报 0）。方法调用改用 `query_graph` 取 `CALLS`+`USAGE` 两种边，查询式与实测对照见 `docs/agents/code-index.md` §本仓拿它做什么 第 1 条。
+- 改函数/常量/白名单/导出面**之前**：`trace_path(function_name="X", direction="inbound", project="C-Users-test-Desktop-my-learnhub-plugin")` 看调用面——改公共面特别值得。**但它只对自由函数可靠**：接收者是注入对象/参数的方法调用（`agent.gateRepairRound(...)`）在图上记成 `USAGE` 不是 `CALLS`，`trace_path` 会返回 `callers_total: 0` —— **这个 0 与「真的没有调用方」同形**（2026-09-15 实测：`gateRepairRound` 有 3 个生产调用点却报 0）。方法调用改用 `query_graph` 取 `CALLS`+`USAGE` 两种边，查询式与实测对照见 `docs/agents/code-index.md` §本仓拿它做什么 第 1 条。**这条说的是「换对的工具」，不是「图不可靠」**：0 的修正案就是那一条 `query_graph` 查询式（一条够用），不是退回 grep——grep 只有文本层，恰恰回答不了这条查询要答的闭合性。拿「trace_path 会报 0」当整体跳过图的理由，是把单个工具的已知坑读成了图的死刑（同会话实测：换成 `query_graph` 后一次查清 `ConceptRegistry.merge` 的全部入边与 `PROPOSAL_KINDS` 的全部消费方）。
 - 要下**否定/穷尽**结论（「没有 X 调用它」）**之前**：`index_status` + `check_index_coverage` 查一眼覆盖，并 grep 被 `parse_partial`/`skipped` 标记的行段——图是 best-effort，「图上没有」**不等于**「代码里没有」。**`trace_path` 报 0 时同样按这条办：0 是待证伪的信号，不是结论。**
 - 收尾可跑 `detect_changes(project=…)` 看 blast radius 作第二意见（符号按**上一次索引**解析，新加的导出符号它还不知道）。
 
@@ -53,7 +55,7 @@ Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `doc
 
 **调用前须知**：MCP 工具的 schema 住 `mcps\codebase-memory-mcp\tools\<tool>.json`（首次调用任一工具前先 `Read` 它一次）；`project = C-Users-test-Desktop-my-learnhub-plugin`。
 
-**收尾点名（自检）**：动过或探索过 `src/` 的任务，若跑过图查询，把（工具名 + 目标 + 结论）与 blast radius 一行写进收尾报告——省审阅者很多事。**若这次确有闭合性问题却没有任何图查询记录，视为漏步**；反过来，纯定位/纯文档/叶子改动**没有**图查询不算漏步。
+**收尾点名（自检门，两问——答「是」而查无图记录 = 当场补查再收尾）**：动过或探索过 `src/` 的任务，写收尾报告**之前**先过两问：① 这次**回答过闭合性问题吗**（哪怕只是顺手确认了一句「还有谁引用它」）？② 改动面**碰了公共面吗**（导出面 / 白名单 / 提案 kind / 工具面 / 契约类型这类）？任一问答「是」而没有任何图查询记录 = **漏步，正确动作是当场把查询补跑掉**（结果照样点名），不是在报告里承认一句「漏了」就算完——漏步的报告不豁免漏掉的查询。跑过图查询的，把（工具名 + 目标 + 结论）与 blast radius 一行写进收尾报告——省审阅者很多事。反过来，纯定位/纯文档/叶子改动**没有**图查询不算漏步，也不必为了点名而造查询（防滥用条款照常生效）。
 
 
 

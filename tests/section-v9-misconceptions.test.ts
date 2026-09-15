@@ -312,6 +312,7 @@ test('errorCardGenerate：材料附「误解先验（出生期候选错法）」
     tag: 'v9-errcard-',
     graph: MISC_GRAPH,
     banks: { 入门: ERR_BANK },
+    files: REGISTRY, // #264 错误卡在册对照：先验概念须在册才进材料（不在册被拦并报告）
   }, async ({ engine }) => {
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: 'B', correct: false, judge: 'single_choice', qid: 'q1', ts: '2026-09-07T10:00:00' })
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 2, answer: 'B', correct: false, judge: 'single_choice', qid: 'q1', ts: '2026-09-08T10:00:00' })

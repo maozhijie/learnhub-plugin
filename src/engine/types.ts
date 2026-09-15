@@ -246,9 +246,12 @@ export interface ReviewRec {
 
 /** 提案 kind 全集（P-2 泛化：图谱域 edit + 项目域 project_plan/project_milestone
  * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制）+ 覆盖域 enrich（schema v2
- * 出生/覆盖层分家，#127/#131：回填通道，sha256 内容指纹，只补写图谱可对照字段））。
+ * 出生/覆盖层分家，#127/#131：回填通道，sha256 内容指纹，只补写图谱可对照字段）
+ * + 概念层治理域 concept_merge / confusable_pair（#265 / ADR-0084：合并是这套系统里
+ * **唯一的不可逆动作**，走「提案 + 人确认」两段式；混淆对候选从题目共现派生、人审
+ * 一次一条——两者都绝不自动入册，确认门是人的动作）。
  * 种子（seed，#256 / ADR-0082）已退役：图谱结构由生长批/编辑提案铺。 */
-export const PROPOSAL_KINDS = ['edit', 'enrich', 'project_plan', 'project_milestone', 'experiment'] as const
+export const PROPOSAL_KINDS = ['edit', 'enrich', 'project_plan', 'project_milestone', 'experiment', 'concept_merge', 'confusable_pair'] as const
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
 
 /** 提案状态全集（store 全留痕：pending/applied/rejected；#172 起字面量数组收敛于此）。 */

@@ -66,7 +66,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
   // 生成任务注册表恢复（fire-and-forget）：running 标失败、queued 保留但队列暂停
   restoreGenJobs(rt)
 
-  // —— agent 工具面（111 个，按域分组注册）——
+  // —— agent 工具面（112 个，按域分组注册）——
   registerTools(ctx, rt)
 
   // —— 客户端面板 HTTP 路由 ——
@@ -81,7 +81,7 @@ export function apply(ctx: Context, config?: LearnhubConfig) {
     'learnhub: panel SPA (web/dist)',
   )
 
-  console.log(`[learnhub] plugin loaded: vault=${rt.vault}, center=${rt.vault}/${rt.centerRel}, 111 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
+  console.log(`[learnhub] plugin loaded: vault=${rt.vault}, center=${rt.vault}/${rt.centerRel}, 112 tools registered (pure TS engine), page at ${PAGE}, API at ${API}/*`)
 
   // 加载自检：不依赖模型直接跑一次 status，验证引擎通路。
   void rt.engine.statusJson()

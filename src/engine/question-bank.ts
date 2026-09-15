@@ -591,6 +591,18 @@ export class BankSubsystem {
     // 图视图加载一次（fail loud——图 Broken 不能被静默读成先验缺席，Missing/Broken 两态
     // 不混同）；节误解先验（#147 出生期候选错法）取材于此，先验缺席仍合法。
     const { graph, state } = await this.e.loadView(c)
+    // 错误卡引用的概念名在册对照（#264 / 父 #260）：误解先验进提示词材料前过一遍登记表
+    // 在册集——与节点三面（teaches/assumes/misconceptions 受理门）、题目 invokes **同一
+    // 口径**。读侧纪律照 ADR-0071：登记表 Broken 不拦生成（照旧出卡，只是本门不生效）；
+    // 但**读到的名字不在表**的一律拦在材料之外并如实报告——静默喂给模型等于把悬空地址
+    // 洗成「先验」。
+    let conceptNames: Set<string> | null = null
+    try {
+      conceptNames = namesOf(await this.e.concepts.load(c.root))
+    } catch {
+      conceptNames = null
+    }
+    const unregistered: Array<{ node: string; concept: string }> = []
     const skipped: string[] = []
     interface Mat { node: string; qid: string; section: string | null; sectionBody: string | null }
     const mats: Array<Mat & { material: string }> = []
@@ -624,6 +636,12 @@ export class BankSubsystem {
       }
       const wrongs = x.wrongs.map(w => `「${w}」`).join('、')
       const mis = graph.misconceptionsOf[x.node] ?? []
+      // 在册对照（#264）：一遍分区——在册的进材料，不在册的逐条记进报告面
+      const misKept: typeof mis = []
+      for (const m of mis) {
+        if (conceptNames && !conceptNames.has(m.concept)) unregistered.push({ node: x.node, concept: m.concept })
+        else misKept.push(m)
+      }
       mats.push({
         node: x.node, qid: x.qid, section: q.section ?? sectionTitle,
         sectionBody,
@@ -635,7 +653,7 @@ export class BankSubsystem {
           `- 原题正确答案：${typeof q.answer === 'boolean' ? (q.answer ? '对' : '错') : String(q.answer)}`,
           ...(q.explanation ? [`- 原题解析：${q.explanation}`] : []),
           `- 学习者的错答（去重，最近在前）：${wrongs}`,
-          ...(mis.length ? [`- 误解先验（出生期候选错法；「干扰做法」项可从中改编，mine 仍以学习者错答为准）：${mis.map(m => `${m.concept}（${m.model}）`).join('；')}`] : []),
+          ...(misKept.length ? [`- 误解先验（出生期候选错法；「干扰做法」项可从中改编，mine 仍以学习者错答为准）：${misKept.map(m => `${m.concept}（${m.model}）`).join('；')}`] : []),
           ...(sectionBody ? [`- 来源节「${sectionTitle}」正文节选：${sectionBody}`] : []),
         ].join('\n'),
       })
@@ -680,7 +698,11 @@ export class BankSubsystem {
         v.spec!.cards.map(({ kind: _kind, id: _id, source_node: _sn, archived: _a, fsrs: _f, stats: _st, ...rest }) => rest))
       generated.push({ node, ids: r.ids, count: r.count })
     }
-    return { course: c.name, generated, ...(skipped.length ? { skipped } : {}) }
+    return {
+      course: c.name, generated,
+      ...(skipped.length ? { skipped } : {}),
+      ...(unregistered.length ? { unregistered_concepts: unregistered } : {}),
+    }
   }
 
 

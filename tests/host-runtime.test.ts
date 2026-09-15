@@ -6,7 +6,7 @@
  *   - quizJobResults 等待语义：agent 工具同步语义（入队 + 等终态 + 读结果表）、超时与消失 fail loud
  *   - 工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变（tests/fixtures/host-tools-snapshot.json，
  *     由重构前的 src/index.ts mock-apply 捕获；#256 −1：learnhub_project_decompile_apply 退役）
- *   - 「路由 ↔ 工具」对账基线：87 共享引擎入口 / 工具独有 25 / 路由独有 54
+ *   - 「路由 ↔ 工具」对账基线：87 共享引擎入口 / 工具独有 26 / 路由独有 54
  *     （tests/fixtures/host-face-baseline.json，ADR-0045 命令注册表迁移的回归网；
  *     #240 / ADR-0076 建课改模式后路由面 +3：graph.createCourse/addEndpoint/removeEndpoint；
  *     #256 种子链退役：冒烟管线改走 graphPropose/graphApply 两条入口转共享，pinToday/unpinToday
@@ -1200,16 +1200,16 @@ test('路由分发：static 抽离后 /file、/vendor、/interactive 的守卫�
 
 // ---------------------------------------------------------------- 工具面快照 + 路由↔工具对账
 
-test('工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变（#203 +1）', () => {
+test('工具面快照：112 个工具的名称/描述/schema 与重构前基线逐字不变（#265 +1）', () => {
   const rt = makeRuntime()
   const captured: Array<{ name?: string; description?: string; parameters?: unknown; output?: unknown }> = []
   registerTools(fakeCtx(captured), rt)
-  assert.equal(captured.length, 111, '工具总数不变（注册顺序按域分组重排，逐工具逐字不变；#203 +1 receipt_review_mode；#256 −1 project_decompile_apply）')
+  assert.equal(captured.length, 112, '工具总数（#265 +1 learnhub_concept_confusable_candidates；描述漂移仅限本票三处：graph-propose/graph-proposals/concept-merge）')
   const snapshot = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-snapshot.json'), 'utf8')) as
     Array<{ name: string; description: string; parameters: unknown }>
-  assert.equal(snapshot.length, 111)
+  assert.equal(snapshot.length, 112)
   const byName = new Map(captured.map(t => [t.name, t]))
-  assert.equal(byName.size, 111, '工具名无重复')
+  assert.equal(byName.size, 112, '工具名无重复')
   for (const expect of snapshot) {
     const got = byName.get(expect.name)
     assert.ok(got, `缺工具 ${expect.name}`)
@@ -1247,7 +1247,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：87 共享引擎入口、工具独有 25、路由独有 54（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、路由独有 54（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -1291,7 +1291,7 @@ test('路由↔工具对账基线：87 共享引擎入口、工具独有 25、�
   // #248 / ADR-0077 卡点自报：三个引擎写点（落账/待消费/消费标记）仅路由面（面板
   // 通道 handler 与生长批执行器消费，agent 工具面不直接触卡点自报）
   assert.equal(shared.length, 87)
-  assert.equal(toolOnly.length, 25, '#215：content2.contentCheck 转共享（冒烟复跑质检门），工具独有 26→25')
+  assert.equal(toolOnly.length, 26, '#265 +1：graph.conceptConfusableCandidates（候选派生只走 agent 工具面）；#215 前例：content2.contentCheck 转共享')
   assert.equal(routeOnly.length, 54, '#256：−content2.contentReview/−graph.seedPropose/−proposals.proposalImpact/−sched2.setDayCutoff（种子链+day-cutoff 退役）；#255 −1：doctor 随 doctor 退役')
 })
 

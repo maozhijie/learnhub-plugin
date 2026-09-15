@@ -696,7 +696,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "graph.conceptMerge(\"1\",\"1\",\"1\")"
+   "graph.conceptMerge(\"1\",\"1\",\"1\",undefined)"
   ]
  },
  {
@@ -733,6 +733,30 @@
   "queued": false,
   "text": "",
   "error": "invalid arguments: missing required property \"into\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_concept_confusable_candidates · 全参",
+  "tool": "learnhub_concept_confusable_candidates",
+  "args": {
+   "course": "1",
+   "max": 1
+  },
+  "queued": false,
+  "text": "[]",
+  "calls": [
+   "graph.conceptConfusableCandidates(\"1\",1)"
+  ]
+ },
+ {
+  "id": "learnhub_concept_confusable_candidates · 缺 course",
+  "tool": "learnhub_concept_confusable_candidates",
+  "args": {
+   "max": 1
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"course\"",
   "calls": []
  },
  {

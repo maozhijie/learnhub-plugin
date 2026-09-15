@@ -24,6 +24,9 @@ const KIND_LABELS: Record<string, { label: string; color: string }> = {
   project_plan: { label: '项目计划', color: 'purple' },
   project_milestone: { label: '里程碑', color: 'purple' },
   experiment: { label: '实验开跑', color: 'green' },
+  // #265：概念层治理动作——合并不可逆（只并入、不拆分），易混对候选接受后才入册
+  concept_merge: { label: '概念合并（不可逆）', color: 'red' },
+  confusable_pair: { label: '易混对候选', color: 'magenta' },
 }
 const kindLabel = (kind: string) => KIND_LABELS[kind] ?? { label: kind, color: 'orange' }
 

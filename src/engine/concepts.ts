@@ -13,6 +13,15 @@
  * 易混对 / 档位）与候选面退出；清标记即完全恢复（写侧只落 `true`，false 等同缺席）。
  * 条目仍禁删、仍只并入：退役走「标记」，不走删除。
  *
+ * 写侧门与量级纪律（v0.3，#264 / 父 #260）：铸名受理门对本批新名做**近似名预检**（字符
+ * trigram Jaccard，与题目侧查重同算法族，**软提示不拒收**——精确撞名的硬拒语义不变）；
+ * 登记表有**量级告警带**（别名条数、混淆对条数各 WARN/ERROR 两档，报到读面与人审回执，
+ * **不拒收**：别名是历史地址，拦下即断读）；混淆对**注入有上限**、超限按稳定序截断并
+ * 如实披露（组装面在 content.ts）。
+ *
+ * 治理回路（#265 / 父 #260）：合并与混淆对候选都走**提案 + 人确认**两段式——合并不可逆
+ * （只并入、不拆分），未确认不落盘；候选从**题目共现**派生，人审一次一条，接受后才入册。
+ *
  * 登记机械化无人审：铸名随生长批提案（edit 提案 concepts 块）随图 apply 的写入单元落盘，
  * 人的领域判断只在合并/改名时行使。
  */
@@ -20,6 +29,8 @@ import type { VaultFs } from './io.ts'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './io.ts'
 import type { Paths } from './paths.ts'
+import { trigramSimilarity } from './question-dedup.ts'
+import { round2 } from './grading.ts'
 
 /** 登记表条目：canonical 主名；别名可选（名字并集后历史地址都在这）；定义选填
  * （同形异义与螺旋升档判断的依据，随注入切片给出）；易混对选填（#232：同课程在册
@@ -126,6 +137,215 @@ export function confusablePairsOf(entries: ConceptEntry[], scope: ReadonlySet<st
   }
   return out
 }
+
+/** 混淆对注入上限（#264）：注入产物的条数硬帽——超限按下面 capConfusablePairs 的稳定序
+ * 截断，截断数与理由写在注入文本里（披露纪律：不静默丢）。上限也是量级告警的 WARN 带
+ * （条目混淆对条数越过它 = 该收敛了——见 conceptMagnitudeFindings）。 */
+export const CONFUSABLE_INJECT_CAP = 8
+
+/** 注入产物的截断结果（#264）：pairs = 实际注入的前 cap 条（**稳定序**：confusablePairsOf
+ * 的产出序是登记表文件序的纯函数——同输入恒同序，不排序不重排）；truncated = 被截掉条数。 */
+export interface ConfusableInjection {
+  pairs: Array<{ a: string; b: string }>
+  total: number
+  truncated: number
+}
+
+/** 混淆对注入截断（#264 纯函数）：超上限只取前 cap 条，并把「共几对、截掉几对」如实报出
+ * 供注入文本披露（调用方不得静默丢弃——截断是事实，要写进提示词）。 */
+export function capConfusablePairs(
+  pairs: Array<{ a: string; b: string }>, cap = CONFUSABLE_INJECT_CAP,
+): ConfusableInjection {
+  if (pairs.length <= cap) return { pairs, total: pairs.length, truncated: 0 }
+  return { pairs: pairs.slice(0, cap), total: pairs.length, truncated: pairs.length - cap }
+}
+
+// ---- 混淆对候选派生（#265：从题目共现挖候选，走提案，永不自动入册）----
+
+/** 候选派生的输入：一个节点的题目（各自 invokes 的概念）与误解先验（错答侧涉及的概念）。
+ * 纯数据面——读盘取材（题库 + 图）归调用方，本函数零 IO。 */
+export interface CooccurrenceNode {
+  node: string
+  questions: Array<{ id?: string; q?: string; invokes?: unknown }>
+  /** 节点的误解条目（误解先验）：concept = 该误解针对的概念（错答侧）。 */
+  misconceptions?: Array<{ concept: string }>
+}
+
+/** 一条候选混淆对：a/b = 归一后的条目 canonical（无序对，a/b 只是提案里的书写向），
+ * weight = 共现证据条数（排序用），evidence = 逐条可查的共现证据（人审据此判断）。 */
+export interface ConfusableCandidate {
+  a: string
+  b: string
+  weight: number
+  evidence: string[]
+}
+
+/** 候选派生的单次产出上限（#265）：一次扫描最多产出多少条待审提案——人审队列是人的
+ * 吞吐，一次倒 200 条等于没有队列；其余候选留待下次扫描（已产出的不重复堆）。 */
+export const CONFUSABLE_CANDIDATE_MAX = 20
+
+/** 无序概念对的稳定键（已声明判定与候选去重共用同一身份规则：排序后拼单键）。 */
+export function conceptPairKey(a: string, b: string): string {
+  return [a, b].sort().join('\u0000')
+}
+
+/** 已声明的易混对键集（无序；两端都可解析才算声明——悬空引用不算数，且**任一端废弃即
+ * 退出候选面**：废弃条目不再被提名，ADR-0084 ②）。 */
+export function declaredPairKeys(entries: ConceptEntry[]): Set<string> {
+  const keys = new Set<string>()
+  for (const e of entries) {
+    for (const raw of e.confusable ?? []) {
+      const other = resolveConcept(entries, raw)
+      if (!other || other.canonical === e.canonical) continue
+      if (isDeprecated(e) || isDeprecated(other)) continue
+      keys.add(conceptPairKey(e.canonical, other.canonical))
+    }
+  }
+  return keys
+}
+
+/** 混淆对候选派生（#265 纯函数）：从**题目共现**挖候选——① 同一节点题目各自 invokes 的
+ * 概念对（同一节点的多道题各自指向不同概念 = 这些概念在同一个学习动作里被同时调用）；
+ * ② 错答与正答涉及的概念对（节点误解先验的概念 vs 其题目 invokes 的概念）。两类都只吃
+ * **在册且活跃**的概念名（未在册 = 悬空，废弃 = 退出候选面）；已声明的对不重复提名；
+ * 自指对跳过。产出按 weight 降序、再按名字典序——**同输入同输出**（候选面也要可复现）。 */
+export function confusableCandidates(
+  nodes: CooccurrenceNode[], entries: ConceptEntry[],
+): ConfusableCandidate[] {
+  const declared = declaredPairKeys(entries)
+  const canonicalOf = (name: unknown): string | null => {
+    if (typeof name !== 'string' || !name.trim()) return null
+    const hit = resolveConcept(entries, name.trim())
+    if (!hit || isDeprecated(hit)) return null
+    return hit.canonical
+  }
+  const acc = new Map<string, { a: string; b: string; evidence: string[] }>()
+  const add = (first: string, second: string, line: string): void => {
+    if (first === second) return
+    const key = conceptPairKey(first, second)
+    if (declared.has(key)) return
+    const hit = acc.get(key) ?? { a: first, b: second, evidence: [] }
+    if (!hit.evidence.includes(line)) hit.evidence.push(line)
+    acc.set(key, hit)
+  }
+  for (const n of nodes) {
+    // ① 同节点题目各自的 invokes 概念对
+    const invoked: Array<{ qid: string; concept: string }> = []
+    for (const q of n.questions) {
+      const concept = canonicalOf(q.invokes)
+      if (concept) invoked.push({ qid: q.id ?? q.q?.slice(0, 24) ?? '?', concept })
+    }
+    for (let i = 0; i < invoked.length; i++) {
+      for (let j = i + 1; j < invoked.length; j++) {
+        const x = invoked[i]!
+        const y = invoked[j]!
+        add(x.concept, y.concept,
+          `节点「${n.node}」的题目间共现：${x.qid}→「${x.concept}」、${y.qid}→「${y.concept}」`)
+      }
+    }
+    // ② 错答（误解先验）与正答（题目 invokes）涉及的概念对
+    for (const m of n.misconceptions ?? []) {
+      const wrong = canonicalOf(m.concept)
+      if (!wrong) continue
+      for (const x of invoked) {
+        add(wrong, x.concept,
+          `节点「${n.node}」的误解先验「${wrong}」与其题目 ${x.qid} 的 invokes「${x.concept}」`)
+      }
+    }
+  }
+  return [...acc.values()]
+    .map(v => ({ a: v.a, b: v.b, weight: v.evidence.length, evidence: [...v.evidence].sort() }))
+    .sort((x, y) => y.weight - x.weight || x.a.localeCompare(y.a) || x.b.localeCompare(y.b))
+}
+
+// ---- 近似名预检（#264：铸名软提示，不改精确撞名的硬拒）----
+
+/** 近似名相似度阈值（字符 trigram Jaccard，与题目侧查重 #119 同算法族——同量纲、独立阈值：
+ * 概念名短，0.6 已属「写法近似」）。 */
+export const NEAR_NAME_THRESHOLD = 0.6
+
+/** 一条近似名候选：本批铸名 name 与**在册**名字 existing 的相似度超阈值（父票裁决：
+ * 预检对象是在册名字；批内近似重复不在本门，批内精确重复归 mintConflicts）。 */
+export interface NearNameCandidate { name: string; existing: string; similarity: number }
+
+/** 近似名预检（#264 纯函数）：对本批铸名的**每个新名**（canonical 与别名）与既有在册名字
+ * （canonical ∪ 别名，含废弃条目——废弃地址仍占名位，撞上它同样是重复铸名）做字符级近似
+ * 检测，超阈值即作候选回报。**软提示**：不改精确撞名的硬拒语义（精确相等那一类归
+ * mintConflicts），命中也**不拒收**——由提交方自行决定改名或在提案里说明理由。 */
+export function nearNameCandidates(
+  mints: ConceptEntry[], existing: ConceptEntry[], threshold = NEAR_NAME_THRESHOLD,
+): NearNameCandidate[] {
+  const known = namesOf(existing)
+  const out: NearNameCandidate[] = []
+  const seen = new Set<string>()
+  for (const m of mints) {
+    for (const name of [m.canonical, ...(m.aliases ?? [])]) {
+      for (const other of known) {
+        if (other === name) continue // 精确撞名是硬拒门的业务（mintConflicts 报冲突）
+        const similarity = trigramSimilarity(name, other)
+        if (similarity < threshold) continue
+        const key = `${name}\u0000${other}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({ name, existing: other, similarity: round2(similarity) })
+      }
+    }
+  }
+  return out.sort((a, b) => b.similarity - a.similarity || a.name.localeCompare(b.name) || a.existing.localeCompare(b.existing))
+}
+
+/** 近似名候选 → 可执行提示行（非阻；随受理回执回报，供提交方改名或说明）。 */
+export function nearNameWarnings(candidates: NearNameCandidate[]): string[] {
+  return candidates.map(c =>
+    `近似名提示（非阻）：铸名「${c.name}」与在册名字「${c.existing}」写法近似（相似度 ${c.similarity}）——同一个概念就引用既有名字，确实是另一个概念就在提案 reason 里写明区别；精确撞名照样硬拒`)
+}
+
+// ---- 量级纪律（#264：与节点侧同规格的 WARN/ERROR 带）----
+
+/** 量级告警带（#264）：别名条数与混淆对条数各两档——warn 越过收敛线、error 越过病态线。
+ * 混淆对的 warn 带与注入上限对齐（越过 = 注入面已在截断）。 */
+export const ALIAS_WARN_MAX = 4
+export const ALIAS_ERROR_MAX = 8
+
+export interface ConceptMagnitudeFinding {
+  entry: string
+  field: 'aliases' | 'confusable'
+  count: number
+  band: 'warn' | 'error'
+  message: string
+}
+
+/** 量级告警（#264 纯函数）：逐条目量别名与混淆对条数，超出带即报一条。**只报不拦**——
+ * 别名是历史地址（断读才是违约，见 ADR-0084 ②），量级是「该收敛了」的信号而不是门禁；
+ * ERROR 带是更强的信号（病态量级），随人审回执与 data-check 呈现。 */
+export function conceptMagnitudeFindings(entries: ConceptEntry[]): ConceptMagnitudeFinding[] {
+  const out: ConceptMagnitudeFinding[] = []
+  for (const e of entries) {
+    const aliasCount = (e.aliases ?? []).length
+    if (aliasCount > ALIAS_WARN_MAX) {
+      out.push({
+        entry: e.canonical, field: 'aliases', count: aliasCount,
+        band: aliasCount > ALIAS_ERROR_MAX ? 'error' : 'warn',
+        message: `概念「${e.canonical}」别名 ${aliasCount} 条（WARN 带 >${ALIAS_WARN_MAX}、ERROR 带 >${ALIAS_ERROR_MAX}）：一个身份挂了太多历史地址，考虑是否该并入/复用别的条目`,
+      })
+    }
+    const confusableCount = (e.confusable ?? []).length
+    if (confusableCount > CONFUSABLE_INJECT_CAP) {
+      out.push({
+        entry: e.canonical, field: 'confusable', count: confusableCount,
+        band: confusableCount > CONFUSABLE_INJECT_CAP * 2 ? 'error' : 'warn',
+        message: `概念「${e.canonical}」混淆对 ${confusableCount} 条（WARN 带 >${CONFUSABLE_INJECT_CAP}＝注入上限、ERROR 带 >${CONFUSABLE_INJECT_CAP * 2}）：注入面已按上限截断，先收敛再谈覆盖`,
+      })
+    }
+  }
+  return out
+}
+
+/** 量级告警行（读物：受理回执与体检共用同一文案面）。 */
+export function conceptMagnitudeWarnings(entries: ConceptEntry[]): string[] {
+  return conceptMagnitudeFindings(entries).map(f => `${f.band === 'error' ? 'ERROR 带' : 'WARN 带'}量级告警：${f.message}`)
+}
+
 
 /** 登记表契约校验（读侧门禁与 data-check 共用同一口径）：concepts 列表 + 全部名字
  * 联合唯一。违约行可执行——给出冲突名字与占用位置。 */
@@ -341,6 +561,113 @@ export function mergeConceptEntries(
   return { errors: [], entries: out }
 }
 
+/** 一枚易混对入册（纯函数，#265 人审通过后的执行核）：把 b 写进 a 的 confusable。
+ * **只写提案声明的那个方向**——ADR-0084 ③：写入侧不自动补双向（不无依据地造数据），
+ * 单向是合法的**待复核态**；对称性由读侧呈现、人审补全。地址经精确解析归一，
+ * 任一端不在册 = 错误不落盘；已声明的对幂等成功（重放安全）。 */
+export function addConfusablePair(
+  entries: ConceptEntry[], a: string, b: string,
+): { errors: string[]; entries: ConceptEntry[]; changed: boolean } {
+  const ea = resolveConcept(entries, a)
+  const eb = resolveConcept(entries, b)
+  if (!ea) return { errors: [`「${a}」不在登记表在册（canonical/别名精确匹配）——易混对只对在册条目生效`], entries, changed: false }
+  if (!eb) return { errors: [`「${b}」不在登记表在册（canonical/别名精确匹配）——易混对只对在册条目生效`], entries, changed: false }
+  if (ea.canonical === eb.canonical) {
+    return { errors: [`「${b}」与「${a}」是同一条目——易混对需要两个不同条目`], entries, changed: false }
+  }
+  const key = conceptPairKey(ea.canonical, eb.canonical)
+  if (declaredPairKeys(entries).has(key)) return { errors: [], entries, changed: false } // 已声明：幂等
+  const out = entries.map(e => {
+    if (e.canonical !== ea.canonical) return e
+    const list = [...(e.confusable ?? []), b]
+    return { ...e, confusable: list }
+  })
+  return { errors: [], entries: out, changed: true }
+}
+
+// ---- 治理回路：合并提案与混淆对候选提案（#265 / 父 #260）----
+
+/** 合并提案面（#265 两段式的第一段）：from/into 是**书写地址**（canonical 或别名，提交时
+ * 不做在册归一——提案可能基于旧登记表，归一留在受理门与 apply 双门各自对表）。
+ * `irreversible: true` 恒在场 = 提案面**显式声明不可逆语义**；`irreversible_note`（选填）
+ * 是不可逆全文（CONCEPT_MERGE_IRREVERSIBLE），受理引擎写入、apply 复核被篡改即拒。 */
+export interface ConceptMergeProposalSpec {
+  course: string
+  from: string
+  into: string
+  reason?: string
+  irreversible_note?: string
+}
+
+/** 合并不可逆声明（提案产物面与 apply 复核共用的同一句）。 */
+export const CONCEPT_MERGE_IRREVERSIBLE = '合并不可逆：from 整条并入 into（canonical 降级为别名、名字并集），登记表不提供拆分——旧地址经别名续解析，条目禁删只并入（ADR-0084 ②）。'
+
+const MERGE_KEYS = new Set(['course', 'from', 'into', 'reason', 'irreversible', 'irreversible_note'])
+
+/** 合并提案产物 schema 门（形态；在册归一与撞名归受理门）。 */
+export function validateConceptMergeProposal(doc: unknown): { errors?: string[]; spec?: ConceptMergeProposalSpec } {
+  const errors: string[] = []
+  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return { errors: ['(顶层): 必须是映射（{course, from, into, reason?}）'] }
+  const d = doc as Record<string, unknown>
+  const unknown = Object.keys(d).filter(k => !MERGE_KEYS.has(k))
+  if (unknown.length) errors.push(`(顶层) 含未知字段 ${JSON.stringify(unknown)}（只允许 course/from/into/reason/irreversible）`)
+  const course = typeof d.course === 'string' ? d.course.trim() : ''
+  if (!course) errors.push('course: 不能为空')
+  const from = typeof d.from === 'string' ? d.from.trim() : ''
+  const into = typeof d.into === 'string' ? d.into.trim() : ''
+  if (!from) errors.push('from: 不能为空（被并入条目的书写地址：canonical 或别名）')
+  if (!into) errors.push('into: 不能为空（存续条目的书写地址：canonical 或别名）')
+  if (from && into && from === into) errors.push('into: 不能与被并入的名字相同（合并需要两个不同条目）')
+  if (d.reason !== undefined && (typeof d.reason !== 'string' || !d.reason.trim())) {
+    errors.push('reason: 写了就给内容（合并是人的判断，理由供人审复核）')
+  }
+  if (d.irreversible !== undefined && d.irreversible !== true) {
+    errors.push('irreversible: 只能是 true（合并不可逆是恒定语义，不接受关掉）')
+  }
+  if (d.irreversible_note !== undefined && d.irreversible_note !== CONCEPT_MERGE_IRREVERSIBLE) {
+    errors.push('irreversible_note: 声明文本被篡改（只接受受理引擎写入的原文——不可逆语义不接受改写）')
+  }
+  if (errors.length) return { errors }
+  return {
+    spec: {
+      course, from, into,
+      ...(typeof d.reason === 'string' && d.reason.trim() ? { reason: d.reason.trim() } : {}),
+      ...(d.irreversible_note === CONCEPT_MERGE_IRREVERSIBLE ? { irreversible_note: CONCEPT_MERGE_IRREVERSIBLE } : {}),
+    },
+  }
+}
+
+/** 混淆对候选提案面（#265）：a/b 是**归一后的条目 canonical**（候选由派生面产出，
+ * 已过在册与废弃过滤）；evidence = 共现证据行（人审据此判断「是不是真易混」）。
+ * 接受后**只写 a→b 一个方向**（ADR-0084 ③：单向合法，是待复核态）。 */
+export interface ConfusableCandidateProposalSpec { course: string; a: string; b: string; evidence: string[]; reason?: string }
+
+const CONFUSABLE_CANDIDATE_KEYS = new Set(['course', 'a', 'b', 'evidence', 'reason'])
+
+/** 混淆对候选提案产物 schema 门（形态；在册与撞名归受理门与 apply 双门）。 */
+export function validateConfusableCandidateProposal(doc: unknown): { errors?: string[]; spec?: ConfusableCandidateProposalSpec } {
+  const errors: string[] = []
+  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return { errors: ['(顶层): 必须是映射（{course, a, b, evidence, reason?}）'] }
+  const d = doc as Record<string, unknown>
+  const unknown = Object.keys(d).filter(k => !CONFUSABLE_CANDIDATE_KEYS.has(k))
+  if (unknown.length) errors.push(`(顶层) 含未知字段 ${JSON.stringify(unknown)}（只允许 course/a/b/evidence/reason）`)
+  const course = typeof d.course === 'string' ? d.course.trim() : ''
+  if (!course) errors.push('course: 不能为空')
+  const a = typeof d.a === 'string' ? d.a.trim() : ''
+  const b = typeof d.b === 'string' ? d.b.trim() : ''
+  if (!a) errors.push('a: 不能为空')
+  if (!b) errors.push('b: 不能为空')
+  if (a && a === b) errors.push('b: 不能与 a 相同（对需要两个不同概念）')
+  let evidence: string[] = []
+  if (!Array.isArray(d.evidence) || !d.evidence.length || d.evidence.some(e => typeof e !== 'string' || !e.trim())) {
+    errors.push('evidence: 必须是非空字符串列表（候选必须有来源可查——共现证据是候选的立身之本）')
+  } else {
+    evidence = (d.evidence as string[]).map(e => e.trim())
+  }
+  if (errors.length) return { errors }
+  return { spec: { course, a, b, evidence, ...(typeof d.reason === 'string' && d.reason.trim() ? { reason: d.reason.trim() } : {}) } }
+}
+
 /** 概念登记表读写：文件缺失 Missing 合法空态（load 返回空表）；存在但 YAML/契约坏
  * 抛 Broken（不静默当空表——名字唯一性是全部概念引用的地基，坏了必须 fail loud）。 */
 export class ConceptRegistry {
@@ -381,19 +708,6 @@ export class ConceptRegistry {
     await atomicWrite(this.paths.conceptRegistryPath(root), YAML.stringify({ concepts: entries }), this.fs)
   }
 
-  /** 并入（human 决策执行面）：from 并入 into，名字并集，旧地址经别名续解析。
-   * 失败抛错不改盘。 */
-  async merge(root: string, from: string, into: string): Promise<{ into: string; names: string[] }> {
-    const entries = await this.load(root)
-    const merged = mergeConceptEntries(entries, from, into)
-    if (merged.errors.length) {
-      throw new Error(`[concept-merge] 合并未执行（登记表保持原样）。\n${merged.errors.map(e => `  ✗ ${e}`).join('\n')}`)
-    }
-    await this.save(root, merged.entries)
-    const dst = resolveConcept(merged.entries, into)
-    return { into: dst!.canonical, names: [dst!.canonical, ...(dst!.aliases ?? [])] }
-  }
-
   /** 废弃标记翻转（human 决策执行面）：按名字（canonical 或别名）置/清 deprecated，
    * 清标记 = 字段删除完全恢复。失败抛错不改盘（登记表保持原样）。 */
   async setDeprecated(root: string, name: string, deprecated: boolean): Promise<{ canonical: string; deprecated: boolean }> {
@@ -405,5 +719,19 @@ export class ConceptRegistry {
     await this.save(root, toggled.entries)
     const hit = resolveConcept(toggled.entries, name)!
     return { canonical: hit.canonical, deprecated: isDeprecated(hit) }
+  }
+
+  /** 混淆对入册（human 确认的执行面，#265）：把 b 写进 a 的 confusable（只写一个方向，
+   * 单向是待复核态，ADR-0084 ③）。已在册的对幂等成功。失败抛错不改盘。 */
+  async addConfusable(root: string, a: string, b: string): Promise<{ a: string; b: string; changed: boolean }> {
+    const entries = await this.load(root)
+    const added = addConfusablePair(entries, a, b)
+    if (added.errors.length) {
+      throw new Error(`[concept-confusable] 易混对未入册（登记表保持原样）。\n${added.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    if (added.changed) await this.save(root, added.entries)
+    const ea = resolveConcept(added.entries, a)!
+    const eb = resolveConcept(added.entries, b)!
+    return { a: ea.canonical, b: eb.canonical, changed: added.changed }
   }
 }
