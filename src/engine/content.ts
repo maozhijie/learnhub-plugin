@@ -1198,7 +1198,10 @@ export class Content {
       }
     }
     push(node)
-    const anc = graph.names.filter(n => n !== node && graph.isAncestor(n, node))
+    // 祖先段单一出处 Graph.upstreamClosure（#270）：names 筛 isAncestor 的手写副本退役
+    // （G10 门）。环图行为变更登记：旧实现 reach 空 → 祖先段恒空；现在恢复真实可达集
+    // （ADR-0085 §实现登记 #270，环 fixture 钉在 enc-backfill-audit.test.ts）。
+    const anc = [...graph.upstreamClosure(node)].filter(n => n !== node)
       .sort((a, b) => Content.byDepthDesc(graph, a, b))
     for (const a of anc) push(a)
     return out
@@ -1244,12 +1247,16 @@ export class Content {
       const c = (q.invokes as string).trim()
       cntByConcept.set(c, (cntByConcept.get(c) ?? 0) + 1)
     }
-    // 概念 → 闭包内教它的最近前置（depth 最大；同深名字典序小者；教的节点与闭包没变时结果稳定）
+    // 概念 → 闭包内教它的最近前置（depth 最大；同深名字典序小者；教的节点与闭包没变时
+    // 结果稳定）。候选集单一出处 Graph.taughtByOf（#270 反向映射）：names 全扫退役——
+    // 旧 m===node 与 teachesOf[m] 检查由候选集性质吸收（isAncestor 自身恒 false）。
+    // 环上 depth 作废（全 0）→「最近」退化为名字序——已知退化，环 fixture 钉住
+    // （ADR-0085 §实现登记 #270）。
     const holderOf = new Map<string, { node: string; depth: number }>()
     for (const c of cntByConcept.keys()) {
       let best: { node: string; depth: number } | null = null
-      for (const m of graph.names) {
-        if (m === node || !graph.isAncestor(m, node) || !(c in (graph.teachesOf[m] ?? {}))) continue
+      for (const m of graph.taughtByOf[c] ?? []) {
+        if (!graph.isAncestor(m, node)) continue
         const d = graph.depth[m] ?? 0
         if (!best || d > best.depth || (d === best.depth && m.localeCompare(best.node) < 0)) best = { node: m, depth: d }
       }

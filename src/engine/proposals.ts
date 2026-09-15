@@ -356,8 +356,8 @@ export function consolidationGateErrors(
   operator: GrowthOperator | undefined, ops: EditOp[], graph: Graph,
 ): string[] {
   if (operator !== '巩固') return []
-  const taught = new Set<string>()
-  for (const n of graph.names) for (const c of Object.keys(graph.teachesOf[n] ?? {})) taught.add(c)
+  // 已教概念集单一出处 Graph.taughtByOf（#270 反向映射）：names 全扫折叠退役。
+  const taught = new Set(Object.keys(graph.taughtByOf))
   const errors: string[] = []
   for (const [i, op] of ops.entries()) {
     if (op.op !== 'add_node') continue

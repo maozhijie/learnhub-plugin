@@ -31,16 +31,18 @@ export interface GraphAnalysis {
     enc_edges: number
     roots: number
     leaves: number
-    max_depth: number
+    /** 环上作废为 null（#270 作废署名）：0 会伪装成「全部根级」。 */
+    max_depth: number | null
     components: number
     has_cycle: boolean
   }
-  unreachable: string[]
+  /** 环上作废为 null（#270 作废署名）：[] 会伪装成「全部可达」。 */
+  unreachable: string[] | null
   bottlenecks: Array<{ node: string; successors: number; unlocks: number }>
   lapse_hotspots: Array<{ node: string; lapses: number }>
   /** 图谱健康分（0-100；结束条件锚点，公式与语义见 health.ts）。
    * est_note：est 分布压缩的 advisor 提示（null = 无；不改分，est 重标注属图生成专题）。 */
-  health: { score: number; breakdown: Record<string, number>; est_note: string | null }
+  health: { score: number; breakdown: Record<string, number>; est_note: string | null; topology_void?: string[] }
   /** 分批构建建议（图谱 designer 逐批展开时规划下一批的输入，全部可行动）。 */
   suggestions: {
     /** 节点数 <5 的块（浅块优先，最多 8 个）——往哪扩。 */
@@ -97,9 +99,9 @@ export async function analyzeGraph(
 ): Promise<GraphAnalysis> {
   void parseDay(today)
 
-  // 不可达 = 从任一根出发 BFS 达不到的节点（有环时跳过）
-  const unreachable: string[] = []
-  if (!graph.hasCycle) {
+  // 不可达 = 从任一根出发 BFS 达不到的节点。环上作废为 null（#270 作废署名）：
+  // 「算不出」≠「没有」——空数组会伪装成全部可达。
+  const unreachable: string[] | null = graph.hasCycle ? null : (() => {
     const seen = new Set<string>()
     const queue = graph.roots.slice()
     while (queue.length) {
@@ -108,8 +110,8 @@ export async function analyzeGraph(
       seen.add(u)
       for (const v of graph.succ[u]) if (!seen.has(v)) queue.push(v)
     }
-    unreachable.push(...graph.names.filter(n => !seen.has(n)).sort())
-  }
+    return graph.names.filter(n => !seen.has(n)).sort()
+  })()
 
   // 瓶颈：后继数 top（解锁口径 = succ 中未学者数）
   const bottlenecks = graph.names
@@ -213,8 +215,11 @@ export async function analyzeGraph(
       roots: graph.roots.length,
       // 口径豁免（#200 / ADR-0055）：leaves 剔终点——设计上的收敛点是方向标记，不是缺陷叶子
       leaves: graph.leaves.filter(n => !endpoints.has(n)).length,
-      // 主线深度（原 max_depth，正名不改字段名）：终点计入——课程长到哪里的进度读数
-      max_depth: Object.keys(graph.depth).length ? Math.max(...Object.values(graph.depth)) : 0,
+      // 主线深度（原 max_depth，正名不改字段名）：终点计入——课程长到哪里的进度读数。
+      // 环上作废为 null（#270 作废署名）：depth 空，0 会伪装成「全部根级」。
+      max_depth: graph.hasCycle
+        ? null
+        : Object.keys(graph.depth).length ? Math.max(...Object.values(graph.depth)) : 0,
       components: graph.components.length,
       has_cycle: graph.hasCycle,
     },

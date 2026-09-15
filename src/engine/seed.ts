@@ -286,23 +286,13 @@ export interface CompletionFold {
   closure: { learned: number; total: number }
 }
 
-/** 终点前置闭包 = 终点 + 全部传递前置（环存在时退化为闭包内逐点 BFS）；终点不在图内
- * 时退化为 {终点} 本身（悬空锚由 endpoint_in_graph 呈现，这里不炸）。 */
+/** 终点前置闭包 = 终点 + 全部传递前置。单一出处 Graph.upstreamClosure（#270）：
+ * 无环/环图同一实现（旧「无环走 names 筛 isAncestor、环走内联 BFS」的双分支副本删除，
+ * 是 G10 门第二类的现成样本）；终点不在图内时退化为 {终点} 本身（悬空锚由
+ * endpoint_in_graph 呈现，这里不炸）；悬空前置不入闭包（upstreamClosure 同一容错口径）。 */
 function closureOf(graph: Graph, endpoint: string): Set<string> {
-  const closure = new Set<string>([endpoint])
-  if (!graph.nset.has(endpoint)) return closure
-  if (!graph.hasCycle) {
-    for (const n of graph.names) if (graph.isAncestor(n, endpoint)) closure.add(n)
-  } else {
-    const queue = [endpoint]
-    while (queue.length) {
-      const u = queue.shift()!
-      for (const p of graph.preOf[u]) {
-        if (graph.nset.has(p) && !closure.has(p)) { closure.add(p); queue.push(p) }
-      }
-    }
-  }
-  return closure
+  if (!graph.nset.has(endpoint)) return new Set([endpoint])
+  return graph.upstreamClosure(endpoint)
 }
 
 /** 终点前置闭包健康（能力锚定完成判据的结构可判定部分；audit 的 E 级同款口径，

@@ -107,7 +107,7 @@ test('#201 异常态恢复演练：接线批过受理门 → 复发预防对照 
 
     // ---- 异常态盘点（三病俱全的读数基线） ----
     const doc0 = await engine.graph.graphAnalyze('数学') as {
-      stats: { leaves: number; max_depth: number }
+      stats: { leaves: number; max_depth: number | null }
       nodes: Array<{ data: { id: string; depth: number; isEndpoint: boolean } }>
       schema: Record<string, { pre: string[] }>
     }
@@ -194,7 +194,7 @@ ops:
 
     // ---- 第 5 步：异常态 → 合法态的读数变化 ----
     const doc1 = await engine.graph.graphAnalyze('数学') as {
-      stats: { leaves: number; max_depth: number }
+      stats: { leaves: number; max_depth: number | null }
       nodes: Array<{ data: { id: string; depth: number; isEndpoint: boolean } }>
       schema: Record<string, { pre: string[] }>
     }

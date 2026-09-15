@@ -93,7 +93,7 @@ test('#200 分析载荷：isEndpoint 读锚派生；stats.leaves 剔终点、主
   }, async ({ engine }) => {
     const doc = await engine.graph.graphAnalyze('数学') as {
       endpoints: string[]
-      stats: { leaves: number; max_depth: number }
+      stats: { leaves: number; max_depth: number | null }
       nodes: Array<{ data: { id: string; isEndpoint: boolean } }>
     }
     assert.deepEqual(doc.endpoints, ['终点'])

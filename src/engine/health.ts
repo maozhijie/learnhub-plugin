@@ -52,7 +52,7 @@ export function estSpreadNote(g: EstSpreadSource): string | null {
  * 不是空降缺陷）。 */
 export function graphHealthScore(
   graph: Graph, opts: { endpoints?: ReadonlySet<string> } = {},
-): { score: number; breakdown: Record<string, number> } {
+): { score: number; breakdown: Record<string, number>; topology_void?: string[] } {
   const endpoints = opts.endpoints ?? EMPTY_ENDPOINTS
   const names = graph.names.filter(n => !endpoints.has(n))
 
@@ -100,5 +100,6 @@ export function graphHealthScore(
     structure_hygiene: structureHygiene,
   }
   const score = Math.min(100, Math.round(Object.values(breakdown).reduce((s, v) => s + v, 0)))
-  return { score, breakdown }
+  // 作废署名（#270）：收敛度环上置 0 不是「收敛差」是「算不出」——显式披露，签名只给环。
+  return { score, breakdown, ...(graph.hasCycle ? { topology_void: ['convergence'] } : {}) }
 }

@@ -372,6 +372,7 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | G6 顶层不变量 | 除教练层 `proposals.ts` 外无模块调用图写原语（`GraphStore.writeRegionDoc`，`data/*.yaml` 的唯一写路径） | 硬门 | 绿（唯一调用者就是 `proposals.ts`） |
 | G7 类型门 | `tsc --noEmit`（根 `tsconfig.json`；`module`／`moduleResolution` = `nodenext`、`noEmit`；#178 批3 起 `strict: true`）逐文件错误数卡基线 | 棘轮 | 扫描面 `src/`：**0 处 / 0 个涉错文件**（基线 `typeErrors` 空表）。实测链：main **196 处 / 17 个涉错文件**（未清理）→ #171 **181** → #170 **80 处 / 9 文件** → #168 **75 处 / 11 文件**（错误随代码搬移）→ **#178 四批清零**（批1 门面接线伸进子系统的 31 个 TS2341 放宽为公开面；批2 TS2322 全清 + 两处潜伏 bug；批3 根 tsconfig 转 `strict: true`、24 处残差清零；批4 ui 依赖侧 86 处清零）→ **0/0**。UI 类型门：`ui/src` 0 错、依赖侧存量债 **0 处**（`npm run typecheck` 串行跑） |
 | G8 适配器面 | engine 内时钟直读（`Date.now(`＋无参 `new Date()`，含模板串插值）／`Math.random`／`node:fs` import 数／fs 调用点数四标量卡基线（`scripts/scan-adapter-face.mjs`） | 棘轮 | 实测链：阶段①第一刀 **clockReads 29／mathRandom 0** → 时钟清扫 **clockReads 1**（唯一余量 = io.ts `atomicWrite` tmp 命名的登记例外；`tests/clock-rng-port.test.ts` 断言固定时钟+定长随机流下同输入同输出）→ 阶段② **fsImports 0／fsCalls 0**（engine 内零 node:fs——`VaultFs` 端口住 io.ts、实现住 host/vault-fs.ts、装配住 EngineConfig.fs） |
+| G10 闭包单一出处 | 手写闭包折叠零命中（`scripts/scan-closure.mjs`，2026-09-15 新增，#270 / ADR-0085）：C1a `names.filter(…isAncestor…)`、C1b for-of names 循环体筛 isAncestor、C2 for-of preOf 迭代头 + queue.shift 手写 BFS；豁免＝原语之家 `graph.ts` + `graph-subsystem.ts`（graphPath 链查询白名单，要路径不要集合；#270 已补悬空守卫）。isAncestor 单点判定是合法用法不拦。启发式边界（形态门固有局限，靠评审兜底）：C2 是文件级共现、C1a 只看 filter 头 240 字符窗、解构别名三门全漏 | 硬门 0 | 绿（四处手写折叠退役收成 `Graph.upstreamClosure` + `Graph.taughtByOf`/`assumedByOf` 单一出处；自检：三形态假样本全被抓、原语家与注释豁免、白名单非幽灵） |
 
 门的三处实现事实（照着改时别踩）：
 
@@ -380,12 +381,13 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 - **G6 的白名单是紧的**：`graphApply('enrich')` 从 `growth-subsystem.ts`／`projects.ts` 直调 `proposals.*` 属提案门内的教练层行为，不触本门（ADR-0044 已登记）；原语定义处 `graph.ts` 不算调用者。自检：白名单外的调用（含解构别名）必须被看见。
 - **G7 的扫描面自检靠 `--listFiles`**：测量与诊断同一次 `tsc` 调用取回（`scripts/scan-types.mjs`），门断言「src/ 里每个 `.ts`／`.tsx` 都被 tsc 读到」——只看错误数无法区分「干净」与「根本没扫」，这正是 R3 恒过的形状。另：tsc 只报无文件位置的错（tsconfig 写坏）时测量**抛错**而不是静默返回空集。**typescript 与 @types/node 精确锁版本**：错误数随工具链版本漂移，换档必须与基线同提交。
 - **G7 的收窄档位**：`strict: false` 下真假分支不参与字面量联合收窄（`if (!x.ok)` 不收窄、`if (x.ok === false)` 收窄）——#170 实测，清理时统一改用显式比较。
+- **G10 的 C2 只认迭代头**：初版「`queue.shift()` 与 `preOf[` 同文件共现」实测误报 `analysis.ts`——它的 unreachable BFS 走 `succ`，`preOf[n]` 只是 schema 构造的属性读取；收紧为「`for (… of ….preOf[…])` 迭代头 + queue.shift」后误报消失。教训：共现式判据要锁**同一语句的语法形态**，不能锁文件级文本共现。
 
 棘轮基线与操作（`scripts/arch-baseline.json` + `scripts/arch-baseline.mjs`）：
 
 - 基线记录每个受控量的实测值：逐子系统的声明／实用／接线数与三槽位计数、逐文件行数、**涉错文件的类型错误数**（只记有错的文件，未列出即 0 处）。**基线只在清理提交里下调**；涨了先看这行长在哪、能不能不长。
 - 基线自身也自检**幽灵条目**：删了子系统／文件／修好一个文件却留下基线条目 = 永不复活的门，一并失败。
-- 看当前实测与违规：`node scripts/arch-baseline.mjs`（全部受控量，违规退出 1）；单看类型门：`npm run typecheck`（= `node scripts/arch-baseline.mjs --types`）；单看窄面：`node scripts/scan-deps-face.mjs`；单看规模：`node scripts/scan-budget.mjs`；单看类型清单：`node scripts/scan-types.mjs`；单看顶层不变量：`node scripts/scan-invariant.mjs`；按实测重写基线：`node scripts/arch-baseline.mjs --update`。
+- 看当前实测与违规：`node scripts/arch-baseline.mjs`（全部受控量，违规退出 1）；单看类型门：`npm run typecheck`（= `node scripts/arch-baseline.mjs --types`）；单看窄面：`node scripts/scan-deps-face.mjs`；单看规模：`node scripts/scan-budget.mjs`；单看类型清单：`node scripts/scan-types.mjs`；单看顶层不变量：`node scripts/scan-invariant.mjs`；单看闭包门：`node scripts/scan-closure.mjs`；按实测重写基线：`node scripts/arch-baseline.mjs --update`。
 - 四个「装配」方向（dead 声明未用／missing 用而未声明／unwired 声明未接线／surplus 接线未声明）**不进基线**——它们必须是 0，由 G3 直接卡（这些是装配断裂，不是可以棘轮化的债；`surplus` 在 #171 清到 0 后由棘轮转本档）。
 - `npm test` = **类型门**（`npm run typecheck`）+ 全部规则与行为测试（类型门在 `tests/arch-guards.test.ts` 的 G7 里再跑一次同一份对照，故单独 `node --test` 也拦得住）。
 

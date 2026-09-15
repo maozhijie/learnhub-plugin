@@ -236,17 +236,10 @@ export async function renderConceptFootprint(
     ? entries.filter(e => e.canonical.includes(q) || (e.aliases ?? []).some(a => a.includes(q)))
     : entries
   const { graph } = await deps.loadView(c)
-  const teachers = new Map<string, string[]>()
-  const assumers = new Map<string, string[]>()
-  const fold = (map: Map<string, string[]>, concept: string, node: string): void => {
-    const xs = map.get(concept)
-    if (xs) xs.push(node)
-    else map.set(concept, [node])
-  }
-  for (const n of graph.names) {
-    for (const concept of Object.keys(graph.teachesOf[n] ?? {})) fold(teachers, concept, n)
-    for (const concept of Object.keys(graph.assumesOf[n] ?? {})) fold(assumers, concept, n)
-  }
+  // 概念反向映射单一出处 Graph.taughtByOf/assumedByOf（#270）：names 全扫折叠退役——
+  // 构造期同一趟折出，键序与节点序和手工折叠逐字一致。
+  const teachers = graph.taughtByOf
+  const assumers = graph.assumedByOf
   const invokes = await providers.conceptInvokes()
   const lines = [`## 概念足迹：${c.name}（${hit.length}/${entries.length} 条${q ? `，query=「${q}」` : '（全表——无 query）'}）`, '']
   if (!hit.length) {
@@ -259,8 +252,8 @@ export async function renderConceptFootprint(
   for (const e of hit.slice(0, LIST_CAP)) {
     lines.push(`### ${e.canonical}${isDeprecated(e) ? '（已废弃——地址仍解析、已从生成注入与候选面退出：勿再引用、勿铸同名）' : ''}`)
     lines.push(`- 词条档：${e.aliases?.length ? `别名 ${e.aliases.join('、')}｜` : ''}${e.definition ?? '（无定义）'}`)
-    const taught = teachers.get(e.canonical) ?? []
-    const assumed = assumers.get(e.canonical) ?? []
+    const taught = teachers[e.canonical] ?? []
+    const assumed = assumers[e.canonical] ?? []
     lines.push(`- 教学面：teaches ${taught.length ? taught.join('、') : '（无节点教它）'}｜assumes ${assumed.length ? assumed.join('、') : '（无节点假设它）'}`)
     const byNode = invokes.get(e.canonical)
     if (byNode?.size) {

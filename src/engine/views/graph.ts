@@ -70,15 +70,18 @@ export interface GraphDoc {
     enc_edges: number
     roots: number
     leaves: number
-    max_depth: number
+    /** 环上作废为 null（#270 作废署名）：0 会伪装成「全部根级」。 */
+    max_depth: number | null
     components: number
     has_cycle: boolean
   }
-  unreachable: string[]
+  /** 环上作废为 null（#270 作废署名）：[] 会伪装成「全部可达」。 */
+  unreachable: string[] | null
   bottlenecks: Array<{ node: string; successors: number; unlocks: number }>
   lapse_hotspots: Array<{ node: string; lapses: number }>
-  /** 图谱健康分（0-100；结束条件锚点）。est_note：est 分布压缩的 advisor 提示（null = 无）。 */
-  health: { score: number; breakdown: Record<string, number>; est_note: string | null }
+  /** 图谱健康分（0-100；结束条件锚点）。est_note：est 分布压缩的 advisor 提示（null = 无）。
+   * topology_void（#270 作废署名）：环上置 0 的分项名单（如 convergence）。 */
+  health: { score: number; breakdown: Record<string, number>; est_note: string | null; topology_void?: string[] }
   /** 分批构建建议（图谱 designer 逐批展开时规划下一批的输入，全部可行动）。 */
   suggestions: {
     /** 节点数 <5 的块（浅块优先）——往哪扩。 */

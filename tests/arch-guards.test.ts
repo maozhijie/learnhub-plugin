@@ -10,6 +10,7 @@
  *   G5 文件规模           —— 棘轮（逐文件行数卡基线；views 叶子／types.ts 大表在白名单外）
  *   G6 顶层不变量         —— 硬门（除教练层 proposals.ts 外无模块调用图写原语）
  *   G7 类型门             —— 棘轮（`tsc --noEmit` 逐文件错误数卡基线；扫描面 src/）
+ *   G10 闭包单一出处      —— 硬门（手写 names 筛祖先 / preOf BFS 折叠零命中；#270 / ADR-0085）
  *
  * 两条铁律（ADR-0047，两条都来自实测教训）：
  *   ① **带自检**：每个门构造一个必然违规的样本并断言门会失败；收集器类门另断言它能看见
@@ -19,7 +20,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -32,6 +33,7 @@ import { BASELINE_FILE, measure, readBaseline, depsFaceViolations, sizeViolation
 import { countAdapterFace, adapterFaceTotals, adapterFaceViolations } from '../scripts/scan-adapter-face.mjs'
 import { sameTransactionHits, writeUnitCallCounts, writeUnitViolations, srcFilesOf } from '../scripts/scan-write-unit.mjs'
 import { parseTscOutput, scanTypes, checkedSrc } from '../scripts/scan-types.mjs'
+import { closureFoldSites, forOfNamesBodies, scanClosureFolds, CLOSURE_PRIMITIVE_HOME, CLOSURE_SCAN_WHITELIST } from '../scripts/scan-closure.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = join(ROOT, 'src')
@@ -479,4 +481,53 @@ test('G9 写入单元：src/ 零「同事务」注释，七站点各自经 runWr
   const bad = writeUnitViolations(sameTransactionHits(files), writeUnitCallCounts(files))
   assert.deepEqual(bad, [], `写入单元门不符：
 ${bad.join('\n')}`)
+})
+
+// ---------------------------------------------------------------- G10 闭包单一出处（#270）
+
+test('G10 自检：三类手写折叠形态都会被抓，原语家与注释不触门（门不是恒过）', () => {
+  const sites = closureFoldSites([
+    // C1a：names.filter 链内 isAncestor（#264/#265 事故形态）
+    ['src/engine/rogue-a.ts', 'const anc = graph.names.filter(n => graph.isAncestor(n, node))'],
+    // C1b：for-of names 循环体含 isAncestor（跨行大括号体）
+    ['src/engine/rogue-b.ts', 'for (const n of graph.names) {\n  if (graph.isAncestor(n, node)) out.push(n)\n}'],
+    // C2：for-of preOf 迭代头 + queue.shift（手写 BFS）
+    ['src/engine/rogue-c.ts', 'for (const p of graph.preOf[u]) queue.push(p)\nwhile (queue.length) queue.shift()'],
+    // 原语自己的家不算手写（isAncestor/upstreamClosure/reach 定义处）
+    [CLOSURE_PRIMITIVE_HOME, 'for (const p of this.preOf[u] ?? []) queue.push(p)\nconst anc = this.names.filter(n => this.isAncestor(n, x))'],
+    // 注释里提到形态不触门（否则是假红）
+    ['src/engine/notes.ts', '// 别再写 graph.names.filter(n => graph.isAncestor(n, node)) 了'],
+  ])
+  assert.deepEqual([...sites.keys()].sort(),
+    ['src/engine/rogue-a.ts', 'src/engine/rogue-b.ts', 'src/engine/rogue-c.ts'],
+    '三形态全部被抓；原语家豁免、注释豁免')
+  assert.ok(sites.get('src/engine/rogue-a.ts')![0]!.includes('C1a'))
+  assert.ok(sites.get('src/engine/rogue-b.ts')![0]!.includes('C1b'))
+  assert.ok(sites.get('src/engine/rogue-c.ts')![0]!.includes('C2'))
+})
+
+test('G10 自检：forOfNamesBodies 大括号平衡提取，不吞循环体后的代码', () => {
+  const bodies = forOfNamesBodies('for (const n of g.names) { if (a) { b() } }\nconst after = 1')
+  assert.equal(bodies.length, 1)
+  assert.ok(bodies[0]!.includes('b()'), '嵌套大括号取到平衡点')
+  assert.ok(!bodies[0]!.includes('after'), '平衡提取止于配对大括号')
+  const stmt = forOfNamesBodies('for (const n of g.names) doThing(n)')
+  assert.equal(stmt.length, 1)
+  assert.ok(stmt[0]!.includes('doThing'), '无大括号单语句也提取')
+  const neighbor = forOfNamesBodies('for (const n of g.names) sync(n)\nif (g.isAncestor(a, b)) warn()')
+  assert.equal(neighbor.length, 1)
+  assert.ok(!neighbor[0]!.includes('isAncestor'), '单语句窗口止于语句边界——邻行的合法单点判定不误报（审查 Major#1）')
+})
+
+test('G10 闭包单一出处：src/ 零白名单外的手写闭包折叠；豁免清单非幽灵（#270）', () => {
+  assert.ok(existsSync(join(ROOT, CLOSURE_PRIMITIVE_HOME)), '原语之家必须在场（改名家目录要同步本门）')
+  for (const w of CLOSURE_SCAN_WHITELIST) {
+    assert.ok(existsSync(join(ROOT, w.file)), `白名单文件 ${w.file} 不存在（幽灵豁免，G9 教训）`)
+  }
+  const sites = scanClosureFolds(ROOT)
+  const bad = [...sites.entries()].filter(([f]) => !CLOSURE_SCAN_WHITELIST.some(w => w.file === f))
+  assert.deepEqual(bad, [],
+    '手写闭包折叠复发：前置闭包/祖先集一律走 Graph.upstreamClosure（悬空容错 + 环口径），'
+    + '教授者集合走 Graph.taughtByOf/assumedByOf（构造期反向映射）；链查询（要路径不要集合）'
+    + `才可入白名单。命中：\n${[...bad.keys()].map(f => `${f}: ${sites.get(f)!.join('; ')}`).join('\n')}`)
 })

@@ -166,6 +166,37 @@ test('conceptScopeOf：本节 teaches 在前、祖先按深度浅→深（#148 �
   )
 })
 
+// ---- 环图 fixture（ADR-0085 §环语义裁定 #270）：可达类读数恢复、拓扑序判据退化钉住 ----
+
+test('conceptScopeOf 环图：祖先段从「旧实现恒空」恢复为真实上游闭包（#270）', () => {
+  // A→B→C→A 三角环（pre 边：B 的前置 A、C 的前置 B、A 的前置 C）；各教一个概念。
+  const graph = graphOf([
+    node({ name: 'A', pre: ['C'], teaches: { ca: '知道' } }),
+    node({ name: 'B', pre: ['A'], teaches: { cb: '知道' } }),
+    node({ name: 'C', pre: ['B'], teaches: { cc: '知道' } }),
+  ])
+  assert.deepEqual(
+    Content.conceptScopeOf(graph, 'B'),
+    ['cb', 'ca', 'cc'],
+    '本节 cb 在前；上游闭包 {A,C} 全部入清单（旧实现 reach 空 → isAncestor 恒 false → 祖先段恒空）；环上 depth 全 0 → 名字序 A<C',
+  )
+})
+
+test('invokesProjection 环图：投影到环内教授者，「最近」退化为名字序 tie-break（#270 已知退化）', () => {
+  // A→B→C→A 环；A 与 C 都教 k，B 的题目 invokes:k。环上 depth 作废（全 0）→
+  // 「最近前置 = depth 最大」退化 → 名字典序小者胜（A）。深度判据的恢复依赖解环。
+  const graph = graphOf([
+    node({ name: 'A', pre: ['C'], teaches: { k: '知道' } }),
+    node({ name: 'B', pre: ['A'] }),
+    node({ name: 'C', pre: ['B'], teaches: { k: '知道' } }),
+  ])
+  assert.deepEqual(
+    Content.invokesProjection(graph, 'B', [{ invokes: 'k' }]),
+    [{ node: 'A', w: 1, note: 'invokes 投影 1/1' }],
+    'A、C 都在 B 的（环）闭包内且都教 k；depth 并列 → 名字序 tie-break 取 A（旧实现 isAncestor 恒 false → 零投影）',
+  )
+})
+
 test('encBackfeedHints：闭包内未落 enc → set_enc 建议；闭包外 → set_pre 建议', () => {
   const graph = graphOf([
     node({ name: '甲' }),

@@ -331,8 +331,9 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
           <Tag size='small'>{s.nodes} 节点</Tag>
           <Tag size='small'>{s.edges} 依赖</Tag>
           <Tag size='small'>{bankSet.size} 有题库</Tag>
-          {/* 图深度（原「主线深度」正名，ADR-0076：多终点下没有单一主线可指；口径不变） */}
-          <Tag size='small' color='magenta'>图深度 {doc.stats.max_depth}</Tag>
+          {/* 图深度（原「主线深度」正名，ADR-0076：多终点下没有单一主线可指；口径不变）。
+              null = 环上作废（#270 作废署名），不是 0。 */}
+          <Tag size='small' color='magenta'>{doc.stats.max_depth === null ? '图深度作废（图有环）' : `图深度 ${doc.stats.max_depth}`}</Tag>
           <Tag size='small' color='gray'>全局总览 · 点节点进入学习</Tag>
         </Space>
         <div className='lh-ml-auto lh-gap-8 lh-row lh-wrap'>

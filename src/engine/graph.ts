@@ -291,8 +291,13 @@ export class Graph {
   difficultyOf: Record<string, number> = {}
   /** name → {概念 → 教学档位}（可选字段；缺席的节点不在表内，schema v2 概念字段组）。 */
   teachesOf: Record<string, Record<string, ConceptTier>> = {}
+  /** 概念 → 按图序（names 序）教它的节点列表（构造期与 teachesOf 同一趟折出，#270：
+   * 概念反向映射单一出处——消费面读这里，不再各自扫全图折叠）。 */
+  taughtByOf: Record<string, string[]> = {}
   /** name → {概念 → 所需档位}（可选字段；缺席的节点不在表内）。 */
   assumesOf: Record<string, Record<string, ConceptTier>> = {}
+  /** 概念 → 按图序假设它的节点列表（构造期与 assumesOf 同一趟折出，#270）。 */
+  assumedByOf: Record<string, string[]> = {}
   /** name → 误解先验列表（可选字段；缺席的节点不在表内）。 */
   misconceptionsOf: Record<string, Misconception[]> = {}
   regionIdxOf: Record<string, number> = {}
@@ -306,11 +311,17 @@ export class Graph {
   order: string[] = []
   hasCycle = false
   cycleNodes: string[] = []
+  /** 拓扑深度（根=0 向下递增）。**环上作废**：保持空表，`hasCycle` 是显式作废旗标——
+   * 消费面不得把「算不出」渲染成「没有/0」（#270 作废署名，ADR-0085 §环语义裁定）。 */
   depth: Record<string, number> = {}
+  /** 后代可达集（succ 方向；不含自身，除非自环）。**全图可算**（环上也真——ADR-0085
+   * §环语义裁定 #270：isAncestor 与 upstreamClosure 同口径，环上祖先判定「算得出真可达」）；
+   * 环图构造退化为逐点 BFS（异常态且规模小，成本可接受）。 */
   reach: Record<string, Set<string>> = {}
   leaves: string[] = []
   roots: string[] = []
-  /** 渲染用边 = 传递约简后的边（[u, v] 升序）。 */
+  /** 渲染用边 = 传递约简后的边（[u, v] 升序）。**环上作废**（空数组 + hasCycle 旗标，
+   * #270 作废署名：空 ≠ 真的没有边）。 */
   edges: [string, string][] = []
   components: string[][] = []
 
@@ -333,8 +344,16 @@ export class Graph {
           if (node.type) this.typeOf[n] = node.type
           if (node.bloom) this.bloomOf[n] = node.bloom
           if (node.difficulty !== undefined) this.difficultyOf[n] = node.difficulty
-          if (node.teaches && Object.keys(node.teaches).length) this.teachesOf[n] = node.teaches
-          if (node.assumes && Object.keys(node.assumes).length) this.assumesOf[n] = node.assumes
+          if (node.teaches && Object.keys(node.teaches).length) {
+            this.teachesOf[n] = node.teaches
+            // 反向映射与正向同一趟折出（#270）：本趟遍历序 = names 序，故 taughtByOf[c]
+            // 的节点序与「names 序扫折叠」逐字一致。
+            for (const c of Object.keys(node.teaches)) (this.taughtByOf[c] ??= []).push(n)
+          }
+          if (node.assumes && Object.keys(node.assumes).length) {
+            this.assumesOf[n] = node.assumes
+            for (const c of Object.keys(node.assumes)) (this.assumedByOf[c] ??= []).push(n)
+          }
           if (node.misconceptions?.length) this.misconceptionsOf[n] = node.misconceptions
         }
       }
@@ -375,6 +394,22 @@ export class Graph {
         for (const v of this.succ[u]) {
           s.add(v)
           for (const w of this.reach[v] ?? []) s.add(w)
+        }
+        this.reach[u] = s
+      }
+    } else {
+      // 环语义裁定（ADR-0085 §环语义裁定 #270，选项 a）：环上 reach 也算得出真可达——
+      // isAncestor 与 upstreamClosure 同口径，不得各自为政。作废的只有拓扑序类读数
+      // （depth/edges，hasCycle 为显式旗标）。
+      for (const u of this.names) {
+        const s = new Set<string>()
+        const seen = new Set<string>([u])
+        const queue = [u]
+        while (queue.length) {
+          for (const v of this.succ[queue.shift()!]) {
+            s.add(v)
+            if (!seen.has(v)) { seen.add(v); queue.push(v) }
+          }
         }
         this.reach[u] = s
       }
@@ -426,20 +461,27 @@ export class Graph {
     return this.preOf[n].every(p => done.has(p) || this.opt.has(p))
   }
 
-  /** a 是否为 n 的祖先（pre 传递闭包内，不含自身）。 */
+  /** a 是否为 n 的祖先（pre 传递闭包内，不含自身）。环上也成立（reach 全图可算——
+   * ADR-0085 §环语义裁定 #270：与 upstreamClosure 同口径）。单点判定是合法用法；
+   * names 全扫求祖先集必须走 upstreamClosure（G10 门拦截手写副本）。 */
   isAncestor(a: string, n: string): boolean {
     return a !== n && (this.reach[a]?.has(n) ?? false)
   }
 
-  /** 前置传递闭包（沿 preOf BFS；**含自身**，调用方自行剔除）。
-   * 单一出处：上游图摘要与 `graph_node` 的 `prereq_closure` 共用——两处各写一遍 BFS
-   * 曾让「同一个闭包」有两个实现（口径一致靠注释，不靠代码）。 */
+  /** 前置传递闭包（沿 preOf BFS；**含自身**，调用方自行剔除）。悬空 pre 显式容忍：
+   * 断边名不入闭包不炸（structureCheck / audit E2 负责报告，派生读数只认图内节点；
+   * 悬空名入参退化为 {自身}）。单一出处（#270）：上游图摘要、graph_node 的
+   * prereq_closure、终点闭包（seed.closureOf）、概念清单祖先段（content.conceptScopeOf）
+   * 共用——手写 BFS 副本曾让「同一个闭包」有多个实现（环/无环口径分叉），就地重写
+   * 由 G10 门拦截。 */
   upstreamClosure(n: string): Set<string> {
     const seen = new Set<string>([n])
     const queue = [n]
     while (queue.length) {
       const u = queue.shift()!
-      for (const p of this.preOf[u]) if (!seen.has(p)) { seen.add(p); queue.push(p) }
+      for (const p of this.preOf[u] ?? []) {
+        if (this.nset.has(p) && !seen.has(p)) { seen.add(p); queue.push(p) }
+      }
     }
     return seen
   }

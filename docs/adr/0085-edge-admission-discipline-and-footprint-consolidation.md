@@ -164,3 +164,15 @@
 - 不做「概念足迹」的 UI（#268）。
 
 取号：0085（写前 `ls docs/adr/` 确认，0084 已占）。票面：#267。
+
+## 实现登记·补记（#270，2026-09-15）
+
+「概念足迹收成一处」已由 #270 落地。本节补记结果与两处实现期裁定，上文不动：
+
+- **反向映射**：`Graph` 构造期与正向同趟折出 `taughtByOf` / `assumedByOf`（names 序确定性；`misconceptions` 反向继续不做——准入判据二次适用）。
+- **`upstreamClosure` 守卫**：`nset` 过滤 + `preOf[u] ?? []`——悬空前置不入闭包、悬空名入参退化 `{自身}`（裁定：闭包只认图内节点，保 `foldCompletion` 进度计数与 `closureHealthErrors` 不被断边污染）。第五处 `graphPath` 的 parent 回溯 BFS 同口径补守卫（要**链**不要集合，G10 白名单豁免）。
+- **四处扫描退役**：`conceptScopeOf` 祖先段、`invokesProjection` 候选集、`seed.closureOf`（环图分支内联 BFS 整体删除）、`renderConceptFootprint` 折叠、`consolidationGateErrors` taught 集——全部改读原语。
+- **环语义裁定（选项 a）**：`isAncestor` 在环上也走闭包（环图构造退化为逐点 succ BFS，课程规模可接受），25+ 调用点保持 boolean 契约不变（选项 b「环上作废」需全部调用点处理 void，改动面不成比例）。**depth/edges 保持环上作废**（`hasCycle` 显式旗标）。
+- **作废署名**：「算不出」≠「没有」——`max_depth`/`unreachable` 环上 `null`（不再伪装成 0/[]）；健康分 `topology_void: ['convergence']`；审计环图 INFO 披露「R1/R2/R4/R6 本轮不算」；UI 图深度标签显式「作废（图有环）」。已知退化（环上 depth 并列 → 「最近前置」退化为名字序）由环 fixture 钉住。
+- **防复发门 G10**（`scripts/scan-closure.mjs`，门册已登记）：拦 names 筛 `isAncestor`（链式/for-of 两形态）与 for-of `preOf` + queue.shift 手写 BFS；豁免原语之家与 graphPath 白名单。
+- 验证：`npm test` 全绿（G5 基线 8 文件同提交迁移；G3/G4 零漂移；类型门 0/0）。

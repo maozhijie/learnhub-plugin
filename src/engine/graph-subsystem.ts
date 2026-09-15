@@ -371,7 +371,15 @@ export class GraphSubsystem {
     const queue = [to]
     while (queue.length) {
       const u = queue.shift()!
-      for (const p of graph.preOf[u]) if (!seen.has(p)) { seen.add(p); parent[p] = u; queue.push(p) }
+      // 悬空容错（#270 第五处，与 upstreamClosure 同一口径）：E2 断边名不入队
+      // （无定义、给不出「先学什么」）；?? [] 兜 preOf 键缺席（防御性——现控制流
+      // 入队的恒为图内节点，真正拦悬空的是 nset.has(p)）。
+      for (const p of graph.preOf[u] ?? []) {
+        if (!graph.nset.has(p) || seen.has(p)) continue
+        seen.add(p)
+        parent[p] = u
+        queue.push(p)
+      }
     }
     if (!seen.has(from)) {
       return { course: c.name, from, to, related: false, message: `「${from}」不在「${to}」的前置闭包内。` }
