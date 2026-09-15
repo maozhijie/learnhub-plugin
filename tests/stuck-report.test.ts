@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { stuckReportGate, foldStuckReports, stuckReportInject } from '../src/engine/stuck-report.ts'
 import type { StuckConsumptionRec, StuckReportRec } from '../src/engine/types.ts'
-import { withVault, noteText } from './helpers/vault.ts'
+import { withVault, noteText, localDay } from './helpers/vault.ts'
 import { createHostRuntime } from '../src/host/runtime.ts'
 import type { HostRuntime } from '../src/host/runtime.ts'
 import { handleApi } from '../src/host/api.ts'
@@ -126,13 +126,15 @@ test('引擎落账：原话逐字、course 归一；与作答投影互不可见�
     // 作答投影看不见卡点行：作答统计/激励/聚合零感知
     const answers = await engine.store.practiceAll()
     assert.equal(answers.length, 0)
-    // 激励聚合（streak/热力图数据源）同样零感知：先落一条真作答打底，再报卡点读数不涨
+    // 激励聚合（streak/热力图数据源）同样零感知：先落一条真作答打底，再报卡点读数不涨。
+    // 聚合按真实时钟的学习日入桶（工厂日界 00:00）——硬编码日期会随日子过期（曾红）
     await engine.store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: '2', correct: true, judge: 'ok' })
+    const today = localDay(0)
     const before = await engine.store.activityCounts()
     await engine.growth2.stuckReportAppend('数学', '进阶', '进阶卡住了')
     const after = await engine.store.activityCounts()
-    assert.equal(after['2026-09-14']?.practice, before['2026-09-14']?.practice, '卡点行不进 activityCounts（自报不点亮 streak/热力图）')
-    assert.equal((after['2026-09-14']?.practice ?? 0) >= 1, true, '真作答打底确认聚合本身在工作')
+    assert.equal(after[today]?.practice, before[today]?.practice, '卡点行不进 activityCounts（自报不点亮 streak/热力图）')
+    assert.equal((after[today]?.practice ?? 0) >= 1, true, '真作答打底确认聚合本身在工作')
     // 卡点投影读得到（入门自报 + 激励聚合检查落的那条）
     assert.equal((await engine.store.stuckStreamAll()).length, 2)
     assert.equal(await engine.growth2.stuckPending('数学').then(r => r.length), 2)

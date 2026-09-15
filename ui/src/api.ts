@@ -100,9 +100,6 @@ export const api = {
    * archived = 本次归档题数；取消跳过不自动恢复。 */
   nodeSkip: (course: string, node: string, skipped = true) =>
     http<{ course: string; node: string; stage: string; archived?: number }>('POST', '/node/skip', { course, node, skipped }),
-  /** 「今天学它」pin（E3 #67）：pinned=true 置顶当日推荐榜首（次日自动失效），false 取消。 */
-  pinNode: (course: string, node: string, pinned = true) =>
-    http<{ course: string; node: string; date?: string }>('POST', '/node/pin', { course, node, pinned }),
   nodeComplete: (course: string, node: string, force = false) =>
     http<{ accepted: boolean; accuracy: number | null; course: string; node: string; stage?: string; initialized?: number; due?: string | null; reason?: string }>('POST', '/node/complete', { course, node, force }),
   /** 入队即返回：全局串行队列后台按序生成（同一时刻只跑一个节点管线）。 */
@@ -222,16 +219,11 @@ export const api = {
   /** 记忆健康仪表盘（#61）：负载预报/状态分布/真实保留率/遗忘曲线四面板。 */
   memory: () => http<import('./types').MemoryHealth>('GET', '/memory'),
   setDailyGoal: (goal: number) => http<CommandOutput<'daily-goal'>>('PUT', '/daily-goal', { goal }),
-  review: (course: string, node: string) => http<{ message: string }>('POST', '/review', { course, node }),
   feedback: (path: string) => http<{ message: string }>('POST', '/feedback', { path }),
   proposals: () => http<import('./types').PropItem[]>('GET', '/proposals'),
   proposalApply: (kind: import('./types').PropItem['kind'], id?: number) =>
     http<import('./types').GraphApplyResult | Record<string, unknown>>('POST', '/proposals/apply', { kind, id }),
   proposalReject: (id: number, note = '') => http<{ message: string }>('POST', '/proposals/reject', { id, note }),
-  /** 种子提案影响预览（#159）：reseed/建课应用确认框的知识前置——知情后再确认。 */
-  proposalImpact: (kind: 'seed', id?: number) =>
-    http<import('./types').SeedImpactDoc>('POST', '/proposals/impact', { kind, ...(id !== undefined ? { id } : {}) }),
-  doctor: () => http<import('./types').DoctorDoc>('GET', '/doctor'),
   questionsAll: (course?: string) =>
     http<{ total: number; questions: import('./types').BankEntry[] }>('GET', `/questions-all${q({ course })}`),
   questionAdd: (course: string, node: string, question: Record<string, unknown>) =>

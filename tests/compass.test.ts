@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { withVault, localDay } from './helpers/vault.ts'
+import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import type { Paths } from '../src/engine/paths.ts'
@@ -24,19 +25,6 @@ import { AgentSeam } from '../src/engine/agent.ts'
 // - 沙盘 ETA 每周随周复盘挂载（标记周幂等），措辞锁死「模型推演，非承诺」。
 
 const SEED_VAULT = { registry: null, graph: null }
-
-const CAPABILITY_SEED = `course: 数学
-reason: 常识基线起步的能力锚定课程
-endpoint:
-  name: 用导数解决优化问题
-  region: 基础
-  block: 终点块
-starts:
-  - name: 认识变化率
-    region: 基础
-    block: 起点块
-    basis: baseline
-`
 
 const GOLD_ROUTE = [
   '- **把变化率说成本质**：从日常速度与陡峭感出发建立「变化多快」的直觉，朝导数定义推进。',
@@ -67,14 +55,10 @@ function replayFake(reply: string) {
   return Object.assign(seam, { calls, requests })
 }
 
-async function seedApplied(
-  engine: LearnhubEngine,
-): Promise<{ compass: { state: string; annotations_preserved: boolean } }> {
-  // ADR-0076 种子降职：先建课（名称即空图）+ 手加终点（起草要有方向），种子只给已注册课程起草
-  await engine.graph.createCourse('数学')
-  await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
-  const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-  return await engine.graph.graphApply('seed', r.id) as { compass: { state: string; annotations_preserved: boolean } }
+async function seedApplied(engine: LearnhubEngine): Promise<void> {
+  // #256 种子通道退役：起草夹具直接落盘（等效建课 + 手加终点「导数方向」+ 起草起点/终点），
+  // 罗盘脚手架随起草落盘（与退役前 applySeed 的 compass=scaffold 同态）。
+  await draftCourse(engine, CAPABILITY_DRAFT)
 }
 
 /** 测试用最小罗盘正文（与 compassScaffold 同构）。 */
@@ -107,10 +91,9 @@ test('纯函数：段级合并保留段外字节、未知段原样保留、路�
   assert.deepEqual(validateRouteBody(GOLD_ROUTE), [])
 })
 
-test('AC1 种子 apply 落罗盘脚手架；金样本初画全链：单次 deep 调用、路线落位、批注保留', async () => {
+test('AC1 起草落罗盘脚手架；金样本初画全链：单次 deep 调用、路线落位、批注保留', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
-    const applied = await seedApplied(engine)
-    assert.equal(applied.compass.state, 'scaffold')
+    await seedApplied(engine)
 
     // 脚手架三段式：路线待初画、批注区引导、ETA 待刷新
     const p = paths.compassPath('数学')

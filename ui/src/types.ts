@@ -34,7 +34,7 @@ export interface AgentGuideItem { tool: string; page: string; text: string; prom
 export type {
   AdviceItem, AnkiStatusDoc, AnswerResult, BankEntry, CalibrationAdvice, CalibrationProfileDoc,
   CalibrationSourceProfile, CleanupGroup, CleanupPreviewDoc, DiagnosticEntry,
-  DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult, DoctorDoc, ErrorAnswerResult,
+  DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult, ErrorAnswerResult,
   ErrorArchiveResult, ErrorCardFace, ErrorCardItem, ErrorGenerateResult, ErrorQueueDoc,
   EtaItem, FadingTier, GraphApplyResult, GraphBrowseDoc,
   GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphPathResult, GraphProposeResult,
@@ -42,7 +42,6 @@ export type {
   LearnerCardItem, LearnerCardKind, LearnerForgetResult,
   LearnerQueueDoc, LearnerRateResult, LessonDoc, LessonSection, MemoryHealthDoc as MemoryHealth,
   NoteSourceDoc, NoteSourceItem, NoteSourceRegisterResult, ProposalRec as PropItem,
-  SeedImpactDoc,
   ProjectCrossDoc, ProjectExecRec, ProjectExecResult, ProjectLifecycle,
   QuestionForgetResult, QuestionGetDoc, QuestionItem, QuestionKind, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueCard, QueueItem, RecEvent, RecEventType, RecommendDoc, ReviewCard,

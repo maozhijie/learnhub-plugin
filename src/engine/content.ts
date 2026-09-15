@@ -1442,15 +1442,6 @@ export class Content {
     return version
   }
 
-  /** 人审通过 → content.status=reviewed。 */
-  async review(_root: string, _graph: Graph, node: string, fmOf: (n: string) => Fm | undefined, project: (node: string, fm: Fm) => Promise<void>): Promise<string> {
-    const fm = fmOf(node)
-    if (!fm) throw new Error(`[review] 课程文件不存在: ${node}`)
-    const next = { ...fm, content: { ...fm.content, status: 'reviewed' as const } }
-    await project(node, next)
-    return `[review] ${node} → reviewed（v${fm.content.version}）。`
-  }
-
   // ---- gen-exercises（题组写入练习区；schema 门禁内联） ----
 
   /** 题组 schema 校验（ExerciseSet 同构，手写以输出与旧引擎一致的中文错误行）。 */

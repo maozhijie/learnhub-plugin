@@ -33,10 +33,10 @@ export function applyId(value: unknown): number | undefined {
   return value
 }
 
-/** 图提案/应用工具的 kind：只受理 edit/seed/enrich，其余值当场拒绝（未知 kind 统一拒收）。 */
-export function graphKind(value: unknown): 'edit' | 'seed' | 'enrich' {
-  if (value === 'edit' || value === 'seed' || value === 'enrich') return value
-  throw new Error(`[graph] 非法 kind: ${String(value)}（允许 edit/seed/enrich）`)
+/** 图提案/应用工具的 kind：只受理 edit/enrich，其余值当场拒绝（未知 kind 统一拒收）。 */
+export function graphKind(value: unknown): 'edit' | 'enrich' {
+  if (value === 'edit' || value === 'enrich') return value
+  throw new Error(`[graph] 非法 kind: ${String(value)}（允许 edit/enrich）`)
 }
 
 /** reject 的提案 id：拒绝无省略语义，必须显式正整数。 */

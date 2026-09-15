@@ -21,6 +21,7 @@ import {
 } from '../src/engine/project-exec.ts'
 import { masteryOfFm } from '../src/engine/srs.ts'
 import { withVault } from './helpers/vault.ts'
+import { draftCourse } from './helpers/drafted.ts'
 
 // ---- 图种子：入门(pre 底座) ← 进阶，进阶声明 enc: [入门] ----
 
@@ -248,28 +249,16 @@ test('事件流边界：无 enc 边也回流（行使即回流）/ 空 nodes / �
   })
 })
 
-test('#149 stub 与粗 pre：种子簇节点行使回流 EMA（自身一次）；粗 pre 占位边只记流不回流', async () => {
+test('#149 stub 与粗 pre：起草簇节点行使回流 EMA（自身一次）；粗 pre 占位边只记流不回流', async () => {
   await withVault({ registry: null, graph: null }, async ({ engine, paths }) => {
-    // 种子图（粗占位边：endpoint.pre = starts）+ 项目挂靠种子簇节点
-    await engine.graph.createCourse('数学')
-    const seedYaml = `course: 数学
-goal_type: capability
-endpoint:
-  name: 弹唱目标
-  region: 演奏
-  block: 终点块
-starts:
-  - name: 持琴与手型
-    region: 演奏
-    block: 入手块
-    basis: project
-  - name: 音阶爬格
-    region: 演奏
-    block: 入手块
-    basis: project
-`
-    const sp = await engine.graph.graphPropose('seed', seedYaml) as { id: number }
-    await engine.graph.graphApply('seed', sp.id)
+    // 起草图（粗占位边：endpoint.pre = starts）+ 项目挂靠种子簇节点
+    await draftCourse(engine, {
+      starts: [
+        { name: '持琴与手型', region: '演奏', block: '入手块', basis: 'project' },
+        { name: '音阶爬格', region: '演奏', block: '入手块', basis: 'project' },
+      ],
+      endpoint: { name: '弹唱目标', region: '演奏', block: '终点块' },
+    })
     await engine.project.projectCreate({ name: '练琴计划', goal: '弹小曲' })
     const p1 = await engine.project.projectPlanPropose('练琴计划', PLAN_WITH_NODES('练琴计划', '数学/弹唱目标, 数学/音阶爬格'))
     await engine.graph.projectApply(p1.id)

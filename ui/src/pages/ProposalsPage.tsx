@@ -1,54 +1,24 @@
-/** 提案页：agent 图构建的 seed/edit/enrich 提案（gen 已退役），人审后应用或拒绝（全留痕）。
- * 列表常驻新鲜（8s 轮询 + 手动刷新）——起草完成后提案才出现，人审队列不能是死数据。
- * #159：种子提案应用前先取影响预览（将新建什么、覆盖什么、什么保留），知情后再确认。
- * #156 应用闭环：应用成功触发全局课程树刷新（frame.reload——新课程不刷新浏览器即可见，
- * 跨页流经 learnhub:reload 补拉），并给「查看结果」按钮按提案类型分流（种子→图页、
- * 富化→题库、反编译→项目页）；不强制跳页、可连续处理。 */
+/** 提案页：agent 图构建的 edit/enrich 提案（gen/seed 已退役，存量留痕仍可读），人审后
+ * 应用或拒绝（全留痕）。列表常驻新鲜（8s 轮询 + 手动刷新）——起草完成后提案才出现，
+ * 人审队列不能是死数据。
+ * #156 应用闭环：应用成功触发全局课程树刷新（frame.reload——不刷新浏览器即可见，
+ * 跨页流经 learnhub:reload 补拉），并给「查看结果」按钮按提案类型分流（编辑→图页、
+ * 富化→题库、反编译/项目→项目页）；不强制跳页、可连续处理。 */
 import { Alert, Button, Card, Empty, Message, Modal, Space, Table, Tag, Typography } from '@arco-design/web-react'
 import { useCallback, useState } from 'react'
 import { api } from '../api'
 import { usePolling } from '../hooks/usePolling'
 import type { AppFrame } from '../App'
 import type { ViewKey } from '../lib/router'
-import type { PropItem, SeedImpactDoc } from '../types'
+import type { PropItem } from '../types'
 import { errorMessage } from '../hooks/useCommand'
 
 const { Text } = Typography
 
-/** 种子提案影响预览（人话，ADR-0076：课程必须已注册、起草不覆盖既有锚）：只说引擎真会
- * 做的事——新建节点、现有锚全保留、罗盘仅在缺席时脚手架初建、全保留项。 */
-function SeedImpactPreview({ impact }: { impact: SeedImpactDoc }) {
-  return (
-    <Alert type='info' className='lh-mb-8' content={
-      <Space direction='vertical' size={2}>
-        {impact.current_anchors.length > 0 && (
-          <Text>
-            现有终点「{impact.current_anchors.map(a => a.endpoint).join('、')}」全部保留——起草不覆盖既有锚（同名终点会在受理门被拒）。
-          </Text>
-        )}
-        {impact.new_nodes.length > 0 && (
-          <Text>将新建 {impact.new_nodes.length} 个节点：{impact.new_nodes.join('、')}。</Text>
-        )}
-        {impact.existing_nodes.length > 0 && (
-          <Text type='warning'>
-            「{impact.existing_nodes.join('、')}」与现有图重名：应用会被拒（提案已不适用当前图）——建议拒绝后重提。
-          </Text>
-        )}
-        {impact.compass_reset && <Text>罗盘缺席：将随本提案脚手架初建（已有罗盘原样保留，不重置）。</Text>}
-        {impact.graph_nodes > 0 && (
-          <Text type='secondary'>
-            现有图 {impact.graph_nodes} 个节点连同学习进度、题库与调度全部保留——本轮不删除、不作废任何已有内容。
-          </Text>
-        )}
-      </Space>
-    } />
-  )
-}
-
-/** 提案 kind → 人读标签（gen 仅存量留痕展示）。 */
+/** 提案 kind → 人读标签（gen/seed 仅存量留痕展示）。 */
 const KIND_LABELS: Record<string, { label: string; color: string }> = {
   gen: { label: '建课（退役）', color: 'gray' },
-  seed: { label: '种子', color: 'lime' },
+  seed: { label: '种子（退役）', color: 'gray' },
   edit: { label: '编辑', color: 'orange' },
   enrich: { label: '富化', color: 'cyan' },
   project_plan: { label: '项目计划', color: 'purple' },
@@ -57,14 +27,13 @@ const KIND_LABELS: Record<string, { label: string; color: string }> = {
 }
 const kindLabel = (kind: string) => KIND_LABELS[kind] ?? { label: kind, color: 'orange' }
 
-/** 「查看结果」按提案类型分流（#156；落点接 #209 新结构）：种子→工作台罗盘与图、
- * 富化→工作台题库分栏、反编译双提案→项目页；编辑批落工作台图、项目域落项目页、
- * 实验落洞察。返回视图键 + 需要预置的课程名。 */
+/** 「查看结果」按提案类型分流（#156；落点接 #209 新结构）：编辑批→工作台图、
+ * 富化→工作台题库分栏、项目域（计划/里程碑）→项目页、实验→洞察。
+ * 返回视图键 + 需要预置的课程名。 */
 function resultTarget(p: PropItem): { tab: ViewKey | 'wb.graph' | 'wb.bank'; course?: string } {
   if (p.kind === 'enrich') return { tab: 'wb.bank', course: p.course }
   if (p.kind === 'project_plan' || p.kind === 'project_milestone') return { tab: 'projects' }
   if (p.kind === 'experiment') return { tab: 'insight' }
-  if (p.kind === 'seed' && p.pair != null) return { tab: 'projects' }
   return { tab: 'wb.graph', course: p.course }
 }
 
@@ -97,29 +66,9 @@ export default function ProposalsPage({ frame, course }: { frame?: AppFrame; cou
   }
 
   const apply = async (p: PropItem) => {
-    // 种子提案先取影响预览（#159）：知情后再确认；预览取不到不拦人审，
-    // 但在确认框里明说（面板说真话——不静默退回摘要）
-    let impact: SeedImpactDoc | null = null
-    let impactError: string | null = null
-    if (p.kind === 'seed') {
-      try {
-        impact = await api.proposalImpact('seed', p.id)
-      } catch (err) {
-        impactError = errorMessage(err)
-      }
-    }
     Modal.confirm({
       title: `应用提案 #${p.id}（${kindLabel(p.kind).label}）？`,
-      content: (
-        <Space direction='vertical' size={4} className='lh-full'>
-          {impact && <SeedImpactPreview impact={impact} />}
-          {impactError && (
-            <Alert type='warning' className='lh-mb-8'
-              content={`影响预览失败：${impactError}`} />
-          )}
-          <Text type='secondary'>{p.summary}</Text>
-        </Space>
-      ),
+      content: <Text type='secondary'>{p.summary}</Text>,
       className: 'lh-w-620',
       onOk: async () => {
         setBusy(true)
@@ -163,7 +112,7 @@ export default function ProposalsPage({ frame, course }: { frame?: AppFrame; cou
 
   return (
     <Space direction='vertical' className='lh-full' size={14}>
-      <Alert type='info' content='面板下发的种子/富化/反编译/项目草案与教练回合的生长批提案都汇集在这里人审 → 应用后图结构与 Obsidian 笔记联动落盘（生长批过受理门即自动应用，不在此排队——ADR-0003）。' />
+      <Alert type='info' content='面板下发的富化/反编译/项目草案与教练回合的生长批提案都汇集在这里人审 → 应用后图结构与 Obsidian 笔记联动落盘（生长批过受理门即自动应用，不在此排队——ADR-0003）。' />
       <Card size='small' title='提案列表' className='lh-card'
         extra={<Button size='mini' onClick={() => void load()}>刷新</Button>}>
         {items === null ? null : items.length === 0 ? (

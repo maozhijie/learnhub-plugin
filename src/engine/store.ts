@@ -30,8 +30,7 @@ export { netPracticeRecs } from './grading.ts'
 let stuckAppendChain: Promise<void> = Promise.resolve()
 
 /** 提案逐条最小形状契约（ADR-0053；store 与 data-check 同一出处，防双纪律漂移）：
- * id 正整数、status 三值、artifact 非空字符串（apply 的回读键）、pair 若在必须是正整数。
- * pair 的**存在性**是清单级（指向列表中存在的 id），由 loadProposals 统一核。
+ * id 正整数、status 三值、artifact 非空字符串（apply 的回读键）。
  * 返回错误列表（空 = 合格）。 */
 export function proposalShapeErrors(e: unknown): string[] {
   const p = (e ?? {}) as Partial<ProposalRec>
@@ -41,9 +40,6 @@ export function proposalShapeErrors(e: unknown): string[] {
     errs.push(`status 必须是 pending/applied/rejected（收到 ${JSON.stringify(p.status ?? null)}）`)
   }
   if (typeof p.artifact !== 'string' || !p.artifact.trim()) errs.push('artifact 必须是非空字符串（apply 的回读键）')
-  if (p.pair !== undefined && (!Number.isInteger(p.pair) || (p.pair as number) <= 0)) {
-    errs.push('pair 必须是正整数（同源另一半提案 id）')
-  }
   return errs
 }
 
@@ -226,9 +222,8 @@ export class Store {
   // ---- proposals ----
 
   /** 全部提案（ADR-0053 逐条最小形状契约）：文件缺失 = Missing 合法空态（[]）；存在但
-   * JSON 损坏 / 非数组 / 逐条形状违约 / pair 悬空 = Broken 报出（文案带路径与条目位置）
-   * ——pairApplyBlock 联动守卫与复诊对账吃这些字段的合法性，形状坏会把对账不一致
-   * 静默误判成正常单边。 */
+   * JSON 损坏 / 非数组 / 逐条形状违约 = Broken 报出（文案带路径与条目位置）——形状坏会
+   * 把对账不一致静默误判成正常单条。 */
   async loadProposals(): Promise<ProposalRec[]> {
     let raw: string
     try {
@@ -251,13 +246,6 @@ export class Store {
         throw new Error(`[proposals] ${this.paths.proposalsPath} 第 ${i} 条不满足提案契约（Broken：${errs.join('；')}）：修复或删除该条目后再试。`)
       }
     }
-    const ids = new Set(doc.map(p => (p as ProposalRec).id))
-    for (const [i, e] of doc.entries()) {
-      const pair = (e as ProposalRec).pair
-      if (pair !== undefined && !ids.has(pair)) {
-        throw new Error(`[proposals] ${this.paths.proposalsPath} 第 ${i} 条 pair 悬空（Broken：声明的联动提案 #${pair} 不在清单中）：修复或删除该条目后再试。`)
-      }
-    }
     return doc as ProposalRec[]
   }
 
@@ -267,20 +255,16 @@ export class Store {
 
   /** 新建提案 → id（自增）。artifact 支持路径构造器形态（产物路径含自增 id）——注册表
    * 条目出生即完整，没有「先落空 artifact 再回填」的两段窗口（ADR-0053 契约下空
-   * artifact 是违约形态，注册表任何时刻落盘都必须可通过本类 loadProposals 读回）。
-   * opts.pair = 联动提案 id 出生即写（#149 反编译对：计划半区落盘那一刻就带联动，
-   * 任一时刻崩溃都不会留下可单边 apply 的无守卫半区）。 */
+   * artifact 是违约形态，注册表任何时刻落盘都必须可通过本类 loadProposals 读回）。 */
   async createProposal(
     kind: ProposalRec['kind'], course: string, summary: string,
     artifact: string | ((id: number) => string),
-    opts: { pair?: number } = {},
   ): Promise<number> {
     const list = await this.loadProposals()
     const id = list.reduce((m, p) => Math.max(m, p.id), 0) + 1
     list.push({
       id, kind, course, status: 'pending', summary,
       artifact: typeof artifact === 'function' ? artifact(id) : artifact,
-      ...(opts.pair !== undefined ? { pair: opts.pair } : {}),
       created: nowIsoOf(this.clock.nowMs()), decided: null, decision_note: '',
     })
     await this.saveProposals(list)
@@ -312,27 +296,6 @@ export class Store {
     }
     if (prop.status !== 'pending') throw new Error(`[apply] 提案 #${prop.id} 已 ${prop.status}。`)
     return prop
-  }
-
-  /** 同源双提案单边 apply 守卫（#149 反编译 v8 pair 联动；返回拒收文案，null = 放行）。
-   * 另一半 pending = apply 时序缺口（计划先落盘会让 plan.nodes 引用悬空节点炸消费面）
-   * ——拒收并指向联合入口；applied = 联合 apply 的崩溃恢复续段——放行；rejected =
-   * 双提案应同退，单边生效会让同源产物半挂——拒收（重新反编译产生新对）。
-   * opts.pairApply = 联合入口在两半区之间调用时的豁免旗标。 */
-  static pairApplyBlock(
-    prop: ProposalRec, proposals: ProposalRec[], opts: { pairApply?: boolean } = {},
-  ): string | null {
-    if (!prop.pair || opts.pairApply) return null
-    const sibling = proposals.find(p => p.id === prop.pair)
-    if (!sibling) return `提案 #${prop.id} 声明的联动提案 #${prop.pair} 不存在（同源对账数据不一致，fail loud）——先修复提案记录。`
-    if (sibling.status === 'pending') {
-      return `反编译双提案同进同退：另一半 #${sibling.id}（${sibling.kind}）仍 pending——`
-        + '计划与种子簇必须同时生效（计划引用先有图可解析），用 learnhub_project_decompile_apply 联合 apply；要放弃就两半一起 reject。'
-    }
-    if (sibling.status === 'rejected') {
-      return `反编译双提案同进同退：另一半 #${sibling.id}（${sibling.kind}）已拒——本提案应同退，不单边生效；重新反编译产生新对。`
-    }
-    return null // applied：联合 apply 中途失败后的恢复续段，放行
   }
 
   // ---- snapshots ----

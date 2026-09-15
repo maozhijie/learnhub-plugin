@@ -54,13 +54,9 @@ export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = 
     file: 'engine/agent.ts', witness: ['async gateRepairRound'],
     what: '缝的共享门错修复轮：门错误 + 被拒原文回灌重产恰一次，仍败以站点 fatal 抛两轮死因',
   },
-  seedRepairPrompt: {
-    file: 'engine/seed.ts', witness: ['export function seedRepairPrompt'],
-    what: '种子起草：干跑校验门未过 → 回灌重出完整 YAML 恰一次',
-  },
   decompileRepairPrompt: {
     file: 'engine/project-decompile.ts', witness: ['export function decompileRepairPrompt'],
-    what: '目标反编译：双产物校验/名字对账死因回灌恰一次',
+    what: '目标反编译：产物校验/名字对账死因回灌恰一次',
   },
   invokesOncePerQuestion: {
     file: 'engine/note-source.ts', witness: ['async repairInvokesOnce'],
@@ -121,7 +117,6 @@ export const REPAIR_ROUND_LOCKS: Readonly<Record<string, string | null>> = {
   回执评审: 'repair-policy.test.ts',
   罗盘: 'compass.test.ts',
   课程节生成: 'section-split.test.ts',
-  种子起草: 'seed-proposal.test.ts',
   目标反编译: null,
   教练生长: null,
   里程碑草案: null,
@@ -404,25 +399,6 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     notes: '两段式防锚定（Phase 1 独立解题、明确忽略存储键）——全仓 LLM-as-judge 先例，#223 第二意见门继承此形态',
   },
   {
-    station: '种子起草',
-    templates: ['种子提案'],
-    format: 'yaml',
-    clause: YAML_CLAUSE,
-    allowed: ['单个 YAML 文档（course/mode/reason/goal_type/endpoint/starts（1–3）/worksheet（仅 coverage））'],
-    forbidden: ['代码围栏', '解释性文字', 'est/enc/pre 等种子骨架外字段（粗占位边引擎落）', 'capability 携带 worksheet'],
-    repair: {
-      rounds: 1,
-      mechanism: 'seedRepairPrompt',
-      feedback: '受理门错误原文 + 被拒候选原文回灌（seedRepairPrompt，gateRepairRound 恰一次）',
-      escalate: '修复轮 deep 档',
-    },
-    failureCodes: ['SEED_GATE_FAILED'],
-    sensitivity: '规划',
-    structuredEligible: false,
-    shape: { kind: 'yaml-top', keys: [{ key: 'endpoint', shape: 'object' }, { key: 'starts', shape: 'array' }] },
-    notes: '权威受理门在 proposeSeed（schema/注册表对账/结构/概念对表）；唯一有操作化正反例的站（起点/终点资格 ✗✓）',
-  },
-  {
     station: '教练生长',
     templates: ['教练回合'],
     format: 'yaml',
@@ -462,8 +438,8 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     templates: ['项目目标反编译'],
     format: 'yaml',
     clause: YAML_CLAUSE,
-    allowed: ['单个 YAML 文档双产物（project + plan 半区 + seed 半区；显式目标课程时 seed 半区省略）'],
-    forbidden: ['代码围栏', '解释性文字', '计划引用种子簇与既有结构之外的节点名（名字对账）'],
+    allowed: ['单个 YAML 文档（project + plan 半区；#256 起 seed 半区退役，plan-only）'],
+    forbidden: ['代码围栏', '解释性文字', '计划引用既有结构之外的节点名（名字对账）'],
     repair: {
       rounds: 1,
       mechanism: 'decompileRepairPrompt',
@@ -474,7 +450,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     sensitivity: '规划',
     structuredEligible: false,
     shape: { kind: 'yaml-top', keys: [{ key: 'project', shape: 'string' }, { key: 'plan', shape: 'array' }] },
-    notes: '双提案同进同退（人审联合 apply）；seed 半区起点资格同种子提案判据（v9）',
+    notes: 'plan-only（#256 种子半区退役）：只产计划提案，apply 由 learnhub_project_apply 人审生效',
   },
   {
     station: '计划草案',
@@ -656,15 +632,6 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // 终点状态驱动（交汇优先），主线批接线义务声明 target_endpoints（受理门同步核）。
     version: 7, date: '2026-09-14', changeType: '多终点裁决（#240 / ADR-0076）：note.target_endpoints 进输出契约 + 交汇优先 + 停摆判据改逐终点',
     expectedDelta: '前进/换向含 add_node 的批多出 note.target_endpoints 字段（可多值），ops 必须对每个声明终点携带 set_pre；提示词新增交汇优先纪律与「同节点可进多个终点 pre」的合法性；route 改按终点分节。单终点课程：target_endpoints 仍必填（单元素），其余形态不变',
-  }],
-  种子提案: [{
-    version: 4, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
-    expectedDelta: '种子 schema 从「硬约束 1」移到末段（修复轮同构）；起点/终点资格判据文本不变',
-  }, {
-    // #240 / ADR-0076 第七节：种子降职为结构起草教练——不再建课（课程必须已注册），
-    // 方向取自锚定终点的目标描述，锚全保留、罗盘不重置。
-    version: 5, date: '2026-09-14', changeType: '种子降职（#240 / ADR-0076）：不再建课，方向取自锚定终点，锚全保留',
-    expectedDelta: 'YAML 不再有 mode/goal 相关键与「新课程」分支；提示词立场从「一次建模建课」变「给已注册课程的空图/既有图起草结构」；同终点名起草会被受理门拒（撞锚门）；已注册课程起草的节点 schema 不变',
   }],
 }
 

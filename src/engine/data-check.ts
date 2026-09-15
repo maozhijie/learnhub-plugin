@@ -48,6 +48,7 @@ export type DataCheckReason =
   | 'note_yaml_parse'
   | 'note_schema'
   | 'note_missing'
+  | 'note_orphan'
   | 'question_bank_unreadable'
   | 'question_bank_yaml_parse'
   | 'question_bank_schema'
@@ -77,7 +78,6 @@ export type DataCheckReason =
   | 'proposals_unreadable'
   | 'proposals_json_parse'
   | 'proposals_schema'
-  | 'proposals_pair_dangling'
   | 'proposals_artifact_missing'
   | 'gen_jobs_unreadable'
   | 'gen_jobs_json_parse'
@@ -206,7 +206,8 @@ async function listMarkdown(path: string, fs: VaultFs): Promise<string[]> {
 async function scanNotes(
   findings: DataCheckFinding[],
   courseName: string,
-  courseDir: string, fs: VaultFs): Promise<string[]> {
+  courseDir: string,
+  nodeNames: Set<string>, fs: VaultFs): Promise<string[]> {
   const files = await listMarkdown(courseDir, fs)
   for (const path of files) {
     const where = `课程「${courseName}」笔记 ${path}`
@@ -232,7 +233,18 @@ async function scanNotes(
     }
     const checked = validateNoteFrontmatter(doc)
     const errors = checked.errors
-    if (errors.length) push(findings, 'note', 'broken', 'note_schema', where, errors.join('；'))
+    if (errors.length) {
+      push(findings, 'note', 'broken', 'note_schema', where, errors.join('；'))
+      continue
+    }
+    // 孤儿笔记（#255 / doctor 的 unknown 格并入）：frontmatter 合法但节点名不在图节点集内
+    // ——节点改名/删除后的遗留。笔记本身是合法对象（用户笔记永不判 Broken，ADR-0004），
+    // 故只以 hint 浮出（不进 status）：可见性归体检，处置归人工（删笔记或改名回图）。
+    const node = checked.fm!.node
+    if (!nodeNames.has(node)) {
+      push(findings, 'note', 'hint', 'note_orphan', where,
+        `节点「${node}」不在图内——节点改名/删除后的遗留笔记（推荐、就绪与生成都不再读它；删除该笔记或把节点改回图内即可消解）。`)
+    }
   }
   return files
 }
@@ -356,7 +368,7 @@ async function scanCourse(
     }
   }
 
-  const noteFilesList = await scanNotes(findings, courseName, courseDir, fs)
+  const noteFilesList = await scanNotes(findings, courseName, courseDir, nodeNames, fs)
   const bankCount = await scanBanks(findings, courseName, bankDir, nodes, fs)
   return { graphFiles: graphFiles.length, notes: noteFilesList.length, banks: bankCount, nodes }
 }
@@ -689,7 +701,7 @@ async function scanGenJobs(
 }
 
 /** 提案注册表体检（#193 / ADR-0053 逐条最小形状契约）：文件缺失 = 合法空态（零
- * finding）；JSON 损坏 / 非数组 / 逐条形状违约 / pair 悬空 / 悬空 artifact（提案记录的
+ * finding）；JSON 损坏 / 非数组 / 逐条形状违约 / 悬空 artifact（提案记录的
  * artifact 路径在盘上不存在——propose 落盘后产物被手工挪走或删除）= Broken finding，
  * detail 带定位与原因。返回提案清单（损坏时 null：复诊对账的登记日无从取）——形状
  * 违约条目不阻断其余条目的对账（体检收尽量多的可见性，收严语义归 store.loadProposals）。 */
@@ -718,15 +730,10 @@ async function scanProposals(
     return null
   }
   const list = doc as ProposalRec[]
-  const ids = new Set(list.map(p => p.id))
   for (const [i, e] of list.entries()) {
     const errs = proposalShapeErrors(e)
     if (errs.length) {
       push(findings, 'proposals', 'broken', 'proposals_schema', where, `第 ${i} 条（提案 #${e.id}）：${errs.join('；')}。`)
-    }
-    if (e.pair !== undefined && !ids.has(e.pair)) {
-      push(findings, 'proposals', 'broken', 'proposals_pair_dangling', where,
-        `第 ${i} 条（提案 #${e.id}）pair 悬空：声明的联动提案 #${e.pair} 不在清单中（同源对账数据不一致）。`)
     }
     if (typeof e.artifact === 'string' && e.artifact.trim() && !fs.exists(e.artifact)) {
       push(findings, 'proposals', 'broken', 'proposals_artifact_missing', `提案 #${e.id} 产物 ${e.artifact}`,

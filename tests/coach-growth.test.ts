@@ -6,6 +6,8 @@ import { addDays, todayStr } from '../src/engine/dates.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { parseCompass, sectionBody, SECTION_ROUTE, SECTION_ANNOTATIONS } from '../src/engine/compass.ts'
 import { withVault, noteText } from './helpers/vault.ts'
+import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
+import type { DraftSpec } from './helpers/drafted.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
 
 // 生长批受理（#145/#150 / ADR-0033 滚动教练的裁决产物面）：
@@ -18,24 +20,6 @@ import { AgentSeam } from '../src/engine/agent.ts'
 // - 裁决语义在提示词不测——金样本只锁组装与 schema（首过率/调用数基线对照）。
 
 const SEED_VAULT = { registry: null, graph: null }
-
-/** 种子提案：概念「变化率」随种子铸名、起点/终点 teaches 引用（巩固门的已教概念底座）。
- * ADR-0076：mode 退役，课程先名称建课，方向由手加锚携带。 */
-const CAPABILITY_SEED = `course: 数学
-concepts:
-  - canonical: 变化率
-endpoint:
-  name: 用导数解决优化问题
-  region: 基础
-  block: 终点块
-  teaches: {变化率: 会用}
-starts:
-  - name: 认识变化率
-    region: 基础
-    block: 起点块
-    basis: baseline
-    teaches: {变化率: 会用}
-`
 
 /** 画面里的金样本裁决（模板输出契约：course + note + route + ops [+ concepts]）。
  * ops 缺省 = 默认前进批；ops = [] 显式零操作（ops: []）；concepts = 顶层铸名块。
@@ -130,11 +114,20 @@ function scriptFake(
 }
 
 async function seedApplied(engine: Awaited<ReturnType<typeof withVault>>['engine']): Promise<void> {
-  // ADR-0076 种子降职：先建课（名称即空图）+ 手加终点（起草要有方向），锚追加不覆盖
-  await engine.graph.createCourse('数学')
-  await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
-  const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-  await engine.graph.graphApply('seed', r.id)
+  // #256 种子通道退役：起草夹具直接落盘（等效建课 + 手加终点 + 种子 apply），
+  // 概念「变化率」随批铸名、起点/终点 teaches 引用（巩固门的已教概念底座）。
+  await draftCourse(engine, CAPABILITY_DRAFT)
+}
+
+/** 三起点起草夹具（停机转译/计划注入两测用；无概念铸名）。 */
+const DRAFT_MULTI_START: DraftSpec = {
+  manualEndpoints: [{ name: '导数方向', goalNote: '能用导数解决优化问题' }],
+  starts: [
+    { name: '认识变化率', region: '基础', block: '起点块', basis: 'baseline' },
+    { name: '极限直觉', region: '基础', block: '起点块', basis: 'baseline' },
+    { name: '函数图像', region: '基础', block: '起点块', basis: 'baseline' },
+  ],
+  endpoint: { name: '用导数解决优化问题', region: '基础', block: '终点块' },
 }
 
 /** 巩固门底座核对：种子的 teaches 已让「变化率」成为已教概念。 */
@@ -274,7 +267,7 @@ test('拒收零落盘：裁决未过受理门时罗盘与图零改动、零提�
     await seedApplied(engine)
     const compassPath = paths.compassPath('数学')
     const before = await readFile(compassPath, 'utf8')
-    const journalBefore = await readFile(join(paths.centerRoot, 'state', 'journal.jsonl'), 'utf8')
+    const journalBefore = await readFile(join(paths.centerRoot, 'state', 'journal.jsonl'), 'utf8').catch(() => '')
 
     // 断边裁决（pre 引用不存在的节点）：propose 门拒绝 → coachGrowthBatch fail loud
     const bad = goldVerdict({ ops: [
@@ -294,7 +287,7 @@ test('拒收零落盘：裁决未过受理门时罗盘与图零改动、零提�
     await assert.rejects(() => engine.growth2.coachGrowthBatch('数学', replayFake(badRoute)), /路线门|标题/)
     assert.equal(await readFile(compassPath, 'utf8'), before)
     assert.equal(
-      await readFile(join(paths.centerRoot, 'state', 'journal.jsonl'), 'utf8'),
+      await readFile(join(paths.centerRoot, 'state', 'journal.jsonl'), 'utf8').catch(() => ''),
       journalBefore,
       '零 graph_edit journal',
     )
@@ -386,26 +379,8 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
 test('停机转译：就绪深度满足时不拉回合（零调用）；force 越过后照常受理', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     const declared = todayStr(new Date())
-    // ADR-0076：先建课再手加终点，种子只给已注册课程起草
-    await engine.graph.createCourse('数学')
-    await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
-    const r = await engine.graph.graphPropose('seed', `course: 数学
-endpoint:
-  name: 用导数解决优化问题
-  region: 基础
-  block: 终点块
-starts:
-  - name: 认识变化率
-    region: 基础
-    block: 起点块
-  - name: 极限直觉
-    region: 基础
-    block: 起点块
-  - name: 函数图像
-    region: 基础
-    block: 起点块
-`) as { id: number }
-    await engine.graph.graphApply('seed', r.id)
+    // #256 种子通道退役：起草夹具直接落盘（三起点）
+    await draftCourse(engine, DRAFT_MULTI_START)
     // 三个起点正文就绪（ready=3）；today 移出冷启动首周（required=3）→ 深度满足
     const { writeFile, mkdir } = await import('node:fs/promises')
     for (const node of ['认识变化率', '极限直觉', '函数图像']) {
@@ -501,26 +476,8 @@ test('金样本回放闸：两族金样本首过（首过率对照、调用数�
 test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重裁请求），注入块随包进提示词', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     const declared = todayStr(new Date())
-    // ADR-0076：先建课再手加终点，种子只给已注册课程起草
-    await engine.graph.createCourse('数学')
-    await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
-    const r = await engine.graph.graphPropose('seed', `course: 数学
-endpoint:
-  name: 用导数解决优化问题
-  region: 基础
-  block: 终点块
-starts:
-  - name: 认识变化率
-    region: 基础
-    block: 起点块
-  - name: 极限直觉
-    region: 基础
-    block: 起点块
-  - name: 函数图像
-    region: 基础
-    block: 起点块
-`) as { id: number }
-    await engine.graph.graphApply('seed', r.id)
+    // #256 种子通道退役：起草夹具直接落盘（三起点）
+    await draftCourse(engine, DRAFT_MULTI_START)
     // 三个起点正文就绪（ready=3）；today 移出冷启动首周（required=3）→ 深度满足
     const { writeFile, mkdir } = await import('node:fs/promises')
     for (const node of ['认识变化率', '极限直觉', '函数图像']) {

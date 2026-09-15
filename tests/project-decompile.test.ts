@@ -198,17 +198,16 @@ test('decompileRepairPrompt：修复轮携带原材料 + 上次输出 + 逐条�
 
 // ---- 门面：plan-only 受理（种子降职后只产计划提案）----
 
-test('门面 plan-only（ADR-0076）：受理只落计划提案，seed_proposal/pair.seed 恒 null', async () => {
+test('门面 plan-only（ADR-0076；#256 种子链退役）：受理只落计划提案（无 seed_proposal/pair）', async () => {
   await withVault(DECOMPILE_VAULT, async ({ engine }) => {
     await projectOf(engine)
     const llm = replayFake(decompileYaml('练琴计划'))
     const r = await engine.project.projectDecompile('练琴计划', { course: '数学' }, llm)
     assert.equal(r.repaired, false)
     assert.equal(r.plan_proposal.kind, 'project_plan')
-    assert.equal(r.seed_proposal, null, '种子降职：反编译不再产种子提案')
-    assert.equal(r.pair.plan, r.plan_proposal.id)
-    assert.equal(r.pair.seed, null, 'pair 只剩计划半区')
-    // 提案记录：单提案、无 pair 联动
+    assert.equal('seed_proposal' in r, false, '种子半区退役：反编译不再产种子提案（#256）')
+    assert.equal('pair' in r, false, 'pair 联动机械随种子链退役（#256）')
+    // 提案记录：单提案
     const list = await engine.store.loadProposals()
     assert.equal(list.filter(p => p.status === 'pending').length, 1, '只落计划提案')
     const plan = list.find(p => p.id === r.plan_proposal.id)!
@@ -250,8 +249,6 @@ plan:
     const llm2 = replayFake(planOnly)
     const r = await engine.project.projectDecompile('练琴计划', { course: '吉他' }, llm2)
     assert.equal(r.plan_proposal.milestones, 1)
-    assert.equal(r.seed_proposal, null)
-    assert.equal(r.pair.seed, null)
     const list = await engine.store.loadProposals()
     assert.equal(list.filter(p => p.status === 'pending').length, 1, '只落计划提案')
     // 修订通道照常：apply 带 diff 触发面在 project-domain 测
@@ -295,8 +292,6 @@ test('模型多产 seed 半区：修复轮摘除（ADR-0076 即拒）→ 只落�
     const llm = scriptFake([bad, planOnly])
     const r = await engine.project.projectDecompile('练琴计划', { course: '数学' }, llm)
     assert.equal(r.repaired, true)
-    assert.equal(r.seed_proposal, null)
-    assert.equal(r.pair.seed, null)
     const list = await engine.store.loadProposals()
     assert.equal(list.filter(p => p.status === 'pending').length, 1, '只落计划提案')
     assert.equal(list[0]!.pair, undefined, '单提案无 pair 联动')

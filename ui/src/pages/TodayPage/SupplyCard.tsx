@@ -37,7 +37,7 @@ export function GateCard({ frame, pending }: { frame: AppFrame; pending: number 
           <Text className='today-supply-num'>{pending ?? '—'}</Text>
           {pending === 0 && <Text type='secondary' className='lh-t-12'> 收件箱清着，不欠人审</Text>}
           {pending != null && pending > 0 && (
-            <Text type='secondary' className='lh-t-12'> 生长批/种子在等人审——审慢了课程断粮</Text>
+            <Text type='secondary' className='lh-t-12'> 生长批/提案在等人审——审慢了课程断粮</Text>
           )}
         </div>
         <Button size='mini' className='lh-ml-auto' onClick={e => { e.stopPropagation(); frame.goto('courses.proposals') }}>

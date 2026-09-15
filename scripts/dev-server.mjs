@@ -133,7 +133,7 @@ createServer(async (req, res) => {
         case '/note': return sendJson(res, 200, await engine.resolveNote(vault, need({ path: q('path') }, 'path'), '学习中心'))
         case '/graph': return sendJson(res, 200, await engine.graphAnalyze(q('course'), url.searchParams.get('elements') === '1'))
         case '/proposals': return sendJson(res, 200, await engine.graphProposals())
-        case '/doctor': return sendJson(res, 200, await engine.doctor())
+        case '/data-check': return sendJson(res, 200, await engine.dataCheck())
         case '/generate/status': return sendJson(res, 200, [])
         case '/interactive': {
           // 交互件伺服（与 host 同逻辑）：限启用课程根内 .html；CSP 禁外联、放开 'self' 取 vendored 库
@@ -187,7 +187,6 @@ createServer(async (req, res) => {
           await engine.graphReject(id, typeof body.note === 'string' ? body.note.trim() : '')
           return sendJson(res, 200, { message: `[reject] 提案 #${id} 已拒绝留痕。` })
         }
-        case '/review': return sendJson(res, 200, { message: await engine.contentReview(need(body, 'course'), need(body, 'node')) })
       }
       throw new Error(`dev-server 未实现该路由（完整环境用 dsh web）: POST ${route}`)
     }

@@ -5,10 +5,12 @@
  *   - 暂停/恢复：重启暂停旗标挡泵，resumeQueue 清旗标并复泵
  *   - quizJobResults 等待语义：agent 工具同步语义（入队 + 等终态 + 读结果表）、超时与消失 fail loud
  *   - 工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变（tests/fixtures/host-tools-snapshot.json，
- *     由重构前的 src/index.ts mock-apply 捕获）
- *   - 「路由 ↔ 工具」对账基线：88 共享引擎入口 / 工具独有 25 / 路由独有 56
+ *     由重构前的 src/index.ts mock-apply 捕获；#256 −1：learnhub_project_decompile_apply 退役）
+ *   - 「路由 ↔ 工具」对账基线：87 共享引擎入口 / 工具独有 25 / 路由独有 54
  *     （tests/fixtures/host-face-baseline.json，ADR-0045 命令注册表迁移的回归网；
- *     #240 / ADR-0076 建课改模式后路由面 +3：graph.createCourse/addEndpoint/removeEndpoint）
+ *     #240 / ADR-0076 建课改模式后路由面 +3：graph.createCourse/addEndpoint/removeEndpoint；
+ *     #256 种子链退役：冒烟管线改走 graphPropose/graphApply 两条入口转共享，pinToday/unpinToday
+ *     随 node-pin 路由退役转工具独有）
  * 引擎方法用实例属性影子化（shadowing prototype），不依赖真实模型与真实课程数据。
  */
 import test from 'node:test'
@@ -667,26 +669,18 @@ function priorAudit(over: Record<string, unknown> = {}): Record<string, unknown>
   }
 }
 
-test('先验审计随任务记录带出（#229）：零命中不静默——种子起草任务消息带扫描面与扩词读数', async () => {
+test('先验审计随任务记录带出（#229）：零命中不静默——正文任务消息带扫描面与扩词读数', async () => {
   const rt = makeRuntime()
+  stubContentPipeline(rt)
   stub(rt, {
-    'graph.seedPropose': async () => ({ id: 7, starts: 1, endpoint: '终点', prior: priorAudit(), repaired: false }),
-    saveGenJobs: async () => undefined,
-    loadGenJobs: async () => [{
-      course: '数学', node: '种子起草', startedAt: new Date().toISOString(), status: 'queued', phase: '种子',
-      model: 'test', message: '排队等待生成…',
-      seedPayload: { goal: '会用导数解决优化问题', mode: 'new', goalType: 'capability', useVaultPrior: true, worksheet: [] },
-    }],
-    'registry.get': async (key: string) => ({ name: key }),
-    loadView: async () => ({ graph: { nset: new Set<string>() } }),
-    'growth2.coachCheckpoint': async () => ({ courses: [] }),
-    'growth2.settleRechecks': async () => null,
+    'content2.contentPack': async (_c: unknown, _n: unknown, opts?: { onPrior?: (a: unknown) => void }) => {
+      opts?.onPrior?.(priorAudit())  // 零命中：扫了 3 篇、登记表扩词 1
+      return '上下文包'
+    },
   })
-  restoreGenJobs(rt)
-  await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'queued') // 恢复是异步链
-  resumeQueue(rt, fakeCtx())
-  await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'done')
-  const msg = rt.jobs.genJobs.get('数学/种子起草')!.message ?? ''
+  await enqueueGeneration(rt, fakeCtx(), '数学', '节点A')
+  await until(() => rt.jobs.genJobs.get('数学/节点A')?.status === 'done')
+  const msg = rt.jobs.genJobs.get('数学/节点A')!.message ?? ''
   assert.match(msg, /先验 0 命中（扫 3 篇、登记表扩词 1）/, '零命中 + 扫描面 + 扩词数一起带出（旧实现读不出「检索过没有」）')
   assert.doesNotMatch(msg, /先验命中 0/, '零命中与「有命中」是两种措辞，不混')
 })
@@ -905,18 +899,18 @@ test('生长一步的 force 随任务进执行侧（#240 修）：停摆图上�
 
 test('重启恢复：排队图域任务负载随档恢复，恢复队列后正常执行；生长批裁决面随档保留', async () => {
   const rt = makeRuntime()
-  const seedCalls: Array<Record<string, unknown>> = []
+  const decompileCalls: Array<Record<string, unknown>> = []
   const savedPhases: Array<Record<string, unknown>[]> = []
   stub(rt, {
-    'graph.seedPropose': async (req: Record<string, unknown>) => {
-      seedCalls.push(req)
-      return { id: 7, starts: 1, endpoint: '终点', prior: priorAudit({ scanned: 1 }), repaired: false }
+    'project.projectDecompile': async (project: string, opts: Record<string, unknown>) => {
+      decompileCalls.push({ project, ...opts })
+      return { plan_proposal: { id: 7, milestones: 3 }, prior: priorAudit({ scanned: 1 }) }
     },
     saveGenJobs: async (jobs: Array<Record<string, unknown>>) => { savedPhases.push(jobs) },
     loadGenJobs: async () => [
-      { course: '数学', node: '种子起草', startedAt: new Date().toISOString(), status: 'queued',
-        phase: '种子', model: 'test', message: '排队等待生成队列…',
-        seedPayload: { goalType: 'capability', useVaultPrior: false, worksheet: [{ block: '会求导' }] } },
+      { course: '数学', node: '目标反编译', startedAt: new Date().toISOString(), status: 'queued',
+        phase: '反编译', model: 'test', message: '排队等待生成队列…',
+        decompilePayload: { project: 'p1', course: '数学', notes: ['笔记/音程.md'] } },
       { course: '物理', node: '生长批', startedAt: new Date().toISOString(), status: 'done',
         phase: '生长', finishedAt: new Date().toISOString(), growthOutcome: 'idle',
         model: 'test', message: '就绪深度满足——教练停摆，无批可产。' },
@@ -928,7 +922,7 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
     'growth2.settleRechecks': async () => null,
   })
   restoreGenJobs(rt)
-  await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'queued')
+  await until(() => rt.jobs.genJobs.get('数学/目标反编译')?.status === 'queued')
   assert.equal(rt.flags.queuePaused, true, '恢复后队列暂停（不自动开跑，生成页一键恢复）')
   // 生长批上一轮裁决面随档恢复：重拉阻尼的判据（恢复丢失 = 停摆裁决被无声抹掉）
   assert.equal(rt.jobs.genJobs.get('物理/生长批')?.growthOutcome, 'idle')
@@ -937,30 +931,30 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
 
   const res = resumeQueue(rt, fakeCtx())
   assert.equal(res.resumed, 1)
-  await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'done')
-  assert.match(rt.jobs.genJobs.get('数学/种子起草')!.message ?? '', /种子提案 #7/)
-  assert.equal(seedCalls.length, 1)
-  // ADR-0076 种子降职：seedPayload 不再有 goal/mode（方向由锚定终点携带），剩余表单
-  // 字段随档原样进引擎（jobs 执行器显式挑字段构造 req）
-  assert.deepEqual(seedCalls[0], {
-    course: '数学', goalType: 'capability', useVaultPrior: false, worksheet: [{ block: '会求导' }],
-  }, '负载随档恢复：seedPayload 剩余表单字段原样进引擎')
+  await until(() => rt.jobs.genJobs.get('数学/目标反编译')?.status === 'done')
+  assert.match(rt.jobs.genJobs.get('数学/目标反编译')!.message ?? '', /反编译计划提案 #7/)
+  assert.equal(decompileCalls.length, 1)
+  // 负载随档恢复：decompilePayload 剩余字段原样进引擎（jobs 执行器显式挑字段构造 opts，
+  // #256 反编译 plan-only：不再有 seed 半区与 pair 联动）
+  assert.deepEqual(decompileCalls[0], {
+    project: 'p1', course: '数学', notes: ['笔记/音程.md'],
+  }, '负载随档恢复：decompilePayload 字段原样进引擎')
   // #185 落盘即归一：读侧别名只在恢复缝生效，写侧（含执行过程中的持久化）一律产现值
   assert.ok(savedPhases.length > 0, '执行过程至少落盘一次')
-  const persistedSeed = savedPhases.at(-1)!.find(j => j.course === '数学')
-  assert.equal(persistedSeed?.phase, 'seed', '旧档 phase=种子 经恢复归一后落盘为现值')
+  const persisted = savedPhases.at(-1)!.find(j => j.course === '数学')
+  assert.equal(persisted?.phase, 'decompile', '旧档 phase=反编译 经恢复归一后落盘为现值')
 })
 
 test('重启恢复：负载要求的排队图域任务缺负载 → 恢复处明确标失败可重试（不拖到执行器）', async () => {
   const rt = makeRuntime()
   let executed = false
   stub(rt, {
-    seedPropose: async () => { executed = true; return { id: 1 } },
+    'project.projectDecompile': async () => { executed = true; return { plan_proposal: { id: 1, milestones: 1 } } },
     saveGenJobs: async () => undefined,
     loadGenJobs: async () => [
-      // 旧档案形态：phase=种子 但 payload 缺失（#157 前的注册表会落出这种档）
-      { course: '数学', node: '种子起草', startedAt: new Date().toISOString(), status: 'queued',
-        phase: '种子', model: 'test', message: '排队等待生成队列…' },
+      // 旧档案形态：phase=反编译 但 payload 缺失（#157 前的注册表会落出这种档）
+      { course: '数学', node: '目标反编译', startedAt: new Date().toISOString(), status: 'queued',
+        phase: '反编译', model: 'test', message: '排队等待生成队列…' },
     ],
     // 恢复清扫的存在性探针（真实注册表为空会把恢复记录判悬空清掉）
     'registry.get': async (key: string) => ({ name: key }),
@@ -969,16 +963,41 @@ test('重启恢复：负载要求的排队图域任务缺负载 → 恢复处明
     'growth2.settleRechecks': async () => null,
   })
   restoreGenJobs(rt)
-  await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'failed')
-  const job = rt.jobs.genJobs.get('数学/种子起草')!
+  await until(() => rt.jobs.genJobs.get('数学/目标反编译')?.status === 'failed')
+  const job = rt.jobs.genJobs.get('数学/目标反编译')!
   assert.match(job.message ?? '', /负载缺失/, '失败原因可读（不再是执行器抛「负载缺失或 phase 未知」）')
   assert.match(job.message ?? '', /重新下发（可重试）/)
   assert.ok(job.finishedAt, '恢复当下盖终态戳（保留期起算）')
-  assert.equal(rt.jobs.genJobs.get('数学/种子起草')?.status, 'failed')
+  assert.equal(rt.jobs.genJobs.get('数学/目标反编译')?.status, 'failed')
   // 队列不再有排队假象：一键恢复后没有任务可跑，执行器不被触达
   assert.equal(resumeQueue(rt, fakeCtx()).resumed, 0)
   await sleep(30)
   assert.equal(executed, false)
+})
+
+// ---------------------------------------------------------------- 已退役站的历史档（#256）
+
+test('重启恢复：已退役站的排队任务（phase=seed）→ 恢复处明确标失败，不被当正文管线误跑（#256）', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    saveGenJobs: async () => undefined,
+    loadGenJobs: async () => [
+      // 旧部署落下的「种子起草」历史档：phase 仍是 seed、payload 也在（旧档案形态）
+      { course: '数学', node: '种子起草', startedAt: new Date().toISOString(), status: 'queued',
+        phase: 'seed', model: 'test', message: '排队等待生成队列…',
+        seedPayload: { goalType: 'capability', useVaultPrior: false, worksheet: [] } },
+    ],
+    'registry.get': async (key: string) => ({ name: key }),
+    loadView: async () => ({ graph: { nset: new Set<string>() } }),
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  restoreGenJobs(rt)
+  await until(() => rt.jobs.genJobs.get('数学/种子起草')?.status === 'failed')
+  const job = rt.jobs.genJobs.get('数学/种子起草')!
+  assert.match(job.message ?? '', /已退役/, '退役站历史档在恢复处明确标失败（不是静默排队假象）')
+  assert.equal(job.phase, 'seed', 'phase 未被改写成 outline（不落进正文管线）')
+  assert.equal(resumeQueue(rt, fakeCtx()).resumed, 0, '退役站任务不再有排队假象，执行器不被触达')
 })
 
 // ---------------------------------------------------------------- 任务档 Broken（#194 / ADR-0053）
@@ -1165,16 +1184,16 @@ test('路由分发：static 抽离后 /file、/vendor、/interactive 的守卫�
 
 // ---------------------------------------------------------------- 工具面快照 + 路由↔工具对账
 
-test('工具面快照：112 个工具的名称/描述/schema 与重构前基线逐字不变（#203 +1）', () => {
+test('工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变（#203 +1）', () => {
   const rt = makeRuntime()
   const captured: Array<{ name?: string; description?: string; parameters?: unknown; output?: unknown }> = []
   registerTools(fakeCtx(captured), rt)
-  assert.equal(captured.length, 112, '工具总数不变（注册顺序按域分组重排，逐工具逐字不变；#203 +1 receipt_review_mode）')
+  assert.equal(captured.length, 111, '工具总数不变（注册顺序按域分组重排，逐工具逐字不变；#203 +1 receipt_review_mode；#256 −1 project_decompile_apply）')
   const snapshot = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-snapshot.json'), 'utf8')) as
     Array<{ name: string; description: string; parameters: unknown }>
-  assert.equal(snapshot.length, 112)
+  assert.equal(snapshot.length, 111)
   const byName = new Map(captured.map(t => [t.name, t]))
-  assert.equal(byName.size, 112, '工具名无重复')
+  assert.equal(byName.size, 111, '工具名无重复')
   for (const expect of snapshot) {
     const got = byName.get(expect.name)
     assert.ok(got, `缺工具 ${expect.name}`)
@@ -1212,7 +1231,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、路由独有 59（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：87 共享引擎入口、工具独有 25、路由独有 54（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -1227,7 +1246,7 @@ test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、�
   const agentDeclared = new Set(COMMAND_LIST.filter(c => c.channels.some(ch => ch.tool))
     .map(c => c.engine).filter((e): e is string => !!e))
   const toolFace = new Set([...faceOf(read('src/host/tools.ts') + read('src/host/tool-handlers.ts')), ...agentDeclared])
-  // #169：路由面的引擎入口 = **注册表 panel 通道的声明** ∪ 宿主源码里的直调。生成路径的调用
+  // #169：路由面的引擎入口 = **注册表路由通道（panel+ops）的声明** ∪ 宿主源码里的直调。生成路径的调用
   // 现在住在声明里（src/commands/），不在任何 .ts 文件里——只扫源码会让大部分 route-only 凭空消失。
   const declared = new Set(COMMAND_LIST.filter(c => c.channels.some(ch => ch.route))
     .map(c => c.engine).filter((e): e is string => !!e))
@@ -1249,11 +1268,15 @@ test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、�
   // 两面共享；bank.load 与 paths.courseRoot 进路由面（工具面不读这两条入口）
   // #240 / ADR-0076 建课改模式：冒烟管线改走 createCourse→addEndpoint→seedPropose→apply
   // （名称建课 + 手加终点），三条入口进路由面
+  // #256 种子链退役：冒烟管线改走 graphPropose/graphApply（手写 edit 提案铺起点+终点接线）——
+  // graph.graphPropose/graph.graphApply 进路由面转共享；node-pin 路由退役使 learner.pinToday/
+  // learner.unpinToday 从共享转工具独有（agent 工具保留）；content2.contentReview/graph.seedPropose/
+  // proposals.proposalImpact/sched2.setDayCutoff 随种子链与 day-cutoff 退役出路由面
   // #248 / ADR-0077 卡点自报：三个引擎写点（落账/待消费/消费标记）仅路由面（面板
   // 通道 handler 与生长批执行器消费，agent 工具面不直接触卡点自报）
-  assert.equal(shared.length, 88)
+  assert.equal(shared.length, 87)
   assert.equal(toolOnly.length, 25, '#215：content2.contentCheck 转共享（冒烟复跑质检门），工具独有 26→25')
-  assert.equal(routeOnly.length, 59, '#248：+growth2.stuckReportAppend、+growth2.stuckPending、+growth2.stuckMarkConsumed（卡点自报三口仅路由面），路由独有 56→59')
+  assert.equal(routeOnly.length, 54, '#256：−content2.contentReview/−graph.seedPropose/−proposals.proposalImpact/−sched2.setDayCutoff（种子链+day-cutoff 退役）；#255 −1：doctor 随 doctor 退役')
 })
 
 // ---------------------------------------------------------------- apply 不自动入队正文（ADR-0078）

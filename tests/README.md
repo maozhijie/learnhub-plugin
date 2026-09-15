@@ -6,7 +6,7 @@
 
 ## 门面 C 形态（#182 / ADR-0049，2026-09-12）
 
-hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engine.<子系统>.<方法>`**（子系统实例 = `learner`/`content2`/`project`/`bank2`/`channels`/`lab`/`graph`/`growth2`/`sched2`/`registry`/`proposals`/`projects`，全部公开 readonly 属性；hub 保留装配接线 + 装配域方法 statusJson/recommend/doctor/rebuild/saveGenJobs 等）。对测试的三点影响：
+hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engine.<子系统>.<方法>`**（子系统实例 = `learner`/`content2`/`project`/`bank2`/`channels`/`lab`/`graph`/`growth2`/`sched2`/`registry`/`proposals`/`projects`，全部公开 readonly 属性；hub 保留装配接线 + 装配域方法 statusJson/recommend/rebuild/saveGenJobs 等）。对测试的三点影响：
 
 - **直调写点路径**：`engine.learner.learnerQueue(...)` 而非 `engine.learnerQueue(...)`；hub 装配域方法保留裸名（`engine.statusJson()`）。注册表 `engine` 字段同口径（点路径 + hub 裸名），门① 断言子系统类原型。
 - **打桩按真实调用路径**：宿主泵/路由驱动的引擎调用走点路径，桩键写 `<子系统>.<方法>`（`tests/host-runtime.test.ts` 的 `stub()` 助手支持两种键）。
@@ -163,7 +163,7 @@ UI 测试网与数据获取缝（2026-09-12 新增，#183 / ADR-0051／ADR-0052�
 
 写入单元（2026-09-11 新增，#176 / ADR-0046；`engine/write-unit.ts` + `tests/write-unit.test.ts`）：
 
-- **`runWriteUnit(op, { course?, clock, journal, steps })` 是跨文件落盘的唯一编排口**：按声明顺序执行（顺序是领域知识，原语只强制「声明顺序＝执行顺序」）→ 声明了 `done` 幂等判据的步骤 done=true 即续段跳过（「已存在即续段」原语化；无 done = 每次都执行）→ 全部成功后经 sink 追加**恰一条** journal（复用既有 `state/journal.jsonl`，`kind='write_unit'`、`node=<op>`、`detail='steps=名:done|skipped,…'`、ts 经 Clock 端口——零新日志文件）。失败：步骤 k 抛错即上抛中止，不回滚不续跑、失败不写 journal（与原 26 处「同事务」注释的今天语义逐条对齐）；恢复走 dataCheck/doctor/rebuild。
+- **`runWriteUnit(op, { course?, clock, journal, steps })` 是跨文件落盘的唯一编排口**：按声明顺序执行（顺序是领域知识，原语只强制「声明顺序＝执行顺序」）→ 声明了 `done` 幂等判据的步骤 done=true 即续段跳过（「已存在即续段」原语化；无 done = 每次都执行）→ 全部成功后经 sink 追加**恰一条** journal（复用既有 `state/journal.jsonl`，`kind='write_unit'`、`node=<op>`、`detail='steps=名:done|skipped,…'`、ts 经 Clock 端口——零新日志文件）。失败：步骤 k 抛错即上抛中止，不回滚不续跑、失败不写 journal（与原 26 处「同事务」注释的今天语义逐条对齐）；恢复走 dataCheck/rebuild。
 - **七站点**（`scripts/scan-write-unit.mjs` 的站点清单，键 = 相对 src/ 的 posix 路径——views/proposals.ts 与 engine/proposals.ts 同名，按文件名计数会互相覆盖）：applyEdit 9 步／applySeed 8 步／applyEnrich 5 步（proposals.ts）、nodeComplete 5 步／optimizeFsrsParams 4 步（sched-subsystem.ts）、experimentStop 3 步（nof1.ts）、settleRechecks 每条目 2 步（growth-subsystem.ts）。今天语义对照表与三处形状裁定见 #176 票评论。
 - **G9 写入单元门**（`tests/arch-guards.test.ts`）：src/ 零「同事务」注释（顺序知识只住步骤声明）+ 七站点各自必须经 `runWriteUnit`（迁移回退/新增跨文件落盘绕开原语即失败）；自检：残留被抓、调用数不足被抓、站点文件改名被抓（幽灵清单）、齐备则绿。
 
@@ -322,6 +322,41 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 **旧键深链**：`#/learn`、`#/courses/graph`、`#/stats`、`#/lab` 等平铺/子路由旧键按 ADR-0058 登记为**自用工具可接受的已知断裂**——`parseHash` 回落默认页签，规范化经 `syncHash` 走 replaceState（不留非法形、不产生历史条目）。断言常驻 `tests/ui-router.test.ts` 的 parseHash 用例（旧键样例逐条列举）与 syncHash 用例（旧键 hash 规范化）。
 
 
+## 死入口退役（#255 / #256，ADR-0081／ADR-0082）：受控面迁移登记
+
+**#255（doctor 并入 data-check）**：删 `GET /doctor` 路由 + `doctor` 命令 + `engine.doctor()` + `DoctorDoc` 视图；三个消费者（`scripts/smoke.mjs`／`scripts/e2e.mjs`／`scripts/dev-server.mjs`）迁 `dataCheck()`；时钟端口测试改锚 `recommend().date`。详见 ADR-0081。
+
+**#256（种子链 + 四条死命令退役）**：删 7 条命令（`seed-propose`／`proposals-impact`／`project-decompile-apply`／`node-pin`／`review`／`courses`／`day-cutoff`）、6 条路由（`GET /courses`、`POST /node/pin`、`/proposals/impact`、`/review`、`/seed/propose`、`PUT /day-cutoff`）、1 个 agent 工具（`learnhub_project_decompile_apply`）。退役判据是**可达性**（无产品入口/调用方），不是快照存在与否——行为快照是行为回归，不是可达性门。`learnhub_pin_today`/`learnhub_unpin` 两个 agent 工具**保留**。详见 ADR-0082。
+
+| 受控面 | 迁移内容 | 落点 | 判据 |
+|---|---|---|---|
+| 命令注册表 | G2 命令数 162→155（−7）；门③ tool 名 112→111（−1）、`(method,path)` 133→127（−6）；门④ 面板通道 133→127；门② 队列通道 16→15（−seed-propose）；`API_CALLSITES` 149→148（−`api.proposalImpact`）；NO_ENGINE 白名单同步删 `seed-propose`／`node-pin` 两条幽灵 | `tests/arch-guards.test.ts`／`tests/commands.test.ts`／`tests/ui-types.test.ts` | 棘轮精确匹配 |
+| 路由行为快照 | 快照 488→466 条（删 6 条死路由的 22 条探针）；状态码分布 200×229／404×6／500×253 → 200×219／404×6／500×241；方法不匹配样本 `/node/pin`→`/rebuild`；`host-routes-baseline.json` 133→127 条 | `tests/fixtures/host-routes-{snapshot,baseline}.json`（删除即迁移） | `tests/host-routes.test.ts` 逐字复现 |
+| 工具面快照 | `host-tools-behavior.json` 261→258 条（删 decompile_apply 3 条探针）；`host-tools-snapshot.json` 112→111（删 decompile_apply；graph_propose/graph_proposals/project_apply/project_decompile/project_exec_log 契约随 plan-only 改述） | `tests/fixtures/host-tools-*.json` | `tests/tools-face.test.ts`／`tests/host-runtime.test.ts` 逐字复现 |
+| 两面基线与窄面 | `host-face-baseline.json` 重算（shared 88→87：+graphApply/+graphPropose（冒烟管线改走 edit 提案）、−pinToday/−unpinToday（node-pin 路由退役）、−projectDecompileApply；routeOnly 58→54）；G3 声明/实用/接线合计 187→185（GraphDeps 18→16、ProjectDeps 20→19，dead 声明 `noteManifest`/`loadPrompt` 随硬门删除）；G5 受控文件 120 | `tests/fixtures/host-face-baseline.json`、`scripts/arch-baseline.json`（`--update`） | `tests/host-runtime.test.ts`／`tests/arch-guards.test.ts`（G3/G4/G5） |
+| 提示词面 | 删模板「种子提案」（版本号删除不产生新版本 → `prompt-bump -- check` 恒绿，不补 `PROMPT_CHANGELOG`）；质量量规删「种子·终点」轴；生成站「种子起草」退役；生成任务 phase 词表去 `seed` | `src/engine/prompts/templates.ts`、`src/engine/quality-audit.ts` | `tests/prompt-changelog.test.ts`／`tests/output-contract.test.ts`／`tests/quality-audit.test.ts`／`tests/generation-jobs.test.ts` |
+
+**存量兼容**：提案读侧不校验 `kind`——存量 `kind=seed` 提案仍可读出、不判 Broken；apply 侧按 kind 拒绝（`tests/proposals-contract.test.ts` 钉住）。
+
+## ops 面正名 + 可达性门（#257 / ADR-0083）：受控面迁移登记
+
+**#257（ops 面正名 + 可达性门）**：命令注册表通道种类扩为 `agent`／`panel`／`ops`；`smoke`／`spike`／`quality-review` 由 `panel` 改声明为 `ops`（`npm run` 脚本驱动的宿主 API——真 provider 只在宿主 ctx，必须走宿主 HTTP；路由与 handler 逐字不变）；新增**门⑨ 可达性**。详见 ADR-0083。
+
+| 受控面 | 迁移内容 | 落点 | 判据 |
+|---|---|---|---|
+| 命令注册表 | 通道种类 +`ops`；`smoke`/`spike`/`quality-review` 由 `panel`→`ops`（命令数 155、路由数 127、工具数 111 **均不变**）；门③④⑧ 措辞改「路由通道（panel+ops）」（过滤口径 `.route` 本就不分种类，语义不变）；新增门⑨ | `src/commands/types.ts`、`src/commands/维护.ts`、`tests/commands.test.ts` | 门⑨ 硬门 0（无孤儿、无 `ops` 误标） |
+| 文件规模棘轮 | `src/commands/types.ts` 128→131（三行注释） | `scripts/arch-baseline.json`（`--update`） | 棘轮精确匹配 |
+| 路由/工具/行为快照 | **零漂移**：三条路由只改通道种类，`host-routes-*`／`host-tools-*`／`host-face-baseline` 逐字不变 | —（未改） | `tests/host-routes.test.ts`／`tools-face`／`host-runtime` 全绿 |
+| 提示词面 | 不触碰任何提示词文本 | —（未改） | `npm run prompt-bump -- check` 恒绿、无 `PROMPT_CHANGELOG` 条目 |
+
+**门⑨ 可达性**（命令注册表；`tests/commands.test.ts`；#257 / ADR-0083）：
+
+- **内容**：每个命令必须至少一个可达面——`panel` 路由→UI 源码（`ui/src` ∪ `src/client`）、`ops` 路由→`scripts/`、`agent` 通道→注册即产品面（工具名下发即暴露）；另附 `ops` 路由必有 `scripts/` 调用点的正确性断言。
+- **档位**：硬门 0（孤儿 0 + `ops` 误标 0）。
+- **阈值来源（实测）**：`panel` 路由 127 条，其中 7 条双通道命令的路由（`question-save`／`project-lifecycle`／`explain-back-pack`／`note-source-exclude`／`note-source-unexclude`／`note-resolve`／`rebuild`）UI 未接但命令经 agent 工具可达；`smoke`／`spike`／`quality-review` 无 UI 调用、由 `scripts/` 兜住（正名 `ops`）；`vendor-` 为 `prefix` 静态伺服（由运行期生成物引用），机械豁免。**孤儿 0**。
+- **两向自检**（ADR-0047 铁律①）：纯函数 `scanReachability` 同源——① 合成「panel-only 路由无 UI 调用」样本断言判孤儿；② 断言收集器看得见真实调用点（`/status`∈`ui/src`、`/discuss-pack`∈`src/client`、`/smoke`∈`scripts/`）。
+- **已知边界**：只覆盖**静态可达性**（源码里的路径字面量）——「按钮存在但从不渲染」「运行时动态拼路由」看不见。
+
 架构门 G1–G7（2026-09-11 新增，#165 / ADR-0047；`tests/arch-guards.test.ts`）：
 
 把「约定只活在注释与 ADR 里」变成会失败的东西。全部零依赖、文本／加载／编译层面、`node:test` 原生、随 `npm test` 全量执行。两条铁律：**每个门都带自检**（构造必然违规的样本并断言门会失败；收集器类门另断言它能看见目标形态——R3 曾因收集器只收相对说明符而**恒过**，恒过的门比没有门更坏）；**棘轮是精确匹配**（实际 == 基线，涨了失败、**降了但未同步下调基线也失败**＝过期即失败）。
@@ -330,9 +365,9 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 |---|---|---|---|
 | G1 未定义标识符 | 剥注释与字符串后「被当函数调用却未声明未导入」即失败（`scripts/undefined-scan.mjs`） | 硬门 0 | 0（`shuffled` 修复后）。**已由 G7 的 TS2304 接管**（同一形态的编译期权威判据），本门留作零依赖兜底。2026-09-13 判据修订：形参正则认可可选形参 `name?`——曾把函数体内对可选形参的裸调用误报为未定义，逼调用方为绕门改签名；随修按铁律①补 G1 自检（可选形参夹具不误报 + 真未定义夹具仍拦截），章程 §3「门红了先裁决」由此立 |
 | G2／G2b／G2c 宿主装配面 | 动态 import `src/index.ts` 与 `host/*`；入口三件套 `name`／`inject`／`apply` 齐备、技术层导出在（#168 起 `need` 归 `host/params.ts`、路由表归 `host/route-table.ts`／`routes.ts`／`routes-post.ts`）、入口文件非空；G2c＝宿主除常量外零模块级 `let`（`scripts/scan-host-state.mjs`，受控面**动态发现**＝index.ts + host/**/*.ts；ADR-0048） | 硬门 | 绿。**G2 的加载冒烟不可退役**——tsc 看不见模块级初始化路径。G2c 受控面 14 个文件、模块级 let 0 |
-| G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。**四个方向全为硬门 0**（dead／missing／unwired／surplus） | 硬门 0 | 声明 **187** ／ 实用 187 ／ 接线 **187** ／ 多余 **0**（9 个子系统；#171 曾清掉 30 条多余接线——10 phantom + 20 未使用——后由棘轮转硬门；落笔时三向 167，现值 187 随 #158/#159/#161 新增命令域与 #203 receiptReviewEffect 接线自然增长，基线同步） |
+| G3 窄面三向一致 | deps 声明 ↔ 类体 `this.e.X` 实用 ↔ 门面 `new XSubsystem({…})` 的接线键。**四个方向全为硬门 0**（dead／missing／unwired／surplus） | 硬门 0 | 声明 **187** ／ 实用 187 ／ 接线 **187** ／ 多余 **0**（9 个子系统；#171 曾清掉 30 条多余接线——10 phantom + 20 未使用——后由棘轮转硬门；落笔时三向 167，现值 187 随 #158/#159/#161 新增命令域与 #203 receiptReviewEffect 接线自然增长，基线同步）〔#256 刷新：种子链退役令 GraphDeps declared/used/wired 18→16、ProjectDeps 20→19，合计 188→185，基线已同步〕 |
 | G4 窄面宽度（三槽位） | `handles`／`facade`／`fns` 逐子系统卡基线；`handles ≤12／facade ≤20／fns ≤10` 是**非活动目标** | 棘轮 | 实测最大 handles **11**／facade **21**／fns **0**（fns 对预算已绿；handles 11 贴 ≤12 上限；facade 21 已越 ≤20 非活动目标——目标是落笔时的愿望值，活动门是逐子系统基线，越线要靠重划解决而非就地收紧） |
-| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | **15 个受控 engine 文件超 600**（proposals 1802、question-bank 1575、content 1477、projects 1388、learner-cards 1365、note-source 1234、growth-subsystem 1138、content-subsystem 1061、data-check 982、nof1 958、index 858、output-contracts 699、graph-subsystem 648、sessions 641、seed 633）；宿主最大 `jobs.ts` **1219**（#161 合并入队钩子、#160 种子链 triggerSeedContent；#227 节间连贯注入 1039→1092、#228 出题档位声明 1092→1109；**#252/ADR-0078 撤两条正文自动入队链 1250→1219**），**无宿主文件超 900**（`index.ts` 3029 → 91 薄入口见 #167；`api.ts` 999 → 60 见 #168；`tools.ts` 1040 → 127 见 #169 agent 切面，#169 后表生成路径取代了 `routes.ts`／`routes-post.ts`，两文件已退役）。活动门＝逐文件基线（**119** 个受控文件；#163 新增 `engine/coach-tools.ts`，#195 新增 `engine/evidence-streams.ts`）。〔2026-09-14 重读实测刷新上列数字：原行停在 #237 提示词搬迁前（`content.ts` 的 485 行模板已迁出，故 1962→1477），超 600 口径随之由 12 文件变 15 文件、受控文件 118→119。〕 |
+| G5 文件规模 | `src/` 下逐文件行数卡基线（行数口径＝`wc -l`）；白名单：`engine/views/` 叶子、`engine/types.ts`（共享类型与枚举大表） | 棘轮；`engine ≤600／宿主 ≤900` 是**非活动目标** | **15 个受控 engine 文件超 600**（proposals 1802、question-bank 1575、content 1477、projects 1388、learner-cards 1365、note-source 1234、growth-subsystem 1138、content-subsystem 1061、data-check 982、nof1 958、index 858、output-contracts 699、graph-subsystem 648、sessions 641、seed 633）；宿主最大 `jobs.ts` **1219**（#161 合并入队钩子、#160 种子链 triggerSeedContent；#227 节间连贯注入 1039→1092、#228 出题档位声明 1092→1109；**#252/ADR-0078 撤两条正文自动入队链 1250→1219**），**无宿主文件超 900**（`index.ts` 3029 → 91 薄入口见 #167；`api.ts` 999 → 60 见 #168；`tools.ts` 1040 → 127 见 #169 agent 切面，#169 后表生成路径取代了 `routes.ts`／`routes-post.ts`，两文件已退役）。活动门＝逐文件基线（**119** 个受控文件；#163 新增 `engine/coach-tools.ts`，#195 新增 `engine/evidence-streams.ts`）。〔2026-09-14 重读实测刷新上列数字：原行停在 #237 提示词搬迁前（`content.ts` 的 485 行模板已迁出，故 1962→1477），超 600 口径随之由 12 文件变 15 文件、受控文件 118→119。〕〔#256 刷新：seed 633→418 退出超 600 名单，现 13 个受控 engine 文件超 600（question-bank 1575、content 1506、proposals 1471、learner-cards 1365、projects 1333、note-source 1234、growth-subsystem 1192、content-subsystem 1049、data-check 992、nof1 958、index 837、output-contracts 681、sessions 641）；宿主最大 jobs.ts 1219→1234（#256 反编译 plan-only 收敛）；受控文件 120。〕 |
 | G6 顶层不变量 | 除教练层 `proposals.ts` 外无模块调用图写原语（`GraphStore.writeRegionDoc`，`data/*.yaml` 的唯一写路径） | 硬门 | 绿（唯一调用者就是 `proposals.ts`） |
 | G7 类型门 | `tsc --noEmit`（根 `tsconfig.json`；`module`／`moduleResolution` = `nodenext`、`noEmit`；#178 批3 起 `strict: true`）逐文件错误数卡基线 | 棘轮 | 扫描面 `src/`：**0 处 / 0 个涉错文件**（基线 `typeErrors` 空表）。实测链：main **196 处 / 17 个涉错文件**（未清理）→ #171 **181** → #170 **80 处 / 9 文件** → #168 **75 处 / 11 文件**（错误随代码搬移）→ **#178 四批清零**（批1 门面接线伸进子系统的 31 个 TS2341 放宽为公开面；批2 TS2322 全清 + 两处潜伏 bug；批3 根 tsconfig 转 `strict: true`、24 处残差清零；批4 ui 依赖侧 86 处清零）→ **0/0**。UI 类型门：`ui/src` 0 错、依赖侧存量债 **0 处**（`npm run typecheck` 串行跑） |
 | G8 适配器面 | engine 内时钟直读（`Date.now(`＋无参 `new Date()`，含模板串插值）／`Math.random`／`node:fs` import 数／fs 调用点数四标量卡基线（`scripts/scan-adapter-face.mjs`） | 棘轮 | 实测链：阶段①第一刀 **clockReads 29／mathRandom 0** → 时钟清扫 **clockReads 1**（唯一余量 = io.ts `atomicWrite` tmp 命名的登记例外；`tests/clock-rng-port.test.ts` 断言固定时钟+定长随机流下同输入同输出）→ 阶段② **fsImports 0／fsCalls 0**（engine 内零 node:fs——`VaultFs` 端口住 io.ts、实现住 host/vault-fs.ts、装配住 EngineConfig.fs） |

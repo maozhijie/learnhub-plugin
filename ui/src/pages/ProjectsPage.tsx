@@ -55,7 +55,7 @@ export default function ProjectsPage() {
   const [rating, setRating] = useState(3)
   const [nodesText, setNodesText] = useState('')
   const [note, setNote] = useState('')
-  // 目标反编译（面板下发，ADR-0038）：新建项目并起草「里程碑计划 + 知识种子簇」双提案
+  // 目标反编译（面板下发，ADR-0038）：新建项目并起草里程碑计划提案
   const [dcName, setDcName] = useState('')
   const [dcGoal, setDcGoal] = useState('')
   const [dcBusy, setDcBusy] = useState(false)
@@ -123,7 +123,7 @@ export default function ProjectsPage() {
     }
   }
 
-  /** 新建项目 + 目标反编译：项目落地后入队双提案起草（计划半区 + 种子半区，同进同退）。 */
+  /** 新建项目 + 目标反编译：项目落地后入队计划提案起草。 */
   const createAndDecompile = async () => {
     if (!dcName.trim()) { Message.warning('给项目起个名'); return }
     if (!dcGoal.trim()) { Message.warning('描述一下目标——反编译只认目标描述'); return }
@@ -133,7 +133,7 @@ export default function ProjectsPage() {
       const id = String((created as { id?: unknown }).id ?? '')
       if (!id) throw new Error('项目创建返回缺少 id')
       const r = await api.projectDecompile(id)
-      Message.success(`${r.message}（生成队列看进度，提案收件箱联合人审）`)
+      Message.success(`${r.message}（生成队列看进度，提案收件箱人审）`)
       setDcName('')
       setDcGoal('')
       await loadList()
@@ -167,8 +167,8 @@ export default function ProjectsPage() {
       <Card size='small' title='目标反编译（建课引导）' className='lh-card'>
         <Space direction='vertical' size={8} className='lh-full'>
           <Text type='secondary' className='lh-t-12'>
-            从「目标项目描述」反推学习资产：里程碑计划草案 + 知识种子簇双提案（同进同退，提案页联合人审）；
-            显式目标课程时只产计划半区。知识子图检索只读 Vault 先验，apply 前零写入。
+            从「目标项目描述」反推学习资产：产里程碑计划草案（提案页人审）；plan.nodes 必须引用目标课程既有节点名。
+            知识子图检索只读 Vault 先验，apply 前零写入。
           </Text>
           <Space size={8} wrap>
             <Input className='lh-w-200' placeholder='项目名（如：三个月弹会小曲）' value={dcName} onChange={setDcName} />

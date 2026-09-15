@@ -447,9 +447,9 @@ test('评审失败件不进分数分布（评审失败 ≠ 产物差）；未评
   assert.equal(lowScoreItems([failed], QUALITY_RUBRICS).length, 0)
 })
 
-test('站 → 量规映射：多站共享量规逐站命中（题目两站）；无量规站不评（目标反编译不产 seed 半区——ADR-0076）', () => {
+test('站 → 量规映射：多站共享量规逐站命中；无量规站不评（种子站随 #256 退役、目标反编译只产计划）', () => {
   assert.equal(rubricForStation('教练生长', QUALITY_RUBRICS)?.id, '教练回合')
-  assert.equal(rubricForStation('种子起草', QUALITY_RUBRICS)?.id, '种子·终点', '种子起草站（种子提案产物）仍挂种子·终点量规')
+  assert.equal(rubricForStation('种子起草', QUALITY_RUBRICS), undefined, '种子站随种子链整体退役（#256）——不再挂量规、不评')
   assert.equal(rubricForStation('目标反编译', QUALITY_RUBRICS), undefined, '目标反编译只产计划提案（ADR-0076 种子降职）——目标反编译站不再挂种子量规')
   assert.equal(rubricForStation('判卷', QUALITY_RUBRICS), undefined, '无量规站不评（判定标准先于判定器）')
   assert.ok(rubricStations(QUALITY_RUBRICS).includes('教练生长'))

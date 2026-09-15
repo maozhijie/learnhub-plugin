@@ -1,7 +1,8 @@
 /**
- * 图质量面审计抽样（#224 / ADR-0070 §图质量面）：两类审计（教练回合裁决质量 / 种子·终点
- * 资格）的审计面声明、系统性发现候选与跨表对账——票面验收「两类审计可跑出报告」的引擎侧
- * 证据（实跑报告由宿主运行器产出，见 tests/quality-review-runner.test.ts）。
+ * 图质量面审计抽样（#224 / ADR-0070 §图质量面）：教练回合裁决质量的审计面声明、系统性
+ * 发现候选与跨表对账——票面验收「审计可跑出报告」的引擎侧证据（实跑报告由宿主运行器产出，
+ * 见 tests/quality-review-runner.test.ts）。#256 种子链退役后「种子/终点资格」轴与「种子·终点」
+ * 量规一并删除。
  *
  * 本文件同时是一道**跨表对账门**：审计面清单（AUDIT_AXES）里的站、量规、维度必须真的在
  * 语料站名词表与量规注册表里——三张表漂移（量规改了维度 id、站改名）时审计不会静默跑空。
@@ -46,7 +47,7 @@ function low(over: Partial<LowScoreItem> = {}): LowScoreItem {
 
 test('审计面清单：站名在语料词表、量规与维度在注册表——三张表漂移即红（审计不会静默跑空）', () => {
   const stations = new Set(Object.values(STATIONS))
-  assert.equal(AUDIT_AXES.length, 2, '票面两类审计：教练回合裁决质量 + 种子/终点资格')
+  assert.equal(AUDIT_AXES.length, 1, '种子轴退役后仅存教练回合裁决质量轴（#256）')
   for (const axis of AUDIT_AXES) {
     for (const s of axis.stations) assert.ok(stations.has(s), `审计面的站「${s}」不在语料站名词表`)
     const rubric = QUALITY_RUBRICS.find(r => r.id === axis.rubric)
@@ -61,7 +62,7 @@ test('审计面清单：站名在语料词表、量规与维度在注册表—�
   }
 })
 
-test('审计面声明：两类审计逐轴列出（含看点）；未抽到样本的轴照实说「本轮无样本」', () => {
+test('审计面声明：逐轴列出（含看点）；未抽到样本的轴照实说「本轮无样本」', () => {
   const lines = auditScopeLines({
     sampling: { corpusDir: 'C:/桩', stations: ['教练生长'], pool: 3, selected: 3, quota: { bad: 3, ok: 2 } },
     stats: [stat()],
@@ -69,11 +70,9 @@ test('审计面声明：两类审计逐轴列出（含看点）；未抽到样�
   })
   const text = lines.join('\n')
   assert.ok(text.includes('审计面声明'))
-  assert.ok(text.includes('教练回合裁决质量'), '轴一在册')
-  assert.ok(text.includes('种子/终点资格'), '轴二在册')
-  assert.ok(text.includes('本轮无该轴语料样本'), '未抽到样本的轴显式声明（不静默省略）')
+  assert.ok(text.includes('教练回合裁决质量'), '轴在册')
   assert.ok(text.includes('已判 2 件次'), '在册轴的判读件次带出')
-  assert.ok(text.includes('算子选择 + 理由 vs 图面') || text.includes('起点是否单一行为单元'), '看点进声明')
+  assert.ok(text.includes('算子选择 + 理由 vs 图面'), '看点进声明')
 })
 
 test('系统性发现候选：低分率越预注册线才入候选；低分件引用与判据出处随候选带出（贴票用）', () => {

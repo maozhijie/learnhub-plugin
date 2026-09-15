@@ -31,7 +31,7 @@ export type {
 
 // graph 域视图类型归档 views/graph.ts（#152）：叶子文件——领主直引它，不经本 barrel 牵进重模块（R7）。
 export type {
-  GraphApplyEditResult, GraphApplyEnrichResult, GraphApplyResult, GraphApplySeedResult, GraphBrowseBlock, GraphBrowseDoc, GraphBrowseNode, GraphBrowseRegion, GraphDoc, GraphElementsDoc, GraphEncBackfillNoneResult, GraphEncBackfillProposedResult, GraphEncBackfillResult, GraphJumpCandidate, GraphNodeDoc, GraphNodeSchema, GraphPathRelatedResult, GraphPathResult, GraphPathUnrelatedResult,
+  GraphApplyEditResult, GraphApplyEnrichResult, GraphApplyResult, GraphBrowseBlock, GraphBrowseDoc, GraphBrowseNode, GraphBrowseRegion, GraphDoc, GraphElementsDoc, GraphEncBackfillNoneResult, GraphEncBackfillProposedResult, GraphEncBackfillResult, GraphJumpCandidate, GraphNodeDoc, GraphNodeSchema, GraphPathRelatedResult, GraphPathResult, GraphPathUnrelatedResult,
 } from './views/graph.ts'
 
 
@@ -55,21 +55,6 @@ export type {
 
 
 
-// ---- doctor（GET /api/doctor；fm schema 对账，doctor）----
-
-export interface DoctorBrokenNote { path: string; node?: string; reason: string }
-
-export interface DoctorCourseReport {
-  course: string
-  total: number
-  notes: number
-  broken: DoctorBrokenNote[]
-  missing: string[]
-  unknown: string[]
-}
-
-export interface DoctorDoc { generated_at: string; courses: DoctorCourseReport[] }
-
 // ---- graph analyze（GET /api/graph、learnhub_graph_analyze；graphAnalyze → analysis.analyzeGraph）----
 // analysis.ts 依赖 node:fs 闭包，ui 侧 tsc 无法拉入——此处在视图层镜像 GraphAnalysis
 // 形状（改动需与 analysis.ts 同步）。
@@ -91,24 +76,13 @@ export interface DoctorDoc { generated_at: string; courses: DoctorCourseReport[]
 // Graph*ProposalResult 四型住 proposals.ts（提案域词汇，#152 刀 5 归位——projects 的
 // 窄面引用它们，经 views barrel 会绕出类型环）。
 export type {
-  GraphEditProposalResult, GraphSeedProposalResult, GraphEnrichProposalResult, GraphProposeResult,
+  GraphEditProposalResult, GraphEnrichProposalResult, GraphProposeResult,
 } from './views/proposals.ts'
-// 种子提案影响预览（#159）：reseed/建课应用确认框的知识前置。
-export type { SeedImpactDoc } from './views/proposals.ts'
-// 图谱域：edit（变更）、seed（种子，#142）与 enrich（富化覆盖层，#140）。
+// 图谱域：edit（变更）与 enrich（富化覆盖层，#140）。
 
 /** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。
  * operator/disagreement = 生长批受理时随行（#145 note 区算子标签；disagreement=带分歧声明）。
  * compass_rewrite（受理=意图）与 apply 侧 compass_rewritten（已落盘=事实）分相位命名。 */
-/** 种子提案受理（proposeSeed，#142）：课程新入口，一次人审即开工。
- * prior_feed_unresponded = ≥0.7 先验候选未被结构回应的条数（喂料分流，非阻可见）。 */
-
-
-
-
-
-
-
 // ---- 内容管线（queueItemsAll / lesson / coursesTree）----
 
 

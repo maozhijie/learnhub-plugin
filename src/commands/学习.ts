@@ -154,19 +154,6 @@ export const 学习域 = {
       }
     ]
   }),
-  'courses': command({
-    id: "courses",
-    args: {},
-    engine: "registry.enabled",
-    domain: "学习",
-    channels: [
-      {
-        channel: "panel",
-        mode: "sync",
-        route: { method: "GET", path: "/courses" },
-      }
-    ]
-  }),
   'courses-tree': command({
     id: "courses-tree",
     args: {
@@ -196,22 +183,6 @@ export const 学习域 = {
         mode: "sync",
         route: { method: "PUT", path: "/daily-goal" },
         bind: ["goal"]
-      }
-    ]
-  }),
-  'day-cutoff': command({
-    id: "day-cutoff",
-    args: {
-      value: { type: "string", required: true }
-    },
-    engine: "sched2.setDayCutoff",
-    domain: "学习",
-    channels: [
-      {
-        channel: "panel",
-        mode: "sync",
-        route: { method: "PUT", path: "/day-cutoff" },
-        bind: ["value"]
       }
     ]
   }),
@@ -393,22 +364,6 @@ export const 学习域 = {
       }
     ]
   }),
-  'node-pin': command({
-    id: "node-pin",
-    args: {
-      pinned: { type: "boolean", required: true },
-      course: { type: "string", required: true },
-      node: { type: "string", required: true }
-    },
-    domain: "学习",
-    channels: [
-      {
-        channel: "panel",
-        mode: "sync",
-        route: { method: "POST", path: "/node/pin" }
-      }
-    ]
-  }),
   'pin-today': command({
     id: "pin-today",
     summary: "Pin a node as「今天学它」(E3 goal ownership): for TODAY only it is raised to the top of its course in learnhub_recommend with a「你选了它」marker and its normal reason — a read-side ordering overlay, never a gate; pinning a not-ready node keeps the prerequisite soft-gate hint and the node stays openable. Pins expire automatically tomorrow. Optionally mount an execution intention (C-5): pass cue AND action to attach an if-then plan「在【时间/地点锚】之后【单一具体行动】」— the format is locked to a stable cue + ONE concrete action (multi-step chains and vague cues fall outside the evidence; Gollwitzer & Sheeran 2006). The intention rides the pinned recommend event and the panel, and expires with the pin. Learner Output: zero effect on scheduling, mastery, or XP.",
@@ -500,22 +455,6 @@ export const 学习域 = {
       }
     ]
   }),
-  'review': command({
-    id: "review",
-    args: {
-      course: { type: "string", required: true },
-      node: { type: "string", required: true }
-    },
-    engine: "content2.contentReview",
-    domain: "学习",
-    channels: [
-      {
-        channel: "panel",
-        mode: "sync",
-        route: { method: "POST", path: "/review" },
-      }
-    ]
-  }),
   'review-queue': command({
     id: "review-queue",
     summary: "List the cross-course due review cards as JSON (Anki-style; answers omitted — answer with learnhub_question_answer, self-rate Hard/Good/Easy after correct replies). Omit filters for the whole queue: cards sort by predicted recall risk R ascending (r carried per card). Note-source cards (C1) ride the same queue with source:\"note\" and course=笔记源 (node = source id) — answer/rate/forget them through the SAME learnhub_question_answer / learnhub_question_rate / learnhub_question_forget calls; note_drifted (content changed — offer regenerate/archival) and note_suspended (missing source or broken mirror) summaries ride the response; suspended cards never block course cards. Pass course and/or node for TARGETED review — the direct entry that recommendation/status advice items point to (A3 soft-gate prerequisite review and enc component-skill remediation): {course, node} returns exactly that node's due questions. A single-node session is ADAPTIVELY ordered (A1 difficulty tuning): cards carry a combined difficulty scalar d and the response carries the node-mastery start band — present cards nearest that band first; during the session shift the band up one step after every second consecutive correct answer and drop it back toward the base after a wrong/forgot, re-picking the nearest-d remaining card each time. band_pref (E5) is the learner's explicit difficulty choice as a weighted preference on that start band: hard raises it, easy relaxes it, omit for pure A1 — the anti-frustration drop-back still applies. Cards flagged jol=true are the sampled JOL probe (E4): before revealing the answer you may ask the learner for a one-tap prediction (会/不会/没把握) and pass it back as the predicted field on learnhub_question_answer / learnhub_question_forget — skippable, never blocking. A `calibration_hint` string riding the response (Self-Calibration, ADR-0022) means the learner's「会」predictions have run systematically low on actual accuracy: surface it verbatim next to the JOL probe as a gentle, non-blocking expectation-management nudge — never turn it into a score or a gate (the learner can disable it globally). Unknown node names fail loud.",
@@ -560,24 +499,6 @@ export const 学习域 = {
         mode: "queued",
         route: { method: "POST", path: "/generate/section" },
         phase: "sections"
-      }
-    ]
-  }),
-  'seed-propose': command({
-    id: "seed-propose",
-    args: {
-      course: { type: "string", required: true },
-      goalType: { type: "string" },
-      worksheet: { type: "array" },
-      useVaultPrior: { type: "boolean" }
-    },
-    domain: "学习",
-    channels: [
-      {
-        channel: "panel",
-        mode: "queued",
-        route: { method: "POST", path: "/seed/propose" },
-        phase: "seed"
       }
     ]
   }),

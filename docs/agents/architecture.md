@@ -1,6 +1,6 @@
 # 架构与门：面向 agent 的章程
 
-本仓库的架构约定不只是注释和 ADR——**它们会失败**：分层规则（R1–R7）、架构门（G1–G9）、命令注册表八道门、类型门与各类棘轮，全部随 `npm test` 全量执行。这篇是它们的地图；每道门的阈值来源与实测链的唯一登记处在 [`tests/README.md`](../../tests/README.md)（门册），裁决与理由在 `docs/adr/`。
+本仓库的架构约定不只是注释和 ADR——**它们会失败**：分层规则（R1–R7）、架构门（G1–G9）、命令注册表九道门、类型门与各类棘轮，全部随 `npm test` 全量执行。这篇是它们的地图；每道门的阈值来源与实测链的唯一登记处在 [`tests/README.md`](../../tests/README.md)（门册），裁决与理由在 `docs/adr/`。
 
 ## 1. `npm test` 的真实构成
 
@@ -25,7 +25,7 @@
 |---|---|---|
 | R1–R7 分层 | `tests/import-rules.test.ts` | host 只走 engine 门面、engine 禁引宿主与 `@deepseek-ai/*`、views 纯类型、io.ts 零依赖叶子、子系统不回引门面、src 全图零环 |
 | G1–G9 架构门 | `tests/arch-guards.test.ts` | 未定义标识符、宿主装配面/模块级 let、窄面三向与宽度、文件规模、顶层不变量、类型门、适配器面、写入单元 |
-| 注册表八道门 | `tests/commands.test.ts` | 命令声明的 engine 存在性、队列 phase、唯一性、handler 覆盖、指南投影、零运行时依赖、零行为漂移、声明与面一致 |
+| 注册表九道门 | `tests/commands.test.ts` | 命令声明的 engine 存在性、队列 phase、唯一性、handler 覆盖、指南投影、零运行时依赖、零行为漂移、声明与面一致、可达性 |
 
 单跑脚本（都在 `scripts/`，输出与门一致）：`undefined-scan.mjs`／`scan-deps-face.mjs`（窄面三向+宽度）／`scan-budget.mjs`（文件规模）／`scan-invariant.mjs`（顶层不变量）／`scan-host-state.mjs`（模块级 let）／`scan-types.mjs`（类型清单）。命令注册表声明在 `src/commands/`。
 

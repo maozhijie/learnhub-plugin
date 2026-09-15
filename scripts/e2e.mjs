@@ -1,6 +1,6 @@
 /**
  * 端到端写路径测试：把 学习中心 的最小子集复制到临时目录，在副本上跑
- * 题库保存/刷卡作答（题目级 FSRS）/跳过/完成/审计/doctor/面板扩展接口 全链路，
+ * 题库保存/刷卡作答（题目级 FSRS）/跳过/完成/审计/dataCheck/面板扩展接口 全链路，
  * 绝不触碰真实 vault。种子课程动态探测（注册表第一门启用课），课程名不硬编码。
  * 用法：node scripts/e2e.mjs <vault 路径>
  */
@@ -189,9 +189,10 @@ async function run() {
     assert(existsSync(join(dstCenter, courseRoot, '审计报告.md')), 'audit report missing')
     assert(existsSync(join(dstCenter, courseRoot, '就绪清单.md')), 'ready list missing')
   })
-  await step('doctor', async () => {
-    const doc = await engine.doctor()
-    assert(doc.courses.length === 1, 'doctor shape')
+  await step('dataCheck', async () => {
+    const report = await engine.dataCheck()
+    assert(report.inventory.notes > 0, 'data-check shape')
+    assert(report.status !== 'broken', `data-check broken：${report.findings.filter(f => f.level === 'broken').map(f => f.reason).join('、')}`)
   })
   await step('skip/complete + questionsAll（面板扩展接口）', async () => {
     // 完成确认：未作答题初始化 FSRS + stage→review

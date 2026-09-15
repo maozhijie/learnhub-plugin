@@ -12,7 +12,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { AgentSeam, LearnhubEngine, DEFAULT_QUIZ_AUDIT_RATE, CURRENT_SCHEMA_VERSION } from '../engine/index.ts'
-import type { SeedDraftRequest } from '../engine/index.ts'
 import type { GenJobFailure, GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
 import { createCorpusCapture } from './corpus.ts'
@@ -87,10 +86,8 @@ export interface GenJob {
    * 随任务进执行侧——就绪深度已满足（`check.ok`）时也不短路成停摆，照产一轮回合
    * （教练仍可裁 `ops: []`）。自动触发点不带它（停摆与阻尼照旧生效）。 */
   growthForce?: boolean
-  /** 图域任务负载（面板下发，phase 决定形状）：种子=建课/换终点表单（SeedDraftRequest
-   * 去 course——course 是任务键槽）；反编译=项目目标反编译；计划/里程碑=项目草案
+  /** 图域任务负载（面板下发，phase 决定形状）：反编译=项目目标反编译；计划/里程碑=项目草案
    * （course 槽放项目 id）。 */
-  seedPayload?: Omit<SeedDraftRequest, 'course'>
   decompilePayload?: { project: string; course?: string; goal?: string; notes?: string[] }
   planPayload?: { project: string }
   milestonePayload?: { project: string; milestone: string }

@@ -40,8 +40,8 @@ function resolveSource(source: string): string | null {
 /** 锚门本体（可注入 = 自检可喂坏样本）。 */
 function runRubricGate(rubrics: readonly QualityRubric[]): void {
   assert.deepEqual(
-    rubrics.map(r => r.id), ['大纲', '节正文', '题目', '教练回合', '种子·终点'],
-    '五份量规缺一不可（大纲/节正文/题目/教练回合/种子·终点）',
+    rubrics.map(r => r.id), ['大纲', '节正文', '题目', '教练回合'],
+    '四份量规缺一不可（大纲/节正文/题目/教练回合；「种子·终点」随种子链整体退役 #256）',
   )
   const stations = new Set(Object.values(STATIONS))
   for (const r of rubrics) {
@@ -76,7 +76,7 @@ function allCriteriaOf(r: QualityRubric) {
   return out
 }
 
-test('锚门：五份量规全量对账（出处可解析 + 锚点在册 + 法庭元数据 + 无总分）', () => {
+test('锚门：四份量规全量对账（出处可解析 + 锚点在册 + 法庭元数据 + 无总分）', () => {
   runRubricGate(QUALITY_RUBRICS)
 })
 
@@ -104,16 +104,17 @@ test('自检：加「总分」维度 / 换掉法庭元数据，元数据门必�
       : r)
   assert.throws(() => runRubricGate(withTotal), /总分/)
   const noCourt = QUALITY_RUBRICS.map(r =>
-    r.id === '种子·终点' ? { ...r, court: { ai: '', human: '', outcome: '' } } : r)
+    r.id === '教练回合' ? { ...r, court: { ai: '', human: '', outcome: '' } } : r)
   assert.throws(() => runRubricGate(noCourt), /RUBRIC_COURTS/)
 })
 
-test('出处解析四族都有真实使用者（词条/ADR 分支非死代码）', () => {
-  // ADR 族：种子·终点的资格判据引用 ADR-0040/0056（#221 来源承诺）
-  const seed = rubricOf('种子·终点')!
-  const sources = new Set(seed.dimensions.flatMap(d => d.criteria).map(c => c.source))
-  assert.ok(sources.has('ADR-0040') && sources.has('ADR-0056') && [...sources].some(s => s.startsWith('模板:')),
-    '种子·终点量规应同时消费 ADR 与模板两族出处')
+test('出处解析各族都有真实使用者（词条/ADR 分支非死代码）', () => {
+  // ADR 族：解析器对真实 ADR 可用（#256 种子·终点量规退役后，判据面不再引用 ADR；
+  // 分支由本断言保活——将来有判据引用 ADR 出处时直接可用）
+  assert.ok(resolveSource('ADR-0062')?.includes('ADR-0062'))
+  assert.equal(resolveSource('ADR-9999'), null)
+  // 模板族：全量规都在消费（任一判据的 source 以「模板:」开头）
+  assert.ok(QUALITY_RUBRICS.flatMap(r => r.dimensions).flatMap(d => d.criteria).some(c => c.source.startsWith('模板:')))
   // 词条族：解析器对真实词条可用（判据尚未引用时不强制入库——分支由本断言保活）
   assert.ok(resolveSource('词条:生成站')?.includes('**生成站（Generation Station）**'))
   assert.equal(resolveSource('词条:不存在的词条'), null)
@@ -138,7 +139,7 @@ test('#221 增补：「与相邻节衔接」是节正文量规的显式判据（
 
 test('量规先于评审器：判据可被评审器扁平消费（allCriteria 三级定位齐全）', () => {
   const flat = allCriteria()
-  assert.ok(flat.length >= 30, `五量规判据总量实测 ${flat.length}，不应缩水`)
+  assert.ok(flat.length >= 30, `四量规判据总量实测 ${flat.length}，不应缩水`)
   for (const x of flat) {
     assert.ok(x.rubric && x.dimension && x.criterion.id, '扁平视图三级定位（量规/维度/判据）必须齐全')
     assert.ok(x.criterion.evidence.length > 0, `判据「${x.criterion.id}」缺证据要求（引原文定位）`)

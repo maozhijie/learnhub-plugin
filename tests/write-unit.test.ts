@@ -65,7 +65,7 @@ test('失败行为：步骤 k 抛错 → 上抛中止，此前已写留在盘上
   ])
   await assert.rejects(h.run(), /盘满/)
   assert.deepEqual(h.order, ['run:第一笔', 'run:会炸的一笔'], '失败前的步骤已执行（部分态 = 今天语义），失败后的不执行')
-  assert.equal(h.journal.length, 0, '失败不写 journal（恢复走 dataCheck/doctor/rebuild）')
+  assert.equal(h.journal.length, 0, '失败不写 journal（恢复走 dataCheck/rebuild）')
 })
 
 test('journal：末尾恰一条，走既有 journal.jsonl 形状（kind=write_unit、node=op、ts 经 Clock 端口）', async () => {

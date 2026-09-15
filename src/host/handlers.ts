@@ -8,7 +8,7 @@
  *
  * 键是**路由**（method + path）：handler 是路由级事实（`/jol`、`/sleep` 各有一条通道走生成路径、
  * 另一条要 handler），命令级的 id 会让同命令的两条通道互相覆盖。门④ 断言本表键集合恰等于
- * 注册表里**没有 bind 的 panel 通道**集合。
+ * 注册表里**没有 bind 的路由通道（panel+ops）**集合。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
@@ -76,40 +76,12 @@ async function explainBackTurn(rt: HostRuntime, ctx: Context, course: string, no
     { capture: rt.corpus.record, station: STATIONS.explainBack })
 }
 
-/** 反编译双提案的联合 apply 目标（#156）：kind 命中 seed/project_plan、目标提案带 pair
- * 联动且仍 pending、另一半在 pending/applied（同进同退或崩溃续段）时返回联合入口的
- * 两半 id；其余返回 null 走统一 apply 单边路径——无 pair 的普通提案、目标已决
- * （takePending 的「已 applied」拒收语义要原样保留）、另一半已拒/缺失（单边守卫的
- * 精确拒收文案不改写）都不拦。 */
-export function pairJointTarget(
-  proposals: ReadonlyArray<Pick<ProposalRec, 'id' | 'kind' | 'status' | 'pair'>>,
-  kind: string, pid?: number,
-): { planPid: number; seedPid: number } | null {
-  if (kind !== 'seed' && kind !== 'project_plan') return null
-  const target = pid !== undefined
-    ? proposals.find(p => p.id === pid)
-    : [...proposals].reverse().find(p => p.status === 'pending' && p.kind === kind)
-  if (!target || target.status !== 'pending' || !target.pair) return null
-  const sibling = proposals.find(p => p.id === target.pair)
-  if (!sibling || (sibling.status !== 'pending' && sibling.status !== 'applied')) return null
-  const plan = target.kind === 'project_plan' ? target : sibling
-  const seed = target.kind === 'seed' ? target : sibling
-  if (plan.kind !== 'project_plan' || seed.kind !== 'seed') return null
-  return { planPid: plan.id, seedPid: seed.id }
-}
-
 export const HANDLERS: Record<string, RouteHandler> = {
   'GET /status': async ({ rt, ctx, res }) => {
     // 模型透明：status 附带当前 LLM 配置（provider/model/思考档，面板只读展示）。
     // 会话开始触点（五点接线，30 分钟节流）：面板打开/轮询共用入口，fire-and-forget。
     sessionStartCheckpoint(rt, ctx)
     sendJson(res, 200, await apiRun(rt, 'api/status', async () => ({ ...(await rt.engine.statusJson()), llm: llmView() })))
-  },
-  'GET /courses': async ({ rt, res }) => {
-    const list = (await rt.engine.registry.enabled()).map(c => ({
-      name: c.name, root: c.root, enabled: String(c.enabled !== false),
-    }))
-    sendJson(res, 200, list)
   },
   'GET /recommend': async ({ rt, url, res }) => {
     const limit = Number(url.searchParams.get('limit') ?? '5')
@@ -317,15 +289,6 @@ export const HANDLERS: Record<string, RouteHandler> = {
     coachTriggerDetached(rt, ctx, 'node_skip', need(body, 'course'), { force: true })
     sendJson(res, 200, skipped)
   },
-  'POST /node/pin': async ({ rt, body, res }) => {
-    // 「今天学它」pin（E3 #67）：显式方向——pinned=true 置顶当日推荐榜首（只改
-    // 排序、保留就绪提示、次日自动失效），false 取消。
-    const pinned = requireBoolean(body, 'pinned')
-    const out = pinned
-      ? await rt.engine.learner.pinToday(need(body, 'course'), need(body, 'node'))
-      : await rt.engine.learner.unpinToday(need(body, 'course'), need(body, 'node'))
-    sendJson(res, 200, await apiRun(rt, 'api/node/pin', async () => out))
-  },
   'POST /node/complete': async ({ rt, ctx, body, res }) => {
     // 完成 = 教练回合触发点之一（五点接线）：自动触点走阻尼；路由返回后 fire-and-forget
     const done = await apiRun(rt, 'api/node/complete', () =>
@@ -337,21 +300,13 @@ export const HANDLERS: Record<string, RouteHandler> = {
     sendJson(res, 200, { message: await rt.engine.content2.submitFeedback(rt.vault, rt.centerRel, need(body, 'path')) })
   },
   'POST /proposals/apply': async ({ rt, ctx, body, res }) => {
-    // 提案统一 apply（图谱域 edit/seed/enrich + 项目域 project_plan/project_milestone）：
+    // 提案统一 apply（图谱域 edit/enrich + 项目域 project_plan/project_milestone）：
     // kind 必须显式照抄提案记录，未知 kind 引擎报错；
-    // 反编译双提案（pair 联动）检测到即自动走联合入口（#156）——纯面板用户不再被
-    // 「用 learnhub_project_decompile_apply」的拒收文案指向 agent 会话（ADR-0038 补完）；
-    // 计划修订触发的换线/补支生长批随后入队（#149；联合结果从 plan 半区取触发）；
+    // 计划修订触发的换线/补支生长批随后入队（#149）；
     // 正文不随 apply 入队（ADR-0078：apply 只落结构，内容由学习者显式下发）
     const kind = need(body, 'kind')
     const id = applyId(body.id)
-    // pair 检测只对参与反编译对的 kind 取提案列表（其余 kind 不多打一次引擎）
-    const joint = kind === 'seed' || kind === 'project_plan'
-      ? pairJointTarget(await rt.engine.graph.graphProposals(), kind, id)
-      : null
-    const applied = joint
-      ? await rt.engine.project.projectDecompileApply(joint.planPid, joint.seedPid)
-      : await rt.engine.graph.proposalApply(kind, id)
+    const applied = await rt.engine.graph.proposalApply(kind, id)
     const planPart = applied as { plan?: { kind?: string; growth?: Array<{ course: string; lines: string[] }> } }
     triggerPlanGrowth(rt, ctx, planPart.plan ?? (applied as { kind?: string }))
     await afterGraphApply(rt)
@@ -527,9 +482,6 @@ export const HANDLERS: Record<string, RouteHandler> = {
       })
     }))
   },
-  'POST /review': async ({ rt, body, res }) => {
-    sendJson(res, 200, { message: await rt.engine.content2.contentReview(need(body, 'course'), need(body, 'node')) })
-  },
   'POST /question-answer': async ({ rt, ctx, body, res }) => {
     sendJson(res, 200, await apiRun(rt, 'api/question-answer', () => rt.engine.content2.questionAnswer(
       llmSeam(ctx, rt.corpus.record, STATIONS.judge),
@@ -658,27 +610,6 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 罗盘初画/重画（#143 透明度装置）：LLM 一次调用进串行队列，不占请求
     sendJson(res, 200, await apiRun(rt, 'api/coach/compass', async () =>
       enqueueGraphJob(rt, ctx, { course: need(body, 'course'), node: '罗盘', phase: 'compass' })))
-  },
-  'POST /seed/propose': async ({ rt, ctx, body, res }) => {
-    // 种子起草（ADR-0076 种子降职：给已注册课程起草结构，不再建课；方向取自已加终点
-    // 的目标描述——goal/mode 字段已退役）。表单绑定字段随任务携带进引擎
-    const seedCourse = need(body, 'course')
-    const worksheet = optList(body, 'worksheet')
-      ?.filter((w): w is { block?: unknown; note?: unknown } => typeof w === 'object' && w !== null)
-      .map(w => ({
-        block: typeof w.block === 'string' ? w.block : '',
-        ...(typeof w.note === 'string' && w.note.trim() ? { note: w.note } : {}),
-      }))
-      .filter(w => w.block.trim()) ?? []
-    sendJson(res, 200, await apiRun(rt, 'api/seed/propose', async () =>
-      enqueueGraphJob(rt, ctx, {
-        course: seedCourse, node: '种子起草', phase: 'seed',
-        seedPayload: {
-          goalType: body.goalType === 'coverage' ? 'coverage' : 'capability',
-          useVaultPrior: optTrue(body, 'useVaultPrior'),
-          worksheet,
-        },
-      })))
   },
   'POST /endpoint/add': async ({ rt, body, res }) => {
     // 添加终点（ADR-0076 §三：终点由学习者手加，立即写盘不等生成队列）。**纯声明**：

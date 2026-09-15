@@ -20,6 +20,7 @@ import {
   outlineRepairFeedback,
   quizFailureOutcome,
   quizSuccessOutcome,
+  RETIRED_GEN_JOB_PHASES,
   sectionFailure,
   type GenJobFailure,
   type GenJobPhase,
@@ -546,7 +547,7 @@ export function sessionStartCheckpoint(rt: HostRuntime, ctx: Context): void {
 /** 图域任务入队（面板下发共用）：键 = course/node 标签；同键在途不重入，终态即覆盖
  * （单发起草，重按 = 重来）。返回 queued 旗标 + 消息给路由留痕——拒绝重复入队是
  * 非成功语义，面板按旗标着色、不得弹成功样式（#155 交互诚实性）。 */
-export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: string; node: string; phase: GenJobPhase } & Partial<Pick<GenJob, 'seedPayload' | 'decompilePayload' | 'planPayload' | 'milestonePayload'>>): { message: string; queued: boolean } {
+export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: string; node: string; phase: GenJobPhase } & Partial<Pick<GenJob, 'decompilePayload' | 'planPayload' | 'milestonePayload'>>): { message: string; queued: boolean } {
   assertQueueWritable(rt)
   const key = `${j.course}/${j.node}`
   const last = rt.jobs.genJobs.get(key)
@@ -556,7 +557,6 @@ export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: stri
   rt.jobs.genJobs.set(key, {
     course: j.course, node: j.node, startedAt: new Date().toISOString(),
     status: 'queued', phase: j.phase, model: llmCfg.model, message: '排队等待生成队列…',
-    ...(j.seedPayload ? { seedPayload: j.seedPayload } : {}),
     ...(j.decompilePayload ? { decompilePayload: j.decompilePayload } : {}),
     ...(j.planPayload ? { planPayload: j.planPayload } : {}),
     ...(j.milestonePayload ? { milestonePayload: j.milestonePayload } : {}),
@@ -568,29 +568,18 @@ export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: stri
 
 /** 图域任务 phase → 语料站名（#213 失败补标映射；growth 在 generateGrowthJob 单列）。 */
 const GRAPH_JOB_STATIONS: Partial<Record<GenJobPhase, string>> = {
-  seed: STATIONS.seed, compass: STATIONS.compass, decompile: STATIONS.decompile,
+  compass: STATIONS.compass, decompile: STATIONS.decompile,
   plan: STATIONS.plan, milestone: STATIONS.milestone,
 }
 
-/** 图域任务执行（面板下发）：seed/compass/decompile/plan/milestone——引擎 LLM 方法一次受理，
- * 产物一律走提案人审通道（种子一次人审、反编译联合人审、计划 apply 带快照），任务
+/** 图域任务执行（面板下发）：compass/decompile/plan/milestone——引擎 LLM 方法一次受理，
+ * 产物一律走提案人审通道（反编译计划人审、计划 apply 带快照），任务
  * 只留受理摘要；失败落 failed 可从生成页重试。失败经语料补标（phase → 站，#213）。 */
 async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Promise<void> {
   job.status = 'running'
   persistGenJobs(rt)
   try {
-    if (job.phase === 'seed' && job.seedPayload) {
-      job.message = '种子起草中（锚定终点方向 → 模型）…'
-      persistGenJobs(rt)
-      const r = await rt.engine.graph.seedPropose({
-        course: job.course,
-        goalType: job.seedPayload.goalType, useVaultPrior: job.seedPayload.useVaultPrior,
-        worksheet: job.seedPayload.worksheet,
-      }, rt.agent)
-      job.status = 'done'
-      job.message = `种子提案 #${r.id} 待人审：${r.starts} 起点 → 终点「${r.endpoint}」`
-        + `${r.prior ? priorNoteOf(r.prior) : ''}${r.repaired ? '；修复轮一次' : ''}——提案收件箱一次人审即开工`
-    } else if (job.phase === 'compass') {
+    if (job.phase === 'compass') {
       // 初画/重画共用一条队列通道（repainted 由引擎结果区分），措辞不预设哪一种
       job.message = '罗盘路线绘制中（deep 档工具回路）…'
       persistGenJobs(rt)
@@ -602,7 +591,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
       // 回路轨迹（#163）：重画前查了哪些只读视图，生成页逐条可查
       if (r.trajectory?.length) job.message += `｜回路轨迹：${r.trajectory.join('；')}`
     } else if (job.phase === 'decompile' && job.decompilePayload) {
-      job.message = '目标反编译中（计划 + 种子双提案）…'
+      job.message = '目标反编译中（里程碑计划）…'
       persistGenJobs(rt)
       const p = job.decompilePayload
       const r = await rt.engine.project.projectDecompile(p.project, {
@@ -611,7 +600,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
         ...(p.notes?.length ? { notes: p.notes } : {}),
       }, rt.agent)
       job.status = 'done'
-      job.message = `反编译双提案待联合人审：计划 #${r.pair.plan}${r.pair.seed ? ` + 种子 #${r.pair.seed}` : ''}${priorNoteOf(r.prior)}——提案收件箱同进同退`
+      job.message = `反编译计划提案 #${r.plan_proposal.id} 待人审：${r.plan_proposal.milestones} 个里程碑${priorNoteOf(r.prior)}——提案收件箱人审即生效`
     } else if (job.phase === 'plan' && job.planPayload) {
       job.message = '里程碑计划草案生成中…'
       persistGenJobs(rt)
@@ -712,9 +701,9 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
 
 /** 队列执行泵：空闲且未暂停时取队首排队任务跑管线；跑完（含失败）继续泵下一个。
  * phase=quiz 的纯出题任务走 generateQuizJob、phase=growth 走 generateGrowthJob（#145）、
- * 图域任务（seed/compass/decompile/plan/milestone）走 generateGraphJob（面板下发），其余按节点
+ * 图域任务（compass/decompile/plan/milestone）走 generateGraphJob（面板下发），其余按节点
  * 管线执行（#118）。 */
-const GRAPH_JOB_PHASES: ReadonlySet<GenJobPhase> = new Set<GenJobPhase>(['seed', 'compass', 'decompile', 'plan', 'milestone'])
+const GRAPH_JOB_PHASES: ReadonlySet<GenJobPhase> = new Set<GenJobPhase>(['compass', 'decompile', 'plan', 'milestone'])
 
 export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
   // broken 态不开跑（#194）：任务执行会反复全量落盘注册表——写回闸拒绝（静默，与
@@ -1154,9 +1143,10 @@ export function resumeQueue(rt: HostRuntime, ctx: Context): { paused: boolean; r
 
 /** 生成任务注册表恢复（apply 装配步，fire-and-forget）：running/cancelling 随进程消失标失败；
  * queued 保留但队列置为暂停（不自动开跑——重启后静默烧 token 是惊吓，生成页一键恢复）；
- * 图域任务负载随档恢复（#157：种子/反编译/计划/里程碑的 payload 与生长批 inject/裁决
+ * 图域任务负载随档恢复（#157：反编译/计划/里程碑的 payload 与生长批 inject/裁决
  * 面板下发时随任务落盘，恢复缺失即无法执行——负载要求的 queued 任务在恢复处明确标
- * 失败可重试，不拖到执行器抛「负载缺失或 phase 未知」）；恢复清扫与幸存终态按剩余
+ * 失败可重试，不拖到执行器抛「负载缺失或 phase 未知」；#256 种子链退役后 phase=seed
+ * 的历史档同样在恢复处明确标失败）；恢复清扫与幸存终态按剩余
  * 保留期补挂定时器（跨重启只能靠时间戳结算，ADR-0039）。任务档 Broken（#194 / 
  * ADR-0053）：队列置 broken 态——生成页显式报错 + 修复指引，写回闸拒绝一切落盘，
  * 宿主其余功能不受影响。 */
@@ -1203,7 +1193,6 @@ export function restoreGenJobs(rt: HostRuntime): void {
             ? { growthOutcome: j.growthOutcome } : {}),
           // 图域任务负载随档恢复（#157）：形状由写入侧（面板下发）保证，这里只做
           // 「非空对象」闸——损坏负载进执行器由引擎契约 fail loud，不做静默兜底
-          ...(j.seedPayload && typeof j.seedPayload === 'object' ? { seedPayload: j.seedPayload } : {}),
           ...(j.decompilePayload && typeof j.decompilePayload === 'object' ? { decompilePayload: j.decompilePayload } : {}),
           ...(j.planPayload && typeof j.planPayload === 'object' ? { planPayload: j.planPayload } : {}),
           ...(j.milestonePayload && typeof j.milestonePayload === 'object' ? { milestonePayload: j.milestonePayload } : {}),
@@ -1212,6 +1201,14 @@ export function restoreGenJobs(rt: HostRuntime): void {
           ...(interrupted
             ? { finishedAt: new Date().toISOString() }
             : (typeof j.finishedAt === 'string' ? { finishedAt: j.finishedAt } : {})),
+        }
+        // 已退役站的历史档（#256 种子链退役）：phase 仍在档里、但已无执行器——明确标失败，
+        // 不让它落进 pumpGeneration 的默认分派（会被当正文管线误跑，并把 phase 改写成 outline）；
+        // 「重启前已落盘的 phase=seed 任务」是与提案 kind=seed 同族的存量兼容面。
+        if (restored.status === 'queued' && restored.phase !== undefined && RETIRED_GEN_JOB_PHASES.has(String(restored.phase))) {
+          restored.status = 'failed'
+          restored.message = '该任务所属的生成站已退役（#256 种子起草），无法恢复执行——请改走教练生长或手加终点重新下发。'
+          restored.finishedAt = new Date().toISOString()
         }
         // 负载要求的排队图域任务恢复后缺负载（旧档案/未完整落盘）：明确标失败可重试，
         // 不留 queued 假象——恢复队列一键开跑时才炸出「负载缺失或 phase 未知」是静默变形

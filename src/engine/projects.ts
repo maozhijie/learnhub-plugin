@@ -42,7 +42,6 @@ import { declaredEncOf } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { CourseEntry, Fm, VaultPriorAudit } from './types.ts'
 import type { AgentSeam, GateVerdict } from './agent.ts'
-import type { GraphApplyResult } from './views/graph.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
 
 import { applyPracticeEvidence } from './grading.ts'
@@ -353,7 +352,7 @@ export class Projects {
   // ---- 计划提案（project_plan；带快照的修订通道，设计 §7） ----
 
   async proposePlan(
-    projectId: string, yamlText: string, opts: { pair?: number } = {},
+    projectId: string, yamlText: string,
   ): Promise<{ id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }> {
     const project = await this.load(projectId)
     let doc: unknown
@@ -368,24 +367,18 @@ export class Projects {
     }
     const initial = project.plan.length === 0
     // 注册表条目出生即完整（ADR-0053 契约下空 artifact 是违约形态）：路径经构造器形态
-    // 随条目一次落盘；pair 出生即写（#149 同源双提案——种子半区先建、号已知，计划半区
-    // 落盘那一刻就带联动，任一时刻崩溃都不会留下可单边 apply 的无守卫计划半区）。
+    // 随条目一次落盘。
     const pid = await this.store.createProposal('project_plan', projectId,
       `${initial ? '初次规划' : '计划修订'}：${v.plan.length} 个里程碑`,
-      id => this.paths.proposalArtifactPath(id, 'project_plan', projectId),
-      opts.pair !== undefined ? { pair: opts.pair } : {})
+      id => this.paths.proposalArtifactPath(id, 'project_plan', projectId))
     const path = this.paths.proposalArtifactPath(pid, 'project_plan', projectId)
     await atomicWrite(path, YAML.stringify(doc), this.fs)
     return { id: pid, kind: 'project_plan', project: projectId, milestones: v.plan.length, initial }
   }
 
-  /** apply 计划提案：被替换的旧计划 YAML 落快照（初次规划无快照），不静默覆盖。
-   * 同源双提案守卫（#149）：反编译 pair 联动的计划提案不得先于种子半区单独 apply
-   * （计划引用悬空节点炸消费面）——联合入口走 opts.pairApply 豁免。 */
-  async applyPlan(pid?: number, opts: { pairApply?: boolean } = {}): Promise<ProjectApplyResult> {
+  /** apply 计划提案：被替换的旧计划 YAML 落快照（初次规划无快照），不静默覆盖。 */
+  async applyPlan(pid?: number): Promise<ProjectApplyResult> {
     const prop = await this.store.takePending('project_plan', pid)
-    const block = Store.pairApplyBlock(prop, await this.store.loadProposals(), opts)
-    if (block) throw new Error(`[project-plan-apply] ${block}`)
     const v = validatePlanArtifact(await this.loadArtifact(prop), prop.course)
     if (v.errors || !v.plan) {
       throw new Error(`[project-plan-apply] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
@@ -567,8 +560,6 @@ export interface ProjectDeps {
   /** 概念登记表（#229 查询扩展：反编译站检索词按别名/易混概念低权重扩词）。 */
   concepts: Pick<ConceptRegistry, 'load'>
   bank: Pick<QuestionBank, 'load'>
-  /** 图 apply 包装（#175 阶段③归位：联合受理不再直调 applySeed）。 */
-  graphApply(kind: 'seed', pid?: number, opts?: { pairApply?: boolean; today?: string }): Promise<GraphApplyResult>
   projects: Projects
   noteManifest: Pick<NoteSourceManifest, 'load' | 'save'>
   /** vault 根目录。 */
@@ -584,7 +575,7 @@ export interface ProjectDeps {
   enabledCourses(): Promise<CourseEntry[]>
   loadPrompt(kind: string): Promise<string>
   locateNode(nodeSpec: string): Promise<{ course: CourseEntry; node: string }>
-  graphPropose(kind: 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult>
+  graphPropose(kind: 'edit' | 'enrich', yamlText: string): Promise<GraphProposeResult>
   nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }>
   saveNodeNote(path: string, fm: Fm, body: string): Promise<void>
 }
@@ -1087,18 +1078,14 @@ export class ProjectSubsystem {
     }
   }
 
-  /** 目标反编译（P-5，v8 #149）：一次模型调用产出**双提案**——里程碑计划草案
-   * （project_plan）与知识子图种子簇（kind=seed，子图簇直通新课程的种子起点，
-   * 起点 basis 铸 project）。同源同进同退：
-   * - 受理侧门禁全部过完才落任何提案：双半区 schema 门 + 名字对账门（plan.nodes ⊆
-   *   种子簇 ∪ 既有图节点名）+ 种子落点/结构预检——任一失败回灌修复一轮，仍败则
-   *   DECOMPILE_GATE_FAILED 零提案（同退的静态半）；
-   * - 两提案 pair 互相指认：apply 只走 projectDecompileApply 联合入口（种子先落图、
-   *   计划后落盘），单边 apply 被守卫拒、单边 reject 联动拒另一半（同退的动态半）。
-   * 显式目标课程 = 已播种课程的新计划半区（nodes 引用既有节点名，对账门收紧到既有
-   * 图；新知识需要走计划修订驱动的教练补支）；省略 course = 种子簇充当新课程种子。
+  /** 目标反编译（P-5）：一次模型调用产出里程碑计划草案（project_plan）——显式目标
+   * 课程必填（ADR-0076：反编译不再自带建课能力，先建课再反编译）；plan.nodes 对账门
+   * 收紧到该课程既有图节点名（新知识走计划修订驱动的教练补支）。
+   * - 受理侧门禁全过才落提案：schema 门 + 名字对账门——任一失败回灌修复一轮，仍败
+   *   则 DECOMPILE_GATE_FAILED 零提案；
+   * - #256 种子半区退役：反编译只产计划提案，seed 半区与 pair 联动机械已删净。
    * 检索面复用 Vault 先验（只读）；apply 前零 canonical 写入（ADR-0015 裁决 6）。
-   * 调用经统一 agent 缝（#162）：剥围栏/调用日志在缝里内建，双产物门未过经缝的门错
+   * 调用经统一 agent 缝（#162）：剥围栏/调用日志在缝里内建，产物门未过经缝的门错
    * 修复轮回灌重产恰一次（修复轮语义档 deep——回灌重裁是值得多思考一轮的高难调用）。 */
   async projectDecompile(
     id: string,
@@ -1112,8 +1099,6 @@ export class ProjectSubsystem {
     notes: string[]
     repaired: boolean
     plan_proposal: { id: number; kind: 'project_plan'; project: string; milestones: number; initial: boolean }
-    seed_proposal: { id: number; kind: 'seed'; course: string; endpoint: string; starts: number } | null
-    pair: { plan: number; seed: number | null }
   }> {
     const fm = await this.e.projects.load(id)
     const goal = decompileGoalOf(opts.goal, fm.goal)
@@ -1217,8 +1202,7 @@ export class ProjectSubsystem {
     })
     const doc: DecompileDoc = round.result
     // 名字对账门已在修复环内跑过（judgeOnce 过门 = 对账为空）——此处直接受理。
-    // ADR-0076 种子降职：反编译只产计划提案（seed 半区退役；双提案 pair 联动与联合
-    // 入口 projectDecompileApply 保留给存量 pending 对，不再产新对）。
+    // ADR-0076/#256 种子半区退役：反编译只产计划提案（seed 半区与 pair 联动机械已删净）。
     const planProposal = await this.e.projects.proposePlan(fm.id, YAML.stringify({ project: fm.id, plan: doc.plan }))
     return {
       project: fm.id,
@@ -1226,46 +1210,7 @@ export class ProjectSubsystem {
       notes: picked.map(p => p.path),
       repaired: round.repaired,
       plan_proposal: planProposal!,
-      seed_proposal: null,
-      pair: { plan: planProposal!.id, seed: null },
     }
-  }
-
-
-  /** 反编译双提案联合 apply（#149 同进同退的动态半）：两提案 pair 互指才受理；
-   * 种子先落图（簇节点 + 终点锚 + 笔记脚手架——计划引用先有图可解析）、计划后落盘。
-   * 任一半区已是 applied = 崩溃恢复续段（跳过重放该半区）；rejected = 拒绝复活
-   * （重新反编译产生新对）。 */
-  async projectDecompileApply(planPid: number, seedPid: number): Promise<{
-    project: string
-    seed: GraphApplyResult | null
-    plan: ProjectApplyResult | null
-  }> {
-    const list = await this.e.store.loadProposals()
-    const plan = list.find(p => p.id === planPid)
-    const seed = list.find(p => p.id === seedPid)
-    const bad = (why: string): Error => new Error(`[project-decompile-apply] ${why}`)
-    if (!plan || (plan.status !== 'pending' && plan.status !== 'applied')) {
-      throw bad(`计划提案 #${planPid} 不存在或已决（pending/applied 之外不受理）。`)
-    }
-    if (!seed || (seed.status !== 'pending' && seed.status !== 'applied')) {
-      throw bad(`种子提案 #${seedPid} 不存在或已决（pending/applied 之外不受理）。`)
-    }
-    if (plan.kind !== 'project_plan' || seed.kind !== 'seed') {
-      throw bad(`提案 kind 不对（#${planPid}=${plan.kind}，#${seedPid}=${seed.kind}）——联合 apply 只收 反编译对（project_plan + seed）。`)
-    }
-    if (plan.pair !== seedPid || seed.pair !== planPid) {
-      throw bad(`提案 #${planPid} 与 #${seedPid} 不是同一反编译对（pair 联动缺失或互指不符）——反编译对只走本联合入口；独立提案（无 pair）才走 learnhub_project_apply / learnhub_graph_apply 单独生效。`)
-    }
-    const today = (await this.e.learningDay()).today
-    // 种子先落图：簇节点 + 终点锚 + ensureNotesFor 笔记脚手架——计划引用先有图可解析
-    const seedResult = seed.status === 'pending'
-      ? await this.e.graphApply('seed', seedPid, { pairApply: true, today })
-      : null
-    const planResult = plan.status === 'pending'
-      ? await this.applyProjectPlanProposal(planPid, { pairApply: true })
-      : null
-    return { project: (planResult as { project?: string })?.project ?? plan.course, seed: seedResult, plan: planResult }
   }
 
 
@@ -1274,7 +1219,7 @@ export class ProjectSubsystem {
    * 快照 diff（id 为身份锚）并解析换线/补支触发（按锚定课程聚合，宿主入队生长批）；
    * 已过点里程碑被移除/改名出显式警告（不拒绝）。单边守卫在 projects.applyPlan 内。 */
   async applyProjectPlanProposal(
-    pid?: number, opts: { pairApply?: boolean } = {},
+    pid?: number,
   ): Promise<ProjectApplyResult> {
     let before: ProjectFm | null = null
     const proposals = await this.e.store.loadProposals()
@@ -1285,7 +1230,7 @@ export class ProjectSubsystem {
         before = await this.e.projects.load(prop.course).catch(() => null)
       }
     }
-    const result = await this.e.projects.applyPlan(pid, opts)
+    const result = await this.e.projects.applyPlan(pid)
     if (result.kind !== 'project_plan') return result
     const after = await this.e.projects.load(result.project)
     const diff = planRevisionDiff(before?.plan ?? [], after.plan)

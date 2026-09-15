@@ -86,14 +86,14 @@ test('评审器跑通：报告落 state/质量评审、逐件两期评审、证�
   const result = await runQualityReview(ctx, rt, { repeats: 1, corpusDir: join(vault, '学习中心', 'state', '生成语料') })
   const report = result.report
 
-  assert.equal(report.sampling.stations.join('、'), '教练生长、种子起草', '范围 = 有量规的站（判卷等无量规站不评）')
-  assert.equal(report.sampling.pool, 4, '池 = 夹具四件')
-  assert.equal(report.sampling.selected, 4, '配额（bad 3 + ok 2）盖过池量时取全池')
+  assert.equal(report.sampling.stations.join('、'), '教练生长', '范围 = 有量规的站（种子站随 #256 退役、判卷等无量规站不评）')
+  assert.equal(report.sampling.pool, 3, '池 = 教练生长夹具三件（种子站语料不再入范围）')
+  assert.equal(report.sampling.selected, 3, '配额（bad 3 + ok 2）盖过池量时取全池')
   assert.equal(report.unscoreable.length, 1, '空输出件零模型调用（列为未评分件）')
-  assert.equal(report.reviews.length, 3, '剩余三件逐件评审')
+  assert.equal(report.reviews.length, 2, '剩余两件逐件评审')
   assert.ok(report.reviews.every(r => r.blind && r.reconciled && r.calls === 2), '每件两段式两次调用')
-  assert.equal(report.cost.calls, 6, '成本 = 次数 × 2（未评分件不计）')
-  assert.equal(report.cost.inputTokens, 6 * 111)
+  assert.equal(report.cost.calls, 4, '成本 = 件数 × 2（未评分件不计）')
+  assert.equal(report.cost.inputTokens, 4 * 111)
   assert.equal(report.temperature, 0, '温度固定（可比性）')
   assert.ok(prompts[0]!.includes('一期（盲评）') && !prompts[0]!.includes('教练回合提示词（用户可编辑'), '一期不给生成提示词')
 

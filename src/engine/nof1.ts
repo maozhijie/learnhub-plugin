@@ -623,7 +623,7 @@ export class LabSubsystem {
    * 正典记录发生了什么，不造假结论），学习者档案投影重建。
    * 写入单元（#176）：步骤顺序照今天的声明——「结局事件 → 停标志落盘 → 投影重建」，
    * 崩溃后重试收敛（结局步骤的 done 幂等判据 = 同实验 id 已有结局事件即续段）。
-   * 失败：任一步抛错上抛中止，不回滚不续跑（恢复走 dataCheck/doctor）。 */
+   * 失败：任一步抛错上抛中止，不回滚不续跑（恢复走 dataCheck）。 */
   async experimentStop(id?: number): Promise<ExperimentDef> {
     const list = await this.e.store.loadExperiments()
     const hit = id !== undefined ? list.find(e => e.id === id) : list.find(e => e.status === 'running')

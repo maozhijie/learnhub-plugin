@@ -93,7 +93,6 @@ export const STATIONS = {
   selfNote: '自注反馈',
   tutor: '老师辅导',
   explainBack: '讲给我听',
-  seed: '种子起草',
   growth: '教练生长',
   compass: '罗盘',
   decompile: '目标反编译',
