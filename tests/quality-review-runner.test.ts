@@ -12,7 +12,7 @@
 import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,12 +31,24 @@ test.after(() => {
   for (const dir of tmpDirs) rmSync(dir, { recursive: true, force: true })
 })
 
+/** 递归拷贝目录：逐文件读写——Windows 上 cpSync 对含中文的目标路径会静默不拷
+ * （同 spike.ts copyDir 的既有教训），夹具的中文站目录名正是受害者。 */
+function copyDir(src: string, dst: string): void {
+  mkdirSync(dst, { recursive: true })
+  for (const e of readdirSync(src, { withFileTypes: true })) {
+    const s = `${src}/${e.name}`
+    const d = `${dst}/${e.name}`
+    if (e.isDirectory()) copyDir(s, d)
+    else copyFileSync(s, d)
+  }
+}
+
 /** 临时 vault：夹具语料副本进 state/生成语料（真实布局），返回 vault 路径。 */
 function tempVault(withCorpus = true): string {
   const vault = mkdtempSync(join(tmpdir(), 'learnhub-review-'))
   tmpDirs.push(vault)
   mkdirSync(join(vault, '学习中心', 'state'), { recursive: true })
-  if (withCorpus) cpSync(FIXTURE_CORPUS, join(vault, '学习中心', 'state', '生成语料'), { recursive: true })
+  if (withCorpus) copyDir(FIXTURE_CORPUS, join(vault, '学习中心', 'state', '生成语料'))
   return vault
 }
 
