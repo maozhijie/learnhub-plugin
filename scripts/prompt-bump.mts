@@ -109,6 +109,47 @@ export function markerVersionsOf(templateText: string): Set<number> {
   return new Set([...templateText.matchAll(MARKER_RE)].map(m => Number(m[1])))
 }
 
+/** 一份模板文件里**逐键**的版本号（键 → 版本；同键多标记取最后一个）。
+ *
+ * 为什么必须逐键而不是全face集合并集：每个模板键的版本号是**各自独立**的计数（罗盘初画
+ * v3 与 题目生成 v14 可以并存），所以「版本号 X」在不同键之间天然撞车。集合差的判据在这种
+ * 撞车下把一次真实 bump 判成零变化——实测（#250）：把 教练回合 由 v7 bump 到 v8 时，
+ * 「错误对比卡」与「项目里程碑计划」已经是 v8，`newVersions` 为空，该 bump 对提交级门
+ * **完全隐形**（门报「无违规」，但它根本没看见这次 bump）。这是集合并集语义的洞，不是策略变化：
+ * 键集合与版本号都照旧，只有比对粒度从「面的版本号集合」换成「键的版本号」。
+ *
+ * 搬迁不变式照旧成立：模板从旧路径挪到新路径时键与版本都不变 → 逐键比对同样判零变化。 */
+export function versionsByKeyOf(templateText: string): Map<string, number> {
+  const byKey = new Map<string, number>()
+  let lastKey: string | null = null
+  for (const line of templateText.split('\n')) {
+    // 模板值的开行：`    键: \`` 或 `    '键': \``（Markdown/纯文本键都可能带引号）
+    const open = /^\s+(?:'([^']+)'|([^\s:'`]+)):\s*`/.exec(line)
+    if (open) lastKey = open[1] ?? open[2]!
+    for (const m of line.matchAll(MARKER_RE)) {
+      // 标记可能在开行同行（``错误对比卡: `<!-- … -->``）或紧随其后一行
+      if (lastKey) byKey.set(lastKey, Number(m[1]))
+    }
+  }
+  return byKey
+}
+
+/** 无法归属到模板键的版本号（键的开行之前出现的标记——历史形态：标记曾住在
+ * `content.ts` 的散文/注释里；临时仓库夹具也照这个形态造）。这类标记退回**集合差**
+ * 口径判定（它们没有键可比），键可解析的那部分走逐键口径——两种口径互不干扰，
+ * 各自的健全性都在（见 versionsByKeyOf 与 tests/prompt-changelog.test.ts 的自检）。 */
+export function unkeyedVersionsOf(templateText: string): Set<number> {
+  const out = new Set<number>()
+  let lastKey: string | null = null
+  for (const line of templateText.split('\n')) {
+    const open = /^\s+(?:'([^']+)'|([^\s:'`]+)):\s*`/.exec(line)
+    if (open) lastKey = open[1] ?? open[2]!
+    if (lastKey) continue
+    for (const m of line.matchAll(MARKER_RE)) out.add(Number(m[1]))
+  }
+  return out
+}
+
 /** 判定：每个新出现的版本号都必须在同一提交里有登记条目。违规行给出 sha/subject/版本。 */
 export function bumpViolations(bumps: readonly BumpCommit[]): string[] {
   const out: string[] = []
@@ -152,20 +193,24 @@ function refHasPath(ref: string, path: string, root: string): boolean {
   }
 }
 
-/** 某提交下**模板面**的版本号并集（面内不存在的路径按空集计）。取并集而非逐文件比对，是为了
- * 让「标记从旧路径挪到新路径」在门眼里等于零变化：搬迁前后并集相同，自然不产生新版本号。 */
-function versionsAt(ref: string, root: string): Set<number> {
-  const out = new Set<number>()
+/** 某提交下**模板面**的逐键版本号（键 → 版本；旧路径与新路径同键时后者覆盖——搬迁不变式
+ * 由「键与版本都没变」保证，与并集口径同源）+ 无法归属键的版本号集合。 */
+function faceVersionsAt(ref: string, root: string): { keys: Map<string, number>; unkeyed: Set<number> } {
+  const keys = new Map<string, number>()
+  const unkeyed = new Set<number>()
   for (const f of TEMPLATE_FILES) {
     if (!refHasPath(ref, f, root)) continue
-    for (const v of markerVersionsOf(git(['show', `${ref}:${f}`], root))) out.add(v)
+    const text = git(['show', `${ref}:${f}`], root)
+    for (const [key, v] of versionsByKeyOf(text)) keys.set(key, v)
+    for (const v of unkeyedVersionsOf(text)) unkeyed.add(v)
   }
-  return out
+  return { keys, unkeyed }
 }
 
 /** 扫 git 历史取 bump 提交（`since..until`，缺省 since = 纪律起点、until = HEAD）。
  * 两段式：先一次 `git log -p` 找出**候选提交**（diff 里出现版本标记），再对候选逐一看
- * 模板面的版本集合差——候选很少，故 `git show` 的开销可控。 */
+ * 模板面的**逐键**版本差——候选很少，故 `git show` 的开销可控。判据是「某个键的版本号
+ * 变了」（不是面的版本号集合差了谁——见 versionsByKeyOf 的撞车说明）。 */
 export function scanBumps(opts: { cwd: string; since?: string; until?: string }): { commits: number; bumps: BumpCommit[] } {
   const root = gitRoot(opts.cwd)
   const since = opts.since ?? disciplineStartRef(root)
@@ -175,9 +220,14 @@ export function scanBumps(opts: { cwd: string; since?: string; until?: string })
   const bumps: BumpCommit[] = []
   for (const r of readings) {
     if (!r.addedMarkers.length) continue
-    const now = versionsAt(r.sha, root)
-    const before = versionsAt(`${r.sha}^`, root)
-    const newVersions = [...now].filter(v => !before.has(v)).sort((a, b) => a - b)
+    const now = faceVersionsAt(r.sha, root)
+    const before = faceVersionsAt(`${r.sha}^`, root)
+    // 两种口径合流：可归属键的标记按「键的版本变了」判（吃撞车），不可归属的按集合差判
+    const changed = [...now.keys.entries()]
+      .filter(([key, v]) => before.keys.get(key) !== v)
+      .map(([, v]) => v)
+    const added = [...now.unkeyed].filter(v => !before.unkeyed.has(v))
+    const newVersions = [...new Set([...changed, ...added])].sort((a, b) => a - b)
     if (newVersions.length) bumps.push({ sha: r.sha, subject: r.subject, newVersions, registeredVersions: r.addedChangelogVersions })
   }
   return { commits: readings.length, bumps }

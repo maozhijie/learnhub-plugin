@@ -16,7 +16,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  CHANGELOG_FILE, MARKER_RE, TEMPLATE_FILES, bumpViolations, compareReviewReports, markerVersionsOf, parseLogDiff, replayCorpus, replayViolations,
+  CHANGELOG_FILE, MARKER_RE, TEMPLATE_FILES, bumpViolations, compareReviewReports, markerVersionsOf, parseLogDiff, replayCorpus, replayViolations, unkeyedVersionsOf, versionsByKeyOf,
 } from '../scripts/prompt-bump.mts'
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')
@@ -67,6 +67,25 @@ test('#220 登记门：解析 diff 找到新增的版本标记与登记条目（
   assert.deepEqual(second!.addedMarkers, [])
   assert.deepEqual(markerVersionsOf('a\n<!-- learnhub:prompt/v3 -->\nb\n<!-- learnhub:prompt/v9 -->'), new Set([3, 9]))
   assert.equal(MARKER_RE.test(''), false)
+})
+
+test('#220 登记门自检：逐键解析吃掉「版本号跨键撞车」——集合口径会漏判的 bump 现在看得见', () => {
+  // 键各自独立计数 → 同一个 v8 天然属于多个键。下面两份文本只差「教练回合」的归属：
+  // 前者 v7、后者 bump 到 v8，而 v8 早已被「错误对比卡」占用。集合差口径下后者判
+  // 「无新版本号」= 一次真实 bump 隐形（#250 实测踩到：门报「无违规」，但它没看见这次 bump）。
+  const before = ['    错误对比卡: `<!-- learnhub:prompt/v8 -->', '    教练回合: `\\', '<!-- learnhub:prompt/v7 -->'].join('\n')
+  const after = ['    错误对比卡: `<!-- learnhub:prompt/v8 -->', '    教练回合: `\\', '<!-- learnhub:prompt/v8 -->'].join('\n')
+  assert.deepEqual([...versionsByKeyOf(before)], [['错误对比卡', 8], ['教练回合', 7]])
+  assert.deepEqual([...versionsByKeyOf(after)], [['错误对比卡', 8], ['教练回合', 8]])
+  const unionNew = [...markerVersionsOf(after)].filter(v => !markerVersionsOf(before).has(v))
+  assert.deepEqual(unionNew, [], '集合口径：一次真实 bump 的新增版本号为空（这就是那个洞）')
+  const perKeyNew = [...versionsByKeyOf(after)].filter(([k, v]) => versionsByKeyOf(before).get(k) !== v).map(([, v]) => v)
+  assert.deepEqual(perKeyNew, [8], '逐键口径：同一次 bump 看得见')
+  // 键集合与版本逐个解析正确（含带引号的键、标记与键同行的形态）
+  const mixed = ['    课程大纲: `\\', '<!-- learnhub:prompt/v12 -->', '    罗盘初画: `<!-- learnhub:prompt/v3 -->'].join('\n')
+  assert.deepEqual([...versionsByKeyOf(mixed)], [['课程大纲', 12], ['罗盘初画', 3]])
+  // 键的开行之前的标记无法归属 → 退回集合差口径（历史形态：标记曾住 content.ts 的散文/注释）
+  assert.deepEqual([...unkeyedVersionsOf('// <!-- learnhub:prompt/v9 -->\n    键: `\\\n<!-- learnhub:prompt/v2 -->')], [9])
 })
 
 test('#220 登记门：bump 不补条目/合规/标记挪位三类样本的判定', () => {
