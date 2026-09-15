@@ -154,7 +154,7 @@ export async function runAudit(
     }
     const canonical = paths.courseNotePath(root, blockOf[nodeName][1], nodeName)
     if (path.replace(/\\/g, '/').toLowerCase() !== canonical.replace(/\\/g, '/').toLowerCase()) {
-      warns.push(`R10 课程文件位置非规范（应用 rename/move op）: ${rel}`)
+      warns.push(`R10 课程文件位置非规范（应用 rename op；move 已随 Region/Block 退役 #275）: ${rel}`)
     }
     const fm = rawFm as Record<string, unknown>
     const stage = fm.stage

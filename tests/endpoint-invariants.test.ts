@@ -78,8 +78,6 @@ reason: 长过目标
 ops:
   - op: add_node
     name: 目标综述
-    region: 基础
-    block: 入门块
     pre: [终点]
     est: 20
 `),
@@ -98,8 +96,6 @@ note:
 ops:
   - op: add_node
     name: 新台阶
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 15
 `),
@@ -115,8 +111,6 @@ note:
 ops:
   - op: add_node
     name: 新台阶
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 15
   - op: set_pre
@@ -134,8 +128,6 @@ note:
 ops:
   - op: add_node
     name: 新方向
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 15
 `),
@@ -155,8 +147,6 @@ note:
 ops:
   - op: add_node
     name: 新台阶
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 15
   - op: set_pre
@@ -191,8 +181,6 @@ note:
 ops:
   - op: add_node
     name: 支线台阶
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 10
 `) as { id: number }
@@ -262,8 +250,6 @@ note:
 ops:
   - op: add_node
     name: 更高台阶
-    region: 基础
-    block: 入门块
     pre: [中间台阶]
     est: 15
   - op: set_pre
@@ -295,8 +281,6 @@ note:
 ops:
   - op: add_node
     name: 支线台阶
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 10
 `) as { id: number }
@@ -566,8 +550,6 @@ note:
 ops:
   - op: add_node
     name: 甲更高台阶
-    region: 基础
-    block: 入门块
     pre: [起点甲]
     est: 15
   - op: set_pre
@@ -593,8 +575,6 @@ note:
 ops:
   - op: add_node
     name: 甲新台阶
-    region: 基础
-    block: 入门块
     pre: [起点甲]
     est: 15
   - op: set_pre
@@ -620,8 +600,6 @@ note:
 ops:
   - op: add_node
     name: 交汇台阶
-    region: 基础
-    block: 入门块
     pre: [起点甲, 起点乙]
     est: 15
   - op: set_pre
@@ -647,8 +625,6 @@ note:
 ops:
   - op: add_node
     name: 又一台阶
-    region: 基础
-    block: 入门块
     pre: [起点甲]
     est: 10
 `),
@@ -664,8 +640,6 @@ note:
 ops:
   - op: add_node
     name: 又一台阶
-    region: 基础
-    block: 入门块
     pre: [起点甲]
     est: 10
 `),

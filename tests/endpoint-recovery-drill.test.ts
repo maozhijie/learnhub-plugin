@@ -152,8 +152,6 @@ ops:
 ops:
   - op: add_node
     name: 结课寄语
-    region: 生长
-    block: 综述块
     pre: [${ENDPOINT}]
     est: 10
 `),

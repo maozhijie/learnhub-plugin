@@ -46,8 +46,6 @@ function goldVerdict(opts: {
   const opsBody = opts.ops ?? [
     '- op: add_node',
     '  name: 平均变化率',
-    '  region: 基础',
-    '  block: 起点块',
     '  pre: [认识变化率]',
     '  est: 15',
     '  bloom: 理解',
@@ -149,8 +147,6 @@ async function assertTaught(engine: Awaited<ReturnType<typeof withVault>>['engin
 ops:
   - op: add_node
     name: 巩固合法探针
-    region: 基础
-    block: 起点块
     pre: [认识变化率]
     teaches: {${concept}: 知道}
 `)
@@ -302,8 +298,6 @@ test('拒收零落盘：裁决未过受理门时罗盘与图零改动、零提�
     const bad = goldVerdict({ ops: [
       '- op: add_node',
       '  name: 悬空节点',
-      '  region: 基础',
-      '  block: 起点块',
       '  pre: [不存在节点]',
     ] })
     await assert.rejects(() => engine.growth2.coachGrowthBatch('数学', replayFake(bad)), /悬空|断边|不存在/)
@@ -362,8 +356,6 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
       ops: [
         '- op: add_node',
         '  name: 变化率综合',
-        '  region: 基础',
-        '  block: 起点块',
         '  pre: [认识变化率]',
         '  teaches: {极限: 知道}',
       ],
@@ -381,8 +373,6 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
       ops: [
         '- op: add_node',
         '  name: 变化率综合',
-        '  region: 基础',
-        '  block: 起点块',
         '  pre: [认识变化率]',
         '  teaches: {变化率: 会用}',
       ],
@@ -396,8 +386,6 @@ test('AC4 巩固门：巩固节点只引已教概念（新概念拒收）；前�
       ops: [
         '- op: add_node',
         '  name: 极限初步',
-        '  region: 基础',
-        '  block: 起点块',
         '  pre: [认识变化率]',
         '  teaches: {极限: 知道}',
         '- op: set_pre',
@@ -430,8 +418,6 @@ test('停机转译：就绪深度满足时不拉回合（零调用）；force �
     const fake = replayFake(goldVerdict({ ops: [
       '- op: add_node',
       '  name: 平均变化率',
-      '  region: 基础',
-      '  block: 起点块',
       '  pre: [认识变化率]',
       '- op: set_pre',
       '  node: 用导数解决优化问题',
@@ -478,8 +464,6 @@ test('金样本回放闸：两族金样本首过（首过率对照、调用数�
     ops: [
       '- op: add_node',
       '  name: 导数的几何意义',
-      '  region: 基础',
-      '  block: 起点块',
       '  pre: [认识变化率]',
       '  est: 10',
     ],
@@ -527,8 +511,6 @@ test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重�
     const verdict = goldVerdict({ ops: [
       '- op: add_node',
       '  name: 平均变化率',
-      '  region: 基础',
-      '  block: 起点块',
       '  pre: [认识变化率]',
       '- op: set_pre',
       '  node: 用导数解决优化问题',
@@ -551,13 +533,12 @@ test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重�
 
 // ---- 回灌止血（#157）：受理门拒收 → 门错误回灌教练重裁一次（仍败才 failed）----
 
-/** 引用图上不存在的区的畸形裁决（实机死法；过 schema 门、被 propose 受理门拒）。 */
-const BAD_REGION_OPS = [
+/** 引用图上不存在节点的畸形裁决（实机死法；过 schema 门——pre 是自由字符串列表、
+ * 被 propose 受理门拒——断边）。#275 后 region/block 为退役字段，改用悬空 pre 触发回灌。 */
+const BAD_PRE_OPS = [
   '- op: add_node',
   '  name: 平均变化率',
-  '  region: 幻区',
-  '  block: 起点块',
-  '  pre: [认识变化率]',
+  '  pre: [幻节点]',
   '  est: 15',
   '  bloom: 理解',
   '  difficulty: 2',
@@ -628,12 +609,12 @@ test('schema 门畸形仍败：重裁产出仍未过 schema 门 → 原样失败
   })
 })
 
-test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错误回灌重裁段 → 合法产出进受理门', async () => {
+test('#157 回灌重裁：受理门拒收（引用不存在的节点）→ 门错误回灌重裁段 → 合法产出进受理门', async () => {
   await withLoggedVault(async ({ engine, log }) => {
     await seedApplied(engine)
-    // 首轮裁决引用图上不存在的区（实机死法）：过 schema 门（区是自由字符串）、
-    // 被 propose 受理门拒（add_node 区不存在）；重裁段产出合法裁决 → 提案照常受理
-    const fake = scriptFake([goldVerdict({ ops: BAD_REGION_OPS })], [goldVerdict()])
+    // 首轮裁决引用图上不存在的节点（实机死法）：过 schema 门（pre 是自由字符串列表）、
+    // 被 propose 受理门拒（变更后断边）；重裁段产出合法裁决 → 提案照常受理
+    const fake = scriptFake([goldVerdict({ ops: BAD_PRE_OPS })], [goldVerdict()])
     const r = await engine.growth2.coachGrowthBatch('数学', fake)
 
     // 调用数基线：轻量段 1 次 + 回灌重裁段恰 1 次（deep 档）
@@ -641,8 +622,8 @@ test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错�
     assert.equal(fake.calls[1]!.effort, 'deep', '回灌重裁段恒 deep 档')
     // 门错误与被拒原文都回灌进重裁段 prompt（教练拿得到死因与修正起点）
     assert.match(fake.calls[1]!.prompt, /受理门反馈/)
-    assert.match(fake.calls[1]!.prompt, /区不存在: 幻区/, '首轮拒绝原因原样回灌')
-    assert.match(fake.calls[1]!.prompt, /region: 幻区/, '被拒裁决原文随包回灌')
+    assert.match(fake.calls[1]!.prompt, /变更后断边: 平均变化率 -> 幻节点/, '首轮拒绝原因原样回灌')
+    assert.match(fake.calls[1]!.prompt, /pre: \[幻节点\]/, '被拒裁决原文随包回灌')
     assert.match(fake.calls[1]!.prompt, /当前图面/, '重裁段恒带图面（修正引用的取值域）')
     // 重裁产出走完整受理链：提案应用、路径可观测（light → repair）
     assert.equal(r.state, 'applied')
@@ -668,7 +649,7 @@ test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错�
 test('#157 回灌仍败：重裁产出再被受理门拒收 → 原样失败且错误带两轮死因，零提案落盘', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
     await seedApplied(engine)
-  const malformed = goldVerdict({ ops: BAD_REGION_OPS })
+  const malformed = goldVerdict({ ops: BAD_PRE_OPS })
   const fake = scriptFake([malformed], [malformed])
     await assert.rejects(
       engine.growth2.coachGrowthBatch('数学', fake),
@@ -677,7 +658,7 @@ test('#157 回灌仍败：重裁产出再被受理门拒收 → 原样失败且�
         assert.match(msg, /回灌重裁一轮仍未通过/, '失败显式声明死因形态')
         assert.match(msg, /【首轮】/, '带首轮拒绝原因')
         assert.match(msg, /【重裁】/, '带重裁拒绝原因')
-        assert.match(msg, /区不存在: 幻区/)
+        assert.match(msg, /变更后断边: 平均变化率 -> 幻节点/)
         return true
       },
     )
@@ -783,11 +764,11 @@ test('#163 AC 任务取消传导（站点级）：开局取消零调用；回路
 test('#163 AC 门错修复轮恰好一次不回归：拒收后恰回灌重裁一段（repair 单发），轨迹只来自回路段', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
     await seedApplied(engine)
-    // 首轮回路会话产出畸形裁决（引用幻区）被受理门拒收 → repair 单发重裁一次 → 过门
+    // 首轮回路会话产出畸形裁决（引用幻节点）被受理门拒收 → repair 单发重裁一次 → 过门
     const fake = scriptFake(
       [[
         { text: '查一下图面再裁。', toolCalls: [{ id: 't1', name: 'graph_view', arguments: '{}' }] },
-        { text: goldVerdict({ ops: BAD_REGION_OPS }) },
+        { text: goldVerdict({ ops: BAD_PRE_OPS }) },
       ]],
       [goldVerdict()],
     )

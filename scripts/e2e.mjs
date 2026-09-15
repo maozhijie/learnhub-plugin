@@ -503,19 +503,18 @@ async function run() {
   })
   await step('图谱健康分/建议 + edit 认知维度字段 + R13 跳步候选 + enc 反哺 hints', async () => {
     // edit 提案（add_node 携 est/bloom/difficulty）→ apply → findings + 字段落盘 + analyze health/suggestions
-    // edit 不能新建区（add_node 的区/块必须已存在）——锚直接从图上取既有区/块/节点
+    // add_node 无坐标（#275）：落到图内既有的单一区；pre 锚直接从图上取既有节点
     // （课程笔记目录里可能有剪除归档的孤儿笔记，不可靠）
     const anyBrowse = await engine.graphBrowse(courseName)
     const region = anyBrowse.regions[0].name
-    const block = anyBrowse.regions[0].blocks[0].name
     const anchorNode = anyBrowse.regions[0].blocks[0].nodes[0].node
     const prop = await engine.graphPropose('edit', [
       `course: ${courseName}`,
       'reason: e2e 认知维度字段',
       'ops:',
-      `  - { op: add_node, name: 计算e2e基础量, region: ${region}, block: ${block}, pre: [${anchorNode}], est: 10, bloom: 理解, difficulty: 1 }`,
-      `  - { op: add_node, name: 应用e2e基础量解题, region: ${region}, block: ${block}, pre: [计算e2e基础量], est: 20, bloom: 应用, difficulty: 3 }`,
-      `  - { op: add_node, name: 证明e2e进阶结论, region: ${region}, block: ${block}, pre: [应用e2e基础量解题], est: 30, bloom: 分析, difficulty: 5 }`,
+      `  - { op: add_node, name: 计算e2e基础量, pre: [${anchorNode}], est: 10, bloom: 理解, difficulty: 1 }`,
+      `  - { op: add_node, name: 应用e2e基础量解题, pre: [计算e2e基础量], est: 20, bloom: 应用, difficulty: 3 }`,
+      `  - { op: add_node, name: 证明e2e进阶结论, pre: [应用e2e基础量解题], est: 30, bloom: 分析, difficulty: 5 }`,
     ].join('\n'))
     const applied = await engine.graphApply('edit', prop.id)
     assert(Array.isArray(applied.findings), `apply findings missing: ${JSON.stringify(applied)}`)
@@ -536,7 +535,7 @@ async function run() {
       `course: ${courseName}`,
       'reason: e2e edit 认知维度',
       'ops:',
-      `  - { op: add_node, name: 辨析e2e边界情形, region: ${region}, block: ${block}, pre: [计算e2e基础量], est: 15, type: practice, bloom: 分析, difficulty: 2 }`,
+      `  - { op: add_node, name: 辨析e2e边界情形, pre: [计算e2e基础量], est: 15, type: practice, bloom: 分析, difficulty: 2 }`,
     ].join('\n'))
     await engine.graphApply('edit', prop2.id)
     const regionText2 = readFileSync(join(dataDir, regionFile), 'utf8')
@@ -553,7 +552,7 @@ async function run() {
         `course: ${courseName}`,
         'reason: e2e 非法 bloom',
         'ops:',
-        `  - { op: add_node, name: 理解e2e非法字段, region: ${region}, block: ${block}, pre: [], bloom: 顿悟 }`,
+        `  - { op: add_node, name: 理解e2e非法字段, pre: [], bloom: 顿悟 }`,
       ].join('\n'))
     } catch (err) { threw = err.message }
     assert(threw.includes('非法认知层级'), `bad bloom must reject: ${threw}`)

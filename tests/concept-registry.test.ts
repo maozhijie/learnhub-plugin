@@ -146,8 +146,6 @@ test('#141 受理门：引用未在册名字的 edit 提案被拒（拒收信息
 ops:
   - op: add_node
     name: 中继节点
-    region: 基础
-    block: 入门块
     pre: [入门]
     teaches: { 未登记概念: 知道 }
     assumes: { 也没登记: 会用, 因式分解: 知道 }
@@ -172,8 +170,6 @@ test('#141 受理门：引用在册名字（含别名）的提案受理；登记
 ops:
   - op: add_node
     name: 中继节点
-    region: 基础
-    block: 入门块
     pre: [入门]
     teaches: { 十字相乘法: 知道 }
 `
@@ -185,8 +181,6 @@ ops:
 ops:
   - op: add_node
     name: 中继节点
-    region: 基础
-    block: 入门块
     pre: [入门]
     teaches: { 任意概念: 知道 }
 `
@@ -204,8 +198,6 @@ concepts:
 ops:
   - op: add_node
     name: 中继节点
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 10
     teaches: { 行变换几何直觉: 知道 }
@@ -225,8 +217,6 @@ concepts:
 ops:
   - op: add_node
     name: 节点甲
-    region: 基础
-    block: 入门块
     pre: [入门]
 `
     await assert.rejects(() => engine.graph.graphPropose('edit', clashCanonical), /「因式分解」.*已在登记表|铸名冲突/)
@@ -237,8 +227,6 @@ concepts:
 ops:
   - op: add_node
     name: 节点乙
-    region: 基础
-    block: 入门块
     pre: [入门]
 `
     await assert.rejects(() => engine.graph.graphPropose('edit', clashAlias), /十字相乘法/)
@@ -249,8 +237,6 @@ concepts:
 ops:
   - op: add_node
     name: 节点丙
-    region: 基础
-    block: 入门块
     pre: [入门]
 `
     await assert.rejects(() => engine.graph.graphPropose('edit', clashWithin), /概念甲/)
@@ -262,13 +248,13 @@ test('#141 concepts 块条目契约：canonical 缺失、未知键 → schema �
   const noCanonical = validateEditProposal({
     course: '数学',
     concepts: [{ definition: '没有 canonical' }],
-    ops: [{ op: 'add_node', name: '甲', region: '基', block: '块' }],
+    ops: [{ op: 'add_node', name: '甲' }]
   })
   assert.ok(noCanonical.errors?.some(e => e.includes('canonical')))
   const unknownKey = validateEditProposal({
     course: '数学',
     concepts: [{ canonical: '甲', tier: '知道' }],
-    ops: [{ op: 'add_node', name: '甲', region: '基', block: '块' }],
+    ops: [{ op: 'add_node', name: '甲' }]
   })
   assert.ok(unknownKey.errors?.some(e => e.includes('含未知字段')))
 })
@@ -283,8 +269,6 @@ concepts:
 ops:
   - op: add_node
     name: 中继节点
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 10
     teaches: { 行变换几何直觉: 知道 }

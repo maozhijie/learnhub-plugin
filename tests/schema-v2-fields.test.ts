@@ -160,8 +160,6 @@ reason: 再添一条同概念误解
 ops:
   - op: add_node
     name: 新误解节点
-    region: 基础
-    block: 入门块
     pre: [误解节点]
     misconceptions:
       - { concept: 概念甲, model: 错法四 }
@@ -186,8 +184,6 @@ concepts:
 ops:
   - op: add_node
     name: 中继节点
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 10
     teaches: { 行变换几何直觉: 知道 }
@@ -214,8 +210,6 @@ test('受理门：概念字段组的 ERROR 尺寸/枚举负路径在 edit 门被
 ops:
   - op: add_node
     name: 概念爆炸
-    region: 基础
-    block: 入门块
     pre: []
     teaches: { 概念1: 知道, 概念2: 知道, 概念3: 知道, 概念4: 知道, 概念5: 知道, 概念6: 知道, 概念7: 知道, 概念8: 知道, 概念9: 知道 }
     assumes: { 概念A: 知道, 概念B: 知道 }
@@ -226,8 +220,6 @@ ops:
 ops:
   - op: add_node
     name: 坏档位
-    region: 基础
-    block: 入门块
     pre: []
     teaches: { 概念: 精通 }
 `

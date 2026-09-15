@@ -58,8 +58,6 @@ function insertionYaml(opts: {
     'ops:',
     '  - op: add_node',
     `    name: ${name}`,
-    '    region: 基础',
-    '    block: 入门块',
     `    pre: [${opts.pre ?? '入门'}]`,
     '    est: 10',
     ...(opts.withConcept ? ['    teaches: {过渡概念: 会用}'] : []),
@@ -555,8 +553,8 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
         id => paths.proposalArtifactPath(id, 'edit', '数学'))
       await writeFile(paths.proposalArtifactPath(pid, 'edit', '数学'),
         ['course: 数学', 'note:', '  operator: 插入', `  reason: 场景批 ${i}`, '  recheck:', '    metric: 前进恢复', 'ops:',
-          '  - op: add_node', `    name: 场景节点${i}甲`, '    region: 基础', '    block: 入门块', '    pre: [入门]',
-          '  - op: add_node', `    name: 场景节点${i}乙`, '    region: 基础', '    block: 入门块', '    pre: [入门]'].join('\n') + '\n', 'utf8')
+          '  - op: add_node', `    name: 场景节点${i}甲`, '    pre: [入门]',
+          '  - op: add_node', `    name: 场景节点${i}乙`, '    pre: [入门]'].join('\n') + '\n', 'utf8')
       await engine.store.updateProposal(pid, { status: 'applied', decided: ts(-8 + i) })
       await appendProbationEntry(paths, 'math', { node: `场景${i}`, pre: ['入门'], proposal: pid, due: 5 }, nodeVaultFs)
       await appendProbationEntry(paths, 'math', {
@@ -572,14 +570,14 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
     await assert.rejects(
       () => engine.graph.graphPropose('edit', [
         'course: 数学', 'note:', '  operator: 插入', '  reason: 再插一节', '  recheck:', '    metric: 前进恢复', '    days: 5', 'ops:',
-        '  - op: add_node', '    name: 过渡二号', '    region: 基础', '    block: 入门块', '    pre: [入门]',
+        '  - op: add_node', '    name: 过渡二号', '    pre: [入门]',
       ].join('\n') + '\n'),
       /生长闸门拒绝受理[\s\S]*复诊通过率/,
       '超速插入批在受理门就被拒收（构造超限场景验证调速）')
     // 前进批不受闸（ADR-0076 主线批必接线：声明终点 + set_pre 汇入批内新前沿；route 不携带——本批不重写罗盘）
     const fwd = await engine.graph.graphPropose('edit', [
       'course: 数学', 'note:', '  operator: 前进', '  reason: 主线推进', '  target_endpoints: [终点]', 'ops:',
-      '  - op: add_node', '    name: 前进节点', '    region: 基础', '    block: 入门块', '    pre: [入门]',
+      '  - op: add_node', '    name: 前进节点', '    pre: [入门]',
       '  - op: set_pre', '    node: 终点', '    pre: [前进节点]',
     ].join('\n') + '\n') as { id: number }
     assert.ok(fwd.id > 0)
@@ -587,7 +585,7 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
     // 旁支 1 节：占比 1/8 = 12.5% ≤ 20% → 放行
     const side = await engine.graph.graphPropose('edit', [
       'course: 数学', 'note:', '  operator: 旁支', '  reason: 教学消费支线', 'ops:',
-      '  - op: add_node', '    name: 旁支节点', '    region: 基础', '    block: 入门块', '    pre: [入门]',
+      '  - op: add_node', '    name: 旁支节点', '    pre: [入门]',
     ].join('\n') + '\n') as { id: number }
     assert.ok(side.id > 0)
     await engine.graph.graphReject(side.id)

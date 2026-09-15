@@ -301,15 +301,14 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
       await runner.engine.graph.createCourse(course)
       const endpoint = `${course}目标`
       await runner.engine.graph.addEndpoint(course, endpoint, goal)
-      // 终点落图后「未分区/未分区」块已在图上——edit 的 add_node 据此建起点节点，
-      // 再把终点接线到起点（起点 → 终点 一条最小链）。edit 不能新建区/块（add_node 的
-      // 区/块必须已存在），故起点只能落在 addEndpoint 建出的未分区块里。
+      // 终点落图后 add_node 不再需要坐标（#275：落到图内既有的单一区）——起点节点直接
+      // 落图，再把终点接线到起点（起点 → 终点 一条最小链）。
       const startName = `${course}起点`
       const proposal = await runner.engine.graph.graphPropose('edit', [
         `course: ${course}`,
         'reason: 冒烟起点（#256 种子退役后结构站改用手写 edit 提案）',
         'ops:',
-        `  - { op: add_node, name: ${startName}, region: 未分区, block: 未分区, pre: [] }`,
+        `  - { op: add_node, name: ${startName}, pre: [] }`,
         `  - { op: set_pre, node: ${endpoint}, pre: [${startName}] }`,
       ].join('\n'))
       pipeline.proposalId = proposal.id

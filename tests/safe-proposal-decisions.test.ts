@@ -44,40 +44,32 @@ ops:
   })
 })
 
-test('#11 move to a nonexistent block fails at proposal validation', async () => {
+test('#11 move 已退役：op 白名单拒绝（#275 写侧词汇退场）', async () => {
   await vaultWithCourse(async engine => {
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 ops:
-  - { op: move, node: 入门, region: 基础, block: 不存在的块 }
+  - { op: move, node: 入门, region: 基础, block: 块 }
 `),
-      /move 目标块不存在（不允许静默建块）/,
+      /非法操作 move/,
     )
     const pending = await engine.graph.graphProposals('pending', 'edit')
     assert.equal(pending.length, 0)
   })
 })
 
-test('#11 add_node may create a block and apply reports created_blocks; later move into it succeeds', async () => {
+test('#11 add_node 无坐标落图（落到图内既有区/块）；created_blocks 不再由 add_node 建块', async () => {
   await vaultWithCourse(async engine => {
     const add = await engine.graph.graphPropose('edit', `course: 数学
 ops:
-  - { op: add_node, name: 新块起点, region: 基础, block: 新块, pre: [入门], est: 15 }
+  - { op: add_node, name: 新块起点, pre: [入门], est: 15 }
 `) as { id: number }
     const applied = await engine.graph.graphApply('edit', add.id) as { created_blocks: string[] }
-    assert.deepEqual(applied.created_blocks, ['新块'])
-
-    const move = await engine.graph.graphPropose('edit', `course: 数学
-ops:
-  - { op: move, node: 入门, region: 基础, block: 新块 }
-`) as { id: number }
-    const moved = await engine.graph.graphApply('edit', move.id) as { created_blocks: string[] }
-    assert.deepEqual(moved.created_blocks, [], 'move must not create blocks')
+    assert.deepEqual(applied.created_blocks, [], 'add_node 落到既有区/块，不新建块（#275）')
 
     const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
-    const newBlock = regions[0]!.blocks.find(b => b.name === '新块')
-    assert.ok(newBlock)
-    assert.deepEqual(newBlock!.nodes.map(n => n.name).sort(), ['入门', '新块起点'])
+    const landed = regions[0]!.blocks.flatMap(b => b.nodes).find(n => n.name === '新块起点')
+    assert.ok(landed, '新节点落到图内既有的单一区')
   })
 })
 

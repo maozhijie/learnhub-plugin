@@ -1,14 +1,15 @@
 /**
  * 受理门通过率对照实验（#163 AC3 / ADR-0041）：同一组「带幻觉的裁决草稿」，分别以
  * **单发形态**（#162 的盲盒上下文包——产裁决前无任何自查）与**工具回路形态**（#163——
- * 裁决前经 graph_view 核实节点/区名、concept_footprint 对表概念）送入生长站，统计
+ * 裁决前经 graph_view 核实节点名、concept_footprint 对表概念）送入生长站，统计
  * 受理门（propose）通过率。
  *
- * 实验设计（确定性，无随机）：12 个场景 = 3 类幻觉目标（pre 断边引用 / 区名 / 概念名）
- * × 4 个「貌似合理但在图上不存在」的变体——幻觉形态来自实机死批证据（引用不存在的区
- * 「代数与函数」、概念未铸名）。回路人格的修正**全部派生自工具回灌内容**（从 graph_view
- * 提取逐字节点/区名、从 concept_footprint 提取 canonical，按二元组最大相似度对表），
- * 不作弊携带真名——它演示的是回路机制的能力：工具访问让畸形草稿在裁决前有据可修。
+ * 实验设计（确定性，无随机）：8 个场景 = 2 类幻觉目标（pre 断边引用 / 概念名）
+ * × 4 个「貌似合理但在图上不存在」的变体——幻觉形态来自实机死批证据（引用不存在的节点、
+ * 概念未铸名；「区名幻觉」随 #275 写侧词汇退役（region/block 一律拒收）已不可能，该轴删除）。
+ * 回路人格的修正**全部派生自工具回灌内容**（从 graph_view 提取逐字节点名、从 concept_footprint
+ * 提取 canonical，按二元组最大相似度对表），不作弊携带真名——它演示的是回路机制的能力：
+ * 工具访问让畸形草稿在裁决前有据可修。
  *
  * 口径声明：人格是脚本化的，本实验度量的是**机制能力**（给了工具与自查轮，幻觉能在
  * 过门前被证据修正），不是真实模型的首过率；真实模型收益以实机运行日志为准。
@@ -45,8 +46,6 @@ function goldVerdict(): string {
     'ops:',
     '  - op: add_node',
     '    name: 平均变化率',
-    '    region: 基础',
-    '    block: 起点块',
     '    pre: [认识变化率]',
     '    est: 15',
     '    bloom: 理解',
@@ -58,17 +57,12 @@ function goldVerdict(): string {
   ].join('\n') + '\n'
 }
 
-/** 幻觉场景：3 类目标 × 4 变体（貌似合理、图上/登记表不存在）。 */
+/** 幻觉场景：2 类目标 × 4 变体（貌似合理、图上/登记表不存在）。 */
 const HALLUCINATIONS: Array<{ target: string; variants: string[]; apply: (v: string, yaml: string) => string }> = [
   {
     target: 'pre 断边引用（节点名不存在）',
     variants: ['认识变化律', '变化率认识', '认识变化率（基础）', '认识变化率初步'],
     apply: (v, yaml) => yaml.replace('pre: [认识变化率]', `pre: [${v}]`),
-  },
-  {
-    target: '区名不存在（实机死批形态）',
-    variants: ['代数与函数', '概率统计', '函数与极限', '代数'],
-    apply: (v, yaml) => yaml.replaceAll('region: 基础', `region: ${v}`),
   },
   {
     target: '概念未铸名（teaches 对表拒收）',
@@ -99,12 +93,10 @@ function bestMatch(bad: string, candidates: string[]): string {
 }
 
 /** 从工具回灌文本提取取值域并修正草稿（回路人格的裁前自查）。只对表**引用**——
- * pre 必须命中既有节点或本批更早创建的节点、region 必须命中既有区、teaches 必须命中
- * 登记表 canonical；add_node 的 name 是新节点名，合法地不在图上，不作对表。 */
+ * pre 必须命中既有节点或本批更早创建的节点、teaches 必须命中登记表 canonical；
+ * add_node 的 name 是新节点名，合法地不在图上，不作对表。 */
 function selfCheckCorrect(draft: string, graphView: string, registryText: string): string {
   const nodeNames = [...graphView.matchAll(/^- (.+?)（/gm)].map(m => m[1]!)
-  // #250 起图面是逐节点一行（`- 名（深度 N｜区·块｜…`）——区名在深度段之后
-  const regions = [...new Set([...graphView.matchAll(/^- .+?（深度 \d+｜(.+?)·.+?｜/gm)].map(m => m[1]!))]
   // #249 起概念面是 concept_footprint：词条档以 `### <canonical>` 分节
   const concepts = [...registryText.matchAll(/^### (.+?)(?: *｜|$)/gm)].map(m => m[1]!)
   // 本批新建节点是后续 op（终点接线 set_pre）的合法 pre 取值域（与受理门同口径）
@@ -114,9 +106,6 @@ function selfCheckCorrect(draft: string, graphView: string, registryText: string
   // pre 引用对表节点名
   out = out.replace(/pre: \[(.+?)\]/g, (_m, inner: string) =>
     'pre: [' + inner.split('、').map(x => preTargets.includes(x.trim()) ? x.trim() : bestMatch(x.trim(), preTargets)).join('、') + ']')
-  // region 对表区名
-  out = out.replace(/^(\s*region: )(.+)$/gm, (_m, p: string, r: string) =>
-    p + (regions.includes(r.trim()) ? r : bestMatch(r.trim(), regions)))
   // teaches 对表登记表 canonical
   out = out.replace(/teaches: \{(.+?)\}/g, (_m, inner: string) =>
     'teaches: {' + inner.split('、').map(kv => {
@@ -151,7 +140,7 @@ function loopFake(corrupted: string): AgentSeam {
   return Object.assign(seam, { requests })
 }
 
-test('受理门通过率对照（12 场景）：单发 0/12 vs 回路 12/12——工具自查让幻觉在过门前被证据修正', async () => {
+test('受理门通过率对照（8 场景）：单发 0/8 vs 回路 8/8——工具自查让幻觉在过门前被证据修正', async () => {
   // 每场景一枚新 vault：金样本批会创建同名节点，跨场景不能共用一张图
   let singlePass = 0
   let loopPass = 0
@@ -188,5 +177,5 @@ test('受理门通过率对照（12 场景）：单发 0/12 vs 回路 12/12—�
 
   assert.equal(loopPass, SCENARIOS.length, `回路形态全过（实测 ${loopRate}）`)
   assert.ok(singlePass < loopPass, `回路严格优于单发（单发 ${singleRate} vs 回路 ${loopRate}）`)
-  assert.equal(seenTargets.size, HALLUCINATIONS.length, '三类幻觉目标全覆盖')
+  assert.equal(seenTargets.size, HALLUCINATIONS.length, '两类幻觉目标全覆盖')
 })

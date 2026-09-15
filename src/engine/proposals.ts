@@ -37,13 +37,11 @@ import type { GraphApplyEditResult, GraphApplyEnrichResult } from './views/graph
 export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
 
 export interface EditOp {
-  op: 'add_node' | 'del_node' | 'set_pre' | 'set_enc' | 'rename' | 'move' | 'set_note'
+  op: 'add_node' | 'del_node' | 'set_pre' | 'set_enc' | 'rename' | 'set_note'
   node?: string
   /** add_node 的节点键（#131 §7 键名统一：与图 YAML/parseNode 同名，旧 `node` 键退役）。 */
   name?: string
   new?: string
-  region?: string
-  block?: string
   pre?: string[]
   /** set_enc 整体替换的成分技能边（与图 YAML 同形态：字符串=权重 1，映射带可选 w/note）；add_node 可选携带。 */
   enc?: Array<string | { node: string; w?: number; note?: string }>
@@ -81,9 +79,10 @@ export interface GrowthNote {
   recheck?: RecheckPrereg
 }
 
-/** 提案 op 上的边轻纪律键（#127：候选边留提案侧留痕、origin 从 journal 派生、
- * 复诊状态落 state/边实验.jsonl——提案节点同样零边元数据字段，一律拒收不静默丢弃）。 */
-const RETIRED_OP_KEYS = ['origin', 'status', 'probation'] as const
+/** 提案 op 上的退役键：边轻纪律键（#127：候选边留提案侧留痕、origin 从 journal 派生、
+ * 复诊状态落 state/边实验.jsonl，提案节点零边元数据字段）+ 结构坐标键（#275：Region/Block
+ * 退役，写侧不再有 region/block 坐标）。一律拒收不静默丢弃。 */
+const RETIRED_OP_KEYS = ['origin', 'status', 'probation', 'region', 'block'] as const
 
 export interface EditProposalSpec {
   course: string
@@ -99,7 +98,7 @@ export interface EditProposalSpec {
   route?: string
 }
 
-const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'move', 'set_note'] as const
+const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'set_note'] as const
 
 /** 批内 add_node 数（插入登记/调速闸门的「本批新增」口径单点；解析前 doc.ops 与
  * EditOp[] 同形消费）。 */
@@ -225,14 +224,15 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       }
       const op = o.op
       if (typeof op !== 'string' || !(EDIT_OPS as readonly string[]).includes(op)) {
-        errors.push(`${where}.op: 非法操作 ${String(op)}（允许 ${EDIT_OPS.join('/')}）`)
+        errors.push(`${where}.op: 非法操作 ${String(op)}（允许 ${EDIT_OPS.join('/')}）${op === 'move' ? '——move 已随 Region/Block 退役（#275）：分组改为读侧派生，写侧不再有换分区操作' : ''}`)
         return
       }
-      // 边轻纪律（#127）：提案节点同样零边元数据字段——静默丢弃会丢生长语义，fail loud。
+      // 退役键（#127 边轻纪律 + #275 结构坐标）：静默丢弃会丢语义，fail loud。按键族分段给出可执行指引。
       const retired = Object.keys(o).filter(k => (RETIRED_OP_KEYS as readonly string[]).includes(k))
-      if (retired.length) {
-        errors.push(`${where}: 提案 op 不接受边元数据字段 ${JSON.stringify(retired)}（origin 从提案 journal 派生、复诊状态落 state/边实验.jsonl——图与提案节点零边字段）`)
-      }
+      const coords = retired.filter(k => k === 'region' || k === 'block')
+      const edges = retired.filter(k => k !== 'region' && k !== 'block')
+      if (coords.length) errors.push(`${where}: 不接受坐标键 ${JSON.stringify(coords)}（随 Region/Block 退役 #275）——add_node 只需 name + pre，删掉这两个键即可落图（分布由读侧派生）`)
+      if (edges.length) errors.push(`${where}: 不接受这些字段 ${JSON.stringify(edges)}（origin 从提案 journal 派生、复诊状态落 state/边实验.jsonl——图与提案节点零边字段）`)
       // 键名统一到 name（#131 §7 / #1：与图 YAML 同口径，不做兼容双读也不容双写）——
       // add_node 用 name 定义新节点；其余 op 用 node 引用既有节点。写错键一律 fail loud。
       if (op === 'add_node') {
@@ -251,7 +251,6 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
         errors.push(`${where}: op=${op} 不接受 teaches/assumes/misconceptions（概念字段组只在 add_node 出生时写）`)
       }
       if (op === 'rename' && !(o.new && String(o.new).trim())) errors.push(`${where}: rename 需要 new（rename 成对字段：node=旧名，new=新名）`)
-      if ((op === 'add_node' || op === 'move') && !(o.region && o.block)) errors.push(`${where}: op=${op} 需要 region 与 block（分区定位：区名 + 块名）`)
       // 整体替换语义防呆：缺 pre/enc 数组会被当成空集静默清掉已有边，这里直接拒绝（显式清空写 pre: [] / enc: []）
       if (op === 'set_pre' && !Array.isArray(o.pre)) errors.push(`${where}: set_pre 需要 pre 列表（整体替换语义，缺省会被当成清空全部前置；显式清空写 pre: []）`)
       if (op === 'set_enc' && !Array.isArray(o.enc)) errors.push(`${where}: set_enc 需要 enc 列表（整体替换语义，缺省会被当成清空全部成分技能边；显式清空写 enc: []）`)
@@ -294,8 +293,6 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
         node: typeof o.node === 'string' ? o.node.trim() : undefined,
         name: typeof o.name === 'string' ? o.name.trim() : undefined,
         new: typeof o.new === 'string' ? o.new.trim() : undefined,
-        region: typeof o.region === 'string' ? o.region.trim() : undefined,
-        block: typeof o.block === 'string' ? o.block.trim() : undefined,
         pre: Array.isArray(o.pre) ? o.pre.map(String) : [],
         ...(Array.isArray(o.enc) ? { enc: o.enc as EditOp['enc'] } : {}),
         opt: Boolean(o.opt),
@@ -724,19 +721,19 @@ export class GraphProposals {
       throw new Error(`[apply-edit] 生长闸门拒绝写入（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
 
+    // add_node 无坐标（#275）：落到图内既有的单一区（首个区）——区内无块时落点会建一个以
+    // 区名命名的块（created_blocks 记这些新建块）。存储塌缩（一课程一文件）见 #284。
     const createdBlocks = new Set<string>()
     for (const op of spec.ops) {
       if (op.op !== 'add_node') continue
-      const region = regions.find(r => r.name === op.region)
-      if (region && !region.blocks.some(b => b.name === op.block)) createdBlocks.add(op.block!)
+      const region = regions[0]
+      if (region && !region.blocks.length) createdBlocks.add(region.name)
     }
 
     const renames: Record<string, string> = {}
-    const moves: Array<[string, string, string]> = []
     const dels: string[] = []
     for (const op of spec.ops) {
       if (op.op === 'rename') renames[op.node!] = op.new!
-      else if (op.op === 'move') moves.push([op.node!, op.region!, op.block!])
       else if (op.op === 'del_node') dels.push(op.node!)
     }
 
@@ -802,10 +799,9 @@ export class GraphProposals {
         {
           // 3. 改名/移动/删除联动课程笔记（用 ops 应用前的图定位旧文件位置；
           //    graphAfter 里旧名已不存在/位置已变，会让联动静默失效）
-          name: '笔记联动（改名/移动/归档）',
+          name: '笔记联动（改名/归档）',
           run: async () => {
-            for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(root, graph, oldName, newName, undefined)
-            for (const [node, regionName] of moves) await this.relocateNote(root, graph, node, undefined, regionName)
+            for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(root, graph, oldName, newName)
             for (const node of dels) await this.archiveNote(root, graph, node, prop.id)
           },
         },
@@ -1382,17 +1378,16 @@ export class GraphProposals {
     return { kind: 'confusable_pair', course: course.name, a: r.a, b: r.b, changed: r.changed }
   }
 
-  /** 改名/移动联动课程笔记：搬文件 + 更新 fm.node + 题库随迁；无笔记静默跳过。 */
-  private async relocateNote(root: string, graph: Graph, node: string, newName?: string, newRegion?: string): Promise<void> {
+  /** 改名联动课程笔记：搬文件 + 更新 fm.node + 题库随迁；无笔记静默跳过。 */
+  private async relocateNote(root: string, graph: Graph, node: string, newName?: string): Promise<void> {
     if (!graph.blockOf[node]) return
     const region = graph.blockOf[node][1]
     const oldPath = this.paths.courseNotePath(root, region, node)
     const targetName = newName ?? node
-    const targetRegion = newRegion ?? region
     if (this.fs.exists(oldPath)) {
       const { loadNote, saveNote } = await import('./notes.ts')
       const { fm, body } = await loadNote(oldPath, this.fs)
-      const newPath = this.paths.courseNotePath(root, targetRegion, targetName)
+      const newPath = this.paths.courseNotePath(root, region, targetName)
       await saveNote(newPath, { ...(fm ?? {}), node: targetName }, body, this.fs)
       if (oldPath.toLowerCase() !== newPath.toLowerCase()) {
         // 新内容（fm.node=新名）已写入 newPath；摘除旧文件。
@@ -1488,16 +1483,15 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
   const renameMap: Record<string, string> = {}
   const removed = new Set<string>()
 
-  const regionOf = (name: string) => sim.find(r => r.name === name)
-
   for (const op of ops) {
     if (op.op === 'add_node') {
       if (names.has(op.name!)) { errors.push(`add_node 重名: ${op.name}`); continue }
-      const r = regionOf(op.region!)
-      if (!r) { errors.push(`add_node 区不存在: ${op.region}`); continue }
-      let blk = r.blocks.find(b => b.name === op.block)
+      // 无坐标（#275）：落到图内既有的单一区（首个区）；区内无块时以区名建块。
+      const r = sim[0]
+      if (!r) { errors.push('add_node 无可落区（图内无区）'); continue }
+      let blk = r.blocks[0]
       if (!blk) {
-        blk = { name: op.block!, nodes: [] }
+        blk = { name: r.name, nodes: [] }
         r.blocks.push(blk)
       }
       blk.nodes.push(nodeFromAddOp(op))
@@ -1513,13 +1507,6 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
         renameMap[op.node!] = op.new!
         names.delete(op.node!)
         names.add(op.new!)
-      }
-    } else if (op.op === 'move') {
-      if (!names.has(op.node!)) { errors.push(`move 节点不存在: ${op.node}`); continue }
-      const dstRegion = regionOf(op.region!)
-      if (!dstRegion) errors.push(`move 目标区不存在: ${op.region}`)
-      else if (!dstRegion.blocks.some(b => b.name === op.block)) {
-        errors.push(`move 目标块不存在（不允许静默建块）: ${op.region}/${op.block}`)
       }
     } else if (op.op === 'set_pre') {
       if (!names.has(op.node!)) { errors.push(`set_pre 节点不存在: ${op.node}`); continue }
@@ -1562,7 +1549,6 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
 export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
   const renameMap: Record<string, string> = {}
   const removed = new Set<string>()
-  const regionOf = (name: string) => regions.find(r => r.name === name)
   const findNode = (node: string): { r: GRegion; b: GBlock; n: GNode } | null => {
     for (const r of regions) for (const b of r.blocks) {
       const n = b.nodes.find(x => x.name === node)
@@ -1573,10 +1559,11 @@ export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
 
   for (const op of ops) {
     if (op.op === 'add_node') {
-      const r = regionOf(op.region!)!
-      let blk = r.blocks.find(b => b.name === op.block)
+      // 无坐标（#275）：落到图内既有的单一区（首个区）；区内无块时以区名建块。
+      const r = regions[0]!
+      let blk = r.blocks[0]
       if (!blk) {
-        blk = { name: op.block!, nodes: [] }
+        blk = { name: r.name, nodes: [] }
         r.blocks.push(blk)
       }
       blk.nodes.push(nodeFromAddOp(op))
@@ -1584,16 +1571,6 @@ export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
       removed.add(op.node!)
     } else if (op.op === 'rename') {
       renameMap[op.node!] = op.new!
-    } else if (op.op === 'move') {
-      const hit = findNode(op.node!)
-      if (!hit) continue
-      hit.b.nodes = hit.b.nodes.filter(n => n.name !== op.node)
-      const dstR = regionOf(op.region!)!
-      let dstBlk = dstR.blocks.find(b => b.name === op.block)
-      if (!dstBlk) {
-        throw new Error(`[apply-edit] move 目标块不存在（不允许静默建块）: ${op.region}/${op.block}`)
-      }
-      dstBlk.nodes.push(hit.n)
     } else if (op.op === 'set_pre') {
       const hit = findNode(op.node!)
       if (hit) hit.n.pre = [...(op.pre ?? [])]

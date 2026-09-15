@@ -46,8 +46,6 @@ concepts:
 ops:
   - op: add_node
     name: 中继节点
-    region: 基础
-    block: 入门块
     pre: [入门]
     est: 10
     teaches: { ${canonical}: 知道 }

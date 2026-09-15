@@ -27,8 +27,6 @@ test('键名统一到 name（#140）：add_node 用 name，旧 node 键拒收并
 ops:
   - op: add_node
     node: 追加技能
-    region: 基础区
-    block: 入门
     pre: [前置技能]
     est: 10
 `
@@ -52,7 +50,7 @@ ops:
 // ---- 生长批裁决产物面（#145）：note 区 / route / 零操作 / 边轻键 ----
 
 test('#145 note 区严格 schema：恰 {operator, reason, target_endpoints?, disagreement?, recheck?}，算子枚举锁死（ADR-0076 朝向进 note）', () => {
-  const base = (note: string): string => `course: 校验课\n${note}ops:\n  - op: add_node\n    name: 新节点\n    region: 基础区\n    block: 入门\n    pre: []\n`
+  const base = (note: string): string => `course: 校验课\n${note}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n`
   // 非法算子 / 缺理由 / 未知字段 / disagreement 空声明
   const badOperator = validateEditProposal(YAML.parse(base('note:\n  operator: 冲刺\n  reason: 理由\n')))
   assert.ok(badOperator.errors!.some(e => e.includes('note.operator: 非法算子') && e.includes(GROWTH_OPERATORS.join('/'))))
@@ -100,12 +98,12 @@ test('#145 零操作：生长批（note 在场）ops 空列表合法；普通提
 
 test('#145 route：唯一写权属生长批——普通提案携带拒收；生长批合法携带', () => {
   const routeBody = 'route: |\n  - **阶段一**：朝终点推进。\n'
-  const plainWithRoute = validateEditProposal(YAML.parse(`course: 校验课\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    region: 基础区\n    block: 入门\n    pre: []\n`))
+  const plainWithRoute = validateEditProposal(YAML.parse(`course: 校验课\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n`))
   assert.ok(plainWithRoute.errors!.some(e => e.includes('route: 普通 edit 提案不得携带')))
-  const growthWithRoute = validateEditProposal(YAML.parse(`course: 校验课\nnote:\n  operator: 前进\n  reason: 理由\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    region: 基础区\n    block: 入门\n    pre: []\n`))
+  const growthWithRoute = validateEditProposal(YAML.parse(`course: 校验课\nnote:\n  operator: 前进\n  reason: 理由\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n`))
   assert.equal(growthWithRoute.errors, undefined)
   assert.ok(growthWithRoute.spec!.route!.includes('阶段一'))
-  const emptyRoute = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  operator: 前进\n  reason: 理由\nroute: "  "\nops:\n  - op: add_node\n    name: 新节点\n    region: 基础区\n    block: 入门\n    pre: []\n'))
+  const emptyRoute = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  operator: 前进\n  reason: 理由\nroute: "  "\nops:\n  - op: add_node\n    name: 新节点\n    pre: []\n'))
   assert.ok(emptyRoute.errors!.some(e => e.includes('route: 必须是非空字符串')))
 })
 
@@ -115,14 +113,25 @@ test('#127 边轻纪律在提案侧：op 携带 origin/status/probation 一律�
 ops:
   - op: add_node
     name: 插入节点
-    region: 基础区
-    block: 入门
     pre: []
     ${key}: 10
 `
     const v = validateEditProposal(YAML.parse(yaml))
-    assert.ok(v.errors!.some(e => e.includes(`不接受边元数据字段`) && e.includes(`"${key}"`)), `键 ${key} 应被拒收`)
+    assert.ok(v.errors!.some(e => e.includes(`不接受这些字段`) && e.includes(`"${key}"`)), `键 ${key} 应被拒收`)
   }
+})
+
+test('#275 写侧词汇退场：add_node 无坐标通过；move/region/block 一律拒收', () => {
+  // add_node 不再要求坐标：只写 name/pre 即过 schema 门
+  const bare = validateEditProposal(YAML.parse('course: 校验课\nops:\n  - { op: add_node, name: 新节点, pre: [] }\n'))
+  assert.equal(bare.errors, undefined)
+  assert.equal(bare.spec!.ops[0]!.op, 'add_node')
+  // move 已退役：不在 op 白名单，fail loud 且列出可执行操作集
+  const move = validateEditProposal(YAML.parse('course: 校验课\nops:\n  - { op: move, node: 入门, region: 基础, block: 块 }\n'))
+  assert.ok(move.errors!.some(e => e.includes('非法操作 move') && e.includes('add_node/del_node/set_pre/set_enc/rename/set_note')))
+  // 残留坐标键（region/block）一律拒收不静默丢弃
+  const residue = validateEditProposal(YAML.parse('course: 校验课\nops:\n  - { op: add_node, name: 新节点, region: 基础区, block: 入门, pre: [] }\n'))
+  assert.ok(residue.errors!.some(e => e.includes('不接受坐标键') && e.includes('"region"') && e.includes('"block"')))
 })
 
 test('#145 巩固门受理路径：巩固批引未教概念拒收、引已教概念通过（走引擎全门）', async () => {
@@ -141,8 +150,6 @@ note:
 ops:
   - op: add_node
     name: 综合收束
-    region: 基础区
-    block: 入门
     pre: [入门]
     teaches: {${teaches}}
 ${extraConcepts}`
@@ -161,6 +168,6 @@ ops:
     node: 入门
     pre: [入门]
     probation: 10
-`), /不接受边元数据字段/)
+`), /不接受这些字段/)
   })
 })
