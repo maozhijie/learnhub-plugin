@@ -247,7 +247,7 @@ export interface ReviewRec {
 /** 提案 kind 全集（P-2 泛化：图谱域 edit + 项目域 project_plan/project_milestone
  * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制）+ 覆盖域 enrich（schema v2
  * 出生/覆盖层分家，#127/#131：回填通道，sha256 内容指纹，只补写图谱可对照字段））。
- * 种子（seed，#256 / ADR-0081）已退役：图谱结构由生长批/编辑提案铺。 */
+ * 种子（seed，#256 / ADR-0082）已退役：图谱结构由生长批/编辑提案铺。 */
 export const PROPOSAL_KINDS = ['edit', 'enrich', 'project_plan', 'project_milestone', 'experiment'] as const
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
 

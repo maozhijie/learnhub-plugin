@@ -11,7 +11,7 @@
  * - `engine` 可选：声明了就必须是门面方法；队列型/按参分派型/无引擎型留空（白名单登记理由）；
  * - `bind` 住**通道**：顺序＝引擎实参位置，元素＝`args` 键名，`null`＝该位置传 `undefined`；
  * - `phase` 住**通道**：队列型命令的入口阶段（∈ GEN_JOB_PHASES）；
- * - `channel` 是**投递面**（ADR-0082）：`agent`＝工具面、`panel`＝面板路由面、
+ * - `channel` 是**投递面**（ADR-0083）：`agent`＝工具面、`panel`＝面板路由面、
  *   `ops`＝`npm run` 脚本驱动的宿主 API 面（如 smoke/spike/quality-review——真 provider 只在宿主 ctx，必须走宿主 HTTP）；
  *   panel/ops 都是路由，可达面不同（#257 可达性门据此分流）；
  * - `output` 类型引用（编译期幻影字段，运行时不写）。

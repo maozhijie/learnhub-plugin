@@ -322,11 +322,11 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 **旧键深链**：`#/learn`、`#/courses/graph`、`#/stats`、`#/lab` 等平铺/子路由旧键按 ADR-0058 登记为**自用工具可接受的已知断裂**——`parseHash` 回落默认页签，规范化经 `syncHash` 走 replaceState（不留非法形、不产生历史条目）。断言常驻 `tests/ui-router.test.ts` 的 parseHash 用例（旧键样例逐条列举）与 syncHash 用例（旧键 hash 规范化）。
 
 
-## 死入口退役（#255 / #256，ADR-0080／ADR-0081）：受控面迁移登记
+## 死入口退役（#255 / #256，ADR-0081／ADR-0082）：受控面迁移登记
 
-**#255（doctor 并入 data-check）**：删 `GET /doctor` 路由 + `doctor` 命令 + `engine.doctor()` + `DoctorDoc` 视图；三个消费者（`scripts/smoke.mjs`／`scripts/e2e.mjs`／`scripts/dev-server.mjs`）迁 `dataCheck()`；时钟端口测试改锚 `recommend().date`。详见 ADR-0080。
+**#255（doctor 并入 data-check）**：删 `GET /doctor` 路由 + `doctor` 命令 + `engine.doctor()` + `DoctorDoc` 视图；三个消费者（`scripts/smoke.mjs`／`scripts/e2e.mjs`／`scripts/dev-server.mjs`）迁 `dataCheck()`；时钟端口测试改锚 `recommend().date`。详见 ADR-0081。
 
-**#256（种子链 + 四条死命令退役）**：删 7 条命令（`seed-propose`／`proposals-impact`／`project-decompile-apply`／`node-pin`／`review`／`courses`／`day-cutoff`）、6 条路由（`GET /courses`、`POST /node/pin`、`/proposals/impact`、`/review`、`/seed/propose`、`PUT /day-cutoff`）、1 个 agent 工具（`learnhub_project_decompile_apply`）。退役判据是**可达性**（无产品入口/调用方），不是快照存在与否——行为快照是行为回归，不是可达性门。`learnhub_pin_today`/`learnhub_unpin` 两个 agent 工具**保留**。详见 ADR-0081。
+**#256（种子链 + 四条死命令退役）**：删 7 条命令（`seed-propose`／`proposals-impact`／`project-decompile-apply`／`node-pin`／`review`／`courses`／`day-cutoff`）、6 条路由（`GET /courses`、`POST /node/pin`、`/proposals/impact`、`/review`、`/seed/propose`、`PUT /day-cutoff`）、1 个 agent 工具（`learnhub_project_decompile_apply`）。退役判据是**可达性**（无产品入口/调用方），不是快照存在与否——行为快照是行为回归，不是可达性门。`learnhub_pin_today`/`learnhub_unpin` 两个 agent 工具**保留**。详见 ADR-0082。
 
 | 受控面 | 迁移内容 | 落点 | 判据 |
 |---|---|---|---|
@@ -338,9 +338,9 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 
 **存量兼容**：提案读侧不校验 `kind`——存量 `kind=seed` 提案仍可读出、不判 Broken；apply 侧按 kind 拒绝（`tests/proposals-contract.test.ts` 钉住）。
 
-## ops 面正名 + 可达性门（#257 / ADR-0082）：受控面迁移登记
+## ops 面正名 + 可达性门（#257 / ADR-0083）：受控面迁移登记
 
-**#257（ops 面正名 + 可达性门）**：命令注册表通道种类扩为 `agent`／`panel`／`ops`；`smoke`／`spike`／`quality-review` 由 `panel` 改声明为 `ops`（`npm run` 脚本驱动的宿主 API——真 provider 只在宿主 ctx，必须走宿主 HTTP；路由与 handler 逐字不变）；新增**门⑨ 可达性**。详见 ADR-0082。
+**#257（ops 面正名 + 可达性门）**：命令注册表通道种类扩为 `agent`／`panel`／`ops`；`smoke`／`spike`／`quality-review` 由 `panel` 改声明为 `ops`（`npm run` 脚本驱动的宿主 API——真 provider 只在宿主 ctx，必须走宿主 HTTP；路由与 handler 逐字不变）；新增**门⑨ 可达性**。详见 ADR-0083。
 
 | 受控面 | 迁移内容 | 落点 | 判据 |
 |---|---|---|---|
@@ -349,7 +349,7 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 路由/工具/行为快照 | **零漂移**：三条路由只改通道种类，`host-routes-*`／`host-tools-*`／`host-face-baseline` 逐字不变 | —（未改） | `tests/host-routes.test.ts`／`tools-face`／`host-runtime` 全绿 |
 | 提示词面 | 不触碰任何提示词文本 | —（未改） | `npm run prompt-bump -- check` 恒绿、无 `PROMPT_CHANGELOG` 条目 |
 
-**门⑨ 可达性**（命令注册表；`tests/commands.test.ts`；#257 / ADR-0082）：
+**门⑨ 可达性**（命令注册表；`tests/commands.test.ts`；#257 / ADR-0083）：
 
 - **内容**：每个命令必须至少一个可达面——`panel` 路由→UI 源码（`ui/src` ∪ `src/client`）、`ops` 路由→`scripts/`、`agent` 通道→注册即产品面（工具名下发即暴露）；另附 `ops` 路由必有 `scripts/` 调用点的正确性断言。
 - **档位**：硬门 0（孤儿 0 + `ops` 误标 0）。

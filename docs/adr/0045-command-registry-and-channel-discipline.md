@@ -93,7 +93,7 @@ interface CommandSpec {
 | ④ | handler 覆盖 | **已落地**：`host/handlers.ts` 键（method+path）== 没有 bind 的 panel 通道集合；`host/tool-handlers.ts` 键（工具名）== 没有 bind 的 agent 通道集合（无孤儿、无死代码） |
 | 8 | 声明与面一致 | 注册表 agent 通道的 `(tool, args, summary)` 与工具面快照逐字一致；panel 通道的 `(method, path)` 与路由清单逐字一致 |
 
-> **#257 / ADR-0082 追加**：第九道门「可达性」——每个命令至少一个可达面（`panel` 路由→UI 源码调用点、`ops` 路由→`scripts/` 调用点、`agent` 通道→注册即产品面）；通道种类遂由 `agent`/`panel` 扩为 `agent`/`panel`/`ops`（`smoke`/`spike`/`quality-review` 正名为 `ops`）。
+> **#257 / ADR-0083 追加**：第九道门「可达性」——每个命令至少一个可达面（`panel` 路由→UI 源码调用点、`ops` 路由→`scripts/` 调用点、`agent` 通道→注册即产品面）；通道种类遂由 `agent`/`panel` 扩为 `agent`/`panel`/`ops`（`smoke`/`spike`/`quality-review` 正名为 `ops`）。
 
 - **「门面转发层消失或自动生成」**（消费方直连子系统）是终极形态，牵动 host/UI/测试全部调用点，**另开票**，本 ADR 不裁。**（已由 ADR-0049 定案，2026-09-11：终态取 C 形态——hub 降级为纯容器、公开面改 `engine.<子系统>.<方法>`、199 个转发体删除；施工票 #182。本 ADR 当初"牵动 host／UI／测试全部调用点"的估量已被 #169 改写：host 生成路径现为 `rt.engine[engine](...args)` 字符串查表，"全部消费方"实测塌缩为 tests 直调 1086 处／host 例外直调 164 处／注册表 154 条 `engine` 字段／接线箭头函数 108 条；UI 从不经过门面。）**
 - `ui/` 的 151 处类型错与它自己的 tsconfig／vite 构建**不在本 ADR 范围**。

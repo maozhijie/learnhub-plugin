@@ -1,7 +1,7 @@
 /**
  * 命令注册表（#169 / ADR-0045 裁定）：形状、唯一性、接线与两面一致性的门。
  *
- * 门清单（ADR-0045 末尾的八道门 + ⑨ 可达性〔#257 / ADR-0082〕；7 由既有的两份快照测试承担）：
+ * 门清单（ADR-0045 末尾的八道门 + ⑨ 可达性〔#257 / ADR-0083〕；7 由既有的两份快照测试承担）：
  *   ① `engine` 声明值 ∈ 门面原型方法；留空的必须落在白名单（逐条理由＝ADR 的三类）
  *   ② 队列通道的 `phase` ∈ GEN_JOB_PHASES，且 runner 认得它（节点锚定阶段或 jobs.ts 里有分支）
  *   ③ 唯一性：`id`／`tool` 名／`(method, path)` 在装配表上各自唯一（并断言索引没被静默覆盖）
@@ -11,7 +11,7 @@
  *   ⑧ 声明与面一致：agent 通道的 `(tool, summary, args)` 投影后与工具面快照逐字一致；
  *      路由通道（panel/ops）的 `(method, path)` 与路由清单逐字一致
  *   ⑨ 可达性：每个命令至少一个可达面（panel 路由→UI 源码 / ops 路由→`scripts/` / agent 工具位）；
- *      ops 路由必有 `scripts/` 调用点（#257 新增，见 ADR-0082）
+ *      ops 路由必有 `scripts/` 调用点（#257 新增，见 ADR-0083）
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -59,7 +59,7 @@ interface ReachCommand { id: string; channels: readonly ReachChannel[] }
 interface ReachSurfaces { ui: string; scripts: string }
 
 /**
- * 可达性判据（#257 / ADR-0082）：命令必须至少有一个可达面，面按通道种类定。
+ * 可达性判据（#257 / ADR-0083）：命令必须至少有一个可达面，面按通道种类定。
  * - `agent` 通道：注册即产品面（工具名下发即暴露，无需静态调用点）。
  * - `panel` 路由：在 UI 源码（`ui/src` ∪ `src/client`）找到**调用点**即可达。
  * - `ops` 路由：在 `scripts/` 找到**调用点**即可达。
@@ -321,7 +321,7 @@ test('门③·装配：按 id 键的装配没被跨文件重名吃掉（键数 =
 
 // ---------------------------------------------------------------- ⑨ 可达性
 
-test('门⑨ 可达性：每个命令至少一个可达面；ops 路由必有 scripts/ 调用点（#257 / ADR-0082）', () => {
+test('门⑨ 可达性：每个命令至少一个可达面；ops 路由必有 scripts/ 调用点（#257 / ADR-0083）', () => {
   const uiText = walkText(join(ROOT, 'ui', 'src')) + '\n' + walkText(join(ROOT, 'src', 'client'))
   const scriptsText = walkText(join(ROOT, 'scripts'))
   // 收集器可见性自检（R3 恒过教训）：两个面都得真读到**调用点**，否则门会静默恒过
