@@ -3,7 +3,7 @@ schema_version: 1
 locale: zh-CN
 branch: main
 nodes_managed: true
-exported_at: "2026-09-14T13:06:21Z"
+exported_at: "2026-09-15T01:09:50Z"
 modules:
     "":
         dir_name: dsh-learnhub 插件根（Cordis 学习中心插件）

@@ -11,7 +11,20 @@
 - [src/commands/index.ts](file://src/commands/index.ts)
 - [src/commands/types.ts](file://src/commands/types.ts)
 - [src/commands/学习.ts](file://src/commands/学习.ts)
+- [src/engine/stuck-report.ts](file://src/engine/stuck-report.ts)
+- [src/engine/growth-subsystem.ts](file://src/engine/growth-subsystem.ts)
+- [src/engine/types.ts](file://src/engine/types.ts)
+- [src/engine/params.ts](file://src/engine/params.ts)
+- [docs/adr/0077-stuck-report-direct-evidence.md](file://docs/adr/0077-stuck-report-direct-evidence.md)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 新增 POST /coach/stuck-report 端点文档，包含完整的请求响应格式、参数验证和错误处理说明
+- 更新端点清单，添加卡点自报相关端点
+- 增强频率限制和安全考虑章节，详细说明卡点自报的频控机制
+- 补充客户端集成指南中的卡点自报调用示例
+- 更新架构流程图，展示新的卡点自报处理流程
 
 ## 目录
 1. [简介](#简介)
@@ -32,11 +45,12 @@
 - handlers 模块的请求处理流程与中间件机制
 - apiRun 统一封装模式与日志记录机制
 - 静态文件服务与前端 SPA 路由支持
+- **新增**：卡点自报（stuck-report）端点的完整实现细节
 - 完整的 API 调用示例与客户端集成指南
 - 安全、速率限制与性能优化建议
 
 ## 项目结构
-HTTP 路由由“声明式命令注册表 + 数据化路由表 + 手写处理器”三部分构成，配合统一的 HTTP 技术层与运行时封装，形成稳定可扩展的分发体系。
+HTTP 路由由"声明式命令注册表 + 数据化路由表 + 手写处理器"三部分构成，配合统一的 HTTP 技术层与运行时封装，形成稳定可扩展的分发体系。
 
 ```mermaid
 graph TB
@@ -77,7 +91,7 @@ A --> L["/learnhub/api/interactive<br/>交互件 HTML"]
 - [src/host/api.ts:1-84](file://src/host/api.ts#L1-L84)
 - [src/commands/index.ts:1-72](file://src/commands/index.ts#L1-L72)
 - [src/host/route-table.ts:1-75](file://src/host/route-table.ts#L1-L75)
-- [src/host/handlers.ts:1-742](file://src/host/handlers.ts#L1-L742)
+- [src/host/handlers.ts:1-769](file://src/host/handlers.ts#L1-L769)
 - [src/host/http.ts:1-55](file://src/host/http.ts#L1-L55)
 - [src/host/static.ts:1-134](file://src/host/static.ts#L1-L134)
 - [src/host/runtime.ts:1-255](file://src/host/runtime.ts#L1-L255)
@@ -134,7 +148,7 @@ Note over API,Http : 未命中→404 {error}
 ### 命令注册表与面板通道
 - 命令以 id 为键集中装配，每个命令可拥有多个 ChannelSpec（agent/panel），面板通道通过 route.method/path 暴露为 HTTP 端点。
 - WIRE_ARGS 维护面板通道的参数键名映射，供 UI 侧做 camelCase↔snake_case 转换。
-- BY_ROUTE 提供按 “METHOD PATH” 索引的命令，用于快速匹配。
+- BY_ROUTE 提供按 "METHOD PATH" 索引的命令，用于快速匹配。
 
 章节来源
 - [src/commands/index.ts:25-72](file://src/commands/index.ts#L25-L72)
@@ -146,7 +160,7 @@ Note over API,Http : 未命中→404 {error}
 - 参数校验使用 params.ts 提供的 need/opt* 系列工具，失败抛出 ParamError，最终在 handleApi 中转为 500 错误响应。
 
 章节来源
-- [src/host/handlers.ts:1-742](file://src/host/handlers.ts#L1-L742)
+- [src/host/handlers.ts:1-769](file://src/host/handlers.ts#L1-L769)
 - [src/host/http.ts:26-40](file://src/host/http.ts#L26-L40)
 - [src/host/runtime.ts:243-253](file://src/host/runtime.ts#L243-L253)
 
@@ -178,6 +192,72 @@ Note over API,Http : 未命中→404 {error}
 章节来源
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/runtime.ts:198-215](file://src/host/runtime.ts#L198-L215)
+
+### 卡点自报端点详解
+**新增功能**：POST /coach/stuck-report 端点实现了学习者卡点自报的完整闭环流程。
+
+#### 端点规格
+- **路径**：`/learnhub/api/coach/stuck-report`
+- **方法**：POST
+- **认证**：无内置认证（建议在网关层实现）
+- **请求体**：
+  ```json
+  {
+    "course": "课程名称",
+    "node": "节点名称", 
+    "text": "卡点描述文本"
+  }
+  ```
+
+#### 参数验证
+- `course`：必填字符串，表示课程标识
+- `node`：必填字符串，必须是课程图上存在的节点
+- `text`：必填字符串，非空 trimmed 文本
+
+#### 频率限制机制
+- **同节点限制**：每学习日最多 1 条自报
+- **总量限制**：全课程每日最多 5 条自报
+- **限制策略**：超限直接拒绝，不记录也不触发回合
+
+#### 处理流程
+1. **参数验证**：检查必填字段和节点存在性
+2. **频率检查**：验证是否超过限制
+3. **落账存储**：将自报原文逐字存入 practice 流水
+4. **立即入队**：强制触发教练回合（force=true）
+5. **批量处理**：启动生长批处理，消费待处理的自报
+
+#### 响应格式
+成功响应：
+```json
+{
+  "recorded": true,
+  "ts": "时间戳",
+  "queued": true,
+  "message": "教练回合已启动：你的自报原话会随回合交给教练归因，建议稍后呈现。"
+}
+```
+
+失败响应：
+```json
+{
+  "error": "错误消息"
+}
+```
+
+#### 错误处理
+- **参数验证失败**：返回 500，包含具体的中文错误消息
+- **频率限制触发**：返回 500，说明触发的限制类型
+- **节点不存在**：返回 500，提示节点不在课程图上
+- **文本为空**：返回 500，要求填写有效内容
+
+章节来源
+- [src/commands/学习.ts:118-133](file://src/commands/学习.ts#L118-L133)
+- [src/host/handlers.ts:630-656](file://src/host/handlers.ts#L630-L656)
+- [src/engine/growth-subsystem.ts:380-404](file://src/engine/growth-subsystem.ts#L380-L404)
+- [src/engine/stuck-report.ts:1-84](file://src/engine/stuck-report.ts#L1-L84)
+- [src/engine/types.ts:175-211](file://src/engine/types.ts#L175-L211)
+- [src/engine/params.ts:61-62](file://src/engine/params.ts#L61-L62)
+- [docs/adr/0077-stuck-report-direct-evidence.md:1-37](file://docs/adr/0077-stuck-report-direct-evidence.md#L1-L37)
 
 ## 依赖关系分析
 - api.ts 依赖 commands/index.ts 的 BY_ROUTE 与 COMMAND_LIST，依赖 http.ts 的 readJson/sendJson，依赖 runtime.ts 的 apiRun/resolveEngineEntry，依赖 handlers.ts 的手写处理器。
@@ -216,12 +296,15 @@ RT --> ENG["engine/index.ts"]
   - 生成路径通过 readArgs/bind 直调引擎，减少样板代码；队列型任务入队即返回，避免阻塞请求。
   - 静态资源区分缓存策略：assets/* 长期缓存，index.html 与交互件 no-store，保障更新即时生效。
   - 运行日志异步落盘，失败静默，不阻塞主流程。
+  - **新增**：卡点自报采用立即入队策略，避免同步阻塞用户请求。
 - 安全
   - 路径穿越防护：/file、/vendor、/interactive 均拒绝 .. 与越界路径。
   - CSP 限制：交互件默认 default-src 'none'，仅放开必要源；connect-src 封死外联。
   - 白名单 MIME：仅允许已知扩展名，防止任意文件类型泄露。
+  - **新增**：卡点自报的频率限制防止滥用和资源浪费。
 - 速率限制
   - 当前未在 HTTP 层实现全局限流；建议在网关或反向代理层实施基于 IP/用户维度的速率限制，保护长耗时接口（如 /smoke、/quality-review、/spike）。
+  - **新增**：卡点自报内置频率限制（同节点每日1条，全课程每日5条）。
 - 优化建议
   - 对高频只读接口（如 /status、/courses、/review-queue）启用应用层缓存或 CDN 缓存头。
   - 对批量任务（生成、评审、冒烟）采用异步队列与进度查询，避免同步阻塞。
@@ -241,6 +324,10 @@ RT --> ENG["engine/index.ts"]
   - 新增端点时，先在命令注册表中声明 panel 通道，并在 handlers.ts 补充手写处理器（如需）。
   - 参数校验失败时，调整前端传参类型与命名，遵循 WIRE_ARGS 约定。
   - 若出现路径穿越或 MIME 不支持错误，检查请求路径与扩展名是否符合白名单。
+- **卡点自报特定问题**
+  - 频率限制错误：检查是否超过每日限制，等待下一学习日或更换节点。
+  - 节点不存在：确认节点名称与课程图上的节点完全匹配。
+  - 文本为空：确保提交的 text 字段包含有效内容。
 
 章节来源
 - [src/host/api.ts:58-82](file://src/host/api.ts#L58-L82)
@@ -248,7 +335,7 @@ RT --> ENG["engine/index.ts"]
 - [src/host/runtime.ts:217-231](file://src/host/runtime.ts#L217-L231)
 
 ## 结论
-LearnHub 的 HTTP API 路由体系以“声明式命令注册表 + 数据化路由表 + 手写处理器”为核心，结合统一的 HTTP 技术层与运行时封装，实现了高内聚、低耦合、易扩展的后端服务架构。通过严格的参数校验、安全控制与运行日志，保障了接口的稳定性与可观测性。建议在生产环境中结合网关层实现速率限制与缓存策略，进一步提升性能与安全性。
+LearnHub 的 HTTP API 路由体系以"声明式命令注册表 + 数据化路由表 + 手写处理器"为核心，结合统一的 HTTP 技术层与运行时封装，实现了高内聚、低耦合、易扩展的后端服务架构。通过严格的参数校验、安全控制与运行日志，保障了接口的稳定性与可观测性。**新增的卡点自报端点**进一步完善了学习体验反馈机制，提供了实时的学习障碍检测和处理能力。建议在生产环境中结合网关层实现速率限制与缓存策略，进一步提升性能与安全性。
 
 [本节为总结性内容，不直接分析具体文件]
 
@@ -270,6 +357,7 @@ LearnHub 的 HTTP API 路由体系以“声明式命令注册表 + 数据化路�
 - GET /generate/status：生成任务状态
 - GET /explain-pack：讲解包
 - GET /anki/status：Anki 通道状态
+- **POST /coach/stuck-report：卡点自报（新增）**
 - POST /smoke：生成冒烟测试
 - POST /spike：工具调用通道 Spike
 - POST /quality-review：离线质量评审
@@ -316,6 +404,7 @@ LearnHub 的 HTTP API 路由体系以“声明式命令注册表 + 数据化路�
 - 常用方法：
   - 获取状态：GET /learnhub/api/status
   - 获取课程：GET /learnhub/api/courses
+  - **提交卡点自报：POST /learnhub/api/coach/stuck-report**
   - 提交反馈：POST /learnhub/api/feedback
   - 生成任务：POST /learnhub/api/generate
   - 查询队列：GET /learnhub/api/generate/status
@@ -330,6 +419,10 @@ LearnHub 的 HTTP API 路由体系以“声明式命令注册表 + 数据化路�
 - 获取状态
   - 请求：GET /learnhub/api/status
   - 响应：{ ...status, llm: {...} }
+- **提交卡点自报（新增）**
+  - 请求：POST /learnhub/api/coach/stuck-report
+  - 请求体：{ course: "数学", node: "入门", text: "这节的导数和上一节的极限对不上。" }
+  - 响应：{ recorded: true, ts: "2026-09-14T09:00:00Z", queued: true, message: "教练回合已启动：你的自报原话会随回合交给教练归因，建议稍后呈现。" }
 - 提交反馈
   - 请求：POST /learnhub/api/feedback
   - 请求体：{ path: "课程/笔记/xxx.md" }

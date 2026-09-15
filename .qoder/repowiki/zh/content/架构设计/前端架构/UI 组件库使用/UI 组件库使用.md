@@ -12,7 +12,17 @@
 - [ZoneBody.tsx](file://ui/src/components/ZoneBody.tsx)
 - [renderers.tsx](file://ui/src/components/renderers.tsx)
 - [TodayPage/index.tsx](file://ui/src/pages/TodayPage/index.tsx)
+- [StuckReportEntry.tsx](file://ui/src/components/StuckReportEntry.tsx)
+- [LessonView.tsx](file://ui/src/components/LessonView.tsx)
+- [api.ts](file://ui/src/api.ts)
 </cite>
+
+## 更新摘要
+**变更内容**
+- 新增 StuckReportEntry 组件文档，提供卡点自报功能的详细说明
+- 更新 LessonView 集成说明，展示新组件的集成方式
+- 添加三态回执系统的详细解释
+- 补充 API 接口和样式系统的使用说明
 
 ## 目录
 1. [简介](#简介)
@@ -61,9 +71,10 @@ A --> I["Arco 主题与语言包"]
 ## 核心组件
 - 应用壳层：App.tsx 负责初始化数据、主题切换、路由同步、错误态与空态处理，并向下传递 frame 上下文。
 - 壳顶栏：ShellTopBar.tsx 提供五区导航、课程区子导航、帮助抽屉入口与主题切换按钮，遵循 Arco Tabs 与 Tooltip。
-- 视图容器：ZoneBody.tsx 实现“首访保活”策略，已访问视图常驻 DOM，非激活隐藏，配合 active-tab 信号控制轮询。
+- 视图容器：ZoneBody.tsx 实现"首访保活"策略，已访问视图常驻 DOM，非激活隐藏，配合 active-tab 信号控制轮询。
 - 内容渲染：renderers.tsx 注册代码块渲染器（Mermaid、媒体、交互 iframe、SVG、图表），并与共享清单对账。
 - 今日页：TodayPage/index.tsx 聚合推荐流、复习队列、供给快照与生成任务轮询，驱动学习会话与后台任务提示。
+- **卡点自报**：StuckReportEntry.tsx 提供学习者卡点反馈入口，支持自由文本输入和三态回执系统。
 
 章节来源
 - [App.tsx:1-180](file://ui/src/App.tsx#L1-L180)
@@ -71,6 +82,7 @@ A --> I["Arco 主题与语言包"]
 - [ZoneBody.tsx:1-43](file://ui/src/components/ZoneBody.tsx#L1-L43)
 - [renderers.tsx:1-166](file://ui/src/components/renderers.tsx#L1-L166)
 - [TodayPage/index.tsx:1-287](file://ui/src/pages/TodayPage/index.tsx#L1-L287)
+- [StuckReportEntry.tsx:1-74](file://ui/src/components/StuckReportEntry.tsx#L1-L74)
 
 ## 架构总览
 下图展示从入口到页面渲染的关键调用链与数据流向，包括主题配置、路由同步、视图保活与轮询刷新。
@@ -204,6 +216,49 @@ P-->>P : 用户操作生成/跳过/复习
 章节来源
 - [TodayPage/index.tsx:36-287](file://ui/src/pages/TodayPage/index.tsx#L36-L287)
 
+### 卡点自报组件详解
+**新增功能** StuckReportEntry 组件为学习者提供卡点反馈入口，支持自由文本输入和三态回执系统。
+
+#### 组件特性
+- **警告样式按钮**：使用 `status='warning'` 的迷你按钮，提示用户"我卡住了？"
+- **自由文本输入**：支持多行文本输入，允许跨节引用、模糊指代、情绪化描述
+- **三态回执系统**：
+  - 成功态（queued=true）：绿色背景，显示"教练回合已启动"
+  - 在途态（queued=false）：黄色警告背景，如实说明不重复入队
+  - 拒绝态：红色危险背景，显示服务端拒绝原因
+
+#### 集成方式
+组件在 LessonView 中作为页内伴生组件集成，位于学习内容上方，随时可用。
+
+```mermaid
+flowchart TD
+A["用户点击'我卡住了？'"] --> B["展开输入区域"]
+B --> C["输入卡点描述"]
+C --> D{"提交验证"}
+D --> |有效| E["调用 api.stuckReport"]
+D --> |无效| F["显示拒绝回执"]
+E --> G{"服务器响应"}
+G --> |queued=true| H["显示成功回执"]
+G --> |queued=false| I["显示在途回执"]
+H --> J["收起输入框"]
+I --> J
+F --> K["保留输入内容"]
+```
+
+图表来源
+- [StuckReportEntry.tsx:14-74](file://ui/src/components/StuckReportEntry.tsx#L14-L74)
+- [LessonView.tsx:321-323](file://ui/src/components/LessonView.tsx#L321-L323)
+
+#### API 接口
+- **端点**：POST `/learnhub/api/coach/stuck-report`
+- **请求体**：{ course, node, text }
+- **响应体**：{ recorded, ts, queued, message }
+
+章节来源
+- [StuckReportEntry.tsx:1-74](file://ui/src/components/StuckReportEntry.tsx#L1-L74)
+- [LessonView.tsx:321-323](file://ui/src/components/LessonView.tsx#L321-L323)
+- [api.ts:214-217](file://ui/src/api.ts#L214-L217)
+
 ### 响应式设计实现
 - 布局与间距：通过语义类名（lh-*）与 CSS 变量（--lh-*）统一管理间距、字号、颜色与圆角，确保在不同尺寸下的一致性。
 - 图容器高度：为 React Flow 容器设置视口高度兜底，避免画布塌缩导致 fitView 失效。
@@ -234,6 +289,8 @@ App --> Zone["components/ZoneBody.tsx"]
 Zone --> Today["pages/TodayPage/index.tsx"]
 Today --> Renderers["components/renderers.tsx"]
 App --> Global["global.css"]
+LessonView --> StuckReportEntry["components/StuckReportEntry.tsx"]
+StuckReportEntry --> Api["ui/src/api.ts"]
 ```
 
 图表来源
@@ -244,6 +301,9 @@ App --> Global["global.css"]
 - [TodayPage/index.tsx:1-287](file://ui/src/pages/TodayPage/index.tsx#L1-L287)
 - [renderers.tsx:1-166](file://ui/src/components/renderers.tsx#L1-L166)
 - [global.css:1-398](file://ui/src/global.css#L1-L398)
+- [LessonView.tsx:1-485](file://ui/src/components/LessonView.tsx#L1-L485)
+- [StuckReportEntry.tsx:1-74](file://ui/src/components/StuckReportEntry.tsx#L1-L74)
+- [api.ts:1-374](file://ui/src/api.ts#L1-L374)
 
 章节来源
 - [package.json:1-48](file://ui/package.json#L1-L48)
@@ -261,15 +321,20 @@ App --> Global["global.css"]
 - 路由异常：核对当前 hash 与期望视图是否一致，必要时调用 syncHash 规范化；工作台跳转需使用 navigateCourse。
 - 内容渲染失败：确认代码块 lang 是否在共享清单中注册，并在 renderers 中有对应实现；Mermaid 渲染失败会降级源码显示。
 - 轮询无更新：检查 usePolling 的 tab 标识与 intervalMs；确认 refreshSupply 回调内网络请求成功且边沿检测正确。
+- **卡点自报问题**：
+  - 组件未显示：检查 LessonView 是否正确引入 StuckReportEntry 组件
+  - 提交失败：确认 api.stuckReport 端点是否正确配置，检查网络连接
+  - 回执异常：验证服务器响应格式是否符合预期 {recorded, queued, message}
 
 章节来源
 - [App.tsx:119-128](file://ui/src/App.tsx#L119-L128)
 - [router.ts:134-164](file://ui/src/lib/router.ts#L134-L164)
 - [renderers.tsx:17-41](file://ui/src/components/renderers.tsx#L17-L41)
 - [TodayPage/index.tsx:74-118](file://ui/src/pages/TodayPage/index.tsx#L74-L118)
+- [StuckReportEntry.tsx:20-35](file://ui/src/components/StuckReportEntry.tsx#L20-L35)
 
 ## 结论
-LearnHub 前端 UI 以 Arco Design 为基础，通过集中化的主题与样式体系、稳健的路由与视图保活机制、可扩展的内容渲染器与严格的清单对账，实现了高可用、易维护的前端面板。遵循本文档的集成规范与最佳实践，可在保证性能与可访问性的前提下高效扩展新组件与页面。
+LearnHub 前端 UI 以 Arco Design 为基础，通过集中化的主题与样式体系、稳健的路由与视图保活机制、可扩展的内容渲染器与严格的清单对账，实现了高可用、易维护的前端面板。**新增的卡点自报功能**进一步增强了学习者的反馈渠道，通过三态回执系统提供清晰的交互反馈。遵循本文档的集成规范与最佳实践，可在保证性能与可访问性的前提下高效扩展新组件与页面。
 
 [本节为总结，不直接分析具体文件]
 
