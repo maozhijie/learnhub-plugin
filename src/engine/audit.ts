@@ -152,7 +152,7 @@ export async function runAudit(
       errors.push(`E4 课程文件对应未知节点（改名未同步？用 rename op）: ${rel} → ${nodeName}`)
       continue
     }
-    const canonical = paths.courseNotePath(root, blockOf[nodeName][1], nodeName)
+    const canonical = paths.courseNotePath(root, nodeName)
     if (path.replace(/\\/g, '/').toLowerCase() !== canonical.replace(/\\/g, '/').toLowerCase()) {
       warns.push(`R10 课程文件位置非规范（应用 rename op；move 已随 Region/Block 退役 #275）: ${rel}`)
     }

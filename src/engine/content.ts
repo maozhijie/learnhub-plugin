@@ -914,8 +914,7 @@ export class Content {
       e.code = 'OUTLINE_BUDGET'
       throw e
     }
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(root, regionName, node)
+    const path = this.paths.courseNotePath(root, node)
     const { fm, body } = await loadNote(path, this.fs)
     if (!fm || typeof fm.node !== 'string') throw new Error(`[outline] 课程文件不存在（先为节点生成内容骨架）: ${node}`)
     // 档位随大纲记录（预留接入点：弹性评估读 content.tier；不驱动调度）
@@ -934,8 +933,7 @@ export class Content {
     root: string, graph: Graph, node: string, sectionId: string, yamlText: string,
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
   ): Promise<{ sections: SectionManifest[]; tolerated: string[] }> {
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(root, regionName, node)
+    const path = this.paths.courseNotePath(root, node)
     const { fm, body } = await loadNote(path, this.fs)
     if (!fm || typeof fm.node !== 'string') throw new Error(`[split] 课程文件不存在: ${node}`)
     const sections = ((fm.content as { sections?: SectionManifest[] } | undefined)?.sections) ?? []
@@ -984,8 +982,7 @@ export class Content {
     root: string, graph: Graph, node: string, sectionId: string, md: string,
     journal: (rec: Omit<JournalRec, 'ts'>) => Promise<unknown>,
   ): Promise<{ version: number; title: string; hints: string[]; repairs: string[]; lenient?: string }> {
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(root, regionName, node)
+    const path = this.paths.courseNotePath(root, node)
     const { fm, body } = await loadNote(path, this.fs)
     if (!fm || typeof fm.node !== 'string') throw new Error(`[section] 课程文件不存在: ${node}`)
     const sections = ((fm.content as { sections?: SectionManifest[] } | undefined)?.sections) ?? []
@@ -1412,8 +1409,7 @@ export class Content {
 
   /** 读课程文件「## 内容反馈」区的用户文字。 */
   async collectFeedback(root: string, graph: Graph, node: string): Promise<string> {
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(root, regionName, node)
+    const path = this.paths.courseNotePath(root, node)
     const { body } = await loadNote(path, this.fs)
     const m = body.match(/## 内容反馈\s*\n([\s\S]*?)(?=\n## |$)/)
     if (!m) return ''
@@ -1454,8 +1450,7 @@ export class Content {
         ...(fm.content.sections ? { sections: Content.manifestFromBody(body, version) } : {}),
       },
     }
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(root, regionName, node)
+    const path = this.paths.courseNotePath(root, node)
     await saveNote(path, next as unknown as Record<string, unknown>, body, this.fs)
     await journal({ course: '', node, rating: null, kind: 'content_apply', elapsed_days: 0, detail: `正文 v${version} 落盘（status=draft）` })
     return version

@@ -115,7 +115,7 @@ test('忘记：按答错记全部证据、0 XP、推进 Again；重复忘记拒�
     assert.equal(q.stats?.attempts, 1)
     assert.equal(q.stats?.correct, 0, '忘记不计正确')
 
-    const note = await readFile(join(engine.paths.courseRoot('math'), '课程', '基础', '入门.md'), 'utf8')
+    const note = await readFile(join(engine.paths.courseRoot('math'), '课程', '入门.md'), 'utf8')
     assert.match(note, /stage: learning/, '忘记与作答同样推进节点 stage')
     assert.match(note, /attempts: 1/)
     assert.match(note, /correct: 0/)

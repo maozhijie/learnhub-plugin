@@ -81,7 +81,7 @@ test('行为：给定计划可出分布推演视图；全路径零 canonical 写
   }, async ({ engine }) => {
     const snap = (p: string) => (existsSync(p) ? readFileSync(p, 'utf8') : '')
     const before = {
-      note: snap(engine.paths.courseNotePath('math', '基础', '入门')),
+      note: snap(engine.paths.courseNotePath('math', '入门')),
       bank: snap(engine.paths.courseRoot('math') + '/题库/入门.yaml'),
       journal: snap(engine.paths.journalPath),
       review: snap(engine.paths.reviewLogPath),
@@ -109,7 +109,7 @@ test('行为：给定计划可出分布推演视图；全路径零 canonical 写
     await assert.rejects(() => engine.lab.sandboxRun({ minutesPerDay: 0 }), /正数/)
 
     // 零写侧：推演前后 canonical 全部逐字节不变
-    assert.equal(snap(engine.paths.courseNotePath('math', '基础', '入门')), before.note, '课程笔记不动')
+    assert.equal(snap(engine.paths.courseNotePath('math', '入门')), before.note, '课程笔记不动')
     assert.equal(snap(engine.paths.courseRoot('math') + '/题库/入门.yaml'), before.bank, '题库不动')
     assert.equal(snap(engine.paths.journalPath), before.journal, '账本不动')
     assert.equal(snap(engine.paths.reviewLogPath), before.review, '复习日志不动')

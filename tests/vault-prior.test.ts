@@ -152,7 +152,7 @@ test('searchVaultPrior：命中中心外个人笔记；学习中心与点目录�
     files: [
       { path: '乐理/和弦.md', content: personalNote },
       { path: '乐理/.obsidian/缓存.md', content: '# 大三度\n\n不该被扫到。' },
-      { path: '学习中心/数学/课程/基础/杂记.md', content: '# 大三度\n\n中心内不是先验来源。' },
+      { path: '学习中心/数学/课程/杂记.md', content: '# 大三度\n\n中心内不是先验来源。' },
       { path: '乐理/无关.md', content: '# 购物清单\n\n牛奶 鸡蛋。' },
     ],
   }, async ({ engine, root }) => {

@@ -11,6 +11,8 @@ import { join } from 'node:path'
 import { YAML } from './yaml.ts'
 import { atomicWrite } from './io.ts'
 import { safeFilename } from './paths.ts'
+import type { ConceptEntry } from './concepts.ts'
+import { resolveConcept } from './concepts.ts'
 import type { GBlock, GNode, GRegion, EncEdge, ConceptTier, Misconception } from './types.ts'
 import { BLOOM_LEVELS, CONCEPT_TIERS } from './types.ts'
 import type { Paths } from './paths.ts'
@@ -495,6 +497,66 @@ export class Graph {
   edgeCount(): number {
     return Object.values(this.succ).reduce((s, v) => s + v.length, 0)
   }
+}
+
+// ---- 读侧分组轴（#278 / Epic #275：分组 = 读侧派生 + 可重叠，零落盘随图重算） ----
+
+export type GroupAxis = 'depth' | 'concept' | 'endpoint'
+
+export interface GroupViewOpts {
+  /** 概念登记表条目（concept 轴用）：别名经 resolveConcept 归并到 canonical，防一个概念裂成多组。 */
+  conceptEntries?: ConceptEntry[]
+  /** 终点名列表（endpoint 轴用，如 state/终点锚.json 的锚集合）：悬空锚不入算。 */
+  endpoints?: string[]
+}
+
+/** 同一份节点按派生轴切组：`{ label, nodes[] }[]`。纯读侧 fold、零落盘；
+ * depth = 单归属（每节点恰一组）；concept / endpoint = 可重叠（每节点可进多组）。
+ * 环上 depth 显式作废（照 #270 作废署名纪律：空 ≠ 没有）——返回「无法分层」态而非空数组。 */
+export function groupView(
+  graph: Graph, axis: GroupAxis, opts: GroupViewOpts = {},
+): { label: string; nodes: string[] }[] {
+  if (axis === 'depth') {
+    if (graph.hasCycle) {
+      // 显式「无法分层」态：环上 depth 已作废（hasCycle 是旗标），不静默给空/退化桶
+      return [{ label: '图有环——无法分层', nodes: graph.cycleNodes }]
+    }
+    const byDepth = new Map<number, string[]>()
+    for (const n of graph.names) {
+      const k = graph.depth[n] ?? 0
+      ;(byDepth.get(k) ?? byDepth.set(k, []).get(k)!).push(n)
+    }
+    return [...byDepth.entries()].sort(([a], [b]) => a - b)
+      .map(([k, nodes]) => ({ label: `L${k}`, nodes }))
+  }
+  if (axis === 'concept') {
+    const canonicalOf = (raw: string): string => resolveConcept(opts.conceptEntries ?? [], raw)?.canonical ?? raw
+    const groups = new Map<string, Set<string>>()
+    for (const raw of new Set([...Object.keys(graph.taughtByOf), ...Object.keys(graph.assumedByOf)])) {
+      const label = canonicalOf(raw)
+      const members = groups.get(label) ?? groups.set(label, new Set()).get(label)!
+      for (const n of graph.taughtByOf[raw] ?? []) members.add(n)
+      for (const n of graph.assumedByOf[raw] ?? []) members.add(n)
+    }
+    const covered = new Set([...groups.values()].flatMap(s => [...s]))
+    // 未标概念的节点显式缺席（不是静默丢失）：追加一组让「没进任何概念组」可见
+    const untagged = graph.names.filter(n => !covered.has(n))
+    if (untagged.length) {
+      const g = groups.get('未标概念')
+      if (g) for (const n of untagged) g.add(n) // 真有概念叫「未标概念」：合并，不顶掉真实组
+      else groups.set('未标概念', new Set(untagged))
+    }
+    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
+      .map(([label, members]) => ({ label, nodes: graph.names.filter(n => members.has(n)) }))
+  }
+  // endpoint：成员 = 终点前置闭包去自身（upstreamClosure 单一出处）；悬空锚不入算；零终点 = 空
+  const out: { label: string; nodes: string[] }[] = []
+  for (const e of opts.endpoints ?? []) {
+    if (!graph.nset.has(e)) continue
+    const closure = graph.upstreamClosure(e)
+    out.push({ label: e, nodes: graph.names.filter(n => n !== e && closure.has(n)) })
+  }
+  return out
 }
 
 /** 合并结构检查：重名 / 断边 / 环 → 错误列表（空 = 通过）。 */

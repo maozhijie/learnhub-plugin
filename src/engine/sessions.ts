@@ -305,8 +305,7 @@ export class Sessions {
   /** 节点课程笔记的 vault 相对路径（不含 .md）；无笔记返回 null。 */
   notePath(root: string, graph: Graph, n: string): string | null {
     if (!graph.blockOf[n]) return null
-    const region = graph.blockOf[n][1]
-    const path = this.paths.courseNotePath(root, region, n)
+    const path = this.paths.courseNotePath(root, n)
     if (!this.fs.exists(path)) return null
     const marker = '/学习中心/'
     const idx = path.replace(/\\/g, '/').indexOf(marker)
@@ -609,8 +608,7 @@ export class Sessions {
   /** 单节点课程学习包：分节正文 + 前置 + 推荐下一步。today = 学习日（ADR-0020），facade 注入。 */
   async lesson(courseName: string, root: string, graph: Graph, state: Record<string, Fm>, node: string, today: string): Promise<LessonDoc> {
     if (!graph.nset.has(node)) throw new Error(`[lesson] 课程「${courseName}」中没有节点「${node}」。`)
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(root, regionName, node)
+    const path = this.paths.courseNotePath(root, node)
     const { fm: rawFm, body } = await loadNote(path, this.fs)
     const fm = asFm(rawFm)
     if (!fm) {
@@ -629,7 +627,7 @@ export class Sessions {
     const unlocks = candidates.filter(n => graph.preOf[n].includes(node))
     return {
       course: courseName, node,
-      region: regionName,
+      region: graph.blockOf[node][1],
       stage: effectiveStage(state, node),
       mastery: masteryOfFm(fm),
       sections,

@@ -800,8 +800,7 @@ export class LearnerSubsystem {
   /** 讲解会话的正文要点（s1–s3 型）：lessonSections 切分（练习/反馈排除），
    * 封顶 8 节防包体失控（讲解包是会话 system，不是全文导出）。 */
   async explainPoints(c: CourseEntry, graph: Graph, node: string): Promise<ExplainPoint[]> {
-    const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
+    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, node), this.e.fs)
     return Sessions.lessonSections(body).slice(0, 8)
   }
 

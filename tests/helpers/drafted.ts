@@ -183,7 +183,7 @@ export async function draftCourse(engine: LearnhubEngine, spec: DraftSpec = {}):
       const text = typeof override === 'string'
         ? override
         : noteText(n.name, { ...seed, body: seed.body ?? ['> 内容待生成。'] }) + '\n'
-      await atomicWrite(paths.courseNotePath(root, n.region, n.name), text, fs)
+      await atomicWrite(paths.courseNotePath(root, n.name), text, fs)
     }
   }
 }

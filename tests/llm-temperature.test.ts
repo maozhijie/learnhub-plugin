@@ -76,7 +76,7 @@ test('无调用点行为变化：真实生成管线全程不传 temperature（�
   const root = mkdtempSync(join(tmpdir(), 'llm-temp-pipeline-')).replace(/\\/g, '/')
   try {
     mkdirSync(join(root, '学习中心', 'math', 'data'), { recursive: true })
-    mkdirSync(join(root, '学习中心', 'math', '课程', '基础'), { recursive: true })
+    mkdirSync(join(root, '学习中心', 'math', '课程'), { recursive: true })
     mkdirSync(join(root, '学习中心', 'math', '题库'), { recursive: true })
     writeFileSync(join(root, '学习中心', '课程注册表.yaml'),
       'courses:\n  - id: math-01\n    name: 数学\n    root: math\n    enabled: true\n', 'utf8')

@@ -196,7 +196,7 @@ test('断裂不变性：清空内容层后合成初始化仍取到沉淀先验�
     ].join('\n') + '\n', 'utf8')
     const course = join(root, '学习中心', 'math')
     await mkdir(join(course, 'data'), { recursive: true })
-    await mkdir(join(course, '课程', '基础'), { recursive: true })
+    await mkdir(join(course, '课程'), { recursive: true })
     await mkdir(join(course, '题库'), { recursive: true })
     const graph = [
       'region: 基础',
@@ -223,7 +223,7 @@ test('断裂不变性：清空内容层后合成初始化仍取到沉淀先验�
       '',
       '# 入门',
     ].join('\n') + '\n'
-    await writeFile(join(course, '课程', '基础', '入门.md'), note, 'utf8')
+    await writeFile(join(course, '课程', '入门.md'), note, 'utf8')
     const bank = ['node: 入门', 'questions:', ...tfQuestion('q1', {})].join('\n') + '\n'
     await writeFile(join(course, '题库', '入门.yaml'), bank, 'utf8')
     // ④ 合成初始化：先验从沉淀折叠取回，不因内容层清空回落默认

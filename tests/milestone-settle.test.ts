@@ -128,7 +128,7 @@ test('过点进账本与 streak 口径：today_xp 计入对账行；除对账行
     assert.equal((await store.journalTail(null, 100)).length, 1, '全库 journal 只增对账这一行')
 
     // 课程笔记零写入（红线）
-    assert.doesNotMatch(readFileSync(join(root, '学习中心', 'math', '课程', '基础', '入门.md'), 'utf8'), /milestone_settle/)
+    assert.doesNotMatch(readFileSync(join(root, '学习中心', 'math', '课程', '入门.md'), 'utf8'), /milestone_settle/)
     assert.ok(existsSync(join(root, '学习中心', 'projects', '练耳日记', '项目.md')))
   })
 })

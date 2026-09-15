@@ -63,7 +63,7 @@ test('rekey：新键重判原作答 → 改判对，XP 补记、对错/EMA 修�
     assert.equal(q.stats?.last_correct, true)
 
     // 节点 frontmatter：correct+1、EMA 撤 0 分步补 1 分步（0.49+0.3=0.79）；attempts 不变
-    const note = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    const note = await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8')
     assert.match(note, /correct: 1/)
     assert.match(note, /practice_ema: 0\.79/)
 
@@ -103,7 +103,7 @@ test('rekey：原作答也不符合新键 → 只修键，判罚与证据净零�
     assert.equal(q.stats?.correct, 0, '新键下原作答仍不符，对错维持')
     assert.equal(q.stats?.attempts, 1)
     // 证据净零：判罚维持时 EMA/attempts 不得被逆向调整（审查修复：只修键）
-    const note = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    const note = await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8')
     assert.match(note, /attempts: 1/)
     assert.match(note, /practice_ema: 0\.49/, 'EMA 维持答错后的 0.7×0.7，不撤步')
   })
@@ -128,7 +128,7 @@ test('void：作答作废——XP 净值归零（乱猜罚返还）、attempts�
     assert.equal(q.archived, true, '瑕疵题归档随作废结算原子落盘（ADR-0031）')
     assert.deepEqual(q.fsrs, fsBefore, 'FSRS 不回滚（ADR-0031：调度误差自愈，review-log 不抹）')
 
-    const note = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    const note = await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8')
     assert.match(note, /attempts: 0/)
     assert.match(note, /practice_ema: 0\.7/, 'EMA 逆向一步回到 0.49/0.7')
 

@@ -515,7 +515,7 @@ export class GraphProposals {
     for (const r of regions) {
       for (const b of r.blocks) {
         for (const n of b.nodes) {
-          const path = this.paths.courseNotePath(root, r.name, n.name)
+          const path = this.paths.courseNotePath(root, n.name)
           if (this.fs.exists(path)) continue
           await saveNote(path, defaultFrontmatter(n.name) as unknown as Record<string, unknown>, '> 内容待生成。\n', this.fs)
           created++
@@ -1381,13 +1381,12 @@ export class GraphProposals {
   /** 改名联动课程笔记：搬文件 + 更新 fm.node + 题库随迁；无笔记静默跳过。 */
   private async relocateNote(root: string, graph: Graph, node: string, newName?: string): Promise<void> {
     if (!graph.blockOf[node]) return
-    const region = graph.blockOf[node][1]
-    const oldPath = this.paths.courseNotePath(root, region, node)
+    const oldPath = this.paths.courseNotePath(root, node)
     const targetName = newName ?? node
     if (this.fs.exists(oldPath)) {
       const { loadNote, saveNote } = await import('./notes.ts')
       const { fm, body } = await loadNote(oldPath, this.fs)
-      const newPath = this.paths.courseNotePath(root, region, targetName)
+      const newPath = this.paths.courseNotePath(root, targetName)
       await saveNote(newPath, { ...(fm ?? {}), node: targetName }, body, this.fs)
       if (oldPath.toLowerCase() !== newPath.toLowerCase()) {
         // 新内容（fm.node=新名）已写入 newPath；摘除旧文件。
@@ -1411,8 +1410,7 @@ export class GraphProposals {
   /** del_node：课程笔记与题库移入 state/archive（不丢用户内容）。 */
   private async archiveNote(root: string, graph: Graph, node: string, pid: number): Promise<void> {
     if (!graph.blockOf[node]) return
-    const region = graph.blockOf[node][1]
-    const oldPath = this.paths.courseNotePath(root, region, node)
+    const oldPath = this.paths.courseNotePath(root, node)
     const archiveDir = `${this.paths.courseStateDir(root)}/archive`
     const { safeFilename } = await import('./paths.ts')
     if (this.fs.exists(oldPath)) {

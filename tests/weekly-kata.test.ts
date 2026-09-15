@@ -123,7 +123,7 @@ test('#114 「下一实验」出口：一键转 N-of-1 提案 / 执行意图，�
       await readFile(join(engine.paths.centerStateDir, 'journal.jsonl'), 'utf8').catch(() => ''),
       await readFile(join(engine.paths.centerStateDir, 'practice.jsonl'), 'utf8').catch(() => ''),
       await readFile(join(engine.paths.centerStateDir, 'review-log.jsonl'), 'utf8').catch(() => ''),
-      await readFile(join(engine.paths.courseRoot('math'), '课程', '基础', '入门.md'), 'utf8').catch(() => '(无笔记)'),
+      await readFile(join(engine.paths.courseRoot('math'), '课程', '入门.md'), 'utf8').catch(() => '(无笔记)'),
     ]
     const before = await snap()
 

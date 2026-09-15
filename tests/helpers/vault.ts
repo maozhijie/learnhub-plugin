@@ -106,16 +106,16 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
     if (graph !== null) {
       const graphFile = options.graphFile ?? '基础.yaml'
       await mkdir(join(course, 'data'), { recursive: true })
-      await mkdir(join(course, '课程', '基础'), { recursive: true })
       await mkdir(join(course, '题库'), { recursive: true })
       await writeFile(join(course, 'data', graphFile), `${graph}\n`, 'utf8')
     }
 
     for (const [key, seed] of Object.entries(options.notes ?? {})) {
-      const rel = key.includes('/') ? key : join('基础', key)
+      // #280 笔记路径平铺：课程/<节点>.md；键含「/」时按相对路径整段落盘
+      // （引擎平铺后不读嵌套路径——该分支仅作纯文件种子/逃生口）
       const node = key.split('/').at(-1)!
       const text = typeof seed === 'string' ? seed : noteText(node, seed) + '\n'
-      const path = join(course, '课程', `${rel}.md`)
+      const path = join(course, '课程', `${key}.md`)
       await mkdir(dirname(path), { recursive: true })
       await writeFile(path, text, 'utf8')
     }

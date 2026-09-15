@@ -537,8 +537,7 @@ export class GraphSubsystem {
       const fm = state[node]
       if (!fm || !hasReadyContent(fm)) continue
       if (graph.typeOf[node] === 'practice') continue // practice 节点无题，enc: [] 合法空态
-      const [, regionName] = graph.blockOf[node]
-      const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
+      const { body } = await loadNote(this.e.paths.courseNotePath(c.root, node), this.e.fs)
       // 投影（#148）：节点在库题目的 invokes 覆盖率 → 前置节点的出生 w（候选边同享此权重）
       const proj = Content.invokesProjection(graph, node, (await this.e.bank.load(this.e.paths.courseRoot(c.root), node)).questions)
       const projW = new Map(proj.map(e => [e.node, { w: e.w, note: e.note }]))

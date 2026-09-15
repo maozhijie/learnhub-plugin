@@ -402,7 +402,7 @@ test('AC2 行使闸：probation 在途行使只记流不回流（EMA/计数不�
     const practice = await engine.store.practiceAll()
     assert.equal(practice.filter(r => r.node === '过渡').length, 1, '只记流：流水在')
     const fmOf = async (node: string): Promise<string> => {
-      const files = { 过渡: '基础/过渡', 入门: '基础/入门' } as Record<string, string>
+      const files = { 过渡: '过渡', 入门: '入门' } as Record<string, string>
       return await readFile(`${engine.paths.courseDir('math')}/${files[node]}.md`, 'utf8')
     }
     const gatedFm = await fmOf('过渡')

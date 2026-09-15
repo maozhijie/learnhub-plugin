@@ -450,7 +450,7 @@ export class LearnhubEngine {
 
   /** Broken 笔记的路径定位（按规范路径精确匹配，不按 node 名猜）。 */
   private findBrokenNote(root: string, graph: Graph, node: string, broken: BrokenNote[]): BrokenNote | undefined {
-    const expected = this.paths.courseNotePath(root, graph.blockOf[node]?.[1], node)
+    const expected = this.paths.courseNotePath(root, node)
     const key = expected.replace(/\\/g, '/').toLowerCase()
     return broken.find(b => b.path.replace(/\\/g, '/').toLowerCase() === key)
   }
@@ -463,8 +463,7 @@ export class LearnhubEngine {
 
   /** 无笔记节点补占位文件（保证 frontmatter 始终可查）。文件已存在但状态不可用时不覆盖。 */
   private async ensureNote(root: string, graph: Graph, node: string): Promise<Fm> {
-    const [, regionName] = graph.blockOf[node]
-    const path = this.paths.courseNotePath(root, regionName, node)
+    const path = this.paths.courseNotePath(root, node)
     if (this.fs.exists(path)) {
       const { fm: rawFm } = await loadNote(path, this.fs)
       const checked = validateNoteFrontmatter(rawFm)
@@ -759,9 +758,8 @@ export class LearnhubEngine {
     lines.push(`- 区/块：${graph.blockOf[node][1]} · ${graph.blockOf[node][2]}；深度 L${(graph.depth[node] ?? 0) + 1}；阶段：${fm?.stage ?? 'unknown'}；掌握度：${pctOf(mastery)}`)
     const note = graph.noteOf[node]
     if (note) lines.push(`- note：${note}`)
-    const [, regionName] = graph.blockOf[node]
     try {
-      const { body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node), this.fs)
+      const { body } = await loadNote(this.paths.courseNotePath(c.root, node), this.fs)
       const cleaned = body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
       lines.push('', '## 节点正文', cleaned ? cleaned.slice(0, 6000) : '（尚未生成正文）')
     } catch {
@@ -786,8 +784,7 @@ export class LearnhubEngine {
    * 错误态的「讲解这道题」动作经 explain-pack 路由取用）。 */
   async errorExplainPack(courseKey: string | undefined, node: string, qid: string): Promise<string> {
     const { c, graph, q } = await this.content2.questionContext(courseKey, node, qid, 'explain')
-    const [, regionName] = graph.blockOf[node]
-    const { fm: rawFm, body } = await loadNote(this.paths.courseNotePath(c.root, regionName, node), this.fs)
+    const { fm: rawFm, body } = await loadNote(this.paths.courseNotePath(c.root, node), this.fs)
     const fm = asFm(rawFm)
     // 本次作答 = practice 流水里该题最近一条（答错作答或忘记申报；动作只从错误态进入）
     const rec = (await this.store.practiceAll())

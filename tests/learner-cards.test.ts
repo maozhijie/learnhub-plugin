@@ -158,7 +158,7 @@ test('讲解包：面板/宿主通道取到要点+图位置+初学者人设指�
 test('定位反馈：判词解析入 E 档案；解析失败零副作用；canonical 通道零写入（#33 边界回归）', async () => {
   await withVault(LEARNER_VAULT, async ({ engine }) => {
     const bankBefore = existsSync(engine.paths.journalPath) ? await readFile(engine.paths.journalPath, 'utf8') : ''
-    const noteBefore = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    const noteBefore = await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8')
 
     let feedbackSystem = ''
     const v = await engine.learner.explainBackFeedback('数学', '入门',
@@ -194,7 +194,7 @@ test('定位反馈：判词解析入 E 档案；解析失败零副作用；canon
     assert.ok(!existsSync(engine.paths.practicePath))
     assert.ok(!existsSync(engine.paths.reviewLogPath))
     assert.ok(!existsSync(engine.paths.courseRoot('math') + '/题库/入门.yaml'))
-    assert.equal(await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8'), noteBefore)
+    assert.equal(await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8'), noteBefore)
     assert.equal(existsSync(engine.paths.journalPath) ? await readFile(engine.paths.journalPath, 'utf8') : '', bankBefore)
   })
 })
@@ -309,7 +309,7 @@ test('加我的理解：AI 对照该节要点给定位反馈 → 判词入 E 档
     assert.ok(!existsSync(engine.paths.reviewLogPath))
     assert.ok(!existsSync(engine.paths.journalPath))
     assert.ok(!existsSync(engine.paths.courseRoot('math') + '/题库/入门.yaml'))
-    assert.equal(await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8'), `${NOTE}\n`)
+    assert.equal(await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8'), `${NOTE}\n`)
   })
 })
 
@@ -386,7 +386,7 @@ test('我的卡队列与自评：新卡入队→首推到期→一卡一天一�
     assert.equal(xpRows.length, 2)
     assert.ok(xpRows.every(r => r.course === '*' && r.node === '*'))
     assert.deepEqual(xpRows.map(r => r.xp).sort((a, b) => a - b), [0, 5])
-    const fm = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    const fm = await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8')
     assert.match(fm, /practice:\n  attempts: 3\n  correct: 2/)
   })
 })

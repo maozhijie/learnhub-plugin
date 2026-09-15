@@ -357,7 +357,8 @@ async function scanCourse(
   }
 
   for (const node of nodes) {
-    const notePath = join(courseDir, safeFilename(node.region), `${safeFilename(node.name)}.md`)
+    // #280 笔记路径平铺：预期位置 = 课程/<节点>.md（region 仅作图内归属信息，不再进路径）
+    const notePath = join(courseDir, `${safeFilename(node.name)}.md`)
     if (!noteFiles.has(resolve(notePath).toLowerCase())) {
       push(
         findings,

@@ -162,7 +162,7 @@ test('contentSectionsView：tierLabel 清单值优先、缺席按位置推导，
     assert.equal(views[0]!.tierLabel, '低', 's1 清单 tier=低 在场直接用')
     assert.equal(views[1]!.tierLabel, '高', 's2 缺席 → 推导（difficulty 3 基中，pos2/2 → 高）')
     // 不回填：视图解析后 frontmatter 里 s2 仍无 tier 字段
-    const notePath = paths.courseNotePath('math', '基础', '入门')
+    const notePath = paths.courseNotePath('math', '入门')
     const raw = await readFile(notePath, 'utf8')
     const s2Block = raw.slice(raw.indexOf('s2'))
     assert.doesNotMatch(s2Block.slice(0, s2Block.indexOf('title') >= 0 ? s2Block.indexOf('title') : s2Block.length), /tier/, 's2 清单项未回填 tier')
@@ -181,7 +181,7 @@ test('金样本回放：v9 换装后大纲+逐节落盘全链，同种子 vault 
     await seedOutline(engine)
     const r1 = await engine.content2.contentSection('数学', '入门', 's1', GOLD_S1)
     const r2 = await engine.content2.contentSection('数学', '入门', 's2', GOLD_S2)
-    const notePath = paths.courseNotePath('math', '基础', '入门')
+    const notePath = paths.courseNotePath('math', '入门')
     return { r1, r2, note: await readFile(notePath, 'utf8') }
   })
   const a = await run()

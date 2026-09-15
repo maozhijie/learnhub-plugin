@@ -322,7 +322,7 @@ test('apply 失败自清：审计 ERROR 拦下 apply 时机器裁决不留 pendi
   await withLoggedVault(async ({ engine, paths, log }) => {
     await seedApplied(engine)
     // 弄坏课程文件（E4 Broken → 审计 ERROR）：受理门不查审计，apply 门会拦
-    const notePath = paths.courseNotePath('数学', '基础', '认识变化率')
+        const notePath = paths.courseNotePath('数学', '认识变化率')
     const { writeFile } = await import('node:fs/promises')
     await writeFile(notePath, '---\nnode: 认识变化率\ncontent:\n  sections: "坏档"\n---\n# 认识变化率\n', 'utf8')
     const compassPath = paths.compassPath('数学')
@@ -406,11 +406,10 @@ test('停机转译：就绪深度满足时不拉回合（零调用）；force �
     // #256 种子通道退役：起草夹具直接落盘（三起点）
     await draftCourse(engine, DRAFT_MULTI_START)
     // 三个起点正文就绪（ready=3）；today 移出冷启动首周（required=3）→ 深度满足
-    const { writeFile, mkdir } = await import('node:fs/promises')
+    const { writeFile } = await import('node:fs/promises')
     for (const node of ['认识变化率', '极限直觉', '函数图像']) {
-      await mkdir(`${paths.centerRoot}/数学/课程/基础`, { recursive: true })
       await writeFile(
-        paths.courseNotePath('数学', '基础', node),
+        paths.courseNotePath('数学', node),
         noteText(node, { content: { sections: ['    - { id: s1, title: 开场, type: 概念, status: ready, version: 0 }'] } }),
         'utf8',
       )
@@ -499,11 +498,10 @@ test('#149 计划修订注入：check.ok 不再短路停摆（注入=显式重�
     // #256 种子通道退役：起草夹具直接落盘（三起点）
     await draftCourse(engine, DRAFT_MULTI_START)
     // 三个起点正文就绪（ready=3）；today 移出冷启动首周（required=3）→ 深度满足
-    const { writeFile, mkdir } = await import('node:fs/promises')
+    const { writeFile } = await import('node:fs/promises')
     for (const node of ['认识变化率', '极限直觉', '函数图像']) {
-      await mkdir(`${paths.centerRoot}/数学/课程/基础`, { recursive: true })
       await writeFile(
-        paths.courseNotePath('数学', '基础', node),
+        paths.courseNotePath('数学', node),
         noteText(node, { content: { sections: ['    - { id: s1, title: 开场, type: 概念, status: ready, version: 0 }'] } }),
         'utf8',
       )

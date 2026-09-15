@@ -324,13 +324,13 @@ function buildTemplate(): string {
   const root = mkdtempSync(join(tmpdir(), 'learnhub-spike-tpl-')).replace(/\\/g, '/')
   const center = `${root}/学习中心`
   mkdirSync(`${center}/spike/data`, { recursive: true })
-  mkdirSync(`${center}/spike/课程/基础`, { recursive: true })
+  mkdirSync(`${center}/spike/课程`, { recursive: true })
   mkdirSync(`${center}/spike/题库`, { recursive: true })
   mkdirSync(`${center}/state`, { recursive: true })
   writeFileSync(`${center}/课程注册表.yaml`, REGISTRY, 'utf8')
   writeFileSync(`${center}/spike/概念登记表.yaml`, CONCEPTS, 'utf8')
   writeFileSync(`${center}/spike/data/基础.yaml`, GRAPH, 'utf8')
-  writeFileSync(`${center}/spike/课程/基础/${NODE}.md`, NOTE, 'utf8')
+  writeFileSync(`${center}/spike/课程/${NODE}.md`, NOTE, 'utf8')
   writeFileSync(`${center}/state/learnhub.json`,
     JSON.stringify({ schema: { version: CURRENT_SCHEMA_VERSION, formats: {} }, day_cutoff: '00:00' }, null, 1) + '\n', 'utf8')
   return root

@@ -350,7 +350,7 @@ test('实验不改推进语义：同流程在有/无实验两 vault 间账本一
   const flow = async (engine: import('../src/engine/index.ts').LearnhubEngine) => {
     await engine.content2.questionAnswer(async () => JSON.stringify({ score: 1, feedback: '' }), '数学', '入门', 'a1', 'true', 30)
     await engine.content2.questionForget('数学', '入门', 'a2', 8)
-    const note = readFileSync(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    const note = readFileSync(engine.paths.courseNotePath('math', '入门'), 'utf8')
     const practice = stripTs(existsSync(engine.paths.practicePath) ? readFileSync(engine.paths.practicePath, 'utf8') : '')
     const journal = stripTs(existsSync(engine.paths.journalPath) ? readFileSync(engine.paths.journalPath, 'utf8') : '')
     const rlog = readFileSync(engine.paths.reviewLogPath, 'utf8').trim().split('\n').map(l => JSON.parse(l) as ReviewRec)

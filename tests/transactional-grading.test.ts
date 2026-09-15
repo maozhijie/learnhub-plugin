@@ -31,7 +31,7 @@ async function evidenceSnapshot(paths: Paths): Promise<Record<string, string | n
   }
   return {
     bank: await read(join(paths.courseRoot('math'), '题库', '入门.yaml')),
-    note: await read(join(paths.courseRoot('math'), '课程', '基础', '入门.md')),
+    note: await read(join(paths.courseRoot('math'), '课程', '入门.md')),
     practice: await read(join(paths.centerStateDir, 'practice.jsonl')),
     journal: await read(join(paths.centerStateDir, 'journal.jsonl')),
   }

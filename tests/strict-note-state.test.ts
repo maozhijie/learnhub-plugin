@@ -40,7 +40,7 @@ test('#7 valid core state loads, unknown metadata is preserved on write, missing
     assert.equal(state['入门']?.stage, 'ready')
 
     await engine.sched2.nodeSkip('数学', '入门', true)
-    const raw = await readFile(join(await engine.paths.courseDir('math'), '基础', '入门.md'), 'utf8')
+    const raw = await readFile(join(await engine.paths.courseDir('math'), '入门.md'), 'utf8')
     assert.ok(raw.includes('custom_user_field: 我的元数据'), 'unknown metadata was dropped by a state write')
     assert.ok(raw.includes('stage: skipped'), 'stage update missing')
     assert.ok(!raw.includes('mastery:'), '新式文件的回写不得引入 mastery 键')

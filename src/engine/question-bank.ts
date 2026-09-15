@@ -1222,8 +1222,7 @@ export class BankSubsystem {
     const conceptEntries = await this.e.concepts.load(c.root)
     const conceptNames = namesOf(conceptEntries)
     const retiredConcepts = deprecatedNames(conceptEntries)
-    const [, regionName] = graph.blockOf[node]
-    const note = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
+    const note = await loadNote(this.e.paths.courseNotePath(c.root, node), this.e.fs)
     const body = note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
     if (!body) throw new Error(`[quiz] 「${node}」还没有正文——先「生成正文」再出题。`)
     const tpl = await this.e.loadPrompt('题目生成')
@@ -1394,8 +1393,7 @@ export class BankSubsystem {
     const conceptEntries = await this.e.concepts.load(c.root)
     const conceptNames = namesOf(conceptEntries)
     const retiredConcepts = deprecatedNames(conceptEntries)
-    const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
+    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, node), this.e.fs)
     const mdByTitle = new Map<string, string>()
     for (const part of body.split(/^## /m).slice(1)) {
       const nl = part.indexOf('\n')
@@ -1510,8 +1508,7 @@ export class BankSubsystem {
     const played = (await this.e.store.practiceAll()).some(r =>
       r.course === c.name && r.node === node && r.judge === 'interactive' && r.qid === qid
       && dayOfTs(r.ts, cutoff) === today)
-    const [, regionName] = graph.blockOf[node]
-    const path = this.e.paths.courseNotePath(c.root, regionName, node)
+    const path = this.e.paths.courseNotePath(c.root, node)
     const { fm: rawFm, body } = await loadNote(path, this.e.fs)
     const fm = asFm(rawFm)
     if (played) return { settled: false, mastery: masteryOfFm(fm) }

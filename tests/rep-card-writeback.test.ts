@@ -30,7 +30,7 @@ test('练习流答对推进后：fm.fsrs 回刷为该题新卡，稳定度分量
     notes: { 入门: { stage: 'review', fsrs: staleRep } },
     banks: { 入门: [tfQuestion('a1', { fsrs: qCard })] },
   }, async ({ engine, paths }) => {
-    const note = paths.courseNotePath('math', '基础', '入门')
+    const note = paths.courseNotePath('math', '入门')
     const r = await answer(engine, 'a1', 'true') as Record<string, unknown>
     assert.equal(r.scheduled, true)
     assert.ok((r.mastery as number) > 0.3, `稳定度分量应参与 mastery（得到 ${r.mastery}）`)
@@ -49,7 +49,7 @@ test('自评挂起期间代表卡不动，questionRate 落盘后回刷', async (
     notes: { 入门: { stage: 'review', fsrs: staleRep } },
     banks: { 入门: [tfQuestion('a1', { fsrs: qCard })] },
   }, async ({ engine, paths }) => {
-    const note = paths.courseNotePath('math', '基础', '入门')
+    const note = paths.courseNotePath('math', '入门')
     const r = await answer(engine, 'a1', 'true', { deferSchedule: true }) as Record<string, unknown>
     assert.equal(r.pendingRating, true)
     const before = await noteFsrs(note)
@@ -70,7 +70,7 @@ test('忘记把代表卡拉回：due 变近、稳定度回落 → mastery 回落
     notes: { 入门: { stage: 'review', fsrs: rep } },
     banks: { 入门: [tfQuestion('a1', { fsrs: rep })] },
   }, async ({ engine, paths }) => {
-    const note = paths.courseNotePath('math', '基础', '入门')
+    const note = paths.courseNotePath('math', '入门')
     // 种子态：代表卡 = 该题卡，mastery = 0.7 × min(1, 20/60) = 0.33（无练习证据）
     const r = await engine.content2.questionForget('数学', '入门', 'a1', 7) as Record<string, unknown>
     assert.equal(r.scheduled, true)
@@ -94,7 +94,7 @@ test('推的不是代表题：代表卡不变（practice 证据照常更新，fs
     notes: { 入门: { stage: 'review', fsrs: repCard } },
     banks: { 入门: [tfQuestion('a1', { fsrs: repCard }), tfQuestion('a2', { fsrs: qCard })] },
   }, async ({ engine, paths }) => {
-    const note = paths.courseNotePath('math', '基础', '入门')
+    const note = paths.courseNotePath('math', '入门')
     const fsBefore = await noteFsrs(note)
     const r = await answer(engine, 'a2', 'true') as Record<string, unknown>
     assert.equal(r.scheduled, true, 'a2 真实推进')
@@ -110,7 +110,7 @@ test('同日重复作答不推卡，也不回刷代表卡（每题每天一次�
     notes: { 入门: { stage: 'review', fsrs: staleRep } },
     banks: { 入门: [tfQuestion('a1', { fsrs: qCard })] },
   }, async ({ engine, paths }) => {
-    const note = paths.courseNotePath('math', '基础', '入门')
+    const note = paths.courseNotePath('math', '入门')
     const first = await answer(engine, 'a1', 'true') as Record<string, unknown>
     assert.equal(first.scheduled, true)
     const afterFirst = await noteFsrs(note)

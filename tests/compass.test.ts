@@ -316,7 +316,7 @@ test('AC3 沙盘 ETA 每周挂载：措辞锁死、标记周幂等、越阈分�
     assert.equal(await readFile(p, 'utf8'), text1)
 
     // 越阈分位带：终点已掌握（stability 60 + ema 0.95 → mastery 0.99 ≥ 0.8）→ 首档即达
-    const notePath = paths.courseNotePath('数学', '基础', '用导数解决优化问题')
+    const notePath = paths.courseNotePath('数学', '用导数解决优化问题')
     await writeFile(notePath, `---
 node: 用导数解决优化问题
 stage: mastered

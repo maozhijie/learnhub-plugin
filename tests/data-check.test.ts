@@ -55,7 +55,7 @@ const BANK = [
 /** 三处故意损坏：图 schema、笔记 frontmatter、题库 kind（经逃生口覆盖正常档）。 */
 const BROKEN_FILES = [
   { path: '学习中心/math/data/基础.yaml', content: `${GRAPH}\n        broken: true\n` },
-  { path: '学习中心/math/课程/基础/入门.md', content: '---\nnode: "入门\n---\n' },
+  { path: '学习中心/math/课程/入门.md', content: '---\nnode: "入门\n---\n' },
   { path: '学习中心/math/题库/入门.yaml', content: `${BANK.replace('true_false', 'impossible')}\n` },
 ]
 

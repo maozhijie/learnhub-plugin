@@ -51,7 +51,7 @@ const NOTE = [
 const CONTRACT_VAULT = {
   graph: REGION_A,
   graphFile: '甲区.yaml',
-  notes: { '甲区/甲一': `${NOTE}\n` },
+  notes: { 甲一: `${NOTE}\n` },
   files: [{ path: '学习中心/math/data/乙区.yaml', content: `${REGION_B}\n` }],
 }
 

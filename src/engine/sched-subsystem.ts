@@ -102,8 +102,7 @@ export class SchedSubsystem {
     this.e.assertNoteOk(c, graph, broken, node, 'skip')
     if (!state[node]) await this.e.ensureNote(c.root, graph, node)
     const stage: Stage = skipped ? 'skipped' : 'ready'
-    const [, regionName] = graph.blockOf[node]
-    const path = this.e.paths.courseNotePath(c.root, regionName, node)
+    const path = this.e.paths.courseNotePath(c.root, node)
     const { fm: rawFm, body } = await loadNote(path, this.e.fs)
     const fm = asFm(rawFm)
     if (fm) await saveNote(path, { ...fm, stage } as unknown as Record<string, unknown>, body, this.e.fs)
@@ -163,8 +162,7 @@ export class SchedSubsystem {
     let initialized = 0
     let due: string | null = null
     let repCard: FsrsBlock | null = null
-    const [, regionName] = graph.blockOf[node]
-    const path = this.e.paths.courseNotePath(c.root, regionName, node)
+    const path = this.e.paths.courseNotePath(c.root, node)
     // stage 守卫的幂等判据（声明给三步共用）：frontmatter 已是 review = 该块已落，续段跳过
     const stageAlreadyReview = async () => {
       const { fm: rawFm } = await loadNote(path, this.e.fs)

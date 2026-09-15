@@ -171,9 +171,9 @@ export class Paths {
   queuePath(root: string): string { return `${this.courseStateDir(root)}/生成队列.md` }
   fsrsParamsPath(root: string): string { return `${this.courseStateDir(root)}/fsrs参数.json` }
 
-  /** 课程文件规范路径：课程/<区名>/<节点名>.md。 */
-  courseNotePath(root: string, regionName: string, nodeName: string): string {
-    return `${this.courseDir(root)}/${safeFilename(regionName)}/${safeFilename(nodeName)}.md`
+  /** 课程文件规范路径：课程/<节点名>.md（#280 笔记路径平铺：去区段，与「无层级」结论一致）。 */
+  courseNotePath(root: string, nodeName: string): string {
+    return `${this.courseDir(root)}/${safeFilename(nodeName)}.md`
   }
 
   // ---- 项目区（P 区 / ADR-0015：Project 是 Course 姊妹实体，工作区按 #92 设计文档布局） ----

@@ -254,7 +254,7 @@ test('红线：项目全路径零 canonical 写入——复习队列/XP 账本/�
   await withVault({ notes: { 入门: {} } }, async ({ engine, store, root }) => {
     const queueBefore = JSON.stringify(await engine.content2.reviewQueue())
     const xpBefore = JSON.stringify(await engine.sched2.xpStatus())
-    const noteBefore = readFileSync(join(root, '学习中心', 'math', '课程', '基础', '入门.md'), 'utf8')
+    const noteBefore = readFileSync(join(root, '学习中心', 'math', '课程', '入门.md'), 'utf8')
     const journalBefore = await store.journalTail(null, 100)
 
     await engine.project.projectCreate({ name: '练耳日记', goal: '听辨音程' })
@@ -267,7 +267,7 @@ test('红线：项目全路径零 canonical 写入——复习队列/XP 账本/�
 
     assert.equal(JSON.stringify(await engine.content2.reviewQueue()), queueBefore)
     assert.equal(JSON.stringify(await engine.sched2.xpStatus()), xpBefore)
-    assert.equal(readFileSync(join(root, '学习中心', 'math', '课程', '基础', '入门.md'), 'utf8'), noteBefore)
+    assert.equal(readFileSync(join(root, '学习中心', 'math', '课程', '入门.md'), 'utf8'), noteBefore)
     // journal 一行不增（streak/热力图聚合 journal 全部行——项目域写它会涨 streak，ADR-0015 裁决 7）
     const after = await store.journalTail(null, 100)
     assert.equal(after.length, journalBefore.length)

@@ -281,7 +281,7 @@ test('导入回写：Again/Hard/Good/Easy 按 vault ts-fsrs 重算 + 流水/复�
     assert.equal(reviews.find(x => x.qid === 'q2' && x.rating_source === 'auto')?.rating, 1)
 
     // 代表卡回刷：fm.fsrs = 全部未归档题里 due 最早（q2 明天再见）
-    const fm = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    const fm = await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8')
     const fmDue = /due: "?([^"\n]+)"?/.exec(fm.slice(fm.indexOf('fsrs:')))?.[1]
     assert.equal(fmDue, q2After.due)
   })
@@ -455,7 +455,7 @@ test('笔记源卡 Anki 衔接：到期卡入 learnhub::笔记源 镜象，作�
     const practice = await engine.store.practiceAll()
     assert.equal(practice.find(x => x.course === '笔记源' && x.judge === 'review')?.qid, 'q1')
     // 节点文件零写入（笔记源没有代表卡——课程域 frontmatter 不被 Anki 事件触碰）
-    const fm = await readFile(engine.paths.courseNotePath('math', '基础', '入门'), 'utf8')
+    const fm = await readFile(engine.paths.courseNotePath('math', '入门'), 'utf8')
     assert.ok(!fm.includes(`due: "${TODAY}"`), '课程节点 frontmatter 未被笔记源 Anki 事件改写')
   })
 })

@@ -293,7 +293,7 @@ test('graphEncBackfill：无反哺候选 → ops=0 且不产生提案', async ()
     // 擦掉乙的 enc_candidates 机器块 → 候选为空 → 无回填
     const { writeFile } = await import('node:fs/promises')
     await writeFile(
-      join(engine.paths.courseRoot('math'), '课程', '基础', '乙.md'),
+      join(engine.paths.courseRoot('math'), '课程', '乙.md'),
       NOTE_乙.replace('<!-- enc_candidates: [甲] -->', ''),
       'utf8',
     )

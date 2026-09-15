@@ -188,8 +188,7 @@ export class ContentSubsystem {
     const { graph, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[check] 节点「${node}」不在图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'check')
-    const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
+    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, node), this.e.fs)
     return this.e.content.gateReport(graph, c.root, node, body)
   }
 
@@ -261,9 +260,8 @@ export class ContentSubsystem {
     const nodes: string[] = []
     for (const node of graph.order.length ? graph.order : graph.names) {
       if (!state[node]) continue // 无笔记文件：大纲步骤会建占位，无需重置
-      const [, regionName] = graph.blockOf[node]
-      const path = this.e.paths.courseNotePath(c.root, regionName, node)
-      const backup = `${trashBase}/${c.root}/课程/${safeFilename(regionName)}/${safeFilename(node)}.md`
+      const path = this.e.paths.courseNotePath(c.root, node)
+      const backup = `${trashBase}/${c.root}/课程/${safeFilename(node)}.md`
       await atomicWrite(backup, await this.e.fs.readFile(path), this.e.fs)
       const { fm } = await loadNote(path, this.e.fs)
       await saveNote(path, {
@@ -321,8 +319,7 @@ export class ContentSubsystem {
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[sections] 节点「${node}」不在图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'sections')
-    const [, regionName] = graph.blockOf[node]
-    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
+    const { body } = await loadNote(this.e.paths.courseNotePath(c.root, node), this.e.fs)
     const mdByTitle = new Map<string, string>()
     for (const part of body.split(/^## /m).slice(1)) {
       const nl = part.indexOf('\n')
@@ -344,7 +341,7 @@ export class ContentSubsystem {
     if (!graph.nset.has(node)) throw new Error(`[feedback] 未知节点: ${node}`)
     this.e.assertNoteOk(c, graph, broken, node, 'feedback')
     return this.e.content.feedback(c.root, graph, node, n => state[n], async (n, fm) => {
-      const path = this.e.paths.courseNotePath(c.root, graph.blockOf[n][1], n)
+      const path = this.e.paths.courseNotePath(c.root, n)
       await this.e.updateNoteFm(path, fm)
     })
   }
@@ -909,11 +906,10 @@ export class ContentSubsystem {
   }
 
 
-  /** 节点笔记读写便道（ADR-0014 附带）：blockOf → courseNotePath → loadNote → asFm
-   * 四步舞收口；写回经 saveNodeNote（saveNote 的双强转收在门面一处）。 */
+  /** 节点笔记读写便道（ADR-0014 附带）：courseNotePath → loadNote → asFm
+   * 收口；写回经 saveNodeNote（saveNote 的双强转收在门面一处）。 */
   async nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }> {
-    const [, regionName] = graph.blockOf[node]
-    const path = this.e.paths.courseNotePath(c.root, regionName, node)
+    const path = this.e.paths.courseNotePath(c.root, node)
     const { fm: rawFm, body } = await loadNote(path, this.e.fs)
     return { path, fm: asFm(rawFm), body }
   }
