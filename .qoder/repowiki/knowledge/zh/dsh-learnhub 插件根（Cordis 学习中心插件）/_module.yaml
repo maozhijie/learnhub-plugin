@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: ""
-title: Learnhub 学习引擎插件（dsh-learnhub）
+title: dsh-learnhub 插件根（Cordis 学习中心插件）
 scope:
     - CONTEXT.md
     - AGENTS.md
