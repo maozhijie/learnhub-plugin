@@ -52,6 +52,17 @@ git worktree remove ../learnhub-plugin-task1
 git branch -d feature/task1
 ```
 
+## The code index is keyed by path, so worktrees multiply it
+
+The `codebase-memory-mcp` index is keyed by **absolute path**, so every worktree is a separate project holding a complete copy of its own graph — no dedupe, and nothing in `list_projects` links a worktree back to its canonical checkout. Indexing a second worktree means a second full index, not a delta of the first.
+
+Two rules for this repo, both detailed in `docs/agents/code-index.md`:
+
+1. **Index the main checkout once and treat that index as canonical; do not index inside a worktree.** Worktrees here exist to isolate uncommitted changes, not structural knowledge, so the canonical index covers most tasks. If you do need branch-specific structure, call `delete_project` **in the same session, before removing the worktree** — after removal the path-derived name is hard to reconstruct.
+2. **Never pass `persistence: true` from a worktree.** It writes `.codebase-memory/graph.db.zst` **inside `repo_path`**, leaving a large untracked directory in a worktree — the same class of mess the junction warning above describes. `.gitignore` covers `/.codebase-memory/` as insurance, but the artifact still has to be deleted by hand.
+
+Removing the worktree does **not** remove the project record: it stays in `list_projects` with `status: ready` and its nodes still answerable, `root_exists` / `is_git` turn false, and its `branch` field goes **null** — so the list loses the one field that identified it as a dead worktree. `delete_project` is the only thing that clears the record and its `.db`.
+
 ## Shared-checkout races: rules from the 2026-09-09 double-ruling
 
 Worktrees are the structural fix, but wayfinder maps invite several sessions onto one map at once, and those sessions sometimes share one checkout anyway. Two rulings landing the same afternoon both picked ADR number 0016 from a stale directory listing and both appended to `CONTEXT.md` within minutes. What worked, in order of when it matters:

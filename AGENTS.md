@@ -24,6 +24,10 @@ Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `doc
 
 **收尾必须点名（纪律，不是门能拦住的形态）**：凡是这次任务**改动过提示词**，任务收尾必须报告——① 改了哪几条（常量名）；② `文件:行`；③ 新旧差异要点（改了什么语义）；④ 对应的 `PROMPT_CHANGELOG` 登记条目（或说明为何不需要）。理由是提示词的人工返工面就在这里：人要靠这份点名**快速找到 AI 这次动过哪些散文**再逐条复核，不点名等于让人自己 diff 全仓。收尾消息不在仓库里、机械不可判，故它是纪律而非门（ADR-0075 §4）。
 
+### 代码索引（codebase-memory MCP）
+
+本仓用 `codebase-memory-mcp` 建代码知识图谱（函数/调用边/复杂度），用 `search_graph`、`trace_path`、`get_architecture` 代替逐个读文件。**只给主检出索引一次，`mode: "moderate"`**——`fast` 不建语义边，`semantic_query` 会一条不返回。三个常用面：`trace_path(direction:"inbound")` 查改动影响面、`detect_changes` 收尾算 blast radius、`get_architecture(aspects:["clusters","cycles"])` 拿一份独立于手工门的分层读数。两条纪律：**图是 best-effort**（`index_status` 会报 `parse_partial`/`skipped`，做「没有 X」这类否定结论前先查覆盖）+ **ADR 归 `docs/adr/`**（别用 MCP 的 `manage_adr`，那是第二份真相源，且不是门读的那份）。用法、实测数字与反面清单见 `docs/agents/code-index.md`。
+
 ## 本地启动 dsh 宿主
 
 编译后重启宿主才能生效（lib 是宿主启动时加载的，不热更新）：
@@ -51,3 +55,5 @@ node scripts/link-peers.mjs
 ZCode 没有会话级分支/worktree 隔离：同目录开多个会话共享同一 checkout 和当前分支，未提交改动与 switch/rebase 会互相踩。并行做多个任务时，每个任务建一个 git worktree、每个 worktree 开一个会话；同一会话内的并行 subagent 共享工作目录，配置隔离不了，只能按文件范围拆分或改走多 worktree。
 
 新 worktree 的依赖要装**两处**：根目录与 `ui/` 子包各自 `npm install`（`ui/` 有自己的 package.json，node_modules 不共享）——只装根的话 `npm test` 会在 `tests/md-chain.test.ts` 炸 `Cannot find package 'remark-gfm'`，ui 的 typecheck/build 同样失败。命令与其余注意事项见 `docs/agents/parallel-sessions.md`。
+
+**别在 worktree 里建代码索引**：索引按绝对路径分库，每个 worktree 一份完整副本、零去重，且移除 worktree 后记录仍留在 `list_projects` 里、只能显式 `delete_project` 清掉。规则见 `docs/agents/parallel-sessions.md`。

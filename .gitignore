@@ -1,6 +1,7 @@
 node_modules/
 /lib/
 /web/
+/.codebase-memory/
 *.log
 .DS_Store
 .worktrees/
