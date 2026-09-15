@@ -241,7 +241,7 @@ export const 维护域 = {
     domain: "维护",
     channels: [
       {
-        channel: "panel",
+        channel: "ops",
         mode: "sync",
         route: { method: "POST", path: "/spike" }
       }
@@ -260,7 +260,7 @@ export const 维护域 = {
     domain: "维护",
     channels: [
       {
-        channel: "panel",
+        channel: "ops",
         mode: "sync",
         route: { method: "POST", path: "/smoke" }
       }
@@ -280,7 +280,7 @@ export const 维护域 = {
     domain: "维护",
     channels: [
       {
-        channel: "panel",
+        channel: "ops",
         mode: "sync",
         route: { method: "POST", path: "/quality-review" }
       }

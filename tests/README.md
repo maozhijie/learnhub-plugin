@@ -338,6 +338,25 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 
 **存量兼容**：提案读侧不校验 `kind`——存量 `kind=seed` 提案仍可读出、不判 Broken；apply 侧按 kind 拒绝（`tests/proposals-contract.test.ts` 钉住）。
 
+## ops 面正名 + 可达性门（#257 / ADR-0082）：受控面迁移登记
+
+**#257（ops 面正名 + 可达性门）**：命令注册表通道种类扩为 `agent`／`panel`／`ops`；`smoke`／`spike`／`quality-review` 由 `panel` 改声明为 `ops`（`npm run` 脚本驱动的宿主 API——真 provider 只在宿主 ctx，必须走宿主 HTTP；路由与 handler 逐字不变）；新增**门⑨ 可达性**。详见 ADR-0082。
+
+| 受控面 | 迁移内容 | 落点 | 判据 |
+|---|---|---|---|
+| 命令注册表 | 通道种类 +`ops`；`smoke`/`spike`/`quality-review` 由 `panel`→`ops`（命令数 155、路由数 127、工具数 111 **均不变**）；门③④⑧ 措辞改「路由通道（panel+ops）」（过滤口径 `.route` 本就不分种类，语义不变）；新增门⑨ | `src/commands/types.ts`、`src/commands/维护.ts`、`tests/commands.test.ts` | 门⑨ 硬门 0（无孤儿、无 `ops` 误标） |
+| 文件规模棘轮 | `src/commands/types.ts` 128→131（三行注释） | `scripts/arch-baseline.json`（`--update`） | 棘轮精确匹配 |
+| 路由/工具/行为快照 | **零漂移**：三条路由只改通道种类，`host-routes-*`／`host-tools-*`／`host-face-baseline` 逐字不变 | —（未改） | `tests/host-routes.test.ts`／`tools-face`／`host-runtime` 全绿 |
+| 提示词面 | 不触碰任何提示词文本 | —（未改） | `npm run prompt-bump -- check` 恒绿、无 `PROMPT_CHANGELOG` 条目 |
+
+**门⑨ 可达性**（命令注册表；`tests/commands.test.ts`；#257 / ADR-0082）：
+
+- **内容**：每个命令必须至少一个可达面——`panel` 路由→UI 源码（`ui/src` ∪ `src/client`）、`ops` 路由→`scripts/`、`agent` 通道→注册即产品面（工具名下发即暴露）；另附 `ops` 路由必有 `scripts/` 调用点的正确性断言。
+- **档位**：硬门 0（孤儿 0 + `ops` 误标 0）。
+- **阈值来源（实测）**：`panel` 路由 127 条，其中 7 条双通道命令的路由（`question-save`／`project-lifecycle`／`explain-back-pack`／`note-source-exclude`／`note-source-unexclude`／`note-resolve`／`rebuild`）UI 未接但命令经 agent 工具可达；`smoke`／`spike`／`quality-review` 无 UI 调用、由 `scripts/` 兜住（正名 `ops`）；`vendor-` 为 `prefix` 静态伺服（由运行期生成物引用），机械豁免。**孤儿 0**。
+- **两向自检**（ADR-0047 铁律①）：纯函数 `scanReachability` 同源——① 合成「panel-only 路由无 UI 调用」样本断言判孤儿；② 断言收集器看得见真实调用点（`/status`∈`ui/src`、`/discuss-pack`∈`src/client`、`/smoke`∈`scripts/`）。
+- **已知边界**：只覆盖**静态可达性**（源码里的路径字面量）——「按钮存在但从不渲染」「运行时动态拼路由」看不见。
+
 架构门 G1–G7（2026-09-11 新增，#165 / ADR-0047；`tests/arch-guards.test.ts`）：
 
 把「约定只活在注释与 ADR 里」变成会失败的东西。全部零依赖、文本／加载／编译层面、`node:test` 原生、随 `npm test` 全量执行。两条铁律：**每个门都带自检**（构造必然违规的样本并断言门会失败；收集器类门另断言它能看见目标形态——R3 曾因收集器只收相对说明符而**恒过**，恒过的门比没有门更坏）；**棘轮是精确匹配**（实际 == 基线，涨了失败、**降了但未同步下调基线也失败**＝过期即失败）。

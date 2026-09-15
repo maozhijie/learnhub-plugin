@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url'
 import { API, handleApi, matchRoute } from '../src/host/api.ts'
 import { BY_ROUTE, COMMAND_LIST } from '../src/commands/index.ts'
 
-/** 表项视图：panel 通道拉平（方法与路径都是分发键）。 */
+/** 表项视图：路由通道（panel+ops）拉平（方法与路径都是分发键）。 */
 const routes = COMMAND_LIST.flatMap(c => c.channels.filter(ch => ch.route)
   .map(ch => ({ command: c, method: ch.route!.method, route: ch.route!.path, prefix: ch.prefix, bind: ch.bind })))
 import { cleanupProbeVault, runProbes } from './helpers/routes-probe.ts'

@@ -2,8 +2,8 @@
  * 命令注册表·装配（#169；ADR-0045）。
  *
  * 一张表，两个适配器：agent 通道→工具面（host/tools.ts + host/tool-handlers.ts），
- * panel 通道→路由面（host/api.ts + host/handlers.ts）。门跑在这张装配表上
- * （唯一性/配对/engine 存在性/阶段/指南投影/声明与面一致）。
+ * 路由通道（panel／ops）→路由面（host/api.ts + host/handlers.ts）。门跑在这张装配表上
+ * （唯一性/配对/engine 存在性/阶段/指南投影/声明与面一致/可达性）。
  *
  * **表是「按 id 键的对象」而不是数组**：#169 把它当成类型可见形状用——`CommandId` /
  * `CommandOutput<id>` 让 UI 的 111 个端点从 `output` 派生响应类型（ADR-0045 裁定 7），
@@ -52,7 +52,7 @@ export type CommandId = keyof typeof COMMANDS
 export type CommandOutput<K extends CommandId> = NonNullable<(typeof COMMANDS)[K]['output']>
 
 /**
- * panel 通道的**线名表**（`${method} ${path}` → 该命令 `args` 的键名）：
+ * 路由通道（panel／ops）的**线名表**（`${method} ${path}` → 该命令 `args` 的键名）：
  * 请求体的键名出处——UI 侧 camelCase→snake_case 的翻译以它为权威（`tests/ui-types.test.ts` 逐条核对）。
  */
 export const WIRE_ARGS: ReadonlyMap<string, readonly string[]> = new Map(
@@ -65,7 +65,7 @@ export const BY_TOOL: ReadonlyMap<string, CommandSpec> = new Map(
   COMMAND_LIST.flatMap(c => c.channels.filter(x => x.tool).map(x => [x.tool!, c] as const)),
 )
 
-/** 按 `${method} ${path}` 索引（panel 通道，含前缀项）。 */
+/** 按 `${method} ${path}` 索引（路由通道 panel／ops，含前缀项）。 */
 export const BY_ROUTE: ReadonlyMap<string, CommandSpec> = new Map(
   COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route).map(x => [`${x.route!.method} ${x.route!.path}`, c] as const)),
 )

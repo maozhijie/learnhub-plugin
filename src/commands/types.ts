@@ -11,6 +11,9 @@
  * - `engine` 可选：声明了就必须是门面方法；队列型/按参分派型/无引擎型留空（白名单登记理由）；
  * - `bind` 住**通道**：顺序＝引擎实参位置，元素＝`args` 键名，`null`＝该位置传 `undefined`；
  * - `phase` 住**通道**：队列型命令的入口阶段（∈ GEN_JOB_PHASES）；
+ * - `channel` 是**投递面**（ADR-0082）：`agent`＝工具面、`panel`＝面板路由面、
+ *   `ops`＝`npm run` 脚本驱动的宿主 API 面（如 smoke/spike/quality-review——真 provider 只在宿主 ctx，必须走宿主 HTTP）；
+ *   panel/ops 都是路由，可达面不同（#257 可达性门据此分流）；
  * - `output` 类型引用（编译期幻影字段，运行时不写）。
  */
 import type { GenJobPhase } from '../generation-jobs.ts'
@@ -75,11 +78,11 @@ export type ParameterSchemaSpec = Record<string, ParamSpec>
 
 /** 一条通道：允许通道 + 该通道自己的执行模型（＋该通道的实参绑定与队列阶段）。 */
 export interface ChannelSpec {
-  channel: 'agent' | 'panel'
+  channel: 'agent' | 'panel' | 'ops'
   mode: 'sync' | 'queued'
   /** agent 通道的工具名。 */
   tool?: string
-  /** panel 通道的路由。 */
+  /** panel／ops 通道的路由（panel→UI 源码调用点，ops→`scripts/` 调用点）。 */
   route?: { method: HttpMethod; path: string }
   /** 仅 mode:'queued'：入队后从哪个阶段开始跑（∈ GEN_JOB_PHASES）。 */
   phase?: GenJobPhase
@@ -100,7 +103,7 @@ export interface ChannelSpec {
 /** 一条命令（`E` = 声明的引擎入口；`output` 由它派生）。 */
 export interface CommandSpec<E extends string = string> {
   id: string
-  /** 工具面 description 的单一出处（逐字）；仅面板通道的命令可缺（待面板文案票，ADR-0045 裁定 3）。 */
+  /** 工具面 description 的单一出处（逐字）；仅面板／ops 通道的命令可缺（待面板文案票，ADR-0045 裁定 3）。 */
   summary?: string
   args: ParameterSchemaSpec
   /** 引擎入口（门面方法名）；留空须进白名单（逐条理由，见 tests/commands.test.ts）。 */

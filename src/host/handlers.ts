@@ -8,7 +8,7 @@
  *
  * 键是**路由**（method + path）：handler 是路由级事实（`/jol`、`/sleep` 各有一条通道走生成路径、
  * 另一条要 handler），命令级的 id 会让同命令的两条通道互相覆盖。门④ 断言本表键集合恰等于
- * 注册表里**没有 bind 的 panel 通道**集合。
+ * 注册表里**没有 bind 的路由通道（panel+ops）**集合。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
