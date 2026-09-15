@@ -7,3 +7,4 @@ node_modules/
 .worktrees/
 
 .pnpm-store/
+.scratch/**
