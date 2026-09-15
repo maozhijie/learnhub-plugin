@@ -44,6 +44,32 @@ index_repository(repo_path="C:/Users/test/Desktop/my/learnhub-plugin", mode="mod
 4. **按意图找代码，不按名字找。** `search_graph(query="...")` 是对名字与 docstring 的 BM25；`semantic_query=[...]` 负责跨越用词（查 `score` / `evaluate` / `student`，命中了名为 `gradeAnswer`、正文里一个这些词都没有的函数）。当你知道「这件事在哪发生」却不知道标识符时用它。**`score` 不能当置信度读**——上面那些明确命中回来的值约 `-0.015`，即略负；只有相对排序有意义。
 5. **带结构的 grep。** `search_code(pattern="...")` 把原始命中归并进包含它们的函数，定义在前、测试在后。对 `src/engine/prompts/` 下的提示词文本，这就是对的工具，配 `file_pattern` / `path_filter`——提示词是惰性字符串，纯文本检索正是你要的，图那一层帮不上什么。
 
+## 新鲜度：怎么一分钟判定「索引是否落后于 HEAD」
+
+本仓实测过一次索引滞后事故（#281/#283 会话）：代码里 `groupView` 已落地，`search_graph(groupView)` 却返回 0——当时误当「符号不存在」差点下了否定结论。判定是否滞后只看一件事：
+
+- **`index_status(project=...)` 的 `git.head_sha` 对比 `git log -1` 的 HEAD**（`verbose: true` 会连 `base_sha`、分支、worktree 一起给）。一致 → 索引已是 HEAD 内容，别怀疑新鲜度；不一致 → 索引落后，需要决定是否重索引（重索引是一次完整跑，见上）。
+- 再配一个**内容级抽查**：拿最近一次引擎提交新增的符号跑 `search_graph(name_pattern=...)`，确认图上真的有它。
+
+2026-09-15 复验读数：`head_sha` 与 HEAD（`46e9018`）一致，`groupView`/`GroupViewOpts` 均在图上（`src/engine/graph.ts:506-560`），节点数从索引建库时的 9883 涨到 9887，与 #278 落地提交的增量吻合——那次滞后已被覆盖，当前不存在。
+
+**两类「看起来像滞后」但不是滞后的情况**，先排除再下结论：
+
+1. **设计性排除**：`tests/*.test.ts`、lock 文件等按 `fast-pattern`/`skip-list` 排除（见 `index_status` 的 `not_indexed`，本仓 144 项）。只改 tests 的提交在图上「无变化」是预期行为——本次 HEAD 提交（仅改 `tests/`）就是实例。
+2. **`parse_partial` 行段**：本仓当前 2 处（`src/engine/store.ts:365`、`ui/src/api.ts:53,55,228`），这些行段里的构造可能不在图上，查闭合性时 grep 兜底。
+
+## 滞后事故的成因：源码验证后的机理
+
+查过上游源码（`DeusData/codebase-memory-mcp` README §Auto-Index，2026-09 实读）后，刷新时机有三层：
+
+1. **会话启动自动索引（`auto_index`）**：MCP 会话首连时自动为新项目建库。
+2. **后台 watcher 的 git 变更检测（`auto_watch`、`watcher_enabled`，均默认开）**：已建项目注册给 daemon 的后台轮询线程，检测到 git 变更自动重索引——这是旧库追平 HEAD 的主路径。
+3. **显式 `index_repository`**：手动兜底。
+
+据此修正本次事故的成因判断（daemon 日志实锤）：**watcher 的存活被绑在 daemon 上，而 daemon 是会话制的**——日志实拍 `daemon.runtime_stopping reason=last_committed_client_disconnected` → `watcher.stop` → `daemon.stop`，即最后一个 CBM 会话断开后 daemon 退出、watcher 随停。`ce35049`（groupView 落地，22:14）提交时上一个会话已断开，变更发生在空窗期，无人看见；#281/#283 会话紧接着查图，图还是建库时的旧树，故返回 0。直到今天 23:28 新会话起来，daemon 重启、项目重新注册并触发重索引（日志里两次非本会话发起的 `index_repository`，3.3s/6s）才追平 HEAD。准确结论：**watcher 只在「至少一个 CBM 会话活着」的窗口里工作；跨会话空窗期的提交它一概看不见，只能等下一个会话启动的自动索引补课**。
+
+不变的教训：**watcher 是 best-effort 的会话内追平，不是事务保证，更不跨会话空窗**。图回答闭合性之前，先花十秒钟确认它回答的是哪个版本的代码——`index_status` 的 `head_sha` 就是这个十秒钟；不一致时要么等 watcher 追平，要么显式 `index_repository` 兜底。若空窗期后有滞后且迟迟不追平，再按序排查：① `config get auto_watch` / `watcher_enabled` 是否被关过（改 `watcher_enabled` 须 `daemon stop` 后重启才生效）；② daemon 是否在跑（`daemon-conflicts.ndjson`、`cbm-daemon.log`）。
+
 ## 不要做的事
 
 - **不要把图当 ground truth。** 索引是 best-effort，并且自报缺口：`index_status` 会返回 `parse_partial`（已索引但含解析器读不了的行段——那里的构造可能缺失）与 `skipped`（完全没索引），`query_graph(graph="missed")` 是同一批缺口的结构化视图。做**否定或穷尽**结论之前——「没有东西调用它」「不存在 X」「只有这一处」——先查 `check_index_coverage`，至少 grep 一下被标记的文件。**图上没有不等于代码里没有。** 本仓的精确匹配面（门基线、棘轮、`PROMPT_CHANGELOG` 条目、ADR 编号）永远从真实文件读。
