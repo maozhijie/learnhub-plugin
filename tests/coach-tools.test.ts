@@ -19,6 +19,7 @@ import {
 } from '../src/engine/coach-tools.ts'
 import type { CoachToolDeps } from '../src/engine/coach-tools.ts'
 import { Graph } from '../src/engine/graph.ts'
+import { resolveConcept } from '../src/engine/concepts.ts'
 import type { GNode, GRegion, Fm } from '../src/engine/types.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import type { CourseEntry } from '../src/engine/types.ts'
@@ -41,6 +42,34 @@ const SEED_VAULT = { registry: null, graph: null }
 const DRAFT = {
   ...CAPABILITY_DRAFT,
   concepts: [{ canonical: '变化率', aliases: ['rate of change'], definition: '刻画「变化多快」的概念' }],
+}
+
+/**
+ * 测试侧 providers：行为摘要给替身（本文件不测它的渲染），概念足迹的 invokes 折叠按
+ * **生产同一规则**自建（排除归档题 + 登记表 canonical 归一）——生产口径住
+ * `growth-subsystem.conceptInvokesOf`，facade 全链（coach-growth 的脚本化工具回合）
+ * 消费的是那一份；本文件只在直测渲染面时喂等价输入。
+ */
+function providersOf(engine: LearnhubEngine, c: CourseEntry): { behaviorDigestText: () => Promise<string>; conceptInvokes: () => Promise<Map<string, Map<string, number>>> } {
+  return {
+    behaviorDigestText: async () => '摘要',
+    conceptInvokes: async () => {
+      const entries = await engine.concepts.load(c.root)
+      const out = new Map<string, Map<string, number>>()
+      await engine.learner.scanCourseBanks(c, async (node, bank) => {
+        for (const q of bank.questions) {
+          if (q.archived === true) continue
+          const raw = typeof q.invokes === 'string' ? q.invokes.trim() : ''
+          if (!raw) continue
+          const concept = resolveConcept(entries, raw)?.canonical ?? raw
+          let byNode = out.get(concept)
+          if (!byNode) out.set(concept, byNode = new Map())
+          byNode.set(node, (byNode.get(node) ?? 0) + 1)
+        }
+      })
+      return out
+    },
+  }
 }
 
 function depsOf(engine: LearnhubEngine): CoachToolDeps {
@@ -98,9 +127,7 @@ test('只读性：全白名单逐工具调用后 vault 字节级不变（零写�
     await draftCourse(engine, DRAFT)
     const course = await engine.registry.resolve('数学') as CourseEntry
     const before = await snapshotVault(root)
-    const runTool = coachToolExecutor(depsOf(engine), course, {
-      behaviorDigestText: async () => '（行为摘要渲染产物——provider 注入）',
-    })
+    const runTool = coachToolExecutor(depsOf(engine), course, providersOf(engine, course))
     for (const name of COACH_TOOL_NAMES) {
       const out = await runTool({ id: 'x', name, arguments: NODE_PARAM_TOOLS[name] ?? '{}' })
       assert.ok(out.length > 0, `${name} 产出非空视图`)
@@ -123,7 +150,7 @@ test('视图内容：图面带节点取值域、节点卡带结构档、概念�
         '  - id: q1', '    kind: true_false', '    q: 变化率题干。', '    answer: true', '    invokes: 变化率',
         '  - id: q2', '    kind: true_false', '    q: 归档题干。', '    answer: false', '    archived: true',
       ].join('\n') + '\n', 'utf8')
-    const runTool = coachToolExecutor(depsOf(engine), course, { behaviorDigestText: async () => '摘要' })
+    const runTool = coachToolExecutor(depsOf(engine), course, providersOf(engine, course))
 
     // graph_view：结构事实源（节点名 + pre 引用取值域）
     const view = await runTool({ id: '1', name: 'graph_view', arguments: '' })
@@ -178,7 +205,7 @@ test('上游图摘要：⚠ 弱掌握标记与超 cap 按深度截断的显式�
       notes: { '认识变化率': { stage: 'learning', practice: { attempts: 3, correct: 1 } } },
     })
     const course = await engine.registry.resolve('数学') as CourseEntry
-    const runTool = coachToolExecutor(depsOf(engine), course, { behaviorDigestText: async () => '摘要' })
+    const runTool = coachToolExecutor(depsOf(engine), course, providersOf(engine, course))
     const dag = await runTool({ id: '1', name: 'upstream_dag', arguments: '{"node":"用导数解决优化问题"}' })
     assert.match(dag, /- 认识变化率（深度 0｜基础·起点块｜在学｜掌握 0\.1 ⚠/, '弱掌握节点在闭包拓扑里带 ⚠')
   })
@@ -195,7 +222,7 @@ test('上游图摘要：⚠ 弱掌握标记与超 cap 按深度截断的显式�
   ].join('\n')
   await withVault({ registry: DEFAULT_REGISTRY, graph: graphYaml }, async ({ engine }) => {
     const course = await engine.registry.resolve('数学') as CourseEntry
-    const runTool = coachToolExecutor(depsOf(engine), course, { behaviorDigestText: async () => '摘要' })
+    const runTool = coachToolExecutor(depsOf(engine), course, providersOf(engine, course))
     const dag = await runTool({ id: '1', name: 'upstream_dag', arguments: `{"node":"${nameOf(chain - 1)}"}` })
     assert.match(dag, new RegExp(`前置传递闭包 ${chain - 1} 个节点`))
     assert.match(dag, /超出预览上限 60，余 5 个——按深度截断/)
@@ -221,10 +248,10 @@ test('全图摘要（纯函数）:逐节点一行含深度/区·块/掌握/邻�
   assert.match(view, /- ⚑ 终点：终点（方向标记/)
   assert.match(view, /### 全图（逐节点一行，深度序——⚠ 弱掌握、⚑ 终点）/)
   // 逐节点一行：深度序在前（甲 d0 在 丙 d2 之前）+ 区·块 + 掌握 + pre 邻接 + teaches 并入同行
-  assert.match(view, /- 甲（d0｜基础·起点块｜复习中｜掌握 0\.1 ⚠）｜pre: （根）/)
-  assert.match(view, /- 丙（d2｜进阶·中段块｜未开始·待生成｜掌握 0｜est 15′）｜pre: 乙/)
-  assert.match(view, /- 终点 ⚑（d3｜进阶·终点块｜/)
-  assert.ok(view.indexOf('- 甲（d0') < view.indexOf('- 丙（d2'), '深度序：地基在前')
+  assert.match(view, /- 甲（深度 0｜基础·起点块｜复习中｜掌握 0\.1 ⚠）｜pre: （根）/)
+  assert.match(view, /- 丙（深度 2｜进阶·中段块｜未开始·待生成｜掌握 0｜est 15′）｜pre: 乙/)
+  assert.match(view, /- 终点 ⚑（深度 3｜进阶·终点块｜/)
+  assert.ok(view.indexOf('- 甲（深度 0') < view.indexOf('- 丙（深度 2'), '深度序：地基在前')
   assert.ok(!/- 丙（[^）]*⚠/.test(view), '未开始（ready）不误标 ⚠——mastery 0 是还没学不是学塌了')
   // 全部节点名逐行在场 = pre 引用的取值域（旧「其余节点名单」的截断面已消失）
   for (const n of ['甲', '乙', '丙', '终点']) assert.ok(view.includes(`- ${n}`), `${n} 逐节点行在场`)
@@ -248,9 +275,9 @@ test('全图摘要（纯函数）：超 cap 降级为区/块聚合 + 前沿细�
   assert.match(view, /### 前沿与在学细节/)
   // ⚠ 与 ⚑ 例外不截：弱掌握与终点各自全列（即便它们落在聚合桶里）
   assert.match(view, /### ⚠ 弱掌握（例外不截，1 个）/)
-  assert.match(view, /- 弱点（d0｜主区·小块｜复习中｜掌握 0\.1 ⚠｜est 10′）｜pre: （根）/)
+  assert.match(view, /- 弱点（深度 0｜主区·小块｜复习中｜掌握 0\.1 ⚠｜est 10′）｜pre: （根）/)
   assert.match(view, /### ⚑ 终点（例外不截，1 个）/)
-  assert.match(view, /- 终点 ⚑（d1｜主区·小块｜/)
+  assert.match(view, /- 终点 ⚑（深度 1｜主区·小块｜/)
   assert.match(view, /……（全图 212 个节点超出逐节点行上限 200——已降级为区\/块聚合 \+ 前沿与在学细节；⚠ 弱掌握与 ⚑ 终点例外全列。变焦细节用 upstream_dag \/ node_card。）/)
   assert.ok(!view.includes('### 全图（逐节点一行'), '降级时不再出逐节点行块（整块退场，不是逐节点截断）')
   // 聚合行按全量计数（不是「前 N 个」的和）——降级的诚实性在这里可判
@@ -271,7 +298,7 @@ test('合法空态与拒收语义：零终点锚给空态行；白名单外/坏�
       scanCourseBanks: async () => undefined,
       loadView: async () => { throw new Error('不应取图') },
       learningDay: async () => ({ today: '2026-09-15', cutoff: 0 }),
-    }, course, { behaviorDigestText: async () => '摘要' })
+    }, course, providersOf(engine, course))
 
     // 零终点（空锚）：罗盘/终点锚视图给合法空态（不炸、不静默编内容）
     const anchor = await runTool({ id: '1', name: 'endpoint_anchor', arguments: '' })
@@ -283,6 +310,12 @@ test('合法空态与拒收语义：零终点锚给空态行；白名单外/坏�
     await assert.rejects(
       () => runTool({ id: '3', name: 'graph_apply', arguments: '{"kind":"edit"}' }),
       /白名单外工具「graph_apply」被拒.*提案→受理门→apply/,
+    )
+    // 已退役的 concept_registry 也走拒收——不是「换了个名字还在」，是白名单真收紧了
+    // （#249 验收：registry 移除后的拒收；拒收文案回程新名单供模型改道）
+    await assert.rejects(
+      () => runTool({ id: '3b', name: 'concept_registry', arguments: '{"query":"变化率"}' }),
+      /白名单外工具「concept_registry」被拒.*concept_footprint/s,
     )
     await assert.rejects(
       () => runTool({ id: '4', name: 'enqueue_generation', arguments: '{}' }),
@@ -303,7 +336,7 @@ test('合法空态与拒收语义：零终点锚给空态行；白名单外/坏�
 
 test('node_card 未知节点 fail loud 并指路 graph_view（图面是逐字取值域）', async () => {
   await withVault({ registry: DEFAULT_REGISTRY }, async ({ engine }) => {
-    const runTool = coachToolExecutor(depsOf(engine), course, { behaviorDigestText: async () => '摘要' })
+    const runTool = coachToolExecutor(depsOf(engine), course, providersOf(engine, course))
     await assert.rejects(
       () => runTool({ id: '1', name: 'node_card', arguments: '{"node":"不存在的节点"}' }),
       /不在图上.*graph_view/,

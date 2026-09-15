@@ -431,6 +431,19 @@ export class Graph {
     return a !== n && (this.reach[a]?.has(n) ?? false)
   }
 
+  /** 前置传递闭包（沿 preOf BFS；**含自身**，调用方自行剔除）。
+   * 单一出处：上游图摘要与 `graph_node` 的 `prereq_closure` 共用——两处各写一遍 BFS
+   * 曾让「同一个闭包」有两个实现（口径一致靠注释，不靠代码）。 */
+  upstreamClosure(n: string): Set<string> {
+    const seen = new Set<string>([n])
+    const queue = [n]
+    while (queue.length) {
+      const u = queue.shift()!
+      for (const p of this.preOf[u]) if (!seen.has(p)) { seen.add(p); queue.push(p) }
+    }
+    return seen
+  }
+
   readySet(done: Set<string>, doing: Set<string>): string[] {
     return this.names
       .filter(n => !done.has(n) && !doing.has(n) && this.isReady(n, done))

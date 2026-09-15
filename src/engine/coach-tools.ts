@@ -81,15 +81,36 @@ function isWeak(state: Record<string, Fm>, n: string, today: string): boolean {
   return Boolean(due && today && String(due) <= today)
 }
 
-/** 逐节点读数的公共列（ADR-0077 全图摘要与上游图摘要同源）：阶段｜掌握度(+⚠)｜
- * est｜due。掌握度是读侧派生（masteryOfFm 口径 B），due 只在已排程时出现。 */
-function readingColumns(state: Record<string, Fm>, graph: Graph, n: string, today: string): string {
+/** 逐节点行的公共折叠（ADR-0077：全图摘要与上游图摘要**同源同形**）：深度｜区·块｜
+ * 阶段｜掌握度(+⚠)｜est｜due，pre 邻接与 teaches 并入同行。两处视图的差别只在
+ * `pres`（摘要给图上全部 pre；上游闭包给**闭包内**的 pre 子集——闭包外的边不属本视图
+ * 的拓扑）与各自的外围块（降级聚合 / 邻接表 + cap），行本身一份实现——两处各写一遍
+ * 行格式，就会出现「摘要显示 d2、工具显示 深度 2」这类只靠人眼对齐的漂移。
+ * 返回不带项目符号的行体（调用方决定是 `- ` 列表项还是别的挂法，如目标节点行）。 */
+function nodeRowBody(
+  graph: Graph, state: Record<string, Fm>, n: string,
+  opts: { today: string; endpoints: ReadonlySet<string>; pres?: string[] },
+): string {
+  const [, region, block] = graph.blockOf[n]
+  const pres = opts.pres ?? graph.preOf[n]
+  const teaches = Object.entries(graph.teachesOf[n] ?? {}).map(([c, t]) => `${c} ${t}`)
   const est = graph.estOf[n]
   const fs = state[n]?.fsrs
   const due = fs && fs.reps ? fs.due : null
-  return `${activeLabel(state, n)}｜掌握 ${masteryOfFm(state[n])}${isWeak(state, n, today) ? ' ⚠' : ''}`
+  const columns = `${activeLabel(state, n)}｜掌握 ${masteryOfFm(state[n])}${isWeak(state, n, opts.today) ? ' ⚠' : ''}`
     + (est ? `｜est ${est}′` : '')
     + (due ? `｜due ${String(due)}` : '')
+  return `${n}${opts.endpoints.has(n) ? ' ⚑' : ''}（深度 ${graph.depth[n] ?? 0}｜${region}·${block}｜${columns}）`
+    + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
+    + (teaches.length ? `｜teaches: ${teaches.join('、')}` : '')
+}
+
+/** 逐节点行（列表项形态）。 */
+function nodeRow(
+  graph: Graph, state: Record<string, Fm>, n: string,
+  opts: { today: string; endpoints: ReadonlySet<string>; pres?: string[] },
+): string {
+  return `- ${nodeRowBody(graph, state, n, opts)}`
 }
 
 /** 全图摘要（#250 / ADR-0077，自 #144 的「前沿细节 + 其余名单」升级）：教练全量包
@@ -133,14 +154,7 @@ export function renderGrowthGraphView(
       ? [...endpoints].map(n => `- ⚑ 终点：${n}（方向标记——朝该方向的生长须汇入它；不可 del/rename，零正文零题库不被调度，主线批须 set_pre 接线到新前沿）`)
       : ['（零终点——空锚是合法空态，先加一个终点：教练回合无从裁决方向）']),
   ]
-  const nodeLine = (n: string): string => {
-    const [, region, block] = graph.blockOf[n]
-    const pres = graph.preOf[n]
-    const teaches = Object.entries(graph.teachesOf[n] ?? {}).map(([c, t]) => `${c} ${t}`)
-    return `- ${n}${endpoints.has(n) ? ' ⚑' : ''}（d${graph.depth[n] ?? 0}｜${region}·${block}｜${readingColumns(state, graph, n, today)}）`
-      + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
-      + (teaches.length ? `｜teaches: ${teaches.join('、')}` : '')
-  }
+  const nodeLine = (n: string): string => nodeRow(graph, state, n, { today, endpoints })
   if (!degraded) {
     lines.push('', `### 全图（逐节点一行，深度序——⚠ 弱掌握、⚑ 终点）`, '')
     for (const n of ordered) lines.push(nodeLine(n))
@@ -209,16 +223,18 @@ export function renderNodeCard(
  * query 语义 = 子串发现（命中 canonical 或别名），**不是**存在性判定：无 query 给全表
  * （cap 内定义逐条对照），空结果 = 「换宽词或读全表，不是不存在」——子串当发现机制会
  * 因粒度/角度/别称差异静默失败（ADR-0077 归因映射分层）。写侧恒精确：提案概念引用仍
- * 逐字命中在册名字，本视图只供读侧找候选。读侧派生零落盘。 */
+ * 逐字命中在册名字，本视图只供读侧找候选。读侧派生零落盘。
+ *
+ * 足迹取材全经 providers 注入（题目的 invokes 折叠口径住 growth-subsystem——S60 契约：
+ * 子系统私有折叠经 providers 复用，本文件不自己扫库；图侧反查读 `deps.loadView`）。 */
 export async function renderConceptFootprint(
-  deps: CoachToolDeps, c: CourseEntry, query?: string,
+  deps: CoachToolDeps, c: CourseEntry, providers: CoachToolProviders, query?: string,
 ): Promise<string> {
   const entries = await deps.concepts.load(c.root)
   const q = query?.trim()
   const hit = q
     ? entries.filter(e => e.canonical.includes(q) || (e.aliases ?? []).some(a => a.includes(q)))
     : entries
-  // 足迹取材：图（teaches/assumes 反查）与题库（invokes 分布）——登记表解析后按 canonical 归一
   const { graph } = await deps.loadView(c)
   const teachers = new Map<string, string[]>()
   const assumers = new Map<string, string[]>()
@@ -231,18 +247,7 @@ export async function renderConceptFootprint(
     for (const concept of Object.keys(graph.teachesOf[n] ?? {})) fold(teachers, concept, n)
     for (const concept of Object.keys(graph.assumesOf[n] ?? {})) fold(assumers, concept, n)
   }
-  const invokes = new Map<string, Map<string, number>>()
-  await deps.scanCourseBanks(c, async (node, bank) => {
-    for (const question of bank.questions) {
-      if (question.archived === true) continue
-      const raw = typeof question.invokes === 'string' ? question.invokes.trim() : ''
-      if (!raw) continue
-      const concept = resolveConcept(entries, raw)?.canonical ?? raw
-      let byNode = invokes.get(concept)
-      if (!byNode) invokes.set(concept, byNode = new Map())
-      byNode.set(node, (byNode.get(node) ?? 0) + 1)
-    }
-  })
+  const invokes = await providers.conceptInvokes()
   const lines = [`## 概念足迹：${c.name}（${hit.length}/${entries.length} 条${q ? `，query=「${q}」` : '（全表——无 query）'}）`, '']
   if (!hit.length) {
     lines.push(entries.length
@@ -289,21 +294,19 @@ export function renderUpstreamDag(
   }
   const today = opts.today ?? ''
   const endpoints = opts.endpoints ?? new Set<string>()
-  // 前置传递闭包（沿 preOf BFS；不含自身）——与 graph_node 的 prereq_closure 同口径
-  const seen = new Set<string>([node])
-  const queue = [node]
-  while (queue.length) {
-    const u = queue.shift()!
-    for (const p of graph.preOf[u]) if (!seen.has(p)) { seen.add(p); queue.push(p) }
-  }
-  const all = [...seen].filter(n => n !== node)
+  // 前置传递闭包（沿 preOf BFS；不含自身）——出处是 Graph.upstreamClosure（与 graph_node
+  // 的 prereq_closure 同一实现，不是同一段代码各写一遍）
+  const all = [...graph.upstreamClosure(node)].filter(n => n !== node)
     .sort((a, b) => (graph.depth[a] ?? 0) - (graph.depth[b] ?? 0) || a.localeCompare(b))
   const shown = all.slice(0, UPSTREAM_CLOSURE_CAP)
   const shownSet = new Set(shown)
-  const [, region, block] = graph.blockOf[node]
+  // 闭包内 pre 邻接的取值域（含目标节点——它是本视图的入口，边指向闭包内）
+  const inScope = (n: string): boolean => n === node || shownSet.has(n)
+  const row = (n: string): string =>
+    nodeRow(graph, state, n, { today, endpoints, pres: graph.preOf[n].filter(inScope) })
   const lines: string[] = [
     `## 上游图摘要：${node}${endpoints.has(node) ? ' ⚑' : ''}（前置传递闭包 ${all.length} 个节点）`, '',
-    `- 目标节点：${node}（深度 ${graph.depth[node] ?? 0}｜${region}·${block}｜${readingColumns(state, graph, node, today)}）`,
+    `- 目标节点：${nodeRowBody(graph, state, node, { today, endpoints })}`,
     `- 闭包规模：${all.length} 个上游节点${all.length > shown.length ? `（本视图只列深度最小的 ${shown.length} 个，余 ${all.length - shown.length} 个见溢出行）` : '（全列）'}`,
     '',
   ]
@@ -311,21 +314,13 @@ export function renderUpstreamDag(
     lines.push('### 闭包节点', '', '（闭包为空——该节点是根：没有上游地基可诊断）', '')
   } else {
     lines.push('### 闭包节点（深度序——地基在前；⚠ = 弱掌握或到期积压）', '')
-    for (const n of shown) {
-      const [, r, b] = graph.blockOf[n]
-      const pres = graph.preOf[n]
-      const teaches = Object.entries(graph.teachesOf[n] ?? {}).map(([cc, t]) => `${cc} ${t}`)
-      lines.push(`- ${n}${endpoints.has(n) ? ' ⚑' : ''}（深度 ${graph.depth[n] ?? 0}｜${r}·${b}｜${readingColumns(state, graph, n, today)}）`
-        + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
-        + (teaches.length ? `｜teaches: ${teaches.join('、')}` : ''))
-    }
+    for (const n of shown) lines.push(row(n))
     if (all.length > shown.length) {
       const cut = graph.depth[all[shown.length]!] ?? 0
       lines.push('', `……（超出预览上限 ${UPSTREAM_CLOSURE_CAP}，余 ${all.length - shown.length} 个——按深度截断，省略的是深度 ≥ ${cut} 的节点；本次目标节点深度 ${graph.depth[node] ?? 0}，被省略的是离目标较近的一圈。近邻细节用 node_card 逐跳下钻。）`)
     }
-    // 闭包内 pre 邻接表（含目标节点一行——它是本视图的入口，边指向闭包内）
-    const inScope = (n: string): boolean => n === node || shownSet.has(n)
-    lines.push('', '### 闭包内 pre 邻接（本题视图的读侧派生；图上 pre 只有名字列表，零边字段）', '')
+    // 闭包内 pre 邻接表（紧凑无歧义；图上 pre 只有名字列表，零边字段——边轻纪律同构）
+    lines.push('', '### 闭包内 pre 邻接（本视图的读侧派生；图上 pre 只有名字列表，零边字段）', '')
     for (const n of [...shown, node]) {
       const pres = graph.preOf[n].filter(inScope)
       lines.push(`- ${n} → ${pres.length ? pres.join('、') : '（根）'}`)
@@ -425,6 +420,10 @@ export interface CoachToolDeps {
  * 取材（invokes 解析/掌握度折叠）住在 growth-subsystem，工具面直接复用其渲染产物。 */
 export interface CoachToolProviders {
   behaviorDigestText: () => Promise<string>
+  /** 概念 → 节点 → 在库题数（concept_footprint 的足迹取材）。口径住 growth-subsystem
+   * 的题库扫描——本文件不自己扫库，避免与行为摘要的 invokes 折叠各写一份（两份口径
+   * 必然漂移：一处排除归档题、一处不排除，消费者读到两个不一样的「invokes 分布」）。 */
+  conceptInvokes: () => Promise<Map<string, Map<string, number>>>
 }
 
 /** 白名单八件的工具规格（JSON Schema 直通 provider function calling）。 */
@@ -477,7 +476,7 @@ export function coachToolExecutor(
       }
       case 'concept_footprint': {
         const q = argsOf(call).query
-        return renderConceptFootprint(deps, c, typeof q === 'string' ? q : undefined)
+        return renderConceptFootprint(deps, c, providers, typeof q === 'string' ? q : undefined)
       }
       case 'behavior_digest':
         return providers.behaviorDigestText()

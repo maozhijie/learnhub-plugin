@@ -593,7 +593,30 @@ export class GrowthSubsystem {
         const { graph, state } = await this.e.loadView(c)
         return renderBehaviorDigest(await this.behaviorDigestOf(c, graph, state, today, cutoff))
       },
+      conceptInvokes: () => this.conceptInvokesOf(c),
     })
+  }
+
+  /** 概念 → 节点 → 在库题数（concept_footprint 的足迹取材，与 invokesResolver 同源扫描）。
+   * 唯一的口径差异写在**这里**（不是散在两个文件里各写一份）：本口径只数**现役池**
+   * （排除归档题——足迹问的是「这个概念还能被哪些题行使」，归档题已不在出题池）；而
+   * invokesResolver 服务行为摘要的窗口聚合，归档与否由下游窗口按 practice 流水过滤，
+   * 故它不在这里排除。 */
+  private async conceptInvokesOf(c: CourseEntry): Promise<Map<string, Map<string, number>>> {
+    const entries = await this.e.concepts.load(c.root)
+    const out = new Map<string, Map<string, number>>()
+    await this.e.scanCourseBanks(c, async (node, bank) => {
+      for (const q of bank.questions) {
+        if (q.archived === true) continue
+        const inv = typeof q.invokes === 'string' ? q.invokes.trim() : ''
+        if (!inv) continue
+        const concept = resolveConcept(entries, inv)?.canonical ?? inv
+        let byNode = out.get(concept)
+        if (!byNode) out.set(concept, byNode = new Map())
+        byNode.set(node, (byNode.get(node) ?? 0) + 1)
+      }
+    })
+    return out
   }
 
   /** 行为摘要折叠（coachContextPack 与教练工具面 behavior_digest 共用的单次取材）：

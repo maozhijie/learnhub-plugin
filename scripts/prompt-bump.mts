@@ -109,7 +109,10 @@ export function markerVersionsOf(templateText: string): Set<number> {
   return new Set([...templateText.matchAll(MARKER_RE)].map(m => Number(m[1])))
 }
 
-/** 一份模板文件里**逐键**的版本号（键 → 版本；同键多标记取最后一个）。
+/** 一次遍历取两个读数：逐键版本号（键 → 版本；同键多标记取最后一个）+ 无法归属到键的
+ * 版本号集合（键的开行之前出现的标记——历史形态：标记曾住 `content.ts` 的散文/注释；
+ * 临时仓库夹具也照这个形态造）。**一趟解析，两份读数**——两个口径各走一遍同样的
+ * 「找开行 → 记住 lastKey → 扫标记」循环，必然有一天漂移成两套归属规则。
  *
  * 为什么必须逐键而不是全face集合并集：每个模板键的版本号是**各自独立**的计数（罗盘初画
  * v3 与 题目生成 v14 可以并存），所以「版本号 X」在不同键之间天然撞车。集合差的判据在这种
@@ -119,8 +122,9 @@ export function markerVersionsOf(templateText: string): Set<number> {
  * 键集合与版本号都照旧，只有比对粒度从「面的版本号集合」换成「键的版本号」。
  *
  * 搬迁不变式照旧成立：模板从旧路径挪到新路径时键与版本都不变 → 逐键比对同样判零变化。 */
-export function versionsByKeyOf(templateText: string): Map<string, number> {
-  const byKey = new Map<string, number>()
+export function templateVersionsOf(templateText: string): { keys: Map<string, number>; unkeyed: Set<number> } {
+  const keys = new Map<string, number>()
+  const unkeyed = new Set<number>()
   let lastKey: string | null = null
   for (const line of templateText.split('\n')) {
     // 模板值的开行：`    键: \`` 或 `    '键': \``（Markdown/纯文本键都可能带引号）
@@ -128,26 +132,11 @@ export function versionsByKeyOf(templateText: string): Map<string, number> {
     if (open) lastKey = open[1] ?? open[2]!
     for (const m of line.matchAll(MARKER_RE)) {
       // 标记可能在开行同行（``错误对比卡: `<!-- … -->``）或紧随其后一行
-      if (lastKey) byKey.set(lastKey, Number(m[1]))
+      if (lastKey) keys.set(lastKey, Number(m[1]))
+      else unkeyed.add(Number(m[1]))
     }
   }
-  return byKey
-}
-
-/** 无法归属到模板键的版本号（键的开行之前出现的标记——历史形态：标记曾住在
- * `content.ts` 的散文/注释里；临时仓库夹具也照这个形态造）。这类标记退回**集合差**
- * 口径判定（它们没有键可比），键可解析的那部分走逐键口径——两种口径互不干扰，
- * 各自的健全性都在（见 versionsByKeyOf 与 tests/prompt-changelog.test.ts 的自检）。 */
-export function unkeyedVersionsOf(templateText: string): Set<number> {
-  const out = new Set<number>()
-  let lastKey: string | null = null
-  for (const line of templateText.split('\n')) {
-    const open = /^\s+(?:'([^']+)'|([^\s:'`]+)):\s*`/.exec(line)
-    if (open) lastKey = open[1] ?? open[2]!
-    if (lastKey) continue
-    for (const m of line.matchAll(MARKER_RE)) out.add(Number(m[1]))
-  }
-  return out
+  return { keys, unkeyed }
 }
 
 /** 判定：每个新出现的版本号都必须在同一提交里有登记条目。违规行给出 sha/subject/版本。 */
@@ -200,9 +189,9 @@ function faceVersionsAt(ref: string, root: string): { keys: Map<string, number>;
   const unkeyed = new Set<number>()
   for (const f of TEMPLATE_FILES) {
     if (!refHasPath(ref, f, root)) continue
-    const text = git(['show', `${ref}:${f}`], root)
-    for (const [key, v] of versionsByKeyOf(text)) keys.set(key, v)
-    for (const v of unkeyedVersionsOf(text)) unkeyed.add(v)
+    const read = templateVersionsOf(git(['show', `${ref}:${f}`], root))
+    for (const [key, v] of read.keys) keys.set(key, v)
+    for (const v of read.unkeyed) unkeyed.add(v)
   }
   return { keys, unkeyed }
 }

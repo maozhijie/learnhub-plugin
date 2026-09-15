@@ -267,14 +267,8 @@ export class GraphSubsystem {
       const hit = b.nodes.find(n => n.name === node)
       if (hit) { gnode = hit; break }
     }
-    // 前置传递闭包（沿 pred BFS；不含自身），按深度降序=先学在前
-    const seen = new Set<string>([node])
-    const queue = [node]
-    while (queue.length) {
-      const u = queue.shift()!
-      for (const p of graph.preOf[u]) if (!seen.has(p)) { seen.add(p); queue.push(p) }
-    }
-    const closure = [...seen].filter(n => n !== node)
+    // 前置传递闭包（Graph.upstreamClosure 单一出处；不含自身），按深度降序=先学在前
+    const closure = [...graph.upstreamClosure(node)].filter(n => n !== node)
       .sort((a, b) => (graph.depth[b] ?? 0) - (graph.depth[a] ?? 0))
     const fm = state[node]
     return {

@@ -102,8 +102,8 @@ function bestMatch(bad: string, candidates: string[]): string {
  * 登记表 canonical；add_node 的 name 是新节点名，合法地不在图上，不作对表。 */
 function selfCheckCorrect(draft: string, graphView: string, registryText: string): string {
   const nodeNames = [...graphView.matchAll(/^- (.+?)（/gm)].map(m => m[1]!)
-  // #250 起图面是逐节点一行（`- 名（dN｜区·块｜…`）——区名在深度段之后
-  const regions = [...new Set([...graphView.matchAll(/^- .+?（d\d+｜(.+?)·.+?｜/gm)].map(m => m[1]!))]
+  // #250 起图面是逐节点一行（`- 名（深度 N｜区·块｜…`）——区名在深度段之后
+  const regions = [...new Set([...graphView.matchAll(/^- .+?（深度 \d+｜(.+?)·.+?｜/gm)].map(m => m[1]!))]
   // #249 起概念面是 concept_footprint：词条档以 `### <canonical>` 分节
   const concepts = [...registryText.matchAll(/^### (.+?)(?: *｜|$)/gm)].map(m => m[1]!)
   // 本批新建节点是后续 op（终点接线 set_pre）的合法 pre 取值域（与受理门同口径）
