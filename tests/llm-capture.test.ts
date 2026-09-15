@@ -9,6 +9,7 @@
  * - runtime 装配：createHostRuntime 接好 rt.corpus 与双缝——无 llm 的假 ctx 走到
  *   适配器即抛错，failed 捕获落盘（state/生成语料/<站>/bad-*.md）。
  */
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
@@ -103,7 +104,7 @@ test('捕获：调用级失败记 failed+稳定码，错误原样上抛', async 
 test('贯通：AgentSeam 站/形态/语义档下行进语料，usage 沿 usageSink 回程进 AgentCallRecord', async () => {
   const { cap, root } = makeCap()
   const records: AgentCallRecord[] = []
-  const agent = new AgentSeam({
+  const agent = new AgentSeam({ logger: memLogger(),
     complete: llmSeam(fakeLlmCtx(OK_STREAM), cap.record),
     onCall: r => records.push(r),
   }, systemClock)
@@ -131,7 +132,7 @@ test('贯通：AgentSeam 站/形态/语义档下行进语料，usage 沿 usageSi
 test('捕获：agentLoop 回路调用进语料（station 沿请求、kind=loop、提示词可读渲染）', async () => {
   const { cap, root } = makeCap()
   const records: AgentCallRecord[] = []
-  const agent = new AgentSeam({
+  const agent = new AgentSeam({ logger: memLogger(),
     complete: llmSeam(fakeLlmCtx(OK_STREAM), cap.record),
     stream: llmStreamSeam(fakeLlmCtx(OK_STREAM), cap.record),
     onCall: r => records.push(r),
@@ -159,7 +160,7 @@ test('装配：createHostRuntime 接好 rt.corpus 与双缝——无 llm 假 ctx
   mkdirSync(join(vault, '学习中心'), { recursive: true })
   try {
     const rt: HostRuntime = createHostRuntime({ tools: { register: () => () => undefined } } as unknown as Context,
-      { vault, centerRel: '学习中心' })
+      { vault, centerRel: '学习中心', logger: memLogger() })
     assert.ok(rt.corpus)
     assert.equal(rt.corpus.lastRef('不存在站'), undefined)
     await assert.rejects(() => rt.agent.complete('种子起草', 'p', { effort: 'fast' }))
@@ -225,7 +226,7 @@ test('#236 回路提示词段：上一轮请求的工具参数随历史进下一
       }),
     },
   } as unknown as Context
-  const agent = new AgentSeam({ complete: async () => '', stream: llmStreamSeam(scripted, cap.record) }, systemClock)
+  const agent = new AgentSeam({ logger: memLogger(), complete: async () => '', stream: llmStreamSeam(scripted, cap.record) }, systemClock)
   try {
     const r = await agent.agentLoop({
       station: '教练生长', prompt: '回路任务', tools: [{ name: 'read_graph', description: '只读工具', parameters: {} }],

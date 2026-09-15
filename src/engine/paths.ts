@@ -48,7 +48,10 @@ export class Paths {
   get snapshotDir(): string { return `${this.centerStateDir}/snapshots` }
   get dashboardPath(): string { return `${this.centerRoot}/学习仪表盘.md` }
   get recoveryStatePath(): string { return `${this.centerStateDir}/recovery_state.json` }
-  get runLogPath(): string { return `${this.centerStateDir}/运行日志.md` }
+  /** 调试日志落点（#253 / ADR-0080）：`state/logs/<本地日历日>.log`——「观测面写侧住
+   * host，engine 只登记路径」（`corpusDir`／`qualityReviewDir` 同款）。文件名用日历日，
+   * 与「学习日」无关（出处戳永远用日历日，词条「学习日」）。 */
+  get logsDir(): string { return `${this.centerStateDir}/logs` }
   get promptDir(): string { return `${this.centerStateDir}/提示词` }
   /** 生成语料（#213 / ADR-0060）：`state/生成语料/<站>/`——真实模型调用的原始产出
    * 存档（frontmatter+提示词+原始输出），解析器回归 fixture 源 / 质量评审抽样池 /

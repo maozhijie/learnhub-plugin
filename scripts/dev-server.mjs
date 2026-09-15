@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { join, resolve, sep, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { LearnhubEngine } from '../lib/engine.js'
+import { LearnhubEngine, noopLogger } from '../lib/engine.js'
 
 const vault = process.argv[2]
 const port = Number(process.argv[3] ?? 3210)
@@ -19,7 +19,7 @@ if (!vault) {
 }
 const DIST = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'dist')
 const VENDOR = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'vendor')
-const engine = new LearnhubEngine({ vault })
+const engine = new LearnhubEngine({ vault, logger: noopLogger })
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png',

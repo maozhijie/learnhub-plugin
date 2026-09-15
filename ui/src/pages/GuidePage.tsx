@@ -61,7 +61,7 @@ export default function GuidePage() {
       <Card size='small' title='怎么跟 agent 协作'>
         <Text type='secondary' className='lh-t-12 lh-block'>
           1. 在 dsh 会话里用自然语言说需求（上面每条的示例指令可直接粘贴）；agent 调用 learnhub 工具完成动作，
-          全部调用留痕在学习中心 state/运行日志.md。
+          全部调用留痕在学习中心 state/logs/ 下的按日文件里（调试日志，每天一个 .log）。
         </Text>
         <Text type='secondary' className='lh-t-12 lh-block'>
           2. 改动走提案-确认或显式确认的通道（提案在「课程 → 提案收件箱」人审；清理/归档在单课工作台的

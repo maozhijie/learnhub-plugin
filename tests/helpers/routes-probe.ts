@@ -16,6 +16,8 @@
  *   ③ 响应写出（`res.end`）即冻结：之后的 fire-and-forget（教练触点、队列泵）不入快照
  *      （它们由 jobs 侧测试覆盖；这里只要「响应前的调用序列」这一份确定性切片）。
  */
+import { settleQuiet } from './settle.ts'
+import { memLogger } from './logger.ts'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -162,18 +164,20 @@ function fakeReq(spec: ProbeSpec): IncomingMessage {
 
 /** 跑一条探针：全新 runtime + 录制式引擎 + 假 req/res。 */
 export async function runProbe(spec: ProbeSpec): Promise<ProbeResult> {
-  const rt = createHostRuntime(fakeCtx(), { vault: probeVault(), centerRel: '学习中心' })
+  const rt = createHostRuntime(fakeCtx(), { vault: probeVault(), centerRel: '学习中心', logger: memLogger() })
   const recorder = shadowEngine(rt)
   const out = { status: 0, res: undefined as unknown }
   const res = {
     writeHead: (code: number) => { out.status = code },
+    // 不在这里 stop：响应返回 ≠ 后台链收尾（见 settleQuiet）
     end: (data?: unknown) => {
-      recorder.stop()
       const text = data === undefined ? '' : String(data)
       try { out.res = text ? JSON.parse(text) : null } catch { out.res = text }
     },
   } as unknown as ServerResponse
   await handleApi(rt, fakeCtx(), fakeReq(spec), res)
+  await settleQuiet(recorder, rt.flags)
+  recorder.stop()
   return { status: out.status, res: out.res, calls: recorder.calls }
 }
 

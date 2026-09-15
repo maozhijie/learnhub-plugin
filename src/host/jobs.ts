@@ -28,7 +28,7 @@ import {
 } from '../generation-jobs.ts'
 import { SECTION_PREV_TAIL_HEADING } from '../engine/prompts/host.ts'
 import { contentEffort, llmCfg, llmSeam, llmSeamStripped } from './llm.ts'
-import { runLog } from './runtime.ts'
+import { logCall } from './runtime.ts'
 import type { GenJob, HostRuntime } from './runtime.ts'
 import { STATIONS } from './corpus.ts'
 
@@ -404,7 +404,7 @@ export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<n
     // 写回闸拒绝（#194）：清扫会触发注册表全量落盘——跳过并留痕（不抛：apply 出口
     // 等调用方不被任务档损坏牵连，清扫延后到修档重启）
     const why = rt.flags.genQueueBroken
-    void runLog(rt, 'gen_jobs_sweep', `任务档 broken，清扫跳过（修档重启后恢复）：${why}`).catch(() => undefined)
+    rt.logger.warn('host.gen_jobs.restore_failed', { error: `任务档 broken，清扫跳过（修档重启后恢复）：${why}` })
     return 0
   }
   const perCourse = new Map<string, Promise<Set<string> | null | undefined>>()
@@ -486,10 +486,9 @@ export function triggerPlanGrowth(rt: HostRuntime, ctx: Context, result: { kind?
   for (const t of result.growth) {
     try {
       const r = enqueueGrowthBatch(rt, ctx, t.course, '里程碑计划修订（换线/补支）', t.lines.join('\n'))
-      void runLog(rt, 'coach_growth', r.message).catch(() => undefined)
+      logCall(rt, 'coach_growth', r.message)
     } catch (err) {
-      void runLog(rt, 'coach_growth', `「${t.course}」计划修订生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
-        .catch(() => undefined)
+      logCall(rt, 'coach_growth', `「${t.course}」计划修订生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
     }
   }
 }
@@ -505,7 +504,7 @@ export async function afterGraphApply(rt: HostRuntime): Promise<void> {
 
 /** 教练回合触发统一出口（五点接线，词条「教练回合」）：就绪深度检查 → 低于前瞻的课程
  * 入队生长批（自动触点走阻尼；显式触点 force 豁免停摆/暂不产结构——显式重新裁决）→
- * 运行日志。触发点：node_complete / node_skip（各自路由）、session_start（节流）、
+ * 调试日志。触发点：node_complete / node_skip（各自路由）、session_start（节流）、
  * queue_idle（生成泵排空）、panel_dispatch（「生长一步」按钮直达入队，不走本函数的检查）。
  * 返回人读摘要（调用方留痕）。 */
 async function coachTrigger(rt: HostRuntime, ctx: Context, trigger: CoachTrigger, courseKey?: string, opts: { force?: boolean } = {}): Promise<string> {
@@ -522,21 +521,21 @@ async function coachTrigger(rt: HostRuntime, ctx: Context, trigger: CoachTrigger
     }
   }
   const summary = lines.join('；')
-  await runLog(rt, `coach_checkpoint(${trigger})`, summary).catch(() => undefined)
+  logCall(rt, `coach_checkpoint(${trigger})`, summary)
   return summary
 }
 
 /** 会话开始检查点的节流窗（检查点是逐课程读侧 loadView，不能跟着 5s 轮询跑）。 */
 const SESSION_START_THROTTLE_MS = 30 * 60_000
 
-/** 教练触点的 fire-and-forget 包装（路由/状态入口侧）：失败只留运行日志，不挡原动作。 */
+/** 教练触点的 fire-and-forget 包装（路由/状态入口侧）：失败只留调试日志，不挡原动作。 */
 export function coachTriggerDetached(rt: HostRuntime, ctx: Context, trigger: CoachTrigger, courseKey?: string, opts: { force?: boolean } = {}): void {
   void coachTrigger(rt, ctx, trigger, courseKey, opts)
-    .catch(err => runLog(rt, `coach_checkpoint(${trigger})`, `调用失败：${err instanceof Error ? err.message : String(err)}`).catch(() => undefined))
+    .catch(err => logCall(rt, `coach_checkpoint(${trigger})`, `调用失败：${err instanceof Error ? err.message : String(err)}`))
 }
 
 /** 会话开始触点（节流 30 分钟）：面板打开（GET /status）与 agent 会话开工
- * （learnhub_status）共用入口，fire-and-forget——失败只留运行日志。 */
+ * （learnhub_status）共用入口，fire-and-forget——失败只留调试日志。 */
 export function sessionStartCheckpoint(rt: HostRuntime, ctx: Context): void {
   const now = Date.now()
   if (now - rt.flags.lastSessionStartAt < SESSION_START_THROTTLE_MS) return
@@ -622,7 +621,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, `${job.course}/${job.node}`, job.status)
-    void runLog(rt, `graph_job(${job.phase})`, `「${job.course}」${job.message}`).catch(() => undefined)
+    logCall(rt, `graph_job(${job.phase})`, `「${job.course}」${job.message}`)
   }
 }
 
@@ -684,7 +683,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
         const n = await rt.engine.growth2.stuckMarkConsumed(job.course, stuckTargets)
         if (n > 0) {
           job.message += `｜已消费卡点自报 ${n} 条`
-          void runLog(rt, 'stuck_report', `「${job.course}」教练回合已消费 ${n} 条卡点自报`)
+          logCall(rt, 'stuck_report', `「${job.course}」教练回合已消费 ${n} 条卡点自报`)
         }
       } catch { /* 留账不丢，下一回合重新消费 */ }
     }
@@ -695,7 +694,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
-    void runLog(rt, 'coach_growth', `「${job.course}」生长批：${job.message}`)
+    logCall(rt, 'coach_growth', `「${job.course}」生长批：${job.message}`)
   }
 }
 
@@ -725,12 +724,12 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
       rt.flags.pumping = false
       // 队列空闲触发点（#144 → 五点接线）：生成队列排空 → 教练回合就绪深度检查，
       // 低于前瞻的课程随后入队生长批（#145：自动拉批只在检查点之后入队——FIFO 不插队，
-      // 重拉阻尼见 enqueueGrowthBatch）。失败只留运行日志，不挡生成泵。
+      // 重拉阻尼见 enqueueGrowthBatch）。失败只留调试日志，不挡生成泵。
       if (!nextQueuedJob([...rt.jobs.genJobs.values()])) {
         void coachTrigger(rt, ctx, 'queue_idle')
           .then(() =>
             // 复诊结算钩子（#146）：队列空闲时自动结算到期插入边（零人审：proven｜
-            // 自动剪除）；失败只留运行日志，不挡泵——到期未决由 data-check 提示类可见。
+            // 自动剪除）；失败只留调试日志，不挡泵——到期未决由 data-check 提示类可见。
             rt.engine.growth2.settleRechecks())
           .then(r => {
             if (!r) return
@@ -738,14 +737,13 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
             for (const c of r.courses) {
               if (!c.settled.length) continue
               settledAny = true
-              runLog(rt, 'probation_settle', `「${c.course}」复诊结算：${c.settled.map(s =>
+              logCall(rt, 'probation_settle', `「${c.course}」复诊结算：${c.settled.map(s =>
                 `${s.node}→${s.outcome}${s.metric ? `（${s.metric}）` : ''}`).join('；')}`)
-                .catch(() => undefined)
             }
             // 复诊不达标自动剪除会删节点（无人审 del_node，ADR-0039 写侧联动）
             if (settledAny) return sweepGenJobs(rt)
           })
-          .catch(err => runLog(rt, 'coach_checkpoint(queue_idle)', `调用失败：${err instanceof Error ? err.message : String(err)}`))
+          .catch(err => logCall(rt, 'coach_checkpoint(queue_idle)', `调用失败：${err instanceof Error ? err.message : String(err)}`))
       }
       pumpGeneration(rt, ctx)
     })
@@ -754,7 +752,7 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
 /** 纯出题任务执行（#118）：单次 questionGenerate（定向补节/指令/题量随任务携带），
  * 取消旗标逐题生效；终态与保留期与节点管线同语义。出题档位显式声明（#228）：
  * 随节点难度 contentEffort（高复杂度 deep、否则 fast），不再走部署默认；档位缺失
- * 折叠 fast（同管线兜底口径），运行日志留档位记录供成本对照。 */
+ * 折叠 fast（同管线兜底口径），调试日志留档位记录供成本对照。 */
 async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Promise<void> {
   const key = `${job.course}/${job.node}`
   job.status = 'running'
@@ -794,7 +792,7 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
-    void runLog(rt, 'quiz_job', `「${job.course}/${job.node}」${job.message}（节点档位 ${job.tier ?? '?'}；出题 effort=${quizEffort}）`).catch(() => undefined)
+    logCall(rt, 'quiz_job', `「${job.course}/${job.node}」${job.message}（节点档位 ${job.tier ?? '?'}；出题 effort=${quizEffort}）`)
     // 结果暂存（agent 工具读取用）随终态保留期一并清理
     setTimeout(() => rt.jobs.quizJobResults.delete(key), generationJobRetentionMs(job.status)).unref()
   }
@@ -968,8 +966,10 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
   } finally {
     // 终态保留：失败/取消/部分完成留 24h 供排查与重试，成功留 30 分钟；之后清出注册表
     scheduleJobRetention(rt, key, job.status)
-    // 档位记录（#228）：正文初跑与两路出题的 effort 都随节点难度声明，运行日志留痕供成本对照
-    void runLog(rt, 'content_job', `「${course}/${node}」${job.message ?? ''}（节点档位 ${job.tier ?? '?'}；正文/出题 effort=${contentEffort(job.tier === '高')}）`).catch(() => undefined)
+    // 档位记录（#228）：正文初跑与两路出题的 effort 都随节点难度声明，调试日志留痕供成本对照
+    rt.logger.info('content.job', {
+      course, node, tier: job.tier ?? '?', effort: contentEffort(job.tier === '高'), message: job.message ?? '',
+    })
   }
 }
 
@@ -1159,7 +1159,7 @@ export function restoreGenJobs(rt: HostRuntime): void {
       // 只罩读档：broken 语义 = 任务档损坏；恢复内环的意外错误归链尾 catch，不误锁写回闸。
       rt.flags.genQueueBroken = err instanceof Error ? err.message : String(err)
       console.error(`[learnhub] gen-jobs restore failed: ${rt.flags.genQueueBroken}`)
-      void runLog(rt, 'gen_jobs_restore', `生成任务档恢复失败，队列置 broken 态：${rt.flags.genQueueBroken}`).catch(() => undefined)
+      rt.logger.warn('host.gen_jobs.restore_failed', { error: `生成任务档恢复失败，队列置 broken 态：${rt.flags.genQueueBroken}` })
       return null
     })
     .then(async stale => {
@@ -1230,6 +1230,11 @@ export function restoreGenJobs(rt: HostRuntime): void {
       const aliveQueued = [...rt.jobs.genJobs.values()].filter(j => j.status === 'queued').length
       if (aliveQueued > 0) rt.flags.queuePaused = true
       persistGenJobs(rt)
+      // 恢复留痕（#253 / ADR-0080 `host.gen_jobs.restored`）：此前只有 console（进程关了
+      // 就没了），排查「重启后任务为什么是 failed」时看不到恢复当时扫掉了什么。
+      rt.logger.info('host.gen_jobs.restored', {
+        stale: stale.length, swept, queued_paused: aliveQueued,
+      })
       if (stale.length) {
         console.log(`[learnhub] gen-jobs restored: ${stale.length} (swept ${swept} dangling/expired${aliveQueued ? `, ${aliveQueued} queued paused` : ''})`)
       }
@@ -1239,6 +1244,6 @@ export function restoreGenJobs(rt: HostRuntime): void {
       // 内环错误与档无关，误标会把写回闸锁在非损坏态上
       const msg = err instanceof Error ? err.message : String(err)
       console.error(`[learnhub] gen-jobs restore error: ${msg}`)
-      void runLog(rt, 'gen_jobs_restore', `生成任务恢复内环失败：${msg}`).catch(() => undefined)
+      rt.logger.warn('host.gen_jobs.restore_failed', { error: `生成任务恢复内环失败：${msg}` })
     })
 }

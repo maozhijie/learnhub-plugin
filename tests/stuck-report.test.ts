@@ -6,6 +6,7 @@
  * - 宿主编排缝：落账 → force 入队 → 在途合并 → 消费标记 → 异常不丢账
  *   （先例 host-runtime.test.ts 的影子引擎桩）。
  */
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -191,7 +192,9 @@ function fakeCtx(): Context {
 
 /** 独立 runtime：与 withVault 同 vault 建第二个引擎实例（宿主侧），vault 生命周期归 withVault。 */
 function makeRt(vault: string): HostRuntime {
-  return createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心' })
+  // 内存 logger（#253 / ADR-0080）：真写盘是 fire-and-forget，会与 withVault 的临时
+  // vault 清理抢时序（实测 ENOTEMPTY），且本文件不消费日志
+  return createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心', logger: memLogger() })
 }
 
 function stub(rt: HostRuntime, methods: Record<string, unknown>): void {

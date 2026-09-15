@@ -6,9 +6,12 @@ import { addDays, todayStr } from '../src/engine/dates.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { parseCompass, sectionBody, SECTION_ROUTE, SECTION_ANNOTATIONS } from '../src/engine/compass.ts'
 import { withVault, noteText } from './helpers/vault.ts'
+import type { VaultHandle } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import type { DraftSpec } from './helpers/drafted.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
+import { memLogger } from './helpers/logger.ts'
+import type { MemLogger } from './helpers/logger.ts'
 
 // 生长批受理（#145/#150 / ADR-0033 滚动教练的裁决产物面）：
 // - 教练回合三段式 effort：显然步轻量段（fast，行为摘要+罗盘+图面）恒 1 次调用；
@@ -20,6 +23,13 @@ import { AgentSeam } from '../src/engine/agent.ts'
 // - 裁决语义在提示词不测——金样本只锁组装与 schema（首过率/调用数基线对照）。
 
 const SEED_VAULT = { registry: null, graph: null }
+
+/** 带**断言用** logger 的 vault（#253 / ADR-0080：日志是一等验收面——「有没有跑过回灌
+ * 重裁」只能从事件序列看出来）。引擎侧确定性：内存实现，零盘面噪声。 */
+async function withLoggedVault<T>(run: (h: VaultHandle & { log: MemLogger }) => Promise<T>): Promise<T> {
+  const log = memLogger()
+  return withVault({ ...SEED_VAULT, logger: log }, async h => run({ ...h, log }))
+}
 
 /** 画面里的金样本裁决（模板输出契约：course + note + route + ops [+ concepts]）。
  * ops 缺省 = 默认前进批；ops = [] 显式零操作（ops: []）；concepts = 顶层铸名块。
@@ -93,7 +103,10 @@ function scriptFake(
   }> = []
   const queue = sessions.map(s => [...(typeof s === 'string' ? [{ text: s }] : s)] as LoopScriptTurn[])
   let current: LoopScriptTurn[] = []
+  // #253 / ADR-0080：缝自持 logger——`agent.gate.repair` 等四条门事件由此可断言
+  const gateLog = memLogger()
   const seam = new AgentSeam({
+    logger: gateLog,
     complete: async (prompt, system, opts) => {
       calls.push({ prompt, system, effort: opts?.effort })
       if (!repairReplies.length) throw new Error('脚本化补全端口：回灌重裁应答已耗尽')
@@ -110,7 +123,7 @@ function scriptFake(
       return { text: next.text, toolCalls: next.toolCalls ?? [] }
     },
   }, systemClock)
-  return Object.assign(seam, { calls, requests })
+  return Object.assign(seam, { calls, requests, gateLog })
 }
 
 async function seedApplied(engine: Awaited<ReturnType<typeof withVault>>['engine']): Promise<void> {
@@ -145,7 +158,7 @@ ops:
 }
 
 test('AC1 金样本全链：轻量段单次 fast 调用、提案应用、罗盘同事务重写、journal 挂提案 id', async () => {
-  await withVault(SEED_VAULT, async ({ engine, paths }) => {
+  await withLoggedVault(async ({ engine, paths, log }) => {
     await seedApplied(engine)
     const compassPath = paths.compassPath('数学')
     const annotations = '我想快点走到优化应用。'
@@ -161,6 +174,14 @@ test('AC1 金样本全链：轻量段单次 fast 调用、提案应用、罗盘�
 
     // 组装与调用数基线：显然步恒 1 次调用、fast 档、轻量包（无终点锚/误解目录区块）
     assert.equal(fake.calls.length, 1, '调用数基线：显然步轻量段恒一次调用（无修复轮）')
+    // #253 / ADR-0080：首过轮的日志形态——「没跑回灌重裁」= `coach.repair.trigger` 缺席
+    assert.deepEqual(log.events().filter(e => e.startsWith('coach.')),
+      ['coach.round.enter', 'coach.segment.enter', 'coach.segment.exit', 'coach.round.result'],
+      '首过：轻量段进出各一条 + 回合进出，零 repair.trigger')
+    // 缝侧事件走缝自己的 logger（站点缝是测试造的假实现，不共享 vault 的 logger）
+    assert.equal(fake.gateLog.nth('agent.gate.first')!.fields.verdict, 'pass')
+    assert.equal(fake.gateLog.count('agent.gate.repair'), 0, '首轮过门 = 重试轮没跑（一眼判据）')
+    assert.equal(log.nth('coach.round.result')!.fields.repaired, false)
     assert.equal(fake.calls[0]!.effort, 'fast')
     assert.match(fake.calls[0]!.prompt, /教练回合提示词/, '模板在前')
     assert.match(fake.calls[0]!.prompt, /轻量段——只带行为摘要与罗盘/, '轻量上下文包')
@@ -601,7 +622,7 @@ test('schema 门畸形仍败：重裁产出仍未过 schema 门 → 原样失败
 })
 
 test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错误回灌重裁段 → 合法产出进受理门', async () => {
-  await withVault(SEED_VAULT, async ({ engine }) => {
+  await withLoggedVault(async ({ engine, log }) => {
     await seedApplied(engine)
     // 首轮裁决引用图上不存在的区（实机死法）：过 schema 门（区是自由字符串）、
     // 被 propose 受理门拒（add_node 区不存在）；重裁段产出合法裁决 → 提案照常受理
@@ -623,6 +644,17 @@ test('#157 回灌重裁：受理门拒收（引用不存在的区）→ 门错�
     assert.equal(r.segments[1]!.effort, 'deep')
     assert.equal(r.proposal!.operator, '前进')
     assert.equal(r.applied!.created.join(','), '平均变化率')
+    // #253 / ADR-0080 主验收物：**「到底有没有跑过回灌重裁」从日志一眼可见**——
+    // 坏例 bad-2026-09-14-0021 当时不可观测的就是这一步。
+    assert.equal(log.count('coach.repair.trigger'), 1, '重裁触发：主判据在场且恰一次')
+    assert.equal(fake.gateLog.count('agent.gate.repair'), 1, '缝侧同口径（车站=教练生长）')
+    assert.equal(fake.gateLog.nth('agent.gate.repair')!.fields.station, '教练生长')
+    assert.equal(fake.gateLog.nth('agent.gate.first')!.fields.verdict, 'reject')
+    assert.equal(fake.gateLog.nth('agent.gate.first')!.fields.station, '教练生长')
+    assert.equal(log.nth('coach.gate.reject')!.fields.gate, 'propose', '受理门（propose）拒收留痕')
+    assert.equal(log.nth('coach.segment.exit')!.fields.schema, 'ok', '重裁段过 schema 后正常退出')
+    assert.equal(log.nth('coach.round.result')!.fields.repaired, true)
+    assert.equal(log.nth('coach.round.result')!.fields.segments, 'light,repair')
   })
 })
 

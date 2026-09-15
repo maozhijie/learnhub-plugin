@@ -95,7 +95,7 @@ export interface ChannelSpec {
   required?: string[]
   /** 前缀路由（今天唯一一条：GET /vendor/）。 */
   prefix?: boolean
-  /** 本通道是否记运行日志（`apiRun` 包装）；省略＝记。实测 3 条面板路由直调不包 `apiRun`
+  /** 本通道是否记调试日志（`apiRun` 包装 → `engine.call`）；省略＝记。实测 3 条面板路由直调不包 `apiRun`
    * （`/question-save`、`/question-add`、`/question-archive`），原样保留。 */
   log?: boolean
 }

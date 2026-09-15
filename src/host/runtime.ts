@@ -5,17 +5,19 @@
  * （部署路径）、jobs（生成任务注册表 + 出题结果表）与 flags
  * （queuePaused/pumping/lastSessionStartAt）。技术层函数一律收 runtime 参数（不在函数
  * 体内引用模块级状态），因此每个技术层函数在测试里都可用自造 runtime 直接调用——宿主
- * 第一次可测。除常量外宿主模块级 let 归零。本文件同时承载跨技术层共享的运行日志工具
- * （stripFences 已随缝归位 engine/agent.ts）与部署路径校验/首启 seed。
+ * 第一次可测。除常量外宿主模块级 let 归零。本文件同时承载跨技术层共享的引擎调用留痕
+ * （`logCall`／`run`／`apiRun`；#253 / ADR-0080 起写结构化调试日志，不再追加
+ * `state/运行日志.md`）与部署路径校验/首启 seed。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { appendFile, mkdir } from 'node:fs/promises'
 import { AgentSeam, LearnhubEngine, DEFAULT_QUIZ_AUDIT_RATE, CURRENT_SCHEMA_VERSION } from '../engine/index.ts'
+import type { Logger } from '../engine/index.ts'
 import type { GenJobFailure, GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
 import { createCorpusCapture } from './corpus.ts'
 import type { CorpusCapture } from './corpus.ts'
+import { createFileLogger } from './log-file.ts'
 import { mathRng, systemClock } from './clock.ts'
 import { nodeVaultFs } from './vault-fs.ts'
 
@@ -40,6 +42,11 @@ export interface LearnhubConfig {
    * 评审抽样——临时 vault 随跑随删，不覆盖的话冒烟的语料一件都留不下）。缺省 = 本 vault
    * 的 `state/生成语料`。 */
   corpusDir?: string
+  /** 调试日志实现覆盖（#253 / ADR-0080）：**测试与排障**用——缺省按 `${center}/state/logs`
+   * 建文件 logger。测试注入内存假实现是必需而非便利：日志是 fire-and-forget 的，真写盘会
+   * 与测试自己的临时 vault 清理抢时序（实测 `ENOTEMPTY: directory not empty`：日志在
+   * `rm(root, {recursive})` 之后重新建了 `state/logs`）。生产不设此项。 */
+  logger?: Logger
 }
 
 /** 课程生成任务注册表（course/node 键）：面板「生成」页签的状态源，
@@ -122,6 +129,10 @@ export interface HostRuntime {
   corpus: CorpusCapture
   vault: string
   centerRel: string
+  /** 调试日志端口（#253 / ADR-0080）：宿主唯一观测面——`engine.call`／`agent.call`／
+   * 各生成任务留痕都经它。实现是 `host/log-file.ts` 的文件 logger（按天 + 保留期 + 上限），
+   * 级别门住在那里（引擎侧不判级别）。 */
+  logger: Logger
   jobs: HostJobs
   flags: HostFlags
   /** 出题第二意见门抽样率（#223）：config 缺省 0.25（DEFAULT_QUIZ_AUDIT_RATE），0 = 关门；
@@ -157,30 +168,39 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     mkdirSync(`${center}/state`, { recursive: true })
     writeFileSync(freshConfigPath, JSON.stringify({ schema: { version: CURRENT_SCHEMA_VERSION, formats: {} } }, null, 1) + '\n', 'utf8')
   }
-  const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng, fs: nodeVaultFs })
+  // —— 调试日志（#253 / ADR-0080）：宿主唯一观测面的实现。落点镜像 `Paths.logsDir`
+  //（`state/logs/<本地日历日>.log`；路径的**登记处**仍是 Paths，写侧住宿主——与上方
+  // 出生盖戳的 `state/learnhub.json` 同款：本文件按中心根拼路径）。级别门、按天切分、
+  // 保留期与单日上限全在实现里（引擎侧不判级别、不读环境）。 ——
+  const logger = config?.logger ?? createFileLogger({ dir: `${center}/state/logs` })
+  const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng, fs: nodeVaultFs, logger })
   // —— 生成语料捕获器（#213 / ADR-0060）：缝出口全量落盘的 sink，构造先于 agent 缝
   //（llmSeam/llmStreamSeam 装配时接它）。写盘异步 fire-and-forget、故障静默。 ——
   const corpus = createCorpusCapture(config?.corpusDir ? config.corpusDir.replace(/\\/g, '/') : engine.paths.corpusDir)
   // —— 统一 agent 缝装配（#162）：端口适配住 host/llm.ts 唯一适配文件，投递层只构造
-  // 与注入；调用日志沿缝贯通、注入侧可观测（console + 运行日志）。 ——
+  // 与注入；调用日志沿缝贯通、注入侧可观测（console + 调试日志 `agent.call`）。 ——
   let rtRef: HostRuntime | undefined
   const agent = new AgentSeam({
     complete: llmSeam(ctx, corpus.record),
     stream: llmStreamSeam(ctx, corpus.record),
+    logger,
     onCall: r => {
       const usage = r.usage ? ` · tok ${r.usage.inputTokens}/${r.usage.outputTokens}${r.usage.reasoningTokens !== undefined ? `+${r.usage.reasoningTokens}` : ''}` : ''
       console.info(`[learnhub:agent] ${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符${usage}`)
-      if (rtRef) {
-        void runLog(rtRef, 'llm_call',
-          `${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符${usage}`)
-          .catch(() => undefined)
-      }
+      // token 是否随路由上报由 provider 决定：缺则不造字段（不写 `tokens=undefined`）
+      rtRef?.logger.info('agent.call', {
+        station: r.station, mode: r.mode, call_no: r.callNo,
+        ...(r.effort !== undefined ? { effort: r.effort } : {}),
+        ms: r.durationMs, prompt_chars: r.promptChars, reply_chars: r.replyChars,
+        ...(r.usage ? { tokens: `${r.usage.inputTokens}/${r.usage.outputTokens}${r.usage.reasoningTokens !== undefined ? `+${r.usage.reasoningTokens}` : ''}` } : {}),
+      })
     },
   }, systemClock)
   const rt: HostRuntime = {
     engine, agent, corpus,
     vault,
     centerRel,
+    logger,
     jobs: { genJobs: new Map(), quizJobResults: new Map() },
     flags: { queuePaused: false, pumping: false, lastSessionStartAt: 0, genQueueBroken: null },
     quizAuditRate,
@@ -189,8 +209,54 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
   return rt
 }
 
-/** 单条运行日志输出截断上限（与 OB 插件同源）。 */
-const LOG_LIMIT = 1500
+/** 引擎调用留痕（前身 `runLog`，markdown 追加 → 结构化事件；#253 / ADR-0080）：
+ * `engine.call` 一行（`tool` + `chars`）+ 摘要续行。`summary` 必须是**摘要不是原文**
+ * ——「不落原文」是本票的隐私面纪律（原文已在生成语料与 `journal.jsonl`；日志会被人
+ * `rg` 与贴进排查对话）：`run`／`apiRun` 出口经 `summarize`，其余站点给的本来就是
+ * 宿主自产的事件一句话。截断与失败静默都不在这里——那是宿主日志实现的事。
+ *
+ * **对坏输入容错**：入口只声明 `string`，但这条链上游是引擎出口与桩替身，实际可能
+ * 拿到 `undefined`（旧 `runLog` 靠一个把 `output.length` 包进去的 try/catch 顺带容错，
+ * 换代时那个隐式行为一度丢过——探针快照当场把它抓了出来）。**日志故障绝不上浮成主流程
+ * 故障**是本票的硬纪律，故这里显式归一而不是靠调用方守规矩。 */
+export function logCall(rt: HostRuntime, tool: string, summary: string): void {
+  const text = typeof summary === 'string' ? summary.trim() : ''
+  rt.logger.info('engine.call', { tool, chars: text.length, detail: [text || '（无输出）'] })
+}
+
+/** 输出摘要（不落原文：首行截断 + 行数索引）。行数用 `match` 数换行，**不按行切分**
+ * ——`src/` 的手写行切分属 JSONL 读侧受控原语（ADR-0053 单一实现，门见
+ * `tests/jsonl-contract.test.ts`），这里不是 JSONL 读，别去动那道门的白名单。 */
+function summarize(output: unknown): string {
+  const text = typeof output === 'string' ? output.trim() : ''
+  if (!text) return '（无输出）'
+  const breakAt = text.indexOf('\n')
+  const head = (breakAt < 0 ? text : text.slice(0, breakAt)).slice(0, 200)
+  const lines = 1 + (text.match(/\n/g)?.length ?? 0)
+  return lines > 1 ? `${head}…（共 ${lines} 行）` : head
+}
+
+/** D14 v3 唯一出口：engine 调用 + 调试日志留痕。 */
+export async function run(rt: HostRuntime, tool: string, fn: () => Promise<string>): Promise<string> {
+  const out = await fn()
+  logCall(rt, tool, summarize(out))
+  return out
+}
+
+/** 面板路由出口：引擎返回对象原样透传（sendJson 统一序列化一次），
+ * 日志记录序列化摘要；调用失败也留痕（#116 语义沿袭 → `engine.call.fail`），随后原样抛出。
+ * 绝不在路由里手动 stringify 对象——会双编码。 */
+export async function apiRun<T>(rt: HostRuntime, tool: string, fn: () => Promise<T>): Promise<T> {
+  let out: T
+  try {
+    out = await fn()
+  } catch (err) {
+    rt.logger.error('engine.call.fail', { tool, error: err instanceof Error ? err.message : String(err) })
+    throw err
+  }
+  logCall(rt, tool, summarize(typeof out === 'string' ? out : JSON.stringify(out) ?? ''))
+  return out
+}
 
 /** 注册表 engine 字段 → 可调用引擎入口（ADR-0049 C 形态）：
  * 子系统方法写 `<子系统>.<方法>` 点路径，hub 装配域方法保留裸名。
@@ -209,43 +275,5 @@ export function resolveEngineEntry(rt: HostRuntime, engine: string): (...a: neve
   const fn = sub ? (sub as Record<string, unknown>)[engine.slice(dot + 1)] : undefined
   if (typeof fn !== 'function') throw new Error(`[engine] 引擎入口不存在：${engine}`)
   return (fn as (...a: never[]) => unknown).bind(sub)
-}
-
-/** 运行日志：每次引擎调用的记录（工具名 + 输出摘要）。 */
-export async function runLog(rt: HostRuntime, tool: string, output: string): Promise<void> {
-  const path = `${rt.engine.paths.centerStateDir}/运行日志.md`
-  try {
-    if (!existsSync(path)) {
-      await mkdir(rt.engine.paths.centerStateDir, { recursive: true })
-      await appendFile(path, '# 运行日志\n\n> 插件调用 learnhub 引擎的记录。引擎自动产出，勿手工改。\n', 'utf8')
-    }
-    const ts = new Date().toLocaleString('sv-SE')
-    const clip = output.length > LOG_LIMIT ? output.slice(0, LOG_LIMIT) + '\n…（已截断）' : output
-    await appendFile(path, `\n## ${ts} · ${tool}\n\n\`\`\`\n${clip.trim() || '（无输出）'}\n\`\`\`\n`, 'utf8')
-  } catch {
-    // 日志失败不影响主流程
-  }
-}
-
-/** D14 v3 唯一出口：engine 调用 + 运行日志。 */
-export async function run(rt: HostRuntime, tool: string, fn: () => Promise<string>): Promise<string> {
-  const out = await fn()
-  await runLog(rt, tool, out)
-  return out
-}
-
-/** 面板路由出口：引擎返回对象原样透传（sendJson 统一序列化一次），
- * 日志记录序列化摘要；调用失败也留痕（#116：运行日志支持失败记录），随后原样抛出。
- * 绝不在路由里手动 stringify 对象——会双编码。 */
-export async function apiRun<T>(rt: HostRuntime, tool: string, fn: () => Promise<T>): Promise<T> {
-  let out: T
-  try {
-    out = await fn()
-  } catch (err) {
-    await runLog(rt, tool, `调用失败：${err instanceof Error ? err.message : String(err)}`)
-    throw err
-  }
-  await runLog(rt, tool, typeof out === 'string' ? out : JSON.stringify(out))
-  return out
 }
 

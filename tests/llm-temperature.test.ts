@@ -10,6 +10,7 @@
  *  ② 适配器透传：同一适配器给值即原样进 provider 请求（含工具回路缝），不给则整键缺席
  *     （缺席 = 宿主默认档，与今天逐字等价）。
  */
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -89,7 +90,7 @@ test('无调用点行为变化：真实生成管线全程不传 temperature（�
     // 应答脚本：大纲 YAML（形状按 contentOutline 真门，节清单可被引擎真实解析）
     const OUTLINE = `node: 入门\nsections:\n  - id: s1\n    title: 概念：冒烟\n    type: 概念\n    points: 一句话要点\n    visual: 无\n`
     const ctx = capturingCtx([OUTLINE, '## 概念：冒烟\n\n正文。\n'], captures)
-    const rt: HostRuntime = createHostRuntime(ctx, { vault: root, centerRel: '学习中心' })
+    const rt: HostRuntime = createHostRuntime(ctx, { vault: root, centerRel: '学习中心', logger: memLogger() })
     assert.equal(rt.vault, root, 'runtime 部署路径归一（装配在跑）')
     enqueueGeneration(rt, ctx, '数学', '入门')
     // 等首个 dsh 请求落地（大纲站），管线后续仍会继续发调用

@@ -17,7 +17,7 @@ import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
-import { LearnhubEngine } from '../src/engine/index.ts'
+import { LearnhubEngine, noopLogger } from '../src/engine/index.ts'
 import { CURRENT_SCHEMA_VERSION } from '../src/engine/schema.ts'
 import { mathRng, systemClock } from '../src/host/clock.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
@@ -55,7 +55,7 @@ test('硬门：v2/v1 库（缺 schema 块 / 旧版本号 / 损坏 JSON / 缺文�
   for (const [files, versionPattern] of cases) {
     const root = await rawVault({ '学习中心/课程注册表.yaml': 'courses: []\n', ...files })
     try {
-      assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng, fs: nodeVaultFs }), (err: unknown) => {
+      assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng, fs: nodeVaultFs, logger: noopLogger }), (err: unknown) => {
         const message = (err as Error).message
         assert.ok(versionPattern.test(message), message)
         assert.match(message, /scripts\/migrate-v2\.mjs/, '报错必须指路一次性断裂脚本')
@@ -73,7 +73,7 @@ test('硬门：未来版本号同样拒载（引擎只认当前主版本）', as
     '学习中心/state/learnhub.json': JSON.stringify({ schema: { version: 4 } }),
   })
   try {
-    assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng, fs: nodeVaultFs }), /v4/)
+    assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng, fs: nodeVaultFs, logger: noopLogger }), /v4/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -151,7 +151,7 @@ test('断裂脚本：存档搬移 + 登记表豁免 + 流水原地 + 版本戳 +
     assert.equal(config.schema.breaks[0].from, 2)
     assert.deepEqual([...config.schema.breaks[0].archived].sort(), ['math', '物理'])
     // ⑥ 引擎此刻可正常构造（硬门放行 v3）
-    const engine = new LearnhubEngine({ vault, clock: systemClock, rng: mathRng, fs: nodeVaultFs })
+    const engine = new LearnhubEngine({ vault, clock: systemClock, rng: mathRng, fs: nodeVaultFs, logger: noopLogger })
     assert.equal(engine.schema.version, 3)
     // ⑦ 存档区被数据体检计成 archived（信息级、不进 status）
     const report = await engine.dataCheck()

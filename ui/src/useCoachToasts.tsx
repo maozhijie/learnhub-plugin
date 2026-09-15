@@ -9,7 +9,7 @@
  * - 通知回放（#161）：localStorage 记 last-seen 消费水位，面板打开首拍把「面板关闭
  *   期间完成、水位未及」的终态任务补发出来（带「补发」前缀，失败批照带「重试」）——
  *   不再因面板关闭错过结果。保留期外的终态（done 30 分钟）已被清扫，无从补发。
- * - 复诊结算（队列空闲钩子自动跑，宿主侧只有运行日志）：在途节点消失/三率增量 = 已出结论。
+ * - 复诊结算（队列空闲钩子自动跑，宿主侧只有调试日志）：在途节点消失/三率增量 = 已出结论。
  * 通知按钮按任务性质分流：产物是提案的（反编译/计划/里程碑）→「去提案收件箱」人审；
  * 过程性的（生长/罗盘）→「去生成队列」。 */
 import { Button, Message, Notification } from '@arco-design/web-react'
@@ -185,8 +185,8 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
             ...(dPruned > 0 ? [`剪除 ${dPruned}`] : []),
           ].join('／')
           const detail = settled.length
-            ? `${settled.join('、')} 已出结论${breakdown ? `（${breakdown}）` : ''}——详见运行日志`
-            : `${breakdown}——详见运行日志`
+            ? `${settled.join('、')} 已出结论${breakdown ? `（${breakdown}）` : ''}——详见调试日志`
+            : `${breakdown}——详见调试日志`
           notify('info', `复诊结算（${course}）`, detail)
         }
       }

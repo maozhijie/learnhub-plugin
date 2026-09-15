@@ -122,7 +122,7 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   // 宿主技术层五文件（#167 / ADR-0048）：构造 / 队列 / 路由 / 伺服 / 工具面的关键导出在
   // （stripFences 已随缝归位 engine/agent.ts，#162——宿主不再拥有补全后处理）
   const runtime = await import('../src/host/runtime.ts')
-  for (const n of ['createHostRuntime', 'runLog', 'run', 'apiRun']) {
+  for (const n of ['createHostRuntime', 'logCall', 'run', 'apiRun']) {
     assert.equal(typeof runtime[n], 'function', `host/runtime.ts 缺导出 ${n}`)
   }
   const jobs = await import('../src/host/jobs.ts')

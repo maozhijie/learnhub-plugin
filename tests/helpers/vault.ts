@@ -13,9 +13,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { LearnhubEngine } from '../../src/engine/index.ts'
 import { CURRENT_SCHEMA_VERSION } from '../../src/engine/schema.ts'
-import type { Clock, Rng } from '../../src/engine/index.ts'
+import type { Clock, Logger, Rng } from '../../src/engine/index.ts'
 import { systemClock, mathRng } from '../../src/host/clock.ts'
 import { nodeVaultFs } from '../../src/host/vault-fs.ts'
+import { memLogger } from './logger.ts'
+import type { MemLogger } from './logger.ts'
 import type { Paths } from '../../src/engine/paths.ts'
 import type { Store } from '../../src/engine/store.ts'
 
@@ -73,6 +75,9 @@ export interface VaultOptions {
   clock?: Clock
   /** 随机源注入：undefined = Math.random；引擎的 jolRng/洗牌同源。 */
   rng?: Rng
+  /** 调试日志端口注入（#253 / ADR-0080）：缺省注入内存记录型假 logger——引擎侧确定性、
+   * 零盘面噪声；断言事件序列见 `tests/helpers/logger.ts`。 */
+  logger?: Logger
   /** 逃生口：vault 相对路径任意文件。 */
   files?: Array<{ path: string; content: string }>
 }
@@ -82,6 +87,8 @@ export interface VaultHandle {
   root: string
   paths: Paths
   store: Store
+  /** 本 vault 的 logger；未显式注入时是内存记录型假实现，可直接断言事件。 */
+  logger: MemLogger | Logger
 }
 
 export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) => Promise<T>): Promise<T> {
@@ -131,12 +138,14 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
       day_cutoff: '00:00',
     }, null, 1) + '\n', 'utf8')
 
+    const logger = options.logger ?? memLogger()
     const engine = new LearnhubEngine({
       vault: root,
       ...(centerRel === '学习中心' ? {} : { centerRel }),
       clock: options.clock ?? systemClock,
       rng: options.rng ?? mathRng,
       fs: nodeVaultFs,
+      logger,
     })
 
     if (options.reviewLog?.length) {
@@ -149,9 +158,13 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
       await writeFile(path, f.content, 'utf8')
     }
 
-    return await run({ engine, root, paths: engine.paths, store: engine.store })
+    return await run({ engine, root, paths: engine.paths, store: engine.store, logger })
   } finally {
-    await rm(root, { recursive: true, force: true })
+    // 清理带重试：产品里有多条 **fire-and-forget** 的写者（生成泵的终态落盘、语料捕获、
+    // 日志 sink……），它们可能在 `rm` 走到 `state/` 时刚好落一个文件，让 rmdir 报
+    // ENOTEMPTY（#253 实测复现率约 1/3 全量跑）。这是测试清理对产品异步形态的依赖，
+    // 不是产品缺陷——重试几次即消（`maxRetries` 只在 recursive 下生效）。
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 })
   }
 }
 

@@ -38,7 +38,7 @@
 | `host.gen_jobs.restore_failed` | WARN | `error=<msg>` | 前身 `gen_jobs_restore` |
 | `host.gen_jobs.restored` | INFO | `stale` `swept` `queued_paused` | 今天只有 console，新增留痕 |
 
-级别原则：进出／结果 = INFO；拒收与"触发修复" = WARN；死亡／失败 = ERROR；逐轮轨迹与尺寸明细 = DEBUG。`agent.ts` 的 `gateRepairRound<T, U>(_station, …)` 站点参数随本票复活（改名 `station`）——六个策略站（种子起草／罗盘／教练生长／目标反编译／计划草案／里程碑草案）共用该缝，故日志一次到位。
+级别原则：进出／结果 = INFO；拒收与"触发修复" = WARN；死亡／失败 = ERROR；逐轮轨迹与尺寸明细 = DEBUG。`agent.ts` 的 `gateRepairRound<T, U>(_station, …)` 站点参数随本票复活（改名 `station`）——六个策略站（种子起草／罗盘／教练生长／目标反编译／计划草案／里程碑草案）共用**统一 agent 缝**，故缝级日志一次到位。**但 `gateRepairRound` 本身只有三个站在用**（教练生长 `growth-subsystem.ts`／目标反编译 `projects.ts`／里程碑草案 `host/jobs.ts`）：计划草案走裸 `agent.complete`（无修复轮），种子起草与罗盘走 `agentLoop`——故 `agent.gate.first`／`repair`／`repair.reject`／`death` 四条实际只从这三个站发出（§修订 2026-09-15）。
 
 边界：
 
@@ -60,3 +60,20 @@
 - **零依赖手写 logger（票面候选之一）**——零依赖、打包面最小，但本票择框架：pino 在主流程里统一了级别门与日志 API 的形状，且其格式化／旋转缺陷已由"自建 sink"这一处收敛。否决（若日后 sink 复杂度增长，这是可回退的对照方案）。
 
 取号：0080（写前 `ls docs/adr/` 确认，0079 已占）。票面：#253 轻量级日志方案（每天一个 .log 文件 + 引擎关键路径可观测）。
+
+## §修订（2026-09-15，实施前核实）
+
+**「六个策略站共用 `gateRepairRound`」是计数错误，实为三个站。** 上表事件闭集与接线清单不变，只更正这句话的事实面（实施前用 `query_graph` 取 `gateRepairRound` 全部入边 + grep 复核得出）：
+
+| 站点 | 实际入口 | 有 `gateRepairRound`？ |
+|---|---|---|
+| 教练生长 | `growth-subsystem.ts:813` | ✅ |
+| 目标反编译 | `projects.ts:1191` | ✅ |
+| 里程碑草案 | `host/jobs.ts:1045` | ✅ |
+| 计划草案 | `host/jobs.ts:1032` `rt.agent.complete('计划草案', …)` | ❌ 无修复轮 |
+| 种子起草 | `agentLoop`（回路收束，无单发修复轮） | ❌ |
+| 罗盘 | `agentLoop`（`compassPaint`，路线门首过即落） | ❌ |
+
+「六站共用」对**统一 agent 缝**（`AgentSeam`：`complete`／`repair`／`agentLoop`／`gateRepairRound` 四种形态）成立；对 `gateRepairRound` 这一种形态不成立。后果仅限验收口径：`agent.gate.*` 四条只应从上述三站出现，按「六站都该有」去查会对不上。
+
+**方法论附注**：这次核实踩到的坑——本仓 `trace_path(direction="inbound")` 的默认 `mode: "calls"` 对方法调用不闭合（`agent.gateRepairRound(...)` 在图上记成 `USAGE` 不是 `CALLS`），对 `gateRepairRound` 返回 `callers_total: 0`，与「真的没有调用方」同形。已固化进 `docs/agents/code-index.md`（含 `CALLS`+`USAGE` 双取兜底查询）与 `AGENTS.md`（`trace_path` 报 0 须复核）。

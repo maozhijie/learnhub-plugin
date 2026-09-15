@@ -8,7 +8,7 @@ import { mkdirSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { LearnhubEngine } from '../lib/engine.js'
+import { LearnhubEngine, noopLogger } from '../lib/engine.js'
 
 const vault = process.argv[2]
 if (!vault) {
@@ -22,7 +22,7 @@ const srcCenter = join(vault, '学习中心')
 const dstCenter = join(scratch, '学习中心')
 
 // 种子课程动态探测：注册表第一门启用课（真实 vault 的课程名不固定）
-const probe = new LearnhubEngine({ vault })
+const probe = new LearnhubEngine({ vault, logger: noopLogger })
 const seed = (await probe.enabledCourses())[0]
 if (!seed) {
   console.error('e2e: 注册表里没有启用中的课程，无法取种子')
@@ -121,7 +121,7 @@ const step = async (name, fn) => {
 const assert = (cond, msg) => { if (!cond) throw new Error(msg || 'assertion failed') }
 
 async function run() {
-  const engine = new LearnhubEngine({ vault: scratch })
+  const engine = new LearnhubEngine({ vault: scratch, logger: noopLogger })
   // 学习日从引擎取（ADR-0020）：日界可配置（默认 02:00），UI/脚本不得自算日历日
   const learningToday = (await engine.xpStatus()).date
   await step('questionSave', async () => {

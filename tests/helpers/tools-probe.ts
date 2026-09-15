@@ -10,6 +10,8 @@
  * 队列型工具（mode=queued）的「响应后」调用序列不入快照（fire-and-forget 的时序噪音），
  * 只比文本——路由面那份快照也做过同样的取舍。
  */
+import { settleQuiet } from './settle.ts'
+import { memLogger } from './logger.ts'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -122,16 +124,19 @@ export function argsFor(tool: CapturedTool, drop?: string): Record<string, unkno
 /** 跑一条工具探针。 */
 export async function runToolProbe(probe: ToolProbe): Promise<ToolResult> {
   const captured: CapturedTool[] = []
-  const rt = createHostRuntime(fakeCtx([]), { vault: probeVault(), centerRel: '学习中心' })
+  const rt = createHostRuntime(fakeCtx([]), { vault: probeVault(), centerRel: '学习中心', logger: memLogger() })
   registerTools(fakeCtx(captured), rt)
   const tool = captured.find(t => t.name === probe.tool)
   if (!tool) return { text: '', error: `未知工具 ${probe.tool}`, calls: [] }
   const recorder = shadowEngine(rt)
   try {
     const out = await tool.execute(probe.args as never)
+    // 响应返回 ≠ 后台生成链收尾（见 settle.ts）：不在执行返回处立刻定格
+    await settleQuiet(recorder, rt.flags)
     recorder.stop()
     return { text: typeof out === 'string' ? out : JSON.stringify(out), calls: probe.queued ? [] : recorder.calls }
   } catch (err) {
+    await settleQuiet(recorder, rt.flags)
     recorder.stop()
     return { text: '', error: err instanceof Error ? err.message : String(err), calls: [] }
   }
@@ -146,7 +151,7 @@ export async function runToolProbes(probes: ToolProbe[]): Promise<ToolResult[]> 
 /** 探测面前提：工具名与 declared 必填键（生成探针要用）。 */
 export function toolInventory(): CapturedTool[] {
   const captured: CapturedTool[] = []
-  const rt = createHostRuntime(fakeCtx([]), { vault: probeVault(), centerRel: '学习中心' })
+  const rt = createHostRuntime(fakeCtx([]), { vault: probeVault(), centerRel: '学习中心', logger: memLogger() })
   registerTools(fakeCtx(captured as unknown[]), rt)
   return captured
 }

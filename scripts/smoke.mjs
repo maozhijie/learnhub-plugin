@@ -2,7 +2,7 @@
  * 只读冒烟测试：真实 vault 数据过一遍引擎的读路径（不写任何文件）。
  * 用法：node scripts/smoke.mjs <vault 路径>
  */
-import { LearnhubEngine } from '../lib/engine.js'
+import { LearnhubEngine, noopLogger } from '../lib/engine.js'
 
 const vault = process.argv[2]
 if (!vault) {
@@ -10,7 +10,7 @@ if (!vault) {
   process.exit(1)
 }
 
-const engine = new LearnhubEngine({ vault })
+const engine = new LearnhubEngine({ vault, logger: noopLogger })
 let failed = 0
 const step = async (name, fn) => {
   try {

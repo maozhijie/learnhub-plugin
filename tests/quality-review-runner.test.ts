@@ -9,6 +9,7 @@
  *   （站标签 = STATIONS.qualityReview）。
  * - 空输出件零模型调用（成本纪律）；语料目录无有量规的站时 fail loud 并给指引。
  */
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -76,7 +77,7 @@ function stubCtx(opts: { secondPassScores?: number } = {}): { ctx: Context; prom
 }
 
 function runtimeOf(ctx: Context, vault: string): HostRuntime {
-  return createHostRuntime(ctx, { vault })
+  return createHostRuntime(ctx, { vault, logger: memLogger() })
 }
 
 test('评审器跑通：报告落 state/质量评审、逐件两期评审、证据与 ref 都在、成本按件计', async () => {

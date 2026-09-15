@@ -37,6 +37,7 @@ import { ContentSubsystem } from './content-subsystem.ts'
 import { GraphProposals } from './proposals.ts'
 import type { ApplyAudit } from './proposals.ts'
 import type { Clock, Rng } from './clock.ts'
+import type { Logger } from './logger.ts'
 
 import { Projects, ProjectSubsystem } from './projects.ts'
 import { endpointNames, readAnchors, foldCompletion } from './seed.ts'
@@ -89,6 +90,11 @@ export { CURRENT_SCHEMA_VERSION } from './schema.ts'
 export type { LlmCallKind, LlmComplete, LlmEffort, LlmStream, LlmTokenUsage, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
 /** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */
 export type { Clock, Rng } from './clock.ts'
+/** 调试日志端口（#253 / ADR-0080）：类型与 noop 实现随门面出——宿主取型走门面（R1），
+ * **仓库脚本**只消费 `lib/engine.js`，故 `noopLogger` 必须住引擎产物里（宿主实现
+ * `host/log-file.ts` 不在其中，见 `engine/logger.ts` 的说明）。 */
+export { noopLogger } from './logger.ts'
+export type { Logger, LogLevel, LogFields, LogFieldValue } from './logger.ts'
 /** 统一 agent 缝（#162 / ADR-0041/0044）：类随门面出（宿主构造注入），类型随缝出。 */
 export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
 export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
@@ -145,6 +151,12 @@ export interface EngineConfig {
   /** vault 存储端口（#175 阶段② / ADR-0044）：engine 侧一切读盘落盘的唯一通道。
    * 实现住 host/vault-fs.ts（nodeVaultFs）；R2 自此是应用→适配器的存储边界。 */
   fs: VaultFs
+  /** 调试日志端口（#253 / ADR-0080）：端口形状住引擎（`engine/logger.ts`）、实现住
+   * 适配器（`host/log-file.ts`）、装配住这里。**必填而非可选缺省 noop**——可选会让
+   * 「忘了接线 = 日志静默消失」，恰是本票要治的病；代价是构造点显式接线（宿主 1 处 +
+   * 仓库脚本 5 处 + 测试工厂）。deps 面只给**真正打日志的子系统**接 `logger` 槽
+   * （当前 = GrowthSubsystem；`agent.gate.*` 由宿主构造的 AgentSeam 自持）。 */
+  logger: Logger
 }
 
 export class LearnhubEngine {
@@ -194,6 +206,8 @@ export class LearnhubEngine {
   readonly rng: Rng
   /** vault 存储端口（#175 阶段②）：域类与子系统经构造注入共享同一实例。 */
   readonly fs: VaultFs
+  /** 调试日志端口（#253 / ADR-0080）：经 constructor 注入，只接线给真正打日志的子系统。 */
+  readonly logger: Logger
   jolRng: () => number
 
   /** 课程调度器实例缓存（ADR-0014 附带）：参数文件唯一写者是 optimizeFsrsParams
@@ -218,6 +232,7 @@ export class LearnhubEngine {
     this.rng = config.rng
     this.jolRng = config.rng
     this.fs = config.fs
+    this.logger = config.logger
     this.vaultRoot = vault
     this.paths = new Paths(centerRoot)
     // schema 版本硬门（#138 / ADR-0034）：非当前主版本拒载，封死一切取用引擎的路径。
@@ -379,7 +394,7 @@ export class LearnhubEngine {
       sched: courseRoot => this.sched(courseRoot),
     })
     this.growth2 = new GrowthSubsystem({
-      clock: this.clock, fs: this.fs,
+      clock: this.clock, fs: this.fs, logger: this.logger,
       store: this.store, paths: this.paths, registry: this.registry,
       concepts: this.concepts, content: this.content,
       enabledCourses: () => this.registry.enabled(),
@@ -832,6 +847,6 @@ export class LearnhubEngine {
     await saveNote(path, fm as unknown as Record<string, unknown>, body, this.fs)
   }
 
-  /** 写一条 journal（运行日志等由插件层做）。 */
+  /** 写一条 journal（调试日志由插件层做）。 */
   journal() { return this.store }
 }

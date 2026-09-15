@@ -21,7 +21,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { IncomingMessage } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
-import { LearnhubEngine } from '../src/engine/index.ts'
+import { LearnhubEngine, noopLogger } from '../src/engine/index.ts'
+import { memLogger } from './helpers/logger.ts'
 import { createHostRuntime, resolveEngineEntry } from '../src/host/runtime.ts'
 import type { HostRuntime } from '../src/host/runtime.ts'
 import { mathRng, systemClock } from '../src/host/clock.ts'
@@ -70,11 +71,13 @@ function fakeCtx(captured?: unknown[]): Context {
 }
 
 /** 造一个隔离 runtime：临时 vault + 空旗标（并行测试互不污染——模块级状态归零的直接收益）。 */
-function makeRuntime(): HostRuntime {
+function makeRuntime(log: ReturnType<typeof memLogger> = memLogger()): HostRuntime {
   const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-'))
   tmpVaults.push(vault)
   mkdirSync(join(vault, '学习中心'))
-  return createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心' })
+  // 注入内存 logger（#253 / ADR-0080）：真写盘会与测试自己的 vault 清理抢时序；
+  // 需要断言留痕的用例自己造一个传进来（`rt.logger` 就是这个实例）。
+  return createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心', logger: log })
 }
 
 /** 影子化引擎方法（实例属性覆盖原型方法），脚本化宿主依赖的引擎入口。 */
@@ -133,7 +136,7 @@ test('createHostRuntime：新鲜库出生盖 v3 戳；已有旧版 learnhub.json
   const fresh = mkdtempSync(join(tmpdir(), 'learnhub-rt-fresh-'))
   tmpVaults.push(fresh)
   mkdirSync(join(fresh, '学习中心'))
-  createHostRuntime(fakeCtx(), { vault: fresh })
+  createHostRuntime(fakeCtx(), { vault: fresh, logger: memLogger() })
   const stamped = JSON.parse(readFileSync(join(fresh, '学习中心', 'state', 'learnhub.json'), 'utf8'))
   assert.deepEqual(stamped, { schema: { version: 3, formats: {} } }, '首启 seed 写入 runtime 构造路径（#138）')
 
@@ -142,7 +145,7 @@ test('createHostRuntime：新鲜库出生盖 v3 戳；已有旧版 learnhub.json
   mkdirSync(join(existing, '学习中心', 'state'), { recursive: true })
   const marker = '{"schema":{"version":3,"formats":{}},"marker":"已有库"}'
   writeFileSync(join(existing, '学习中心', 'state', 'learnhub.json'), marker, 'utf8')
-  createHostRuntime(fakeCtx(), { vault: existing })
+  createHostRuntime(fakeCtx(), { vault: existing, logger: memLogger() })
   assert.equal(readFileSync(join(existing, '学习中心', 'state', 'learnhub.json'), 'utf8'), marker, '非新鲜库不重盖戳（旧版本库另由硬门拒载）')
 })
 
@@ -150,7 +153,7 @@ test('createHostRuntime：runtime 形状——引擎实例、路径归一、旗�
   const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-shape-'))
   tmpVaults.push(vault)
   mkdirSync(join(vault, '学习中心'))
-  const rt = createHostRuntime(fakeCtx(), { vault: `${vault}\\`, centerRel: '/学习中心/' })
+  const rt = createHostRuntime(fakeCtx(), { vault: `${vault}\\`, centerRel: '/学习中心/', logger: memLogger() })
   assert.ok(rt.engine instanceof LearnhubEngine)
   assert.equal(rt.vault, vault.replace(/\\/g, '/'), 'vault 反斜杠归一、尾分隔符剥掉')
   assert.equal(rt.centerRel, '学习中心', 'centerRel 剥首尾分隔符')
@@ -383,8 +386,9 @@ test('节间连贯注入（#227）：节清单标 i/N、非首节附前节结尾
   assert.ok(!s2Prompt.includes('前文铺垫句子'), '窗口从行首截取、只含结尾行，前节主体不入窗')
 })
 
-test('出题档位声明（#228）：出题 effort 随节点难度显式声明（高=deep/低=fast），运行日志留档位记录', async () => {
-  const rt = makeRuntime()
+test('出题档位声明（#228）：出题 effort 随节点难度显式声明（高=deep/低=fast），调试日志留档位记录', async () => {
+  const log = memLogger()
+  const rt = makeRuntime(log)
   const efforts: Array<string | undefined> = []
   let tier = 3
   stub(rt, {
@@ -402,9 +406,11 @@ test('出题档位声明（#228）：出题 effort 随节点难度显式声明�
   await until(() => rt.jobs.genJobs.get('数学/节点A')?.status === 'done')
   assert.equal(rt.jobs.genJobs.get('数学/节点A')!.tier, '高', '节点档位随任务记录')
   assert.equal(efforts[0], 'low', '高复杂度节点出题 effort=deep（部署档 low，不再走部署默认）')
-  await until(() => {
-    try { return readFileSync(rt.engine.paths.runLogPath, 'utf8').includes('出题 effort=deep') } catch { return false }
-  }, 2000)
+  // #253 / ADR-0080：留痕从 markdown 换成结构化事件——档位记录进 `engine.call` 的
+  // 摘要续行（`detail`）。盘面形态（按天切分/保留期/上限）由 `tests/file-log.test.ts`
+  // 对真实现单独测；这里断言事件面，不碰盘。
+  await until(() => log.entries.some(e => e.event === 'engine.call'
+    && String(e.fields.detail ?? '').includes('出题 effort=deep')), 2000)
 
   tier = 1
   efforts.length = 0
@@ -1035,7 +1041,8 @@ test('任务档修复后重启：broken 清空，既有恢复语义零回归（�
   const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-'))
   tmpVaults.push(vault)
   mkdirSync(join(vault, '学习中心'))
-  const build = () => createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心' })
+  // 内存 logger：真写盘会与测试自己的 vault 清理抢时序（日志是 fire-and-forget）
+  const build = () => createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心', logger: memLogger() })
   const rt = build()
   writeFileSync(rt.engine.paths.genJobsPath, '{oops', 'utf8')
   restoreGenJobs(rt)
@@ -1087,7 +1094,7 @@ test('loadGenJobs 读错误（非 ENOENT）= Broken：不静默回空表——�
     JSON.stringify({ schema: { version: 3, formats: {} } }, null, 1) + '\n', 'utf8')
   const base = nodeVaultFs
   const engine = new LearnhubEngine({
-    vault, centerRel: '学习中心', clock: systemClock, rng: mathRng,
+    vault, centerRel: '学习中心', clock: systemClock, rng: mathRng, logger: noopLogger,
     fs: {
       ...base,
       readFile: async (p: string) => {

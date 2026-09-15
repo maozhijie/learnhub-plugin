@@ -13,6 +13,7 @@
  * 口径声明：人格是脚本化的，本实验度量的是**机制能力**（给了工具与自查轮，幻觉能在
  * 过门前被证据修正），不是真实模型的首过率；真实模型收益以实机运行日志为准。
  */
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { withVault } from './helpers/vault.ts'
@@ -127,7 +128,7 @@ function selfCheckCorrect(draft: string, graphView: string, registryText: string
 
 /** 单发形态假实现（#162 站点形态）：盲产裁决，零工具轮。 */
 function singleShotFake(verdict: string): AgentSeam {
-  return new AgentSeam({
+  return new AgentSeam({ logger: memLogger(),
     complete: async () => verdict,
     stream: async () => ({ text: verdict, toolCalls: [] }),
   }, systemClock)
@@ -136,7 +137,7 @@ function singleShotFake(verdict: string): AgentSeam {
 /** 回路形态假实现（#163 站点形态）：先查图面与登记表，从回灌内容修正后再裁决。 */
 function loopFake(corrupted: string): AgentSeam {
   const requests: Array<{ messages: Array<{ role: string; text?: string }>; tools?: Array<{ name: string }> }> = []
-  const seam = new AgentSeam({
+  const seam = new AgentSeam({ logger: memLogger(),
     complete: async () => { throw new Error('回路人格不走单发') },
     stream: async req => {
       requests.push({ messages: [...req.messages], tools: req.tools })

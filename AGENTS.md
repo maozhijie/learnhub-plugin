@@ -31,13 +31,14 @@ Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `doc
 **先判一次（这一条决定走哪条路）**：
 
 - 问的是**闭合性**——「还有谁调用它 / 影响面到哪 / 会不会漏 / 模块怎么聚」→ **先图**。图给的是 grep 给不出的闭合证据（实测先例：#249 改教练工具白名单，`trace_path(inbound, coachToolset)` 一次给出 3 个入边全在 `growth-subsystem`）。
+- 改动面**含公共面**（必填字段、导出面、白名单、配置形状、端口契约）→ **图查询是必做步骤，不是可选项**。漏一个构造点/消费方的代价是运行期 `undefined`；而 `rg` 只覆盖文本层、`trace_path` 又会把「解析不出来」返回成 `0`（见下），两者都会替你掩盖这个漏。
 - 问的是**定位**——已确知名字/路径，只想找出它在哪、或读某处实现 → **直接 `SearchCodebase`/`Grep`/`Read`，不必上图**。
 
 **何时点火（探索期与改动期都算）**：
 
 - 触达 `src/` 的只读探索/调研：当你要回答上面那类**闭合性问题**、或自己拿不准「这件事在哪发生」时，先跑一次图再进文件。
-- 改函数/常量/白名单/导出面**之前**：`trace_path(function_name="X", direction="inbound", project="C-Users-test-Desktop-my-learnhub-plugin")` 看调用面——改公共面特别值得。
-- 要下**否定/穷尽**结论（「没有 X 调用它」）**之前**：`index_status` + `check_index_coverage` 查一眼覆盖，并 grep 被 `parse_partial`/`skipped` 标记的行段——图是 best-effort，「图上没有」**不等于**「代码里没有」。
+- 改函数/常量/白名单/导出面**之前**：`trace_path(function_name="X", direction="inbound", project="C-Users-test-Desktop-my-learnhub-plugin")` 看调用面——改公共面特别值得。**但它只对自由函数可靠**：接收者是注入对象/参数的方法调用（`agent.gateRepairRound(...)`）在图上记成 `USAGE` 不是 `CALLS`，`trace_path` 会返回 `callers_total: 0` —— **这个 0 与「真的没有调用方」同形**（2026-09-15 实测：`gateRepairRound` 有 3 个生产调用点却报 0）。方法调用改用 `query_graph` 取 `CALLS`+`USAGE` 两种边，查询式与实测对照见 `docs/agents/code-index.md` §本仓拿它做什么 第 1 条。
+- 要下**否定/穷尽**结论（「没有 X 调用它」）**之前**：`index_status` + `check_index_coverage` 查一眼覆盖，并 grep 被 `parse_partial`/`skipped` 标记的行段——图是 best-effort，「图上没有」**不等于**「代码里没有」。**`trace_path` 报 0 时同样按这条办：0 是待证伪的信号，不是结论。**
 - 收尾可跑 `detect_changes(project=…)` 看 blast radius 作第二意见（符号按**上一次索引**解析，新加的导出符号它还不知道）。
 
 **何时不必用（防滥用——下列情形直接读文件，别为用图而用图）**：

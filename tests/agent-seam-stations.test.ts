@@ -6,6 +6,7 @@
  * - 语义档沿缝贯通：计划草案 fast、里程碑修复轮 deep，注入侧可观测；
  * - 门错修复轮：里程碑轻量结构门未过恰回灌重产一次，仍败带原样门错误与错误码。
  */
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
@@ -33,7 +34,7 @@ function makeRuntime(): HostRuntime {
   const vault = mkdtempSync(join(tmpdir(), 'learnhub-seam-station-'))
   tmpVaults.push(vault)
   mkdirSync(join(vault, '学习中心'))
-  return createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心' })
+  return createHostRuntime(fakeCtx(), { vault, centerRel: '学习中心', logger: memLogger() })
 }
 
 test.after(() => {
@@ -48,7 +49,7 @@ function scriptedSeam(rt: HostRuntime, replies: string[]) {
     if (!replies.length) throw new Error('脚本化补全端口：应答已耗尽')
     return replies.shift()!
   }
-  rt.agent = new AgentSeam({ complete: port }, systemClock)
+  rt.agent = new AgentSeam({ logger: memLogger(), complete: port }, systemClock)
   return Object.assign(rt.agent, { calls })
 }
 

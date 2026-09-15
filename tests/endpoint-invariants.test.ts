@@ -1,3 +1,4 @@
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
@@ -423,7 +424,7 @@ test('#199 生成门：enqueueGeneration 对终点恒拒（不看就绪），非
       effect: () => undefined,
       webServer: { register: () => undefined },
     } as unknown as Context
-    const rt = createHostRuntime(ctx, { vault: root, centerRel: '学习中心' })
+    const rt = createHostRuntime(ctx, { vault: root, centerRel: '学习中心', logger: memLogger() })
     rt.flags.queuePaused = true // 泵保持安静：本测试只断言入队语义
     // 终点恒拒——就绪与否都拒，文案可读
     await assert.rejects(

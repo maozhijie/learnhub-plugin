@@ -21,7 +21,7 @@ import {
   need, needQuery, optBoolean, optFinite, optList, optNumber, optObject, optQuery, optRaw, optString, optText, optTrimmed,
   optTrue, ParamError, pick, requireBoolean, requireNumber, requireObject, requireOneOf, requireString,
 } from './params.ts'
-import { apiRun, runLog } from './runtime.ts'
+import { apiRun, logCall } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import type { RouteHandler } from './route-table.ts'
 import { llmComplete, llmSeam, llmSeamStripped, llmView } from './llm.ts'
@@ -514,7 +514,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /question-dispute/apply': async ({ rt, body, res }) => {
     // 申诉结算：rekey（改键重判可改判对）/ void（瑕疵题作废）/ overridden（强制豁免，不得分）
-    // 守卫留在 apiRun 回调内（今天就在这里）：失败时运行日志留痕的语义随之不变
+    // 守卫留在 apiRun 回调内（今天就在这里）：失败时留痕（`engine.call.fail`）的语义随之不变
     sendJson(res, 200, await apiRun(rt, 'api/question-dispute/apply', () => {
       const resolution = requireOneOf(body, 'resolution', ['rekey', 'void', 'overridden'] as const)
       const rawRevision = body.revision as { answer?: unknown; explanation?: unknown } | undefined
@@ -569,11 +569,11 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 生长一步 / 失败重试（面板下发 = 显式重新裁决，词条「生长批」）：即时入队、追加队尾、
     // 豁免停摆/暂不产结构与失败阻尼（#157：失败通知与生成页的「重试」走同一路由）；
     // 被拒时 message 带原因（在途/已取消）。
-    // 触发五点的检查点观测（读侧感知留运行日志）——入队本身不受检查结果闸：
+    // 触发五点的检查点观测（读侧感知留调试日志）——入队本身不受检查结果闸：
     // 显式请求恒产一轮，就绪满足由教练回合停机转译为 idle。
     const growthCourse = need(body, 'course')
     void rt.engine.growth2.coachCheckpoint('panel_dispatch', growthCourse)
-      .then(r => runLog(rt, 'coach_checkpoint(panel_dispatch)',
+      .then(r => logCall(rt, 'coach_checkpoint(panel_dispatch)',
         r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}`).join('；')))
       .catch(() => undefined)
     sendJson(res, 200, await apiRun(rt, 'api/coach/growth', async () =>

@@ -18,7 +18,7 @@
  * 纪律：
  * - D14（v3）：一切数据访问收口 engine/ 模块；工具/路由/UI 不得绕过 engine 直写数据文件。
  * - D15：评分只经工作单 → settle 入库；UI 自动写回也只写工作单评分行。
- * - 每次工具/路由调用追加 state/运行日志.md（LOG_LIMIT 截断）。
+ * - 每次工具/路由调用写一条调试日志（`state/logs/<日历日>.log`，`engine.call`）。
  */
 import type { Context, Effect } from '@deepseek-ai/cordis'
 import type { IncomingMessage, ServerResponse } from 'node:http'

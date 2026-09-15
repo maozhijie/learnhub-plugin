@@ -11,6 +11,7 @@
  * （ADR-0076 前 v8 的双提案 pair 联动/联合 apply/reject 联动退役：存量 pending 对仍可走
  * projectDecompileApply，但公开 API 不再产新对——动态半的回归面移交存量机制，此处不构造。）
  */
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { decompileGoalOf, decompileRepairPrompt, decompileTerms, reconcilePlanNodes, splitDecompileDoc } from '../src/engine/project-decompile.ts'
@@ -88,7 +89,7 @@ function replayFake(reply: string) {
  * （prompt/语义档经缝直通）。按调用序回放（第 i 次调用回 replies[i]，越界取最后一条）。 */
 function scriptFake(replies: string[]) {
   const calls: Array<{ prompt: string; effort?: string }> = []
-  const seam = new AgentSeam({
+  const seam = new AgentSeam({ logger: memLogger(),
     complete: async (prompt, _system, opts) => {
       calls.push({ prompt, effort: opts?.effort })
       return replies[Math.min(calls.length - 1, replies.length - 1)]!

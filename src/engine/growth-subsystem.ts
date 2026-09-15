@@ -39,6 +39,10 @@ export interface GrowthDeps {
   clock: Clock
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
+  /** 调试日志端口（#253 / ADR-0080）：教练回合 7 条事件（`coach.round.*`／
+   * `coach.segment.*`／`coach.gate.reject`／`coach.repair.trigger`）由本子系统发——
+   * 「到底有没有跑过回灌重裁」是 `coach.repair.trigger` 一眼可判的主验收物。 */
+  logger: Logger
   store: Store
   paths: Paths
   registry: Registry
@@ -68,6 +72,7 @@ import { resolveConcept } from './concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from './dates.ts'
 import { foldStuckReports, stuckReportGate } from './stuck-report.ts'
 import type { Clock } from './clock.ts'
+import type { Logger } from './logger.ts'
 import { netPracticeRecs } from './grading.ts'
 import { atomicWrite } from './io.ts'
 import type { JolPrediction } from './jol.ts'
@@ -706,6 +711,10 @@ export class GrowthSubsystem {
     if (check.ok && !opts.force && opts.inject === undefined) {
       return { course: c.name, state: 'idle', check, segments: [], trajectory: [], proposal: null, applied: null }
     }
+    // 回合进入（#253 / ADR-0080）：只记真正跑起来的回合——停摆短路（上一行）不算回合，
+    // 于是 `coach.round.enter` 与 `coach.round.result` 成对，「跑了没有」不留灰带。
+    const log = this.e.logger
+    log.info('coach.round.enter', { course: c.name, today })
     const { graph, state } = await this.e.loadView(c)
     const view = renderGrowthGraphView(graph, state, endpointNames(anchors), { today })
     const template = await this.e.content.loadPrompt('教练回合')
@@ -725,6 +734,7 @@ export class GrowthSubsystem {
     ): Promise<GrowthVerdict> => {
       assertAlive()
       const effort = tier === 'light' ? 'fast' as const : 'deep' as const
+      log.info('coach.segment.enter', { course: c.name, tier, effort })
       const r = await agent.agentLoop({
         station: '教练生长', prompt, effort,
         tools: toolset.tools, runTool: toolset.runTool,
@@ -734,6 +744,14 @@ export class GrowthSubsystem {
       const verdict = this.parseGrowthVerdict(r.text)
       if (!verdict._schemaErrors) {
         segments.push({ tier, effort, operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
+        log.info('coach.segment.exit', {
+          course: c.name, tier, operator: verdict.note.operator,
+          disagreement: Boolean(verdict.note.disagreement), schema: 'ok',
+        })
+      } else {
+        // schema=reject：裁决没解析出来，`operator`／`disagreement` 无从取值——按本仓
+        // 「缺则不造字段」纪律省略（填占位值会把「解析失败」伪装成一个真实算子）。
+        log.info('coach.segment.exit', { course: c.name, tier, schema: 'reject', detail: verdict._schemaErrors })
       }
       return verdict
     }
@@ -786,6 +804,11 @@ export class GrowthSubsystem {
     // repair 单发（图面已随包回灌 = 修正取值域在场），不经回路。
     const runRepair = async (feedback: string, previousYaml: string): Promise<GrowthVerdict> => {
       assertAlive()
+      log.info('coach.segment.enter', { course: c.name, tier: 'repair', effort: 'deep' })
+      // 「到底有没有跑过回灌重裁」的主判据（#253 / ADR-0080）：这条缺席 = 首轮就过了
+      // 受理门（或回合根本没进到 gateRepairRound）——坏例 bad-2026-09-14-0021 当时
+      // 完全不可观测的就是这一步。
+      log.warn('coach.repair.trigger', { course: c.name, round: 1 })
       const pack = await this.coachContextPack(c.name, { today, packLabel: '回灌重裁段——上一版裁决被受理门拒收' })
       const prompt = coachPrompt(
         pack,
@@ -796,9 +819,14 @@ export class GrowthSubsystem {
       const verdict = this.parseGrowthVerdict(raw)
       // 修复轮仍过不了 schema 门 = 两轮死因（throw 被 gateRepairRound 捕获为 repair death）
       if (verdict._schemaErrors) {
+        log.info('coach.segment.exit', { course: c.name, tier: 'repair', schema: 'reject', detail: verdict._schemaErrors })
         throw new Error(`[coach-growth] 回灌重裁段裁决仍未过 schema 门（零写盘）。\n${verdict._schemaErrors.join('\n')}`)
       }
       segments.push({ tier: 'repair', effort: 'deep', operator: verdict.note.operator, disagreement: Boolean(verdict.note.disagreement) })
+      log.info('coach.segment.exit', {
+        course: c.name, tier: 'repair', operator: verdict.note.operator,
+        disagreement: Boolean(verdict.note.disagreement), schema: 'ok',
+      })
       return verdict
     }
 
@@ -824,13 +852,17 @@ export class GrowthSubsystem {
         assertAlive()
         // schema 门：parseGrowthVerdict 返回的 errors 作数据（不 throw），在此拦截触发修复流
         if (verdict._schemaErrors) {
-          return { errors: [`[coach-growth] 教练回合裁决未过 schema 门（零写盘）。\n${verdict._schemaErrors.join('\n')}`] }
+          const errors = [`[coach-growth] 教练回合裁决未过 schema 门（零写盘）。\n${verdict._schemaErrors.join('\n')}`]
+          log.warn('coach.gate.reject', { course: c.name, gate: 'schema', errors: errors.length, detail: errors })
+          return { errors }
         }
         try {
           const prop = await this.e.graphPropose('edit', verdict.yaml) as GraphEditProposalResult
           return { errors: [], result: prop }
         } catch (err) {
-          return { errors: [fmt(err)] }
+          const errors = [fmt(err)]
+          log.warn('coach.gate.reject', { course: c.name, gate: 'propose', errors: errors.length, detail: errors })
+          return { errors }
         }
       },
       repair: (gateErrors, rejected) => runRepair(gateErrors.join('\n'), rejected.yaml),
@@ -845,6 +877,9 @@ export class GrowthSubsystem {
     } catch (err) {
       // 受理过门但 apply 失败（审计 ERROR/图已变化等竞态）：机器裁决不留 pending——
       // 自清后原样抛错（教练回合是每步重算的函数，下一触发重新裁决即可）
+      log.error('coach.round.apply_fail', {
+        course: c.name, proposal: prop.id, error: err instanceof Error ? err.message : String(err),
+      })
       await this.e.graphReject(prop.id, `生长批自动 apply 失败：${err instanceof Error ? err.message : String(err)}`)
         .catch(() => undefined)
       throw err
@@ -852,6 +887,13 @@ export class GrowthSubsystem {
     // 本批新建节点名（读数用）。正文生成**不由本批触发**（ADR-0078）：生长只落结构，
     // 就绪缺口不再自动入队正文——故这里也不再算 ready_unbuilt（省一次 loadView）。
     const created = final.spec.ops.filter(o => o.op === 'add_node').map(o => o.name!)
+    log.info('coach.round.result', {
+      course: c.name,
+      segments: segments.map(s => s.tier).join(','),
+      repaired: round.repaired,
+      proposal: prop.id,
+      ops: final.spec.ops.length,
+    })
     return {
       course: c.name,
       state: 'applied',

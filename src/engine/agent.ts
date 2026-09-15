@@ -24,6 +24,7 @@
  */
 import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmTokenUsage, LlmToolCall, LlmToolSpec } from './llm.ts'
 import type { Clock } from './clock.ts'
+import type { Logger } from './logger.ts'
 
 /** 剥掉模型可能包住的整段 markdown 代码围栏：限 markdown/yaml/json 等数据类标签——
  * 正文类标签（svg/plot 等）本身是内容的一部分，剥掉会毁掉 ```svg/```plot 引用块。
@@ -41,7 +42,7 @@ export const AGENT_LOOP_MAX_TOOL_ROUNDS = 20
 /** 调用模式（观测面词汇）：complete 单发 / repair 门错修复轮 / loop 工具回路轮。 */
 export type AgentCallMode = 'complete' | 'repair' | 'loop'
 
-/** 一次底层 LLM 调用的观测记录（注入侧可观测：宿主接运行日志/console）。 */
+/** 一次底层 LLM 调用的观测记录（注入侧可观测：宿主接调试日志 `agent.call` + console）。 */
 export interface AgentCallRecord {
   /** 调用站标签（种子起草/教练生长/罗盘/目标反编译/计划草案/里程碑草案/…）。 */
   station: string
@@ -57,11 +58,15 @@ export interface AgentCallRecord {
   usage?: LlmTokenUsage
 }
 
-/** 缝的端口注入：complete 必带；stream 只在 agentLoop 消费；onCall 是观测面。 */
+/** 缝的端口注入：complete 必带；stream 只在 agentLoop 消费；onCall 是观测面。
+ * `logger`（#253 / ADR-0080）是**调试日志端口**——门错修复轮的四条 `agent.gate.*`
+ * 事件由缝自己发（站点参数沿 `gateRepairRound(station, …)` 贯通），故缝必须持有它。
+ * **必填**：可选会让「忘了接线 = 日志静默消失」，正是本票要治的病。 */
 export interface AgentSeamPorts {
   complete: LlmComplete
   stream?: LlmStream
   onCall?: (record: AgentCallRecord) => void
+  logger: Logger
 }
 
 /** 门的裁决：errors 空 = 过门。门可以是**受理门**（propose/写盘这类过门即落受理产物
@@ -105,19 +110,37 @@ export class AgentSeam {
   /** 门错修复轮（共享能力，ADR-0041「+1 次门错修复轮」）：first() 产出 → gate() 校验
    * → 未过以门错误原文 + 被拒候选原文回灌 repair() 重产**恰一次** → 仍败（或修复轮
    * 自身失败）以 fatal() 抛两轮死因。修复轮的语义档由站点在 repair() 内声明（回灌
-   * 重裁恒 deep 档）。过门的受理产物经 `result` 交还（受理式门：类型上过门必有产物）。 */
-  async gateRepairRound<T, U>(_station: string, spec: GateRepairSpec<T, U>): Promise<{ candidate: T; result: U; repaired: boolean }> {
+   * 重裁恒 deep 档）。过门的受理产物经 `result` 交还（受理式门：类型上过门必有产物）。
+   *
+   * `station`（#253 / ADR-0080 复活，原为未用的 `_station`）是**日志站点标签**，四条
+   * `agent.gate.*` 事件全带它——「到底跑没跑回灌重裁」由此一眼可判：
+   * `agent.gate.repair` 不出现 = 首轮就过门（或根本没进这个缝）。三条实际调用点 =
+   * 教练生长／目标反编译／里程碑草案（`agent.gate.first`/`repair`/`repair.reject`/`death`
+   * 只从三站发出；「六站共用」指整个缝而非这一形态，见 ADR-0080 §修订）。 */
+  async gateRepairRound<T, U>(station: string, spec: GateRepairSpec<T, U>): Promise<{ candidate: T; result: U; repaired: boolean }> {
+    const log = this.ports.logger
     const candidate = await spec.first()
     const firstGate = await spec.gate(candidate)
-    if (!firstGate.errors.length) return { candidate, result: firstGate.result as U, repaired: false }
+    if (!firstGate.errors.length) {
+      log.info('agent.gate.first', { station, verdict: 'pass', errors: 0 })
+      return { candidate, result: firstGate.result as U, repaired: false }
+    }
+    log.info('agent.gate.first', { station, verdict: 'reject', errors: firstGate.errors.length, detail: firstGate.errors })
+    log.info('agent.gate.repair', { station, attempt: 1 })
     let repairedCandidate: T
     try {
       repairedCandidate = await spec.repair(firstGate.errors, candidate)
     } catch (err) {
-      throw spec.fatal(firstGate.errors, [err instanceof Error ? err.message : String(err)])
+      const death = [err instanceof Error ? err.message : String(err)]
+      log.error('agent.gate.death', { station, first_errors: firstGate.errors.length, repair_errors: death.length, detail: [...firstGate.errors, ...death] })
+      throw spec.fatal(firstGate.errors, death)
     }
     const repairGate = await spec.gate(repairedCandidate)
-    if (repairGate.errors.length) throw spec.fatal(firstGate.errors, repairGate.errors)
+    if (repairGate.errors.length) {
+      log.warn('agent.gate.repair.reject', { station, errors: repairGate.errors.length, detail: repairGate.errors })
+      log.error('agent.gate.death', { station, first_errors: firstGate.errors.length, repair_errors: repairGate.errors.length, detail: [...firstGate.errors, ...repairGate.errors] })
+      throw spec.fatal(firstGate.errors, repairGate.errors)
+    }
     return { candidate: repairedCandidate, result: repairGate.result as U, repaired: true }
   }
 

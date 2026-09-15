@@ -1,3 +1,4 @@
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, rm, writeFile } from 'node:fs/promises'
@@ -41,7 +42,7 @@ const GOLD_ROUTE_2 = GOLD_ROUTE + '\n- **换向预留**：学习者批注提到�
 function replayFake(reply: string) {
   const calls: Array<{ prompt: string; system?: string; effort?: string }> = []
   const requests: Array<{ messages: Array<{ role: string; text?: string; isError?: boolean }>; tools?: Array<{ name: string }> }> = []
-  const seam = new AgentSeam({
+  const seam = new AgentSeam({ logger: memLogger(),
     complete: async (prompt, system, opts) => {
       calls.push({ prompt, system, effort: opts?.effort })
       return reply
@@ -133,7 +134,7 @@ test('#163 罗盘重画经工具回路：裁决前查图自证名字（工具回
     const scripted = (() => {
       const calls: Array<{ prompt: string; system?: string; effort?: string }> = []
       const requests: Array<{ messages: Array<{ role: string; text?: string; toolCalls?: unknown }>; tools?: Array<{ name: string }> }> = []
-      const seam = new AgentSeam({
+      const seam = new AgentSeam({ logger: memLogger(),
         complete: async prompt => { calls.push({ prompt }); return GOLD_ROUTE },
     stream: async req => {
       calls.push({ prompt: (req.messages[0] as { text: string }).text, effort: req.effort })

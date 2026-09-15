@@ -8,6 +8,7 @@
  * - 工具回路模式：白名单工具执行与结果回灌、runTool 失败以 isError 回灌、
  *   K≤20 轮预算封顶 fail loud（不可被调用方抬高）、LlmStream 缺位 fail loud。
  */
+import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from '../src/engine/agent.ts'
@@ -55,7 +56,7 @@ test('stripFences：整段围栏剥壳（数据类标签），正文类标签与
 test('单发模式：剥围栏内建、语义档贯通端口、调用日志按站归组且注入侧可观测', async () => {
   const port = fakeComplete(['```yaml\nok: 1\n```', '直接文本'])
   const obs = collector()
-  const agent = new AgentSeam({ complete: port, onCall: obs.onCall }, systemClock)
+  const agent = new AgentSeam({ logger: memLogger(), complete: port, onCall: obs.onCall }, systemClock)
 
   const first = await agent.complete('罗盘', '画罗盘', { effort: 'deep' })
   assert.equal(first, 'ok: 1', '整段围栏在缝里剥掉（站点拿到的已是净文本）')
@@ -80,7 +81,7 @@ test('单发模式：剥围栏内建、语义档贯通端口、调用日志按�
 test('repair：与 complete 同一传输，观测面单独标 repair 模式', async () => {
   const port = fakeComplete(['修好了'])
   const obs = collector()
-  const agent = new AgentSeam({ complete: port, onCall: obs.onCall }, systemClock)
+  const agent = new AgentSeam({ logger: memLogger(), complete: port, onCall: obs.onCall }, systemClock)
   const out = await agent.repair('教练生长', '回灌重裁', { effort: 'deep' })
   assert.equal(out, '修好了')
   assert.equal(port.calls[0]!.effort, 'deep')
@@ -90,7 +91,7 @@ test('repair：与 complete 同一传输，观测面单独标 repair 模式', as
 test('门错修复轮：首过零修复；拒收恰回灌重裁一轮（门错误+被拒原文）；受理产物随行', async () => {
   // 首过：repair 不被调用，受理产物经 result 交还
   const portOk = fakeComplete(['好产出'])
-  const agentOk = new AgentSeam({ complete: portOk }, systemClock)
+  const agentOk = new AgentSeam({ logger: memLogger(), complete: portOk }, systemClock)
   const ok = await agentOk.gateRepairRound<string, { spec: number }>('种子起草', {
     first: () => agentOk.complete('种子起草', '包'),
     gate: raw => (raw === '好产出' ? { errors: [], result: { spec: 1 } } : { errors: ['格式错'] }),
@@ -104,7 +105,8 @@ test('门错修复轮：首过零修复；拒收恰回灌重裁一轮（门错�
 
   // 拒收 → 恰一轮回灌重裁 → 过
   const port = fakeComplete(['坏产出', '好产出'])
-  const agent = new AgentSeam({ complete: port }, systemClock)
+  const log = memLogger()
+  const agent = new AgentSeam({ logger: log, complete: port }, systemClock)
   const repaired = await agent.gateRepairRound<string, { spec: number }>('种子起草', {
     first: () => agent.complete('种子起草', '包'),
     gate: raw => (raw === '好产出' ? { errors: [], result: { spec: 2 } } : { errors: ['格式错', '缺字段'] }),
@@ -119,10 +121,16 @@ test('门错修复轮：首过零修复；拒收恰回灌重裁一轮（门错�
   assert.equal(repaired.result.spec, 2, '重裁产出重进受理门，产物取重裁那一轮')
   assert.equal(repaired.repaired, true)
   assert.equal(port.calls.length, 2, '恰一次修复轮（首轮 + 重裁共 2 次补全）')
+  // #253 / ADR-0080：门错修复轮的四条事件——「首轮被拒 → 跑过重裁 → 过门」
+  assert.deepEqual(log.events(), ['agent.gate.first', 'agent.gate.repair'])
+  assert.equal(log.nth('agent.gate.first')!.fields.verdict, 'reject')
+  assert.equal(log.nth('agent.gate.first')!.fields.station, '种子起草', '站点参数沿缝贯通')
+  assert.equal(log.nth('agent.gate.repair')!.fields.attempt, 1, '恰一轮：attempt 恒 1')
 
   // 仍败：fatal 拿到两轮死因
   const port2 = fakeComplete(['坏产出', '还是坏'])
-  const agent2 = new AgentSeam({ complete: port2 }, systemClock)
+  const log2 = memLogger()
+  const agent2 = new AgentSeam({ logger: log2, complete: port2 }, systemClock)
   await assert.rejects(
     () => agent2.gateRepairRound<string, void>('种子起草', {
       first: () => agent2.complete('种子起草', '包'),
@@ -133,11 +141,30 @@ test('门错修复轮：首过零修复；拒收恰回灌重裁一轮（门错�
     /死因【首轮】门拒绝：坏产出【重裁】门拒绝：还是坏/,
   )
   assert.equal(port2.calls.length, 2, '恰两轮调用，不无限重试')
+  // #253 / ADR-0080 验收判据 2：两轮死因在 `agent.gate.death` 里**全文可读**（续行）
+  assert.deepEqual(log2.events(), ['agent.gate.first', 'agent.gate.repair', 'agent.gate.repair.reject', 'agent.gate.death'])
+  assert.equal(log2.nth('agent.gate.repair.reject')!.fields.errors, 1)
+  const death = log2.nth('agent.gate.death')!
+  assert.equal(death.level, 'error')
+  assert.equal(death.fields.first_errors, 1)
+  assert.equal(death.fields.repair_errors, 1)
+  assert.deepEqual(death.fields.detail, ['门拒绝：坏产出', '门拒绝：还是坏'], '两轮死因原文都在（不是只给计数）')
+  // 首轮就过门：`agent.gate.repair` 缺席 = 「没跑重试」的一眼判据
+  const log3 = memLogger()
+  const agentOk2 = new AgentSeam({ logger: log3, complete: fakeComplete(['好产出']) }, systemClock)
+  await agentOk2.gateRepairRound<string, void>('种子起草', {
+    first: () => agentOk2.complete('种子起草', '包'),
+    gate: () => ({ errors: [] }),
+    repair: () => { throw new Error('不该被调用') },
+    fatal: () => new Error('不该 fatal'),
+  })
+  assert.deepEqual(log3.events(), ['agent.gate.first'], '首过：只记 first，repair 缺席')
+  assert.equal(log3.nth('agent.gate.first')!.fields.verdict, 'pass')
 })
 
 test('门错修复轮：修复轮自身失败（模型/解析抛错）同葬进 fatal；门内程序性抛错原样冒泡', async () => {
   const port = fakeComplete(['坏产出', '修复轮产出'])
-  const agent = new AgentSeam({ complete: port }, systemClock)
+  const agent = new AgentSeam({ logger: memLogger(), complete: port }, systemClock)
   await assert.rejects(
     () => agent.gateRepairRound<string, void>('目标反编译', {
       first: () => agent.complete('目标反编译', '包'),
@@ -149,7 +176,7 @@ test('门错修复轮：修复轮自身失败（模型/解析抛错）同葬进 
   )
 
   // 门内抛错 = 程序性失败（非门拒绝）：原样冒泡、不进修复轮
-  const agent3 = new AgentSeam({ complete: fakeComplete(['x']) }, systemClock)
+  const agent3 = new AgentSeam({ logger: memLogger(), complete: fakeComplete(['x']) }, systemClock)
   await assert.rejects(
     () => agent3.gateRepairRound<string, void>('目标反编译', {
       first: () => agent3.complete('目标反编译', '包'),
@@ -167,7 +194,7 @@ test('工具回路：白名单工具执行回灌继续、最终文本剥围栏�
     { text: '```yaml\nverdict: 1\n```' },
   ])
   const obs = collector()
-  const agent = new AgentSeam({ complete: fakeComplete([]), stream, onCall: obs.onCall }, systemClock)
+  const agent = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream, onCall: obs.onCall }, systemClock)
   const tools: LlmToolSpec[] = [{ name: 'graph_view', description: '图面', parameters: { type: 'object' } }]
   const toolInputs: string[] = []
   const r = await agent.agentLoop({
@@ -202,7 +229,7 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤20
     { text: '查', toolCalls: [{ id: 'e1', name: 'bank_view', arguments: '{}' }] },
     { text: '好' },
   ])
-  const agent = new AgentSeam({ complete: fakeComplete([]), stream: errStream }, systemClock)
+  const agent = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: errStream }, systemClock)
   await agent.agentLoop({
     station: '教练生长', prompt: 'p', tools: [],
     runTool: async () => { throw new Error('白名单外工具') },
@@ -215,7 +242,7 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤20
   const endless = fakeStream(Array.from({ length: 23 }, (_, i) => ({
     text: `第${i}轮`, toolCalls: [{ id: `c${i}`, name: 'graph_view', arguments: '{}' }],
   })))
-  const agent2 = new AgentSeam({ complete: fakeComplete([]), stream: endless }, systemClock)
+  const agent2 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: endless }, systemClock)
   await assert.rejects(
     () => agent2.agentLoop({
       station: '教练生长', prompt: 'p', tools: [],
@@ -226,7 +253,7 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤20
   assert.equal(endless.requests.length, 21, '第 K+1 轮发现仍在请求工具即中止')
 
   // LlmStream 端口缺位：fail loud 指向适配器缺位
-  const agent3 = new AgentSeam({ complete: fakeComplete([]) }, systemClock)
+  const agent3 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]) }, systemClock)
   await assert.rejects(
     () => agent3.agentLoop({ station: '罗盘', prompt: 'p', tools: [], runTool: async () => 'x' }),
     /LlmStream 端口/,
@@ -241,7 +268,7 @@ test('工具回路：任务取消传导（#163）——旗标翻真即中止，�
     { text: '查一下', toolCalls: [{ id: 'c1', name: 'graph_view', arguments: '{}' }] },
     { text: '不该到达的终裁' },
   ])
-  const agent = new AgentSeam({ complete: fakeComplete([]), stream }, systemClock)
+  const agent = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream }, systemClock)
   const toolCalls: string[] = []
   await assert.rejects(
     () => agent.agentLoop({
@@ -260,7 +287,7 @@ test('工具回路：任务取消传导（#163）——旗标翻真即中止，�
 
   // 首轮调用前即取消：零底层调用零工具执行
   const stream2 = fakeStream([{ text: 'x' }])
-  const agent2 = new AgentSeam({ complete: fakeComplete([]), stream: stream2 }, systemClock)
+  const agent2 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: stream2 }, systemClock)
   await assert.rejects(
     () => agent2.agentLoop({ station: '罗盘', prompt: 'p', tools: [], runTool: async () => 'y', isCancelled: () => true }),
     /任务已取消/,
@@ -269,7 +296,7 @@ test('工具回路：任务取消传导（#163）——旗标翻真即中止，�
 
   // 未取消：isCancelled 缺省语义不变（回路跑完）
   const stream3 = fakeStream([{ text: '终裁' }])
-  const agent3 = new AgentSeam({ complete: fakeComplete([]), stream: stream3 }, systemClock)
+  const agent3 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: stream3 }, systemClock)
   const ok = await agent3.agentLoop({ station: '罗盘', prompt: 'p', tools: [], runTool: async () => 'y' })
   assert.equal(ok.text, '终裁')
 })
@@ -281,7 +308,7 @@ test('#213 token 计量回程：端口 opts.usageSink 回调的 usage 进 AgentC
     opts?.usageSink?.({ inputTokens: 120, outputTokens: 45, reasoningTokens: 30 })
     return '回复'
   }
-  const agent = new AgentSeam({ complete: sinkFake, onCall: obs.onCall }, systemClock)
+  const agent = new AgentSeam({ logger: memLogger(), complete: sinkFake, onCall: obs.onCall }, systemClock)
   await agent.complete('种子起草', 'p')
   assert.equal(obs.records.length, 1)
   assert.deepEqual(obs.records[0].usage, { inputTokens: 120, outputTokens: 45, reasoningTokens: 30 })
@@ -291,11 +318,11 @@ test('#213 token 计量回程：端口 opts.usageSink 回调的 usage 进 AgentC
     seen.push({ station: opts?.station, kind: opts?.kind })
     return 'r'
   }
-  const agent2 = new AgentSeam({ complete: spy }, systemClock)
+  const agent2 = new AgentSeam({ logger: memLogger(), complete: spy }, systemClock)
   await agent2.repair('教练生长', '回灌')
   assert.deepEqual(seen, [{ station: '教练生长', kind: 'repair' }])
   // 端口不回 usage：AgentCallRecord.usage 缺席（路由未上报的合法态）
-  const agent3 = new AgentSeam({ complete: fakeComplete(['x']), onCall: obs.onCall }, systemClock)
+  const agent3 = new AgentSeam({ logger: memLogger(), complete: fakeComplete(['x']), onCall: obs.onCall }, systemClock)
   await agent3.complete('罗盘', 'p')
   assert.equal(obs.records[1].usage, undefined)
 })
