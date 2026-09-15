@@ -94,7 +94,7 @@ export const 图谱域 = {
   }),
   'graph-analyze': command({
     id: "graph-analyze",
-    summary: "Analyze a course knowledge graph: structural stats, unreachable nodes, bottlenecks, lapse hotspots, graph health score (0-100, see health), next-batch suggestions (suggestions.expand_blocks/missing_pre/unconverged, plus jump_candidates + jump_total — cognitive-jump edges needing a verdict each — and merge_blocks), the full per-node schema (schema: pre/enc/est/bloom/difficulty/note per node — the data basis for edge-level self-checks), plus cytoscape render elements. Returns JSON. Run before planning each batch of graph edits; the next-batch plan must cite concrete entries from health/suggestions.",
+    summary: "Analyze a course knowledge graph: structural stats, unreachable nodes, bottlenecks, lapse hotspots, graph health score (0-100, see health), next-batch suggestions (suggestions.concept_growth — the imbalance-sorted per-concept table (supply/demand/depth_spread/evidence), #281 — plus missing_pre and jump_candidates + jump_total, cognitive-jump edges needing a verdict each), the full per-node schema (schema: pre/enc/est/bloom/difficulty/note per node — the data basis for edge-level self-checks), plus cytoscape render elements. Returns JSON. Run before planning each batch of graph edits; the next-batch plan must cite concrete entries from health/suggestions.",
     args: {
       course: { type: "string", description: "Course name; omit when only one course is enabled", read: "query" },
       elementsOnly: { type: "boolean", description: "Only output cytoscape render elements (nodes/edges)" }
@@ -131,11 +131,11 @@ export const 图谱域 = {
   }),
   'graph-browse': command({
     id: "graph-browse",
-    summary: "Browse a course graph by region and/or block: node listings with depth/stage/est/difficulty/type/content status. Omit both filters to list every region (structure overview); give region (and optionally block) to explore one area. A block without a region succeeds only when exactly one block with that name exists; zero matches or ambiguity across regions fails with the matching region list so you can add the region filter. Unknown regions/blocks fail loud with valid names.",
+    summary: "Browse a course graph by grouping axis (#281: grouping is read-side derived, Region/Block retired): node listings grouped along depth (single-membership layers), concept (teaches/assumes derived, overlapping) or endpoint (per-endpoint upstream closure, overlapping), with depth/stage/est/difficulty/type/content status. axis defaults to depth; group optionally filters to one label. Overlapping nodes repeat per group (multiple positions visible). Unknown axis/group names fail loud with the valid values.",
     args: {
       course: { type: "string", description: "Course name; omit when only one course is enabled" },
-      region: { type: "string", description: "Region name filter" },
-      block: { type: "string", description: "Block name filter (requires region when ambiguous)" }
+      axis: { type: "string", description: "Grouping axis: depth (default) / concept / endpoint" },
+      group: { type: "string", description: "Optional group label filter along the chosen axis" }
     },
     engine: "graph.graphBrowse",
     domain: "图谱",
@@ -144,7 +144,7 @@ export const 图谱域 = {
         channel: "agent",
         mode: "sync",
         tool: "learnhub_graph_browse",
-        bind: ["course", "region", "block"]
+        bind: ["course", "axis", "group"]
       }
     ]
   }),

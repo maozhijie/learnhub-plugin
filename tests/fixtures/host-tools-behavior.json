@@ -535,7 +535,7 @@
   "queued": false,
   "text": "[]",
   "calls": [
-   "graph.graphBrowse(\"1\",\"1\",\"1\")"
+   "graph.graphBrowse(\"1\",undefined,undefined)"
   ]
  },
  {

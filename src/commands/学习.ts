@@ -157,7 +157,8 @@ export const 学习域 = {
   'courses-tree': command({
     id: "courses-tree",
     args: {
-      course: { type: "string", read: "query" }
+      course: { type: "string", read: "query" },
+      axis: { type: "string", description: "Grouping axis: depth (default) / concept / endpoint", read: "query" }
     },
     engine: "content2.coursesTree",
     domain: "学习",
@@ -166,7 +167,7 @@ export const 学习域 = {
         channel: "panel",
         mode: "sync",
         route: { method: "GET", path: "/courses/tree" },
-        bind: ["course"]
+        bind: ["course", "axis"]
       }
     ]
   }),

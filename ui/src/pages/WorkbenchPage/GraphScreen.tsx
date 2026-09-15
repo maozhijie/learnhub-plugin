@@ -156,10 +156,15 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
   const [graphError, setGraphError] = useState<string | null>(null)
   /** 排队/生成中的节点（节点名 → 阶段；角标与 hover 工具条消费）。 */
   const [genStates, setGenStates] = useState<Record<string, 'queued' | 'running'>>({})
-  // 总览过滤
-  const [region, setRegion] = useState<string>('')
+  // 总览过滤（#283 换轴）：轴单一提升在 frame（图面与课程树同切）；组过滤按 tree 的组员集合
+  const [group, setGroup] = useState<string>('')
   const [search, setSearch] = useState('')
   const [readyOnly, setReadyOnly] = useState(false)
+  const axis = frame.graphAxis
+  const groups = useMemo(
+    () => frame.tree?.courses.find(c => c.name === course)?.groups ?? [],
+    [frame.tree, course],
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -201,11 +206,13 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
     if (edge) { void load(); void reloadFrame() }
   }, [jobs, course, load, reloadFrame])
 
-  // 过滤：裁出子图（端点不在集合内的边一并裁掉）
+  // 过滤：裁出子图（端点不在集合内的边一并裁掉）；组过滤 = 节点 ∈ 所选组的成员集
+  // （concept/endpoint 轴下同一节点在多组重复——tree 的组员集与 graphBrowse 同源口径）
   const filtered = useMemo(() => {
     if (!doc) return null
+    const groupNodes = group ? new Set(groups.find(g => g.label === group)?.nodes.map(n => n.node) ?? []) : null
     const keep = (id: string) => {
-      if (region && !(doc.nodes.find(n => n.data.id === id)?.data.region === region)) return false
+      if (groupNodes && !groupNodes.has(id)) return false
       if (readyOnly) {
         const n = doc.nodes.find(x => x.data.id === id)
         if (!n || (n.data.stage !== 'ready' && n.data.stage !== 'learning')) return false
@@ -217,7 +224,7 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
     const ids = new Set(nodes.map(n => n.data.id))
     const edges = doc.edges.filter(e => ids.has(e.data.source) && ids.has(e.data.target))
     return { ...doc, nodes, edges }
-  }, [doc, region, search, readyOnly])
+  }, [doc, group, groups, search, readyOnly])
 
   const computeLocked = useCallback((g: GraphDoc) => {
     const stageOf = new Map(g.nodes.map(n => [n.data.id, n.data.stage] as const))
@@ -245,10 +252,6 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
     [rec, course],
   )
   const bankSet = useMemo(() => new Set(banks?.map(b => b.node) ?? []), [banks])
-  const regions = useMemo(
-    () => [...new Set(doc?.nodes.map(n => n.data.region) ?? [])].sort(),
-    [doc],
-  )
 
   const onSelect = (nodeId: string) => frame.openLesson(course, nodeId)
 
@@ -338,9 +341,17 @@ export default function GraphScreen({ frame, course, jobs }: { frame: AppFrame; 
         </Space>
         <div className='lh-ml-auto lh-gap-8 lh-row lh-wrap'>
           <Select
-            size='small' placeholder='全区' className='lh-w-160' allowClear
-            value={region || undefined} onChange={v => setRegion(v ?? '')}
-            options={regions.map(r => ({ label: r, value: r }))} />
+            size='small' className='lh-w-110'
+            value={axis} onChange={v => { frame.setGraphAxis(v as typeof axis); setGroup('') }}
+            options={[
+              { label: '按深度', value: 'depth' },
+              { label: '按概念', value: 'concept' },
+              { label: '按终点', value: 'endpoint' },
+            ]} />
+          <Select
+            size='small' placeholder='全部分组' className='lh-w-160' allowClear
+            value={group || undefined} onChange={v => setGroup(v ?? '')}
+            options={groups.map(g => ({ label: `${g.label}（${g.nodes.length}）`, value: g.label }))} />
           <Input.Search size='small' placeholder='搜索节点名' className='lh-w-180'
             value={search} onChange={setSearch} allowClear />
           <Space size={6}>

@@ -627,7 +627,6 @@ export class Sessions {
     const unlocks = candidates.filter(n => graph.preOf[n].includes(node))
     return {
       course: courseName, node,
-      region: graph.blockOf[node][1],
       stage: effectiveStage(state, node),
       mastery: masteryOfFm(fm),
       sections,

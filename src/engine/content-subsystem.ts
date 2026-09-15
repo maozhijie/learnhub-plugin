@@ -84,7 +84,7 @@ import { calibrationHintText, overconfidenceOf } from './calibration.ts'
 import type { ComplexityTier } from './complexity.ts'
 import { nodeTierOf, sectionTierLabel } from './complexity.ts'
 import { OPEN_QUESTION_GRADING_SYSTEM, PASS_SCORE, REFLECTION_GRADING_SYSTEM, answerDiff, applyPracticeEvidence, clamp01, evaluateAllo, parseOpenGrading, parseReflectionGrading, revealAnswer } from './grading.ts'
-import { safeFilename } from './graph.ts'
+import { safeFilename, groupView, type GroupAxis } from './graph.ts'
 import { jolDeviatedKeys, pickJolTargets } from './jol.ts'
 import type { LearnerCardDoc } from './learner-cards.ts'
 import { interleaveBySource } from './nof1.ts'
@@ -422,28 +422,33 @@ export class ContentSubsystem {
     return this.contentFeedback(course, node)
   }
 
-  /** 课程工作区树：course → region → block → node（stage/mastery/笔记/题库状态）。 */
-  async coursesTree(courseKey?: string): Promise<TreeDoc> {
+  /** 课程工作区树（#283 换轴）：course → 按所选分组轴（depth/concept/endpoint）切组 →
+   * 节点。depth 单归属；concept/endpoint 派生可重叠——同一节点在多组重复出现，多重
+   * 位置可见；未标概念等兑底组按普通组返回（固定组名是引擎契约，UI 不特判）。
+   * 轴状态由调用方持有并与图面共享，本入口每次重算（读侧派生零落盘）。 */
+  async coursesTree(courseKey?: string, axis: GroupAxis = 'depth'): Promise<TreeDoc> {
     const targets = courseKey ? [await this.e.registry.resolve(courseKey)] : await this.e.enabledCourses()
     const courses = []
     for (const c of targets) {
       const { graph, state } = await this.e.loadView(c)
-      const regions = graph.regions.map(r => ({
-        name: r.name, color: r.color,
-        blocks: r.blocks.map(b => ({
-          name: b.name,
-          nodes: b.nodes.map(n => ({
-            node: n.name, opt: n.opt,
-            stage: effectiveStage(state, n.name),
-            mastery: masteryOfFm(state[n.name]),
-            contentVersion: state[n.name]?.content.version ?? 0,
-            contentStatus: state[n.name]?.content.status ?? 'draft',
-            path: this.e.sessions.notePath(c.root, graph, n.name),
-            hasBank: this.e.fs.exists(this.e.bank.bankPath(this.e.paths.courseRoot(c.root), n.name)),
-          })),
-        })),
-      }))
-      courses.push({ name: c.name, id: c.id, regions })
+      const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
+      const groups = groupView(graph, axis, {
+        conceptEntries: await this.e.concepts.load(c.root),
+        endpoints: [...endpointNames(anchors)],
+      })
+      const nodeOf = (n: string) => ({
+        node: n, opt: graph.opt.has(n),
+        stage: effectiveStage(state, n),
+        mastery: masteryOfFm(state[n]),
+        contentVersion: state[n]?.content.version ?? 0,
+        contentStatus: state[n]?.content.status ?? 'draft' as const,
+        path: this.e.sessions.notePath(c.root, graph, n),
+        hasBank: this.e.fs.exists(this.e.bank.bankPath(this.e.paths.courseRoot(c.root), n)),
+      })
+      courses.push({
+        name: c.name, id: c.id, axis,
+        groups: groups.map(g => ({ label: g.label, nodes: g.nodes.map(nodeOf) })),
+      })
     }
     return { courses }
   }

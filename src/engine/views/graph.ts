@@ -2,6 +2,7 @@
  * graph 域视图类型（#152 刀归档；叶子文件，只引类型层）。
  */
 import type { ContentStatus, EncEdge, GrowthOperator, Stage } from '../types.ts'
+import type { GroupAxis } from '../graph.ts'
 import type { GraphProposeResult } from './proposals.ts'
 
 /** 富化提案受理（proposeEnrich，覆盖层通道）：files = 指纹锚定的正典文件数。 */
@@ -33,17 +34,7 @@ export interface GraphApplyEnrichResult {
 
 export type GraphApplyResult = GraphApplyEditResult | GraphApplyEnrichResult
 
-export interface GraphBrowseBlock { name: string; nodes: GraphBrowseNode[] }
-
-export interface GraphBrowseDoc {
-  course: string
-  total: number
-  regions: GraphBrowseRegion[]
-  /** Broken 状态显式暴露，不伪装成 unseen/draft。 */
-  broken_notes: Array<{ path: string; node?: string; reason: string }>
-}
-
-/** 区/块浏览（graphBrowse）：按区名/块名过滤的节点清单。 */
+/** 组浏览节点载荷（graphBrowse）：轻量结构档，重叠组下同一节点随组重复。 */
 export interface GraphBrowseNode {
   node: string
   depth: number
@@ -54,7 +45,18 @@ export interface GraphBrowseNode {
   content_status: ContentStatus
 }
 
-export interface GraphBrowseRegion { name: string; blocks: GraphBrowseBlock[] }
+/** 组浏览视图（graphBrowse，#281）：按分组轴（depth/concept/endpoint）切组的节点清单。
+ * depth = 单归属分区；concept / endpoint = 派生可重叠——同一节点的多重位置以
+ * 「详情随组重复」直接呈现（不引入共享 map，消费方照组渲染即可）。 */
+export interface GraphBrowseDoc {
+  course: string
+  /** 本文档的分组轴（回显请求值；缺省 depth）。 */
+  axis: GroupAxis
+  total: number
+  groups: Array<{ label: string; nodes: GraphBrowseNode[] }>
+  /** Broken 状态显式暴露，不伪装成 unseen/draft。 */
+  broken_notes: Array<{ path: string; node?: string; reason: string }>
+}
 
 /** 图分析全量视图（analysis.GraphAnalysis 的视图镜像 + 终点锚派生的终点标记；React Flow elements 格式）。 */
 export interface GraphDoc {
@@ -82,25 +84,32 @@ export interface GraphDoc {
   /** 图谱健康分（0-100；结束条件锚点）。est_note：est 分布压缩的 advisor 提示（null = 无）。
    * topology_void（#270 作废署名）：环上置 0 的分项名单（如 convergence）。 */
   health: { score: number; breakdown: Record<string, number>; est_note: string | null; topology_void?: string[] }
-  /** 分批构建建议（图谱 designer 逐批展开时规划下一批的输入，全部可行动）。 */
+  /** 分批构建建议（图谱 designer 逐批展开时规划下一批的输入，全部可行动）。
+   * concept_growth（#281，grill 定稿 2026-09-15）：失衡排序表——零机械阈值，排序
+   * 暴露相对严重度，判读归教练。悬空依赖（supply 空）恒在最前；其余按行为证据
+   * （stuck+skipped 降序）→ 结构失衡度（demand−supply）降序。 */
   suggestions: {
-    /** 节点数 <5 的块（浅块优先）——往哪扩。 */
-    expand_blocks: Array<{ region: string; block: string; nodes: number }>
-    /** 空降节点（region 序靠后且 pre 为空）——先补谁。 */
+    concept_growth: Array<{
+      /** canonical 概念名（读侧经 resolveConcept 归并，别名不裂组）。 */
+      concept: string
+      /** 教它的节点（taughtByOf，图序）。 */
+      supply: string[]
+      /** 需求三路现成计数：assumes 它的节点数 / 题目 invokes 计数 / 服务哪些终点。 */
+      demand: { assumed: number; invoked: number; endpoints: string[] }
+      /** 组内成员的 depth 分布（如 {"L0": 2, "L5": 3}）；跨深是螺旋常态，宽 ≠ 异常。 */
+      depth_spread: Record<string, number>
+      /** 学习者证据聚合（只聚合计数，原文永不进图分析——ADR-0032 / #248）。 */
+      evidence: { skipped: number; stuck: number }
+    }>
+    /** 空降节点（pre 为空，剔终点）——先补谁；种子期豁免。 */
     missing_pre: string[]
-    /** 平均 pre 数 <1.5 的块——哪里连接过少。 */
-    unconverged: Array<{ region: string; block: string; avg_pre: number }>
     /** 认知跨步候选——每条必须 verdict：认可或修。 */
     jump_candidates: GraphJumpCandidate[]
     /** 跨步候选总数（截断前）——结束条件要求清零。 */
     jump_total: number
-    /** 节点数 <3 的块（合并比展开更划算时）。 */
-    merge_blocks: Array<{ region: string; block: string; nodes: number }>
   }
   nodes: Array<{ data: {
     id: string
-    region: string
-    block: string
     depth: number
     stage: Stage
     opt: boolean

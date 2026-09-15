@@ -17,9 +17,10 @@
 import { effectiveStage } from './audit.ts'
 import type { CompassDoc } from './compass.ts'
 import { ETA_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, etaMarkerOf, hasLearnerAnnotations, parseCompass, sectionBody } from './compass.ts'
-import type { ConceptRegistry } from './concepts.ts'
+import type { ConceptEntry, ConceptRegistry } from './concepts.ts'
 import { isDeprecated, resolveConcept } from './concepts.ts'
 import type { Graph } from './graph.ts'
+import { groupView } from './graph.ts'
 import { round2 } from './grading.ts'
 import type { VaultFs } from './io.ts'
 import { hasReadyContent } from './notes.ts'
@@ -81,8 +82,9 @@ function isWeak(state: Record<string, Fm>, n: string, today: string): boolean {
   return Boolean(due && today && String(due) <= today)
 }
 
-/** 逐节点行的公共折叠（ADR-0077：全图摘要与上游图摘要**同源同形**）：深度｜区·块｜
- * 阶段｜掌握度(+⚠)｜est｜due，pre 邻接与 teaches 并入同行。两处视图的差别只在
+/** 逐节点行的公共折叠（ADR-0077：全图摘要与上游图摘要**同源同形**；#281：去「区·块」
+ * 死坐标——分组是读侧派生，逐节点行不再携带）：深度｜阶段｜掌握度(+⚠)｜est｜due，
+ * pre 邻接与 teaches 并入同行。两处视图的差别只在
  * `pres`（摘要给图上全部 pre；上游闭包给**闭包内**的 pre 子集——闭包外的边不属本视图
  * 的拓扑）与各自的外围块（降级聚合 / 邻接表 + cap），行本身一份实现——两处各写一遍
  * 行格式，就会出现「摘要显示 d2、工具显示 深度 2」这类只靠人眼对齐的漂移。
@@ -91,7 +93,6 @@ function nodeRowBody(
   graph: Graph, state: Record<string, Fm>, n: string,
   opts: { today: string; endpoints: ReadonlySet<string>; pres?: string[] },
 ): string {
-  const [, region, block] = graph.blockOf[n]
   const pres = opts.pres ?? graph.preOf[n]
   const teaches = Object.entries(graph.teachesOf[n] ?? {}).map(([c, t]) => `${c} ${t}`)
   const est = graph.estOf[n]
@@ -100,7 +101,7 @@ function nodeRowBody(
   const columns = `${activeLabel(state, n)}｜掌握 ${masteryOfFm(state[n])}${isWeak(state, n, opts.today) ? ' ⚠' : ''}`
     + (est ? `｜est ${est}′` : '')
     + (due ? `｜due ${String(due)}` : '')
-  return `${n}${opts.endpoints.has(n) ? ' ⚑' : ''}（深度 ${graph.depth[n] ?? 0}｜${region}·${block}｜${columns}）`
+  return `${n}${opts.endpoints.has(n) ? ' ⚑' : ''}（深度 ${graph.depth[n] ?? 0}｜${columns}）`
     + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
     + (teaches.length ? `｜teaches: ${teaches.join('、')}` : '')
 }
@@ -114,23 +115,25 @@ function nodeRow(
 }
 
 /** 全图摘要（#250 / ADR-0077，自 #144 的「前沿细节 + 其余名单」升级）：教练全量包
- * 图面块的**常驻形态**——逐节点一行全图紧凑拓扑（深度序、区·块、阶段、掌握度，pre
+ * 图面块的**常驻形态**——逐节点一行全图紧凑拓扑（深度序、阶段、掌握度，pre
  * 邻接并入同行），弱掌握带 ⚠、终点带 ⚑。对教练它是预先存在的上下文：任何裁决自带
  * 全局骨架、健康分布与接线靶（卡点归因、算子裁决、插入定位都不必先查工具）。同时
- * 是结构事实源——ops 的节点名、region/block 与 pre 引用的取值域（逐节点一行意味着
+ * 是结构事实源——ops 的节点名与 pre 引用的取值域（逐节点一行意味着
  * **全部**节点名都在，不再有「其余名单」的截断面）。
  *
- * 规模降级（ADR-0077 先写死）：图超 FULL_GRAPH_CAP 时自动降为「区/块聚合行（节点数/
- * 掌握均值/就绪数）+ 前沿与在学细节行 + 显式溢出说明」，**⚠ 弱掌握与 ⚑ 终点例外不截**
- * （诊断与接线价值最高的子集）。与 upstream_dag 的分工：摘要 = 常驻地图集（省列），
- * 工具 = 变焦（全列含 due/est/teaches）。
+ * 规模降级（ADR-0077 先写死；#281 换轴）：图超 FULL_GRAPH_CAP 时自动降为「depth 段
+ * 聚合行（节点数/掌握均值/就绪数）+ 前沿与在学细节行 + 显式溢出说明」，**⚠ 弱掌握与
+ * ⚑ 终点例外不截**（诊断与接线价值最高的子集）；**概念组读数表永不全量降级**——它是
+ * 教练判读的核心面，降级只压节点级载荷（可见性是结构保证，不靠模型主动查）。
+ * 与 upstream_dag 的分工：摘要 = 常驻地图集（省列），工具 = 变焦（全列含 due/est/teaches）。
  *
  * endpoints：终点恒标（#200 / ADR-0055；#239 多终点化：**逐个终点**）——头部带每个
  * 终点一行，节点行带 ⚑。opts.today：⚠ 到期积压判据的 today（缺席时只判掌握度）。
+ * opts.conceptEntries：概念组读数表的 canonical 归并供料（缺席 = 空表头，别名不裂组）。
  * 轻量段同吃这份图面，裁决不盲。纯组装零写副作用、读侧派生零落盘。 */
 export function renderGrowthGraphView(
   graph: Graph, state: Record<string, Fm>, endpoints: ReadonlySet<string> = new Set<string>(),
-  opts: { today?: string } = {},
+  opts: { today?: string; conceptEntries?: ConceptEntry[] } = {},
 ): string {
   const today = opts.today ?? ''
   // 前沿 = readySet（未开始且非 opt 前置全部达成）；rValue 恒 1 = R 软闸不改变可学性、
@@ -146,32 +149,58 @@ export function renderGrowthGraphView(
   const weak = ordered.filter(n => isWeak(state, n, today))
   const degraded = ordered.length > FULL_GRAPH_CAP
   const lines: string[] = [
-    '## 当前图面（全图摘要——结构事实源；ops 的节点名、区/块与 pre 引用必须逐字来自这里）', '',
+    '## 当前图面（全图摘要——结构事实源；ops 的节点名与 pre 引用必须逐字来自这里）', '',
     `- 节点共 ${graph.names.length} 个；前沿与在学 ${active.length} 个｜弱掌握 ${weak.length} 个 ⚠`
       + `（⚠ = 已开始且掌握度低于 ${WEAK_MASTERY_THRESHOLD} 或到期积压）`
-      + (degraded ? `｜**超 ${FULL_GRAPH_CAP} 已降级**（区/块聚合 + 前沿细节；⚠ 与 ⚑ 例外不截）` : ''),
+      + (degraded ? `｜**超 ${FULL_GRAPH_CAP} 已降级**（depth 段聚合 + 前沿细节；⚠ 与 ⚑ 例外不截；概念组读数不降级）` : ''),
     ...(endpoints.size
       ? [...endpoints].map(n => `- ⚑ 终点：${n}（方向标记——朝该方向的生长须汇入它；不可 del/rename，零正文零题库不被调度，主线批须 set_pre 接线到新前沿）`)
       : ['（零终点——空锚是合法空态，先加一个终点：教练回合无从裁决方向）']),
   ]
+  // 概念组读数表（#281）：canonical 归并后逐组一行（teaches/assumes/未标），永不全量降级
+  // ——它是教练判读的核心面。只聚合计数，零阈值零建议：判读归教练。
+  const canonicalOf = (raw: string): string => resolveConcept(opts.conceptEntries ?? [], raw)?.canonical ?? raw
+  const conceptGroups = new Map<string, { supply: number; assumed: number; members: Set<string> }>()
+  for (const raw of new Set([...Object.keys(graph.taughtByOf), ...Object.keys(graph.assumedByOf)])) {
+    const label = canonicalOf(raw)
+    const slot = conceptGroups.get(label) ?? conceptGroups.set(label, { supply: 0, assumed: 0, members: new Set() }).get(label)!
+    slot.supply += graph.taughtByOf[raw]?.length ?? 0
+    slot.assumed += graph.assumedByOf[raw]?.length ?? 0
+    for (const n of graph.taughtByOf[raw] ?? []) slot.members.add(n)
+    for (const n of graph.assumedByOf[raw] ?? []) slot.members.add(n)
+  }
+  const coveredByConcept = new Set([...conceptGroups.values()].flatMap(g => [...g.members]))
+  let untagged = graph.names.filter(n => !coveredByConcept.has(n))
+  // 真有概念叫「未标概念」：合并不顶替（同 groupView 纪律），兑底名单并入真实组
+  const untitledGroup = conceptGroups.get('未标概念')
+  if (untagged.length && untitledGroup) {
+    for (const n of untagged) untitledGroup.members.add(n)
+    untagged = []
+  }
+  lines.push('', `### 概念组读数（teaches/assumes 派生可重叠；未标概念显式在列）`, '')
+  if (conceptGroups.size || untagged.length) {
+    for (const [label, g] of [...conceptGroups.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      const skipped = [...g.members].filter(n => effectiveStage(state, n) === 'skipped').length
+      lines.push(`- ${label}：教 ${g.supply}｜assumes ${g.assumed}｜成员 ${g.members.size} 个${skipped ? `｜跳过 ${skipped}` : ''}`)
+    }
+    if (untagged.length) lines.push(`- 未标概念：${untagged.length} 个节点（合法 Missing——概念铸名随生长批提案落盘，不回填）`)
+  } else {
+    lines.push('（零概念足迹——合法空态： teaches/assumes 随生长批落盘）')
+  }
   const nodeLine = (n: string): string => nodeRow(graph, state, n, { today, endpoints })
   if (!degraded) {
     lines.push('', `### 全图（逐节点一行，深度序——⚠ 弱掌握、⚑ 终点）`, '')
     for (const n of ordered) lines.push(nodeLine(n))
   } else {
-    // 降级：区/块聚合（节点数/掌握均值/就绪数）→ 前沿与在学细节 → ⚠/⚑ 例外全列 → 溢出说明
-    const buckets = new Map<string, string[]>()
-    for (const n of ordered) {
-      const key = `${graph.blockOf[n][1]}·${graph.blockOf[n][2]}`
-      const xs = buckets.get(key)
-      if (xs) xs.push(n)
-      else buckets.set(key, [n])
-    }
-    lines.push('', `### 区/块聚合（超 ${FULL_GRAPH_CAP} 个节点，逐节点行已降级）`, '')
-    for (const [key, ns] of [...buckets.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    // 降级：depth 段聚合（节点数/掌握均值/就绪数）→ 前沿与在学细节 → ⚠/⚑ 例外全列 → 溢出说明
+    // 桶来源 = groupView(depth) 单一出处（环上显式「无法分层」，不静默空桶）
+    const buckets = groupView(graph, 'depth')
+    lines.push('', `### depth 段聚合（超 ${FULL_GRAPH_CAP} 个节点，逐节点行已降级）`, '')
+    for (const bucket of buckets) {
+      const ns = bucket.nodes
       const mean = ns.reduce((s, n) => s + masteryOfFm(state[n]), 0) / ns.length
       const ready = ns.filter(n => activeSet.has(n)).length
-      lines.push(`- ${key}：${ns.length} 个节点（掌握均值 ${round2(mean)}｜前沿与在学 ${ready}）`)
+      lines.push(`- ${bucket.label}：${ns.length} 个节点（掌握均值 ${round2(mean)}｜前沿与在学 ${ready}）`)
     }
     lines.push('', `### 前沿与在学细节（${active.length} 个）`, '')
     if (active.length) for (const n of active) lines.push(nodeLine(n))
@@ -183,7 +212,7 @@ export function renderGrowthGraphView(
       lines.push('', `### ⚑ 终点（例外不截，${reachable.length} 个）`, '')
       for (const n of reachable) lines.push(nodeLine(n))
     }
-    lines.push('', `……（全图 ${ordered.length} 个节点超出逐节点行上限 ${FULL_GRAPH_CAP}——已降级为区/块聚合 + 前沿与在学细节；⚠ 弱掌握与 ⚑ 终点例外全列。变焦细节用 upstream_dag / node_card。）`)
+    lines.push('', `……（全图 ${ordered.length} 个节点超出逐节点行上限 ${FULL_GRAPH_CAP}——已降级为 depth 段聚合 + 前沿与在学细节；⚠ 弱掌握与 ⚑ 终点例外全列，概念组读数不降级。变焦细节用 upstream_dag / node_card。）`)
   }
   return lines.join('\n') + '\n'
 }
@@ -459,7 +488,7 @@ export function coachToolExecutor(
       case 'graph_view': {
         const { graph, state } = await deps.loadView(c)
         const { today } = await deps.learningDay()
-        return renderGrowthGraphView(graph, state, await endpointsOf(), { today })
+        return renderGrowthGraphView(graph, state, await endpointsOf(), { today, conceptEntries: await deps.concepts.load(c.root) })
       }
       case 'node_card': {
         const node = argsOf(call).node

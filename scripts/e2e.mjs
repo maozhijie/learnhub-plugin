@@ -503,11 +503,10 @@ async function run() {
   })
   await step('图谱健康分/建议 + edit 认知维度字段 + R13 跳步候选 + enc 反哺 hints', async () => {
     // edit 提案（add_node 携 est/bloom/difficulty）→ apply → findings + 字段落盘 + analyze health/suggestions
-    // add_node 无坐标（#275）：落到图内既有的单一区；pre 锚直接从图上取既有节点
-    // （课程笔记目录里可能有剪除归档的孤儿笔记，不可靠）
-    const anyBrowse = await engine.graphBrowse(courseName)
-    const region = anyBrowse.regions[0].name
-    const anchorNode = anyBrowse.regions[0].blocks[0].nodes[0].node
+    // add_node 无坐标（#275）：pre 锚直接从图上取既有节点（#281：graphBrowse 已换分组轴，
+    // 组标签随轴派生；depth 轴缺省，首组首节点作锚）
+    const anyBrowse = await engine.graph.graphBrowse(courseName)
+    const anchorNode = anyBrowse.groups[0].nodes[0].node
     const prop = await engine.graphPropose('edit', [
       `course: ${courseName}`,
       'reason: e2e 认知维度字段',
@@ -519,7 +518,7 @@ async function run() {
     const applied = await engine.graphApply('edit', prop.id)
     assert(Array.isArray(applied.findings), `apply findings missing: ${JSON.stringify(applied)}`)
     const dataDir = join(dstCenter, courseRoot, 'data')
-    const regionFile = readdirSync(dataDir).find(f => readFileSync(join(dataDir, f), 'utf8').includes(region))
+    const regionFile = readdirSync(dataDir).find(f => readFileSync(join(dataDir, f), 'utf8').includes(anchorNode))
     assert(regionFile, 'region file not found')
     const regionText = readFileSync(join(dataDir, regionFile), 'utf8')
     assert(regionText.includes('difficulty: 5') && regionText.includes('bloom: 分析') && regionText.includes('est: 30'), `edit node fields not persisted: ${regionText.slice(0, 400)}`)
@@ -528,8 +527,8 @@ async function run() {
     for (const k of ['action_naming', 'est_coverage', 'pre_completeness', 'convergence', 'structure_hygiene']) {
       assert(k in a.health.breakdown, `breakdown missing ${k}: ${JSON.stringify(a.health.breakdown)}`)
     }
-    assert(Array.isArray(a.suggestions.expand_blocks) && a.suggestions.expand_blocks.every(b => b.nodes < 5), `expand_blocks: ${JSON.stringify(a.suggestions.expand_blocks)}`)
-    assert(Array.isArray(a.suggestions.missing_pre) && Array.isArray(a.suggestions.unconverged), 'suggestions shape')
+    assert(Array.isArray(a.suggestions.concept_growth) && a.suggestions.concept_growth.every(r => Array.isArray(r.supply) && typeof r.demand.assumed === 'number'), `concept_growth: ${JSON.stringify(a.suggestions.concept_growth).slice(0, 200)}`)
+    assert(Array.isArray(a.suggestions.missing_pre), 'suggestions shape')
     // edit add_node 字段透传（回归：旧实现一律丢弃 est/type）
     const prop2 = await engine.graphPropose('edit', [
       `course: ${courseName}`,
@@ -594,8 +593,9 @@ async function run() {
     assert(nd.succ.includes('应用e2e基础量解题'), `graphNode succ: ${JSON.stringify(nd.succ)}`)
     assert(nd.enc.some(e => e.node === '辨析e2e边界情形' && e.w === 0.5), `graphNode enc: ${JSON.stringify(nd.enc)}`)
     assert(Array.isArray(nd.prereq_closure), 'graphNode closure')
-    const br = await engine.graphBrowse(courseName, region)
-    assert(br.total >= 4 && br.regions.length === 1 && br.regions[0].blocks.length >= 1, `graphBrowse: ${JSON.stringify(br).slice(0, 200)}`)
+    // 组浏览（#281）：按 depth 轴 + 首组过滤，节点详情随组携带
+    const br = await engine.graph.graphBrowse(courseName, 'depth', anyBrowse.groups[0].label)
+    assert(br.total >= 1 && br.axis === 'depth' && br.groups.length === 1 && br.groups[0].nodes.length >= 1, `graphBrowse: ${JSON.stringify(br).slice(0, 200)}`)
     const pa = await engine.graphPath(courseName, '计算e2e基础量', '证明e2e进阶结论')
     assert(pa.related === true && pa.direct === false, `graphPath related: ${JSON.stringify(pa)}`)
     assert(JSON.stringify(pa.chain) === JSON.stringify(['计算e2e基础量', '应用e2e基础量解题', '证明e2e进阶结论']), `graphPath chain: ${JSON.stringify(pa.chain)}`)

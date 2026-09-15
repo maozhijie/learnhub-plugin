@@ -47,7 +47,7 @@ export type {
   QuestionsAllDoc, QuestionsDoc, QueueCard, QueueItem, RecEvent, RecEventType, RecommendDoc, ReviewCard,
   ReviewQueueDoc, SectionManifest as SectionManifestItem, SkillLaneItem, SkillsListDoc, StatusCourse,
   StatusDoc, TooEasyAdvice,
-  TreeBlock, TreeCourse, TreeDoc, TreeRegion, TreeNode, XpStatus,
+    TreeCourse, TreeDoc, TreeGroup, TreeNode, XpStatus,
 } from '../../src/engine/views'
 
 // ---- 宿主侧形状：从宿主模块派生（不镜像） ----

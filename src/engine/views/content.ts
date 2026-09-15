@@ -11,11 +11,11 @@ export interface QueueItem { course: string; node: string; kind: string; reason:
 /** 课程学习分节（lesson 响应；manifest 存在时补 id/type 供练习轮装配）。 */
 export interface LessonSection { title: string; md: string; id?: string; type?: string }
 
-/** 单节点课程学习包（lesson）：分节正文 + 节清单 + 前置 + 推荐下一步。 */
+/** 单节点课程学习包（lesson）：分节正文 + 节清单 + 前置 + 推荐下一步（#281：region 随
+ * 「区·块」坐标退役——分组是读侧派生，学习包不再携带死坐标）。 */
 export interface LessonDoc {
   course: string
   node: string
-  region: string
   stage: Stage
   mastery: number
   sections: LessonSection[]
@@ -36,11 +36,11 @@ export interface TreeNode {
   hasBank: boolean
 }
 
-export interface TreeBlock { name: string; nodes: TreeNode[] }
+/** 课程工作区树（coursesTree，#283 换轴）：course → 按所选分组轴切组 → 节点。
+ * depth = 单归属；concept / endpoint = 派生可重叠（同一节点在多组重复出现）。 */
+export interface TreeGroup { label: string; nodes: TreeNode[] }
 
-export interface TreeRegion { name: string; color: string; blocks: TreeBlock[] }
-
-export interface TreeCourse { name: string; id?: string; regions: TreeRegion[] }
+export interface TreeCourse { name: string; id?: string; axis: string; groups: TreeGroup[] }
 
 export interface TreeDoc { courses: TreeCourse[] }
 

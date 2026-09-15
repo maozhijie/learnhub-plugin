@@ -25,13 +25,13 @@ export type {
 
 // content 域视图类型归档 views/content.ts（#152）：叶子文件——领主直引它，不经本 barrel 牵进重模块（R7）。
 export type {
-  ErrorCardFace, LessonDoc, LessonSection, QuestionItem, QuestionsDoc, QueueItem, QueueCard, ReviewCard, ReviewQueueDoc, TreeBlock, TreeCourse, TreeDoc, TreeNode, TreeRegion,
+  ErrorCardFace, LessonDoc, LessonSection, QuestionItem, QuestionsDoc, QueueItem, QueueCard, ReviewCard, ReviewQueueDoc, TreeCourse, TreeDoc, TreeGroup, TreeNode,
 } from './views/content.ts'
 
 
 // graph 域视图类型归档 views/graph.ts（#152）：叶子文件——领主直引它，不经本 barrel 牵进重模块（R7）。
 export type {
-  GraphApplyEditResult, GraphApplyEnrichResult, GraphApplyResult, GraphBrowseBlock, GraphBrowseDoc, GraphBrowseNode, GraphBrowseRegion, GraphDoc, GraphElementsDoc, GraphEncBackfillNoneResult, GraphEncBackfillProposedResult, GraphEncBackfillResult, GraphJumpCandidate, GraphNodeDoc, GraphNodeSchema, GraphPathRelatedResult, GraphPathResult, GraphPathUnrelatedResult,
+  GraphApplyEditResult, GraphApplyEnrichResult, GraphApplyResult, GraphBrowseDoc, GraphBrowseNode, GraphDoc, GraphElementsDoc, GraphEncBackfillNoneResult, GraphEncBackfillProposedResult, GraphEncBackfillResult, GraphJumpCandidate, GraphNodeDoc, GraphNodeSchema, GraphPathRelatedResult, GraphPathResult, GraphPathUnrelatedResult,
 } from './views/graph.ts'
 
 
@@ -88,7 +88,7 @@ export type {
 
 
 
-// ---- 课程工作区树（coursesTree；course → region → block → node）----
+// ---- 课程工作区树（coursesTree；course → 按所选分组轴切组 → 节点，#283）----
 
 
 // ---- 题目作答视图（questions / reviewQueue 共用；questionView 产出）----

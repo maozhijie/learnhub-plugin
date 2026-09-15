@@ -88,25 +88,29 @@ test('#12 engine facade rejects invalid question counts before invoking the mode
   })
 })
 
-test('#12 block-only graph browsing: unambiguous succeeds, zero-match and ambiguous fail with context', async () => {
+test('#12 graph browsing by grouping axis: groups returned, filter + fail loud (#281)', async () => {
   await withVault(CONTRACT_VAULT, async ({ engine }) => {
-    const ok = await engine.graph.graphBrowse('数学', undefined, '唯一块') as { total: number; regions: Array<{ name: string }> }
-    assert.equal(ok.total, 1)
-    assert.deepEqual(ok.regions.map(r => r.name), ['乙区'])
+    // depth 轴（缺省）：跨区图折叠成深度段；节点详情随组携带
+    const doc = await engine.graph.graphBrowse('数学') as { axis: string; total: number; groups: Array<{ label: string; nodes: Array<{ node: string }> }> }
+    assert.equal(doc.axis, 'depth')
+    assert.deepEqual(doc.groups.map(g => g.label), ['L0', 'L1'])
+    assert.equal(doc.groups[0]!.nodes.length, 2)
+    assert.equal(doc.total, 4)
 
+    // group 过滤：只留所选组；重叠轴下同一节点详情随组重复（多重位置可见）
+    const one = await engine.graph.graphBrowse('数学', 'depth', 'L1') as { total: number; groups: Array<{ label: string; nodes: unknown[] }> }
+    assert.equal(one.groups.length, 1)
+    assert.equal(one.total, 2)
+
+    // 坏组名 fail loud（列出可用组）；坏轴名 fail loud
     await assert.rejects(
-      () => engine.graph.graphBrowse('数学', undefined, '不存在块'),
-      (err: unknown) => (err as Error).message.includes('块「不存在块」不存在')
-        && (err as Error).message.includes('可用块'),
+      () => engine.graph.graphBrowse('数学', 'depth', '不存在组'),
+      (err: unknown) => (err as Error).message.includes('没有组「不存在组」')
+        && (err as Error).message.includes('可用'),
     )
     await assert.rejects(
-      () => engine.graph.graphBrowse('数学', undefined, '同名块'),
-      (err: unknown) => (err as Error).message.includes('块「同名块」不唯一')
-        && (err as Error).message.includes('甲区') && (err as Error).message.includes('乙区'),
-    )
-    await assert.rejects(
-      () => engine.graph.graphBrowse('数学', '甲区', '唯一块'),
-      (err: unknown) => (err as Error).message.includes('区「甲区」中没有块「唯一块」'),
+      () => engine.graph.graphBrowse('数学', 'region' as never),
+      (err: unknown) => (err as Error).message.includes('非法分组轴'),
     )
   })
 })

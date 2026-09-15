@@ -14,6 +14,9 @@ import { useCoachToasts } from './useCoachToasts'
 /** 打开中的节点学习视图（学习页二级视图）；focusNode = 图页定位高亮目标。 */
 export interface LessonRef { course: string; node: string }
 
+/** 分组轴（#283）：图面筛选与课程树共享同一轴——单一提升，杜绝「图看概念、树看深度」错位。 */
+export type GraphAxis = 'depth' | 'concept' | 'endpoint'
+
 /** 全局共享态：状态总览 + 课程树 + 当前课程 + 视图/学习视图跳转。 */
 export interface AppFrame {
   status: StatusWithLlm | null
@@ -22,6 +25,9 @@ export interface AppFrame {
   lesson: LessonRef | null
   focusNode: string | null
   focusJob: string | null
+  /** 分组轴（#283）：图面与课程树同切一个轴；切换后课程树随 reload 重取。 */
+  graphAxis: GraphAxis
+  setGraphAxis: (a: GraphAxis) => void
   /** 生成视图定位目标（任务注册表 key）：教练台在途任务条点击后的落点（#155）。 */
   setCourse: (c: string) => void
   goto: (view: ViewKey) => void
@@ -55,13 +61,15 @@ export default function App() {
   const [lesson, setLesson] = useState<LessonRef | null>(null)
   const [focusNode, setFocusNode] = useState<string | null>(null)
   const [focusJob, setFocusJob] = useState<string | null>(null)
+  const [graphAxis, setGraphAxis] = useState<GraphAxis>('depth')
   const [loading, setLoading] = useState(true)
   const [fatal, setFatal] = useState<string | null>(null)
   const [helpOpen, setHelpOpen] = useState(false)
 
   const reload = useCallback(async () => {
     try {
-      const [s, t] = await Promise.all([api.status(), api.coursesTree()])
+      // 课程树随共享轴走（#283）：轴切换 → reload 重建 → 树与图面同轴
+      const [s, t] = await Promise.all([api.status(), api.coursesTree(graphAxis)])
       setStatus(s)
       setTree(t)
       // 当前课程被删/停用时回落到第一门启用课程
@@ -76,7 +84,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [graphAxis])
 
   useEffect(() => { void reload() }, [reload])
 
@@ -141,6 +149,7 @@ export default function App() {
 
   const frame: AppFrame = {
     status, tree, course, lesson, focusNode, focusJob,
+    graphAxis, setGraphAxis,
     setCourse: c => setCourse(c),
     goto: go,
     openCourse,

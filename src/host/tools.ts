@@ -34,7 +34,7 @@ export const AGENT_GUIDE: Array<{ tool: string; page: string; text: string; prom
     prompt: '把「<笔记路径>」移出笔记源排除清单' },
   { tool: 'learnhub_graph_node', page: 'courses', text: '单节点深查：前置/后继/enc 边/生成状态/健康问题一次看全。',
     prompt: '用 learnhub_graph_node 深查「<节点>」' },
-  { tool: 'learnhub_graph_browse', page: 'courses', text: '按区/块浏览课程图结构。', prompt: '按区块浏览「<课程>」的图结构' },
+  { tool: 'learnhub_graph_browse', page: 'courses', text: '按分组轴（深度/概念/终点）浏览课程图结构。', prompt: '按概念轴浏览「<课程>」的图结构' },
   { tool: 'learnhub_graph_path', page: 'courses', text: '查询两节点之间的先修链（学 B 之前要过哪些节点）。',
     prompt: '查一下从「<节点A>」到「<节点B>」的先修链' },
   { tool: 'learnhub_question_audit', page: 'courses', text: '题库契约只读体检：表达式/数字填空、记法违规、转义损坏、超长解析——只盘点不修复。',

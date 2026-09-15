@@ -188,7 +188,7 @@ test('视图内容：图面带节点取值域、节点卡带结构档、概念�
     // upstream_dag：前置闭包全拓扑 + 邻接表（认识变化率 是 用导数解决优化问题 的唯一上游）
     const dag = await runTool({ id: '5', name: 'upstream_dag', arguments: '{"node":"用导数解决优化问题"}' })
     assert.match(dag, /上游图摘要：用导数解决优化问题 ⚑（前置传递闭包 1 个节点）/)
-    assert.match(dag, /- 认识变化率（深度 0｜基础·起点块｜未开始·待生成｜掌握 0）/, '未开始节点不误标 ⚠（ready 是「还没学」不是「学塌了」）')
+    assert.match(dag, /- 认识变化率（深度 0｜未开始·待生成｜掌握 0）/, '未开始节点不误标 ⚠（ready 是「还没学」不是「学塌了」）')
     assert.match(dag, /### 闭包内 pre 邻接/)
     assert.match(dag, /- 用导数解决优化问题 → 认识变化率/)
     // 根节点：闭包空给合法空态行
@@ -207,7 +207,7 @@ test('上游图摘要：⚠ 弱掌握标记与超 cap 按深度截断的显式�
     const course = await engine.registry.resolve('数学') as CourseEntry
     const runTool = coachToolExecutor(depsOf(engine), course, providersOf(engine, course))
     const dag = await runTool({ id: '1', name: 'upstream_dag', arguments: '{"node":"用导数解决优化问题"}' })
-    assert.match(dag, /- 认识变化率（深度 0｜基础·起点块｜在学｜掌握 0\.1 ⚠/, '弱掌握节点在闭包拓扑里带 ⚠')
+    assert.match(dag, /- 认识变化率（深度 0｜在学｜掌握 0\.1 ⚠/, '弱掌握节点在闭包拓扑里带 ⚠')
   })
 
   // 超 cap：cap=60，造 65 个上游节点（单链）+ 目标节点
@@ -230,7 +230,7 @@ test('上游图摘要：⚠ 弱掌握标记与超 cap 按深度截断的显式�
   })
 })
 
-test('全图摘要（纯函数）:逐节点一行含深度/区·块/掌握/邻接，⚠ 弱掌握与 ⚑ 终点标记', () => {
+test('全图摘要（纯函数）:逐节点一行含深度/掌握/邻接，⚠ 弱掌握与 ⚑ 终点标记；概念组读数常驻', () => {
   const graph = new Graph([
     regionOf('基础', '起点块', [gNode('甲', []), gNode('乙', ['甲'])]),
     regionOf('进阶', '中段块', [gNode('丙', ['乙'], { est: 15 })]),
@@ -247,10 +247,13 @@ test('全图摘要（纯函数）:逐节点一行含深度/区·块/掌握/邻�
   assert.match(view, /节点共 4 个；前沿与在学 \d+ 个｜弱掌握 2 个 ⚠/)
   assert.match(view, /- ⚑ 终点：终点（方向标记/)
   assert.match(view, /### 全图（逐节点一行，深度序——⚠ 弱掌握、⚑ 终点）/)
-  // 逐节点一行：深度序在前（甲 d0 在 丙 d2 之前）+ 区·块 + 掌握 + pre 邻接 + teaches 并入同行
-  assert.match(view, /- 甲（深度 0｜基础·起点块｜复习中｜掌握 0\.1 ⚠）｜pre: （根）/)
-  assert.match(view, /- 丙（深度 2｜进阶·中段块｜未开始·待生成｜掌握 0｜est 15′）｜pre: 乙/)
-  assert.match(view, /- 终点 ⚑（深度 3｜进阶·终点块｜/)
+  // 逐节点一行：深度序在前（甲 d0 在 丙 d2 之前）+ 掌握 + pre 邻接 + teaches 并入同行
+  // （#281：区·块死坐标退役，逐节点行不再携带）
+  assert.match(view, /### 概念组读数（teaches\/assumes 派生可重叠；未标概念显式在列）/)
+  assert.match(view, /- 未标概念：4 个节点（合法 Missing/)
+  assert.match(view, /- 甲（深度 0｜复习中｜掌握 0\.1 ⚠）｜pre: （根）/)
+  assert.match(view, /- 丙（深度 2｜未开始·待生成｜掌握 0｜est 15′）｜pre: 乙/)
+  assert.match(view, /- 终点 ⚑（深度 3｜/)
   assert.ok(view.indexOf('- 甲（深度 0') < view.indexOf('- 丙（深度 2'), '深度序：地基在前')
   assert.ok(!/- 丙（[^）]*⚠/.test(view), '未开始（ready）不误标 ⚠——mastery 0 是还没学不是学塌了')
   // 全部节点名逐行在场 = pre 引用的取值域（旧「其余节点名单」的截断面已消失）
@@ -260,7 +263,7 @@ test('全图摘要（纯函数）:逐节点一行含深度/区·块/掌握/邻�
   assert.match(renderGrowthGraphView(graph, state), /（零终点——空锚是合法空态/)
 })
 
-test('全图摘要（纯函数）：超 cap 降级为区/块聚合 + 前沿细节 + 溢出说明，⚠ 与 ⚑ 例外不截', () => {
+test('全图摘要（纯函数）：超 cap 降级为 depth 段聚合 + 前沿细节 + 溢出说明，⚠ 与 ⚑ 例外不截', () => {
   const many = Array.from({ length: 210 }, (_, i) => gNode(`批${String(i).padStart(3, '0')}`, []))
   const graph = new Graph([
     regionOf('主区', '大块', many),
@@ -270,18 +273,18 @@ test('全图摘要（纯函数）：超 cap 降级为区/块聚合 + 前沿细�
   const view = renderGrowthGraphView(graph, state, new Set(['终点']), { today: '2026-09-15' })
   assert.match(view, /节点共 212 个/)
   assert.match(view, /超 200 已降级/)
-  assert.match(view, /### 区\/块聚合（超 200 个节点，逐节点行已降级）/)
-  assert.match(view, /- 主区·大块：210 个节点（掌握均值 0｜前沿与在学 \d+）/)
+  assert.match(view, /### depth 段聚合（超 200 个节点，逐节点行已降级）/)
+  assert.match(view, /- L0：211 个节点（掌握均值 0｜前沿与在学 210）/)
   assert.match(view, /### 前沿与在学细节/)
   // ⚠ 与 ⚑ 例外不截：弱掌握与终点各自全列（即便它们落在聚合桶里）
   assert.match(view, /### ⚠ 弱掌握（例外不截，1 个）/)
-  assert.match(view, /- 弱点（深度 0｜主区·小块｜复习中｜掌握 0\.1 ⚠｜est 10′）｜pre: （根）/)
+  assert.match(view, /- 弱点（深度 0｜复习中｜掌握 0\.1 ⚠｜est 10′）｜pre: （根）/)
   assert.match(view, /### ⚑ 终点（例外不截，1 个）/)
-  assert.match(view, /- 终点 ⚑（深度 1｜主区·小块｜/)
-  assert.match(view, /……（全图 212 个节点超出逐节点行上限 200——已降级为区\/块聚合 \+ 前沿与在学细节；⚠ 弱掌握与 ⚑ 终点例外全列。变焦细节用 upstream_dag \/ node_card。）/)
+  assert.match(view, /- 终点 ⚑（深度 1｜/)
+  assert.match(view, /……（全图 212 个节点超出逐节点行上限 200——已降级为 depth 段聚合 \+ 前沿与在学细节；⚠ 弱掌握与 ⚑ 终点例外全列，概念组读数不降级。变焦细节用 upstream_dag \/ node_card。）/)
   assert.ok(!view.includes('### 全图（逐节点一行'), '降级时不再出逐节点行块（整块退场，不是逐节点截断）')
-  // 聚合行按全量计数（不是「前 N 个」的和）——降级的诚实性在这里可判
-  assert.match(view, /- 主区·小块：2 个节点（掌握均值 0\.05｜前沿与在学 1）/, '聚合覆盖该块全部节点（含未进前沿的 weak 节点）')
+  // 聚合桶覆盖全量节点（211 + 1 = 212）——降级的诚实性在这里可判（终点因弱点已学而就绪）
+  assert.match(view, /- L1：1 个节点（掌握均值 0｜前沿与在学 1）/)
 })
 
 test('合法空态与拒收语义：零终点锚给空态行；白名单外/坏参数 fail loud', async () => {

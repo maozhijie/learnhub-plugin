@@ -43,14 +43,15 @@ const q = (params: Record<string, string | number | undefined>) => {
 export const api = {
   /** 模型透明：响应 = 引擎 StatusDoc + 宿主 llm 配置（provider/model/思考档）。 */
   status: () => http<import('./types').StatusWithLlm>('GET', '/status'),
-  coursesTree: () => http<import('./types').TreeDoc>('GET', '/courses/tree'),
+  /** 课程工作区树（#283 换轴）：course → 按所选分组轴切组 → 节点；轴与图面共享。 */
+  coursesTree: (axis?: string) => http<import('./types').TreeDoc>('GET', `/courses/tree${q({ axis })}`),
   graph: (course?: string) => http<import('./types').GraphDoc>('GET', `/graph${q({ course })}`),
   /** 罗盘读视图（#209 工作台首屏）：剩余路线 + 学习者批注（软输入）+ 沙盘 ETA（非承诺）。 */
   compass: (course?: string) => http<import('./types').CompassDoc>('GET', `/compass${q({ course })}`),
   recommend: (limit = 8) => http<import('./types').RecommendDoc>('GET', `/recommend?limit=${limit}`),
   queue: () => http<import('./types').QueueItem[]>('GET', '/queue'),
   lesson: (node: string, course?: string) =>
-    http<{ course: string; node: string; region: string; stage: string; mastery: number; sections: import('./types').LessonSection[]; manifest: import('./types').SectionManifestItem[] | null; prereqs: string[]; suggest_next: string[] }>('GET', `/lesson${q({ node, course })}`),
+    http<{ course: string; node: string; stage: string; mastery: number; sections: import('./types').LessonSection[]; manifest: import('./types').SectionManifestItem[] | null; prereqs: string[]; suggest_next: string[] }>('GET', `/lesson${q({ node, course })}`),
   questions: (course: string, node: string) =>
     http<{ course: string; node: string; mastery?: number; questions: import('./types').QuestionItem[] }>('GET', `/questions${q({ course, node })}`),
   questionAnswer: (course: string, node: string, qid: string, answer: string, elapsedS?: number,

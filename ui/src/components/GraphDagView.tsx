@@ -61,7 +61,6 @@ interface DagNodeData extends Record<string, unknown> {
   title: string
   depth: number
   stage: Stage
-  region: string
   recommended: boolean
   locked: boolean
   hasBank: boolean
@@ -196,7 +195,7 @@ function layoutDag(
       height: NODE_HEIGHT,
       position: { x: (pos?.x ?? 0) - NODE_WIDTH / 2, y: (pos?.y ?? 0) - NODE_HEIGHT / 2 },
       data: {
-        title: n.data.id, depth: n.data.depth, stage: n.data.stage, region: n.data.region,
+        title: n.data.id, depth: n.data.depth, stage: n.data.stage,
         recommended: recommendedSet.has(n.data.id), locked: lockedIds.has(n.data.id),
         hasBank: bankSet.has(n.data.id), focused: n.data.id === focusNode,
         mastery: n.data.mastery ?? 0,

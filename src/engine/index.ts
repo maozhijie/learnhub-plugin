@@ -352,6 +352,7 @@ export class LearnhubEngine {
       loadView: course => this.loadView(course),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       seedAuditFor: (courseName, today) => this.seedAuditFor(courseName, today),
+      conceptInvokesOf: c => this.growth2.conceptInvokesOf(c),
       applyProjectPlanProposal: pid => this.project.applyProjectPlanProposal(pid),
       experimentApply: pid => this.lab.experimentApply(pid),
     })

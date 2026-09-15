@@ -60,8 +60,9 @@ export default function BankColumn({ frame, course }: { frame: AppFrame; course:
   useEffect(() => { void load() }, [load])
   useEffect(() => { void loadAdvice() }, [loadAdvice])
 
-  const nodesForCourse = (frame.tree?.courses.find(c => c.name === course)?.regions ?? [])
-    .flatMap(r => r.blocks.flatMap(b => b.nodes.map(n => n.node)))
+  // 课程树已塌成「课程 → 按所选轴分组 → 节点」（#283）；多重归属节点去重后给自建题选择
+  const nodesForCourse = [...new Set((frame.tree?.courses.find(c => c.name === course)?.groups ?? [])
+    .flatMap(g => g.nodes.map(n => n.node)))]
   /** 到期列着色：以引擎学习日为基准（ADR-0020）；学习日未取到时不着色。 */
   const dueColor = (due: string) =>
     today === null ? 'gray' : due < today ? 'red' : due === today ? 'orange' : 'gray'

@@ -19,6 +19,7 @@ import type { Projects, ProjectApplyResult } from './projects.ts'
 import type { GraphProposals, ApplyAudit } from './proposals.ts'
 import type { ConceptRegistry } from './concepts.ts'
 import { CONFUSABLE_CANDIDATE_MAX, conceptPairKey, confusableCandidates, declaredPairKeys } from './concepts.ts'
+import { groupView, type GroupAxis } from './graph.ts'
 import type { CooccurrenceNode } from './concepts.ts'
 import type { Registry } from './registry.ts'
 import type { QuestionBank } from './question-bank.ts'
@@ -45,6 +46,8 @@ export interface GraphDeps {
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   assertNoteOk(course: { root: string }, graph: Graph, broken: BrokenNote[], node: string, tool: string): void
   seedAuditFor(courseName: string, today: string): Promise<ApplyAudit>
+  /** 题目 invokes 折叠（concept_growth.demand.invoked 取材；口径住 growth-subsystem 单一出处）。 */
+  conceptInvokesOf(c: { name: string; root: string }): Promise<Map<string, Map<string, number>>>
   applyProjectPlanProposal(pid?: number): Promise<ProjectApplyResult>
   experimentApply(pid?: number): Promise<{ id: number; title: string; arm_today: string }>
 }
@@ -92,7 +95,11 @@ export class GraphSubsystem {
     // 终点标记随锚走（#200 / ADR-0055 读侧单源派生；#239 多终点化：逐终点标记）：
     // 节点载荷标 isEndpoint、leaves/空降建议/健康分口径剔终点，UI 图面据此渲染终点
     // 样式并关终点生成入口
-    const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase, endpoints)
+    const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase, endpoints, {
+      conceptEntries: await this.e.concepts.load(c.root),
+      conceptInvokes: await this.e.conceptInvokesOf(c),
+      stuckByNode: await this.stuckByNode(c.name),
+    })
     // 交汇节点读侧派生（ADR-0076）：落在 ≥2 个终点前置闭包内的节点标 serves（仅交汇
     // 节点携带）；逐终点最后台阶随行（UI 终点列表反向展示）
     const serves = junctionServes(graph, anchors)
@@ -108,6 +115,16 @@ export class GraphSubsystem {
         .filter(a => graph.nset.has(a.endpoint))
         .map(a => ({ endpoint: a.endpoint, last_steps: graph.preOf[a.endpoint] })),
     }
+  }
+
+  /** 卡点自报节点计数（#248 流水 → 节点 → 条数；只聚合计数，原文永不进图分析）。 */
+  private async stuckByNode(courseName: string): Promise<Map<string, number>> {
+    const out = new Map<string, number>()
+    for (const r of await this.e.store.stuckStreamAll()) {
+      if (r.kind !== 'stuck_report' || r.course !== courseName) continue
+      out.set(r.node, (out.get(r.node) ?? 0) + 1)
+    }
+    return out
   }
 
   /** 读链接先验缓存（Missing = null 合法空态；坏档 fail loud——它是引擎 state 契约文件）。 */
@@ -299,57 +316,36 @@ export class GraphSubsystem {
   }
 
 
-  /** 区/块浏览：按区名/块名过滤的节点清单（探索某区域的结构与内容状态）。 */
-  async graphBrowse(courseKey: string | undefined, region?: string, block?: string): Promise<GraphBrowseDoc> {
+  /** 组浏览（graphBrowse，#281）：按分组轴（depth/concept/endpoint）切组的节点清单——
+   * depth 单归属、concept/endpoint 派生可重叠（同一节点详情随组重复，多重位置可见）。
+   * 坏轴名/坏组名 fail loud（列出可用取值）。 */
+  async graphBrowse(courseKey: string | undefined, axis: GroupAxis = 'depth', group?: string): Promise<GraphBrowseDoc> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state, broken } = await this.e.loadView(c)
-    const blockNames = [...new Set(graph.regions.flatMap(r => r.blocks.map(b => b.name)))]
-    let regionName = region
-    if (!regionName && block) {
-      const hits = graph.regions.map(r => ({
-        region: r.name,
-        count: r.blocks.filter(b => b.name === block).length,
-      })).filter(h => h.count > 0)
-      if (!hits.length) {
-        throw new Error(`[graph-browse] 只按块浏览时块「${block}」不存在（可用块：${blockNames.join('、') || '（无）'}）`)
-      }
-      if (hits.length > 1 || hits[0]!.count > 1) {
-        const where = hits.map(h => `${h.region}（${h.count} 处）`).join('、')
-        throw new Error(`[graph-browse] 块「${block}」不唯一（${where}）——请加 region 限定后再浏览。`)
-      }
-      regionName = hits[0]!.region
+    // 轴合法性由 groupView 顶部统一 fail loud（单一出处）
+    const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
+    const groups = groupView(graph, axis, {
+      conceptEntries: await this.e.concepts.load(c.root),
+      endpoints: [...endpointNames(anchors)],
+    })
+    if (group && !groups.some(g => g.label === group)) {
+      throw new Error(`[graph-browse] 轴「${axis}」下没有组「${group}」（可用：${groups.map(g => g.label).join('、') || '（空）'}）`)
     }
-    if (regionName && !graph.regions.some(r => r.name === regionName)) {
-      throw new Error(`[graph-browse] 区「${regionName}」不存在（可用：${graph.regions.map(r => r.name).join('、')}）`)
-    }
-    if (regionName && block && !graph.regions.find(r => r.name === regionName)?.blocks.some(b => b.name === block)) {
-      const regionBlocks = [...new Set(graph.regions.find(r => r.name === regionName)!.blocks.map(b => b.name))]
-      throw new Error(`[graph-browse] 区「${regionName}」中没有块「${block}」（可用：${regionBlocks.join('、') || '（空）'}）`)
-    }
-    const regions = graph.regions
-      .filter(r => !regionName || r.name === regionName)
-      .map(r => ({
-        name: r.name,
-        blocks: r.blocks
-          .filter(b => !block || b.name === block)
-          .map(b => ({
-            name: b.name,
-            nodes: b.nodes.map(n => ({
-              node: n.name,
-              depth: graph.depth[n.name] ?? 0,
-              stage: effectiveStage(state, n.name),
-              est: graph.estOf[n.name],
-              difficulty: graph.difficultyOf[n.name],
-              type: graph.typeOf[n.name],
-              content_status: state[n.name]?.content.status ?? 'draft',
-            })),
-          })),
-      }))
-    const total = regions.reduce((s, r) => s + r.blocks.reduce((t, b) => t + b.nodes.length, 0), 0)
+    const shown = groups.filter(g => !group || g.label === group)
+    const nodeOf = (n: string) => ({
+      node: n,
+      depth: graph.depth[n] ?? 0,
+      stage: effectiveStage(state, n),
+      est: graph.estOf[n],
+      difficulty: graph.difficultyOf[n],
+      type: graph.typeOf[n],
+      content_status: state[n]?.content.status ?? 'draft' as const,
+    })
     return {
       course: c.name,
-      total,
-      regions,
+      axis,
+      total: shown.reduce((s, g) => s + g.nodes.length, 0),
+      groups: shown.map(g => ({ label: g.label, nodes: g.nodes.map(nodeOf) })),
       // 纯结构浏览继续可用，但 Broken 状态必须显式暴露，不伪装成 unseen/draft
       broken_notes: broken.map(b => ({
         path: b.path,

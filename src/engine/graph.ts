@@ -28,6 +28,13 @@ const RETIRED_EDGE_KEYS: Record<string, string> = {
   probation: '边轻纪律：复诊状态落 state/边实验.jsonl（边实验账本），图 YAML 零边字段',
 }
 
+/** 防复活门（#281 / Epic #275）：节点条目上的结构坐标键 fail loud 拒收——分组是读侧
+ * 派生（depth/概念/终点），不落盘；Region/Block 不借尸还魂（照 origin/status 先例）。 */
+const RETIRED_NODE_KEYS: Record<string, string> = {
+  region: 'Region/Block 已退役（#275/#281）：节点不接受 region 键——分组由读侧按轴派生，零落盘',
+  block: 'Region/Block 已退役（#275/#281）：节点不接受 block 键——分组由读侧按轴派生，零落盘',
+}
+
 export class SchemaError extends Error {}
 
 function fail(path: string, msg: string): never {
@@ -136,8 +143,10 @@ export function parseNode(raw: unknown, path: string, where: string, warns?: str
   const unknown = Object.keys(r).filter(k => !NODE_KEYS.has(k))
   if (unknown.length) {
     const edgeHints = unknown.map(k => RETIRED_EDGE_KEYS[k]).filter(Boolean)
+    const nodeHints = unknown.map(k => RETIRED_NODE_KEYS[k]).filter(Boolean)
     fail(path, `${where} 含未知字段 ${JSON.stringify(unknown)}（只允许 ${[...NODE_KEYS].join('/')}）`
-      + (edgeHints.length ? `；${edgeHints.join('；')}` : ''))
+      + (edgeHints.length ? `；${edgeHints.join('；')}` : '')
+      + (nodeHints.length ? `；${nodeHints.join('；')}` : ''))
   }
   const name = r.name
   if (typeof name !== 'string' || !name.trim()) fail(path, `${where} 节点 name 缺失或为空`)
@@ -516,6 +525,10 @@ export interface GroupViewOpts {
 export function groupView(
   graph: Graph, axis: GroupAxis, opts: GroupViewOpts = {},
 ): { label: string; nodes: string[] }[] {
+  // 轴校验单一出处（#283 review）：未知轴会静默落到 endpoint 分支，全部入口 fail loud
+  if (!['depth', 'concept', 'endpoint'].includes(axis)) {
+    throw new Error(`非法分组轴「${String(axis)}」（允许 depth/concept/endpoint）`)
+  }
   if (axis === 'depth') {
     if (graph.hasCycle) {
       // 显式「无法分层」态：环上 depth 已作废（hasCycle 是旗标），不静默给空/退化桶

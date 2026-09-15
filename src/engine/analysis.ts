@@ -6,12 +6,13 @@
 import type { Graph } from './graph.ts'
 import type { Fm, Stage } from './types.ts'
 import type { Store } from './store.ts'
+import type { ConceptEntry } from './concepts.ts'
+import { resolveConcept } from './concepts.ts'
 import { effectiveStage } from './audit.ts'
 import { graphHealthScore, estSpreadNote } from './health.ts'
-import { floatNodes, jumpCandidates } from './quality.ts'
+import { jumpCandidates } from './quality.ts'
 import type { JumpCandidate } from './quality.ts'
 import { parseDay, daysBetween } from './dates.ts'
-import { round2 } from './grading.ts'
 import { masteryOfFm } from './srs.ts'
 import { hasReadyContent } from './notes.ts'
 import type { VaultLinkCandidateView } from './vault-links.ts'
@@ -22,6 +23,17 @@ export interface VaultLinkPrior {
   /** 映射到本课程图的候选总数（截断前）。 */
   mapped_total: number
   candidates: VaultLinkCandidateView[]
+}
+
+/** concept_growth 表的供料（#281）：analysis 保持无 IO——概念登记表、题目 invokes 折叠、
+ * 卡点自报节点计数由调用方（GraphSubsystem.graphAnalyze）折好后传入。 */
+export interface ConceptGrowthInput {
+  /** 概念登记表条目：别名经 resolveConcept 归并到 canonical，防一个概念裂成多行。 */
+  conceptEntries: ConceptEntry[]
+  /** canonical 概念 → 节点 → 在库现役题数（growth-subsystem 同源口径，排除归档题）。 */
+  conceptInvokes: Map<string, Map<string, number>>
+  /** 节点 → 卡点自报条数（stuck 流水折出计数；原文永不进图分析——#248 纪律）。 */
+  stuckByNode: Map<string, number>
 }
 
 export interface GraphAnalysis {
@@ -43,20 +55,24 @@ export interface GraphAnalysis {
   /** 图谱健康分（0-100；结束条件锚点，公式与语义见 health.ts）。
    * est_note：est 分布压缩的 advisor 提示（null = 无；不改分，est 重标注属图生成专题）。 */
   health: { score: number; breakdown: Record<string, number>; est_note: string | null; topology_void?: string[] }
-  /** 分批构建建议（图谱 designer 逐批展开时规划下一批的输入，全部可行动）。 */
+  /** 分批构建建议（图谱 designer 逐批展开时规划下一批的输入，全部可行动）。
+   * concept_growth（#281，grill 定稿 2026-09-15）：失衡排序表——零机械阈值，排序
+   * 暴露相对严重度，判读归教练。悬空依赖（supply 空）恒在最前；其余按行为证据
+   * （stuck+skipped 降序）→ 结构失衡度（demand−supply）降序。 */
   suggestions: {
-    /** 节点数 <5 的块（浅块优先，最多 8 个）——往哪扩。 */
-    expand_blocks: Array<{ region: string; block: string; nodes: number }>
-    /** 空降节点（region 序靠后且 pre 为空，最多 sugCap 个）——先补谁。 */
+    concept_growth: Array<{
+      concept: string
+      supply: string[]
+      demand: { assumed: number; invoked: number; endpoints: string[] }
+      depth_spread: Record<string, number>
+      evidence: { skipped: number; stuck: number }
+    }>
+    /** 空降节点（pre 为空，剔终点；种子期豁免）。 */
     missing_pre: string[]
-    /** 平均 pre 数 <1.5 的块（最多 8 个）——哪里连接过少。 */
-    unconverged: Array<{ region: string; block: string; avg_pre: number }>
-    /** 认知跨步候选（合成口径见 quality.ts；最多 sugCap 条）——每条必须 verdict：认可或修。 */
+    /** 认知跨步候选（合成口径见 quality.ts）——每条必须 verdict：认可或修。 */
     jump_candidates: JumpCandidate[]
     /** 跨步候选总数（截断前）——结束条件要求清零。 */
     jump_total: number
-    /** 节点数 <3 的块（合并比展开更划算时）。 */
-    merge_blocks: Array<{ region: string; block: string; nodes: number }>
     /** 种子图豁免（#142）：true = 图仍是种子本身（终点锚种子节点全集）——
      * missing_pre 豁免、健康分不设阈值；生长批进入后翻转 false。自由 JSON 段字段。 */
     seed_phase?: boolean
@@ -67,7 +83,7 @@ export interface GraphAnalysis {
   }
   /** Vault 链接扫描元信息：未扫描时 scanned_at=null（带 hint 指路扫描工具）。 */
   vault_links: { scanned_at: string | null; mapped_total: number; hint?: string }
-  nodes: Array<{ data: { id: string; region: string; block: string; depth: number; stage: Stage; opt: boolean; mastery: number; hasContent: boolean; isEndpoint: boolean; type?: string; serves?: string[] } }>
+  nodes: Array<{ data: { id: string; depth: number; stage: Stage; opt: boolean; mastery: number; hasContent: boolean; isEndpoint: boolean; type?: string; serves?: string[] } }>
   edges: Array<{ data: { id: string; source: string; target: string; kind: string; w?: number } }>
   /** 节点 schema 全量（pre/enc/est/bloom/difficulty/teaches/assumes/misconceptions/note…）
    * ——编辑规划与边级自查的数据依据；elementsOnly 模式不含。 */
@@ -96,6 +112,8 @@ export async function analyzeGraph(
   /** 终点节点名集（ADR-0055 读侧单源派生，#200；#239 多终点化）：节点载荷据此标
    * isEndpoint，stats.leaves 与 missing_pre（空降建议）剔终点——终点是方向标记不是课程节点。 */
   endpoints: ReadonlySet<string> = new Set<string>(),
+  /** concept_growth 供料（#281，见 ConceptGrowthInput）；缺席 = 空供料（测试/纯结构调用）。 */
+  growth?: ConceptGrowthInput,
 ): Promise<GraphAnalysis> {
   void parseDay(today)
 
@@ -141,8 +159,6 @@ export async function analyzeGraph(
     return {
       data: {
         id: n,
-        region: graph.blockOf[n][1],
-        block: graph.blockOf[n][2],
         depth: graph.depth[n] ?? 0,
         stage: effectiveStage(state, n),
         opt: graph.opt.has(n),
@@ -175,37 +191,97 @@ export async function analyzeGraph(
     ...(graph.noteOf[n] ? { note: graph.noteOf[n] } : {}),
   }]))
 
-  // 分批构建建议：块节点数（expand_blocks）、空降节点（missing_pre）、块平均前置数（unconverged）
-  const blockStats = new Map<string, { region: string; block: string; nodes: number; preSum: number }>()
-  for (const n of graph.names) {
-    const [, region, block] = graph.blockOf[n]
-    const key = `${region}\n${block}`
-    const s = blockStats.get(key) ?? { region, block, nodes: 0, preSum: 0 }
-    s.nodes++
-    s.preSum += graph.preOf[n].length
-    blockStats.set(key, s)
+  // concept_growth 失衡排序表（#281，grill 定稿）：成员 = taughtByOf ∪ assumedByOf（别名
+  // 经 resolveConcept 归并到 canonical）；demand = assumes 计数 + 题目 invokes 计数 + 服务
+  // 的终点；evidence = skipped 节点数 + stuck 自报条数（只聚合计数，原文不进图分析）。
+  // 排序零机械阈值：悬空依赖（supply 空）恒在最前 → 行为证据降序 → 结构失衡度降序。
+  const growthInput = growth ?? { conceptEntries: [], conceptInvokes: new Map<string, Map<string, number>>(), stuckByNode: new Map<string, number>() }
+  const canonicalOf = (raw: string): string => resolveConcept(growthInput.conceptEntries, raw)?.canonical ?? raw
+  const footprint = new Map<string, { supply: Set<string>; assumed: Set<string> }>()
+  for (const raw of new Set([...Object.keys(graph.taughtByOf), ...Object.keys(graph.assumedByOf)])) {
+    const label = canonicalOf(raw)
+    const slot = footprint.get(label) ?? footprint.set(label, { supply: new Set(), assumed: new Set() }).get(label)!
+    for (const n of graph.taughtByOf[raw] ?? []) slot.supply.add(n)
+    for (const n of graph.assumedByOf[raw] ?? []) slot.assumed.add(n)
   }
-  const blocks = [...blockStats.values()]
-  // 建议条目上限随图规模伸缩：大图的浅块/空降节点更多，固定 top-N 看不全
+  for (const c of growthInput.conceptEntries) {
+    if (!footprint.has(c.canonical)) footprint.set(c.canonical, { supply: new Set(), assumed: new Set() })
+  }
+  // 终点前置闭包预折（demand.endpoints：成员落在哪个终点闭包内 = 该概念服务哪个终点）
+  const endpointClosures = [...endpoints].filter(e => graph.nset.has(e))
+    .map(e => ({ e, closure: graph.upstreamClosure(e) }))
+  const conceptGrowth = [...footprint.entries()].map(([concept, fp]) => {
+    const members = new Set([...fp.supply, ...fp.assumed])
+    const invoked = growthInput.conceptInvokes.get(concept)
+    const invokedTotal = invoked ? [...invoked.values()].reduce((s, v) => s + v, 0) : 0
+    const depthSpread: Record<string, number> = {}
+    for (const n of members) {
+      const k = `L${graph.depth[n] ?? 0}`
+      depthSpread[k] = (depthSpread[k] ?? 0) + 1
+    }
+    let skipped = 0
+    let stuck = 0
+    for (const n of members) {
+      if (effectiveStage(state, n) === 'skipped') skipped++
+      stuck += growthInput.stuckByNode.get(n) ?? 0
+    }
+    return {
+      concept,
+      supply: graph.names.filter(n => fp.supply.has(n)),
+      demand: {
+        assumed: fp.assumed.size,
+        invoked: invokedTotal,
+        endpoints: endpointClosures.filter(({ closure }) => [...members].some(n => closure.has(n))).map(({ e }) => e),
+      },
+      depth_spread: depthSpread,
+      evidence: { skipped, stuck },
+    }
+  })
+  // 「未标概念」兑底组显式在列（不静默缺席）但不构成失衡信号——恒排在表尾；
+  // 真有概念叫「未标概念」时合并进那一行（同 groupView 的「合并不顶替」纪律）
+  const covered = new Set([...footprint.values()].flatMap(fp => [...fp.supply, ...fp.assumed]))
+  const untagged = graph.names.filter(n => !covered.has(n))
+  const untaggedSpread: Record<string, number> = {}
+  for (const n of untagged) {
+    const k = `L${graph.depth[n] ?? 0}`
+    untaggedSpread[k] = (untaggedSpread[k] ?? 0) + 1
+  }
+  const untaggedEvidence = {
+    skipped: untagged.filter(n => effectiveStage(state, n) === 'skipped').length,
+    stuck: untagged.reduce((s, n) => s + (growthInput.stuckByNode.get(n) ?? 0), 0),
+  }
+  const existingUntitled = conceptGrowth.find(r => r.concept === '未标概念')
+  if (untagged.length && existingUntitled) {
+    for (const [k, v] of Object.entries(untaggedSpread)) existingUntitled.depth_spread[k] = (existingUntitled.depth_spread[k] ?? 0) + v
+    existingUntitled.evidence.skipped += untaggedEvidence.skipped
+    existingUntitled.evidence.stuck += untaggedEvidence.stuck
+  } else if (untagged.length) {
+    conceptGrowth.push({
+      concept: '未标概念',
+      supply: [],
+      demand: { assumed: 0, invoked: 0, endpoints: [] },
+      depth_spread: untaggedSpread,
+      evidence: untaggedEvidence,
+    })
+  }
+  const rankedGrowth = [...conceptGrowth]
+    .slice(0, conceptGrowth.length - (untagged.length && !existingUntitled ? 1 : 0))
+    .sort((a, b) => {
+      const dangling = (r: typeof a): number => (r.supply.length === 0 && (r.demand.assumed + r.demand.invoked) > 0) ? 0 : 1
+      const evidenceOf = (r: typeof a): number => -(r.evidence.stuck + r.evidence.skipped)
+      const imbalanceOf = (r: typeof a): number => -(r.demand.assumed + r.demand.invoked - r.supply.length)
+      return dangling(a) - dangling(b) || evidenceOf(a) - evidenceOf(b) || imbalanceOf(a) - imbalanceOf(b) || a.concept.localeCompare(b.concept)
+    })
+  if (untagged.length && !existingUntitled) rankedGrowth.push(conceptGrowth[conceptGrowth.length - 1]!)
+  
+  // 空降建议：pre 为空（剔终点 #200：接线待完成不是空降缺陷；种子期豁免 #142）。
+  // 「根级豁免」不能用 depth>0 表达——pre 派生深度下无 pre 必为 0（health.ts 同款教训），
+  // 那是死条件；根级起点即无 pre 的节点本身，豁免只靠种子期开关。
   const sugCap = Math.min(16, Math.max(8, Math.ceil(graph.names.length / 25)))
-  const topBlocks = (
-    items: typeof blocks, keep: (b: { nodes: number }) => boolean, cap: number,
-  ) => items
-    .filter(keep)
-    .sort((a, b) => a.nodes - b.nodes || a.region.localeCompare(b.region))
-    .slice(0, cap)
-    .map(({ region, block, nodes }) => ({ region, block, nodes }))
-  const expandBlocks = topBlocks(blocks, b => b.nodes < 5, sugCap)
-  // 空降建议剔终点（#200）：终点没有 pre 是接线待完成（方向不变式管），不是空降缺陷
-  const missingPre = seedPhase ? [] : floatNodes(graph).filter(n => !endpoints.has(n)).slice(0, sugCap)
-  const jumps = jumpCandidates(graph)
-  const mergeBlocks = topBlocks(blocks, b => b.nodes < 3, sugCap)
-  const unconverged = blocks
-    .map(b => ({ ...b, avg_pre: round2(b.preSum / b.nodes) }))
-    .filter(b => b.avg_pre < 1.5)
-    .sort((a, b) => a.avg_pre - b.avg_pre)
+  const missingPre = seedPhase ? [] : graph.names
+    .filter(n => !endpoints.has(n) && !graph.preOf[n].length)
     .slice(0, sugCap)
-    .map(({ region, block, avg_pre }) => ({ region, block, avg_pre }))
+  const jumps = jumpCandidates(graph)
 
   return {
     stats: {
@@ -228,12 +304,10 @@ export async function analyzeGraph(
     lapse_hotspots: lapseHotspots,
     health: { ...graphHealthScore(graph, { endpoints }), est_note: estSpreadNote(graph) },
     suggestions: {
-      expand_blocks: expandBlocks,
+      concept_growth: rankedGrowth,
       missing_pre: missingPre,
-      unconverged,
       jump_candidates: jumps.slice(0, sugCap),
       jump_total: jumps.length,
-      merge_blocks: mergeBlocks,
       ...(seedPhase ? { seed_phase: true } : {}),
       vault_link_candidates: vaultLinks.candidates.slice(0, sugCap),
     },
