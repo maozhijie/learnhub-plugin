@@ -380,6 +380,10 @@ _Avoid_: 存量回填（已裁取消）、事后补标、出生字段改写
 出生之后经回填通道补写的内容字段层（首期=enc 回填；invokes 存量回填已随出生打标落地而取消——新题出生即标、旧题 invokes 空恒合法 Missing）：与出生字段分家、各有归属——出生字段随内容生长批写入，覆盖层写入走提案事务（与登记表同款），目录布局与内容指纹归 cutover 票。覆盖层只补写登记表/图谱可对照的字段，不改写出生字段的历史语义。
 _Avoid_: 迁移（宣告式断裂零迁移代码）、双写、补丁
 
+**边轻纪律（Edge-Light Discipline）**:
+图谱边的准入纪律：凡欲落在边上的属性，先在**声明**与**状态**之间二分——**声明**（边的固有成分，只写一次、不随生命周期演化、边删即消失）住**边上**（图 YAML 内联，既有实例 `enc.w` / `enc.note`）；**状态**（随生命周期演化、边被删除后记录仍须存活）**去账本**（`origin` / `status` / `probation` 为既有实例）。需要「边上的额外信息」时走**三档逃生口**：**结构化状态 → 账本**（边实验账本）｜**非结构化说明 → 边上的自由文本**（`enc.note`）｜**统一适用的软硬判断 → 顶点上的布尔**（`opt`，代价是广播型顶点布尔把粒度塌到顶点级，「p 对彼必需、对此可选」这类边级差异表达不了）。新增边种 / 边属性前**必须先证明其「不可派生」**（信息不在盘上、且无法由既有正典在需要时算出）——加边种要有据，不是永不加。图 YAML 与提案 op 上的 `origin` / `status` / `probation` 键由 `graph.ts` 的 `RETIRED_EDGE_KEYS` 与 `proposals.ts` 的 `RETIRED_OP_KEYS` fail loud 拒收（ADR-0085；诊断出处 #127）。
+_Avoid_: 边属性（泛称）、边元数据
+
 **边实验账本（Edge Probation Ledger）**:
 插入边复诊状态的追加流水（`state/边实验.jsonl`，每课程一份，只增）：条目 {node, pre, proposal, due, outcome?, decided_at?}，状态集 {probation→proven｜剪除}，仅插入边持有。图 YAML 的 pre 保持名字列表零边字段（边轻）——在图即断言，实验期状态全在账本；origin 从提案 journal 派生不存储；断裂时随行为流水换代存档。
 _Avoid_: 边状态字段（不进图 YAML）、实验边（单独使用）、确认态（confirmed 已裁不设）
@@ -457,7 +461,7 @@ _Avoid_: 疗效验证（探针流语汇，本图未实现）、试用期、观�
 _Avoid_: 内容诊断（B1 引擎产出的建议项）、卡点报告（泛称）、diagnostic（已被 B1 占用）、错题反馈
 
 **概念足迹（Concept Footprint）**:
-按概念反查全图引用面的读侧投影：哪些节点 teaches/assumes 它、哪些题目 invokes 它、登记表 confusable 易混对指向谁。教练回合解读卡点自报与插入定位的裁决数据源——足迹非空 = 有天然挂点，足迹空（含缺册）= 插入候选默认挂当前节点前置；定位是教练裁决，引擎不写定位规则。query 子串发现只供读侧找候选，概念引用恒精确匹配在册名字（登记表纪律的延伸）。废弃条目仍列出并**显式标注**（读面是「眼」、不是注入/候选面——标注使教练识别地址仍被占用，免误引用或误铸同名）。读侧派生零落盘。
+按概念反查全图引用面的读侧投影：哪些节点 teaches/assumes 它、哪些题目 invokes 它、登记表 confusable 易混对指向谁。教练回合解读卡点自报与插入定位的裁决数据源——足迹非空 = 有天然挂点，足迹空（含缺册）= 插入候选默认挂当前节点前置；定位是教练裁决，引擎不写定位规则。query 子串发现只供读侧找候选，概念引用恒精确匹配在册名字（登记表纪律的延伸）。废弃条目仍列出并**显式标注**（读面是「眼」、不是注入/候选面——标注使教练识别地址仍被占用，免误引用或误铸同名）。**实况**（ADR-0085）：它今天**不是一等派生，而是现扫**——「概念反向」分三处各折一遍（`coach-tools.ts` `renderConceptFootprint`、`content.ts` `invokesProjection`、`proposals.ts` `consolidationGateErrors`），「反向可达」亦四散（`Graph.upstreamClosure` 是唯一声称出处，另有 `content.ts` `conceptScopeOf` / `invokesProjection`、`seed.ts` 三处 O(N) 扫描）；题目侧已收拢为 `growth-subsystem.conceptInvokesOf` 单实现。**裁定形态**：概念反向收进 `Graph` 构造期、与 `teachesOf` / `assumesOf` 并列（`taughtByOf` / `assumedByOf`）；反向可达统一读 `upstreamClosure`（三处 O(N) 扫描改读，环图行为差异须专门测试钉住——有环图上 `isAncestor` 恒 false 而 BFS 仍走）；`misconceptions` 反向**不做**（无消费者，是准入判据的首次自我适用）；**统一在消费面不在存储面**（节点侧 eager、题目侧 lazy）。实现另开票。读侧派生零落盘。
 _Avoid_: 概念索引（泛称）、反向登记表、概念图谱
 
 **上游图摘要（Upstream DAG Summary）**:
