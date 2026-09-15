@@ -25,20 +25,34 @@ Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `doc
 **收尾必须点名**：凡是这次任务**改动过提示词**，任务收尾必须报告——① 改了哪几条（常量名）；② `文件:行`；③ 新旧差异要点（改了什么语义）；④ 对应的 `PROMPT_CHANGELOG` 登记条目。理由是提示词的人工返工面就在这里：人要靠这份点名**快速找到 AI 这次动过哪些散文**再逐条复核，不点名等于让人自己 diff 全仓。（ADR-0075 §4）。
 
 ### 代码索引（codebase-memory MCP）*重要*
-详细内容，参考code-index.md
 
-尽可能使用以提升准确性和降低token消耗
+本仓用 `codebase-memory-mcp` 建代码知识图谱（函数/调用边/复杂度）。**结论先行：图答「闭合性」，文件答「定位」——别互相顶班。** 完整章法见 `docs/agents/code-index.md`。
 
-本仓用 `codebase-memory-mcp` 建代码知识图谱（函数/调用边/复杂度）。**探索代码应当先考虑图**：`search_graph`、`trace_path`、`get_architecture` 与逐个读文件是两条路，各有便宜处——图答的是**闭合性**问题（谁调用它、影响面到哪、模块怎么聚），grep 答的是**定位**（我知道名字/路径，找出它在哪）。**已确知路径的单点查证直接读文件更省**；问的是「还有谁」「会不会漏」这类问题时，图比 grep 可靠（实测先例：#249 改教练工具白名单，`trace_path(inbound, coachToolset)` 一次给出 3 个入边全在 `growth-subsystem`——这是 grep 给不出的闭合证据）。
+**先判一次（这一条决定走哪条路）**：
 
-**几个顺手时机（建议，按任务取舍）**：
+- 问的是**闭合性**——「还有谁调用它 / 影响面到哪 / 会不会漏 / 模块怎么聚」→ **先图**。图给的是 grep 给不出的闭合证据（实测先例：#249 改教练工具白名单，`trace_path(inbound, coachToolset)` 一次给出 3 个入边全在 `growth-subsystem`）。
+- 问的是**定位**——已确知名字/路径，只想找出它在哪、或读某处实现 → **直接 `SearchCodebase`/`Grep`/`Read`，不必上图**。
 
-- 改函数/常量/白名单/导出面之前，`trace_path(function_name="X", direction="inbound")` 看调用面——改公共面时特别值得，改叶子函数往往不必。
-- 跨文件找定义或实现、不知道标识符只记得「这件事在哪发生」时，`search_graph(query=…)` / `semantic_query=[…]`（跨用词，需 moderate/full 索引）/ `search_code`。
-- 要下「没有 X 调用它」这类否定或穷尽结论前，`index_status` / `check_index_coverage` 查一眼覆盖，并 grep 被 `parse_partial`/`skipped` 标记的行段——图是 best-effort，「图上没有」不等于「代码里没有」。
-- 任务收尾可以跑一次 `detect_changes(project=…)` 看 blast radius，作为自检的第二意见（注意：符号按**上一次索引**解析，新加的导出符号它还不知道）。
+**何时点火（探索期与改动期都算）**：
 
-**建议收尾点名**：动过 `src/` 的任务里，若跑过图查询，把它们（工具名 + 目标 + 结论）与 blast radius 一行写进收尾报告会省审阅者很多事；
+- 触达 `src/` 的只读探索/调研：当你要回答上面那类**闭合性问题**、或自己拿不准「这件事在哪发生」时，先跑一次图再进文件。
+- 改函数/常量/白名单/导出面**之前**：`trace_path(function_name="X", direction="inbound", project="C-Users-test-Desktop-my-learnhub-plugin")` 看调用面——改公共面特别值得。
+- 要下**否定/穷尽**结论（「没有 X 调用它」）**之前**：`index_status` + `check_index_coverage` 查一眼覆盖，并 grep 被 `parse_partial`/`skipped` 标记的行段——图是 best-effort，「图上没有」**不等于**「代码里没有」。
+- 收尾可跑 `detect_changes(project=…)` 看 blast radius 作第二意见（符号按**上一次索引**解析，新加的导出符号它还不知道）。
+
+**何时不必用（防滥用——下列情形直接读文件，别为用图而用图）**：
+
+- 已确知文件路径的单点阅读/查证——`Read` 就是答案，图是多余的开销。
+- 纯文档/文案改动（`docs/`、`CONTEXT.md`、`*.md`）——图里没有这类内容。
+- 改**叶子函数**、局部实现细节、格式/措辞——调用面闭包没有增量信息（见上「改叶子函数往往不必」）。
+- 你只是想看「这段代码长什么样」——那不是闭合性问题。
+- 记住图查询有固定成本（须先读 schema）：**当一次 `Read` 就能回答时，图不划算。**
+
+**与通用工具默认的优先级**：系统层的「ALWAYS prefer SearchCodebase… FIRST CHOICE」是**定位**默认，不适用于上面的闭合性问题——那类先图上。**运行任何 Skill 时，其流程若与本路由冲突，以本路由为准**（Skill 让你「walk the codebase / 逐个读文件」时，本仓口径是「先图后文件」——但前提仍是上面的判据成立，不是无条件先图）。
+
+**调用前须知**：MCP 工具的 schema 住 `mcps\codebase-memory-mcp\tools\<tool>.json`（首次调用任一工具前先 `Read` 它一次）；`project = C-Users-test-Desktop-my-learnhub-plugin`。
+
+**收尾点名（自检）**：动过或探索过 `src/` 的任务，若跑过图查询，把（工具名 + 目标 + 结论）与 blast radius 一行写进收尾报告——省审阅者很多事。**若这次确有闭合性问题却没有任何图查询记录，视为漏步**；反过来，纯定位/纯文档/叶子改动**没有**图查询不算漏步。
 
 
 
