@@ -18,7 +18,7 @@ import { effectiveStage } from './audit.ts'
 import type { CompassDoc } from './compass.ts'
 import { ETA_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, etaMarkerOf, hasLearnerAnnotations, parseCompass, sectionBody } from './compass.ts'
 import type { ConceptRegistry } from './concepts.ts'
-import { resolveConcept } from './concepts.ts'
+import { isDeprecated, resolveConcept } from './concepts.ts'
 import type { Graph } from './graph.ts'
 import { round2 } from './grading.ts'
 import type { VaultFs } from './io.ts'
@@ -257,7 +257,7 @@ export async function renderConceptFootprint(
   }
   if (q) lines.push(`（子串发现只供找候选——**空 ≠ 不存在**：无命中时换宽词或不带 query 读全表。）`, '')
   for (const e of hit.slice(0, LIST_CAP)) {
-    lines.push(`### ${e.canonical}`)
+    lines.push(`### ${e.canonical}${isDeprecated(e) ? '（已废弃——地址仍解析、已从生成注入与候选面退出：勿再引用、勿铸同名）' : ''}`)
     lines.push(`- 词条档：${e.aliases?.length ? `别名 ${e.aliases.join('、')}｜` : ''}${e.definition ?? '（无定义）'}`)
     const taught = teachers.get(e.canonical) ?? []
     const assumed = assumers.get(e.canonical) ?? []

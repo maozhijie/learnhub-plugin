@@ -1,6 +1,7 @@
 import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import type { ConceptRegistry } from './concepts.ts'
+import { deprecatedNames } from './concepts.ts'
 import type { VaultPriorAudit } from './types.ts'
 /**
  * Content 子系统（#152 刀 8 / ADR-0043）：内容管线、笔记 resolve/反馈区、课程工作区
@@ -95,7 +96,7 @@ import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm, previewDue, retrievabilityBlock } from './srs.ts'
 import { sourceKeyOf } from './types.ts'
 import type { FsrsBlock, ReviewRec, SectionManifest } from './types.ts'
-import { priorSection, runPriorSearch } from './vault-prior.ts'
+import { priorSection, queryEntriesFor, runPriorSearch } from './vault-prior.ts'
 import type { AnswerResult, LessonDoc, QuestionForgetResult, QuestionRateResult, QuestionsDoc, QueueItem, QuestionItem, QueueCard, ReviewCard, ReviewQueueDoc, TreeDoc } from './views/content.ts'
 import { xpForAnswer } from './xp.ts'
 export class ContentSubsystem {
@@ -140,8 +141,12 @@ export class ContentSubsystem {
     this.e.assertNoteOk(c, graph, broken, node, 'pack')
     const prior = await this.vaultPriorFor(c, graph, node)
     opts?.onPrior?.(prior.audit)
+    // 废弃条目从生成注入面退出（#262 / ADR-0084）：内容包 §12 误解坑位 / §13 前置概念档位
+    // 按 retired 剔除。登记表 Broken 不拦生成（降级为不过滤，与 vault 先验检索同款，ADR-0071）。
+    const { entries } = await queryEntriesFor(this.e.concepts, c.root)
+    const retiredConcepts = deprecatedNames(entries)
     // endpoint 随锚入包（#200）：后继预告的终点措辞读锚现算，普通前沿叶子不再被误标终点
-    const pack = this.e.content.contextPack(graph, state, node, c.name, { omitDeliverables: opts?.omitDeliverables, endpoints })
+    const pack = this.e.content.contextPack(graph, state, node, c.name, { omitDeliverables: opts?.omitDeliverables, endpoints, retiredConcepts })
     return prior.section ? `${pack}\n\n---\n\n${prior.section}` : pack
   }
 

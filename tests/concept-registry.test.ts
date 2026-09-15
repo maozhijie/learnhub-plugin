@@ -4,12 +4,16 @@ import { existsSync } from 'node:fs'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
+  activeEntries,
   applyConceptMints,
   confusablePairsOf,
   conceptReferenceErrors,
+  deprecatedNames,
+  isDeprecated,
   mergeConceptEntries,
   namesOf,
   resolveConcept,
+  setConceptDeprecated,
   validateConceptRegistry,
   ConceptRegistry,
 } from '../src/engine/concepts.ts'
@@ -524,5 +528,170 @@ test('#232 合并不丢易混对：from 与 into 的 confusable 并集随并入�
   )
   const dst = merged.entries.find(e => e.canonical === '甲')!
   assert.deepEqual(dst.confusable, ['丙', '丁'], '并集去重（丙双写合一）')
+})
+
+// ---- 地址生命周期（#262 / ADR-0084）：废弃 = 标记不删除、可逆、地址仍解析、退出注入/候选 ----
+
+test('#262 deprecated 可选字段：布尔合法；false 归一为缺席（清标记无残留）；非布尔报错', () => {
+  const ok = validateConceptRegistry({ concepts: [{ canonical: '甲', deprecated: true }] })
+  assert.deepEqual(ok.errors, [])
+  assert.equal(ok.entries[0]!.deprecated, true)
+
+  const off = validateConceptRegistry({ concepts: [{ canonical: '甲', deprecated: false }] })
+  assert.deepEqual(off.errors, [])
+  assert.equal('deprecated' in off.entries[0]!, false, 'false 归一为缺席（写侧只落 true）')
+
+  const absent = validateConceptRegistry({ concepts: [{ canonical: '甲' }] })
+  assert.equal(absent.entries[0]!.deprecated, undefined)
+
+  const bad = validateConceptRegistry({ concepts: [{ canonical: '甲', deprecated: '是' }] })
+  assert.match(bad.errors.join('\n'), /deprecated: 必须是布尔值/)
+})
+
+test('#262 废弃判定与过滤：isDeprecated / activeEntries / deprecatedNames（canonical ∪ 别名）', () => {
+  const entries = [
+    { canonical: '甲', aliases: ['甲别'] },
+    { canonical: '乙', deprecated: true },
+    { canonical: '丙', aliases: ['丙别'], deprecated: true },
+  ]
+  assert.equal(isDeprecated(entries[0]!), false)
+  assert.equal(isDeprecated(entries[1]!), true)
+  assert.deepEqual(activeEntries(entries).map(e => e.canonical), ['甲'])
+  assert.deepEqual([...deprecatedNames(entries)].sort(), ['丙', '丙别', '乙'])
+})
+
+test('#262 废弃地址仍解析：resolveConcept / namesOf 对废弃条目不例外', () => {
+  const entries = [{ canonical: '甲', aliases: ['甲别'], deprecated: true }]
+  assert.equal(resolveConcept(entries, '甲')?.canonical, '甲')
+  assert.equal(resolveConcept(entries, '甲别')?.canonical, '甲', '别名地址仍解析')
+  assert.deepEqual([...namesOf(entries)].sort(), ['甲', '甲别'])
+})
+
+test('#262 setConceptDeprecated 纯函数：置标记 / 清标记完全恢复 / 未在册报错', () => {
+  const base = [
+    { canonical: '甲', aliases: ['甲别'], definition: '定义' },
+    { canonical: '乙' },
+  ]
+  const on = setConceptDeprecated(base, '甲别', true)
+  assert.equal(on.errors.length, 0)
+  assert.equal(on.entries[0]!.deprecated, true, '按别名定位到身份条目')
+  assert.equal(on.entries[1]!.deprecated, undefined, '其余条目不动')
+  // 清标记 = 字段删除，完全恢复（与原始对象 deep-equal，无残留副作用）
+  const off = setConceptDeprecated(on.entries, '甲', false)
+  assert.equal(off.errors.length, 0)
+  assert.deepEqual(off.entries, base)
+  // 未在册名字 → 错误不落盘
+  const miss = setConceptDeprecated(base, '不存在', true)
+  assert.equal(miss.errors.length, 1)
+  assert.match(miss.errors[0]!, /不在登记表/)
+  assert.deepEqual(miss.entries, base)
+})
+
+test('#262 易混对候选退出：任一端废弃的对不产出（地址仍解析）；清标记后恢复产出', () => {
+  const entries = [
+    { canonical: '自然数', confusable: ['质数'] },
+    { canonical: '质数', confusable: ['自然数'], deprecated: true },
+    { canonical: '整除' },
+  ]
+  assert.deepEqual(confusablePairsOf(entries, new Set(['自然数', '质数'])), [])
+  const rev = setConceptDeprecated(entries, '质数', false).entries
+  assert.deepEqual(confusablePairsOf(rev, new Set(['自然数', '质数'])), [{ a: '自然数', b: '质数' }])
+})
+
+test('#262 登记表门面：setDeprecated 落盘 + 废弃地址仍解析 + 清标记完全恢复 + 失败不改盘', async () => {
+  await withVault(registryVault(), async ({ engine, root }) => {
+    const original = await engine.concepts.load('math')
+    const r = await engine.concepts.setDeprecated('math', '十字相乘法', true)
+    assert.equal(r.canonical, '因式分解', '按别名定位到身份条目')
+    assert.equal(r.deprecated, true)
+    const entries = await engine.concepts.load('math')
+    assert.equal(resolveConcept(entries, '因式分解')?.deprecated, true)
+    assert.equal(resolveConcept(entries, '十字相乘法')?.canonical, '因式分解', '废弃后别名地址仍解析')
+    assert.match(readFileSync(registryPath(root), 'utf8'), /deprecated: true/)
+    // 清标记完全恢复（读回与原始条目 deep-equal）
+    await engine.concepts.setDeprecated('math', '因式分解', false)
+    assert.deepEqual(await engine.concepts.load('math'), original, '清标记无残留')
+    // 未在册名字 → 抛错不改盘
+    await assert.rejects(() => engine.concepts.setDeprecated('math', '不存在', true), /不在登记表/)
+    assert.deepEqual(await engine.concepts.load('math'), original)
+  })
+})
+
+test('#262 生成注入面退出：废弃概念不出现在概念清单与易混对块；旧地址引用仍受理', async () => {
+  const graph = [
+    'region: 基础',
+    'color: blue',
+    'blocks:',
+    '  - name: 入门块',
+    '    nodes:',
+    '      - { name: 入门, pre: [], opt: false, note: "", est: 20, teaches: { 因式分解: 知道, 配方法: 会用 } }',
+  ].join('\n')
+  await withVault({
+    graph,
+    notes: { 入门: { body: QUIZ_BODY.split('\n') } },
+    tag: 'learnhub-depinject-',
+    files: [{
+      path: '学习中心/math/概念登记表.yaml',
+      content: [
+        'concepts:',
+        '  - canonical: 因式分解',
+        '    aliases: [十字相乘法]',
+        '    confusable: [配方法]',
+        '    deprecated: true',
+        '  - canonical: 配方法',
+      ].join('\n') + '\n',
+    }],
+  }, async ({ engine }) => {
+    let prompt = ''
+    const llmOf = (stem: string, invokes: string) => async (p: string): Promise<string> => {
+      prompt = p
+      return [
+        'node: 入门',
+        'questions:',
+        '  - kind: true_false',
+        `    q: ${stem}`,
+        '    answer: true',
+        `    invokes: ${invokes}`,
+      ].join('\n')
+    }
+    const r1 = await engine.bank2.questionGenerate('数学', '入门', 1, llmOf('甲批问：三角形的内角和是180度。', '配方法'))
+    assert.match(prompt, /## 概念清单/, '活跃概念在场 → 清单块产出')
+    // 只看清单块：模板硬约束里出现「因式分解」是举例词，不能对全 prompt 断言
+    const scopeBlock = prompt.split('## 概念清单')[1]!.split('---')[0]!
+    assert.match(scopeBlock, /- 配方法/)
+    assert.doesNotMatch(scopeBlock, /因式分解|十字相乘法/, '废弃概念退出概念清单（含其别名）')
+    assert.doesNotMatch(prompt, /## 易混对/, '任一端废弃 → 易混对块不产出（空串）')
+    assert.equal(r1.added, 1)
+    // 旧地址（废弃概念 canonical/别名）仍解析 → 受理门照常接受
+    const r2 = await engine.bank2.questionGenerate('数学', '入门', 1, llmOf('乙批问：地球绕太阳公转一圈是一年。', '十字相乘法'))
+    assert.equal(r2.rejected.length, 0)
+    assert.equal(r2.added, 1, '废弃地址写的 invokes 仍解析为在册名字、受理')
+  })
+})
+
+test('#262 内容包注入面退出：§12 误解坑位与 §13 前置概念档位剔除废弃概念（活跃概念照旧）', async () => {
+  const graph = [
+    'region: 基础',
+    'color: blue',
+    'blocks:',
+    '  - name: 入门块',
+    '    nodes:',
+    '      - { name: 入门, pre: [], opt: false, note: "", est: 20, assumes: { "因式分解": "会用", "配方法": "会用" }, misconceptions: [{ concept: "因式分解", model: "把因式分解当成展开" }] }',
+  ].join('\n')
+  await withVault({
+    graph,
+    notes: { 入门: { body: ['# 入门', '', '入门正文。'] } },
+    tag: 'learnhub-deppack-',
+    files: [{
+      path: '学习中心/math/概念登记表.yaml',
+      content: ['concepts:', '  - canonical: 因式分解', '    deprecated: true', '  - canonical: 配方法'].join('\n') + '\n',
+    }],
+  }, async ({ engine }) => {
+    const pack = await engine.content2.contentPack('数学', '入门')
+    assert.match(pack, /## 13\. 前置概念档位/)
+    assert.match(pack, /- 配方法：会用/, '活跃概念仍在 §13')
+    assert.doesNotMatch(pack, /因式分解/, '废弃概念退出 §13 与 §12')
+    assert.doesNotMatch(pack, /## 12\. 误解坑位/, '唯一误解先验废弃 → 整段省略（不产空块）')
+  })
 })
 

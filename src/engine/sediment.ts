@@ -15,8 +15,11 @@
  * 即时/周分档：immediate 事件按最新态折叠；weekly 事件按学习周（周一锚定）分组、
  * 中心级可重折——追加正典天然可重放，重折 = 重新 foldSediment。
  * 沉淀记录用概念地址（登记表条目名）书写，不用节点/题目 id（跨断裂存活的档案
- * 坐标系，CONTEXT.md「概念」词条）；addresser 尚未接线（#141 登记表、#146 复诊、
- * #145 生长批），concept 字段缺席合法。
+ * 坐标系，CONTEXT.md「概念」词条）。**已接线的范围**（#262 对齐）：复诊结算
+ * （recordRecheckOutcome）按插入节点 teaches 的概念清单逐条写 concept 地址（经
+ * resolveConcept 归一 canonical，无 teaches 时单条无地址）；concept 字段缺席合法。
+ * 图修复（graph_repair，结构级）把概念清单放在 payload.concepts、**不写地址字段**
+ * ——一个结构事件关联多个概念，地址字段是单值，列表形态才不丢事实。
  */
 import type { VaultFs } from './io.ts'
 import { atomicWrite, readJsonlLines } from './io.ts'
@@ -46,7 +49,8 @@ export interface SedimentEvent {
   kind: SedimentKind
   tier: SedimentTier
   payload: Record<string, unknown>
-  /** 概念地址（登记表条目名）：复诊结局、概念级先验等按概念书写的记录用；缺席合法。 */
+  /** 概念地址（登记表条目名）：复诊结局按插入节点 teaches 逐条书写；缺席合法（无 teaches，
+   * 或结构级事件如图修复史——后者的概念清单在 payload.concepts，不走地址字段）。 */
   concept?: string
 }
 
@@ -121,7 +125,8 @@ export interface SedimentFold {
   latest: Partial<Record<SedimentKind, SedimentEvent>>
   /** weekly 档按学习周分组（周升序）——周档流水中心级可重折的读法。 */
   weekly: Partial<Record<SedimentKind, SedimentWeekGroup[]>>
-  /** 概念地址 → 该概念最新一条（复诊结局/概念级先验的读法；未接线时为空）。 */
+  /** 概念地址 → 该概念最新一条（**复诊结局**的读法——按地址字段折；图修复史的概念清单在
+   * payload.concepts、不写地址字段，故「概念级先验」不经此读出，未接线/无地址时为空）。 */
   byConcept: Partial<Record<SedimentKind, Record<string, SedimentEvent>>>
 }
 

@@ -146,7 +146,7 @@ export class Content {
    * 「无后继即终点」的结构启发式改读锚：只有锚定的终点才获终点措辞，普通前沿叶子
    * 不再被误标。 */
   contextPack(graph: Graph, state: Record<string, Fm>, node: string, course?: string,
-    opts?: { omitDeliverables?: boolean; endpoints?: ReadonlySet<string> }): string {
+    opts?: { omitDeliverables?: boolean; endpoints?: ReadonlySet<string>; retiredConcepts?: ReadonlySet<string> }): string {
     const [, region, block] = graph.blockOf[node]
     const pres = graph.preOf[node]
     const succs = graph.succ[node] ?? []
@@ -258,7 +258,10 @@ export class Content {
       out.push('- 预测门会被质检门做结构校验（字段齐全、answer ∈ options），不合规格式会被拒收返工。')
     }
     // §12/§13（#147）：误解目录与前置档位是生成期感知面——缺席合法（Missing），整段省略。
-    const mis = graph.misconceptionsOf[node] ?? []
+    // 废弃条目从生成注入面退出（#262 / ADR-0084）：两段注入的都是概念名，按 retiredConcepts
+    // 剔除；剔除后为空则整段省略（不产空块）。
+    const retired = opts?.retiredConcepts
+    const mis = (graph.misconceptionsOf[node] ?? []).filter(m => !retired?.has(m.concept))
     if (mis.length) {
       out.push('')
       out.push('## 12. 误解坑位（生成期先验；讲到对应概念时预埋坑位警示）')
@@ -266,12 +269,12 @@ export class Content {
       out.push('- 这是生成期先验：真实学习者的错误以后由作答流水挖矿与申诉复核接管，有反馈区意见时以意见为准。')
       for (const m of mis) out.push(`- ${m.concept}：${m.model}`)
     }
-    const assumes = graph.assumesOf[node]
-    if (assumes && Object.keys(assumes).length) {
+    const assumes = Object.entries(graph.assumesOf[node] ?? {}).filter(([c]) => !retired?.has(c))
+    if (assumes.length) {
       out.push('')
       out.push('## 13. 前置概念档位（assumes；写作时按档位把握「能默认学习者会什么」）')
       out.push('- 知道 = 学习者认识该概念（可提及作再认，不能默认会操作）；会用 = 能常规使用（可直接调用，必要时一句话回顾）；能教 = 已熟练（可作多步推理的默认起点，不必回顾）。前置不重教。')
-      for (const [c, t] of Object.entries(assumes)) out.push(`- ${c}：${t}`)
+      for (const [c, t] of assumes) out.push(`- ${c}：${t}`)
     }
     return out.join('\n') + '\n'
   }

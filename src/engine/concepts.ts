@@ -8,6 +8,11 @@
  * 条目禁删只并入：合并 = 名字并集，被并入条目的 canonical 降级为别名，旧地址经别名
  * 续解析——沉淀层档案坐标系（ADR-0034）的语义底座，登记表跨宣告式断裂存活。
  *
+ * 地址生命周期（v0.3，#262 / ADR-0084）：条目可被标记**废弃**（可逆、不删除）——废弃地址
+ * 保留全部别名解析（用旧名字写的历史记录仍解析到该条目），仅从生成注入面（概念清单 /
+ * 易混对 / 档位）与候选面退出；清标记即完全恢复（写侧只落 `true`，false 等同缺席）。
+ * 条目仍禁删、仍只并入：退役走「标记」，不走删除。
+ *
  * 登记机械化无人审：铸名随生长批提案（edit 提案 concepts 块）随图 apply 的写入单元落盘，
  * 人的领域判断只在合并/改名时行使。
  */
@@ -19,15 +24,17 @@ import type { Paths } from './paths.ts'
 /** 登记表条目：canonical 主名；别名可选（名字并集后历史地址都在这）；定义选填
  * （同形异义与螺旋升档判断的依据，随注入切片给出）；易混对选填（#232：同课程在册
  * 概念名，出题时随概念清单注入作跨概念对比题候选；名字经精确解析归一，悬空引用
- * 消费侧静默降级）。 */
+ * 消费侧静默降级）；废弃标记选填（#262：true = 该条目退役——地址仍解析、仅从生成
+ * 注入面与候选面退出；缺席 = 在册活跃。写侧只落 true，false 等同缺席）。 */
 export interface ConceptEntry {
   canonical: string
   aliases?: string[]
   definition?: string
   confusable?: string[]
+  deprecated?: boolean
 }
 
-const ENTRY_KEYS = new Set(['canonical', 'aliases', 'definition', 'confusable'])
+const ENTRY_KEYS = new Set(['canonical', 'aliases', 'definition', 'confusable', 'deprecated'])
 
 /** 一处概念引用（受理门对表的错误行定位原料）：where 供拒收文案指位。 */
 export interface ConceptRef { where: string; concept: string }
@@ -55,7 +62,7 @@ export function validateConceptEntry(raw: unknown, where: string): { errors: str
   const errors: string[] = []
   const unknown = Object.keys(r).filter(k => !ENTRY_KEYS.has(k))
   if (unknown.length) {
-    errors.push(`${where} 含未知字段 ${JSON.stringify(unknown)}（条目只允许 canonical/aliases/definition/confusable）`)
+    errors.push(`${where} 含未知字段 ${JSON.stringify(unknown)}（条目只允许 canonical/aliases/definition/confusable/deprecated）`)
   }
   const canonical = typeof r.canonical === 'string' ? r.canonical.trim() : ''
   if (!canonical) errors.push(`${where}.canonical: 不能为空`)
@@ -85,8 +92,17 @@ export function validateConceptEntry(raw: unknown, where: string): { errors: str
       if (cleaned.length) confusable = cleaned
     }
   }
+  // 废弃标记（#262）：布尔；只落 true——false 等同缺席（清标记 = 字段删除，完全恢复）
+  let deprecated = false
+  if (r.deprecated !== undefined) {
+    if (typeof r.deprecated !== 'boolean') {
+      errors.push(`${where}.deprecated: 必须是布尔值`)
+    } else {
+      deprecated = r.deprecated
+    }
+  }
   if (errors.length || !canonical) return { errors }
-  return { errors: [], entry: { canonical, ...(aliases ? { aliases } : {}), ...(definition ? { definition } : {}), ...(confusable ? { confusable } : {}) } }
+  return { errors: [], entry: { canonical, ...(aliases ? { aliases } : {}), ...(definition ? { definition } : {}), ...(confusable ? { confusable } : {}), ...(deprecated ? { deprecated: true } : {}) } }
 }
 
 /** 易混对候选提取（#232）：条目 confusable 名字经精确解析归一到所属条目 canonical，
@@ -99,6 +115,8 @@ export function confusablePairsOf(entries: ConceptEntry[], scope: ReadonlySet<st
     for (const raw of e.confusable ?? []) {
       const other = resolveConcept(entries, raw)
       if (!other || other.canonical === e.canonical) continue
+      // 废弃条目从生成注入面与候选面退出（#262）：任一端废弃的对不产出（地址仍解析，只是不再作候选）
+      if (isDeprecated(e) || isDeprecated(other)) continue
       if (!scope.has(e.canonical) && !scope.has(other.canonical)) continue
       const key = [e.canonical, other.canonical].sort().join('\u0000')
       if (seen.has(key)) continue
@@ -147,9 +165,53 @@ export function namesOf(entries: ConceptEntry[]): Set<string> {
   return names
 }
 
-/** 精确匹配解析：名字（canonical 或别名）→ 条目；未命中返回 null。永不模糊匹配。 */
+/** 精确匹配解析：名字（canonical 或别名）→ 条目；未命中返回 null。永不模糊匹配。
+ * 废弃条目不例外——历史记录用旧地址书写时必须仍解析得到（#262 的地址生命周期）。 */
 export function resolveConcept(entries: ConceptEntry[], name: string): ConceptEntry | null {
   return entries.find(e => e.canonical === name || (e.aliases ?? []).includes(name)) ?? null
+}
+
+/** 废弃判定（#262）：条目被标记退役——保留全部别名解析，仅从生成注入面与候选面退出。
+ * 可逆：清标记即完全恢复（写侧只落 true，false 等同缺席）。 */
+export function isDeprecated(e: ConceptEntry): boolean {
+  return e.deprecated === true
+}
+
+/** 活跃条目（生成注入面与候选面的取值域）：剔除废弃条目——它们地址仍解析，但不再产出。 */
+export function activeEntries(entries: ConceptEntry[]): ConceptEntry[] {
+  return entries.filter(e => !isDeprecated(e))
+}
+
+/** 废弃条目的全部名字（canonical ∪ 别名）：供「概念清单」这类名字面过滤——废弃地址
+ * 仍解析，只是不再作为注入/候选产出。 */
+export function deprecatedNames(entries: ConceptEntry[]): Set<string> {
+  const out = new Set<string>()
+  for (const e of entries) {
+    if (!isDeprecated(e)) continue
+    out.add(e.canonical)
+    for (const a of e.aliases ?? []) out.add(a)
+  }
+  return out
+}
+
+/** 废弃标记翻转（纯函数，human 决策的执行核，与 mergeConceptEntries 同款）：按名字
+ * （canonical 或别名）定位条目置/清 deprecated。清标记 = 删除字段（完全恢复，无残留）；
+ * 未在册名字 = 错误不落盘。 */
+export function setConceptDeprecated(
+  entries: ConceptEntry[], name: string, deprecated: boolean,
+): { errors: string[]; entries: ConceptEntry[] } {
+  const idx = entries.findIndex(e => e.canonical === name || (e.aliases ?? []).includes(name))
+  if (idx < 0) return { errors: [`「${name}」不在登记表在册（canonical/别名精确匹配）——废弃标记只对在册条目生效`], entries }
+  const out = entries.map((e, i): ConceptEntry => {
+    if (i !== idx) return e
+    if (!deprecated) {
+      const copy: ConceptEntry = { ...e }
+      delete copy.deprecated
+      return copy
+    }
+    return { ...e, deprecated: true }
+  })
+  return { errors: [], entries: out }
 }
 
 /** 概念引用对表（受理门）：未在册的名字逐个给出可执行错误行。known = 在册名字 ∪
@@ -330,5 +392,18 @@ export class ConceptRegistry {
     await this.save(root, merged.entries)
     const dst = resolveConcept(merged.entries, into)
     return { into: dst!.canonical, names: [dst!.canonical, ...(dst!.aliases ?? [])] }
+  }
+
+  /** 废弃标记翻转（human 决策执行面）：按名字（canonical 或别名）置/清 deprecated，
+   * 清标记 = 字段删除完全恢复。失败抛错不改盘（登记表保持原样）。 */
+  async setDeprecated(root: string, name: string, deprecated: boolean): Promise<{ canonical: string; deprecated: boolean }> {
+    const entries = await this.load(root)
+    const toggled = setConceptDeprecated(entries, name, deprecated)
+    if (toggled.errors.length) {
+      throw new Error(`[concept-deprecate] 废弃标记未执行（登记表保持原样）。\n${toggled.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    await this.save(root, toggled.entries)
+    const hit = resolveConcept(toggled.entries, name)!
+    return { canonical: hit.canonical, deprecated: isDeprecated(hit) }
   }
 }

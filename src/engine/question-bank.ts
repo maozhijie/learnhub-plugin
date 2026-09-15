@@ -44,7 +44,7 @@ import type { ExplainPoint } from './explain.ts'
 import { advanceStrict } from './advance.ts'
 import { sectionEntryOf } from './attribution.ts'
 import { nodeTierOf, perSectionQuizTarget, sectionTierLabel } from './complexity.ts'
-import { confusablePairsOf, invokesTagged, invokesUnregistered, namesOf } from './concepts.ts'
+import { confusablePairsOf, deprecatedNames, invokesTagged, invokesUnregistered, namesOf } from './concepts.ts'
 import { dayOfTs, nowIsoOf } from './dates.ts'
 import type { Clock } from './clock.ts'
 import { DISPUTE_REVIEW_SYSTEM, PASS_SCORE, applyPracticeEvidence, evaluateAllo, parseDisputeReview, revealAnswer, netPracticeRecs } from './grading.ts'
@@ -1199,6 +1199,7 @@ export class BankSubsystem {
     // 登记表条目同时供易混对候选提取（#232，随概念清单注入）
     const conceptEntries = await this.e.concepts.load(c.root)
     const conceptNames = namesOf(conceptEntries)
+    const retiredConcepts = deprecatedNames(conceptEntries)
     const [, regionName] = graph.blockOf[node]
     const note = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
     const body = note.body.replace(/^>\s*内容待生成。\s*$/m, '').trim()
@@ -1237,7 +1238,7 @@ export class BankSubsystem {
     // 出生打标（#148）：概念清单 = 本节 teaches ∪ 前置闭包 teaches；空清单 = 门不激活。
     // 易混对候选（#232）：登记表 confusable 中与本节清单相交的对，随清单注入——
     // 缺席 = 块为空串，对比题指令静默降级（模板条款 conditioned on 该段在场）。
-    const conceptScope = Content.conceptScopeOf(graph, node)
+    const conceptScope = Content.conceptScopeOf(graph, node).filter(c => !retiredConcepts.has(c))
     const conceptBlock = Content.conceptListBlock(conceptScope)
       + Content.confusablePairsBlock(confusablePairsOf(conceptEntries, new Set(conceptScope)))
     const raw = await llm(withContractLast(tpl,
@@ -1370,6 +1371,7 @@ export class BankSubsystem {
     // 登记表条目同时供易混对候选提取（#232）
     const conceptEntries = await this.e.concepts.load(c.root)
     const conceptNames = namesOf(conceptEntries)
+    const retiredConcepts = deprecatedNames(conceptEntries)
     const [, regionName] = graph.blockOf[node]
     const { body } = await loadNote(this.e.paths.courseNotePath(c.root, regionName, node), this.e.fs)
     const mdByTitle = new Map<string, string>()
@@ -1394,7 +1396,7 @@ export class BankSubsystem {
     const misBlock = misconceptionPromptBlock(graph.misconceptionsOf[node], '干扰项材料')
     // 出生打标（#148）：概念清单整课一次组装，逐节提示词与补标调用共用；
     // 易混对候选随清单注入（#232，缺席 = 空串静默降级）
-    const conceptScope = Content.conceptScopeOf(graph, node)
+    const conceptScope = Content.conceptScopeOf(graph, node).filter(c => !retiredConcepts.has(c))
     const conceptBlock = Content.conceptListBlock(conceptScope)
       + Content.confusablePairsBlock(confusablePairsOf(conceptEntries, new Set(conceptScope)))
     let added = 0

@@ -439,6 +439,36 @@ test('门面：登记表档位/误解目录取前沿视野（可学∪在学）�
   })
 })
 
+test('#262 废弃条目退出登记表档位注入面：在册计数只算活跃、前沿档位剔除废弃概念', async () => {
+  await withVault({
+    graph: [
+      'region: 基础',
+      'color: blue',
+      'blocks:',
+      '  - name: 链块',
+      '    nodes:',
+      '      - { name: 起点, pre: [], opt: false, note: "", est: 20, teaches: { "因式分解": "知道", "配方法": "会用" }, assumes: { "因式分解": "会用" } }',
+    ].join('\n'),
+    notes: { 起点: { stage: 'ready', content: { sections: READY_SECTIONS } } },
+    files: [{
+      path: '学习中心/math/概念登记表.yaml',
+      content: [
+        'concepts:',
+        '  - canonical: 因式分解',
+        '    aliases: [十字相乘法]',
+        '    deprecated: true',
+        '  - canonical: 配方法',
+      ].join('\n') + '\n',
+    }],
+  }, async ({ engine }) => {
+    const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
+    assert.ok(pack.includes('1 条在册（另有 1 条已废弃'), '在册计数只算活跃条目')
+    assert.ok(pack.includes('前沿 teaches：配方法 会用'), '活跃概念仍在前沿档位')
+    assert.ok(pack.includes('前沿 assumes：（前沿节点无 assumes 字段）'), '废弃概念退出前沿 assumes')
+    assert.ok(!pack.includes('因式分解') && !pack.includes('十字相乘法'), '废弃概念与其别名不出现在档位注入面')
+  })
+})
+
 test('门面：coachCheckpoint 三个触发点同核——就绪存量只数「未开始且有正文」', async () => {
   await withVault({
     graph: CHAIN_GRAPH,

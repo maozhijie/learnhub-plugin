@@ -68,7 +68,7 @@ import { coachToolset, renderGrowthGraphView } from './coach-tools.ts'
 import type { CoachToolDeps } from './coach-tools.ts'
 import type { CompassEtaProbe } from './compass.ts'
 import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, reconcileRoute, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
-import { resolveConcept } from './concepts.ts'
+import { activeEntries, deprecatedNames, resolveConcept } from './concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from './dates.ts'
 import { foldStuckReports, stuckReportGate } from './stuck-report.ts'
 import type { Clock } from './clock.ts'
@@ -539,12 +539,16 @@ export class GrowthSubsystem {
 
     if (!lightweight) {
       // ③ 登记表档位（前沿视野 = 可学 ∪ 在学节点的概念档位折叠；同概念取最高档）
+      // 废弃条目从生成注入面退出（#262）：在册计数只算活跃条目，前沿档位折叠剔除废弃概念
       const entries = await this.e.concepts.load(c.root)
+      const retired = deprecatedNames(entries)
+      const live = activeEntries(entries)
       const tierRank = (t: ConceptTier): number => CONCEPT_TIERS.indexOf(t)
       const foldTiers = (pick: (n: string) => Record<string, ConceptTier> | undefined): Array<[string, ConceptTier]> => {
         const best = new Map<string, ConceptTier>()
         for (const n of active) {
           for (const [concept, tier] of Object.entries(pick(n) ?? {})) {
+            if (retired.has(concept)) continue
             const cur = best.get(concept)
             if (!cur || tierRank(tier) > tierRank(cur)) best.set(concept, tier)
           }
@@ -554,8 +558,9 @@ export class GrowthSubsystem {
       const fmtTiers = (xs: Array<[string, ConceptTier]>): string => xs.map(([k, t]) => `${k} ${t}`).join('、')
       const teaches = foldTiers(n => graph.teachesOf[n])
       const assumes = foldTiers(n => graph.assumesOf[n])
+      const retiredCount = entries.length - live.length
       block('登记表档位（前沿概念的教学档位视野）', [
-        `- 概念登记表：${entries.length ? `${entries.length} 条在册` : 'Missing（合法空态——铸名随生长批提案落盘）'}`,
+        `- 概念登记表：${entries.length ? `${live.length} 条在册${retiredCount ? `（另有 ${retiredCount} 条已废弃——地址仍解析，仅退出生成注入与候选面）` : ''}` : 'Missing（合法空态——铸名随生长批提案落盘）'}`,
         `- 可学/在学节点 ${active.length} 个`,
         `- 前沿 teaches：${teaches.length ? fmtTiers(teaches) : '（前沿节点无 teaches 字段）'}`,
         `- 前沿 assumes：${assumes.length ? fmtTiers(assumes) : '（前沿节点无 assumes 字段）'}`,
