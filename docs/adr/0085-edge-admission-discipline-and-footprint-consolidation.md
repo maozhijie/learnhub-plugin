@@ -1,6 +1,6 @@
 # 边种与边属性的准入判据：边轻纪律成文 + 概念足迹收成一处
 
-一条纪律在这个仓里**被执行，却从未被定义**：`graph.ts` 的 `RETIRED_EDGE_KEYS` 与 `proposals.ts` 的 `RETIRED_OP_KEYS` 对 `origin` / `status` / `probation` 三个键在图 YAML 与提案 op 两侧各设一道 fail loud 拒收，而「边轻纪律」这个词在整个 `docs/` 里**只被旁引过一次**（ADR-0077 的 `upstream_dag` 段），**没有任何地方定义它**。本 ADR 把这条纪律成文——钉死它的诊断、给出边属性的二分判据与三档逃生口、写明加边种的准入判据；同时把一处已收敛的结构欠账（概念足迹的四处折叠）的**收拢形态**落成纸面。
+一条纪律在这个仓里**被执行，却从未被定义**：`graph.ts` 的 `RETIRED_EDGE_KEYS` 与 `proposals.ts` 的 `RETIRED_OP_KEYS` 对 `origin` / `status` / `probation` 三个键在图 YAML 与提案 op 两侧各设一道 fail loud 拒收，而「边轻纪律」这个词在整个 `docs/` 里**从未被定义**——只在 ADR-0077 的 `upstream_dag` 段被旁引一次，另在调研笔记 `docs/research/2026-09-graph-edge-semantics.md` 有一条外部对照基线（RDF 等标准同取向），但**没有一处给出判据**。本 ADR 把这条纪律成文——钉死它的诊断、给出边属性的二分判据与三档逃生口、写明加边种的准入判据；同时把一处结构欠账（概念足迹的折叠散在多处）的**收拢形态**落成纸面。
 
 本 ADR **只落文档**（本文件 + `CONTEXT.md` 两处词条），不含代码；概念足迹的**收拢实现另开票**（见「实现登记」）。域词条（`CONTEXT.md`「边轻纪律」「概念足迹」）按同一口径修订，两者的差值以本 ADR 为准。
 
@@ -54,9 +54,9 @@
 
 > **凡欲落在边上的属性，先在「声明」与「状态」之间二分：**
 > - **声明（Declaration）**——描述**边的固有成分**、只写一次、不随生命周期演化、边消失即随之消失：住**边上**（图 YAML 内联）。既有实例：`enc.w`（成分技能权重）、`enc.note`。
-> - **状态（State）**——描述**边在生命周期里的演化**、会被反复更新、且**边被删除后记录仍须存活**：**去账本**。既有实例：`origin`、`status`、`probation`。
+> - **状态（State）**——描述**边在生命周期里的演化**、会被反复更新、且**边被删除后记录仍须存活**：**不落边**。既有实例：`origin`、`status`、`probation`。
 
-状态去账本的**唯一理由**是生命周期与边不同（边可删、账本记录不可删）。**禁止把状态塞进边**——`graph.ts` / `proposals.ts` 的两道 fail loud 拒收就是这条判据的执法面。
+**两个轴正交，不可混读**：本判据（声明 vs 状态）回答"落不落在边上"；「三字段的三种机制」回答"不落边时去哪"——`probation` → **账本**、`status` → **跨源连接**、`origin` → **可派生**（无家可去、也不必去）。状态**不落边**的形态因此有三种（去账本 / 跨源连接 / 可派生），三者叠加才完整；把三者并成一句"不重复存储"正是本 ADR 要纠正的"一句话掩盖三件事"。**禁止把状态塞进边**——`graph.ts` / `proposals.ts` 的两道 fail loud 拒收就是这条判据的执法面。
 
 ## 三档逃生口
 
@@ -85,7 +85,7 @@
 
 ### 准确清单（实测）
 
-概念足迹今天的真实形态是**散在四处折叠**——不是一等派生。
+概念足迹今天的真实形态是**折叠散在多处**（A：3 处概念反向 + B：4 处反向可达）——不是一等派生。
 
 **A. 概念反向（扫全图折到概念）—— 3 处**
 
@@ -102,7 +102,7 @@
 | `Graph.upstreamClosure` | **BFS** ← 自称"单一出处"，其注释已记录"两处各写一遍 BFS"的旧教训 |
 | `content.ts` `conceptScopeOf` | `graph.names` 上 `filter` + `isAncestor` ← O(N) |
 | `content.ts` `invokesProjection` | 逐点 `isAncestor` ← O(N) × 每个概念 |
-| `seed.ts` | `graph.names` 里筛 `isAncestor` ← O(N) |
+| `seed.ts` `closureOf` | 无环走 `graph.names` 筛 `isAncestor`（O(N)）；**有环走内联 `preOf` BFS**（`upstreamClosure` 的手写副本） |
 
 **C. 题目侧 —— 已收拢，不动。** 单实现 `growth-subsystem.conceptInvokesOf` + providers 契约（`renderConceptFootprint` 经 `providers.conceptInvokes()` 复用，本文件不自己扫库）。
 
@@ -110,12 +110,15 @@
 
 1. **概念反向住 `Graph` 构造期**，与正向映射**并列**：`taughtByOf` / `assumedByOf`（概念 → 节点[]，按 `graph.names` 序 → 确定性）。**顺带完成**——`teachesOf` / `assumesOf` 本就在同一趟构造里建好（`Graph` 构造期已有那段遍历），反向只是同一趟里多折一次。
 2. **不做 `misconceptions` 反向**——今天无消费者；按本 ADR 的准入判据，**没有消费者的不加**。**这是准入判据的第一次自我适用，必须记进本 ADR。**
-3. **`upstreamClosure` 独占反向可达**，B 的三处 O(N) 扫描改读它。安全性依据：**集合恒等**（无环图上 `isAncestor(a, n) ≡ a ∈ upstreamClosure(n)\{n}`）+ **比较器是全序**（`content.ts` `byDepthDesc`：`depth` 差 `||` 名字，无并列）→ **输出逐字不变**。**但必须写明：有环时两者行为不同**——有环图上 `Graph.reach` 为空、`isAncestor` 恒 false（故现有三处扫描在环图上返回空集），而 BFS 的 `upstreamClosure` 仍沿 `preOf` 走完全部可达前置。**此差异必须显式对待，不得掩饰**：收敛时若沿用 `upstreamClosure`，环图上的闭包读数会**变多**（从空集恢复到真实可达集）——这是修复而非回归，但**行为确实变了**，须有专门测试钉住。
+3. **`upstreamClosure` 独占反向可达**，B 的四处扫描改读它。安全性依据：**集合恒等**（无环图上 `isAncestor(a, n) ≡ a ∈ upstreamClosure(n)\{n}`）+ **比较器是全序**（`content.ts` `byDepthDesc`：`depth` 差 `||` 名字，无并列）→ **输出逐字不变**。**但有两处差异必须显式对待，不得掩饰**：
+   - **有环时**：有环图上 `Graph.reach` 为空、`isAncestor` 恒 false，而 BFS 的 `upstreamClosure` 仍沿 `preOf` 走完全部可达前置。**`content.ts` 的两处扫描**（`conceptScopeOf` / `invokesProjection`）在环图上确实返回空集；**但 `seed.ts` 的 `closureOf` 已按 `hasCycle` 分叉**（环上走内联 BFS、输出非空且与 `upstreamClosure` 等价）——故并非"三处都空"。收敛时 `content.ts` 两处沿用 `upstreamClosure`，环图读数会**从空集恢复到真实可达集**（修复而非回归，但**行为确实变了**）。
+   - **有断边时（无环亦然）——`upstreamClosure` 会抛错、扫描不会**：`Graph` 构造期 `preOf` 保留全部 `pre` 名（含悬空名），而 `succ` / `pred` 与 `reach` 只收 `nset` 成员——故 `isAncestor` 对断边**优雅降级**（返回子集），而 `upstreamClosure` 的 BFS 直接遍历 `preOf`，走到悬空名时 `preOf[p]` 为 `undefined`、`for...of` **抛 `TypeError`**（实测：`names=[A,C]`、`preOf={A:[X],C:[A]}`、`X` 悬空时 `isAncestor` 集为 `[A]` 而 `upstreamClosure(C)` 抛 `this.preOf[u] is not iterable`）。断边是显式容忍态（`graph.ts` 文件头「不因重名/断边/环崩溃」、`structureCheck` 报断边、audit E2），故收敛前**必须先给 `upstreamClosure` 补 `nset` 守卫**（或消费面自滤），否则会把今天不炸的扫描变成崩溃路径。
+   **两处差异均须专门测试钉住。**
 4. **统一在消费面，不在存储面。** **节点侧 = eager**（数据就在 `Graph` 手里，构造期一次折出）；**题目侧 = lazy**（`loadView` 只返回 graph + state，**不含题目**，扫题库不免费，故维持按需经 providers）。两面对外**一张脸**（一个读侧视图同时消费两侧），**不建新模块**。理由：题目粒度天然更大、更贵，硬把两侧塞进同一个 eager 存储面是"为了对称而付不值的代价"。
 
 ### 防复发门（必须有，否则会第四次散）
 
-`upstreamClosure` 的注释写过一次教训——「口径一致靠注释，不靠代码」——随后**被违反三次**（B 表里三处 O(N) 扫描就是证据）。"靠注释"已证明无效。故本 ADR 要求：**加一条门**（在 `tests/arch-guards.test.ts`，或用 `scripts/scan-*.mjs` 套路）——**禁止在 `graph.names` 上"筛 + `isAncestor`"求祖先集**（命中即报，指向 `Graph.upstreamClosure`）。门的具体实现随概念足迹收拢**另开票**，届时按章程 §5 加门纪律（带正反两向自检：误报样本不再报、真违规样本仍拦截），阈值与实测链登记进 `tests/README.md` 门册。
+`upstreamClosure` 的注释写过一次教训——「口径一致靠注释，不靠代码」——随后**被违反三次**（B 表里三处 O(N) 扫描就是证据；其中 `seed.ts` 环图分支还内联了一份 BFS 副本）。"靠注释"已证明无效。故本 ADR 要求：**加一条门**（在 `tests/arch-guards.test.ts`，或用 `scripts/scan-*.mjs` 套路）——**禁止在 `graph.names` 上"筛 + `isAncestor`"求祖先集，也禁止就地手写 `preOf` BFS 求闭包**（两类都命中即报，指向 `Graph.upstreamClosure`；`seed.ts` `closureOf` 的内联副本是第二类的现成样本）。门的具体实现随概念足迹收拢**另开票**，届时按章程 §5 加门纪律（带正反两向自检：误报样本不再报、真违规样本仍拦截），阈值与实测链登记进 `tests/README.md` 门册。
 
 ## 被拒方案
 
@@ -126,9 +129,9 @@
 - **`opt` 与粒度。** `opt` 今天是广播型顶点布尔。边成一等行后它理论上可细化到边，代价是存量回填 + 由 1 条信息变 N 条；而它想表达的那种边级差异是否真被需要，**尚无消费者证明**。
 - **`pre` 的可读性。** `region → blocks → nodes` 两级容器同时是**分区**与**阅读结构**（`graph.ts`）；拆开后读一个节点要跨文件（对 agent 亦然）。
 
-**判据（何时才该拆）**：① 边的**顶点类型不止一种**；② 边种 ≥3 且**形状异质**；③ 边的集合需要被**独立审计 / 独立演化**。
+**判据（何时才该拆）**：（甲）边的**顶点类型不止一种**；（乙）边种 ≥3 且**形状异质**；（丙）边的集合需要被**独立审计 / 独立演化**。
 
-**而 ③（引用二分图）今天已经满足①**——引用二分图的左侧同时是**节点**（住 `data/*.yaml`）与**题目**（住题库 YAML），右侧是**概念**（住 `概念登记表.yaml`），天然跨三个文件。**所以：① 不该拆；该收拢的是 ③。**
+**而「引用二分图」今天已经满足（甲）**——它的左侧同时是**节点**（住 `data/*.yaml`）与**题目**（住题库 YAML），右侧是**概念**（住 `概念登记表.yaml`），天然跨三个文件。**所以：节点/边那种"数据图"不该拆；该收拢的是「引用二分图」。**
 
 ### `misconceptions` 反向——不做（准入判据的首次自我适用）
 
@@ -143,7 +146,7 @@
 
 **本 ADR 只落文档**（本文件 + `CONTEXT.md` 两处词条）。以下**实现另开票（待开票）**，形态与判据以本 ADR 为准：
 
-- **概念足迹收成一处**：`Graph` 构造期加 `taughtByOf` / `assumedByOf`；B 的三处 O(N) 扫描改读 `upstreamClosure`（连同环图行为差异的专门测试）；`coach-tools.ts` / `content.ts` / `proposals.ts` 三处消费面改读反向映射；**防复发门**（禁止 `graph.names` 上"筛 + `isAncestor`"）。这是一张**尚未开出的票**——本 ADR 落其形态与清单，不施工。
+- **概念足迹收成一处**：`Graph` 构造期加 `taughtByOf` / `assumedByOf`；B 的 O(N) 扫描与 `seed.ts` 内联 BFS 改读 `upstreamClosure`（须先补 `nset` 守卫防断边抛错；连同环图/断边行为差异的专门测试）；`coach-tools.ts` / `content.ts` / `proposals.ts` 三处消费面改读反向映射；**防复发门**（禁止 `graph.names` 上"筛 + `isAncestor`"，禁止手写 `preOf` BFS）。这是一张**尚未开出的票**——本 ADR 落其形态与清单，不施工。
 - **卡点自报归因面的概念足迹消费**：既有实现（#249），不动。
 
 ## 行为与门影响
@@ -153,7 +156,7 @@
 
 ## 边界
 
-- **不动任何源码**（`Graph` 不加反向映射、四处折叠不收敛）——实现另票。
+- **不动任何源码**（`Graph` 不加反向映射、多处折叠不收敛）——实现另票。
 - **不做**任何存储层的拆分或合并（节点/边分开存储已在「被拒方案」裁为不采纳）。
 - 不新增边种、不改 `pre` / `enc` 的 schema。
 - 不重开 #249（已关；本 ADR 只记录它留下的缝隙）。
