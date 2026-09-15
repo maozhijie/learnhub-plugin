@@ -48,6 +48,7 @@ export type DataCheckReason =
   | 'note_yaml_parse'
   | 'note_schema'
   | 'note_missing'
+  | 'note_orphan'
   | 'question_bank_unreadable'
   | 'question_bank_yaml_parse'
   | 'question_bank_schema'
@@ -206,7 +207,8 @@ async function listMarkdown(path: string, fs: VaultFs): Promise<string[]> {
 async function scanNotes(
   findings: DataCheckFinding[],
   courseName: string,
-  courseDir: string, fs: VaultFs): Promise<string[]> {
+  courseDir: string,
+  nodeNames: Set<string>, fs: VaultFs): Promise<string[]> {
   const files = await listMarkdown(courseDir, fs)
   for (const path of files) {
     const where = `课程「${courseName}」笔记 ${path}`
@@ -232,7 +234,18 @@ async function scanNotes(
     }
     const checked = validateNoteFrontmatter(doc)
     const errors = checked.errors
-    if (errors.length) push(findings, 'note', 'broken', 'note_schema', where, errors.join('；'))
+    if (errors.length) {
+      push(findings, 'note', 'broken', 'note_schema', where, errors.join('；'))
+      continue
+    }
+    // 孤儿笔记（#255 / doctor 的 unknown 格并入）：frontmatter 合法但节点名不在图节点集内
+    // ——节点改名/删除后的遗留。笔记本身是合法对象（用户笔记永不判 Broken，ADR-0004），
+    // 故只以 hint 浮出（不进 status）：可见性归体检，处置归人工（删笔记或改名回图）。
+    const node = checked.fm!.node
+    if (!nodeNames.has(node)) {
+      push(findings, 'note', 'hint', 'note_orphan', where,
+        `节点「${node}」不在图内——节点改名/删除后的遗留笔记（推荐、就绪与生成都不再读它；删除该笔记或把节点改回图内即可消解）。`)
+    }
   }
   return files
 }
@@ -356,7 +369,7 @@ async function scanCourse(
     }
   }
 
-  const noteFilesList = await scanNotes(findings, courseName, courseDir, fs)
+  const noteFilesList = await scanNotes(findings, courseName, courseDir, nodeNames, fs)
   const bankCount = await scanBanks(findings, courseName, bankDir, nodes, fs)
   return { graphFiles: graphFiles.length, notes: noteFilesList.length, banks: bankCount, nodes }
 }

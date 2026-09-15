@@ -21,7 +21,7 @@ type EngineSubsystemName =
   | 'learner' | 'content2' | 'project' | 'bank2' | 'channels' | 'lab'
   | 'graph' | 'growth2' | 'sched2' | 'registry' | 'proposals' | 'projects'
 
-/** hub 自身的装配域方法名（status/recommend/doctor/rebuild/生成任务持久化/私有 helper）。 */
+/** hub 自身的装配域方法名（status/recommend/rebuild/生成任务持久化/私有 helper）。 */
 type HubMethod = {
   [K in Exclude<keyof LearnhubEngine, EngineSubsystemName>]: LearnhubEngine[K] extends (...a: never[]) => unknown ? K : never
 }[Exclude<keyof LearnhubEngine, EngineSubsystemName>]

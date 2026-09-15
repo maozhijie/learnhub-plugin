@@ -6,7 +6,7 @@
 
 ## 门面 C 形态（#182 / ADR-0049，2026-09-12）
 
-hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engine.<子系统>.<方法>`**（子系统实例 = `learner`/`content2`/`project`/`bank2`/`channels`/`lab`/`graph`/`growth2`/`sched2`/`registry`/`proposals`/`projects`，全部公开 readonly 属性；hub 保留装配接线 + 装配域方法 statusJson/recommend/doctor/rebuild/saveGenJobs 等）。对测试的三点影响：
+hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engine.<子系统>.<方法>`**（子系统实例 = `learner`/`content2`/`project`/`bank2`/`channels`/`lab`/`graph`/`growth2`/`sched2`/`registry`/`proposals`/`projects`，全部公开 readonly 属性；hub 保留装配接线 + 装配域方法 statusJson/recommend/rebuild/saveGenJobs 等）。对测试的三点影响：
 
 - **直调写点路径**：`engine.learner.learnerQueue(...)` 而非 `engine.learnerQueue(...)`；hub 装配域方法保留裸名（`engine.statusJson()`）。注册表 `engine` 字段同口径（点路径 + hub 裸名），门① 断言子系统类原型。
 - **打桩按真实调用路径**：宿主泵/路由驱动的引擎调用走点路径，桩键写 `<子系统>.<方法>`（`tests/host-runtime.test.ts` 的 `stub()` 助手支持两种键）。
@@ -163,7 +163,7 @@ UI 测试网与数据获取缝（2026-09-12 新增，#183 / ADR-0051／ADR-0052�
 
 写入单元（2026-09-11 新增，#176 / ADR-0046；`engine/write-unit.ts` + `tests/write-unit.test.ts`）：
 
-- **`runWriteUnit(op, { course?, clock, journal, steps })` 是跨文件落盘的唯一编排口**：按声明顺序执行（顺序是领域知识，原语只强制「声明顺序＝执行顺序」）→ 声明了 `done` 幂等判据的步骤 done=true 即续段跳过（「已存在即续段」原语化；无 done = 每次都执行）→ 全部成功后经 sink 追加**恰一条** journal（复用既有 `state/journal.jsonl`，`kind='write_unit'`、`node=<op>`、`detail='steps=名:done|skipped,…'`、ts 经 Clock 端口——零新日志文件）。失败：步骤 k 抛错即上抛中止，不回滚不续跑、失败不写 journal（与原 26 处「同事务」注释的今天语义逐条对齐）；恢复走 dataCheck/doctor/rebuild。
+- **`runWriteUnit(op, { course?, clock, journal, steps })` 是跨文件落盘的唯一编排口**：按声明顺序执行（顺序是领域知识，原语只强制「声明顺序＝执行顺序」）→ 声明了 `done` 幂等判据的步骤 done=true 即续段跳过（「已存在即续段」原语化；无 done = 每次都执行）→ 全部成功后经 sink 追加**恰一条** journal（复用既有 `state/journal.jsonl`，`kind='write_unit'`、`node=<op>`、`detail='steps=名:done|skipped,…'`、ts 经 Clock 端口——零新日志文件）。失败：步骤 k 抛错即上抛中止，不回滚不续跑、失败不写 journal（与原 26 处「同事务」注释的今天语义逐条对齐）；恢复走 dataCheck/rebuild。
 - **七站点**（`scripts/scan-write-unit.mjs` 的站点清单，键 = 相对 src/ 的 posix 路径——views/proposals.ts 与 engine/proposals.ts 同名，按文件名计数会互相覆盖）：applyEdit 9 步／applySeed 8 步／applyEnrich 5 步（proposals.ts）、nodeComplete 5 步／optimizeFsrsParams 4 步（sched-subsystem.ts）、experimentStop 3 步（nof1.ts）、settleRechecks 每条目 2 步（growth-subsystem.ts）。今天语义对照表与三处形状裁定见 #176 票评论。
 - **G9 写入单元门**（`tests/arch-guards.test.ts`）：src/ 零「同事务」注释（顺序知识只住步骤声明）+ 七站点各自必须经 `runWriteUnit`（迁移回退/新增跨文件落盘绕开原语即失败）；自检：残留被抓、调用数不足被抓、站点文件改名被抓（幽灵清单）、齐备则绿。
 

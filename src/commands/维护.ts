@@ -82,20 +82,6 @@ export const 维护域 = {
       }
     ]
   }),
-  'doctor': command({
-    id: "doctor",
-    args: {},
-    engine: "doctor",
-    domain: "维护",
-    channels: [
-      {
-        channel: "panel",
-        mode: "sync",
-        route: { method: "GET", path: "/doctor" },
-        bind: []
-      }
-    ]
-  }),
   'feedback': command({
     id: "feedback",
     summary: "Submit content feedback of a course note: reads the note「内容反馈」section and marks the node flagged + regeneration queue.",

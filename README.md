@@ -202,8 +202,8 @@ clone 的 `preset/learnhub/agent.cordis.yml`（file:// URL，安装见文末「�
 ## 脚本
 
 ```sh
-node scripts/smoke.mjs <vault>       # 只读冒烟：status/xpStatus/promptKinds/recommend/doctor/analyze/coursesTree/读路径
-node scripts/e2e.mjs <vault>         # 写路径端到端：临时副本上跑 题库(9题型)→作答(FSRS/乱猜)→XP 预算对账→skip/complete→审计→doctor→edit 联动→交互件→风格变体→图谱健康分/认知维度→genJobs
+node scripts/smoke.mjs <vault>       # 只读冒烟：status/xpStatus/promptKinds/recommend/dataCheck/analyze/coursesTree/读路径
+node scripts/e2e.mjs <vault>         # 写路径端到端：临时副本上跑 题库(9题型)→作答(FSRS/乱猜)→XP 预算对账→skip/complete→审计→dataCheck→edit 联动→交互件→风格变体→图谱健康分/认知维度→genJobs
 node scripts/dev-server.mjs <vault> [port]  # 面板开发伺服：直调引擎 + web/dist（无模型 seam）
 node scripts/ensure-notes.mjs <vault> [course]  # 幂等补齐课程缺笔记的骨架文件（存量修复）
 node scripts/smoke-panel.mjs [port]  # 面板伺服冒烟：301/资产/API 形状

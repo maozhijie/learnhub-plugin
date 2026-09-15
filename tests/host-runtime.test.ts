@@ -6,7 +6,7 @@
  *   - quizJobResults 等待语义：agent 工具同步语义（入队 + 等终态 + 读结果表）、超时与消失 fail loud
  *   - 工具面快照：111 个工具的名称/描述/schema 与重构前基线逐字不变（tests/fixtures/host-tools-snapshot.json，
  *     由重构前的 src/index.ts mock-apply 捕获）
- *   - 「路由 ↔ 工具」对账基线：88 共享引擎入口 / 工具独有 25 / 路由独有 56
+ *   - 「路由 ↔ 工具」对账基线：88 共享引擎入口 / 工具独有 25 / 路由独有 58
  *     （tests/fixtures/host-face-baseline.json，ADR-0045 命令注册表迁移的回归网；
  *     #240 / ADR-0076 建课改模式后路由面 +3：graph.createCourse/addEndpoint/removeEndpoint）
  * 引擎方法用实例属性影子化（shadowing prototype），不依赖真实模型与真实课程数据。
@@ -1212,7 +1212,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、路由独有 59（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、路由独有 58（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -1253,7 +1253,7 @@ test('路由↔工具对账基线：88 共享引擎入口、工具独有 25、�
   // 通道 handler 与生长批执行器消费，agent 工具面不直接触卡点自报）
   assert.equal(shared.length, 88)
   assert.equal(toolOnly.length, 25, '#215：content2.contentCheck 转共享（冒烟复跑质检门），工具独有 26→25')
-  assert.equal(routeOnly.length, 59, '#248：+growth2.stuckReportAppend、+growth2.stuckPending、+growth2.stuckMarkConsumed（卡点自报三口仅路由面），路由独有 56→59')
+  assert.equal(routeOnly.length, 58, '#248：+growth2.stuckReportAppend、+growth2.stuckPending、+growth2.stuckMarkConsumed（卡点自报三口仅路由面）；#255 −1：doctor 随 doctor 退役，路由独有 59→58')
 })
 
 // ---------------------------------------------------------------- apply 不自动入队正文（ADR-0078）

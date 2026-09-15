@@ -10,7 +10,7 @@
  *
  * 失败行为（与各域既有顺序约定注释的今天语义逐条对齐）：步骤 k 抛错 → 异常上抛中止，
  * 前面已写的步骤留在盘上——不回滚、不续跑、失败不写 journal；恢复走既有
- * dataCheck／doctor／rebuild 与各域自己的幂等门/重验门。
+ * dataCheck／rebuild 与各域自己的幂等门/重验门。
  *
  * journal sink：复用既有 state/journal.jsonl（store.appendJournal，零新工件；
  * ADR-0046 的「既有 JSONL 流水」支）。ts 经 Clock 端口（#175 阶段①）。

@@ -110,6 +110,26 @@ test('Data Check separates legal missing objects from valid data at the engine f
   })
 })
 
+test('Data Check 孤儿笔记（#255：doctor 的 unknown 格并入）：节点名不在图内 → hint finding，定位到笔记路径与悬空节点名', async () => {
+  // 节点改名/删除后的遗留形态：笔记文件名与 frontmatter 节点名都还在，图节点集里已没有它
+  const ORPHAN = NOTE.replace('node: 入门', 'node: 已删节点')
+  await withVault({ graph: GRAPH, notes: { 入门: NOTE, 已删节点: ORPHAN }, banks: { 入门: BANK } }, async ({ engine, root }) => {
+    const report = await engine.dataCheck()
+
+    const hit = report.findings.find(f => f.reason === 'note_orphan')
+    assert.ok(hit, '悬空节点名的笔记报 finding')
+    assert.equal(hit!.level, 'hint', '提示类：用户笔记本身永不判 Broken（ADR-0004）')
+    assert.match(hit!.location, /已删节点\.md$/, '定位到笔记路径')
+    assert.match(hit!.detail ?? '', /已删节点/, 'detail 带悬空节点名')
+    assert.ok(hit!.location.includes(root))
+
+    // 契约只增不改：既有 missing 判定与 status 口径不动（hint 不进 status）
+    assert.deepEqual(report.byArea.note, { missing: 1, broken: 0, archived: 0, hint: 1 })
+    assert.equal(report.counts.hint, 1)
+    assert.equal(report.status, 'missing')
+  })
+})
+
 test('Data Check reports broken YAML and schema without crashing the scan', async () => {
   await withVault({ graph: GRAPH, notes: { 入门: NOTE }, banks: { 入门: BANK }, files: BROKEN_FILES }, async ({ engine, root }) => {
     const report = await engine.dataCheck()

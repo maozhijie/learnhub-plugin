@@ -6,7 +6,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { withVault } from './helpers/vault.ts'
-import { nowIsoOf } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/dates.ts'
 import type { Clock, Rng } from '../src/engine/index.ts'
 
 /** 固定时钟（任意常量时刻；与真实现在相距足够远，可断言缺省注入确实不同）。 */
@@ -33,10 +33,10 @@ const MATCHING_BANK = [
   '    answer: ["一", "二", "三"]',
 ].join('\n')
 
-test('时钟端口：固定时钟下 doctor.generated_at 确定（同输入同输出），与缺省真实时钟可区分', async () => {
+test('时钟端口：固定时钟下学习日确定（同输入同输出），与缺省真实时钟可区分', async () => {
   const run = (clock?: Clock) =>
-    withVault({ ...(clock ? { clock } : {}) }, async ({ engine }) => (await engine.doctor()).generated_at)
-  assert.equal(await run(FIXED), nowIsoOf(FIXED.nowMs()), '生成时刻 = 注入时刻的本地 ISO 渲染')
+    withVault({ ...(clock ? { clock } : {}) }, async ({ engine }) => (await engine.recommend()).date)
+  assert.equal(await run(FIXED), todayStr(new Date(FIXED.nowMs()), 0), '学习日 = 注入时刻按日界折算的本地日期（工厂基线 00:00）')
   assert.equal(await run(FIXED), await run(FIXED), '两个固定时钟引擎同输出（同一输入同一输出）')
   assert.notEqual(await run(), await run(FIXED), '缺省注入 = 真实系统时钟（systemClock），与固定时刻可区分')
 })

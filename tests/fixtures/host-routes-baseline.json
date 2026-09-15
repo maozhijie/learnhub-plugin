@@ -93,11 +93,6 @@
  },
  {
   "method": "GET",
-  "route": "/doctor",
-  "keys": []
- },
- {
-  "method": "GET",
   "route": "/questions-all",
   "keys": [
    "course"

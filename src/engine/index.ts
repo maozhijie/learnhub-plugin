@@ -60,7 +60,7 @@ import { Skills } from './skills.ts'
 import { Habits } from './habits.ts'
 import { AnkiMirror } from './anki.ts'
 import { Sessions } from './sessions.ts'
-import { todayStr, nowIsoOf, fmtCutoff } from './dates.ts'
+import { todayStr, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './io.ts'
 import { assertSchemaVersion } from './schema.ts'
 import type { SchemaBlock } from './schema.ts'
@@ -69,7 +69,7 @@ import { auditQuestion } from './question-hygiene.ts'
 import type { QuestionAuditReport } from './question-hygiene.ts'
 import type { CourseEntry, Fm } from './types.ts'
 import type { DataCheckReport } from './data-check.ts'
-import type { DoctorDoc, RecommendDoc, StatusDoc } from './views.ts'
+import type { RecommendDoc, StatusDoc } from './views.ts'
 
 /** 宿主取值走门面（D14 收口，#152 刀 1 / ADR-0042）：re-export 门只供应纯函数、
  * 常量与缝型——数据访问仍只走门面方法，门不是数据旁路。 */
@@ -573,26 +573,6 @@ export class LearnhubEngine {
   // ---- 「今天学它」pin（E3 #67 / ADR-0009 Learner Output）----
 
   // 以下 E3pin/E4jol/U4kata/E5coach/E2explain/E1cards/SC/Uskill/Ureceipt/Uhabit 十节方法体住 LearnerSubsystem（learner-cards.ts，#152 刀 4 聚合+转发）
-
-  // ---- doctor（fm schema 对账） ----
-
-  async doctor(): Promise<DoctorDoc> {
-    const courses = []
-    for (const c of await this.registry.enabled()) {
-      const { graph, state, broken } = await this.loadView(c)
-      const missing = graph.names.filter(n => !state[n])
-      const unknown = Object.keys(state).filter(n => !graph.nset.has(n))
-      courses.push({
-        course: c.name,
-        total: graph.names.length,
-        notes: Object.keys(state).length,
-        broken: broken.map(b => ({ path: b.path, ...(b.node ? { node: b.node } : {}), reason: b.reason })),
-        missing,
-        unknown,
-      })
-    }
-    return { generated_at: nowIsoOf(this.clock.nowMs()), courses }
-  }
 
   // ---- rebuild（audit + 就绪清单） ----
 

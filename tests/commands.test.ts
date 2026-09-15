@@ -140,7 +140,7 @@ test('门③ 唯一性：id／tool 名／(method, path) 各自唯一，索引没
   assert.equal(tools.length, 112, `agent 通道应恰 112 条，实得 ${tools.length}（#203 +1：learnhub_receipt_review_mode）`)
   const routeKeys = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route).map(x => `${x.route!.method} ${x.route!.path}`))
   assert.equal(new Set(routeKeys).size, routeKeys.length, '(method, path) 有重复')
-  assert.equal(routeKeys.length, 134, `panel 通道应恰 134 条，实得 ${routeKeys.length}（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report）`)
+  assert.equal(routeKeys.length, 133, `panel 通道应恰 133 条，实得 ${routeKeys.length}（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor 随 doctor 退役）`)
   assert.equal(BY_TOOL.size, tools.length, 'BY_TOOL 索引吞了条目（有重复 tool 名被 Map 覆盖）')
   assert.equal(BY_ROUTE.size, routeKeys.length, 'BY_ROUTE 索引吞了条目（有重复路由被 Map 覆盖）')
 })
@@ -225,7 +225,7 @@ test('门④ handler 覆盖：handlers.ts 的键集合 == 没有 bind 的 panel 
   assert.deepEqual(missing, [], `这些路由既没有 bind（生成路径）也没有 handler：\n${missing.join('\n')}`)
   assert.deepEqual(dead, [], `这些 handler 已被生成路径覆盖（死代码，该删）：\n${dead.join('\n')}`)
   assert.ok(generic.length >= 45, `生成路径只剩 ${generic.length} 条（装机率塌了）`)
-  assert.equal(generic.length + handled.length, 134, '面板通道总数应恰 134（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report）')
+  assert.equal(generic.length + handled.length, 133, '面板通道总数应恰 133（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor）')
   // bind 的每个键都必须在 args 里（否则取值器会抛「声明漏键」）
   const badBind = panel.filter(x => (x.channel.bind ?? []).some(k => k !== null && !(k in x.command.args)))
     .map(x => x.command.id)

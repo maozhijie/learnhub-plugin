@@ -55,21 +55,6 @@ export type {
 
 
 
-// ---- doctor（GET /api/doctor；fm schema 对账，doctor）----
-
-export interface DoctorBrokenNote { path: string; node?: string; reason: string }
-
-export interface DoctorCourseReport {
-  course: string
-  total: number
-  notes: number
-  broken: DoctorBrokenNote[]
-  missing: string[]
-  unknown: string[]
-}
-
-export interface DoctorDoc { generated_at: string; courses: DoctorCourseReport[] }
-
 // ---- graph analyze（GET /api/graph、learnhub_graph_analyze；graphAnalyze → analysis.analyzeGraph）----
 // analysis.ts 依赖 node:fs 闭包，ui 侧 tsc 无法拉入——此处在视图层镜像 GraphAnalysis
 // 形状（改动需与 analysis.ts 同步）。

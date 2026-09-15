@@ -34,7 +34,7 @@ await step('promptKinds（含风格变体）', async () => {
   return kinds
 })
 await step('recommend', () => engine.recommend(5))
-await step('doctor', () => engine.doctor())
+await step('dataCheck', () => engine.dataCheck())
 await step('queueItemsAll', () => engine.queueItemsAll())
 await step('graphAnalyze', () => engine.graphAnalyze(undefined, false))
 await step('graphAnalyze.elements', () => engine.graphAnalyze(undefined, true))

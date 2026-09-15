@@ -5,8 +5,9 @@
  *   ① **对账清单**：代码里的表项集合必须与重构前（if 链）实测的清单逐条一致
  *      （tests/fixtures/host-routes-baseline.json，125 条 = GET 46 + POST 73 + PUT 6；
  *      #159/#209/#215/#216/#222 各 +1 → 130 条；#240 / ADR-0076 +3（POST /course/create、
- *      /endpoint/add、/endpoint/remove）→ 现值 133 条）。
- *   ② **行为快照**：485 条探针（每条路由 × 空参／全参／逐个缺参，外加分发纪律样本）
+ *      /endpoint/add、/endpoint/remove）；#248 +1（POST /coach/stuck-report）；
+ *      #255 −1（GET /doctor 随 doctor 退役）→ 现值 133 条）。
+ *   ② **行为快照**：488 条探针（每条路由 × 空参／全参／逐个缺参，外加分发纪律样本）
  *      逐字复现重构前捕获的 `{status, res, 引擎调用}`（tests/fixtures/host-routes-snapshot.json）。
  *      这是「120 条路由的方法／路径／响应形状逐字不变」与「参数守卫错误消息逐字不变」
  *      的证据，不是通读一遍代码后的相信。
@@ -61,7 +62,7 @@ test('对账清单：每条路由都被快照探针覆盖（快照漏了哪条�
 
 // ---------------------------------------------------------------- ② 行为快照（逐字不变）
 
-test('行为快照：489 条探针的状态码／响应体／引擎调用序列与基线逐字一致', async () => {
+test('行为快照：488 条探针的状态码／响应体／引擎调用序列与基线逐字一致', async () => {
   const specs: ProbeSpec[] = SNAPSHOT.map(s => ({ id: s.id, method: s.method, url: s.url, ...(s.body ? { body: s.body } : {}) }))
   const got = await runProbes(specs)
   const diffs: string[] = []
@@ -77,9 +78,9 @@ test('行为快照：489 条探针的状态码／响应体／引擎调用序列�
   assert.deepEqual(diffs, [], `路由行为相对重构前漂移（${diffs.length} 条）：\n${diffs.join('\n')}`)
 })
 
-test('行为快照：状态码分布保持 200×230／404×6／500×253（探针口径；#209 +2×200/#215 +2×500/#216 +2×500/#222 +2×500；#240 −1×200/−1×500（seed/propose 删 goal/mode 探针）+4×200/+8×500（建课改模式三路由）；#248 +1×200/+3×500（卡点自报路由）', () => {
+test('行为快照：状态码分布保持 200×229／404×6／500×253（探针口径；#209 +2×200/#215 +2×500/#216 +2×500/#222 +2×500；#240 −1×200/−1×500（seed/propose 删 goal/mode 探针）+4×200/+8×500（建课改模式三路由）；#248 +1×200/+3×500（卡点自报路由）；#255 −1×200（GET /doctor 随 doctor 退役））', () => {
   const dist = SNAPSHOT.reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.status]: (acc[s.status] ?? 0) + 1 }), {})
-  assert.deepEqual(dist, { 200: 230, 404: 6, 500: 253 })
+  assert.deepEqual(dist, { 200: 229, 404: 6, 500: 253 })
 })
 
 // ---------------------------------------------------------------- ③ 分发纪律

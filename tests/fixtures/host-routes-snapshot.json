@@ -330,16 +330,6 @@
   ]
  },
  {
-  "id": "GET /doctor · 空参",
-  "method": "GET",
-  "url": "/learnhub/api/doctor",
-  "status": 200,
-  "res": [],
-  "calls": [
-   "doctor()"
-  ]
- },
- {
   "id": "GET /questions-all · 空参",
   "method": "GET",
   "url": "/learnhub/api/questions-all",
