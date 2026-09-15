@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: docs
-title: 项目架构决策记录与研发文档
+title: 架构决策与 Agent 工作章程文档集
 scope:
     - docs/
 source_files: []

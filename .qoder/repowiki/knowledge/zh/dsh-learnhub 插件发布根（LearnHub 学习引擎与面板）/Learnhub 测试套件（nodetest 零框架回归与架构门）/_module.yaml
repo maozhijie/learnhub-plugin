@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: tests
-title: 引擎与宿主测试套件（Node.js 原生 runner）
+title: Learnhub 测试套件（node:test 零框架回归与架构门）
 scope:
     - tests/
 source_files: []

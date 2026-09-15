@@ -3,11 +3,11 @@ schema_version: 1
 locale: zh-CN
 branch: main
 nodes_managed: true
-exported_at: "2026-09-15T01:09:50Z"
+exported_at: "2026-09-15T03:39:36Z"
 modules:
     "":
-        dir_name: dsh-learnhub 插件根（Cordis 学习中心插件）
-        title: dsh-learnhub 插件根（Cordis 学习中心插件）
+        dir_name: dsh-learnhub 插件发布根（LearnHub 学习引擎与面板）
+        title: dsh-learnhub 插件发布根（LearnHub 学习引擎与面板）
         scope:
             - CONTEXT.md
             - AGENTS.md
@@ -25,8 +25,8 @@ modules:
         depends_on: []
         related_to: []
     docs:
-        dir_name: 项目架构决策记录与研发文档
-        title: 项目架构决策记录与研发文档
+        dir_name: 架构决策与 Agent 工作章程文档集
+        title: 架构决策与 Agent 工作章程文档集
         scope:
             - docs/
         source_files: []
@@ -45,8 +45,8 @@ modules:
         depends_on: []
         related_to: []
     tests:
-        dir_name: 引擎与宿主测试套件（Node.js 原生 runner）
-        title: 引擎与宿主测试套件（Node.js 原生 runner）
+        dir_name: Learnhub 测试套件（nodetest 零框架回归与架构门）
+        title: Learnhub 测试套件（node:test 零框架回归与架构门）
         scope:
             - tests/
         source_files: []
@@ -55,8 +55,8 @@ modules:
         related_to:
             - path: ui
     ui:
-        dir_name: LearnHub 面板前端（React + Vite 学习工作台 UI）
-        title: LearnHub 面板前端（React + Vite 学习工作台 UI）
+        dir_name: LearnHub 面板前端（React + Vite 学习工作区）
+        title: LearnHub 面板前端（React + Vite 学习工作区）
         scope:
             - ui/
         source_files: []

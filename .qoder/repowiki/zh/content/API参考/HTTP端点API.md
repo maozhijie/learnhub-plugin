@@ -12,6 +12,12 @@
 - [tests/fixtures/host-routes-baseline.json](file://tests/fixtures/host-routes-baseline.json)
 </cite>
 
+## 更新摘要
+**变更内容**
+- 移除了已退役的端点：POST /seed/propose、POST /node/pin、POST /review、GET /courses、PUT /day-cutoff
+- 更新了路由表以反映当前可用的端点
+- 修正了相关示例和说明
+
 ## 目录
 1. [简介](#简介)
 2. [项目结构](#项目结构)
@@ -27,9 +33,11 @@
 ## 简介
 本文件为学习平台插件的 HTTP 端点 API 完整文档。内容覆盖所有 RESTful 接口的 URL、HTTP 方法、请求参数、响应格式与状态码；说明认证授权与安全考虑；提供请求/响应示例（成功与失败）；描述路由表组织与中间件处理流程；给出客户端集成指南与 SDK 使用建议；记录版本管理与向后兼容策略；并总结限流策略与性能限制。
 
+**重要更新**：部分端点已退役，包括 POST /seed/propose、POST /node/pin、POST /review、GET /courses、PUT /day-cutoff。这些端点现在返回 404 错误。
+
 ## 项目结构
 - 路由前缀：所有面板 API 统一以 /learnhub/api 开头。
-- 分发机制：采用“注册表驱动 + 手写处理器例外”的双通道模式。命令注册表声明每个端点的参数 schema、引擎入口与路由映射；未命中生成路径的请求由 handlers.ts 中的手写处理器承接。
+- 分发机制：采用"注册表驱动 + 手写处理器例外"的双通道模式。命令注册表声明每个端点的参数 schema、引擎入口与路由映射；未命中生成路径的请求由 handlers.ts 中的手写处理器承接。
 - 技术层：http.ts 提供 JSON 读写与静态资源 MIME 类型；runtime.ts 提供运行时上下文、运行日志与引擎调用封装；route-table.ts 定义路由项结构与构造器。
 
 ```mermaid
@@ -44,13 +52,13 @@ Engine --> Runtime["apiRun/runLog 记录运行日志"]
 Runtime --> Res["sendJson 统一响应"]
 ```
 
-图表来源
+**图表来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/commands/index.ts:58-71](file://src/commands/index.ts#L58-L71)
 - [src/host/runtime.ts:198-253](file://src/host/runtime.ts#L198-L253)
 - [src/host/http.ts:26-40](file://src/host/http.ts#L26-L40)
 
-章节来源
+**章节来源**
 - [src/host/api.ts:25-83](file://src/host/api.ts#L25-L83)
 - [src/host/http.ts:1-55](file://src/host/http.ts#L1-L55)
 - [src/host/route-table.ts:1-75](file://src/host/route-table.ts#L1-L75)
@@ -64,7 +72,7 @@ Runtime --> Res["sendJson 统一响应"]
 - 运行时 runtime：封装引擎调用、运行日志、任务注册表与标志位，保证可测性与可观测性。
 - HTTP 工具 http：JSON 序列化/反序列化、MIME 白名单、KaTeX 注入等。
 
-章节来源
+**章节来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/commands/index.ts:25-71](file://src/commands/index.ts#L25-L71)
 - [src/host/handlers.ts:101-741](file://src/host/handlers.ts#L101-L741)
@@ -110,7 +118,7 @@ A-->>C : "500 {error : '...'}"
 end
 ```
 
-图表来源
+**图表来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/runtime.ts:240-253](file://src/host/runtime.ts#L240-L253)
 
@@ -119,7 +127,7 @@ end
 ### 路由表与命令注册
 - 路由表项 RouteSpec：包含 method、route、handler、可选 prefix，以及预留的命令注册字段位（id/summary/args/engine/output/channels）。
 - 命令 CommandSpec：集中声明 id、summary、args、engine、output、domain、channels；channels 指定 agent/panel 通道、同步/队列模式、路由、阶段、bind、必填清单、是否记日志等。
-- 装配索引：BY_ROUTE 将 “METHOD PATH” 映射到命令，WIRE_ARGS 维护面板通道的参数键名权威表，用于前端 camelCase→snake_case 转换。
+- 装配索引：BY_ROUTE 将 "METHOD PATH" 映射到命令，WIRE_ARGS 维护面板通道的参数键名权威表，用于前端 camelCase→snake_case 转换。
 
 ```mermaid
 classDiagram
@@ -152,12 +160,12 @@ class ChannelSpec {
 RouteSpec <.. CommandSpec : "预留字段位"
 ```
 
-图表来源
+**图表来源**
 - [src/host/route-table.ts:16-75](file://src/host/route-table.ts#L16-L75)
 - [src/commands/types.ts:54-129](file://src/commands/types.ts#L54-L129)
 - [src/commands/index.ts:58-71](file://src/commands/index.ts#L58-L71)
 
-章节来源
+**章节来源**
 - [src/host/route-table.ts:1-75](file://src/host/route-table.ts#L1-L75)
 - [src/commands/types.ts:1-129](file://src/commands/types.ts#L1-L129)
 - [src/commands/index.ts:1-72](file://src/commands/index.ts#L1-L72)
@@ -168,7 +176,7 @@ RouteSpec <.. CommandSpec : "预留字段位"
 - 参数校验失败：500 + { error: "中文消息（路由 METHOD PATH）" }。
 - 其他异常：500 + { error: "引擎错误或业务错误" }。
 
-章节来源
+**章节来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/http.ts:26-40](file://src/host/http.ts#L26-L40)
 
@@ -180,7 +188,7 @@ RouteSpec <.. CommandSpec : "预留字段位"
   - 对敏感接口（如 Anki 导入导出、批量评审）增加二次确认或审计日志。
   - 限制跨域与 CSP（静态资源已做同源限制，交互件沙箱有额外约束）。
 
-章节来源
+**章节来源**
 - [src/host/static.ts:1-200](file://src/host/static.ts#L1-L200)
 - [src/host/http.ts:17-24](file://src/host/http.ts#L17-L24)
 
@@ -207,35 +215,45 @@ ApiRun --> SendJson
 SendJson --> End(["结束"])
 ```
 
-图表来源
+**图表来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/http.ts:34-40](file://src/host/http.ts#L34-L40)
 - [src/host/runtime.ts:240-253](file://src/host/runtime.ts#L240-L253)
 
-章节来源
+**章节来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/handlers.ts:101-741](file://src/host/handlers.ts#L101-L741)
 
 ### 关键端点分类与说明
 以下为常用端点类别与职责概览（具体参数以命令注册表与处理器为准）：
-- 状态与查询类 GET：/status、/courses、/recommend、/graph、/review-queue、/probation、/experiments、/generate/status、/explain-pack、/anki/status、/agent-guide、/bank-cleanup 等。
-- 文件与静态资源：/file（vault 媒体）、/vendor/（vendored 库）、/interactive（交互件 HTML）。
-- 笔记与内容：/note（解析笔记）、/feedback（提交反馈）。
-- 学习与复习：/tutor、/explain-back、/explain-feedback、/explain-archive、/learner-rate、/question-answer、/question-rate、/question-forget、/band-session、/learner-add、/learner-archive。
-- 题库管理：/question-generate、/question-add、/question-archive、/error-answer、/error-generate、/error-archive、/difficulty-advice-dismiss。
-- 提案与图谱：/proposals/apply、/proposals/reject、/endpoint/add、/endpoint/remove。
-- 生成与队列：/generate、/generate/resume、/generate/section、/course/reset、/generate/cancel。
-- 教练与生长：/coach/growth、/coach/compass。
-- 项目：/project/create、/project/plan/generate、/project/milestone/generate、/project/decompile、/project/exec。
-- 实验与沙盘：/sandbox/run、/experiments/apply、/experiments/stop。
-- Anki 互通：/anki/export、/anki/import。
-- 习惯与技能：/habits/create、/habits/repeat、/habits/archive、/skills/archive、/skills/maintenance。
-- 周复盘：/kata/save、/kata/convert/intention。
-- 配置开关：/jol、/calibration/hints、/sleep、/rebuild。
 
-章节来源
+**已移除的端点**（返回 404）：
+- POST /seed/propose - 种子提案（已随种子链退役）
+- POST /node/pin - 节点置顶（已退役）
+- POST /review - 复习（已退役）
+- GET /courses - 课程列表（已退役）
+- PUT /day-cutoff - 日界设置（已退役）
+
+**当前可用端点**：
+- 状态与查询类 GET：/status、/recommend、/graph、/review-queue、/probation、/experiments、/generate/status、/explain-pack、/anki/status、/agent-guide、/bank-cleanup、/compass、/lesson、/queue、/courses/tree、/questions、/file、/vendor/、/interactive、/note、/proposals、/questions-all、/xp、/memory、/jol、/calibration/profile、/calibration/hints、/coach、/sleep、/thermostat、/prompts、/discuss-pack、/explain-back-pack、/note-sources、/difficulty-advice、/question-audit、/learner-queue、/error-queue、/skills、/habits、/habit、/projects、/project/cross、/project/log、/kata
+- 文件与静态资源：/file（vault 媒体）、/vendor/（vendored 库）、/interactive（交互件 HTML）
+- 笔记与内容：/note（解析笔记）、/feedback（提交反馈）
+- 学习与复习：/tutor、/explain-back、/explain-feedback、/explain-archive、/learner-rate、/question-answer、/question-rate、/question-forget、/band-session、/learner-add、/learner-archive
+- 题库管理：/question-generate、/question-add、/question-archive、/error-answer、/error-generate、/error-archive、/difficulty-advice-dismiss
+- 提案与图谱：/proposals/apply、/proposals/reject、/endpoint/add、/endpoint/remove、/graph/backfill
+- 生成与队列：/generate、/generate/resume、/generate/section、/course/reset、/generate/cancel
+- 教练与生长：/coach/growth、/coach/compass、/coach/stuck-report
+- 项目：/project/create、/project/plan/generate、/project/milestone/generate、/project/decompile、/project/exec、/project/lifecycle、/project/tier、/project/log
+- 实验与沙盘：/sandbox/run、/experiments/apply、/experiments/stop、/experiments/propose
+- Anki 互通：/anki/export、/anki/import
+- 习惯与技能：/habits/create、/habits/repeat、/habits/archive、/skills/archive、/skills/maintenance
+- 周复盘：/kata/save、/kata/convert/intention、/kata/convert/experiment
+- 配置开关：/jol、/calibration/hints、/sleep、/rebuild、/daily-goal
+- 质量评审：/quality-review、/smoke、/spike
+
+**章节来源**
 - [src/host/handlers.ts:101-741](file://src/host/handlers.ts#L101-L741)
-- [tests/fixtures/host-routes-baseline.json:1-800](file://tests/fixtures/host-routes-baseline.json#L1-L800)
+- [tests/fixtures/host-routes-baseline.json:1-992](file://tests/fixtures/host-routes-baseline.json#L1-L992)
 
 ### 请求/响应示例（成功与失败）
 - 成功示例（GET /status）
@@ -245,13 +263,13 @@ SendJson --> End(["结束"])
   - 请求：POST /learnhub/api/generate，body 含 course、node、可选 style
   - 响应：200 + JSON（入队结果）
 - 失败示例（未知路由）
-  - 请求：POST /learnhub/api/unknown
-  - 响应：404 + { error: "unknown route: POST /unknown" }
+  - 请求：POST /learnhub/api/seed/propose（已退役）
+  - 响应：404 + { error: "unknown route: POST /seed/propose" }
 - 失败示例（参数校验失败）
   - 请求：POST /learnhub/api/question-generate，缺少必填字段
   - 响应：500 + { error: "缺少必填参数：<key>（路由 POST /question-generate）" }
 
-章节来源
+**章节来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/handlers.ts:388-403](file://src/host/handlers.ts#L388-L403)
 
@@ -272,12 +290,12 @@ API --> HTTP["http.sendJson/readJson"]
 API --> STAT["static.serve*"]
 ```
 
-图表来源
+**图表来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/runtime.ts:198-253](file://src/host/runtime.ts#L198-L253)
 - [src/host/http.ts:26-40](file://src/host/http.ts#L26-L40)
 
-章节来源
+**章节来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/runtime.ts:198-253](file://src/host/runtime.ts#L198-L253)
 
@@ -288,7 +306,7 @@ API --> STAT["static.serve*"]
 - 日志与可观测性：apiRun 记录每次引擎调用的输出摘要；AgentSeam 记录 LLM 调用详情（站点、模式、耗时、字符数、token 用量）。
 - 限流策略：当前未见全局速率限制中间件；建议在宿主入口或网关层增加基于 IP/用户/接口的限流策略，并对长耗时接口设置超时保护。
 
-章节来源
+**章节来源**
 - [src/host/handlers.ts:101-107](file://src/host/handlers.ts#L101-L107)
 - [src/host/runtime.ts:105-113](file://src/host/runtime.ts#L105-L113)
 - [src/host/runtime.ts:170-182](file://src/host/runtime.ts#L170-L182)
@@ -296,18 +314,21 @@ API --> STAT["static.serve*"]
 
 ## 故障排查指南
 - 404 未知路由：检查请求路径与方法是否与命令注册表一致；注意 POST/PUT 会先读体再查表，非法 JSON 的未知路由返回 500 而非 404。
-- 500 参数错误：查看 ParamError 消息与附加的“路由 METHOD PATH”，定位缺失或非法字段。
+- 500 参数错误：查看 ParamError 消息与附加的"路由 METHOD PATH"，定位缺失或非法字段。
 - 引擎调用失败：查阅运行日志（state/运行日志.md），apiRun 会记录失败原因与输出摘要。
 - 队列问题：检查 HostFlags.queuePaused/pumping 与任务注册表；队列空闲时会自动触发教练回合与复诊结算。
 - 静态资源 404：确认路径在白名单扩展名内，且位于 vault 相对路径或 vendor 目录。
+- **已退役端点**：如果收到 404 错误，可能是该端点已退役（如 /seed/propose、/node/pin、/review、/courses、/day-cutoff）。
 
-章节来源
+**章节来源**
 - [src/host/api.ts:48-83](file://src/host/api.ts#L48-L83)
 - [src/host/runtime.ts:217-253](file://src/host/runtime.ts#L217-L253)
 - [src/host/http.ts:12-24](file://src/host/http.ts#L12-L24)
 
 ## 结论
-本 API 体系通过“注册表驱动 + 手写处理器例外”的方式，实现了高内聚、低耦合的路由分发与引擎调用。统一的状态码与错误出口、完善的运行日志与队列机制，为稳定性与可观测性提供了保障。建议在宿主入口补充鉴权与限流中间件，并在网关层实施更严格的速率控制与超时保护。
+本 API 体系通过"注册表驱动 + 手写处理器例外"的方式，实现了高内聚、低耦合的路由分发与引擎调用。统一的状态码与错误出口、完善的运行日志与队列机制，为稳定性与可观测性提供了保障。建议在宿主入口补充鉴权与限流中间件，并在网关层实施更严格的速率控制与超时保护。
+
+**重要提醒**：部分端点已退役，包括 POST /seed/propose、POST /node/pin、POST /review、GET /courses、PUT /day-cutoff。这些端点不再可用，调用时将返回 404 错误。
 
 ## 附录：路由表与请求响应示例
 - 路由表权威来源：tests/fixtures/host-routes-baseline.json 记录了各端点的 method、route 与 keys（参数键集合），可作为客户端集成的参考基线。
@@ -321,8 +342,8 @@ API --> STAT["static.serve*"]
   - 404 + { error: "unknown route: ..." }
   - 500 + { error: "中文参数错误消息（路由 ...）" }
 
-章节来源
-- [tests/fixtures/host-routes-baseline.json:1-800](file://tests/fixtures/host-routes-baseline.json#L1-L800)
+**章节来源**
+- [tests/fixtures/host-routes-baseline.json:1-992](file://tests/fixtures/host-routes-baseline.json#L1-L992)
 - [src/commands/index.ts:58-71](file://src/commands/index.ts#L58-L71)
 - [src/host/handlers.ts:114-146](file://src/host/handlers.ts#L114-L146)
 - [src/host/handlers.ts:504-529](file://src/host/handlers.ts#L504-L529)

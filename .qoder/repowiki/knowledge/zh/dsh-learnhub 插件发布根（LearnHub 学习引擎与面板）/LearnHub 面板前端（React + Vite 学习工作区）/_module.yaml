@@ -1,6 +1,6 @@
 schema_version: 1
 module_path: ui
-title: LearnHub 面板前端（React + Vite 学习工作台 UI）
+title: LearnHub 面板前端（React + Vite 学习工作区）
 scope:
     - ui/
 source_files: []
