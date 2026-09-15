@@ -6,8 +6,9 @@
  *      （tests/fixtures/host-routes-baseline.json，125 条 = GET 46 + POST 73 + PUT 6；
  *      #159/#209/#215/#216/#222 各 +1 → 130 条；#240 / ADR-0076 +3（POST /course/create、
  *      /endpoint/add、/endpoint/remove）；#248 +1（POST /coach/stuck-report）；
- *      #255 −1（GET /doctor 随 doctor 退役）→ 现值 133 条）。
- *   ② **行为快照**：488 条探针（每条路由 × 空参／全参／逐个缺参，外加分发纪律样本）
+ *      #255 −1（GET /doctor 随 doctor 退役）；#256 −6（GET /courses、POST /node/pin、
+ *      /proposals/impact、/review、/seed/propose、PUT /day-cutoff 六条死路由退役）→ 现值 127 条）。
+ *   ② **行为快照**：466 条探针（每条路由 × 空参／全参／逐个缺参，外加分发纪律样本）
  *      逐字复现重构前捕获的 `{status, res, 引擎调用}`（tests/fixtures/host-routes-snapshot.json）。
  *      这是「120 条路由的方法／路径／响应形状逐字不变」与「参数守卫错误消息逐字不变」
  *      的证据，不是通读一遍代码后的相信。
@@ -62,7 +63,7 @@ test('对账清单：每条路由都被快照探针覆盖（快照漏了哪条�
 
 // ---------------------------------------------------------------- ② 行为快照（逐字不变）
 
-test('行为快照：488 条探针的状态码／响应体／引擎调用序列与基线逐字一致', async () => {
+test('行为快照：466 条探针的状态码／响应体／引擎调用序列与基线逐字一致', async () => {
   const specs: ProbeSpec[] = SNAPSHOT.map(s => ({ id: s.id, method: s.method, url: s.url, ...(s.body ? { body: s.body } : {}) }))
   const got = await runProbes(specs)
   const diffs: string[] = []
@@ -78,9 +79,9 @@ test('行为快照：488 条探针的状态码／响应体／引擎调用序列�
   assert.deepEqual(diffs, [], `路由行为相对重构前漂移（${diffs.length} 条）：\n${diffs.join('\n')}`)
 })
 
-test('行为快照：状态码分布保持 200×229／404×6／500×253（探针口径；#209 +2×200/#215 +2×500/#216 +2×500/#222 +2×500；#240 −1×200/−1×500（seed/propose 删 goal/mode 探针）+4×200/+8×500（建课改模式三路由）；#248 +1×200/+3×500（卡点自报路由）；#255 −1×200（GET /doctor 随 doctor 退役））', () => {
+test('行为快照：状态码分布保持 200×219／404×6／500×241（探针口径；#209 +2×200/#215 +2×500/#216 +2×500/#222 +2×500；#240 −1×200/−1×500（seed/propose 删 goal/mode 探针）+4×200/+8×500（建课改模式三路由）；#248 +1×200/+3×500（卡点自报路由）；#255 −1×200（GET /doctor 随 doctor 退役）；#256 −22 条探针（六条死路由退役：−10×200/−12×500））', () => {
   const dist = SNAPSHOT.reduce<Record<string, number>>((acc, s) => ({ ...acc, [s.status]: (acc[s.status] ?? 0) + 1 }), {})
-  assert.deepEqual(dist, { 200: 229, 404: 6, 500: 253 })
+  assert.deepEqual(dist, { 200: 219, 404: 6, 500: 241 })
 })
 
 // ---------------------------------------------------------------- ③ 分发纪律
@@ -96,8 +97,8 @@ test('分发纪律：未命中回落 404（方法与剥前缀后的路由名逐�
 
 test('分发纪律：方法不匹配 = 404（GET 路由不接 POST/PUT，POST 路由不接 GET）', () => {
   assert.equal(matchRoute('POST', '/status'), undefined, 'GET 路由不被 POST 命中')
-  assert.equal(matchRoute('PUT', '/node/pin'), undefined, 'POST 路由不被 PUT 命中')
-  assert.equal(matchRoute('GET', '/node/pin'), undefined, 'POST 路由不被 GET 命中')
+  assert.equal(matchRoute('PUT', '/rebuild'), undefined, 'POST 路由不被 PUT 命中')
+  assert.equal(matchRoute('GET', '/rebuild'), undefined, 'POST 路由不被 GET 命中')
   // 同路径两条方法各自独立命中（/jol、/sleep、/calibration/hints、/project/log）
   const methodOf = (m: string, p: string) => BY_ROUTE.get(`${m} ${p}`)?.channels.find(ch => ch.route?.method === m && ch.route?.path === p)?.route?.method
   assert.equal(methodOf('GET', '/jol'), 'GET')

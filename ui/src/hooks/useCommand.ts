@@ -23,7 +23,7 @@ export function errorMessage(err: unknown): string {
 /** 队列下发结果的诚实着色（#155 交互诚实性，四处同形的归一）：引擎返回
  * `{message, queued}`——queued=false 是「已在途、拒绝重复入队」类拒绝语义，
  * 弹 warning 不弹成功；成功侧可换更长的指引文案（successMessage）、
- * onQueued 只在真入队后走（如种子表单收起）。 */
+ * onQueued 只在真入队后走。 */
 export function notifyQueued(
   r: { message: string; queued: boolean },
   opts: { successMessage?: string; onQueued?: () => void } = {},

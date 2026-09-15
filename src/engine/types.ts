@@ -244,11 +244,11 @@ export interface ReviewRec {
   exp?: { id: number; arm: string }
 }
 
-/** 提案 kind 全集（P-2 泛化：图谱域 edit/seed + 项目域 project_plan/project_milestone
+/** 提案 kind 全集（P-2 泛化：图谱域 edit + 项目域 project_plan/project_milestone
  * + 实验域 experiment（D-1 #110 / ADR-0023 提案-确认制）+ 覆盖域 enrich（schema v2
  * 出生/覆盖层分家，#127/#131：回填通道，sha256 内容指纹，只补写图谱可对照字段））。
- * seed（种子提案，#142）是课程唯一的新入口。 */
-export const PROPOSAL_KINDS = ['edit', 'seed', 'enrich', 'project_plan', 'project_milestone', 'experiment'] as const
+ * 种子（seed，#256 / ADR-0081）已退役：图谱结构由生长批/编辑提案铺。 */
+export const PROPOSAL_KINDS = ['edit', 'enrich', 'project_plan', 'project_milestone', 'experiment'] as const
 export type ProposalKind = (typeof PROPOSAL_KINDS)[number]
 
 /** 提案状态全集（store 全留痕：pending/applied/rejected；#172 起字面量数组收敛于此）。 */
@@ -297,10 +297,6 @@ export interface ProposalRec {
   created: string
   decided?: string | null
   decision_note?: string
-  /** 同源双提案联动（#149 目标反编译 v8）：另一半提案 id。反编译产出计划+种子双提案
-   * 时互相指认，apply 须走联合入口（同进同退——计划引用先有图可解析）、任一半区
-   * reject 联动拒另一半；普通提案缺席合法（无对账）。 */
-  pair?: number
 }
 
 /** 勘误冲正流水条目（state/勘误.jsonl，ADR-0031）：对一条已落盘作答判罚的抵消记录。

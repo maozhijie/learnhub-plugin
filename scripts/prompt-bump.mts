@@ -40,7 +40,6 @@ import { stripWrappingFence } from '../src/engine/compass.ts'
 import { Content } from '../src/engine/content.ts'
 import { YAML } from '../src/engine/yaml.ts'
 import { validateBank } from '../src/engine/question-bank.ts'
-import { validateSeedProposal } from '../src/engine/seed.ts'
 import { validateEditProposal } from '../src/engine/proposals.ts'
 import { splitDecompileDoc, validatePlanArtifact } from '../src/engine/project-decompile.ts'
 import { validateErrorCards } from '../src/engine/error-cards.ts'
@@ -197,8 +196,6 @@ export const REPLAY_FACE: Record<string, (raw: string) => string[] | null> = {
   // invokes/查重在回放面外——回放判**解析/形状**，不判查重与概念对表）
   题目生成: raw => bankShape(raw),
   笔记出题: raw => bankShape(raw),
-  // 种子提案：站链 = AgentSeam.complete（剥围栏）→ YAML.parseModel → validateSeedProposal
-  种子起草: raw => yamlThen(stripFences(raw), doc => validateSeedProposal(doc).errors),
   // 教练回合：站链 = stripWrappingFence → parseModel → validateEditProposal → 必须有 note 区
   // （growth-subsystem.coachGrowthBatch 的 parseGrowthVerdict，私有方法——镜像并注记）
   教练生长: raw => throwsToErrors(() => {

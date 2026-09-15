@@ -109,16 +109,6 @@ export async function readDayCutoff(paths: Paths, fs: VaultFs): Promise<number> 
   return parseCutoff(doc.day_cutoff ?? DAY_CUTOFF_DEFAULT) ?? parseCutoff(DAY_CUTOFF_DEFAULT)!
 }
 
-/** 写日界（原子替换，保留其他字段）→ 归一化 'HH:mm'；非法值 fail loud（显式设置动作）。 */
-export async function writeDayCutoff(paths: Paths, value: string, fs: VaultFs): Promise<string> {
-  const minutes = parseCutoff(value)
-  if (minutes === null) throw new Error(`[config] day_cutoff 必须是 00:00–23:59 的 'HH:mm'（收到 ${String(value)}）。`)
-  const prev = await readLearnhubConfig(paths.learnhubConfigPath, fs) as LearnhubConfigFile
-  const normalized = fmtCutoff(minutes)
-  await writeLearnhubConfig(paths.learnhubConfigPath, { ...prev, day_cutoff: normalized }, fs)
-  return normalized
-}
-
 // ---- 流水派生 ----
 
 /** 流水的 XP 计：作答（practice.xp）+ 非作答入账（journal.xp，如满分 bonus）。

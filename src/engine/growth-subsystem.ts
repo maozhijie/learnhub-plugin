@@ -46,8 +46,8 @@ export interface GrowthDeps {
   content: Content
   /** 罗盘 ETA 折叠记忆（同一学习日同锚复用）。 */
   enabledCourses(): Promise<CourseEntry[]>
-  graphApply(kind: 'edit' | 'seed' | 'enrich', pid?: number): Promise<GraphApplyResult>
-  graphPropose(kind: 'edit' | 'seed' | 'enrich', yamlText: string): Promise<GraphProposeResult>
+  graphApply(kind: 'edit' | 'enrich', pid?: number): Promise<GraphApplyResult>
+  graphPropose(kind: 'edit' | 'enrich', yamlText: string): Promise<GraphProposeResult>
   graphReject(pid: number, note?: string): Promise<ProposalRec>
   learningDay(): Promise<{ today: string; cutoff: number }>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>

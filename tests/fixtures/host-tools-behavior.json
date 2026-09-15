@@ -585,7 +585,7 @@
   },
   "queued": false,
   "text": "",
-  "error": "[graph] 非法 kind: 1（允许 edit/seed/enrich）",
+  "error": "[graph] 非法 kind: 1（允许 edit/enrich）",
   "calls": []
  },
  {
@@ -1523,41 +1523,6 @@
   "queued": false,
   "text": "",
   "error": "invalid arguments: missing required property \"id\"",
-  "calls": []
- },
- {
-  "id": "learnhub_project_decompile_apply · 全参",
-  "tool": "learnhub_project_decompile_apply",
-  "args": {
-   "plan": 1,
-   "seed": 1
-  },
-  "queued": false,
-  "text": "[]",
-  "calls": [
-   "project.projectDecompileApply(1,1)"
-  ]
- },
- {
-  "id": "learnhub_project_decompile_apply · 缺 plan",
-  "tool": "learnhub_project_decompile_apply",
-  "args": {
-   "seed": 1
-  },
-  "queued": false,
-  "text": "",
-  "error": "invalid arguments: missing required property \"plan\"",
-  "calls": []
- },
- {
-  "id": "learnhub_project_decompile_apply · 缺 seed",
-  "tool": "learnhub_project_decompile_apply",
-  "args": {
-   "plan": 1
-  },
-  "queued": false,
-  "text": "",
-  "error": "invalid arguments: missing required property \"seed\"",
   "calls": []
  },
  {

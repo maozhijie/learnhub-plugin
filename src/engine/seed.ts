@@ -1,14 +1,14 @@
 /**
- * 种子与终点锚（#142 / ADR-0033 生长式图；#239 / ADR-0076 多终点化）：
+ * 终点锚（#142 / ADR-0033 生长式图；#239 / ADR-0076 多终点化；#256 / ADR-0081 种子链退役）：
  *
- * - 种子提案（kind=seed）是**给已注册课程起草结构**的通道（ADR-0076 种子降职：不再建课）：
- *   1–3 起点 + 终点节点 + 朝终点的粗占位边（终点.pre = 起点），一次人审即开工；
- *   种子节点零 enc 零 est。课程本身由「名称建课」（建课 = 名称即空图）先注册。
  * - 终点锚是课程的方向锚**集合**（`state/终点锚.json` = `{version: 2, anchors: [...]}`）：
  *   一条锚 = 一个终点的方向与承诺（终点节点 + 选填目标描述 + 目标类型 + 声明日期 +
  *   选填收尾宣告 + 覆盖锚定的块工作表）。课程可有任意多条，`anchors: []` 是合法空态
  *   （零方向）。**一切读侧按集合工作**——生成门、就绪/推荐剔除、审计豁免、图面标记、
  *   读数的消费者逐个终点判定，不再假定唯一终点。
+ * - 锚上的 `origin_proposal` / `seed_nodes` / `start_basis` 是已退役的种子起草通道
+ *   （#256）留下的字段：**只作存量读侧保留**——不再有写通道，读侧（锚校验、锚落盘
+ *   回写、种子图豁免）照旧认。
  * - 完成判据降为逐终点读数与停摆输入：foldCompletion 按终点折叠（ADR-0056 终点纯标记
  *   化——mastery 折叠自最后台阶（终点.pre 集全部 ≥ 阈值）+ 该终点已收尾（sealed）；
  *   能力锚定另要求闭包健康，覆盖锚定另要求块工作表全部核销）。零写侧状态、零专门停机
@@ -16,15 +16,8 @@
  */
 import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
-import { parseConceptFields } from './graph.ts'
-import { validateConceptEntry } from './concepts.ts'
-import type { ConceptEntry } from './concepts.ts'
-import type { Fm, GNode, ConceptTier, Misconception, BloomLevel } from './types.ts'
-import { BLOOM_LEVELS } from './types.ts'
+import type { Fm } from './types.ts'
 import { effectiveStage, masteryOfFm } from './srs.ts'
-import { repairRoundPrompt } from './prompt-assembly.ts'
-import { render } from './prompt-render.ts'
-import { SEED_REPAIR_HEADLINE } from './prompts/projects.ts'
 import type { Graph } from './graph.ts'
 
 /** 目标类型二分（#136）：能力锚定默认；覆盖锚定显式选择且必须带块工作表。 */
@@ -32,8 +25,8 @@ export type GoalType = 'capability' | 'coverage'
 /** 完成判据的终点 mastery 阈值（读侧折叠常量；mastery = 0.7·稳定度完成度 + 0.3·练习证据）。 */
 export const COMPLETION_MASTERY_THRESHOLD = 0.8
 
-/** 起点定位三路（词条「种子」）：baseline 常识基线 / vault 先验熟悉边界 / project
- * 反编译子图簇（#149 接线：目标反编译产出种子提案时由引擎把起点铸成 project）。 */
+/** 起点定位三路（已退役的种子起草通道留痕字段的读侧类型）：baseline 常识基线 /
+ * vault 先验熟悉边界 / project 反编译子图簇。不再有写通道。 */
 export const START_BASES = ['baseline', 'vault', 'project'] as const
 export type StartBasis = (typeof START_BASES)[number]
 
@@ -70,8 +63,8 @@ export interface AnchorBook {
   anchors: EndpointAnchor[]
 }
 
-/** 块工作表条目的共用解析+归一（validateEndpointAnchor 与 validateSeedProposal 同一契约）：
- * block 必填非空、note/done 选填合法；strictKeys 时未知键拒收（提案侧防呆，锚读侧宽容）。
+/** 锚的块工作表条目共用解析+归一（validateEndpointAnchor 的块工作表契约）：
+ * block 必填非空、note/done 选填合法；strictKeys 时未知键拒收（锚读侧宽容）。
  * 返回归一条目列表（坏条目跳过，错误行已入 errors）。 */
 function parseWorksheetEntries(
   raw: unknown, where: string, errors: string[], opts: { strictKeys?: boolean; requireNonEmpty?: boolean } = {},
@@ -253,178 +246,6 @@ export function endpointNames(anchors: EndpointAnchor[]): Set<string> {
   return new Set(anchors.map(a => a.endpoint))
 }
 
-// ---- 种子提案 schema（kind=seed） ----
-
-/** 种子节点条目（起点与终点同构；est/enc/pre 不可声明——种子零 enc 零 est，
- * 占位边由引擎落到终点.pre）。 */
-export interface SeedNodeSpec {
-  name: string
-  region: string
-  block: string
-  note?: string
-  bloom?: BloomLevel
-  difficulty?: 1 | 2 | 3 | 4 | 5
-  teaches?: Record<string, ConceptTier>
-  assumes?: Record<string, ConceptTier>
-  misconceptions?: Misconception[]
-  /** 起点定位路由声明（仅起点；baseline 常识基线 / vault 先验熟悉边界 / project 反编译
-   * 子图簇——第三路由 #149 目标反编译受理时铸成）。 */
-  basis?: StartBasis
-}
-
-export interface SeedProposalSpec {
-  course: string
-  goal_type: GoalType
-  endpoint: SeedNodeSpec
-  starts: SeedNodeSpec[]
-  /** 块工作表：goal_type=coverage 必带；capability 拒收。 */
-  worksheet?: Array<{ block: string; note?: string; done?: boolean }>
-  /** 铸名块（#141 同一契约，随图 apply 的写入单元落盘）。 */
-  concepts?: ConceptEntry[]
-  reason?: string
-}
-
-const SEED_NODE_KEYS = new Set(['name', 'region', 'block', 'note', 'bloom', 'difficulty', 'teaches', 'assumes', 'misconceptions', 'basis'])
-const SEED_TOP_KEYS = new Set(['course', 'goal_type', 'endpoint', 'starts', 'worksheet', 'concepts', 'reason'])
-
-/** 种子节点条目解析（起点/终点共用；seed 节点走 parseConceptFields 同一闸）。 */
-function parseSeedNode(raw: unknown, where: string, errors: string[], warns: string[]): SeedNodeSpec | null {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    errors.push(`${where}: 必须是映射`)
-    return null
-  }
-  const r = raw as Record<string, unknown>
-  const unknown = Object.keys(r).filter(k => !SEED_NODE_KEYS.has(k))
-  if (unknown.length) {
-    errors.push(`${where} 含未知字段 ${JSON.stringify(unknown)}（只允许 ${[...SEED_NODE_KEYS].join('/')}；`
-      + `种子节点零 enc 零 est——enc/est 不接受，占位边由引擎落到终点 pre，起点是入口不携带 pre）`)
-  }
-  const name = typeof r.name === 'string' ? r.name.trim() : ''
-  if (!name) errors.push(`${where}.name 不能为空`)
-  const region = typeof r.region === 'string' ? r.region.trim() : ''
-  if (!region) errors.push(`${where}.region 不能为空（分区定位：区名 + 块名）`)
-  const block = typeof r.block === 'string' ? r.block.trim() : ''
-  if (!block) errors.push(`${where}.block 不能为空（分区定位：区名 + 块名）`)
-  if (r.note !== undefined && typeof r.note !== 'string') errors.push(`${where}.note: 必须是字符串`)
-  if (r.bloom !== undefined && (!(BLOOM_LEVELS as readonly string[]).includes(String(r.bloom)))) {
-    errors.push(`${where}.bloom: 非法认知层级 ${String(r.bloom)}（允许 ${BLOOM_LEVELS.join('/')}）`)
-  }
-  if (r.difficulty !== undefined && ![1, 2, 3, 4, 5].includes(Number(r.difficulty))) {
-    errors.push(`${where}.difficulty: 非法难度 ${String(r.difficulty)}（允许 1-5）`)
-  }
-  if (r.basis !== undefined && !(START_BASES as readonly string[]).includes(String(r.basis))) {
-    errors.push(`${where}.basis: 非法定位 ${String(r.basis)}（允许 ${START_BASES.join('/')}）`)
-  }
-  let fields: ReturnType<typeof parseConceptFields> = {}
-  if (r.teaches !== undefined || r.assumes !== undefined || r.misconceptions !== undefined) {
-    try {
-      fields = parseConceptFields(r, '种子提案', where, name || '?', warns)
-    } catch (e) {
-      errors.push((e as Error).message)
-    }
-  }
-  if (!name || !region || !block) return null
-  return {
-    name, region, block,
-    ...(typeof r.note === 'string' && r.note ? { note: r.note } : {}),
-    ...(typeof r.bloom === 'string' && (BLOOM_LEVELS as readonly string[]).includes(r.bloom) ? { bloom: r.bloom as BloomLevel } : {}),
-    ...([1, 2, 3, 4, 5].includes(Number(r.difficulty)) ? { difficulty: Number(r.difficulty) as 1 | 2 | 3 | 4 | 5 } : {}),
-    ...fields,
-    ...(typeof r.basis === 'string' && (START_BASES as readonly string[]).includes(r.basis) ? { basis: r.basis as StartBasis } : {}),
-  }
-}
-
-/** SeedProposal schema 校验（warns 收集概念字段组非阻提示，可省略）。 */
-export function validateSeedProposal(doc: unknown, warns?: string[]): { errors?: string[]; spec?: SeedProposalSpec } {
-  const errors: string[] = []
-  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) return { errors: ['(顶层): 必须是映射'] }
-  const d = doc as Record<string, unknown>
-  const unknownTop = Object.keys(d).filter(k => !SEED_TOP_KEYS.has(k))
-  if (unknownTop.length) {
-    errors.push(`(顶层) 含未知字段 ${JSON.stringify(unknownTop)}（只允许 ${[...SEED_TOP_KEYS].join('/')}）`)
-  }
-  if (typeof d.course !== 'string' || !d.course.trim()) errors.push('course: 不能为空')
-  if (d.goal_type !== undefined && d.goal_type !== 'capability' && d.goal_type !== 'coverage') {
-    errors.push(`goal_type: 只允许 capability/coverage（缺省 = capability 能力锚定；coverage 覆盖锚定必须显式选择并带 worksheet）`)
-  }
-  const goalType: GoalType = d.goal_type === 'coverage' ? 'coverage' : 'capability'
-  if (d.endpoint === undefined) {
-    errors.push('endpoint: 缺失（种子提案必须声明终点节点——课程的方向锚）')
-  }
-  const endpoint = d.endpoint === undefined ? null : parseSeedNode(d.endpoint, 'endpoint', errors, warns ?? [])
-  if (!Array.isArray(d.starts) || !d.starts.length) {
-    errors.push('starts: 缺失或为空（种子 = 1–3 个起点节点 + 终点）')
-  }
-  const starts: SeedNodeSpec[] = []
-  if (Array.isArray(d.starts)) {
-    if (d.starts.length > 3) {
-      errors.push(`starts: 有 ${d.starts.length} 条（上限 3）——种子只铺起点，其余由教练生长批沿症状与消费生长`)
-    }
-    d.starts.forEach((raw, i) => {
-      const s = parseSeedNode(raw, `starts.${i}`, errors, warns ?? [])
-      if (s) starts.push(s)
-    })
-  }
-  // 工作表：覆盖必带非空、能力拒收（互斥由判据语义锁定，不靠约定）
-  let worksheet: SeedProposalSpec['worksheet']
-  if (d.worksheet !== undefined) {
-    worksheet = parseWorksheetEntries(d.worksheet, 'worksheet', errors, { strictKeys: true, requireNonEmpty: true })
-  }
-  if (goalType === 'coverage' && !worksheet?.length) {
-    errors.push('worksheet: 覆盖锚定（goal_type=coverage）必须携带块工作表——完成判据=块工作表+终点')
-  }
-  if (goalType === 'capability' && d.worksheet !== undefined) {
-    errors.push('worksheet: 能力锚定课程不带块工作表（完成判据=终点掌握；要清单式目标请显式 goal_type=coverage）')
-  }
-  let concepts: ConceptEntry[] | undefined
-  if (d.concepts !== undefined) {
-    if (!Array.isArray(d.concepts)) {
-      errors.push('concepts: 必须是列表（铸名条目 = {canonical, aliases?, definition?}）')
-    } else {
-      concepts = []
-      d.concepts.forEach((raw, i) => {
-        const v = validateConceptEntry(raw, `concepts.${i + 1}`)
-        errors.push(...v.errors)
-        if (v.entry) concepts!.push(v.entry)
-      })
-    }
-  }
-  if (d.reason !== undefined && typeof d.reason !== 'string') errors.push('reason: 必须是字符串')
-  // 重名防呆（跨 endpoint/starts；跨区同名也是重名）
-  const names = starts.map(s => s.name)
-  if (endpoint) names.push(endpoint.name)
-  const dupes = [...new Set(names.filter((n, i) => names.indexOf(n) !== i))]
-  if (dupes.length) errors.push(`种子节点重名: ${dupes.join('、')}（起点与终点名字必须互异）`)
-  if (errors.length) return { errors }
-  return {
-    spec: {
-      course: (d.course as string).trim(),
-      goal_type: goalType,
-      endpoint: endpoint!,
-      starts,
-      ...(worksheet ? { worksheet } : {}),
-      ...(concepts !== undefined ? { concepts } : {}),
-      ...(typeof d.reason === 'string' ? { reason: d.reason } : {}),
-    },
-  }
-}
-
-/** 种子节点条目 → GNode（零 enc 零 est；起点 pre 空，终点 pre = 起点——朝终点的粗占位边）。 */
-export function seedNodeToGNode(spec: SeedNodeSpec, pre: string[]): GNode {
-  return {
-    name: spec.name,
-    pre: [...pre],
-    opt: false,
-    note: spec.note ?? '',
-    enc: [],
-    ...(spec.bloom ? { bloom: spec.bloom } : {}),
-    ...(spec.difficulty !== undefined ? { difficulty: spec.difficulty } : {}),
-    ...(spec.teaches ? { teaches: { ...spec.teaches } } : {}),
-    ...(spec.assumes ? { assumes: { ...spec.assumes } } : {}),
-    ...(spec.misconceptions?.length ? { misconceptions: spec.misconceptions.map(m => ({ ...m })) } : {}),
-  }
-}
-
 // ---- 完成读数 = 逐终点折叠（雾区条款上半；#239 多终点化） ----
 
 /** 逐终点状态三档（ADR-0076 生长停摆的输入）：未接线 → 已铺通（锚上 sealed）→
@@ -595,39 +416,3 @@ export function junctionServes(graph: Graph, anchors: EndpointAnchor[]): Map<str
   return new Map([...serves].filter(([, list]) => list.length >= 2))
 }
 
-/** 写锚时的锚条目构造（起草 apply 用；起点/终点名与图内严格一致）。 */
-export function anchorFromSeed(
-  spec: SeedProposalSpec, originProposal: number, declared: string,
-): EndpointAnchor {
-  return {
-    endpoint: spec.endpoint.name,
-    goal_type: spec.goal_type,
-    declared,
-    worksheet: (spec.worksheet ?? []).map(w => ({ block: w.block, ...(w.note ? { note: w.note } : {}), done: w.done === true })),
-    origin_proposal: originProposal,
-    seed_nodes: [...spec.starts.map(s => s.name), spec.endpoint.name],
-    start_basis: Object.fromEntries(spec.starts.filter(s => s.basis).map(s => [s.name, s.basis!])),
-  }
-}
-
-/** 面板/agent 下发的种子起草请求（ADR-0038；ADR-0076 种子降职：`goal` 与 `mode` 已
- * 退役——起草只作用于已注册课程，课程由「名称建课」先注册，方向由人手加终点表达）。
- * 绑定字段（目标类型/块工作表）以表单为准，引擎受理前覆盖写入——模型照抄错误不影响绑定。 */
-export interface SeedDraftRequest {
-  course: string
-  goalType?: 'capability' | 'coverage'
-  useVaultPrior?: boolean
-  worksheet?: Array<{ block: string; note?: string }>
-}
-
-/** 种子起草修复轮提示词（面板下发的 seedPropose 用，与 decompileRepairPrompt 同一机械）：
- * 上一次输出未过干跑校验门 → 附校验清单重出完整 YAML。模板与材料分开收（#218 契约后置），
- * 共用 `repairRoundPrompt`（同族的另一站是目标反编译）；死因标题的散文住
- * `prompts/projects.ts`（#237 / ADR-0075：散文与代码分家，标题经 `render` 取值）。 */
-export function seedRepairPrompt(tpl: string, materials: string, previous: string, errors: string[]): string {
-  return repairRoundPrompt(
-    tpl, materials,
-    render(SEED_REPAIR_HEADLINE, {}),
-    previous, errors,
-  )
-}

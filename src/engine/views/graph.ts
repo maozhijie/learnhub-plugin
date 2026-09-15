@@ -31,25 +31,7 @@ export interface GraphApplyEnrichResult {
   findings: string[]
 }
 
-export type GraphApplyResult = GraphApplyEditResult | GraphApplySeedResult | GraphApplyEnrichResult
-
-/** 种子提案 apply（#142）：终点锚落盘 + 起点/终点/占位边落图（ADR-0076 种子降职：
- * 只作用于已注册课程，不再建课）。seedPhase 豁免生效时 findings 不带健康分提示
- * （种子图健康分不设阈值）。compass = 罗盘常驻随 apply 就位（#143）：scaffold 新建。 */
-export interface GraphApplySeedResult {
-  course: string
-  goal_type: 'capability' | 'coverage'
-  endpoint: string
-  starts: string[]
-  declared: string
-  worksheet_items?: number
-  regions: string[]
-  snapshot: number
-  created_blocks: string[]
-  compass: { state: 'scaffold'; annotations_preserved: boolean }
-  prior_feed: { unresponded: number }
-  findings: string[]
-}
+export type GraphApplyResult = GraphApplyEditResult | GraphApplyEnrichResult
 
 export interface GraphBrowseBlock { name: string; nodes: GraphBrowseNode[] }
 

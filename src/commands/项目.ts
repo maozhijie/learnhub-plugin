@@ -9,7 +9,7 @@ import { command } from './types.ts'
 export const 项目域 = {
   'project-apply': command({
     id: "project-apply",
-    summary: "Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted — a revision diff (milestone identity keyed by id) is returned and switch-line/branch-in growth batches are ENQUEUED for the anchored courses (#149); project_milestone = overwrite the milestone artifact with the old text snapshotted). Decompile-linked plan proposals CANNOT apply alone while their seed half is pending — use learnhub_project_decompile_apply. Graph proposals (edit/seed) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.",
+    summary: "Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted — a revision diff (milestone identity keyed by id) is returned and switch-line/branch-in growth batches are ENQUEUED for the anchored courses (#149); project_milestone = overwrite the milestone artifact with the old text snapshotted). Decompile-linked plan proposals are plan-only (ADR-0076: the seed half is retired). Graph proposals (edit/enrich) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.",
     args: {
       id: { type: "number", description: "Pending proposal id", required: true }
     },
@@ -72,11 +72,11 @@ export const 项目域 = {
   }),
   'project-decompile': command({
     id: "project-decompile",
-    summary: "GOAL DECOMPILATION, v8 seed-cluster form (#149): one model call produces TWO paired proposals from the goal description + registered notes — a milestone plan draft (project_plan) and a knowledge-subgraph SEED CLUSTER (kind=seed: 1-3 start nodes + endpoint, engine stamps basis=project and lands the coarse placeholder edges). Same-origin in-out: both pass gates before EITHER is filed (plan-seed name-reconciliation gate: every plan.nodes reference must resolve to a seed-cluster node or an existing graph node — dangling references reject the whole run), and the pair is LINKED (apply ONLY via learnhub_project_decompile_apply which lands the seed graph first then the plan; rejecting one auto-rejects the other). With an explicit course param: the course must already exist and NO seed half is produced (the plan references existing nodes only — new knowledge needs are grown later by the coach, driven by plan-revision diffs). Vault priors are mined read-only; nothing canonical is written before apply.",
+    summary: "GOAL DECOMPILATION (#149; ADR-0076 seed half retired): one model call produces a milestone plan draft (project_plan) from the goal description + registered notes. The plan's node references must resolve to existing graph nodes of the target course (a name-reconciliation gate rejects dangling references); with an explicit course param the course must already exist. New knowledge needs are grown later by the coach, driven by plan-revision diffs (a plan-only run — no seed half). Vault priors are mined read-only; nothing canonical is written before apply.",
     args: {
       id: { type: "string", description: "Project id (the plan-draft proposal targets it)", required: true },
       goal: { type: "string", description: "Goal description prose; defaults to the project's goal field (empty goal is rejected)" },
-      course: { type: "string", description: "Existing target course: plan-only run (nodes must reference existing graph nodes); omit → the seed cluster becomes a NEW course seed proposal (pair-linked with the plan)" },
+      course: { type: "string", description: "Target course (required): plan-only run — nodes must reference existing graph nodes (ADR-0076: decompilation no longer creates courses; create the course first)" },
       notes: {
         type: "array",
         description: "Registered note-source ids or vault-relative paths to mine for prior context; omit → all registered sources",
@@ -92,24 +92,6 @@ export const 项目域 = {
         mode: "queued",
         route: { method: "POST", path: "/project/decompile" },
         phase: "decompile"
-      }
-    ]
-  }),
-  'project-decompile-apply': command({
-    id: "project-decompile-apply",
-    summary: "Apply a DECOMPILED pair TOGETHER (project_plan + seed, #149 same-origin in-out): pass BOTH proposal ids from learnhub_project_decompile; the seed lands first (cluster nodes + endpoint anchor + note scaffolds) so the plan's node references resolve, then the plan writes. Single-sided apply of a linked pair is rejected at the guard — use this joint entry (crash recovery: an already-applied half is skipped, a rejected half never revives — re-decompile instead).",
-    args: {
-      plan: { type: "number", description: "project_plan proposal id", required: true },
-      seed: { type: "number", description: "seed proposal id (pair-linked with the plan)", required: true }
-    },
-    engine: "project.projectDecompileApply",
-    domain: "项目",
-    channels: [
-      {
-        channel: "agent",
-        mode: "sync",
-        tool: "learnhub_project_decompile_apply",
-        bind: ["plan", "seed"]
       }
     ]
   }),
@@ -135,7 +117,7 @@ export const 项目域 = {
   }),
   'project-exec-log': command({
     id: "project-exec-log",
-    summary: "Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project's OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. Exercised linked nodes get practice evidence backflow ONE-WAY into each node's practice channel (existing applyPracticeEvidence EMA, node-level dedup — seeded stub nodes participate exactly like taught ones); the count of exercised existing enc edges is reported for observability but coarse placeholder pre edges are NOT backflow channels. Zero XP, zero journal, zero FSRS/scheduling writes.",
+    summary: "Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project's OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. Exercised linked nodes get practice evidence backflow ONE-WAY into each node's practice channel (existing applyPracticeEvidence EMA, node-level dedup — stub nodes participate exactly like taught ones); the count of exercised existing enc edges is reported for observability but coarse placeholder pre edges are NOT backflow channels. Zero XP, zero journal, zero FSRS/scheduling writes.",
     args: {
       id: { type: "string", description: "Project id", required: true },
       source: { type: "string", description: "auto (requires evidence) / self / ai", required: true },

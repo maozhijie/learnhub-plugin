@@ -13,11 +13,6 @@
  },
  {
   "method": "GET",
-  "route": "/courses",
-  "keys": []
- },
- {
-  "method": "GET",
   "route": "/lesson",
   "keys": [
    "node",
@@ -343,15 +338,6 @@
  },
  {
   "method": "POST",
-  "route": "/node/pin",
-  "keys": [
-   "course",
-   "node",
-   "pinned"
-  ]
- },
- {
-  "method": "POST",
   "route": "/node/complete",
   "keys": [
    "course",
@@ -369,14 +355,6 @@
  {
   "method": "POST",
   "route": "/proposals/apply",
-  "keys": [
-   "kind",
-   "id"
-  ]
- },
- {
-  "method": "POST",
-  "route": "/proposals/impact",
   "keys": [
    "kind",
    "id"
@@ -651,14 +629,6 @@
  },
  {
   "method": "POST",
-  "route": "/review",
-  "keys": [
-   "course",
-   "node"
-  ]
- },
- {
-  "method": "POST",
   "route": "/question-save",
   "keys": [
    "course",
@@ -842,16 +812,6 @@
  },
  {
   "method": "POST",
-  "route": "/seed/propose",
-  "keys": [
-   "course",
-   "worksheet",
-   "goalType",
-   "useVaultPrior"
-  ]
- },
- {
-  "method": "POST",
   "route": "/probation/settle",
   "keys": []
  },
@@ -958,13 +918,6 @@
   "route": "/daily-goal",
   "keys": [
    "goal"
-  ]
- },
- {
-  "method": "PUT",
-  "route": "/day-cutoff",
-  "keys": [
-   "value"
   ]
  },
  {

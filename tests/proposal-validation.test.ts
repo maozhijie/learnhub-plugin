@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { validateEditProposal } from '../src/engine/proposals.ts'
 import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 import { withVault } from './helpers/vault.ts'
+import { draftCourse } from './helpers/drafted.ts'
 import { YAML } from '../src/engine/yaml.ts'
 
 test('未知提案 kind：受理门统一拒收且不落提案', async () => {
@@ -126,23 +127,13 @@ ops:
 
 test('#145 巩固门受理路径：巩固批引未教概念拒收、引已教概念通过（走引擎全门）', async () => {
   await withVault({ registry: null, graph: null, tag: 'learnhub-consolidate-' }, async ({ engine }) => {
-    // ADR-0076：种子降职——起草只收已注册课程，先名称建课再起草（mode=new 建课路径退役）
-    await engine.graph.createCourse('校验课')
-    const seed = `course: 校验课
-concepts:
-  - canonical: 变化率
-endpoint:
-  name: 综合应用
-  region: 基础区
-  block: 终点块
-starts:
-  - name: 入门
-    region: 基础区
-    block: 入门
-    teaches: {变化率: 会用}
-`
-    const seeded = await engine.graph.graphPropose('seed', seed) as { id: number }
-    await engine.graph.graphApply('seed', seeded.id)
+    // #256 种子通道退役：起草夹具直接落盘（概念「变化率」随批铸名，起点 teaches 引用）
+    await draftCourse(engine, {
+      course: '校验课',
+      concepts: [{ canonical: '变化率' }],
+      starts: [{ name: '入门', region: '基础区', block: '入门', teaches: { 变化率: '会用' } }],
+      endpoint: { name: '综合应用', region: '基础区', block: '终点块' },
+    })
     const consolidate = (teaches: string, extraConcepts = ''): string => `course: 校验课
 note:
   operator: 巩固

@@ -353,25 +353,19 @@ test('双沙盘参照渲染：两计划带并排、措辞锁死非承诺、终�
 // ---- 门面：六区块上下文包 / 检查点接线（vault 工厂，facade 测试缝） ----
 
 import { withVault, localDay } from './helpers/vault.ts'
+import { draftCourse } from './helpers/drafted.ts'
+import type { DraftSpec } from './helpers/drafted.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 
-const CAPABILITY_SEED = `course: 数学
-reason: 常识基线起步的能力锚定课程
-endpoint:
-  name: 用导数解决优化问题
-  region: 基础
-  block: 终点块
-starts:
-  - name: 认识变化率
-    region: 基础
-    block: 起点块
-    basis: baseline
-`
+/** 起草夹具（无概念铸名）：起点「认识变化率」+ 终点「用导数解决优化问题」。 */
+const CAPABILITY_DRAFT: DraftSpec = {
+  starts: [{ name: '认识变化率', region: '基础', block: '起点块', basis: 'baseline' }],
+  endpoint: { name: '用导数解决优化问题', region: '基础', block: '终点块' },
+}
 
 async function seedApplied(engine: LearnhubEngine): Promise<void> {
-  await engine.graph.createCourse('数学')
-  const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-  await engine.graph.graphApply('seed', r.id)
+  // #256 种子通道退役：起草夹具直接落盘
+  await draftCourse(engine, CAPABILITY_DRAFT)
 }
 
 const READY_SECTIONS = ['    - { id: s1, title: 第一节, type: 讲授, status: ready, version: 1 }']
@@ -509,7 +503,7 @@ test('门面：就绪核算逐个剔除终点——尾段非终点前沿清空�
   })
 })
 
-test('门面：种子 apply 后冷启动生效（锚声明日 = 学习日）；种子图无正文 → ready=0 告警', async () => {
+test('门面：起草后冷启动生效（锚声明日 = 学习日）；起草图无正文 → ready=0 告警', async () => {
   await withVault({ registry: null, graph: null }, async ({ engine }) => {
     await seedApplied(engine)
     const r = await engine.growth2.coachCheckpoint('session_start', '数学')

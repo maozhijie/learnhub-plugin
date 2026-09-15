@@ -8,17 +8,18 @@ export type GenJobStatus = 'queued' | 'running' | 'cancelling' | 'done' | 'parti
 
 /** 生成队列 phase 全集（#131 §5 / #140 + 面板下发扩展；#185 起全表英文小写）：
  * - 节点内容管线（course/node 键）：outline 大纲 → sections 逐节正文 → quiz 自动出题（quiz 亦为纯出题任务的入队形态）。
- * - 图域任务（course 键）：seed 种子（建课/换终点起草）/ growth 生长（教练回合生长批）/ compass 罗盘 /
- *   decompile 反编译（目标反编译双提案）/ plan 计划草案 / milestone 里程碑任务卡。富化不是队列 phase
- *   （#155 剔除）：覆盖层回填只产 pending 提案走人审，从未入队——登记值只会误导执行面。 */
-export const GEN_JOB_PHASES = ['outline', 'sections', 'quiz', 'seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'] as const
+ * - 图域任务（course 键）：growth 生长（教练回合生长批）/ compass 罗盘 /
+ *   decompile 反编译（目标反编译计划提案）/ plan 计划草案 / milestone 里程碑任务卡。富化不是队列 phase
+ *   （#155 剔除）：覆盖层回填只产 pending 提案走人审，从未入队——登记值只会误导执行面。
+ *   （#256 种子起草站退役，phase=seed 随种子链一并删。） */
+export const GEN_JOB_PHASES = ['outline', 'sections', 'quiz', 'growth', 'compass', 'decompile', 'plan', 'milestone'] as const
 export type GenJobPhase = (typeof GEN_JOB_PHASES)[number]
 
 /** #185 命名统一的读侧迁移别名：图域六值在 2026-09-12 前以中文持久化在
  * state/生成任务.json（ADR-0045「阶段命名缺口」），恢复读入时映射为现值。
  * 别名表只服务读侧归一——写侧（入队/执行/落盘）一律写现值，永不产生旧值。 */
 export const LEGACY_GEN_JOB_PHASES: Readonly<Record<string, GenJobPhase>> = {
-  种子: 'seed', 生长: 'growth', 罗盘: 'compass', 反编译: 'decompile', 计划: 'plan', 里程碑: 'milestone',
+  生长: 'growth', 罗盘: 'compass', 反编译: 'decompile', 计划: 'plan', 里程碑: 'milestone',
 }
 
 /** 持久化档读入的 phase 归一：现值原样、旧中文值映射为现值；未知值原样透传——
@@ -55,7 +56,7 @@ export function isGenJobTerminal(status: GenJobStatus): boolean {
 }
 
 /** 内容锚定 phase：任务键是真实节点（内容管线三值 + 排队中尚未标注 phase 的内容任务）。
- * 图域任务（种子/生长/富化/罗盘/反编译/计划/里程碑）是课程级任务，node 槽是标签
+ * 图域任务（生长/富化/罗盘/反编译/计划/里程碑）是课程级任务，node 槽是标签
  * （「生长批」「罗盘」…），不参与节点悬空判定。 */
 export function isNodeAnchoredPhase(phase: GenJobPhase | undefined): boolean {
   return phase === undefined || phase === 'outline' || phase === 'sections' || phase === 'quiz'
@@ -64,8 +65,7 @@ export function isNodeAnchoredPhase(phase: GenJobPhase | undefined): boolean {
 /** 图域任务执行所必需的负载键（#157；面板下发入队时随任务写入）：phase → GenJob 上
  * 的负载字段。罗盘与生长零负载（course 键即全部入参，罗盘引擎自取课程、生长批只带
  * 可选 inject）；键缺失的任务在重启恢复处明确标失败可重试，不进执行器才炸。 */
-export const GRAPH_JOB_REQUIRED_PAYLOAD: Partial<Record<GenJobPhase, 'seedPayload' | 'decompilePayload' | 'planPayload' | 'milestonePayload'>> = {
-  seed: 'seedPayload',
+export const GRAPH_JOB_REQUIRED_PAYLOAD: Partial<Record<GenJobPhase, 'decompilePayload' | 'planPayload' | 'milestonePayload'>> = {
   decompile: 'decompilePayload',
   plan: 'planPayload',
   milestone: 'milestonePayload',
@@ -76,12 +76,17 @@ export const GRAPH_JOB_REQUIRED_PAYLOAD: Partial<Record<GenJobPhase, 'seedPayloa
  * （恢复侧明确标失败可重试，不再拖到执行器抛「负载缺失或 phase 未知」）。 */
 export function graphJobPayloadGap(
   phase: GenJobPhase | undefined,
-  job: { seedPayload?: unknown; decompilePayload?: unknown; planPayload?: unknown; milestonePayload?: unknown },
+  job: { decompilePayload?: unknown; planPayload?: unknown; milestonePayload?: unknown },
 ): 'payload_missing' | null {
   const need = phase === undefined ? undefined : GRAPH_JOB_REQUIRED_PAYLOAD[phase]
   if (!need) return null
   return job[need] != null ? null : 'payload_missing'
 }
+
+/** 已退役的图域 phase（#256 种子链退役）：历史档里可能仍落有这些 phase 的 queued 任务，
+ * 但它们已无执行器——恢复侧据此明确标失败，不让它落进 pumpGeneration 的默认分派
+ * （会被当正文管线误跑，并把 phase 改写成 outline）。含旧中文别名值（#185 读侧迁移前）。 */
+export const RETIRED_GEN_JOB_PHASES: ReadonlySet<string> = new Set(['seed', '种子'])
 
 /** 任务记录悬空判定的存在性输入（宿主用引擎的注册表与图解析结果喂入）。 */
 export interface GenJobExistence {

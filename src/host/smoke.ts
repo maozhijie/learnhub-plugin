@@ -6,10 +6,10 @@
  * 与 scripts/smoke.mjs（只读读路径冒烟）分工不同：本文件是**写路径 + 真模型**冒烟，
  * 必须跑在宿主进程里（真 provider 只在宿主 ctx 上）。链路：
  *
- *   临时 vault → 种子起草（真生成站）→ 提案直通（脚本内人审等价：apply 即受理，
- *   走生产 apply 路径而非人工点按）→ 正文管线（大纲 → 逐节 → 出题，经全局队列）→
- *   产物复过既有结构门（contentCheck 质检门 / 契约注册表 validateByContract / 题库
- *   读回即 validateBank 门）→ 汇总报告。
+ *   临时 vault → 结构站（#256 种子退役后 = 手写 edit 提案铺起点 + 终点接线）→ 提案直通
+ *   （脚本内人审等价：apply 即受理，走生产 apply 路径而非人工点按）→ 正文管线（大纲 → 逐节
+ *   → 出题，经全局队列）→ 产物复过既有结构门（contentCheck 质检门 / 契约注册表 validateByContract
+ *   / 题库读回即 validateBank 门）→ 汇总报告。
  *
  * 报告三块：各站成功率与失败码分布（读语料捕获，#213）、token 消耗（frontmatter
  * usage 求和）、产物结构断言（复跑既有门，不重造判据）。规模控制：1 节点、走真实
@@ -27,11 +27,11 @@ import { contractOf, hasReadyContent, validateByContract } from '../engine/index
 import { createHostRuntime } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import { afterGraphApply, cancelGeneration, enqueueGeneration, pumpGeneration, waitForGenJob } from './jobs.ts'
-import { STATIONS, parseCorpusFrontmatter } from './corpus.ts'
+import { parseCorpusFrontmatter } from './corpus.ts'
 
 /** 冒烟入参（路由可覆盖，缺省即最小成本档）。 */
 export interface SmokeRequest {
-  /** 目标描述（种子起草的输入；缺省给一个迷你能力目标）。 */
+  /** 目标描述（终点锚的 goal_note；缺省给一个迷你能力目标）。 */
   goal?: string
   /** 课程名（临时 vault 内新建；缺省「冒烟课」）。 */
   course?: string
@@ -85,15 +85,17 @@ export interface SmokeReport {
   node: string | null
   /** 管线终局面（任务终态 + 失败节清单——文本面）。 */
   pipeline: {
-    seedProposalId: number | null
+    /** 结构站（#256：种子退役后改用手写 edit 提案铺起点）受理的提案 id。 */
+    proposalId: number | null
     endpoint: string | null
-    starts: string[]
+    /** 跑正文管线的起点节点名（edit 提案铺出的节点）。 */
+    start: string | null
     jobStatus: string | null
     jobMessage: string | null
     failedSections: Array<{ sectionTitle?: string; code?: string; finding?: string }>
-    /** 管线终局失败（站级）：种子站提案未受理 / 正文站任务失败·超时·消失——报告照出
+    /** 管线终局失败（站级）：结构站提案未受理 / 正文站任务失败·超时·消失——报告照出
      * （诊断面不给 500：报告里要能看到是哪一站、什么失败码、语料去哪看）。 */
-    stageError?: { stage: 'seed' | 'content'; message: string }
+    stageError?: { stage: 'structure' | 'content'; message: string }
   }
   stations: SmokeStationStats[]
   artifacts: SmokeArtifactCheck[]
@@ -289,25 +291,33 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
     // 管线终局面累加器：任何一站死掉都照出报告（诊断面不给 500），只有「拿不到宿主
     // llm」在上面直接抛。
     const pipeline: SmokeReport['pipeline'] = {
-      seedProposalId: null, endpoint: null, starts: [], jobStatus: null, jobMessage: null, failedSections: [],
+      proposalId: null, endpoint: null, start: null, jobStatus: null, jobMessage: null, failedSections: [],
     }
     let node: string | null = null
 
-    // —— ① 建课 + 加终点 + 种子起草（ADR-0076：课程先注册、方向由锚携带）+ 提案直通
-    // （脚本内人审等价：apply 即受理）——
+    // —— ① 建课 + 加终点 + 结构提案（#256：种子站退役，改用手写 edit 提案铺起点节点）
+    // + 提案直通（脚本内人审等价：apply 即受理）——
     try {
       await runner.engine.graph.createCourse(course)
-      await runner.engine.graph.addEndpoint(course, `${course}目标`, goal)
-      const seed = await runner.engine.graph.seedPropose(
-        { course, goalType: 'capability' }, runner.agent,
-      )
-      pipeline.seedProposalId = seed.id
-      pipeline.endpoint = seed.endpoint
-      const applied = await runner.engine.graph.proposalApply('seed', seed.id) as { starts?: unknown }
-      const starts = Array.isArray(applied?.starts) ? applied.starts.filter((s): s is string => typeof s === 'string') : []
-      if (!starts.length) throw new Error('种子应用没有返回起点节点——无法继续正文管线（见语料「种子起草」死因）')
-      pipeline.starts = starts
-      node = starts[0]
+      const endpoint = `${course}目标`
+      await runner.engine.graph.addEndpoint(course, endpoint, goal)
+      // 终点落图后「未分区/未分区」块已在图上——edit 的 add_node 据此建起点节点，
+      // 再把终点接线到起点（起点 → 终点 一条最小链）。edit 不能新建区/块（add_node 的
+      // 区/块必须已存在），故起点只能落在 addEndpoint 建出的未分区块里。
+      const startName = `${course}起点`
+      const proposal = await runner.engine.graph.graphPropose('edit', [
+        `course: ${course}`,
+        'reason: 冒烟起点（#256 种子退役后结构站改用手写 edit 提案）',
+        'ops:',
+        `  - { op: add_node, name: ${startName}, region: 未分区, block: 未分区, pre: [] }`,
+        `  - { op: set_pre, node: ${endpoint}, pre: [${startName}] }`,
+      ].join('\n'))
+      pipeline.proposalId = proposal.id
+      pipeline.endpoint = endpoint
+      const applied = await runner.engine.graph.graphApply('edit', proposal.id)
+      if (!('ops' in applied) || !(applied.ops >= 1)) throw new Error('结构提案应用零操作——无法继续正文管线（见语料「结构提案」死因）')
+      pipeline.start = startName
+      node = startName
       // 宿主侧 apply 联动（清扫悬空任务）；正文不随 apply 入队（ADR-0078），冒烟在此
       // 补一步显式下发（等价于面板「生成」按钮）——漏了入队就是「任务不在注册表」
       await afterGraphApply(runner)
@@ -334,16 +344,8 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       pipeline.jobStatus = pipeline.jobStatus ?? 'failed'
-      // 解析级失败由宿主 catch 点补标语料（#213 生产纪律，jobs.ts failCorpus 同款）：
-      // 冒烟直调种子站不经队列，这步就落在冒烟自己的 catch 里——否则该站语料停在 ok，
-      // 报告读不出死因分类
-      if (node === null) {
-        const code = (err as { code?: string }).code ?? 'ERROR'
-        const ref = runner.corpus.annotateLast(STATIONS.seed, { outcome: 'failed', code })
-        pipeline.jobMessage = pipeline.jobMessage ?? message + (ref ? `｜语料 生成语料/${ref}` : '')
-      }
       pipeline.jobMessage = pipeline.jobMessage ?? message
-      pipeline.stageError = { stage: node === null ? 'seed' : 'content', message }
+      pipeline.stageError = { stage: node === null ? 'structure' : 'content', message }
       runner.flags.queuePaused = true
     }
 

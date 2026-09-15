@@ -1,14 +1,16 @@
 /**
  * 图质量面审计抽样（#224 / ADR-0070 §图质量面）：教练回合裁决质量（算子选择 + 理由 vs
- * 图面）与种子/终点资格（ADR-0040/0056 判据兑现度）的抽样审计——走 #222 评审器形态，
- * 量规用 #221 的「教练回合」「种子·终点」两份，样本来自生成语料（教练生长/种子起草）。
+ * 图面）的抽样审计——走 #222 评审器形态，量规用 #221 的「教练回合」，样本来自生成语料
+ * （教练生长）。
+ *
+ * #256：种子链整体退役——「种子/终点资格」审计轴与「种子·终点」量规一并删除。
  *
  * 本模块只加审计特有的三件事，评分与报告机械全在 quality-review.ts（一条口径、一个实现）：
  *
- * 1. **审计面清单**（`AUDIT_AXES`）：两类审计各自的名字、量规、样本站与要看的维度——
+ * 1. **审计面清单**（`AUDIT_AXES`）：每类审计的名字、量规、样本站与要看的维度——
  *    报告开头照它声明「这一轮审了什么、没审什么」，防「跑过一轮」被读成「全面覆盖」。
  * 2. **系统性发现候选**（`systemicCandidates`）：逐（站 × 维度）算低分率，越预注册线即
- *    入候选（票面「某算子被系统性误用」「终点承诺句系统性窄化」这类结论的候选形态）。
+ *    入候选（票面「某算子被系统性误用」这类结论的候选形态）。
  *    候选是**提议**：蒸馏成票、改量规、开新票都在人审（分层法庭），本模块不下结论。
  * 3. **候选渲染**（`renderAuditSection`）：候选 + 低分件引用 + 判据出处，直接可贴回票面。
  *
@@ -47,7 +49,7 @@ export interface AuditAxis {
   dimensions: Array<{ id: string; focus: string }>
 }
 
-/** 两类审计（#224 规格逐条对应）。 */
+/** 图质量面审计轴（#224 规格；#256 种子轴退役后仅存教练回合轴）。 */
 export const AUDIT_AXES: readonly AuditAxis[] = [
   {
     id: 'coach-turn',
@@ -60,27 +62,16 @@ export const AUDIT_AXES: readonly AuditAxis[] = [
       { id: '裁决与路线', focus: '分歧纪律与路线重写是否守非承诺措辞、停机转译是否得当' },
     ],
   },
-  {
-    id: 'seed-endpoint',
-    name: '种子/终点资格（ADR-0040/0056 判据兑现度）',
-    stations: ['种子起草'],
-    rubric: '种子·终点',
-    dimensions: [
-      { id: '起点资格', focus: '起点是否单一行为单元、常识可行、宁简勿繁' },
-      { id: '终点资格', focus: '终点是否承诺句、面向覆盖是否静默丢弃/窄化、是否可兑现' },
-      { id: '骨架与路由', focus: '骨架模式、先验路由、定位与取舍是否写全' },
-    ],
-  },
 ]
 
 /** 系统性候选的预注册线：至少这么多已判档件、且低分率不低于此值才入候选。 */
 export const SYSTEMIC_MIN_SAMPLES = 2
 export const SYSTEMIC_LOW_RATE = 0.5
 
-/** 审计面声明行（报告开头；两类审计各一行，未抽到样本的轴也照实列出「本轮无样本」）。 */
+/** 审计面声明行（报告开头；逐轴对照，未抽到样本的轴也照实列出「本轮无样本」）。 */
 export function auditScopeLines(report: Pick<QualityReviewReport, 'sampling' | 'stats' | 'rubricIds'>): string[] {
   const L: string[] = []
-  L.push(`> **审计面声明**（#224）：本轮抽样 ${report.sampling.selected} 件，量规 ${report.rubricIds.join('、') || '（无）'}。两类审计逐轴对照：`)
+  L.push(`> **审计面声明**（#224）：本轮抽样 ${report.sampling.selected} 件，量规 ${report.rubricIds.join('、') || '（无）'}。逐轴对照：`)
   for (const axis of AUDIT_AXES) {
     const inScope = axis.stations.filter(s => report.sampling.stations.includes(s))
     const scored = report.stats.filter(s => inScope.includes(s.station) && axis.dimensions.some(d => d.id === s.dimension))

@@ -79,7 +79,7 @@ import { assertNoBrokenNotes } from './sessions.ts'
 import { applyRatingBlock, resolveFsrsParams, retrievabilityBlock } from './srs.ts'
 import type { FsrsBlock, Stage } from './types.ts'
 import type { MemoryHealthDoc, XpStatus } from './views/sched.ts'
-import { difficultyCalibration, nominalBudget, readDailyGoal, readDayCutoff, streakFrom, sumXp, writeDailyGoal, writeDayCutoff } from './xp.ts'
+import { difficultyCalibration, nominalBudget, readDailyGoal, readDayCutoff, streakFrom, sumXp, writeDailyGoal } from './xp.ts'
 export class SchedSubsystem {
   constructor(private e: SchedDeps) {}
 
@@ -314,11 +314,6 @@ export class SchedSubsystem {
     return { goal: await writeDailyGoal(this.e.paths, goal, this.e.fs) }
   }
 
-
-  /** 调整日界（state/learnhub.json 的 day_cutoff；ADR-0020）→ 生效 'HH:mm'。 */
-  async setDayCutoff(value: string): Promise<{ day_cutoff: string }> {
-    return { day_cutoff: await writeDayCutoff(this.e.paths, value, this.e.fs) }
-  }
 
   /** 统计页四面板聚合（xpStatus 的姊妹方法，只读）：每日负载预报（扫全部启用课程
    * 题库 q.fsrs.due，Anki Forecast 语义）、记忆状态分布（Stability/Difficulty/当前

@@ -38,8 +38,8 @@ function autoConfirm(): Array<Record<string, unknown>> {
 }
 
 const JOB_FIXTURE = {
-  key: '数学/种子起草', course: '数学', node: '种子起草', status: 'running',
-  startedAt: '2026-09-12T00:00:00Z', phase: 'seed',
+  key: '数学/生长', course: '数学', node: '生长', status: 'running',
+  startedAt: '2026-09-12T00:00:00Z', phase: 'growth',
 }
 
 // ---- CoachCockpit（#155/#240）：零终点禁用生长/罗盘重画 + 任务条点击定位 ----
@@ -71,8 +71,8 @@ test('CoachCockpit：在途任务条点击 → onOpenJob 带任务 key（落生�
     onOpenJob: (j: { key: string }) => seen.push(j.key),
   }))
   assert.ok(screen.getByText(/看全程/), '在途条可见')
-  await click(screen.getByText(/种子起草（数学）/))
-  assert.deepEqual(seen, ['数学/种子起草'], '点击回调带任务注册表 key')
+  await click(screen.getByText(/生长（数学）/))
+  assert.deepEqual(seen, ['数学/生长'], '点击回调带任务注册表 key')
 })
 
 // ---- SeedFormModal（#155/#240）：建课表单只收一个课程名，按引擎真实返回着色 ----
@@ -117,8 +117,8 @@ const proposalFix: Array<Record<string, unknown>> = []
 
 function resetProposals(): void {
   proposalFix.splice(0, proposalFix.length, {
-    id: 7, kind: 'seed', course: '数学', status: 'pending', pair: undefined,
-    summary: '1–3 起点 + 终点', artifact: '', created: '2026-09-12T00:00:00Z',
+    id: 7, kind: 'edit', course: '数学', status: 'pending',
+    summary: '编辑提案', artifact: '', created: '2026-09-12T00:00:00Z',
   })
   routes({ 'GET /proposals': proposalFix, 'POST /proposals/apply': { message: '已应用' } })
 }
@@ -134,7 +134,7 @@ async function refetchProposals(): Promise<void> {
   })
 }
 
-test('ProposalsPage：应用成功出现「查看结果」，种子提案点击落图页并预置课程', async () => {
+test('ProposalsPage：应用成功出现「查看结果」，编辑提案点击落图页并预置课程', async () => {
   autoConfirm()
   const { default: ProposalsPage } = await importUi('pages/ProposalsPage.tsx')
   resetProposals()
@@ -146,17 +146,17 @@ test('ProposalsPage：应用成功出现「查看结果」，种子提案点击�
   proposalFix[0]!.status = 'applied'
   await refetchProposals()
   await click(await screen.findByText('查看结果'))
-  assert.deepEqual(calls.openCourse, [['数学', 'graph']], '种子提案 → 单课工作台罗盘与图，openCourse 自带课程预置（#209）')
+  assert.deepEqual(calls.openCourse, [['数学', 'graph']], '编辑提案 → 单课工作台罗盘与图，openCourse 自带课程预置（#209）')
 })
 
-test('ProposalsPage：富化提案「查看结果」落题库，反编译对（pair）落项目页', async () => {
+test('ProposalsPage：富化提案「查看结果」落题库，计划提案落项目页', async () => {
   autoConfirm()
   const { default: ProposalsPage } = await importUi('pages/ProposalsPage.tsx')
   resetProposals()
-  // 本用例只放两行：富化在前、反编译种子半区（pair=4）在后
+  // 本用例只放两行：富化在前、计划提案在后
   proposalFix.splice(0, 1,
-    { id: 8, kind: 'enrich', course: '数学', status: 'pending', pair: undefined, summary: 's', artifact: '', created: '2026-09-12T00:00:00Z' },
-    { id: 9, kind: 'seed', course: '数学', status: 'pending', pair: 4, summary: '反编译种子半区', artifact: '', created: '2026-09-12T00:00:00Z' },
+    { id: 8, kind: 'enrich', course: '数学', status: 'pending', summary: 's', artifact: '', created: '2026-09-12T00:00:00Z' },
+    { id: 9, kind: 'project_plan', course: '数学', status: 'pending', summary: '计划提案', artifact: '', created: '2026-09-12T00:00:00Z' },
   )
   const { frame, calls } = spyFrame()
   render(React.createElement(ProposalsPage, { frame }))
@@ -168,7 +168,7 @@ test('ProposalsPage：富化提案「查看结果」落题库，反编译对（p
   await refetchProposals()
   await click(await screen.findByText('查看结果'))
   assert.deepEqual(calls.openCourse, [['数学', 'bank']], '富化 → 单课工作台题库分栏（#209）')
-  // 应用反编译种子半区 #9 → 查看结果 → projects（routes() 重注册清空调用记录，按 body.id 断言）
+  // 应用计划提案 #9 → 查看结果 → projects（routes() 重注册清空调用记录，按 body.id 断言）
   await click(screen.getAllByText('应用')[0])
   await waitFor(() => {
     assert.ok(stubCalls().some(c => c.method === 'POST' && c.path === '/proposals/apply'
@@ -178,5 +178,5 @@ test('ProposalsPage：富化提案「查看结果」落题库，反编译对（p
   await refetchProposals()
   const views = await screen.findAllByText('查看结果')
   await click(views[views.length - 1])
-  assert.ok(calls.goto.some(g => g[0] === 'projects'), '反编译对 → 项目页')
+  assert.ok(calls.goto.some(g => g[0] === 'projects'), '计划提案 → 项目页')
 })

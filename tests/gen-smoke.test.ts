@@ -1,10 +1,10 @@
 /**
  * 生成冒烟运行器（#215）：临时 vault 跑通全管线 + 结构断言报告。
  *
- * 这里用**路由式假 provider**（按提示词形态分派应答）驱动真实管线：种子起草 → 提案
+ * 这里用**路由式假 provider**（按提示词形态分派应答）驱动真实管线：手写结构提案 → 提案
  * 直通 → 大纲 → 逐节正文 → 出题，每一步都由真引擎的解析器与门禁裁决。两条断言：
  *
- *  ① 全绿路径：报告 verdict=ok、四站齐全、token 计量 > 0、产物断言全过。
+ *  ① 全绿路径：报告 verdict=ok、三站齐全、token 计量 > 0、产物断言全过。
  *  ② 解析回归现形：把大纲应答换成非法 YAML（等价于解析器回归的输入端注入）——报告里
  *     大纲站 outcome=failed + 失败码、产物断言失败、verdict=failed。报告是诊断面，
  *     它必须能指认「哪一站、什么码」。
@@ -17,18 +17,9 @@ import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { runGenerationSmoke } from '../src/host/smoke.ts'
 
-/** 路由式假 provider：按提示词形态分派应答（正文/题目/大纲/种子各一条规则）。 */
+/** 路由式假 provider：按提示词形态分派应答（正文/题目/大纲各一条规则）。 */
 function routingCtx(outlineYaml: string, calls: string[]): Context {
   const answer = (prompt: string): string => {
-    if (prompt.includes('## 起草方向')) {
-      // 种子起草（ADR-0076 种子降职）：给已注册课程起草结构——顶层键随 v5 契约
-      // （course/goal_type/endpoint/starts/…，不再有 mode；方向由锚定终点携带）
-      return [
-        'course: 冒烟课', 'goal_type: capability', 'reason: 冒烟验证',
-        'endpoint:', '  name: 冒烟终点', '  region: 基础', '  block: 终点块',
-        'starts:', '  - name: 冒烟起点', '    region: 基础', '    block: 起点块', '    basis: baseline',
-      ].join('\n')
-    }
     if (prompt.includes('## 本节任务')) {
       const title = /- 节标题：(.*)/.exec(prompt)?.[1]?.trim() ?? '概念：冒烟'
       return `## ${title}\n\n这是本节正文，用来验证冒烟链路。\n`
@@ -40,7 +31,7 @@ function routingCtx(outlineYaml: string, calls: string[]): Context {
       const section = perSection ?? '通用'
       const tag = perSection ? `定向${perSection}` : '综合'
       return [
-        `node: 冒烟起点`, 'questions:',
+        `node: 冒烟课起点`, 'questions:',
         '  - kind: true_false', `    q: 冒烟${tag}题一：冒烟链路的题干。`, '    answer: true',
         `    difficulty: 1`, `    section: ${section}`,
         '  - kind: true_false', `    q: 冒烟${tag}题二：冒烟链路的另一题干。`, '    answer: false',
@@ -66,22 +57,22 @@ function routingCtx(outlineYaml: string, calls: string[]): Context {
 }
 
 const GOOD_OUTLINE = [
-  'node: 冒烟起点', 'sections:',
+  'node: 冒烟课起点', 'sections:',
   '  - id: s1', '    title: 概念：冒烟甲', '    type: 概念', '    points: 要点甲', '    visual: 无',
   '  - id: s2', '    title: 概念：冒烟乙', '    type: 概念', '    points: 要点乙', '    visual: 无',
 ].join('\n')
 
 /** 解析回归注入：不是合法大纲产物（无 sections 映射）。 */
-const BROKEN_OUTLINE = 'node: 冒烟起点\nsections: 这不是列表'
+const BROKEN_OUTLINE = 'node: 冒烟课起点\nsections: 这不是列表'
 
-test('冒烟全绿路径：四站齐全、token 计量、产物断言全过、verdict=ok', async () => {
+test('冒烟全绿路径：三站齐全、token 计量、产物断言全过、verdict=ok', async () => {
   const calls: string[] = []
   const report = await runGenerationSmoke(routingCtx(GOOD_OUTLINE, calls))
   assert.equal(report.verdict, 'ok', `报告应全绿：${JSON.stringify(report.artifacts.filter(a => !a.ok))}`)
-  assert.equal(report.node, '冒烟起点')
+  assert.equal(report.node, '冒烟课起点')
   assert.equal(report.pipeline.jobStatus, 'done')
   const stations = report.stations.map(s => s.station)
-  for (const s of ['种子起草', '课程大纲', '课程节生成', '题目生成']) {
+  for (const s of ['课程大纲', '课程节生成', '题目生成']) {
     assert.ok(stations.includes(s), `报告缺站「${s}」（实得 ${stations.join('、')}）`)
   }
   const total = report.stations.reduce((n, s) => n + s.inputTokens + s.outputTokens, 0)
@@ -113,7 +104,7 @@ test('冒烟语料可外落（--corpus）：站表读的是外落目录、语料
   try {
     const report = await runGenerationSmoke(routingCtx(GOOD_OUTLINE, []), { corpusDir: dir })
     assert.equal(report.corpusDir, dir.replace(/\\/g, '/'), '报告语料目录 = 外落目录')
-    assert.ok(report.stations.length >= 4, `站表应读外落目录：实得 ${report.stations.length} 站`)
+    assert.ok(report.stations.length >= 3, `站表应读外落目录：实得 ${report.stations.length} 站`)
     assert.ok(report.stations.every(s => s.calls > 0), '各站调用数 > 0')
     const outlineDir = join(dir, '课程大纲')
     assert.ok(existsSync(outlineDir), '外落目录里有大纲站的捕获文件')

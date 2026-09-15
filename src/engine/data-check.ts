@@ -78,7 +78,6 @@ export type DataCheckReason =
   | 'proposals_unreadable'
   | 'proposals_json_parse'
   | 'proposals_schema'
-  | 'proposals_pair_dangling'
   | 'proposals_artifact_missing'
   | 'gen_jobs_unreadable'
   | 'gen_jobs_json_parse'
@@ -702,7 +701,7 @@ async function scanGenJobs(
 }
 
 /** 提案注册表体检（#193 / ADR-0053 逐条最小形状契约）：文件缺失 = 合法空态（零
- * finding）；JSON 损坏 / 非数组 / 逐条形状违约 / pair 悬空 / 悬空 artifact（提案记录的
+ * finding）；JSON 损坏 / 非数组 / 逐条形状违约 / 悬空 artifact（提案记录的
  * artifact 路径在盘上不存在——propose 落盘后产物被手工挪走或删除）= Broken finding，
  * detail 带定位与原因。返回提案清单（损坏时 null：复诊对账的登记日无从取）——形状
  * 违约条目不阻断其余条目的对账（体检收尽量多的可见性，收严语义归 store.loadProposals）。 */
@@ -731,15 +730,10 @@ async function scanProposals(
     return null
   }
   const list = doc as ProposalRec[]
-  const ids = new Set(list.map(p => p.id))
   for (const [i, e] of list.entries()) {
     const errs = proposalShapeErrors(e)
     if (errs.length) {
       push(findings, 'proposals', 'broken', 'proposals_schema', where, `第 ${i} 条（提案 #${e.id}）：${errs.join('；')}。`)
-    }
-    if (e.pair !== undefined && !ids.has(e.pair)) {
-      push(findings, 'proposals', 'broken', 'proposals_pair_dangling', where,
-        `第 ${i} 条（提案 #${e.id}）pair 悬空：声明的联动提案 #${e.pair} 不在清单中（同源对账数据不一致）。`)
     }
     if (typeof e.artifact === 'string' && e.artifact.trim() && !fs.exists(e.artifact)) {
       push(findings, 'proposals', 'broken', 'proposals_artifact_missing', `提案 #${e.id} 产物 ${e.artifact}`,

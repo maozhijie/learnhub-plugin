@@ -7,7 +7,7 @@ import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 
 test('P2: 存量内置模板全部升到 prompt/v6（生长式套件除外——新套件模板自带版本线）', () => {
   for (const kind of Object.keys(Content.PROMPT_KINDS)) {
-    if (kind === '罗盘初画' || kind === '教练回合' || kind === '种子提案') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
+    if (kind === '罗盘初画' || kind === '教练回合') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
     const text = Content.PROMPT_KINDS[kind]!
     assert.ok(Content.promptVersionOf(text) >= 6, `${kind} 应升到 v6+`)
   }
@@ -48,19 +48,6 @@ test('#149/#240: 项目目标反编译模板 v11——plan-only 契约（ADR-007
   assert.match(tpl, /学习者已有理解（Vault 先验）/, '先验段注入指令（尊重已有理解，不从零铺已会节点）')
   assert.match(tpl, /提案/, '产物走人审提案通道（apply 前零 canonical 写入）')
   assert.match(tpl, /留给教练按计划修订补支生长/, '新知识缺口不硬凑名字（走计划修订驱动的教练补支）')
-})
-
-test('面板下发：种子提案模板 v1——起草契约（骨架模式/熟悉边界/绑定字段/目标类型二分）', () => {
-  const tpl = Content.PROMPT_KINDS['种子提案']!
-  assert.ok(Content.promptVersionOf(tpl) >= 1, '种子提案 自带版本线（生长式套件 v1 起）')
-  assert.match(tpl, /1–3 个起点节点 \+ 一个终点节点/, '种子形态锚点')
-  assert.match(tpl, /零 enc 零 est 零 pre/, '种子骨架模式（粗占位边引擎落）')
-  assert.match(tpl, /熟悉边界/, '起点定位 = vault 先验的熟悉边界路')
-  assert.match(tpl, /basis: baseline\|vault/, '起点三路的语义路由声明')
-  assert.match(tpl, /照抄附后的「课程名」/, '绑定字段以表单为准（课程名不自拟）')
-  assert.match(tpl, /goal_type 照抄附后的「目标类型」/, '目标类型二分由表单绑定')
-  assert.match(tpl, /capability/, '能力锚定缺省')
-  assert.match(tpl, /仅 goal_type=coverage 时携带/, 'worksheet 只随 coverage')
 })
 
 // ---- v9 题目生成契约（ADR-0029/0030）：唯一答案填空 + 记法契约 + YAML 单引号规则 ----
@@ -265,42 +252,13 @@ test('ADR-0040: 教练回合模板 v3——生长纪律（认知粒度/动作句
   assert.match(tpl, /上交前/, 'pre-submit 自查清单锚点')
 })
 
-// ---- v2 种子提案契约（ADR-0040）：起点资格判据——单一行为单元 + 复合概念操作化判定 ----
+// ---- v11 反编译契约（#240 / ADR-0076；#256 随种子链整体退役）：上交前自查 ----
 
-test('ADR-0040: 种子提案模板 v2——起点资格（单一行为单元/零复合概念/宁简勿繁）+ 操作化正反例', () => {
-  const tpl = Content.PROMPT_KINDS['种子提案']!
-  assert.ok(Content.promptVersionOf(tpl) >= 2, '种子提案应带版本标记 v2+')
-  assert.match(tpl, /起点资格/, '资格判据段名（受理门查不了，靠把关）')
-  assert.match(tpl, /单一行为单元/, '起点 = 单一行为单元')
-  assert.match(tpl, /零复合概念/, '复合概念禁令')
-  assert.match(tpl, /不放松起点资格/, '自述基础不放松资格（实测疼点：零基础自述下起点仍复合）')
-  assert.match(tpl, /宁简勿繁/, '不对称论证锚点（过简趋零代价 vs 过繁坡道断裂）')
-  assert.match(tpl, /「Python 基础语法」/, '复合泛称反例（allo 校勘范式：判据配正反例）')
-  assert.match(tpl, /装好环境并运行第一行代码/, '单一行为正例')
-})
-
-// ---- v3 种子提案契约（#202 / ADR-0056）：终点资格与起点资格分家 ----
-
-test('#202: 种子提案模板 v3——终点资格（承诺句/面向覆盖/禁窄化/可兑现）+ 操作化反例', () => {
-  const tpl = Content.PROMPT_KINDS['种子提案']!
-  assert.ok(Content.promptVersionOf(tpl) >= 3, '种子提案应带版本标记 v3+')
-  assert.match(tpl, /终点资格/, '终点资格段名（与起点资格分家）')
-  assert.match(tpl, /承诺句/, '终点 = 承诺句不是台阶句')
-  assert.match(tpl, /禁止静默丢弃/, '面向覆盖纪律（禁静默丢弃）')
-  assert.match(tpl, /窄化限定词/, '禁窄化限定词（「或/A 者 B」措辞）')
-  assert.match(tpl, /可兑现/, '可兑现性判据（空泛口号不合格）')
-  assert.match(tpl, /机器学习/, '操作化反例 = 「数学」课四面向实测案例')
-  assert.match(tpl, /不受「单一行为单元」约束/, '终点不吃起点资格判据')
-  assert.match(tpl, /定位与取舍/, 'reason 扩「定位与取舍」')
-})
-
-// ---- v11 反编译契约（#240 / ADR-0076）：seed 起点资格随 seed 半区退役 + 上交前自查 ----
-
-test('ADR-0076: 项目目标反编译模板 v11——seed 起点资格退役（判据归种子提案模板专有）', () => {
+test('ADR-0076/#256: 项目目标反编译模板——起点资格判据不入反编译（随种子半区整体退役）', () => {
   const tpl = Content.PROMPT_KINDS['项目目标反编译']!
   assert.ok(Content.promptVersionOf(tpl) >= 9, '项目目标反编译应升到 v9+')
-  assert.doesNotMatch(tpl, /起点资格/, 'seed 半区退役——起点资格判据不再进反编译模板（ADR-0076）')
-  assert.doesNotMatch(tpl, /单一行为单元/, '单一行为单元判据归种子提案模板专有')
+  assert.doesNotMatch(tpl, /起点资格/, '起点资格判据已随种子半区退役（#256）')
+  assert.doesNotMatch(tpl, /单一行为单元/, '单一行为单元判据已随种子半区退役（#256）')
   assert.match(tpl, /上交前自查/, 'pre-submit 自查锚点（plan-only 形态自查 plan.nodes 对账）')
 })
 

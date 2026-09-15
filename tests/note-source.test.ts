@@ -393,8 +393,11 @@ test('纯函数缝：排除命中判定（精确 + 目录前缀，前缀串撞�
 
 test('排除清单管理：落盘归一去重、重复排除幂等、解除不在清单 fail loud、手编配置形状归一、其他字段保留', async () => {
   await withVault(async (engine, p) => {
-    // 场上先有其他配置字段：写排除不得抹掉
-    await engine.sched2.setDayCutoff('03:00')
+    // 场上先有其他配置字段：写排除不得抹掉（手编 config：直接落 state/learnhub.json，保留 schema 戳；
+    // #256 day-cutoff 命令退役后，日界无编程写入面，#256 不再经引擎写它）
+    const cfgPath = engine.paths.learnhubConfigPath
+    const prevCfg = JSON.parse(await readFile(cfgPath, 'utf8')) as Record<string, unknown>
+    await writeFile(cfgPath, JSON.stringify({ ...prevCfg, day_cutoff: '03:00' }, null, 1) + '\n', 'utf8')
     const add = await engine.channels.noteSourceExclude(join(p.folderAbs, '存档'))
     assert.deepEqual(add.excludes, ['我的笔记/存档'])
     const again = await engine.channels.noteSourceExclude('我的笔记/存档/') // 同路径异写法（尾斜杠）幂等

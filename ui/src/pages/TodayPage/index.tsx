@@ -236,7 +236,7 @@ export default function TodayPage({ frame }: { frame: AppFrame }) {
             {noCourses ? (
               <Card size='small' className='lh-card'>
                 <Space direction='vertical' size={12} className='lh-full lh-row lh-p-16px-0'>
-                  <Text type='secondary'>还没有课程：到课程区的教练台起草种子提案（1–3 个起点 + 终点锚），一次人审即开工。</Text>
+                  <Text type='secondary'>还没有课程：到课程区新建课程（名称即空图），加终点声明方向后由教练回合生长结构。</Text>
                 </Space>
               </Card>
             ) : (events.length > 0 ? (

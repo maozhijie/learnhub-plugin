@@ -187,7 +187,6 @@ createServer(async (req, res) => {
           await engine.graphReject(id, typeof body.note === 'string' ? body.note.trim() : '')
           return sendJson(res, 200, { message: `[reject] 提案 #${id} 已拒绝留痕。` })
         }
-        case '/review': return sendJson(res, 200, { message: await engine.contentReview(need(body, 'course'), need(body, 'node')) })
       }
       throw new Error(`dev-server 未实现该路由（完整环境用 dsh web）: POST ${route}`)
     }

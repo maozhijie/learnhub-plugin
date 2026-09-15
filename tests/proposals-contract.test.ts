@@ -1,7 +1,7 @@
 /**
  * 提案注册表契约（#193 / ADR-0053）：store.loadProposals 逐条最小形状契约（id 正整数、
- * status 三值、artifact 非空、pair 存在性）+ Data Check proposals area + 复诊盘点去静默
- * + 提案出生即完整（空 artifact 两段窗口关闭）。
+ * status 三值、artifact 非空）+ Data Check proposals area + 复诊盘点去静默
+ * + 提案出生即完整（空 artifact 两段窗口关闭）。#256：pair 存在性校验随 pair 联动机械退役删除。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -24,7 +24,7 @@ function byReason(report: DataCheckReport): Map<string, number> {
   return out
 }
 
-test('loadProposals：Missing 合法空态；四种损坏形态各自抛 Broken 且带路径与条目位置', async () => {
+test('loadProposals：Missing 合法空态；各损坏形态各自抛 Broken 且带路径与条目位置', async () => {
   await withVault({}, async ({ engine, root }) => {
     const p = join(root, PROPOSALS)
     assert.deepEqual(await engine.store.loadProposals(), [], '文件缺失 = Missing 合法空态')
@@ -45,10 +45,6 @@ test('loadProposals：Missing 合法空态；四种损坏形态各自抛 Broken 
 
     await writeFile(p, JSON.stringify([rec({ id: 0 })]), 'utf8')
     await assert.rejects(() => engine.store.loadProposals(), /第 0 条.*id 必须是正整数/)
-
-    await writeFile(p, JSON.stringify([rec({ pair: 9 })]), 'utf8')
-    await assert.rejects(() => engine.store.loadProposals(),
-      /第 0 条 pair 悬空（Broken：声明的联动提案 #9 不在清单中）：修复或删除该条目后再试。/)
   })
 })
 
@@ -64,16 +60,14 @@ test('Data Check proposals area：损坏形态逐条报 broken（可定位），
 
     await writeFile(p, JSON.stringify([
       rec({ status: 'appling', artifact: join(root, '学习中心', 'state', 'learnhub.json') }),
-      rec({ id: 2, artifact: join(root, '学习中心', 'state', 'learnhub.json'), pair: 99 }),
       rec({ id: 3, artifact: join(root, '学习中心', 'state', '不存在的产物.yaml') }),
     ]), 'utf8')
     const report = await engine.dataCheck()
     const reasons = byReason(report)
     assert.equal(reasons.get('proposals_schema'), 1, '字段违约逐条定位（第 0 条）')
-    assert.equal(reasons.get('proposals_pair_dangling'), 1, 'pair 悬空定位（提案 #2）')
     assert.equal(reasons.get('proposals_artifact_missing'), 1, '悬空 artifact：propose 落盘后产物被手工挪走/删除的场景')
     assert.equal(report.status, 'broken')
-    assert.deepEqual(report.byArea.proposals, { missing: 0, broken: 3, archived: 0, hint: 0 })
+    assert.deepEqual(report.byArea.proposals, { missing: 0, broken: 2, archived: 0, hint: 0 })
   })
 })
 

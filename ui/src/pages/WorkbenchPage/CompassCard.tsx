@@ -48,7 +48,7 @@ export default function CompassCard({ course }: { course: string }) {
         </Space>
       }>
       {doc.missing ? (
-        <Empty description='罗盘还没有初画：种子提案应用后落「待初画」占位，教练台可下发罗盘初画（或随首个生长批自动重写）。' />
+        <Empty description='罗盘还没有初画：教练台可下发罗盘初画（或随首个生长批自动重写）。' />
       ) : (
         <Space direction='vertical' size={10} className='lh-full'>
           <div>

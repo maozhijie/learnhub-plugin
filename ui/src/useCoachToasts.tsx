@@ -1,6 +1,6 @@
 /** App 级教练通知（ADR-0038 面板下发的可见性半区）：轻轮询 diff 生成任务注册表与
  * 复诊在途清单，把「系统在我的课程上动了手」浮出来——
- * - 图域任务（种子/生长/罗盘/反编译/计划/里程碑）入队与终态各弹一条（含触发语义与结果行）；
+ * - 图域任务（生长/罗盘/反编译/计划/里程碑）入队与终态各弹一条（含触发语义与结果行）；
  *   内容类任务不弹（各页已有指示器）；被阻尼拒掉的重拉不产生注册表条目 → 自然不弹。
  * - 生长批失败通知带「重试」按钮（#157）：点击重新下发面板生长命令（显式重新裁决，
  *   豁免失败阻尼）——教练一次产出畸形不再让课程静默停止生长。
@@ -10,7 +10,7 @@
  *   期间完成、水位未及」的终态任务补发出来（带「补发」前缀，失败批照带「重试」）——
  *   不再因面板关闭错过结果。保留期外的终态（done 30 分钟）已被清扫，无从补发。
  * - 复诊结算（队列空闲钩子自动跑，宿主侧只有运行日志）：在途节点消失/三率增量 = 已出结论。
- * 通知按钮按任务性质分流：产物是提案的（种子/反编译/计划/里程碑）→「去提案收件箱」人审；
+ * 通知按钮按任务性质分流：产物是提案的（反编译/计划/里程碑）→「去提案收件箱」人审；
  * 过程性的（生长/罗盘）→「去生成队列」。 */
 import { Button, Message, Notification } from '@arco-design/web-react'
 import { useEffect, useRef } from 'react'
@@ -21,7 +21,6 @@ import { errorMessage } from './hooks/useCommand'
 import { GRAPH_PHASES } from './hooks/useGenJobActions'
 
 const PHASE_TITLE: Record<string, string> = {
-  seed: '种子起草',
   growth: '教练回合（生长批）',
   compass: '罗盘初画',
   decompile: '目标反编译',
@@ -29,7 +28,7 @@ const PHASE_TITLE: Record<string, string> = {
   milestone: '里程碑任务卡',
 }
 /** 产物是提案的任务：完成通知跳提案收件箱（下一步动作是人审），其余跳生成队列。 */
-const PROPOSAL_OUTPUT = new Set(['seed', 'decompile', 'plan', 'milestone'])
+const PROPOSAL_OUTPUT = new Set(['decompile', 'plan', 'milestone'])
 /** 通知回放的消费水位（#161）：localStorage 键，值为已展示终态的最大 finishedAt 毫秒。 */
 const LAST_SEEN_KEY = 'learnhub-coach-notif-lastseen'
 

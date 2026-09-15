@@ -10,12 +10,11 @@ import { errorMessage, notifyQueued } from './useCommand'
 import type { GenJobItem } from '../types'
 
 /** 图域任务 phase 全集（教练回合/面板下发的队列形态；与引擎 GEN_JOB_PHASES 同口径）。 */
-export const GRAPH_PHASES = new Set(['seed', 'growth', 'compass', 'decompile', 'plan', 'milestone'])
+export const GRAPH_PHASES = new Set(['growth', 'compass', 'decompile', 'plan', 'milestone'])
 
 /** phase → 人读标签+展示色（生成队列任务表与供给卡失败行共用，单一出处）。 */
 export const GEN_PHASE_META: Partial<Record<NonNullable<GenJobItem['phase']>, { label: string; color: string }>> = {
   quiz: { label: '出题', color: 'cyan' },
-  seed: { label: '种子起草', color: 'lime' },
   growth: { label: '生长批', color: 'orange' },
   compass: { label: '罗盘初画', color: 'gold' },
   decompile: { label: '目标反编译', color: 'purple' },

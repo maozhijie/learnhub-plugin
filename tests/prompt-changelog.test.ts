@@ -346,8 +346,8 @@ test('#220 评审对照 CLI：合成两份报告，降则红、不降则绿', ()
     const before = join(dir, 'before.json')
     const after = join(dir, 'after.json')
     const write = (p: string, counts: number[]): void => writeFileSync(p, JSON.stringify({
-      stats: [stat('种子起草', 'start', '起点资格', counts)],
-      reviews: [{ ref: '种子起草/a.md', station: '种子起草' }],
+      stats: [stat('教练生长', 'growth', '生长纪律', counts)],
+      reviews: [{ ref: '教练生长/a.md', station: '教练生长' }],
     }), 'utf8')
     write(before, [0, 1, 1, 0])
     write(after, [0, 0, 2, 0])

@@ -1,5 +1,5 @@
 /**
- * 项目族与教练生长站的模型面散文（#237 / ADR-0075）：`seed.ts` 与 `project-decompile.ts`
+ * 项目族与教练生长站的模型面散文（#237 / ADR-0075）：`project-decompile.ts`
  * 的修复轮死因标题、`coach-round.ts` 的双沙盘参考块、`growth-subsystem.ts` 教练回合的
  * 两块注入散文，全部收成**惰性字符串 + `{{变量}}` 占位符**，取值在调用点完成。
  *
@@ -16,12 +16,8 @@
  * 清单式排版），搬迁时一个字也不能动——渲染结果与搬迁前完全相同，零行为变化、不 bump 版本。
  */
 
-/** 种子起草修复轮死因标题（`seed.ts::seedRepairPrompt` 的 headline 参；同族的另一站是目标
- * 反编译）：门未过 → 重出**完整** YAML，不解释。 */
-export const SEED_REPAIR_HEADLINE = '## 上一次输出未过种子校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）'
-
 /** 目标反编译修复轮死因标题（`project-decompile.ts::decompileRepairPrompt` 的 headline 参）：
- * 双产物（计划 + 种子半区）同源，故校验门按整体拒绝回灌。 */
+ * 双产物（project + plan）同源，故校验门按整体拒绝回灌。 */
 export const DECOMPILE_REPAIR_HEADLINE = '## 上一次输出未过双产物校验门（重新输出**完整** YAML 文档，修正下列全部问题；仍只输出一个 YAML，不要解释）'
 
 /** 双沙盘仲裁参照块（`coach-round.ts::renderArbitrationEvidence`）：两份逐周分位带与新增

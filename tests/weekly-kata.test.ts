@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { withVault } from './helpers/vault.ts'
+import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import { weekStartOf, weekEndOf, prevWeekStartOf, buildKataReality, renderKataReality } from '../src/engine/kata.ts'
 import { todayStr, dayOfTs } from '../src/engine/dates.ts'
 
@@ -162,33 +163,16 @@ test('#114 清单面：多周记录按周排列，answered 现判', async () => 
 
 // ---- #150 罗盘周 ETA 挂周复盘：现状区旁挂沙盘 ETA 摘要 ----
 
-test('#150 现状区旁挂沙盘 ETA：有锚课程逐课一行越阈参照（非承诺措辞）；未播种无此小节', async () => {
+test('#150 现状区旁挂沙盘 ETA：有锚课程逐课一行越阈参照（非承诺措辞）；未起草无此小节', async () => {
   const weekStart = prevWeekStartOf(todayStr(new Date()))!
-  const SEED = `course: 数学
-concepts:
-  - canonical: 变化率
-endpoint:
-  name: 用导数解决优化问题
-  region: 基础
-  block: 终点块
-  teaches: {变化率: 会用}
-starts:
-  - name: 认识变化率
-    region: 基础
-    block: 起点块
-    basis: baseline
-    teaches: {变化率: 会用}
-`
   await withVault({ registry: null, graph: null }, async ({ engine }) => {
-    // 未播种（零锚）：无 ETA 小节（合法空态——透明度装置锚在终点锚上）
+    // 未起草（零锚）：无 ETA 小节（合法空态——透明度装置锚在终点锚上）
     await engine.graph.createCourse('数学')
     const bare = await engine.learner.kataOpen(weekStart)
     assert.doesNotMatch(bare.reality, /### 沙盘 ETA/)
 
-    // 手加终点 + 播种（锚追加不覆盖：锚「导数方向」保留，起草终点新入锚册）→ ETA 逐终点
-    await engine.graph.addEndpoint('数学', '导数方向', '能用导数解决优化问题')
-    const r = await engine.graph.graphPropose('seed', SEED) as { id: number }
-    await engine.graph.graphApply('seed', r.id)
+    // 手加终点 + 起草（锚追加不覆盖：锚「导数方向」保留，起草终点新入锚册）→ ETA 逐终点
+    await draftCourse(engine, CAPABILITY_DRAFT)
     const doc = await engine.learner.kataOpen(weekStart)
     assert.match(doc.reality, /### 沙盘 ETA/)
     assert.match(doc.reality, /数学 → 终点「用导数解决优化问题」：p50/)

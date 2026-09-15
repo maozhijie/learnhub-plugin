@@ -44,8 +44,8 @@ export interface RubricDimension {
 }
 
 export interface QualityRubric {
-  /** 产物类型（五类：大纲/节正文/题目/教练回合/种子·终点）。 */
-  id: '大纲' | '节正文' | '题目' | '教练回合' | '种子·终点'
+  /** 产物类型（四类：大纲/节正文/题目/教练回合）。 */
+  id: '大纲' | '节正文' | '题目' | '教练回合'
   product: string
   /** 消费本量规的生成站（语料站名，对账 host STATIONS）。 */
   stations: string[]
@@ -362,76 +362,6 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
             id: '停机转译', criterion: '回合被拉起 = 就绪深度未满足：结构无需变化时写 ops: []（裁决=等内容跟上）；终点.pre 已达最终台阶时先出收尾接线批再停摆',
             evidence: '引就绪检查结果与裁决对照；无理由停摆或该收尾不收尾点名',
             source: '模板:教练回合', anchor: '收尾即宣告该终点坡道铺通',
-          },
-        ],
-      },
-    ],
-  },
-  {
-    id: '种子·终点',
-    // #240 / ADR-0076 种子降职：种子不再建课、目标反编译不再产 seed 半区——本量规只剩
-    // 种子起草一站，终点锚由学习者手加（人是权威），量规只审种子起草自带的那个终点。
-    product: '种子提案（给已注册课程起草结构：起点 + 起草终点；方向取自锚定终点的目标描述）',
-    stations: ['种子起草'],
-    court: RUBRIC_COURTS,
-    dimensions: [
-      {
-        id: '起点资格', name: '起点资格（ADR-0040）',
-        criteria: [
-          {
-            id: '单一行为单元', criterion: '起点是坡道第一级台阶，任何情况下必须是单一行为单元：名字连缀两个可独立教学对象（与/和/及）或要先解释名字本身的行话泛称不合格',
-            evidence: '引起点名对照正反例（「装好环境并运行第一行代码」✓ vs「Python 基础语法」✗）',
-            source: 'ADR-0040', anchor: '单一行为单元',
-          },
-          {
-            id: '常识起步', criterion: '零基础学习者从常识直接可起步（不依赖未教概念）；学习者自述的基础只写进 reason，不放松起点资格',
-            evidence: '引起点 pre 依赖面（应为零）与 reason 措辞对照',
-            source: 'ADR-0040', anchor: '零基础学习者从常识直接可起步',
-          },
-          {
-            id: '宁简勿繁', criterion: '起点过简代价趋零、过繁代价是整条坡道断裂——拿不准取更简的',
-            evidence: '引起点粒度与首个生长台阶推演对照',
-            source: 'ADR-0040', anchor: '宁简勿繁',
-          },
-        ],
-      },
-      {
-        id: '终点资格', name: '终点资格（ADR-0056）',
-        criteria: [
-          {
-            id: '承诺句', criterion: '终点名是承诺句（学习者兑现了什么承诺的合成处），不是一节可教可考的台阶句；不受「单一行为单元」约束',
-            evidence: '引终点名判断句式（台阶句/主题句点名）',
-            source: 'ADR-0056', anchor: '终点是承诺句不是台阶句',
-          },
-          {
-            id: '面向覆盖', criterion: '目标有几个面向，终点句就合成几个面向：禁止静默丢弃、禁止窄化限定词（「或/A 者 B」）；确实装不下显式取舍写进 reason',
-            evidence: '引目标描述面向分解与终点句对照（#202 机器学习四面向反例同款审法）',
-            source: 'ADR-0056', anchor: '禁静默丢弃',
-          },
-          {
-            id: '可兑现', criterion: '教练能从起点沿真实的需要长出通往终点的主线、并能在既有节点齐备时据它裁决收尾；「成为大师」类空泛口号不合格',
-            evidence: '引终点句推演最后台阶的可辨认性；推演不出收尾判据的点名',
-            source: 'ADR-0056', anchor: '可兑现性判据',
-          },
-        ],
-      },
-      {
-        id: '骨架与路由', name: '种子骨架与先验路由',
-        criteria: [
-          {
-            id: '骨架模式', criterion: '起点恰 1–3 个、终点恰 1 个；种子节点零 enc 零 est 零 pre（朝终点的粗占位边由引擎落）；worksheet 仅 coverage 携带',
-            evidence: '引提案字段清单对照骨架模式；携带 est/pre 或 capability 带 worksheet 点名',
-            source: '模板:种子提案', anchor: '零 enc 零 est 零 pre',
-          },
-          {
-            id: '先验路由', criterion: '附 Vault 先验段时起点放在熟悉边界（学习者笔记已稳定覆盖的不作起点，basis=vault）；无命中常识基线起步（basis=baseline）',
-            evidence: '引先验命中与起点选择对照；把已稳定覆盖内容当起点/先验命中仍标 baseline 点名',
-            source: '模板:种子提案', anchor: '熟悉边界',
-          },
-          {
-            id: '定位与取舍', criterion: 'reason 写「定位与取舍」：起点为什么放这里（略过哪些地形）+ 终点覆盖/显式舍弃了哪些面向',
-            evidence: '引 reason 与面向分解对照；只写定位不写取舍（或反之）点名',
-            source: '模板:种子提案', anchor: '定位与取舍',
           },
         ],
       },

@@ -52,7 +52,6 @@ import type { CompletionFold } from './seed.ts'
  * 装配上；**带行为的引擎子模块仍只准走门面**。 */
 export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
 export type { GateVerdict } from './agent.ts'
-export type { SeedDraftRequest } from './seed.ts'
 import { QuestionBank, validateBank, BankSubsystem } from './question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem } from './note-source.ts'
 import { LearnerCards, LearnerSubsystem } from './learner-cards.ts'
@@ -302,7 +301,6 @@ export class LearnhubEngine {
       enabledCourses: () => this.registry.enabled(),
       loadPrompt: kind => this.content2.loadPrompt(kind),
       locateNode: nodeSpec => this.locateNode(nodeSpec),
-      graphApply: (kind, pid, opts) => this.graph.graphApply(kind, pid, opts),
       graphPropose: (kind, yamlText) => this.graph.graphPropose(kind, yamlText),
       nodeNote: (c, graph, node) => this.content2.nodeNote(c, graph, node),
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
@@ -334,13 +332,12 @@ export class LearnhubEngine {
       clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, projects: this.projects, proposals: this.proposals,
       concepts: this.concepts, registry: this.registry, bank: this.bank,
-      noteManifest: this.noteManifest, vaultRoot: this.vaultRoot,
+      vaultRoot: this.vaultRoot,
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
-      loadPrompt: kind => this.content2.loadPrompt(kind),
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),
       seedAuditFor: (courseName, today) => this.seedAuditFor(courseName, today),
-      applyProjectPlanProposal: (pid, opts) => this.project.applyProjectPlanProposal(pid, opts),
+      applyProjectPlanProposal: pid => this.project.applyProjectPlanProposal(pid),
       experimentApply: pid => this.lab.experimentApply(pid),
     })
     this.content2 = new ContentSubsystem({

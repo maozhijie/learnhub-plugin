@@ -11,6 +11,7 @@ import assert from 'node:assert/strict'
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { withVault, DEFAULT_REGISTRY } from './helpers/vault.ts'
+import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import {
   COACH_TOOL_NAMES, coachToolSpecs, coachToolExecutor,
 } from '../src/engine/coach-tools.ts'
@@ -20,23 +21,11 @@ import type { CourseEntry } from '../src/engine/types.ts'
 
 const SEED_VAULT = { registry: null, graph: null }
 
-const CAPABILITY_SEED = `course: 数学
-concepts:
-  - canonical: 变化率
-    aliases: [rate of change]
-    definition: 刻画「变化多快」的概念
-endpoint:
-  name: 用导数解决优化问题
-  region: 基础
-  block: 终点块
-  teaches: {变化率: 会用}
-starts:
-  - name: 认识变化率
-    region: 基础
-    block: 起点块
-    basis: baseline
-    teaches: {变化率: 会用}
-`
+/** 起草夹具：概念「变化率」带别名/定义（登记表 query 过滤断言用）。 */
+const DRAFT = {
+  ...CAPABILITY_DRAFT,
+  concepts: [{ canonical: '变化率', aliases: ['rate of change'], definition: '刻画「变化多快」的概念' }],
+}
 
 function depsOf(engine: LearnhubEngine): CoachToolDeps {
   return {
@@ -79,9 +68,7 @@ test('白名单结构：恰 ADR-0041 七件只读视图，规格带描述与参�
 
 test('只读性：全白名单逐工具调用后 vault 字节级不变（零写侧、零队列触点的行为化断言）', async () => {
   await withVault(SEED_VAULT, async ({ engine, root }) => {
-    await engine.graph.createCourse('数学')
-    const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-    await engine.graph.graphApply('seed', r.id)
+    await draftCourse(engine, DRAFT)
     const course = await engine.registry.resolve('数学') as CourseEntry
     const before = await snapshotVault(root)
     const runTool = coachToolExecutor(depsOf(engine), course, {
@@ -98,11 +85,9 @@ test('只读性：全白名单逐工具调用后 vault 字节级不变（零写�
 
 test('视图内容：图面带节点取值域、节点卡带结构档、登记表 query 过滤、题库概况计数', async () => {
   await withVault(SEED_VAULT, async ({ engine, root }) => {
-    await engine.graph.createCourse('数学')
-    const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-    await engine.graph.graphApply('seed', r.id)
+    await draftCourse(engine, DRAFT)
     const course = await engine.registry.resolve('数学') as CourseEntry
-    // 种子 apply 自建课程根：题库文件按真实根落盘（bank_overview 取材）
+    // 起草自建课程根：题库文件按真实根落盘（bank_overview 取材）
     const { writeFile, mkdir } = await import('node:fs/promises')
     const bankDir = join(root, '学习中心', course.root, '题库')
     await mkdir(bankDir, { recursive: true })

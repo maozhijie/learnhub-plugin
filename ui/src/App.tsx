@@ -37,7 +37,7 @@ export interface AppFrame {
   loading: boolean
 }
 
-/** 空课程守卫只拦「纯消费」视图：提案/生成是建课回路的一半（种子起草 → 生成看
+/** 空课程守卫只拦「纯消费」视图：提案/生成是建课回路的一半（建课 → 加终点 → 生成看
  * 进度 → 提案人审 → 才有课程），我的课程自带建课入口（教练台空课形态）、实践/
  * 项目/今日自带空态入口，一律放行——否则死锁：建课要靠提案页人审，提案页却被
  * 「没有课程」拦住。 */
@@ -167,7 +167,7 @@ export default function App() {
       <div className={`app-body${view === 'courses.course' ? ' no-pad' : ''}`}>
         {NO_COURSE_BLOCKED.includes(view) && noCourse ? (
           <div className='app-empty-hint'>
-            <Empty description='还没有课程：到「课程」区「我的课程」的教练台新建课程——种子起草后在「提案收件箱」人审开工，等待时可在「生成队列」看进度' />
+            <Empty description='还没有课程：到「课程」区「我的课程」的教练台新建课程（名称即空图）——加终点声明方向后由教练回合生长结构，等待时可在「生成队列」看进度' />
             <Button type='primary' onClick={() => go('courses.home')}>去课程区建课</Button>
           </div>
         ) : (

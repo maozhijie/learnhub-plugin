@@ -206,7 +206,7 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
             </Space>} />
         )}
         <Text type='secondary' className='lh-block lh-mb-8'>
-          全局串行队列{sliced ? '的本课切片' : ''}：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。{sliced ? '种子起草与生长批由教练台分栏下发。' : '课程图的种子提案与生长批从教练台下发（入队即在本页看进度）。'}
+          全局串行队列{sliced ? '的本课切片' : ''}：入队即返回，同一时刻只执行一个节点管线，按入队顺序后台执行；刷新页面不丢失。{sliced ? '生长批由教练台分栏下发。' : '课程图的生长批从教练台下发（入队即在本页看进度）。'}
         </Text>
         {jobs === null ? null : jobs.length === 0 ? (
           <Empty description='当前没有生成任务' />

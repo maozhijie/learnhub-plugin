@@ -18,16 +18,6 @@
   ]
  },
  {
-  "id": "GET /courses · 空参",
-  "method": "GET",
-  "url": "/learnhub/api/courses",
-  "status": 200,
-  "res": [],
-  "calls": [
-   "registry.enabled()"
-  ]
- },
- {
   "id": "GET /lesson · 空参",
   "method": "GET",
   "url": "/learnhub/api/lesson",
@@ -1523,74 +1513,6 @@
   "calls": []
  },
  {
-  "id": "POST /node/pin · 空参",
-  "method": "POST",
-  "url": "/learnhub/api/node/pin",
-  "body": {},
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：pinned（路由 POST /node/pin）"
-  },
-  "calls": []
- },
- {
-  "id": "POST /node/pin · 全参",
-  "method": "POST",
-  "url": "/learnhub/api/node/pin",
-  "body": {
-   "course": "1",
-   "node": "1",
-   "pinned": true
-  },
-  "status": 200,
-  "res": [],
-  "calls": [
-   "learner.pinToday(\"1\",\"1\")"
-  ]
- },
- {
-  "id": "POST /node/pin · 缺 course",
-  "method": "POST",
-  "url": "/learnhub/api/node/pin",
-  "body": {
-   "node": "1",
-   "pinned": true
-  },
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：course（路由 POST /node/pin）"
-  },
-  "calls": []
- },
- {
-  "id": "POST /node/pin · 缺 node",
-  "method": "POST",
-  "url": "/learnhub/api/node/pin",
-  "body": {
-   "course": "1",
-   "pinned": true
-  },
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：node（路由 POST /node/pin）"
-  },
-  "calls": []
- },
- {
-  "id": "POST /node/pin · 缺 pinned",
-  "method": "POST",
-  "url": "/learnhub/api/node/pin",
-  "body": {
-   "course": "1",
-   "node": "1"
-  },
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：pinned（路由 POST /node/pin）"
-  },
-  "calls": []
- },
- {
   "id": "POST /node/complete · 空参",
   "method": "POST",
   "url": "/learnhub/api/node/complete",
@@ -1746,44 +1668,6 @@
   "res": [],
   "calls": [
    "graph.proposalApply(\"1\",undefined)"
-  ]
- },
- {
-  "id": "POST /proposals/impact · 空参",
-  "method": "POST",
-  "url": "/learnhub/api/proposals/impact",
-  "body": {},
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：kind（路由 POST /proposals/impact）"
-  },
-  "calls": []
- },
- {
-  "id": "POST /proposals/impact · 全参",
-  "method": "POST",
-  "url": "/learnhub/api/proposals/impact",
-  "body": {
-   "kind": "seed",
-   "id": 3
-  },
-  "status": 200,
-  "res": [],
-  "calls": [
-   "proposals.proposalImpact(\"seed\",3)"
-  ]
- },
- {
-  "id": "POST /proposals/impact · 缺id",
-  "method": "POST",
-  "url": "/learnhub/api/proposals/impact",
-  "body": {
-   "kind": "seed"
-  },
-  "status": 200,
-  "res": [],
-  "calls": [
-   "proposals.proposalImpact(\"seed\",undefined)"
   ]
  },
  {
@@ -3842,59 +3726,6 @@
   ]
  },
  {
-  "id": "POST /review · 空参",
-  "method": "POST",
-  "url": "/learnhub/api/review",
-  "body": {},
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：course（路由 POST /review）"
-  },
-  "calls": []
- },
- {
-  "id": "POST /review · 全参",
-  "method": "POST",
-  "url": "/learnhub/api/review",
-  "body": {
-   "course": "1",
-   "node": "1"
-  },
-  "status": 200,
-  "res": {
-   "message": []
-  },
-  "calls": [
-   "content2.contentReview(\"1\",\"1\")"
-  ]
- },
- {
-  "id": "POST /review · 缺 course",
-  "method": "POST",
-  "url": "/learnhub/api/review",
-  "body": {
-   "node": "1"
-  },
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：course（路由 POST /review）"
-  },
-  "calls": []
- },
- {
-  "id": "POST /review · 缺 node",
-  "method": "POST",
-  "url": "/learnhub/api/review",
-  "body": {
-   "course": "1"
-  },
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：node（路由 POST /review）"
-  },
-  "calls": []
- },
- {
   "id": "POST /question-save · 空参",
   "method": "POST",
   "url": "/learnhub/api/question-save",
@@ -5094,8 +4925,8 @@
    "error": "缺少必填参数：course（路由 POST /coach/growth）"
   },
   "calls": []
- }, {
- 
+ },
+ {
   "id": "POST /coach/stuck-report · 空参",
   "method": "POST",
   "url": "/learnhub/api/coach/stuck-report",
@@ -5105,10 +4936,8 @@
    "error": "缺少必填参数：course（路由 POST /coach/stuck-report）"
   },
   "calls": []
- 
  },
  {
- 
   "id": "POST /coach/stuck-report · 缺 node",
   "method": "POST",
   "url": "/learnhub/api/coach/stuck-report",
@@ -5120,10 +4949,8 @@
    "error": "缺少必填参数：node（路由 POST /coach/stuck-report）"
   },
   "calls": []
- 
  },
  {
- 
   "id": "POST /coach/stuck-report · 缺 text",
   "method": "POST",
   "url": "/learnhub/api/coach/stuck-report",
@@ -5136,10 +4963,8 @@
    "error": "缺少必填参数：text（路由 POST /coach/stuck-report）"
   },
   "calls": []
- 
  },
  {
- 
   "id": "POST /coach/stuck-report · 全参",
   "method": "POST",
   "url": "/learnhub/api/coach/stuck-report",
@@ -5164,7 +4989,6 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
- 
  },
  {
   "id": "POST /coach/compass · 空参",
@@ -5243,145 +5067,6 @@
   "res": [],
   "calls": [
    "graph.graphEncBackfill(undefined)"
-  ]
- },
- {
-  "id": "POST /seed/propose · 空参",
-  "method": "POST",
-  "url": "/learnhub/api/seed/propose",
-  "body": {},
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：course（路由 POST /seed/propose）"
-  },
-  "calls": []
- },
- {
-  "id": "POST /seed/propose · 全参",
-  "method": "POST",
-  "url": "/learnhub/api/seed/propose",
-  "body": {
-   "course": "1",
-   "worksheet": [
-    {
-     "block": "1"
-    }
-   ],
-   "goalType": "1",
-   "useVaultPrior": true
-  },
-  "status": 200,
-  "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。",
-   "queued": true
-  },
-  "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（锚定终点方向 → 模型）…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "graph.seedPropose({\"course\":\"1\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案收件箱一次人审即开工\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案收件箱一次人审即开工\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
-  ]
- },
- {
-  "id": "POST /seed/propose · 缺 course",
-  "method": "POST",
-  "url": "/learnhub/api/seed/propose",
-  "body": {
-   "worksheet": [
-    {
-     "block": "1"
-    }
-   ],
-   "goalType": "1",
-   "useVaultPrior": true
-  },
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：course（路由 POST /seed/propose）"
-  },
-  "calls": []
- },
- {
-  "id": "POST /seed/propose · 缺 worksheet",
-  "method": "POST",
-  "url": "/learnhub/api/seed/propose",
-  "body": {
-   "course": "1",
-   "goalType": "1",
-   "useVaultPrior": true
-  },
-  "status": 200,
-  "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。",
-   "queued": true
-  },
-  "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（锚定终点方向 → 模型）…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
-   "graph.seedPropose({\"course\":\"1\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案收件箱一次人审即开工\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案收件箱一次人审即开工\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[]},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
-  ]
- },
- {
-  "id": "POST /seed/propose · 缺 goalType",
-  "method": "POST",
-  "url": "/learnhub/api/seed/propose",
-  "body": {
-   "course": "1",
-   "worksheet": [
-    {
-     "block": "1"
-    }
-   ],
-   "useVaultPrior": true
-  },
-  "status": 200,
-  "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。",
-   "queued": true
-  },
-  "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（锚定终点方向 → 模型）…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "graph.seedPropose({\"course\":\"1\",\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案收件箱一次人审即开工\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案收件箱一次人审即开工\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":true,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
-  ]
- },
- {
-  "id": "POST /seed/propose · 缺 useVaultPrior",
-  "method": "POST",
-  "url": "/learnhub/api/seed/propose",
-  "body": {
-   "course": "1",
-   "worksheet": [
-    {
-     "block": "1"
-    }
-   ],
-   "goalType": "1"
-  },
-  "status": 200,
-  "res": {
-   "message": "「1」种子起草已入队（生成队列 FIFO）。",
-   "queued": true
-  },
-  "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子起草中（锚定终点方向 → 模型）…\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "graph.seedPropose({\"course\":\"1\",\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案收件箱一次人审即开工\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"种子起草\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"seed\",\"model\":\"deepseek-v4-flash\",\"message\":\"种子提案 #undefined 待人审：undefined 起点 → 终点「undefined」——提案收件箱一次人审即开工\",\"seedPayload\":{\"goalType\":\"capability\",\"useVaultPrior\":false,\"worksheet\":[{\"block\":\"1\"}]},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
  {
@@ -5850,10 +5535,10 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（里程碑计划）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5893,10 +5578,10 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（里程碑计划）…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5919,10 +5604,10 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（里程碑计划）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"notes\":[\"1\"]},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -5943,10 +5628,10 @@
   "calls": [
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（计划 + 种子双提案）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（里程碑计划）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\"},{\"ports\":{},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'plan')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },
@@ -6407,41 +6092,6 @@
   "calls": []
  },
  {
-  "id": "PUT /day-cutoff · 空参",
-  "method": "PUT",
-  "url": "/learnhub/api/day-cutoff",
-  "body": {},
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：value（路由 PUT /day-cutoff）"
-  },
-  "calls": []
- },
- {
-  "id": "PUT /day-cutoff · 全参",
-  "method": "PUT",
-  "url": "/learnhub/api/day-cutoff",
-  "body": {
-   "value": "1"
-  },
-  "status": 200,
-  "res": [],
-  "calls": [
-   "sched2.setDayCutoff(\"1\")"
-  ]
- },
- {
-  "id": "PUT /day-cutoff · 缺 value",
-  "method": "PUT",
-  "url": "/learnhub/api/day-cutoff",
-  "body": {},
-  "status": 500,
-  "res": {
-   "error": "缺少必填参数：value（路由 PUT /day-cutoff）"
-  },
-  "calls": []
- },
- {
   "id": "PUT /jol · 空参",
   "method": "PUT",
   "url": "/learnhub/api/jol",
@@ -6681,12 +6331,12 @@
   "calls": []
  },
  {
-  "id": "GET /node/pin · 方法不匹配（POST 路由）",
+  "id": "GET /rebuild · 方法不匹配（POST 路由）",
   "method": "GET",
-  "url": "/learnhub/api/node/pin",
+  "url": "/learnhub/api/rebuild",
   "status": 404,
   "res": {
-   "error": "unknown route: GET /node/pin"
+   "error": "unknown route: GET /rebuild"
   },
   "calls": []
  },

@@ -126,7 +126,7 @@ function runContractGate(
   }
 }
 
-test('文本锚门：14 模板站 + 判卷族 + 交互件/独立解题面与注册表全量对账（漂移即红）', () => {
+test('文本锚门：模板站 + 判卷族 + 交互件/独立解题面与注册表全量对账（漂移即红）', () => {
   runContractGate(OUTPUT_CONTRACTS, OUT_OF_SCOPE_STATIONS, Content.PROMPT_KINDS, new Set(Object.values(STATIONS)))
 })
 
@@ -150,7 +150,7 @@ test('自检：注册表声明句被改坏（改注册表不改模板）门必�
 
 test('自检：模板键漏登/站名幽灵，覆盖完备性必须变红', () => {
   const kinds = { ...Content.PROMPT_KINDS }
-  delete kinds['种子提案']
+  delete kinds['课程大纲']
   assert.throws(() => runContractGate(OUTPUT_CONTRACTS, OUT_OF_SCOPE_STATIONS, kinds, new Set(Object.values(STATIONS))), /一一对应/)
   assert.throws(
     () => runContractGate(OUTPUT_CONTRACTS, [{ station: '不存在的站', reason: 'x' }], Content.PROMPT_KINDS, new Set(Object.values(STATIONS))),

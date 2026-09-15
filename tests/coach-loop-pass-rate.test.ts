@@ -16,26 +16,19 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { withVault } from './helpers/vault.ts'
+import { draftCourse } from './helpers/drafted.ts'
+import type { DraftSpec } from './helpers/drafted.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
 import { systemClock } from '../src/host/clock.ts'
 
 const SEED_VAULT = { registry: null, graph: null }
 
-const CAPABILITY_SEED = `course: 数学
-concepts:
-  - canonical: 变化率
-endpoint:
-  name: 用导数解决优化问题
-  region: 基础
-  block: 终点块
-  teaches: {变化率: 会用}
-starts:
-  - name: 认识变化率
-    region: 基础
-    block: 起点块
-    basis: baseline
-    teaches: {变化率: 会用}
-`
+/** 起草夹具（概念「变化率」随批铸名）：起点/终点 teach 引用（回路对表底座）。 */
+const CAPABILITY_DRAFT: DraftSpec = {
+  concepts: [{ canonical: '变化率' }],
+  starts: [{ name: '认识变化率', region: '基础', block: '起点块', basis: 'baseline', teaches: { 变化率: '会用' } }],
+  endpoint: { name: '用导数解决优化问题', region: '基础', block: '终点块', teaches: { 变化率: '会用' } },
+}
 
 /** 金样本裁决骨架（与 coach-growth 的金样本同形：前进批 + pre 引用 + teaches 对表；
  * #198 主线批必接线终点——set_pre 替换语义随批接线新前沿）。 */
@@ -162,9 +155,8 @@ test('受理门通过率对照（12 场景）：单发 0/12 vs 回路 12/12—�
   const seenTargets = new Set<string>()
   for (const sc of SCENARIOS) {
     await withVault(SEED_VAULT, async ({ engine }) => {
-      await engine.graph.createCourse('数学')
-      const r = await engine.graph.graphPropose('seed', CAPABILITY_SEED) as { id: number }
-      await engine.graph.graphApply('seed', r.id)
+      // #256 种子通道退役：起草夹具直接落盘
+      await draftCourse(engine, CAPABILITY_DRAFT)
 
       // 单发形态：盲产裁决被受理门拒收（零提案落盘）
       await assert.rejects(

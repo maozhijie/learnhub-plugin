@@ -345,18 +345,6 @@ export class ContentSubsystem {
   }
 
 
-  async contentReview(courseKey: string | undefined, node: string): Promise<string> {
-    const c = await this.e.registry.resolve(courseKey)
-    const { graph, state, broken } = await this.e.loadView(c)
-    if (!graph.nset.has(node)) throw new Error(`[review] 未知节点: ${node}`)
-    this.e.assertNoteOk(c, graph, broken, node, 'review')
-    return this.e.content.review(c.root, graph, node, n => state[n], async (n, fm) => {
-      const path = this.e.paths.courseNotePath(c.root, graph.blockOf[n][1], n)
-      await this.e.updateNoteFm(path, fm)
-    })
-  }
-
-
   async contentQueue(courseKey: string | undefined, node: string): Promise<string> {
     const c = await this.e.registry.resolve(courseKey)
     return this.e.content.queueManual(c.root, node)

@@ -11,16 +11,12 @@ import { YAML } from './yaml.ts'
 import { Store } from './store.ts'
 import { atomicWrite } from './io.ts'
 import { runWriteUnit } from './write-unit.ts'
-import { Graph, GraphStore, loadRegionDoc, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc, structureCheck } from './graph.ts'
+import { Graph, GraphStore, loadRegionDoc, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from './graph.ts'
 import { ConceptRegistry, applyConceptMints, conceptReferenceErrors, mintConflicts, namesOf, validateConceptEntry } from './concepts.ts'
 import type { ConceptEntry, ConceptRef } from './concepts.ts'
 import { saveNote, defaultFrontmatter } from './notes.ts'
-import {
-  validateSeedProposal, seedNodeToGNode, anchorFromSeed, endpointNames, readAnchors, writeAnchors, isSeedGraph,
-} from './seed.ts'
-import type { SeedProposalSpec, EndpointAnchor } from './seed.ts'
-import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
-import type { PriorFeedVerdict } from './vault-links.ts'
+import { endpointNames, readAnchors, writeAnchors, isSeedGraph } from './seed.ts'
+import type { EndpointAnchor } from './seed.ts'
 import {
   SECTION_ROUTE, compassScaffold, withSectionText, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
@@ -33,8 +29,8 @@ import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconce
 import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { CourseEntry, ProposalKind, ProposalRec } from './types.ts'
-import type { GraphEditProposalResult, GraphSeedProposalResult, GraphEnrichProposalResult, SeedImpactDoc } from './views/proposals.ts'
-import type { GraphApplyEditResult, GraphApplySeedResult, GraphApplyEnrichResult } from './views/graph.ts'
+import type { GraphEditProposalResult, GraphEnrichProposalResult } from './views/proposals.ts'
+import type { GraphApplyEditResult, GraphApplyEnrichResult } from './views/graph.ts'
 
 /** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。 */
 export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
@@ -378,21 +374,6 @@ export function consolidationGateErrors(
   return errors
 }
 
-/** 种子提案全部概念引用（起点/终点节点的概念字段组；铸名随种子提案的写入单元落盘）。 */
-function conceptRefsOfSeed(spec: SeedProposalSpec): ConceptRef[] {
-  const refs: ConceptRef[] = []
-  for (const [where, node] of [...spec.starts.map((s, i) => [`starts.${i}`, s] as const), ['endpoint', spec.endpoint] as const]) {
-    for (const concept of Object.keys(node.teaches ?? {})) refs.push({ where: `teaches[${where}(${node.name})]`, concept })
-    for (const concept of Object.keys(node.assumes ?? {})) refs.push({ where: `assumes[${where}(${node.name})]`, concept })
-    for (const m of node.misconceptions ?? []) refs.push({ where: `misconceptions[${where}(${node.name})]`, concept: m.concept })
-  }
-  return refs
-}
-
-/** apply 返回的 findings：audit warns 摘要 + 健康分基线提示（健康分是审计基线
- * 报告项，引擎不设阈值、不进完成判据——完成=终点锚判据。
- * seedPhase=true 时健康分提示豁免（#142：种子图健康分不设阈值——起点/终点几张
- * 节点的图分数必然低，提示是噪音；生长批进入后恢复）。 */
 export function applyFindings(audit: ApplyAudit, seedPhase = false): string[] {
   const findings = audit.warns.map(w => `⚠ ${w}`)
   if (!seedPhase && audit.ok && audit.health > 0 && audit.health < 80) {
@@ -512,7 +493,7 @@ export class GraphProposals {
   /** 概念引用对表门（#141）：teaches/assumes/误解 的概念引用必须精确命中登记表
    * 在册名字（canonical 或别名）或提案铸名块的铸名；铸名与登记表撞名同样
    * 拒收。返回错误行列表（空 = 通过）。root 参数是课程 root（非路径）。
-   * edit 与 seed（#142）共用。 */
+   * edit 提案受理时用。 */
   private async conceptGateErrors(root: string, refs: ConceptRef[], mints: ConceptEntry[]): Promise<string[]> {
     const existing = await this.concepts.load(root) // 登记表 Broken 在此抛错，apply 不落盘
     const errors = mintConflicts(mints, existing)
@@ -521,7 +502,7 @@ export class GraphProposals {
     return errors
   }
 
-  /** 为图中缺笔记的节点补骨架文件（幂等）：seed/edit apply 落图后调用。
+  /** 为图中缺笔记的节点补骨架文件（幂等）：apply 落图后调用。
    * 节点存在于图就该有 frontmatter 文件——vault 笔记是调度状态的事实源。 */
   async ensureNotesFor(root: string, regions: GRegion[]): Promise<number> {
     let created = 0
@@ -568,7 +549,7 @@ export class GraphProposals {
     const errors = simulateOps(regions, graph, spec.ops)
     const conceptErrors = await this.conceptGateErrors(course.root, conceptRefsOfOps(spec.ops), spec.concepts ?? [])
     // 终点锚保护 + 生长方向不变式（#142/#198）：锚定的终点不可经 edit 直改，
-    // add_node 禁以终点为 pre、主线批必接线——换终点只走重新种子提案。
+    // add_node 禁以终点为 pre、主线批必接线——换终点只走 removeEndpoint + addEndpoint。
     const endpointErrors = await this.endpointGuardErrors(course.root, spec)
     // 巩固门（#145）：operator=巩固 的 add_node 只引已教概念。
     const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
@@ -705,11 +686,11 @@ export class GraphProposals {
     const graph = new Graph(regions)
     const errors = simulateOps(regions, graph, spec.ops) // 二次校验
     if (errors.length) throw new Error('[apply-edit] 提案已不适用当前图（被拒绝，可重提）。')
-    // 终点锚保护复验（#142/#198）：受理与 apply 之间锚可能新落（种子 apply 并发），
+    // 终点锚保护复验（#142/#198）：受理与 apply 之间锚可能新落（加终点并发），
     // 两门全过才开始任何写盘。
     const endpointErrors = await this.endpointGuardErrors(root, spec)
     if (endpointErrors.length) {
-      throw new Error(`[apply-edit] 终点锚保护拒绝写入——换终点只走重新种子提案（kind=seed）。\n${endpointErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+      throw new Error(`[apply-edit] 终点锚保护拒绝写入——换终点只走 removeEndpoint + addEndpoint（终点锚由学习者手加，不直改）。\n${endpointErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     // 巩固门复验（#145）：受理与 apply 之间图可能变化，已教概念集在当前图上重算。
     const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
@@ -907,281 +888,7 @@ export class GraphProposals {
     }
   }
 
-  // ---- 种子提案（kind=seed，#142：课程新入口 + 终点锚）----
-
-  /** 先验喂料分流判定（#142）：≥0.7 候选对在给定图结构上的回应情况。缓存缺文件 =
-   * 零候选（Missing 合法空态，零先验零注入全绿）；坏档 fail loud（引擎 state 契约文件）。 */
-  private async priorFeed(graph: Graph): Promise<{ responded: PriorFeedVerdict[]; unresponded: PriorFeedVerdict[] }> {
-    const cache = await readVaultLinksCache(this.paths.vaultLinksPath, this.fs)
-    if (!cache) return { responded: [], unresponded: [] }
-    return splitPriorFeed(cache.edges, graph.names, graph)
-  }
-
-  /** graph propose-seed（#142；ADR-0076 种子降职：给已注册课程起草结构，不再建课）：
-   * schema 门 → 课程已注册门（未注册拒并指引先建课）→ 终点撞锚门 → 结构检查（投影图）
-   * → 概念对表 → 先验喂料分流（≥0.7 未被结构回应的候选进 warns，非阻）→ pending，
-   * 一次人审即开工。 */
-  async proposeSeed(yamlText: string): Promise<GraphSeedProposalResult> {
-    const warns: string[] = []
-    const v = validateSeedProposal(YAML.parseModel(yamlText), warns)
-    if (v.errors) throw new Error(`[propose-seed] schema 校验失败，提案未受理。\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}`)
-    const spec = v.spec!
-    const course = await this.registry.get(spec.course)
-    if (!course) {
-      throw new Error(`[propose-seed] 注册表中没有课程「${spec.course}」——种子已降职为「给已注册课程起草结构」（ADR-0076）：先在面板建课（名称即空图），再来起草。`)
-    }
-    const root = course.root
-    // 终点撞锚门：同名终点已有锚 = 换方向，那是学习者的显式动作（删终点再起草）——
-    // 起草不覆盖既有锚（reseed 的锚覆盖路径已随 ADR-0076 退役）
-    const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
-    if (anchors.some(a => a.endpoint === spec.endpoint.name)) {
-      throw new Error(`[propose-seed] 终点「${spec.endpoint.name}」已有锚记录——起草不覆盖既有锚；换方向由学习者删终点后重提。`)
-    }
-    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
-    const existingRegions: GRegion[] = []
-    for (const path of Object.values(await store.regionFiles())) {
-      existingRegions.push(loadRegionDoc(YAML.parse(await this.fs.readFile(path)), path))
-    }
-    const seedRegions = seedSpecToRegions(spec)
-    const errors = structureCheck(existingRegions.length ? new Graph(existingRegions) : null, seedRegions, '种子提案')
-    const conceptErrors = await this.conceptGateErrors(root, conceptRefsOfSeed(spec), spec.concepts ?? [])
-    // 先验喂料分流：在投影后的合并图上判回应（含本提案新节点）
-    const feed = await this.priorFeed(new Graph([...existingRegions, ...seedRegions]))
-    warns.push(...priorFeedWarns(feed.unresponded))
-    if (errors.length || conceptErrors.length) {
-      throw new Error(`[propose-seed] 提案未受理（修正后重提）。\n`
-        + [...errors, ...conceptErrors].map(e => `  ✗ ${e}`).join('\n'))
-    }
-    const { pid } = await this.saveArtifact('seed', spec.course, YAML.parseModel(yamlText))
-    await this.store.updateProposal(pid, {
-      summary: `种子（${spec.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'}）：${spec.starts.length} 起点 → 终点「${spec.endpoint.name}」`
-        + (spec.worksheet?.length ? `；块工作表 ${spec.worksheet.length} 项` : ''),
-    })
-    return {
-      id: pid, kind: 'seed', course: spec.course,
-      goal_type: spec.goal_type, endpoint: spec.endpoint.name, starts: spec.starts.length,
-      ...(spec.worksheet?.length ? { worksheet: spec.worksheet.length } : {}),
-      prior_feed_unresponded: feed.unresponded.length,
-      ...(warns.length ? { warns } : {}),
-    }
-  }
-
-  /** 种子提案影响预览（#159）：起草应用确认框的知识前置——知情后再确认（ADR-0076：
-   * 课程必须已注册，「按空图直算」的建课分支已删；对空图课程照常直算——全部节点=新建、
-   * 零锚可覆盖）。只读现势计算（提案产物 schema 复验 + 当前图 + 现锚），只把引擎真会
-   * 做的事说清楚：新建哪些节点、什么全保留。 */
-  async proposalImpact(kind: string, pid?: number): Promise<SeedImpactDoc> {
-    if (kind !== 'seed') {
-      throw new Error(`[proposal-impact] 只有种子提案（kind=seed）有影响预览（收到 ${String(kind)}）。`)
-    }
-    const list = await this.store.loadProposals()
-    const prop = pid !== undefined
-      ? list.find(p => p.id === pid)
-      : [...list].reverse().find(p => p.status === 'pending' && p.kind === 'seed')
-    if (!prop || prop.kind !== 'seed' || prop.status !== 'pending') {
-      const label = pid !== undefined ? `#${pid}` : '（最新 pending）'
-      throw new Error(`[proposal-impact] 种子提案 ${label} 不存在或已决（预览只对 pending 提案有意义）。`)
-    }
-    const v = validateSeedProposal(await this.loadArtifact(prop.artifact))
-    if (v.errors || !v.spec) {
-      throw new Error(`[proposal-impact] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
-    }
-    const spec = v.spec
-    const course = await this.registry.get(spec.course)
-    if (!course) {
-      throw new Error(`[proposal-impact] 注册表中没有课程「${spec.course}」——起草只作用于已注册课程（先建课，名称即空图）。`)
-    }
-    const root = course.root
-    const regions = await new GraphStore(this.paths, this.paths.courseRoot(root), this.fs).load()
-    const graph = new Graph(regions)
-    const names = new Set(graph.names)
-    const proposed = [...spec.starts.map(s => s.name), spec.endpoint.name]
-    const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
-    return {
-      course: spec.course,
-      new_nodes: proposed.filter(n => !names.has(n)),
-      existing_nodes: proposed.filter(n => names.has(n)),
-      graph_nodes: graph.names.length,
-      current_anchors: anchors.map(a => ({
-        endpoint: a.endpoint, declared: a.declared, ...(a.origin_proposal !== undefined ? { origin_proposal: a.origin_proposal } : {}),
-      })),
-      compass_reset: !this.fs.exists(this.paths.compassPath(root)),
-      ...(spec.worksheet?.length ? { worksheet_items: spec.worksheet.length } : {}),
-    }
-  }
-
-  /** graph apply-seed（#142；ADR-0076 种子降职：只作用于已注册课程，不再建课）：
-   * 概念对表复验 + 结构复验 → 落图（起点 + 终点 + 朝终点的粗占位边）→ 终点锚落盘
-   * （逐条追加，不覆盖既有锚）→ 铸名 + 快照 + 笔记脚手架 + journal。罗盘只在缺席时
-   * 脚手架初建，绝不重置（reseed 重置路径已随 ADR-0076 退役）。同源双提案守卫（#149）：
-   * 反编译 pair 联动的种子提案不得先于计划半区单独 apply（联合入口走 opts.pairApply
-   * 豁免；计划已生效的恢复续段放行）。 */
-  async applySeed(
-    pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }, today?: string,
-    opts: { pairApply?: boolean } = {},
-  ): Promise<GraphApplySeedResult> {
-    if (!audit.ok) throw new Error('[apply-seed] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
-    const prop = await this.store.takePending('seed', pid)
-    const pairBlock = Store.pairApplyBlock(prop, await this.store.loadProposals(), opts)
-    if (pairBlock) throw new Error(`[apply-seed] ${pairBlock}`)
-    const v = validateSeedProposal(await this.loadArtifact(prop.artifact))
-    if (v.errors || !v.spec) throw new Error(`[apply-seed] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
-    const spec = v.spec
-    const course = await this.registry.get(spec.course)
-    if (!course) throw new Error(`[apply-seed] 注册表中没有课程「${spec.course}」（受理后状态变化）——reject 本提案后先建课再重新起草。`)
-    const root = course.root
-    const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
-    // 概念对表复验（#141 同款：受理与 apply 之间登记表可能变化；铸名侧幂等），两门全过才开始写盘
-    const existing = await this.concepts.load(root)
-    const { errors: mintErrors, entries: mergedEntries } = applyConceptMints(existing, spec.concepts ?? [])
-    const conceptErrors = [...mintErrors, ...conceptReferenceErrors(conceptRefsOfSeed(spec), namesOf(mergedEntries))]
-    if (conceptErrors.length) {
-      throw new Error(`[apply-seed] 概念引用对表失败，提案不落盘。\n${conceptErrors.map(e => `  ✗ ${e}`).join('\n')}`)
-    }
-    // 结构复验：图可能在受理后变化（重名/断边/环在合并视图上重查）
-    const existingFiles = await store.regionFiles()
-    const existingRegions: GRegion[] = []
-    for (const path of Object.values(existingFiles)) {
-      existingRegions.push(loadRegionDoc(YAML.parse(await this.fs.readFile(path)), path))
-    }
-    const seedRegions = seedSpecToRegions(spec)
-    const errors = structureCheck(existingRegions.length ? new Graph(existingRegions) : null, seedRegions, '种子提案')
-    if (errors.length) {
-      throw new Error(`[apply-seed] 提案已不适用当前图（被拒绝，可重提）。\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
-    }
-    const createdBlocks = new Set<string>()
-    const existingBlocks = new Map<string, Set<string>>()
-    for (const region of existingRegions) existingBlocks.set(region.name, new Set(region.blocks.map(b => b.name)))
-    for (const region of seedRegions) {
-      const current = existingBlocks.get(region.name)
-      for (const block of region.blocks) {
-        if (!current?.has(block.name)) createdBlocks.add(block.name)
-      }
-    }
-
-    // 写入单元（#176）：写序照今天的声明——「铸名 → 图区落盘 → 终点锚 → 罗盘 →
-    // 快照 → 笔记骨架 → journal(graph_seed) → 提案 applied」。铸名孤儿条目合法、
-    // 悬空引用违约（登记表先写、图在后）；块合并无去重，重放靠上方 structureCheck
-    // 重名拒收（门拦，不靠续段）。失败上抛中止，不回滚不续跑，失败不写 journal。
-    let regions: Awaited<ReturnType<GraphStore['load']>> = []
-    let version = 0
-    const declared = today ?? todayStr(new Date(this.clock.nowMs()))
-    const anchor = anchorFromSeed(spec, prop.id, declared)
-    // 锚集合逐条追加（ADR-0076：起草不覆盖既有锚——同名终点已在受理门拒绝，这里只防
-    // 受理与 apply 之间的竞态）：其他终点的锚原样保留
-    const anchorPath = this.paths.anchorPath(root)
-    const anchorsBefore = await readAnchors(anchorPath, this.fs)
-    if (anchorsBefore.some(a => a.endpoint === anchor.endpoint)) {
-      throw new Error(`[apply-seed] 终点「${anchor.endpoint}」在受理后新落了锚（受理后状态变化）——reject 本提案后重提。`)
-    }
-    const anchorsNext = [...anchorsBefore, anchor]
-    const written: string[] = []
-    // 罗盘现状读取（在写序第一笔前读与第四步读等价——本单元内无更早的罗盘写入）
-    const compassPath = this.paths.compassPath(root)
-    const existingCompass = this.fs.exists(compassPath) ? await this.fs.readFile(compassPath) : null
-    // 罗盘只在缺席时脚手架初建；在场原样保留（批注区/路线/ETA 都不动——重置路径已退役）
-    const compassNext = existingCompass ?? compassScaffold(course.name)
-    await runWriteUnit('applySeed', {
-      clock: this.clock!,
-      journal: rec => this.store.appendJournal(rec),
-      steps: [
-        {
-          // 写序第一笔照旧：登记表先写，图在后——铸名幂等已在上方 applyConceptMints 门内
-          name: '铸名落概念登记表',
-          run: async () => {
-            if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
-          },
-        },
-        {
-          // data/*.yaml 落图（既有区按块名合并；新区新建文件）
-          name: '图区落盘',
-          run: async () => {
-            for (const region of seedRegions) {
-              const path = existingFiles[region.name]
-              if (path) {
-                const current = loadRegionDoc(YAML.parse(await this.fs.readFile(path)), path)
-                const byName = new Map(current.blocks.map(b => [b.name, b]))
-                for (const nb of region.blocks) {
-                  const hit = byName.get(nb.name)
-                  if (hit) hit.nodes.push(...nb.nodes)
-                  else current.blocks.push(nb)
-                }
-                await store.writeRegionDoc(path, current)
-              } else {
-                const idx = Object.keys(existingFiles).length + written.length
-                await store.writeRegionDoc(`${this.paths.dataDir(root)}/${String(idx).padStart(2, '0')}_${region.name}.yaml`, region)
-              }
-              written.push(region.name)
-            }
-          },
-        },
-        {
-          // 方向锚集合：按终点并入（同名替换、其余保留）——一个终点的起草不动其他终点
-          name: '终点锚落盘',
-          run: async () => {
-            await writeAnchors(anchorPath, anchorsNext, this.fs)
-          },
-        },
-        {
-          // 罗盘常驻（#143 / ADR-0033 透明度装置）：缺席 = 脚手架初建（路线/ETA 待初画
-          // 与周挂载接管）；在场 = 原样保留。零 LLM 依赖，apply 永不被透明度装置挡住。
-          name: '罗盘常驻',
-          run: async () => {
-            if (existingCompass) return
-            await atomicWrite(compassPath, compassNext, this.fs)
-          },
-        },
-        {
-          name: '快照',
-          run: async () => {
-            regions = await store.load()
-            version = (await this.store.latestSnapshotVersion(course.name)) + 1
-            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions))
-          },
-        },
-        {
-          // 逐节点 existsSync 跳过（步骤内幂等：已有笔记的节点不覆盖）
-          name: '笔记骨架补齐',
-          run: async () => { await this.ensureNotesFor(root, regions) },
-        },
-        {
-          name: '操作 journal',
-          run: async () => {
-            await this.store.appendJournal({
-              course: course.name, node: '*', rating: null, kind: 'graph_seed', elapsed_days: 0,
-              session: String(prop.id),
-              detail: `种子（${spec.goal_type === 'coverage' ? '覆盖锚定' : '能力锚定'}）：起点 ${spec.starts.map(s => s.name).join('、')} → 终点 ${spec.endpoint.name}；占位边 ${spec.starts.length} 条`
-                + (spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''),
-            })
-          },
-        },
-        {
-          name: '提案 applied',
-          run: async () => {
-            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: `终点锚落盘；快照 v${version}` })
-          },
-        },
-      ],
-    })
-    const merged = new Graph(regions)
-    const feed = await this.priorFeed(merged)
-    // 种子图豁免：图仍 = 锚集合的种子节点并集时健康分不设阈值（findings 不带 <80 提示）
-    const seedPhase = isSeedGraph(anchorsNext, merged)
-    return {
-      course: course.name,
-      goal_type: spec.goal_type,
-      endpoint: spec.endpoint.name,
-      starts: spec.starts.map(s => s.name),
-      declared,
-      ...(spec.worksheet?.length ? { worksheet_items: spec.worksheet.length } : {}),
-      regions: written,
-      snapshot: version,
-      created_blocks: [...createdBlocks],
-      compass: { state: 'scaffold' as const, annotations_preserved: false },
-      prior_feed: { unresponded: feed.unresponded.length },
-      findings: applyFindings(audit, seedPhase),
-    }
-  }
+  // ---- 建课（ADR-0076：名称即空图）----
 
   /** 名称建课（ADR-0076 §一：建课 = 名称即空图）：面板只收一个课程名，一个写入单元
    * 落全部脚手架——注册表条目（enabled）+ 课程根目录（data/课程/state）+
@@ -1565,9 +1272,7 @@ export class GraphProposals {
     }
   }
 
-  /** graph reject。同源双提案联动（#149）：pair 在场的提案被拒时，pending 的另一半
-   * 联动同拒（同进同退——反编译双提案是一个逻辑单元，半挂的 pending 只会误导人审）；
-   * 已决的另一半不动（applied 不回滚、rejected 幂等）。 */
+  /** graph reject（全留痕：pending → rejected，决策理由随行）。 */
   async reject(pid: number, note = ''): Promise<ProposalRec> {
     if (!Number.isInteger(pid) || pid <= 0) {
       throw new Error(`[reject] 提案 id 必须是正整数（收到 ${String(pid)}）；拒绝不能省略 id。`)
@@ -1576,15 +1281,6 @@ export class GraphProposals {
     const prop = list.find(p => p.id === pid)
     if (!prop || prop.status !== 'pending') throw new Error(`[reject] 提案 #${pid} 不存在或已决。`)
     await this.store.updateProposal(pid, { status: 'rejected', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: note })
-    if (prop.pair) {
-      const sibling = list.find(p => p.id === prop.pair)
-      if (sibling && sibling.status === 'pending') {
-        await this.store.updateProposal(sibling.id, {
-          status: 'rejected', decided: new Date(this.clock.nowMs()).toISOString(),
-          decision_note: `同源双提案同退（#${pid} 已拒，联动拒绝）${note ? `：${note}` : ''}`,
-        })
-      }
-    }
     return prop
   }
 
@@ -1605,33 +1301,6 @@ export class GraphProposals {
     }
     return list.slice(-limit).reverse()
   }
-}
-
-/** SeedProposal → GRegion[]（#142）：起点 pre=[]，终点 pre=起点——朝终点的粗占位边
- * （生长批用 set_pre 消化细化）；种子节点零 enc 零 est。同区同名块聚进同一块。 */
-export function seedSpecToRegions(spec: SeedProposalSpec): GRegion[] {
-  const byRegion = new Map<string, Map<string, GNode[]>>()
-  const put = (node: GNode, region: string, block: string): void => {
-    let blocks = byRegion.get(region)
-    if (!blocks) { blocks = new Map(); byRegion.set(region, blocks) }
-    let nodes = blocks.get(block)
-    if (!nodes) { nodes = []; blocks.set(block, nodes) }
-    nodes.push(node)
-  }
-  for (const s of spec.starts) put(seedNodeToGNode(s, []), s.region, s.block)
-  put(seedNodeToGNode(spec.endpoint, spec.starts.map(s => s.name)), spec.endpoint.region, spec.endpoint.block)
-  return [...byRegion.entries()].map(([name, blocks]) => ({
-    name,
-    color: '',
-    blocks: [...blocks.entries()].map(([bname, nodes]) => ({ name: bname, nodes })),
-  }))
-}
-
-/** 先验喂料分流的受理回执行（#142：≥0.7 须被结构显式回应——可见非阻，喂料分流
- * 取代人审分流；回应 = pre/enc 边落地，或 vault 重扫后候选自然消失）。 */
-export function priorFeedWarns(unresponded: PriorFeedVerdict[]): string[] {
-  return unresponded.map(v =>
-    `≥0.7 先验候选未被结构回应: ${v.aNode} ~ ${v.bNode}（w=${v.w}）——喂料分流要求结构显式回应（补 pre/enc 边），或确属无关（重扫 vault 后消失）`)
 }
 
 /** add_node op → GNode（模拟与实落共用一个构造；概念字段组随 op 携带，键名统一后取 name）。 */

@@ -42,7 +42,6 @@ export type {
   LearnerCardItem, LearnerCardKind, LearnerForgetResult,
   LearnerQueueDoc, LearnerRateResult, LessonDoc, LessonSection, MemoryHealthDoc as MemoryHealth,
   NoteSourceDoc, NoteSourceItem, NoteSourceRegisterResult, ProposalRec as PropItem,
-  SeedImpactDoc,
   ProjectCrossDoc, ProjectExecRec, ProjectExecResult, ProjectLifecycle,
   QuestionForgetResult, QuestionGetDoc, QuestionItem, QuestionKind, QuestionRateResult,
   QuestionsAllDoc, QuestionsDoc, QueueCard, QueueItem, RecEvent, RecEventType, RecommendDoc, ReviewCard,

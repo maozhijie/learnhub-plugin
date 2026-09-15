@@ -15,9 +15,9 @@ export default function CoursesPage({ frame }: { frame: AppFrame }) {
     return (
       <Space direction='vertical' className='lh-full' size={12}>
         <Card>
-          <Text type='secondary'>还没有课程——在这里新建：种子一次人审即开工，图随教练回合沿真实的需要生长。</Text>
+          <Text type='secondary'>还没有课程——在这里新建：落一门空课，加终点声明方向后由教练回合沿真实的需要生长。</Text>
         </Card>
-        {/* 空 vault：驾驶舱仍然可达——建课从这里开始（种子提案一次人审即开工） */}
+        {/* 空 vault：驾驶舱仍然可达——建课从这里开始（名称即空图） */}
         <CoachCockpit course={null} />
       </Space>
     )
