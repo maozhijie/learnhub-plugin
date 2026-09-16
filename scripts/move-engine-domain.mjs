@@ -48,7 +48,7 @@ const SPEC_PATTERNS = [
  * 相对 specifier 解析（带 `.ts` 直用 → 补扩展名 → 目录 index 的兜底，与
  * import-rules.test.ts::resolveSpec 同款）。非相对项返回 null。
  */
-export function resolveSpec(importerAbs, spec) {
+function resolveSpec(importerAbs, spec) {
   if (!spec.startsWith('.')) return null
   const abs = resolve(dirname(importerAbs), spec)
   for (const cand of [abs, `${abs}.ts`, `${abs}.tsx`, join(abs, 'index.ts'), join(abs, 'index.tsx')]) {
@@ -58,7 +58,7 @@ export function resolveSpec(importerAbs, spec) {
 }
 
 /** 收集全部相对 specifier 及其在原文中的 [start, end) 偏移（按出现顺序）。 */
-export function collectSpecs(code) {
+function collectSpecs(code) {
   const found = []
   for (const re of SPEC_PATTERNS) {
     for (const m of code.matchAll(re)) {
@@ -74,7 +74,7 @@ export function collectSpecs(code) {
  * `movedTarget` 把「搬移前的绝对路径」映射到「搬移后的绝对路径」，未搬文件返回原值。
  * 返回 [{start, end, from, to}]，按偏移降序（好从尾部往前原地替换）。
  */
-export function planRewrite(code, oldAbs, newAbs, movedTarget) {
+function planRewrite(code, oldAbs, newAbs, movedTarget) {
   const edits = []
   for (const { start, end, spec } of collectSpecs(code)) {
     const resolved = resolveSpec(oldAbs, spec)
@@ -93,6 +93,7 @@ export function planRewrite(code, oldAbs, newAbs, movedTarget) {
 
 function walkSources(root) {
   const out = []
+  if (!existsSync(root)) return out // 缺根不是错误：改写面按仓现状取，缺席的根贡献空集
   const walk = abs => {
     for (const e of readdirSync(abs, { withFileTypes: true })) {
       if (e.isDirectory()) {
@@ -175,10 +176,17 @@ function main() {
     writeFileSync(p.newAbs, code, 'utf8')
   }
   console.log(`✓ 搬移与改写完成（${moves.length} 件 / ${editCount} 条）；接着跑全量门`)
-  // 留档口径：搬移后 specifier 改写正确性由 R1–R7 + tsc 直接执法，不需脚本自证。
-  for (const m of moves) {
-    if (!existsSync(m.to)) console.error(`✗ 搬移后目标缺失：${toPosix(relative(root, m.to))}`)
+  // 收尾只断言「搬移落地」，**不断言「改写正确」**——后者由 `npm test` 全量门执法
+  // （R1–R7 的说明符解析 + tsc）。脚本自己给不出这份证据：路径键控的登记面
+  //（`REPAIR_MECHANISMS[].file`／`引擎:` 出处／`scan-*.mjs` 常量／`arch-baseline.json`
+  // 的 sizes 键）看不见 specifier，specifier 正确也不代表它们对。
+  const missing = moves.filter(m => !existsSync(m.to)).map(m => toPosix(relative(root, m.to)))
+  if (missing.length) {
+    for (const f of missing) console.error(`✗ 搬移后目标缺失：${f}`)
+    process.exitCode = 1
+    return
   }
+  console.log(`✓ ${moves.length} 件目标全部在位（改写正确性请以全量门为准）`)
 }
 
 if (process.argv[1] && process.argv[1].includes('move-engine-domain')) main()

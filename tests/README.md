@@ -466,7 +466,7 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 受控面 | 迁移内容 | 落点 | 判据 |
 |---|---|---|---|
 | 文件规模棘轮 | **每刀**：45 条 `sizes` 键随路径迁移，行数实测**逐一不变**（纯搬移的可证伪读数）；`depsFace`／`typeErrors`／`adapterFace` 三族逐字未变 | `scripts/arch-baseline.json`（`--update`） | G5 棘轮精确匹配 |
-| 修复策略机制登记 | `REPAIR_MECHANISMS[].file` 4 条（刀① `invokesOncePerQuestion`；刀③ `auditRepairOncePerQuestion`／`gradingReaskOnce`／`disputeReaskOnce`）。该门按 `src/` 相对路径**精确匹配**读源文件对账 witness 串 | `src/engine/output-contracts.ts` | `tests/repair-policy.test.ts` |
+| 修复策略机制登记 | `REPAIR_MECHANISMS[].file` 4 条（刀① `invokesOncePerQuestion`；刀③ `auditRepairOncePerQuestion`／`gradingReaskOnce`／`disputeReaskOnce`；该文件随刀③迁至 `src/engine/content/output-contracts.ts`）。该门按 `src/` 相对路径**精确匹配**读源文件对账 witness 串 | `src/engine/content/output-contracts.ts` | `tests/repair-policy.test.ts` |
 | 量规出处锚门 | 2 条判据的 `引擎:content.ts` 出处（锚门按 `src/engine/<file>` 读源对账 `## 10. 先做后教`／`## 11. 专家思维轨迹`）；刀③ 后判据原句仍在 content 内 | `src/engine/content/quality-rubrics.ts` | `tests/quality-rubrics.test.ts` 锚门 |
 | 图写原语 / 闭包单一出处门 | 刀②：`GRAPH_WRITE_PRIMITIVES[].definedIn`（graph.ts 迁家）、`CLOSURE_PRIMITIVE_HOME`、`CLOSURE_SCAN_WHITELIST` 成员路径 | `scripts/scan-invariant.mjs`／`scripts/scan-closure.mjs` | G6／G10（`tests/arch-guards.test.ts`） |
 | 写入单元站点表 | 刀④：`WRITE_UNIT_SITES['engine/sched-subsystem.ts']` → `'engine/sched/sched-subsystem.ts'`（键是 `src/` 相对路径，不能用文件名——同名文件会互相覆盖） | `scripts/scan-write-unit.mjs` | G9 |
@@ -478,5 +478,7 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 
 **两处静默失效的形态（本仓教训，供后续搬迁复用）**：
 
-- **单路径登记面在搬迁提交处被 git 历史简化截断**：`CHANGELOG_FILE` 只留当前路径时，`disciplineStartRef` 的 `git log -S PROMPT_CHANGELOG -- <当前路径>` 在搬迁提交处截断，纪律起点**静默从 `7a9a136`（#218 登记面引入提交）漂到本刀提交**，登记门扫描窗口从 25 个提交缩到 1，且**照旧报绿**（实测：双路径下起点仍为 `7a9a136`、报「扫描 25 个提交」）。同源修法是 ADR-0075 §3 的「面是清单不是单文件」——历史路径留在面里。
+- **单路径登记面在搬迁提交处被 git 历史简化截断**：`CHANGELOG_FILE` 只留当前路径时，`disciplineStartRef` 的 `git log -S PROMPT_CHANGELOG -- <当前路径>` 在搬迁提交处截断，纪律起点**静默从 `7a9a136`（#218 登记面引入提交）漂到本刀提交**——扫描窗口随之从「自 #218 起」缩到「自本刀起」，且**照旧报绿**（实测：双路径下起点仍为 `7a9a136`；窗口提交数随每刀改动 `content.ts` 而递增，故只记起点不记条数）。同源修法是 ADR-0075 §3 的「面是清单不是单文件」——历史路径留在面里。
 - **自检抄写常量值 = 常量迁家时自检局部恒过**：G6／G9 两处自检把路径键控常量的**值**抄进样本、而非引用常量；常量迁家后样本不再命中目标分支——G9 因读模块级表而当场变红（可发现），G6 则**门照旧绿、豁免分支悄悄不再被断言**（不可发现，比红更坏）。同源修法是自检引用常量本身。
+
+**遗留（不在刀①–④，随刀⑧ 的文档面一并收）**：刀①–④ 只改 import specifier 与上表登记的路径键，**未做全仓散文/注释里的路径引用扫尾**——这是 ADR-0093 的既定分期（刀⑧ 布局定型后一次扫）。已知道的存量悬空路径引用（散文，非门、非运行期）：`build.mjs`（`src/engine/optimize.ts`，刀④后应为 `sched/optimize.ts`）、`scripts/diversity-baseline.mts` 的注释与其产物 `tests/fixtures/diversity-baseline.json` 的 `note`（`src/engine/question-diversity.ts`，刀③后应为 `content/…`）、`tests/prompt-changelog.test.ts` 里那句「模板迁到 prompts/templates.ts」的提交信息样例（历史叙述，保留即可）、`.qoder/` 生成的 wiki（追踪入库的机器产物）。**刀⑧ 扫尾时以此为清单起点。**

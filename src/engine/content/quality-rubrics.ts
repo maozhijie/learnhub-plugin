@@ -31,7 +31,7 @@ export interface RubricCriterion {
   criterion: string
   /** 证据要求：评审必须引用什么原文作证据、定位到哪（引原文定位）。 */
   evidence: string
-  /** 出处：判据的仓库内来源。格式 = `模板:<PROMPT_KINDS 键>` | `ADR-XXXX` | `词条:<词条名>` | `引擎:<engine 文件名>`。 */
+  /** 出处：判据的仓库内来源。格式 = `模板:<PROMPT_KINDS 键>` | `ADR-XXXX` | `词条:<词条名>` | `引擎:<engine 下相对路径>`（如 `content/content.ts`——锚门按 `src/engine/<该路径>` 读源对账）。 */
   source: string
   /** 锚点：source 指向的文档里必须在册的原句片段（锚门核对用；缺席 = 不对账）。 */
   anchor?: string

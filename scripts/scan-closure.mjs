@@ -1,6 +1,6 @@
 /**
  * 闭包折叠单一出处扫描（#270 门 G10；ADR-0085 §防复发门）：
- * **图遍历闭包的原语只住 Graph（`src/engine/graph.ts`）**。
+ * **图遍历闭包的原语只住 Graph（`CLOSURE_PRIMITIVE_HOME`，见下）**。
  *
  * 「前置传递闭包 / 祖先集」的正解是 `Graph.upstreamClosure`（悬空容错 + 环口径与
  * isAncestor 同步）与 `Graph.taughtByOf`/`assumedByOf`（构造期反向映射）。历史上四处
