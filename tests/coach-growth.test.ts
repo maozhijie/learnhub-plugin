@@ -11,6 +11,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { AgentSeam } from '../src/engine/agent.ts'
+import { COACH_PLAN_STATION, GROWTH_DRAFT_STATION } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
@@ -75,5 +76,49 @@ test('#163 任务取消传导（站点级）：开局取消零调用', async () 
       /已取消/,
     )
     assert.equal(calls, 0, '开局取消零调用')
+  })
+})
+
+// ---- #301 缺陷③：失败站标签随错误随行（宿主失败补标据此落站）----
+
+const PLAN_YAML = [
+  'course: 数学',
+  'operator: 前进',
+  'reason: 前沿缺下一台阶',
+  'target_endpoints: [用导数解决优化问题]',
+  'steps:',
+  '  - intent: 建立变化率直觉',
+  '    teaches_concept: 变化率',
+  '    est_hint: 15',
+].join('\n')
+
+test('#301 失败站标签：思路官站失败（计划门两轮不过）带思路官标签', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const badPlan = new AgentSeam({
+      logger: memLogger(),
+      complete: async () => 'operator: 复习\nreason: 不在算子表里\n',
+      stream: async () => { throw new Error('停摆/拒收路径不应拉起执行官') },
+    }, systemClock)
+    const err = await h.engine.growth2.coachGrowthBatch('数学', badPlan)
+      .then(() => null, (e: unknown) => e as Error & { station?: string })
+    assert.equal(err?.station, COACH_PLAN_STATION, '计划门两轮死因 = 思路官站')
+    assert.match(err!.message, /思路官计划未过 schema 门/)
+  })
+})
+
+test('#301 失败站标签：执行官站失败（回路端口故障）带草稿站标签——不再误标到思路官站', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    // 思路官正常产计划，执行官回路端口抛错（脚本耗尽/传输故障的等价形态）
+    const agent = new AgentSeam({
+      logger: memLogger(),
+      complete: async () => PLAN_YAML,
+      stream: async () => { throw new Error('回路端口故障') },
+    }, systemClock)
+    const err = await h.engine.growth2.coachGrowthBatch('数学', agent)
+      .then(() => null, (e: unknown) => e as Error & { station?: string })
+    assert.equal(err?.station, GROWTH_DRAFT_STATION, '草稿回路故障 = 执行官站')
+    assert.match(err!.message, /回路端口故障/)
   })
 })

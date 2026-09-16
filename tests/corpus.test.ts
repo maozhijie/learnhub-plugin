@@ -3,7 +3,8 @@ import { test } from 'node:test'
 import { mkdtempSync, readFileSync, rmSync, existsSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createCorpusCapture, parseCorpusFile, TOOL_CALLS_MARKER } from '../src/host/corpus.ts'
+import { createCorpusCapture, parseCorpusFile, STATIONS, TOOL_CALLS_MARKER } from '../src/host/corpus.ts'
+import { COACH_PLAN_STATION, GROWTH_DRAFT_STATION } from '../src/engine/index.ts'
 import type { CorpusRecordInput } from '../src/host/corpus.ts'
 
 function tmpCenter(): string {
@@ -222,4 +223,12 @@ test('语料读侧：无工具调用段的旧格式照读；段内坏行以占�
   assert.deepEqual(parsed.toolCalls[0], { name: 'a', arguments: '{}' })
   assert.equal(parsed.toolCalls.length, 2, '坏行不被静默丢')
   assert.deepEqual(parsed.toolCalls[1], { name: '（未解析）', arguments: '这不是 JSON' }, '占位保留原文')
+})
+
+test('#301 站名词表受控纪律：生长两站各引引擎常量（站名对齐靠常量不靠字面），遗留单站名已清理', () => {
+  assert.equal(STATIONS.growthPlan, COACH_PLAN_STATION, '思路官站名 = 引擎常量（COACH_PLAN_STATION）')
+  assert.equal(STATIONS.growthDraft, GROWTH_DRAFT_STATION, '执行官站名 = 引擎常量（GROWTH_DRAFT_STATION）')
+  assert.notEqual(STATIONS.growthPlan, STATIONS.growthDraft, '两站两目录——失败补标按真实失败站落盘（#301 缺陷③）')
+  // 拆分前的单站遗留名 `growth: '教练思路'` 已删（写死的映射会把执行官站的失败标到思路官站）
+  assert.equal(Object.keys(STATIONS).includes('growth'), false, '遗留映射键不再存在')
 })

@@ -5,7 +5,7 @@
  * 读写，本文件零模块级可变状态；队列语义零改动（FIFO、可取消、重启可恢复、阻尼）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, TIER_LABELS, endpointNames, genericQuizTarget, readAnchors, stuckReportInject, tierIdxOf } from '../engine/index.ts'
+import { Content, TIER_LABELS, endpointNames, genericQuizTarget, readAnchors, stationOfError, stuckReportInject, tierIdxOf } from '../engine/index.ts'
 import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport, VaultPriorAudit } from '../engine/index.ts'
 import {
   contentFailureStatus,
@@ -683,6 +683,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       ...(job.growthForce === true ? { force: true } : {}),
       ...(job.growthTrigger ? { trigger: job.growthTrigger } : {}),
       isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
+      // 补丁形状被归一（#301 缺陷①「收下即归一」）→ 给执行官站**当次**捕获补标 tolerated：
+      // 回调在工具调用内同步触发，此刻「最近一条」正是命中那一轮（批次结束后再补标只会
+      // 落到最后一轮——站内对齐语义照 ADR-0060，标的必须是命中件本身）
+      onTolerated: code => { rt.corpus.annotateLast(STATIONS.growthDraft, { outcome: 'tolerated', code }) },
     })
     if (r.state === 'idle') {
       job.growthOutcome = 'idle'
@@ -720,7 +724,13 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       }
     }
   } catch (err) {
-    const corpusRef = failCorpus(rt, STATIONS.growth, err)
+    // 生长失败的**真实失败站**按错误随行的站标签取（#301 缺陷③；两站各带各的——
+    // 引擎在抛出点打标签，读侧单一出处 stationOfError）。未标注 = 两站都没被调用
+    // （零终点/注册表缺课/纯 IO 故障）→ **没有死因样本，不补标**：旧口径写死
+    // `STATIONS.growth`（'教练思路'）会把最近一次思路官成功件改成 failed/bad- 并把
+    // 排查者指向错的语料目录，标错件比不标更坏。
+    const station = stationOfError(err)
+    const corpusRef = station ? failCorpus(rt, station, err) : undefined
     failGenJob(rt, job, err instanceof Error ? err.message : String(err), corpusRef)
   } finally {
     persistGenJobs(rt)

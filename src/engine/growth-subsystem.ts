@@ -90,7 +90,7 @@ import { addNodeCountOf, applyOpsToNodes, editGateErrors, replayDraft, sealedDec
 import type { DraftDiff, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
 import {
   GROWTH_DRAFT_MARKER, deleteDraft, draftDirOf, draftFindings, draftPathOf, expandPatchOps, findActiveDraft, saveDraft,
-  GROWTH_DRAFT_STATION,
+  GROWTH_DRAFT_STATION, PATCH_SHAPE_CHEATSHEET, normalizePatchShape,
 } from './growth-draft.ts'
 import type { GrowthDraftDoc, GrowthDraftRound } from './growth-draft.ts'
 import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS } from './params.ts'
@@ -106,6 +106,37 @@ import type { GraphApplyEditResult } from './views/graph.ts'
 import type { GraphEditProposalResult } from './views/proposals.ts'
 import { readDailyGoal } from './xp.ts'
 import { YAML } from './yaml.ts'
+
+/** 思路官站的语料站标签（#301：host STATIONS.growthPlan 引本常量对齐；站名是受控词表）。
+ * 此前这一站名是散在调用点的字面量 + host 侧一张写死的 `growth: '教练思路'` 映射。 */
+export const COACH_PLAN_STATION = '教练思路'
+
+/** 给错误打上站标签（#301 缺陷③）：宿主失败补标按**真实失败站**落盘——此前生长任务失败
+ * 一律补标到 `STATIONS.growth`（'教练思路'），于是执行官站的失败被标到思路官站最近一条
+ * 捕获上（常是一次成功件：被改成 `failed` + `bad-` 前缀），死因还把排查者指向错的语料
+ * 目录。站名 = 语料受控词表成员（引擎常量与 host STATIONS 同源）。 */
+function tagErrorWithStation(err: unknown, station: string): Error {
+  const e = err instanceof Error ? err : new Error(String(err))
+  ;(e as Error & { station?: string }).station = station
+  return e
+}
+
+/** 读错误携带的站标签（跨层契约的**唯一读侧**：宿主经门面消费，别自己 cast 字段——
+ * 键名一旦改动，这一处与打标签处同源可比，不会静默失联）。undefined = 无标签。 */
+export function stationOfError(err: unknown): string | undefined {
+  const station = (err as { station?: unknown } | null)?.station
+  return typeof station === 'string' && station.trim() ? station : undefined
+}
+
+/** 一段站点工作的异常兜底：该段内任何抛出都带上本段站点标签（宿主据此补标）。 */
+async function stationTagged<T>(station: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (err) {
+    throw tagErrorWithStation(err, station)
+  }
+}
+
 export class GrowthSubsystem {
   constructor(private e: GrowthDeps) {}
 
@@ -698,7 +729,13 @@ export class GrowthSubsystem {
    * opts.trigger = 触发点（宿主入队侧随任务携带；缺省 session_start 按常规族）。 */
   async coachGrowthBatch(
     courseKey: string, agent: AgentSeam,
-    opts: { force?: boolean; today?: string; inject?: string; trigger?: CoachTrigger; isCancelled?: () => boolean } = {},
+    opts: {
+      force?: boolean; today?: string; inject?: string; trigger?: CoachTrigger; isCancelled?: () => boolean
+      /** 形状容忍回调（#301 缺陷①）：本批有补丁形状被归一（「收下即归一」命中）时随行
+       * 通知——宿主据此给该站**当次**捕获补标 tolerated（补标要落在命中那一轮的语料件上，
+       * 批次结束后 annotateLast 只会标到最后一轮）。调用点缺省 = 不补标。 */
+      onTolerated?: (code: string) => void
+    } = {},
   ): Promise<{
     course: string
     state: 'idle' | 'applied'
@@ -749,30 +786,33 @@ export class GrowthSubsystem {
       const doc = YAML.parseModel(yaml) as GrowthPlanHandover & { course: string }
       return { plan: doc, yaml }
     }
-    const runPlan = async (mode: 'complete' | 'repair', feedbackYaml?: string, schemaErrors?: readonly string[]): Promise<PlanVerdict> => {
-      assertAlive()
-      // #296：首轮 schema 错误清单进回灌块（修复轮不再盲修——此前 feedbackYaml 同时充
-      // 当 feedback 与 previousYaml，清单只活在拒绝事件里，模型只能对着原文猜）
-      const prompt = feedbackYaml === undefined ? planPrompt : planPrompt + '\n\n---\n\n'
-        + render(COACH_PLAN_FEEDBACK_BLOCK, {
-          feedback: feedbackYaml ?? '', previousYaml: feedbackYaml ?? '',
-          schemaErrors: (schemaErrors ?? []).map(e => `- ${e}`).join('\n') || '（无清单，按模板逐项自查）',
+    const runPlan = (mode: 'complete' | 'repair', feedbackYaml?: string, schemaErrors?: readonly string[]): Promise<PlanVerdict> =>
+      // 本段任何抛出（取消传导 / 缝故障 / 解析器故障）都算「思路官站失败」——宿主失败补标
+      // 据此落站（#301 缺陷③）
+      stationTagged(COACH_PLAN_STATION, async () => {
+        assertAlive()
+        // #296：首轮 schema 错误清单进回灌块（修复轮不再盲修——此前 feedbackYaml 同时充
+        // 当 feedback 与 previousYaml，清单只活在拒绝事件里，模型只能对着原文猜）
+        const prompt = feedbackYaml === undefined ? planPrompt : planPrompt + '\n\n---\n\n'
+          + render(COACH_PLAN_FEEDBACK_BLOCK, {
+            feedback: feedbackYaml ?? '', previousYaml: feedbackYaml ?? '',
+            schemaErrors: (schemaErrors ?? []).map(e => `- ${e}`).join('\n') || '（无清单，按模板逐项自查）',
+          })
+        if (mode === 'repair') {
+          log.debug('coach.plan.reinject', { course: c.name, family, schema_errors: (schemaErrors ?? []).length })
+        }
+        log.info('coach.plan.enter', { course: c.name, family, mode })
+        const raw = mode === 'complete'
+          ? await agent.complete(COACH_PLAN_STATION, prompt, { effort: 'fast' })
+          : await agent.repair(COACH_PLAN_STATION, prompt, { effort: 'fast' })
+        const verdict = parsePlan(raw)
+        log.info('coach.plan.exit', {
+          course: c.name, family, mode,
+          operator: verdict._schemaErrors ? undefined : verdict.plan.operator,
+          ...(verdict._schemaErrors ? { schema: 'reject', detail: verdict._schemaErrors } : { schema: 'ok' }),
         })
-      if (mode === 'repair') {
-        log.debug('coach.plan.reinject', { course: c.name, family, schema_errors: (schemaErrors ?? []).length })
-      }
-      log.info('coach.plan.enter', { course: c.name, family, mode })
-      const raw = mode === 'complete'
-        ? await agent.complete('教练思路', prompt, { effort: 'fast' })
-        : await agent.repair('教练思路', prompt, { effort: 'fast' })
-      const verdict = parsePlan(raw)
-      log.info('coach.plan.exit', {
-        course: c.name, family, mode,
-        operator: verdict._schemaErrors ? undefined : verdict.plan.operator,
-        ...(verdict._schemaErrors ? { schema: 'reject', detail: verdict._schemaErrors } : { schema: 'ok' }),
+        return verdict
       })
-      return verdict
-    }
     let planVerdict = await runPlan('complete')
     segments.push({
       tier: 'plan', effort: 'fast', operator: planVerdict._schemaErrors ? '' : planVerdict.plan.operator,
@@ -783,7 +823,7 @@ export class GrowthSubsystem {
       log.warn('coach.plan.recheck', { course: c.name, round: 1, detail: planVerdict._schemaErrors })
       const repaired = await runPlan('repair', planVerdict.yaml, planVerdict._schemaErrors)
       if (repaired._schemaErrors) {
-        throw new Error(`[coach-growth] 思路官计划未过 schema 门（回灌重裁一轮仍未过——零写盘）。\n【首轮】${planVerdict._schemaErrors.join('\n')}\n【重裁】${repaired._schemaErrors.join('\n')}`)
+        throw tagErrorWithStation(new Error(`[coach-growth] 思路官计划未过 schema 门（回灌重裁一轮仍未过——零写盘）。\n【首轮】${planVerdict._schemaErrors.join('\n')}\n【重裁】${repaired._schemaErrors.join('\n')}`), COACH_PLAN_STATION)
       }
       segments.push({ tier: 'plan_repair', effort: 'fast', operator: repaired.plan.operator, disagreement: false })
       planVerdict = repaired
@@ -796,15 +836,18 @@ export class GrowthSubsystem {
 
     // —— ② 执行官：#271 草稿回路原样，计划作交接块注入（advisory——门不放松） ——
     log.info('coach.draft.handover', { course: c.name, operator: plan.operator, steps: plan.steps.length })
-    const draft = await this.coachDraft(courseKey, agent, {
+    // 草稿段任何抛出（回路预算耗尽 / 形状与门拒收 / 禁止空手结束）都算「执行官站失败」——
+    // 宿主失败补标据此落站（#301 缺陷③）
+    const draft = await stationTagged(GROWTH_DRAFT_STATION, () => this.coachDraft(courseKey, agent, {
       today,
       ...(opts.isCancelled ? { isCancelled: opts.isCancelled } : {}),
+      ...(opts.onTolerated ? { onTolerated: opts.onTolerated } : {}),
       plan: {
         operator: plan.operator, reason: plan.reason,
         target_endpoints: plan.target_endpoints, steps: plan.steps,
         ...(plan.recheck ? { recheck: plan.recheck } : {}),
       },
-    })
+    }))
     const lastFinish = draft.finishes.at(-1)
     if (lastFinish) {
       segments.push({ tier: 'executor', effort: 'deep', operator: lastFinish.operator, disagreement: false })
@@ -921,7 +964,12 @@ export class GrowthSubsystem {
    * 默认续建（注入轮次日志恢复认知）；预算常量单源 engine/params.ts。 */
   async coachDraft(
     courseKey: string, agent: AgentSeam,
-    opts: { today?: string; isCancelled?: () => boolean; plan?: GrowthPlanHandover } = {},
+    opts: {
+      today?: string; isCancelled?: () => boolean; plan?: GrowthPlanHandover
+      /** 形状容忍回调（#301 缺陷①）：见 coachGrowthBatch 同名字段——补丁形状被归一时
+       * 随当次工具调用同步通知（此刻「最近一条捕获」正是命中那一轮）。 */
+      onTolerated?: (code: string) => void
+    } = {},
   ): Promise<{
     course: string
     session_id: string
@@ -1013,17 +1061,23 @@ export class GrowthSubsystem {
       if (call.name === 'draft_patch') {
         const rawOps = Array.isArray(args.ops) ? args.ops as Array<Record<string, unknown>> : []
         if (!rawOps.length) throw new Error('[draft_patch] ops 不能为空——不产结构就不要调本工具。')
+        // 形状门「收下即归一」（#301 缺陷① / ADR-0088 §修订）：可修的形状当场归一为发布
+        // 形态（回执注明归一动作、语料补标 tolerated），修不了的整批拒收回灌合法形态——
+        // 毒形状永不随草稿过夜（此前原样入 doc.ops/doc.concepts，直到 finish 才在权威门炸）
+        const shape = normalizePatchShape(rawOps, args.concepts)
+        if (shape.errors.length) {
+          await logRound('patch', `补丁被拒（形状不合法 ${shape.errors.length} 处；整批回滚）`, shape.errors)
+          throw new Error(`[draft_patch] 形状未过（整批回滚，零落草稿）：\n${shape.errors.map(e => `  ✗ ${e}`).join('\n')}\n${PATCH_SHAPE_CHEATSHEET}`)
+        }
         // 糖算子展开（#272 统一入口）：insert_prereq_chain / split_node → 原子 EditOp；
         // suggest_confusable → confusable 建议（不是图 op，finish 发布成功后展开为候选提案）
         const { nodes, graph } = await draftNodesOf()
-        const { ops: expanded, confusables: suggestions } = expandPatchOps(rawOps, nodes, graph, endpointNames(anchors))
+        const { ops: expanded, confusables: suggestions } = expandPatchOps(shape.ops, nodes, graph, endpointNames(anchors))
         const unpublishedCount = doc.ops.length - doc.published + expanded.length
         if (unpublishedCount > GROWTH_DRAFT_MAX_OPS_PER_BATCH) {
           throw new Error(`[draft_patch] 每批未发布增量 ≤${GROWTH_DRAFT_MAX_OPS_PER_BATCH} 条（本补丁后将为 ${unpublishedCount}）——先 draft_finish 发布再开新批。`)
         }
-        // 概念铸名随批登记（形态门：validateConceptEntry 同闸在 finish 的 schema 门跑；
-        // 这里只收 canonical 形态的可 JSON 条目）
-        const mints = Array.isArray(args.concepts) ? args.concepts as ConceptEntry[] : []
+        const mints = shape.concepts
         // 试算：全量重放过门才落草稿（失败整批回滚 + 取值域回灌）
         const trial = [...doc.ops, ...expanded]
         const r = replayDraft(nodes, graph, trial)
@@ -1048,8 +1102,14 @@ export class GrowthSubsystem {
               : {}),
           }
         }
-        await logRound('patch', `补丁 ${expanded.length} 条（未发布 ${doc.ops.length - doc.published}）`)
-        return `已入草稿：本补丁 ${expanded.length} 条；未发布增量 ${doc.ops.length - doc.published} 条（水位 ${doc.published}/${doc.ops.length}）。先 draft_audit 再 draft_finish。`
+        await logRound('patch', `补丁 ${expanded.length} 条（未发布 ${doc.ops.length - doc.published}）${shape.normalized.length ? `；形状归一 ${shape.normalized.length} 处` : ''}`)
+        // 归一命中 → 宿主给当次捕获补标 tolerated（此刻最近一条捕获就是本轮；批次结束后
+        // 再补标只会落到最后一轮——#301 缺陷③ 同款的「标对件」纪律）
+        if (shape.normalized.length) opts.onTolerated?.('patch_shape_normalized')
+        const normLines = shape.normalized.length
+          ? `\n形状归一 ${shape.normalized.length} 处（已按发布形态收下）：\n${shape.normalized.map(s => `  · ${s}`).join('\n')}`
+          : ''
+        return `已入草稿：本补丁 ${expanded.length} 条；未发布增量 ${doc.ops.length - doc.published} 条（水位 ${doc.published}/${doc.ops.length}）。${normLines}\n先 draft_audit 再 draft_finish。`
       }
       if (call.name === 'draft_audit') {
         const { errors, diff } = await replayUnpublished()
@@ -1105,10 +1165,20 @@ export class GrowthSubsystem {
         const graph = new Graph(nodes)
         const anchors = await readAnchors(this.e.paths.anchorPath(root), this.e.fs)
         const entries = await entriesOf()
-        const driftErrors = await editGateErrors(spec, {
-          nodes, graph, entries, anchors, mints: doc.concepts,
-          growthGate: async s => this.growthGateErrors(s),
-        })
+        let driftErrors: string[]
+        try {
+          driftErrors = await editGateErrors(spec, {
+            nodes, graph, entries, anchors, mints: doc.concepts,
+            growthGate: async s => this.growthGateErrors(s),
+          })
+        } catch (err) {
+          // 门复验**异常**转门错误（#301 缺陷②）：异常穿透会让 logRound('finish') 一次都
+          // 不执行、finish 轮次在草稿里零痕迹、回灌给模型的只有一行裸异常（不可诊断、每次
+          // 重试原样再失败）。保险丝：形状归一（缺陷①）落地后权威门恒见合法形态，本分支
+          // 只该由「读侧不自愈的存量毒草稿」这类情形触发。
+          const msg = err instanceof Error ? err.message : String(err)
+          driftErrors = [`门复验内部异常（非门拒绝——本批 ops/概念块含引擎无法解析的字段形状）：${msg}\n${PATCH_SHAPE_CHEATSHEET}`]
+        }
         if (driftErrors.length) {
           await logRound('finish', `finish 被拒（${driftErrors.length} 个门错误；零落盘）`, driftErrors)
           throw new Error(`[draft_finish] 门复验未过（拒收零落盘，草稿保留——修正后重试）：\n${driftErrors.map(e => `  ✗ ${e}`).join('\n')}`)

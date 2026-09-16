@@ -13,9 +13,9 @@ import { atomicWrite } from './io.ts'
 import type { Paths } from './paths.ts'
 import type { EditOp } from './proposals.ts'
 import type { ConceptEntry } from './concepts.ts'
-import { nearNameCandidates, resolveConcept } from './concepts.ts'
+import { nearNameCandidates, resolveConcept, validateConceptEntry } from './concepts.ts'
 import type { Graph } from './graph.ts'
-import type { GNode } from './types.ts'
+import type { GNode, Misconception } from './types.ts'
 import type { EndpointAnchor } from './seed.ts'
 
 /** 执行官站的语料站标签（host STATIONS.growthDraft 引门面常量对齐；站名是受控词表）。 */
@@ -74,6 +74,247 @@ export interface PatchSuggestion {
   concept: string
   with: string
 }
+
+// ---- 补丁形状归一（#301 缺陷① / ADR-0088 §修订「收下即归一」）----
+
+/** 形状归一的产物：ops（原样条目 + 归一后的概念字段组；仍是补丁载荷形态，展开归
+ * expandPatchOps）/ concepts（铸名条目，**发布形态**）/ normalized（归一动作行——回执与
+ * 轮次日志用，空 = 形状本来就合法）/ errors（修不了的形状：非空即整批拒收，行内带字段
+ * 指向与合法形态）。
+ *
+ * 为什么需要它（2026-09-16 数学基础空课事故）：草稿补丁的宽容面此前是「原样收下」，
+ * 模型给的三形状（字符串列表/字典/配对列表）全都直进 doc.ops/doc.concepts，直到 finish
+ * 才在权威门里炸——而权威门对**非数组** misconceptions 是 `for...of` 直接抛 TypeError
+ * 穿透，一次 finish 轮次都记不下、回灌给模型一行裸异常。裁决（ADR-0088 §修订）：
+ * **暂存宽容、发布严格**——名字/条目信息完备的形状在补丁入口当场归一为发布形态（回执
+ * 注明归一动作、语料补标 tolerated），修不了的当场整批拒收回灌合法形态；毒形状永不随
+ * 草稿过夜，权威门恒见合法形态。 */
+export interface PatchShapeNormalization {
+  ops: Array<Record<string, unknown>>
+  concepts: ConceptEntry[]
+  normalized: string[]
+  errors: string[]
+}
+
+/** 收到形态的人话名（回灌行用：让模型认得出自己写了什么）。 */
+function shapeWordOf(v: unknown): string {
+  if (Array.isArray(v)) return v.every(x => typeof x === 'string') ? '字符串列表' : '列表'
+  if (v === null) return 'null'
+  if (typeof v === 'object') return '字典'
+  if (typeof v === 'string') return '字符串'
+  if (typeof v === 'number') return '数字'
+  if (typeof v === 'boolean') return '布尔'
+  return String(typeof v)
+}
+
+/** teaches/assumes 归一：配对列表 [[概念, 档], …] → 概念→档映射；映射形原样透传。
+ * 其余形态（字符串/列表但元素不是二元组）报错——展开后它会被 `{...raw}` 摊成
+ * `{0: [...]}` 这类伪映射，铸名对表与 teaches 反查会静默失真。 */
+function tierMapFieldOf(
+  raw: unknown, where: string, out: PatchShapeNormalization,
+): Record<string, unknown> | undefined {
+  if (!Array.isArray(raw)) {
+    if (typeof raw === 'object' && raw !== null) return raw as Record<string, unknown>
+    out.errors.push(`${where}: 必须是「概念→档」映射（{概念: 档}）——收到 ${shapeWordOf(raw)}`)
+    return undefined
+  }
+  const map: Record<string, unknown> = {}
+  for (const [i, pair] of raw.entries()) {
+    if (!Array.isArray(pair) || pair.length !== 2) {
+      out.errors.push(`${where}: 配对列表的每一项都要是 [概念, 档] 二元组——第 ${i + 1} 项是 ${JSON.stringify(pair)}；不用配对列表就写映射 {概念: 档}`)
+      return undefined
+    }
+    const concept = String(pair[0] ?? '').trim()
+    const tier = String(pair[1] ?? '').trim()
+    if (!concept || !tier) {
+      out.errors.push(`${where}: 配对列表的每一项都要有概念名与档——第 ${i + 1} 项是 ${JSON.stringify(pair)}`)
+      return undefined
+    }
+    map[concept] = tier
+  }
+  out.normalized.push(`${where} 配对列表 → 概念→档映射（${Object.keys(map).length} 条）`)
+  return map
+}
+
+/** misconceptions 归一：按概念归组的字典 `{概念: [文字…]}`（值为单条文本也收）→
+ * 条目数组 `[{concept, model}]`。**条目数组只收合法条目形状**（恰 concept/model 两键、
+ * 都非空）——本次事故里模型还写过 `[{concept, text}]`（键名错）与字符串列表（拆不出
+ * 概念）两类：它们都无法被权威门受理，若放行就会「先落草稿、到 finish 才炸」= 毒 op
+ * 清不掉、草稿卡死（事故里那十几轮形状试探正是这条路的产物），故一律入口拒收 + 回灌
+ * 合法形态。尺寸带/每概念封顶等**语义**维度不在此裁（归 finish 的权威门，那是「补 op
+ * 能修」的一类）。 */
+function misconceptionsFieldOf(
+  raw: unknown, where: string, out: PatchShapeNormalization,
+): Misconception[] | undefined {
+  if (Array.isArray(raw)) {
+    if (raw.some(x => typeof x === 'string')) {
+      out.errors.push(`${where}: 误解必须是条目列表 [{concept, model}]——收到字符串列表（一条字符串拆不出它属于哪个概念）：每条写成 {concept: 在册概念名, model: 错误模型文字}；按概念归组也可写字典 {概念: [文字…]}`)
+      return undefined
+    }
+    for (const [j, item] of raw.entries()) {
+      if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+        out.errors.push(`${where}: 误解条目第 ${j + 1} 项必须是映射 {concept, model}——收到 ${shapeWordOf(item)}`)
+        return undefined
+      }
+      const entry = item as Record<string, unknown>
+      const unknown = Object.keys(entry).filter(k => k !== 'concept' && k !== 'model')
+      if (unknown.length) {
+        out.errors.push(`${where}: 误解条目第 ${j + 1} 项含未知字段 ${JSON.stringify(unknown)}（条目只允许 concept/model——典型错答文字写进 model）`)
+        return undefined
+      }
+      if (typeof entry.concept !== 'string' || !entry.concept.trim()) {
+        out.errors.push(`${where}: 误解条目第 ${j + 1} 项缺 concept（在册概念名）`)
+        return undefined
+      }
+      if (typeof entry.model !== 'string' || !entry.model.trim()) {
+        out.errors.push(`${where}: 误解条目第 ${j + 1} 项缺 model（错误模型文字：典型错答、坑位用途）`)
+        return undefined
+      }
+    }
+    return raw as Misconception[]
+  }
+  if (typeof raw === 'object' && raw !== null) {
+    const entries: Misconception[] = []
+    let concepts = 0
+    for (const [concept, texts] of Object.entries(raw as Record<string, unknown>)) {
+      if (!concept.trim()) {
+        out.errors.push(`${where}: 误解字典的概念名不能为空`)
+        return undefined
+      }
+      const list = typeof texts === 'string' ? [texts] : Array.isArray(texts) ? texts : null
+      if (!list || !list.every(t => typeof t === 'string' && t.trim())) {
+        out.errors.push(`${where}: 字典形的值必须是文本或文本列表（概念名 → 该项文字）——「${concept}」的值是 ${shapeWordOf(texts)}`)
+        return undefined
+      }
+      concepts++
+      for (const t of list as string[]) entries.push({ concept: concept.trim(), model: t.trim() })
+    }
+    if (!entries.length) {
+      out.errors.push(`${where}: 误解字典是空的（本字段省略即可）`)
+      return undefined
+    }
+    out.normalized.push(`${where} 字典 → 条目数组（${concepts} 概念 / ${entries.length} 条）`)
+    return entries
+  }
+  out.errors.push(`${where}: 误解必须是条目列表 [{concept, model}]——收到 ${shapeWordOf(raw)}`)
+  return undefined
+}
+
+/** 一条 op/链条目的概念字段组归一（add_node 出生层；链条目展开后也是 add_node）。 */
+function normalizeConceptFieldsOf(
+  rec: Record<string, unknown>, where: string, out: PatchShapeNormalization,
+): Record<string, unknown> {
+  const next = { ...rec }
+  for (const field of ['teaches', 'assumes'] as const) {
+    if (rec[field] === undefined) continue
+    const v = tierMapFieldOf(rec[field], `${where}.${field}`, out)
+    if (v !== undefined) next[field] = v
+  }
+  if (rec.misconceptions !== undefined) {
+    const v = misconceptionsFieldOf(rec.misconceptions, `${where}.misconceptions`, out)
+    if (v !== undefined) next.misconceptions = v
+  }
+  return next
+}
+
+/** 单条铸名归一（返回 0..n 条：字典形 {名字: 定义} 一键一枚）：字符串「X」→ {canonical}；
+ * 字典 {name: X, …} → {canonical: X, …}；字典 {X: 定义} → {canonical: X, definition}。
+ * 归一律过 validateConceptEntry（形态权威门原样借用——未知键/空名照样拒收，不造第二套
+ * 契约）。 */
+function mintEntriesOf(raw: unknown, where: string, out: PatchShapeNormalization): ConceptEntry[] {
+  const accept = (candidate: Record<string, unknown>, note?: string): ConceptEntry[] => {
+    const v = validateConceptEntry(candidate, where)
+    if (v.errors.length || !v.entry) {
+      out.errors.push(...v.errors)
+      return []
+    }
+    if (note) out.normalized.push(note)
+    return [v.entry]
+  }
+  if (typeof raw === 'string') {
+    const canonical = raw.trim()
+    if (!canonical) {
+      out.errors.push(`${where}: 铸名不能是空字符串`)
+      return []
+    }
+    return accept({ canonical }, `${where} 字符串 → 铸名条目「${canonical}」`)
+  }
+  if (Array.isArray(raw)) {
+    out.errors.push(`${where}: 每条铸名是一个条目（{canonical, …} 或字符串），不是列表`)
+    return []
+  }
+  if (typeof raw !== 'object' || raw === null) {
+    out.errors.push(`${where}: 铸名必须是条目（{canonical, aliases?, definition?}）或字符串——收到 ${shapeWordOf(raw)}`)
+    return []
+  }
+  const r = raw as Record<string, unknown>
+  if (typeof r.canonical === 'string') return accept(r)
+  if (typeof r.name === 'string') {
+    const { name, ...rest } = r
+    return accept({ canonical: name, ...rest }, `${where} {name} → {canonical: ${JSON.stringify(name.trim())}}`)
+  }
+  const keys = Object.keys(r)
+  if (keys.length && keys.every(k => k.trim()) && keys.every(k => typeof r[k] === 'string')) {
+    const entries: ConceptEntry[] = []
+    for (const k of keys) {
+      const definition = String(r[k]).trim()
+      entries.push(...accept({ canonical: k.trim(), ...(definition ? { definition } : {}) }))
+    }
+    if (entries.length === keys.length) out.normalized.push(`${where} 字典（${keys.length} 键）→ ${keys.length} 枚铸名（键=名字、值=定义）`)
+    return entries
+  }
+  out.errors.push(`${where}: 铸名必须是条目（{canonical, aliases?, definition?}）或字符串——收到字典（键 ${JSON.stringify(keys)} 既不含 canonical/name，也不是「名字→定义」的字符串映射）`)
+  return []
+}
+
+/** 铸名块归一（裸值宽容：模型把整块写成单条时按单条收下）。 */
+function mintBlockOf(raw: unknown, out: PatchShapeNormalization): ConceptEntry[] {
+  if (raw === undefined || raw === null) return []
+  const items = Array.isArray(raw) ? raw : [raw]
+  if (!Array.isArray(raw)) out.normalized.push(`concepts 不是列表（${shapeWordOf(raw)}）→ 按单条铸名收下`)
+  const entries: ConceptEntry[] = []
+  for (const [i, item] of items.entries()) entries.push(...mintEntriesOf(item, `concepts.${i + 1}`, out))
+  return entries
+}
+
+/** 补丁载荷的形状归一（draft_patch 入口；纯函数）。概念字段组只归一 add_node 与
+ * insert_prereq_chain 的链条目——写在其他 op 上的概念字段组归权威门按「只许 add_node
+ * 出生」拒收（那里的话更准）。 */
+export function normalizePatchShape(
+  rawOps: ReadonlyArray<Record<string, unknown>>, rawConcepts: unknown,
+): PatchShapeNormalization {
+  const out: PatchShapeNormalization = { ops: [], concepts: [], normalized: [], errors: [] }
+  for (const [i, raw] of rawOps.entries()) {
+    const where = `ops.${i}`
+    if (raw.op === 'add_node') {
+      out.ops.push(normalizeConceptFieldsOf(raw, where, out))
+      continue
+    }
+    if (raw.op === 'insert_prereq_chain' && Array.isArray(raw.chain)) {
+      out.ops.push({
+        ...raw,
+        chain: (raw.chain as unknown[]).map((item, j) =>
+          item !== null && typeof item === 'object' && !Array.isArray(item)
+            ? normalizeConceptFieldsOf(item as Record<string, unknown>, `${where}.chain[${j}]`, out)
+            : item),
+      })
+      continue
+    }
+    out.ops.push({ ...raw })
+  }
+  out.concepts = mintBlockOf(rawConcepts, out)
+  return out
+}
+
+/** 合法形态速查（形状拒收回灌的那一段）：事故里模型烧掉十几轮在试探形状，
+ * 拒收回执一次给全三件套的合法写法。归一行**不新开提示词常量**——它是引擎侧工具
+ * 返回文本（ADR-0088 §修订）。 */
+export const PATCH_SHAPE_CHEATSHEET = [
+  '合法形态速查（三件套）：',
+  '  · teaches / assumes：{概念: 档}（配对列表 [[概念, 档], …] 也收）',
+  '  · misconceptions：[{concept: 在册概念名, model: 错误模型文字}]（按概念归组的字典 {概念: [文字…]} 也收；**字符串列表不收**——拆不出概念）',
+  '  · concepts（铸名）：[{canonical: 名字, definition?, aliases?}]（字符串「名字」、{name: 名字}、字典 {名字: 定义} 也收）',
+].join('\n')
 
 // ---- 糖算子展开（#272）：expandPatchOps 与手写原子 ops 在 replayDraft 下逐字等价 ----
 

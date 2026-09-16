@@ -46,3 +46,24 @@
 ## 取号与票面
 
 取号：0088（写前 `ls docs/adr/` 确认，0087 已占）。票面：#271（父 Epic #266）。图查证记录：`coachToolsetFor` 入边 2（`coachGrowthBatch`/`compassPaint`）、`simulateOps` 入边 `proposeEdit`/`applyEdit`、`gateRepairRound` 生产 3 处（`coachGrowthBatch`/`projectDecompile`/`generateProjectMilestone`——方法调用 `trace_path` 报 0 为已知坑，`query_graph` CALLS|USAGE 补证）、`coachGrowthBatch` 动态分发。裁决过程：2026-09-16 grilling 两轮 14 问，CONTEXT.md 词条随轮落地。
+
+## §修订（2026-09-16，#301 生长草稿三缺陷收口）
+
+触发：同日「数学基础」空课事故——空课（仅一终点锚）面板下发生长批，思路官裁决正常、执行官第 2 轮即铺出正确结构（2 add_node + 终点 set_pre + 铸名 5 概念），但 `draft_finish` 连续 4 次被引擎侧异常击穿（`TypeError: object is not iterable`，非门拒绝），模型用其余十几轮做形状试探全部无效、第 21 轮撞 K≤20 预算顶，**零结构发布**（烧 ~49.7k token）。原文与语料存 2026-09-16 实机存档，**已入仓为回放 fixture**：`tests/fixtures/growth-draft-incident-2026-09-16.json`（提取规则见其 `_source`）。
+
+**修订裁决一：补丁入口「收下即归一」（草稿宽容面从「原样收下」收紧为「归一或拒收」）。** 原裁决只声明「草稿通过 = 门通过」，对**入口形状**未置一词，实现因此原样收下模型给的一切形状（字符串列表/字典/配对列表），毒形状随草稿过夜、直到 finish 才在权威门炸（而权威门对非数组 `misconceptions` 是 `for...of` 直接抛 TypeError 穿透——连 finish 轮次都记不下）。修订后的分界是**两面**：
+
+- **暂存宽容（草稿补丁入口，`growth-draft.ts::normalizePatchShape`）**：名字/条目信息完备的形状当场归一为发布形态——铸名 字符串`「X」`/`{name: X}`/字典`{X: 定义}`（含多键与裸值，均「名字→定义」同族）→ `{canonical[, definition]}`；`teaches/assumes` 配对列表 `[[概念,档],…]` → 概念→档映射；`misconceptions` 按概念归组的字典 `{概念:[文字…]}` → `[{concept, model}]`。归一动作随当次工具回执可见（引擎侧返回文本，**不新开提示词常量**），并随 `onTolerated` 回调给宿主**当次**捕获补标 tolerated（批次结束后再补标只会落到最后一轮）。
+- **发布严格（权威门）**：修不了的形状入口整批拒收 + 回灌合法形态速查（`PATCH_SHAPE_CHEATSHEET`），**毒形状永不随草稿过夜**；权威门恒见合法形态，门同源不变式按构造而非按运气成立。拒收面含：`misconceptions` 字符串列表（一条字符串拆不出 concept——事故里它被摊成 `{concept: undefined}`，让审计报出「孤立新铸概念："undefined"」的鬼错误）、误解条目非映射/键名错（事故里模型写过 `[{concept, text}]`）、字典值非文本/文本列表、铸名不可判读形态。**尺寸带/每概念封顶/概念在册**等语义维度不入口归一（那是「补 op 能修」的一类，归 finish 权威门）。
+
+**修订裁决二：门复验异常转门错误（保险丝）。** `growth-subsystem.ts` 调 `editGateErrors` 处加 try/catch：异常折叠为带字段指向的门错误行（`logRound('finish')` 照记、回灌可执行反馈），不再让异常穿透 writeTool 只回灌一行裸异常。配套让重放侧成为形状问题的**单一发声处**：`nodeFromAddOp` 对不能忠实落图的形状 fail loud（非列表 `misconceptions`、取不到真概念名的条目），`replayDraft` 逐 op 收下该行；`conceptRefsOfOps`/`consolidationGateErrors` 对非数组/非条目项**跳过**（不再 `for...of` 抛错，也不再造「引用「undefined」未在册」的鬼引用）。
+
+**修订裁决三：生长失败语料补标按真实失败站落盘。** 两站各失败各的——站标签由引擎在抛出点随错误随行（`stationTaggedError`：思路官段 `COACH_PLAN_STATION`、草稿段 `GROWTH_DRAFT_STATION`），宿主按标签补标；未标注（两站都没跑起来：零终点/注册表缺课/纯 IO 故障）= 没有死因样本，**不补标**。旧口径写死 `STATIONS.growth`（'教练思路'，拆分前单站遗留名）把执行官站的失败补标到思路官站最近一条捕获上（事故里那是一条成功件，被改成 `failed` + `bad-` 前缀，死因还把排查者指向错的语料目录）。站名常量归引擎侧（`COACH_PLAN_STATION` 随门面出，host `STATIONS.growthPlan` 引它对齐），遗留键清理。
+
+**存量处置**：事故毒草稿（`published=0`）修复落地后取消重开，**不做读侧自愈**——毒形状只可能存在于未发布段（`published>0` 的草稿过不了 finish），取消永远安全。落地动作：本仓 `coachDraftCancel` 是唯一取消通道（命令/面板接面仍归另票），故在 vault 里把该文件**停用改名**（`草稿/draft-2026-09-16T17-59-59.json` → 同目录 `*.json.cancelled`；`findActiveDraft` 只收 `*.json`，改名即等于取消，且证据留档不删）。
+
+**提示词面判定（明确登记，防误读为漏登）**：本次新增的模型可见散文 = 形状拒收回执（`PATCH_SHAPE_CHEATSHEET` + 逐字段错误行）与成功回执的「形状归一 N 处」一节，两处都是**引擎侧工具返回文本**（与既有回执「已入草稿：…先 draft_audit 再 draft_finish。」同类），不在 `src/engine/prompts/`、不是 `PROMPT_KINDS` 模板、不入 `TEMPLATE_FILES`：prompt-bump 两门不执法（票面 受管制面 同此判定）。按章程 §8 末段，这一类靠**人审 + 收尾点名**兜——清单见票面 #301 评论（逐条给常量名与文件行）。§8 的登记纪律面（让最终 prompt 变化者须同提交登记）**不覆盖工具回执文本**：登记表的键 = `PROMPT_KINDS` 全集，给非模板文本造条目会让状态级门（键集合 == PROMPT_KINDS）当场变红。
+
+**"收下即归一"的两处**超出票面字面、在其原则内**的判定（如实登记，供复核）**：① 铸名块裸值与非单键字典（`concepts: {X: 定义, Y: 定义}` 或整块不是列表）也按「名字→定义」归一——票面写的是字典 `{x:def}` 单条形态，但同一形状族；不收就等于保留一类**静默丢弃**（旧实现对非数组 concepts 直接 `[]` 丢掉，事故 call17 的 4 枚铸名即如此丢的）。② 误解条目**内**形状（`{concept, text}` 键名错、条目非映射）改为入口拒收而非归一：`text`→`model` 的改写是同一件的第二次猜测，且票面只授权「字典→条目数组」一种归一；拒收行会指名未知字段并给合法形态，一轮可修。两条都在 `tests/growth-draft.test.ts` 有对应断言。
+
+**行为与门影响（本次修订）**：工具面/schema/路由/磁盘格式**零改动**（不是产品契约变更，无探针快照迁移）；新增导出 `normalizePatchShape`/`COACH_PLAN_STATION`/`stationOfError` + 类型 `PatchShapeNormalization`（`PATCH_SHAPE_CHEATSHEET` 只随 `growth-draft.ts` 出、不进門面——无引擎外消费方），G5/G7 棘轮随实现重写、`scripts/arch-baseline.json` 同提交更新（G4 窄面未触）；`REPAIR_MECHANISMS.plannerRecheckOnce` 的见证串随站名常量化改写（`agent.repair('教练思路'` → `agent.repair(COACH_PLAN_STATION`，S68 门当场红过，已同步）。**图查证记录**（AGENTS.md 收尾点名；project `D-learnhub-plugin`，`query_graph`）：`STATIONS` 入边 29 条全为成员访问（键改名只影响 `jobs.ts` 一处，已核；值未动故 S63 站表门不受影响）；`editGateErrors` ← `proposeEdit`/`applyEdit`/草稿内核 3 处（错误行契约三处同调不变）；`nodeFromAddOp` ← `replayDraft`/`applyOpsToNodes`（前者逐 op 收下抛错、后者只在门后跑，fail loud 不会从无门路径逃逸）；`normalizePatchShape`/`PATCH_SHAPE_CHEATSHEET` ← 仅补丁入口（无其他调用点漏接）；`GrowthDraftDoc` ← 草稿读写四函数 + `coachDraft`（磁盘格式未变，无迁移面）。验收回放：`tests/growth-draft.test.ts`（事故语料逐调用回放 call2/call3/call5/6/call15/call17/call21 + 毒草稿 finish 门错误化 + 保险丝折叠 + tolerated 回调）、`tests/corpus.test.ts`（站名词表对表）、`tests/coach-growth.test.ts`（两站失败各带各的标签）、`tests/host-runtime.test.ts`（失败补标落真死因件 + tolerated 落当次件 + 无标签不补标）。

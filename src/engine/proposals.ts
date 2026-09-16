@@ -336,14 +336,28 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
   }
 }
 
-/** edit 提案全部概念引用（teaches/assumes 键 + 误解 concept；#141 受理门对表原料）。 */
+/** edit 提案全部概念引用（teaches/assumes 键 + 误解 concept；#141 受理门对表原料）。
+ * 非列表 misconceptions 在此**跳过**而不是 `for...of`（#301 缺陷②：字典形不可迭代，
+ * 抛出的 TypeError 会穿透整条门序列——连 finish 轮次都记不下、回灌给模型一行裸异常）。
+ * 该形状的可执行错误行由重放侧（nodeFromAddOp）给出，一处说一次。 */
 function conceptRefsOfOps(ops: EditOp[]): ConceptRef[] {
   const refs: ConceptRef[] = []
   for (const [i, op] of ops.entries()) {
     const where = `ops.${i}(${op.op === 'add_node' ? op.name : op.node})`
-    for (const concept of Object.keys(op.teaches ?? {})) refs.push({ where: `teaches[${where}]`, concept })
-    for (const concept of Object.keys(op.assumes ?? {})) refs.push({ where: `assumes[${where}]`, concept })
-    for (const m of op.misconceptions ?? []) refs.push({ where: `misconceptions[${where}]`, concept: m.concept })
+    // 取不到真概念名的字段一律跳过（形状问题由重放侧的可执行行给出，见 nodeFromAddOp）：
+    // 非映射的 teaches/assumes 会被 Object.keys 数成「引用「0」未在册」、非列表或非条目的
+    // misconceptions 会数成「引用「undefined」未在册」——两类鬼引用都会盖住真错误（#301）
+    for (const field of ['teaches', 'assumes'] as const) {
+      const map: unknown = op[field]
+      if (map === undefined || map === null || typeof map !== 'object' || Array.isArray(map)) continue
+      for (const concept of Object.keys(map)) refs.push({ where: `${field}[${where}]`, concept })
+    }
+    for (const m of Array.isArray(op.misconceptions) ? op.misconceptions : []) {
+      const concept = (m as { concept?: unknown } | null)?.concept
+      if (typeof concept === 'string' && concept.trim()) {
+        refs.push({ where: `misconceptions[${where}]`, concept })
+      }
+    }
   }
   return refs
 }
@@ -367,8 +381,10 @@ export function consolidationGateErrors(
     for (const concept of Object.keys(op.assumes ?? {})) {
       if (!taught.has(concept)) errors.push(`${where}: 巩固节点 assumes「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
     }
-    for (const m of op.misconceptions ?? []) {
-      if (!taught.has(m.concept)) errors.push(`${where}: 巩固节点误解条目「${m.concept}」不是已教概念——巩固只引已教概念做综合收束`)
+    for (const m of Array.isArray(op.misconceptions) ? op.misconceptions : []) {
+      const concept = (m as { concept?: unknown } | null)?.concept
+      if (typeof concept !== 'string' || !concept.trim()) continue // 形状错误由重放侧给出（#301）
+      if (!taught.has(concept)) errors.push(`${where}: 巩固节点误解条目「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
     }
   }
   return errors
@@ -1444,8 +1460,15 @@ export class GraphProposals {
   }
 }
 
-/** add_node op → GNode（模拟与实落共用一个构造；概念字段组随 op 携带，键名统一后取 name）。 */
+/** add_node op → GNode（模拟与实落共用一个构造；概念字段组随 op 携带，键名统一后取 name）。
+ * 概念字段组形状在此 fail loud（#301 缺陷②）：此前对非列表 `misconceptions` 取 `.length`
+ * 静默丢字段（数据丢失零反馈）、对字符串列表 `{...m}` 摊成 `{concept: undefined}` 鬼条目
+ * （再经 misconceptionCapErrors 报出「概念"undefined"已有 N 条」的伪错误）——草稿重放与
+ * 受理门两路都从这里漏。形状归一只发生在草稿补丁入口（暂存宽容 #301 缺陷①），权威门
+ * 见到的非法形状一律 fail loud：`replayDraft` 逐 op 收下这行，不让异常穿透门序列。 */
 function nodeFromAddOp(op: EditOp): GNode {
+  const teaches = tierMapOf(op, 'teaches')
+  const assumes = tierMapOf(op, 'assumes')
   return {
     name: op.name!,
     pre: [...(op.pre ?? [])],
@@ -1456,10 +1479,46 @@ function nodeFromAddOp(op: EditOp): GNode {
     ...(op.type ? { type: op.type } : {}),
     ...(op.bloom ? { bloom: op.bloom as BloomLevel } : {}),
     ...(op.difficulty !== undefined ? { difficulty: op.difficulty as GNode['difficulty'] } : {}),
-    ...(op.teaches ? { teaches: { ...op.teaches } } : {}),
-    ...(op.assumes ? { assumes: { ...op.assumes } } : {}),
-    ...(op.misconceptions?.length ? { misconceptions: op.misconceptions.map(m => ({ ...m })) } : {}),
+    ...(teaches ? { teaches } : {}),
+    ...(assumes ? { assumes } : {}),
+    ...(op.misconceptions !== undefined ? { misconceptions: misconceptionEntriesOf(op) } : {}),
   }
+}
+
+/** op.teaches/assumes → 概念→档映射（**非映射者 fail loud**，理由同 misconceptionEntriesOf：
+ * 配对列表/字符串被 `{...raw}` 摊成 `{0:[…]}` 这类伪映射，再经概念对表报成「引用「0」未在册」
+ * ——误导排查。配对列表的宽容形态只在草稿补丁入口归一（#301 缺陷①），权威门只管合法形态；
+ * 档位枚举与尺寸带仍归 parseConceptFields。 */
+function tierMapOf(op: EditOp, field: 'teaches' | 'assumes'): Record<string, ConceptTier> | undefined {
+  const raw: unknown = op[field]
+  if (raw === undefined) return undefined
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    const got = Array.isArray(raw) ? '列表' : typeof raw
+    throw new Error(`add_node「${op.name ?? ''}」.${field} 形状非法（收到${got}）：teaches/assumes 是「概念→档」映射 {概念: 档}——配对列表 [[概念, 档], …] 请直接写映射后重提`)
+  }
+  return { ...(raw as Record<string, ConceptTier>) }
+}
+
+/** op.misconceptions → 条目列表（**不能忠实落图者 fail loud**；条目内其余形状——未知键、
+ * 缺 model——仍归 parseConceptFields 逐条裁，不在这里复刻第二套契约）。判据就是
+ * 「能否取到一枚真概念名」：取不到时旧实现会摊出 `{concept: undefined}` 的鬼条目，
+ * 再经 misconceptionCapErrors 报成「误解封顶越界: 概念"undefined"已有 N 条」——误导
+ * 排查（#301 缺陷①的鬼错误症状），故这一形态在此就地拦下。 */
+function misconceptionEntriesOf(op: EditOp): Misconception[] {
+  const raw: unknown = op.misconceptions
+  if (!Array.isArray(raw)) {
+    const got = typeof raw === 'object' && raw !== null ? '字典' : typeof raw
+    throw new Error(`add_node「${op.name ?? ''}」.misconceptions 形状非法（收到${got}）：误解必须是条目列表 [{concept, model}]——字典形 {概念: [文字…]} 请拆成逐条条目后重提`)
+  }
+  const entries: Misconception[] = []
+  for (const [j, item] of raw.entries()) {
+    const m = item as Record<string, unknown> | null
+    if (m === null || typeof m !== 'object' || Array.isArray(m) || typeof m.concept !== 'string' || !m.concept.trim()) {
+      throw new Error(`add_node「${op.name ?? ''}」.misconceptions 第 ${j + 1} 项不是合法条目（一条字符串拆不出它属于哪个概念）：每条写成 {concept: 在册概念名, model: 错误模型文字}`)
+    }
+    entries.push({ ...m } as unknown as Misconception)
+  }
+  return entries
 }
 
 /** 草稿差异（Draft Diff，#271 / ADR-0088）：生长草稿相对其基图的结构增量读数——只读、
@@ -1490,7 +1549,13 @@ export function replayDraft(nodes: GNode[], graph: Graph, ops: EditOp[]): DraftR
   for (const op of ops) {
     if (op.op === 'add_node') {
       if (names.has(op.name!)) { errors.push(`add_node 重名: ${op.name}`); continue }
-      sim.push(nodeFromAddOp(op))
+      // 概念字段组的形状错误逐 op 收下（#301 缺陷②）：抛出去会穿透整条门序列
+      try {
+        sim.push(nodeFromAddOp(op))
+      } catch (e) {
+        errors.push((e as Error).message)
+        continue
+      }
       names.add(op.name!)
       added.push(op.name!)
     } else if (op.op === 'del_node') {

@@ -22,7 +22,7 @@
  */
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { QUIZ_SOLVER_STATION, QUALITY_REVIEW_STATION } from '../engine/index.ts'
-import { GROWTH_DRAFT_STATION } from '../engine/index.ts'
+import { COACH_PLAN_STATION, GROWTH_DRAFT_STATION } from '../engine/index.ts'
 import type { LlmTokenUsage } from '../engine/index.ts'
 
 /** 成功样本环形封顶（每站）。 */
@@ -94,8 +94,10 @@ export const STATIONS = {
   selfNote: '自注反馈',
   tutor: '老师辅导',
   explainBack: '讲给我听',
-  growth: '教练思路',
-  /** 生长草稿执行官站（#271 / ADR-0088）：引擎侧 GROWTH_DRAFT_STATION 引门面常量对齐。 */
+  /** 生长两站的站标签（#271/#273 拆分 / ADR-0088）：思路官与执行官各一站，都引引擎侧
+   * 常量对齐（站名对齐靠常量不靠字面）。#301 清理了拆分前的单站遗留名 `growth`——那张
+   * 写死的映射把执行官站的失败补标到思路官站（详见 host/jobs 的失败补标处）。 */
+  growthPlan: COACH_PLAN_STATION,
   growthDraft: GROWTH_DRAFT_STATION,
   compass: '罗盘',
   decompile: '目标反编译',

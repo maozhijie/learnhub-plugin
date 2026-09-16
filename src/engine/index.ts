@@ -100,9 +100,15 @@ export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
 export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
 /** 出题第二意见门（#223）：站标签与缺省抽样率随门面出（宿主 STATIONS/配置对齐用）。 */
 export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
+/** 思路官站标签（#301 缺陷③）：宿主 STATIONS.growthPlan 引本常量对齐——失败补标按真实
+ * 失败站落盘，站名常量的单一出处从此在引擎侧（此前 host 侧一张写死的遗留映射
+ * `growth: '教练思路'`）。 */
+export { COACH_PLAN_STATION } from './growth-subsystem.ts'
 /** 生长草稿内核（#271 / ADR-0088）：站标签/草稿差异与门同调纯函数随门面出（宿主与测试消费）。 */
-export { GROWTH_DRAFT_STATION, expandPatchOps, draftFindings } from './growth-draft.ts'
-export type { PatchSuggestion } from './growth-draft.ts'
+export { GROWTH_DRAFT_STATION, expandPatchOps, draftFindings, normalizePatchShape } from './growth-draft.ts'
+export type { PatchSuggestion, PatchShapeNormalization } from './growth-draft.ts'
+/** 生长失败站标签的读侧（#301 缺陷③）：宿主按真实失败站补标语料，读法经门面走（不 cast 字段）。 */
+export { stationOfError } from './growth-subsystem.ts'
 export { editGateErrors, replayDraft, sealedDecisionOf, simulateOps } from './proposals.ts'
 export type { DraftDiff, DraftReplay, SealedDecision, EditGateCtx } from './proposals.ts'
 export type { SecondOpinionReport, SecondOpinionOptions } from './question-audit.ts'
