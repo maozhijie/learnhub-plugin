@@ -39,9 +39,19 @@ function errorCodeOf(err: unknown): string {
 
 /** 语料补标（#213）：站最近一条捕获改判 failed+失败码，返回任务失败详情的语料引用
  * （无捕获 = undefined——引用只在真有语料文件时带出）。站内对齐语义：队列泵单并发 +
- * catch 紧随该站调用，「最近一条」即死因样本（ADR-0060）。 */
-function failCorpus(rt: HostRuntime, station: string, err: unknown): string | undefined {
-  return rt.corpus.annotateLast(station, { outcome: 'failed', code: errorCodeOf(err) })
+ * catch 紧随该站调用，「最近一条」即死因样本（ADR-0060）。
+ *
+ * `since` = 本轮开始前取的引用令牌（#313 B7）：判据是「这一轮对该站**真的**产生过捕获」
+ * ——取消 / 轮次预算耗尽 / 熔断前零调用 / 空手结束这类非模型失败本轮可能一次 LLM 都
+ * 没调，旧口径会把上一轮甚至上一个会话的成功件改名 `bad-` + `outcome: failed`：bad 桶
+ * 被污染（质量评审抽样失真），失败详情里那句「语料 …/<件>」也指向成功件。 */
+function failCorpus(rt: HostRuntime, station: string, err: unknown, since?: string): string | undefined {
+  return rt.corpus.annotateLast(station, { outcome: 'failed', code: errorCodeOf(err) }, { since })
+}
+
+/** 参照令牌（#313 B7）：任务开始时按站取一次，失败补标时交回。 */
+function corpusToken(rt: HostRuntime, station: string): string | undefined {
+  return rt.corpus.lastRef(station)
 }
 
 /** 出题站的补全缝转发闭包（generateQuiz/finishWithQuiz 共用，#223）：调用级
@@ -70,13 +80,15 @@ async function generateQuiz(rt: HostRuntime, complete: LlmComplete, course: stri
   /** 先验检索审计注记（#229）：纯出题任务也要说得清这次读了哪几篇笔记（随 opts 透传）。 */
   onPrior?: (audit: VaultPriorAudit) => void
 }) {
+  // 取消不是模型死亡：取消轮出的件不补标成 failed（#313 B7——section 级 catch 同款纪律）
+  const since = corpusToken(rt, STATIONS.quiz)
   try {
     return await rt.engine.bank2.questionGenerate(course, node, count, quizSeam(complete, opts?.effort), {
       ...opts,
       ...(rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : {}),
     })
   } catch (err) {
-    failCorpus(rt, STATIONS.quiz, err)
+    if (opts?.isCancelled?.() !== true) failCorpus(rt, STATIONS.quiz, err, since)
     throw err
   }
 }
@@ -608,6 +620,10 @@ const GRAPH_JOB_STATIONS: Partial<Record<GenJobPhase, string>> = {
 async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Promise<void> {
   job.status = 'running'
   persistGenJobs(rt)
+  // 补标的在场证明（#313 B7）：本轮对该站零新捕获即不补标（取消/受理前失败是这类形态）
+  const corpusTokenAtStart = job.phase && GRAPH_JOB_STATIONS[job.phase]
+    ? corpusToken(rt, GRAPH_JOB_STATIONS[job.phase]!)
+    : undefined
   try {
     if (job.phase === 'compass') {
       // 初画/重画共用一条队列通道（repainted 由引擎结果区分），措辞不预设哪一种
@@ -646,7 +662,8 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
     }
   } catch (err) {
     const station = job.phase ? GRAPH_JOB_STATIONS[job.phase] : undefined
-    const corpusRef = station ? failCorpus(rt, station, err) : undefined
+    // 取消不是模型死亡（#313 B7）：取消轮的件不补标，失败详情也不该带语料指向
+    const corpusRef = station && (job.status as GenJobStatus) !== 'cancelling' ? failCorpus(rt, station, err, corpusTokenAtStart) : undefined
     failGenJob(rt, job, err instanceof Error ? err.message : String(err), corpusRef)
   } finally {
     persistGenJobs(rt)
@@ -680,10 +697,16 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
     // 卡点自报读取失败留痕（#291 / ADR-0091）：不挡回合（留账，下回合重试）
     rt.logger.warn('coach_growth.stuck_read_failed', { course: job.course })
   }
+  // 失败补标的在场证明（#313 B7）：两站各取一次（要到 catch 才由错站标签知道是哪一个）。
+  // 取消 / 轮次预算耗尽 / 熔断前零调用 / 空手结束这类非模型失败本轮可能一次都没调，
+  // 旧口径会把上一轮甚至上一个会话的成功件改名 bad-（bad 桶污染 + 「语料 …/<件>」指向成功件）。
+  const growthTokens = new Map<string, string | undefined>([
+    [STATIONS.growthPlan, corpusToken(rt, STATIONS.growthPlan)],
+    [STATIONS.growthDraft, corpusToken(rt, STATIONS.growthDraft)],
+  ])
   try {
     const r = await rt.engine.growth2.coachGrowthBatch(job.course, rt.agent, {
-      ...(inject ? { inject } : {}),
-      // 显式重新裁决的豁免随任务进执行侧（#240）：面板「生长一步」/失败重试点过的
+      ...(inject ? { inject } : {}),      // 显式重新裁决的豁免随任务进执行侧（#240）：面板「生长一步」/失败重试点过的
       // 那一轮，就绪深度已满足也不短路成停摆——否则按钮在停摆图上恒空转
       ...(job.growthForce === true ? { force: true } : {}),
       ...(job.growthTrigger ? { trigger: job.growthTrigger } : {}),
@@ -735,7 +758,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
     // `STATIONS.growth`（'教练思路'）会把最近一次思路官成功件改成 failed/bad- 并把
     // 排查者指向错的语料目录，标错件比不标更坏。
     const station = stationOfError(err)
-    const corpusRef = station ? failCorpus(rt, station, err) : undefined
+    // 取消不是模型死亡（#313 B7）：取消轮的件不补标成 failed、失败详情也不带语料指向
+    const corpusRef = station && (job.status as GenJobStatus) !== 'cancelling'
+      ? failCorpus(rt, station, err, growthTokens.get(station))
+      : undefined
     failGenJob(rt, job, err instanceof Error ? err.message : String(err), corpusRef)
   } finally {
     persistGenJobs(rt)
@@ -835,6 +861,8 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
   }
   // 先验审计注记（#229）：纯出题任务不产正文包，审计从出题这一次检索取
   let priorNote = ''
+  // 补标的在场证明（#313 B7）：取消/受理前失败本轮对该站零捕获即不补标
+  const quizTokenAtStart = corpusToken(rt, STATIONS.quiz)
   try {
     const r = await generateQuiz(rt, llmSeam(ctx, rt.corpus.record), job.course, job.node, job.count, {
       ...(job.section ? { section: job.section } : {}),
@@ -850,8 +878,9 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
     job.status = 'done'
     job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}${auditNoteOf(r)}${diversityNoteOf(r)}${priorNote}`
   } catch (err) {
-    // generateQuiz 内已补标，此处取 ref 进失败详情
-    const corpusRef = failCorpus(rt, STATIONS.quiz, err)
+    // generateQuiz 内已补标，此处取 ref 进失败详情；取消轮不补标（#313 B7——`:841` 的
+    // 取消检查抛出的错也落进这个 catch，旧口径会把上一轮成功件标成 failed）
+    const corpusRef = (job.status as GenJobStatus) === 'cancelling' ? undefined : failCorpus(rt, STATIONS.quiz, err, quizTokenAtStart)
     failGenJob(rt, job, err instanceof Error ? err.message : String(err), corpusRef)
   } finally {
     persistGenJobs(rt)

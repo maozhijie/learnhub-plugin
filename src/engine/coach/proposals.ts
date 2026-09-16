@@ -35,8 +35,12 @@ import type { CourseEntry, ProposalKind, ProposalRec } from '../types.ts'
 import type { GraphEditProposalResult, GraphEnrichProposalResult } from '../views/proposals.ts'
 import type { GraphApplyEditResult, GraphApplyEnrichResult } from '../views/graph.ts'
 
-/** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。 */
-export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
+/** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。
+ * `errors`（#313 B5）= 审计 ERROR 明细：此前只写进 `课程根/审计报告.md`，而 apply 的抛错
+ * 只说「先处理 审计报告.md」——草稿会话的模型只有读图工具、读不到文件，只能烧轮次。
+ * 明细随错随行后，模型在拒收当场就看到死因（同一批 ERROR 也在 propose/草稿门序列里
+ * 以 auditGate 提前报出）。 */
+export interface ApplyAudit { ok: boolean; warns: string[]; health: number; errors?: string[] }
 
 export interface EditOp {
   op: 'add_node' | 'del_node' | 'set_pre' | 'set_enc' | 'rename' | 'set_note'
@@ -475,6 +479,10 @@ export interface EditGateCtx {
   /** 本批铸名块（对表用；与 entries 撞名由 mintConflicts 硬拒）。 */
   mints?: ConceptEntry[]
   growthGate?: (spec: EditProposalSpec) => Promise<string[]>
+  /** apply 侧审计门（#313 B5）：返回审计 ERROR 行，空 = 放行。propose 与草稿试算都接它，
+   * 使「审计存在 ERROR」这件事在**第一次提案/第一次补丁**就可见——否则模型要烧到
+   * apply 才看到一行指不到明细的拒收官话（草稿会话连审计报告文件都读不到）。 */
+  auditGate?: () => Promise<string[]>
 }
 
 export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): Promise<string[]> {
@@ -489,7 +497,11 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
   if (errors.length) return errors
   const gateBlocks = ctx.growthGate ? await ctx.growthGate(spec) : []
   // 闸门横幅随错误行返回（原 propose/apply 两侧的包装文案，门同调后单源在此）
-  return gateBlocks.length ? ['生长闸门拒绝受理（插入积极性调速，#146）', ...gateBlocks] : []
+  if (gateBlocks.length) return ['生长闸门拒绝受理（插入积极性调速，#146）', ...gateBlocks]
+  const auditBlocks = ctx.auditGate ? await ctx.auditGate() : []
+  return auditBlocks.length
+    ? ['审计门拒绝受理（与 apply 同一判据：课程存在 ERROR 时任何提案都不落盘），明细：', ...auditBlocks]
+    : []
 }
 
 /** 受理门的**完整**序列（#309 缺陷① / ADR-0088 §修订）：schema 纯校验（`validateEditProposal`
@@ -676,6 +688,9 @@ export class GraphProposals {
     /** 生长闸门（#146 插入/旁支调速）：受理与 apply 双门在 schema 门后调用——需要
      * 三率流水（账本/提案/练习），由门面注入（本类零流水依赖）；返回拒收行，空 = 放行。 */
     private growthGate: ((spec: EditProposalSpec) => Promise<string[]>) | undefined,
+    /** 审计门的受理面（#313 B5）：按课程名返回审计 ERROR 行（只算不落盘）。propose 与
+     * 草稿试算共用同一判据——「审计通过」与「apply 被拒」不再能在同一帧共存。 */
+    private auditGate: ((course: string) => Promise<string[]>) | undefined,
     /** 时钟端口（#175 阶段①）：decided/now 戳与学习日缺省都经它取时。 */
     private clock: Clock,
     private fs: VaultFs,
@@ -735,6 +750,7 @@ export class GraphProposals {
     const gateErrors = await editGateErrors(spec, {
       nodes, graph, entries, anchors,
       mints: spec.concepts ?? [], growthGate: this.growthGate,
+      ...(this.auditGate ? { auditGate: () => this.auditGate!(course.name) } : {}),
     })
     if (gateErrors.length) {
       throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
@@ -781,7 +797,8 @@ export class GraphProposals {
    * 才开始任何写盘，提案被拒罗盘不落盘）+ 快照。登记表先写（孤儿条目合法、悬空引用
    * 违约），graph 落盘在后。 */
   async applyEdit(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<GraphApplyEditResult> {
-    if (!audit.ok) throw new Error('[apply-edit] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
+    if (!audit.ok) throw new Error(`[apply-edit] 审计门存在 ERROR，拒绝写入（明细随行附上；报告人也读得到：课程根/审计报告.md）。`
+      + (audit.errors?.length ? `\n${audit.errors.map(e => `  ✗ ${e}`).join('\n')}` : ''))
     const prop = await this.store.takePending('edit', pid)
     const v = validateEditProposal(await this.loadArtifact(prop.artifact))
     if (v.errors || !v.spec) throw new Error(`[apply-edit] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)
@@ -1169,7 +1186,8 @@ export class GraphProposals {
 
   /** graph apply-enrich：指纹复核 → 写正典（enc 整体替换）→ 覆盖层留痕 → journal + 快照。 */
   async applyEnrich(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<GraphApplyEnrichResult> {
-    if (!audit.ok) throw new Error('[apply-enrich] 审计存在 ERROR，拒绝写入——先处理 审计报告.md。')
+    if (!audit.ok) throw new Error(`[apply-enrich] 审计门存在 ERROR，拒绝写入（明细随行附上；报告人也读得到：课程根/审计报告.md）。`
+      + (audit.errors?.length ? `\n${audit.errors.map(e => `  ✗ ${e}`).join('\n')}` : ''))
     const prop = await this.store.takePending('enrich', pid)
     const v = validateEnrichProposal(await this.loadArtifact(prop.artifact))
     if (v.errors || !v.spec) throw new Error(`[apply-enrich] 提案产物 schema 失效。\n${(v.errors ?? []).map(e => `  ✗ ${e}`).join('\n')}`)

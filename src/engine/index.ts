@@ -261,9 +261,11 @@ export class LearnhubEngine {
     this.noteManifest = new NoteSourceManifest(this.paths, this.fs)
     this.ankiMirror = new AnkiMirror(this.paths, this.fs)
     // 生长闸门注入（#146 插入/旁支调速）：三率流水在门面（账本/提案/练习），受理与
-    // apply 双门经此回调消费同一份闸门判定。
+    // apply 双门经此回调消费同一份闸门判定。审计门注入（#313 B5）同款：propose 侧也要
+    // 看见「课程存在审计 ERROR」——否则同一帧里可以「受理通过」而 apply 每轮拒。
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot,
-      spec => this.growth2.growthGateErrors(spec), this.clock, this.fs, this.logger)
+      spec => this.growth2.growthGateErrors(spec),
+      course => this.auditGateErrors(course), this.clock, this.fs, this.logger)
     this.projects = new Projects(this.paths, this.store, this.clock, this.fs)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course), this.fs, this.logger)
     this.lab = new LabSubsystem({
@@ -416,6 +418,7 @@ export class LearnhubEngine {
       graphReject: (pid, note) => this.graph.graphReject(pid, note),
       graphProposals: (status, kind) => this.graph.graphProposals(status, kind),
       proposeConfusableCandidate: (courseKey, pair) => this.proposals.proposeConfusableCandidate(courseKey, pair),
+      auditErrors: course => this.auditGateErrors(course),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       mcAggregate: (plan, cards, nodes, today, scheds, fallbackCourse) => this.lab.mcAggregate(plan, cards, nodes, today, scheds, fallbackCourse),
@@ -648,9 +651,26 @@ export class LearnhubEngine {
       const result = await runAudit(this.paths, course.root, course.name, graph, today, this.fs)
       // 健康分与审计同口径剔终点（#200 / ADR-0055；#239 多终点化）：读锚现算，起草 apply 落的锚即刻生效
       const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(course.root), this.fs))
-      audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph, { endpoints }).score }
+      // errors 随行（#313 B5）：apply 的拒收文案要带上明细——模型只看到「先处理 审计报告.md」
+      // 时，手上没有任何可执行信息（草稿会话连文件都读不到）
+      audit = {
+        ok: !result.failed, warns: result.warns.slice(0, 8),
+        health: graphHealthScore(graph, { endpoints }).score,
+        errors: result.errors.slice(0, 12),
+      }
     }
     return audit
+  }
+
+  /** 审计门的**受理面**（#313 B5）：propose 与草稿试算消费同一判据（`editGateErrors.auditGate`），
+   * 但只算不落盘——报告落盘仍归 apply 侧那次真跑，门不该在拒绝路径上写文件。 */
+  private async auditGateErrors(courseName: string): Promise<string[]> {
+    const course = await this.registry.get(courseName)
+    if (!course || !this.fs.exists(this.paths.dataDir(course.root))) return []
+    const { graph } = await this.loadView(course)
+    const result = await runAudit(this.paths, course.root, course.name, graph,
+      (await this.learningDay()).today, this.fs, { report: false })
+    return result.errors.slice(0, 12)
   }
 
   // ---- 内容管线 ----

@@ -6,6 +6,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { AgentSeam } from '../src/engine/infra/agent.ts'
+import { COACH_PLAN_STATION } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
@@ -49,6 +50,27 @@ test('coach.plan.reinject：计划门拒收后的修复轮回灌观测（DEBUG m
     assert.equal(e.level, 'debug')
     assert.equal(e.fields.family, 'routine', '#296 后事件带族别与清单计数（字段面以门册为准）；#310 起首裁不是重裁——本课程无生长批历史，panel_dispatch 也走常规族')
     assert.equal(e.fields.schema_errors, 1)
+  })
+})
+
+test('#313 B6：门拒绝落调试日志——coach.gate.reject 两轮各一条（幽灵事件接线兑现）', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const agent = planFake([badPlan, badPlan])
+    await assert.rejects(
+      () => h.engine.growth2.coachGrowthBatch('数学', agent, { trigger: 'panel_dispatch' }),
+      /未过 schema 门/,
+    )
+    // 此前这条事件只活在 ADR-0080 的闭集里（全仓零发出点）：排查者按文档 grep 日志
+    // 会得到「没跑过重裁」的假否定。现在两个站的每一处门拒绝都从这里落地。
+    assert.equal(h.logger.count('coach.gate.reject'), 2, '首轮 + 回灌重裁各一条')
+    const first = h.logger.nth('coach.gate.reject', 1)!
+    assert.equal(first.level, 'warn')
+    assert.equal(first.fields.station, COACH_PLAN_STATION)
+    assert.equal(first.fields.gate, 'plan_schema')
+    assert.equal(first.fields.round, 1)
+    assert.ok(Array.isArray(first.fields.detail), '明细进续行（MULTILINE_EVENTS 成员）')
+    assert.equal(h.logger.nth('coach.gate.reject', 2)!.fields.fatal, true, '两轮死因那条带 fatal')
   })
 })
 

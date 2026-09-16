@@ -824,7 +824,8 @@ test('生长批失败终态：教练回合抛错 → failed 带死因；自动�
 test('#301 生长失败语料补标按真实失败站落盘：执行官站失败 → 教练执行站当次捕获改判；思路官成功件不动', async () => {
   const rt = makeRuntime()
   const corpusDir = join(rt.vault, '学习中心', 'state', '生成语料')
-  // 两站各一条捕获（站内对齐语义：「最近一条」即死因样本）
+  // 两站各一条**历史**捕获（上一个会话/上一轮的件——#313 B7 起「最近一条」不再自动等于
+  // 死因样本：判据是「这一轮对该站真的产生过捕获」，故历史件必须原样留着）
   const seedCapture = (station: string, seq: number) => rt.corpus.record({
     ts: `2026-09-16T10:00:0${seq}.000Z`, station, kind: 'loop', outcome: 'ok',
     durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '输出',
@@ -833,10 +834,16 @@ test('#301 生长失败语料补标按真实失败站落盘：执行官站失败
   seedCapture('教练执行', 2)
   await rt.corpus.flush()
   const coachPlanRef = rt.corpus.lastRef('教练思路')!
+  const staleDraftRef = rt.corpus.lastRef('教练执行')!
 
   stub(rt, {
     // 引擎在抛出点给错误打站标签（growth-subsystem 的 stationTaggedError）——宿主据此落站
     'growth2.coachGrowthBatch': async () => {
+      // 本轮执行官站真跑过一轮：当次捕获先落盘，随后才失败
+      rt.corpus.record({
+        ts: '2026-09-16T10:00:09.000Z', station: '教练执行', kind: 'loop', outcome: 'ok',
+        durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '本轮的死因件',
+      })
       throw Object.assign(new Error('[coach-draft] 回路收束但草稿仍有 3 条未发布增量且未成功 finish'), { station: '教练执行' })
     },
     saveGenJobs: async () => undefined,
@@ -848,12 +855,13 @@ test('#301 生长失败语料补标按真实失败站落盘：执行官站失败
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'failed')
   await rt.corpus.flush()
 
-  // 执行官站：当次捕获改判 failed + 迁进 bad 桶
+  // 执行官站：**本轮**捕获改判 failed + 迁进 bad 桶
   const draftRef = rt.corpus.lastRef('教练执行')!
-  assert.match(draftRef, /^教练执行\/bad-/, '执行官站捕获被补标（bad 桶前缀随 outcome）')
+  assert.match(draftRef, /^教练执行\/bad-/, '执行官站本轮捕获被补标（bad 桶前缀随 outcome）')
   const draftBody = readFileSync(join(corpusDir, draftRef), 'utf8')
   assert.match(draftBody, /outcome: failed/)
   assert.match(draftBody, /code: ERROR/)
+  assert.match(readFileSync(join(corpusDir, staleDraftRef), 'utf8'), /outcome: ok/, '上一轮的件不背这一轮的锅（#313 B7）')
   // 思路官成功件**不被改标**（旧口径把生长失败一律补到思路官站——#301 缺陷③）
   assert.match(coachPlanRef, /^教练思路\/ok-/, '思路官站捕获仍在 ok 桶')
   assert.match(readFileSync(join(corpusDir, coachPlanRef), 'utf8'), /outcome: ok/)
@@ -928,6 +936,65 @@ test('#301 生长失败无站标签（两站都没跑起来：零终点这类）
   assert.match(readFileSync(join(corpusDir, before), 'utf8'), /outcome: ok/)
   const msg = rt.jobs.genJobs.get('数学/生长批')!.message ?? ''
   assert.doesNotMatch(msg, /语料 生成语料/, '无站标签 = 无死因样本，不带语料引用')
+})
+
+test('#313 B7 非模型失败不补标：熔断/预算类失败本轮零调用 → 上一件的 ok 捕获原样、失败详情不带语料引用', async () => {
+  const rt = makeRuntime()
+  const corpusDir = join(rt.vault, '学习中心', 'state', '生成语料')
+  // 上一轮（甚至上一个会话）的成功件：站内对齐语义下它就是「最近一条」
+  rt.corpus.record({
+    ts: '2026-09-16T09:00:01.000Z', station: '教练执行', kind: 'loop', outcome: 'ok',
+    durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '上一轮的产出',
+  })
+  await rt.corpus.flush()
+  const before = rt.corpus.lastRef('教练执行')!
+  stub(rt, {
+    // 轮次预算耗尽：入口就抛，本轮**一次 LLM 调用都没发生**（带草稿站标签）
+    'growth2.coachGrowthBatch': async () => {
+      throw Object.assign(new Error('[coach-draft] 会话轮次预算耗尽（≤16 轮）'), { station: '教练执行' })
+    },
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'failed')
+  await rt.corpus.flush()
+  // 死因样本必须**出自本轮**：本轮零捕获 → 不补标（旧口径把上一件改名 bad- + failed，
+  // bad 桶被污染 = 质量评审抽样失真，失败详情那句「语料 …/<件>」还指向成功件）
+  assert.equal(rt.corpus.lastRef('教练执行'), before, '捕获未被改名')
+  assert.match(readFileSync(join(corpusDir, before), 'utf8'), /outcome: ok/)
+  assert.doesNotMatch(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', /语料 生成语料/, '没有本轮死因样本就不给语料引用')
+})
+
+test('#313 B7 取消不补标：取消轮即便有本轮捕获也不改判 failed（取消不是模型死亡）', async () => {
+  const rt = makeRuntime()
+  const corpusDir = join(rt.vault, '学习中心', 'state', '生成语料')
+  stub(rt, {
+    // 取消的真实时序：面板/工具把 status 置 cancelling → 回路 assertAlive 抛错。
+    // 桩里同步复现：先落一条本轮捕获（回路真跑过），再翻状态、再抛。
+    'growth2.coachGrowthBatch': async () => {
+      rt.corpus.record({
+        ts: '2026-09-16T10:00:05.000Z', station: '教练执行', kind: 'loop', outcome: 'ok',
+        durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '本轮已产出的件',
+      })
+      cancelGeneration(rt, '数学', '生长批')
+      throw Object.assign(new Error('[coach-growth] 生长批任务已取消——回合中止（已产计划丢弃）。'), { station: '教练执行' })
+    },
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  await until(() => {
+    const s = rt.jobs.genJobs.get('数学/生长批')?.status
+    return s !== undefined && s !== 'running' && s !== 'queued' && s !== 'cancelling'
+  })
+  await rt.corpus.flush()
+  const ref = rt.corpus.lastRef('教练执行')!
+  assert.match(ref, /^教练执行\/ok-/, '取消轮的件留在 ok 桶（取消不算模型死亡）')
+  assert.match(readFileSync(join(corpusDir, ref), 'utf8'), /outcome: ok/)
+  assert.doesNotMatch(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', /语料 生成语料/, '取消不是死因，不带语料引用')
 })
 
 test('生长批停摆终态（#161）：就绪深度满足 → done 带中性说明（非成功样式）+ growthOutcome=idle 供通知分流', async () => {

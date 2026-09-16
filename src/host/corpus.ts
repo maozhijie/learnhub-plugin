@@ -64,9 +64,13 @@ export interface CorpusCapture {
   record(input: CorpusRecordInput): void
   /** 按相对 ref（`<站>/<文件名>`）补标；文件已滚出/已迁名时静默跳过。 */
   annotate(ref: string, patch: CorpusPatch): void
-  /** 按站补标最近一条捕获，返回迁移后的新 ref（无捕获 = undefined）。 */
-  annotateLast(station: string, patch: CorpusPatch): string | undefined
-  /** 该站最近一条捕获的相对 ref（供生成任务失败详情引用）。 */
+  /** 按站补标最近一条捕获，返回迁移后的新 ref（无捕获 = undefined）。
+   * `since` = 调用方在本轮开始前取的 `lastRef` 令牌（#313 B7）：相等即「本轮对该站零捕获」
+   * ——此时「最近一条」是上一轮甚至上一个会话的件，补标会把它改名 `bad-`（bad 桶被污染
+   * = 质量评审抽样失真，失败详情里那句「语料 …/<件>」也指向成功件）。非模型失败
+   * （取消 / 轮次预算耗尽 / 熔断前零调用 / 空手结束）正是这种形态。省略 = 照旧补标。 */
+  annotateLast(station: string, patch: CorpusPatch, opts?: { since?: string }): string | undefined
+  /** 该站最近一条捕获的相对 ref（供生成任务失败详情引用 + 失败补标的在场证明）。 */
   lastRef(station: string): string | undefined
   /** 等待全部在飞写盘完成（测试缝；生产不调）。 */
   flush(): Promise<void>
@@ -324,9 +328,12 @@ export function createCorpusCapture(corpusDir: string): CorpusCapture {
       }).catch(() => undefined)
     },
 
-    annotateLast(station: string, patch: CorpusPatch): string | undefined {
+    annotateLast(station: string, patch: CorpusPatch, opts: { since?: string } = {}): string | undefined {
       const name = lastByName.get(station)
       if (!name) return undefined
+      // 本轮零新捕获（#313 B7）：令牌相等就是「最近一条不是这一轮产的」——不补标、
+      // 不返回引用（失败详情就不该带语料指向）。
+      if (opts.since !== undefined && opts.since === `${station}/${name}`) return undefined
       const newName = name.replace(/^(ok|bad)-/, `${patch.outcome === 'ok' ? 'ok' : 'bad'}-`)
       lastByName.set(station, newName)
       this.annotate(`${station}/${name}`, patch)

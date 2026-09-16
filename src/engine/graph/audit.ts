@@ -33,9 +33,15 @@ export interface AuditResult {
   exempt: string[]
 }
 
+/** `report: false` = 只算不落盘（#313 B5）：门序列（propose / 草稿试算）要消费 ERROR 明细，
+ * 但「门」不该在拒绝路径上写文件——报告落盘仍归 apply 侧那一次真跑（人审读的就是那份）。 */
+export interface AuditOpts {
+  report?: boolean
+}
+
 export async function runAudit(
   paths: Paths, root: string, courseName: string, graph: Graph,
-  today: string, fs: VaultFs,
+  today: string, fs: VaultFs, opts: AuditOpts = {},
 ): Promise<AuditResult> {
   const errors: string[] = []
   const warns: string[] = []
@@ -284,7 +290,9 @@ export async function runAudit(
   }
   lines.push('')
   section('INFO · R9 提示项', infos)
-  await import('../infra/io.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n'), fs))
+  if (opts.report !== false) {
+    await import('../infra/io.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n'), fs))
+  }
 
   return { failed: errors.length > 0, errors, warns, infos, baseline, exempt }
 }

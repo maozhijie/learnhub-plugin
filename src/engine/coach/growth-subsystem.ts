@@ -38,9 +38,12 @@ export interface GrowthDeps {
   clock: Clock
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
-  /** 调试日志端口（#253 / ADR-0080）：教练回合 7 条事件（`coach.round.*`／
-   * `coach.segment.*`／`coach.gate.reject`／`coach.repair.trigger`）由本子系统发——
-   * 「到底有没有跑过回灌重裁」是 `coach.repair.trigger` 一眼可判的主验收物。 */
+  /** 调试日志端口（#253 / ADR-0080）：教练回合的事件由本子系统发——进出/结果走
+   * `coach.round.enter｜round.result`、思路官三段 `coach.plan.enter｜plan.exit｜plan.reinject`、
+   * 执行官站 `coach.draft.*`，**门拒绝统一走 `coach.gate.reject`**（#313 B6：#146 当年的
+   * 初版登记点名的 `coach.repair.trigger`／`coach.segment.*`／`coach.round.apply_fail`
+   * 全仓零发出点，按文档 grep 会得到「没跑过重裁」的假否定——现在两个站的门拒绝都从这一条
+   * 落地，station/gate 两字段区分「哪一站、哪个门」）。 */
   logger: Logger
   store: Store
   paths: Paths
@@ -58,6 +61,9 @@ export interface GrowthDeps {
    * ——只暴露这一个入口，不引入第二套候选语义（同样人审一次一条，不自动入册）。 */
   proposeConfusableCandidate(courseKey: string, pair: { a: string; b: string; evidence: string[] }): Promise<{ id: number; a: string; b: string; weight: number }>
   learningDay(): Promise<{ today: string; cutoff: number }>
+  /** 审计门的受理面（#313 B5）：按课程名返回审计 ERROR 行（只算不落盘）。草稿试算与
+   * propose 共用同一判据——「审计通过」与「apply 被拒」不再能在同一帧共存。 */
+  auditErrors(course: string): Promise<string[]>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   mcAggregate(plan: SandboxPlan, cards: SandboxCard[], nodes: SandboxNode[], today: string, scheds: Map<string, FSRS>, fallbackCourse: string): { curve: SandboxCurvePoint[]; map: Array<{ node: string; p50: number; p80: number }> }
   sandboxPopulation(courses: CourseEntry[], nodeFilter: Set<string> | null): Promise<{ cards: SandboxCard[]; nodes: SandboxNode[]; scheds: Map<string, FSRS> }>
@@ -888,10 +894,19 @@ export class GrowthSubsystem {
       disagreement: planVerdict._schemaErrors ? false : planVerdict.plan.operator === '插入' && Boolean(planVerdict.plan.recheck),
     })
     if (planVerdict._schemaErrors) {
-      // 计划门拒收 → 回灌重裁恰一次（两轮死因 fail loud，零写盘）
-      log.warn('coach.plan.recheck', { course: c.name, round: 1, detail: planVerdict._schemaErrors })
+      // 计划门拒收 → 回灌重裁恰一次（两轮死因 fail loud，零写盘）。留痕事件是
+      // `coach.gate.reject`（#313 B6：族里此前发的是 `coach.plan.recheck`，而排查手册
+      // 与门册点名的主验收物是 `coach.gate.reject`——「按文档 grep 会得到假否定」）。
+      log.warn('coach.gate.reject', {
+        course: c.name, station: COACH_PLAN_STATION, gate: 'plan_schema', round: 1,
+        errors: planVerdict._schemaErrors.length, detail: planVerdict._schemaErrors,
+      })
       const repaired = await runPlan('repair', planVerdict.yaml, planVerdict._schemaErrors)
       if (repaired._schemaErrors) {
+        log.warn('coach.gate.reject', {
+          course: c.name, station: COACH_PLAN_STATION, gate: 'plan_schema', round: 2, fatal: true,
+          errors: repaired._schemaErrors.length, detail: repaired._schemaErrors,
+        })
         throw tagErrorWithStation(new Error(`[coach-growth] 思路官计划未过 schema 门（回灌重裁一轮仍未过——零写盘）。\n【首轮】${planVerdict._schemaErrors.join('\n')}\n【重裁】${repaired._schemaErrors.join('\n')}`), COACH_PLAN_STATION)
       }
       segments.push({ tier: 'plan_repair', effort: planEffort, operator: repaired.plan.operator, disagreement: false })
@@ -1205,6 +1220,7 @@ export class GrowthSubsystem {
           anchors: await readAnchors(this.e.paths.anchorPath(root), this.e.fs),
           mints,
           growthGate: async s => this.growthGateErrors(s),
+          auditGate: () => this.e.auditErrors(c.name),
         },
       }
     }
@@ -1529,9 +1545,9 @@ export class GrowthSubsystem {
         if (call.name.startsWith('draft_')) return await writeTool(call)
         return await readExecutor(call)
       } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
         const logged = doc.rounds.length > before && doc.rounds.at(-1)?.kind === kind
         if (kind && !logged) {
-          const msg = err instanceof Error ? err.message : String(err)
           // 补记**尽力而为**：轮志落盘失败（IO）不得顶替掉原始错误——排查面第一优先是
           // 「这个工具为什么抛」，不是「日志为什么没写上」。
           try {
@@ -1540,6 +1556,13 @@ export class GrowthSubsystem {
             this.e.logger.warn('growth.draft.round_write_failed', { course: c.name, session: doc.session_id, kind })
           }
         }
+        // 门拒收留痕（#313 B6）：草稿侧的每一次门拒绝此前只活在**草稿档的轮志**里
+        // （模型看得到、人翻日志看不到）——`coach.gate.reject` 是文档点名的主验收物，
+        // 这里让它真的发得出来：`gate` = 被拒的工具，明细进续行（MULTILINE_EVENTS 已登记）。
+        this.e.logger.warn('coach.gate.reject', {
+          course: c.name, station: GROWTH_DRAFT_STATION, gate: call.name,
+          errors: 1, detail: [msg.split('\n')[0] ?? ''],
+        })
         throw err
       }
     }

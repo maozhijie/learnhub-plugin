@@ -53,7 +53,13 @@ const SEALED_VAULT = {
   graph: GRAPH,
   files: [{ path: join('学习中心', 'math', 'state', '终点锚.json'), content: anchorDoc() }],
   notes: {
-    入门: { stage: 'review' },
+    // fsrs 不能缺（#313 B5）：stage=review 而 fsrs 缺失是审计 E5 ERROR，受理门现在当场
+    // 看得见它（此前只有 apply 拒收，propose 照收）——夹具得给一份自洽的复习态
+    入门: {
+      stage: 'review',
+      fsrs: { stability: 3, difficulty: 5, due: '2026-09-20', last_review: '2026-09-13', reps: 2, lapses: 0 },
+      practice: { attempts: 2, correct: 1 },
+    },
     中间台阶: { stage: 'ready' },
     终点: { stage: 'ready', content: { version: 1, status: 'reviewed' } },
   },

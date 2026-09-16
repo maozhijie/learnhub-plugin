@@ -93,6 +93,24 @@ ADR-0080 建立了调试日志的事件闭集，但闭集是**当票快照**不�
 
 同票的非事件面（同登记，避免只在票面留痕）：① 草稿轮志补**写件崩溃轮**（`draft_patch`/`draft_audit`/`draft_finish` 未被受理门记账的抛出 = 轮志多一条崩溃轮（`补丁崩溃` / `审计崩溃` / `finish 崩溃` + `（错误首行）`；三件工具 → 轮志 kind 的映射与措辞表单一住处 `DRAFT_TOOL_ROUND_KIND`/`DRAFT_ROUND_CRASH_LABEL`），`errors` 带全文）——草稿轮志是**草稿档**不是日志事件，登记在此只为「finish 崩溃零痕迹」这一观测缺口有出处；② `summarize` 单行超界改为显式标注（`…（首行已截断，共 N 字符）`），失败类值可传 `{ full: true }` 不截断（生长批出口用它保住失败原因与语料指向）。
 
+### #313 B6 增补（幽灵事件退役 + 接线兑现 + 存量补登）
+
+起因：ADR-0080 的两条「一眼判据」里有一条指着一个全仓零发出点的事件名，照它 grep 会得到假否定；反向也有一族一直在发却没登记的事件。**只增不改**：退役的行留在原处，状态写在这里。
+
+| 事件 | 状态 | 字段 | 备注 |
+|---|---|---|---|
+| `coach.gate.reject` | **接线兑现**（闭集内成员，此前零发出点） | `course` `station` `gate` `errors=<n>` `detail` `round?` `fatal?` | 两个教练站的**每一处门拒绝**：思路官计划 schema 门（round 1/2，`gate: plan_schema`）与执行官草稿写件的每一次拒收/崩溃（`gate` = 被拒工具名）。WARN；明细进续行（本是 `MULTILINE_EVENTS` 成员，登记时就按多行设计的）。「到底有没有跑过重裁/重试」现在真的 grep 得到 |
+| `coach.plan.enter` | 存量补登（#273 起一直在发，漏登闭集） | `course` `family` `mode` | INFO |
+| `coach.plan.exit` | 存量补登 | `course` `family` `mode` `operator?` `schema` `detail` | INFO；`schema=reject` 时带续行（`MULTILINE_EVENTS` 已登记） |
+| `coach.repair.trigger` | **退役**（零发出点） | — | 闭集成员，从未接线。重裁/重试的主判据改用 `coach.gate.reject`（见 ADR-0080 §修订） |
+| `coach.segment.enter` | **退役**（零发出点） | — | 同上；两站拆分后的实际形态是 `coach.plan.*` |
+| `coach.segment.exit` | **退役**（零发出点） | — | 同时从 `MULTILINE_EVENTS` 出册——登记了却永远不会出现的续行规则是排查时的诱饵（`coach.plan.exit` 已在册，续行能力不减） |
+| `coach.round.apply_fail` | **退役**（零发出点） | — | apply 失败经草稿写件的拒收路径归 `coach.gate.reject`（`gate: draft_finish`），终局死亡归宿主 `host.gen_jobs.run_error` |
+| `coach.plan.recheck` | **改名退役**（曾是唯一真发点） | — | 原名与「复诊（recheck）」词条撞词——它说的是计划门回灌重裁，不是插入边复诊。改发 `coach.gate.reject`（WARN，字段带 gate/round/detail），消息面零损失 |
+| `growth.draft.round_write_failed` | 已在册（#302） | 不变 | 本次未改 |
+
+同票非事件面（同登记）：`annotateLast` 增「本轮是否产过捕获」判据（`{ since }` 令牌）与取消豁免——非模型失败（取消 / 轮次预算 / 熔断前零调用 / 空手结束）不再把上一轮的件改名 `bad-`（bad 桶污染 = 质量评审抽样失真）。这是**补标语义**不是日志事件，登记在此只为它有单一出处。
+
 ### console 侧处置（非 logger 事件）
 
 - `log-file.ts` 的 `levelFromEnv` 收到非法 `LEARNHUB_LOG_LEVEL` 值时 `console.warn` 一次（级别门实现住宿主，此处无 logger 可用——console 是唯一出口），接线票 #292 落地。

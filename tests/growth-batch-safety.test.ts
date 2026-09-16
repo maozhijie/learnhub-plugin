@@ -10,6 +10,7 @@
 //   落账本（state/边实验.jsonl）——提示词那句「插入批落地时随批携带」由此成立。
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { writeFile } from 'node:fs/promises'
 import { Graph } from '../src/engine/graph/graph.ts'
 import { YAML } from '../src/engine/infra/yaml.ts'
 import { replayDraft } from '../src/engine/index.ts'
@@ -19,7 +20,7 @@ import type { EditOp } from '../src/engine/coach/proposals.ts'
 import type { GNode } from '../src/engine/types.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { AgentSeam } from '../src/engine/infra/agent.ts'
-import { withVault } from './helpers/vault.ts'
+import { withVault, noteText } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import { memLogger } from './helpers/logger.ts'
 
@@ -114,6 +115,43 @@ test('#313 A4：未知键 fail loud——顶层与 op 级各有白名单', () =>
   // 合法形态不受影响
   const ok = validateEditProposal(YAML.parse('course: 校验课\nreason: r\nconcepts:\n  - canonical: 概念甲\nops:\n  - { op: add_node, name: 新节点, pre: [], teaches: { 概念甲: 会用 } }\n'))
   assert.equal(ok.errors, undefined, ok.errors?.join('\n'))
+})
+
+// ---- B5：审计门的明细与受理面 ----
+
+/** 制造一条确定性审计 ERROR：课程目录里多出一份不属任何图节点的笔记（E4）。 */
+async function ghostNote(h: Awaited<ReturnType<typeof withVault>>): Promise<void> {
+  await writeFile(h.paths.courseNotePath('数学', '幽灵节点'), noteText('幽灵节点') + '\n', 'utf8')
+}
+
+const SIDE_BATCH = 'course: 数学\nnote:\n  operator: 旁支\n  reason: 教学消费支线\nops:\n  - op: add_node\n    name: 支线台阶\n    pre: [认识变化率]\n'
+
+test('#313 B5：审计 ERROR 的明细随错随行（apply 拒收不再只指一份模型读不到的报告）', async () => {
+  await withVault({ registry: null, graph: null }, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const prop = await h.engine.graph.graphPropose('edit', SIDE_BATCH) as { id: number }
+    await ghostNote(h)
+    const err = await h.engine.graph.graphApply('edit', prop.id).then(() => null, (e: unknown) => e as Error)
+    assert.ok(err, 'apply 被审计门拒绝')
+    assert.match(err!.message, /审计门存在 ERROR/)
+    assert.match(err!.message, /E4 课程文件对应未知节点/, '明细随行——草稿会话的模型读不到 课程根/审计报告.md')
+  })
+})
+
+test('#313 B5：审计 ERROR 也进受理门（propose 当场拒，不再「受理通过而 apply 每轮拒」）', async () => {
+  await withVault({ registry: null, graph: null }, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    await ghostNote(h)
+    await assert.rejects(() => h.engine.graph.graphPropose('edit', SIDE_BATCH), (e: Error) => {
+      assert.match(e.message, /审计门拒绝受理/, 'propose 侧同判据（门同源）')
+      assert.match(e.message, /E4 课程文件对应未知节点/)
+      return true
+    })
+    // 审计 ERROR 清了就照常受理（门只拦「当前状态不干净」）
+    await h.engine.fs.unlink(h.paths.courseNotePath('数学', '幽灵节点'))
+    const ok = await h.engine.graph.graphPropose('edit', SIDE_BATCH) as { id: number }
+    assert.ok(ok.id > 0)
+  })
 })
 
 // ---- B2：插入批的复诊预注册写入面 ----
@@ -215,5 +253,9 @@ test('#313 B2：note_recheck 形状不合法当场整批拒收（回灌合法取
     const receipt = receipts.join('\n---\n')
     assert.match(receipt, /note_recheck 未过/)
     assert.match(receipt, /卡点集中度降幅/, '回灌带合法取值域（模型不必去猜）')
+    // 门拒绝也落调试日志（#313 B6：草稿侧此前只活在草稿档的轮志里，人翻日志看不到）
+    const gateLog = h.logger.nth('coach.gate.reject')!
+    assert.equal(gateLog.fields.gate, 'draft_patch', 'gate = 被拒的工具')
+    assert.equal(gateLog.fields.station, '教练执行')
   })
 })
