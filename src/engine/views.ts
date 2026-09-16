@@ -1,8 +1,8 @@
-export type { DiagnosticEntry } from './attribution.ts'
+export type { DiagnosticEntry } from './sched/attribution.ts'
 export type {
   AdviceItem, RecommendDoc, RecEvent, RecEventType, SleepSuggestionEntry,
   StatusCourse, StatusDoc, StatusGateAdvice,
-} from './sessions.ts'
+} from './sched/sessions.ts'
 
 /** 提案记录（store/proposals 持久化条目）与节清单（frontmatter content.sections）
  * 的转发导出：graphReject/graphProposals 的返回与 LessonDoc.manifest 引用，

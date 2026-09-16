@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { BAND_STEP_UP, combinedDifficulty, nextBand, pickNext, sessionOrder, startBand } from '../src/engine/adaptive.ts'
+import { BAND_STEP_UP, combinedDifficulty, nextBand, pickNext, sessionOrder, startBand } from '../src/engine/sched/adaptive.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 
 const PAST = '2024-01-01'

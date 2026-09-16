@@ -5,8 +5,8 @@
  * 其余随机补齐；预测可忽略、可全局关闭。判定只入作答流水的元标注（Learner
  * Output，ADR-0009）——不喂 canonical、不进掌握度/XP。零依赖纯函数（接缝 S30）。
  */
-import type { PracticeRec } from './types.ts'
-import { sourceKeyOf } from './types.ts'
+import type { PracticeRec } from '../types.ts'
+import { sourceKeyOf } from '../types.ts'
 
 /** 一档三点预测（题面出示后、翻面前作答）。 */
 export type JolPrediction = '会' | '不会' | '没把握'

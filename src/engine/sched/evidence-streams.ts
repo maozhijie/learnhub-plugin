@@ -8,7 +8,7 @@
  * 盘点清单不随流水增长漂移。无读侧的纯留痕流（覆盖层.jsonl、判卷失败.jsonl）
  * 不列册，在守卫的豁免表里显式点名。
  */
-import type { Paths } from './paths.ts'
+import type { Paths } from '../paths.ts'
 
 /** 展开半径：center 全中心一份；course 每注册课程一份；project 每项目目录一份。 */
 export type EvidenceStreamScope = 'center' | 'course' | 'project'

@@ -4,7 +4,7 @@ import { Graph } from '../src/engine/graph/graph.ts'
 import {
   gateAdvice, isStruggle, withinStruggleWindow, encRemedialAdvice,
   STRUGGLE_MIN_ATTEMPTS, STRUGGLE_WINDOW_DAYS,
-} from '../src/engine/sessions.ts'
+} from '../src/engine/sched/sessions.ts'
 import type { EncEdge, Fm, GNode } from '../src/engine/types.ts'
 
 const gnode = (name: string, pre: string[] = [], enc: EncEdge[] = []): GNode =>

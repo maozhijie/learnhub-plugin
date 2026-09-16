@@ -300,4 +300,4 @@ function chunksOf<T>(arr: T[], size: number): T[][] {
 }
 
 /** stage 视图（调度消费的统一入口）：无状态行视为 unseen。 */
-export { effectiveStage } from '../srs.ts'
+export { effectiveStage } from '../sched/srs.ts'

@@ -17,7 +17,7 @@ import type { JournalRec, PracticeRec, PracticeStreamRow, ProposalRec, ReviewRec
 import type { ReceiptLogRec } from './receipts.ts'
 import type { HabitRepeatRec } from './habits.ts'
 import type { PinRec } from './goals.ts'
-import type { BandRec } from './coach.ts'
+import type { BandRec } from './sched/coach.ts'
 import type { ExperimentDef } from './types.ts'
 import type { Paths } from './paths.ts'
 

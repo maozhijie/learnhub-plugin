@@ -14,7 +14,7 @@
 import type { VaultFs } from '../io.ts'
 import { sourceKeyOf } from '../types.ts'
 import { atomicWrite } from '../io.ts'
-import { alreadyScheduledOn } from '../advance.ts'
+import { alreadyScheduledOn } from '../sched/advance.ts'
 import type { Paths } from '../paths.ts'
 import type { FsrsBlock } from '../types.ts'
 import type { AlloKind } from '../grading.ts'

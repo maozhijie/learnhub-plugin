@@ -29,7 +29,7 @@ import { YAML } from './yaml.ts'
 import { todayStr, addDays } from './dates.ts'
 import type { Clock } from './clock.ts'
 import type { FsrsBlock } from './types.ts'
-import type { AdvanceCard, AdvanceLog } from './advance.ts'
+import type { AdvanceCard, AdvanceLog } from './sched/advance.ts'
 import type { Paths } from './paths.ts'
 
 export type SkillStatus = 'active' | 'archived'

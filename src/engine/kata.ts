@@ -22,7 +22,7 @@ import { execRatingScore } from './project-exec.ts'
 import type { ProjectExecRec } from './project-exec.ts'
 import { crossingText, etaHorizonOf } from './compass.ts'
 import type { CompassEta, RouteReconcile } from './compass.ts'
-import { dueReviewFirstPushes, trueRetention } from './memory.ts'
+import { dueReviewFirstPushes, trueRetention } from './sched/memory.ts'
 import type { PracticeRec, JournalRec, ReviewRec } from './types.ts'
 import type { HabitRepeatRec } from './habits.ts'
 

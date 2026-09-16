@@ -12,10 +12,10 @@
  * 「类型：」前缀/空白差异）；「通用」与匹配不上返回 null（跨节综合题失败指向
  * 节点级问题，归 B2，不参与节归因）。
  */
-import { parseSectionTitle } from '../../shared/content-renderers.ts'
-import { daysBetween, parseDay } from './dates.ts'
-import { round2 } from './grading.ts'
-import type { SectionManifest } from './types.ts'
+import { parseSectionTitle } from '../../../shared/content-renderers.ts'
+import { daysBetween, parseDay } from '../dates.ts'
+import { round2 } from '../grading.ts'
+import type { SectionManifest } from '../types.ts'
 
 /** 门面暴露的诊断建议项 = 判定 + 课程/节点定位。 */
 export interface DiagnosticItem extends SectionVerdict {

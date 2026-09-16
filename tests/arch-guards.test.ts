@@ -31,7 +31,7 @@ import { scanGraphWriters, graphWriteCallers, GRAPH_WRITE_WHITELIST, GRAPH_WRITE
 import { hostFiles, moduleLevelLets, scanHostLets } from '../scripts/scan-host-state.mjs'
 import { BASELINE_FILE, measure, readBaseline, depsFaceViolations, sizeViolations, typeViolations } from '../scripts/arch-baseline.mjs'
 import { countAdapterFace, adapterFaceTotals, adapterFaceViolations } from '../scripts/scan-adapter-face.mjs'
-import { sameTransactionHits, writeUnitCallCounts, writeUnitViolations, srcFilesOf } from '../scripts/scan-write-unit.mjs'
+import { sameTransactionHits, writeUnitCallCounts, writeUnitViolations, srcFilesOf, WRITE_UNIT_SITES } from '../scripts/scan-write-unit.mjs'
 import { parseTscOutput, scanTypes, checkedSrc } from '../scripts/scan-types.mjs'
 import { closureFoldSites, forOfNamesBodies, scanClosureFolds, CLOSURE_PRIMITIVE_HOME, CLOSURE_SCAN_WHITELIST } from '../scripts/scan-closure.mjs'
 
@@ -465,13 +465,16 @@ test('G8 适配器面：engine 内时钟/随机直读与 node:fs 依赖按基线
 // ---------------------------------------------------------------- G9 写入单元
 
 test('G9 自检：「同事务」残留与站点缺原语都会被抓（门不是恒过）', () => {
-  const bad = writeUnitViolations(
-    ['src/engine/rogue.ts'],
-    { 'engine/proposals.ts': 0, 'engine/sched-subsystem.ts': 2, 'engine/nof1.ts': 1, 'engine/growth-subsystem.ts': 1 },
-  )
+  // 「齐备」读数按**真实站点清单**造（单一出处）：`writeUnitViolations` 读的是模块级
+  // WRITE_UNIT_SITES，自检再抄一份同形表会随站点迁家而静默失真——实测（#305 刀④）
+  // 硬编码 'engine/sched-subsystem.ts' 在迁家后不再命中真键，「齐备则绿」当场变红。
+  const complete = { ...WRITE_UNIT_SITES }
+  const PROPOSALS = 'engine/proposals.ts'
+  const bad = writeUnitViolations(['src/engine/rogue.ts'], { ...complete, [PROPOSALS]: 0 })
   assert.ok(bad.some(v => v.includes('[同事务残留]') && v.includes('rogue.ts')), '「同事务」注释必须被抓')
-  assert.ok(bad.some(v => v.includes('proposals.ts') && v.includes('0 < 3')), '站点调用数不足必须被抓')
-  assert.ok(writeUnitViolations([], { 'engine/proposals.ts': 3, 'engine/sched-subsystem.ts': 2, 'engine/nof1.ts': 1, 'engine/growth-subsystem.ts': 1 }).length === 0, '齐备则绿')
+  assert.ok(bad.some(v => v.includes('proposals.ts') && v.includes(`0 < ${WRITE_UNIT_SITES[PROPOSALS]}`)),
+    '站点调用数不足必须被抓')
+  assert.ok(writeUnitViolations([], complete).length === 0, '齐备则绿')
   assert.ok(writeUnitViolations([], {}).some(v => v.includes('站点缺失')), '站点文件改名要被抓（幽灵清单）')
 })
 

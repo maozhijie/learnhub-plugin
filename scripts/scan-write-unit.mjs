@@ -8,7 +8,7 @@
  *
  * 站点清单（文件 → 该文件内的写入单元调用次数 ≥ N）：
  *   proposals.ts ≥3（applyEdit／applySeed／applyEnrich）
- *   sched-subsystem.ts ≥2（nodeComplete／optimizeFsrsParams）
+ *   sched/sched-subsystem.ts ≥2（nodeComplete／optimizeFsrsParams）
  *   nof1.ts ≥1（experimentStop）
  *   growth-subsystem.ts ≥1（settleRechecks）
  */
@@ -19,7 +19,7 @@ import { join } from 'node:path'
  * views/proposals.ts 与 engine/proposals.ts 同名，按名计数会互相覆盖）。 */
 export const WRITE_UNIT_SITES = {
   'engine/proposals.ts': 3,
-  'engine/sched-subsystem.ts': 2,
+  'engine/sched/sched-subsystem.ts': 2,
   'engine/nof1.ts': 1,
   'engine/growth-subsystem.ts': 1,
 }

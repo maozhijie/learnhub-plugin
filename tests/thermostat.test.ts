@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
-import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from '../src/engine/thermostat.ts'
-import type { BandRec } from '../src/engine/coach.ts'
+import { retentionBand, bandDistribution, execRatingDistribution, thermostatSuggestions } from '../src/engine/sched/thermostat.ts'
+import type { BandRec } from '../src/engine/sched/coach.ts'
 import type { ReviewRec } from '../src/engine/types.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 

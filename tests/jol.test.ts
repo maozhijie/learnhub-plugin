@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { jolCalibration, jolDeviatedKeys, pickJolTargets } from '../src/engine/jol.ts'
+import { jolCalibration, jolDeviatedKeys, pickJolTargets } from '../src/engine/sched/jol.ts'
 import type { PracticeRec } from '../src/engine/types.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 

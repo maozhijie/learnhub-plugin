@@ -45,11 +45,11 @@ import type { AgentSeam, GateVerdict } from './agent.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
 
 import { applyPracticeEvidence } from './grading.ts'
-import { masteryOfFm } from './srs.ts'
+import { masteryOfFm } from './sched/srs.ts'
 import type { ExecutionEvidence } from './skills.ts'
 import { ratingFromEvidence } from './skills.ts'
 
-import { difficultyCalibration, milestonePrice } from './xp.ts'
+import { difficultyCalibration, milestonePrice } from './sched/xp.ts'
 import { dayOfTs, nowIsoOf } from './dates.ts'
 import { CROSS_AXIS_THRESHOLD, TIER_REC_DEMOTE_SCORE, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, XP_PER_MILESTONE_DEFAULT } from './params.ts'
 import { execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate, execEvidenceScore, recommendTier, validateExecEvent, appendExecRec, execRecsAll } from './project-exec.ts'

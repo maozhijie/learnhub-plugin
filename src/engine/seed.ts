@@ -17,7 +17,7 @@
 import type { VaultFs } from './io.ts'
 import { atomicWrite } from './io.ts'
 import type { Fm } from './types.ts'
-import { effectiveStage, masteryOfFm } from './srs.ts'
+import { effectiveStage, masteryOfFm } from './sched/srs.ts'
 import type { Graph } from './graph/graph.ts'
 
 /** 目标类型二分（#136）：能力锚定默认；覆盖锚定显式选择且必须带块工作表。 */

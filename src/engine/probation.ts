@@ -20,7 +20,7 @@
  * （追加只增，读侧折叠取最新行）。
  */
 import type { VaultFs } from './io.ts'
-import { dueReviewFirstPushes, trueRetention } from './memory.ts'
+import { dueReviewFirstPushes, trueRetention } from './sched/memory.ts'
 import { readJsonlLines } from './io.ts'
 import {
   RECHECK_DAYS_MIN, RECHECK_DAYS_MAX,

@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { bandOffset, BAND_PREF_OFFSET } from '../src/engine/adaptive.ts'
-import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, COACH_MIN_ANSWERED, COACH_MIN_SESSIONS, withinCoachWindow } from '../src/engine/coach.ts'
-import type { BandRec } from '../src/engine/coach.ts'
+import { bandOffset, BAND_PREF_OFFSET } from '../src/engine/sched/adaptive.ts'
+import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, COACH_MIN_ANSWERED, COACH_MIN_SESSIONS, withinCoachWindow } from '../src/engine/sched/coach.ts'
+import type { BandRec } from '../src/engine/sched/coach.ts'
 import { todayStr } from '../src/engine/dates.ts'
 import { tfQuestion, withVault, localDay } from './helpers/vault.ts'
 

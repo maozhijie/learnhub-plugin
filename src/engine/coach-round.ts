@@ -23,9 +23,9 @@
  */
 import { dayOfTs, parseDay, daysBetween } from './dates.ts'
 import { pctOf } from './grading.ts'
-import { dueReviewFirstPushes, trueRetention } from './memory.ts'
-import { SEDIMENT_KINDS } from './sediment.ts'
-import type { SedimentFold } from './sediment.ts'
+import { dueReviewFirstPushes, trueRetention } from './sched/memory.ts'
+import { SEDIMENT_KINDS } from './sched/sediment.ts'
+import type { SedimentFold } from './sched/sediment.ts'
 import type { PracticeRec, ReviewRec, Misconception } from './types.ts'
 
 // ---- 行为摘要：窗口（最近 7 学习日或 10 节取大） ----

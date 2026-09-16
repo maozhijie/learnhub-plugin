@@ -14,7 +14,7 @@
  */
 
 /** 「答错证据」口径与 A3 struggle 同源：作答正确率低于 sessions.STRUGGLE_ACCURACY。 */
-import { STRUGGLE_ACCURACY } from '../sessions.ts'
+import { STRUGGLE_ACCURACY } from '../sched/sessions.ts'
 import { sourceKeyOf } from '../types.ts'
 import { daysBetween, parseDay } from '../dates.ts'
 

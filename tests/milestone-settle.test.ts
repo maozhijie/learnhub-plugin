@@ -11,7 +11,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { milestonePrice } from '../src/engine/xp.ts'
+import { milestonePrice } from '../src/engine/sched/xp.ts'
 import { validatePlanItems } from '../src/engine/projects.ts'
 import { withVault, tfQuestion } from './helpers/vault.ts'
 

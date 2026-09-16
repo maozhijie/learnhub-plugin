@@ -7,9 +7,9 @@
  * 首学推进（无旧卡，stability_before 为空）不是「到期复习」，也不进保留率口径
  * （True Retention = 到期复习中实际答对的比例）。零依赖纯函数（接缝 S26）。
  */
-import type { ReviewRec } from './types.ts'
-import { DAY_MS, dayOfTs, fmtDay } from './dates.ts'
-import { sourceKeyOf } from './types.ts'
+import type { ReviewRec } from '../types.ts'
+import { DAY_MS, dayOfTs, fmtDay } from '../dates.ts'
+import { sourceKeyOf } from '../types.ts'
 
 /** 负载预报的时间窗（未来 N 日，Anki Forecast 语义；假设不再学新卡且不遗忘）。 */
 export const FORECAST_DAYS = 30

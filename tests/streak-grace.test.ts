@@ -9,7 +9,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { streakFrom } from '../src/engine/xp.ts'
+import { streakFrom } from '../src/engine/sched/xp.ts'
 import { XP_STREAK_GRACE_DAYS } from '../src/engine/params.ts'
 import { localDay, withVault } from './helpers/vault.ts'
 

@@ -25,9 +25,9 @@
 
 import { applyRatingBlock, retrievabilityBlock, masteryValue } from './srs.ts'
 import type { FSRS } from 'ts-fsrs'
-import type { FsrsBlock } from './types.ts'
-import { DAY_MS, parseDay, fmtDay } from './dates.ts'
-import { nodeKeyOf } from './types.ts'
+import type { FsrsBlock } from '../types.ts'
+import { DAY_MS, parseDay, fmtDay } from '../dates.ts'
+import { nodeKeyOf } from '../types.ts'
 
 /** 单次复习的成本（分钟；粗化常数）。 */
 export const REVIEW_MIN = 1

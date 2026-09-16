@@ -19,7 +19,7 @@ import {
   execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate,
   execEvidenceScore, recommendTier,
 } from '../src/engine/project-exec.ts'
-import { masteryOfFm } from '../src/engine/srs.ts'
+import { masteryOfFm } from '../src/engine/sched/srs.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse } from './helpers/drafted.ts'
 

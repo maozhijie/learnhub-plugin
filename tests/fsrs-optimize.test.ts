@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { defaultParams, FSRS6_PARAM_COUNT, OPTIMIZE_MIN_REVIEWS, sequenceReviews, trainingSequences } from '../src/engine/optimize.ts'
-import type { OptimizerImpl, TrainingSequence } from '../src/engine/optimize.ts'
+import { defaultParams, FSRS6_PARAM_COUNT, OPTIMIZE_MIN_REVIEWS, sequenceReviews, trainingSequences } from '../src/engine/sched/optimize.ts'
+import type { OptimizerImpl, TrainingSequence } from '../src/engine/sched/optimize.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import type { ReviewRec } from '../src/engine/types.ts'
 import { withVault } from './helpers/vault.ts'
@@ -162,7 +162,7 @@ test('优化器：训练产出长度不是 21 → 拒绝写回', async () => {
 // ---- binding 真集成（native 依赖冒烟：训练产出 21 参 + 指标形状）----
 
 test('binding 冒烟：真实训练器产出 FSRS-6 参数向量与时序切分指标（或小数据 null）', async () => {
-  const { trainAndEvaluate } = await import('../src/engine/optimize.ts')
+  const { trainAndEvaluate } = await import('../src/engine/sched/optimize.ts')
   const seqs: TrainingSequence[] = Array.from({ length: 40 }, (_, c) => ({
     key: `c${c}`,
     reviews: Array.from({ length: 12 }, (_, i) => ({

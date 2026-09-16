@@ -13,7 +13,7 @@ import { graphHealthScore, estSpreadNote } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import type { JumpCandidate } from './quality.ts'
 import { parseDay, daysBetween } from '../dates.ts'
-import { masteryOfFm } from '../srs.ts'
+import { masteryOfFm } from '../sched/srs.ts'
 import { hasReadyContent } from '../vault/notes.ts'
 import type { VaultLinkCandidateView } from '../vault/vault-links.ts'
 

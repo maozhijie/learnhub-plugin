@@ -1,4 +1,4 @@
-import { clamp01 } from './grading.ts'
+import { clamp01 } from '../grading.ts'
 /**
  * A1 作答期难度微调（决议 #34 / 实施工单 #57）：已调度题「单节点会话」（复习该节点
  * 到期题 / Forgot 后重学 / 节点二刷补做）内的流式难度自适应选序。

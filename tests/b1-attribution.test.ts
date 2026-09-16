@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { evaluateSectionSignals, formatSignalDetail, normSectionKey, parseSignalDetail, sectionEntryOf } from '../src/engine/attribution.ts'
-import type { AttemptFact, RewriteFact, SectionManifest, SectionSignalInput } from '../src/engine/attribution.ts'
+import { evaluateSectionSignals, formatSignalDetail, normSectionKey, parseSignalDetail, sectionEntryOf } from '../src/engine/sched/attribution.ts'
+import type { AttemptFact, RewriteFact, SectionManifest, SectionSignalInput } from '../src/engine/sched/attribution.ts'
 import { withVault } from './helpers/vault.ts'
 import type { NoteSeed, VaultHandle } from './helpers/vault.ts'
 

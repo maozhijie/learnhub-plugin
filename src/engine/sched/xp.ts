@@ -10,12 +10,12 @@
  * - 预算制：节点预算 = 标称 N₀（est 内容定价，回落题目权重和）× 客观难度校准 k
  *   （FSRS difficulty 加权，无人工干预）；完成时 settle 对账锁定定价。
  */
-import type { VaultFs } from './io.ts'
-import { readLearnhubConfig, writeLearnhubConfig } from './io.ts'
-import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, XP_PER_MILESTONE_DEFAULT, DAILY_XP_GOAL_DEFAULT, DAY_CUTOFF_DEFAULT, XP_STREAK_GRACE_DAYS, FSRS_DIFFICULTY_MID } from './params.ts'
-import { parseDay, fmtDay, dayOfTs, parseCutoff, fmtCutoff } from './dates.ts'
-import type { PracticeRec, JournalRec } from './types.ts'
-import type { Paths } from './paths.ts'
+import type { VaultFs } from '../io.ts'
+import { readLearnhubConfig, writeLearnhubConfig } from '../io.ts'
+import { XP_BASE, XP_GUESS_SECONDS, XP_GUESS_PENALTY, XP_PER_NODE_DEFAULT, XP_PER_MILESTONE_DEFAULT, DAILY_XP_GOAL_DEFAULT, DAY_CUTOFF_DEFAULT, XP_STREAK_GRACE_DAYS, FSRS_DIFFICULTY_MID } from '../params.ts'
+import { parseDay, fmtDay, dayOfTs, parseCutoff, fmtCutoff } from '../dates.ts'
+import type { PracticeRec, JournalRec } from '../types.ts'
+import type { Paths } from '../paths.ts'
 
 /** 一次作答的 XP 结算。 */
 export interface XpSettle { xp: number; reason: 'correct' | 'wrong' | 'guess' | 'repeat' }

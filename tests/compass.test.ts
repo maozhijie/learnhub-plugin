@@ -8,7 +8,7 @@ import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import type { Paths } from '../src/engine/paths.ts'
-import { SANDBOX_WORDING } from '../src/engine/sandbox.ts'
+import { SANDBOX_WORDING } from '../src/engine/sched/sandbox.ts'
 import { weekStartOf } from '../src/engine/kata.ts'
 import {
   SECTION_ROUTE, SECTION_ANNOTATIONS, SECTION_ETA, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,

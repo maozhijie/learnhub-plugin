@@ -14,7 +14,7 @@ import {
   clampMaintenanceDays, laneDue, laneEventKind, ratingFromEvidence,
   MAINTENANCE_DEFAULT_DAYS, executionXpDetail,
 } from '../src/engine/skills.ts'
-import { EXECUTION_TRAINING_GATE, trainingSequences } from '../src/engine/optimize.ts'
+import { EXECUTION_TRAINING_GATE, trainingSequences } from '../src/engine/sched/optimize.ts'
 import type { FsrsBlock, ReviewRec } from '../src/engine/types.ts'
 import { localDay, withVault } from './helpers/vault.ts'
 import { addDays } from '../src/engine/dates.ts'

@@ -7,8 +7,8 @@ import {
   COACH_COLD_START_DAYS, COACH_COLD_START_EST_MULT,
 } from '../src/engine/coach-round.ts'
 import type { DigestInput } from '../src/engine/coach-round.ts'
-import type { SandboxCard, SandboxNode } from '../src/engine/sandbox.ts'
-import { foldSediment, renderLearnerProfile } from '../src/engine/sediment.ts'
+import type { SandboxCard, SandboxNode } from '../src/engine/sched/sandbox.ts'
+import { foldSediment, renderLearnerProfile } from '../src/engine/sched/sediment.ts'
 import type { PracticeRec, ReviewRec, SedimentEvent } from '../src/engine/types.ts'
 
 // 教练回合感知面（#144）纯函数层：行为摘要五件套（读侧折叠、同输入同输出）、

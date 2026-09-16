@@ -11,7 +11,7 @@
  * 是合法空态。解析刻意宽容：学习者手删 `## ` 标题时该段内容并入 preamble 残留（可见、
  * 非权威），机器段按需追加末尾——权威覆盖语义不受手编破坏影响，不做 fail loud。
  */
-import { SANDBOX_WORDING } from './sandbox.ts'
+import { SANDBOX_WORDING } from './sched/sandbox.ts'
 import { pctOf } from './grading.ts'
 import type { EndpointAnchor } from './seed.ts'
 

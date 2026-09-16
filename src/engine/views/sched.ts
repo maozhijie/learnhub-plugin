@@ -1,7 +1,7 @@
 /**
  * sched 域视图类型（#152 刀归档；叶子文件，只引类型层）。
  */
-import type { JolBin } from '../jol.ts'
+import type { JolBin } from '../sched/jol.ts'
 
 /** 每课程 ETA（剩余节点 × 每节点 XP ÷ 每日目标）。 */
 export interface EtaItem { course: string; remaining: number; done: number; per_node: number; days: number }

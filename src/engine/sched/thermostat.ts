@@ -11,11 +11,11 @@
  *
  * 零依赖纯函数（接口数据由门面注入）；阈值全部低数据静默。
  */
-import { round2, pctOf } from './grading.ts'
-import { DAY_MS, calendarDayOf } from './dates.ts'
+import { round2, pctOf } from '../grading.ts'
+import { DAY_MS, calendarDayOf } from '../dates.ts'
 import type { BandPref } from './adaptive.ts'
 import type { BandRec } from './coach.ts'
-import type { ReviewRec } from './types.ts'
+import type { ReviewRec } from '../types.ts'
 
 /** 长期观测窗口（天）：难度带选择分布与执行事件评级分布的回看窗。 */
 export const THERMOSTAT_WINDOW_DAYS = 30

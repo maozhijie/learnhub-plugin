@@ -11,7 +11,7 @@
  * （stats.last || fsrs.last_review）守 Anki 回放通道。
  */
 import type { FSRS } from 'ts-fsrs'
-import type { FsrsBlock } from './types.ts'
+import type { FsrsBlock } from '../types.ts'
 import { applyRatingBlock, retrievabilityBlock } from './srs.ts'
 
 /** 任何自带 FSRS 隔离调度块的卡的最小投影：题卡 / 笔记源镜像卡 / 我的卡 / Anki 内存卡同构。 */

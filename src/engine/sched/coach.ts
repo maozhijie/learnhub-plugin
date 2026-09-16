@@ -8,7 +8,7 @@
  */
 
 /** 难度带偏好（E5）：简单 = 放宽 A1 目标带，挑战 = 抬高；标准/不选 = 纯 A1。 */
-import { DAY_MS } from './dates.ts'
+import { DAY_MS } from '../dates.ts'
 import type { BandPref } from './adaptive.ts'
 
 /** 一条难度带会话记录（会话结束落盘；band 是该次会话学习者选的带）。 */

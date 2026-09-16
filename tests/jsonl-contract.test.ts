@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withVault } from './helpers/vault.ts'
-import { EVIDENCE_STREAMS } from '../src/engine/evidence-streams.ts'
+import { EVIDENCE_STREAMS } from '../src/engine/sched/evidence-streams.ts'
 import { Paths } from '../src/engine/paths.ts'
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src')

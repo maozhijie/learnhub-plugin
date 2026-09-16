@@ -18,9 +18,9 @@
  * 估计随元数据落盘（小数据下 binding 会 NotEnoughData，缺失时记 null）。
  */
 import { generatorParameters } from 'ts-fsrs'
-import { daysBetween, parseDay, dayOfTs } from './dates.ts'
-import { sourceKeyOf } from './types.ts'
-import type { ReviewRec } from './types.ts'
+import { daysBetween, parseDay, dayOfTs } from '../dates.ts'
+import { sourceKeyOf } from '../types.ts'
+import type { ReviewRec } from '../types.ts'
 
 /** 写回门禁：真实复习日志条数下限（官方口径：Anki 24.04 要求 ≥400，月频重训足够）。 */
 export const OPTIMIZE_MIN_REVIEWS = 400

@@ -9,7 +9,7 @@ import {
 import type { ProbationEntry, ReviewRec } from '../src/engine/probation.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import type { PracticeRec } from '../src/engine/types.ts'
-import { readSedimentCanon } from '../src/engine/sediment.ts'
+import { readSedimentCanon } from '../src/engine/sched/sediment.ts'
 import { withVault, tfQuestion, localDay } from './helpers/vault.ts'
 import type { MemLogger } from './helpers/logger.ts'
 
