@@ -39,11 +39,14 @@ export function stripFences(body: string): string {
  * 要更深回路，撞顶照旧 fail loud（trajectory 工具轨迹补自激防线的观测面）。 */
 export const AGENT_LOOP_MAX_TOOL_ROUNDS = 20
 
-/** 同错误熔断阈值（ADR-0041 §修订补记 2026-09-16）：同一工具**连续** ≥3 次返回**逐字相同**
- * 的结果文本即提前熔断。指纹取结果全文（异常与门拒绝同口径——渐进修复的错误文本逐轮在变，
- * 不得误杀）；仅同工具连续命中才计数（读写交替的自然节奏自己打断计数）。与 K≤20 的分工：
- * K 顶管「自激空转」，本阈值管「同一不可修复错误的连续重试」（实测事故：一个引擎缺陷让
- * `draft_finish` 连抛 4 次同一异常，21 次调用约 49.7k token 里三分之二烧在它上面）。 */
+/** 同错误熔断阈值（ADR-0041 §修订补记 2026-09-16；#309 缺陷④ 加第二口径）。两条口径共用
+ * 本阈值：① 同一工具**连续** ≥3 次返回**逐字相同**的结果（成功与失败同口径）——管纯自激
+ * 空转；② 同一工具的**同一门错误行**在会话内累计 ≥3 次——管 `patch / finish` 交替的挣扎
+ * （2026-09-17 事故实测：① 被中间的成功 patch 打断而 0 次触发、最终撞 K≤20 顶；② 的指纹
+ * 口径见 `fingerprintLinesOf`，全文/全部行口径在事故与「连试四种不同非法取值」两种形态下
+ * 各自失效）。② 按「进展世代」（`agentLoop` 的 `progressEpoch`，草稿站 = 已发布水位）前移
+ * 清零：成功发布的正常节奏不误杀。与 K≤20 的分工：K 顶管「自激空转」，本阈值管「同一不可
+ * 修复错误的反复重试」。 */
 export const AGENT_LOOP_REPEAT_LIMIT = 3
 
 /** 调用模式（观测面词汇）：complete 单发 / repair 门错修复轮 / loop 工具回路轮。 */
@@ -157,7 +160,8 @@ export class AgentSeam {
    * isCancelled（#163 任务取消传导）：每轮底层调用前与每次工具执行后检查，取消即抛错
    * 中止——生成页取消旗标沿站点传入，回路不再空烧后续轮。trajectory 逐轮记录工具调用
    * 与结果摘要（#163 任务消息消费）。
-   * 同错误熔断（#302 ③ / ADR-0041 §修订补记）见 `AGENT_LOOP_REPEAT_LIMIT`；工具级失败
+   * 同错误熔断（#302 ③ / ADR-0041 §修订补记；#309 缺陷④ 口径重写）见
+   * `AGENT_LOOP_REPEAT_LIMIT`；工具级失败
    * 同时发 `agent.tool.fail` 一条（站/工具/错误摘要）——此前失败只活在 trajectory 与
    * 下一轮回灌里，调试日志零事件（事后只能逐件考古语料）。 */
   async agentLoop(req: {
@@ -172,6 +176,10 @@ export class AgentSeam {
     runTool: (call: LlmToolCall) => Promise<string>
     /** 取消检查（队列任务取消旗标；缺省不查）。true = 抛错中止，已产结果丢弃。 */
     isCancelled?: () => boolean
+    /** 进展世代（#309 缺陷④）：调用方在**确有进展**处返回一个单调值（草稿站 = 已发布
+     * 水位，发布成功即前移）。每轮读一次，值变了就清空熔断游标——成功发布的正常节奏
+     * 不误杀；缺省不查（无进展概念的站按会话内累计）。 */
+    progressEpoch?: () => number
   }): Promise<{ text: string; toolRounds: number; trajectory: string[] }> {
     if (!this.ports.stream) {
       throw new Error(`[agent-seam] 「${req.station}」需要工具回路，但注入侧未提供 LlmStream 端口（宿主适配器缺位）。`)
@@ -183,13 +191,28 @@ export class AgentSeam {
     }
     const turns: LlmLoopTurn[] = [{ role: 'user', text: req.prompt }]
     const trajectory: string[] = []
-    // 同错误熔断的连续游标（缝的局部态，随一次回路生命周期生灭）：同一工具的逐字相同结果连计数。
+    // 熔断游标（缝的局部态，随一次回路生命周期生灭）。两条口径并存（#309 缺陷④）：
+    // ① **连续逐字相同**（成功与失败同口径，ADR-0041 §修订补记原口径）——纯自激空转；
+    // ② **同一工具、同一门错误行在会话内累计**（本票新增）——① 在 patch/finish 交替的挣扎
+    //    形态下被中间的成功调用打断而恒不触发（2026-09-17 事故实测：4 次 finish 被拒、熔断
+    //    0 次触发、最终撞 K≤20 顶）。指纹取**门错误行**而非全文/全部行见 `fingerprintLinesOf`；
+    //    行口径在第 24 次调用（第三次 finish 被拒）止血。
     let lastTool = ''
     let lastResult = ''
     let repeats = 0
+    // 口径② 的行指纹计数（键 = 工具 + 行，见 `LINE_SEP`）：只在进展世代前移时清空。
+    const lineHits = new Map<string, number>()
+    let epoch = req.progressEpoch?.()
     let toolRounds = 0
     for (;;) {
       assertAlive()
+      // 进展世代前移（发布成功）：清空熔断游标——成功发布的正常节奏不误杀（#309 ④）
+      const nowEpoch = req.progressEpoch?.()
+      if (nowEpoch !== epoch) {
+        epoch = nowEpoch
+        repeats = 0
+        lineHits.clear()
+      }
       const startedAt = this.clock.nowMs()
       const r = await this.ports.stream({
         messages: turns,
@@ -226,6 +249,29 @@ export class AgentSeam {
         else { lastTool = call.name; lastResult = out; repeats = 1 }
         if (repeats >= AGENT_LOOP_REPEAT_LIMIT) {
           throw new Error(`[agent-seam] 「${req.station}」工具回路熔断：${call.name} 连续 ${repeats} 次返回逐字相同的结果（${out.length} 字符）——回路中止，死因：同错误重复。`)
+        }
+        if (isError) {
+          // 口径②（#309 缺陷④）：同一工具 + 同一结果行在本次回路内累计（逐行去重）。中间夹着
+          // 的成功调用、**别的工具**的失败、以及同一次失败里的其他错误行都不打断它——那正是
+          // 事故里计数被重置的漏洞；清零只认进展世代（发布成功）。
+          //
+          // 代价与理由：同一行连续出现三轮即熔断，哪怕模型每轮都在改别处（那正是事故形状：
+          // 三条「档位非法」行在四次 finish 拒绝里一直在场）。接受这个口径是因为「这一条错误
+          // 三轮没被消掉」就是「同一不可修复错误的反复重试」本身，而 #309 缺陷② 起另有
+          // `draft_revert` 这条正路；反过来放过的代价是非对称的（实测 35k token 零产出）。
+          const lines = fingerprintLinesOf(out)
+          let tripped: { line: string; n: number } | null = null
+          for (const line of lines) {
+            const key = `${call.name}${LINE_SEP}${line}`
+            const n = (lineHits.get(key) ?? 0) + 1
+            lineHits.set(key, n)
+            if (n >= AGENT_LOOP_REPEAT_LIMIT && !tripped) tripped = { line, n }
+          }
+          if (tripped) {
+            throw new Error(`[agent-seam] 「${req.station}」工具回路熔断：${call.name} 的同一结果行在本次会话内累计出现 `
+              + `${tripped.n} 次（跨成功调用累计、逐字相同：「${tripped.line.length > 120 ? `${tripped.line.slice(0, 120)}…` : tripped.line}」）`
+              + `——回路中止，死因：同错误重复。`)
+          }
         }
         assertAlive()
       }
@@ -279,3 +325,23 @@ function firstLineOf(text: string): string {
   const head = text.split('\n', 1)[0] ?? ''
   return head.length > TOOL_FAIL_SUMMARY_LIMIT ? `${head.slice(0, TOOL_FAIL_SUMMARY_LIMIT)}…` : head
 }
+
+/** 门错误行的统一前缀（本仓门输出的唯一错误行形态；schema 门/重放/锚保护/巩固门/闸门全用它）。 */
+const GATE_ERROR_MARK = '✗'
+
+/** 失败文本的**行指纹**（同错误熔断口径②的指纹单元，#309 缺陷④）。
+ *
+ * 取门错误行（`✗ ` 前缀）而不是全文或「全部行」是两处实测逼出来的：
+ * ① 全文口径在事故里恒够不到阈值——四次 finish 拒绝的全文两两相同、两两不同（后两次多出
+ *    一条 `ops.11.op: 非法操作 move`）；
+ * ② 「全部行」口径会把**样板行**算进去（`[draft_patch] 补丁未过受理门同一套校验…` 这类包装
+ *    与「合法取值域」区块），于是「连试四种不同的非法取值」也会凑够三次同样的样板行而误杀。
+ * 若整段失败文本里一条门错误行都没有（裸异常那类，如 #301 的 `TypeError`），退化为整段文本
+ * 一行——同一异常反复抛仍按逐字相同计数。轮内去重（一行出现两次算一次）。 */
+function fingerprintLinesOf(text: string): string[] {
+  const marks = [...new Set(text.split('\n').map(l => l.trim()).filter(l => l.startsWith(GATE_ERROR_MARK)))]
+  return marks.length ? marks : [text.trim()]
+}
+
+/** 行指纹的键分隔符（工具与行拼键；行文本里不会出现 NUL）。 */
+const LINE_SEP = '\u0000'

@@ -86,13 +86,13 @@ import type { AgentSeam, GateVerdict } from '../infra/agent.ts'
 import type { LlmToolCall, LlmToolSpec } from '../infra/llm.ts'
 import { hasReadyContent } from '../vault/notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
-import { addNodeCountOf, applyOpsToNodes, editGateErrors, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
-import type { DraftDiff, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
+import { addNodeCountOf, applyOpsToNodes, editGateErrors, editProposalGateErrors, EDIT_OPS, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
+import type { DraftDiff, EditGateCtx, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
 import {
   GROWTH_DRAFT_MARKER, deleteDraft, draftDirOf, draftFindings, draftPathOf, expandPatchOps, findActiveDraft, saveDraft,
   GROWTH_DRAFT_STATION, PATCH_SHAPE_CHEATSHEET, normalizePatchShape,
 } from './growth-draft.ts'
-import type { GrowthDraftDoc, GrowthDraftRound } from './growth-draft.ts'
+import type { EditProposalNoteLite, GrowthDraftDoc, GrowthDraftRound } from './growth-draft.ts'
 import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS } from '../infra/params.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from '../sched/sandbox.ts'
 import { appendSedimentEvent } from '../sched/sediment.ts'
@@ -114,13 +114,13 @@ export const COACH_PLAN_STATION = '教练思路'
 /** 三件写工具 → 轮志 kind 的单源映射（#302 ②：写件崩溃补轮志的归属判据，与各工具自己
  * 记账时用的 kind 同表——两处各写一份必然有一天漂移成「崩溃记为另一类轮」）。 */
 const DRAFT_TOOL_ROUND_KIND: Record<string, GrowthDraftRound['kind']> = {
-  draft_patch: 'patch', draft_audit: 'audit', draft_finish: 'finish',
+  draft_patch: 'patch', draft_audit: 'audit', draft_finish: 'finish', draft_revert: 'revert',
 }
 
 /** 写件崩溃轮的措辞前缀（轮志 summary = `<前缀>（<错误首行>）`；`finish` 与既有
  * 「finish 被拒」同款留空格，其余按中文连写）。 */
 const DRAFT_ROUND_CRASH_LABEL: Record<GrowthDraftRound['kind'], string> = {
-  patch: '补丁崩溃', audit: '审计崩溃', finish: 'finish 崩溃', note: 'note 崩溃',
+  patch: '补丁崩溃', audit: '审计崩溃', finish: 'finish 崩溃', note: 'note 崩溃', revert: '撤销崩溃',
 }
 
 /** 崩溃轮 summary 里的错误首行上界（引擎侧的摘要口径；宿主侧的 `LOG_SUMMARY_HEAD` 是
@@ -644,6 +644,9 @@ export class GrowthSubsystem {
       const retiredCount = entries.length - live.length
       block('登记表档位（前沿概念的教学档位视野）', [
         `- 概念登记表：${entries.length ? `${live.length} 条在册${retiredCount ? `（另有 ${retiredCount} 条已废弃——地址仍解析，仅退出生成注入与候选面）` : ''}` : 'Missing（合法空态——铸名随生长批提案落盘）'}`,
+        // 档位取值域**无条件**给（#309 缺陷③）：此前只在「前沿有档位」时经示例间接暴露，
+        // 空课/空态批下模型看不到取值域、自造「初识」，直到 propose 拒绝文案里才第一次见合法值。
+        `- teaches / assumes 的档位取值域：${CONCEPT_TIERS.join(' / ')}（写别的值会被受理门拒收）`,
         `- 可学/在学节点 ${active.length} 个`,
         `- 前沿 teaches：${teaches.length ? fmtTiers(teaches) : '（前沿节点无 teaches 字段）'}`,
         `- 前沿 assumes：${assumes.length ? fmtTiers(assumes) : '（前沿节点无 assumes 字段）'}`,
@@ -958,8 +961,8 @@ export class GrowthSubsystem {
       est: { type: 'number', description: '预估分钟（add_node）' },
       bloom: { type: 'string', description: '认知层级（add_node）' },
       difficulty: { type: 'number', description: '难度 1–5（add_node）' },
-      teaches: { type: 'object', description: '概念→档（add_node 出生层；概念必须逐字在册或随批铸名）' },
-      assumes: { type: 'object', description: '概念→档（add_node 出生层）' },
+      teaches: { type: 'object', description: `概念→档（add_node 出生层；概念必须逐字在册或随批铸名。**档位取值域：${CONCEPT_TIERS.join(' / ')}**）` },
+      assumes: { type: 'object', description: `概念→档（add_node 出生层。**档位取值域：${CONCEPT_TIERS.join(' / ')}**）` },
       misconceptions: { type: 'array', description: '误解条目（add_node 出生层）' },
     })
     return [
@@ -982,6 +985,11 @@ export class GrowthSubsystem {
       },
       {
         name: 'draft_finish', description: '按批发布（写件）：把自上次发布以来的未发布增量硬化为生长批提案 → 受理门 → apply。基图漂移（外部改了图）或门复验未过 = 拒收零落盘、错误回灌继续修。收尾（终点坡道铺通）须以零 add_node 的纯 set_pre 独立批 finish。', parameters: obj({}),
+      },
+      {
+        name: 'draft_revert', description: '撤销（写件）：丢弃最近 N 条未发布增量（省略 count = 丢弃本批全部未发布增量，回到水位）。给「草稿里卡着修不掉的坏增量」留一条路——追加式草稿删不掉已入草稿的 op，del_node 重铸也改不动它；撤销后本批作废（连本批 note / 铸名 / confusable 建议一并清），已发布段（水位以下）不可动。', parameters: obj({
+          count: { type: 'number', description: '丢弃最近多少条未发布增量（正整数；省略 = 全部丢弃）' },
+        }),
       },
     ]
   }
@@ -1046,20 +1054,19 @@ export class GrowthSubsystem {
     }
     const finishes: Array<{ proposal_id: number; ops: number; snapshot: number; operator: string; reason: string; target_endpoints: string[]; created: string[] }> = []
 
-    // —— 草稿图的现势折叠：基图 + 已发布段（[0, published)）= 草稿基线；未发布增量叠其上 ——
+    // —— 草稿图的现势折叠：**真实基图（已含历次 finish 落盘的已发布段）+ 未发布增量** ——
+    // 水位处的「草稿图」就是真实基图：`applyEdit` 把已发布段写进了 `data/图.yaml`，再叠一次就是
+    // 双重应用（#309：旧实现在此对基图**重放已发布段**，于是第一批发布成功后第二次 `draft_patch`
+    // 必以「add_node 重名」炸——会话在第一批之后事实上已死，而唯一的出路只有取消会话）。
+    // 增量一律只取 `ops.slice(published)`；基图漂移由 finish 的门复验对真实基图再跑一遍兜住。
     const draftNodesOf = async (): Promise<{ nodes: Awaited<ReturnType<GraphStore['load']>>; graph: Graph }> => {
       const store = new GraphStore(this.e.paths, this.e.paths.courseRoot(root), this.e.fs)
       const base = await store.load()
-      const baseGraph = new Graph(base)
-      if (doc.published > 0) {
-        const r = replayDraft(base, baseGraph, doc.ops.slice(0, doc.published))
-        if (r.errors.length) {
-          throw new Error(`[coach-draft] 草稿已发布段对当前基图重放失败（基图漂移或草稿损坏）：\n${r.errors.map(e => `  ✗ ${e}`).join('\n')}`)
-        }
-        return { nodes: base, graph: baseGraph }
-      }
-      return { nodes: base, graph: baseGraph }
+      return { nodes: base, graph: new Graph(base) }
     }
+
+    /** 未发布增量（水位之后的 ops）：试算 / 审计 / 发布三处**同一段**。 */
+    const unpublishedOf = (): EditOp[] => doc.ops.slice(doc.published)
 
     // —— 读件执行器：复用 coachToolset 的通用执行器（deps 结构化注入），白名单由本站
     //    规格表收紧为读件五件 + 写件三具；白名单外调用照旧 fail loud。 ——
@@ -1069,13 +1076,63 @@ export class GrowthSubsystem {
     })
     const entriesOf = async (): Promise<ConceptEntry[]> => this.e.concepts.load(root)
 
-    /** 未发布增量（草稿图 + 全量 ops 重放）的读数：errors + DraftDiff——已发布段的
-     * 重放错误在 draftNodesOf 已 fail loud，此处对全量重放取未发布段读数（与已发布
-     * 语义一致）。 */
-    const replayUnpublished = async (): Promise<{ errors: string[]; diff: DraftDiff }> => {
-      const { nodes, graph } = await draftNodesOf()
-      const full = replayDraft(nodes, graph, doc.ops)
-      return { errors: full.errors, diff: full.diff }
+    /** 本批硬化后的**提案形态**（#309 缺陷①）：`draft_patch` 试算 / `draft_audit` /
+     * `draft_finish` **三处同一份**——「草稿通过 = 门通过」要求三处喂给门的是同一个对象，
+     * 不是三处各拼一份（拼装漂移正是「审计通过而 finish 被拒」那类事故的温床）。
+     * `noteIn` / `conceptsIn` 供试算传「本补丁**将要**声明的 note 与铸名」——补丁的
+     * note_operator 与 concepts 在试算时尚未写回 doc，拿旧值试算 = 试算的是另一批。 */
+    const batchSpecOf = (
+      ops: EditOp[], opts: { note?: EditProposalNoteLite; concepts?: ConceptEntry[] } = {},
+    ): EditProposalSpec => {
+      const noteLite = opts.note === undefined ? doc.note : opts.note
+      const concepts = opts.concepts ?? doc.concepts
+      return {
+        course: c.name,
+        reason: noteLite?.reason ?? '',
+        ops,
+        ...(concepts.length ? { concepts } : {}),
+        ...(noteLite
+          ? {
+              note: {
+                operator: noteLite.operator as GrowthNote['operator'],
+                reason: noteLite.reason,
+                ...(noteLite.target_endpoints?.length ? { target_endpoints: noteLite.target_endpoints } : {}),
+                ...(noteLite.disagreement ? { disagreement: noteLite.disagreement } : {}),
+              },
+            }
+          : {}),
+      }
+    }
+
+    /** 门序列的上下文装载（试算 / 审计 / 发布三处同源）：基图（= 水位处的草稿图）+ 登记表
+     * + 现行锚 + 生长闸门；mints = 本批铸名缓存。`pre` = 调用方已装载的同一份底图（补丁试算
+     * 要的是「展开糖算子时看到的那张图」，不重新读一遍）。 */
+    const gateCtxOf = async (
+      pre?: { nodes: Awaited<ReturnType<GraphStore['load']>>; graph: Graph },
+      mints: ConceptEntry[] = doc.concepts,
+    ): Promise<{ nodes: Awaited<ReturnType<GraphStore['load']>>; graph: Graph; ctx: EditGateCtx }> => {
+      const { nodes, graph } = pre ?? await draftNodesOf()
+      return {
+        nodes, graph,
+        ctx: {
+          nodes, graph, entries: await entriesOf(),
+          anchors: await readAnchors(this.e.paths.anchorPath(root), this.e.fs),
+          mints,
+          growthGate: async s => this.growthGateErrors(s),
+        },
+      }
+    }
+
+    /** 合法取值域回灌（#309 缺陷①③）：门错误拒收时随行给全取值域——档位枚举此前**不在写作面**
+     * （模型自造「初识」直到 propose 拒绝文案里才第一次看到合法取值），这里无条件带上。 */
+    const domainsHint = async (): Promise<string> => {
+      const { graph } = await draftNodesOf()
+      return [
+        `档位取值域（teaches / assumes 的值）：${CONCEPT_TIERS.join(' / ')}`,
+        `op 词汇：${EDIT_OPS.join(' / ')}（糖算子 insert_prereq_chain / split_node / suggest_confusable；move 与 region/block 已退役）`,
+        `节点取值域（草稿图逐字）：${[...graph.names].slice(0, 80).join('、')}${graph.names.length > 80 ? ' …' : ''}`,
+        `概念取值域（在册 canonical）：${(await entriesOf()).map(e => e.canonical).slice(0, 60).join('、') || '（空册——随批 concepts 铸名）'}`,
+      ].join('\n  · ')
     }
 
     const renderDiff = (diff: DraftDiff): string => [
@@ -1109,30 +1166,34 @@ export class GrowthSubsystem {
           throw new Error(`[draft_patch] 每批未发布增量 ≤${GROWTH_DRAFT_MAX_OPS_PER_BATCH} 条（本补丁后将为 ${unpublishedCount}）——先 draft_finish 发布再开新批。`)
         }
         const mints = shape.concepts
-        // 试算：全量重放过门才落草稿（失败整批回滚 + 取值域回灌）
-        const trial = [...doc.ops, ...expanded]
-        const r = replayDraft(nodes, graph, trial)
-        if (r.errors.length) {
-          const g2 = graph
-          const domains = [
-            `节点取值域（草稿图逐字）：${[...g2.names].slice(0, 80).join('、')}${g2.names.length > 80 ? ' …' : ''}`,
-            `概念取值域（在册 canonical）：${(await entriesOf()).map(e => e.canonical).slice(0, 60).join('、') || '（空册——随批 concepts 铸名）'}`,
-          ]
-          await logRound('patch', `补丁被拒（${expanded.length} 条）`, r.errors)
-          throw new Error(`[draft_patch] 补丁未过草稿重放（整批回滚，零落草稿）：\n${r.errors.map(e => `  ✗ ${e}`).join('\n')}\n合法取值域：\n${domains.join('\n')}`)
+        // 本补丁**将要**声明的 note 与铸名：试算必须按「补丁生效后的本批形态」跑——拿旧 note
+        // 试算等于试算另一批（前进/换向的接线义务、note.recheck 的跨字段规则都挂在 note 上）。
+        const nextNote: EditProposalNoteLite | undefined = typeof args.note_operator === 'string' && args.note_operator.trim()
+          ? {
+              operator: args.note_operator.trim(),
+              reason: typeof args.note_reason === 'string' ? args.note_reason.trim() : '',
+              ...(Array.isArray(args.note_target_endpoints) && args.note_target_endpoints.length
+                ? { target_endpoints: (args.note_target_endpoints as unknown[]).map(String) }
+                : {}),
+            }
+          : doc.note
+        const nextMints = mints.length ? [...doc.concepts, ...mints] : doc.concepts
+        // 试算：**未发布段 + 本补丁**过完整门（schema 纯校验 + 门序列）才落草稿——#309 缺陷①：
+        // 此前试算只跑 replayDraft（门的结构子集），`move` 这类非法 op 与 `初识` 这类非法档位
+        // 一路落进草稿、直到 finish 才在 propose 的 schema 门炸，而那时 op 已无法清除（缺陷②）。
+        const trial = [...unpublishedOf(), ...expanded]
+        const trialSpec = batchSpecOf(trial, { note: nextNote, concepts: nextMints })
+        const { ctx: trialCtx } = await gateCtxOf({ nodes, graph }, nextMints)
+        const trialErrors = (await editProposalGateErrors(trialSpec, trialCtx)).errors
+        if (trialErrors.length) {
+          await logRound('patch', `补丁被拒（${expanded.length} 条）`, trialErrors)
+          throw new Error(`[draft_patch] 补丁未过受理门同一套校验（整批回滚，零草稿）：\n`
+            + `${trialErrors.map(e => `  ✗ ${e}`).join('\n')}\n合法取值域：\n  · ${await domainsHint()}`)
         }
         doc.ops.push(...expanded)
         if (mints.length) doc.concepts.push(...mints)
         if (suggestions.length) doc.confusables = [...(doc.confusables ?? []), ...suggestions]
-        if (typeof args.note_operator === 'string' && args.note_operator.trim()) {
-          doc.note = {
-            operator: args.note_operator.trim(),
-            reason: typeof args.note_reason === 'string' ? args.note_reason.trim() : '',
-            ...(Array.isArray(args.note_target_endpoints) && args.note_target_endpoints.length
-              ? { target_endpoints: (args.note_target_endpoints as unknown[]).map(String) }
-              : {}),
-          }
-        }
+        if (nextNote !== doc.note) doc.note = nextNote
         await logRound('patch', `补丁 ${expanded.length} 条（未发布 ${doc.ops.length - doc.published}）${shape.normalized.length ? `；形状归一 ${shape.normalized.length} 处` : ''}`)
         // 归一命中 → 宿主给当次捕获补标 tolerated（此刻最近一条捕获就是本轮；批次结束后
         // 再补标只会落到最后一轮——#301 缺陷③ 同款的「标对件」纪律）
@@ -1143,14 +1204,19 @@ export class GrowthSubsystem {
         return `已入草稿：本补丁 ${expanded.length} 条；未发布增量 ${doc.ops.length - doc.published} 条（水位 ${doc.published}/${doc.ops.length}）。${normLines}\n先 draft_audit 再 draft_finish。`
       }
       if (call.name === 'draft_audit') {
-        const { errors, diff } = await replayUnpublished()
+        // 审计 = **把 finish 要提交的那一份**喂给受理门的完整序列（#309 缺陷①：此前只跑
+        // replayDraft——门的结构子集，schema 门缺席，于是「审计通过」与「finish 被拒」可以同帧
+        // 共存，模型据此以为可以发布）。试算走同一个 batchSpecOf / editProposalGateErrors。
+        const { nodes, graph } = await draftNodesOf()
+        const { ctx } = await gateCtxOf({ nodes, graph })
+        const errors = (await editProposalGateErrors(batchSpecOf(unpublishedOf()), ctx)).errors
+        const diff = replayDraft(nodes, graph, unpublishedOf()).diff
         // findings（#272）：非阻、与门错误分列；门错误在场时不折草稿图（重放不完整，
         // findings 的图读数会失真——先把门错误修完再看 findings）
         let findings: string[] = []
         if (!errors.length) {
-          const { nodes, graph } = await draftNodesOf()
           const sim: GNode[] = JSON.parse(JSON.stringify(nodes))
-          applyOpsToNodes(sim, doc.ops)
+          applyOpsToNodes(sim, unpublishedOf())
           findings = draftFindings({
             mints: doc.concepts, entries: await entriesOf(), graph: new Graph(sim),
             invokes: await this.conceptInvokesOf(c),
@@ -1159,14 +1225,52 @@ export class GrowthSubsystem {
         }
         await logRound('audit', errors.length ? `审计：${errors.length} 个门错误` : findings.length ? `审计：通过（${findings.length} 条 findings）` : '审计：通过')
         if (errors.length) {
-          return `审计未过（与受理门同一套校验，草稿通过 = 门通过）：\n${errors.map(e => `  ✗ ${e}`).join('\n')}\n草稿差异：\n${renderDiff(diff)}`
+          return `审计未过（与受理门同一套校验，草稿通过 = 门通过）：\n${errors.map(e => `  ✗ ${e}`).join('\n')}`
+            + `\n合法取值域：\n  · ${await domainsHint()}\n草稿差异：\n${renderDiff(diff)}`
         }
         return `审计通过（草稿通过 = 门通过）。草稿差异：\n${renderDiff(diff)}`
           + (findings.length ? `\n审计 findings（非阻 ${findings.length} 条；不拦 finish，该修的照修）：\n${findings.map(f => `  ⚠ ${f}`).join('\n')}` : '\n审计 findings：无')
-          + `\n未发布增量 ${doc.ops.length - doc.published} 条——可 draft_finish。`
+          + (doc.ops.length - doc.published
+            ? `\n未发布增量 ${doc.ops.length - doc.published} 条——可 draft_finish。`
+            : '\n未发布增量 0 条——不可 finish，先用 draft_patch 补一批。')
+      }
+      if (call.name === 'draft_revert') {
+        // 逃生口（#309 缺陷②）：草稿只能追加，被门拒的 op 永久卡在未发布段且每次 finish 重投
+        // 都带着它（事故里 `ops[0..2]` 的非法档位与 `ops[11]` 的退役 op 因此不可清，模型的
+        // del+add 重铸在原理上无效）——「模型永远有一步可走」的兜底就是这一具。
+        const unpublished = unpublishedOf()
+        if (!unpublished.length) {
+          throw new Error('[draft_revert] 没有未发布增量可撤——已发布段（水位以下）不可动。')
+        }
+        const raw = args.count
+        let count = unpublished.length
+        if (raw !== undefined) {
+          if (typeof raw !== 'number' || !Number.isInteger(raw) || raw <= 0) {
+            throw new Error(`[draft_revert] count 必须是正整数（省略 = 丢弃全部未发布增量；收到 ${JSON.stringify(raw)}）。`)
+          }
+          if (raw > unpublished.length) {
+            throw new Error(`[draft_revert] count=${raw} 超过未发布增量 ${unpublished.length} 条（省略 count 即全部丢弃）。`)
+          }
+          count = raw
+        }
+        const dropped = doc.ops.splice(doc.ops.length - count, count)
+        // 回到水位 = 本批作废：note / 铸名缓存 / confusable 建议一并清（它们都是**批级**状态，
+        // 留着会让下一批带着上一批的理由与铸名发布）。部分撤销保留它们（本批仍在建）。
+        if (!unpublishedOf().length) {
+          doc.note = undefined
+          doc.concepts = []
+          doc.confusables = []
+        }
+        const { nodes, graph } = await draftNodesOf()
+        const residual = replayDraft(nodes, graph, unpublishedOf()).errors
+        await logRound('revert', `撤销 ${dropped.length} 条未发布增量（余 ${unpublishedOf().length} 条）`)
+        return `已撤销 ${dropped.length} 条未发布增量：${dropped.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('、')}。`
+          + `\n水位 ${doc.published}/${doc.ops.length}；未发布增量 ${unpublishedOf().length} 条。`
+          + (unpublishedOf().length ? `\n剩余未发布段重放：${residual.length ? `\n${residual.map(e => `  ✗ ${e}`).join('\n')}` : '通过（结构面）'}` : '')
+          + (unpublishedOf().length ? '\n可继续 draft_patch 或 draft_audit。' : '\n本批已清空——用 draft_patch 重开一批。')
       }
       if (call.name === 'draft_finish') {
-        const unpublished = doc.ops.slice(doc.published)
+        const unpublished = unpublishedOf()
         const noteLite = doc.note
         if (!noteLite || !noteLite.operator || !noteLite.reason) {
           throw new Error('[draft_finish] 缺本批 note（operator/reason）——先用 draft_patch 的 note_operator/note_reason 声明本批算子与理由。')
@@ -1174,34 +1278,18 @@ export class GrowthSubsystem {
         if (!(GROWTH_OPERATORS as readonly string[]).includes(noteLite.operator)) {
           throw new Error(`[draft_finish] note.operator 非法：${noteLite.operator}（允许 ${GROWTH_OPERATORS.join('/')}）`)
         }
-        const spec: EditProposalSpec = {
-          course: c.name,
-          reason: noteLite.reason,
-          ops: unpublished,
-          ...(doc.concepts.length ? { concepts: doc.concepts } : {}),
-          note: {
-            operator: noteLite.operator as GrowthNote['operator'],
-            reason: noteLite.reason,
-            ...(noteLite.target_endpoints?.length ? { target_endpoints: noteLite.target_endpoints } : {}),
-            ...(noteLite.disagreement ? { disagreement: noteLite.disagreement } : {}),
-          },
-        }
+        const spec: EditProposalSpec = batchSpecOf(unpublished)
         // 零增量 finish 无意义（空手结束由入口 fail loud 执法）
         if (!unpublished.length) {
           throw new Error('[draft_finish] 没有未发布增量——先 draft_patch 再 finish。')
         }
-        // 门复验对**真实基图**再跑一遍（水位模型：基图漂移 = 拒收零落盘、草稿保留）
-        const store = new GraphStore(this.e.paths, this.e.paths.courseRoot(root), this.e.fs)
-        const nodes = await store.load()
-        const graph = new Graph(nodes)
-        const anchors = await readAnchors(this.e.paths.anchorPath(root), this.e.fs)
-        const entries = await entriesOf()
+        // 门复验对**真实基图**再跑一遍（水位模型：基图漂移 = 拒收零落盘、草稿保留）。走的是
+        // draft_audit 同一入口（#309 缺陷①）——审计通过而此处被拒只可能源于门之间的状态变化
+        // （基图/登记表/锚被外部改动、生长闸门状态变了），不再源于两侧各跑一套校验。
         let driftErrors: string[]
         try {
-          driftErrors = await editGateErrors(spec, {
-            nodes, graph, entries, anchors, mints: doc.concepts,
-            growthGate: async s => this.growthGateErrors(s),
-          })
+          const { ctx } = await gateCtxOf()
+          driftErrors = (await editProposalGateErrors(spec, ctx)).errors
         } catch (err) {
           // 门复验**异常**转门错误（#301 缺陷②）：异常穿透会让 logRound('finish') 一次都
           // 不执行、finish 轮次在草稿里零痕迹、回灌给模型的只有一行裸异常（不可诊断、每次
@@ -1233,7 +1321,9 @@ export class GrowthSubsystem {
           await logRound('finish', `apply 失败（提案 #${prop.id} 已自清）`, [msg])
           throw new Error(`[draft_finish] apply 失败（提案已拒绝清场，草稿保留）：\n${msg}`)
         }
-        const sealed = sealedDecisionOf(unpublished, anchors)
+        // sealed 谓词要的是**现行锚**（本批 set_pre 接线是否构成收尾宣告）——只读锚文件，
+        // 不为它再装载一遍图与登记表（门复验刚刚跑过，那两次装载在 gateCtxOf 里）。
+        const sealed = sealedDecisionOf(unpublished, await readAnchors(this.e.paths.anchorPath(root), this.e.fs))
         doc.published = doc.ops.length
         doc.note = undefined
         doc.concepts = []
@@ -1263,7 +1353,7 @@ export class GrowthSubsystem {
         if (doc.published === doc.ops.length) await deleteDraft(this.e.fs, draftPath)
         return `发布成功：提案 #${prop.id} 已 apply（快照 v${applied.snapshot}）；水位前移至 ${doc.published}/${doc.ops.length}。${sealed.effects.length ? `收尾宣告：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}。` : ''}${confusableLines.length ? `\n${confusableLines.join('\n')}` : ''}`
       }
-      throw new Error(`白名单外工具「${call.name}」被拒：执行官写件只有 draft_patch / draft_audit / draft_finish。`)
+      throw new Error(`白名单外工具「${call.name}」被拒：执行官写件只有 draft_patch / draft_audit / draft_finish / draft_revert。`)
     }
 
     // —— 回路 ——
@@ -1321,6 +1411,9 @@ export class GrowthSubsystem {
     const loop = await agent.agentLoop({
       station: GROWTH_DRAFT_STATION, prompt, effort: 'deep',
       tools: GrowthSubsystem.draftToolSpecs(), runTool,
+      // 进展世代 = 已发布水位（#309 缺陷④）：发布成功即前移 → 熔断游标清零，正常节奏不误杀；
+      // 一路不发布（事故形态）则同错误行按工具累计，第三次止血而不是烧到 K≤20 顶。
+      progressEpoch: () => doc.published,
       ...(opts.isCancelled ? { isCancelled: opts.isCancelled } : {}),
     })
     const finished = doc.rounds.some(r => r.kind === 'finish' && r.summary.startsWith('发布成功'))

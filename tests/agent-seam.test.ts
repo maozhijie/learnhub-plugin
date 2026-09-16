@@ -11,10 +11,23 @@
 import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, AGENT_LOOP_REPEAT_LIMIT, stripFences } from '../src/engine/infra/agent.ts'
 import { systemClock } from '../src/host/clock.ts'
 import type { AgentCallRecord, GateVerdict } from '../src/engine/infra/agent.ts'
 import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmToolSpec } from '../src/engine/infra/llm.ts'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+
+/** 事故语料回放序列（#309 缺陷④）：2026-09-17 实机逐轮的「工具名 + 结果原文 + 成/败」。
+ * 提取规则与出处见 fixture 的 `_source`。 */
+function incidentSeq(): Array<{ calls: string[]; failed: boolean; result: string }> {
+  return (JSON.parse(readFileSync(join(HERE, 'fixtures', 'agent-loop-incident-2026-09-17.json'), 'utf8')) as {
+    turns: Array<{ calls: string[]; failed: boolean; result: string }>
+  }).turns
+}
 
 /** 脚本化补全端口：按调用序回放，记录 prompt/system/语义档。 */
 function fakeComplete(replies: string[]) {
@@ -356,7 +369,8 @@ test('#302 ③ 同错误熔断：同一工具连续 3 次逐字相同即熔断�
   assert.equal(typeof fail.fields.chars, 'number')
   assert.match(String(fail.fields.error), /^\[draft_finish\] 门复验未过/)
 
-  // 渐进修复（错误文本逐轮在变）不熔断：模型能一路改到过门
+  // 错误行逐轮在变（不是同一条行反复在场）不误杀：模型一路改到过门——ADR-0041 §修订补记的
+  // 原始判据形状（渐进修复的每一轮报的是**不同**的行，故行计数恒为 1）
   const fixing = fakeStream([
     ...Array.from({ length: 5 }, (_, i) => ({
       text: `第${i + 1}轮`, toolCalls: [{ id: `r${i}`, name: 'draft_finish', arguments: '{}' }],
@@ -364,10 +378,10 @@ test('#302 ③ 同错误熔断：同一工具连续 3 次逐字相同即熔断�
     { text: '```yaml\nok: 1\n```' },
   ])
   const agent2 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: fixing }, systemClock)
-  let n = 0
+  let left = 6
   const ok = await agent2.agentLoop({
     station: '执行官草稿', prompt: '发布', tools: [],
-    runTool: async () => { throw new Error(`门错误清单剩 ${5 - n++} 条（逐轮在缩短）`) },
+    runTool: async () => { throw new Error(`门错误清单剩 ${--left} 条（逐轮在缩短）`) },
   })
   assert.equal(ok.text, 'ok: 1', '逐轮变化的错误不误杀——修复链走完由模型收束')
   assert.equal(fixing.requests.length, 6)
@@ -386,6 +400,124 @@ test('#302 ③ 同错误熔断：同一工具连续 3 次逐字相同即熔断�
   })
   assert.equal(mixed.text, '收束')
   assert.equal(AGENT_LOOP_REPEAT_LIMIT, 3, 'ADR-0041 §修订补记：同错误熔断阈值 = 连续 3 次')
+})
+
+test('#309 ④ 熔断口径②：patch/finish 交替、拒绝文案逐字相同也熔断（成功发布即清零不误杀）', async () => {
+  // 事故形态（2026-09-17 数学基础二次事故）：patch 成功 → finish 被同一批错误行拒绝，
+  // 交替反复。口径① 的「连续逐字相同」被中间的成功 patch 打断，熔断 0 次触发 → 撞 K 顶。
+  const script = Array.from({ length: 12 }, (_, i) => ({
+    text: `第${i + 1}轮`,
+    toolCalls: [{ id: `c${i}`, name: i % 2 ? 'draft_finish' : 'draft_patch', arguments: '{}' }],
+  }))
+  const reject = [
+    '[draft_finish] 受理门拒收（零落盘，草稿保留）：',
+    '  ✗ ops.0: teaches 档位非法 "初识"（允许 知道/会用/能教）',
+    '  ✗ ops.1: teaches 档位非法 "初识"（允许 知道/会用/能教）',
+  ].join('\n')
+  const stream = fakeStream(script)
+  const agent = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream }, systemClock)
+  let runs = 0
+  await assert.rejects(
+    () => agent.agentLoop({
+      station: '教练执行', prompt: '发布', tools: [],
+      runTool: async call => {
+        runs++
+        if (call.name === 'draft_patch') return `已入草稿：本补丁 ${runs} 条` // 每轮都不同且成功
+        throw new Error(reject)
+      },
+    }),
+    /工具回路熔断：draft_finish 的同一结果行在本次会话内累计出现 3 次.*死因：同错误重复/,
+  )
+  assert.equal(runs, 6, '第 3 次 finish 被拒即熔断（patch/finish 各走 3 次即止）')
+
+  // 中间夹别的错误行不打断本行的账（事故里第三次 finish 拒绝是门复验的 set_pre 覆盖错误，
+  // 与前后两次 schema 拒绝不同——它不该把 schema 行的计数清掉）
+  const interleaved = fakeStream([
+    ...Array.from({ length: 10 }, (_, i) => ({ text: `第${i + 1}轮`, toolCalls: [{ id: `i${i}`, name: 'draft_finish', arguments: '{}' }] })),
+    { text: '收束' },
+  ])
+  const agent1b = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: interleaved }, systemClock)
+  let nth = 0
+  await assert.rejects(
+    () => agent1b.agentLoop({
+      station: '教练执行', prompt: '发布', tools: [],
+      runTool: async () => {
+        nth++
+        // 第 2 次换成完全不同的一批错误行（事故里的「另一类拒绝」）；第 1/3/4 次都带那条
+        // 逐字相同的行 → 它在第 4 次累计到 3（中间那一次不含它，照样累计）
+        throw new Error(nth === 2
+          ? '  ✗ 另一类错误（门复验：未覆盖批内新前沿）\n  ✗ 附注：第 2 次'
+          : `  ✗ 同一批错误行（逐字相同）\n  ✗ 附注：第 ${nth} 次`)
+      },
+    }),
+    /同一结果行在本次会话内累计出现 3 次/,
+  )
+
+  // 错误行逐轮在变（同一条行不反复在场）不误杀：模型一路改到过门
+  const shrinking = fakeStream([
+    ...Array.from({ length: 4 }, (_, i) => ({ text: `第${i + 1}轮`, toolCalls: [{ id: `s${i}`, name: 'draft_finish', arguments: '{}' }] })),
+    { text: '收束' },
+  ])
+  const agent2 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: shrinking }, systemClock)
+  let left = 4
+  const fixed = await agent2.agentLoop({
+    station: '教练执行', prompt: '发布', tools: [],
+    runTool: async () => {
+      // 报的是「还剩 N 条」这一轮**新**的行——指纹逐轮不同，故不累计（行口径按逐字相同的行判）
+      throw new Error(`  ✗ 门错误还剩 ${left--} 条（逐轮在缩短）`)
+    },
+  })
+  assert.equal(fixed.text, '收束', '逐轮变化的错误行不误杀')
+
+  // 成功发布（进展世代前移）清零：同一失败文本再出现也从头计数——正常节奏不误杀
+  const publishing = fakeStream([
+    ...Array.from({ length: 6 }, (_, i) => ({ text: `第${i + 1}轮`, toolCalls: [{ id: `p${i}`, name: 'draft_finish', arguments: '{}' }] })),
+    { text: '收束' },
+  ])
+  const agent4 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: publishing }, systemClock)
+  let published = 0
+  const ok = await agent4.agentLoop({
+    station: '教练执行', prompt: '发布', tools: [],
+    progressEpoch: () => published,
+    runTool: async () => {
+      published++ // 每轮都算「发布成功」——世代前移即清零
+      throw new Error('  ✗ 同一条错误行（逐字相同）')
+    },
+  })
+  assert.equal(ok.text, '收束', '有进展的重复失败不熔断')
+})
+
+test('#309 ④ 事故语料回放：2026-09-17 实机的 19 轮工具结果喂进回路，熔断在第三次 finish 被拒时止血', async () => {
+  // fixture = 事故实机语料 `生成语料/教练执行/bad-...0021.md` 里逐轮摘出的工具结果原文
+  // （提取规则见 fixture 的 `_source`）。回放价值：口径① 在这段序列上 0 次触发（连续逐字
+  // 相同被中间的成功 patch 与一次 patch 形状拒绝打断），口径② 在第 24 次工具调用（第 18 轮，
+  // 本地 00:18:00）命中一条 `✗ ops.0: … teaches[…] 档位非法 "初识"（允许 知道/会用/能教）`
+  // 第三次在场——实测止血点，此后还有 3 轮调用（含又一次同文案拒绝与撞 K 顶前的挣扎）没发生。
+  const seq = incidentSeq()
+  // fixture 按**轮**存（一轮可多具工具，同一批结果）；缝的 runTool 按**具**调——拍平成一具一条，
+  // 否则第一轮（4 具只读工具）就会让后面的轮次整体错位。
+  const calls = seq.flatMap((t, ti) => t.calls.map((name, i) => ({ name, id: `t${ti + 1}-${i}`, failed: t.failed, result: t.result })))
+  const script = Array.from({ length: seq.length }, (_, ti) => ({
+    text: '继续。',
+    toolCalls: seq[ti]!.calls.map((name, i) => ({ id: `t${ti + 1}-${i}`, name, arguments: '{}' })),
+  }))
+  script.push({ text: '（脚本耗尽前的收束）', toolCalls: [] })
+  const stream = fakeStream(script)
+  const agent = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream }, systemClock)
+  let turn = 0
+  await assert.rejects(
+    () => agent.agentLoop({
+      station: '教练执行', prompt: '生长', tools: [],
+      runTool: async () => {
+        const c = calls[turn++]
+        if (!c) throw new Error('回放越界：熔断本该早已止血')
+        if (c.failed) throw new Error(c.result)
+        return c.result
+      },
+    }),
+    /工具回路熔断：draft_finish 的同一结果行在本次会话内累计出现 3 次/,
+  )
+  assert.equal(turn, 24, '恰在第 24 次工具调用（第 18 轮）熔断——事故里它一路跑到第 21 轮撞 K 顶')
 })
 
 test('#302 ② 工具失败事件：成功调用不发；失败摘要是首行（全文留在轨迹与语料）', async () => {

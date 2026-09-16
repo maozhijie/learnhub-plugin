@@ -72,9 +72,11 @@ test('结构守卫：JSONL 读侧必经原语——src 全域 split("\\n") 只�
   // mini-YAML 解析（yaml.ts）；路径与错误文案处理（note-source/generation-jobs 的
   // sectionFailure 切错误消息取首条 ✗）；语料 frontmatter 行级补丁（#213 corpus 的
   // applyPatch 只动 --- 围栏内 outcome/code 行，纯文本非数据流；#215 smoke 的
-  // parseCorpusFrontmatter / #216 spike 的 firstLine 同族（读捕获文件围栏、切门错误首行取摘要））。白名单外出现
+  // parseCorpusFrontmatter / #216 spike 的 firstLine 同族（读捕获文件围栏、切门错误首行取摘要）；
+  // #309 agent.ts 的 fingerprintLinesOf 同族（切**门错误行**取熔断指纹——同 generation-jobs
+  // 的 sectionFailure，纯文本非数据流，且只为逐字比对）。白名单外出现
   // split('\n') = 有人手写 JSONL parse 循环（ADR-0053 单一实现违约）。
-  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts', 'generation-jobs.ts', 'corpus.ts', 'smoke.ts', 'spike.ts'])
+  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts', 'generation-jobs.ts', 'corpus.ts', 'smoke.ts', 'spike.ts', 'agent.ts'])
   const files: string[] = []
   function walk(dir: string): void {
     for (const e of readdirSync(dir, { withFileTypes: true })) {

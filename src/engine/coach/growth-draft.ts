@@ -28,7 +28,8 @@ export const GROWTH_DRAFT_MARKER = '生长草稿（非活图、非提案）'
 export interface GrowthDraftRound {
   /** ISO 时刻。 */
   at: string
-  kind: 'patch' | 'audit' | 'finish' | 'note'
+  /** `revert` = `draft_revert` 撤销未发布增量（#309 缺陷②的逃生口，轮志照记）。 */
+  kind: 'patch' | 'audit' | 'finish' | 'note' | 'revert'
   summary: string
   /** 该轮的门错误回灌（过门轮省略）。 */
   errors?: string[]

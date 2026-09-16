@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createFileLogger, LOG_DAILY_LIMIT_BYTES, LOG_ENTRY_LIMIT, LOG_RETENTION_DAYS, MULTILINE_EVENTS } from '../src/host/log-file.ts'
+import { createFileLogger, LOG_DAILY_LIMIT_BYTES, LOG_ENTRY_LIMIT, LOG_FAILURE_WARN_STREAK, LOG_RETENTION_DAYS, MULTILINE_EVENTS } from '../src/host/log-file.ts'
 
 /** 固定时刻构造（本地时区；测试断言行内时间与文件名都用它）。 */
 const at = (y: number, mo: number, d: number, h = 13, mi = 4, s = 5, ms = 7): number =>
@@ -206,4 +206,53 @@ test('写盘失败静默不影响主流程，但失败计数与原因经实例�
   assert.ok(log.failures > 0, '失败计数可见')
   assert.ok(typeof log.lastError === 'string' && log.lastError.length > 0, '失败原因可见')
   rmSync(root, { recursive: true, force: true })
+})
+
+// ---- #309 缺陷⑤：目录自愈 + 连续失败浮出（ADR-0080「绝不静默停止」）----
+
+test('#309 目录自愈：删掉整个日志目录后，下一步操作即恢复写盘（不再等宿主重启或跨日）', () => {
+  const dir = tempDir('selfheal')
+  const log = createFileLogger({ dir, now: () => at(2026, 9, 15) })
+  log.info('coach.round.enter', { course: '数学' })
+  assert.equal(linesOf(dir, '2026-09-15').length, 1)
+
+  // 事故形态：用户删掉整个学习库（state/logs 随之消失），宿主进程继续跑——当日 `day`
+  // 缓存已是今天，旧实现只在跨日时 mkdir → 之后每次 append 都 ENOENT 静默失败。
+  rmSync(dir, { recursive: true, force: true })
+  log.info('coach.round.enter', { course: '数学' })
+  assert.equal(linesOf(dir, '2026-09-15').length, 1, '目录重建且日志在下一步操作即恢复（当场重试，不等下一次写盘）')
+  // 自愈后恢复常态：连续写盘照旧（就绪位重建，不再逐条 mkdir）
+  log.info('coach.round.enter', { course: '数学' })
+  assert.equal(linesOf(dir, '2026-09-15').length, 2)
+
+  // 再删一次：同样在下一步操作恢复（自愈不是一次性的）
+  rmSync(dir, { recursive: true, force: true })
+  log.info('coach.round.enter', { course: '数学' })
+  assert.equal(linesOf(dir, '2026-09-15').length, 1, '反复删目录也照样自愈')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('#309 连续写盘失败浮出：达阈告警恰一次；写盘成功即清零（下一次连续失败再浮出）', () => {
+  const root = mkdtempSync(join(tmpdir(), 'learnhub-log-streak-'))
+  const blocker = join(root, 'blocker')
+  writeFileSync(blocker, 'x', 'utf8')
+  const dir = join(blocker, 'logs') // 父路径是普通文件 → mkdir 与 append 恒失败
+  const warned: string[] = []
+  const log = createFileLogger({ dir, now: () => at(2026, 9, 15), warn: m => warned.push(m) })
+  for (let i = 1; i <= LOG_FAILURE_WARN_STREAK; i++) {
+    log.info('coach.round.enter', { course: '数学' })
+    assert.equal(warned.length, i < LOG_FAILURE_WARN_STREAK ? 0 : 1, `第 ${i} 次失败：达阈才浮出`)
+  }
+  assert.match(warned[0]!, /连续 5 次写盘失败/, '告警带连续次数与最近原因')
+  assert.match(warned[0]!, /落点/, '告警带落点（可执行：去看那个目录）')
+  for (let i = 0; i < 5; i++) log.info('coach.round.enter', { course: '数学' })
+  assert.equal(warned.length, 1, '同一失败批次只浮出一次（不刷屏）')
+
+  // 写盘成功清零：换到可写目录后写一条，再回到坏目录连败 → 新的失败批次照样浮出
+  rmSync(root, { recursive: true, force: true })
+  const good = tempDir('streak-ok')
+  const log2 = createFileLogger({ dir: good, now: () => at(2026, 9, 15), warn: m => warned.push(m) })
+  log2.info('coach.round.enter', { course: '数学' })
+  assert.equal(warned.length, 1, '成功写盘本身不告警')
+  rmSync(good, { recursive: true, force: true })
 })

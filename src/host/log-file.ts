@@ -19,7 +19,12 @@
  *   console 告警一次（次日自动复位）。**绝不静默停止**——「同一节一周 4,149 条重复失败」
  *   那类雪崩正是静默停止喂出来的（`tests/README.md` 记过）。
  * - 写盘失败静默不影响主流程（与 `runLog` 同款纪律），但内部记 `failures`／`lastError`
- *   并经实例暴露——避免「日志自己坏了没人知道」。
+ *   并经实例暴露——避免「日志自己坏了没人知道」；**连续**失败达 `LOG_FAILURE_WARN_STREAK`
+ *   时经注入的 `warn` 出口浮出一次（#309 缺陷⑤：目录被删那类失败此前零外部出口）。
+ * - **目录自愈**（#309 缺陷⑤）：日志目录的建立与「日历日缓存」解耦——写盘前缺就建，写盘
+ *   失败即把就绪位打回，下一次 emit 重建。此前 `mkdirSync` 只在跨日时执行，用户删掉整个
+ *   学习库后当日 `day` 缓存已是今天 → 目录永不重建 → 当天剩余时间与整个生成批次零日志，
+ *   且只进内部计数器完全静默（宿主重启或跨日才自愈）。
  * - 级别门**唯一一处**住在这里；默认 INFO，可经宿主侧 env `LEARNHUB_LOG_LEVEL` 调
  *   （引擎侧不读环境）。
  */
@@ -40,6 +45,9 @@ export const LOG_ENTRY_LIMIT = 16384
 export const LOG_RETENTION_DAYS = 30
 /** 单日软上限（字节）。 */
 export const LOG_DAILY_LIMIT_BYTES = 20 * 1024 * 1024
+/** 连续写盘失败达此数即浮出一次告警（#309 缺陷⑤）。ADR-0080 的「绝不静默停止」此前只
+ * 兑现到「单日上限」那一类——目录消失那类失败全进内部计数器，外部零出口。 */
+export const LOG_FAILURE_WARN_STREAK = 5
 /** 保留期清扫只认这个文件名形状；其余文件一律不碰。 */
 const LOG_FILE_RE = /^(\d{4}-\d{2}-\d{2})\.log$/
 
@@ -148,27 +156,84 @@ export function createFileLogger(opts: FileLoggerOptions): FileLogger {
   const warn = opts.warn ?? ((m: string): void => { console.warn(m) })
   const level = opts.level ?? levelFromEnv(process.env) ?? 'info'
 
-  // 闭包态（非模块级）：当日日历日 / 当日已写字节 / 停写日 / 已告警日 / 失败面。
+  // 闭包态（非模块级）：当日日历日 / 当日已写字节 / 停写日 / 已告警日 / 失败面 / 目录就绪位。
   let day = ''
   let bytes = 0
   let cappedDay: string | null = null
   let warnedDay: string | null = null
   let failures = 0
   let lastError: string | null = null
+  // 目录就绪位与「连续失败」两件是 #309 缺陷⑤ 的新态：目录缺即建（与跨日缓存解耦）、
+  // 连续失败达阈浮出一次（成功写盘即清零，下一起新的失败批次照样能浮出）。
+  let dirReady = false
+  let failStreak = 0
+  let failWarned = false
 
   const fail = (err: unknown): void => {
     failures++
     lastError = messageOf(err)
   }
 
-  /** 跨日（或首次写）：建目录 → 惰性清扫 → 沿用当日已有字节数（跨进程重启不虚高）。 */
-  const ensureDay = (target: string): void => {
-    if (day === target) return
-    day = target
-    cappedDay = null
-    warnedDay = null
+  /** 目录就绪位保证（#309 缺陷⑤）：**与跨日缓存解耦**——写盘前缺就建。此前只有跨日才
+   * `mkdirSync`，删库后当日缓存已是今天 → 目录永不重建 → 整个批次静默零日志。 */
+  const ensureDir = (): void => {
+    if (dirReady) return
+    mkdirSync(opts.dir, { recursive: true })
+    dirReady = true
+  }
+
+  /** 连续写盘失败达阈浮出一次（#309 缺陷⑤）：ADR-0080 的「绝不静默停止」此前只兑现到
+   * 单日上限那一类，目录消失那类失败全进内部计数器、外部零出口。 */
+  const warnIfStreak = (): void => {
+    if (failStreak < LOG_FAILURE_WARN_STREAK || failWarned) return
+    failWarned = true
     try {
-      mkdirSync(opts.dir, { recursive: true })
+      warn(`[learnhub:log] 日志已连续 ${failStreak} 次写盘失败（最近：${lastError ?? '(未记录)'}）——落点 ${opts.dir}；`
+        + `检查目录是否被删/不可写（写盘失败不挡主流程，但日志会在此期间缺失）。`)
+    } catch {
+      // 告警出口故障不挡主流程
+    }
+  }
+
+  /** 写一行 + **目录自愈当场重试**（#309 缺陷⑤）：就绪位只打回的话，删库后的恢复要等到
+   * 再下一次写盘——重试让「下一步操作即恢复」成立。记账分两档：**每一次**尝试失败都进
+   * `failures`／`lastError`（累计口径照旧，自愈那一次也算——盘上确实失败过），而**连续失败
+   * 链只数重试也失败的那一类**（自愈成功不算「连续失败」，否则删库一次就报一连串）。
+   * 返回是否真写进去了（成败决定字节账与告警面）。 */
+  const appendLine = (target: string, text: string): boolean => {
+    const path = join(opts.dir, `${target}.log`)
+    try {
+      appendFileSync(path, text, 'utf8')
+    } catch (err) {
+      fail(err)
+      dirReady = false
+      try {
+        ensureDir()
+        appendFileSync(path, text, 'utf8')
+      } catch (retryErr) {
+        fail(retryErr)
+        failStreak++
+        warnIfStreak()
+        return false
+      }
+    }
+    failStreak = 0
+    failWarned = false
+    return true
+  }
+
+  /** 跨日（或首次写）：建目录 → 惰性清扫 → 沿用当日已有字节数（跨进程重启不虚高）。
+   * 目录可用性每轮都保（见 ensureDir）；跨日的三项只做一次。 */
+  const ensureDay = (target: string): void => {
+    const crossed = day !== target
+    if (crossed) {
+      day = target
+      cappedDay = null
+      warnedDay = null
+    }
+    try {
+      ensureDir()
+      if (!crossed) return
       sweepOld(target)
       try {
         bytes = statSync(join(opts.dir, `${target}.log`)).size
@@ -178,6 +243,8 @@ export function createFileLogger(opts: FileLoggerOptions): FileLogger {
     } catch (err) {
       // 失败不归 0（#296）：statSync 之外的失败（mkdir 等）沿用上次 bytes——归 0 会让
       // 单日上限判定失真可超写；沿用值偏保守（可能提前触顶停写，但绝不超写）。
+      // 就绪位打回（#309）：目录建立失败不是永久态，下一次写盘再试。
+      dirReady = false
       fail(err)
     }
   }
@@ -193,10 +260,8 @@ export function createFileLogger(opts: FileLoggerOptions): FileLogger {
         rmSync(join(opts.dir, name), { force: true })
       } catch (err) {
         fail(err)
-        try {
-          appendFileSync(join(opts.dir, `${target}.log`),
-            `[${clockLabel(now())}] [WARN] host.log.sweep_failed file=${name} error=${messageOf(err)}\n`, 'utf8')
-        } catch { /* 留痕失败不挡清扫 */ }
+        // 留痕失败不挡清扫（appendLine 自带目录自愈重试与连续失败链记账）
+        appendLine(target, `[${clockLabel(now())}] [WARN] host.log.sweep_failed file=${name} error=${messageOf(err)}\n`)
       }
     }
   }
@@ -204,12 +269,8 @@ export function createFileLogger(opts: FileLoggerOptions): FileLogger {
   /** 命中单日上限：停写 + 文件尾标记行 + 告警一次（次日 `ensureDay` 自动复位）。 */
   const cap = (target: string): void => {
     cappedDay = target
-    try {
-      appendFileSync(join(opts.dir, `${target}.log`),
-        `[${clockLabel(now())}] [WARN] host.log.daily_cap 已停写：单日超过 ${LOG_DAILY_LIMIT_BYTES} 字节（次日自动复位）\n`, 'utf8')
-    } catch (err) {
-      fail(err)
-    }
+    appendLine(target,
+      `[${clockLabel(now())}] [WARN] host.log.daily_cap 已停写：单日超过 ${LOG_DAILY_LIMIT_BYTES} 字节（次日自动复位）\n`)
     if (warnedDay === target) return
     warnedDay = target
     try {
@@ -230,9 +291,10 @@ export function createFileLogger(opts: FileLoggerOptions): FileLogger {
         cap(target)
         return
       }
-      appendFileSync(join(opts.dir, `${target}.log`), `${body}\n`, 'utf8')
-      bytes += size
+      // 字节账只在真写进去时前移（appendLine 自愈重试失败时不算——超写防线不容虚账）
+      if (appendLine(target, `${body}\n`)) bytes += size
     } catch (err) {
+      dirReady = false
       fail(err)
     }
   }

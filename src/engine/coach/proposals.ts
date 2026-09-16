@@ -100,7 +100,9 @@ export interface EditProposalSpec {
   route?: string
 }
 
-const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'set_note'] as const
+/** 合法 op 词汇（schema 门与取值域回灌的单一出处；糖算子不在其中——它们在补丁入口展开成
+ * 这些原子 op 之后才进权威门）。 */
+export const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'set_note'] as const
 
 /** 批内 add_node 数（插入登记/调速闸门的「本批新增」口径单点；解析前 doc.ops 与
  * EditOp[] 同形消费）。 */
@@ -453,6 +455,23 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
   return gateBlocks.length ? ['生长闸门拒绝受理（插入积极性调速，#146）', ...gateBlocks] : []
 }
 
+/** 受理门的**完整**序列（#309 缺陷① / ADR-0088 §修订）：schema 纯校验（`validateEditProposal`
+ * ——op 白名单、档位枚举、bloom/difficulty/est 取值域、字段互斥、note 区跨字段规则、铸名/误解
+ * 条目形态）+ `editGateErrors`（结构重放 / 概念对表 / 终点锚保护 / 巩固门 / 生长闸门）。
+ *
+ * 为什么需要它：`editGateErrors` 只是门的**结构子集**，`draft_audit` 拿去当「草稿通过 = 门通过」
+ * 的判据时漏掉了 schema 面——2026-09-17 事故里审计连报两次「通过」，finish 却分别被 propose 的
+ * schema 门（`teaches[...] 档位非法 "初识"`）与门复验拒掉，模型据此以为「审计通过 = 可以发布」。
+ * proposeEdit 与草稿内核（`draft_patch` 试算 / `draft_audit` / `draft_finish`）**同一函数、
+ * 同一顺序**——同一批 ops 两侧结论一致按构造成立，不靠两套实现对齐。 */
+export async function editProposalGateErrors(
+  doc: unknown, ctx: EditGateCtx, warns?: string[],
+): Promise<{ errors: string[]; spec?: EditProposalSpec; phase: 'schema' | 'gate' }> {
+  const v = validateEditProposal(doc, warns)
+  if (v.errors) return { errors: v.errors, phase: 'schema' }
+  return { errors: await editGateErrors(v.spec!, ctx), spec: v.spec, phase: 'gate' }
+}
+
 // ---- 富化覆盖层通道（kind=enrich，#140：schema v2 出生/覆盖层分家）----
 
 /** 覆盖层字段条目：节点 → 该字段的写入值。首期只有 enc（#127 §6：覆盖层首期=enc 回填）。 */
@@ -674,6 +693,8 @@ export class GraphProposals {
     warns.push(...nearNameWarnings(nearNameCandidates(spec.concepts ?? [], entries)))
     if (spec.concepts?.length) warns.push(...conceptMagnitudeWarnings(applyConceptMints(entries, spec.concepts).entries))
     const anchors = await readAnchors(this.paths.anchorPath(course.root), this.fs)
+    // 门序列 = editProposalGateErrors 的内部两步（validateEditProposal → editGateErrors）；此处
+    // 不调那个合并入口只为让「注册表查不到课程」与「路线门」各出各的行文（草稿侧走合并入口）。
     const gateErrors = await editGateErrors(spec, {
       nodes, graph, entries, anchors,
       mints: spec.concepts ?? [], growthGate: this.growthGate,

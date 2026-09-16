@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Graph } from '../src/engine/graph/graph.ts'
+import { Graph, GraphStore } from '../src/engine/graph/graph.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
+import { GrowthSubsystem } from '../src/engine/coach/growth-subsystem.ts'
 import { normalizePatchShape, replayDraft, sealedDecisionOf, editGateErrors, simulateOps } from '../src/engine/index.ts'
 import { GROWTH_DRAFT_MARKER, draftPathOf, loadDraft } from '../src/engine/coach/growth-draft.ts'
 import type { EditGateCtx } from '../src/engine/index.ts'
@@ -133,6 +135,51 @@ const SEED = { registry: null, graph: null }
 
 async function seeded(h: Awaited<ReturnType<typeof withVault>>): Promise<void> {
   await draftCourse(h.engine, CAPABILITY_DRAFT)
+}
+
+// ---- #309：门同源 / 逃生口 / 水位重放（判据落在「模型看到了什么」上，故要摘回执） ----
+
+/** 摘每轮工具回执（`req.messages` 末条 tool 消息）的脚本化假 agent（先例：#301 端到端用例）。 */
+function receiptFake(queue: LoopTurn[][]): { seam: AgentSeam; receipts: string[] } {
+  const receipts: string[] = []
+  let current: LoopTurn[] = []
+  const seam = new AgentSeam({
+    logger: memLogger(),
+    complete: async () => { throw new Error('脚本化补全端口：不应调用') },
+    stream: async req => {
+      const last = req.messages.at(-1)
+      if (last?.role === 'tool') receipts.push(last.text)
+      if (!current.length) {
+        current = queue.shift() ?? []
+        if (!current.length) throw new Error('脚本化回路端口：会话脚本已耗尽')
+      }
+      return current.shift()!
+    },
+  }, systemClock)
+  return { seam, receipts }
+}
+
+/** 一具 draft_patch 调用（用例里 4 行以内能读完）。 */
+function patchCall(id: string, ops: unknown[], extra: Record<string, unknown> = {}): LoopTurn {
+  return { text: '', toolCalls: [{ id, name: 'draft_patch', arguments: JSON.stringify({ ops, ...extra }) }] }
+}
+
+/** 一具写件工具调用（draft_audit / draft_finish / draft_revert 这类无参或单参的）。 */
+function toolCall(id: string, name: string, args: Record<string, unknown> = {}): LoopTurn {
+  return { text: '', toolCalls: [{ id, name, arguments: JSON.stringify(args) }] }
+}
+
+/** 草稿快照（站级用例读盘面用；目录里至多一份在途）。 */
+function draftDocIn(h: Awaited<ReturnType<typeof withVault>>): {
+  ops: Array<{ op?: string; name?: string; teaches?: unknown }>
+  published: number
+  concepts: Array<{ canonical: string }>
+  note?: unknown
+  rounds: Array<{ kind: string; summary: string; errors?: string[] }>
+} {
+  const dir = `${h.paths.courseStateDir('数学')}/草稿`
+  const file = readdirSync(dir)[0]!
+  return JSON.parse(readFileSync(join(dir, file), 'utf8'))
 }
 
 test('执行官站：patch→finish 走真实提案管线并落 sealed；草稿清场；水位前移', async () => {
@@ -309,7 +356,10 @@ test('#301 形状门端到端：字典形误解归一收下（回执注明归一
             op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15,
             teaches: { 变化率: '会用' },
             misconceptions: { 变化率: ['把平均变化率当成瞬时变化率'] },
-          }],
+          },
+          // 前进批的接线义务也归**补丁期**的门（#309 缺陷①）：试算跑的是受理门同一套，
+          // 含终点锚保护——少了这条 set_pre，补丁当场被拒而不是等到 finish
+          { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] }],
           concepts: ['平均变化率'],
           note_operator: '前进',
           note_reason: '前沿缺下一台阶',
@@ -341,7 +391,7 @@ test('#301 形状门端到端：字典形误解归一收下（回执注明归一
     assert.ok(receipts.some(r => /形状归一 2 处/.test(r)
       && /字典 → 条目数组（1 概念 \/ 1 条）/.test(r)
       && /concepts\.1 字符串 → 铸名条目「平均变化率」/.test(r)), receipts.join('\n---\n'))
-    assert.ok(receipts.some(r => /已入草稿：本补丁 1 条/.test(r)), '成功回执照旧')
+    assert.ok(receipts.some(r => /已入草稿：本补丁 2 条/.test(r)), '成功回执照旧')
     // 落草稿的是归一后的**发布形态**（毒形状不随草稿过夜）
     const dir = `${h.paths.courseStateDir('数学')}/草稿`
     const doc = JSON.parse(readFileSync(join(dir, readdirSync(dir)[0]!), 'utf8')) as {
@@ -378,9 +428,15 @@ test('#301 缺陷②：毒形状不再击穿门序列——finish 记轮次 + �
     const dir = `${h.paths.courseStateDir('数学')}/草稿`
     await h.engine.fs.mkdir(dir)
     const poison = incidentPatch(3)
+    // 只留「误解字典形」这一处毒：同一批语料里档位也是非法的（直观/理解/应用），而 #309 缺陷①
+    // 之后 schema 门会先报档位那一行——本用例要钉的是毒**形状**本身，故把档位键摘掉让判据对准它
+    const legacyOps = poison.ops!.map(o => {
+      const { teaches: _t, assumes: _a, ...rest } = o as Record<string, unknown>
+      return rest
+    }).filter(o => Object.keys(o).length)
     await h.engine.fs.writeFile(join(dir, 'draft-legacy.json'), JSON.stringify({
       marker: GROWTH_DRAFT_MARKER, version: 1, course: '数学', session_id: 'draft-legacy',
-      ops: poison.ops, published: 0, concepts: [], rounds: [],
+      ops: legacyOps, published: 0, concepts: [], rounds: [],
       note: { operator: '巩固', reason: '试探：存量毒形状能否被门拦下' },
       created_at: '2026-09-16T00:00:00.000Z', updated_at: '2026-09-16T00:00:00.000Z',
     }))
@@ -395,7 +451,10 @@ test('#301 缺陷②：毒形状不再击穿门序列——finish 记轮次 + �
     }
     const finish = doc.rounds.filter(r => r.kind === 'finish')
     assert.equal(finish.length, 1, 'finish 被拒也留轮次痕迹')
-    assert.match(finish[0]!.errors!.join('\n'), /misconceptions 形状非法/, '回灌是字段指向的可执行行')
+    // 回灌是字段指向的可执行行。**措辞换了一处**（#309 缺陷①）：finish 现在跑的是受理门完整
+    // 序列（schema 纯校验在前），毒形状由 `parseConceptFields` 先报「必须是列表」——这句比
+    // 重放侧的「形状非法」更贴入口（重放侧那一句仍覆盖在单元级断言里，见本用例上半段）。
+    assert.match(finish[0]!.errors!.join('\n'), /misconceptions 必须是列表/, '回灌是字段指向的可执行行')
   })
 })
 
@@ -451,3 +510,211 @@ test('#302 ② finish 崩溃补轮志：缺 note / 非法算子这类抛出此�
     assert.match(last.errors![0]!, /缺本批 note/)
   })
 })
+
+// ---- #309 缺陷①：补丁期即拒（门同源含 schema 面）----
+
+test('#309 ① 补丁期就拒非法取值：档位「初识」/ 退役 op move / 非法 bloom·difficulty 各被拒并回灌取值域', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    const { seam, receipts } = receiptFake([[
+      // 事故原形：模型自造档位「初识」（合法只有 知道/会用/能教）——此前一路落进草稿，
+      // 直到 finish 才被 propose 的 schema 门拒，而那时 op 已清不掉（缺陷②叠缺陷①）
+      patchCall('p1', [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' } }],
+        { note_operator: '旁支', note_reason: 'r' }),
+      // 退役 op（事故里 ops[11] 的另一个永久毒点）
+      patchCall('p2', [{ op: 'move', node: '认识变化率', to: '别处' }], { note_operator: '旁支', note_reason: 'r' }),
+      patchCall('p3', [{ op: 'add_node', name: '甲台阶', pre: ['认识变化率'], bloom: '领悟' }], { note_operator: '旁支', note_reason: 'r' }),
+      patchCall('p4', [{ op: 'add_node', name: '乙台阶', pre: ['认识变化率'], difficulty: 9 }], { note_operator: '旁支', note_reason: 'r' }),
+      { text: '四批都被拒，收束。' },
+    ]])
+    const r = await h.engine.growth2.coachDraft('数学', seam)
+    assert.equal(r.unpublished_ops, 0, '毒 op 一条都没落草稿（草稿零落毒）')
+    assert.equal(draftDocIn(h).ops.length, 0)
+    const all = receipts.join('\n---\n')
+    assert.match(all, /档位非法 "初识"（允许 知道\/会用\/能教）/, '非法档位在补丁期就被拒且指明合法取值')
+    assert.match(all, /非法操作 move.*已随 Region\/Block 退役/, '退役 op 同款被补丁期拒')
+    assert.match(all, /非法认知层级 领悟/, '非法 bloom 同款')
+    assert.match(all, /非法难度 9/, '非法 difficulty 同款')
+    assert.match(all, /合法取值域：\n  · 档位取值域（teaches \/ assumes 的值）：知道 \/ 会用 \/ 能教/, '回灌带档位取值域')
+    assert.match(all, /op 词汇：add_node \/ del_node \/ set_pre \/ set_enc \/ rename \/ set_note/, '回灌带 op 词汇')
+    // 每次拒收都留轮志（#302 ② 的观测面照旧）
+    assert.equal(draftDocIn(h).rounds.filter(x => x.kind === 'patch').length, 4)
+  })
+})
+
+test('#309 ①③ 审计 = 同批 propose 的受理结论（同一批 ops 两侧错误行逐字一致）', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    // 存量毒草稿（读侧不自愈）：绕过补丁期门的那一类只能在草稿里预置
+    const dir = `${h.paths.courseStateDir('数学')}/草稿`
+    await h.engine.fs.mkdir(dir)
+    const ops = [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' } }]
+    await h.engine.fs.writeFile(join(dir, 'draft-poison.json'), JSON.stringify({
+      marker: GROWTH_DRAFT_MARKER, version: 1, course: '数学', session_id: 'draft-poison',
+      ops, published: 0, concepts: [], rounds: [],
+      note: { operator: '旁支', reason: '存量毒草稿' },
+      created_at: '2026-09-17T00:00:00.000Z', updated_at: '2026-09-17T00:00:00.000Z',
+    }))
+    const { seam, receipts } = receiptFake([[toolCall('a1', 'draft_audit'), { text: '收束。' }]])
+    // 审计看见门错误后模型收束，草稿里还留着那条毒 op → 禁止空手结束 fail loud（照旧纪律）
+    await assert.rejects(() => h.engine.growth2.coachDraft('数学', seam), /禁止空手结束/)
+    const audit = receipts.find(r => r.startsWith('审计'))!
+    assert.match(audit, /审计未过/, '审计看得见 schema 面的错（此前只跑结构重放，会报「通过」）')
+    const auditErrors = audit.split('\n').filter(l => l.trim().startsWith('✗')).map(l => l.trim())
+
+    // 同一批 ops 走真实受理门：错误行必须逐字一致（「草稿通过 = 门通过」的反面同款）
+    await assert.rejects(
+      () => h.engine.graph.graphPropose('edit', YAML.stringify({
+        course: '数学', ops, note: { operator: '旁支', reason: '存量毒草稿' },
+      })),
+      (err: Error) => {
+        const proposeErrors = err.message.split('\n').filter(l => l.trim().startsWith('✗')).map(l => l.trim())
+        assert.deepEqual(proposeErrors, auditErrors, '两侧错误行逐字一致（门同源含 schema 面）')
+        return true
+      },
+    )
+
+    // 另一侧（AC3 的 ⟺）：干净的一批两侧**都过**——审计说「通过」且受理门收下它。
+    // 只钉拒绝侧会把「审计恒判不过」这种实现读成合规，故两个方向各来一次。
+    const cleanDir = `${h.paths.courseStateDir('数学')}/草稿`
+    await h.engine.fs.unlink(join(cleanDir, 'draft-poison.json')).catch(() => undefined)
+    const goodOps = [
+      { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' } },
+      { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
+    ]
+    await h.engine.fs.writeFile(join(cleanDir, 'draft-clean.json'), JSON.stringify({
+      marker: GROWTH_DRAFT_MARKER, version: 1, course: '数学', session_id: 'draft-clean',
+      ops: goodOps, published: 0, concepts: [], rounds: [],
+      note: { operator: '前进', reason: '前沿缺下一台阶', target_endpoints: ['用导数解决优化问题'] },
+      created_at: '2026-09-17T00:00:00.000Z', updated_at: '2026-09-17T00:00:00.000Z',
+    }))
+    const clean = receiptFake([[toolCall('a2', 'draft_audit'), { text: '收束。' }]])
+    await assert.rejects(() => h.engine.growth2.coachDraft('数学', clean.seam), /禁止空手结束/)
+    assert.match(clean.receipts.join('\n'), /审计通过（草稿通过 = 门通过）/, '干净的一批审计通过')
+    const proposed = await h.engine.graph.graphPropose('edit', YAML.stringify({
+      course: '数学', ops: goodOps,
+      note: { operator: '前进', reason: '前沿缺下一台阶', target_endpoints: ['用导数解决优化问题'] },
+    }))
+    assert.ok(proposed.id > 0, '同一批 ops 受理门也收下——两侧结论一致')
+  })
+})
+
+// ---- #309 缺陷②：未发布段的逃生口 ----
+
+test('#309 ② 逃生口：draft_revert 清掉已入草稿的坏 op，finish 随后成功发布', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    // 事故草稿的等价物：坏 op 已在水位之上的未发布段（补丁期门落地前入的草稿）
+    const dir = `${h.paths.courseStateDir('数学')}/草稿`
+    await h.engine.fs.mkdir(dir)
+    const poison = { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' } }
+    const good = [
+      { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' } },
+      { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
+    ]
+    await h.engine.fs.writeFile(join(dir, 'draft-stuck.json'), JSON.stringify({
+      marker: GROWTH_DRAFT_MARKER, version: 1, course: '数学', session_id: 'draft-stuck',
+      ops: [poison], published: 0, concepts: [], rounds: [], note: { operator: '前进', reason: '前沿缺下一台阶' },
+      created_at: '2026-09-17T00:00:00.000Z', updated_at: '2026-09-17T00:00:00.000Z',
+    }))
+    const { seam, receipts } = receiptFake([[
+      // 先撞一次墙：finish 被同一批错误行拒（毒 op 卡在未发布段，del+add 也改不动它）
+      toolCall('f1', 'draft_finish'),
+      // 逃生口：回退到水位（连本批 note / 铸名一并清）
+      toolCall('v1', 'draft_revert'),
+      patchCall('p1', good, { note_operator: '前进', note_reason: '前沿缺下一台阶', note_target_endpoints: ['用导数解决优化问题'] }),
+      toolCall('f2', 'draft_finish'),
+      { text: '发布完成。' },
+    ]])
+    const r = await h.engine.growth2.coachDraft('数学', seam)
+    assert.equal(r.finished, true, '撤销后重开一批即可发布——「模型永远有一步可走」')
+    assert.equal(r.unpublished_ops, 0)
+    assert.match(receipts.join('\n'), /已撤销 1 条未发布增量：add_node\(平均变化率\)/)
+    assert.match(receipts.join('\n'), /本批已清空——用 draft_patch 重开一批/)
+    // 撤销轮进轮志（续建时注入上下文，恢复认知）
+    assert.ok(r.rounds.some(x => x.kind === 'revert'), r.rounds.map(x => x.kind).join(','))
+    const nodes = await new GraphStore(h.engine.paths, h.engine.paths.courseRoot('数学'), h.engine.fs).load()
+    assert.ok(nodes.some(n => n.name === '平均变化率'), '干净重铸的那一版落了图')
+    assert.deepEqual(await h.engine.growth2.coachDraftCancel('数学'), { cancelled: false }, '发布成功草稿清场')
+  })
+})
+
+test('#309 ② draft_revert 的部分撤销与边界：count 只丢尾部 N 条；越界/非正整数当场拒收', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    const { seam, receipts } = receiptFake([[
+      patchCall('p1', [
+        { op: 'add_node', name: '甲台阶', pre: ['认识变化率'] },
+        { op: 'add_node', name: '乙台阶', pre: ['甲台阶'] },
+      ], { note_operator: '旁支', note_reason: 'r' }),
+      toolCall('v1', 'draft_revert', { count: 1 }),
+      toolCall('v2', 'draft_revert', { count: 5 }), // 越界
+      toolCall('v3', 'draft_revert', { count: 0 }), // 非正整数
+      toolCall('v4', 'draft_revert'), // 全省
+      { text: '收束。' },
+    ]])
+    const r = await h.engine.growth2.coachDraft('数学', seam)
+    const all = receipts.join('\n---\n')
+    assert.match(all, /已撤销 1 条未发布增量：add_node\(乙台阶\)。\n水位 0\/1；未发布增量 1 条/, 'count 只丢尾部 N 条')
+    assert.match(all, /count=5 超过未发布增量 1 条/, '越界可读拒收')
+    assert.match(all, /count 必须是正整数/, '非正整数拒收')
+    assert.match(all, /已撤销 1 条未发布增量：add_node\(甲台阶\)。\n水位 0\/0；未发布增量 0 条/, '省略 count = 回到水位')
+    assert.equal(r.unpublished_ops, 0)
+    assert.equal(draftDocIn(h).ops.length, 0)
+    assert.equal(draftDocIn(h).note, undefined, '回到水位 = 本批作废，note 一并清')
+  })
+})
+
+test('#309 ② 逃生口边界：没有未发布增量时 draft_revert 可读拒收（不动已发布段）', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    const { seam, receipts } = receiptFake([[toolCall('v1', 'draft_revert'), { text: '收束。' }]])
+    await h.engine.growth2.coachDraft('数学', seam)
+    assert.match(receipts.join('\n'), /没有未发布增量可撤——已发布段（水位以下）不可动/)
+  })
+})
+
+// ---- #309 水位重放修正：一批发布后第二批仍可建（旧实现第二批当场死）----
+
+test('#309 水位：一批发布成功后同会话再开一批照常（基图已含已发布段，不重复应用）', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    const { seam } = receiptFake([[
+      patchCall('p1', [
+        { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15 },
+        { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
+      ], { note_operator: '前进', note_reason: '第一级台阶', note_target_endpoints: ['用导数解决优化问题'] }),
+      toolCall('f1', 'draft_finish'),
+      patchCall('p2', [
+        { op: 'add_node', name: '瞬时速度', pre: ['平均变化率'], est: 15 },
+        { op: 'set_pre', node: '用导数解决优化问题', pre: ['瞬时速度'] },
+      ], { note_operator: '前进', note_reason: '第二级台阶', note_target_endpoints: ['用导数解决优化问题'] }),
+      toolCall('f2', 'draft_finish'),
+      { text: '两批完成。' },
+    ]])
+    const r = await h.engine.growth2.coachDraft('数学', seam)
+    assert.equal(r.published_batches, 2, '同会话两批都发布成功（旧实现在第二次 draft_patch 就炸）')
+    assert.equal(r.finished, true)
+    const nodes = await new GraphStore(h.engine.paths, h.engine.paths.courseRoot('数学'), h.engine.fs).load()
+    assert.ok(nodes.some(n => n.name === '瞬时速度'))
+  })
+})
+
+// ---- #309 缺陷③：档位词汇住在写作面 ----
+
+test('#309 ③ 档位取值域进写作面：draft_patch 的工具 description 与上下文包档位块都无条件带', async () => {
+  const specs = GrowthSubsystem.draftToolSpecs()
+  const patch = specs.find(s => s.name === 'draft_patch')!
+  const fields = (patch.parameters as { properties: { ops: { items: { properties: Record<string, { description?: string }> } } } })
+    .properties.ops.items.properties
+  for (const f of ['teaches', 'assumes'] as const) {
+    assert.match(String(fields[f]!.description), /档位取值域：知道 \/ 会用 \/ 能教/, `${f} 的字段说明要给取值域`)
+  }
+  assert.ok(specs.some(s => s.name === 'draft_revert'), '逃生口是模型可见的工具')
+  await withVault(SEED, async h => {
+    await seeded(h)
+    const pack = await h.engine.growth2.coachContextPack('数学')
+    assert.match(pack, /teaches \/ assumes 的档位取值域：知道 \/ 会用 \/ 能教/, '档位块无条件带取值域（空态也带）')
+  })
+})
+
