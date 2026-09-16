@@ -342,9 +342,16 @@ export interface GrowthPlanHandover {
 }
 
 /** 思路官计划的 schema 门（纯函数，错误作数据）：operator 枚举（含停摆）、reason 必填、
- * steps 逐条 intent 必填且零节点名形态（禁 pre/节点名字段）、teaches_concept 非空时为
- * 字符串、est_hint 正数、recheck 仅插入批携带且 metric 枚举、前进/换向非停摆必声明
- * target_endpoints。course 键允许携带（照抄上下文包标题）不校验。 */
+ * steps 逐条 intent 必填且零节点名形态（禁 pre/节点名字段；未知键 fail loud）、
+ * teaches_concept 非空时为字符串、est_hint 正数、**非停摆算子至少一个台阶**、
+ * recheck 仅插入批携带且 metric 枚举、前进/换向非停摆必声明 target_endpoints。
+ * course 键允许照抄上下文包标题（#313 C16：按归一后的课程名比对，标题包装不算不符）。 */
+function courseKeyOfPlan(raw: string): string {
+  return raw.trim()
+    .replace(/^#?\s*教练回合上下文包[：:]\s*/, '')
+    .replace(/[（(][^（()）]*[)）]\s*$/, '')
+    .trim()
+}
 export function validatePlanHandover(doc: unknown, courseName: string): string[] {
   const errors: string[] = []
   if (typeof doc !== 'object' || doc === null) return ['[coach-plan] 计划不是 YAML 映射（结构不合法）。']
@@ -356,8 +363,8 @@ export function validatePlanHandover(doc: unknown, courseName: string): string[]
   if (typeof d.reason !== 'string' || !d.reason.trim()) {
     errors.push('[coach-plan] 缺 reason——方向裁决必须带一句话理由。')
   }
-  if (d.course !== undefined && d.course !== courseName) {
-    errors.push(`[coach-plan] course「${String(d.course)}」与课程「${courseName}」不符。`)
+  if (d.course !== undefined && courseKeyOfPlan(String(d.course)) !== courseName) {
+    errors.push(`[coach-plan] course「${String(d.course)}」与课程「${courseName}」不符（照抄上下文包标题可以，但里面得有这门课的名字）。`)
   }
   const endpoints = Array.isArray(d.target_endpoints) ? d.target_endpoints : []
   if (d.operator === '前进' || d.operator === '换向') {
@@ -369,6 +376,13 @@ export function validatePlanHandover(doc: unknown, courseName: string): string[]
   if (steps !== undefined && !Array.isArray(steps)) {
     errors.push('[coach-plan] steps 必须是列表（停摆时省略或空列表）。')
   } else if (Array.isArray(steps)) {
+    // 非停摆算子必须有台阶（#313 C15）：旧口径把 `operator: 前进` + `steps: []` 静默读成
+    // 停摆（返回 idle、理由丢弃），而「计划不完整」与「教练判断暂不需长新内容」是两件事
+    // ——前者该回灌重裁，后者才是裁决结论。停摆只能由 operator: 停摆 表达（模板同款措辞）。
+    // 算子本身非法时不叠这条（一条根因一条错，别让回灌清单里两条说同一件事）。
+    if (PLAN_OPERATORS.includes(String(d.operator)) && d.operator !== '停摆' && !steps.length) {
+      errors.push('[coach-plan] 非停摆算子必须给出至少一个台阶（steps 空 = 计划不完整）——不产结构就显式裁决 operator: 停摆。')
+    }
     steps.forEach((st, i) => {
       const s = (st ?? {}) as Record<string, unknown>
       if (typeof s.intent !== 'string' || !s.intent.trim()) {
@@ -379,6 +393,12 @@ export function validatePlanHandover(doc: unknown, courseName: string): string[]
       }
       if (s.est_hint !== undefined && (typeof s.est_hint !== 'number' || !(s.est_hint > 0))) {
         errors.push(`[coach-plan] steps[${i}] est_hint 必须是正数（分钟）。`)
+      }
+      // 未知键 fail loud（#313 C17）：写 `est` 而不是 `est_hint` 此前无声蒸发（无 warn、
+      // 无回灌），而台阶时长是执行官的估值依据。与图侧 op 白名单同一纪律。
+      const unknown = Object.keys(s).filter(k => !['intent', 'teaches_concept', 'est_hint'].includes(k))
+      if (unknown.length) {
+        errors.push(`[coach-plan] steps[${i}] 含未知字段 ${JSON.stringify(unknown)}（只允许 intent/teaches_concept/est_hint——写错键名会无声蒸发）。`)
       }
       // 零名字契约：计划里出现图 op 字段 = 思路官越权写补丁（粒度变焦归执行官）
       for (const banned of ['op', 'name', 'node', 'pre', 'ops']) {

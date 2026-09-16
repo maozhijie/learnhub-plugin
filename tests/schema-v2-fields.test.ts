@@ -143,6 +143,12 @@ nodes:
       - { concept: 概念甲, model: 错法二 }
       - { concept: 概念甲, model: 错法三 }
 `,
+  // 概念名要在册（#313 C12 后封顶按 canonical 计数，且引用未在册名字会先被对表门拦下）——
+  // 本用例问的是封顶，不是对表，夹具给一份在册条目
+  files: [{
+    path: join('学习中心', 'math', '概念登记表.yaml'),
+    content: ['concepts:', '  - canonical: 概念甲', ''].join('\n'),
+  }],
 }
 
 test('受理门：误解跨节点封顶——存量 3 条后再提案第 4 条被拒，拒收信息可执行', async () => {

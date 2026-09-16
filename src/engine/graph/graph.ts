@@ -554,17 +554,36 @@ export function structureCheck(existing: Graph | null, newNodes: GNode[], label:
   return errors
 }
 
-/** 误解封顶的跨节点计数（#127 §1.3/§7）：同一概念全课程（合并视图）封顶 3 条，
- * 越界 ERROR。受理门在模拟合并后的图上跑——提案新增与存量一起计数，存量已越界时
- * 下一笔提案同样被拒（拒收信息可执行：列出概念与现计数）。 */
-export function misconceptionCapErrors(nodes: GNode[]): string[] {
+/** 误解封顶的跨节点计数（#127 §1.3/§7）：同一概念全课程（合并视图）封顶 3 条，越界 ERROR。
+ *
+ * **增量判据**（#313 C9）：判的是「本批**新增**把某概念推到什么程度」，不是「合并后的绝对
+ * 计数」——绝对计数会砖死课程：概念合并（#265）把两条目的误解并到同一个 canonical 名下，
+ * 存量当场可能越界，此后该课程**任何** edit 提案都被同一行错误拒（连与误解无关的批也拒），
+ * 而错误行建议的动作「并入既有条目文字」在 op 词汇里不可表达（只有 add_node 能写概念字段
+ * 组），唯一出路 del+rebuild 又撞同批删建。`base` = 变更前的逐概念计数：本批没把某概念推过
+ * 「封顶」或「存量水位」（取两者较大）就放行；真推过了才报，且错误行如实给出存量与新增。
+ * 计数按 canonical 归一（#313 C12）由调用方在传入前完成（`base` 与 `nodes` 同口径）。 */
+export function misconceptionCapErrors(nodes: GNode[], base?: Map<string, number>): string[] {
   const count = new Map<string, number>()
   for (const n of nodes) {
     for (const m of n.misconceptions ?? []) count.set(m.concept, (count.get(m.concept) ?? 0) + 1)
   }
-  return [...count.entries()].filter(([, n]) => n > 3)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([concept, n]) => `误解封顶越界: 概念「${concept}」全课程已有 ${n} 条误解（同一概念封顶 3 条）——新增前先收敛（并入既有条目文字或换节点承载）`)
+  return misconceptionCapErrorsOfCounts(count, base)
+}
+
+/** 计数形入口（#313 C9/C12）：调用方已按 canonical 归一并折好两侧计数时走这里。 */
+export function misconceptionCapErrorsOfCounts(count: Map<string, number>, base?: Map<string, number>): string[] {
+  const out: string[] = []
+  for (const [concept, n] of [...count.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (n <= 3) continue
+    const had = base?.get(concept) ?? 0
+    if (base && n <= Math.max(3, had)) continue
+    out.push(`误解封顶越界: 概念「${concept}」全课程已有 ${n} 条误解（同一概念封顶 3 条`
+      + `${had > 3 ? `；存量 ${had} 条本已越界，本批不新增就放行` : ''}）——新增前先收敛，两条可走的路：`
+      + `① 换节点承载（同一概念的误解条目可分布在不同节点上）；`
+      + `② 用 del_node + add_node 同名重建该节点时少写一条（同批改写语义，正文原地保留）`)
+  }
+  return out
 }
 
 /** 整图快照文档（data/图.yaml 的文档 JSON 化，save_snapshot 同构）。 */

@@ -191,7 +191,8 @@ test('#273: 思路官回合模板 v1——算子集含停摆、零名字交接�
   assert.match(tpl, /teaches_concept/, '概念面字段（只写概念名）')
   assert.match(tpl, /metric: 前进恢复\|卡点集中度降幅\|保留率恢复/, 'recheck metric 枚举锁死')
   assert.match(tpl, /recheck 仅 operator=插入 时携带/, '非插入批禁带 recheck')
-  assert.match(tpl, /steps 为空 = 停摆/, '零步 = 停摆语态')
+  assert.match(tpl, /停摆只能由 operator: 停摆 表达/, '零步只属停摆（非停摆的空 steps 由门拒，#313 C15）')
+  assert.match(tpl, /其余算子必须给出至少一个台阶/, '「计划不完整」与「裁决停摆」是两件事——非停摆必须给台阶')
   // 停机语义
   assert.match(tpl, /就绪深度检查未满足/, '停机转译：拉起即缺口')
 })

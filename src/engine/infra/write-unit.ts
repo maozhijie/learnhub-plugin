@@ -53,7 +53,17 @@ export async function runWriteUnit(
       steps.push({ name: step.name, status: 'skipped' })
       continue
     }
-    await step.run()
+    try {
+      await step.run()
+    } catch (err) {
+      // 失败点随错随行（#313 C8）：`写单元在中间某步失败` 的调用方此前只能看到原始异常，
+      // 读不出「前面哪几步已经落盘」——而本原语的语义正是**已落盘的不回滚**，恢复动作
+      // （拒绝半途提案 / 按图现势重提）完全取决于这个分界。步骤名进消息，不吞原错误。
+      const e = err instanceof Error ? err : new Error(String(err))
+      e.message = `[write-unit ${op}] 步骤「${step.name}」失败：此前 ${steps.filter(s => s.status === 'done').length} 步已落盘` +
+        `（${steps.filter(s => s.status === 'done').map(s => s.name).join('、') || '无'}）、不回滚、失败不写 journal。\n${e.message}`
+      throw e
+    }
     steps.push({ name: step.name, status: 'done' })
   }
   const doneNames = steps.filter(s => s.status === 'done').map(s => s.name)

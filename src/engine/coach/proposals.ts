@@ -11,7 +11,7 @@ import { YAML } from '../infra/yaml.ts'
 import { Store } from '../store.ts'
 import { atomicWrite } from '../infra/io.ts'
 import { runWriteUnit } from '../infra/write-unit.ts'
-import { Graph, GraphStore, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from '../graph/graph.ts'
+import { Graph, GraphStore, parseConceptFields, parseEnc, misconceptionCapErrorsOfCounts, snapshotDoc } from '../graph/graph.ts'
 import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from '../concepts/concepts.ts'
 import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from '../concepts/concepts.ts'
 import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from '../concepts/concepts.ts'
@@ -410,24 +410,28 @@ function conceptRefsOfOps(ops: EditOp[]): ConceptRef[] {
  * 不走复诊由边轻纪律键拒收与 #146 结算语义共同保证（巩固批没有复诊通道）。 */
 export function consolidationGateErrors(
   operator: GrowthOperator | undefined, ops: EditOp[], graph: Graph,
+  entries: ReadonlyArray<ConceptEntry> = [],
 ): string[] {
   if (operator !== '巩固') return []
   // 已教概念集单一出处 Graph.taughtByOf（#270 反向映射）：names 全扫折叠退役。
-  const taught = new Set(Object.keys(graph.taughtByOf))
+  // 两侧都归一到 canonical（#313 C12）——图上写别名、提案写 canonical（或反过来）时
+  // 按原始串比对会误判「不是已教概念」而无谓拒收。
+  const canon = canonicalizerOf(entries)
+  const taught = new Set(Object.keys(graph.taughtByOf).map(canon))
   const errors: string[] = []
   for (const [i, op] of ops.entries()) {
     if (op.op !== 'add_node') continue
     const where = `ops.${i}(add_node ${op.name})`
     for (const concept of Object.keys(op.teaches ?? {})) {
-      if (!taught.has(concept)) errors.push(`${where}: 巩固节点 teaches「${concept}」不是已教概念——巩固只引已教概念做综合收束；新概念走 前进/插入/旁支 产出`)
+      if (!taught.has(canon(concept))) errors.push(`${where}: 巩固节点 teaches「${concept}」不是已教概念——巩固只引已教概念做综合收束；新概念走 前进/插入/旁支 产出`)
     }
     for (const concept of Object.keys(op.assumes ?? {})) {
-      if (!taught.has(concept)) errors.push(`${where}: 巩固节点 assumes「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
+      if (!taught.has(canon(concept))) errors.push(`${where}: 巩固节点 assumes「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
     }
     for (const m of Array.isArray(op.misconceptions) ? op.misconceptions : []) {
       const concept = (m as { concept?: unknown } | null)?.concept
       if (typeof concept !== 'string' || !concept.trim()) continue // 形状错误由重放侧给出（#301）
-      if (!taught.has(concept)) errors.push(`${where}: 巩固节点误解条目「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
+      if (!taught.has(canon(concept))) errors.push(`${where}: 巩固节点误解条目「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
     }
   }
   return errors
@@ -454,17 +458,48 @@ export interface SealedDecision {
 }
 
 export function sealedDecisionOf(ops: EditOp[], anchors: EndpointAnchor[]): SealedDecision {
-  const wires = new Set(ops.filter(o => o.op === 'set_pre' && o.node).map(o => o.node!))
+  // 接线必须**非空**（#313 C10）：`set_pre {node: 终点, pre: []}` 是把终点的前置清空，
+  // 不构成收尾接线——旧谓词只看 op 形态，于是「pre 空 = 未接线」的终点会被标成 sealed
+  // （与上下文包里读出的「未接线」自相矛盾，而 sealed 一旦落锚会一直留着）。
+  const wires = new Set(ops.filter(o => o.op === 'set_pre' && o.node && (o.pre ?? []).length > 0).map(o => o.node!))
   const touched = anchors.filter(a => wires.has(a.endpoint))
   if (!wires.size || !touched.length) return { wired: [], sealing: false, effects: [] }
   const adds = addNodeCountOf(ops)
-  const sealing = adds === 0 && ops.every(o => o.op === 'set_pre')
+  const sealing = adds === 0 && ops.every(o => o.op === 'set_pre' && (o.pre ?? []).length > 0)
   if (!sealing && adds === 0) return { wired: touched.map(a => a.endpoint), sealing: false, effects: [] }
   return {
     wired: touched.map(a => a.endpoint),
     sealing,
     effects: touched.map(a => ({ endpoint: a.endpoint, action: sealing ? 'seal' as const : 'reopen' as const })),
   }
+}
+
+/** 概念名归一的判决面（#313 C12）：图上与 op 里的概念名允许写别名（对表门按在册
+ * canonical ∪ aliases 放行），但**按名比对的判据**（巩固门的「已教」集合、误解封顶的
+ * 逐概念计数）必须归一到 canonical——否则同一个概念因写法不同被折成两半：巩固门误判
+ * 「不是已教概念」而无谓拒收，封顶按串拆开（实际可放 4–6 条）。归一同一处实现，不各写一份。 */
+function canonicalizerOf(entries: ReadonlyArray<ConceptEntry>): (name: string) => string {
+  if (!entries.length) return n => n
+  return name => resolveConcept([...entries], name)?.canonical ?? name
+}
+
+/** 误解封顶门（#313 C9 增量判据 + C12 归一）：`nodes` 与 `base` 都按 canonical 计数，且只报
+ * 「本批把某概念推过封顶/存量水位」的那一类——存量越界（概念合并的产物）不再砖死课程。 */
+export function misconceptionGateErrors(
+  nodes: GNode[], base: GNode[], entries: ReadonlyArray<ConceptEntry>,
+): string[] {
+  const canon = canonicalizerOf(entries)
+  const counts = (ns: GNode[]): Map<string, number> => {
+    const m = new Map<string, number>()
+    for (const n of ns) {
+      for (const mi of n.misconceptions ?? []) {
+        const k = canon(mi.concept)
+        m.set(k, (m.get(k) ?? 0) + 1)
+      }
+    }
+    return m
+  }
+  return misconceptionCapErrorsOfCounts(counts(nodes), counts(base))
 }
 
 /** edit 受理门全序列收拢（#271 / ADR-0088 中心裁决「门同源」）：结构重放 / 概念对表 /
@@ -492,8 +527,13 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
     ...mintConflicts(mints, ctx.entries),
     ...conceptReferenceErrors(conceptRefsOfOps(spec.ops), namesOf([...ctx.entries, ...mints])),
     ...endpointGuardErrorsOf(spec, ctx.anchors),
-    ...consolidationGateErrors(spec.note?.operator, spec.ops, ctx.graph),
+    ...consolidationGateErrors(spec.note?.operator, spec.ops, ctx.graph, ctx.entries),
   ]
+  // 误解封顶（#313 C9/C12）：增量判据 + canonical 归一，落在登记表现行条目（+ 本批铸名）上。
+  // 结构面先过才跑（与旧序一致——重放已有错时叠一条派生错误只会盖住真死因）
+  if (!errors.length) {
+    errors.push(...misconceptionGateErrors(simulatedNodes(ctx.nodes, spec.ops), ctx.nodes, [...ctx.entries, ...mints]))
+  }
   if (errors.length) return errors
   const gateBlocks = ctx.growthGate ? await ctx.growthGate(spec) : []
   // 闸门横幅随错误行返回（原 propose/apply 两侧的包装文案，门同调后单源在此）
@@ -634,11 +674,18 @@ export function endpointGuardErrorsOf(spec: EditProposalSpec, anchors: EndpointA
       errors.push(`ops.${i}: rename 拒绝——「${op.node}」是锚定的终点（${label(op.node!)}）。终点增删走显式动作，不直改锚`)
     }
   }
-  // ① 禁以终点为 pre：add_node 把方向锚当前置 = 长过目标
+  // ① 禁以终点为 pre：add_node 把方向锚当前置 = 长过目标。set_pre 同罚（#313 C10）：
+  // `set_pre {node: X, pre: [终点]}` 此前无人拦——终点是**方向锚**（零正文不被调度），
+  // 把它写成别人的前置既让方向失去意义，又让「已铺通」的读数失真；接线语义是
+  // `set_pre {node: 终点, pre: [台阶]}`（终点当 node，不是当 pre）。
   for (const [i, op] of spec.ops.entries()) {
-    if (op.op === 'add_node' && (op.pre ?? []).some(p => endpoints.has(p))) {
-      const hit = (op.pre ?? []).filter(p => endpoints.has(p))
+    if ((op.op !== 'add_node' && op.op !== 'set_pre') || !(op.pre ?? []).length) continue
+    const hit = (op.pre ?? []).filter(p => endpoints.has(p))
+    if (!hit.length) continue
+    if (op.op === 'add_node') {
       errors.push(`ops.${i}: add_node「${op.name}」以终点「${hit.join('、')}」为 pre——目标之后不是本课程的生长域（禁长过目标）`)
+    } else {
+      errors.push(`ops.${i}: set_pre(${op.node}) 把终点「${hit.join('、')}」写进了前置——终点是方向锚不是台阶；接线写 set_pre { node: ${hit[0]}, pre: [<台阶>] }（终点当 node）`)
     }
   }
   // ② 主线批必接线（ADR-0076 教练回合多终点化）：前进/换向批含新节点时必须声明
@@ -866,123 +913,135 @@ export class GraphProposals {
     const probationRegistered: string[] = []
     let nodes2: Awaited<ReturnType<GraphStore['load']>> = []
     let version = 0
-    await runWriteUnit('applyEdit', {
-      clock: this.clock!,
-      journal: rec => this.store.appendJournal(rec),
-      steps: [
-        {
-          // 写序第一笔照旧：此后任一步失败，登记表至多多出孤儿条目（合法态）——
-          // 反过来图先写会让引用悬空；铸名幂等已在上方 applyConceptMints 门内
-          name: '铸名落概念登记表',
-          run: async () => {
-            if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
+    try {
+      await runWriteUnit('applyEdit', {
+        clock: this.clock!,
+        journal: rec => this.store.appendJournal(rec),
+        steps: [
+          {
+            // 写序第一笔照旧：此后任一步失败，登记表至多多出孤儿条目（合法态）——
+            // 反过来图先写会让引用悬空；铸名幂等已在上方 applyConceptMints 门内
+            name: '铸名落概念登记表',
+            run: async () => {
+              if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
+            },
           },
-        },
-        {
-          name: '图重写',
-          run: async () => {
-            await store.writeGraphDoc(nodes)
+          {
+            name: '图重写',
+            run: async () => {
+              await store.writeGraphDoc(nodes)
+            },
           },
-        },
-        {
-          // 3.1 终点锚 sealed 维护（ADR-0056；#239 / ADR-0076 多终点化：**逐终点独立**）：
-          //     只看**被本批接线的那一个终点**——收尾接线批 = 零 add_node 的纯 set_pre 批
-          //     → 给该终点落 sealed 收尾宣告（该终点的坡道已铺到最终台阶）；该终点被含
-          //     add_node 的主线批接线 → 清除（重开该终点主线 = 坡道重新在途）。其他终点
-          //     的 sealed 不受本批影响。夹带其他 op 的零新增批不构成收尾宣告、也不动 sealed。
-          //     读-改-写在一步内完成；零终点静默跳过；sealed 缺省不落盘（形状不变）。
-          name: '终点锚 sealed 维护',
-          run: async () => {
-            // sealed 谓词单一出处 sealedDecisionOf（#271 / ADR-0088：apply 与草稿内核同调）
-            const decision = sealedDecisionOf(spec.ops, await readAnchors(this.paths.anchorPath(root), this.fs))
-            if (!decision.effects.length) return
-            const today = todayStr(new Date(this.clock.nowMs()))
-            const anchorPath = this.paths.anchorPath(root)
-            const anchors = await readAnchors(anchorPath, this.fs)
-            const next: EndpointAnchor[] = anchors.map(a => {
-              const eff = decision.effects.find(e => e.endpoint === a.endpoint)
-              if (!eff) return a
-              return eff.action === 'seal' ? { ...a, sealed: today } : { ...a, sealed: undefined }
-            })
-            await writeAnchors(anchorPath, next, this.fs)
+          {
+            // 3.1 终点锚 sealed 维护（ADR-0056；#239 / ADR-0076 多终点化：**逐终点独立**）：
+            //     只看**被本批接线的那一个终点**——收尾接线批 = 零 add_node 的纯 set_pre 批
+            //     → 给该终点落 sealed 收尾宣告（该终点的坡道已铺到最终台阶）；该终点被含
+            //     add_node 的主线批接线 → 清除（重开该终点主线 = 坡道重新在途）。其他终点
+            //     的 sealed 不受本批影响。夹带其他 op 的零新增批不构成收尾宣告、也不动 sealed。
+            //     读-改-写在一步内完成；零终点静默跳过；sealed 缺省不落盘（形状不变）。
+            name: '终点锚 sealed 维护',
+            run: async () => {
+              // sealed 谓词单一出处 sealedDecisionOf（#271 / ADR-0088：apply 与草稿内核同调）
+              const decision = sealedDecisionOf(spec.ops, await readAnchors(this.paths.anchorPath(root), this.fs))
+              if (!decision.effects.length) return
+              const today = todayStr(new Date(this.clock.nowMs()))
+              const anchorPath = this.paths.anchorPath(root)
+              const anchors = await readAnchors(anchorPath, this.fs)
+              const next: EndpointAnchor[] = anchors.map(a => {
+                const eff = decision.effects.find(e => e.endpoint === a.endpoint)
+                if (!eff) return a
+                return eff.action === 'seal' ? { ...a, sealed: today } : { ...a, sealed: undefined }
+              })
+              await writeAnchors(anchorPath, next, this.fs)
+            },
           },
-        },
-        {
-          // 3. 改名/移动/删除联动课程笔记（用 ops 应用前的图定位旧文件位置；
-          //    graphAfter 里旧名已不存在/位置已变，会让联动静默失效）
-          name: '笔记联动（改名/归档）',
-          run: async () => {
-            for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(prop.course, root, graph, oldName, newName)
-            for (const node of archived) await this.archiveNote(root, graph, node, prop.id)
+          {
+            // 3. 改名/移动/删除联动课程笔记（用 ops 应用前的图定位旧文件位置；
+            //    graphAfter 里旧名已不存在/位置已变，会让联动静默失效）
+            name: '笔记联动（改名/归档）',
+            run: async () => {
+              for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(prop.course, root, graph, oldName, newName)
+              for (const node of archived) await this.archiveNote(root, graph, node, prop.id)
+            },
           },
-        },
-        {
-          // 3.5 罗盘批内重写（#145）：路线门已过、只换「剩余路线」段，批注区/ETA
-          //     字节保留；罗盘缺席落脚手架打底（与 compassRewrite 同语义）。
-          name: '罗盘批内重写',
-          run: async () => {
-            if (compassRoute === null) return
-            const compassPath = this.paths.compassPath(root)
-            const base = this.fs.exists(compassPath) ? await this.fs.readFile(compassPath) : compassScaffold(course.name)
-            await atomicWrite(compassPath, withSectionText(base, SECTION_ROUTE, compassRoute), this.fs)
-            compassRewritten = true
+          {
+            // 3.5 罗盘批内重写（#145）：路线门已过、只换「剩余路线」段，批注区/ETA
+            //     字节保留；罗盘缺席落脚手架打底（与 compassRewrite 同语义）。
+            name: '罗盘批内重写',
+            run: async () => {
+              if (compassRoute === null) return
+              const compassPath = this.paths.compassPath(root)
+              const base = this.fs.exists(compassPath) ? await this.fs.readFile(compassPath) : compassScaffold(course.name)
+              await atomicWrite(compassPath, withSectionText(base, SECTION_ROUTE, compassRoute), this.fs)
+              compassRewritten = true
+            },
           },
-        },
-        {
-          // 3.6 边实验账本登记（#146）：插入批的每个 add_node 登记一条在途复诊
-          //     （node/pre = 登记快照、proposal = 本批提案 id、due = 预注册学习日数）——
-          //     到期结算钩子据此自动裁决（proven｜自动剪除），零人审。
-          name: '边实验账本登记',
-          run: async () => {
-            if (!(spec.note?.operator === '插入' && spec.note.recheck)) return
-            const due = spec.note.recheck.days ?? RECHECK_DAYS_DEFAULT
-            for (const op of spec.ops) {
-              if (op.op !== 'add_node') continue
-              await appendProbationEntry(this.paths, root, {
-                node: op.name!, pre: [...(op.pre ?? [])], proposal: prop.id, due,
-              }, this.fs)
-              probationRegistered.push(op.name!)
-            }
+          {
+            // 3.6 边实验账本登记（#146）：插入批的每个 add_node 登记一条在途复诊
+            //     （node/pre = 登记快照、proposal = 本批提案 id、due = 预注册学习日数）——
+            //     到期结算钩子据此自动裁决（proven｜自动剪除），零人审。
+            name: '边实验账本登记',
+            run: async () => {
+              if (!(spec.note?.operator === '插入' && spec.note.recheck)) return
+              const due = spec.note.recheck.days ?? RECHECK_DAYS_DEFAULT
+              for (const op of spec.ops) {
+                if (op.op !== 'add_node') continue
+                await appendProbationEntry(this.paths, root, {
+                  node: op.name!, pre: [...(op.pre ?? [])], proposal: prop.id, due,
+                }, this.fs)
+                probationRegistered.push(op.name!)
+              }
+            },
           },
-        },
-        {
-          name: '快照',
-          run: async () => {
-            nodes2 = await store.load()
-            version = (await this.store.latestSnapshotVersion(course.name)) + 1
-            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, nodes2))
+          {
+            name: '快照',
+            run: async () => {
+              nodes2 = await store.load()
+              version = (await this.store.latestSnapshotVersion(course.name)) + 1
+              await this.store.saveSnapshot(course.name, version, snapshotDoc(store, nodes2))
+            },
           },
-        },
-        {
-          // 逐节点 existsSync 跳过（步骤内幂等：已有笔记的节点不覆盖）
-          name: '笔记骨架补齐',
-          run: async () => { await this.ensureNotesFor(root, nodes2) },
-        },
-        {
-          // detail 三段：操作清单（add_node 显示 name，其余显示 node）→ 铸名 → 生长批裁决；
-          // 零操作批（裁决暂不产结构）也要留痕可读
-          name: '操作 journal',
-          run: async () => {
-            const opList = spec.ops.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('；')
-            const mintList = spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''
-            const detail = (opList || `（零操作${spec.route !== undefined ? '，罗盘重写' : '，裁决留痕'}）`)
-              + mintList
-              + (spec.note ? `；生长批（${spec.note.operator}）：${spec.note.reason}` : '')
-            await this.store.appendJournal({
-              course: course.name, node: '*', rating: null, kind: 'graph_edit', elapsed_days: 0,
-              session: String(prop.id),
-              detail,
-            })
+          {
+            // 逐节点 existsSync 跳过（步骤内幂等：已有笔记的节点不覆盖）
+            name: '笔记骨架补齐',
+            run: async () => { await this.ensureNotesFor(root, nodes2) },
           },
-        },
-        {
-          name: '提案 applied',
-          run: async () => {
-            await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: `快照 v${version}` })
+          {
+            // detail 三段：操作清单（add_node 显示 name，其余显示 node）→ 铸名 → 生长批裁决；
+            // 零操作批（裁决暂不产结构）也要留痕可读
+            name: '操作 journal',
+            run: async () => {
+              const opList = spec.ops.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('；')
+              const mintList = spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''
+              const detail = (opList || `（零操作${spec.route !== undefined ? '，罗盘重写' : '，裁决留痕'}）`)
+                + mintList
+                + (spec.note ? `；生长批（${spec.note.operator}）：${spec.note.reason}` : '')
+              await this.store.appendJournal({
+                course: course.name, node: '*', rating: null, kind: 'graph_edit', elapsed_days: 0,
+                session: String(prop.id),
+                detail,
+              })
+            },
           },
-        },
-      ],
-    })
+          {
+            name: '提案 applied',
+            run: async () => {
+              await this.store.updateProposal(prop.id, { status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(), decision_note: `快照 v${version}` })
+            },
+          },
+        ],
+      })
+    } catch (err) {
+      // 半途失败的状态与出路（#313 C8）：写单元不回滚，所以「图已改、提案仍 pending、草稿水位
+      // 不动」是可能态。此前这个事实只写在源码注释里——模型与人只看到一行原始异常，随后重投
+      // 被门以「add_node 重名」拒（**错误行与真死因反向**，事故里模型据此怀疑有人抢跑、反复
+      // del+add 重铸）。这里把分界与两条出路随错随行；失败点由 runWriteUnit 的前缀给出。
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new Error(`${msg}\n`
+        + `【半途失败的状态】写入单元不回滚：失败点之前的写入（铸名/图重写/快照…）已落盘，`
+        + `提案 #${prop.id} 仍在 pending（重放会被门以「重名/断边」拒，别重放）。\n`
+        + `  出路：核对 data/图.yaml 的现势后 reject 本提案并按现状重提；草稿会话用 draft_revert 丢弃本批未发布增量重开。`)
+    }
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
     const seedPhase = isSeedGraph(await readAnchors(this.paths.anchorPath(root), this.fs), new Graph(nodes2))
     return {
@@ -1710,7 +1769,8 @@ export function replayDraft(nodes: GNode[], graph: Graph, ops: EditOp[]): DraftR
     }
     for (const [edge, missing] of [...encDangling].sort()) errors.push(`变更后 enc 断边: ${edge}${removedSet.has(missing) ? `（「${missing}」被本批删除——同上，先 set_enc 摘掉这条成分技能边）` : ''}`)
     if (merged.hasCycle) errors.push(`变更后引入环：${merged.cycleNodes.slice(0, 5).join('、')}`)
-    errors.push(...misconceptionCapErrors(simKept))
+    // 误解封顶移出本函数（#313 C9/C12）：它要按 canonical 与**变更前**的计数比对，两者都
+    // 需要登记表——归 editGateErrors 统一裁（replayDraft 只管结构面）。
   }
   const diff: DraftDiff = {
     added_nodes: added,
@@ -1726,6 +1786,14 @@ export function replayDraft(nodes: GNode[], graph: Graph, ops: EditOp[]): DraftR
 /** 在节点列表副本上模拟全部操作 → 错误列表（内部改调 replayDraft——草稿与门同源，ADR-0088）。 */
 export function simulateOps(nodes: GNode[], graph: Graph, ops: EditOp[]): string[] {
   return replayDraft(nodes, graph, ops).errors
+}
+
+/** op 列表落在一份深拷贝上的产物（门里的派生读数——误解封顶的「变更后」一侧）。
+ * 与 applyOpsToNodes 同一套记账，不另写一遍应用逻辑。 */
+function simulatedNodes(nodes: GNode[], ops: EditOp[]): GNode[] {
+  const sim: GNode[] = JSON.parse(JSON.stringify(nodes))
+  applyOpsToNodes(sim, ops)
+  return sim
 }
 
 /** 把 op 列表实际落到节点列表（applyEdit 落图前的内存侧应用）。与 replayDraft 同一套

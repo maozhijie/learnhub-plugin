@@ -284,6 +284,16 @@ async function splitOverflowSection(
 /** 队列写回闸（#194 / ADR-0053）：任务档 Broken 期间拒绝一切会改动并全量落盘注册表
  * 的交互路径（入队/整课重置/恢复队列）——否则下一次入队会把坏档全量覆盖（静默销毁
  * 现场）。文案自带 broken 原因（含路径与修复指引）。 */
+/** 队列暂停态的随行说明（#313 C13）：重启恢复把队列置**暂停**（防无人值守地连跑——
+ * 语义正确，保留），但入队照收、泵不动，而回执只说「已入队」：面板 toast 于是报「已入队」
+ * 而队列一动不动，暂停提示此前只长在生成页与今日页，教练台看不到。回执如实说一句
+ * 「暂停中、怎么恢复」，用户就不用去猜为什么没动静。 */
+function pausedNoteOf(rt: HostRuntime): string {
+  return rt.flags.queuePaused
+    ? '；注意：队列处于**暂停**态（重启恢复置位）——在生成页点「恢复队列」后才会开始执行'
+    : ''
+}
+
 function assertQueueWritable(rt: HostRuntime): void {
   if (rt.flags.genQueueBroken) {
     throw new Error(`生成任务档损坏，队列处于 broken 态，已拒绝该操作——${rt.flags.genQueueBroken}`)
@@ -347,7 +357,7 @@ export async function enqueueGeneration(rt: HostRuntime, ctx: Context, course: s
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
-  return { message: `「${node}」已入队，将在后台按序生成（进度见生成队列）。`, queued: true }
+  return { message: `「${node}」已入队，将在后台按序生成（进度见生成队列）${pausedNoteOf(rt)}。`, queued: true }
 }
 
 /** 入队一个纯出题任务（#118 补生成任务化）：复用全局队列与 GenJob 记录（phase=quiz），
@@ -375,7 +385,7 @@ export function enqueueQuizGeneration(
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
-  return { key, message: `「${node}」出题任务已入队，将在后台按序生成（进度见生成队列）。`, queued: true }
+  return { key, message: `「${node}」出题任务已入队，将在后台按序生成（进度见生成队列）${pausedNoteOf(rt)}。`, queued: true }
 }
 
 
@@ -519,7 +529,7 @@ export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
-  return { message: `「${course}」生长批已入队（${why}）。`, queued: true }
+  return { message: `「${course}」生长批已入队（${why}）${pausedNoteOf(rt)}。`, queued: true }
 }
 
 /** 计划修订驱动的生长批入队（#149）：apply 结果携带换线/补支触发时逐课程入队
@@ -605,7 +615,7 @@ export function enqueueGraphJob(rt: HostRuntime, ctx: Context, j: { course: stri
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
-  return { message: `「${j.course}」${j.node}已入队（生成队列 FIFO）。`, queued: true }
+  return { message: `「${j.course}」${j.node}已入队（生成队列 FIFO）${pausedNoteOf(rt)}。`, queued: true }
 }
 
 /** 图域任务 phase → 语料站名（#213 失败补标映射；growth 在 generateGrowthJob 单列）。 */
@@ -721,6 +731,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       job.status = 'done'
       // 停摆是判据满足的自然结果，不是成就（#161）：中性说明文案，面板通知与生成页共用
       job.message = `教练判断暂不需长新内容（未开始存量 ${r.check.unstarted}/${r.check.required}）。`
+        + (r.halt_reason ? `理由：${r.halt_reason}` : '')
     } else {
       const p = r.proposal!
       const a = r.applied!
@@ -1099,6 +1110,14 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
 /** 单节重写：节任务上下文 → 模型 → sectionApply（与管线共用同一拼装、门禁与修复回路；
  * 剥围栏缝同管线；allowSplit:false——重写不改大纲结构，溢出如实报错）。 */
 export async function generateSection(rt: HostRuntime, ctx: Context, course: string, node: string, sectionId: string): Promise<string> {
+  // 并发闸（#313 C14）：单节重写此前既不查注册表也不入队——同节点的管线任务正在跑时
+  // 两条通道会并写同一节（后写覆盖，谁赢看时序），且重写本身不在注册表里，取消够不到它。
+  // 最小诚实修法 = 与 enqueueGeneration 同款互斥（同节点 running/cancelling 时拒绝）；
+  // 「重写也进队列、可取消」是更大的动作（入队需 phase 与面板呈现），另票。
+  const busy = rt.jobs.genJobs.get(`${course}/${node}`)
+  if (busy && (busy.status === 'running' || busy.status === 'cancelling')) {
+    throw new Error(`「${node}」正在生成中（${busy.status === 'cancelling' ? '取消中' : 'running'}），单节重写会与它并写同一节——等它收尾或先取消，再重写这一节。`)
+  }
   // 先验审计注记（#229）：单节重写同样是「读到学习者哪几篇笔记」的一次生成，注记照带
   let priorNote = ''
   const pack = await rt.engine.content2.contentPack(course, node, {

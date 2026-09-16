@@ -803,6 +803,8 @@ export class GrowthSubsystem {
     trajectory: string[]
     proposal: { id: number; ops: number; operator: string; reason: string; disagreement: boolean } | null
     applied: { ops: number; snapshot: number; created: string[] } | null
+    /** 停摆裁决的理由（#313 E24；仅在 state='idle' 且思路官给了停摆计划时在场）。 */
+    halt_reason?: string
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
@@ -914,8 +916,10 @@ export class GrowthSubsystem {
     }
     const plan = planVerdict.plan
     if (plan.operator === '停摆' || !plan.steps.length) {
-      log.info('coach.round.result', { course: c.name, operator: plan.operator, halt: true })
-      return { course: c.name, state: 'idle', check, segments, trajectory: [], proposal: null, applied: null }
+      log.info('coach.round.result', { course: c.name, operator: plan.operator, halt: true, reason: plan.reason })
+      // 停摆理由随结果带出（#313 E24）：面板此前只显示固定文案「教练判断暂不需长新内容」——
+      // 用户既不知为何也不知下一步（reason 只活在语料的 LLM 交换里）。
+      return { course: c.name, state: 'idle', check, segments, trajectory: [], proposal: null, applied: null, halt_reason: plan.reason }
     }
 
     // —— ② 执行官：#271 草稿回路原样，计划作交接块注入（advisory——门不放松） ——
@@ -1119,6 +1123,11 @@ export class GrowthSubsystem {
         unpublished: doc.ops.length - doc.published,
       })
     }
+    // 计划换代即清上一批的 note（#313 C11）：新计划进场时，草稿里残留的 doc.note 只可能属于
+    // **上一批**（本批的 note 由本轮 draft_patch 声明）——不清掉它，续建会话会带着上一批的
+    // 算子/理由/朝向把本批发出去（提案记账与三率 tally 记的是错的算子），而思路官这一轮的
+    // 方向只活在提示词里。清掉即强制本批显式声明；插入批的复诊预注册由计划兜底（不丢）。
+    if (opts.plan && doc.note) doc.note = undefined
     const draftPath = draftPathOf(this.e.paths, root, doc.session_id)
     const persist = async (): Promise<void> => {
       doc.updated_at = nowIsoOf(this.e.clock.nowMs())
