@@ -18,8 +18,8 @@ import {
   COACH_TOOL_NAMES, coachToolSpecs, coachToolExecutor, renderGrowthGraphView,
 } from '../src/engine/coach-tools.ts'
 import type { CoachToolDeps } from '../src/engine/coach-tools.ts'
-import { Graph } from '../src/engine/graph.ts'
-import { resolveConcept } from '../src/engine/concepts.ts'
+import { Graph } from '../src/engine/graph/graph.ts'
+import { resolveConcept } from '../src/engine/concepts/concepts.ts'
 import type { GNode, Fm } from '../src/engine/types.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import type { CourseEntry } from '../src/engine/types.ts'

@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { todayStr } from '../src/engine/dates.ts'
-import { runAudit } from '../src/engine/audit.ts'
-import { graphHealthScore } from '../src/engine/health.ts'
+import { runAudit } from '../src/engine/graph/audit.ts'
+import { graphHealthScore } from '../src/engine/graph/health.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import { withVault } from './helpers/vault.ts'
@@ -42,7 +42,7 @@ async function analyzeOf(engine: LearnhubEngine) {
 }
 
 async function auditOf(engine: LearnhubEngine) {
-  const { Graph, GraphStore } = await import('../src/engine/graph.ts')
+  const { Graph, GraphStore } = await import('../src/engine/graph/graph.ts')
   const nodes = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
   const graph = new Graph(nodes)
   return runAudit(engine.paths, 'math', '数学', graph, todayStr(new Date()), nodeVaultFs)

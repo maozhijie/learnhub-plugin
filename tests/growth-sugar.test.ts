@@ -7,7 +7,7 @@
 //   发布成功后展开为混淆对候选提案（人审一次一条，不自动入册）。
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Graph } from '../src/engine/graph.ts'
+import { Graph } from '../src/engine/graph/graph.ts'
 import { replayDraft } from '../src/engine/index.ts'
 import { expandPatchOps, draftFindings } from '../src/engine/index.ts'
 import type { EditOp, GNode } from '../src/engine/index.ts'

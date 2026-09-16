@@ -30,11 +30,11 @@ import { strip } from './undefined-scan.mjs'
 const SRC_DIR = 'src'
 
 /** 闭包原语之家（定义处不算手写折叠）。 */
-export const CLOSURE_PRIMITIVE_HOME = 'src/engine/graph.ts'
+export const CLOSURE_PRIMITIVE_HOME = 'src/engine/graph/graph.ts'
 
 /** 白名单：形态像但语义不是「names 筛祖先 / 手写 preOf BFS 求闭包」的文件（带理由）。 */
 export const CLOSURE_SCAN_WHITELIST = [
-  { file: 'src/engine/graph-subsystem.ts', reason: 'graphPath 带 parent 回溯求前置链（#270），非闭包折叠' },
+  { file: 'src/engine/graph/graph-subsystem.ts', reason: 'graphPath 带 parent 回溯求前置链（#270），非闭包折叠' },
 ]
 
 /** C1a：`.names.filter(` 链内 240 字符窗出现 `isAncestor(`（names 全扫求祖先集）。 */

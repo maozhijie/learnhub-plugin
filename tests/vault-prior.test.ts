@@ -19,7 +19,7 @@ import {
   excerptAround, expandPriorTerms, priorQueryTerms, priorSection, priorTerms, queryEntriesFor, searchVaultPrior,
 } from '../src/engine/vault/vault-prior.ts'
 import type { PriorQueryTerm } from '../src/engine/vault/vault-prior.ts'
-import type { ConceptEntry } from '../src/engine/concepts.ts'
+import type { ConceptEntry } from '../src/engine/concepts/concepts.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { withVault } from './helpers/vault.ts'
 

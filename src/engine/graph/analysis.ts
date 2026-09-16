@@ -4,18 +4,18 @@
  * cytoscape 渲染元素（面板 DAG 视图消费）。
  */
 import type { Graph } from './graph.ts'
-import type { Fm, Stage } from './types.ts'
-import type { Store } from './store.ts'
-import type { ConceptEntry } from './concepts.ts'
-import { resolveConcept } from './concepts.ts'
+import type { Fm, Stage } from '../types.ts'
+import type { Store } from '../store.ts'
+import type { ConceptEntry } from '../concepts/concepts.ts'
+import { resolveConcept } from '../concepts/concepts.ts'
 import { effectiveStage } from './audit.ts'
 import { graphHealthScore, estSpreadNote } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import type { JumpCandidate } from './quality.ts'
-import { parseDay, daysBetween } from './dates.ts'
-import { masteryOfFm } from './srs.ts'
-import { hasReadyContent } from './vault/notes.ts'
-import type { VaultLinkCandidateView } from './vault/vault-links.ts'
+import { parseDay, daysBetween } from '../dates.ts'
+import { masteryOfFm } from '../srs.ts'
+import { hasReadyContent } from '../vault/notes.ts'
+import type { VaultLinkCandidateView } from '../vault/vault-links.ts'
 
 /** analyze 进来的 Vault 链接先验段（engine 侧从 state/vault链接.json 映射，analysis 保持无 IO）。 */
 export interface VaultLinkPrior {

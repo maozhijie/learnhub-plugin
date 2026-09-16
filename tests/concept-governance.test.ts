@@ -18,8 +18,8 @@ import {
   addConfusablePair, capConfusablePairs, confusableCandidates, conceptMagnitudeFindings,
   nearNameCandidates, nearNameWarnings, validateConceptMergeProposal, validateConfusableCandidateProposal,
   CONFUSABLE_INJECT_CAP,
-} from '../src/engine/concepts.ts'
-import type { ConceptEntry } from '../src/engine/concepts.ts'
+} from '../src/engine/concepts/concepts.ts'
+import type { ConceptEntry } from '../src/engine/concepts/concepts.ts'
 import { Content } from '../src/engine/content.ts'
 import { YAML } from '../src/engine/yaml.ts'
 import { withVault } from './helpers/vault.ts'

@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Graph, groupView } from '../src/engine/graph.ts'
+import { Graph, groupView } from '../src/engine/graph/graph.ts'
 import type { GNode } from '../src/engine/types.ts'
-import type { ConceptEntry } from '../src/engine/concepts.ts'
+import type { ConceptEntry } from '../src/engine/concepts/concepts.ts'
 
 // #278 读侧分组轴（Epic #275 T2）：groupView 纯新增原语。
 // 只断言外部行为——哪些节点进哪些组、单归属 vs 重叠、组名来源；不断言内部字段。

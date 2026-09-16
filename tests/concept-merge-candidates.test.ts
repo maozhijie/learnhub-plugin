@@ -13,8 +13,8 @@ import { join } from 'node:path'
 import {
   mergeCandidates, validateConceptMergeProposal,
   MERGE_TEXT_THRESHOLD, MERGE_FOOTPRINT_THRESHOLD, MERGE_INVOKES_THRESHOLD,
-} from '../src/engine/concepts.ts'
-import type { ConceptEntry } from '../src/engine/concepts.ts'
+} from '../src/engine/concepts/concepts.ts'
+import type { ConceptEntry } from '../src/engine/concepts/concepts.ts'
 import { YAML } from '../src/engine/yaml.ts'
 import { withVault } from './helpers/vault.ts'
 

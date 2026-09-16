@@ -5,8 +5,8 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { conceptFootprintCore } from '../src/engine/concepts.ts'
-import type { ConceptEntry } from '../src/engine/concepts.ts'
+import { conceptFootprintCore } from '../src/engine/concepts/concepts.ts'
+import type { ConceptEntry } from '../src/engine/concepts/concepts.ts'
 
 function core(entries: ConceptEntry[], opts: {
   taughtByOf?: Record<string, string[]>

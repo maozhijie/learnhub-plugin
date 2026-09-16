@@ -15,7 +15,7 @@ import type { Paths } from './paths.ts'
 import type { Registry } from './vault/registry.ts'
 import type { QuestionBank, BankDoc } from './question-bank.ts'
 import type { Content } from './content.ts'
-import type { Graph } from './graph.ts'
+import type { Graph } from './graph/graph.ts'
 import type { BrokenNote } from './vault/notes.ts'
 import type { Fm, CourseEntry } from './types.ts'
 import type { FSRS } from 'ts-fsrs'
@@ -63,7 +63,7 @@ export interface SchedDeps {
   scanCourseBanks(c: CourseEntry, fn: (node: string, bank: BankDoc) => Promise<void>): Promise<void>
   sched(courseRoot: string | null): Promise<FSRS>
 }
-import { effectiveStage } from './audit.ts'
+import { effectiveStage } from './graph/audit.ts'
 import { calibrationProfileView } from './calibration.ts'
 import { dayOfTs, fmtCutoff, prevWeekStartOf, todayStr, weekEndOf } from './dates.ts'
 import type { Clock } from './clock.ts'

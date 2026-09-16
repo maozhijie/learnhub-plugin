@@ -25,12 +25,12 @@
  * 登记机械化无人审：铸名随生长批提案（edit 提案 concepts 块）随图 apply 的写入单元落盘，
  * 人的领域判断只在合并/改名时行使。
  */
-import type { VaultFs } from './io.ts'
-import { YAML } from './yaml.ts'
-import { atomicWrite } from './io.ts'
-import type { Paths } from './paths.ts'
-import { trigramSimilarity } from './question-dedup.ts'
-import { round2 } from './grading.ts'
+import type { VaultFs } from '../io.ts'
+import { YAML } from '../yaml.ts'
+import { atomicWrite } from '../io.ts'
+import type { Paths } from '../paths.ts'
+import { trigramSimilarity } from '../question-dedup.ts'
+import { round2 } from '../grading.ts'
 
 /** 登记表条目：canonical 主名；别名可选（名字并集后历史地址都在这）；定义选填
  * （同形异义与螺旋升档判断的依据，随注入切片给出）；易混对选填（#232：同课程在册

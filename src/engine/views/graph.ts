@@ -2,8 +2,8 @@
  * graph 域视图类型（#152 刀归档；叶子文件，只引类型层）。
  */
 import type { ContentStatus, EncEdge, GrowthOperator, Stage } from '../types.ts'
-import type { GroupAxis } from '../graph.ts'
-import type { ConceptFootprintCore } from '../concepts.ts'
+import type { GroupAxis } from '../graph/graph.ts'
+import type { ConceptFootprintCore } from '../concepts/concepts.ts'
 import type { GraphProposeResult } from './proposals.ts'
 
 /** 概念足迹视图（GET /concepts/footprint，#268）：course 名 + 取材核产出（词条档/

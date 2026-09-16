@@ -19,7 +19,7 @@ const SRC_DIR = 'src'
 
 /** 图写原语与其定义处（新增原语时两处一起加：原语名 + 它所在的模块）。 */
 export const GRAPH_WRITE_PRIMITIVES = [
-  { name: 'writeGraphDoc', definedIn: 'src/engine/graph.ts' },
+  { name: 'writeGraphDoc', definedIn: 'src/engine/graph/graph.ts' },
 ]
 
 /** 唯一允许调用图写原语的模块（教练层提案门）。 */

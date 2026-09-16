@@ -9,10 +9,10 @@
  */
 import type { VaultFs } from './io.ts'
 import { join, resolve } from 'node:path'
-import { SchemaError, loadGraphDoc } from './graph.ts'
+import { SchemaError, loadGraphDoc } from './graph/graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './vault/registry.ts'
-import { conceptMagnitudeFindings, validateConceptRegistry } from './concepts.ts'
+import { conceptMagnitudeFindings, validateConceptRegistry } from './concepts/concepts.ts'
 import { validateAnchorBook } from './seed.ts'
 import { classifySource, fingerprintOf, validateNoteSourceManifest } from './vault/note-source.ts'
 import { validateLearnerCards } from './learner-cards.ts'

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Graph } from '../src/engine/graph.ts'
-import { graphHealthScore, estSpreadNote } from '../src/engine/health.ts'
+import { Graph } from '../src/engine/graph/graph.ts'
+import { graphHealthScore, estSpreadNote } from '../src/engine/graph/health.ts'
 import type { GNode } from '../src/engine/types.ts'
 
 /** 最小 GNode 工厂：必填字段补默认值（存储塌缩后图 = GNode 声明序数组）。 */

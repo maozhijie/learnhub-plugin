@@ -14,13 +14,13 @@
  * （GrowthDeps 天然满足），行为摘要这类依赖子系统私有取材口径的视图经 providers
  * 注入（单一出处不漂移）。
  */
-import { effectiveStage } from './audit.ts'
+import { effectiveStage } from './graph/audit.ts'
 import type { CompassDoc } from './compass.ts'
 import { ETA_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, etaMarkerOf, hasLearnerAnnotations, parseCompass, sectionBody } from './compass.ts'
-import type { ConceptEntry, ConceptRegistry } from './concepts.ts'
-import { isDeprecated, resolveConcept } from './concepts.ts'
-import type { Graph } from './graph.ts'
-import { groupView } from './graph.ts'
+import type { ConceptEntry, ConceptRegistry } from './concepts/concepts.ts'
+import { isDeprecated, resolveConcept } from './concepts/concepts.ts'
+import type { Graph } from './graph/graph.ts'
+import { groupView } from './graph/graph.ts'
 import { round2 } from './grading.ts'
 import type { VaultFs } from './io.ts'
 import { hasReadyContent } from './vault/notes.ts'

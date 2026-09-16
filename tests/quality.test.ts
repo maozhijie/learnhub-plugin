@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { jumpCandidates, floatNodes } from '../src/engine/quality.ts'
+import { jumpCandidates, floatNodes } from '../src/engine/graph/quality.ts'
 import type { GNode } from '../src/engine/types.ts'
 
 /** 最小 GNode 工厂：必填字段补默认值。 */

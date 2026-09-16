@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url'
 import { scanUndefined } from '../scripts/undefined-scan.mjs'
 import { faceOf, scanDepsFaces, depthOneKeys, faceViolations } from '../scripts/scan-deps-face.mjs'
 import { scanSizes, srcFiles, whitelistHits, SIZE_WHITELIST } from '../scripts/scan-budget.mjs'
-import { scanGraphWriters, graphWriteCallers, GRAPH_WRITE_WHITELIST } from '../scripts/scan-invariant.mjs'
+import { scanGraphWriters, graphWriteCallers, GRAPH_WRITE_WHITELIST, GRAPH_WRITE_PRIMITIVES } from '../scripts/scan-invariant.mjs'
 import { hostFiles, moduleLevelLets, scanHostLets } from '../scripts/scan-host-state.mjs'
 import { BASELINE_FILE, measure, readBaseline, depsFaceViolations, sizeViolations, typeViolations } from '../scripts/arch-baseline.mjs'
 import { countAdapterFace, adapterFaceTotals, adapterFaceViolations } from '../scripts/scan-adapter-face.mjs'
@@ -355,7 +355,7 @@ test('G5 文件规模棘轮：逐文件行数卡基线（views 叶子／types.ts
 
 test('G6 自检：白名单外调用图写原语会被抓（门不是恒过）', () => {
   const callers = graphWriteCallers([
-    ['src/engine/graph.ts', 'async writeGraphDoc(nodes) { await writeFile(path, y) }'],
+    [GRAPH_WRITE_PRIMITIVES[0]!.definedIn, 'async writeGraphDoc(nodes) { await writeFile(path, y) }'],
     ['src/engine/proposals.ts', 'await store.writeGraphDoc(nodes)'],
     ['src/engine/rogue.ts', 'await store.writeGraphDoc(nodes)'],
     ['src/engine/sneaky.ts', 'const { writeGraphDoc } = store'],

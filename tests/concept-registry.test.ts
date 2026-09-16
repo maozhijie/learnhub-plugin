@@ -16,7 +16,7 @@ import {
   setConceptDeprecated,
   validateConceptRegistry,
   ConceptRegistry,
-} from '../src/engine/concepts.ts'
+} from '../src/engine/concepts/concepts.ts'
 import { validateBank } from '../src/engine/question-bank.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEditProposal } from '../src/engine/proposals.ts'

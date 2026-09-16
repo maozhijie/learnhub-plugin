@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
-import { GraphStore } from '../src/engine/graph.ts'
+import { GraphStore } from '../src/engine/graph/graph.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 工厂基线课程（数学 / 入门节点，#284 后图 = 单文件 data/图.yaml）上做提案决策测试。 */

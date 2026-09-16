@@ -306,7 +306,7 @@ test('#202 折叠语义：未收尾不判完成 / 收尾后达标判完成 / 旧
     assert.deepEqual(fold.closure, { learned: 1, total: 1 }, '闭包进度：前置步数（终点自身不计）')
 
     // 悬空锚：终点不在图内 → mastery_met=false 可见不炸
-    const { Graph } = await import('../src/engine/graph.ts')
+    const { Graph } = await import('../src/engine/graph/graph.ts')
     const dangling = foldCompletion(new Graph([]), {}, [{
       endpoint: '不在图内', goal_type: 'capability', declared: '2026-09-01',
       origin_proposal: 1, seed_nodes: ['不在图内'], worksheet: [], start_basis: {},
@@ -571,7 +571,7 @@ ops:
 `) as { id: number }
     assert.ok(growA.id > 0)
     await engine.graph.graphApply('edit', growA.id)
-    const { GraphStore, Graph } = await import('../src/engine/graph.ts')
+    const { GraphStore, Graph } = await import('../src/engine/graph/graph.ts')
     const nodeVaultFs = (await import('../src/host/vault-fs.ts')).nodeVaultFs
     const graphOf = async (): Promise<Graph> =>
       new Graph(await new GraphStore(paths, paths.courseRoot('math'), nodeVaultFs).load())

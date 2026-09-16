@@ -42,8 +42,8 @@ import type { VaultFs } from '../io.ts'
 import { stripHtmlComments } from '../html-comments.ts'
 import { stripFrontmatter, titleOfBody } from './note-source.ts'
 import type { VaultPriorAudit } from '../types.ts'
-import { resolveConcept } from '../concepts.ts'
-import type { ConceptEntry, ConceptRegistry } from '../concepts.ts'
+import { resolveConcept } from '../concepts/concepts.ts'
+import type { ConceptEntry, ConceptRegistry } from '../concepts/concepts.ts'
 
 /** 一条 Vault 先验命中。 */
 export interface VaultPriorHit {

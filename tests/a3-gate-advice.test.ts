@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Graph } from '../src/engine/graph.ts'
+import { Graph } from '../src/engine/graph/graph.ts'
 import {
   gateAdvice, isStruggle, withinStruggleWindow, encRemedialAdvice,
   STRUGGLE_MIN_ATTEMPTS, STRUGGLE_WINDOW_DAYS,
