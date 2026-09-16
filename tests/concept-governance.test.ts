@@ -20,7 +20,7 @@ import {
   CONFUSABLE_INJECT_CAP,
 } from '../src/engine/concepts/concepts.ts'
 import type { ConceptEntry } from '../src/engine/concepts/concepts.ts'
-import { Content } from '../src/engine/content.ts'
+import { Content } from '../src/engine/content/content.ts'
 import { YAML } from '../src/engine/yaml.ts'
 import { withVault } from './helpers/vault.ts'
 

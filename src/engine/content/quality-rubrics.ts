@@ -163,12 +163,12 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
           {
             id: '先做后教', criterion: '高难节点挑战节先行：挑战节只给题面与尝试引导不给解答；讲解收尾完整解答并回扣学习者第一节的尝试与缺口（PS-I）',
             evidence: '引挑战节与讲解收尾对照；解答未回扣尝试缺口的点名',
-            source: '引擎:content.ts', anchor: '## 10. 先做后教',
+            source: '引擎:content/content.ts', anchor: '## 10. 先做后教',
           },
           {
             id: '思维轨迹', criterion: '思维节写专家第一人称意识流（尝试/犹豫/自我盘问/监控调整），必须故意踩一次典型错误岔路并当场元评论点破；关键转折处设预测门',
             evidence: '引思维节原句：意识流段落、坑位与元评论、预测门块各至少一处定位',
-            source: '引擎:content.ts', anchor: '## 11. 专家思维轨迹',
+            source: '引擎:content/content.ts', anchor: '## 11. 专家思维轨迹',
           },
         ],
       },

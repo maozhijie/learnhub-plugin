@@ -8,7 +8,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { problemFirstOf, nodeProblemFirstOf } from '../src/engine/complexity.ts'
+import { problemFirstOf, nodeProblemFirstOf } from '../src/engine/content/complexity.ts'
 import { withVault } from './helpers/vault.ts'
 
 // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }

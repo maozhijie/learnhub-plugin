@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Content } from '../src/engine/content.ts'
-import { MAX_SECTIONS } from '../src/engine/complexity.ts'
+import { Content } from '../src/engine/content/content.ts'
+import { MAX_SECTIONS } from '../src/engine/content/complexity.ts'
 import type { SectionManifest } from '../src/engine/types.ts'
 import { isSectionOverflow, sectionFailure } from '../src/generation-jobs.ts'
 

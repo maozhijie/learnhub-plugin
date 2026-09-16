@@ -7,9 +7,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { QUALITY_RUBRICS, RUBRIC_COURTS, allCriteria, rubricOf } from '../src/engine/quality-rubrics.ts'
-import type { QualityRubric } from '../src/engine/quality-rubrics.ts'
-import { Content } from '../src/engine/content.ts'
+import { QUALITY_RUBRICS, RUBRIC_COURTS, allCriteria, rubricOf } from '../src/engine/content/quality-rubrics.ts'
+import type { QualityRubric } from '../src/engine/content/quality-rubrics.ts'
+import { Content } from '../src/engine/content/content.ts'
 import { STATIONS } from '../src/host/corpus.ts'
 
 const CONTEXT = readFileSync(new URL('../CONTEXT.md', import.meta.url), 'utf8')

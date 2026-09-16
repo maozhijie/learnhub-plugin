@@ -8,8 +8,8 @@
  * 纯函数模块（host 出题路径与测试共用）；命中的题丢弃不入库，由调用方报告。
  */
 
-import { render } from './prompt-render.ts'
-import { EXISTING_STEMS_BLOCK } from './prompts/quiz.ts'
+import { render } from '../prompt-render.ts'
+import { EXISTING_STEMS_BLOCK } from '../prompts/quiz.ts'
 
 /** 近似重复判定阈值：trigram Jaccard 相似度 ≥ 该值判为高度相似。 */
 export const DUPLICATE_SIMILARITY_THRESHOLD = 0.8

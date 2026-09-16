@@ -9,7 +9,7 @@
  * 引擎返回 → 注册表；宿主返回 → 宿主模块；UI 专有 → 本地词汇。
  */
 import type { StatusDoc } from '../../src/engine/views'
-import type { QuestionAuditReport } from '../../src/engine/question-hygiene'
+import type { QuestionAuditReport } from '../../src/engine/content/question-hygiene'
 import type { CommandOutput } from '../../src/commands/index'
 import type { generationStatus } from '../../src/host/jobs'
 import type { LearnhubEngine } from '../../src/engine/index'

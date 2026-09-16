@@ -29,7 +29,7 @@ import type { VaultFs } from '../io.ts'
 import { YAML } from '../yaml.ts'
 import { atomicWrite } from '../io.ts'
 import type { Paths } from '../paths.ts'
-import { trigramSimilarity } from '../question-dedup.ts'
+import { trigramSimilarity } from '../content/question-dedup.ts'
 import { round2 } from '../grading.ts'
 
 /** 登记表条目：canonical 主名；别名可选（名字并集后历史地址都在这）；定义选填

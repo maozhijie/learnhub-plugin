@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Content } from '../src/engine/content.ts'
-import { validateBank } from '../src/engine/question-bank.ts'
+import { Content } from '../src/engine/content/content.ts'
+import { validateBank } from '../src/engine/content/question-bank.ts'
 
 // ---- S5 checkSectionShape:节形状门（阈值从档位预算派生：warn=×1.3 / finding=×2）----
 

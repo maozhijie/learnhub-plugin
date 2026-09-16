@@ -21,7 +21,7 @@ import { GraphSubsystem } from './graph/graph-subsystem.ts'
 import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './vault/notes.ts'
 import type { BrokenNote } from './vault/notes.ts'
 import { getScheduler, masteryOfFm } from './srs.ts'
-import { ErrorCards } from './error-cards.ts'
+import { ErrorCards } from './content/error-cards.ts'
 import { YAML } from './yaml.ts'
 import { dataCheck } from './data-check.ts'
 import { readDayCutoff } from './xp.ts'
@@ -32,8 +32,8 @@ import { LabSubsystem } from './nof1.ts'
 import { sectionEntryOf } from './attribution.ts'
 import { diagnosticView } from './attribution.ts'
 import { runAudit } from './graph/audit.ts'
-import { Content } from './content.ts'
-import { ContentSubsystem } from './content-subsystem.ts'
+import { Content } from './content/content.ts'
+import { ContentSubsystem } from './content/content-subsystem.ts'
 import { GraphProposals } from './proposals.ts'
 import type { ApplyAudit } from './proposals.ts'
 import type { Clock, Rng } from './clock.ts'
@@ -53,7 +53,7 @@ import type { CompletionFold } from './seed.ts'
  * 装配上；**带行为的引擎子模块仍只准走门面**。 */
 export type { CoachTrigger, CoachPromptFamily, CoachCheck, CoachGrowthSegment, GrowthPlanHandover } from './coach-round.ts';
 export type { GateVerdict } from './agent.ts'
-import { QuestionBank, validateBank, BankSubsystem } from './question-bank.ts'
+import { QuestionBank, validateBank, BankSubsystem } from './content/question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem } from './vault/note-source.ts'
 import { LearnerCards, LearnerSubsystem } from './learner-cards.ts'
 import { Skills } from './skills.ts'
@@ -65,24 +65,24 @@ import { atomicWrite } from './io.ts'
 import { assertSchemaVersion } from './schema.ts'
 import type { SchemaBlock } from './schema.ts'
 import { revealAnswer, pctOf } from './grading.ts'
-import { auditQuestion } from './question-hygiene.ts'
-import type { QuestionAuditReport } from './question-hygiene.ts'
+import { auditQuestion } from './content/question-hygiene.ts'
+import type { QuestionAuditReport } from './content/question-hygiene.ts'
 import type { CourseEntry, Fm } from './types.ts'
 import type { DataCheckReport } from './data-check.ts'
 import type { RecommendDoc, StatusDoc } from './views.ts'
 
 /** 宿主取值走门面（D14 收口，#152 刀 1 / ADR-0042）：re-export 门只供应纯函数、
  * 常量与缝型——数据访问仍只走门面方法，门不是数据旁路。 */
-export { Content } from './content.ts'
+export { Content } from './content/content.ts'
 export { ANKI_ENDPOINT, AnkiConnectClient } from './vault/anki.ts'
-export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './complexity.ts'
+export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './content/complexity.ts'
 /** 正文就绪判定（#160 宿主种子链消费的纯函数：起点「正文未生成」口径与生长批一致）。 */
 export { hasReadyContent } from './vault/notes.ts'
 /** 宿主侧实验工具（#215 冒烟复跑契约门 / #216 spike 题面去重）经门面消费的两个纯函数：
  * R1「host 的 engine 导入只走门面」的直接后果——原实现从宿主直引子模块（越层），
  * 由 code-review 两轴审查抓出并收口到门面。 */
-export { contractOf, validateByContract } from './output-contracts.ts'
-export { normalizeStem } from './question-dedup.ts'
+export { contractOf, validateByContract } from './content/output-contracts.ts'
+export { normalizeStem } from './content/question-dedup.ts'
 export { endpointNames, readAnchors } from './seed.ts'
 /** 卡点自报（#248 / ADR-0077）：注入块渲染随门面出——宿主在途合并缝（generateGrowthJob）消费。 */
 export { stuckReportInject } from './stuck-report.ts'
@@ -99,7 +99,7 @@ export type { Logger, LogLevel, LogFields, LogFieldValue } from './logger.ts'
 export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
 export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
 /** 出题第二意见门（#223）：站标签与缺省抽样率随门面出（宿主 STATIONS/配置对齐用）。 */
-export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
+export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './content/question-audit.ts'
 /** 思路官站标签（#301 缺陷③）：宿主 STATIONS.growthPlan 引本常量对齐——失败补标按真实
  * 失败站落盘，站名常量的单一出处从此在引擎侧（此前 host 侧一张写死的遗留映射
  * `growth: '教练思路'`）。 */
@@ -111,9 +111,9 @@ export type { PatchSuggestion, PatchShapeNormalization } from './growth-draft.ts
 export { stationOfError } from './growth-subsystem.ts'
 export { editGateErrors, replayDraft, sealedDecisionOf, simulateOps } from './proposals.ts'
 export type { DraftDiff, DraftReplay, SealedDecision, EditGateCtx } from './proposals.ts'
-export type { SecondOpinionReport, SecondOpinionOptions } from './question-audit.ts'
+export type { SecondOpinionReport, SecondOpinionOptions } from './content/question-audit.ts'
 /** 出题多样性仪表（#230 / ADR-0064）：报告类型随门面出（宿主任务消息、工具面、基线脚本消费）。 */
-export type { QuestionDiversityReport, DiversityMetrics, DiversityReading, DistractorReading } from './question-diversity.ts'
+export type { QuestionDiversityReport, DiversityMetrics, DiversityReading, DistractorReading } from './content/question-diversity.ts'
 /** Vault 先验检索审计（#229 / ADR-0071）：检索核的审计类型随门面出（宿主在生成入口的
  * onPrior 注记回调里消费，R1：host 的 engine 导入只走门面）。审计**形状**住中立词汇层
  * types.ts（分居理由见那里：形状若住检索核会与 question-bank/note-source 成环，R7）。 */
@@ -121,8 +121,8 @@ export type { VaultPriorHit, VaultPriorSearch, PriorQueryTerm } from './vault/va
 export type { VaultPriorAudit } from './types.ts'
 /** 质量量规注册表（#221 / ADR-0062）：量规随门面出——离线评审运行器（#222）按站取量规、
  * 报告带分层法庭元数据，评审器不重写判据（判定标准先于判定器）。 */
-export { QUALITY_RUBRICS, RUBRIC_COURTS, rubricOf, allCriteria } from './quality-rubrics.ts'
-export type { QualityRubric, RubricDimension, RubricCriterion } from './quality-rubrics.ts'
+export { QUALITY_RUBRICS, RUBRIC_COURTS, rubricOf, allCriteria } from './content/quality-rubrics.ts'
+export type { QualityRubric, RubricDimension, RubricCriterion } from './content/quality-rubrics.ts'
 /** 离线批量评审器（#222 / ADR-0070）：站标签 + 固定温度 + 抽样/提示词/解析/聚合/渲染
  * 全部随门面出——宿主运行器（host/quality-review.ts）只经门面消费（R1：host 的
  * engine 导入只走门面）。 */
@@ -132,17 +132,17 @@ export {
   sampleQualitySamples, rubricForStation, rubricStations, dimensionNameOf, reviewBlindPrompt,
   reviewReconcilePrompt, parseReviewDoc, parseDimensionScores, evidenceLocated, finalScores,
   scoreStats, lowScoreItems, versionComparison, stabilityOf, canonicalReviews, artifactTextOf,
-} from './quality-review.ts'
+} from './content/quality-review.ts'
 export type {
   ReviewSample, SampleQuota, ReviewScore, DimensionScore, SampleReview, DimensionStat, LowScoreItem,
   VersionStat, StabilityStat,
-} from './quality-review.ts'
+} from './content/quality-review.ts'
 /** 报告形态与渲染（#222）：与测量面分开住——交付面（人读排版）与测量面（口径）变的原因不同。 */
-export { renderQualityReviewReport } from './quality-review-report.ts'
-export type { QualityReviewReport, SystemicCandidate, ReportRenderOptions } from './quality-review-report.ts'
+export { renderQualityReviewReport } from './content/quality-review-report.ts'
+export type { QualityReviewReport, SystemicCandidate, ReportRenderOptions } from './content/quality-review-report.ts'
 /** 图质量面审计抽样（#224 / ADR-0070）：审计面清单 + 系统性发现候选随门面出。 */
-export { AUDIT_AXES, SYSTEMIC_MIN_SAMPLES, SYSTEMIC_LOW_RATE, auditCriteriaOf, auditScopeLines, systemicCandidates } from './quality-audit.ts'
-export type { AuditAxis, CriterionRef } from './quality-audit.ts'
+export { AUDIT_AXES, SYSTEMIC_MIN_SAMPLES, SYSTEMIC_LOW_RATE, auditCriteriaOf, auditScopeLines, systemicCandidates } from './content/quality-audit.ts'
+export type { AuditAxis, CriterionRef } from './content/quality-audit.ts'
 
 
 

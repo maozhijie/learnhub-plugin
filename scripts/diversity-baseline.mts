@@ -21,8 +21,8 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { YAML } from '../src/engine/yaml.ts'
-import { diversityMetricsOf, diversityQuestionOf } from '../src/engine/question-diversity.ts'
-import type { DiversityMetrics, DiversityQuestion } from '../src/engine/question-diversity.ts'
+import { diversityMetricsOf, diversityQuestionOf } from '../src/engine/content/question-diversity.ts'
+import type { DiversityMetrics, DiversityQuestion } from '../src/engine/content/question-diversity.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repo = dirname(here)

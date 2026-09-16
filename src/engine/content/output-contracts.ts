@@ -68,17 +68,17 @@ export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = 
     // #237 / ADR-0075：证人原为提示词文本「出题修复（第二意见抽查发现答案键不一致）」，该散文
     // 已迁到 prompts/quiz.ts（QUIZ_AUDIT_REPAIR_PROMPT）。证人换成**代码级锚点**：机制的实现
     // 是这个回路，不是那段散文——指向调用点才能同时盯住「回路被删」与「常量改名」。
-    file: 'engine/question-audit.ts', witness: ['const repairPrompt = render(QUIZ_AUDIT_REPAIR_PROMPT'],
+    file: 'engine/content/question-audit.ts', witness: ['const repairPrompt = render(QUIZ_AUDIT_REPAIR_PROMPT'],
     what: '出题第二意见（#223）：不一致题恰一次回灌修复、修复题原位替换再审计、仍败弃题',
   },
   gradingReaskOnce: {
     // #237 / ADR-0075：同上，重问轮的证人由 `[重判要求]`（现住 prompts/content.ts）换成调用点。
-    file: 'engine/content-subsystem.ts', witness: ['render(GRADING_REASK_PROMPT'],
+    file: 'engine/content/content-subsystem.ts', witness: ['render(GRADING_REASK_PROMPT'],
     what: '判卷：解析失败自动重问一次，仍失败零落盘抛「AI 判卷输出不可用」',
   },
   disputeReaskOnce: {
     // #237 / ADR-0075：同上，重判后缀证人由 `[重判要求]`（现住 prompts/quiz.ts）换成调用点。
-    file: 'engine/question-bank.ts', witness: ['render(DISPUTE_REASK_SUFFIX'],
+    file: 'engine/content/question-bank.ts', witness: ['render(DISPUTE_REASK_SUFFIX'],
     what: '申诉判卷：同判卷重判轮，仍失败抛「AI 复核输出不可用」',
   },
   milestoneStructureRepair: {

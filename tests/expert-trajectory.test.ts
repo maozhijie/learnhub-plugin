@@ -11,7 +11,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { SECTION_TYPES, parsePredictBlock, splitPredictSegments, parseSectionTitle } from '../shared/content-renderers.ts'
-import { Content } from '../src/engine/content.ts'
+import { Content } from '../src/engine/content/content.ts'
 import { withVault } from './helpers/vault.ts'
 
 // ---- shared：节类型与预测门解析 ----

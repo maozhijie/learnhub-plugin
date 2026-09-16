@@ -17,7 +17,7 @@ import {
   gateMilestone, milestoneFileOf, PROJECT_LIFECYCLES, FADING_TIERS, planRevisionDiff,
 } from '../src/engine/projects.ts'
 import type { PlanItem } from '../src/engine/projects.ts'
-import { Content } from '../src/engine/content.ts'
+import { Content } from '../src/engine/content/content.ts'
 import { withVault } from './helpers/vault.ts'
 
 // ---- 纯函数：计划 schema ----

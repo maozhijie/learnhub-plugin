@@ -26,13 +26,13 @@
  * 通过）；评分读数一律带样本量（缺席即缺席，不填 0）。纯函数、零副作用、不读时钟、
  * 不碰 fs（宿主侧读写与模型调用住 src/host/quality-review.ts）。
  */
-import { stripFences } from './agent.ts'
-import { render } from './prompt-render.ts'
+import { stripFences } from '../agent.ts'
+import { render } from '../prompt-render.ts'
 import {
   QUALITY_REVIEW_BLIND_OUTPUT_SPEC,
   QUALITY_REVIEW_BLIND_PROMPT,
   QUALITY_REVIEW_RECONCILE_PROMPT,
-} from './prompts/grading.ts'
+} from '../prompts/grading.ts'
 import type { QualityRubric, RubricDimension } from './quality-rubrics.ts'
 
 /** 评审调用的语料站标签（宿主 STATIONS.qualityReview 引本常量对齐——站名对齐靠常量不靠字面）。 */
@@ -184,7 +184,7 @@ export function dimensionNameOf(rubrics: readonly QualityRubric[], station: stri
 /** 评审员系统提示词（文本住 `prompts/grading.ts`，本处 re-export 保持既有 import 面）。
  * JSON-only 契约住在 system（#212 §四.1 的唯一先例是回执评审/判卷族——契约离生成点最近的
  * 位置；评审器是判定器，形态与判卷同族）。 */
-export { QUALITY_REVIEW_SYSTEM } from './prompts/grading.ts'
+export { QUALITY_REVIEW_SYSTEM } from '../prompts/grading.ts'
 
 /** 量规块（两期共用）：逐维度列出判据与证据要求——判据原文来自量规表，评审器不重写。 */
 function rubricBlock(rubric: QualityRubric): string {

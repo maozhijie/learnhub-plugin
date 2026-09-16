@@ -11,7 +11,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { LlmComplete } from '../src/engine/llm.ts'
-import { sampleAuditIndices, parseSolverReply, solverPromptFor } from '../src/engine/question-audit.ts'
+import { sampleAuditIndices, parseSolverReply, solverPromptFor } from '../src/engine/content/question-audit.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 脚本化假实现：按调用序逐个回放应答（记录全部 prompt 供断言）。 */

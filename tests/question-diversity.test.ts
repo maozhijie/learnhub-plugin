@@ -20,8 +20,8 @@ import { YAML } from '../src/engine/yaml.ts'
 import {
   distractorDistanceOf, diversityMetricsOf, diversityQuestionOf, entropyOf, levenshteinDistance,
   meanStemSimilarityOf, questionDiversityReportOf, selfBleuOf, trigramOverlap,
-} from '../src/engine/question-diversity.ts'
-import type { DiversityMetrics, DiversityQuestion } from '../src/engine/question-diversity.ts'
+} from '../src/engine/content/question-diversity.ts'
+import type { DiversityMetrics, DiversityQuestion } from '../src/engine/content/question-diversity.ts'
 import { withVault } from './helpers/vault.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))

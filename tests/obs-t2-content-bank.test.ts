@@ -6,7 +6,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { rm } from 'node:fs/promises'
 import { withVault, tfQuestion } from './helpers/vault.ts'
-import { MAX_SECTIONS } from '../src/engine/complexity.ts'
+import { MAX_SECTIONS } from '../src/engine/content/complexity.ts'
 
 const manifestLine = (id: string, title: string, type = '概念'): string =>
   `    - { id: ${id}, title: ${title}, type: ${type}, status: pending, version: 0 }`

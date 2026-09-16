@@ -20,40 +20,40 @@
  * （open_question 0–10 分制，≥6 及格）。作答副作用 = practice 流水 + frontmatter
  * 计数/EMA（调度仍走 D15 settle）。
  */
-import type { VaultFs } from './io.ts'
-import { atomicWrite } from './io.ts'
-import { YAML } from './yaml.ts'
-import { clamp01, normChoice, numericOf } from './grading.ts'
-import type { AlloKind } from './grading.ts'
-import type { FsrsBlock } from './types.ts'
-import type { Paths } from './paths.ts'
+import type { VaultFs } from '../io.ts'
+import { atomicWrite } from '../io.ts'
+import { YAML } from '../yaml.ts'
+import { clamp01, normChoice, numericOf } from '../grading.ts'
+import type { AlloKind } from '../grading.ts'
+import type { FsrsBlock } from '../types.ts'
+import type { Paths } from '../paths.ts'
 import type { ErrorCards } from './error-cards.ts'
-import type { ConceptRegistry } from './concepts/concepts.ts'
-import type { Logger } from './logger.ts'
+import type { ConceptRegistry } from '../concepts/concepts.ts'
+import type { Logger } from '../logger.ts'
 
 import { Content } from './content.ts'
-import { withContractLast } from './prompt-assembly.ts'
-import type { Graph } from './graph/graph.ts'
-import type { BrokenNote } from './vault/notes.ts'
-import { asFm, loadNote, saveNote } from './vault/notes.ts'
+import { withContractLast } from '../prompt-assembly.ts'
+import type { Graph } from '../graph/graph.ts'
+import type { BrokenNote } from '../vault/notes.ts'
+import { asFm, loadNote, saveNote } from '../vault/notes.ts'
 import type { FSRS } from 'ts-fsrs'
-import { NOTE_SOURCE_COURSE } from './types.ts'
-import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, NoteSourceEntry, GNode, VaultPriorAudit } from './types.ts'
+import { NOTE_SOURCE_COURSE } from '../types.ts'
+import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, NoteSourceEntry, GNode, VaultPriorAudit } from '../types.ts'
 import type { AdviceDismissRec } from './bank-advice.ts'
-import type { LlmComplete } from './llm.ts'
-import type { ExplainPoint } from './explain.ts'
-import { advanceStrict } from './advance.ts'
-import { sectionEntryOf } from './attribution.ts'
+import type { LlmComplete } from '../llm.ts'
+import type { ExplainPoint } from '../explain.ts'
+import { advanceStrict } from '../advance.ts'
+import { sectionEntryOf } from '../attribution.ts'
 import { nodeTierOf, perSectionQuizTarget, sectionTierLabel } from './complexity.ts'
-import { confusablePairsOf, deprecatedNames, invokesTagged, invokesUnregistered, namesOf } from './concepts/concepts.ts'
-import { dayOfTs, nowIsoOf } from './dates.ts'
-import type { Clock } from './clock.ts'
-import { DISPUTE_REVIEW_SYSTEM, PASS_SCORE, applyPracticeEvidence, evaluateAllo, parseDisputeReview, revealAnswer, netPracticeRecs } from './grading.ts'
-import { FSRS_DIFFICULTY_MID } from './params.ts'
-import { assertNoBrokenNotes, Sessions } from './sessions.ts'
-import { masteryOfFm, effectiveStage } from './srs.ts'
-import { xpForAnswer } from './xp.ts'
-import { normSectionKey } from './attribution.ts'
+import { confusablePairsOf, deprecatedNames, invokesTagged, invokesUnregistered, namesOf } from '../concepts/concepts.ts'
+import { dayOfTs, nowIsoOf } from '../dates.ts'
+import type { Clock } from '../clock.ts'
+import { DISPUTE_REVIEW_SYSTEM, PASS_SCORE, applyPracticeEvidence, evaluateAllo, parseDisputeReview, revealAnswer, netPracticeRecs } from '../grading.ts'
+import { FSRS_DIFFICULTY_MID } from '../params.ts'
+import { assertNoBrokenNotes, Sessions } from '../sessions.ts'
+import { masteryOfFm, effectiveStage } from '../srs.ts'
+import { xpForAnswer } from '../xp.ts'
+import { normSectionKey } from '../attribution.ts'
 import { adviceDismissKey, calibrationAdvice, tooEasyAdvice } from './bank-advice.ts'
 import { cleanupCandidatesForNode } from './bank-cleanup.ts'
 import type { CleanupReason } from './bank-cleanup.ts'
@@ -66,19 +66,19 @@ import type { DiversityQuestion, QuestionDiversityReport } from './question-dive
 import { questionViolation, repairQuestionStrings } from './question-hygiene.ts'
 import { runSecondOpinion, mergeSecondOpinionReports, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
 import type { SecondOpinionReport } from './question-audit.ts'
-import { render } from './prompt-render.ts'
+import { render } from '../prompt-render.ts'
 import {
   DISPUTE_REASK_SUFFIX, DISPUTE_REVIEW_PROMPT, MISCONCEPTION_PRIOR_BLOCK,
   QUIZ_COUNT_AND_ANCHOR, QUIZ_INSTRUCTION_BLOCK, QUIZ_NODE_ANCHOR_HIGH, QUIZ_NODE_ANCHOR_LOW, QUIZ_NODE_ANCHOR_MID,
   QUIZ_SECTION_ANCHOR_HIGH, QUIZ_SECTION_ANCHOR_LOW, QUIZ_SECTION_ANCHOR_MID,
   QUIZ_SECTION_LISTING_MULTI, QUIZ_SECTION_LISTING_SINGLE, QUIZ_SECTION_LISTING_SINGLE_BATCH,
-} from './prompts/quiz.ts'
+} from '../prompts/quiz.ts'
 import type {
   BankEntry, CleanupGroup, CleanupPreviewDoc, DifficultyAdviceDoc, DifficultyAdviceNode, DisputeApplyResult, DisputeReviewResult,
   ErrorAnswerResult, ErrorArchiveResult, ErrorCardItem, ErrorGenerateResult, ErrorMineDoc, ErrorQueueDoc,
   QuestionGetDoc, QuestionsAllDoc,
-} from './views/bank.ts'
-import { safeFilename } from './paths.ts'
+} from '../views/bank.ts'
+import { safeFilename } from '../paths.ts'
 
 export interface BankQuestion {
   id: string

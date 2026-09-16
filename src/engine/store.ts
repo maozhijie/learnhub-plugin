@@ -351,7 +351,7 @@ export class Store {
   // ---- 「过于简单」建议忽略清单（B2；bank-advice.AdviceDismissRec）----
 
   /** 忽略清单；文件缺失 = Missing 合法空态（[]），坏档 = Broken 报出（与 pin 同纪律）。 */
-  async loadAdviceDismissals(): Promise<import('./bank-advice.ts').AdviceDismissRec[]> {
+  async loadAdviceDismissals(): Promise<import('./content/bank-advice.ts').AdviceDismissRec[]> {
     let raw: string
     try {
       raw = await this.fs.readFile(this.paths.adviceDismissPath)
@@ -369,11 +369,11 @@ export class Store {
     if (!Array.isArray(doc)) {
       throw new Error(`[advice-dismiss] ${this.paths.adviceDismissPath} 不是清单数组（Broken）：修复或删除该文件后再试。`)
     }
-    return doc as import('./bank-advice.ts').AdviceDismissRec[]
+    return doc as import('./content/bank-advice.ts').AdviceDismissRec[]
   }
 
   /** 全量替换忽略清单（原子写）。 */
-  async saveAdviceDismissals(list: import('./bank-advice.ts').AdviceDismissRec[]): Promise<void> {
+  async saveAdviceDismissals(list: import('./content/bank-advice.ts').AdviceDismissRec[]): Promise<void> {
     await atomicWrite(this.paths.adviceDismissPath, JSON.stringify(list, null, 1) + '\n', this.fs)
   }
 

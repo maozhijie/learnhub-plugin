@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
-import { Content } from '../src/engine/content.ts'
+import { Content } from '../src/engine/content/content.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { todayStr } from '../src/engine/dates.ts'
 import { Graph, GraphStore } from '../src/engine/graph/graph.ts'

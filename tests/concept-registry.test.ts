@@ -17,7 +17,7 @@ import {
   validateConceptRegistry,
   ConceptRegistry,
 } from '../src/engine/concepts/concepts.ts'
-import { validateBank } from '../src/engine/question-bank.ts'
+import { validateBank } from '../src/engine/content/question-bank.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEditProposal } from '../src/engine/proposals.ts'
 import { withVault } from './helpers/vault.ts'

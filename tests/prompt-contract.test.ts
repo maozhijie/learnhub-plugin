@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { Content } from '../src/engine/content.ts'
+import { Content } from '../src/engine/content/content.ts'
 import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 
 // ---- v6 提示词契约（#14 P2/P3）：版本标记 + 复杂度档案锚点 ----

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { cleanupCandidatesForNode } from '../src/engine/bank-cleanup.ts'
+import { cleanupCandidatesForNode } from '../src/engine/content/bank-cleanup.ts'
 import { withVault, tfQuestion } from './helpers/vault.ts'
 
 // ---- 纯规则 ----

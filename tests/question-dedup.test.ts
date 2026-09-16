@@ -8,7 +8,7 @@ import {
   findDuplicateStem,
   existingStemsPromptBlock,
   DUPLICATE_SIMILARITY_THRESHOLD,
-} from '../src/engine/question-dedup.ts'
+} from '../src/engine/content/question-dedup.ts'
 import { withVault } from './helpers/vault.ts'
 
 // ---- 纯函数：归一化 / trigram 相似度 / 查重 ----

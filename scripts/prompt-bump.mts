@@ -38,12 +38,12 @@ import { join, resolve } from 'node:path'
 import { stripFences } from '../src/engine/agent.ts'
 import { validatePlanHandover } from '../src/engine/coach-round.ts'
 import { stripWrappingFence } from '../src/engine/compass.ts'
-import { Content } from '../src/engine/content.ts'
+import { Content } from '../src/engine/content/content.ts'
 import { YAML } from '../src/engine/yaml.ts'
-import { validateBank } from '../src/engine/question-bank.ts'
+import { validateBank } from '../src/engine/content/question-bank.ts'
 import { validateEditProposal } from '../src/engine/proposals.ts'
 import { splitDecompileDoc, validatePlanArtifact } from '../src/engine/project-decompile.ts'
-import { validateErrorCards } from '../src/engine/error-cards.ts'
+import { validateErrorCards } from '../src/engine/content/error-cards.ts'
 import { validateRouteBody } from '../src/engine/compass.ts'
 import { parseReceiptReview } from '../src/engine/receipts.ts'
 import { parseCorpusFile } from '../src/host/corpus.ts'
@@ -57,9 +57,22 @@ export const MARKER_RE = /<!-- learnhub:prompt\/v(\d+) -->/g
  * 只留新路径的话，搬迁那一提交的父提交版本集合会读成空集，15 条老标记全被误判成「首次出现」，
  * 门就会逼人给一次纯搬迁补 15 条假增量。历史路径因此**留在面里**（搬迁后它贡献空集、无害），
  * 一次搬迁于是在门眼里是零 diff——这正是「标记挪位不算 bump」的原话（ADR-0072 §裁决 2）。
+ *
+ * #305（ADR-0093 刀③）把 `content.ts` 从 `engine/` 顶层搬进 `engine/content/`：本条目的
+ * **当前路径**随之追加（`src/engine/content/content.ts`），历史路径照上段纪律留在面里。
  */
-export const TEMPLATE_FILES: readonly string[] = ['src/engine/content.ts', 'src/engine/prompts/templates.ts']
-export const CHANGELOG_FILE = 'src/engine/output-contracts.ts'
+export const TEMPLATE_FILES: readonly string[] = [
+  'src/engine/content.ts', 'src/engine/prompts/templates.ts', 'src/engine/content/content.ts',
+]
+
+/** 登记表**当前路径**（写盘/夹具用；git 历史探测见 `CHANGELOG_FILES`）。 */
+export const CHANGELOG_FILE = 'src/engine/content/output-contracts.ts'
+/** 登记表的历史路径 + 当前路径。与 `TEMPLATE_FILES` 同款「面是清单」纪律，理由更硬一层：
+ * ① `disciplineStartRef` 用 `git log -S ... -- <路径>` 动态发现纪律起点，只给当前路径的话
+ * git 的历史简化会在搬迁提交处截断，起点会**静默漂到搬迁提交**、覆盖窗口悄悄变窄；
+ * ② `scanBumps` 的 `git log -p` 面若只给当前路径，搬迁之前那些提交的登记 diff（`+version: N`）
+ * 读不到，历史里的合规 bump 会被误判成「无登记」而假红。 */
+export const CHANGELOG_FILES: readonly string[] = ['src/engine/output-contracts.ts', CHANGELOG_FILE]
 
 // ---------------------------------------------------------------- ① 提交级登记门
 
@@ -158,7 +171,7 @@ export function bumpViolations(bumps: readonly BumpCommit[]): string[] {
  * 编不出一份诚实的回溯表（同 PROMPT_CHANGELOG 头注「本表自 #218 起计」）。 */
 export function disciplineStartRef(cwd: string): string {
   const root = gitRoot(cwd)
-  const shas = git(['log', '-S', 'PROMPT_CHANGELOG', '--format=%H', '--', CHANGELOG_FILE], root).trim().split('\n').filter(Boolean)
+  const shas = git(['log', '-S', 'PROMPT_CHANGELOG', '--format=%H', '--', ...CHANGELOG_FILES], root).trim().split('\n').filter(Boolean)
   const first = shas[shas.length - 1]
   if (!first) throw new Error(`[prompt-bump] 找不到 PROMPT_CHANGELOG 的引入提交（${CHANGELOG_FILE}）——仓库历史里没有登记面？`)
   return first
@@ -205,7 +218,7 @@ export function scanBumps(opts: { cwd: string; since?: string; until?: string })
   const root = gitRoot(opts.cwd)
   const since = opts.since ?? disciplineStartRef(root)
   const range = `${since}..${opts.until ?? 'HEAD'}`
-  const log = git(['log', '-p', '-U0', '--format=@@COMMIT %H %s', range, '--', ...TEMPLATE_FILES, CHANGELOG_FILE], root)
+  const log = git(['log', '-p', '-U0', '--format=@@COMMIT %H %s', range, '--', ...TEMPLATE_FILES, ...CHANGELOG_FILES], root)
   const readings = parseLogDiff(log)
   const bumps: BumpCommit[] = []
   for (const r of readings) {

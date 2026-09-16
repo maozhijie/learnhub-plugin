@@ -43,7 +43,7 @@ import {
   sweepGenJobs,
   waitForGenJob,
 } from '../src/host/jobs.ts'
-import { contractOf } from '../src/engine/output-contracts.ts'
+import { contractOf } from '../src/engine/content/output-contracts.ts'
 import { AGENT_GUIDE, registerTools } from '../src/host/tools.ts'
 import { COMMAND_LIST } from '../src/commands/index.ts'
 

@@ -20,7 +20,7 @@ import type { Paths } from '../paths.ts'
 import { parseDay, daysBetween } from '../dates.ts'
 import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
-import { Content } from '../content.ts'
+import { Content } from '../content/content.ts'
 import { endpointNames, isSeedGraph, readAnchors } from '../seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from '../vault/vault-links.ts'
 

@@ -9,7 +9,7 @@ import { YAML } from '../src/engine/yaml.ts'
 import {
   repairModelEscapes, hasEscapeCorruption, notationViolation,
   blankAnswerViolation, repairQuestionStrings, questionViolation, auditQuestion,
-} from '../src/engine/question-hygiene.ts'
+} from '../src/engine/content/question-hygiene.ts'
 
 // ---- 转义损坏修复（YAML/JSON 双引号吃掉 LaTeX 反斜杠）----
 

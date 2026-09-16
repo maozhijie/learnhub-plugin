@@ -12,7 +12,7 @@
  */
 import { readJsonlLines } from './io.ts'
 import type { VaultFs } from './io.ts'
-import type { BankQuestion } from './question-bank.ts'
+import type { BankQuestion } from './content/question-bank.ts'
 import type { Paths } from './paths.ts'
 import { shuffledWith as shuffled } from './shuffle.ts'
 

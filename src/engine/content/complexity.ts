@@ -5,7 +5,7 @@
  * 纯静态模块：折叠、锚点与护栏全部是 graph 无关的纯函数，可直接单测。
  * 图谱侧的 pre 闭包规模与 p75 由调用方（engine）算好传入。
  */
-import { BLOOM_LEVELS, type BloomLevel } from './types.ts'
+import { BLOOM_LEVELS, type BloomLevel } from '../types.ts'
 
 /** 复杂度档位：1=低、2=中、3=高。 */
 export type ComplexityTier = 1 | 2 | 3

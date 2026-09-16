@@ -16,7 +16,7 @@ import {
   SECTION_VISUAL_CAP,
   type TierSignals,
   type GraphSignalsSource,
-} from '../src/engine/complexity.ts'
+} from '../src/engine/content/complexity.ts'
 
 // ---- 折叠：difficulty 基档 ----
 

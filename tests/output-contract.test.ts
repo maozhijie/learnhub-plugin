@@ -10,16 +10,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
-import { Content } from '../src/engine/content.ts'
+import { Content } from '../src/engine/content/content.ts'
 import {
   OUTPUT_CONTRACTS, OUT_OF_SCOPE_STATIONS, PROMPT_CHANGELOG, contractOf, validateByContract,
-} from '../src/engine/output-contracts.ts'
-import type { OutputContract, PromptBump } from '../src/engine/output-contracts.ts'
+} from '../src/engine/content/output-contracts.ts'
+import type { OutputContract, PromptBump } from '../src/engine/content/output-contracts.ts'
 import { splitContractSection, withContractLast } from '../src/engine/prompt-assembly.ts'
 import { DISPUTE_REVIEW_SYSTEM, OPEN_QUESTION_GRADING_SYSTEM, REFLECTION_GRADING_SYSTEM } from '../src/engine/grading.ts'
 import { receiptReviewSystem } from '../src/engine/receipts.ts'
-import { solverPromptFor } from '../src/engine/question-audit.ts'
-import { QUALITY_REVIEW_SYSTEM } from '../src/engine/quality-review.ts'
+import { solverPromptFor } from '../src/engine/content/question-audit.ts'
+import { QUALITY_REVIEW_SYSTEM } from '../src/engine/content/quality-review.ts'
 import { STATIONS } from '../src/host/corpus.ts'
 
 /** 锚文本解析表：判别名 → 系统提示词原文；规范块判别名 → 引擎拼装块原文。 */
