@@ -71,12 +71,14 @@ test('pinHeadScore：课程内最高分 + 1（置顶课程内、不无限跨课�
   assert.equal(pinHeadScore([], '数学'), 1)
 })
 
-test('newLessonRationale：解锁数与区轮转拼成一句自然语句', () => {
-  const s = newLessonRationale(2, '基础', true)
+test('newLessonRationale：解锁数拼成一句自然语句（#282 分区轮转退役）', () => {
+  const s = newLessonRationale(2)
   assert.ok(s.startsWith('为什么先学它：'), s)
   assert.ok(s.includes('解锁 2 个后继'), s)
-  assert.ok(s.includes('「基础」区最久没学'), s)
-  assert.ok(!newLessonRationale(0, '进阶', false).includes('解锁'), '无解锁时不提后继')
+  assert.ok(!s.includes('区'), s)
+  const t = newLessonRationale(0)
+  assert.ok(t.includes('地基台阶'), t)
+  assert.ok(!/\d 个后继/.test(t), '无解锁时不编造后继数')
 })
 
 // ---- 门面：pin 覆盖层 / 就绪提示保留 / 过期失效 / 合成事件 ----
@@ -141,7 +143,7 @@ test('取消 pin：清单清空、推荐回落默认排序', async () => {
   })
 })
 
-test('rationale：未 pin 的榜首新课 why 是一句自然语句（解锁数 + 区轮转）', async () => {
+test('rationale：未 pin 的榜首新课 why 是一句自然语句（解锁数；#282 区轮转退役）', async () => {
   await withVault(goalsVault(), async ({ engine }) => {
     const rec = await engine.recommend(20) as { events: Ev[] }
     const geo = rec.events.find(e => e.node === '几何') as Ev | undefined
@@ -150,7 +152,7 @@ test('rationale：未 pin 的榜首新课 why 是一句自然语句（解锁数 
     const why = String(geo!.why)
     assert.ok(why.startsWith('为什么先学它：'), why)
     assert.ok(why.includes('解锁 1 个后继'), `几何进阶唯一卡在几何 → 解锁 1（${why}）`)
-    assert.ok(why.includes('轮转'), why)
+    assert.ok(!why.includes('区'), why)
     const gated = rec.events.find(e => e.node === '导数') as Ev | undefined
     assert.ok(gated && String(gated.why).includes('保持率已衰减'), '被软闸拦下的新课保留就绪提示原文（rationale 并入语义不变）')
   })

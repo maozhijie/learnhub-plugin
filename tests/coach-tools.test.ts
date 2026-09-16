@@ -161,7 +161,8 @@ test('视图内容：图面带节点取值域、节点卡带结构档、概念�
     // node_card：单节点结构档
     const card = await runTool({ id: '2', name: 'node_card', arguments: '{"node":"用导数解决优化问题"}' })
     assert.match(card, /节点卡：用导数解决优化问题/)
-    assert.match(card, /基础 · 终点块/)
+    assert.match(card, /深度：1（读侧派生，地基在 0）/)
+    assert.doesNotMatch(card, /区·块/)
     assert.match(card, /teaches：变化率 会用/)
 
     // concept_footprint：词条档（canonical/别名/定义）+ 足迹（teaches/assumes/invokes 分布）

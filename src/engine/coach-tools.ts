@@ -1,7 +1,7 @@
 /**
  * 教练只读工具面（ADR-0041 / #163；#249 / ADR-0077 七件 → 八件）：教练工具回路可调用的
  * **只读引擎视图白名单**——图视图、节点卡、概念足迹、行为摘要、题库概况、罗盘、终点锚、
- * 上游图摘要八件。裁决前按需自查取代盲盒上下文包的证据缺口：区/块与节点名、pre 引用、
+ * 上游图摘要八件。裁决前按需自查取代盲盒上下文包的证据缺口：节点名、pre 引用、
  * 概念名在产出裁决前可直接对表。
  *
  * 信任边界不动：教练不持任何写工具——写路径仍走提案→受理门→apply 正道；工具实现
@@ -41,7 +41,7 @@ export const COACH_TOOL_NAMES = [
 ] as const
 export type CoachToolName = (typeof COACH_TOOL_NAMES)[number]
 
-/** 全图摘要逐节点行的上限（ADR-0077 规模降级先写死）：超此值自动降为区/块聚合行 +
+/** 全图摘要逐节点行的上限（ADR-0077 规模降级先写死）：超此值自动降为 depth 段聚合行 +
  * 前沿细节 + 显式溢出说明（⚠ 与 ⚑ 例外不截）。与 UPSTREAM_CLOSURE_CAP 同族：上限只防
  * 膨胀，不服务取值域完整性时才收紧——降级模式仍给出全部节点名可引用的替代面。 */
 const FULL_GRAPH_CAP = 200
@@ -217,7 +217,7 @@ export function renderGrowthGraphView(
   return lines.join('\n') + '\n'
 }
 
-/** 节点卡（node_card）：单节点的结构档与内容态——区·块、阶段、pre/teaches/assumes、
+/** 节点卡（node_card）：单节点的结构档与内容态——深度、阶段、pre/teaches/assumes、
  * est、下游消费、误解先验。未知节点 fail loud（graph_view 取逐字名单），不静默编空卡。
  * endpoints：终点卡恒标（#200）——下游消费与调度措辞按方向标记口径。 */
 export function renderNodeCard(
@@ -226,7 +226,6 @@ export function renderNodeCard(
   if (!graph.nset.has(node)) {
     throw new Error(`节点「${node}」不在图上——用 graph_view 取逐字名单后重试（引用必须逐字命中）。`)
   }
-  const [, region, block] = graph.blockOf[node]
   const pres = graph.preOf[node] ?? []
   const teaches = Object.entries(graph.teachesOf[node] ?? {})
   const assumes = Object.entries(graph.assumesOf[node] ?? {})
@@ -235,7 +234,7 @@ export function renderNodeCard(
   const isEndpoint = endpoints.has(node)
   return [
     `## 节点卡：${node}${isEndpoint ? ' ⚑ 终点（方向标记）' : ''}`, '',
-    `- 区·块：${region} · ${block}`,
+    `- 深度：${graph.depth[node] ?? 0}（读侧派生，地基在 0）`,
     `- 阶段：${activeLabel(state, node)}${isEndpoint ? '（终点——零正文零题库不被学习调度，ADR-0056）' : graph.typeOf[node] === 'practice' ? '（交互实践节点）' : ''}${graph.estOf[node] ? `｜est ${graph.estOf[node]}′` : ''}`,
     `- pre：${pres.length ? pres.join('、') : '（根）'}`,
     `- teaches：${teaches.length ? teaches.map(([c, t]) => `${c} ${t}`).join('、') : '（无）'}`,
@@ -301,7 +300,7 @@ export async function renderConceptFootprint(
 }
 
 /** 上游图摘要（upstream_dag，ADR-0077）：给定节点渲染其**前置传递闭包全拓扑**——
- * 闭包节点逐条带深度/区·块/阶段/掌握度/到期/est（弱掌握带 ⚠，塌陷点在拓扑里直接
+ * 闭包节点逐条带深度/阶段/掌握度/到期/est（弱掌握带 ⚠，塌陷点在拓扑里直接
  * 现形），闭包内 pre 边以邻接表呈现（紧凑无歧义，与图上「pre 名字列表零边字段」的
  * 边轻纪律同构）。与全图摘要的分工：摘要 = 常驻地图集（省列），本工具 = 变焦（全列
  * 含 due/est）——诊断「七步之前的地基」不再靠逐跳 node_card。超 cap 按深度截断 +
@@ -454,14 +453,14 @@ export function coachToolSpecs(): LlmToolSpec[] {
     type: 'object', properties, required, additionalProperties: false,
   })
   return [
-    { name: 'graph_view', description: '当前课程图面：全部节点名单 + 前沿/在学节点细节行（区·块/pre/teaches/est/正文态）。裁决 ops 的节点名、region/block 与 pre 引用的取值域——产出裁决前先来这里对表。', parameters: obj({}) },
-    { name: 'node_card', description: '单节点结构档：区·块、阶段、pre/teaches/assumes、est、下游消费、误解先验。', parameters: obj({ node: { type: 'string', description: '节点名（逐字，来自 graph_view）' } }, ['node']) },
+    { name: 'graph_view', description: '当前课程图面：全部节点名单 + 前沿/在学节点细节行（深度/pre/teaches/est/正文态）与概念组读数表。裁决 ops 的节点名与 pre 引用的取值域——产出裁决前先来这里对表。', parameters: obj({}) },
+    { name: 'node_card', description: '单节点结构档：深度、阶段、pre/teaches/assumes、est、下游消费、误解先验。', parameters: obj({ node: { type: 'string', description: '节点名（逐字，来自 graph_view）' } }, ['node']) },
     { name: 'concept_footprint', description: '概念足迹（双职责）：① 词条档 canonical/别名/定义/confusable（teaches/assumes/concepts 铸名对表的唯一权威）；② 足迹——哪些节点 teaches/assumes 它、题目 invokes 分布、confusable 指向，以及插入挂点判读（足迹非空 = 天然挂点）。query 是**子串发现**不是存在性判定：无命中时**空 ≠ 不存在**——换宽词再试，或不带 query 读全表逐条对照；写侧提案的概念引用仍须逐字命中在册名字。', parameters: obj({ query: { type: 'string', description: '可选子串（命中 canonical 或别名）；省略 = 读全表' } }) },
     { name: 'behavior_digest', description: '行为摘要五件套（窗口=最近 7 学习日或 10 节取大）：掌握轨迹/卡点集中度/速度校准/误解活跃度/保留率。', parameters: obj({}) },
     { name: 'bank_overview', description: '题库概况：逐节点在库/归档/invokes 标注题数。巩固批与出题现势参照。', parameters: obj({}) },
     { name: 'compass_read', description: '罗盘现势：终点集合/剩余路线 + 学习者批注（软输入，提议非指令）+ 沙盘 ETA。', parameters: obj({}) },
     { name: 'endpoint_anchor', description: '终点锚集合：逐终点的终点节点/目标类型/声明日/块工作表核销进度/收尾宣告。', parameters: obj({}) },
-    { name: 'upstream_dag', description: '上游图摘要：给定节点的前置传递闭包全拓扑（逐条带深度/区·块/阶段/掌握度/到期/est，⚠ = 弱掌握或到期积压）+ 闭包内 pre 邻接表 + 超 cap 溢出行。深链诊断「七步之前的地基」一次可见，取代逐跳 node_card。', parameters: obj({ node: { type: 'string', description: '节点名（逐字，来自 graph_view）' } }, ['node']) },
+    { name: 'upstream_dag', description: '上游图摘要：给定节点的前置传递闭包全拓扑（逐条带深度/阶段/掌握度/到期/est，⚠ = 弱掌握或到期积压）+ 闭包内 pre 邻接表 + 超 cap 溢出行。深链诊断「七步之前的地基」一次可见，取代逐跳 node_card。', parameters: obj({ node: { type: 'string', description: '节点名（逐字，来自 graph_view）' } }, ['node']) },
   ]
 }
 

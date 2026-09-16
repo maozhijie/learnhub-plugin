@@ -236,25 +236,6 @@ export function encRemedialAdvice(
     .slice(0, limit)
 }
 
-/** 各区「最久未学习」排序（轮转）：从未学过的区最优先。 */
-export function regionLru(graph: Graph, state: Record<string, Fm>): string[] {
-  const last: Record<string, string> = {}
-  for (const n of graph.names) {
-    const fs = state[n]?.fsrs
-    if (fs?.last_review) {
-      const region = graph.blockOf[n][1]
-      if (!last[region] || fs.last_review > last[region]) last[region] = fs.last_review
-    }
-  }
-  const regions = graph.regions.map(r => r.name)
-  return regions.slice().sort((a, b) => {
-    const la = last[a] ?? ''
-    const lb = last[b] ?? ''
-    if (la !== lb) return la < lb ? -1 : 1
-    return regions.indexOf(b) - regions.indexOf(a)
-  })
-}
-
 export interface CourseStats {
   counts: Record<Stage, number>
   ready: string[]
@@ -450,13 +431,12 @@ export class Sessions {
           : `学到一半，继续完成它（保持率约 ${Math.round(r * 100)}%）`
         add('learning', n, 52 + (1 - r) * 10 + (struggling ? 6 : 0), why, advice.length ? advice : undefined)
       }
-      // 新课：解锁后继数 + 分区轮转；被 R-gate 拦下的候选（#54 R 半）在 new 事件上
+      // 新课：解锁后继数；被 R-gate 拦下的候选（#54 R 半）在 new 事件上
       // 前置展示软闸建议项——文案引导「先复习 P 的 n 道到期题」，评分抬一档排在
       // 普通新课之前，但不阻止直接学 N（软闸语义，无新增拦截）。
       // 推荐面剔终点（#199 / ADR-0056）：终点不出现在「今天学什么」推荐流里。
       const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(c.root), this.fs))
-      const lru = regionLru(graph, state)
-      const lruBonus = new Map(lru.map((r0, i) => [r0, Math.max(0, 8 - i * 2)]))
+
       const ready = readySet(graph, state, rValue).filter(n => !endpoints.has(n))
       const done = doneSet(graph, state)
       const started = new Set([...done, ...learningSet(graph, state)])
@@ -466,19 +446,18 @@ export class Sessions {
         !started.has(m) && graph.preOf[m].includes(n)
         && graph.preOf[m].every(p => p === n || graph.opt.has(p) || done.has(p))).length
       for (const n of ready) {
-        const region = graph.blockOf[n][1]
         const unlocks = unlocksOf(n)
         const gate = st.advice[n]
         if (gate?.length) {
           const top = gate[0]!
-          add('new', n, 40 + Math.min(unlocks * 4, 16) + (lruBonus.get(region) ?? 0),
+          add('new', n, 40 + Math.min(unlocks * 4, 16),
             `前置 ${top.node} 保持率已衰减（R=${top.r}），建议先复习它的 ${top.due} 道到期题再学本节（仍可直接学）`,
             gate)
           continue
         }
-        // rationale（#67 E3）：既有信号（解锁数/区轮转）升级为一句自然语句
-        add('new', n, 30 + Math.min(unlocks * 4, 16) + (lruBonus.get(region) ?? 0),
-          newLessonRationale(unlocks, region, lru.length > 0 && lru[0] === region))
+        // rationale（#67 E3）：既有信号（解锁数）升级为一句自然语句
+        add('new', n, 30 + Math.min(unlocks * 4, 16),
+          newLessonRationale(unlocks))
       }
       // B1（#69）：本课程的内容诊断建议项——节点已有事件则附着，否则独立 diagnostic
       // 事件（score 介于 new 与 review 之间）。每节点合一条，diagnostics 数组内联

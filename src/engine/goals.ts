@@ -41,11 +41,11 @@ export function pinHeadScore(events: Array<{ course: string; score: number }>, c
   return max + 1
 }
 
-/** 榜首新课的自然语句理由（#67）：由既有推荐信号（解锁数 / 区轮转）拼成一句
+/** 榜首新课的自然语句理由（#67；#282：分区轮转退役，只留解锁数信号）拼成一句
  * 可读的话，替代原来的分号拼接短语——引擎始终提议非指令。 */
-export function newLessonRationale(unlocks: number, region: string, regionTop: boolean): string {
+export function newLessonRationale(unlocks: number): string {
   const why: string[] = []
   if (unlocks > 0) why.push(`学好它能解锁 ${unlocks} 个后继`)
-  why.push(regionTop ? `「${region}」区最久没学，按轮转该轮到它了` : `「${region}」区按轮转次序排到它`)
+  else why.push('暂无直接后继解锁，适合作为地基台阶先行')
   return `为什么先学它：${why.join('，')}。`
 }

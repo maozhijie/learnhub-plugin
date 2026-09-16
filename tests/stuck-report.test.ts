@@ -313,6 +313,7 @@ test('宿主编排：频控拒绝 → 500 带原因，不落账不触发', async
     const r2 = await postReport(rt, { course: '数学', node: '入门', text: '第二报' })
     assert.equal(r2.status, 500)
     assert.match(String(r2.doc.error), /上限 1 条/)
+    await until(() => calls.length > 0) // pump 异步——先等第一报的回合真的跑过（#282 并发 flaky）
     assert.equal(calls.length, 1, '被频控拒绝的自报不触发回合')
   })
 })
