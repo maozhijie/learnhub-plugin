@@ -19,16 +19,16 @@
  * 评审指令散文住 `prompts/feedback.ts`（#237 / ADR-0075 惰性化）；vault 可编辑模板、回执
  * 材料与节点要点是动态材料（含学习者自写内容），朴素拼装注入、不进 `render` 变量面。
  */
-import { render } from '../prompt-render.ts'
+import { render } from '../infra/prompt-render.ts'
 import {
   RECEIPT_REVIEW_DEPTH_BRIEF, RECEIPT_REVIEW_DEPTH_FULL, RECEIPT_REVIEW_MATERIAL_HEADING,
   RECEIPT_REVIEW_NO_POINTS, RECEIPT_REVIEW_RECENT_HEADING, RECEIPT_REVIEW_RUBRIC_HEADING,
   RECEIPT_REVIEW_SYSTEM, RECEIPT_REVIEW_TARGET,
 } from '../prompts/feedback.ts'
-import { nowIsoOf } from '../dates.ts'
-import { applyPracticeEvidence, clamp01 } from '../grading.ts'
+import { nowIsoOf } from '../infra/dates.ts'
+import { applyPracticeEvidence, clamp01 } from '../infra/grading.ts'
 import type { Fm } from '../types.ts'
-import type { LlmComplete } from '../llm.ts'
+import type { LlmComplete } from '../infra/llm.ts'
 
 /** 回执材料形态（来源枚举，ADR-0016 裁决 4：留档、同权进 EMA）。 */
 export type ReceiptKind = 'text' | 'image' | 'export' | 'signoff'

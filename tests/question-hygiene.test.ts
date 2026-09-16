@@ -5,7 +5,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { withVault } from './helpers/vault.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 import {
   repairModelEscapes, hasEscapeCorruption, notationViolation,
   blankAnswerViolation, repairQuestionStrings, questionViolation, auditQuestion,

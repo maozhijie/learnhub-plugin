@@ -1,7 +1,7 @@
 /**
  * 题库域视图类型（C-3 错误卡 / 题目管理 / B2 回流 / 一键清理 / 勘误冲正；#152 刀 6 自 views.ts 归档）。
  */
-import type { AlloKind } from '../grading.ts'
+import type { AlloKind } from '../infra/grading.ts'
 import type { FsrsBlock } from '../types.ts'
 
 /** 题库条目（questionsAll 的 questions 列表项；题目管理列表，不含答案）。 */

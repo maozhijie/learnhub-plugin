@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { chmod, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { AnkiTransport } from '../src/engine/vault/anki.ts'
-import { assertSchemaVersion } from '../src/engine/schema.ts'
+import { assertSchemaVersion } from '../src/engine/infra/schema.ts'
 import { withVault, tfQuestion } from './helpers/vault.ts'
 import { FakeAnki } from './helpers/anki-fake.ts'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 
 // #294/#295 复查后的行为修复回归：fail-loud 与取消传导（#294）、读侧宽容与补偿路径（#295）
 

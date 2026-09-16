@@ -1,4 +1,4 @@
-import type { PracticeRec, ErratumRec } from './types.ts'
+import type { PracticeRec, ErratumRec } from '../types.ts'
 /**
  * 判卷与作答记录。
  *
@@ -12,7 +12,7 @@ import type { PracticeRec, ErratumRec } from './types.ts'
  * 判卷不碰调度状态（D15：评分写入只走工作单→settle）；唯一副作用 =
  * practice 计数累加（frontmatter）+ 作答流水 + 练习证据 EMA（allo mastery 语义）。
  */
-import type { Fm } from './types.ts'
+import type { Fm } from '../types.ts'
 
 /**
  * 判卷族提示词文本的单源（#237 / ADR-0075）：三条 system 提示词（反思判卷／开放题判卷／
@@ -24,7 +24,7 @@ export {
   REFLECTION_GRADING_SYSTEM,
   OPEN_QUESTION_GRADING_SYSTEM,
   DISPUTE_REVIEW_SYSTEM,
-} from './prompts/grading.ts'
+} from '../prompts/grading.ts'
 
 // ---------------------------------------------------------------- 数值工具（#172 单一出处）
 

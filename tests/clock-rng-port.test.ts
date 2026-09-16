@@ -1,12 +1,12 @@
 /**
- * Clock／Rng 端口注入缝（#175 阶段① / ADR-0044 归属）：形状住 engine/clock.ts、
+ * Clock／Rng 端口注入缝（#175 阶段① / ADR-0044 归属）：形状住 engine/infra/clock.ts、
  * 实现住 host/clock.ts、装配住 EngineConfig。本文件断言外移的收益——注入固定时钟
  * 与定长随机流后，「同一输入同一输出」可断言，而不是靠碰运气。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { withVault } from './helpers/vault.ts'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 import type { Clock, Rng } from '../src/engine/index.ts'
 
 /** 固定时钟（任意常量时刻；与真实现在相距足够远，可断言缺省注入确实不同）。 */

@@ -12,7 +12,7 @@
  * 非权威），机器段按需追加末尾——权威覆盖语义不受手编破坏影响，不做 fail loud。
  */
 import { SANDBOX_WORDING } from '../sched/sandbox.ts'
-import { pctOf } from '../grading.ts'
+import { pctOf } from '../infra/grading.ts'
 import type { EndpointAnchor } from './seed.ts'
 
 export const SECTION_ROUTE = '剩余路线'

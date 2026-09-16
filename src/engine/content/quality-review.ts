@@ -26,8 +26,8 @@
  * 通过）；评分读数一律带样本量（缺席即缺席，不填 0）。纯函数、零副作用、不读时钟、
  * 不碰 fs（宿主侧读写与模型调用住 src/host/quality-review.ts）。
  */
-import { stripFences } from '../agent.ts'
-import { render } from '../prompt-render.ts'
+import { stripFences } from '../infra/agent.ts'
+import { render } from '../infra/prompt-render.ts'
 import {
   QUALITY_REVIEW_BLIND_OUTPUT_SPEC,
   QUALITY_REVIEW_BLIND_PROMPT,

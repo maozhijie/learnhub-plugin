@@ -5,9 +5,9 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { runWriteUnit } from '../src/engine/write-unit.ts'
-import type { WriteStep } from '../src/engine/write-unit.ts'
-import { nowIsoOf } from '../src/engine/dates.ts'
+import { runWriteUnit } from '../src/engine/infra/write-unit.ts'
+import type { WriteStep } from '../src/engine/infra/write-unit.ts'
+import { nowIsoOf } from '../src/engine/infra/dates.ts'
 import type { JournalRec } from '../src/engine/types.ts'
 import type { Clock } from '../src/engine/index.ts'
 

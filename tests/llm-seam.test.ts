@@ -13,7 +13,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { LlmComplete, LlmEffort } from '../src/engine/llm.ts'
+import type { LlmComplete, LlmEffort } from '../src/engine/infra/llm.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 录制型假实现：记 prompt/system/语义档，固定回放同一应答。 */

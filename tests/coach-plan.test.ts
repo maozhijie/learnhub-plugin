@@ -11,7 +11,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AgentSeam } from '../src/engine/agent.ts'
+import { AgentSeam } from '../src/engine/infra/agent.ts'
 import { coachPromptFamily, validatePlanHandover } from '../src/engine/coach/coach-round.ts'
 import type { GrowthPlanHandover } from '../src/engine/coach/coach-round.ts'
 import { systemClock } from '../src/host/clock.ts'

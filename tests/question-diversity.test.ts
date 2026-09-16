@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { LearnhubEngine } from '../src/engine/index.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 import {
   distractorDistanceOf, diversityMetricsOf, diversityQuestionOf, entropyOf, levenshteinDistance,
   meanStemSimilarityOf, questionDiversityReportOf, selfBleuOf, trigramOverlap,

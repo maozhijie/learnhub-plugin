@@ -8,7 +8,7 @@
  * （True Retention = 到期复习中实际答对的比例）。零依赖纯函数（接缝 S26）。
  */
 import type { ReviewRec } from '../types.ts'
-import { DAY_MS, dayOfTs, fmtDay } from '../dates.ts'
+import { DAY_MS, dayOfTs, fmtDay } from '../infra/dates.ts'
 import { sourceKeyOf } from '../types.ts'
 
 /** 负载预报的时间窗（未来 N 日，Anki Forecast 语义；假设不再学新卡且不遗忘）。 */

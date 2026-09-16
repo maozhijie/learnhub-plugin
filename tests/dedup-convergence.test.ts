@@ -17,9 +17,9 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { round2, clamp01, pctOf } from '../src/engine/grading.ts'
+import { round2, clamp01, pctOf } from '../src/engine/infra/grading.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
-import { DAY_MS, calendarDayOf, dayOfTs, fmtDay, addDays } from '../src/engine/dates.ts'
+import { DAY_MS, calendarDayOf, dayOfTs, fmtDay, addDays } from '../src/engine/infra/dates.ts'
 // 来源键经 anki.ts 原路径导入——有意验证 re-export 接缝未晃（本体在 types.ts）
 import { sourceKeyOf, parseSourceKey, nodeKeyOf } from '../src/engine/vault/anki.ts'
 import { PROPOSAL_STATUSES } from '../src/engine/types.ts'
@@ -96,8 +96,23 @@ test('PROPOSAL_STATUSES 与既有字面量数组一致', () => {
 // ---- 单一出处门：七组模式在出处模块之外零残留（含自检）----
 
 function engineFiles(): Array<{ name: string; code: string }> {
-  return readdirSync(ENGINE).filter(f => f.endsWith('.ts'))
-    .map(f => ({ name: f, code: String(readFileSync(join(ENGINE, f), 'utf8')) }))
+  // 扫描面 = engine 下**全部模块**（递归）。`prompts/`（提示词文本面，ADR-0075）与
+  // `views/`（视图叶子类型面，ADR-0043）不在面里——它们不是模块代码，各有各的门。
+  // name 是**相对 engine 的 posix 路径**：按 basename 判 home 会踩同名文件
+  // （`prompts/grading.ts` 与 `infra/grading.ts` 同名），把非 home 的当 home 放行。
+  const out: Array<{ name: string; code: string }> = []
+  const walk = (dir: string, rel: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) {
+        if (rel === '' && (e.name === 'prompts' || e.name === 'views')) continue
+        walk(join(dir, e.name), rel === '' ? e.name : `${rel}/${e.name}`)
+      } else if (e.name.endsWith('.ts')) {
+        out.push({ name: rel === '' ? e.name : `${rel}/${e.name}`, code: String(readFileSync(join(dir, e.name), 'utf8')) })
+      }
+    }
+  }
+  walk(ENGINE, '')
+  return out
 }
 
 /** 门自检：构造必然违规的样本，断言正则真能咬住（恒过的门比没有门更坏）。 */
@@ -110,31 +125,31 @@ test('单一出处门：七组收敛模式在出处外零残留', () => {
     {
       label: '两位舍入',
       re: /Math\.round\([^\n]*\* 100\) \/ 100/,
-      home: 'grading.ts',
+      home: 'infra/grading.ts',
       bad: 'const x = Math.round((a / b) * 100) / 100',
     },
     {
       label: 'clamp01 内联',
       re: /Math\.min\(1, Math\.max\(0, /,
-      home: 'grading.ts',
+      home: 'infra/grading.ts',
       bad: 'const y = Math.min(1, Math.max(0, v))',
     },
     {
       label: '百分比格式化',
       re: /Math\.round\([^`\n]*\* 100\)\}%`/,
-      home: 'grading.ts',
+      home: 'infra/grading.ts',
       bad: 'const pct = (v: number) => `${Math.round(v * 100)}%`',
     },
     {
       label: '日毫秒字面量',
       re: /\b86400000\b/,
-      home: 'dates.ts',
+      home: 'infra/dates.ts',
       bad: 'const d = new Date(t + i * 86400000)',
     },
     {
       label: '时间戳取日历日',
       re: /\.ts\.slice\(0, ?10\)|toISOString\(\)\.slice\(0, ?10\)/,
-      home: 'dates.ts',
+      home: 'infra/dates.ts',
       bad: 'const day = rec.ts.slice(0, 10)',
     },
     {
@@ -149,7 +164,7 @@ test('单一出处门：七组收敛模式在出处外零残留', () => {
       // pctOf 自带 %，调用点再拼字面 % 会输出 %%（收敛期实测回归，门锁死）
       label: 'pctOf 后拼字面百分号',
       re: /pctOf\([^\n)]*\)\}?%/,
-      home: 'grading.ts',
+      home: 'infra/grading.ts',
       bad: 'const s = `正确率 ${pctOf(x)}%`',
     },
     {
@@ -160,8 +175,12 @@ test('单一出处门：七组收敛模式在出处外零残留', () => {
     },
   ]
   for (const g of gates) selfCheck(new RegExp(g.re.source), g.bad, g.label)
+  const files = engineFiles()
+  // 扫描面自检（#307 / ADR-0047「收集器静默收窄」）：读顶层不递归时，域文件夹里的残留
+  // 对门不可见且门照旧报绿——实测 ADR-0093 刀①–⑦ 期间该门面从 91 件静默缩到 22 件。
+  assert.ok(files.length >= 91, `单一出处扫描面只剩 ${files.length} 件（engine 模块应 91 件：顶层 5 + 9 域；扫描面收窄会让门静默恒过）`)
   const offenders: string[] = []
-  for (const { name, code } of engineFiles()) {
+  for (const { name, code } of files) {
     for (const g of gates) {
       if (name === g.home) continue
       // 剥行注释与块注释，避免文档/示例文本误咬

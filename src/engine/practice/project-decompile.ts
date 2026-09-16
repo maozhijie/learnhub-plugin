@@ -12,8 +12,8 @@
  * 校验、名字对账门、修复轮提示词拼装；编排（检索/提案受理）在引擎门面 projectDecompile。
  */
 import { priorTerms } from '../vault/vault-prior.ts'
-import { repairRoundPrompt } from '../prompt-assembly.ts'
-import { render } from '../prompt-render.ts'
+import { repairRoundPrompt } from '../infra/prompt-assembly.ts'
+import { render } from '../infra/prompt-render.ts'
 import { DECOMPILE_REPAIR_HEADLINE } from '../prompts/projects.ts'
 
 /** 反编译文档过门后的规格（ADR-0076：计划半区唯一——种子半区已退役）。 */

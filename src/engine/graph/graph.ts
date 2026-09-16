@@ -7,16 +7,16 @@
  * Graph 构造不因重名/断边/环崩溃：派生邻接表、拓扑序（环检测）、深度、可达集、
  * 传递约简边、连通分量、就绪判定，语义与 Python 版逐项对齐。
  */
-import type { VaultFs } from '../io.ts'
+import type { VaultFs } from '../infra/io.ts'
 import { join } from 'node:path'
-import { YAML } from '../yaml.ts'
-import { atomicWrite } from '../io.ts'
-import { safeFilename } from '../paths.ts'
+import { YAML } from '../infra/yaml.ts'
+import { atomicWrite } from '../infra/io.ts'
+import { safeFilename } from '../infra/paths.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
 import { resolveConcept } from '../concepts/concepts.ts'
 import type { GNode, EncEdge, ConceptTier, Misconception } from '../types.ts'
 import { BLOOM_LEVELS, CONCEPT_TIERS } from '../types.ts'
-import type { Paths } from '../paths.ts'
+import type { Paths } from '../infra/paths.ts'
 
 const NODE_KEYS = new Set(['name', 'pre', 'opt', 'note', 'enc', 'est', 'type', 'bloom', 'difficulty',
   'teaches', 'assumes', 'misconceptions'])

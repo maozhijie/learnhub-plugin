@@ -19,19 +19,19 @@
  * 纪律）。outcome 缺席 = probation 在途；同一 (proposal, node) 的后行覆盖前行
  * （追加只增，读侧折叠取最新行）。
  */
-import type { VaultFs } from '../io.ts'
+import type { VaultFs } from '../infra/io.ts'
 import { dueReviewFirstPushes, trueRetention } from '../sched/memory.ts'
-import { readJsonlLines } from '../io.ts'
+import { readJsonlLines } from '../infra/io.ts'
 import {
   RECHECK_DAYS_MIN, RECHECK_DAYS_MAX,
   RECHECK_CONCENTRATION_DROP, RECHECK_RETENTION_RECOVER, RECHECK_RETENTION_MIN_SAMPLES,
   GROWTH_RATES_WINDOW_DAYS, GROWTH_RATE_MIN_SAMPLE, GROWTH_RECHECK_PASS_FLOOR,
   GROWTH_INSERT_RATE_CAP, GROWTH_SIDEBRANCH_CAP, GROWTH_SIDEBRANCH_CAP_RESILIENT,
   GROWTH_RESILIENCE_HIGH,
-} from '../params.ts'
-import { dayOfTs } from '../dates.ts'
-import { pctOf } from '../grading.ts'
-import type { Paths } from '../paths.ts'
+} from '../infra/params.ts'
+import { dayOfTs } from '../infra/dates.ts'
+import { pctOf } from '../infra/grading.ts'
+import type { Paths } from '../infra/paths.ts'
 import type { PracticeRec, ReviewRec } from '../types.ts'
 
 // ---- 账本条目（词条「边实验账本」）----

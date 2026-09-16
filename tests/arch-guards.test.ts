@@ -102,9 +102,9 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
     assert.equal(typeof llm[n], 'function', `host/llm.ts 缺导出 ${n}`)
   }
   // 统一 agent 缝（#162 / ADR-0041/0044）：应用层端口消费者 + 随缝归位的 stripFences
-  const agentSeam = await import('../src/engine/agent.ts')
-  assert.equal(typeof agentSeam.AgentSeam, 'function', 'engine/agent.ts 缺 AgentSeam')
-  assert.equal(typeof agentSeam.stripFences, 'function', 'engine/agent.ts 缺 stripFences（补全后处理随缝归位）')
+  const agentSeam = await import('../src/engine/infra/agent.ts')
+  assert.equal(typeof agentSeam.AgentSeam, 'function', 'engine/infra/agent.ts 缺 AgentSeam')
+  assert.equal(typeof agentSeam.stripFences, 'function', 'engine/infra/agent.ts 缺 stripFences（补全后处理随缝归位）')
   assert.equal(agentSeam.AGENT_LOOP_MAX_TOOL_ROUNDS, 20, '回路预算 K≤20（ADR-0077 上调自 ADR-0041 的 6）')
   assert.equal(typeof agentSeam.AgentSeam.prototype.complete, 'function', '缝缺单发模式 complete()')
   assert.equal(typeof agentSeam.AgentSeam.prototype.agentLoop, 'function', '缝缺回路模式 agentLoop()')
@@ -122,7 +122,7 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   }
 
   // 宿主技术层五文件（#167 / ADR-0048）：构造 / 队列 / 路由 / 伺服 / 工具面的关键导出在
-  // （stripFences 已随缝归位 engine/agent.ts，#162——宿主不再拥有补全后处理）
+  // （stripFences 已随缝归位 engine/infra/agent.ts，#162——宿主不再拥有补全后处理）
   const runtime = await import('../src/host/runtime.ts')
   for (const n of ['createHostRuntime', 'logCall', 'run', 'apiRun']) {
     assert.equal(typeof runtime[n], 'function', `host/runtime.ts 缺导出 ${n}`)
@@ -165,7 +165,7 @@ test('G2b src 下的入口文件存在且非空（防止误删/误移）', () =>
   for (const rel of ['index.ts', 'host/llm.ts', 'host/http.ts', 'host/params.ts', 'host/route-table.ts',
     'host/handlers.ts',
     'host/runtime.ts', 'host/jobs.ts', 'host/api.ts', 'host/static.ts', 'host/tools.ts', 'engine/index.ts',
-    'engine/agent.ts']) {
+    'engine/infra/agent.ts']) {
     assert.ok(statSync(join(SRC, rel)).size > 0, `${rel} 缺失或为空`)
   }
 })
@@ -462,7 +462,7 @@ test('G8 适配器面：engine 内时钟/随机直读与 node:fs 依赖按基线
   const probe = countAdapterFace("import { readFile } from 'node:fs/promises'\nconst x = await readFile('a')")
   assert.ok(probe.fsImports === 1 && probe.fsCalls === 1, '收集器必须看得见 node:fs 形态（扫描面塌了会静默恒过）')
   const bad = adapterFaceViolations(measured, BASELINE.adapterFace ?? {})
-  assert.deepEqual(bad, [], `适配器面棘轮不符基线：\n${bad.join('\n')}\n（Clock/Rng 走 engine/clock.ts 端口、fs 走 vault 存储端口；io.ts 的 atomicWrite tmp 命名是登记过的例外）`)
+  assert.deepEqual(bad, [], `适配器面棘轮不符基线：\n${bad.join('\n')}\n（Clock/Rng 走 engine/infra/clock.ts 端口、fs 走 vault 存储端口；io.ts 的 atomicWrite tmp 命名是登记过的例外）`)
 })
 
 // ---------------------------------------------------------------- G9 写入单元

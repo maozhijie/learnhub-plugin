@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Paths } from '../src/engine/paths.ts'
+import type { Paths } from '../src/engine/infra/paths.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** ready 节点 + 存量 `mastery: 0` 键（旧文件兼容形态，顶层键）。 */

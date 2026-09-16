@@ -21,7 +21,7 @@ import { validateBank } from '../src/engine/content/question-bank.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEditProposal } from '../src/engine/coach/proposals.ts'
 import { withVault } from './helpers/vault.ts'
-import type { Paths } from '../src/engine/paths.ts'
+import type { Paths } from '../src/engine/infra/paths.ts'
 
 // 概念登记表（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml，每课程一份受控词表。
 // 条目 = canonical 名 + 别名[] + 选填定义；全部名字联合唯一（违约 Broken、缺失 Missing

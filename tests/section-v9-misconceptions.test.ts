@@ -16,11 +16,11 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Content } from '../src/engine/content/content.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 import { deriveSectionTier, sectionTierLabel } from '../src/engine/content/complexity.ts'
 import { Graph, GraphStore } from '../src/engine/graph/graph.ts'
 import { runAudit } from '../src/engine/graph/audit.ts'
-import type { LlmComplete } from '../src/engine/llm.ts'
+import type { LlmComplete } from '../src/engine/infra/llm.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 录制型假实现（同 llm-seam.test.ts 口径）：记 prompt，固定回放同一应答。 */

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { answer, tfQuestion, withVault } from './helpers/vault.ts'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 import type { FsrsBlock } from '../src/engine/types.ts'
 
 const PAST = '2024-01-01'

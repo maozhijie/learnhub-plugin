@@ -22,7 +22,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { REPAIR_MECHANISMS, REPAIR_ROUND_LOCKS, OUTPUT_CONTRACTS } from '../src/engine/content/output-contracts.ts'
 import type { OutputContract, RepairMechanismSpec } from '../src/engine/content/output-contracts.ts'
-import type { LlmComplete } from '../src/engine/llm.ts'
+import type { LlmComplete } from '../src/engine/infra/llm.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 录制型假实现：记 prompt，固定回放同一应答（与 #148 金样本闸同款）。 */

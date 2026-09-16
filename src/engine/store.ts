@@ -8,22 +8,22 @@
  * 通用 IO 原语（atomicWrite / learnhub.json 读写 / JSONL 只读）住 ./io.ts——零领域
  * 依赖叶子，供 graph 等低层模块回引，不构成对存储层的反向依赖（#152 刀 1 / ADR-0042）。
  */
-import { atomicWrite, readJsonlLines } from './io.ts'
-import type { VaultFs } from './io.ts'
-import { netPracticeRecs } from './grading.ts'
-import { nowIsoOf, dayOfTs } from './dates.ts'
-import type { Clock } from './clock.ts'
+import { atomicWrite, readJsonlLines } from './infra/io.ts'
+import type { VaultFs } from './infra/io.ts'
+import { netPracticeRecs } from './infra/grading.ts'
+import { nowIsoOf, dayOfTs } from './infra/dates.ts'
+import type { Clock } from './infra/clock.ts'
 import type { JournalRec, PracticeRec, PracticeStreamRow, ProposalRec, ReviewRec, EArchiveRec, ErratumRec, StuckConsumptionRec, StuckReportRec } from './types.ts'
 import type { ReceiptLogRec } from './practice/receipts.ts'
 import type { HabitRepeatRec } from './practice/habits.ts'
 import type { PinRec } from './learner/goals.ts'
 import type { BandRec } from './sched/coach.ts'
 import type { ExperimentDef } from './types.ts'
-import type { Paths } from './paths.ts'
+import type { Paths } from './infra/paths.ts'
 
 // netPracticeRecs 住 grading.ts（#152 刀 6 归位：题库域经 grading 取用；store 被低层
 // 模块反向 type-import，值依赖留原地会把存储层拖进下游成环）。
-export { netPracticeRecs } from './grading.ts'
+export { netPracticeRecs } from './infra/grading.ts'
 
 // 卡点自报 id 分配的串行链（#248）：「读 taken → 定 id → append」必须互斥，否则并发
 // 请求读到同一 taken 集会产出重复 id、击穿按 id 抵消语义。失败不链式传染（链只记完成）。

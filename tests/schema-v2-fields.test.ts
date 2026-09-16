@@ -6,7 +6,7 @@ import { GraphStore, loadGraphDoc, parseConceptFields, parseNode, SchemaError } 
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEditProposal } from '../src/engine/coach/proposals.ts'
 import { withVault } from './helpers/vault.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 
 // schema v2 节点概念字段组（#127 §1/§7 + v1.1 种子框架适配；#140 受理门）：
 // teaches 在场 1–8（1–2 WARN）/ assumes 缺席合法在场 3–10（1–2 WARN）/ 误解 {concept, model}

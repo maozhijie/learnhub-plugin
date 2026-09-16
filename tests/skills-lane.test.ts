@@ -17,7 +17,7 @@ import {
 import { EXECUTION_TRAINING_GATE, trainingSequences } from '../src/engine/sched/optimize.ts'
 import type { FsrsBlock, ReviewRec } from '../src/engine/types.ts'
 import { localDay, withVault } from './helpers/vault.ts'
-import { addDays } from '../src/engine/dates.ts'
+import { addDays } from '../src/engine/infra/dates.ts'
 
 // ---- 纯函数：维持节拍帽 ----
 

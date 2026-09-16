@@ -6,7 +6,7 @@ import { GraphStore } from '../src/engine/graph/graph.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEnrichProposal } from '../src/engine/coach/proposals.ts'
 import { withVault } from './helpers/vault.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 
 // kind=enrich 富化覆盖层通道（#140：schema v2 出生/覆盖层分家，#127 §6 / #131 §6）：
 // 受理时计正典文件 sha256 指纹 → pending → 人审 → apply 指纹复核（不符拒收）→

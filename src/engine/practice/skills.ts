@@ -23,14 +23,14 @@
  *
  * Missing/Broken 纪律沿用 ADR-0004：技能文件缺失 = 合法空态；存在但坏 = Broken 抛出。
  */
-import type { VaultFs } from '../io.ts'
-import { atomicWrite } from '../io.ts'
-import { YAML } from '../yaml.ts'
-import { todayStr, addDays } from '../dates.ts'
-import type { Clock } from '../clock.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { atomicWrite } from '../infra/io.ts'
+import { YAML } from '../infra/yaml.ts'
+import { todayStr, addDays } from '../infra/dates.ts'
+import type { Clock } from '../infra/clock.ts'
 import type { FsrsBlock } from '../types.ts'
 import type { AdvanceCard, AdvanceLog } from '../sched/advance.ts'
-import type { Paths } from '../paths.ts'
+import type { Paths } from '../infra/paths.ts'
 
 export type SkillStatus = 'active' | 'archived'
 export const SKILL_STATUSES: SkillStatus[] = ['active', 'archived']

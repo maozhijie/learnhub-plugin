@@ -19,7 +19,7 @@ import { foldSediment, readSedimentCanon, renderLearnerProfile, latestFsrsParams
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import type { SedimentEvent } from '../src/engine/sched/sediment.ts'
 import { getScheduler, previewDue } from '../src/engine/sched/srs.ts'
-import { DESIRED_RETENTION } from '../src/engine/params.ts'
+import { DESIRED_RETENTION } from '../src/engine/infra/params.ts'
 import { defaultParams, FSRS6_PARAM_COUNT, OPTIMIZE_MIN_REVIEWS } from '../src/engine/sched/optimize.ts'
 import type { OptimizerImpl, TrainingSequence } from '../src/engine/sched/optimize.ts'
 import { prevWeekStartOf } from '../src/engine/learner/kata.ts'

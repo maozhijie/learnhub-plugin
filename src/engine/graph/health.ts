@@ -8,7 +8,7 @@
  */
 import type { Graph } from './graph.ts'
 import { floatNodes } from './quality.ts'
-import { clamp01 } from '../grading.ts'
+import { clamp01 } from '../infra/grading.ts'
 
 /** 零终点（空锚是合法空态）：健康分口径的缺省读侧集合。 */
 const EMPTY_ENDPOINTS: ReadonlySet<string> = new Set<string>()

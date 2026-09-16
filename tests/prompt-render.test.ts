@@ -10,7 +10,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { render } from '../src/engine/prompt-render.ts'
+import { render } from '../src/engine/infra/prompt-render.ts'
 
 test('render：替换字符串与数字占位符', () => {
   assert.equal(render('辅导 {{node}} 第 {{n}} 节', { node: '极限', n: 3 }), '辅导 极限 第 3 节')

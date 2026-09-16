@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { fingerprintOf, classifySource, sourceHint, normalizeSourcePath, validateNoteSourceEntries, isExcludedPath } from '../src/engine/vault/note-source.ts'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 import { DEFAULT_REGISTRY, withVault as makeVault } from './helpers/vault.ts'
 
 const NOTE = [

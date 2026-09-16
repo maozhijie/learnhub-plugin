@@ -90,7 +90,7 @@ const nodeBanner = {
 }
 
 /** native 模块（napi .node 二进制按平台包分发）不可打包：运行时从 node_modules 动态
- * import。优化器（#62）是唯一消费方，调用点隔离在 src/engine/optimize.ts。 */
+ * import。优化器（#62）是唯一消费方，调用点隔离在 src/engine/sched/optimize.ts。 */
 const NODE_EXTERNALS = ['@deepseek-ai/*', 'node:*', '@open-spaced-repetition/*']
 
 const clientBanner = {

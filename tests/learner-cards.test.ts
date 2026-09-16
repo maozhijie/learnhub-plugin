@@ -7,7 +7,7 @@ import type { LearnhubEngine } from '../src/engine/index.ts'
 import { validateLearnerCards, LEARNER_PROMPT_MAX, LEARNER_CONTENT_MAX } from '../src/engine/learner/learner-cards.ts'
 import { parseExplainVerdict, explainBackPack, EXPLAIN_VERDICTS, EXPLAIN_TAGS } from '../src/engine/learner/explain.ts'
 import { selfNoteFeedbackSystem, selfNoteFeedbackPrompt, selfNotePromptOf } from '../src/engine/learner/self-note.ts'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 入门带悬挂前置（前置概念不在图内）——讲解包要能照常点名前置。 */

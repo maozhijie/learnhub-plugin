@@ -367,7 +367,7 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
       corpusDir,
       hints: [
         `题量目标 ${quizCount}（成本闸只封综合批；逐节批按档位默认）`,
-        '要复现「解析回归能在报告里现形」：临时把 src/engine/yaml.ts 的 parseModel 改成抛错 → npm run build → 重启宿主 → 重跑 npm run smoke；'
+        '要复现「解析回归能在报告里现形」：临时把 src/engine/infra/yaml.ts 的 parseModel 改成抛错 → npm run build → 重启宿主 → 重跑 npm run smoke；'
         + '报告里对应站 outcome=failed、失败码进站行（还原后重跑即绿）。',
       ],
     }

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 import { runAudit } from '../src/engine/graph/audit.ts'
 import { graphHealthScore } from '../src/engine/graph/health.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'

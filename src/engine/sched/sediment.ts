@@ -21,11 +21,11 @@
  * 图修复（graph_repair，结构级）把概念清单放在 payload.concepts、**不写地址字段**
  * ——一个结构事件关联多个概念，地址字段是单值，列表形态才不丢事实。
  */
-import type { VaultFs } from '../io.ts'
-import { atomicWrite, readJsonlLines } from '../io.ts'
-import { calendarDayOf, weekStartOf } from '../dates.ts'
-import { nowIsoOf } from '../dates.ts'
-import type { Paths } from '../paths.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { atomicWrite, readJsonlLines } from '../infra/io.ts'
+import { calendarDayOf, weekStartOf } from '../infra/dates.ts'
+import { nowIsoOf } from '../infra/dates.ts'
+import type { Paths } from '../infra/paths.ts'
 
 /** 七类事件（#139 事件骨架；#150 增 N-of-1 实验结局——停=定稿，个体效应结论出生即写）。 */
 export const SEDIMENT_KINDS = [

@@ -10,13 +10,13 @@
 // 生长批受理、边实验账本与复诊。住同域新文件（compass.ts 与 proposals.ts 互相引用，
 // 放进领主即成环）；本文件只被门面引用，跨子系统调用经窄面注入回引门面。
 
-import type { VaultFs } from '../io.ts'
+import type { VaultFs } from '../infra/io.ts'
 import type { Store } from '../store.ts'
-import type { Paths } from '../paths.ts'
+import type { Paths } from '../infra/paths.ts'
 import type { Registry } from '../vault/registry.ts'
 import type { ConceptRegistry } from '../concepts/concepts.ts'
-import { withContractLast } from '../prompt-assembly.ts'
-import { render } from '../prompt-render.ts'
+import { withContractLast } from '../infra/prompt-assembly.ts'
+import { render } from '../infra/prompt-render.ts'
 import { COACH_PLAN_FEEDBACK_BLOCK, COACH_INJECT_BLOCK } from '../prompts/projects.ts'
 import type { Content } from '../content/content.ts'
 import type { BankDoc } from '../content/question-bank.ts'
@@ -74,16 +74,16 @@ import type { CompassEtaProbe } from './compass.ts'
 import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, reconcileRoute, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { activeEntries, deprecatedNames, resolveConcept } from '../concepts/concepts.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
-import { dayOfTs, nowIsoOf, weekStartOf } from '../dates.ts'
+import { dayOfTs, nowIsoOf, weekStartOf } from '../infra/dates.ts'
 import { foldStuckReports, stuckReportGate } from './stuck-report.ts'
-import type { Clock } from '../clock.ts'
-import type { Logger } from '../logger.ts'
-import { netPracticeRecs } from '../grading.ts'
-import { atomicWrite } from '../io.ts'
+import type { Clock } from '../infra/clock.ts'
+import type { Logger } from '../infra/logger.ts'
+import { netPracticeRecs } from '../infra/grading.ts'
+import { atomicWrite } from '../infra/io.ts'
 import type { JolPrediction } from '../sched/jol.ts'
 import { JOL_PREDICTIONS } from '../sched/jol.ts'
-import type { AgentSeam, GateVerdict } from '../agent.ts'
-import type { LlmToolCall, LlmToolSpec } from '../llm.ts'
+import type { AgentSeam, GateVerdict } from '../infra/agent.ts'
+import type { LlmToolCall, LlmToolSpec } from '../infra/llm.ts'
 import { hasReadyContent } from '../vault/notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
 import { addNodeCountOf, applyOpsToNodes, editGateErrors, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
@@ -93,10 +93,10 @@ import {
   GROWTH_DRAFT_STATION, PATCH_SHAPE_CHEATSHEET, normalizePatchShape,
 } from './growth-draft.ts'
 import type { GrowthDraftDoc, GrowthDraftRound } from './growth-draft.ts'
-import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS } from '../params.ts'
+import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS } from '../infra/params.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from '../sched/sandbox.ts'
 import { appendSedimentEvent } from '../sched/sediment.ts'
-import { runWriteUnit } from '../write-unit.ts'
+import { runWriteUnit } from '../infra/write-unit.ts'
 import { COMPLETION_MASTERY_THRESHOLD, endpointNames, foldCompletion, junctionServes, readAnchors } from './seed.ts'
 import { readySet } from '../sched/sessions.ts'
 import { masteryOfFm } from '../sched/srs.ts'
@@ -105,7 +105,7 @@ import { CONCEPT_TIERS, GROWTH_OPERATORS } from '../types.ts'
 import type { GraphApplyEditResult } from '../views/graph.ts'
 import type { GraphEditProposalResult } from '../views/proposals.ts'
 import { readDailyGoal } from '../sched/xp.ts'
-import { YAML } from '../yaml.ts'
+import { YAML } from '../infra/yaml.ts'
 
 /** 思路官站的语料站标签（#301：host STATIONS.growthPlan 引本常量对齐；站名是受控词表）。
  * 此前这一站名是散在调用点的字面量 + host 侧一张写死的 `growth: '教练思路'` 映射。 */
@@ -961,7 +961,7 @@ export class GrowthSubsystem {
    * REPAIR_MECHANISMS.draftAuditRepair（finish 拒收错误原文回灌 loop 继续修、不进
    * gateRepairRound——门错修复轮保留为旧路径的最后兜底）。禁止空手结束：回路自然收束
    * 且未成功 finish 且草稿仍有未发布增量 → fail loud（草稿保留可续建）。会话在途草稿
-   * 默认续建（注入轮次日志恢复认知）；预算常量单源 engine/params.ts。 */
+   * 默认续建（注入轮次日志恢复认知）；预算常量单源 engine/infra/params.ts。 */
   async coachDraft(
     courseKey: string, agent: AgentSeam,
     opts: {

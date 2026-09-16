@@ -16,7 +16,7 @@
 /** 「答错证据」口径与 A3 struggle 同源：作答正确率低于 sessions.STRUGGLE_ACCURACY。 */
 import { STRUGGLE_ACCURACY } from '../sched/sessions.ts'
 import { sourceKeyOf } from '../types.ts'
-import { daysBetween, parseDay } from '../dates.ts'
+import { daysBetween, parseDay } from '../infra/dates.ts'
 
 /** 校准建议（低掌握半边）：节点 Mastery 低于该值才算「低迷」。
  * 复习/掌握期的节点防饱和后仍应明显高于此；新学的正常低值由 stage 守门排除。 */

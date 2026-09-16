@@ -15,7 +15,7 @@ import {
   MERGE_TEXT_THRESHOLD, MERGE_FOOTPRINT_THRESHOLD, MERGE_INVOKES_THRESHOLD,
 } from '../src/engine/concepts/concepts.ts'
 import type { ConceptEntry } from '../src/engine/concepts/concepts.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 import { withVault } from './helpers/vault.ts'
 
 // ---- 纯函数：三条信号各一票；已声明/废弃不提名；同输入同输出 ----

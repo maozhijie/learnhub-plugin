@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Paths } from '../src/engine/paths.ts'
-import { parseReflectionGrading, parseOpenGrading } from '../src/engine/grading.ts'
+import type { Paths } from '../src/engine/infra/paths.ts'
+import { parseReflectionGrading, parseOpenGrading } from '../src/engine/infra/grading.ts'
 import { withVault } from './helpers/vault.ts'
 
 // ---- 解析加固（#116.1）：markdown 围栏、外层散文、尾逗号、字符串分数 ----

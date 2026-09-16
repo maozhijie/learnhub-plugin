@@ -11,8 +11,8 @@
  *
  * 零依赖纯函数（接口数据由门面注入）；阈值全部低数据静默。
  */
-import { round2, pctOf } from '../grading.ts'
-import { DAY_MS, calendarDayOf } from '../dates.ts'
+import { round2, pctOf } from '../infra/grading.ts'
+import { DAY_MS, calendarDayOf } from '../infra/dates.ts'
 import type { BandPref } from './adaptive.ts'
 import type { BandRec } from './coach.ts'
 import type { ReviewRec } from '../types.ts'

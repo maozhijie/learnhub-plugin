@@ -1,6 +1,6 @@
 /**
- * 离线批量评审运行器（#222 / ADR-0070）：契约、提示词与报告机械全在引擎（engine/quality-review.ts
- * / engine/quality-audit.ts），本文件是**宿主适配**——读盘（生成语料抽样池）、调模型（真
+ * 离线批量评审运行器（#222 / ADR-0070）：契约、提示词与报告机械全在引擎（engine/content/quality-review.ts
+ * / engine/content/quality-audit.ts），本文件是**宿主适配**——读盘（生成语料抽样池）、调模型（真
  * provider 只在宿主 ctx）、写盘（人读报告）。三件事都只能住宿主：引擎侧零 fs 零时钟（G8）、
  * 模型端口也只有宿主 ctx 上有。
  *

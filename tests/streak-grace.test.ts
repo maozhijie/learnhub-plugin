@@ -10,7 +10,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { streakFrom } from '../src/engine/sched/xp.ts'
-import { XP_STREAK_GRACE_DAYS } from '../src/engine/params.ts'
+import { XP_STREAK_GRACE_DAYS } from '../src/engine/infra/params.ts'
 import { localDay, withVault } from './helpers/vault.ts'
 
 // 学习日种子走本地日历日（helpers.localDay）：UTC 日在本地 0 点后与引擎「今天」错位一天

@@ -5,7 +5,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { writeFile, mkdir } from 'node:fs/promises'
-import { AgentSeam } from '../src/engine/agent.ts'
+import { AgentSeam } from '../src/engine/infra/agent.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'

@@ -27,7 +27,7 @@ import { appendFileSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:f
 import { join } from 'node:path'
 import { Writable } from 'node:stream'
 import { pino } from 'pino'
-import type { LogFields, LogLevel, Logger } from '../engine/logger.ts'
+import type { LogFields, LogLevel, Logger } from '../engine/infra/logger.ts'
 
 /** 事件名 → 级别门的数值映射（ADR-0080：error 50／warn 40／info 30／debug 20）。 */
 const LEVEL_NUM: Record<LogLevel, number> = { debug: 20, info: 30, warn: 40, error: 50 }
@@ -280,4 +280,4 @@ function recordOf(event: string, fields?: LogFields): Record<string, unknown> {
 }
 
 /** 宿主侧 noop 实现（ADR-0080 原意：与 `createFileLogger` 同文件导出，供宿主消费者取用）。 */
-export { noopLogger } from '../engine/logger.ts'
+export { noopLogger } from '../engine/infra/logger.ts'

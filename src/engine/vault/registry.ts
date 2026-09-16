@@ -8,12 +8,12 @@
  * 契约（ADR-0004 / #6）：注册表缺失是合法空状态；文件存在但 YAML 或条目
  * 不合契约时必须 fail loud，不能被读成空课程列表或静默过滤坏条目。
  */
-import type { VaultFs } from '../io.ts'
-import { atomicWrite } from '../io.ts'
-import { YAML } from '../yaml.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { atomicWrite } from '../infra/io.ts'
+import { YAML } from '../infra/yaml.ts'
 import type { CourseEntry, NoteSourceEntry } from '../types.ts'
 import { validateNoteSourceEntries } from './note-source.ts'
-import type { Paths } from '../paths.ts'
+import type { Paths } from '../infra/paths.ts'
 
 /** 注册表契约校验（数据体检与 Registry 读侧共用同一口径）。
  * 合法条目：name/root 非空且各自唯一；可选 id（出现则非空且唯一）、enabled（布尔）、tags（字符串列表）。

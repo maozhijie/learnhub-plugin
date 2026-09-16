@@ -30,7 +30,7 @@ index_repository(repo_path="C:/Users/test/Desktop/my/learnhub-plugin", mode="mod
    | 目标 | 图上入边 | `trace_path(inbound)` | 真相（grep） |
    |---|---|---|---|
    | `runLog`（自由函数） | 158 条 `CALLS` | 正常 | 一致 |
-   | `gateRepairRound`（方法） | 5 条 `USAGE`、**0 条 `CALLS`** | **报 0** | 3 个生产调用点（`engine/projects.ts:1191`／`engine/growth-subsystem.ts:813`／`host/jobs.ts:1045`） |
+   | `gateRepairRound`（方法） | 5 条 `USAGE`、**0 条 `CALLS`** | **报 0** | 3 个生产调用点（`engine/practice/projects.ts:1191`／`engine/coach/growth-subsystem.ts:813`／`host/jobs.ts:1045`） |
    | `store.readJsonl`（方法） | 4 `CALLS` + 4 `USAGE` | 只看见一半 | 9 个调用点 |
 
    所以方法调用的影响面改用这条查询——它把 `CALLS` 与 `USAGE` 一起取：
@@ -53,7 +53,7 @@ index_repository(repo_path="C:/Users/test/Desktop/my/learnhub-plugin", mode="mod
 - **`index_status(project=...)` 的 `git.head_sha` 对比 `git log -1` 的 HEAD**（`verbose: true` 会连 `base_sha`、分支、worktree 一起给）。一致 → 索引已是 HEAD 内容，别怀疑新鲜度；不一致 → 索引落后，需要决定是否重索引（重索引是一次完整跑，见上）。
 - 再配一个**内容级抽查**：拿最近一次引擎提交新增的符号跑 `search_graph(name_pattern=...)`，确认图上真的有它。
 
-2026-09-15 复验读数：`head_sha` 与 HEAD（`46e9018`）一致，`groupView`/`GroupViewOpts` 均在图上（`src/engine/graph.ts:506-560`），节点数从索引建库时的 9883 涨到 9887，与 #278 落地提交的增量吻合——那次滞后已被覆盖，当前不存在。
+2026-09-15 复验读数：`head_sha` 与 HEAD（`46e9018`）一致，`groupView`/`GroupViewOpts` 均在图上（`src/engine/graph/graph.ts:506-560`），节点数从索引建库时的 9883 涨到 9887，与 #278 落地提交的增量吻合——那次滞后已被覆盖，当前不存在。
 
 **两类「看起来像滞后」但不是滞后的情况**，先排除再下结论：
 

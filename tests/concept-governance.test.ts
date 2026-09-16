@@ -21,7 +21,7 @@ import {
 } from '../src/engine/concepts/concepts.ts'
 import type { ConceptEntry } from '../src/engine/concepts/concepts.ts'
 import { Content } from '../src/engine/content/content.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 import { withVault } from './helpers/vault.ts'
 
 const REGISTRY_YAML = [

@@ -18,7 +18,7 @@
  * 估计随元数据落盘（小数据下 binding 会 NotEnoughData，缺失时记 null）。
  */
 import { generatorParameters } from 'ts-fsrs'
-import { daysBetween, parseDay, dayOfTs } from '../dates.ts'
+import { daysBetween, parseDay, dayOfTs } from '../infra/dates.ts'
 import { sourceKeyOf } from '../types.ts'
 import type { ReviewRec } from '../types.ts'
 

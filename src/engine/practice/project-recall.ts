@@ -10,11 +10,11 @@
  * 抽题只读课程题库：不出新题、不改题、不推进任何调度（与 learnhub_question_answer
  * 通道彻底分流——检索点的作答证据只留学习者与 agent 的会话里）。
  */
-import { readJsonlLines } from '../io.ts'
-import type { VaultFs } from '../io.ts'
+import { readJsonlLines } from '../infra/io.ts'
+import type { VaultFs } from '../infra/io.ts'
 import type { BankQuestion } from '../content/question-bank.ts'
-import type { Paths } from '../paths.ts'
-import { shuffledWith as shuffled } from '../shuffle.ts'
+import type { Paths } from '../infra/paths.ts'
+import { shuffledWith as shuffled } from '../infra/shuffle.ts'
 
 /** 检索点抽中的题（跨课程汇集；答案不落档——流水留「抽了什么」，判对错是会话内口头事）。 */
 export interface RecallQuestion {

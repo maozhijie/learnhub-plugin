@@ -17,7 +17,7 @@
 import { readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { Content } from '../src/engine/index.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 import { diversityMetricsOf, diversityQuestionOf } from '../src/engine/content/question-diversity.ts'
 import { normalizeStem } from '../src/engine/content/question-dedup.ts'
 

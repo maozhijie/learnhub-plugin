@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { bandOffset, BAND_PREF_OFFSET } from '../src/engine/sched/adaptive.ts'
 import { coachFeedback, COACH_DUE_HARD_R, COACH_HARD_D, COACH_MIN_ANSWERED, COACH_MIN_SESSIONS, withinCoachWindow } from '../src/engine/sched/coach.ts'
 import type { BandRec } from '../src/engine/sched/coach.ts'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 import { tfQuestion, withVault, localDay } from './helpers/vault.ts'
 
 // E5 自选难度 + 可用的困难教练（决议 #50 / 实施工单 #65）：显式带选择作为 A1 的

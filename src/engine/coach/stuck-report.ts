@@ -13,7 +13,7 @@
  * 折叠出消费态）——原记录永不改写，回合异常时自报自然留账不丢。
  */
 import type { StuckConsumptionRec, StuckReportFolded, StuckReportRec } from '../types.ts'
-import { STUCK_REPORT_PER_NODE_PER_DAY, STUCK_REPORT_DAILY_COURSE_CAP } from '../params.ts'
+import { STUCK_REPORT_PER_NODE_PER_DAY, STUCK_REPORT_DAILY_COURSE_CAP } from '../infra/params.ts'
 
 /** 频控上限（默认取 params 集中表；显式入参供测试与未来调参面）。 */
 export interface StuckGateLimits {

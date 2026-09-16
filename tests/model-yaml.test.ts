@@ -8,7 +8,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 
 test('parseModel：行尾/整行机器块串味，忠实解析败后剥注释救回并留痕', () => {
   const polluted = [

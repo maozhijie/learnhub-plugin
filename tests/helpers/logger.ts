@@ -8,7 +8,7 @@
  * 引擎侧确定性：断言在内存里完成，零盘面噪声、零跨日/保留期耦合——真正的盘面行为
  * （按天切分/保留期/上限）由 `tests/file-log.test.ts` 对 `host/log-file.ts` 单独测。
  */
-import type { LogFields, LogLevel, Logger } from '../../src/engine/logger.ts'
+import type { LogFields, LogLevel, Logger } from '../../src/engine/infra/logger.ts'
 
 export interface LogEntry {
   level: LogLevel

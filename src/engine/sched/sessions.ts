@@ -6,17 +6,17 @@
  * 复习到期判定 = 题库聚合（节点 due = min(题目 due)），由 facade 注入 bankDue。
  * 节点的 stage 推进发生在作答（首答→learning）与完成确认（→review）两处，见 engine。
  */
-import type { VaultFs } from '../io.ts'
-import { parseDay, daysBetween, dayOfTs } from '../dates.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { parseDay, daysBetween, dayOfTs } from '../infra/dates.ts'
 import { effectiveStage } from './srs.ts'
 import { retrievability, getScheduler, masteryOfFm } from './srs.ts'
-import { R_GATE } from '../params.ts'
+import { R_GATE } from '../infra/params.ts'
 import { loadNote, asFm, validateNoteFrontmatter, hasReadyContent } from '../vault/notes.ts'
 import type { BrokenNote } from '../vault/notes.ts'
 import type { Graph } from '../graph/graph.ts'
 import type { Fm, Stage } from '../types.ts'
-import type { Paths } from '../paths.ts'
-import type { Logger } from '../logger.ts'
+import type { Paths } from '../infra/paths.ts'
+import type { Logger } from '../infra/logger.ts'
 import { DIAGNOSTIC_SCORE, diagnosticView } from './attribution.ts'
 import type { DiagnosticEntry, DiagnosticItem } from './attribution.ts'
 import type { LessonDoc } from '../views/content.ts'
@@ -26,8 +26,8 @@ import type { ProbationCourseView } from '../coach/probation.ts'
 import type { CoachCheck } from '../coach/coach-round.ts'
 import { newLessonRationale, pinHeadScore, todayPins } from '../learner/goals.ts'
 import type { PinRec } from '../learner/goals.ts'
-import { reconsolidationAdvice, SLEEP_SCORE, SLEEP_STANDALONE_MAX } from '../sleep.ts'
-import type { SleepSuggestion } from '../sleep.ts'
+import { reconsolidationAdvice, SLEEP_SCORE, SLEEP_STANDALONE_MAX } from '../infra/sleep.ts'
+import type { SleepSuggestion } from '../infra/sleep.ts'
 
 /** 单课调度素材的统一视图参数。 */
 export interface ViewSource {

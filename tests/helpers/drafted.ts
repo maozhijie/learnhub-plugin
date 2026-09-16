@@ -11,14 +11,14 @@
  * 纪律：本模块只写盘、不触引擎写通道（零 journal、零提案）——它是夹具，不是生产代码。
  */
 import type { LearnhubEngine } from '../../src/engine/index.ts'
-import type { VaultFs } from '../../src/engine/io.ts'
-import { atomicWrite } from '../../src/engine/io.ts'
+import type { VaultFs } from '../../src/engine/infra/io.ts'
+import { atomicWrite } from '../../src/engine/infra/io.ts'
 import type { CourseEntry, GNode } from '../../src/engine/types.ts'
 import { GraphStore } from '../../src/engine/graph/graph.ts'
 import { writeAnchors } from '../../src/engine/coach/seed.ts'
 import type { EndpointAnchor, GoalType, StartBasis } from '../../src/engine/coach/seed.ts'
 import { compassScaffold } from '../../src/engine/coach/compass.ts'
-import { todayStr } from '../../src/engine/dates.ts'
+import { todayStr } from '../../src/engine/infra/dates.ts'
 import { noteText } from './vault.ts'
 import type { NoteSeed } from './vault.ts'
 

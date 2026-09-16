@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { calibrationBins, dueReviewFirstPushes, forecast, forgettingCurve, stateHistograms, trueRetention } from '../src/engine/sched/memory.ts'
-import { todayStr } from '../src/engine/dates.ts'
+import { todayStr } from '../src/engine/infra/dates.ts'
 import type { ReviewRec } from '../src/engine/types.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 

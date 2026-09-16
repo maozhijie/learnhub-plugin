@@ -17,10 +17,10 @@ import assert from 'node:assert/strict'
 import { decompileGoalOf, decompileRepairPrompt, decompileTerms, reconcilePlanNodes, splitDecompileDoc } from '../src/engine/practice/project-decompile.ts'
 import { Content } from '../src/engine/content/content.ts'
 import { systemClock } from '../src/host/clock.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 import type { PlanItem } from '../src/engine/practice/projects.ts'
 import { withVault } from './helpers/vault.ts'
-import { AgentSeam } from '../src/engine/agent.ts'
+import { AgentSeam } from '../src/engine/infra/agent.ts'
 
 /** 模板原文（契约后置的修复轮断言用：#218 起 decompileRepairPrompt 收模板与材料两半）。 */
 const TPL = Content.PROMPT_KINDS['项目目标反编译']!

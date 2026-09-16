@@ -5,12 +5,12 @@
  * 提案落盘 pending（产物文件全留痕）→ 人审 → apply 过 audit 门禁生效 → journal + 快照。
  * 拒绝同样留痕（status=rejected）。
  */
-import type { VaultFs } from '../io.ts'
+import type { VaultFs } from '../infra/io.ts'
 import { createHash } from 'node:crypto'
-import { YAML } from '../yaml.ts'
+import { YAML } from '../infra/yaml.ts'
 import { Store } from '../store.ts'
-import { atomicWrite } from '../io.ts'
-import { runWriteUnit } from '../write-unit.ts'
+import { atomicWrite } from '../infra/io.ts'
+import { runWriteUnit } from '../infra/write-unit.ts'
 import { Graph, GraphStore, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from '../graph/graph.ts'
 import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from '../concepts/concepts.ts'
 import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from '../concepts/concepts.ts'
@@ -21,16 +21,16 @@ import type { EndpointAnchor } from './seed.ts'
 import {
   SECTION_ROUTE, compassScaffold, withSectionText, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
-import { todayStr } from '../dates.ts'
-import type { Clock } from '../clock.ts'
-import type { Logger } from '../logger.ts'
-import { noopLogger } from '../logger.ts'
+import { todayStr } from '../infra/dates.ts'
+import type { Clock } from '../infra/clock.ts'
+import type { Logger } from '../infra/logger.ts'
+import { noopLogger } from '../infra/logger.ts'
 import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
-import { RECHECK_DAYS_DEFAULT } from '../params.ts'
+import { RECHECK_DAYS_DEFAULT } from '../infra/params.ts'
 import type { GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from '../types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from '../types.ts'
-import type { Paths } from '../paths.ts'
+import type { Paths } from '../infra/paths.ts'
 import type { CourseEntry, ProposalKind, ProposalRec } from '../types.ts'
 import type { GraphEditProposalResult, GraphEnrichProposalResult } from '../views/proposals.ts'
 import type { GraphApplyEditResult, GraphApplyEnrichResult } from '../views/graph.ts'
@@ -1395,7 +1395,7 @@ export class GraphProposals {
     }
     // 题库随迁（改名时；无题库静默跳过）
     if (newName) {
-      const { safeFilename } = await import('../paths.ts')
+      const { safeFilename } = await import('../infra/paths.ts')
       const bankDir = this.paths.courseRoot(root)
       const oldBank = `${bankDir}/题库/${safeFilename(node)}.yaml`
       if (this.fs.exists(oldBank)) {
@@ -1417,7 +1417,7 @@ export class GraphProposals {
     if (!graph.nset.has(node)) return
     const oldPath = this.paths.courseNotePath(root, node)
     const archiveDir = `${this.paths.courseStateDir(root)}/archive`
-    const { safeFilename } = await import('../paths.ts')
+    const { safeFilename } = await import('../infra/paths.ts')
     if (this.fs.exists(oldPath)) {
       await this.fs.mkdir(archiveDir)
       await this.fs.rename(oldPath, `${archiveDir}/del-${pid}-${safeFilename(node)}.md`)

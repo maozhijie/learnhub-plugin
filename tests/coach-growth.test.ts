@@ -10,7 +10,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AgentSeam } from '../src/engine/agent.ts'
+import { AgentSeam } from '../src/engine/infra/agent.ts'
 import { COACH_PLAN_STATION, GROWTH_DRAFT_STATION } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { withVault } from './helpers/vault.ts'

@@ -13,7 +13,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
 import type { ProposalRec } from '../engine/types.ts'
-import { render } from '../engine/prompt-render.ts'
+import { render } from '../engine/infra/prompt-render.ts'
 import { TUTOR_SYSTEM_INSTRUCTIONS } from '../engine/prompts/host.ts'
 import { applyId, bandPref, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
 import { sendJson } from './http.ts'

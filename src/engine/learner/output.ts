@@ -11,11 +11,11 @@
  * （门面 refreshSourceFingerprints）——引擎自己的写不算内容漂移，漂移只留给
  * 引擎之外的手改。
  */
-import type { VaultFs } from '../io.ts'
-import { OUTPUT_DIR_NAME, safeFilename } from '../paths.ts'
-import { atomicWrite } from '../io.ts'
-import { YAML } from '../yaml.ts'
-import type { Paths } from '../paths.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { OUTPUT_DIR_NAME, safeFilename } from '../infra/paths.ts'
+import { atomicWrite } from '../infra/io.ts'
+import { YAML } from '../infra/yaml.ts'
+import type { Paths } from '../infra/paths.ts'
 
 /** 输出区产品类（→ 我的产出/<类>/ 子目录；需求池 V-3 点名三类 + 周复盘 U-4）。 */
 export const OUTPUT_KINDS = ['周复盘', '讲解稿', '错误卡'] as const

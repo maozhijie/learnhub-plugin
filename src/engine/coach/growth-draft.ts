@@ -8,9 +8,9 @@
  * （#272；重放与门序列住 proposals.ts（replayDraft / editGateErrors——草稿通过 =
  * 门通过按构造成立），站编排住 growth-subsystem.ts（growth2.coachDraft）。
  */
-import type { VaultFs } from '../io.ts'
-import { atomicWrite } from '../io.ts'
-import type { Paths } from '../paths.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { atomicWrite } from '../infra/io.ts'
+import type { Paths } from '../infra/paths.ts'
 import type { EditOp } from './proposals.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
 import { nearNameCandidates, resolveConcept, validateConceptEntry } from '../concepts/concepts.ts'

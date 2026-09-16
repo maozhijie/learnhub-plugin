@@ -11,7 +11,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { withVault } from './helpers/vault.ts'
 import { EVIDENCE_STREAMS } from '../src/engine/sched/evidence-streams.ts'
-import { Paths } from '../src/engine/paths.ts'
+import { Paths } from '../src/engine/infra/paths.ts'
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src')
 
@@ -94,7 +94,7 @@ test('结构守卫：JSONL 读侧必经原语——src 全域 split("\\n") 只�
 })
 
 test('结构守卫：追加流水登记处对账——paths.ts 的 .jsonl 路径成员必须列册或显式豁免（#195 防盘点清单漂移）', async () => {
-  const pathsSrc = await readFile(join(SRC, 'engine', 'paths.ts'), 'utf8')
+  const pathsSrc = await readFile(join(SRC, 'engine', 'infra', 'paths.ts'), 'utf8')
   const jsonlGetters = new Set<string>()
   for (const line of pathsSrc.split('\n')) {
     if (!line.includes('.jsonl')) continue

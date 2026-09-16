@@ -11,10 +11,10 @@
 import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from '../src/engine/agent.ts'
+import { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from '../src/engine/infra/agent.ts'
 import { systemClock } from '../src/host/clock.ts'
-import type { AgentCallRecord, GateVerdict } from '../src/engine/agent.ts'
-import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmToolSpec } from '../src/engine/llm.ts'
+import type { AgentCallRecord, GateVerdict } from '../src/engine/infra/agent.ts'
+import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmToolSpec } from '../src/engine/infra/llm.ts'
 
 /** 脚本化补全端口：按调用序回放，记录 prompt/system/语义档。 */
 function fakeComplete(replies: string[]) {

@@ -22,7 +22,7 @@ import {
 import type { Message, TokenUsage, ToolCallId, ToolSchema } from '@deepseek-ai/dsh-llm'
 import { stripFences } from '../engine/index.ts'
 import type { LlmCallKind, LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmTokenUsage, LlmToolCall } from '../engine/index.ts'
-import { render } from '../engine/prompt-render.ts'
+import { render } from '../engine/infra/prompt-render.ts'
 import {
   LOOP_PROMPT_ASSISTANT, LOOP_PROMPT_TASK, LOOP_PROMPT_TOOL_CALLS, LOOP_PROMPT_TOOL_ERROR_SUFFIX, LOOP_PROMPT_TOOL_RESULT,
 } from '../engine/prompts/host.ts'
@@ -186,7 +186,7 @@ export function llmSeam(ctx: Context, capture?: CorpusSink, station?: string): L
 
 /** 机械站的补全缝（#175 阶段③：stripFences 九处接线随适配器归位）——llmSeam 包上
  * 补全后处理，投递层直接把它当 LlmComplete 传给引擎，不再各自 import stripFences
- * 手工包裹（stripFences 本体住 engine/agent.ts，随缝定义；这里是它的适配器组装位）。 */
+ * 手工包裹（stripFences 本体住 engine/infra/agent.ts，随缝定义；这里是它的适配器组装位）。 */
 export function llmSeamStripped(ctx: Context, capture?: CorpusSink, station?: string): LlmComplete {
   const seam = llmSeam(ctx, capture, station)
   return async (prompt, system, opts) => stripFences(await seam(prompt, system, opts))
@@ -195,7 +195,7 @@ export function llmSeamStripped(ctx: Context, capture?: CorpusSink, station?: st
 /** 宿主→引擎工具回路端口（LlmStream）的适配器（#162 / ADR-0041 回路半）：端口中立
  * 的回路历史翻译成 dsh 消息（user/assistant/tool-result），工具白名单直通 provider
  * function calling；语义档翻译、空闲超时、截断重试、档位降级与补全缝同一套机械。
- * 消费方 = engine/agent.ts 的 agentLoop()（应用层端口消费者），测试注入假端口即可
+ * 消费方 = engine/infra/agent.ts 的 agentLoop()（应用层端口消费者），测试注入假端口即可
  * 脚本化应答——回路逻辑不依赖真实模型确定性可测。req.station 沿请求贯通进语料
  * （#213，回路调用站 = 教练回合/罗盘）。 */
 export function llmStreamSeam(ctx: Context, capture?: CorpusSink): LlmStream {

@@ -11,13 +11,13 @@
  * 种子图豁免（#142）：图仍 = 锚集合种子节点并集时，R1/R2/R8/R13 豁免、健康分不设阈值
  * ——种子本来就只有起点+终点几张节点，形状告警与低健康分是噪音（生长批进入后恢复）。
  */
-import type { VaultFs } from '../io.ts'
+import type { VaultFs } from '../infra/io.ts'
 import { scanAll, loadNote, hasReadyContent } from '../vault/notes.ts'
 import { STAGES } from '../types.ts'
 import type { Fm } from '../types.ts'
 import type { Graph } from './graph.ts'
-import type { Paths } from '../paths.ts'
-import { parseDay, daysBetween } from '../dates.ts'
+import type { Paths } from '../infra/paths.ts'
+import { parseDay, daysBetween } from '../infra/dates.ts'
 import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import { Content } from '../content/content.ts'
@@ -284,7 +284,7 @@ export async function runAudit(
   }
   lines.push('')
   section('INFO · R9 提示项', infos)
-  await import('../io.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n'), fs))
+  await import('../infra/io.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n'), fs))
 
   return { failed: errors.length > 0, errors, warns, infos, baseline, exempt }
 }

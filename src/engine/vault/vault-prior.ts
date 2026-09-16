@@ -38,8 +38,8 @@
  * 不改 frontmatter；注入产物只进生成提示词（提示词落盘属提示词快照域，与个人笔记
  * 无关）。学习中心/ 与点目录整体排除（引擎管理区不是先验来源）。
  */
-import type { VaultFs } from '../io.ts'
-import { stripHtmlComments } from '../html-comments.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { stripHtmlComments } from '../infra/html-comments.ts'
 import { stripFrontmatter, titleOfBody } from './note-source.ts'
 import type { VaultPriorAudit } from '../types.ts'
 import { resolveConcept } from '../concepts/concepts.ts'

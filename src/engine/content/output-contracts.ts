@@ -53,7 +53,7 @@ export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = 
     what: '节正文修复阶梯三档：块级局部修补 → 整节压缩（deep 升档）→ 溢出交大纲拆节',
   },
   gateRepairRound: {
-    file: 'engine/agent.ts', witness: ['async gateRepairRound'],
+    file: 'engine/infra/agent.ts', witness: ['async gateRepairRound'],
     what: '缝的共享门错修复轮：门错误 + 被拒原文回灌重产恰一次，仍败以站点 fatal 抛两轮死因',
   },
   decompileRepairPrompt: {

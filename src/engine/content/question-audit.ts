@@ -16,11 +16,11 @@
  *   题目生成站的 repair 形态（kind='repair'，站名由注入缝闭包钉住）。
  */
 
-import { YAML } from '../yaml.ts'
-import { evaluateAllo, revealAnswer } from '../grading.ts'
-import type { AlloKind, AlloQuestion } from '../grading.ts'
-import type { LlmComplete } from '../llm.ts'
-import { render } from '../prompt-render.ts'
+import { YAML } from '../infra/yaml.ts'
+import { evaluateAllo, revealAnswer } from '../infra/grading.ts'
+import type { AlloKind, AlloQuestion } from '../infra/grading.ts'
+import type { LlmComplete } from '../infra/llm.ts'
+import { render } from '../infra/prompt-render.ts'
 import { QUIZ_AUDIT_REPAIR_ITEM, QUIZ_AUDIT_REPAIR_PROMPT, QUIZ_SOLVER_PROMPT } from '../prompts/quiz.ts'
 
 /** 第二意见独立解题的语料站标签（host STATIONS.quizSolver 引门面同名常量对齐）。 */

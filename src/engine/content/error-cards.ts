@@ -14,12 +14,12 @@
  *
  * Missing/Broken 纪律沿用 ADR-0004：文件缺失 = 合法空卡组；存在但坏 = 抛 Broken。
  */
-import type { VaultFs } from '../io.ts'
-import { atomicWrite } from '../io.ts'
-import { YAML } from '../yaml.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { atomicWrite } from '../infra/io.ts'
+import { YAML } from '../infra/yaml.ts'
 import type { FsrsBlock, PracticeRec } from '../types.ts'
-import type { Paths } from '../paths.ts'
-import { safeFilename } from '../paths.ts'
+import type { Paths } from '../infra/paths.ts'
+import { safeFilename } from '../infra/paths.ts'
 
 export type ErrorCardKind = 'contrast'
 export const ERROR_CARD_KINDS: ErrorCardKind[] = ['contrast']

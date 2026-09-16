@@ -9,10 +9,10 @@
  * 人审产物（proposals.json / snapshots/）。无 SQLite，无投影回写。
  */
 import { graphHealthScore } from './graph/health.ts'
-import type { VaultFs } from './io.ts'
+import type { VaultFs } from './infra/io.ts'
 /** vault 存储端口（#175 阶段②）：类型随门面出，实现住 host/vault-fs.ts。 */
-export type { VaultFs } from './io.ts'
-import { Paths } from './paths.ts'
+export type { VaultFs } from './infra/io.ts'
+import { Paths } from './infra/paths.ts'
 import { Registry } from './vault/registry.ts'
 import { ConceptRegistry } from './concepts/concepts.ts'
 import { Store } from './store.ts'
@@ -22,7 +22,7 @@ import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFro
 import type { BrokenNote } from './vault/notes.ts'
 import { getScheduler, masteryOfFm } from './sched/srs.ts'
 import { ErrorCards } from './content/error-cards.ts'
-import { YAML } from './yaml.ts'
+import { YAML } from './infra/yaml.ts'
 import { dataCheck } from './data-check.ts'
 import { readDayCutoff } from './sched/xp.ts'
 import { SchedSubsystem } from './sched/sched-subsystem.ts'
@@ -36,8 +36,8 @@ import { Content } from './content/content.ts'
 import { ContentSubsystem } from './content/content-subsystem.ts'
 import { GraphProposals } from './coach/proposals.ts'
 import type { ApplyAudit } from './coach/proposals.ts'
-import type { Clock, Rng } from './clock.ts'
-import type { Logger } from './logger.ts'
+import type { Clock, Rng } from './infra/clock.ts'
+import type { Logger } from './infra/logger.ts'
 
 import { Projects, ProjectSubsystem } from './practice/projects.ts'
 import { endpointNames, readAnchors, foldCompletion } from './coach/seed.ts'
@@ -52,7 +52,7 @@ import type { CompletionFold } from './coach/seed.ts'
  * 提示词文本）。判据是「有行为吗」：纯声明面没有运行期语义，深导入不会把宿主焊到引擎内部
  * 装配上；**带行为的引擎子模块仍只准走门面**。 */
 export type { CoachTrigger, CoachPromptFamily, CoachCheck, CoachGrowthSegment, GrowthPlanHandover } from './coach/coach-round.ts';
-export type { GateVerdict } from './agent.ts'
+export type { GateVerdict } from './infra/agent.ts'
 import { QuestionBank, validateBank, BankSubsystem } from './content/question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem } from './vault/note-source.ts'
 import { LearnerCards, LearnerSubsystem } from './learner/learner-cards.ts'
@@ -60,11 +60,11 @@ import { Skills } from './practice/skills.ts'
 import { Habits } from './practice/habits.ts'
 import { AnkiMirror } from './vault/anki.ts'
 import { Sessions } from './sched/sessions.ts'
-import { todayStr, fmtCutoff } from './dates.ts'
-import { atomicWrite } from './io.ts'
-import { assertSchemaVersion } from './schema.ts'
-import type { SchemaBlock } from './schema.ts'
-import { revealAnswer, pctOf } from './grading.ts'
+import { todayStr, fmtCutoff } from './infra/dates.ts'
+import { atomicWrite } from './infra/io.ts'
+import { assertSchemaVersion } from './infra/schema.ts'
+import type { SchemaBlock } from './infra/schema.ts'
+import { revealAnswer, pctOf } from './infra/grading.ts'
 import { auditQuestion } from './content/question-hygiene.ts'
 import type { QuestionAuditReport } from './content/question-hygiene.ts'
 import type { CourseEntry, Fm } from './types.ts'
@@ -86,18 +86,18 @@ export { normalizeStem } from './content/question-dedup.ts'
 export { endpointNames, readAnchors } from './coach/seed.ts'
 /** 卡点自报（#248 / ADR-0077）：注入块渲染随门面出——宿主在途合并缝（generateGrowthJob）消费。 */
 export { stuckReportInject } from './coach/stuck-report.ts'
-export { CURRENT_SCHEMA_VERSION } from './schema.ts'
-export type { LlmCallKind, LlmComplete, LlmEffort, LlmStream, LlmTokenUsage, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
+export { CURRENT_SCHEMA_VERSION } from './infra/schema.ts'
+export type { LlmCallKind, LlmComplete, LlmEffort, LlmStream, LlmTokenUsage, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './infra/llm.ts'
 /** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */
-export type { Clock, Rng } from './clock.ts'
+export type { Clock, Rng } from './infra/clock.ts'
 /** 调试日志端口（#253 / ADR-0080）：类型与 noop 实现随门面出——宿主取型走门面（R1），
  * **仓库脚本**只消费 `lib/engine.js`，故 `noopLogger` 必须住引擎产物里（宿主实现
- * `host/log-file.ts` 不在其中，见 `engine/logger.ts` 的说明）。 */
-export { noopLogger } from './logger.ts'
-export type { Logger, LogLevel, LogFields, LogFieldValue } from './logger.ts'
+ * `host/log-file.ts` 不在其中，见 `engine/infra/logger.ts` 的说明）。 */
+export { noopLogger } from './infra/logger.ts'
+export type { Logger, LogLevel, LogFields, LogFieldValue } from './infra/logger.ts'
 /** 统一 agent 缝（#162 / ADR-0041/0044）：类随门面出（宿主构造注入），类型随缝出。 */
-export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
-export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
+export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './infra/agent.ts'
+export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './infra/agent.ts'
 /** 出题第二意见门（#223）：站标签与缺省抽样率随门面出（宿主 STATIONS/配置对齐用）。 */
 export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './content/question-audit.ts'
 /** 思路官站标签（#301 缺陷③）：宿主 STATIONS.growthPlan 引本常量对齐——失败补标按真实
@@ -162,7 +162,7 @@ export interface EngineConfig {
   /** vault 存储端口（#175 阶段② / ADR-0044）：engine 侧一切读盘落盘的唯一通道。
    * 实现住 host/vault-fs.ts（nodeVaultFs）；R2 自此是应用→适配器的存储边界。 */
   fs: VaultFs
-  /** 调试日志端口（#253 / ADR-0080）：端口形状住引擎（`engine/logger.ts`）、实现住
+  /** 调试日志端口（#253 / ADR-0080）：端口形状住引擎（`engine/infra/logger.ts`）、实现住
    * 适配器（`host/log-file.ts`）、装配住这里。**必填而非可选缺省 noop**——可选会让
    * 「忘了接线 = 日志静默消失」，恰是本票要治的病；代价是构造点显式接线（宿主 1 处 +
    * 仓库脚本 5 处 + 测试工厂）。deps 面只给**真正打日志的子系统**接 `logger` 槽

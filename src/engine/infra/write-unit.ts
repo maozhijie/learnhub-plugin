@@ -17,7 +17,7 @@
  */
 import { nowIsoOf } from './dates.ts'
 import type { Clock } from './clock.ts'
-import type { JournalRec } from './types.ts'
+import type { JournalRec } from '../types.ts'
 
 /** 写入单元的一个步骤：有名字（journal 清单可读）、有落盘动作、可选的幂等判据。 */
 export interface WriteStep {

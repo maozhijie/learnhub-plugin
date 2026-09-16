@@ -11,10 +11,10 @@
 // ---- Graph 子系统（#152 刀 7 / ADR-0043）：图域五节。本文件只被门面引用，可自由
 // import 领域模块（枢纽领主 graph.ts 不被反向依赖）。
 
-import type { VaultFs } from '../io.ts'
-import type { Clock } from '../clock.ts'
+import type { VaultFs } from '../infra/io.ts'
+import type { Clock } from '../infra/clock.ts'
 import type { Store } from '../store.ts'
-import type { Paths } from '../paths.ts'
+import type { Paths } from '../infra/paths.ts'
 import type { Projects, ProjectApplyResult } from '../practice/projects.ts'
 import type { GraphProposals, ApplyAudit } from '../coach/proposals.ts'
 import type { ConceptRegistry } from '../concepts/concepts.ts'
@@ -26,7 +26,7 @@ import type { QuestionBank } from '../content/question-bank.ts'
 import type { Graph } from './graph.ts'
 import type { BrokenNote } from '../vault/notes.ts'
 import type { Fm } from '../types.ts'
-import type { Logger } from '../logger.ts'
+import type { Logger } from '../infra/logger.ts'
 
 /** Graph 域对门面的窄面（门面构造时传 this）：领域类与纯函数直接 import，
  * 这里只列门面私有方法/字段——它们无法从模块导入。 */
@@ -60,7 +60,7 @@ import { analyzeGraph } from './analysis.ts'
 import { effectiveStage } from './audit.ts'
 import { Content } from '../content/content.ts'
 import { declaredEncOf } from './graph.ts'
-import { atomicWrite } from '../io.ts'
+import { atomicWrite } from '../infra/io.ts'
 import { readNoteSourceExcludes } from '../vault/note-source.ts'
 import { hasReadyContent, loadNote } from '../vault/notes.ts'
 import type { EnrichFieldEntry } from '../coach/proposals.ts'
@@ -74,7 +74,7 @@ import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLin
 import type { ConceptFootprintDoc, GraphApplyResult, GraphBrowseDoc, GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult } from '../views/graph.ts'
 import type { ExperimentStartResult } from '../views/lab.ts'
 import type { GraphProposeResult, ConceptApplyResult } from '../views/proposals.ts'
-import { YAML } from '../yaml.ts'
+import { YAML } from '../infra/yaml.ts'
 export class GraphSubsystem {
   constructor(private e: GraphDeps) {}
 

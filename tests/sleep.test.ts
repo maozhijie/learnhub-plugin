@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { reconsolidationAdvice, SLEEP_SCORE } from '../src/engine/sleep.ts'
+import { reconsolidationAdvice, SLEEP_SCORE } from '../src/engine/infra/sleep.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 一门两节点课：入门（普通）→ 练习节（practice 交互实践节点 = 重巩固型）。 */

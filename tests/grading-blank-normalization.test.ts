@@ -4,7 +4,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { evaluateAllo, normBlank } from '../src/engine/grading.ts'
+import { evaluateAllo, normBlank } from '../src/engine/infra/grading.ts'
 
 test('normBlank：NFKC 折叠全角/半角 → 去全部空白 → 小写', () => {
   assert.equal(normBlank('ＤＮＡ 聚 合 酶'), normBlank('dna聚合酶'))

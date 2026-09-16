@@ -30,13 +30,13 @@
  * 自评/ai 照收（ADR-0016 自报即可信精神）。零 XP、零 journal、零 review-log、
  * 零 sessions/srs（ADR-0015 §7：节点消费者对 Project 不可见）。
  */
-import { readJsonlLines } from '../io.ts'
-import type { VaultFs } from '../io.ts'
-import { nextEma, round2, pctOf } from '../grading.ts'
+import { readJsonlLines } from '../infra/io.ts'
+import type { VaultFs } from '../infra/io.ts'
+import { nextEma, round2, pctOf } from '../infra/grading.ts'
 import { FADING_TIERS } from '../types.ts'
 import type { FadingTier } from '../types.ts'
-import { CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from '../params.ts'
-import type { Paths } from '../paths.ts'
+import { CROSS_AXIS_THRESHOLD, TIER_REC_MIN_EVENTS, TIER_REC_PROMOTE_SCORE, TIER_REC_DEMOTE_SCORE } from '../infra/params.ts'
+import type { Paths } from '../infra/paths.ts'
 
 /** 执行事件评分来源枚举（对齐 skills.ts / ADR-0018 入口契约）。 */
 export type ExecSource = 'auto' | 'self' | 'ai'

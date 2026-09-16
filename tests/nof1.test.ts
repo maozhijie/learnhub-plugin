@@ -11,7 +11,7 @@ import type { ExperimentDef, Nof1OutcomeRec } from '../src/engine/coach/nof1.ts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tfQuestion, withVault } from './helpers/vault.ts'
-import { addDays } from '../src/engine/dates.ts'
+import { addDays } from '../src/engine/infra/dates.ts'
 
 const BATCH_DEF: ExperimentDef = {
   id: 1, template: 'band_default_std_vs_hard', variable: 'band_default',

@@ -7,7 +7,7 @@ import { withVault, localDay } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
-import type { Paths } from '../src/engine/paths.ts'
+import type { Paths } from '../src/engine/infra/paths.ts'
 import { SANDBOX_WORDING } from '../src/engine/sched/sandbox.ts'
 import { weekStartOf } from '../src/engine/learner/kata.ts'
 import {
@@ -15,7 +15,7 @@ import {
   ETA_MARKER_PREFIX, parseCompass, sectionBody, withSectionText, validateRouteBody, etaMarkerOf,
   reconcileRoute, hasPaintedRoute,
 } from '../src/engine/coach/compass.ts'
-import { AgentSeam } from '../src/engine/agent.ts'
+import { AgentSeam } from '../src/engine/infra/agent.ts'
 
 // 罗盘（#143 / ADR-0033 透明度装置）：课程根常驻的非承诺路线草图（罗盘.md）。
 // - 种子 apply 落罗盘脚手架；罗盘初画（模板 v1、deep 档、单次调用）产出剩余路线初稿，

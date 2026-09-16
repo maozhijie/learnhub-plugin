@@ -7,7 +7,7 @@
  * 指纹盘点（Missing/漂移计数进 inventory、源文件缺失报 finding）——用户笔记本身
  * 仍**永不判 Broken**（漂移是状态不是损坏，逐源明细以 noteSourceList 为准）。
  */
-import type { VaultFs } from './io.ts'
+import type { VaultFs } from './infra/io.ts'
 import { join, resolve } from 'node:path'
 import { SchemaError, loadGraphDoc } from './graph/graph.ts'
 import { validateBank } from './content/question-bank.ts'
@@ -18,17 +18,17 @@ import { classifySource, fingerprintOf, validateNoteSourceManifest } from './vau
 import { validateLearnerCards } from './learner/learner-cards.ts'
 import { validateErrorCards } from './content/error-cards.ts'
 import { validateNoteFrontmatter } from './vault/notes.ts'
-import { YAML } from './yaml.ts'
-import { parseSchemaBlock } from './schema.ts'
+import { YAML } from './infra/yaml.ts'
+import { parseSchemaBlock } from './infra/schema.ts'
 import { readProbationLedger, foldProbation, recheckDue, learningDaysOf } from './coach/probation.ts'
 import { readDayCutoff } from './sched/xp.ts'
-import { readJsonlLines, readJsonlLinesReport } from './io.ts'
+import { readJsonlLines, readJsonlLinesReport } from './infra/io.ts'
 import { proposalShapeErrors } from './store.ts'
 import { EVIDENCE_STREAMS } from './sched/evidence-streams.ts'
-import { dayOfTs, todayStr } from './dates.ts'
+import { dayOfTs, todayStr } from './infra/dates.ts'
 import type { CourseEntry, PracticeRec, PracticeStreamRow, ProposalRec, ReviewRec } from './types.ts'
-import { safeFilename } from './paths.ts'
-import type { Paths } from './paths.ts'
+import { safeFilename } from './infra/paths.ts'
+import type { Paths } from './infra/paths.ts'
 
 export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger' | 'proposals' | 'gen_jobs' | 'evidence_streams'
 

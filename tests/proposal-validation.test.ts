@@ -4,7 +4,7 @@ import { validateEditProposal } from '../src/engine/coach/proposals.ts'
 import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse } from './helpers/drafted.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 
 test('未知提案 kind：受理门统一拒收且不落提案', async () => {
   await withVault({ registry: null, graph: null, tag: 'learnhub-unknown-kind-' }, async ({ engine }) => {

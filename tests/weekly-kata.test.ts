@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import { weekStartOf, weekEndOf, prevWeekStartOf, buildKataReality, renderKataReality } from '../src/engine/learner/kata.ts'
-import { todayStr, dayOfTs } from '../src/engine/dates.ts'
+import { todayStr, dayOfTs } from '../src/engine/infra/dates.ts'
 
 const BANK = [
   'node: 入门',

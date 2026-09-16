@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { withVault } from './helpers/vault.ts'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 
 // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const PRACTICE_GRAPH = [

@@ -1,6 +1,6 @@
 /** 生成任务状态与保留期的单一契约：host 状态机与测试共用，避免字面量散落。 */
 
-import { render } from './engine/prompt-render.ts'
+import { render } from './engine/infra/prompt-render.ts'
 import { OUTLINE_BUDGET_REPAIR_FEEDBACK, OUTLINE_PARSE_REPAIR_FEEDBACK } from './engine/prompts/content.ts'
 
 /** 生成任务状态：queued 为排队待跑（非活动、非终态）；running/cancelling 为活动态，其余为终态。 */

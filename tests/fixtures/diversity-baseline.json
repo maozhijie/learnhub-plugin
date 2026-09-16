@@ -1,5 +1,5 @@
 {
-  "note": "出题多样性基线（#230 / ADR-0064）：批 = 语料文件、bank = 全语料聚合；数字由 scripts/diversity-baseline.mts 用 src/engine/question-diversity.ts 同一函数复算，手改必被 tests/question-diversity.test.ts 打回",
+  "note": "出题多样性基线（#230 / ADR-0064）：批 = 语料文件、bank = 全语料聚合；数字由 scripts/diversity-baseline.mts 用 src/engine/content/question-diversity.ts 同一函数复算，手改必被 tests/question-diversity.test.ts 打回",
   "corpus": [
     "tests/fixtures/bank-corpus/判断命题真假并用与或非组合命题.yaml",
     "tests/fixtures/bank-corpus/提取公因式进行因式分解.yaml",

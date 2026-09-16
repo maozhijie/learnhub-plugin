@@ -29,6 +29,8 @@
 
 单跑脚本（都在 `scripts/`，输出与门一致）：`undefined-scan.mjs`／`scan-deps-face.mjs`（窄面三向+宽度）／`scan-budget.mjs`（文件规模）／`scan-invariant.mjs`（顶层不变量）／`scan-host-state.mjs`（模块级 let）／`scan-types.mjs`（类型清单）。命令注册表声明在 `src/commands/`。
 
+搬迁施工器 `move-engine-domain.mjs`（engine 按域归组的常驻工具，ADR-0093）：一条命令 = `git mv` 一域文件 + **两向** specifier 改写（未搬文件指向被搬文件的 + 被搬文件自身全部相对 specifier 重算；只做前者会在运行期 ERR_MODULE_NOT_FOUND）；扩展名形态照抄（`.ts` 保 `.ts`、ui/ 无扩展名保无扩展名）。**它只保证搬移落地，不保证改写正确**——正确性由全量门执法，且路径键控的登记面（`arch-baseline.json` 的 sizes 键、`REPAIR_MECHANISMS[].file`、`scan-*.mjs` 的路径常量）specifier 改不到，须手工随刀同步（清单见 `tests/README.md` 门册「engine 按域归组」各节）。
+
 ## 5. 加新门／改阈值的纪律
 
 - **每个门必须带自检**：构造必然违规的样本、断言门会失败；收集器类门另须断言它能看见目标形态。血的来源：R3 曾因收集器只收相对说明符而**恒过**；G3 的第三方向（门面接线）落地前脚本退出 0，对 30 条多余接线完全不可见。**恒过的门比没有门更坏。**
@@ -37,7 +39,7 @@
 
 ## 6. 分层与顶层不变量（一句话版）
 
-四层：`ui/` → 宿主（`src/index.ts` + `src/host/`）→ engine 门面（`src/engine/index.ts`）→ 子系统。方向规则见 R1–R7；顶层不变量：**只有教练层 `proposals.ts` 能调用图写原语**（`GraphStore.writeRegionDoc`，白名单唯一成员）。裁决见 ADR-0042（分层与规则执法）、ADR-0044（顶层分层与不变量）、ADR-0049（门面终态）；engine 内部按域分文件夹见 ADR-0093（施工进行中：刀①–④ 已落，终态 9 域 + 顶层 5）。
+四层：`ui/` → 宿主（`src/index.ts` + `src/host/`）→ engine 门面（`src/engine/index.ts`）→ 子系统。方向规则见 R1–R7；顶层不变量：**只有教练层 `proposals.ts` 能调用图写原语**（`GraphStore.writeRegionDoc`，白名单唯一成员）。裁决见 ADR-0042（分层与规则执法）、ADR-0044（顶层分层与不变量）、ADR-0049（门面终态）；engine 内部按域分文件夹见 ADR-0093——**已落**：`src/engine/` 顶层只剩 5 件（`index.ts` 门面、`types.ts`、`views.ts`+`views/`、`store.ts`、`data-check.ts`），其余 91 件归 9 个域单层（`vault/`／`graph/`／`concepts/`／`content/`／`sched/`／`practice/`／`learner/`／`coach/`／`infra/`）。**导航读法**：文件夹 = 子系统，物理路径与公开面 `engine.<子系统>` 同构；`store.ts`／`data-check.ts` 留顶层是刻意的——它们坐在域**之上**（聚合流水／盘点全域），入任何桶都制造「infra 依赖域」的倒挂。
 
 **容器增量纪律**（ADR-0093 拷问裁定，候选池 #308）：新机制优先落**域内兄弟文件**（纯函数/小类），子系统容器只收「公开面薄方法 + 委托」——容器是汇点不是仓库，机制入容器前先过一问「它与既有方法是否共享同一种变更理由」。行数/方法数**不开门**（坏代理，§5「阈值必须实测」的对称面：没有实测阈值就不设门）；本纪律靠人审 + 结构候选池（#308，持续追加）执法，不机械化。
 
@@ -50,7 +52,7 @@
 
 **改模板 = 改生产行为**：模板文本与拼装方式决定模型看到什么，进而决定产出。生成质量两轴（格式契约稳定 / 内容质量）的最上游杠杆就在这里，所以模板变更走**登记 + 过门**两步，不停留在「提交信息里写一句」。
 
-**登记**（**纪律面**：凡是让**最终 prompt 变化**的改动都算——模板文本没动、拼装侧重排、注入面增删也算）：同提交补 `PROMPT_CHANGELOG` 条目（`src/engine/output-contracts.ts`，键 = `PROMPT_KINDS` 键），四件套 `version` / `date` / `changeType` / **`expectedDelta`（预期输出增量）**——「这次改动预期模型输出发生什么变化」。同一版本号下允许第二条登记：模板文本没动但最终 prompt 变了，记在同一版本号下并写明变更面，不冒充版本 bump（先例见 ADR-0065 §6 的 §5 复活登记）。
+**登记**（**纪律面**：凡是让**最终 prompt 变化**的改动都算——模板文本没动、拼装侧重排、注入面增删也算）：同提交补 `PROMPT_CHANGELOG` 条目（`src/engine/content/output-contracts.ts`，键 = `PROMPT_KINDS` 键），四件套 `version` / `date` / `changeType` / **`expectedDelta`（预期输出增量）**——「这次改动预期模型输出发生什么变化」。同一版本号下允许第二条登记：模板文本没动但最终 prompt 变了，记在同一版本号下并写明变更面，不冒充版本 bump（先例见 ADR-0065 §6 的 §5 复活登记）。
 
 两道门执法，判据不同、都要绿：
 

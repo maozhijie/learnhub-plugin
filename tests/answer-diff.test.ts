@@ -4,7 +4,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { answerDiff } from '../src/engine/grading.ts'
+import { answerDiff } from '../src/engine/infra/grading.ts'
 
 const MC = { kind: 'multi_choice' as const, q: '题干', answer: ['A', 'B', 'D'] }
 

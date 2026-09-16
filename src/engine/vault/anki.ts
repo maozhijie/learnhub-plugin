@@ -11,13 +11,13 @@
  * （sourceKeyOf / parseSourceKey）。AnkiConnect 走可注入 transport（测试用
  * 假 Anki，运行时 fetch 到 http://127.0.0.1:8765）。
  */
-import type { VaultFs } from '../io.ts'
+import type { VaultFs } from '../infra/io.ts'
 import { sourceKeyOf } from '../types.ts'
-import { atomicWrite } from '../io.ts'
+import { atomicWrite } from '../infra/io.ts'
 import { alreadyScheduledOn } from '../sched/advance.ts'
-import type { Paths } from '../paths.ts'
+import type { Paths } from '../infra/paths.ts'
 import type { FsrsBlock } from '../types.ts'
-import type { AlloKind } from '../grading.ts'
+import type { AlloKind } from '../infra/grading.ts'
 
 /** AnkiConnect 默认端点（桌面 Anki + AnkiConnect 插件）。 */
 export const ANKI_ENDPOINT = 'http://127.0.0.1:8765'

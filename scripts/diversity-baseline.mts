@@ -20,7 +20,7 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { YAML } from '../src/engine/yaml.ts'
+import { YAML } from '../src/engine/infra/yaml.ts'
 import { diversityMetricsOf, diversityQuestionOf } from '../src/engine/content/question-diversity.ts'
 import type { DiversityMetrics, DiversityQuestion } from '../src/engine/content/question-diversity.ts'
 
@@ -59,7 +59,7 @@ for (const name of names) {
   perBatch[name] = diversityMetricsOf(qs)
 }
 const baseline = {
-  note: '出题多样性基线（#230 / ADR-0064）：批 = 语料文件、bank = 全语料聚合；数字由 scripts/diversity-baseline.mts 用 src/engine/question-diversity.ts 同一函数复算，手改必被 tests/question-diversity.test.ts 打回',
+  note: '出题多样性基线（#230 / ADR-0064）：批 = 语料文件、bank = 全语料聚合；数字由 scripts/diversity-baseline.mts 用 src/engine/content/question-diversity.ts 同一函数复算，手改必被 tests/question-diversity.test.ts 打回',
   corpus: names.map(name => `tests/fixtures/bank-corpus/${name}`),
   total: all.length,
   aggregate: diversityMetricsOf(all),

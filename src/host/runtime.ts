@@ -1,7 +1,7 @@
 /**
  * 宿主技术层·runtime（#167 自 src/index.ts 分装；ADR-0048）：
  * 显式 runtime 对象承载宿主全部可变态——engine（门面实例）、agent（统一 agent 缝实例，
- * #162：投递层构造并注入双端口适配，应用层 engine/agent.ts 消费）、vault/centerRel
+ * #162：投递层构造并注入双端口适配，应用层 engine/infra/agent.ts 消费）、vault/centerRel
  * （部署路径）、jobs（生成任务注册表 + 出题结果表）与 flags
  * （queuePaused/pumping/lastSessionStartAt）。技术层函数一律收 runtime 参数（不在函数
  * 体内引用模块级状态），因此每个技术层函数在测试里都可用自造 runtime 直接调用——宿主

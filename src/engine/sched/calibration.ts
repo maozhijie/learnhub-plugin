@@ -20,7 +20,7 @@
 import { JOL_CALIBRATION_MIN, jolCalibration } from './jol.ts'
 import type { JolBin, JolPrediction } from './jol.ts'
 import type { PracticeRec } from '../types.ts'
-import { CALIBRATION_OVERCONF_THRESHOLD } from '../params.ts'
+import { CALIBRATION_OVERCONF_THRESHOLD } from '../infra/params.ts'
 
 /** 配对源枚举（v1 只有 jol；#88/#89 扩展）。 */
 export type CalibrationSource = 'jol'

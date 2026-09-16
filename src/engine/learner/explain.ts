@@ -12,7 +12,7 @@
  * 正文要点/讲稿是动态材料（含学习者自写内容），朴素拼装后就地注入，不进 `render` 变量面
  * ——危险与口径见该模块头注。
  */
-import { render } from '../prompt-render.ts'
+import { render } from '../infra/prompt-render.ts'
 import {
   EXPLAIN_BACKPACK_HEADER, EXPLAIN_BACKPACK_NO_POINTS, EXPLAIN_BACKPACK_TAIL,
   EXPLAIN_FEEDBACK_POINTS_HEADING, EXPLAIN_FEEDBACK_SYSTEM, EXPLAIN_FEEDBACK_TRANSCRIPT_HEADING,

@@ -13,8 +13,8 @@
  * 节点级问题，归 B2，不参与节归因）。
  */
 import { parseSectionTitle } from '../../../shared/content-renderers.ts'
-import { daysBetween, parseDay } from '../dates.ts'
-import { round2 } from '../grading.ts'
+import { daysBetween, parseDay } from '../infra/dates.ts'
+import { round2 } from '../infra/grading.ts'
 import type { SectionManifest } from '../types.ts'
 
 /** 门面暴露的诊断建议项 = 判定 + 课程/节点定位。 */

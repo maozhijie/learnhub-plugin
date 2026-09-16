@@ -10,7 +10,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { LlmComplete } from '../src/engine/llm.ts'
+import type { LlmComplete } from '../src/engine/infra/llm.ts'
 import { sampleAuditIndices, parseSolverReply, solverPromptFor } from '../src/engine/content/question-audit.ts'
 import { withVault } from './helpers/vault.ts'
 
