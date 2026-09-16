@@ -683,6 +683,10 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
   执行官回合: [{
     version: 1, date: '2026-09-16', changeType: '新站（#271 / ADR-0088）：生长草稿执行官回合模板 v1',
     expectedDelta: '新站首版——产物从「YAML 文档」变为工具调用轨迹（draft_patch/draft_audit/draft_finish 承载）；预期增量是生长批从「一回合一批」变为「草稿内多批累积 + 按批 finish」，失败回灌改在 loop 内继续修而非恰一次重裁。与旧教练回合站并行共存（旧路径不动，退场归 #273）',
+  }, {
+    // 糖算子补全 + 审计 findings（#272）：模板只改两处散文（op 词汇清单、审步骤 findings 句）
+    version: 2, date: '2026-09-16', changeType: '补丁纪律扩糖算子（split_node / suggest_confusable）+ 审步骤带 findings 句（#272）',
+    expectedDelta: '① op 词汇清单增 split_node（拆节点：轮廓继承、消费方重排、删原节点、终点不可拆）与 suggest_confusable（易混指向，finish 后自动展开为混淆对候选提案待人审）；② 工作循环第 3 步增「非阻 findings 不拦 finish 但该修的照修」句。裁决语义、输出契约、门序列不变；引擎侧 draft_patch 白名单同步新增两糖算子。过门记录：check ✓；replay 报 3 件语料回归经 stash 对照确认为 HEAD 存量漂移（教练生长 2 件 + 种子起草 1 件，2026-09-13 语料与回放面缺席清单，同 v8/#282 先例），非本次变更引入；compare 未做真模型对照（同 v8 先例如实登记）',
   }],
 }
 

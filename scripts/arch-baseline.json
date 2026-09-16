@@ -47,12 +47,12 @@
       }
     },
     "GrowthDeps": {
-      "declared": 19,
-      "used": 19,
-      "wired": 19,
+      "declared": 20,
+      "used": 20,
+      "wired": 20,
       "slots": {
         "handles": 8,
-        "facade": 11,
+        "facade": 12,
         "fns": 0
       }
     },
@@ -138,12 +138,12 @@
     "src/engine/grading.ts": 401,
     "src/engine/graph-subsystem.ts": 607,
     "src/engine/graph.ts": 643,
-    "src/engine/growth-draft.ts": 114,
-    "src/engine/growth-subsystem.ts": 1607,
+    "src/engine/growth-draft.ts": 262,
+    "src/engine/growth-subsystem.ts": 1624,
     "src/engine/habits.ts": 202,
     "src/engine/health.ts": 105,
     "src/engine/html-comments.ts": 52,
-    "src/engine/index.ts": 854,
+    "src/engine/index.ts": 856,
     "src/engine/io.ts": 102,
     "src/engine/jol.ts": 78,
     "src/engine/kata.ts": 345,
@@ -155,7 +155,7 @@
     "src/engine/note-source.ts": 1234,
     "src/engine/notes.ts": 334,
     "src/engine/optimize.ts": 140,
-    "src/engine/output-contracts.ts": 732,
+    "src/engine/output-contracts.ts": 736,
     "src/engine/output.ts": 68,
     "src/engine/params.ts": 66,
     "src/engine/paths.ts": 200,

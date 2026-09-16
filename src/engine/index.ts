@@ -101,7 +101,8 @@ export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } f
 /** 出题第二意见门（#223）：站标签与缺省抽样率随门面出（宿主 STATIONS/配置对齐用）。 */
 export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
 /** 生长草稿内核（#271 / ADR-0088）：站标签/草稿差异与门同调纯函数随门面出（宿主与测试消费）。 */
-export { GROWTH_DRAFT_STATION } from './growth-draft.ts'
+export { GROWTH_DRAFT_STATION, expandPatchOps, draftFindings } from './growth-draft.ts'
+export type { PatchSuggestion } from './growth-draft.ts'
 export { editGateErrors, replayDraft, sealedDecisionOf, simulateOps } from './proposals.ts'
 export type { DraftDiff, DraftReplay, SealedDecision, EditGateCtx } from './proposals.ts'
 export type { SecondOpinionReport, SecondOpinionOptions } from './question-audit.ts'
@@ -406,6 +407,7 @@ export class LearnhubEngine {
       graphApply: (kind, pid) => this.graph.graphApply(kind, pid),
       graphPropose: (kind, yamlText) => this.graph.graphPropose(kind, yamlText),
       graphReject: (pid, note) => this.graph.graphReject(pid, note),
+      proposeConfusableCandidate: (courseKey, pair) => this.proposals.proposeConfusableCandidate(courseKey, pair),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       mcAggregate: (plan, cards, nodes, today, scheds, fallbackCourse) => this.lab.mcAggregate(plan, cards, nodes, today, scheds, fallbackCourse),

@@ -52,6 +52,9 @@ export interface GrowthDeps {
   graphApply(kind: 'edit' | 'enrich', pid?: number): Promise<GraphApplyResult>
   graphPropose(kind: 'edit' | 'enrich', yamlText: string): Promise<GraphProposeResult>
   graphReject(pid: number, note?: string): Promise<ProposalRec>
+  /** 混淆对候选提案（#272 窄面注入）：草稿 finish 发布成功后展开 suggest_confusable 用
+   * ——只暴露这一个入口，不引入第二套候选语义（同样人审一次一条，不自动入册）。 */
+  proposeConfusableCandidate(courseKey: string, pair: { a: string; b: string; evidence: string[] }): Promise<{ id: number; a: string; b: string; weight: number }>
   learningDay(): Promise<{ today: string; cutoff: number }>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   mcAggregate(plan: SandboxPlan, cards: SandboxCard[], nodes: SandboxNode[], today: string, scheds: Map<string, FSRS>, fallbackCourse: string): { curve: SandboxCurvePoint[]; map: Array<{ node: string; p50: number; p80: number }> }
@@ -81,10 +84,10 @@ import type { AgentSeam, GateVerdict } from './agent.ts'
 import type { LlmToolCall, LlmToolSpec } from './llm.ts'
 import { hasReadyContent } from './notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
-import { addNodeCountOf, editGateErrors, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
+import { addNodeCountOf, applyOpsToRegions, editGateErrors, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
 import type { DraftDiff, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
 import {
-  GROWTH_DRAFT_MARKER, deleteDraft, draftDirOf, draftPathOf, findActiveDraft, saveDraft,
+  GROWTH_DRAFT_MARKER, deleteDraft, draftDirOf, draftFindings, draftPathOf, expandPatchOps, findActiveDraft, saveDraft,
   GROWTH_DRAFT_STATION,
 } from './growth-draft.ts'
 import type { GrowthDraftDoc, GrowthDraftRound } from './growth-draft.ts'
@@ -940,7 +943,9 @@ export class GrowthSubsystem {
       type: 'object', properties, required, additionalProperties: false,
     })
     const opFields = (): Record<string, unknown> => ({
-      op: { type: 'string', description: '原子操作：add_node / del_node / set_pre / set_enc / rename / set_note；糖算子 insert_prereq_chain（见下）' },
+      op: { type: 'string', description: '原子操作：add_node / del_node / set_pre / set_enc / rename / set_note；糖算子 insert_prereq_chain / split_node / suggest_confusable（见下）' },
+      into: { type: 'array', items: { type: 'string' }, description: 'split_node 的拆分新名（≥2 个，轮廓继承被拆节点；终点不可拆）' },
+      with: { type: 'string', description: 'suggest_confusable 的易混对端（须是在册概念或随批铸名）' },
       name: { type: 'string', description: 'add_node 的新节点名' },
       node: { type: 'string', description: '引用既有节点的名字（add_node 以外的 op 用）' },
       pre: { type: 'array', items: { type: 'string' }, description: '前置节点名列表（add_node / set_pre；set_pre 是整体替换语义）' },
@@ -961,7 +966,7 @@ export class GrowthSubsystem {
       { name: 'upstream_dag', description: '上游图摘要：给定节点的前置传递闭包全拓扑 + 闭包内 pre 邻接。接线定位与深链诊断用。', parameters: obj({ node: { type: 'string', description: '节点名（逐字）' } }, ['node']) },
       { name: 'endpoint_anchor', description: '终点锚集合：逐终点的目标类型/声明日/收尾宣告。set_pre 接线的靶在这里对表（终点只可被 set_pre 接线，禁出现在 add_node 的 pre）。', parameters: obj({}) },
       {
-        name: 'draft_patch', description: '批量补丁（写件）：把一组 EditOp 原子操作追加进生长草稿（每批 ≤24 条未发布增量；失败整批回滚并回灌 errors + 合法取值域）。糖算子 insert_prereq_chain：chain 数组按序展开成线性 add_node 链（前一条是后一条的 pre；首条的 pre 取 pre 字段）。op 词汇不含 move 与 region/block（已退役 #275）。', parameters: obj({
+        name: 'draft_patch', description: '批量补丁（写件）：把一组 EditOp 原子操作追加进生长草稿（每批 ≤24 条未发布增量；失败整批回滚并回灌 errors + 合法取值域）。糖算子——insert_prereq_chain：chain 按序展开成线性 add_node 链；split_node：把既有节点拆成 into 多个（轮廓继承 + 消费方 set_pre 重排 + 删原节点；终点不可拆）；suggest_confusable：给随批铸名的新概念顺手登记易混指向（不是图 op；finish 发布成功后展开为混淆对候选提案，人审后才入册）。op 词汇不含 move 与 region/block（已退役 #275）。', parameters: obj({
           ops: { type: 'array', description: '补丁操作列表', items: { type: 'object', properties: { ...opFields(), chain: { type: 'array', description: 'insert_prereq_chain 的链条目（按序线性串联）' } } } },
           concepts: { type: 'array', description: '随批铸名（本批新引入的概念；已能用就不铸）' },
           note_operator: { type: 'string', description: '本批生长算子（前进/插入/巩固/旁支/换向；下次 finish 硬化为 note）' },
@@ -970,7 +975,7 @@ export class GrowthSubsystem {
         }, ['ops']),
       },
       {
-        name: 'draft_audit', description: '审计（写件，只读效果）：对草稿图 + 未发布增量跑与受理门同一套校验（草稿通过 = 门通过），返回门错误与草稿差异（新增/删除/改名/接线改写）。finish 前先 audit。', parameters: obj({}),
+        name: 'draft_audit', description: '审计（写件，只读效果）：对草稿图 + 未发布增量跑与受理门同一套校验（草稿通过 = 门通过），返回门错误与草稿差异；另附非阻 findings（限本会话新铸概念的孤立/悬空/近似名撞车 + 终点收尾提示——不拦 finish，但该修的照修）。finish 前先 audit。', parameters: obj({}),
       },
       {
         name: 'draft_finish', description: '按批发布（写件）：把自上次发布以来的未发布增量硬化为生长批提案 → 受理门 → apply。基图漂移（外部改了图）或门复验未过 = 拒收零落盘、错误回灌继续修。收尾（终点坡道铺通）须以零 add_node 的纯 set_pre 独立批 finish。', parameters: obj({}),
@@ -1073,30 +1078,10 @@ export class GrowthSubsystem {
       if (call.name === 'draft_patch') {
         const rawOps = Array.isArray(args.ops) ? args.ops as Array<Record<string, unknown>> : []
         if (!rawOps.length) throw new Error('[draft_patch] ops 不能为空——不产结构就不要调本工具。')
-        // 糖算子展开：insert_prereq_chain → 线性 add_node 链（前一条是后一条的 pre）
-        const expanded: EditOp[] = []
-        for (const [i, raw] of rawOps.entries()) {
-          if (raw.op !== 'insert_prereq_chain') {
-            expanded.push(raw as unknown as EditOp)
-            continue
-          }
-          const chain = Array.isArray(raw.chain) ? raw.chain as Array<Record<string, unknown>> : []
-          if (chain.length < 2) throw new Error(`ops.${i}: insert_prereq_chain 的 chain 至少 2 条（一条不成链；单节点直接用 add_node）。`)
-          chain.forEach((item, j) => {
-            expanded.push({
-              op: 'add_node',
-              name: String(item.name ?? ''),
-              pre: j === 0 ? (Array.isArray(raw.pre) ? raw.pre as string[] : [])
-                : [String(chain[j - 1]!.name ?? '')],
-              ...(item.est !== undefined ? { est: Number(item.est) } : {}),
-              ...(item.bloom !== undefined ? { bloom: String(item.bloom) as EditOp['bloom'] } : {}),
-              ...(item.difficulty !== undefined ? { difficulty: Number(item.difficulty) as EditOp['difficulty'] } : {}),
-              ...(item.teaches !== undefined ? { teaches: item.teaches as EditOp['teaches'] } : {}),
-              ...(item.assumes !== undefined ? { assumes: item.assumes as EditOp['assumes'] } : {}),
-              ...(item.misconceptions !== undefined ? { misconceptions: item.misconceptions as EditOp['misconceptions'] } : {}),
-            })
-          })
-        }
+        // 糖算子展开（#272 统一入口）：insert_prereq_chain / split_node → 原子 EditOp；
+        // suggest_confusable → confusable 建议（不是图 op，finish 发布成功后展开为候选提案）
+        const { regions, graph } = await draftRegionsOf()
+        const { ops: expanded, confusables: suggestions } = expandPatchOps(rawOps, regions, graph, endpointNames(anchors))
         const unpublishedCount = doc.ops.length - doc.published + expanded.length
         if (unpublishedCount > GROWTH_DRAFT_MAX_OPS_PER_BATCH) {
           throw new Error(`[draft_patch] 每批未发布增量 ≤${GROWTH_DRAFT_MAX_OPS_PER_BATCH} 条（本补丁后将为 ${unpublishedCount}）——先 draft_finish 发布再开新批。`)
@@ -1106,7 +1091,6 @@ export class GrowthSubsystem {
         const mints = Array.isArray(args.concepts) ? args.concepts as ConceptEntry[] : []
         // 试算：全量重放过门才落草稿（失败整批回滚 + 取值域回灌）
         const trial = [...doc.ops, ...expanded]
-        const { regions, graph } = await draftRegionsOf()
         const r = replayDraft(regions, graph, trial)
         if (r.errors.length) {
           const g2 = graph
@@ -1119,6 +1103,7 @@ export class GrowthSubsystem {
         }
         doc.ops.push(...expanded)
         if (mints.length) doc.concepts.push(...mints)
+        if (suggestions.length) doc.confusables = [...(doc.confusables ?? []), ...suggestions]
         if (typeof args.note_operator === 'string' && args.note_operator.trim()) {
           doc.note = {
             operator: args.note_operator.trim(),
@@ -1133,10 +1118,26 @@ export class GrowthSubsystem {
       }
       if (call.name === 'draft_audit') {
         const { errors, diff } = await replayUnpublished()
-        await logRound('audit', errors.length ? `审计：${errors.length} 个门错误` : '审计：通过')
-        return errors.length
-          ? `审计未过（与受理门同一套校验，草稿通过 = 门通过）：\n${errors.map(e => `  ✗ ${e}`).join('\n')}\n草稿差异：\n${renderDiff(diff)}`
-          : `审计通过（草稿通过 = 门通过）。草稿差异：\n${renderDiff(diff)}\n未发布增量 ${doc.ops.length - doc.published} 条——可 draft_finish。`
+        // findings（#272）：非阻、与门错误分列；门错误在场时不折草稿图（重放不完整，
+        // findings 的图读数会失真——先把门错误修完再看 findings）
+        let findings: string[] = []
+        if (!errors.length) {
+          const { regions, graph } = await draftRegionsOf()
+          const sim: GRegion[] = JSON.parse(JSON.stringify(regions))
+          applyOpsToRegions(sim, doc.ops)
+          findings = draftFindings({
+            mints: doc.concepts, entries: await entriesOf(), graph: new Graph(sim),
+            invokes: await this.conceptInvokesOf(c),
+            confusables: doc.confusables ?? [], anchors,
+          })
+        }
+        await logRound('audit', errors.length ? `审计：${errors.length} 个门错误` : findings.length ? `审计：通过（${findings.length} 条 findings）` : '审计：通过')
+        if (errors.length) {
+          return `审计未过（与受理门同一套校验，草稿通过 = 门通过）：\n${errors.map(e => `  ✗ ${e}`).join('\n')}\n草稿差异：\n${renderDiff(diff)}`
+        }
+        return `审计通过（草稿通过 = 门通过）。草稿差异：\n${renderDiff(diff)}`
+          + (findings.length ? `\n审计 findings（非阻 ${findings.length} 条；不拦 finish，该修的照修）：\n${findings.map(f => `  ⚠ ${f}`).join('\n')}` : '\n审计 findings：无')
+          + `\n未发布增量 ${doc.ops.length - doc.published} 条——可 draft_finish。`
       }
       if (call.name === 'draft_finish') {
         const unpublished = doc.ops.slice(doc.published)
@@ -1199,9 +1200,25 @@ export class GrowthSubsystem {
         doc.published = doc.ops.length
         doc.note = undefined
         doc.concepts = []
-        await logRound('finish', `发布成功：提案 #${prop.id}，快照 v${applied.snapshot}，ops ${unpublished.length}${sealed.effects.length ? `；sealed：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}` : ''}`)
+        // confusable 建议（#272）：发布成功后展开为混淆对候选提案（人审一次一条，
+        // 不自动入册）——铸名此刻已在册；对端不在册/已声明过等不拦 finish，逐条记行
+        const confusableLines: string[] = []
+        for (const s of doc.confusables ?? []) {
+          try {
+            const p = await this.e.proposeConfusableCandidate(c.name, {
+              a: s.concept, b: s.with,
+              evidence: [`生长批提案 #${prop.id} 铸名建议（${noteLite.operator}——${noteLite.reason}）`],
+            })
+            confusableLines.push(`confusable 候选提案 #${p.id}：「${p.a}」→「${p.b}」待人审`)
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err)
+            confusableLines.push(`confusable 建议未展开（「${s.concept}」↔「${s.with}」）：${msg.split('\n')[0]}`)
+          }
+        }
+        doc.confusables = []
+        await logRound('finish', `发布成功：提案 #${prop.id}，快照 v${applied.snapshot}，ops ${unpublished.length}${sealed.effects.length ? `；sealed：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}` : ''}${confusableLines.length ? `；${confusableLines.length} 条 confusable 建议` : ''}`)
         if (doc.published === doc.ops.length) await deleteDraft(this.e.fs, draftPath)
-        return `发布成功：提案 #${prop.id} 已 apply（快照 v${applied.snapshot}）；水位前移至 ${doc.published}/${doc.ops.length}。${sealed.effects.length ? `收尾宣告：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}。` : ''}`
+        return `发布成功：提案 #${prop.id} 已 apply（快照 v${applied.snapshot}）；水位前移至 ${doc.published}/${doc.ops.length}。${sealed.effects.length ? `收尾宣告：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}。` : ''}${confusableLines.length ? `\n${confusableLines.join('\n')}` : ''}`
       }
       throw new Error(`白名单外工具「${call.name}」被拒：执行官写件只有 draft_patch / draft_audit / draft_finish。`)
     }
