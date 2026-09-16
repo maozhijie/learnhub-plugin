@@ -43,6 +43,8 @@ export interface OptimizeMeta {
 export interface SchedDeps {
   /** 时钟端口（#175 阶段①）：参数写回 trained_at 戳。 */
   clock: Clock
+  /** 调试日志端口（#292 / ADR-0091）：params_fallback / optimize.meta 两条的出口。 */
+  logger: Logger
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
   store: Store
@@ -71,7 +73,8 @@ import { jolCalibration } from './jol.ts'
 import { FORECAST_DAYS, calibrationBins, dueReviewFirstPushes, forecast, forgettingCurve, stateHistograms, trueRetention } from './memory.ts'
 import { asFm, loadNote, saveNote } from './notes.ts'
 import type { OptimizerImpl } from './optimize.ts'
-import { FSRS6_PARAM_COUNT, OPTIMIZE_MIN_REVIEWS, bindingImpl, defaultParams, sequenceReviews, trainingSequences } from './optimize.ts'
+import { FSRS6_PARAM_COUNT, OPTIMIZE_MIN_REVIEWS, bindingImpl, defaultParams, executionGate, sequenceReviews, trainingSequences } from './optimize.ts'
+import type { Logger } from './logger.ts'
 import { XP_PERFECT_BONUS, XP_STREAK_GRACE_DAYS } from './params.ts'
 import { appendSedimentEvent, foldSediment, readSedimentCanon, rebuildLearnerProfile } from './sediment.ts'
 import { runWriteUnit } from './write-unit.ts'
@@ -366,7 +369,11 @@ export class SchedSubsystem {
     written?: string[]
     meta?: OptimizeMeta
   }> {
-    const seqs = trainingSequences(await this.e.store.reviewLogAll(), await readDayCutoff(this.e.paths, this.e.fs))
+    const logs = await this.e.store.reviewLogAll()
+    const gate = executionGate(logs)
+    // 混训门写回元数据（#292 / ADR-0091 指针级）：这次优化执行事件进没进训练、有多少条。
+    this.e.logger.debug('sched.optimize.meta', { execution_included: gate.included, execution_rows: gate.rows })
+    const seqs = trainingSequences(logs, await readDayCutoff(this.e.paths, this.e.fs))
     const count = sequenceReviews(seqs)
     if (count < OPTIMIZE_MIN_REVIEWS) {
       return { status: 'skipped', reason: `真实复习日志 ${count} 条，不足 ${OPTIMIZE_MIN_REVIEWS} 条——保持现参不训练（synthetic 已排除，每卡每天只计第一条）` }
@@ -376,7 +383,7 @@ export class SchedSubsystem {
     // 基线 = 现参（学习者级一套），走 resolveFsrsParams 唯一口径：沉淀正典（事实源）
     // → 任一启用课程的参数缓存 → 官方默认。对照基线必须与调度此刻实际生效的同一套，
     // 不因基线读取阻塞训练。
-    const baseline = await resolveFsrsParams(this.e.paths, courses.map(c => c.root), this.e.fs)
+    const baseline = await resolveFsrsParams(this.e.paths, courses.map(c => c.root), this.e.fs, this.e.logger)
     let baselineParams = baseline.parameters ?? defaultParams()
     const baselineSource = baseline.source
     const baselineEval = await impl.evaluate(baselineParams, seqs)

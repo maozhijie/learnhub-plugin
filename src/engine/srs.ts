@@ -17,6 +17,7 @@ import { DESIRED_RETENTION, S_MASTER } from './params.ts'
 import { FSRS6_PARAM_COUNT } from './optimize.ts'
 import { latestFsrsParams } from './sediment.ts'
 import type { Paths } from './paths.ts'
+import type { Logger } from './logger.ts'
 
 // 值域锁 Grade（= Rating 去 Manual）：sched.next 的形参类型；整枚 Rating 不可赋（ts-fsrs v5）
 const RATING_BY_NUM: Record<number, Grade> = {
@@ -28,21 +29,30 @@ export const RATING_NAME: Record<number, string> = {
 
 /** FSRS 参数唯一取参口径（#139 正典化）：沉淀正典（事实源）→ 课程参数缓存（按传入
  * 顺序逐个找）→ 官方默认（undefined，由调用方决定省略 w 或用 defaultParams 对照）。
- * getScheduler 与优化器基线共用同一函数——杜绝「缓存与沉淀分叉时两口径各执一词」。 */
+ * getScheduler 与优化器基线共用同一函数——杜绝「缓存与沉淀分叉时两口径各执一词」。
+ * 损坏的层不静默滑过：正典长度不对 / 缓存读坏（非「文件不存在」的合法空态）各发一条
+ * `sched.params_fallback`（#292 / ADR-0091）——参数静默回退官方默认是学习质量漂移。 */
 export async function resolveFsrsParams(
-  paths: Paths, courseRoots: Array<string | null> = [], fs: VaultFs,
+  paths: Paths, courseRoots: Array<string | null> = [], fs: VaultFs, logger: Logger,
 ): Promise<{ parameters: number[] | undefined; source: 'sediment' | 'cache' | 'default' }> {
   const canon = await latestFsrsParams(paths, fs)
   if (canon && canon.length === FSRS6_PARAM_COUNT) return { parameters: canon, source: 'sediment' }
+  if (canon) {
+    logger.info('sched.params_fallback', { source: 'sediment', why: `length_${canon.length}` })
+  }
   for (const root of courseRoots) {
     if (!root) continue
+    const cachePath = paths.fsrsParamsPath(root)
+    if (!fs.exists(cachePath)) continue // 该课程无参数缓存：合法空态，不记事件
     try {
-      const doc = JSON.parse(await fs.readFile(paths.fsrsParamsPath(root))) as { parameters?: number[] }
+      const doc = JSON.parse(await fs.readFile(cachePath)) as { parameters?: number[] }
       if (Array.isArray(doc.parameters) && doc.parameters.length === FSRS6_PARAM_COUNT) {
         return { parameters: doc.parameters, source: 'cache' }
       }
-    } catch {
-      // 该课程无参数缓存：继续
+      logger.info('sched.params_fallback', { source: 'cache', course: root, why: 'shape' })
+    } catch (err) {
+      const code = (err as { code?: unknown } | null)?.code
+      logger.info('sched.params_fallback', { source: 'cache', course: root, why: typeof code === 'string' ? 'io_error' : 'parse_fail' })
     }
   }
   return { parameters: undefined, source: 'default' }
@@ -50,8 +60,8 @@ export async function resolveFsrsParams(
 
 /** 构造调度器（日粒度、无 fuzz）：参数走 resolveFsrsParams 唯一口径（#139 正典化，
  * 参数文件已退役为缓存——删缓存不丢事实）。 */
-export async function getScheduler(paths: Paths, courseRoot: string | null = null, fs: VaultFs): Promise<FSRS> {
-  const { parameters: w } = await resolveFsrsParams(paths, [courseRoot], fs)
+export async function getScheduler(paths: Paths, courseRoot: string | null = null, fs: VaultFs, logger: Logger): Promise<FSRS> {
+  const { parameters: w } = await resolveFsrsParams(paths, [courseRoot], fs, logger)
   return fsrs(generatorParameters({
     request_retention: DESIRED_RETENTION,
     enable_fuzz: false,

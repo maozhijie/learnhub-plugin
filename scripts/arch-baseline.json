@@ -17,11 +17,11 @@
       }
     },
     "ChannelsDeps": {
-      "declared": 18,
-      "used": 18,
-      "wired": 18,
+      "declared": 19,
+      "used": 19,
+      "wired": 19,
       "slots": {
-        "handles": 9,
+        "handles": 10,
         "facade": 9,
         "fns": 0
       }
@@ -87,11 +87,11 @@
       }
     },
     "SchedDeps": {
-      "declared": 16,
-      "used": 16,
-      "wired": 16,
+      "declared": 17,
+      "used": 17,
+      "wired": 17,
       "slots": {
-        "handles": 8,
+        "handles": 9,
         "facade": 8,
         "fns": 0
       }
@@ -152,9 +152,9 @@
     "src/engine/logger.ts": 48,
     "src/engine/memory.ts": 118,
     "src/engine/nof1.ts": 958,
-    "src/engine/note-source.ts": 1257,
+    "src/engine/note-source.ts": 1262,
     "src/engine/notes.ts": 334,
-    "src/engine/optimize.ts": 140,
+    "src/engine/optimize.ts": 146,
     "src/engine/output-contracts.ts": 715,
     "src/engine/output.ts": 68,
     "src/engine/params.ts": 66,
@@ -181,16 +181,16 @@
     "src/engine/receipts.ts": 270,
     "src/engine/registry.ts": 153,
     "src/engine/sandbox.ts": 221,
-    "src/engine/sched-subsystem.ts": 547,
+    "src/engine/sched-subsystem.ts": 554,
     "src/engine/schema.ts": 95,
     "src/engine/sediment.ts": 229,
     "src/engine/seed.ts": 408,
     "src/engine/self-note.ts": 46,
-    "src/engine/sessions.ts": 616,
+    "src/engine/sessions.ts": 618,
     "src/engine/shuffle.ts": 17,
     "src/engine/skills.ts": 259,
     "src/engine/sleep.ts": 41,
-    "src/engine/srs.ts": 191,
+    "src/engine/srs.ts": 201,
     "src/engine/store.ts": 511,
     "src/engine/stuck-report.ts": 83,
     "src/engine/thermostat.ts": 138,
@@ -204,11 +204,11 @@
     "src/host/api.ts": 83,
     "src/host/clock.ts": 12,
     "src/host/corpus.ts": 343,
-    "src/host/handlers.ts": 699,
+    "src/host/handlers.ts": 713,
     "src/host/http.ts": 54,
-    "src/host/jobs.ts": 1289,
+    "src/host/jobs.ts": 1304,
     "src/host/llm.ts": 389,
-    "src/host/log-file.ts": 278,
+    "src/host/log-file.ts": 283,
     "src/host/params.ts": 229,
     "src/host/quality-review.ts": 255,
     "src/host/route-table.ts": 74,

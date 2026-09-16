@@ -83,3 +83,5 @@
 **「直调不包 `apiRun`」的口径已过时，以本段为准。** 裁决与边界段写的「`/question-save`／`/question-add`／`/question-archive` 三条直调路由」是当票快照：`/question-save` 已被 #169 收编进通道注册表（经 `apiRun` 留痕，注释过时、不缺留痕）；经 `handlers.ts` 手写路由实盘（2026-09-16），当前**写侧直调面共 9 条**——`PUT /question-update`、`POST /question-add`、`POST /question-archive`、`POST /rebuild`、`POST /feedback`、`POST /proposals/apply`、`POST /proposals/reject`、`POST /course/delete`、`POST /generate/cancel`；另有读侧 `GET /note` 直调（无写副作用，不计入写侧面）。处置：逐条包 `apiRun` 或 `logCall`（写侧优先），由 #292（T4）落地后对照本表复核注销。
 
 **闭集外存量事件的登记去向**：`coach.draft.enter/handover/unfinished/exit` 四条已在代码（`growth-subsystem.ts` 草稿回路）但漏登本 ADR 闭集——按 Q4 裁决转入附录 ADR（ADR-0091）登记，本表闭集不追改。此后新事件一律先进附录登记再接线。
+
+**复核注销（2026-09-16，#292；承接上段处置）**：勘误所列 9 条写侧直调已全部收编进 `apiRun`（tool 标签 `api/<路由>`，`engine.call`／`engine.call.fail` 留痕）；`/course/delete` 与 `/proposals/apply` 只把 engine 写侧包进 `apiRun`，路由内的 host 侧联动（清扫、生长批入队）留在痕外不重复记。`GET /note` 读侧维持直调不计。对照本表复核完毕，勘误处置至此闭环。

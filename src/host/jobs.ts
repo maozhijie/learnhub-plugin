@@ -292,6 +292,16 @@ function persistGenJobs(rt: HostRuntime): void {
     })
 }
 
+/** 执行器 catch 的统一终局（#292 run_error）：置终态、失败（取消不算失败）留 ERROR
+ * 一声、组人读 message。corpusRef = 生成语料引用（graph/growth/quiz 三站有，正文管线无）。 */
+function failGenJob(rt: HostRuntime, job: GenJob, msg: string, corpusRef?: string): void {
+  job.status = contentFailureStatus(job.status)
+  if (job.status === 'failed') {
+    rt.logger.error('host.gen_jobs.run_error', { job: `${job.course}/${job.node}`, error: msg })
+  }
+  job.message = msg + (corpusRef ? `｜语料 生成语料/${corpusRef}` : '')
+}
+
 /** 入队一个节点的生成任务（FIFO；重复入队幂等）。同一节点 running/cancelling 时拒绝。
  * 终点恒拒（#199 / ADR-0055 生成门，经 ADR-0056 修订；#239 多终点化：任一终点都拒）：
  * 终点是方向标记不被学习调度，不看就绪状态、手动与自动通道同认这道门；拒绝带
@@ -408,12 +418,14 @@ export function scheduleJobRetention(rt: HostRuntime, key: string, status: GenJo
 export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<number> {
   if (rt.flags.genQueueBroken) {
     // 写回闸拒绝（#194）：清扫会触发注册表全量落盘——跳过并留痕（不抛：apply 出口
-    // 等调用方不被任务档损坏牵连，清扫延后到修档重启）
+    // 等调用方不被任务档损坏牵连，清扫延后到修档重启）。队列级跳过没有单课程上下文，
+    // 只发 why（ADR-0091 sweep_skip 的 course 字段留给逐记录跳过）。
     const why = rt.flags.genQueueBroken
-    rt.logger.warn('host.gen_jobs.sweep_skip', { error: `任务档 broken，清扫跳过（修档重启后恢复）：${why}` })
+    rt.logger.warn('host.gen_jobs.sweep_skip', { why: `任务档 broken，清扫跳过（修档重启后恢复）：${why}` })
     return 0
   }
   const perCourse = new Map<string, Promise<Set<string> | null | undefined>>()
+  const graphUnreadable = new Set<string>()
   const nodeNamesOf = (course: string): Promise<Set<string> | null | undefined> => {
     let p = perCourse.get(course)
     if (!p) {
@@ -433,6 +445,12 @@ export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<n
   let swept = 0
   for (const [key, j] of [...rt.jobs.genJobs.entries()]) {
     const names = await nodeNamesOf(j.course)
+    if (names === undefined && !graphUnreadable.has(j.course)) {
+      // 图读不动 = 存在性未知保守保留（悬空判定做不了）——逐课程留一声，防悬空记录
+      // 无限滞留而无痕（ADR-0091 sweep_skip：course + why）
+      graphUnreadable.add(j.course)
+      rt.logger.warn('host.gen_jobs.sweep_skip', { course: j.course, why: 'graph_unreadable' })
+    }
     const verdict = genJobSweepVerdict(j, { courseMissing: names === null, nodeMissing: !!names && !names.has(j.node) }, now)
     if (verdict === 'keep') continue
     if (j.status === 'running') j.status = 'cancelling'
@@ -624,8 +642,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
   } catch (err) {
     const station = job.phase ? GRAPH_JOB_STATIONS[job.phase] : undefined
     const corpusRef = station ? failCorpus(rt, station, err) : undefined
-    job.status = contentFailureStatus(job.status)
-    job.message = (err instanceof Error ? err.message : String(err)) + (corpusRef ? `｜语料 生成语料/${corpusRef}` : '')
+    failGenJob(rt, job, err instanceof Error ? err.message : String(err), corpusRef)
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, `${job.course}/${job.node}`, job.status)
@@ -704,8 +721,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
     }
   } catch (err) {
     const corpusRef = failCorpus(rt, STATIONS.growth, err)
-    job.status = contentFailureStatus(job.status)
-    job.message = (err instanceof Error ? err.message : String(err)) + (corpusRef ? `｜语料 生成语料/${corpusRef}` : '')
+    failGenJob(rt, job, err instanceof Error ? err.message : String(err), corpusRef)
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
@@ -745,7 +761,7 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
         live.status = contentFailureStatus(live.status)
         live.message = `执行器意外逃逸（泵级兜底置失败）：${msg}`
         live.failures = [{ code: 'PUMP_ESCAPE', finding: msg }]
-        rt.logger.error('host.gen_jobs.pump_escape', { course: live.course, node: live.node, error: msg })
+        rt.logger.error('host.gen_jobs.pump_escape', { job: `${live.course}/${live.node}`, error: msg })
         persistGenJobs(rt)
         scheduleJobRetention(rt, `${live.course}/${live.node}`, live.status)
       }
@@ -816,9 +832,9 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
     job.status = 'done'
     job.message = `出题完成：新增 ${r.added} 道（题库共 ${r.total}）${dupNote}${rejNote}${auditNoteOf(r)}${diversityNoteOf(r)}${priorNote}`
   } catch (err) {
-    const corpusRef = failCorpus(rt, STATIONS.quiz, err)  // generateQuiz 内已补标，此处取 ref 进失败详情
-    job.status = contentFailureStatus(job.status)
-    job.message = (err instanceof Error ? err.message : String(err)) + (corpusRef ? `｜语料 生成语料/${corpusRef}` : '')
+    // generateQuiz 内已补标，此处取 ref 进失败详情
+    const corpusRef = failCorpus(rt, STATIONS.quiz, err)
+    failGenJob(rt, job, err instanceof Error ? err.message : String(err), corpusRef)
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
@@ -988,8 +1004,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     }
     return msg
   } catch (err) {
-    job.status = contentFailureStatus(job.status)
-    job.message = err instanceof Error ? err.message : String(err)
+    failGenJob(rt, job, err instanceof Error ? err.message : String(err))
     if (failures.length) job.failures = failures
     persistGenJobs(rt)
     throw err

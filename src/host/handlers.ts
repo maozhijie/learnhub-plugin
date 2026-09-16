@@ -129,7 +129,9 @@ export const HANDLERS: Record<string, RouteHandler> = {
       if (experiments.length) {
         try {
           report = await rt.engine.lab.experimentReport()
-        } catch {
+        } catch (err) {
+          // 面板收到 report=null 的原因留痕（#292 / ADR-0091），响应形状不变
+          rt.logger.warn('api.experiments.report_failed', { error: err instanceof Error ? err.message : String(err) })
           report = null
         }
       }
@@ -247,8 +249,9 @@ export const HANDLERS: Record<string, RouteHandler> = {
     })))
   },
   'PUT /question-update': async ({ rt, body, res }) => {
-    sendJson(res, 200, await rt.engine.bank2.questionUpdate(
-      need(body, 'course'), need(body, 'node'), need(body, 'qid'), optObject(body, 'patch') ?? {}))
+    // 直调路由收编（#292 / ADR-0080 §勘误）：写侧经 apiRun 留 engine.call 痕
+    sendJson(res, 200, await apiRun(rt, 'api/question-update', () => rt.engine.bank2.questionUpdate(
+      need(body, 'course'), need(body, 'node'), need(body, 'qid'), optObject(body, 'patch') ?? {})))
   },
   'POST /habits/create': async ({ rt, body, res }) => {
     // 习惯创建（#90）：意图两字段（线索/行动）由引擎 fail loud 校验
@@ -279,7 +282,8 @@ export const HANDLERS: Record<string, RouteHandler> = {
       rt.engine.learner.skillSetMaintenance(need(body, 'skill'), body.days == null ? null : requireNumber(body, 'days'))))
   },
   'POST /rebuild': async ({ rt, res }) => {
-    sendJson(res, 200, { message: (await rt.engine.rebuild()).message })
+    // 直调路由收编（#292 / ADR-0080 §勘误）
+    sendJson(res, 200, await apiRun(rt, 'api/rebuild', async () => ({ message: (await rt.engine.rebuild()).message })))
   },
   'POST /node/skip': async ({ rt, ctx, body, res }) => {
     // 跳过 = 显式重新裁决（词条「教练回合」五点之一）：force 豁免停摆/暂不产结构
@@ -297,24 +301,28 @@ export const HANDLERS: Record<string, RouteHandler> = {
     sendJson(res, 200, done)
   },
   'POST /feedback': async ({ rt, body, res }) => {
-    sendJson(res, 200, { message: await rt.engine.content2.submitFeedback(rt.vault, rt.centerRel, need(body, 'path')) })
+    // 直调路由收编（#292 / ADR-0080 §勘误）
+    sendJson(res, 200, await apiRun(rt, 'api/feedback', async () =>
+      ({ message: await rt.engine.content2.submitFeedback(rt.vault, rt.centerRel, need(body, 'path')) })))
   },
   'POST /proposals/apply': async ({ rt, ctx, body, res }) => {
     // 提案统一 apply（图谱域 edit/enrich + 项目域 project_plan/project_milestone）：
     // kind 必须显式照抄提案记录，未知 kind 引擎报错；
     // 计划修订触发的换线/补支生长批随后入队（#149）；
-    // 正文不随 apply 入队（ADR-0078：apply 只落结构，内容由学习者显式下发）
+    // 正文不随 apply 入队（ADR-0078：apply 只落结构，内容由学习者显式下发）。
+    // 写侧直调收编（#292）：engine 调用经 apiRun 留痕，host 侧联动留在痕外。
     const kind = need(body, 'kind')
     const id = applyId(body.id)
-    const applied = await rt.engine.graph.proposalApply(kind, id)
+    const applied = await apiRun(rt, 'api/proposals/apply', () => rt.engine.graph.proposalApply(kind, id))
     const planPart = applied as { plan?: { kind?: string; growth?: Array<{ course: string; lines: string[] }> } }
     triggerPlanGrowth(rt, ctx, planPart.plan ?? (applied as { kind?: string }))
     await afterGraphApply(rt)
     sendJson(res, 200, applied)
   },
   'POST /proposals/reject': async ({ rt, body, res }) => {
+    // 直调路由收编（#292 / ADR-0080 §勘误）
     const id = rejectId(body.id)
-    await rt.engine.graph.graphReject(id, optString(body, 'note').trim())
+    await apiRun(rt, 'api/proposals/reject', () => rt.engine.graph.graphReject(id, optString(body, 'note').trim()))
     sendJson(res, 200, { message: `[reject] 提案 #${id} 已拒绝留痕。` })
   },
   'POST /experiments/apply': async ({ rt, body, res }) => {
@@ -537,14 +545,16 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /question-add': async ({ rt, body, res }) => {
     const q = requireObject(body, 'question')
-    sendJson(res, 200, await rt.engine.bank2.questionAdd(
-      need(body, 'course'), need(body, 'node'), q))
+    // 直调路由收编（#292 / ADR-0080 §勘误）
+    sendJson(res, 200, await apiRun(rt, 'api/question-add', () => rt.engine.bank2.questionAdd(
+      need(body, 'course'), need(body, 'node'), q)))
   },
   'POST /question-archive': async ({ rt, body, res }) => {
-    // reason = 归档原因（ADR-0032：too_easy=建议确认 / manual=人工等），可逆恢复时清除
-    sendJson(res, 200, await rt.engine.bank2.questionArchive(
+    // reason = 归档原因（ADR-0032：too_easy=建议确认 / manual=人工等），可逆恢复时清除；
+    // 直调路由收编（#292 / ADR-0080 §勘误）
+    sendJson(res, 200, await apiRun(rt, 'api/question-archive', () => rt.engine.bank2.questionArchive(
       need(body, 'course'), need(body, 'node'), need(body, 'qid'),
-      optTrue(body, 'archived'), optRaw(body, 'reason')))
+      optTrue(body, 'archived'), optRaw(body, 'reason'))))
   },
   'POST /difficulty-advice-dismiss': async ({ rt, body, res }) => {
     // B2 建议忽略/恢复：误判的持久忽略（undo 恢复单条，all 清空全部；
@@ -557,13 +567,17 @@ export const HANDLERS: Record<string, RouteHandler> = {
         optTrue(body, 'undo'), optTrue(body, 'all'))))
   },
   'POST /course/delete': async ({ rt, body, res }) => {
-    const r = await rt.engine.bank2.courseDelete(need(body, 'course'))
+    // 直调路由收编（#292 / ADR-0080 §勘误）：engine 写侧经 apiRun 留痕；host 侧
+    // 写联动（清扫）有自己的接线留痕，不重复进 apiRun
+    const r = await apiRun(rt, 'api/course/delete', () => rt.engine.bank2.courseDelete(need(body, 'course')))
     // 写侧联动（ADR-0039）：课程没了，注册表里它的任务记录（含排队/在途）随即出册
     await sweepGenJobs(rt)
     sendJson(res, 200, r)
   },
   'POST /generate/cancel': async ({ rt, body, res }) => {
-    sendJson(res, 200, cancelGeneration(rt, need(body, 'course'), need(body, 'node')))
+    // 直调路由收编（#292 / ADR-0080 §勘误）
+    sendJson(res, 200, await apiRun(rt, 'api/generate/cancel', async () =>
+      cancelGeneration(rt, need(body, 'course'), need(body, 'node'))))
   },
   'POST /coach/growth': async ({ rt, ctx, body, res }) => {
     // 生长一步 / 失败重试（面板下发 = 显式重新裁决，词条「生长批」）：即时入队、追加队尾、

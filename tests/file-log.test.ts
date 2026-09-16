@@ -109,7 +109,18 @@ test('级别门：默认 INFO 挡 debug；env LEARNHUB_LOG_LEVEL 可调（引擎
     dbg.debug('x.debug', { a: 1 })
     assert.ok(linesOf(dir, '2026-09-15').some(l => l.includes('[DEBUG] x.debug')), 'env 抬档生效')
     process.env.LEARNHUB_LOG_LEVEL = '不存在的档'
-    const bad = createFileLogger({ dir, now: () => at(2026, 9, 15) })
+    // 非法值 console.warn 恰好一声（#292 / ADR-0091）：级别门住宿主、此处无 logger，console 是唯一出口
+    const warnings: string[] = []
+    const origWarn = console.warn
+    console.warn = (m: unknown) => warnings.push(String(m))
+    let bad: ReturnType<typeof createFileLogger>
+    try {
+      bad = createFileLogger({ dir, now: () => at(2026, 9, 15) })
+    } finally {
+      console.warn = origWarn
+    }
+    assert.equal(warnings.length, 1, '非法值告警恰好一声')
+    assert.match(warnings[0]!, /LEARNHUB_LOG_LEVEL 非法值「不存在的档」/)
     bad.debug('x.debug2', { a: 1 })
     assert.ok(!linesOf(dir, '2026-09-15').some(l => l.includes('x.debug2')), '非法值回退缺省 INFO，不抛错')
   } finally {

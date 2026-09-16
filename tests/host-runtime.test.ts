@@ -1141,6 +1141,7 @@ test('执行器逃逸兜底（#296）：置终态前抛错 → 泵级置 failed 
   assert.ok(job.finishedAt, '兜底终态盖保留期起算戳')
   await until(() => log.count('host.gen_jobs.pump_escape') === 1)
   assert.equal(log.nth('host.gen_jobs.pump_escape')!.level, 'error')
+  assert.equal(log.nth('host.gen_jobs.pump_escape')!.fields.job, '数学/节点A', '#292：字段对齐 ADR-0091（job=键）')
   await until(() => rt.flags.pumping === false, 100)
 })
 

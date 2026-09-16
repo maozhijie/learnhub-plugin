@@ -167,7 +167,7 @@ test('FSRS 正典化：优化写沉淀正典 + 缓存镜像 + 档案投影；删
     // 删缓存不丢事实：getScheduler 落沉淀取回同一套参数
     await rm(engine.paths.fsrsParamsPath('math'))
     const today = localDay()
-    const sched = await getScheduler(engine.paths, 'math', nodeVaultFs)
+    const sched = await getScheduler(engine.paths, 'math', nodeVaultFs, engine.logger)
     assert.equal(previewDue(sched, null, 3, today), previewDue(schedWith(trained2), null, 3, today), '与显式用沉淀参数构造的调度器同推演')
     assert.notEqual(previewDue(sched, null, 3, today), previewDue(schedWith(defaultParams()), null, 3, today), '确实不是默认参数')
   })

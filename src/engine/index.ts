@@ -223,7 +223,7 @@ export class LearnhubEngine {
   private async sched(courseRoot: string | null): Promise<FSRS> {
     let s = this.schedCache.get(courseRoot)
     if (!s) {
-      s = await getScheduler(this.paths, courseRoot, this.fs)
+      s = await getScheduler(this.paths, courseRoot, this.fs, this.logger)
       this.schedCache.set(courseRoot, s)
     }
     return s
@@ -259,7 +259,7 @@ export class LearnhubEngine {
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot,
       spec => this.growth2.growthGateErrors(spec), this.clock, this.fs, this.logger)
     this.projects = new Projects(this.paths, this.store, this.clock, this.fs)
-    this.sessions = new Sessions(this.paths, async course => this.loadView(course), this.fs)
+    this.sessions = new Sessions(this.paths, async course => this.loadView(course), this.fs, this.logger)
     this.lab = new LabSubsystem({
       clock: this.clock, fs: this.fs,
       store: this.store, paths: this.paths, registry: this.registry,
@@ -274,7 +274,7 @@ export class LearnhubEngine {
       sedimentRebuildProfile: () => this.sched2.sedimentRebuildProfile(),
     })
     this.channels = new ChannelsSubsystem({
-      clock: this.clock, fs: this.fs,
+      clock: this.clock, fs: this.fs, logger: this.logger,
       store: this.store, paths: this.paths, bank: this.bank,
       ankiMirror: this.ankiMirror, noteManifest: this.noteManifest, vaultRoot: this.vaultRoot,
       registry: {
@@ -388,7 +388,7 @@ export class LearnhubEngine {
       updateNoteFm: (path, fm) => this.updateNoteFm(path, fm),
     })
     this.sched2 = new SchedSubsystem({
-      clock: this.clock, fs: this.fs,
+      clock: this.clock, fs: this.fs, logger: this.logger,
       store: this.store, paths: this.paths, registry: this.registry, bank: this.bank,
       content: this.content, schedCache: this.schedCache,
       assertNoteOk: (course, graph, broken, node, tool) => this.assertNoteOk(course, graph, broken, node, tool),

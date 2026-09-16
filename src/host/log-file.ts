@@ -110,9 +110,14 @@ function clipEntry(text: string): string {
   return text.length > LOG_ENTRY_LIMIT ? `${text.slice(0, LOG_ENTRY_LIMIT)}…（已截断）` : text
 }
 
-/** env `LEARNHUB_LOG_LEVEL` 解析：非法值回退缺省而不抛错——日志配置写坏不该挡启动。 */
+/** env `LEARNHUB_LOG_LEVEL` 解析：非法值回退缺省而不抛错——日志配置写坏不该挡启动；
+ * 但回退要出一声（#292 / ADR-0091）：级别门住宿主，此处无 logger 可用，console 是
+ * 唯一出口。levelFromEnv 只在构造 logger 时各跑一次，天然即「一次」粒度，无模块态。 */
 function levelFromEnv(env: NodeJS.ProcessEnv): LogLevel | undefined {
   const raw = env.LEARNHUB_LOG_LEVEL?.trim().toLowerCase()
+  if (raw && !LEVELS.includes(raw as LogLevel)) {
+    console.warn(`[learnhub] LEARNHUB_LOG_LEVEL 非法值「${raw}」：回退缺省 INFO（可选 ${LEVELS.join('/')}）`)
+  }
   return LEVELS.includes(raw as LogLevel) ? raw as LogLevel : undefined
 }
 

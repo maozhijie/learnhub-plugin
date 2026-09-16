@@ -41,13 +41,19 @@ export interface TrainingSequence {
 /** 评估指标（binding ModelEvaluation 的同形快照）。 */
 export interface OptimizerMetrics { logLoss: number; rmseBins: number }
 
+/** 混训门现状（#292 / ADR-0091 `sched.optimize.meta` 的两个指针字段）：执行事件条数
+ * 与是否放行。trainingSequences 与优化器写回观测共用，单一口径防两处判得不一致。 */
+export function executionGate(logs: ReviewRec[]): { rows: number; included: boolean } {
+  let rows = 0
+  for (const rec of logs) if (rec.rating_source === 'execution') rows++
+  return { rows, included: rows >= EXECUTION_TRAINING_GATE }
+}
+
 /** 真实推进 → 每卡训练序列（纯函数，接缝 S27）：排除 synthetic 与未过混训门的
  * execution、每卡每天取第一条、delta_t 链首条 0；序列按 key 排序保证确定序。
  * 「天」= 学习日（ADR-0020）。 */
 export function trainingSequences(logs: ReviewRec[], cutoffMin = 0): TrainingSequence[] {
-  let executionRows = 0
-  for (const rec of logs) if (rec.rating_source === 'execution') executionRows++
-  const allowExecution = executionRows >= EXECUTION_TRAINING_GATE
+  const allowExecution = executionGate(logs).included
   const byCard = new Map<string, ReviewRec[]>()
   for (const rec of logs) {
     const ok = rec.rating_source === 'auto' || rec.rating_source === 'self'

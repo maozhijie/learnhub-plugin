@@ -16,6 +16,7 @@ import type { BrokenNote } from './notes.ts'
 import type { Graph } from './graph.ts'
 import type { Fm, Stage } from './types.ts'
 import type { Paths } from './paths.ts'
+import type { Logger } from './logger.ts'
 import { DIAGNOSTIC_SCORE, diagnosticView } from './attribution.ts'
 import type { DiagnosticEntry, DiagnosticItem } from './attribution.ts'
 import type { LessonDoc } from './views/content.ts'
@@ -278,6 +279,7 @@ export class Sessions {
     private paths: Paths,
     private viewOf: ViewSource,
     private fs: VaultFs,
+    private logger: Logger,
   ) {}
 
   // ---- 笔记路径 ----
@@ -304,7 +306,7 @@ export class Sessions {
     for (const c of enabled) {
       const { graph, state, broken } = await this.viewOf(c)
       assertNoBrokenNotes('status', broken)
-      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root), this.fs)
+      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root), this.fs, this.logger)
       const rValue = (n: string) => retrievability(sched, state[n], today)
       const statByNode = new Map((statsByCourse.get(c.name) ?? []).map(s => [s.node, s]))
       const st = courseStats(graph, state, rValue, today, R_GATE, n => statByNode.get(n)?.count ?? 0)
@@ -356,7 +358,7 @@ export class Sessions {
     for (const c of enabled) {
       const { graph, state, broken } = await this.viewOf(c)
       assertNoBrokenNotes('recommend', broken)
-      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root), this.fs)
+      const sched = await getScheduler(this.paths, this.paths.courseRoot(c.root), this.fs, this.logger)
       const rValue = (n: string) => retrievability(sched, state[n], today)
       const stats = statsByCourse.get(c.name) ?? []
       const statByNode = new Map(stats.map(s => [s.node, s]))
@@ -597,7 +599,7 @@ export class Sessions {
       throw new Error(`[lesson] 课程文件不存在（内容未生成？）：${node}`)
     }
     const sections = Sessions.lessonSections(body)
-    const sched = await getScheduler(this.paths, this.paths.courseRoot(root), this.fs)
+    const sched = await getScheduler(this.paths, this.paths.courseRoot(root), this.fs, this.logger)
     const rValue = (n: string) => retrievability(sched, state[n], today)
     // 学习者面剔终点（#199）：学习包的「推荐下一步」同样不出现终点
     const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(root), this.fs))

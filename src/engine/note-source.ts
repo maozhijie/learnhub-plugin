@@ -34,6 +34,7 @@ import type { LlmComplete } from './llm.ts'
 import type { JolPrediction } from './jol.ts'
 import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
+import type { Logger } from './logger.ts'
 import type { QuestionBank, BankDoc, BankQuestion } from './question-bank.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { AnkiStatusDoc, NoteSourceDoc, NoteSourceItem, NoteSourceRegisterResult } from './views/channels.ts'
@@ -359,6 +360,8 @@ export interface ChannelsDeps {
   questionView(q: BankQuestion, i: number, opts?: { today?: string }): QuestionItem
   judgeBankAnswer(llmComplete: LlmComplete, q: BankQuestion, answer: string, op?: string, ref?: { course: string; node: string; qid: string }): Promise<{ score: number; feedback: string }>
   refreshRepCard(c: CourseEntry, graph: Graph, node: string): Promise<Fm | null>
+  /** 调试日志端口（#292 / ADR-0091）：anki_export_skipped / ease_unknown 两条的出口。 */
+  logger: Logger
 }
 
 export class ChannelsSubsystem {
@@ -1003,6 +1006,7 @@ export class ChannelsSubsystem {
         bank = await this.e.bank.load(this.e.paths.noteSourceDir, e.id)
       } catch {
         brokenSources++ // 镜像 Broken：该源挂起（data-check 显式报出），计数随返回面留痕，不阻塞其他源
+        this.e.logger.warn('note_source.anki_export_skipped', { source: e.id }) // #292 / ADR-0091
         continue
       }
       for (const q of bank.questions) {
@@ -1138,6 +1142,7 @@ export class ChannelsSubsystem {
         map = mapAnkiEase(ev.button)
       } catch {
         result.skipped_unknown++
+        this.e.logger.debug('note_source.ease_unknown', { button: ev.button }) // #292 / ADR-0091：未知样本指针（判别面住 mapAnkiEase）
         continue
       }
       const iso = isoFromMs(ev.ts)
