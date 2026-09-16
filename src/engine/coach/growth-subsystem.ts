@@ -1258,6 +1258,21 @@ export class GrowthSubsystem {
           throw new Error(`[draft_patch] 每批未发布增量 ≤${GROWTH_DRAFT_MAX_OPS_PER_BATCH} 条（本补丁后将为 ${unpublishedCount}）——先 draft_finish 发布再开新批。`)
         }
         const mints = shape.concepts
+        // 复诊预注册（#313 B2）：draft_patch 此前**没有任何写入面**——门要求「插入批必须预注册
+        // 复诊」，工具面却只有 ops/concepts/note_operator/note_reason/note_target_endpoints，
+        // 写了 note_recheck 也进不来。后果是思路官一裁「插入」，执行官无合法写法：只能熔断，
+        // 或改标别的算子（假算子入账 + 复诊永不登记，#146 的复诊/边实验账本经两站编排不可达）。
+        // 形态沿用同一个 recheckPreregOf（与 note.recheck 同一契约，不造第二套）。
+        let patchRecheck: RecheckPrereg | undefined
+        if (args.note_recheck !== undefined) {
+          const rc = recheckPreregOf(args.note_recheck)
+          if (rc.errors.length) {
+            await logRound('patch', '补丁被拒（note_recheck 形状不合法；整批回滚）', rc.errors)
+            throw new Error(`[draft_patch] note_recheck 未过（整批回滚，零落草稿）：\n${rc.errors.map(e => `  ✗ ${e}`).join('\n')}`
+              + `\n合法形态：{metric: ${RECHECK_METRICS.join('|')}, days?: 5–20 学习日（缺省 10）}`)
+          }
+          patchRecheck = rc.prereg
+        }
         // 本补丁**将要**声明的 note 与铸名：试算必须按「补丁生效后的本批形态」跑——拿旧 note
         // 试算等于试算另一批（前进/换向的接线义务、note.recheck 的跨字段规则都挂在 note 上）。
         // 复诊预注册的写入面（#312 B2）：draft_patch 增 note_recheck。此前它没有任何写入面

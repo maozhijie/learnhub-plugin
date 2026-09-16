@@ -86,6 +86,18 @@ export interface GrowthNote {
  * 退役，写侧不再有 region/block 坐标）。一律拒收不静默丢弃。 */
 const RETIRED_OP_KEYS = ['origin', 'status', 'probation', 'region', 'block'] as const
 
+/** edit 提案的合法顶层键（#313 A4）。此前顶层零白名单：模型写 `pres:` / `blooom:` 这类
+ * 错键时字段无声蒸发，回执/审计/finish 全绿。同仓 parseNode/parseEnc/误解条目都是未知键
+ * fail loud，这里对齐。 */
+export const EDIT_TOP_KEYS = ['course', 'reason', 'concepts', 'ops', 'note', 'route'] as const
+
+/** 单条 op 的合法键（#313 A4；糖算子自己的键——into/with/chain——在补丁入口展开成原子 op
+ * 后就不在权威门里出现，故不在本表）。 */
+export const EDIT_OP_KEYS = [
+  'op', 'node', 'name', 'new', 'pre', 'enc', 'opt', 'note', 'est', 'type',
+  'bloom', 'difficulty', 'teaches', 'assumes', 'misconceptions',
+] as const
+
 export interface EditProposalSpec {
   course: string
   reason?: string
@@ -127,6 +139,12 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
   const errors: string[] = []
   const d = doc as Record<string, unknown> | null
   if (typeof d !== 'object' || d === null) return { errors: ['(顶层): 必须是映射'] }
+  // 顶层白名单（#313 A4）：未知键一律拒收。写错键名字段（pres/blooom/…）此前无声蒸发，
+  // 回执、审计、finish 全绿——而模型那边「写了就生效」的假设没人纠正。
+  const unknownTop = Object.keys(d).filter(k => !(EDIT_TOP_KEYS as readonly string[]).includes(k))
+  if (unknownTop.length) {
+    errors.push(`(顶层) 含未知字段 ${JSON.stringify(unknownTop)}（只允许 ${EDIT_TOP_KEYS.join('/')}——写错键名字段会无声蒸发；生长批的算子/理由/朝向/复诊预注册写进 note 区）`)
+  }
   try {
     nonempty(d.course, 'course')
   } catch (e) { errors.push((e as Error).message) }
@@ -239,6 +257,13 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       const edges = retired.filter(k => k !== 'region' && k !== 'block')
       if (coords.length) errors.push(`${where}: 不接受坐标键 ${JSON.stringify(coords)}（随 Region/Block 退役 #275）——add_node 只需 name + pre，删掉这两个键即可落图（分布由读侧派生）`)
       if (edges.length) errors.push(`${where}: 不接受这些字段 ${JSON.stringify(edges)}（origin 从提案 journal 派生、复诊状态落 state/边实验.jsonl——图与提案节点零边字段）`)
+      // 未知键白名单（#313 A4）：与图 YAML / 误解条目同款 fail loud——键名写错（pres/blooom/
+      // est_minutes…）此前无声蒸发，门零错误、回执全绿，模型以为写了就生效。
+      const unknownKeys = Object.keys(o).filter(k =>
+        !(EDIT_OP_KEYS as readonly string[]).includes(k) && !(RETIRED_OP_KEYS as readonly string[]).includes(k))
+      if (unknownKeys.length) {
+        errors.push(`${where}: 含未知字段 ${JSON.stringify(unknownKeys)}（只允许 ${EDIT_OP_KEYS.join('/')}——字段名写错会无声蒸发；add_node 的节点名写 name，其余 op 引用既有节点写 node）`)
+      }
       // 键名统一到 name（#131 §7 / #1：与图 YAML 同口径，不做兼容双读也不容双写）——
       // add_node 用 name 定义新节点；其余 op 用 node 引用既有节点。写错键一律 fail loud。
       if (op === 'add_node') {
@@ -260,6 +285,16 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       // 整体替换语义防呆：缺 pre/enc 数组会被当成空集静默清掉已有边，这里直接拒绝（显式清空写 pre: [] / enc: []）
       if (op === 'set_pre' && !Array.isArray(o.pre)) errors.push(`${where}: set_pre 需要 pre 列表（整体替换语义，缺省会被当成清空全部前置；显式清空写 pre: []）`)
       if (op === 'set_enc' && !Array.isArray(o.enc)) errors.push(`${where}: set_enc 需要 enc 列表（整体替换语义，缺省会被当成清空全部成分技能边；显式清空写 enc: []）`)
+      // add_node 的 pre 同口径（#313 A2）：非列表一律 fail loud——旧实现 `Array.isArray(o.pre) ?
+      // … : []` 把 `pre: "甲"` 这类写法静默折成零前置，节点以**根部**落图（可学性判据、主线接线、
+      // 断边检查全程无错误行）。与 set_pre/set_enc 的「必须列表」是同一件事，同文件不许两种口径。
+      if (op === 'add_node' && o.pre !== undefined && !Array.isArray(o.pre)) {
+        errors.push(`${where}: add_node 的 pre 必须是列表（前置节点名列表；收到 ${typeof o.pre === 'string' ? '字符串' : typeof o.pre}）——零前置写 pre: [] 或省略本字段`)
+      }
+      // pre 元素形状（#313 A2）：`String(p)` 会把 1/null/true 静默转成 '1'/'null'/'true'
+      // 落成断边或鬼节点引用——节点名必须逐字是字符串。
+      if (Array.isArray(o.pre) && o.pre.some(p => typeof p !== 'string' || !p.trim())) {
+        errors.push(`${where}: pre 的每一项都要是非空节点名（逐字字符串）——收到 ${JSON.stringify(o.pre.slice(0, 5))}；数字/null 会被静默转成字符串落图`)}
       // 认知维度可选字段（schema 从严：给了就必合法）
       if (o.bloom !== undefined && o.bloom !== '' && !(BLOOM_LEVELS as readonly string[]).includes(String(o.bloom))) {
         errors.push(`${where}.bloom: 非法认知层级 ${String(o.bloom)}（允许 ${BLOOM_LEVELS.join('/')}）`)
@@ -793,6 +828,14 @@ export class GraphProposals {
       if (op.op === 'rename') renames[op.node!] = op.new!
       else if (op.op === 'del_node') dels.push(op.node!)
     }
+    // 笔记联动口径（#313 A1）：同批 del_node X + add_node X（或 rename B→X）= 改写/顶替这个名字，
+    // 不是「删掉再新建一份」——旧笔记不归档（正文原地留给同名新节点，骨架补齐不覆盖已有文件），
+    // 否则模型的「先删后建」改写会把学习者正文推进 state/archive 再补一个空骨架。真消失的名字照旧归档。
+    const readded = new Set([
+      ...spec.ops.filter(o => o.op === 'add_node').map(o => o.name!),
+      ...Object.values(renames),
+    ])
+    const archived = dels.filter(n => !readded.has(n))
 
     // 2. data/图.yaml 重写（内存侧应用 ops；落盘动作进下方写入单元）
     applyOpsToNodes(nodes, spec.ops)
@@ -853,7 +896,7 @@ export class GraphProposals {
           name: '笔记联动（改名/归档）',
           run: async () => {
             for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(prop.course, root, graph, oldName, newName)
-            for (const node of dels) await this.archiveNote(root, graph, node, prop.id)
+            for (const node of archived) await this.archiveNote(root, graph, node, prop.id)
           },
         },
         {
@@ -1565,7 +1608,14 @@ export function replayDraft(nodes: GNode[], graph: Graph, ops: EditOp[]): DraftR
   const errors: string[] = []
   const names = new Set(graph.names)
   const renameMap: Record<string, string> = {}
-  const removed = new Set<string>()
+  /** 被本批删除的**节点身份**（不是名字——#313 A1/A3）：`del_node X` + 同批 `add_node X`
+   * 是「先删后建」这一最自然的改写写法（模型修 teaches/误解 时唯一可用的形态，因为概念
+   * 字段组只在 add_node 出生时写），按名字记账会把**新节点**一起滤掉（原节点被归档、
+   * 新节点消失，journal 却写着 del+add，diff 还报「新增」）。按身份记账后：删的是「此刻
+   * 图上那个节点」，后来的同名新节点不算被删；指向旧名的入边在批末重新落到同名新节点上
+   * （`pre`/`enc` 不再按名字被无声剪掉——真断边由下方 `变更后断边` 门报出）。 */
+  const removed = new Set<GNode>()
+  const removedNames: string[] = []
   const added: string[] = []
   const rewired: Array<{ node: string; pres_before: string[]; pres_after: string[] }> = []
 
@@ -1573,18 +1623,22 @@ export function replayDraft(nodes: GNode[], graph: Graph, ops: EditOp[]): DraftR
     if (op.op === 'add_node') {
       if (names.has(op.name!)) { errors.push(`add_node 重名: ${op.name}`); continue }
       // 概念字段组的形状错误逐 op 收下（#301 缺陷②）：抛出去会穿透整条门序列
+      let fresh: GNode
       try {
-        sim.push(nodeFromAddOp(op))
+        fresh = nodeFromAddOp(op)
       } catch (e) {
         errors.push((e as Error).message)
         continue
       }
+      sim.push(fresh)
       names.add(op.name!)
       added.push(op.name!)
     } else if (op.op === 'del_node') {
       if (!names.has(op.node!)) { errors.push(`del_node 节点不存在: ${op.node}`); continue }
+      const hit = sim.find(n => n.name === op.node && !removed.has(n))
+      if (hit) removed.add(hit)
+      removedNames.push(op.node!)
       names.delete(op.node!)
-      removed.add(op.node!)
     } else if (op.op === 'rename') {
       if (!names.has(op.node!)) errors.push(`rename 旧名不存在: ${op.node}`)
       else if (names.has(op.new!)) errors.push(`rename 新名已占用: ${op.new}`)
@@ -1597,45 +1651,56 @@ export function replayDraft(nodes: GNode[], graph: Graph, ops: EditOp[]): DraftR
       if (!names.has(op.node!)) { errors.push(`set_pre 节点不存在: ${op.node}`); continue }
       rewired.push({ node: op.node!, pres_before: [...(graph.preOf[op.node!] ?? [])], pres_after: [...(op.pre ?? [])] })
       for (const n of sim) {
-        if (n.name === op.node) n.pre = [...(op.pre ?? [])]
+        if (n.name === op.node && !removed.has(n)) n.pre = [...(op.pre ?? [])]
       }
     } else if (op.op === 'set_enc') {
       if (!names.has(op.node!)) { errors.push(`set_enc 节点不存在: ${op.node}`); continue }
       for (const n of sim) {
-        if (n.name === op.node) n.enc = normalizeOpEnc(op.enc)
+        if (n.name === op.node && !removed.has(n)) n.enc = normalizeOpEnc(op.enc)
       }
     } else if (op.op === 'set_note') {
       if (!names.has(op.node!)) { errors.push(`set_note 节点不存在: ${op.node}`); continue }
       for (const n of sim) {
-        if (n.name === op.node) n.note = op.note ?? ''
+        if (n.name === op.node && !removed.has(n)) n.note = op.note ?? ''
       }
     }
   }
 
   const mapped = (p: string) => renameMap[p] ?? p
   for (const n of sim) {
-    if (removed.has(n.name)) continue
+    if (removed.has(n)) continue
     n.name = mapped(n.name)
-    n.pre = n.pre.map(mapped).filter(p => !removed.has(p))
-    n.enc = n.enc.map(e => ({ ...e, node: mapped(e.node) })).filter(e => !removed.has(e.node))
+    n.pre = n.pre.map(mapped)
+    n.enc = n.enc.map(e => ({ ...e, node: mapped(e.node) }))
   }
-  const simKept = sim.filter(n => !removed.has(n.name))
+  const simKept = sim.filter(n => !removed.has(n))
   if (!errors.length) {
     const merged = new Graph(simKept)
-    const dangling = new Set(merged.names.flatMap(n => merged.preOf[n].filter(p => !merged.nset.has(p)).map(p => `${n} -> ${p}`)))
-    for (const d of [...dangling].sort()) errors.push(`变更后断边: ${d}`)
-    const encDangling = new Set(merged.names.flatMap(n => (merged.encOf[n] ?? []).filter(([p]) => !merged.nset.has(p)).map(([p]) => `${n} ~enc~ ${p}`)))
-    for (const d of [...encDangling].sort()) errors.push(`变更后 enc 断边: ${d}`)
+    const removedSet = new Set(removedNames)
+    // 断边不再被静默摘除（#313 A3）：del_node 此前顺手 filter 掉所有指向被删节点的 pre/enc
+    // 入边，于是「删掉一个还有人依赖的节点」永不报错、只静默改变下游的前置集合（对照
+    // pruneProbationNode / removeEndpoint 都显式做摘边恢复，说明这里是漏的而非设计）。
+    // 现在由本门 fail loud，错误行给可执行出路（显式 set_pre 摘桥 / 改用 rename）。
+    const dangling = new Map<string, string>()
+    for (const n of merged.names) {
+      for (const p of merged.preOf[n]) if (!merged.nset.has(p)) dangling.set(`${n} -> ${p}`, p)
+    }
+    for (const [edge, missing] of [...dangling].sort()) errors.push(`变更后断边: ${edge}${removedSet.has(missing) ? `（「${missing}」被本批删除，但这条 pre 边还指着它——del_node 不再替你摘边：先对依赖它的节点 set_pre {node: <消费方>, pre: [...]} 显式摘桥，或改用 rename 保住节点）` : ''}`)
+    const encDangling = new Map<string, string>()
+    for (const n of merged.names) {
+      for (const [p] of merged.encOf[n] ?? []) if (!merged.nset.has(p)) encDangling.set(`${n} ~enc~ ${p}`, p)
+    }
+    for (const [edge, missing] of [...encDangling].sort()) errors.push(`变更后 enc 断边: ${edge}${removedSet.has(missing) ? `（「${missing}」被本批删除——同上，先 set_enc 摘掉这条成分技能边）` : ''}`)
     if (merged.hasCycle) errors.push(`变更后引入环：${merged.cycleNodes.slice(0, 5).join('、')}`)
     errors.push(...misconceptionCapErrors(simKept))
   }
   const diff: DraftDiff = {
     added_nodes: added,
-    removed_nodes: [...removed],
+    removed_nodes: removedNames,
     renamed: Object.entries(renameMap).map(([from, to]) => ({ from, to })),
     added_edges: rewired.flatMap(w =>
-      w.pres_after.map(mapped).filter(p => !removed.has(p) && !w.pres_before.includes(p)).map(p => ({ node: mapped(w.node), pre: p }))),
-    rewired: rewired.map(w => ({ node: mapped(w.node), pres_before: w.pres_before.map(mapped).filter(p => !removed.has(p)), pres_after: w.pres_after.map(mapped).filter(p => !removed.has(p)) })),
+      w.pres_after.map(mapped).filter(p => !w.pres_before.includes(p)).map(p => ({ node: mapped(w.node), pre: p }))),
+    rewired: rewired.map(w => ({ node: mapped(w.node), pres_before: w.pres_before.map(mapped), pres_after: w.pres_after.map(mapped) })),
   }
   return { errors, diff }
 }
@@ -1645,17 +1710,20 @@ export function simulateOps(nodes: GNode[], graph: Graph, ops: EditOp[]): string
   return replayDraft(nodes, graph, ops).errors
 }
 
-/** 把 op 列表实际落到节点列表（applyEdit 落图前的内存侧应用）。 */
+/** 把 op 列表实际落到节点列表（applyEdit 落图前的内存侧应用）。与 replayDraft 同一套
+ * 记账口径（#313 A1/A3）：删除按**节点身份**记（同名 del+add 的新节点不被误删），
+ * `pre`/`enc` 只做改名映射、不再按被删名过滤——真断边在门里就被拒，落不到这里。 */
 export function applyOpsToNodes(nodes: GNode[], ops: EditOp[]): void {
   const renameMap: Record<string, string> = {}
-  const removed = new Set<string>()
-  const findNode = (node: string): GNode | null => nodes.find(x => x.name === node) ?? null
+  const removed = new Set<GNode>()
+  const findNode = (node: string): GNode | null => nodes.find(x => x.name === node && !removed.has(x)) ?? null
 
   for (const op of ops) {
     if (op.op === 'add_node') {
       nodes.push(nodeFromAddOp(op))
     } else if (op.op === 'del_node') {
-      removed.add(op.node!)
+      const hit = findNode(op.node!)
+      if (hit) removed.add(hit)
     } else if (op.op === 'rename') {
       renameMap[op.node!] = op.new!
     } else if (op.op === 'set_pre') {
@@ -1672,11 +1740,12 @@ export function applyOpsToNodes(nodes: GNode[], ops: EditOp[]): void {
 
   const mapped = (p: string) => renameMap[p] ?? p
   for (const n of nodes) {
+    if (removed.has(n)) continue
     n.name = mapped(n.name)
-    n.pre = n.pre.map(mapped).filter(p => !removed.has(p))
-    n.enc = n.enc.map(e => ({ ...e, node: mapped(e.node) })).filter(e => !removed.has(e.node))
+    n.pre = n.pre.map(mapped)
+    n.enc = n.enc.map(e => ({ ...e, node: mapped(e.node) }))
   }
-  const kept = nodes.filter(n => !removed.has(n.name))
+  const kept = nodes.filter(n => !removed.has(n))
   nodes.length = 0
   nodes.push(...kept)
 }

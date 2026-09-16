@@ -389,6 +389,11 @@ export function expandPatchOps(
     }
     const chain = Array.isArray(raw.chain) ? raw.chain as Array<Record<string, unknown>> : []
     if (chain.length < 2) throw new Error(`ops.${i}: insert_prereq_chain 的 chain 至少 2 条（一条不成链；单节点直接用 add_node）。`)
+    // 链首的 pre 同 add_node 口径（#313 A2）：非列表此前静默折成 []，整条链会以「零前置」
+    // 落图挂在根部——与 set_pre/add_node 的「必须列表」是一件事。
+    if (raw.pre !== undefined && !Array.isArray(raw.pre)) {
+      throw new Error(`ops.${i}: insert_prereq_chain 的 pre 必须是列表（链首的前置节点名列表；收到 ${typeof raw.pre === 'string' ? '字符串' : typeof raw.pre}）——零前置写 pre: [] 或省略本字段。`)
+    }
     chain.forEach((item, j) => {
       expanded.push({
         op: 'add_node',
