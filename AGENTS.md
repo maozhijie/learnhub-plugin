@@ -12,6 +12,10 @@ Five canonical roles mapped to Chinese label strings (`待分类`、`待补充�
 
 Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+**ADR 是决策记录，不是施工日志**：每条只写「裁了什么 / 为什么（实测数字留，行号与代码片段不留）/ 否决了什么 / 不做什么」——施工记录（commit、按刀叙述）归票面，行为变更与快照迁移登记归门册（`tests/README.md`），实现细节归代码。**「一票一 ADR」不是本仓标准**（票面才是设计方案的家）。**尺寸**：目标 ≤10KB（约 60 行），>12KB 即过大须瘦身；修订节不堆流水，改变了原裁决方向的写新 ADR 并标「已被 ADR-NNNN 取代」。**取号**：`git fetch origin` + `ls docs/adr/` 取最高号 +1，同提交更新 `docs/adr/README.md` 索引；并行会话撞号时**后落地者改号**。规范全文见 `docs/agents/domain.md`。
+
+**CONTEXT.md 是词汇表，仅此而已**：词条 = 一至两句「它是什么」+ `_Avoid_` 清单；实现细节、行为规格、裁决理由一律不进词表（分别归代码、ADR、门册）。词条头 `**名字**:` **独立成行**、`_Avoid_:` 行紧随定义——`tests/helpers/copy-lock.ts` 运行时解析这两行取 canonical 词与 Avoid 词，是文案锁门的唯一出处，**改词表 = 改门**（删一个 Avoid 词等于放开一条文案反断言）。规范全文见 `docs/agents/domain.md`。
+
 ### 架构与门
 
 `npm test` 先串行跑类型门，测试里还有分层规则（R1–R7）、架构门（G1–G9）与棘轮——**基线不匹配的失败是门在执法，不是 bug**（棘轮精确匹配：涨了失败，降了没同步下调基线也失败）。章程（门的地图、单跑脚本、加门/改阈值的纪律、行为变更登记）见 `docs/agents/architecture.md`；每道门阈值与实测链的唯一登记处是 `tests/README.md`（门册）。

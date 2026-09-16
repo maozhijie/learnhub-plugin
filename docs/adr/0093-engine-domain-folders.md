@@ -36,3 +36,5 @@
 - `tests/README.md`（门册）：`scan-write-unit.mjs` 路径表变更随第 ⑦ 刀登记。
 - `docs/agents/architecture.md`：四层图补一句 engine 内部按域分文件夹，随第 ⑧ 刀（布局完成时）落地。
 - 本 ADR 与 CONTEXT.md 无涉：文件夹布局是实现细节，不进词汇表。
+
+**取号说明**：本篇原落 0092，与同日 8 分钟前先落地的《空图首级：起点资格判据迁家为教练材料注入》撞号（并行窗口竞态），2026-09-16 更正为 0093——CONTEXT.md 与既有引用均以 0092 指向前者。此后取号按 `docs/adr/README.md` 的登记表核对。

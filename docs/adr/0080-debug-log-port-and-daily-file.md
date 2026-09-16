@@ -1,87 +1,45 @@
 # 调试日志：端口形状住引擎、写侧住宿主、按天一个 .log
 
-引擎层此前没有任何运行时可观测面：`gateRepairRound` 是否触发修复轮、教练回合各段是否真的跑过、门到底拒了什么，只能靠单测里脚本化假实现才看得见。宿主仅有的两个观测面——`console.*`（进程一关就没了）与 `state/运行日志.md`（markdown 追加、无级别、难 grep、单文件无限增长、单条 1500 字符截断）——都只覆盖「宿主调了引擎什么」，看不见引擎内部决策（#253）。
+引擎层此前没有任何运行时可观测面：修复轮是否触发、教练回合各段是否真跑过、门到底拒了什么，只能靠单测里的脚本化假实现才看得见；宿主仅有的两个观测面——`console.*`（进程一关就没了）与 `state/运行日志.md`（markdown 追加、无级别、难 grep、单文件无限增长、单条 1500 字符截断）——都只覆盖「宿主调了引擎什么」，看不见引擎内部决策（#253）。代价不是「日志少」，而是**「修复写了也没人能证明它跑过」**：坏例 `bad-2026-09-14T09-25-39-609Z-0021`（schema 门畸形未走回灌重裁）的修复已落地在 `growth-subsystem.ts`，但触发路径当时不可观测、排查靠读源码猜。故补齐观测面，并把旧观测面整条**并入后删除**，避免两套日志各说各话。
 
-理由：坏例 `bad-2026-09-14T09-25-39-609Z-0021`（schema 门畸形未走回灌重裁）的修复已在 `growth-subsystem.ts` 落地（schema 错误作数据流过 `first()`、在 `gate()` 里拦截触发修复流），但**触发路径当时不可观测**——排查靠读源码猜。可观测面缺位的代价不是"日志少"，而是"修复写了也没人能证明它跑过"。故本票补齐观测面，并把旧观测面（`运行日志.md`）整条并入后删除，避免两套日志各说各话。
+## 关键裁决
 
-关键裁决：
+- **端口形状住应用层、实现住适配器、装配住 `EngineConfig`（必填）**：`src/engine/logger.ts` 纯类型零导入（四方法 `debug/info/warn/error(event, fields?)`），实现住 `src/host/log-file.ts`，`noop` 供仓库脚本、内存记录型假实现住 `tests/helpers/`；引擎内零 `node:fs`（G8 的 fsImports／fsCalls 保持 0）。与 `Clock`／`Rng`／`VaultFs` 三端口同纪律（引擎内零回退），且 `paths.ts` 有成文先例（观测面「写侧住 host，engine 只登记路径」）。**必填而非可选缺省 noop**：可选会让「忘了接线 = 日志静默消失」，恰是本票要治的病。代价：构造点显式接线 + deps 面逐子系统 `logger` 槽 +1（G4 宽度基线同步）。
+- **引擎只发结构化条目，行文本由宿主拼**：调用点是 `log.info('coach.segment.enter', { course, tier, effort })`——引擎不拼字符串、不判级别；**级别门唯一一处住在宿主实现**（映射 `error 50／warn 40／info 30／debug 20`），避免「引擎认 info、宿主认 warn」这类错位状态。默认档 `INFO`，可经宿主侧 env `LEARNHUB_LOG_LEVEL` 调（引擎侧不读环境）。
+- **行格式与文件名**：`[HH:MM:SS.mmm] [LEVEL] <事件名> k=v k=v`，本地时间，**行内不带日期**（文件名担）；文件名用**日历日**（`CONTEXT.md` 词条「学习日」已钉死：出处戳永远用日历日，不参与学习口径）。落点 `state/logs/YYYY-MM-DD.log`（`Paths.logsDir` getter，引擎只登记路径）。
+- **多行纪律**：默认一条一行；只允许四类带续行（缩进两格）——`engine.call`／`agent.gate.death`／`coach.gate.reject`／`coach.segment.exit(schema=reject)`，因为「门到底说了什么」正是排查时最不可替代的信息，压成单行会把错误清单腰斩。单条上界 **16,384 字符**（原 `LOG_LIMIT` 1500 的升档），超限截断并显式标注 `…（已截断）`。
+- **pino 的用法（如实记录其价值边界）**：只用 core + 自建 Writable sink，**不用 `pino.transport()`**——transport 的目标模块在 esbuild 单文件产物里按路径运行时解析、打包后失效（官方已知坑），这是本仓构建形态的硬约束，不属于「以后再说」的风险。按天切分、保留期清扫、失败静默全在自建 sink 里。**在「按天 + 纯文本 + 静默失败」这条需求上，pino 的收益退化为「级别门 + 日志 API + 生态习惯」，格式化与旋转仍得自写**——后人不必以为引了框架就一劳永逸。
+- **保留期与两道闸**：保留 **30 天**，跨日新建文件时惰性清扫（只认 `^\d{4}-\d{2}-\d{2}\.log$`，其余文件不碰），不压缩；**单日 20 MB 软上限**——超限停止当天写盘、在文件尾追加一条标记行、宿主 console 告警一次（次日自动复位），**绝不静默停止**。上限与保留期是常量 + 测试，不做配置化。
+- **失败静默的可见性契约**：主流程零感知（`try/catch` 静默，与 `runLog` 同款纪律）；但宿主实现内部记 `lastError` 与失败计数、经 logger 实例暴露（可测可查），避免「日志自己坏了没人知道」。上限状态是 logger 实例内部态（住 `createHostRuntime`，不碰 G2c 的宿主模块级 `let` 禁令）。
+- **替换 `运行日志.md`**：`run`／`apiRun` 出口与全部调用点**保留**，只换 sink；事件改名（前身对照见闭集段）；删 `runLog`／`LOG_LIMIT`／`Paths.runLogPath`。**vault 里已有的 `state/运行日志.md` 不迁移、不删除**（插件不删用户 vault 里的文件，留人处置）。
+- **不落原文**：日志只做索引——计数／尺寸／首行截断摘要。提示词、裁决 YAML、学习笔记内容一律不进日志（原文已在生成语料与 `journal.jsonl`）；日志会被人 `rg` 与贴进排查对话，裹挟个人笔记有隐私面。
 
-- **端口形状住应用层、实现住适配器、装配住 `EngineConfig`（必填）。** `src/engine/logger.ts` 纯类型零导入（四方法 `debug/info/warn/error(event, fields?)`），实现住 `src/host/log-file.ts`（pino 文件实现），`noop` 实现供仓库脚本，内存记录型假实现住 `tests/helpers/`；引擎内零 `node:fs`（G8 的 fsImports／fsCalls 保持 0）。与 `Clock`／`Rng`／`VaultFs` 三端口同纪律（引擎内零回退），且 `paths.ts` 有成文先例——观测面产物「写侧住 host，engine 只登记路径」（`corpusDir`／`qualityReviewDir` 同款）。**必填而非可选缺省 noop**：可选会让"忘了接线 = 日志静默消失"，恰是本票要治的病。代价：8 文件 11 处构造点接线（`src/host/runtime.ts`／`tests/helpers/vault.ts`／`tests/host-runtime.test.ts`／`tests/schema-cutover.test.ts` ×3／`scripts/{smoke,ensure-notes,e2e ×2,dev-server}.mjs`）+ deps 面逐子系统 `logger` 槽 +1（G4 宽度基线同步，只给真正打日志的子系统接线）。
-- **引擎只发结构化条目，行文本由宿主拼。** 调用点是 `log.info('coach.segment.enter', { course, tier, effort })`——引擎不拼字符串、不判级别；**级别门唯一一处住在宿主实现**（映射 `error 50／warn 40／info 30／debug 20`），避免"引擎认 info、宿主认 warn"这类错位状态。默认档 `INFO`，可经宿主侧 env `LEARNHUB_LOG_LEVEL` 调（引擎侧不读环境）。
-- **行格式与文件名。** `[HH:MM:SS.mmm] [LEVEL] <事件名> k=v k=v`，本地时间，**行内不带日期**（文件名担）；文件名用**日历日**（`CONTEXT.md` 词条「学习日」已钉死：出处戳永远用日历日，不参与学习口径）。落点 `state/logs/YYYY-MM-DD.log`（`Paths.logsDir` getter，引擎只登记路径）。
-- **多行纪律。** 默认一条一行；只允许四类带续行（缩进两格）——`engine.call`／`agent.gate.death`／`coach.gate.reject`／`coach.segment.exit(schema=reject)`，因为"门到底说了什么"正是排查时最不可替代的信息，压成单行会把错误清单腰斩。单条上界 **16,384 字符**（原 `LOG_LIMIT` 1500 的升档），超限截断并显式标注 `…（已截断）`。
-- **pino 的用法（如实记录其价值边界）。** 只用 core + 自建 Writable sink（`pino({ level, timestamp: false, base: undefined }, ourSink)`），**不用 `pino.transport()`**——transport 的目标模块在 esbuild 单文件产物里按路径运行时解析，打包后失效（官方已知坑），这不属于"以后再说"的风险而是本仓构建形态的硬约束。按天切分、保留期清扫、失败静默全在自建 sink 里。**在"按天 + 纯文本 + 静默失败"这条需求上，pino 的收益退化为「级别门 + 日志 API + 生态习惯」，格式化与旋转仍得自写**——后人不必以为引了框架就一劳永逸。
-- **保留期与两道闸。** 保留 **30 天**，跨日新建文件时惰性清扫（只认 `^\d{4}-\d{2}-\d{2}\.log$`，其余文件不碰），不压缩；**单日 20 MB 软上限**——超限停止当天写盘、在文件尾追加一条标记行、宿主 console 告警一次（次日自动复位），**绝不静默停止**（`tests/README.md` 记过"同一节一周 4,149 条重复失败"那类真实雪崩）。上限与保留期是常量 + 测试，不做配置化。
-- **失败静默的可见性契约。** 主流程零感知：`try/catch` 静默，与 `runLog` 同款纪律；但宿主实现内部记 `lastError` 与失败计数，经 logger 实例暴露（可测可查），避免"日志自己坏了没人知道"。上限状态是 logger 实例内部态（住 `createHostRuntime`，不碰 G2c 的宿主模块级 `let` 禁令）。
-- **替换 `运行日志.md`。** `run`／`apiRun` 出口与全部调用点**保留**，只换 sink；`llm_call` → `agent.call`（INFO）、`content_job` → `content.job`、6+ 处 `void runLog(...)` → 结构化事件；删 `runLog`／`LOG_LIMIT`／`Paths.runLogPath`。**vault 里已有的 `state/运行日志.md` 不迁移、不删除**（插件不删用户 vault 里的文件，留人处置）。UI 文案（`GuidePage.tsx`、`useCoachToasts.tsx`）与 `src/index.ts` 头注、`CONTEXT.md` 第 24 行随改。
-- **不落原文。** 日志只做索引：计数／尺寸／首行截断摘要。提示词、裁决 YAML、学习笔记内容一律不进日志——原文已在生成语料（ADR-0060）与 `journal.jsonl`；日志会被人 `rg` 与贴进排查对话，裹挟个人笔记有隐私面。
+**事件闭集（17 条）与级别原则**：事件名点分小写、字段 `snake_case`、`station` 值保持中文与现网 console 一致；级别原则——进出／结果 = INFO、拒收与「触发修复」 = WARN、死亡／失败 = ERROR、逐轮轨迹与尺寸明细 = DEBUG。闭集：`agent.gate.first｜repair｜repair.reject｜death`、`coach.round.enter｜round.result｜round.apply_fail`、`coach.segment.enter｜segment.exit`、`coach.gate.reject`、`coach.repair.trigger`、`engine.call｜engine.call.fail`、`agent.call`（前身 `llm_call`）、`content.job`（前身 `content_job`）、`host.gen_jobs.restore_failed｜restored`。两条一眼判据：**`agent.gate.repair` 不出现 = 没跑重裁**；`coach.repair.trigger` 是「到底有没有跑过重试」的主判据。**四条 `agent.gate.*` 只从三个站发出**（教练生长／目标反编译／里程碑草案）：计划草案走裸 `agent.complete`（无修复轮）、种子起草与罗盘走 `agentLoop`——按「六站都该有」去查会对不上（「六站共用统一 agent 缝」仍成立，错的只是「六站共用 `gateRepairRound`」这一计数，§修订 2026-09-15 更正）。**此后新事件先进 ADR-0091 附录登记再接线**，本表闭集不追改。
 
-本票接线的事件闭集（字段 `snake_case`，`station` 值保持中文与现网 console 一致）：
+## 边界
 
-| 事件 | 级别 | 字段 | 备注 |
-|---|---|---|---|
-| `agent.gate.first` | INFO | `station` `verdict=pass\|reject` `errors=<n>` | reject 时续行附门错误清单 |
-| `agent.gate.repair` | INFO | `station` `attempt=1` | **"没这条 = 没跑重试"**——一眼判据 |
-| `agent.gate.repair.reject` | WARN | `station` `errors=<n>` | 修复轮仍被拒 |
-| `agent.gate.death` | ERROR | `station` `first_errors=<n>` `repair_errors=<n>` | 续行附两轮死因全文 |
-| `coach.round.enter` | INFO | `course` `today` | |
-| `coach.segment.enter` | INFO | `course` `tier=light\|full\|arbitration\|repair` `effort=fast\|deep` | |
-| `coach.segment.exit` | INFO | `course` `tier` `operator` `disagreement=<bool>` `schema=ok\|reject` | schema=reject 时续行附清单 |
-| `coach.gate.reject` | WARN | `course` `gate=schema\|propose` `errors=<n>` | 续行附清单 |
-| `coach.repair.trigger` | WARN | `course` `round=1` | **"到底有没有跑过重试"的主判据** |
-| `coach.round.result` | INFO | `course` `segments=light,repair` `repaired=<bool>` `proposal=<id>` `ops=<n>` | |
-| `coach.round.apply_fail` | ERROR | `course` `proposal=<id>` `error=<msg>` | |
-| `engine.call` | INFO | `tool` `chars=<n>` + 续行输出摘要 | 前身 `runLog`（`run`／`apiRun`） |
-| `engine.call.fail` | ERROR | `tool` `error=<msg>` | 前身 `apiRun` 失败留痕 |
-| `agent.call` | INFO | `station` `mode` `call_no` `effort` `ms` `prompt_chars` `reply_chars` `tokens` | 前身 `llm_call`；`tokens` 缺则省略该字段 |
-| `content.job` | INFO | `course` `node` `tier` `effort` `message` | 前身 `content_job` |
-| `host.gen_jobs.restore_failed` | WARN | `error=<msg>` | 前身 `gen_jobs_restore` |
-| `host.gen_jobs.restored` | INFO | `stale` `swept` `queued_paused` | 今天只有 console，新增留痕 |
-
-级别原则：进出／结果 = INFO；拒收与"触发修复" = WARN；死亡／失败 = ERROR；逐轮轨迹与尺寸明细 = DEBUG。`agent.ts` 的 `gateRepairRound<T, U>(_station, …)` 站点参数随本票复活（改名 `station`）——六个策略站（种子起草／罗盘／教练生长／目标反编译／计划草案／里程碑草案）共用**统一 agent 缝**，故缝级日志一次到位。**但 `gateRepairRound` 本身只有三个站在用**（教练生长 `growth-subsystem.ts`／目标反编译 `projects.ts`／里程碑草案 `host/jobs.ts`）：计划草案走裸 `agent.complete`（无修复轮），种子起草与罗盘走 `agentLoop`——故 `agent.gate.first`／`repair`／`repair.reject`／`death` 四条实际只从这三个站发出（§修订 2026-09-15）。
-
-边界：
-
-- **不在本票范围**：面板日志查看页；`/question-save`／`/question-add`／`/question-archive` 三条"直调不包 `apiRun`"路由的留痕补齐（口径已登记，另开票）；`journal.jsonl` 语义；提示词（零改动 → 无 `PROMPT_CHANGELOG` 条目）。
-- **`docs/adr/` 历史档（0020／0046／0059／0060／0079）里"运行日志"的引用不改**——历史不可改；本 ADR 是其并入记录。
+- **不在本票范围**：面板日志查看页；「直调不包 `apiRun`」路由的留痕补齐（口径已登记、另开票——写侧 9 条已由 #292 全部收编进 `apiRun`，读侧 `GET /note` 无写副作用不计）；`journal.jsonl` 语义；提示词（零改动 → 无 `PROMPT_CHANGELOG` 条目）。
+- **术语**：新概念叫**「调试日志」**，`CONTEXT.md` 不新增「运行日志」词条——它从此只是历史名词，复用旧名会让历史 ADR 满篇的「运行日志」指代一个已不存在的东西；`docs/adr/` 历史档（0020／0046／0059／0060／0079）里的引用不改，本 ADR 是其并入记录。
 - **pino 打进 lib 产物**（沿用 `yaml`／`ts-fsrs` 同款 bundle，保单文件 lib 分发纪律），过门动作是构建后跑 `npm run smoke` 验真出一行；`--external:pino` 只作实测失败后的退路，退的理由须回写本 ADR。依赖记 `pino ^10.3.1`（实测最新）。
-- **测试面**：新增 `tests/file-log.test.ts`（按天切分／行格式与多行形态／级别过滤／保留期清扫／写盘失败静默 + 失败计数／单日上限标记行）；`tests/coach-growth.test.ts` 增"重裁触发与否从日志可见"断言；`tests/host-runtime.test.ts` 的 `出题 effort=deep` 断言改读新 `.log`；`tests/helpers/vault.ts` 默认注入内存记录型假 logger（引擎侧确定性与零盘面噪声）。门面：G5 两个新受控文件登记、G4 逐子系统基线同步、G3 三向一致、`tests/README.md` 门册新条目 **S75** 与行为变更登记。
-- **术语**：新概念叫**「调试日志」**，`CONTEXT.md` 不新增「运行日志」词条——它从此只是历史名词，复用旧名会让历史 ADR／README 里满篇的"运行日志"指代一个已不存在的东西。
+- **测试面**：门面 G5 两个新受控文件登记、G4 逐子系统基线同步、G3 三向一致；盘面契约、测试文件清单与行为变更登记在门册 `tests/README.md` §调试日志落地（#258）。
 
-替代方案（否决）：
+## 替代方案（否决）
 
-- **让引擎自己写盘（走 `VaultFs`，省一个端口与 11 处接线）**——格式／旋转／保留期属适配器关注点，且与 `paths.ts`「观测面写侧住 host」的成文先例相抵；ADR-0046 当年否决"引擎写运行日志.md"的观测语义顾虑同源。否决：端口形态。
-- **端口可选、缺省 noop**——省 11 处接线，代价是日志可静默消失（正是本票要治的病）。否决。
+- **让引擎自己写盘（走 `VaultFs`，省一个端口与全部接线）**——格式／旋转／保留期属适配器关注点，且与 `paths.ts`「观测面写侧住 host」的成文先例相抵（ADR-0046 当年否决「引擎写 `运行日志.md`」的观测语义顾虑同源）。否决：端口形态。
+- **端口可选、缺省 noop**——省全部接线，代价是日志可静默消失，正是本票要治的病。否决。
 - **`运行日志.md` 共存分工**——两套观测面并存、边界靠人记，且 markdown 无级别难 grep 的痛点不治。否决：整条替换，旧文件留在 vault 里不迁移不删除。
 - **`pino-roll` transport 拿按天切分**——第二依赖，且 worker thread 在 esbuild 单文件产物里失效，格式仍是 JSON 还得再引 `pino-pretty`。否决。
-- **放宽验收为 JSON 行**——背离票面"纯文本行格式可 grep"的判据，人读性下降。否决。
+- **放宽验收为 JSON 行**——背离票面「纯文本行格式可 grep」的判据，人读性下降。否决。
 - **单条压成一行 / 只记元数据**——前者把门错误清单腰斩，后者把最有价值的观测面（门到底说了什么）主动丢掉。否决。
-- **取消单条上界 / 按级别分档**——前者把"无限增长"从目录搬回单条，后者引入没人校准的旋钮。否决。
-- **零依赖手写 logger（票面候选之一）**——零依赖、打包面最小，但本票择框架：pino 在主流程里统一了级别门与日志 API 的形状，且其格式化／旋转缺陷已由"自建 sink"这一处收敛。否决（若日后 sink 复杂度增长，这是可回退的对照方案）。
-
-取号：0080（写前 `ls docs/adr/` 确认，0079 已占）。票面：#253 轻量级日志方案（每天一个 .log 文件 + 引擎关键路径可观测）。
+- **取消单条上界 / 按级别分档**——前者把「无限增长」从目录搬回单条，后者引入没人校准的旋钮。否决。
+- **零依赖手写 logger（票面候选之一）**——零依赖、打包面最小，但本票择框架：pino 在主流程里统一了级别门与日志 API 的形状，且其格式化／旋转缺陷已由「自建 sink」这一处收敛。否决（若日后 sink 复杂度增长，这是可回退的对照方案）。
 
 ## §修订（2026-09-15，实施前核实）
 
-**「六个策略站共用 `gateRepairRound`」是计数错误，实为三个站。** 上表事件闭集与接线清单不变，只更正这句话的事实面（实施前用 `query_graph` 取 `gateRepairRound` 全部入边 + grep 复核得出）：
-
-| 站点 | 实际入口 | 有 `gateRepairRound`？ |
-|---|---|---|
-| 教练生长 | `growth-subsystem.ts:813` | ✅ |
-| 目标反编译 | `projects.ts:1191` | ✅ |
-| 里程碑草案 | `host/jobs.ts:1045` | ✅ |
-| 计划草案 | `host/jobs.ts:1032` `rt.agent.complete('计划草案', …)` | ❌ 无修复轮 |
-| 种子起草 | `agentLoop`（回路收束，无单发修复轮） | ❌ |
-| 罗盘 | `agentLoop`（`compassPaint`，路线门首过即落） | ❌ |
-
-「六站共用」对**统一 agent 缝**（`AgentSeam`：`complete`／`repair`／`agentLoop`／`gateRepairRound` 四种形态）成立；对 `gateRepairRound` 这一种形态不成立。后果仅限验收口径：`agent.gate.*` 四条只应从上述三站出现，按「六站都该有」去查会对不上。
-
-**方法论附注**：这次核实踩到的坑——本仓 `trace_path(direction="inbound")` 的默认 `mode: "calls"` 对方法调用不闭合（`agent.gateRepairRound(...)` 在图上记成 `USAGE` 不是 `CALLS`），对 `gateRepairRound` 返回 `callers_total: 0`，与「真的没有调用方」同形。已固化进 `docs/agents/code-index.md`（含 `CALLS`+`USAGE` 双取兜底查询）与 `AGENTS.md`（`trace_path` 报 0 须复核）。
+**「六个策略站共用 `gateRepairRound`」是计数错误，实为三个站**（教练生长／目标反编译／里程碑草案；计划草案走裸 `agent.complete`、种子起草与罗盘走 `agentLoop`，均无修复轮）。事件闭集与接线清单不变，只更正这句话的事实面；后果仅限验收口径——`agent.gate.*` 四条只应从上述三站出现，按「六站都该有」去查会对不上。**「六站共用统一 agent 缝」（`complete`／`repair`／`agentLoop`／`gateRepairRound` 四种形态）仍成立**，对 `gateRepairRound` 这一种形态不成立。方法论附注：核实中踩到本仓 `trace_path` 默认 `calls` 模式对方法调用不闭合（`agent.gateRepairRound(...)` 在图上记成 `USAGE`），对 `gateRepairRound` 返回 `callers_total: 0` 与「真的没有调用方」同形——已固化进 `docs/agents/code-index.md`（`CALLS`＋`USAGE` 双取兜底查询）。
 
 ## §勘误（2026-09-16，#289；勘误只追加本段，上文裁决正文不改）
 
-**「直调不包 `apiRun`」的口径已过时，以本段为准。** 裁决与边界段写的「`/question-save`／`/question-add`／`/question-archive` 三条直调路由」是当票快照：`/question-save` 已被 #169 收编进通道注册表（经 `apiRun` 留痕，注释过时、不缺留痕）；经 `handlers.ts` 手写路由实盘（2026-09-16），当前**写侧直调面共 9 条**——`PUT /question-update`、`POST /question-add`、`POST /question-archive`、`POST /rebuild`、`POST /feedback`、`POST /proposals/apply`、`POST /proposals/reject`、`POST /course/delete`、`POST /generate/cancel`；另有读侧 `GET /note` 直调（无写副作用，不计入写侧面）。处置：逐条包 `apiRun` 或 `logCall`（写侧优先），由 #292（T4）落地后对照本表复核注销。
+**「直调不包 `apiRun`」的口径已过时，以本段为准**：边界段写的「三条直调路由」是当票快照，当前**写侧直调面共 9 条**——`PUT /question-update`、`POST /question-add`、`POST /question-archive`、`POST /rebuild`、`POST /feedback`、`POST /proposals/apply`、`POST /proposals/reject`、`POST /course/delete`、`POST /generate/cancel`（读侧 `GET /note` 无写副作用，不计入写侧面）；处置：逐条包 `apiRun` 或 `logCall`（写侧优先）。**复核注销（2026-09-16，#292）**：9 条已全部收编进 `apiRun`（tool 标签 `api/<路由>`，`engine.call`／`engine.call.fail` 留痕）；`/course/delete` 与 `/proposals/apply` 只把 engine 写侧包进 `apiRun`，路由内 host 侧联动（清扫、生长批入队）留痕外不重复记。**闭集外存量事件的登记去向**：`coach.draft.enter/handover/unfinished/exit` 四条已在代码（草稿回路）但漏登本 ADR 闭集——按裁决转入附录 ADR-0091 登记，本表闭集不追改；此后新事件一律先进附录登记再接线。
 
-**闭集外存量事件的登记去向**：`coach.draft.enter/handover/unfinished/exit` 四条已在代码（`growth-subsystem.ts` 草稿回路）但漏登本 ADR 闭集——按 Q4 裁决转入附录 ADR（ADR-0091）登记，本表闭集不追改。此后新事件一律先进附录登记再接线。
-
-**复核注销（2026-09-16，#292；承接上段处置）**：勘误所列 9 条写侧直调已全部收编进 `apiRun`（tool 标签 `api/<路由>`，`engine.call`／`engine.call.fail` 留痕）；`/course/delete` 与 `/proposals/apply` 只把 engine 写侧包进 `apiRun`，路由内的 host 侧联动（清扫、生长批入队）留在痕外不重复记。`GET /note` 读侧维持直调不计。对照本表复核完毕，勘误处置至此闭环。
+**施工明细**（构造点接线清单、17 条事件的字段表与前身对照、盘面测试文件清单、`smoke` 过门读数、`trace_path` 报 0 的复核经过）见 #253／#258 票面与门册 `tests/README.md` §调试日志落地；事件名与级别的权威登记见 ADR-0091；`git log` 是完整流水。
