@@ -70,7 +70,7 @@ import type { LearnerArchiveResult, LearnerForgetResult, LearnerRateResult } fro
 import { assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from '../sched/sessions.ts'
 import type { NodeStat, WindowStat } from '../sched/sessions.ts'
 import type { SedimentKind } from '../sched/sediment.ts'
-import type { CompassEta, RouteReconcile } from '../compass.ts'
+import type { CompassEta, RouteReconcile } from '../coach/compass.ts'
 import { readDayCutoff, xpForAnswer } from '../sched/xp.ts'
 
 // LearnerCardKind / LEARNER_CARD_KINDS 住 types.ts（中立层，#152 刀 4）；

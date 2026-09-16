@@ -354,13 +354,16 @@ test('G5 文件规模棘轮：逐文件行数卡基线（views 叶子／types.ts
 // ---------------------------------------------------------------- G6 顶层不变量
 
 test('G6 自检：白名单外调用图写原语会被抓（门不是恒过）', () => {
+  // 白名单成员的路径引用常量本身（不抄值）：迁家后抄写的样本会不再等于白名单条目，
+  // 而本自检的断言面是「白名单外被抓」——样本一旦脱靶，该分支静默不再被覆盖。
+  const whitelisted = GRAPH_WRITE_WHITELIST[0]!
   const callers = graphWriteCallers([
     [GRAPH_WRITE_PRIMITIVES[0]!.definedIn, 'async writeGraphDoc(nodes) { await writeFile(path, y) }'],
-    ['src/engine/proposals.ts', 'await store.writeGraphDoc(nodes)'],
+    [whitelisted, 'await store.writeGraphDoc(nodes)'],
     ['src/engine/rogue.ts', 'await store.writeGraphDoc(nodes)'],
     ['src/engine/sneaky.ts', 'const { writeGraphDoc } = store'],
   ])
-  assert.deepEqual([...callers.keys()].sort(), ['src/engine/proposals.ts', 'src/engine/rogue.ts', 'src/engine/sneaky.ts'],
+  assert.deepEqual([...callers.keys()].sort(), [whitelisted, 'src/engine/rogue.ts', 'src/engine/sneaky.ts'].sort(),
     '白名单外的调用（含解构别名）必须被看见；原语自己的家不算调用者')
 })
 
@@ -469,7 +472,9 @@ test('G9 自检：「同事务」残留与站点缺原语都会被抓（门不�
   // WRITE_UNIT_SITES，自检再抄一份同形表会随站点迁家而静默失真——实测（#305 刀④）
   // 硬编码 'engine/sched-subsystem.ts' 在迁家后不再命中真键，「齐备则绿」当场变红。
   const complete = { ...WRITE_UNIT_SITES }
-  const PROPOSALS = 'engine/proposals.ts'
+  // 站点键的路径随域搬迁（#305 刀④／#307 刀⑦）——同样不许抄值：按站点名从模块级表里
+  // 取（取不到时下面两条断言当场红，不会静默放过）。
+  const PROPOSALS = Object.keys(WRITE_UNIT_SITES).find(k => k.endsWith('/proposals.ts')) ?? ''
   const bad = writeUnitViolations(['src/engine/rogue.ts'], { ...complete, [PROPOSALS]: 0 })
   assert.ok(bad.some(v => v.includes('[同事务残留]') && v.includes('rogue.ts')), '「同事务」注释必须被抓')
   assert.ok(bad.some(v => v.includes('proposals.ts') && v.includes(`0 < ${WRITE_UNIT_SITES[PROPOSALS]}`)),

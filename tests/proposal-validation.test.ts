@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validateEditProposal } from '../src/engine/proposals.ts'
+import { validateEditProposal } from '../src/engine/coach/proposals.ts'
 import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse } from './helpers/drafted.ts'

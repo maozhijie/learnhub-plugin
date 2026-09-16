@@ -21,7 +21,7 @@ import { parseDay, daysBetween } from '../dates.ts'
 import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import { Content } from '../content/content.ts'
-import { endpointNames, isSeedGraph, readAnchors } from '../seed.ts'
+import { endpointNames, isSeedGraph, readAnchors } from '../coach/seed.ts'
 import { readVaultLinksCache, splitPriorFeed } from '../vault/vault-links.ts'
 
 export interface AuditResult {

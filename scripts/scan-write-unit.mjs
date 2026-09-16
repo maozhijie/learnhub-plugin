@@ -7,21 +7,21 @@
  *      回退或新增跨文件落盘操作绕开原语都会被抓。
  *
  * 站点清单（文件 → 该文件内的写入单元调用次数 ≥ N）：
- *   proposals.ts ≥3（applyEdit／applySeed／applyEnrich）
+ *   coach/proposals.ts ≥3（applyEdit／applySeed／applyEnrich）
  *   sched/sched-subsystem.ts ≥2（nodeComplete／optimizeFsrsParams）
- *   nof1.ts ≥1（experimentStop）
- *   growth-subsystem.ts ≥1（settleRechecks）
+ *   coach/nof1.ts ≥1（experimentStop）
+ *   coach/growth-subsystem.ts ≥1（settleRechecks）
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** 七站点的最低调用数（键 = 相对 src/ 的 posix 路径——不能用文件名：
- * views/proposals.ts 与 engine/proposals.ts 同名，按名计数会互相覆盖）。 */
+ * views/proposals.ts 与 engine/coach/proposals.ts 同名，按名计数会互相覆盖）。 */
 export const WRITE_UNIT_SITES = {
-  'engine/proposals.ts': 3,
+  'engine/coach/proposals.ts': 3,
   'engine/sched/sched-subsystem.ts': 2,
-  'engine/nof1.ts': 1,
-  'engine/growth-subsystem.ts': 1,
+  'engine/coach/nof1.ts': 1,
+  'engine/coach/growth-subsystem.ts': 1,
 }
 
 export function srcFilesOf(root) {

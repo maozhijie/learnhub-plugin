@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import {
   clampRecheckDays, recheckPreregOf, appendProbationEntry, readProbationLedger, foldProbation,
   recheckVerdict, recheckDue, learningDaysOf, growthRates, growthGate,
-} from '../src/engine/probation.ts'
-import type { ProbationEntry, ReviewRec } from '../src/engine/probation.ts'
+} from '../src/engine/coach/probation.ts'
+import type { ProbationEntry, ReviewRec } from '../src/engine/coach/probation.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import type { PracticeRec } from '../src/engine/types.ts'
 import { readSedimentCanon } from '../src/engine/sched/sediment.ts'

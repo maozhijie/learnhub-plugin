@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { GraphStore } from '../src/engine/graph/graph.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
-import { validateEnrichProposal } from '../src/engine/proposals.ts'
+import { validateEnrichProposal } from '../src/engine/coach/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import { YAML } from '../src/engine/yaml.ts'
 

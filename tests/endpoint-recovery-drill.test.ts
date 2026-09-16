@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { readAnchors } from '../src/engine/seed.ts'
+import { readAnchors } from '../src/engine/coach/seed.ts'
 import { withVault } from './helpers/vault.ts'
 
 // 存量异常态恢复演练（#201 / ADR-0055 边界条款验收票）：

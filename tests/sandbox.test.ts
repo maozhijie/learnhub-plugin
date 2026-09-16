@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fsrs, generatorParameters } from 'ts-fsrs'
 import { simulateRun, aggregateRuns, quantile, SANDBOX_RUNS, SANDBOX_WORDING, SANDBOX_DEFAULT_WEEKS } from '../src/engine/sched/sandbox.ts'
 import type { SandboxCard, SandboxNode } from '../src/engine/sched/sandbox.ts'
-import { mulberry32 } from '../src/engine/nof1.ts'
+import { mulberry32 } from '../src/engine/coach/nof1.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 
 const TODAY = '2026-09-09'

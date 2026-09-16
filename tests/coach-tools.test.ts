@@ -16,8 +16,8 @@ import { withVault, DEFAULT_REGISTRY } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import {
   COACH_TOOL_NAMES, coachToolSpecs, coachToolExecutor, renderGrowthGraphView,
-} from '../src/engine/coach-tools.ts'
-import type { CoachToolDeps } from '../src/engine/coach-tools.ts'
+} from '../src/engine/coach/coach-tools.ts'
+import type { CoachToolDeps } from '../src/engine/coach/coach-tools.ts'
 import { Graph } from '../src/engine/graph/graph.ts'
 import { resolveConcept } from '../src/engine/concepts/concepts.ts'
 import type { GNode, Fm } from '../src/engine/types.ts'

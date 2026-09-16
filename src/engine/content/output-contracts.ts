@@ -87,13 +87,13 @@ export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = 
   },
   draftAuditRepair: {
     // #271 / ADR-0088：证人 = 写件工具分发处的字面量（draft_patch/draft_audit/draft_finish）。
-    file: 'engine/growth-subsystem.ts', witness: ['draft_patch', 'draft_audit', 'draft_finish'],
+    file: 'engine/coach/growth-subsystem.ts', witness: ['draft_patch', 'draft_audit', 'draft_finish'],
     what: '生长草稿执行官站：写件工具的门错误原文回灌 loop 继续修（轮数计入会话预算，不进 gateRepairRound）',
   },
   plannerRecheckOnce: {
     // #273：证人 = 思路官重裁调用点（agent.repair 站名走 COACH_PLAN_STATION 常量；
     // #301 起站名不再散字面量，证人串跟着换成常量名形态）。
-    file: 'engine/growth-subsystem.ts', witness: ['agent.repair(COACH_PLAN_STATION', 'COACH_PLAN_FEEDBACK_BLOCK'],
+    file: 'engine/coach/growth-subsystem.ts', witness: ['agent.repair(COACH_PLAN_STATION', 'COACH_PLAN_FEEDBACK_BLOCK'],
     what: '教练思路官：计划 schema 门拒收 → 门错误 + 被拒计划原文回灌重裁恰一次，仍败两轮死因抛出',
   },
 }

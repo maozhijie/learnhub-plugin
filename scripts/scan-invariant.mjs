@@ -23,7 +23,7 @@ export const GRAPH_WRITE_PRIMITIVES = [
 ]
 
 /** 唯一允许调用图写原语的模块（教练层提案门）。 */
-export const GRAPH_WRITE_WHITELIST = ['src/engine/proposals.ts']
+export const GRAPH_WRITE_WHITELIST = ['src/engine/coach/proposals.ts']
 
 /**
  * 从 `[路径, 源码]` 序列里收集图写原语的调用者（定义处除外）。

@@ -26,22 +26,22 @@ import { YAML } from './yaml.ts'
 import { dataCheck } from './data-check.ts'
 import { readDayCutoff } from './sched/xp.ts'
 import { SchedSubsystem } from './sched/sched-subsystem.ts'
-import { GrowthSubsystem } from './growth-subsystem.ts'
+import { GrowthSubsystem } from './coach/growth-subsystem.ts'
 import type { FSRS } from 'ts-fsrs'
-import { LabSubsystem } from './nof1.ts'
+import { LabSubsystem } from './coach/nof1.ts'
 import { sectionEntryOf } from './sched/attribution.ts'
 import { diagnosticView } from './sched/attribution.ts'
 import { runAudit } from './graph/audit.ts'
 import { Content } from './content/content.ts'
 import { ContentSubsystem } from './content/content-subsystem.ts'
-import { GraphProposals } from './proposals.ts'
-import type { ApplyAudit } from './proposals.ts'
+import { GraphProposals } from './coach/proposals.ts'
+import type { ApplyAudit } from './coach/proposals.ts'
 import type { Clock, Rng } from './clock.ts'
 import type { Logger } from './logger.ts'
 
 import { Projects, ProjectSubsystem } from './practice/projects.ts'
-import { endpointNames, readAnchors, foldCompletion } from './seed.ts'
-import type { CompletionFold } from './seed.ts'
+import { endpointNames, readAnchors, foldCompletion } from './coach/seed.ts'
+import type { CompletionFold } from './coach/seed.ts'
 
 /** 宿主取型走门面（D14：host 不深导入引擎子模块）；纯类型 re-export 门。
  *
@@ -51,7 +51,7 @@ import type { CompletionFold } from './seed.ts'
  * 允许 host 深导入的只有**纯声明面**——纯类型，与纯字符串常量（`engine/prompts/*.ts` 的
  * 提示词文本）。判据是「有行为吗」：纯声明面没有运行期语义，深导入不会把宿主焊到引擎内部
  * 装配上；**带行为的引擎子模块仍只准走门面**。 */
-export type { CoachTrigger, CoachPromptFamily, CoachCheck, CoachGrowthSegment, GrowthPlanHandover } from './coach-round.ts';
+export type { CoachTrigger, CoachPromptFamily, CoachCheck, CoachGrowthSegment, GrowthPlanHandover } from './coach/coach-round.ts';
 export type { GateVerdict } from './agent.ts'
 import { QuestionBank, validateBank, BankSubsystem } from './content/question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem } from './vault/note-source.ts'
@@ -83,9 +83,9 @@ export { hasReadyContent } from './vault/notes.ts'
  * 由 code-review 两轴审查抓出并收口到门面。 */
 export { contractOf, validateByContract } from './content/output-contracts.ts'
 export { normalizeStem } from './content/question-dedup.ts'
-export { endpointNames, readAnchors } from './seed.ts'
+export { endpointNames, readAnchors } from './coach/seed.ts'
 /** 卡点自报（#248 / ADR-0077）：注入块渲染随门面出——宿主在途合并缝（generateGrowthJob）消费。 */
-export { stuckReportInject } from './stuck-report.ts'
+export { stuckReportInject } from './coach/stuck-report.ts'
 export { CURRENT_SCHEMA_VERSION } from './schema.ts'
 export type { LlmCallKind, LlmComplete, LlmEffort, LlmStream, LlmTokenUsage, LlmLoopTurn, LlmToolCall, LlmToolSpec } from './llm.ts'
 /** 时钟/随机端口（#175 阶段①）：类型随门面出（宿主经 R1 门取型，实现住 host/clock.ts）。 */
@@ -103,14 +103,14 @@ export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './content/question
 /** 思路官站标签（#301 缺陷③）：宿主 STATIONS.growthPlan 引本常量对齐——失败补标按真实
  * 失败站落盘，站名常量的单一出处从此在引擎侧（此前 host 侧一张写死的遗留映射
  * `growth: '教练思路'`）。 */
-export { COACH_PLAN_STATION } from './growth-subsystem.ts'
+export { COACH_PLAN_STATION } from './coach/growth-subsystem.ts'
 /** 生长草稿内核（#271 / ADR-0088）：站标签/草稿差异与门同调纯函数随门面出（宿主与测试消费）。 */
-export { GROWTH_DRAFT_STATION, expandPatchOps, draftFindings, normalizePatchShape } from './growth-draft.ts'
-export type { PatchSuggestion, PatchShapeNormalization } from './growth-draft.ts'
+export { GROWTH_DRAFT_STATION, expandPatchOps, draftFindings, normalizePatchShape } from './coach/growth-draft.ts'
+export type { PatchSuggestion, PatchShapeNormalization } from './coach/growth-draft.ts'
 /** 生长失败站标签的读侧（#301 缺陷③）：宿主按真实失败站补标语料，读法经门面走（不 cast 字段）。 */
-export { stationOfError } from './growth-subsystem.ts'
-export { editGateErrors, replayDraft, sealedDecisionOf, simulateOps } from './proposals.ts'
-export type { DraftDiff, DraftReplay, SealedDecision, EditGateCtx } from './proposals.ts'
+export { stationOfError } from './coach/growth-subsystem.ts'
+export { editGateErrors, replayDraft, sealedDecisionOf, simulateOps } from './coach/proposals.ts'
+export type { DraftDiff, DraftReplay, SealedDecision, EditGateCtx } from './coach/proposals.ts'
 export type { SecondOpinionReport, SecondOpinionOptions } from './content/question-audit.ts'
 /** 出题多样性仪表（#230 / ADR-0064）：报告类型随门面出（宿主任务消息、工具面、基线脚本消费）。 */
 export type { QuestionDiversityReport, DiversityMetrics, DiversityReading, DistractorReading } from './content/question-diversity.ts'

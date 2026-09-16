@@ -5,8 +5,8 @@ import {
   readyDepthCheck, renderSedimentForCoach,
   COACH_LOOKAHEAD_DEFAULT, COACH_LOOKAHEAD_MIN, COACH_LOOKAHEAD_MAX,
   COACH_COLD_START_DAYS, COACH_COLD_START_EST_MULT,
-} from '../src/engine/coach-round.ts'
-import type { DigestInput } from '../src/engine/coach-round.ts'
+} from '../src/engine/coach/coach-round.ts'
+import type { DigestInput } from '../src/engine/coach/coach-round.ts'
 import type { SandboxCard, SandboxNode } from '../src/engine/sched/sandbox.ts'
 import { foldSediment, renderLearnerProfile } from '../src/engine/sched/sediment.ts'
 import type { PracticeRec, ReviewRec, SedimentEvent } from '../src/engine/types.ts'

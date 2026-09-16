@@ -14,7 +14,7 @@ import {
   SECTION_ROUTE, SECTION_ANNOTATIONS, SECTION_ETA, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,
   ETA_MARKER_PREFIX, parseCompass, sectionBody, withSectionText, validateRouteBody, etaMarkerOf,
   reconcileRoute, hasPaintedRoute,
-} from '../src/engine/compass.ts'
+} from '../src/engine/coach/compass.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
 
 // 罗盘（#143 / ADR-0033 透明度装置）：课程根常驻的非承诺路线草图（罗盘.md）。

@@ -15,7 +15,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { validatePlanHandover } from '../src/engine/coach-round.ts'
+import { validatePlanHandover } from '../src/engine/coach/coach-round.ts'
 
 /** 金样本计划骨架（与 coach-plan 的金计划同形：前进 + 朝向 + 意图句台阶）。 */
 function goldPlanYaml(): string {

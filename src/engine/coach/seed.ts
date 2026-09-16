@@ -14,11 +14,11 @@
  *   能力锚定另要求闭包健康，覆盖锚定另要求块工作表全部核销）。零写侧状态、零专门停机
  *   代码；锚文件缺失 = 零终点（合法空态，空集合折叠）。
  */
-import type { VaultFs } from './io.ts'
-import { atomicWrite } from './io.ts'
-import type { Fm } from './types.ts'
-import { effectiveStage, masteryOfFm } from './sched/srs.ts'
-import type { Graph } from './graph/graph.ts'
+import type { VaultFs } from '../io.ts'
+import { atomicWrite } from '../io.ts'
+import type { Fm } from '../types.ts'
+import { effectiveStage, masteryOfFm } from '../sched/srs.ts'
+import type { Graph } from '../graph/graph.ts'
 
 /** 目标类型二分（#136）：能力锚定默认；覆盖锚定显式选择且必须带块工作表。 */
 export type GoalType = 'capability' | 'coverage'

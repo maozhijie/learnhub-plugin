@@ -19,7 +19,7 @@ import type { Graph } from '../graph/graph.ts'
 import type { BrokenNote } from '../vault/notes.ts'
 import type { Fm, CourseEntry } from '../types.ts'
 import type { FSRS } from 'ts-fsrs'
-import type { CoachCheck } from '../coach-round.ts'
+import type { CoachCheck } from '../coach/coach-round.ts'
 import type { SedimentEvent, SedimentFold, SedimentKind, SedimentTier } from './sediment.ts'
 
 /** Sched 域对门面的窄面：领域实例直接 import 类型，跨子系统方法走本面注入。 */

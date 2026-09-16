@@ -14,23 +14,23 @@
  * （GrowthDeps 天然满足），行为摘要这类依赖子系统私有取材口径的视图经 providers
  * 注入（单一出处不漂移）。
  */
-import { effectiveStage } from './graph/audit.ts'
+import { effectiveStage } from '../graph/audit.ts'
 import type { CompassDoc } from './compass.ts'
 import { ETA_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, etaMarkerOf, hasLearnerAnnotations, parseCompass, sectionBody } from './compass.ts'
-import type { ConceptEntry, ConceptRegistry } from './concepts/concepts.ts'
-import { isDeprecated, resolveConcept } from './concepts/concepts.ts'
-import type { Graph } from './graph/graph.ts'
-import { groupView } from './graph/graph.ts'
-import { round2 } from './grading.ts'
-import type { VaultFs } from './io.ts'
-import { hasReadyContent } from './vault/notes.ts'
-import type { Paths } from './paths.ts'
-import type { BankDoc } from './content/question-bank.ts'
+import type { ConceptEntry, ConceptRegistry } from '../concepts/concepts.ts'
+import { isDeprecated, resolveConcept } from '../concepts/concepts.ts'
+import type { Graph } from '../graph/graph.ts'
+import { groupView } from '../graph/graph.ts'
+import { round2 } from '../grading.ts'
+import type { VaultFs } from '../io.ts'
+import { hasReadyContent } from '../vault/notes.ts'
+import type { Paths } from '../paths.ts'
+import type { BankDoc } from '../content/question-bank.ts'
 import { endpointNames, readAnchors } from './seed.ts'
-import { readySet } from './sched/sessions.ts'
-import { masteryOfFm } from './sched/srs.ts'
-import type { CourseEntry, Fm } from './types.ts'
-import type { LlmToolCall, LlmToolSpec } from './llm.ts'
+import { readySet } from '../sched/sessions.ts'
+import { masteryOfFm } from '../sched/srs.ts'
+import type { CourseEntry, Fm } from '../types.ts'
+import type { LlmToolCall, LlmToolSpec } from '../llm.ts'
 
 /** 工具面白名单（ADR-0041 形状；#249 / ADR-0077 八件）：名字是教练工具调用的唯一取值域。
  * `concept_registry` 已由 `concept_footprint` 完整吸收（词条档职责并入足迹视图）；

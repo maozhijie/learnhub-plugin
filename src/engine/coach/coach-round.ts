@@ -21,12 +21,12 @@
  * 裁决语义（算子集、停机规则）在提示词、归生长批受理票 #145——本票只管感知。
  * 零依赖纯函数（接缝 S51）。#273 起双沙盘仲裁参照随旧单发路径退场（本票不再持沙盘面）。
  */
-import { dayOfTs, parseDay, daysBetween } from './dates.ts'
-import { pctOf } from './grading.ts'
-import { dueReviewFirstPushes, trueRetention } from './sched/memory.ts'
-import { SEDIMENT_KINDS } from './sched/sediment.ts'
-import type { SedimentFold } from './sched/sediment.ts'
-import type { PracticeRec, ReviewRec, Misconception } from './types.ts'
+import { dayOfTs, parseDay, daysBetween } from '../dates.ts'
+import { pctOf } from '../grading.ts'
+import { dueReviewFirstPushes, trueRetention } from '../sched/memory.ts'
+import { SEDIMENT_KINDS } from '../sched/sediment.ts'
+import type { SedimentFold } from '../sched/sediment.ts'
+import type { PracticeRec, ReviewRec, Misconception } from '../types.ts'
 
 // ---- 行为摘要：窗口（最近 7 学习日或 10 节取大） ----
 

@@ -6,8 +6,8 @@ import {
   NOF1_TEMPLATES, NOF1_VARIABLE_WHITELIST, NOF1_PER_ARM_MIN,
   shuffleAssign, nof1ArmForDay, interleaveBySource, analyzeNof1, nof1Outcomes, nof1PracticeOutcomes,
   nof1TemplateViolation, mulberry32,
-} from '../src/engine/nof1.ts'
-import type { ExperimentDef, Nof1OutcomeRec } from '../src/engine/nof1.ts'
+} from '../src/engine/coach/nof1.ts'
+import type { ExperimentDef, Nof1OutcomeRec } from '../src/engine/coach/nof1.ts'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tfQuestion, withVault } from './helpers/vault.ts'

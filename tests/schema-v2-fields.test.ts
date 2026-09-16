@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { GraphStore, loadGraphDoc, parseConceptFields, parseNode, SchemaError } from '../src/engine/graph/graph.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
-import { validateEditProposal } from '../src/engine/proposals.ts'
+import { validateEditProposal } from '../src/engine/coach/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import { YAML } from '../src/engine/yaml.ts'
 

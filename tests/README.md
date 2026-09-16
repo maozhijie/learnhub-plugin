@@ -481,4 +481,19 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 - **单路径登记面在搬迁提交处被 git 历史简化截断**：`CHANGELOG_FILE` 只留当前路径时，`disciplineStartRef` 的 `git log -S PROMPT_CHANGELOG -- <当前路径>` 在搬迁提交处截断，纪律起点**静默从 `7a9a136`（#218 登记面引入提交）漂到本刀提交**——扫描窗口随之从「自 #218 起」缩到「自本刀起」，且**照旧报绿**（实测：双路径下起点仍为 `7a9a136`；窗口提交数随每刀改动 `content.ts` 而递增，故只记起点不记条数）。同源修法是 ADR-0075 §3 的「面是清单不是单文件」——历史路径留在面里。
 - **自检抄写常量值 = 常量迁家时自检局部恒过**：G6／G9 两处自检把路径键控常量的**值**抄进样本、而非引用常量；常量迁家后样本不再命中目标分支——G9 因读模块级表而当场变红（可发现），G6 则**门照旧绿、豁免分支悄悄不再被断言**（不可发现，比红更坏）。同源修法是自检引用常量本身。
 
+## engine 按域归组 刀⑦（#307 / ADR-0093，2026-09-16）：coach/ + 写入单元受管制面
+
+**纯搬移、零逻辑改动**：10 件迁入 `src/engine/coach/`（`growth-subsystem`／`proposals`／`coach-round`／`coach-tools`／`growth-draft`／`compass`／`seed`／`stuck-report`／`probation`／`nof1`），顶层 32 → 22。逐刀 diff 口径同刀①–④（非 import 行只许出现下表路径键）。
+
+| 受控面 | 迁移内容 | 落点 | 判据 |
+|---|---|---|---|
+| 文件规模棘轮 | 10 条 `sizes` 键随路径迁移，行数实测**逐一不变**；`depsFace`／`typeErrors`／`adapterFace` 三族逐字未变 | `scripts/arch-baseline.json`（`--update`） | G5 棘轮精确匹配 |
+| 写入单元站点表 | **本刀是路径表 4 条里剩的 3 条**：`engine/proposals.ts`／`engine/nof1.ts`／`engine/growth-subsystem.ts` → `engine/coach/` 前缀（第 4 条 `sched-subsystem` 随刀④已迁）；文件头站点清单注释同步。键是 `src/` 相对路径，**不能用文件名**——`views/proposals.ts` 与 `engine/coach/proposals.ts` 同名，按名计数会互相覆盖 | `scripts/scan-write-unit.mjs::WRITE_UNIT_SITES` | G9 |
+| 图写原语白名单 | `GRAPH_WRITE_WHITELIST` 唯一成员 `'src/engine/proposals.ts'` → `'src/engine/coach/proposals.ts'`（图写原语 `data/*.yaml` 的唯一写路径；ADR-0044 顶层不变量） | `scripts/scan-invariant.mjs` | G6 |
+| 修复策略机制登记 | `REPAIR_MECHANISMS.draftAuditRepair.file`／`plannerRecheckOnce.file` 两条 `'engine/growth-subsystem.ts'` → `'engine/coach/growth-subsystem.ts'`（该门按 `src/` 相对路径精确匹配读源对账 witness 串） | `src/engine/content/output-contracts.ts` | `tests/repair-policy.test.ts` |
+| 自检样本去硬编码 | G6 自检的**白名单成员样本**原抄 `'src/engine/proposals.ts'`（样本脱靶后「白名单外被抓」分支静默不再被覆盖——与刀② 的 `definedIn` 同形），改引用 `GRAPH_WRITE_WHITELIST[0]`；G9 自检的站点键同样抄了值，改按站点名（`/proposals.ts` 后缀）从模块级 `WRITE_UNIT_SITES` 派生，取不到时断言当场红 | `tests/arch-guards.test.ts` | 门照旧绿 + 两处分支恢复被覆盖 |
+| 产品契约 | **零漂移**：路由/工具面/schema/磁盘格式/提示词文本全部未动 | —（未改） | 探针快照逐字不变；`prompt-bump -- check` 恒绿 |
+
+**门照常执法的负样本实测**（不是「绿了就算」——绿也可能是门不再看这一面）：临时造 `src/engine/rogue-probe-tmp.ts`（含 `store.writeGraphDoc(nodes)` 调用）后直接调门本体，G6 实测写入方 = `['src/engine/coach/proposals.ts', 'src/engine/rogue-probe-tmp.ts']`（白名单外那件被看见，门会红）；G9 站点读数 = `{coach/growth-subsystem:1, coach/nof1:1, coach/proposals:5, sched/sched-subsystem:2}`，与 `WRITE_UNIT_SITES` 新键逐一命中。探针样本已删。
+
 **遗留（不在刀①–④，随刀⑧ 的文档面一并收）**：刀①–④ 只改 import specifier 与上表登记的路径键，**未做全仓散文/注释里的路径引用扫尾**——这是 ADR-0093 的既定分期（刀⑧ 布局定型后一次扫）。已知道的存量悬空路径引用（散文，非门、非运行期）：`build.mjs`（`src/engine/optimize.ts`，刀④后应为 `sched/optimize.ts`）、`scripts/diversity-baseline.mts` 的注释与其产物 `tests/fixtures/diversity-baseline.json` 的 `note`（`src/engine/question-diversity.ts`，刀③后应为 `content/…`）、`tests/prompt-changelog.test.ts` 里那句「模板迁到 prompts/templates.ts」的提交信息样例（历史叙述，保留即可）、`.qoder/` 生成的 wiki（追踪入库的机器产物）。**刀⑧ 扫尾时以此为清单起点。**

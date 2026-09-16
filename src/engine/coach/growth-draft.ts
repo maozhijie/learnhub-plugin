@@ -8,14 +8,14 @@
  * （#272；重放与门序列住 proposals.ts（replayDraft / editGateErrors——草稿通过 =
  * 门通过按构造成立），站编排住 growth-subsystem.ts（growth2.coachDraft）。
  */
-import type { VaultFs } from './io.ts'
-import { atomicWrite } from './io.ts'
-import type { Paths } from './paths.ts'
+import type { VaultFs } from '../io.ts'
+import { atomicWrite } from '../io.ts'
+import type { Paths } from '../paths.ts'
 import type { EditOp } from './proposals.ts'
-import type { ConceptEntry } from './concepts/concepts.ts'
-import { nearNameCandidates, resolveConcept, validateConceptEntry } from './concepts/concepts.ts'
-import type { Graph } from './graph/graph.ts'
-import type { GNode, Misconception } from './types.ts'
+import type { ConceptEntry } from '../concepts/concepts.ts'
+import { nearNameCandidates, resolveConcept, validateConceptEntry } from '../concepts/concepts.ts'
+import type { Graph } from '../graph/graph.ts'
+import type { GNode, Misconception } from '../types.ts'
 import type { EndpointAnchor } from './seed.ts'
 
 /** 执行官站的语料站标签（host STATIONS.growthDraft 引门面常量对齐；站名是受控词表）。 */

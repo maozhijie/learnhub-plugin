@@ -5,35 +5,35 @@
  * 提案落盘 pending（产物文件全留痕）→ 人审 → apply 过 audit 门禁生效 → journal + 快照。
  * 拒绝同样留痕（status=rejected）。
  */
-import type { VaultFs } from './io.ts'
+import type { VaultFs } from '../io.ts'
 import { createHash } from 'node:crypto'
-import { YAML } from './yaml.ts'
-import { Store } from './store.ts'
-import { atomicWrite } from './io.ts'
-import { runWriteUnit } from './write-unit.ts'
-import { Graph, GraphStore, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from './graph/graph.ts'
-import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from './concepts/concepts.ts'
-import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from './concepts/concepts.ts'
-import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from './concepts/concepts.ts'
-import { saveNote, defaultFrontmatter } from './vault/notes.ts'
+import { YAML } from '../yaml.ts'
+import { Store } from '../store.ts'
+import { atomicWrite } from '../io.ts'
+import { runWriteUnit } from '../write-unit.ts'
+import { Graph, GraphStore, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from '../graph/graph.ts'
+import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from '../concepts/concepts.ts'
+import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from '../concepts/concepts.ts'
+import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from '../concepts/concepts.ts'
+import { saveNote, defaultFrontmatter } from '../vault/notes.ts'
 import { endpointNames, readAnchors, writeAnchors, isSeedGraph } from './seed.ts'
 import type { EndpointAnchor } from './seed.ts'
 import {
   SECTION_ROUTE, compassScaffold, withSectionText, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
-import { todayStr } from './dates.ts'
-import type { Clock } from './clock.ts'
-import type { Logger } from './logger.ts'
-import { noopLogger } from './logger.ts'
+import { todayStr } from '../dates.ts'
+import type { Clock } from '../clock.ts'
+import type { Logger } from '../logger.ts'
+import { noopLogger } from '../logger.ts'
 import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
-import { RECHECK_DAYS_DEFAULT } from './params.ts'
-import type { GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
-import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from './types.ts'
-import type { Paths } from './paths.ts'
-import type { CourseEntry, ProposalKind, ProposalRec } from './types.ts'
-import type { GraphEditProposalResult, GraphEnrichProposalResult } from './views/proposals.ts'
-import type { GraphApplyEditResult, GraphApplyEnrichResult } from './views/graph.ts'
+import { RECHECK_DAYS_DEFAULT } from '../params.ts'
+import type { GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from '../types.ts'
+import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from '../types.ts'
+import type { Paths } from '../paths.ts'
+import type { CourseEntry, ProposalKind, ProposalRec } from '../types.ts'
+import type { GraphEditProposalResult, GraphEnrichProposalResult } from '../views/proposals.ts'
+import type { GraphApplyEditResult, GraphApplyEnrichResult } from '../views/graph.ts'
 
 /** apply 门禁的审计快照（facade 层跑 audit 后传入；findings 由 warns + 健康分组成）。 */
 export interface ApplyAudit { ok: boolean; warns: string[]; health: number }
@@ -1375,7 +1375,7 @@ export class GraphProposals {
     const oldPath = this.paths.courseNotePath(root, node)
     const targetName = newName ?? node
     if (this.fs.exists(oldPath)) {
-      const { loadNote, saveNote } = await import('./vault/notes.ts')
+      const { loadNote, saveNote } = await import('../vault/notes.ts')
       const { fm, body } = await loadNote(oldPath, this.fs)
       const newPath = this.paths.courseNotePath(root, targetName)
       await saveNote(newPath, { ...(fm ?? {}), node: targetName }, body, this.fs)
@@ -1395,7 +1395,7 @@ export class GraphProposals {
     }
     // 题库随迁（改名时；无题库静默跳过）
     if (newName) {
-      const { safeFilename } = await import('./paths.ts')
+      const { safeFilename } = await import('../paths.ts')
       const bankDir = this.paths.courseRoot(root)
       const oldBank = `${bankDir}/题库/${safeFilename(node)}.yaml`
       if (this.fs.exists(oldBank)) {
@@ -1417,7 +1417,7 @@ export class GraphProposals {
     if (!graph.nset.has(node)) return
     const oldPath = this.paths.courseNotePath(root, node)
     const archiveDir = `${this.paths.courseStateDir(root)}/archive`
-    const { safeFilename } = await import('./paths.ts')
+    const { safeFilename } = await import('../paths.ts')
     if (this.fs.exists(oldPath)) {
       await this.fs.mkdir(archiveDir)
       await this.fs.rename(oldPath, `${archiveDir}/del-${pid}-${safeFilename(node)}.md`)
