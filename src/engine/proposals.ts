@@ -380,6 +380,61 @@ export function applyFindings(audit: ApplyAudit, seedPhase = false): string[] {
   return findings
 }
 
+/** sealed 谓词（#271 / ADR-0088 抽出共享：apply 写单元与草稿内核两处同调，不复刻）：
+ * 收尾接线批 = 零 add_node 的纯 set_pre 批 → 被接线终点落 sealed；被含 add_node 的
+ * 主线批接线 → reopen。夹带其他 op 的零新增批不构成收尾宣告、也不动 sealed。
+ * effects 为空 = 本批不触碰任何终点锚。 */
+export interface SealedDecision {
+  /** 被本批 set_pre 接线的终点节点（图上在册锚的子集）。 */
+  wired: string[]
+  /** 是否构成收尾宣告（零 add_node 纯 set_pre 批）。 */
+  sealing: boolean
+  effects: Array<{ endpoint: string; action: 'seal' | 'reopen' }>
+}
+
+export function sealedDecisionOf(ops: EditOp[], anchors: EndpointAnchor[]): SealedDecision {
+  const wires = new Set(ops.filter(o => o.op === 'set_pre' && o.node).map(o => o.node!))
+  const touched = anchors.filter(a => wires.has(a.endpoint))
+  if (!wires.size || !touched.length) return { wired: [], sealing: false, effects: [] }
+  const adds = addNodeCountOf(ops)
+  const sealing = adds === 0 && ops.every(o => o.op === 'set_pre')
+  if (!sealing && adds === 0) return { wired: touched.map(a => a.endpoint), sealing: false, effects: [] }
+  return {
+    wired: touched.map(a => a.endpoint),
+    sealing,
+    effects: touched.map(a => ({ endpoint: a.endpoint, action: sealing ? 'seal' as const : 'reopen' as const })),
+  }
+}
+
+/** edit 受理门全序列收拢（#271 / ADR-0088 中心裁决「门同源」）：结构重放 / 概念对表 /
+ * 终点锚保护 / 巩固门 / 生长闸门——proposeEdit / applyEdit / 草稿内核**三处同调**，
+ * 草稿通过 = 门通过按构造成立。上下文由调用方装载（entries = 登记现行条目，需铸名
+ * 合并的调用方传合并后集合并省略 mints；anchors = 现行终点锚），本函数零 IO。 */
+export interface EditGateCtx {
+  regions: GRegion[]
+  graph: Graph
+  entries: ConceptEntry[]
+  anchors: EndpointAnchor[]
+  /** 本批铸名块（对表用；与 entries 撞名由 mintConflicts 硬拒）。 */
+  mints?: ConceptEntry[]
+  growthGate?: (spec: EditProposalSpec) => Promise<string[]>
+}
+
+export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): Promise<string[]> {
+  const mints = ctx.mints ?? []
+  const errors = [
+    ...simulateOps(ctx.regions, ctx.graph, spec.ops),
+    ...mintConflicts(mints, ctx.entries),
+    ...conceptReferenceErrors(conceptRefsOfOps(spec.ops), namesOf([...ctx.entries, ...mints])),
+    ...endpointGuardErrorsOf(spec, ctx.anchors),
+    ...consolidationGateErrors(spec.note?.operator, spec.ops, ctx.graph),
+  ]
+  if (errors.length) return errors
+  const gateBlocks = ctx.growthGate ? await ctx.growthGate(spec) : []
+  // 闸门横幅随错误行返回（原 propose/apply 两侧的包装文案，门同调后单源在此）
+  return gateBlocks.length ? ['生长闸门拒绝受理（插入积极性调速，#146）', ...gateBlocks] : []
+}
+
 // ---- 富化覆盖层通道（kind=enrich，#140：schema v2 出生/覆盖层分家）----
 
 /** 覆盖层字段条目：节点 → 该字段的写入值。首期只有 enc（#127 §6：覆盖层首期=enc 回填）。 */
@@ -471,6 +526,69 @@ function enrichMissingTargets(fields: EnrichFieldEntry[], graph: Graph): string[
   return [...new Set(fields.map(f => f.node).filter(n => !graph.nset.has(n)))]
 }
 
+/** 终点锚保护 + 生长方向不变式（#142/#198 / ADR-0055；#239 / ADR-0076 多终点化：**每个**终点
+ * 各跑同一套检查）：edit 提案不得 del/rename 锚定的终点节点——那是绕开显式终点动作的锚直改。
+ * 方向不变式三句：① 任何 add_node 以终点为 pre 直接拒——目标之后不是本课程的生长域；
+ * ② 主线批（前进/换向）含新节点时必须声明 target_endpoints，接线覆盖检查对每个声明的终点
+ * 各跑一遍——零终点课程同样不豁免；③ 收尾接线批（零 add_node 的纯 set_pre）合法。
+ * 接线核查取「覆盖」而非「相等」：最后台阶可与既有台阶合流（交汇），新前沿全部在 wire 里
+ * 就守住不变式。旁支/巩固/插入豁免接线义务。（#271 抽出纯函数形态：editGateErrors 三处同调） */
+export function endpointGuardErrorsOf(spec: EditProposalSpec, anchors: EndpointAnchor[]): string[] {
+  const endpoints = endpointNames(anchors)
+  const label = (name: string): string => {
+    const a = anchors.find(x => x.endpoint === name)!
+    return `${a.declared} 声明${a.origin_proposal !== undefined ? `，提案 #${a.origin_proposal}` : ''}`
+  }
+  const errors: string[] = []
+  for (const [i, op] of spec.ops.entries()) {
+    if (!endpoints.has(op.node ?? '')) continue
+    if (op.op === 'del_node') {
+      errors.push(`ops.${i}: del_node 拒绝——「${op.node}」是锚定的终点（${label(op.node!)}）。终点增删走显式动作，不直改锚`)
+    } else if (op.op === 'rename') {
+      errors.push(`ops.${i}: rename 拒绝——「${op.node}」是锚定的终点（${label(op.node!)}）。终点增删走显式动作，不直改锚`)
+    }
+  }
+  // ① 禁以终点为 pre：add_node 把方向锚当前置 = 长过目标
+  for (const [i, op] of spec.ops.entries()) {
+    if (op.op === 'add_node' && (op.pre ?? []).some(p => endpoints.has(p))) {
+      const hit = (op.pre ?? []).filter(p => endpoints.has(p))
+      errors.push(`ops.${i}: add_node「${op.name}」以终点「${hit.join('、')}」为 pre——目标之后不是本课程的生长域（禁长过目标）`)
+    }
+  }
+  // ② 主线批必接线（ADR-0076 教练回合多终点化）：前进/换向批含新节点时必须声明
+  //    note.target_endpoints（本批朝哪些终点长），接线覆盖检查对**每个**声明的终点
+  //    各跑一遍；声明终点必须是在册锚（锚由人手增删，提案不得凭空捏造方向）。
+  //    同一个新节点同时进多个终点的 pre 是合法形态（交汇节点，同一门下天然放行）。
+  const adds = addNodeCountOf(spec.ops)
+  if (spec.note && (spec.note.operator === '前进' || spec.note.operator === '换向') && adds > 0) {
+    const targets = spec.note.target_endpoints ?? []
+    if (!targets.length) {
+      errors.push(`生长批（${spec.note.operator}）含 ${adds} 个新节点但未声明朝向——note.target_endpoints 必填（本批朝哪些终点长；交汇优先，可声明多个）`)
+    }
+    const newNames = spec.ops.filter(o => o.op === 'add_node').map(o => o.name!)
+    const consumed = new Set(spec.ops.flatMap(o => o.op === 'add_node' ? (o.pre ?? []) : []))
+    const frontier = newNames.filter(n => !consumed.has(n))
+    for (const target of targets) {
+      if (!endpoints.has(target)) {
+        errors.push(`note.target_endpoints: 「${target}」不是在册终点——朝向只能声明锚上已声明的终点（锚由学习者手加，提案不得改）`)
+        continue
+      }
+      const wirings = spec.ops.filter(o => o.op === 'set_pre' && o.node === target)
+      if (!wirings.length) {
+        errors.push(`生长批（${spec.note.operator}）声明朝「${target}」长但未接线——主线批必须携带 set_pre { node: ${target}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre 恒指向教练当前认定的最后台阶，真实坡道取代起草粗边）`)
+      } else {
+        // apply 取最后一条 set_pre（整体替换语义后者生效）——接线核查同口径
+        const wired = new Set(wirings[wirings.length - 1]!.pre ?? [])
+        const missing = frontier.filter(n => !wired.has(n))
+        if (missing.length) {
+          errors.push(`set_pre(${target}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 当前认定的最后台阶）`)
+        }
+      }
+    }
+  }
+  return errors
+}
+
 export class GraphProposals {
   private concepts: ConceptRegistry
   constructor(
@@ -486,26 +604,6 @@ export class GraphProposals {
     private fs: VaultFs,
   ) {
     this.concepts = new ConceptRegistry(paths, this.fs)
-  }
-
-  /** 概念引用对表门（#141）：teaches/assumes/误解 的概念引用必须精确命中登记表
-   * 在册名字（canonical 或别名）或提案铸名块的铸名；铸名与登记表撞名同样
-   * 拒收。返回错误行列表（空 = 通过）。root 参数是课程 root（非路径）。
-   * edit 提案受理时用。
-   * #264 增近似名预检与量级告警：都是**非阻提示**（精确撞名照旧硬拒）。 */
-  private async conceptGateErrors(
-    root: string, refs: ConceptRef[], mints: ConceptEntry[],
-  ): Promise<{ errors: string[]; warns: string[] }> {
-    const existing = await this.concepts.load(root) // 登记表 Broken 在此抛错，apply 不落盘
-    const errors = mintConflicts(mints, existing)
-    const known = namesOf([...existing, ...mints])
-    errors.push(...conceptReferenceErrors(refs, known))
-    // 近似名预检（#264，软提示）：本批铸名与在册名字字符级近似 → 候选清单随受理回执回报。
-    // 只对**本批新名**检测（存量近似名不是本批的事）；精确相等归 mintConflicts 的硬拒。
-    const warns = nearNameWarnings(nearNameCandidates(mints, existing))
-    // 量级告警（#264，非阻）：本批铸名落盘后的条目量级——别名堆叠与混淆对堆积在此可见。
-    if (mints.length) warns.push(...conceptMagnitudeWarnings(applyConceptMints(existing, mints).entries))
-    return { errors, warns }
   }
 
   /** 为图中缺笔记的节点补骨架文件（幂等）：apply 落图后调用。
@@ -552,24 +650,17 @@ export class GraphProposals {
     if (!course) throw new Error(`[propose-edit] 注册表中没有课程「${spec.course}」。`)
     const regions = await new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs).load()
     const graph = new Graph(regions)
-    const errors = simulateOps(regions, graph, spec.ops)
-    const conceptGate = await this.conceptGateErrors(course.root, conceptRefsOfOps(spec.ops), spec.concepts ?? [])
-    const conceptErrors = conceptGate.errors
-    warns.push(...conceptGate.warns)
-    // 终点锚保护 + 生长方向不变式（#142/#198）：锚定的终点不可经 edit 直改，
-    // add_node 禁以终点为 pre、主线批必接线——换终点只走 removeEndpoint + addEndpoint。
-    const endpointErrors = await this.endpointGuardErrors(course.root, spec)
-    // 巩固门（#145）：operator=巩固 的 add_node 只引已教概念。
-    const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
-    if (errors.length || conceptErrors.length || endpointErrors.length || consolidationErrors.length) {
-      throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n`
-        + [...errors, ...conceptErrors, ...endpointErrors, ...consolidationErrors].map(e => `  ✗ ${e}`).join('\n'))
-    }
-    // 生长闸门（#146 插入/旁支调速）：三率超限/复诊通过率触底时插入与旁支闸停（低数据
-    // 静默）——插入积极性的调速器在受理门就拦，不让超速批落 pending。
-    const gateErrors = this.growthGate ? await this.growthGate(spec) : []
+    const entries = await this.concepts.load(course.root) // 登记表 Broken 在此抛错，apply 不落盘
+    // 非阻提示照旧（#264 近似名预检与量级告警）；错误面统一走 editGateErrors（门同源，ADR-0088）
+    warns.push(...nearNameWarnings(nearNameCandidates(spec.concepts ?? [], entries)))
+    if (spec.concepts?.length) warns.push(...conceptMagnitudeWarnings(applyConceptMints(entries, spec.concepts).entries))
+    const anchors = await readAnchors(this.paths.anchorPath(course.root), this.fs)
+    const gateErrors = await editGateErrors(spec, {
+      regions, graph, entries, anchors,
+      mints: spec.concepts ?? [], growthGate: this.growthGate,
+    })
     if (gateErrors.length) {
-      throw new Error(`[propose-edit] 生长闸门拒绝受理（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+      throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     // 罗盘重写预检（#145 写入单元门：提案被拒罗盘不落盘——route 门在受理时就走一遍，
     // 不给坏路线落 pending 的机会）
@@ -601,72 +692,12 @@ export class GraphProposals {
     return validateRouteBody(stripWrappingFence(routeMd))
   }
 
-  /** 终点守卫（#142 锚保护 + #198 生长方向不变式 / ADR-0055；#239 / ADR-0076 多终点化：
-   * **每个**终点各跑同一套检查）：edit 提案不得 del/rename 锚定的终点节点——那是绕开
-   * 显式终点动作的锚直改。方向不变式三句：① 任何 add_node 以终点为 pre 直接拒——
-   * 目标之后不是本课程的生长域；② 主线批（前进/换向）含新节点时必须声明
-   * target_endpoints，接线覆盖检查对每个声明的终点各跑一遍——零终点课程同样不豁免
-   * （没有方向就没有前进）。③ 收尾接线批（零 add_node 的纯 set_pre）合法——停摆前
-   * 把终点接在教练认定的最终台阶上。接线核查取「覆盖」而非「相等」：最后台阶可以与
-   * 既有台阶合流（多条支线同时汇入终点，同一节点可同进多个终点的 pre——交汇），新前沿
-   * 全部在 wire 里就守住了不变式；旧边在 set_pre 整体替换下只随显式再声明存活。旁支/
-   * 巩固/插入豁免接线义务。 */
+  /** 终点守卫的 IO 薄壳（纯判定住模块层 endpointGuardErrorsOf；propose/apply 双门经
+   * editGateErrors 同调消费，本方法保留给 route 门外的独立调用点）。 */
   private async endpointGuardErrors(root: string, spec: EditProposalSpec): Promise<string[]> {
-    const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
-    const endpoints = endpointNames(anchors)
-    const label = (name: string): string => {
-      const a = anchors.find(x => x.endpoint === name)!
-      return `${a.declared} 声明${a.origin_proposal !== undefined ? `，提案 #${a.origin_proposal}` : ''}`
-    }
-    const errors: string[] = []
-    for (const [i, op] of spec.ops.entries()) {
-      if (!endpoints.has(op.node ?? '')) continue
-      if (op.op === 'del_node') {
-        errors.push(`ops.${i}: del_node 拒绝——「${op.node}」是锚定的终点（${label(op.node!)}）。终点增删走显式动作，不直改锚`)
-      } else if (op.op === 'rename') {
-        errors.push(`ops.${i}: rename 拒绝——「${op.node}」是锚定的终点（${label(op.node!)}）。终点增删走显式动作，不直改锚`)
-      }
-    }
-    // ① 禁以终点为 pre：add_node 把方向锚当前置 = 长过目标
-    for (const [i, op] of spec.ops.entries()) {
-      if (op.op === 'add_node' && (op.pre ?? []).some(p => endpoints.has(p))) {
-        const hit = (op.pre ?? []).filter(p => endpoints.has(p))
-        errors.push(`ops.${i}: add_node「${op.name}」以终点「${hit.join('、')}」为 pre——目标之后不是本课程的生长域（禁长过目标）`)
-      }
-    }
-    // ② 主线批必接线（ADR-0076 教练回合多终点化）：前进/换向批含新节点时必须声明
-    //    note.target_endpoints（本批朝哪些终点长），接线覆盖检查对**每个声明的终点**
-    //    各跑一遍；声明终点必须是在册锚（锚由人手增删，提案不得凭空捏造方向）。
-    //    同一个新节点同时进多个终点的 pre 是合法形态（交汇节点，同一门下天然放行）。
-    const adds = addNodeCountOf(spec.ops)
-    if (spec.note && (spec.note.operator === '前进' || spec.note.operator === '换向') && adds > 0) {
-      const targets = spec.note.target_endpoints ?? []
-      if (!targets.length) {
-        errors.push(`生长批（${spec.note.operator}）含 ${adds} 个新节点但未声明朝向——note.target_endpoints 必填（本批朝哪些终点长；交汇优先，可声明多个）`)
-      }
-      const newNames = spec.ops.filter(o => o.op === 'add_node').map(o => o.name!)
-      const consumed = new Set(spec.ops.flatMap(o => o.op === 'add_node' ? (o.pre ?? []) : []))
-      const frontier = newNames.filter(n => !consumed.has(n))
-      for (const target of targets) {
-        if (!endpoints.has(target)) {
-          errors.push(`note.target_endpoints: 「${target}」不是在册终点——朝向只能声明锚上已声明的终点（锚由学习者手加，提案不得改）`)
-          continue
-        }
-        const wirings = spec.ops.filter(o => o.op === 'set_pre' && o.node === target)
-        if (!wirings.length) {
-          errors.push(`生长批（${spec.note.operator}）声明朝「${target}」长但未接线——主线批必须携带 set_pre { node: ${target}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre 恒指向教练当前认定的最后台阶，真实坡道取代起草粗边）`)
-        } else {
-          // apply 取最后一条 set_pre（整体替换语义后者生效）——接线核查同口径
-          const wired = new Set(wirings[wirings.length - 1]!.pre ?? [])
-          const missing = frontier.filter(n => !wired.has(n))
-          if (missing.length) {
-            errors.push(`set_pre(${target}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 当前认定的最后台阶）`)
-          }
-        }
-      }
-    }
-    return errors
+    return endpointGuardErrorsOf(spec, await readAnchors(this.paths.anchorPath(root), this.fs))
   }
+
 
   /** graph apply-edit：概念对表复验 → 铸名与图随写入单元落盘 + 改名/移动/删除联动课程
    * 笔记 + 罗盘批内重写（#145：route 在场时随图 apply 的写入单元——路线门/巩固门全过
@@ -692,18 +723,15 @@ export class GraphProposals {
     }
     const regions = await store.load()
     const graph = new Graph(regions)
-    const errors = simulateOps(regions, graph, spec.ops) // 二次校验
-    if (errors.length) throw new Error('[apply-edit] 提案已不适用当前图（被拒绝，可重提）。')
-    // 终点锚保护复验（#142/#198）：受理与 apply 之间锚可能新落（加终点并发），
-    // 两门全过才开始任何写盘。
-    const endpointErrors = await this.endpointGuardErrors(root, spec)
-    if (endpointErrors.length) {
-      throw new Error(`[apply-edit] 终点锚保护拒绝写入——换终点只走 removeEndpoint + addEndpoint（终点锚由学习者手加，不直改）。\n${endpointErrors.map(e => `  ✗ ${e}`).join('\n')}`)
-    }
-    // 巩固门复验（#145）：受理与 apply 之间图可能变化，已教概念集在当前图上重算。
-    const consolidationErrors = consolidationGateErrors(spec.note?.operator, spec.ops, graph)
-    if (consolidationErrors.length) {
-      throw new Error(`[apply-edit] 巩固门拒绝写入——巩固节点只引已教概念。\n${consolidationErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+    // 门复验统一走 editGateErrors（门同源，ADR-0088）：结构重放/概念对表（铸名合并集）/锚
+    // 保护/巩固门/生长闸门一次跑全——受理与 apply 之间图/登记表/锚可能变化，双门全过才写盘。
+    const gateErrors = await editGateErrors(spec, {
+      regions, graph, entries: mergedEntries,
+      anchors: await readAnchors(this.paths.anchorPath(root), this.fs),
+      growthGate: this.growthGate,
+    })
+    if (gateErrors.length) {
+      throw new Error(`[apply-edit] 门复验拒绝写入（提案已不适用当前图或门状态已变，被拒绝可重提）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     // 罗盘重写预检（#145 写入单元最后一道门）：路线门与锚复验不过 = 零写盘。
     let compassRoute: string | null = null
@@ -714,12 +742,8 @@ export class GraphProposals {
       }
       compassRoute = stripWrappingFence(spec.route)
     }
-    // 生长闸门复验（#146）：受理与 apply 之间三率可能被其他批的结算/登记推移，
-    // 双门全过才开始任何写盘（与巩固门同款纪律）。
-    const gateErrors = this.growthGate ? await this.growthGate(spec) : []
-    if (gateErrors.length) {
-      throw new Error(`[apply-edit] 生长闸门拒绝写入（插入积极性调速，#146）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
-    }
+    // 生长闸门复验（#146）已并入上方 editGateErrors（门同源）——空门合并保留这段位以锚住
+    // “route 门在生长闸之后”的写序不变。
 
     // add_node 无坐标（#275）：落到图内既有的单一区（首个区）——区内无块时落点会建一个以
     // 区名命名的块（created_blocks 记这些新建块）。存储塌缩（一课程一文件）见 #284。
@@ -779,19 +803,16 @@ export class GraphProposals {
           //     读-改-写在一步内完成；零终点静默跳过；sealed 缺省不落盘（形状不变）。
           name: '终点锚 sealed 维护',
           run: async () => {
-            const wires = new Set(spec.ops.filter(o => o.op === 'set_pre' && o.node).map(o => o.node!))
-            if (!wires.size) return
+            // sealed 谓词单一出处 sealedDecisionOf（#271 / ADR-0088：apply 与草稿内核同调）
+            const decision = sealedDecisionOf(spec.ops, await readAnchors(this.paths.anchorPath(root), this.fs))
+            if (!decision.effects.length) return
+            const today = todayStr(new Date(this.clock.nowMs()))
             const anchorPath = this.paths.anchorPath(root)
             const anchors = await readAnchors(anchorPath, this.fs)
-            const touched = anchors.filter(a => wires.has(a.endpoint))
-            if (!touched.length) return
-            const adds = addNodeCountOf(spec.ops)
-            const sealing = adds === 0 && spec.ops.every(o => o.op === 'set_pre')
-            if (!sealing && adds === 0) return // 夹带其他 op 的零新增批：不收尾也不重开
-            const today = todayStr(new Date(this.clock.nowMs()))
             const next: EndpointAnchor[] = anchors.map(a => {
-              if (!wires.has(a.endpoint)) return a
-              return sealing ? { ...a, sealed: today } : { ...a, sealed: undefined }
+              const eff = decision.effects.find(e => e.endpoint === a.endpoint)
+              if (!eff) return a
+              return eff.action === 'seal' ? { ...a, sealed: today } : { ...a, sealed: undefined }
             })
             await writeAnchors(anchorPath, next, this.fs)
           },
@@ -1473,13 +1494,30 @@ function nodeFromAddOp(op: EditOp): GNode {
   }
 }
 
-/** 在 regions 副本上模拟全部操作 → 错误列表。 */
-export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): string[] {
+/** 草稿差异（Draft Diff，#271 / ADR-0088）：生长草稿相对其基图的结构增量读数——只读、
+ * 零落盘，供草稿期实时看图与审计（UI 消费归 #269 候选，本票只保证可导出）。 */
+export interface DraftDiff {
+  added_nodes: string[]
+  removed_nodes: string[]
+  renamed: Array<{ from: string; to: string }>
+  /** 新增的 pre 边（rewired 节点里「after 有 before 无」的逐条展开）。 */
+  added_edges: Array<{ node: string; pre: string }>
+  /** set_pre 整体替换的接线改写（before/after 都给——替换语义下删除也可见）。 */
+  rewired: Array<{ node: string; pres_before: string[]; pres_after: string[] }>
+}
+
+export interface DraftReplay { errors: string[]; diff: DraftDiff }
+
+/** 草稿内核的重放（#271 / ADR-0088）：与 simulateOps 同一套结构重放，额外折出 DraftDiff
+ * ——草稿校验与门校验同源（simulateOps 内部改调本函数，两处不各写一遍）。 */
+export function replayDraft(regions: GRegion[], graph: Graph, ops: EditOp[]): DraftReplay {
   const sim: GRegion[] = JSON.parse(JSON.stringify(regions))
   const errors: string[] = []
   const names = new Set(graph.names)
   const renameMap: Record<string, string> = {}
   const removed = new Set<string>()
+  const added: string[] = []
+  const rewired: Array<{ node: string; pres_before: string[]; pres_after: string[] }> = []
 
   for (const op of ops) {
     if (op.op === 'add_node') {
@@ -1494,6 +1532,7 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
       }
       blk.nodes.push(nodeFromAddOp(op))
       names.add(op.name!)
+      added.push(op.name!)
     } else if (op.op === 'del_node') {
       if (!names.has(op.node!)) { errors.push(`del_node 节点不存在: ${op.node}`); continue }
       names.delete(op.node!)
@@ -1508,6 +1547,7 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
       }
     } else if (op.op === 'set_pre') {
       if (!names.has(op.node!)) { errors.push(`set_pre 节点不存在: ${op.node}`); continue }
+      rewired.push({ node: op.node!, pres_before: [...(graph.preOf[op.node!] ?? [])], pres_after: [...(op.pre ?? [])] })
       for (const r of sim) for (const b of r.blocks) for (const n of b.nodes) {
         if (n.name === op.node) n.pre = [...(op.pre ?? [])]
       }
@@ -1540,7 +1580,20 @@ export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): st
     if (merged.hasCycle) errors.push(`变更后引入环：${merged.cycleNodes.slice(0, 5).join('、')}`)
     errors.push(...misconceptionCapErrors(sim))
   }
-  return errors
+  const diff: DraftDiff = {
+    added_nodes: added,
+    removed_nodes: [...removed],
+    renamed: Object.entries(renameMap).map(([from, to]) => ({ from, to })),
+    added_edges: rewired.flatMap(w =>
+      w.pres_after.map(mapped).filter(p => !removed.has(p) && !w.pres_before.includes(p)).map(p => ({ node: mapped(w.node), pre: p }))),
+    rewired: rewired.map(w => ({ node: mapped(w.node), pres_before: w.pres_before.map(mapped).filter(p => !removed.has(p)), pres_after: w.pres_after.map(mapped).filter(p => !removed.has(p)) })),
+  }
+  return { errors, diff }
+}
+
+/** 在 regions 副本上模拟全部操作 → 错误列表（内部改调 replayDraft——草稿与门同源，ADR-0088）。 */
+export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): string[] {
+  return replayDraft(regions, graph, ops).errors
 }
 
 /** 把 op 列表实际落到 Region 对象列表。 */

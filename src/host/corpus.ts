@@ -22,6 +22,7 @@
  */
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { QUIZ_SOLVER_STATION, QUALITY_REVIEW_STATION } from '../engine/index.ts'
+import { GROWTH_DRAFT_STATION } from '../engine/index.ts'
 import type { LlmTokenUsage } from '../engine/index.ts'
 
 /** 成功样本环形封顶（每站）。 */
@@ -94,6 +95,8 @@ export const STATIONS = {
   tutor: '老师辅导',
   explainBack: '讲给我听',
   growth: '教练生长',
+  /** 生长草稿执行官站（#271 / ADR-0088）：引擎侧 GROWTH_DRAFT_STATION 引门面常量对齐。 */
+  growthDraft: GROWTH_DRAFT_STATION,
   compass: '罗盘',
   decompile: '目标反编译',
   plan: '计划草案',

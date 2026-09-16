@@ -16,8 +16,10 @@
  */
 
 /** 输出形态。`'json'` 是保留枚举位：判卷/回执评审已在其上，其余站迁移与否由
- * 格式敏感度治理（#214 增补：YAML 站群默认不迁——多样性坍缩证据 arXiv:2607.18476）。 */
-export type OutputFormat = 'yaml' | 'markdown-blocks' | 'json' | 'route-text'
+ * 格式敏感度治理（#214 增补：YAML 站群默认不迁——多样性坍缩证据 arXiv:2607.18476）。
+ * `'tool-calls'`（#271 / ADR-0088）：产物整个在工具调用参数里（生长草稿执行官站），
+ * 文本只是说明——塞进 'json' 是语义撒谎且文本锚门对不上。 */
+export type OutputFormat = 'yaml' | 'markdown-blocks' | 'json' | 'route-text' | 'tool-calls'
 
 /** 格式敏感度：该站产物对输出形态变化的敏感轴（#212 §五）。机械评审 = 分类/量表类
  * 任务、格式税证据充分为正向；规划 = 结构化规划产物；推理创意 = 推理/创意敏感，
@@ -83,6 +85,11 @@ export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = 
     file: 'host/jobs.ts', witness: ['MILESTONE_GATE_FAILED', 'gateRepairRound<string, MilestoneWriteResult>'],
     what: '里程碑产物：轻量结构门未过 → gateRepairRound 回灌重产恰一次',
   },
+  draftAuditRepair: {
+    // #271 / ADR-0088：证人 = 写件工具分发处的字面量（draft_patch/draft_audit/draft_finish）。
+    file: 'engine/growth-subsystem.ts', witness: ['draft_patch', 'draft_audit', 'draft_finish'],
+    what: '生长草稿执行官站：写件工具的门错误原文回灌 loop 继续修（轮数计入会话预算，不进 gateRepairRound；后者保留为旧路径最后兼底）',
+  },
 }
 
 /** 修复策略（单源，对齐现状登记：rounds = 整批门错回灌重产轮数，0 = 无整批修复轮）。
@@ -117,6 +124,7 @@ export const REPAIR_ROUND_LOCKS: Readonly<Record<string, string | null>> = {
   回执评审: 'repair-policy.test.ts',
   罗盘: 'compass.test.ts',
   课程节生成: 'section-split.test.ts',
+  教练执行: null,
   目标反编译: null,
   教练生长: null,
   里程碑草案: null,
@@ -419,6 +427,25 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     notes: '受理门（schema/结构事实/概念对表/锚保护/巩固门/生长闸门/路线门）拒收零落盘；裁决语义全在提示词（生长纪律 ADR-0040）',
   },
   {
+    station: '教练执行',
+    templates: ['执行官回合'],
+    format: 'tool-calls',
+    clause: ['产物以工具调用承载（draft_patch / draft_audit / draft_finish）', '全程以工具调用工作'],
+    allowed: ['draft_patch / draft_audit / draft_finish 工具调用轨迹（产物在参数里；文本只作说明）'],
+    forbidden: ['以正文交付裁决', '代码围栏', 'move 与 region/block（已退役 #275）'],
+    repair: {
+      rounds: 1,
+      mechanism: 'draftAuditRepair',
+      feedback: 'draft_patch/draft_audit/draft_finish 的门错误原文 + 合法取值域回灌 loop 继续修（轮数计入会话预算；不进 gateRepairRound）',
+      note: 'gateRepairRound 保留为旧路径最后兼底（ADR-0088 裁决 8）；禁止空手结束 = 自然收束且有未发布增量 fail loud',
+    },
+    failureCodes: [],
+    sensitivity: '规划',
+    structuredEligible: false,
+    shape: { kind: 'any' },
+    notes: '生长草稿执行官站（#271 / ADR-0088）：草稿通过 = 门通过按构造成立（editGateErrors 三处同调）；按批 finish 走真实受理门 → apply（tool-calls 是自己的结构化通道，不占 json 迁移资格口径）',
+  },
+  {
     station: '罗盘',
     templates: ['罗盘初画'],
     format: 'route-text',
@@ -652,6 +679,10 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // #282 / Epic #275 T5：引擎读面去「区·块」死坐标——模板散文里的分区词同步退役。
     version: 9, date: '2026-09-16', changeType: '去区·块（#282）：图面读法/硬约束/输出模板的分区坐标退役',
     expectedDelta: '① 感知面读法改为「深度序｜阶段｜掌握度 + pre/teaches 同行 + 概念组读数表」，⚠ 密集处定位补「对照概念组读数看缺口落在哪个概念」；② 降级说明改为 depth 段聚合（与渲染侧 #281 一致）；③ 硬约束 2 去掉「区/块名逐字来自图面」；④ add_node 输出模板删 region/block 两行（写侧退役键 fail loud 拒收，模板再带必被拒）。裁决语义、五算子、输出契约其余部分不变。过门记录：check ✓；replay 报 3 件语料回归经 stash 对照确认为 HEAD 存量漂移（2026-09-13 语料的 op 词表/concepts 形状与种子起草站缺席清单），非本次变更引入；compare 未做真模型对照（同 v8 先例如实登记）',
+  }],
+  执行官回合: [{
+    version: 1, date: '2026-09-16', changeType: '新站（#271 / ADR-0088）：生长草稿执行官回合模板 v1',
+    expectedDelta: '新站首版——产物从「YAML 文档」变为工具调用轨迹（draft_patch/draft_audit/draft_finish 承载）；预期增量是生长批从「一回合一批」变为「草稿内多批累积 + 按批 finish」，失败回灌改在 loop 内继续修而非恰一次重裁。与旧教练回合站并行共存（旧路径不动，退场归 #273）',
   }],
 }
 

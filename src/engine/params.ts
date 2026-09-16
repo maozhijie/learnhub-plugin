@@ -60,3 +60,7 @@ export const GROWTH_RESILIENCE_HIGH = 0.8       // 复诊通过率达此（样�
 // ---- 卡点自报频控（#248 / ADR-0077；上限同时是教练回合触发上限，起点值实证后调）----
 export const STUCK_REPORT_PER_NODE_PER_DAY = 1 // 同节点每学习日自报上限（条）
 export const STUCK_REPORT_DAILY_COURSE_CAP = 5 // 全课程每日自报总量上限（条）
+
+// ---- 生长草稿预算（#271 / ADR-0088；执行官站预算，常量单源——host-params 覆盖留后票）----
+export const GROWTH_DRAFT_MAX_OPS_PER_BATCH = 24 // 每批（两次 finish 之间）累积未发布 ops 上限
+export const GROWTH_DRAFT_MAX_ROUNDS = 16        // 每会话轮次上限（一轮 = 一次 agentLoop 收束）

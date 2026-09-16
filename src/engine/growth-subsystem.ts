@@ -20,7 +20,7 @@ import { render } from './prompt-render.ts'
 import { COACH_GATE_FEEDBACK_BLOCK, COACH_INJECT_BLOCK } from './prompts/projects.ts'
 import type { Content } from './content.ts'
 import type { BankDoc } from './question-bank.ts'
-import type { Graph } from './graph.ts'
+import { Graph, GraphStore } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { Fm, CourseEntry, ProposalRec, StuckReportFolded, StuckReportRec } from './types.ts'
 import type { FSRS } from 'ts-fsrs'
@@ -28,7 +28,6 @@ import type { CoachCheck } from './coach-round.ts'
 import type { CompassEta, CompassEtaRow, RouteReconcile } from './compass.ts'
 import type { GraphApplyResult } from './views/graph.ts'
 import type { GraphProposeResult } from './views/proposals.ts'
-import type { EditProposalSpec, GrowthNote } from './proposals.ts'
 import type { SedimentFold } from './sediment.ts'
 import type { SandboxCard, SandboxCurvePoint, SandboxNode, SandboxPlan } from './sandbox.ts'
 import type { ProbationCourseView, ProbationEntry, ProbationFold, ProbationOutcome, RecheckMetric, GrowthBatchTally } from './probation.ts'
@@ -64,11 +63,12 @@ export interface GrowthDeps {
 import { effectiveStage } from './audit.ts'
 import type { CoachGrowthSegment, CoachTrigger } from './coach-round.ts'
 import { arbitrationPopulations, behaviorDigest, readyDepthCheck, renderArbitrationEvidence, renderBehaviorDigest, renderSedimentForCoach } from './coach-round.ts'
-import { coachToolset, renderGrowthGraphView } from './coach-tools.ts'
+import { coachToolExecutor, coachToolset, renderGrowthGraphView } from './coach-tools.ts'
 import type { CoachToolDeps } from './coach-tools.ts'
 import type { CompassEtaProbe } from './compass.ts'
 import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, reconcileRoute, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { activeEntries, deprecatedNames, resolveConcept } from './concepts.ts'
+import type { ConceptEntry } from './concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from './dates.ts'
 import { foldStuckReports, stuckReportGate } from './stuck-report.ts'
 import type { Clock } from './clock.ts'
@@ -81,7 +81,14 @@ import type { AgentSeam, GateVerdict } from './agent.ts'
 import type { LlmToolCall, LlmToolSpec } from './llm.ts'
 import { hasReadyContent } from './notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
-import { addNodeCountOf, validateEditProposal } from './proposals.ts'
+import { addNodeCountOf, editGateErrors, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
+import type { DraftDiff, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
+import {
+  GROWTH_DRAFT_MARKER, deleteDraft, draftDirOf, draftPathOf, findActiveDraft, saveDraft,
+  GROWTH_DRAFT_STATION,
+} from './growth-draft.ts'
+import type { GrowthDraftDoc, GrowthDraftRound } from './growth-draft.ts'
+import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS } from './params.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from './sandbox.ts'
 import { appendSedimentEvent } from './sediment.ts'
 import { runWriteUnit } from './write-unit.ts'
@@ -89,7 +96,8 @@ import { COMPLETION_MASTERY_THRESHOLD, endpointNames, foldCompletion, junctionSe
 import { readySet } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
 import type { ConceptTier } from './types.ts'
-import { CONCEPT_TIERS } from './types.ts'
+import { CONCEPT_TIERS, GROWTH_OPERATORS } from './types.ts'
+import type { GRegion } from './types.ts'
 import type { GraphApplyEditResult } from './views/graph.ts'
 import type { GraphEditProposalResult } from './views/proposals.ts'
 import { readDailyGoal } from './xp.ts'
@@ -918,6 +926,340 @@ export class GrowthSubsystem {
         created,
       },
     }
+  }
+
+
+  // ---- 生长草稿·执行官站（#271 / ADR-0088：草稿内核 + 批量补丁 + 按批 finish）----
+
+  /** 执行官站的只读工具面（读件五件，#271）：复用 coach-tools 渲染函数（同源不漂移）、
+   * 新建注册面——description 面向补丁语境；旧 coachToolset 八件与 compassPaint 不动
+   * （coachToolsetFor 仅 2 消费方）。写件三工具 draft_patch / draft_audit / draft_finish
+   * 的规格也在此登记（产物以工具调用承载的站，OutputFormat='tool-calls'）。 */
+  static draftToolSpecs(): LlmToolSpec[] {
+    const obj = (properties: Record<string, unknown>, required: string[] = []): Record<string, unknown> => ({
+      type: 'object', properties, required, additionalProperties: false,
+    })
+    const opFields = (): Record<string, unknown> => ({
+      op: { type: 'string', description: '原子操作：add_node / del_node / set_pre / set_enc / rename / set_note；糖算子 insert_prereq_chain（见下）' },
+      name: { type: 'string', description: 'add_node 的新节点名' },
+      node: { type: 'string', description: '引用既有节点的名字（add_node 以外的 op 用）' },
+      pre: { type: 'array', items: { type: 'string' }, description: '前置节点名列表（add_node / set_pre；set_pre 是整体替换语义）' },
+      enc: { type: 'array', description: 'set_enc 整体替换的成分技能边' },
+      new: { type: 'string', description: 'rename 的新名' },
+      note: { type: 'string', description: '节点一句话说明' },
+      est: { type: 'number', description: '预估分钟（add_node）' },
+      bloom: { type: 'string', description: '认知层级（add_node）' },
+      difficulty: { type: 'number', description: '难度 1–5（add_node）' },
+      teaches: { type: 'object', description: '概念→档（add_node 出生层；概念必须逐字在册或随批铸名）' },
+      assumes: { type: 'object', description: '概念→档（add_node 出生层）' },
+      misconceptions: { type: 'array', description: '误解条目（add_node 出生层）' },
+    })
+    return [
+      { name: 'graph_view', description: '当前草稿图面（基图 + 草稿增量已叠加）：全部节点名单 + 细节行。patch 的节点名与 pre 引用的取值域——出补丁前先来这里对表。', parameters: obj({}) },
+      { name: 'node_card', description: '单节点结构档（草稿图口径）：阶段、pre/teaches/assumes、下游消费、误解先验。', parameters: obj({ node: { type: 'string', description: '节点名（逐字，来自 graph_view）' } }, ['node']) },
+      { name: 'concept_footprint', description: '概念足迹：teaches/assumes/误解 引用对表的唯一权威（写侧恒精确——引用必须逐字命中在册名字或随批 concepts 铸名）。query 是子串发现不是存在性判定：空 ≠ 不存在。', parameters: obj({ query: { type: 'string', description: '可选子串；省略 = 读全表' } }) },
+      { name: 'upstream_dag', description: '上游图摘要：给定节点的前置传递闭包全拓扑 + 闭包内 pre 邻接。接线定位与深链诊断用。', parameters: obj({ node: { type: 'string', description: '节点名（逐字）' } }, ['node']) },
+      { name: 'endpoint_anchor', description: '终点锚集合：逐终点的目标类型/声明日/收尾宣告。set_pre 接线的靶在这里对表（终点只可被 set_pre 接线，禁出现在 add_node 的 pre）。', parameters: obj({}) },
+      {
+        name: 'draft_patch', description: '批量补丁（写件）：把一组 EditOp 原子操作追加进生长草稿（每批 ≤24 条未发布增量；失败整批回滚并回灌 errors + 合法取值域）。糖算子 insert_prereq_chain：chain 数组按序展开成线性 add_node 链（前一条是后一条的 pre；首条的 pre 取 pre 字段）。op 词汇不含 move 与 region/block（已退役 #275）。', parameters: obj({
+          ops: { type: 'array', description: '补丁操作列表', items: { type: 'object', properties: { ...opFields(), chain: { type: 'array', description: 'insert_prereq_chain 的链条目（按序线性串联）' } } } },
+          concepts: { type: 'array', description: '随批铸名（本批新引入的概念；已能用就不铸）' },
+          note_operator: { type: 'string', description: '本批生长算子（前进/插入/巩固/旁支/换向；下次 finish 硬化为 note）' },
+          note_reason: { type: 'string', description: '本批理由一句话' },
+          note_target_endpoints: { type: 'array', items: { type: 'string' }, description: '前进/换向批的朝向声明（朝哪些终点长；与接线义务配套）' },
+        }, ['ops']),
+      },
+      {
+        name: 'draft_audit', description: '审计（写件，只读效果）：对草稿图 + 未发布增量跑与受理门同一套校验（草稿通过 = 门通过），返回门错误与草稿差异（新增/删除/改名/接线改写）。finish 前先 audit。', parameters: obj({}),
+      },
+      {
+        name: 'draft_finish', description: '按批发布（写件）：把自上次发布以来的未发布增量硬化为生长批提案 → 受理门 → apply。基图漂移（外部改了图）或门复验未过 = 拒收零落盘、错误回灌继续修。收尾（终点坡道铺通）须以零 add_node 的纯 set_pre 独立批 finish。', parameters: obj({}),
+      },
+    ]
+  }
+
+  /** 生长草稿·执行官最小回路（#271 / ADR-0088）：输入自足（coachContextPack + 图面 +
+   * 草稿状态），三段式外壳保留、note.disagreement 语义不动（route 归 #273）；站登记
+   * growthDraft='教练执行' + OutputFormat 'tool-calls' + 模板键「执行官回合」+
+   * REPAIR_MECHANISMS.draftAuditRepair（finish 拒收错误原文回灌 loop 继续修、不进
+   * gateRepairRound——门错修复轮保留为旧路径的最后兜底）。禁止空手结束：回路自然收束
+   * 且未成功 finish 且草稿仍有未发布增量 → fail loud（草稿保留可续建）。会话在途草稿
+   * 默认续建（注入轮次日志恢复认知）；预算常量单源 engine/params.ts。 */
+  async coachDraft(
+    courseKey: string, agent: AgentSeam,
+    opts: { today?: string; isCancelled?: () => boolean } = {},
+  ): Promise<{
+    course: string
+    session_id: string
+    resumed: boolean
+    finished: boolean
+    published_batches: number
+    unpublished_ops: number
+    trajectory: string[]
+    rounds: Array<{ kind: string; summary: string }>
+  }> {
+    const c = await this.e.registry.resolve(courseKey)
+    const root = c.root
+    const today = opts.today ?? (await this.e.learningDay()).today
+    // —— 草稿会话：在途续建（注入轮次日志）或新建 ——
+    const existing = await findActiveDraft(this.e.fs, this.e.paths, root)
+    const resumed = existing !== null
+    const doc: GrowthDraftDoc = existing ?? {
+      marker: GROWTH_DRAFT_MARKER, version: 1,
+      course: c.name, session_id: `draft-${nowIsoOf(this.e.clock.nowMs()).replace(/[:.]/g, '-')}`,
+      ops: [], published: 0, concepts: [], rounds: [],
+      created_at: nowIsoOf(this.e.clock.nowMs()), updated_at: nowIsoOf(this.e.clock.nowMs()),
+    }
+    if (doc.course !== c.name) {
+      throw new Error(`[coach-draft] 在途草稿属于课程「${doc.course}」，与「${c.name}」不符——同课程单份在途，先取消或完成它。`)
+    }
+    if (doc.rounds.length >= GROWTH_DRAFT_MAX_ROUNDS) {
+      throw new Error(`[coach-draft] 会话轮次预算耗尽（≤${GROWTH_DRAFT_MAX_ROUNDS} 轮）——草稿保留（${doc.ops.length - doc.published} 条未发布增量），可显式取消后新开会话。`)
+    }
+    const draftPath = draftPathOf(this.e.paths, root, doc.session_id)
+    const persist = async (): Promise<void> => {
+      doc.updated_at = nowIsoOf(this.e.clock.nowMs())
+      await this.e.fs.mkdir(draftDirOf(this.e.paths, root))
+      await saveDraft(this.e.fs, draftPath, doc)
+    }
+    const logRound = async (kind: GrowthDraftRound['kind'], summary: string, errors?: string[]): Promise<void> => {
+      doc.rounds.push({ at: nowIsoOf(this.e.clock.nowMs()), kind, summary, ...(errors ? { errors } : {}) })
+      await persist()
+    }
+
+    // —— 草稿图的现势折叠：基图 + 已发布段（[0, published)）= 草稿基线；未发布增量叠其上 ——
+    const draftRegionsOf = async (): Promise<{ regions: GRegion[]; graph: Graph }> => {
+      const store = new GraphStore(this.e.paths, this.e.paths.courseRoot(root), this.e.fs)
+      const base = await store.load()
+      const baseGraph = new Graph(base)
+      if (doc.published > 0) {
+        const r = replayDraft(base, baseGraph, doc.ops.slice(0, doc.published))
+        if (r.errors.length) {
+          throw new Error(`[coach-draft] 草稿已发布段对当前基图重放失败（基图漂移或草稿损坏）：\n${r.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+        }
+        return { regions: base, graph: baseGraph }
+      }
+      return { regions: base, graph: baseGraph }
+    }
+
+    // —— 读件执行器：复用 coachToolset 的通用执行器（deps 结构化注入），白名单由本站
+    //    规格表收紧为读件五件 + 写件三具；白名单外调用照旧 fail loud。 ——
+    const readExecutor = coachToolExecutor(this.e, c, {
+      behaviorDigestText: async () => '',
+      conceptInvokes: () => this.conceptInvokesOf(c),
+    })
+    const entriesOf = async (): Promise<ConceptEntry[]> => this.e.concepts.load(root)
+
+    /** 未发布增量（草稿图 + 全量 ops 重放）的读数：errors + DraftDiff——已发布段的
+     * 重放错误在 draftRegionsOf 已 fail loud，此处对全量重放取未发布段读数（与已发布
+     * 语义一致）。 */
+    const replayUnpublished = async (): Promise<{ errors: string[]; diff: DraftDiff }> => {
+      const { regions, graph } = await draftRegionsOf()
+      const full = replayDraft(regions, graph, doc.ops)
+      return { errors: full.errors, diff: full.diff }
+    }
+
+    const renderDiff = (diff: DraftDiff): string => [
+      `新增节点 ${diff.added_nodes.length}：${diff.added_nodes.join('、') || '（无）'}`,
+      `删除节点 ${diff.removed_nodes.length}：${diff.removed_nodes.join('、') || '（无）'}`,
+      `改名 ${diff.renamed.length}：${diff.renamed.map(r => `${r.from}→${r.to}`).join('、') || '（无）'}`,
+      `新增边 ${diff.added_edges.length}：${diff.added_edges.map(e => `${e.node} ← ${e.pre}`).join('、') || '（无）'}`,
+      `接线改写 ${diff.rewired.length}：${diff.rewired.map(w => `${w.node}（${w.pres_before.join('、') || '∅'} → ${w.pres_after.join('、') || '∅'}）`).join('；') || '（无）'}`,
+    ].join('\n')
+
+    // —— 写件三工具 ——
+    const writeTool = async (call: LlmToolCall): Promise<string> => {
+      const args = JSON.parse(call.arguments.trim() || '{}') as Record<string, unknown>
+      if (call.name === 'draft_patch') {
+        const rawOps = Array.isArray(args.ops) ? args.ops as Array<Record<string, unknown>> : []
+        if (!rawOps.length) throw new Error('[draft_patch] ops 不能为空——不产结构就不要调本工具。')
+        // 糖算子展开：insert_prereq_chain → 线性 add_node 链（前一条是后一条的 pre）
+        const expanded: EditOp[] = []
+        for (const [i, raw] of rawOps.entries()) {
+          if (raw.op !== 'insert_prereq_chain') {
+            expanded.push(raw as unknown as EditOp)
+            continue
+          }
+          const chain = Array.isArray(raw.chain) ? raw.chain as Array<Record<string, unknown>> : []
+          if (chain.length < 2) throw new Error(`ops.${i}: insert_prereq_chain 的 chain 至少 2 条（一条不成链；单节点直接用 add_node）。`)
+          chain.forEach((item, j) => {
+            expanded.push({
+              op: 'add_node',
+              name: String(item.name ?? ''),
+              pre: j === 0 ? (Array.isArray(raw.pre) ? raw.pre as string[] : [])
+                : [String(chain[j - 1]!.name ?? '')],
+              ...(item.est !== undefined ? { est: Number(item.est) } : {}),
+              ...(item.bloom !== undefined ? { bloom: String(item.bloom) as EditOp['bloom'] } : {}),
+              ...(item.difficulty !== undefined ? { difficulty: Number(item.difficulty) as EditOp['difficulty'] } : {}),
+              ...(item.teaches !== undefined ? { teaches: item.teaches as EditOp['teaches'] } : {}),
+              ...(item.assumes !== undefined ? { assumes: item.assumes as EditOp['assumes'] } : {}),
+              ...(item.misconceptions !== undefined ? { misconceptions: item.misconceptions as EditOp['misconceptions'] } : {}),
+            })
+          })
+        }
+        const unpublishedCount = doc.ops.length - doc.published + expanded.length
+        if (unpublishedCount > GROWTH_DRAFT_MAX_OPS_PER_BATCH) {
+          throw new Error(`[draft_patch] 每批未发布增量 ≤${GROWTH_DRAFT_MAX_OPS_PER_BATCH} 条（本补丁后将为 ${unpublishedCount}）——先 draft_finish 发布再开新批。`)
+        }
+        // 概念铸名随批登记（形态门：validateConceptEntry 同闸在 finish 的 schema 门跑；
+        // 这里只收 canonical 形态的可 JSON 条目）
+        const mints = Array.isArray(args.concepts) ? args.concepts as ConceptEntry[] : []
+        // 试算：全量重放过门才落草稿（失败整批回滚 + 取值域回灌）
+        const trial = [...doc.ops, ...expanded]
+        const { regions, graph } = await draftRegionsOf()
+        const r = replayDraft(regions, graph, trial)
+        if (r.errors.length) {
+          const g2 = graph
+          const domains = [
+            `节点取值域（草稿图逐字）：${[...g2.names].slice(0, 80).join('、')}${g2.names.length > 80 ? ' …' : ''}`,
+            `概念取值域（在册 canonical）：${(await entriesOf()).map(e => e.canonical).slice(0, 60).join('、') || '（空册——随批 concepts 铸名）'}`,
+          ]
+          await logRound('patch', `补丁被拒（${expanded.length} 条）`, r.errors)
+          throw new Error(`[draft_patch] 补丁未过草稿重放（整批回滚，零落草稿）：\n${r.errors.map(e => `  ✗ ${e}`).join('\n')}\n合法取值域：\n${domains.join('\n')}`)
+        }
+        doc.ops.push(...expanded)
+        if (mints.length) doc.concepts.push(...mints)
+        if (typeof args.note_operator === 'string' && args.note_operator.trim()) {
+          doc.note = {
+            operator: args.note_operator.trim(),
+            reason: typeof args.note_reason === 'string' ? args.note_reason.trim() : '',
+            ...(Array.isArray(args.note_target_endpoints) && args.note_target_endpoints.length
+              ? { target_endpoints: (args.note_target_endpoints as unknown[]).map(String) }
+              : {}),
+          }
+        }
+        await logRound('patch', `补丁 ${expanded.length} 条（未发布 ${doc.ops.length - doc.published}）`)
+        return `已入草稿：本补丁 ${expanded.length} 条；未发布增量 ${doc.ops.length - doc.published} 条（水位 ${doc.published}/${doc.ops.length}）。先 draft_audit 再 draft_finish。`
+      }
+      if (call.name === 'draft_audit') {
+        const { errors, diff } = await replayUnpublished()
+        await logRound('audit', errors.length ? `审计：${errors.length} 个门错误` : '审计：通过')
+        return errors.length
+          ? `审计未过（与受理门同一套校验，草稿通过 = 门通过）：\n${errors.map(e => `  ✗ ${e}`).join('\n')}\n草稿差异：\n${renderDiff(diff)}`
+          : `审计通过（草稿通过 = 门通过）。草稿差异：\n${renderDiff(diff)}\n未发布增量 ${doc.ops.length - doc.published} 条——可 draft_finish。`
+      }
+      if (call.name === 'draft_finish') {
+        const unpublished = doc.ops.slice(doc.published)
+        const noteLite = doc.note
+        if (!noteLite || !noteLite.operator || !noteLite.reason) {
+          throw new Error('[draft_finish] 缺本批 note（operator/reason）——先用 draft_patch 的 note_operator/note_reason 声明本批算子与理由。')
+        }
+        if (!(GROWTH_OPERATORS as readonly string[]).includes(noteLite.operator)) {
+          throw new Error(`[draft_finish] note.operator 非法：${noteLite.operator}（允许 ${GROWTH_OPERATORS.join('/')}）`)
+        }
+        const spec: EditProposalSpec = {
+          course: c.name,
+          reason: noteLite.reason,
+          ops: unpublished,
+          ...(doc.concepts.length ? { concepts: doc.concepts } : {}),
+          note: {
+            operator: noteLite.operator as GrowthNote['operator'],
+            reason: noteLite.reason,
+            ...(noteLite.target_endpoints?.length ? { target_endpoints: noteLite.target_endpoints } : {}),
+            ...(noteLite.disagreement ? { disagreement: noteLite.disagreement } : {}),
+          },
+        }
+        // 零增量 finish 无意义（空手结束由入口 fail loud 执法）
+        if (!unpublished.length) {
+          throw new Error('[draft_finish] 没有未发布增量——先 draft_patch 再 finish。')
+        }
+        // 门复验对**真实基图**再跑一遍（水位模型：基图漂移 = 拒收零落盘、草稿保留）
+        const store = new GraphStore(this.e.paths, this.e.paths.courseRoot(root), this.e.fs)
+        const regions = await store.load()
+        const graph = new Graph(regions)
+        const anchors = await readAnchors(this.e.paths.anchorPath(root), this.e.fs)
+        const entries = await entriesOf()
+        const driftErrors = await editGateErrors(spec, {
+          regions, graph, entries, anchors, mints: doc.concepts,
+          growthGate: async s => this.growthGateErrors(s),
+        })
+        if (driftErrors.length) {
+          await logRound('finish', `finish 被拒（${driftErrors.length} 个门错误；零落盘）`, driftErrors)
+          throw new Error(`[draft_finish] 门复验未过（拒收零落盘，草稿保留——修正后重试）：\n${driftErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+        }
+        // 真实受理门 → apply（propose 自带 schema 门 + 全门序列；拒收零落盘）
+        let prop: GraphEditProposalResult
+        try {
+          prop = await this.e.graphPropose('edit', YAML.stringify(spec)) as GraphEditProposalResult
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          await logRound('finish', `propose 被拒（零落盘）`, [msg])
+          throw new Error(`[draft_finish] 受理门拒收（零落盘，草稿保留）：\n${msg}`)
+        }
+        let applied: GraphApplyEditResult
+        try {
+          applied = await this.e.graphApply('edit', prop.id) as GraphApplyEditResult
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          await this.e.graphReject(prop.id, `生长草稿 finish 自动 apply 失败：${msg}`).catch(() => undefined)
+          await logRound('finish', `apply 失败（提案 #${prop.id} 已自清）`, [msg])
+          throw new Error(`[draft_finish] apply 失败（提案已拒绝清场，草稿保留）：\n${msg}`)
+        }
+        const sealed = sealedDecisionOf(unpublished, anchors)
+        doc.published = doc.ops.length
+        doc.note = undefined
+        doc.concepts = []
+        await logRound('finish', `发布成功：提案 #${prop.id}，快照 v${applied.snapshot}，ops ${unpublished.length}${sealed.effects.length ? `；sealed：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}` : ''}`)
+        if (doc.published === doc.ops.length) await deleteDraft(this.e.fs, draftPath)
+        return `发布成功：提案 #${prop.id} 已 apply（快照 v${applied.snapshot}）；水位前移至 ${doc.published}/${doc.ops.length}。${sealed.effects.length ? `收尾宣告：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}。` : ''}`
+      }
+      throw new Error(`白名单外工具「${call.name}」被拒：执行官写件只有 draft_patch / draft_audit / draft_finish。`)
+    }
+
+    // —— 回路 ——
+    const { graph, state } = await this.e.loadView(c)
+    const anchors = await readAnchors(this.e.paths.anchorPath(root), this.e.fs)
+    const view = renderGrowthGraphView(graph, state, endpointNames(anchors), { today, conceptEntries: await entriesOf() })
+    const template = await this.e.content.loadPrompt('执行官回合')
+    const pack = await this.coachContextPack(c.name, { today, packLabel: '执行官——草稿会话上下文' })
+    const draftStatus = [
+      `## 草稿状态（会话 ${doc.session_id}${resumed ? '，续建' : '，新建'}；水位 ${doc.published}/${doc.ops.length}）`, '',
+      `- 未发布增量 ${doc.ops.length - doc.published} 条；铸名缓存 ${doc.concepts.length} 条`,
+      ...(doc.note ? [`- 本批 note：${doc.note.operator}——${doc.note.reason}`] : []),
+      ...(doc.rounds.length ? [`- 轮次日志（尾部 8 条）：`, ...doc.rounds.slice(-8).map(r => `  - [${r.kind}] ${r.summary}${r.errors ? `（✗ ${r.errors.length} 个错误）` : ''}`)] : []),
+    ].join('\n')
+    const prompt = withContractLast(template, [pack, view, draftStatus]
+      .map(b => b.trim()).join('\n\n---\n\n'))
+    const runTool = async (call: LlmToolCall): Promise<string> => {
+      if (call.name.startsWith('draft_')) return writeTool(call)
+      return readExecutor(call)
+    }
+    const log = this.e.logger
+    log.info('coach.draft.enter', { course: c.name, session: doc.session_id, resumed })
+    const loop = await agent.agentLoop({
+      station: GROWTH_DRAFT_STATION, prompt, effort: 'deep',
+      tools: GrowthSubsystem.draftToolSpecs(), runTool,
+      ...(opts.isCancelled ? { isCancelled: opts.isCancelled } : {}),
+    })
+    const finished = doc.rounds.some(r => r.kind === 'finish' && r.summary.startsWith('发布成功'))
+      && doc.published === doc.ops.length && doc.ops.length > 0
+    // 禁止空手结束（ADR-0088 裁决 8）：自然收束且未成功 finish 且有未发布增量 → fail loud
+    if (!finished && doc.ops.length > doc.published) {
+      await persist()
+      log.warn('coach.draft.unfinished', { course: c.name, session: doc.session_id, unpublished: doc.ops.length - doc.published })
+      throw new Error(`[coach-draft] 回路收束但草稿仍有 ${doc.ops.length - doc.published} 条未发布增量且未成功 finish（禁止空手结束）——草稿已保留（会话 ${doc.session_id}），续建或显式取消。`)
+    }
+    if (doc.published === doc.ops.length && finished) await deleteDraft(this.e.fs, draftPath)
+    log.info('coach.draft.exit', { course: c.name, session: doc.session_id, finished })
+    return {
+      course: c.name,
+      session_id: doc.session_id,
+      resumed,
+      finished,
+      published_batches: doc.rounds.filter(r => r.kind === 'finish' && r.summary.startsWith('发布成功')).length,
+      unpublished_ops: doc.ops.length - doc.published,
+      trajectory: loop.trajectory,
+      rounds: doc.rounds.map(r => ({ kind: r.kind, summary: r.summary })),
+    }
+  }
+
+  /** 生长草稿·显式取消（内部 API；命令/面板接面另票）：删除在途草稿快照。 */
+  async coachDraftCancel(courseKey: string): Promise<{ cancelled: boolean }> {
+    const c = await this.e.registry.resolve(courseKey)
+    const doc = await findActiveDraft(this.e.fs, this.e.paths, c.root)
+    if (!doc) return { cancelled: false }
+    await deleteDraft(this.e.fs, draftPathOf(this.e.paths, c.root, doc.session_id))
+    return { cancelled: true }
   }
 
   /** 生长闸门（注入 GraphProposals 的回调，propose/apply 双门消费）：只对生长批的

@@ -100,6 +100,10 @@ export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './agent.ts'
 export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './agent.ts'
 /** 出题第二意见门（#223）：站标签与缺省抽样率随门面出（宿主 STATIONS/配置对齐用）。 */
 export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './question-audit.ts'
+/** 生长草稿内核（#271 / ADR-0088）：站标签/草稿差异与门同调纯函数随门面出（宿主与测试消费）。 */
+export { GROWTH_DRAFT_STATION } from './growth-draft.ts'
+export { editGateErrors, replayDraft, sealedDecisionOf, simulateOps } from './proposals.ts'
+export type { DraftDiff, DraftReplay, SealedDecision, EditGateCtx } from './proposals.ts'
 export type { SecondOpinionReport, SecondOpinionOptions } from './question-audit.ts'
 /** 出题多样性仪表（#230 / ADR-0064）：报告类型随门面出（宿主任务消息、工具面、基线脚本消费）。 */
 export type { QuestionDiversityReport, DiversityMetrics, DiversityReading, DistractorReading } from './question-diversity.ts'
