@@ -18,7 +18,7 @@ import type { Paths } from './paths.ts'
 import type { Projects, ProjectApplyResult } from './projects.ts'
 import type { GraphProposals, ApplyAudit } from './proposals.ts'
 import type { ConceptRegistry } from './concepts.ts'
-import { CONFUSABLE_CANDIDATE_MAX, conceptPairKey, confusableCandidates, declaredPairKeys } from './concepts.ts'
+import { CONFUSABLE_CANDIDATE_MAX, conceptPairKey, confusableCandidates, declaredPairKeys, isDeprecated, mergeCandidates, resolveConcept } from './concepts.ts'
 import { groupView, type GroupAxis } from './graph.ts'
 import type { CooccurrenceNode } from './concepts.ts'
 import type { Registry } from './registry.ts'
@@ -504,6 +504,74 @@ export class GraphSubsystem {
       message: filed.length
         ? `已产出 ${filed.length} 条待审混淆对候选提案（人审一次一条；接受后才入册）；共扫 ${nodes.length} 个带 invokes 的节点`
         : '没有新的混淆对候选：共现证据不足，或候选都已声明/已在待审队列（候选面不含废弃条目）',
+    }
+  }
+
+  /** 合并候选派生（#274）：非对话通道的合并候选提议——确定性信号（① 名面重叠 /
+   * ② teaches∪assumes 足迹雷同（#270 反向映射取材）/ ③ 题目 invokes 分布相近，零 LLM
+   * 可回放）逐对产出 concept_merge **待审提案**（复用 proposeConceptMerge，含不可逆
+   * 声明）。信任边界不动：apply 仍只有面板人审一条路（ADR-0084），派生只产提案、绝不
+   * 自动入册。已声明 confusable 的对不提名（人已裁定易混而非同一）；已在待审队列的对
+   * 不重复堆；废弃条目退出候选面。max 上限旋钮（缺省 CONFUSABLE_CANDIDATE_MAX，硬帽
+   * 50——与 confusable 派生同一套人审吞吐纪律）。 */
+  async conceptMergeCandidates(courseKey?: string, max?: number): Promise<{
+    course: string; scanned: number
+    filed: Array<{ id: number; from: string; into: string; weight: number }>
+    message: string
+  }> {
+    const c = await this.e.registry.resolve(courseKey)
+    const { graph } = await this.e.loadView(c)
+    const entries = await this.e.concepts.load(c.root)
+    // ③ invokes 分布：概念 → invokes 它的节点集（题库 Broken/缺席不拦派生，其余节点照常挖；ADR-0071 宽容读取）
+    const invokesNodesOf: Record<string, string[]> = {}
+    let scanned = 0
+    for (const node of graph.order) {
+      let questions: Array<{ invokes?: unknown }> = []
+      try {
+        questions = (await this.e.bank.load(this.e.paths.courseRoot(c.root), node)).questions
+      } catch {
+        questions = []
+      }
+      if (!questions.some(q => typeof q.invokes === 'string' && q.invokes.trim())) continue
+      scanned++
+      for (const q of questions) {
+        if (typeof q.invokes !== 'string' || !q.invokes.trim()) continue
+        const hit = resolveConcept(entries, q.invokes.trim())
+        if (!hit || isDeprecated(hit)) continue
+        const list = invokesNodesOf[hit.canonical] ??= []
+        if (!list.includes(node)) list.push(node)
+      }
+    }
+    // ② 足迹：teaches ∪ assumes 反向映射按概念合并（#270 单一出处，构造期折出）
+    const footprintOf: Record<string, string[]> = {}
+    for (const [concept, holders] of Object.entries(graph.taughtByOf)) footprintOf[concept] = [...holders]
+    for (const [concept, holders] of Object.entries(graph.assumedByOf)) {
+      const list = footprintOf[concept] ??= []
+      for (const n of holders) if (!list.includes(n)) list.push(n)
+    }
+    const candidates = mergeCandidates(footprintOf, invokesNodesOf, entries)
+    // max 是位置参数（工具面 boundArgs 按 bind 序传参）：上限旋钮，硬帽 50（与 confusable 同帽）
+    const cap = Math.max(1, Math.min(max ?? CONFUSABLE_CANDIDATE_MAX, 50))
+    const pendingPairs = await this.e.proposals.pendingConceptMergePairKeys()
+    const filed: Array<{ id: number; from: string; into: string; weight: number }> = []
+    for (const cand of candidates) {
+      if (filed.length >= cap) break
+      // 已在队列的跳过（登记表在两次读取之间被并发改动的窗口由这里兜住）
+      const key = conceptPairKey(cand.a, cand.b)
+      if (pendingPairs.has(key)) continue
+      // 并入向取字典序在前者（确定性规则；语义上谁并谁入由人审定夺）
+      const p = await this.e.proposals.proposeConceptMerge(
+        c.name, cand.b, cand.a,
+        `确定性派生（#274）：${cand.evidence.join('；')}`,
+      )
+      pendingPairs.add(key) // 同一扫描内不重复登记
+      filed.push({ id: p.id, from: p.from, into: p.into, weight: cand.weight })
+    }
+    return {
+      course: c.name, scanned, filed,
+      message: filed.length
+        ? `已产出 ${filed.length} 条待审合并提案（不可逆：只并入、不拆分；人审一次一条）；共扫 ${scanned} 个带 invokes 的节点`
+        : '没有新的合并候选：确定性信号不足，或候选都已声明 confusable/已在待审队列（候选面不含废弃条目）',
     }
   }
 

@@ -1287,6 +1287,19 @@ export class GraphProposals {
     }
   }
 
+  /** 已在待审队列的合并对键集（#274 派生器防重复登记的对照面）：按**产物结构**比对
+   * （from/into 归一 canonical 的无序对键），不靠 summary 文本——与 confusable 候选
+   * 去重同一纪律（摘要拿去当身份键会在措辞变化下静默失效）。 */
+  async pendingConceptMergePairKeys(): Promise<Set<string>> {
+    const out = new Set<string>()
+    for (const p of await this.store.loadProposals()) {
+      if (p.kind !== 'concept_merge' || p.status !== 'pending') continue
+      const spec = validateConceptMergeProposal(await this.loadArtifact(p.artifact)).spec
+      if (spec) out.add(conceptPairKey(spec.from, spec.into))
+    }
+    return out
+  }
+
   /** 合并确认（#265 两段式第二段，**人的动作**：面板 /proposals/apply 触发）：产物复验
    * （形态 + 在册双门，受理后登记表可能被手改/并入）→ 并入落盘 → journal。不可逆语义
    * 在提案面已声明；这里只执行。 */

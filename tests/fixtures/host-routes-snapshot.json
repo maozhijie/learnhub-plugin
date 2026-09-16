@@ -4906,12 +4906,12 @@
     },
     "calls": [
       "growth2.coachCheckpoint(\"panel_dispatch\",\"1\")",
-      "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\"}])",
-      "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\"}])",
+      "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\",\"growthForce\":true}])",
+      "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true}])",
       "growth2.stuckPending(\"1\")",
-      "growth2.coachGrowthBatch(\"1\",{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}},{\"force\":true,\"trigger\":\"panel_dispatch\"})",
-      "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\"}])",
-      "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\",\"finishedAt\":\"«ts»\"}])",
+      "growth2.coachGrowthBatch(\"1\",{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}},{\"force\":true})",
+      "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true}])",
+      "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"finishedAt\":\"«ts»\"}])",
       "growth2.coachCheckpoint(\"queue_idle\",undefined)"
     ]
   },
@@ -5068,6 +5068,41 @@
     "calls": [
       "graph.graphEncBackfill(undefined)"
     ]
+  },
+  {
+    "id": "POST /concepts/merge-candidates · 空参",
+    "method": "POST",
+    "url": "/learnhub/api/concepts/merge-candidates",
+    "body": {},
+    "status": 500,
+    "res": {
+      "error": "缺少必填参数：course（路由 POST /concepts/merge-candidates）"
+    },
+    "calls": []
+  },
+  {
+    "id": "POST /concepts/merge-candidates · 全参",
+    "method": "POST",
+    "url": "/learnhub/api/concepts/merge-candidates",
+    "body": {
+      "course": "1"
+    },
+    "status": 200,
+    "res": [],
+    "calls": [
+      "graph.conceptMergeCandidates(\"1\")"
+    ]
+  },
+  {
+    "id": "POST /concepts/merge-candidates · 缺 course",
+    "method": "POST",
+    "url": "/learnhub/api/concepts/merge-candidates",
+    "body": {},
+    "status": 500,
+    "res": {
+      "error": "缺少必填参数：course（路由 POST /concepts/merge-candidates）"
+    },
+    "calls": []
   },
   {
     "id": "POST /course/create · 空参",

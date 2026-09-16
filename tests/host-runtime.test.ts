@@ -1200,16 +1200,16 @@ test('路由分发：static 抽离后 /file、/vendor、/interactive 的守卫�
 
 // ---------------------------------------------------------------- 工具面快照 + 路由↔工具对账
 
-test('工具面快照：112 个工具的名称/描述/schema 与重构前基线逐字不变（#265 +1）', () => {
+test('工具面快照：113 个工具的名称/描述/schema 与重构前基线逐字不变（#274 +1）', () => {
   const rt = makeRuntime()
   const captured: Array<{ name?: string; description?: string; parameters?: unknown; output?: unknown }> = []
   registerTools(fakeCtx(captured), rt)
-  assert.equal(captured.length, 112, '工具总数（#265 +1 learnhub_concept_confusable_candidates；描述漂移仅限本票三处：graph-propose/graph-proposals/concept-merge）')
+  assert.equal(captured.length, 113, '工具总数（#274 +1 learnhub_concept_merge_candidates；#265 +1 learnhub_concept_confusable_candidates；描述漂移仅限本票三处：graph-propose/graph-proposals/concept-merge）')
   const snapshot = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-snapshot.json'), 'utf8')) as
     Array<{ name: string; description: string; parameters: unknown }>
-  assert.equal(snapshot.length, 112)
+  assert.equal(snapshot.length, 113)
   const byName = new Map(captured.map(t => [t.name, t]))
-  assert.equal(byName.size, 112, '工具名无重复')
+  assert.equal(byName.size, 113, '工具名无重复')
   for (const expect of snapshot) {
     const got = byName.get(expect.name)
     assert.ok(got, `缺工具 ${expect.name}`)
@@ -1290,7 +1290,7 @@ test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、�
   // proposals.proposalImpact/sched2.setDayCutoff 随种子链与 day-cutoff 退役出路由面
   // #248 / ADR-0077 卡点自报：三个引擎写点（落账/待消费/消费标记）仅路由面（面板
   // 通道 handler 与生长批执行器消费，agent 工具面不直接触卡点自报）
-  assert.equal(shared.length, 87)
+  assert.equal(shared.length, 88, '#274：graph.conceptMergeCandidates 工具/路由双通道 → 转共享')
   assert.equal(toolOnly.length, 26, '#265 +1：graph.conceptConfusableCandidates（候选派生只走 agent 工具面）；#215 前例：content2.contentCheck 转共享')
   assert.equal(routeOnly.length, 54, '#256：−content2.contentReview/−graph.seedPropose/−proposals.proposalImpact/−sched2.setDayCutoff（种子链+day-cutoff 退役）；#255 −1：doctor 随 doctor 退役')
 })

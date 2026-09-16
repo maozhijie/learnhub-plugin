@@ -147,7 +147,7 @@ export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, o
   onOpenJob?: (job: GenJobItem) => void
 }) {
   const [seedForm, setSeedForm] = useState(false)
-  const [busy, setBusy] = useState<'growth' | 'compass' | 'backfill' | null>(null)
+  const [busy, setBusy] = useState<'growth' | 'compass' | 'backfill' | 'mergeScan' | null>(null)
   const noEndpoints = course !== null && endpointCount === 0
 
   const growth = (c: string) => {
@@ -200,6 +200,26 @@ export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, o
     })
   }
 
+  const mergeScan = (c: string) => {
+    Modal.confirm({
+      title: `扫描「${c}」的疑似重复概念？`,
+      content: '确定性信号（名面重叠 / 足迹雷同 / invokes 分布相近，不调模型）逐对产出合并提案——提案收件箱人审后才会合并（合并不可逆：只并入、不拆分）。',
+      okText: '扫描',
+      onOk: async () => {
+        setBusy('mergeScan')
+        try {
+          const r = await api.mergeCandidatesScan(c)
+          const s = JSON.stringify(r)
+          Message.success(s.length > 120 ? `${s.slice(0, 120)}…——见提案收件箱` : `${s}——见提案收件箱`)
+        } catch (err) {
+          Message.error(errorMessage(err))
+        } finally {
+          setBusy(null)
+        }
+      },
+    })
+  }
+
   return (
     <Card size='small' title='教练台' className='lh-card'
       extra={<Text type='secondary' className='lh-t-12'>建课 = 名称即空图；终点由你在图屏手加；生长由教练回合裁决（过受理门自动应用）</Text>}>
@@ -213,6 +233,7 @@ export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, o
             </Tooltip>
             <Button size='small' disabled={noEndpoints} loading={busy === 'compass'} onClick={() => void compass(course)}>罗盘重画</Button>
             <Button size='small' loading={busy === 'backfill'} onClick={() => backfill(course)}>回填成分技能边</Button>
+            <Button size='small' loading={busy === 'mergeScan'} onClick={() => mergeScan(course)}>扫描疑似重复概念</Button>
           </>
         )}
       </Space>

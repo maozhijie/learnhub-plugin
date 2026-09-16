@@ -768,6 +768,26 @@
   }
  },
  {
+  "name": "learnhub_concept_merge_candidates",
+  "description": "Scan a course concept registry for SUSPECTED DUPLICATE entries and file one CONCEPT-MERGE PROPOSAL per pair (概念登记表 #274): deterministic signals only, ZERO LLM, replayable — (1) text overlap between name surfaces (canonical/aliases/definition, character-trigram similarity), (2) teaches/assumes footprint similarity (node-set overlap), (3) similar question-invokes distribution across nodes. Each proposal is an IRREVERSIBLE merge proposal (只并入、不拆分) that lands pending in the panel — the scan merges nothing and the apply path stays human-only (ADR-0084); review with the proposals list. Pairs already declared confusable are never nominated (the learner already ruled them distinct-but-confusable); pairs already pending are not stacked (re-runnable); deprecated entries leave the candidate surface; one scan files at most `max` proposals (people are the bottleneck). Same surface as the panel button「扫描疑似重复概念」.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "course": {
+     "type": "string",
+     "description": "Course name; omit when only one course is enabled"
+    },
+    "max": {
+     "type": "number",
+     "description": "Max proposals filed in this scan (default 20, hard cap 50)"
+    }
+   },
+   "required": [
+    "course"
+   ]
+  }
+ },
+ {
   "name": "learnhub_compass",
   "description": "Read a course compass (罗盘, ADR-0033 transparency device #143): the resident non-commitment route sketch at the course root — current 剩余路线 (route, coach-owned, rewritten per growth batch), the learner annotation area (软输入: read it before planning growth batches; proposals, never orders), and the weekly sandbox ETA (quantile bands, 模型推演非承诺). Missing file = legal empty state (course not seeded yet). This file NEVER enters completion criteria or any authority — do not treat hand-edited routes as structure changes.",
   "parameters": {

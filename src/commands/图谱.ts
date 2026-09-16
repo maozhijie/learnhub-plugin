@@ -92,6 +92,30 @@ export const 图谱域 = {
       }
     ]
   }),
+  'concept-merge-candidates': command({
+    id: "concept-merge-candidates",
+    summary: "Scan a course concept registry for SUSPECTED DUPLICATE entries and file one CONCEPT-MERGE PROPOSAL per pair (概念登记表 #274): deterministic signals only, ZERO LLM, replayable — (1) text overlap between name surfaces (canonical/aliases/definition, character-trigram similarity), (2) teaches/assumes footprint similarity (node-set overlap), (3) similar question-invokes distribution across nodes. Each proposal is an IRREVERSIBLE merge proposal (只并入、不拆分) that lands pending in the panel — the scan merges nothing and the apply path stays human-only (ADR-0084); review with the proposals list. Pairs already declared confusable are never nominated (the learner already ruled them distinct-but-confusable); pairs already pending are not stacked (re-runnable); deprecated entries leave the candidate surface; one scan files at most `max` proposals (people are the bottleneck). Same surface as the panel button「扫描疑似重复概念」.",
+    args: {
+      course: { type: "string", description: "Course name; omit when only one course is enabled", required: true },
+      max: { type: "number", description: "Max proposals filed in this scan (default 20, hard cap 50)" }
+    },
+    engine: "graph.conceptMergeCandidates",
+    domain: "图谱",
+    channels: [
+      {
+        channel: "agent",
+        mode: "sync",
+        tool: "learnhub_concept_merge_candidates",
+        bind: ["course", "max"]
+      },
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/concepts/merge-candidates" },
+        bind: ["course"]
+      }
+    ]
+  }),
   'graph-analyze': command({
     id: "graph-analyze",
     summary: "Analyze a course knowledge graph: structural stats, unreachable nodes, bottlenecks, lapse hotspots, graph health score (0-100, see health), next-batch suggestions (suggestions.concept_growth — the imbalance-sorted per-concept table (supply/demand/depth_spread/evidence), #281 — plus missing_pre and jump_candidates + jump_total, cognitive-jump edges needing a verdict each), the full per-node schema (schema: pre/enc/est/bloom/difficulty/note per node — the data basis for edge-level self-checks), plus cytoscape render elements. Returns JSON. Run before planning each batch of graph edits; the next-batch plan must cite concrete entries from health/suggestions.",

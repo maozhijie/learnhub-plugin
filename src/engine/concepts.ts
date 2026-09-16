@@ -258,6 +258,96 @@ export function confusableCandidates(
     .sort((x, y) => y.weight - x.weight || x.a.localeCompare(y.a) || x.b.localeCompare(y.b))
 }
 
+// ---- 合并候选派生（#274：概念层自净的提议端——非对话通道的合并候选提议）----
+
+/** 合并候选的三条确定性信号阈值：① 名面重叠沿用近似名同族的字符 trigram Jaccard（与
+ * NEAR_NAME_THRESHOLD 同量纲、独立阈值）；② ③ 足迹 / invokes 分布是集合 Jaccard——
+ * 节点集小，0.8 已属「雷同」（题目侧查重同族量纲，同输入同输出）。 */
+export const MERGE_TEXT_THRESHOLD = 0.6
+export const MERGE_FOOTPRINT_THRESHOLD = 0.8
+export const MERGE_INVOKES_THRESHOLD = 0.8
+
+/** 一条合并候选：a/b = 归一后的条目 canonical（无序对，a 字典序在前——确定性定序，
+ * 并入向由人审定夺），weight = 证据条数（排序用），evidence = 逐条可查的证据。 */
+export interface MergeCandidate { a: string; b: string; weight: number; evidence: string[] }
+
+/** 集合 Jaccard 相似度（0–1；双方任一为空返回 0——空足迹不与任何概念相似）。 */
+function setJaccard(xs: readonly string[], ys: readonly string[]): number {
+  const a = new Set(xs)
+  const b = new Set(ys)
+  if (!a.size || !b.size) return 0
+  let inter = 0
+  for (const x of a) if (b.has(x)) inter++
+  return inter / (a.size + b.size - inter)
+}
+
+/** 合并候选派生（#274 纯函数，零 LLM、确定性回放）：三条信号各一票——
+ * ① 名面重叠：两条目的 canonical ∪ 别名 ∪ 定义 两两 trigram 相似度超阈（同义重复铸名的
+ *    直接痕迹，#264 同算法族）；
+ * ② 足迹雷同：两概念 teaches ∪ assumes 反向映射（#270 taughtByOf/assumedByOf，入参由
+ *    调用方合并给出）的节点集 Jaccard 超阈（教与被假设的场景完全重叠 = 疑似同一概念）；
+ * ③ invokes 分布相近：两概念被题目 invokes 的节点集 Jaccard 超阈（被调用的学习场景
+ *    完全重叠）。
+ * 只吃**在册且活跃**条目（废弃退出候选面，ADR-0084 ②）；已声明 confusable 的对不提名
+ * （人已裁定「易混而非同一」）；自指对跳过。产出按 weight 降序、再按名字典序，evidence
+ * 亦按字典序——**同输入同输出**（候选面可复现）。 */
+export function mergeCandidates(
+  footprintOf: Readonly<Record<string, readonly string[]>>,
+  invokesNodesOf: Readonly<Record<string, readonly string[]>>,
+  entries: ConceptEntry[],
+): MergeCandidate[] {
+  const active = entries.filter(e => !isDeprecated(e))
+  const declared = declaredPairKeys(entries)
+  const activeNames = new Set(active.map(e => e.canonical))
+  const acc = new Map<string, { a: string; b: string; evidence: string[] }>()
+  const add = (first: string, second: string, line: string): void => {
+    if (first === second) return
+    const key = conceptPairKey(first, second)
+    if (declared.has(key)) return
+    const [a, b] = [first, second].sort((x, y) => x.localeCompare(y))
+    const hit = acc.get(key) ?? { a, b, evidence: [] }
+    if (!hit.evidence.includes(line)) hit.evidence.push(line)
+    acc.set(key, hit)
+  }
+  // ① 名面重叠（登记表序遍历，只走上三角）
+  const surfacesOf = (e: ConceptEntry): string[] =>
+    [e.canonical, ...(e.aliases ?? []), ...(e.definition ? [e.definition] : [])]
+      .map(s => s.trim()).filter(Boolean)
+  for (let i = 0; i < active.length; i++) {
+    for (let j = i + 1; j < active.length; j++) {
+      const ea = active[i]!
+      const eb = active[j]!
+      for (const x of surfacesOf(ea)) {
+        for (const y of surfacesOf(eb)) {
+          const sim = trigramSimilarity(x, y)
+          if (sim < MERGE_TEXT_THRESHOLD) continue
+          add(ea.canonical, eb.canonical, `名面重叠：「${x}」≈「${y}」（相似度 ${round2(sim)}）`)
+        }
+      }
+    }
+  }
+  // ② ③ 集合信号（名字典序遍历，只走上三角；不在册/废弃的概念不入候选面）
+  const signalNames = [...new Set([...Object.keys(footprintOf), ...Object.keys(invokesNodesOf)])]
+    .filter(n => activeNames.has(n)).sort((x, y) => x.localeCompare(y))
+  for (let i = 0; i < signalNames.length; i++) {
+    for (let j = i + 1; j < signalNames.length; j++) {
+      const x = signalNames[i]!
+      const y = signalNames[j]!
+      const fp = setJaccard(footprintOf[x] ?? [], footprintOf[y] ?? [])
+      if (fp >= MERGE_FOOTPRINT_THRESHOLD) {
+        add(x, y, `足迹雷同：teaches/assumes 节点集重合（Jaccard ${round2(fp)}）`)
+      }
+      const inv = setJaccard(invokesNodesOf[x] ?? [], invokesNodesOf[y] ?? [])
+      if (inv >= MERGE_INVOKES_THRESHOLD) {
+        add(x, y, `invokes 分布相近：被题目调用的节点集重合（Jaccard ${round2(inv)}）`)
+      }
+    }
+  }
+  return [...acc.values()]
+    .map(v => ({ a: v.a, b: v.b, weight: v.evidence.length, evidence: [...v.evidence].sort() }))
+    .sort((x, y) => y.weight - x.weight || x.a.localeCompare(y.a) || x.b.localeCompare(y.b))
+}
+
 // ---- 近似名预检（#264：铸名软提示，不改精确撞名的硬拒）----
 
 /** 近似名相似度阈值（字符 trigram Jaccard，与题目侧查重 #119 同算法族——同量纲、独立阈值：

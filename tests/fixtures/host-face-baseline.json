@@ -28,6 +28,7 @@
   "content2.resolveNote",
   "content2.reviewQueue",
   "content2.submitFeedback",
+  "graph.conceptMergeCandidates",
   "graph.graphAnalyze",
   "graph.graphApply",
   "graph.graphEncBackfill",

@@ -319,6 +319,9 @@ export const api = {
   /** 成分技能边回填（确定性推断，同步受理 → 富化提案待人审）。 */
   encBackfill: (course?: string) =>
     http<Record<string, unknown>>('POST', '/graph/backfill', { ...(course ? { course } : {}) }),
+  /** 疑似重复概念扫描（确定性派生 #274，同步受理 → 合并提案待人审）。 */
+  mergeCandidatesScan: (course?: string) =>
+    http<Record<string, unknown>>('POST', '/concepts/merge-candidates', { ...(course ? { course } : {}) }),
   /** 名称建课（ADR-0076：建课 = 名称即空图，一个写入单元落全部脚手架，不自动生成）。 */
   courseCreate: (name: string) =>
     http<{ id?: string; name: string; root: string; enabled?: boolean }>('POST', '/course/create', { name }),
