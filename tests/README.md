@@ -493,7 +493,7 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 
 ## engine 按域归组 刀⑦（#307 / ADR-0093，2026-09-16）：coach/ + 写入单元受管制面
 
-**纯搬移、零逻辑改动**：10 件迁入 `src/engine/coach/`（`growth-subsystem`／`proposals`／`coach-round`／`coach-tools`／`growth-draft`／`compass`／`seed`／`stuck-report`／`probation`／`nof1`），顶层 32 → 22。逐刀 diff 口径同刀①–④（非 import 行只许出现下表路径键）。
+**纯搬移、零逻辑改动**：10 件迁入 `src/engine/coach/`（`growth-subsystem`／`proposals`／`coach-round`／`coach-tools`／`growth-draft`／`compass`／`seed`／`stuck-report`／`probation`／`nof1`），顶层 32 → 22。逐刀 diff 口径：非 import 行只许出现**下表登记的路径键**，外加本刀的自检去硬编码修复（下表末两行逐条登记，非口径外夹带）。
 
 | 受控面 | 迁移内容 | 落点 | 判据 |
 |---|---|---|---|
@@ -522,6 +522,8 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 **全仓散文/注释路径扫尾**（刀①–④ 立的分期：布局定型后一次扫）。改的是**会误导读者的活引用**，历史记录不动：
 
 - 活代码/注释：`src/engine/index.ts`（logger 端口说明 ×2）、`src/engine/coach/growth-subsystem.ts`（params 单源）、`src/host/llm.ts`（agent 缝 ×2）、`src/host/runtime.ts`（agent 缝）、`src/host/quality-review.ts`（引擎侧机械 ×2）、`src/host/smoke.ts`（smoke 提示串里的复现路径）、`tests/clock-rng-port.test.ts`（clock 端口）、`tests/arch-guards.test.ts`（agent 缝 ×3、clock 端口）、`scripts/scan-budget.mjs`（prompt-render 白名单理由）、`build.mjs`（optimize 调用点）、`scripts/diversity-baseline.mts` + 产物 `tests/fixtures/diversity-baseline.json` 的 `note`（question-diversity 出处）、`docs/agents/code-index.md`（两处方法调用点路径）、`docs/agents/architecture.md`（`PROMPT_CHANGELOG` 处）
-- **不动**（有理由，不是漏）：`docs/adr/**` 与 `docs/research/**`（决策/调研记录里的路径是**当时**的现场，不改写历史）、`tests/README.md` 里刀①–⑧ 之前的门册行（同上）、`tests/prompt-changelog.test.ts` 的历史提交信息样例、`.qoder/repowiki/**`（机器生成的 wiki，可整个重新生成——手改等于伪造生成器输出，故不扫）
+- **不动**（有理由，不是漏）：`docs/adr/**` 与 `docs/research/**`（决策/调研记录里的路径是**当时**的现场，不改写历史）、`tests/README.md` 里刀①–⑧ 之前的门册行（同上）、`tests/prompt-changelog.test.ts` 的历史提交信息样例、`.qoder/repowiki/**`（机器生成的 wiki，可整个重新生成——手改等于伪造生成器输出，故不扫）；`docs/agents/**` 是**活手册**（导航章而非决策记录），含其证据段内的路径一律按今天的可达性改——这是与上一条的分界，不是双标；散文里的**裸文件名**（如 `scan-invariant.mjs` 头注释的 `projects.ts`）不属路径引用，按名说话，不改
 
 **遗留（刀①–④ 登记的那份清单已在本刀清账）**：`build.mjs`／`diversity-baseline`（脚本注释 + 产物 note）均已按刀④/③ 后的路径改毕；分期内无新增遗留。
+
+**code-review 两轴（#307）补的两处**（同一分期内发现，随本刀一起落）：① 扫尾面漏了 `shared/`——`shared/content-renderers.ts` 头注释仍指 `src/engine/content.ts`（该文件是 ui 与 engine 共用的零依赖面，但**不在**施工器 `SOURCE_ROOTS` 里，故施工器与我的首轮 grep 都没覆盖它；实测该目录无 engine 相对 specifier，故无漏改，纯清单缺口）；施工器 `SOURCE_ROOTS` 补入 `shared`，注释留因。② `src/engine/infra/agent.ts` 头注释的 `engine/llm.ts`、`scripts/diversity-baseline.mts` 头注释的 `src/engine/question-diversity.ts` 两处活引用漏改（后者同文件内的 `note` 已改、头注释未改——半个修复比不修更误导）。

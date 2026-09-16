@@ -30,8 +30,10 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 
-/** 改写面：全部可能持有 engine 相对 specifier 的源码根。 */
-const SOURCE_ROOTS = ['src', 'tests', 'scripts', 'ui/src']
+/** 改写面：全部可能持有 engine 相对 specifier 的源码根。
+ * `shared/` 必须在内——它是 ui 与 engine 共用的零依赖面（#307 刀⑧ 扫尾时发现：
+ * 当时的清单漏了它，凡 shared/ 里出现过的相对 specifier 都不会被改写）。 */
+const SOURCE_ROOTS = ['src', 'tests', 'scripts', 'ui/src', 'shared']
 const SOURCE_EXT = /\.(ts|tsx|mts|mjs)$/
 const SKIP_DIRS = new Set(['node_modules', 'lib', 'web', 'dist', '.git'])
 const FILE_EXT = /\.(ts|tsx|js|jsx|mts|mjs)$/

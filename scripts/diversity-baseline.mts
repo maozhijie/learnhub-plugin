@@ -3,7 +3,7 @@
  * 快照复算三指标，输出基线 JSON（`tests/fixtures/diversity-baseline.json`）。
  *
  * 一条口径、两个消费者：本脚本与 `tests/question-diversity.test.ts` 都调
- * `src/engine/question-diversity.ts` 的**同一函数**——基线的数字不可能与出题运行时
+ * `src/engine/content/question-diversity.ts` 的**同一函数**——基线的数字不可能与出题运行时
  * 读数用两套算法（那是基线最没有意义的一种死法）。所以脚本只负责「读文件 → 测 → 落
  * JSON」，不含任何公式。
  *

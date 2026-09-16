@@ -3,7 +3,7 @@
  * 唯一调用面，接口按业务事实分双模式——`complete()` 单发直返 + `agentLoop()` 有界
  * 只读工具回路。
  *
- * 归属（ADR-0044）：本文件是应用层的端口消费者——端口住应用层（`engine/llm.ts` 的
+ * 归属（ADR-0044）：本文件是应用层的端口消费者——端口住应用层（`engine/infra/llm.ts` 的
  * `LlmComplete`/`LlmStream` 纯类型）、实现住适配器（dsh 耦合 100% 收在 `host/llm.ts`
  * 唯一适配文件）、装配住投递层（`createHostRuntime` 构造并注入）；R3「engine 禁
  * import `@deepseek-ai/*`」从此就是应用层与适配器的分界线。

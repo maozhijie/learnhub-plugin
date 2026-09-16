@@ -3,7 +3,7 @@
  *
  * 消费方：
  * - ui/src/components/renderers.ts：按 lang 实现渲染器、MdView 查表分发
- * - src/engine/content.ts：loadPrompt 把清单注入生成提示词、gateReport 校验未注册 lang
+ * - src/engine/content/content.ts：loadPrompt 把清单注入生成提示词、gateReport 校验未注册 lang
  *
  * 扩展新格式 = 在 RENDERERS 加一项 + UI 注册表加一个实现，两侧自动同步。
  */
