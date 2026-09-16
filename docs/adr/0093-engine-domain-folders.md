@@ -31,9 +31,30 @@
 - **施工 = 8 刀，风险递增序**：① `vault/`（试点，验证流程）→ ② `graph/`+`concepts/` → ③ `content/` → ④ `sched/` → ⑤ `practice/` → ⑥ `learner/` → ⑦ `coach/` → ⑧ `infra/`。每刀 = 搬一域 + 全仓改 specifier + 全量门绿 + 独立提交，独立可回滚（ADR-0043 立的逐刀纪律）。唯一牵动路径键控门的是 ⑦（`scripts/scan-write-unit.mjs` 硬编码 `engine/proposals.ts` 等 4 条路径，随刀同步）；diff 最大的是 ⑧（全仓 import 改写 + `src/host` 深导入的 prompt-render/logger 两处），放最后因为届时施工模式已被前七刀验证。
 - **本 ADR 只定终态与序列，不施工**（施工总票 #304，立而不排期；子票按 issue-tracker 粒度判据执行时归并开出）。
 
+## §修订（2026-09-16，#305 刀①–④ 实测）
+
+**更正上「唯一牵动路径键控门的是 ⑦」**：该判断低估了搬迁的波及面，实测刀①–④ **每一刀**都触到路径键控面，全量 7 类（刀⑤–⑧ 同表复用，不必重新发现）：
+
+| 路径键控面 | 触到的刀 | 说明 |
+|---|---|---|
+| `scripts/arch-baseline.json::sizes` | **每刀** | 逐文件行数按路径进基线；纯搬移下值不变、键必迁，须同提交 `--update` |
+| `src/engine/output-contracts.ts::REPAIR_MECHANISMS[].file` | ①③⑤⑦⑧ | 按 `src/` 相对路径精确匹配读源对账 witness 串 |
+| `quality-rubrics.ts` 判据的 `引擎:` 出处 | ③ | 锚门按 `src/engine/<file>` 读源对账锚点原句 |
+| `scan-invariant.mjs`（`definedIn`／白名单）／`scan-closure.mjs`（原语之家／白名单） | ②⑦ | G6／G10 |
+| `scan-write-unit.mjs::WRITE_UNIT_SITES` | ④⑦ | 本 ADR 原已记 ⑦；④ 的 `sched-subsystem.ts` 同属 |
+| `prompt-bump.mts`（`TEMPLATE_FILES`／登记表面） | ③ | 见下条 |
+| `tests/arch-guards.test.ts` 自检里**抄写**上述常量值的路径字面量 | ②④ | 见下条 |
+
+**两条形态裁决（比上表更可复用）**：
+
+- **登记面须是清单、含搬迁前的历史路径**，否则 git 历史简化在搬迁提交处截断：只改 `CHANGELOG_FILE` 单路径会让登记门的纪律起点从 `7a9a136`（#218 引入提交）静默漂到搬迁提交、扫描窗口 25 → 1 且**照旧报绿**。这不是新裁决，是 ADR-0075 §3「面是清单不是单文件」在登记表面上的同一判据；`TEMPLATE_FILES` 与 `CHANGELOG_FILES` 现在都按它写。
+- **自检只许引用路径键控常量，不许抄写其值**：抄写的样本在常量迁家后不再命中目标分支——读模块级表的当场变红（可发现），纯样本的则**门照旧绿而分支悄悄不再被断言**（不可发现，比红更坏，正是 ADR-0047「恒过的门比没有门更坏」的局部形态）。刀②④ 各修一处（G6 引用 `GRAPH_WRITE_PRIMITIVES[0].definedIn`、G9 按 `{...WRITE_UNIT_SITES}` 造读数）。
+
+**施工器**：`scripts/move-engine-domain.mjs`（刀① 沉淀，可复用到 ⑧）——`git mv` + 两向 specifier 改写（未搬文件指向被搬文件的 + 被搬文件自身全部相对 specifier 重算；后者不可省，否则被搬文件指向留守文件的 specifier 静默失配）。测试缝、导出面、`prompts/`／`views/` 位置均未动，与原裁决一致。
+
 ## 登记面
 
-- `tests/README.md`（门册）：`scan-write-unit.mjs` 路径表变更随第 ⑦ 刀登记。
+- `tests/README.md`（门册）：`scan-write-unit.mjs` 路径表变更随第 ⑦ 刀登记；刀①–④ 的 7 类路径键控面迁移与两条形态裁决已登记（§engine 按域归组 刀①–④）。
 - `docs/agents/architecture.md`：四层图补一句 engine 内部按域分文件夹，随第 ⑧ 刀（布局完成时）落地。
 - 本 ADR 与 CONTEXT.md 无涉：文件夹布局是实现细节，不进词汇表。
 

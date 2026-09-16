@@ -458,3 +458,25 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 行为 | **生长失败语料补标按真实失败站落盘**：站标签随错误随行（思路官段 `COACH_PLAN_STATION`／草稿段 `GROWTH_DRAFT_STATION`，`tagErrorWithStation`），宿主经门面读侧 `stationOfError` 据此补标；**未标注 = 不补标**（两站都没跑起来 = 没有死因样本）；遗留写死映射 `STATIONS.growth: '教练思路'` 清理为 `STATIONS.growthPlan`（引引擎常量） | `src/engine/growth-subsystem.ts`、`src/engine/index.ts`、`src/host/corpus.ts`、`src/host/jobs.ts`（catch 处取 `stationOfError`） | `tests/coach-growth.test.ts`（两站失败各带各的站标签）、`tests/corpus.test.ts`（站名常量对表 + 遗留键不再存在）、`tests/host-runtime.test.ts`（执行官站失败 → 教练执行站捕获改判 + 思路官成功件不动 + 语料引用指死因件；形状容忍 → tolerated 落**当次**捕获 + 对照组后一轮保持 ok；无站标签 → 不补标） |
 | 行为 | **形状容忍回调 `onTolerated`**（引擎→宿主窄面，可选）：归一命中时随当次工具调用同步通知，宿主给该站**当次**捕获补标 `tolerated`（code=`patch_shape_normalized`）——批次结束后 `annotateLast` 只会标到最后一轮 | `growth-subsystem.ts::coachGrowthBatch/coachDraft` opts、`src/host/jobs.ts` | `tests/growth-draft.test.ts`（回调恰一次）+ `tests/host-runtime.test.ts`（补标落当次件） |
 | 受控量 | 新增导出 `normalizePatchShape`／`COACH_PLAN_STATION`／`stationOfError` + 类型 `PatchShapeNormalization`（`PATCH_SHAPE_CHEATSHEET` 只随 growth-draft.ts 出、不进門面：无引擎外消费方）（G5/G7 随实现重写；G4 窄面未触）；工具/schema/路由/磁盘格式零改动（**非**产品契约变更 → 无探针快照迁移）；提示词面判定：新增散文全是引擎侧工具返回文本（非 `PROMPT_KINDS` 模板、不在 `TEMPLATE_FILES`）——prompt-bump 两门不执法，按章程 §8 末段靠收尾点名兜（清单见 #301 票面评论） | `scripts/arch-baseline.json`（--update：growth-draft 264→505、growth-subsystem 1601→1671、proposals 1603→1668、host/jobs 1304→1314、host/corpus 343→345、index 857→863、output-contracts 715→716；typeErrors 0/0） | `tests/arch-guards.test.ts` 绿；`tests/growth-sugar.test.ts`／`explicit-tool-contracts`／`output-contract`／`repair-policy`（见证串随站名常量化改写）照旧绿（工具面与契约未动） |
+
+## engine 按域归组 刀①–④（#305 / ADR-0093，2026-09-16）：受控面迁移登记
+
+**纯搬移、零逻辑改动**：45 件从 `src/engine/` 顶层迁入域文件夹（`vault/` 6、`graph/` 6、`concepts/` 1、`content/` 16、`sched/` 16），顶层 91 → 46。四刀各自独立提交、独立可回滚；文件名/导出面/门面 `index.ts` 唯一汇点地位原样。施工器 `scripts/move-engine-domain.mjs`（两向 specifier 改写：未搬文件指向被搬文件的 + 被搬文件自身全部相对 specifier 重算；扩展名形态照抄，ui/ 无扩展名写法保留）。逐刀 diff 口径：`git diff -M -U0` 里非 import 行只许出现下表登记的路径键。
+
+| 受控面 | 迁移内容 | 落点 | 判据 |
+|---|---|---|---|
+| 文件规模棘轮 | **每刀**：45 条 `sizes` 键随路径迁移，行数实测**逐一不变**（纯搬移的可证伪读数）；`depsFace`／`typeErrors`／`adapterFace` 三族逐字未变 | `scripts/arch-baseline.json`（`--update`） | G5 棘轮精确匹配 |
+| 修复策略机制登记 | `REPAIR_MECHANISMS[].file` 4 条（刀① `invokesOncePerQuestion`；刀③ `auditRepairOncePerQuestion`／`gradingReaskOnce`／`disputeReaskOnce`）。该门按 `src/` 相对路径**精确匹配**读源文件对账 witness 串 | `src/engine/output-contracts.ts` | `tests/repair-policy.test.ts` |
+| 量规出处锚门 | 2 条判据的 `引擎:content.ts` 出处（锚门按 `src/engine/<file>` 读源对账 `## 10. 先做后教`／`## 11. 专家思维轨迹`）；刀③ 后判据原句仍在 content 内 | `src/engine/content/quality-rubrics.ts` | `tests/quality-rubrics.test.ts` 锚门 |
+| 图写原语 / 闭包单一出处门 | 刀②：`GRAPH_WRITE_PRIMITIVES[].definedIn`（graph.ts 迁家）、`CLOSURE_PRIMITIVE_HOME`、`CLOSURE_SCAN_WHITELIST` 成员路径 | `scripts/scan-invariant.mjs`／`scripts/scan-closure.mjs` | G6／G10（`tests/arch-guards.test.ts`） |
+| 写入单元站点表 | 刀④：`WRITE_UNIT_SITES['engine/sched-subsystem.ts']` → `'engine/sched/sched-subsystem.ts'`（键是 `src/` 相对路径，不能用文件名——同名文件会互相覆盖） | `scripts/scan-write-unit.mjs` | G9 |
+| 提示词面（模板面 + 登记表面） | 刀③：`TEMPLATE_FILES` **追加当前路径** `content/content.ts`（历史路径 `content.ts` 照 ADR-0075 §3 留在面里）；`CHANGELOG_FILE` 拆出 `CHANGELOG_FILES`（历史路径 + 当前路径），两处 git 历史探测（`disciplineStartRef` 的 `git log -S`、`scanBumps` 的 `git log -p`）都改走清单 | `scripts/prompt-bump.mts` | `tests/prompt-changelog.test.ts` + `npm run prompt-bump -- check` |
+| 自检样本去硬编码 | 刀②：G6 自检的「原语自己的家豁免」样本原抄 `'src/engine/graph.ts'`，迁家后**不再等于** `definedIn`——门仍绿但该分支静默不再被覆盖（局部恒过）。改为引用 `GRAPH_WRITE_PRIMITIVES[0].definedIn`（与 G10 引用 `CLOSURE_PRIMITIVE_HOME` 同款）。刀④：G9 自检抄写的站点读数表同理失真，且因 `writeUnitViolations` 读**模块级** `WRITE_UNIT_SITES`，「齐备则绿」当场**变红**——改为按 `{...WRITE_UNIT_SITES}` 造读数 | `tests/arch-guards.test.ts` | 门照旧绿 + 两处分支恢复被覆盖 |
+| 产品契约 | **零漂移**：路由路径/响应形状、agent 工具名与 schema、磁盘格式、提示词文本、`views/` 与 `prompts/` 位置全部未动 | —（未改） | 路由/工具/行为快照逐字不变；`prompt-bump -- check` 恒绿（模板版本集合差为零） |
+
+**实测：搬迁会牵动的路径键控面共 7 类，不止票面预期的 1 类**。ADR-0093 原记「唯一牵动路径键控门的是 ⑦（`scan-write-unit.mjs` 4 条路径）」，实测刀①–④ 各自都触到（见上表）；更正已写进 ADR-0093 §修订，供刀⑤–⑧ 复用。
+
+**两处静默失效的形态（本仓教训，供后续搬迁复用）**：
+
+- **单路径登记面在搬迁提交处被 git 历史简化截断**：`CHANGELOG_FILE` 只留当前路径时，`disciplineStartRef` 的 `git log -S PROMPT_CHANGELOG -- <当前路径>` 在搬迁提交处截断，纪律起点**静默从 `7a9a136`（#218 登记面引入提交）漂到本刀提交**，登记门扫描窗口从 25 个提交缩到 1，且**照旧报绿**（实测：双路径下起点仍为 `7a9a136`、报「扫描 25 个提交」）。同源修法是 ADR-0075 §3 的「面是清单不是单文件」——历史路径留在面里。
+- **自检抄写常量值 = 常量迁家时自检局部恒过**：G6／G9 两处自检把路径键控常量的**值**抄进样本、而非引用常量；常量迁家后样本不再命中目标分支——G9 因读模块级表而当场变红（可发现），G6 则**门照旧绿、豁免分支悄悄不再被断言**（不可发现，比红更坏）。同源修法是自检引用常量本身。
