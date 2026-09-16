@@ -77,3 +77,9 @@
 「六站共用」对**统一 agent 缝**（`AgentSeam`：`complete`／`repair`／`agentLoop`／`gateRepairRound` 四种形态）成立；对 `gateRepairRound` 这一种形态不成立。后果仅限验收口径：`agent.gate.*` 四条只应从上述三站出现，按「六站都该有」去查会对不上。
 
 **方法论附注**：这次核实踩到的坑——本仓 `trace_path(direction="inbound")` 的默认 `mode: "calls"` 对方法调用不闭合（`agent.gateRepairRound(...)` 在图上记成 `USAGE` 不是 `CALLS`），对 `gateRepairRound` 返回 `callers_total: 0`，与「真的没有调用方」同形。已固化进 `docs/agents/code-index.md`（含 `CALLS`+`USAGE` 双取兜底查询）与 `AGENTS.md`（`trace_path` 报 0 须复核）。
+
+## §勘误（2026-09-16，#289；勘误只追加本段，上文裁决正文不改）
+
+**「直调不包 `apiRun`」的口径已过时，以本段为准。** 裁决与边界段写的「`/question-save`／`/question-add`／`/question-archive` 三条直调路由」是当票快照：`/question-save` 已被 #169 收编进通道注册表（经 `apiRun` 留痕，注释过时、不缺留痕）；经 `handlers.ts` 手写路由实盘（2026-09-16），当前**写侧直调面共 9 条**——`PUT /question-update`、`POST /question-add`、`POST /question-archive`、`POST /rebuild`、`POST /feedback`、`POST /proposals/apply`、`POST /proposals/reject`、`POST /course/delete`、`POST /generate/cancel`；另有读侧 `GET /note` 直调（无写副作用，不计入写侧面）。处置：逐条包 `apiRun` 或 `logCall`（写侧优先），由 #292（T4）落地后对照本表复核注销。
+
+**闭集外存量事件的登记去向**：`coach.draft.enter/handover/unfinished/exit` 四条已在代码（`growth-subsystem.ts` 草稿回路）但漏登本 ADR 闭集——按 Q4 裁决转入附录 ADR（ADR-0091）登记，本表闭集不追改。此后新事件一律先进附录登记再接线。
