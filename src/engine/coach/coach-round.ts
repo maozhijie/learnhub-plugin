@@ -23,6 +23,7 @@
  */
 import { dayOfTs, parseDay, daysBetween } from '../infra/dates.ts'
 import { pctOf } from '../infra/grading.ts'
+import { stripWrappingFence, validateRouteBody } from './compass.ts'
 import { dueReviewFirstPushes, trueRetention } from '../sched/memory.ts'
 import { SEDIMENT_KINDS } from '../sched/sediment.ts'
 import type { SedimentFold } from '../sched/sediment.ts'
@@ -321,13 +322,22 @@ export const COACH_PLAN_PROMPT_KEYS = {
 
 /** 思路官交接契约（#273）：零节点名、零图上引用——意图句台阶 + 概念名（逐字在册）+
  * est 提示；recheck 仅指插入批的预注册复诊（与生长批 note.recheck 同形状），不引入
- * 新回路。 */
+ * 新回路。
+ *
+ * `route`（#310 / ADR-0092 §修订）：罗盘「剩余路线」段的新正文——#273 把 route 划出
+ * 执行官后没交给思路官，于是该段**冻结在最后一次初画**（「数学基础」连初画都没跑，
+ * 至今是 ROUTE_PENDING 占位），而受理门/写入路径/对账文案五处仍在假设这条通道活着。
+ * 恢复方式 = 交回思路官：同一轮已在读全图与旧罗盘、并在裁决方向，顺手重写路线零额外
+ * 调用，且避免「计划朝终点 A、罗盘写终点 B」的分叉（计划与路线同作者、同一次裁决产出）。 */
 export interface GrowthPlanHandover {
   operator: string
   reason: string
   target_endpoints: string[]
   steps: Array<{ intent: string; teaches_concept?: string; est_hint?: number }>
   recheck?: { metric: string; days?: number }
+  /** 罗盘「剩余路线」段新正文（按终点分节、每节 3–7 条阶段条目、非承诺措辞）。
+   * **缺省 = 不改写、保留旧稿**（apply 只在 `spec.route !== undefined` 时写）。 */
+  route?: string
 }
 
 /** 思路官计划的 schema 门（纯函数，错误作数据）：operator 枚举（含停摆）、reason 必填、
@@ -374,6 +384,19 @@ export function validatePlanHandover(doc: unknown, courseName: string): string[]
         if (s[banned] !== undefined) errors.push(`[coach-plan] steps[${i}] 出现「${banned}」——交接计划零节点名零操作，补丁归执行官。`)
       }
     })
+  }
+  // 罗盘「剩余路线」新正文（#310 / ADR-0092 §修订）：门与 apply 侧**同源**——同一个
+  // `validateRouteBody`（#309 的教训是「计划门过、apply 门拒」等于开了一条静默丢弃
+  // 通道，同源校验把那类洞在计划门就堵掉）。义务：前进/换向必写（方向批本就该重画
+  // 路线）；停摆/插入/巩固可不写——缺省 = 不改写、保留旧稿，绝不是清空。
+  const route = d.route
+  if (route !== undefined && typeof route !== 'string') {
+    errors.push('[coach-plan] route 必须是字符串（罗盘「剩余路线」段的块标量正文）。')
+  } else if (typeof route === 'string') {
+    errors.push(...validateRouteBody(stripWrappingFence(route)).map(e => `[coach-plan] route: ${e}`))
+  }
+  if ((d.operator === '前进' || d.operator === '换向') && !(typeof route === 'string' && route.trim())) {
+    errors.push('[coach-plan] 前进/换向计划必须携带 route（罗盘「剩余路线」段新正文：按终点分节、每节 3–7 条阶段条目、非承诺措辞）。')
   }
   if (d.recheck !== undefined) {
     if (d.operator !== '插入') {

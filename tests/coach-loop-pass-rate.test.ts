@@ -17,7 +17,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { validatePlanHandover } from '../src/engine/coach/coach-round.ts'
 
-/** 金样本计划骨架（与 coach-plan 的金计划同形：前进 + 朝向 + 意图句台阶）。 */
+/** 金样本计划骨架（与 coach-plan 的金计划同形：前进 + 朝向 + 意图句台阶 + route）。 */
 function goldPlanYaml(): string {
   return [
     'course: 数学',
@@ -28,8 +28,14 @@ function goldPlanYaml(): string {
     '  - intent: 从日常速度建立「变化多快」的直觉',
     '    teaches_concept: 变化率',
     '    est_hint: 15',
+    'route: |',
+    '  - **用导数解决优化问题**：',
+    '    - **变化率直觉**：从日常速度体会「变化多快」',
   ].join('\n') + '\n'
 }
+
+/** 金计划的 route 正文（前进必写；#310）——回放对象与 YAML 两条路径共用一份。 */
+const GOLD_ROUTE = ['- **用导数解决优化问题**：', '  - **变化率直觉**：从日常速度体会「变化多快」'].join('\n')
 
 /** 幻觉场景（旧实验的 2 类目标 × 4 变体 → 新契约下的等价形态：越权写补丁/节点名）。 */
 const HALLUCINATIONS: Array<{ target: string; variants: string[]; apply: (v: string, yaml: string) => string }> = [
@@ -50,7 +56,7 @@ const SCENARIOS = HALLUCINATIONS.flatMap(h => h.variants.map(v => ({ target: h.t
 test('结构性对照基线（8 场景）：越权补丁/节点名入计划 → 计划门 8/8 拦截；金计划零错误', () => {
   // 对照：金计划（零名字）过计划门
   assert.deepEqual(validatePlanHandover(
-    { operator: '前进', reason: '前沿缺下一台阶', target_endpoints: ['用导数解决优化问题'], steps: [{ intent: '直觉台阶', teaches_concept: '变化率', est_hint: 15 }] },
+    { operator: '前进', reason: '前沿缺下一台阶', target_endpoints: ['用导数解决优化问题'], steps: [{ intent: '直觉台阶', teaches_concept: '变化率', est_hint: 15 }], route: GOLD_ROUTE },
     '数学',
   ), [], '金计划过门（对照基线的「回路侧」）')
 
@@ -83,5 +89,6 @@ function injectAsObject(yaml: string): Record<string, unknown> {
     reason: '前沿缺下一台阶，沿终点推进',
     target_endpoints: ['用导数解决优化问题'],
     steps: [step],
+    route: GOLD_ROUTE,
   }
 }

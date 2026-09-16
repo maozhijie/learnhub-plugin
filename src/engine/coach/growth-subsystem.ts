@@ -343,7 +343,9 @@ export class GrowthSubsystem {
         const existing = this.e.fs.exists(path) ? await this.e.fs.readFile(path) : compassScaffold(c.name)
         const doc = parseCompass(existing)
         // 对账在 ETA 早退之前算（与标记周无关——路线什么时候漂移都要看得见）；
-        // 只按名字粗比、只读图面，图面加载失败由外层 catch 归 skipped（不挡 ETA）
+        // 只按名字粗比、只读图面，图面加载失败由外层 catch 归 skipped（不挡 ETA）。
+        // #310 起路线随方向批（前进/换向）重写，本对账才真正看到「本批之后的路线」——
+        // 此前该段长期冻结在最后一次初画，漂移读数恒定失真。
         const routeBody = sectionBody(doc, SECTION_ROUTE)
         const reconcile = hasPaintedRoute(routeBody)
           ? reconcileRoute(routeBody!, [...(await this.e.loadView(c)).graph.nset])
@@ -615,10 +617,15 @@ export class GrowthSubsystem {
           }
         }
         lines.push('- 裁决纪律：优先选能同时推进多个未达成终点的台阶（交汇优先）')
-        // 首级判据材料（#303 / ADR-0092）：前沿为空 = 这次裁决铺的是坡道第一级台阶——
-        // 判据住 `prompts/projects.ts` 单源，与上行同域（都是这条回合的裁决纪律）；
-        // 两族思路官经同一上下文包组装，自动共享（模板文件零改动）。
-        if (frontierEmpty) lines.push(render(COACH_FIRST_RUNG_CRITERIA, {}))
+        // 首级判据材料（#303 / ADR-0092；#310 补绑终点）：前沿为空 = 这次裁决铺的是坡道
+        // 第一级——课程名与终点锚作占位符注入，判据才绑得回既有输入（ADR-0033「视角由
+        // 目标携带」），否则上界约束可被域外解满足。单源住 `prompts/projects.ts`，与上行
+        // 同域；两族思路官与执行官经同一上下文包自动共享（模板文件零改动）。
+        if (frontierEmpty) {
+          lines.push(render(COACH_FIRST_RUNG_CRITERIA, {
+            course: c.name, endpoints: anchors.map(a => a.endpoint).join('、'),
+          }))
+        }
         block('终点锚', lines.join('\n'))
       } else {
         block('终点锚', '（零终点——空锚是合法空态，但教练回合无从裁决方向；先加一个终点。）')
@@ -796,7 +803,11 @@ export class GrowthSubsystem {
     const log = this.e.logger
     log.info('coach.round.enter', { course: c.name, today, trigger: opts.trigger ?? 'session_start' })
     const { graph, state } = await this.e.loadView(c)
-    const view = renderGrowthGraphView(graph, state, endpointNames(anchors), { today, conceptEntries: await this.e.concepts.load(c.root) })
+    const endpoints = endpointNames(anchors)
+    const view = renderGrowthGraphView(graph, state, endpoints, { today, conceptEntries: await this.e.concepts.load(c.root) })
+    // 首裁口径（#310 / ADR-0092 §修订）：就绪前沿排除终点锚后为空 = 这次裁决铺的是坡道
+    // 第一级。同一判据两用——coachContextPack 内注首级判据块，此处定档位（下行）。
+    const frontierEmpty = this.coachFrontier(graph, state).every(n => endpoints.has(n))
     const segments: CoachGrowthSegment[] = []
     const assertAlive = (): void => {
       if (opts.isCancelled?.() === true) {
@@ -805,10 +816,16 @@ export class GrowthSubsystem {
     }
 
     // —— ① 思路官：两族模板 + 常驻材料 + 注入/上次裁决摘要，单发产交接计划 ——
-    const family = coachPromptFamily(opts.trigger ?? 'session_start')
+    // 首裁不是重裁（#310）：重裁族的叙述（沿用/推翻上次裁决）预设了一个不存在的上一轮
+    // ——空课取不到摘要块，模型只能自己绕过（本轮实测 reason 里写「无从沿袭上次裁决」）。
+    // 故族选择从「只看触发点」改为「触发点 + 状态」：本课程**没有任何已落盘的生长批**
+    // 时走常规族（其叙述与「从零决定第一级台阶」同构），有历史后照旧按触发点折叠。
+    // 判据本是引擎一步可判的事实（ADR-0092 自己的论据，此前只用来判「注不注判据块」）。
+    const history = await this.lastGrowthSummaryOf(c)
+    const family = history === undefined ? 'routine' : coachPromptFamily(opts.trigger ?? 'session_start')
     const template = await this.e.content.loadPrompt(COACH_PLAN_PROMPT_KEYS[family])
     const pack = await this.coachContextPack(c.name, { today })
-    const lastSummary = family === 'recheck' ? await this.lastGrowthSummaryOf(c) : undefined
+    const lastSummary = family === 'recheck' ? history : undefined
     const planPrompt = withContractLast(template, [
       pack,
       opts.inject !== undefined ? render(COACH_INJECT_BLOCK, { inject: opts.inject.trimEnd() }) : undefined,
@@ -823,6 +840,12 @@ export class GrowthSubsystem {
       const doc = YAML.parseModel(yaml) as GrowthPlanHandover & { course: string }
       return { plan: doc, yaml }
     }
+    // 档位随语义浓度（#310）：首裁是「从零决定往哪儿长」——两站拆分（#273）后算子、朝向、
+    // 台阶意图全压在思路官侧，而它此前恒 fast（本轮实测 1.4 秒 / 121 输出 token），错的
+    // 代价由恒 deep 的执行官以 20 轮 / 33.1k token 支付。首裁抬 deep；其余回合维持 fast
+    // （边界见 ADR-0092 §修订：插入算子的高语义同样值得 deep，但算子是模型输出、调用前
+    // 无从派发，故不在此处假装能判）。
+    const planEffort = frontierEmpty ? 'deep' : 'fast'
     const runPlan = (mode: 'complete' | 'repair', feedbackYaml?: string, schemaErrors?: readonly string[]): Promise<PlanVerdict> =>
       // 本段任何抛出（取消传导 / 缝故障 / 解析器故障）都算「思路官站失败」——宿主失败补标
       // 据此落站（#301 缺陷③）
@@ -840,8 +863,8 @@ export class GrowthSubsystem {
         }
         log.info('coach.plan.enter', { course: c.name, family, mode })
         const raw = mode === 'complete'
-          ? await agent.complete(COACH_PLAN_STATION, prompt, { effort: 'fast' })
-          : await agent.repair(COACH_PLAN_STATION, prompt, { effort: 'fast' })
+          ? await agent.complete(COACH_PLAN_STATION, prompt, { effort: planEffort })
+          : await agent.repair(COACH_PLAN_STATION, prompt, { effort: planEffort })
         const verdict = parsePlan(raw)
         log.info('coach.plan.exit', {
           course: c.name, family, mode,
@@ -852,7 +875,7 @@ export class GrowthSubsystem {
       })
     let planVerdict = await runPlan('complete')
     segments.push({
-      tier: 'plan', effort: 'fast', operator: planVerdict._schemaErrors ? '' : planVerdict.plan.operator,
+      tier: 'plan', effort: planEffort, operator: planVerdict._schemaErrors ? '' : planVerdict.plan.operator,
       disagreement: planVerdict._schemaErrors ? false : planVerdict.plan.operator === '插入' && Boolean(planVerdict.plan.recheck),
     })
     if (planVerdict._schemaErrors) {
@@ -862,7 +885,7 @@ export class GrowthSubsystem {
       if (repaired._schemaErrors) {
         throw tagErrorWithStation(new Error(`[coach-growth] 思路官计划未过 schema 门（回灌重裁一轮仍未过——零写盘）。\n【首轮】${planVerdict._schemaErrors.join('\n')}\n【重裁】${repaired._schemaErrors.join('\n')}`), COACH_PLAN_STATION)
       }
-      segments.push({ tier: 'plan_repair', effort: 'fast', operator: repaired.plan.operator, disagreement: false })
+      segments.push({ tier: 'plan_repair', effort: planEffort, operator: repaired.plan.operator, disagreement: false })
       planVerdict = repaired
     }
     const plan = planVerdict.plan
@@ -883,6 +906,9 @@ export class GrowthSubsystem {
         operator: plan.operator, reason: plan.reason,
         target_endpoints: plan.target_endpoints, steps: plan.steps,
         ...(plan.recheck ? { recheck: plan.recheck } : {}),
+        // 罗盘「剩余路线」（#310）：随计划进执行官站的批规格，不落草稿字段（避免续建把
+        // 旧稿当本批产物带回来）；缺省 = 不改写、保留旧稿。
+        ...(plan.route !== undefined ? { route: plan.route } : {}),
       },
     }))
     const lastFinish = draft.finishes.at(-1)
@@ -1042,6 +1068,10 @@ export class GrowthSubsystem {
     const c = await this.e.registry.resolve(courseKey)
     const root = c.root
     const today = opts.today ?? (await this.e.learningDay()).today
+    // 罗盘「剩余路线」（#310）：计划携带的路线正文。取到局部变量是因为 `batchSpecOf` 的
+    // 第二参同名 `opts` 把它遮蔽了；它**只从计划读**、从不从草稿档读——路线不是草稿产物，
+    // 落进草稿字段会被续建当成「本批产物」带回（与 C11 同类风险）。
+    const planRoute = opts.plan?.route
     // —— 草稿会话：在途续建（注入轮次日志）或新建 ——
     const existing = await findActiveDraft(this.e.fs, this.e.paths, root, file => {
       // 生长草稿档损坏留痕（#291 / ADR-0091）：坏档不炸读侧（照旧视为无在途），WARN 指针随行
@@ -1137,6 +1167,10 @@ export class GrowthSubsystem {
         reason: noteLite?.reason ?? '',
         ops,
         ...(concepts.length ? { concepts } : {}),
+        // 罗盘批内重写（#310）：路线随计划来，且只在**生长批**（note 区在场）上携带——
+        // 受理门的 route 规则如此（普通 edit 提案携带即拒收）。试验算/门复验/发布三处
+        // 同走本函数，故 route 在试算阶段就被同一扇门验过（计划门与 apply 门同源）。
+        ...(noteLite && planRoute !== undefined ? { route: planRoute } : {}),
         ...(noteLite
           ? {
               note: {
@@ -1456,6 +1490,9 @@ export class GrowthSubsystem {
       `- 理由：${opts.plan.reason}`,
       ...opts.plan.steps.map((s, i) => `- 台阶 ${i + 1}：${s.intent}${s.teaches_concept ? `（概念面：${s.teaches_concept}）` : ''}${s.est_hint ? `（约 ${s.est_hint} 分钟）` : ''}`),
       ...(opts.plan.recheck ? [`- 预注册复诊：${opts.plan.recheck.metric}（${opts.plan.recheck.days ?? RECHECK_DAYS_DEFAULT} 学习日）——插入批随批携带：用 draft_patch 的 note_recheck 写这一枚（metrics 取值域见该参数说明；草稿侧缺席时按本计划兜底）。`] : []),
+      // 罗盘路线（#310）：让执行官看得见「本批还会改写罗盘」，但不给它活干——写入由引擎
+      // 从本计划取（batchSpecOf），执行官零 op。缺省（route 未携带）= 不改写、保留旧稿。
+      ...(opts.plan.route !== undefined ? ['- 罗盘路线：「剩余路线」段本次随批重画（正文由引擎从本计划携带写入，你无需为它写任何 op）；路线是草图不是承诺。'] : []),
       '',
       '计划是方向不是操作：节点名与补丁仍须你对草稿图逐字对表后用 draft_patch 落地；与图面事实冲突时以图面为准，偏离计划时在 note_reason 里说一句。',
     ].join('\n') : undefined

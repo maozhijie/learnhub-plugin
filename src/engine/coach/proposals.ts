@@ -199,12 +199,14 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       }
     }
   }
-  // 罗盘批内重写（#145）：route 只随生长批携带——「剩余路线」写权属教练回合生长批，
-  // 普通 edit 提案携带即拒收（罗盘唯一写权，见 compass.ts 头注）。
+  // 罗盘批内重写（#145；#310 恢复生产者）：route 只随生长批携带——「剩余路线」写权属
+  // 生长批，普通 edit 提案携带即拒收（罗盘唯一写权，见 compass.ts 头注）。正文的来源是
+  // **思路官计划**（`GrowthPlanHandover.route`），由引擎在批规格里携带；缺省 = 不改写、
+  // 保留旧稿（绝不是清空）。
   let route: string | undefined
   if (d.route !== undefined) {
     if (!note) {
-      errors.push('route: 普通 edit 提案不得携带（「剩余路线」唯一写权属教练回合生长批——带 note 区的生长批才随批重写罗盘）')
+      errors.push('route: 普通 edit 提案不得携带（「剩余路线」唯一写权属生长批——带 note 区的生长批才随批重写罗盘）')
     } else if (typeof d.route !== 'string' || !d.route.trim()) {
       errors.push('route: 必须是非空字符串（「剩余路线」段新正文；不重写罗盘就省略本字段）')
     } else {

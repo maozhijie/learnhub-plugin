@@ -11,9 +11,11 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile, writeFile } from 'node:fs/promises'
 import { AgentSeam } from '../src/engine/infra/agent.ts'
 import { coachPromptFamily, validatePlanHandover } from '../src/engine/coach/coach-round.ts'
 import type { GrowthPlanHandover } from '../src/engine/coach/coach-round.ts'
+import { SECTION_ANNOTATIONS, SECTION_ROUTE, parseCompass, sectionBody, withSectionText } from '../src/engine/coach/compass.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
@@ -39,6 +41,12 @@ function goldPlan(): GrowthPlanHandover {
     reason: '前沿缺下一台阶，沿终点推进',
     target_endpoints: ['用导数解决优化问题'],
     steps: [{ intent: '从日常速度建立「变化多快」的直觉', teaches_concept: '变化率', est_hint: 15 }],
+    // 前进必写 route（#310）：罗盘「剩余路线」段新正文，门与 apply 侧同源校验。
+    route: [
+      '- **用导数解决优化问题**：',
+      '  - **变化率直觉**：从日常速度体会「变化多快」',
+      '  - **平均变化率**：算出一次平均变化率（候选）',
+    ].join('\n'),
   }
 }
 
@@ -55,6 +63,7 @@ const yamlOf = (p: Record<string, unknown>): string => [
     ...(s.name ? [`    name: ${String(s.name)}`] : []),
   ])] : ['steps: []']),
   ...(p.recheck === undefined ? [] : [`recheck:`, `  metric: ${String((p.recheck as Record<string, unknown>).metric)}`, `  days: ${String((p.recheck as Record<string, unknown>).days)}`]),
+  ...(p.route === undefined ? [] : ['route: |', ...String(p.route).split('\n').map(l => (l ? `  ${l}` : ''))]),
 ].join('\n')
 
 test('validatePlanHandover：金计划零错误；枚举/朝向/零名字/recheck 各负例逐类拦截', () => {
@@ -82,12 +91,28 @@ test('validatePlanHandover：金计划零错误；枚举/朝向/零名字/rechec
   assert.ok(validatePlanHandover({ ...goldPlan(), course: '物理' } as unknown as GrowthPlanHandover, '数学').some(e => e.includes('course')))
 })
 
+test('#310 计划契约的 route：门与 apply 侧同源校验（同一个 validateRouteBody）；前进/换向必写、其余算子可省', () => {
+  // 非法 route：空 / 带 `## ` 标题（会劫持罗盘段落）——两条都由同一个路线门给出
+  assert.ok(validatePlanHandover({ ...goldPlan(), route: '   ' }, '数学').some(e => e.includes('route')))
+  assert.ok(validatePlanHandover({ ...goldPlan(), route: '- ok\n## 劫持\n' }, '数学').some(e => e.includes('route') && e.includes('标题')))
+  assert.ok(validatePlanHandover({ ...goldPlan(), route: 123 as unknown as string }, '数学').some(e => e.includes('route')))
+  // 前进/换向必写（方向批本就该重画路线）
+  assert.ok(validatePlanHandover({ ...goldPlan(), route: undefined }, '数学').some(e => e.includes('必须携带 route')))
+  assert.ok(
+    validatePlanHandover({ ...goldPlan(), operator: '换向', route: undefined, target_endpoints: ['用导数解决优化问题'] }, '数学')
+      .some(e => e.includes('必须携带 route')),
+  )
+  // 停摆/插入/巩固可不写——缺省 = 不改写、保留旧稿（不是清空）
+  assert.deepEqual(validatePlanHandover({ ...goldPlan(), operator: '巩固', route: undefined, target_endpoints: [] }, '数学'), [])
+  assert.deepEqual(validatePlanHandover({ ...goldPlan(), operator: '插入', route: undefined, recheck: { metric: '前进恢复', days: 10 } }, '数学'), [])
+})
+
 // ---- 两站假 agent：思路官走 complete（单发零工具），执行官走 stream 回路（脚本化） ----
 
 type LoopTurn = { text: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }
 
 function twoStationFake(opts: { plans: string[]; sessions: LoopTurn[][] }) {
-  const completeCalls: Array<{ prompt: string; mode: 'complete' | 'repair' }> = []
+  const completeCalls: Array<{ prompt: string; mode: 'complete' | 'repair'; effort?: string }> = []
   /** 执行官司路的逐轮请求（回灌的工具结果住在 messages 里——断言补丁期拒收文案用）。 */
   const streamCalls: Array<{ messages: Array<{ text?: string }> }> = []
   let planIdx = 0
@@ -96,10 +121,10 @@ function twoStationFake(opts: { plans: string[]; sessions: LoopTurn[][] }) {
   const seam = new AgentSeam({
     logger: memLogger(),
     // seam.repair 与 complete 同一传输（都进本端口）——mode 按调用序标注：首次 = 单发，后续 = 回灌重裁
-    complete: async prompt => {
+    complete: async (prompt, _system, opts2) => {
       const mode = completeCalls.length === 0 ? 'complete' as const : 'repair' as const
       const plan = opts.plans[planIdx++]!
-      completeCalls.push({ prompt, mode })
+      completeCalls.push({ prompt, mode, effort: opts2?.effort })
       return plan
     },
     stream: async req => {
@@ -176,17 +201,47 @@ test('停摆计划（operator=停摆）：不拉执行官，合法停摆零提�
   })
 })
 
-test('显式重裁族（panel_dispatch）：走「思路官重裁」模板；无留痕时不带上次裁决摘要块', async () => {
+test('首裁不是重裁（#310 / ADR-0092 §修订）：本课程无生长批历史时 panel_dispatch 也走常规族，且首裁抬 deep 档；有历史后照旧折叠到重裁族', async () => {
   await withVault(SEED, async h => {
     await draftCourse(h.engine, CAPABILITY_DRAFT)
-    const agent = twoStationFake({ plans: [goldPlanYaml()], sessions: [executorTurns()] })
-    await h.engine.growth2.coachGrowthBatch('数学', agent, { trigger: 'panel_dispatch' })
-    const planPrompt = agent.completeCalls[0]!.prompt
-    assert.match(planPrompt, /思路官重裁提示词/)
-    assert.doesNotMatch(planPrompt, /## 上次裁决摘要（上一次生长批/)  
-    // 常规族对照：session_start 走「思路官回合」
-    const h2 = agent
-    void h2
+    // ① 空课首裁 + panel_dispatch：重裁族的叙述（沿用/推翻上次裁决）预设了一个不存在的
+    //    上一轮，摘要块也取不到——派发按「触发点 + 状态」折叠，无历史 → 常规族。
+    const cold = twoStationFake({ plans: [goldPlanYaml()], sessions: [executorTurns()] })
+    await h.engine.growth2.coachGrowthBatch('数学', cold, { trigger: 'panel_dispatch' })
+    const coldPrompt = cold.completeCalls[0]!.prompt
+    assert.match(coldPrompt, /思路官回合提示词/, '无历史 → 常规族（首裁不是重裁）')
+    assert.doesNotMatch(coldPrompt, /思路官重裁提示词/)
+    assert.doesNotMatch(coldPrompt, /## 上次裁决摘要（上一次生长批/)
+
+    // ② 有生长批历史之后：panel_dispatch 照旧折叠到重裁族，摘要块在场（现状不变）
+    const stopPlan = yamlOf({ operator: '停摆', reason: '就绪缺口由内容生成跟上', target_endpoints: [], steps: [] })
+    const warm = twoStationFake({ plans: [stopPlan], sessions: [] })
+    await h.engine.growth2.coachGrowthBatch('数学', warm, { trigger: 'panel_dispatch', force: true })
+    const warmPrompt = warm.completeCalls[0]!.prompt
+    assert.match(warmPrompt, /思路官重裁提示词/, '有历史 → 重裁族（触发点折叠照旧）')
+    assert.match(warmPrompt, /## 上次裁决摘要（上一次生长批/)
+  })
+})
+
+// ---- #310 L5：首裁抬 deep（判据 = 前沿为空，与首级判据块的注入判据同一条） ----
+
+test('首裁抬 deep（#310 L5）：前沿为空的首裁回合用 deep 档，非首裁维持 fast', async () => {
+  const stopPlan = yamlOf({ operator: '停摆', reason: '首级台阶留待下一轮', target_endpoints: [], steps: [] })
+
+  // ① 空图首级（只有终点锚 → 前沿为空）：这是「从零决定往哪儿长」的回合
+  await withVault({ registry: null, graph: null }, async h => {
+    await draftCourse(h.engine, { manualEndpoints: [{ name: '终点A', goalNote: '会用导数' }], notes: false })
+    const cold = twoStationFake({ plans: [stopPlan], sessions: [] })
+    await h.engine.growth2.coachGrowthBatch('数学', cold, { force: true })
+    assert.equal(cold.completeCalls[0]!.effort, 'deep', '前沿为空 → deep（错的代价由恒 deep 的执行官以 20 倍 token 支付）')
+  })
+
+  // ② 前沿非空（有未开始的就绪节点）→ fast 档照旧
+  await withVault({ registry: null, graph: null }, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const warm = twoStationFake({ plans: [stopPlan], sessions: [] })
+    await h.engine.growth2.coachGrowthBatch('数学', warm, { force: true })
+    assert.equal(warm.completeCalls[0]!.effort, 'fast', '非首裁维持 fast')
   })
 })
 
@@ -332,5 +387,45 @@ test('#303 两族共享首级判据：前沿为空时回合/重裁两族提示�
       recheckPrompt.indexOf('首级判据（本回合') < recheckPrompt.indexOf('## 上次裁决摘要'),
       '段序纪律：包材料在前、包外注入块在后',
     )
+  })
+})
+
+// ---- #310：罗盘「剩余路线」恢复生产者（计划携带 → 引擎透传 → apply 批内重写）----
+
+test('#310 route 随前进批写盘：「剩余路线」段换成计划正文，批注区字节保留', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const p = h.engine.paths.compassPath('数学')
+    // 罗盘初始是脚手架（「剩余路线」= ROUTE_PENDING 占位）；先把批注区写成手编内容——
+    // 重写路线时必须原样存活（段级替换语义，批注区是学习者的软输入）
+    await writeFile(p, withSectionText(await readFile(p, 'utf8'), SECTION_ANNOTATIONS, '想先补概率。'))
+
+    const agent = twoStationFake({ plans: [goldPlanYaml()], sessions: [executorTurns()] })
+    const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
+    assert.equal(r.state, 'applied')
+
+    const doc = parseCompass(await readFile(p, 'utf8'))
+    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), goldPlan().route, '计划携带的路线落到「剩余路线」段')
+    assert.equal(sectionBody(doc, SECTION_ANNOTATIONS)?.trim(), '想先补概率。', '批注区字节保留')
+    // 路线也进执行官交接块（可见，但写权归引擎——执行官零 op）
+    assert.match(agent.completeCalls[0]!.prompt, /罗盘路线/)
+  })
+})
+
+test('#310 停摆批不改写旧稿：「剩余路线」段原样保留', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const p = h.engine.paths.compassPath('数学')
+    // 先写一份「上一次方向批的产物」当旧稿
+    const R0 = '- **用导数解决优化问题**：\n  - **旧稿台阶**：上一批写下的路线'
+    await writeFile(p, withSectionText(await readFile(p, 'utf8'), SECTION_ROUTE, R0))
+
+    const stopPlan = yamlOf({ operator: '停摆', reason: '就绪缺口由内容生成跟上', target_endpoints: [], steps: [] })
+    const agent = twoStationFake({ plans: [stopPlan], sessions: [] })
+    const r = await h.engine.growth2.coachGrowthBatch('数学', agent, { force: true })
+    assert.equal(r.state, 'idle', '停摆：零提案零写盘')
+
+    const doc = parseCompass(await readFile(p, 'utf8'))
+    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), R0, '缺省 = 不改写、保留旧稿（绝不是清空）')
   })
 })

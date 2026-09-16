@@ -530,6 +530,8 @@ test('门面：nodeComplete 结果携带 coach 字段；statusJson 附会话开�
 })
 
 // ---- #303 空图首级判据材料注入（ADR-0092：材料注入，不开第三族模板）----
+// ---- #310：判据补绑终点（课程名 + 终点锚作占位符注入；「宁简勿繁」降为同向候选间偏好；
+//      域外正反例（Python）删除）----
 
 test('#303 首级判据注入：触发口径是「前沿为空」（排除终点后未开始节点数为零），不是节点数', async () => {
   const CRITERIA = '首级判据'
@@ -538,9 +540,16 @@ test('#303 首级判据注入：触发口径是「前沿为空」（排除终点
     await draftCourse(engine, { manualEndpoints: [{ name: '终点A', goalNote: '会用导数' }], notes: false })
     const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
     assert.ok(pack.includes(CRITERIA), '前沿为空 → 注入首级判据')
-    assert.ok(pack.includes('零复合概念'), '判据四条随行（ADR-0040 原文）')
+    assert.ok(pack.includes('零复合概念'), '起点资格四条随行（迁自 ADR-0040 原文）')
     assert.ok(pack.includes('坡道第一级台阶'), '操作化反例警示随行')
     assert.ok(pack.includes('裁决纪律：优先选能同时推进多个未达成终点的台阶'), '与裁决纪律行同域共存')
+    // #310 补绑终点：块头点名本节课的两个既有输入（课程名 + 终点锚，不新增输入面）
+    assert.ok(pack.includes('本课程：数学'), '块头点名课程名')
+    assert.ok(pack.includes('声明终点：终点A'), '块头点名终点锚')
+    assert.ok(pack.includes('朝这些终点之一推进了一步'), '「朝终点可辨认」是先决条件')
+    assert.ok(pack.includes('同向候选之间取更简的那个'), '「宁简勿繁」降为同向候选间的偏好（去引信）')
+    assert.ok(!pack.includes('过简的代价趋近零'), '绝对化表述已删')
+    assert.ok(!pack.includes('Python'), '域外正反例已删（不收具体领域 → 无照抄范例）')
   })
 
   // ② 多终点零普通节点：节点数 2（不是「≤1」），前沿仍为空 → 照注入（口径不是节点数）
@@ -550,6 +559,7 @@ test('#303 首级判据注入：触发口径是「前沿为空」（排除终点
     })
     const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
     assert.ok(pack.includes(CRITERIA), '未开始存量零 = 注入（两个节点全是终点）')
+    assert.ok(pack.includes('声明终点：终点A、终点B'), '多终点逐个点名（与逐终点锚区块同源）')
   })
 
   // ③ 普通节点已学完（前沿被清空）：同样命中——「删空普通节点」的等价场景
