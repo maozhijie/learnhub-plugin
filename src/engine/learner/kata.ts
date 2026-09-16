@@ -15,16 +15,16 @@
  * 聚合纯函数（buildKataReality）：流水进 → 分箱出；周归属全部经 dayOfTs（学习日
  * 口径，凌晨归属随日界），周内/周外用 YYYY-MM-DD 字典序比较。
  */
-import { dayOfTs, inWeek, weekStartOf } from './dates.ts'
-import { round2, pctOf } from './grading.ts'
+import { dayOfTs, inWeek, weekStartOf } from '../dates.ts'
+import { round2, pctOf } from '../grading.ts'
 import { obsidianLink } from './output.ts'
-import { execRatingScore } from './practice/project-exec.ts'
-import type { ProjectExecRec } from './practice/project-exec.ts'
-import { crossingText, etaHorizonOf } from './compass.ts'
-import type { CompassEta, RouteReconcile } from './compass.ts'
-import { dueReviewFirstPushes, trueRetention } from './sched/memory.ts'
-import type { PracticeRec, JournalRec, ReviewRec } from './types.ts'
-import type { HabitRepeatRec } from './practice/habits.ts'
+import { execRatingScore } from '../practice/project-exec.ts'
+import type { ProjectExecRec } from '../practice/project-exec.ts'
+import { crossingText, etaHorizonOf } from '../compass.ts'
+import type { CompassEta, RouteReconcile } from '../compass.ts'
+import { dueReviewFirstPushes, trueRetention } from '../sched/memory.ts'
+import type { PracticeRec, JournalRec, ReviewRec } from '../types.ts'
+import type { HabitRepeatRec } from '../practice/habits.ts'
 
 export const KATA_KIND = 'weekly_kata'
 
@@ -39,7 +39,7 @@ export const KATA_EMPTY = '（待答）'
 
 // ---- 学习周折叠：定义住 dates.ts（纯日历语义，#152 刀 1 归位），此处原路径
 // re-export 保住 S45 接缝（tests 与 engine 门面仍从 kata 导入）----
-export { weekStartOf, weekEndOf, prevWeekStartOf, inWeek } from './dates.ts'
+export { weekStartOf, weekEndOf, prevWeekStartOf, inWeek } from '../dates.ts'
 
 // ---- 现状聚合（引擎自动填的四问之外那一问）----
 

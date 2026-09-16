@@ -9,7 +9,7 @@ import type { LearnhubEngine } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import type { Paths } from '../src/engine/paths.ts'
 import { SANDBOX_WORDING } from '../src/engine/sched/sandbox.ts'
-import { weekStartOf } from '../src/engine/kata.ts'
+import { weekStartOf } from '../src/engine/learner/kata.ts'
 import {
   SECTION_ROUTE, SECTION_ANNOTATIONS, SECTION_ETA, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,
   ETA_MARKER_PREFIX, parseCompass, sectionBody, withSectionText, validateRouteBody, etaMarkerOf,

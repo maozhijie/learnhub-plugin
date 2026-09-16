@@ -55,7 +55,7 @@ export type { CoachTrigger, CoachPromptFamily, CoachCheck, CoachGrowthSegment, G
 export type { GateVerdict } from './agent.ts'
 import { QuestionBank, validateBank, BankSubsystem } from './content/question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem } from './vault/note-source.ts'
-import { LearnerCards, LearnerSubsystem } from './learner-cards.ts'
+import { LearnerCards, LearnerSubsystem } from './learner/learner-cards.ts'
 import { Skills } from './practice/skills.ts'
 import { Habits } from './practice/habits.ts'
 import { AnkiMirror } from './vault/anki.ts'

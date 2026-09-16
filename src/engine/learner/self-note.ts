@@ -9,13 +9,13 @@
  * 指令散文住 `prompts/feedback.ts`（#237 / ADR-0075 惰性化）；自注原文与节正文明
  * 学习者自写内容，朴素拼装注入、不进 `render` 变量面（口径见该模块头注）。
  */
-import { render } from './prompt-render.ts'
+import { render } from '../prompt-render.ts'
 import {
   SELF_NOTE_FEEDBACK_HEADING, SELF_NOTE_FEEDBACK_NO_POINTS, SELF_NOTE_FEEDBACK_NOTE_HEADING,
   SELF_NOTE_FEEDBACK_SECTION_HEADING, SELF_NOTE_FEEDBACK_SYSTEM,
-} from './prompts/feedback.ts'
+} from '../prompts/feedback.ts'
 import type { ExplainPoint } from './explain.ts'
-import type { LearnerCardKind } from './types.ts'
+import type { LearnerCardKind } from '../types.ts'
 
 /** 自注卡的默认正面提示（按卡面档；学习者可显式覆盖）。 */
 export function selfNotePromptOf(kind: LearnerCardKind, anchor: string): string {

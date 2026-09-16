@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { newLessonRationale, normalizeGoalIntention, pinHeadScore, todayPins } from '../src/engine/goals.ts'
-import type { PinRec } from '../src/engine/goals.ts'
+import { newLessonRationale, normalizeGoalIntention, pinHeadScore, todayPins } from '../src/engine/learner/goals.ts'
+import type { PinRec } from '../src/engine/learner/goals.ts'
 import { tfQuestion, withVault } from './helpers/vault.ts'
 import type { NoteSeed } from './helpers/vault.ts'
 

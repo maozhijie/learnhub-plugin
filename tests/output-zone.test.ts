@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import { withVault } from './helpers/vault.ts'
-import { obsidianLink, writeOutputArtifact, outputArtifactFile, isRegistrableCenterRel } from '../src/engine/output.ts'
+import { obsidianLink, writeOutputArtifact, outputArtifactFile, isRegistrableCenterRel } from '../src/engine/learner/output.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 
 /** 个人笔记字节快照（红线：输出区/注册动作对用户笔记零写入）。 */

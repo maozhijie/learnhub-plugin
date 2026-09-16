@@ -22,7 +22,7 @@ import { getScheduler, previewDue } from '../src/engine/sched/srs.ts'
 import { DESIRED_RETENTION } from '../src/engine/params.ts'
 import { defaultParams, FSRS6_PARAM_COUNT, OPTIMIZE_MIN_REVIEWS } from '../src/engine/sched/optimize.ts'
 import type { OptimizerImpl, TrainingSequence } from '../src/engine/sched/optimize.ts'
-import { prevWeekStartOf } from '../src/engine/kata.ts'
+import { prevWeekStartOf } from '../src/engine/learner/kata.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import { localDay, tfQuestion, withVault } from './helpers/vault.ts'
 
