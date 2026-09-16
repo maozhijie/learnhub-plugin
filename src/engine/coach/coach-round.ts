@@ -307,7 +307,11 @@ export type CoachTrigger = 'node_complete' | 'node_skip' | 'session_start' | 'qu
 /** 思路官提示词两族（#273）：trigger → 族的纯函数映射。常规生长族（node_complete /
  * session_start / queue_idle）平裁下一步方向；显式重裁族（node_skip / panel_dispatch）
  * 是显式重新裁决——上次裁决摘要随包回灌，可沿用可推翻。收尾朝向**不是**提示词族：
- * sealed 是批形态触发的引擎自动标记（proposals.ts），在 plan 内表现为算子判断。 */
+ * sealed 是批形态触发的引擎自动标记（proposals.ts），在 plan 内表现为算子判断。
+ *
+ * **本函数只是触发点折叠那一半**（#310 / ADR-0092 §修订）：重裁族的叙述依赖「上次裁决
+ * 摘要」块在场，而该块在空课取不到——调用点据此再折一次状态（材料不在场即走常规族），
+ * 故「跳过/面板下发 = 显式重新裁决」只在本课程有上一次裁决留痕时成立。 */
 export type CoachPromptFamily = 'routine' | 'recheck'
 
 export function coachPromptFamily(trigger: CoachTrigger): CoachPromptFamily {
@@ -324,11 +328,8 @@ export const COACH_PLAN_PROMPT_KEYS = {
  * est 提示；recheck 仅指插入批的预注册复诊（与生长批 note.recheck 同形状），不引入
  * 新回路。
  *
- * `route`（#310 / ADR-0092 §修订）：罗盘「剩余路线」段的新正文——#273 把 route 划出
- * 执行官后没交给思路官，于是该段**冻结在最后一次初画**（「数学基础」连初画都没跑，
- * 至今是 ROUTE_PENDING 占位），而受理门/写入路径/对账文案五处仍在假设这条通道活着。
- * 恢复方式 = 交回思路官：同一轮已在读全图与旧罗盘、并在裁决方向，顺手重写路线零额外
- * 调用，且避免「计划朝终点 A、罗盘写终点 B」的分叉（计划与路线同作者、同一次裁决产出）。 */
+ * `route`（#310 / ADR-0096）：罗盘「剩余路线」段的新正文，由思路官随方向裁决产出。
+ * **缺省 = 不改写、保留旧稿**（apply 只在 route 在场时写本段）——绝不是清空。 */
 export interface GrowthPlanHandover {
   operator: string
   reason: string

@@ -15,7 +15,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { AgentSeam } from '../src/engine/infra/agent.ts'
 import { coachPromptFamily, validatePlanHandover } from '../src/engine/coach/coach-round.ts'
 import type { GrowthPlanHandover } from '../src/engine/coach/coach-round.ts'
-import { SECTION_ANNOTATIONS, SECTION_ROUTE, parseCompass, sectionBody, withSectionText } from '../src/engine/coach/compass.ts'
+import { SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, parseCompass, sectionBody, withSectionText } from '../src/engine/coach/compass.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
@@ -392,13 +392,14 @@ test('#303 两族共享首级判据：前沿为空时回合/重裁两族提示�
 
 // ---- #310：罗盘「剩余路线」恢复生产者（计划携带 → 引擎透传 → apply 批内重写）----
 
-test('#310 route 随前进批写盘：「剩余路线」段换成计划正文，批注区字节保留', async () => {
+test('#310 route 随前进批写盘：「剩余路线」段换成计划正文，批注区/ETA 段字节保留', async () => {
   await withVault(SEED, async h => {
     await draftCourse(h.engine, CAPABILITY_DRAFT)
     const p = h.engine.paths.compassPath('数学')
     // 罗盘初始是脚手架（「剩余路线」= ROUTE_PENDING 占位）；先把批注区写成手编内容——
     // 重写路线时必须原样存活（段级替换语义，批注区是学习者的软输入）
     await writeFile(p, withSectionText(await readFile(p, 'utf8'), SECTION_ANNOTATIONS, '想先补概率。'))
+    const etaBefore = sectionBody(parseCompass(await readFile(p, 'utf8')), SECTION_ETA)
 
     const agent = twoStationFake({ plans: [goldPlanYaml()], sessions: [executorTurns()] })
     const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
@@ -407,8 +408,24 @@ test('#310 route 随前进批写盘：「剩余路线」段换成计划正文，
     const doc = parseCompass(await readFile(p, 'utf8'))
     assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), goldPlan().route, '计划携带的路线落到「剩余路线」段')
     assert.equal(sectionBody(doc, SECTION_ANNOTATIONS)?.trim(), '想先补概率。', '批注区字节保留')
+    assert.equal(sectionBody(doc, SECTION_ETA), etaBefore, 'ETA 段字节保留（只换目标段，段外不碰）')
     // 路线也进执行官交接块（可见，但写权归引擎——执行官零 op）
     assert.match(agent.completeCalls[0]!.prompt, /罗盘路线/)
+  })
+})
+
+test('#310 非法 route 被计划门拒 → 回灌重裁恰一次（与 apply 侧同源的那个路线门）', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    // 前进 + 带 `## ` 标题的 route——路线门判它劫持罗盘段落，计划门当场拒收
+    const badRoute = goldPlanYaml().replace('route: |', 'route: |\n  ## 劫持段')
+    const agent = twoStationFake({ plans: [badRoute, goldPlanYaml()], sessions: [executorTurns()] })
+    const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
+    assert.equal(r.state, 'applied')
+    assert.equal(agent.completeCalls.length, 2, '计划门拒收 → 回灌重裁恰一次')
+    assert.equal(agent.completeCalls[1]!.mode, 'repair')
+    assert.match(agent.completeCalls[1]!.prompt, /schema 门错误清单/)
+    assert.match(agent.completeCalls[1]!.prompt, /route/, '死因点名 route（同一扇路线门给出的错误行）')
   })
 })
 
