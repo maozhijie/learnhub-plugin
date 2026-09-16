@@ -3,7 +3,12 @@
  */
 import type { ContentStatus, EncEdge, GrowthOperator, Stage } from '../types.ts'
 import type { GroupAxis } from '../graph.ts'
+import type { ConceptFootprintCore } from '../concepts.ts'
 import type { GraphProposeResult } from './proposals.ts'
+
+/** 概念足迹视图（GET /concepts/footprint，#268）：course 名 + 取材核产出（词条档/
+ * 教学面/题目面/漂移面）。行与漂移的类型出处住 concepts.ts（取材核与类型同源）。 */
+export type ConceptFootprintDoc = { course: string } & ConceptFootprintCore
 
 /** 富化提案受理（proposeEnrich，覆盖层通道）：files = 指纹锚定的正典文件数。 */
 

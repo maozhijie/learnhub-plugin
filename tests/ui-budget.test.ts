@@ -140,9 +140,10 @@ function inlineStyleSites(srcRoot: string): Array<{ file: string; body: string; 
  * 两条静态站点（PracticePage / ProposalsPage 的 Modal 宽度）已于 #211 迁 `.lh-w-560/620`；
  * #240 改版换手（净持平）：终点面板行的静态 `alignItems: 'flex-start'` 迁
  * `.lh-items-start`（−1），图屏改版带入 1 处新的动态站点（+1，图例色点按数据着色）。
- * 余下 31 处逐条为动态：进度条百分比宽度、按数据/判定着色、React Flow 边样式对象等。
+ * 余下 32 处逐条为动态：进度条百分比宽度、按数据/判定着色、React Flow 边样式对象等
+ * （#268 +1：概念足迹分栏 invokes 分布条的宽度百分比——静态样式已迁 .lh-bar-track/.lh-bar-fill）。
  */
-const INLINE_STYLE_SITES = 31
+const INLINE_STYLE_SITES = 32
 
 const NL = String.fromCharCode(10)
 

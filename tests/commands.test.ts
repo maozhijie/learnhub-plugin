@@ -216,7 +216,7 @@ test('门③ 唯一性：id／tool 名／(method, path) 各自唯一，索引没
   assert.equal(tools.length, 113, `agent 通道应恰 113 条，实得 ${tools.length}（#274 +1：learnhub_concept_merge_candidates；#265 +1：learnhub_concept_confusable_candidates；#203 +1：learnhub_receipt_review_mode；#256 −1：learnhub_project_decompile_apply 随反编译 plan-only 退役）`)
   const routeKeys = COMMAND_LIST.flatMap(c => c.channels.filter(x => x.route).map(x => `${x.route!.method} ${x.route!.path}`))
   assert.equal(new Set(routeKeys).size, routeKeys.length, '(method, path) 有重复')
-  assert.equal(routeKeys.length, 128, `路由通道（panel+ops）应恰 128 条，实得 ${routeKeys.length}（#274 +1：POST /concepts/merge-candidates；#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor 随 doctor 退役；#256 −6：GET /courses、POST /node/pin、/proposals/impact、/review、/seed/propose、PUT /day-cutoff 死路由退役）`)
+  assert.equal(routeKeys.length, 129, `路由通道（panel+ops）应恰 129 条，实得 ${routeKeys.length}（#274 +1：POST /concepts/merge-candidates；#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor 随 doctor 退役；#256 −6：GET /courses、POST /node/pin、/proposals/impact、/review、/seed/propose、PUT /day-cutoff 死路由退役）`)
   assert.equal(BY_TOOL.size, tools.length, 'BY_TOOL 索引吞了条目（有重复 tool 名被 Map 覆盖）')
   assert.equal(BY_ROUTE.size, routeKeys.length, 'BY_ROUTE 索引吞了条目（有重复路由被 Map 覆盖）')
 })
@@ -301,7 +301,7 @@ test('门④ handler 覆盖：handlers.ts 的键集合 == 没有 bind 的路由�
   assert.deepEqual(missing, [], `这些路由既没有 bind（生成路径）也没有 handler：\n${missing.join('\n')}`)
   assert.deepEqual(dead, [], `这些 handler 已被生成路径覆盖（死代码，该删）：\n${dead.join('\n')}`)
   assert.ok(generic.length >= 45, `生成路径只剩 ${generic.length} 条（装机率塌了）`)
-  assert.equal(generic.length + handled.length, 128, '路由通道（panel+ops）总数应恰 128（#274 +1：POST /concepts/merge-candidates；（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor；#256 −6：六条死路由退役）')
+  assert.equal(generic.length + handled.length, 129, '路由通道（panel+ops）总数应恰 129（#268 +1：GET /concepts/footprint；#274 +1：POST /concepts/merge-candidates；（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor；#256 −6：六条死路由退役）')
   // bind 的每个键都必须在 args 里（否则取值器会抛「声明漏键」）
   const badBind = routes.filter(x => (x.channel.bind ?? []).some(k => k !== null && !(k in x.command.args)))
     .map(x => x.command.id)

@@ -279,6 +279,7 @@ tr.gen-job-focused > td { animation: gen-job-flash 3s ease-out forwards; }
 .lh-mb-8 { margin-bottom: var(--lh-space-2) }
 .lh-minh-380 { min-height: 380px }
 .lh-minw-100 { min-width: 100px }
+.lh-minw-80 { min-width: 80px }
 .lh-minw-132 { min-width: 132px }
 .lh-minw-148 { min-width: 148px }
 .lh-minw-160 { min-width: 160px }
@@ -347,6 +348,10 @@ tr.gen-job-focused > td { animation: gen-job-flash 3s ease-out forwards; }
 .lh-w-220 { width: 220px }
 .lh-w-240 { width: 240px }
 .lh-w-260 { width: 260px }
+
+/* ---- 概念足迹（#268）：invokes 分布条（DOM 条列；宽度百分比为动态值留在内联） ---- */
+.lh-bar-track { flex: 1; height: 8px; border-radius: 4px; background: var(--color-fill-2, rgba(128,128,128,0.24)); position: relative }
+.lh-bar-fill { height: 100%; border-radius: 4px; background: var(--color-primary-light-3, rgba(22,93,255,0.5)) }
 .lh-w-28 { width: 28px }
 .lh-w-360 { width: 360px }
 .lh-w-44 { width: 44px }
@@ -360,6 +365,10 @@ tr.gen-job-focused > td { animation: gen-job-flash 3s ease-out forwards; }
 .lh-w-84 { width: 84px }
 .lh-w-90 { width: 90px }
 .lh-w-96 { width: 96px }
+
+/* ---- 概念足迹（#268）：invokes 分布条（DOM 条列；宽度百分比为动态值留在内联） ---- */
+.lh-bar-track { flex: 1; height: 8px; border-radius: 4px; background: var(--color-fill-2, rgba(128,128,128,0.24)); position: relative }
+.lh-bar-fill { height: 100%; border-radius: 4px; background: var(--color-primary-light-3, rgba(22,93,255,0.5)) }
 
 /* ---- 面 / 卡 / 图元 ---- */
 .lh-border { border: 1px solid var(--lh-border) }

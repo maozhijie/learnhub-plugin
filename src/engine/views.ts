@@ -31,7 +31,7 @@ export type {
 
 // graph 域视图类型归档 views/graph.ts（#152）：叶子文件——领主直引它，不经本 barrel 牵进重模块（R7）。
 export type {
-  GraphApplyEditResult, GraphApplyEnrichResult, GraphApplyResult, GraphBrowseDoc, GraphBrowseNode, GraphDoc, GraphElementsDoc, GraphEncBackfillNoneResult, GraphEncBackfillProposedResult, GraphEncBackfillResult, GraphJumpCandidate, GraphNodeDoc, GraphNodeSchema, GraphPathRelatedResult, GraphPathResult, GraphPathUnrelatedResult,
+  ConceptFootprintDoc, GraphApplyEditResult, GraphApplyEnrichResult, GraphApplyResult, GraphBrowseDoc, GraphBrowseNode, GraphDoc, GraphElementsDoc, GraphEncBackfillNoneResult, GraphEncBackfillProposedResult, GraphEncBackfillResult, GraphJumpCandidate, GraphNodeDoc, GraphNodeSchema, GraphPathRelatedResult, GraphPathResult, GraphPathUnrelatedResult,
 } from './views/graph.ts'
 
 

@@ -38,9 +38,9 @@ export type CourseSub = (typeof COURSE_SUBS)[number]
 
 export const DEFAULT_COURSE_SUB: CourseSub = 'home'
 
-/** 单课工作台分栏（#209）：首屏罗盘+图 → 教练台 → 生长与队列（本课切片）→
- * 提案（本课切片）→ 题库（本课切片）。 */
-export const WORKBENCH_SUBS = ['graph', 'coach', 'queue', 'proposals', 'bank'] as const
+/** 单课工作台分栏（#209）：首屏罗盘+图 → 概念足迹（#268：引用面的第一张人类面孔，
+ * 与图谱并列）→ 教练台 → 生长与队列（本课切片）→ 提案（本课切片）→ 题库（本课切片）。 */
+export const WORKBENCH_SUBS = ['graph', 'concepts', 'coach', 'queue', 'proposals', 'bank'] as const
 
 export type WorkbenchSub = (typeof WORKBENCH_SUBS)[number]
 

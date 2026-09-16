@@ -1249,7 +1249,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、路由独有 54（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、路由独有 55（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -1294,7 +1294,7 @@ test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、�
   // 通道 handler 与生长批执行器消费，agent 工具面不直接触卡点自报）
   assert.equal(shared.length, 88, '#274：graph.conceptMergeCandidates 工具/路由双通道 → 转共享')
   assert.equal(toolOnly.length, 26, '#265 +1：graph.conceptConfusableCandidates（候选派生只走 agent 工具面）；#215 前例：content2.contentCheck 转共享')
-  assert.equal(routeOnly.length, 54, '#256：−content2.contentReview/−graph.seedPropose/−proposals.proposalImpact/−sched2.setDayCutoff（种子链+day-cutoff 退役）；#255 −1：doctor 随 doctor 退役')
+  assert.equal(routeOnly.length, 55, '#268 +1：graph.conceptFootprint（概念足迹纯读，仅面板路由面）；#256：−content2.contentReview/−graph.seedPropose/−proposals.proposalImpact/−sched2.setDayCutoff（种子链+day-cutoff 退役）；#255 −1：doctor 随 doctor 退役')
 })
 
 // ---------------------------------------------------------------- apply 不自动入队正文（ADR-0078）

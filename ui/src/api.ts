@@ -322,6 +322,10 @@ export const api = {
   /** 疑似重复概念扫描（确定性派生 #274，同步受理 → 合并提案待人审）。 */
   mergeCandidatesScan: (course?: string) =>
     http<Record<string, unknown>>('POST', '/concepts/merge-candidates', { ...(course ? { course } : {}) }),
+  /** 概念足迹（#268，纯读）：词条档 + 教学面 + 题目面 + 漂移面三类；query = 子串发现
+   * 非存在性判定（空 ≠ 不存在），省略 = 全表 + 漂移面。 */
+  conceptFootprint: (course?: string, query?: string) =>
+    http<import('./types').ConceptFootprintDoc>('GET', `/concepts/footprint${q({ course, query })}`),
   /** 名称建课（ADR-0076：建课 = 名称即空图，一个写入单元落全部脚手架，不自动生成）。 */
   courseCreate: (name: string) =>
     http<{ id?: string; name: string; root: string; enabled?: boolean }>('POST', '/course/create', { name }),

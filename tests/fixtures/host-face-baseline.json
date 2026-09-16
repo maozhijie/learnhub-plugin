@@ -144,6 +144,7 @@
   "discussionPack",
   "errorExplainPack",
   "graph.addEndpoint",
+  "graph.conceptFootprint",
   "graph.createCourse",
   "graph.proposalApply",
   "graph.removeEndpoint",

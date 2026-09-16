@@ -145,10 +145,10 @@ test('G2 宿主模块可加载且装配面齐备', async () => {
   // #169：路由表演进为命令注册表（routes.ts／routes-post.ts 的 125 条表项 → src/commands/ 的声明，
   // 例外 handler 落 host/handlers.ts）
   const commands = await import('../src/commands/index.ts')
-  assert.equal(commands.COMMAND_LIST.length, 157, '注册表应为 156 条命令（#274 +1：concept-merge-candidates；#265 +1：concept-confusable-candidates；#203 +1：receipt-review-mode；#215 +1：smoke；#216 +1：spike；#222 +1：quality-review；#240 +3：course-create、endpoint-add、endpoint-remove；#248 +1：stuck-report；#255 −1：doctor 并入 data-check；#256 −7：seed-propose、proposals-impact、project-decompile-apply、node-pin、review、courses、day-cutoff 死入口退役）')
-  assert.equal(Object.keys(commands.COMMANDS).length, 157, '按 id 键的装配表应为 156 个键（#265 +1、#159 +1、#203 +1、#215 +1、#216 +1、#222 +1、#240 +3、#248 +1、#255 −1、#256 −7）')
+  assert.equal(commands.COMMAND_LIST.length, 158, '注册表应为 158 条命令（#268 +1：concept-footprint；#274 +1：concept-merge-candidates；#265 +1：concept-confusable-candidates；#203 +1：receipt-review-mode；#215 +1：smoke；#216 +1：spike；#222 +1：quality-review；#240 +3：course-create、endpoint-add、endpoint-remove；#248 +1：stuck-report；#255 −1：doctor 并入 data-check；#256 −7：seed-propose、proposals-impact、project-decompile-apply、node-pin、review、courses、day-cutoff 死入口退役）')
+  assert.equal(Object.keys(commands.COMMANDS).length, 158, '按 id 键的装配表应为 158 个键（#268 +1、#265 +1、#159 +1、#203 +1、#215 +1、#216 +1、#222 +1、#240 +3、#248 +1、#255 −1、#256 −7）')
   assert.equal(commands.BY_TOOL.size, 113, 'agent 通道索引应为 112 条工具（#265 +1：learnhub_concept_confusable_candidates；#203 +1；#256 −1：project-decompile-apply）')
-  assert.equal(commands.BY_ROUTE.size, 128, '路由通道（panel+ops）索引应为 127 条路由（#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor；#256 −6：六条死路由退役）')
+  assert.equal(commands.BY_ROUTE.size, 129, '路由通道（panel+ops）索引应为 129 条路由（#268 +1：GET /concepts/footprint；#209 +1：GET /compass；#215 +1：POST /smoke；#216 +1：POST /spike；#222 +1：POST /quality-review；#240 +3：POST /course/create、POST /endpoint/add、POST /endpoint/remove；#248 +1：POST /coach/stuck-report；#255 −1：GET /doctor；#256 −6：六条死路由退役）')
   const handlers = await import('../src/host/handlers.ts')
   assert.equal(typeof handlers.HANDLERS, 'object', 'host/handlers.ts 缺 HANDLERS')
   const staticSrv = await import('../src/host/static.ts')

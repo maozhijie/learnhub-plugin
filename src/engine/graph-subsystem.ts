@@ -18,7 +18,7 @@ import type { Paths } from './paths.ts'
 import type { Projects, ProjectApplyResult } from './projects.ts'
 import type { GraphProposals, ApplyAudit } from './proposals.ts'
 import type { ConceptRegistry } from './concepts.ts'
-import { CONFUSABLE_CANDIDATE_MAX, conceptPairKey, confusableCandidates, declaredPairKeys, isDeprecated, mergeCandidates, resolveConcept } from './concepts.ts'
+import { CONFUSABLE_CANDIDATE_MAX, conceptFootprintCore, conceptPairKey, confusableCandidates, declaredPairKeys, isDeprecated, mergeCandidates, resolveConcept } from './concepts.ts'
 import { groupView, type GroupAxis } from './graph.ts'
 import type { CooccurrenceNode } from './concepts.ts'
 import type { Registry } from './registry.ts'
@@ -68,7 +68,7 @@ import type { CourseEntry, ProposalRec } from './types.ts'
 import { PROPOSAL_KINDS } from './types.ts'
 import type { VaultLinkCandidateView, VaultLinksDoc } from './vault-links.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLinks, scoreTier } from './vault-links.ts'
-import type { GraphApplyResult, GraphBrowseDoc, GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult } from './views/graph.ts'
+import type { ConceptFootprintDoc, GraphApplyResult, GraphBrowseDoc, GraphDoc, GraphElementsDoc, GraphEncBackfillResult, GraphNodeDoc, GraphPathResult } from './views/graph.ts'
 import type { ExperimentStartResult } from './views/lab.ts'
 import type { GraphProposeResult, ConceptApplyResult } from './views/proposals.ts'
 import { YAML } from './yaml.ts'
@@ -573,6 +573,22 @@ export class GraphSubsystem {
    * 声明的那个方向（单向是待复核态，ADR-0084 ③）。 */
   async conceptConfusableApply(pid?: number): Promise<{ kind: 'confusable_pair'; course: string; a: string; b: string; changed: boolean }> {
     return this.e.proposals.applyConfusableCandidate(pid)
+  }
+
+  /** 概念足迹读视图（#268，GET /concepts/footprint）：纯读零落盘——词条档 + 教学面
+   * （#270 反向映射）+ 题目面（invokes 折叠口径住 growth-subsystem 单一出处）+ 漂移面
+   * 三类（孤儿/悬空/单向，恒全表派生）。query = 子串发现非存在性判定。与教练
+   * concept_footprint 同数据源（登记表 + 反向映射 + conceptInvokesOf），漂移面是
+   * 面板独有增量；教练侧渲染仍走自己的文本折叠（含插入挂点判读），未消费本核。 */
+  async conceptFootprint(courseKey?: string, query?: string): Promise<ConceptFootprintDoc> {
+    const c = await this.e.registry.resolve(courseKey)
+    const entries = await this.e.concepts.load(c.root)
+    const { graph } = await this.e.loadView(c)
+    const invokes = await this.e.conceptInvokesOf(c)
+    return {
+      course: c.name,
+      ...conceptFootprintCore({ entries, taughtByOf: graph.taughtByOf, assumedByOf: graph.assumedByOf, invokes, query }),
+    }
   }
 
   /** enc 覆盖层回填入口（#148 权重新语义）：对课程里已有 Ready 内容、且反哺候选或

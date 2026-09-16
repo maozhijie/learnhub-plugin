@@ -6490,5 +6490,35 @@
    "error": "[quality-review] 宿主 ctx 没有 llm——离线评审必须在宿主进程内跑（真 provider 只在宿主）。先在仓库根 npm run build，再 npx @deepseek-ai/dsh web 起宿主。"
   },
   "calls": []
+ },
+ {
+  "id": "GET /concepts/footprint · 空参",
+  "method": "GET",
+  "url": "/learnhub/api/concepts/footprint",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graph.conceptFootprint(undefined,undefined)"
+  ]
+ },
+ {
+  "id": "GET /concepts/footprint · 全参",
+  "method": "GET",
+  "url": "/learnhub/api/concepts/footprint?course=1&query=x",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graph.conceptFootprint(\"1\",\"x\")"
+  ]
+ },
+ {
+  "id": "GET /concepts/footprint · 缺 query",
+  "method": "GET",
+  "url": "/learnhub/api/concepts/footprint?course=1",
+  "status": 200,
+  "res": [],
+  "calls": [
+   "graph.conceptFootprint(\"1\",undefined)"
+  ]
  }
 ]

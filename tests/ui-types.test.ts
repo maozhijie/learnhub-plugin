@@ -41,8 +41,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
  * #248：+1（阅读页卡点自报入口，ADR-0077）：LessonView 页内 StuckReportEntry 调
  * api.stuckReport 一处——t=0 受阻信号录入，原话逐字落账并触发 force 教练回合。
  * #256：−1（种子链退役）：提案页 SeedImpactPreview 的 api.proposalImpact 随「种子影响预览」
- * 面板一并离场（—1）。 */
-const API_CALLSITES = 149
+ * 面板一并离场（—1）。
+ * #268：+1（概念足迹分栏 api.conceptFootprint，GET /concepts/footprint 纯读视图）。 */
+const API_CALLSITES = 150
 
 test(`UI 公共面零改动：api.<name>( 调用点数量不变（${API_CALLSITES} 处，函数名与签名未动）`, () => {
   const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => {

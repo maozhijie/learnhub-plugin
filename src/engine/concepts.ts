@@ -758,6 +758,132 @@ export function validateConfusableCandidateProposal(doc: unknown): { errors?: st
   return { spec: { course, a, b, evidence, ...(typeof d.reason === 'string' && d.reason.trim() ? { reason: d.reason.trim() } : {}) } }
 }
 
+// ---- 概念足迹读侧派生（#268：面板「概念足迹」视图的取材核；与教练 concept_footprint
+// 同数据源——登记表 + #270 反向映射 + invokes 折叠，但教练渲染未消费本核）----
+
+/** 一条概念足迹行：词条档四字段（canonical/别名/定义/confusable，缺失如实为空——
+ * 未标注诚实）+ 教学面（谁 teaches/assumes 它，#270 反向映射取材）+ 题目面（invokes
+ * 分布，按题数降序、同数按节点名字典序）。悬空 confusable 与单向未回指逐行显式标注；
+ * orphan = 足迹空（教学面与题目面全空）。 */
+export interface ConceptFootprintRow {
+  canonical: string
+  aliases: string[]
+  definition: string | null
+  deprecated: boolean
+  /** 原始声明（含悬空项——登记表是静态物，原始单向关系不丢）。 */
+  confusable: string[]
+  /** 声明了但不在册的指向（消费侧静默降级，读侧要显式浮出）。 */
+  danglingConfusable: string[]
+  /** 我指向它而它没回指我（归一后判；中性事实，不预判该不该修）。 */
+  unreciprocated: string[]
+  teachers: string[]
+  assumers: string[]
+  invokes: Array<{ node: string; count: number }>
+  orphan: boolean
+}
+
+/** 漂移面（本视图的价值所在；恒对**全表**派生，不随 query 收窄——治理入口不能被
+ * 子串过滤静默变窄）。三类：孤儿（足迹空）、悬空 confusable、单向 confusable。 */
+export interface ConceptFootprintDrift {
+  orphans: string[]
+  dangling: Array<{ from: string; to: string }>
+  oneWay: Array<{ from: string; to: string }>
+}
+
+/** 取材核的纯派生产出：rows 随 query 过滤（登记表序），drift 恒全表。 */
+export interface ConceptFootprintCore {
+  total: number
+  matched: number
+  /** 归一后的子串（null = 无 query 全表）；命中为空 ≠ 不存在，由呈现层带话术。 */
+  query: string | null
+  rows: ConceptFootprintRow[]
+  drift: ConceptFootprintDrift
+}
+
+/** 概念足迹取材核（#268 纯函数，零 IO）：登记表条目 + #270 反向映射 + invokes 折叠
+ * → 逐概念行 + 全表漂移面。反向映射的键是节点 YAML 写的原始名字（canonical 或别名），
+ * 这里经精确解析归一到 canonical 再并（别名书写的足迹不裂行）；invokes 键已是归一后
+ * 的 canonical（折叠口径住 growth-subsystem 单一出处）。子串发现命中 canonical 或
+ * 别名——是发现机制不是存在性判定。 */
+export function conceptFootprintCore(args: {
+  entries: ConceptEntry[]
+  taughtByOf: Record<string, string[]>
+  assumedByOf: Record<string, string[]>
+  invokes: Map<string, Map<string, number>>
+  query?: string
+}): ConceptFootprintCore {
+  const { entries, taughtByOf, assumedByOf, invokes } = args
+  const q = args.query?.trim() || null
+  // 反向映射按 canonical 归并（保 names 序：同一 canonical 的多个原始键按映射键序拼）
+  const mergeRaw = (raw: Record<string, string[]>): Map<string, string[]> => {
+    const out = new Map<string, string[]>()
+    for (const [name, holders] of Object.entries(raw)) {
+      const hit = resolveConcept(entries, name)
+      if (!hit) continue
+      const list = out.get(hit.canonical) ?? []
+      for (const n of holders) if (!list.includes(n)) list.push(n)
+      out.set(hit.canonical, list)
+    }
+    return out
+  }
+  const teachersOf = mergeRaw(taughtByOf)
+  const assumersOf = mergeRaw(assumedByOf)
+  // 逐条目声明集（归一后的 canonical → 它声明的指向集）：单向判定的回指侧查**对方**
+  // 的声明，自己的声明不算自己已回指
+  const declaresOf = new Map<string, Set<string>>()
+  for (const e of entries) {
+    const targets = new Set<string>()
+    for (const raw of e.confusable ?? []) {
+      const other = resolveConcept(entries, raw)
+      if (!other || other.canonical === e.canonical) continue
+      targets.add(other.canonical)
+    }
+    declaresOf.set(e.canonical, targets)
+  }
+  const rowOf = (e: ConceptEntry): ConceptFootprintRow => {
+    const confusable = e.confusable ?? []
+    const dangling = confusable.filter(x => resolveConcept(entries, x) === null)
+    const resolved = [...new Set(confusable
+      .map(x => resolveConcept(entries, x)?.canonical)
+      .filter((x): x is string => Boolean(x) && x !== e.canonical))]
+    const unreciprocated = resolved.filter(t => !declaresOf.get(t)?.has(e.canonical))
+    const teachers = teachersOf.get(e.canonical) ?? []
+    const assumers = assumersOf.get(e.canonical) ?? []
+    const byNode = invokes.get(e.canonical)
+    const invokesDist = byNode?.size
+      ? [...byNode.entries()].map(([node, count]) => ({ node, count }))
+        .sort((a, b) => b.count - a.count || a.node.localeCompare(b.node))
+      : []
+    return {
+      canonical: e.canonical,
+      aliases: e.aliases ?? [],
+      definition: e.definition ?? null,
+      deprecated: isDeprecated(e),
+      confusable,
+      danglingConfusable: dangling,
+      unreciprocated,
+      teachers,
+      assumers,
+      invokes: invokesDist,
+      orphan: !teachers.length && !assumers.length && !invokesDist.length,
+    }
+  }
+  const all = entries.map(rowOf)
+  const rows = q ? all.filter(r =>
+    r.canonical.includes(q) || r.aliases.some(a => a.includes(q))) : all
+  return {
+    total: entries.length,
+    matched: rows.length,
+    query: q,
+    rows,
+    drift: {
+      orphans: all.filter(r => r.orphan).map(r => r.canonical),
+      dangling: all.flatMap(r => r.danglingConfusable.map(to => ({ from: r.canonical, to }))),
+      oneWay: all.flatMap(r => r.unreciprocated.map(to => ({ from: r.canonical, to }))),
+    },
+  }
+}
+
 /** 概念登记表读写：文件缺失 Missing 合法空态（load 返回空表）；存在但 YAML/契约坏
  * 抛 Broken（不静默当空表——名字唯一性是全部概念引用的地基，坏了必须 fail loud）。 */
 export class ConceptRegistry {

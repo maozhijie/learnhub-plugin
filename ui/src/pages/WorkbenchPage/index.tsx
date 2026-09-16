@@ -17,6 +17,7 @@ import GeneratePage from '../GeneratePage'
 import ProposalsPage from '../ProposalsPage'
 import BankColumn from './BankColumn'
 import CoachColumn from './CoachColumn'
+import ConceptFootprintColumn from './ConceptFootprintColumn'
 import GraphScreen from './GraphScreen'
 
 const { Text } = Typography
@@ -24,6 +25,7 @@ const { Text } = Typography
 /** 工作台分栏项（顺序 = 可见序；字面量表由 tests/ui-router.test.ts 三表门对账）。 */
 export const WORKBENCH_ITEMS: Array<{ key: WorkbenchSub; title: string }> = [
   { key: 'graph', title: '罗盘与图' },
+  { key: 'concepts', title: '概念足迹' },
   { key: 'coach', title: '教练台' },
   { key: 'queue', title: '生长与队列' },
   { key: 'proposals', title: '提案' },
@@ -75,6 +77,7 @@ export default function WorkbenchPage({ frame, courseId }: { frame: AppFrame; co
         {WORKBENCH_ITEMS.map(item => <Tabs.TabPane key={item.key} title={item.title} />)}
       </Tabs>
       {wb === 'graph' && <GraphScreen frame={frame} course={course} jobs={allJobs} />}
+      {wb === 'concepts' && <ConceptFootprintColumn course={course} />}
       {wb === 'coach' && <CoachColumn frame={frame} course={course} jobs={graphJobs} />}
       {wb === 'queue' && <GeneratePage frame={frame} course={course} />}
       {wb === 'proposals' && <ProposalsPage frame={frame} course={course} />}

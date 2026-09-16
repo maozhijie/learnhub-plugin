@@ -116,6 +116,24 @@ export const 图谱域 = {
       }
     ]
   }),
+  'concept-footprint': command({
+    id: "concept-footprint",
+    summary: "Read-only concept footprint view (#268): per-entry term card (canonical/aliases/definition/confusable — missing fields are shown as missing, never faked), teaching face (which nodes teach/assume it, #270 reverse maps), question face (invokes distribution per node), and the DRIFT panel over the FULL registry regardless of query: orphans (empty footprint), dangling confusable pointers, one-way confusable (I point at it, it does not point back — a neutral fact, no fix verdict). query is SUBSTRING DISCOVERY over canonical/aliases, NOT an existence test: empty result means widen the term or read the full table, not that the concept does not exist. Pure read, zero writes; same data sources as the coach's concept_footprint tool (registry + #270 reverse maps + invokes folding), with the drift panel as the panel-only addition.",
+    args: {
+      course: { type: "string", description: "Course name; omit when only one course is enabled", read: "query" },
+      query: { type: "string", description: "Optional substring (hits canonical or alias); omit for full table + drift panel", read: "query" }
+    },
+    engine: "graph.conceptFootprint",
+    domain: "图谱",
+    channels: [
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "GET", path: "/concepts/footprint" },
+        bind: ["course", "query"]
+      }
+    ]
+  }),
   'graph-analyze': command({
     id: "graph-analyze",
     summary: "Analyze a course knowledge graph: structural stats, unreachable nodes, bottlenecks, lapse hotspots, graph health score (0-100, see health), next-batch suggestions (suggestions.concept_growth — the imbalance-sorted per-concept table (supply/demand/depth_spread/evidence), #281 — plus missing_pre and jump_candidates + jump_total, cognitive-jump edges needing a verdict each), the full per-node schema (schema: pre/enc/est/bloom/difficulty/note per node — the data basis for edge-level self-checks), plus cytoscape render elements. Returns JSON. Run before planning each batch of graph edits; the next-batch plan must cite concrete entries from health/suggestions.",

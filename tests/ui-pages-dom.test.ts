@@ -487,3 +487,60 @@ test('文案语义锁·休眠题：列名「未调度」词条明文许可，Avo
   assert.ok(await screen.findByText('未调度'), '休眠题的到期列名「未调度」渲染（词条明文许可）')
   lockCopy(document.body.textContent ?? '', { canonical: ['休眠题'], glossary: '休眠题（Dormant Question）' })
 })
+
+// ---- WorkbenchPage 概念足迹分栏（#268）：词条档三面 + 漂移面三类 + 「空 ≠ 不存在」 ----
+
+const FOOTPRINT_FIXTURE = {
+  course: '数学', total: 2, matched: 2, query: null,
+  rows: [
+    {
+      canonical: '导数', aliases: ['derivative'], definition: '变化率', deprecated: false,
+      confusable: ['极限'], danglingConfusable: [], unreciprocated: ['极限'],
+      teachers: ['甲'], assumers: [], invokes: [{ node: '入门', count: 3 }],
+      orphan: false,
+    },
+    {
+      canonical: '悬空者', aliases: [], definition: null, deprecated: true,
+      confusable: ['不在册'], danglingConfusable: ['不在册'], unreciprocated: [],
+      teachers: [], assumers: [], invokes: [], orphan: true,
+    },
+  ],
+  drift: {
+    orphans: ['悬空者'],
+    dangling: [{ from: '悬空者', to: '不在册' }],
+    oneWay: [{ from: '导数', to: '极限' }],
+  },
+}
+
+test('概念足迹分栏：词条档/教学面/题目面/漂移面三类如实呈现（#268）', async () => {
+  const { default: Column } = await importUi('pages/WorkbenchPage/ConceptFootprintColumn.tsx')
+  routes({ 'GET /concepts/footprint': FOOTPRINT_FIXTURE })
+  render(React.createElement(Column, { course: '数学' }))
+  assert.ok(await screen.findByText('导数'), '词条档渲染')
+  assert.ok(screen.getByText(/变化率/), '定义渲染')
+  assert.ok(screen.getByText(/教学面：teaches 甲/), '教学面渲染反向（谁 teaches）')
+  assert.ok(screen.getByText(/×3/), '题目 invokes 分布渲染（节点 × 题数）')
+  assert.ok(screen.getByText(/单向易混：极限 未回指本条/), '单向 confusable 显式标注（中性话术）')
+  assert.ok(screen.getByText(/悬空：不在册 不在册/), '悬空 confusable 显式标注')
+  assert.ok(screen.getByText(/漂移面（恒全表派生/), '漂移面区块渲染')
+  assert.ok(screen.getByText(/孤儿 1｜悬空 confusable 1｜单向 confusable 1/), '三类各给计数')
+  assert.ok(screen.getByText(/（无定义）/), '缺失定义不假装有（未标注诚实）')
+})
+
+test('概念足迹分栏：子串发现「空 ≠ 不存在」话术显式在场（#268 / ADR-0077）', async () => {
+  const { default: Column } = await importUi('pages/WorkbenchPage/ConceptFootprintColumn.tsx')
+  routes({ 'GET /concepts/footprint': { ...FOOTPRINT_FIXTURE, matched: 0, rows: [], query: '极限' } })
+  render(React.createElement(Column, { course: '数学' }))
+  assert.ok(await screen.findByText(/空 ≠ 不存在/), '空命中显式声明「换宽词或读全表」，不伪装成不存在')
+})
+
+test('概念足迹分栏：视图文案只用「概念足迹」，不出现 Avoid 词（概念图谱/概念索引/概念图）', async () => {
+  const { default: Column } = await importUi('pages/WorkbenchPage/ConceptFootprintColumn.tsx')
+  routes({ 'GET /concepts/footprint': FOOTPRINT_FIXTURE })
+  render(React.createElement(Column, { course: '数学' }))
+  await screen.findByText('导数')
+  const text = document.body.textContent ?? ''
+  for (const avoid of ['概念图谱', '概念索引', '概念图']) {
+    assert.ok(!text.includes(avoid), 'Avoid 词「' + avoid + '」不得出现（命名纪律）')
+  }
+})
