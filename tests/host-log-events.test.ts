@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
-import { apiRun, createHostRuntime, run } from '../src/host/runtime.ts'
+import { LOG_SUMMARY_HEAD, apiRun, createHostRuntime, logCall, run, summarize } from '../src/host/runtime.ts'
 import type { HostRuntime } from '../src/host/runtime.ts'
 import { restoreGenJobs } from '../src/host/jobs.ts'
 import { memLogger } from './helpers/logger.ts'
@@ -110,4 +110,42 @@ test('host.gen_jobs.restore_failed（WARN）与 host.gen_jobs.restored（INFO）
   assert.equal(typeof e.fields.swept, 'number')
   assert.equal(typeof e.fields.queued_paused, 'number')
   assert.equal(rtB.flags.genQueueBroken, null, '正常档不置 broken')
+})
+
+test('#302 ② 摘要修正：单行超界不再静默腰斩（带字符数标注）；失败类值不截断（`run` 之外的摘要面）', async () => {
+  const log = memLogger()
+  const rt = makeRt(log)
+
+  // 常规档：首行超 200 字 → 显式标注「截断了多少」，不再是裸切片
+  const long = 'x'.repeat(500)
+  assert.equal(await run(rt, 'api/generate/status', async () => long), long)
+  const short = log.nth('engine.call')!
+  assert.deepEqual(short.fields.detail, [`${'x'.repeat(LOG_SUMMARY_HEAD)}…（首行已截断，共 500 字符）`])
+
+  // 失败类值（生长批出口用 full）：整段照落——单行超长也不切
+  const failure = `生成失败：门复验未过（${'致命'.repeat(300)}）｜语料 生成语料/教练执行/bad-x.md`
+  logCall(rt, 'coach_growth', summarize(failure, { full: true }))
+  assert.deepEqual(log.nth('engine.call')!.fields.detail, [failure], '失败类值不截断（指向完整值的文末照旧可读）')
+  // 多行失败（两轮死因 + 文末指向）：full 也不折首行——折了会把详情与「完整值在哪」一起丢
+  const multi = ['两轮死因：思路官计划未过 schema 门', '【首轮】operator 非法', '【重裁】仍非法', '｜语料 生成语料/教练执行/bad-x.md'].join('\n')
+  logCall(rt, 'coach_growth', summarize(multi, { full: true }))
+  assert.deepEqual(log.nth('engine.call')!.fields.detail, [multi], '多行失败整段可读（首行折法只用于常规值）')
+})
+
+test('#302 ② 轮询降噪：apiRun 的 level 决定留痕档位（默认 INFO、降噪路由 DEBUG），失败留痕恒 ERROR', async () => {
+  const log = memLogger()
+  const rt = makeRt(log)
+  await apiRun(rt, 'api/status', async () => ({ ok: 1 }))
+  await apiRun(rt, 'api/generate/status', async () => ({ jobs: [] }), { level: 'debug' })
+  assert.equal(log.nth('engine.call', 1)!.level, 'info', '默认档不变')
+  assert.equal(log.nth('engine.call', 2)!.level, 'debug', '轮询读路由留痕降到 DEBUG（INFO 层回到信号面）')
+  assert.equal(log.nth('engine.call', 2)!.fields.tool, 'api/generate/status')
+
+  // 失败留痕不受降噪影响：仍是 ERROR（轮询里的真故障不能被静音）
+  await assert.rejects(
+    () => apiRun(rt, 'api/generate/status', async () => { throw new Error('档坏了') }, { level: 'debug' }),
+    /档坏了/,
+  )
+  assert.equal(log.nth('engine.call.fail')!.level, 'error')
+  assert.equal(log.count('engine.call'), 2, '失败不冒充成功留痕')
 })

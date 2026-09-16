@@ -17,7 +17,7 @@ import type { Registry } from '../vault/registry.ts'
 import type { ConceptRegistry } from '../concepts/concepts.ts'
 import { withContractLast } from '../infra/prompt-assembly.ts'
 import { render } from '../infra/prompt-render.ts'
-import { COACH_PLAN_FEEDBACK_BLOCK, COACH_INJECT_BLOCK } from '../prompts/projects.ts'
+import { COACH_PLAN_FEEDBACK_BLOCK, COACH_INJECT_BLOCK, COACH_FIRST_RUNG_CRITERIA } from '../prompts/projects.ts'
 import type { Content } from '../content/content.ts'
 import type { BankDoc } from '../content/question-bank.ts'
 import { Graph, GraphStore } from '../graph/graph.ts'
@@ -110,6 +110,22 @@ import { YAML } from '../infra/yaml.ts'
 /** 思路官站的语料站标签（#301：host STATIONS.growthPlan 引本常量对齐；站名是受控词表）。
  * 此前这一站名是散在调用点的字面量 + host 侧一张写死的 `growth: '教练思路'` 映射。 */
 export const COACH_PLAN_STATION = '教练思路'
+
+/** 三件写工具 → 轮志 kind 的单源映射（#302 ②：写件崩溃补轮志的归属判据，与各工具自己
+ * 记账时用的 kind 同表——两处各写一份必然有一天漂移成「崩溃记为另一类轮」）。 */
+const DRAFT_TOOL_ROUND_KIND: Record<string, GrowthDraftRound['kind']> = {
+  draft_patch: 'patch', draft_audit: 'audit', draft_finish: 'finish',
+}
+
+/** 写件崩溃轮的措辞前缀（轮志 summary = `<前缀>（<错误首行>）`；`finish` 与既有
+ * 「finish 被拒」同款留空格，其余按中文连写）。 */
+const DRAFT_ROUND_CRASH_LABEL: Record<GrowthDraftRound['kind'], string> = {
+  patch: '补丁崩溃', audit: '审计崩溃', finish: 'finish 崩溃', note: 'note 崩溃',
+}
+
+/** 崩溃轮 summary 里的错误首行上界（引擎侧的摘要口径；宿主侧的 `LOG_SUMMARY_HEAD` 是
+ * 另一个面——引擎不 import 宿主，两个数字各自为政不共享）。 */
+const DRAFT_ROUND_HEAD_LIMIT = 200
 
 /** 给错误打上站标签（#301 缺陷③）：宿主失败补标按**真实失败站**落盘——此前生长任务失败
  * 一律补标到 `STATIONS.growth`（'教练思路'），于是执行官站的失败被标到思路官站最近一条
@@ -527,6 +543,11 @@ export class GrowthSubsystem {
     const lightweight = opts.lightweight === true
     const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
     const active = [...this.coachFrontier(graph, state), ...graph.names.filter(n => effectiveStage(state, n) === 'learning')]
+    // 前沿为空（#303 / ADR-0092）：口径是**就绪前沿**（`coachFrontier` = 前置全达成且未开始）
+    // 排除终点锚后为空——「仅终点」是它的特例，删空/学完普通节点的怪态也命中（按「节点数 ≤1」
+    // 的字面判断会漏掉后者）。判据看的是**未开始的就绪存量**，不是图的历史规模。
+    const endpoints = endpointNames(anchors)
+    const frontierEmpty = this.coachFrontier(graph, state).every(n => endpoints.has(n))
     // 逐终点状态（ADR-0076：未接线/已铺通/已达成 + 闭包进度）与交汇读侧派生
     const folds = anchors.length ? foldCompletion(graph, state, anchors) : []
     const foldOf = new Map(folds.map(f => [f.endpoint, f]))
@@ -585,6 +606,10 @@ export class GrowthSubsystem {
           }
         }
         lines.push('- 裁决纪律：优先选能同时推进多个未达成终点的台阶（交汇优先）')
+        // 首级判据材料（#303 / ADR-0092）：前沿为空 = 这次裁决铺的是坡道第一级台阶——
+        // 判据住 `prompts/projects.ts` 单源，与上行同域（都是这条回合的裁决纪律）；
+        // 两族思路官经同一上下文包组装，自动共享（模板文件零改动）。
+        if (frontierEmpty) lines.push(render(COACH_FIRST_RUNG_CRITERIA, {}))
         block('终点锚', lines.join('\n'))
       } else {
         block('终点锚', '（零终点——空锚是合法空态，但教练回合无从裁决方向；先加一个终点。）')
@@ -887,7 +912,13 @@ export class GrowthSubsystem {
         this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
         return undefined
       }
-      const note = (YAML.parseModel(last.artifact) as { note?: { operator?: string; reason?: string } } | undefined)?.note
+      // #303 顺带修正：`ProposalRec.artifact` 是**落盘路径**（proposals 子系统按它 loadArtifact），
+      // 不是产物原文——旧实现直接 `YAML.parseModel(last.artifact)` 拿到的是路径字符串，
+      // `note` 恒 undefined，于是重裁族的摘要块**从来没注入过**（`coach.plan.summary_miss`
+      // 一路 DEBUG 静默）。这里按路径读盘。
+      const note = (this.e.fs.exists(last.artifact)
+        ? YAML.parse(await this.e.fs.readFile(last.artifact)) as { note?: { operator?: string; reason?: string } }
+        : undefined)?.note
       if (!note?.operator) {
         this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
         return undefined
@@ -1261,8 +1292,29 @@ export class GrowthSubsystem {
     const prompt = withContractLast(template, [pack, view, draftStatus, handover]
       .map(b => b?.trim()).filter((b): b is string => Boolean(b)).join('\n\n---\n\n'))
     const runTool = async (call: LlmToolCall): Promise<string> => {
-      if (call.name.startsWith('draft_')) return writeTool(call)
-      return readExecutor(call)
+      // 写件崩溃补轮志（#302 ②）：三件写工具此前只有**被受理门拒绝**的那几条路径写轮志，
+      // 其余抛出（缺 note / 非法算子 / 零增量 / op 超量 / 门复验未预期异常）在草稿里零痕迹
+      // ——事故里 4 次 finish 崩溃因此不可考古（只能靠语料逐文件还原是谁、为什么死的）。
+      // 判据 = 本次调用是否已经记过同 kind 的轮（记过就不重复记——被拒轮次自己写了细节）。
+      const kind = DRAFT_TOOL_ROUND_KIND[call.name]
+      const before = doc.rounds.length
+      try {
+        if (call.name.startsWith('draft_')) return await writeTool(call)
+        return await readExecutor(call)
+      } catch (err) {
+        const logged = doc.rounds.length > before && doc.rounds.at(-1)?.kind === kind
+        if (kind && !logged) {
+          const msg = err instanceof Error ? err.message : String(err)
+          // 补记**尽力而为**：轮志落盘失败（IO）不得顶替掉原始错误——排查面第一优先是
+          // 「这个工具为什么抛」，不是「日志为什么没写上」。
+          try {
+            await logRound(kind, `${DRAFT_ROUND_CRASH_LABEL[kind]}（${(msg.split('\n')[0] ?? '').slice(0, DRAFT_ROUND_HEAD_LIMIT)}）`, [msg])
+          } catch {
+            this.e.logger.warn('growth.draft.round_write_failed', { course: c.name, session: doc.session_id, kind })
+          }
+        }
+        throw err
+      }
     }
     const log = this.e.logger
     log.info('coach.draft.enter', { course: c.name, session: doc.session_id, resumed })

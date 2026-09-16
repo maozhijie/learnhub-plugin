@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Content } from '../src/engine/content/content.ts'
 import { GROWTH_OPERATORS } from '../src/engine/types.ts'
+import { withVault } from './helpers/vault.ts'
 
 // ---- v6 提示词契约（#14 P2/P3）：版本标记 + 复杂度档案锚点 ----
 
@@ -261,4 +262,31 @@ test('#233: 节生成三变体升 v11——硬约束 6 带图文互引半句；�
   assert.ok(Content.promptVersionOf(quiz) >= 13, '题目生成 应升到 v13')
   assert.match(quiz, /解析应配一个 ```svg 或 ```plot 代码块配图/, '几何/函数/数据类解析配图由「可用」升「应配」')
   assert.match(quiz, /软性要求，不进门禁/, '保持软措辞——零新增门禁 finding（验收红线）')
+})
+
+// ---- #302 ①：渲染菜单只认占位符（旧兜底回收——输出契约不被注入面覆盖）----
+
+/** 占位符站（模板里带 `{{renderers}}`）= 课程节生成三风格变体；其余 13 站无占位符。 */
+const RENDERER_PLACEHOLDER_KINDS = ['课程节生成', '课程节生成-苏格拉底', '课程节生成-费曼'] as const
+
+test('#302: 无占位符的 13 个内置站不被追加渲染菜单（loadPrompt 逐字等于模板原文）；三风格变体照旧注入', async () => {
+  const kinds = Object.keys(Content.PROMPT_KINDS)
+  assert.equal(kinds.length, 16, '内置站总数（13 无占位符 + 3 风格变体）')
+  assert.deepEqual(
+    kinds.filter(k => Content.PROMPT_KINDS[k]!.includes('{{renderers}}')).sort(),
+    [...RENDERER_PLACEHOLDER_KINDS].sort(),
+    '占位符站恰三风格变体——模板面是这份断言的取值域',
+  )
+  await withVault({ tag: 'renderers-placeholder' }, async h => {
+    for (const kind of kinds) {
+      const final = await h.engine.content2.loadPrompt(kind)
+      if ((RENDERER_PLACEHOLDER_KINDS as readonly string[]).includes(kind)) {
+        assert.match(final, /## 面板支持的渲染格式/, `${kind}（占位符站）应注入渲染能力清单`)
+        assert.doesNotMatch(final, /\{\{renderers\}\}/, `${kind} 占位符应被替换干净`)
+      } else {
+        assert.doesNotMatch(final, /面板支持的渲染格式/, `${kind} 输出契约不得被面板渲染菜单覆盖（#302 ①）`)
+        assert.equal(final, Content.PROMPT_KINDS[kind]!, `${kind} 无占位符 = 零注入（loadPrompt 逐字交还模板）`)
+      }
+    }
+  })
 })

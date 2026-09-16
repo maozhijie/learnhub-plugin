@@ -95,9 +95,12 @@ export interface ChannelSpec {
   required?: string[]
   /** 前缀路由（今天唯一一条：GET /vendor/）。 */
   prefix?: boolean
-  /** 本通道是否记调试日志（`apiRun` 包装 → `engine.call`）；省略＝记。实测 3 条面板路由直调不包 `apiRun`
-   * （`/question-save`、`/question-add`、`/question-archive`），原样保留。 */
-  log?: boolean
+  /** 本通道是否记调试日志（`apiRun` 包装 → `engine.call`）；省略＝记。
+   * `false` = 不记；`'debug'` = 记在 DEBUG 档（#302 ②：面板高频轮询读路由降噪——
+   * 默认 INFO 档不落盘，排查时经 `LEARNHUB_LOG_LEVEL=debug` 照旧可取）。
+   * 历史：`false` 的原始使用者是 3 条直调路由（`/question-save`、`/question-add`、
+   * `/question-archive`）——#292 已把它们全部收编进 `apiRun`，当前无通道声明 `false`。 */
+  log?: boolean | 'debug'
 }
 
 /** 一条命令（`E` = 声明的引擎入口；`output` 由它派生）。 */

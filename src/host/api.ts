@@ -65,7 +65,9 @@ export async function handleApi(rt: HostRuntime, ctx: Context, req: IncomingMess
       const engine = command.engine
       const args = readArgs(command.args, channel, hasBody ? { kind: 'body', body } : { kind: 'query', url }, channel.bind)
       const call = async () => resolveEngineEntry(rt, engine)(...args as never[])
-      const out = channel.log === false ? await call() : await apiRun(rt, `api${channel.route?.path ?? route}`, call)
+      // `log: false` = 不记；`log: 'debug'` = 记在 DEBUG 档（#302 ② 轮询降噪）
+      const out = channel.log === false ? await call()
+        : await apiRun(rt, `api${channel.route?.path ?? route}`, call, channel.log === 'debug' ? { level: 'debug' } : {})
       sendJson(res, 200, out)
       return
     }

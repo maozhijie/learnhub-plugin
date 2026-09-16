@@ -39,6 +39,13 @@ export function stripFences(body: string): string {
  * 要更深回路，撞顶照旧 fail loud（trajectory 工具轨迹补自激防线的观测面）。 */
 export const AGENT_LOOP_MAX_TOOL_ROUNDS = 20
 
+/** 同错误熔断阈值（ADR-0041 §修订补记 2026-09-16）：同一工具**连续** ≥3 次返回**逐字相同**
+ * 的结果文本即提前熔断。指纹取结果全文（异常与门拒绝同口径——渐进修复的错误文本逐轮在变，
+ * 不得误杀）；仅同工具连续命中才计数（读写交替的自然节奏自己打断计数）。与 K≤20 的分工：
+ * K 顶管「自激空转」，本阈值管「同一不可修复错误的连续重试」（实测事故：一个引擎缺陷让
+ * `draft_finish` 连抛 4 次同一异常，21 次调用约 49.7k token 里三分之二烧在它上面）。 */
+export const AGENT_LOOP_REPEAT_LIMIT = 3
+
 /** 调用模式（观测面词汇）：complete 单发 / repair 门错修复轮 / loop 工具回路轮。 */
 export type AgentCallMode = 'complete' | 'repair' | 'loop'
 
@@ -149,7 +156,10 @@ export class AgentSeam {
    * K≤`AGENT_LOOP_MAX_TOOL_ROUNDS` 轮后仍请求工具即 fail loud——预算封顶防自激循环。
    * isCancelled（#163 任务取消传导）：每轮底层调用前与每次工具执行后检查，取消即抛错
    * 中止——生成页取消旗标沿站点传入，回路不再空烧后续轮。trajectory 逐轮记录工具调用
-   * 与结果摘要（#163 任务消息消费）。 */
+   * 与结果摘要（#163 任务消息消费）。
+   * 同错误熔断（#302 ③ / ADR-0041 §修订补记）见 `AGENT_LOOP_REPEAT_LIMIT`；工具级失败
+   * 同时发 `agent.tool.fail` 一条（站/工具/错误摘要）——此前失败只活在 trajectory 与
+   * 下一轮回灌里，调试日志零事件（事后只能逐件考古语料）。 */
   async agentLoop(req: {
     station: string
     /** 回路首条用户消息（任务指令/上下文包）。 */
@@ -173,6 +183,10 @@ export class AgentSeam {
     }
     const turns: LlmLoopTurn[] = [{ role: 'user', text: req.prompt }]
     const trajectory: string[] = []
+    // 同错误熔断的连续游标（缝的局部态，随一次回路生命周期生灭）：同一工具的逐字相同结果连计数。
+    let lastTool = ''
+    let lastResult = ''
+    let repeats = 0
     let toolRounds = 0
     for (;;) {
       assertAlive()
@@ -202,9 +216,17 @@ export class AgentSeam {
         } catch (err) {
           out = err instanceof Error ? err.message : String(err)
           isError = true
+          this.ports.logger.warn('agent.tool.fail', {
+            station: req.station, tool: call.name, chars: out.length, error: firstLineOf(out),
+          })
         }
         trajectory.push(`${call.name}(${call.arguments.length} 字符参数) → ${out.length} 字符${isError ? '（失败）' : ''}`)
         turns.push({ role: 'tool', callId: call.id, text: out, ...(isError ? { isError: true } : {}) })
+        if (call.name === lastTool && out === lastResult) repeats++
+        else { lastTool = call.name; lastResult = out; repeats = 1 }
+        if (repeats >= AGENT_LOOP_REPEAT_LIMIT) {
+          throw new Error(`[agent-seam] 「${req.station}」工具回路熔断：${call.name} 连续 ${repeats} 次返回逐字相同的结果（${out.length} 字符）——回路中止，死因：同错误重复。`)
+        }
         assertAlive()
       }
     }
@@ -248,4 +270,12 @@ export class AgentSeam {
 /** 回路历史的累计字符数（观测面口径：首条任务指令 + 各轮工具结果）。 */
 function promptCharsOf(turns: LlmLoopTurn[]): number {
   return turns.reduce((n, t) => n + t.text.length, 0)
+}
+
+/** 工具失败的**摘要**（`agent.tool.fail` 的 error 字段）：首行 + 上界。全文仍在 trajectory、
+ * 生成语料与模型下一轮可见的回灌里——日志只做索引，不复述（ADR-0080「不落原文」）。 */
+const TOOL_FAIL_SUMMARY_LIMIT = 500
+function firstLineOf(text: string): string {
+  const head = text.split('\n', 1)[0] ?? ''
+  return head.length > TOOL_FAIL_SUMMARY_LIMIT ? `${head.slice(0, TOOL_FAIL_SUMMARY_LIMIT)}…` : head
 }

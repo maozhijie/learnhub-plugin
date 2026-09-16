@@ -11,7 +11,7 @@
 import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from '../src/engine/infra/agent.ts'
+import { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, AGENT_LOOP_REPEAT_LIMIT, stripFences } from '../src/engine/infra/agent.ts'
 import { systemClock } from '../src/host/clock.ts'
 import type { AgentCallRecord, GateVerdict } from '../src/engine/infra/agent.ts'
 import type { LlmComplete, LlmEffort, LlmLoopTurn, LlmStream, LlmToolSpec } from '../src/engine/infra/llm.ts'
@@ -239,14 +239,16 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤20
   assert.match(toolTurn.text, /白名单外工具/)
 
   // 预算：K≤20 不可抬高——20 轮工具后第 21 轮仍请求工具 → fail loud（不无限回路）
+  // 工具结果逐轮在变（否则先撞同错误熔断——#302 ③ 的防线在 K 顶之前，两者各测各的）
   const endless = fakeStream(Array.from({ length: 23 }, (_, i) => ({
     text: `第${i}轮`, toolCalls: [{ id: `c${i}`, name: 'graph_view', arguments: '{}' }],
   })))
   const agent2 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: endless }, systemClock)
+  let spin = 0
   await assert.rejects(
     () => agent2.agentLoop({
       station: '教练生长', prompt: 'p', tools: [],
-      runTool: async () => 'ok',
+      runTool: async () => `图面第 ${++spin} 版（逐轮在变）`,
     }),
     /工具回路预算耗尽（K≤20 轮后仍在请求工具）/,
   )
@@ -325,4 +327,87 @@ test('#213 token 计量回程：端口 opts.usageSink 回调的 usage 进 AgentC
   const agent3 = new AgentSeam({ logger: memLogger(), complete: fakeComplete(['x']), onCall: obs.onCall }, systemClock)
   await agent3.complete('罗盘', 'p')
   assert.equal(obs.records[1].usage, undefined)
+})
+
+test('#302 ③ 同错误熔断：同一工具连续 3 次逐字相同即熔断（死因注明「同错误重复」），K 顶与取消照旧', async () => {
+  // 事故形态（ADR-0041 §修订补记）：draft_finish 连抛同一异常——第 3 次即止血，不等 K≤20
+  const script = Array.from({ length: 6 }, (_, i) => ({
+    text: `第${i + 1}轮：再试一次`, toolCalls: [{ id: `f${i}`, name: 'draft_finish', arguments: '{}' }],
+  }))
+  const stream = fakeStream(script)
+  const log = memLogger()
+  const agent = new AgentSeam({ logger: log, complete: fakeComplete([]), stream }, systemClock)
+  let toolRuns = 0
+  await assert.rejects(
+    () => agent.agentLoop({
+      station: '执行官草稿', prompt: '发布', tools: [],
+      runTool: async () => { toolRuns++; throw new Error('[draft_finish] 门复验未过：ops[0].pre 引用不存在的节点') },
+    }),
+    /工具回路熔断：draft_finish 连续 3 次返回逐字相同的结果.*死因：同错误重复/,
+  )
+  assert.equal(stream.requests.length, 3, '第 3 次相同结果即熔断——第 4 轮底层调用不发生')
+  assert.equal(toolRuns, 3, '工具执行恰 3 次（省下的轮次就是省下的 token）')
+  // 每条失败都有事件（#302 ②）：站/工具/字符数/错误摘要首行
+  assert.equal(log.count('agent.tool.fail'), 3)
+  const fail = log.nth('agent.tool.fail')!
+  assert.equal(fail.level, 'warn')
+  assert.equal(fail.fields.station, '执行官草稿')
+  assert.equal(fail.fields.tool, 'draft_finish')
+  assert.equal(typeof fail.fields.chars, 'number')
+  assert.match(String(fail.fields.error), /^\[draft_finish\] 门复验未过/)
+
+  // 渐进修复（错误文本逐轮在变）不熔断：模型能一路改到过门
+  const fixing = fakeStream([
+    ...Array.from({ length: 5 }, (_, i) => ({
+      text: `第${i + 1}轮`, toolCalls: [{ id: `r${i}`, name: 'draft_finish', arguments: '{}' }],
+    })),
+    { text: '```yaml\nok: 1\n```' },
+  ])
+  const agent2 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: fixing }, systemClock)
+  let n = 0
+  const ok = await agent2.agentLoop({
+    station: '执行官草稿', prompt: '发布', tools: [],
+    runTool: async () => { throw new Error(`门错误清单剩 ${5 - n++} 条（逐轮在缩短）`) },
+  })
+  assert.equal(ok.text, 'ok: 1', '逐轮变化的错误不误杀——修复链走完由模型收束')
+  assert.equal(fixing.requests.length, 6)
+
+  // 同工具但结果不同（读写交替的自然节奏）不计数：A/B 交替 8 轮也不熔断
+  const alternating = fakeStream([
+    ...Array.from({ length: 8 }, (_, i) => ({
+      text: `第${i + 1}轮`, toolCalls: [{ id: `a${i}`, name: i % 2 ? 'draft_audit' : 'draft_patch', arguments: '{}' }],
+    })),
+    { text: '收束' },
+  ])
+  const agent3 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: alternating }, systemClock)
+  const mixed = await agent3.agentLoop({
+    station: '执行官草稿', prompt: 'p', tools: [],
+    runTool: async call => (call.name === 'draft_audit' ? '审计：通过' : '已入草稿'),
+  })
+  assert.equal(mixed.text, '收束')
+  assert.equal(AGENT_LOOP_REPEAT_LIMIT, 3, 'ADR-0041 §修订补记：同错误熔断阈值 = 连续 3 次')
+})
+
+test('#302 ② 工具失败事件：成功调用不发；失败摘要是首行（全文留在轨迹与语料）', async () => {
+  const log = memLogger()
+  const stream = fakeStream([
+    { text: '查', toolCalls: [{ id: 'ok1', name: 'graph_view', arguments: '{}' }] },
+    { text: '再查', toolCalls: [{ id: 'bad1', name: 'bank_view', arguments: '{}' }] },
+    { text: '收束' },
+  ])
+  const agent = new AgentSeam({ logger: log, complete: fakeComplete([]), stream }, systemClock)
+  const r = await agent.agentLoop({
+    station: '教练生长', prompt: 'p', tools: [],
+    runTool: async call => {
+      if (call.name === 'bank_view') throw new Error('白名单外工具\n第二行细节不进摘要')
+      return '图面'
+    },
+  })
+  assert.equal(log.count('agent.tool.fail'), 1, '成功调用不发事件（失败才发）')
+  const e = log.nth('agent.tool.fail')!
+  assert.equal(e.level, 'warn')
+  assert.equal(e.fields.tool, 'bank_view')
+  assert.equal(e.fields.error, '白名单外工具', '摘要 = 首行（多行错误的细节走轨迹/语料）')
+  assert.equal(e.fields.chars, '白名单外工具\n第二行细节不进摘要'.length)
+  assert.match(r.trajectory.join('\n'), /bank_view.*（失败）/, '轨迹照旧逐条记（#163 任务消息消费面不动）')
 })

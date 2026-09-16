@@ -339,7 +339,9 @@ export class Content {
 
   /** 读提示词模板；内置模板带版本标记，vault 快照缺标记或版本更低时覆盖升级（旧文件存 .bak 供 diff 恢复），
    * 非内置类型要求用户已自建同名文件。
-   * {{renderers}} 占位符注入渲染能力清单；旧模板缺占位符时在末尾追加注入段（运行时兜底，不改用户文件）。 */
+   * `{{renderers}}` 占位符注入渲染能力清单（#237 / ADR-0075 §1），**只认占位符**：模板里没有它
+   * 就不注入（#302 ① 删掉旧兜底——旧行为把面板渲染菜单无条件追加到无占位符模板末尾，13 个内置
+   * 站因此被判「只能使用下列格式」，与教练站「只输出 YAML」的输出契约直接矛盾）。 */
   async loadPrompt(kind: string): Promise<string> {
     const builtin = Content.PROMPT_KINDS[kind]
     await this.fs.mkdir(this.paths.promptDir)
@@ -355,9 +357,7 @@ export class Content {
       }
     }
     const text = await this.fs.readFile(p)
-    const caps = rendererCapabilityBlock()
-    if (text.includes('{{renderers}}')) return text.replaceAll('{{renderers}}', caps)
-    return text.trimEnd() + '\n\n' + caps
+    return text.includes('{{renderers}}') ? text.replaceAll('{{renderers}}', rendererCapabilityBlock()) : text
   }
 
   /** 内置模板首行版本标记 → 数字；无标记（历史快照）= 0，下次 loadPrompt 即升级。 */

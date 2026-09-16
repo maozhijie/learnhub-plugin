@@ -12,7 +12,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { AgentSeam, LearnhubEngine, DEFAULT_QUIZ_AUDIT_RATE, CURRENT_SCHEMA_VERSION } from '../engine/index.ts'
-import type { CoachTrigger, Logger } from '../engine/index.ts'
+import type { CoachTrigger, Logger, LogLevel } from '../engine/index.ts'
 import type { GenJobFailure, GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
 import { createCorpusCapture } from './corpus.ts'
@@ -217,25 +217,45 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
  * `rg` 与贴进排查对话）：`run`／`apiRun` 出口经 `summarize`，其余站点给的本来就是
  * 宿主自产的事件一句话。截断与失败静默都不在这里——那是宿主日志实现的事。
  *
+ * **`level`（#302 ②）**：面板轮询这类「高频、无信号」的读调用降到 `debug`（默认 INFO
+ * 档不落盘、`LEARNHUB_LOG_LEVEL=debug` 时照旧可取）——实测某日 370 条 `engine.call`
+ * 里 289 条是 `api/generate/status` 与 `api/queue` 的轮询噪音，INFO 层被它们淹到看不见
+ * 真信号。降噪只调级别，不改事件名与字段面。
+ *
  * **对坏输入容错**：入口只声明 `string`，但这条链上游是引擎出口与桩替身，实际可能
  * 拿到 `undefined`（旧 `runLog` 靠一个把 `output.length` 包进去的 try/catch 顺带容错，
  * 换代时那个隐式行为一度丢过——探针快照当场把它抓了出来）。**日志故障绝不上浮成主流程
  * 故障**是本票的硬纪律，故这里显式归一而不是靠调用方守规矩。 */
-export function logCall(rt: HostRuntime, tool: string, summary: string, chars = summary.length): void {
+export function logCall(rt: HostRuntime, tool: string, summary: string, chars = summary.length, level: LogLevel = 'info'): void {
   const text = typeof summary === 'string' ? summary.trim() : ''
-  rt.logger.info('engine.call', { tool, chars, detail: [text || '（无输出）'] })
+  rt.logger[level]('engine.call', { tool, chars, detail: [text || '（无输出）'] })
 }
+
+/** 摘要首行上界（超限**显式标注**，不静默腰斩——见 `summarize`）。 */
+export const LOG_SUMMARY_HEAD = 200
 
 /** 输出摘要（不落原文：首行截断 + 行数索引）。行数用 `match` 数换行，**不按行切分**
  * ——`src/` 的手写行切分属 JSONL 读侧受控原语（ADR-0053 单一实现，门见
- * `tests/jsonl-contract.test.ts`），这里不是 JSONL 读，别去动那道门的白名单。 */
-function summarize(output: unknown): string {
+ * `tests/jsonl-contract.test.ts`），这里不是 JSONL 读，别去动那道门的白名单。
+ *
+ * **两处 #302 ② 的修正**：
+ * ① 截断**不再静默**——旧实现单行超界时直接切片返回，读日志的人看不出「这里少了什么」；
+ *    现在带 `…（首行已截断，共 N 字符）`。
+ * ② `opts.full` = 失败类值**整段照落**（不折首行、不截断）：失败原因可能是多行文本
+ *    （生成任务 `message` 里「两轮死因」的 `【首轮】/【重裁】` 两段就是），而**完整值指向
+ *    拼在文末**（`…｜语料 生成语料/<站>/<文件>`）——折首行等于把死因详情与指向一起丢掉。
+ *    上界仍由宿主单条上限（16,384，超限显式标注）兜。消费面：`run`／`apiRun` 出口（默认档）
+ *    与失败类站点（`host/jobs.ts` 的生长批出口）。 */
+export function summarize(output: unknown, opts: { full?: boolean } = {}): string {
   const text = typeof output === 'string' ? output.trim() : ''
   if (!text) return '（无输出）'
+  if (opts.full === true) return text
   const breakAt = text.indexOf('\n')
-  const head = (breakAt < 0 ? text : text.slice(0, breakAt)).slice(0, 200)
+  const head = breakAt < 0 ? text : text.slice(0, breakAt)
+  const shown = head.slice(0, LOG_SUMMARY_HEAD)
+  const cut = shown.length < head.length ? `…（首行已截断，共 ${head.length} 字符）` : ''
   const lines = 1 + (text.match(/\n/g)?.length ?? 0)
-  return lines > 1 ? `${head}…（共 ${lines} 行）` : head
+  return lines > 1 ? `${shown}${cut}…（共 ${lines} 行）` : `${shown}${cut}`
 }
 
 /** D14 v3 唯一出口：engine 调用 + 调试日志留痕。`chars` 传**原文尺寸**（`out.length`）
@@ -248,8 +268,9 @@ export async function run(rt: HostRuntime, tool: string, fn: () => Promise<strin
 
 /** 面板路由出口：引擎返回对象原样透传（sendJson 统一序列化一次），
  * 日志记录序列化摘要；调用失败也留痕（#116 语义沿袭 → `engine.call.fail`），随后原样抛出。
- * 绝不在路由里手动 stringify 对象——会双编码。 */
-export async function apiRun<T>(rt: HostRuntime, tool: string, fn: () => Promise<T>): Promise<T> {
+ * 绝不在路由里手动 stringify 对象——会双编码。
+ * `opts.level` = 该路由的留痕级别（#302 ②：轮询读路由传 `debug` 降噪，失败留痕恒 ERROR）。 */
+export async function apiRun<T>(rt: HostRuntime, tool: string, fn: () => Promise<T>, opts: { level?: LogLevel } = {}): Promise<T> {
   let out: T
   try {
     out = await fn()
@@ -258,7 +279,7 @@ export async function apiRun<T>(rt: HostRuntime, tool: string, fn: () => Promise
     throw err
   }
   const serialized = typeof out === 'string' ? out : JSON.stringify(out) ?? ''
-  logCall(rt, tool, summarize(serialized), serialized.length)
+  logCall(rt, tool, summarize(serialized), serialized.length, opts.level ?? 'info')
   return out
 }
 

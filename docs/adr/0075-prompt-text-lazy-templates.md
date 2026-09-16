@@ -16,7 +16,7 @@
 
 **占位符只认标识符形态**（`{{targetNode}}`）是刻意收窄的口径：`{{…}}` 同时是**挖空重述的卡面标记**（`learner-cards.ts` 的 cloze 语法），而学习者自写卡面内容会作为**值**流进提示词；若把「任何 `{{…}}`」都判成残留，学习者写一个英文挖空（`{{mitosis}}`）就会当场抛错——那是数据，不是没填的占位符（剩余误报面见边界段）。多余变量不抛（传超集无害，「传错名」由缺变量兜住）；收窄口径由 `tests/prompt-render.test.ts` 两个反向用例钉住。
 
-**`{{renderers}}` 不走这个渲染器**：15 条生成模板里的 `{{renderers}}` 由 `Content.loadPrompt` 在运行时替换（vault 快照路径，含「旧模板缺占位符时末尾追加注入段」的兜底），生成站的**材料**注入走 `withContractLast` 段序拼装、不做字符串替换。因此 `templates.ts` 的文本**不得**送进 `render()`——那会把 `{{renderers}}` 判成缺失变量（约束写在模块头注）。
+**`{{renderers}}` 不走这个渲染器**：15 条生成模板里的 `{{renderers}}` 由 `Content.loadPrompt` 在运行时替换（vault 快照路径；~~含「旧模板缺占位符时末尾追加注入段」的兜底~~——**该兜底已由 [ADR-0094](0094-renderer-menu-placeholder-only.md) 删除：占位符是唯一注入口径**），生成站的**材料**注入走 `withContractLast` 段序拼装、不做字符串替换。因此 `templates.ts` 的文本**不得**送进 `render()`——那会把 `{{renderers}}` 判成缺失变量（约束写在模块头注）。
 
 ### 2. 落点：`src/engine/prompts/` 按域分文件；行数棘轮按 `types.ts` 先例豁免
 

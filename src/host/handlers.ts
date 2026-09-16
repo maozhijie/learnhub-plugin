@@ -139,7 +139,9 @@ export const HANDLERS: Record<string, RouteHandler> = {
     }))
   },
   'GET /generate/status': async ({ rt, res }) => {
-    sendJson(res, 200, await apiRun(rt, 'api/generate/status', () => generationStatus(rt)))
+    // 面板轮询读路由（#302 ②）：留痕降到 DEBUG——INFO 层要留给信号（实测某日 370 条
+    // engine.call 里 289 条是本路由与 /queue 的轮询；失败留痕仍是 ERROR，不受此影响）。
+    sendJson(res, 200, await apiRun(rt, 'api/generate/status', () => generationStatus(rt), { level: 'debug' }))
   },
   'GET /explain-pack': async ({ rt, url, res }) => {
     // 错误当下「讲解这道题」逐题包（Arc D #64）：客户端桥注入宿主会话的首条消息原料

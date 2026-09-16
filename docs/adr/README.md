@@ -99,3 +99,4 @@
 | [0091](./0091-observability-event-registry-appendix.md) | 调试日志附录事件登记表：#259 巡检增量（闭集外新事件与指针级事件统一入册） |
 | [0092](./0092-empty-graph-first-rung-criteria-rehome.md) | 空图首级：起点资格判据迁家为教练材料注入（不开第三族） |
 | [0093](./0093-engine-domain-folders.md) | engine 目录按域分文件夹：91 文件归 9 域单层 + 顶层 5 |
+| [0094](./0094-renderer-menu-placeholder-only.md) | 渲染能力清单只认占位符：删有占位符就注入、没占位符就追加的运行期兜底 |

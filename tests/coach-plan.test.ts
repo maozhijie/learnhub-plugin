@@ -212,3 +212,39 @@ test('两轮死因：重裁仍败 → fail loud（零提案落盘）', async () 
     assert.equal(agent.completeCalls.length, 2, '恰一次回灌（两轮死因）')
   })
 })
+
+// ---- #303：首级判据材料随上下文包进两族思路官（模板文件零改动，故断言落在 prompt 上）----
+
+test('#303 两族共享首级判据：前沿为空时回合/重裁两族提示词都带判据块；重裁族与上次裁决摘要共存', async () => {
+  await withVault(SEED, async h => {
+    // 前沿变空的现实路径：先跑一批（产出「平均变化率」+ 落一条 applied 提案），
+    // 再把两个节点学完——图上仍有普通节点，但未开始存量归零（非「仅终点」特例）。
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const first = twoStationFake({ plans: [goldPlanYaml()], sessions: [executorTurns()] })
+    const r1 = await h.engine.growth2.coachGrowthBatch('数学', first)
+    assert.equal(r1.state, 'applied')
+    for (const node of ['认识变化率', '平均变化率']) await h.engine.sched2.nodeComplete('数学', node, true)
+
+    // ① 常规生长族：判据块进提示词（材料随包，模板文本一字未动）
+    const stopPlan = yamlOf({ operator: '停摆', reason: '就绪缺口由内容生成跟上', target_endpoints: [], steps: [] })
+    const routine = twoStationFake({ plans: [stopPlan], sessions: [] })
+    await h.engine.growth2.coachGrowthBatch('数学', routine, { force: true })
+    const routinePrompt = routine.completeCalls[0]!.prompt
+    assert.match(routinePrompt, /思路官回合提示词/)
+    assert.match(routinePrompt, /首级判据（本回合\*\*前沿为空\*\*/, '常规族带判据块')
+    assert.match(routinePrompt, /零复合概念/, '判据四条随行（ADR-0040 原文）')
+    assert.match(routinePrompt, /裁决纪律：优先选能同时推进多个未达成终点的台阶/, '与既有裁决纪律行同域共存')
+
+    // ② 显式重裁族：同一上下文包组装 → 判据块同样在场；「上次裁决摘要」块与它共存无冲突
+    const recheck = twoStationFake({ plans: [stopPlan], sessions: [] })
+    await h.engine.growth2.coachGrowthBatch('数学', recheck, { force: true, trigger: 'panel_dispatch' })
+    const recheckPrompt = recheck.completeCalls[0]!.prompt
+    assert.match(recheckPrompt, /思路官重裁提示词/)
+    assert.match(recheckPrompt, /首级判据（本回合\*\*前沿为空\*\*/, '重裁族同样带判据块（两族经同一上下文包组装）')
+    assert.match(recheckPrompt, /## 上次裁决摘要（上一次生长批/, '上一批的 applied 提案留痕照常注入（#303 顺带修正：旧实现把落盘路径当产物原文读 → 摘要块恒不出现）')
+    assert.ok(
+      recheckPrompt.indexOf('首级判据（本回合') < recheckPrompt.indexOf('## 上次裁决摘要'),
+      '段序纪律：包材料在前、包外注入块在后',
+    )
+  })
+})

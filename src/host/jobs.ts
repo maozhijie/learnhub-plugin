@@ -28,7 +28,7 @@ import {
 } from '../generation-jobs.ts'
 import { SECTION_PREV_TAIL_HEADING } from '../engine/prompts/host.ts'
 import { contentEffort, llmCfg, llmSeam, llmSeamStripped } from './llm.ts'
-import { logCall } from './runtime.ts'
+import { logCall, summarize } from './runtime.ts'
 import type { GenJob, HostRuntime } from './runtime.ts'
 import { STATIONS } from './corpus.ts'
 
@@ -735,7 +735,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
   } finally {
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
-    logCall(rt, 'coach_growth', `「${job.course}」生长批：${job.message}`)
+    // 失败类的 message 摘要**不截断**（#302 ②）：它是失败原因全文 + 语料指向
+    // （`…｜语料 生成语料/<站>/<件>`）——旧口径按首行 200 字切，死因与「完整值在哪」
+    // 一起被腰斩（实测事故日志里正是这一行读不出是谁死的）。
+    logCall(rt, 'coach_growth', summarize(`「${job.course}」生长批：${job.message}`, { full: job.status !== 'done' }))
   }
 }
 

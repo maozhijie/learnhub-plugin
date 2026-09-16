@@ -81,6 +81,18 @@ ADR-0080 建立了调试日志的事件闭集，但闭集是**当票快照**不�
 |---|---|---|---|
 | `host.gen_jobs.restored` | INFO | + `skipped_malformed=<n>` | 恢复时畸形记录计数（ADR-0080 闭集内事件） |
 
+### #302 增补（观测面补全 + 同错误熔断；接线票 #302）
+
+| 事件 | 级别 | 字段 | 备注 |
+|---|---|---|---|
+| `agent.tool.fail` | WARN | `station` `tool` `chars` `error` | 工具回路里 `runTool` 抛出（白名单外调用、写件被拒、门复验异常同口径）——此前这类失败**只活在 trajectory**（`N 字符（失败）`）与下一轮回灌里，调试日志零事件，事后只能逐件考古语料。`error` = 错误**首行**摘要（上界 500 字）；全文仍在 trajectory／生成语料／模型下一轮可见的回灌里（日志只做索引）。住缝（`engine/infra/agent.ts::agentLoop`），全部 loop 站共享 |
+| `growth.draft.round_write_failed` | WARN | `course` `session` `kind` | 写件崩溃轮志**补记失败**（IO）——吞错点留痕：补记是尽力而为（不得顶替原始错误），"没写上也别静默" |
+| `engine.call`（闭集内既有事件） | 随调用点 | — | **级别降噪**（不新开事件名）：面板轮询读路由 `GET /generate/status`（handler）与 `GET /queue`（通道声明 `log: 'debug'`）留痕降到 DEBUG——实测某日 370 条 `engine.call` 里 289 条是这两条的轮询。事件名与字段面不变；失败留痕（`engine.call.fail`）恒 ERROR |
+
+**级别选择（如实记一句）**：两条新事件取 WARN 而非 ERROR——`agent.tool.fail` 覆盖的抛出含**门拒绝**（模型侧可自纠的正常回路产物，一轮一次），一律 ERROR 会让正常修复轮报错；终局死亡（熔断/预算耗尽）仍由抛出的错误经宿主 `host.gen_jobs.run_error`（ERROR）与草稿崩溃轮记账，不靠这两条。ADR-0080 的「死亡/失败 = ERROR」在这一格上按「可自纠的失败 vs 终局死亡」细分。
+
+同票的非事件面（同登记，避免只在票面留痕）：① 草稿轮志补**写件崩溃轮**（`draft_patch`/`draft_audit`/`draft_finish` 未被受理门记账的抛出 = 轮志多一条崩溃轮（`补丁崩溃` / `审计崩溃` / `finish 崩溃` + `（错误首行）`；三件工具 → 轮志 kind 的映射与措辞表单一住处 `DRAFT_TOOL_ROUND_KIND`/`DRAFT_ROUND_CRASH_LABEL`），`errors` 带全文）——草稿轮志是**草稿档**不是日志事件，登记在此只为「finish 崩溃零痕迹」这一观测缺口有出处；② `summarize` 单行超界改为显式标注（`…（首行已截断，共 N 字符）`），失败类值可传 `{ full: true }` 不截断（生长批出口用它保住失败原因与语料指向）。
+
 ### console 侧处置（非 logger 事件）
 
 - `log-file.ts` 的 `levelFromEnv` 收到非法 `LEARNHUB_LOG_LEVEL` 值时 `console.warn` 一次（级别门实现住宿主，此处无 logger 可用——console 是唯一出口），接线票 #292 落地。

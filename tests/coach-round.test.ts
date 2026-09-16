@@ -486,3 +486,46 @@ test('门面：nodeComplete 结果携带 coach 字段；statusJson 附会话开�
     assert.equal(typeof doc.courses[0]!.coach?.ready, 'number')
   })
 })
+
+// ---- #303 空图首级判据材料注入（ADR-0092：材料注入，不开第三族模板）----
+
+test('#303 首级判据注入：触发口径是「前沿为空」（排除终点后未开始节点数为零），不是节点数', async () => {
+  const CRITERIA = '首级判据'
+  // ① 空图（仅终点）——新课加完终点的第一次生长
+  await withVault({ registry: null, graph: null }, async ({ engine }) => {
+    await draftCourse(engine, { manualEndpoints: [{ name: '终点A', goalNote: '会用导数' }], notes: false })
+    const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
+    assert.ok(pack.includes(CRITERIA), '前沿为空 → 注入首级判据')
+    assert.ok(pack.includes('零复合概念'), '判据四条随行（ADR-0040 原文）')
+    assert.ok(pack.includes('坡道第一级台阶'), '操作化反例警示随行')
+    assert.ok(pack.includes('裁决纪律：优先选能同时推进多个未达成终点的台阶'), '与裁决纪律行同域共存')
+  })
+
+  // ② 多终点零普通节点：节点数 2（不是「≤1」），前沿仍为空 → 照注入（口径不是节点数）
+  await withVault({ registry: null, graph: null }, async ({ engine }) => {
+    await draftCourse(engine, {
+      manualEndpoints: [{ name: '终点A' }, { name: '终点B' }], notes: false,
+    })
+    const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
+    assert.ok(pack.includes(CRITERIA), '未开始存量零 = 注入（两个节点全是终点）')
+  })
+
+  // ③ 普通节点已学完（前沿被清空）：同样命中——「删空普通节点」的等价场景
+  await withVault({ registry: null, graph: null }, async ({ engine }) => {
+    await draftCourse(engine, {
+      starts: [{ name: '起点', basis: 'baseline' }],
+      endpoint: { name: '终点A' },
+      notes: { 起点: { stage: 'review', content: { sections: READY_SECTIONS } } },
+    })
+    const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
+    assert.ok(pack.includes(CRITERIA), '图上还有普通节点（起点）但已开始 → 未开始存量零，照注入')
+  })
+
+  // ④ 前沿非空：包形与现状一致（判据不注入，也不改任何既有区块）
+  await withVault({ registry: null, graph: null }, async ({ engine }) => {
+    await draftCourse(engine, CAPABILITY_DRAFT)
+    const pack = await engine.growth2.coachContextPack('数学', { today: localDay(0) })
+    assert.ok(!pack.includes(CRITERIA), '有未开始的前沿节点 → 不注入（非空图回合不白吃 token）')
+    assert.ok(pack.includes('认识变化率'), '前沿节点照旧进包')
+  })
+})

@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Graph } from '../src/engine/graph/graph.ts'
 import { normalizePatchShape, replayDraft, sealedDecisionOf, editGateErrors, simulateOps } from '../src/engine/index.ts'
-import { GROWTH_DRAFT_MARKER } from '../src/engine/coach/growth-draft.ts'
+import { GROWTH_DRAFT_MARKER, draftPathOf, loadDraft } from '../src/engine/coach/growth-draft.ts'
 import type { EditGateCtx } from '../src/engine/index.ts'
 import type { EditOp, EditProposalSpec } from '../src/engine/coach/proposals.ts'
 import type { GNode } from '../src/engine/types.ts'
@@ -426,5 +426,28 @@ test('#301 缺陷②保险丝：门复验抛异常也折叠成门错误行（草
     const line = finish[0]!.errors!.join('\n')
     assert.match(line, /门复验内部异常（非门拒绝/, '折叠成门错误行')
     assert.match(line, /合法形态速查/, '随行给合法形态（与拒收回执同一份常量）')
+  })
+})
+
+test('#302 ② finish 崩溃补轮志：缺 note / 非法算子这类抛出此前零痕迹，现在进草稿轮志（含崩溃摘要）', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    // 事故形态：模型连调 draft_finish 而每次都在同一条早退分支上抛错（缺本批 note）。
+    // 此前这类抛出既不发工具失败事件、也不写轮志——草稿里只剩 patch/audit，finish 一次没有。
+    const r = await h.engine.growth2.coachDraft('数学', scriptFake([[
+      { text: '', toolCalls: [{ id: 'c1', name: 'draft_finish', arguments: '{}' }] },
+      { text: '', toolCalls: [{ id: 'c2', name: 'draft_finish', arguments: '{ }' }] },
+      { text: '先不发了。' },
+    ]]))
+    assert.equal(r.finished, false)
+    const finishes = r.rounds.filter(x => x.kind === 'finish')
+    assert.equal(finishes.length, 2, '两次崩溃各留一条 finish 轮志（此前一次都没有）')
+    assert.match(finishes[0]!.summary, /^finish 崩溃（\[draft_finish\] 缺本批 note/)
+    // 崩溃摘要 = 错误首行；完整错误原文随轮志 errors 落盘（可回灌给下一轮的执行官看）
+    const doc = await loadDraft(h.engine.fs, draftPathOf(h.engine.paths, '数学', r.session_id))
+    const last = doc!.rounds.at(-1)!
+    assert.equal(last.kind, 'finish')
+    assert.equal(last.errors?.length, 1)
+    assert.match(last.errors![0]!, /缺本批 note/)
   })
 })

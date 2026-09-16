@@ -431,7 +431,10 @@ export const 学习域 = {
         channel: "panel",
         mode: "sync",
         route: { method: "GET", path: "/queue" },
-        bind: []
+        bind: [],
+        // 面板轮询读路由（#302 ②）：留痕降到 DEBUG——本路由与 /generate/status 实测占某日
+        // engine.call 的 78%，INFO 层被轮询噪音淹没；失败留痕（engine.call.fail）仍是 ERROR。
+        log: "debug"
       }
     ]
   }),
