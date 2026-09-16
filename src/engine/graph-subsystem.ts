@@ -26,12 +26,15 @@ import type { QuestionBank } from './question-bank.ts'
 import type { Graph } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
 import type { Fm } from './types.ts'
+import type { Logger } from './logger.ts'
 
 /** Graph 域对门面的窄面（门面构造时传 this）：领域类与纯函数直接 import，
  * 这里只列门面私有方法/字段——它们无法从模块导入。 */
 export interface GraphDeps {
   /** 时钟端口（#175 阶段①）：vault 链接扫描 generated_at。 */
   clock: Clock
+  /** 调试日志端口（#253 / ADR-0080；#291 附录登记接线）：挖矿面题库 Broken 排除留痕。 */
+  logger: Logger
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
   store: Store
@@ -477,6 +480,8 @@ export class GraphSubsystem {
       try {
         questions = (await this.e.bank.load(this.e.paths.courseRoot(c.root), node)).questions
       } catch {
+        // 挖矿面题库 Broken 排除留痕（#291）：其余节点照常挖（ADR-0071 宽容读取）
+        this.e.logger.warn('graph.mine.bank_skip', { course: c.name, node })
         questions = [] // 题库 Broken/缺席不拦候选派生（其余节点照常挖；ADR-0071 宽容读取）
       }
       if (!questions.some(q => typeof q.invokes === 'string' && q.invokes.trim())) continue
@@ -524,6 +529,8 @@ export class GraphSubsystem {
       try {
         questions = (await this.e.bank.load(this.e.paths.courseRoot(c.root), node)).questions
       } catch {
+        // 挖矿面题库 Broken 排除留痕（#291）：其余节点照常挖（ADR-0071 宽容读取）
+        this.e.logger.warn('graph.mine.bank_skip', { course: c.name, node })
         questions = []
       }
       if (!questions.some(q => typeof q.invokes === 'string' && q.invokes.trim())) continue

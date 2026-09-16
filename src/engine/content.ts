@@ -25,6 +25,8 @@ import type { GNode, SectionManifest, EncEdge } from './types.ts'
 import type { Graph } from './graph.ts'
 import type { Paths } from './paths.ts'
 import type { Fm, JournalRec } from './types.ts'
+import type { Logger } from './logger.ts'
+import { noopLogger } from './logger.ts'
 
 export const QUEUE_GENERATE = '生成'
 export const QUEUE_REGEN = '重生成'
@@ -53,7 +55,12 @@ export class Content {
   private paths: Paths
   private clock: Clock
   private fs: VaultFs
-  constructor(paths: Paths, clock: Clock, fs: VaultFs) {
+  /** 调试日志端口（#253 / ADR-0080；#290 附录登记接线）：节门降级（content.gate.*）
+   * 与富块修复计数（content.repair.rich_blocks）由本类发。缺省 noop——仓库脚本
+   * 与既有构造点零改动；宿主装配（index.ts）显式接引擎 logger。 */
+  private logger: Logger
+  constructor(paths: Paths, clock: Clock, fs: VaultFs, logger: Logger = noopLogger) {
+    this.logger = logger
     this.paths = paths
     this.clock = clock
     this.fs = fs
@@ -572,6 +579,14 @@ export class Content {
 
   /** 程序性修复后的富内容块改写结果（落盘前调用；不改语义，只修机器可判的脏输入）。 */
   static fixRichBlocks(body: string): string {
+    return Content.fixRichBlocksReport(body).body
+  }
+
+  /** fixRichBlocks 的计数变体（#290 指针级观测）：返回改写结果 + 修复块数与涉及语言数
+   * ——管线调用站据此发 `content.repair.rich_blocks`（细节目 journal，日志只记计数）。 */
+  static fixRichBlocksReport(body: string): { body: string; blocks: number; langs: number } {
+    let blocks = 0
+    const langs = new Set<string>()
     // plot/chart：JSON 尾随逗号/行注释是 fast 档模型高频失误；面板解析失败会降级源码，
     // 单靠门禁容忍不够——落盘前把可解析的脏 JSON 改写为规范 JSON.stringify 产物。
     // 合法 JSON 原样保留（不重排，避免与模型产出逐字 diff）。
@@ -580,12 +595,16 @@ export class Content {
       if (Content.strictJsonObject(code)) return whole
       const parsed = Content.parseLooseJsonObject(code) // 脏输入：尾随逗号/行注释
       if (!parsed) return whole // 仍不可解析:留给门禁 finding,回灌模型定向修复
+      blocks++
+      langs.add(lang)
       return `\`\`\`${lang}\n${JSON.stringify(parsed, null, 2)}\n\`\`\``
     })
     // svg：前导杂质裁剪至首个 <svg（门禁要求块以 <svg 开头）
     body = body.replace(/^```svg[ \t]*\r?\n([\s\S]*?)```[ \t]*\r?$/gm, (whole, code: string) => {
       const idx = code.indexOf('<svg')
       if (idx <= 0) return whole
+      blocks++
+      langs.add('svg')
       return '```svg\n' + code.slice(idx) + '```'
     })
     // mermaid：节点文本含 | 等特殊字符且未整体双引号包裹时自动补引号（渲染降级的高频根因）
@@ -593,15 +612,18 @@ export class Content {
       const fixed = code.split('\n').map(line =>
         line.replace(/(\w[\w\u4e00-\u9fff]*)\[([^\]"\n]*\|[^\]"\n]*)\]/g, (_m, id: string, label: string) => `${id}["${label.replace(/"/g, '\\"')}"]`),
       ).join('\n')
-      return fixed === code ? whole : '```mermaid\n' + fixed + '```'
+      if (fixed === code) return whole
+      blocks++
+      langs.add('mermaid')
+      return '```mermaid\n' + fixed + '```'
     })
-    return body
+    return { body, blocks, langs: langs.size }
   }
 
   /** 别名一致性程序化修复（#147 QC 格式类门禁程序化修复）：正文出现不采用名 →
    * 全部替换为采用名（别名词表是课程规范的纯文字映射，替换语义安全）；
    * 返回修复明细供 journal 留痕。写侧修复——contentCheck 只读校验不受影响。 */
-  async fixAliases(root: string, body: string): Promise<{ body: string; fixed: string[] }> {
+  async fixAliases(root: string, body: string): Promise<{ body: string; fixed: string[]; table_size: number }> {
     const table = await this.aliasTable(root)
     let out = body
     const fixed: string[] = []
@@ -611,7 +633,7 @@ export class Content {
         fixed.push(`${bad}→${good}`)
       }
     }
-    return { body: out, fixed }
+    return { body: out, fixed, table_size: Object.keys(table).length }
   }
 
   /** 严格解析为 JSON 对象才为真（不容忍尾随逗号——fixRichBlocks 用它区分脏输入）。 */
@@ -959,17 +981,20 @@ export class Content {
    * 拆节阶梯仍有效，不动。 */
   static demoteCapLengthFindings(
     findings: readonly string[], warns: readonly string[], sectionCount: number,
-  ): { findings: string[]; warns: string[]; lenient: string | null } {
+  ): { findings: string[]; warns: string[]; lenient: string | null; over_by?: number } {
     if (sectionCount < MAX_SECTIONS || !findings.length || !findings.every(f => f.includes('正文过长'))) {
       return { findings: [...findings], warns: [...warns], lenient: null }
     }
+    let overBy: number | undefined
     const demoted = findings.map(f => {
       const m = f.match(/节「(.+?)」正文过长（约 (\d+) 字 > 拒收线 (\d+) 字/)
-      return m
-        ? `满编放行：节「${m[1]}」正文约 ${m[2]} 字超拒收线 ${m[3]} 字（节点已满编 ${MAX_SECTIONS} 节，拆节阶梯不可用；人工复核兑底）`
-        : `满编放行（节点已满编，长度 finding 降为警告；人工复核兑底）：${f}`
+      if (m) {
+        overBy = (overBy ?? 0) + (Number(m[2]) - Number(m[3]))
+        return `满编放行：节「${m[1]}」正文约 ${m[2]} 字超拒收线 ${m[3]} 字（节点已满编 ${MAX_SECTIONS} 节，拆节阶梯不可用；人工复核兑底）`
+      }
+      return `满编放行（节点已满编，长度 finding 降为警告；人工复核兑底）：${f}`
     })
-    return { findings: [], warns: [...warns, ...demoted], lenient: demoted.join('；') }
+    return { findings: [], warns: [...warns, ...demoted], lenient: demoted.join('；'), ...(overBy ? { over_by: overBy } : {}) }
   }
 
   /** 单节落盘：交互件标记块先拆出落盘 → QC 格式类程序化修复（别名，#147）→ 节级质检门 →
@@ -1000,7 +1025,15 @@ export class Content {
     // 格式类门禁程序化修复（#147）：别名不一致是机器可判可修的纯文字违规，先确定性
     // 替换再过门禁——门禁只拦机器修不了的违规；修复明细进 journal 与返回值留痕。
     const aliasFix = await this.fixAliases(root, stripped)
-    const sectionMd = Content.fixRichBlocks(aliasFix.body)
+    // 别名门失活（#290）：词表空（规范文件缺席或无 §8）= 门不生效——INFO 留痕，不静默
+    if (aliasFix.table_size === 0) {
+      this.logger.info('content.gate.alias_missing', { node, section: entry.id })
+    }
+    const rich = Content.fixRichBlocksReport(aliasFix.body)
+    if (rich.blocks > 0) {
+      this.logger.info('content.repair.rich_blocks', { node, blocks: rich.blocks, langs: rich.langs })
+    }
+    const sectionMd = rich.body
     const gate = await this.gateReport(graph, root, node, `## ${entry.title}\n\n${sectionMd}`)
     const html = Content.checkInteractiveHtml(split.files)
     // 思维节专属门（P-8 #97）：预测门至少一处——「先预测再揭晓」的阅读流门是这一
@@ -1015,7 +1048,13 @@ export class Content {
       : Content.demoteCapLengthFindings(gate.findings, gate.warns, sections.length)
     gate.findings = cap.findings
     gate.warns = cap.warns
+    // 节门降级的引擎内视图（#290 / ADR-0091）：满编放行 WARN 留痕（journal 与返回值之外
+    // 的第三只眼）；节门拒收 DEBUG 只记指针（错误清单已在 GATE_FAILED 续行）。
+    if (cap.lenient) {
+      this.logger.warn('content.gate.lenient', { node, section: entry.id, over_by: cap.over_by })
+    }
     if (gate.findings.length || html.findings.length) {
+      this.logger.debug('content.gate.section_reject', { section: entry.id, errors: gate.findings.length + html.findings.length })
       // 结构化失败信息（ADR-0054）：sectionId/标题支撑续跑与定点重写，预算数字支撑
       // 修复轮的显式压缩目标；message 仍是人读事实源（含 ✗ 清单）。
       const budget = TIER_ANCHORS[nodeTierOf(graph, node)].sectionWordBudget

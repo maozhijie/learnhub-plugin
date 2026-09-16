@@ -29,6 +29,7 @@ import type { FsrsBlock } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { ErrorCards } from './error-cards.ts'
 import type { ConceptRegistry } from './concepts.ts'
+import type { Logger } from './logger.ts'
 
 import { Content } from './content.ts'
 import { withContractLast } from './prompt-assembly.ts'
@@ -469,6 +470,9 @@ export class QuestionBank {
 export interface BankDeps {
   /** 时钟端口（#175 阶段①）：勘误/回收站戳与移入回收站的唯一性后缀。 */
   clock: Clock
+  /** 调试日志端口（#253 / ADR-0080；#290 附录登记接线）：bank 侧登记表降级、题库 Broken
+   * 排除、出题取消/受理失败/逐节解析失败留痕由本子系统发。 */
+  logger: Logger
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
   /** store/registry/proposals 均为结构化窄面：question-bank 被通道域（note-source）
@@ -560,6 +564,8 @@ export class BankSubsystem {
             if (!card.archived) yield { course: c.name, node, card }
           }
         } catch {
+          // Broken 卡组跳过轨迹（#290）：不阻塞其他卡，明细在 data-check 报告
+          this.e.logger.debug('bank.card.skip_broken', { node })
           continue // Broken 卡组不阻塞其他卡（data-check 体检面报出）
         }
       }
@@ -608,6 +614,8 @@ export class BankSubsystem {
     try {
       conceptNames = namesOf(await this.e.concepts.load(c.root))
     } catch {
+      // 登记表降级不静默（#290）：照旧出卡只是本门不生效，WARN 指针留痕
+      this.e.logger.warn('bank.gate.registry_broken', { course: c.name })
       conceptNames = null
     }
     const unregistered: Array<{ node: string; concept: string }> = []
@@ -620,6 +628,8 @@ export class BankSubsystem {
         const bank = await this.e.bank.load(this.e.paths.courseRoot(c.root), x.node)
         q = bank.questions.find(q => q.id === x.qid && !q.archived)
       } catch {
+        // 候选面题库 Broken 排除留痕（#290）：明细在 data-check 报告
+        this.e.logger.warn('bank.card.bank_broken', { course: c.name, node: x.node })
         q = undefined
       }
       if (!q) {
@@ -1278,7 +1288,10 @@ export class BankSubsystem {
     }
     // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用；仍空由下方受理门拒收
     if (conceptScope.length) {
-      if (opts?.isCancelled?.()) throw cancelledError(0)
+      if (opts?.isCancelled?.()) {
+        this.e.logger.warn('bank.quiz.cancelled', { course: c.name, node, added_so_far: 0 })
+        throw cancelledError(0)
+      }
       await this.e.repairInvokesOnce(llm, doc.questions.slice(0, requested), conceptScope)
     }
     // doc.node 只是模型对节点的复述（常自创短名），落盘位置由入参决定，不作硬校验
@@ -1303,7 +1316,11 @@ export class BankSubsystem {
       rejected.push(...audit.rejected)
     }
     for (const item of pending) {
-      if (opts?.isCancelled?.()) throw cancelledError(added)
+      if (opts?.isCancelled?.()) {
+        // 取消半批留痕（#290）：已入库量随事件带出，半批状态可追
+        this.e.logger.warn('bank.quiz.cancelled', { course: c.name, node, added_so_far: added })
+        throw cancelledError(added)
+      }
       const q = { ...(item as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有题数自动编号，避免与既有 q1 冲突
       if (opts?.generic) q.section = '通用' // 综合题不绑节（轮装配时统一收尾）
@@ -1356,7 +1373,10 @@ export class BankSubsystem {
         added++
         accepted.push(diversityQuestionOf({ ...q, q: stem }))
       } else {
-        skipped++ // 单题非法（如模型超纲出题型）不毁整批，好题照常入库
+        // admitQuestion 失败留痕（#290 过渡期事件，修复票 #294 收编）：qid 未定，
+        // 以题干前缀代定位；单题非法（如模型超纲出题型）不毁整批，好题照常入库
+        this.e.logger.warn('bank.quiz.admit_fail', { course: c.name, node, qid: stem.slice(0, 40) })
+        skipped++
       }
     }
     if (!added) {
@@ -1436,7 +1456,10 @@ export class BankSubsystem {
     // 多样性仪表（#230）：只累计本批入库题（与 questionGenerate 同口径）
     const accepted: DiversityQuestion[] = []
     for (const [si, s] of manifest.entries()) {
-      if (opts?.isCancelled?.()) throw cancelledError(added)
+      if (opts?.isCancelled?.()) {
+        this.e.logger.warn('bank.quiz.cancelled', { course: c.name, node, added_so_far: added })
+        throw cancelledError(added)
+      }
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
       if (!sectionMd) continue
@@ -1456,11 +1479,16 @@ export class BankSubsystem {
       try {
         doc = YAML.parseModel(raw) as { questions?: unknown } | null
       } catch {
+        // 逐节出题 YAML 解析失败留痕（#290）：跳过，综合调用兼底
+        this.e.logger.warn('bank.quiz.section_parse_fail', { node, section: s.id })
         continue // 该节模型输出非法 YAML：跳过，综合调用兼底
       }
       if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions)) continue
       // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用，仍空由下方门弃
-      if (opts?.isCancelled?.()) throw cancelledError(added)
+      if (opts?.isCancelled?.()) {
+        this.e.logger.warn('bank.quiz.cancelled', { course: c.name, node, added_so_far: added })
+        throw cancelledError(added)
+      }
       if (conceptScope.length) await this.e.repairInvokesOnce(llm, doc.questions, conceptScope)
       // 第二意见门（#223）随节生效：不一致题恰一次修复、仍败弃题；报告跨节聚合
       let sectionItems = doc.questions as Array<Record<string, unknown>>
@@ -1489,7 +1517,9 @@ export class BankSubsystem {
           added++
           accepted.push(diversityQuestionOf({ ...q, q: stem }))
         } else {
-          invalid++ // 单题非法（invalid）不毁整批，但计数进返回面（#294：返回面不再对不上账）
+          // 单题非法（invalid）不毁整批；计数进返回面（#294 合流）+ admit_fail 留痕（#290）
+          this.e.logger.warn('bank.quiz.admit_fail', { course: c.name, node, qid: stem.slice(0, 40) })
+          invalid++
         }
       }
     }

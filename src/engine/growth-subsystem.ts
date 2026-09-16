@@ -312,7 +312,10 @@ export class GrowthSubsystem {
         await atomicWrite(path, withSectionText(existing, SECTION_ETA, renderEtaBody(eta)), this.e.fs)
         out.push({ course: c.name, state: 'refreshed', eta, ...(reconcile ? { reconcile } : {}) })
       } catch (err) {
-        out.push({ course: c.name, state: 'skipped', detail: err instanceof Error ? err.message : String(err) })
+        // ETA 挂载跳过原因留痕（#291 / ADR-0091）：单课失败不挡其他课，WARN 指针随行
+        const detail = err instanceof Error ? err.message : String(err)
+        this.e.logger.warn('compass.eta.skip_fail', { course: c.name, detail })
+        out.push({ course: c.name, state: 'skipped', detail })
       }
     }
     return out
@@ -459,7 +462,19 @@ export class GrowthSubsystem {
     const today = opts.today ?? learningToday
     const courses = courseKey ? [await this.e.registry.resolve(courseKey)] : await this.e.enabledCourses()
     const out: CoachCheck[] = []
-    for (const c of courses) out.push(await this.coachCheckFor(c, today))
+    for (const c of courses) {
+      try {
+        out.push(await this.coachCheckFor(c, today))
+      } catch (err) {
+        // 检查点检查失败留痕（#291 / ADR-0091，触发五点）：照旧上抛（宿主失败面不变），
+        // 日志补「哪门课、为什么」的指针
+        this.e.logger.warn('coach.checkpoint.fail', {
+          trigger, course: c.name,
+          error: err instanceof Error ? err.message : String(err),
+        })
+        throw err
+      }
+    }
     return { trigger, courses: out }
   }
 
@@ -825,9 +840,15 @@ export class GrowthSubsystem {
       const props = await this.e.graphProposals('applied', 'edit')
       const mine = props.filter(p => p.course === c.name)
       const last = mine.at(-1)
-      if (!last) return undefined
+      if (!last) {
+        this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
+        return undefined
+      }
       const note = (YAML.parseModel(last.artifact) as { note?: { operator?: string; reason?: string } } | undefined)?.note
-      if (!note?.operator) return undefined
+      if (!note?.operator) {
+        this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
+        return undefined
+      }
       return [
         '## 上次裁决摘要（上一次生长批的方向留痕——可沿用可推翻）', '',
         `- 算子：${note.operator}`,
@@ -835,6 +856,7 @@ export class GrowthSubsystem {
         `- 提案：#${last.id}（已应用）`,
       ].join('\n')
     } catch {
+      this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
       return undefined
     }
   }
@@ -916,7 +938,10 @@ export class GrowthSubsystem {
     const root = c.root
     const today = opts.today ?? (await this.e.learningDay()).today
     // —— 草稿会话：在途续建（注入轮次日志）或新建 ——
-    const existing = await findActiveDraft(this.e.fs, this.e.paths, root)
+    const existing = await findActiveDraft(this.e.fs, this.e.paths, root, file => {
+      // 生长草稿档损坏留痕（#291 / ADR-0091）：坏档不炸读侧（照旧视为无在途），WARN 指针随行
+      this.e.logger.warn('growth.draft.corrupt', { course: c.name, session: file.replace(/\.json$/, '') })
+    })
     const resumed = existing !== null
     const doc: GrowthDraftDoc = existing ?? {
       marker: GROWTH_DRAFT_MARKER, version: 1,
@@ -1275,7 +1300,8 @@ export class GrowthSubsystem {
         if (!operator || !added) continue
         tallies.push({ operator, added, day: dayOfTs(p.decided, cutoff) })
       } catch {
-        // 留痕缺失不炸读侧
+        // 三率 tally 折损留痕（#291）：留痕缺失不炸读侧，WARN 指针随行
+        this.e.logger.warn('growth.tally_skip', { course: p.course })
       }
     }
     return tallies

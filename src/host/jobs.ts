@@ -654,7 +654,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       stuckTargets = pending.map(p => p.id)
       inject = [inject, stuckReportInject(pending)].filter(Boolean).join('\n\n') || undefined
     }
-  } catch { /* 自报读取失败不挡回合（留账，下回合重试） */ }
+  } catch {
+    // 卡点自报读取失败留痕（#291 / ADR-0091）：不挡回合（留账，下回合重试）
+    rt.logger.warn('coach_growth.stuck_read_failed', { course: job.course })
+  }
   try {
     const r = await rt.engine.growth2.coachGrowthBatch(job.course, rt.agent, {
       ...(inject ? { inject } : {}),
@@ -694,7 +697,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
           job.message += `｜已消费卡点自报 ${n} 条`
           logCall(rt, 'stuck_report', `「${job.course}」教练回合已消费 ${n} 条卡点自报`)
         }
-      } catch { /* 留账不丢，下一回合重新消费 */ }
+      } catch {
+        // 消费标记失败留痕（#291 / ADR-0091）：留账不丢，下一回合重新消费
+        rt.logger.warn('coach_growth.stuck_consume_failed', { course: job.course, targets: stuckTargets.length })
+      }
     }
   } catch (err) {
     const corpusRef = failCorpus(rt, STATIONS.growth, err)
@@ -1110,8 +1116,10 @@ export async function resetCourseChain(rt: HostRuntime, ctx: Context, courseKey:
       await enqueueGeneration(rt, ctx, c.name, node)
       queued++
     } catch (err) {
-      // 终点不进链（#199 生成门）：跳过；其余入队错误照常上抛
+      // 终点不进链（#199 生成门）：跳过；其余入队错误照常上抛。
+      // 行跳过留痕（#290 / ADR-0091）：INFO 指针，整课链的静默跳过不再无痕
       if ((err as { code?: unknown }).code !== 'ENDPOINT_GENERATION_FORBIDDEN') throw err
+      rt.logger.info('content.queue.line_skipped', { course: c.name, node })
     }
   }
   return { reset, queued }

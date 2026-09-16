@@ -235,14 +235,20 @@ export async function loadDraft(fs: VaultFs, path: string): Promise<GrowthDraftD
 }
 
 /** 扫描在途草稿（同课程至多一份；目录 Missing/空 = null，合法空态）。多个文件在目录
- * 时取字典序最新（幂等自愈面——正常流程不会出现多份；残留旧文件由下次 finish/取消清场）。 */
-export async function findActiveDraft(fs: VaultFs, paths: Paths, root: string): Promise<GrowthDraftDoc | null> {
+ * 时取字典序最新（幂等自愈面——正常流程不会出现多份；残留旧文件由下次 finish/取消清场）。
+ * onCorrupt（#291 观测缝）：损坏/非本格式的文件逐个回调（文件名，含后缀），不改变「坏档
+ * 视为无在途」的读侧语义——调用方据此发 growth.draft.corrupt 留痕。 */
+export async function findActiveDraft(
+  fs: VaultFs, paths: Paths, root: string,
+  onCorrupt?: (file: string) => void,
+): Promise<GrowthDraftDoc | null> {
   const dir = draftDirOf(paths, root)
   if (!fs.exists(dir)) return null
   const files = (await fs.readdir(dir)).filter(f => f.endsWith('.json')).sort()
   for (const f of files.reverse()) {
     const doc = await loadDraft(fs, `${dir}/${f}`)
     if (doc) return doc
+    onCorrupt?.(f)
   }
   return null
 }

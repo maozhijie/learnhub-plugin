@@ -23,6 +23,8 @@ import {
 } from './compass.ts'
 import { todayStr } from './dates.ts'
 import type { Clock } from './clock.ts'
+import type { Logger } from './logger.ts'
+import { noopLogger } from './logger.ts'
 import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
 import { RECHECK_DAYS_DEFAULT } from './params.ts'
@@ -591,6 +593,9 @@ export function endpointGuardErrorsOf(spec: EditProposalSpec, anchors: EndpointA
 
 export class GraphProposals {
   private concepts: ConceptRegistry
+  /** 调试日志端口（#253 / ADR-0080；#290/#291 附录登记接线）：题库随迁丢失与去重扫描
+   * 跳过留痕由本类发。缺省 noop——既有构造点零改动；宿主装配显式接引擎 logger。 */
+  private logger: Logger
   constructor(
     private paths: Paths,
     private store: Store,
@@ -602,7 +607,9 @@ export class GraphProposals {
     /** 时钟端口（#175 阶段①）：decided/now 戳与学习日缺省都经它取时。 */
     private clock: Clock,
     private fs: VaultFs,
+    logger: Logger = noopLogger,
   ) {
+    this.logger = logger
     this.concepts = new ConceptRegistry(paths, this.fs)
   }
 
@@ -806,7 +813,7 @@ export class GraphProposals {
           //    graphAfter 里旧名已不存在/位置已变，会让联动静默失效）
           name: '笔记联动（改名/归档）',
           run: async () => {
-            for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(root, graph, oldName, newName)
+            for (const [oldName, newName] of Object.entries(renames)) await this.relocateNote(prop.course, root, graph, oldName, newName)
             for (const node of dels) await this.archiveNote(root, graph, node, prop.id)
           },
         },
@@ -1299,6 +1306,8 @@ export class GraphProposals {
       try {
         spec = validateConfusableCandidateProposal(await this.loadArtifact(p.artifact)).spec
       } catch {
+        // 提案去重扫描跳过留痕（#291 / ADR-0091）：产物缺失/损坏的旧提案不参与比对
+        this.logger.debug('graph.proposal.scan_skip', { kind: 'confusable_pair', id: p.id })
         continue // 产物缺失/损坏的旧提案不参与比对（它自己 apply 时会 fail loud）
       }
       if (spec && conceptPairKey(spec.a, spec.b) === dupKey) {
@@ -1345,7 +1354,7 @@ export class GraphProposals {
   }
 
   /** 改名联动课程笔记：搬文件 + 更新 fm.node + 题库随迁；无笔记静默跳过。 */
-  private async relocateNote(root: string, graph: Graph, node: string, newName?: string): Promise<void> {
+  private async relocateNote(course: string, root: string, graph: Graph, node: string, newName?: string): Promise<void> {
     if (!graph.nset.has(node)) return
     const oldPath = this.paths.courseNotePath(root, node)
     const targetName = newName ?? node
@@ -1374,7 +1383,8 @@ export class GraphProposals {
       const bankDir = this.paths.courseRoot(root)
       const oldBank = `${bankDir}/题库/${safeFilename(node)}.yaml`
       if (this.fs.exists(oldBank)) {
-        // 随迁失败 fail loud（#295）：吞掉会让题库继续挂旧节点名，静默数据不一致
+        // 随迁失败 fail loud（#295；#291 的 graph.apply.bank_follow_miss 随吞错点消失
+        // 退役——fail loud 已是更强的可见性，不必再留 WARN 指针）
         try {
           await this.fs.rename(oldBank, `${bankDir}/题库/${safeFilename(targetName)}.yaml`)
         } catch (err) {

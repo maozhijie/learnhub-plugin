@@ -19,6 +19,7 @@ import type { FsrsBlock, Fm, CourseEntry, EArchiveRec, LearnerCardKind } from '.
 import type { Paths } from './paths.ts'
 import { safeFilename } from './paths.ts'
 import type { Store } from './store.ts'
+import type { Logger } from './logger.ts'
 import type { Registry } from './registry.ts'
 import type { QuestionBank, BankDoc } from './question-bank.ts'
 import type { Projects } from './projects.ts'
@@ -317,6 +318,8 @@ export class LearnerCards {
 export interface LearnerDeps {
   /** 时钟端口（#175 阶段①）：习惯重复 ts 戳。 */
   clock: Clock
+  /** 调试日志端口（#253 / ADR-0080；#290 附录登记接线）：共用题库遍历的 Broken 见闻留痕。 */
+  logger: Logger
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
   store: Pick<Store, 'appendBandRec' | 'appendEArchive' | 'appendHabitRepeat' | 'appendJournal' | 'appendReceipt' | 'appendReview' | 'bandRecsAll' | 'habitRepeatsAll' | 'journalTail' | 'loadPins' | 'practiceAll' | 'receiptsAll' | 'reviewLogAll' | 'savePins'>
@@ -512,7 +515,17 @@ export class LearnerSubsystem {
     const courseRoot = this.e.paths.courseRoot(c.root)
     for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
       const node = f.replace(/\.yaml$/, '')
-      await fn(node, await this.e.bank.load(courseRoot, node))
+      try {
+        await fn(node, await this.e.bank.load(courseRoot, node))
+      } catch (err) {
+        // Broken 见闻指针（#290）：明细在 data-check 报告；照旧上抛（消费方各自分流），
+        // 日志只补「哪个节点坏了」的可见性
+        this.e.logger.debug('bank.card.broken_seen', {
+          node,
+          error: err instanceof Error ? err.message : String(err),
+        })
+        throw err
+      }
     }
   }
 

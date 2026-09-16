@@ -245,7 +245,7 @@ export class LearnhubEngine {
     this.schema = assertSchemaVersion(this.paths.learnhubConfigPath, this.fs)
     this.registry = new Registry(this.paths, this.fs)
     this.store = new Store(this.paths, this.clock, this.fs)
-    this.content = new Content(this.paths, this.clock, this.fs)
+    this.content = new Content(this.paths, this.clock, this.fs, this.logger)
     this.bank = new QuestionBank(this.paths, this.fs)
     this.concepts = new ConceptRegistry(this.paths, this.fs)
     this.learnerCards = new LearnerCards(this.paths, this.clock, this.fs)
@@ -257,7 +257,7 @@ export class LearnhubEngine {
     // 生长闸门注入（#146 插入/旁支调速）：三率流水在门面（账本/提案/练习），受理与
     // apply 双门经此回调消费同一份闸门判定。
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot,
-      spec => this.growth2.growthGateErrors(spec), this.clock, this.fs)
+      spec => this.growth2.growthGateErrors(spec), this.clock, this.fs, this.logger)
     this.projects = new Projects(this.paths, this.store, this.clock, this.fs)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course), this.fs)
     this.lab = new LabSubsystem({
@@ -294,7 +294,7 @@ export class LearnhubEngine {
       refreshRepCard: (c, graph, node) => this.content2.refreshRepCard(c, graph, node),
     })
     this.learner = new LearnerSubsystem({
-      clock: this.clock, fs: this.fs,
+      clock: this.clock, fs: this.fs, logger: this.logger,
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, projects: this.projects, habits: this.habits,
       skills: this.skills, learnerCards: this.learnerCards, noteManifest: this.noteManifest,
@@ -326,7 +326,7 @@ export class LearnhubEngine {
       saveNodeNote: (path, fm, body) => this.content2.saveNodeNote(path, fm, body),
     })
     this.bank2 = new BankSubsystem({
-      clock: this.clock, fs: this.fs,
+      clock: this.clock, fs: this.fs, logger: this.logger,
       store: this.store, paths: this.paths, registry: this.registry,
       bank: this.bank, errorCards: this.errorCards, concepts: this.concepts,
       proposals: this.proposals, schedCache: this.schedCache,
@@ -349,7 +349,7 @@ export class LearnhubEngine {
       isNoteSourceCourse: courseKey => this.channels.isNoteSourceCourse(courseKey),
     })
     this.graph = new GraphSubsystem({
-      clock: this.clock, fs: this.fs,
+      clock: this.clock, fs: this.fs, logger: this.logger,
       store: this.store, paths: this.paths, projects: this.projects, proposals: this.proposals,
       concepts: this.concepts, registry: this.registry, bank: this.bank,
       vaultRoot: this.vaultRoot,
@@ -362,6 +362,7 @@ export class LearnhubEngine {
       experimentApply: pid => this.lab.experimentApply(pid),
     })
     this.content2 = new ContentSubsystem({
+      logger: this.logger,
       store: this.store, paths: this.paths, registry: this.registry, concepts: this.concepts, bank: this.bank,
       content: this.content, sessions: this.sessions, learnerCards: this.learnerCards,
       vaultRoot: this.vaultRoot, jolRng: () => this.jolRng, clock: this.clock, fs: this.fs,

@@ -34,6 +34,7 @@ import type { BandPref } from './adaptive.ts'
 import type { ErrorCard } from './error-cards.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { Clock } from './clock.ts'
+import type { Logger } from './logger.ts'
 import { render } from './prompt-render.ts'
 import { GRADING_OPEN_QUESTION_PROMPT, GRADING_OPEN_QUESTION_REFERENCE, GRADING_REASK_PROMPT, GRADING_REFLECTION_PROMPT } from './prompts/content.ts'
 
@@ -41,6 +42,9 @@ import { GRADING_OPEN_QUESTION_PROMPT, GRADING_OPEN_QUESTION_REFERENCE, GRADING_
 export interface ContentDeps {
   /** 时钟端口（#175 阶段①）：回收站目录戳与评分失败日志 ts。 */
   clock: Clock
+  /** 调试日志端口（#253 / ADR-0080；#290 附录登记接线）：contentPack 登记表降级、
+   * reviewQueue 读分流、判卷重试指针与整篇管线的富块/别名修复留痕由本子系统发。 */
+  logger: Logger
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
   store: Store
@@ -143,7 +147,9 @@ export class ContentSubsystem {
     opts?.onPrior?.(prior.audit)
     // 废弃条目从生成注入面退出（#262 / ADR-0084）：内容包 §12 误解坑位 / §13 前置概念档位
     // 按 retired 剔除。登记表 Broken 不拦生成（降级为不过滤，与 vault 先验检索同款，ADR-0071）。
-    const { entries } = await queryEntriesFor(this.e.concepts, c.root)
+    const { entries, error } = await queryEntriesFor(this.e.concepts, c.root)
+    // 登记表 Broken 降级不静默（#290）：读侧照旧不过滤，INFO 指针留痕
+    if (error) this.e.logger.info('content.pack.registry_broken', { course: c.name })
     const retiredConcepts = deprecatedNames(entries)
     // endpoint 随锚入包（#200）：后继预告的终点措辞读锚现算，普通前沿叶子不再被误标终点
     const pack = this.e.content.contextPack(graph, state, node, c.name, { omitDeliverables: opts?.omitDeliverables, endpoints, retiredConcepts })
@@ -212,7 +218,12 @@ export class ContentSubsystem {
       const target = `${courseRoot}/${f.rel}`
       await atomicWrite(target, f.html, this.e.fs)
     }
-    const fixed = Content.fixRichBlocks((await this.e.content.fixAliases(c.root, split.body)).body)
+    // 整篇路径的确定性修复留痕（#290）：与节路径（content.ts sectionApply）同款指针事件
+    const aliasFix = await this.e.content.fixAliases(c.root, split.body)
+    if (aliasFix.table_size === 0) this.e.logger.info('content.gate.alias_missing', { node })
+    const rich = Content.fixRichBlocksReport(aliasFix.body)
+    if (rich.blocks > 0) this.e.logger.info('content.repair.rich_blocks', { node, blocks: rich.blocks, langs: rich.langs })
+    const fixed = rich.body
     const gate = await this.e.content.gateReport(graph, c.root, node, fixed)
     const html = Content.checkInteractiveHtml(split.files)
     if (!gate.passed || html.findings.length) {
@@ -618,6 +629,11 @@ export class ContentSubsystem {
       try {
         files = await this.e.fs.readdir(this.e.paths.bankDir(c.root))
       } catch {
+        // 读异常与 Missing 分流留痕（#290）：missing = 尚无题库目录（合法空态）；
+        // io = EBUSY/EPERM 类应浮出的读故障——DEBUG 指针，明细靠重试复现
+        this.e.logger.debug('content.review_queue.fallback', {
+          why: this.e.fs.exists(this.e.paths.bankDir(c.root)) ? 'io' : 'missing',
+        })
         continue
       }
       for (const f of files.filter(f => f.endsWith('.yaml')).sort()) {
@@ -874,6 +890,8 @@ export class ContentSubsystem {
         } catch (err) {
           lastError = err instanceof Error ? err.message : String(err)
           await this.logGradingFailure({ ...ref, kind: q.kind, attempt, error: lastError, raw })
+          // 指针级重试观测（#290）：明细在 logGradingFailure 留痕，日志只记第几次
+          this.e.logger.debug('bank.quiz.grading_retry', { kind: q.kind, attempt })
         }
       }
       throw new Error(`[${op}] AI 判卷输出不可用，本次作答未记录（请重试，或核对题目/模型输出）：${lastError}`)
