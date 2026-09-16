@@ -42,10 +42,10 @@ import { Content } from '../src/engine/content/content.ts'
 import { YAML } from '../src/engine/yaml.ts'
 import { validateBank } from '../src/engine/content/question-bank.ts'
 import { validateEditProposal } from '../src/engine/proposals.ts'
-import { splitDecompileDoc, validatePlanArtifact } from '../src/engine/project-decompile.ts'
+import { splitDecompileDoc, validatePlanArtifact } from '../src/engine/practice/project-decompile.ts'
 import { validateErrorCards } from '../src/engine/content/error-cards.ts'
 import { validateRouteBody } from '../src/engine/compass.ts'
-import { parseReceiptReview } from '../src/engine/receipts.ts'
+import { parseReceiptReview } from '../src/engine/practice/receipts.ts'
 import { parseCorpusFile } from '../src/host/corpus.ts'
 
 /** 模板版本标记（每条模板头；与 PROMPT_CHANGELOG 的版本号同源）。 */

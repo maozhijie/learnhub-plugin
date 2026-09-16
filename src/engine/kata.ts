@@ -18,13 +18,13 @@
 import { dayOfTs, inWeek, weekStartOf } from './dates.ts'
 import { round2, pctOf } from './grading.ts'
 import { obsidianLink } from './output.ts'
-import { execRatingScore } from './project-exec.ts'
-import type { ProjectExecRec } from './project-exec.ts'
+import { execRatingScore } from './practice/project-exec.ts'
+import type { ProjectExecRec } from './practice/project-exec.ts'
 import { crossingText, etaHorizonOf } from './compass.ts'
 import type { CompassEta, RouteReconcile } from './compass.ts'
 import { dueReviewFirstPushes, trueRetention } from './sched/memory.ts'
 import type { PracticeRec, JournalRec, ReviewRec } from './types.ts'
-import type { HabitRepeatRec } from './habits.ts'
+import type { HabitRepeatRec } from './practice/habits.ts'
 
 export const KATA_KIND = 'weekly_kata'
 

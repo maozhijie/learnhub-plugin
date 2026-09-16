@@ -15,8 +15,8 @@ import { join } from 'node:path'
 import {
   validatePlanItems, validatePlanArtifact, validateMilestoneArtifact,
   gateMilestone, milestoneFileOf, PROJECT_LIFECYCLES, FADING_TIERS, planRevisionDiff,
-} from '../src/engine/projects.ts'
-import type { PlanItem } from '../src/engine/projects.ts'
+} from '../src/engine/practice/projects.ts'
+import type { PlanItem } from '../src/engine/practice/projects.ts'
 import { Content } from '../src/engine/content/content.ts'
 import { withVault } from './helpers/vault.ts'
 

@@ -57,7 +57,7 @@ export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = 
     what: '缝的共享门错修复轮：门错误 + 被拒原文回灌重产恰一次，仍败以站点 fatal 抛两轮死因',
   },
   decompileRepairPrompt: {
-    file: 'engine/project-decompile.ts', witness: ['export function decompileRepairPrompt'],
+    file: 'engine/practice/project-decompile.ts', witness: ['export function decompileRepairPrompt'],
     what: '目标反编译：产物校验/名字对账死因回灌恰一次',
   },
   invokesOncePerQuestion: {

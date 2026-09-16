@@ -13,7 +13,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { cooccurrencePairs, orientCandidate, coWeight } from '../src/engine/project-enc.ts'
+import { cooccurrencePairs, orientCandidate, coWeight } from '../src/engine/practice/project-enc.ts'
 import { withVault, tfQuestion } from './helpers/vault.ts'
 
 // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }

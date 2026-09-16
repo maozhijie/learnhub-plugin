@@ -11,7 +11,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { habitStreak, automationCurve, validateHabitDoc } from '../src/engine/habits.ts'
+import { habitStreak, automationCurve, validateHabitDoc } from '../src/engine/practice/habits.ts'
 import { localDay, withVault } from './helpers/vault.ts'
 
 // 学习日口径 = 本地日历日（helpers.localDay），不用 UTC 日算术

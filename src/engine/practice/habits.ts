@@ -18,12 +18,12 @@
  *
  * Missing/Broken 纪律沿用 ADR-0004：实体文件缺失 = 合法空态；存在但坏 = Broken 抛出。
  */
-import type { VaultFs } from './io.ts'
-import { atomicWrite } from './io.ts'
-import { YAML } from './yaml.ts'
-import { todayStr, parseDay, fmtDay } from './dates.ts'
-import type { Clock } from './clock.ts'
-import type { Paths } from './paths.ts'
+import type { VaultFs } from '../io.ts'
+import { atomicWrite } from '../io.ts'
+import { YAML } from '../yaml.ts'
+import { todayStr, parseDay, fmtDay } from '../dates.ts'
+import type { Clock } from '../clock.ts'
+import type { Paths } from '../paths.ts'
 
 export type HabitStatus = 'active' | 'archived'
 export const HABIT_STATUSES: HabitStatus[] = ['active', 'archived']

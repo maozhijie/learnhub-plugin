@@ -12,7 +12,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { milestonePrice } from '../src/engine/sched/xp.ts'
-import { validatePlanItems } from '../src/engine/projects.ts'
+import { validatePlanItems } from '../src/engine/practice/projects.ts'
 import { withVault, tfQuestion } from './helpers/vault.ts'
 
 // ---- 纯函数：过点定价 ----

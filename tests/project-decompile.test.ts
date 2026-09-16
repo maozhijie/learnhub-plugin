@@ -14,11 +14,11 @@
 import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { decompileGoalOf, decompileRepairPrompt, decompileTerms, reconcilePlanNodes, splitDecompileDoc } from '../src/engine/project-decompile.ts'
+import { decompileGoalOf, decompileRepairPrompt, decompileTerms, reconcilePlanNodes, splitDecompileDoc } from '../src/engine/practice/project-decompile.ts'
 import { Content } from '../src/engine/content/content.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { YAML } from '../src/engine/yaml.ts'
-import type { PlanItem } from '../src/engine/projects.ts'
+import type { PlanItem } from '../src/engine/practice/projects.ts'
 import { withVault } from './helpers/vault.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
 

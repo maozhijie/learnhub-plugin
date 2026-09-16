@@ -18,7 +18,7 @@ import { join } from 'node:path'
 import {
   execRatingScore, exercisedEncEdges, classifyCross, masteryAggregate,
   execEvidenceScore, recommendTier,
-} from '../src/engine/project-exec.ts'
+} from '../src/engine/practice/project-exec.ts'
 import { masteryOfFm } from '../src/engine/sched/srs.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse } from './helpers/drafted.ts'

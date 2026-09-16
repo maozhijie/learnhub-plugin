@@ -11,7 +11,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { wantsFullReview, receiptsUntilNextFull, parseReceiptReview, RECEIPT_KIND_LABEL } from '../src/engine/receipts.ts'
+import { wantsFullReview, receiptsUntilNextFull, parseReceiptReview, RECEIPT_KIND_LABEL } from '../src/engine/practice/receipts.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { withVault } from './helpers/vault.ts'
 

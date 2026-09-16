@@ -4,7 +4,7 @@
  * canonical 调度、不设门禁；仅作用当日（date 过期自动失效）。未就绪节点照常
  * 可 pin——就绪提示随事件带出，引擎提议非指令。零依赖纯函数（接缝 S29）。
  */
-import type { ExecutionIntention } from './habits.ts'
+import type { ExecutionIntention } from './practice/habits.ts'
 
 /** 一条 pin 记录（state/今日pin.json；中心级、跨课程/节点皆可）。
  * intention（C-5 #84）：挂载的执行意图（if-then 计划）——共享 ExecutionIntention

@@ -8,8 +8,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { drawRecallQuestions } from '../src/engine/project-recall.ts'
-import type { RecallPool } from '../src/engine/project-recall.ts'
+import { drawRecallQuestions } from '../src/engine/practice/project-recall.ts'
+import type { RecallPool } from '../src/engine/practice/project-recall.ts'
 import { withVault, tfQuestion } from './helpers/vault.ts'
 
 // ---- 纯函数：抽题 ----

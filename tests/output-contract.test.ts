@@ -17,7 +17,7 @@ import {
 import type { OutputContract, PromptBump } from '../src/engine/content/output-contracts.ts'
 import { splitContractSection, withContractLast } from '../src/engine/prompt-assembly.ts'
 import { DISPUTE_REVIEW_SYSTEM, OPEN_QUESTION_GRADING_SYSTEM, REFLECTION_GRADING_SYSTEM } from '../src/engine/grading.ts'
-import { receiptReviewSystem } from '../src/engine/receipts.ts'
+import { receiptReviewSystem } from '../src/engine/practice/receipts.ts'
 import { solverPromptFor } from '../src/engine/content/question-audit.ts'
 import { QUALITY_REVIEW_SYSTEM } from '../src/engine/content/quality-review.ts'
 import { STATIONS } from '../src/host/corpus.ts'
