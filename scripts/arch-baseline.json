@@ -1,232 +1,232 @@
 {
-  "$comment": [
-    "架构门基线（ADR-0047 棘轮：实际 == 基线；涨了失败、降了未同步下调也失败）。",
-    "只在清理提交里改这一份；改的理由写在同一个提交里。重写：node scripts/arch-baseline.mjs --update",
-    "四个装配方向（dead 声明未用 / missing 用而未声明 / unwired 声明未接线 / surplus 接线未声明）不进基线——它们必须是 0，由 tests/arch-guards.test.ts 直接卡。",
-    "typeErrors 只记有错的文件（未列出即 0 处）；tsc 版本换档（typescript/@types/node 均精确锁版本）会整体重排，故换档必须与基线同提交。"
-  ],
-  "depsFace": {
-    "BankDeps": {
-      "declared": 27,
-      "used": 27,
-      "wired": 27,
-      "slots": {
-        "handles": 10,
-        "facade": 17,
-        "fns": 0
-      }
-    },
-    "ChannelsDeps": {
-      "declared": 18,
-      "used": 18,
-      "wired": 18,
-      "slots": {
-        "handles": 9,
-        "facade": 9,
-        "fns": 0
-      }
-    },
-    "ContentDeps": {
-      "declared": 32,
-      "used": 32,
-      "wired": 32,
-      "slots": {
-        "handles": 11,
-        "facade": 21,
-        "fns": 0
-      }
-    },
-    "GraphDeps": {
-      "declared": 17,
-      "used": 17,
-      "wired": 17,
-      "slots": {
-        "handles": 10,
-        "facade": 7,
-        "fns": 0
-      }
-    },
-    "GrowthDeps": {
-      "declared": 20,
-      "used": 20,
-      "wired": 20,
-      "slots": {
-        "handles": 8,
-        "facade": 12,
-        "fns": 0
-      }
-    },
-    "LabDeps": {
-      "declared": 15,
-      "used": 15,
-      "wired": 15,
-      "slots": {
-        "handles": 7,
-        "facade": 8,
-        "fns": 0
-      }
-    },
-    "LearnerDeps": {
-      "declared": 24,
-      "used": 24,
-      "wired": 24,
-      "slots": {
-        "handles": 11,
-        "facade": 13,
-        "fns": 0
-      }
-    },
-    "ProjectDeps": {
-      "declared": 19,
-      "used": 19,
-      "wired": 19,
-      "slots": {
-        "handles": 10,
-        "facade": 9,
-        "fns": 0
-      }
-    },
-    "SchedDeps": {
-      "declared": 16,
-      "used": 16,
-      "wired": 16,
-      "slots": {
-        "handles": 8,
-        "facade": 8,
-        "fns": 0
-      }
-    }
+ "$comment": [
+  "架构门基线（ADR-0047 棘轮：实际 == 基线；涨了失败、降了未同步下调也失败）。",
+  "只在清理提交里改这一份；改的理由写在同一个提交里。重写：node scripts/arch-baseline.mjs --update",
+  "四个装配方向（dead 声明未用 / missing 用而未声明 / unwired 声明未接线 / surplus 接线未声明）不进基线——它们必须是 0，由 tests/arch-guards.test.ts 直接卡。",
+  "typeErrors 只记有错的文件（未列出即 0 处）；tsc 版本换档（typescript/@types/node 均精确锁版本）会整体重排，故换档必须与基线同提交。"
+ ],
+ "depsFace": {
+  "BankDeps": {
+   "declared": 27,
+   "used": 27,
+   "wired": 27,
+   "slots": {
+    "handles": 10,
+    "facade": 17,
+    "fns": 0
+   }
   },
-  "sizes": {
-    "src/client/index.tsx": 155,
-    "src/client/jsx.d.ts": 25,
-    "src/commands/index.ts": 71,
-    "src/commands/types.ts": 131,
-    "src/commands/图谱.ts": 313,
-    "src/commands/学习.ts": 675,
-    "src/commands/学习者产出.ts": 700,
-    "src/commands/实验室.ts": 216,
-    "src/commands/维护.ts": 289,
-    "src/commands/通道.ts": 227,
-    "src/commands/项目.ts": 399,
-    "src/commands/题库.ts": 361,
-    "src/engine/adaptive.ts": 81,
-    "src/engine/advance.ts": 106,
-    "src/engine/agent.ts": 251,
-    "src/engine/analysis.ts": 332,
-    "src/engine/anki.ts": 323,
-    "src/engine/attribution.ts": 261,
-    "src/engine/audit.ts": 327,
-    "src/engine/bank-advice.ts": 117,
-    "src/engine/bank-cleanup.ts": 28,
-    "src/engine/calibration.ts": 110,
-    "src/engine/clock.ts": 19,
-    "src/engine/coach-round.ts": 461,
-    "src/engine/coach-tools.ts": 528,
-    "src/engine/coach.ts": 61,
-    "src/engine/compass.ts": 288,
-    "src/engine/complexity.ts": 268,
-    "src/engine/concepts.ts": 737,
-    "src/engine/content-subsystem.ts": 1055,
-    "src/engine/content.ts": 1520,
-    "src/engine/data-check.ts": 1001,
-    "src/engine/dates.ts": 126,
-    "src/engine/error-cards.ts": 352,
-    "src/engine/evidence-streams.ts": 39,
-    "src/engine/explain.ts": 92,
-    "src/engine/goals.ts": 51,
-    "src/engine/grading.ts": 401,
-    "src/engine/graph-subsystem.ts": 607,
-    "src/engine/graph.ts": 643,
-    "src/engine/growth-draft.ts": 262,
-    "src/engine/growth-subsystem.ts": 1624,
-    "src/engine/habits.ts": 202,
-    "src/engine/health.ts": 105,
-    "src/engine/html-comments.ts": 52,
-    "src/engine/index.ts": 856,
-    "src/engine/io.ts": 102,
-    "src/engine/jol.ts": 78,
-    "src/engine/kata.ts": 345,
-    "src/engine/learner-cards.ts": 1364,
-    "src/engine/llm.ts": 82,
-    "src/engine/logger.ts": 48,
-    "src/engine/memory.ts": 118,
-    "src/engine/nof1.ts": 958,
-    "src/engine/note-source.ts": 1234,
-    "src/engine/notes.ts": 334,
-    "src/engine/optimize.ts": 140,
-    "src/engine/output-contracts.ts": 736,
-    "src/engine/output.ts": 68,
-    "src/engine/params.ts": 66,
-    "src/engine/paths.ts": 200,
-    "src/engine/probation.ts": 415,
-    "src/engine/project-decompile.ts": 211,
-    "src/engine/project-enc.ts": 72,
-    "src/engine/project-exec.ts": 261,
-    "src/engine/project-recall.ts": 78,
-    "src/engine/projects.ts": 1333,
-    "src/engine/prompt-assembly.ts": 42,
-    "src/engine/prompt-render.ts": 51,
-    "src/engine/proposals.ts": 1658,
-    "src/engine/quality-audit.ts": 114,
-    "src/engine/quality-review-report.ts": 222,
-    "src/engine/quality-review.ts": 592,
-    "src/engine/quality-rubrics.ts": 386,
-    "src/engine/quality.ts": 60,
-    "src/engine/question-audit.ts": 279,
-    "src/engine/question-bank.ts": 1596,
-    "src/engine/question-dedup.ts": 88,
-    "src/engine/question-diversity.ts": 302,
-    "src/engine/question-hygiene.ts": 246,
-    "src/engine/receipts.ts": 270,
-    "src/engine/registry.ts": 153,
-    "src/engine/sandbox.ts": 221,
-    "src/engine/sched-subsystem.ts": 547,
-    "src/engine/schema.ts": 79,
-    "src/engine/sediment.ts": 229,
-    "src/engine/seed.ts": 408,
-    "src/engine/self-note.ts": 46,
-    "src/engine/sessions.ts": 617,
-    "src/engine/shuffle.ts": 17,
-    "src/engine/skills.ts": 259,
-    "src/engine/sleep.ts": 41,
-    "src/engine/srs.ts": 191,
-    "src/engine/store.ts": 501,
-    "src/engine/stuck-report.ts": 83,
-    "src/engine/thermostat.ts": 138,
-    "src/engine/vault-links.ts": 451,
-    "src/engine/vault-prior.ts": 375,
-    "src/engine/views.ts": 225,
-    "src/engine/write-unit.ts": 71,
-    "src/engine/xp.ts": 173,
-    "src/engine/yaml.ts": 53,
-    "src/generation-jobs.ts": 217,
-    "src/host/api.ts": 83,
-    "src/host/clock.ts": 12,
-    "src/host/corpus.ts": 343,
-    "src/host/handlers.ts": 699,
-    "src/host/http.ts": 54,
-    "src/host/jobs.ts": 1249,
-    "src/host/llm.ts": 389,
-    "src/host/log-file.ts": 268,
-    "src/host/params.ts": 229,
-    "src/host/quality-review.ts": 255,
-    "src/host/route-table.ts": 74,
-    "src/host/runtime.ts": 281,
-    "src/host/smoke.ts": 387,
-    "src/host/spike.ts": 742,
-    "src/host/static.ts": 133,
-    "src/host/tool-handlers.ts": 287,
-    "src/host/tools.ts": 125,
-    "src/host/vault-fs.ts": 24,
-    "src/index.ts": 90,
-    "src/tool-contracts.ts": 54
+  "ChannelsDeps": {
+   "declared": 18,
+   "used": 18,
+   "wired": 18,
+   "slots": {
+    "handles": 9,
+    "facade": 9,
+    "fns": 0
+   }
   },
-  "typeErrors": {},
-  "adapterFace": {
-    "clockReads": 1,
-    "mathRandom": 0,
-    "fsImports": 0,
-    "fsCalls": 0
+  "ContentDeps": {
+   "declared": 32,
+   "used": 32,
+   "wired": 32,
+   "slots": {
+    "handles": 11,
+    "facade": 21,
+    "fns": 0
+   }
+  },
+  "GraphDeps": {
+   "declared": 17,
+   "used": 17,
+   "wired": 17,
+   "slots": {
+    "handles": 10,
+    "facade": 7,
+    "fns": 0
+   }
+  },
+  "GrowthDeps": {
+   "declared": 21,
+   "used": 21,
+   "wired": 21,
+   "slots": {
+    "handles": 8,
+    "facade": 13,
+    "fns": 0
+   }
+  },
+  "LabDeps": {
+   "declared": 15,
+   "used": 15,
+   "wired": 15,
+   "slots": {
+    "handles": 7,
+    "facade": 8,
+    "fns": 0
+   }
+  },
+  "LearnerDeps": {
+   "declared": 24,
+   "used": 24,
+   "wired": 24,
+   "slots": {
+    "handles": 11,
+    "facade": 13,
+    "fns": 0
+   }
+  },
+  "ProjectDeps": {
+   "declared": 19,
+   "used": 19,
+   "wired": 19,
+   "slots": {
+    "handles": 10,
+    "facade": 9,
+    "fns": 0
+   }
+  },
+  "SchedDeps": {
+   "declared": 16,
+   "used": 16,
+   "wired": 16,
+   "slots": {
+    "handles": 8,
+    "facade": 8,
+    "fns": 0
+   }
   }
+ },
+ "sizes": {
+  "src/client/index.tsx": 155,
+  "src/client/jsx.d.ts": 25,
+  "src/commands/index.ts": 71,
+  "src/commands/types.ts": 131,
+  "src/commands/图谱.ts": 313,
+  "src/commands/学习.ts": 675,
+  "src/commands/学习者产出.ts": 700,
+  "src/commands/实验室.ts": 216,
+  "src/commands/维护.ts": 289,
+  "src/commands/通道.ts": 227,
+  "src/commands/项目.ts": 399,
+  "src/commands/题库.ts": 361,
+  "src/engine/adaptive.ts": 81,
+  "src/engine/advance.ts": 106,
+  "src/engine/agent.ts": 251,
+  "src/engine/analysis.ts": 332,
+  "src/engine/anki.ts": 323,
+  "src/engine/attribution.ts": 261,
+  "src/engine/audit.ts": 327,
+  "src/engine/bank-advice.ts": 117,
+  "src/engine/bank-cleanup.ts": 28,
+  "src/engine/calibration.ts": 110,
+  "src/engine/clock.ts": 19,
+  "src/engine/coach-round.ts": 485,
+  "src/engine/coach-tools.ts": 528,
+  "src/engine/coach.ts": 61,
+  "src/engine/compass.ts": 288,
+  "src/engine/complexity.ts": 268,
+  "src/engine/concepts.ts": 737,
+  "src/engine/content-subsystem.ts": 1055,
+  "src/engine/content.ts": 1520,
+  "src/engine/data-check.ts": 1001,
+  "src/engine/dates.ts": 126,
+  "src/engine/error-cards.ts": 352,
+  "src/engine/evidence-streams.ts": 39,
+  "src/engine/explain.ts": 92,
+  "src/engine/goals.ts": 51,
+  "src/engine/grading.ts": 401,
+  "src/engine/graph-subsystem.ts": 607,
+  "src/engine/graph.ts": 643,
+  "src/engine/growth-draft.ts": 262,
+  "src/engine/growth-subsystem.ts": 1545,
+  "src/engine/habits.ts": 202,
+  "src/engine/health.ts": 105,
+  "src/engine/html-comments.ts": 52,
+  "src/engine/index.ts": 857,
+  "src/engine/io.ts": 102,
+  "src/engine/jol.ts": 78,
+  "src/engine/kata.ts": 345,
+  "src/engine/learner-cards.ts": 1364,
+  "src/engine/llm.ts": 82,
+  "src/engine/logger.ts": 48,
+  "src/engine/memory.ts": 118,
+  "src/engine/nof1.ts": 958,
+  "src/engine/note-source.ts": 1234,
+  "src/engine/notes.ts": 334,
+  "src/engine/optimize.ts": 140,
+  "src/engine/output-contracts.ts": 715,
+  "src/engine/output.ts": 68,
+  "src/engine/params.ts": 66,
+  "src/engine/paths.ts": 200,
+  "src/engine/probation.ts": 415,
+  "src/engine/project-decompile.ts": 211,
+  "src/engine/project-enc.ts": 72,
+  "src/engine/project-exec.ts": 261,
+  "src/engine/project-recall.ts": 78,
+  "src/engine/projects.ts": 1333,
+  "src/engine/prompt-assembly.ts": 42,
+  "src/engine/prompt-render.ts": 51,
+  "src/engine/proposals.ts": 1658,
+  "src/engine/quality-audit.ts": 114,
+  "src/engine/quality-review-report.ts": 222,
+  "src/engine/quality-review.ts": 592,
+  "src/engine/quality-rubrics.ts": 371,
+  "src/engine/quality.ts": 60,
+  "src/engine/question-audit.ts": 279,
+  "src/engine/question-bank.ts": 1596,
+  "src/engine/question-dedup.ts": 88,
+  "src/engine/question-diversity.ts": 302,
+  "src/engine/question-hygiene.ts": 246,
+  "src/engine/receipts.ts": 270,
+  "src/engine/registry.ts": 153,
+  "src/engine/sandbox.ts": 221,
+  "src/engine/sched-subsystem.ts": 547,
+  "src/engine/schema.ts": 79,
+  "src/engine/sediment.ts": 229,
+  "src/engine/seed.ts": 408,
+  "src/engine/self-note.ts": 46,
+  "src/engine/sessions.ts": 617,
+  "src/engine/shuffle.ts": 17,
+  "src/engine/skills.ts": 259,
+  "src/engine/sleep.ts": 41,
+  "src/engine/srs.ts": 191,
+  "src/engine/store.ts": 501,
+  "src/engine/stuck-report.ts": 83,
+  "src/engine/thermostat.ts": 138,
+  "src/engine/vault-links.ts": 451,
+  "src/engine/vault-prior.ts": 375,
+  "src/engine/views.ts": 225,
+  "src/engine/write-unit.ts": 71,
+  "src/engine/xp.ts": 173,
+  "src/engine/yaml.ts": 53,
+  "src/generation-jobs.ts": 217,
+  "src/host/api.ts": 83,
+  "src/host/clock.ts": 12,
+  "src/host/corpus.ts": 343,
+  "src/host/handlers.ts": 699,
+  "src/host/http.ts": 54,
+  "src/host/jobs.ts": 1252,
+  "src/host/llm.ts": 389,
+  "src/host/log-file.ts": 268,
+  "src/host/params.ts": 229,
+  "src/host/quality-review.ts": 255,
+  "src/host/route-table.ts": 74,
+  "src/host/runtime.ts": 283,
+  "src/host/smoke.ts": 387,
+  "src/host/spike.ts": 742,
+  "src/host/static.ts": 133,
+  "src/host/tool-handlers.ts": 287,
+  "src/host/tools.ts": 125,
+  "src/host/vault-fs.ts": 24,
+  "src/index.ts": 90,
+  "src/tool-contracts.ts": 54
+ },
+ "typeErrors": {},
+ "adapterFace": {
+  "clockReads": 1,
+  "mathRandom": 0,
+  "fsImports": 0,
+  "fsCalls": 0
+ }
 }

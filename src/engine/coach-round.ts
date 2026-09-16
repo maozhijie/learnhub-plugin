@@ -19,18 +19,13 @@
  *   含本批照走）与参照块渲染——零写侧，读法锁「模型推演，非承诺」。
  *
  * 裁决语义（算子集、停机规则）在提示词、归生长批受理票 #145——本票只管感知。
- * 零依赖纯函数（接缝 S51）。
+ * 零依赖纯函数（接缝 S51）。#273 起双沙盘仲裁参照随旧单发路径退场（本票不再持沙盘面）。
  */
 import { dayOfTs, parseDay, daysBetween } from './dates.ts'
 import { pctOf } from './grading.ts'
-import { render } from './prompt-render.ts'
-import { ARBITRATION_EVIDENCE } from './prompts/projects.ts'
 import { dueReviewFirstPushes, trueRetention } from './memory.ts'
 import { SEDIMENT_KINDS } from './sediment.ts'
 import type { SedimentFold } from './sediment.ts'
-import { SANDBOX_NODE_EST_DEFAULT } from './sandbox.ts'
-import { nodeKeyOf } from './types.ts'
-import type { SandboxCard, SandboxCurvePoint, SandboxNode } from './sandbox.ts'
 import type { PracticeRec, ReviewRec, Misconception } from './types.ts'
 
 // ---- 行为摘要：窗口（最近 7 学习日或 10 节取大） ----
@@ -308,12 +303,101 @@ export const COACH_COLD_START_EST_MULT = 1.5
  * 面板下发。跳过与面板下发是显式重新裁决——上一次停摆裁决不再代表现状（重拉阻尼豁免在宿主入队侧）。 */
 export type CoachTrigger = 'node_complete' | 'node_skip' | 'session_start' | 'queue_idle' | 'panel_dispatch'
 
-/** 教练回合单段装配的观测记录（#145 两段式 effort；#150 增仲裁段；#157 增回灌重裁段）：
- * tier/effort 定档，operator 为该段裁决产出的算子标签，disagreement = 该段是否声明真分歧
- * （轻量段 true → 升级全量段；全量段 true → 升级双沙盘仲裁段；仲裁段为终审，声明只作
- * 可观测留痕）。repair = 受理门拒收后的回灌重裁段（门错误回灌教练重裁一次，恰一段）。 */
+/** 思路官提示词两族（#273）：trigger → 族的纯函数映射。常规生长族（node_complete /
+ * session_start / queue_idle）平裁下一步方向；显式重裁族（node_skip / panel_dispatch）
+ * 是显式重新裁决——上次裁决摘要随包回灌，可沿用可推翻。收尾朝向**不是**提示词族：
+ * sealed 是批形态触发的引擎自动标记（proposals.ts），在 plan 内表现为算子判断。 */
+export type CoachPromptFamily = 'routine' | 'recheck'
+
+export function coachPromptFamily(trigger: CoachTrigger): CoachPromptFamily {
+  return trigger === 'node_skip' || trigger === 'panel_dispatch' ? 'recheck' : 'routine'
+}
+
+/** 提示词键（templates.ts 注册名）：族 → 模板键的单源映射。 */
+export const COACH_PLAN_PROMPT_KEYS = {
+  routine: '思路官回合',
+  recheck: '思路官重裁',
+} as const
+
+/** 思路官交接契约（#273）：零节点名、零图上引用——意图句台阶 + 概念名（逐字在册）+
+ * est 提示；recheck 仅指插入批的预注册复诊（与生长批 note.recheck 同形状），不引入
+ * 新回路。 */
+export interface GrowthPlanHandover {
+  operator: string
+  reason: string
+  target_endpoints: string[]
+  steps: Array<{ intent: string; teaches_concept?: string; est_hint?: number }>
+  recheck?: { metric: string; days?: number }
+}
+
+/** 思路官计划的 schema 门（纯函数，错误作数据）：operator 枚举（含停摆）、reason 必填、
+ * steps 逐条 intent 必填且零节点名形态（禁 pre/节点名字段）、teaches_concept 非空时为
+ * 字符串、est_hint 正数、recheck 仅插入批携带且 metric 枚举、前进/换向非停摆必声明
+ * target_endpoints。course 键允许携带（照抄上下文包标题）不校验。 */
+export function validatePlanHandover(doc: unknown, courseName: string): string[] {
+  const errors: string[] = []
+  if (typeof doc !== 'object' || doc === null) return ['[coach-plan] 计划不是 YAML 映射（结构不合法）。']
+  const d = doc as Record<string, unknown>
+  const PLAN_OPERATORS = ['前进', '插入', '巩固', '旁支', '换向', '停摆']
+  if (!PLAN_OPERATORS.includes(String(d.operator))) {
+    errors.push(`[coach-plan] operator 非法：${String(d.operator)}（允许 ${PLAN_OPERATORS.join('/')}）`)
+  }
+  if (typeof d.reason !== 'string' || !d.reason.trim()) {
+    errors.push('[coach-plan] 缺 reason——方向裁决必须带一句话理由。')
+  }
+  if (d.course !== undefined && d.course !== courseName) {
+    errors.push(`[coach-plan] course「${String(d.course)}」与课程「${courseName}」不符。`)
+  }
+  const endpoints = Array.isArray(d.target_endpoints) ? d.target_endpoints : []
+  if (d.operator === '前进' || d.operator === '换向') {
+    if (!endpoints.length) errors.push('[coach-plan] 前进/换向计划必须声明 target_endpoints（朝向声明）。')
+  } else if (d.target_endpoints !== undefined && !endpoints.length && d.target_endpoints !== undefined && !Array.isArray(d.target_endpoints)) {
+    errors.push('[coach-plan] target_endpoints 必须是字符串数组。')
+  }
+  const steps = d.steps
+  if (steps !== undefined && !Array.isArray(steps)) {
+    errors.push('[coach-plan] steps 必须是列表（停摆时省略或空列表）。')
+  } else if (Array.isArray(steps)) {
+    steps.forEach((st, i) => {
+      const s = (st ?? {}) as Record<string, unknown>
+      if (typeof s.intent !== 'string' || !s.intent.trim()) {
+        errors.push(`[coach-plan] steps[${i}] 缺 intent——台阶用意图句描述，不写节点名。`)
+      }
+      if (s.teaches_concept !== undefined && (typeof s.teaches_concept !== 'string' || !s.teaches_concept.trim())) {
+        errors.push(`[coach-plan] steps[${i}] teaches_concept 非空时必须是概念名（逐字在册）。`)
+      }
+      if (s.est_hint !== undefined && (typeof s.est_hint !== 'number' || !(s.est_hint > 0))) {
+        errors.push(`[coach-plan] steps[${i}] est_hint 必须是正数（分钟）。`)
+      }
+      // 零名字契约：计划里出现图 op 字段 = 思路官越权写补丁（粒度变焦归执行官）
+      for (const banned of ['op', 'name', 'node', 'pre', 'ops']) {
+        if (s[banned] !== undefined) errors.push(`[coach-plan] steps[${i}] 出现「${banned}」——交接计划零节点名零操作，补丁归执行官。`)
+      }
+    })
+  }
+  if (d.recheck !== undefined) {
+    if (d.operator !== '插入') {
+      errors.push('[coach-plan] recheck 仅 operator=插入 时携带。')
+    } else {
+      const rc = (d.recheck ?? {}) as Record<string, unknown>
+      const METRICS = ['前进恢复', '卡点集中度降幅', '保留率恢复']
+      if (!METRICS.includes(String(rc.metric))) {
+        errors.push(`[coach-plan] recheck.metric 非法：${String(rc.metric)}（允许 ${METRICS.join('/')}）`)
+      }
+      if (rc.days !== undefined && (typeof rc.days !== 'number' || rc.days < 5 || rc.days > 20)) {
+        errors.push('[coach-plan] recheck.days 合法区间 5–20 学习日。')
+      }
+    }
+  }
+  return errors
+}
+
+/** 教练两站回合的观测记录（#273 思路官/执行官拆分）：tier 区分站与段——plan =
+ * 思路官单发（常规/重裁族同键）、plan_repair = 计划门拒后的回灌重裁（恰一次）、
+ * executor = 执行官草稿回路（operator 取最后成功 finish 批的算子）。disagreement
+ * 在思路官侧随计划携带、执行官侧恒 false（分歧语义归思路官，#271 口径）。 */
 export interface CoachGrowthSegment {
-  tier: 'light' | 'full' | 'arbitration' | 'repair'
+  tier: 'plan' | 'plan_repair' | 'executor'
   effort: 'fast' | 'deep'
   operator: string
   disagreement: boolean
@@ -375,66 +459,6 @@ export function readyDepthCheck(input: {
     warnings.push(`就绪深度 ${input.ready} 低于前瞻需求 ${required}（深度 ${depth}${cold_start ? `，冷启动首周 ×${COACH_COLD_START_EST_MULT}` : ''}）——教练回合应裁决生长。`)
   }
   return { ready: input.ready, depth, required, cold_start, ok, exhausted: false, warnings }
-}
-
-// ---- 双沙盘仲裁（#150：全量段仍真分歧 → 终审段的两份推演参照） ----
-
-/** 仲裁参照的两份沙盘总体：before = 现状照走（注入总体原样）；after = 含本批候选
- * 节点照走（add_node 逐一追加未开始节点与代表卡——est 缺省 15 与总体采集同口径、
- * 已有同名节点跳过）。纯函数：不改注入数组。沙盘零写侧纪律不动（ADR-0025）——
- * 两份总体都只进读侧蒙特卡洛，不落盘、不进门禁。 */
-export function arbitrationPopulations(
-  nodes: SandboxNode[], cards: SandboxCard[],
-  added: Array<{ name: string; est?: number }>, course: string,
-): {
-  before: { nodes: SandboxNode[]; cards: SandboxCard[] }
-  after: { nodes: SandboxNode[]; cards: SandboxCard[] }
-} {
-  const extraNodes: SandboxNode[] = []
-  const extraCards: SandboxCard[] = []
-  const known = new Set(nodes.map(n => n.node))
-  for (const a of added) {
-    if (!a.name || known.has(a.name)) continue
-    known.add(a.name)
-    extraNodes.push({
-      course, node: a.name,
-      est: typeof a.est === 'number' && a.est > 0 ? a.est : SANDBOX_NODE_EST_DEFAULT,
-      practice: { attempts: 0, correct: 0 },
-      started: false, skipped: false,
-    })
-    extraCards.push({ key: `node:${nodeKeyOf(course, a.name)}`, course, node: a.name, kind: 'node', fs: null })
-  }
-  return {
-    before: { nodes, cards },
-    after: { nodes: [...nodes, ...extraNodes], cards: [...cards, ...extraCards] },
-  }
-}
-
-/** 仲裁参照块渲染（终审段 prompt 末块）：两份计划的逐周总掌握分位带并排 + 读法一句
- * ——沙盘只模拟「记」的维持，本批的收益不在推演里，两带差异只读作预算/保留的代价
- * 参考；措辞锁死「模型推演，非承诺」（ADR-0025 照旧），终审归教练的教学判断。
- * 散文骨架住 `prompts/projects.ts`（#237 / ADR-0075：本函数只算变量——分位带、新增
- * 清单、分歧原文——再交 `render` 取值）；`band` 是逐周分位带的序列化，属动态材料。 */
-export function renderArbitrationEvidence(input: {
-  /** 全量段的分歧声明（原话携带，仲裁段读得到撕的是什么）。 */
-  disagreement: string
-  minutes_per_day: number
-  weeks: number
-  /** 本批候选新增节点名（渲染用；与推演总体的 after 追加一致）。 */
-  added: string[]
-  before: SandboxCurvePoint[]
-  after: SandboxCurvePoint[]
-}): string {
-  const band = (xs: SandboxCurvePoint[]): string =>
-    xs.map(p => `W${p.week} p50=${pctOf(p.p50)}/p80=${pctOf(p.p80)}`).join(' · ')
-  return render(ARBITRATION_EVIDENCE, {
-    disagreement: input.disagreement || '（未携带声明原文）',
-    minutesPerDay: input.minutes_per_day,
-    weeks: input.weeks,
-    beforeBand: band(input.before),
-    addedClause: input.added.length ? `，新增：${input.added.join('、')}` : '，本批无新增节点',
-    afterBand: band(input.after),
-  })
 }
 
 // ---- 沉淀折叠的教练投影（六区块包第 5 块「罗盘尾段」的沉淀半区） ----

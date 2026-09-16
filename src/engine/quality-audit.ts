@@ -52,14 +52,14 @@ export interface AuditAxis {
 /** 图质量面审计轴（#224 规格；#256 种子轴退役后仅存教练回合轴）。 */
 export const AUDIT_AXES: readonly AuditAxis[] = [
   {
-    id: 'coach-turn',
-    name: '教练回合裁决质量（算子选择 + 理由 vs 图面）',
-    stations: ['教练生长'],
-    rubric: '教练回合',
+    id: 'coach-plan',
+    name: '思路官方向裁决质量（算子 + 理由 vs 上下文）',
+    stations: ['教练思路'],
+    rubric: '教练思路',
     dimensions: [
-      { id: '生长纪律', focus: '新节点粒度/命名/依赖/边级自查是否兑现生成时纪律' },
-      { id: '算子语义', focus: '算子方向、接线义务、插入预注册、批规模是否守住算子语义' },
-      { id: '裁决与路线', focus: '分歧纪律与路线重写是否守非承诺措辞、停机转译是否得当' },
+      { id: '方向纪律', focus: '台阶粒度/意图句/最小必要方向是否兑现交接纪律' },
+      { id: '算子语义', focus: '朝向声明、插入预注册、零名字契约是否守住契约语义' },
+      { id: '重裁与停摆', focus: '重裁沿用或推翻是否说理、停机转译是否得当' },
     ],
   },
 ]

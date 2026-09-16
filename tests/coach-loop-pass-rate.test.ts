@@ -1,181 +1,87 @@
 /**
- * 受理门通过率对照实验（#163 AC3 / ADR-0041）：同一组「带幻觉的裁决草稿」，分别以
- * **单发形态**（#162 的盲盒上下文包——产裁决前无任何自查）与**工具回路形态**（#163——
- * 裁决前经 graph_view 核实节点名、concept_footprint 对表概念）送入生长站，统计
- * 受理门（propose）通过率。
+ * 受理门通过率对照基线（#163 AC3 实验的 #273 后继形态）：
  *
- * 实验设计（确定性，无随机）：8 个场景 = 2 类幻觉目标（pre 断边引用 / 概念名）
- * × 4 个「貌似合理但在图上不存在」的变体——幻觉形态来自实机死批证据（引用不存在的节点、
- * 概念未铸名；「区名幻觉」随 #275 写侧词汇退役（region/block 一律拒收）已不可能，该轴删除）。
- * 回路人格的修正**全部派生自工具回灌内容**（从 graph_view 提取逐字节点名、从 concept_footprint
- * 提取 canonical，按二元组最大相似度对表），不作弊携带真名——它演示的是回路机制的能力：
- * 工具访问让畸形草稿在裁决前有据可修。
+ * 旧实验（单发盲盒 vs 工具回路，8 场景 0/8 vs 8/8）随旧单发路径退场（#273 不留开关）。
+ * 新回路的「过门率下限」由两件东西构成，本文件锁前一半（结构性对照基线）：
  *
- * 口径声明：人格是脚本化的，本实验度量的是**机制能力**（给了工具与自查轮，幻觉能在
- * 过门前被证据修正），不是真实模型的首过率；真实模型收益以实机运行日志为准。
+ * 1. **结构性消灭幻觉面**：思路官交接计划零节点名零图上引用——旧实验的 8 个幻觉场景
+ *    （pre 断边引用 / 概念未铸名 × 4 变体）在新契约下**无法成立**：把节点名/图 op 塞进
+ *    计划 = 计划门当场拒收（validatePlanHandover）。本测试以同一组 8 变体回放，断言
+ *    全部被计划门拦截（对照基线：旧单发 0/8 → 新契约 8/8 拦截）。
+ * 2. **机制能力（脚本化全链首次过门 8/8）**：思路官 plan（脚本化）→ 执行官轨迹（脚本化）
+ *    → 真实提案管线，全链逐场景 applied——在 tests/coach-plan.test.ts 全链测试锁死。
+ *
+ * 口径声明照旧：人格是脚本化的，本组实验度量的是机制能力，不是真实模型的首过率。
  */
-import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { withVault } from './helpers/vault.ts'
-import { draftCourse } from './helpers/drafted.ts'
-import type { DraftSpec } from './helpers/drafted.ts'
-import { AgentSeam } from '../src/engine/agent.ts'
-import { systemClock } from '../src/host/clock.ts'
+import { validatePlanHandover } from '../src/engine/coach-round.ts'
 
-const SEED_VAULT = { registry: null, graph: null }
-
-/** 起草夹具（概念「变化率」随批铸名）：起点/终点 teach 引用（回路对表底座）。 */
-const CAPABILITY_DRAFT: DraftSpec = {
-  concepts: [{ canonical: '变化率' }],
-  starts: [{ name: '认识变化率', region: '基础', block: '起点块', basis: 'baseline', teaches: { 变化率: '会用' } }],
-  endpoint: { name: '用导数解决优化问题', region: '基础', block: '终点块', teaches: { 变化率: '会用' } },
-}
-
-/** 金样本裁决骨架（与 coach-growth 的金样本同形：前进批 + pre 引用 + teaches 对表；
- * #198 主线批必接线终点——set_pre 替换语义随批接线新前沿）。 */
-function goldVerdict(): string {
+/** 金样本计划骨架（与 coach-plan 的金计划同形：前进 + 朝向 + 意图句台阶）。 */
+function goldPlanYaml(): string {
   return [
     'course: 数学',
-    'note:',
-    '  operator: 前进',
-    '  reason: 前沿缺下一台阶，沿终点推进',
-    '  target_endpoints: [用导数解决优化问题]',
-    'route: |',
-    '  - **把变化率说成本质**：从日常速度出发建立「变化多快」的直觉。',
-    'ops:',
-    '  - op: add_node',
-    '    name: 平均变化率',
-    '    pre: [认识变化率]',
-    '    est: 15',
-    '    bloom: 理解',
-    '    difficulty: 2',
-    '    teaches: {变化率: 会用}',
-    '  - op: set_pre',
-    '    node: 用导数解决优化问题',
-    '    pre: [平均变化率]',
+    'operator: 前进',
+    'reason: 前沿缺下一台阶，沿终点推进',
+    'target_endpoints: [用导数解决优化问题]',
+    'steps:',
+    '  - intent: 从日常速度建立「变化多快」的直觉',
+    '    teaches_concept: 变化率',
+    '    est_hint: 15',
   ].join('\n') + '\n'
 }
 
-/** 幻觉场景：2 类目标 × 4 变体（貌似合理、图上/登记表不存在）。 */
+/** 幻觉场景（旧实验的 2 类目标 × 4 变体 → 新契约下的等价形态：越权写补丁/节点名）。 */
 const HALLUCINATIONS: Array<{ target: string; variants: string[]; apply: (v: string, yaml: string) => string }> = [
   {
-    target: 'pre 断边引用（节点名不存在）',
-    variants: ['认识变化律', '变化率认识', '认识变化率（基础）', '认识变化率初步'],
-    apply: (v, yaml) => yaml.replace('pre: [认识变化率]', `pre: [${v}]`),
+    target: '越权写图 op（补丁归执行官）',
+    variants: ['add_node', 'set_pre', 'del_node', 'rename'],
+    apply: (v, yaml) => yaml.replace('    est_hint: 15', `    est_hint: 15\n    op: ${v}`),
   },
   {
-    target: '概念未铸名（teaches 对表拒收）',
-    variants: ['变化律', '变化率概念', '变化率原理', '变化率（直觉）'],
-    apply: (v, yaml) => yaml.replace('teaches: {变化率: 会用}', `teaches: {${v}: 会用}`),
+    target: '节点名入计划（零名字契约）',
+    variants: ['平均变化率', '认识变化率初步', '导数直觉台阶', '变化率（直觉）'],
+    apply: (v, yaml) => yaml.replace('    teaches_concept: 变化率', `    teaches_concept: 变化率\n    name: ${v}`),
   },
 ]
 
-const SCENARIOS = HALLUCINATIONS.flatMap(h => h.variants.map(v => ({ target: h.target, variant: v, yaml: h.apply(v, goldVerdict()) })))
+const SCENARIOS = HALLUCINATIONS.flatMap(h => h.variants.map(v => ({ target: h.target, variant: v, yaml: h.apply(v, goldPlanYaml()) })))
 
-// ---- 回路人格的「证据修正」：全部派生自工具回灌文本，不携带真名 ----
+test('结构性对照基线（8 场景）：越权补丁/节点名入计划 → 计划门 8/8 拦截；金计划零错误', () => {
+  // 对照：金计划（零名字）过计划门
+  assert.deepEqual(validatePlanHandover(
+    { operator: '前进', reason: '前沿缺下一台阶', target_endpoints: ['用导数解决优化问题'], steps: [{ intent: '直觉台阶', teaches_concept: '变化率', est_hint: 15 }] },
+    '数学',
+  ), [], '金计划过门（对照基线的「回路侧」）')
 
-const bigrams = (s: string): Set<string> => new Set([...s].slice(0, -1).map((_, i) => s.slice(i, i + 2)))
-
-/** 二元组最大相似度对表：在候选里挑与幻觉名最接近的逐字名（无阈值——单候选必命中）。 */
-function bestMatch(bad: string, candidates: string[]): string {
-  const B = bigrams(bad)
-  let best = candidates[0]!
-  let bestScore = -1
-  for (const c of candidates) {
-    const A = bigrams(c)
-    let inter = 0
-    for (const x of A) if (B.has(x)) inter++
-    const score = inter / Math.max(1, Math.min(A.size, B.size))
-    if (score > bestScore) { bestScore = score; best = c }
-  }
-  return best
-}
-
-/** 从工具回灌文本提取取值域并修正草稿（回路人格的裁前自查）。只对表**引用**——
- * pre 必须命中既有节点或本批更早创建的节点、teaches 必须命中登记表 canonical；
- * add_node 的 name 是新节点名，合法地不在图上，不作对表。 */
-function selfCheckCorrect(draft: string, graphView: string, registryText: string): string {
-  const nodeNames = [...graphView.matchAll(/^- (.+?)（/gm)].map(m => m[1]!)
-  // #249 起概念面是 concept_footprint：词条档以 `### <canonical>` 分节
-  const concepts = [...registryText.matchAll(/^### (.+?)(?: *｜|$)/gm)].map(m => m[1]!)
-  // 本批新建节点是后续 op（终点接线 set_pre）的合法 pre 取值域（与受理门同口径）
-  const batchNames = [...draft.matchAll(/- op: add_node\n\s+name: (.+)/g)].map(m => m[1]!.trim())
-  const preTargets = [...nodeNames, ...batchNames]
-  let out = draft
-  // pre 引用对表节点名
-  out = out.replace(/pre: \[(.+?)\]/g, (_m, inner: string) =>
-    'pre: [' + inner.split('、').map(x => preTargets.includes(x.trim()) ? x.trim() : bestMatch(x.trim(), preTargets)).join('、') + ']')
-  // teaches 对表登记表 canonical
-  out = out.replace(/teaches: \{(.+?)\}/g, (_m, inner: string) =>
-    'teaches: {' + inner.split('、').map(kv => {
-      const [c, t] = kv.split(': ').map(s => s.trim())
-      return `${concepts.includes(c!) ? c : bestMatch(c!, concepts)}: ${t}`
-    }).join('、') + '}')
-  return out
-}
-
-/** 单发形态假实现（#162 站点形态）：盲产裁决，零工具轮。 */
-function singleShotFake(verdict: string): AgentSeam {
-  return new AgentSeam({ logger: memLogger(),
-    complete: async () => verdict,
-    stream: async () => ({ text: verdict, toolCalls: [] }),
-  }, systemClock)
-}
-
-/** 回路形态假实现（#163 站点形态）：先查图面与登记表，从回灌内容修正后再裁决。 */
-function loopFake(corrupted: string): AgentSeam {
-  const requests: Array<{ messages: Array<{ role: string; text?: string }>; tools?: Array<{ name: string }> }> = []
-  const seam = new AgentSeam({ logger: memLogger(),
-    complete: async () => { throw new Error('回路人格不走单发') },
-    stream: async req => {
-      requests.push({ messages: [...req.messages], tools: req.tools })
-      if (requests.length === 1) return { text: '先查图面与登记表再裁。', toolCalls: [{ id: 'g1', name: 'graph_view', arguments: '{}' }] }
-      if (requests.length === 2) return { text: '对表概念登记表。', toolCalls: [{ id: 'c1', name: 'concept_footprint', arguments: '{}' }] }
-      const graphView = requests[1]!.messages[2]!.text!
-      const registry = requests[2]!.messages[4]!.text!
-      return { text: selfCheckCorrect(corrupted, graphView, registry), toolCalls: [] }
-    },
-  }, systemClock)
-  return Object.assign(seam, { requests })
-}
-
-test('受理门通过率对照（8 场景）：单发 0/8 vs 回路 8/8——工具自查让幻觉在过门前被证据修正', async () => {
-  // 每场景一枚新 vault：金样本批会创建同名节点，跨场景不能共用一张图
-  let singlePass = 0
-  let loopPass = 0
+  let blocked = 0
   const seenTargets = new Set<string>()
   for (const sc of SCENARIOS) {
-    await withVault(SEED_VAULT, async ({ engine }) => {
-      // #256 种子通道退役：起草夹具直接落盘
-      await draftCourse(engine, CAPABILITY_DRAFT)
-
-      // 单发形态：盲产裁决被受理门拒收（零提案落盘）
-      await assert.rejects(
-        () => engine.growth2.coachGrowthBatch('数学', singleShotFake(sc.yaml)),
-        (err: unknown) => {
-          const msg = err instanceof Error ? err.message : String(err)
-          return /受理门拒收|区不存在|断边|未铸名|登记表/.test(msg)
-        },
-        `${sc.target}「${sc.variant}」应被受理门拒收`,
-      )
-      assert.equal((await engine.graph.graphProposals('pending', 'edit')).length, 0, '被拒批零落盘')
-
-      // 回路形态：裁前自查（graph_view + concept_registry）→ 证据修正 → 过门
-      const fake = loopFake(sc.yaml)
-      const out = await engine.growth2.coachGrowthBatch('数学', fake)
-      assert.equal(out.state, 'applied', `${sc.target}「${sc.variant}」经回路修正后应过受理门`)
-      assert.ok(out.trajectory.some(t => t.includes('graph_view')), '自查真的发生了（轨迹可证）')
-      assert.ok(out.applied!.compass_rewritten)
-      seenTargets.add(sc.target)
-      loopPass++
-    })
-    void singlePass
+    const errors = validatePlanHandover(
+      // 解析回放：把注入了越权字段的 YAML 当 object 校验（门吃解析产物，错误作数据）
+      injectAsObject(sc.yaml),
+      '数学',
+    )
+    assert.ok(errors.length > 0, `${sc.target}「${sc.variant}」应被计划门拒收`)
+    blocked++
+    seenTargets.add(sc.target)
   }
-  const singleRate = `${singlePass}/${SCENARIOS.length}`
-  const loopRate = `${loopPass}/${SCENARIOS.length}`
-
-  assert.equal(loopPass, SCENARIOS.length, `回路形态全过（实测 ${loopRate}）`)
-  assert.ok(singlePass < loopPass, `回路严格优于单发（单发 ${singleRate} vs 回路 ${loopRate}）`)
-  assert.equal(seenTargets.size, HALLUCINATIONS.length, '两类幻觉目标全覆盖')
+  assert.equal(blocked, SCENARIOS.length, `新契约结构性拦截全部幻觉形态（实测 ${blocked}/${SCENARIOS.length}）——旧单发对照 0/8 的后继基线`)
+  assert.equal(seenTargets.size, HALLUCINATIONS.length, '两类越权目标全覆盖')
 })
+
+/** 把回放 YAML 的 steps 项取成 object（门吃解析产物；这里手工还原注入字段）。 */
+function injectAsObject(yaml: string): Record<string, unknown> {
+  const op = yaml.match(/    op: (.+)/)?.[1]
+  const name = yaml.match(/    name: (.+)/)?.[1]
+  const step: Record<string, unknown> = { intent: '直觉台阶', teaches_concept: '变化率', est_hint: 15 }
+  if (op !== undefined) step.op = op.trim()
+  if (name !== undefined) step.name = name.trim()
+  return {
+    course: '数学',
+    operator: '前进',
+    reason: '前沿缺下一台阶，沿终点推进',
+    target_endpoints: ['用导数解决优化问题'],
+    steps: [step],
+  }
+}

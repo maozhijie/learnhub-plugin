@@ -51,7 +51,7 @@ import type { CompletionFold } from './seed.ts'
  * 允许 host 深导入的只有**纯声明面**——纯类型，与纯字符串常量（`engine/prompts/*.ts` 的
  * 提示词文本）。判据是「有行为吗」：纯声明面没有运行期语义，深导入不会把宿主焊到引擎内部
  * 装配上；**带行为的引擎子模块仍只准走门面**。 */
-export type { CoachTrigger, CoachCheck, CoachGrowthSegment } from './coach-round.ts'
+export type { CoachTrigger, CoachPromptFamily, CoachCheck, CoachGrowthSegment, GrowthPlanHandover } from './coach-round.ts';
 export type { GateVerdict } from './agent.ts'
 import { QuestionBank, validateBank, BankSubsystem } from './question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem } from './note-source.ts'
@@ -407,6 +407,7 @@ export class LearnhubEngine {
       graphApply: (kind, pid) => this.graph.graphApply(kind, pid),
       graphPropose: (kind, yamlText) => this.graph.graphPropose(kind, yamlText),
       graphReject: (pid, note) => this.graph.graphReject(pid, note),
+      graphProposals: (status, kind) => this.graph.graphProposals(status, kind),
       proposeConfusableCandidate: (courseKey, pair) => this.proposals.proposeConfusableCandidate(courseKey, pair),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),

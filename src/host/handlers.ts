@@ -577,7 +577,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
         r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}`).join('；')))
       .catch(() => undefined)
     sendJson(res, 200, await apiRun(rt, 'api/coach/growth', async () =>
-      enqueueGrowthBatch(rt, ctx, growthCourse, '面板下发（显式重新裁决）', undefined, { force: true })))
+      enqueueGrowthBatch(rt, ctx, growthCourse, '面板下发（显式重新裁决）', undefined, { force: true, trigger: 'panel_dispatch' })))
   },
   'POST /coach/stuck-report': async ({ rt, ctx, body, res }) => {
     // 卡点自报闭环（#248 / ADR-0077）：原话逐字落 practice 流水独立 kind（频控

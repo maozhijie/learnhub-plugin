@@ -7,7 +7,7 @@ import { GROWTH_OPERATORS } from '../src/engine/types.ts'
 
 test('P2: 存量内置模板全部升到 prompt/v6（生长式套件除外——新套件模板自带版本线）', () => {
   for (const kind of Object.keys(Content.PROMPT_KINDS)) {
-    if (kind === '罗盘初画' || kind === '教练回合' || kind === '执行官回合') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
+    if (kind === '罗盘初画' || kind === '思路官回合' || kind === '思路官重裁' || kind === '执行官回合') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
     const text = Content.PROMPT_KINDS[kind]!
     assert.ok(Content.promptVersionOf(text) >= 6, `${kind} 应升到 v6+`)
   }
@@ -159,97 +159,53 @@ test('#143: 罗盘初画模板 v1——非承诺措辞、批注软输入、路�
   assert.match(tpl, /块工作表/, '覆盖锚定课程按工作表块组织')
 })
 
-// ---- v7 教练回合契约（#198 / ADR-0055+0056；ADR-0076 多终点化）：主线批朝向声明 + 逐终点接线 ----
+// ---- v1 思路官回合契约（#273 两站编排）：算子集 + 停摆转译 + 零名字交接契约 ----
 
-test('#198: 教练回合模板 v7——主线批朝向声明（note.target_endpoints + 交汇优先）与收尾接线批（收尾即宣告该终点坡道铺通）', () => {
-  const tpl = Content.PROMPT_KINDS['教练回合']!
-  assert.ok(Content.promptVersionOf(tpl) >= 7, '教练回合应带版本标记 v7+')
-  assert.match(tpl, /主线批必声明朝向/, '前进批朝向声明锚点（ADR-0076 多终点化）')
-  assert.match(tpl, /note\.target_endpoints 必填/, '输出契约新增朝向声明字段（本批朝哪些终点长）')
-  assert.match(tpl, /交汇优先/, '多终点交汇节点合法且优先（能同时推进多个未达成终点）')
-  assert.match(tpl, /收尾即宣告该终点坡道铺通/, '收尾批 = 终点坡道铺通宣告（ADR-0056 / ADR-0076 多终点化）')
-  assert.match(tpl, /零 add_node 的纯 set_pre 接线批/, '收尾批形态（停摆前接线）')
-  assert.match(tpl, /禁长过目标/, '禁以终点为 pre')
-  assert.match(tpl, /豁免接线义务/, '旁支/巩固/插入豁免')
-})
-
-// ---- v2 教练回合契约（#150）：三段式分歧纪律——轻量→全量→双沙盘仲裁终审 ----
-
-test('#150: 教练回合模板 v2——真分歧升级双沙盘仲裁（终审、非承诺措辞照旧）', () => {
-  const tpl = Content.PROMPT_KINDS['教练回合']!
-  assert.ok(Content.promptVersionOf(tpl) >= 2, '教练回合 应带版本标记 v2+')
-  assert.match(tpl, /三段式与分歧纪律/, '三段式升级链（两段式扩三段）')
-  assert.match(tpl, /双沙盘/, '真分歧升级双沙盘仲裁')
-  assert.match(tpl, /终审/, '仲裁段结论为最终裁决')
-  assert.match(tpl, /模型推演，非承诺/, '沙盘参照非承诺措辞照旧（ADR-0025 纪律不动）')
-  assert.match(tpl, /不再写（没有更多段了）/, '终审后没有更多段')
-  assert.match(tpl, /六区块能裁动就绝不声明/, '仲裁税纪律：六区块能裁动不升级')
-})
-
-// ---- v1 教练回合契约（#145 / ADR-0033 滚动教练）：算子集 + 停机转译 + 两段式 + note/route 输出契约 ----
-
-test('#145: 教练回合模板 v1——五算子语义、停机转译、分歧升级、note/route/ops 输出契约', () => {
-  const tpl = Content.PROMPT_KINDS['教练回合']!
-  assert.ok(Content.promptVersionOf(tpl) >= 1, '教练回合 应带版本标记 v1+')
-  // 算子集五件与停机规则转译（前进=目标消费、旁支=教学消费不走复诊）
+test('#273: 思路官回合模板 v1——算子集含停摆、零名字交接契约、朝向声明、recheck 仅插入携带', () => {
+  const tpl = Content.PROMPT_KINDS['思路官回合']!
+  assert.ok(Content.promptVersionOf(tpl) >= 1, '思路官回合 应带版本标记 v1+')
+  // 算子集（五件 + 停摆；停机规则转译进算子语义）
   for (const op of GROWTH_OPERATORS) {
     assert.ok(tpl.includes(`**${op}**`), `算子集含「${op}」`)
   }
+  assert.match(tpl, /\*\*停摆\*\*/, '停摆 = 结构暂无需变化（steps 为空，裁决留痕）')
   assert.match(tpl, /目标消费/, '前进 = 目标消费（停机规则转译进算子语义）')
+  assert.match(tpl, /症状消费/, '插入 = 症状消费')
   assert.match(tpl, /教学消费/, '旁支 = 教学消费')
-  assert.match(tpl, /不走复诊/, '旁支/巩固不走复诊')
-  assert.match(tpl, /只引已教概念/, '巩固只引已教概念')
-  assert.match(tpl, /终点的增删归学习者/, '换向只裁决朝向，终点增删归学习者（图屏手加手删，锚不归提案管——ADR-0076）')
-  // 两段式与分歧纪律
-  assert.match(tpl, /轻量段/, '轻量段（显然步）')
-  assert.match(tpl, /免仲裁税/, '显然步免仲裁税')
-  assert.match(tpl, /真分歧/, '真分歧才声明')
-  assert.match(tpl, /disagreement/, '分歧声明字段（避让申诉 Dispute 词条）')
-  assert.match(tpl, /全量段/, '分歧升级全量段')
+  assert.match(tpl, /只行使已教概念/, '巩固只行使已教概念')
+  assert.match(tpl, /终点的增删归学习者/, '换向只裁决朝向，终点增删归学习者（ADR-0076）')
+  // 零名字契约：单轮零工具单发，粒度变焦归执行官
+  assert.match(tpl, /不持有任何工具/, '思路官零工具（交接契约的载体约束）')
+  assert.match(tpl, /零节点名、零图上引用/, '交接计划零名字（幻觉面结构性消失的锚点）')
+  assert.match(tpl, /意图句/, '台阶用意图句描述')
+  assert.match(tpl, /登记表档位/, '概念名逐字来自登记表档位区')
+  // 朝向声明与收尾朝向的算子判断（sealed 是批形态触发的引擎自动标记）
+  assert.match(tpl, /target_endpoints/, '朝向声明字段')
+  assert.match(tpl, /交汇优先/, '多终点交汇优先')
+  assert.match(tpl, /收尾朝向是算子判断的一部分/, '收尾不是提示词族——计划内算子判断')
   // 输出契约
-  assert.match(tpl, /note:/, 'note 区（算子+理由+分歧）')
-  assert.match(tpl, /operator: 前进\|插入\|巩固\|旁支\|换向/, '算子枚举锁死')
+  assert.match(tpl, /operator: 前进\|插入\|巩固\|旁支\|换向\|停摆/, '算子枚举（含停摆）')
   assert.match(tpl, /reason:/, '理由必填')
-  assert.match(tpl, /route: \|/, '罗盘随批重写（route 块）')
-  assert.match(tpl, /ops: \[\]/, '零操作=暂不产结构（合法语态）')
-  assert.match(tpl, /逐字来自图面/, '节点名/pre 引用逐字来自图面')
-  assert.match(tpl, /每批重算一次|不做一次性规划|≤8 个操作/, '批规模克制')
-  assert.match(tpl, /单引号/, 'YAML 单引号规则锚点')
-  // 停机语义：回合被拉起 = 就绪深度未满足
+  assert.match(tpl, /steps:/, '交接计划台阶列表')
+  assert.match(tpl, /teaches_concept/, '概念面字段（只写概念名）')
+  assert.match(tpl, /metric: 前进恢复\|卡点集中度降幅\|保留率恢复/, 'recheck metric 枚举锁死')
+  assert.match(tpl, /recheck 仅 operator=插入 时携带/, '非插入批禁带 recheck')
+  assert.match(tpl, /steps 为空 = 停摆/, '零步 = 停摆语态')
+  // 停机语义
   assert.match(tpl, /就绪深度检查未满足/, '停机转译：拉起即缺口')
 })
 
-// ---- v2 教练回合契约（#146 / 插入提案生命周期）：插入批复诊预注册 + 插入积极性调速 ----
+// ---- v1 思路官重裁契约（#273 显式重裁族）：上次裁决摘要回灌 + 沿用/推翻纪律 ----
 
-test('#146: 教练回合模板 v2——插入批 note.recheck 预注册（metric 三选一/days 缺省 10）与调速闸门措辞', () => {
-  const tpl = Content.PROMPT_KINDS['教练回合']!
-  assert.ok(Content.promptVersionOf(tpl) >= 2, '教练回合应带版本标记 v2+')
-  // 复诊预注册：metric 恰一枚可机判（小集合枚举锁死）+ 复诊期缺省
-  assert.match(tpl, /recheck/, 'recheck 预注册字段（随 note 区）')
-  assert.match(tpl, /metric: 前进恢复\|卡点集中度降幅\|保留率恢复/, 'metric 枚举锁死（可机判小集合）')
-  assert.match(tpl, /缺省 10 学习日|days 缺省 10/, '复诊期缺省 10 学习日')
-  assert.match(tpl, /自动结算/, '到期自动结算归引擎，教练不写结论')
-  // 调速闸门对教练可见（插入积极性调速器）
-  assert.match(tpl, /闸停|拒收/, '超限批被闸停/拒收的现势语义')
-  assert.match(tpl, /旁支占比|旁支超限|韧性闸门/, '旁支上限的韧性闸门')
-  // 插入批纪律与其他算子的边界
-  assert.match(tpl, /插入批纪律|note\.recheck 必填/, '插入批必须预注册')
-  assert.match(tpl, /不走复诊/, '旁支/巩固不走复诊')
-})
-
-// ---- v3 教练回合契约（ADR-0040）：生长纪律段——生成时质量自查回归提示词层 ----
-
-test('ADR-0040: 教练回合模板 v3——生长纪律（认知粒度/动作句/螺旋式/依赖充分性/边级自查）+ 上交前自查', () => {
-  const tpl = Content.PROMPT_KINDS['教练回合']!
-  assert.ok(Content.promptVersionOf(tpl) >= 3, '教练回合应带版本标记 v3+')
-  assert.match(tpl, /生长纪律/, '生成时质量段名（受理门只锁 schema 与结构事实）')
-  assert.match(tpl, /30 分钟/, '认知粒度 30 分钟自问')
-  assert.match(tpl, /动作句/, '动作句命名纪律')
-  assert.match(tpl, /螺旋式/, '螺旋式学习合法 + 名称可区分')
-  assert.match(tpl, /完整的直接前置集合/, '依赖充分性锚点')
-  assert.match(tpl, /真实依赖优先于难度曲线/, '依赖与难度的冲突序（跳跃=症状，留给插入）')
-  assert.match(tpl, /边级自查/, '逐边 verdict 纪律')
-  assert.match(tpl, /上交前/, 'pre-submit 自查清单锚点')
+test('#273: 思路官重裁模板 v1——显式重新裁决、上次裁决摘要随包、沿用或推翻说理', () => {
+  const tpl = Content.PROMPT_KINDS['思路官重裁']!
+  assert.ok(Content.promptVersionOf(tpl) >= 1, '思路官重裁 应带版本标记 v1+')
+  assert.match(tpl, /显式重新裁决/, '重裁族定位（node_skip / panel_dispatch）')
+  assert.match(tpl, /上次裁决摘要/, '摘要块随包回灌')
+  assert.match(tpl, /可沿用（现状未变）也可推翻/, '沿用或推翻的双向语义')
+  assert.match(tpl, /重裁不是重试/, '重裁纪律（推翻时 reason 说明）')
+  assert.match(tpl, /零节点名、零图上引用/, '零名字契约与常规族同构')
+  assert.match(tpl, /operator: 前进\|插入\|巩固\|旁支\|换向\|停摆/, '算子枚举同构')
 })
 
 // ---- v11 反编译契约（#240 / ADR-0076；#256 随种子链整体退役）：上交前自查 ----

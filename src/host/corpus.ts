@@ -94,7 +94,7 @@ export const STATIONS = {
   selfNote: '自注反馈',
   tutor: '老师辅导',
   explainBack: '讲给我听',
-  growth: '教练生长',
+  growth: '教练思路',
   /** 生长草稿执行官站（#271 / ADR-0088）：引擎侧 GROWTH_DRAFT_STATION 引门面常量对齐。 */
   growthDraft: GROWTH_DRAFT_STATION,
   compass: '罗盘',

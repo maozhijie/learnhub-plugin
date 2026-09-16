@@ -88,7 +88,12 @@ export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = 
   draftAuditRepair: {
     // #271 / ADR-0088：证人 = 写件工具分发处的字面量（draft_patch/draft_audit/draft_finish）。
     file: 'engine/growth-subsystem.ts', witness: ['draft_patch', 'draft_audit', 'draft_finish'],
-    what: '生长草稿执行官站：写件工具的门错误原文回灌 loop 继续修（轮数计入会话预算，不进 gateRepairRound；后者保留为旧路径最后兼底）',
+    what: '生长草稿执行官站：写件工具的门错误原文回灌 loop 继续修（轮数计入会话预算，不进 gateRepairRound）',
+  },
+  plannerRecheckOnce: {
+    // #273：证人 = 思路官重裁调用点（agent.repair 站名「教练思路」）。
+    file: 'engine/growth-subsystem.ts', witness: ["agent.repair('教练思路'", 'COACH_PLAN_FEEDBACK_BLOCK'],
+    what: '教练思路官：计划 schema 门拒收 → 门错误 + 被拒计划原文回灌重裁恰一次，仍败两轮死因抛出',
   },
 }
 
@@ -125,8 +130,8 @@ export const REPAIR_ROUND_LOCKS: Readonly<Record<string, string | null>> = {
   罗盘: 'compass.test.ts',
   课程节生成: 'section-split.test.ts',
   教练执行: null,
+  教练思路: 'coach-plan.test.ts',
   目标反编译: null,
-  教练生长: null,
   里程碑草案: null,
   判卷: null,
   申诉判卷: null,
@@ -407,24 +412,24 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     notes: '两段式防锚定（Phase 1 独立解题、明确忽略存储键）——全仓 LLM-as-judge 先例，#223 第二意见门继承此形态',
   },
   {
-    station: '教练生长',
-    templates: ['教练回合'],
+    station: '教练思路',
+    templates: ['思路官回合', '思路官重裁'],
     format: 'yaml',
     clause: YAML_CLAUSE,
-    allowed: ['单个 YAML 文档（course/note（operator+reason[+disappointment? disagreement+recheck]）/route/ops/concepts）'],
-    forbidden: ['代码围栏', '解释性文字', '终点出现在 add_node 的 pre 里（禁长过目标）', '非插入批携带 recheck'],
+    allowed: ['单个 YAML 文档（course/operator/reason/target_endpoints/steps[intent/teaches_concept/est_hint][+recheck]）——零节点名零图上引用'],
+    forbidden: ['代码围栏', '解释性文字', 'steps 内出现图 op 字段（op/name/node/pre/ops）——补丁归执行官'],
     repair: {
       rounds: 1,
-      mechanism: 'gateRepairRound',
-      feedback: '受理门反馈 + 被拒裁决原文随全量包回灌重裁（repair 单发，恰一次）',
-      escalate: '重裁段恒 deep 档',
-      note: '三段式回合：轻量段 fast 恒 1 调用 → 分歧升级全量段 deep → 仍真分歧双沙盘仲裁段；每段经 agentLoop 工具回路（K≤20，ADR-0077 上调）',
+      mechanism: 'plannerRecheckOnce',
+      feedback: '计划 schema 门错误 + 被拒计划原文回灌重裁（repair 单发，恰一次）',
+      escalate: '重裁恒 fast 档（两族同档）',
+      note: '两站编排（#273）：思路官单轮零工具单发（两族随触发点折叠），停摆计划不拉执行官；执行归「教练执行」站的草稿回路',
     },
     failureCodes: [],
     sensitivity: '推理创意',
     structuredEligible: false,
-    shape: { kind: 'yaml-top', keys: [{ key: 'note', shape: 'object' }, { key: 'route', shape: 'string' }, { key: 'ops', shape: 'array' }] },
-    notes: '受理门（schema/结构事实/概念对表/锚保护/巩固门/生长闸门/路线门）拒收零落盘；裁决语义全在提示词（生长纪律 ADR-0040）',
+    shape: { kind: 'yaml-top', keys: [{ key: 'operator', shape: 'string' }, { key: 'reason', shape: 'string' }, { key: 'steps', shape: 'array' }] },
+    notes: '交接契约零名字零引用（粒度变焦归执行官）；显式重裁族注入上次裁决摘要（applied edit 提案留痕）',
   },
   {
     station: '教练执行',
@@ -437,7 +442,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
       rounds: 1,
       mechanism: 'draftAuditRepair',
       feedback: 'draft_patch/draft_audit/draft_finish 的门错误原文 + 合法取值域回灌 loop 继续修（轮数计入会话预算；不进 gateRepairRound）',
-      note: 'gateRepairRound 保留为旧路径最后兼底（ADR-0088 裁决 8）；禁止空手结束 = 自然收束且有未发布增量 fail loud',
+      note: '禁止空手结束 = 自然收束且有未发布增量 fail loud；计划门修复轮归思路官站（plannerRecheckOnce）',
     },
     failureCodes: [],
     sensitivity: '规划',
@@ -643,42 +648,16 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     version: 3, date: '2026-09-14', changeType: '按终点分节（#240 / ADR-0076）：剩余路线一节一个终点，节头 - **终点名**：',
     expectedDelta: '路线正文从单列改多节（每终点 3–7 条阶段条目）；节头带锚记录的终点名、明确禁用标题行；同节点可出现在多节（交汇常态）。单终点课程的条目形态不变、多一节头行',
   }],
-  教练回合: [{
-    version: 6, date: '2026-09-13', changeType: '输出契约独立成节 `## 输出` 并置尾 + 拼装侧契约后置',
-    expectedDelta: 'note/route/ops schema 从「硬约束 1」移到末段（回灌重裁段同构）；算子语义与批规模纪律不变',
-  }, {
-    // 非模板变更（同一版本号下的第二条登记）：**注入面改形状**（#239 / ADR-0076 锚多终点化）。
-    // 模板文本一字未动，但上下文包三处随锚集合变：① 包头与「终点锚」区块逐终点一行
-    // （含目标描述与逐终点收尾宣告）；② 图面 `graph_view` 的终点行与细节行 ⚑ 逐终点标记，
-    // 零终点给「先加一个终点」行；③ 终点措辞由「承诺标记」正名为「方向标记」（ADR-0076
-    // 定位收缩：方向 + 停摆输入）。裁决语义与批规模纪律不变。
-    version: 6, date: '2026-09-14', changeType: '锚集合注入（#239；模板文本未动，上下文包与图面改逐终点）',
-    expectedDelta: '多终点课程：裁决视野从「一个方向」变「方向集合」，主线批接线义务按**每个**声明的终点核（受理门同步改，见 tests/README 门册 #239 段）。单终点课程输出无实质变化——预期增量只在措辞与「逐终点行」形态',
-  }, {
-    // #240 / ADR-0076 第五节：教练回合多终点化。模板文本改写：生长方向由上下文包逐
-    // 终点状态驱动（交汇优先），主线批接线义务声明 target_endpoints（受理门同步核）。
-    version: 7, date: '2026-09-14', changeType: '多终点裁决（#240 / ADR-0076）：note.target_endpoints 进输出契约 + 交汇优先 + 停摆判据改逐终点',
-    expectedDelta: '前进/换向含 add_node 的批多出 note.target_endpoints 字段（可多值），ops 必须对每个声明终点携带 set_pre；提示词新增交汇优先纪律与「同节点可进多个终点 pre」的合法性；route 改按终点分节。单终点课程：target_endpoints 仍必填（单元素），其余形态不变',
-  }, {
-    // #250 / ADR-0077：感知面升级。模板新增两节（感知面读法 / 卡点自报的消费），外加
-    // 注入块标题中立化与图面块渲染侧升级（同一版本号下要覆盖的两类变更面）。
-    version: 8, date: '2026-09-15', changeType: '感知面升级（#250 / ADR-0077）：全图摘要读法 + 工具空结果语义与归因三层取材 + 卡点自报消费纪律',
-    expectedDelta: '新增两节散文——「感知面读法」（全图摘要按骨架/健康分布/接线靶三读法；八件只读工具；归因三层取材「概念面 → 无 query 全表 → query 收窄」，明写「空结果 ≠ 不存在」）与「卡点自报的消费」（解读后直接成立插入症状、免行为窗口聚合；归因映射分层与宽窄归属由教练裁；插入定位按概念足迹，足迹空默认挂当前节点前置；别名收编提议留人审；零激励）。裁决语义、五算子、输出契约与批规模纪律均不变，预期增量主要是**归因与插入定位的依据来源**变清楚（不再靠猜查询词、不再等窗口证据），以及复习类结论的定向锚点表述',
-  }, {
-    // 非模板变更（同一版本号下的第二条登记）：**注入块与图面块的形状变**（模板文本只动
-    // 了上面两节）。① `COACH_INJECT_BLOCK` 标题由「里程碑计划修订注入」改为中立的
-    // 「外部注入」——同一 inject 通道也载卡点自报（#248），旧标题会把一条自报读成换线/
-    // 补支请求、指向错误算子纪律；② 图面块 `renderGrowthGraphView` 由「前沿细节 + 其余
-    // 名单」升级为逐节点一行全图摘要（深度序/区·块/阶段/掌握度 + pre 邻接同行，⚠ 弱掌握、
-    // ⚑ 终点；超 200 节点降级为区/块聚合 + 前沿细节 + 溢出行，⚠/⚑ 例外不截）；③ 工具面
-    // 七件 → 八件（concept_registry 由 concept_footprint 吸收，新增 upstream_dag），
-    // 回路预算 K≤6 → K≤20（#249）。
-    version: 8, date: '2026-09-15', changeType: '注入块标题中立化 + 图面块升全图摘要 + 工具面 7→8 + 回路预算 K=20（#249/#250）',
-    expectedDelta: '① 注入块的标题与框架句不再预判材料性质（材料自带小标题成为性质判定依据）；② 每批提示词的图面块从「前沿细节行 + 其余名单一行」变为**逐节点一行**——把全部节点名/区·块/pre 邻接/掌握度/⚠/⚑ 直接摆在裁决视野里，预期减少工具调用轮数（全图摘要拉低平均轮次本身就是这次升级的目的之一），大图（>200 节点）改吃聚合行 + 溢出行；③ 工具描述与白名单换名（concept_footprint / upstream_dag 在册，concept_registry 拒收）；④ 回路预算上限 6→20，撞顶 fail loud 的阈值随之改变（观测面基线同步）。**此项未做真模型对照**——若观察到教练回合裁决质量下降或工具调用显著变多，回退点就是这一行',
-  }, {
-    // #282 / Epic #275 T5：引擎读面去「区·块」死坐标——模板散文里的分区词同步退役。
-    version: 9, date: '2026-09-16', changeType: '去区·块（#282）：图面读法/硬约束/输出模板的分区坐标退役',
-    expectedDelta: '① 感知面读法改为「深度序｜阶段｜掌握度 + pre/teaches 同行 + 概念组读数表」，⚠ 密集处定位补「对照概念组读数看缺口落在哪个概念」；② 降级说明改为 depth 段聚合（与渲染侧 #281 一致）；③ 硬约束 2 去掉「区/块名逐字来自图面」；④ add_node 输出模板删 region/block 两行（写侧退役键 fail loud 拒收，模板再带必被拒）。裁决语义、五算子、输出契约其余部分不变。过门记录：check ✓；replay 报 3 件语料回归经 stash 对照确认为 HEAD 存量漂移（2026-09-13 语料的 op 词表/concepts 形状与种子起草站缺席清单），非本次变更引入；compare 未做真模型对照（同 v8 先例如实登记）',
+  思路官回合: [{
+    // #273：旧「教练回合」单发三段式退场，新站首版——产物从「生长批 YAML（note/route/ops）」
+    // 变为**交接计划**（零节点名零图上引用）；裁决语义保留算子集与停摆转译，粒度变焦归执行官。
+    version: 1, date: '2026-09-16', changeType: '新站（#273）：思路官方向裁决——单轮零工具单发产交接计划',
+    expectedDelta: '产物形状从 kind=edit 提案 YAML 变为 {operator, reason, target_endpoints, steps[intent/teaches_concept/est_hint], recheck?}——零节点名零引用，补丁归执行官草稿回路；停摆转译进算子集（operator=停摆或 steps 空）。预期增量是「方向裁决」与「粒度变焦」解耦，思路官不再持工具、不再抄节点名，幻觉面随零名字契约结构性消失。过门记录：check ✓；replay 报 3 件语料回归经对照确认为 HEAD 存量漂移（教练生长 2 件 + 种子起草 1 件，同 #282/#272 先例），非本次变更引入；compare 未做真模型对照（同 v8 先例如实登记）',
+  }],
+  思路官重裁: [{
+    // #273 显式重裁族：node_skip / panel_dispatch 触发；上次裁决摘要随包回灌，可沿用可推翻。
+    version: 1, date: '2026-09-16', changeType: '新站重裁族（#273）：显式重新裁决 + 上次裁决摘要注入',
+    expectedDelta: '与「思路官回合」同构的交接计划契约；多出「上次裁决摘要」块（applied edit 提案的算子/理由留痕）与沿用/推翻纪律（推翻时 reason 说明）。触发点映射：node_skip / panel_dispatch 走本族，其余走常规族。过门记录：check ✓；replay 报 3 件语料回归同上（存量漂移）；compare 未做真模型对照',
   }],
   执行官回合: [{
     version: 1, date: '2026-09-16', changeType: '新站（#271 / ADR-0088）：生长草稿执行官回合模板 v1',

@@ -452,7 +452,7 @@ const GROWTH_JOB_NODE = '生长批'
  * 入队）；在途防重入与已取消（明确的中止意图）照旧。豁免随任务携带（`growthForce`）
  * 进执行侧——就绪深度已满足时也不短路成停摆（#240 修：此前只在入队侧生效，
  * 「生长一步」在停摆图上恒空转）。 */
-export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean } = {}): { message: string; queued: boolean } {
+export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean; trigger?: CoachTrigger } = {}): { message: string; queued: boolean } {
   assertQueueWritable(rt)
   const key = `${course}/${GROWTH_JOB_NODE}`
   const last = rt.jobs.genJobs.get(key)
@@ -473,6 +473,7 @@ export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string
     model: llmCfg.model, message: `排队等待教练回合（${why}）…`,
     ...(inject ? { growthInject: inject } : {}),
     ...(opts.force === true ? { growthForce: true } : {}),
+    ...(opts.trigger ? { growthTrigger: opts.trigger } : {}),
   })
   persistGenJobs(rt)
   pumpGeneration(rt, ctx)
@@ -514,7 +515,7 @@ async function coachTrigger(rt: HostRuntime, ctx: Context, trigger: CoachTrigger
     lines.push(`${chk.course}：ready=${chk.ready}/${chk.required}${chk.ok ? '' : '（低于前瞻，已告警）'}`)
     if (chk.ok) continue
     try {
-      const enq = enqueueGrowthBatch(rt, ctx, chk.course, `${trigger} 触发（就绪深度 ${chk.ready}/${chk.required}）`, undefined, opts)
+      const enq = enqueueGrowthBatch(rt, ctx, chk.course, `${trigger} 触发（就绪深度 ${chk.ready}/${chk.required}）`, undefined, { ...opts, trigger })
       lines.push(enq.message)
     } catch (err) {
       lines.push(`「${chk.course}」生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
@@ -653,6 +654,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       // 显式重新裁决的豁免随任务进执行侧（#240）：面板「生长一步」/失败重试点过的
       // 那一轮，就绪深度已满足也不短路成停摆——否则按钮在停摆图上恒空转
       ...(job.growthForce === true ? { force: true } : {}),
+      ...(job.growthTrigger ? { trigger: job.growthTrigger } : {}),
       isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
     })
     if (r.state === 'idle') {
@@ -666,10 +668,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       job.growthOutcome = a.ops > 0 ? 'applied' : 'no_structure'
       job.status = 'done'
       const tierNote = r.segments
-        .map(s => `${{ light: '轻', full: '全', arbitration: '双沙盘仲裁', repair: '回灌重裁' }[s.tier] ?? s.tier}${s.disagreement ? '↑分歧升级' : ''}(${s.operator})`)
+        .map(s => `${{ plan: '思路官', plan_repair: '重裁', executor: '执行官' }[s.tier] ?? s.tier}${s.tier === 'plan_repair' ? '↑回灌' : ''}(${s.operator})`)
         .join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
-        + `${a.compass_rewritten ? '；罗盘已随批重写' : ''}｜${tierNote}｜理由：${p.reason}`
+        + `｜${tierNote}｜理由：${p.reason}`
       // 回路轨迹（#163）：裁决前查了哪些只读视图，生成页逐条可查
       if (r.trajectory?.length) job.message += `｜回路轨迹：${r.trajectory.join('；')}`
       // 受理批可含 del_node/rename（ADR-0039 写侧联动）：清扫悬空任务记录。
@@ -1189,6 +1191,7 @@ export function restoreGenJobs(rt: HostRuntime): void {
           // force 也是执行负载（#240：恢复后这一轮仍是显式重新裁决，不该被停摆短路）
           ...(typeof j.growthInject === 'string' ? { growthInject: j.growthInject } : {}),
           ...(j.growthForce === true ? { growthForce: true } : {}),
+          ...(j.growthTrigger !== undefined ? { growthTrigger: j.growthTrigger } : {}),
           ...(j.growthOutcome === 'idle' || j.growthOutcome === 'no_structure' || j.growthOutcome === 'applied'
             ? { growthOutcome: j.growthOutcome } : {}),
           // 图域任务负载随档恢复（#157）：形状由写入侧（面板下发）保证，这里只做

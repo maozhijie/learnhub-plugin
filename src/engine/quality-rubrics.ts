@@ -44,8 +44,8 @@ export interface RubricDimension {
 }
 
 export interface QualityRubric {
-  /** 产物类型（四类：大纲/节正文/题目/教练回合）。 */
-  id: '大纲' | '节正文' | '题目' | '教练回合'
+  /** 产物类型（四类：大纲/节正文/题目/教练思路）。 */
+  id: '大纲' | '节正文' | '题目' | '教练思路'
   product: string
   /** 消费本量规的生成站（语料站名，对账 host STATIONS）。 */
   stations: string[]
@@ -290,78 +290,63 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
     ],
   },
   {
-    id: '教练回合',
-    product: '教练生长批（裁决 + note 区 + route 重写 + ops 操作）',
-    stations: ['教练生长'],
+    id: '教练思路',
+    product: '思路官方向批（方向裁决 + 交接计划：operator/target_endpoints/steps/recheck?）',
+    stations: ['教练思路'],
     court: RUBRIC_COURTS,
     dimensions: [
       {
-        id: '生长纪律', name: '生长纪律（ADR-0040 生成时质量）',
+        id: '方向纪律', name: '方向纪律（意图句交接）',
         criteria: [
           {
-            id: '认知粒度', criterion: '每个新节点是独立学习行为单元：零基础学习者能在 30 分钟内从它的 pre 直接学会；est 按此诚实申报',
-            evidence: '引新节点名/pre/est 与 30 分钟自问对照；明显多步复合的节点点名',
-            source: '模板:教练回合', anchor: '30 分钟',
+            id: '台阶粒度', criterion: '每个台阶是独立学习行为单元：30 分钟量级、est_hint 诚实申报',
+            evidence: '引 steps 的 intent/est_hint 与 30 分钟量级对照；明显多步复合的台阶点名',
+            source: '模板:思路官回合', anchor: '30 分钟量级',
           },
           {
-            id: '动作句命名', criterion: '节点名大多是动作句（解/求/证/推导/比较/判定）；「理解 X」「学习 X」与「XX 基础语法」类复合泛称禁用；螺旋式重现名称可区分',
-            evidence: '引新节点名清单；层级不清近似名与复合泛称点名',
-            source: '模板:教练回合', anchor: '动作句',
+            id: '动作句意图', criterion: 'intent 写成动作句（解/求/证/推导/比较/判定……）；「理解 X」「学习 X」类层级不清表述禁用',
+            evidence: '引各台阶 intent 原句；层级不清/复合泛称点名',
+            source: '模板:思路官回合', anchor: '动作句意图',
           },
           {
-            id: '依赖充分性', criterion: '新节点的 pre 是完整的直接前置集合——不懂 pre 里任何一条都会卡住；不塞间接前置（传递依赖交给图）；真实依赖优先于难度曲线',
-            evidence: '引每条新 pre 边与「缺了会卡在哪」对照；塞间接前置/漏关键前置点名',
-            source: '模板:教练回合', anchor: '完整的直接前置集合',
-          },
-          {
-            id: '边级自查', criterion: '本批每条新 pre 边给一句 verdict：删掉这条边学习会在哪一步失控——答不出具体失控点 = 冗余不写',
-            evidence: '引边 verdict 原句；无 verdict 或失控点不可定位的边点名',
-            source: '模板:教练回合', anchor: '边级自查',
+            id: '最小必要方向', criterion: '一份计划只服务一个算子方向；看清全图再裁，不为一次性规划',
+            evidence: '引 operator 与 steps 朝向对照；跨方向混裁/一次性铺满点名',
+            source: '模板:思路官回合', anchor: '最小必要方向',
           },
         ],
       },
       {
-        id: '算子语义', name: '算子与结构语义',
+        id: '算子语义', name: '算子与契约语义',
         criteria: [
           {
-            id: '接线义务', criterion: '前进/换向批含 add_node 时必须声明朝向（note.target_endpoints）并对每个声明终点携带 set_pre 接线（整体替换语义，交汇优先——同一新节点可进多个终点的 pre）；收尾走零 add_node 的纯 set_pre 接线批（收尾即宣告该终点坡道铺通）；终点不出现在 add_node 的 pre 里',
-            evidence: '引批 ops、note.target_endpoints 与终点 pre 现势对照；缺朝向声明/缺接线/终点当 pre 的批点名',
-            source: '模板:教练回合', anchor: '主线批必声明朝向',
+            id: '朝向声明', criterion: '前进/换向必声明 target_endpoints（可多个，交汇优先）；停摆 steps 为空',
+            evidence: '引计划朝向与终点锚对照；缺朝向声明/无谓停摆点名',
+            source: '模板:思路官回合', anchor: '必声明朝向',
           },
           {
-            id: '插入预注册', criterion: '插入批 note.recheck 必填：metric 恰一枚可机判（与症状同源）、days 缺省 10 学习日；非插入批不得携带 recheck',
-            evidence: '引插入批 recheck 与症状对照；metric 与症状不同源/越界 days 点名',
-            source: '模板:教练回合', anchor: 'note.recheck 必填',
+            id: '插入预注册', criterion: '插入计划必带 recheck（恰一枚可机判 metric、与症状同源、days 合法 5–20 学习日）；其余算子禁带',
+            evidence: '引 recheck 与症状对照；metric 不同源/days 越界点名',
+            source: '模板:思路官回合', anchor: '恰一枚可机判',
           },
           {
-            id: '巩固只引已教', criterion: '巩固节点的 teaches/assumes/误解只引图面在册已教概念；旁支/巩固不走复诊',
-            evidence: '引巩固批概念引用与图面 teaches 并集对照',
-            source: '模板:教练回合', anchor: '只引已教概念',
-          },
-          {
-            id: '批规模克制', criterion: '每批 ≤8 个操作、只朝一个算子方向；apply 后每批重算一次，不做一次性规划',
-            evidence: '引批 op 计数与算子一致性；超限批/混合算子批点名',
-            source: '模板:教练回合', anchor: '≤8 个操作',
+            id: '零名字契约', criterion: '计划零节点名零图上引用：台阶用意图句描述，概念面只写逐字在册概念名；steps 出现图 op 字段即越权写补丁',
+            evidence: '引 steps 原文检索节点名与 op/name/pre 字段；越权点名',
+            source: '模板:思路官回合', anchor: '零节点名',
           },
         ],
       },
       {
-        id: '裁决与路线', name: '裁决纪律与路线重写',
+        id: '重裁与停摆', name: '重裁纪律与停机转译',
         criteria: [
           {
-            id: '分歧纪律', criterion: '三段式分歧纪律：显然步免仲裁税不声明；真分歧才写 note.disagreement 升全量段；六区块能裁动就绝不升级双沙盘',
-            evidence: '引 segments 轨迹与 disagreement 声明对照；滥用升级/该升不升的回合点名',
-            source: '模板:教练回合', anchor: '六区块能裁动就绝不声明',
+            id: '重裁纪律', criterion: '显式重裁先判断现状相对上次裁决变了什么，再决定沿用或推翻；推翻时 reason 说明一句',
+            evidence: '引重裁 reason 与上次裁决摘要块对照；无谓翻烙饼/无谓沿袭点名',
+            source: '模板:思路官重裁', anchor: '重裁不是重试',
           },
           {
-            id: '路线重写', criterion: 'route 恒写（3–7 条阶段条目）；非承诺措辞——不写时间估算与进度承诺；路线是草图不是权威结构',
-            evidence: '引 route 条目数与措辞检查；出现「将完成/保证」类承诺措辞点名',
-            source: '模板:教练回合', anchor: '随批重写',
-          },
-          {
-            id: '停机转译', criterion: '回合被拉起 = 就绪深度未满足：结构无需变化时写 ops: []（裁决=等内容跟上）；终点.pre 已达最终台阶时先出收尾接线批再停摆',
-            evidence: '引就绪检查结果与裁决对照；无理由停摆或该收尾不收尾点名',
-            source: '模板:教练回合', anchor: '收尾即宣告该终点坡道铺通',
+            id: '停机转译', criterion: '回合被拉起 = 就绪深度未满足：结构无需变化时 operator=停摆或 steps 为空；收尾朝向照常给方向（收尾宣告由引擎对纯接线批自动完成）',
+            evidence: '引就绪检查与计划对照；无理由停摆点名',
+            source: '模板:思路官回合', anchor: '停摆',
           },
         ],
       },

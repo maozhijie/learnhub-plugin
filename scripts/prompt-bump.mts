@@ -36,6 +36,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { stripFences } from '../src/engine/agent.ts'
+import { validatePlanHandover } from '../src/engine/coach-round.ts'
 import { stripWrappingFence } from '../src/engine/compass.ts'
 import { Content } from '../src/engine/content.ts'
 import { YAML } from '../src/engine/yaml.ts'
@@ -237,13 +238,13 @@ export const REPLAY_FACE: Record<string, (raw: string) => string[] | null> = {
   笔记出题: raw => bankShape(raw),
   // 教练回合：站链 = stripWrappingFence → parseModel → validateEditProposal → 必须有 note 区
   // （growth-subsystem.coachGrowthBatch 的 parseGrowthVerdict，私有方法——镜像并注记）
-  教练生长: raw => throwsToErrors(() => {
-    const doc = YAML.parseModel(stripWrappingFence(raw))
-    const v = validateEditProposal(doc)
-    if (v.errors || !v.spec) throw new Error((v.errors ?? ['edit 提案 schema 未过']).join('；'))
-    if (!v.spec.note) throw new Error('缺 note 区——生长批必须携带算子标签与理由')
-  }),
-  // 目标反编译：站链 = AgentSeam.complete（剥围栏）→ YAML.parseModel → splitDecompileDoc。
+  教练思路: raw => {
+  const doc = YAML.parseModel(stripWrappingFence(raw))
+  const course = doc !== null && typeof doc === 'object' && typeof (doc as { course?: unknown }).course === 'string'
+    ? (doc as { course: string }).course : ''
+  const errors = validatePlanHandover(doc, course)
+  return errors.length ? errors : null
+},  // 目标反编译：站链 = AgentSeam.complete（剥围栏）→ YAML.parseModel → splitDecompileDoc。
   // **跨产物一致性按自指口径旁路**：project 名取产物自身；#240/ADR-0076 种子降职后本站
   // 只产计划——splitDecompileDoc 现对 seed 半区即拒（受理侧知识，回放同口径）。
   // 旧语料（含 seed 半区）回放会红：那是降职语义在执法，不是回放面坏。

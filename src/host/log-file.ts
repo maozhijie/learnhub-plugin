@@ -47,13 +47,13 @@ const LOG_FILE_RE = /^(\d{4}-\d{2}-\d{2})\.log$/
  * 原样留住（压成单行会把错误清单腰斩，而那是排查时最不可替代的信息）。
  * `coach.segment.exit` 只在 `schema=reject` 时带（见 `allowsContinuation`）。 */
 export const MULTILINE_EVENTS: readonly string[] = [
-  'engine.call', 'agent.gate.death', 'agent.gate.first', 'coach.gate.reject', 'coach.segment.exit',
+  'engine.call', 'agent.gate.death', 'agent.gate.first', 'coach.gate.reject', 'coach.segment.exit', 'coach.plan.exit',
 ]
 
 /** 事件+字段 → 是否允许续行。 */
 function allowsContinuation(event: string, fields: Record<string, unknown>): boolean {
   if (!MULTILINE_EVENTS.includes(event)) return false
-  if (event === 'coach.segment.exit') return fields.schema === 'reject'
+  if (event === 'coach.segment.exit' || event === 'coach.plan.exit') return fields.schema === 'reject'
   return true
 }
 
