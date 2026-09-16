@@ -11,7 +11,6 @@ export interface GraphApplyEditResult {
   course: string
   ops: number
   snapshot: number
-  created_blocks: string[]
   /** rename 联动：旧名 → 新名。 */
   renames: Record<string, string>
   deleted: string[]
@@ -23,7 +22,7 @@ export interface GraphApplyEditResult {
   findings: string[]
 }
 
-/** 富化提案 apply（指纹复核通过后写正典）：files = 被重写的区文件。 */
+/** 富化提案 apply（指纹复核通过后写正典）：files = 被重写的正典文件。 */
 export interface GraphApplyEnrichResult {
   course: string
   fields: number
@@ -166,12 +165,10 @@ export interface GraphJumpCandidate {
   reasons: Array<'difficulty' | 'depth'>
 }
 
-/** 单节点图详情（graphNode）：schema 字段值 + 直接邻域 + 前置传递闭包。 */
+/** 单节点图详情（graphNode）：schema 字段面 + 直接邻域 + 前置传递闭包面。 */
 export interface GraphNodeDoc {
   course: string
   node: string
-  region: string
-  block: string
   depth: number
   opt: boolean
   pre: string[]

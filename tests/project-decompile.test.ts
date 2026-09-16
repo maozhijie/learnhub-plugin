@@ -25,14 +25,11 @@ import { AgentSeam } from '../src/engine/agent.ts'
 /** 模板原文（契约后置的修复轮断言用：#218 起 decompileRepairPrompt 收模板与材料两半）。 */
 const TPL = Content.PROMPT_KINDS['项目目标反编译']!
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const TWO_NODE_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
 ].join('\n')
 
 const GOAL = '自学吉他：三个月弹会《野蜂飞舞》选段'

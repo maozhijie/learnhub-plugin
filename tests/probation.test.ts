@@ -23,15 +23,12 @@ import { withVault, tfQuestion, localDay } from './helpers/vault.ts'
 
 // ---- 种子材料 ----
 
-/** 两节点图：入门 → 进阶（插入批在中间补「过渡」，剪除时恢复粗边 入门→进阶）。 */
+/** 两节点图：入门 → 进阶（插入批在中间补「过渡」，剪除时恢复粗边 入门→进阶）。
+ * #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }。 */
 const TWO_NODE_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 /** 插入批 YAML：过渡节点 + set_pre 把进阶的前置换成过渡（复诊剪除时恢复 入门）。 */
@@ -449,8 +446,8 @@ test('AC1 到期结算·自动剪除：不达标 del_node 归档 + 原粗边恢�
     const settlePid = r.courses[0]!.settled[0]!.proposal
     assert.ok(settlePid, '剪除走自动提案（留痕）')
 
-    // 图形态：过渡被删、原粗边恢复（进阶.pre = [入门]；YAML 流式/块式两种序列化都认）
-    const data = await readFile(join(paths.courseRoot('math'), 'data', '基础.yaml'), 'utf8')
+    // 图形态（#284 单文件 data/图.yaml）：过渡被删、原粗边恢复（进阶.pre = [入门]；YAML 流式/块式两种序列化都认）
+    const data = await readFile(join(paths.courseRoot('math'), 'data', '图.yaml'), 'utf8')
     assert.doesNotMatch(data, /过渡/, '插入节点已删')
     assert.match(data, /pre: \[入门\]|pre:\s*\n\s+- 入门/, '原粗边恢复')
 
@@ -528,14 +525,10 @@ test('AC4 data-check 到期未决：hint 提示类（不进 status）+ inventory
 
 test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限时插入批被受理门拒收，前进/旁支照常', async () => {  await withVault({
     graph: [
-      'region: 基础',
-      'color: blue',
-      'blocks:',
-      '  - name: 入门块',
-      '    nodes:',
-      '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-      '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
-      '      - { name: 终点, pre: [入门], opt: false, note: "" }',
+      'nodes:',
+      '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+      '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
+      '  - { name: 终点, pre: [入门], opt: false, note: "" }',
     ].join('\n'),
     files: [{ path: join('学习中心', 'math', 'state', '终点锚.json'), content: JSON.stringify({
       version: 2,
@@ -613,8 +606,8 @@ test('结算只遍历折叠后的在途条目：已决 (proposal,node) 的裁决
     assert.deepEqual(second.courses[0]!.settled.map(s => [s.node, s.outcome]), [['过渡乙', '剪除']],
       '第二次结算只裁决 B——A 已决，不得复读重裁')
 
-    // A 的 proven 不翻案：过渡仍在图、账本恰 2 行（登记 + 一条 proven），无重复结局
-    const data = await readFile(join(paths.courseRoot('math'), 'data', '基础.yaml'), 'utf8')
+    // A 的 proven 不翻案：过渡仍在图、账本恰 2 行（登记 + 一条 proven），无重复结局（#284 单文件 data/图.yaml）
+    const data = await readFile(join(paths.courseRoot('math'), 'data', '图.yaml'), 'utf8')
     assert.match(data, /过渡\n|过渡 /, 'A 节点仍在图（未翻案剪除）')
     const ledger = await readProbationLedger(paths, 'math', nodeVaultFs)
     const byProposal = new Map<number, number>()

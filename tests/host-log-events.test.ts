@@ -38,7 +38,7 @@ function makeRt(log: ReturnType<typeof memLogger>, responses: string[] = []): Ho
   const vault = mkdtempSync(join(tmpdir(), 'learnhub-logev-'))
   mkdirSync(join(vault, '学习中心', 'state'), { recursive: true })
   writeFileSync(join(vault, '学习中心', 'state', 'learnhub.json'),
-    JSON.stringify({ schema: { version: 3, formats: {} } }, null, 1) + '\n', 'utf8')
+    JSON.stringify({ schema: { version: 4, formats: {} } }, null, 1) + '\n', 'utf8')
   return createHostRuntime(fakeCtx(responses), { vault, centerRel: '学习中心', logger: log })
 }
 

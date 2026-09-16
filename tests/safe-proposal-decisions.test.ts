@@ -5,7 +5,7 @@ import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { GraphStore } from '../src/engine/graph.ts'
 import { withVault } from './helpers/vault.ts'
 
-/** 工厂基线课程（数学 / 基础区 / 入门块 / 入门节点）上做提案决策测试。 */
+/** 工厂基线课程（数学 / 入门节点，#284 后图 = 单文件 data/图.yaml）上做提案决策测试。 */
 async function vaultWithCourse(run: (engine: LearnhubEngine, courseName: string) => Promise<void>): Promise<void> {
   await withVault({ tag: 'learnhub-proposals-' }, async ({ engine }) => {
     await run(engine, '数学')
@@ -24,8 +24,9 @@ ops:
     }
     const pending = await engine.graph.graphProposals('pending', 'edit')
     assert.equal(pending.length, 1, 'failed explicit-id attempts must not consume the proposal')
-    const applied = await engine.graph.graphApply('edit') as { created_blocks: string[] }
-    assert.ok(Array.isArray(applied.created_blocks))
+    const applied = await engine.graph.graphApply('edit') as { course: string; ops: number }
+    assert.equal(applied.course, '数学')
+    assert.equal(applied.ops, 1, '隐式 apply 恰好消化这一条 pending 提案（GraphApplyEditResult 无 created_blocks——建块产物已随 #284 退役）')
   })
 })
 
@@ -58,18 +59,18 @@ ops:
   })
 })
 
-test('#11 add_node 无坐标落图（落到图内既有区/块）；created_blocks 不再由 add_node 建块', async () => {
+test('#11 add_node 无坐标落图（直接进单文件节点列表）；零建块产物随 #284 退役', async () => {
   await vaultWithCourse(async engine => {
     const add = await engine.graph.graphPropose('edit', `course: 数学
 ops:
   - { op: add_node, name: 新块起点, pre: [入门], est: 15 }
 `) as { id: number }
-    const applied = await engine.graph.graphApply('edit', add.id) as { created_blocks: string[] }
-    assert.deepEqual(applied.created_blocks, [], 'add_node 落到既有区/块，不新建块（#275）')
+    const applied = await engine.graph.graphApply('edit', add.id) as { ops: number }
+    assert.equal(applied.ops, 1, 'add_node 直接入节点列表，不新建块（#275）')
 
-    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
-    const landed = regions[0]!.blocks.flatMap(b => b.nodes).find(n => n.name === '新块起点')
-    assert.ok(landed, '新节点落到图内既有的单一区')
+    const nodes = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
+    const landed = nodes.find(n => n.name === '新块起点')
+    assert.ok(landed, '新节点落到 data/图.yaml 的节点列表')
   })
 })
 

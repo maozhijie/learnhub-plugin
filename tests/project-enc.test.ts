@@ -16,14 +16,11 @@ import { join } from 'node:path'
 import { cooccurrencePairs, orientCandidate, coWeight } from '../src/engine/project-enc.ts'
 import { withVault, tfQuestion } from './helpers/vault.ts'
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const TWO_NODE_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
 ].join('\n')
 
 // ---- 纯函数 ----
@@ -115,7 +112,7 @@ test('行为推断 enc：共现窗口 → 单个 pending enrich 提案 → 人�
     const applied = await engine.graph.graphApply('enrich', r.proposals[0].id)
     assert.equal(applied.course, '数学')
     assert.equal(applied.fields, 1)
-    const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '基础.yaml'), 'utf8')
+    const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '图.yaml'), 'utf8')
     assert.match(dataYaml, /行为推断（P-6 #96）/)
     assert.match(dataYaml, /name: 进阶[\s\S]*enc:[\s\S]*node: 入门/)
 
@@ -176,7 +173,7 @@ test('行为推断 enc 红线：跨课程关联不成边；直接写 data 的路
     graph: TWO_NODE_GRAPH,
     notes: { 入门: {}, 进阶: {} },
     files: [{
-      path: '学习中心/eng/data/基础.yaml',
+      path: '学习中心/eng/data/图.yaml',
       content: TWO_NODE_GRAPH,
     }],
   }, async ({ engine }) => {
@@ -223,14 +220,10 @@ test('行为推断 enc 红线：synthetic 复习推进不算行为证据', async
 
 test('行为推断 enc 闭包契约：无 pre 关系的共现对不硬提边（E7 会拒），降级 no_pre 信号', async () => {
   const THREE_NODE_GRAPH = [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 入门块',
-    '    nodes:',
-    '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-    '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
-    '      - { name: 平行, pre: [], opt: false, note: "", est: 20 }',
+    'nodes:',
+    '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+    '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
+    '  - { name: 平行, pre: [], opt: false, note: "", est: 20 }',
   ].join('\n')
   await withVault({
     graph: THREE_NODE_GRAPH,

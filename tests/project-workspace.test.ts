@@ -6,14 +6,11 @@ import { existsSync } from 'node:fs'
 import { withVault } from './helpers/vault.ts'
 import { YAML } from '../src/engine/yaml.ts'
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const PRACTICE_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 前置概念, pre: [], opt: false, note: "", est: 15 }',
-  '      - { name: 练琴, pre: [前置概念], opt: false, note: "", est: 30, type: practice }',
+  'nodes:',
+  '  - { name: 前置概念, pre: [], opt: false, note: "", est: 15 }',
+  '  - { name: 练琴, pre: [前置概念], opt: false, note: "", est: 30, type: practice }',
 ].join('\n')
 
 const NOTE = [

@@ -159,13 +159,10 @@ test('档位沿缝可观测：加我的理解恒 fast 档、回执评审恒 deep
     assert.equal(fake.calls.length, 1)
     assert.equal(fake.calls[0].effort, 'fast', '自注反馈 = 机械调用，缝上声明 fast 档')
   })
+  // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
   const GRAPH_PRACTICE = [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 入门块',
-    '    nodes:',
-    '      - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
+    'nodes:',
+    '  - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
   ].join('\n')
   await withVault({ tag: 'llm-seam-deep', graph: GRAPH_PRACTICE, notes: { 练耳: {} } }, async ({ engine }) => {
     const fake = replayFake(JSON.stringify({

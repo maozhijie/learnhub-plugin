@@ -2,10 +2,11 @@
  * 结构性审计（吸收自 Python audit.py）。
  *
  * ERROR: E1 重名 / E2 未定义前置 / E3 环 / E4 课程文件↔图失同步 / E5 frontmatter schema / E6 enc 断边 / E7 enc 非祖先
- * WARN : R1 浅叶子 / R2 单浅前置叶子 / R4 深度异常 / R6 传递冗余 / R8 多连通分量 / R10 状态异常 / R13 认知跨步候选
+ * WARN : R1 浅叶子 / R2 单浅前置叶子 / R6 传递冗余 / R8 多连通分量 / R10 状态异常 / R13 认知跨步候选
  *         R14 enc 覆盖缺口 / R15 enc 与反哺候选不一致 / R16 enc 权重无区分度（内容级背书，#53）
  *         R17 先验候选未被结构回应（w≥0.7 喂料分流，#142）
- * INFO : R5 跨区引用 / R9 疑似别名 / R18 概念字段组盘点（#147，档位零门禁零调度的审计面确认）
+ * INFO : R9 疑似别名 / R18 概念字段组盘点（#147，档位零门禁零调度的审计面确认）
+ * 退役：R4 深度异常 / R5 跨区引用随 Region/Block 存储退役（#284：分组依据不存在，#275 已去读面）
  * ERROR 存在时返回 failed=true（生成/结算门禁）。
  * 种子图豁免（#142）：图仍 = 锚集合种子节点并集时，R1/R2/R8/R13 豁免、健康分不设阈值
  * ——种子本来就只有起点+终点几张节点，形状告警与低健康分是噪音（生长批进入后恢复）。
@@ -13,7 +14,7 @@
 import type { VaultFs } from './io.ts'
 import { scanAll, loadNote, hasReadyContent } from './notes.ts'
 import { STAGES } from './types.ts'
-import type { GRegion, Fm } from './types.ts'
+import type { Fm } from './types.ts'
 import type { Graph } from './graph.ts'
 import type { Paths } from './paths.ts'
 import { parseDay, daysBetween } from './dates.ts'
@@ -33,15 +34,13 @@ export interface AuditResult {
 }
 
 export async function runAudit(
-  paths: Paths, root: string, courseName: string, graph: Graph, regions: GRegion[],
+  paths: Paths, root: string, courseName: string, graph: Graph,
   today: string, fs: VaultFs,
 ): Promise<AuditResult> {
   const errors: string[] = []
   const warns: string[] = []
   const infos: string[] = []
-  const { names, nset, preOf, depth, reach, hasCycle, blockOf } = graph
-  const name2region = Object.fromEntries(names.map(n => [n, blockOf[n][1]]))
-  const name2block = Object.fromEntries(names.map(n => [n, blockOf[n][2]]))
+  const { names, nset, preOf, depth, reach, hasCycle } = graph
 
   // E1/E2
   for (const [n, c] of Object.entries(graph.count)) {
@@ -62,9 +61,9 @@ export async function runAudit(
   // 终点节点名集（#200 / ADR-0055 口径豁免的读锚出处；#239 多终点化：逐处按集合读）
   const endpoints = endpointNames(anchors)
 
-  // 拓扑读数作废披露（#270 作废署名）：环图上 R1/R2/R4/R6 全部静默空——告警缺席不是
+  // 拓扑读数作废披露（#270 作废署名）：环图上 R1/R2/R6 全部静默空——告警缺席不是
   // 「结构干净」，是「拓扑序读数本轮算不出」。INFO 点名，解环后恢复。
-  if (hasCycle) infos.push('拓扑读数作废：图有环（E3），R1 浅叶子/R2 单浅前置/R4 深度异常/R6 冗余前置本轮不算——解环后恢复')
+  if (hasCycle) infos.push('拓扑读数作废：图有环（E3），R1 浅叶子/R2 单浅前置/R6 冗余前置本轮不算——解环后恢复')
 
   // R1 / R2 —— R1 阈值随图最大深度相对化（大图 depth>20 时 depth≤5 的旁支叶子是正常收尾），
   // 条目多时只列前 15 条附溢出行，避免淹没报告里的其他发现
@@ -73,7 +72,7 @@ export async function runAudit(
   const r1Depth = hasCycle ? 5 : Math.max(5, Math.round(maxDepth / 4))
   const r1 = graph.leaves.filter(n => !endpoints.has(n) && !hasCycle && (depth[n] ?? 0) <= r1Depth)
   if (!seedPhase) {
-    for (const n of r1.slice(0, 15)) warns.push(`R1 浅叶子: [${name2region[n]}] ${n}（depth=${depth[n]}，阈值 ${r1Depth}）`)
+    for (const n of r1.slice(0, 15)) warns.push(`R1 浅叶子: ${n}（depth=${depth[n]}，阈值 ${r1Depth}）`)
     if (r1.length > 15) warns.push(`R1 浅叶子另有多 ${r1.length - 15} 处未列出`)
     const r2 = names.filter(n => {
       const ps = preOf[n]
@@ -83,33 +82,8 @@ export async function runAudit(
     if (r2.length > 15) warns.push(`R2 单浅前置叶子另有多 ${r2.length - 15} 处未列出`)
   }
 
-  // R4 深度异常
-  const blockDepths: Record<string, Array<[number, string]>> = {}
-  for (const n of names) {
-    if (depth[n] !== undefined) {
-      const key = `${name2region[n]}｜${name2block[n]}`
-      ;(blockDepths[key] ??= []).push([depth[n], n])
-    }
-  }
-  for (const [key, items] of Object.entries(blockDepths)) {
-    if (items.length < 3) continue
-    const mean = items.reduce((s, [d]) => s + d, 0) / items.length
-    const [region, block] = key.split('｜')
-    for (const [d, n] of items) {
-      const ps = preOf[n]
-      const isEntry = !ps.length || ps.every(p => name2block[p] !== block)
-      if (isEntry) continue
-      if (mean > 0 && d < mean / 2) warns.push(`R4 深度异常: [${region} · ${block}] ${n} depth=${d}，块均值=${mean.toFixed(1)}`)
-    }
-  }
-  // R5 / R6（R6 升 WARN：冗余边是「连接不准」的机械可检面，交付前须逐条 verdict 清零）
-  for (const n of names) {
-    for (const p of preOf[n]) {
-      if (nset.has(p) && name2region[p] !== name2region[n]) {
-        infos.push(`R5 跨区引用: [${name2region[n]}] ${n} <- [${name2region[p]}] ${p}`)
-      }
-    }
-  }
+  // R6（R6 升 WARN：冗余边是「连接不准」的机械可检面，交付前须逐条 verdict 清零）
+  // （R4 深度异常 / R5 跨区引用已随 Region/Block 存储退役，#284：分组依据不存在）
   if (!hasCycle) {
     for (const n of names) {
       const ps = preOf[n].filter(p => nset.has(p))
@@ -304,16 +278,12 @@ export async function runAudit(
   section('WARN（需人工裁决）', warns)
   lines.push(`## 未生成课程文件豁免登记（E4，共 ${exempt.length} 个；内容管线生成后自动销号）`, '')
   if (exempt.length) {
-    const byRegion: Record<string, string[]> = {}
-    for (const n of exempt) (byRegion[name2region[n]] ??= []).push(n)
-    for (const region of regions) {
-      if (byRegion[region.name]) lines.push(`- [${region.name}] ${byRegion[region.name].length} 个`)
-    }
+    for (const chunk of chunksOf(exempt.sort(), 20)) lines.push(`- ${chunk.join('、')}`)
   } else {
     lines.push('（无）')
   }
   lines.push('')
-  section('INFO · R5/R9 提示项', infos)
+  section('INFO · R9 提示项', infos)
   await import('./io.ts').then(m => m.atomicWrite(paths.reportPath(root), lines.join('\n'), fs))
 
   return { failed: errors.length > 0, errors, warns, infos, baseline, exempt }
@@ -321,6 +291,12 @@ export async function runAudit(
 
 function fmt(d: Date): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+}
+
+function chunksOf<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
 }
 
 /** stage 视图（调度消费的统一入口）：无状态行视为 unseen。 */

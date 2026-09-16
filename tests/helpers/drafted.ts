@@ -13,7 +13,7 @@
 import type { LearnhubEngine } from '../../src/engine/index.ts'
 import type { VaultFs } from '../../src/engine/io.ts'
 import { atomicWrite } from '../../src/engine/io.ts'
-import type { CourseEntry, GNode, GRegion } from '../../src/engine/types.ts'
+import type { CourseEntry, GNode } from '../../src/engine/types.ts'
 import { GraphStore } from '../../src/engine/graph.ts'
 import { writeAnchors } from '../../src/engine/seed.ts'
 import type { EndpointAnchor, GoalType, StartBasis } from '../../src/engine/seed.ts'
@@ -25,8 +25,6 @@ import type { NoteSeed } from './vault.ts'
 /** 起草起点（pre=[]；basis 走锚的 start_basis 留痕）。 */
 export interface DraftStart {
   name: string
-  region?: string
-  block?: string
   teaches?: Record<string, string>
   basis?: StartBasis
 }
@@ -34,8 +32,6 @@ export interface DraftStart {
 /** 起草终点（pre = starts 全集 = 粗占位边）。 */
 export interface DraftEndpoint {
   name: string
-  region?: string
-  block?: string
   goalNote?: string
   goalType?: GoalType
   worksheet?: Array<{ block: string; note?: string; done: boolean }>
@@ -62,28 +58,8 @@ export interface DraftSpec {
 export const CAPABILITY_DRAFT: DraftSpec = {
   concepts: [{ canonical: '变化率' }],
   manualEndpoints: [{ name: '导数方向', goalNote: '能用导数解决优化问题' }],
-  starts: [{ name: '认识变化率', region: '基础', block: '起点块', basis: 'baseline', teaches: { 变化率: '会用' } }],
-  endpoint: { name: '用导数解决优化问题', region: '基础', block: '终点块', teaches: { 变化率: '会用' } },
-}
-
-const REGION_DEFAULT = '基础'
-const BLOCK_DEFAULT = '起点块'
-
-/** 把一组节点按区/块聚成 Region 列表（区顺序 = 首次出现顺序）。 */
-function regionsOf(nodes: Array<{ region: string; block: string; node: GNode }>): GRegion[] {
-  const byRegion = new Map<string, Map<string, GNode[]>>()
-  for (const { region, block, node } of nodes) {
-    let blocks = byRegion.get(region)
-    if (!blocks) { blocks = new Map(); byRegion.set(region, blocks) }
-    let list = blocks.get(block)
-    if (!list) { list = []; blocks.set(block, list) }
-    list.push(node)
-  }
-  return [...byRegion.entries()].map(([name, blocks]) => ({
-    name,
-    color: '',
-    blocks: [...blocks.entries()].map(([bname, ns]) => ({ name: bname, nodes: ns })),
-  }))
+  starts: [{ name: '认识变化率', basis: 'baseline', teaches: { 变化率: '会用' } }],
+  endpoint: { name: '用导数解决优化问题', teaches: { 变化率: '会用' } },
 }
 
 /**
@@ -106,36 +82,24 @@ export async function draftCourse(engine: LearnhubEngine, spec: DraftSpec = {}):
     await engine.registry.save(items)
   }
 
-  // ② 图区落盘（手加终点 → 未分区；起点/终点 → 声明区）
+  // ② 单文件图落盘（#284：data/图.yaml；手加终点/起点/终点全部平铺为节点）
   const starts = spec.starts ?? []
-  const flat: Array<{ region: string; block: string; node: GNode }> = []
+  const nodes: GNode[] = []
   for (const e of spec.manualEndpoints ?? []) {
-    flat.push({ region: '未分区', block: '未分区', node: { name: e.name, pre: [], opt: false, note: '', enc: [] } })
+    nodes.push({ name: e.name, pre: [], opt: false, note: '', enc: [] })
   }
   for (const s of starts) {
-    flat.push({
-      region: s.region ?? REGION_DEFAULT,
-      block: s.block ?? BLOCK_DEFAULT,
-      node: { name: s.name, pre: [], opt: false, note: '', enc: [], ...(s.teaches ? { teaches: s.teaches as GNode['teaches'] } : {}) },
-    })
+    nodes.push({ name: s.name, pre: [], opt: false, note: '', enc: [], ...(s.teaches ? { teaches: s.teaches as GNode['teaches'] } : {}) })
   }
   if (spec.endpoint) {
     const ep = spec.endpoint
-    flat.push({
-      region: ep.region ?? REGION_DEFAULT,
-      block: ep.block ?? '终点块',
-      node: {
-        name: ep.name, pre: starts.map(s => s.name), opt: false, note: '', enc: [],
-        ...(ep.teaches ? { teaches: ep.teaches as GNode['teaches'] } : {}),
-      },
+    nodes.push({
+      name: ep.name, pre: starts.map(s => s.name), opt: false, note: '', enc: [],
+      ...(ep.teaches ? { teaches: ep.teaches as GNode['teaches'] } : {}),
     })
   }
   const store = new GraphStore(paths, paths.courseRoot(root), fs)
-  const regions = regionsOf(flat)
-  for (let i = 0; i < regions.length; i++) {
-    const r = regions[i]!
-    await store.writeRegionDoc(`${paths.dataDir(root)}/${String(i).padStart(2, '0')}_${r.name}.yaml`, r)
-  }
+  await store.writeGraphDoc(nodes)
 
   // ③ 终点锚落盘（手加锚在前、起草锚在后；起草锚带 seed_nodes/start_basis 留痕）
   const anchors: EndpointAnchor[] = []
@@ -169,21 +133,21 @@ export async function draftCourse(engine: LearnhubEngine, spec: DraftSpec = {}):
   // ⑤ 罗盘脚手架（createCourse 的等价物）
   await atomicWrite(paths.compassPath(root), compassScaffold(course), fs)
 
-  // ⑥ 起点/终点笔记骨架（与退役前 ensureNotesFor 同款：只在区内的种子节点上）
+  // ⑥ 起点/终点笔记骨架（与退役前 ensureNotesFor 同款：只在种子节点上）
   if (spec.notes !== false) {
-    const defaults: Array<{ name: string; region: string }> = [
-      ...starts.map(s => ({ name: s.name, region: s.region ?? REGION_DEFAULT })),
-      ...(spec.endpoint ? [{ name: spec.endpoint.name, region: spec.endpoint.region ?? REGION_DEFAULT }] : []),
+    const defaults: string[] = [
+      ...starts.map(s => s.name),
+      ...(spec.endpoint ? [spec.endpoint.name] : []),
     ]
-    for (const n of defaults) {
-      const override = spec.notes?.[n.name]
+    for (const name of defaults) {
+      const override = spec.notes?.[name]
       const seed = (typeof override === 'object' && override !== null ? override : {}) as NoteSeed
       // 正文占位与引擎 ensureNotesFor 同款（`> 内容待生成。`）——它被四处消费点按整行剥离
       // （question-bank／index 的整课节选），换成 `# <节点名>` 会改变喂给模型的上下文
       const text = typeof override === 'string'
         ? override
-        : noteText(n.name, { ...seed, body: seed.body ?? ['> 内容待生成。'] }) + '\n'
-      await atomicWrite(paths.courseNotePath(root, n.name), text, fs)
+        : noteText(name, { ...seed, body: seed.body ?? ['> 内容待生成。'] }) + '\n'
+      await atomicWrite(paths.courseNotePath(root, name), text, fs)
     }
   }
 }

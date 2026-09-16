@@ -14,32 +14,22 @@ import { withVault } from './helpers/vault.ts'
 /** A→B→C→A 三角环 vault（Graph 构造期 hasCycle=true；环上 depth 空、reach 逐点闭包）。 */
 const CYCLE_VAULT = {
   graph: [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 环块',
-    '    nodes:',
-    '      - { name: A, pre: [C], opt: false, note: "", est: 10 }',
-    '      - { name: B, pre: [A], opt: false, note: "", est: 10 }',
-    '      - { name: C, pre: [B], opt: false, note: "", est: 10 }',
+    'nodes:',
+    '  - { name: A, pre: [C], opt: false, note: "", est: 10 }',
+    '  - { name: B, pre: [A], opt: false, note: "", est: 10 }',
+    '  - { name: C, pre: [B], opt: false, note: "", est: 10 }',
   ].join('\n'),
-  graphFile: '00_基础.yaml',
   notes: { A: {}, B: {}, C: {} },
 }
 
 /** 对照 DAG：根 → 中 → 叶（拓扑序读数全部算得出）。 */
 const DAG_VAULT = {
   graph: [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 链块',
-    '    nodes:',
-    '      - { name: 根, pre: [], opt: false, note: "", est: 10 }',
-    '      - { name: 中, pre: [根], opt: false, note: "", est: 10 }',
-    '      - { name: 叶, pre: [中], opt: false, note: "", est: 10 }',
+    'nodes:',
+    '  - { name: 根, pre: [], opt: false, note: "", est: 10 }',
+    '  - { name: 中, pre: [根], opt: false, note: "", est: 10 }',
+    '  - { name: 叶, pre: [中], opt: false, note: "", est: 10 }',
   ].join('\n'),
-  graphFile: '00_基础.yaml',
   notes: { 根: {}, 中: {}, 叶: {} },
 }
 
@@ -53,9 +43,9 @@ async function analyzeOf(engine: LearnhubEngine) {
 
 async function auditOf(engine: LearnhubEngine) {
   const { Graph, GraphStore } = await import('../src/engine/graph.ts')
-  const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
-  const graph = new Graph(regions)
-  return runAudit(engine.paths, 'math', '数学', graph, regions, todayStr(new Date()), nodeVaultFs)
+  const nodes = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
+  const graph = new Graph(nodes)
+  return runAudit(engine.paths, 'math', '数学', graph, todayStr(new Date()), nodeVaultFs)
 }
 
 // ---- analysis：max_depth / unreachable / health.topology_void ----
@@ -78,14 +68,14 @@ test('analysis DAG 对照：拓扑序读数照常出数、无 topology_void 字�
   })
 })
 
-// ---- audit：环上 R1/R2/R4/R6 静默空 → INFO 披露 ----
+// ---- audit：环上 R1/R2/R6 静默空 → INFO 披露 ----
 
 test('audit 环图：拓扑读数作废的 INFO 披露在场（R1/R6 静默空不再无解释）', async () => {
   await withVault(CYCLE_VAULT, async ({ engine }) => {
     const r = await auditOf(engine)
     assert.ok(
       r.infos.some(i => i.includes('拓扑读数作废')),
-      `环图审计必须解释为什么 R1/R2/R4/R6 没有读数；实际 infos: ${JSON.stringify(r.infos)}`,
+      `环图审计必须解释为什么 R1/R2/R6 没有读数；实际 infos: ${JSON.stringify(r.infos)}`,
     )
   })
 })
@@ -107,8 +97,7 @@ test('graphHealthScore：环图返回 topology_void，无环图不带该键（#2
     estOf: {},
     components: [names],
     roots: [],
-    regionIdxOf: { A: 0, B: 0, C: 0 },
-    regions: [{ name: 'r0' }],
+    nodes: names.map(n => ({ name: n })),
   }
   const cyclic = graphHealthScore({
     ...base,

@@ -1,8 +1,8 @@
 /**
  * 顶层不变量扫描（#165 门 G6；ADR-0044）：**只有教练层能改图**。
  *
- * 判据取「谁能调用图写原语」：`GraphStore.writeRegionDoc`（`graph.ts`，`data/*.yaml`
- * 的唯一写原语）的调用者只准是 `proposals.ts`（`applyEdit`／`applySeed` 的落图处，
+ * 判据取「谁能调用图写原语」：`GraphStore.writeGraphDoc`（`graph.ts`，`data/图.yaml`
+ * 的唯一写原语，#284 存储塌缩）的调用者只准是 `proposals.ts`（`applyEdit` 的落图处，
  * 即教练层的提案门）。其余任何模块直接调用它 = 绕过提案门改图，门即失败。
  *
  * 白名单是**紧的**：`proposals.ts` 一处。`graphApply('enrich')` 从 `growth-subsystem.ts`
@@ -19,7 +19,7 @@ const SRC_DIR = 'src'
 
 /** 图写原语与其定义处（新增原语时两处一起加：原语名 + 它所在的模块）。 */
 export const GRAPH_WRITE_PRIMITIVES = [
-  { name: 'writeRegionDoc', definedIn: 'src/engine/graph.ts' },
+  { name: 'writeGraphDoc', definedIn: 'src/engine/graph.ts' },
 ]
 
 /** 唯一允许调用图写原语的模块（教练层提案门）。 */
@@ -37,9 +37,9 @@ export function graphWriteCallers(sources) {
     const hits = []
     for (const prim of GRAPH_WRITE_PRIMITIVES) {
       if (file === prim.definedIn) continue
-      // 调用形态：`x.writeRegionDoc(`
+      // 调用形态：`x.writeGraphDoc(`
       if (new RegExp(`\\.${prim.name}\\s*\\(`).test(src)) hits.push(prim.name)
-      // 解构别名（`const { writeRegionDoc } = store`）同属调用面
+      // 解构别名（`const { writeGraphDoc } = store`）同属调用面
       else if (new RegExp(`[{,]\\s*${prim.name}\\s*[,}]`).test(src)) hits.push(`${prim.name}(解构)`)
     }
     if (hits.length) callers.set(file, hits)

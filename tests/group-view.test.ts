@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Graph, groupView } from '../src/engine/graph.ts'
-import type { GNode, GRegion } from '../src/engine/types.ts'
+import type { GNode } from '../src/engine/types.ts'
 import type { ConceptEntry } from '../src/engine/concepts.ts'
 
 // #278 读侧分组轴（Epic #275 T2）：groupView 纯新增原语。
@@ -12,8 +12,7 @@ function gnode(partial: Partial<GNode> & { name: string }): GNode {
 }
 
 function graphOf(nodes: GNode[]): Graph {
-  const regions: GRegion[] = [{ name: '基础', color: 'blue', blocks: [{ name: '块', nodes }] }]
-  return new Graph(regions)
+  return new Graph(nodes)
 }
 
 const entry = (canonical: string, aliases: string[] = []): ConceptEntry =>

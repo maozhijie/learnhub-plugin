@@ -5,14 +5,13 @@ import {
   gateAdvice, isStruggle, withinStruggleWindow, encRemedialAdvice,
   STRUGGLE_MIN_ATTEMPTS, STRUGGLE_WINDOW_DAYS,
 } from '../src/engine/sessions.ts'
-import type { EncEdge, Fm, GNode, GRegion } from '../src/engine/types.ts'
+import type { EncEdge, Fm, GNode } from '../src/engine/types.ts'
 
 const gnode = (name: string, pre: string[] = [], enc: EncEdge[] = []): GNode =>
   ({ name, pre, opt: false, note: '', enc })
 
 function buildGraph(...nodes: GNode[]): Graph {
-  const regions: GRegion[] = [{ name: '区', color: '', blocks: [{ name: '块', nodes }] }]
-  return new Graph(regions)
+  return new Graph(nodes)
 }
 
 const fm = (stage: Fm['stage']): Fm => ({

@@ -16,13 +16,9 @@ import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { withVault } from './helpers/vault.ts'
 
 const GRAPH_PRACTICE = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
-  '      - { name: 乐理, pre: [], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
+  '  - { name: 乐理, pre: [], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 /** 假评审模型：记录收到的 (prompt, system)，返回可编造的 JSON 评分。 */

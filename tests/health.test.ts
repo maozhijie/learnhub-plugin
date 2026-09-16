@@ -1,31 +1,27 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { Graph } from '../src/engine/graph.ts'
 import { graphHealthScore, estSpreadNote } from '../src/engine/health.ts'
+import type { GNode } from '../src/engine/types.ts'
 
-/** graphHealthScore 所需的最小图形状（只给 health 实际读取的字段）。 */
-function healthGraph({ regionCount, floatIdx }: { regionCount: number; floatIdx: number }) {
-  const names = ['入口', '后段裸奔']
-  return {
-    names,
-    nset: new Set(names),
-    preOf: { 入口: [], 后段裸奔: [] },
-    estOf: {},
-    depth: { 入口: 0, 后段裸奔: 0 },
-    hasCycle: false,
-    components: [names],
-    roots: ['入口'],
-    regionIdxOf: { 入口: 0, 后段裸奔: floatIdx },
-    regions: Array.from({ length: regionCount }, (_, i) => ({ name: `r${i}` })),
-  }
-}
+/** 最小 GNode 工厂：必填字段补默认值（存储塌缩后图 = GNode 声明序数组）。 */
+const gnode = (name: string, pre: string[] = []): GNode => ({ name, pre, opt: false, note: '', enc: [] })
 
 test('S3: 后段空降节点拉低前置完备分（不再恒满分）', () => {
-  const { breakdown } = graphHealthScore(healthGraph({ regionCount: 4, floatIdx: 3 }) as never)
+  // 声明序：total=2 → exempt = max(1, ceil(2/4)) = 1；入口 idx0 在豁免带，
+  // 「后段裸奔」idx1 靠后且 pre 为空 → 空降 1/2 → (1 - 1/2) * 20 = 10
+  const { breakdown } = graphHealthScore(new Graph([gnode('入口'), gnode('后段裸奔')]))
   assert.equal(breakdown.pre_completeness, 10)
 })
 
-test('S3: 入口 region 的无 pre 节点是正常起点，前置完备满分', () => {
-  const { breakdown } = graphHealthScore(healthGraph({ regionCount: 8, floatIdx: 0 }) as never)
+test('S3: 声明序豁免带内的无 pre 入口是正常起点，前置完备满分', () => {
+  // total=4 → exempt = 1：入口 idx0 在豁免带，其余节点都有 pre → 0 空降 → 20
+  const { breakdown } = graphHealthScore(new Graph([
+    gnode('入口'),
+    gnode('基础', ['入口']),
+    gnode('进阶', ['基础']),
+    gnode('高阶', ['进阶']),
+  ]))
   assert.equal(breakdown.pre_completeness, 20)
 })
 

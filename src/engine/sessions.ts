@@ -100,7 +100,6 @@ export interface RecEvent {
   type: RecEventType
   course: string
   node: string
-  region: string
   score: number
   why: string
   /** 节点课程笔记的 vault 相对路径（无笔记 = null）。 */
@@ -285,7 +284,7 @@ export class Sessions {
 
   /** 节点课程笔记的 vault 相对路径（不含 .md）；无笔记返回 null。 */
   notePath(root: string, graph: Graph, n: string): string | null {
-    if (!graph.blockOf[n]) return null
+    if (!graph.nset.has(n)) return null
     const path = this.paths.courseNotePath(root, n)
     if (!this.fs.exists(path)) return null
     const marker = '/学习中心/'
@@ -387,7 +386,7 @@ export class Sessions {
         if (seen.has(node)) return
         seen.add(node)
         events.push({
-          type: etype, course: c.name, node, region: graph.blockOf[node]?.[1] ?? '',
+          type: etype, course: c.name, node,
           score: Math.round(score * 10) / 10, why, path: this.notePath(c.root, graph, node),
           hasContent: hasReadyContent(state[node]),
           ...(advice?.length ? { advice } : {}),
@@ -471,7 +470,7 @@ export class Sessions {
         }
         events.push({
           type: 'diagnostic', course: c.name, node,
-          region: graph.blockOf[node]?.[1] ?? '', score: DIAGNOSTIC_SCORE,
+          score: DIAGNOSTIC_SCORE,
           why: list[0]!.reason + (list.length > 1 ? `（另有 ${list.length - 1} 节待诊断）` : ''),
           path: this.notePath(c.root, graph, node),
           hasContent: hasReadyContent(state[node]),
@@ -510,7 +509,7 @@ export class Sessions {
               : '你选了它 · 今天学它'
         events.push({
           type: 'pin', course: c.name, node: pin.node,
-          region: graph.blockOf[pin.node]?.[1] ?? '', score: head, why,
+          score: head, why,
           path: this.notePath(c.root, graph, pin.node),
           hasContent: hasReadyContent(state[pin.node]),
           pinned: true,
@@ -537,7 +536,7 @@ export class Sessions {
           standalone++
           events.push({
             type: 'sleep', course: c.name, node: n,
-            region: graph.blockOf[n]?.[1] ?? '', score: SLEEP_SCORE,
+            score: SLEEP_SCORE,
             why: sug.text, path: this.notePath(c.root, graph, n),
             hasContent: hasReadyContent(state[n]),
             sleep: sug,

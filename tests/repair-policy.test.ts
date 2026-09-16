@@ -154,13 +154,9 @@ test('自检：幽灵机制名 / 0 轮却点名机制 / 见证串改坏，三类
 // ---------------------------------------------------------------- ② 行为层
 
 const GRAPH_NO_TEACHES = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 甲, pre: [], opt: false, note: "", est: 10 }',
-  '      - { name: 乙, pre: [甲], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 甲, pre: [], opt: false, note: "", est: 10 }',
+  '  - { name: 乙, pre: [甲], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 const NOTE_乙 = {
@@ -175,12 +171,8 @@ const VAULT = { graph: GRAPH_NO_TEACHES, notes: { 乙: NOTE_乙 } }
 
 /** 回执评审只能挂实践节点（ADR-0016）：practice 类型夹具（同 receipts.test.ts）。 */
 const GRAPH_PRACTICE = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
+  'nodes:',
+  '  - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
 ].join('\n')
 
 test('#217 出题站 rounds=0 行为锁：模型产出不可解析 → 恰一次调用即断，无整批修复轮', async () => {

@@ -105,18 +105,13 @@ test('纯函数缝：目录段排除（x* 段前缀、其余段全等）', () =>
 // ---- 引擎行为：扫描 → 缓存 → analyze 段 → 单提案回填 ----
 
 /** 双节点图：入门(pre []) → 进阶(pre [入门])；另有 平行/未关联 验证 blocked。 */
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 平行, pre: [], opt: false, note: "", est: 15 }',
-  '  - name: 进阶块',
-  '    nodes:',
-  '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 30 }',
-  '      - { name: 未关联, pre: [], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 平行, pre: [], opt: false, note: "", est: 15 }',
+  '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 30 }',
+  '  - { name: 未关联, pre: [], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 const NOTE = (title: string, body: string[]) =>

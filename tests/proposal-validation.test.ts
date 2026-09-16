@@ -140,8 +140,8 @@ test('#145 巩固门受理路径：巩固批引未教概念拒收、引已教概
     await draftCourse(engine, {
       course: '校验课',
       concepts: [{ canonical: '变化率' }],
-      starts: [{ name: '入门', region: '基础区', block: '入门', teaches: { 变化率: '会用' } }],
-      endpoint: { name: '综合应用', region: '基础区', block: '终点块' },
+      starts: [{ name: '入门', teaches: { 变化率: '会用' } }],
+      endpoint: { name: '综合应用' },
     })
     const consolidate = (teaches: string, extraConcepts = ''): string => `course: 校验课
 note:

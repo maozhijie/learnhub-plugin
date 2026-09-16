@@ -107,14 +107,11 @@ test('注入块：待消费逐条一行、原话逐字（仅换行渲染层转�
 // ---------------------------------------------------------------- 引擎写点（withVault seam）
 
 /** 双节点图：频控与在途测试需要第二个节点。 */
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const TWO_NODE_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 test('引擎落账：原话逐字、course 归一；与作答投影互不可见、零 XP（零激励落地）', async () => {

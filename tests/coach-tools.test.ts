@@ -20,7 +20,7 @@ import {
 import type { CoachToolDeps } from '../src/engine/coach-tools.ts'
 import { Graph } from '../src/engine/graph.ts'
 import { resolveConcept } from '../src/engine/concepts.ts'
-import type { GNode, GRegion, Fm } from '../src/engine/types.ts'
+import type { GNode, Fm } from '../src/engine/types.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
 import type { CourseEntry } from '../src/engine/types.ts'
 
@@ -28,9 +28,6 @@ import type { CourseEntry } from '../src/engine/types.ts'
 
 const gNode = (name: string, pre: string[], extra: Partial<GNode> = {}): GNode =>
   ({ name, pre, opt: false, note: '', enc: [], ...extra })
-
-const regionOf = (name: string, block: string, nodes: GNode[]): GRegion =>
-  ({ name, color: '', blocks: [{ name: block, nodes }] })
 
 /** 最小 Fm（只填掌握度折叠读到的字段；content 给合法缺省）。 */
 const fm = (stage: Fm['stage'], practice: { attempts: number; correct: number } = { attempts: 0, correct: 0 }): Fm =>
@@ -215,11 +212,11 @@ test('上游图摘要：⚠ 弱掌握标记与超 cap 按深度截断的显式�
   const chain = 66
   const nameOf = (i: number): string => `链${String(i).padStart(3, '0')}`
   const graphYaml = [
-    'region: 基础', 'color: blue', 'blocks:', '  - name: 链块', '    nodes:',
+    'nodes:',
     ...Array.from({ length: chain }, (_, i) =>
       i === chain - 1
-        ? `      - { name: ${nameOf(i)}, pre: [${nameOf(i - 1)}] }`
-        : `      - { name: ${nameOf(i)}, pre: [${i ? nameOf(i - 1) : ''}] }`),
+        ? `  - { name: ${nameOf(i)}, pre: [${nameOf(i - 1)}] }`
+        : `  - { name: ${nameOf(i)}, pre: [${i ? nameOf(i - 1) : ''}] }`),
   ].join('\n')
   await withVault({ registry: DEFAULT_REGISTRY, graph: graphYaml }, async ({ engine }) => {
     const course = await engine.registry.resolve('数学') as CourseEntry
@@ -233,9 +230,10 @@ test('上游图摘要：⚠ 弱掌握标记与超 cap 按深度截断的显式�
 
 test('全图摘要（纯函数）:逐节点一行含深度/掌握/邻接，⚠ 弱掌握与 ⚑ 终点标记；概念组读数常驻', () => {
   const graph = new Graph([
-    regionOf('基础', '起点块', [gNode('甲', []), gNode('乙', ['甲'])]),
-    regionOf('进阶', '中段块', [gNode('丙', ['乙'], { est: 15 })]),
-    regionOf('进阶', '终点块', [gNode('终点', ['丙'])]),
+    gNode('甲', []),
+    gNode('乙', ['甲']),
+    gNode('丙', ['乙'], { est: 15 }),
+    gNode('终点', ['丙']),
   ])
   const state: Record<string, Fm> = {
     甲: fm('review', { attempts: 3, correct: 1 }),   // 已开始且掌握 0.1 → ⚠
@@ -266,10 +264,7 @@ test('全图摘要（纯函数）:逐节点一行含深度/掌握/邻接，⚠ �
 
 test('全图摘要（纯函数）：超 cap 降级为 depth 段聚合 + 前沿细节 + 溢出说明，⚠ 与 ⚑ 例外不截', () => {
   const many = Array.from({ length: 210 }, (_, i) => gNode(`批${String(i).padStart(3, '0')}`, []))
-  const graph = new Graph([
-    regionOf('主区', '大块', many),
-    regionOf('主区', '小块', [gNode('弱点', [], { est: 10 }), gNode('终点', ['弱点'])]),
-  ])
+  const graph = new Graph([...many, gNode('弱点', [], { est: 10 }), gNode('终点', ['弱点'])])
   const state: Record<string, Fm> = { 弱点: fm('review', { attempts: 3, correct: 1 }), 终点: fm('unseen') }
   const view = renderGrowthGraphView(graph, state, new Set(['终点']), { today: '2026-09-15' })
   assert.match(view, /节点共 212 个/)

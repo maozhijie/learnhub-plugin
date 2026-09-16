@@ -4,13 +4,9 @@ import { withVault } from './helpers/vault.ts'
 import type { NoteSeed } from './helpers/vault.ts'
 
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 前置概念, pre: [], opt: false, note: "", est: 15 }',
-  '      - { name: 入门, pre: [前置概念], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 前置概念, pre: [], opt: false, note: "", est: 15 }',
+  '  - { name: 入门, pre: [前置概念], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 /** 带 manifest（s1/s2 两节）与正文的入门笔记种子（noteText 逐字生成原 NOTE 常量）。 */

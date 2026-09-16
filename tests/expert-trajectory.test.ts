@@ -65,14 +65,10 @@ test('checkPredictBlocks：结构合法零 findings，坏块给出定位', () =>
 // ---- 生成注入：高难节点 §11 ----
 
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 高难节点, pre: [], opt: false, note: "", difficulty: 4 }',
-  '      - { name: 高bloom节点, pre: [], opt: false, note: "", bloom: 评价 }',
-  '      - { name: 平易节点, pre: [], opt: false, note: "", difficulty: 2 }',
+  'nodes:',
+  '  - { name: 高难节点, pre: [], opt: false, note: "", difficulty: 4 }',
+  '  - { name: 高bloom节点, pre: [], opt: false, note: "", bloom: 评价 }',
+  '  - { name: 平易节点, pre: [], opt: false, note: "", difficulty: 2 }',
 ].join('\n')
 
 test('上下文包：高难节点注入 §11 专家思维轨迹（含预测门格式），平易节点不注入', async () => {

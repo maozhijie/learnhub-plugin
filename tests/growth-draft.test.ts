@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { Graph } from '../src/engine/graph.ts'
 import { replayDraft, sealedDecisionOf, editGateErrors, simulateOps } from '../src/engine/index.ts'
 import type { EditGateCtx } from '../src/engine/index.ts'
-import type { EditOp, EditProposalSpec, GRegion } from '../src/engine/index.ts'
+import type { EditOp, EditProposalSpec } from '../src/engine/proposals.ts'
+import type { GNode } from '../src/engine/types.ts'
 import type { ConceptEntry, EndpointAnchor } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
@@ -17,31 +18,25 @@ import { memLogger } from './helpers/logger.ts'
 // - 站级：脚本化假 agent 灌工具调用轨迹——过门 / 按批 finish 走真实提案管线 / 拒收零落盘 /
 //   续建恢复认知 / 禁止空手结束。
 
-// ---- 纯函数测试夹具：单区单块图 3 节点（甲→乙→丙）----
-function fixture(): { regions: GRegion[]; graph: Graph } {
-  const regions: GRegion[] = [{
-    name: '基础', color: '',
-    blocks: [{
-      name: '基础块',
-      nodes: [
-        { name: '甲', pre: [], opt: false, note: '', enc: [] },
-        { name: '乙', pre: ['甲'], opt: false, note: '', enc: [] },
-        { name: '丙', pre: ['乙'], opt: false, note: '', enc: [] },
-        { name: '终点甲', pre: [], opt: false, note: '', enc: [] },
-      ],
-    }],
-  }]
-  return { regions, graph: new Graph(regions) }
+// ---- 纯函数测试夹具：声明序平铺 4 节点（甲→乙→丙 + 终点甲）----
+function fixture(): { nodes: GNode[]; graph: Graph } {
+  const nodes: GNode[] = [
+    { name: '甲', pre: [], opt: false, note: '', enc: [] },
+    { name: '乙', pre: ['甲'], opt: false, note: '', enc: [] },
+    { name: '丙', pre: ['乙'], opt: false, note: '', enc: [] },
+    { name: '终点甲', pre: [], opt: false, note: '', enc: [] },
+  ]
+  return { nodes, graph: new Graph(nodes) }
 }
 
 test('replayDraft：草稿差异（新增/接线改写/新增边）与错误累积，simulateOps 同源', () => {
-  const { regions, graph } = fixture()
+  const { nodes, graph } = fixture()
   const ops: EditOp[] = [
     { op: 'add_node', name: '丁', pre: ['丙'] },
     { op: 'set_pre', node: '丙', pre: ['乙', '丁'] },
     { op: 'del_node', node: '不存在' }, // 错误累积不中断
   ]
-  const r = replayDraft(regions, graph, ops)
+  const r = replayDraft(nodes, graph, ops)
   assert.deepEqual(r.errors, ['del_node 节点不存在: 不存在'])
   assert.deepEqual(r.diff.added_nodes, ['丁'])
   const rewire = r.diff.rewired.find(w => w.node === '丙')!
@@ -49,7 +44,7 @@ test('replayDraft：草稿差异（新增/接线改写/新增边）与错误累�
   assert.deepEqual(rewire.pres_after, ['乙', '丁'])
   assert.deepEqual(r.diff.added_edges, [{ node: '丙', pre: '丁' }])
   // 门同源：simulateOps 内部改调 replayDraft，错误逐字一致
-  assert.deepEqual(simulateOps(regions, graph, ops), r.errors)
+  assert.deepEqual(simulateOps(nodes, graph, ops), r.errors)
 })
 
 test('sealedDecisionOf：零 add_node 纯 set_pre 批 = seal；含 add_node 接线 = reopen；夹带零新增批不动', () => {
@@ -74,13 +69,13 @@ test('sealedDecisionOf：零 add_node 纯 set_pre 批 = seal；含 add_node 接�
 })
 
 test('editGateErrors：概念未铸名/终点接线义务被拦；全过则空', async () => {
-  const { regions, graph } = fixture()
+  const { nodes, graph } = fixture()
   const anchors: EndpointAnchor[] = [{
     endpoint: '终点甲', goal_type: 'capability', declared: '2026-09-16',
     worksheet: [], seed_nodes: [], start_basis: {},
   }]
   const entries: ConceptEntry[] = []
-  const base = { regions, graph, entries, anchors }
+  const base = { nodes, graph, entries, anchors }
   const bad: EditProposalSpec = {
     course: '数学',
     ops: [{ op: 'add_node', name: '丁', pre: [], teaches: { 未铸名: '会用' } }],

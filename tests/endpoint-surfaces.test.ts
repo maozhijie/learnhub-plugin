@@ -18,53 +18,31 @@ import { nodeVaultFs } from '../src/host/vault-fs.ts'
 /** 异常态形态（ADR-0055 实机「数学」课同构）：终点.pre 仍是种子起点（陈旧接线、
  * 深度 1）、生长 1 节点未汇入终点闭包；旁支叶子作 R1 对照（该告警的、与不该告警的）。 */
 const ANOMALY_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 起步块',
-  '    nodes:',
-  '      - { name: 起点一, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 起点二, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 终点, pre: [起点一, 起点二], opt: false, note: "" }',
-  '  - name: 生长块',
-  '    nodes:',
-  '      - { name: 生长台阶, pre: [起点一], opt: false, note: "", est: 15 }',
-  '      - { name: 旁支叶子, pre: [起点二], opt: false, note: "", est: 10 }',
+  'nodes:',
+  '  - { name: 起点一, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 起点二, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 终点, pre: [起点一, 起点二], opt: false, note: "" }',
+  '  - { name: 生长台阶, pre: [起点一], opt: false, note: "", est: 15 }',
+  '  - { name: 旁支叶子, pre: [起点二], opt: false, note: "", est: 10 }',
 ].join('\n')
 
 /** 已接线形态：终点接在生长台阶之后（深度 2、全图最深）——主线深度保留终点的判据场景。 */
 const WIRED_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 起步块',
-  '    nodes:',
-  '      - { name: 起点一, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 起点二, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 终点, pre: [生长台阶], opt: false, note: "" }',
-  '  - name: 生长块',
-  '    nodes:',
-  '      - { name: 生长台阶, pre: [起点一], opt: false, note: "", est: 15 }',
-  '      - { name: 旁支叶子, pre: [起点二], opt: false, note: "", est: 10 }',
+  'nodes:',
+  '  - { name: 起点一, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 起点二, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 终点, pre: [生长台阶], opt: false, note: "" }',
+  '  - { name: 生长台阶, pre: [起点一], opt: false, note: "", est: 15 }',
+  '  - { name: 旁支叶子, pre: [起点二], opt: false, note: "", est: 10 }',
 ].join('\n')
 
-/** 双区图（两文件）：region 序靠后的「终点」与「空降节点」都无 pre——健康分 floats 豁免的判据场景。 */
+/** 单文件多节点（#284：原「双区两文件」并入一个节点列表）：声明序靠后的「终点」与
+ * 「空降节点」都无 pre——健康分 floats 豁免的判据场景（序豁免改为列表前 1/4）。 */
 const FLOAT_GRAPH = [
-  'region: 一',
-  'color: blue',
-  'blocks:',
-  '  - name: 起点块',
-  '    nodes:',
-  '      - { name: 起点, pre: [], opt: false, note: "", est: 20 }',
-].join('\n')
-const FLOAT_GRAPH_REGION2 = [
-  'region: 二',
-  'color: red',
-  'blocks:',
-  '  - name: 后区',
-  '    nodes:',
-  '      - { name: 终点, pre: [], opt: false, note: "" }',
-  '      - { name: 空降节点, pre: [], opt: false, note: "", est: 15 }',
+  'nodes:',
+  '  - { name: 起点, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 终点, pre: [], opt: false, note: "" }',
+  '  - { name: 空降节点, pre: [], opt: false, note: "", est: 15 }',
 ].join('\n')
 
 /** 锚容器原文：每条 = 一条锚（逐条缺省 = capability + 起草留痕；#239 多终点化）。 */
@@ -82,8 +60,8 @@ function anchorDoc(...endpoints: string[]): string {
 }
 
 async function graphOf(engine: LearnhubEngine): Promise<Graph> {
-  const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
-  return new Graph(regions)
+  const nodes = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
+  return new Graph(nodes)
 }
 
 test('#200 分析载荷：isEndpoint 读锚派生；stats.leaves 剔终点、主线深度保留终点', async () => {
@@ -109,9 +87,7 @@ test('#200 分析载荷：isEndpoint 读锚派生；stats.leaves 剔终点、主
 test('#200 健康分：前置完备项的空降清单与分母剔终点', async () => {
   await withVault({
     graph: FLOAT_GRAPH,
-    graphFile: '00_一.yaml',
     files: [
-      { path: '学习中心/math/data/01_二.yaml', content: FLOAT_GRAPH_REGION2 },
       { path: '学习中心/math/state/终点锚.json', content: anchorDoc('终点') },
     ],
   }, async ({ engine }) => {
@@ -131,7 +107,7 @@ test('#200 审计：R1 豁免终点（对照旁支叶子照告）；基线叶子
     files: [{ path: '学习中心/math/state/终点锚.json', content: anchorDoc() }],
   }, async ({ engine }) => {
     const graph = await graphOf(engine)
-    const result = await runAudit(engine.paths, 'math', '数学', graph, graph.regions, '2026-09-13', nodeVaultFs)
+    const result = await runAudit(engine.paths, 'math', '数学', graph, '2026-09-13', nodeVaultFs)
     const r1 = result.warns.filter(w => w.startsWith('R1 '))
     assert.ok(r1.length > 0, '浅叶子告警在（非种子图）')
     assert.ok(r1.every(w => !w.includes('终点')), 'R1 不再对终点告警')
@@ -198,16 +174,12 @@ test('#200 伪终点措辞废除：普通叶子（无后继）不再误标终点
 
 /** 两终点形态：起点一→终点甲（陈旧接线），起点二→终点乙；旁支叶子作 R1 对照。 */
 const TWO_ENDPOINT_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 起步块',
-  '    nodes:',
-  '      - { name: 起点一, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 起点二, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 终点甲, pre: [起点一], opt: false, note: "" }',
-  '      - { name: 终点乙, pre: [起点二], opt: false, note: "" }',
-  '      - { name: 旁支叶子, pre: [起点一], opt: false, note: "", est: 10 }',
+  'nodes:',
+  '  - { name: 起点一, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 起点二, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 终点甲, pre: [起点一], opt: false, note: "" }',
+  '  - { name: 终点乙, pre: [起点二], opt: false, note: "" }',
+  '  - { name: 旁支叶子, pre: [起点一], opt: false, note: "", est: 10 }',
 ].join('\n')
 
 test('#239 两终点：图面/分析载荷/审计/健康分逐终点判定（一个都不漏）', async () => {
@@ -228,7 +200,7 @@ test('#239 两终点：图面/分析载荷/审计/健康分逐终点判定（一
     // 图叶子 = 两个终点 + 旁支叶子；剔两个终点后只剩旁支叶子
     assert.equal(doc.stats.leaves, 1, 'stats.leaves 剔全部终点')
     // 审计 R1：两个终点都不告警（旁支叶子照告）
-    const result = await runAudit(engine.paths, 'math', '数学', graph, graph.regions, '2026-09-13', nodeVaultFs)
+    const result = await runAudit(engine.paths, 'math', '数学', graph, '2026-09-13', nodeVaultFs)
     const r1 = result.warns.filter(w => w.startsWith('R1 '))
     assert.ok(r1.some(w => w.includes('旁支叶子')), '普通浅叶子照常告警（对照）')
     assert.ok(!r1.some(w => w.includes('终点甲') || w.includes('终点乙')), 'R1 对两个终点都不告警')

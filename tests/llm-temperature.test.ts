@@ -80,11 +80,12 @@ test('无调用点行为变化：真实生成管线全程不传 temperature（�
     mkdirSync(join(root, '学习中心', 'math', '题库'), { recursive: true })
     writeFileSync(join(root, '学习中心', '课程注册表.yaml'),
       'courses:\n  - id: math-01\n    name: 数学\n    root: math\n    enabled: true\n', 'utf8')
-    writeFileSync(join(root, '学习中心', 'math', 'data', '基础.yaml'),
-      'region: 基础\ncolor: blue\nblocks:\n  - name: 入门块\n    nodes:\n      - { name: 入门, pre: [], opt: false, note: "", est: 20 }\n', 'utf8')
+    // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }；schema v4 硬门
+    writeFileSync(join(root, '学习中心', 'math', 'data', '图.yaml'),
+      'nodes:\n  - { name: 入门, pre: [], opt: false, note: "", est: 20 }\n', 'utf8')
     mkdirSync(join(root, '学习中心', 'state'), { recursive: true })
     writeFileSync(join(root, '学习中心', 'state', 'learnhub.json'),
-      JSON.stringify({ schema: { version: 3, formats: {} }, day_cutoff: '00:00' }, null, 1) + '\n', 'utf8')
+      JSON.stringify({ schema: { version: 4, formats: {} }, day_cutoff: '00:00' }, null, 1) + '\n', 'utf8')
 
     const captures: StreamCapture[] = []
     // 应答脚本：大纲 YAML（形状按 contentOutline 真门，节清单可被引擎真实解析）

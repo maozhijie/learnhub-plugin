@@ -15,7 +15,7 @@ import type { EditOp } from './proposals.ts'
 import type { ConceptEntry } from './concepts.ts'
 import { nearNameCandidates, resolveConcept } from './concepts.ts'
 import type { Graph } from './graph.ts'
-import type { GNode, GRegion } from './types.ts'
+import type { GNode } from './types.ts'
 import type { EndpointAnchor } from './seed.ts'
 
 /** 执行官站的语料站标签（host STATIONS.growthDraft 引门面常量对齐；站名是受控词表）。 */
@@ -77,13 +77,9 @@ export interface PatchSuggestion {
 
 // ---- 糖算子展开（#272）：expandPatchOps 与手写原子 ops 在 replayDraft 下逐字等价 ----
 
-/** regions 里按名找节点（草稿补丁展开面的局部助手；Graph 不暴露节点对象访问器）。 */
-function nodeInRegions(regions: ReadonlyArray<GRegion>, name: string): GNode | null {
-  for (const r of regions) for (const b of r.blocks) {
-    const n = b.nodes.find(x => x.name === name)
-    if (n) return n
-  }
-  return null
+/** 图节点列表里按名找节点（草稿补丁展开面的局部助手；Graph 不暴露节点对象访问器）。 */
+function nodeInNodes(nodes: ReadonlyArray<GNode>, name: string): GNode | null {
+  return nodes.find(x => x.name === name) ?? null
 }
 
 /** insert_prereq_chain（#271）+ split_node / suggest_confusable（#272）的统一展开：
@@ -97,7 +93,7 @@ function nodeInRegions(regions: ReadonlyArray<GRegion>, name: string): GNode | n
  * del_node，锚保护在 finish 必拒——按门同源口径提前到展开面 fail loud）。 */
 export function expandPatchOps(
   rawOps: ReadonlyArray<Record<string, unknown>>,
-  regions: ReadonlyArray<GRegion>, graph: Graph, endpoints: ReadonlySet<string>,
+  nodes: ReadonlyArray<GNode>, graph: Graph, endpoints: ReadonlySet<string>,
 ): { ops: EditOp[]; confusables: PatchSuggestion[] } {
   const expanded: EditOp[] = []
   const confusables: PatchSuggestion[] = []
@@ -115,7 +111,7 @@ export function expandPatchOps(
       const into = (Array.isArray(raw.into) ? raw.into as unknown[] : []).map(x => String(x ?? '').trim()).filter(Boolean)
       if (!node) throw new Error(`ops.${i}: split_node 缺 node（被拆节点的名字）。`)
       if (endpoints.has(node)) throw new Error(`ops.${i}: split_node 拒绝——「${node}」是锚定的终点（终点不可拆分；拆含 del_node，锚保护必拒）。`)
-      const src = nodeInRegions(regions, node)
+      const src = nodeInNodes(nodes, node)
       if (!src) throw new Error(`ops.${i}: split_node 的 node 不存在: ${node}（逐字来自 graph_view）。`)
       if (into.length < 2) throw new Error(`ops.${i}: split_node 的 into 至少 2 个新名（拆一份请直接 rename）。`)
       if (new Set(into).size !== into.length) throw new Error(`ops.${i}: split_node 的 into 含重名。`)

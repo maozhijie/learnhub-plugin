@@ -524,13 +524,10 @@ test('#135 练习侧结局：practice_ema 报告从 practice/回执/exec 三股�
 
 // ---- #203 回执评审模式（receipt_review_mode）：白名单增补 + 双变体通道 + 模板登记 ----
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const PRACTICE_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
+  'nodes:',
+  '  - { name: 练耳, pre: [], opt: false, note: "", est: 20, type: practice }',
 ].join('\n')
 const LLM_THROWS = async (): Promise<string> => { throw new Error('LLM 不该被调用（自评臂不评审）') }
 

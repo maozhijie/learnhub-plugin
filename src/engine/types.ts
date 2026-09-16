@@ -100,12 +100,6 @@ export interface GNode {
   misconceptions?: Misconception[]
 }
 
-/** 图块（graphstore.Block）。 */
-export interface GBlock { name: string; nodes: GNode[] }
-
-/** 图区（graphstore.Region，即 data/*.yaml 单文件）。 */
-export interface GRegion { name: string; color: string; blocks: GBlock[] }
-
 /** 课程注册表条目（registry.load 同构）。 */
 export interface CourseEntry { id?: string; name: string; root: string; enabled?: boolean; tags?: string[] }
 

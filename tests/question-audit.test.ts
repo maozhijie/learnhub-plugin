@@ -25,13 +25,10 @@ function scriptFake(replies: string[]) {
   return Object.assign(fn, { calls })
 }
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 乙, pre: [], opt: false, note: "", est: 10 }',
+  'nodes:',
+  '  - { name: 乙, pre: [], opt: false, note: "", est: 10 }',
 ].join('\n')
 
 const NOTE_乙 = {

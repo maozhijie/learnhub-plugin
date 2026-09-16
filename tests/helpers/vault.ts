@@ -30,12 +30,8 @@ export const DEFAULT_REGISTRY = [
 ].join('\n')
 
 export const DEFAULT_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 /** 节点笔记种子；不满足时给原始字符串逐字落盘。 */
@@ -57,17 +53,15 @@ export interface VaultOptions {
   centerRel?: string
   /** 课程注册表原文；undefined = 默认单课程，null = 不写。 */
   registry?: string | null
-  /** 课程图原文；undefined = 默认单节点图，null = 不写（不建课程目录）。 */
+  /** 课程图原文（data/图.yaml，#284 单文件图）；undefined = 默认单节点图，null = 不写（不建课程目录）。 */
   graph?: string | null
-  /** 图数据文件名（默认 基础.yaml）。 */
-  graphFile?: string
   /** 节名 → 笔记原文或种子；未列出的节点不写。键含「/」时按课程目录下相对路径整段解析（多区域用）。 */
   notes?: Record<string, string | NoteSeed>
   /** 节名 → 题库原文或题目 YAML 行数组；未列出的节点不写题库文件。 */
   banks?: Record<string, string | string[][]>
   /** 预置 state/review-log.jsonl（每元素一行 JSON）。 */
   reviewLog?: string[]
-  /** schema 版本戳覆盖（#138 硬门）：undefined = 盖当前 v3；给 version 可伪造旧/新
+  /** schema 版本戳覆盖（#138 硬门）：undefined = 盖当前 v4；给 version 可伪造旧/新
    * 版本测门。门本身的负路径（拒载文案）直接裸构造引擎测——工厂总是构造引擎。 */
   schema?: { version?: number; breaks?: unknown[] }
   /** 时钟注入（#175 阶段①）：undefined = 真实系统时钟；固定时钟 + 定长随机流
@@ -104,10 +98,9 @@ export async function withVault<T>(options: VaultOptions, run: (h: VaultHandle) 
     if (registry !== null) await writeFile(join(center, '课程注册表.yaml'), `${registry}\n`, 'utf8')
 
     if (graph !== null) {
-      const graphFile = options.graphFile ?? '基础.yaml'
       await mkdir(join(course, 'data'), { recursive: true })
       await mkdir(join(course, '题库'), { recursive: true })
-      await writeFile(join(course, 'data', graphFile), `${graph}\n`, 'utf8')
+      await writeFile(join(course, 'data', '图.yaml'), `${graph}\n`, 'utf8')
     }
 
     for (const [key, seed] of Object.entries(options.notes ?? {})) {

@@ -505,7 +505,7 @@ export const 学习域 = {
   }),
   'course-create': command({
     id: "course-create",
-    summary: "Create a course from its name only (ADR-0076: name = empty graph): one write unit lands the registry entry, the course root with data/00_未分区.yaml (zero-node region — the legal carrier of an empty graph), an empty concept registry, an empty endpoint-anchor book and the compass scaffold. NO generation is started: a zero-node graph never enters automatic coach triggers, and adding endpoints declares directions only; the first growth comes from the learner dispatching a coach round explicitly (coach-growth).",
+    summary: "Create a course from its name only (ADR-0076: name = empty graph): one write unit lands the registry entry, the course root with data/图.yaml ({ nodes: [] } — the legal carrier of an empty graph), an empty concept registry, an empty endpoint-anchor book and the compass scaffold. NO generation is started: a zero-node graph never enters automatic coach triggers, and adding endpoints declares directions only; the first growth comes from the learner dispatching a coach round explicitly (coach-growth).",
     args: {
       name: { type: "string", description: "Course name (the registry primary key; duplicates are rejected)", required: true }
     },
@@ -522,7 +522,7 @@ export const 学习域 = {
   }),
   'endpoint-add': command({
     id: "endpoint-add",
-    summary: "Add an endpoint (终点) to a course (ADR-0076: endpoints are learner-authored, any number, written to disk immediately — no generation queue): lands a zero-pre node (region 未分区) plus one anchor record {goal_type: capability, optional goal_note}. No AI qualification gate applies (the learner is the authority); structure gates still run (duplicate node names rejected — an existing node cannot be made an endpoint). Declaration only: NO generation is started, so the learner can declare every direction first and then release the coach once with one explicit round (coach-growth).",
+    summary: "Add an endpoint (终点) to a course (ADR-0076: endpoints are learner-authored, any number, written to disk immediately — no generation queue): lands a zero-pre node plus one anchor record {goal_type: capability, optional goal_note}. No AI qualification gate applies (the learner is the authority); structure gates still run (duplicate node names rejected — an existing node cannot be made an endpoint). Declaration only: NO generation is started, so the learner can declare every direction first and then release the coach once with one explicit round (coach-growth).",
     args: {
       course: { type: "string", required: true },
       endpoint: { type: "string", description: "Endpoint node name (must not collide with any existing node/anchor)", required: true },

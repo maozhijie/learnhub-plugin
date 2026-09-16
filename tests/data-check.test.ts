@@ -7,21 +7,17 @@ import type { DataCheckReport } from '../src/engine/data-check.ts'
 import { withVault } from './helpers/vault.ts'
 
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - name: 入门',
-  '        pre: []',
-  '        opt: false',
-  '        note: ""',
-  '        est: 20',
-  '      - name: 进阶',
-  '        pre: [入门]',
-  '        opt: false',
-  '        note: ""',
-  '        est: 25',
+  'nodes:',
+  '  - name: 入门',
+  '    pre: []',
+  '    opt: false',
+  '    note: ""',
+  '    est: 20',
+  '  - name: 进阶',
+  '    pre: [入门]',
+  '    opt: false',
+  '    note: ""',
+  '    est: 25',
 ].join('\n')
 
 const NOTE = [
@@ -52,9 +48,10 @@ const BANK = [
   '    answer: true',
 ].join('\n')
 
-/** 三处故意损坏：图 schema、笔记 frontmatter、题库 kind（经逃生口覆盖正常档）。 */
+/** 三处故意损坏：图 schema（#284 后坏法 = 节点条目未知字段，loadGraphDoc 对顶层未知键
+ * 不设防；坏档经逃生口覆盖正常档 data/图.yaml）、笔记 frontmatter、题库 kind。 */
 const BROKEN_FILES = [
-  { path: '学习中心/math/data/基础.yaml', content: `${GRAPH}\n        broken: true\n` },
+  { path: '学习中心/math/data/图.yaml', content: 'nodes:\n  - { name: 入门, pre: [], opt: false, note: "", est: 20, broken: true }\n' },
   { path: '学习中心/math/课程/入门.md', content: '---\nnode: "入门\n---\n' },
   { path: '学习中心/math/题库/入门.yaml', content: `${BANK.replace('true_false', 'impossible')}\n` },
 ]
@@ -308,14 +305,10 @@ test('Data Check evidence_streams area：多流同时坏不炸、逐流出 findi
 
 test('删终点体检无 Broken（#240/ADR-0076）：锚与节点一并移除、收尾宣告随锚走，体检零 endpoint_anchor finding', async () => {
   const ENDPOINT_GRAPH = [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 入门块',
-    '    nodes:',
-    '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-    '      - { name: 中间台阶, pre: [入门], opt: false, note: "", est: 20 }',
-    '      - { name: 终点, pre: [入门], opt: false, note: "" }',
+    'nodes:',
+    '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+    '  - { name: 中间台阶, pre: [入门], opt: false, note: "", est: 20 }',
+    '  - { name: 终点, pre: [入门], opt: false, note: "" }',
   ].join('\n')
   const ANCHORS = JSON.stringify({ version: 2, anchors: [{
     endpoint: '终点', goal_type: 'capability', declared: '2026-09-01',

@@ -161,7 +161,7 @@ export function RecCard({ e, gen, onOpen, onSkip, onGenerate, onAdvice }: {
             {!generating && e.hasContent && <Tag size='small' color='green' className='lh-ml-8'>已生成</Tag>}
           </Title>
           <Text type='secondary' className='lh-t-12'>
-            {e.course}{e.region ? ` · ${e.region}` : ''}{e.why ? ` · ${e.why}` : ''}
+            {e.course}{e.why ? ` · ${e.why}` : ''}
           </Text>
           {e.intention && (
             <Text type='secondary' className='lh-t-12 lh-block lh-mt-2 lh-text-gold'>

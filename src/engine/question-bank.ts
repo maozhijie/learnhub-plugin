@@ -37,7 +37,7 @@ import type { BrokenNote } from './notes.ts'
 import { asFm, loadNote, saveNote } from './notes.ts'
 import type { FSRS } from 'ts-fsrs'
 import { NOTE_SOURCE_COURSE } from './types.ts'
-import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, NoteSourceEntry, GRegion, VaultPriorAudit } from './types.ts'
+import type { EncEdge, ErratumRec, Fm, CourseEntry, JournalRec, PracticeRec, NoteSourceEntry, GNode, VaultPriorAudit } from './types.ts'
 import type { AdviceDismissRec } from './bank-advice.ts'
 import type { LlmComplete } from './llm.ts'
 import type { ExplainPoint } from './explain.ts'
@@ -486,7 +486,7 @@ export interface BankDeps {
   errorCards: Pick<ErrorCards, 'addCards' | 'archiveCard' | 'load' | 'updateCardEvidence'>
   concepts: Pick<ConceptRegistry, 'load'>
   proposals: {
-    ensureNotesFor(root: string, regions: GRegion[]): Promise<number>
+    ensureNotesFor(root: string, nodes: GNode[]): Promise<number>
   }
   /** 课程调度器实例缓存（FSRS 写回后失效用）。 */
   schedCache: Map<string | null, FSRS>
@@ -1556,7 +1556,7 @@ export class BankSubsystem {
     const out: Array<{ course: string; created: number }> = []
     for (const c of courses) {
       const { graph } = await this.e.loadView(c)
-      const created = await this.e.proposals.ensureNotesFor(c.root, graph.regions)
+      const created = await this.e.proposals.ensureNotesFor(c.root, graph.nodes)
       out.push({ course: c.name, created })
     }
     return { courses: out }

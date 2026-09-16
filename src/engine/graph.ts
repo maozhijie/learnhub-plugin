@@ -1,7 +1,8 @@
 /**
- * 概念图模型 + data/*.yaml 加载 + 结构检查 + 快照（吸收自 Python graphstore.py）。
+ * 概念图模型 + data/图.yaml 加载 + 结构检查 + 快照（吸收自 Python graphstore.py）。
  *
- * data/*.yaml 是图结构最终事实源（人可读、git 可审、agent 经提案修改）；
+ * data/图.yaml 是图结构最终事实源（一课程一文件，#284 存储塌缩：人可读、git 可审、
+ * agent 经提案修改）；
  * schema 级错误抛 SchemaError 直接中断；语义级问题（重名/断边/环）由 audit 报告。
  * Graph 构造不因重名/断边/环崩溃：派生邻接表、拓扑序（环检测）、深度、可达集、
  * 传递约简边、连通分量、就绪判定，语义与 Python 版逐项对齐。
@@ -13,7 +14,7 @@ import { atomicWrite } from './io.ts'
 import { safeFilename } from './paths.ts'
 import type { ConceptEntry } from './concepts.ts'
 import { resolveConcept } from './concepts.ts'
-import type { GBlock, GNode, GRegion, EncEdge, ConceptTier, Misconception } from './types.ts'
+import type { GNode, EncEdge, ConceptTier, Misconception } from './types.ts'
 import { BLOOM_LEVELS, CONCEPT_TIERS } from './types.ts'
 import type { Paths } from './paths.ts'
 
@@ -183,27 +184,22 @@ export function parseNode(raw: unknown, path: string, where: string, warns?: str
   return node
 }
 
-/** 解析单个区 YAML 文件为 Region。 */
-export function loadRegionDoc(doc: unknown, path: string): GRegion {
-  if (typeof doc !== 'object' || doc === null) fail(path, '顶层必须是映射（region/color/blocks）')
+/** 防复活门（ADR-0090 裁决 1）：文档顶层的历史结构键 fail loud 拒收——旧 v3 分区文件
+ * 不得静默忽略顶层键过关（节点级的见 RETIRED_NODE_KEYS）。 */
+const RETIRED_DOC_KEYS: Record<string, string> = {
+  regions: 'Region/Block 已退役（#275/#284）：图是一课程一文件 data/图.yaml（扁平 nodes[]），顶层不接受 regions——旧 v3 分区文件请删除重建',
+  blocks: 'Region/Block 已退役（#275/#284）：图是一课程一文件 data/图.yaml（扁平 nodes[]），顶层不接受 blocks——旧 v3 分区文件请删除重建',
+  color: 'Region/Block 已退役（#275/#284）：region 着色随分区退役，顶层不接受 color——旧 v3 分区文件请删除重建',
+}
+
+/** 解析单文件图 YAML（data/图.yaml，#284 存储塌缩：一课程一文件）为节点列表。 */
+export function loadGraphDoc(doc: unknown, path: string): GNode[] {
+  if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) fail(path, '顶层必须是映射（nodes）')
   const d = doc as Record<string, unknown>
-  const region = d.region
-  if (typeof region !== 'string' || !region.trim()) fail(path, 'region 缺失或为空')
-  const color = typeof d.color === 'string' ? d.color : ''
-  if (typeof d.color === 'undefined') { /* color 缺省允许 */ }
-  if (!Array.isArray(d.blocks)) fail(path, 'blocks 必须是列表')
-  const blocks: GBlock[] = d.blocks.map((braw, bi) => {
-    const where = `块#${bi + 1}`
-    if (typeof braw !== 'object' || braw === null || typeof (braw as Record<string, unknown>).name !== 'string') {
-      fail(path, `${where} 缺少 name`)
-    }
-    const b = braw as Record<string, unknown>
-    const bname = (b.name as string).trim()
-    if (!Array.isArray(b.nodes)) fail(path, `块[${bname}] nodes 必须是列表`)
-    const nodes = (b.nodes as unknown[]).map(nraw => parseNode(nraw, path, `块[${bname}]`))
-    return { name: bname, nodes }
-  })
-  return { name: region.trim(), color, blocks }
+  const retired = Object.keys(d).filter(k => RETIRED_DOC_KEYS[k])
+  if (retired.length) fail(path, retired.map(k => RETIRED_DOC_KEYS[k]).join('；'))
+  if (!Array.isArray(d.nodes)) fail(path, 'nodes 必须是列表')
+  return d.nodes.map(nraw => parseNode(nraw, path, '节点'))
 }
 
 export class GraphStore {
@@ -211,78 +207,51 @@ export class GraphStore {
 
   private get dataDir(): string { return join(this.courseRoot, 'data') }
 
-  /** 按文件名顺序加载 data 目录全部 .yaml → Region 列表。 */
-  async load(): Promise<GRegion[]> {
-    const files = await this.regionFilePaths()
-    if (!files.length) {
+  /** 单文件图路径（data/图.yaml，#284 存储塌缩）。 */
+  graphPath(): string { return join(this.dataDir, '图.yaml') }
+
+  /** 加载单文件图 → 节点列表。 */
+  async load(): Promise<GNode[]> {
+    const path = this.graphPath()
+    if (!this.fs.exists(path)) {
       // 两类缺失分开报（#61 教训：合并成「为空或不存在」把排查带偏）——建课前目录
-      // 不存在是正常态（建课提案预览按此分流），目录在但零 .yaml 才是真异常
+      // 不存在是正常态（建课提案预览按此分流），目录在但缺 图.yaml 才是真异常
       const missing = !this.fs.exists(this.dataDir)
       throw new SchemaError(missing
         ? `数据目录不存在: ${this.dataDir}`
-        : `数据目录为空（没有 .yaml 区文件）: ${this.dataDir}`)
+        : `图文件不存在（应有 data/图.yaml）: ${this.dataDir}`)
     }
-    const out: GRegion[] = []
-    for (const p of files) {
-      out.push(loadRegionDoc(YAML.parse(await this.fs.readFile(p)), p))
-    }
-    return out
+    return loadGraphDoc(YAML.parse(await this.fs.readFile(path)), path)
   }
 
-  async regionFilePaths(): Promise<string[]> {
-    let entries
-    try {
-      entries = await this.fs.readdir(this.dataDir)
-    } catch {
-      return []
-    }
-    return entries.filter(f => f.endsWith('.yaml')).sort()
-      .map(f => join(this.dataDir, f))
-  }
-
-  /** 区名 → yaml 文件路径（edit/seed apply 落图用）。 */
-  async regionFiles(): Promise<Record<string, string>> {
-    const out: Record<string, string> = {}
-    for (const p of await this.regionFilePaths()) {
-      const r = loadRegionDoc(YAML.parse(await this.fs.readFile(p)), p)
-      out[r.name] = p
-    }
-    return out
-  }
-
-  /** Region → YAML 文本（节点字段按 name/pre/opt/note/est/type/bloom/difficulty/teaches/
+  /** 节点列表 → YAML 文本（节点字段按 name/pre/opt/note/est/type/bloom/difficulty/teaches/
    * assumes/misconceptions/enc 顺序，省空值）。 */
-  regionDoc(region: GRegion, color?: string): Record<string, unknown> {
+  graphDoc(nodes: GNode[]): Record<string, unknown> {
     return {
-      region: region.name,
-      color: color !== undefined ? color : region.color,
-      blocks: region.blocks.map(b => ({
-        name: b.name,
-        nodes: b.nodes.map(n => {
-          const doc: Record<string, unknown> = { name: n.name }
-          if (n.pre.length) doc.pre = [...n.pre]
-          if (n.opt) doc.opt = true
-          if (n.note) doc.note = n.note
-          if (n.est !== undefined) doc.est = n.est
-          if (n.type) doc.type = n.type
-          if (n.bloom) doc.bloom = n.bloom
-          if (n.difficulty !== undefined) doc.difficulty = n.difficulty
-          if (n.teaches && Object.keys(n.teaches).length) doc.teaches = { ...n.teaches }
-          if (n.assumes && Object.keys(n.assumes).length) doc.assumes = { ...n.assumes }
-          if (n.misconceptions?.length) doc.misconceptions = n.misconceptions.map(m => ({ ...m }))
-          if (n.enc.length) doc.enc = n.enc.map(e => {
-            const edge: Record<string, unknown> = { node: e.node, w: e.w }
-            if (e.note) edge.note = e.note
-            return edge
-          })
-          return doc
-        }),
-      })),
+      nodes: nodes.map(n => {
+        const doc: Record<string, unknown> = { name: n.name }
+        if (n.pre.length) doc.pre = [...n.pre]
+        if (n.opt) doc.opt = true
+        if (n.note) doc.note = n.note
+        if (n.est !== undefined) doc.est = n.est
+        if (n.type) doc.type = n.type
+        if (n.bloom) doc.bloom = n.bloom
+        if (n.difficulty !== undefined) doc.difficulty = n.difficulty
+        if (n.teaches && Object.keys(n.teaches).length) doc.teaches = { ...n.teaches }
+        if (n.assumes && Object.keys(n.assumes).length) doc.assumes = { ...n.assumes }
+        if (n.misconceptions?.length) doc.misconceptions = n.misconceptions.map(m => ({ ...m }))
+        if (n.enc.length) doc.enc = n.enc.map(e => {
+          const edge: Record<string, unknown> = { node: e.node, w: e.w }
+          if (e.note) edge.note = e.note
+          return edge
+        })
+        return doc
+      }),
     }
   }
 
-  async writeRegionDoc(path: string, region: GRegion): Promise<void> {
-    await atomicWrite(path, YAML.stringify(this.regionDoc(region)), this.fs) // 与 applyEnrich 同一原语（ADR-0046：同一正典一种 durability）
+  async writeGraphDoc(nodes: GNode[]): Promise<void> {
+    await atomicWrite(this.graphPath(), YAML.stringify(this.graphDoc(nodes)), this.fs) // 与 applyEnrich 同一原语（ADR-0046：同一正典一种 durability）
   }
 }
 
@@ -311,9 +280,6 @@ export class Graph {
   assumedByOf: Record<string, string[]> = {}
   /** name → 误解先验列表（可选字段；缺席的节点不在表内）。 */
   misconceptionsOf: Record<string, Misconception[]> = {}
-  regionIdxOf: Record<string, number> = {}
-  /** name → [区序号, 区名, 块名]。 */
-  blockOf: Record<string, [number, string, string]> = {}
   encOf: Record<string, [string, number][]> = {}
   count: Record<string, number> = {}
   succ: Record<string, string[]> = {}
@@ -336,38 +302,30 @@ export class Graph {
   edges: [string, string][] = []
   components: string[][] = []
 
-  constructor(readonly regions: GRegion[]) {
-    for (const n of this.regions.flatMap(r => r.blocks.flatMap(b => b.nodes))) {
-      this.names.push(n.name)
-      this.count[n.name] = (this.count[n.name] ?? 0) + 1
-      this.preOf[n.name] = [...n.pre]
-    }
-    for (const [ridx, region] of this.regions.entries()) {
-      for (const block of region.blocks) {
-        for (const node of block.nodes) {
-          const n = node.name
-          this.regionIdxOf[n] = ridx
-          this.blockOf[n] = [ridx, region.name, block.name]
-          this.encOf[n] = node.enc.map(e => [e.node, e.w])
-          if (node.opt) this.opt.add(n)
-          if (node.note) this.noteOf[n] = node.note
-          if (node.est !== undefined) this.estOf[n] = node.est
-          if (node.type) this.typeOf[n] = node.type
-          if (node.bloom) this.bloomOf[n] = node.bloom
-          if (node.difficulty !== undefined) this.difficultyOf[n] = node.difficulty
-          if (node.teaches && Object.keys(node.teaches).length) {
-            this.teachesOf[n] = node.teaches
-            // 反向映射与正向同一趟折出（#270）：本趟遍历序 = names 序，故 taughtByOf[c]
-            // 的节点序与「names 序扫折叠」逐字一致。
-            for (const c of Object.keys(node.teaches)) (this.taughtByOf[c] ??= []).push(n)
-          }
-          if (node.assumes && Object.keys(node.assumes).length) {
-            this.assumesOf[n] = node.assumes
-            for (const c of Object.keys(node.assumes)) (this.assumedByOf[c] ??= []).push(n)
-          }
-          if (node.misconceptions?.length) this.misconceptionsOf[n] = node.misconceptions
-        }
+  constructor(readonly nodes: GNode[]) {
+    for (const n of this.nodes) {
+      const name = n.name
+      this.names.push(name)
+      this.count[name] = (this.count[name] ?? 0) + 1
+      this.preOf[name] = [...n.pre]
+      this.encOf[name] = n.enc.map(e => [e.node, e.w])
+      if (n.opt) this.opt.add(name)
+      if (n.note) this.noteOf[name] = n.note
+      if (n.est !== undefined) this.estOf[name] = n.est
+      if (n.type) this.typeOf[name] = n.type
+      if (n.bloom) this.bloomOf[name] = n.bloom
+      if (n.difficulty !== undefined) this.difficultyOf[name] = n.difficulty
+      if (n.teaches && Object.keys(n.teaches).length) {
+        this.teachesOf[name] = n.teaches
+        // 反向映射与正向同一趟折出（#270）：本趟遍历序 = names 序，故 taughtByOf[c]
+        // 的节点序与「names 序扫折叠」逐字一致。
+        for (const c of Object.keys(n.teaches)) (this.taughtByOf[c] ??= []).push(name)
       }
+      if (n.assumes && Object.keys(n.assumes).length) {
+        this.assumesOf[name] = n.assumes
+        for (const c of Object.keys(n.assumes)) (this.assumedByOf[c] ??= []).push(name)
+      }
+      if (n.misconceptions?.length) this.misconceptionsOf[name] = n.misconceptions
     }
     this.nset = new Set(this.names)
     for (const n of this.names) {
@@ -573,10 +531,9 @@ export function groupView(
 }
 
 /** 合并结构检查：重名 / 断边 / 环 → 错误列表（空 = 通过）。 */
-export function structureCheck(existing: Graph | null, newRegions: GRegion[], label: string): string[] {
+export function structureCheck(existing: Graph | null, newNodes: GNode[], label: string): string[] {
   const errors: string[] = []
   const mergedNames = existing ? [...existing.names] : []
-  const newNodes = newRegions.flatMap(r => r.blocks.flatMap(b => b.nodes))
   const seen = new Set(mergedNames)
   for (const n of newNodes) {
     if (seen.has(n.name)) errors.push(`${label}重名节点: ${n.name}`)
@@ -591,7 +548,7 @@ export function structureCheck(existing: Graph | null, newRegions: GRegion[], la
     }
   }
   if (!errors.length) {
-    const merged = new Graph([...(existing?.regions ?? []), ...newRegions])
+    const merged = new Graph([...(existing?.nodes ?? []), ...newNodes])
     if (merged.hasCycle) errors.push(`${label}引入环：涉及 ${merged.cycleNodes.slice(0, 5).join('、')}`)
   }
   return errors
@@ -600,9 +557,9 @@ export function structureCheck(existing: Graph | null, newRegions: GRegion[], la
 /** 误解封顶的跨节点计数（#127 §1.3/§7）：同一概念全课程（合并视图）封顶 3 条，
  * 越界 ERROR。受理门在模拟合并后的图上跑——提案新增与存量一起计数，存量已越界时
  * 下一笔提案同样被拒（拒收信息可执行：列出概念与现计数）。 */
-export function misconceptionCapErrors(regions: GRegion[]): string[] {
+export function misconceptionCapErrors(nodes: GNode[]): string[] {
   const count = new Map<string, number>()
-  for (const r of regions) for (const b of r.blocks) for (const n of b.nodes) {
+  for (const n of nodes) {
     for (const m of n.misconceptions ?? []) count.set(m.concept, (count.get(m.concept) ?? 0) + 1)
   }
   return [...count.entries()].filter(([, n]) => n > 3)
@@ -610,33 +567,21 @@ export function misconceptionCapErrors(regions: GRegion[]): string[] {
     .map(([concept, n]) => `误解封顶越界: 概念「${concept}」全课程已有 ${n} 条误解（同一概念封顶 3 条）——新增前先收敛（并入既有条目文字或换节点承载）`)
 }
 
-/** 整图快照文档（data/*.yaml 的文档序列 JSON 化，save_snapshot 同构）。 */
-export function snapshotDoc(store: GraphStore, regions: GRegion[]): unknown {
-  return regions.map(r => store.regionDoc(r))
+/** 整图快照文档（data/图.yaml 的文档 JSON 化，save_snapshot 同构）。 */
+export function snapshotDoc(store: GraphStore, nodes: GNode[]): unknown {
+  return store.graphDoc(nodes)
 }
 
 /** 既有声明 enc 原始形态表（节点名 → 边数组）。图视图的 encOf 会丢 note——
  * enc 回填与行为推断提案要「整体替换且既有声明原样保留」，必须走这里。 */
 export function declaredEncOf(graph: Graph): Map<string, EncEdge[]> {
-  return new Map(graph.regions.flatMap(r => r.blocks.flatMap(b => b.nodes)).map(n => [n.name, n.enc]))
+  return new Map(graph.nodes.map(n => [n.name, n.enc]))
 }
 
-/** 就绪清单构建（build 产物：按区/块列未学条目）。 */
+/** 就绪清单构建（build 产物：列未学条目）。#284 存储塌缩后无区/块可分组，改平铺清单。 */
 export async function writeReadyList(paths: Paths, root: string, graph: Graph, done: Set<string>, fs: VaultFs): Promise<void> {
-  const lines: string[] = ['# 就绪清单', '', '> 引擎自动生成：当前就绪（前置达标）的未学节点，按区/块分组。', '']
-  const ready = graph.readySet(done, new Set())
-  const byRegion: Record<string, string[]> = {}
-  for (const n of ready) {
-    const region = graph.blockOf[n][1]
-    ;(byRegion[region] ??= []).push(n)
-  }
-  for (const region of graph.regions) {
-    const items = byRegion[region.name]
-    if (!items?.length) continue
-    lines.push(`## ${region.name}`, '')
-    for (const n of items) lines.push(`- ${n}（块：${graph.blockOf[n][2]}）`)
-    lines.push('')
-  }
+  const lines: string[] = ['# 就绪清单', '', '> 引擎自动生成：当前就绪（前置达标）的未学节点。', '']
+  for (const n of graph.readySet(done, new Set())) lines.push(`- ${n}`)
   await atomicWrite(paths.readyPath(root), lines.join('\n'), fs)
 }
 

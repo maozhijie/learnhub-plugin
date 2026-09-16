@@ -11,7 +11,7 @@ import { YAML } from './yaml.ts'
 import { Store } from './store.ts'
 import { atomicWrite } from './io.ts'
 import { runWriteUnit } from './write-unit.ts'
-import { Graph, GraphStore, loadRegionDoc, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from './graph.ts'
+import { Graph, GraphStore, parseConceptFields, parseEnc, misconceptionCapErrors, snapshotDoc } from './graph.ts'
 import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from './concepts.ts'
 import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from './concepts.ts'
 import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from './concepts.ts'
@@ -26,7 +26,7 @@ import type { Clock } from './clock.ts'
 import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
 import { RECHECK_DAYS_DEFAULT } from './params.ts'
-import type { GRegion, GBlock, GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
+import type { GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from './types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from './types.ts'
 import type { Paths } from './paths.ts'
 import type { CourseEntry, ProposalKind, ProposalRec } from './types.ts'
@@ -411,7 +411,7 @@ export function sealedDecisionOf(ops: EditOp[], anchors: EndpointAnchor[]): Seal
  * 草稿通过 = 门通过按构造成立。上下文由调用方装载（entries = 登记现行条目，需铸名
  * 合并的调用方传合并后集合并省略 mints；anchors = 现行终点锚），本函数零 IO。 */
 export interface EditGateCtx {
-  regions: GRegion[]
+  nodes: GNode[]
   graph: Graph
   entries: ConceptEntry[]
   anchors: EndpointAnchor[]
@@ -423,7 +423,7 @@ export interface EditGateCtx {
 export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): Promise<string[]> {
   const mints = ctx.mints ?? []
   const errors = [
-    ...simulateOps(ctx.regions, ctx.graph, spec.ops),
+    ...simulateOps(ctx.nodes, ctx.graph, spec.ops),
     ...mintConflicts(mints, ctx.entries),
     ...conceptReferenceErrors(conceptRefsOfOps(spec.ops), namesOf([...ctx.entries, ...mints])),
     ...endpointGuardErrorsOf(spec, ctx.anchors),
@@ -608,17 +608,13 @@ export class GraphProposals {
 
   /** 为图中缺笔记的节点补骨架文件（幂等）：apply 落图后调用。
    * 节点存在于图就该有 frontmatter 文件——vault 笔记是调度状态的事实源。 */
-  async ensureNotesFor(root: string, regions: GRegion[]): Promise<number> {
+  async ensureNotesFor(root: string, nodes: GNode[]): Promise<number> {
     let created = 0
-    for (const r of regions) {
-      for (const b of r.blocks) {
-        for (const n of b.nodes) {
-          const path = this.paths.courseNotePath(root, n.name)
-          if (this.fs.exists(path)) continue
-          await saveNote(path, defaultFrontmatter(n.name) as unknown as Record<string, unknown>, '> 内容待生成。\n', this.fs)
-          created++
-        }
-      }
+    for (const n of nodes) {
+      const path = this.paths.courseNotePath(root, n.name)
+      if (this.fs.exists(path)) continue
+      await saveNote(path, defaultFrontmatter(n.name) as unknown as Record<string, unknown>, '> 内容待生成。\n', this.fs)
+      created++
     }
     return created
   }
@@ -648,15 +644,15 @@ export class GraphProposals {
     const spec = v.spec!
     const course = await this.registry.get(spec.course)
     if (!course) throw new Error(`[propose-edit] 注册表中没有课程「${spec.course}」。`)
-    const regions = await new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs).load()
-    const graph = new Graph(regions)
+    const nodes = await new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs).load()
+    const graph = new Graph(nodes)
     const entries = await this.concepts.load(course.root) // 登记表 Broken 在此抛错，apply 不落盘
     // 非阻提示照旧（#264 近似名预检与量级告警）；错误面统一走 editGateErrors（门同源，ADR-0088）
     warns.push(...nearNameWarnings(nearNameCandidates(spec.concepts ?? [], entries)))
     if (spec.concepts?.length) warns.push(...conceptMagnitudeWarnings(applyConceptMints(entries, spec.concepts).entries))
     const anchors = await readAnchors(this.paths.anchorPath(course.root), this.fs)
     const gateErrors = await editGateErrors(spec, {
-      regions, graph, entries, anchors,
+      nodes, graph, entries, anchors,
       mints: spec.concepts ?? [], growthGate: this.growthGate,
     })
     if (gateErrors.length) {
@@ -721,12 +717,12 @@ export class GraphProposals {
     if (conceptErrors.length) {
       throw new Error(`[apply-edit] 概念引用对表失败，提案不落盘。\n${conceptErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
-    const regions = await store.load()
-    const graph = new Graph(regions)
+    const nodes = await store.load()
+    const graph = new Graph(nodes)
     // 门复验统一走 editGateErrors（门同源，ADR-0088）：结构重放/概念对表（铸名合并集）/锚
     // 保护/巩固门/生长闸门一次跑全——受理与 apply 之间图/登记表/锚可能变化，双门全过才写盘。
     const gateErrors = await editGateErrors(spec, {
-      regions, graph, entries: mergedEntries,
+      nodes, graph, entries: mergedEntries,
       anchors: await readAnchors(this.paths.anchorPath(root), this.fs),
       growthGate: this.growthGate,
     })
@@ -745,15 +741,6 @@ export class GraphProposals {
     // 生长闸门复验（#146）已并入上方 editGateErrors（门同源）——空门合并保留这段位以锚住
     // “route 门在生长闸之后”的写序不变。
 
-    // add_node 无坐标（#275）：落到图内既有的单一区（首个区）——区内无块时落点会建一个以
-    // 区名命名的块（created_blocks 记这些新建块）。存储塌缩（一课程一文件）见 #284。
-    const createdBlocks = new Set<string>()
-    for (const op of spec.ops) {
-      if (op.op !== 'add_node') continue
-      const region = regions[0]
-      if (region && !region.blocks.length) createdBlocks.add(region.name)
-    }
-
     const renames: Record<string, string> = {}
     const dels: string[] = []
     for (const op of spec.ops) {
@@ -761,18 +748,17 @@ export class GraphProposals {
       else if (op.op === 'del_node') dels.push(op.node!)
     }
 
-    // 2. data/*.yaml 重写（内存侧应用 ops；落盘动作进下方写入单元）
-    applyOpsToRegions(regions, spec.ops)
-    const files = await store.regionFiles()
+    // 2. data/图.yaml 重写（内存侧应用 ops；落盘动作进下方写入单元）
+    applyOpsToNodes(nodes, spec.ops)
 
-    // 写入单元（#176）：写序照今天的声明——「铸名 → 图区重写 → 终点锚 sealed 维护
+    // 写入单元（#176）：写序照今天的声明——「铸名 → 图重写 → 终点锚 sealed 维护
     // （#202）→ 笔记联动 → 罗盘批内重写 → 边实验账本 → 快照 → 笔记骨架 → journal(graph_edit)
     // → 提案 applied」。铸名孤儿条目合法、悬空引用违约（登记表先写、图在后）；路线门/
     // 巩固门/生长闸全过才进写序（罗盘被拒不落盘）。失败上抛中止，不回滚不续跑，失败不写
     // journal；重放被 takePending/simulateOps 门拦住（重放不保证收敛，靠门不靠续段）。
     let compassRewritten = false
     const probationRegistered: string[] = []
-    let regions2: Awaited<ReturnType<GraphStore['load']>> = []
+    let nodes2: Awaited<ReturnType<GraphStore['load']>> = []
     let version = 0
     await runWriteUnit('applyEdit', {
       clock: this.clock!,
@@ -787,11 +773,9 @@ export class GraphProposals {
           },
         },
         {
-          name: '图区重写',
+          name: '图重写',
           run: async () => {
-            for (const region of regions) {
-              if (region.name in files) await store.writeRegionDoc(files[region.name], region)
-            }
+            await store.writeGraphDoc(nodes)
           },
         },
         {
@@ -858,15 +842,15 @@ export class GraphProposals {
         {
           name: '快照',
           run: async () => {
-            regions2 = await store.load()
+            nodes2 = await store.load()
             version = (await this.store.latestSnapshotVersion(course.name)) + 1
-            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
+            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, nodes2))
           },
         },
         {
           // 逐节点 existsSync 跳过（步骤内幂等：已有笔记的节点不覆盖）
           name: '笔记骨架补齐',
-          run: async () => { await this.ensureNotesFor(root, regions2) },
+          run: async () => { await this.ensureNotesFor(root, nodes2) },
         },
         {
           // detail 三段：操作清单（add_node 显示 name，其余显示 node）→ 铸名 → 生长批裁决；
@@ -894,12 +878,11 @@ export class GraphProposals {
       ],
     })
     // 种子图豁免（#142）：apply 后图仍 = 终点锚种子节点全集时健康分不设阈值
-    const seedPhase = isSeedGraph(await readAnchors(this.paths.anchorPath(root), this.fs), new Graph(regions2))
+    const seedPhase = isSeedGraph(await readAnchors(this.paths.anchorPath(root), this.fs), new Graph(nodes2))
     return {
       course: course.name,
       ops: spec.ops.length,
       snapshot: version,
-      created_blocks: [...createdBlocks],
       renames,
       deleted: dels,
       ...(spec.note
@@ -920,7 +903,7 @@ export class GraphProposals {
 
   /** 名称建课（ADR-0076 §一：建课 = 名称即空图）：面板只收一个课程名，一个写入单元
    * 落全部脚手架——注册表条目（enabled）+ 课程根目录（data/课程/state）+
-   * `data/00_未分区.yaml`（零节点区，空图的合法载体：GraphStore.load 正常读取）+
+   * `data/图.yaml`（{ nodes: [] }，空图的合法载体：GraphStore.load 正常读取，#284）+
    * 空 `概念登记表.yaml`（concepts: []）+ `state/终点锚.json`（空锚，合法空态）+
    * `罗盘.md` 脚手架。**不自动初始化生成**：零节点图不入任何自动触发点（零节点闸），
    * 第一次生长由学习者显式下发或加终点触发。写序 = 脚手架在先、注册表条目在后：
@@ -935,7 +918,6 @@ export class GraphProposals {
     const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
     const anchorPath = this.paths.anchorPath(root)
     const compassPath = this.paths.compassPath(root)
-    const zeroRegion: GRegion = { name: '未分区', color: '', blocks: [] }
     const entry: CourseEntry = { id: `${root}-01`, name: trimmed, root, enabled: true }
     await runWriteUnit('createCourse', {
       course: trimmed,
@@ -943,10 +925,10 @@ export class GraphProposals {
       journal: rec => this.store.appendJournal(rec),
       steps: [
         {
-          name: '课程脚手架（目录/零节点区/概念登记表/终点锚/罗盘）',
+          name: '课程脚手架（目录/空图/概念登记表/终点锚/罗盘）',
           run: async () => {
             for (const sub of ['data', '课程', 'state']) await this.fs.mkdir(`${this.centerRoot}/${root}/${sub}`)
-            await store.writeRegionDoc(`${this.paths.dataDir(root)}/00_未分区.yaml`, zeroRegion)
+            await store.writeGraphDoc([])
             await this.concepts.save(root, [])
             await writeAnchors(anchorPath, [], this.fs)
             await atomicWrite(compassPath, compassScaffold(trimmed), this.fs)
@@ -965,8 +947,8 @@ export class GraphProposals {
   }
 
   /** 添加终点（ADR-0076 §三：终点由学习者手动增删，立即写盘不等生成队列）：建一个
-   * 零 pre 新节点（区/块 = 未分区）+ 落一条锚（可选一句目标描述给教练读；目标类型
-   * 默认能力锚定、不露表单）。人手加终点不过资格判据（人是权威），但结构门照旧：
+   * 零 pre 新节点落 data/图.yaml（#284 单文件图）+ 落一条锚（可选一句目标描述给教练读；
+   * 目标类型默认能力锚定、不露表单）。人手加终点不过资格判据（人是权威），但结构门照旧：
    * 课程必须已注册、图内不得重名（对已有正文/题库/调度/est 的节点名加终点一律拒）、
    * 锚集合不得重名。不提供改名、不提供「把已有节点设为终点」（撞纯标记红线）。 */
   async addEndpoint(courseName: string, endpointName: string, goalNote?: string): Promise<{ course: string; endpoint: string }> {
@@ -976,8 +958,8 @@ export class GraphProposals {
     if (!name) throw new Error('[endpoint-add] 终点名不能为空。')
     const root = course.root
     const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
-    const regions = await store.load()
-    const graph = new Graph(regions)
+    const nodes = await store.load()
+    const graph = new Graph(nodes)
     if (graph.nset.has(name)) {
       throw new Error(`[endpoint-add] 图上已有节点「${name}」——不能把已有节点设为终点（撞纯标记红线：已有正文/题库/调度的节点不能被标成终点）；终点必须是新建的零 pre 节点。`)
     }
@@ -1002,25 +984,10 @@ export class GraphProposals {
       journal: rec => this.store.appendJournal(rec),
       steps: [
         {
-          name: '终点节点落图（未分区，零 pre）',
+          name: '终点节点落图（零 pre）',
           run: async () => {
-            const regionName = '未分区'
-            const files = await store.regionFiles()
-            const path = files[regionName]
-            if (path) {
-              const current = loadRegionDoc(YAML.parse(await this.fs.readFile(path)), path)
-              let block = current.blocks.find(b => b.name === regionName)
-              if (!block) {
-                block = { name: regionName, nodes: [] }
-                current.blocks.push(block)
-              }
-              block.nodes.push({ name, pre: [], opt: false, note: '', enc: [] })
-              await store.writeRegionDoc(path, current)
-            } else {
-              const idx = Object.keys(files).length
-              const region: GRegion = { name: regionName, color: '', blocks: [{ name: regionName, nodes: [{ name, pre: [], opt: false, note: '', enc: [] }] }] }
-              await store.writeRegionDoc(`${this.paths.dataDir(root)}/${String(idx).padStart(2, '0')}_${regionName}.yaml`, region)
-            }
+            nodes.push({ name, pre: [], opt: false, note: '', enc: [] })
+            await store.writeGraphDoc(nodes)
           },
         },
         {
@@ -1049,28 +1016,17 @@ export class GraphProposals {
       throw new Error(`[endpoint-remove] 「${name}」不是课程「${course.name}」的终点（锚集合里没有它）。`)
     }
     const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
-    const regions = await store.load()
-    // 内存侧先算好各区重写文本（摘终点节点 + 全图摘指向它的 pre 边；台阶留在图上成为末端）
+    const nodes = await store.load()
+    // 内存侧先改好节点列表（摘终点节点 + 全图摘指向它的 pre 边；台阶留在图上成为末端）
     const unhooked: string[] = []
-    const touched = new Map<string, string>()
-    for (const region of regions) {
-      let dirty = false
-      for (const b of region.blocks) {
-        const kept = b.nodes.filter(n => {
-          if (n.name === name) { dirty = true; return false }
-          return true
-        })
-        for (const n of kept) {
-          if (n.pre.includes(name)) {
-            n.pre = n.pre.filter(p => p !== name)
-            unhooked.push(n.name)
-            dirty = true
-          }
-        }
-        b.nodes = kept
+    for (const n of nodes) {
+      if (n.name === name) continue
+      if (n.pre.includes(name)) {
+        n.pre = n.pre.filter(p => p !== name)
+        unhooked.push(n.name)
       }
-      if (dirty) touched.set(region.name, YAML.stringify(store.regionDoc(region)))
     }
+    const kept = nodes.filter(n => n.name !== name)
     const anchorsNext = anchors.filter(a => a.endpoint !== name)
     await runWriteUnit('removeEndpoint', {
       course: course.name,
@@ -1078,14 +1034,9 @@ export class GraphProposals {
       journal: rec => this.store.appendJournal(rec),
       steps: [
         {
-          name: '图区重写（摘终点节点与指向它的 pre 边）',
+          name: '图重写（摘终点节点与指向它的 pre 边）',
           run: async () => {
-            const files = await store.regionFiles()
-            for (const [regionName, text] of touched) {
-              const abs = files[regionName]
-              if (!abs) throw new Error(`[endpoint-remove] 区「${regionName}」没有对应 data/*.yaml。`)
-              await atomicWrite(abs, text, this.fs)
-            }
+            await store.writeGraphDoc(kept)
           },
         },
         {
@@ -1108,21 +1059,15 @@ export class GraphProposals {
     const course = await this.registry.get(spec.course)
     if (!course) throw new Error(`[propose-enrich] 注册表中没有课程「${spec.course}」。`)
     const store = new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs)
-    const regions = await store.load()
-    const graph = new Graph(regions)
+    const nodes = await store.load()
+    const graph = new Graph(nodes)
     const missing = enrichMissingTargets(spec.fields, graph)
     if (missing.length) {
       throw new Error(`[propose-enrich] 目标节点不在图内，提案未受理：${missing.join('、')}（覆盖层只补写既有节点；新增节点走 kind=edit）`)
     }
-    const regionFiles = await store.regionFiles()
-    const fingerprints: Record<string, string> = {}
-    for (const f of spec.fields) {
-      const regionName = graph.blockOf[f.node][1]
-      const abs = regionFiles[regionName]
-      if (!abs) throw new Error(`[propose-enrich] 区「${regionName}」没有对应 data/*.yaml（图加载不一致）。`)
-      const rel = `data/${abs.replace(/[/\\]/g, '/').split('/').pop()}`
-      if (!(rel in fingerprints)) fingerprints[rel] = sha256(await this.fs.readFile(abs))
-    }
+    const abs = store.graphPath()
+    if (!this.fs.exists(abs)) throw new Error(`[propose-enrich] 图文件不存在（图加载不一致）: ${abs}`)
+    const fingerprints: Record<string, string> = { 'data/图.yaml': sha256(await this.fs.readFile(abs)) }
     const { pid } = await this.saveArtifact('enrich', spec.course, {
       course: spec.course,
       reason: spec.reason,
@@ -1163,26 +1108,18 @@ export class GraphProposals {
       throw new Error(`[apply-enrich] 正典文件在提案受理后被修改，sha256 指纹不符，拒绝写入：${stale.join('、')}`
         + `——reject 本提案后重新生成富化提案（提案必须基于当前正典）。`)
     }
-    const regions = await store.load()
-    const graph = new Graph(regions)
+    const nodes = await store.load()
+    const graph = new Graph(nodes)
     const missing = enrichMissingTargets(spec.fields, graph)
     if (missing.length) throw new Error(`[apply-enrich] 目标节点已不在图内：${missing.join('、')}。`)
-    // 内存侧先算好各区重写文本（不是落盘动作；落盘步骤见下方写入单元声明）
-    const touched = new Map<string, string>() // 区名 → 重写后的文件文本（算指纹用）
+    // 内存侧改好节点列表（enc 整体替换；不是落盘动作，落盘步骤见下方写入单元声明）
+    const byName = new Map(nodes.map(n => [n.name, n]))
     for (const f of spec.fields) {
-      const regionName = graph.blockOf[f.node][1]
-      const region = regions.find(r => r.name === regionName)
-      if (!region) throw new Error(`[apply-enrich] 区「${regionName}」在图中不存在。`)
-      for (const b of region.blocks) {
-        const n = b.nodes.find(x => x.name === f.node)
-        if (n) n.enc = f.enc.map(e => ({ ...e }))
-      }
-      touched.set(regionName, YAML.stringify(store.regionDoc(region)))
+      const n = byName.get(f.node)
+      if (n) n.enc = f.enc.map(e => ({ ...e }))
     }
-    const regionFiles = await store.regionFiles()
-    const fileHashes = new Map<string, string>()
-    // 写入单元（#176）：写序照今天的声明——受影响区正典重写 → 覆盖层留痕 → 快照 →
-    // journal(graph_enrich) → 提案 applied（覆盖层/快照只在全部正典写成功后）。
+    // 写入单元（#176）：写序照今天的声明——图正典重写 → 覆盖层留痕 → 快照 →
+    // journal(graph_enrich) → 提案 applied（覆盖层/快照只在正典写成功后）。
     // 指纹复核（上方）就是防重放门：部分 apply 后重放必被拒收。失败上抛中止，
     // 不回滚不续跑，失败不写 journal；恢复 = reject 后基于新正典重提。
     let version = 0
@@ -1191,14 +1128,9 @@ export class GraphProposals {
       journal: rec => this.store.appendJournal(rec),
       steps: [
         {
-          name: '受影响区正典重写',
+          name: '图正典重写',
           run: async () => {
-            for (const [regionName, text] of touched) {
-              const abs = regionFiles[regionName]
-              if (!abs) throw new Error(`[apply-enrich] 区「${regionName}」没有对应 data/*.yaml。`)
-              await atomicWrite(abs, text, this.fs)
-              fileHashes.set(regionName, sha256(text))
-            }
+            await store.writeGraphDoc(nodes)
           },
         },
         {
@@ -1210,7 +1142,7 @@ export class GraphProposals {
               target: f.node,
               field: 'enc',
               value: f.enc,
-              content_hash: fileHashes.get(graph.blockOf[f.node][1]),
+              content_hash: spec.fingerprints!['data/图.yaml'],
               applied_at: now,
             }))
             await this.fs.mkdir(this.paths.courseStateDir(root))
@@ -1220,9 +1152,9 @@ export class GraphProposals {
         {
           name: '快照',
           run: async () => {
-            const regions2 = await store.load()
+            const nodes2 = await store.load()
             version = (await this.store.latestSnapshotVersion(course.name)) + 1
-            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, regions2))
+            await this.store.saveSnapshot(course.name, version, snapshotDoc(store, nodes2))
           },
         },
         {
@@ -1246,7 +1178,7 @@ export class GraphProposals {
       course: course.name,
       fields: spec.fields.length,
       snapshot: version,
-      files: [...touched.keys()],
+      files: ['data/图.yaml'],
       findings: applyFindings(audit),
     }
   }
@@ -1414,7 +1346,7 @@ export class GraphProposals {
 
   /** 改名联动课程笔记：搬文件 + 更新 fm.node + 题库随迁；无笔记静默跳过。 */
   private async relocateNote(root: string, graph: Graph, node: string, newName?: string): Promise<void> {
-    if (!graph.blockOf[node]) return
+    if (!graph.nset.has(node)) return
     const oldPath = this.paths.courseNotePath(root, node)
     const targetName = newName ?? node
     if (this.fs.exists(oldPath)) {
@@ -1443,7 +1375,7 @@ export class GraphProposals {
 
   /** del_node：课程笔记与题库移入 state/archive（不丢用户内容）。 */
   private async archiveNote(root: string, graph: Graph, node: string, pid: number): Promise<void> {
-    if (!graph.blockOf[node]) return
+    if (!graph.nset.has(node)) return
     const oldPath = this.paths.courseNotePath(root, node)
     const archiveDir = `${this.paths.courseStateDir(root)}/archive`
     const { safeFilename } = await import('./paths.ts')
@@ -1523,8 +1455,8 @@ export interface DraftReplay { errors: string[]; diff: DraftDiff }
 
 /** 草稿内核的重放（#271 / ADR-0088）：与 simulateOps 同一套结构重放，额外折出 DraftDiff
  * ——草稿校验与门校验同源（simulateOps 内部改调本函数，两处不各写一遍）。 */
-export function replayDraft(regions: GRegion[], graph: Graph, ops: EditOp[]): DraftReplay {
-  const sim: GRegion[] = JSON.parse(JSON.stringify(regions))
+export function replayDraft(nodes: GNode[], graph: Graph, ops: EditOp[]): DraftReplay {
+  const sim: GNode[] = JSON.parse(JSON.stringify(nodes))
   const errors: string[] = []
   const names = new Set(graph.names)
   const renameMap: Record<string, string> = {}
@@ -1535,15 +1467,7 @@ export function replayDraft(regions: GRegion[], graph: Graph, ops: EditOp[]): Dr
   for (const op of ops) {
     if (op.op === 'add_node') {
       if (names.has(op.name!)) { errors.push(`add_node 重名: ${op.name}`); continue }
-      // 无坐标（#275）：落到图内既有的单一区（首个区）；区内无块时以区名建块。
-      const r = sim[0]
-      if (!r) { errors.push('add_node 无可落区（图内无区）'); continue }
-      let blk = r.blocks[0]
-      if (!blk) {
-        blk = { name: r.name, nodes: [] }
-        r.blocks.push(blk)
-      }
-      blk.nodes.push(nodeFromAddOp(op))
+      sim.push(nodeFromAddOp(op))
       names.add(op.name!)
       added.push(op.name!)
     } else if (op.op === 'del_node') {
@@ -1561,37 +1485,38 @@ export function replayDraft(regions: GRegion[], graph: Graph, ops: EditOp[]): Dr
     } else if (op.op === 'set_pre') {
       if (!names.has(op.node!)) { errors.push(`set_pre 节点不存在: ${op.node}`); continue }
       rewired.push({ node: op.node!, pres_before: [...(graph.preOf[op.node!] ?? [])], pres_after: [...(op.pre ?? [])] })
-      for (const r of sim) for (const b of r.blocks) for (const n of b.nodes) {
+      for (const n of sim) {
         if (n.name === op.node) n.pre = [...(op.pre ?? [])]
       }
     } else if (op.op === 'set_enc') {
       if (!names.has(op.node!)) { errors.push(`set_enc 节点不存在: ${op.node}`); continue }
-      for (const r of sim) for (const b of r.blocks) for (const n of b.nodes) {
+      for (const n of sim) {
         if (n.name === op.node) n.enc = normalizeOpEnc(op.enc)
+      }
+    } else if (op.op === 'set_note') {
+      if (!names.has(op.node!)) { errors.push(`set_note 节点不存在: ${op.node}`); continue }
+      for (const n of sim) {
+        if (n.name === op.node) n.note = op.note ?? ''
       }
     }
   }
 
   const mapped = (p: string) => renameMap[p] ?? p
-  for (const r of sim) {
-    for (const b of r.blocks) {
-      for (const n of b.nodes) {
-        if (removed.has(n.name)) continue
-        n.name = mapped(n.name)
-        n.pre = n.pre.map(mapped).filter(p => !removed.has(p))
-        n.enc = n.enc.map(e => ({ ...e, node: mapped(e.node) })).filter(e => !removed.has(e.node))
-      }
-      b.nodes = b.nodes.filter(n => !removed.has(n.name))
-    }
+  for (const n of sim) {
+    if (removed.has(n.name)) continue
+    n.name = mapped(n.name)
+    n.pre = n.pre.map(mapped).filter(p => !removed.has(p))
+    n.enc = n.enc.map(e => ({ ...e, node: mapped(e.node) })).filter(e => !removed.has(e.node))
   }
+  const simKept = sim.filter(n => !removed.has(n.name))
   if (!errors.length) {
-    const merged = new Graph(sim)
+    const merged = new Graph(simKept)
     const dangling = new Set(merged.names.flatMap(n => merged.preOf[n].filter(p => !merged.nset.has(p)).map(p => `${n} -> ${p}`)))
     for (const d of [...dangling].sort()) errors.push(`变更后断边: ${d}`)
     const encDangling = new Set(merged.names.flatMap(n => (merged.encOf[n] ?? []).filter(([p]) => !merged.nset.has(p)).map(([p]) => `${n} ~enc~ ${p}`)))
     for (const d of [...encDangling].sort()) errors.push(`变更后 enc 断边: ${d}`)
     if (merged.hasCycle) errors.push(`变更后引入环：${merged.cycleNodes.slice(0, 5).join('、')}`)
-    errors.push(...misconceptionCapErrors(sim))
+    errors.push(...misconceptionCapErrors(simKept))
   }
   const diff: DraftDiff = {
     added_nodes: added,
@@ -1604,61 +1529,45 @@ export function replayDraft(regions: GRegion[], graph: Graph, ops: EditOp[]): Dr
   return { errors, diff }
 }
 
-/** 在 regions 副本上模拟全部操作 → 错误列表（内部改调 replayDraft——草稿与门同源，ADR-0088）。 */
-export function simulateOps(regions: GRegion[], graph: Graph, ops: EditOp[]): string[] {
-  return replayDraft(regions, graph, ops).errors
+/** 在节点列表副本上模拟全部操作 → 错误列表（内部改调 replayDraft——草稿与门同源，ADR-0088）。 */
+export function simulateOps(nodes: GNode[], graph: Graph, ops: EditOp[]): string[] {
+  return replayDraft(nodes, graph, ops).errors
 }
 
-/** 把 op 列表实际落到 Region 对象列表。 */
-export function applyOpsToRegions(regions: GRegion[], ops: EditOp[]): void {
+/** 把 op 列表实际落到节点列表（applyEdit 落图前的内存侧应用）。 */
+export function applyOpsToNodes(nodes: GNode[], ops: EditOp[]): void {
   const renameMap: Record<string, string> = {}
   const removed = new Set<string>()
-  const findNode = (node: string): { r: GRegion; b: GBlock; n: GNode } | null => {
-    for (const r of regions) for (const b of r.blocks) {
-      const n = b.nodes.find(x => x.name === node)
-      if (n) return { r, b, n }
-    }
-    return null
-  }
+  const findNode = (node: string): GNode | null => nodes.find(x => x.name === node) ?? null
 
   for (const op of ops) {
     if (op.op === 'add_node') {
-      // 无坐标（#275）：落到图内既有的单一区（首个区）；区内无块时以区名建块。
-      const r = regions[0]!
-      let blk = r.blocks[0]
-      if (!blk) {
-        blk = { name: r.name, nodes: [] }
-        r.blocks.push(blk)
-      }
-      blk.nodes.push(nodeFromAddOp(op))
+      nodes.push(nodeFromAddOp(op))
     } else if (op.op === 'del_node') {
       removed.add(op.node!)
     } else if (op.op === 'rename') {
       renameMap[op.node!] = op.new!
     } else if (op.op === 'set_pre') {
       const hit = findNode(op.node!)
-      if (hit) hit.n.pre = [...(op.pre ?? [])]
+      if (hit) hit.pre = [...(op.pre ?? [])]
     } else if (op.op === 'set_enc') {
       const hit = findNode(op.node!)
-      if (hit) hit.n.enc = normalizeOpEnc(op.enc)
+      if (hit) hit.enc = normalizeOpEnc(op.enc)
     } else if (op.op === 'set_note') {
       const hit = findNode(op.node!)
-      if (hit) hit.n.note = op.note ?? ''
+      if (hit) hit.note = op.note ?? ''
     }
   }
 
   const mapped = (p: string) => renameMap[p] ?? p
-  for (const r of regions) {
-    for (const b of r.blocks) {
-      for (const n of b.nodes) {
-        n.name = mapped(n.name)
-        n.pre = n.pre.map(mapped).filter(p => !removed.has(p))
-        n.enc = n.enc.map(e => ({ ...e, node: mapped(e.node) })).filter(e => !removed.has(e.node))
-      }
-      b.nodes = b.nodes.filter(n => !removed.has(n.name))
-    }
-    r.blocks = r.blocks.filter(b => b.nodes.length)
+  for (const n of nodes) {
+    n.name = mapped(n.name)
+    n.pre = n.pre.map(mapped).filter(p => !removed.has(p))
+    n.enc = n.enc.map(e => ({ ...e, node: mapped(e.node) })).filter(e => !removed.has(e.node))
   }
+  const kept = nodes.filter(n => !removed.has(n.name))
+  nodes.length = 0
+  nodes.push(...kept)
 }
 
 // ---- 图提案受理结果（#152 刀 5 自 views.ts 归位）----

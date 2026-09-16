@@ -198,15 +198,12 @@ test('断裂不变性：清空内容层后合成初始化仍取到沉淀先验�
     await mkdir(join(course, 'data'), { recursive: true })
     await mkdir(join(course, '课程'), { recursive: true })
     await mkdir(join(course, '题库'), { recursive: true })
+    // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
     const graph = [
-      'region: 基础',
-      'color: blue',
-      'blocks:',
-      '  - name: 入门块',
-      '    nodes:',
-      '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+      'nodes:',
+      '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
     ].join('\n') + '\n'
-    await writeFile(join(course, 'data', '基础.yaml'), graph, 'utf8')
+    await writeFile(join(course, 'data', '图.yaml'), graph, 'utf8')
     const note = [
       '---',
       'node: 入门',

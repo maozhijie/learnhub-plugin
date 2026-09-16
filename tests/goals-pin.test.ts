@@ -9,17 +9,13 @@ import type { NoteSeed } from './helpers/vault.ts'
 
 /** 极限(review, 前置衰减源) → 导数/积分(ready, 被软闸拦)；几何(ready, 无前置) → 几何进阶(unseen)；已会(mastered, 无题库)。 */
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 极限, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 导数, pre: [极限], opt: false, note: "", est: 20 }',
-  '      - { name: 积分, pre: [极限], opt: false, note: "", est: 20 }',
-  '      - { name: 几何, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 几何进阶, pre: [几何], opt: false, note: "", est: 20 }',
-  '      - { name: 已会, pre: [], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 极限, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 导数, pre: [极限], opt: false, note: "", est: 20 }',
+  '  - { name: 积分, pre: [极限], opt: false, note: "", est: 20 }',
+  '  - { name: 几何, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 几何进阶, pre: [几何], opt: false, note: "", est: 20 }',
+  '  - { name: 已会, pre: [], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 const PAST = '2024-01-01'

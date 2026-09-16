@@ -72,16 +72,11 @@ test('#274 派生器：足迹雷同与 invokes 分布相近各自独立成票', 
 
 // ---- 子系统触发面：信号 → 待审提案；重跑不堆；max 封顶；人审 apply 落盘 ----
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const MC_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20, teaches: { 丙: 知道, 庚: 知道 } }',
-  '  - name: 进阶块',
-  '    nodes:',
-  '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 20, teaches: { 丙: 知道, 庚: 知道 } }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20, teaches: { 丙: 知道, 庚: 知道 } }',
+  '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 20, teaches: { 丙: 知道, 庚: 知道 } }',
 ].join('\n')
 
 const MC_REGISTRY = [

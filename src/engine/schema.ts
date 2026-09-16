@@ -14,7 +14,7 @@ import type { VaultFs } from './io.ts'
  */
 
 /** 当前引擎唯一认许的 schema 主版本。 */
-export const CURRENT_SCHEMA_VERSION = 3
+export const CURRENT_SCHEMA_VERSION = 4
 
 /** 一次断裂的档案条目（迁移脚本落笔；引擎零消费）。 */
 export interface SchemaBreak {
@@ -72,8 +72,7 @@ export function assertSchemaVersion(configPath: string, fs: VaultFs): SchemaBloc
   const found = schema ? `v${schema.version}` : '无 schema.version（v1 库）'
   throw new Error(
     `[learnhub] schema 版本硬门：learnhub.json 为 ${found}，引擎只认 v${CURRENT_SCHEMA_VERSION}`
-    + `（宣告式断裂，ADR-0034：旧课程树整体入存档、零兼容代码）。\n`
-    + `  请先运行一次性迁移脚本：node scripts/migrate-v2.mjs "<vault根目录>"\n`
-    + `  （脚本执行断裂：现有课程树整体移入 学习中心/存档/pre-v<来源版本>/<日期>/、`
-    + `learnhub.json 戳 version: ${CURRENT_SCHEMA_VERSION} 并追加 breaks 记录、概念登记表豁免存活。）`)
+    + `（宣告式断裂：#284 存储塌缩，图谱改为一课程一文件 data/图.yaml，零迁移脚本）。\n`
+    + `  旧课程库不再支持、由用户自删：删除旧课程目录（或整个学习中心数据目录）后重建；`
+    + `跨断裂存活的档案（概念登记表等）随重建课程重新落盘。`)
 }

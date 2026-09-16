@@ -19,41 +19,26 @@ import { withVault } from './helpers/vault.ts'
 //   5. 异常态 → 合法态读数：终点深度 1→7、主线深度 6→7、last_steps 随接线改扎、
 //      收尾 + 最后台阶达标判完成；存量终点正文保留（不追溯清档边界）。
 
-/** 异常态夹具图：三起点 + 终点（陈旧粗边）+ 12 生长节点（真实坡道 6 + 支线 5 + 综述 1）。 */
-const BASE_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 种子块',
-  '    nodes:',
-  '      - { name: 数与式运算, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 方程与恒等变形, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 图形与度量, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 用数学解决真实问题, pre: [数与式运算, 方程与恒等变形, 图形与度量], opt: false, note: "" }',
-].join('\n')
-
-const GROWTH_GRAPH = [
-  'region: 生长',
-  'color: green',
-  'blocks:',
-  '  - name: 主线坡道',
-  '    nodes:',
-  '      - { name: 从文字到方程, pre: [方程与恒等变形], opt: false, note: "", est: 15 }',
-  '      - { name: 设未知数, pre: [从文字到方程], opt: false, note: "", est: 15 }',
-  '      - { name: 建立方程模型, pre: [设未知数], opt: false, note: "", est: 20 }',
-  '      - { name: 化简与变形, pre: [建立方程模型], opt: false, note: "", est: 20 }',
-  '      - { name: 合成求解路径, pre: [化简与变形], opt: false, note: "", est: 25 }',
-  '      - { name: 答案检验, pre: [合成求解路径], opt: false, note: "", est: 20 }',
-  '  - name: 支线块',
-  '    nodes:',
-  '      - { name: 几何作图初步, pre: [图形与度量], opt: false, note: "", est: 15 }',
-  '      - { name: 面积与周长计算, pre: [几何作图初步], opt: false, note: "", est: 20 }',
-  '      - { name: 数据的收集与整理, pre: [数与式运算], opt: false, note: "", est: 15 }',
-  '      - { name: 平均数与直观统计, pre: [数据的收集与整理], opt: false, note: "", est: 15 }',
-  '      - { name: 数据可视化初步, pre: [平均数与直观统计], opt: false, note: "", est: 15 }',
-  '  - name: 综述块',
-  '    nodes:',
-  '      - { name: 按顺序综述从文字到答案的每一步动作, pre: [用数学解决真实问题], opt: false, note: "" }',
+/** 异常态夹具图（单文件 data/图.yaml，#284 存储塌缩：原 00_基础/01_生长 两区并成一个节点列表）：
+ * 三起点 + 终点（陈旧粗边）+ 12 生长节点（真实坡道 6 + 支线 5 + 综述 1）。 */
+const GRAPH = [
+  'nodes:',
+  '  - { name: 数与式运算, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 方程与恒等变形, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 图形与度量, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 用数学解决真实问题, pre: [数与式运算, 方程与恒等变形, 图形与度量], opt: false, note: "" }',
+  '  - { name: 从文字到方程, pre: [方程与恒等变形], opt: false, note: "", est: 15 }',
+  '  - { name: 设未知数, pre: [从文字到方程], opt: false, note: "", est: 15 }',
+  '  - { name: 建立方程模型, pre: [设未知数], opt: false, note: "", est: 20 }',
+  '  - { name: 化简与变形, pre: [建立方程模型], opt: false, note: "", est: 20 }',
+  '  - { name: 合成求解路径, pre: [化简与变形], opt: false, note: "", est: 25 }',
+  '  - { name: 答案检验, pre: [合成求解路径], opt: false, note: "", est: 20 }',
+  '  - { name: 几何作图初步, pre: [图形与度量], opt: false, note: "", est: 15 }',
+  '  - { name: 面积与周长计算, pre: [几何作图初步], opt: false, note: "", est: 20 }',
+  '  - { name: 数据的收集与整理, pre: [数与式运算], opt: false, note: "", est: 15 }',
+  '  - { name: 平均数与直观统计, pre: [数据的收集与整理], opt: false, note: "", est: 15 }',
+  '  - { name: 数据可视化初步, pre: [平均数与直观统计], opt: false, note: "", est: 15 }',
+  '  - { name: 按顺序综述从文字到答案的每一步动作, pre: [用数学解决真实问题], opt: false, note: "" }',
 ].join('\n')
 
 const ENDPOINT = '用数学解决真实问题'
@@ -82,20 +67,18 @@ const MASTERED = {
 }
 
 const DRILL_VAULT = {
-  graph: BASE_GRAPH,
-  graphFile: '00_基础.yaml',
+  graph: GRAPH,
   files: [
-    { path: '学习中心/math/data/01_生长.yaml', content: GROWTH_GRAPH },
     { path: '学习中心/math/state/终点锚.json', content: anchorDoc() },
   ],
   notes: {
     // 病三：终点已被生成正文（真实坡道未成——坡道 11 节点零正文零练习）
     [ENDPOINT]: { stage: 'ready', content: { version: 1, status: 'reviewed' } },
-    // 综述节点也被生成过（教练歪长的产物有了存量正文，处置时走归档）；多区键带「区/」前缀
-    [`生长/${OVERVIEW}`]: { stage: 'ready', content: { version: 1, status: 'reviewed' } },
+    // 综述节点也被生成过（教练歪长的产物有了存量正文，处置时走归档）；笔记平铺（#280）
+    [OVERVIEW]: { stage: 'ready', content: { version: 1, status: 'reviewed' } },
     // 真实前沿一线已练到位（学习者在坡道上走过，只是图没接线）
-    '生长/合成求解路径': MASTERED,
-    '生长/答案检验': MASTERED,
+    '合成求解路径': MASTERED,
+    '答案检验': MASTERED,
   },
 }
 

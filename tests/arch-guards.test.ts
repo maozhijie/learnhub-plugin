@@ -355,10 +355,10 @@ test('G5 文件规模棘轮：逐文件行数卡基线（views 叶子／types.ts
 
 test('G6 自检：白名单外调用图写原语会被抓（门不是恒过）', () => {
   const callers = graphWriteCallers([
-    ['src/engine/graph.ts', 'async writeRegionDoc(path, region) { await writeFile(path, y) }'],
-    ['src/engine/proposals.ts', 'await store.writeRegionDoc(files[r.name], region)'],
-    ['src/engine/rogue.ts', 'await store.writeRegionDoc(path, region)'],
-    ['src/engine/sneaky.ts', 'const { writeRegionDoc } = store'],
+    ['src/engine/graph.ts', 'async writeGraphDoc(nodes) { await writeFile(path, y) }'],
+    ['src/engine/proposals.ts', 'await store.writeGraphDoc(nodes)'],
+    ['src/engine/rogue.ts', 'await store.writeGraphDoc(nodes)'],
+    ['src/engine/sneaky.ts', 'const { writeGraphDoc } = store'],
   ])
   assert.deepEqual([...callers.keys()].sort(), ['src/engine/proposals.ts', 'src/engine/rogue.ts', 'src/engine/sneaky.ts'],
     '白名单外的调用（含解构别名）必须被看见；原语自己的家不算调用者')
@@ -366,8 +366,8 @@ test('G6 自检：白名单外调用图写原语会被抓（门不是恒过）',
 
 test('G6 自检：注释与字符串里提到原语名不算调用（否则是假红）', () => {
   const callers = graphWriteCallers([
-    ['src/engine/notes.ts', '// 只有 proposals.ts 才该调 store.writeRegionDoc(\nconst x = 1'],
-    ['src/engine/other.ts', "const doc = '调用 store.writeRegionDoc(path, region)'"],
+    ['src/engine/notes.ts', '// 只有 proposals.ts 才该调 store.writeGraphDoc(\nconst x = 1'],
+    ['src/engine/other.ts', "const doc = '调用 store.writeGraphDoc(path, region)'"],
   ])
   assert.deepEqual([...callers.keys()], [], '注释／字符串里的提及不该触硬门')
 })

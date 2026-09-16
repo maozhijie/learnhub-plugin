@@ -33,23 +33,20 @@ function replayFake(reply: string) {
   return Object.assign(fn, { calls })
 }
 
-/** 主 vault：入门（difficulty 3，无 PS-I）带 teaches/assumes/误解各一组。 */
+/** 主 vault：入门（difficulty 3，无 PS-I）带 teaches/assumes/误解各一组。
+ * #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }。 */
 const MISC_GRAPH = `
-region: 基础
-color: blue
-blocks:
-  - name: 入门块
-    nodes:
-      - name: 入门
-        pre: []
-        opt: false
-        note: ""
-        est: 20
-        difficulty: 3
-        teaches: { 鸽巢原理: 会用 }
-        assumes: { 计数: 知道 }
-        misconceptions:
-          - { concept: 鸽巢原理, model: 把「总有一个巢至少两只」误记成「每个巢都有两只」 }
+nodes:
+  - name: 入门
+    pre: []
+    opt: false
+    note: ""
+    est: 20
+    difficulty: 3
+    teaches: { 鸽巢原理: 会用 }
+    assumes: { 计数: 知道 }
+    misconceptions:
+      - { concept: 鸽巢原理, model: 把「总有一个巢至少两只」误记成「每个巢都有两只」 }
 `
 
 const MIS_MODEL = /把「总有一个巢至少两只」误记成「每个巢都有两只」/
@@ -403,9 +400,9 @@ test('blockPatchPrompt/applyBlockPatch/extractFencedBlocks：逐块替换、数�
 
 test('runAudit：R18 概念字段组盘点进 INFO 与基线（只盘点，不校验语义）', async () => {
   await withVault({ tag: 'v9-audit-', graph: MISC_GRAPH, notes: { 入门: {} } }, async ({ engine }) => {
-    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
-    const graph = new Graph(regions)
-    const r = await runAudit(engine.paths, 'math', '数学', graph, regions, todayStr(new Date()), nodeVaultFs)
+    const nodes = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
+    const graph = new Graph(nodes)
+    const r = await runAudit(engine.paths, 'math', '数学', graph, todayStr(new Date()), nodeVaultFs)
     const r18 = r.infos.find(x => x.startsWith('R18 概念字段组盘点'))
     assert.ok(r18, 'R18 INFO 在场')
     assert.match(r18!, /teaches 1 节点、assumes 1 节点、误解 1 条/)

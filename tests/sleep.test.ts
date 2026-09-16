@@ -5,14 +5,11 @@ import { reconsolidationAdvice, SLEEP_SCORE } from '../src/engine/sleep.ts'
 import { withVault } from './helpers/vault.ts'
 
 /** 一门两节点课：入门（普通）→ 练习节（practice 交互实践节点 = 重巩固型）。 */
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const PRACTICE_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 练习节, pre: [入门], opt: false, note: "", est: 15, type: practice }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 练习节, pre: [入门], opt: false, note: "", est: 15, type: practice }',
 ].join('\n')
 
 test('纯函数：文案锁预期管理口径——主建议带 Walker 依据，心理演练带 r≈0.13 与「别替代真练」', () => {

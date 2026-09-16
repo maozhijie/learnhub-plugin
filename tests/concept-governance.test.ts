@@ -433,13 +433,10 @@ const EC_BANK = [
   '    section: s1',
 ].join('\n')
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const EC_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20, misconceptions: [{ concept: 勾股定理, model: 两边相加再开方 }, { concept: 没登记的概念, model: 任意错法 }] }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20, misconceptions: [{ concept: 勾股定理, model: 两边相加再开方 }, { concept: 没登记的概念, model: 任意错法 }] }',
 ].join('\n')
 
 const EC_VALID_YAML = [

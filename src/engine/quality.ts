@@ -47,14 +47,15 @@ export function jumpCandidates(
   return out.sort((a, b) => b.depthSpan - a.depthSpan || a.node.localeCompare(b.node) || a.pre.localeCompare(b.pre))
 }
 
-/** 空降节点：region 序靠后（前 1/4 之外）且 pre 为空——内容凭空拔高的结构信号。 */
+/** 空降节点：图内声明序靠后（前 1/4 之外，#284 后同一节点列表序）且 pre 为空——凭空拔高信号。 */
 export function floatNodes(
-  graph: Pick<Graph, 'names' | 'preOf' | 'regionIdxOf' | 'regions'>,
+  graph: Pick<Graph, 'names' | 'preOf' | 'nodes'>,
 ): string[] {
-  const total = graph.regions.length
+  const total = graph.nodes.length
   if (!total) return []
   const exempt = Math.max(1, Math.ceil(total * FLOAT_REGION_THRESHOLD))
+  const idxOf = new Map(graph.nodes.map((n, i) => [n.name, i]))
   return graph.names
-    .filter(n => graph.preOf[n].length === 0 && graph.regionIdxOf[n] >= exempt)
+    .filter(n => graph.preOf[n].length === 0 && (idxOf.get(n) ?? 0) >= exempt)
     .sort()
 }

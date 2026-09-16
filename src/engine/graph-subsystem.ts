@@ -64,7 +64,7 @@ import type { EnrichFieldEntry } from './proposals.ts'
 import { endpointNames, isSeedGraph, junctionServes, readAnchors } from './seed.ts'
 import { assertNoBrokenNotes } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
-import type { CourseEntry, GNode, ProposalRec } from './types.ts'
+import type { CourseEntry, ProposalRec } from './types.ts'
 import { PROPOSAL_KINDS } from './types.ts'
 import type { VaultLinkCandidateView, VaultLinksDoc } from './vault-links.ts'
 import { mapEdgesToNodes, orientLinkPair, readVaultLinkDirExcludes, scanVaultLinks, scoreTier } from './vault-links.ts'
@@ -281,11 +281,7 @@ export class GraphSubsystem {
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[graph-node] 节点「${node}」不在课程「${c.name}」的图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'graph-node')
-    let gnode: GNode | undefined
-    for (const r of graph.regions) for (const b of r.blocks) {
-      const hit = b.nodes.find(n => n.name === node)
-      if (hit) { gnode = hit; break }
-    }
+    const gnode = graph.nodes.find(n => n.name === node)
     // 前置传递闭包（Graph.upstreamClosure 单一出处；不含自身），按深度降序=先学在前
     const closure = [...graph.upstreamClosure(node)].filter(n => n !== node)
       .sort((a, b) => (graph.depth[b] ?? 0) - (graph.depth[a] ?? 0))
@@ -293,8 +289,6 @@ export class GraphSubsystem {
     return {
       course: c.name,
       node,
-      region: graph.blockOf[node][1],
-      block: graph.blockOf[node][2],
       depth: graph.depth[node] ?? 0,
       opt: graph.opt.has(node),
       pre: graph.preOf[node],

@@ -1146,8 +1146,7 @@ export class ProjectSubsystem {
       const { graph } = await this.e.loadView(target)
       const groups = new Map<string, string[]>()
       for (const n of graph.names.slice().sort()) {
-        const [, region, block] = graph.blockOf[n] ?? []
-        const key = region && block ? `${region} · ${block}` : '（未分块）'
+        const key = `L${graph.depth[n] ?? 0}`
         const list = groups.get(key) ?? []
         list.push(n)
         groups.set(key, list)
@@ -1155,7 +1154,7 @@ export class ProjectSubsystem {
       const listed = groups.size
         ? [...groups.entries()].map(([key, names]) => `  - ${key}（${names.length}）：${names.join('、')}`).join('\n')
         : '  -（空图——计划引用的节点名必须先在图上；朝尚不存在节点的意图走计划修订驱动的教练补支）'
-      courseBlock = `- 目标课程：${target.name}（已注册——**不产 seed 半区**，只给 plan；反编译不再自带建课能力）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形；按「区 · 块」分组，括号内是该组节点数）：\n${listed}`
+      courseBlock = `- 目标课程：${target.name}（已注册——**不产 seed 半区**，只给 plan；反编译不再自带建课能力）\n- 现有结构（plan.nodes 只能引用这些节点名，写「${target.name}/节点名」全形；按深度层分组，括号内是该组节点数）：\n${listed}`
     }
     const tpl = await this.e.loadPrompt('项目目标反编译')
     const notesList = picked.length ? picked.map(p => `- 《${p.title}》（${p.path}）`).join('\n') : '-（无注册笔记）'

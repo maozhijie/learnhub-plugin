@@ -3,28 +3,14 @@ import assert from 'node:assert/strict'
 import { applyId, questionCount, rejectId, requireSkipDirection } from '../src/tool-contracts.ts'
 import { withVault } from './helpers/vault.ts'
 
-const REGION_A = [
-  'region: 甲区',
-  'color: red',
-  'blocks:',
-  '  - name: 同名块',
-  '    nodes:',
-  '      - { name: 甲一, pre: [], opt: false, note: "" }',
-  '  - name: 甲独有块',
-  '    nodes:',
-  '      - { name: 甲二, pre: [甲一], opt: false, note: "" }',
-].join('\n')
-
-const REGION_B = [
-  'region: 乙区',
-  'color: blue',
-  'blocks:',
-  '  - name: 同名块',
-  '    nodes:',
-  '      - { name: 乙一, pre: [], opt: false, note: "" }',
-  '  - name: 唯一块',
-  '    nodes:',
-  '      - { name: 乙二, pre: [乙一], opt: false, note: "" }',
+/** 单文件多节点（#284：原「甲乙两区两文件」并入一个节点列表）：两组各两节点、
+ * 各自一条链（甲一→甲二、乙一→乙二），深度轴分组预期 L0/L1 不变。 */
+const GRAPH = [
+  'nodes:',
+  '  - { name: 甲一, pre: [], opt: false, note: "" }',
+  '  - { name: 甲二, pre: [甲一], opt: false, note: "" }',
+  '  - { name: 乙一, pre: [], opt: false, note: "" }',
+  '  - { name: 乙二, pre: [乙一], opt: false, note: "" }',
 ].join('\n')
 
 const NOTE = [
@@ -47,12 +33,10 @@ const NOTE = [
   '本节点正文用于出题冒烟，足够长。',
 ].join('\n')
 
-/** 甲区图走 graph/graphFile；乙区图用 files 逃生口补第二张区图（factory 单 graph 槽）。 */
+/** 四节点图（单文件 data/图.yaml）；甲一带出题冒烟笔记。 */
 const CONTRACT_VAULT = {
-  graph: REGION_A,
-  graphFile: '甲区.yaml',
+  graph: GRAPH,
   notes: { 甲一: `${NOTE}\n` },
-  files: [{ path: '学习中心/math/data/乙区.yaml', content: `${REGION_B}\n` }],
 }
 
 function sixQuestions(): string {
@@ -90,7 +74,7 @@ test('#12 engine facade rejects invalid question counts before invoking the mode
 
 test('#12 graph browsing by grouping axis: groups returned, filter + fail loud (#281)', async () => {
   await withVault(CONTRACT_VAULT, async ({ engine }) => {
-    // depth 轴（缺省）：跨区图折叠成深度段；节点详情随组携带
+    // depth 轴（缺省）：全图折叠成深度段；节点详情随组携带
     const doc = await engine.graph.graphBrowse('数学') as { axis: string; total: number; groups: Array<{ label: string; nodes: Array<{ node: string }> }> }
     assert.equal(doc.axis, 'depth')
     assert.deepEqual(doc.groups.map(g => g.label), ['L0', 'L1'])

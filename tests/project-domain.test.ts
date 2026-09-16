@@ -309,14 +309,11 @@ test('#149 快照 diff 纯函数：id 身份锚定——重排/改名词不误�
 
 test('#149 修订 apply 面：换线/补支触发随结果带出（按锚定课程聚合）；已过点里程碑被移除出显式警告', async () => {
   await withVault({
+    // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
     graph: [
-      'region: 基础',
-      'color: blue',
-      'blocks:',
-      '  - name: 入门块',
-      '    nodes:',
-      '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-      '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
+      'nodes:',
+      '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+      '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }',
     ].join('\n'),
     notes: { 入门: {}, 进阶: {} },
   }, async ({ engine }) => {

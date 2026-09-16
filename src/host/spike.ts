@@ -260,32 +260,28 @@ const REGISTRY = [
 ].join('\n')
 
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - name: 变量是什么',
-  '        pre: []',
-  '        opt: false',
-  '        note: ""',
-  '        est: 20',
-  '        teaches:',
-  '          变量: 会用',
-  '      - name: 赋值与读取',
-  '        pre: [变量是什么]',
-  '        opt: false',
-  '        note: ""',
-  '        est: 20',
-  '        teaches:',
-  '          赋值: 会用',
-  '      - name: 两个时刻的判断',
-  '        pre: [赋值与读取]',
-  '        opt: false',
-  '        note: ""',
-  '        est: 20',
-  '        teaches:',
-  '          读取: 知道',
+  'nodes:',
+  '  - name: 变量是什么',
+  '    pre: []',
+  '    opt: false',
+  '    note: ""',
+  '    est: 20',
+  '    teaches:',
+  '      变量: 会用',
+  '  - name: 赋值与读取',
+  '    pre: [变量是什么]',
+  '    opt: false',
+  '    note: ""',
+  '    est: 20',
+  '    teaches:',
+  '      赋值: 会用',
+  '  - name: 两个时刻的判断',
+  '    pre: [赋值与读取]',
+  '    opt: false',
+  '    note: ""',
+  '    est: 20',
+  '    teaches:',
+  '      读取: 知道',
   '',
 ].join('\n')
 
@@ -329,7 +325,7 @@ function buildTemplate(): string {
   mkdirSync(`${center}/state`, { recursive: true })
   writeFileSync(`${center}/课程注册表.yaml`, REGISTRY, 'utf8')
   writeFileSync(`${center}/spike/概念登记表.yaml`, CONCEPTS, 'utf8')
-  writeFileSync(`${center}/spike/data/基础.yaml`, GRAPH, 'utf8')
+  writeFileSync(`${center}/spike/data/图.yaml`, GRAPH, 'utf8')
   writeFileSync(`${center}/spike/课程/${NODE}.md`, NOTE, 'utf8')
   writeFileSync(`${center}/state/learnhub.json`,
     JSON.stringify({ schema: { version: CURRENT_SCHEMA_VERSION, formats: {} }, day_cutoff: '00:00' }, null, 1) + '\n', 'utf8')

@@ -7,18 +7,14 @@ import { todayStr } from '../src/engine/dates.ts'
 import { Graph, GraphStore } from '../src/engine/graph.ts'
 import { runAudit } from '../src/engine/audit.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
-import type { GNode, GRegion } from '../src/engine/types.ts'
+import type { GNode } from '../src/engine/types.ts'
 import { withVault } from './helpers/vault.ts'
 
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 甲, pre: [], opt: false, note: "", est: 10 }',
-  '      - { name: 乙, pre: [甲], opt: false, note: "", est: 20 }',
-  '      - { name: 丙, pre: [], opt: false, note: "", est: 10 }',
+  'nodes:',
+  '  - { name: 甲, pre: [], opt: false, note: "", est: 10 }',
+  '  - { name: 乙, pre: [甲], opt: false, note: "", est: 20 }',
+  '  - { name: 丙, pre: [], opt: false, note: "", est: 10 }',
 ].join('\n')
 
 /** 乙：已有 Ready 内容（sections.ready）+ 正文声明 enc_candidates（反哺候选源）。 */
@@ -51,17 +47,16 @@ const NOTE_乙 = [
   '<!-- enc_candidates: [甲] -->',
 ].join('\n')
 
-/** 甲乙丙三节点课程（图文件名 00_基础.yaml）；乙用原始笔记，甲丙用共享工厂缺省笔记。 */
+/** 甲乙丙三节点课程（单文件 data/图.yaml）；乙用原始笔记，甲丙用共享工厂缺省笔记。 */
 const ENC_VAULT = {
   graph: GRAPH,
-  graphFile: '00_基础.yaml',
   notes: { 甲: {}, 乙: `${NOTE_乙}\n`, 丙: {} },
 }
 
 async function auditOf(engine: LearnhubEngine) {
-  const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
-  const graph = new Graph(regions)
-  return runAudit(engine.paths, 'math', '数学', graph, regions, todayStr(new Date()), nodeVaultFs)
+  const nodes = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
+  const graph = new Graph(nodes)
+  return runAudit(engine.paths, 'math', '数学', graph, todayStr(new Date()), nodeVaultFs)
 }
 
 // ---- 纯函数：候选收集 / 提升 / 反哺 hints / 内容级审计 ----
@@ -71,8 +66,7 @@ function node(partial: Partial<GNode> & { name: string }): GNode {
 }
 
 function graphOf(nodes: GNode[]): Graph {
-  const regions: GRegion[] = [{ name: '基础', color: 'blue', blocks: [{ name: '块', nodes }] }]
-  return new Graph(regions)
+  return new Graph(nodes)
 }
 
 test('candidateCallSites：enc_candidates 块 + 练习 uses 各计一站并去重', () => {
@@ -305,14 +299,10 @@ test('graphEncBackfill：无反哺候选 → ops=0 且不产生提案', async ()
 
 test('graphEncBackfill：invokes 投影出生权重随 enrich 提案回填（#148 权重新语义）', async () => {
   const GRAPH_TEACHES = [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 入门块',
-    '    nodes:',
-    '      - { name: 甲, pre: [], opt: false, note: "", est: 10, teaches: { 自然数: 知道 } }',
-    '      - { name: 乙, pre: [甲], opt: false, note: "", est: 20 }',
-    '      - { name: 丙, pre: [], opt: false, note: "", est: 10 }',
+    'nodes:',
+    '  - { name: 甲, pre: [], opt: false, note: "", est: 10, teaches: { 自然数: 知道 } }',
+    '  - { name: 乙, pre: [甲], opt: false, note: "", est: 20 }',
+    '  - { name: 丙, pre: [], opt: false, note: "", est: 10 }',
   ].join('\n')
   const NOTE_乙_NO_CAND = NOTE_乙.replace('\n<!-- enc_candidates: [甲] -->', '')
   const BANK_乙 = [
@@ -330,7 +320,6 @@ test('graphEncBackfill：invokes 投影出生权重随 enrich 提案回填（#14
   ].join('\n')
   await withVault({
     graph: GRAPH_TEACHES,
-    graphFile: '00_基础.yaml',
     notes: { 甲: {}, 乙: `${NOTE_乙_NO_CAND}\n`, 丙: {} },
     banks: { 乙: BANK_乙 },
   }, async ({ engine }) => {
@@ -345,10 +334,10 @@ test('graphEncBackfill：invokes 投影出生权重随 enrich 提案回填（#14
     assert.equal(applied.course, '数学')
 
     // 正典生效：甲 w = 1/1（唯一带 invokes 的题），投影 note 留痕
-    const regions = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
-    const graph = new Graph(regions)
+    const nodes = await new GraphStore(engine.paths, engine.paths.courseRoot('math'), nodeVaultFs).load()
+    const graph = new Graph(nodes)
     assert.deepEqual(graph.encOf['乙'], [['甲', 1]])
-    const edge = regions[0]!.blocks[0]!.nodes.find(n => n.name === '乙')!.enc[0]!
+    const edge = nodes.find(n => n.name === '乙')!.enc[0]!
     assert.equal(edge.node, '甲')
     assert.equal(edge.w, 1)
     assert.equal(edge.note, 'invokes 投影 1/1')

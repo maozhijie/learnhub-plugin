@@ -5,14 +5,10 @@ import { answer, tfQuestion, withVault } from './helpers/vault.ts'
 /** 基石 → 入门 → 进阶；enc 边按测试开关挂在入门（→基石）或进阶（→入门）上。 */
 function graphYaml(encOn入门: boolean, encOn进阶 = false): string {
   return [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 入门块',
-    '    nodes:',
-    '      - { name: 基石, pre: [] }',
-    '      - { name: 入门, pre: [基石]' + (encOn入门 ? ', enc: [{node: 基石, w: 0.9}]' : '') + ' }',
-    '      - { name: 进阶, pre: [入门]' + (encOn进阶 ? ', enc: [{node: 入门, w: 0.8}]' : '') + ' }',
+    'nodes:',
+    '  - { name: 基石, pre: [] }',
+    '  - { name: 入门, pre: [基石]' + (encOn入门 ? ', enc: [{node: 基石, w: 0.9}]' : '') + ' }',
+    '  - { name: 进阶, pre: [入门]' + (encOn进阶 ? ', enc: [{node: 入门, w: 0.8}]' : '') + ' }',
   ].join('\n')
 }
 

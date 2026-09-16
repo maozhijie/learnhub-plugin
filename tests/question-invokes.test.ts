@@ -33,14 +33,11 @@ function scriptFake(replies: string[]) {
   return Object.assign(fn, { calls })
 }
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 甲, pre: [], opt: false, note: "", est: 10, teaches: { 自然数: 知道 } }',
-  '      - { name: 乙, pre: [甲], opt: false, note: "", est: 20, teaches: { 质数: 会用 } }',
+  'nodes:',
+  '  - { name: 甲, pre: [], opt: false, note: "", est: 10, teaches: { 自然数: 知道 } }',
+  '  - { name: 乙, pre: [甲], opt: false, note: "", est: 20, teaches: { 质数: 会用 } }',
 ].join('\n')
 
 const REGISTRY = 'concepts:\n  - canonical: 自然数\n  - canonical: 质数\n'
@@ -138,7 +135,7 @@ test('invokes 未在册 → 拒收（#141 同门）；清单缺席（无 teaches
     assert.ok(r.rejected.some(x => /invokes 概念「集合」未在概念登记表在册/.test(x.reason)))
   })
   await withVault({
-    graph: 'region: 基础\ncolor: blue\nblocks:\n  - name: 入门块\n    nodes:\n      - { name: 乙, pre: [], opt: false, note: "", est: 10 }',
+    graph: 'nodes:\n  - { name: 乙, pre: [], opt: false, note: "", est: 10 }',
     notes: { 乙: NOTE_乙 },
   }, async ({ engine }) => {
     const noInvokes = GOLD.replace(/\n    invokes: \S+/g, '')

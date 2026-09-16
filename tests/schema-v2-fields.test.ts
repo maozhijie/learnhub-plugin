@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { GraphStore, loadRegionDoc, parseConceptFields, parseNode, SchemaError } from '../src/engine/graph.ts'
+import { GraphStore, loadGraphDoc, parseConceptFields, parseNode, SchemaError } from '../src/engine/graph.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { validateEditProposal } from '../src/engine/proposals.ts'
 import { withVault } from './helpers/vault.ts'
@@ -13,11 +13,7 @@ import { YAML } from '../src/engine/yaml.ts'
 // 无签名字段、每概念全课程封顶 3；档值中文锁定 知道/会用/能教；边轻：图 YAML 零边字段。
 
 const graphWith = (nodeLines: string) => `
-region: 基础
-color: blue
-blocks:
-  - name: 入门块
-    nodes:
+nodes:
 ${nodeLines}
 `
 
@@ -29,28 +25,28 @@ function expectSchemaError(fn: () => unknown, part: string): void {
   })
 }
 
-test('概念字段组：合法三组照抄落图，regionDoc 序列化与 parseNode 回读一致', () => {
-  const doc = YAML.parse(graphWith(`      - name: 主技能
-        pre: []
-        opt: false
-        note: ""
-        est: 20
-        teaches: { 因式分解: 会用, 配方法: 能教 }
-        assumes: { 整式乘法: 知道, 一元一次方程: 会用 }
-        misconceptions:
-          - concept: 因式分解
-            model: 把因式分解当成整式乘法的逆运算瞎展开
-        enc: []`))
-  const region = loadRegionDoc(doc, 'data/基础.yaml')
-  const n = region.blocks[0]!.nodes[0]!
+test('概念字段组：合法三组照抄落图，graphDoc 序列化与 parseNode 回读一致', () => {
+  const doc = YAML.parse(graphWith(`  - name: 主技能
+    pre: []
+    opt: false
+    note: ""
+    est: 20
+    teaches: { 因式分解: 会用, 配方法: 能教 }
+    assumes: { 整式乘法: 知道, 一元一次方程: 会用 }
+    misconceptions:
+      - concept: 因式分解
+        model: 把因式分解当成整式乘法的逆运算瞎展开
+    enc: []`))
+  const nodes = loadGraphDoc(doc, 'data/图.yaml')
+  const n = nodes[0]!
   assert.deepEqual(n.teaches, { 因式分解: '会用', 配方法: '能教' })
   assert.deepEqual(n.assumes, { 整式乘法: '知道', 一元一次方程: '会用' })
   assert.deepEqual(n.misconceptions, [{ concept: '因式分解', model: '把因式分解当成整式乘法的逆运算瞎展开' }])
-  // 快照/落盘序列化保真（regionDoc 顺序与省空值纪律）
-  const round = new GraphStore(null as never, '', nodeVaultFs).regionDoc(region)
-  const again = loadRegionDoc(round, 'data/基础.yaml')
-  assert.deepEqual(again.blocks[0]!.nodes[0]!.teaches, n.teaches)
-  assert.deepEqual(again.blocks[0]!.nodes[0]!.misconceptions, n.misconceptions)
+  // 快照/落盘序列化保真（graphDoc 顺序与省空值纪律）
+  const round = new GraphStore(null as never, '', nodeVaultFs).graphDoc(nodes)
+  const again = loadGraphDoc(round, 'data/图.yaml')
+  assert.deepEqual(again[0]!.teaches, n.teaches)
+  assert.deepEqual(again[0]!.misconceptions, n.misconceptions)
 })
 
 test('概念字段组：缺席全合法（种子/纯结构节点零概念字段可过）', () => {
@@ -112,24 +108,24 @@ test('误解条目：无签名字段（未知字段 ERROR）、缺 model ERROR�
 
 test('边轻（#127 §2）：图 YAML 出现 origin/status/probation 边字段即 Broken，拒收信息可执行', () => {
   expectSchemaError(
-    () => loadRegionDoc(YAML.parse(graphWith(`      - name: 插入节点
-        pre: [起点]
-        origin: insert-提案1
-        enc: []`)), 'data/x.yaml'),
+    () => loadGraphDoc(YAML.parse(graphWith(`  - name: 插入节点
+    pre: [起点]
+    origin: insert-提案1
+    enc: []`)), 'data/图.yaml'),
     'origin 从提案 journal 派生，图 YAML 不存储',
   )
   expectSchemaError(
-    () => loadRegionDoc(YAML.parse(graphWith(`      - name: 复诊节点
-        pre: [起点]
-        status: probation
-        enc: []`)), 'data/x.yaml'),
+    () => loadGraphDoc(YAML.parse(graphWith(`  - name: 复诊节点
+    pre: [起点]
+    status: probation
+    enc: []`)), 'data/图.yaml'),
     '复诊状态落 state/边实验.jsonl',
   )
   expectSchemaError(
-    () => loadRegionDoc(YAML.parse(graphWith(`      - name: 复诊节点
-        pre: [起点]
-        probation: 2026-09-20
-        enc: []`)), 'data/x.yaml'),
+    () => loadGraphDoc(YAML.parse(graphWith(`  - name: 复诊节点
+    pre: [起点]
+    probation: 2026-09-20
+    enc: []`)), 'data/图.yaml'),
     '边轻纪律',
   )
 })
@@ -138,18 +134,14 @@ test('边轻（#127 §2）：图 YAML 出现 origin/status/probation 边字段�
 
 const CAP_VAULT = {
   graph: `
-region: 基础
-color: blue
-blocks:
-  - name: 入门块
-    nodes:
-      - { name: 起点, pre: [], opt: false, note: "", est: 20 }
-      - name: 误解节点
-        pre: [起点]
-        misconceptions:
-          - { concept: 概念甲, model: 错法一 }
-          - { concept: 概念甲, model: 错法二 }
-          - { concept: 概念甲, model: 错法三 }
+nodes:
+  - { name: 起点, pre: [], opt: false, note: "", est: 20 }
+  - name: 误解节点
+    pre: [起点]
+    misconceptions:
+      - { concept: 概念甲, model: 错法一 }
+      - { concept: 概念甲, model: 错法二 }
+      - { concept: 概念甲, model: 错法三 }
 `,
 }
 
@@ -195,8 +187,8 @@ ops:
     assert.ok(r.warns?.some(w => /teaches 仅 1 条（窄节点提示/.test(w)), '窄节点提示随受理回执返回')
     assert.ok(r.warns?.some(w => /assumes 仅 2 条/.test(w)))
     await engine.graph.graphApply('edit', r.id)
-    // 出生层落图：概念字段组随 add_node 写进正典 data/*.yaml
-    const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '基础.yaml'), 'utf8')
+    // 出生层落图：概念字段组随 add_node 写进正典 data/图.yaml
+    const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '图.yaml'), 'utf8')
     assert.match(dataYaml, /teaches:/)
     assert.match(dataYaml, /行变换几何直觉: 知道/)
     assert.match(dataYaml, /misconceptions:/)

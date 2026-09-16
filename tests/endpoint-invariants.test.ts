@@ -24,14 +24,10 @@ import { withVault, noteText, tfQuestion } from './helpers/vault.ts'
 
 /** 双节点图：入门（起点）→ 终点；再加一个旁支后继 A 供 T1/T2 对照。 */
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 中间台阶, pre: [入门], opt: false, note: "", est: 20 }',
-  '      - { name: 终点, pre: [入门], opt: false, note: "" }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 中间台阶, pre: [入门], opt: false, note: "", est: 20 }',
+  '  - { name: 终点, pre: [入门], opt: false, note: "" }',
 ].join('\n')
 
 /** 锚容器原文（写侧通道只有起草 apply 与逐终点 sealed 维护；测试经 files 逃生口直接落盘）。
@@ -444,14 +440,10 @@ test('#199 生成门：contextPack 不为终点组装产料上下文（管线侧
 
 test('#199 T1/T2 不登记终点：前置节点进入学习时后继触发清单剔终点', async () => {
   const graph = [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 入门块',
-    '    nodes:',
-    '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-    '      - { name: 普通后继, pre: [入门], opt: false, note: "", est: 20 }',
-    '      - { name: 终点, pre: [入门], opt: false, note: "" }',
+    'nodes:',
+    '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+    '  - { name: 普通后继, pre: [入门], opt: false, note: "", est: 20 }',
+    '  - { name: 终点, pre: [入门], opt: false, note: "" }',
   ].join('\n')
   await withVault({
     graph,
@@ -487,15 +479,11 @@ test('#199 学习者账剔终点：status 就绪存量/清单与推荐面都不�
 
 /** 两终点图：起点甲→终点甲、起点乙→终点乙（两条独立方向）。 */
 const TWO_ENDPOINT_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 起点甲, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 起点乙, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 终点甲, pre: [起点甲], opt: false, note: "" }',
-  '      - { name: 终点乙, pre: [起点乙], opt: false, note: "" }',
+  'nodes:',
+  '  - { name: 起点甲, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 起点乙, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 终点甲, pre: [起点甲], opt: false, note: "" }',
+  '  - { name: 终点乙, pre: [起点乙], opt: false, note: "" }',
 ].join('\n')
 
 const TWO_ENDPOINT_VAULT = {

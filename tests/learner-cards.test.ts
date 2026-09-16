@@ -12,12 +12,8 @@ import { withVault } from './helpers/vault.ts'
 
 /** 入门带悬挂前置（前置概念不在图内）——讲解包要能照常点名前置。 */
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [前置概念], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 入门, pre: [前置概念], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 /** 带 manifest（s1/s2 两节）与正文的节点笔记。 */

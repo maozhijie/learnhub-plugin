@@ -14,13 +14,9 @@ import { YAML } from '../src/engine/yaml.ts'
 
 const ENRICH_VAULT = {
   graph: `
-region: 基础
-color: blue
-blocks:
-  - name: 入门块
-    nodes:
-      - { name: 入门, pre: [], opt: false, note: "", est: 20 }
-      - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }
+nodes:
+  - { name: 入门, pre: [], opt: false, note: "", est: 20 }
+  - { name: 进阶, pre: [入门], opt: false, note: "", est: 25 }
 `,
 }
 
@@ -48,23 +44,23 @@ fields:
 `
     const r = await engine.graph.graphPropose('enrich', yamlText) as { id: number; kind: string; files: number }
     assert.equal(r.kind, 'enrich')
-    assert.equal(r.files, 1, '目标节点的区文件被指纹锚定')
+    assert.equal(r.files, 1, '正典图文件（data/图.yaml）被指纹锚定')
 
     // 受理产物留痕：fields + fingerprints 进 artifact（全留痕纪律）
     const artifact = await readFile(
       engine.paths.proposalArtifactPath(r.id, 'enrich', '数学'), 'utf8')
     assert.match(artifact, /fields:/)
     assert.match(artifact, /fingerprints:/)
-    assert.match(artifact, /data\/基础\.yaml/)
+    assert.match(artifact, /data\/图\.yaml/)
 
     const applied = await engine.graph.graphApply('enrich', r.id) as { course: string; fields: number; snapshot: number; files: string[] }
     assert.equal(applied.course, '数学')
     assert.equal(applied.fields, 1)
     assert.equal(applied.snapshot, 1, '快照落盘')
-    assert.deepEqual(applied.files, ['基础'], 'files = 被重写的区名')
+    assert.deepEqual(applied.files, ['data/图.yaml'], 'files = 被重写的正典图文件')
 
-    // 读侧只读正典：enc 落进 data/*.yaml
-    const dataYaml = await readFile(join(root, '学习中心', 'math', 'data', '基础.yaml'), 'utf8')
+    // 读侧只读正典：enc 落进 data/图.yaml
+    const dataYaml = await readFile(join(root, '学习中心', 'math', 'data', '图.yaml'), 'utf8')
     assert.match(dataYaml, /name: 进阶[\s\S]*enc:[\s\S]*node: 入门/)
     assert.match(dataYaml, /w: 0\.8/)
 
@@ -94,7 +90,7 @@ fields:
     const r = await engine.graph.graphPropose('enrich', yamlText) as { id: number }
 
     // 受理后有人改了正典（edit 提案/手工）
-    const dataPath = join(root, '学习中心', 'math', 'data', '基础.yaml')
+    const dataPath = join(root, '学习中心', 'math', 'data', '图.yaml')
     await writeFile(dataPath, (await readFile(dataPath, 'utf8')).replace('est: 20', 'est: 22'), 'utf8')
 
     await assert.rejects(
@@ -139,8 +135,8 @@ fields:
     const r = await engine.graph.graphPropose('enrich', yamlText) as { id: number }
     await engine.graph.graphApply('enrich', r.id)
     const store = new GraphStore(engine.paths, join(root, '学习中心', 'math'), nodeVaultFs)
-    const regions = await store.load()
-    const node = regions[0]!.blocks[0]!.nodes.find(n => n.name === '进阶')!
+    const nodes = await store.load()
+    const node = nodes.find(n => n.name === '进阶')!
     assert.deepEqual(node.enc, [{ node: '入门', w: 0.6, note: '先验' }])
   })
 })

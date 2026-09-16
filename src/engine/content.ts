@@ -21,7 +21,7 @@ import { withContractLast } from './prompt-assembly.ts'
 import { TEMPLATES } from './prompts/templates.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../shared/content-renderers.ts'
-import type { GRegion, GNode, SectionManifest, EncEdge } from './types.ts'
+import type { GNode, SectionManifest, EncEdge } from './types.ts'
 import type { Graph } from './graph.ts'
 import type { Paths } from './paths.ts'
 import type { Fm, JournalRec } from './types.ts'
@@ -147,7 +147,6 @@ export class Content {
    * 不再被误标。 */
   contextPack(graph: Graph, state: Record<string, Fm>, node: string, course?: string,
     opts?: { omitDeliverables?: boolean; endpoints?: ReadonlySet<string>; retiredConcepts?: ReadonlySet<string> }): string {
-    const [, region, block] = graph.blockOf[node]
     const pres = graph.preOf[node]
     const succs = graph.succ[node] ?? []
     const enc = graph.encOf[node] ?? []
@@ -156,7 +155,7 @@ export class Content {
     const out: string[] = []
     out.push(`# 生成上下文包：${node}`, '')
     out.push('## 1. 目标节点')
-    out.push(`- 名称：${node} ｜ 区/块：${region} · ${block} ｜ 深度：${dSelf}${isPractice ? ' ｜ 类型：交互实践（practice）' : ''}`)
+    out.push(`- 名称：${node} ｜ 深度：${dSelf}${isPractice ? ' ｜ 类型：交互实践（practice）' : ''}`)
     out.push(`- pre：${pres.length ? pres.join('、') : '（无，根节点）'}`)
     if (graph.noteOf[node]) out.push(`- note：${graph.noteOf[node]}`)
     out.push('')
@@ -183,7 +182,7 @@ export class Content {
     out.push('')
     out.push('## 4. 领域边界')
     const scope = `本课属于${course ? `课程「${course}」的` : ''}`
-    out.push(`${scope}「${region} · ${block}」区块。只讲本节点范围内的内容；后继节点至多在自然收尾处一句话带过，不展开、不提前教；是否提及由你判断。`)
+    out.push(`${scope}一个节点。只讲本节点范围内的内容；后继节点至多在自然收尾处一句话带过，不展开、不提前教；是否提及由你判断。`)
     // #218 复核抓出的实现 bug（登记为行为变更）：本行原为 `Object.keys(graph.nset)`——
     // nset 是 Set（graph.ts:305），`Object.keys` 对 Set 恒返回空数组，§5 因此**恒渲染
     // 「（无：本节点已是图内最深）」**：#212 §四.4 讨论的「禁止概念 ≤200 是稀释点」在
@@ -1321,14 +1320,13 @@ export class Content {
     const infos: string[] = []
     const declared = graph.encOf[node] ?? []
     const declaredNames = new Set(declared.map(([t]) => t))
-    const region = graph.blockOf[node]?.[1] ?? ''
     const sites = Content.candidateCallSites(body)
     // (a) 覆盖缺口：只对已有 Ready 内容的节点背书；practice 节点合法空 enc 不报
     if (hasReady && graph.typeOf[node] !== 'practice' && sites.size) {
       const missing = [...sites.keys()].filter(c =>
         graph.nset.has(c) && c !== node && graph.isAncestor(c, node) && !declaredNames.has(c))
       if (missing.length) {
-        warns.push(`R14 enc 覆盖缺口: [${region}] ${node}：反哺候选已引用但未落 enc — ${missing.slice(0, 8).join('、')}${missing.length > 8 ? ` 等 ${missing.length} 个` : ''}（set_enc 提升，见 ADR-0008）`)
+        warns.push(`R14 enc 覆盖缺口: ${node}：反哺候选已引用但未落 enc — ${missing.slice(0, 8).join('、')}${missing.length > 8 ? ` 等 ${missing.length} 个` : ''}（set_enc 提升，见 ADR-0008）`)
       }
     }
     // (b) 一致性：候选可空——正文候选被删光时「声明边全不在候选」正是最极端的漂移
@@ -1336,15 +1334,15 @@ export class Content {
       const stale = [...declaredNames].filter(n => !sites.has(n))
       const covered = [...declaredNames].filter(n => sites.has(n)).length
       if (sites.size && covered === 0) {
-        warns.push(`R15 enc 与反哺候选不一致: [${region}] ${node}：已声明 enc（${[...declaredNames].join('、')}）与反哺候选（${[...sites.keys()].join('、')}）零交集——内容或候选漂移，核对后 set_enc 重建`)
+        warns.push(`R15 enc 与反哺候选不一致: ${node}：已声明 enc（${[...declaredNames].join('、')}）与反哺候选（${[...sites.keys()].join('、')}）零交集——内容或候选漂移，核对后 set_enc 重建`)
       }
       if (stale.length) {
-        infos.push(`R15 enc 边未见当前反哺候选: [${region}] ${node}：${stale.join('、')}${sites.size ? '' : '（正文当前无任何反哺候选——机器块被删或内容已重写？）'}${stale.length === declared.length ? '（全部声明边都不在当前候选）' : ''}`)
+        infos.push(`R15 enc 边未见当前反哺候选: ${node}：${stale.join('、')}${sites.size ? '' : '（正文当前无任何反哺候选——机器块被删或内容已重写？）'}${stale.length === declared.length ? '（全部声明边都不在当前候选）' : ''}`)
       }
     }
     // (c) 权重合理性：全部同权 = 调度路由无区分度（全 0 无路由价值、全 1 等于无权重）
     if (declared.length >= 2 && new Set(declared.map(([, w]) => w)).size === 1) {
-      warns.push(`R16 enc 权重无区分度: [${region}] ${node}：${declared.length} 条边全为 w=${declared[0][1]}——按调用强度校准权重后再启用调度路由`)
+      warns.push(`R16 enc 权重无区分度: ${node}：${declared.length} 条边全为 w=${declared[0][1]}——按调用强度校准权重后再启用调度路由`)
     }
     return { warns, infos }
   }
@@ -1517,4 +1515,4 @@ export class Content {
 }
 
 /** 类型再导出（引擎内其它模块消费）。 */
-export type { GRegion, GNode }
+export type { GNode }

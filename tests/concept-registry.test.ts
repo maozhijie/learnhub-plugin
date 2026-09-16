@@ -281,7 +281,7 @@ test('#141 同事务：apply 后图与登记表同时落盘（铸名随生长批
     const onDisk = readFileSync(registryPath(root), 'utf8')
     assert.match(onDisk, /行变换几何直觉/)
     assert.match(onDisk, /把行变换看成平面上的几何操作/)
-    const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '基础.yaml'), 'utf8')
+    const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '图.yaml'), 'utf8')
     assert.match(dataYaml, /行变换几何直觉: 知道/)
   })
 })
@@ -576,13 +576,10 @@ test('#262 登记表门面：setDeprecated 落盘 + 废弃地址仍解析 + 清�
 })
 
 test('#262 生成注入面退出：废弃概念不出现在概念清单与易混对块；旧地址引用仍受理', async () => {
+  // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
   const graph = [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 入门块',
-    '    nodes:',
-    '      - { name: 入门, pre: [], opt: false, note: "", est: 20, teaches: { 因式分解: 知道, 配方法: 会用 } }',
+    'nodes:',
+    '  - { name: 入门, pre: [], opt: false, note: "", est: 20, teaches: { 因式分解: 知道, 配方法: 会用 } }',
   ].join('\n')
   await withVault({
     graph,
@@ -628,13 +625,10 @@ test('#262 生成注入面退出：废弃概念不出现在概念清单与易混
 })
 
 test('#262 内容包注入面退出：§12 误解坑位与 §13 前置概念档位剔除废弃概念（活跃概念照旧）', async () => {
+  // #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
   const graph = [
-    'region: 基础',
-    'color: blue',
-    'blocks:',
-    '  - name: 入门块',
-    '    nodes:',
-    '      - { name: 入门, pre: [], opt: false, note: "", est: 20, assumes: { "因式分解": "会用", "配方法": "会用" }, misconceptions: [{ concept: "因式分解", model: "把因式分解当成展开" }] }',
+    'nodes:',
+    '  - { name: 入门, pre: [], opt: false, note: "", est: 20, assumes: { "因式分解": "会用", "配方法": "会用" }, misconceptions: [{ concept: "因式分解", model: "把因式分解当成展开" }] }',
   ].join('\n')
   await withVault({
     graph,

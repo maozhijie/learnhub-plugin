@@ -22,7 +22,7 @@ import type { Content } from './content.ts'
 import type { BankDoc } from './question-bank.ts'
 import { Graph, GraphStore } from './graph.ts'
 import type { BrokenNote } from './notes.ts'
-import type { Fm, CourseEntry, ProposalRec, StuckReportFolded, StuckReportRec } from './types.ts'
+import type { Fm, CourseEntry, GNode, ProposalRec, StuckReportFolded, StuckReportRec } from './types.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { CoachCheck } from './coach-round.ts'
 import type { CompassEta, CompassEtaRow, RouteReconcile } from './compass.ts'
@@ -86,7 +86,7 @@ import type { AgentSeam, GateVerdict } from './agent.ts'
 import type { LlmToolCall, LlmToolSpec } from './llm.ts'
 import { hasReadyContent } from './notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
-import { addNodeCountOf, applyOpsToRegions, editGateErrors, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
+import { addNodeCountOf, applyOpsToNodes, editGateErrors, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
 import type { DraftDiff, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
 import {
   GROWTH_DRAFT_MARKER, deleteDraft, draftDirOf, draftFindings, draftPathOf, expandPatchOps, findActiveDraft, saveDraft,
@@ -102,7 +102,6 @@ import { readySet } from './sessions.ts'
 import { masteryOfFm } from './srs.ts'
 import type { ConceptTier } from './types.ts'
 import { CONCEPT_TIERS, GROWTH_OPERATORS } from './types.ts'
-import type { GRegion } from './types.ts'
 import type { GraphApplyEditResult } from './views/graph.ts'
 import type { GraphEditProposalResult } from './views/proposals.ts'
 import { readDailyGoal } from './xp.ts'
@@ -936,7 +935,7 @@ export class GrowthSubsystem {
     const finishes: Array<{ proposal_id: number; ops: number; snapshot: number; operator: string; reason: string; target_endpoints: string[]; created: string[] }> = []
 
     // —— 草稿图的现势折叠：基图 + 已发布段（[0, published)）= 草稿基线；未发布增量叠其上 ——
-    const draftRegionsOf = async (): Promise<{ regions: GRegion[]; graph: Graph }> => {
+    const draftNodesOf = async (): Promise<{ nodes: Awaited<ReturnType<GraphStore['load']>>; graph: Graph }> => {
       const store = new GraphStore(this.e.paths, this.e.paths.courseRoot(root), this.e.fs)
       const base = await store.load()
       const baseGraph = new Graph(base)
@@ -945,9 +944,9 @@ export class GrowthSubsystem {
         if (r.errors.length) {
           throw new Error(`[coach-draft] 草稿已发布段对当前基图重放失败（基图漂移或草稿损坏）：\n${r.errors.map(e => `  ✗ ${e}`).join('\n')}`)
         }
-        return { regions: base, graph: baseGraph }
+        return { nodes: base, graph: baseGraph }
       }
-      return { regions: base, graph: baseGraph }
+      return { nodes: base, graph: baseGraph }
     }
 
     // —— 读件执行器：复用 coachToolset 的通用执行器（deps 结构化注入），白名单由本站
@@ -959,11 +958,11 @@ export class GrowthSubsystem {
     const entriesOf = async (): Promise<ConceptEntry[]> => this.e.concepts.load(root)
 
     /** 未发布增量（草稿图 + 全量 ops 重放）的读数：errors + DraftDiff——已发布段的
-     * 重放错误在 draftRegionsOf 已 fail loud，此处对全量重放取未发布段读数（与已发布
+     * 重放错误在 draftNodesOf 已 fail loud，此处对全量重放取未发布段读数（与已发布
      * 语义一致）。 */
     const replayUnpublished = async (): Promise<{ errors: string[]; diff: DraftDiff }> => {
-      const { regions, graph } = await draftRegionsOf()
-      const full = replayDraft(regions, graph, doc.ops)
+      const { nodes, graph } = await draftNodesOf()
+      const full = replayDraft(nodes, graph, doc.ops)
       return { errors: full.errors, diff: full.diff }
     }
 
@@ -983,8 +982,8 @@ export class GrowthSubsystem {
         if (!rawOps.length) throw new Error('[draft_patch] ops 不能为空——不产结构就不要调本工具。')
         // 糖算子展开（#272 统一入口）：insert_prereq_chain / split_node → 原子 EditOp；
         // suggest_confusable → confusable 建议（不是图 op，finish 发布成功后展开为候选提案）
-        const { regions, graph } = await draftRegionsOf()
-        const { ops: expanded, confusables: suggestions } = expandPatchOps(rawOps, regions, graph, endpointNames(anchors))
+        const { nodes, graph } = await draftNodesOf()
+        const { ops: expanded, confusables: suggestions } = expandPatchOps(rawOps, nodes, graph, endpointNames(anchors))
         const unpublishedCount = doc.ops.length - doc.published + expanded.length
         if (unpublishedCount > GROWTH_DRAFT_MAX_OPS_PER_BATCH) {
           throw new Error(`[draft_patch] 每批未发布增量 ≤${GROWTH_DRAFT_MAX_OPS_PER_BATCH} 条（本补丁后将为 ${unpublishedCount}）——先 draft_finish 发布再开新批。`)
@@ -994,7 +993,7 @@ export class GrowthSubsystem {
         const mints = Array.isArray(args.concepts) ? args.concepts as ConceptEntry[] : []
         // 试算：全量重放过门才落草稿（失败整批回滚 + 取值域回灌）
         const trial = [...doc.ops, ...expanded]
-        const r = replayDraft(regions, graph, trial)
+        const r = replayDraft(nodes, graph, trial)
         if (r.errors.length) {
           const g2 = graph
           const domains = [
@@ -1025,9 +1024,9 @@ export class GrowthSubsystem {
         // findings 的图读数会失真——先把门错误修完再看 findings）
         let findings: string[] = []
         if (!errors.length) {
-          const { regions, graph } = await draftRegionsOf()
-          const sim: GRegion[] = JSON.parse(JSON.stringify(regions))
-          applyOpsToRegions(sim, doc.ops)
+          const { nodes, graph } = await draftNodesOf()
+          const sim: GNode[] = JSON.parse(JSON.stringify(nodes))
+          applyOpsToNodes(sim, doc.ops)
           findings = draftFindings({
             mints: doc.concepts, entries: await entriesOf(), graph: new Graph(sim),
             invokes: await this.conceptInvokesOf(c),
@@ -1069,12 +1068,12 @@ export class GrowthSubsystem {
         }
         // 门复验对**真实基图**再跑一遍（水位模型：基图漂移 = 拒收零落盘、草稿保留）
         const store = new GraphStore(this.e.paths, this.e.paths.courseRoot(root), this.e.fs)
-        const regions = await store.load()
-        const graph = new Graph(regions)
+        const nodes = await store.load()
+        const graph = new Graph(nodes)
         const anchors = await readAnchors(this.e.paths.anchorPath(root), this.e.fs)
         const entries = await entriesOf()
         const driftErrors = await editGateErrors(spec, {
-          regions, graph, entries, anchors, mints: doc.concepts,
+          nodes, graph, entries, anchors, mints: doc.concepts,
           growthGate: async s => this.growthGateErrors(s),
         })
         if (driftErrors.length) {

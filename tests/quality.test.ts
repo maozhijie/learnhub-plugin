@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { jumpCandidates, floatNodes } from '../src/engine/quality.ts'
+import type { GNode } from '../src/engine/types.ts'
+
+/** 最小 GNode 工厂：必填字段补默认值。 */
+const gnode = (name: string, pre: string[] = []): GNode => ({ name, pre, opt: false, note: '', enc: [] })
 
 /** 构造 jumpCandidates / floatNodes 所需的最小图形状（两个函数都是 Pick 接口）。 */
 function jumpGraph(nodes: Record<string, { pre: string[]; d?: number; depth: number }>) {
@@ -47,23 +51,23 @@ test('S1: 难度只标一端时难度口径不参与，靠 depth 口径兜底', 
   assert.deepEqual(jumps[0]!.reasons, ['depth'])
 })
 
-test('S2: region 序靠后且 pre 为空 = 空降节点', () => {
+test('S2: 声明序靠后且 pre 为空 = 空降节点', () => {
   const g = {
     names: ['入口', '后段裸奔'],
     preOf: { 入口: [], 后段裸奔: [] },
-    regionIdxOf: { 入口: 0, 后段裸奔: 3 },
-    regions: [{ name: 'r0' }, { name: 'r1' }, { name: 'r2' }, { name: 'r3' }],
+    nodes: [gnode('入口'), gnode('后段裸奔')],
   }
+  // total=2 → exempt = max(1, ceil(2/4)) = 1：入口 idx0 在豁免带，后段裸奔 idx1 靠后
   assert.deepEqual(floatNodes(g), ['后段裸奔'])
 })
 
-test('S2: 首 1/4 region 的无 pre 入口不算空降', () => {
+test('S2: 声明序豁免带（首 ceil(total/4) 个）内的无 pre 入口不算空降', () => {
   const g = {
-    names: ['入口'],
-    preOf: { 入口: [] },
-    regionIdxOf: { 入口: 1 },
-    regions: Array.from({ length: 8 }, (_, i) => ({ name: `r${i}` })),
+    names: ['入口', '基础', '进阶', '高阶'],
+    preOf: { 入口: [], 基础: ['入口'], 进阶: ['基础'], 高阶: ['进阶'] },
+    nodes: [gnode('入口'), gnode('基础', ['入口']), gnode('进阶', ['基础']), gnode('高阶', ['进阶'])],
   }
+  // total=4 → exempt = 1：入口 idx0 在豁免带，其余节点都有 pre
   assert.deepEqual(floatNodes(g), [])
 })
 
@@ -71,20 +75,20 @@ test('S2: 有 pre 的节点永不算空降', () => {
   const g = {
     names: ['后段有前置'],
     preOf: { 后段有前置: ['别的'] },
-    regionIdxOf: { 后段有前置: 3 },
-    regions: Array.from({ length: 4 }, (_, i) => ({ name: `r${i}` })),
+    nodes: [gnode('垫底'), gnode('后段有前置', ['别的'])],
   }
+  // idx1 靠后但 pre 非空 → 不空降
   assert.deepEqual(floatNodes(g), [])
 })
 
-test('S2: region 总数 <4 时至少豁免首区（首区入口不误判）', () => {
+test('S2: 节点总数 <4 时至少豁免首个声明（首入口不误判）', () => {
   const g = {
-    names: ['首区入口', '次区入口'],
-    preOf: { 首区入口: [], 次区入口: [] },
-    regionIdxOf: { 首区入口: 0, 次区入口: 1 },
-    regions: [{ name: 'r0' }, { name: 'r1' }],
+    names: ['入口甲', '入口乙'],
+    preOf: { 入口甲: [], 入口乙: [] },
+    nodes: [gnode('入口甲'), gnode('入口乙')],
   }
-  assert.deepEqual(floatNodes(g), ['次区入口'])
+  // total=2 → exempt = max(1, ceil(2/4)) = 1：入口甲 idx0 豁免，入口乙 idx1 空降
+  assert.deepEqual(floatNodes(g), ['入口乙'])
 })
 
 

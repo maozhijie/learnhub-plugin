@@ -302,8 +302,8 @@ import type { LearnhubEngine } from '../src/engine/index.ts'
 
 /** 起草夹具（无概念铸名）：起点「认识变化率」+ 终点「用导数解决优化问题」。 */
 const CAPABILITY_DRAFT: DraftSpec = {
-  starts: [{ name: '认识变化率', region: '基础', block: '起点块', basis: 'baseline' }],
-  endpoint: { name: '用导数解决优化问题', region: '基础', block: '终点块' },
+  starts: [{ name: '认识变化率', basis: 'baseline' }],
+  endpoint: { name: '用导数解决优化问题' },
 }
 
 async function seedApplied(engine: LearnhubEngine): Promise<void> {
@@ -315,14 +315,10 @@ const READY_SECTIONS = ['    - { id: s1, title: 第一节, type: 讲授, status:
 
 /** 三节点链：起点（review+有正文）/ 中继（ready+有正文）/ 高阶（ready、无正文）。 */
 const CHAIN_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 链块',
-  '    nodes:',
-  '      - { name: 起点, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 中继, pre: [起点], opt: false, note: "", est: 25 }',
-  '      - { name: 高阶, pre: [中继], opt: false, note: "", est: 30 }',
+  'nodes:',
+  '  - { name: 起点, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 中继, pre: [起点], opt: false, note: "", est: 25 }',
+  '  - { name: 高阶, pre: [中继], opt: false, note: "", est: 30 }',
 ].join('\n')
 
 test('门面：全量包六区块定序稳定；轻量包恰两件（行为摘要+罗盘）', async () => {
@@ -359,13 +355,9 @@ test('门面：全量包六区块定序稳定；轻量包恰两件（行为摘�
 test('门面：登记表档位/误解目录取前沿视野（可学∪在学），零终点锚为合法空态行', async () => {
   await withVault({
     graph: [
-      'region: 基础',
-      'color: blue',
-      'blocks:',
-      '  - name: 链块',
-      '    nodes:',
-      '      - { name: 起点, pre: [], opt: false, note: "", est: 20, teaches: { "极限": "能教" }, misconceptions: [{ concept: "极限", model: "把极限当成一个值" }] }',
-      '      - { name: 中继, pre: [起点], opt: false, note: "", est: 25, teaches: { "极限": "会用" }, assumes: { "极限": "会用" } }',
+      'nodes:',
+      '  - { name: 起点, pre: [], opt: false, note: "", est: 20, teaches: { "极限": "能教" }, misconceptions: [{ concept: "极限", model: "把极限当成一个值" }] }',
+      '  - { name: 中继, pre: [起点], opt: false, note: "", est: 25, teaches: { "极限": "会用" }, assumes: { "极限": "会用" } }',
     ].join('\n'),
     notes: {
       起点: { stage: 'review', content: { sections: READY_SECTIONS } },
@@ -385,12 +377,8 @@ test('门面：登记表档位/误解目录取前沿视野（可学∪在学）�
 test('#262 废弃条目退出登记表档位注入面：在册计数只算活跃、前沿档位剔除废弃概念', async () => {
   await withVault({
     graph: [
-      'region: 基础',
-      'color: blue',
-      'blocks:',
-      '  - name: 链块',
-      '    nodes:',
-      '      - { name: 起点, pre: [], opt: false, note: "", est: 20, teaches: { "因式分解": "知道", "配方法": "会用" }, assumes: { "因式分解": "会用" } }',
+      'nodes:',
+      '  - { name: 起点, pre: [], opt: false, note: "", est: 20, teaches: { "因式分解": "知道", "配方法": "会用" }, assumes: { "因式分解": "会用" } }',
     ].join('\n'),
     notes: { 起点: { stage: 'ready', content: { sections: READY_SECTIONS } } },
     files: [{
@@ -439,14 +427,10 @@ test('门面：coachCheckpoint 三个触发点同核——就绪存量只数「�
 })
 
 const TAIL_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 链块',
-  '    nodes:',
-  '      - { name: 起点, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 中继, pre: [起点], opt: false, note: "", est: 25 }',
-  '      - { name: 终点, pre: [中继], opt: false, note: "", est: 30 }',
+  'nodes:',
+  '  - { name: 起点, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 中继, pre: [起点], opt: false, note: "", est: 25 }',
+  '  - { name: 终点, pre: [中继], opt: false, note: "", est: 30 }',
 ].join('\n')
 
 test('门面：就绪核算逐个剔除终点——尾段非终点前沿清空判据通过；终点正文不虚增存量', async () => {

@@ -11,12 +11,8 @@ import { withVault } from './helpers/vault.ts'
 
 /** 本文件课程图带 `bloom: 理解`（bloom 目标带断言的原料），与工厂默认图不同。 */
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20, bloom: 理解 }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20, bloom: 理解 }',
 ].join('\n')
 
 /** 题目行：stats 可播种（作答统计是检测的证据源之一）。

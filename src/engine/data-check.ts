@@ -9,7 +9,7 @@
  */
 import type { VaultFs } from './io.ts'
 import { join, resolve } from 'node:path'
-import { SchemaError, loadRegionDoc } from './graph.ts'
+import { SchemaError, loadGraphDoc } from './graph.ts'
 import { validateBank } from './question-bank.ts'
 import { validateRegistry } from './registry.ts'
 import { conceptMagnitudeFindings, validateConceptRegistry } from './concepts.ts'
@@ -133,7 +133,6 @@ export interface DataCheckReport {
 
 interface GraphNodeLike {
   name: string
-  region: string
 }
 
 function errorText(err: unknown): string {
@@ -306,53 +305,45 @@ async function scanCourse(
   dataDir: string,
   courseDir: string,
   bankDir: string, fs: VaultFs): Promise<{ graphFiles: number; notes: number; banks: number; nodes: GraphNodeLike[] }> {
+  // #284 存储塌缩：一课程一文件（data/图.yaml），目录里其余 .yaml 都是旧库残留
   const graphFiles = await listFiles(dataDir, '.yaml', fs)
   const nodes: GraphNodeLike[] = []
-  if (!graphFiles.length) {
+  const graphPath = graphFiles.find(p => p.endsWith('图.yaml'))
+  if (!graphPath) {
     push(
       findings,
       'graph',
       'missing',
       'graph_missing',
-      `课程「${courseName}」图目录 ${dataDir}`,
-      '没有可加载的 data/*.yaml。',
+      `课程「${courseName}」图文件 ${join(dataDir, '图.yaml')}`,
+      '没有可加载的 data/图.yaml。',
     )
   }
 
-  const regionNames = new Set<string>()
   const nodeNames = new Set<string>()
   const noteFiles = new Set((await listMarkdown(courseDir, fs)).map(path => resolve(path).toLowerCase()))
-  for (const path of graphFiles) {
-    const where = `课程「${courseName}」图文件 ${path}`
-    const result = await readYamlDoc(path, fs)
+  if (graphPath) {
+    const where = `课程「${courseName}」图文件 ${graphPath}`
+    const result = await readYamlDoc(graphPath, fs)
     if (result.readError) {
       push(findings, 'graph', 'broken', 'graph_unreadable', where, result.readError)
-      continue
-    }
-    if (result.parseError) {
+    } else if (result.parseError) {
       push(findings, 'graph', 'broken', 'graph_yaml_parse', where, result.parseError)
-      continue
-    }
-    try {
-      const region = loadRegionDoc(result.doc, path)
-      if (regionNames.has(region.name)) {
-        push(findings, 'graph', 'broken', 'graph_schema', where, `区「${region.name}」与其他文件重复。`)
-      } else {
-        regionNames.add(region.name)
-      }
-      for (const block of region.blocks) {
-        for (const node of block.nodes) {
+    } else {
+      try {
+        const loaded = loadGraphDoc(result.doc, graphPath)
+        for (const node of loaded) {
           if (nodeNames.has(node.name)) {
-            push(findings, 'graph', 'broken', 'graph_schema', where, `节点「${node.name}」与其他文件重复。`)
+            push(findings, 'graph', 'broken', 'graph_schema', where, `节点「${node.name}」重复。`)
           } else {
             nodeNames.add(node.name)
-            nodes.push({ name: node.name, region: region.name })
+            nodes.push({ name: node.name })
           }
         }
+      } catch (err) {
+        const level = err instanceof SchemaError ? 'graph_schema' : 'graph_yaml_parse'
+        push(findings, 'graph', 'broken', level, where, errorText(err))
       }
-    } catch (err) {
-      const level = err instanceof SchemaError ? 'graph_schema' : 'graph_yaml_parse'
-      push(findings, 'graph', 'broken', level, where, errorText(err))
     }
   }
 

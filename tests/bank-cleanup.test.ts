@@ -30,13 +30,9 @@ test('cleanupCandidatesForNode：skipped 收全部未归档；completed 只收�
 // ---- 门面：预览/应用（归档可逆不删除）、reason 记录、nodeSkip 自动归档 ----
 
 const GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
-  '      - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
+  'nodes:',
+  '  - { name: 入门, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 进阶, pre: [入门], opt: false, note: "", est: 20 }',
 ].join('\n')
 
 const scheduled = (reps = 2) => ({

@@ -1,4 +1,4 @@
-// 糖算子补全 + 审计 findings（#272，接 #271 草稿内核）：
+﻿// 糖算子补全 + 审计 findings（#272，接 #271 草稿内核）：
 // - 糖展开等价性：expandPatchOps（insert_prereq_chain / split_node / suggest_confusable）
 //   展开后的 ops 序列与手写原子 ops 逐字等价（确定性回放）；展开面 fail loud（终点不可拆、
 //   into 不足、悬空引用）。
@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { Graph } from '../src/engine/graph.ts'
 import { replayDraft } from '../src/engine/index.ts'
 import { expandPatchOps, draftFindings } from '../src/engine/index.ts'
-import type { EditOp, GRegion } from '../src/engine/index.ts'
+import type { EditOp, GNode } from '../src/engine/index.ts'
 import type { ConceptEntry, EndpointAnchor } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { AgentSeam } from '../src/engine/agent.ts'
@@ -18,28 +18,22 @@ import { withVault } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import { memLogger } from './helpers/logger.ts'
 
-// ---- 纯函数夹具：单区单块图（甲→乙→丙 + 终点甲；乙带轮廓）----
-function fixture(): { regions: GRegion[]; graph: Graph } {
-  const regions: GRegion[] = [{
-    name: '基础', color: '',
-    blocks: [{
-      name: '基础块',
-      nodes: [
-        { name: '甲', pre: [], opt: false, note: '', enc: [] },
-        { name: '乙', pre: ['甲'], opt: false, note: '', enc: [], est: 15, teaches: { 变化率: '会用' } },
-        { name: '丙', pre: ['乙'], opt: false, note: '', enc: [] },
-        { name: '终点甲', pre: ['乙'], opt: false, note: '', enc: [] },
-      ],
-    }],
-  }]
-  return { regions, graph: new Graph(regions) }
+// ---- 纯函数夹具：单文件图（甲→乙→丙 + 终点甲；乙带轮廓，#284 nodes 平铺）----
+function fixture(): { nodes: GNode[]; graph: Graph } {
+  const nodes: GNode[] = [
+    { name: '甲', pre: [], opt: false, note: '', enc: [] },
+    { name: '乙', pre: ['甲'], opt: false, note: '', enc: [], est: 15, teaches: { 变化率: '会用' } },
+    { name: '丙', pre: ['乙'], opt: false, note: '', enc: [] },
+    { name: '终点甲', pre: ['乙'], opt: false, note: '', enc: [] },
+  ]
+  return { nodes, graph: new Graph(nodes) }
 }
 
 test('split_node 展开：与手写原子 ops 逐字等价（轮廓继承 + 消费方重排 + 删原节点）', () => {
-  const { regions, graph } = fixture()
+  const { nodes, graph } = fixture()
   const { ops, confusables } = expandPatchOps(
     [{ op: 'split_node', node: '乙', into: ['乙一', '乙二'] }] as Array<Record<string, unknown>>,
-    regions, graph, new Set(['终点甲']),
+    nodes, graph, new Set(['终点甲']),
   )
   assert.deepEqual(confusables, [])
   const hand: EditOp[] = [
@@ -51,18 +45,18 @@ test('split_node 展开：与手写原子 ops 逐字等价（轮廓继承 + 消�
   ]
   assert.deepEqual(ops, hand)
   // 确定性回放：展开序列与手写序列在 replayDraft 下错误/差异一致且全过
-  const a = replayDraft(regions, graph, ops)
-  const b = replayDraft(regions, graph, hand)
+  const a = replayDraft(nodes, graph, ops)
+  const b = replayDraft(nodes, graph, hand)
   assert.deepEqual(a, b)
   assert.deepEqual(a.errors, [])
 })
 
 test('insert_prereq_chain 展开与 suggest_confusable 收集（建议不是图 op）', () => {
-  const { regions, graph } = fixture()
+  const { nodes, graph } = fixture()
   const { ops, confusables } = expandPatchOps([
     { op: 'insert_prereq_chain', pre: ['甲'], chain: [{ name: '丁' }, { name: '戊' }] },
     { op: 'suggest_confusable', name: '导数', with: '变化率' },
-  ] as Array<Record<string, unknown>>, regions, graph, new Set(['终点甲']))
+  ] as Array<Record<string, unknown>>, nodes, graph, new Set(['终点甲']))
   assert.deepEqual(ops, [
     { op: 'add_node', name: '丁', pre: ['甲'] },
     { op: 'add_node', name: '戊', pre: ['丁'] },
@@ -71,10 +65,10 @@ test('insert_prereq_chain 展开与 suggest_confusable 收集（建议不是图 
 })
 
 test('展开面 fail loud：终点不可拆 / into 不足 / 节点不存在 / 同名建议 / 链过短', () => {
-  const { regions, graph } = fixture()
+  const { nodes, graph } = fixture()
   const eps = new Set(['终点甲'])
   const split = (raw: Record<string, unknown>): unknown[] =>
-    expandPatchOps([raw], regions, graph, eps).ops
+    expandPatchOps([raw], nodes, graph, eps).ops
   assert.throws(() => split({ op: 'split_node', node: '终点甲', into: ['a', 'b'] }), /终点不可拆/)
   assert.throws(() => split({ op: 'split_node', node: '乙', into: ['只有一份'] }), /至少 2 个新名/)
   assert.throws(() => split({ op: 'split_node', node: '不存在', into: ['a', 'b'] }), /不存在/)

@@ -432,8 +432,8 @@ export class LearnhubEngine {
   /** 单课完整视图：图 + frontmatter 状态（每次现读，文件量小，天然最新）。 */
   async loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }> {
     const store = new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs)
-    const regions = await store.load()
-    const graph = new Graph(regions)
+    const nodes = await store.load()
+    const graph = new Graph(nodes)
     const { state, broken } = await stateMap(this.paths.courseDir(course.root), this.fs)
     return { graph, state, broken }
   }
@@ -601,8 +601,7 @@ export class LearnhubEngine {
     let failed = false
     for (const c of targets) {
       const { graph, state } = await this.loadView(c)
-      const regions = graph.regions
-      const audit = await runAudit(this.paths, c.root, c.name, graph, regions, (await this.learningDay()).today, this.fs)
+      const audit = await runAudit(this.paths, c.root, c.name, graph, (await this.learningDay()).today, this.fs)
       if (audit.failed) failed = true
       lines.push(`[${c.name}] 审计：ERROR ${audit.errors.length} | WARN ${audit.warns.length} | INFO ${audit.infos.length}${audit.failed ? '（阻断）' : ''}`)
       const done = new Set(Object.entries(state).filter(([, f]) => ['review', 'mastered', 'skipped'].includes(f.stage)).map(([n]) => n))
@@ -639,7 +638,7 @@ export class LearnhubEngine {
     let audit: ApplyAudit = { ok: true, warns: [], health: 0 }
     if (course && this.fs.exists(this.paths.dataDir(course.root))) {
       const { graph } = await this.loadView(course)
-      const result = await runAudit(this.paths, course.root, course.name, graph, graph.regions, today, this.fs)
+      const result = await runAudit(this.paths, course.root, course.name, graph, today, this.fs)
       // 健康分与审计同口径剔终点（#200 / ADR-0055；#239 多终点化）：读锚现算，起草 apply 落的锚即刻生效
       const endpoints = endpointNames(await readAnchors(this.paths.anchorPath(course.root), this.fs))
       audit = { ok: !result.failed, warns: result.warns.slice(0, 8), health: graphHealthScore(graph, { endpoints }).score }

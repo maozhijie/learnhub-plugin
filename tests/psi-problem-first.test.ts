@@ -11,15 +11,12 @@ import assert from 'node:assert/strict'
 import { problemFirstOf, nodeProblemFirstOf } from '../src/engine/complexity.ts'
 import { withVault } from './helpers/vault.ts'
 
+// #284 存储塌缩：单文件 data/图.yaml { nodes: [...] }
 const PSI_GRAPH = [
-  'region: 基础',
-  'color: blue',
-  'blocks:',
-  '  - name: 入门块',
-  '    nodes:',
-  '      - { name: 高难节点, pre: [], opt: false, note: "", difficulty: 4 }',
-  '      - { name: 高bloom节点, pre: [], opt: false, note: "", bloom: 分析 }',
-  '      - { name: 平易节点, pre: [], opt: false, note: "", difficulty: 2, bloom: 理解 }',
+  'nodes:',
+  '  - { name: 高难节点, pre: [], opt: false, note: "", difficulty: 4 }',
+  '  - { name: 高bloom节点, pre: [], opt: false, note: "", bloom: 分析 }',
+  '  - { name: 平易节点, pre: [], opt: false, note: "", difficulty: 2, bloom: 理解 }',
 ].join('\n')
 
 test('PS-I 路由真值表：difficulty ≥ 4 或 bloom 高阶层启用，中低难不反转', () => {

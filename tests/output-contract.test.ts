@@ -252,11 +252,11 @@ test('CONTEXT.md「输出契约」词条承诺的敏感度词表在册（机械�
 
 // ---- #218 稀释治理：§5 截断如实告知（位置保留的理由见 ADR-0065 §4） ----
 
-/** 造一个「目标 + n 个更深节点」的图（更深 = 进 §5 禁止概念）。 */
+/** 造一个「目标 + n 个更深节点」的图（更深 = 进 §5 禁止概念）。#284 存储塌缩：单文件 data/图.yaml { nodes: [...] }。 */
 function graphWithDeeper(n: number): string {
-  const nodes = ['      - { name: 目标, pre: [], opt: false, note: "", est: 10 }']
-  for (let i = 0; i < n; i++) nodes.push(`      - { name: N${i}, pre: [目标], opt: false, note: "", est: 10 }`)
-  return ['region: 基础', 'color: blue', 'blocks:', '  - name: 入门块', '    nodes:', ...nodes].join('\n')
+  const nodes = ['  - { name: 目标, pre: [], opt: false, note: "", est: 10 }']
+  for (let i = 0; i < n; i++) nodes.push(`  - { name: N${i}, pre: [目标], opt: false, note: "", est: 10 }`)
+  return ['nodes:', ...nodes].join('\n')
 }
 
 /** 取上下文包 §5 段的非空行（标题行被正则吃掉：行 0 = 名字清单，行 1 = 可选的截断告知）。 */
