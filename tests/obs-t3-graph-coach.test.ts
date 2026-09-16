@@ -47,7 +47,8 @@ test('coach.plan.reinject：计划门拒收后的修复轮回灌观测（DEBUG m
     assert.equal(h.logger.count('coach.plan.reinject'), 1)
     const e = h.logger.nth('coach.plan.reinject')!
     assert.equal(e.level, 'debug')
-    assert.equal(e.fields.mode, 'repair')
+    assert.equal(e.fields.family, 'recheck', '#296 后事件带族别与清单计数（字段面以门册为准）')
+    assert.equal(e.fields.schema_errors, 1)
   })
 })
 
