@@ -28,7 +28,8 @@ import {
 } from '../engine/prompts/host.ts'
 import type { CorpusRecordInput } from './corpus.ts'
 
-/** 语料捕获缝（适配器只消 record 一面；annotate/lastRef 由宿主失败处理经 rt.corpus 用）。 */
+/** 语料捕获缝（适配器只消 record 一面；annotate/annotateLast/lastRef 由宿主失败处理与
+ * 失败补标的在场证明经 rt.corpus 用，#313 B7/D20）。 */
 export type CorpusSink = (input: CorpusRecordInput) => void
 
 export const llmCfg = {
@@ -42,6 +43,16 @@ export const llmCfg = {
  * 名字留在 effort 词族——「档位」在 CONTEXT.md 语言表里专指复杂度档位（contentTierOf），不混用。 */
 export function contentEffort(highTier: boolean): LlmEffort {
   return highTier ? 'deep' : 'fast'
+}
+
+/** 日志自查三态视图（#313 E26）：`failures` / `lastError` / `cappedDay` 此前生产零消费
+ * （只有连续失败 5 次的 console.warn）——「日志自己坏了」在面板与 /status 上都看不到。
+ * 读侧住宿主：具体实现（FileLogger）住这一层，引擎只认 Logger 端口，不为观测面加宽端口；
+ * 端口实现不带这三态（如 noop/内存假实现）时返回 null，字段照旧在场（面板按 null 走空态）。 */
+export function logHealthOf(logger: unknown): { failures: number; last_error: string | null; capped_today: string | null } | null {
+  const l = logger as Partial<{ failures: number; lastError: string | null; cappedDay: string | null }> | null
+  if (!l || typeof l.failures !== 'number') return null
+  return { failures: l.failures, last_error: l.lastError ?? null, capped_today: l.cappedDay ?? null }
 }
 
 /** 当前 LLM 配置视图（模型透明，#? 与 /status、learnhub_status 一同带出，面板只读展示；

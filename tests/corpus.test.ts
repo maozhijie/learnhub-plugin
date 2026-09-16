@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync, readdirSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCorpusCapture, parseCorpusFile, STATIONS, TOOL_CALLS_MARKER } from '../src/host/corpus.ts'
-import { COACH_PLAN_STATION, GROWTH_DRAFT_STATION } from '../src/engine/index.ts'
+import { COACH_PLAN_STATION, COMPASS_STATION, DECOMPILE_STATION, GROWTH_DRAFT_STATION, QUALITY_REVIEW_STATION, QUIZ_SOLVER_STATION } from '../src/engine/index.ts'
 import type { CorpusRecordInput } from '../src/host/corpus.ts'
 
 function tmpCenter(): string {
@@ -231,4 +231,22 @@ test('#301 站名词表受控纪律：生长两站各引引擎常量（站名对
   assert.notEqual(STATIONS.growthPlan, STATIONS.growthDraft, '两站两目录——失败补标按真实失败站落盘（#301 缺陷③）')
   // 拆分前的单站遗留名 `growth: '教练思路'` 已删（写死的映射会把执行官站的失败标到思路官站）
   assert.equal(Object.keys(STATIONS).includes('growth'), false, '遗留映射键不再存在')
+})
+
+test('#313 D19 站名一条链：引擎侧站常量全部在宿主词表里（四站点双写的收口）', () => {
+  // 判据：引擎写下的站名 ∈ STATIONS——此前罗盘/目标反编译两侧各写一份字面量（改一侧即
+  // 静默分裂成两个语料目录、GRAPH_JOB_STATIONS 失败补标失配），现有门只断言
+  // OUTPUT_CONTRACTS ⊆ STATIONS，管不到「引擎侧常量」这一面。
+  const engineStations: Array<[string, string]> = [
+    ['COACH_PLAN_STATION', COACH_PLAN_STATION], ['GROWTH_DRAFT_STATION', GROWTH_DRAFT_STATION],
+    ['COMPASS_STATION', COMPASS_STATION], ['DECOMPILE_STATION', DECOMPILE_STATION],
+    ['QUIZ_SOLVER_STATION', QUIZ_SOLVER_STATION], ['QUALITY_REVIEW_STATION', QUALITY_REVIEW_STATION],
+  ]
+  const known = new Set(Object.values(STATIONS) as string[])
+  for (const [name, value] of engineStations) {
+    assert.ok(known.has(value), `引擎常量 ${name}（${value}）不在宿主词表 STATIONS 里——两侧改名即分裂成两个语料目录`)
+  }
+  // 四个生成站（罗盘/反编译/计划/里程碑）的 GRAPH_JOB_STATIONS 映射也要在册
+  const graphStations = ['罗盘', '目标反编译', '计划草案', '里程碑草案']
+  for (const g of graphStations) assert.ok(known.has(g), `图域任务站 ${g} 不在词表里`)
 })

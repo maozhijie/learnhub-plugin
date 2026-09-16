@@ -17,6 +17,10 @@ import { YAML } from '../infra/yaml.ts'
 // 原路径 re-export，门面与 tests 的既有导入路径不晃。
 export type { FadingTier } from '../types.ts'
 export { FADING_TIERS } from '../types.ts'
+/** 目标反编译站的语料站标签（#313 D19）：站名是受控词表（host STATIONS）成员，引擎侧
+ * 单一出处——此前引擎与宿主各写一份字面量，改名即静默分裂成两个语料目录。 */
+export const DECOMPILE_STATION = '目标反编译'
+
 import { FADING_TIERS } from '../types.ts'
 import type { FadingTier } from '../types.ts'
 export type { PlanItem } from './project-decompile.ts'
@@ -1187,11 +1191,11 @@ export class ProjectSubsystem {
       const errors = [...gate.errors, ...reconcile].map(x => `  ✗ ${x}`)
       return errors.length || !gate.result ? { errors } : { errors, result: gate.result }
     }
-    const round = await agent.gateRepairRound<string, DecompileDoc>('目标反编译', {
-      first: () => agent.complete('目标反编译', pack),
+    const round = await agent.gateRepairRound<string, DecompileDoc>(DECOMPILE_STATION, {
+      first: () => agent.complete(DECOMPILE_STATION, pack),
       gate: judgeOnce,
       repair: (gateErrors, rejected) =>
-        agent.repair('目标反编译', decompileRepairPrompt(tpl, materials, rejected, gateErrors), { effort: 'deep' }),
+        agent.repair(DECOMPILE_STATION, decompileRepairPrompt(tpl, materials, rejected, gateErrors), { effort: 'deep' }),
       fatal: (_firstErrors, repairErrors) => {
         const e: Error & { code?: string } = new Error(
           `[project-decompile] 模型产出未过双产物校验门（已自动修复重试一轮，提案未受理）：\n${repairErrors.join('\n')}`)

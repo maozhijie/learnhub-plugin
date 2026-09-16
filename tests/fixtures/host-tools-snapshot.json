@@ -238,6 +238,38 @@
   }
  },
  {
+  "name": "learnhub_growth_batch",
+  "description": "Run one coach round for a course and apply the resulting growth batch (生长批 #145): enqueues ONE growth job on the generation queue (phase=growth) and waits for its terminal message. The round runs the two-station relay — 思路官 produces the direction plan, 执行官 lands the structure through the draft circuit — and the batch is a kind=edit proposal that applies automatically once the gates pass (anchor-review model, ADR-0003; no per-batch human review). Structure only: no content is enqueued (ADR-0078 — content is dispatched explicitly), so the receipt names the created nodes and you generate their bodies separately. Rejected when the course has zero endpoints, when the queue is paused (restart-recovery sets that; resume from the generate page), or while a batch is already running/cancelling. Budget: one deep tool loop plus one fast plan call — do not call it repeatedly to 'hurry' a course along.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "course": {
+     "type": "string",
+     "description": "Course name"
+    }
+   },
+   "required": [
+    "course"
+   ]
+  }
+ },
+ {
+  "name": "learnhub_coach_draft_cancel",
+  "description": "Cancel the in-flight growth draft (生长草稿) of a course — deletes the DRAFT SNAPSHOT so the next growth step opens a fresh session. This is the escape hatch for a stuck draft session: when the round budget is exhausted (later draft_patch calls are refused; only draft_finish is still allowed) or when the unpublished increments keep failing the acceptance gate, the course stays resumed on that draft forever (drafts are resumed by default and round counts accumulate), and this is the way out. Only UNPUBLISHED increments are dropped — everything already published was applied to the graph and stays. Prefer draft_finish when the prepared increments are publishable; confirm with the learner before dropping work.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "course": {
+     "type": "string",
+     "description": "Course name"
+    }
+   },
+   "required": [
+    "course"
+   ]
+  }
+ },
+ {
   "name": "learnhub_calibration_profile",
   "description": "Get the Self-Calibration profile (ADR-0022, #104) as JSON: per-source slices of learner self-assessment × objective outcome pairs (v1 source \"jol\" = JOL prediction × actual answer; more sources land via the pairing contract). Each source carries calibration bins (per-prediction actual accuracy, shown only at >=10 sampled pairs — below the gate it is null, never fabricated) and an overconfidence verdict with evidence (the「会」bin's n / actual accuracy / threshold). `global` merges sources as a REFERENCE view only — domain-specific components are significant, so always present it together with its warning and treat the per-source slices as authoritative. When a source is overconfident and hints are enabled, review-queue responses ride a `calibration_hint` string: surface it verbatim at the self-assessment exit as a gentle nudge (see learnhub_review_queue); JOL probe density is then boosted (1/3 → 1/2) automatically. Read-only derivation: this NEVER discounts learner self-assessment driving canonical state — FSRS ratings pass through untouched and nothing feeds Mastery/XP. Never present it as a personality trait or a score.",
   "parameters": {
@@ -836,6 +868,35 @@
     "course",
     "node"
    ]
+  }
+ },
+ {
+  "name": "learnhub_generate_cancel",
+  "description": "Cancel a queued or running generation task for one node (排队的任务直接出队；running 的置 cancelling，回路在下一个检查点中止). node is the job key's node part: a node name for content/quiz jobs, or the job's own node for graph jobs (e.g. 罗盘 / 计划草案 / 里程碑草案) and 生长批 for the growth job. Works on the task registry, so it reaches anything that went through the queue — it does NOT reach a single-section rewrite in flight (that path is not registered). Returns whether anything was cancelled.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "course": {
+     "type": "string",
+     "description": "Course name"
+    },
+    "node": {
+     "type": "string",
+     "description": "Node name, or the job node for queue-level jobs (生长批 / 罗盘 / 计划草案 / 里程碑草案)"
+    }
+   },
+   "required": [
+    "course",
+    "node"
+   ]
+  }
+ },
+ {
+  "name": "learnhub_generate_status",
+  "description": "Read the generation queue: every task record (course/node/status/message/progress/tier), the terminal-state retention readout, and the queue flags — including queuePaused (set by restart recovery: enqueuing still succeeds while paused, but the pump does not run until the queue is resumed from the panel). Use it to answer 'did my generation/growth task start, is it stuck, what did it say' before enqueuing anything else, and after a cancel.",
+  "parameters": {
+   "type": "object",
+   "properties": {}
   }
  },
  {

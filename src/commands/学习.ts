@@ -102,8 +102,9 @@ export const 学习域 = {
   }),
   'coach-growth': command({
     id: "coach-growth",
+    summary: "Run one coach round for a course and apply the resulting growth batch (生长批 #145): enqueues ONE growth job on the generation queue (phase=growth) and waits for its terminal message. The round runs the two-station relay — 思路官 produces the direction plan, 执行官 lands the structure through the draft circuit — and the batch is a kind=edit proposal that applies automatically once the gates pass (anchor-review model, ADR-0003; no per-batch human review). Structure only: no content is enqueued (ADR-0078 — content is dispatched explicitly), so the receipt names the created nodes and you generate their bodies separately. Rejected when the course has zero endpoints, when the queue is paused (restart-recovery sets that; resume from the generate page), or while a batch is already running/cancelling. Budget: one deep tool loop plus one fast plan call — do not call it repeatedly to 'hurry' a course along.",
     args: {
-      course: { type: "string", required: true }
+      course: { type: "string", description: "Course name", required: true }
     },
     domain: "学习",
     channels: [
@@ -112,7 +113,8 @@ export const 学习域 = {
         mode: "queued",
         route: { method: "POST", path: "/coach/growth" },
         phase: "growth"
-      }
+      },
+      { channel: "agent", mode: "sync", tool: "learnhub_growth_batch" }
     ]
   }),
   'coach-draft-cancel': command({
@@ -265,9 +267,10 @@ export const 学习域 = {
   }),
   'generate-cancel': command({
     id: "generate-cancel",
+    summary: "Cancel a queued or running generation task for one node (排队的任务直接出队；running 的置 cancelling，回路在下一个检查点中止). node is the job key's node part: a node name for content/quiz jobs, or the job's own node for graph jobs (e.g. 罗盘 / 计划草案 / 里程碑草案) and 生长批 for the growth job. Works on the task registry, so it reaches anything that went through the queue — it does NOT reach a single-section rewrite in flight (that path is not registered). Returns whether anything was cancelled.",
     args: {
-      course: { type: "string", required: true },
-      node: { type: "string", required: true }
+      course: { type: "string", description: "Course name", required: true },
+      node: { type: "string", description: "Node name, or the job node for queue-level jobs (生长批 / 罗盘 / 计划草案 / 里程碑草案)", required: true }
     },
     domain: "学习",
     channels: [
@@ -275,7 +278,8 @@ export const 学习域 = {
         channel: "panel",
         mode: "sync",
         route: { method: "POST", path: "/generate/cancel" }
-      }
+      },
+      { channel: "agent", mode: "sync", tool: "learnhub_generate_cancel" }
     ]
   }),
   'generate-resume': command({
@@ -292,6 +296,7 @@ export const 学习域 = {
   }),
   'generate-status': command({
     id: "generate-status",
+    summary: "Read the generation queue: every task record (course/node/status/message/progress/tier), the terminal-state retention readout, and the queue flags — including queuePaused (set by restart recovery: enqueuing still succeeds while paused, but the pump does not run until the queue is resumed from the panel). Use it to answer 'did my generation/growth task start, is it stuck, what did it say' before enqueuing anything else, and after a cancel.",
     args: {},
     domain: "学习",
     channels: [
@@ -299,7 +304,8 @@ export const 学习域 = {
         channel: "panel",
         mode: "sync",
         route: { method: "GET", path: "/generate/status" }
-      }
+      },
+      { channel: "agent", mode: "sync", tool: "learnhub_generate_status" }
     ]
   }),
   'goal-intention': command({

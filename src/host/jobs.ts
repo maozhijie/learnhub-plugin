@@ -49,7 +49,8 @@ function failCorpus(rt: HostRuntime, station: string, err: unknown, since?: stri
   return rt.corpus.annotateLast(station, { outcome: 'failed', code: errorCodeOf(err) }, { since })
 }
 
-/** 参照令牌（#313 B7）：任务开始时按站取一次，失败补标时交回。 */
+/** 失败补标的两道判据（#313 B7）：① 取消不是模型死亡（section 级 catch 的同款纪律）；
+ * ② 本轮对该站零捕获（令牌相等）就没有死因样本。返回 null = 不补标。 */
 function corpusToken(rt: HostRuntime, station: string): string | undefined {
   return rt.corpus.lastRef(station)
 }
@@ -485,7 +486,9 @@ export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<n
 }
 
 /** 生长批任务键（课程级任务，node 槽放「生长批」标签；队列 phase=生长，#145）。 */
-const GROWTH_JOB_NODE = '生长批'
+/** 生长批任务在注册表里的 node 段（#313 E22：agent 侧的 learnhub_growth_batch 等终态
+ * 要用它拼 key，导出以免第二处字面量）。 */
+export const GROWTH_JOB_NODE = '生长批'
 
 /** 入队一个生长批任务（#145）：教练回合裁决 → kind=edit 提案 → 罗盘随批写入单元重写。
  * 阻尼防泵循环（否则「失败→排空→检查点→入队」立即成环）：同课已有生长批在途不重入；
@@ -673,7 +676,9 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
   } catch (err) {
     const station = job.phase ? GRAPH_JOB_STATIONS[job.phase] : undefined
     // 取消不是模型死亡（#313 B7）：取消轮的件不补标，失败详情也不该带语料指向
-    const corpusRef = station && (job.status as GenJobStatus) !== 'cancelling' ? failCorpus(rt, station, err, corpusTokenAtStart) : undefined
+    const corpusRef = station && (job.status as GenJobStatus) !== 'cancelling'
+      ? failCorpus(rt, station, err, corpusTokenAtStart)
+      : undefined
     failGenJob(rt, job, err instanceof Error ? err.message : String(err), corpusRef)
   } finally {
     persistGenJobs(rt)
@@ -741,6 +746,9 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
         .map(s => `${{ plan: '思路官', plan_repair: '重裁', executor: '执行官' }[s.tier] ?? s.tier}${s.tier === 'plan_repair' ? '↑回灌' : ''}(${s.operator})`)
         .join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
+        // 新建节点名随行（#313 E23）：引擎已返回 created，旧回执只给条数——用户长完一批后
+        // 没有面告诉他「这几个节点要生成正文」，接在后面的节点在推荐流里根本不出现。
+        + (a.created.length ? `｜新建：${a.created.join('、')}` : '')
         + `｜${tierNote}｜理由：${p.reason}`
       // 回路轨迹（#163）：裁决前查了哪些只读视图，生成页逐条可查
       if (r.trajectory?.length) job.message += `｜回路轨迹：${r.trajectory.join('；')}`
@@ -1142,7 +1150,7 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
  * 计划草案一次成型、无修复轮（修订走提案快照的人审语义，草案不自动重试）。 */
 export async function generateProjectPlan(rt: HostRuntime, id: string): Promise<string> {
   const prompt = await rt.engine.project.projectPlanPack(id)
-  const yaml = await rt.agent.complete('计划草案', prompt, { effort: 'fast' })
+  const yaml = await rt.agent.complete(STATIONS.plan, prompt, { effort: 'fast' })
   const prop = await rt.engine.project.projectPlanPropose(id, yaml)
   return `[project-plan] 提案 #${prop.id} 已受理（${prop.initial ? '初次规划' : '计划修订'}：${prop.milestones} 个里程碑）——人审后 learnhub_project_apply 生效（apply 带旧计划快照）。`
 }
@@ -1155,8 +1163,8 @@ export async function generateProjectMilestone(rt: HostRuntime, id: string, mile
   const prompt = await rt.engine.project.projectMilestonePack(id, milestoneId)
   const write = (md: string) => rt.engine.project.projectMilestoneWrite(id, milestoneId, md)
   type MilestoneWriteResult = Awaited<ReturnType<typeof write>>
-  const round = await agent.gateRepairRound<string, MilestoneWriteResult>('里程碑草案', {
-    first: () => agent.complete('里程碑草案', prompt, { effort: 'fast' }),
+  const round = await agent.gateRepairRound<string, MilestoneWriteResult>(STATIONS.milestone, {
+    first: () => agent.complete(STATIONS.milestone, prompt, { effort: 'fast' }),
     gate: async (md): Promise<GateVerdict<MilestoneWriteResult>> => {
       try {
         return { errors: [], result: await write(md) }
@@ -1167,7 +1175,7 @@ export async function generateProjectMilestone(rt: HostRuntime, id: string, mile
       }
     },
     repair: (gateErrors, rejected) =>
-      agent.repair('里程碑草案', Content.withContractLast(prompt, Content.sectionRepairBody(rejected, gateErrors.join('\n'))), { effort: 'deep' }),
+      agent.repair(STATIONS.milestone, Content.withContractLast(prompt, Content.sectionRepairBody(rejected, gateErrors.join('\n'))), { effort: 'deep' }),
     // 修复轮仍败：原样以门错误抛出（与旧直抛形态同文案同码，零提案落盘语义不变）
     fatal: (_firstErrors, repairErrors) => Object.assign(new Error(repairErrors.join('\n')), { code: 'MILESTONE_GATE_FAILED' }),
   })

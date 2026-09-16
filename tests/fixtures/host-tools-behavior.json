@@ -4,7 +4,7 @@
   "tool": "learnhub_status",
   "args": {},
   "queued": false,
-  "text": "{\"llm\":{\"provider\":\"deepseek-official\",\"model\":\"deepseek-v4-flash\",\"fast_effort\":\"off\",\"deep_effort\":\"low\"}}",
+  "text": "{\"llm\":{\"provider\":\"deepseek-official\",\"model\":\"deepseek-v4-flash\",\"fast_effort\":\"off\",\"deep_effort\":\"low\"},\"log\":null}",
   "calls": [
    "growth2.coachCheckpoint(\"session_start\",undefined)",
    "statusJson()"
@@ -3271,6 +3271,36 @@
   "tool": "learnhub_content_check",
   "args": {
    "course": "1"
+  },
+  "queued": false,
+  "text": "",
+  "error": "invalid arguments: missing required property \"node\"",
+  "calls": []
+ },
+ {
+  "id": "learnhub_generate_status · 空参",
+  "tool": "learnhub_generate_status",
+  "args": {},
+  "queued": false,
+  "text": "{\"jobs\":[],\"queuePaused\":false,\"queuedCount\":0,\"broken\":null}",
+  "calls": []
+ },
+ {
+  "id": "learnhub_generate_cancel · 全参（无此任务）",
+  "tool": "learnhub_generate_cancel",
+  "args": {
+   "course": "数学",
+   "node": "节点甲"
+  },
+  "queued": false,
+  "text": "没有可取消的任务：「数学/节点甲」不在注册表里（已终态出册、或 key 写错——用 learnhub_generate_status 看队列）。",
+  "calls": []
+ },
+ {
+  "id": "learnhub_generate_cancel · 缺 node",
+  "tool": "learnhub_generate_cancel",
+  "args": {
+   "course": "数学"
   },
   "queued": false,
   "text": "",

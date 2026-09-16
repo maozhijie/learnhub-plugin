@@ -259,9 +259,18 @@ export function summarize(output: unknown, opts: { full?: boolean } = {}): strin
 }
 
 /** D14 v3 唯一出口：engine 调用 + 调试日志留痕。`chars` 传**原文尺寸**（`out.length`）
- * 而不是摘要尺寸——它是「这次调用吐了多大」的索引，摘要只是给人看的那一行。 */
+ * 而不是摘要尺寸——它是「这次调用吐了多大」的索引，摘要只是给人看的那一行。
+ * 失败也留痕（#313 E25）：agent 工具面（tool-handlers + registry bind）此前没有 catch——
+ * 工具一抛，日志里连一行 `engine.call` 都没有（面板路由侧 `apiRun` 有 `engine.call.fail`），
+ * 「这个工具为什么失败」事后只能靠模型会话或人工复现。与 apiRun 同款：ERROR 留痕后原样抛出。 */
 export async function run(rt: HostRuntime, tool: string, fn: () => Promise<string>): Promise<string> {
-  const out = await fn()
+  let out: string
+  try {
+    out = await fn()
+  } catch (err) {
+    rt.logger.error('engine.call.fail', { tool, error: err instanceof Error ? err.message : String(err) })
+    throw err
+  }
   logCall(rt, tool, summarize(out), typeof out === 'string' ? out.length : 0)
   return out
 }

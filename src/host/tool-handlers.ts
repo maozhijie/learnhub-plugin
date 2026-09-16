@@ -10,22 +10,41 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { ANKI_ENDPOINT, AnkiConnectClient } from '../engine/index.ts'
 import { applyId, bandPref, graphKind, questionCount, rejectId, requireSkipDirection } from '../tool-contracts.ts'
-import { llmSeam, llmSeamStripped, llmView } from './llm.ts'
+import { logHealthOf, llmSeam, llmSeamStripped, llmView } from './llm.ts'
 import { STATIONS } from './corpus.ts'
 import { run } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import {
   afterGraphApply, enqueueGeneration, enqueueGraphJob, enqueueQuizGeneration, generateProjectMilestone,
   generateProjectPlan, generateSection, resetCourseChain, sessionStartCheckpoint, sweepGenJobs,
-  triggerPlanGrowth, waitForGenJob,
+  triggerPlanGrowth, waitForGenJob, generationStatus, cancelGeneration, enqueueGrowthBatch, GROWTH_JOB_NODE,
 } from './jobs.ts'
 
 export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (args: never) => Promise<string>> {
   return {
   'learnhub_status': () => run(rt, 'learnhub_status', async () => {
       sessionStartCheckpoint(rt, ctx) // 会话开始触点（agent 会话开工 = 同一面板打开语义，节流共用）
-      return JSON.stringify({ ...(await rt.engine.statusJson()), llm: llmView() })
+      return JSON.stringify({ ...(await rt.engine.statusJson()), llm: llmView(), log: logHealthOf(rt.logger) })
     }),
+  // #313 E22：生长批与队列此前只有面板通道（agent 会话里既拉不起生长、也取消不了任务、
+  // 也读不到队列状态——罗盘两条通道都有）。三具工具全部走宿主任务队列（与面板同一入口），
+  // 不引入第二套接线；生长批长跑，故与 compass_paint 同款「入队 + 等终态消息」。
+  'learnhub_growth_batch': (args: { course: string }) => run(rt, 'learnhub_growth_batch', async () => {
+      // 与面板「生长一步」同一入队入口（enqueueGrowthBatch），agent 侧同步等终态
+      // （一次调用即结果）——生长批是长跑回路，取消走 learnhub_generate_cancel。
+      const enq = enqueueGrowthBatch(rt, ctx, args.course, 'agent 会话下发（learnhub_growth_batch）')
+      if (!enq.queued) return enq.message
+      const job = await waitForGenJob(rt, `${args.course}/${GROWTH_JOB_NODE}`)
+      return `${job.message ?? ''}（终态 ${job.status}）`
+    }),
+  'learnhub_generate_cancel': (args: { course: string; node: string }) => run(rt, 'learnhub_generate_cancel', async () => {
+      const r = cancelGeneration(rt, args.course, args.node)
+      return r.cancelled
+        ? `已取消「${args.course}/${args.node}」（${r.status === 'queued' ? '排队中直接出队' : `置 ${r.status}`}）。`
+        : `没有可取消的任务：「${args.course}/${args.node}」不在注册表里（已终态出册、或 key 写错——用 learnhub_generate_status 看队列）。`
+    }),
+  'learnhub_generate_status': () => run(rt, 'learnhub_generate_status', async () =>
+      JSON.stringify(await generationStatus(rt))),
   'learnhub_skip': (args: { course: string; node: string; skipped?: boolean }) => run(rt, 'learnhub_skip', async () =>
       JSON.stringify(await rt.engine.sched2.nodeSkip(args.course, args.node, requireSkipDirection(args.skipped)))),
   'learnhub_complete': (args: { course: string; node: string; force?: boolean }) => run(rt, 'learnhub_complete', async () =>

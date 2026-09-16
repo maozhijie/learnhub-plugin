@@ -24,7 +24,7 @@ import {
 import { apiRun, logCall } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import type { RouteHandler } from './route-table.ts'
-import { llmComplete, llmSeam, llmSeamStripped, llmView } from './llm.ts'
+import { llmComplete, logHealthOf, llmSeam, llmSeamStripped, llmView } from './llm.ts'
 import { STATIONS } from './corpus.ts'
 import { AGENT_GUIDE } from './tools.ts'
 import { serveInteractive, serveVaultFile, serveVendor } from './static.ts'
@@ -81,7 +81,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 模型透明：status 附带当前 LLM 配置（provider/model/思考档，面板只读展示）。
     // 会话开始触点（五点接线，30 分钟节流）：面板打开/轮询共用入口，fire-and-forget。
     sessionStartCheckpoint(rt, ctx)
-    sendJson(res, 200, await apiRun(rt, 'api/status', async () => ({ ...(await rt.engine.statusJson()), llm: llmView() })))
+    sendJson(res, 200, await apiRun(rt, 'api/status', async () => ({ ...(await rt.engine.statusJson()), llm: llmView(), log: logHealthOf(rt.logger) })))
   },
   'GET /recommend': async ({ rt, url, res }) => {
     const limit = Number(url.searchParams.get('limit') ?? '5')

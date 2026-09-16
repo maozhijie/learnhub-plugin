@@ -997,6 +997,66 @@ test('#313 B7 取消不补标：取消轮即便有本轮捕获也不改判 faile
   assert.doesNotMatch(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', /语料 生成语料/, '取消不是死因，不带语料引用')
 })
 
+test('#313 E23：生长批成功回执点名新建节点（「哪几个节点要生成正文」在回执里）', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    'growth2.coachGrowthBatch': async () => ({
+      course: '数学', state: 'applied',
+      check: { course: '数学', ready: 0, depth: 3, required: 3, cold_start: false, ok: false, exhausted: false, warnings: [] },
+      segments: [{ tier: 'plan', effort: 'fast', operator: '前进', disagreement: false }],
+      trajectory: [],
+      proposal: { id: 7, ops: 2, operator: '前进', reason: '前沿缺下一台阶', disagreement: false },
+      applied: { ops: 2, snapshot: 3, created: ['平均变化率', '瞬时速度'] },
+    }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+    // apply 出口的悬空清扫要课程在册（否则本任务被当悬空记录清掉——空 vault 的诚实行为）
+    'registry.get': async () => ({ id: '数学-01', name: '数学', root: '数学', enabled: true }),
+    loadView: async () => ({ graph: { nset: new Set<string>() }, state: {}, broken: [] }),
+  })
+  enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
+  await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
+  const msg = rt.jobs.genJobs.get('数学/生长批')!.message ?? ''
+  // 引擎已经返回 created，旧回执只给条数——用户长完一批后没有面告诉他哪几个节点要生成正文
+  assert.match(msg, /新建：平均变化率、瞬时速度/)
+  assert.match(msg, /理由：前沿缺下一台阶/)
+})
+
+test('#313 E22：agent 面补上生长批/取消/队列状态（此前只有面板通道——agent 会话里既拉不起生长、也取消不了、也读不到队列）', async () => {
+  const rt = makeRuntime()
+  const captured: Array<{ name?: string; execute: (args: unknown) => Promise<unknown> }> = []
+  registerTools(fakeCtx(captured), rt)
+  const names = captured.map(t => t.name)
+  for (const n of ['learnhub_growth_batch', 'learnhub_generate_cancel', 'learnhub_generate_status']) {
+    assert.ok(names.includes(n), `agent 面缺 ${n}`)
+  }
+  // 队列状态：可读（重启暂停旗标随行——面板之外的第二个可见面）
+  const statusTool = captured.find(t => t.name === 'learnhub_generate_status')!
+  const status = JSON.parse(String(await statusTool.execute({}))) as { jobs: unknown[]; queuePaused: boolean }
+  assert.deepEqual(status.jobs, [])
+  assert.equal(status.queuePaused, false)
+  // 取消：没这个任务时如实说没有，而不是静默成功
+  const cancelTool = captured.find(t => t.name === 'learnhub_generate_cancel')!
+  assert.match(String(await cancelTool.execute({ course: '数学', node: '不存在的节点' })), /没有可取消的任务/)
+  // 生长批：走面板同一入队入口（enqueueGrowthBatch）+ 等终态，回执沿用任务 message
+  stub(rt, {
+    'growth2.coachGrowthBatch': async () => ({
+      course: '数学', state: 'idle',
+      check: { course: '数学', ready: 3, depth: 3, required: 3, cold_start: false, ok: true, exhausted: false, warnings: [] },
+      segments: [], proposal: null, applied: null, halt_reason: '内容已跟上，无需长新节点',
+    }),
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const growthTool = captured.find(t => t.name === 'learnhub_growth_batch')!
+  const out = String(await growthTool.execute({ course: '数学' }))
+  assert.match(out, /教练判断暂不需长新内容/, '回执是生长任务的终态 message')
+  assert.match(out, /理由：内容已跟上/, '#313 E24：停摆理由随回执（固定文案只说「不需长新内容」）')
+  assert.match(out, /终态 done/)
+})
+
 test('生长批停摆终态（#161）：就绪深度满足 → done 带中性说明（非成功样式）+ growthOutcome=idle 供通知分流', async () => {
   const rt = makeRuntime()
   stub(rt, {
@@ -1470,17 +1530,18 @@ test('路由分发：static 抽离后 /file、/vendor、/interactive 的守卫�
 
 // ---------------------------------------------------------------- 工具面快照 + 路由↔工具对账
 
-test('工具面快照：114 个工具的名称/描述/schema 与重构前基线逐字不变（#312 +1 / #274 +1）', () => {
+
+test('工具面快照：117 个工具的名称/描述/schema 与重构前基线逐字不变（#312 +1；#274 +1；#313 +3）', () => {
   const rt = makeRuntime()
   const captured: Array<{ name?: string; description?: string; parameters?: unknown; output?: unknown }> = []
   registerTools(fakeCtx(captured), rt)
-  assert.equal(captured.length, 114, '工具总数（#312 +1 learnhub_coach_draft_cancel；#274 +1 learnhub_concept_merge_candidates；#265 +1 learnhub_concept_confusable_candidates；描述漂移仅限本票三处：graph-propose/graph-proposals/concept-merge）')
+  assert.equal(captured.length, 117, '工具总数（#313 +3：learnhub_growth_batch / learnhub_generate_cancel / learnhub_generate_status；#312 +1 learnhub_coach_draft_cancel；#274 +1 learnhub_concept_merge_candidates；#265 +1 learnhub_concept_confusable_candidates）')
   const snapshot = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-snapshot.json'), 'utf8')) as
     Array<{ name: string; description: string; parameters: unknown }>
-  // 快照是「切面之前」的捕获：新工具不在快照里（下方遍历快照条目逐字比对，不反向要求登记）
-  assert.equal(snapshot.length, 113)
+  assert.equal(snapshot.length, 117)
   const byName = new Map(captured.map(t => [t.name, t]))
-  assert.equal(byName.size, 114, '工具名无重复')
+  assert.equal(byName.size, 117, '工具名无重复')
+
   for (const expect of snapshot) {
     const got = byName.get(expect.name)
     assert.ok(got, `缺工具 ${expect.name}`)

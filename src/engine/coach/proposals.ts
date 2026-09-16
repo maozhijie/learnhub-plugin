@@ -410,7 +410,7 @@ function conceptRefsOfOps(ops: EditOp[]): ConceptRef[] {
  * 不走复诊由边轻纪律键拒收与 #146 结算语义共同保证（巩固批没有复诊通道）。 */
 export function consolidationGateErrors(
   operator: GrowthOperator | undefined, ops: EditOp[], graph: Graph,
-  entries: ReadonlyArray<ConceptEntry> = [],
+  entries: ReadonlyArray<ConceptEntry>,
 ): string[] {
   if (operator !== '巩固') return []
   // 已教概念集单一出处 Graph.taughtByOf（#270 反向映射）：names 全扫折叠退役。
@@ -1071,7 +1071,8 @@ export class GraphProposals {
    * `data/图.yaml`（{ nodes: [] }，空图的合法载体：GraphStore.load 正常读取，#284）+
    * 空 `概念登记表.yaml`（concepts: []）+ `state/终点锚.json`（空锚，合法空态）+
    * `罗盘.md` 脚手架。**不自动初始化生成**：零节点图不入任何自动触发点（零节点闸），
-   * 第一次生长由学习者显式下发或加终点触发。写序 = 脚手架在先、注册表条目在后：
+   * 第一次生长由学习者在教练台显式下发（加终点是**纯声明**、不触发任何生成，ADR-0076 §三
+   * / #313 D21——此处旧注释写「或加终点触发」与实现相反）。写序 = 脚手架在先、注册表条目在后：
    * 半途失败最多留孤儿目录（无注册表条目，建课可重试），不会留下不能加载的死课。 */
   async createCourse(name: string): Promise<CourseEntry> {
     const trimmed = name.trim()

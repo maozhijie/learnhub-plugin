@@ -563,15 +563,6 @@ export function structureCheck(existing: Graph | null, newNodes: GNode[], label:
  * 组），唯一出路 del+rebuild 又撞同批删建。`base` = 变更前的逐概念计数：本批没把某概念推过
  * 「封顶」或「存量水位」（取两者较大）就放行；真推过了才报，且错误行如实给出存量与新增。
  * 计数按 canonical 归一（#313 C12）由调用方在传入前完成（`base` 与 `nodes` 同口径）。 */
-export function misconceptionCapErrors(nodes: GNode[], base?: Map<string, number>): string[] {
-  const count = new Map<string, number>()
-  for (const n of nodes) {
-    for (const m of n.misconceptions ?? []) count.set(m.concept, (count.get(m.concept) ?? 0) + 1)
-  }
-  return misconceptionCapErrorsOfCounts(count, base)
-}
-
-/** 计数形入口（#313 C9/C12）：调用方已按 canonical 归一并折好两侧计数时走这里。 */
 export function misconceptionCapErrorsOfCounts(count: Map<string, number>, base?: Map<string, number>): string[] {
   const out: string[] = []
   for (const [concept, n] of [...count.entries()].sort(([a], [b]) => a.localeCompare(b))) {

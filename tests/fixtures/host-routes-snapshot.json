@@ -10,7 +10,8 @@
     "model": "deepseek-v4-flash",
     "fast_effort": "off",
     "deep_effort": "low"
-   }
+   },
+   "log": null
   },
   "calls": [
    "growth2.coachCheckpoint(\"session_start\",undefined)",

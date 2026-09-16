@@ -17,6 +17,10 @@ import { SANDBOX_WORDING } from '../sched/sandbox.ts'
 import { pctOf } from '../infra/grading.ts'
 import type { EndpointAnchor } from './seed.ts'
 
+/** 罗盘站的语料站标签（#313 D19）：站名是受控词表（host STATIONS）成员，引擎侧单一出处
+ * ——此前引擎与宿主各写一份字面量，改名即静默分裂成两个语料目录。 */
+export const COMPASS_STATION = '罗盘'
+
 export const SECTION_ROUTE = '剩余路线'
 export const SECTION_ANNOTATIONS = '学习者批注区'
 export const SECTION_ETA = '沙盘 ETA'

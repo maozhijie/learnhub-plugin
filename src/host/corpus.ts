@@ -15,13 +15,14 @@
  * - 环形：失败与容忍必存但封顶（bad 桶 200/站），成功环形 25/站（ok 桶）——桶编码
  *   进文件名前缀（ok-/bad-，余段=ISO 时间戳+站内序号），修剪是纯目录操作零内容读。
  * - 写盘异步 fire-and-forget、故障静默（观测面纪律：语料故障不挡生成主流程）；
- *   lastRef 登记同步（宿主失败处理取引用不依赖写盘完成）。flush() 是测试缝。
+ *   lastRef 登记同步（宿主失败补标取它当「本轮有没有新捕获」的令牌，不依赖写盘完成）。
+ *   flush() 是测试缝。
  * - G9 裁决（ADR-0060）：语料写入是单文件遥测写、无跨文件一致性——不入
  *   runWriteUnit 站点表、不写 journal（journal 只记领域事实，不记观测面）。
  * - 站名是受控词表（PROMPT_KINDS ∪ AgentSeam 六站，无斜杠），ref 的 split('/') 依赖它。
  */
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { QUIZ_SOLVER_STATION, QUALITY_REVIEW_STATION } from '../engine/index.ts'
+import { QUIZ_SOLVER_STATION, QUALITY_REVIEW_STATION, COMPASS_STATION, DECOMPILE_STATION } from '../engine/index.ts'
 import { COACH_PLAN_STATION, GROWTH_DRAFT_STATION } from '../engine/index.ts'
 import type { LlmTokenUsage } from '../engine/index.ts'
 
@@ -70,7 +71,8 @@ export interface CorpusCapture {
    * = 质量评审抽样失真，失败详情里那句「语料 …/<件>」也指向成功件）。非模型失败
    * （取消 / 轮次预算耗尽 / 熔断前零调用 / 空手结束）正是这种形态。省略 = 照旧补标。 */
   annotateLast(station: string, patch: CorpusPatch, opts?: { since?: string }): string | undefined
-  /** 该站最近一条捕获的相对 ref（供生成任务失败详情引用 + 失败补标的在场证明）。 */
+  /** 该站最近一条捕获的相对 ref：**失败补标的在场证明**（#313 B7 起有生产消费——宿主
+ * 在任务开始前取一次，失败时交回 annotateLast 的 `since` 比对）。 */
   lastRef(station: string): string | undefined
   /** 等待全部在飞写盘完成（测试缝；生产不调）。 */
   flush(): Promise<void>
@@ -103,8 +105,8 @@ export const STATIONS = {
    * 写死的映射把执行官站的失败补标到思路官站（详见 host/jobs 的失败补标处）。 */
   growthPlan: COACH_PLAN_STATION,
   growthDraft: GROWTH_DRAFT_STATION,
-  compass: '罗盘',
-  decompile: '目标反编译',
+  compass: COMPASS_STATION,
+  decompile: DECOMPILE_STATION,
   plan: '计划草案',
   milestone: '里程碑草案',
 } as const

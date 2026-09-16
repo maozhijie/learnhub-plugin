@@ -84,6 +84,14 @@ test('engine.call / engine.call.fail：run 与 apiRun 出口留痕（失败也�
   assert.equal(bad.fields.tool, 'api/boom')
   assert.equal(bad.fields.error, '后端炸了')
   assert.equal(log.count('engine.call'), 1, '失败不冒充成功留痕（两事件各管一段）')
+
+  // #313 E25：agent 工具面走的是 `run`（tool-handlers 46 处 + registry bind），此前**没有**
+  // catch——工具一抛日志里连一行都没有，「这个工具为什么失败」事后只能靠模型会话或人工复现
+  await assert.rejects(() => run(rt, 'learnhub_oops', async () => { throw new Error('工具炸了') }), /工具炸了/)
+  const toolFail = log.nth('engine.call.fail')!
+  assert.equal(toolFail.fields.tool, 'learnhub_oops')
+  assert.equal(toolFail.fields.error, '工具炸了')
+  assert.equal(log.count('engine.call'), 1, '工具失败也不冒充成功留痕')
 })
 
 test('host.gen_jobs.restore_failed（WARN）与 host.gen_jobs.restored（INFO）：重启恢复两条路径都留痕', async () => {

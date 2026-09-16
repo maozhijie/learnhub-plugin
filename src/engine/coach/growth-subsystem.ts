@@ -63,7 +63,7 @@ export interface GrowthDeps {
   learningDay(): Promise<{ today: string; cutoff: number }>
   /** 审计门的受理面（#313 B5）：按课程名返回审计 ERROR 行（只算不落盘）。草稿试算与
    * propose 共用同一判据——「审计通过」与「apply 被拒」不再能在同一帧共存。 */
-  auditErrors(course: string): Promise<string[]>
+  auditGateErrors(course: string): Promise<string[]>
   loadView(course: { name: string; root: string }): Promise<{ graph: Graph; state: Record<string, Fm>; broken: BrokenNote[] }>
   mcAggregate(plan: SandboxPlan, cards: SandboxCard[], nodes: SandboxNode[], today: string, scheds: Map<string, FSRS>, fallbackCourse: string): { curve: SandboxCurvePoint[]; map: Array<{ node: string; p50: number; p80: number }> }
   sandboxPopulation(courses: CourseEntry[], nodeFilter: Set<string> | null): Promise<{ cards: SandboxCard[]; nodes: SandboxNode[]; scheds: Map<string, FSRS> }>
@@ -77,7 +77,7 @@ import { COACH_PLAN_PROMPT_KEYS, behaviorDigest, coachPromptFamily, readyDepthCh
 import { coachToolExecutor, coachToolset, renderGrowthGraphView } from './coach-tools.ts'
 import type { CoachToolDeps } from './coach-tools.ts'
 import type { CompassEtaProbe } from './compass.ts'
-import { COMPASS_ETA_PROBE_WEEKS, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, reconcileRoute, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
+import { COMPASS_ETA_PROBE_WEEKS, COMPASS_STATION, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, reconcileRoute, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { activeEntries, deprecatedNames, resolveConcept } from '../concepts/concepts.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from '../infra/dates.ts'
@@ -268,7 +268,7 @@ export class GrowthSubsystem {
     }))
     const toolset = this.coachToolsetFor(c)
     const loop = await agent.agentLoop({
-      station: '罗盘', prompt, effort: 'deep',
+      station: COMPASS_STATION, prompt, effort: 'deep',
       tools: toolset.tools, runTool: toolset.runTool,
       ...(opts.isCancelled ? { isCancelled: opts.isCancelled } : {}),
     })
@@ -333,7 +333,7 @@ export class GrowthSubsystem {
    * 携带 eta——周复盘现状区的 ETA 旁挂（#150）取同一份数据，不二次蒙特卡洛。
    * 顺带做**路线对账**（#231 / ADR-0074）：同一挂载点、同一份已读的罗盘文本，把
    * 「剩余路线」条目与图面节点名做零模型粗 diff，结果随行携带 reconcile——周复盘现状区
-   * 只以结论呈现。**非权威**：不改罗盘（写权仍唯教练随批重写）、不进门禁、不触发重画；
+   * 只以结论呈现。**非权威**：不改罗盘（写权仍唯一，见 #313 D18）、不进门禁、不触发重画；
    * 未画路线（待初画占位）没有对账对象，不出结论。 */
   async compassEtaRefresh(
     courseKey?: string, opts: { today?: string; force?: boolean } = {},
@@ -1229,7 +1229,7 @@ export class GrowthSubsystem {
           anchors: await readAnchors(this.e.paths.anchorPath(root), this.e.fs),
           mints,
           growthGate: async s => this.growthGateErrors(s),
-          auditGate: () => this.e.auditErrors(c.name),
+          auditGate: () => this.e.auditGateErrors(c.name),
         },
       }
     }
@@ -1283,21 +1283,6 @@ export class GrowthSubsystem {
           throw new Error(`[draft_patch] 每批未发布增量 ≤${GROWTH_DRAFT_MAX_OPS_PER_BATCH} 条（本补丁后将为 ${unpublishedCount}）——先 draft_finish 发布再开新批。`)
         }
         const mints = shape.concepts
-        // 复诊预注册（#313 B2）：draft_patch 此前**没有任何写入面**——门要求「插入批必须预注册
-        // 复诊」，工具面却只有 ops/concepts/note_operator/note_reason/note_target_endpoints，
-        // 写了 note_recheck 也进不来。后果是思路官一裁「插入」，执行官无合法写法：只能熔断，
-        // 或改标别的算子（假算子入账 + 复诊永不登记，#146 的复诊/边实验账本经两站编排不可达）。
-        // 形态沿用同一个 recheckPreregOf（与 note.recheck 同一契约，不造第二套）。
-        let patchRecheck: RecheckPrereg | undefined
-        if (args.note_recheck !== undefined) {
-          const rc = recheckPreregOf(args.note_recheck)
-          if (rc.errors.length) {
-            await logRound('patch', '补丁被拒（note_recheck 形状不合法；整批回滚）', rc.errors)
-            throw new Error(`[draft_patch] note_recheck 未过（整批回滚，零落草稿）：\n${rc.errors.map(e => `  ✗ ${e}`).join('\n')}`
-              + `\n合法形态：{metric: ${RECHECK_METRICS.join('|')}, days?: 5–20 学习日（缺省 10）}`)
-          }
-          patchRecheck = rc.prereg
-        }
         // 本补丁**将要**声明的 note 与铸名：试算必须按「补丁生效后的本批形态」跑——拿旧 note
         // 试算等于试算另一批（前进/换向的接线义务、note.recheck 的跨字段规则都挂在 note 上）。
         // 复诊预注册的写入面（#312 B2）：draft_patch 增 note_recheck。此前它没有任何写入面

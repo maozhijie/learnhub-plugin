@@ -11,6 +11,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createFileLogger, LOG_DAILY_LIMIT_BYTES, LOG_ENTRY_LIMIT, LOG_FAILURE_WARN_STREAK, LOG_RETENTION_DAYS, MULTILINE_EVENTS } from '../src/host/log-file.ts'
+import { logHealthOf } from '../src/host/llm.ts'
 
 /** 固定时刻构造（本地时区；测试断言行内时间与文件名都用它）。 */
 const at = (y: number, mo: number, d: number, h = 13, mi = 4, s = 5, ms = 7): number =>
@@ -94,6 +95,18 @@ test('字段纪律：undefined/null 不造字段、空数组不造续行；单�
   const entry = readFileSync(join(dir, '2026-09-15.log'), 'utf8').trimEnd().split(NL).slice(1).join(NL)
   assert.ok(entry.endsWith('…（已截断）'), '超限显式标注，不静默丢尾巴')
   assert.ok(entry.length <= LOG_ENTRY_LIMIT + '…（已截断）'.length, '截到上界就不再长')
+  rmSync(dir, { recursive: true, force: true })
+})
+
+test('#313 E26：日志自查三态出得到宿主面（/status 与 learnhub_status 的唯一读法）', () => {
+  const dir = tempDir('loghealth')
+  const log = createFileLogger({ dir, now: () => at(2026, 9, 15) })
+  // 三态此前生产零消费（只有连续失败 5 次的 console.warn）——「日志自己坏了」在面板上
+  // 看不到。logHealthOf 是宿主侧读法（引擎只认 Logger 端口，不为观测面加宽端口）。
+  assert.deepEqual(logHealthOf(log), { failures: 0, last_error: null, capped_today: null })
+  // 端口实现不带这三态（noop / 内存假实现）→ null，字段照旧在场（面板走空态）
+  assert.equal(logHealthOf({ debug: () => {}, info: () => {}, warn: () => {}, error: () => {} }), null)
+  assert.equal(logHealthOf(null), null)
   rmSync(dir, { recursive: true, force: true })
 })
 

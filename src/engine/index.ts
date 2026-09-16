@@ -104,6 +104,10 @@ export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './content/question
  * 失败站落盘，站名常量的单一出处从此在引擎侧（此前 host 侧一张写死的遗留映射
  * `growth: '教练思路'`）。 */
 export { COACH_PLAN_STATION } from './coach/growth-subsystem.ts'
+// 站名是受控词表（host STATIONS）成员：引擎侧单一出处经门面出（#313 D19——两侧各写字面量
+// 时改名即静默分裂成两个语料目录）
+export { COMPASS_STATION } from './coach/compass.ts'
+export { DECOMPILE_STATION } from './practice/projects.ts'
 /** 生长草稿内核（#271 / ADR-0088）：站标签/草稿差异与门同调纯函数随门面出（宿主与测试消费）。 */
 export { GROWTH_DRAFT_STATION, expandPatchOps, draftFindings, normalizePatchShape } from './coach/growth-draft.ts'
 export type { PatchSuggestion, PatchShapeNormalization } from './coach/growth-draft.ts'
@@ -418,7 +422,7 @@ export class LearnhubEngine {
       graphReject: (pid, note) => this.graph.graphReject(pid, note),
       graphProposals: (status, kind) => this.graph.graphProposals(status, kind),
       proposeConfusableCandidate: (courseKey, pair) => this.proposals.proposeConfusableCandidate(courseKey, pair),
-      auditErrors: course => this.auditGateErrors(course),
+      auditGateErrors: course => this.auditGateErrors(course),
       learningDay: () => this.learningDay(),
       loadView: course => this.loadView(course),
       mcAggregate: (plan, cards, nodes, today, scheds, fallbackCourse) => this.lab.mcAggregate(plan, cards, nodes, today, scheds, fallbackCourse),
