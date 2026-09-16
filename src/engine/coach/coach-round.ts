@@ -328,7 +328,7 @@ export const COACH_PLAN_PROMPT_KEYS = {
  * est 提示；recheck 仅指插入批的预注册复诊（与生长批 note.recheck 同形状），不引入
  * 新回路。
  *
- * `route`（#310 / ADR-0096）：罗盘「剩余路线」段的新正文，由思路官随方向裁决产出。
+ * `route`（#310 / ADR-0097）：罗盘「剩余路线」段的新正文，由思路官随方向裁决产出。
  * **缺省 = 不改写、保留旧稿**（apply 只在 route 在场时写本段）——绝不是清空。 */
 export interface GrowthPlanHandover {
   operator: string
