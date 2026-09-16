@@ -35,6 +35,7 @@
   "graph.graphProposals",
   "graph.graphPropose",
   "graph.graphReject",
+  "growth2.coachDraftCancel",
   "growth2.compassPaint",
   "growth2.compassRead",
   "growth2.probationStatus",

@@ -88,6 +88,8 @@ type LoopTurn = { text: string; toolCalls?: Array<{ id: string; name: string; ar
 
 function twoStationFake(opts: { plans: string[]; sessions: LoopTurn[][] }) {
   const completeCalls: Array<{ prompt: string; mode: 'complete' | 'repair' }> = []
+  /** 执行官司路的逐轮请求（回灌的工具结果住在 messages 里——断言补丁期拒收文案用）。 */
+  const streamCalls: Array<{ messages: Array<{ text?: string }> }> = []
   let planIdx = 0
   let sessionIdx = 0
   let currentTurns: LoopTurn[] = []
@@ -100,7 +102,8 @@ function twoStationFake(opts: { plans: string[]; sessions: LoopTurn[][] }) {
       completeCalls.push({ prompt, mode })
       return plan
     },
-    stream: async () => {
+    stream: async req => {
+      streamCalls.push(req as { messages: Array<{ text?: string }> })
       if (!currentTurns.length) {
         const nextSession = opts.sessions[sessionIdx++]
         if (!nextSession) throw new Error('脚本化回路端口：会话脚本已耗尽')
@@ -110,7 +113,11 @@ function twoStationFake(opts: { plans: string[]; sessions: LoopTurn[][] }) {
       return { text: turn.text, toolCalls: turn.toolCalls ?? [] }
     },
   }, systemClock)
-  return Object.assign(seam, { completeCalls, consumedSessions: () => sessionIdx })
+  return Object.assign(seam, {
+    completeCalls, streamCalls, consumedSessions: () => sessionIdx,
+    /** 回灌给执行官的全部文本（含工具结果），拼接后供逐字断言。 */
+    fedBack: () => streamCalls.flatMap(c => c.messages.map(m => m.text ?? '')).join('\n'),
+  })
 }
 
 function goldPlanYaml(): string {
@@ -197,6 +204,85 @@ test('计划门拒收 → 回灌重裁恰一次（plannerRecheckOnce）；segmen
     assert.match(agent.completeCalls[1]!.prompt, /operator: 复习/)
     assert.match(agent.completeCalls[1]!.prompt, /schema 门错误清单/)
     assert.match(agent.completeCalls[1]!.prompt, /operator 非法/)
+  })
+})
+
+// ---- 插入批的复诊预注册写入面（#312 B2）----
+
+/** 插入批的补丁轮：在「认识变化率」与终点之间插一步（并把终点接线改到插入节点）。 */
+function insertPatchTurn(noteExtra: Record<string, unknown>): LoopTurn {
+  const patch = {
+    ops: [
+      { op: 'add_node', name: '中间台阶', pre: ['认识变化率'], est: 12, teaches: { 变化率: '会用' } },
+      { op: 'set_pre', node: '用导数解决优化问题', pre: ['中间台阶'] },
+    ],
+    note_operator: '插入',
+    note_reason: '卡点集中在缺失的前置步骤上，插一步补上',
+    note_target_endpoints: ['用导数解决优化问题'],
+    ...noteExtra,
+  }
+  return { text: '落补丁。', toolCalls: [{ id: 'p1', name: 'draft_patch', arguments: JSON.stringify(patch) }] }
+}
+
+function finishTurns(): LoopTurn[] {
+  return [
+    { text: '发布。', toolCalls: [{ id: 'f1', name: 'draft_finish', arguments: '{}' }] },
+    { text: '本批已发布。' },
+  ]
+}
+
+test('#312 B2：插入批经执行官站可发布——计划里的预注册复诊随批落地，账本登记在途', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    // 思路官侧本来就在计划里给了 recheck（交接块明写给执行官）；此前的写入面缺失让它
+    // 到不了 note：draft_patch 无该参数、EditProposalNoteLite 无该字段、finish 不透传——
+    // 受理门「插入批必须预注册复诊」因此恒拒 = 插入算子结构性不可发布。
+    const plan = yamlOf({
+      operator: '插入',
+      reason: '卡点集中在缺失的前置步骤上',
+      target_endpoints: ['用导数解决优化问题'],
+      steps: [{ intent: '补上中间一步', teaches_concept: '变化率' }],
+      recheck: { metric: '卡点集中度降幅', days: 8 },
+    })
+    const agent = twoStationFake({ plans: [plan], sessions: [[insertPatchTurn({}), ...finishTurns()]] })
+    const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
+    assert.equal(r.state, 'applied', '插入批照常走真实提案管线发布')
+    assert.deepEqual(r.applied!.created, ['中间台阶'])
+    // 预注册落字处 = 提案 artifact 的 note.recheck，且边实验账本据此登记在途复诊
+    const view = await h.engine.growth2.probationStatus('数学')
+    assert.deepEqual(view.courses[0]!.in_flight, ['中间台阶'], '插入边随批登记在途（复诊到期自动结算）')
+    const artifact = await h.engine.fs.readFile(h.engine.paths.proposalArtifactPath(r.proposal!.id, 'edit', '数学'))
+    assert.match(artifact, /卡点集中度降幅/, '计划的复诊判据随批落到 artifact（结算侧按它取数）')
+  })
+})
+
+test('#312 B2：执行官显式写的 note_recheck 覆盖计划里的那一枚；取值域非法当场拒收（整批回滚）', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const plan = yamlOf({
+      operator: '插入',
+      reason: '卡点集中在缺失的前置步骤上',
+      target_endpoints: ['用导数解决优化问题'],
+      steps: [{ intent: '补上中间一步' }],
+      recheck: { metric: '卡点集中度降幅', days: 8 },
+    })
+    const agent = twoStationFake({
+      plans: [plan],
+      sessions: [[
+        // 第一发：非法的复诊指标——整批回滚（ops 一条不落草稿），回执带合法取值域
+        insertPatchTurn({ note_recheck: { metric: '卡点降低' } }),
+        // 第二发：同一条补丁，写合法的预注册——原样入草稿并胜出（计划是 advisory）
+        insertPatchTurn({ note_recheck: { metric: '保留率恢复', days: 6 } }),
+        ...finishTurns(),
+      ]],
+    })
+    const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
+    assert.equal(r.state, 'applied')
+    assert.match(agent.fedBack(), /metric ∈ 前进恢复\/卡点集中度降幅\/保留率恢复/, '拒收回执带取值域')
+    assert.match(agent.fedBack(), /整批回滚/, '拒收是整批的（ops 不落草稿）')
+    const artifact = await h.engine.fs.readFile(h.engine.paths.proposalArtifactPath(r.proposal!.id, 'edit', '数学'))
+    assert.match(artifact, /保留率恢复/, '执行官写的那一枚胜出')
+    assert.doesNotMatch(artifact, /卡点集中度降幅/, '计划的那一枚未被采用（显式值优先）')
   })
 })
 

@@ -765,6 +765,13 @@
  },
  {
   "method": "POST",
+  "route": "/coach/draft/cancel",
+  "keys": [
+   "course"
+  ]
+ },
+ {
+  "method": "POST",
   "route": "/coach/compass",
   "keys": [
    "course"

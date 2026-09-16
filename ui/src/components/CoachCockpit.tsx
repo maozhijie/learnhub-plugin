@@ -25,16 +25,21 @@ const JOB_STATUS: Partial<Record<GenJobItem['status'], { label: string; color: s
   cancelled: { label: '已取消', color: 'gray' },
 }
 
-/** 就绪深度卡（#161）：状态面 course.coach 直读——就绪存量对照前瞻需求的进度条 + 告警。
+/** 就绪深度卡（#161）：状态面 course.coach 直读——**未开始存量**对照前瞻需求的进度条 + 告警。
  * 冷启动首周需求 ×1.5 后 ceil；exhausted（ADR-0076 停摆判据：前沿除终点外清空 /
  * 零节点空课 / 所有终点已达成）= 判据自然通过——剩下的路是学掉终点或先加终点，
- * 不是继续生长。 */
+ * 不是继续生长。
+ * 判据量纲 = 未开始存量（#312 B1 / ADR-0096）：生长批每次都追加未开始的节点，这个数必然
+ * 随之上涨；正文存量与「可立刻开学」的节点数都不参与达标——「结构达标但正文未生成」是
+ * 两条通道的缺口，单独一行说清。 */
 function ReadinessCard({ check, noEndpoints }: { check: NonNullable<StatusCourse['coach']>; noEndpoints: boolean }) {
   const tight = !check.ok
-  // exhausted（尾段前沿清空）判据自然通过：进度条显满格，不因 ready=0 显 0% 绿条
+  // exhausted（尾段前沿清空）判据自然通过：进度条显满格，不因未开始存量=0 显 0% 绿条
   const ratio = check.exhausted || check.required <= 0
     ? 100
-    : Math.min(100, Math.round((check.ready / check.required) * 100))
+    : Math.min(100, Math.round((check.unstarted / check.required) * 100))
+  // 结构达标、正文一条没生成：判据说「不用再长」，学习者却无正文可读——显式提示而非静默
+  const contentGap = !check.exhausted && check.ok && check.ready === 0
   return (
     <Card size='small' title='就绪深度（教练回合判据）' className='lh-card'
       extra={
@@ -42,14 +47,18 @@ function ReadinessCard({ check, noEndpoints }: { check: NonNullable<StatusCourse
           {check.cold_start && <Tag size='small' color='orange'>冷启动首周</Tag>}
           {check.exhausted
             ? <Tag size='small' color='gray'>尾段·前沿已清空</Tag>
-            : (tight ? <Tag size='small' color='red'>低于前瞻</Tag> : <Tag size='small' color='green'>达标</Tag>)}
+            : tight
+              ? <Tag size='small' color='red'>低于前瞻</Tag>
+              : contentGap
+                ? <Tag size='small' color='orange'>结构达标·正文待生成</Tag>
+                : <Tag size='small' color='green'>达标</Tag>}
         </Space>
       }>
       <Space direction='vertical' size={4} className='lh-full'>
         <div className='lh-row lh-gap-10'>
           <Progress size='small' className='lh-flex-1' percent={ratio} showText={false}
             status={tight ? 'error' : 'success'} />
-          <Text className='lh-t-12 lh-noshrink'>就绪 {check.ready}/{check.required}</Text>
+          <Text className='lh-t-12 lh-noshrink'>未开始存量 {check.unstarted}/{check.required}</Text>
         </div>
         {check.exhausted ? (
           <Text type='secondary' className='lh-t-12'>
@@ -60,10 +69,11 @@ function ReadinessCard({ check, noEndpoints }: { check: NonNullable<StatusCourse
         ) : (
           <Text type='secondary' className='lh-t-12'>
             前瞻需求 {check.required}（前瞻深度 {check.depth}{check.cold_start ? '，冷启动首周放宽后取整' : ''}）；
-            就绪 = 前置已达成、正文已生成的未开始节点。
+            未开始存量 = 图上还没开始的节点数（除终点；生长批每次都追加它，判据因此闭得上）；
+            正文就绪 {check.ready}（正文只由显式下发产生，不经生长批）。
           </Text>
         )}
-        {tight && check.warnings.map(w => (
+        {!check.exhausted && check.warnings.map(w => (
           <Text key={w} type='warning' className='lh-t-12'>{w}</Text>
         ))}
       </Space>
@@ -147,7 +157,7 @@ export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, o
   onOpenJob?: (job: GenJobItem) => void
 }) {
   const [seedForm, setSeedForm] = useState(false)
-  const [busy, setBusy] = useState<'growth' | 'compass' | 'backfill' | 'mergeScan' | null>(null)
+  const [busy, setBusy] = useState<'growth' | 'compass' | 'backfill' | 'mergeScan' | 'draftCancel' | null>(null)
   const noEndpoints = course !== null && endpointCount === 0
 
   const growth = (c: string) => {
@@ -178,6 +188,29 @@ export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, o
     } finally {
       setBusy(null)
     }
+  }
+
+  const draftCancel = (c: string) => {
+    Modal.confirm({
+      title: `取消「${c}」的生长草稿？`,
+      content: '在途草稿未发布的增量会被丢弃（已发布的批次已落图、不受影响）；下次「生长一步」从空会话重开。'
+        + '本课没有在途草稿时什么也不会发生。要保留这批增量就别在这里取消——去生成页看那批是否还能 finish。',
+      okText: '取消草稿',
+      okButtonProps: { status: 'warning' },
+      onOk: async () => {
+        setBusy('draftCancel')
+        try {
+          const r = await api.coachDraftCancel(c)
+          // cancelled=false = 合法空态（本课没有在途草稿），不是失败——交互诚实性（#155 同款）
+          if (r.cancelled) Message.success('已取消本课在途的生长草稿')
+          else Message.info('本课没有在途的生长草稿')
+        } catch (err) {
+          Message.error(errorMessage(err))
+        } finally {
+          setBusy(null)
+        }
+      },
+    })
   }
 
   const backfill = (c: string) => {
@@ -232,6 +265,10 @@ export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, o
               <Button size='small' disabled={noEndpoints} loading={busy === 'growth'} onClick={() => growth(course)}>生长一步</Button>
             </Tooltip>
             <Button size='small' disabled={noEndpoints} loading={busy === 'compass'} onClick={() => void compass(course)}>罗盘重画</Button>
+            {/* 草稿逃生口（#312 B4）：轮次预算耗尽/未发布增量过不了门时，它是唯一真出口 */}
+            <Tooltip content='取消本课在途的生长草稿：只丢未发布的增量（已发布的批次已落图，不受影响）。下次「生长一步」从空会话重开'>
+              <Button size='small' loading={busy === 'draftCancel'} onClick={() => draftCancel(course)}>取消草稿</Button>
+            </Tooltip>
             <Button size='small' loading={busy === 'backfill'} onClick={() => backfill(course)}>回填成分技能边</Button>
             <Button size='small' loading={busy === 'mergeScan'} onClick={() => mergeScan(course)}>扫描疑似重复概念</Button>
           </>

@@ -193,7 +193,7 @@ test('保留率概况：到期复习（auto/self、有旧卡、每卡每日第�
 
 test('就绪深度：默认 3、clamp [2,5]、非法值回落默认', () => {
   for (const [depth, want] of [[undefined, 3], [null, 3], [1, 2], [2, 2], [5, 5], [9, 5]] as const) {
-    const c = readyDepthCheck({ ready: 5, declared: null, today: TODAY, depth })
+    const c = readyDepthCheck({ ready: 5, unstarted: 5, declared: null, today: TODAY, depth })
     assert.equal(c.depth, want)
     assert.equal(c.required, want)
     assert.equal(c.ok, true)
@@ -207,44 +207,60 @@ test('就绪深度：默认 3、clamp [2,5]、非法值回落默认', () => {
 test('就绪深度：冷启动首周（锚声明起 7 天内）需求 ×1.5 后 ceil；第 7 天起恢复', () => {
   assert.equal(COACH_COLD_START_DAYS, 7)
   assert.equal(COACH_COLD_START_EST_MULT, 1.5)
-  const cold = readyDepthCheck({ ready: 4, declared: '2026-09-07', today: TODAY }) // 第 4 天
+  const cold = readyDepthCheck({ ready: 4, unstarted: 4, declared: '2026-09-07', today: TODAY }) // 第 4 天
   assert.equal(cold.cold_start, true)
   assert.equal(cold.depth, 3)
   assert.equal(cold.required, 5) // ceil(3×1.5)
   assert.equal(cold.ok, false)
   assert.ok(cold.warnings[0]!.includes('冷启动首周 ×1.5'))
-  const weekOut = readyDepthCheck({ ready: 3, declared: '2026-09-03', today: TODAY }) // 整 7 天
+  const weekOut = readyDepthCheck({ ready: 3, unstarted: 3, declared: '2026-09-03', today: TODAY }) // 整 7 天
   assert.equal(weekOut.cold_start, false)
   assert.equal(weekOut.required, 3)
   assert.equal(weekOut.ok, true)
 })
 
-test('就绪深度：ready=0 只告警不阻塞；低于前瞻一行告警；满足即静默', () => {
-  const zero = readyDepthCheck({ ready: 0, declared: null, today: TODAY })
+test('就绪深度：未开始存量 0 只告警不阻塞；低于前瞻一行告警；满足即静默', () => {
+  const zero = readyDepthCheck({ ready: 0, unstarted: 0, declared: null, today: TODAY })
   assert.equal(zero.ok, false)
   assert.equal(zero.warnings.length, 1)
-  assert.ok(zero.warnings[0]!.includes('ready=0'))
+  assert.ok(zero.warnings[0]!.includes('未开始存量 0'))
   assert.ok(zero.warnings[0]!.includes('只告警不阻塞'))
-  const low = readyDepthCheck({ ready: 2, declared: null, today: TODAY })
+  const low = readyDepthCheck({ ready: 2, unstarted: 2, declared: null, today: TODAY })
   assert.equal(low.ok, false)
   assert.equal(low.warnings.length, 1)
-  assert.ok(low.warnings[0]!.includes('低于前瞻需求 3'))
-  const ok = readyDepthCheck({ ready: 3, declared: null, today: TODAY })
+  assert.ok(low.warnings[0]!.includes('未开始存量 2 低于前瞻需求 3'))
+  const ok = readyDepthCheck({ ready: 3, unstarted: 3, declared: null, today: TODAY })
   assert.equal(ok.ok, true)
   assert.deepEqual(ok.warnings, [])
 })
 
+test('就绪深度：判据量纲 = 未开始存量（#312 B1）——正文存量不参与达标，缺口单独一行', () => {
+  // 事故形态：生长批只落结构（ADR-0078）→ 结构够深而正文一条没有。判据挂正文存量时
+  // 「落盘成功 → 队列空 → 检查点 → ready=0 < required → 再入队」自激、无人值守烧额度。
+  const structureOnly = readyDepthCheck({ ready: 0, unstarted: 3, declared: null, today: TODAY })
+  assert.equal(structureOnly.ok, true, '结构达标即停摆：生长批涨的是未开始存量，不是正文存量')
+  assert.equal(structureOnly.ready, 0)
+  assert.equal(structureOnly.unstarted, 3)
+  assert.equal(structureOnly.warnings.length, 1, '不静默：结构达标 ≠ 学习者有正文可读')
+  assert.ok(structureOnly.warnings[0]!.includes('正文就绪 0'))
+  assert.ok(structureOnly.warnings[0]!.includes('显式下发'))
+  // 正文存量高于需求但结构不足：判据按结构判（正文由显式下发产生，与生长时机无关）
+  const thinStructure = readyDepthCheck({ ready: 9, unstarted: 2, declared: null, today: TODAY })
+  assert.equal(thinStructure.ok, false, '正文再多也不改判据——动作只能动结构')
+  assert.ok(thinStructure.warnings[0]!.includes('未开始存量 2 低于前瞻需求 3'))
+})
+
 test('就绪深度：exhausted（除终点外前沿清空）判据自然通过——尾段合法停摆零告警', () => {
-  const tail = readyDepthCheck({ ready: 0, declared: null, today: TODAY, exhausted: true })
+  const tail = readyDepthCheck({ ready: 0, unstarted: 0, declared: null, today: TODAY, exhausted: true })
   assert.equal(tail.ok, true)
   assert.equal(tail.exhausted, true, 'exhausted 出册（#161）：UI 据此区分「尾段合法停摆」与「刚播种的合法空态」')
   assert.deepEqual(tail.warnings, [])
-  const coldTail = readyDepthCheck({ ready: 2, declared: '2026-09-07', today: TODAY, exhausted: true })
+  const coldTail = readyDepthCheck({ ready: 2, unstarted: 2, declared: '2026-09-07', today: TODAY, exhausted: true })
   assert.equal(coldTail.ok, true, '冷启动放大也不复活已清空的前沿')
   assert.equal(coldTail.exhausted, true)
   assert.deepEqual(coldTail.warnings, [])
-  const normal = readyDepthCheck({ ready: 0, declared: null, today: TODAY })
-  assert.equal(normal.exhausted, false, '非尾段（含刚播种的 ready=0 空态）不标 exhausted')
+  const normal = readyDepthCheck({ ready: 0, unstarted: 0, declared: null, today: TODAY })
+  assert.equal(normal.exhausted, false, '非尾段（含刚播种的未开始存量 0 空态）不标 exhausted')
 })
 
 // ---- 渲染：行为摘要区块体 / 沉淀折叠教练投影 ----
@@ -400,13 +416,13 @@ test('#262 废弃条目退出登记表档位注入面：在册计数只算活跃
   })
 })
 
-test('门面：coachCheckpoint 三个触发点同核——就绪存量只数「未开始且有正文」', async () => {
+test('门面：coachCheckpoint 三个触发点同核——判据量纲 = 未开始存量，正文存量单列', async () => {
   await withVault({
     graph: CHAIN_GRAPH,
     notes: {
       起点: { stage: 'review', content: { sections: READY_SECTIONS } },
       中继: { stage: 'ready', content: { sections: READY_SECTIONS } },
-      高阶: { stage: 'ready' }, // 无正文：不入就绪存量
+      高阶: { stage: 'ready' }, // 无正文：入未开始存量、不入正文存量
     },
   }, async ({ engine }) => {
     for (const trigger of ['node_complete', 'session_start', 'queue_idle'] as const) {
@@ -415,14 +431,39 @@ test('门面：coachCheckpoint 三个触发点同核——就绪存量只数「�
       assert.equal(r.courses.length, 1)
       const check = r.courses[0]!
       assert.equal(check.course, '数学')
-      assert.equal(check.ready, 1, '只有中继（前置达成且有正文）入存量')
+      assert.equal(check.unstarted, 2, '未开始存量 = 图上还没开始的节点（中继 + 高阶）——判据量纲（#312 B1）')
+      assert.equal(check.ready, 1, '正文存量只数「就绪前沿里已有正文」的（中继；判据不读它）')
       assert.equal(check.depth, 3)
       assert.equal(check.required, 3)
       assert.equal(check.cold_start, false)
       assert.equal(check.ok, false)
       assert.equal(check.warnings.length, 1)
-      assert.ok(check.warnings[0]!.includes('低于前瞻需求 3'))
+      assert.ok(check.warnings[0]!.includes('未开始存量 2 低于前瞻需求 3'))
     }
+  })
+})
+
+const WIDE_GRAPH = [
+  'nodes:',
+  '  - { name: 台阶甲, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 台阶乙, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 台阶丙, pre: [], opt: false, note: "", est: 20 }',
+  '  - { name: 台阶丁, pre: [], opt: false, note: "", est: 20 }',
+].join('\n')
+
+test('门面：#312 B1 事故形态——结构够深、正文为零 → 判停摆（不再自激重拉），缺口单独告警', async () => {
+  // 生长批只落结构（ADR-0078）：判据挂正文存量时，「落盘成功 → 队列空 → queue_idle →
+  // 正文仍为 0 → 再入队」无人值守地无限循环（实测 35k token 零产出）。判据换成就绪前沿
+  // 后同一局面判停摆——宿主据此不再自动拉批（`if (chk.ok) continue`）。
+  await withVault({ graph: WIDE_GRAPH }, async ({ engine }) => {
+    const r = await engine.growth2.coachCheckpoint('queue_idle')
+    const check = r.courses[0]!
+    assert.equal(check.unstarted, 4, '四个节点都还没开始（追加结构必然涨这个数）')
+    assert.equal(check.ready, 0, '一条正文都没有')
+    assert.equal(check.ok, true, '结构达标即停摆（此前 ok=false → 每次队列排空都再拉一轮）')
+    assert.equal(check.warnings.length, 1, '不静默：正文缺口照说')
+    assert.ok(check.warnings[0]!.includes('正文就绪 0'))
+    assert.ok(check.warnings[0]!.includes('显式下发'))
   })
 })
 
@@ -460,16 +501,17 @@ test('门面：就绪核算逐个剔除终点——尾段非终点前沿清空�
   })
 })
 
-test('门面：起草后冷启动生效（锚声明日 = 学习日）；起草图无正文 → ready=0 告警', async () => {
+test('门面：起草后冷启动生效（锚声明日 = 学习日）；起草图无正文 → 存量不足告警（正文存量单列）', async () => {
   await withVault({ registry: null, graph: null }, async ({ engine }) => {
     await seedApplied(engine)
     const r = await engine.growth2.coachCheckpoint('session_start', '数学')
     const check = r.courses[0]!
     assert.equal(check.cold_start, true)
     assert.equal(check.required, 5)
-    assert.equal(check.ready, 0)
-    assert.ok(check.warnings[0]!.includes('ready=0'))
-    assert.ok(check.warnings[0]!.includes('只告警不阻塞'))
+    assert.equal(check.ready, 0, '起草图节点均无正文：正文就绪 0（学习面读数）')
+    assert.ok(check.unstarted > 0, '判据量纲 = 未开始存量（#312 B1）：结构在图上，正文另算')
+    assert.ok(check.warnings[0]!.includes('未开始存量'))
+    assert.ok(check.warnings[0]!.includes('低于前瞻需求 5'))
   })
 })
 

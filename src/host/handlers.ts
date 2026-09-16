@@ -590,7 +590,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     const growthCourse = need(body, 'course')
     void rt.engine.growth2.coachCheckpoint('panel_dispatch', growthCourse)
       .then(r => logCall(rt, 'coach_checkpoint(panel_dispatch)',
-        r.courses.map(x => `${x.course}：ready=${x.ready}/${x.required}`).join('；')))
+        r.courses.map(x => `${x.course}：未开始存量 ${x.unstarted}/${x.required}（正文就绪 ${x.ready}）`).join('；')))
       .catch(() => undefined)
     sendJson(res, 200, await apiRun(rt, 'api/coach/growth', async () =>
       enqueueGrowthBatch(rt, ctx, growthCourse, '面板下发（显式重新裁决）', undefined, { force: true, trigger: 'panel_dispatch' })))

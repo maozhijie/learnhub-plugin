@@ -101,3 +101,4 @@
 | [0093](./0093-engine-domain-folders.md) | engine 目录按域分文件夹：91 文件归 9 域单层 + 顶层 5 |
 | [0094](./0094-renderer-menu-placeholder-only.md) | 渲染能力清单只认占位符：删有占位符就注入、没占位符就追加的运行期兜底 |
 | [0095](./0095-growth-draft-lifecycle-closure.md) | 生长草稿的生命周期收口：门同源兑现到 schema 面、未发布段逃生口、水位重放修正 |
+| [0096](./0096-blocking-audit-closures-criterion-dimension-and-real-exits.md) | 生长链路四个阻断收口：判据与动作同量纲、插入批预注册写入面、取消与预算的真出口 |

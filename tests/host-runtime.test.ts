@@ -768,7 +768,7 @@ test('生长批任务消息带回路轨迹（#163）：生成页可查裁决前�
   stub(rt, {
     'growth2.coachGrowthBatch': async () => ({
       course: '数学', state: 'applied',
-      check: { course: '数学', ready: 0, depth: 3, required: 3, cold_start: false, ok: false, exhausted: false, warnings: [] },
+      check: { course: '数学', ready: 0, unstarted: 0, depth: 3, required: 3, cold_start: false, ok: false, exhausted: false, warnings: [] },
       segments: [{ tier: 'light', effort: 'fast', operator: '前进', disagreement: false }],
       trajectory: ['[轻量段] graph_view(2 字符参数) → 412 字符', '[轻量段] concept_registry(15 字符参数) → 88 字符'],
       proposal: { id: 9, ops: 1, operator: '前进', reason: '前沿缺下一台阶', disagreement: false },
@@ -935,7 +935,7 @@ test('生长批停摆终态（#161）：就绪深度满足 → done 带中性说
   stub(rt, {
     'growth2.coachGrowthBatch': async () => ({
       course: '数学', state: 'idle',
-      check: { course: '数学', ready: 3, depth: 3, required: 3, cold_start: false, ok: true, exhausted: false, warnings: [] },
+      check: { course: '数学', ready: 3, unstarted: 3, depth: 3, required: 3, cold_start: false, ok: true, exhausted: false, warnings: [] },
       segments: [], proposal: null, applied: null,
     }),
     saveGenJobs: async () => undefined,
@@ -947,11 +947,11 @@ test('生长批停摆终态（#161）：就绪深度满足 → done 带中性说
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
   const job = rt.jobs.genJobs.get('数学/生长批')!
   assert.equal(job.growthOutcome, 'idle', '裁决面落档：面板通知据此走中性说明而非绿色成功')
-  assert.match(job.message ?? '', /教练判断暂不需长新内容（就绪 3\/3）/, '停摆文案是中性说明（#161 验收口径）')
+  assert.match(job.message ?? '', /教练判断暂不需长新内容（未开始存量 3\/3）/, '停摆文案是中性说明（#161 验收口径）')
   assert.ok(job.finishedAt, '终态盖戳（保留期起算点）')
 })
 
-test('生长批已取消：明确的中止意图不被 force 豁免（重试只属于失败批）', async () => {
+test('生长批已取消：自动触发点被挡（中止意图），显式重来照走（#312 B3 与失败同权）', async () => {
   const rt = makeRuntime()
   stub(rt, {
     saveGenJobs: async () => undefined,
@@ -962,11 +962,12 @@ test('生长批已取消：明确的中止意图不被 force 豁免（重试只�
     course: '数学', node: '生长批', startedAt: new Date().toISOString(),
     status: 'cancelled', finishedAt: new Date().toISOString(), message: '已被取消',
   })
-  for (const opts of [{}, { force: true }]) {
-    const r = enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, opts)
-    assert.equal(r.queued, false)
-    assert.match(r.message, /已取消/)
-  }
+  const auto = enqueueGrowthBatch(rt, fakeCtx(), '数学', '自动触发')
+  assert.equal(auto.queued, false)
+  assert.match(auto.message, /已取消/)
+  assert.match(auto.message, /面板「生长一步」/, '文案指向真实存在的动作（此前指向「下一次触发」＝同一条分支）')
+  const forced = enqueueGrowthBatch(rt, fakeCtx(), '数学', '面板下发（显式重新裁决）', undefined, { force: true })
+  assert.equal(forced.queued, true, '取消挡住的只是自动触发点——显式请求覆盖（与 failed 同权）')
 })
 
 test('加终点是纯声明（#240/ADR-0076 修正）：落盘不动生成队列——方向先声明完，放行归「生长一步」', async () => {
@@ -1001,7 +1002,7 @@ test('生长一步的 force 随任务进执行侧（#240 修）：停摆图上�
       forcedFlags.push(opts?.force)
       return {
         course: '数学', state: 'idle',
-        check: { course: '数学', ready: 0, depth: 3, required: 5, cold_start: true, ok: true, exhausted: true, warnings: [] },
+        check: { course: '数学', ready: 0, unstarted: 0, depth: 3, required: 5, cold_start: true, ok: true, exhausted: true, warnings: [] },
         segments: [], proposal: null, applied: null,
       }
     },
@@ -1402,16 +1403,17 @@ test('路由分发：static 抽离后 /file、/vendor、/interactive 的守卫�
 
 // ---------------------------------------------------------------- 工具面快照 + 路由↔工具对账
 
-test('工具面快照：113 个工具的名称/描述/schema 与重构前基线逐字不变（#274 +1）', () => {
+test('工具面快照：114 个工具的名称/描述/schema 与重构前基线逐字不变（#312 +1 / #274 +1）', () => {
   const rt = makeRuntime()
   const captured: Array<{ name?: string; description?: string; parameters?: unknown; output?: unknown }> = []
   registerTools(fakeCtx(captured), rt)
-  assert.equal(captured.length, 113, '工具总数（#274 +1 learnhub_concept_merge_candidates；#265 +1 learnhub_concept_confusable_candidates；描述漂移仅限本票三处：graph-propose/graph-proposals/concept-merge）')
+  assert.equal(captured.length, 114, '工具总数（#312 +1 learnhub_coach_draft_cancel；#274 +1 learnhub_concept_merge_candidates；#265 +1 learnhub_concept_confusable_candidates；描述漂移仅限本票三处：graph-propose/graph-proposals/concept-merge）')
   const snapshot = JSON.parse(readFileSync(join(ROOT, 'tests', 'fixtures', 'host-tools-snapshot.json'), 'utf8')) as
     Array<{ name: string; description: string; parameters: unknown }>
+  // 快照是「切面之前」的捕获：新工具不在快照里（下方遍历快照条目逐字比对，不反向要求登记）
   assert.equal(snapshot.length, 113)
   const byName = new Map(captured.map(t => [t.name, t]))
-  assert.equal(byName.size, 113, '工具名无重复')
+  assert.equal(byName.size, 114, '工具名无重复')
   for (const expect of snapshot) {
     const got = byName.get(expect.name)
     assert.ok(got, `缺工具 ${expect.name}`)
@@ -1492,7 +1494,7 @@ test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、�
   // proposals.proposalImpact/sched2.setDayCutoff 随种子链与 day-cutoff 退役出路由面
   // #248 / ADR-0077 卡点自报：三个引擎写点（落账/待消费/消费标记）仅路由面（面板
   // 通道 handler 与生长批执行器消费，agent 工具面不直接触卡点自报）
-  assert.equal(shared.length, 88, '#274：graph.conceptMergeCandidates 工具/路由双通道 → 转共享')
+  assert.equal(shared.length, 89, '#312：growth2.coachDraftCancel 工具/路由双通道（草稿逃生口）→ 转共享；#274：graph.conceptMergeCandidates 同款')
   assert.equal(toolOnly.length, 26, '#265 +1：graph.conceptConfusableCandidates（候选派生只走 agent 工具面）；#215 前例：content2.contentCheck 转共享')
   assert.equal(routeOnly.length, 55, '#268 +1：graph.conceptFootprint（概念足迹纯读，仅面板路由面）；#256：−content2.contentReview/−graph.seedPropose/−proposals.proposalImpact/−sched2.setDayCutoff（种子链+day-cutoff 退役）；#255 −1：doctor 随 doctor 退役')
 })

@@ -13,7 +13,7 @@ import assert from 'node:assert/strict'
 import { AgentSeam } from '../src/engine/infra/agent.ts'
 import { COACH_PLAN_STATION, GROWTH_DRAFT_STATION } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
-import { withVault } from './helpers/vault.ts'
+import { withVault, localDay } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import { memLogger } from './helpers/logger.ts'
 
@@ -41,6 +41,29 @@ test('force 豁免：就绪深度已满足也不短路——思路官被拉起�
     const r = await h.engine.growth2.coachGrowthBatch('数学', agent, { force: true })
     assert.equal(r.state, 'idle', '停摆计划 = 合法停摆')
     assert.equal(seen.length, 1, '思路官恰一次单发')
+  })
+})
+
+test('#312 B1：结构达标、正文为零 → 停机转译 idle 且零 LLM 调用（自激回路这一半也断掉）', async () => {
+  await withVault(SEED, async h => {
+    // 事故形态：结构够深（三起点 = 前瞻需求 3）、正文一条没生成（生长批只落结构，ADR-0078）。
+    // 判据挂在正文存量上时，队列每排空一次就真花一轮「思路官 fast + 执行官 deep」。
+    await draftCourse(h.engine, {
+      declared: localDay(-30),
+      starts: [{ name: '台阶甲' }, { name: '台阶乙' }, { name: '台阶丙' }],
+      endpoint: { name: '终点' },
+    })
+    const seen: string[] = []
+    const agent = new AgentSeam({
+      logger: memLogger(),
+      complete: async prompt => { seen.push(prompt); return haltPlan() },
+      stream: async () => { throw new Error('停摆不应拉起执行官') },
+    }, systemClock)
+    const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
+    assert.equal(r.state, 'idle', '判据与动作同量纲：结构达标即停摆')
+    assert.equal(r.check.unstarted, 3)
+    assert.equal(r.check.ready, 0, '正文存量不参与判据（正文走显式下发）')
+    assert.equal(seen.length, 0, '一个模型站都没拉起——这是自激回路烧掉的正是这一笔')
   })
 })
 

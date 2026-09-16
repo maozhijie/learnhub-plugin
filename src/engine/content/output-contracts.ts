@@ -764,6 +764,11 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // ADR-0095；模板文本未动）。本站的模型可见面不止模板：工具清单的 description 也是写作面。
     version: 2, date: '2026-09-17', changeType: '档位取值域进工具与上下文包 + 新增写件工具 draft_revert（#309 缺陷②③ / ADR-0095；模板文本未动）',
     expectedDelta: '① 上下文包「登记表档位」块无条件多一行档位取值域（同思路官条目）；② `draft_patch` 的 `teaches`/`assumes` 字段说明带同一取值域；③ 工具清单新增第四具写件工具 `draft_revert(count?)`——丢弃最近 N 条未发布增量（省略 count = 回到水位）并随轮志留痕。预期增量：档位取值非法导致的补丁/发布折返下降（事故里 `初识` 连拒四次、毒 op 清不掉，最终零发布）；草稿卡死时的下一动作从「反复重铸」变为「撤销回水位重开一批」。模板散文仍写着「写件三工具」——本票不改模板（改散文=改提示词，另票），工具清单是模型每次调用都看的权威面',
+  }, {
+    // 非模板变更（同版本号第五条登记）：**工具面新增参数 + 注入面一行改写**（#312 B2 /
+    // ADR-0096；模板文本未动）。与上一条同源：本站的模型可见面不止模板。
+    version: 2, date: '2026-09-17', changeType: 'draft_patch 增 note_recheck + 交接块点名写法（#312 B2 / ADR-0096；模板文本未动）',
+    expectedDelta: '① `draft_patch` 新增可选参数 `note_recheck`（`{metric, days?}`，取值域与 clamp 写进 description）——插入批的复诊预注册从此有写入面；② 交接块的「预注册复诊」行从「插入批落地时随批携带」改为「用 draft_patch 的 note_recheck 写这一枚（缺席时按本计划兜底）」。预期增量：思路官裁「插入」后执行官不再无路可走（此前该算子经本站结构性不可发布：受理门要预注册而本站三处都没有写入面，模型只能熔断或改标别的算子）；预注册的写法从猜变成照抄交接块那一枚',
   }],
 }
 

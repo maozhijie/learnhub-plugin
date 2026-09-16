@@ -85,7 +85,8 @@ import { JOL_PREDICTIONS } from '../sched/jol.ts'
 import type { AgentSeam, GateVerdict } from '../infra/agent.ts'
 import type { LlmToolCall, LlmToolSpec } from '../infra/llm.ts'
 import { hasReadyContent } from '../vault/notes.ts'
-import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict } from './probation.ts'
+import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckPreregOf, recheckVerdict, RECHECK_METRICS } from './probation.ts'
+import type { RecheckPrereg } from './probation.ts'
 import { addNodeCountOf, applyOpsToNodes, editGateErrors, editProposalGateErrors, EDIT_OPS, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
 import type { DraftDiff, EditGateCtx, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
 import {
@@ -93,12 +94,12 @@ import {
   GROWTH_DRAFT_STATION, PATCH_SHAPE_CHEATSHEET, normalizePatchShape,
 } from './growth-draft.ts'
 import type { EditProposalNoteLite, GrowthDraftDoc, GrowthDraftRound } from './growth-draft.ts'
-import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS } from '../infra/params.ts'
+import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS, RECHECK_DAYS_DEFAULT, RECHECK_DAYS_MAX, RECHECK_DAYS_MIN } from '../infra/params.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from '../sched/sandbox.ts'
 import { appendSedimentEvent } from '../sched/sediment.ts'
 import { runWriteUnit } from '../infra/write-unit.ts'
 import { COMPLETION_MASTERY_THRESHOLD, endpointNames, foldCompletion, junctionServes, readAnchors } from './seed.ts'
-import { readySet } from '../sched/sessions.ts'
+import { doneSet, learningSet, readySet } from '../sched/sessions.ts'
 import { masteryOfFm } from '../sched/srs.ts'
 import type { ConceptTier } from '../types.ts'
 import { CONCEPT_TIERS, GROWTH_OPERATORS } from '../types.ts'
@@ -415,17 +416,24 @@ export class GrowthSubsystem {
 
   /** 单课程就绪深度检查（coachCheckpoint 与 statusJson 共用核）：零终点 = 不判冷启动
    * （合法空态）；锚 Broken fail loud（与 courseCompletion 同口径）。
-   * 就绪存量与前瞻需求都不计终点（词条「前瞻深度」：终点是锚点不是课程节点；#239
+   * 两个存量与前瞻需求都不计终点（词条「前瞻深度」：终点是锚点不是课程节点；#239
    * 多终点化：逐个终点剔除）——课程尾段前沿只剩终点时判据永不可满足会让教练永不停摆。
    * 冷启动周从**最早**的终点声明日起算。
-   * 停摆判据（ADR-0076）= 就绪存量达标（前沿除终点外已清空）或 所有终点已达成
+   * 停摆判据（ADR-0076）= 未开始存量达标（除终点外没有未开始的节点）或 所有终点已达成
    * （逐终点「已铺通 + 最后台阶全掌握」，foldCompletion 同一口径）；**零节点图**（刚建
-   * 的空课）同判停摆——不入任何自动触发点（第一次生长由学习者显式下发/加终点）。 */
+   * 的空课）同判停摆——不入任何自动触发点（第一次生长由学习者显式下发/加终点）。
+   * 判据量纲 = **未开始存量**（#312 B1 / ADR-0096）：生长批只落结构（ADR-0078），正文存量
+   * 归显式下发侧；而「可立刻开学」的节点数（就绪前沿）要学习者推进才变——追加在身后的
+   * 台阶不涨它，挂它上就仍然是「判据与动作两个量纲」的自激（实测 35k token 零产出）。 */
   async coachCheckFor(c: CourseEntry, today: string): Promise<CoachCheck> {
     const { graph, state } = await this.e.loadView(c)
     const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
     const endpoints = endpointNames(anchors)
     const live = this.coachFrontier(graph, state).filter(n => !endpoints.has(n))
+    // 未开始 = 未进 doneSet 也未在学（stage ∉ {learning, review, mastered, skipped}）——与
+    // readySet 同一把「开始」尺子，故「已开始的节点」与「就绪前沿」的补集一致。
+    const started = new Set([...doneSet(graph, state), ...learningSet(graph, state)])
+    const unstarted = graph.names.filter(n => !started.has(n) && !endpoints.has(n)).length
     const declared = anchors.map(a => a.declared).sort()[0] ?? null
     // 停摆判据（ADR-0076）：存量达标（就绪前沿除终点外清空）或 所有终点已达成；
     // 零节点图同判停摆（零节点闸）。零终点但有节点的课程不判停摆——没方向就要先加终点。
@@ -435,6 +443,7 @@ export class GrowthSubsystem {
       course: c.name,
       ...readyDepthCheck({
         ready: live.filter(n => hasReadyContent(state[n])).length,
+        unstarted,
         declared,
         today,
         exhausted: graph.names.length === 0 || allReached || (anchors.length > 0 && live.length === 0),
@@ -500,7 +509,7 @@ export class GrowthSubsystem {
 
   /** 教练回合检查点（#144 触发五点：节点完成/节点跳过/会话开始/队列空闲/面板下发）。
    * 逐课程拉起就绪深度检查——纯读侧感知，零写副作用、零 LLM 调用（裁决与生长批生产
-   * 归受理票 #145，入队阻尼语义归宿主）；ready=0 只告警，生长永不挡当前学习动作
+   * 归受理票 #145，入队阻尼语义归宿主）；未开始存量为空只告警，生长永不挡当前学习动作
    * （FIFO 不插队靠检查点前置：自动拉批只在检查点之后入队，不越过任何已排队任务）。 */
   async coachCheckpoint(
     trigger: CoachTrigger, courseKey?: string, opts: { today?: string } = {},
@@ -978,6 +987,15 @@ export class GrowthSubsystem {
           note_operator: { type: 'string', description: '本批生长算子（前进/插入/巩固/旁支/换向；下次 finish 硬化为 note）' },
           note_reason: { type: 'string', description: '本批理由一句话' },
           note_target_endpoints: { type: 'array', items: { type: 'string' }, description: '前进/换向批的朝向声明（朝哪些终点长；与接线义务配套）' },
+          note_recheck: {
+            type: 'object',
+            description: `插入批的复诊预注册（**operator=插入 且本批有 add_node 时必填**，其余算子不得携带）：{metric, days?}——插入边的到期结算零人审，没有预注册就没有结算判据。metric 取值域：${RECHECK_METRICS.join(' / ')}（思路官交接块里给的那一枚照抄）；days 缺省 ${RECHECK_DAYS_DEFAULT} 学习日、clamp [${RECHECK_DAYS_MIN},${RECHECK_DAYS_MAX}]。`,
+            properties: {
+              metric: { type: 'string', description: `可机判结局指标：${RECHECK_METRICS.join(' / ')}` },
+              days: { type: 'number', description: `复诊期学习日数（缺省 ${RECHECK_DAYS_DEFAULT}，越界 clamp 到 [${RECHECK_DAYS_MIN},${RECHECK_DAYS_MAX}]）` },
+            },
+            required: ['metric'],
+          },
         }, ['ops']),
       },
       {
@@ -1039,8 +1057,17 @@ export class GrowthSubsystem {
     if (doc.course !== c.name) {
       throw new Error(`[coach-draft] 在途草稿属于课程「${doc.course}」，与「${c.name}」不符——同课程单份在途，先取消或完成它。`)
     }
-    if (doc.rounds.length >= GROWTH_DRAFT_MAX_ROUNDS) {
-      throw new Error(`[coach-draft] 会话轮次预算耗尽（≤${GROWTH_DRAFT_MAX_ROUNDS} 轮）——草稿保留（${doc.ops.length - doc.published} 条未发布增量），可显式取消后新开会话。`)
+    // 轮次预算（#312 B4）：耗尽不再在**入口**抛（那让每次触发先烧完思路官两轮、再当场
+    // 失败——课程就此砖化，而文案指向的「显式取消」当时没有任何生产接面）。改为把预算
+    // 挪进回路：本会话此后的写件只放行收束动作（发布/撤销），追加补丁被拒并说明出路。
+    // 判据每次**现读**（不是入口快照）：本轮自己的轮志也在累加，进站时 15/16 的会话照样
+    // 会在第 16 轮前后被拦——快照会让「本轮再多写几轮」绕过预算。
+    const budgetExhausted = (): boolean => doc.rounds.length >= GROWTH_DRAFT_MAX_ROUNDS
+    if (budgetExhausted()) {
+      this.e.logger.warn('growth.draft.round_budget_exhausted', {
+        course: c.name, session: doc.session_id, rounds: doc.rounds.length,
+        unpublished: doc.ops.length - doc.published,
+      })
     }
     const draftPath = draftPathOf(this.e.paths, root, doc.session_id)
     const persist = async (): Promise<void> => {
@@ -1076,16 +1103,35 @@ export class GrowthSubsystem {
     })
     const entriesOf = async (): Promise<ConceptEntry[]> => this.e.concepts.load(root)
 
+    /** 本批生效的复诊预注册（#312 B2）：草稿 note 里显式写的优先；没写且本批是插入批
+     * （operator=插入 且有 add_node——受理门要求携带它的正是这一形态）时，用思路官交接
+     * 计划里的那一枚兜底（交接块已把它明写给执行官）。计划是 advisory，故只兜底、不覆盖。
+     * 两个来源都过同一道 `recheckPreregOf`（取值域/clamp 单源，不因来路不同而放宽）。 */
+    const recheckOf = (noteLite: EditProposalNoteLite | undefined, ops: EditOp[]): RecheckPrereg | undefined => {
+      if (noteLite?.recheck) {
+        const v = recheckPreregOf(noteLite.recheck)
+        if (!v.prereg) {
+          // 显式值非法只可能来自手改的草稿文件（draft_patch 侧同门拦在前面）：不静默改用
+          // 计划那一枚（那会悄悄换掉判据），让它以「缺预注册」的形态在门里炸出来。
+          return undefined
+        }
+        return v.prereg
+      }
+      const insertBatch = noteLite?.operator === '插入' && ops.some(op => op.op === 'add_node')
+      return insertBatch && opts.plan?.recheck ? recheckPreregOf(opts.plan.recheck).prereg : undefined
+    }
     /** 本批硬化后的**提案形态**（#309 缺陷①）：`draft_patch` 试算 / `draft_audit` /
      * `draft_finish` **三处同一份**——「草稿通过 = 门通过」要求三处喂给门的是同一个对象，
      * 不是三处各拼一份（拼装漂移正是「审计通过而 finish 被拒」那类事故的温床）。
      * `noteIn` / `conceptsIn` 供试算传「本补丁**将要**声明的 note 与铸名」——补丁的
-     * note_operator 与 concepts 在试算时尚未写回 doc，拿旧值试算 = 试算的是另一批。 */
+     * note_operator 与 concepts 在试算时尚未写回 doc，拿旧值试算 = 试算的是另一批。
+     * 复诊预注册（#312 B2）在这里落一次：三处同调因此天然一致——试算带上它、发布也带上它。 */
     const batchSpecOf = (
       ops: EditOp[], opts: { note?: EditProposalNoteLite; concepts?: ConceptEntry[] } = {},
     ): EditProposalSpec => {
       const noteLite = opts.note === undefined ? doc.note : opts.note
       const concepts = opts.concepts ?? doc.concepts
+      const recheck = recheckOf(noteLite, ops)
       return {
         course: c.name,
         reason: noteLite?.reason ?? '',
@@ -1098,6 +1144,7 @@ export class GrowthSubsystem {
                 reason: noteLite.reason,
                 ...(noteLite.target_endpoints?.length ? { target_endpoints: noteLite.target_endpoints } : {}),
                 ...(noteLite.disagreement ? { disagreement: noteLite.disagreement } : {}),
+                ...(recheck ? { recheck } : {}),
               },
             }
           : {}),
@@ -1147,6 +1194,12 @@ export class GrowthSubsystem {
     const writeTool = async (call: LlmToolCall): Promise<string> => {
       const args = JSON.parse(call.arguments.trim() || '{}') as Record<string, unknown>
       if (call.name === 'draft_patch') {
+        // 轮次预算耗尽后只放行收束动作（#312 B4）：追加补丁被拒，并给出真实存在的两条出路
+        // （发布已备好的那批；或取消本会话草稿重开——此前这条「取消」只在文案里存在）。
+        if (budgetExhausted()) {
+          await logRound('patch', `补丁被拒（轮次预算耗尽，${doc.rounds.length}/${GROWTH_DRAFT_MAX_ROUNDS}）`)
+          throw new Error(`[draft_patch] 本会话轮次预算耗尽（${doc.rounds.length}/${GROWTH_DRAFT_MAX_ROUNDS} 轮）——不再接受追加；本批已有 ${doc.ops.length - doc.published} 条未发布增量：可 draft_audit 后 draft_finish 发布它们、draft_revert 撤掉卡住的增量，或取消本会话草稿重开一批（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。`)
+        }
         const rawOps = Array.isArray(args.ops) ? args.ops as Array<Record<string, unknown>> : []
         if (!rawOps.length) throw new Error('[draft_patch] ops 不能为空——不产结构就不要调本工具。')
         // 形状门「收下即归一」（#301 缺陷① / ADR-0088 §修订）：可修的形状当场归一为发布
@@ -1168,20 +1221,44 @@ export class GrowthSubsystem {
         const mints = shape.concepts
         // 本补丁**将要**声明的 note 与铸名：试算必须按「补丁生效后的本批形态」跑——拿旧 note
         // 试算等于试算另一批（前进/换向的接线义务、note.recheck 的跨字段规则都挂在 note 上）。
-        const nextNote: EditProposalNoteLite | undefined = typeof args.note_operator === 'string' && args.note_operator.trim()
-          ? {
-              operator: args.note_operator.trim(),
-              reason: typeof args.note_reason === 'string' ? args.note_reason.trim() : '',
-              ...(Array.isArray(args.note_target_endpoints) && args.note_target_endpoints.length
-                ? { target_endpoints: (args.note_target_endpoints as unknown[]).map(String) }
-                : {}),
-            }
-          : doc.note
+        // 复诊预注册的写入面（#312 B2）：draft_patch 增 note_recheck。此前它没有任何写入面
+        // （无参数、lite 型无字段、finish 也不透传），而受理门要求「operator=插入 且有
+        // add_node」必须携带它、交接块还反向承诺「插入批落地时随批携带」——思路官一裁
+        // 「插入」，执行官就没有任何合法写法能发布。校验先于任何变更（拒收即整批回滚）、
+        // 且走与提案侧同一个 `recheckPreregOf`（取值域/未知键/clamp 同一份口径）。
+        let declaredNote: EditProposalNoteLite | undefined
+        if (typeof args.note_operator === 'string' && args.note_operator.trim()) {
+          declaredNote = {
+            operator: args.note_operator.trim(),
+            reason: typeof args.note_reason === 'string' ? args.note_reason.trim() : '',
+            ...(Array.isArray(args.note_target_endpoints) && args.note_target_endpoints.length
+              ? { target_endpoints: (args.note_target_endpoints as unknown[]).map(String) }
+              : {}),
+          }
+        }
+        if (args.note_recheck !== undefined) {
+          const v = recheckPreregOf(args.note_recheck)
+          if (v.errors.length || !v.prereg) {
+            await logRound('patch', `补丁被拒（note_recheck 未过预注册门；整批回滚）`, v.errors)
+            throw new Error(`[draft_patch] note_recheck 未过复诊预注册门（与提案受理门同一套校验；拒收即整批回滚）：\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}\n合法取值域：metric ∈ ${RECHECK_METRICS.join('/')}；days 缺省 ${RECHECK_DAYS_DEFAULT}、clamp [${RECHECK_DAYS_MIN},${RECHECK_DAYS_MAX}]`)
+          }
+          const base = declaredNote ?? doc.note
+          if (!base) {
+            throw new Error('[draft_patch] note_recheck 随本批 note 携带——本次补丁缺 note_operator/note_reason、草稿里也还没有本批 note：复诊预注册是本批声明的字段，不是独立追加项。')
+          }
+          declaredNote = { ...base, recheck: v.prereg }
+        }
+        const declared: EditProposalNoteLite | undefined = declaredNote ?? doc.note
         const nextMints = mints.length ? [...doc.concepts, ...mints] : doc.concepts
         // 试算：**未发布段 + 本补丁**过完整门（schema 纯校验 + 门序列）才落草稿——#309 缺陷①：
         // 此前试算只跑 replayDraft（门的结构子集），`move` 这类非法 op 与 `初识` 这类非法档位
         // 一路落进草稿、直到 finish 才在 propose 的 schema 门炸，而那时 op 已无法清除（缺陷②）。
         const trial = [...unpublishedOf(), ...expanded]
+        // 插入批的预注册若草稿侧没写，就地**落进 doc.note**（来源见 recheckOf：本轮的交接计划）：
+        // 只靠 finish 时读当时的计划兜底，会让跨轮续建的批次被**后一轮**的计划换掉判据（甚至
+        // 换没）。把它在补丁期固化，这一批的判据从此只由本批 note 决定。
+        const planRecheck = declared && !declared.recheck ? recheckOf(declared, trial) : undefined
+        const nextNote: EditProposalNoteLite | undefined = planRecheck && declared ? { ...declared, recheck: planRecheck } : declared
         const trialSpec = batchSpecOf(trial, { note: nextNote, concepts: nextMints })
         const { ctx: trialCtx } = await gateCtxOf({ nodes, graph }, nextMints)
         const trialErrors = (await editProposalGateErrors(trialSpec, trialCtx)).errors
@@ -1189,6 +1266,7 @@ export class GrowthSubsystem {
           await logRound('patch', `补丁被拒（${expanded.length} 条）`, trialErrors)
           throw new Error(`[draft_patch] 补丁未过受理门同一套校验（整批回滚，零草稿）：\n`
             + `${trialErrors.map(e => `  ✗ ${e}`).join('\n')}\n合法取值域：\n  · ${await domainsHint()}`)
+
         }
         doc.ops.push(...expanded)
         if (mints.length) doc.concepts.push(...mints)
@@ -1278,6 +1356,8 @@ export class GrowthSubsystem {
         if (!(GROWTH_OPERATORS as readonly string[]).includes(noteLite.operator)) {
           throw new Error(`[draft_finish] note.operator 非法：${noteLite.operator}（允许 ${GROWTH_OPERATORS.join('/')}）`)
         }
+        // 提案形态由 batchSpecOf 单点装配（含本批生效的复诊预注册，见该函数）——试算/审计/
+        // 发布三处喂给门的因此是同一份对象，不会出现「试算带上计划的 recheck、发布丢了它」。
         const spec: EditProposalSpec = batchSpecOf(unpublished)
         // 零增量 finish 无意义（空手结束由入口 fail loud 执法）
         if (!unpublished.length) {
@@ -1375,7 +1455,7 @@ export class GrowthSubsystem {
       `- 算子：${opts.plan.operator}；朝向：${opts.plan.target_endpoints.join('、') || '（未声明）'}`,
       `- 理由：${opts.plan.reason}`,
       ...opts.plan.steps.map((s, i) => `- 台阶 ${i + 1}：${s.intent}${s.teaches_concept ? `（概念面：${s.teaches_concept}）` : ''}${s.est_hint ? `（约 ${s.est_hint} 分钟）` : ''}`),
-      ...(opts.plan.recheck ? [`- 预注册复诊：${opts.plan.recheck.metric}（${opts.plan.recheck.days ?? 10} 学习日）——插入批落地时随批携带。`] : []),
+      ...(opts.plan.recheck ? [`- 预注册复诊：${opts.plan.recheck.metric}（${opts.plan.recheck.days ?? RECHECK_DAYS_DEFAULT} 学习日）——插入批随批携带：用 draft_patch 的 note_recheck 写这一枚（metrics 取值域见该参数说明；草稿侧缺席时按本计划兜底）。`] : []),
       '',
       '计划是方向不是操作：节点名与补丁仍须你对草稿图逐字对表后用 draft_patch 落地；与图面事实冲突时以图面为准，偏离计划时在 note_reason 里说一句。',
     ].join('\n') : undefined
@@ -1422,7 +1502,9 @@ export class GrowthSubsystem {
     if (!finished && doc.ops.length > doc.published) {
       await persist()
       log.warn('coach.draft.unfinished', { course: c.name, session: doc.session_id, unpublished: doc.ops.length - doc.published })
-      throw new Error(`[coach-draft] 回路收束但草稿仍有 ${doc.ops.length - doc.published} 条未发布增量且未成功 finish（禁止空手结束）——草稿已保留（会话 ${doc.session_id}），续建或显式取消。`)
+      throw new Error(budgetExhausted()
+        ? `[coach-draft] 轮次预算已耗尽（${doc.rounds.length}/${GROWTH_DRAFT_MAX_ROUNDS} 轮）、本批仍有 ${doc.ops.length - doc.published} 条未发布增量未发布成功——真出口：修好门错误后 finish、draft_revert 撤掉卡住的增量重开一批，或取消本会话草稿（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。`
+        : `[coach-draft] 回路收束但草稿仍有 ${doc.ops.length - doc.published} 条未发布增量且未成功 finish（禁止空手结束）——草稿已保留（会话 ${doc.session_id}），续建或显式取消（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。`)
     }
     if (doc.published === doc.ops.length && finished) await deleteDraft(this.e.fs, draftPath)
     log.info('coach.draft.exit', { course: c.name, session: doc.session_id, finished })
@@ -1439,7 +1521,10 @@ export class GrowthSubsystem {
     }
   }
 
-  /** 生长草稿·显式取消（内部 API；命令/面板接面另票）：删除在途草稿快照。 */
+  /** 生长草稿·显式取消（#312 B4 起有生产接面：agent 工具 `learnhub_coach_draft_cancel` +
+   * 面板路由 `POST /coach/draft/cancel` + 教练台「取消草稿」）：删除在途草稿快照——只丢
+   * **未发布**增量，已发布的批次已随历次 finish 落进图里。没有在途草稿是合法空态
+   * （`cancelled: false`），不是错误。 */
   async coachDraftCancel(courseKey: string): Promise<{ cancelled: boolean }> {
     const c = await this.e.registry.resolve(courseKey)
     const doc = await findActiveDraft(this.e.fs, this.e.paths, c.root)

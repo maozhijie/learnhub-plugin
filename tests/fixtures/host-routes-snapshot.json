@@ -4927,6 +4927,41 @@
   "calls": []
  },
  {
+  "id": "POST /coach/draft/cancel · 空参",
+  "method": "POST",
+  "url": "/learnhub/api/coach/draft/cancel",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "缺少必填参数：course（路由 POST /coach/draft/cancel）"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /coach/draft/cancel · 缺 course",
+  "method": "POST",
+  "url": "/learnhub/api/coach/draft/cancel",
+  "body": {},
+  "status": 500,
+  "res": {
+   "error": "缺少必填参数：course（路由 POST /coach/draft/cancel）"
+  },
+  "calls": []
+ },
+ {
+  "id": "POST /coach/draft/cancel · 全参",
+  "method": "POST",
+  "url": "/learnhub/api/coach/draft/cancel",
+  "body": {
+   "course": "1"
+  },
+  "status": 200,
+  "res": [],
+  "calls": [
+   "growth2.coachDraftCancel(\"1\")"
+  ]
+ },
+ {
   "id": "POST /coach/stuck-report · 空参",
   "method": "POST",
   "url": "/learnhub/api/coach/stuck-report",

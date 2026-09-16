@@ -8,6 +8,7 @@ import { YAML } from '../src/engine/infra/yaml.ts'
 import { GrowthSubsystem } from '../src/engine/coach/growth-subsystem.ts'
 import { normalizePatchShape, replayDraft, sealedDecisionOf, editGateErrors, simulateOps } from '../src/engine/index.ts'
 import { GROWTH_DRAFT_MARKER, draftPathOf, loadDraft } from '../src/engine/coach/growth-draft.ts'
+import { GROWTH_DRAFT_MAX_ROUNDS } from '../src/engine/infra/params.ts'
 import type { EditGateCtx } from '../src/engine/index.ts'
 import type { EditOp, EditProposalSpec } from '../src/engine/coach/proposals.ts'
 import type { GNode } from '../src/engine/types.ts'
@@ -181,6 +182,80 @@ function draftDocIn(h: Awaited<ReturnType<typeof withVault>>): {
   const file = readdirSync(dir)[0]!
   return JSON.parse(readFileSync(join(dir, file), 'utf8'))
 }
+
+// ---- #312：轮次预算耗尽后的收束面（草稿侧；逃生口本体归 #309 的 draft_revert）----
+
+/** 往课程草稿目录落一份在途草稿（存量草稿的站级用例共用）。 */
+async function seedDraft(
+  h: Awaited<ReturnType<typeof withVault>>,
+  doc: Record<string, unknown>,
+): Promise<void> {
+  const dir = `${h.paths.courseStateDir('数学')}/草稿`
+  await h.engine.fs.mkdir(dir)
+  await h.engine.fs.writeFile(join(dir, `${String(doc.session_id)}.json`), JSON.stringify({
+    marker: GROWTH_DRAFT_MARKER, version: 1, course: '数学', published: 0, concepts: [],
+    created_at: '2026-09-16T00:00:00.000Z', updated_at: '2026-09-16T00:00:00.000Z',
+    ...doc,
+  }))
+}
+
+test('#312 B4：轮次预算耗尽不再砖化——入口照进站，追加补丁被拒并点名真出口，已备好的批照常发布', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    // 一次挣扎会话撞满预算（16 轮）后草稿保留、轮数跨触发累计：此前每次触发都在入口抛，
+    // 「可显式取消」当时没有任何生产接面 → 该课程事实上锁死（除手删磁盘文件外无出路）。
+    await seedDraft(h, {
+      session_id: 'draft-budget',
+      ops: [
+        { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' } },
+        { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
+      ],
+      rounds: Array.from({ length: GROWTH_DRAFT_MAX_ROUNDS }, (_, i) => ({
+        at: '2026-09-16T00:00:00.000Z', kind: 'patch', summary: `历史轮 ${i + 1}`,
+      })),
+      note: { operator: '前进', reason: '前沿缺下一台阶', target_endpoints: ['用导数解决优化问题'] },
+    })
+    const { seam, receipts } = receiptFake([[
+      patchCall('c1', [{ op: 'add_node', name: '多余台阶', pre: ['认识变化率'] }], { note_operator: '前进', note_reason: 'r' }),
+      toolCall('c2', 'draft_finish'),
+      { text: '已发布备好的那批。' },
+    ]])
+    const r = await h.engine.growth2.coachDraft('数学', seam)
+    assert.equal(r.resumed, true, '预算耗尽也照进站续建（此前入口抛 = 连收束的机会都没有）')
+    assert.equal(r.finished, true, '已备好的批照常发布：收束权归回路')
+    assert.equal(r.unpublished_ops, 0)
+    const fed = receipts.join('\n')
+    assert.equal(fed.includes('多余台阶'), false, '追加补丁整批未落草稿')
+    assert.match(fed, /轮次预算耗尽/, '拒收回执说明预算状态')
+    assert.match(fed, /draft_revert/, '回执点名可用的收束动作（#309 的逃生口）')
+    assert.match(fed, /learnhub_coach_draft_cancel/, '回执点名真实存在的出口（agent 工具）')
+    assert.match(fed, /coach\/draft\/cancel/, '回执点名真实存在的出口（宿主路由）')
+  })
+})
+
+test('#312 B4：预算耗尽只收紧「追加」——收束动作照放行（draft_revert 撤掉卡住的增量后清空本批）', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    await seedDraft(h, {
+      session_id: 'draft-budget-revert',
+      ops: [{ op: 'add_node', name: '多余台阶', pre: ['认识变化率'], est: 12 }],
+      rounds: Array.from({ length: GROWTH_DRAFT_MAX_ROUNDS }, (_, i) => ({
+        at: '2026-09-16T00:00:00.000Z', kind: 'patch', summary: `历史轮 ${i + 1}`,
+      })),
+      note: { operator: '前进', reason: 'r' },
+    })
+    const { seam, receipts } = receiptFake([[
+      toolCall('r1', 'draft_revert'),
+      { text: '撤回后收束。' },
+    ]])
+    const r = await h.engine.growth2.coachDraft('数学', seam)
+    assert.equal(r.unpublished_ops, 0, '逃生口在预算耗尽时照常可用（它是收束动作，不是添砖）')
+    assert.match(receipts.join('\n'), /已撤销 1 条未发布增量/)
+    const doc = draftDocIn(h)
+    assert.deepEqual(doc.ops, [], '未发布增量已清，批级 note 随批作废')
+    assert.equal(doc.note, undefined)
+  })
+})
 
 test('执行官站：patch→finish 走真实提案管线并落 sealed；草稿清场；水位前移', async () => {
   await withVault(SEED, async h => {

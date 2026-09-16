@@ -115,6 +115,29 @@ export const 学习域 = {
       }
     ]
   }),
+  'coach-draft-cancel': command({
+    id: "coach-draft-cancel",
+    summary: "Cancel the in-flight growth draft (生长草稿) of a course — deletes the DRAFT SNAPSHOT so the next growth step opens a fresh session. This is the escape hatch for a stuck draft session: when the round budget is exhausted (later draft_patch calls are refused; only draft_finish is still allowed) or when the unpublished increments keep failing the acceptance gate, the course stays resumed on that draft forever (drafts are resumed by default and round counts accumulate), and this is the way out. Only UNPUBLISHED increments are dropped — everything already published was applied to the graph and stays. Prefer draft_finish when the prepared increments are publishable; confirm with the learner before dropping work.",
+    args: {
+      course: { type: "string", description: "Course name", required: true }
+    },
+    engine: "growth2.coachDraftCancel",
+    domain: "学习",
+    channels: [
+      {
+        channel: "agent",
+        mode: "sync",
+        tool: "learnhub_coach_draft_cancel",
+        bind: ["course"]
+      },
+      {
+        channel: "panel",
+        mode: "sync",
+        route: { method: "POST", path: "/coach/draft/cancel" },
+        bind: ["course"]
+      }
+    ]
+  }),
   'stuck-report': command({
     id: "stuck-report",
     args: {

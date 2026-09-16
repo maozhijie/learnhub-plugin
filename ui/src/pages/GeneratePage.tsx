@@ -249,7 +249,8 @@ export default function GeneratePage({ frame, course }: { frame?: AppFrame; cour
                       {j.status === 'queued' ? '移出队列' : '取消'}
                     </Button>
                     : null}
-                  {(j.status === 'failed' || j.status === 'partial') && (
+                  {/* 已取消同权（#312 B3）：取消挡住的只是自动触发点——显式重试照走 */}
+                  {(j.status === 'failed' || j.status === 'partial' || j.status === 'cancelled') && (
                     <Button size='mini' type='text' status='warning'
                       loading={retryBusy === j.key}
                       onClick={() => void retryShared(j)}>重试</Button>

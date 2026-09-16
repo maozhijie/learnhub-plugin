@@ -62,12 +62,16 @@ export interface GrowthDraftDoc {
 }
 
 /** note 区的落盘瘦身形态（与 GrowthNote 同构；avoid 引 proposals 的 GrowthNote 造成
- * 类型耦合——草稿缓存只关心可 JSON 化的取值）。 */
+ * 类型耦合——草稿缓存只关心可 JSON 化的取值）。
+ * `recheck`（#312 B2）= 插入批的复诊预注册：受理门要求「operator=插入 且有 add_node」
+ * 必须携带（proposals.validateEditProposal），而它是**提案那一侧**的硬门——草稿侧不给
+ * 写入面就等于插入算子经执行官站结构性不可发布。取值域与 clamp 归 probation（写侧只透传）。 */
 export interface EditProposalNoteLite {
   operator: string
   reason: string
   target_endpoints?: string[]
   disagreement?: string
+  recheck?: { metric: string; days?: number }
 }
 
 /** confusable 建议一条（#272）：concept 是（通常随批铸名的）新概念，with 是易混对端。 */

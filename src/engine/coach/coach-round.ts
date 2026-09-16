@@ -407,8 +407,13 @@ export interface CoachGrowthSegment {
 export interface CoachCheck extends ReadyDepthCheck { course: string }
 
 export interface ReadyDepthCheck {
-  /** 就绪存量：未开始（前置达成）且正文已生成的节点数（调用方按此口径注入）。 */
+  /** 正文就绪存量：未开始（前置达成）且正文已生成的节点数——**学习面读数**。
+   * 正文由显式下发产生（ADR-0078：生长批只落结构），故它不是自动拉批的量纲。 */
   ready: number
+  /** 未开始存量：图上还没开始的节点数（除终点）——**判据与自动拉批的量纲**（#312 B1）：
+   * 生长批每次都追加未开始节点，这个数必然随之上涨；而「可立刻开学」的节点数要靠学习者
+   * 推进才会变（追加在身后的台阶不涨它）——挂在后者上，判据与动作仍是两个量纲。 */
+  unstarted: number
   /** 前瞻深度（配置值 clamp 后）。 */
   depth: number
   /** 需求深度（冷启动首周 ×1.5 后 ceil）。 */
@@ -418,17 +423,20 @@ export interface ReadyDepthCheck {
   /** 除终点外就绪前沿已清空（课程尾段，词条「前瞻深度」）——判据自然通过，
    * 剩下的路是学掉终点。UI 据此区分「尾段合法停摆」与「刚建课的合法空态」。 */
   exhausted: boolean
-  /** 只告警不阻塞：ready=0 与低于前瞻各出一行。 */
+  /** 只告警不阻塞：未开始存量空、低于前瞻、结构达标但正文未生成各出一行。 */
   warnings: string[]
 }
 
-/** 就绪深度检查（纯函数）：ready ≥ required 即满足——满足时教练回合自然无批可产
- * （停摆是判据满足的自然结果，不是新状态）；ready=0 只告警（合法空态：刚建课/
+/** 就绪深度检查（纯函数）：**unstarted ≥ required 即满足**——满足时教练回合自然无批可产
+ * （停摆是判据满足的自然结果，不是新状态）；unstarted=0 只告警（合法空态：刚建课/
  * 生长尚未跟上），永不阻塞、永不抛错。exhausted = 除终点外就绪前沿已清空（课程尾段，
  * 词条「前瞻深度」：终点是锚点不是课程节点）——判据自然通过，零告警：教练合法停摆，
  * 剩下的路是学掉终点，不是继续生长。 */
 export function readyDepthCheck(input: {
+  /** 正文就绪存量（学习面读数，不参与 ok）。 */
   ready: number
+  /** 未开始存量（判据量纲）。 */
+  unstarted: number
   /** 终点锚声明日（null = 零终点/空锚，不判冷启动）。 */
   declared: string | null
   today: string
@@ -449,16 +457,20 @@ export function readyDepthCheck(input: {
   if (input.exhausted === true) {
     // 课程尾段：非终点前沿已清空——合法停摆，判据自然通过、零告警（词条「前瞻深度」：
     // 终点是锚点不是课程节点，剩下的路是学掉终点，不是继续生长）。
-    return { ready: input.ready, depth, required, cold_start, ok: true, exhausted: true, warnings: [] }
+    return { ready: input.ready, unstarted: input.unstarted, depth, required, cold_start, ok: true, exhausted: true, warnings: [] }
   }
-  const ok = input.ready >= required
+  const ok = input.unstarted >= required
   const warnings: string[] = []
-  if (input.ready === 0) {
-    warnings.push('就绪存量 ready=0（当前没有「前置已达成且正文已生成」的可学节点）——只告警不阻塞：生长永不挡当前学习动作。')
+  if (input.unstarted === 0) {
+    warnings.push('未开始存量 0（图上没有未开始的节点）——只告警不阻塞：生长永不挡当前学习动作。')
   } else if (!ok) {
-    warnings.push(`就绪深度 ${input.ready} 低于前瞻需求 ${required}（深度 ${depth}${cold_start ? `，冷启动首周 ×${COACH_COLD_START_EST_MULT}` : ''}）——教练回合应裁决生长。`)
+    warnings.push(`未开始存量 ${input.unstarted} 低于前瞻需求 ${required}（深度 ${depth}${cold_start ? `，冷启动首周 ×${COACH_COLD_START_EST_MULT}` : ''}）——教练回合应裁决生长。`)
+  } else if (input.ready === 0) {
+    // 结构达标但正文未生成：判据与动作同量纲（#312 B1）之后，这一行是最容易误读的
+    // 缺口——判据说「不用再长」，学习者却无正文可读。正文与结构走两条通道（ADR-0078）。
+    warnings.push('正文就绪 0（前线节点均未生成正文）——生长判据已达标、教练不必再长结构；正文由显式下发产生（面板「生成」/agent 正文入口），不经生长批。')
   }
-  return { ready: input.ready, depth, required, cold_start, ok, exhausted: false, warnings }
+  return { ready: input.ready, unstarted: input.unstarted, depth, required, cold_start, ok, exhausted: false, warnings }
 }
 
 // ---- 沉淀折叠的教练投影（六区块包第 5 块「罗盘尾段」的沉淀半区） ----

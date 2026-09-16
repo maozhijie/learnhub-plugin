@@ -316,6 +316,10 @@ export const api = {
   /** 罗盘初画/重画（LLM 一次调用，队列任务化）。queued=false = 在途拒绝，非成功语义。 */
   compassPaint: (course: string) =>
     http<{ message: string; queued: boolean }>('POST', '/coach/compass', { course }),
+  /** 取消在途生长草稿（#312 B4 的逃生口）：只丢**未发布**增量，已发布的批次不受影响；
+   * cancelled=false = 本课没有在途草稿（合法空态，非错误）。 */
+  coachDraftCancel: (course: string) =>
+    http<{ cancelled: boolean }>('POST', '/coach/draft/cancel', { course }),
   /** 成分技能边回填（确定性推断，同步受理 → 富化提案待人审）。 */
   encBackfill: (course?: string) =>
     http<Record<string, unknown>>('POST', '/graph/backfill', { ...(course ? { course } : {}) }),

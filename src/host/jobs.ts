@@ -474,7 +474,8 @@ const GROWTH_JOB_NODE = '生长批'
  * 阻尼（计划改了目标，上一次停摆裁决不再代表现状）；在途/失败阻尼照旧。
  * force（面板下发）= 同 inject 的显式豁免（学习者点了「生长一步」/失败通知「重试」
  * 就是重新裁决的意图，#157）：豁免停摆/暂不产结构与**失败**阻尼（终态记录覆盖重新
- * 入队）；在途防重入与已取消（明确的中止意图）照旧。豁免随任务携带（`growthForce`）
+ * 入队）；**已取消同权**（#312 B3——取消挡住的只是自动触发点，不是学习者显式重来）；
+ * 在途防重入照旧。豁免随任务携带（`growthForce`）
  * 进执行侧——就绪深度已满足时也不短路成停摆（#240 修：此前只在入队侧生效，
  * 「生长一步」在停摆图上恒空转）。 */
 export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean; trigger?: CoachTrigger } = {}): { message: string; queued: boolean } {
@@ -484,8 +485,12 @@ export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string
   if (last && (last.status === 'queued' || last.status === 'running' || last.status === 'cancelling')) {
     return { message: `「${course}」已有生长批任务在途，不重复入队。`, queued: false }
   }
-  if (last?.status === 'cancelled') {
-    return { message: `「${course}」上一生长批已取消（${last.message ?? ''}），不重拉——取消是明确的中止意图，可等下一次触发。`, queued: false }
+  if (last?.status === 'cancelled' && opts.force !== true) {
+    // 取消与失败同权（#312 B3）：显式请求（面板「生长一步」/生成页重试）可覆盖，自动
+    // 触发点照旧被挡。此前取消在任何 force 之前无条件返回，而文案指向「下一次触发」
+    // ——下一次触发命中的正是这条分支：一门课取消过一次就锁死整个终态保留期（24h），
+    // 连面板显式下发都进不来。
+    return { message: `「${course}」上一生长批已取消（${last.message ?? ''}），不自动重拉——取消是明确的中止意图，可从生成队列或面板「生长一步」显式重新下发。`, queued: false }
   }
   if (last?.status === 'failed' && opts.force !== true) {
     return { message: `「${course}」上一生长批失败（${last.message ?? ''}），不自动重试——可从生成队列或失败通知重试，或等下一次触发。`, queued: false }
@@ -537,10 +542,10 @@ async function coachTrigger(rt: HostRuntime, ctx: Context, trigger: CoachTrigger
   const r = await rt.engine.growth2.coachCheckpoint(trigger, courseKey)
   const lines: string[] = []
   for (const chk of r.courses) {
-    lines.push(`${chk.course}：ready=${chk.ready}/${chk.required}${chk.ok ? '' : '（低于前瞻，已告警）'}`)
+    lines.push(`${chk.course}：未开始存量 ${chk.unstarted}/${chk.required}（正文就绪 ${chk.ready}）${chk.ok ? '' : '（低于前瞻，已告警）'}`)
     if (chk.ok) continue
     try {
-      const enq = enqueueGrowthBatch(rt, ctx, chk.course, `${trigger} 触发（就绪深度 ${chk.ready}/${chk.required}）`, undefined, { ...opts, trigger })
+      const enq = enqueueGrowthBatch(rt, ctx, chk.course, `${trigger} 触发（未开始存量 ${chk.unstarted}/${chk.required}）`, undefined, { ...opts, trigger })
       lines.push(enq.message)
     } catch (err) {
       lines.push(`「${chk.course}」生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
@@ -692,7 +697,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       job.growthOutcome = 'idle'
       job.status = 'done'
       // 停摆是判据满足的自然结果，不是成就（#161）：中性说明文案，面板通知与生成页共用
-      job.message = `教练判断暂不需长新内容（就绪 ${r.check.ready}/${r.check.required}）。`
+      job.message = `教练判断暂不需长新内容（未开始存量 ${r.check.unstarted}/${r.check.required}）。`
     } else {
       const p = r.proposal!
       const a = r.applied!

@@ -109,8 +109,10 @@ export function useCoachToasts(nav: { generate: () => void; proposals: () => voi
       } else if (cur.status === 'partial') {
         notify('info', `${prefix}${title}部分完成`, cur.message, target)
       } else if (cur.status === 'failed' || cur.status === 'cancelled') {
+        // 取消与失败同权（#312 B3）：取消记录不再挡显式重来，通知里的「重试」因此照给
+        // （与生成页那一枚同判据：生长批才走重新裁决路由）
         notify('error', `${prefix}${title}${cur.status === 'failed' ? '失败' : '已取消'}`, cur.message,
-          target, cur.status === 'failed' && cur.phase === 'growth' ? () => void retryGrowth(cur.course) : undefined)
+          target, cur.phase === 'growth' ? () => void retryGrowth(cur.course) : undefined)
       }
     }
 
