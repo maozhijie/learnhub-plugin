@@ -52,13 +52,21 @@ index_repository(repo_path="C:/Users/test/Desktop/my/learnhub-wt-N", mode="moder
 
 先图后文件的判据照旧（`AGENTS.md` §代码索引）；文件操作用池位绝对路径。
 
-### ⑤ 释放
+### ⑤ 合入 main 后释放
 
-成果先按正常流程落地（提交；按任务要求推送/PR），再删标记：
+**默认自动合入（用户 2026-09-16 裁决）：任务收尾时 agent 自己把池位分支合回 main，不等人工。** 判据驱动的执行序列：
+
+1. 成果在池位分支已提交且全量 `npm test` 绿（含类型门与棘轮；基线迁移同提交）。
+2. 到主检出（`learnhub-plugin`）`fetch origin` 确认 main 未漂移：`wt-N` 基于 `origin/main` 头且主检出差无它人在途提交 → 直接 `git merge --ff-only wt-N`；main 已前进 → 先在池位 `rebase origin/main` 复跑受影响的门再重试 ff。
+3. `git push origin main`。
+4. 主检出的**脏文件不碰**（可能是他人/用户在途作业）：ff 合并只要不触碰脏文件即可成功；若冲突面涉脏文件，停下报告，不代任何人决断。
+5. 合入后再删标记释放：
 
 ```sh
 node scripts/worktree-pool.mjs release <1|2|3>
 ```
+
+**豁免**（不合入直接释放或等人工的情形）：任务面未过全量门；票面明说「不落地/仅调研」；用户当次任务另作交代。远程分支 `wt-N` 合入后可留作存档（池分支被复用时会被 ② 强制重置，不构成堆积）。
 
 **成果未整合就释放要慎重**：下一认领者的 ② 会把这些未整合提交一起 rebase 带走。
 
