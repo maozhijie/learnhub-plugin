@@ -149,7 +149,7 @@ test('事务性：AI 输出不可解析 → 回执与 EMA 零落盘；坏流水 
       /不是合法 JSON/,
     )
     assert.equal((await h.store.receiptsAll()).length, 0) // 回执未落
-    const { loadNote } = await import('../src/engine/notes.ts')
+    const { loadNote } = await import('../src/engine/vault/notes.ts')
     const { fm } = await loadNote(`${h.root}/学习中心/math/课程/练耳.md`, nodeVaultFs)
     assert.equal(fm.practice_ema, undefined) // EMA 未动
     assert.equal(fm.practice.attempts, 0)

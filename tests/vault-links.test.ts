@@ -8,7 +8,7 @@ import {
   parseWikilinks, stripCodeFences, isDateTarget, isNonMdTarget, normalizeLinkName,
   linkNameOfPath, buildNameIndex, linkScore, scoreTier, mapEdgesToNodes, orientLinkPair,
   dirExcluded, VAULT_LINK_DEFAULT_DIR_EXCLUDES,
-} from '../src/engine/vault-links.ts'
+} from '../src/engine/vault/vault-links.ts'
 import { withVault as makeVault } from './helpers/vault.ts'
 
 // ---- 纯函数缝：wikilink 解析 ----

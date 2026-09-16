@@ -1,6 +1,6 @@
 /** 假 AnkiConnect（内存态牌组/笔记/复习日志，cardReviews 按毫秒水位过滤）；
  * 从 anki.test.ts 抽出共享（#295 幂等回归也消费）。 */
-import type { AnkiTransport } from '../../src/engine/anki.ts'
+import type { AnkiTransport } from '../../src/engine/vault/anki.ts'
 
 export class FakeAnki implements AnkiTransport {
   notes = new Map<number, { noteId: number; deckName: string; fields: Record<string, string>; tags: string[] }>()

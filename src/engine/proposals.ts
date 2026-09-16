@@ -15,7 +15,7 @@ import { Graph, GraphStore, parseConceptFields, parseEnc, misconceptionCapErrors
 import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from './concepts.ts'
 import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from './concepts.ts'
 import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from './concepts.ts'
-import { saveNote, defaultFrontmatter } from './notes.ts'
+import { saveNote, defaultFrontmatter } from './vault/notes.ts'
 import { endpointNames, readAnchors, writeAnchors, isSeedGraph } from './seed.ts'
 import type { EndpointAnchor } from './seed.ts'
 import {
@@ -1375,7 +1375,7 @@ export class GraphProposals {
     const oldPath = this.paths.courseNotePath(root, node)
     const targetName = newName ?? node
     if (this.fs.exists(oldPath)) {
-      const { loadNote, saveNote } = await import('./notes.ts')
+      const { loadNote, saveNote } = await import('./vault/notes.ts')
       const { fm, body } = await loadNote(oldPath, this.fs)
       const newPath = this.paths.courseNotePath(root, targetName)
       await saveNote(newPath, { ...(fm ?? {}), node: targetName }, body, this.fs)

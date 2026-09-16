@@ -13,13 +13,13 @@ import type { VaultFs } from './io.ts'
 /** vault 存储端口（#175 阶段②）：类型随门面出，实现住 host/vault-fs.ts。 */
 export type { VaultFs } from './io.ts'
 import { Paths } from './paths.ts'
-import { Registry } from './registry.ts'
+import { Registry } from './vault/registry.ts'
 import { ConceptRegistry } from './concepts.ts'
 import { Store } from './store.ts'
 import { GraphStore, Graph, writeReadyList } from './graph.ts'
 import { GraphSubsystem } from './graph-subsystem.ts'
-import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './notes.ts'
-import type { BrokenNote } from './notes.ts'
+import { stateMap, loadNote, saveNote, defaultFrontmatter, asFm, validateNoteFrontmatter } from './vault/notes.ts'
+import type { BrokenNote } from './vault/notes.ts'
 import { getScheduler, masteryOfFm } from './srs.ts'
 import { ErrorCards } from './error-cards.ts'
 import { YAML } from './yaml.ts'
@@ -54,11 +54,11 @@ import type { CompletionFold } from './seed.ts'
 export type { CoachTrigger, CoachPromptFamily, CoachCheck, CoachGrowthSegment, GrowthPlanHandover } from './coach-round.ts';
 export type { GateVerdict } from './agent.ts'
 import { QuestionBank, validateBank, BankSubsystem } from './question-bank.ts'
-import { NoteSourceManifest, ChannelsSubsystem } from './note-source.ts'
+import { NoteSourceManifest, ChannelsSubsystem } from './vault/note-source.ts'
 import { LearnerCards, LearnerSubsystem } from './learner-cards.ts'
 import { Skills } from './skills.ts'
 import { Habits } from './habits.ts'
-import { AnkiMirror } from './anki.ts'
+import { AnkiMirror } from './vault/anki.ts'
 import { Sessions } from './sessions.ts'
 import { todayStr, fmtCutoff } from './dates.ts'
 import { atomicWrite } from './io.ts'
@@ -74,10 +74,10 @@ import type { RecommendDoc, StatusDoc } from './views.ts'
 /** 宿主取值走门面（D14 收口，#152 刀 1 / ADR-0042）：re-export 门只供应纯函数、
  * 常量与缝型——数据访问仍只走门面方法，门不是数据旁路。 */
 export { Content } from './content.ts'
-export { ANKI_ENDPOINT, AnkiConnectClient } from './anki.ts'
+export { ANKI_ENDPOINT, AnkiConnectClient } from './vault/anki.ts'
 export { TIER_LABELS, tierIdxOf, genericQuizTarget } from './complexity.ts'
 /** 正文就绪判定（#160 宿主种子链消费的纯函数：起点「正文未生成」口径与生长批一致）。 */
-export { hasReadyContent } from './notes.ts'
+export { hasReadyContent } from './vault/notes.ts'
 /** 宿主侧实验工具（#215 冒烟复跑契约门 / #216 spike 题面去重）经门面消费的两个纯函数：
  * R1「host 的 engine 导入只走门面」的直接后果——原实现从宿主直引子模块（越层），
  * 由 code-review 两轴审查抓出并收口到门面。 */
@@ -117,7 +117,7 @@ export type { QuestionDiversityReport, DiversityMetrics, DiversityReading, Distr
 /** Vault 先验检索审计（#229 / ADR-0071）：检索核的审计类型随门面出（宿主在生成入口的
  * onPrior 注记回调里消费，R1：host 的 engine 导入只走门面）。审计**形状**住中立词汇层
  * types.ts（分居理由见那里：形状若住检索核会与 question-bank/note-source 成环，R7）。 */
-export type { VaultPriorHit, VaultPriorSearch, PriorQueryTerm } from './vault-prior.ts'
+export type { VaultPriorHit, VaultPriorSearch, PriorQueryTerm } from './vault/vault-prior.ts'
 export type { VaultPriorAudit } from './types.ts'
 /** 质量量规注册表（#221 / ADR-0062）：量规随门面出——离线评审运行器（#222）按站取量规、
  * 报告带分层法庭元数据，评审器不重写判据（判定标准先于判定器）。 */

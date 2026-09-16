@@ -21,9 +21,9 @@ import { round2, clamp01, pctOf } from '../src/engine/grading.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { DAY_MS, calendarDayOf, dayOfTs, fmtDay, addDays } from '../src/engine/dates.ts'
 // 来源键经 anki.ts 原路径导入——有意验证 re-export 接缝未晃（本体在 types.ts）
-import { sourceKeyOf, parseSourceKey, nodeKeyOf } from '../src/engine/anki.ts'
+import { sourceKeyOf, parseSourceKey, nodeKeyOf } from '../src/engine/vault/anki.ts'
 import { PROPOSAL_STATUSES } from '../src/engine/types.ts'
-import { saveNote } from '../src/engine/notes.ts'
+import { saveNote } from '../src/engine/vault/notes.ts'
 
 const ENGINE = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'engine')
 

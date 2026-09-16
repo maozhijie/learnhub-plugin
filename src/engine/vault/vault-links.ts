@@ -20,9 +20,9 @@
  * ADR-0010 只读纪律：个人笔记零写入——产物只落引擎 state 区；缓存带源文件
  * 指纹（与笔记源指纹同法），漂移可见、可重扫。纯文件扫描，不依赖宿主检索 API。
  */
-import type { VaultFs } from './io.ts'
+import type { VaultFs } from '../io.ts'
 import { fingerprintOf, stripFrontmatter } from './note-source.ts'
-import { clamp01 } from './grading.ts'
+import { clamp01 } from '../grading.ts'
 
 /** 一条候选关联对（无向：a/b 为字典序较小的路径在前）。 */
 export interface VaultLinkEdge {

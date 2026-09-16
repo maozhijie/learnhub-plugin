@@ -12,7 +12,7 @@
  * ——种子本来就只有起点+终点几张节点，形状告警与低健康分是噪音（生长批进入后恢复）。
  */
 import type { VaultFs } from './io.ts'
-import { scanAll, loadNote, hasReadyContent } from './notes.ts'
+import { scanAll, loadNote, hasReadyContent } from './vault/notes.ts'
 import { STAGES } from './types.ts'
 import type { Fm } from './types.ts'
 import type { Graph } from './graph.ts'
@@ -22,7 +22,7 @@ import { graphHealthScore } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import { Content } from './content.ts'
 import { endpointNames, isSeedGraph, readAnchors } from './seed.ts'
-import { readVaultLinksCache, splitPriorFeed } from './vault-links.ts'
+import { readVaultLinksCache, splitPriorFeed } from './vault/vault-links.ts'
 
 export interface AuditResult {
   failed: boolean

@@ -61,7 +61,7 @@ export const REPAIR_MECHANISMS: Readonly<Record<string, RepairMechanismSpec>> = 
     what: '目标反编译：产物校验/名字对账死因回灌恰一次',
   },
   invokesOncePerQuestion: {
-    file: 'engine/note-source.ts', witness: ['async repairInvokesOnce'],
+    file: 'engine/vault/note-source.ts', witness: ['async repairInvokesOnce'],
     what: '出题逐题回路：清单在场且有题缺 invokes → 恰一次补标调用（不是整批重产）',
   },
   auditRepairOncePerQuestion: {

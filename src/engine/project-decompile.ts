@@ -11,7 +11,7 @@
  * 本模块只放纯函数（零 IO、零引擎实例依赖）：目标描述解析、检索词派生、产物拆分
  * 校验、名字对账门、修复轮提示词拼装；编排（检索/提案受理）在引擎门面 projectDecompile。
  */
-import { priorTerms } from './vault-prior.ts'
+import { priorTerms } from './vault/vault-prior.ts'
 import { repairRoundPrompt } from './prompt-assembly.ts'
 import { render } from './prompt-render.ts'
 import { DECOMPILE_REPAIR_HEADLINE } from './prompts/projects.ts'

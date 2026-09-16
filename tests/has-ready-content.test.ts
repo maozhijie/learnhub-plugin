@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { defaultFrontmatter, hasReadyContent } from '../src/engine/notes.ts'
+import { defaultFrontmatter, hasReadyContent } from '../src/engine/vault/notes.ts'
 import type { Fm } from '../src/engine/types.ts'
 
 // ---- hasReadyContent：列表/图三态「已生成」标识的数据源 ----

@@ -6,12 +6,12 @@
  * 键序固定 node/stage/fsrs/mastery/practice_ema/content/practice，其余键保序追加；
  * mastery 位仅为旧文件键序稳定保留，新文件不再写入该键（ADR-0007）。
  */
-import type { VaultFs } from './io.ts'
-import { atomicWrite } from './io.ts'
+import type { VaultFs } from '../io.ts'
+import { atomicWrite } from '../io.ts'
 import { join } from 'node:path'
-import { YAML } from './yaml.ts'
-import type { Fm, FsrsBlock, Stage } from './types.ts'
-import { STAGES } from './types.ts'
+import { YAML } from '../yaml.ts'
+import type { Fm, FsrsBlock, Stage } from '../types.ts'
+import { STAGES } from '../types.ts'
 
 export const CONTENT_STATUS = ['draft', 'reviewed', 'flagged'] as const
 

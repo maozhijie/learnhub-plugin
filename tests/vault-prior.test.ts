@@ -17,8 +17,8 @@ import { join } from 'node:path'
 import {
   ALIAS_TERM_WEIGHT, CONFUSABLE_TERM_WEIGHT,
   excerptAround, expandPriorTerms, priorQueryTerms, priorSection, priorTerms, queryEntriesFor, searchVaultPrior,
-} from '../src/engine/vault-prior.ts'
-import type { PriorQueryTerm } from '../src/engine/vault-prior.ts'
+} from '../src/engine/vault/vault-prior.ts'
+import type { PriorQueryTerm } from '../src/engine/vault/vault-prior.ts'
 import type { ConceptEntry } from '../src/engine/concepts.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { withVault } from './helpers/vault.ts'

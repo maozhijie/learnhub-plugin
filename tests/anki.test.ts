@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { LearnhubEngine } from '../src/engine/index.ts'
 import { revealAnswer } from '../src/engine/grading.ts'
-import { mapAnkiEase, sameDayAdvanced, planMirrorSync, sourceKeyOf, parseSourceKey, ankiCardPayload, fingerprintOf, isoFromMs } from '../src/engine/anki.ts'
-import type { AnkiTransport } from '../src/engine/anki.ts'
+import { mapAnkiEase, sameDayAdvanced, planMirrorSync, sourceKeyOf, parseSourceKey, ankiCardPayload, fingerprintOf, isoFromMs } from '../src/engine/vault/anki.ts'
+import type { AnkiTransport } from '../src/engine/vault/anki.ts'
 import { todayStr } from '../src/engine/dates.ts'
 import { withVault as makeVault } from './helpers/vault.ts'
 import { FakeAnki } from './helpers/anki-fake.ts'
@@ -318,7 +318,7 @@ test('Anki 状态：镜象概况 + 到期分布 + AnkiConnect 可达性；连接
 })
 
 test('AnkiConnectClient：坏端点带指引报错；错误响应透传 AnkiConnect error 字段', async () => {
-  const { AnkiConnectClient } = await import('../src/engine/anki.ts')
+  const { AnkiConnectClient } = await import('../src/engine/vault/anki.ts')
   const bad = new AnkiConnectClient('http://127.0.0.1:9', async () => {
     throw new Error('connect ECONNREFUSED')
   })

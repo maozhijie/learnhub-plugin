@@ -11,13 +11,13 @@
  * （sourceKeyOf / parseSourceKey）。AnkiConnect 走可注入 transport（测试用
  * 假 Anki，运行时 fetch 到 http://127.0.0.1:8765）。
  */
-import type { VaultFs } from './io.ts'
-import { sourceKeyOf } from './types.ts'
-import { atomicWrite } from './io.ts'
-import { alreadyScheduledOn } from './advance.ts'
-import type { Paths } from './paths.ts'
-import type { FsrsBlock } from './types.ts'
-import type { AlloKind } from './grading.ts'
+import type { VaultFs } from '../io.ts'
+import { sourceKeyOf } from '../types.ts'
+import { atomicWrite } from '../io.ts'
+import { alreadyScheduledOn } from '../advance.ts'
+import type { Paths } from '../paths.ts'
+import type { FsrsBlock } from '../types.ts'
+import type { AlloKind } from '../grading.ts'
 
 /** AnkiConnect 默认端点（桌面 Anki + AnkiConnect 插件）。 */
 export const ANKI_ENDPOINT = 'http://127.0.0.1:8765'
@@ -51,7 +51,7 @@ export function sameDayAdvanced(
 // ---- 纯函数缝：来源键（回写归属）——本体 #172 归位 types.ts 中立词汇层，
 // 原路径 re-export 保接缝（note-source 等既有导入不晃；ADR-0042 手法）。----
 
-export { sourceKeyOf, parseSourceKey, nodeKeyOf } from './types.ts'
+export { sourceKeyOf, parseSourceKey, nodeKeyOf } from '../types.ts'
 
 // ---- 纯函数缝：导出负载与镜象 diff ----
 
