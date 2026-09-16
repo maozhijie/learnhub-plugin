@@ -228,8 +228,11 @@ export class Store {
     let raw: string
     try {
       raw = await this.fs.readFile(this.paths.proposalsPath)
-    } catch {
-      return []
+    } catch (err) {
+      // 只认 ENOENT 为 Missing 合法空态（#295，比照 gen-jobs #194）：权限/锁类 IO 错
+      // 静默回空表会让下一次全量替换写静默销毁原档，Broken 同口径上抛。
+      if ((err as { code?: unknown }).code === 'ENOENT') return []
+      throw new Error(`[proposals] ${this.paths.proposalsPath} 不可读（Broken）：${err instanceof Error ? err.message : String(err)}`)
     }
     let doc: unknown
     try {
@@ -323,8 +326,10 @@ export class Store {
     let raw: string
     try {
       raw = await this.fs.readFile(this.paths.pinPath)
-    } catch {
-      return []
+    } catch (err) {
+      // 只认 ENOENT 为 Missing 合法空态（#295）；其余 IO 错静默回空会被 pin 写入覆盖原档
+      if ((err as { code?: unknown }).code === 'ENOENT') return []
+      throw new Error(`[pin] ${this.paths.pinPath} 不可读（Broken）：${err instanceof Error ? err.message : String(err)}`)
     }
     let doc: unknown
     try {
@@ -350,8 +355,10 @@ export class Store {
     let raw: string
     try {
       raw = await this.fs.readFile(this.paths.adviceDismissPath)
-    } catch {
-      return []
+    } catch (err) {
+      // 只认 ENOENT 为 Missing 合法空态（#295，与 pin 同纪律）
+      if ((err as { code?: unknown }).code === 'ENOENT') return []
+      throw new Error(`[advice-dismiss] ${this.paths.adviceDismissPath} 不可读（Broken）：${err instanceof Error ? err.message : String(err)}`)
     }
     let doc: unknown
     try {
@@ -414,8 +421,11 @@ export class Store {
     let raw: string
     try {
       raw = await this.fs.readFile(this.paths.experimentsPath)
-    } catch {
-      return []
+    } catch (err) {
+      // 只认 ENOENT 为 Missing 合法空态（#295）：分臂与结局登记是预注册事实，
+      // 非 ENOENT 错静默回空会被新实验定义覆盖。
+      if ((err as { code?: unknown }).code === 'ENOENT') return []
+      throw new Error(`[nof1] ${this.paths.experimentsPath} 不可读（Broken）：${err instanceof Error ? err.message : String(err)}`)
     }
     let doc: unknown
     try {

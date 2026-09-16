@@ -124,6 +124,14 @@ function bankError(op: string, path: string, detail: string): Error {
   return new Error(`[${op}] 题库 Broken（位置：${path}）\n  ✗ ${detail}`)
 }
 
+/** 取消抛错（#294）：半批已即时入库的题不回滚（已落盘的学习者数据），消息如实对账
+ * 「已入库 N 题」，与宿主 cancelled 事件的 added_so_far 口径一致——不再谎报「结果已丢弃」。 */
+function cancelledError(addedSoFar: number): Error {
+  return new Error(addedSoFar > 0
+    ? `生成已取消：此前已入库 ${addedSoFar} 题（已落盘，不回滚），其余丢弃。`
+    : '生成已取消，结果已丢弃。')
+}
+
 /** 写入侧答案形态门禁（prompt 约束的服务端兜底）：multi_choice 至少 2 个正确项。
  * 只拦写入（生成入库/修订），不做进 validateBank 的读取门禁——存量题库里
  * 历史生成的单正确项多选不该让整个题库读成 Broken（显式盘点修复，ADR-0004）。 */
@@ -1270,7 +1278,7 @@ export class BankSubsystem {
     }
     // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用；仍空由下方受理门拒收
     if (conceptScope.length) {
-      if (opts?.isCancelled?.()) throw new Error('生成已取消，结果已丢弃。')
+      if (opts?.isCancelled?.()) throw cancelledError(0)
       await this.e.repairInvokesOnce(llm, doc.questions.slice(0, requested), conceptScope)
     }
     // doc.node 只是模型对节点的复述（常自创短名），落盘位置由入参决定，不作硬校验
@@ -1295,7 +1303,7 @@ export class BankSubsystem {
       rejected.push(...audit.rejected)
     }
     for (const item of pending) {
-      if (opts?.isCancelled?.()) throw new Error('生成已取消，结果已丢弃。')
+      if (opts?.isCancelled?.()) throw cancelledError(added)
       const q = { ...(item as Record<string, unknown>) }
       delete q.id // id 由 addQuestion 按现有题数自动编号，避免与既有 q1 冲突
       if (opts?.generic) q.section = '通用' // 综合题不绑节（轮装配时统一收尾）
@@ -1381,7 +1389,7 @@ export class BankSubsystem {
       /** Vault 先验检索审计注记（#229）：同 questionGenerate。 */
       onPrior?: (audit: VaultPriorAudit) => void
     },
-  ): Promise<{ course: string; node: string; added: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[]; secondOpinion?: SecondOpinionReport; diversity: QuestionDiversityReport }> {
+  ): Promise<{ course: string; node: string; added: number; invalid: number; sections: number; duplicates: number; escapesRepaired: number; enc: EncEdge[]; secondOpinion?: SecondOpinionReport; diversity: QuestionDiversityReport }> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph, state, broken } = await this.e.loadView(c)
     if (!graph.nset.has(node)) throw new Error(`[quiz] 节点「${node}」不在图内。`)
@@ -1420,6 +1428,7 @@ export class BankSubsystem {
     const conceptBlock = Content.conceptListBlock(conceptScope)
       + Content.confusablePairsBlock(confusablePairsOf(conceptEntries, new Set(conceptScope)))
     let added = 0
+    let invalid = 0
     let sections = 0
     let duplicates = 0
     let escapesRepaired = 0
@@ -1427,6 +1436,7 @@ export class BankSubsystem {
     // 多样性仪表（#230）：只累计本批入库题（与 questionGenerate 同口径）
     const accepted: DiversityQuestion[] = []
     for (const [si, s] of manifest.entries()) {
+      if (opts?.isCancelled?.()) throw cancelledError(added)
       if (s.type === '练习' || s.type === '交互') continue
       const sectionMd = mdByTitle.get(s.title)
       if (!sectionMd) continue
@@ -1450,6 +1460,7 @@ export class BankSubsystem {
       }
       if (typeof doc !== 'object' || doc === null || !Array.isArray(doc.questions)) continue
       // 出生打标修复轮（#148）：清单在场且有题缺 invokes → 恰一次补标调用，仍空由下方门弃
+      if (opts?.isCancelled?.()) throw cancelledError(added)
       if (conceptScope.length) await this.e.repairInvokesOnce(llm, doc.questions, conceptScope)
       // 第二意见门（#223）随节生效：不一致题恰一次修复、仍败弃题；报告跨节聚合
       let sectionItems = doc.questions as Array<Record<string, unknown>>
@@ -1475,14 +1486,16 @@ export class BankSubsystem {
         const verdict = await this.e.admitQuestion(this.e.paths.courseRoot(c.root), node, q, stem, existingStems)
         if (verdict.verdict === 'duplicate') duplicates++
         else if (verdict.verdict === 'added') {
-          added++ // 单题非法（invalid）不毁整批
+          added++
           accepted.push(diversityQuestionOf({ ...q, q: stem }))
+        } else {
+          invalid++ // 单题非法（invalid）不毁整批，但计数进返回面（#294：返回面不再对不上账）
         }
       }
     }
     const bank = await this.e.bank.load(this.e.paths.courseRoot(c.root), node)
     return {
-      course: c.name, node, added, sections, duplicates, escapesRepaired,
+      course: c.name, node, added, invalid, sections, duplicates, escapesRepaired,
       enc: Content.invokesProjection(graph, node, bank.questions),
       diversity: questionDiversityReportOf(accepted, bank.questions.filter(q => !q.archived)),
       ...(auditReport ? { secondOpinion: auditReport } : {}),

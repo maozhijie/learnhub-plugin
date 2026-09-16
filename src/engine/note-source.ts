@@ -640,7 +640,10 @@ export class ChannelsSubsystem {
 
   /** 收题公步（#119 防相似：笔记出题/节点出题/逐节出题三处同缝）：程序化查重命中
    * → duplicate（附对方题面供报告）；入库成功把题面登记进查重基线（批内互查）；
-   * 单题非法（超纲题型等）→ invalid，不毁整批。 */
+   * 单题非法（超纲题型等）→ invalid，不毁整批；IO/系统级故障 fail loud 上抛（#294：
+   * 落盘失败被洗成 invalid 会把存储故障混进单题非法计数，好题静默蒸发）。
+   * 判别口径：领域校验拒绝（id 冲突/答案形态/题库校验门）是无 errno code 的普通
+   * Error；readFile/writeFile 类系统错带 `code`（EACCES/EISDIR/ENOENT…）。 */
   async admitQuestion(
     root: string, node: string, q: Record<string, unknown>, stem: string,
     existingStems: Array<{ q: string; kind?: string; difficulty?: number }>,
@@ -649,7 +652,10 @@ export class ChannelsSubsystem {
     if (dup) return { verdict: 'duplicate', against: dup }
     try {
       await this.e.bank.addQuestion(root, node, q)
-    } catch {
+    } catch (err) {
+      if ((err as { code?: unknown }).code !== undefined) {
+        throw new Error(`[quiz] 题目入库失败（${root}/题库/${node}）——存储故障不折算成单题非法：\n  ✗ ${err instanceof Error ? err.message : String(err)}`)
+      }
       return { verdict: 'invalid' }
     }
     existingStems.push({ q: stem, kind: typeof q.kind === 'string' ? q.kind : undefined, difficulty: undefined })
@@ -793,7 +799,15 @@ export class ChannelsSubsystem {
     for (const e of entries) {
       if (e.enabled === false) continue
       const item = itemById.get(e.id)
-      const { status, title } = await this.sourceStatusOf(e, item)
+      let status: NoteSourceStatus
+      let title: string
+      try {
+        ;({ status, title } = await this.sourceStatusOf(e, item))
+      } catch (err) {
+        // 读异常单源隔离（#295）：EBUSY/EPERM 类只挂起该源（汇总面可见），不炸整个复习队列
+        suspended.push({ id: e.id, path: e.path ?? '', reason: `源读异常：${err instanceof Error ? err.message.split('\n')[0] : String(err)}` })
+        continue
+      }
       if (status === 'missing') {
         suspended.push({ id: e.id, path: e.path ?? '', reason: sourceHint('missing') ?? '' })
         continue
@@ -967,8 +981,9 @@ export class ChannelsSubsystem {
    * 笔记源到期卡并入（V-4 #108 / ADR-0011 衔接）：deck learnhub::笔记源，来源键
    * 笔记源/<源id>/题id——Missing/镜像 Broken 的源与复习队列同口径挂起不导出、
    * 不阻塞其他源；导入侧按同一来源键路由回镜像题库。 */
-  private async collectAnkiDuePayloads(today: string): Promise<AnkiNotePayload[]> {
+  private async collectAnkiDuePayloads(today: string): Promise<{ payloads: AnkiNotePayload[]; brokenSources: number }> {
     const out: AnkiNotePayload[] = []
+    let brokenSources = 0
     for (const c of await this.e.enabledCourses()) {
       await this.e.scanCourseBanks(c, async (node, bank) => {
         for (const q of bank.questions) {
@@ -987,7 +1002,8 @@ export class ChannelsSubsystem {
       try {
         bank = await this.e.bank.load(this.e.paths.noteSourceDir, e.id)
       } catch {
-        continue // 镜像 Broken：该源挂起（data-check 显式报出），不阻塞其他源
+        brokenSources++ // 镜像 Broken：该源挂起（data-check 显式报出），计数随返回面留痕，不阻塞其他源
+        continue
       }
       for (const q of bank.questions) {
         if (q.archived || !q.fsrs?.reps || q.fsrs.due > today) continue
@@ -995,7 +1011,7 @@ export class ChannelsSubsystem {
         out.push(ankiCardPayload(NOTE_SOURCE_COURSE, e.id, q, back))
       }
     }
-    return out
+    return { payloads: out, brokenSources }
   }
 
 
@@ -1003,10 +1019,10 @@ export class ChannelsSubsystem {
    * 移除已归档/已重生成/已被 vault 消费的旧卡；镜象与 vault 不一致时以 vault 为
    * 准，Anki 侧排期输出不作数（ADR-0011）。Anki 侧手动删过的笔记自动重建。 */
   async ankiExportPush(transport: AnkiTransport, today?: string): Promise<{
-    date: string; added: number; updated: number; removed: number; total: number; decks: string[]
+    date: string; added: number; updated: number; removed: number; total: number; decks: string[]; broken_sources: number
   }> {
     today ??= (await this.e.learningDay()).today
-    const payloads = await this.collectAnkiDuePayloads(today)
+    const { payloads, brokenSources } = await this.collectAnkiDuePayloads(today)
     const mirror = await this.e.ankiMirror.load()
     const plan = planMirrorSync(payloads, mirror.notes)
     const decks = [...new Set(payloads.map(p => p.deckName))]
@@ -1038,7 +1054,7 @@ export class ChannelsSubsystem {
     }
     await ankiDeleteNotes(transport, plan.removeNoteIds)
     await this.e.ankiMirror.save({ last_push: nowIsoOf(this.e.clock.nowMs()), last_import_ms: mirror.last_import_ms, notes: [...kept.values()] })
-    return { date: today, added: plan.add.length, updated: plan.update.length, removed: plan.removeNoteIds.length, total: payloads.length, decks }
+    return { date: today, added: plan.add.length, updated: plan.update.length, removed: plan.removeNoteIds.length, total: payloads.length, decks, broken_sources: brokenSources }
   }
 
 
@@ -1074,7 +1090,8 @@ export class ChannelsSubsystem {
     const rows = await ankiCardReviews(transport, mirror.last_import_ms, (opts?.nowMs ?? this.e.clock.nowMs()) + 60_000)
     const events = rows
       .map(r => ({ ts: Number(r[0]), cardId: Number(r[1]), button: Number(r[3]), timeMs: Number(r[7]) }))
-      .filter(e => Number.isFinite(e.ts) && Number.isFinite(e.cardId) && Number.isFinite(e.button))
+      .filter(e => Number.isFinite(e.ts) && Number.isFinite(e.cardId) && Number.isFinite(e.button)
+        && e.ts > mirror.last_import_ms) // 水位幂等（#295）：拉取窗口含上边界/前瞻，重放事件不重复入账
       .sort((a, b) => a.ts - b.ts)
     const result = { imported: events.length, advanced: 0, skipped_same_day: 0, skipped_unknown: 0, unknown: [] as string[] }
     if (!events.length) return result
@@ -1168,7 +1185,13 @@ export class ChannelsSubsystem {
       }
       if (!ctx) { noteUnknown('课程不在注册表'); continue }
       const courseRoot = this.e.paths.courseRoot(ctx.c.root)
-      const bank = await this.e.bank.load(courseRoot, loc.node)
+      let bank: BankDoc
+      try {
+        bank = await this.e.bank.load(courseRoot, loc.node)
+      } catch {
+        noteUnknown('课程题库不可读') // 口径与笔记源通道一致（#295）：不可读计 unknown，不炸整批
+        continue
+      }
       const idx = bank.questions.findIndex(x => x.id === loc.qid)
       const q = idx >= 0 ? bank.questions[idx] : undefined
       if (!q || q.archived) { noteUnknown('题目已归档或重生成'); continue }
@@ -1207,7 +1230,7 @@ export class ChannelsSubsystem {
   async ankiStatus(transport?: AnkiTransport, today?: string): Promise<AnkiStatusDoc> {
     today ??= (await this.e.learningDay()).today
     const mirror = await this.e.ankiMirror.load()
-    const payloads = await this.collectAnkiDuePayloads(today)
+    const { payloads } = await this.collectAnkiDuePayloads(today)
     const byDeck = new Map<string, number>()
     for (const p of payloads) byDeck.set(p.deckName, (byDeck.get(p.deckName) ?? 0) + 1)
     let anki: AnkiStatusDoc['anki'] | undefined

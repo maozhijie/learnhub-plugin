@@ -1357,9 +1357,15 @@ export class GraphProposals {
       if (oldPath.toLowerCase() !== newPath.toLowerCase()) {
         // 新内容（fm.node=新名）已写入 newPath；摘除旧文件。
         // 不能 rename(oldPath, newPath)——会把旧 frontmatter 覆盖回新路径。
-        await this.fs.unlink(oldPath).catch(async () => {
-          await this.fs.writeFile(oldPath, '').catch(() => undefined)
-        })
+        // unlink 失败 fail loud（#295）：清空正文的破坏性回退比可见的旧档残留更危险。
+        try {
+          await this.fs.unlink(oldPath)
+        } catch (err) {
+          throw new Error(
+            `[concept-apply] 概念改名后旧笔记摘除失败：${oldPath}\n`
+            + `  新档已写入 ${newPath}，旧档残留（新档是准），请手工删除。\n`
+            + `  ✗ ${err instanceof Error ? err.message : String(err)}`)
+        }
       }
     }
     // 题库随迁（改名时；无题库静默跳过）
@@ -1368,7 +1374,14 @@ export class GraphProposals {
       const bankDir = this.paths.courseRoot(root)
       const oldBank = `${bankDir}/题库/${safeFilename(node)}.yaml`
       if (this.fs.exists(oldBank)) {
-        await this.fs.rename(oldBank, `${bankDir}/题库/${safeFilename(targetName)}.yaml`).catch(() => undefined)
+        // 随迁失败 fail loud（#295）：吞掉会让题库继续挂旧节点名，静默数据不一致
+        try {
+          await this.fs.rename(oldBank, `${bankDir}/题库/${safeFilename(targetName)}.yaml`)
+        } catch (err) {
+          throw new Error(
+            `[concept-apply] 题库随迁失败：题库仍挂旧节点名「${node}」（${oldBank}），与新节点名「${targetName}」不一致，请手工改名。\n`
+            + `  ✗ ${err instanceof Error ? err.message : String(err)}`)
+        }
       }
     }
   }

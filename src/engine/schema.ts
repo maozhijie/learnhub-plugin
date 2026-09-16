@@ -34,7 +34,8 @@ export interface SchemaBlock {
   formats?: Record<string, number>
 }
 
-/** 从 learnhub.json 原文提取 schema 块；损坏/缺失返回 null（判定为史前库）。 */
+/** 从 learnhub.json 原文提取 schema 块；损坏/缺失返回 null（拒因由 assertSchemaVersion
+ * 按文件是否在处分流：损坏 vs 史前库，#295）。 */
 export function parseSchemaBlock(raw: string | null): SchemaBlock | null {
   if (raw === null) return null
   let doc: unknown
@@ -57,9 +58,10 @@ export function parseSchemaBlock(raw: string | null): SchemaBlock | null {
 }
 
 /** 启动硬门（同步）：learnhub.json 的 schema.version 非当前版本即抛错并指引迁移
- * 脚本。版本判定口径：有 version 数字按数字比；无 schema 块/文件缺失/JSON 损坏
- * 一律视为史前库（v1 时代没有版本标记），同样拒载——v2 起出生的库由工厂/脚本
- * 盖版本戳，不存在「合法的没版本」状态。 */
+ * 脚本。版本判定口径：有 version 数字按数字比；文件缺失 = 史前库（v1 时代没有版本
+ * 标记）；JSON.parse 失败 = 损坏拒因（#295：与史前库分开——损坏档可能仍可抢救，
+ * 指引备份 + 人工检查，不给删库建议；可解析但无 schema 块仍视为史前库形态）。
+ * v2 起出生的库由工厂/脚本盖版本戳，不存在「合法的没版本」状态。 */
 export function assertSchemaVersion(configPath: string, fs: VaultFs): SchemaBlock {
   let raw: string | null = null
   try {
@@ -69,6 +71,21 @@ export function assertSchemaVersion(configPath: string, fs: VaultFs): SchemaBloc
   }
   const schema = parseSchemaBlock(raw)
   if (schema && schema.version === CURRENT_SCHEMA_VERSION) return schema
+  if (raw !== null && schema === null) {
+    // 拒因分流（#295）：JSON.parse 本身失败 = 损坏档（可能仍可抢救，指引备份 + 人工
+    // 检查，不给删库建议）；可解析但缺/坏 schema 块 = v1 史前库形态，走重建文案。
+    let damaged = false
+    try {
+      JSON.parse(raw)
+    } catch {
+      damaged = true
+    }
+    if (damaged) {
+      throw new Error(
+        `[learnhub] schema 硬门：learnhub.json 存在但 JSON 解析失败（损坏）。\n`
+        + `  先备份该文件再人工检查修复（档案可能仍可抢救）；不要直接删库重建。`)
+    }
+  }
   const found = schema ? `v${schema.version}` : '无 schema.version（v1 库）'
   throw new Error(
     `[learnhub] schema 版本硬门：learnhub.json 为 ${found}，引擎只认 v${CURRENT_SCHEMA_VERSION}`

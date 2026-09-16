@@ -1007,10 +1007,12 @@ async function finishWithQuiz(rt: HostRuntime, complete: LlmComplete, job: GenJo
   persistGenJobs(rt)
   const quizEffort = contentEffort(job.tier === '高')
   try {
+    // 取消旗标接进两路出题（#294）：管线正文段已随节检查，出题段此前不查——点取消后仍烧完全部 LLM 调用
+    const cancel = () => (job.status as GenJobStatus) === 'cancelling'
     const per = await rt.engine.bank2.questionGenerateSections(job.course, job.node, quizSeam(complete, quizEffort),
-      rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : undefined)
+      { ...(rt.quizAuditRate > 0 ? { secondOpinion: { rate: rt.quizAuditRate } } : {}), isCancelled: cancel })
     // 成本闸只落在综合批（冒烟实测：两批都会被真实调用，封综合批已把单次成本压到最小档）
-    const quiz = await generateQuiz(rt, complete, job.course, job.node, quizCount ?? genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort })
+    const quiz = await generateQuiz(rt, complete, job.course, job.node, quizCount ?? genericQuizTarget(tierIdxOf(job.tier)), { generic: true, effort: quizEffort, isCancelled: cancel })
     const outcome = quizSuccessOutcome(contentMsg, per.added, quiz.added, quiz.total)
     job.status = outcome.status
     job.message = outcome.message

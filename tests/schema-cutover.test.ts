@@ -39,12 +39,11 @@ test('硬门：v4 库正常构造，schema 块随引擎可读', async () => {
   })
 })
 
-test('硬门：v3/v1 库（缺 schema 块 / 旧版本号 / 损坏 JSON / 缺文件）构造期拒载并宣告零迁移断裂', async () => {
+test('硬门：v3/v1 库（缺 schema 块 / 旧版本号 / 缺文件）构造期拒载并宣告零迁移断裂', async () => {
   const cases: Array<[Record<string, string>, RegExp]> = [
     [{ '学习中心/state/learnhub.json': '{"day_cutoff":"00:00"}' }, /无 schema\.version（v1 库）/],
     [{ '学习中心/state/learnhub.json': JSON.stringify({ schema: { version: 3 } }) }, /v3/],
     [{ '学习中心/state/learnhub.json': JSON.stringify({ schema: { version: 1 } }) }, /v1/],
-    [{ '学习中心/state/learnhub.json': '{broken json' }, /无 schema\.version（v1 库）/],
     [{}, /无 schema\.version（v1 库）/],
   ]
   for (const [files, versionPattern] of cases) {
@@ -62,6 +61,21 @@ test('硬门：v3/v1 库（缺 schema 块 / 旧版本号 / 损坏 JSON / 缺文�
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  }
+})
+
+test('硬门：损坏 JSON 与史前库拒因分流（#295）——损坏给备份+人工检查指引，不给删库建议', async () => {
+  const root = await rawVault({ '学习中心/课程注册表.yaml': 'courses: []\n', '学习中心/state/learnhub.json': '{broken json' })
+  try {
+    assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng, fs: nodeVaultFs, logger: noopLogger }), (err: unknown) => {
+      const message = (err as Error).message
+      assert.match(message, /JSON 解析失败（损坏）/, '#295：损坏拒因单列，不再并入史前库文案')
+      assert.match(message, /备份/, '损坏档可能仍可抢救：先备份再人工检查')
+      assert.doesNotMatch(message, /用户自删|删除旧课程目录/, '损坏拒因不给删库建议')
+      return true
+    })
+  } finally {
+    await rm(root, { recursive: true, force: true })
   }
 })
 
