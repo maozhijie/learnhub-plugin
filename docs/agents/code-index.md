@@ -6,11 +6,13 @@
 
 ## 装：只给主检出索引一次，且要带语义边
 
-从**主检出**索引，不要在 worktree 里索引，模式用 `mode: "moderate"`（或 `"full"`）：
+从**主检出**索引，不要在**临时** worktree 里索引，模式用 `mode: "moderate"`（或 `"full"`）：
 
 ```
 index_repository(repo_path="C:/Users/test/Desktop/my/learnhub-plugin", mode="moderate")
 ```
+
+**例外：常驻 worktree 池。** `learnhub-wt-1..3` 永不销毁，各自持有一份自己的索引（project 名按各自路径派生），每次认领后重跑一次 `index_repository` 刷新——养得起，因为不会死；章法见 `parallel-sessions.md` §常驻 worktree 池。
 
 - **`fast` 会悄悄拿走语义搜索。** `fast` 不建相似度/语义边，`semantic_query` 会返回零条并附提示 `semantic_query needs a moderate/full index`。实测：同一组四个关键词在 `fast` 索引上**返回 0 条**，同一批文件以 `moderate` 索引后**返回 3 条**。`fast` 只留给一次性诊断跑。
 - **索引按绝对路径分库。** 一 project 一索引、一文件：`~/.cache/codebase-memory-mcp/<路径派生名>.db`（分隔符变连字符，点号保留——例如 `C-Users-test-.zcode-workspace-default-ripwire`）。`list_projects` 的 `size_bytes` 等于该文件在盘上的大小，那份 55k 节点的索引实测 **213 MiB**。检出与它的 worktree 之间零去重——worktree 规则见 `parallel-sessions.md`。
@@ -74,7 +76,7 @@ index_repository(repo_path="C:/Users/test/Desktop/my/learnhub-plugin", mode="mod
 
 - **不要把图当 ground truth。** 索引是 best-effort，并且自报缺口：`index_status` 会返回 `parse_partial`（已索引但含解析器读不了的行段——那里的构造可能缺失）与 `skipped`（完全没索引），`query_graph(graph="missed")` 是同一批缺口的结构化视图。做**否定或穷尽**结论之前——「没有东西调用它」「不存在 X」「只有这一处」——先查 `check_index_coverage`，至少 grep 一下被标记的文件。**图上没有不等于代码里没有。** 本仓的精确匹配面（门基线、棘轮、`PROMPT_CHANGELOG` 条目、ADR 编号）永远从真实文件读。
 - **本仓的 ADR 不要用 `manage_adr`。** ADR 住 `docs/adr/`，编号成文件，`npm test` 会读那个目录。`manage_adr` 写的是 MCP 内部一个 per-project store——在一个已有唯一真相源的仓里开第二份，而且不是门读的那份。`index_repository` 每次都会推 `adr_hint` 建议你用它；本仓忽略那条提示。
-- **不要在 worktree 里索引，也永远不要传 `persistence: true`。** 见 `parallel-sessions.md`——前者按任务乘以一份 213 MiB 索引，后者在 `repo_path` 里丢下一个大 `.codebase-memory/` 目录。
+- **不要在临时 worktree 里索引，也永远不要传 `persistence: true`。** 见 `parallel-sessions.md`——前者按任务乘以一份 213 MiB 索引（**常驻池位是唯一例外**：永不销毁，索引建一次、每次认领后刷新），后者在 `repo_path` 里丢下一个大 `.codebase-memory/` 目录（池位同样禁止）。
 - **不要反射式重索引**，也不要换个路径再索引一份「干净的」——本仓重索引是一次完整跑，第二个路径是第二个 project，且没有回指。
 
 ## 收尾维护

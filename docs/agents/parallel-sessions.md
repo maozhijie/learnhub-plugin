@@ -2,9 +2,71 @@
 
 ZCode has no built-in per-session branch or worktree assignment. A session is bound to the directory it is opened in: two sessions on the same directory share one checkout and one current branch, so they overwrite each other's uncommitted changes and fight over `git switch` / `git rebase`.
 
-The fix is structural, not configurational: **one git worktree per task, one ZCode session per worktree.**
+The fix is structural, not configurational: **one git worktree per task, one ZCode session per worktree.** 并行任务的默认形态不再是临时新建 worktree，而是下面这个常驻池；本文其余章节（临时新建、merge back、清理）降级为后备手段。
 
-## When to use this
+## 常驻 worktree 池（并行任务默认走这里）
+
+三个**永不销毁**的 worktree 组成池，认领制使用：
+
+| 池位 | 路径 | 分支 | codebase 索引 project 名 |
+|---|---|---|---|
+| wt-1 | `../learnhub-wt-1` | `wt-1` | `C-Users-test-Desktop-my-learnhub-wt-1` |
+| wt-2 | `../learnhub-wt-2` | `wt-2` | `C-Users-test-Desktop-my-learnhub-wt-2` |
+| wt-3 | `../learnhub-wt-3` | `wt-3` | `C-Users-test-Desktop-my-learnhub-wt-3` |
+
+常驻的理由：省掉每次「建 worktree + 两处 `npm install`」的固定成本；codebase 索引按绝对路径分库、重索引是一次完整管线跑——**正因池位不销毁，索引才值得建一次、养一世**。下文临时 worktree 的限制大多仍适用于临时场合，唯独「别在 worktree 里建索引」对池位**不适用**（它们是唯一例外）。
+
+任务全流程，工具一律 `scripts/worktree-pool.mjs`：
+
+### ① 认领
+
+```sh
+node scripts/worktree-pool.mjs claim --task "<一句话任务描述>"
+```
+
+- 脚本以 `flag: 'wx'` **原子**写认领标记（`<仓父目录>/.learnhub-wt-claims/<池位>.json`，含任务与时间戳）：已认领池位自动跳过，两个会话同抢一个池位只有一个成功；全满时报错退出。标记放**仓外**是故意的——git 看不见，不会被 ② 的 `git add -A` 误提交，也不污染池位的 `git status`。
+- **绕过脚本、手动跳过标记直接用 = 撞车**。看池况：`node scripts/worktree-pool.mjs status`。
+- 同一会话里的并行 subagent 照样认领：subagent 隔离不了工作目录，但文件操作全走池位**绝对路径**、图查询传池位自己的 project 名，即等效隔离。
+
+### ② 同步（先提交本地，再追平远端）
+
+```sh
+git -C ../learnhub-wt-N add -A && git -C ../learnhub-wt-N commit -m "wip: sync 前落盘"   # 仅有脏改动时
+git -C ../learnhub-wt-N fetch origin
+git -C ../learnhub-wt-N rebase origin/main
+```
+
+- 最复杂的情形是「云端与本地都有新内容」：**先提交本地**（脏树 rebase 会当场拒绝），rebase 一次性追平；无本地提交时退化为 fast-forward。
+- rebase 后 `git log origin/main..HEAD` 过一眼：出现**不是本任务带来的提交** = 上一任务未整合的遗留，先向用户确认再动，别默默带着跑。
+- 冲突：停下报告用户，不要自动硬解。
+
+### ③ 刷新索引
+
+```
+index_repository(repo_path="C:/Users/test/Desktop/my/learnhub-wt-N", mode="moderate")
+```
+
+之后本池位的一切图查询（`search_graph` / `query_graph` / `trace_path` / `detect_changes`）都传上表的 project 名。重索引是完整管线跑、非增量——「认领即刷新」是池制的设计成本，宁慢勿旧（拿不准是否落后时，先按 `code-index.md` §新鲜度用 `index_status` 的 `head_sha` 对 HEAD 秒判）。`persistence: true` 对池位同样禁止。
+
+### ④ 探索与执行
+
+先图后文件的判据照旧（`AGENTS.md` §代码索引）；文件操作用池位绝对路径。
+
+### ⑤ 释放
+
+成果先按正常流程落地（提交；按任务要求推送/PR），再删标记：
+
+```sh
+node scripts/worktree-pool.mjs release <1|2|3>
+```
+
+**成果未整合就释放要慎重**：下一认领者的 ② 会把这些未整合提交一起 rebase 带走。
+
+### 定期保养（用户或定时任务）
+
+只对**未被认领**的池位跑 `node scripts/worktree-pool.mjs sync`（= ② 的同款动作：脏树先提交 → fetch → rebase；冲突自动 abort 保持原状并报告，绝不留冲突态），认领中的一律不碰。索引的批量刷新没有 CLI——让任一会话对各池位重跑一次 ③ 即可。
+
+## When to use this（临时 worktree：后备手段）
 
 Use separate worktrees whenever two or more sessions must work in this repo at the same time (e.g. implementing two independent issues in parallel).
 
@@ -58,7 +120,7 @@ The `codebase-memory-mcp` index is keyed by **absolute path**, so every worktree
 
 Two rules for this repo, both detailed in `docs/agents/code-index.md`:
 
-1. **Index the main checkout once and treat that index as canonical; do not index inside a worktree.** Worktrees here exist to isolate uncommitted changes, not structural knowledge, so the canonical index covers most tasks. If you do need branch-specific structure, call `delete_project` **in the same session, before removing the worktree** — after removal the path-derived name is hard to reconstruct.
+1. **Index the main checkout once and treat that index as canonical; do not index inside an ad-hoc worktree.** Worktrees here exist to isolate uncommitted changes, not structural knowledge, so the canonical index covers most tasks. If you do need branch-specific structure, call `delete_project` **in the same session, before removing the worktree** — after removal the path-derived name is hard to reconstruct. **唯一例外是常驻池位**（§常驻 worktree 池）：它们永不销毁，各有自己的索引，建一次、每次认领后刷新——`delete_project` 对池位无意义，不存在「移除 worktree 留死记录」的问题。
 2. **Never pass `persistence: true` from a worktree.** It writes `.codebase-memory/graph.db.zst` **inside `repo_path`**, leaving a large untracked directory in a worktree — the same class of mess the junction warning above describes. `.gitignore` covers `/.codebase-memory/` as insurance, but the artifact still has to be deleted by hand.
 
 Removing the worktree does **not** remove the project record: it stays in `list_projects` with `status: ready` and its nodes still answerable, `root_exists` / `is_git` turn false, and its `branch` field goes **null** — so the list loses the one field that identified it as a dead worktree. `delete_project` is the only thing that clears the record and its `.db`.

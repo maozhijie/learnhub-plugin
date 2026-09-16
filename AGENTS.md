@@ -83,8 +83,10 @@ node scripts/link-peers.mjs
 
 ## 并行会话用 worktree 隔离
 
-ZCode 没有会话级分支/worktree 隔离：同目录开多个会话共享同一 checkout 和当前分支，未提交改动与 switch/rebase 会互相踩。并行做多个任务时，每个任务建一个 git worktree、每个 worktree 开一个会话；同一会话内的并行 subagent 共享工作目录，配置隔离不了，只能按文件范围拆分或改走多 worktree。
+ZCode 没有会话级分支/worktree 隔离：同目录开多个会话共享同一 checkout 和当前分支，未提交改动与 switch/rebase 会互相踩；同一会话内的并行 subagent 共享工作目录，配置隔离不了。
 
-新 worktree 的依赖要装**两处**：根目录与 `ui/` 子包各自 `npm install`（`ui/` 有自己的 package.json，node_modules 不共享）——只装根的话 `npm test` 会在 `tests/md-chain.test.ts` 炸 `Cannot find package 'remark-gfm'`，ui 的 typecheck/build 同样失败。命令与其余注意事项见 `docs/agents/parallel-sessions.md`。
+**并行任务默认走常驻 worktree 池**（三个永不销毁的池位 `../learnhub-wt-1..3`，分支 `wt-1..3`，依赖与代码索引常备）：① `node scripts/worktree-pool.mjs claim --task "<一句话>"` 认领（原子标记防撞车，标记在仓外）；② 同步——脏树先 `commit`，再 `fetch origin` + `rebase origin/main`（最复杂时是云端与本地混合才是最新：先提交本地，再 rebase 追平）；③ `index_repository(repo_path=<池位路径>, mode="moderate")` 刷新该池位索引，project 名按池位路径派生，之后图查询都传它；④ 按先图后文件章法探索执行，文件操作用池位绝对路径（同一会话的并行 subagent 也走认领）；⑤ 成果落地后 `release <1|2|3>` 释放。定期保养：只对未认领池位跑 `node scripts/worktree-pool.mjs sync`。完整章法见 `docs/agents/parallel-sessions.md` §常驻 worktree 池。
 
-**别在 worktree 里建代码索引**：索引按绝对路径分库，每个 worktree 一份完整副本、零去重，且移除 worktree 后记录仍留在 `list_projects` 里、只能显式 `delete_project` 清掉。规则见 `docs/agents/parallel-sessions.md`。
+临时新建 worktree 是后备（池满且用户同意、或需要长期独占分支），依赖要装**两处**：根目录与 `ui/` 子包各自 `npm install`（`ui/` 有自己的 package.json，node_modules 不共享）——只装根的话 `npm test` 会在 `tests/md-chain.test.ts` 炸 `Cannot find package 'remark-gfm'`，ui 的 typecheck/build 同样失败。命令与其余注意事项见 `docs/agents/parallel-sessions.md`。
+
+**别在临时 worktree 里建代码索引**：索引按绝对路径分库，每个 worktree 一份完整副本、零去重，且移除 worktree 后记录仍留在 `list_projects` 里、只能显式 `delete_project` 清掉。**唯一例外是常驻池位**——它们永不销毁，索引建一次、每次认领后刷新。规则见 `docs/agents/parallel-sessions.md`。
