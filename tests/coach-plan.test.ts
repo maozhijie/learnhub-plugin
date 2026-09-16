@@ -192,9 +192,11 @@ test('计划门拒收 → 回灌重裁恰一次（plannerRecheckOnce）；segmen
     assert.deepEqual(r.segments.map(s => s.tier), ['plan', 'plan_repair', 'executor'])
     assert.equal(agent.completeCalls.length, 2)
     assert.equal(agent.completeCalls[1]!.mode, 'repair')
-    // 回灌块带被拒计划原文
+    // 回灌块带被拒计划原文 + 首轮 schema 错误清单（#296：修复轮不盲修）
     assert.match(agent.completeCalls[1]!.prompt, /计划门反馈/)
     assert.match(agent.completeCalls[1]!.prompt, /operator: 复习/)
+    assert.match(agent.completeCalls[1]!.prompt, /schema 门错误清单/)
+    assert.match(agent.completeCalls[1]!.prompt, /operator 非法/)
   })
 })
 

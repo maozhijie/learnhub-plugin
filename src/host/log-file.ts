@@ -171,18 +171,28 @@ export function createFileLogger(opts: FileLoggerOptions): FileLogger {
         bytes = 0 // 当日文件尚未存在 = 合法零态
       }
     } catch (err) {
-      bytes = 0
+      // 失败不归 0（#296）：statSync 之外的失败（mkdir 等）沿用上次 bytes——归 0 会让
+      // 单日上限判定失真可超写；沿用值偏保守（可能提前触顶停写，但绝不超写）。
       fail(err)
     }
   }
 
-  /** 保留期清扫：只删日期形状的 `.log`，超期即删（不压缩）。 */
+  /** 保留期清扫：只删日期形状的 `.log`，超期即删（不压缩）。逐文件容错（#296）：
+   * 单文件删除失败不中断清扫（中断 = 超期档堆积），留痕继续清其余。 */
   const sweepOld = (target: string): void => {
     const cutoff = shiftDay(target, -LOG_RETENTION_DAYS)
     for (const name of readdirSync(opts.dir)) {
       const m = LOG_FILE_RE.exec(name)
       if (!m || !m[1] || m[1] >= cutoff) continue
-      rmSync(join(opts.dir, name), { force: true })
+      try {
+        rmSync(join(opts.dir, name), { force: true })
+      } catch (err) {
+        fail(err)
+        try {
+          appendFileSync(join(opts.dir, `${target}.log`),
+            `[${clockLabel(now())}] [WARN] host.log.sweep_failed file=${name} error=${messageOf(err)}\n`, 'utf8')
+        } catch { /* 留痕失败不挡清扫 */ }
+      }
     }
   }
 

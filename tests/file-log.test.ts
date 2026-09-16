@@ -137,6 +137,25 @@ test('保留期清扫：跨日新建时惰性清扫 30 天前，只认日期形�
   rmSync(dir, { recursive: true, force: true })
 })
 
+test('清扫逐文件容错（#296）：单文件删除失败不中断清扫，留痕 host.log.sweep_failed + 失败计数', () => {
+  const dir = tempDir('sweep-tolerant')
+  mkdirSync(dir, { recursive: true })
+  const stuck = '2026-07-01.log' // 同名**非空目录**：rmSync 必败（单文件容错的确定性载体）
+  mkdirSync(join(dir, stuck), { recursive: true })
+  writeFileSync(join(dir, stuck, 'inner.txt'), 'x', 'utf8')
+  const other = '2026-07-02.log' // 同批超期 → 应继续被清（不中断）
+  writeFileSync(join(dir, other), 'x\n', 'utf8')
+  const log = createFileLogger({ dir, now: () => at(2026, 9, 15) })
+  log.info('coach.round.enter', { course: '数学' })
+  const left = readdirSync(dir).sort()
+  assert.ok(left.includes(stuck), '删除失败的文件保留（不中断、不抛出）')
+  assert.ok(!left.includes(other), '同批其余超期文件继续被清')
+  assert.ok(log.failures > 0, '失败计数可查')
+  assert.ok(linesOf(dir, '2026-09-15').some(l =>
+    l.includes('[WARN] host.log.sweep_failed') && l.includes(`file=${stuck}`)), '单文件失败留痕')
+  rmSync(dir, { recursive: true, force: true })
+})
+
 test('单日上限：停写 + 文件尾标记行 + 告警一次；次日自动复位', () => {
   const dir = tempDir('cap')
   let now = at(2026, 9, 15)

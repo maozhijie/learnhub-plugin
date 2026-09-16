@@ -1095,6 +1095,96 @@ test('broken 态清扫跳过：内存态不动、不落盘（清扫延后到修�
   assert.ok(rt.jobs.genJobs.has('已删课/节点A'), '注册表内存态不动')
 })
 
+// ---------------------------------------------------------------- 修复/补偿回路（#296）
+
+test('落盘失败不吞错（#296）：persistGenJobs 置 Broken 写回闸 + host.gen_jobs.persist_failed 留痕', async () => {
+  const log = memLogger()
+  const rt = makeRuntime(log)
+  stub(rt, { saveGenJobs: async () => { throw new Error('EACCES: 磁盘满') } })
+  // 最短触发路径：终态保留期定时器到期后的那次落盘（saveGenJobs 必败）
+  rt.jobs.genJobs.set('数学/节点A', {
+    course: '数学', node: '节点A', startedAt: new Date().toISOString(), status: 'done',
+  } as never)
+  scheduleJobRetention(rt, '数学/节点A', 'done', 1)
+  await until(() => rt.flags.genQueueBroken !== null)
+  assert.match(rt.flags.genQueueBroken!, /落盘失败/, 'broken 文案带死因')
+  await until(() => log.count('host.gen_jobs.persist_failed') === 1)
+  assert.equal(log.nth('host.gen_jobs.persist_failed')!.level, 'error')
+  // 置闸后交互面拒绝（沿 #194 语义）：下一次入队不再用内存态全量覆盖
+  assert.throws(() => enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点A'), /broken 态/)
+  // broken 后 persist 直接跳过：不再反复打同一失败
+  rt.jobs.genJobs.delete('数学/节点A')
+  scheduleJobRetention(rt, '数学/节点A', 'done', 1)
+  await sleep(30)
+  assert.equal(log.count('host.gen_jobs.persist_failed'), 1, '写回闸期间不重复留痕')
+})
+
+test('执行器逃逸兜底（#296）：置终态前抛错 → 泵级置 failed + pump_escape 留痕，无永久 running', async () => {
+  const log = memLogger()
+  const rt = makeRuntime(log)
+  stub(rt, {
+    'content2.contentTierOf': async () => 1,
+    'bank2.questionGenerate': async () => { throw new Error('LLM 炸了') },
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  // 语料注记也炸：执行器 catch 内的 failCorpus 再次抛出 = 置终态**前**的意外逃逸
+  ;(rt.corpus as unknown as { annotateLast: () => never }).annotateLast = () => {
+    throw new Error('语料档也炸了')
+  }
+  enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点A')
+  await until(() => rt.jobs.genJobs.get('数学/节点A')?.status === 'failed')
+  const job = rt.jobs.genJobs.get('数学/节点A')!
+  assert.match(job.message ?? '', /执行器意外逃逸/, '终态带兜底死因')
+  assert.equal(job.failures?.[0]?.code, 'PUMP_ESCAPE', 'failures 带错误信息')
+  assert.ok(job.finishedAt, '兜底终态盖保留期起算戳')
+  await until(() => log.count('host.gen_jobs.pump_escape') === 1)
+  assert.equal(log.nth('host.gen_jobs.pump_escape')!.level, 'error')
+  await until(() => rt.flags.pumping === false, 100)
+})
+
+test('恢复留痕计数（#296）：畸形记录计进 skipped_malformed，不再零痕跳过', async () => {
+  const log = memLogger()
+  const rt = makeRuntime(log)
+  stub(rt, {
+    saveGenJobs: async () => undefined,
+    loadGenJobs: async () => [
+      { node: '缺课程', startedAt: new Date().toISOString(), status: 'done' },
+      { course: '数学', node: '节点A', startedAt: new Date().toISOString(), status: 'done', model: 'test' },
+    ],
+    'registry.get': async (key: string) => ({ name: key }),
+    loadView: async () => ({ graph: { nset: new Set(['节点A']) } }),
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  restoreGenJobs(rt)
+  await until(() => log.count('host.gen_jobs.restored') === 1)
+  assert.equal(log.nth('host.gen_jobs.restored')!.fields.skipped_malformed, 1)
+  assert.ok(rt.jobs.genJobs.has('数学/节点A'), '合法记录照常恢复')
+  assert.equal([...rt.jobs.genJobs.keys()].filter(k => k.includes('缺课程')).length, 0)
+})
+
+test('清扫留痕（#296）：出册计数 retention_swept(INFO)、broken 跳过 sweep_skip(WARN)', async () => {
+  const log = memLogger()
+  const rt = makeRuntime(log)
+  rt.jobs.genJobs.set('已删课/节点A', {
+    course: '已删课', node: '节点A', startedAt: new Date().toISOString(), status: 'cancelled',
+  } as never)
+  stub(rt, {
+    'registry.get': async () => null,
+    saveGenJobs: async () => undefined,
+  })
+  assert.equal(await sweepGenJobs(rt), 1)
+  await until(() => log.count('host.gen_jobs.retention_swept') === 1)
+  assert.equal(log.nth('host.gen_jobs.retention_swept')!.level, 'info')
+  assert.equal(log.nth('host.gen_jobs.retention_swept')!.fields.swept, 1)
+  rt.flags.genQueueBroken = '任务档损坏（测试注入）'
+  assert.equal(await sweepGenJobs(rt), 0)
+  await until(() => log.count('host.gen_jobs.sweep_skip') === 1)
+  assert.equal(log.nth('host.gen_jobs.sweep_skip')!.level, 'warn')
+})
+
 test('loadGenJobs 读错误（非 ENOENT）= Broken：不静默回空表——防权限/锁档被下一次入队覆盖', async () => {
   const vault = mkdtempSync(join(tmpdir(), 'learnhub-rt-'))
   tmpVaults.push(vault)

@@ -734,10 +734,18 @@ export class GrowthSubsystem {
       const doc = YAML.parseModel(yaml) as GrowthPlanHandover & { course: string }
       return { plan: doc, yaml }
     }
-    const runPlan = async (mode: 'complete' | 'repair', feedbackYaml?: string): Promise<PlanVerdict> => {
+    const runPlan = async (mode: 'complete' | 'repair', feedbackYaml?: string, schemaErrors?: readonly string[]): Promise<PlanVerdict> => {
       assertAlive()
+      // #296：首轮 schema 错误清单进回灌块（修复轮不再盲修——此前 feedbackYaml 同时充
+      // 当 feedback 与 previousYaml，清单只活在拒绝事件里，模型只能对着原文猜）
       const prompt = feedbackYaml === undefined ? planPrompt : planPrompt + '\n\n---\n\n'
-        + render(COACH_PLAN_FEEDBACK_BLOCK, { feedback: feedbackYaml ?? '', previousYaml: feedbackYaml ?? '' })
+        + render(COACH_PLAN_FEEDBACK_BLOCK, {
+          feedback: feedbackYaml ?? '', previousYaml: feedbackYaml ?? '',
+          schemaErrors: (schemaErrors ?? []).map(e => `- ${e}`).join('\n') || '（无清单，按模板逐项自查）',
+        })
+      if (mode === 'repair') {
+        log.debug('coach.plan.reinject', { course: c.name, family, schema_errors: (schemaErrors ?? []).length })
+      }
       log.info('coach.plan.enter', { course: c.name, family, mode })
       const raw = mode === 'complete'
         ? await agent.complete('教练思路', prompt, { effort: 'fast' })
@@ -758,7 +766,7 @@ export class GrowthSubsystem {
     if (planVerdict._schemaErrors) {
       // 计划门拒收 → 回灌重裁恰一次（两轮死因 fail loud，零写盘）
       log.warn('coach.plan.recheck', { course: c.name, round: 1, detail: planVerdict._schemaErrors })
-      const repaired = await runPlan('repair', planVerdict.yaml)
+      const repaired = await runPlan('repair', planVerdict.yaml, planVerdict._schemaErrors)
       if (repaired._schemaErrors) {
         throw new Error(`[coach-growth] 思路官计划未过 schema 门（回灌重裁一轮仍未过——零写盘）。\n【首轮】${planVerdict._schemaErrors.join('\n')}\n【重裁】${repaired._schemaErrors.join('\n')}`)
       }
@@ -1094,7 +1102,8 @@ export class GrowthSubsystem {
           applied = await this.e.graphApply('edit', prop.id) as GraphApplyEditResult
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
-          await this.e.graphReject(prop.id, `生长草稿 finish 自动 apply 失败：${msg}`).catch(() => undefined)
+          await this.e.graphReject(prop.id, `生长草稿 finish 自动 apply 失败：${msg}`)
+            .catch(rejErr => this.rejectCompensateFail(prop.id, `生长草稿 finish 自动 apply 失败：${msg}`, rejErr))
           await logRound('finish', `apply 失败（提案 #${prop.id} 已自清）`, [msg])
           throw new Error(`[draft_finish] apply 失败（提案已拒绝清场，草稿保留）：\n${msg}`)
         }
@@ -1446,6 +1455,27 @@ export class GrowthSubsystem {
   }
 
 
+  /** 补偿失败兜底（#296）：graphReject 补偿失败时留痕 + 把提案置显式 rejected——
+   * 半途提案滞留 pending 会被 takePending 缺省「最新」误中（apply 错靶）。登记表
+   * 本身写不动时只余留痕（那是 #194 式损坏面，不在此兜）。 */
+  private async rejectCompensateFail(propId: number, reason: string, rejErr: unknown): Promise<void> {
+    const msg = rejErr instanceof Error ? rejErr.message : String(rejErr)
+    this.e.logger.error('graph.reject_compensate_fail', { proposal: propId, error: msg })
+    try {
+      await this.e.store.updateProposal(propId, {
+        status: 'rejected',
+        decided: new Date(this.e.clock.nowMs()).toISOString(),
+        decision_note: `${reason}｜拒绝补偿失败兜底置显式状态：${msg}`,
+      })
+    } catch (err2) {
+      this.e.logger.error('graph.reject_compensate_fail', {
+        proposal: propId,
+        error: `置显式状态也失败：${err2 instanceof Error ? err2.message : String(err2)}`,
+      })
+    }
+  }
+
+
   /** 自动剪除（不达标结算的执行半）：set_pre 把插入节点的现行 pre 还给每个下游消费
    * 节点（原粗边恢复）+ del_node 归档（课程笔记与题库随 apply 的既有归档语义进
    * state/archive）。走 propose→apply 完整受理门（结构/锚保护/审计零豁免）；任一门
@@ -1473,7 +1503,8 @@ export class GrowthSubsystem {
         return prop.id
       } catch (err) {
         await this.e.graphReject(prop.id, `复诊剪除 apply 失败：${err instanceof Error ? err.message : String(err)}`)
-          .catch(() => undefined)
+          .catch(rejErr => this.rejectCompensateFail(
+            prop.id, `复诊剪除 apply 失败：${err instanceof Error ? err.message : String(err)}`, rejErr))
         return null
       }
     } catch {

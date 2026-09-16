@@ -279,11 +279,17 @@ function assertQueueWritable(rt: HostRuntime): void {
 }
 
 /** 注册表落盘（fire-and-forget；D14：文件 IO 收口 engine）。写回闸兜底：broken 期间
- * 一律跳过（坏档字节原样保留），交互路径的拒绝由 assertQueueWritable 在入口给出。 */
+ * 一律跳过（坏档字节原样保留），交互路径的拒绝由 assertQueueWritable 在入口给出。
+ * 落盘失败不再吞错（#296）：失败留痕 + 置 Broken 写回闸（沿 #194 语义——写不进任务档
+ * 时继续跑，下一次变更会用内存态全量覆盖坏档，静默销毁现场；置闸后坏档字节原样保留）。 */
 function persistGenJobs(rt: HostRuntime): void {
   if (rt.flags.genQueueBroken) return
   void rt.engine.saveGenJobs([...rt.jobs.genJobs.values()].map(j => ({ ...j })))
-    .catch(() => { /* 落盘失败不影响内存态（下次变更重试） */ })
+    .catch(err => {
+      const msg = err instanceof Error ? err.message : String(err)
+      rt.flags.genQueueBroken = `生成任务档落盘失败（#194 写回闸置 broken）：${msg}`
+      rt.logger.error('host.gen_jobs.persist_failed', { error: rt.flags.genQueueBroken })
+    })
 }
 
 /** 入队一个节点的生成任务（FIFO；重复入队幂等）。同一节点 running/cancelling 时拒绝。
@@ -404,7 +410,7 @@ export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<n
     // 写回闸拒绝（#194）：清扫会触发注册表全量落盘——跳过并留痕（不抛：apply 出口
     // 等调用方不被任务档损坏牵连，清扫延后到修档重启）
     const why = rt.flags.genQueueBroken
-    rt.logger.warn('host.gen_jobs.restore_failed', { error: `任务档 broken，清扫跳过（修档重启后恢复）：${why}` })
+    rt.logger.warn('host.gen_jobs.sweep_skip', { error: `任务档 broken，清扫跳过（修档重启后恢复）：${why}` })
     return 0
   }
   const perCourse = new Map<string, Promise<Set<string> | null | undefined>>()
@@ -434,6 +440,7 @@ export async function sweepGenJobs(rt: HostRuntime, now = Date.now()): Promise<n
     swept++
   }
   if (swept) persistGenJobs(rt)
+  if (swept) rt.logger.info('host.gen_jobs.retention_swept', { swept })
   return swept
 }
 
@@ -721,7 +728,22 @@ export function pumpGeneration(rt: HostRuntime, ctx: Context): void {
         ? generateGraphJob(rt, ctx, next)
         : generateContent(rt, ctx, next.course, next.node, next.style, next.quizCount)
   void task
-    .catch(() => { /* 执行器已置 failed 留注册表可重试 */ })
+    .catch(err => {
+      // 泵级兜底（#296）：执行器已自置终态的失败照旧（落盘前已 rethrow 的走这里但
+      // 不重复处置）；置终态**之前**抛错的意外逃逸会让任务永久挂 running——兜住置
+      // failed 终态（failures 带错误信息）+ 留痕，注册表可查可重试。取注册表活对象：
+      // 内容管线执行器会重建 job 对象，泵捕获的 next 是入队时的旧引用（status 不更新）。
+      const live = rt.jobs.genJobs.get(`${next.course}/${next.node}`)
+      if (live && !isGenJobTerminal(live.status)) {
+        const msg = err instanceof Error ? err.message : String(err)
+        live.status = contentFailureStatus(live.status)
+        live.message = `执行器意外逃逸（泵级兜底置失败）：${msg}`
+        live.failures = [{ code: 'PUMP_ESCAPE', finding: msg }]
+        rt.logger.error('host.gen_jobs.pump_escape', { course: live.course, node: live.node, error: msg })
+        persistGenJobs(rt)
+        scheduleJobRetention(rt, `${live.course}/${live.node}`, live.status)
+      }
+    })
     .finally(() => {
       rt.flags.pumping = false
       // 队列空闲触发点（#144 → 五点接线）：生成队列排空 → 教练回合就绪深度检查，
@@ -1166,9 +1188,14 @@ export function restoreGenJobs(rt: HostRuntime): void {
     })
     .then(async stale => {
       if (!stale) return
+      // 畸形记录（缺 course/node）零痕跳过的静默变形（#296）：计数随 restored 事件带出
+      let skippedMalformed = 0
       for (const raw of stale) {
         const j = raw as Partial<GenJob>
-        if (typeof j.course !== 'string' || typeof j.node !== 'string') continue
+        if (typeof j.course !== 'string' || typeof j.node !== 'string') {
+          skippedMalformed++
+          continue
+        }
         const key = `${j.course}/${j.node}`
         const interrupted = j.status === 'running' || j.status === 'cancelling'
         const restored: GenJob = {
@@ -1236,7 +1263,7 @@ export function restoreGenJobs(rt: HostRuntime): void {
       // 恢复留痕（#253 / ADR-0080 `host.gen_jobs.restored`）：此前只有 console（进程关了
       // 就没了），排查「重启后任务为什么是 failed」时看不到恢复当时扫掉了什么。
       rt.logger.info('host.gen_jobs.restored', {
-        stale: stale.length, swept, queued_paused: aliveQueued,
+        stale: stale.length, swept, queued_paused: aliveQueued, skipped_malformed: skippedMalformed,
       })
       if (stale.length) {
         console.log(`[learnhub] gen-jobs restored: ${stale.length} (swept ${swept} dangling/expired${aliveQueued ? `, ${aliveQueued} queued paused` : ''})`)

@@ -11,6 +11,7 @@ import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import type { PracticeRec } from '../src/engine/types.ts'
 import { readSedimentCanon } from '../src/engine/sediment.ts'
 import { withVault, tfQuestion, localDay } from './helpers/vault.ts'
+import type { MemLogger } from './helpers/logger.ts'
 
 // 边实验账本与复诊（#146 / 插入提案生命周期）：
 // - 纯函数层（接缝 S53）：预注册 schema（metric 恰一枚/days clamp）、账本 IO 与折叠、
@@ -483,6 +484,29 @@ test('AC1 到期结算·自动剪除：不达标 del_node 归档 + 原粗边恢�
     const again = await engine.growth2.settleRechecks('数学', { today: localDay(6) })
     assert.equal(again.courses[0]!.settled.length, 0)
     void root
+  })
+})
+
+test('剪除 apply 失败且拒绝补偿也失败（#296）：提案被兜底置显式 rejected 不滞留 pending + graph.reject_compensate_fail 留痕', async () => {
+  await withVault({
+    graph: TWO_NODE_GRAPH,
+    banks: {},
+  }, async ({ engine, logger }) => {
+    await applyInsertion(engine, insertionYaml({ metric: '前进恢复', days: '5', withConcept: true }))
+    for (let d = 1; d <= 5; d++) await engine.store.appendPractice(pRec(d, '入门'))
+    // 剪除的 apply 必败 + 拒绝补偿也必败（graphReject 原本吞错的形态，#296 修复的正是这条）
+    const g = engine.graph as unknown as Record<string, unknown>
+    g.graphApply = async () => { throw new Error('apply 磁盘炸了') }
+    g.graphReject = async () => { throw new Error('reject 也炸了') }
+    const r = await engine.growth2.settleRechecks('数学', { today: localDay(5) })
+    assert.equal(r.courses[0]!.settled.length, 0, '剪除未成，条目保持 in-flight 留待重试')
+    const mem = logger as MemLogger
+    assert.ok(mem.count('graph.reject_compensate_fail') >= 1, '补偿失败留痕')
+    // 兜底置显式状态：该提案不再 pending，takePending 缺省「最新」不会误中它
+    const pend = await engine.graph.graphProposals('pending', 'edit')
+    assert.equal(pend.length, 0, '半途提案不滞留 pending')
+    const rejected = await engine.graph.graphProposals('rejected', 'edit')
+    assert.ok(rejected.some(p => (p.decision_note ?? '').includes('拒绝补偿失败兜底')))
   })
 })
 
