@@ -30,10 +30,15 @@ export interface VaultFs {
 /** 临时文件 + rename 原子写。tmp 名含 `Date.now()` 是**显式登记的例外**（#175 阶段①
  * 适配器面门的基线钉住这一处）：tmp 命名属适配器关注点（ADR-0046 边界段），而 io.ts
  * 是 R5 零相对导入叶子——不能反向 import clock 端口类型，故保留直读；engine 内唯一
- * 有理由的时钟直读，除此之外 clockReads 目标归零。 */
+ * 有理由的时钟直读，除此之外 clockReads 目标归零。
+ * 尾部单调序号防同毫秒撞名：调用方（persistGenJobs 一族）是 fire-and-forget，会并发
+ * 写同一路径——tmp 只到毫秒时两笔同名，先 rename 者把 tmp 搬走，输家 rename ENOENT
+ * （#296 后落盘失败上写回闸，生成队列被误锁 broken，2026-09-17 实测）。 */
+let atomicWriteSeq = 0
+
 export async function atomicWrite(path: string, data: string, fs: VaultFs): Promise<void> {
   await fs.mkdir(path.replace(/[/\\][^/\\]+$/, ''))
-  const tmp = `${path}.tmp-${process.pid}-${Date.now()}`
+  const tmp = `${path}.tmp-${process.pid}-${Date.now()}-${++atomicWriteSeq}`
   await fs.writeFile(tmp, data)
   await fs.rename(tmp, path)
 }

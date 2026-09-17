@@ -304,10 +304,20 @@ function assertQueueWritable(rt: HostRuntime): void {
 /** 注册表落盘（fire-and-forget；D14：文件 IO 收口 engine）。写回闸兜底：broken 期间
  * 一律跳过（坏档字节原样保留），交互路径的拒绝由 assertQueueWritable 在入口给出。
  * 落盘失败不再吞错（#296）：失败留痕 + 置 Broken 写回闸（沿 #194 语义——写不进任务档
- * 时继续跑，下一次变更会用内存态全量覆盖坏档，静默销毁现场；置闸后坏档字节原样保留）。 */
+ * 时继续跑，下一次变更会用内存态全量覆盖坏档，静默销毁现场；置闸后坏档字节原样保留）。
+ * 串行链（persistChain）：终态出口一拍连发两笔（本函数 + scheduleJobRetention 内再一笔），
+ * 并发全量写同一路径在 Windows 上会互踩——tmp 同毫秒撞名（输家 ENOENT，engine 侧
+ * atomicWrite 已加序号）之外，两次 rename 抢同一目标也会 EPERM；链式串行兼保落盘序，
+ * 后笔快照必新于前笔、不得被覆盖。快照取写入时刻的注册表（链上排队期间的新变更
+ * 一并带上），链上残留笔见闸即弃（broken 语义 = 坏档字节原样保留）。 */
 function persistGenJobs(rt: HostRuntime): void {
   if (rt.flags.genQueueBroken) return
-  void rt.engine.saveGenJobs([...rt.jobs.genJobs.values()].map(j => ({ ...j })))
+  rt.jobs.persistChain = rt.jobs.persistChain
+    .catch(() => undefined) // 前序失败不断链：失败已留痕 + 置闸，链要活着接住后续笔
+    .then(() => {
+      if (rt.flags.genQueueBroken) return
+      return rt.engine.saveGenJobs([...rt.jobs.genJobs.values()].map(j => ({ ...j })))
+    })
     .catch(err => {
       const msg = err instanceof Error ? err.message : String(err)
       rt.flags.genQueueBroken = `生成任务档落盘失败（写回闸置 broken）：${msg}`

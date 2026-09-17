@@ -106,6 +106,11 @@ export interface GenJob {
 export interface HostJobs {
   genJobs: Map<string, GenJob>
   quizJobResults: Map<string, Awaited<ReturnType<LearnhubEngine['bank2']['questionGenerate']>>>
+  /** 任务档全量落盘串行链（persistGenJobs 接线）：调用方是 fire-and-forget，终态出口
+   * 一拍连发两笔——并发全量写同一路径在 Windows 上连 rename 都会互踩（EPERM/ENOENT，
+   * 2026-09-17 实测把写回闸误锁 broken）；链式串行兼保落盘序（调用序 = 快照新旧序，
+   * 后笔不得被前笔的旧快照覆盖）。 */
+  persistChain: Promise<void>
 }
 
 /** 运行旗标：重启恢复暂停 / 泵单并发闸 / 会话开始触点节流戳 / 生成任务档 broken 态
@@ -206,7 +211,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     vault,
     centerRel,
     logger,
-    jobs: { genJobs: new Map(), quizJobResults: new Map() },
+    jobs: { genJobs: new Map(), quizJobResults: new Map(), persistChain: Promise.resolve() },
     flags: { queuePaused: false, pumping: false, lastSessionStartAt: 0, genQueueBroken: null },
     repaintSuggestAt: new Map(),
     quizAuditRate,

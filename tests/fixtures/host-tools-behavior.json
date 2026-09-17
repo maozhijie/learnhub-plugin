@@ -781,13 +781,13 @@
   "text": "{\"status\":\"done\",\"message\":\"罗盘已初画：undefined 条路线\"}",
   "calls": [
    "registry.resolve(\"1\")",
-   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
-   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
-   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘路线绘制中（deep 档工具回路）…\"}])",
    "growth2.compassPaint(undefined,{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}},{})",
-   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\"}])",
    "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {

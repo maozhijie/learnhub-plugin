@@ -8,7 +8,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  Handle,
   MarkerType,
   MiniMap,
   Position,
@@ -25,6 +24,17 @@ import type { GraphDoc, Stage } from '../types'
 
 const NODE_WIDTH = 148
 const NODE_HEIGHT = 54
+
+/** 声明式 handles（Node.handles）：handleBounds 由 xyflow 在每次受控 nodes 同步时直接从这里
+ * 重建，不依赖 ResizeObserver 首测。DOM <Handle> 方案的病形：RO 回调绑渲染帧（后台标签页/
+ * 被遮挡窗口不产帧就永不到达），而 5s 轮询每拍整阵替换 flowNodes（节点对象不带 measured），
+ * parseHandles 会把 handleBounds 重置回 undefined → 边渲染门（isNodeInitialized）不满足 →
+ * prod 构建静默丢弃全部连线（「出现一小会又集体消失」）。坐标 = 旧 DOM 测量口径：1×1 隐藏
+ * 锚点贴节点上/下边中心（getHandlePosition 对 Top/Bottom 取 x+width/2）。 */
+const DAG_HANDLES = [
+  { id: 'dag-source', type: 'source' as const, position: Position.Top, x: (NODE_WIDTH - 1) / 2, y: 0, width: 1, height: 1 },
+  { id: 'dag-target', type: 'target' as const, position: Position.Bottom, x: (NODE_WIDTH - 1) / 2, y: NODE_HEIGHT - 1, width: 1, height: 1 },
+]
 
 /** 学习进度五态色板（Arco 语义 token + 字面 fallback：SVG stroke 的 var()
  * 失效会 fallback 到 none，连线直接消失）。 */
@@ -163,10 +173,6 @@ const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
           )}
         </span>
       </div>
-      <Handle type='target' id='dag-target' position={Position.Bottom} isConnectable={false}
-        className='lh-hidden-soft' />
-      <Handle type='source' id='dag-source' position={Position.Top} isConnectable={false}
-        className='lh-hidden-soft' />
     </div>
   )
 }
@@ -193,6 +199,7 @@ function layoutDag(
       type: 'dagNode',
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
+      handles: DAG_HANDLES,
       position: { x: (pos?.x ?? 0) - NODE_WIDTH / 2, y: (pos?.y ?? 0) - NODE_HEIGHT / 2 },
       data: {
         title: n.data.id, depth: n.data.depth, stage: n.data.stage,

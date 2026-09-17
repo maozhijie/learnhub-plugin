@@ -191,6 +191,42 @@ test('队列泵状态机：入队 → 执行 → 终态 done → 保留期清扫
   assert.equal(rt.jobs.genJobs.has(key), false)
 })
 
+test('persistGenJobs 串行链：终态一拍连发两笔不并发互踩，后笔快照带后变更', async () => {
+  // 事故回归（2026-09-17）：generateGrowthJob 的 finally 里 persistGenJobs 与
+  // scheduleJobRetention→persistGenJobs 同步连发两笔，并发全量写同一路径——tmp 同毫秒
+  // 撞名（输家 rename ENOENT，engine atomicWrite 已加序号）之外，Windows 下两次 rename
+  // 抢同一目标还会 EPERM；#296 后任一失败都把写回闸误锁 broken（终档其实已由赢家写成）。
+  // 串行链后：两笔永不并发，链后排队的笔快照必含链前笔落盘期间的新变更。
+  const rt = makeRuntime()
+  let inFlight = 0
+  let maxInFlight = 0
+  const snapshots: boolean[] = []
+  let releaseFirst: (() => void) | undefined
+  const firstGate = new Promise<void>(r => { releaseFirst = r })
+  stub(rt, {
+    saveGenJobs: async (jobs: Array<{ node: string }>) => {
+      inFlight++
+      maxInFlight = Math.max(maxInFlight, inFlight)
+      const hasC = jobs.some(j => j.node === '节点C')
+      if (snapshots.length === 0) await firstGate // 挂住第一笔，给第二笔排队窗口
+      inFlight--
+      snapshots.push(hasC)
+    },
+  })
+  rt.jobs.genJobs.set('数学/节点A', { course: '数学', node: '节点A', startedAt: new Date().toISOString(), status: 'done', message: '' })
+  rt.jobs.genJobs.set('数学/节点B', { course: '数学', node: '节点B', startedAt: new Date().toISOString(), status: 'failed', message: '' })
+  scheduleJobRetention(rt, '数学/节点A', 'done') // 第一笔（进入 saveGenJobs 即挂住，快照此刻落地）
+  await until(() => inFlight === 1)
+  rt.jobs.genJobs.set('数学/节点C', { course: '数学', node: '节点C', startedAt: new Date().toISOString(), status: 'done', message: '' })
+  scheduleJobRetention(rt, '数学/节点C', 'done') // 第二笔（同拍连发——事故形状，链后排队）
+  scheduleJobRetention(rt, '数学/节点B', 'failed') // 第三笔（同拍连发，链后排队）
+  releaseFirst!()
+  await rt.jobs.persistChain
+  assert.equal(maxInFlight, 1, `三笔落盘必须串行（实测峰值并发 ${maxInFlight}）`)
+  assert.deepEqual(snapshots, [false, true, true], '链后排队的笔快照必须带上排队期间的新变更（节点C）')
+  assert.equal(rt.flags.genQueueBroken, null, '串行链下不得误锁写回闸')
+})
+
 test('队列泵状态机：running 重复入队拒绝；排队任务可取消（直接出队）', async () => {
   const rt = makeRuntime()
   let releasePack: (() => void) | undefined

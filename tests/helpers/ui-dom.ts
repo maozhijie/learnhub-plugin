@@ -49,7 +49,10 @@ Object.defineProperty(globalThis, 'navigator', { value: win.navigator, configura
 g.localStorage = win.localStorage
 for (const k of ['HTMLElement', 'HTMLInputElement', 'HTMLTextAreaElement', 'HTMLIFrameElement', 'Element', 'Node', 'SVGElement',
   'Event', 'CustomEvent', 'MouseEvent', 'KeyboardEvent', 'FocusEvent', 'InputEvent', 'UIEvent',
-  'AnimationEvent', 'TransitionEvent', 'MutationObserver', 'getComputedStyle'] as const) {
+  'AnimationEvent', 'TransitionEvent', 'MutationObserver', 'getComputedStyle',
+  // xyflow 的 Pane/autoPan 裸用这对全局（卸载清理路径必调 cancelAnimationFrame）；happy-dom
+  // Window 自带（定时器驱动，不产渲染帧——不改变测量类回调的严苛形态）。
+  'requestAnimationFrame', 'cancelAnimationFrame'] as const) {
   g[k] = (win as unknown as Record<string, unknown>)[k]
 }
 g.getComputedStyle = (win as unknown as { getComputedStyle: unknown }).getComputedStyle.bind(win)

@@ -2000,17 +2000,17 @@
   },
   "calls": [
    "registry.get(\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
    "content2.contentPack(\"1\",\"1\",{})",
    "content2.contentTierOf(\"1\",\"1\")",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
    "content2.loadPrompt(\"课程节生成-1\")",
    "content2.contentSectionsView(\"1\",\"1\")",
    "content2.loadPrompt(\"课程大纲\")",
    "content2.contentPack(\"1\",\"1\",{\"omitDeliverables\":true})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"style\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -2056,17 +2056,17 @@
   },
   "calls": [
    "registry.get(\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
    "content2.contentPack(\"1\",\"1\",{})",
    "content2.contentTierOf(\"1\",\"1\")",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
    "content2.loadPrompt(\"课程节生成\")",
    "content2.contentSectionsView(\"1\",\"1\")",
    "content2.loadPrompt(\"课程大纲\")",
    "content2.contentPack(\"1\",\"1\",{\"omitDeliverables\":true})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成…\",\"phase\":\"outline\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')\",\"phase\":\"outline\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -3595,13 +3595,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
    "content2.contentTierOf(\"1\",\"1\")",
    "bank2.questionGenerate(\"1\",\"1\",1,(prompt, _system, callOpts)=>complete(prompt, undefined, {\n            effort: callOpts?.effort ?? fallbackEffort,\n            station: callOpts?.station ?? STATIONS.quiz,\n            ...callOpts?.kind !== undefined ? {\n                kind: callOpts.kind\n            } : {}\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"effort\":\"fast\",\"secondOpinion\":{\"rate\":0.25}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -3659,13 +3659,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在按学习者意见重出新题…\"}])",
    "content2.contentTierOf(\"1\",\"1\")",
    "bank2.questionGenerate(\"1\",\"1\",1,(prompt, _system, callOpts)=>complete(prompt, undefined, {\n            effort: callOpts?.effort ?? fallbackEffort,\n            station: callOpts?.station ?? STATIONS.quiz,\n            ...callOpts?.kind !== undefined ? {\n                kind: callOpts.kind\n            } : {}\n        }),{\"instruction\":\"1\",\"effort\":\"fast\",\"secondOpinion\":{\"rate\":0.25}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在按学习者意见重出新题…\"}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -3688,13 +3688,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
    "content2.contentTierOf(\"1\",\"1\")",
    "bank2.questionGenerate(\"1\",\"1\",1,(prompt, _system, callOpts)=>complete(prompt, undefined, {\n            effort: callOpts?.effort ?? fallbackEffort,\n            station: callOpts?.station ?? STATIONS.quiz,\n            ...callOpts?.kind !== undefined ? {\n                kind: callOpts.kind\n            } : {}\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"effort\":\"fast\",\"secondOpinion\":{\"rate\":0.25}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"count\":1,\"section\":{\"id\":\"1\",\"title\":\"1\"},\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -3717,13 +3717,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待出题…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
    "content2.contentTierOf(\"1\",\"1\")",
    "bank2.questionGenerate(\"1\",\"1\",undefined,(prompt, _system, callOpts)=>complete(prompt, undefined, {\n            effort: callOpts?.effort ?? fallbackEffort,\n            station: callOpts?.station ?? STATIONS.quiz,\n            ...callOpts?.kind !== undefined ? {\n                kind: callOpts.kind\n            } : {}\n        }),{\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"effort\":\"fast\",\"secondOpinion\":{\"rate\":0.25}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"正在为节「1」定向补题…\"}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"1\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"quiz\",\"section\":{\"id\":\"1\",\"title\":\"1\"},\"instruction\":\"1\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'length')\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -4907,13 +4907,13 @@
   },
   "calls": [
    "growth2.coachCheckpoint(\"panel_dispatch\",\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（面板下发（显式重新裁决））…\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\"}])",
    "growth2.stuckPending(\"1\")",
    "growth2.coachGrowthBatch(\"1\",{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}},{\"force\":true,\"trigger\":\"panel_dispatch\"})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\"}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"growthTrigger\":\"panel_dispatch\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5017,13 +5017,13 @@
   },
   "calls": [
    "growth2.stuckReportAppend(\"1\",\"1\",\"卡住了\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待教练回合（卡点自报触发）…\",\"growthForce\":true}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true}])",
    "growth2.stuckPending(\"1\")",
    "growth2.coachGrowthBatch(\"1\",{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}},{\"force\":true})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"教练回合裁决中（轻量段）…\",\"growthForce\":true}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"生长批\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"growth\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'ops')\",\"growthForce\":true,\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5050,13 +5050,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘路线绘制中（deep 档工具回路）…\"}])",
    "growth2.compassPaint(\"1\",{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}},{})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5495,13 +5495,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"planPayload\":{\"project\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
    "project.projectPlanPack(\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5540,13 +5540,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "project.projectMilestonePack(\"1\",\"1\")",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5604,13 +5604,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（里程碑计划）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5647,13 +5647,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（里程碑计划）…\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"course\":\"1\",\"notes\":[\"1\"]},{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"course\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5673,13 +5673,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（里程碑计划）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"notes\":[\"1\"]},{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"notes\":[\"1\"]},\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5697,13 +5697,13 @@
    "queued": true
   },
   "calls": [
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"queued\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"目标反编译中（里程碑计划）…\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
    "project.projectDecompile(\"1\",{\"goal\":\"1\",\"course\":\"1\"},{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"}}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
-   "growth2.coachCheckpoint(\"queue_idle\",undefined)"
+   "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"反编译\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"decompile\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'id')\",\"decompilePayload\":{\"project\":\"1\",\"goal\":\"1\",\"course\":\"1\"},\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
