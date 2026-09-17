@@ -299,9 +299,9 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
         id: '方向纪律', name: '方向纪律（算子与朝向）',
         criteria: [
           {
-            id: '算子唯一', criterion: '每批恰用一个生长算子（前进/插入/巩固/旁支/换向），以 note_operator 声明并与该批理由一致；本回合不长结构则以 draft_note 零操作收束，不用空批冒充停摆',
-            evidence: '引草稿批的 note_operator 与理由、批内 ops 对照；一批多算子或以空批冒充停摆的点名',
-            source: '模板:教练执行', anchor: 'note_operator / note_reason 声明生长算子',
+            id: '算子逐条目', criterion: '批内每条 add_node 以 operator 声明自己的生长算子（前进/插入/巩固/旁支/换向，批内可跨算子混合）并与该条目内容一致，插入条目携带复诊预注册；本回合不长结构则以 draft_note 零操作收束，不用空批冒充停摆',
+            evidence: '引草稿批的逐条目 operator 与理由、批内 ops 对照；条目算子与内容错位（名为插入实为前进等）或以空批冒充停摆的点名',
+            source: '模板:教练执行', anchor: 'operator 声明自己的生长算子',
           },
           {
             id: '朝向由终点携带', criterion: '朝学习者已声明的终点推进：前进/换向必声明 target_endpoints（可多个，交汇优先），不为一次性规划铺满全图',
@@ -334,9 +334,9 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
             source: '模板:教练执行', anchor: '终点.pre 恒指向你当前认定的最后台阶',
           },
           {
-            id: '插入复诊', criterion: '插入批必须携带复诊预注册（note_recheck），metric 与卡点症状同源',
-            evidence: '引插入批的 note_recheck 与卡点症状对照；缺预注册或 metric 不同源的点名',
-            source: '模板:教练执行', anchor: '插入批用 note_recheck 写复诊预注册',
+            id: '插入复诊', criterion: '插入条目必须携带复诊预注册（recheck），metric 与卡点症状同源',
+            evidence: '引插入条目的 recheck 与卡点症状对照；缺预注册或 metric 不同源的点名',
+            source: '模板:教练执行', anchor: '插入条目用 recheck 写复诊预注册',
           },
           {
             id: '行动清单落实', criterion: '草稿审计/补丁返回的行动清单（findings）下一批须逐条落实，或在回复中显式驳回并说明理由',

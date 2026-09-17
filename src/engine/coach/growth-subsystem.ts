@@ -44,9 +44,9 @@ import {
 } from '../prompts/coach-pack.ts'
 import {
   ERR_ARC_EMPTY, ERR_DRAFT_BUDGET_EXHAUSTED, ERR_DRAFT_COURSE_MISMATCH, ERR_DRAFT_UNFINISHED, ERR_EXEC_WHITELIST,
-  ERR_FINISH_APPLY, ERR_FINISH_BAD_OPERATOR, ERR_FINISH_DRIFT_EXCEPTION, ERR_FINISH_EMPTY,
+  ERR_FINISH_APPLY, ERR_FINISH_DRIFT_EXCEPTION, ERR_FINISH_EMPTY,
   ERR_FINISH_GATE, ERR_FINISH_NO_NOTE, ERR_FINISH_PROPOSE, ERR_NOTE_NO_REASON, ERR_PATCH_BUDGET,
-  ERR_PATCH_EMPTY_OPS, ERR_PATCH_GATE, ERR_PATCH_MAX_OPS, ERR_PATCH_RECHECK, ERR_PATCH_RECHECK_NO_NOTE,
+  ERR_PATCH_EMPTY_OPS, ERR_PATCH_GATE, ERR_PATCH_MAX_OPS,
   ERR_PATCH_SHAPE, ERR_REPAINT_NOTE, ERR_REPAINT_REASON, ERR_REVERT_COUNT_INT, ERR_REVERT_COUNT_MAX,
   ERR_REVERT_NOTHING, ERR_SERVES_ARC_SHAPE,
   EXEC_CONFUSABLE_CANDIDATE, EXEC_CONFUSABLE_FAIL, EXEC_CRASH_ARC, EXEC_CRASH_AUDIT, EXEC_CRASH_FINISH, EXEC_CRASH_NOTE,
@@ -57,17 +57,17 @@ import {
   EXEC_ERR_ITEM, EXEC_FINDING_ITEM, EXEC_NORM_ITEM,
   EXEC_OP_FIELD_ASSUMES, EXEC_OP_FIELD_BLOOM, EXEC_OP_FIELD_DIFFICULTY, EXEC_OP_FIELD_ENC,
   EXEC_OP_FIELD_EST, EXEC_OP_FIELD_INTO, EXEC_OP_FIELD_MISCONCEPTIONS, EXEC_OP_FIELD_NAME,
-  EXEC_OP_FIELD_NEW, EXEC_OP_FIELD_NODE, EXEC_OP_FIELD_NOTE, EXEC_OP_FIELD_OP, EXEC_OP_FIELD_PRE,
-  EXEC_OP_FIELD_TEACHES, EXEC_OP_FIELD_WITH,
+  EXEC_OP_FIELD_NEW, EXEC_OP_FIELD_NODE, EXEC_OP_FIELD_NOTE, EXEC_OP_FIELD_OP, EXEC_OP_FIELD_OPERATOR,
+  EXEC_OP_FIELD_PRE, EXEC_OP_FIELD_RECHECK, EXEC_OP_FIELD_TEACHES, EXEC_OP_FIELD_WITH,
   EXEC_PARAM_CHAIN_DESC, EXEC_PARAM_CONCEPTS_DESC, EXEC_PARAM_DAYS_DESC, EXEC_PARAM_HALT_REASON_DESC,
-  EXEC_PARAM_METRIC_DESC, EXEC_PARAM_NOTE_OPERATOR_DESC, EXEC_PARAM_NOTE_REASON_DESC,
-  EXEC_PARAM_NOTE_RECHECK_DESC, EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC, EXEC_PARAM_OPS_DESC,
+  EXEC_PARAM_METRIC_DESC, EXEC_PARAM_NOTE_REASON_DESC,
+  EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC, EXEC_PARAM_OPS_DESC,
   EXEC_PARAM_REPAINT_DESC, EXEC_PARAM_REPAINT_NOTE_DESC, EXEC_PARAM_SERVES_ARC_DESC,
   EXEC_ROUND_ARC, EXEC_ROUND_ARC_REPAINT, EXEC_ROUND_ARC_SERVES,
   EXEC_ROUND_AUDIT_EMPTY, EXEC_ROUND_AUDIT_ERRORS, EXEC_ROUND_AUDIT_FINDINGS, EXEC_ROUND_AUDIT_OK,
   EXEC_ROUND_FINISH_APPLY_FAIL, EXEC_ROUND_FINISH_CONFUSABLE, EXEC_ROUND_FINISH_OK,
   EXEC_ROUND_FINISH_PROPOSE_REJECT, EXEC_ROUND_FINISH_REJECT, EXEC_ROUND_FINISH_SEALED, EXEC_ROUND_NOTE,
-  EXEC_ROUND_PATCH_BUDGET, EXEC_ROUND_PATCH_OK, EXEC_ROUND_PATCH_OK_NORM, EXEC_ROUND_PATCH_RECHECK,
+  EXEC_ROUND_PATCH_BUDGET, EXEC_ROUND_PATCH_OK, EXEC_ROUND_PATCH_OK_NORM,
   EXEC_ROUND_PATCH_REJECTED, EXEC_ROUND_PATCH_SHAPE, EXEC_ROUND_REVERT, EXEC_STATUS_COUNTS,
   EXEC_STATUS_HEADING, EXEC_STATUS_NEW, EXEC_STATUS_NOTE, EXEC_STATUS_RESUMED,
   EXEC_STATUS_ROUND_ERRORS, EXEC_STATUS_ROUND_LINE, EXEC_STATUS_ROUNDS_HEADING,
@@ -151,9 +151,9 @@ import { JOL_PREDICTIONS } from '../sched/jol.ts'
 import type { AgentSeam, GateVerdict } from '../infra/agent.ts'
 import type { LlmToolCall, LlmToolSpec } from '../infra/llm.ts'
 import { hasReadyContent } from '../vault/notes.ts'
-import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckPreregOf, recheckVerdict, RECHECK_METRICS } from './probation.ts'
+import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict, RECHECK_METRICS } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
-import { addNodeCountOf, applyOpsToNodes, editGateErrors, editProposalGateErrors, EDIT_OPS, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
+import { addNodeCountOf, applyOpsToNodes, editGateErrors, editProposalGateErrors, EDIT_OPS, growthOperatorsOf, operatorFoldOf, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
 import type { DraftDiff, EditGateCtx, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
 import {
   GROWTH_DRAFT_MARKER, deleteDraft, draftDirOf, draftFindings, draftPathOf, expandPatchOps, findActiveDraft, saveDraft,
@@ -928,7 +928,7 @@ export class GrowthSubsystem {
     state: 'idle' | 'applied'
     check: CoachCheck
     trajectory: string[]
-    proposal: { id: number; ops: number; operator: string; reason: string; disagreement: boolean } | null
+    proposal: { id: number; ops: number; operators: string[]; reason: string; disagreement: boolean } | null
     applied: { ops: number; snapshot: number; created: string[] } | null
     /** 停摆收束的理由（#320：回路以 draft_note 零操作收束时在场；state='idle'）。 */
     halt_reason?: string
@@ -975,7 +975,7 @@ export class GrowthSubsystem {
       trajectory: draft.trajectory,
       proposal: lastFinish ? {
         id: lastFinish.proposal_id, ops: lastFinish.ops,
-        operator: lastFinish.operator, reason: lastFinish.reason,
+        operators: lastFinish.operators, reason: lastFinish.reason,
         disagreement: false,
       } : null,
       applied: lastFinish ? {
@@ -1014,6 +1014,16 @@ export class GrowthSubsystem {
       teaches: { type: 'object', description: render(EXEC_OP_FIELD_TEACHES, { tiers: CONCEPT_TIERS.join(' / ') }) },
       assumes: { type: 'object', description: render(EXEC_OP_FIELD_ASSUMES, { tiers: CONCEPT_TIERS.join(' / ') }) },
       misconceptions: { type: 'array', description: render(EXEC_OP_FIELD_MISCONCEPTIONS, {}) },
+      operator: { type: 'string', description: render(EXEC_OP_FIELD_OPERATOR, { ops: GROWTH_OPERATORS.join('/') }) },
+      recheck: {
+        type: 'object',
+        description: render(EXEC_OP_FIELD_RECHECK, {}),
+        properties: {
+          metric: { type: 'string', description: render(EXEC_PARAM_METRIC_DESC, { metrics: RECHECK_METRICS.join(' / ') }) },
+          days: { type: 'number', description: render(EXEC_PARAM_DAYS_DESC, { default: RECHECK_DAYS_DEFAULT, min: RECHECK_DAYS_MIN, max: RECHECK_DAYS_MAX }) },
+        },
+        required: ['metric'],
+      },
     })
     return [
       { name: 'graph_view', description: render(TOOL_GRAPH_VIEW_DESC_DRAFT, {}), parameters: obj({}) },
@@ -1029,21 +1039,8 @@ export class GrowthSubsystem {
         name: 'draft_patch', description: render(EXEC_TOOL_DRAFT_PATCH_DESC, {}), parameters: obj({
           ops: { type: 'array', description: render(EXEC_PARAM_OPS_DESC, { cheatsheet: render(PATCH_SHAPE_CHEATSHEET, {}) }), items: { type: 'object', properties: { ...opFields(), chain: { type: 'array', description: render(EXEC_PARAM_CHAIN_DESC, {}) } } } },
           concepts: { type: 'array', description: render(EXEC_PARAM_CONCEPTS_DESC, {}) },
-          note_operator: { type: 'string', description: render(EXEC_PARAM_NOTE_OPERATOR_DESC, {}) },
           note_reason: { type: 'string', description: render(EXEC_PARAM_NOTE_REASON_DESC, {}) },
           note_target_endpoints: { type: 'array', items: { type: 'string' }, description: render(EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC, {}) },
-          note_recheck: {
-            type: 'object',
-            description: render(EXEC_PARAM_NOTE_RECHECK_DESC, {
-              metrics: RECHECK_METRICS.join(' / '), default: RECHECK_DAYS_DEFAULT,
-              min: RECHECK_DAYS_MIN, max: RECHECK_DAYS_MAX,
-            }),
-            properties: {
-              metric: { type: 'string', description: render(EXEC_PARAM_METRIC_DESC, { metrics: RECHECK_METRICS.join(' / ') }) },
-              days: { type: 'number', description: render(EXEC_PARAM_DAYS_DESC, { default: RECHECK_DAYS_DEFAULT, min: RECHECK_DAYS_MIN, max: RECHECK_DAYS_MAX }) },
-            },
-            required: ['metric'],
-          },
         }, ['ops']),
       },
       {
@@ -1107,7 +1104,7 @@ export class GrowthSubsystem {
     trajectory: string[]
     rounds: Array<{ kind: string; summary: string }>
     /** 成功 finish 批读数：coachGrowthBatch 取最后一批折算 proposal/applied。 */
-    finishes: Array<{ proposal_id: number; ops: number; snapshot: number; operator: string; reason: string; target_endpoints: string[]; created: string[] }>
+    finishes: Array<{ proposal_id: number; ops: number; snapshot: number; operators: string[]; reason: string; target_endpoints: string[]; created: string[] }>
     /** 停摆收束理由（#320：本轮以 draft_note 零操作声明时在场）。 */
     halt_reason?: string
     /** 本批服务弧的阶段标题（#320：draft_arc 声明，供软对齐对表）。 */
@@ -1155,7 +1152,7 @@ export class GrowthSubsystem {
       doc.rounds.push({ at: nowIsoOf(this.e.clock.nowMs()), kind, summary, ...(errors ? { errors } : {}) })
       await persist()
     }
-    const finishes: Array<{ proposal_id: number; ops: number; snapshot: number; operator: string; reason: string; target_endpoints: string[]; created: string[] }> = []
+    const finishes: Array<{ proposal_id: number; ops: number; snapshot: number; operators: string[]; reason: string; target_endpoints: string[]; created: string[] }> = []
 
     // —— 草稿图的现势折叠：**真实基图（已含历次 finish 落盘的已发布段）+ 未发布增量** ——
     // 水位处的「草稿图」就是真实基图：`applyEdit` 把已发布段写进了 `data/图.yaml`，再叠一次就是
@@ -1185,20 +1182,6 @@ export class GrowthSubsystem {
     })
     const entriesOf = async (): Promise<ConceptEntry[]> => this.e.concepts.load(root)
 
-    /** 本批生效的复诊预注册（#312 B2；#320 单一来源）：草稿 note 里显式写的那一枚（draft_patch
-     * 的 note_recheck）。插入批（operator=插入 且有 add_node——受理门要求携带它的正是这一形态）
-     * 缺预注册时由门拒收并在回灌里说清，不再有「思路官计划兜底」这一来源。取值域/clamp 走
-     * `recheckPreregOf` 单源（不因来路不同而放宽）。 */
-    const recheckOf = (noteLite: EditProposalNoteLite | undefined): RecheckPrereg | undefined => {
-      if (!noteLite?.recheck) return undefined
-      const v = recheckPreregOf(noteLite.recheck)
-      if (!v.prereg) {
-        // 显式值非法只可能来自手改的草稿文件（draft_patch 侧同门拦在前面）：不静默兜底
-        //（那会悄悄换掉判据），让它以「缺预注册」的形态在门里炸出来。
-        return undefined
-      }
-      return v.prereg
-    }
     /** 结构性重画建议的形状门（#320；draft_arc 专用）：reason_class 枚举收窄为
      * 结构性事由——读数信号不构成重画战略的理由。 */
     const repaintSuggestionOf = (raw: unknown): { reason_class: string; note?: string } => {
@@ -1218,14 +1201,13 @@ export class GrowthSubsystem {
      * `draft_finish` **三处同一份**——「草稿通过 = 门通过」要求三处喂给门的是同一个对象，
      * 不是三处各拼一份（拼装漂移正是「审计通过而 finish 被拒」那类事故的温床）。
      * `noteIn` / `conceptsIn` 供试算传「本补丁**将要**声明的 note 与铸名」——补丁的
-     * note_operator 与 concepts 在试算时尚未写回 doc，拿旧值试算 = 试算的是另一批。
-     * 复诊预注册（#312 B2）在这里落一次：三处同调因此天然一致——试算带上它、发布也带上它。 */
+     * note_reason 与 concepts 在试算时尚未写回 doc，拿旧值试算 = 试算的是另一批。
+     * 复诊预注册与算子随 ops 条目走（#327 逐条目化），天然随 ops 一同硬化，无批级件。 */
     const batchSpecOf = (
       ops: EditOp[], over: { note?: EditProposalNoteLite; concepts?: ConceptEntry[] } = {},
     ): EditProposalSpec => {
       const noteLite = over.note === undefined ? doc.note : over.note
       const concepts = over.concepts ?? doc.concepts
-      const recheck = recheckOf(noteLite)
       return {
         course: c.name,
         reason: noteLite?.reason ?? '',
@@ -1234,11 +1216,9 @@ export class GrowthSubsystem {
         ...(noteLite
           ? {
               note: {
-                operator: noteLite.operator as GrowthNote['operator'],
                 reason: noteLite.reason,
                 ...(noteLite.target_endpoints?.length ? { target_endpoints: noteLite.target_endpoints } : {}),
                 ...(noteLite.disagreement ? { disagreement: noteLite.disagreement } : {}),
-                ...(recheck ? { recheck } : {}),
               },
             }
           : {}),
@@ -1339,45 +1319,25 @@ export class GrowthSubsystem {
         }
         const mints = shape.concepts
         // 本补丁**将要**声明的 note 与铸名：试算必须按「补丁生效后的本批形态」跑——拿旧 note
-        // 试算等于试算另一批（前进/换向的接线义务、note.recheck 的跨字段规则都挂在 note 上）。
-        // 复诊预注册的写入面（#312 B2）：draft_patch 增 note_recheck。此前它没有任何写入面
-        // （无参数、lite 型无字段、finish 也不透传），而受理门要求「operator=插入 且有
-        // add_node」必须携带它、交接块还反向承诺「插入批落地时随批携带」——思路官一裁
-        // 「插入」，执行官就没有任何合法写法能发布。校验先于任何变更（拒收即整批回滚）、
-        // 且走与提案侧同一个 `recheckPreregOf`（取值域/未知键/clamp 同一份口径）。
-        let declaredNote: EditProposalNoteLite | undefined
-        if (typeof args.note_operator === 'string' && args.note_operator.trim()) {
-          declaredNote = {
-            operator: args.note_operator.trim(),
-            reason: typeof args.note_reason === 'string' ? args.note_reason.trim() : '',
-            ...(Array.isArray(args.note_target_endpoints) && args.note_target_endpoints.length
-              ? { target_endpoints: (args.note_target_endpoints as unknown[]).map(String) }
-              : {}),
+        // 试算等于试算另一批（前进/换向条目的接线义务挂在 note.target_endpoints 上）。
+        // 批级 note 只载理由/朝向（#327 逐条目化：算子与复诊预注册随 ops 条目走，
+        // op.operator / op.recheck 已随条目进 expanded，schema 门逐条裁）。
+        const declaredReason = typeof args.note_reason === 'string' ? args.note_reason.trim() : ''
+        const declaredEndpoints = Array.isArray(args.note_target_endpoints) && args.note_target_endpoints.length
+          ? (args.note_target_endpoints as unknown[]).map(String)
+          : []
+        const declaredNote: EditProposalNoteLite | undefined = declaredReason || declaredEndpoints.length
+          ? {
+            reason: declaredReason,
+            ...(declaredEndpoints.length ? { target_endpoints: declaredEndpoints } : {}),
           }
-        }
-        if (args.note_recheck !== undefined) {
-          const v = recheckPreregOf(args.note_recheck)
-          if (v.errors.length || !v.prereg) {
-            await logRound('patch', render(EXEC_ROUND_PATCH_RECHECK, {}), v.errors)
-            throw new Error(render(ERR_PATCH_RECHECK, {
-              errors: v.errors.map(e => render(EXEC_ERR_ITEM, { error: e })).join('\n'),
-              metrics: RECHECK_METRICS.join('/'),
-              default: RECHECK_DAYS_DEFAULT, min: RECHECK_DAYS_MIN, max: RECHECK_DAYS_MAX,
-            }))
-          }
-          const base = declaredNote ?? doc.note
-          if (!base) {
-            throw new Error(render(ERR_PATCH_RECHECK_NO_NOTE, {}))
-          }
-          declaredNote = { ...base, recheck: v.prereg }
-        }
-        const declared: EditProposalNoteLite | undefined = declaredNote ?? doc.note
+          : undefined
         const nextMints = mints.length ? [...doc.concepts, ...mints] : doc.concepts
         // 试算：**未发布段 + 本补丁**过完整门（schema 纯校验 + 门序列）才落草稿——#309 缺陷①：
         // 此前试算只跑 replayDraft（门的结构子集），`move` 这类非法 op 与 `初识` 这类非法档位
         // 一路落进草稿、直到 finish 才在 propose 的 schema 门炸，而那时 op 已无法清除（缺陷②）。
         const trial = [...unpublishedOf(), ...expanded]
-        const trialSpec = batchSpecOf(trial, { note: declared, concepts: nextMints })
+        const trialSpec = batchSpecOf(trial, { note: declaredNote, concepts: nextMints })
         const { ctx: trialCtx } = await gateCtxOf({ nodes, graph }, nextMints)
         const trialErrors = (await editProposalGateErrors(trialSpec, trialCtx)).errors
         if (trialErrors.length) {
@@ -1390,7 +1350,7 @@ export class GrowthSubsystem {
         doc.ops.push(...expanded)
         if (mints.length) doc.concepts.push(...mints)
         if (suggestions.length) doc.confusables = [...(doc.confusables ?? []), ...suggestions]
-        if (declared !== doc.note) doc.note = declared
+        if (declaredNote !== doc.note) doc.note = declaredNote
         await logRound('patch', render(EXEC_ROUND_PATCH_OK, {
           count: expanded.length, unpublished: doc.ops.length - doc.published,
           norm: shape.normalized.length ? render(EXEC_ROUND_PATCH_OK_NORM, { count: shape.normalized.length }) : '',
@@ -1532,11 +1492,8 @@ export class GrowthSubsystem {
       if (call.name === 'draft_finish') {
         const unpublished = unpublishedOf()
         const noteLite = doc.note
-        if (!noteLite || !noteLite.operator || !noteLite.reason) {
+        if (!noteLite || !noteLite.reason) {
           throw new Error(render(ERR_FINISH_NO_NOTE, {}))
-        }
-        if (!(GROWTH_OPERATORS as readonly string[]).includes(noteLite.operator)) {
-          throw new Error(render(ERR_FINISH_BAD_OPERATOR, { operator: noteLite.operator, allowed: GROWTH_OPERATORS.join('/') }))
         }
         // 提案形态由 batchSpecOf 单点装配（含本批生效的复诊预注册，见该函数）——试算/审计/
         // 发布三处喂给门的因此是同一份对象，不会出现「试算带上计划的 recheck、发布丢了它」。
@@ -1607,7 +1564,7 @@ export class GrowthSubsystem {
           try {
             const p = await this.e.proposeConfusableCandidate(c.name, {
               a: s.concept, b: s.with,
-              evidence: [`生长批提案 #${prop.id} 铸名建议（${noteLite.operator}——${noteLite.reason}）`],
+              evidence: [`生长批提案 #${prop.id} 铸名建议（${operatorFoldOf(unpublished) || '生长'}——${noteLite.reason}）`],
             })
             confusableLines.push(render(EXEC_CONFUSABLE_CANDIDATE, { id: p.id, a: p.a, b: p.b }))
           } catch (err) {
@@ -1619,7 +1576,7 @@ export class GrowthSubsystem {
         const created = unpublished.filter(o => o.op === 'add_node').map(o => String(o.name ?? ''))
         finishes.push({
           proposal_id: prop.id, ops: unpublished.length, snapshot: applied.snapshot,
-          operator: noteLite.operator, reason: noteLite.reason,
+          operators: growthOperatorsOf(unpublished), reason: noteLite.reason,
           target_endpoints: noteLite.target_endpoints ?? [], created,
         })
         await logRound('finish', render(EXEC_ROUND_FINISH_OK, {
@@ -1654,7 +1611,7 @@ export class GrowthSubsystem {
         // 腐坏草稿（concepts 存成字典而非列表）下不能崩：本块是诊断面，读数取舍不栏后续门折叠
         mints: Array.isArray(doc.concepts) ? doc.concepts.length : 0,
       }),
-      ...(doc.note ? [render(EXEC_STATUS_NOTE, { operator: doc.note.operator, reason: doc.note.reason })] : []),
+      ...(doc.note ? [render(EXEC_STATUS_NOTE, { reason: doc.note.reason })] : []),
       ...(doc.rounds.length ? [
         render(EXEC_STATUS_ROUNDS_HEADING, {}),
         ...doc.rounds.slice(-8).map(r => render(EXEC_STATUS_ROUND_LINE, {
@@ -1767,17 +1724,26 @@ export class GrowthSubsystem {
   }
 
   /** 生长闸门（注入 GraphProposals 的回调，propose/apply 双门消费）：只对生长批的
-   * 插入/旁支生效——三率超限或复诊通过率触底时闸停（低数据静默），普通 edit 提案与
-   * 结算自动提案（无 note）恒放行。插入积极性调速器，参数唯一出处 params.ts。 */
+   * 插入/旁支**条目**生效（#327 逐条目化——按 op.operator 分组计数，混算子批各裁各的），
+   * 三率超限或复诊通过率触底时闸停（低数据静默），普通 edit 提案与结算自动提案
+   * （无 note）恒放行。插入积极性调速器，参数唯一出处 params.ts。 */
   async growthGateErrors(spec: EditProposalSpec): Promise<string[]> {
-    if (!spec.note || (spec.note.operator !== '插入' && spec.note.operator !== '旁支')) return []
-    const adds = addNodeCountOf(spec.ops)
-    if (!adds) return []
+    if (!spec.note) return []
+    const addsByOperator = new Map<string, number>()
+    for (const op of spec.ops) {
+      if (op.op !== 'add_node' || (op.operator !== '插入' && op.operator !== '旁支')) continue
+      addsByOperator.set(op.operator, (addsByOperator.get(op.operator) ?? 0) + 1)
+    }
+    if (!addsByOperator.size) return []
     const c = await this.e.registry.get(spec.course)
     if (!c) return []
     const { today, cutoff } = await this.e.learningDay()
     const { rates } = await this.probationFrame(c, today, cutoff)
-    return growthGate(rates, { operator: spec.note.operator, adds }).blocks
+    const blocks: string[] = []
+    for (const [operator, adds] of addsByOperator) {
+      blocks.push(...growthGate(rates, { operator, adds }).blocks)
+    }
+    return blocks
   }
 
 
@@ -1816,8 +1782,10 @@ export class GrowthSubsystem {
 
 
   /** 生长批出材折叠（三率的生长分母）：已决 edit 提案中的生长批（summary 前缀）——
-   * 从 artifact 读 note.operator 与 add_node 数（账本只持有插入，前进/旁支出材从提案
-   * 留痕折叠）。artifact 缺失/损坏的批次不计入（留痕缺失是审计问题，不炸读侧）。 */
+   * 从 artifact 读逐条目算子并按算子分组计数（#327 逐条目化，混算子批一组一条 tally；
+   * 账本只持有插入，前进/旁支出材从提案留痕折叠）。artifact 缺失/损坏的批次不计入
+   * （留痕缺失是审计问题，不炸读侧）；逐条目算子全缺的旧档（#327 前的 note.operator
+   * 形态）回退按批级算子记一条——窗内历史不因 schema 迁移被清零。 */
   private async growthTallies(proposals: ProposalRec[], cutoff: number): Promise<GrowthBatchTally[]> {
     const tallies: GrowthBatchTally[] = []
     for (const p of proposals) {
@@ -1826,12 +1794,21 @@ export class GrowthSubsystem {
       try {
         const doc = YAML.parse(await this.e.fs.readFile(this.e.paths.proposalArtifactPath(p.id, 'edit', p.course))) as {
           note?: { operator?: unknown }
-          ops?: Array<{ op?: unknown }>
+          ops?: Array<{ op?: unknown; operator?: unknown }>
         }
-        const operator = typeof doc.note?.operator === 'string' ? doc.note.operator : ''
-        const added = addNodeCountOf(doc.ops)
-        if (!operator || !added) continue
-        tallies.push({ operator, added, day: dayOfTs(p.decided, cutoff) })
+        const ops = Array.isArray(doc.ops) ? doc.ops : []
+        const byOperator = new Map<string, number>()
+        for (const op of ops) {
+          if (op.op !== 'add_node' || typeof op.operator !== 'string') continue
+          byOperator.set(op.operator, (byOperator.get(op.operator) ?? 0) + 1)
+        }
+        if (byOperator.size) {
+          const day = dayOfTs(p.decided, cutoff)
+          for (const [operator, added] of byOperator) tallies.push({ operator, added, day })
+        } else if (typeof doc.note?.operator === 'string' && addNodeCountOf(ops)) {
+          // #327 前的旧档：批级一枚算子，整批记它
+          tallies.push({ operator: doc.note.operator, added: addNodeCountOf(ops), day: dayOfTs(p.decided, cutoff) })
+        }
       } catch {
         // 三率 tally 折损留痕（#291）：留痕缺失不炸读侧，WARN 指针随行
         this.e.logger.warn('growth.tally_skip', { course: p.course })
@@ -1998,15 +1975,20 @@ export class GrowthSubsystem {
   }
 
 
-  /** 从提案 artifact 回读预注册 metric（账本只存 proposal id 的对账；缺失返回 null）。 */
+  /** 从提案 artifact 回读预注册 metric（账本只存 proposal id 的对账；缺失返回 null）。
+   * #327 起预注册随条目走：按登记节点名找它的 add_node 条目读 op.recheck.metric；
+   * 旧档（note.recheck 形态）回退读批级字段——窗内登记不因 schema 迁移丢判据。 */
   private async recheckMetricOf(_c: CourseEntry, proposals: ProposalRec[], entry: ProbationEntry): Promise<RecheckMetric | null> {
     const rec = proposals.find(p => p.id === entry.proposal)
     if (!rec) return null
     try {
       const doc = YAML.parse(await this.e.fs.readFile(this.e.paths.proposalArtifactPath(entry.proposal, 'edit', rec.course))) as {
         note?: { recheck?: { metric?: unknown } }
+        ops?: Array<{ op?: unknown; name?: unknown; recheck?: { metric?: unknown } }>
       }
-      const metric = doc.note?.recheck?.metric
+      const own = (Array.isArray(doc.ops) ? doc.ops : [])
+        .find(o => o.op === 'add_node' && o.name === entry.node && o.recheck !== undefined)
+      const metric = own?.recheck?.metric ?? doc.note?.recheck?.metric
       return typeof metric === 'string' ? (metric as RecheckMetric) : null
     } catch {
       return null

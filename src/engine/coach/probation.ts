@@ -138,29 +138,31 @@ export function clampRecheckDays(n: number): number {
   return Math.min(RECHECK_DAYS_MAX, Math.max(RECHECK_DAYS_MIN, Math.round(n)))
 }
 
-/** note.recheck 的 schema 门（proposals.validateEditProposal 消费）：恰 {metric, days?}，
- * 未知键拒收；days 非法值拒收、越界值 clamp + warn（默认 10，声明只作快慢调节）。 */
-export function recheckPreregOf(raw: unknown): { errors: string[]; warns: string[]; prereg?: RecheckPrereg } {
+/** recheck 的 schema 门（#327 起预注册随 add_node 条目走：proposals.validateEditProposal
+ * 按 ops.N.recheck 消费，调用方负责拼 where 前缀）：恰 {metric, days?}，未知键拒收；
+ * days 非法值拒收、越界值 clamp + warn（默认 10，声明只作快慢调节）。 */
+export function recheckPreregOf(raw: unknown, where = 'recheck'): { errors: string[]; warns: string[]; prereg?: RecheckPrereg } {
   const errors: string[] = []
   const warns: string[] = []
+  const tag = (msg: string): string => `${where}: ${msg}`
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return { errors: ['note.recheck: 必须是映射（复诊预注册 = {metric, days?}）'], warns }
+    return { errors: [tag('必须是映射（复诊预注册 = {metric, days?}）')], warns }
   }
   const r = raw as Record<string, unknown>
   const unknown = Object.keys(r).filter(k => !['metric', 'days'].includes(k))
   if (unknown.length) {
-    errors.push(`note.recheck 含未知字段 ${JSON.stringify(unknown)}（只允许 metric/days；预注册恰一枚可机判 metric）`)
+    errors.push(tag(`含未知字段 ${JSON.stringify(unknown)}（只允许 metric/days；预注册恰一枚可机判 metric）`))
   }
   if (!(RECHECK_METRICS as readonly string[]).includes(String(r.metric))) {
-    errors.push(`note.recheck.metric: 非法 ${JSON.stringify(String(r.metric))}（允许 ${RECHECK_METRICS.join('/')}）`)
+    errors.push(tag(`metric: 非法 ${JSON.stringify(String(r.metric))}（允许 ${RECHECK_METRICS.join('/')}）`))
   }
   let days: number | undefined
   if (r.days !== undefined) {
     const n = Number(r.days)
-    if (!Number.isFinite(n) || n <= 0) errors.push('note.recheck.days: 必须是正数（复诊期学习日数；缺省 10）')
+    if (!Number.isFinite(n) || n <= 0) errors.push(tag('days: 必须是正数（复诊期学习日数；缺省 10）'))
     else {
       days = clampRecheckDays(n)
-      if (days !== n) warns.push(`note.recheck.days ${n} 已 clamp 到 ${days}（复诊期合法区间 [${RECHECK_DAYS_MIN},${RECHECK_DAYS_MAX}] 学习日）`)
+      if (days !== n) warns.push(tag(`days ${n} 已 clamp 到 ${days}（复诊期合法区间 [${RECHECK_DAYS_MIN},${RECHECK_DAYS_MAX}] 学习日）`))
     }
   }
   if (errors.length) return { errors, warns }

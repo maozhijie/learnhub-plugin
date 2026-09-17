@@ -231,7 +231,7 @@ function stubGrowth(rt: HostRuntime, impl: (course: string, opts: { force?: bool
 
 const APPLIED = {
   state: 'applied', check: { course: '数学', ready: 0, required: 3, ok: false },
-  proposal: { id: 1, ops: 1, operator: '前进', reason: '测试', disagreement: false },
+  proposal: { id: 1, ops: 1, operators: ['前进'], reason: '测试', disagreement: false },
   applied: { ops: 1, snapshot: 2, created: [] },
   segments: [], trajectory: [],
 }

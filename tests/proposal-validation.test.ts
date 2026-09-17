@@ -49,39 +49,49 @@ ops:
 
 // ---- 生长批裁决产物面（#145）：note 区 / route / 零操作 / 边轻键 ----
 
-test('#145 note 区严格 schema：恰 {operator, reason, target_endpoints?, disagreement?, recheck?}，算子枚举锁死（ADR-0076 朝向进 note）', () => {
-  const base = (note: string): string => `course: 校验课\n${note}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n`
-  // 非法算子 / 缺理由 / 未知字段 / disagreement 空声明
-  const badOperator = validateEditProposal(YAML.parse(base('note:\n  operator: 冲刺\n  reason: 理由\n')))
-  assert.ok(badOperator.errors!.some(e => e.includes('note.operator: 非法算子') && e.includes(GROWTH_OPERATORS.join('/'))))
-  const noReason = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n')))
-  assert.ok(noReason.errors!.some(e => e.includes('note.reason 不能为空')))
-  const unknownKey = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n  reason: 理由\n  mode: auto\n')))
-  assert.ok(unknownKey.errors!.some(e => e.includes('note 含未知字段') && e.includes('operator/reason/target_endpoints/disagreement')), 'mode 键退役，allowed 面扩到 target_endpoints/recheck（ADR-0076/#146）')
+test('#145 note 区严格 schema（#327 逐条目化后）：恰 {reason, target_endpoints?, disagreement?}，算子随条目走', () => {
+  const base = (note: string, ops: string): string => `course: 校验课\n${note}ops:\n${ops}`
+  const addNode = '  - op: add_node\n    name: 新节点\n    pre: []\n'
+  // note.operator / note.recheck 退役：写了按未知键点名（指路逐条目写法）
+  const badOperator = validateEditProposal(YAML.parse(base('note:\n  operator: 冲刺\n  reason: 理由\n', addNode)))
+  assert.ok(badOperator.errors!.some(e => e.includes('note 含未知字段') && e.includes('"operator"') && e.includes(GROWTH_OPERATORS.join('/'))))
+  const noReasonDoc = validateEditProposal(YAML.parse(base('note:\n  disagreement: 与批注有分歧\n', addNode)))
+  assert.ok(noReasonDoc.errors!.some(e => e.includes('note.reason 不能为空')))
+  const unknownKey = validateEditProposal(YAML.parse(base('note:\n  reason: 理由\n  mode: auto\n', addNode)))
+  assert.ok(unknownKey.errors!.some(e => e.includes('note 含未知字段') && e.includes('reason/target_endpoints/disagreement')), 'mode 键退役；operator/recheck 指路到 add_node 条目（#327）')
 
-  // 朝向声明（ADR-0076）：schema 门只看列表形态（非空字符串列表）；在册锚与逐终点接线
-  // 的跨字段规则在受理门 endpointGuardErrors（需要锚集合与 ops 全貌）
-  const emptyTargets = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n  reason: 理由\n  target_endpoints: []\n')))
+  // 朝向声明（ADR-0076）：schema 门只看列表形态；跨字段规则在受理门 endpointGuardErrors
+  const emptyTargets = validateEditProposal(YAML.parse(base('note:\n  reason: 理由\n  target_endpoints: []\n', addNode)))
   assert.ok(emptyTargets.errors!.some(e => e.includes('note.target_endpoints: 必须是非空字符串列表')))
-  const nonStringTargets = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n  reason: 理由\n  target_endpoints: [终点甲, 3]\n')))
+  const nonStringTargets = validateEditProposal(YAML.parse(base('note:\n  reason: 理由\n  target_endpoints: [终点甲, 3]\n', addNode)))
   assert.ok(nonStringTargets.errors!.some(e => e.includes('note.target_endpoints: 必须是非空字符串列表')))
-  const emptyDisagreement = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n  reason: 理由\n  disagreement: "  "\n')))
+  const emptyDisagreement = validateEditProposal(YAML.parse(base('note:\n  reason: 理由\n  disagreement: "  "\n', addNode)))
   assert.ok(emptyDisagreement.errors!.some(e => e.includes('note.disagreement')))
 
-  // 合法形态：disagreement 解析进 spec（trim 后），缺席 = undefined
-  const ok = validateEditProposal(YAML.parse(base('note:\n  operator: 旁支\n  reason: 教学消费支线\n  disagreement: 与批注指向有分歧\n')))
+  // 逐条目算子（#327）：非法取值拒收；生长批 add_node 缺 operator 拒收；普通提案带 operator 拒收
+  const badOpOperator = validateEditProposal(YAML.parse(base('note:\n  reason: 理由\n', '  - op: add_node\n    name: 新节点\n    pre: []\n    operator: 冲刺\n')))
+  assert.ok(badOpOperator.errors!.some(e => e.includes('ops.0.operator: 非法算子') && e.includes(GROWTH_OPERATORS.join('/'))))
+  const missingOperator = validateEditProposal(YAML.parse(base('note:\n  reason: 理由\n', addNode)))
+  assert.ok(missingOperator.errors!.some(e => e.includes('ops.0: 生长批的 add_node 必须声明算子 operator')))
+  const plainWithOperator = validateEditProposal(YAML.parse('course: 校验课\nops:\n  - op: add_node\n    name: 新节点\n    pre: []\n    operator: 前进\n'))
+  assert.ok(plainWithOperator.errors!.some(e => e.includes('operator/recheck 只随生长批的 add_node 携带')))
+  const opOnNonAdd = validateEditProposal(YAML.parse(base('note:\n  reason: 理由\n', '  - op: set_pre\n    node: 台阶\n    pre: []\n    operator: 前进\n')))
+  assert.ok(opOnNonAdd.errors!.some(e => e.includes('ops.0: operator/recheck 只随 add_node 携带')))
+
+  // 合法形态：note 不再有 operator；disagreement 解析进 spec（trim 后）
+  const ok = validateEditProposal(YAML.parse(base('note:\n  reason: 教学消费支线\n  disagreement: 与批注指向有分歧\n', '  - op: add_node\n    name: 新节点\n    pre: []\n    operator: 旁支\n')))
   assert.equal(ok.errors, undefined)
-  assert.deepEqual(ok.spec!.note, { operator: '旁支', reason: '教学消费支线', disagreement: '与批注指向有分歧' })
-  const targeted = validateEditProposal(YAML.parse(base('note:\n  operator: 前进\n  reason: 理由\n  target_endpoints: [终点甲, 终点乙]\n')))
+  assert.deepEqual(ok.spec!.note, { reason: '教学消费支线', disagreement: '与批注指向有分歧' })
+  const targeted = validateEditProposal(YAML.parse(base('note:\n  reason: 理由\n  target_endpoints: [终点甲, 终点乙]\n', '  - op: add_node\n    name: 新节点\n    pre: []\n    operator: 前进\n')))
   assert.equal(targeted.errors, undefined)
   assert.deepEqual(targeted.spec!.note!.target_endpoints, ['终点甲', '终点乙'], '朝向声明解析进 spec（trim 后）')
-  const plain = validateEditProposal(YAML.parse(base('')))
+  const plain = validateEditProposal(YAML.parse('course: 校验课\nops:\n  - op: add_node\n    name: 新节点\n    pre: []\n'))
   assert.equal(plain.errors, undefined)
   assert.equal(plain.spec!.note, undefined, '普通提案无 note 区')
 })
 
 test('#145 零操作：生长批（note 在场）ops 空列表合法；普通提案与 ops 缺失照旧拒收', () => {
-  const note = 'note:\n  operator: 前进\n  reason: 结构已足，等内容跟上\n'
+  const note = 'note:\n  reason: 结构已足，等内容跟上\n'
   const zeroOps = validateEditProposal(YAML.parse(`course: 校验课\n${note}ops: []\n`))
   assert.equal(zeroOps.errors, undefined)
   assert.deepEqual(zeroOps.spec!.ops, [])
@@ -101,7 +111,7 @@ test('#316 / ADR-0099 route 退役：提案携带即拒收（写权归罗盘站�
   const plainWithRoute = validateEditProposal(YAML.parse(`course: 校验课\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n`))
   assert.ok(plainWithRoute.errors!.some(e => e.includes('route: 已退役') && e.includes('learnhub_compass_paint')))
   // 生长批同理：写权反转后 note 区也不再豁免 route
-  const growthWithRoute = validateEditProposal(YAML.parse(`course: 校验课\nnote:\n  operator: 前进\n  reason: 理由\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n`))
+  const growthWithRoute = validateEditProposal(YAML.parse(`course: 校验课\nnote:\n  reason: 理由\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n    operator: 前进\n`))
   assert.ok(growthWithRoute.errors!.some(e => e.includes('route: 已退役')))
 })
 
@@ -143,12 +153,12 @@ test('#145 巩固门受理路径：巩固批引未教概念拒收、引已教概
     })
     const consolidate = (teaches: string, extraConcepts = ''): string => `course: 校验课
 note:
-  operator: 巩固
   reason: 收束已学
 ops:
   - op: add_node
     name: 综合收束
     pre: [入门]
+    operator: 巩固
     teaches: {${teaches}}
 ${extraConcepts}`
     await assert.rejects(
@@ -156,8 +166,8 @@ ${extraConcepts}`
       /巩固门|只引已教概念/,
       '随批铸名 ≠ 已教——巩固节点引新概念拒收',
     )
-    const ok = await engine.graph.graphPropose('edit', consolidate('变化率: 会用')) as { id: number; operator?: string }
-    assert.equal(ok.operator, '巩固')
+    const ok = await engine.graph.graphPropose('edit', consolidate('变化率: 会用')) as { id: number; operators?: string[] }
+    assert.deepEqual(ok.operators, ['巩固'])
     // 边轻键在引擎全门同样拒收（受理与 schema 一致）
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 校验课

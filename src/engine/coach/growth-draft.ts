@@ -79,15 +79,13 @@ export interface GrowthDraftDoc {
 
 /** note 区的落盘瘦身形态（与 GrowthNote 同构；avoid 引 proposals 的 GrowthNote 造成
  * 类型耦合——草稿缓存只关心可 JSON 化的取值）。
- * `recheck`（#312 B2）= 插入批的复诊预注册：受理门要求「operator=插入 且有 add_node」
- * 必须携带（proposals.validateEditProposal），而它是**提案那一侧**的硬门——草稿侧不给
- * 写入面就等于插入算子经执行官站结构性不可发布。取值域与 clamp 归 probation（写侧只透传）。 */
+ * #327 起 note 只载**批级**声明（理由/朝向/分歧）；算子与复诊预注册是逐条目属性
+ * （op.operator / op.recheck，随 doc.ops 走）——受理门要求插入条目必须预注册
+ * （proposals.validateEditProposal），草稿侧的写入面就是 add_node 条目自己的 recheck 字段。 */
 export interface EditProposalNoteLite {
-  operator: string
   reason: string
   target_endpoints?: string[]
   disagreement?: string
-  recheck?: { metric: string; days?: number }
 }
 
 /** confusable 建议一条（#272）：concept 是（通常随批铸名的）新概念，with 是易混对端。 */
@@ -386,10 +384,14 @@ export function expandPatchOps(
       if (into.length < 2) throw new Error(render(OP_ERR_SPLIT_MIN, { where: `ops.${i}` }))
       if (new Set(into).size !== into.length) throw new Error(render(OP_ERR_SPLIT_DUP, { where: `ops.${i}` }))
       const pres = [...(graph.preOf[node] ?? [])]
+      // 拆分件的算子/复诊预注册随 raw 声明、逐件继承（#327 逐条目化：生长批的每条
+      // add_node 都要 operator——拆分不改变「以什么方式长」，一件声明全体继承）。
       for (const name of into) {
         expanded.push({
           op: 'add_node', name,
           pre: [...pres],
+          ...(raw.operator !== undefined ? { operator: raw.operator as EditOp['operator'] } : {}),
+          ...(raw.recheck !== undefined ? { recheck: raw.recheck as EditOp['recheck'] } : {}),
           ...(src.note ? { note: src.note } : {}),
           ...(src.est !== undefined ? { est: src.est } : {}),
           ...(src.bloom ? { bloom: src.bloom } : {}),
@@ -424,6 +426,9 @@ export function expandPatchOps(
         name: String(item.name ?? ''),
         pre: j === 0 ? (Array.isArray(raw.pre) ? raw.pre as string[] : [])
           : [String(chain[j - 1]!.name ?? '')],
+        // 链条目的算子/复诊预注册逐条透传（#327 逐条目化：展开后的 add_node 与手写原子 op 同形）
+        ...(item.operator !== undefined ? { operator: item.operator as EditOp['operator'] } : {}),
+        ...(item.recheck !== undefined ? { recheck: item.recheck as EditOp['recheck'] } : {}),
         ...(item.est !== undefined ? { est: Number(item.est) } : {}),
         ...(item.bloom !== undefined ? { bloom: String(item.bloom) as EditOp['bloom'] } : {}),
         ...(item.difficulty !== undefined ? { difficulty: Number(item.difficulty) as EditOp['difficulty'] } : {}),

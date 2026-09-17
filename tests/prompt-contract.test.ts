@@ -191,9 +191,10 @@ test('#320: 教练执行模板 v1——单站回路、算子集含停摆、补�
   assert.match(tpl, /target_endpoints/, '朝向声明字段')
   assert.match(tpl, /交汇优先/, '多终点交汇优先')
   assert.match(tpl, /收尾宣告由引擎对纯接线批自动完成/, '收尾不是另立仪式——引擎自动标记')
-  // 补丁纪律
-  assert.match(tpl, /note_operator \/ note_reason/, '每批声明算子与理由')
-  assert.match(tpl, /note_recheck 写复诊预注册/, '插入批复诊预注册随批携带')
+  // 补丁纪律（#327 逐条目化：算子与复诊预注册随 add_node 条目走）
+  assert.match(tpl, /operator 声明自己的生长算子/, '每条 add_node 逐条目声明算子')
+  assert.match(tpl, /批理由用 note_reason/, '批级理由仍随批声明')
+  assert.match(tpl, /插入条目用 recheck 写复诊预注册/, '插入条目复诊预注册随条目携带')
   assert.match(tpl, /set_pre \/ set_enc 是\*\*整体替换\*\*语义/, 'set_pre/set_enc 整体替换语义')
   // 弧建议边界（建议权非写权）
   assert.match(tpl, /你对弧只有建议权/, '弧写权归罗盘站——教练只有建议权')

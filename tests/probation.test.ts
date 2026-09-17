@@ -45,18 +45,19 @@ function insertionYaml(opts: {
   const operator = opts.operator ?? '插入'
   const recheckOn = opts.recheck ?? true
   const name = opts.name ?? '过渡'
+  // #327 逐条目化：算子与复诊预注册随 add_node 条目走（note 只载批级理由）
   return [
     'course: 数学',
     'note:',
-    `  operator: ${operator}`,
     '  reason: 卡点集中指向过渡缺口，当场补台阶',
-    ...(recheckOn
-      ? [`  recheck:`, `    metric: ${opts.metric ?? '前进恢复'}`, ...(opts.days ? [`    days: ${opts.days}`] : [])]
-      : []),
     'ops:',
     '  - op: add_node',
     `    name: ${name}`,
     `    pre: [${opts.pre ?? '入门'}]`,
+    `    operator: ${operator}`,
+    ...(recheckOn
+      ? ['    recheck:', `      metric: ${opts.metric ?? '前进恢复'}`, ...(opts.days ? [`      days: ${opts.days}`] : [])]
+      : []),
     '    est: 10',
     ...(opts.withConcept ? ['    teaches: {过渡概念: 会用}'] : []),
     '  - op: set_pre',
@@ -334,7 +335,7 @@ test('AC1 插入批受理：预注册随提案落字、apply 同事务落账本�
     assert.ok(((prop as { warns?: string[] }).warns ?? []).some(w => w.includes('clamp')), 'clamp 落受理回执 warn')
     const applied = await engine.graph.graphApply('edit', prop.id) as Record<string, unknown>
     assert.deepEqual(applied.probation_registered, ['过渡'])
-    assert.deepEqual(applied.recheck, { metric: '前进恢复', due: 20 }, 'days 100 clamp 到 20')
+    assert.deepEqual(applied.rechecks, [{ node: '过渡', metric: '前进恢复', due: 20 }], 'days 100 clamp 到 20；#327 起逐条目随行')
 
     const ledger = await readProbationLedger(paths, 'math', nodeVaultFs)
     assert.equal(ledger.length, 1)
@@ -365,11 +366,11 @@ test('预注册负路径：插入批缺预注册/非插入批携带/非法 metri
   await withVault({ graph: TWO_NODE_GRAPH }, async ({ engine, paths }) => {
     await assert.rejects(
       () => engine.graph.graphPropose('edit', insertionYaml({ recheck: false })),
-      /note\.recheck: 插入批必须预注册复诊/,
+      /ops\.0: 插入条目必须预注册复诊/,
       '插入批（有 add_node）必须预注册——零人审结算的判据前提')
     await assert.rejects(
       () => engine.graph.graphPropose('edit', insertionYaml({ operator: '前进' })),
-      /复诊预注册只随插入批携带/,
+      /ops\.0: 复诊预注册只随插入条目携带/,
       '前进批没有可登记的插入边')
     await assert.rejects(
       () => engine.graph.graphPropose('edit', insertionYaml({ metric: '疗效验证' })),
@@ -586,23 +587,24 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
 
     await assert.rejects(
       () => engine.graph.graphPropose('edit', [
-        'course: 数学', 'note:', '  operator: 插入', '  reason: 再插一节', '  recheck:', '    metric: 前进恢复', '    days: 5', 'ops:',
-        '  - op: add_node', '    name: 过渡二号', '    pre: [入门]',
+        'course: 数学', 'note:', '  reason: 再插一节', 'ops:',
+        '  - op: add_node', '    name: 过渡二号', '    pre: [入门]', '    operator: 插入', '    recheck:', '      metric: 前进恢复', '      days: 5',
       ].join('\n') + '\n'),
       /生长闸门拒绝受理[\s\S]*复诊通过率/,
       '超速插入批在受理门就被拒收（构造超限场景验证调速）')
     // 前进批不受闸（ADR-0076 主线批必接线：声明终点 + set_pre 汇入批内新前沿；route 不携带——本批不重写罗盘）
     const fwd = await engine.graph.graphPropose('edit', [
-      'course: 数学', 'note:', '  operator: 前进', '  reason: 主线推进', '  target_endpoints: [终点]', 'ops:',
-      '  - op: add_node', '    name: 前进节点', '    pre: [入门]',
+      'course: 数学', 'note:', '  reason: 主线推进', '  target_endpoints: [终点]', 'ops:',
+      '  - op: add_node', '    name: 前进节点', '    pre: [入门]', '    operator: 前进',
       '  - op: set_pre', '    node: 终点', '    pre: [前进节点]',
     ].join('\n') + '\n') as { id: number }
     assert.ok(fwd.id > 0)
     await engine.graph.graphReject(fwd.id)
     // 旁支 1 节：占比 1/8 = 12.5% ≤ 20% → 放行
     const side = await engine.graph.graphPropose('edit', [
-      'course: 数学', 'note:', '  operator: 旁支', '  reason: 教学消费支线', 'ops:',
+      'course: 数学', 'note:', '  reason: 教学消费支线', 'ops:',
       '  - op: add_node', '    name: 旁支节点', '    pre: [入门]',
+      '    operator: 旁支',
     ].join('\n') + '\n') as { id: number }
     assert.ok(side.id > 0)
     await engine.graph.graphReject(side.id)

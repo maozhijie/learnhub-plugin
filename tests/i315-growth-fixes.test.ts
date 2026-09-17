@@ -81,7 +81,7 @@ test('#315 B2：sealedDecisionOf——闭包未真已学不落 sealed（降级�
 
   // 主线批（含 add_node 接线）语义不动：reopen 照旧
   const reopen = sealedDecisionOf([
-    { op: 'add_node', name: '丁', pre: [] },
+    { op: 'add_node', name: '丁', pre: [], operator: '前进' },
     { op: 'set_pre', node: '终点', pre: ['丁'] },
   ], anchors, () => ({ total: 0, unlearned: [] }))
   assert.deepEqual(reopen.effects, [{ endpoint: '终点', action: 'reopen' }])
@@ -95,7 +95,7 @@ test('#315 B2：sealedDecisionOf——闭包未真已学不落 sealed（降级�
 
 test('#315 B3：单一 teaches 概念时裸字符串误解列表归一归属；多概念仍拒收', () => {
   const single = normalizePatchShape([
-    { op: 'add_node', name: '丁', pre: [], teaches: { 变化率: '会用' }, misconceptions: ['以为变化率就是导数', '以为变化率恒为正'] },
+    { op: 'add_node', name: '丁', pre: [], teaches: { 变化率: '会用' }, misconceptions: ['以为变化率就是导数', '以为变化率恒为正'], operator: '前进' },
   ], undefined)
   assert.deepEqual(single.errors, [])
   assert.ok(single.normalized.some(s => s.includes('唯一 teaches 概念「变化率」')))
@@ -106,12 +106,12 @@ test('#315 B3：单一 teaches 概念时裸字符串误解列表归一归属；�
   ])
 
   const multi = normalizePatchShape([
-    { op: 'add_node', name: '丁', pre: [], teaches: { 甲概念: '会用', 乙概念: '知道' }, misconceptions: ['拆不出'] },
+    { op: 'add_node', name: '丁', pre: [], teaches: { 甲概念: '会用', 乙概念: '知道' }, misconceptions: ['拆不出'], operator: '前进' },
   ], undefined)
   assert.ok(multi.errors.some(e => e.includes('字符串列表')), '多概念时真拆不出——照旧拒收回灌速查')
 
   const noTeaches = normalizePatchShape([
-    { op: 'add_node', name: '丁', pre: [], misconceptions: ['无 teaches 不归属'] },
+    { op: 'add_node', name: '丁', pre: [], misconceptions: ['无 teaches 不归属'], operator: '前进' },
   ], undefined)
   assert.ok(noTeaches.errors.some(e => e.includes('字符串列表')), '无 teaches 不猜归属')
 })
@@ -164,16 +164,16 @@ test('#315 B5：同一图面下上下文包的结构读数逐字一致（同一�
 test('#315 B7：teaches 与 assumes 同概念（含别名归一）拒收；不同概念放行', () => {
   const entries: ConceptEntry[] = [{ canonical: '变化率', aliases: ['rate of change'] }]
   const contradiction = selfContradictionErrors([
-    { op: 'add_node', name: '丁', pre: [], teaches: { 变化率: '能教' }, assumes: { 变化率: '会用' } },
+    { op: 'add_node', name: '丁', pre: [], teaches: { 变化率: '能教' }, assumes: { 变化率: '会用' }, operator: '前进' },
   ], entries)
   assert.equal(contradiction.length, 1)
   assert.match(contradiction[0]!, /teaches 与 assumes 同一概念「变化率」/)
   const viaAlias = selfContradictionErrors([
-    { op: 'add_node', name: '丁', pre: [], teaches: { 变化率: '能教' }, assumes: { 'rate of change': '会用' } },
+    { op: 'add_node', name: '丁', pre: [], teaches: { 变化率: '能教' }, assumes: { 'rate of change': '会用' }, operator: '前进' },
   ], entries)
   assert.equal(viaAlias.length, 1, '别名写法按 canonical 归一后同样命中')
   const spiral = selfContradictionErrors([
-    { op: 'add_node', name: '丁', pre: [], teaches: { 变化率: '能教' }, assumes: { 别的概念: '会用' } },
+    { op: 'add_node', name: '丁', pre: [], teaches: { 变化率: '能教' }, assumes: { 别的概念: '会用' }, operator: '前进' },
   ], entries)
   assert.deepEqual(spiral, [], '假设别的概念 = 合法，螺旋升档只 teaches 高档不 assumes 同概念')
 })
@@ -247,7 +247,6 @@ test('#315 B2 apply 主形态：空 pre 终点接线未学坡道，收尾批降�
     // 降级判定必须看**接线后**的闭包（用接线前旧图会读到空闭包而漏降级）。
     const prop = await h.engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 终点坡道收尾接线
 ops:
   - op: set_pre
@@ -267,7 +266,6 @@ test('#315 B2 apply：闭包未真已学时收尾批降级（锚不落 sealed）
     assert.equal(await readSealed(), undefined)
     const sealBatch = () => `course: 数学
 note:
-  operator: 前进
   reason: 终点坡道收尾接线
 ops:
   - op: set_pre

@@ -325,7 +325,6 @@ test('删终点体检无 Broken（#240/ADR-0076）：锚与节点一并移除、
     await engine.graph.addEndpoint('数学', '手工终点', '一句目标描述')
     const closing = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 停摆前把手工终点接上最后台阶
 ops:
   - op: set_pre

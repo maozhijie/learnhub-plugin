@@ -115,7 +115,6 @@ test('#201 异常态恢复演练：接线批过受理门 → 复发预防对照 
     // ---- 第 1 步：收尾接线批过 #198 新受理门（教练裁决：终点 = 真实前沿一线）----
     const wiring = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 对账演练——陈旧终点接线（种子粗边）作废，终点改扎真实前沿「合成求解路径」「答案检验」一线，收尾宣告随批落锚
 ops:
   - op: set_pre

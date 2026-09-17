@@ -42,7 +42,7 @@ test('#313 A1：同批 del_node X + add_node X（先删后建改写）不再吞�
   const { nodes, graph } = fixture()
   const ops: EditOp[] = [
     { op: 'del_node', node: '乙' },
-    { op: 'add_node', name: '乙', pre: ['甲'], teaches: { 变化率: '会用' } },
+    { op: 'add_node', name: '乙', pre: ['甲'], teaches: { 变化率: '会用' }, operator: '前进' },
   ]
   const r = replayDraft(nodes, graph, ops)
   // 零错误：丙 的 pre 在批末重新落到同名新节点上（不是断边，也不该被静默摘掉）
@@ -124,7 +124,7 @@ async function ghostNote(h: Awaited<ReturnType<typeof withVault>>): Promise<void
   await writeFile(h.paths.courseNotePath('数学', '幽灵节点'), noteText('幽灵节点') + '\n', 'utf8')
 }
 
-const SIDE_BATCH = 'course: 数学\nnote:\n  operator: 旁支\n  reason: 教学消费支线\nops:\n  - op: add_node\n    name: 支线台阶\n    pre: [认识变化率]\n'
+const SIDE_BATCH = 'course: 数学\nnote:\n  reason: 教学消费支线\nops:\n  - op: add_node\n    name: 支线台阶\n    pre: [认识变化率]\n    operator: 旁支\n'
 
 test('#313 B5：审计 ERROR 的明细随错随行（apply 拒收不再只指一份模型读不到的报告）', async () => {
   await withVault({ registry: null, graph: null }, async h => {
@@ -156,11 +156,11 @@ test('#313 B5：审计 ERROR 也进受理门（propose 当场拒，不再「受�
 
 // ---- B2：插入批的复诊预注册写入面 ----
 
-test('#313 B2：note 区跨字段门照旧——插入批缺预注册拒收、非插入批携带拒收', () => {
-  const missing = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  operator: 插入\n  reason: r\nops:\n  - { op: add_node, name: 新节点, pre: [] }\n'))
-  assert.ok(missing.errors!.some(e => e.includes('插入批必须预注册复诊')), missing.errors!.join('\n'))
-  const surplus = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  operator: 前进\n  reason: r\n  recheck: { metric: 前进恢复 }\nops:\n  - { op: add_node, name: 新节点, pre: [] }\n'))
-  assert.ok(surplus.errors!.some(e => e.includes('复诊预注册只随插入批携带')), surplus.errors!.join('\n'))
+test('#313 B2 跨字段门（#327 逐条目化后）：插入条目缺预注册拒收、非插入条目携带拒收', () => {
+  const missing = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  reason: r\nops:\n  - { op: add_node, name: 新节点, pre: [], operator: 插入 }\n'))
+  assert.ok(missing.errors!.some(e => e.includes('插入条目必须预注册复诊')), missing.errors!.join('\n'))
+  const surplus = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  reason: r\nops:\n  - { op: add_node, name: 新节点, pre: [], operator: 前进, recheck: { metric: 前进恢复 } }\n'))
+  assert.ok(surplus.errors!.some(e => e.includes('复诊预注册只随插入条目携带')), surplus.errors!.join('\n'))
 })
 
 type LoopTurn = { text: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }
@@ -190,7 +190,7 @@ const finishCall = (id: string): LoopTurn => ({ text: '', toolCalls: [{ id, name
 
 /** 一条插入批的最小合法 ops：起点「认识变化率」与终点「用导数解决优化问题」之间插一级台阶。 */
 const INSERT_OPS = [
-  { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15 },
+  { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '插入' },
   { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
 ]
 
@@ -198,9 +198,8 @@ test('#313 B2：draft_patch 的 note_recheck 是真实写入面——插入批�
   await withVault({ registry: null, graph: null }, async h => {
     await draftCourse(h.engine, CAPABILITY_DRAFT)
     const { seam } = scriptFake([
-      patchCall('c1', INSERT_OPS, {
-        note_operator: '插入', note_reason: '卡点集中在变化率到导数的跨步',
-        note_recheck: { metric: '卡点集中度降幅', days: 5 },
+      patchCall('c1', [{ ...INSERT_OPS[0], recheck: { metric: '卡点集中度降幅', days: 5 } }, INSERT_OPS[1]], {
+        note_reason: '卡点集中在变化率到导数的跨步',
       }),
       finishCall('c2'),
       { text: '本批已发布。' },
@@ -220,15 +219,15 @@ test('#313 B2：note_recheck 形状不合法当场整批拒收（回灌合法取
   await withVault({ registry: null, graph: null }, async h => {
     await draftCourse(h.engine, CAPABILITY_DRAFT)
     const { seam, receipts } = scriptFake([
-      patchCall('c1', INSERT_OPS, {
-        note_operator: '插入', note_reason: 'r', note_recheck: { metric: '乱写的 metric' },
+      patchCall('c1', [{ ...INSERT_OPS[0], recheck: { metric: '乱写的 metric' } }, INSERT_OPS[1]], {
+        note_reason: 'r',
       }),
       { text: '收束（本批不成立）。' },
     ])
     const r = await h.engine.growth2.coachDraft('数学', seam)
     assert.equal(r.unpublished_ops, 0, '整批回滚：毒形状不随草稿过夜')
     const receipt = receipts.join('\n---\n')
-    assert.match(receipt, /note_recheck 未过/)
+    assert.match(receipt, /recheck: 非法|metric: 非法|ops\.0\.recheck:/)
     assert.match(receipt, /卡点集中度降幅/, '回灌带合法取值域（模型不必去猜）')
     // 门拒绝也落调试日志（#313 B6：草稿侧此前只活在草稿档的轮志里，人翻日志看不到）
     const gateLog = h.logger.nth('coach.gate.reject')!

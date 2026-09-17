@@ -93,12 +93,12 @@ test('#198② 主线批（前进）含新节点未声明朝向 → 受理门拒�
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 前沿缺下一台阶
 ops:
   - op: add_node
     name: 新台阶
     pre: [入门]
+    operator: 前进
     est: 15
 `),
       /未声明朝向.*target_endpoints 必填/s,
@@ -107,13 +107,13 @@ ops:
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 前沿缺下一台阶
   target_endpoints: [终点]
 ops:
   - op: add_node
     name: 新台阶
     pre: [入门]
+    operator: 前进
     est: 15
   - op: set_pre
     node: 终点
@@ -125,12 +125,12 @@ ops:
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 换向
   reason: 批注指向变化
 ops:
   - op: add_node
     name: 新方向
     pre: [入门]
+    operator: 换向
     est: 15
 `),
       /未声明朝向/s,
@@ -143,13 +143,13 @@ test('#198③ 主线批接线合规受理 + 收尾接线批（零 add_node 纯 s
     // 前进批带朝向声明 + 完整接线：新前沿汇入终点闭包 → 受理
     const mainline = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 前沿缺下一台阶
   target_endpoints: [终点]
 ops:
   - op: add_node
     name: 新台阶
     pre: [入门]
+    operator: 前进
     est: 15
   - op: set_pre
     node: 终点
@@ -161,7 +161,6 @@ ops:
     // 收尾接线批：零 add_node、ops 只有终点 set_pre → 合法（停摆前把终点接上最终台阶）
     const closing = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 既有节点已满足终点要求，停摆前接线
 ops:
   - op: set_pre
@@ -178,12 +177,12 @@ test('#198 豁免与既有语义：旁支批免接线可受理；del/rename 终�
     // 旁支批（症状/教学消费）豁免接线义务
     const side = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 旁支
   reason: 讲清主线必须先教的支线
 ops:
   - op: add_node
     name: 支线台阶
     pre: [入门]
+    operator: 旁支
     est: 10
 `) as { id: number }
     assert.ok(side.id > 0)
@@ -224,7 +223,6 @@ test('#198/#202 apply 侧：收尾接线批写 sealed；主线接线批清 seale
     // 收尾接线批 apply → 锚写 sealed（收尾即宣告承诺兑现）
     const closing = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 既有节点已满足终点要求，停摆前接线
 ops:
   - op: set_pre
@@ -246,13 +244,13 @@ ops:
     // 主线接线批重开（前进 + add_node + 声明朝向 + 终点接线）→ sealed 清除，完成回到未完成
     const reopen = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 目标扩了一级，重开主线
   target_endpoints: [终点]
 ops:
   - op: add_node
     name: 更高台阶
     pre: [中间台阶]
+    operator: 前进
     est: 15
   - op: set_pre
     node: 终点
@@ -275,7 +273,6 @@ ops:
     )
     const reseal = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 再次收尾接线
 ops:
   - op: set_pre
@@ -285,12 +282,12 @@ ops:
     await engine.graph.graphApply('edit', reseal.id)
     const side = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 旁支
   reason: 支线补台阶
 ops:
   - op: add_node
     name: 支线台阶
     pre: [入门]
+    operator: 旁支
     est: 10
 `) as { id: number }
     await engine.graph.graphApply('edit', side.id)
@@ -349,7 +346,6 @@ test('#202 sealed 落盘口径：夹带非 set_pre op 的零新增批不构成�
     // 零 add_node 但夹带 set_note（非纯 set_pre 批）→ sealed 不写也不清
     const mixed = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 只改备注不接线
 ops:
   - op: set_note
@@ -361,7 +357,6 @@ ops:
     // 纯 set_pre 批但接线的是别的节点（不触终点）→ sealed 不动
     const otherTarget = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 重接中间台阶前置
 ops:
   - op: set_pre
@@ -523,7 +518,6 @@ test('#239 逐终点收尾：接线终点甲只给甲写 sealed，乙不受影�
     // 收尾接线批（零 add_node 纯 set_pre）只接甲 → 只有甲落 sealed
     const closeA = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 甲方向已满足，停摆前接线
 ops:
   - op: set_pre
@@ -545,13 +539,13 @@ ops:
     // 甲重开主线（前进 + add_node + 声明朝甲）→ 只清甲的 sealed，乙照旧
     const reopenA = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 甲方向再进一级
   target_endpoints: [终点甲]
 ops:
   - op: add_node
     name: 甲更高台阶
     pre: [起点甲]
+    operator: 前进
     est: 15
   - op: set_pre
     node: 终点甲
@@ -570,13 +564,13 @@ test('#239 接线门多终点化（ADR-0076）：声明朝向逐终点接线受�
     // 声明朝甲方向长：target_endpoints=[终点甲] + 甲接线 → 受理；乙的 pre 一字未动
     const growA = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 只朝甲方向长
   target_endpoints: [终点甲]
 ops:
   - op: add_node
     name: 甲新台阶
     pre: [起点甲]
+    operator: 前进
     est: 15
   - op: set_pre
     node: 终点甲
@@ -595,13 +589,13 @@ ops:
     // 交汇合法：同一新节点同批声明两个朝向、各带 set_pre → 同时进多个终点的 pre
     const junction = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 一级台阶同时服务两个方向（交汇）
   target_endpoints: [终点甲, 终点乙]
 ops:
   - op: add_node
     name: 交汇台阶
     pre: [起点甲, 起点乙]
+    operator: 前进
     est: 15
   - op: set_pre
     node: 终点甲
@@ -620,13 +614,13 @@ ops:
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 朝不存在的方向长
   target_endpoints: [不存在的终点]
 ops:
   - op: add_node
     name: 又一台阶
     pre: [起点甲]
+    operator: 前进
     est: 10
 `),
       /不是在册终点/,
@@ -636,12 +630,12 @@ ops:
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
-  operator: 前进
   reason: 桥梁期的老写法
 ops:
   - op: add_node
     name: 又一台阶
     pre: [起点甲]
+    operator: 前进
     est: 10
 `),
       /未声明朝向.*target_endpoints 必填/s,

@@ -695,6 +695,11 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // #326：下游/邻域子图读件入站——读件八件 → 九件（工具使用清单随行）。
     version: 2, date: '2026-09-17', changeType: '读件 +1（#326）：只读工具清单增 subgraph（下游子图）',
     expectedDelta: '【工具使用】第 1 条的只读工具枚举增 subgraph（给定节点的下游传递闭包全拓扑——谁消费它、影响面到哪）。预期增量：模型在插入/旁支/删改裁决前可一次自查下游影响面（此前只有单跳 node_card 下游消费行），不再凭单跳近邻猜影响面；其余纪律不变',
+  }, {
+    // #327：算子降为逐条目属性（混算子批）——note_operator / note_recheck 批级两参退役，
+    // op.operator / op.recheck 逐条目声明；生长批 note 区只载理由/朝向/分歧。
+    version: 3, date: '2026-09-17', changeType: '批次形状（#327）：算子与复诊预注册降为逐条目属性——混算子批合法',
+    expectedDelta: '【生长算子集】补「算子是逐条目属性」段：每条 add_node 用 operator 声明自己的算子，同批可混算子（前进铺主线 + 插入补台阶 + 旁支挂支线一次长出）；【补丁纪律】改「每条 add_node 用 operator 声明算子；插入条目用 recheck 写预注册」。同波模型面：draft_patch 去 note_operator / note_recheck 两参（opFields 增 operator / recheck），批级状态块与收束/拒收文案随行改口径。预期增量：一轮/一批可跨算子出各色节点而不必拆批重投；接线义务与复诊结算分别收窄到前进/换向、插入条目；停摆与零操作收束不变。过门记录：check ✓（同提交登记）；replay 未做——本机无生成语料目录（同 v1/v2 先例如实登记）；compare 未做真模型对照（同先例）',
   }],
 }
 
