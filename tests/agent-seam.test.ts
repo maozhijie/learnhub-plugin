@@ -6,7 +6,8 @@
  *   仍败以 fatal 抛两轮死因、修复轮自身失败同葬、门内程序性抛错原样冒泡；
  *   受理式门（propose/写盘）的产物经 GateVerdict.result 随行交还。
  * - 工具回路模式：白名单工具执行与结果回灌、runTool 失败以 isError 回灌、
- *   K≤20 轮预算封顶 fail loud（不可被调用方抬高）、LlmStream 缺位 fail loud。
+ *   预算三件成组（#328：轮数/输出 token/总时长）任一件越顶 fail loud（不可被调用方
+ *   抬高；token 件沿 usage 回程累计、时长件沿时钟端口）、LlmStream 缺位 fail loud。
  */
 import { memLogger } from './helpers/logger.ts'
 import test from 'node:test'
@@ -47,13 +48,13 @@ function collector(): { records: AgentCallRecord[]; onCall: (r: AgentCallRecord)
 }
 
 /** 脚本化回路端口：按调用序回放助手轮（文本+工具调用），记录整段回路历史。 */
-function fakeStream(script: Array<{ text: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }>) {
+function fakeStream(script: Array<{ text: string; toolCalls?: Array<{ id: string; name: string; arguments: string }>; usage?: { inputTokens: number; outputTokens: number } }>) {
   const requests: Array<{ messages: LlmLoopTurn[]; tools?: LlmToolSpec[]; effort?: LlmEffort }> = []
   const fn: LlmStream = async req => {
     requests.push({ messages: req.messages, tools: req.tools, effort: req.effort })
     if (!script.length) throw new Error('脚本化回路端口：应答已耗尽')
     const next = script.shift()!
-    return { text: next.text, toolCalls: next.toolCalls ?? [] }
+    return { text: next.text, toolCalls: next.toolCalls ?? [], ...(next.usage ? { usage: next.usage } : {}) }
   }
   return Object.assign(fn, { requests })
 }
@@ -263,7 +264,7 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤20
       station: '教练生长', prompt: 'p', tools: [],
       runTool: async () => `图面第 ${++spin} 版（逐轮在变）`,
     }),
-    /工具回路预算耗尽（K≤20 轮后仍在请求工具）/,
+    /工具回路预算耗尽（三件成组：轮数\/输出 token\/总时长）——轮数件（20 轮后仍在请求工具，上限 20 轮）触顶/,
   )
   assert.equal(endless.requests.length, 21, '第 K+1 轮发现仍在请求工具即中止')
 
@@ -274,6 +275,55 @@ test('工具回路：runTool 失败以 isError 回灌（模型可见），K≤20
     /LlmStream 端口/,
   )
   assert.equal(AGENT_LOOP_MAX_TOOL_ROUNDS, 20, 'ADR-0077 回路预算 K≤20（上调自 ADR-0041 的 6）')
+})
+
+test('预算三件成组（#328）：输出 token 件沿 usage 回程累计越顶 fail loud；路由未上报 usage 时该件不执法', async () => {
+  // 每轮上报 20000 输出 token：第 2 轮累计 40000 > 32768 → 输出 token 件触顶（轮数远未到 20）
+  const stream = fakeStream(Array.from({ length: 4 }, (_, i) => ({
+    text: `第${i}轮`, toolCalls: [{ id: `c${i}`, name: 'graph_view', arguments: '{}' }],
+    usage: { inputTokens: 1000, outputTokens: 20000 },
+  })))
+  const agent = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream }, systemClock)
+  let toolRuns = 0
+  await assert.rejects(
+    () => agent.agentLoop({
+      station: '教练执行', prompt: 'p', tools: [],
+      runTool: async () => { toolRuns++; return `图面第 ${toolRuns} 版（逐轮在变，不撞熔断）` },
+    }),
+    /输出 token 件（累计 40000，上限 32768）触顶/,
+  )
+  assert.equal(toolRuns, 1, '触顶轮的新请求工具不再执行（与 K 顶同位裁决）')
+
+  // 对照：usage 缺席（路由未上报）→ token 件不执法，回路照常走到文本收束
+  const silent = fakeStream([
+    { text: '查', toolCalls: [{ id: 'c1', name: 'graph_view', arguments: '{}' }] },
+    { text: '收束' },
+  ])
+  const agent2 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: silent }, systemClock)
+  const out = await agent2.agentLoop({ station: '教练执行', prompt: 'p', tools: [], runTool: async () => '图面' })
+  assert.equal(out.text, '收束')
+})
+
+test('预算三件成组（#328）：总时长件沿时钟端口越顶 fail loud', async () => {
+  // 时钟随轮快进 20 分钟/轮：第 2 轮裁决时已用 40 分钟 > 30 分钟上限 → 时长件触顶
+  let now = 0
+  const fastClock = { nowMs: () => now }
+  const stream = fakeStream(Array.from({ length: 4 }, (_, i) => ({
+    text: `第${i}轮`, toolCalls: [{ id: `c${i}`, name: 'graph_view', arguments: '{}' }],
+  })))
+  const agent = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream }, fastClock)
+  let spin = 0
+  await assert.rejects(
+    () => agent.agentLoop({
+      station: '教练执行', prompt: 'p', tools: [],
+      runTool: async () => {
+        spin++
+        now += 20 * 60 * 1000 // 每执行一次工具，墙钟快进 20 分钟（deep 档慢轮的极端化）
+        return `图面第 ${spin} 版（逐轮在变，不撞熔断）`
+      },
+    }),
+    /总时长件（已用 \d+ms，上限 1800000ms）触顶/,
+  )
 })
 
 test('工具回路：任务取消传导（#163）——旗标翻真即中止，后续轮与工具执行不再发生', async () => {

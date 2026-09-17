@@ -16,7 +16,8 @@
  *   原文回灌重产一次，仍败以站点死因抛出。#157 的生长批回灌重裁段即此形态的雏形，
  *   随缝收口共享（受理门本身零改动，ADR-0050 语义原样）。
  *
- * 回路预算（ADR-0041；ADR-0077 上调 6→20）：K≤20 次工具轮（`agentLoop` 强制，不设调用方覆盖）+ 1 次门错
+ * 回路预算（ADR-0041；ADR-0077 上调 6→20；#328 起三件成组）：轮数 ≤20 / 输出 token
+ * ≤32768 / 总时长 ≤30 分钟（`agentLoop` 强制，不设调用方覆盖）+ 1 次门错
  * 修复轮（`gateRepairRound` 强制）；回路只在生成队列任务内运行，工具实现禁止递归
  * 入队/触发教练。宿主会话适配位（后路）：教练未来需要全 agent 面（查 vault 笔记、
  * 查网）时，把注入的 LlmStream 换成 `ctx.agents.create` 的会话适配实现——调用点
@@ -34,10 +35,36 @@ export function stripFences(body: string): string {
   return m ? m[1] : body
 }
 
-/** 工具轮预算上限（ADR-0041 形状；ADR-0077 上调 6→20）：回路第 K 轮后仍请求工具即中止；
- * 不设调用方覆盖（统一天花板不分档）——教练职责变重（归因/定位/插入裁决/在途自报消费）
- * 要更深回路，撞顶照旧 fail loud（trajectory 工具轨迹补自激防线的观测面）。 */
+/** 工具轮预算上限（ADR-0041 形状；ADR-0077 上调 6→20；#328 起为三件成组预算的轮数件）：
+ * 回路第 K 轮后仍请求工具即中止；不设调用方覆盖（统一天花板不分档）——教练职责变重
+ * （归因/定位/插入裁决/在途自报消费）要更深回路，撞顶照旧 fail loud（trajectory 工具轨迹
+ * 补自激防线的观测面）。 */
 export const AGENT_LOOP_MAX_TOOL_ROUNDS = 20
+
+/** 回路预算三件成组（#328 / ADR-0101 §否决了什么）：轮数 / 输出 token / 总时长——
+ * 预算是「防烧穿」的成组防线，不是「多拨点数」的绩效指标。「只拨数字」式单纯加轮数被
+ * 明确否决：本仓两次事故（#309 的 21 轮 / 约 35k token 零发布，与 2026-09-17 的 20 轮 /
+ * 约 33.1k token 空转）都是**烧到轮数顶零发布**——轮数顶只兜自激空转的尾部，单独存在时
+ * 挡不住「不撞顶但也烧穿了」的会话。三件各管一个烧穿面，按本仓规模论证如下：
+ *
+ * - **轮数 20**（`AGENT_LOOP_MAX_TOOL_ROUNDS`）：健康会话（单批或数批：graph_view 对表 →
+ *   patch → audit → finish，生产轨迹实测一个发布批约 3–5 个工具轮）远低于此；20 给多批
+ *   会话（3 批 × ~5 轮 + 审计与收尾）留头寸。理由不是「越大越好」，而是它与熔断
+ *   （`AGENT_LOOP_REPEAT_LIMIT`，同错误 3 次止血）分工：熔断管「同一不可修复错误的反复
+ *   重试」，轮数顶管「每次都换个花样但毫无进展」的长尾。
+ * - **输出 token 32768**：回路真正随轮数线性涨的是输出侧（每轮的工具调用参数 + 简短
+ *   文本；上下文与工具回执是输入侧）。健康会话的输出量级是数千；事故全程约 35k——
+ *   取 32768 ≈ 恰好在「健康会话够用、事故挡得住」的量纲上，配合熔断与草稿侧
+ *   `draft_revert` 撤销出口，把「烧穿」从不可见变成 fail loud 的死因。token 计量沿
+ *   provider usage 回程（#213），路由未上报 usage 时该件不执法（best-effort，与观测面同口径）。
+ * - **总时长 1800000ms（30 分钟）**：deep 档单轮含推理可达分钟级，20 轮健康上限 ≈ 20–30
+ *   分钟；30 分钟封的是「无人值守烧额度」（#312 B1 的自激回路无人值守形态）的墙钟尾部
+ *   ——token 件管不住 provider 慢响应，时长件与取消旗标（`isCancelled`）共同兜底。
+ * 与消费侧的配合：草稿站（growth-subsystem.coachDraft）在回路外另有**会话级**轮志预算
+ * （`GROWTH_DRAFT_MAX_ROUNDS`，写件轮计数）与「禁止空手结束」门——缝级三件管单次回路，
+ * 站级预算管会话生命周期，两层不互相替代。 */
+export const AGENT_LOOP_MAX_OUTPUT_TOKENS = 32768
+export const AGENT_LOOP_MAX_DURATION_MS = 1_800_000
 
 /** 同错误熔断阈值（ADR-0041 §修订补记 2026-09-16；#309 缺陷④ 加第二口径）。两条口径共用
  * 本阈值：① 同一工具**连续** ≥3 次返回**逐字相同**的结果（成功与失败同口径）——管纯自激
@@ -157,6 +184,9 @@ export class AgentSeam {
   /** 工具回路模式（有界多轮迭代 + 只读工具调用）：模型每轮可请求白名单内工具，
    * 缝执行 runTool 并把结果回灌继续；模型不再请求工具即以文本产出收束（剥围栏）。
    * K≤`AGENT_LOOP_MAX_TOOL_ROUNDS` 轮后仍请求工具即 fail loud——预算封顶防自激循环。
+   * 预算三件成组（#328）：轮数之外，输出 token（沿 usage 回程累计，路由未上报则该件
+   * 不执法）与总时长任一件越顶同位 fail loud，死因点名触顶件与实测数——单纯加轮数被
+   * ADR-0101 否决（两次事故都是烧到 K 顶零发布），三件各管一个烧穿面。
    * isCancelled（#163 任务取消传导）：每轮底层调用前与每次工具执行后检查，取消即抛错
    * 中止——生成页取消旗标沿站点传入，回路不再空烧后续轮。trajectory 逐轮记录工具调用
    * 与结果摘要（#163 任务消息消费）。
@@ -204,6 +234,10 @@ export class AgentSeam {
     const lineHits = new Map<string, number>()
     let epoch = req.progressEpoch?.()
     let toolRounds = 0
+    // 预算三件成组（#328）的回路内计量：时长起点取自时钟端口（测试可注入固定钟）；
+    // 输出 token 沿 provider usage 回程累计（路由未上报 usage 时该件不执法）。
+    const loopStartedAt = this.clock.nowMs()
+    let outputTokens = 0
     for (;;) {
       assertAlive()
       // 进展世代前移（发布成功）：清空熔断游标——成功发布的正常节奏不误杀（#309 ④）
@@ -222,12 +256,25 @@ export class AgentSeam {
         tools: req.tools,
       })
       this.emit(req.station, 'loop', req.effort, promptCharsOf(turns), r.text, startedAt, r.usage)
+      if (r.usage) outputTokens += r.usage.outputTokens
       const calls = r.toolCalls ?? []
       if (!calls.length) {
         return { text: stripFences(r.text), toolRounds, trajectory }
       }
-      if (toolRounds >= AGENT_LOOP_MAX_TOOL_ROUNDS) {
-        throw new Error(`[agent-seam] 「${req.station}」工具回路预算耗尽（K≤${AGENT_LOOP_MAX_TOOL_ROUNDS} 轮后仍在请求工具）——回路中止。`)
+      // 预算三件成组（#328）：轮数 / 输出 token / 总时长任一件越顶即 fail loud——死因点名
+      // 触顶的是哪一件与实测数，与「同错误熔断」的死因措辞可区分（熔断管同一不可修复错误
+      // 的反复重试，三件预算管「换个花样但毫无进展」的烧穿长尾）。与轮数件同位裁决：本轮
+      // 新请求的工具调用不再执行（与 K 顶同款，已执行轮的产物已在 trajectory）。
+      const elapsedMs = this.clock.nowMs() - loopStartedAt
+      const budgetTripped = toolRounds >= AGENT_LOOP_MAX_TOOL_ROUNDS
+        ? `轮数件（${toolRounds} 轮后仍在请求工具，上限 ${AGENT_LOOP_MAX_TOOL_ROUNDS} 轮）`
+        : outputTokens > AGENT_LOOP_MAX_OUTPUT_TOKENS
+          ? `输出 token 件（累计 ${outputTokens}，上限 ${AGENT_LOOP_MAX_OUTPUT_TOKENS}）`
+          : elapsedMs > AGENT_LOOP_MAX_DURATION_MS
+            ? `总时长件（已用 ${elapsedMs}ms，上限 ${AGENT_LOOP_MAX_DURATION_MS}ms）`
+            : null
+      if (budgetTripped) {
+        throw new Error(`[agent-seam] 「${req.station}」工具回路预算耗尽（三件成组：轮数/输出 token/总时长）——${budgetTripped}触顶，回路中止。`)
       }
       toolRounds++
       turns.push({ role: 'assistant', text: r.text, toolCalls: calls })

@@ -145,7 +145,7 @@
     "src/engine/graph/health.ts": 105,
     "src/engine/graph/quality.ts": 61,
     "src/engine/index.ts": 885,
-    "src/engine/infra/agent.ts": 347,
+    "src/engine/infra/agent.ts": 394,
     "src/engine/infra/clock.ts": 19,
     "src/engine/infra/dates.ts": 126,
     "src/engine/infra/grading.ts": 401,
