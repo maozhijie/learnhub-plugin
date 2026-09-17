@@ -3,7 +3,8 @@
  * 出处与施工史只对人与注释有意义（注释归代码）。执法面：
  * ① src/commands/*.ts 的 summary / description 字面量（业务 LLM 工具描述）；
  * ② src/engine/prompts/*.ts 的模板体（剥整行注释后逐行扫——提示词是惰性字符串，
- *   注释全是整行 // 或块注释，模板体内不该有代码注释形态）。
+ *   注释全是整行 // 或块注释，模板体内不该有代码注释形态）；
+ * ③ ui/src 全部非注释文本（用户可见前端文案；JSX 注释块剥除后扫）。
  * 判据与边界登记在 tests/README.md；自检含必然违规样本（ADR-0047 惯例）。 */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -23,14 +24,35 @@ function literalsAfter(source: string, key: string): string[] {
   return out
 }
 
-/** 非注释部分：剥整行注释（//、*、/*开头）与「 // 」行尾注释（URL 的 // 不带前导空格）。 */
-function nonCommentLines(source: string): string[] {
-  return source.split(/\r?\n/)
+/** 非注释文本：剥 JSX 注释块、整行注释与「 // 」行尾注释（URL 的 // 不带前导空格）。 */
+function nonCommentText(source: string): string {
+  return source
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+    .split(/\r?\n/)
     .filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l))
     .map(l => {
       const c = l.indexOf(' // ')
       return c >= 0 ? l.slice(0, c) : l
     })
+    .join('\n')
+}
+
+function scanBody(dirRel: string): string[] {
+  const dir = join(ROOT, ...dirRel.split('/'))
+  const hits: string[] = []
+  const walk = (d: string) => {
+    for (const f of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, f.name)
+      if (f.isDirectory()) { walk(p); continue }
+      if (!/\.(ts|tsx)$/.test(f.name)) continue
+      const body = nonCommentText(readFileSync(p, 'utf8'))
+      let m: RegExpExecArray | null
+      const re = new RegExp(REF.source, 'g')
+      while ((m = re.exec(body))) hits.push(`${p.slice(dir.length + 1) || f}: …${body.slice(Math.max(0, m.index - 40), m.index + 20)}…`)
+    }
+  }
+  walk(dir)
+  return hits
 }
 
 test('模型面引用门·命令注册表 summary/description 无 ADR/# 引用', () => {
@@ -49,16 +71,11 @@ test('模型面引用门·命令注册表 summary/description 无 ADR/# 引用',
 })
 
 test('模型面引用门·提示词模板体无 ADR/# 引用', () => {
-  const dir = join(ROOT, 'src', 'engine', 'prompts')
-  const hits: string[] = []
-  for (const f of readdirSync(dir)) {
-    if (!f.endsWith('.ts')) continue
-    const body = nonCommentLines(readFileSync(join(dir, f), 'utf8')).join('\n')
-    let m: RegExpExecArray | null
-    const re = new RegExp(REF.source, 'g')
-    while ((m = re.exec(body))) hits.push(`${f}: …${body.slice(Math.max(0, m.index - 40), m.index + 20)}…`)
-  }
-  assert.deepEqual(hits, [])
+  assert.deepEqual(scanBody('src/engine/prompts'), [])
+})
+
+test('模型面引用门·前端用户可见文本无 ADR/# 引用', () => {
+  assert.deepEqual(scanBody('ui/src'), [])
 })
 
 // ---- 自检（ADR-0047 惯例：构造必然违规样本，断言判据真的会咬）----

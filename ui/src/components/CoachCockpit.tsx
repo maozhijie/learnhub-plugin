@@ -163,7 +163,7 @@ export default function CoachCockpit({ course, jobs, coach, endpointCount = 0, o
   const growth = (c: string) => {
     Modal.confirm({
       title: `生长一步「${c}」？`,
-      content: '教练回合将裁决下一步生长并产出一个生长批：过受理门即自动应用（罗盘随批重写），不逐批人审（ADR-0003）；裁决与结果在生成队列可见。',
+      content: '教练回合将裁决下一步生长并产出一个生长批：过受理门即自动应用，不逐批人审；裁决与结果在生成队列可见。',
       okText: '生长一步',
       onOk: async () => {
         setBusy('growth')

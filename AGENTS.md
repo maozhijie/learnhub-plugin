@@ -28,6 +28,18 @@ Single-context layout: one `CONTEXT.md` + `docs/adr/` at the repo root. See `doc
 
 **收尾必须点名**：凡是这次任务**改动过提示词**，任务收尾必须报告——① 改了哪几条（常量名）；② `文件:行`；③ 新旧差异要点（改了什么语义）；④ 对应的 `PROMPT_CHANGELOG` 登记条目。理由是提示词的人工返工面就在这里：人要靠这份点名**快速找到 AI 这次动过哪些散文**再逐条复核，不点名等于让人自己 diff 全仓。（ADR-0075 §4）。
 
+### 模型面与业务文本的引用纪律
+
+**判据**：`ADR-NNNN`、`#NNN`（票据号）这类出处/施工史引用只属于**注释**——凡会离开代码仓的文本一律不带：
+- **模型面**：`src/commands/` 的 summary/description（业务 LLM 工具描述）、`src/engine/prompts/` 模板体；
+- **业务面**：`ui/src/` 用户可见文案、罗盘等学习者可见文件、回灌给模型的错误与提案 reason。
+
+理由：引用对 LLM 与学习者零信息量、只耗 token；随引用沉淀的旧语义（如「罗盘随批重写」）还会误导模型。出处沿革归注释与 ADR 本体。
+
+**门**：`tests/model-face-refs.test.ts`（三面执法：commands 字面量 / prompts 模板体 / ui/src 非注释文本——JSX 注释块剥除后扫）；改门 = 改门册（`tests/README.md`）。
+
+**豁免**：一切注释（行/块/JSX）；output-contracts 登记数据、quality-* 离线人审报告、spike 开发语料（人审面）。
+
 ### 代码索引（codebase-memory MCP）*重要*
 
 本仓用 `codebase-memory-mcp` 建代码知识图谱（函数/调用边/复杂度）。**结论先行：图答「闭合性」，文件答「定位」——别互相顶班。** 完整章法见 `docs/agents/code-index.md`。

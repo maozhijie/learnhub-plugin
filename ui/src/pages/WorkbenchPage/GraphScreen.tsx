@@ -35,7 +35,7 @@ function Legend() {
         </Space>
       ))}
       <Text type='secondary'>同色底越深 = 掌握度越高（悬停看数值）</Text>
-      <Text type='secondary'>终点是方向标记：不被学习调度、不产料（ADR-0056）</Text>
+      <Text type='secondary'>终点是方向标记：不被学习调度、不产料</Text>
     </Space>
   )
 }

@@ -106,7 +106,7 @@ const DagNodeInner: React.FC<NodeProps<DagNode>> = ({ data }) => {
           : '1px solid var(--color-border-2, #e5e6eb)'
   const tint = masteryTint(data.stage, data.mastery)
   const bg = tint ?? 'var(--color-bg-2, #fff)'
-  const tooltip = `${data.title}${data.isEndpoint ? '（⚑ 终点 · 方向标记——不被学习调度、不产料，ADR-0056）' : ''}${data.locked ? '（前置未完成）' : ''}`
+  const tooltip = `${data.title}${data.isEndpoint ? '（⚑ 终点 · 方向标记——不被学习调度、不产料）' : ''}${data.locked ? '（前置未完成）' : ''}`
     + (data.stage === 'review' || data.stage === 'mastered' || data.stage === 'learning'
       ? `（掌握度 ${Math.round(data.mastery * 100)}%）` : '')
   return (

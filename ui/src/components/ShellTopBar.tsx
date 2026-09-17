@@ -36,7 +36,7 @@ export function ShellTopBar(props: {
       </Tabs>
       <div className='shell-controls'>
         {/* 铃铛通知中心：壳位预留（ADR-0058），实现属 #164 池票——不可用态带说明 */}
-        <Tooltip content='通知中心在建：升级落地前此处留位（属池票 #164）'>
+        <Tooltip content='通知中心在建：升级落地前此处留位'>
           <Button size='mini' type='text' disabled aria-label='通知中心（未开放）'
             icon={<Badge dot><IconNotification /></Badge>} />
         </Tooltip>

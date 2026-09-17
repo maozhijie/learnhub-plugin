@@ -115,7 +115,7 @@ export default function ProposalsPage({ frame, course }: { frame?: AppFrame; cou
 
   return (
     <Space direction='vertical' className='lh-full' size={14}>
-      <Alert type='info' content='面板下发的富化/反编译/项目草案与教练回合的生长批提案都汇集在这里人审 → 应用后图结构与 Obsidian 笔记联动落盘（生长批过受理门即自动应用，不在此排队——ADR-0003）。' />
+      <Alert type='info' content='面板下发的富化/反编译/项目草案与教练回合的生长批提案都汇集在这里人审 → 应用后图结构与 Obsidian 笔记联动落盘（生长批过受理门即自动应用，不在此排队）。' />
       <Card size='small' title='提案列表' className='lh-card'
         extra={<Button size='mini' onClick={() => void load()}>刷新</Button>}>
         {items === null ? null : items.length === 0 ? (
