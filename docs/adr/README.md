@@ -2,7 +2,7 @@
 
 架构决策记录（Architecture Decision Record）。**每条只记决策与理由，不是施工日志**——写作规范（该写什么、不该写什么、尺寸纪律）见 [`docs/agents/domain.md`](../agents/domain.md) 的「ADR 写作规范」段。
 
-**当前最高号：0098。**编号是顺序号，取号前 `git fetch origin` + `ls docs/adr/`，取最大号 + 1，并在**同一次提交**里把新条目加进本表。并行会话撞号时**后落地者改号**并留取号说明（先例见 [ADR-0093](./0093-engine-domain-folders.md)）。
+**当前最高号：0099。**编号是顺序号，取号前 `git fetch origin` + `ls docs/adr/`，取最大号 + 1，并在**同一次提交**里把新条目加进本表。并行会话撞号时**后落地者改号**并留取号说明（先例见 [ADR-0093](./0093-engine-domain-folders.md)）。
 
 | 编号 | 标题 |
 |---|---|
@@ -104,3 +104,4 @@
 | [0096](./0096-blocking-audit-closures-criterion-dimension-and-real-exits.md) | 生长链路四个阻断收口：判据与动作同量纲、插入批预注册写入面、取消与预算的真出口 |
 | [0097](./0097-compass-route-back-to-plan-contract.md) | 罗盘「剩余路线」恢复生产者：route 回到思路官的计划契约 |
 | [0098](./0098-growth-chain-silent-loss-and-diagnosability.md) | 生长链路的静默丢弃与可诊断面收口（#313 第三次审计 A/B/C/D/E 五组） |
+| [0099](./0099-compass-master-station.md) | 罗盘升格为大师站：战略分解、写权反转与终点锚程度语义 |
