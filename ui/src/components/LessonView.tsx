@@ -356,7 +356,7 @@ export default function LessonView(props: { course: string; node: string; frame:
                 <div key={i} className='lh-row lh-gap-8 lh-wrap'>
                   <Text type='secondary' className='lh-grow lh-t-12'>
                     ✗ {f.sectionTitle ?? f.sectionId ?? '未知节'}{f.finding ? `：${f.finding}` : ''}
-                    {f.corpusRef ? `（语料 ${f.corpusRef}）` : ''}
+                    {f.corpusRef ? `（调用记录 ${f.corpusRef}）` : ''}
                   </Text>
                   {f.sectionId && (
                     <Tooltip content='只重新生成这一节（过质检门后落盘），不动其余节'>

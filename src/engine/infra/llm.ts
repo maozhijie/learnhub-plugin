@@ -14,12 +14,17 @@
 /** 语义思考档。 */
 export type LlmEffort = 'fast' | 'deep'
 
-/** Token 计量投影（#213）：适配器从 provider usage 块投影的端口中立三值；
- * reasoningTokens 缺省 = 路由不上报推理税。 */
+/** Token 计量投影（#213 三值；#330 起缓存与总 token 恢复随行——适配器从 provider
+ * usage 块投影的端口中立值；缺省字段 = 路由不上报，不造 undefined）。
+ * inputTokens 是未命中缓存的新输入；缓存读写单列（计费输入 = 三者之和）。 */
 export interface LlmTokenUsage {
   inputTokens: number
   outputTokens: number
   reasoningTokens?: number
+  /** 全调用总量（含聚合输入与输出）；路由不给或缺席时不投影。 */
+  totalTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
 }
 
 /** 调用形态（#213 语料站标签的 kind 半边，对齐 AgentCallMode）：complete 单发 /

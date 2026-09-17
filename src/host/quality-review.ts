@@ -1,6 +1,6 @@
 /**
  * 离线批量评审运行器（#222 / ADR-0070）：契约、提示词与报告机械全在引擎（engine/content/quality-review.ts
- * / engine/content/quality-audit.ts），本文件是**宿主适配**——读盘（生成语料抽样池）、调模型（真
+ * / engine/content/quality-audit.ts），本文件是**宿主适配**——读盘（调用记录抽样池）、调模型（真
  * provider 只在宿主 ctx）、写盘（人读报告）。三件事都只能住宿主：引擎侧零 fs 零时钟（G8）、
  * 模型端口也只有宿主 ctx 上有。
  *
@@ -47,12 +47,14 @@ import {
 } from '../engine/index.ts'
 import type { QualityReviewReport, ReviewSample, SampleQuota, SampleReview, QualityRubric } from '../engine/index.ts'
 import { llmSeam } from './llm.ts'
-import { parseCorpusFile } from './corpus.ts'
+import { stampCorpusSink } from './corpus.ts'
+import { corpusLayoutOf, parseCorpusFile, readCallRecords } from './corpus-read.ts'
 import type { HostRuntime } from './runtime.ts'
 
 /** 运行入参（路由可覆盖；缺省 = 全部有量规的站、配额 3 失败件 + 2 成功件、重复 2 次）。 */
 export interface QualityReviewRequest {
-  /** 语料目录（缺省 = 本 vault 的 state/生成语料；供 fixture/历史语料回放）。 */
+  /** 语料目录（缺省 = 本 vault 的 state/调用记录；指向历史 state/生成语料/ 走旧读侧，
+   * 供 fixture/历史语料回放——旧档冻结不迁移，ADR-0103）。 */
   corpusDir?: string
   /** 只看这些站（缺省 = 量规在册且语料目录里存在的站）。 */
   stations?: string[]
@@ -75,9 +77,34 @@ export interface QualityReviewRunResult {
   reportPath: string
 }
 
-/** 站目录 → 语料样本清单（只读 `.md`；缺目录 = 该站本轮无样本）。坏档/非本格式文件按
+/** 语料目录 → 样本清单。**双形态读侧**（#330）：新目录（`调用记录/`，按任务成组）走
+ * 按调用读侧 readCallRecords；旧 `state/生成语料/` 目录（冻结，不迁移）走旧读侧
+ * parseCorpusFile——历史语料回放是 corpusDir 参数存在的意义。坏档/非本格式文件按
  * 空串走，不中断整轮——一件坏档不该让整轮评审失败，它会以「未评分件」现身报告。 */
 export function readCorpusSamples(corpusDir: string, stations: readonly string[]): ReviewSample[] {
+  if (corpusLayoutOf(corpusDir) === '生成语料') return readLegacyCorpusSamples(corpusDir, stations)
+  const out: ReviewSample[] = []
+  for (const call of readCallRecords(corpusDir, { stations })) {
+    out.push({
+      ref: call.ref,
+      station: call.station,
+      ts: call.ts,
+      kind: call.kind,
+      ...(call.effort !== undefined ? { effort: call.effort } : {}),
+      outcome: call.outcome,
+      ...(call.code ? { code: call.code } : {}),
+      ...(call.truncated ? { truncated: true } : {}),
+      templateVersion: templateVersionOf(call.prompt),
+      prompt: call.prompt,
+      output: call.output,
+      ...(call.toolCalls.length ? { toolCalls: call.toolCalls } : {}),
+    })
+  }
+  return out
+}
+
+/** 旧生成语料目录（冻结格式）的样本清单：`<dir>/<站>/*.md` 一调用一文件。 */
+function readLegacyCorpusSamples(corpusDir: string, stations: readonly string[]): ReviewSample[] {
   const out: ReviewSample[] = []
   for (const station of stations) {
     const dir = join(corpusDir, station)
@@ -111,12 +138,14 @@ export function readCorpusSamples(corpusDir: string, stations: readonly string[]
 }
 
 /** 语料目录里现有站 + 量规在册站的交集（评审范围的口径单源：没有量规的站不评——
- * 判定标准先于判定器）。 */
+ * 判定标准先于判定器）。双形态：新目录盘点按调用读侧的站集合，旧目录按子目录名。 */
 function scopeOf(corpusDir: string, requested?: readonly string[]): string[] {
   const registry = [...new Set(QUALITY_RUBRICS.flatMap(r => r.stations))]
-  const available = existsSync(corpusDir)
-    ? new Set(readdirSync(corpusDir, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name))
-    : new Set<string>()
+  const available = corpusLayoutOf(corpusDir) === '生成语料'
+    ? new Set(existsSync(corpusDir)
+      ? readdirSync(corpusDir, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name)
+      : [])
+    : new Set(readCallRecords(corpusDir).map(c => c.station))
   const wanted = requested?.length ? requested.filter(s => registry.includes(s)) : registry
   return wanted.filter(s => available.has(s)).sort()
 }
@@ -149,7 +178,7 @@ export async function runQualityReview(
 
   const pool = readCorpusSamples(corpusDir, wanted)
   const picked = sampleQualitySamples(pool, quota)
-  const llm = llmSeam(ctx, rt.corpus.record)
+  const llm = llmSeam(ctx, stampCorpusSink(rt.corpus, { source: '离线' }))
   const reviews: SampleReview[] = []
   const unscoreable: QualityReviewReport['unscoreable'] = []
   let calls = 0

@@ -1,5 +1,5 @@
 /**
- * 离线批量评审驱动（#222；图质量面审计 #224）：一条命令从生成语料抽样、按质量量规评分、
+ * 离线批量评审驱动（#222；图质量面审计 #224）：一条命令从调用记录抽样、按质量量规评分、
  * 落人读报告。
  *
  *   npm run quality-review                          # 全部有量规的站（每站 3 失败件 + 2 成功件，重复 2 次）
@@ -82,7 +82,7 @@ function guidance(reason) {
     `     起完看输出里的本地 URL；端口不是 3080 时用 npm run quality-review -- --base http://127.0.0.1:<端口>`,
     `  2. 报 Cannot find package '@deepseek-ai/dsh-llm' = peer junction 缺失：node scripts/link-peers.mjs`,
     `  3. 报「语料目录里没有有量规的站样本」= 还没跑过生成：先 npm run smoke（临时 vault 全管线）`,
-    `     或让宿主跑一轮真实生成，语料落在 <学习中心>/state/生成语料/<站>/`,
+    `     或让宿主跑一轮真实生成，语料落在 <学习中心>/state/调用记录/`,
     `  4. 报 EADDRINUSE 3080：先查 netstat -ano | findstr :3080——很可能是用户自己起的宿主，`,
     `     探活 curl ${base}/learnhub/api/status 正常就别动它（直接对它跑评审）。`,
     '',

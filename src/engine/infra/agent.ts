@@ -366,7 +366,7 @@ function promptCharsOf(turns: LlmLoopTurn[]): number {
 }
 
 /** 工具失败的**摘要**（`agent.tool.fail` 的 error 字段）：首行 + 上界。全文仍在 trajectory、
- * 生成语料与模型下一轮可见的回灌里——日志只做索引，不复述（ADR-0080「不落原文」）。 */
+ * 调用记录与模型下一轮可见的回灌里——日志只做索引，不复述（ADR-0080「不落原文」）。 */
 const TOOL_FAIL_SUMMARY_LIMIT = 500
 function firstLineOf(text: string): string {
   const head = text.split('\n', 1)[0] ?? ''

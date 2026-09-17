@@ -106,10 +106,11 @@ test('冒烟语料可外落（--corpus）：站表读的是外落目录、语料
     assert.equal(report.corpusDir, dir.replace(/\\/g, '/'), '报告语料目录 = 外落目录')
     assert.ok(report.stations.length >= 3, `站表应读外落目录：实得 ${report.stations.length} 站`)
     assert.ok(report.stations.every(s => s.calls > 0), '各站调用数 > 0')
-    const outlineDir = join(dir, '课程大纲')
-    assert.ok(existsSync(outlineDir), '外落目录里有大纲站的捕获文件')
-    const f = readdirSync(outlineDir)[0]!
-    assert.ok(readFileSync(join(outlineDir, f), 'utf8').includes('## 原始输出'), '捕获文件是本格式（frontmatter + 提示词 + 原始输出）')
+    const groupFile = join(dir, '冒烟课', '冒烟课起点.md')
+    assert.ok(existsSync(groupFile), '外落目录里有本任务组文件（<课程>/<节点>.md）')
+    const body = readFileSync(groupFile, 'utf8')
+    assert.ok(body.includes('## 调用索引') && body.includes('### 请求') && body.includes('### 响应'),
+      '捕获组文件是本格式（调用索引 + 请求/响应 JSON 原文块）')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

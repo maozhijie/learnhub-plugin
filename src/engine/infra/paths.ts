@@ -53,12 +53,13 @@ export class Paths {
    * 与「学习日」无关（出处戳永远用日历日，词条「学习日」）。 */
   get logsDir(): string { return `${this.centerStateDir}/logs` }
   get promptDir(): string { return `${this.centerStateDir}/提示词` }
-  /** 生成语料（#213 / ADR-0060）：`state/生成语料/<站>/`——真实模型调用的原始产出
-   * 存档（frontmatter+提示词+原始输出），解析器回归 fixture 源 / 质量评审抽样池 /
-   * 模型更换格式漂移体检标本。写侧住 host/corpus（捕获器），engine 侧只登记路径。 */
-  get corpusDir(): string { return `${this.centerStateDir}/生成语料` }
+  /** 调用记录（#330 / ADR-0103，取代生成语料 #213 / ADR-0060 的目录）：`state/调用记录/
+   * <课程>/<节点>.md`——按任务成组的完整请求/响应存档（每次调用一节：元数据 + 请求/
+   * 响应 JSON 原文块），无业务键的离线调用落 `state/调用记录/_离线/<站>.md`。写侧住
+   * host/corpus（捕获器），engine 侧只登记路径。旧 `state/生成语料/` 冻结不迁移。 */
+  get corpusDir(): string { return `${this.centerStateDir}/调用记录` }
   /** 质量评审报告（#222 / ADR-0070）：`state/质量评审/`——离线评审器的人读报告落点
-   * （报告不进 canonical、不写沉淀层；「内容质量结论」事件另行落地）。与生成语料同属
+   * （报告不进 canonical、不写沉淀层；「内容质量结论」事件另行落地）。与调用记录同属
    * state 观测面：写侧住 host/quality-review（评审运行器），engine 侧只登记路径。 */
   get qualityReviewDir(): string { return `${this.centerStateDir}/质量评审` }
   get learnhubConfigPath(): string { return `${this.centerStateDir}/learnhub.json` }

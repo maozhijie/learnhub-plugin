@@ -19,7 +19,7 @@
  * 与 provider 配置）。宿主未编译/未起时的可执行指引由驱动脚本 scripts/gen-smoke.mjs
  * 给出（它把连接失败转成指引，不静默）。
  */
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -27,7 +27,7 @@ import { contractOf, hasReadyContent, validateByContract } from '../engine/index
 import { createHostRuntime } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import { afterGraphApply, cancelGeneration, enqueueGeneration, pumpGeneration, waitForGenJob } from './jobs.ts'
-import { parseCorpusFrontmatter } from './corpus.ts'
+import { parseCallRecordFile } from './corpus-read.ts'
 
 /** 冒烟入参（路由可覆盖，缺省即最小成本档）。 */
 export interface SmokeRequest {
@@ -41,7 +41,7 @@ export interface SmokeRequest {
   quizAuditRate?: number
   /** 正文管线等待上限毫秒（缺省 10 分钟）。 */
   jobTimeoutMs?: number
-  /** 语料落盘目录覆盖（绝对路径；缺省 = 临时 vault 内的 `state/生成语料`，随 vault 一起删）。
+  /** 语料落盘目录覆盖（绝对路径；缺省 = 临时 vault 内的 `state/调用记录`，随 vault 一起删）。
    * 给一个持久目录 = 把本轮真模型调用的提示词与产出留在盘上，供离线评审器抽样（#222/#224
    * 的实跑样本来源；与 spike 的 --corpus 同形态）。 */
   corpusDir?: string
@@ -113,45 +113,47 @@ const BY = {
   note: 'engine.loadView（笔记 frontmatter 读）',
 } as const
 
-/** usage 行形如 `usage: { input_tokens: 10, output_tokens: 5, reasoning_tokens: 2 }`。 */
-function usageOf(fm: Record<string, string>): { input: number; output: number; reasoning: number } {
-  const m = /input_tokens:\s*(\d+),\s*output_tokens:\s*(\d+)(?:,\s*reasoning_tokens:\s*(\d+))?/.exec(fm.usage ?? '')
-  return { input: Number(m?.[1] ?? 0), output: Number(m?.[2] ?? 0), reasoning: Number(m?.[3] ?? 0) }
-}
-
-/** 读语料目录汇总各站（捕获已是「每调用一文件」，报告只是换个读法）。 */
+/** 读调用记录目录汇总各站（捕获已是按任务成组的完整记录，报告只是按站换一种读法）。
+ * 目录形态：`<课程>/<节点>.md`（含 .partN 分卷）∪ `_离线/<站>.md`；非本格式文件跳过。
+ * promptChars/replyChars 取请求/响应文本与工具参数的字符量（请求 JSON 的原文量级）。 */
 export function collectStations(corpusDir: string): SmokeStationStats[] {
   const byStation = new Map<string, SmokeStationStats>()
-  if (!existsSync(corpusDir)) return []
-  for (const station of readdirSync(corpusDir)) {
-    const dir = join(corpusDir, station)
+  let dirs: string[]
+  try {
+    dirs = readdirSync(corpusDir).filter(d => statSync(join(corpusDir, d)).isDirectory())
+  } catch {
+    return []
+  }
+  for (const d of dirs) {
     let files: string[]
     try {
-      files = readdirSync(dir).filter(f => f.endsWith('.md'))
+      files = readdirSync(join(corpusDir, d)).filter(f => f.endsWith('.md'))
     } catch {
-      continue  // 非目录/已删：跳过
-    }
-    const s: SmokeStationStats = {
-      station, calls: 0, ok: 0, tolerated: 0, failed: 0, failureCodes: {},
-      inputTokens: 0, outputTokens: 0, reasoningTokens: 0, promptChars: 0, replyChars: 0, durationMs: 0,
+      continue
     }
     for (const f of files) {
-      const fm = parseCorpusFrontmatter(readFileSync(join(dir, f), 'utf8'))
-      s.calls++
-      const outcome = fm.outcome ?? 'ok'
-      if (outcome === 'ok') s.ok++
-      else if (outcome === 'tolerated') s.tolerated++
-      else s.failed++
-      if (fm.code) s.failureCodes[fm.code] = (s.failureCodes[fm.code] ?? 0) + 1
-      const u = usageOf(fm)
-      s.inputTokens += u.input
-      s.outputTokens += u.output
-      s.reasoningTokens += u.reasoning
-      s.promptChars += Number(fm.prompt_chars ?? 0)
-      s.replyChars += Number(fm.reply_chars ?? 0)
-      s.durationMs += Number(fm.duration_ms ?? 0)
+      for (const call of parseCallRecordFile(readFileSync(join(corpusDir, d, f), 'utf8'))) {
+        let s = byStation.get(call.station)
+        if (!s) {
+          s = {
+            station: call.station, calls: 0, ok: 0, tolerated: 0, failed: 0, failureCodes: {},
+            inputTokens: 0, outputTokens: 0, reasoningTokens: 0, promptChars: 0, replyChars: 0, durationMs: 0,
+          }
+          byStation.set(call.station, s)
+        }
+        s.calls++
+        if (call.outcome === 'ok') s.ok++
+        else if (call.outcome === 'tolerated') s.tolerated++
+        else s.failed++
+        if (call.code) s.failureCodes[call.code] = (s.failureCodes[call.code] ?? 0) + 1
+        s.inputTokens += call.usage?.inputTokens ?? 0
+        s.outputTokens += call.usage?.outputTokens ?? 0
+        s.reasoningTokens += call.usage?.reasoningTokens ?? 0
+        s.promptChars += call.prompt.length
+        s.replyChars += call.output.length + call.toolCalls.reduce((n, c) => n + c.arguments.length, 0)
+        s.durationMs += call.durationMs
+      }
     }
-    byStation.set(station, s)
   }
   // 稳定序：调用多的站在前，同数按站名（报告 diff 可读）
   return [...byStation.values()].sort((a, b) => b.calls - a.calls || a.station.localeCompare(b.station))
@@ -276,7 +278,7 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
   const root = mkdtempSync(join(tmpdir(), 'learnhub-gen-smoke-')).replace(/\\/g, '/')
   // 语料落点：给了 corpusDir 就写外面（临时 vault 随跑随删，语料留不下来），
   // 报告站表与 corpusDir 字段都读这个实际落点（#222 实测抓出：两边各说各话）
-  const corpusDir = req.corpusDir ? req.corpusDir.replace(/\\/g, '/') : `${root}/学习中心/state/生成语料`
+  const corpusDir = req.corpusDir ? req.corpusDir.replace(/\\/g, '/') : `${root}/学习中心/state/调用记录`
   let rt: HostRuntime | null = null
   try {
     mkdirSync(join(root, '学习中心'), { recursive: true })

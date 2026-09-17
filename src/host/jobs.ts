@@ -6,7 +6,7 @@
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { Content, TIER_LABELS, endpointNames, hasPaintedRoute, genericQuizTarget, readAnchors, stationOfError, stuckReportInject, tierIdxOf } from '../engine/index.ts'
-import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport, VaultPriorAudit } from '../engine/index.ts'
+import type { AgentSeam, CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport, VaultPriorAudit } from '../engine/index.ts'
 import {
   contentFailureStatus,
   genJobRetentionRemainingMs,
@@ -28,9 +28,9 @@ import {
 } from '../generation-jobs.ts'
 import { SECTION_PREV_TAIL_HEADING } from '../engine/prompts/host.ts'
 import { contentEffort, llmCfg, llmSeam, llmSeamStripped } from './llm.ts'
-import { logCall, summarize } from './runtime.ts'
+import { logCall, summarize, taskAgentSeam } from './runtime.ts'
 import type { GenJob, HostRuntime } from './runtime.ts'
-import { STATIONS } from './corpus.ts'
+import { STATIONS, stampCorpusSink } from './corpus.ts'
 
 /** 稳定失败码提取（#213 语料补标口径）：有 code 用 code，其余归 ERROR。 */
 function errorCodeOf(err: unknown): string {
@@ -345,13 +345,14 @@ function persistGenJobs(rt: HostRuntime): void {
 }
 
 /** 执行器 catch 的统一终局（#292 run_error）：置终态、失败（取消不算失败）留 ERROR
- * 一声、组人读 message。corpusRef = 生成语料引用（graph/growth/quiz 三站有，正文管线无）。 */
+ * 一声、组人读 message。corpusRef = 调用记录引用（#330 起 `<课程>/<节点>#<序号>`；
+ * graph/growth/quiz 三站有，正文管线无）。 */
 function failGenJob(rt: HostRuntime, job: GenJob, msg: string, corpusRef?: string): void {
   job.status = contentFailureStatus(job.status)
   if (job.status === 'failed') {
     rt.logger.error('host.gen_jobs.run_error', { job: `${job.course}/${job.node}`, error: msg })
   }
-  job.message = msg + (corpusRef ? `｜语料 生成语料/${corpusRef}` : '')
+  job.message = msg + (corpusRef ? `｜调用记录 ${corpusRef}` : '')
 }
 
 /** 入队一个节点的生成任务（FIFO；重复入队幂等）。同一节点 running/cancelling 时拒绝。
@@ -722,10 +723,13 @@ function enqueueRepaintSuggestion(
 
 /** 图域任务执行（面板下发）：compass/decompile/plan/milestone——引擎 LLM 方法一次受理，
  * 产物一律走提案人审通道（反编译计划人审、计划 apply 带快照），任务
- * 只留受理摘要；失败落 failed 可从生成页重试。失败经语料补标（phase → 站，#213）。 */
-async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Promise<void> {
+ * 只留受理摘要；失败落 failed 可从生成页重试。失败经语料补标（phase → 站，#213）。
+ * agent 缝按任务构造（#330）：捕获带本任务身份（course/node 即任务键，图域三相位
+ * 的 course 槽放项目 id——分组键泛化口径，ADR-0103 Q12）。 */
+async function generateGraphJob(rt: HostRuntime, ctx: Context, job: GenJob): Promise<void> {
   job.status = 'running'
   persistGenJobs(rt)
+  const agent = taskAgentSeam(rt, ctx, { course: job.course, node: job.node, source: '作业' })
   // 补标的在场证明（#313 B7）：本轮对该站零新捕获即不补标（取消/受理前失败是这类形态）
   const corpusTokenAtStart = job.phase && GRAPH_JOB_STATIONS[job.phase]
     ? corpusToken(rt, GRAPH_JOB_STATIONS[job.phase]!)
@@ -735,7 +739,7 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
       // 初画/重画共用一条队列通道（repainted 由引擎结果区分），措辞不预设哪一种
       job.message = '罗盘路线绘制中（deep 档工具回路）…'
       persistGenJobs(rt)
-      const r = await rt.engine.growth2.compassPaint(job.course, rt.agent, {
+      const r = await rt.engine.growth2.compassPaint(job.course, agent, {
         isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
       })
       job.status = 'done'
@@ -751,18 +755,18 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
         ...(p.goal ? { goal: p.goal } : {}),
         ...(p.course ? { course: p.course } : {}),
         ...(p.notes?.length ? { notes: p.notes } : {}),
-      }, rt.agent)
+      }, agent)
       job.status = 'done'
       job.message = `反编译计划提案 #${r.plan_proposal.id} 待人审：${r.plan_proposal.milestones} 个里程碑${priorNoteOf(r.prior)}——提案收件箱人审即生效`
     } else if (job.phase === 'plan' && job.planPayload) {
       job.message = '里程碑计划草案生成中…'
       persistGenJobs(rt)
-      job.message = await generateProjectPlan(rt, job.planPayload.project)
+      job.message = await generateProjectPlan(rt, agent, job.planPayload.project)
       job.status = 'done'
     } else if (job.phase === 'milestone' && job.milestonePayload) {
       job.message = '里程碑任务卡生成中…'
       persistGenJobs(rt)
-      job.message = await generateProjectMilestone(rt, job.milestonePayload.project, job.milestonePayload.milestone)
+      job.message = await generateProjectMilestone(rt, agent, job.milestonePayload.project, job.milestonePayload.milestone)
       job.status = 'done'
     } else {
       throw new Error(`图域任务负载缺失或 phase 未知：${String(job.phase)}`)
@@ -812,8 +816,11 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
   const growthTokens = new Map<string, string | undefined>([
     [STATIONS.growthDraft, corpusToken(rt, STATIONS.growthDraft)],
   ])
+  // agent 缝按任务构造（#330）：捕获带本任务身份——教练回合全部调用落
+  // `调用记录/<课程>/生长批.md` 组文件（来源=作业）。
+  const agent = taskAgentSeam(rt, ctx, { course: job.course, node: GROWTH_JOB_NODE, source: '作业' })
   try {
-    const r = await rt.engine.growth2.coachGrowthBatch(job.course, rt.agent, {
+    const r = await rt.engine.growth2.coachGrowthBatch(job.course, agent, {
       ...(inject ? { inject } : {}),      // 显式重新裁决的豁免随任务进执行侧（#240）：面板「生长一步」/失败重试点过的
       // 那一轮，就绪深度已满足也不短路成停摆——否则按钮在停摆图上恒空转
       ...(job.growthForce === true ? { force: true } : {}),
@@ -883,7 +890,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
     persistGenJobs(rt)
     scheduleJobRetention(rt, key, job.status)
     // 失败类的 message 摘要**不截断**（#302 ②）：它是失败原因全文 + 语料指向
-    // （`…｜语料 生成语料/<站>/<件>`）——旧口径按首行 200 字切，死因与「完整值在哪」
+    // （`…｜调用记录 <课程>/<节点>#<序号>`）——旧口径按首行 200 字切，死因与「完整值在哪」
     // 一起被腰斩（实测事故日志里正是这一行读不出是谁死的）。
     logCall(rt, 'coach_growth', summarize(`「${job.course}」生长批：${job.message}`, { full: job.status !== 'done' }))
   }
@@ -980,7 +987,7 @@ async function generateQuizJob(rt: HostRuntime, ctx: Context, job: GenJob): Prom
   // 补标的在场证明（#313 B7）：取消/受理前失败本轮对该站零捕获即不补标
   const quizTokenAtStart = corpusToken(rt, STATIONS.quiz)
   try {
-    const r = await generateQuiz(rt, llmSeam(ctx, rt.corpus.record), job.course, job.node, job.count, {
+    const r = await generateQuiz(rt, llmSeam(ctx, stampCorpusSink(rt.corpus, { course: job.course, node: job.node, source: '作业' })), job.course, job.node, job.count, {
       ...(job.section ? { section: job.section } : {}),
       ...(job.instruction ? { instruction: job.instruction } : {}),
       isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
@@ -1028,7 +1035,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
     : { course, node, startedAt: new Date().toISOString(), status: 'running', phase: 'outline', ...(style ? { style } : {}) }
   rt.jobs.genJobs.set(key, job)
   persistGenJobs(rt)
-  const complete = llmSeamStripped(ctx, rt.corpus.record)
+  const complete = llmSeamStripped(ctx, stampCorpusSink(rt.corpus, { course, node, source: '作业' }))
   const failures: GenJobFailure[] = []
   try {
     // 先验审计注记（#229）：零命中/两种截断随任务消息带出（ADR-0004）。取**第一次**读数
@@ -1072,7 +1079,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
         const feedback = outlineRepairFeedback(err)
         const outlineRef = failCorpus(rt, STATIONS.outline, err)
         if (!feedback) {
-          if (outlineRef && err instanceof Error) err.message += `｜语料 生成语料/${outlineRef}`
+          if (outlineRef && err instanceof Error) err.message += `｜调用记录 ${outlineRef}`
           throw err
         }
         outlineYaml = await complete(Content.withContractLast(outlineTpl, `${packOutline}\n\n${feedback}`), undefined, { effort: outlineEffort, station: STATIONS.outline, kind: 'repair' })
@@ -1081,7 +1088,7 @@ async function generateContent(rt: HostRuntime, ctx: Context, course: string, no
           await applyOutline(outlineYaml)
         } catch (repairErr) {
           const outlineRef = failCorpus(rt, STATIONS.outline, repairErr)
-          if (outlineRef && repairErr instanceof Error) repairErr.message += `｜语料 生成语料/${outlineRef}`
+          if (outlineRef && repairErr instanceof Error) repairErr.message += `｜调用记录 ${outlineRef}`
           throw repairErr
         }
       }
@@ -1238,25 +1245,26 @@ export async function generateSection(rt: HostRuntime, ctx: Context, course: str
   const coherence: SectionCoherence = { sections: views, prevTail: sIdx > 0 ? sectionTailOf(views[sIdx - 1]?.md) : undefined }
   // 与管线同款剥围栏缝（管线产出口对 ``` 围栏容忍，重写通道此前裸缝更脆，ADR-0054）；
   // allowSplit:false——「重写这一节」的意图是重写本节，不自动改大纲结构（溢出即如实报错）
-  const r = await applySectionWithRepair(rt, llmSeamStripped(ctx, rt.corpus.record), course, node, s, sectionTpl, pack, { highTier, allowSplit: false, coherence })
+  const r = await applySectionWithRepair(rt, llmSeamStripped(ctx, stampCorpusSink(rt.corpus, { course, node, source: '单节重写' })), course, node, s, sectionTpl, pack, { highTier, allowSplit: false, coherence })
   return `[section] 「${r.title}」v${r.version} 落盘。${r.lenient ? `${r.lenient}。` : ''}${priorNote}`
 }
 
 /** 项目里程碑计划生成（P 区 #92）：计划提示词包 → 缝 complete（fast 档，#162 计划站
  * 迁入缝）→ 提案受理（人审后 apply 带快照生效）。受理门在 projectPlanPropose——
- * 计划草案一次成型、无修复轮（修订走提案快照的人审语义，草案不自动重试）。 */
-export async function generateProjectPlan(rt: HostRuntime, id: string): Promise<string> {
+ * 计划草案一次成型、无修复轮（修订走提案快照的人审语义，草案不自动重试）。
+ * agent 由调用方注入（图域执行器按任务构造，#330）。 */
+export async function generateProjectPlan(rt: HostRuntime, agent: AgentSeam, id: string): Promise<string> {
   const prompt = await rt.engine.project.projectPlanPack(id)
-  const yaml = await rt.agent.complete(STATIONS.plan, prompt, { effort: 'fast' })
+  const yaml = await agent.complete(STATIONS.plan, prompt, { effort: 'fast' })
   const prop = await rt.engine.project.projectPlanPropose(id, yaml)
   return `[project-plan] 提案 #${prop.id} 已受理（${prop.initial ? '初次规划' : '计划修订'}：${prop.milestones} 个里程碑）——人审后 learnhub_project_apply 生效（apply 带旧计划快照）。`
 }
 
 /** 项目里程碑产物生成：任务卡提示词包 → 缝 complete（fast 档）→ 轻量结构门（未过经
  * 缝的门错修复轮回灌重产恰一次，deep 档）→ 首生直落 / 已生成自动转重生成提案（带快照，
- * 不静默覆盖）。写盘是受理式门：过门即落产物，经 GateVerdict.result 随行交还。 */
-export async function generateProjectMilestone(rt: HostRuntime, id: string, milestoneId: string): Promise<string> {
-  const agent = rt.agent
+ * 不静默覆盖）。写盘是受理式门：过门即落产物，经 GateVerdict.result 随行交还。
+ * agent 由调用方注入（图域执行器按任务构造，#330）。 */
+export async function generateProjectMilestone(rt: HostRuntime, agent: AgentSeam, id: string, milestoneId: string): Promise<string> {
   const prompt = await rt.engine.project.projectMilestonePack(id, milestoneId)
   const write = (md: string) => rt.engine.project.projectMilestoneWrite(id, milestoneId, md)
   type MilestoneWriteResult = Awaited<ReturnType<typeof write>>

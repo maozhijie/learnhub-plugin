@@ -16,7 +16,7 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
  * 多行纪律）；`undefined`／`null` 整个键省略（缺值不造字段，缺 `tokens` 即此例）。
  *
  * 值只允许标量与标量数组：**不落原文**——提示词、裁决 YAML、学习笔记内容一律不进日志
- * （原文已在生成语料与 `journal.jsonl`；日志会被人 `rg` 与贴进排查对话，裹挟个人笔记
+ * （原文已在调用记录与 `journal.jsonl`；日志会被人 `rg` 与贴进排查对话，裹挟个人笔记
  * 有隐私面）。 */
 export type LogFieldValue = string | number | boolean | null | undefined | string[]
 

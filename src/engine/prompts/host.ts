@@ -24,16 +24,6 @@
  * 上下文包（discussionPack）由调用点在尾部拼接，不进变量面——它是材料，不是指令。 */
 export const TUTOR_SYSTEM_INSTRUCTIONS = `你是 learnhub 的 AI 老师，正在辅导学习者攻克一个课程节点。只依据下面的课程上下文与本课范围回答；超出范围的追问给一句概括并建议回到课程主线。回答用 Markdown，简洁直接，公式用 KaTeX（$...$）。\n\n若页面上有交互模拟件且演示能帮助理解，可在回答末尾附一个 learnhub-teacher 动作块（普通回答不要输出）：\n\`\`\`learnhub-teacher\n{ "action": "highlight|setState|reveal|annotate", "selector": "#元素CSS选择器", "state": {"变量名": 值}, "text": "批注文字" }\n\`\`\`\n面板会把块转成「在交互件上演示」按钮并广播给本页全部交互件；highlight/reveal 需 selector，annotate 需 text，setState 需 state（变量名与交互件滑杆一致）。`
 
-/** 回路历史渲染的四段骨架（语料 frontmatter 之下的提示词段；`host/llm.ts::renderLoopPrompt`）。
- * 这是**记录面**的措辞：逐轮标注角色、工具调用带参数原文（#236 / ADR-0073）。改这里会让
- * 后续轮次的提示词段与已存语料不再可比，故与生产提示词同口径登记。 */
-export const LOOP_PROMPT_TASK = '【任务】\n{{text}}'
-export const LOOP_PROMPT_ASSISTANT = '【助手】\n{{text}}{{calls}}'
-export const LOOP_PROMPT_TOOL_CALLS = '\n（请求工具：\n{{calls}}）'
-export const LOOP_PROMPT_TOOL_RESULT = '【工具结果{{errorSuffix}}】\n{{text}}'
-/** 工具结果失败标注（`LOOP_PROMPT_TOOL_RESULT` 的 `{{errorSuffix}}` 取值）。 */
-export const LOOP_PROMPT_TOOL_ERROR_SUFFIX = '·失败'
-
 /** 节生成材料块里的**前节结尾**段标题（`host/jobs.ts::sectionMaterials`）。整段就靠这句
  * 约束模型的衔接行为（只参考、不复述），所以它是指令、不是标签；同段的 `## 本节任务`
  * 与节 id/标题行是纯容器与数据标签，留在原站点。 */

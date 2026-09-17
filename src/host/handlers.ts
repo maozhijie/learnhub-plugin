@@ -25,7 +25,7 @@ import { apiRun, logCall } from './runtime.ts'
 import type { HostRuntime } from './runtime.ts'
 import type { RouteHandler } from './route-table.ts'
 import { llmComplete, logHealthOf, llmSeam, llmSeamStripped, llmView } from './llm.ts'
-import { STATIONS } from './corpus.ts'
+import { STATIONS, stampCorpusSink } from './corpus.ts'
 import { AGENT_GUIDE } from './tools.ts'
 import { serveInteractive, serveVaultFile, serveVendor } from './static.ts'
 import {
@@ -54,7 +54,7 @@ async function tutorChat(rt: HostRuntime, ctx: Context, course: string, node: st
   // #237 / ADR-0075：指令散文在 prompts/host.ts（单源），上下文包是材料、在尾部拼接——不进变量面。
   const system = render(TUTOR_SYSTEM_INSTRUCTIONS, {}) + `\n\n${pack}`
   return llmComplete(ctx, `${transcript}\n\n（请回答上面最后一条学习者的提问。）`, system,
-    { capture: rt.corpus.record, station: STATIONS.tutor })
+    { capture: stampCorpusSink(rt.corpus, { course, node, source: '面板' }), station: STATIONS.tutor })
 }
 
 /** E2「讲给我听」（#68）：初学者人设讲解会话——explainBackPack（要点+图位置+人设
@@ -73,7 +73,7 @@ async function explainBackTurn(rt: HostRuntime, ctx: Context, course: string, no
     .map(h => `${h.role === 'assistant' ? '[初学者]' : '[学习者]'} ${h.content}`)
     .join('\n\n')
   return llmComplete(ctx, `${transcript}\n\n（继续按你的角色追问或收尾。）`, system,
-    { capture: rt.corpus.record, station: STATIONS.explainBack })
+    { capture: stampCorpusSink(rt.corpus, { course, node, source: '面板' }), station: STATIONS.explainBack })
 }
 
 export const HANDLERS: Record<string, RouteHandler> = {
@@ -194,7 +194,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     })))
   },
   'POST /quality-review': async ({ rt, ctx, body, res }) => {
-    // 离线批量评审器（#222；图质量面审计 #224）：从生成语料抽样、按质量量规逐维度评分、
+    // 离线批量评审器（#222；图质量面审计 #224）：从调用记录抽样、按质量量规逐维度评分、
     // 落人读报告到 state/质量评审。同步阻塞整轮（分钟级，逐件两段式评审 + 重复次数），
     // 驱动脚本 scripts/quality-review.mjs 按长超时调用。显式给非法类型一律拒（诊断面，
     // 宁可报错不可静默换参数）。
@@ -397,7 +397,8 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /explain-feedback': async ({ rt, ctx, body, res }) => {
     // E2 定位反馈回合（#68）：对照要点给是非+定位+怎么补；判词只入 E 档案
     sendJson(res, 200, await apiRun(rt, 'api/explain-feedback', () => rt.engine.learner.explainBackFeedback(
-      need(body, 'course'), need(body, 'node'), optString(body, 'transcript'), llmSeam(ctx, rt.corpus.record, STATIONS.explainFeedback))))
+      need(body, 'course'), need(body, 'node'), optString(body, 'transcript'),
+      llmSeam(ctx, stampCorpusSink(rt.corpus, { course: need(body, 'course'), node: need(body, 'node'), source: '面板' }), STATIONS.explainFeedback))))
   },
   'POST /explain-archive': async ({ rt, body, res }) => {
     // E2 存档（#68）：把这版讲稿存成 E1 自注卡（再讲一遍/挖空重述两档）
@@ -413,7 +414,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     // 笔记源出题（#59）：读笔记正文 → 笔记出题 prompt → validateBank 门禁落镜像
     sendJson(res, 200, await apiRun(rt, 'api/note-source/generate', () => rt.engine.channels.noteSourceGenerate(
       need(body, 'id'), questionCount(body.count),
-      llmSeamStripped(ctx, rt.corpus.record, STATIONS.noteQuiz))))
+      llmSeamStripped(ctx, stampCorpusSink(rt.corpus, { source: '面板' }), STATIONS.noteQuiz))))
   },
   'POST /anki/export': async ({ rt, res }) => {
     // 导出到 Anki（C2 #63，#72 UI 挂接）：与 learnhub_anki_export 同一引擎通道
@@ -445,7 +446,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
         ...pick('node', optText(body, 'node')),
         ...(body.max !== undefined ? { max: Number(body.max) } : {}),
       },
-      llmSeamStripped(ctx, rt.corpus.record, STATIONS.errorCards))))
+      llmSeamStripped(ctx, stampCorpusSink(rt.corpus, { course: need(body, 'course'), node: optText(body, 'node'), source: '面板' }), STATIONS.errorCards))))
   },
   'POST /error-archive': async ({ rt, body, res }) => {
     sendJson(res, 200, await apiRun(rt, 'api/error-archive', () => rt.engine.bank2.errorCardArchive(
@@ -459,7 +460,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
         ...pick('kind', optText(body, 'kind') as never),
         ...pick('prompt', optText(body, 'prompt')),
         ...pick('section', optText(body, 'section')),
-      }, llmSeam(ctx, rt.corpus.record, STATIONS.selfNote))))
+      }, llmSeam(ctx, stampCorpusSink(rt.corpus, { course: need(body, 'course'), node: need(body, 'node'), source: '面板' }), STATIONS.selfNote))))
   },
   'POST /learner-archive': async ({ rt, body, res }) => {
     const archived = requireBoolean(body, 'archived')
@@ -494,7 +495,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   },
   'POST /question-answer': async ({ rt, ctx, body, res }) => {
     sendJson(res, 200, await apiRun(rt, 'api/question-answer', () => rt.engine.content2.questionAnswer(
-      llmSeam(ctx, rt.corpus.record, STATIONS.judge),
+      llmSeam(ctx, stampCorpusSink(rt.corpus, { course: need(body, 'course'), node: need(body, 'node'), source: '面板' }), STATIONS.judge),
       need(body, 'course'), need(body, 'node'), need(body, 'qid'),
       optString(body, 'answer'),
       optFinite(body, 'elapsed_s') ?? null,
@@ -519,7 +520,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
   'POST /question-dispute/review': async ({ rt, ctx, body, res }) => {
     // 瑕疵题申诉复核（ADR-0031）：LLM 两阶段复核三态裁定，只读不落盘
     sendJson(res, 200, await apiRun(rt, 'api/question-dispute/review', () => rt.engine.bank2.questionDisputeReview(
-      llmSeam(ctx, rt.corpus.record, STATIONS.dispute),
+      llmSeam(ctx, stampCorpusSink(rt.corpus, { course: need(body, 'course'), node: need(body, 'node'), source: '面板' }), STATIONS.dispute),
       need(body, 'course'), need(body, 'node'), need(body, 'qid'))))
   },
   'POST /question-dispute/apply': async ({ rt, body, res }) => {

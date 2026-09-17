@@ -5,8 +5,8 @@
  * - 「对样例语料跑出报告」：夹具语料副本进临时 vault 的 `state/生成语料/`，报告落
  *   `state/质量评审/`（报告不进 canonical —— 断言它只出现在 state 观测面）。
  * - 「报告每条分数能指到具体语料文件与原文证据」：报告里 ref 与证据引文都在。
- * - 「评审调用本身进语料」：跑完在 `state/生成语料/质量评审/` 下能看到评审调用捕获
- *   （站标签 = STATIONS.qualityReview）。
+ * - 「评审调用本身进调用记录」：跑完在 `state/调用记录/_离线/质量评审.md` 组文件里能看到
+ *   评审调用捕获（站标签 = STATIONS.qualityReview；#330 起捕获落调用记录新目录）。
  * - 空输出件零模型调用（成本纪律）；语料目录无有量规的站时 fail loud 并给指引。
  */
 import { memLogger } from './helpers/logger.ts'
@@ -21,6 +21,7 @@ import { createHostRuntime } from '../src/host/runtime.ts'
 import type { HostRuntime } from '../src/host/runtime.ts'
 import { runQualityReview } from '../src/host/quality-review.ts'
 import { STATIONS } from '../src/host/corpus.ts'
+import { parseCallRecordFile } from '../src/host/corpus-read.ts'
 import { QUALITY_REVIEW_STATION } from '../src/engine/index.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -126,20 +127,20 @@ test('评审器跑通：报告落 state/质量评审、逐件两期评审、证�
   assert.ok(result.report.systemic, '图轴在册时系统性候选进报告（#224）')
 })
 
-test('评审调用本身进语料（站标签 质量评审）：报告与语料捕获都在 state 观测面', async () => {
+test('评审调用本身进调用记录（站标签 质量评审，_离线 组文件）：报告与捕获都在 state 观测面', async () => {
   const vault = tempVault()
   const { ctx } = stubCtx()
   const rt = runtimeOf(ctx, vault)
   await runQualityReview(ctx, rt, { repeats: 1, stations: ['教练执行'], badQuota: 0, okQuota: 1, corpusDir: join(vault, '学习中心', 'state', '生成语料') })
   await rt.corpus.flush()
-  const dir = join(vault, '学习中心', 'state', '生成语料', STATIONS.qualityReview)
-  assert.ok(existsSync(dir), `评审调用捕获目录应在：${dir}`)
-  const files = readdirSync(dir)
-  assert.equal(files.length, 2, '一件两段式 = 两条捕获（一期 + 二期）')
-  const body = readFileSync(join(dir, files[0]!), 'utf8')
-  assert.ok(body.includes('station: 质量评审'), '站标签正确（STATIONS.qualityReview）')
-  assert.ok(body.includes('outcome: ok'), '捕获记为成功调用')
-  assert.ok(body.includes('## 提示词') && body.includes('## 原始输出'), '提示词与原始输出都留档')
+  const path = join(vault, '学习中心', 'state', '调用记录', '_离线', '质量评审.md')
+  assert.ok(existsSync(path), `评审调用捕获组文件应在：${path}`)
+  const calls = parseCallRecordFile(readFileSync(path, 'utf8'))
+  assert.equal(calls.length, 2, '一件两段式 = 两条捕获（一期 + 二期）')
+  assert.equal(calls[0]!.station, STATIONS.qualityReview, '站标签正确（STATIONS.qualityReview）')
+  assert.equal(calls[0]!.outcome, 'ok', '捕获记为成功调用')
+  assert.ok(calls[0]!.prompt.length > 0 && calls[0]!.output.length > 0, '提示词与响应都留档（请求/响应 JSON 原文块）')
+  assert.equal(calls[0]!.source, '离线', '无业务键的评审调用来源 = 离线')
   assert.equal(QUALITY_REVIEW_STATION, STATIONS.qualityReview, '站名常量与词表同源')
 })
 

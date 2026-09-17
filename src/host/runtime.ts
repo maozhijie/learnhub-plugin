@@ -12,11 +12,11 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { AgentSeam, LearnhubEngine, DEFAULT_QUIZ_AUDIT_RATE, CURRENT_SCHEMA_VERSION } from '../engine/index.ts'
-import type { CoachTrigger, Logger, LogLevel } from '../engine/index.ts'
+import type { AgentCallRecord, CoachTrigger, Logger, LogLevel } from '../engine/index.ts'
 import type { GenJobFailure, GenJobPhase, GenJobStatus } from '../generation-jobs.ts'
 import { llmSeam, llmStreamSeam } from './llm.ts'
-import { createCorpusCapture } from './corpus.ts'
-import type { CorpusCapture } from './corpus.ts'
+import { createCorpusCapture, stampCorpusSink } from './corpus.ts'
+import type { CallIdentity, CorpusCapture } from './corpus.ts'
 import { createFileLogger } from './log-file.ts'
 import { mathRng, systemClock } from './clock.ts'
 import { nodeVaultFs } from './vault-fs.ts'
@@ -38,9 +38,9 @@ export interface LearnhubConfig {
   /** 出题第二意见门抽样率（#223）：0–1，0 = 关门；缺省 0.25（起步低）。
    * 高难度题（difficulty 3）恒入样；非 0–1 数值在装配时 fail loud。 */
   quizAuditRate?: number
-  /** 生成语料落盘目录覆盖（#222 起：冒烟把临时 vault 的语料写到外面的持久目录，供离线
+  /** 调用记录落盘目录覆盖（#222 起：冒烟把临时 vault 的语料写到外面的持久目录，供离线
    * 评审抽样——临时 vault 随跑随删，不覆盖的话冒烟的语料一件都留不下）。缺省 = 本 vault
-   * 的 `state/生成语料`。 */
+   * 的 `state/调用记录`（#330 起；旧 `state/生成语料/` 冻结不迁移）。 */
   corpusDir?: string
   /** 调试日志实现覆盖（#253 / ADR-0080）：**测试与排障**用——缺省按 `${center}/state/logs`
    * 建文件 logger。测试注入内存假实现是必需而非便利：日志是 fire-and-forget 的，真写盘会
@@ -131,8 +131,9 @@ export interface HostRuntime {
   /** 统一 agent 缝（#162 / ADR-0041/0044）：六个策略站的调用面。站点方法以它为
    * llm 注入参——投递层构造一次、逐调用传入（#137 注入缝纪律沿袭：测试换假端口）。 */
   agent: AgentSeam
-  /** 生成语料捕获器（#213 / ADR-0060）：缝出口全量落盘（经 host/llm.ts 接线）+
-   * 失败/容忍补标（jobs.ts 等宿主 catch 点）+ 任务失败详情的语料引用来源。 */
+  /** 调用记录捕获器（#330 / ADR-0103，取代生成语料 #213 / ADR-0060）：缝出口全量
+   * 落盘（经 host/llm.ts 接线）+ 失败/容忍补标（jobs.ts 等宿主 catch 点）+ 任务失败
+   * 详情的调用记录引用来源。 */
   corpus: CorpusCapture
   vault: string
   centerRel: string
@@ -189,27 +190,19 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
   // 保留期与单日上限全在实现里（引擎侧不判级别、不读环境）。 ——
   const logger = config?.logger ?? createFileLogger({ dir: `${center}/state/logs` })
   const engine = new LearnhubEngine({ vault, centerRel, clock: systemClock, rng: mathRng, fs: nodeVaultFs, logger })
-  // —— 生成语料捕获器（#213 / ADR-0060）：缝出口全量落盘的 sink，构造先于 agent 缝
-  //（llmSeam/llmStreamSeam 装配时接它）。写盘异步 fire-and-forget、故障静默。 ——
+  // —— 调用记录捕获器（#330 / ADR-0103，取代生成语料 #213 / ADR-0060）：缝出口全量
+  // 落盘的 sink，构造先于 agent 缝（llmSeam/llmStreamSeam 装配时接它）。写盘异步
+  // fire-and-forget、故障静默。 ——
   const corpus = createCorpusCapture(config?.corpusDir ? config.corpusDir.replace(/\\/g, '/') : engine.paths.corpusDir)
   // —— 统一 agent 缝装配（#162）：端口适配住 host/llm.ts 唯一适配文件，投递层只构造
-  // 与注入；调用日志沿缝贯通、注入侧可观测（console + 调试日志 `agent.call`）。 ——
+  // 与注入；调用日志沿缝贯通、注入侧可观测（console + 调试日志 `agent.call`）。
+  // 队列任务内的调用经 taskAgentSeam 带任务身份盖章捕获（#330）；本实例是无身份兜底。 ——
   let rtRef: HostRuntime | undefined
   const agent = new AgentSeam({
     complete: llmSeam(ctx, corpus.record),
     stream: llmStreamSeam(ctx, corpus.record),
     logger,
-    onCall: r => {
-      const usage = r.usage ? ` · tok ${r.usage.inputTokens}/${r.usage.outputTokens}${r.usage.reasoningTokens !== undefined ? `+${r.usage.reasoningTokens}` : ''}` : ''
-      console.info(`[learnhub:agent] ${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符${usage}`)
-      // token 是否随路由上报由 provider 决定：缺则不造字段（不写 `tokens=undefined`）
-      rtRef?.logger.info('agent.call', {
-        station: r.station, mode: r.mode, call_no: r.callNo,
-        ...(r.effort !== undefined ? { effort: r.effort } : {}),
-        ms: r.durationMs, prompt_chars: r.promptChars, reply_chars: r.replyChars,
-        ...(r.usage ? { tokens: `${r.usage.inputTokens}/${r.usage.outputTokens}${r.usage.reasoningTokens !== undefined ? `+${r.usage.reasoningTokens}` : ''}` } : {}),
-      })
-    },
+    onCall: agentOnCall(() => rtRef),
   }, systemClock)
   const rt: HostRuntime = {
     engine, agent, corpus,
@@ -226,9 +219,38 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
   return rt
 }
 
+/** agent 缝的观测面 onCall（console + 调试日志 `agent.call`）：默认装配点与任务身份
+ * 缝（taskAgentSeam）共用一份接线，防双处漂移。 */
+function agentOnCall(rtRef: () => HostRuntime | undefined): (record: AgentCallRecord) => void {
+  return r => {
+    const usage = r.usage ? ` · tok ${r.usage.inputTokens}/${r.usage.outputTokens}${r.usage.reasoningTokens !== undefined ? `+${r.usage.reasoningTokens}` : ''}` : ''
+    console.info(`[learnhub:agent] ${r.station} · ${r.mode} #${r.callNo} · ${r.effort ?? '默认档'} · ${r.durationMs}ms · 入 ${r.promptChars}/出 ${r.replyChars} 字符${usage}`)
+    // token 是否随路由上报由 provider 决定：缺则不造字段（不写 `tokens=undefined`）
+    rtRef()?.logger.info('agent.call', {
+      station: r.station, mode: r.mode, call_no: r.callNo,
+      ...(r.effort !== undefined ? { effort: r.effort } : {}),
+      ms: r.durationMs, prompt_chars: r.promptChars, reply_chars: r.replyChars,
+      ...(r.usage ? { tokens: `${r.usage.inputTokens}/${r.usage.outputTokens}${r.usage.reasoningTokens !== undefined ? `+${r.usage.reasoningTokens}` : ''}` } : {}),
+    })
+  }
+}
+
+/** 任务身份的 agent 缝（#330 / ADR-0103）：队列任务执行器在 course/node 在场的作用域
+ * 构造，捕获缝经 stampCorpusSink 盖章——本任务发出的全部 agent 调用（教练回合/罗盘
+ * 回路/计划站）落同一任务组文件，来源标「作业」。观测面接线与默认缝同款。 */
+export function taskAgentSeam(rt: HostRuntime, ctx: Context, identity: CallIdentity): AgentSeam {
+  const sink = stampCorpusSink(rt.corpus, identity)
+  return new AgentSeam({
+    complete: llmSeam(ctx, sink),
+    stream: llmStreamSeam(ctx, sink),
+    logger: rt.logger,
+    onCall: agentOnCall(() => rt),
+  }, systemClock)
+}
+
 /** 引擎调用留痕（前身 `runLog`，markdown 追加 → 结构化事件；#253 / ADR-0080）：
  * `engine.call` 一行（`tool` + `chars`）+ 摘要续行。`summary` 必须是**摘要不是原文**
- * ——「不落原文」是本票的隐私面纪律（原文已在生成语料与 `journal.jsonl`；日志会被人
+ * ——「不落原文」是本票的隐私面纪律（原文已在调用记录与 `journal.jsonl`；日志会被人
  * `rg` 与贴进排查对话）：`run`／`apiRun` 出口经 `summarize`，其余站点给的本来就是
  * 宿主自产的事件一句话。截断与失败静默都不在这里——那是宿主日志实现的事。
  *
@@ -258,7 +280,7 @@ export const LOG_SUMMARY_HEAD = 200
  *    现在带 `…（首行已截断，共 N 字符）`。
  * ② `opts.full` = 失败类值**整段照落**（不折首行、不截断）：失败原因可能是多行文本
  *    （生成任务 `message` 里「两轮死因」的 `【首轮】/【重裁】` 两段就是），而**完整值指向
- *    拼在文末**（`…｜语料 生成语料/<站>/<文件>`）——折首行等于把死因详情与指向一起丢掉。
+ *    拼在文末**（`…｜调用记录 <课程>/<节点>#<序号>`）——折首行等于把死因详情与指向一起丢掉。
  *    上界仍由宿主单条上限（16,384，超限显式标注）兜。消费面：`run`／`apiRun` 出口（默认档）
  *    与失败类站点（`host/jobs.ts` 的生长批出口）。 */
 export function summarize(output: unknown, opts: { full?: boolean } = {}): string {

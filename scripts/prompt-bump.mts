@@ -45,7 +45,7 @@ import { splitDecompileDoc, validatePlanArtifact } from '../src/engine/practice/
 import { validateErrorCards } from '../src/engine/content/error-cards.ts'
 import { validateRouteBody } from '../src/engine/coach/compass.ts'
 import { parseReceiptReview } from '../src/engine/practice/receipts.ts'
-import { parseCorpusFile } from '../src/host/corpus.ts'
+import { corpusLayoutOf, parseCorpusFile, readCallRecords } from '../src/host/corpus-read.ts'
 
 /** 模板版本标记（每条模板头；与 PROMPT_CHANGELOG 的版本号同源）。 */
 export const MARKER_RE = /<!-- learnhub:prompt\/v(\d+) -->/g
@@ -331,9 +331,13 @@ export interface ReplayReading {
   errors: string[]
 }
 
-/** 读语料目录（`<dir>/<站>/*.md`，格式解析复用 host/corpus.ts 的单一出处）并按站回放。 */
+/** 读语料目录并按站回放。**双形态读侧**（#330 / ADR-0103）：新目录（`调用记录/`，按
+ * 任务成组）走按调用读侧 readCallRecords；旧 `state/生成语料/` 目录（冻结，不迁移）
+ * 走旧读侧 parseCorpusFile——历史语料与 fixture 的回放语义保持。基线取档上的 outcome，
+ * 回放只判「能不能解析」，逐件一条 ReplayReading。 */
 export function replayCorpus(dir: string, opts: { stations?: readonly string[] } = {}): ReplayReading[] {
   const wanted = opts.stations?.length ? opts.stations : null
+  if (corpusLayoutOf(dir) !== '生成语料') return replayCallRecords(readCallRecords(dir), wanted)
   const out: ReplayReading[] = []
   let stations: string[]
   try {
@@ -375,6 +379,34 @@ export function replayCorpus(dir: string, opts: { stations?: readonly string[] }
     }
   }
   return out
+}
+
+/** 新目录形态（调用记录）的回放：按调用记录逐件过解析面。 */
+function replayCallRecords(records: ReturnType<typeof readCallRecords>, wanted: readonly string[] | null): ReplayReading[] {
+  const out: ReplayReading[] = []
+  for (const call of records) {
+    if (wanted && !wanted.includes(call.station)) continue
+    const parse = REPLAY_FACE[call.station]
+    const undeclared = !parse && !(call.station in REPLAY_OUT_OF_SCOPE)
+    if (!parse) {
+      out.push({
+        ref: call.ref, station: call.station, baseline: call.outcome,
+        replay: undeclared ? 'failed' : null,
+        regression: undeclared,
+        errors: undeclared
+          ? [`站「${call.station}」既不在回放面（REPLAY_FACE）也不在缺席清单（REPLAY_OUT_OF_SCOPE）——新站漏登，按回放失败处理`]
+          : [],
+      })
+      continue
+    }
+    // 回放吃响应文本（各解析面自带剥围栏，与旧路径同口径）；回路轮文本为空而载荷在
+    // arguments 里——回放面无此类站（缺席清单挡），防御性拼接保持「受评对象 = 文本 + 载荷」。
+    const text = [call.output, ...call.toolCalls.map(c => c.arguments)].filter(Boolean).join('\n')
+    const errors = parse(text)
+    const replay = errors ? 'failed' : 'passed'
+    out.push({ ref: call.ref, station: call.station, baseline: call.outcome, replay, regression: replay === 'failed' && call.outcome !== 'failed', errors: errors ?? [] })
+  }
+  return out.sort((a, b) => a.ref.localeCompare(b.ref))
 }
 
 /** 回放违规（回归件）——只有「基线通过 → 回放失败」算，基线本就失败的不重复计入。 */
@@ -494,7 +526,7 @@ function cmdCheck(args: string[]): number {
 function cmdReplay(args: string[]): number {
   const corpus = opt(args, 'corpus')
   if (!corpus) {
-    console.error('缺少 --corpus <语料目录>（宿主语料默认住 <中心>/state/生成语料；夹具可指向 tests/fixtures/quality-corpus）')
+    console.error('缺少 --corpus <语料目录>（宿主语料默认住 <中心>/state/调用记录；夹具可指向 tests/fixtures/quality-corpus）')
     return 2
   }
   const dir = resolve(corpus)

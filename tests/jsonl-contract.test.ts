@@ -76,7 +76,7 @@ test('结构守卫：JSONL 读侧必经原语——src 全域 split("\\n") 只�
   // #309 agent.ts 的 fingerprintLinesOf 同族（切**门错误行**取熔断指纹——同 generation-jobs
   // 的 sectionFailure，纯文本非数据流，且只为逐字比对）。白名单外出现
   // split('\n') = 有人手写 JSONL parse 循环（ADR-0053 单一实现违约）。
-  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts', 'generation-jobs.ts', 'corpus.ts', 'smoke.ts', 'spike.ts', 'agent.ts'])
+  const ALLOW = new Set(['io.ts', 'compass.ts', 'content.ts', 'growth-subsystem.ts', 'grading.ts', 'note-source.ts', 'yaml.ts', 'generation-jobs.ts', 'corpus.ts', 'corpus-read.ts', 'smoke.ts', 'spike.ts', 'agent.ts'])
   const files: string[] = []
   function walk(dir: string): void {
     for (const e of readdirSync(dir, { withFileTypes: true })) {

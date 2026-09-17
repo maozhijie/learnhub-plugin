@@ -64,7 +64,7 @@ test('计划草案站经缝：剥围栏在缝里完成（受理拿到净 YAML）
   // 模型把整段 YAML 包进围栏——缝剥壳后受理（原投递层接线语义，收口后由缝内建）
   const fake = scriptedSeam(rt, ['```yaml\nproject: 练琴计划\nplan: []\n```'])
 
-  const out = await generateProjectPlan(rt, '练琴计划')
+  const out = await generateProjectPlan(rt, rt.agent, '练琴计划')
 
   assert.match(out, /提案 #7 已受理（初次规划：2 个里程碑）/)
   assert.equal(fake.calls.length, 1, '计划草案一次成型：恒一次调用（无修复轮）')
@@ -88,7 +88,7 @@ test('里程碑草案站经缝：轻量结构门未过恰回灌重产一次（�
   }) as never
   const fake = scriptedSeam(rt, ['坏产出', '好产出'])
 
-  const out = await generateProjectMilestone(rt, '练琴计划', 'm1')
+  const out = await generateProjectMilestone(rt, rt.agent, '练琴计划', 'm1')
 
   assert.match(out, /「m1」已落盘（档位 低）。/)
   assert.equal(fake.calls.length, 2, '恰两轮调用：首产 + 回灌重产一次')
@@ -109,7 +109,7 @@ test('里程碑草案站经缝：轻量结构门未过恰回灌重产一次（�
   }) as never
   scriptedSeam(rt2, ['坏一版', '还是坏'])
   await assert.rejects(
-    () => generateProjectMilestone(rt2, '练琴计划', 'm1'),
+    () => generateProjectMilestone(rt2, rt2.agent, '练琴计划', 'm1'),
     (err: unknown) => {
       const e = err as Error & { code?: string }
       assert.match(e.message, /仍缺验收清单/)

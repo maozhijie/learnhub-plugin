@@ -42,7 +42,7 @@ import {
 } from '../src/engine/index.ts'
 import type { DimensionScore, QualityReviewReport, ReviewSample, SampleReview } from '../src/engine/index.ts'
 import { readCorpusSamples } from '../src/host/quality-review.ts'
-import { parseCorpusFile, parseCorpusFrontmatter } from '../src/host/corpus.ts'
+import { parseCorpusFile, parseCorpusFrontmatter } from '../src/host/corpus-read.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CORPUS = join(ROOT, 'tests', 'fixtures', 'quality-corpus')

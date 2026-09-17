@@ -5542,11 +5542,11 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑计划草案生成中…\",\"planPayload\":{\"project\":\"1\"}}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "registry.load()",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜调用记录 «corpus-ref»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "registry.load()",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜调用记录 «corpus-ref»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "registry.load()",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/计划草案/«corpus-file»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"计划草案\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"plan\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜调用记录 «corpus-ref»\",\"planPayload\":{\"project\":\"1\"},\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {
@@ -5592,11 +5592,11 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"里程碑任务卡生成中…\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"}}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)",
    "registry.load()",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜调用记录 «corpus-ref»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "registry.load()",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜调用记录 «corpus-ref»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])",
    "registry.load()",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜语料 生成语料/里程碑草案/«corpus-file»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])"
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"里程碑草案(1)\",\"startedAt\":\"«ts»\",\"status\":\"failed\",\"phase\":\"milestone\",\"model\":\"deepseek-v4-flash\",\"message\":\"Cannot read properties of undefined (reading 'stream')｜调用记录 «corpus-ref»\",\"milestonePayload\":{\"project\":\"1\",\"milestone\":\"1\"},\"finishedAt\":\"«ts»\"}])"
   ]
  },
  {

@@ -28,6 +28,8 @@ import type { HostRuntime } from '../src/host/runtime.ts'
 import { mathRng, systemClock } from '../src/host/clock.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { handleApi } from '../src/host/api.ts'
+import { OFFLINE_DIR } from '../src/host/corpus.ts'
+import { parseCallRecordFile } from '../src/host/corpus-read.ts'
 import {
   cancelGeneration,
   enqueueGeneration,
@@ -546,10 +548,10 @@ test('#213 语料容忍补标：大纲解析容忍命中 → 大纲站当次捕�
   await until(() => rt.jobs.genJobs.get(key)?.status === 'done')
   await rt.corpus.flush()
   const ref = rt.corpus.lastRef('课程大纲')
-  assert.ok(ref, '大纲站捕获在案')
-  const body = readFileSync(join(rt.vault, '学习中心', 'state', '生成语料', ref!), 'utf8')
-  assert.match(body, /^---\n[\s\S]*outcome: tolerated/, '捕获初标 ok 被管线补标 tolerated（失败·容忍必存）')
-  assert.match(body, /station: 课程大纲/)
+  assert.ok(ref && /^数学\/节点A#\d+$/.test(ref), '大纲站捕获在案（ref 指向任务组）')
+  const body = readFileSync(join(rt.vault, '学习中心', 'state', '调用记录', '数学', '节点A.md'), 'utf8')
+  assert.match(body, /^- 结果: tolerated$/m, '捕获初标 ok 被管线补标 tolerated（失败·容忍必存）')
+  assert.match(body, /## #\d+ ｜ 课程大纲 ｜ 作业/, '节头带站与来源')
 })
 
 test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 → 子节照常生成 → done', async () => {
@@ -866,18 +868,18 @@ test('生长批失败终态：教练回合抛错 → failed 带死因；自动�
 
 test('#301 生长失败语料补标按真实失败站落盘：教练执行站失败 → 本站当次捕获改判；别站成功件不动', async () => {
   const rt = makeRuntime()
-  const corpusDir = join(rt.vault, '学习中心', 'state', '生成语料')
+  const corpusDir = join(rt.vault, '学习中心', 'state', '调用记录')
   // 教练执行站与另一站各一条**历史**捕获（上一个会话/上一轮的件——#313 B7 起「最近一条」不再
   // 自动等于死因样本：判据是「这一轮对该站真的产生过捕获」，故历史件必须原样留着）
   const seedCapture = (station: string, seq: number) => rt.corpus.record({
     ts: `2026-09-16T10:00:0${seq}.000Z`, station, kind: 'loop', outcome: 'ok',
-    durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '输出',
+    durationMs: 1, provider: 'p', model: 'm', attempt: 1,
+    request: { messages: [{ role: 'user', text: '提示词' }] }, response: { text: '输出', finish: 'stop' },
   })
   seedCapture('罗盘', 1)
   seedCapture('教练执行', 2)
   await rt.corpus.flush()
   const otherRef = rt.corpus.lastRef('罗盘')!
-  const staleDraftRef = rt.corpus.lastRef('教练执行')!
 
   stub(rt, {
     // 引擎在抛出点给错误打站标签（growth-subsystem 的 stationTaggedError）——宿主据此落站
@@ -885,7 +887,8 @@ test('#301 生长失败语料补标按真实失败站落盘：教练执行站失
       // 本轮执行官站真跑过一轮：当次捕获先落盘，随后才失败
       rt.corpus.record({
         ts: '2026-09-16T10:00:09.000Z', station: '教练执行', kind: 'loop', outcome: 'ok',
-        durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '本轮的死因件',
+        durationMs: 1, provider: 'p', model: 'm', attempt: 1,
+        request: { messages: [{ role: 'user', text: '提示词' }] }, response: { text: '本轮的死因件', finish: 'stop' },
       })
       throw Object.assign(new Error('[coach-draft] 回路收束但草稿仍有 3 条未发布增量且未成功 finish'), { station: '教练执行' })
     },
@@ -898,23 +901,24 @@ test('#301 生长失败语料补标按真实失败站落盘：教练执行站失
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'failed')
   await rt.corpus.flush()
 
-  // 执行官站：**本轮**捕获改判 failed + 迁进 bad 桶
+  // 执行官站：**本轮**捕获改判 failed（组文件内改节，不迁桶）
   const draftRef = rt.corpus.lastRef('教练执行')!
-  assert.match(draftRef, /^教练执行\/bad-/, '执行官站本轮捕获被补标（bad 桶前缀随 outcome）')
-  const draftBody = readFileSync(join(corpusDir, draftRef), 'utf8')
-  assert.match(draftBody, /outcome: failed/)
-  assert.match(draftBody, /code: ERROR/)
-  assert.match(readFileSync(join(corpusDir, staleDraftRef), 'utf8'), /outcome: ok/, '上一轮的件不背这一轮的锅（#313 B7）')
+  assert.match(draftRef, /^_离线\/教练执行#/, '执行官站本轮捕获被补标（ref 指向离线组）')
+  const draftCalls = parseCallRecordFile(readFileSync(join(corpusDir, OFFLINE_DIR, '教练执行.md'), 'utf8'))
+  const dead = draftCalls.find(c => c.output === '本轮的死因件')!
+  assert.equal(dead.outcome, 'failed', '本轮死因件改判 failed')
+  assert.equal(dead.code, 'ERROR')
+  assert.equal(draftCalls.find(c => c.seq === 1)!.outcome, 'ok', '上一轮的件不背这一轮的锅（#313 B7）')
   // 别站成功件**不被改标**（旧口径把生长失败一律补到某固定站——#301 缺陷③）
-  assert.match(otherRef, /^罗盘\/ok-/, '别站捕获仍在 ok 桶')
-  assert.match(readFileSync(join(corpusDir, otherRef), 'utf8'), /outcome: ok/)
-  // 失败详情带语料引用（指到真死因件）
-  assert.match(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', new RegExp(`｜语料 生成语料/${draftRef.replace(/[/\\]/g, '.')}`))
+  assert.match(otherRef, /^_离线\/罗盘#/, '别站捕获仍在案')
+  assert.equal(parseCallRecordFile(readFileSync(join(corpusDir, OFFLINE_DIR, '罗盘.md'), 'utf8'))[0].outcome, 'ok')
+  // 失败详情带调用记录引用（指到真死因件）
+  assert.match(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', new RegExp(`｜调用记录 ${draftRef.replace(/[/\\]/g, '.')}`))
 })
 
 test('#301 形状容忍补标：归一命中 → 宿主给执行官站**当次**捕获改判 tolerated（回调在工具调用内触发）', async () => {
   const rt = makeRuntime()
-  const corpusDir = join(rt.vault, '学习中心', 'state', '生成语料')
+  const corpusDir = join(rt.vault, '学习中心', 'state', '调用记录')
   let tolerantRef: string | undefined
   stub(rt, {
     // 引擎桩：模拟「本轮回路的捕获刚落盘 → 工具调用里归一命中 → 回调同步触发」的时序
@@ -922,13 +926,15 @@ test('#301 形状容忍补标：归一命中 → 宿主给执行官站**当次**
     'growth2.coachGrowthBatch': async (_c: string, _a: unknown, opts?: { onTolerated?: (code: string) => void }) => {
       rt.corpus.record({
         ts: '2026-09-16T10:00:12.176Z', station: '教练执行', kind: 'loop', outcome: 'ok',
-        durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '',
+        durationMs: 1, provider: 'p', model: 'm', attempt: 1,
+        request: { messages: [{ role: 'user', text: '提示词' }] }, response: { text: '', finish: 'stop' },
       })
       opts?.onTolerated?.('patch_shape_normalized')
       // 再落一轮捕获（对照位：补标只该落在命中那一轮，不该落到最后一轮）
       rt.corpus.record({
         ts: '2026-09-16T10:00:20.000Z', station: '教练执行', kind: 'loop', outcome: 'ok',
-        durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '',
+        durationMs: 1, provider: 'p', model: 'm', attempt: 1,
+        request: { messages: [{ role: 'user', text: '提示词' }] }, response: { text: '', finish: 'stop' },
       })
       tolerantRef = rt.corpus.lastRef('教练执行')
       return {
@@ -944,22 +950,20 @@ test('#301 形状容忍补标：归一命中 → 宿主给执行官站**当次**
   await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
   await rt.corpus.flush()
-  const files = readdirSync(join(corpusDir, '教练执行')).sort()
-  const marked = files.filter(f => f.startsWith('bad-'))
-  assert.equal(marked.length, 1, `恰一件被补标（命中那一轮）：${files.join('、')}`)
-  const body = readFileSync(join(corpusDir, '教练执行', marked[0]!), 'utf8')
-  assert.match(body, /outcome: tolerated/)
-  assert.match(body, /code: patch_shape_normalized/, '补标带机器可读码（前端只给 outcome，理由在这里）')
-  assert.match(marked[0]!, /10-00-12-176Z/, '补标落在**当次**捕获上（不是批次最后一轮）')
-  assert.match(tolerantRef!, /^教练执行\/ok-.*10-00-20/, '对照组：后一轮保持 ok')
+  const calls = parseCallRecordFile(readFileSync(join(corpusDir, OFFLINE_DIR, '教练执行.md'), 'utf8'))
+  assert.equal(calls.filter(c => c.outcome === 'tolerated').length, 1, `恰一件被补标（命中那一轮）：${calls.length} 节`)
+  assert.equal(calls[0].outcome, 'tolerated', '补标落在**当次**捕获上（不是批次最后一轮）')
+  assert.equal(calls[0].code, 'patch_shape_normalized', '补标带机器可读码（前端只给 outcome，理由在这里）')
+  assert.match(tolerantRef!, /^_离线\/教练执行#2$/, '对照组：后一轮保持 ok')
 })
 
 test('#301 生长失败无站标签（零终点这类，回路一次都没跑起来）→ 不补标任何捕获，也不给语料引用', async () => {
   const rt = makeRuntime()
-  const corpusDir = join(rt.vault, '学习中心', 'state', '生成语料')
+  const corpusDir = join(rt.vault, '学习中心', 'state', '调用记录')
   rt.corpus.record({
     ts: '2026-09-16T10:00:01.000Z', station: '罗盘', kind: 'complete', outcome: 'ok',
-    durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '输出',
+    durationMs: 1, provider: 'p', model: 'm', attempt: 1,
+    request: { messages: [{ role: 'user', text: '提示词' }] }, response: { text: '输出', finish: 'stop' },
   })
   await rt.corpus.flush()
   const before = rt.corpus.lastRef('罗盘')!
@@ -976,18 +980,19 @@ test('#301 生长失败无站标签（零终点这类，回路一次都没跑起
   await rt.corpus.flush()
   // 没有死因样本就不标（标错件比不标更坏）——上一批的捕获保持原样、失败详情无语料引用
   assert.equal(rt.corpus.lastRef('罗盘'), before)
-  assert.match(readFileSync(join(corpusDir, before), 'utf8'), /outcome: ok/)
+  assert.match(readFileSync(join(corpusDir, OFFLINE_DIR, '罗盘.md'), 'utf8'), /^- 结果: ok$/m)
   const msg = rt.jobs.genJobs.get('数学/生长批')!.message ?? ''
-  assert.doesNotMatch(msg, /语料 生成语料/, '无站标签 = 无死因样本，不带语料引用')
+  assert.doesNotMatch(msg, /调用记录/, '无站标签 = 无死因样本，不带语料引用')
 })
 
 test('#313 B7 非模型失败不补标：熔断/预算类失败本轮零调用 → 上一件的 ok 捕获原样、失败详情不带语料引用', async () => {
   const rt = makeRuntime()
-  const corpusDir = join(rt.vault, '学习中心', 'state', '生成语料')
+  const corpusDir = join(rt.vault, '学习中心', 'state', '调用记录')
   // 上一轮（甚至上一个会话）的成功件：站内对齐语义下它就是「最近一条」
   rt.corpus.record({
     ts: '2026-09-16T09:00:01.000Z', station: '教练执行', kind: 'loop', outcome: 'ok',
-    durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '上一轮的产出',
+    durationMs: 1, provider: 'p', model: 'm', attempt: 1,
+    request: { messages: [{ role: 'user', text: '提示词' }] }, response: { text: '上一轮的产出', finish: 'stop' },
   })
   await rt.corpus.flush()
   const before = rt.corpus.lastRef('教练执行')!
@@ -1006,20 +1011,21 @@ test('#313 B7 非模型失败不补标：熔断/预算类失败本轮零调用 �
   // 死因样本必须**出自本轮**：本轮零捕获 → 不补标（旧口径把上一件改名 bad- + failed，
   // bad 桶被污染 = 质量评审抽样失真，失败详情那句「语料 …/<件>」还指向成功件）
   assert.equal(rt.corpus.lastRef('教练执行'), before, '捕获未被改名')
-  assert.match(readFileSync(join(corpusDir, before), 'utf8'), /outcome: ok/)
-  assert.doesNotMatch(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', /语料 生成语料/, '没有本轮死因样本就不给语料引用')
+  assert.match(readFileSync(join(corpusDir, OFFLINE_DIR, '教练执行.md'), 'utf8'), /^- 结果: ok$/m)
+  assert.doesNotMatch(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', /调用记录/, '没有本轮死因样本就不给语料引用')
 })
 
 test('#313 B7 取消不补标：取消轮即便有本轮捕获也不改判 failed（取消不是模型死亡）', async () => {
   const rt = makeRuntime()
-  const corpusDir = join(rt.vault, '学习中心', 'state', '生成语料')
+  const corpusDir = join(rt.vault, '学习中心', 'state', '调用记录')
   stub(rt, {
     // 取消的真实时序：面板/工具把 status 置 cancelling → 回路 assertAlive 抛错。
     // 桩里同步复现：先落一条本轮捕获（回路真跑过），再翻状态、再抛。
     'growth2.coachGrowthBatch': async () => {
       rt.corpus.record({
         ts: '2026-09-16T10:00:05.000Z', station: '教练执行', kind: 'loop', outcome: 'ok',
-        durationMs: 1, provider: 'p', model: 'm', prompt: '提示词', output: '本轮已产出的件',
+        durationMs: 1, provider: 'p', model: 'm', attempt: 1,
+        request: { messages: [{ role: 'user', text: '提示词' }] }, response: { text: '本轮已产出的件', finish: 'stop' },
       })
       cancelGeneration(rt, '数学', '生长批')
       throw Object.assign(new Error('[coach-growth] 生长批任务已取消——回合中止（已产计划丢弃）。'), { station: '教练执行' })
@@ -1035,9 +1041,9 @@ test('#313 B7 取消不补标：取消轮即便有本轮捕获也不改判 faile
   })
   await rt.corpus.flush()
   const ref = rt.corpus.lastRef('教练执行')!
-  assert.match(ref, /^教练执行\/ok-/, '取消轮的件留在 ok 桶（取消不算模型死亡）')
-  assert.match(readFileSync(join(corpusDir, ref), 'utf8'), /outcome: ok/)
-  assert.doesNotMatch(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', /语料 生成语料/, '取消不是死因，不带语料引用')
+  assert.match(ref, /^_离线\/教练执行#/, '取消轮的件留在 ok（取消不算模型死亡）')
+  assert.match(readFileSync(join(corpusDir, OFFLINE_DIR, '教练执行.md'), 'utf8'), /^- 结果: ok$/m)
+  assert.doesNotMatch(rt.jobs.genJobs.get('数学/生长批')!.message ?? '', /调用记录/, '取消不是死因，不带语料引用')
 })
 
 test('#313 E23：生长批成功回执点名新建节点（「哪几个节点要生成正文」在回执里）', async () => {
