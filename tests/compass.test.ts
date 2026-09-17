@@ -13,7 +13,7 @@ import { weekStartOf } from '../src/engine/learner/kata.ts'
 import {
   SECTION_ROUTE, SECTION_ANNOTATIONS, SECTION_ETA, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,
   ETA_MARKER_PREFIX, parseCompass, sectionBody, withSectionText, validateRouteBody, etaMarkerOf,
-  hasPaintedRoute, parseRouteSections, routeBodyWarns, routeWeeklyReview, repaintDueOf, withRepaintMarker,
+  hasPaintedRoute, parseRouteSections, routeBodyWarns, routeWeeklyReview, repaintDueOf, withRepaintMarker, stageAnchorsOf,
 } from '../src/engine/coach/compass.ts'
 import { AgentSeam } from '../src/engine/infra/agent.ts'
 
@@ -91,6 +91,31 @@ test('纯函数：段级合并保留段外字节、未知段原样保留、路�
   assert.ok(validateRouteBody('- ok\n## 劫持\n').some(e => e.includes('标题')))
   assert.ok(validateRouteBody('x'.repeat(4001)).some(e => e.includes('超出上限')))
   assert.deepEqual(validateRouteBody(GOLD_ROUTE), [])
+})
+
+test('纯函数：stageAnchorsOf 阶段标题机器锚点（#319）——两级列表、空位显式不报错', () => {
+  // 已画弧：终点节头 + 阶段条目 → 两级锚点（同名阶段不合并、按节区分）
+  const withHeads = '- **用导数解决优化问题**：\n  - **阶段一：直觉**：推进广度\n  - **阶段一：直觉**：推进深度\n- **第二终点**：\n  - **阶段二：定义**：推进深度'
+  const a = stageAnchorsOf(withHeads)
+  assert.equal(a.empty, false)
+  assert.equal(a.reason, null)
+  assert.deepEqual(a.stages, [
+    { endpoint: '用导数解决优化问题', stage: '阶段一：直觉' },
+    { endpoint: '用导数解决优化问题', stage: '阶段一：直觉' },
+    { endpoint: '第二终点', stage: '阶段二：定义' },
+  ])
+  // 无节头的散条目 → endpoint=''（不硬拒）
+  const flat = stageAnchorsOf(GOLD_ROUTE)
+  assert.equal(flat.empty, false)
+  assert.ok(flat.stages.every(s => s.endpoint === ''))
+  assert.ok(flat.stages.length >= 3)
+  // 空位：未画（null / 占位）与已画但无可解析条目，各自带原因，零抛错
+  assert.deepEqual(stageAnchorsOf(null), { stages: [], empty: true, reason: 'missing-route' })
+  assert.deepEqual(stageAnchorsOf(ROUTE_PENDING), { stages: [], empty: true, reason: 'missing-route' })
+  // 解析刻意宽容：纯散文行也退回提取可读名（软对齐拿它对表自然 miss，不在此拒）
+  const prose = stageAnchorsOf('只是一段人读散文。')
+  assert.equal(prose.empty, false)
+  assert.deepEqual(prose.stages, [{ endpoint: '', stage: '只是一段人读散文。' }])
 })
 
 test('AC1 起草落罗盘脚手架；金样本初画全链：单次 deep 调用、路线落位、批注保留', async () => {

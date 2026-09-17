@@ -326,13 +326,23 @@ export const COACH_PLAN_PROMPT_KEYS = {
 /** 思路官交接契约（#273）：零节点名、零图上引用——意图句台阶 + 概念名（逐字在册）+
  * est 提示；recheck 仅指插入批的预注册复诊（与生长批 note.recheck 同形状），不引入
  * 新回路。#316 / ADR-0099 起**无 route 字段**：罗盘「剩余路线」写权归罗盘站独占，
- * 思路官对弧只有建议权（理由写进 reason）。 */
+ * 思路官对弧只有建议权。#319 起建议与对齐结构化：`serves_arc` 是软对齐指认（值为弧的
+ * 阶段标题，可解析对表；指认不出不拒收，留痕进日志）；`repaint_suggest` 是结构性重画
+ * 建议通道（合法理由枚举收窄为结构性事由，读数信号不构成重画理由）。 */
 export interface GrowthPlanHandover {
   operator: string
   reason: string
   target_endpoints: string[]
   steps: Array<{ intent: string; teaches_concept?: string; est_hint?: number }>
   recheck?: { metric: string; days?: number }
+  /** 本计划服务弧的哪一阶段：值为罗盘「剩余路线」的阶段标题（不是节点名、零节点名契约
+   * 不破）。可选；引擎拿它与当前弧锚点列表对表，命中即过、找不到留痕不拒收（连续
+   * 多批指认不出升级告警，软门）。 */
+  serves_arc?: string
+  /** 教练对弧的重画建议（建议权非写权——入队罗盘站重画任务，引擎侧去抖）：
+   * reason_class 枚举收窄为结构性事由（前沿枯竭 / 弧段走完 / 终点变更），
+   * 「最近学得吃力」类读数信号不合法（量纲纪律）。 */
+  repaint_suggest?: { reason_class: string; note?: string }
 }
 
 /** 思路官计划的 schema 门（纯函数，错误作数据）：operator 枚举（含停摆）、reason 必填、
@@ -417,6 +427,23 @@ export function validatePlanHandover(doc: unknown, courseName: string): string[]
       if (rc.days !== undefined && (typeof rc.days !== 'number' || rc.days < 5 || rc.days > 20)) {
         errors.push('[coach-plan] recheck.days 合法区间 5–20 学习日。')
       }
+    }
+  }
+  // #319 软对齐指认（形状门）：serves_arc 非空时必须是阶段标题字符串——值是否真能在
+  // 当前弧锚点里命中**不在本门执法**（指认不出留痕不拒收，软对齐在引擎侧对表）。
+  if (d.serves_arc !== undefined && (typeof d.serves_arc !== 'string' || !d.serves_arc.trim())) {
+    errors.push('[coach-plan] serves_arc 非空时必须是阶段标题（照抄罗盘「剩余路线」条目的粗体名）。')
+  }
+  // #319 结构性重画建议（枚举门）：reason_class 收窄为结构性事由——「最近学得吃力」
+  // 类读数信号在这里就拒收（量纲纪律：战术波动不构成重画战略的理由）。
+  if (d.repaint_suggest !== undefined) {
+    const rs = (d.repaint_suggest ?? {}) as Record<string, unknown>
+    const REASONS = ['前沿枯竭', '弧段走完', '终点变更']
+    if (!REASONS.includes(String(rs.reason_class))) {
+      errors.push(`[coach-plan] repaint_suggest.reason_class 非法：${String(rs.reason_class)}（只允许结构性事由：${REASONS.join('/')}——读数信号不构成重画理由）。`)
+    }
+    if (rs.note !== undefined && (typeof rs.note !== 'string' || !rs.note.trim())) {
+      errors.push('[coach-plan] repaint_suggest.note 非空时必须是一句话说明。')
     }
   }
   return errors

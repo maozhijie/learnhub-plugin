@@ -137,6 +137,9 @@ export interface HostRuntime {
   logger: Logger
   jobs: HostJobs
   flags: HostFlags
+  /** 教练结构性重画建议的最近入队戳（#319，进程内存：course → epoch ms）——每课程
+   * 最小间隔去抖的读数；重启丢失只是窗口重新起算，不为它持久化。 */
+  repaintSuggestAt: Map<string, number>
   /** 出题第二意见门抽样率（#223）：config 缺省 0.25（DEFAULT_QUIZ_AUDIT_RATE），0 = 关门；
    * 出题管线（generateQuiz/finishWithQuiz）沿 opts.secondOpinion 传入引擎。 */
   quizAuditRate: number
@@ -205,6 +208,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     logger,
     jobs: { genJobs: new Map(), quizJobResults: new Map() },
     flags: { queuePaused: false, pumping: false, lastSessionStartAt: 0, genQueueBroken: null },
+    repaintSuggestAt: new Map(),
     quizAuditRate,
   }
   rtRef = rt

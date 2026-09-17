@@ -627,6 +627,37 @@ const GRAPH_JOB_STATIONS: Partial<Record<GenJobPhase, string>> = {
   plan: STATIONS.plan, milestone: STATIONS.milestone,
 }
 
+/** 教练结构性重画建议的每课程最小间隔（#319；票面「实施时定」的裁决值）：
+ * 罗盘是低频大师站——教练的建议只是拉起触发，不是使唤凭据，间隔内重复建议只留痕。 */
+const REPAINT_SUGGEST_MIN_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
+
+/** 教练结构性重画建议的去抖入队（#319；罗盘任务键 = `course/罗盘`）：同弧罗盘任务在途
+ * = 合并（enqueueGraphJob 同键不重入的白拿）；每课程最小间隔内不重复入队；否则经
+ * enqueueGraphJob 排进罗盘初画/重画队列通道。返回附到生长批回执的附注（无 = null）。 */
+function enqueueRepaintSuggestion(
+  rt: HostRuntime, ctx: Context, course: string,
+  suggest: { reason_class: string; note?: string },
+): string | null {
+  const now = Date.now()
+  const last = rt.repaintSuggestAt.get(course)
+  const inFlight = rt.jobs.genJobs.get(`${course}/罗盘`)
+  if (inFlight && (inFlight.status === 'queued' || inFlight.status === 'running' || inFlight.status === 'cancelling')) {
+    rt.logger.info('repaint.suggest.merged', { course, reason_class: suggest.reason_class })
+    return '重画建议已合并（罗盘任务在途）'
+  }
+  if (last !== undefined && now - last < REPAINT_SUGGEST_MIN_INTERVAL_MS) {
+    rt.logger.info('repaint.suggest.throttled', {
+      course, reason_class: suggest.reason_class,
+      hours_left: Math.ceil((REPAINT_SUGGEST_MIN_INTERVAL_MS - (now - last)) / 3_600_000),
+    })
+    return `重画建议在每课程最小间隔内（${Math.round(REPAINT_SUGGEST_MIN_INTERVAL_MS / 86_400_000)} 天），未重复入队`
+  }
+  const r = enqueueGraphJob(rt, ctx, { course, node: '罗盘', phase: 'compass' })
+  rt.repaintSuggestAt.set(course, now)
+  rt.logger.info('repaint.suggest.enqueued', { course, reason_class: suggest.reason_class, queued: r.queued })
+  return r.queued ? `结构性重画建议已入队罗盘站（${suggest.reason_class}）` : null
+}
+
 /** 图域任务执行（面板下发）：compass/decompile/plan/milestone——引擎 LLM 方法一次受理，
  * 产物一律走提案人审通道（反编译计划人审、计划 apply 带快照），任务
  * 只留受理摘要；失败落 failed 可从生成页重试。失败经语料补标（phase → 站，#213）。 */
@@ -757,6 +788,12 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       // 就绪缺口（a.ready_unbuilt）已就绪但要生成正文的节点不再自动入队（ADR-0078）——
       // 结构先落，正文等显式下发。
       if (a.ops > 0) await sweepGenJobs(rt)
+    }
+    // 结构性重画建议（#319）：建议留痕已在引擎侧（coach.repaint.suggest），这里只管
+    // 去抖入队罗盘站——在途合并 + 每课程最小间隔；裁决结果附到回执。
+    if (r.repaint_suggest) {
+      const note = enqueueRepaintSuggestion(rt, ctx, job.course, r.repaint_suggest)
+      if (note) job.message += `｜${note}`
     }
     // 回合成功（含 idle）才消费：标记失败留账不拒（下一回合重复消费，无害）
     if (stuckTargets.length) {

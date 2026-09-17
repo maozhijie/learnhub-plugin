@@ -77,7 +77,7 @@ import { COACH_PLAN_PROMPT_KEYS, behaviorDigest, coachPromptFamily, readyDepthCh
 import { coachToolExecutor, coachToolset, renderGrowthGraphView } from './coach-tools.ts'
 import type { CoachToolDeps } from './coach-tools.ts'
 import type { CompassEtaProbe } from './compass.ts'
-import { COMPASS_ETA_PROBE_WEEKS, COMPASS_STATION, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, parseRouteSections, renderEtaBody, repaintDueOf, routeBodyWarns, routeWeeklyReview, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
+import { COMPASS_ETA_PROBE_WEEKS, COMPASS_STATION, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, parseRouteSections, renderEtaBody, repaintDueOf, routeBodyWarns, routeWeeklyReview, sectionBody, stageAnchorsOf, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { activeEntries, deprecatedNames, resolveConcept } from '../concepts/concepts.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from '../infra/dates.ts'
@@ -163,6 +163,12 @@ async function stationTagged<T>(station: string, fn: () => Promise<T>): Promise<
 export class GrowthSubsystem {
   constructor(private e: GrowthDeps) {}
 
+  /** 连续 serves_arc 指认不出的升级告警阈值（软门：不拒收、不门拒，只发告警事件）。 */
+  static ARC_ALIGN_STREAK_WARN = 3
+  /** 连续 serves_arc 指认不出计数（进程内存）：命中即清零；锚点空位/未携带不计不清
+   * ——重启丢失只是告警晚几批出现（软门不为它加重持久化面）。 */
+  private arcMissStreak = new Map<string, number>()
+
 // ---- 门面原分节：compass ----
 // ---- 门面原分节：coach ----
 // ---- 门面原分节：growth ----
@@ -224,13 +230,64 @@ export class GrowthSubsystem {
     if (v.route?.trim() && v.route.trim() !== ROUTE_PENDING) {
       const due = repaintDueOf(v.route)
       lines.push('### 罗盘 · 剩余路线（非承诺草图——方向感，不是承诺）', '',
-        ...(due ? [`（重画待办：${due}——弧的写权在罗盘站；如你认为该重估，在 reason 里建议，勿自行改写。）`] : []),
+        ...(due ? [`（重画待办：${due}——弧的写权在罗盘站；如你认为该重估，用计划里的 repaint_suggest（结构性事由）建议，勿自行改写。）`] : []),
         v.route.trim())
     }
     if (hasLearnerAnnotations(v.annotations)) {
       lines.push('### 罗盘 · 学习者批注（软输入——提议非指令）', '', v.annotations!.trim())
     }
     return lines.join('\n\n')
+  }
+
+
+  /** 软对齐对表（#319）：计划 serves_arc 与当前弧的阶段标题锚点对表——命中即过
+   * （info 留痕 + 连击清零）；找不到**不拒收**，warn 留痕（宁多勿缺），连续
+   * ARC_ALIGN_STREAK_WARN 批指认不出升级告警事件（`coach.arc.align_streak`）。
+   * 锚点空位（弧未画/无标题）= 软对齐退化为纯软注入：缺席不推定，不计连击。
+   * 重画建议（repaint_suggest）全量留痕后原样带出，由宿主去抖入队罗盘站。 */
+  private async arcSoftAlign(
+    courseKey: string, courseName: string, plan: GrowthPlanHandover,
+  ): Promise<GrowthPlanHandover['repaint_suggest']> {
+    const log = this.e.logger
+    let repaint_suggest: GrowthPlanHandover['repaint_suggest']
+    if (plan.repaint_suggest) {
+      repaint_suggest = {
+        reason_class: plan.repaint_suggest.reason_class,
+        ...(plan.repaint_suggest.note?.trim() ? { note: plan.repaint_suggest.note!.trim() } : {}),
+      }
+      log.info('coach.repaint.suggest', {
+        course: courseName, reason_class: repaint_suggest.reason_class,
+        ...(repaint_suggest.note ? { note: repaint_suggest.note } : {}),
+      })
+    }
+    if (plan.serves_arc === undefined) return repaint_suggest
+    let anchors: ReturnType<typeof stageAnchorsOf>
+    try {
+      anchors = stageAnchorsOf((await this.compassRead(courseKey)).route)
+    } catch (err) {
+      log.warn('coach.arc.align_degenerate', { course: courseName, reason: 'read-failed', serves_arc: plan.serves_arc, error: err instanceof Error ? err.message : String(err) })
+      return repaint_suggest
+    }
+    if (anchors.empty) {
+      log.info('coach.arc.align_degenerate', { course: courseName, reason: anchors.reason, serves_arc: plan.serves_arc })
+      return repaint_suggest
+    }
+    const serves = plan.serves_arc.trim()
+    if (anchors.stages.some(s => s.stage === serves)) {
+      this.arcMissStreak.delete(courseName)
+      log.info('coach.arc.align', { course: courseName, serves_arc: serves })
+      return repaint_suggest
+    }
+    const streak = (this.arcMissStreak.get(courseName) ?? 0) + 1
+    this.arcMissStreak.set(courseName, streak)
+    log.warn('coach.arc.align_miss', { course: courseName, serves_arc: serves, streak, streak_warn_at: GrowthSubsystem.ARC_ALIGN_STREAK_WARN })
+    if (streak >= GrowthSubsystem.ARC_ALIGN_STREAK_WARN) {
+      log.warn('coach.arc.align_streak', {
+        course: courseName, streak,
+        note: `连续 ${streak} 批 serves_arc 指认不出当前弧的阶段标题——软对齐可能失效（弧已重画而教练未跟进，或教练在编造标题），人审兜底。`,
+      })
+    }
+    return repaint_suggest
   }
 
 
@@ -802,6 +859,8 @@ export class GrowthSubsystem {
     applied: { ops: number; snapshot: number; created: string[] } | null
     /** 停摆裁决的理由（#313 E24；仅在 state='idle' 且思路官给了停摆计划时在场）。 */
     halt_reason?: string
+    /** 结构性重画建议（#319；计划携带时原样带出，去抖与入队归宿主）。 */
+    repaint_suggest?: { reason_class: string; note?: string }
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
@@ -912,11 +971,13 @@ export class GrowthSubsystem {
       planVerdict = repaired
     }
     const plan = planVerdict.plan
+    // —— ①′ 软对齐对表 + 重画建议留痕（建议与对齐都随行带出，宿主侧去抖入队）——
+    const repaint_suggest = await this.arcSoftAlign(courseKey, c.name, plan)
     if (plan.operator === '停摆' || !plan.steps.length) {
       log.info('coach.round.result', { course: c.name, operator: plan.operator, halt: true, reason: plan.reason })
       // 停摆理由随结果带出（#313 E24）：面板此前只显示固定文案「教练判断暂不需长新内容」——
       // 用户既不知为何也不知下一步（reason 只活在语料的 LLM 交换里）。
-      return { course: c.name, state: 'idle', check, segments, trajectory: [], proposal: null, applied: null, halt_reason: plan.reason }
+      return { course: c.name, state: 'idle', check, segments, trajectory: [], proposal: null, applied: null, halt_reason: plan.reason, ...(repaint_suggest ? { repaint_suggest } : {}) }
     }
 
     // —— ② 执行官：#271 草稿回路原样，计划作交接块注入（advisory——门不放松） ——
@@ -958,6 +1019,7 @@ export class GrowthSubsystem {
         ops: lastFinish.ops, snapshot: lastFinish.snapshot,
         created: lastFinish.created,
       } : null,
+      ...(repaint_suggest ? { repaint_suggest } : {}),
     }
   }
 

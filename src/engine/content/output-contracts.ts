@@ -418,7 +418,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     templates: ['思路官回合', '思路官重裁'],
     format: 'yaml',
     clause: YAML_CLAUSE,
-    allowed: ['单个 YAML 文档（course/operator/reason/target_endpoints/steps[intent/teaches_concept/est_hint][+recheck]）——零节点名零图上引用'],
+    allowed: ['单个 YAML 文档（course/operator/reason/target_endpoints/steps[intent/teaches_concept/est_hint][+recheck][+serves_arc][+repaint_suggest[reason_class/note]]）——零节点名零图上引用'],
     forbidden: ['代码围栏', '解释性文字', 'steps 内出现图 op 字段（op/name/node/pre/ops）——补丁归执行官'],
     repair: {
       rounds: 1,
@@ -753,6 +753,11 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // 思路官对弧只有建议权（理由写进 reason）。计划门对携带 route 一律拒收。
     version: 3, date: '2026-09-17', changeType: '撤 route（#316 / ADR-0099）：计划契约去罗盘路线字段，写权归罗盘站',
     expectedDelta: 'YAML 输出契约删除 route: | 段与「罗盘路线（route）」整节；预期增量：思路官不再在每轮计划里顺手产弧（那是回声病的生产端之一），token 随弧正文整段省去；罗盘在初画/重估之间保持稳定（进度不再抹地图）。过门记录：check ✓；replay 报 3 件语料回归，经对照确认为 HEAD 存量漂移（教练思路 2 件 + 种子起草 1 件，与本站模板无关，同 v1 条目先例），已登记；compare 未做真模型对照（同 v1 先例）',
+  }, {
+    // #319 / ADR-0099：建议与对齐结构化——增 serves_arc（软对齐指认，值为弧的阶段标题）
+    // 与 repaint_suggest（结构性重画建议，理由枚举收窄为结构性事由）。
+    version: 4, date: '2026-09-17', changeType: '计划契约增 serves_arc 与 repaint_suggest（#319 / ADR-0099）：软对齐指认 + 结构性重画建议通道',
+    expectedDelta: 'YAML 契约增两个可选字段：serves_arc（值为罗盘「剩余路线」条目的阶段标题原文，非节点名——零节点名契约不破）与 repaint_suggest（{reason_class, note?}，reason_class 枚举收窄为结构性事由：前沿枯竭/弧段走完/终点变更）。预期增量：教练对弧的软对齐从「reason 里的散文」变为可解析对表的指认（命中留痕、连续指认不出升级告警，不拒收）；重画建议从散文建议变为可去抖入队罗盘站的结构化通道（读数型理由在计划门即拒收）；正常回合两字段都缺省，token 增量仅限模板尾段说明句；注入面同批改一处：教练包「罗盘尾段」的重画待办提示改口径（从「在 reason 里建议」指向 repaint_suggest 结构化通道）。过门记录：check ✓；replay 未做——本机无生成语料目录（学习中心为空，同思路官重裁 v2 先例如实登记）；compare 未做真模型对照（同先例）',
   }],
   思路官重裁: [{
     // #273 显式重裁族：node_skip / panel_dispatch 触发；上次裁决摘要随包回灌，可沿用可推翻。
@@ -792,6 +797,10 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // 思路官对弧只有建议权（理由写进 reason）。计划门对携带 route 一律拒收。
     version: 3, date: '2026-09-17', changeType: '撤 route（#316 / ADR-0099）：计划契约去罗盘路线字段，写权归罗盘站',
     expectedDelta: 'YAML 输出契约删除 route: | 段与「罗盘路线（route）」整节；预期增量：思路官不再在每轮计划里顺手产弧（那是回声病的生产端之一），token 随弧正文整段省去；罗盘在初画/重估之间保持稳定（进度不再抹地图）。过门记录：check ✓；replay 报 3 件语料回归，经对照确认为 HEAD 存量漂移（教练思路 2 件 + 种子起草 1 件，与本站模板无关，同 v1 条目先例），已登记；compare 未做真模型对照（同 v1 先例）',
+  }, {
+    // #319 / ADR-0099：与「思路官回合」同构增 serves_arc 与 repaint_suggest。
+    version: 4, date: '2026-09-17', changeType: '计划契约增 serves_arc 与 repaint_suggest（#319 / ADR-0099）：软对齐指认 + 结构性重画建议通道',
+    expectedDelta: '同「思路官回合」v4 条目：YAML 契约增可选 serves_arc（弧的阶段标题原文）与 repaint_suggest（结构性事由枚举）。预期增量：重裁族的多出的显式重新裁决语境里，推翻方向时能顺手指认新方向服务的弧段；重画建议同样只认结构性事由（跳过/答错这类读数信号在重裁语境尤其容易误触发，枚举门在此拒收）；正常回合两字段缺省。过门记录：check ✓；replay 未做——本机无生成语料目录（同 v2 先例）；compare 未做真模型对照（同先例）',
   }],
   执行官回合: [{
     version: 1, date: '2026-09-16', changeType: '新站（#271 / ADR-0088）：生长草稿执行官回合模板 v1',

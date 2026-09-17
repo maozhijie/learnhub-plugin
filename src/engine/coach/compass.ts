@@ -275,6 +275,29 @@ export function hasPaintedRoute(body: string | null): boolean {
   return Boolean(t) && t !== ROUTE_PENDING
 }
 
+/** 阶段标题机器锚点（#319 / ADR-0099 软对齐的读侧锚）：路线正文按已锁死的条目格式
+ * （节头 `- **终点名**：` + 条目 `- **阶段名**：`）解析出两级标题列表，供教练计划的
+ * serves_arc 指认对表。**解析失败不判错**：弧是人读散文为主，锚点缺席只是软对齐退化
+ * 为纯软注入——空位以 `empty: true` + 原因显式表达（沿 compassRead 的 Missing 旗标
+ * 先例，消费方不做 null 分叉）。同名阶段不合并、按节区分（终点名随行携带）。 */
+export interface StageAnchors {
+  /** 两级锚点（保序；endpoint = 所属节头终点名，无节头条目为 ''）。 */
+  stages: Array<{ endpoint: string; stage: string }>
+  /** 空位旗标：true = 未解析出任何阶段标题（软对齐退化）。 */
+  empty: boolean
+  /** 空位原因：missing-route = 路线未画/未落盘；no-stage-titles = 已画但无可解析条目。 */
+  reason: 'missing-route' | 'no-stage-titles' | null
+}
+
+export function stageAnchorsOf(routeBody: string | null): StageAnchors {
+  if (!hasPaintedRoute(routeBody)) return { stages: [], empty: true, reason: 'missing-route' }
+  const stages = parseRouteSections(routeBody!).flatMap(sec =>
+    sec.faces.map(f => ({ endpoint: sec.endpoint, stage: f.name })))
+  return stages.length
+    ? { stages, empty: false, reason: null }
+    : { stages: [], empty: true, reason: 'no-stage-titles' }
+}
+
 /** ETA 段机器标记 → 周一日期（无标记 = null，视为待刷新）。 */
 export function etaMarkerOf(etaBody: string | null): string | null {
   if (!etaBody) return null

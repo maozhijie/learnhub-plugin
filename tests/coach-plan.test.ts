@@ -413,3 +413,71 @@ test('#316 前进批不动罗盘：「剩余路线」段原样保留（写权归
     assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), R0, '罗盘不随生长批动（写权归罗盘站）')
   })
 })
+
+// ---- #319 / ADR-0099：阶段标题锚点 + serves_arc 软对齐 + 结构性重画建议通道 ----
+
+test('#319 计划契约增 serves_arc 与 repaint_suggest：形状门（枚举/非空字符串），命中与否不在本门执法', () => {
+  // serves_arc：合法标题过门（不校验是否真在弧上——软对齐在引擎侧对表）
+  assert.deepEqual(validatePlanHandover({ ...goldPlan(), serves_arc: '某阶段' }, '数学'), [])
+  // serves_arc：空串/非字符串拒收（形状门）
+  assert.ok(validatePlanHandover({ ...goldPlan(), serves_arc: '' }, '数学').some(e => e.includes('serves_arc')))
+  assert.ok(validatePlanHandover({ ...goldPlan(), serves_arc: 42 } as unknown as GrowthPlanHandover, '数学').some(e => e.includes('serves_arc')))
+  // repaint_suggest：结构性理由过门；读数型理由（枚举外）当场拒收
+  assert.deepEqual(validatePlanHandover({ ...goldPlan(), repaint_suggest: { reason_class: '前沿枯竭' } }, '数学'), [])
+  assert.ok(validatePlanHandover({ ...goldPlan(), repaint_suggest: { reason_class: '最近学得吃力' } }, '数学').some(e => e.includes('reason_class 非法')))
+  assert.ok(validatePlanHandover({ ...goldPlan(), repaint_suggest: { reason_class: '保留率下滑' } }, '数学').some(e => e.includes('reason_class 非法')))
+  assert.ok(validatePlanHandover({ ...goldPlan(), repaint_suggest: { reason_class: '前沿枯竭', note: '' } }, '数学').some(e => e.includes('note')))
+})
+
+const ARC_ROUTE = '- **用导数解决优化问题**：\n  - **阶段一：直觉**：推进广度\n  - **阶段二：定义**：推进深度'
+const stopPlanWith = (extra = ''): string =>
+  'course: 数学\noperator: 停摆\nreason: 就绪缺口由内容生成跟上\ntarget_endpoints: []\nsteps: []\n' + extra
+
+test('#319 serves_arc 软对齐：命中留痕 + 连击清零；编造标题留痕不拒收；连续三批升级告警；建议随行带出', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    const p = h.engine.paths.compassPath('数学')
+    await writeFile(p, withSectionText(await readFile(p, 'utf8'), SECTION_ROUTE, ARC_ROUTE))
+
+    // ① 命中：合法阶段标题 → info 留痕，停摆计划照常 idle
+    const hit = twoStationFake({ plans: [stopPlanWith('serves_arc: 阶段一：直觉\n')], sessions: [] })
+    const r1 = await h.engine.growth2.coachGrowthBatch('数学', hit, { force: true })
+    assert.equal(r1.state, 'idle')
+    assert.equal(h.logger.count('coach.arc.align'), 1)
+    assert.equal(h.logger.nth('coach.arc.align')!.fields.serves_arc, '阶段一：直觉')
+
+    // ② 建议通道：repaint_suggest 全量留痕 + 随行带出（宿主去抖入队）
+    const suggest = stopPlanWith('repaint_suggest:\n  reason_class: 弧段走完\n  note: 当前弧段已全部走完\n')
+    const r2 = await h.engine.growth2.coachGrowthBatch('数学', twoStationFake({ plans: [suggest], sessions: [] }), { force: true })
+    assert.deepEqual(r2.repaint_suggest, { reason_class: '弧段走完', note: '当前弧段已全部走完' })
+    assert.equal(h.logger.count('coach.repaint.suggest'), 1)
+
+    // ③ 编造标题：留痕不拒收（state 照常），连击逐批涨，第三批升级告警
+    for (let i = 1; i <= 3; i++) {
+      await h.engine.growth2.coachGrowthBatch('数学', twoStationFake({ plans: [stopPlanWith('serves_arc: 编造的阶段\n')], sessions: [] }), { force: true })
+      assert.equal(h.logger.count('coach.arc.align_miss'), i)
+      assert.equal(h.logger.nth('coach.arc.align_miss')!.fields.streak, i)
+    }
+    assert.equal(h.logger.count('coach.arc.align_streak'), 1, '连续 3 批指认不出 → 告警事件')
+
+    // ④ 命中后连击清零：再编造一次从 1 起算
+    await h.engine.growth2.coachGrowthBatch('数学', twoStationFake({ plans: [stopPlanWith('serves_arc: 阶段二：定义\n')], sessions: [] }), { force: true })
+    assert.equal(h.logger.count('coach.arc.align'), 2)
+    await h.engine.growth2.coachGrowthBatch('数学', twoStationFake({ plans: [stopPlanWith('serves_arc: 又编造\n')], sessions: [] }), { force: true })
+    assert.equal(h.logger.nth('coach.arc.align_miss', 4)!.fields.streak, 1)
+  })
+})
+
+test('#319 锚点空位：弧未画时软对齐退化（缺席不推定，不计连击），建议照常带出', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    // 不画弧（罗盘停留在 ROUTE_PENDING）——serves_arc 指认退化为纯软注入
+    const plan = stopPlanWith('serves_arc: 随便什么\nrepaint_suggest:\n  reason_class: 前沿枯竭\n')
+    const r = await h.engine.growth2.coachGrowthBatch('数学', twoStationFake({ plans: [plan], sessions: [] }), { force: true })
+    assert.equal(r.state, 'idle')
+    assert.equal(h.logger.count('coach.arc.align_degenerate'), 1)
+    assert.equal(h.logger.nth('coach.arc.align_degenerate')!.fields.reason, 'missing-route')
+    assert.equal(h.logger.count('coach.arc.align_miss'), 0, '缺席不计连击')
+    assert.deepEqual(r.repaint_suggest, { reason_class: '前沿枯竭' })
+  })
+})
