@@ -69,6 +69,10 @@ function shadowEngine(rt: HostRuntime): { calls: string[]; stop: () => void } {
   let recording = true
   const record = (label: string, args: unknown[]) => {
     if (recording) calls.push(scrub(`${label}(${args.map(a => JSON.stringify(a) ?? String(a)).join(',')})`))
+    // registry.load 特例（#332）：persistGenJobs 落盘前按注册表过滤悬空任务记录，哨兵 []
+    // 会让全部课程判悬空、快照记成 saveGenJobs([])——返回规范的在册条目（课程「1」），
+    // 与 routes-probe 同款建模，过滤照常放行。
+    if (label === 'registry.load') return Promise.resolve([{ id: '1-01', name: '1', root: '1', enabled: true }])
     return Promise.resolve(SENTINEL)
   }
   // hub 装配域方法（裸名）：覆盖在门面实例上

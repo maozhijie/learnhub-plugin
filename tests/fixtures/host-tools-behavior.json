@@ -782,11 +782,16 @@
   "calls": [
    "registry.resolve(\"1\")",
    "growth2.compassPaint(undefined,{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}},{})",
+   "registry.load()",
    "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)",
+   "registry.load()",
    "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "registry.load()",
    "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "registry.load()",
    "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "registry.load()",
    "saveGenJobs([{\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])"
   ]
  },

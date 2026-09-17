@@ -102,7 +102,7 @@ export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } f
 export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './content/question-audit.ts'
 // 站名是受控词表（host STATIONS）成员：引擎侧单一出处经门面出（#313 D19——两侧各写字面量
 // 时改名即静默分裂成两个语料目录）。#320 两站回单站后 `教练思路` 站退场，不再随门面出。
-export { COMPASS_STATION } from './coach/compass.ts'
+export { COMPASS_STATION, hasPaintedRoute } from './coach/compass.ts'
 export { DECOMPILE_STATION } from './practice/projects.ts'
 /** 生长草稿内核（#271 / ADR-0088）：站标签/草稿差异与门同调纯函数随门面出（宿主与测试消费）。 */
 export { GROWTH_DRAFT_STATION, expandPatchOps, draftFindings, normalizePatchShape } from './coach/growth-draft.ts'

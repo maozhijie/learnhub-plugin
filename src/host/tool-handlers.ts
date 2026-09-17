@@ -32,7 +32,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
   'learnhub_growth_batch': (args: { course: string }) => run(rt, 'learnhub_growth_batch', async () => {
       // 与面板「生长一步」同一入队入口（enqueueGrowthBatch），agent 侧同步等终态
       // （一次调用即结果）——生长批是长跑回路，取消走 learnhub_generate_cancel。
-      const enq = enqueueGrowthBatch(rt, ctx, args.course, 'agent 会话下发（learnhub_growth_batch）')
+      const enq = await enqueueGrowthBatch(rt, ctx, args.course, 'agent 会话下发（learnhub_growth_batch）')
       if (!enq.queued) return enq.message
       const job = await waitForGenJob(rt, `${args.course}/${GROWTH_JOB_NODE}`)
       return `${job.message ?? ''}（终态 ${job.status}）`
@@ -147,7 +147,7 @@ export function toolHandlers(rt: HostRuntime, ctx: Context): Record<string, (arg
       generateProjectMilestone(rt, args.id, args.milestone)),
   'learnhub_project_apply': (args: { id: number }) => run(rt, 'learnhub_project_apply', async () => {
       const result = await rt.engine.graph.projectApply(args.id)
-      triggerPlanGrowth(rt, ctx, result)
+      void triggerPlanGrowth(rt, ctx, result)
       return JSON.stringify(result)
     }),
   'learnhub_project_milestone_recall': (args: { id: string; milestone: string; nodes?: string[]; limit?: number }) => run(rt, 'learnhub_project_milestone_recall', async () =>

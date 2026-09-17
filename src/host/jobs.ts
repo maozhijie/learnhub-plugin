@@ -5,7 +5,7 @@
  * 读写，本文件零模块级可变状态；队列语义零改动（FIFO、可取消、重启可恢复、阻尼）。
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { Content, TIER_LABELS, endpointNames, genericQuizTarget, readAnchors, stationOfError, stuckReportInject, tierIdxOf } from '../engine/index.ts'
+import { Content, TIER_LABELS, endpointNames, hasPaintedRoute, genericQuizTarget, readAnchors, stationOfError, stuckReportInject, tierIdxOf } from '../engine/index.ts'
 import type { CoachTrigger, GateVerdict, LearnhubEngine, LlmComplete, LlmEffort, DiversityReading, QuestionDiversityReport, VaultPriorAudit } from '../engine/index.ts'
 import {
   contentFailureStatus,
@@ -314,9 +314,28 @@ function persistGenJobs(rt: HostRuntime): void {
   if (rt.flags.genQueueBroken) return
   rt.jobs.persistChain = rt.jobs.persistChain
     .catch(() => undefined) // 前序失败不断链：失败已留痕 + 置闸，链要活着接住后续笔
-    .then(() => {
+    .then(async () => {
       if (rt.flags.genQueueBroken) return
-      return rt.engine.saveGenJobs([...rt.jobs.genJobs.values()].map(j => ({ ...j })))
+      // 落盘前课程级悬空过滤（#332）：整库清空/删课绕过既有清扫 hook 时，宿主内存会把
+      // 幽灵记录回写任务档——按注册表对账兜底（ADR-0039「悬空处置唯一：清除」）。仅课程
+      // 级，且豁免 decompile/plan/milestone 三相（其 course 槽放项目 id，不是课程名，归
+      // 项目域自己的账面）；无 course 字段的记录无从对账、原样保留。节点级悬空维持
+      // apply/删除出口的单点清扫，不双处执法。注册表 Broken 或读取失败时原样落盘不过滤
+      // ——兜底不得成为新失败模式（写回闸语义不变）。
+      let known: Set<string>
+      try {
+        const courses = await rt.engine.registry.load()
+        known = new Set(courses.flatMap(c => [c.name, ...(c.id ? [c.id] : [])]))
+      } catch (err) {
+        rt.logger.warn('host.gen_jobs.dangling_filter_skipped', { error: err instanceof Error ? err.message : String(err) })
+        await rt.engine.saveGenJobs([...rt.jobs.genJobs.values()].map(j => ({ ...j })))
+        return
+      }
+      const courseBound = (j: GenJob) =>
+        j.phase !== 'decompile' && j.phase !== 'plan' && j.phase !== 'milestone' && typeof j.course === 'string'
+      await rt.engine.saveGenJobs([...rt.jobs.genJobs.values()]
+        .filter(j => !courseBound(j) || known.has(j.course))
+        .map(j => ({ ...j })))
     })
     .catch(err => {
       const msg = err instanceof Error ? err.message : String(err)
@@ -512,8 +531,10 @@ export const GROWTH_JOB_NODE = '生长批'
  * 入队）；**已取消同权**（#312 B3——取消挡住的只是自动触发点，不是学习者显式重来）；
  * 在途防重入照旧。豁免随任务携带（`growthForce`）
  * 进执行侧——就绪深度已满足时也不短路成停摆（#240 修：此前只在入队侧生效，
- * 「生长一步」在停摆图上恒空转）。 */
-export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean; trigger?: CoachTrigger } = {}): { message: string; queued: boolean } {
+ * 「生长一步」在停摆图上恒空转）。
+ * async（#331）：真入队前先做罗盘初画代拉前置检（pullCompassPaintAhead，弧先于裁决），
+ * 五个触发点共用本缝，行为随缝统一。 */
+export async function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string, why: string, inject?: string, opts: { force?: boolean; trigger?: CoachTrigger } = {}): Promise<{ message: string; queued: boolean }> {
   assertQueueWritable(rt)
   const key = `${course}/${GROWTH_JOB_NODE}`
   const last = rt.jobs.genJobs.get(key)
@@ -533,6 +554,9 @@ export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string
   if (!inject && opts.force !== true && last && last.status === 'done' && last.growthOutcome !== 'applied') {
     return { message: `「${course}」上一生长批裁决为 ${last.growthOutcome === 'idle' ? '停摆' : '暂不产结构'}，不重拉。`, queued: false }
   }
+  // 弧先于裁决（#331）：真要入队新回合才代拉——弧未画先排罗盘站，FIFO 保证本回合
+  // 教练在有弧视野下裁决；在途拒入/阻尼短路时不拉（没有新回合就没有准备件）。
+  await pullCompassPaintAhead(rt, ctx, course)
   rt.jobs.genJobs.set(key, {
     course, node: GROWTH_JOB_NODE, startedAt: new Date().toISOString(), status: 'queued', phase: 'growth',
     model: llmCfg.model, message: `排队等待教练回合（${why}）…`,
@@ -546,12 +570,12 @@ export function enqueueGrowthBatch(rt: HostRuntime, ctx: Context, course: string
 }
 
 /** 计划修订驱动的生长批入队（#149）：apply 结果携带换线/补支触发时逐课程入队
- * （注入块随任务走）。 */
-export function triggerPlanGrowth(rt: HostRuntime, ctx: Context, result: { kind?: string; growth?: Array<{ course: string; lines: string[] }> }): void {
+ * （注入块随任务走）。async（#331：enqueueGrowthBatch 转异步），调用方 fire-and-forget。 */
+export async function triggerPlanGrowth(rt: HostRuntime, ctx: Context, result: { kind?: string; growth?: Array<{ course: string; lines: string[] }> }): Promise<void> {
   if (result.kind !== 'project_plan' || !result.growth?.length) return
   for (const t of result.growth) {
     try {
-      const r = enqueueGrowthBatch(rt, ctx, t.course, '里程碑计划修订（换线/补支）', t.lines.join('\n'))
+      const r = await enqueueGrowthBatch(rt, ctx, t.course, '里程碑计划修订（换线/补支）', t.lines.join('\n'))
       logCall(rt, 'coach_growth', r.message)
     } catch (err) {
       logCall(rt, 'coach_growth', `「${t.course}」计划修订生长批入队失败：${err instanceof Error ? err.message : String(err)}`)
@@ -568,6 +592,34 @@ export async function afterGraphApply(rt: HostRuntime): Promise<void> {
   await sweepGenJobs(rt)
 }
 
+/** 罗盘初画代拉（#331「弧先于裁决」）：生长批入队前弧未画且锚非空时先排罗盘任务——
+ * FIFO 保证罗盘先跑，本回合教练即在有弧视野下裁决（弧是生长批的优劣标尺，标尺先于
+ * 裁决存在）。每宿主会话每课程至多代拉一次（rt.compassAutoPullAt 备忘）：失败转人工
+ * （教练台按钮/生成页重试），重启清零至多重试一次——刻意不查任务注册表终态做判断，
+ * 防持久账面与清库重建的同名课程互相污染。护栏：弧已画不拉（含带重画待办标记的——
+ * 重估走显式路径，#316/#319 语义不变）；罗盘任务在途不重复拉；零终点不拉（罗盘初画
+ * 锚在终点上，拉了必 fail loud 纯噪音）；罗盘读取失败不挡生长批入队（弧缺席是合法
+ * 空态，只留痕）。备忘只在真派单时落——零锚/在途跳过不占名额，后来补了锚照样能拉。 */
+async function pullCompassPaintAhead(rt: HostRuntime, ctx: Context, course: string): Promise<void> {
+  if (rt.compassAutoPullAt.has(course)) return
+  try {
+    const inFlight = rt.jobs.genJobs.get(`${course}/罗盘`)
+    if (inFlight && (inFlight.status === 'queued' || inFlight.status === 'running' || inFlight.status === 'cancelling')) {
+      rt.logger.info('compass.autopull.merged', { course })
+      return
+    }
+    const v = await rt.engine.growth2.compassRead(course)
+    if (!v.anchors.length) return
+    if (hasPaintedRoute(v.route)) return
+    rt.compassAutoPullAt.set(course, Date.now())
+    const r = enqueueGraphJob(rt, ctx, { course, node: '罗盘', phase: 'compass' })
+    rt.logger.info('compass.autopull.enqueued', { course, queued: r.queued })
+  } catch (err) {
+    rt.logger.warn('compass.autopull.read_failed', { course, error: err instanceof Error ? err.message : String(err) })
+  }
+}
+
+
 /** 教练回合触发统一出口（五点接线，词条「教练回合」）：就绪深度检查 → 低于前瞻的课程
  * 入队生长批（自动触点走阻尼；显式触点 force 豁免停摆/暂不产结构——显式重新裁决）→
  * 调试日志。触发点：node_complete / node_skip（各自路由）、session_start（节流）、
@@ -580,7 +632,7 @@ async function coachTrigger(rt: HostRuntime, ctx: Context, trigger: CoachTrigger
     lines.push(`${chk.course}：未开始存量 ${chk.unstarted}/${chk.required}（正文就绪 ${chk.ready}）${chk.ok ? '' : '（低于前瞻，已告警）'}`)
     if (chk.ok) continue
     try {
-      const enq = enqueueGrowthBatch(rt, ctx, chk.course, `${trigger} 触发（未开始存量 ${chk.unstarted}/${chk.required}）`, undefined, { ...opts, trigger })
+      const enq = await enqueueGrowthBatch(rt, ctx, chk.course, `${trigger} 触发（未开始存量 ${chk.unstarted}/${chk.required}）`, undefined, { ...opts, trigger })
       lines.push(enq.message)
     } catch (err) {
       lines.push(`「${chk.course}」生长批入队失败：${err instanceof Error ? err.message : String(err)}`)

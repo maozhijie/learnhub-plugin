@@ -52,7 +52,10 @@ test('coach_growth.stuck_read_failed：卡点自报读取失败不挡回合且�
   const rt = makeRt(log, [HALT_PLAN])
   await draftCourse(rt.engine, CAPABILITY_DRAFT)
   rt.engine.growth2.stuckPending = async () => { throw new Error('流水坏了') }
-  enqueueGrowthBatch(rt, fakeCtx([HALT_PLAN]), '数学', '测试触发')
+  // 罗盘初画代拉前置检（#331）：草稿课程带终点锚，桩掉 compassRead（零锚 = 不代拉）——
+  // 否则真罗盘任务会排在生长批前，消费掉假 LLM 的罐头响应。
+  rt.engine.growth2.compassRead = async () => ({ course: '数学', path: '', anchors: [], missing: true, route: null, annotations: null, eta: null, eta_week: null })
+  await enqueueGrowthBatch(rt, fakeCtx([HALT_PLAN]), '数学', '测试触发')
   await until(() => log.count('coach_growth.stuck_read_failed') === 1)
   const e = log.nth('coach_growth.stuck_read_failed')!
   assert.equal(e.level, 'warn')
@@ -65,7 +68,9 @@ test('coach_growth.stuck_consume_failed：消费标记失败留账且留痕（WA
   await draftCourse(rt.engine, CAPABILITY_DRAFT)
   await rt.engine.store.appendStuckReport({ course: '数学', node: '认识变化率', text: '卡住了' })
   rt.engine.growth2.stuckMarkConsumed = async () => { throw new Error('落盘失败') }
-  enqueueGrowthBatch(rt, fakeCtx([HALT_PLAN]), '数学', '测试触发')
+  // 同上（#331）：桩掉罗盘代拉前置检的读侧。
+  rt.engine.growth2.compassRead = async () => ({ course: '数学', path: '', anchors: [], missing: true, route: null, annotations: null, eta: null, eta_week: null })
+  await enqueueGrowthBatch(rt, fakeCtx([HALT_PLAN]), '数学', '测试触发')
   await until(() => log.count('coach_growth.stuck_consume_failed') === 1)
   const e = log.nth('coach_growth.stuck_consume_failed')!
   assert.equal(e.level, 'warn')

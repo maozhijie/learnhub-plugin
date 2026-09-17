@@ -126,6 +126,12 @@ function shadowEngine(rt: HostRuntime): { calls: string[]; stop: () => void } {
     if (recording) {
       calls.push(scrub(`${label}(${args.map(a => JSON.stringify(a) ?? String(a)).join(',')})`))
     }
+    // registry.load 特例（#332）：persistGenJobs 落盘前按注册表过滤悬空任务记录，哨兵 []
+    // 会让全部课程判悬空、快照记成 saveGenJobs([])——与 registry.get 建模（探针课程「1」
+    // 在册）对齐，返回规范的在册条目，过滤照常放行。
+    if (label === 'registry.load') {
+      return Promise.resolve([{ id: '1-01', name: '1', root: '1', enabled: true }])
+    }
     return Promise.resolve(TEXT_RETURNING.has(methodNameOf(label)) ? TEXT_SENTINEL : SENTINEL)
   }
   // hub 装配域方法（裸名）：覆盖在门面实例上

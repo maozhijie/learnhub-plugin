@@ -145,6 +145,11 @@ export interface HostRuntime {
   /** 教练结构性重画建议的最近入队戳（#319，进程内存：course → epoch ms）——每课程
    * 最小间隔去抖的读数；重启丢失只是窗口重新起算，不为它持久化。 */
   repaintSuggestAt: Map<string, number>
+  /** 罗盘初画代拉的已派单戳（#331，进程内存：course → epoch ms）——生长批入队前弧未画
+   * 时代拉罗盘站，「每宿主会话每课程至多一次」的读数；失败转人工（教练台按钮/生成页
+   * 重试），重启清零至多重试一次。刻意不查任务注册表终态做判断——持久账面可能与清库
+   * 重建的同名课程互相污染（幽灵记录教训，#332）。 */
+  compassAutoPullAt: Map<string, number>
   /** 出题第二意见门抽样率（#223）：config 缺省 0.25（DEFAULT_QUIZ_AUDIT_RATE），0 = 关门；
    * 出题管线（generateQuiz/finishWithQuiz）沿 opts.secondOpinion 传入引擎。 */
   quizAuditRate: number
@@ -214,6 +219,7 @@ export function createHostRuntime(ctx: Context, config: LearnhubConfig = {}): Ho
     jobs: { genJobs: new Map(), quizJobResults: new Map(), persistChain: Promise.resolve() },
     flags: { queuePaused: false, pumping: false, lastSessionStartAt: 0, genQueueBroken: null },
     repaintSuggestAt: new Map(),
+    compassAutoPullAt: new Map(),
     quizAuditRate,
   }
   rtRef = rt

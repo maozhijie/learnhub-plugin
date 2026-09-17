@@ -94,7 +94,9 @@ function stub(rt: HostRuntime, methods: Record<string, unknown>): void {
 }
 
 /** 内容管线的确定性脚本：节清单直接 ready（跳过大纲与逐节正文），出题两段走固定结果；
- * saveGenJobs 捕获每次落盘快照；coach/settle 静默（queue_idle 触点的消费方）。 */
+ * saveGenJobs 捕获每次落盘快照；coach/settle 静默（queue_idle 触点的消费方）。
+ * registry.load 一并桩掉（#332：persistGenJobs 落盘前按注册表过滤悬空记录——测试 vault
+ * 不登记课程，不过桩会把作业快照全滤掉）。 */
 function stubContentPipeline(rt: HostRuntime, opts: { saved?: Array<Array<unknown>> } = {}): void {
   stub(rt, {
     'content2.contentPack': async () => '上下文包',
@@ -104,6 +106,7 @@ function stubContentPipeline(rt: HostRuntime, opts: { saved?: Array<Array<unknow
     'bank2.questionGenerateSections': async () => ({ added: 2 }),
     'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
     'registry.get': async () => ({ name: '数学' }),
+    'registry.load': async () => [{ id: '数学-01', name: '数学', root: '数学', enabled: true }],
     loadView: async () => ({ graph: { nset: new Set(['节点A', '节点B', '节点C']) } }),
     saveGenJobs: async (jobs: Array<unknown>) => { opts.saved?.push(jobs) },
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
@@ -212,6 +215,8 @@ test('persistGenJobs 串行链：终态一拍连发两笔不并发互踩，后�
       inFlight--
       snapshots.push(hasC)
     },
+    // #332 悬空过滤直读注册表：不过桩（空注册表）会把作业快照全滤掉
+    'registry.load': async () => [{ id: '数学-01', name: '数学', root: '数学', enabled: true }],
   })
   rt.jobs.genJobs.set('数学/节点A', { course: '数学', node: '节点A', startedAt: new Date().toISOString(), status: 'done', message: '' })
   rt.jobs.genJobs.set('数学/节点B', { course: '数学', node: '节点B', startedAt: new Date().toISOString(), status: 'failed', message: '' })
@@ -581,6 +586,7 @@ test('溢出修复阶梯（ADR-0054）：压缩修复仍超 → 大纲拆节 →
     'bank2.questionGenerateSections': async () => ({ added: 2 }),
     'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
     saveGenJobs: async (jobs: Array<unknown>) => { saved.push(jobs) },
+    'registry.load': async () => [{ id: '数学-01', name: '数学', root: '数学', enabled: true }],
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
@@ -697,6 +703,7 @@ test('continue→partial（ADR-0054）：单节非溢出失败不中止余节，
     'bank2.questionGenerateSections': async () => ({ added: 2 }),
     'bank2.questionGenerate': async () => ({ added: 3, total: 5, duplicates: [], rejected: [], skipped: [], enc: {} }),
     saveGenJobs: async (jobs: Array<unknown>) => { saved.push(jobs) },
+    'registry.load': async () => [{ id: '数学-01', name: '数学', root: '数学', enabled: true }],
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
@@ -816,7 +823,7 @@ test('生长批任务消息带回路轨迹（#163）：生成页可查裁决前�
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
-  const enq = enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  const enq = await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
   assert.equal(enq.queued, true)
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
   const msg = rt.jobs.genJobs.get('数学/生长批')!.message ?? ''
@@ -839,20 +846,20 @@ test('生长批失败终态：教练回合抛错 → failed 带死因；自动�
     'growth2.settleRechecks': async () => null,
   })
   const key = '数学/生长批'
-  const enq = enqueueGrowthBatch(rt, ctx, '数学', '测试触发')
+  const enq = await enqueueGrowthBatch(rt, ctx, '数学', '测试触发')
   assert.equal(enq.queued, true)
   await until(() => rt.jobs.genJobs.get(key)?.status === 'failed')
   assert.match(rt.jobs.genJobs.get(key)!.message ?? '', /受理门拒收/, '失败消息带死因（通知与生成页可读）')
   assert.ok(rt.jobs.genJobs.get(key)!.finishedAt, '终态盖戳（保留期起算点）')
 
   // 阻尼不回归（AC：失败不自动重拉）：自动触点（无 force）被拒，教练回合不被拉起
-  const blocked = enqueueGrowthBatch(rt, ctx, '数学', '再次自动触发')
+  const blocked = await enqueueGrowthBatch(rt, ctx, '数学', '再次自动触发')
   assert.equal(blocked.queued, false)
   assert.match(blocked.message, /不自动重试/)
   assert.equal(calls, 1)
 
   // force（面板「生长一步」/失败通知「重试」）= 显式重新裁决：豁免失败阻尼重新入队
-  const retried = enqueueGrowthBatch(rt, ctx, '数学', '面板下发（显式重新裁决）', undefined, { force: true })
+  const retried = await enqueueGrowthBatch(rt, ctx, '数学', '面板下发（显式重新裁决）', undefined, { force: true })
   assert.equal(retried.queued, true, '显式重试重新入队')
   await until(() => rt.jobs.genJobs.get(key)?.status === 'failed' && (calls === 2))
 })
@@ -886,7 +893,7 @@ test('#301 生长失败语料补标按真实失败站落盘：教练执行站失
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
-  const enq = enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  const enq = await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
   assert.equal(enq.queued, true)
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'failed')
   await rt.corpus.flush()
@@ -934,7 +941,7 @@ test('#301 形状容忍补标：归一命中 → 宿主给执行官站**当次**
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
-  enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
   await rt.corpus.flush()
   const files = readdirSync(join(corpusDir, '教练执行')).sort()
@@ -964,7 +971,7 @@ test('#301 生长失败无站标签（零终点这类，回路一次都没跑起
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
-  enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'failed')
   await rt.corpus.flush()
   // 没有死因样本就不标（标错件比不标更坏）——上一批的捕获保持原样、失败详情无语料引用
@@ -993,7 +1000,7 @@ test('#313 B7 非模型失败不补标：熔断/预算类失败本轮零调用 �
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
-  enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'failed')
   await rt.corpus.flush()
   // 死因样本必须**出自本轮**：本轮零捕获 → 不补标（旧口径把上一件改名 bad- + failed，
@@ -1021,7 +1028,7 @@ test('#313 B7 取消不补标：取消轮即便有本轮捕获也不改判 faile
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
-  enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
   await until(() => {
     const s = rt.jobs.genJobs.get('数学/生长批')?.status
     return s !== undefined && s !== 'running' && s !== 'queued' && s !== 'cancelling'
@@ -1051,7 +1058,7 @@ test('#313 E23：生长批成功回执点名新建节点（「哪几个节点要
     'registry.get': async () => ({ id: '数学-01', name: '数学', root: '数学', enabled: true }),
     loadView: async () => ({ graph: { nset: new Set<string>() }, state: {}, broken: [] }),
   })
-  enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
   const msg = rt.jobs.genJobs.get('数学/生长批')!.message ?? ''
   // 引擎已经返回 created，旧回执只给条数——用户长完一批后没有面告诉他哪几个节点要生成正文
@@ -1105,13 +1112,115 @@ test('生长批停摆终态（#161）：就绪深度满足 → done 带中性说
     'growth2.coachCheckpoint': async () => ({ courses: [] }),
     'growth2.settleRechecks': async () => null,
   })
-  const enq = enqueueGrowthBatch(rt, fakeCtx(), '数学', 'queue_idle 触发', undefined, { force: true })
+  const enq = await enqueueGrowthBatch(rt, fakeCtx(), '数学', 'queue_idle 触发', undefined, { force: true })
   assert.equal(enq.queued, true)
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
   const job = rt.jobs.genJobs.get('数学/生长批')!
   assert.equal(job.growthOutcome, 'idle', '裁决面落档：面板通知据此走中性说明而非绿色成功')
   assert.match(job.message ?? '', /教练判断暂不需长新内容（未开始存量 3\/3）/, '停摆文案是中性说明（#161 验收口径）')
   assert.ok(job.finishedAt, '终态盖戳（保留期起算点）')
+})
+
+// ---------------------------------------------------------------- 罗盘初画代拉（#331 弧先于裁决）
+
+const COMPASS_UNPAINTED = {
+  course: '数学', path: '', missing: true, route: null, annotations: null, eta: null, eta_week: null,
+  anchors: [{ endpoint: '理工科大学本科水平', goal_type: 'capability' as const }],
+}
+
+const IDLE_ROUND = {
+  course: '数学', state: 'idle',
+  check: { course: '数学', ready: 0, unstarted: 0, depth: 3, required: 5, cold_start: false, ok: true, exhausted: false, warnings: [] },
+  segments: [], proposal: null, applied: null,
+}
+
+test('罗盘初画代拉（#331 弧先于裁决）：弧未画且锚非空 → 生长批入队前先排罗盘任务；每会话每课程至多一次', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    'growth2.compassRead': async () => COMPASS_UNPAINTED,
+    'growth2.compassPaint': async () => ({ course: '数学', path: '', route_lines: 3, annotations_preserved: false, repainted: false, trajectory: [] }),
+    'growth2.coachGrowthBatch': async () => IDLE_ROUND,
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  const enq = await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  assert.equal(enq.queued, true)
+  const compass = rt.jobs.genJobs.get('数学/罗盘')
+  assert.ok(compass, '弧未画：罗盘任务已代拉入队')
+  assert.ok(compass!.startedAt <= rt.jobs.genJobs.get('数学/生长批')!.startedAt, '罗盘先于生长批入队（FIFO 先跑，弧先于裁决）')
+  await until(() => rt.jobs.genJobs.get('数学/罗盘')?.status === 'done')
+
+  // 每宿主会话每课程至多代拉一次：备忘已落，弧仍未画（桩未变）也不再拉
+  rt.jobs.genJobs.delete('数学/生长批')
+  rt.jobs.genJobs.delete('数学/罗盘')
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '再次触发', undefined, { force: true })
+  assert.equal(rt.jobs.genJobs.get('数学/罗盘'), undefined, '备忘生效：同会话不二次代拉（失败转人工）')
+})
+
+test('罗盘初画代拉护栏（#331）：弧已画不拉、零终点不拉、罗盘读取失败不挡生长批入队', async () => {
+  const rt = makeRuntime()
+  stub(rt, {
+    'growth2.coachGrowthBatch': async () => IDLE_ROUND,
+    saveGenJobs: async () => undefined,
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+  })
+  // 弧已画（路线段有正文）→ 不代拉（重估走显式路径）
+  stub(rt, {
+    'growth2.compassRead': async () => ({
+      ...COMPASS_UNPAINTED, missing: false,
+      route: '- **理工科大学本科水平**：\n- **代数主线**：从符号运算到方程（候选）',
+    }),
+  })
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发')
+  assert.equal(rt.jobs.genJobs.get('数学/罗盘'), undefined, '弧已画：不代拉')
+  rt.jobs.genJobs.delete('数学/生长批')
+
+  // 零终点 → 不代拉（罗盘初画锚在终点上，拉了必 fail loud 纯噪音）
+  stub(rt, { 'growth2.compassRead': async () => ({ ...COMPASS_UNPAINTED, anchors: [] }) })
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
+  assert.equal(rt.jobs.genJobs.get('数学/罗盘'), undefined, '零终点：不代拉')
+  rt.jobs.genJobs.delete('数学/生长批')
+
+  // 罗盘读取失败（锚 Broken 等）→ 不拉，且不挡生长批入队（弧缺席是合法空态）
+  stub(rt, { 'growth2.compassRead': async () => { throw new Error('[compass] 终点锚 Broken') } })
+  const enq = await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
+  assert.equal(enq.queued, true, '读取失败不挡生长批入队')
+  assert.equal(rt.jobs.genJobs.get('数学/罗盘'), undefined, '读取失败：不代拉')
+})
+
+test('persistGenJobs 落盘前课程级悬空过滤（#332）：注册表没有的课程记录不落盘；注册表 Broken 原样落盘', async () => {
+  const rt = makeRuntime()
+  const saved: Array<Array<Record<string, unknown>>> = []
+  stub(rt, {
+    'growth2.compassRead': async () => ({ ...COMPASS_UNPAINTED, anchors: [] }),
+    'growth2.coachGrowthBatch': async () => IDLE_ROUND,
+    saveGenJobs: async (jobs: Array<Record<string, unknown>>) => { saved.push(jobs) },
+    'growth2.coachCheckpoint': async () => ({ courses: [] }),
+    'growth2.settleRechecks': async () => null,
+    'registry.load': async () => [{ id: '数学-01', name: '数学', root: '数学', enabled: true }],
+  })
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试触发', undefined, { force: true })
+  await sleep(30)
+  await rt.jobs.persistChain
+  assert.ok(saved.at(-1)!.some(j => j.course === '数学'), '在册课程的记录照常落盘')
+
+  // 清库重建形态：注册表清空后，同一宿主内存态再落盘 → 幽灵记录被过滤
+  stub(rt, { 'registry.load': async () => [] })
+  rt.jobs.genJobs.delete('数学/生长批')
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '清库后再触发', undefined, { force: true })
+  await sleep(30)
+  await rt.jobs.persistChain
+  assert.equal(saved.at(-1)!.some(j => j.course === '数学'), false, '注册表没有的课程：记录不落盘（悬空清除兜底）')
+
+  // 注册表 Broken：原样落盘不过滤（兜底不得成为新失败模式）
+  stub(rt, { 'registry.load': async () => { throw new Error('[registry] 课程注册表 Broken') } })
+  rt.jobs.genJobs.delete('数学/生长批')
+  await enqueueGrowthBatch(rt, fakeCtx(), '数学', '注册表 Broken 后触发', undefined, { force: true })
+  await sleep(30)
+  await rt.jobs.persistChain
+  assert.ok(saved.at(-1)!.some(j => j.course === '数学'), '注册表 Broken：原样落盘不过滤')
 })
 
 test('生长批已取消：自动触发点被挡（中止意图），显式重来照走（#312 B3 与失败同权）', async () => {
@@ -1125,11 +1234,11 @@ test('生长批已取消：自动触发点被挡（中止意图），显式重�
     course: '数学', node: '生长批', startedAt: new Date().toISOString(),
     status: 'cancelled', finishedAt: new Date().toISOString(), message: '已被取消',
   })
-  const auto = enqueueGrowthBatch(rt, fakeCtx(), '数学', '自动触发')
+  const auto = await enqueueGrowthBatch(rt, fakeCtx(), '数学', '自动触发')
   assert.equal(auto.queued, false)
   assert.match(auto.message, /已取消/)
   assert.match(auto.message, /面板「生长一步」/, '文案指向真实存在的动作（此前指向「下一次触发」＝同一条分支）')
-  const forced = enqueueGrowthBatch(rt, fakeCtx(), '数学', '面板下发（显式重新裁决）', undefined, { force: true })
+  const forced = await enqueueGrowthBatch(rt, fakeCtx(), '数学', '面板下发（显式重新裁决）', undefined, { force: true })
   assert.equal(forced.queued, true, '取消挡住的只是自动触发点——显式请求覆盖（与 failed 同权）')
 })
 
@@ -1174,12 +1283,12 @@ test('生长一步的 force 随任务进执行侧（#240 修）：停摆图上�
     'growth2.settleRechecks': async () => null,
   })
   // 面板「生长一步」/失败重试（handlers 的 /coach/growth）走 force
-  const forced = enqueueGrowthBatch(rt, fakeCtx(), '数学', '面板下发（显式重新裁决）', undefined, { force: true })
+  const forced = await enqueueGrowthBatch(rt, fakeCtx(), '数学', '面板下发（显式重新裁决）', undefined, { force: true })
   assert.equal(forced.queued, true)
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
   // 自动触发点（就绪深度不足）不带 force——停摆短路与阻尼照旧生效
   rt.jobs.genJobs.delete('数学/生长批')
-  const auto = enqueueGrowthBatch(rt, fakeCtx(), '数学', 'queue_idle 触发（就绪深度 0/5）')
+  const auto = await enqueueGrowthBatch(rt, fakeCtx(), '数学', 'queue_idle 触发（就绪深度 0/5）')
   assert.equal(auto.queued, true)
   await until(() => rt.jobs.genJobs.get('数学/生长批')?.status === 'done')
   assert.deepEqual(forcedFlags, [true, undefined], '显式放行到执行侧为 true、自动触发不带（两条路径可分辨）')
@@ -1216,7 +1325,7 @@ test('重启恢复：排队图域任务负载随档恢复，恢复队列后正�
   assert.equal(rt.flags.queuePaused, true, '恢复后队列暂停（不自动开跑，生成页一键恢复）')
   // 生长批上一轮裁决面随档恢复：重拉阻尼的判据（恢复丢失 = 停摆裁决被无声抹掉）
   assert.equal(rt.jobs.genJobs.get('物理/生长批')?.growthOutcome, 'idle')
-  const blocked = enqueueGrowthBatch(rt, fakeCtx(), '物理', '自动触发')
+  const blocked = await enqueueGrowthBatch(rt, fakeCtx(), '物理', '自动触发')
   assert.equal(blocked.queued, false, '恢复后的 idle 裁决照常阻尼自动重拉')
 
   const res = resumeQueue(rt, fakeCtx())
@@ -1309,7 +1418,7 @@ test('任务档 Broken 启动：队列 broken、生成页可见报错与指引�
   // 入队四口 + 整课重置全部被拒，提示先修复
   await assert.rejects(() => enqueueGeneration(rt, fakeCtx(), '数学', '节点A'), /broken 态，已拒绝该操作/)
   assert.throws(() => enqueueQuizGeneration(rt, fakeCtx(), '数学', '节点A'), /broken 态/)
-  assert.throws(() => enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试'), /broken 态/)
+  await assert.rejects(() => enqueueGrowthBatch(rt, fakeCtx(), '数学', '测试'), /broken 态/)
   assert.throws(() => enqueueGraphJob(rt, fakeCtx(), { course: '数学', node: '罗盘', phase: 'compass' }), /broken 态/)
   await assert.rejects(() => resetCourseChain(rt, fakeCtx(), '数学'), /broken 态/)
   // 开跑被拒：恢复队列拒绝（泵闸静默，交互口给文案）
@@ -1615,7 +1724,7 @@ test('AGENT_GUIDE 受检投影：22 条指南的工具名/页签/文案都在册
   assert.equal(AGENT_GUIDE.length, 23, '指南条目数（22 条手写 + #203 receipt-review-mode，增减要显式）')
 })
 
-test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、路由独有 55（终态点路径口径；ADR-0045 迁移回归网）', () => {
+test('路由↔工具对账基线：89 共享引擎入口、工具独有 26、路由独有 56（终态点路径口径；ADR-0045 迁移回归网）', () => {
   // 与注册表 engine 字段同口径——改名转发按真名（registry.get/resolve）入账。
   const faceOf = (code: string) => new Set([...code.matchAll(/\.engine\.([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g)].map(m => m[1]))
   const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
@@ -1660,7 +1769,7 @@ test('路由↔工具对账基线：87 共享引擎入口、工具独有 26、�
   // 通道 handler 与生长批执行器消费，agent 工具面不直接触卡点自报）
   assert.equal(shared.length, 89, '#312：growth2.coachDraftCancel 工具/路由双通道（草稿逃生口）→ 转共享；#274：graph.conceptMergeCandidates 同款')
   assert.equal(toolOnly.length, 26, '#265 +1：graph.conceptConfusableCandidates（候选派生只走 agent 工具面）；#215 前例：content2.contentCheck 转共享')
-  assert.equal(routeOnly.length, 55, '#268 +1：graph.conceptFootprint（概念足迹纯读，仅面板路由面）；#256：−content2.contentReview/−graph.seedPropose/−proposals.proposalImpact/−sched2.setDayCutoff（种子链+day-cutoff 退役）；#255 −1：doctor 随 doctor 退役')
+  assert.equal(routeOnly.length, 56, '#331/#332 +1：registry.load（persistGenJobs 落盘前课程级悬空过滤直读注册表）；#268 +1：graph.conceptFootprint（概念足迹纯读，仅面板路由面）；#256：−content2.contentReview/−graph.seedPropose/−proposals.proposalImpact/−sched2.setDayCutoff（种子链+day-cutoff 退役）；#255 −1：doctor 随 doctor 退役')
 })
 
 // ---------------------------------------------------------------- apply 不自动入队正文（ADR-0078）

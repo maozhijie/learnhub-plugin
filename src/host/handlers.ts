@@ -317,7 +317,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
     const id = applyId(body.id)
     const applied = await apiRun(rt, 'api/proposals/apply', () => rt.engine.graph.proposalApply(kind, id))
     const planPart = applied as { plan?: { kind?: string; growth?: Array<{ course: string; lines: string[] }> } }
-    triggerPlanGrowth(rt, ctx, planPart.plan ?? (applied as { kind?: string }))
+    void triggerPlanGrowth(rt, ctx, planPart.plan ?? (applied as { kind?: string }))
     await afterGraphApply(rt)
     sendJson(res, 200, applied)
   },
@@ -608,7 +608,7 @@ export const HANDLERS: Record<string, RouteHandler> = {
       const rec = await rt.engine.growth2.stuckReportAppend(course, node, text)
       let round: { queued: boolean; message: string }
       try {
-        round = enqueueGrowthBatch(rt, ctx, course, '卡点自报触发', undefined, { force: true })
+        round = await enqueueGrowthBatch(rt, ctx, course, '卡点自报触发', undefined, { force: true })
       } catch (err) {
         round = { queued: false, message: `自报已留账；教练回合入队失败：${err instanceof Error ? err.message : String(err)}` }
       }

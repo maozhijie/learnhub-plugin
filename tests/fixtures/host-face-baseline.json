@@ -170,6 +170,7 @@
   "project.projectPlanPropose",
   "registry.enabled",
   "registry.get",
+  "registry.load",
   "saveGenJobs",
   "sched2.memoryHealth",
   "sched2.setDailyGoal",
