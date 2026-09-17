@@ -10,7 +10,7 @@
  * （上下文包骨架）与 `coach-exec.ts`（教练执行站：写件描述/草稿状态块/回执）。
  *
  * 两口径共用：只读工具在**活图**（`coachToolSpecs`）与**草稿**（`growth-subsystem` 的
- * 教练执行读件八件）两处登记——旧实现两处各写一份，同源常量收在此处（口径不同者给显式两名）。
+ * 教练执行读件九件）两处登记——旧实现两处各写一份，同源常量收在此处（口径不同者给显式两名）。
  */
 
 // ---------------------------------------------------------------- 只读工具 description（活图口径）
@@ -23,6 +23,7 @@ export const TOOL_BANK_OVERVIEW_DESC = '题库概况：逐节点在库/归档/in
 export const TOOL_COMPASS_READ_DESC = '罗盘现势：终点集合/剩余路线 + 学习者批注（软输入，提议非指令）+ 沙盘 ETA。'
 export const TOOL_ENDPOINT_ANCHOR_DESC_LIVE = '终点锚集合：逐终点的终点节点/目标类型/声明日/块工作表核销进度/收尾宣告。'
 export const TOOL_UPSTREAM_DAG_DESC_LIVE = '上游图摘要：给定节点的前置传递闭包全拓扑（逐条带深度/阶段/掌握度/到期/est，⚠ = 弱掌握或到期积压）+ 闭包内 pre 邻接表 + 超 cap 溢出行。深链诊断「七步之前的地基」一次可见，取代逐跳 node_card。'
+export const TOOL_SUBGRAPH_DESC_LIVE = '下游子图：给定节点的**下游传递闭包**全拓扑（谁消费它、影响面到哪——逐条带深度/阶段/掌握度/到期/est，⚠ = 弱掌握或到期积压）+ 子图内 pre 邻接表 + 超 cap 溢出行。插入/旁支/删改前的下游影响面自查，与 upstream_dag（上游）互为对边；一跳上游看 node_card，深链地基看 upstream_dag。'
 
 // ---------------------------------------------------------------- 只读工具 description（草稿口径）
 
@@ -30,6 +31,7 @@ export const TOOL_GRAPH_VIEW_DESC_DRAFT = '当前草稿图面（基图 + 草稿�
 export const TOOL_NODE_CARD_DESC_DRAFT = '单节点结构档（草稿图口径）：阶段、pre/teaches/assumes、下游消费、误解先验。'
 export const TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT = '概念足迹：teaches/assumes/误解 引用对表的唯一权威（写侧恒精确——引用必须逐字命中在册名字或随批 concepts 铸名）。query 是子串发现不是存在性判定：空 ≠ 不存在。'
 export const TOOL_UPSTREAM_DAG_DESC_DRAFT = '上游图摘要：给定节点的前置传递闭包全拓扑 + 闭包内 pre 邻接。接线定位与深链诊断用。'
+export const TOOL_SUBGRAPH_DESC_DRAFT = '下游子图：给定节点的下游传递闭包全拓扑 + 子图内 pre 邻接。插入/旁支挂点与下游影响面自查用——别把新台阶插到会挡别人路的地方。'
 export const TOOL_ENDPOINT_ANCHOR_DESC_DRAFT = '终点锚集合：逐终点的目标类型/声明日/收尾宣告。set_pre 接线的靶在这里对表（终点只可被 set_pre 接线，禁出现在 add_node 的 pre）。'
 
 // ---------------------------------------------------------------- 只读工具参数说明
@@ -146,6 +148,20 @@ export const UD_CLOSURE_HEADING = '### 闭包节点（深度序——地基在�
 export const UD_OVERFLOW = '……（超出预览上限 {{cap}}，余 {{rest}} 个——按深度截断，省略的是深度 ≥ {{cut}} 的节点；本次目标节点深度 {{depth}}，被省略的是离目标较近的一圈。近邻细节用 node_card 逐跳下钻。）'
 export const UD_ADJ_HEADING = '### 闭包内 pre 邻接（本视图的读侧派生；图上 pre 只有名字列表，零边字段）'
 export const UD_ADJ_LINE = '- {{node}} → {{pres}}'
+
+// ---------------------------------------------------------------- 下游子图（subgraph 视图骨架，#326）
+
+export const SG_HEADING = '## 下游子图：{{node}}{{flag}}（下游传递闭包 {{total}} 个节点）'
+export const SG_TARGET_ROW = '- 目标节点：{{row}}'
+export const SG_SIZE = '- 闭包规模：{{total}} 个下游节点{{rest}}'
+export const SG_SIZE_TRUNC_SUFFIX = '（本视图只列离目标最近的 {{shown}} 个，余 {{rest}} 个见溢出行）'
+export const SG_SIZE_FULL_SUFFIX = '（全列）'
+export const SG_EMPTY_HEADING = '### 闭包节点'
+export const SG_EMPTY_BODY = '（闭包为空——该节点是叶子：没有下游消费方，影响面止于自身）'
+export const SG_CLOSURE_HEADING = '### 闭包节点（深度序——近处在前；⚠ = 弱掌握或到期积压）'
+export const SG_OVERFLOW = '……（超出预览上限 {{cap}}，余 {{rest}} 个——按深度截断，省略的是深度 ≥ {{cut}} 的更远下游；近邻细节用 node_card 逐跳下钻。）'
+export const SG_ADJ_HEADING = '### 子图内 pre 邻接（本视图的读侧派生；图上 pre 只有名字列表，零边字段）'
+export const SG_ADJ_LINE = '- {{node}} → {{pres}}'
 
 // ---------------------------------------------------------------- 题库概况（bank_overview 视图骨架）
 

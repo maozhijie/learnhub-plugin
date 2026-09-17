@@ -455,6 +455,21 @@ export class Graph {
     return seen
   }
 
+  /** 后代传递闭包（沿 succ BFS；**含自身**，调用方自行剔除）。与 upstreamClosure 同一
+   * 纪律的下游半边（#326 下游/邻域子图读件）：悬空引用不入闭包不炸；单一实现——
+   * 手写 BFS 副本由 G10 门拦截（环上也真，reach 同口径，ADR-0085 §环语义裁定）。 */
+  downstreamClosure(n: string): Set<string> {
+    const seen = new Set<string>([n])
+    const queue = [n]
+    while (queue.length) {
+      const u = queue.shift()!
+      for (const s of this.succ[u] ?? []) {
+        if (!seen.has(s)) { seen.add(s); queue.push(s) }
+      }
+    }
+    return seen
+  }
+
   readySet(done: Set<string>, doing: Set<string>): string[] {
     return this.names
       .filter(n => !done.has(n) && !doing.has(n) && this.isReady(n, done))

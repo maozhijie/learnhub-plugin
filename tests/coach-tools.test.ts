@@ -1,10 +1,10 @@
 /**
- * 教练只读工具面单测（#163 / ADR-0041；#249 / ADR-0077 七件 → 八件）：
- * - 白名单结构：恰八件只读视图（顺序与名字是教练工具调用的取值域契约），
- *   concept_registry 已移除、concept_footprint / upstream_dag 在册；
+ * 教练只读工具面单测（#163 / ADR-0041；#249 / ADR-0077 七件 → 八件；#326 八件 → 九件）：
+ * - 白名单结构：恰九件只读视图（顺序与名字是教练工具调用的取值域契约），
+ *   concept_registry 已移除、concept_footprint / upstream_dag / subgraph 在册；
  * - 只读性（零写侧）：全白名单逐工具调用后 vault 字节级不变——工具实现没有队列入口、
  *   没有教练/入队触点，防递归自激在这里落成可断言的行为；
- * - 视图内容：图面/节点卡/概念足迹/题库概况/上游图摘要的折叠形态与合法空态；
+ * - 视图内容：图面/节点卡/概念足迹/题库概况/上游图摘要/下游子图的折叠形态与合法空态；
  * - 拒收语义：白名单外（含已退役的 concept_registry）调用 fail loud、坏参数 fail loud
  *   （缝以 isError 回灌，模型可见）。
  */
@@ -84,6 +84,7 @@ function depsOf(engine: LearnhubEngine): CoachToolDeps {
 const NODE_PARAM_TOOLS: Record<string, string> = {
   node_card: '{"node":"认识变化率"}',
   upstream_dag: '{"node":"用导数解决优化问题"}',
+  subgraph: '{"node":"认识变化率"}',
 }
 
 const course: CourseEntry = { name: '数学', root: 'math' }
@@ -102,10 +103,10 @@ async function snapshotVault(root: string): Promise<Map<string, string>> {
   return out
 }
 
-test('白名单结构：恰八件只读视图（concept_registry 退役），规格带描述与参数 schema', () => {
+test('白名单结构：恰九件只读视图（concept_registry 退役），规格带描述与参数 schema', () => {
   assert.deepEqual([...COACH_TOOL_NAMES], [
     'graph_view', 'node_card', 'concept_footprint', 'behavior_digest',
-    'bank_overview', 'compass_read', 'endpoint_anchor', 'upstream_dag',
+    'bank_overview', 'compass_read', 'endpoint_anchor', 'upstream_dag', 'subgraph',
   ])
   assert.ok(!(COACH_TOOL_NAMES as readonly string[]).includes('concept_registry'), 'concept_registry 已由 concept_footprint 完整吸收')
   const specs = coachToolSpecs()
@@ -192,6 +193,17 @@ test('视图内容：图面带节点取值域、节点卡带结构档、概念�
     // 根节点：闭包空给合法空态行
     const rootDag = await runTool({ id: '5b', name: 'upstream_dag', arguments: '{"node":"认识变化率"}' })
     assert.match(rootDag, /闭包为空——该节点是根/)
+
+    // subgraph（#326）：下游闭包全拓扑 + 子图内邻接（认识变化率 的下游是终点 用导数解决优化问题）
+    const sg = await runTool({ id: '5c', name: 'subgraph', arguments: '{"node":"认识变化率"}' })
+    assert.match(sg, /下游子图：认识变化率（下游传递闭包 1 个节点）/)
+    assert.match(sg, /- 用导数解决优化问题 ⚑（深度 1｜/)
+    assert.match(sg, /### 子图内 pre 邻接/)
+    assert.match(sg, /- 用导数解决优化问题 → 认识变化率/)
+    // 终点（全局收敛点）：下游闭包空给合法空态行
+    const leafSg = await runTool({ id: '5d', name: 'subgraph', arguments: '{"node":"用导数解决优化问题"}' })
+    assert.match(leafSg, /下游传递闭包 0 个节点/)
+    assert.match(leafSg, /闭包为空——该节点是叶子：没有下游消费方，影响面止于自身/)
   })
 })
 
@@ -225,6 +237,33 @@ test('上游图摘要：⚠ 弱掌握标记与超 cap 按深度截断的显式�
     assert.match(dag, new RegExp(`前置传递闭包 ${chain - 1} 个节点`))
     assert.match(dag, /超出预览上限 60，余 5 个——按深度截断/)
     assert.match(dag, /### 闭包内 pre 邻接/)
+  })
+})
+
+test('下游子图：超 cap 保留近端（深度小的一端）+ 显式溢出行；未知节点 fail loud（#326）', async () => {
+  // 与上游截断测试同一链夹具：从链根查询下游闭包 = 65 个节点，cap=60 保留离根最近的
+  // 近端（深度 1–60），省略的是深度 ≥ 60 的更远下游
+  const chain = 66
+  const nameOf = (i: number): string => `链${String(i).padStart(3, '0')}`
+  const graphYaml = [
+    'nodes:',
+    ...Array.from({ length: chain }, (_, i) =>
+      i === chain - 1
+        ? `  - { name: ${nameOf(i)}, pre: [${nameOf(i - 1)}] }`
+        : `  - { name: ${nameOf(i)}, pre: [${i ? nameOf(i - 1) : ''}] }`),
+  ].join('\n')
+  await withVault({ registry: DEFAULT_REGISTRY, graph: graphYaml }, async ({ engine }) => {
+    const course = await engine.registry.resolve('数学') as CourseEntry
+    const runTool = coachToolExecutor(depsOf(engine), course, providersOf(engine, course))
+    const sg = await runTool({ id: '1', name: 'subgraph', arguments: `{"node":"${nameOf(0)}"}` })
+    assert.match(sg, new RegExp(`下游传递闭包 ${chain - 1} 个节点`))
+    assert.match(sg, /超出预览上限 60，余 5 个——按深度截断，省略的是深度 ≥ 61 的更远下游/)
+    assert.match(sg, /### 子图内 pre 邻接/)
+    // 未知节点 fail loud（graph_view 取逐字名单，同 upstream_dag 口径）
+    await assert.rejects(
+      () => runTool({ id: '2', name: 'subgraph', arguments: '{"node":"不在图上"}' }),
+      /不在图上/,
+    )
   })
 })
 

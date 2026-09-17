@@ -1,7 +1,7 @@
 /**
- * 教练只读工具面（ADR-0041 / #163；#249 / ADR-0077 七件 → 八件）：教练工具回路可调用的
+ * 教练只读工具面（ADR-0041 / #163；#249 / ADR-0077 七件 → 八件；#326 八件 → 九件）：教练工具回路可调用的
  * **只读引擎视图白名单**——图视图、节点卡、概念足迹、行为摘要、题库概况、罗盘、终点锚、
- * 上游图摘要八件。裁决前按需自查取代盲盒上下文包的证据缺口：节点名、pre 引用、
+ * 上游图摘要、下游子图九件。裁决前按需自查取代盲盒上下文包的证据缺口：节点名、pre 引用、
  * 概念名在产出裁决前可直接对表。
  *
  * 信任边界不动：教练不持任何写工具——写路径仍走提案→受理门→apply 正道；工具实现
@@ -59,17 +59,20 @@ import {
   TOOL_BANK_OVERVIEW_DESC, TOOL_BEHAVIOR_DIGEST_DESC, TOOL_COMPASS_READ_DESC,
   TOOL_CONCEPT_FOOTPRINT_DESC_LIVE, TOOL_ENDPOINT_ANCHOR_DESC_LIVE, TOOL_EXEC_BAD_ARGS,
   TOOL_EXEC_NODE_REQUIRED, TOOL_EXEC_READONLY_REJECT, TOOL_GRAPH_VIEW_DESC_LIVE, TOOL_NODE_CARD_DESC_LIVE,
-  TOOL_PARAM_NODE_DESC, TOOL_PARAM_QUERY_DESC_LIVE, TOOL_UPSTREAM_DAG_DESC_LIVE,
+  TOOL_PARAM_NODE_DESC, TOOL_PARAM_QUERY_DESC_LIVE, TOOL_SUBGRAPH_DESC_LIVE, TOOL_UPSTREAM_DAG_DESC_LIVE,
   UD_ADJ_HEADING, UD_ADJ_LINE, UD_CLOSURE_HEADING, UD_EMPTY_BODY, UD_EMPTY_HEADING, UD_HEADING,
   UD_OVERFLOW, UD_SIZE, UD_SIZE_FULL_SUFFIX, UD_SIZE_TRUNC_SUFFIX, UD_TARGET_ROW,
+  SG_ADJ_HEADING, SG_ADJ_LINE, SG_CLOSURE_HEADING, SG_EMPTY_BODY, SG_EMPTY_HEADING, SG_HEADING,
+  SG_OVERFLOW, SG_SIZE, SG_SIZE_FULL_SUFFIX, SG_SIZE_TRUNC_SUFFIX, SG_TARGET_ROW,
 } from '../prompts/coach-tools.ts'
 
-/** 工具面白名单（ADR-0041 形状；#249 / ADR-0077 八件）：名字是教练工具调用的唯一取值域。
+/** 工具面白名单（ADR-0041 形状；#249 / ADR-0077 八件 → #326 九件）：名字是教练工具调用的唯一取值域。
  * `concept_registry` 已由 `concept_footprint` 完整吸收（词条档职责并入足迹视图）；
- * `node_card` 维持单步 pre 不动——上游闭包的全拓扑由 `upstream_dag` 承担。 */
+ * `node_card` 维持单步 pre 不动——上游闭包的全拓扑由 `upstream_dag` 承担，下游闭包由
+ * `subgraph` 承担（#326 下游/邻域子图读件）。 */
 export const COACH_TOOL_NAMES = [
   'graph_view', 'node_card', 'concept_footprint', 'behavior_digest',
-  'bank_overview', 'compass_read', 'endpoint_anchor', 'upstream_dag',
+  'bank_overview', 'compass_read', 'endpoint_anchor', 'upstream_dag', 'subgraph',
 ] as const
 export type CoachToolName = (typeof COACH_TOOL_NAMES)[number]
 
@@ -85,6 +88,10 @@ const LIST_CAP = 200
  * 截断保留**深度小的一端**（拓扑序在前的地基段）——地基是深链诊断的靶（「七步之前的
  * 地基」），近邻本就随 node_card 的单步 pre 廉价可得；溢出行点名切断深度与余数。 */
 const UPSTREAM_CLOSURE_CAP = 60
+
+/** 下游闭包全拓扑的预览上限（#326，与 UPSTREAM_CLOSURE_CAP 同族）：截断保留**深度小的
+ * 一端**——对下游即离目标最近的近邻环（影响面的第一圈），远端溢出显式点名。 */
+const SUBGRAPH_CLOSURE_CAP = 60
 
 /** ⚠ 弱掌握阈值（ADR-0077：mastery 低于此值或到期积压即标，全图摘要与上游图摘要
  * 共用一处判据）。口径与 B2 难度带校准同值不同域——此处只作读侧标记，不改任何调度、
@@ -421,6 +428,63 @@ export function renderUpstreamDag(
   return lines.join('\n') + '\n'
 }
 
+/** 下游子图（subgraph，#326 下游/邻域子图读件）：给定节点渲染其**下游传递闭包**全拓扑
+ * ——谁消费它、影响面到哪（插入/旁支/删改前的下游自查；与 upstream_dag 互为对边）。
+ * 闭包节点逐条带深度/阶段/掌握度/到期/est（弱掌握带 ⚠），子图内 pre 边以邻接表呈现
+ * （与 upstream_dag 同款边轻纪律）。超 cap 按深度截断 + 显式溢出行——保留深度小的一端
+ * （离目标最近的近邻环，见 SUBGRAPH_CLOSURE_CAP）。未知节点 fail loud（graph_view 取
+ * 逐字名单）。读侧派生零落盘。 */
+export function renderSubgraph(
+  graph: Graph, state: Record<string, Fm>, node: string,
+  opts: { today?: string; endpoints?: ReadonlySet<string> } = {},
+): string {
+  if (!graph.nset.has(node)) {
+    throw new Error(render(NODE_NOT_ON_GRAPH_ERR, { node }))
+  }
+  const today = opts.today ?? ''
+  const endpoints = opts.endpoints ?? new Set<string>()
+  // 后代传递闭包（沿 succ BFS；不含自身）——出处是 Graph.downstreamClosure（与
+  // upstreamClosure 同一纪律的下游半边，不是手写 BFS 副本）
+  const all = [...graph.downstreamClosure(node)].filter(n => n !== node)
+    .sort((a, b) => (graph.depth[a] ?? 0) - (graph.depth[b] ?? 0) || a.localeCompare(b))
+  const shown = all.slice(0, SUBGRAPH_CLOSURE_CAP)
+  const shownSet = new Set(shown)
+  // 子图内 pre 邻接的取值域（含目标节点——它是本视图的入口，边从闭包汇入它）
+  const inScope = (n: string): boolean => n === node || shownSet.has(n)
+  const row = (n: string): string =>
+    nodeRow(graph, state, n, { today, endpoints, pres: graph.preOf[n].filter(inScope) })
+  const lines: string[] = [
+    render(SG_HEADING, { node, flag: endpoints.has(node) ? render(NODE_ROW_ENDPOINT_FLAG, {}) : '', total: all.length }), '',
+    render(SG_TARGET_ROW, { row: nodeRowBody(graph, state, node, { today, endpoints }) }),
+    render(SG_SIZE, {
+      total: all.length,
+      rest: all.length > shown.length
+        ? render(SG_SIZE_TRUNC_SUFFIX, { shown: shown.length, rest: all.length - shown.length })
+        : render(SG_SIZE_FULL_SUFFIX, {}),
+    }),
+    '',
+  ]
+  if (!all.length) {
+    lines.push(render(SG_EMPTY_HEADING, {}), '', render(SG_EMPTY_BODY, {}), '')
+  } else {
+    lines.push(render(SG_CLOSURE_HEADING, {}), '')
+    for (const n of shown) lines.push(row(n))
+    if (all.length > shown.length) {
+      const cut = graph.depth[all[shown.length]!] ?? 0
+      lines.push('', render(SG_OVERFLOW, {
+        cap: SUBGRAPH_CLOSURE_CAP, rest: all.length - shown.length, cut,
+      }))
+    }
+    // 子图内 pre 邻接表（紧凑无歧义；图上 pre 只有名字列表，零边字段——边轻纪律同构）
+    lines.push('', render(SG_ADJ_HEADING, {}), '')
+    for (const n of [node, ...shown]) {
+      const pres = graph.preOf[n].filter(inScope)
+      lines.push(render(SG_ADJ_LINE, { node: n, pres: pres.length ? pres.join('、') : render(NODE_ROW_ROOT, {}) }))
+    }
+  }
+  return lines.join('\n') + '\n'
+}
+
 /** 题库概况（bank_overview）：逐节点题目计数折叠（在库/归档/invokes 标注），裁决
  * 巩固/出题相关批时的现势参照。零题课程给合法空态行。 */
 export async function renderBankOverview(
@@ -526,7 +590,7 @@ export interface CoachToolProviders {
   conceptInvokes: () => Promise<Map<string, Map<string, number>>>
 }
 
-/** 白名单八件的工具规格（JSON Schema 直通 provider function calling）。 */
+/** 白名单九件的工具规格（JSON Schema 直通 provider function calling）。 */
 export function coachToolSpecs(): LlmToolSpec[] {
   const obj = (properties: Record<string, unknown>, required: string[] = []): Record<string, unknown> => ({
     type: 'object', properties, required, additionalProperties: false,
@@ -540,6 +604,7 @@ export function coachToolSpecs(): LlmToolSpec[] {
     { name: 'compass_read', description: render(TOOL_COMPASS_READ_DESC, {}), parameters: obj({}) },
     { name: 'endpoint_anchor', description: render(TOOL_ENDPOINT_ANCHOR_DESC_LIVE, {}), parameters: obj({}) },
     { name: 'upstream_dag', description: render(TOOL_UPSTREAM_DAG_DESC_LIVE, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC, {}) } }, ['node']) },
+    { name: 'subgraph', description: render(TOOL_SUBGRAPH_DESC_LIVE, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC, {}) } }, ['node']) },
   ]
 }
 
@@ -592,6 +657,13 @@ export function coachToolExecutor(
         const { graph, state } = await deps.loadView(c)
         const { today } = await deps.learningDay()
         return renderUpstreamDag(graph, state, node.trim(), { today, endpoints: await endpointsOf() })
+      }
+      case 'subgraph': {
+        const node = argsOf(call).node
+        if (typeof node !== 'string' || !node.trim()) throw new Error(render(TOOL_EXEC_NODE_REQUIRED, { tool: 'subgraph' }))
+        const { graph, state } = await deps.loadView(c)
+        const { today } = await deps.learningDay()
+        return renderSubgraph(graph, state, node.trim(), { today, endpoints: await endpointsOf() })
       }
       default:
         throw new Error(render(TOOL_EXEC_READONLY_REJECT, { name: call.name, names: COACH_TOOL_NAMES.join('/') }))

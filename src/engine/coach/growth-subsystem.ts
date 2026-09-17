@@ -23,7 +23,7 @@ import {
   TOOL_BANK_OVERVIEW_DESC, TOOL_BEHAVIOR_DIGEST_DESC, TOOL_COMPASS_READ_DESC,
   TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT, TOOL_ENDPOINT_ANCHOR_DESC_DRAFT, TOOL_GRAPH_VIEW_DESC_DRAFT,
   TOOL_NODE_CARD_DESC_DRAFT, TOOL_PARAM_NODE_DESC, TOOL_PARAM_NODE_DESC_BARE,
-  TOOL_PARAM_QUERY_DESC_DRAFT, TOOL_UPSTREAM_DAG_DESC_DRAFT,
+  TOOL_PARAM_QUERY_DESC_DRAFT, TOOL_SUBGRAPH_DESC_DRAFT, TOOL_UPSTREAM_DAG_DESC_DRAFT,
 } from '../prompts/coach-tools.ts'
 import {
   PACK_ANCHOR_CLOSURE, PACK_ANCHOR_DECLARED, PACK_ANCHOR_GOAL_TYPE, PACK_ANCHOR_LAST_STEPS,
@@ -843,8 +843,8 @@ export class GrowthSubsystem {
     return out.join('\n') + '\n'
   }
 
-  /** 教练只读工具面（#163 / ADR-0041 形状；#249 / ADR-0077 八件）：图视图/节点卡/概念足迹/
-   * 上游图摘要/题库概况/罗盘/终点锚实现走 coach-tools 的通用执行器（deps 结构化注入，本
+  /** 教练只读工具面（#163 / ADR-0041 形状；#249 / ADR-0077 八件；#326 九件）：图视图/节点卡/概念足迹/
+   * 上游图摘要/下游子图/题库概况/罗盘/终点锚实现走 coach-tools 的通用执行器（deps 结构化注入，本
    * 子系统天然满足）；行为摘要的取材口径（invokes 解析/掌握度折叠）是本子系统的私有折叠，
    * 经 providers 注入复用（单一出处）。工具面零写侧、零队列触点。 */
   private coachToolsetFor(c: CourseEntry): { tools: LlmToolSpec[]; runTool: (call: LlmToolCall) => Promise<string> } {
@@ -989,11 +989,11 @@ export class GrowthSubsystem {
 
   // ---- 生长草稿·教练执行站（#271 / ADR-0088：草稿内核 + 批量补丁 + 按批 finish）----
 
-  /** 单站回路的工具面（#320 / ADR-0101）：读件**八件**（#320 还回 behavior_digest /
-   * bank_overview / compass_read 三件——此前桩成空串被静默砍掉）+ 写件六具（draft_patch /
-   * draft_audit / draft_finish / draft_revert / draft_note / draft_arc）。复用 coach-tools 渲染函数
-   * （同源不漂移）；旧 coachToolset 八件与 compassPaint 不动。产物以工具调用承载
-   * （OutputFormat='tool-calls'）。 */
+  /** 单站回路的工具面（#320 / ADR-0101）：读件**九件**（#320 还回 behavior_digest /
+   * bank_overview / compass_read 三件——此前桩成空串被静默砍掉；#326 增 subgraph 下游
+   * 子图）+ 写件六具（draft_patch / draft_audit / draft_finish / draft_revert / draft_note /
+   * draft_arc）。复用 coach-tools 渲染函数（同源不漂移）；旧 coachToolset 九件与
+   * compassPaint 不动。产物以工具调用承载（OutputFormat='tool-calls'）。 */
   static draftToolSpecs(): LlmToolSpec[] {
     const obj = (properties: Record<string, unknown>, required: string[] = []): Record<string, unknown> => ({
       type: 'object', properties, required, additionalProperties: false,
@@ -1023,6 +1023,7 @@ export class GrowthSubsystem {
       { name: 'bank_overview', description: render(TOOL_BANK_OVERVIEW_DESC, {}), parameters: obj({}) },
       { name: 'compass_read', description: render(TOOL_COMPASS_READ_DESC, {}), parameters: obj({}) },
       { name: 'upstream_dag', description: render(TOOL_UPSTREAM_DAG_DESC_DRAFT, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC_BARE, {}) } }, ['node']) },
+      { name: 'subgraph', description: render(TOOL_SUBGRAPH_DESC_DRAFT, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC_BARE, {}) } }, ['node']) },
       { name: 'endpoint_anchor', description: render(TOOL_ENDPOINT_ANCHOR_DESC_DRAFT, {}), parameters: obj({}) },
       {
         name: 'draft_patch', description: render(EXEC_TOOL_DRAFT_PATCH_DESC, {}), parameters: obj({
@@ -1171,7 +1172,7 @@ export class GrowthSubsystem {
     const unpublishedOf = (): EditOp[] => doc.ops.slice(doc.published)
 
     // —— 读件执行器：复用 coachToolset 的通用执行器（deps 结构化注入），白名单由本站
-    //    规格表收紧为读件八件 + 写件六具；白名单外调用照旧 fail loud。 ——
+    //    规格表收紧为读件九件 + 写件六具（#326 起）；白名单外调用照旧 fail loud。 ——
     //    behavior_digest 的取材口径（invokes 解析/掌握度折叠）是本子系统私有折叠（#320 还回
     //    三件之一），经 providers 注入复用单一出处——此前桩成空串，读件三件被静默砍掉。
     const readExecutor = coachToolExecutor(this.e, c, {

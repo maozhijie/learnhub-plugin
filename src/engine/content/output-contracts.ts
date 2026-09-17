@@ -423,7 +423,7 @@ export const OUTPUT_CONTRACTS: readonly OutputContract[] = [
     sensitivity: '规划',
     structuredEligible: false,
     shape: { kind: 'any' },
-    notes: '单站回路（#271 草稿内核 / ADR-0088；#320 两站回单站 / ADR-0101）：方向裁决与落地同站（读件八件 + 写件六具，弧建议提成 draft_arc），草稿通过 = 门通过按构造成立（editGateErrors 三处同调）；按批 finish 走真实受理门 → apply（tool-calls 是自己的结构化通道，不占 json 迁移资格口径）',
+    notes: '单站回路（#271 草稿内核 / ADR-0088；#320 两站回单站 / ADR-0101；#326 读件九件）：方向裁决与落地同站（读件九件 + 写件六具，弧建议提成 draft_arc），草稿通过 = 门通过按构造成立（editGateErrors 三处同调）；按批 finish 走真实受理门 → apply（tool-calls 是自己的结构化通道，不占 json 迁移资格口径）',
   },
   {
     station: '罗盘',
@@ -691,6 +691,10 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // 零操作停摆 + draft_arc 弧建议）、读件八件（还回 behavior_digest / bank_overview / compass_read 三件）。
     version: 1, date: '2026-09-17', changeType: '新站（#320 / ADR-0101）：两站回单站——方向裁决与落地同站（单站只读工具回路）',
     expectedDelta: '站从「思路官单发产交接计划 + 执行官草稿回路」合并为「单站草稿回路」：产物从 YAML 交接计划（零节点名）变为工具调用轨迹——回路内既定算子与朝向，又以 draft_patch/draft_audit/draft_finish 落结构并按批发布；本回合不长结构用新增写件 draft_note 零操作收束并给理由（停摆不再是计划 side 的 operator=停摆）。随批携带三件归回路：recheck（插入批复诊预注册，写入面 draft_patch.note_recheck）、serves_arc / repaint_suggest（弧对齐指认与结构性重画建议——提成独立写件 draft_arc、零操作，从 draft_patch/draft_note 上移出）——引擎消费口不变。读件还回三件（behavior_digest / bank_overview / compass_read）。预期增量：跨调用通道（计划门 + 回灌重裁恰一次 + 上次裁决摘要 + 分段观测）整体退场，方向裁决不再受零节点名契约与单发格式约束（可在站内先用只读工具自查图面再落补丁）；模板随上下文包 + 图面 + 草稿状态 + 外部注入块自足。过门记录：check ✓（提交级门对版本 bump 与登记同提交执法）；replay 未做——本机无生成语料目录（同思路官回合/重裁 v4 先例如实登记）；compare 未做真模型对照（同先例）',
+  }, {
+    // #326：下游/邻域子图读件入站——读件八件 → 九件（工具使用清单随行）。
+    version: 2, date: '2026-09-17', changeType: '读件 +1（#326）：只读工具清单增 subgraph（下游子图）',
+    expectedDelta: '【工具使用】第 1 条的只读工具枚举增 subgraph（给定节点的下游传递闭包全拓扑——谁消费它、影响面到哪）。预期增量：模型在插入/旁支/删改裁决前可一次自查下游影响面（此前只有单跳 node_card 下游消费行），不再凭单跳近邻猜影响面；其余纪律不变',
   }],
 }
 

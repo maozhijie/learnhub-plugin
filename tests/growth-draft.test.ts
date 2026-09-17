@@ -795,11 +795,12 @@ test('#309 ③ 档位取值域进写作面：draft_patch 的工具 description �
 
 // ---- #320 / ADR-0101：单站回路的读件面（还回三件） ----
 
-test('#320 单站读件面：draftToolSpecs 的只读白名单含还回的三件（行为摘要/题库概况/罗盘读）', () => {
+test('#320 单站读件面：draftToolSpecs 的只读白名单含还回的三件（行为摘要/题库概况/罗盘读）+ #326 的 subgraph', () => {
   const names = GrowthSubsystem.draftToolSpecs().map(s => s.name)
   for (const t of ['behavior_digest', 'bank_overview', 'compass_read'] as const) {
     assert.ok(names.includes(t), `读件 ${t} 在草稿回路工具面（#320 还回，不再桩成空串）`)
   }
+  assert.ok(names.includes('subgraph'), '下游子图读件在草稿回路工具面（#326）')
   assert.ok(names.includes('draft_note'), '零操作停摆收束工具在册')
   assert.ok(names.includes('draft_arc'), '弧建议提成独立写件在册（#320）')
   assert.ok(names.includes('draft_revert'), '逃生口工具仍在册')
