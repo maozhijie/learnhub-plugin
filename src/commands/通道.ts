@@ -9,7 +9,7 @@ import { command } from './types.ts'
 export const 通道域 = {
   'anki-export': command({
     id: "anki-export",
-    summary: "Push today's due cards to desktop Anki over AnkiConnect (C2 #63, ADR-0011 — Anki is a pure ANSWERING conduit, the vault stays the ONLY scheduler): recalibrates the mirror deck(s) learnhub::<课程> on every call — adds missing due cards (model「learnhub」, fields 题目/答案/来源, the 来源 field carries 课程/节点/题id for write-back attribution), updates reworded ones, and DELETES mirror cards that are archived, regenerated, or no longer due in the vault (the deck is a disposable mirror — never judged Broken, vault wins on any mismatch; Anki-side scheduling output is discarded). Requires Anki running with the AnkiConnect add-on. After the learner answers in Anki (Again/Hard/Good/Easy), bring the answers home with learnhub_anki_import — import BEFORE the next export so freshly answered cards are not re-pushed.",
+    summary: "Push today's due cards to desktop Anki over AnkiConnect (Anki is a pure ANSWERING conduit, the vault stays the ONLY scheduler): recalibrates the mirror deck(s) learnhub::<课程> on every call — adds missing due cards (model「learnhub」, fields 题目/答案/来源, the 来源 field carries 课程/节点/题id for write-back attribution), updates reworded ones, and DELETES mirror cards that are archived, regenerated, or no longer due in the vault (the deck is a disposable mirror — never judged Broken, vault wins on any mismatch; Anki-side scheduling output is discarded). Requires Anki running with the AnkiConnect add-on. After the learner answers in Anki (Again/Hard/Good/Easy), bring the answers home with learnhub_anki_import — import BEFORE the next export so freshly answered cards are not re-pushed.",
     args: {
       endpoint: { type: "string", description: "AnkiConnect endpoint; default http://127.0.0.1:8765" }
     },
@@ -30,7 +30,7 @@ export const 通道域 = {
   }),
   'anki-import': command({
     id: "anki-import",
-    summary: "Pull Anki review events since the last import and write them back as RAW ANSWERING EVIDENCE — the vault re-schedules every affected card with its own ts-fsrs, so the conclusion is identical no matter where the learner answered (ADR-0011: vault is the only scheduler). Mapping: Again → 答错 (rating 1, auto), Hard/Good/Easy → 复习自评档 (2/3/4, self, counted as recalled). The「one push per card per day」invariant holds across devices: a card the vault already advanced that day keeps its schedule untouched — the event is archived in the practice stream only. Imported events land in the practice stream (judge=review, timestamped at the Anki answer time, zero XP) and real advances also land in the review log, so memory-health stats and the FSRS parameter optimizer see Anki answers. Events that cannot be attributed (mirror lost → recovered via the 来源 field; question archived/regenerated) are counted and skipped, never guessed.",
+    summary: "Pull Anki review events since the last import and write them back as RAW ANSWERING EVIDENCE — the vault re-schedules every affected card with its own ts-fsrs, so the conclusion is identical no matter where the learner answered — the vault is the only scheduler. Mapping: Again → 答错 (rating 1, auto), Hard/Good/Easy → 复习自评档 (2/3/4, self, counted as recalled). The「one push per card per day」invariant holds across devices: a card the vault already advanced that day keeps its schedule untouched — the event is archived in the practice stream only. Imported events land in the practice stream (judge=review, timestamped at the Anki answer time, zero XP) and real advances also land in the review log, so memory-health stats and the FSRS parameter optimizer see Anki answers. Events that cannot be attributed (mirror lost → recovered via the 来源 field; question archived/regenerated) are counted and skipped, never guessed.",
     args: {
       endpoint: { type: "string", description: "AnkiConnect endpoint; default http://127.0.0.1:8765" }
     },
@@ -51,7 +51,7 @@ export const 通道域 = {
   }),
   'anki-status': command({
     id: "anki-status",
-    summary: "Show the Anki channel status (C2): mirror size and deck names, last push/import timestamps, the current vault due-card distribution the next export would push, and AnkiConnect reachability. Use it to check the channel before exporting or importing.",
+    summary: "Show the Anki channel status: mirror size and deck names, last push/import timestamps, the current vault due-card distribution the next export would push, and AnkiConnect reachability. Use it to check the channel before exporting or importing.",
     args: {
       endpoint: { type: "string", description: "AnkiConnect endpoint; default http://127.0.0.1:8765" }
     },
@@ -72,7 +72,7 @@ export const 通道域 = {
   }),
   'note-source-exclude': command({
     id: "note-source-exclude",
-    summary: "Add a path to the user exclusion list (V-1): a note/folder that batch registrations must never absorb (e.g. private journals, sync-noise folders). Vault-relative or absolute, file or folder (folder = the whole subtree), need not exist yet. Governs FUTURE registrations only — already-registered sources stay until learnhub_note_source_unregister. Current list rides learnhub_note_source_list.",
+    summary: "Add a path to the user exclusion list: a note/folder that batch registrations must never absorb (e.g. private journals, sync-noise folders). Vault-relative or absolute, file or folder (folder = the whole subtree), need not exist yet. Governs FUTURE registrations only — already-registered sources stay until learnhub_note_source_unregister. Current list rides learnhub_note_source_list.",
     args: {
       path: { type: "string", description: "Note or folder path to exclude, vault-relative or absolute; must be outside the learning center", required: true }
     },
@@ -95,7 +95,7 @@ export const 通道域 = {
   }),
   'note-source-generate': command({
     id: "note-source-generate",
-    summary: "Generate review questions for a Note Source (C1): reads the note body (read-only) → 笔记出题 prompt → model → validateBank gate appends each question to the mirror bank (学习中心/笔记源/题库/<id>.yaml) → new cards get their FSRS card initialized (due tomorrow, synthetic init like course completion). The manifest fingerprint refreshes to the current content (drift acknowledged); old questions are NOT auto-archived — offer the learner to archive them explicitly. Fails loud when the source file is missing (re-register first).",
+    summary: "Generate review questions for a Note Source: reads the note body (read-only) → 笔记出题 prompt → model → validateBank gate appends each question to the mirror bank (学习中心/笔记源/题库/<id>.yaml) → new cards get their FSRS card initialized (due tomorrow, synthetic init like course completion). The manifest fingerprint refreshes to the current content (drift acknowledged); old questions are NOT auto-archived — offer the learner to archive them explicitly. Fails loud when the source file is missing (re-register first).",
     args: {
       id: { type: "string", description: "Note-source id, e.g. \"note-1\"", required: true },
       count: { type: "number", description: "Question count cap (default 6)" }
@@ -156,7 +156,7 @@ export const 通道域 = {
   }),
   'note-source-relink': command({
     id: "note-source-relink",
-    summary: "Relink a Note Source to a new path (V-6 drift governance): when a registered note was RENAMED or MOVED, the source reads Missing and its card pool suspends — relink re-attaches the SAME source id to the new path, keeping the mirror bank and every card's FSRS schedule (unlike unregister+re-register, which orphans the old cards). Fingerprint and title refresh from the new file; the pool-mirror md backlink follows. The new path passes the same hygiene as registration (outside the learning center, not on the user exclusion list, not already taken by another source) and must EXIST — relink is a recovery action. Fails loud on every conflict.",
+    summary: "Relink a Note Source to a new path (drift recovery): when a registered note was RENAMED or MOVED, the source reads Missing and its card pool suspends — relink re-attaches the SAME source id to the new path, keeping the mirror bank and every card's FSRS schedule (unlike unregister+re-register, which orphans the old cards). Fingerprint and title refresh from the new file; the pool-mirror md backlink follows. The new path passes the same hygiene as registration (outside the learning center, not on the user exclusion list, not already taken by another source) and must EXIST — relink is a recovery action. Fails loud on every conflict.",
     args: {
       id: { type: "string", description: "Note-source id, e.g. \"note-1\"", required: true },
       path: { type: "string", description: "New note path (after the rename/move), vault-relative or absolute", required: true }
@@ -203,7 +203,7 @@ export const 通道域 = {
   }),
   'note-source-unregister': command({
     id: "note-source-unregister",
-    summary: "Unregister a Note Source (C1): removes the registry entry, the mirror manifest item, the mirror question bank, and the pool-mirror md. The user's note file is untouched. Use the id from learnhub_note_source_list.",
+    summary: "Unregister a Note Source: removes the registry entry, the mirror manifest item, the mirror question bank, and the pool-mirror md. The user's note file is untouched. Use the id from learnhub_note_source_list.",
     args: {
       id: { type: "string", description: "Note-source id, e.g. \"note-1\"", required: true }
     },

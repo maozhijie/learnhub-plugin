@@ -145,7 +145,7 @@ test('管线集成：记法违规与数字填空被拒收并报告原因（ADR-0
     assert.equal(r.added, 1)
     assert.equal(r.rejected.length, 2)
     assert.match(r.rejected[0]!.reason, /ASCII 上标/)
-    assert.match(r.rejected[1]!.reason, /代数式.*ADR-0029/)
+    assert.match(r.rejected[1]!.reason, /代数式.*single_choice/)
   })
 })
 

@@ -105,7 +105,7 @@ export function priorTerms(raw: string[]): string[] {
   for (const term of raw) {
     const t = term.trim()
     if (!t) continue
-    for (const seg of t.split(/[\s/·、，,;；:：()（）\[\]{}-]+/)) {
+    for (const seg of t.split(/[\s/·、，,;；:：()\[\]{}-]+/)) {
       if (seg.length >= 2 && !out.includes(seg)) out.push(seg)
     }
   }

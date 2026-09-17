@@ -112,7 +112,7 @@ test('断裂宣告：v3 库拒载文案点名存储塌缩与自删重建路径�
   try {
     assert.throws(() => new LearnhubEngine({ vault: root, clock: systemClock, rng: mathRng, fs: nodeVaultFs, logger: noopLogger }), (err: unknown) => {
       const message = (err as Error).message
-      assert.match(message, /宣告式断裂：#284 存储塌缩/, '断裂理由点名存储塌缩')
+      assert.match(message, /宣告式断裂：存储塌缩/, '断裂理由点名存储塌缩')
       assert.match(message, /一课程一文件 data\/图\.yaml/, '新存储形态写进文案')
       assert.match(message, /零迁移脚本/)
       assert.match(message, /旧课程库不再支持、由用户自删：删除旧课程目录（或整个学习中心数据目录）后重建/)

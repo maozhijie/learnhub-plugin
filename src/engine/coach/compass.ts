@@ -90,7 +90,7 @@ export function compassScaffold(courseName: string): string {
   return [
     `# 罗盘 · ${courseName}`,
     '',
-    `> 常驻的非承诺路线草图（ADR-0033 罗盘）：「${SECTION_ROUTE}」由罗盘站写（learnhub_compass_paint 初画；低频重估重画，写权归罗盘站——教练只建议不执笔）。`,
+    `> 罗盘：常驻可见的路线草图，不构成承诺。「${SECTION_ROUTE}」由罗盘站写（learnhub_compass_paint 初画；低频重估重画，写权归罗盘站——教练只建议不执笔）。`,
     `> 「${SECTION_ANNOTATIONS}」是你的批注本——教练把它当软输入（提议非指令）；手编本页不产生任何权威变更，也永不进完成判据。`,
     `> 「${SECTION_ETA}」每周随周复盘刷新：${SANDBOX_WORDING}。`,
     '',

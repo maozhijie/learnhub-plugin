@@ -403,7 +403,7 @@ export function validatePlanHandover(doc: unknown, courseName: string): string[]
   // #316 / ADR-0099：route 已退役——写权归罗盘站（learnhub_compass_paint），思路官计划
   // 携带 route 一律拒收（与零节点名契约同纪律：越权写弧在计划门就掉，不给静默丢弃通道）。
   if (d.route !== undefined) {
-    errors.push('[coach-plan] route 已退役（#316 / ADR-0099）：罗盘「剩余路线」写权归罗盘站（learnhub_compass_paint），思路官对弧只有建议权——删掉本字段，建议写进 reason。')
+    errors.push('[coach-plan] route 已退役：罗盘「剩余路线」写权归罗盘站（learnhub_compass_paint），思路官对弧只有建议权——删掉本字段，建议写进 reason。')
   }
   if (d.recheck !== undefined) {
     if (d.operator !== '插入') {

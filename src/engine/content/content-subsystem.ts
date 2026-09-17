@@ -296,7 +296,7 @@ export class ContentSubsystem {
     return {
       course: c.name, nodes, trashed,
       // 重置波及面单独确认项（#139）：模型状态在沉淀层，永不随内容层重置清除
-      sediment: '沉淀层不受影响：FSRS 参数/校准画像等模型状态永不自动删除（ADR-0034）',
+      sediment: '沉淀层不受影响：FSRS 参数/校准画像等模型状态永不自动删除',
     }
   }
 

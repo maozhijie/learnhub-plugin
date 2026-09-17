@@ -89,7 +89,7 @@ export function assertSchemaVersion(configPath: string, fs: VaultFs): SchemaBloc
   const found = schema ? `v${schema.version}` : '无 schema.version（v1 库）'
   throw new Error(
     `[learnhub] schema 版本硬门：learnhub.json 为 ${found}，引擎只认 v${CURRENT_SCHEMA_VERSION}`
-    + `（宣告式断裂：#284 存储塌缩，图谱改为一课程一文件 data/图.yaml，零迁移脚本）。\n`
+    + `（宣告式断裂：存储塌缩，图谱改为一课程一文件 data/图.yaml，零迁移脚本）。\n`
     + `  旧课程库不再支持、由用户自删：删除旧课程目录（或整个学习中心数据目录）后重建；`
     + `跨断裂存活的档案（概念登记表等）随重建课程重新落盘。`)
 }

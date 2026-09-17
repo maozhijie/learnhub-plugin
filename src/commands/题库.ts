@@ -9,7 +9,7 @@ import { command } from './types.ts'
 export const 题库域 = {
   'bank-cleanup': command({
     id: "bank-cleanup",
-    summary: "One-click question-bank housekeeping (ADR-0032, archive-only — never deletes). Preview (default): per node, every non-archived question of skipped nodes plus every dormant question (in bank, never scheduled) of completed review/mastered nodes, grouped with counts and stem excerpts. With apply=true: archives exactly those candidates with reason=cleanup — reversible from the bank panel (restore filter). Always run the preview first and tell the learner what will be archived before applying.",
+    summary: "One-click question-bank housekeeping (archive-only — never deletes). Preview (default): per node, every non-archived question of skipped nodes plus every dormant question (in bank, never scheduled) of completed review/mastered nodes, grouped with counts and stem excerpts. With apply=true: archives exactly those candidates with reason=cleanup — reversible from the bank panel (restore filter). Always run the preview first and tell the learner what will be archived before applying.",
     args: {
       course: { type: "string", description: "Course name; omit to scan all enabled courses" },
       apply: { type: "boolean", description: "omit/false = read-only preview; true = archive the candidates (reason=cleanup)" }
@@ -42,7 +42,7 @@ export const 题库域 = {
   }),
   'difficulty-advice': command({
     id: "difficulty-advice",
-    summary: "Detect difficulty-mismatch advice across question banks (B2, read-only, advice-first — nothing is written): nodes in review/mastered with low derived mastery + struggling answer accuracy + enough answer volume get a \"difficulty band miscalibrated, regenerate\" suggestion carrying a difficulty/bloom target-band instruction (feed it to learnhub_question_generate or the section-rewrite flow, validateBank gate applies); individual questions whose scheduling evidence says \"too easy\" (enough FSRS advances with zero lapses and an interval grown past the threshold — same-day repeats never count) get a \"too easy, archivable\" annotation (archiving is the author/panel decision via learnhub_question_update archived patch — never silent removal). Responses already dismissed by the learner are filtered out (dismissed count returned). Low data stays silent.",
+    summary: "Detect difficulty-mismatch advice across question banks (read-only, advice-first — nothing is written): nodes in review/mastered with low derived mastery + struggling answer accuracy + enough answer volume get a \"difficulty band miscalibrated, regenerate\" suggestion carrying a difficulty/bloom target-band instruction (feed it to learnhub_question_generate or the section-rewrite flow, validateBank gate applies); individual questions whose scheduling evidence says \"too easy\" (enough FSRS advances with zero lapses and an interval grown past the threshold — same-day repeats never count) get a \"too easy, archivable\" annotation (archiving is the author/panel decision via learnhub_question_update archived patch — never silent removal). Responses already dismissed by the learner are filtered out (dismissed count returned). Low data stays silent.",
     args: {
       course: { type: "string", description: "Course name; omit to scan all enabled courses", read: "query" }
     },
@@ -120,7 +120,7 @@ export const 题库域 = {
   }),
   'question-audit': command({
     id: "question-audit",
-    summary: "Read-only content audit of all question banks (course banks + note-source mirror). Flags legacy questions that violate current contracts: fill_in_blank answers that look numeric or algebraic (ADR-0029 unique-answer blanks), notation violations in stem/options/explanation (bare ^ or _ outside $...$, LaTeX commands without $ delimiters), YAML double-quote escape corruption (control characters), and over-long explanations. Returns a JSON findings list; never repairs or writes.",
+    summary: "Read-only content audit of all question banks (course banks + note-source mirror). Flags legacy questions that violate current contracts: fill_in_blank answers that look numeric or algebraic (blanks must have a unique answer), notation violations in stem/options/explanation (bare ^ or _ outside $...$, LaTeX commands without $ delimiters), YAML double-quote escape corruption (control characters), and over-long explanations. Returns a JSON findings list; never repairs or writes.",
     args: {},
     engine: "questionAudit",
     domain: "题库",
@@ -200,7 +200,7 @@ export const 题库域 = {
   }),
   'question-generate': command({
     id: "question-generate",
-    summary: "Generate quiz questions for a node via the model — queued as a quiz job on the global serial generation queue (mutually exclusive with the node content pipeline, so bank writes never interleave) and this call WAITS for the job to finish, then returns the result: node body → question prompt → llm → validateBank gate appends every question to the bank. The prompt lists the node's existing question stems and the engine drops generated questions that duplicate or closely resemble them (reported as duplicates). Birth tagging (#148): when the course concept registry scope (node teaches ∪ prereq-closure teaches) is non-empty every question must carry exactly ONE invokes concept — a missing tag gets one repair pass, still-empty questions are rejected and reported; the result's `enc` field carries the invokes-coverage projection (birth weights over prereq nodes, share of questions invoking each) — carry those into the next growth batch via set_enc whole-replace. Use when a node has no/too few questions. Progress is visible in the gen-jobs registry / panel generate tab while it waits.",
+    summary: "Generate quiz questions for a node via the model — queued as a quiz job on the global serial generation queue (mutually exclusive with the node content pipeline, so bank writes never interleave) and this call WAITS for the job to finish, then returns the result: node body → question prompt → llm → validateBank gate appends every question to the bank. The prompt lists the node's existing question stems and the engine drops generated questions that duplicate or closely resemble them (reported as duplicates). Birth tagging: when the course concept registry scope (node teaches ∪ prereq-closure teaches) is non-empty every question must carry exactly ONE invokes concept — a missing tag gets one repair pass, still-empty questions are rejected and reported; the result's `enc` field carries the invokes-coverage projection (birth weights over prereq nodes, share of questions invoking each) — carry those into the next growth batch via set_enc whole-replace. Use when a node has no/too few questions. Progress is visible in the gen-jobs registry / panel generate tab while it waits.",
     args: {
       course: { type: "string", description: "Course name", required: true },
       node: { type: "string", description: "Node name (must have generated content)", required: true },

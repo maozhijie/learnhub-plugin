@@ -221,7 +221,7 @@ test('门面落点裁决（ADR-0076）：未指定/未注册课程即拒并指�
     // 反一：未指定 course——反编译不再自带建课能力（旧「省略 course 自动建课」即拒）
     await assert.rejects(
       engine.project.projectDecompile('练琴计划', {}, llm),
-      /未指定目标课程——反编译不再自带建课能力（ADR-0076）：先建课（名称即空图），再显式 course 参数指向它/,
+      /未指定目标课程——反编译不再自带建课能力：先建课（名称即空图），再显式 course 参数指向它/,
     )
     // 反二：course 未注册——注册表没有「吉他」
     await assert.rejects(

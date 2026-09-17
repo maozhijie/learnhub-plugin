@@ -194,7 +194,7 @@ export function poolMirrorBody(input: {
     '- 引擎侧：learnhub_note_source_list 看实时状态；learnhub_note_source_generate 重出题。',
     '',
     '> 本文件由 learnhub 维护（学习中心/笔记源/ 镜像区），手编会在下次出题时被覆盖；',
-    '> 你的笔记本体零写入（ADR-0010）。',
+    '> 你的笔记本体零写入。',
     '',
   ]
   return lines.join('\n')

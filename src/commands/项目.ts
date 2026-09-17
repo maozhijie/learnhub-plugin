@@ -9,7 +9,7 @@ import { command } from './types.ts'
 export const 项目域 = {
   'project-apply': command({
     id: "project-apply",
-    summary: "Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted — a revision diff (milestone identity keyed by id) is returned and switch-line/branch-in growth batches are ENQUEUED for the anchored courses (#149); project_milestone = overwrite the milestone artifact with the old text snapshotted). Decompile-linked plan proposals are plan-only (ADR-0076: the seed half is retired). Graph proposals (edit/enrich) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.",
+    summary: "Apply a pending PROJECT proposal by id (kind read from the record: project_plan = write the revised milestone plan into 项目.md with the old plan snapshotted — a revision diff (milestone identity keyed by id) is returned and switch-line/branch-in growth batches are ENQUEUED for the anchored courses; project_milestone = overwrite the milestone artifact with the old text snapshotted). Decompile-linked plan proposals are plan-only. Graph proposals (edit/enrich) go through learnhub_graph_apply instead. Nothing applies without this explicit step — review pending proposals with the learner first.",
     args: {
       id: { type: "number", description: "Pending proposal id", required: true }
     },
@@ -25,7 +25,7 @@ export const 项目域 = {
   }),
   'project-create': command({
     id: "project-create",
-    summary: "Create a project (P-area first-class entity, Course's SISTER not a node): a real-world practice the learner is actually doing, measured in weeks/months. Writes 学习中心/projects/<id>/项目.md (frontmatter: lifecycle=active, fading tier 骨架/补全/独立 default 补全, goal prose, empty plan). Projects carry ZERO XP, ZERO FSRS, never enter sessions/srs/review queue — node consumers are untouched. After creating, draft the milestone plan with learnhub_project_plan_generate.",
+    summary: "Create a project (a course's sister, not a node): a real-world practice the learner is actually doing, measured in weeks/months. Writes 学习中心/projects/<id>/项目.md (frontmatter: lifecycle=active, fading tier 骨架/补全/独立 default 补全, goal prose, empty plan). Projects carry ZERO XP, ZERO FSRS, never enter sessions/srs/review queue — node consumers are untouched. After creating, draft the milestone plan with learnhub_project_plan_generate.",
     args: {
       name: { type: "string", description: "Project name (also becomes the workspace id)", required: true },
       goal: { type: "string", description: "Learner's goal description prose (plan drafting input)", required: true },
@@ -44,7 +44,7 @@ export const 项目域 = {
   }),
   'project-cross-view': command({
     id: "project-cross-view",
-    summary: "Read a project's 2×2 MASTERY CROSS diagnostic (P-7, the project panel's core view): X = declarative mastery (mean masteryOfFm over the plan's linked nodes), Y = project execution evidence (EMA 0.7/0.3 of event scores; both axes threshold 0.6, missing evidence counts as low). Quadrants: 会而不会用 (high mastery × low execution — apply it), 会用而不牢 (low × high — shore up the knowledge base), 健康 (high × high), 补底 (low × low). Also returns the READ-ONLY fading-tier recommendation (challenge point): promotion criteria = performance within the current tier (≥3 events averaging ≥0.8) AND the linked-node mastery holding — the engine only proposes, the learner changes tier explicitly via learnhub_project_tier, and the recommendation NEVER gates milestones or anything else.",
+    summary: "Read a project's 2×2 MASTERY CROSS diagnostic (the project panel's core view): X = declarative mastery (mean derived mastery over the plan's linked nodes), Y = project execution evidence (EMA 0.7/0.3 of event scores; both axes threshold 0.6, missing evidence counts as low). Quadrants: 会而不会用 (high mastery × low execution — apply it), 会用而不牢 (low × high — shore up the knowledge base), 健康 (high × high), 补底 (low × low). Also returns the READ-ONLY fading-tier recommendation (challenge point): promotion criteria = performance within the current tier (≥3 events averaging ≥0.8) AND the linked-node mastery holding — the engine only proposes, the learner changes tier explicitly via learnhub_project_tier, and the recommendation NEVER gates milestones or anything else.",
     args: {
       id: {
         type: "string",
@@ -72,11 +72,11 @@ export const 项目域 = {
   }),
   'project-decompile': command({
     id: "project-decompile",
-    summary: "GOAL DECOMPILATION (#149; ADR-0076 seed half retired): one model call produces a milestone plan draft (project_plan) from the goal description + registered notes. The plan's node references must resolve to existing graph nodes of the target course (a name-reconciliation gate rejects dangling references); with an explicit course param the course must already exist. New knowledge needs are grown later by the coach, driven by plan-revision diffs (a plan-only run — no seed half). Vault priors are mined read-only; nothing canonical is written before apply.",
+    summary: "GOAL DECOMPILATION (plan-only): one model call produces a milestone plan draft (project_plan) from the goal description + registered notes. The plan's node references must resolve to existing graph nodes of the target course (a name-reconciliation gate rejects dangling references); with an explicit course param the course must already exist. New knowledge needs are grown later by the coach, driven by plan-revision diffs (a plan-only run — no seed half). Vault priors are mined read-only; nothing canonical is written before apply.",
     args: {
       id: { type: "string", description: "Project id (the plan-draft proposal targets it)", required: true },
       goal: { type: "string", description: "Goal description prose; defaults to the project's goal field (empty goal is rejected)" },
-      course: { type: "string", description: "Target course (required): plan-only run — nodes must reference existing graph nodes (ADR-0076: decompilation no longer creates courses; create the course first)" },
+      course: { type: "string", description: "Target course (required): plan-only run — nodes must reference existing graph nodes (decompilation never creates courses; create the course first)" },
       notes: {
         type: "array",
         description: "Registered note-source ids or vault-relative paths to mine for prior context; omit → all registered sources",
@@ -97,7 +97,7 @@ export const 项目域 = {
   }),
   'project-enc-candidates': command({
     id: "project-enc-candidates",
-    summary: "Mine BEHAVIORALLY-INFERRED enc candidate edges (P-6): scan the learner's real card flips/answer activity on the project's linked course nodes inside a window (default the 14 days before the named milestone's pass, else before now); node pairs co-active on ≥ min_co days (default 2) become enc candidates with confidence-weighted edges (≥3 days 1.0 / 2 days 0.8 / 1 day 0.6; direction from the pre-closure when the graph knows it, first-activity heuristic otherwise). Files ONE pending edit proposal per course (set_enc whole-replace ops, declared edges preserved — zero schema break; single-proposal human review like enc_backfill); the panel/learnhub_graph_apply decides. Cross-course pairs are dropped, already-declared edges are skipped. This is how the all-zero enc graph starts growing from doing, not declaring.",
+    summary: "Mine BEHAVIORALLY-INFERRED enc candidate edges: scan the learner's real card flips/answer activity on the project's linked course nodes inside a window (default the 14 days before the named milestone's pass, else before now); node pairs co-active on ≥ min_co days (default 2) become enc candidates with confidence-weighted edges (≥3 days 1.0 / 2 days 0.8 / 1 day 0.6; direction from the pre-closure when the graph knows it, first-activity heuristic otherwise). Files ONE pending edit proposal per course (set_enc whole-replace ops, declared edges preserved — zero schema break; single-proposal human review like enc_backfill); the panel/learnhub_graph_apply decides. Cross-course pairs are dropped, already-declared edges are skipped. This is how the all-zero enc graph starts growing from doing, not declaring.",
     args: {
       id: { type: "string", description: "Project id", required: true },
       milestone: { type: "string", description: "Milestone id anchoring the window end at its pass time (must have a pass record); omit to anchor at now" },
@@ -117,7 +117,7 @@ export const 项目域 = {
   }),
   'project-exec-log': command({
     id: "project-exec-log",
-    summary: "Log ONE PROJECT execution event (P-7): a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted, ADR-0016). The event lands in the project's OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. Exercised linked nodes get practice evidence backflow ONE-WAY into each node's practice channel (existing applyPracticeEvidence EMA, node-level dedup — stub nodes participate exactly like taught ones); the count of exercised existing enc edges is reported for observability but coarse placeholder pre edges are NOT backflow channels. Zero XP, zero journal, zero FSRS/scheduling writes.",
+    summary: "Log ONE PROJECT execution event: a real work session on the project with a performance rating (1-4 integer; 4 = strong, 1 = poor) and an honest source (auto REQUIRES observable evidence mapped deterministically; self/ai take the explicit rating — self-report is trusted). The event lands in the project's OWN stream (projects/<id>/exec.jsonl) feeding the fading-tier recommendation and the 2×2 diagnostic. Exercised linked nodes get practice evidence backflow ONE-WAY into each node's practice channel (existing applyPracticeEvidence EMA, node-level dedup — stub nodes participate exactly like taught ones); the count of exercised existing enc edges is reported for observability but coarse placeholder pre edges are NOT backflow channels. Zero XP, zero journal, zero FSRS/scheduling writes.",
     args: {
       id: { type: "string", description: "Project id", required: true },
       source: { type: "string", description: "auto (requires evidence) / self / ai", required: true },
@@ -143,7 +143,7 @@ export const 项目域 = {
   }),
   'project-lifecycle': command({
     id: "project-lifecycle",
-    summary: "Set a project's lifecycle: active/paused/delivered/archived. No irreversible transitions (ADR-0015) — delivered/archived projects can reopen to active; a no-deadline project may legally stay active forever. Pure status change: no XP settle, no scheduling effect.",
+    summary: "Set a project's lifecycle: active/paused/delivered/archived. No irreversible transitions — delivered/archived projects can reopen to active; a no-deadline project may legally stay active forever. Pure status change: no XP settle, no scheduling effect.",
     args: {
       id: { type: "string", description: "Project id", required: true },
       lifecycle: { type: "string", description: "active/paused/delivered/archived", required: true }
@@ -187,7 +187,7 @@ export const 项目域 = {
   }),
   'project-log': command({
     id: "project-log",
-    summary: "Read a project's log (V-5): the learner's free-form working journal at 学习中心/projects/<id>/日志.md — dated entries of what they did, where they got stuck, what they learned. Null when never written (legal empty state, no file is created by reading). The log may be REGISTERED as a Note Source (learnhub_note_source_register with the log path) so its content becomes reviewable — the engine only ever reads it.",
+    summary: "Read a project's log: the learner's free-form working journal at 学习中心/projects/<id>/日志.md — dated entries of what they did, where they got stuck, what they learned. Null when never written (legal empty state, no file is created by reading). The log may be REGISTERED as a Note Source (learnhub_note_source_register with the log path) so its content becomes reviewable — the engine only ever reads it.",
     args: {
       id: {
         type: "string",
@@ -215,7 +215,7 @@ export const 项目域 = {
   }),
   'project-log-append': command({
     id: "project-log-append",
-    summary: "Append one dated entry to a project's log (V-5): the learner's own record of real project work — progress, blockers, decisions, learnings. Entries are learner-authored prose; engine bookkeeping (plan revisions, receipts mirror, exec events) lives in its own files and never pollutes the log. The engine refreshes the registered fingerprint after writing (its own writes are not content drift).",
+    summary: "Append one dated entry to a project's log: the learner's own record of real project work — progress, blockers, decisions, learnings. Entries are learner-authored prose; engine bookkeeping (plan revisions, receipts mirror, exec events) lives in its own files and never pollutes the log. The engine refreshes the registered fingerprint after writing (its own writes are not content drift).",
     args: {
       id: { type: "string", description: "Project id", required: true },
       text: { type: "string", description: "Entry body (non-empty prose; multiple paragraphs/lines fine)", required: true }
@@ -262,7 +262,7 @@ export const 项目域 = {
   }),
   'project-milestone-pass': command({
     id: "project-milestone-pass",
-    summary: "Record the learner's EXPLICIT milestone pass (P-4 settlement): the learner declares a milestone checkpoint reached — no checklist gate and no question gate (Kulik 1990: strict gates hurt completion). One journal settlement row lands (kind=milestone_settle, aligned with the node xp_settle precedent): XP price = the plan's est declaration × FSRS difficulty calibration over the DECLARED linked nodes' question pools (defaults when undeclared; the calibration basis is locked to the plan — it cannot be extended at pass time), locked once — a second pass of the same milestone id is rejected, so revising a plan must use fresh milestone ids. This is the ONLY journal write the project domain ever makes; it counts toward the ledger and streak like real focused work does.",
+    summary: "Record the learner's EXPLICIT milestone pass: the learner declares a milestone checkpoint reached — no checklist gate and no question gate (strict gates hurt completion). One journal settlement row lands (kind=milestone_settle): XP price = the plan's est declaration × FSRS difficulty calibration over the DECLARED linked nodes' question pools (defaults when undeclared; the calibration basis is locked to the plan — it cannot be extended at pass time), locked once — a second pass of the same milestone id is rejected, so revising a plan must use fresh milestone ids. This is the ONLY journal write the project domain ever makes; it counts toward the ledger and streak like real focused work does.",
     args: {
       id: { type: "string", description: "Project id", required: true },
       milestone: { type: "string", description: "Milestone id from the plan", required: true }
@@ -280,7 +280,7 @@ export const 项目域 = {
   }),
   'project-milestone-recall': command({
     id: "project-milestone-recall",
-    summary: "Start a MILESTONE RECALL session (P-3): draw a few questions from the linked course nodes' question banks so the knowledge base stays connected to the real project — retrieval points serve the knowledge base only, they are NOT project acceptance criteria (the gate is only that the milestone artifact exists). Zero XP, zero FSRS, zero scheduling writes: the drawn questions are archived to projects/<id>/recall.jsonl and returned WITH answers for you to run verbally — ask, hear the learner out, compare; never call learnhub_question_answer for these. Then archive the learner's spoken key-decision narration with learnhub_project_recall_reflect.",
+    summary: "Start a MILESTONE RECALL session: draw a few questions from the linked course nodes' question banks so the knowledge base stays connected to the real project — retrieval points serve the knowledge base only, they are NOT project acceptance criteria (the gate is only that the milestone artifact exists). Zero XP, zero FSRS, zero scheduling writes: the drawn questions are archived to projects/<id>/recall.jsonl and returned WITH answers for you to run verbally — ask, hear the learner out, compare; never call learnhub_question_answer for these. Then archive the learner's spoken key-decision narration with learnhub_project_recall_reflect.",
     args: {
       id: { type: "string", description: "Project id", required: true },
       milestone: { type: "string", description: "Milestone id from the plan (artifact must be generated)", required: true },
@@ -321,7 +321,7 @@ export const 项目域 = {
   }),
   'project-recall-log': command({
     id: "project-recall-log",
-    summary: "Read a project's recall-session ledger (P-3): the draw records (which questions were drawn at which milestone) and reflect records (key-decision narrations). Read-only.",
+    summary: "Read a project's recall-session ledger: the draw records (which questions were drawn at which milestone) and reflect records (key-decision narrations). Read-only.",
     args: {
       id: { type: "string", description: "Project id", required: true }
     },
@@ -338,7 +338,7 @@ export const 项目域 = {
   }),
   'project-recall-reflect': command({
     id: "project-recall-reflect",
-    summary: "Archive the learner's key-decision narration from a milestone recall session (P-3): their spoken「到目前为止的关键决策」goes verbatim into projects/<id>/recall.jsonl for later retrospection. No verdict, no scoring, no canonical writes — the narration is for looking back on, not for feeding the scheduler.",
+    summary: "Archive the learner's key-decision narration from a milestone recall session: their spoken「到目前为止的关键决策」goes verbatim into projects/<id>/recall.jsonl for later retrospection. No verdict, no scoring, no canonical writes — the narration is for looking back on, not for feeding the scheduler.",
     args: {
       id: { type: "string", description: "Project id", required: true },
       milestone: { type: "string", description: "Milestone id", required: true },
@@ -374,7 +374,7 @@ export const 项目域 = {
   }),
   'project-tier': command({
     id: "project-tier",
-    summary: "Set a project's fading tier (骨架/补全/独立): how much support NEW milestone artifacts get (near-complete demonstration → partial product with gaps → situation only). Already-generated artifacts keep their tier (no retroactive rewrite — regenerating them at the new tier goes through the proposal channel). Tier movement criteria (performance within tier) belong to the execution-event stream; v1 sets it explicitly with the learner.",
+    summary: "Set a project's fading tier (骨架/补全/独立): how much support NEW milestone artifacts get (near-complete demonstration → partial product with gaps → situation only). Already-generated artifacts keep their tier (no retroactive rewrite — regenerating them at the new tier goes through the proposal channel). Tier movement criteria (performance within tier) belong to the execution-event stream; set it explicitly with the learner.",
     args: {
       id: { type: "string", description: "Project id", required: true },
       tier: { type: "string", description: "骨架/补全/独立", required: true }

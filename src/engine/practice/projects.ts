@@ -1062,14 +1062,14 @@ export class ProjectSubsystem {
         const w = coWeight(pair.co)
         fields.push({
           node: dir.holder,
-          enc: [...existing, { node: dir.skill, w, note: `行为推断（P-6 #96）：${days} 天窗口内共现 ${pair.co} 天（pre 闭包方向）` }],
+          enc: [...existing, { node: dir.skill, w, note: `行为推断：${days} 天窗口内共现 ${pair.co} 天（pre 闭包方向）` }],
         })
         candidates.push({ course: courseName, holder: dir.holder, skill: dir.skill, co: pair.co, w })
       }
       if (!fields.length) continue
       const yamlText = YAML.stringify({
         course: courseName,
-        reason: `行为推断 enc 边（覆盖层通道，P-6 #96）：项目「${fm.name}」${days} 天窗口内翻卡/回看共现 ≥${minCo} 天的关联节点对`,
+        reason: `行为推断 enc 边（覆盖层通道）：项目「${fm.name}」${days} 天窗口内翻卡/回看共现 ≥${minCo} 天的关联节点对`,
         fields,
       })
       const prop = await this.e.graphPropose('enrich', yamlText)
@@ -1128,7 +1128,7 @@ export class ProjectSubsystem {
     // 不再自带建课能力（先建课再反编译）；取其既有节点名（对账取值域）
     const explicitCourse = opts.course?.trim()
     if (!explicitCourse) {
-      throw new Error(`[project-decompile] 未指定目标课程——反编译不再自带建课能力（ADR-0076）：先建课（名称即空图），再显式 course 参数指向它。`)
+      throw new Error(`[project-decompile] 未指定目标课程——反编译不再自带建课能力：先建课（名称即空图），再显式 course 参数指向它。`)
     }
     const target = await this.e.registry.get(explicitCourse)
     if (!target) throw new Error(`[project-decompile] 注册表中没有课程「${explicitCourse}」——先建课（名称即空图）再反编译。`)

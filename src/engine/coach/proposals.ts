@@ -227,7 +227,7 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
   // #316 / ADR-0099：route 已退役——写权归罗盘站（learnhub_compass_paint），提案携带
   // 一律拒收；专用文案点名退役，避免落进泛「未知字段」清单里看不出根因。
   if (d[RETIRED_TOP_ROUTE] !== undefined) {
-    errors.push(`route: 已退役（#316 / ADR-0099）——罗盘「剩余路线」写权归罗盘站（learnhub_compass_paint），教练对弧只有建议权（理由写进 note.reason）。`)
+    errors.push(`route: 已退役——罗盘「剩余路线」写权归罗盘站（learnhub_compass_paint），教练对弧只有建议权（理由写进 note.reason）。`)
   }
   const ops: EditOp[] = []
   if (d.ops === undefined && note) {
@@ -246,14 +246,14 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       }
       const op = o.op
       if (typeof op !== 'string' || !(EDIT_OPS as readonly string[]).includes(op)) {
-        errors.push(`${where}.op: 非法操作 ${String(op)}（允许 ${EDIT_OPS.join('/')}）${op === 'move' ? '——move 已随 Region/Block 退役（#275）：分组改为读侧派生，写侧不再有换分区操作' : ''}`)
+        errors.push(`${where}.op: 非法操作 ${String(op)}（允许 ${EDIT_OPS.join('/')}）${op === 'move' ? '——move 已随 Region/Block 退役：分组改为读侧派生，写侧不再有换分区操作' : ''}`)
         return
       }
       // 退役键（#127 边轻纪律 + #275 结构坐标）：静默丢弃会丢语义，fail loud。按键族分段给出可执行指引。
       const retired = Object.keys(o).filter(k => (RETIRED_OP_KEYS as readonly string[]).includes(k))
       const coords = retired.filter(k => k === 'region' || k === 'block')
       const edges = retired.filter(k => k !== 'region' && k !== 'block')
-      if (coords.length) errors.push(`${where}: 不接受坐标键 ${JSON.stringify(coords)}（随 Region/Block 退役 #275）——add_node 只需 name + pre，删掉这两个键即可落图（分布由读侧派生）`)
+      if (coords.length) errors.push(`${where}: 不接受坐标键 ${JSON.stringify(coords)}（随 Region/Block 退役 ）——add_node 只需 name + pre，删掉这两个键即可落图（分布由读侧派生）`)
       if (edges.length) errors.push(`${where}: 不接受这些字段 ${JSON.stringify(edges)}（origin 从提案 journal 派生、复诊状态落 state/边实验.jsonl——图与提案节点零边字段）`)
       // 未知键白名单（#313 A4）：与图 YAML / 误解条目同款 fail loud——键名写错（pres/blooom/
       // est_minutes…）此前无声蒸发，门零错误、回执全绿，模型以为写了就生效。
@@ -576,7 +576,7 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
   if (errors.length) return errors
   const gateBlocks = ctx.growthGate ? await ctx.growthGate(spec) : []
   // 闸门横幅随错误行返回（原 propose/apply 两侧的包装文案，门同调后单源在此）
-  if (gateBlocks.length) return ['生长闸门拒绝受理（插入积极性调速，#146）', ...gateBlocks]
+  if (gateBlocks.length) return ['生长闸门拒绝受理（插入积极性调速，）', ...gateBlocks]
   const auditBlocks = ctx.auditGate ? await ctx.auditGate() : []
   return auditBlocks.length
     ? ['审计门拒绝受理（与 apply 同一判据：课程存在 ERROR 时任何提案都不落盘），明细：', ...auditBlocks]
@@ -1486,7 +1486,7 @@ export class GraphProposals {
       throw new Error(`[concept-confusable-propose] 候选（「${pair.a}」↔「${pair.b}」）有名字不在登记表在册——候选只从在册概念派生。`)
     }
     if (isDeprecated(ea) || isDeprecated(eb)) {
-      throw new Error(`[concept-confusable-propose] 候选（「${ea.canonical}」↔「${eb.canonical}」）含废弃条目——废弃条目退出候选面（ADR-0084 ②）。`)
+      throw new Error(`[concept-confusable-propose] 候选（「${ea.canonical}」↔「${eb.canonical}」）含废弃条目——废弃条目退出候选面。`)
     }
     if (ea.canonical === eb.canonical) {
       throw new Error(`[concept-confusable-propose] 候选两端是同一个条目「${ea.canonical}」——易混对需要两个不同条目。`)
@@ -1545,7 +1545,7 @@ export class GraphProposals {
     await this.store.appendJournal({
       course: course.name, node: '*', rating: null, kind: 'concept_confusable', elapsed_days: 0,
       session: String(prop.id),
-      detail: `易混对入册「${r.a}」→「${r.b}」${r.changed ? '' : '（已声明，幂等）'}（候选提案 #${prop.id} 人确认；单向是待复核态，ADR-0084 ③）`,
+      detail: `易混对入册「${r.a}」→「${r.b}」${r.changed ? '' : '（已声明，幂等）'}（候选提案 #${prop.id} 人确认；单向是待复核态）`,
     })
     await this.store.updateProposal(prop.id, {
       status: 'applied', decided: new Date(this.clock.nowMs()).toISOString(),

@@ -312,7 +312,7 @@ export function assembleKataDoc(input: {
   return [
     `# 周复盘 ${input.weekStart} ~ ${input.weekEnd}`,
     '',
-    '> 五问复盘（ADR-0026）：「现状」由引擎用上一学习周的真实数据自动填，其余四问你来答。',
+    '> 五问复盘：「现状」由引擎用上一学习周的真实数据自动填，其余四问你来答。',
     '> Learner Output 域：零 XP、不进掌握度、不做 FSRS 卡；缺勤不罚。',
     '> 可经笔记源注册通道把本页注册为复习对象（引擎不强推）。',
     '',

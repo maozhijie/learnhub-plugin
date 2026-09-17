@@ -1588,7 +1588,7 @@ export class BankSubsystem {
     return {
       removed: c.name, trash,
       // 删除波及面单独确认项（#139）：卡级实例记忆随课进 .trash，沉淀层模型状态保留
-      sediment: '沉淀层不受影响：泛用模型状态跨课程删除存活（先验连续，ADR-0034）',
+      sediment: '沉淀层不受影响：泛用模型状态跨课程删除存活（先验连续）',
     }
   }
 

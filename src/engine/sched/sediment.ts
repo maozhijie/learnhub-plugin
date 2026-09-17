@@ -214,7 +214,7 @@ export function renderLearnerProfile(fold: SedimentFold, nowMs: number): string 
     '',
     '# 学习者档案',
     '',
-    '学习模型状态的沉淀层投影（ADR-0034）：内容层可以断裂、重生成、硬删除，这里的模型脾气不丢。',
+    '学习模型状态的沉淀层投影：内容层可以断裂、重生成、硬删除，这里的模型脾气不丢。',
     '每次结算重建；`legacy/` 分区只保留不消费。',
     '',
     (SEDIMENT_KINDS as readonly SedimentKind[]).map(k => section(k, fold)).join('\n'),

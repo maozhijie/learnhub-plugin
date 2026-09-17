@@ -690,7 +690,7 @@ export interface ConceptMergeProposalSpec {
 }
 
 /** 合并不可逆声明（提案产物面与 apply 复核共用的同一句）。 */
-export const CONCEPT_MERGE_IRREVERSIBLE = '合并不可逆：from 整条并入 into（canonical 降级为别名、名字并集），登记表不提供拆分——旧地址经别名续解析，条目禁删只并入（ADR-0084 ②）。'
+export const CONCEPT_MERGE_IRREVERSIBLE = '合并不可逆：from 整条并入 into（canonical 降级为别名、名字并集），登记表不提供拆分——旧地址经别名续解析，条目禁删只并入。'
 
 const MERGE_KEYS = new Set(['course', 'from', 'into', 'reason', 'irreversible', 'irreversible_note'])
 

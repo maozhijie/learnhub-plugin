@@ -32,8 +32,8 @@ const RETIRED_EDGE_KEYS: Record<string, string> = {
 /** 防复活门（#281 / Epic #275）：节点条目上的结构坐标键 fail loud 拒收——分组是读侧
  * 派生（depth/概念/终点），不落盘；Region/Block 不借尸还魂（照 origin/status 先例）。 */
 const RETIRED_NODE_KEYS: Record<string, string> = {
-  region: 'Region/Block 已退役（#275/#281）：节点不接受 region 键——分组由读侧按轴派生，零落盘',
-  block: 'Region/Block 已退役（#275/#281）：节点不接受 block 键——分组由读侧按轴派生，零落盘',
+  region: 'Region/Block 已退役：节点不接受 region 键——分组由读侧按轴派生，零落盘',
+  block: 'Region/Block 已退役：节点不接受 block 键——分组由读侧按轴派生，零落盘',
 }
 
 export class SchemaError extends Error {}
@@ -187,9 +187,9 @@ export function parseNode(raw: unknown, path: string, where: string, warns?: str
 /** 防复活门（ADR-0090 裁决 1）：文档顶层的历史结构键 fail loud 拒收——旧 v3 分区文件
  * 不得静默忽略顶层键过关（节点级的见 RETIRED_NODE_KEYS）。 */
 const RETIRED_DOC_KEYS: Record<string, string> = {
-  regions: 'Region/Block 已退役（#275/#284）：图是一课程一文件 data/图.yaml（扁平 nodes[]），顶层不接受 regions——旧 v3 分区文件请删除重建',
-  blocks: 'Region/Block 已退役（#275/#284）：图是一课程一文件 data/图.yaml（扁平 nodes[]），顶层不接受 blocks——旧 v3 分区文件请删除重建',
-  color: 'Region/Block 已退役（#275/#284）：region 着色随分区退役，顶层不接受 color——旧 v3 分区文件请删除重建',
+  regions: 'Region/Block 已退役：图是一课程一文件 data/图.yaml（扁平 nodes[]），顶层不接受 regions——旧 v3 分区文件请删除重建',
+  blocks: 'Region/Block 已退役：图是一课程一文件 data/图.yaml（扁平 nodes[]），顶层不接受 blocks——旧 v3 分区文件请删除重建',
+  color: 'Region/Block 已退役：region 着色随分区退役，顶层不接受 color——旧 v3 分区文件请删除重建',
 }
 
 /** 解析单文件图 YAML（data/图.yaml，#284 存储塌缩：一课程一文件）为节点列表。 */

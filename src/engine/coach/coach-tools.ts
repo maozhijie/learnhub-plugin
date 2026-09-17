@@ -235,7 +235,7 @@ export function renderNodeCard(
   return [
     `## 节点卡：${node}${isEndpoint ? ' ⚑ 终点（方向标记）' : ''}`, '',
     `- 深度：${graph.depth[node] ?? 0}（读侧派生，地基在 0）`,
-    `- 阶段：${activeLabel(state, node)}${isEndpoint ? '（终点——零正文零题库不被学习调度，ADR-0056）' : graph.typeOf[node] === 'practice' ? '（交互实践节点）' : ''}${graph.estOf[node] ? `｜est ${graph.estOf[node]}′` : ''}`,
+    `- 阶段：${activeLabel(state, node)}${isEndpoint ? '（终点——零正文零题库不被学习调度）' : graph.typeOf[node] === 'practice' ? '（交互实践节点）' : ''}${graph.estOf[node] ? `｜est ${graph.estOf[node]}′` : ''}`,
     `- pre：${pres.length ? pres.join('、') : '（根）'}`,
     `- teaches：${teaches.length ? teaches.map(([c, t]) => `${c} ${t}`).join('、') : '（无）'}`,
     `- assumes：${assumes.length ? assumes.map(([c, t]) => `${c} ${t}`).join('、') : '（无）'}`,

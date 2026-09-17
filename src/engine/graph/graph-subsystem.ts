@@ -252,7 +252,7 @@ export class GraphSubsystem {
         node: dir.holder,
         enc: [...existing, {
           node: dir.skill, w: edge.w,
-          note: `vault 链接先验（#91）：${edge.a.split('/').pop()} ↔ ${edge.b.split('/').pop()}（${edge.count} 次/${edge.files} 源${edge.bidirectional ? '/双向' : ''}）`,
+          note: `vault 链接先验：${edge.a.split('/').pop()} ↔ ${edge.b.split('/').pop()}（${edge.count} 次/${edge.files} 源${edge.bidirectional ? '/双向' : ''}）`,
         }],
       })
       candidates.push({ holder: dir.holder, skill: dir.skill, w: edge.w })
@@ -266,7 +266,7 @@ export class GraphSubsystem {
     }
     const yamlText = YAML.stringify({
       course: c.name,
-      reason: `Vault 链接先验回填（覆盖层通道，V-2 #91）：${fields.length} 个节点的个人笔记关联对成 enc 边（w ≥ 0.7、pre 闭包内）`,
+      reason: `Vault 链接先验回填（覆盖层通道）：${fields.length} 个节点的个人笔记关联对成 enc 边（w ≥ 0.7、pre 闭包内）`,
       fields,
     })
     const prop = await this.graphPropose('enrich', yamlText)
@@ -563,7 +563,7 @@ export class GraphSubsystem {
       // 并入向取字典序在前者（确定性规则；语义上谁并谁入由人审定夺）
       const p = await this.e.proposals.proposeConceptMerge(
         c.name, cand.b, cand.a,
-        `确定性派生（#274）：${cand.evidence.join('；')}`,
+        `确定性派生：${cand.evidence.join('；')}`,
       )
       pendingPairs.add(key) // 同一扫描内不重复登记
       filed.push({ id: p.id, from: p.from, into: p.into, weight: cand.weight })
@@ -645,7 +645,7 @@ export class GraphSubsystem {
     }
     const yamlText = YAML.stringify({
       course: c.name,
-      reason: `enc 反哺回填（覆盖层通道，ADR-0008 / #148 权重=invokes 覆盖率投影）：${fields.length} 个节点按既有 Ready 内容与在库题目补成分技能边`,
+      reason: `enc 反哺回填（覆盖层通道，权重=invokes 覆盖率投影）：${fields.length} 个节点按既有 Ready 内容与在库题目补成分技能边`,
       fields,
     })
     const prop = await this.graphPropose('enrich', yamlText)

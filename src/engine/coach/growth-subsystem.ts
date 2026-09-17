@@ -1029,7 +1029,7 @@ export class GrowthSubsystem {
       { name: 'upstream_dag', description: '上游图摘要：给定节点的前置传递闭包全拓扑 + 闭包内 pre 邻接。接线定位与深链诊断用。', parameters: obj({ node: { type: 'string', description: '节点名（逐字）' } }, ['node']) },
       { name: 'endpoint_anchor', description: '终点锚集合：逐终点的目标类型/声明日/收尾宣告。set_pre 接线的靶在这里对表（终点只可被 set_pre 接线，禁出现在 add_node 的 pre）。', parameters: obj({}) },
       {
-        name: 'draft_patch', description: '批量补丁（写件）：把一组 EditOp 原子操作追加进生长草稿（每批 ≤24 条未发布增量；失败整批回滚并回灌 errors + 合法取值域）。糖算子——insert_prereq_chain：chain 按序展开成线性 add_node 链；split_node：把既有节点拆成 into 多个（轮廓继承 + 消费方 set_pre 重排 + 删原节点；终点不可拆）；suggest_confusable：给随批铸名的新概念顺手登记易混指向（不是图 op；finish 发布成功后展开为混淆对候选提案，人审后才入册）。op 词汇不含 move 与 region/block（已退役 #275）。', parameters: obj({
+        name: 'draft_patch', description: '批量补丁（写件）：把一组 EditOp 原子操作追加进生长草稿（每批 ≤24 条未发布增量；失败整批回滚并回灌 errors + 合法取值域）。糖算子——insert_prereq_chain：chain 按序展开成线性 add_node 链；split_node：把既有节点拆成 into 多个（轮廓继承 + 消费方 set_pre 重排 + 删原节点；终点不可拆）；suggest_confusable：给随批铸名的新概念顺手登记易混指向（不是图 op；finish 发布成功后展开为混淆对候选提案，人审后才入册）。op 词汇不含 move 与 region/block（已退役 ）。', parameters: obj({
           ops: { type: 'array', description: `补丁操作列表。${PATCH_SHAPE_CHEATSHEET}（第一次调用前即可见——形状不合法整批拒收，别拿调用去试。）`, items: { type: 'object', properties: { ...opFields(), chain: { type: 'array', description: 'insert_prereq_chain 的链条目（按序线性串联）' } } } },
           concepts: { type: 'array', description: '随批铸名（本批新引入的概念；已能用就不铸）' },
           note_operator: { type: 'string', description: '本批生长算子（前进/插入/巩固/旁支/换向；下次 finish 硬化为 note）' },
@@ -1902,7 +1902,7 @@ export class GrowthSubsystem {
     ops.push({ op: 'del_node', node })
     const yaml = YAML.stringify({
       course: c.name,
-      reason: `复诊未达标自动剪除（#146）：插入节点「${node}」未过预注册复诊（${metric}：${detail}）——恢复原粗边并归档`,
+      reason: `复诊未达标自动剪除：插入节点「${node}」未过预注册复诊（${metric}：${detail}）——恢复原粗边并归档`,
       ops,
     })
     try {

@@ -49,7 +49,7 @@ export function splitDecompileDoc(
   const d = doc as Record<string, unknown>
   const errors: string[] = []
   if (d.seed !== undefined) {
-    errors.push('seed: 反编译不再自带建课能力（ADR-0076 种子降职）——目标课程必须已注册（先建课再反编译）；计划引用既有图节点名，新知识走计划修订驱动的教练补支')
+    errors.push('seed: 反编译不再自带建课能力——目标课程必须已注册（先建课再反编译）；计划引用既有图节点名，新知识走计划修订驱动的教练补支')
   }
   // 计划半区：#92 的 PlanArtifact 同一门（project 一致 + 条目 schema）
   const pv = validatePlanArtifact({ project: d.project, plan: d.plan }, projectId)

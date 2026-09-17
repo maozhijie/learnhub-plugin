@@ -115,8 +115,8 @@ const EXPRESSION_SIGNS = /[=+*/^\\√]/
 export function blankAnswerViolation(answer: string): string | null {
   const a = answer.trim()
   if (!a) return null
-  if (numericOf(a) !== null) return `填空答案是数值「${a}」——数字答案走 numeric 题型（ADR-0029 唯一答案填空）`
-  if (EXPRESSION_SIGNS.test(a)) return `填空答案「${a}」疑似代数式——表达式答案走 single_choice（ADR-0029 唯一答案填空）`
+  if (numericOf(a) !== null) return `填空答案是数值「${a}」——数字答案走 numeric 题型`
+  if (EXPRESSION_SIGNS.test(a)) return `填空答案「${a}」疑似代数式——表达式答案走 single_choice`
   return null
 }
 

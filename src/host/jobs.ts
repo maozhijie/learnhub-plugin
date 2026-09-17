@@ -310,7 +310,7 @@ function persistGenJobs(rt: HostRuntime): void {
   void rt.engine.saveGenJobs([...rt.jobs.genJobs.values()].map(j => ({ ...j })))
     .catch(err => {
       const msg = err instanceof Error ? err.message : String(err)
-      rt.flags.genQueueBroken = `生成任务档落盘失败（#194 写回闸置 broken）：${msg}`
+      rt.flags.genQueueBroken = `生成任务档落盘失败（写回闸置 broken）：${msg}`
       rt.logger.error('host.gen_jobs.persist_failed', { error: rt.flags.genQueueBroken })
     })
 }
@@ -1337,7 +1337,7 @@ export function restoreGenJobs(rt: HostRuntime): void {
         // 「重启前已落盘的 phase=seed 任务」是与提案 kind=seed 同族的存量兼容面。
         if (restored.status === 'queued' && restored.phase !== undefined && RETIRED_GEN_JOB_PHASES.has(String(restored.phase))) {
           restored.status = 'failed'
-          restored.message = '该任务所属的生成站已退役（#256 种子起草），无法恢复执行——请改走教练生长或手加终点重新下发。'
+          restored.message = '该任务所属的生成站已退役（种子起草），无法恢复执行——请改走教练生长或手加终点重新下发。'
           restored.finishedAt = new Date().toISOString()
         }
         // 负载要求的排队图域任务恢复后缺负载（旧档案/未完整落盘）：明确标失败可重试，

@@ -43,7 +43,7 @@ export function estSpreadNote(g: EstSpreadSource): string | null {
   const p10 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.1))]
   const p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))]
   if (p90 - p10 > 10) return null
-  return `⚠ est 分布压缩（p10-p90 = ${p10}-${p90} 分钟，仅差 ${p90 - p10} 分钟）：est 已成"档位感常数"，对内容规模无区分度——下次图标注让 est 跨更宽取值（见 ADR-0005）`
+  return `⚠ est 分布压缩（p10-p90 = ${p10}-${p90} 分钟，仅差 ${p90 - p10} 分钟）：est 已成"档位感常数"，对内容规模无区分度——下次图标注让 est 跨更宽取值`
 }
 
 /** 图谱健康分：score ∈ [0,100]；breakdown 各项均为 0-20 的原始得分。

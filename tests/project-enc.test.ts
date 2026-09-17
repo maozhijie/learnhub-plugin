@@ -113,7 +113,7 @@ test('行为推断 enc：共现窗口 → 单个 pending enrich 提案 → 人�
     assert.equal(applied.course, '数学')
     assert.equal(applied.fields, 1)
     const dataYaml = readFileSync(join(root, '学习中心', 'math', 'data', '图.yaml'), 'utf8')
-    assert.match(dataYaml, /行为推断（P-6 #96）/)
+    assert.match(dataYaml, /行为推断：/)
     assert.match(dataYaml, /name: 进阶[\s\S]*enc:[\s\S]*node: 入门/)
 
     // 既有声明 enc 保留 + 已声明边不重复提名

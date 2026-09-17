@@ -220,7 +220,7 @@ export class Content {
     out.push('')
     out.push('## 7. 既有 enc 边（练习必须真实调用它们）')
     out.push(enc.length ? enc.map(([t, w]) => `${t}(w=${w.toFixed(1)})`).join('、') : '（暂无）')
-    out.push('- enc = 本课练习真实调用、且位于本节点 pre 闭包内的成分技能（ADR-0008）。')
+    out.push('- enc = 本课练习真实调用、且位于本节点 pre 闭包内的成分技能。')
     out.push('- 练习调用的前置技能请在练习元数据 `uses:` 里如实标注——引擎会把闭包内候选提升为 enc 边，供将来失败回退路由；不存在的候选宁缺毋滥。')
     out.push('')
     if (!opts?.omitDeliverables) {
@@ -230,7 +230,7 @@ export class Content {
         out.push('- 末尾机器块：`<!-- enc_candidates: [] -->`（交互实践不出练习题）')
       } else {
         out.push('- 练习题以题组 YAML 经 learnhub_exercises_gen 写入（不再直接写进正文练习区）；数值题给 tol 容差')
-        out.push('- 题型优先 single_choice / true_false / numeric（可机器判卷）；fill_in_blank 只考唯一写法的术语（数字与代数式不进填空，ADR-0029）；开放性问答题用 reflection 并在 answer 写评分要点')
+        out.push('- 题型优先 single_choice / true_false / numeric（可机器判卷）；fill_in_blank 只考唯一写法的术语（数字与代数式不进填空）；开放性问答题用 reflection 并在 answer 写评分要点')
         out.push('- 末尾机器块：`<!-- enc_candidates: [本课练习真实调用的前置技能（须在本节点 pre 闭包内；落盘后据此提升为 enc 边）] -->`')
       }
     }
@@ -1365,7 +1365,7 @@ export class Content {
       const missing = [...sites.keys()].filter(c =>
         graph.nset.has(c) && c !== node && graph.isAncestor(c, node) && !declaredNames.has(c))
       if (missing.length) {
-        warns.push(`R14 enc 覆盖缺口: ${node}：反哺候选已引用但未落 enc — ${missing.slice(0, 8).join('、')}${missing.length > 8 ? ` 等 ${missing.length} 个` : ''}（set_enc 提升，见 ADR-0008）`)
+        warns.push(`R14 enc 覆盖缺口: ${node}：反哺候选已引用但未落 enc — ${missing.slice(0, 8).join('、')}${missing.length > 8 ? ` 等 ${missing.length} 个` : ''}（set_enc 提升）`)
       }
     }
     // (b) 一致性：候选可空——正文候选被删光时「声明边全不在候选」正是最极端的漂移

@@ -122,7 +122,7 @@ test('#274 conceptMergeCandidates：信号 → 待审合并提案（不可逆声
     assert.ok(v.spec, '候选提案过 schema 门')
     assert.equal(v.spec!.course, '数学')
     assert.equal(artifact.irreversible, true, '不可逆声明随提案面落盘')
-    assert.ok(String(artifact.reason).includes('确定性派生（#274）'))
+    assert.ok(String(artifact.reason).includes('确定性派生'))
     assert.ok(String(artifact.reason).includes('足迹雷同'), '证据逐条可查，人审据此判断')
     // 重跑：已在待审队列的对不再堆
     const r2 = await engine.graph.conceptMergeCandidates('数学')

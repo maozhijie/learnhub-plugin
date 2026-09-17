@@ -306,7 +306,7 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
       const startName = `${course}起点`
       const proposal = await runner.engine.graph.graphPropose('edit', [
         `course: ${course}`,
-        'reason: 冒烟起点（#256 种子退役后结构站改用手写 edit 提案）',
+        'reason: 冒烟起点（种子退役后结构站改用手写 edit 提案）',
         'ops:',
         `  - { op: add_node, name: ${startName}, pre: [] }`,
         `  - { op: set_pre, node: ${endpoint}, pre: [${startName}] }`,

@@ -118,7 +118,7 @@ export const NOF1_TEMPLATES: Nof1Template[] = [
     outcome: 'true_retention',
     description: '节点内容顺序在生成时落定，需要双变体内容通道才能在同批对象上分臂。',
     unlocked: false,
-    unlock_note: '随 #81/#93 的双变体内容通道解锁',
+    unlock_note: '随  的双变体内容通道解锁',
   },
   {
     id: 'retrieval_point',
@@ -131,7 +131,7 @@ export const NOF1_TEMPLATES: Nof1Template[] = [
     outcome: 'true_retention',
     description: '检索点位置与密度是项目检索点会话的设计参数。',
     unlocked: false,
-    unlock_note: '随 #93 检索点会话落地解锁',
+    unlock_note: '随  检索点会话落地解锁',
   },
   {
     id: 'receipt_review_ai_vs_self',
@@ -539,7 +539,7 @@ export class LabSubsystem {
   ): Promise<{ proposal: number; template: string; title: string; pool: number; scope_course: string | null }> {
     const tpl = nof1Template(templateId)
     if (!tpl) {
-      throw new Error(`[nof1] 没有模板「${templateId}」（可用：${NOF1_TEMPLATES.map(t => t.id).join('、')}）。白名单外参数无法配置为实验变量（ADR-0023）。`)
+      throw new Error(`[nof1] 没有模板「${templateId}」（可用：${NOF1_TEMPLATES.map(t => t.id).join('、')}）。白名单外参数无法配置为实验变量。`)
     }
     if (!tpl.unlocked) {
       throw new Error(`[nof1] 模板「${tpl.title}」未解锁：${tpl.unlock_note ?? '参数未上线'}。`)
@@ -590,7 +590,7 @@ export class LabSubsystem {
       || doc.outcome !== tpl.outcome || doc.unit !== tpl.unit
       || !Array.isArray(doc.arms) || doc.arms.length !== 2 || doc.arms[0] !== tpl.arms[0] || doc.arms[1] !== tpl.arms[1]
       || !doc.title) {
-      throw new Error(`[nof1-apply] 提案产物与模板不一致或白名单校验失败（template=${String(doc.template)} variable=${String(doc.variable)} outcome=${String(doc.outcome)}）。预登记口径（含结局）不可在确认环节被偷换（#135）。`)
+      throw new Error(`[nof1-apply] 提案产物与模板不一致或白名单校验失败（template=${String(doc.template)} variable=${String(doc.variable)} outcome=${String(doc.outcome)}）。预登记口径（含结局）不可在确认环节被偷换。`)
     }
     const violation = nof1TemplateViolation(tpl)
     if (violation) throw new Error(`[nof1-apply] ${violation}`)
@@ -798,16 +798,16 @@ export class LabSubsystem {
       },
       unbounded_region: {
         execution_ratings: execRatingDistribution(logs, today),
-        note: '执行事件评级分布——数据源随 U 区执行事件通道（#89）落地；落地前为合法空态。',
+        note: '执行事件评级分布——数据源随 U 区执行事件通道落地；落地前为合法空态。',
       },
       project_region: {
         status: 'deferred',
-        note: '项目区观测（Mastery 交叉 2×2 + 档内表现）随 P-7（#96）后补，不阻塞 v1；下表只聚合展示各项目当前渐退档。',
+        note: '项目区观测（Mastery 交叉 2×2 + 档内表现）随 P-7后补，不阻塞 v1；下表只聚合展示各项目当前渐退档。',
         projects: projects.map(p => ({ id: p.id, name: p.name, tier: p.tier })),
       },
       knobs: [
         { knob: 'band_default', title: 'A1 目标难度带默认值', status: '可确认生效（既有配置入口）', current: defaultBand },
-        { knob: 'retrieval_density', title: '检索点密度', status: '未上线（随 #93 检索点会话落地解锁）' },
+        { knob: 'retrieval_density', title: '检索点密度', status: '未上线（随  检索点会话落地解锁）' },
         { knob: 'fading_tier', title: '渐退档移动提议', status: '聚合展示：档位移动走项目域显式入口（projectSetTier），v1 无待决移动提议对象，此处只汇总各项目当前档', current: projects.map(p => `${p.name}:${p.tier}`).join('、') || null },
       ],
       suggestions,

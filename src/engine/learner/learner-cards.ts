@@ -1206,7 +1206,7 @@ export class LearnerSubsystem {
     if (!graph.nset.has(node)) throw new Error(`[receipt-submit] 节点「${node}」不在课程「${c.name}」的图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'receipt-submit')
     if (graph.typeOf[node] !== 'practice') {
-      throw new Error(`[receipt-submit] 「${node}」不是实践节点（type=practice）——v1 回执只挂实践节点（ADR-0016：机制按通用实践主体建模，项目/技能条目载体后续接入）。`)
+      throw new Error(`[receipt-submit] 「${node}」不是实践节点（type=practice）——v1 回执只挂实践节点（机制按通用实践主体建模，项目/技能条目载体后续接入）。`)
     }
     const note = await this.e.nodeNote(c, graph, node)
     if (!note.fm) throw new Error('[receipt-submit] 节点笔记缺 frontmatter，无法入练习证据 EMA。')

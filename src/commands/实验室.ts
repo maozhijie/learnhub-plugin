@@ -54,7 +54,7 @@ export const 实验室域 = {
   }),
   'experiment-report': command({
     id: "experiment-report",
-    summary: "Get the plain-language N-of-1 report (D-1, ADR-0023): arm-by-arm true retention, arm difference, 95% bootstrap interval, and a permutation test — phrased as an individual effect, never a population claim. Below the minimum observation window (per-arm real-advance minimum) it reports progress only and refuses to judge. running = interim reading; stopped = final.",
+    summary: "Get the plain-language N-of-1 report: arm-by-arm true retention, arm difference, 95% bootstrap interval, and a permutation test — phrased as an individual effect, never a population claim. Below the minimum observation window (per-arm real-advance minimum) it reports progress only and refuses to judge. running = interim reading; stopped = final.",
     args: {
       id: { type: "number", description: "Experiment id; omit for the running (or latest) one" }
     },
@@ -71,7 +71,7 @@ export const 实验室域 = {
   }),
   'experiment-stop': command({
     id: "experiment-stop",
-    summary: "Stop a running N-of-1 experiment (start/stop is always manual, ADR-0023): annotations cease, the report becomes final. Omit id to stop the currently running experiment.",
+    summary: "Stop a running N-of-1 experiment (start/stop is always manual): annotations cease, the report becomes final. Omit id to stop the currently running experiment.",
     args: {
       id: { type: "number", description: "Experiment id; omit for the running one" }
     },
@@ -93,7 +93,7 @@ export const 实验室域 = {
   }),
   'experiment-templates': command({
     id: "experiment-templates",
-    summary: "List the N-of-1 experiment template library (D-1, ADR-0023): preset self-experiments on engine-controlled content/design parameters only (scheduling core is NEVER an experiment variable). Each template carries id/title/question/arms/unit/description and an unlocked flag — unlocked=false templates are visible but cannot be started yet. Zero XP, never touches Mastery; arm labels go into the review log for attribution. Propose with learnhub_experiment_propose, the learner confirms, then learnhub_experiment_apply.",
+    summary: "List the N-of-1 experiment template library: preset self-experiments on engine-controlled content/design parameters only (scheduling core is NEVER an experiment variable). Each template carries id/title/question/arms/unit/description and an unlocked flag — unlocked=false templates are visible but cannot be started yet. Zero XP, never touches Mastery; arm labels go into the review log for attribution. Propose with learnhub_experiment_propose, the learner confirms, then learnhub_experiment_apply.",
     args: {},
     engine: "lab.experimentTemplates",
     domain: "实验室",
@@ -107,7 +107,7 @@ export const 实验室域 = {
   }),
   'receipt-review-mode': command({
     id: "receipt-review-mode",
-    summary: "Get or set the DEFAULT receipt review mode (#203 / ADR-0057): ai = AI rubric review on submit (ADR-0016 default, fading full/brief feedback); self = the learner self-scores 0-1 against the rubric, no LLM call. A running receipt-review N-of-1 experiment (variable receipt_review_mode, practice_ema outcome) overrides this default with the day's arm — batch alternation switches the reviewer by learning day. force_full is ai-arm-only (rejected on self days); self_score is self-arm-only. Omit mode to read the current default.",
+    summary: "Get or set the DEFAULT receipt review mode: ai = AI rubric review on submit (default, fading full/brief feedback); self = the learner self-scores 0-1 against the rubric, no LLM call. A running receipt-review N-of-1 experiment (variable receipt_review_mode, practice_ema outcome) overrides this default with the day's arm — batch alternation switches the reviewer by learning day. force_full is ai-arm-only (rejected on self days); self_score is self-arm-only. Omit mode to read the current default.",
     args: {
       mode: { type: "string", description: "ai / self to set the default; omit to read current config" }
     },
@@ -148,7 +148,7 @@ export const 实验室域 = {
   }),
   'sandbox': command({
     id: "sandbox",
-    summary: "Run the plan sandbox (D-3, ADR-0025): Monte-Carlo projection of the learner's study plan using the SAME FSRS+mastery models as the scheduler (~200 seeded runs). Input = daily minutes goal x horizon in weeks (default 6) x intended course/nodes. Output = end-of-horizon mastery map (per node p50/p80) + total-mastery curve with 50/80 percentile bands + the honest assumption list (1 min per review, practice evidence frozen, new nodes introduced in course order). READ-ONLY: zero canonical writes, no gating, no scheduling side effects. The wording is locked to「模型推演，非承诺」— present the distribution as a distribution, never as a promise, and never as a feasibility verdict; the learner negotiates their own plan with it.",
+    summary: "Run the plan sandbox: Monte-Carlo projection of the learner's study plan using the SAME FSRS+mastery models as the scheduler (~200 seeded runs). Input = daily minutes goal x horizon in weeks (default 6) x intended course/nodes. Output = end-of-horizon mastery map (per node p50/p80) + total-mastery curve with 50/80 percentile bands + the honest assumption list (1 min per review, practice evidence frozen, new nodes introduced in course order). READ-ONLY: zero canonical writes, no gating, no scheduling side effects. The wording is locked to「模型推演，非承诺」— present the distribution as a distribution, never as a promise, and never as a feasibility verdict; the learner negotiates their own plan with it.",
     args: {
       minutes_per_day: { type: "number", description: "Daily learning-minutes goal of the plan", required: true },
       weeks: { type: "number", description: "Horizon in weeks (default 6, max 26)" },
@@ -172,7 +172,7 @@ export const 实验室域 = {
   }),
   'thermostat': command({
     id: "thermostat",
-    summary: "Get the challenge-point thermostat dashboard (D-2, ADR-0024): cross-region observation aggregate + READ-ONLY suggestions — the thermostat is NOT an auto-controller. Course region: true-retention band + long-term difficulty-band choice distribution. Unbounded region: execution-event rating distribution (empty until the U-area execution channel lands). Project region: deferred to P-7, tier list only. Three knobs max (A1 target difficulty-band default, retrieval-point density [not yet available], fading-tier move aggregation); at most three suggestions, low-data-silent. To ACT on a suggestion, show it to the learner and after their explicit confirmation call learnhub_thermostat_apply with the suggestion id — never apply without confirmation; there is no engine-side auto adjustment.",
+    summary: "Get the challenge-point thermostat dashboard: cross-region observation aggregate + READ-ONLY suggestions — the thermostat is NOT an auto-controller. Course region: true-retention band + long-term difficulty-band choice distribution. Unbounded region: execution-event rating distribution (empty until the execution channel lands). Project region: deferred to the project lane, tier list only. Three knobs max (target difficulty-band default, retrieval-point density [not yet available], fading-tier move aggregation); at most three suggestions, low-data-silent. To ACT on a suggestion, show it to the learner and after their explicit confirmation call learnhub_thermostat_apply with the suggestion id — never apply without confirmation; there is no engine-side auto adjustment.",
     args: {},
     engine: "lab.thermostatView",
     domain: "实验室",
@@ -192,7 +192,7 @@ export const 实验室域 = {
   }),
   'thermostat-apply': command({
     id: "thermostat-apply",
-    summary: "Apply ONE thermostat suggestion AFTER the learner explicitly confirms it (D-2, ADR-0024): only ids currently offered by learnhub_thermostat are accepted (stale or invented ids fail loud) — this is the single confirmation gate. Confirmed band-default suggestions write the A1 default difficulty band via the existing config entry; the learner's explicit per-session band choice still overrides it.",
+    summary: "Apply ONE thermostat suggestion AFTER the learner explicitly confirms it: only ids currently offered by learnhub_thermostat are accepted (stale or invented ids fail loud) — this is the single confirmation gate. Confirmed band-default suggestions write the default difficulty band via the existing config entry; the learner's explicit per-session band choice still overrides it.",
     args: {
       suggestion: { type: "string", description: "Suggestion id exactly as offered by learnhub_thermostat (e.g. band_default:standard)", required: true }
     },

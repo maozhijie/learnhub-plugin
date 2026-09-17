@@ -262,7 +262,7 @@ test('链接先验回填：pre 闭包内成 enrich 单提案（既有 enc 保留
     assert.match(yamlText, /fields:/)
     assert.match(yamlText, /node: 进阶/)
     assert.match(yamlText, /fingerprints:/)
-    assert.match(yamlText, /vault 链接先验（#91）/)
+    assert.match(yamlText, /vault 链接先验：/)
     assert.match(yamlText, /w: 0.9/)
 
     // 可重入：提案过审 apply 后，同一批候选不再重复提名（已声明边跳过）
