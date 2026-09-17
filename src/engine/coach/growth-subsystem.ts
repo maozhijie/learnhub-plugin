@@ -18,6 +18,69 @@ import type { ConceptRegistry } from '../concepts/concepts.ts'
 import { withContractLast } from '../infra/prompt-assembly.ts'
 import { render } from '../infra/prompt-render.ts'
 import { COACH_PLAN_FEEDBACK_BLOCK, COACH_INJECT_BLOCK, COACH_FIRST_RUNG_CRITERIA } from '../prompts/projects.ts'
+import {
+  EA_GOAL_CAPABILITY, EA_GOAL_COVERAGE,
+  TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT, TOOL_ENDPOINT_ANCHOR_DESC_DRAFT, TOOL_GRAPH_VIEW_DESC_DRAFT,
+  TOOL_NODE_CARD_DESC_DRAFT, TOOL_PARAM_NODE_DESC, TOOL_PARAM_NODE_DESC_BARE,
+  TOOL_PARAM_QUERY_DESC_DRAFT, TOOL_UPSTREAM_DAG_DESC_DRAFT,
+} from '../prompts/coach-tools.ts'
+import {
+  PACK_ANCHOR_CLOSURE, PACK_ANCHOR_DECLARED, PACK_ANCHOR_GOAL_TYPE, PACK_ANCHOR_LAST_STEPS,
+  PACK_ANCHOR_LAST_STEP_JUNCTION, PACK_ANCHOR_LAST_STEPS_EMPTY, PACK_ANCHOR_NODE, PACK_ANCHOR_NOTE,
+  PACK_ANCHOR_STATUS, PACK_ANCHOR_STATUS_REACHED, PACK_ANCHOR_STATUS_UNSEALED, PACK_ANCHOR_STATUS_UNWIRED,
+  PACK_ANCHOR_STRUCT, PACK_ANCHOR_STRUCT_UNLEARNED, PACK_ANCHOR_WORKSHEET, PACK_ANCHOR_ZERO_BODY,
+  PACK_BLOCK_ANCHOR_TITLE, PACK_BLOCK_COMPASS_TAIL_TITLE, PACK_BLOCK_DIGEST_TITLE,
+  PACK_BLOCK_MISCONCEPTIONS_TITLE, PACK_BLOCK_REGISTRY_TITLE, PACK_BLOCK_V2_TITLE,
+  PACK_COMPASS_EMPTY, PACK_COMPASS_HEADING, PACK_ENDPOINT_CLOSURE, PACK_ENDPOINT_LINE,
+  PACK_ENDPOINT_NOTE, PACK_HEADING, PACK_JUNCTION_DISCIPLINE, PACK_LABEL_FULL, PACK_LABEL_LIGHT,
+  PACK_MISCONCEPTION_LINE, PACK_MISCONCEPTIONS_EMPTY, PACK_REGISTRY_ACTIVE, PACK_REGISTRY_ASSUMES,
+  PACK_REGISTRY_ASSUMES_EMPTY, PACK_REGISTRY_LINE, PACK_REGISTRY_MISSING, PACK_REGISTRY_RETIRED,
+  PACK_REGISTRY_TEACHES, PACK_REGISTRY_TEACHES_EMPTY, PACK_REGISTRY_TIERS,
+  PACK_SEDIMENT_HEADING, PACK_STATUS_DANGLING, PACK_STATUS_REACHED, PACK_STATUS_SEALED,
+  PACK_STATUS_UNWIRED, PACK_STRUCT_COMPLETE, PACK_STRUCT_INCOMPLETE, PACK_STRUCT_SEALED,
+  PACK_STRUCT_UNSEALED, PACK_TAIL_ANNOTATIONS_HEADING, PACK_TAIL_REPAINT_DUE, PACK_TAIL_ROUTE_HEADING,
+  PACK_V2_BODY, PACK_ZERO_ENDPOINTS,
+} from '../prompts/coach-pack.ts'
+import {
+  PLAN_SUMMARY_HEADING, PLAN_SUMMARY_OPERATOR, PLAN_SUMMARY_PROPOSAL, PLAN_SUMMARY_REASON,
+  PLAN_SUMMARY_REASON_EMPTY,
+} from '../prompts/coach-plan.ts'
+import {
+  ERR_DRAFT_BUDGET_EXHAUSTED, ERR_DRAFT_COURSE_MISMATCH, ERR_DRAFT_UNFINISHED, ERR_EXEC_WHITELIST,
+  ERR_FINISH_APPLY, ERR_FINISH_BAD_OPERATOR, ERR_FINISH_DRIFT_EXCEPTION, ERR_FINISH_EMPTY,
+  ERR_FINISH_GATE, ERR_FINISH_NO_NOTE, ERR_FINISH_PROPOSE, ERR_PATCH_BUDGET, ERR_PATCH_EMPTY_OPS,
+  ERR_PATCH_GATE, ERR_PATCH_MAX_OPS, ERR_PATCH_RECHECK, ERR_PATCH_RECHECK_NO_NOTE, ERR_PATCH_SHAPE,
+  ERR_REVERT_COUNT_INT, ERR_REVERT_COUNT_MAX, ERR_REVERT_NOTHING,
+  EXEC_CONFUSABLE_CANDIDATE, EXEC_CONFUSABLE_FAIL, EXEC_CRASH_AUDIT, EXEC_CRASH_FINISH, EXEC_CRASH_NOTE,
+  EXEC_CRASH_PATCH, EXEC_CRASH_REVERT, EXEC_CRASH_SUMMARY, EXEC_DIFF_ADDED_EDGES, EXEC_DIFF_ADDED_EDGE_ITEM,
+  EXEC_DIFF_ADDED_NODES, EXEC_DIFF_EMPTY_SET, EXEC_DIFF_NONE, EXEC_DIFF_REMOVED_NODES, EXEC_DIFF_RENAMED,
+  EXEC_DIFF_RENAMED_ITEM, EXEC_DIFF_REWIRED, EXEC_DIFF_REWIRED_ITEM, EXEC_DOMAIN_CONCEPTS,
+  EXEC_DOMAIN_CONCEPTS_EMPTY, EXEC_DOMAIN_NODES, EXEC_DOMAIN_NODES_MORE, EXEC_DOMAIN_OPS, EXEC_DOMAIN_TIERS,
+  EXEC_ERR_ITEM, EXEC_FINDING_ITEM, EXEC_HANDOVER_ENDPOINTS_EMPTY, EXEC_HANDOVER_FOOTER,
+  EXEC_HANDOVER_HEADING, EXEC_HANDOVER_OPERATOR, EXEC_HANDOVER_RECHECK, EXEC_HANDOVER_REASON,
+  EXEC_HANDOVER_STEP, EXEC_HANDOVER_STEP_CONCEPT, EXEC_HANDOVER_STEP_EST, EXEC_NORM_ITEM,
+  EXEC_OP_FIELD_ASSUMES, EXEC_OP_FIELD_BLOOM, EXEC_OP_FIELD_DIFFICULTY, EXEC_OP_FIELD_ENC,
+  EXEC_OP_FIELD_EST, EXEC_OP_FIELD_INTO, EXEC_OP_FIELD_MISCONCEPTIONS, EXEC_OP_FIELD_NAME,
+  EXEC_OP_FIELD_NEW, EXEC_OP_FIELD_NODE, EXEC_OP_FIELD_NOTE, EXEC_OP_FIELD_OP, EXEC_OP_FIELD_PRE,
+  EXEC_OP_FIELD_TEACHES, EXEC_OP_FIELD_WITH,
+  EXEC_PARAM_CHAIN_DESC, EXEC_PARAM_CONCEPTS_DESC, EXEC_PARAM_DAYS_DESC, EXEC_PARAM_METRIC_DESC,
+  EXEC_PARAM_NOTE_OPERATOR_DESC, EXEC_PARAM_NOTE_REASON_DESC, EXEC_PARAM_NOTE_RECHECK_DESC,
+  EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC, EXEC_PARAM_OPS_DESC,
+  EXEC_ROUND_AUDIT_EMPTY, EXEC_ROUND_AUDIT_ERRORS, EXEC_ROUND_AUDIT_FINDINGS, EXEC_ROUND_AUDIT_OK,
+  EXEC_ROUND_FINISH_APPLY_FAIL, EXEC_ROUND_FINISH_CONFUSABLE, EXEC_ROUND_FINISH_OK,
+  EXEC_ROUND_FINISH_PROPOSE_REJECT, EXEC_ROUND_FINISH_REJECT, EXEC_ROUND_FINISH_SEALED,
+  EXEC_ROUND_PATCH_BUDGET, EXEC_ROUND_PATCH_OK, EXEC_ROUND_PATCH_OK_NORM, EXEC_ROUND_PATCH_RECHECK,
+  EXEC_ROUND_PATCH_REJECTED, EXEC_ROUND_PATCH_SHAPE, EXEC_ROUND_REVERT, EXEC_STATUS_COUNTS,
+  EXEC_STATUS_HEADING, EXEC_STATUS_NEW, EXEC_STATUS_NOTE, EXEC_STATUS_RESUMED,
+  EXEC_STATUS_ROUND_ERRORS, EXEC_STATUS_ROUND_LINE, EXEC_STATUS_ROUNDS_HEADING,
+  EXEC_TOOL_DRAFT_AUDIT_DESC, EXEC_TOOL_DRAFT_FINISH_DESC, EXEC_TOOL_DRAFT_PATCH_DESC,
+  EXEC_TOOL_DRAFT_REVERT_COUNT_DESC, EXEC_TOOL_DRAFT_REVERT_DESC,
+  RECEIPT_AUDIT_EMPTY, RECEIPT_AUDIT_FAIL, RECEIPT_AUDIT_FINDINGS, RECEIPT_AUDIT_FINDINGS_NONE,
+  RECEIPT_AUDIT_NEXT_NONE, RECEIPT_AUDIT_NEXT_READY, RECEIPT_AUDIT_OK, RECEIPT_FINISH,
+  RECEIPT_FINISH_SEALED, RECEIPT_PATCH, RECEIPT_PATCH_NORM, RECEIPT_REVERT, RECEIPT_REVERT_NEXT_CLEAR,
+  RECEIPT_REVERT_NEXT_RESUME, RECEIPT_REVERT_RESIDUAL, RECEIPT_REVERT_RESIDUAL_OK,
+  RECEIPT_REVERT_WATERMARK, REJECT_FINISH_APPLY,
+} from '../prompts/coach-exec.ts'
 import type { Content } from '../content/content.ts'
 import type { BankDoc } from '../content/question-bank.ts'
 import { Graph, GraphStore } from '../graph/graph.ts'
@@ -127,7 +190,8 @@ const DRAFT_TOOL_ROUND_KIND: Record<string, GrowthDraftRound['kind']> = {
 /** 写件崩溃轮的措辞前缀（轮志 summary = `<前缀>（<错误首行>）`；`finish` 与既有
  * 「finish 被拒」同款留空格，其余按中文连写）。 */
 const DRAFT_ROUND_CRASH_LABEL: Record<GrowthDraftRound['kind'], string> = {
-  patch: '补丁崩溃', audit: '审计崩溃', finish: 'finish 崩溃', note: 'note 崩溃', revert: '撤销崩溃',
+  patch: render(EXEC_CRASH_PATCH, {}), audit: render(EXEC_CRASH_AUDIT, {}), finish: render(EXEC_CRASH_FINISH, {}),
+  note: render(EXEC_CRASH_NOTE, {}), revert: render(EXEC_CRASH_REVERT, {}),
 }
 
 /** 崩溃轮 summary 里的错误首行上界（引擎侧的摘要口径；宿主侧的 `LOG_SUMMARY_HEAD` 是
@@ -229,12 +293,12 @@ export class GrowthSubsystem {
     const lines: string[] = []
     if (v.route?.trim() && v.route.trim() !== ROUTE_PENDING) {
       const due = repaintDueOf(v.route)
-      lines.push('### 罗盘 · 剩余路线（非承诺草图——方向感，不是承诺）', '',
-        ...(due ? [`（重画待办：${due}——弧的写权在罗盘站；如你认为该重估，用计划里的 repaint_suggest（结构性事由）建议，勿自行改写。）`] : []),
+      lines.push(render(PACK_TAIL_ROUTE_HEADING, {}), '',
+        ...(due ? [render(PACK_TAIL_REPAINT_DUE, { due })] : []),
         v.route.trim())
     }
     if (hasLearnerAnnotations(v.annotations)) {
-      lines.push('### 罗盘 · 学习者批注（软输入——提议非指令）', '', v.annotations!.trim())
+      lines.push(render(PACK_TAIL_ANNOTATIONS_HEADING, {}), '', v.annotations!.trim())
     }
     return lines.join('\n\n')
   }
@@ -625,24 +689,30 @@ export class GrowthSubsystem {
     const serves = junctionServes(graph, anchors)
 
     const out: string[] = [
-      `# 教练回合上下文包：${c.name}（${opts.packLabel ?? (lightweight ? '轻量段——只带行为摘要与罗盘' : '全量六区块')}）`,
+      render(PACK_HEADING, {
+        course: c.name,
+        label: opts.packLabel ?? (lightweight ? render(PACK_LABEL_LIGHT, {}) : render(PACK_LABEL_FULL, {})),
+      }),
     ]
     // 终点恒标（#200 / ADR-0055 裁决 3；#239 多终点化：逐终点一行；#240 逐终点状态）：
     // 轻量段不注入终点锚区块，但每行终点名的 token 代价换裁决不盲——轻量/全量都在
     // 包头带终点行（状态三档内联）；终点标记的完整语义随图面进每段。
     const statusLabel = (f: (typeof folds)[number] | undefined): string =>
-      f === undefined ? '悬空锚（终点不在图内）'
-        : f.status === 'unwired' ? '未接线'
-        : f.status === 'reached' ? '已达成'
-        : '已铺通（未达成）'
+      f === undefined ? render(PACK_STATUS_DANGLING, {})
+        : f.status === 'unwired' ? render(PACK_STATUS_UNWIRED, {})
+        : f.status === 'reached' ? render(PACK_STATUS_REACHED, {})
+        : render(PACK_STATUS_SEALED, {})
     out.push('', ...(anchors.length
       ? anchors.map(a => {
           const f = foldOf.get(a.endpoint)
-          return `- ⚑ 终点：${a.endpoint}（方向标记——朝该方向的生长须汇入它；零正文零题库不被调度）`
-            + `${a.goal_note ? `｜目标描述：${a.goal_note}` : ''}｜状态：${statusLabel(f)}`
-            + (f ? `｜闭包已学 ${f.closure.learned}/${f.closure.total}` : '')
+          return render(PACK_ENDPOINT_LINE, {
+            endpoint: a.endpoint,
+            note: a.goal_note ? render(PACK_ENDPOINT_NOTE, { note: a.goal_note }) : '',
+            status: statusLabel(f),
+            closure: f ? render(PACK_ENDPOINT_CLOSURE, { learned: f.closure.learned, total: f.closure.total }) : '',
+          })
         })
-      : ['- （零终点——空锚是合法空态，先加一个终点：教练回合无从裁决方向）']))
+      : [render(PACK_ZERO_ENDPOINTS, {})]))
     const block = (title: string, body: string): void => {
       out.push('', `## ${title}`, '', body)
     }
@@ -654,35 +724,45 @@ export class GrowthSubsystem {
         for (const anchor of anchors) {
           const f = foldOf.get(anchor.endpoint)
           lines.push(
-            `- 终点节点：${anchor.endpoint}（方向标记，不可 del/rename；接线 = 该主线批 set_pre 到它）`,
-            `  - 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
-            `  - 声明日期：${anchor.declared}`,
-            `  - 状态：${f === undefined ? '悬空锚（终点不在图内）'
-              : f.status === 'reached' ? '已达成（已铺通且最后台阶全掌握）'
-              : f.status === 'sealed' ? '已铺通（未达成）'
-              : f.criteria.last_steps.length > 0 ? '未铺通（pre 非空、未收尾宣告）'
-              : '未接线（pre 空）——朝它长就要接线'}`,
+            render(PACK_ANCHOR_NODE, { endpoint: anchor.endpoint }),
+            render(PACK_ANCHOR_GOAL_TYPE, { type: anchor.goal_type === 'coverage' ? render(EA_GOAL_COVERAGE, {}) : render(EA_GOAL_CAPABILITY, {}) }),
+            render(PACK_ANCHOR_DECLARED, { declared: anchor.declared }),
+            render(PACK_ANCHOR_STATUS, {
+              status: f === undefined ? render(PACK_STATUS_DANGLING, {})
+                : f.status === 'reached' ? render(PACK_ANCHOR_STATUS_REACHED, {})
+                : f.status === 'sealed' ? render(PACK_STATUS_SEALED, {})
+                : f.criteria.last_steps.length > 0 ? render(PACK_ANCHOR_STATUS_UNSEALED, {})
+                : render(PACK_ANCHOR_STATUS_UNWIRED, {}),
+            }),
           )
           if (f) {
-            lines.push(`  - 闭包学习进度：已学 ${f.closure.learned} / 共 ${f.closure.total}`)
+            lines.push(render(PACK_ANCHOR_CLOSURE, { learned: f.closure.learned, total: f.closure.total }))
             const st = structureOf.get(anchor.endpoint)
             if (st) {
-              lines.push(`  - 结构读数：${st.sealed ? '已收尾' : '未收尾'}｜闭包真已学 ${st.learned}/${st.total}`
-                + (st.unlearned.length ? `（未学：${st.unlearned.join('、')}）` : '')
-                + `｜${st.complete ? '结构已铺完（该终点不再需要生长——计划门与收束判据同用本读数）' : '结构未铺完'}`)
+              lines.push(render(PACK_ANCHOR_STRUCT, {
+                sealed: st.sealed ? render(PACK_STRUCT_SEALED, {}) : render(PACK_STRUCT_UNSEALED, {}),
+                learned: st.learned,
+                total: st.total,
+                unlearned: st.unlearned.length ? render(PACK_ANCHOR_STRUCT_UNLEARNED, { list: st.unlearned.join('、') }) : '',
+                complete: st.complete ? render(PACK_STRUCT_COMPLETE, {}) : render(PACK_STRUCT_INCOMPLETE, {}),
+              }))
             }
             const lastSteps = f.criteria.last_steps.map(s => {
               const other = serves.get(s.node)?.filter(e => e !== anchor.endpoint) ?? []
-              return other.length ? `${s.node}（同时服务：${other.join('、')}——交汇）` : s.node
+              return other.length
+                ? render(PACK_ANCHOR_LAST_STEP_JUNCTION, { node: s.node, others: other.join('、') })
+                : s.node
             })
-            lines.push(`  - 最后台阶：${lastSteps.length ? lastSteps.join('、') : '（pre 空——未接线）'}`)
+            lines.push(render(PACK_ANCHOR_LAST_STEPS, { steps: lastSteps.length ? lastSteps.join('、') : render(PACK_ANCHOR_LAST_STEPS_EMPTY, {}) }))
           }
-          if (anchor.goal_note) lines.push(`  - 目标描述：${anchor.goal_note}`)
+          if (anchor.goal_note) lines.push(render(PACK_ANCHOR_NOTE, { note: anchor.goal_note }))
           if (anchor.worksheet.length) {
-            lines.push(`  - 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`)
+            lines.push(render(PACK_ANCHOR_WORKSHEET, {
+              done: anchor.worksheet.filter(w => w.done).length, total: anchor.worksheet.length,
+            }))
           }
         }
-        lines.push('- 裁决纪律：优先选能同时推进多个未达成终点的台阶（交汇优先）')
+        lines.push(render(PACK_JUNCTION_DISCIPLINE, {}))
         // 首级判据材料（#303 / ADR-0092；#310 补绑终点）：前沿为空 = 这次裁决铺的是坡道
         // 第一级——课程名与终点锚作占位符注入，判据才绑得回既有输入（ADR-0033「视角由
         // 目标携带」），否则上界约束可被域外解满足。单源住 `prompts/projects.ts`，与上行
@@ -692,14 +772,14 @@ export class GrowthSubsystem {
             course: c.name, endpoints: anchors.map(a => a.endpoint).join('、'),
           }))
         }
-        block('终点锚', lines.join('\n'))
+        block(render(PACK_BLOCK_ANCHOR_TITLE, {}), lines.join('\n'))
       } else {
-        block('终点锚', '（零终点——空锚是合法空态，但教练回合无从裁决方向；先加一个终点。）')
+        block(render(PACK_BLOCK_ANCHOR_TITLE, {}), render(PACK_ANCHOR_ZERO_BODY, {}))
       }
     }
 
     // ② 行为摘要五件套（读侧折叠即算即用；轻量包两件之一）
-    block('行为摘要（窗=最近 7 学习日或 10 节取大；即算即用不落盘）',
+    block(render(PACK_BLOCK_DIGEST_TITLE, {}),
       renderBehaviorDigest(await this.behaviorDigestOf(c, graph, state, today, cutoff)))
 
     if (!lightweight) {
@@ -724,22 +804,27 @@ export class GrowthSubsystem {
       const teaches = foldTiers(n => graph.teachesOf[n])
       const assumes = foldTiers(n => graph.assumesOf[n])
       const retiredCount = entries.length - live.length
-      block('登记表档位（前沿概念的教学档位视野）', [
-        `- 概念登记表：${entries.length ? `${live.length} 条在册${retiredCount ? `（另有 ${retiredCount} 条已废弃——地址仍解析，仅退出生成注入与候选面）` : ''}` : 'Missing（合法空态——铸名随生长批提案落盘）'}`,
+      block(render(PACK_BLOCK_REGISTRY_TITLE, {}), [
+        entries.length
+          ? render(PACK_REGISTRY_LINE, {
+              count: live.length,
+              retired: retiredCount ? render(PACK_REGISTRY_RETIRED, { count: retiredCount }) : '',
+            })
+          : render(PACK_REGISTRY_MISSING, {}),
         // 档位取值域**无条件**给（#309 缺陷③）：此前只在「前沿有档位」时经示例间接暴露，
         // 空课/空态批下模型看不到取值域、自造「初识」，直到 propose 拒绝文案里才第一次见合法值。
-        `- teaches / assumes 的档位取值域：${CONCEPT_TIERS.join(' / ')}（写别的值会被受理门拒收）`,
-        `- 可学/在学节点 ${active.length} 个`,
-        `- 前沿 teaches：${teaches.length ? fmtTiers(teaches) : '（前沿节点无 teaches 字段）'}`,
-        `- 前沿 assumes：${assumes.length ? fmtTiers(assumes) : '（前沿节点无 assumes 字段）'}`,
+        render(PACK_REGISTRY_TIERS, { tiers: CONCEPT_TIERS.join(' / ') }),
+        render(PACK_REGISTRY_ACTIVE, { count: active.length }),
+        render(PACK_REGISTRY_TEACHES, { list: teaches.length ? fmtTiers(teaches) : render(PACK_REGISTRY_TEACHES_EMPTY, {}) }),
+        render(PACK_REGISTRY_ASSUMES, { list: assumes.length ? fmtTiers(assumes) : render(PACK_REGISTRY_ASSUMES_EMPTY, {}) }),
       ].join('\n'))
 
       // ④ 误解目录（前沿节点的误解先验；判据签名不设机器字段，#124）
       const misLines = active.slice().sort().flatMap(n =>
-        (graph.misconceptionsOf[n] ?? []).map(m => `- ${n} · ${m.concept}：${m.model}`))
-      block('误解目录（前沿节点的误解先验）', misLines.length
+        (graph.misconceptionsOf[n] ?? []).map(m => render(PACK_MISCONCEPTION_LINE, { node: n, concept: m.concept, model: m.model })))
+      block(render(PACK_BLOCK_MISCONCEPTIONS_TITLE, {}), misLines.length
         ? misLines.join('\n')
-        : '（误解目录空——合法空态：误解先验随生长批写入；真实错误检测归作答流水挖矿与申诉复核）')
+        : render(PACK_MISCONCEPTIONS_EMPTY, {}))
     }
 
     // ⑤ 罗盘尾段（罗盘+沉淀折叠；轻量包只带罗盘半区）
@@ -747,16 +832,15 @@ export class GrowthSubsystem {
     // 罗盘缺席/未画的占位行（#310 改口径）：此前指向 `learnhub_compass_paint` 初画——但
     // 这行是喂给**裁决站**的（思路官零工具），指示它去跑一个它没有的工具是错的；#310 起
     // 「剩余路线」随方向批（前进/换向）由计划携带写出，初画不是必经步骤。
-    const parts = ['### 罗盘', '', tail || '（罗盘缺席或尚无已画路线——合法空态：方向批（前进/换向）会随计划写出「剩余路线」；锚在终点上，零终点先加一个终点。）']
+    const parts = [render(PACK_COMPASS_HEADING, {}), '', tail || render(PACK_COMPASS_EMPTY, {})]
     if (!lightweight) {
-      parts.push('', '### 沉淀折叠', '', renderSedimentForCoach(await this.e.sedimentFold()))
+      parts.push('', render(PACK_SEDIMENT_HEADING, {}), '', renderSedimentForCoach(await this.e.sedimentFold()))
     }
-    block('罗盘尾段', parts.join('\n'))
+    block(render(PACK_BLOCK_COMPASS_TAIL_TITLE, {}), parts.join('\n'))
 
     if (!lightweight) {
       // ⑥ V-2 接缝（先验上下文注入——预留占位，Out of Scope：宿主检索面依赖）
-      block('V-2 接缝（先验上下文注入——预留）',
-        '（v1 未接线：vault 链接先验注入教练回合依赖宿主检索面——本区块为六区块定序占位，接线后由此注入。）')
+      block(render(PACK_BLOCK_V2_TITLE, {}), render(PACK_V2_BODY, {}))
     }
 
     return out.join('\n') + '\n'
@@ -1046,10 +1130,10 @@ export class GrowthSubsystem {
         return undefined
       }
       return [
-        '## 上次裁决摘要（上一次生长批的方向留痕——可沿用可推翻）', '',
-        `- 算子：${note.operator}`,
-        `- 理由：${note.reason ?? '（未留痕）'}`,
-        `- 提案：#${last.id}（已应用）`,
+        render(PLAN_SUMMARY_HEADING, {}), '',
+        render(PLAN_SUMMARY_OPERATOR, { operator: note.operator }),
+        render(PLAN_SUMMARY_REASON, { reason: note.reason ?? render(PLAN_SUMMARY_REASON_EMPTY, {}) }),
+        render(PLAN_SUMMARY_PROPOSAL, { id: last.id }),
       ].join('\n')
     } catch {
       this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
@@ -1068,55 +1152,58 @@ export class GrowthSubsystem {
       type: 'object', properties, required, additionalProperties: false,
     })
     const opFields = (): Record<string, unknown> => ({
-      op: { type: 'string', description: '原子操作：add_node / del_node / set_pre / set_enc / rename / set_note；糖算子 insert_prereq_chain / split_node / suggest_confusable（见下）' },
-      into: { type: 'array', items: { type: 'string' }, description: 'split_node 的拆分新名（≥2 个，轮廓继承被拆节点；终点不可拆）' },
-      with: { type: 'string', description: 'suggest_confusable 的易混对端（须是在册概念或随批铸名）' },
-      name: { type: 'string', description: 'add_node 的新节点名' },
-      node: { type: 'string', description: '引用既有节点的名字（add_node 以外的 op 用）' },
-      pre: { type: 'array', items: { type: 'string' }, description: '前置节点名列表（add_node / set_pre；set_pre 是整体替换语义）' },
-      enc: { type: 'array', description: 'set_enc 整体替换的成分技能边' },
-      new: { type: 'string', description: 'rename 的新名' },
-      note: { type: 'string', description: '节点一句话说明' },
-      est: { type: 'number', description: '预估分钟（add_node）' },
-      bloom: { type: 'string', description: '认知层级（add_node）' },
-      difficulty: { type: 'number', description: '难度 1–5（add_node）' },
-      teaches: { type: 'object', description: `概念→档（add_node 出生层；概念必须逐字在册或随批铸名。**档位取值域：${CONCEPT_TIERS.join(' / ')}**）` },
-      assumes: { type: 'object', description: `概念→档（add_node 出生层。**档位取值域：${CONCEPT_TIERS.join(' / ')}**）` },
-      misconceptions: { type: 'array', description: '误解条目（add_node 出生层）' },
+      op: { type: 'string', description: render(EXEC_OP_FIELD_OP, {}) },
+      into: { type: 'array', items: { type: 'string' }, description: render(EXEC_OP_FIELD_INTO, {}) },
+      with: { type: 'string', description: render(EXEC_OP_FIELD_WITH, {}) },
+      name: { type: 'string', description: render(EXEC_OP_FIELD_NAME, {}) },
+      node: { type: 'string', description: render(EXEC_OP_FIELD_NODE, {}) },
+      pre: { type: 'array', items: { type: 'string' }, description: render(EXEC_OP_FIELD_PRE, {}) },
+      enc: { type: 'array', description: render(EXEC_OP_FIELD_ENC, {}) },
+      new: { type: 'string', description: render(EXEC_OP_FIELD_NEW, {}) },
+      note: { type: 'string', description: render(EXEC_OP_FIELD_NOTE, {}) },
+      est: { type: 'number', description: render(EXEC_OP_FIELD_EST, {}) },
+      bloom: { type: 'string', description: render(EXEC_OP_FIELD_BLOOM, {}) },
+      difficulty: { type: 'number', description: render(EXEC_OP_FIELD_DIFFICULTY, {}) },
+      teaches: { type: 'object', description: render(EXEC_OP_FIELD_TEACHES, { tiers: CONCEPT_TIERS.join(' / ') }) },
+      assumes: { type: 'object', description: render(EXEC_OP_FIELD_ASSUMES, { tiers: CONCEPT_TIERS.join(' / ') }) },
+      misconceptions: { type: 'array', description: render(EXEC_OP_FIELD_MISCONCEPTIONS, {}) },
     })
     return [
-      { name: 'graph_view', description: '当前草稿图面（基图 + 草稿增量已叠加）：全部节点名单 + 细节行。patch 的节点名与 pre 引用的取值域——出补丁前先来这里对表。', parameters: obj({}) },
-      { name: 'node_card', description: '单节点结构档（草稿图口径）：阶段、pre/teaches/assumes、下游消费、误解先验。', parameters: obj({ node: { type: 'string', description: '节点名（逐字，来自 graph_view）' } }, ['node']) },
-      { name: 'concept_footprint', description: '概念足迹：teaches/assumes/误解 引用对表的唯一权威（写侧恒精确——引用必须逐字命中在册名字或随批 concepts 铸名）。query 是子串发现不是存在性判定：空 ≠ 不存在。', parameters: obj({ query: { type: 'string', description: '可选子串；省略 = 读全表' } }) },
-      { name: 'upstream_dag', description: '上游图摘要：给定节点的前置传递闭包全拓扑 + 闭包内 pre 邻接。接线定位与深链诊断用。', parameters: obj({ node: { type: 'string', description: '节点名（逐字）' } }, ['node']) },
-      { name: 'endpoint_anchor', description: '终点锚集合：逐终点的目标类型/声明日/收尾宣告。set_pre 接线的靶在这里对表（终点只可被 set_pre 接线，禁出现在 add_node 的 pre）。', parameters: obj({}) },
+      { name: 'graph_view', description: render(TOOL_GRAPH_VIEW_DESC_DRAFT, {}), parameters: obj({}) },
+      { name: 'node_card', description: render(TOOL_NODE_CARD_DESC_DRAFT, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC, {}) } }, ['node']) },
+      { name: 'concept_footprint', description: render(TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT, {}), parameters: obj({ query: { type: 'string', description: render(TOOL_PARAM_QUERY_DESC_DRAFT, {}) } }) },
+      { name: 'upstream_dag', description: render(TOOL_UPSTREAM_DAG_DESC_DRAFT, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC_BARE, {}) } }, ['node']) },
+      { name: 'endpoint_anchor', description: render(TOOL_ENDPOINT_ANCHOR_DESC_DRAFT, {}), parameters: obj({}) },
       {
-        name: 'draft_patch', description: '批量补丁（写件）：把一组 EditOp 原子操作追加进生长草稿（每批 ≤24 条未发布增量；失败整批回滚并回灌 errors + 合法取值域）。糖算子——insert_prereq_chain：chain 按序展开成线性 add_node 链；split_node：把既有节点拆成 into 多个（轮廓继承 + 消费方 set_pre 重排 + 删原节点；终点不可拆）；suggest_confusable：给随批铸名的新概念顺手登记易混指向（不是图 op；finish 发布成功后展开为混淆对候选提案，人审后才入册）。op 词汇不含 move 与 region/block（已退役 ）。', parameters: obj({
-          ops: { type: 'array', description: `补丁操作列表。${PATCH_SHAPE_CHEATSHEET}（第一次调用前即可见——形状不合法整批拒收，别拿调用去试。）`, items: { type: 'object', properties: { ...opFields(), chain: { type: 'array', description: 'insert_prereq_chain 的链条目（按序线性串联）' } } } },
-          concepts: { type: 'array', description: '随批铸名（本批新引入的概念；已能用就不铸）' },
-          note_operator: { type: 'string', description: '本批生长算子（前进/插入/巩固/旁支/换向；下次 finish 硬化为 note）' },
-          note_reason: { type: 'string', description: '本批理由一句话' },
-          note_target_endpoints: { type: 'array', items: { type: 'string' }, description: '前进/换向批的朝向声明（朝哪些终点长；与接线义务配套）' },
+        name: 'draft_patch', description: render(EXEC_TOOL_DRAFT_PATCH_DESC, {}), parameters: obj({
+          ops: { type: 'array', description: render(EXEC_PARAM_OPS_DESC, { cheatsheet: render(PATCH_SHAPE_CHEATSHEET, {}) }), items: { type: 'object', properties: { ...opFields(), chain: { type: 'array', description: render(EXEC_PARAM_CHAIN_DESC, {}) } } } },
+          concepts: { type: 'array', description: render(EXEC_PARAM_CONCEPTS_DESC, {}) },
+          note_operator: { type: 'string', description: render(EXEC_PARAM_NOTE_OPERATOR_DESC, {}) },
+          note_reason: { type: 'string', description: render(EXEC_PARAM_NOTE_REASON_DESC, {}) },
+          note_target_endpoints: { type: 'array', items: { type: 'string' }, description: render(EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC, {}) },
           note_recheck: {
             type: 'object',
-            description: `插入批的复诊预注册（**operator=插入 且本批有 add_node 时必填**，其余算子不得携带）：{metric, days?}——插入边的到期结算零人审，没有预注册就没有结算判据。metric 取值域：${RECHECK_METRICS.join(' / ')}（思路官交接块里给的那一枚照抄）；days 缺省 ${RECHECK_DAYS_DEFAULT} 学习日、clamp [${RECHECK_DAYS_MIN},${RECHECK_DAYS_MAX}]。`,
+            description: render(EXEC_PARAM_NOTE_RECHECK_DESC, {
+              metrics: RECHECK_METRICS.join(' / '), default: RECHECK_DAYS_DEFAULT,
+              min: RECHECK_DAYS_MIN, max: RECHECK_DAYS_MAX,
+            }),
             properties: {
-              metric: { type: 'string', description: `可机判结局指标：${RECHECK_METRICS.join(' / ')}` },
-              days: { type: 'number', description: `复诊期学习日数（缺省 ${RECHECK_DAYS_DEFAULT}，越界 clamp 到 [${RECHECK_DAYS_MIN},${RECHECK_DAYS_MAX}]）` },
+              metric: { type: 'string', description: render(EXEC_PARAM_METRIC_DESC, { metrics: RECHECK_METRICS.join(' / ') }) },
+              days: { type: 'number', description: render(EXEC_PARAM_DAYS_DESC, { default: RECHECK_DAYS_DEFAULT, min: RECHECK_DAYS_MIN, max: RECHECK_DAYS_MAX }) },
             },
             required: ['metric'],
           },
         }, ['ops']),
       },
       {
-        name: 'draft_audit', description: '审计（写件，只读效果）：对草稿图 + 未发布增量跑与受理门同一套校验（草稿通过 = 门通过），返回门错误与草稿差异；另附非阻 findings（限本会话新铸概念的孤立/悬空/近似名撞车 + 终点收尾提示——不拦 finish，但该修的照修）。finish 前先 audit。', parameters: obj({}),
+        name: 'draft_audit', description: render(EXEC_TOOL_DRAFT_AUDIT_DESC, {}), parameters: obj({}),
       },
       {
-        name: 'draft_finish', description: '按批发布（写件）：把自上次发布以来的未发布增量硬化为生长批提案 → 受理门 → apply。基图漂移（外部改了图）或门复验未过 = 拒收零落盘、错误回灌继续修。收尾（终点坡道铺通）须以零 add_node 的纯 set_pre 独立批 finish。', parameters: obj({}),
+        name: 'draft_finish', description: render(EXEC_TOOL_DRAFT_FINISH_DESC, {}), parameters: obj({}),
       },
       {
-        name: 'draft_revert', description: '撤销（写件）：丢弃最近 N 条未发布增量（省略 count = 丢弃本批全部未发布增量，回到水位）。给「草稿里卡着修不掉的坏增量」留一条路——追加式草稿删不掉已入草稿的 op，del_node 重铸也改不动它；撤销后本批作废（连本批 note / 铸名 / confusable 建议一并清），已发布段（水位以下）不可动。', parameters: obj({
-          count: { type: 'number', description: '丢弃最近多少条未发布增量（正整数；省略 = 全部丢弃）' },
+        name: 'draft_revert', description: render(EXEC_TOOL_DRAFT_REVERT_DESC, {}), parameters: obj({
+          count: { type: 'number', description: render(EXEC_TOOL_DRAFT_REVERT_COUNT_DESC, {}) },
         }),
       },
     ]
@@ -1165,7 +1252,7 @@ export class GrowthSubsystem {
       created_at: nowIsoOf(this.e.clock.nowMs()), updated_at: nowIsoOf(this.e.clock.nowMs()),
     }
     if (doc.course !== c.name) {
-      throw new Error(`[coach-draft] 在途草稿属于课程「${doc.course}」，与「${c.name}」不符——同课程单份在途，先取消或完成它。`)
+      throw new Error(render(ERR_DRAFT_COURSE_MISMATCH, { draftCourse: doc.course, course: c.name }))
     }
     // 轮次预算（#312 B4）：耗尽不再在**入口**抛（那让每次触发先烧完思路官两轮、再当场
     // 失败——课程就此砖化，而文案指向的「显式取消」当时没有任何生产接面）。改为把预算
@@ -1291,19 +1378,31 @@ export class GrowthSubsystem {
     const domainsHint = async (): Promise<string> => {
       const { graph } = await draftNodesOf()
       return [
-        `档位取值域（teaches / assumes 的值）：${CONCEPT_TIERS.join(' / ')}`,
-        `op 词汇：${EDIT_OPS.join(' / ')}（糖算子 insert_prereq_chain / split_node / suggest_confusable；move 与 region/block 已退役）`,
-        `节点取值域（草稿图逐字）：${[...graph.names].slice(0, 80).join('、')}${graph.names.length > 80 ? ' …' : ''}`,
-        `概念取值域（在册 canonical）：${(await entriesOf()).map(e => e.canonical).slice(0, 60).join('、') || '（空册——随批 concepts 铸名）'}`,
+        render(EXEC_DOMAIN_TIERS, { tiers: CONCEPT_TIERS.join(' / ') }),
+        render(EXEC_DOMAIN_OPS, { ops: EDIT_OPS.join(' / ') }),
+        render(EXEC_DOMAIN_NODES, {
+          names: [...graph.names].slice(0, 80).join('、'),
+          more: graph.names.length > 80 ? render(EXEC_DOMAIN_NODES_MORE, {}) : '',
+        }),
+        render(EXEC_DOMAIN_CONCEPTS, {
+          list: (await entriesOf()).map(e => e.canonical).slice(0, 60).join('、') || render(EXEC_DOMAIN_CONCEPTS_EMPTY, {}),
+        }),
       ].join('\n  · ')
     }
 
     const renderDiff = (diff: DraftDiff): string => [
-      `新增节点 ${diff.added_nodes.length}：${diff.added_nodes.join('、') || '（无）'}`,
-      `删除节点 ${diff.removed_nodes.length}：${diff.removed_nodes.join('、') || '（无）'}`,
-      `改名 ${diff.renamed.length}：${diff.renamed.map(r => `${r.from}→${r.to}`).join('、') || '（无）'}`,
-      `新增边 ${diff.added_edges.length}：${diff.added_edges.map(e => `${e.node} ← ${e.pre}`).join('、') || '（无）'}`,
-      `接线改写 ${diff.rewired.length}：${diff.rewired.map(w => `${w.node}（${w.pres_before.join('、') || '∅'} → ${w.pres_after.join('、') || '∅'}）`).join('；') || '（无）'}`,
+      render(EXEC_DIFF_ADDED_NODES, { count: diff.added_nodes.length, list: diff.added_nodes.join('、') || render(EXEC_DIFF_NONE, {}) }),
+      render(EXEC_DIFF_REMOVED_NODES, { count: diff.removed_nodes.length, list: diff.removed_nodes.join('、') || render(EXEC_DIFF_NONE, {}) }),
+      render(EXEC_DIFF_RENAMED, { count: diff.renamed.length, list: diff.renamed.map(r => render(EXEC_DIFF_RENAMED_ITEM, { from: r.from, to: r.to })).join('、') || render(EXEC_DIFF_NONE, {}) }),
+      render(EXEC_DIFF_ADDED_EDGES, { count: diff.added_edges.length, list: diff.added_edges.map(e => render(EXEC_DIFF_ADDED_EDGE_ITEM, { node: e.node, pre: e.pre })).join('、') || render(EXEC_DIFF_NONE, {}) }),
+      render(EXEC_DIFF_REWIRED, {
+        count: diff.rewired.length,
+        list: diff.rewired.map(w => render(EXEC_DIFF_REWIRED_ITEM, {
+          node: w.node,
+          before: w.pres_before.join('、') || render(EXEC_DIFF_EMPTY_SET, {}),
+          after: w.pres_after.join('、') || render(EXEC_DIFF_EMPTY_SET, {}),
+        })).join('；') || render(EXEC_DIFF_NONE, {}),
+      }),
     ].join('\n')
 
     // —— 写件三工具 ——
@@ -1313,18 +1412,24 @@ export class GrowthSubsystem {
         // 轮次预算耗尽后只放行收束动作（#312 B4）：追加补丁被拒，并给出真实存在的两条出路
         // （发布已备好的那批；或取消本会话草稿重开——此前这条「取消」只在文案里存在）。
         if (budgetExhausted()) {
-          await logRound('patch', `补丁被拒（轮次预算耗尽，${doc.rounds.length}/${GROWTH_DRAFT_MAX_ROUNDS}）`)
-          throw new Error(`[draft_patch] 本会话轮次预算耗尽（${doc.rounds.length}/${GROWTH_DRAFT_MAX_ROUNDS} 轮）——不再接受追加；本批已有 ${doc.ops.length - doc.published} 条未发布增量：可 draft_audit 后 draft_finish 发布它们、draft_revert 撤掉卡住的增量，或取消本会话草稿重开一批（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。`)
+          await logRound('patch', render(EXEC_ROUND_PATCH_BUDGET, { rounds: doc.rounds.length, max: GROWTH_DRAFT_MAX_ROUNDS }))
+          throw new Error(render(ERR_PATCH_BUDGET, {
+            rounds: doc.rounds.length, max: GROWTH_DRAFT_MAX_ROUNDS,
+            unpublished: doc.ops.length - doc.published,
+          }))
         }
         const rawOps = Array.isArray(args.ops) ? args.ops as Array<Record<string, unknown>> : []
-        if (!rawOps.length) throw new Error('[draft_patch] ops 不能为空——不产结构就不要调本工具。')
+        if (!rawOps.length) throw new Error(render(ERR_PATCH_EMPTY_OPS, {}))
         // 形状门「收下即归一」（#301 缺陷① / ADR-0088 §修订）：可修的形状当场归一为发布
         // 形态（回执注明归一动作、语料补标 tolerated），修不了的整批拒收回灌合法形态——
         // 毒形状永不随草稿过夜（此前原样入 doc.ops/doc.concepts，直到 finish 才在权威门炸）
         const shape = normalizePatchShape(rawOps, args.concepts)
         if (shape.errors.length) {
-          await logRound('patch', `补丁被拒（形状不合法 ${shape.errors.length} 处；整批回滚）`, shape.errors)
-          throw new Error(`[draft_patch] 形状未过（整批回滚，零落草稿）：\n${shape.errors.map(e => `  ✗ ${e}`).join('\n')}\n${PATCH_SHAPE_CHEATSHEET}`)
+          await logRound('patch', render(EXEC_ROUND_PATCH_SHAPE, { count: shape.errors.length }), shape.errors)
+          throw new Error(render(ERR_PATCH_SHAPE, {
+            errors: shape.errors.map(e => render(EXEC_ERR_ITEM, { error: e })).join('\n'),
+            cheatsheet: render(PATCH_SHAPE_CHEATSHEET, {}),
+          }))
         }
         // 糖算子展开（#272 统一入口）：insert_prereq_chain / split_node → 原子 EditOp；
         // suggest_confusable → confusable 建议（不是图 op，finish 发布成功后展开为候选提案）
@@ -1332,7 +1437,7 @@ export class GrowthSubsystem {
         const { ops: expanded, confusables: suggestions } = expandPatchOps(shape.ops, nodes, graph, endpointNames(anchors))
         const unpublishedCount = doc.ops.length - doc.published + expanded.length
         if (unpublishedCount > GROWTH_DRAFT_MAX_OPS_PER_BATCH) {
-          throw new Error(`[draft_patch] 每批未发布增量 ≤${GROWTH_DRAFT_MAX_OPS_PER_BATCH} 条（本补丁后将为 ${unpublishedCount}）——先 draft_finish 发布再开新批。`)
+          throw new Error(render(ERR_PATCH_MAX_OPS, { max: GROWTH_DRAFT_MAX_OPS_PER_BATCH, count: unpublishedCount }))
         }
         const mints = shape.concepts
         // 本补丁**将要**声明的 note 与铸名：试算必须按「补丁生效后的本批形态」跑——拿旧 note
@@ -1355,12 +1460,16 @@ export class GrowthSubsystem {
         if (args.note_recheck !== undefined) {
           const v = recheckPreregOf(args.note_recheck)
           if (v.errors.length || !v.prereg) {
-            await logRound('patch', `补丁被拒（note_recheck 未过预注册门；整批回滚）`, v.errors)
-            throw new Error(`[draft_patch] note_recheck 未过复诊预注册门（与提案受理门同一套校验；拒收即整批回滚）：\n${v.errors.map(e => `  ✗ ${e}`).join('\n')}\n合法取值域：metric ∈ ${RECHECK_METRICS.join('/')}；days 缺省 ${RECHECK_DAYS_DEFAULT}、clamp [${RECHECK_DAYS_MIN},${RECHECK_DAYS_MAX}]`)
+            await logRound('patch', render(EXEC_ROUND_PATCH_RECHECK, {}), v.errors)
+            throw new Error(render(ERR_PATCH_RECHECK, {
+              errors: v.errors.map(e => render(EXEC_ERR_ITEM, { error: e })).join('\n'),
+              metrics: RECHECK_METRICS.join('/'),
+              default: RECHECK_DAYS_DEFAULT, min: RECHECK_DAYS_MIN, max: RECHECK_DAYS_MAX,
+            }))
           }
           const base = declaredNote ?? doc.note
           if (!base) {
-            throw new Error('[draft_patch] note_recheck 随本批 note 携带——本次补丁缺 note_operator/note_reason、草稿里也还没有本批 note：复诊预注册是本批声明的字段，不是独立追加项。')
+            throw new Error(render(ERR_PATCH_RECHECK_NO_NOTE, {}))
           }
           declaredNote = { ...base, recheck: v.prereg }
         }
@@ -1379,30 +1488,40 @@ export class GrowthSubsystem {
         const { ctx: trialCtx } = await gateCtxOf({ nodes, graph }, nextMints)
         const trialErrors = (await editProposalGateErrors(trialSpec, trialCtx)).errors
         if (trialErrors.length) {
-          await logRound('patch', `补丁被拒（${expanded.length} 条）`, trialErrors)
-          throw new Error(`[draft_patch] 补丁未过受理门同一套校验（整批回滚，零草稿）：\n`
-            + `${trialErrors.map(e => `  ✗ ${e}`).join('\n')}\n合法取值域：\n  · ${await domainsHint()}`)
-
+          await logRound('patch', render(EXEC_ROUND_PATCH_REJECTED, { count: expanded.length }), trialErrors)
+          throw new Error(render(ERR_PATCH_GATE, {
+            errors: trialErrors.map(e => render(EXEC_ERR_ITEM, { error: e })).join('\n'),
+            domains: await domainsHint(),
+          }))
         }
         doc.ops.push(...expanded)
         if (mints.length) doc.concepts.push(...mints)
         if (suggestions.length) doc.confusables = [...(doc.confusables ?? []), ...suggestions]
         if (nextNote !== doc.note) doc.note = nextNote
-        await logRound('patch', `补丁 ${expanded.length} 条（未发布 ${doc.ops.length - doc.published}）${shape.normalized.length ? `；形状归一 ${shape.normalized.length} 处` : ''}`)
+        await logRound('patch', render(EXEC_ROUND_PATCH_OK, {
+          count: expanded.length, unpublished: doc.ops.length - doc.published,
+          norm: shape.normalized.length ? render(EXEC_ROUND_PATCH_OK_NORM, { count: shape.normalized.length }) : '',
+        }))
         // 归一命中 → 宿主给当次捕获补标 tolerated（此刻最近一条捕获就是本轮；批次结束后
         // 再补标只会落到最后一轮——#301 缺陷③ 同款的「标对件」纪律）
         if (shape.normalized.length) opts.onTolerated?.('patch_shape_normalized')
         const normLines = shape.normalized.length
-          ? `\n形状归一 ${shape.normalized.length} 处（已按发布形态收下）：\n${shape.normalized.map(s => `  · ${s}`).join('\n')}`
+          ? render(RECEIPT_PATCH_NORM, {
+            count: shape.normalized.length,
+            lines: shape.normalized.map(s => render(EXEC_NORM_ITEM, { norm: s })).join('\n'),
+          })
           : ''
-        return `已入草稿：本补丁 ${expanded.length} 条；未发布增量 ${doc.ops.length - doc.published} 条（水位 ${doc.published}/${doc.ops.length}）。${normLines}\n先 draft_audit 再 draft_finish。`
+        return render(RECEIPT_PATCH, {
+          count: expanded.length, unpublished: doc.ops.length - doc.published,
+          published: doc.published, total: doc.ops.length, norm: normLines,
+        })
       }
       if (call.name === 'draft_audit') {
         // 空草稿 audit（#315 B4）：零未发布增量 = 本会话无事可做，不跑门、不报门错误——
         // 此前空草稿会吃到「ops: 提案没有操作条目」的门错误，模型要烧几十轮才明白该停。
         if (!unpublishedOf().length) {
-          await logRound('audit', '审计：空草稿（零未发布增量）——无事可做')
-          return '没有未发布增量——本会话无事可做（可直接收束：已发布段无需 audit/finish；要长新内容就 draft_patch 开新批）。'
+          await logRound('audit', render(EXEC_ROUND_AUDIT_EMPTY, {}))
+          return render(RECEIPT_AUDIT_EMPTY, {})
         }
         // 审计 = **把 finish 要提交的那一份**喂给受理门的完整序列（#309 缺陷①：此前只跑
         // replayDraft——门的结构子集，schema 门缺席，于是「审计通过」与「finish 被拒」可以同帧
@@ -1423,16 +1542,26 @@ export class GrowthSubsystem {
             confusables: doc.confusables ?? [], anchors,
           })
         }
-        await logRound('audit', errors.length ? `审计：${errors.length} 个门错误` : findings.length ? `审计：通过（${findings.length} 条 findings）` : '审计：通过')
+        await logRound('audit', errors.length
+          ? render(EXEC_ROUND_AUDIT_ERRORS, { count: errors.length })
+          : findings.length ? render(EXEC_ROUND_AUDIT_FINDINGS, { count: findings.length }) : render(EXEC_ROUND_AUDIT_OK, {}))
         if (errors.length) {
-          return `审计未过（与受理门同一套校验，草稿通过 = 门通过）：\n${errors.map(e => `  ✗ ${e}`).join('\n')}`
-            + `\n合法取值域：\n  · ${await domainsHint()}\n草稿差异：\n${renderDiff(diff)}`
+          return render(RECEIPT_AUDIT_FAIL, {
+            errors: errors.map(e => render(EXEC_ERR_ITEM, { error: e })).join('\n'),
+            domains: await domainsHint(),
+            diff: renderDiff(diff),
+          })
         }
-        return `审计通过（草稿通过 = 门通过）。草稿差异：\n${renderDiff(diff)}`
-          + (findings.length ? `\n审计 findings（非阻 ${findings.length} 条；不拦 finish，该修的照修）：\n${findings.map(f => `  ⚠ ${f}`).join('\n')}` : '\n审计 findings：无')
+        return render(RECEIPT_AUDIT_OK, { diff: renderDiff(diff) })
+          + (findings.length
+            ? render(RECEIPT_AUDIT_FINDINGS, {
+              count: findings.length,
+              lines: findings.map(f => render(EXEC_FINDING_ITEM, { finding: f })).join('\n'),
+            })
+            : render(RECEIPT_AUDIT_FINDINGS_NONE, {}))
           + (doc.ops.length - doc.published
-            ? `\n未发布增量 ${doc.ops.length - doc.published} 条——可 draft_finish。`
-            : '\n未发布增量 0 条——不可 finish，先用 draft_patch 补一批。')
+            ? render(RECEIPT_AUDIT_NEXT_READY, { count: doc.ops.length - doc.published })
+            : render(RECEIPT_AUDIT_NEXT_NONE, {}))
       }
       if (call.name === 'draft_revert') {
         // 逃生口（#309 缺陷②）：草稿只能追加，被门拒的 op 永久卡在未发布段且每次 finish 重投
@@ -1440,16 +1569,16 @@ export class GrowthSubsystem {
         // del+add 重铸在原理上无效）——「模型永远有一步可走」的兜底就是这一具。
         const unpublished = unpublishedOf()
         if (!unpublished.length) {
-          throw new Error('[draft_revert] 没有未发布增量可撤——已发布段（水位以下）不可动。')
+          throw new Error(render(ERR_REVERT_NOTHING, {}))
         }
         const raw = args.count
         let count = unpublished.length
         if (raw !== undefined) {
           if (typeof raw !== 'number' || !Number.isInteger(raw) || raw <= 0) {
-            throw new Error(`[draft_revert] count 必须是正整数（省略 = 丢弃全部未发布增量；收到 ${JSON.stringify(raw)}）。`)
+            throw new Error(render(ERR_REVERT_COUNT_INT, { value: JSON.stringify(raw) }))
           }
           if (raw > unpublished.length) {
-            throw new Error(`[draft_revert] count=${raw} 超过未发布增量 ${unpublished.length} 条（省略 count 即全部丢弃）。`)
+            throw new Error(render(ERR_REVERT_COUNT_MAX, { count: raw, total: unpublished.length }))
           }
           count = raw
         }
@@ -1463,27 +1592,36 @@ export class GrowthSubsystem {
         }
         const { nodes, graph } = await draftNodesOf()
         const residual = replayDraft(nodes, graph, unpublishedOf()).errors
-        await logRound('revert', `撤销 ${dropped.length} 条未发布增量（余 ${unpublishedOf().length} 条）`)
-        return `已撤销 ${dropped.length} 条未发布增量：${dropped.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('、')}。`
-          + `\n水位 ${doc.published}/${doc.ops.length}；未发布增量 ${unpublishedOf().length} 条。`
-          + (unpublishedOf().length ? `\n剩余未发布段重放：${residual.length ? `\n${residual.map(e => `  ✗ ${e}`).join('\n')}` : '通过（结构面）'}` : '')
-          + (unpublishedOf().length ? '\n可继续 draft_patch 或 draft_audit。' : '\n本批已清空——用 draft_patch 重开一批。')
+        await logRound('revert', render(EXEC_ROUND_REVERT, { count: dropped.length, rest: unpublishedOf().length }))
+        return render(RECEIPT_REVERT, {
+          count: dropped.length,
+          list: dropped.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('、'),
+        })
+          + render(RECEIPT_REVERT_WATERMARK, {
+            published: doc.published, total: doc.ops.length, unpublished: unpublishedOf().length,
+          })
+          + (unpublishedOf().length ? render(RECEIPT_REVERT_RESIDUAL, {
+            body: residual.length
+              ? `\n${residual.map(e => render(EXEC_ERR_ITEM, { error: e })).join('\n')}`
+              : render(RECEIPT_REVERT_RESIDUAL_OK, {}),
+          }) : '')
+          + (unpublishedOf().length ? render(RECEIPT_REVERT_NEXT_RESUME, {}) : render(RECEIPT_REVERT_NEXT_CLEAR, {}))
       }
       if (call.name === 'draft_finish') {
         const unpublished = unpublishedOf()
         const noteLite = doc.note
         if (!noteLite || !noteLite.operator || !noteLite.reason) {
-          throw new Error('[draft_finish] 缺本批 note（operator/reason）——先用 draft_patch 的 note_operator/note_reason 声明本批算子与理由。')
+          throw new Error(render(ERR_FINISH_NO_NOTE, {}))
         }
         if (!(GROWTH_OPERATORS as readonly string[]).includes(noteLite.operator)) {
-          throw new Error(`[draft_finish] note.operator 非法：${noteLite.operator}（允许 ${GROWTH_OPERATORS.join('/')}）`)
+          throw new Error(render(ERR_FINISH_BAD_OPERATOR, { operator: noteLite.operator, allowed: GROWTH_OPERATORS.join('/') }))
         }
         // 提案形态由 batchSpecOf 单点装配（含本批生效的复诊预注册，见该函数）——试算/审计/
         // 发布三处喂给门的因此是同一份对象，不会出现「试算带上计划的 recheck、发布丢了它」。
         const spec: EditProposalSpec = batchSpecOf(unpublished)
         // 零增量 finish 无意义（空手结束由入口 fail loud 执法）
         if (!unpublished.length) {
-          throw new Error('[draft_finish] 没有未发布增量——先 draft_patch 再 finish。')
+          throw new Error(render(ERR_FINISH_EMPTY, {}))
         }
         // 门复验对**真实基图**再跑一遍（水位模型：基图漂移 = 拒收零落盘、草稿保留）。走的是
         // draft_audit 同一入口（#309 缺陷①）——审计通过而此处被拒只可能源于门之间的状态变化
@@ -1498,11 +1636,13 @@ export class GrowthSubsystem {
           // 重试原样再失败）。保险丝：形状归一（缺陷①）落地后权威门恒见合法形态，本分支
           // 只该由「读侧不自愈的存量毒草稿」这类情形触发。
           const msg = err instanceof Error ? err.message : String(err)
-          driftErrors = [`门复验内部异常（非门拒绝——本批 ops/概念块含引擎无法解析的字段形状）：${msg}\n${PATCH_SHAPE_CHEATSHEET}`]
+          driftErrors = [render(ERR_FINISH_DRIFT_EXCEPTION, { msg, cheatsheet: render(PATCH_SHAPE_CHEATSHEET, {}) })]
         }
         if (driftErrors.length) {
-          await logRound('finish', `finish 被拒（${driftErrors.length} 个门错误；零落盘）`, driftErrors)
-          throw new Error(`[draft_finish] 门复验未过（拒收零落盘，草稿保留——修正后重试）：\n${driftErrors.map(e => `  ✗ ${e}`).join('\n')}`)
+          await logRound('finish', render(EXEC_ROUND_FINISH_REJECT, { count: driftErrors.length }), driftErrors)
+          throw new Error(render(ERR_FINISH_GATE, {
+            errors: driftErrors.map(e => render(EXEC_ERR_ITEM, { error: e })).join('\n'),
+          }))
         }
         // 真实受理门 → apply（propose 自带 schema 门 + 全门序列；拒收零落盘）
         let prop: GraphEditProposalResult
@@ -1510,18 +1650,19 @@ export class GrowthSubsystem {
           prop = await this.e.graphPropose('edit', YAML.stringify(spec)) as GraphEditProposalResult
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
-          await logRound('finish', `propose 被拒（零落盘）`, [msg])
-          throw new Error(`[draft_finish] 受理门拒收（零落盘，草稿保留）：\n${msg}`)
+          await logRound('finish', render(EXEC_ROUND_FINISH_PROPOSE_REJECT, {}), [msg])
+          throw new Error(render(ERR_FINISH_PROPOSE, { msg }))
         }
         let applied: GraphApplyEditResult
         try {
           applied = await this.e.graphApply('edit', prop.id) as GraphApplyEditResult
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
-          await this.e.graphReject(prop.id, `生长草稿 finish 自动 apply 失败：${msg}`)
-            .catch(rejErr => this.rejectCompensateFail(prop.id, `生长草稿 finish 自动 apply 失败：${msg}`, rejErr))
-          await logRound('finish', `apply 失败（提案 #${prop.id} 已自清）`, [msg])
-          throw new Error(`[draft_finish] apply 失败（提案已拒绝清场，草稿保留）：\n${msg}`)
+          const rejectReason = render(REJECT_FINISH_APPLY, { msg })
+          await this.e.graphReject(prop.id, rejectReason)
+            .catch(rejErr => this.rejectCompensateFail(prop.id, rejectReason, rejErr))
+          await logRound('finish', render(EXEC_ROUND_FINISH_APPLY_FAIL, { id: prop.id }), [msg])
+          throw new Error(render(ERR_FINISH_APPLY, { msg }))
         }
         // sealed 谓词要的是**现行锚**（本批 set_pre 接线是否构成收尾宣告）——只读锚文件，
         // 不为它再装载一遍图与登记表（门复验刚刚跑过，那两次装载在 gateCtxOf 里）。
@@ -1546,10 +1687,10 @@ export class GrowthSubsystem {
               a: s.concept, b: s.with,
               evidence: [`生长批提案 #${prop.id} 铸名建议（${noteLite.operator}——${noteLite.reason}）`],
             })
-            confusableLines.push(`confusable 候选提案 #${p.id}：「${p.a}」→「${p.b}」待人审`)
+            confusableLines.push(render(EXEC_CONFUSABLE_CANDIDATE, { id: p.id, a: p.a, b: p.b }))
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
-            confusableLines.push(`confusable 建议未展开（「${s.concept}」↔「${s.with}」）：${msg.split('\n')[0]}`)
+            confusableLines.push(render(EXEC_CONFUSABLE_FAIL, { concept: s.concept, with: s.with, msg: msg.split('\n')[0] }))
           }
         }
         doc.confusables = []
@@ -1559,11 +1700,19 @@ export class GrowthSubsystem {
           operator: noteLite.operator, reason: noteLite.reason,
           target_endpoints: noteLite.target_endpoints ?? [], created,
         })
-        await logRound('finish', `发布成功：提案 #${prop.id}，快照 v${applied.snapshot}，ops ${unpublished.length}${sealed.effects.length ? `；sealed：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}` : ''}${confusableLines.length ? `；${confusableLines.length} 条 confusable 建议` : ''}`)
+        await logRound('finish', render(EXEC_ROUND_FINISH_OK, {
+          id: prop.id, snapshot: applied.snapshot, ops: unpublished.length,
+          sealed: sealed.effects.length ? render(EXEC_ROUND_FINISH_SEALED, { effects: sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、') }) : '',
+          confusable: confusableLines.length ? render(EXEC_ROUND_FINISH_CONFUSABLE, { count: confusableLines.length }) : '',
+        }))
         if (doc.published === doc.ops.length) await deleteDraft(this.e.fs, draftPath)
-        return `发布成功：提案 #${prop.id} 已 apply（快照 v${applied.snapshot}）；水位前移至 ${doc.published}/${doc.ops.length}。${sealed.effects.length ? `收尾宣告：${sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、')}。` : ''}${confusableLines.length ? `\n${confusableLines.join('\n')}` : ''}`
+        return render(RECEIPT_FINISH, {
+          id: prop.id, snapshot: applied.snapshot, published: doc.published, total: doc.ops.length,
+          sealed: sealed.effects.length ? render(RECEIPT_FINISH_SEALED, { effects: sealed.effects.map(e => `${e.endpoint}=${e.action}`).join('、') }) : '',
+          confusable: confusableLines.length ? `\n${confusableLines.join('\n')}` : '',
+        })
       }
-      throw new Error(`白名单外工具「${call.name}」被拒：执行官写件只有 draft_patch / draft_audit / draft_finish / draft_revert。`)
+      throw new Error(render(ERR_EXEC_WHITELIST, { name: call.name }))
     }
 
     // —— 回路 ——
@@ -1573,22 +1722,46 @@ export class GrowthSubsystem {
     const template = await this.e.content.loadPrompt('执行官回合')
     const pack = await this.coachContextPack(c.name, { today, packLabel: '执行官——草稿会话上下文' })
     const draftStatus = [
-      `## 草稿状态（会话 ${doc.session_id}${resumed ? '，续建' : '，新建'}；水位 ${doc.published}/${doc.ops.length}）`, '',
-      `- 未发布增量 ${doc.ops.length - doc.published} 条；铸名缓存 ${doc.concepts.length} 条`,
-      ...(doc.note ? [`- 本批 note：${doc.note.operator}——${doc.note.reason}`] : []),
-      ...(doc.rounds.length ? [`- 轮次日志（尾部 8 条）：`, ...doc.rounds.slice(-8).map(r => `  - [${r.kind}] ${r.summary}${r.errors ? `（✗ ${r.errors.length} 个错误）` : ''}`)] : []),
+      render(EXEC_STATUS_HEADING, {
+        session: doc.session_id,
+        resumed: resumed ? render(EXEC_STATUS_RESUMED, {}) : render(EXEC_STATUS_NEW, {}),
+        published: doc.published, total: doc.ops.length,
+      }), '',
+      render(EXEC_STATUS_COUNTS, {
+        unpublished: doc.ops.length - doc.published,
+        // 腐坏草稿（concepts 存成字典而非列表）下不能崩：本块是诊断面，读数取舍不栏后续门折叠
+        mints: Array.isArray(doc.concepts) ? doc.concepts.length : 0,
+      }),
+      ...(doc.note ? [render(EXEC_STATUS_NOTE, { operator: doc.note.operator, reason: doc.note.reason })] : []),
+      ...(doc.rounds.length ? [
+        render(EXEC_STATUS_ROUNDS_HEADING, {}),
+        ...doc.rounds.slice(-8).map(r => render(EXEC_STATUS_ROUND_LINE, {
+          kind: r.kind, summary: r.summary,
+          errors: r.errors ? render(EXEC_STATUS_ROUND_ERRORS, { count: r.errors.length }) : '',
+        })),
+      ] : []),
     ].join('\n')
     // 思路官交接块（#273）：方向裁决 advisory 随包——补丁纪律与门序列不因计划放松；
     // 零名字契约与计划同构：执行官仍须对草稿图逐字对表后才落 op。
     const handover = opts.plan ? [
-      '## 思路官交接（方向裁决——advisory，不是补丁）', '',
-      `- 算子：${opts.plan.operator}；朝向：${opts.plan.target_endpoints.join('、') || '（未声明）'}`,
-      `- 理由：${opts.plan.reason}`,
-      ...opts.plan.steps.map((s, i) => `- 台阶 ${i + 1}：${s.intent}${s.teaches_concept ? `（概念面：${s.teaches_concept}）` : ''}${s.est_hint ? `（约 ${s.est_hint} 分钟）` : ''}`),
-      ...(opts.plan.recheck ? [`- 预注册复诊：${opts.plan.recheck.metric}（${opts.plan.recheck.days ?? RECHECK_DAYS_DEFAULT} 学习日）——插入批随批携带：用 draft_patch 的 note_recheck 写这一枚（metrics 取值域见该参数说明；草稿侧缺席时按本计划兜底）。`] : []),
+      render(EXEC_HANDOVER_HEADING, {}), '',
+      render(EXEC_HANDOVER_OPERATOR, {
+        operator: opts.plan.operator,
+        endpoints: opts.plan.target_endpoints.join('、') || render(EXEC_HANDOVER_ENDPOINTS_EMPTY, {}),
+      }),
+      render(EXEC_HANDOVER_REASON, { reason: opts.plan.reason }),
+      ...opts.plan.steps.map((s, i) => render(EXEC_HANDOVER_STEP, {
+        index: i + 1,
+        intent: s.intent,
+        concept: s.teaches_concept ? render(EXEC_HANDOVER_STEP_CONCEPT, { concept: s.teaches_concept }) : '',
+        est: s.est_hint ? render(EXEC_HANDOVER_STEP_EST, { est: s.est_hint }) : '',
+      })),
+      ...(opts.plan.recheck ? [render(EXEC_HANDOVER_RECHECK, {
+        metric: opts.plan.recheck.metric, days: opts.plan.recheck.days ?? RECHECK_DAYS_DEFAULT,
+      })] : []),
       // #316 / ADR-0099：罗盘写权归罗盘站——思路官计划不再携带 route，交接块不再提弧。
       '',
-      '计划是方向不是操作：节点名与补丁仍须你对草稿图逐字对表后用 draft_patch 落地；与图面事实冲突时以图面为准，偏离计划时在 note_reason 里说一句。',
+      render(EXEC_HANDOVER_FOOTER, {}),
     ].join('\n') : undefined
     const prompt = withContractLast(template, [pack, view, draftStatus, handover]
       .map(b => b?.trim()).filter((b): b is string => Boolean(b)).join('\n\n---\n\n'))
@@ -1609,7 +1782,10 @@ export class GrowthSubsystem {
           // 补记**尽力而为**：轮志落盘失败（IO）不得顶替掉原始错误——排查面第一优先是
           // 「这个工具为什么抛」，不是「日志为什么没写上」。
           try {
-            await logRound(kind, `${DRAFT_ROUND_CRASH_LABEL[kind]}（${(msg.split('\n')[0] ?? '').slice(0, DRAFT_ROUND_HEAD_LIMIT)}）`, [msg])
+            await logRound(kind, render(EXEC_CRASH_SUMMARY, {
+              label: DRAFT_ROUND_CRASH_LABEL[kind],
+              head: (msg.split('\n')[0] ?? '').slice(0, DRAFT_ROUND_HEAD_LIMIT),
+            }), [msg])
           } catch {
             this.e.logger.warn('growth.draft.round_write_failed', { course: c.name, session: doc.session_id, kind })
           }
@@ -1641,8 +1817,13 @@ export class GrowthSubsystem {
       await persist()
       log.warn('coach.draft.unfinished', { course: c.name, session: doc.session_id, unpublished: doc.ops.length - doc.published })
       throw new Error(budgetExhausted()
-        ? `[coach-draft] 轮次预算已耗尽（${doc.rounds.length}/${GROWTH_DRAFT_MAX_ROUNDS} 轮）、本批仍有 ${doc.ops.length - doc.published} 条未发布增量未发布成功——真出口：修好门错误后 finish、draft_revert 撤掉卡住的增量重开一批，或取消本会话草稿（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。`
-        : `[coach-draft] 回路收束但草稿仍有 ${doc.ops.length - doc.published} 条未发布增量且未成功 finish（禁止空手结束）——草稿已保留（会话 ${doc.session_id}），续建或显式取消（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。`)
+        ? render(ERR_DRAFT_BUDGET_EXHAUSTED, {
+          rounds: doc.rounds.length, max: GROWTH_DRAFT_MAX_ROUNDS,
+          unpublished: doc.ops.length - doc.published,
+        })
+        : render(ERR_DRAFT_UNFINISHED, {
+          unpublished: doc.ops.length - doc.published, session: doc.session_id,
+        }))
     }
     if (doc.published === doc.ops.length && finished) await deleteDraft(this.e.fs, draftPath)
     else if (doc.ops.length === 0 && !doc.rounds.some(r => r.kind === 'patch' || r.kind === 'finish')) {

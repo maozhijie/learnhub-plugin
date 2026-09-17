@@ -17,6 +17,21 @@ import { nearNameCandidates, resolveConcept, validateConceptEntry } from '../con
 import type { Graph } from '../graph/graph.ts'
 import type { GNode, Misconception } from '../types.ts'
 import type { EndpointAnchor } from './seed.ts'
+import { render } from '../infra/prompt-render.ts'
+import {
+  FIND_CONFUSABLE_DANGLING, FIND_NEAR_NAME, FIND_ORPHAN_MINT, FIND_SEAL_TODO,
+  OP_ERR_CHAIN_MIN, OP_ERR_CHAIN_PRE_LIST, OP_ERR_CONFUSABLE_FIELDS, OP_ERR_CONFUSABLE_SAME,
+  OP_ERR_SPLIT_DUP, OP_ERR_SPLIT_ENDPOINT, OP_ERR_SPLIT_MIN, OP_ERR_SPLIT_MISSING, OP_ERR_SPLIT_NO_NODE,
+  SHAPE_ERR_MINT_DICT, SHAPE_ERR_MINT_EMPTY, SHAPE_ERR_MINT_LIST, SHAPE_ERR_MINT_SHAPE,
+  SHAPE_ERR_MIS_DICT_EMPTY, SHAPE_ERR_MIS_DICT_EMPTY_CONCEPT, SHAPE_ERR_MIS_DICT_VALUE,
+  SHAPE_ERR_MIS_ITEM_MAP, SHAPE_ERR_MIS_ITEM_NO_CONCEPT, SHAPE_ERR_MIS_ITEM_NO_MODEL,
+  SHAPE_ERR_MIS_ITEM_UNKNOWN, SHAPE_ERR_MIS_SHAPE, SHAPE_ERR_MIS_STRING_LIST,
+  SHAPE_ERR_PAIR_EMPTY, SHAPE_ERR_PAIR_ITEM, SHAPE_ERR_TIER_MAP,
+  SHAPE_NORM_MINT_DICT, SHAPE_NORM_MINT_NAME_KEY, SHAPE_NORM_MINT_NOT_LIST, SHAPE_NORM_MINT_STRING,
+  SHAPE_NORM_MIS_BARE, SHAPE_NORM_MIS_DICT, SHAPE_NORM_TIER_PAIR,
+  SHAPE_WORD_BOOLEAN, SHAPE_WORD_LIST, SHAPE_WORD_MAP, SHAPE_WORD_NULL, SHAPE_WORD_NUMBER,
+  SHAPE_WORD_STRING, SHAPE_WORD_STRING_LIST,
+} from '../prompts/coach-draft.ts'
 
 /** 执行官站的语料站标签（host STATIONS.growthDraft 引门面常量对齐；站名是受控词表）。 */
 export const GROWTH_DRAFT_STATION = '教练执行'
@@ -103,12 +118,12 @@ export interface PatchShapeNormalization {
 
 /** 收到形态的人话名（回灌行用：让模型认得出自己写了什么）。 */
 function shapeWordOf(v: unknown): string {
-  if (Array.isArray(v)) return v.every(x => typeof x === 'string') ? '字符串列表' : '列表'
-  if (v === null) return 'null'
-  if (typeof v === 'object') return '字典'
-  if (typeof v === 'string') return '字符串'
-  if (typeof v === 'number') return '数字'
-  if (typeof v === 'boolean') return '布尔'
+  if (Array.isArray(v)) return v.every(x => typeof x === 'string') ? render(SHAPE_WORD_STRING_LIST, {}) : render(SHAPE_WORD_LIST, {})
+  if (v === null) return render(SHAPE_WORD_NULL, {})
+  if (typeof v === 'object') return render(SHAPE_WORD_MAP, {})
+  if (typeof v === 'string') return render(SHAPE_WORD_STRING, {})
+  if (typeof v === 'number') return render(SHAPE_WORD_NUMBER, {})
+  if (typeof v === 'boolean') return render(SHAPE_WORD_BOOLEAN, {})
   return String(typeof v)
 }
 
@@ -120,24 +135,24 @@ function tierMapFieldOf(
 ): Record<string, unknown> | undefined {
   if (!Array.isArray(raw)) {
     if (typeof raw === 'object' && raw !== null) return raw as Record<string, unknown>
-    out.errors.push(`${where}: 必须是「概念→档」映射（{概念: 档}）——收到 ${shapeWordOf(raw)}`)
+    out.errors.push(render(SHAPE_ERR_TIER_MAP, { where, shape: shapeWordOf(raw) }))
     return undefined
   }
   const map: Record<string, unknown> = {}
   for (const [i, pair] of raw.entries()) {
     if (!Array.isArray(pair) || pair.length !== 2) {
-      out.errors.push(`${where}: 配对列表的每一项都要是 [概念, 档] 二元组——第 ${i + 1} 项是 ${JSON.stringify(pair)}；不用配对列表就写映射 {概念: 档}`)
+      out.errors.push(render(SHAPE_ERR_PAIR_ITEM, { where, index: i + 1, value: JSON.stringify(pair) }))
       return undefined
     }
     const concept = String(pair[0] ?? '').trim()
     const tier = String(pair[1] ?? '').trim()
     if (!concept || !tier) {
-      out.errors.push(`${where}: 配对列表的每一项都要有概念名与档——第 ${i + 1} 项是 ${JSON.stringify(pair)}`)
+      out.errors.push(render(SHAPE_ERR_PAIR_EMPTY, { where, index: i + 1, value: JSON.stringify(pair) }))
       return undefined
     }
     map[concept] = tier
   }
-  out.normalized.push(`${where} 配对列表 → 概念→档映射（${Object.keys(map).length} 条）`)
+  out.normalized.push(render(SHAPE_NORM_TIER_PAIR, { where, count: Object.keys(map).length }))
   return map
 }
 
@@ -153,26 +168,26 @@ function misconceptionsFieldOf(
 ): Misconception[] | undefined {
   if (Array.isArray(raw)) {
     if (raw.some(x => typeof x === 'string')) {
-      out.errors.push(`${where}: 误解必须是条目列表 [{concept, model}]——收到字符串列表（一条字符串拆不出它属于哪个概念）：每条写成 {concept: 在册概念名, model: 错误模型文字}；按概念归组也可写字典 {概念: [文字…]}`)
+      out.errors.push(render(SHAPE_ERR_MIS_STRING_LIST, { where }))
       return undefined
     }
     for (const [j, item] of raw.entries()) {
       if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-        out.errors.push(`${where}: 误解条目第 ${j + 1} 项必须是映射 {concept, model}——收到 ${shapeWordOf(item)}`)
+        out.errors.push(render(SHAPE_ERR_MIS_ITEM_MAP, { where, index: j + 1, shape: shapeWordOf(item) }))
         return undefined
       }
       const entry = item as Record<string, unknown>
       const unknown = Object.keys(entry).filter(k => k !== 'concept' && k !== 'model')
       if (unknown.length) {
-        out.errors.push(`${where}: 误解条目第 ${j + 1} 项含未知字段 ${JSON.stringify(unknown)}（条目只允许 concept/model——典型错答文字写进 model）`)
+        out.errors.push(render(SHAPE_ERR_MIS_ITEM_UNKNOWN, { where, index: j + 1, fields: JSON.stringify(unknown) }))
         return undefined
       }
       if (typeof entry.concept !== 'string' || !entry.concept.trim()) {
-        out.errors.push(`${where}: 误解条目第 ${j + 1} 项缺 concept（在册概念名）`)
+        out.errors.push(render(SHAPE_ERR_MIS_ITEM_NO_CONCEPT, { where, index: j + 1 }))
         return undefined
       }
       if (typeof entry.model !== 'string' || !entry.model.trim()) {
-        out.errors.push(`${where}: 误解条目第 ${j + 1} 项缺 model（错误模型文字：典型错答、坑位用途）`)
+        out.errors.push(render(SHAPE_ERR_MIS_ITEM_NO_MODEL, { where, index: j + 1 }))
         return undefined
       }
     }
@@ -183,25 +198,25 @@ function misconceptionsFieldOf(
     let concepts = 0
     for (const [concept, texts] of Object.entries(raw as Record<string, unknown>)) {
       if (!concept.trim()) {
-        out.errors.push(`${where}: 误解字典的概念名不能为空`)
+        out.errors.push(render(SHAPE_ERR_MIS_DICT_EMPTY_CONCEPT, { where }))
         return undefined
       }
       const list = typeof texts === 'string' ? [texts] : Array.isArray(texts) ? texts : null
       if (!list || !list.every(t => typeof t === 'string' && t.trim())) {
-        out.errors.push(`${where}: 字典形的值必须是文本或文本列表（概念名 → 该项文字）——「${concept}」的值是 ${shapeWordOf(texts)}`)
+        out.errors.push(render(SHAPE_ERR_MIS_DICT_VALUE, { where, concept, shape: shapeWordOf(texts) }))
         return undefined
       }
       concepts++
       for (const t of list as string[]) entries.push({ concept: concept.trim(), model: t.trim() })
     }
     if (!entries.length) {
-      out.errors.push(`${where}: 误解字典是空的（本字段省略即可）`)
+      out.errors.push(render(SHAPE_ERR_MIS_DICT_EMPTY, { where }))
       return undefined
     }
-    out.normalized.push(`${where} 字典 → 条目数组（${concepts} 概念 / ${entries.length} 条）`)
+    out.normalized.push(render(SHAPE_NORM_MIS_DICT, { where, concepts, entries: entries.length }))
     return entries
   }
-  out.errors.push(`${where}: 误解必须是条目列表 [{concept, model}]——收到 ${shapeWordOf(raw)}`)
+  out.errors.push(render(SHAPE_ERR_MIS_SHAPE, { where, shape: shapeWordOf(raw) }))
   return undefined
 }
 
@@ -226,7 +241,7 @@ function normalizeConceptFieldsOf(
     const rawMis = rec.misconceptions
     if (single.length === 1 && Array.isArray(rawMis) && rawMis.length > 0 && rawMis.every(x => typeof x === 'string' && String(x).trim())) {
       next.misconceptions = (rawMis as string[]).map(t => ({ concept: single[0]!, model: t.trim() }))
-      out.normalized.push(`${where}.misconceptions 裸字符串列表 → 归属本节点唯一 teaches 概念「${single[0]}」（${rawMis.length} 条）`)
+      out.normalized.push(render(SHAPE_NORM_MIS_BARE, { where, concept: single[0]!, count: rawMis.length }))
       return next
     }
     const v = misconceptionsFieldOf(rec.misconceptions, `${where}.misconceptions`, out)
@@ -252,24 +267,24 @@ function mintEntriesOf(raw: unknown, where: string, out: PatchShapeNormalization
   if (typeof raw === 'string') {
     const canonical = raw.trim()
     if (!canonical) {
-      out.errors.push(`${where}: 铸名不能是空字符串`)
+      out.errors.push(render(SHAPE_ERR_MINT_EMPTY, { where }))
       return []
     }
-    return accept({ canonical }, `${where} 字符串 → 铸名条目「${canonical}」`)
+    return accept({ canonical }, render(SHAPE_NORM_MINT_STRING, { where, canonical }))
   }
   if (Array.isArray(raw)) {
-    out.errors.push(`${where}: 每条铸名是一个条目（{canonical, …} 或字符串），不是列表`)
+    out.errors.push(render(SHAPE_ERR_MINT_LIST, { where }))
     return []
   }
   if (typeof raw !== 'object' || raw === null) {
-    out.errors.push(`${where}: 铸名必须是条目（{canonical, aliases?, definition?}）或字符串——收到 ${shapeWordOf(raw)}`)
+    out.errors.push(render(SHAPE_ERR_MINT_SHAPE, { where, shape: shapeWordOf(raw) }))
     return []
   }
   const r = raw as Record<string, unknown>
   if (typeof r.canonical === 'string') return accept(r)
   if (typeof r.name === 'string') {
     const { name, ...rest } = r
-    return accept({ canonical: name, ...rest }, `${where} {name} → {canonical: ${JSON.stringify(name.trim())}}`)
+    return accept({ canonical: name, ...rest }, render(SHAPE_NORM_MINT_NAME_KEY, { where, canonical: JSON.stringify(name.trim()) }))
   }
   const keys = Object.keys(r)
   if (keys.length && keys.every(k => k.trim()) && keys.every(k => typeof r[k] === 'string')) {
@@ -278,10 +293,10 @@ function mintEntriesOf(raw: unknown, where: string, out: PatchShapeNormalization
       const definition = String(r[k]).trim()
       entries.push(...accept({ canonical: k.trim(), ...(definition ? { definition } : {}) }))
     }
-    if (entries.length === keys.length) out.normalized.push(`${where} 字典（${keys.length} 键）→ ${keys.length} 枚铸名（键=名字、值=定义）`)
+    if (entries.length === keys.length) out.normalized.push(render(SHAPE_NORM_MINT_DICT, { where, keys: keys.length }))
     return entries
   }
-  out.errors.push(`${where}: 铸名必须是条目（{canonical, aliases?, definition?}）或字符串——收到字典（键 ${JSON.stringify(keys)} 既不含 canonical/name，也不是「名字→定义」的字符串映射）`)
+  out.errors.push(render(SHAPE_ERR_MINT_DICT, { where, keys: JSON.stringify(keys) }))
   return []
 }
 
@@ -289,7 +304,7 @@ function mintEntriesOf(raw: unknown, where: string, out: PatchShapeNormalization
 function mintBlockOf(raw: unknown, out: PatchShapeNormalization): ConceptEntry[] {
   if (raw === undefined || raw === null) return []
   const items = Array.isArray(raw) ? raw : [raw]
-  if (!Array.isArray(raw)) out.normalized.push(`concepts 不是列表（${shapeWordOf(raw)}）→ 按单条铸名收下`)
+  if (!Array.isArray(raw)) out.normalized.push(render(SHAPE_NORM_MINT_NOT_LIST, { shape: shapeWordOf(raw) }))
   const entries: ConceptEntry[] = []
   for (const [i, item] of items.entries()) entries.push(...mintEntriesOf(item, `concepts.${i + 1}`, out))
   return entries
@@ -325,14 +340,9 @@ export function normalizePatchShape(
 }
 
 /** 合法形态速查（形状拒收回灌的那一段）：事故里模型烧掉十几轮在试探形状，
- * 拒收回执一次给全三件套的合法写法。归一行**不新开提示词常量**——它是引擎侧工具
- * 返回文本（ADR-0088 §修订）。 */
-export const PATCH_SHAPE_CHEATSHEET = [
-  '合法形态速查（三件套）：',
-  '  · teaches / assumes：{概念: 档}（配对列表 [[概念, 档], …] 也收）',
-  '  · misconceptions：[{concept: 在册概念名, model: 错误模型文字}]（按概念归组的字典 {概念: [文字…]} 也收；**字符串列表不收**——拆不出概念）',
-  '  · concepts（铸名）：[{canonical: 名字, definition?, aliases?}]（字符串「名字」、{name: 名字}、字典 {名字: 定义} 也收）',
-].join('\n')
+ * 拒收回执一次给全三件套的合法写法。**文本已迁 `prompts/coach-draft.ts`（#311 集中单源）**，
+ * 此处只作同名 re-export 以保调用点不变。 */
+export { PATCH_SHAPE_CHEATSHEET } from '../prompts/coach-draft.ts'
 
 // ---- 糖算子展开（#272）：expandPatchOps 与手写原子 ops 在 replayDraft 下逐字等价 ----
 
@@ -360,20 +370,20 @@ export function expandPatchOps(
     if (raw.op === 'suggest_confusable') {
       const concept = String(raw.name ?? '').trim()
       const target = String(raw.with ?? '').trim()
-      if (!concept || !target) throw new Error(`ops.${i}: suggest_confusable 需要 name（本批铸名的新概念）与 with（易混对端）两个字段。`)
-      if (concept === target) throw new Error(`ops.${i}: suggest_confusable 两端同名「${concept}」——易混指向需要两个不同概念。`)
+      if (!concept || !target) throw new Error(render(OP_ERR_CONFUSABLE_FIELDS, { where: `ops.${i}` }))
+      if (concept === target) throw new Error(render(OP_ERR_CONFUSABLE_SAME, { where: `ops.${i}`, concept }))
       confusables.push({ concept, with: target })
       continue
     }
     if (raw.op === 'split_node') {
       const node = String(raw.node ?? '').trim()
       const into = (Array.isArray(raw.into) ? raw.into as unknown[] : []).map(x => String(x ?? '').trim()).filter(Boolean)
-      if (!node) throw new Error(`ops.${i}: split_node 缺 node（被拆节点的名字）。`)
-      if (endpoints.has(node)) throw new Error(`ops.${i}: split_node 拒绝——「${node}」是锚定的终点（终点不可拆分；拆含 del_node，锚保护必拒）。`)
+      if (!node) throw new Error(render(OP_ERR_SPLIT_NO_NODE, { where: `ops.${i}` }))
+      if (endpoints.has(node)) throw new Error(render(OP_ERR_SPLIT_ENDPOINT, { where: `ops.${i}`, node }))
       const src = nodeInNodes(nodes, node)
-      if (!src) throw new Error(`ops.${i}: split_node 的 node 不存在: ${node}（逐字来自 graph_view）。`)
-      if (into.length < 2) throw new Error(`ops.${i}: split_node 的 into 至少 2 个新名（拆一份请直接 rename）。`)
-      if (new Set(into).size !== into.length) throw new Error(`ops.${i}: split_node 的 into 含重名。`)
+      if (!src) throw new Error(render(OP_ERR_SPLIT_MISSING, { where: `ops.${i}`, node }))
+      if (into.length < 2) throw new Error(render(OP_ERR_SPLIT_MIN, { where: `ops.${i}` }))
+      if (new Set(into).size !== into.length) throw new Error(render(OP_ERR_SPLIT_DUP, { where: `ops.${i}` }))
       const pres = [...(graph.preOf[node] ?? [])]
       for (const name of into) {
         expanded.push({
@@ -401,11 +411,11 @@ export function expandPatchOps(
       continue
     }
     const chain = Array.isArray(raw.chain) ? raw.chain as Array<Record<string, unknown>> : []
-    if (chain.length < 2) throw new Error(`ops.${i}: insert_prereq_chain 的 chain 至少 2 条（一条不成链；单节点直接用 add_node）。`)
+    if (chain.length < 2) throw new Error(render(OP_ERR_CHAIN_MIN, { where: `ops.${i}` }))
     // 链首的 pre 同 add_node 口径（#313 A2）：非列表此前静默折成 []，整条链会以「零前置」
     // 落图挂在根部——与 set_pre/add_node 的「必须列表」是一件事。
     if (raw.pre !== undefined && !Array.isArray(raw.pre)) {
-      throw new Error(`ops.${i}: insert_prereq_chain 的 pre 必须是列表（链首的前置节点名列表；收到 ${typeof raw.pre === 'string' ? '字符串' : typeof raw.pre}）——零前置写 pre: [] 或省略本字段。`)
+      throw new Error(render(OP_ERR_CHAIN_PRE_LIST, { where: `ops.${i}`, shape: typeof raw.pre === 'string' ? render(SHAPE_WORD_STRING, {}) : typeof raw.pre }))
     }
     chain.forEach((item, j) => {
       expanded.push({
@@ -444,7 +454,7 @@ export function draftFindings(args: {
   const out: string[] = []
   for (const s of args.confusables) {
     if (!resolveConcept([...args.entries], s.with)) {
-      out.push(`confusable 悬空指向：建议「${s.concept}」↔「${s.with}」的目标不在册——候选提案只收在册概念，先补登记或改指向`)
+      out.push(render(FIND_CONFUSABLE_DANGLING, { concept: s.concept, with: s.with }))
     }
   }
   for (const m of args.mints) {
@@ -453,16 +463,16 @@ export function draftFindings(args: {
     let invoked = 0
     for (const n of args.invokes.get(m.canonical)?.values() ?? []) invoked += n
     if (!taught && !assumed && !invoked) {
-      out.push(`孤立新铸概念：「${m.canonical}」零 teaches / 零 assumes / 零 invokes——概念表不只是名词堆，铸名须有节点真的教它或假设它`)
+      out.push(render(FIND_ORPHAN_MINT, { concept: m.canonical }))
     }
   }
   for (const c of nearNameCandidates([...args.mints], [...args.entries])) {
-    out.push(`近似名撞车：铸名「${c.name}」与在册名字「${c.existing}」过近（相似度 ${c.similarity}）——同一个概念就引用既有名字，确实是另一个概念请在 note.reason 里写明区别`)
+    out.push(render(FIND_NEAR_NAME, { name: c.name, existing: c.existing, similarity: c.similarity }))
   }
   for (const a of args.anchors) {
     if (a.sealed) continue
     if ((args.graph.preOf[a.endpoint] ?? []).length > 0) {
-      out.push(`终点 ${a.endpoint} 已铺通待收尾——收尾须纯 set_pre 独立批发布`)
+      out.push(render(FIND_SEAL_TODO, { endpoint: a.endpoint }))
     }
   }
   return out

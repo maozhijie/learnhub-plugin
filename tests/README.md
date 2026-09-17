@@ -653,3 +653,14 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 |---|---|---|---|
 | 行为 | **DAG 节点改用声明式 handles（`Node.handles`）**：`handleBounds` 由 xyflow 在每次受控 nodes 同步时直接从 `node.handles` 重建（永不重置、不依赖 RO 首测/渲染帧/happy-dom rect），首帧即在；坐标 = 旧 DOM 测量口径（1×1 隐藏锚点贴节点上/下边中心，`getHandlePosition` 对 Top/Bottom 取 x+width/2）。删除 `DagNodeInner` 里两个 DOM `<Handle>` 与 `Handle` import（声明式 handles 使其冗余） | `ui/src/components/GraphDagView.tsx`（`DAG_HANDLES` 常量 + flowNodes 挂 `handles`） | `tests/ui-graph-dag-dom.test.ts`（新，2 例：无测量回调环境边全量渲染 / 受控 nodes 整阵替换后边不消失——happy-dom 无布局引擎、RO 回调永不触发是本病最严苛形态，修复前必红 0 条边） |
 | 受控量 | 测试环境缝补 rAF/cAF 全局抄送（xyflow `Pane`/autoPan 卸载清理路径裸调 `cancelAnimationFrame`，happy-dom Window 自带、定时器驱动不产渲染帧——不改变测量类回调的严苛形态）；`ui/src` 类型/typeErrors 不动；web/dist 重建（bundle hash 迁移） | `tests/helpers/ui-dom.ts`（global 抄送表 +2） | `npm test` 全量绿（1394 tests）；真机浏览器验证：新 bundle 加载后边恒为 2、跨 ≥2 个轮询拍（13.6s 采样 14 点全 2）零掉线、console 全清 |
+
+## 提示词散文铺满 `prompts/`（#311 / ADR-0100，2026-09-17）：受控量迁移登记
+
+本票把教练三站（思路官／执行官／只读工具站）的**模型面散文**从代码里整体搬进 `src/engine/prompts/`——新增 `coach-tools.ts` / `coach-pack.ts` / `coach-plan.ts` / `coach-exec.ts` / `coach-draft.ts` 五文件，消费点（`coach/coach-tools.ts`、`growth-subsystem.ts`、`growth-draft.ts`）全改 `render(CONST, {...})`。**文本逐字搬移、最终 prompt 不变**——无模板版本 bump，`prompt-bump check` 无需登记条目（受控面零版本变化）。唯一的非逐字动作：腐坏草稿（`concepts` 存成字典而非列表）下 `render` 的严格性需一处数组守卫，诊断面读数由 `undefined` 变 `0`（不崩即可继续把毒形状折叠成门错误，见 ADR-0100）。
+
+| 项 | 变更 | 落点 | 验证 |
+|---|---|---|---|
+| 受控量 | **G5 逐文件规模迁移**：`coach-tools.ts 528→607`、`growth-draft.ts 528→538`、`growth-subsystem.ts 2046→2227`——涨的行是搬移的固有成本（`prompts/` 五文件的 named import 面 + `render(CONST, {...})` 参数面），**文本正文已整体移出**；typeErrors 仍 0 | `scripts/arch-baseline.json`（`--update` 同提交迁移） | 棘轮精确匹配；`tests/arch-guards.test.ts` G5 绿 |
+| 提示词 | **纯搬移，最终 prompt 不变**：教练三站任意一条模型面散文现在只需动 `prompts/` 一个文件（验收判据 #1）；活图/草稿两口径工具描述归入同一 `prompts/coach-tools.ts`（**口径不同者显式两名**——票面「重复一份」的前提已不成立：两口径文本本就不同） | `src/engine/prompts/coach-*.ts`；消费点 `coach/coach-tools.ts`、`growth-subsystem.ts`、`growth-draft.ts` | `node --experimental-transform-types scripts/prompt-bump.mts check` ✓（受控面零版本变化）；`tests/model-face-refs.test.ts` 三面绿；`tests/coach-tools.test.ts` / `coach-round.test.ts` / `coach-growth.test.ts` / `growth-draft.test.ts` / `endpoint-surfaces.test.ts` 全绿 |
+
+**未做（另票）**：波②（`shared/content-renderers.ts::rendererCapabilityBlock()` 与 `host/jobs.ts::sectionMaterials` 节块标题——受 `shared/`→`engine/` 反向依赖门约束）、波③（门错误文案——被 `tests/helpers/copy-lock.ts` 断言，逐条评估「语义判据归门、措辞归 prompts」）。理由见 ADR-0100。

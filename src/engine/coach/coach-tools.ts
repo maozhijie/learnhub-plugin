@@ -31,6 +31,38 @@ import { readySet } from '../sched/sessions.ts'
 import { masteryOfFm } from '../sched/srs.ts'
 import type { CourseEntry, Fm } from '../types.ts'
 import type { LlmToolCall, LlmToolSpec } from '../infra/llm.ts'
+import { render } from '../infra/prompt-render.ts'
+import {
+  BO_EMPTY, BO_HEADING, BO_LINE, BO_OVERFLOW,
+  CF_ALIASES_PART, CF_ASSUMERS_NONE, CF_ATTACH_HIT, CF_ATTACH_MISS, CF_ATTACH_VERDICT, CF_CONFUSABLE,
+  CF_DANGLING_CONFUSABLE, CF_DEPRECATED_SUFFIX, CF_ENTRY_DEF, CF_ENTRY_HEADING, CF_ENTRY_NO_DEF,
+  CF_HEADING, CF_INVOKES_DIST, CF_INVOKES_EMPTY, CF_NO_HIT_MISSING, CF_NO_HIT_WITH_QUERY, CF_OVERFLOW,
+  CF_QUERY_FULL, CF_QUERY_HINT, CF_QUERY_PART, CF_TEACHERS_NONE, CF_TEACHING,
+  CV_ANCHOR_LINE, CV_ANCHOR_NOTE, CV_ANNOTATIONS_HEADING, CV_ETA_HEADING, CV_ETA_WEEK_SUFFIX,
+  CV_GOAL_CAPABILITY, CV_GOAL_COVERAGE, CV_HEADING, CV_ROUTE_PAINTED, CV_ROUTE_STATUS, CV_ROUTE_UNPAINTED,
+  CV_ZERO_ENDPOINTS,
+  EA_DECLARED, EA_GOAL_CAPABILITY, EA_GOAL_COVERAGE, EA_GOAL_TYPE, EA_HEADING, EA_HEADING_BARE, EA_NODE,
+  EA_NOTE, EA_SEAL, EA_SEAL_DONE, EA_SEAL_TODO, EA_WORKSHEET, EA_ZERO_ENDPOINTS,
+  GRAPH_VIEW_ACTIVE_EMPTY, GRAPH_VIEW_ACTIVE_HEADING, GRAPH_VIEW_CONCEPT_HEADING, GRAPH_VIEW_CONCEPT_LINE,
+  GRAPH_VIEW_CONCEPT_SKIPPED_SUFFIX, GRAPH_VIEW_DEGRADED_SUFFIX, GRAPH_VIEW_DEPTH_BUCKET,
+  GRAPH_VIEW_DEPTH_HEADING, GRAPH_VIEW_ENDPOINT_HEADING, GRAPH_VIEW_ENDPOINT_LINE, GRAPH_VIEW_FOOTER,
+  GRAPH_VIEW_FULL_HEADING, GRAPH_VIEW_HEADING, GRAPH_VIEW_STATS, GRAPH_VIEW_UNTAGGED_LINE,
+  GRAPH_VIEW_WEAK_EMPTY, GRAPH_VIEW_WEAK_HEADING, GRAPH_VIEW_ZERO_CONCEPT, GRAPH_VIEW_ZERO_ENDPOINTS,
+  NODE_CARD_ASSUMES, NODE_CARD_CONSUMERS, NODE_CARD_CONSUMERS_ENDPOINT, NODE_CARD_CONSUMERS_LEAF,
+  NODE_CARD_DEPTH, NODE_CARD_EMPTY, NODE_CARD_ENDPOINT_FLAG, NODE_CARD_HEADING, NODE_CARD_MISCONCEPTIONS,
+  NODE_CARD_PRE, NODE_CARD_STAGE, NODE_CARD_STAGE_ENDPOINT, NODE_CARD_STAGE_EST, NODE_CARD_STAGE_PRACTICE,
+  NODE_CARD_TEACHES, NODE_NOT_ON_GRAPH_ERR, NODE_ROW_BODY, NODE_ROW_COLUMNS, NODE_ROW_DUE,
+  NODE_ROW_ENDPOINT_FLAG, NODE_ROW_EST, NODE_ROW_ITEM, NODE_ROW_PRE, NODE_ROW_ROOT, NODE_ROW_TEACHES,
+  NODE_ROW_WEAK_FLAG,
+  STAGE_LABEL_LEARNING, STAGE_LABEL_MASTERED, STAGE_LABEL_REVIEW, STAGE_LABEL_UNSEEN_READY,
+  STAGE_LABEL_UNSEEN_TODO,
+  TOOL_BANK_OVERVIEW_DESC, TOOL_BEHAVIOR_DIGEST_DESC, TOOL_COMPASS_READ_DESC,
+  TOOL_CONCEPT_FOOTPRINT_DESC_LIVE, TOOL_ENDPOINT_ANCHOR_DESC_LIVE, TOOL_EXEC_BAD_ARGS,
+  TOOL_EXEC_NODE_REQUIRED, TOOL_EXEC_READONLY_REJECT, TOOL_GRAPH_VIEW_DESC_LIVE, TOOL_NODE_CARD_DESC_LIVE,
+  TOOL_PARAM_NODE_DESC, TOOL_PARAM_QUERY_DESC_LIVE, TOOL_UPSTREAM_DAG_DESC_LIVE,
+  UD_ADJ_HEADING, UD_ADJ_LINE, UD_CLOSURE_HEADING, UD_EMPTY_BODY, UD_EMPTY_HEADING, UD_HEADING,
+  UD_OVERFLOW, UD_SIZE, UD_SIZE_FULL_SUFFIX, UD_SIZE_TRUNC_SUFFIX, UD_TARGET_ROW,
+} from '../prompts/coach-tools.ts'
 
 /** 工具面白名单（ADR-0041 形状；#249 / ADR-0077 八件）：名字是教练工具调用的唯一取值域。
  * `concept_registry` 已由 `concept_footprint` 完整吸收（词条档职责并入足迹视图）；
@@ -62,10 +94,10 @@ export const WEAK_MASTERY_THRESHOLD = 0.5
 /** 节点阶段的人读标签（growthGraphView 的细节行口径，图面与节点卡共用）。 */
 function activeLabel(state: Record<string, Fm>, n: string): string {
   const s = effectiveStage(state, n)
-  if (s === 'learning') return '在学'
-  if (s === 'mastered') return '已掌握'
-  if (s === 'review') return '复习中'
-  return hasReadyContent(state[n]) ? '未开始·正文已生成' : '未开始·待生成'
+  if (s === 'learning') return render(STAGE_LABEL_LEARNING, {})
+  if (s === 'mastered') return render(STAGE_LABEL_MASTERED, {})
+  if (s === 'review') return render(STAGE_LABEL_REVIEW, {})
+  return hasReadyContent(state[n]) ? render(STAGE_LABEL_UNSEEN_READY, {}) : render(STAGE_LABEL_UNSEEN_TODO, {})
 }
 
 /** ⚠ 弱掌握判定（ADR-0077）：只对**已开始**的节点判。unseen / ready 是「还没开始学」
@@ -98,12 +130,21 @@ function nodeRowBody(
   const est = graph.estOf[n]
   const fs = state[n]?.fsrs
   const due = fs && fs.reps ? fs.due : null
-  const columns = `${activeLabel(state, n)}｜掌握 ${masteryOfFm(state[n])}${isWeak(state, n, opts.today) ? ' ⚠' : ''}`
-    + (est ? `｜est ${est}′` : '')
-    + (due ? `｜due ${String(due)}` : '')
-  return `${n}${opts.endpoints.has(n) ? ' ⚑' : ''}（深度 ${graph.depth[n] ?? 0}｜${columns}）`
-    + `｜pre: ${pres.length ? pres.join('、') : '（根）'}`
-    + (teaches.length ? `｜teaches: ${teaches.join('、')}` : '')
+  const columns = render(NODE_ROW_COLUMNS, {
+    stage: activeLabel(state, n),
+    mastery: masteryOfFm(state[n]),
+    weak: isWeak(state, n, opts.today) ? render(NODE_ROW_WEAK_FLAG, {}) : '',
+  })
+    + (est ? render(NODE_ROW_EST, { est }) : '')
+    + (due ? render(NODE_ROW_DUE, { due: String(due) }) : '')
+  return render(NODE_ROW_BODY, {
+    node: n,
+    flag: opts.endpoints.has(n) ? render(NODE_ROW_ENDPOINT_FLAG, {}) : '',
+    depth: graph.depth[n] ?? 0,
+    columns,
+  })
+    + render(NODE_ROW_PRE, { pres: pres.length ? pres.join('、') : render(NODE_ROW_ROOT, {}) })
+    + (teaches.length ? render(NODE_ROW_TEACHES, { teaches: teaches.join('、') }) : '')
 }
 
 /** 逐节点行（列表项形态）。 */
@@ -111,7 +152,7 @@ function nodeRow(
   graph: Graph, state: Record<string, Fm>, n: string,
   opts: { today: string; endpoints: ReadonlySet<string>; pres?: string[] },
 ): string {
-  return `- ${nodeRowBody(graph, state, n, opts)}`
+  return render(NODE_ROW_ITEM, { body: nodeRowBody(graph, state, n, opts) })
 }
 
 /** 全图摘要（#250 / ADR-0077，自 #144 的「前沿细节 + 其余名单」升级）：教练全量包
@@ -149,13 +190,17 @@ export function renderGrowthGraphView(
   const weak = ordered.filter(n => isWeak(state, n, today))
   const degraded = ordered.length > FULL_GRAPH_CAP
   const lines: string[] = [
-    '## 当前图面（全图摘要——结构事实源；ops 的节点名与 pre 引用必须逐字来自这里）', '',
-    `- 节点共 ${graph.names.length} 个；前沿与在学 ${active.length} 个｜弱掌握 ${weak.length} 个 ⚠`
-      + `（⚠ = 已开始且掌握度低于 ${WEAK_MASTERY_THRESHOLD} 或到期积压）`
-      + (degraded ? `｜**超 ${FULL_GRAPH_CAP} 已降级**（depth 段聚合 + 前沿细节；⚠ 与 ⚑ 例外不截；概念组读数不降级）` : ''),
+    render(GRAPH_VIEW_HEADING, {}), '',
+    render(GRAPH_VIEW_STATS, {
+      total: graph.names.length,
+      active: active.length,
+      weak: weak.length,
+      threshold: WEAK_MASTERY_THRESHOLD,
+      degraded: degraded ? render(GRAPH_VIEW_DEGRADED_SUFFIX, { cap: FULL_GRAPH_CAP }) : '',
+    }),
     ...(endpoints.size
-      ? [...endpoints].map(n => `- ⚑ 终点：${n}（方向标记——朝该方向的生长须汇入它；不可 del/rename，零正文零题库不被调度，主线批须 set_pre 接线到新前沿）`)
-      : ['（零终点——空锚是合法空态，先加一个终点：教练回合无从裁决方向）']),
+      ? [...endpoints].map(n => render(GRAPH_VIEW_ENDPOINT_LINE, { node: n }))
+      : [render(GRAPH_VIEW_ZERO_ENDPOINTS, {})]),
   ]
   // 概念组读数表（#281）：canonical 归并后逐组一行（teaches/assumes/未标），永不全量降级
   // ——它是教练判读的核心面。只聚合计数，零阈值零建议：判读归教练。
@@ -177,42 +222,45 @@ export function renderGrowthGraphView(
     for (const n of untagged) untitledGroup.members.add(n)
     untagged = []
   }
-  lines.push('', `### 概念组读数（teaches/assumes 派生可重叠；未标概念显式在列）`, '')
+  lines.push('', render(GRAPH_VIEW_CONCEPT_HEADING, {}), '')
   if (conceptGroups.size || untagged.length) {
     for (const [label, g] of [...conceptGroups.entries()].sort(([a], [b]) => a.localeCompare(b))) {
       const skipped = [...g.members].filter(n => effectiveStage(state, n) === 'skipped').length
-      lines.push(`- ${label}：教 ${g.supply}｜assumes ${g.assumed}｜成员 ${g.members.size} 个${skipped ? `｜跳过 ${skipped}` : ''}`)
+      lines.push(render(GRAPH_VIEW_CONCEPT_LINE, {
+        label, supply: g.supply, assumed: g.assumed, members: g.members.size,
+        skipped: skipped ? render(GRAPH_VIEW_CONCEPT_SKIPPED_SUFFIX, { count: skipped }) : '',
+      }))
     }
-    if (untagged.length) lines.push(`- 未标概念：${untagged.length} 个节点（合法 Missing——概念铸名随生长批提案落盘，不回填）`)
+    if (untagged.length) lines.push(render(GRAPH_VIEW_UNTAGGED_LINE, { count: untagged.length }))
   } else {
-    lines.push('（零概念足迹——合法空态： teaches/assumes 随生长批落盘）')
+    lines.push(render(GRAPH_VIEW_ZERO_CONCEPT, {}))
   }
   const nodeLine = (n: string): string => nodeRow(graph, state, n, { today, endpoints })
   if (!degraded) {
-    lines.push('', `### 全图（逐节点一行，深度序——⚠ 弱掌握、⚑ 终点）`, '')
+    lines.push('', render(GRAPH_VIEW_FULL_HEADING, {}), '')
     for (const n of ordered) lines.push(nodeLine(n))
   } else {
     // 降级：depth 段聚合（节点数/掌握均值/就绪数）→ 前沿与在学细节 → ⚠/⚑ 例外全列 → 溢出说明
     // 桶来源 = groupView(depth) 单一出处（环上显式「无法分层」，不静默空桶）
     const buckets = groupView(graph, 'depth')
-    lines.push('', `### depth 段聚合（超 ${FULL_GRAPH_CAP} 个节点，逐节点行已降级）`, '')
+    lines.push('', render(GRAPH_VIEW_DEPTH_HEADING, { cap: FULL_GRAPH_CAP }), '')
     for (const bucket of buckets) {
       const ns = bucket.nodes
       const mean = ns.reduce((s, n) => s + masteryOfFm(state[n]), 0) / ns.length
       const ready = ns.filter(n => activeSet.has(n)).length
-      lines.push(`- ${bucket.label}：${ns.length} 个节点（掌握均值 ${round2(mean)}｜前沿与在学 ${ready}）`)
+      lines.push(render(GRAPH_VIEW_DEPTH_BUCKET, { label: bucket.label, count: ns.length, mean: round2(mean), ready }))
     }
-    lines.push('', `### 前沿与在学细节（${active.length} 个）`, '')
+    lines.push('', render(GRAPH_VIEW_ACTIVE_HEADING, { count: active.length }), '')
     if (active.length) for (const n of active) lines.push(nodeLine(n))
-    else lines.push('（前沿与在学为空——合法空态：就绪存量 0 或全图已开始）')
-    lines.push('', `### ⚠ 弱掌握（例外不截，${weak.length} 个）`, '')
-    lines.push(weak.length ? weak.map(nodeLine).join('\n') : '（无弱掌握节点——无已开始的低掌握/到期积压节点）')
+    else lines.push(render(GRAPH_VIEW_ACTIVE_EMPTY, {}))
+    lines.push('', render(GRAPH_VIEW_WEAK_HEADING, { count: weak.length }), '')
+    lines.push(weak.length ? weak.map(nodeLine).join('\n') : render(GRAPH_VIEW_WEAK_EMPTY, {}))
     const reachable = ordered.filter(n => endpoints.has(n))
     if (reachable.length) {
-      lines.push('', `### ⚑ 终点（例外不截，${reachable.length} 个）`, '')
+      lines.push('', render(GRAPH_VIEW_ENDPOINT_HEADING, { count: reachable.length }), '')
       for (const n of reachable) lines.push(nodeLine(n))
     }
-    lines.push('', `……（全图 ${ordered.length} 个节点超出逐节点行上限 ${FULL_GRAPH_CAP}——已降级为 depth 段聚合 + 前沿与在学细节；⚠ 弱掌握与 ⚑ 终点例外全列，概念组读数不降级。变焦细节用 upstream_dag / node_card。）`)
+    lines.push('', render(GRAPH_VIEW_FOOTER, { total: ordered.length, cap: FULL_GRAPH_CAP }))
   }
   return lines.join('\n') + '\n'
 }
@@ -224,7 +272,7 @@ export function renderNodeCard(
   graph: Graph, state: Record<string, Fm>, node: string, endpoints: ReadonlySet<string> = new Set<string>(),
 ): string {
   if (!graph.nset.has(node)) {
-    throw new Error(`节点「${node}」不在图上——用 graph_view 取逐字名单后重试（引用必须逐字命中）。`)
+    throw new Error(render(NODE_NOT_ON_GRAPH_ERR, { node }))
   }
   const pres = graph.preOf[node] ?? []
   const teaches = Object.entries(graph.teachesOf[node] ?? {})
@@ -232,15 +280,20 @@ export function renderNodeCard(
   const mis = graph.misconceptionsOf[node] ?? []
   const consumers = graph.succ[node] ?? []
   const isEndpoint = endpoints.has(node)
+  const est = graph.estOf[node]
   return [
-    `## 节点卡：${node}${isEndpoint ? ' ⚑ 终点（方向标记）' : ''}`, '',
-    `- 深度：${graph.depth[node] ?? 0}（读侧派生，地基在 0）`,
-    `- 阶段：${activeLabel(state, node)}${isEndpoint ? '（终点——零正文零题库不被学习调度）' : graph.typeOf[node] === 'practice' ? '（交互实践节点）' : ''}${graph.estOf[node] ? `｜est ${graph.estOf[node]}′` : ''}`,
-    `- pre：${pres.length ? pres.join('、') : '（根）'}`,
-    `- teaches：${teaches.length ? teaches.map(([c, t]) => `${c} ${t}`).join('、') : '（无）'}`,
-    `- assumes：${assumes.length ? assumes.map(([c, t]) => `${c} ${t}`).join('、') : '（无）'}`,
-    `- 下游消费：${consumers.length ? consumers.join('、') : isEndpoint ? '（无——终点是全局收敛点，后继不该存在；出现即异常态，走对账恢复）' : '（无——叶子节点）'}`,
-    `- 误解先验：${mis.length ? mis.map(m => `${m.concept}：${m.model}`).join('；') : '（无）'}`,
+    render(NODE_CARD_HEADING, { node, flag: isEndpoint ? render(NODE_CARD_ENDPOINT_FLAG, {}) : '' }), '',
+    render(NODE_CARD_DEPTH, { depth: graph.depth[node] ?? 0 }),
+    render(NODE_CARD_STAGE, {
+      stage: activeLabel(state, node),
+      suffix: isEndpoint ? render(NODE_CARD_STAGE_ENDPOINT, {})
+        : graph.typeOf[node] === 'practice' ? render(NODE_CARD_STAGE_PRACTICE, {}) : '',
+    }) + (est ? render(NODE_CARD_STAGE_EST, { est }) : ''),
+    render(NODE_CARD_PRE, { pres: pres.length ? pres.join('、') : render(NODE_ROW_ROOT, {}) }),
+    render(NODE_CARD_TEACHES, { teaches: teaches.length ? teaches.map(([c, t]) => `${c} ${t}`).join('、') : render(NODE_CARD_EMPTY, {}) }),
+    render(NODE_CARD_ASSUMES, { assumes: assumes.length ? assumes.map(([c, t]) => `${c} ${t}`).join('、') : render(NODE_CARD_EMPTY, {}) }),
+    render(NODE_CARD_CONSUMERS, { consumers: consumers.length ? consumers.join('、') : isEndpoint ? render(NODE_CARD_CONSUMERS_ENDPOINT, {}) : render(NODE_CARD_CONSUMERS_LEAF, {}) }),
+    render(NODE_CARD_MISCONCEPTIONS, { mis: mis.length ? mis.map(m => `${m.concept}：${m.model}`).join('；') : render(NODE_CARD_EMPTY, {}) }),
   ].join('\n') + '\n'
 }
 
@@ -269,33 +322,44 @@ export async function renderConceptFootprint(
   const teachers = graph.taughtByOf
   const assumers = graph.assumedByOf
   const invokes = await providers.conceptInvokes()
-  const lines = [`## 概念足迹：${c.name}（${hit.length}/${entries.length} 条${q ? `，query=「${q}」` : '（全表——无 query）'}）`, '']
+  const lines = [render(CF_HEADING, {
+    course: c.name, hit: hit.length, total: entries.length,
+    queryPart: q ? render(CF_QUERY_PART, { query: q }) : render(CF_QUERY_FULL, {}),
+  }), '']
   if (!hit.length) {
     lines.push(entries.length
-      ? `（query「${q ?? ''}」无命中条目——**空 ≠ 不存在**：换宽词再试，或不带 query 读全表逐条对照；写侧提案的概念引用仍必须逐字命中在册名字。）`
-      : 'Missing（合法空态——铸名随生长批提案落盘；本批 concepts 铸名即可。）')
+      ? render(CF_NO_HIT_WITH_QUERY, { query: q ?? '' })
+      : render(CF_NO_HIT_MISSING, {}))
     return lines.join('\n') + '\n'
   }
-  if (q) lines.push(`（子串发现只供找候选——**空 ≠ 不存在**：无命中时换宽词或不带 query 读全表。）`, '')
+  if (q) lines.push(render(CF_QUERY_HINT, {}), '')
   for (const e of hit.slice(0, LIST_CAP)) {
-    lines.push(`### ${e.canonical}${isDeprecated(e) ? '（已废弃——地址仍解析、已从生成注入与候选面退出：勿再引用、勿铸同名）' : ''}`)
-    lines.push(`- 词条档：${e.aliases?.length ? `别名 ${e.aliases.join('、')}｜` : ''}${e.definition ?? '（无定义）'}`)
+    lines.push(render(CF_ENTRY_HEADING, { canonical: e.canonical, deprecated: isDeprecated(e) ? render(CF_DEPRECATED_SUFFIX, {}) : '' }))
+    lines.push(render(CF_ENTRY_DEF, {
+      aliasesPart: e.aliases?.length ? render(CF_ALIASES_PART, { aliases: e.aliases.join('、') }) : '',
+      definition: e.definition ?? render(CF_ENTRY_NO_DEF, {}),
+    }))
     const taught = teachers[e.canonical] ?? []
     const assumed = assumers[e.canonical] ?? []
-    lines.push(`- 教学面：teaches ${taught.length ? taught.join('、') : '（无节点教它）'}｜assumes ${assumed.length ? assumed.join('、') : '（无节点假设它）'}`)
+    lines.push(render(CF_TEACHING, {
+      taught: taught.length ? taught.join('、') : render(CF_TEACHERS_NONE, {}),
+      assumed: assumed.length ? assumed.join('、') : render(CF_ASSUMERS_NONE, {}),
+    }))
     const byNode = invokes.get(e.canonical)
     if (byNode?.size) {
       const dist = [...byNode.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      lines.push(`- 题目 invokes 分布：${dist.map(([n, k]) => `${n} ×${k}`).join('、')}`)
+      lines.push(render(CF_INVOKES_DIST, { dist: dist.map(([n, k]) => `${n} ×${k}`).join('、') }))
     } else {
-      lines.push('- 题目 invokes 分布：（无在库题标注它——合法空态：invokes 随出题出生打标）')
+      lines.push(render(CF_INVOKES_EMPTY, {}))
     }
-    if (e.confusable?.length) lines.push(`- confusable 易混指向：${e.confusable.join('、')}`)
+    if (e.confusable?.length) lines.push(render(CF_CONFUSABLE, { list: e.confusable.join('、') }))
     const missing = (e.confusable ?? []).filter(x => resolveConcept(entries, x) === null)
-    if (missing.length) lines.push(`  - （悬空易混引用：${missing.join('、')} 不在册——消费侧静默降级，不硬猜归属）`)
-    lines.push(`- 插入挂点判读：${taught.length || assumed.length || byNode?.size ? '足迹非空 = 有天然挂点' : '足迹空（含缺册）= 插入候选默认挂当前节点前置'}`, '')
+    if (missing.length) lines.push(render(CF_DANGLING_CONFUSABLE, { list: missing.join('、') }))
+    lines.push(render(CF_ATTACH_VERDICT, {
+      verdict: taught.length || assumed.length || byNode?.size ? render(CF_ATTACH_HIT, {}) : render(CF_ATTACH_MISS, {}),
+    }), '')
   }
-  if (hit.length > LIST_CAP) lines.push(`……（超出预览上限 ${LIST_CAP}，余 ${hit.length - LIST_CAP} 条——用 query 收窄）`)
+  if (hit.length > LIST_CAP) lines.push(render(CF_OVERFLOW, { cap: LIST_CAP, rest: hit.length - LIST_CAP }))
   return lines.join('\n') + '\n'
 }
 
@@ -311,7 +375,7 @@ export function renderUpstreamDag(
   opts: { today?: string; endpoints?: ReadonlySet<string> } = {},
 ): string {
   if (!graph.nset.has(node)) {
-    throw new Error(`节点「${node}」不在图上——用 graph_view 取逐字名单后重试（引用必须逐字命中）。`)
+    throw new Error(render(NODE_NOT_ON_GRAPH_ERR, { node }))
   }
   const today = opts.today ?? ''
   const endpoints = opts.endpoints ?? new Set<string>()
@@ -326,25 +390,32 @@ export function renderUpstreamDag(
   const row = (n: string): string =>
     nodeRow(graph, state, n, { today, endpoints, pres: graph.preOf[n].filter(inScope) })
   const lines: string[] = [
-    `## 上游图摘要：${node}${endpoints.has(node) ? ' ⚑' : ''}（前置传递闭包 ${all.length} 个节点）`, '',
-    `- 目标节点：${nodeRowBody(graph, state, node, { today, endpoints })}`,
-    `- 闭包规模：${all.length} 个上游节点${all.length > shown.length ? `（本视图只列深度最小的 ${shown.length} 个，余 ${all.length - shown.length} 个见溢出行）` : '（全列）'}`,
+    render(UD_HEADING, { node, flag: endpoints.has(node) ? render(NODE_ROW_ENDPOINT_FLAG, {}) : '', total: all.length }), '',
+    render(UD_TARGET_ROW, { row: nodeRowBody(graph, state, node, { today, endpoints }) }),
+    render(UD_SIZE, {
+      total: all.length,
+      rest: all.length > shown.length
+        ? render(UD_SIZE_TRUNC_SUFFIX, { shown: shown.length, rest: all.length - shown.length })
+        : render(UD_SIZE_FULL_SUFFIX, {}),
+    }),
     '',
   ]
   if (!all.length) {
-    lines.push('### 闭包节点', '', '（闭包为空——该节点是根：没有上游地基可诊断）', '')
+    lines.push(render(UD_EMPTY_HEADING, {}), '', render(UD_EMPTY_BODY, {}), '')
   } else {
-    lines.push('### 闭包节点（深度序——地基在前；⚠ = 弱掌握或到期积压）', '')
+    lines.push(render(UD_CLOSURE_HEADING, {}), '')
     for (const n of shown) lines.push(row(n))
     if (all.length > shown.length) {
       const cut = graph.depth[all[shown.length]!] ?? 0
-      lines.push('', `……（超出预览上限 ${UPSTREAM_CLOSURE_CAP}，余 ${all.length - shown.length} 个——按深度截断，省略的是深度 ≥ ${cut} 的节点；本次目标节点深度 ${graph.depth[node] ?? 0}，被省略的是离目标较近的一圈。近邻细节用 node_card 逐跳下钻。）`)
+      lines.push('', render(UD_OVERFLOW, {
+        cap: UPSTREAM_CLOSURE_CAP, rest: all.length - shown.length, cut, depth: graph.depth[node] ?? 0,
+      }))
     }
     // 闭包内 pre 邻接表（紧凑无歧义；图上 pre 只有名字列表，零边字段——边轻纪律同构）
-    lines.push('', '### 闭包内 pre 邻接（本视图的读侧派生；图上 pre 只有名字列表，零边字段）', '')
+    lines.push('', render(UD_ADJ_HEADING, {}), '')
     for (const n of [...shown, node]) {
       const pres = graph.preOf[n].filter(inScope)
-      lines.push(`- ${n} → ${pres.length ? pres.join('、') : '（根）'}`)
+      lines.push(render(UD_ADJ_LINE, { node: n, pres: pres.length ? pres.join('、') : render(NODE_ROW_ROOT, {}) }))
     }
   }
   return lines.join('\n') + '\n'
@@ -366,15 +437,15 @@ export async function renderBankOverview(
   })
   perNode.sort((a, b) => a.node.localeCompare(b.node))
   const total = perNode.reduce((s, p) => s + p.total, 0)
-  const lines = [`## 题库概况：${c.name}（${total} 题在 ${perNode.length} 个节点的库中）`, '']
+  const lines = [render(BO_HEADING, { course: c.name, total, nodes: perNode.length }), '']
   if (!perNode.length) {
-    lines.push('（题库空——合法空态：题目随正文生成后的出题管线落库。）')
+    lines.push(render(BO_EMPTY, {}))
     return lines.join('\n') + '\n'
   }
   for (const p of perNode.slice(0, LIST_CAP)) {
-    lines.push(`- ${p.node}：${p.total} 题（归档 ${p.archived} · invokes 标注 ${p.invokes}）`)
+    lines.push(render(BO_LINE, { node: p.node, total: p.total, archived: p.archived, invokes: p.invokes }))
   }
-  if (perNode.length > LIST_CAP) lines.push(`……（超出预览上限 ${LIST_CAP}，余 ${perNode.length - LIST_CAP} 个节点）`)
+  if (perNode.length > LIST_CAP) lines.push(render(BO_OVERFLOW, { cap: LIST_CAP, rest: perNode.length - LIST_CAP }))
   return lines.join('\n') + '\n'
 }
 
@@ -382,22 +453,27 @@ export async function renderBankOverview(
  * 沙盘 ETA 的现势折叠。零终点给合法空态（锚集合同源判定）。 */
 export async function renderCompassView(deps: CoachToolDeps, c: CourseEntry): Promise<string> {
   const anchors = await readAnchors(deps.paths.anchorPath(c.root), deps.fs)
-  if (!anchors.length) return `## 罗盘：${c.name}\n\n（零终点——空锚是合法空态，先加一个终点：罗盘按终点组织剩余路线。）\n`
+  if (!anchors.length) return `${render(CV_HEADING, { course: c.name })}\n\n${render(CV_ZERO_ENDPOINTS, {})}\n`
   const path = deps.paths.compassPath(c.root)
   const doc: CompassDoc | null = deps.fs.exists(path) ? parseCompass(await deps.fs.readFile(path)) : null
   const route = (doc ? sectionBody(doc, SECTION_ROUTE)?.trim() : '') ?? ''
   const eta = (doc ? sectionBody(doc, SECTION_ETA)?.trim() : '') ?? ''
   const annotations = doc ? sectionBody(doc, SECTION_ANNOTATIONS) : null
   const lines: string[] = [
-    `## 罗盘：${c.name}`, '',
-    ...anchors.map(a => `- 终点：${a.endpoint}（${a.goal_type === 'coverage' ? 'coverage 覆盖锚定' : 'capability 能力锚定'}）${a.goal_note ? `——${a.goal_note}` : ''}`),
-    `- 剩余路线：${route && route !== ETA_PENDING ? '已画（见下）' : '未画（占位/缺席）'}`,
+    render(CV_HEADING, { course: c.name }), '',
+    ...anchors.map(a => render(CV_ANCHOR_LINE, {
+      endpoint: a.endpoint,
+      goalType: a.goal_type === 'coverage' ? render(CV_GOAL_COVERAGE, {}) : render(CV_GOAL_CAPABILITY, {}),
+      note: a.goal_note ? render(CV_ANCHOR_NOTE, { note: a.goal_note }) : '',
+    })),
+    render(CV_ROUTE_STATUS, { status: route && route !== ETA_PENDING ? render(CV_ROUTE_PAINTED, {}) : render(CV_ROUTE_UNPAINTED, {}) }),
   ]
   if (route && route !== ETA_PENDING) lines.push('', route)
   if (eta && eta !== ETA_PENDING) {
-    lines.push('', `### 沙盘 ETA（模型推演，非承诺${etaMarkerOf(eta) ? `；${etaMarkerOf(eta)}周` : ''}）`, '', eta)
+    const marker = etaMarkerOf(eta)
+    lines.push('', render(CV_ETA_HEADING, { week: marker ? render(CV_ETA_WEEK_SUFFIX, { weeks: marker }) : '' }), '', eta)
   }
-  if (hasLearnerAnnotations(annotations)) lines.push('', '### 学习者批注（软输入——提议非指令）', '', annotations!.trim())
+  if (hasLearnerAnnotations(annotations)) lines.push('', render(CV_ANNOTATIONS_HEADING, {}), '', annotations!.trim())
   return lines.join('\n') + '\n'
 }
 
@@ -406,19 +482,22 @@ export async function renderCompassView(deps: CoachToolDeps, c: CourseEntry): Pr
  * （锚损坏必须显式浮出，不静默折成零终点）。 */
 export async function renderEndpointAnchor(deps: CoachToolDeps, c: CourseEntry): Promise<string> {
   const anchors = await readAnchors(deps.paths.anchorPath(c.root), deps.fs)
-  if (!anchors.length) return `## 终点锚：${c.name}\n\n（零终点——空锚是合法空态，先加一个终点。）\n`
-  const lines = [`## 终点锚：${c.name}（${anchors.length} 个终点）`, '']
+  if (!anchors.length) return `${render(EA_HEADING_BARE, { course: c.name })}\n\n${render(EA_ZERO_ENDPOINTS, {})}\n`
+  const lines = [render(EA_HEADING, { course: c.name, count: anchors.length }), '']
   for (const anchor of anchors) {
     lines.push(
-      `- 终点节点：${anchor.endpoint}`,
-      `- 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
-      `- 声明日期：${anchor.declared}`,
-      `- 收尾宣告：${anchor.sealed ? `已收尾（${anchor.sealed} 宣告坡道铺通——读数折叠自该终点.pre 集；该终点重开主线接线批会自动清除）` : '未收尾（停摆前该终点.pre 须指向你认定的最终台阶——零 add_node 的纯 set_pre 接线批即收尾宣告）'}`,
+      render(EA_NODE, { node: anchor.endpoint }),
+      render(EA_GOAL_TYPE, { type: anchor.goal_type === 'coverage' ? render(EA_GOAL_COVERAGE, {}) : render(EA_GOAL_CAPABILITY, {}) }),
+      render(EA_DECLARED, { declared: anchor.declared }),
+      render(EA_SEAL, { seal: anchor.sealed ? render(EA_SEAL_DONE, { date: anchor.sealed }) : render(EA_SEAL_TODO, {}) }),
     )
-    if (anchor.goal_note) lines.push(`- 目标描述：${anchor.goal_note}`)
+    if (anchor.goal_note) lines.push(render(EA_NOTE, { note: anchor.goal_note }))
     if (anchor.worksheet.length) {
-      lines.push(`- 块工作表：${anchor.worksheet.filter(w => w.done).length}/${anchor.worksheet.length} 已核销`
-        + `（${anchor.worksheet.map(w => `${w.block}${w.done ? '✓' : ''}`).join('、')}）`)
+      lines.push(render(EA_WORKSHEET, {
+        done: anchor.worksheet.filter(w => w.done).length,
+        total: anchor.worksheet.length,
+        list: anchor.worksheet.map(w => `${w.block}${w.done ? '✓' : ''}`).join('、'),
+      }))
     }
   }
   return lines.join('\n') + '\n'
@@ -453,14 +532,14 @@ export function coachToolSpecs(): LlmToolSpec[] {
     type: 'object', properties, required, additionalProperties: false,
   })
   return [
-    { name: 'graph_view', description: '当前课程图面：全部节点名单 + 前沿/在学节点细节行（深度/pre/teaches/est/正文态）与概念组读数表。裁决 ops 的节点名与 pre 引用的取值域——产出裁决前先来这里对表。', parameters: obj({}) },
-    { name: 'node_card', description: '单节点结构档：深度、阶段、pre/teaches/assumes、est、下游消费、误解先验。', parameters: obj({ node: { type: 'string', description: '节点名（逐字，来自 graph_view）' } }, ['node']) },
-    { name: 'concept_footprint', description: '概念足迹（双职责）：① 词条档 canonical/别名/定义/confusable（teaches/assumes/concepts 铸名对表的唯一权威）；② 足迹——哪些节点 teaches/assumes 它、题目 invokes 分布、confusable 指向，以及插入挂点判读（足迹非空 = 天然挂点）。query 是**子串发现**不是存在性判定：无命中时**空 ≠ 不存在**——换宽词再试，或不带 query 读全表逐条对照；写侧提案的概念引用仍须逐字命中在册名字。', parameters: obj({ query: { type: 'string', description: '可选子串（命中 canonical 或别名）；省略 = 读全表' } }) },
-    { name: 'behavior_digest', description: '行为摘要五件套（窗口=最近 7 学习日或 10 节取大）：掌握轨迹/卡点集中度/速度校准/误解活跃度/保留率。', parameters: obj({}) },
-    { name: 'bank_overview', description: '题库概况：逐节点在库/归档/invokes 标注题数。巩固批与出题现势参照。', parameters: obj({}) },
-    { name: 'compass_read', description: '罗盘现势：终点集合/剩余路线 + 学习者批注（软输入，提议非指令）+ 沙盘 ETA。', parameters: obj({}) },
-    { name: 'endpoint_anchor', description: '终点锚集合：逐终点的终点节点/目标类型/声明日/块工作表核销进度/收尾宣告。', parameters: obj({}) },
-    { name: 'upstream_dag', description: '上游图摘要：给定节点的前置传递闭包全拓扑（逐条带深度/阶段/掌握度/到期/est，⚠ = 弱掌握或到期积压）+ 闭包内 pre 邻接表 + 超 cap 溢出行。深链诊断「七步之前的地基」一次可见，取代逐跳 node_card。', parameters: obj({ node: { type: 'string', description: '节点名（逐字，来自 graph_view）' } }, ['node']) },
+    { name: 'graph_view', description: render(TOOL_GRAPH_VIEW_DESC_LIVE, {}), parameters: obj({}) },
+    { name: 'node_card', description: render(TOOL_NODE_CARD_DESC_LIVE, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC, {}) } }, ['node']) },
+    { name: 'concept_footprint', description: render(TOOL_CONCEPT_FOOTPRINT_DESC_LIVE, {}), parameters: obj({ query: { type: 'string', description: render(TOOL_PARAM_QUERY_DESC_LIVE, {}) } }) },
+    { name: 'behavior_digest', description: render(TOOL_BEHAVIOR_DIGEST_DESC, {}), parameters: obj({}) },
+    { name: 'bank_overview', description: render(TOOL_BANK_OVERVIEW_DESC, {}), parameters: obj({}) },
+    { name: 'compass_read', description: render(TOOL_COMPASS_READ_DESC, {}), parameters: obj({}) },
+    { name: 'endpoint_anchor', description: render(TOOL_ENDPOINT_ANCHOR_DESC_LIVE, {}), parameters: obj({}) },
+    { name: 'upstream_dag', description: render(TOOL_UPSTREAM_DAG_DESC_LIVE, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC, {}) } }, ['node']) },
   ]
 }
 
@@ -476,7 +555,7 @@ export function coachToolExecutor(
       const parsed: unknown = JSON.parse(raw)
       return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, unknown> : {}
     } catch {
-      throw new Error(`工具「${call.name}」参数不是合法 JSON：${raw.slice(0, 80)}`)
+      throw new Error(render(TOOL_EXEC_BAD_ARGS, { name: call.name, raw: raw.slice(0, 80) }))
     }
   }
   return async call => {
@@ -491,7 +570,7 @@ export function coachToolExecutor(
       }
       case 'node_card': {
         const node = argsOf(call).node
-        if (typeof node !== 'string' || !node.trim()) throw new Error('node_card 需要 node 参数（逐字节点名）。')
+        if (typeof node !== 'string' || !node.trim()) throw new Error(render(TOOL_EXEC_NODE_REQUIRED, { tool: 'node_card' }))
         const { graph, state } = await deps.loadView(c)
         return renderNodeCard(graph, state, node.trim(), await endpointsOf())
       }
@@ -509,13 +588,13 @@ export function coachToolExecutor(
         return renderEndpointAnchor(deps, c)
       case 'upstream_dag': {
         const node = argsOf(call).node
-        if (typeof node !== 'string' || !node.trim()) throw new Error('upstream_dag 需要 node 参数（逐字节点名）。')
+        if (typeof node !== 'string' || !node.trim()) throw new Error(render(TOOL_EXEC_NODE_REQUIRED, { tool: 'upstream_dag' }))
         const { graph, state } = await deps.loadView(c)
         const { today } = await deps.learningDay()
         return renderUpstreamDag(graph, state, node.trim(), { today, endpoints: await endpointsOf() })
       }
       default:
-        throw new Error(`白名单外工具「${call.name}」被拒：教练工具面只有只读视图（${COACH_TOOL_NAMES.join('/')}），写路径走提案→受理门→apply。`)
+        throw new Error(render(TOOL_EXEC_READONLY_REJECT, { name: call.name, names: COACH_TOOL_NAMES.join('/') }))
     }
   }
 }

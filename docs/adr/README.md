@@ -105,5 +105,6 @@
 | [0097](./0097-compass-route-back-to-plan-contract.md) | 罗盘「剩余路线」恢复生产者：route 回到思路官的计划契约（route 归属已被 ADR-0099/#316 取代） |
 | [0098](./0098-growth-chain-silent-loss-and-diagnosability.md) | 生长链路的静默丢弃与可诊断面收口（#313 第三次审计 A/B/C/D/E 五组） |
 | [0099](./0099-compass-master-station.md) | 罗盘升格为大师站：战略分解、写权反转与终点锚程度语义 |
+| [0100](./0100-model-face-prose-into-prompts.md) | 模型面散文铺满 `prompts/` —— 教练三站先行 |
 | [0101](./0101-coach-single-station-loop.md) | 教练回单站回路：两站编排退场与读件面归位 |
 | [0102](./0102-audit-action-list-mandatory.md) | 审计由非阻建议升为强制行动清单：生成/修复两档思考 |
