@@ -99,8 +99,8 @@ test('评审器跑通：报告落 state/质量评审、逐件两期评审、证�
   const result = await runQualityReview(ctx, rt, { repeats: 1, corpusDir: join(vault, '学习中心', 'state', '生成语料') })
   const report = result.report
 
-  assert.equal(report.sampling.stations.join('、'), '教练思路', '范围 = 有量规的站（种子站随 #256 退役、判卷等无量规站不评）')
-  assert.equal(report.sampling.pool, 3, '池 = 教练思路夹具三件（种子站语料不再入范围）')
+  assert.equal(report.sampling.stations.join('、'), '教练执行', '范围 = 有量规的站（种子站随 #256 退役、判卷等无量规站不评）')
+  assert.equal(report.sampling.pool, 3, '池 = 教练执行夹具三件（种子站语料不再入范围）')
   assert.equal(report.sampling.selected, 3, '配额（bad 3 + ok 2）盖过池量时取全池')
   assert.equal(report.unscoreable.length, 1, '空输出件零模型调用（列为未评分件）')
   assert.equal(report.reviews.length, 2, '剩余两件逐件评审')
@@ -120,7 +120,7 @@ test('评审器跑通：报告落 state/质量评审、逐件两期评审、证�
   // 报告落盘：state/质量评审/*.md（报告不进 canonical）与返回的 markdown 一致
   assert.ok(result.reportPath.includes('/学习中心/state/质量评审/'), `报告落 state 观测面：${result.reportPath}`)
   assert.equal(readFileSync(result.reportPath, 'utf8'), result.markdown)
-  assert.ok(result.markdown.includes('教练思路/ok-2026-09-13T07-24-41-882Z-0001.md'), '报告指到具体语料文件')
+  assert.ok(result.markdown.includes('教练执行/ok-2026-09-13T07-24-41-882Z-0001.md'), '报告指到具体语料文件')
   assert.ok(result.markdown.includes('「ops」') || result.markdown.includes('「generated」'), '报告带证据引文')
   assert.ok(result.markdown.includes('审计面声明'), '范围含审计面站时报告带审计面声明（#224）')
   assert.ok(result.report.systemic, '图轴在册时系统性候选进报告（#224）')
@@ -130,7 +130,7 @@ test('评审调用本身进语料（站标签 质量评审）：报告与语料�
   const vault = tempVault()
   const { ctx } = stubCtx()
   const rt = runtimeOf(ctx, vault)
-  await runQualityReview(ctx, rt, { repeats: 1, stations: ['教练思路'], badQuota: 0, okQuota: 1, corpusDir: join(vault, '学习中心', 'state', '生成语料') })
+  await runQualityReview(ctx, rt, { repeats: 1, stations: ['教练执行'], badQuota: 0, okQuota: 1, corpusDir: join(vault, '学习中心', 'state', '生成语料') })
   await rt.corpus.flush()
   const dir = join(vault, '学习中心', 'state', '生成语料', STATIONS.qualityReview)
   assert.ok(existsSync(dir), `评审调用捕获目录应在：${dir}`)
@@ -148,7 +148,7 @@ test('稳定性读数：重复两次（桩两轮同判）→ 报告带稳定性�
   const { ctx } = stubCtx()
   const rt = runtimeOf(ctx, vault)
   const result = await runQualityReview(ctx, rt, {
-    repeats: 2, stations: ['教练思路'], badQuota: 0, okQuota: 1,
+    repeats: 2, stations: ['教练执行'], badQuota: 0, okQuota: 1,
     corpusDir: join(vault, '学习中心', 'state', '生成语料'),
   })
   assert.equal(result.report.reviews.length, 2, '一件两轮')
@@ -183,7 +183,7 @@ test('评审应答不可解析：记「评审失败」而非低分（报告单�
   } as unknown as Context
   const rt = runtimeOf(ctx, vault)
   const result = await runQualityReview(ctx, rt, {
-    repeats: 1, stations: ['教练思路'], badQuota: 0, okQuota: 1,
+    repeats: 1, stations: ['教练执行'], badQuota: 0, okQuota: 1,
     corpusDir: join(vault, '学习中心', 'state', '生成语料'),
   })
   assert.equal(result.report.reviews.length, 1)
@@ -195,9 +195,9 @@ test('评审应答不可解析：记「评审失败」而非低分（报告单�
 test('#236 工具调用件端到端：文本为空而载荷在参数里 → 可评（合并视图进两期提示词，不列未评分件）', async () => {
   const vault = tempVault(false)
   const corpus = join(vault, '学习中心', 'state', '生成语料')
-  mkdirSync(join(corpus, '教练思路'), { recursive: true })
-  writeFileSync(join(corpus, '教练思路', 'ok-2026-09-13T08-00-00-000Z-0001.md'), [
-    '---', 'ts: 2026-09-13T08:00:00.000Z', 'station: 教练思路', 'kind: loop', 'effort: fast',
+  mkdirSync(join(corpus, '教练执行'), { recursive: true })
+  writeFileSync(join(corpus, '教练执行', 'ok-2026-09-13T08-00-00-000Z-0001.md'), [
+    '---', 'ts: 2026-09-13T08:00:00.000Z', 'station: 教练执行', 'kind: loop', 'effort: fast',
     'outcome: ok', 'truncated: false', 'duration_ms: 900', 'provider: deepseek-official',
     'model: deepseek-v4-flash', 'prompt_chars: 120', 'reply_chars: 0', '---', '',
     '## 提示词', '', '<!-- learnhub:prompt/v6 -->', '# 教练回合提示词', '',
@@ -207,7 +207,7 @@ test('#236 工具调用件端到端：文本为空而载荷在参数里 → 可�
   const { ctx, prompts } = stubCtx()
   const rt = runtimeOf(ctx, vault)
   const result = await runQualityReview(ctx, rt, {
-    repeats: 1, stations: ['教练思路'], badQuota: 0, okQuota: 5, corpusDir: corpus,
+    repeats: 1, stations: ['教练执行'], badQuota: 0, okQuota: 5, corpusDir: corpus,
   })
   assert.equal(result.report.unscoreable.length, 0, '工具调用件不再落进未评分件（#224 的教练轴空壳）')
   assert.equal(result.report.reviews.length, 1, '逐件两期评审照跑')

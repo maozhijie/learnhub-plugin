@@ -1,6 +1,6 @@
 /**
- * 教练执行官站的模型面散文（#311）：`coach/growth-subsystem.ts` 的写件工具描述与参数说明、
- * 「草稿状态」块、「思路官交接」块、合法取值域回灌与草稿差异行、写件工具的回执与拒收回灌。
+ * 教练执行站的模型面散文（#311）：`coach/growth-subsystem.ts` 的写件工具描述与参数说明、
+ * 「草稿状态」块、合法取值域回灌与草稿差异行、写件工具的回执与拒收回灌。
  *
  * 文本是惰性字符串 + `{{变量}}` 占位符，取值由 `../infra/prompt-render.ts::render` 在调用点
  * 完成（缺变量与残留占位符都抛，详见 ADR-0075）。**本文件是模型可见散文，改动走章程 §8。**
@@ -35,6 +35,8 @@ export const EXEC_TOOL_DRAFT_AUDIT_DESC = '审计（写件，只读效果）：�
 export const EXEC_TOOL_DRAFT_FINISH_DESC = '按批发布（写件）：把自上次发布以来的未发布增量硬化为生长批提案 → 受理门 → apply。基图漂移（外部改了图）或门复验未过 = 拒收零落盘、错误回灌继续修。收尾（终点坡道铺通）须以零 add_node 的纯 set_pre 独立批 finish。'
 export const EXEC_TOOL_DRAFT_REVERT_DESC = '撤销（写件）：丢弃最近 N 条未发布增量（省略 count = 丢弃本批全部未发布增量，回到水位）。给「草稿里卡着修不掉的坏增量」留一条路——追加式草稿删不掉已入草稿的 op，del_node 重铸也改不动它；撤销后本批作废（连本批 note / 铸名 / confusable 建议一并清），已发布段（水位以下）不可动。'
 export const EXEC_TOOL_DRAFT_REVERT_COUNT_DESC = '丢弃最近多少条未发布增量（正整数；省略 = 全部丢弃）'
+export const EXEC_TOOL_DRAFT_NOTE_DESC = '停摆收束（写件，零操作）：本回合不长结构时用它声明理由——零操作 + 给理由，草稿形状不变。弧建议（serves_arc / repaint_suggest）不在本工具上，改走 draft_arc。'
+export const EXEC_TOOL_DRAFT_ARC_DESC = '弧建议（写件，零操作）：声明本回合对罗盘弧的两类建议——serves_arc（本批服务弧的哪一阶段）与 repaint_suggest（结构性重画建议）。二者都只有建议权（弧的写权在罗盘站），确知才给、不硬凑；至少给一件。'
 
 // ---------------------------------------------------------------- draft_patch 参数说明
 
@@ -44,7 +46,7 @@ export const EXEC_PARAM_CONCEPTS_DESC = '随批铸名（本批新引入的概念
 export const EXEC_PARAM_NOTE_OPERATOR_DESC = '本批生长算子（前进/插入/巩固/旁支/换向；下次 finish 硬化为 note）'
 export const EXEC_PARAM_NOTE_REASON_DESC = '本批理由一句话'
 export const EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC = '前进/换向批的朝向声明（朝哪些终点长；与接线义务配套）'
-export const EXEC_PARAM_NOTE_RECHECK_DESC = '插入批的复诊预注册（**operator=插入 且本批有 add_node 时必填**，其余算子不得携带）：{metric, days?}——插入边的到期结算零人审，没有预注册就没有结算判据。metric 取值域：{{metrics}}（思路官交接块里给的那一枚照抄）；days 缺省 {{default}} 学习日、clamp [{{min}},{{max}}]。'
+export const EXEC_PARAM_NOTE_RECHECK_DESC = '插入批的复诊预注册（**operator=插入 且本批有 add_node 时必填**，其余算子不得携带）：{metric, days?}——插入边的到期结算零人审，没有预注册就没有结算判据。metric 取值域：{{metrics}}（与症状同源的那一枚）；days 缺省 {{default}} 学习日、clamp [{{min}},{{max}}]。'
 export const EXEC_PARAM_METRIC_DESC = '可机判结局指标：{{metrics}}'
 export const EXEC_PARAM_DAYS_DESC = '复诊期学习日数（缺省 {{default}}，越界 clamp 到 [{{min}},{{max}}]）'
 
@@ -59,17 +61,12 @@ export const EXEC_STATUS_ROUNDS_HEADING = '- 轮次日志（尾部 8 条）：'
 export const EXEC_STATUS_ROUND_LINE = '  - [{{kind}}] {{summary}}{{errors}}'
 export const EXEC_STATUS_ROUND_ERRORS = '（✗ {{count}} 个错误）'
 
-// ---------------------------------------------------------------- 思路官交接块
+// ---------------------------------------------------------------- draft_note / draft_arc 参数（单站回路的零操作声明）
 
-export const EXEC_HANDOVER_HEADING = '## 思路官交接（方向裁决——advisory，不是补丁）'
-export const EXEC_HANDOVER_OPERATOR = '- 算子：{{operator}}；朝向：{{endpoints}}'
-export const EXEC_HANDOVER_ENDPOINTS_EMPTY = '（未声明）'
-export const EXEC_HANDOVER_REASON = '- 理由：{{reason}}'
-export const EXEC_HANDOVER_STEP = '- 台阶 {{index}}：{{intent}}{{concept}}{{est}}'
-export const EXEC_HANDOVER_STEP_CONCEPT = '（概念面：{{concept}}）'
-export const EXEC_HANDOVER_STEP_EST = '（约 {{est}} 分钟）'
-export const EXEC_HANDOVER_RECHECK = '- 预注册复诊：{{metric}}（{{days}} 学习日）——插入批随批携带：用 draft_patch 的 note_recheck 写这一枚（metrics 取值域见该参数说明；草稿侧缺席时按本计划兜底）。'
-export const EXEC_HANDOVER_FOOTER = '计划是方向不是操作：节点名与补丁仍须你对草稿图逐字对表后用 draft_patch 落地；与图面事实冲突时以图面为准，偏离计划时在 note_reason 里说一句。'
+export const EXEC_PARAM_HALT_REASON_DESC = '本回合不长结构的理由（一句话；停摆收束必填）'
+export const EXEC_PARAM_SERVES_ARC_DESC = '本批服务弧的阶段标题（照抄罗盘「剩余路线」的阶段标题原文，不是节点名；确知才写，不确定就省略）'
+export const EXEC_PARAM_REPAINT_DESC = '结构性重画建议：{reason_class, note?}——reason_class ∈ {{reasons}}（读数信号不构成重画理由）'
+export const EXEC_PARAM_REPAINT_NOTE_DESC = '重画建议的一句话说明'
 
 // ---------------------------------------------------------------- 合法取值域回灌（domainsHint）
 
@@ -99,6 +96,7 @@ export const EXEC_CRASH_PATCH = '补丁崩溃'
 export const EXEC_CRASH_AUDIT = '审计崩溃'
 export const EXEC_CRASH_FINISH = 'finish 崩溃'
 export const EXEC_CRASH_NOTE = 'note 崩溃'
+export const EXEC_CRASH_ARC = '弧建议崩溃'
 export const EXEC_CRASH_REVERT = '撤销崩溃'
 export const EXEC_CRASH_SUMMARY = '{{label}}（{{head}}）'
 export const EXEC_ROUND_PATCH_BUDGET = '补丁被拒（轮次预算耗尽，{{rounds}}/{{max}}）'
@@ -118,6 +116,10 @@ export const EXEC_ROUND_FINISH_APPLY_FAIL = 'apply 失败（提案 #{{id}} 已�
 export const EXEC_ROUND_FINISH_OK = '发布成功：提案 #{{id}}，快照 v{{snapshot}}，ops {{ops}}{{sealed}}{{confusable}}'
 export const EXEC_ROUND_FINISH_SEALED = '；sealed：{{effects}}'
 export const EXEC_ROUND_FINISH_CONFUSABLE = '；{{count}} 条 confusable 建议'
+export const EXEC_ROUND_NOTE = '停摆收束（零操作）：{{reason}}'
+export const EXEC_ROUND_ARC = '弧建议声明（零操作）：{{summary}}'
+export const EXEC_ROUND_ARC_SERVES = 'serves_arc「{{value}}」'
+export const EXEC_ROUND_ARC_REPAINT = 'repaint_suggest「{{value}}」'
 
 // ---------------------------------------------------------------- 写件工具回执与拒收回灌
 
@@ -154,6 +156,14 @@ export const RECEIPT_REVERT_RESIDUAL_OK = '通过（结构面）'
 export const RECEIPT_REVERT_NEXT_RESUME = '\n可继续 draft_patch 或 draft_audit。'
 export const RECEIPT_REVERT_NEXT_CLEAR = '\n本批已清空——用 draft_patch 重开一批。'
 
+export const ERR_NOTE_NO_REASON = '[draft_note] 缺理由——停摆收束必须给一句话说明本回合为什么不长结构。'
+export const ERR_ARC_EMPTY = '[draft_arc] 空声明——serves_arc 与 repaint_suggest 至少给一件（什么都不声明就不要调本工具）。'
+export const ERR_SERVES_ARC_SHAPE = 'serves_arc 非空时必须是阶段标题（照抄罗盘「剩余路线」的阶段标题原文，不是节点名）。'
+export const ERR_REPAINT_REASON = 'repaint_suggest.reason_class 非法：{{value}}（只允许结构性事由：{{reasons}}——读数信号不构成重画理由）。'
+export const ERR_REPAINT_NOTE = 'repaint_suggest.note 非空时必须是一句话说明。'
+export const RECEIPT_NOTE = '已声明本回合不长结构（零操作收束）：{{reason}}。可直接收束，或继续 draft_patch 开新批。'
+export const RECEIPT_ARC = '已声明弧建议（零操作）：{{summary}}。可继续 draft_patch 开新批，或直接收束。'
+
 export const ERR_FINISH_NO_NOTE = '[draft_finish] 缺本批 note（operator/reason）——先用 draft_patch 的 note_operator/note_reason 声明本批算子与理由。'
 export const ERR_FINISH_BAD_OPERATOR = '[draft_finish] note.operator 非法：{{operator}}（允许 {{allowed}}）'
 export const ERR_FINISH_EMPTY = '[draft_finish] 没有未发布增量——先 draft_patch 再 finish。'
@@ -166,7 +176,7 @@ export const EXEC_CONFUSABLE_CANDIDATE = 'confusable 候选提案 #{{id}}：「{
 export const EXEC_CONFUSABLE_FAIL = 'confusable 建议未展开（「{{concept}}」↔「{{with}}」）：{{msg}}'
 export const RECEIPT_FINISH = '发布成功：提案 #{{id}} 已 apply（快照 v{{snapshot}}）；水位前移至 {{published}}/{{total}}。{{sealed}}{{confusable}}'
 export const RECEIPT_FINISH_SEALED = '收尾宣告：{{effects}}。'
-export const ERR_EXEC_WHITELIST = '白名单外工具「{{name}}」被拒：执行官写件只有 draft_patch / draft_audit / draft_finish / draft_revert。'
+export const ERR_EXEC_WHITELIST = '白名单外工具「{{name}}」被拒：写件只有 draft_patch / draft_audit / draft_finish / draft_revert / draft_note / draft_arc。'
 
 export const ERR_DRAFT_BUDGET_EXHAUSTED = '[coach-draft] 轮次预算已耗尽（{{rounds}}/{{max}} 轮）、本批仍有 {{unpublished}} 条未发布增量未发布成功——真出口：修好门错误后 finish、draft_revert 撤掉卡住的增量重开一批，或取消本会话草稿（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。'
 export const ERR_DRAFT_UNFINISHED = '[coach-draft] 回路收束但草稿仍有 {{unpublished}} 条未发布增量且未成功 finish（禁止空手结束）——草稿已保留（会话 {{session}}），续建或显式取消（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。'

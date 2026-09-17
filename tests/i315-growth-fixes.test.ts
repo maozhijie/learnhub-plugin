@@ -146,18 +146,16 @@ test('#315 B5：structureReadingsOf——complete = sealed ∧ 闭包真已学�
   assert.deepEqual(dangling, [])
 })
 
-test('#315 B5：同一图面下两站上下文包的结构读数逐字一致（对照测试）', async () => {
+test('#315 B5：同一图面下上下文包的结构读数逐字一致（同一份函数折叠）', async () => {
   await withVault({ registry: null, graph: null }, async h => {
     await draftCourse(h.engine, CAPABILITY_DRAFT)
     const extract = (pack: string): string[] =>
       pack.split('\n').filter(l => l.includes('结构读数：'))
-    const planner = await h.engine.growth2.coachContextPack('数学', { packLabel: '思路官——方向裁决' })
-    const executor = await h.engine.growth2.coachContextPack('数学', { packLabel: '执行官——草稿会话上下文' })
-    const plannerLines = extract(planner)
+    const pack = await h.engine.growth2.coachContextPack('数学', { packLabel: '教练执行——草稿会话上下文' })
+    const lines = extract(pack)
     // CAPABILITY_DRAFT 两条锚：手加「导数方向」（空闭包）与起草「用导数解决优化问题」
-    assert.ok(plannerLines.some(l => l.includes('闭包真已学 0/0｜结构未铺完')))
-    assert.ok(plannerLines.some(l => l.includes('闭包真已学 0/1（未学：认识变化率）｜结构未铺完')))
-    assert.deepEqual(extract(executor), plannerLines, '两站引用同一谓词，读数逐字一致')
+    assert.ok(lines.some(l => l.includes('闭包真已学 0/0｜结构未铺完')))
+    assert.ok(lines.some(l => l.includes('闭包真已学 0/1（未学：认识变化率）｜结构未铺完')))
   })
 })
 

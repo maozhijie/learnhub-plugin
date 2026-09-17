@@ -6,7 +6,7 @@
 // 覆盖：
 // - A1/A3 重放与落图同源（replayDraft / applyOpsToNodes 同一套按身份的欠账口径）。
 // - A2/A4 schema 门：pre 必须列表、顶层与 op 级未知键 fail loud。
-// - B2 站级：插入批的复诊预注册有两条合法来源（draft_patch 的 note_recheck / 思路官计划兜底），
+// - B2 站级：插入批的复诊预注册随 draft_patch 的 note_recheck 携带，
 //   落账本（state/边实验.jsonl）——提示词那句「插入批落地时随批携带」由此成立。
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -213,29 +213,6 @@ test('#313 B2：draft_patch 的 note_recheck 是真实写入面——插入批�
     assert.equal(ledger[0]!.due, 5, '复诊期取显式 days')
     assert.deepEqual(ledger[0]!.pre, ['认识变化率'])
     assert.equal(ledger[0]!.outcome, undefined, '在途（未结算）')
-  })
-})
-
-test('#313 B2：思路官计划的 recheck 兜底——note_recheck 省略也能发布（提示词承诺成立）', async () => {
-  await withVault({ registry: null, graph: null }, async h => {
-    await draftCourse(h.engine, CAPABILITY_DRAFT)
-    const { seam } = scriptFake([
-      // 补丁只声明算子与理由：预注册随计划来（提示词交接块原话「插入批落地时随批携带」）
-      patchCall('c1', INSERT_OPS, { note_operator: '插入', note_reason: '卡点集中在跨步' }),
-      finishCall('c2'),
-      { text: '本批已发布。' },
-    ])
-    const r = await h.engine.growth2.coachDraft('数学', seam, {
-      plan: {
-        operator: '插入', reason: '卡点集中在跨步', target_endpoints: [], steps: [{ intent: '插入一级台阶' }],
-        recheck: { metric: '卡点集中度降幅' },
-      },
-    })
-    assert.equal(r.finished, true)
-    const ledger = await readProbationLedger(h.paths, '数学', h.engine.fs)
-    assert.equal(ledger.length, 1)
-    assert.equal(ledger[0]!.node, '平均变化率')
-    assert.equal(ledger[0]!.due, 10, '计划未给 days → 缺省 10 学习日')
   })
 })
 

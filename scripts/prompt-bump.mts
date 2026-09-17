@@ -36,7 +36,6 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { stripFences } from '../src/engine/infra/agent.ts'
-import { validatePlanHandover } from '../src/engine/coach/coach-round.ts'
 import { stripWrappingFence } from '../src/engine/coach/compass.ts'
 import { Content } from '../src/engine/content/content.ts'
 import { YAML } from '../src/engine/infra/yaml.ts'
@@ -249,15 +248,7 @@ export const REPLAY_FACE: Record<string, (raw: string) => string[] | null> = {
   // invokes/查重在回放面外——回放判**解析/形状**，不判查重与概念对表）
   题目生成: raw => bankShape(raw),
   笔记出题: raw => bankShape(raw),
-  // 教练回合：站链 = stripWrappingFence → parseModel → validateEditProposal → 必须有 note 区
-  // （growth-subsystem.coachGrowthBatch 的 parseGrowthVerdict，私有方法——镜像并注记）
-  教练思路: raw => {
-  const doc = YAML.parseModel(stripWrappingFence(raw))
-  const course = doc !== null && typeof doc === 'object' && typeof (doc as { course?: unknown }).course === 'string'
-    ? (doc as { course: string }).course : ''
-  const errors = validatePlanHandover(doc, course)
-  return errors.length ? errors : null
-},  // 目标反编译：站链 = AgentSeam.complete（剥围栏）→ YAML.parseModel → splitDecompileDoc。
+  // 目标反编译：站链 = AgentSeam.complete（剥围栏）→ YAML.parseModel → splitDecompileDoc。
   // **跨产物一致性按自指口径旁路**：project 名取产物自身；#240/ADR-0076 种子降职后本站
   // 只产计划——splitDecompileDoc 现对 seed 半区即拒（受理侧知识，回放同口径）。
   // 旧语料（含 seed 半区）回放会红：那是降职语义在执法，不是回放面坏。
@@ -291,6 +282,8 @@ function bankShape(raw: string): string[] | null {
 /** 明确**不在回放面**的站与理由（覆盖面是显式清单，不是漏登；与输出契约注册表的
  * OUT_OF_SCOPE_STATIONS 同款纪律）。 */
 export const REPLAY_OUT_OF_SCOPE: Record<string, string> = {
+  教练执行: '工具调用承载（tool-calls）：产物在写件（draft_patch/draft_audit/draft_finish/draft_note/draft_arc）的参数里，无独立 YAML/JSON 解析面可回放（解析面 = 草稿门，需引擎上下文）',
+  种子起草: '站随种子链整体退役（#256 / ADR-0081）——语料为退场前存量样本，无在役解析面',
   课程节生成: '正文 markdown + 机器块的解析面要引擎/课程上下文（sectionApply 落盘），回放取不到',
   '课程节生成-苏格拉底': '同上（风格变体共享节生成解析面）',
   '课程节生成-费曼': '同上（风格变体共享节生成解析面）',

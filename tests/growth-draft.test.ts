@@ -793,3 +793,27 @@ test('#309 ③ 档位取值域进写作面：draft_patch 的工具 description �
   })
 })
 
+// ---- #320 / ADR-0101：单站回路的读件面（还回三件） ----
+
+test('#320 单站读件面：draftToolSpecs 的只读白名单含还回的三件（行为摘要/题库概况/罗盘读）', () => {
+  const names = GrowthSubsystem.draftToolSpecs().map(s => s.name)
+  for (const t of ['behavior_digest', 'bank_overview', 'compass_read'] as const) {
+    assert.ok(names.includes(t), `读件 ${t} 在草稿回路工具面（#320 还回，不再桩成空串）`)
+  }
+  assert.ok(names.includes('draft_note'), '零操作停摆收束工具在册')
+  assert.ok(names.includes('draft_arc'), '弧建议提成独立写件在册（#320）')
+  assert.ok(names.includes('draft_revert'), '逃生口工具仍在册')
+})
+
+test('#320 单站写件面：弧建议走 draft_arc，draft_patch/draft_note 不再带这些参数（单一通道）', () => {
+  const specs = GrowthSubsystem.draftToolSpecs()
+  const propsOf = (n: string) => Object.keys(
+    (specs.find(s => s.name === n)!.parameters as { properties: Record<string, unknown> }).properties,
+  )
+  assert.ok(!propsOf('draft_patch').includes('note_serves_arc') && !propsOf('draft_patch').includes('repaint_suggest'),
+    'draft_patch 不再带弧建议参数（#320：提成 draft_arc）')
+  assert.ok(!propsOf('draft_note').includes('serves_arc') && !propsOf('draft_note').includes('repaint_suggest'),
+    'draft_note 不再带弧建议参数')
+  assert.deepEqual(propsOf('draft_arc').sort(), ['repaint_suggest', 'serves_arc'], 'draft_arc 只带弧建议两参（serves_arc / repaint_suggest）')
+})
+

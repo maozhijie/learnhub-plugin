@@ -51,7 +51,7 @@ import type { CompletionFold } from './coach/seed.ts'
  * 允许 host 深导入的只有**纯声明面**——纯类型，与纯字符串常量（`engine/prompts/*.ts` 的
  * 提示词文本）。判据是「有行为吗」：纯声明面没有运行期语义，深导入不会把宿主焊到引擎内部
  * 装配上；**带行为的引擎子模块仍只准走门面**。 */
-export type { CoachTrigger, CoachPromptFamily, CoachCheck, CoachGrowthSegment, GrowthPlanHandover } from './coach/coach-round.ts';
+export type { CoachTrigger, CoachCheck } from './coach/coach-round.ts';
 export type { GateVerdict } from './infra/agent.ts'
 import { QuestionBank, validateBank, BankSubsystem } from './content/question-bank.ts'
 import { NoteSourceManifest, ChannelsSubsystem } from './vault/note-source.ts'
@@ -100,12 +100,8 @@ export { AgentSeam, AGENT_LOOP_MAX_TOOL_ROUNDS, stripFences } from './infra/agen
 export type { AgentCallRecord, AgentCallMode, AgentSeamPorts, GateRepairSpec } from './infra/agent.ts'
 /** 出题第二意见门（#223）：站标签与缺省抽样率随门面出（宿主 STATIONS/配置对齐用）。 */
 export { QUIZ_SOLVER_STATION, DEFAULT_QUIZ_AUDIT_RATE } from './content/question-audit.ts'
-/** 思路官站标签（#301 缺陷③）：宿主 STATIONS.growthPlan 引本常量对齐——失败补标按真实
- * 失败站落盘，站名常量的单一出处从此在引擎侧（此前 host 侧一张写死的遗留映射
- * `growth: '教练思路'`）。 */
-export { COACH_PLAN_STATION } from './coach/growth-subsystem.ts'
 // 站名是受控词表（host STATIONS）成员：引擎侧单一出处经门面出（#313 D19——两侧各写字面量
-// 时改名即静默分裂成两个语料目录）
+// 时改名即静默分裂成两个语料目录）。#320 两站回单站后 `教练思路` 站退场，不再随门面出。
 export { COMPASS_STATION } from './coach/compass.ts'
 export { DECOMPILE_STATION } from './practice/projects.ts'
 /** 生长草稿内核（#271 / ADR-0088）：站标签/草稿差异与门同调纯函数随门面出（宿主与测试消费）。 */
@@ -423,7 +419,6 @@ export class LearnhubEngine {
       graphApply: (kind, pid) => this.graph.graphApply(kind, pid),
       graphPropose: (kind, yamlText) => this.graph.graphPropose(kind, yamlText),
       graphReject: (pid, note) => this.graph.graphReject(pid, note),
-      graphProposals: (status, kind) => this.graph.graphProposals(status, kind),
       proposeConfusableCandidate: (courseKey, pair) => this.proposals.proposeConfusableCandidate(courseKey, pair),
       auditGateErrors: course => this.auditGateErrors(course),
       learningDay: () => this.learningDay(),

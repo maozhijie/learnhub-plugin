@@ -40,7 +40,7 @@ function resolveSource(source: string): string | null {
 /** 锚门本体（可注入 = 自检可喂坏样本）。 */
 function runRubricGate(rubrics: readonly QualityRubric[]): void {
   assert.deepEqual(
-    rubrics.map(r => r.id), ['大纲', '节正文', '题目', '教练思路'],
+    rubrics.map(r => r.id), ['大纲', '节正文', '题目', '教练回合'],
     '四份量规缺一不可（大纲/节正文/题目/教练回合；「种子·终点」随种子链整体退役 #256）',
   )
   const stations = new Set(Object.values(STATIONS))
@@ -99,12 +99,12 @@ test('自检：出处指向不存在的文档（模板键改名/词条缺席）�
 
 test('自检：加「总分」维度 / 换掉法庭元数据，元数据门必须变红', () => {
   const withTotal = QUALITY_RUBRICS.map(r =>
-    r.id === '教练思路'
-      ? { ...r, dimensions: [...r.dimensions, { id: '总分', name: '总分（加权合成）', criteria: [{ id: 'x', criterion: 'x', evidence: 'x', source: '模板:思路官回合' }] }] }
+    r.id === '教练回合'
+      ? { ...r, dimensions: [...r.dimensions, { id: '总分', name: '总分（加权合成）', criteria: [{ id: 'x', criterion: 'x', evidence: 'x', source: '模板:教练执行' }] }] }
       : r)
   assert.throws(() => runRubricGate(withTotal), /总分/)
   const noCourt = QUALITY_RUBRICS.map(r =>
-    r.id === '教练思路' ? { ...r, court: { ai: '', human: '', outcome: '' } } : r)
+    r.id === '教练回合' ? { ...r, court: { ai: '', human: '', outcome: '' } } : r)
   assert.throws(() => runRubricGate(noCourt), /RUBRIC_COURTS/)
 })
 

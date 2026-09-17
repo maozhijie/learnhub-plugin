@@ -135,7 +135,7 @@ test('#302 ② 摘要修正：单行超界不再静默腰斩（带字符数标�
   logCall(rt, 'coach_growth', summarize(failure, { full: true }))
   assert.deepEqual(log.nth('engine.call')!.fields.detail, [failure], '失败类值不截断（指向完整值的文末照旧可读）')
   // 多行失败（两轮死因 + 文末指向）：full 也不折首行——折了会把详情与「完整值在哪」一起丢
-  const multi = ['两轮死因：思路官计划未过 schema 门', '【首轮】operator 非法', '【重裁】仍非法', '｜语料 生成语料/教练执行/bad-x.md'].join('\n')
+  const multi = ['两轮死因：草稿回路两轮门拒未过', '【首轮】draft_patch 拒收', '【重试】仍拒收', '｜语料 生成语料/教练执行/bad-x.md'].join('\n')
   logCall(rt, 'coach_growth', summarize(multi, { full: true }))
   assert.deepEqual(log.nth('engine.call')!.fields.detail, [multi], '多行失败整段可读（首行折法只用于常规值）')
 })

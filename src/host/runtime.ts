@@ -93,7 +93,7 @@ export interface GenJob {
    * 随任务进执行侧——就绪深度已满足（`check.ok`）时也不短路成停摆，照产一轮回合
    * （教练仍可裁 `ops: []`）。自动触发点不带它（停摆与阻尼照旧生效）。 */
   growthForce?: boolean
-  /** 触发点（#273）：随任务进执行侧，折思路官提示词两族（coachPromptFamily 纯函数）。 */
+  /** 触发点（#273）：随任务进执行侧，参与就绪深度短路与重裁判定。 */
   growthTrigger?: CoachTrigger
   /** 图域任务负载（面板下发，phase 决定形状）：反编译=项目目标反编译；计划/里程碑=项目草案
    * （course 槽放项目 id）。 */

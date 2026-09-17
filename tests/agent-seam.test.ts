@@ -353,7 +353,7 @@ test('#302 ③ 同错误熔断：同一工具连续 3 次逐字相同即熔断�
   let toolRuns = 0
   await assert.rejects(
     () => agent.agentLoop({
-      station: '执行官草稿', prompt: '发布', tools: [],
+      station: '教练执行', prompt: '发布', tools: [],
       runTool: async () => { toolRuns++; throw new Error('[draft_finish] 门复验未过：ops[0].pre 引用不存在的节点') },
     }),
     /工具回路熔断：draft_finish 连续 3 次返回逐字相同的结果.*死因：同错误重复/,
@@ -364,7 +364,7 @@ test('#302 ③ 同错误熔断：同一工具连续 3 次逐字相同即熔断�
   assert.equal(log.count('agent.tool.fail'), 3)
   const fail = log.nth('agent.tool.fail')!
   assert.equal(fail.level, 'warn')
-  assert.equal(fail.fields.station, '执行官草稿')
+  assert.equal(fail.fields.station, '教练执行')
   assert.equal(fail.fields.tool, 'draft_finish')
   assert.equal(typeof fail.fields.chars, 'number')
   assert.match(String(fail.fields.error), /^\[draft_finish\] 门复验未过/)
@@ -380,7 +380,7 @@ test('#302 ③ 同错误熔断：同一工具连续 3 次逐字相同即熔断�
   const agent2 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: fixing }, systemClock)
   let left = 6
   const ok = await agent2.agentLoop({
-    station: '执行官草稿', prompt: '发布', tools: [],
+    station: '教练执行', prompt: '发布', tools: [],
     runTool: async () => { throw new Error(`门错误清单剩 ${--left} 条（逐轮在缩短）`) },
   })
   assert.equal(ok.text, 'ok: 1', '逐轮变化的错误不误杀——修复链走完由模型收束')
@@ -395,7 +395,7 @@ test('#302 ③ 同错误熔断：同一工具连续 3 次逐字相同即熔断�
   ])
   const agent3 = new AgentSeam({ logger: memLogger(), complete: fakeComplete([]), stream: alternating }, systemClock)
   const mixed = await agent3.agentLoop({
-    station: '执行官草稿', prompt: 'p', tools: [],
+    station: '教练执行', prompt: 'p', tools: [],
     runTool: async call => (call.name === 'draft_audit' ? '审计：通过' : '已入草稿'),
   })
   assert.equal(mixed.text, '收束')

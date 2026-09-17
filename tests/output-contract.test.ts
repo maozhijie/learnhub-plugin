@@ -177,9 +177,9 @@ test('校验器：yaml-top 各站——顶层形状缺失/类型不符即红，�
   assert.equal(validateByContract(quiz, { node: '乙', questions: [{}] }).ok, true)
   assert.equal(validateByContract(quiz, { node: '乙' }).ok, false)
 
-  const growth = contractOf('教练思路')!
-  assert.equal(validateByContract(growth, { operator: '前进', reason: 'r', target_endpoints: ['终点甲'], steps: [{ intent: '台阶' }] }).ok, true)
-  assert.equal(validateByContract(growth, { operator: '前进', reason: 'r' }).ok, false, 'steps 缺失即红')
+  const cards = contractOf('错误对比卡')!
+  assert.equal(validateByContract(cards, { cards: [{}] }).ok, true)
+  assert.equal(validateByContract(cards, {}).ok, false, 'cards 缺失即红')
 
   const decompile = contractOf('目标反编译')!
   assert.equal(validateByContract(decompile, { project: 'p', plan: [] }).ok, true, 'seed 半区可省略（显式目标课程）')

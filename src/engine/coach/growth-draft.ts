@@ -1,5 +1,5 @@
 /**
- * 生长草稿缓存（#271 / ADR-0088 裁决 4）：执行官会话的草稿快照落盘——vault 旁挂
+ * 生长草稿缓存（#271 / ADR-0088 裁决 4）：教练执行会话的草稿快照落盘——vault 旁挂
  * `courseStateDir(root)/草稿/<sessionId>.json` 原子写（每批结束写，非逐 op），带
  * 「非活图、非提案」标记、不进提案生命周期；同课程同一时刻至多一份在途草稿，新会话
  * 遇在途草稿默认续建；finish 发布成功或显式取消时删除；进程重启可续建。
@@ -33,18 +33,19 @@ import {
   SHAPE_WORD_STRING, SHAPE_WORD_STRING_LIST,
 } from '../prompts/coach-draft.ts'
 
-/** 执行官站的语料站标签（host STATIONS.growthDraft 引门面常量对齐；站名是受控词表）。 */
+/** 教练执行站的语料站标签（host STATIONS.growthDraft 引门面常量对齐；站名是受控词表）。 */
 export const GROWTH_DRAFT_STATION = '教练执行'
 
 /** 草稿文件的身份标记（读侧拒收非本格式文件的防呆面；「非活图、非提案」）。 */
 export const GROWTH_DRAFT_MARKER = '生长草稿（非活图、非提案）'
 
-/** 一条轮次日志（草稿快照的对话记忆面：续建时注入执行官上下文，恢复认知）。 */
+/** 一条轮次日志（草稿快照的对话记忆面：续建时注入教练执行上下文，恢复认知）。 */
 export interface GrowthDraftRound {
   /** ISO 时刻。 */
   at: string
-  /** `revert` = `draft_revert` 撤销未发布增量（#309 缺陷②的逃生口，轮志照记）。 */
-  kind: 'patch' | 'audit' | 'finish' | 'note' | 'revert'
+  /** `revert` = `draft_revert` 撤销未发布增量（#309 缺陷②的逃生口，轮志照记）；`arc` =
+   * `draft_arc` 弧建议声明（#320：弧对齐指认与结构性重画建议提成独立工具，零操作）。 */
+  kind: 'patch' | 'audit' | 'finish' | 'note' | 'revert' | 'arc'
   summary: string
   /** 该轮的门错误回灌（过门轮省略）。 */
   errors?: string[]

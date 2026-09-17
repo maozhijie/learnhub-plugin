@@ -51,7 +51,7 @@ const CORPUS = join(ROOT, 'tests', 'fixtures', 'quality-corpus')
 function sample(over: Partial<ReviewSample> = {}): ReviewSample {
   return {
     ref: '教练生长/ok-桩.md',
-    station: '教练思路',
+    station: '教练执行',
     ts: '2026-09-13T00:00:00.000Z',
     kind: 'loop',
     effort: 'fast',
@@ -71,7 +71,7 @@ function replyJson(scores: Record<string, number | null>, evidence: Record<strin
   })
 }
 
-const COACH = QUALITY_RUBRICS.find(r => r.id === '教练思路')!
+const COACH = QUALITY_RUBRICS.find(r => r.id === '教练回合')!
 const COACH_DIMS = COACH.dimensions.map(d => d.id)
 
 // ---------------------------------------------------------------- 版本提取与可评分性
@@ -112,7 +112,7 @@ test('抽样：失败/容忍件优先（bad 桶定额），成功件等距补足
   ]
   const picked = sampleQualitySamples(pool, { bad: 2, ok: 2 })
   const byStation = (s: string) => picked.filter(x => x.station === s).map(x => x.ref)
-  const coach = byStation('教练思路')
+  const coach = byStation('教练执行')
   // bad 桶取最新两件（环形池新→旧），ok 桶等距两件，整体按 ref 升序（时间序）
   assert.deepEqual(coach.filter(r => r.includes('/bad-')), [
     '教练生长/bad-2026-09-13T00-02-00-100Z-0008.md',
@@ -132,13 +132,13 @@ test('抽样：缺省配额 = 失败件优先档（起步低，成本可控）',
 // ---------------------------------------------------------------- 语料读侧（夹具）
 
 test('夹具语料：宿主读侧投影出站/版本/outcome/空输出，可直接进抽样与评审', () => {
-  const samples = readCorpusSamples(CORPUS, ['教练思路', '种子起草'])
+  const samples = readCorpusSamples(CORPUS, ['教练执行', '种子起草'])
   assert.equal(samples.length, 4, '夹具四件（教练生长三件 + 种子起草一件）')
   const bad = samples.find(s => s.ref.endsWith('0004.md'))!
   assert.equal(bad.outcome, 'failed')
   assert.equal(bad.code, 'ERROR')
   assert.equal(isScoreable(bad), false, '空输出 = 未评分件（（空输出）占位还原为空串）')
-  const ok = samples.find(s => s.ref.endsWith('0001.md') && s.station === '教练思路')!
+  const ok = samples.find(s => s.ref.endsWith('0001.md') && s.station === '教练执行')!
   assert.equal(ok.outcome, 'ok')
   assert.equal(ok.templateVersion, 5)
   assert.ok(ok.prompt.includes('教练回合提示词'), '提示词原文进样本（二期对账材料）')
@@ -152,7 +152,7 @@ test('夹具语料：宿主读侧投影出站/版本/outcome/空输出，可直�
 test('语料读侧行尾归一：CRLF（Windows 检出/编辑路径）与 LF 解析结果一致（合入验证抓出的静默失效）', () => {
   // 先按本仓的读写口径归一，再构造 CRLF 对照——否则在 CRLF 检出（Windows autocrlf）下
   // 这里拿到的是 CRLF 原文，"LF 组"其实成了 CR CRLF 双 CR（合入验证抓出的测试自身环境耦合）
-  const lf = readFileSync(join(CORPUS, '教练思路', 'bad-2026-09-13T07-24-45-938Z-0004.md'), 'utf8').replace(/\r\n?/g, '\n')
+  const lf = readFileSync(join(CORPUS, '教练执行', 'bad-2026-09-13T07-24-45-938Z-0004.md'), 'utf8').replace(/\r\n?/g, '\n')
   const crlf = lf.replace(/\n/g, '\r\n')
   const a = parseCorpusFile(lf)
   const b = parseCorpusFile(crlf)
@@ -208,16 +208,16 @@ test('#236 证据定位以合并视图为产物原文：引文落在工具调用
 test('#236 宿主读侧：工具调用段投影进样本并直通可评分判定；旧格式文件为空数组', () => {
   const dir = mkdtempSync(join(tmpdir(), 'learnhub-corpus-read-'))
   try {
-    mkdirSync(join(dir, '教练思路'), { recursive: true })
-    writeFileSync(join(dir, '教练思路', 'ok-2026-09-13T09-00-00-000Z-0001.md'), [
-      '---', 'ts: 2026-09-13T09:00:00.000Z', 'station: 教练思路', 'kind: loop', 'effort: fast',
+    mkdirSync(join(dir, '教练执行'), { recursive: true })
+    writeFileSync(join(dir, '教练执行', 'ok-2026-09-13T09-00-00-000Z-0001.md'), [
+      '---', 'ts: 2026-09-13T09:00:00.000Z', 'station: 教练执行', 'kind: loop', 'effort: fast',
       'outcome: ok', 'truncated: false', 'duration_ms: 900', 'provider: deepseek-official',
       'model: deepseek-v4-flash', 'prompt_chars: 120', 'reply_chars: 0', '---', '',
       '## 提示词', '', '<!-- learnhub:prompt/v6 -->', '# 教练回合提示词', '',
       '## 原始输出', '', '（空输出）', '',
       '## 工具调用', '', JSON.stringify({ name: 'submit_batch', arguments: '{"ops":[]}' }), '',
     ].join('\n'), 'utf8')
-    const samples = readCorpusSamples(dir, ['教练思路'])
+    const samples = readCorpusSamples(dir, ['教练执行'])
     assert.equal(samples.length, 1)
     assert.deepEqual(samples[0]!.toolCalls, [{ name: 'submit_batch', arguments: '{"ops":[]}' }])
     assert.equal(samples[0]!.output, '', '文本侧仍如实地为空')
@@ -347,7 +347,7 @@ test('证据定位核对：引文必须能在产物原文里找到（空白不�
 function review(over: Partial<SampleReview> = {}): SampleReview {
   const blind: DimensionScore[] = COACH_DIMS.map((id, i) => ({ id, score: i === 0 ? 2 : 4, evidence: ['operator: 前进'], notes: 'n', unlocated: [] }))
   return {
-    ref: '教练生长/ok-桩.md', station: '教练思路', run: 1, templateVersion: 5, outcome: 'ok',
+    ref: '教练生长/ok-桩.md', station: '教练执行', run: 1, templateVersion: 5, outcome: 'ok',
     blind, reconciled: blind.map(d => ({ ...d })), calls: 2, inputTokens: 100, outputTokens: 50, durationMs: 1000,
     ...over,
   }
@@ -375,7 +375,7 @@ test('分数分布：1–4 各档 + 不可判 + 低分 + 无证据/未定位四�
   assert.equal(second.counts[3], 1, '终判取二期')
   assert.equal(second.noEvidence, 1)
   assert.equal(second.unlocated, 1)
-  assert.equal(stats.every(s => s.station === '教练思路'), true)
+  assert.equal(stats.every(s => s.station === '教练执行'), true)
 })
 
 test('低分件清单 + 报告渲染：每条分数带语料 ref 与证据引文；报告不出现跨维度总分', () => {
@@ -386,9 +386,9 @@ test('低分件清单 + 报告渲染：每条分数带语料 ref 与证据引文
   const report: QualityReviewReport = {
     startedAt: '2026-09-13T00:00:00.000Z', durationMs: 2000, temperature: 0, repeats: 2,
     rubricIds: ['教练回合', '种子·终点'],
-    sampling: { corpusDir: 'C:/桩/生成语料', stations: ['教练思路', '种子起草'], pool: 4, selected: 3, quota: { bad: 3, ok: 2 } },
+    sampling: { corpusDir: 'C:/桩/生成语料', stations: ['教练执行', '种子起草'], pool: 4, selected: 3, quota: { bad: 3, ok: 2 } },
     reviews,
-    unscoreable: [{ ref: '教练生长/bad-桩.md', station: '教练思路', outcome: 'failed', code: 'ERROR' }],
+    unscoreable: [{ ref: '教练生长/bad-桩.md', station: '教练执行', outcome: 'failed', code: 'ERROR' }],
     stats: scoreStats(reviews, QUALITY_RUBRICS),
     lowScores: low,
     versions: versionComparison(reviews),
@@ -448,13 +448,13 @@ test('评审失败件不进分数分布（评审失败 ≠ 产物差）；未评
 })
 
 test('站 → 量规映射：多站共享量规逐站命中；无量规站不评（种子站随 #256 退役、目标反编译只产计划）', () => {
-  assert.equal(rubricForStation('教练思路', QUALITY_RUBRICS)?.id, '教练思路')
+  assert.equal(rubricForStation('教练执行', QUALITY_RUBRICS)?.id, '教练回合')
   assert.equal(rubricForStation('种子起草', QUALITY_RUBRICS), undefined, '种子站随种子链整体退役（#256）——不再挂量规、不评')
   assert.equal(rubricForStation('目标反编译', QUALITY_RUBRICS), undefined, '目标反编译只产计划提案（ADR-0076 种子降职）——目标反编译站不再挂种子量规')
   assert.equal(rubricForStation('判卷', QUALITY_RUBRICS), undefined, '无量规站不评（判定标准先于判定器）')
-  assert.ok(rubricStations(QUALITY_RUBRICS).includes('教练思路'))
-  assert.equal(dimensionNameOf(QUALITY_RUBRICS, '教练思路', COACH_DIMS[0]!), COACH.dimensions[0]!.name)
-  assert.equal(dimensionNameOf(QUALITY_RUBRICS, '教练思路', '不在册维度'), '不在册维度', '未命中退回 id，报告不缺行')
+  assert.ok(rubricStations(QUALITY_RUBRICS).includes('教练执行'))
+  assert.equal(dimensionNameOf(QUALITY_RUBRICS, '教练执行', COACH_DIMS[0]!), COACH.dimensions[0]!.name)
+  assert.equal(dimensionNameOf(QUALITY_RUBRICS, '教练执行', '不在册维度'), '不在册维度', '未命中退回 id，报告不缺行')
 })
 
 test('分数档标签齐全（报告与提示词共用同一份措辞）', () => {

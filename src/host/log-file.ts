@@ -53,18 +53,16 @@ const LOG_FILE_RE = /^(\d{4}-\d{2}-\d{2})\.log$/
 
 /** 允许带续行的事件（ADR-0080 多行纪律）：续行的用途只有一个——把「门到底说了什么」
  * 原样留住（压成单行会把错误清单腰斩，而那是排查时最不可替代的信息）。
- * `coach.plan.exit` 只在 `schema=reject` 时带（见 `allowsContinuation`）。**`coach.segment.exit`
- * 已出册**（#313 B6：全仓零发出点——登记了却永远不会出现的续行规则，是排查时的诱饵）；
- * 门拒绝的续行归 `coach.gate.reject`（它现在真有发出点：两个教练站的每一处门拒绝）。 */
+ * **`coach.segment.exit` 与 `coach.plan.exit` 已出册**（#313 B6 / #320：全仓零发出点——登记了
+ * 却永远不会出现的续行规则，是排查时的诱饵）；门拒绝的续行归 `coach.gate.reject`（它现在真有
+ * 发出点：单站回路的每一处门拒绝）。 */
 export const MULTILINE_EVENTS: readonly string[] = [
-  'engine.call', 'agent.gate.death', 'agent.gate.first', 'coach.gate.reject', 'coach.plan.exit',
+  'engine.call', 'agent.gate.death', 'agent.gate.first', 'coach.gate.reject',
 ]
 
-/** 事件+字段 → 是否允许续行。 */
-function allowsContinuation(event: string, fields: Record<string, unknown>): boolean {
-  if (!MULTILINE_EVENTS.includes(event)) return false
-  if (event === 'coach.plan.exit') return fields.schema === 'reject'
-  return true
+/** 事件 → 是否允许续行。 */
+function allowsContinuation(event: string): boolean {
+  return MULTILINE_EVENTS.includes(event)
 }
 
 const pad = (n: number, width = 2): string => String(n).padStart(width, '0')
@@ -98,7 +96,7 @@ function messageOf(err: unknown): string {
 function renderEntry(levelNum: number, event: string, fields: Record<string, unknown>, nowMs: number): string {
   const head: string[] = []
   const tail: string[] = []
-  const multiline = allowsContinuation(event, fields)
+  const multiline = allowsContinuation(event)
   for (const [k, v] of Object.entries(fields)) {
     if (v === undefined || v === null) continue
     if (Array.isArray(v)) {

@@ -754,11 +754,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
     // 卡点自报读取失败留痕（#291 / ADR-0091）：不挡回合（留账，下回合重试）
     rt.logger.warn('coach_growth.stuck_read_failed', { course: job.course })
   }
-  // 失败补标的在场证明（#313 B7）：两站各取一次（要到 catch 才由错站标签知道是哪一个）。
+  // 失败补标的在场证明（#313 B7）：生长单站取一次（要到 catch 才由错站标签知道是哪一站）。
   // 取消 / 轮次预算耗尽 / 熔断前零调用 / 空手结束这类非模型失败本轮可能一次都没调，
   // 旧口径会把上一轮甚至上一个会话的成功件改名 bad-（bad 桶污染 + 「语料 …/<件>」指向成功件）。
   const growthTokens = new Map<string, string | undefined>([
-    [STATIONS.growthPlan, corpusToken(rt, STATIONS.growthPlan)],
     [STATIONS.growthDraft, corpusToken(rt, STATIONS.growthDraft)],
   ])
   try {
@@ -768,7 +767,7 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       ...(job.growthForce === true ? { force: true } : {}),
       ...(job.growthTrigger ? { trigger: job.growthTrigger } : {}),
       isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
-      // 补丁形状被归一（#301 缺陷①「收下即归一」）→ 给执行官站**当次**捕获补标 tolerated：
+      // 补丁形状被归一（#301 缺陷①「收下即归一」）→ 给教练执行站**当次**捕获补标 tolerated：
       // 回调在工具调用内同步触发，此刻「最近一条」正是命中那一轮（批次结束后再补标只会
       // 落到最后一轮——站内对齐语义照 ADR-0060，标的必须是命中件本身）
       onTolerated: code => { rt.corpus.annotateLast(STATIONS.growthDraft, { outcome: 'tolerated', code }) },
@@ -784,14 +783,11 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       const a = r.applied!
       job.growthOutcome = a.ops > 0 ? 'applied' : 'no_structure'
       job.status = 'done'
-      const tierNote = r.segments
-        .map(s => `${{ plan: '思路官', plan_repair: '重裁', executor: '执行官' }[s.tier] ?? s.tier}${s.tier === 'plan_repair' ? '↑回灌' : ''}(${s.operator})`)
-        .join('→')
       job.message = `生长批（${p.operator}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
         // 新建节点名随行（#313 E23）：引擎已返回 created，旧回执只给条数——用户长完一批后
         // 没有面告诉他「这几个节点要生成正文」，接在后面的节点在推荐流里根本不出现。
         + (a.created.length ? `｜新建：${a.created.join('、')}` : '')
-        + `｜${tierNote}｜理由：${p.reason}`
+        + `｜理由：${p.reason}`
       // 回路轨迹（#163）：裁决前查了哪些只读视图，生成页逐条可查
       if (r.trajectory?.length) job.message += `｜回路轨迹：${r.trajectory.join('；')}`
       // 受理批可含 del_node/rename（ADR-0039 写侧联动）：清扫悬空任务记录。
@@ -819,11 +815,10 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       }
     }
   } catch (err) {
-    // 生长失败的**真实失败站**按错误随行的站标签取（#301 缺陷③；两站各带各的——
-    // 引擎在抛出点打标签，读侧单一出处 stationOfError）。未标注 = 两站都没被调用
-    // （零终点/注册表缺课/纯 IO 故障）→ **没有死因样本，不补标**：旧口径写死
-    // `STATIONS.growth`（'教练思路'）会把最近一次思路官成功件改成 failed/bad- 并把
-    // 排查者指向错的语料目录，标错件比不标更坏。
+    // 生长失败的**真实失败站**按错误随行的站标签取（#301 缺陷③；生长单站——
+    // 引擎在抛出点打标签，读侧单一出处 stationOfError）。未标注 = 该站没被调用
+    // （零终点/注册表缺课/纯 IO 故障）→ **没有死因样本，不补标**：旧口径写死站名会把
+    // 最近一次成功件改成 failed/bad- 并把排查者指向错的语料目录，标错件比不标更坏。
     const station = stationOfError(err)
     // 取消不是模型死亡（#313 B7）：取消轮的件不补标成 failed、失败详情也不带语料指向
     const corpusRef = station && (job.status as GenJobStatus) !== 'cancelling'

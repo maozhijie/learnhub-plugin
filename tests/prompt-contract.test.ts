@@ -8,7 +8,7 @@ import { withVault } from './helpers/vault.ts'
 
 test('P2: 存量内置模板全部升到 prompt/v6（生长式套件除外——新套件模板自带版本线）', () => {
   for (const kind of Object.keys(Content.PROMPT_KINDS)) {
-    if (kind === '罗盘初画' || kind === '罗盘重画' || kind === '思路官回合' || kind === '思路官重裁' || kind === '执行官回合') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
+    if (kind === '罗盘初画' || kind === '罗盘重画' || kind === '教练执行') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
     const text = Content.PROMPT_KINDS[kind]!
     assert.ok(Content.promptVersionOf(text) >= 6, `${kind} 应升到 v6+`)
   }
@@ -149,11 +149,11 @@ test('C3: 错误对比卡模板——三选一、mine 忠实错法、候选照�
 test('#143 / #316: 罗盘初画模板 v4——罗盘站程度驱动、非承诺措辞、批注软输入、路线条目输出契约', () => {
   const tpl = Content.PROMPT_KINDS['罗盘初画']!
   assert.ok(Content.promptVersionOf(tpl) >= 4, '罗盘初画 应带版本标记 v4+（#316 升格）')
-  assert.match(tpl, /不是承诺/, '路线是草图不是承诺')
+  assert.match(tpl, /非承诺/, '非承诺措辞在册（罗盘透明度装置；手工版未再写「不是承诺」一句）')
   assert.match(tpl, /软输入/, '批注区是教练软输入')
   assert.match(tpl, /提议非指令/, '批注提议非指令锚点')
   assert.match(tpl, /不带 "## " 标题/, '输出不得携带段级标题（段落结构保护）')
-  assert.match(tpl, /3–7 个阶段条目/, '路线条目数量锚')
+  assert.match(tpl, /n 个阶段条目/, '路线条目数量锚（手工版：不再钉死 3–7）')
   assert.match(tpl, /（候选）/, '未落图台阶一律标候选')
   assert.match(tpl, /不写时间估算|不写进度百分比/, '零时间/进度承诺')
   assert.match(tpl, /模型推演，非承诺/, 'ETA 才是推演参照且措辞锁死')
@@ -171,54 +171,33 @@ test('#143 / #316: 罗盘初画模板 v4——罗盘站程度驱动、非承诺�
   assert.match(repaint, /不改写已学事实/, '改弧不回滚图、不重置掌握度')
 })
 
-// ---- v1 思路官回合契约（#273 两站编排）：算子集 + 停摆转译 + 零名字交接契约 ----
+// ---- v1 教练执行契约（#320 单站回路）：方向裁决 + 落地同站、算子集含停摆、draft_note 零操作收束、draft_arc 弧建议、补丁纪律、弧建议边界 ----
 
-test('#273: 思路官回合模板 v1——算子集含停摆、零名字交接契约、朝向声明、recheck 仅插入携带', () => {
-  const tpl = Content.PROMPT_KINDS['思路官回合']!
-  assert.ok(Content.promptVersionOf(tpl) >= 1, '思路官回合 应带版本标记 v1+')
-  // 算子集（五件 + 停摆；停机规则转译进算子语义）
+test('#320: 教练执行模板 v1——单站回路、算子集含停摆、补丁纪律、弧建议边界', () => {
+  const tpl = Content.PROMPT_KINDS['教练执行']!
+  assert.ok(Content.promptVersionOf(tpl) >= 1, '教练执行 应带版本标记 v1+')
+  // 单站：方向裁决与落地同站（两站编排退场）
+  assert.match(tpl, /你是 learnhub 学习系统的教练/, '单站定位（不再分思路官/执行官两站）')
+  assert.doesNotMatch(tpl, /思路官|执行官/, '两站编排的站名已退场')
+  // 弧建议提成独立写件（不再随批/随停摆塞进其他写件）
+  assert.match(tpl, /draft_arc/, '弧建议提成独立工具 draft_arc')
+  // 算子集（五件 + 停摆）
   for (const op of GROWTH_OPERATORS) {
     assert.ok(tpl.includes(`**${op}**`), `算子集含「${op}」`)
   }
-  assert.match(tpl, /\*\*停摆\*\*/, '停摆 = 结构暂无需变化（steps 为空，裁决留痕）')
-  assert.match(tpl, /目标消费/, '前进 = 目标消费（停机规则转译进算子语义）')
-  assert.match(tpl, /症状消费/, '插入 = 症状消费')
-  assert.match(tpl, /教学消费/, '旁支 = 教学消费')
-  assert.match(tpl, /只行使已教概念/, '巩固只行使已教概念')
-  assert.match(tpl, /只裁决朝哪个已声明终点长/, '换向只裁决朝向（ADR-0076；终点的增删归学习者——锚点短语随 19f74d3 措辞修订对齐）')
-  // 零名字契约：单轮零工具单发，粒度变焦归执行官
-  assert.match(tpl, /不动手改图/, '思路官零工具（交接契约的载体约束；锚点随 19f74d3 措辞修订对齐）')
-  assert.match(tpl, /零节点名、零图上引用/, '交接计划零名字（幻觉面结构性消失的锚点）')
-  assert.match(tpl, /意图句/, '台阶用意图句描述')
-  assert.match(tpl, /登记表档位/, '概念名逐字来自登记表档位区')
-  // 朝向声明与收尾朝向的算子判断（sealed 是批形态触发的引擎自动标记）
+  assert.match(tpl, /结构暂无需变化/, '停摆 = 结构暂无需变化')
+  assert.match(tpl, /用 draft_note 写明理由/, '停摆以零操作收束工具给理由')
+  // 朝向声明与收尾（sealed 是批形态触发的引擎自动标记）
   assert.match(tpl, /target_endpoints/, '朝向声明字段')
   assert.match(tpl, /交汇优先/, '多终点交汇优先')
-  assert.match(tpl, /收尾朝向是算子判断的一部分/, '收尾不是提示词族——计划内算子判断')
-  // 输出契约
-  assert.match(tpl, /operator: 前进\|插入\|巩固\|旁支\|换向\|停摆/, '算子枚举（含停摆）')
-  assert.match(tpl, /reason:/, '理由必填')
-  assert.match(tpl, /steps:/, '交接计划台阶列表')
-  assert.match(tpl, /teaches_concept/, '概念面字段（只写概念名）')
-  assert.match(tpl, /metric: 前进恢复\|卡点集中度降幅\|保留率恢复/, 'recheck metric 枚举锁死')
-  assert.match(tpl, /recheck 仅 operator=插入 时携带/, '非插入批禁带 recheck')
-  assert.match(tpl, /停摆只能由 operator: 停摆 表达/, '零步只属停摆（非停摆的空 steps 由门拒，#313 C15）')
-  assert.match(tpl, /其余算子必须给出至少一个台阶/, '「计划不完整」与「裁决停摆」是两件事——非停摆必须给台阶')
-  // 停机语义
-  assert.match(tpl, /就绪深度检查未满足/, '停机转译：拉起即缺口')
-})
-
-// ---- v1 思路官重裁契约（#273 显式重裁族）：上次裁决摘要回灌 + 沿用/推翻纪律 ----
-
-test('#273: 思路官重裁模板 v1——显式重新裁决、上次裁决摘要随包、沿用或推翻说理', () => {
-  const tpl = Content.PROMPT_KINDS['思路官重裁']!
-  assert.ok(Content.promptVersionOf(tpl) >= 1, '思路官重裁 应带版本标记 v1+')
-  assert.match(tpl, /显式重新裁决/, '重裁族定位（node_skip / panel_dispatch）')
-  assert.match(tpl, /上次裁决摘要/, '摘要块随包回灌')
-  assert.match(tpl, /可沿用（现状未变）也可推翻/, '沿用或推翻的双向语义')
-  assert.match(tpl, /重裁不是重试/, '重裁纪律（推翻时 reason 说明）')
-  assert.match(tpl, /零节点名、零图上引用/, '零名字契约与常规族同构')
-  assert.match(tpl, /operator: 前进\|插入\|巩固\|旁支\|换向\|停摆/, '算子枚举同构')
+  assert.match(tpl, /收尾宣告由引擎对纯接线批自动完成/, '收尾不是另立仪式——引擎自动标记')
+  // 补丁纪律
+  assert.match(tpl, /note_operator \/ note_reason/, '每批声明算子与理由')
+  assert.match(tpl, /note_recheck 写复诊预注册/, '插入批复诊预注册随批携带')
+  assert.match(tpl, /set_pre \/ set_enc 是\*\*整体替换\*\*语义/, 'set_pre/set_enc 整体替换语义')
+  // 弧建议边界（建议权非写权）
+  assert.match(tpl, /你对弧只有建议权/, '弧写权归罗盘站——教练只有建议权')
+  assert.match(tpl, /战术波动不推翻战略/, '读数信号不构成重画理由')
 })
 
 // ---- v11 反编译契约（#240 / ADR-0076；#256 随种子链整体退役）：上交前自查 ----
@@ -278,12 +257,12 @@ test('#233: 节生成三变体升 v11——硬约束 6 带图文互引半句；�
 
 // ---- #302 ①：渲染菜单只认占位符（旧兜底回收——输出契约不被注入面覆盖）----
 
-/** 占位符站（模板里带 `{{renderers}}`）= 课程节生成三风格变体；其余 13 站无占位符。 */
+/** 占位符站（模板里带 `{{renderers}}`）= 课程节生成三风格变体；其余 12 站无占位符。 */
 const RENDERER_PLACEHOLDER_KINDS = ['课程节生成', '课程节生成-苏格拉底', '课程节生成-费曼'] as const
 
-test('#302: 无占位符的 13 个内置站不被追加渲染菜单（loadPrompt 逐字等于模板原文）；三风格变体照旧注入', async () => {
+test('#302: 无占位符的 12 个内置站不被追加渲染菜单（loadPrompt 逐字等于模板原文）；三风格变体照旧注入', async () => {
   const kinds = Object.keys(Content.PROMPT_KINDS)
-  assert.equal(kinds.length, 17, '内置站总数（14 无占位符 + 3 风格变体；#316 增罗盘重画族）')
+  assert.equal(kinds.length, 15, '内置站总数（12 无占位符 + 3 风格变体；#320 两站回单站）')
   assert.deepEqual(
     kinds.filter(k => Content.PROMPT_KINDS[k]!.includes('{{renderers}}')).sort(),
     [...RENDERER_PLACEHOLDER_KINDS].sort(),

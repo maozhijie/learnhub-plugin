@@ -6,73 +6,12 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { AgentSeam } from '../src/engine/infra/agent.ts'
-import { COACH_PLAN_STATION } from '../src/engine/index.ts'
 import { systemClock } from '../src/host/clock.ts'
 import { withVault } from './helpers/vault.ts'
 import { draftCourse, CAPABILITY_DRAFT } from './helpers/drafted.ts'
 import { memLogger } from './helpers/logger.ts'
 
 const SEED = { registry: null, graph: null }
-
-/** 思路官脚本化端口（complete 依次回放计划；停摆计划不拉执行官）。 */
-function planFake(plans: string[]): AgentSeam {
-  let i = 0
-  return new AgentSeam({
-    logger: memLogger(),
-    complete: async () => plans[i++] ?? (() => { throw new Error('计划脚本已耗尽') })(),
-  }, systemClock)
-}
-
-const haltPlan = 'course: 数学\noperator: 停摆\nreason: 就绪缺口由内容生成跟上\ntarget_endpoints: []\nsteps: []\n'
-const badPlan = 'course: 数学\noperator: 瞎蒙\nreason: 非法算子\ntarget_endpoints: []\nsteps: []\n'
-
-test('coach.plan.summary_miss：重裁族无上次裁决留痕（DEBUG）', async () => {
-  await withVault(SEED, async h => {
-    await draftCourse(h.engine, CAPABILITY_DRAFT)
-    const agent = planFake([haltPlan])
-    const r = await h.engine.growth2.coachGrowthBatch('数学', agent, { trigger: 'node_skip' })
-    assert.equal(r.state, 'idle')
-    assert.equal(h.logger.count('coach.plan.summary_miss'), 1)
-    const e = h.logger.nth('coach.plan.summary_miss')!
-    assert.equal(e.level, 'debug')
-    assert.equal(e.fields.course, '数学')
-  })
-})
-
-test('coach.plan.reinject：计划门拒收后的修复轮回灌观测（DEBUG mode=repair）', async () => {
-  await withVault(SEED, async h => {
-    await draftCourse(h.engine, CAPABILITY_DRAFT)
-    const agent = planFake([badPlan, haltPlan])
-    const r = await h.engine.growth2.coachGrowthBatch('数学', agent, { trigger: 'panel_dispatch' })
-    assert.equal(r.state, 'idle')
-    assert.equal(h.logger.count('coach.plan.reinject'), 1)
-    const e = h.logger.nth('coach.plan.reinject')!
-    assert.equal(e.level, 'debug')
-    assert.equal(e.fields.family, 'routine', '#296 后事件带族别与清单计数（字段面以门册为准）；#310 起首裁不是重裁——本课程无生长批历史，panel_dispatch 也走常规族')
-    assert.equal(e.fields.schema_errors, 1)
-  })
-})
-
-test('#313 B6：门拒绝落调试日志——coach.gate.reject 两轮各一条（幽灵事件接线兑现）', async () => {
-  await withVault(SEED, async h => {
-    await draftCourse(h.engine, CAPABILITY_DRAFT)
-    const agent = planFake([badPlan, badPlan])
-    await assert.rejects(
-      () => h.engine.growth2.coachGrowthBatch('数学', agent, { trigger: 'panel_dispatch' }),
-      /未过 schema 门/,
-    )
-    // 此前这条事件只活在 ADR-0080 的闭集里（全仓零发出点）：排查者按文档 grep 日志
-    // 会得到「没跑过重裁」的假否定。现在两个站的每一处门拒绝都从这里落地。
-    assert.equal(h.logger.count('coach.gate.reject'), 2, '首轮 + 回灌重裁各一条')
-    const first = h.logger.nth('coach.gate.reject', 1)!
-    assert.equal(first.level, 'warn')
-    assert.equal(first.fields.station, COACH_PLAN_STATION)
-    assert.equal(first.fields.gate, 'plan_schema')
-    assert.equal(first.fields.round, 1)
-    assert.ok(Array.isArray(first.fields.detail), '明细进续行（MULTILINE_EVENTS 成员）')
-    assert.equal(h.logger.nth('coach.gate.reject', 2)!.fields.fatal, true, '两轮死因那条带 fatal')
-  })
-})
 
 test('coach.checkpoint.fail：检查点检查失败留痕（WARN），宿主失败面不变', async () => {
   await withVault(SEED, async h => {

@@ -58,29 +58,24 @@ test('多行形态是闭集：声明的事件带续行（缩进两格），未�
   const log = createFileLogger({ dir, now: () => at(2026, 9, 15) })
   // 声明可续行的（agent.gate.first）
   log.info('agent.gate.first', { station: '教练生长', verdict: 'reject', errors: 2, detail: ['  ✗ 甲', '  ✗ 乙'] })
-  // 声明可续行、但 coach.plan.exit 只在 schema=reject 时带（#313 B6：coach.segment.exit 已出册）
-  log.info('coach.plan.exit', { course: '数学', family: 'routine', schema: 'reject', detail: ['  ✗ 丙'] })
-  log.info('coach.plan.exit', { course: '数学', family: 'routine', schema: 'ok', detail: ['不该成续行'] })
   // 门拒绝（#313 B6 起有真实发出点）：恒可续行，明细逐行留住
-  log.warn('coach.gate.reject', { course: '数学', station: '教练思路', gate: 'plan_schema', errors: 2, detail: ['  ✗ 丁', '  ✗ 戊'] })
+  log.warn('coach.gate.reject', { course: '数学', station: '教练执行', gate: 'draft_patch', errors: 2, detail: ['  ✗ 丁', '  ✗ 戊'] })
   // 未声明的事件：数组内联（谁都能塞数组、但只有闭集里的会长成多行）
-  log.info('coach.round.result', { course: '数学', segments: ['light', 'repair'] })
+  log.info('coach.round.result', { course: '数学', trajectory: ['loop', 'repair'] })
   const body = linesOf(dir, '2026-09-15')
   assert.deepEqual(body, [
     '[13:04:05.007] [INFO] agent.gate.first station=教练生长 verdict=reject errors=2',
     '    ✗ 甲',
     '    ✗ 乙',
-    '[13:04:05.007] [INFO] coach.plan.exit course=数学 family=routine schema=reject',
-    '    ✗ 丙',
-    '[13:04:05.007] [INFO] coach.plan.exit course=数学 family=routine schema=ok detail=不该成续行',
-    '[13:04:05.007] [WARN] coach.gate.reject course=数学 station=教练思路 gate=plan_schema errors=2',
+    '[13:04:05.007] [WARN] coach.gate.reject course=数学 station=教练执行 gate=draft_patch errors=2',
     '    ✗ 丁',
     '    ✗ 戊',
-    '[13:04:05.007] [INFO] coach.round.result course=数学 segments=light | repair',
+    '[13:04:05.007] [INFO] coach.round.result course=数学 trajectory=loop | repair',
   ])
   assert.ok(MULTILINE_EVENTS.includes('engine.call') && MULTILINE_EVENTS.includes('agent.gate.death')
     && MULTILINE_EVENTS.includes('coach.gate.reject'), '闭集成员：engine.call / agent.gate.death / coach.gate.reject')
-  assert.ok(!MULTILINE_EVENTS.includes('coach.segment.exit'), '全仓零发出点的登记项已出册（#313 B6）')
+  assert.ok(!MULTILINE_EVENTS.includes('coach.segment.exit') && !MULTILINE_EVENTS.includes('coach.plan.exit'),
+    '全仓零发出点的登记项已出册（#313 B6 / #320）')
   rmSync(dir, { recursive: true, force: true })
 })
 

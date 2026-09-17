@@ -17,9 +17,10 @@ import type { Registry } from '../vault/registry.ts'
 import type { ConceptRegistry } from '../concepts/concepts.ts'
 import { withContractLast } from '../infra/prompt-assembly.ts'
 import { render } from '../infra/prompt-render.ts'
-import { COACH_PLAN_FEEDBACK_BLOCK, COACH_INJECT_BLOCK, COACH_FIRST_RUNG_CRITERIA } from '../prompts/projects.ts'
+import { COACH_INJECT_BLOCK, COACH_FIRST_RUNG_CRITERIA } from '../prompts/projects.ts'
 import {
   EA_GOAL_CAPABILITY, EA_GOAL_COVERAGE,
+  TOOL_BANK_OVERVIEW_DESC, TOOL_BEHAVIOR_DIGEST_DESC, TOOL_COMPASS_READ_DESC,
   TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT, TOOL_ENDPOINT_ANCHOR_DESC_DRAFT, TOOL_GRAPH_VIEW_DESC_DRAFT,
   TOOL_NODE_CARD_DESC_DRAFT, TOOL_PARAM_NODE_DESC, TOOL_PARAM_NODE_DESC_BARE,
   TOOL_PARAM_QUERY_DESC_DRAFT, TOOL_UPSTREAM_DAG_DESC_DRAFT,
@@ -42,42 +43,40 @@ import {
   PACK_V2_BODY, PACK_ZERO_ENDPOINTS,
 } from '../prompts/coach-pack.ts'
 import {
-  PLAN_SUMMARY_HEADING, PLAN_SUMMARY_OPERATOR, PLAN_SUMMARY_PROPOSAL, PLAN_SUMMARY_REASON,
-  PLAN_SUMMARY_REASON_EMPTY,
-} from '../prompts/coach-plan.ts'
-import {
-  ERR_DRAFT_BUDGET_EXHAUSTED, ERR_DRAFT_COURSE_MISMATCH, ERR_DRAFT_UNFINISHED, ERR_EXEC_WHITELIST,
+  ERR_ARC_EMPTY, ERR_DRAFT_BUDGET_EXHAUSTED, ERR_DRAFT_COURSE_MISMATCH, ERR_DRAFT_UNFINISHED, ERR_EXEC_WHITELIST,
   ERR_FINISH_APPLY, ERR_FINISH_BAD_OPERATOR, ERR_FINISH_DRIFT_EXCEPTION, ERR_FINISH_EMPTY,
-  ERR_FINISH_GATE, ERR_FINISH_NO_NOTE, ERR_FINISH_PROPOSE, ERR_PATCH_BUDGET, ERR_PATCH_EMPTY_OPS,
-  ERR_PATCH_GATE, ERR_PATCH_MAX_OPS, ERR_PATCH_RECHECK, ERR_PATCH_RECHECK_NO_NOTE, ERR_PATCH_SHAPE,
-  ERR_REVERT_COUNT_INT, ERR_REVERT_COUNT_MAX, ERR_REVERT_NOTHING,
-  EXEC_CONFUSABLE_CANDIDATE, EXEC_CONFUSABLE_FAIL, EXEC_CRASH_AUDIT, EXEC_CRASH_FINISH, EXEC_CRASH_NOTE,
+  ERR_FINISH_GATE, ERR_FINISH_NO_NOTE, ERR_FINISH_PROPOSE, ERR_NOTE_NO_REASON, ERR_PATCH_BUDGET,
+  ERR_PATCH_EMPTY_OPS, ERR_PATCH_GATE, ERR_PATCH_MAX_OPS, ERR_PATCH_RECHECK, ERR_PATCH_RECHECK_NO_NOTE,
+  ERR_PATCH_SHAPE, ERR_REPAINT_NOTE, ERR_REPAINT_REASON, ERR_REVERT_COUNT_INT, ERR_REVERT_COUNT_MAX,
+  ERR_REVERT_NOTHING, ERR_SERVES_ARC_SHAPE,
+  EXEC_CONFUSABLE_CANDIDATE, EXEC_CONFUSABLE_FAIL, EXEC_CRASH_ARC, EXEC_CRASH_AUDIT, EXEC_CRASH_FINISH, EXEC_CRASH_NOTE,
   EXEC_CRASH_PATCH, EXEC_CRASH_REVERT, EXEC_CRASH_SUMMARY, EXEC_DIFF_ADDED_EDGES, EXEC_DIFF_ADDED_EDGE_ITEM,
   EXEC_DIFF_ADDED_NODES, EXEC_DIFF_EMPTY_SET, EXEC_DIFF_NONE, EXEC_DIFF_REMOVED_NODES, EXEC_DIFF_RENAMED,
   EXEC_DIFF_RENAMED_ITEM, EXEC_DIFF_REWIRED, EXEC_DIFF_REWIRED_ITEM, EXEC_DOMAIN_CONCEPTS,
   EXEC_DOMAIN_CONCEPTS_EMPTY, EXEC_DOMAIN_NODES, EXEC_DOMAIN_NODES_MORE, EXEC_DOMAIN_OPS, EXEC_DOMAIN_TIERS,
-  EXEC_ERR_ITEM, EXEC_FINDING_ITEM, EXEC_HANDOVER_ENDPOINTS_EMPTY, EXEC_HANDOVER_FOOTER,
-  EXEC_HANDOVER_HEADING, EXEC_HANDOVER_OPERATOR, EXEC_HANDOVER_RECHECK, EXEC_HANDOVER_REASON,
-  EXEC_HANDOVER_STEP, EXEC_HANDOVER_STEP_CONCEPT, EXEC_HANDOVER_STEP_EST, EXEC_NORM_ITEM,
+  EXEC_ERR_ITEM, EXEC_FINDING_ITEM, EXEC_NORM_ITEM,
   EXEC_OP_FIELD_ASSUMES, EXEC_OP_FIELD_BLOOM, EXEC_OP_FIELD_DIFFICULTY, EXEC_OP_FIELD_ENC,
   EXEC_OP_FIELD_EST, EXEC_OP_FIELD_INTO, EXEC_OP_FIELD_MISCONCEPTIONS, EXEC_OP_FIELD_NAME,
   EXEC_OP_FIELD_NEW, EXEC_OP_FIELD_NODE, EXEC_OP_FIELD_NOTE, EXEC_OP_FIELD_OP, EXEC_OP_FIELD_PRE,
   EXEC_OP_FIELD_TEACHES, EXEC_OP_FIELD_WITH,
-  EXEC_PARAM_CHAIN_DESC, EXEC_PARAM_CONCEPTS_DESC, EXEC_PARAM_DAYS_DESC, EXEC_PARAM_METRIC_DESC,
-  EXEC_PARAM_NOTE_OPERATOR_DESC, EXEC_PARAM_NOTE_REASON_DESC, EXEC_PARAM_NOTE_RECHECK_DESC,
-  EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC, EXEC_PARAM_OPS_DESC,
+  EXEC_PARAM_CHAIN_DESC, EXEC_PARAM_CONCEPTS_DESC, EXEC_PARAM_DAYS_DESC, EXEC_PARAM_HALT_REASON_DESC,
+  EXEC_PARAM_METRIC_DESC, EXEC_PARAM_NOTE_OPERATOR_DESC, EXEC_PARAM_NOTE_REASON_DESC,
+  EXEC_PARAM_NOTE_RECHECK_DESC, EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC, EXEC_PARAM_OPS_DESC,
+  EXEC_PARAM_REPAINT_DESC, EXEC_PARAM_REPAINT_NOTE_DESC, EXEC_PARAM_SERVES_ARC_DESC,
+  EXEC_ROUND_ARC, EXEC_ROUND_ARC_REPAINT, EXEC_ROUND_ARC_SERVES,
   EXEC_ROUND_AUDIT_EMPTY, EXEC_ROUND_AUDIT_ERRORS, EXEC_ROUND_AUDIT_FINDINGS, EXEC_ROUND_AUDIT_OK,
   EXEC_ROUND_FINISH_APPLY_FAIL, EXEC_ROUND_FINISH_CONFUSABLE, EXEC_ROUND_FINISH_OK,
-  EXEC_ROUND_FINISH_PROPOSE_REJECT, EXEC_ROUND_FINISH_REJECT, EXEC_ROUND_FINISH_SEALED,
+  EXEC_ROUND_FINISH_PROPOSE_REJECT, EXEC_ROUND_FINISH_REJECT, EXEC_ROUND_FINISH_SEALED, EXEC_ROUND_NOTE,
   EXEC_ROUND_PATCH_BUDGET, EXEC_ROUND_PATCH_OK, EXEC_ROUND_PATCH_OK_NORM, EXEC_ROUND_PATCH_RECHECK,
   EXEC_ROUND_PATCH_REJECTED, EXEC_ROUND_PATCH_SHAPE, EXEC_ROUND_REVERT, EXEC_STATUS_COUNTS,
   EXEC_STATUS_HEADING, EXEC_STATUS_NEW, EXEC_STATUS_NOTE, EXEC_STATUS_RESUMED,
   EXEC_STATUS_ROUND_ERRORS, EXEC_STATUS_ROUND_LINE, EXEC_STATUS_ROUNDS_HEADING,
-  EXEC_TOOL_DRAFT_AUDIT_DESC, EXEC_TOOL_DRAFT_FINISH_DESC, EXEC_TOOL_DRAFT_PATCH_DESC,
-  EXEC_TOOL_DRAFT_REVERT_COUNT_DESC, EXEC_TOOL_DRAFT_REVERT_DESC,
-  RECEIPT_AUDIT_EMPTY, RECEIPT_AUDIT_FAIL, RECEIPT_AUDIT_FINDINGS, RECEIPT_AUDIT_FINDINGS_NONE,
+  EXEC_TOOL_DRAFT_ARC_DESC, EXEC_TOOL_DRAFT_AUDIT_DESC, EXEC_TOOL_DRAFT_FINISH_DESC, EXEC_TOOL_DRAFT_NOTE_DESC,
+  EXEC_TOOL_DRAFT_PATCH_DESC, EXEC_TOOL_DRAFT_REVERT_COUNT_DESC, EXEC_TOOL_DRAFT_REVERT_DESC,
+  RECEIPT_ARC, RECEIPT_AUDIT_EMPTY, RECEIPT_AUDIT_FAIL, RECEIPT_AUDIT_FINDINGS, RECEIPT_AUDIT_FINDINGS_NONE,
   RECEIPT_AUDIT_NEXT_NONE, RECEIPT_AUDIT_NEXT_READY, RECEIPT_AUDIT_OK, RECEIPT_FINISH,
-  RECEIPT_FINISH_SEALED, RECEIPT_PATCH, RECEIPT_PATCH_NORM, RECEIPT_REVERT, RECEIPT_REVERT_NEXT_CLEAR,
+  RECEIPT_FINISH_SEALED, RECEIPT_NOTE, RECEIPT_PATCH, RECEIPT_PATCH_NORM, RECEIPT_REVERT,
+  RECEIPT_REVERT_NEXT_CLEAR,
   RECEIPT_REVERT_NEXT_RESUME, RECEIPT_REVERT_RESIDUAL, RECEIPT_REVERT_RESIDUAL_OK,
   RECEIPT_REVERT_WATERMARK, REJECT_FINISH_APPLY,
 } from '../prompts/coach-exec.ts'
@@ -102,11 +101,11 @@ export interface GrowthDeps {
   /** vault 存储端口（#175 阶段②）。 */
   fs: VaultFs
   /** 调试日志端口（#253 / ADR-0080）：教练回合的事件由本子系统发——进出/结果走
-   * `coach.round.enter｜round.result`、思路官三段 `coach.plan.enter｜plan.exit｜plan.reinject`、
-   * 执行官站 `coach.draft.*`，**门拒绝统一走 `coach.gate.reject`**（#313 B6：#146 当年的
-   * 初版登记点名的 `coach.repair.trigger`／`coach.segment.*`／`coach.round.apply_fail`
-   * 全仓零发出点，按文档 grep 会得到「没跑过重裁」的假否定——现在两个站的门拒绝都从这一条
-   * 落地，station/gate 两字段区分「哪一站、哪个门」）。 */
+   * `coach.round.enter｜round.result`、草稿回路 `coach.draft.*`，**门拒绝统一走
+   * `coach.gate.reject`**（#313 B6：#146 当年的初版登记点名的 `coach.repair.trigger`／
+   * `coach.segment.*`／`coach.round.apply_fail` 全仓零发出点，按文档 grep 会得到「没跑过重裁」
+   * 的假否定——现在单站回路的每一处门拒绝都从这一条落地，station/gate 两字段区分「哪一站、
+   * 哪个门」）。 */
   logger: Logger
   store: Store
   paths: Paths
@@ -118,8 +117,6 @@ export interface GrowthDeps {
   graphApply(kind: 'edit' | 'enrich', pid?: number): Promise<GraphApplyResult>
   graphPropose(kind: 'edit' | 'enrich', yamlText: string): Promise<GraphProposeResult>
   graphReject(pid: number, note?: string): Promise<ProposalRec>
-  /** 已应用提案列表（#273 窄面注入）：显式重裁族「上次裁决摘要」的取材——只读、按 status/kind 过滤。 */
-  graphProposals(status?: string, kind?: string): Promise<ProposalRec[]>
   /** 混淆对候选提案（#272 窄面注入）：草稿 finish 发布成功后展开 suggest_confusable 用
    * ——只暴露这一个入口，不引入第二套候选语义（同样人审一次一条，不自动入册）。 */
   proposeConfusableCandidate(courseKey: string, pair: { a: string; b: string; evidence: string[] }): Promise<{ id: number; a: string; b: string; weight: number }>
@@ -135,8 +132,8 @@ export interface GrowthDeps {
   sedimentRebuildProfile(): Promise<string>
 }
 import { effectiveStage } from '../graph/audit.ts'
-import type { CoachGrowthSegment, CoachTrigger, GrowthPlanHandover } from './coach-round.ts'
-import { COACH_PLAN_PROMPT_KEYS, behaviorDigest, coachPromptFamily, readyDepthCheck, renderBehaviorDigest, renderSedimentForCoach, validatePlanHandover } from './coach-round.ts'
+import type { CoachTrigger } from './coach-round.ts'
+import { behaviorDigest, readyDepthCheck, renderBehaviorDigest, renderSedimentForCoach } from './coach-round.ts'
 import { coachToolExecutor, coachToolset, renderGrowthGraphView } from './coach-tools.ts'
 import type { CoachToolDeps } from './coach-tools.ts'
 import type { CompassEtaProbe } from './compass.ts'
@@ -177,21 +174,20 @@ import type { GraphEditProposalResult } from '../views/proposals.ts'
 import { readDailyGoal } from '../sched/xp.ts'
 import { YAML } from '../infra/yaml.ts'
 
-/** 思路官站的语料站标签（#301：host STATIONS.growthPlan 引本常量对齐；站名是受控词表）。
- * 此前这一站名是散在调用点的字面量 + host 侧一张写死的 `growth: '教练思路'` 映射。 */
-export const COACH_PLAN_STATION = '教练思路'
-
+/** 结构性重画建议的合法事由枚举（结构性事由；读数信号不构成重画理由）：draft_note /
+ * draft_patch 的 repaint_suggest.reason_class 取值域单源（门与工具面同表）。 */
+const REPAINT_REASONS = ['前沿枯竭', '弧段走完', '终点变更']
 /** 三件写工具 → 轮志 kind 的单源映射（#302 ②：写件崩溃补轮志的归属判据，与各工具自己
  * 记账时用的 kind 同表——两处各写一份必然有一天漂移成「崩溃记为另一类轮」）。 */
 const DRAFT_TOOL_ROUND_KIND: Record<string, GrowthDraftRound['kind']> = {
-  draft_patch: 'patch', draft_audit: 'audit', draft_finish: 'finish', draft_revert: 'revert',
+  draft_patch: 'patch', draft_audit: 'audit', draft_finish: 'finish', draft_note: 'note', draft_revert: 'revert', draft_arc: 'arc',
 }
 
 /** 写件崩溃轮的措辞前缀（轮志 summary = `<前缀>（<错误首行>）`；`finish` 与既有
  * 「finish 被拒」同款留空格，其余按中文连写）。 */
 const DRAFT_ROUND_CRASH_LABEL: Record<GrowthDraftRound['kind'], string> = {
   patch: render(EXEC_CRASH_PATCH, {}), audit: render(EXEC_CRASH_AUDIT, {}), finish: render(EXEC_CRASH_FINISH, {}),
-  note: render(EXEC_CRASH_NOTE, {}), revert: render(EXEC_CRASH_REVERT, {}),
+  note: render(EXEC_CRASH_NOTE, {}), revert: render(EXEC_CRASH_REVERT, {}), arc: render(EXEC_CRASH_ARC, {}),
 }
 
 /** 崩溃轮 summary 里的错误首行上界（引擎侧的摘要口径；宿主侧的 `LOG_SUMMARY_HEAD` 是
@@ -199,7 +195,7 @@ const DRAFT_ROUND_CRASH_LABEL: Record<GrowthDraftRound['kind'], string> = {
 const DRAFT_ROUND_HEAD_LIMIT = 200
 
 /** 给错误打上站标签（#301 缺陷③）：宿主失败补标按**真实失败站**落盘——此前生长任务失败
- * 一律补标到 `STATIONS.growth`（'教练思路'），于是执行官站的失败被标到思路官站最近一条
+ * 一律补标到一个固定站（旧 `STATIONS.growth`），于是真实失败站的错误被标到别站最近一条
  * 捕获上（常是一次成功件：被改成 `failed` + `bad-` 前缀），死因还把排查者指向错的语料
  * 目录。站名 = 语料受控词表成员（引擎常量与 host STATIONS 同源）。 */
 function tagErrorWithStation(err: unknown, station: string): Error {
@@ -304,39 +300,40 @@ export class GrowthSubsystem {
   }
 
 
-  /** 软对齐对表（#319）：计划 serves_arc 与当前弧的阶段标题锚点对表——命中即过
+  /** 软对齐对表（#319）：回路声明的 serves_arc（#320 起走 draft_arc）与当前弧的阶段标题锚点对表——命中即过
    * （info 留痕 + 连击清零）；找不到**不拒收**，warn 留痕（宁多勿缺），连续
    * ARC_ALIGN_STREAK_WARN 批指认不出升级告警事件（`coach.arc.align_streak`）。
    * 锚点空位（弧未画/无标题）= 软对齐退化为纯软注入：缺席不推定，不计连击。
    * 重画建议（repaint_suggest）全量留痕后原样带出，由宿主去抖入队罗盘站。 */
   private async arcSoftAlign(
-    courseKey: string, courseName: string, plan: GrowthPlanHandover,
-  ): Promise<GrowthPlanHandover['repaint_suggest']> {
+    courseKey: string, courseName: string,
+    decl: { serves_arc?: string; repaint_suggest?: { reason_class: string; note?: string } },
+  ): Promise<{ reason_class: string; note?: string } | undefined> {
     const log = this.e.logger
-    let repaint_suggest: GrowthPlanHandover['repaint_suggest']
-    if (plan.repaint_suggest) {
+    let repaint_suggest: { reason_class: string; note?: string } | undefined
+    if (decl.repaint_suggest) {
       repaint_suggest = {
-        reason_class: plan.repaint_suggest.reason_class,
-        ...(plan.repaint_suggest.note?.trim() ? { note: plan.repaint_suggest.note!.trim() } : {}),
+        reason_class: decl.repaint_suggest.reason_class,
+        ...(decl.repaint_suggest.note?.trim() ? { note: decl.repaint_suggest.note!.trim() } : {}),
       }
       log.info('coach.repaint.suggest', {
         course: courseName, reason_class: repaint_suggest.reason_class,
         ...(repaint_suggest.note ? { note: repaint_suggest.note } : {}),
       })
     }
-    if (plan.serves_arc === undefined) return repaint_suggest
+    if (decl.serves_arc === undefined) return repaint_suggest
     let anchors: ReturnType<typeof stageAnchorsOf>
     try {
       anchors = stageAnchorsOf((await this.compassRead(courseKey)).route)
     } catch (err) {
-      log.warn('coach.arc.align_degenerate', { course: courseName, reason: 'read-failed', serves_arc: plan.serves_arc, error: err instanceof Error ? err.message : String(err) })
+      log.warn('coach.arc.align_degenerate', { course: courseName, reason: 'read-failed', serves_arc: decl.serves_arc, error: err instanceof Error ? err.message : String(err) })
       return repaint_suggest
     }
     if (anchors.empty) {
-      log.info('coach.arc.align_degenerate', { course: courseName, reason: anchors.reason, serves_arc: plan.serves_arc })
+      log.info('coach.arc.align_degenerate', { course: courseName, reason: anchors.reason, serves_arc: decl.serves_arc })
       return repaint_suggest
     }
-    const serves = plan.serves_arc.trim()
+    const serves = decl.serves_arc.trim()
     if (anchors.stages.some(s => s.stage === serves)) {
       this.arcMissStreak.delete(courseName)
       log.info('coach.arc.align', { course: courseName, serves_arc: serves })
@@ -682,7 +679,7 @@ export class GrowthSubsystem {
     const frontierEmpty = this.frontierEmptyOf(this.coachFrontier(graph, state), endpoints)
     // 逐终点状态（ADR-0076：未接线/已铺通/已达成 + 闭包进度）与交汇读侧派生；
     // #315 B5：结构读数（sealed ∧ 闭包真已学）与逐终点状态**同一份函数**折叠——
-    // 思路官计划门与执行官收束判据引的都是这一行读数，不再各站各猜「还需不需要生长」。
+    // 上下文包与收束判据引的都是这一行读数，不自各猜「还需不需要生长」。
     const folds = anchors.length ? foldCompletion(graph, state, anchors) : []
     const structureOf = new Map(structureReadingsOf(graph, state, anchors).map(r => [r.endpoint, r]))
     const foldOf = new Map(folds.map(f => [f.endpoint, f]))
@@ -766,7 +763,7 @@ export class GrowthSubsystem {
         // 首级判据材料（#303 / ADR-0092；#310 补绑终点）：前沿为空 = 这次裁决铺的是坡道
         // 第一级——课程名与终点锚作占位符注入，判据才绑得回既有输入（ADR-0033「视角由
         // 目标携带」），否则上界约束可被域外解满足。单源住 `prompts/projects.ts`，与上行
-        // 同域；两族思路官与执行官经同一上下文包自动共享（模板文件零改动）。
+        // 同域；单站回路与上下文包经同一出处自动共享（模板文件零改动）。
         if (frontierEmpty) {
           lines.push(render(COACH_FIRST_RUNG_CRITERIA, {
             course: c.name, endpoints: anchors.map(a => a.endpoint).join('、'),
@@ -907,23 +904,16 @@ export class GrowthSubsystem {
   }
 
 
-  /** 生长批两站编排（#273 思路官/执行官拆分；旧单发三段式退场不留开关）：
-   * ① **思路官**（单轮、零工具、单发）：消费常驻上下文 coachContextPack（全量包）+
-   * renderGrowthGraphView 全图摘要 + 外部注入块（#149/#248 同通道），产**交接计划**
-   * {operator, target_endpoints, reason, steps[intent/teaches_concept/est_hint], recheck?}
-   * ——零节点名、零图上引用（粒度变焦归执行官）；计划 schema 门拒收 → 门错误 + 被拒
-   * 计划原文回灌重裁**恰一次**（agent.repair，站名「教练思路」；两轮死因 fail loud，
-   * 零写盘）。提示词两族随触发点折叠（coachPromptFamily）：常规生长族
-   * （node_complete/session_start/queue_idle）走「思路官回合」，显式重裁族
-   * （node_skip/panel_dispatch）走「思路官重裁」并注入上次裁决摘要——摘要取本课程
-   * 最近一次生长批的 outcome 留痕（无留痕则省略块）。停摆计划（operator=停摆或
-   * steps 空）= 合法停摆，不拉执行官。
-   * ② **执行官**（#271 既有草稿回路原样）：计划经「思路官交接」块注入 coachDraft
-   * 提示词（ advisory 方向——补丁纪律与门序列不因计划放松），轨迹/发布全程走草稿站。
-   * 返回形状：proposal/applied 取最后成功 finish 批的读数（route/罗盘重写随旧路径
-   * 退场，compass_rewritten 字段移除）；segments 观测 plan/plan_repair/executor 三段。
-   * 停机转译：就绪深度满足（check.ok）时不拉任何站直接停摆（force/inject 豁免照旧）。
-   * opts.trigger = 触发点（宿主入队侧随任务携带；缺省 session_start 按常规族）。 */
+  /** 生长批单站回路（#320 / ADR-0101；两站编排退场）：教练去集中后的**单站**——「方向裁决」
+   * 与「落地」在同一站完成。① 就绪深度检查 check.ok 短路（force/inject 豁免照旧，不拉回路）；
+   * ② 其余一律拉 `coachDraft` 只读工具回路：读上下文包/图面/草稿状态，经只读工具自查后，
+   * 既定本回合的生长算子与朝向，又以批量补丁把结构写进草稿并按批发布（finish）；本回合不长
+   * 结构则用 `draft_note` 零操作收束并给理由。停摆不再是「思路官计划的 operator」——回路零
+   * 操作收束即停摆，理由随 `draft_note` 带出（halt_reason）。
+   * 声明面归回路（#320）：recheck（插入批复诊预注册）随 draft_patch 批量硬化进提案 note
+   * （batchSpecOf）；serves_arc / repaint_suggest（弧对齐指认与结构性重画建议）走独立写件
+   * draft_arc，回路收束后由 arcSoftAlign 对表留痕并原样带出（去抖入队归宿主）——引擎消费口不变。
+   * 返回形状：proposal/applied 取最后成功 finish 批的读数；halt_reason 取 draft_note 的零操作声明。 */
   async coachGrowthBatch(
     courseKey: string, agent: AgentSeam,
     opts: {
@@ -937,13 +927,12 @@ export class GrowthSubsystem {
     course: string
     state: 'idle' | 'applied'
     check: CoachCheck
-    segments: CoachGrowthSegment[]
     trajectory: string[]
     proposal: { id: number; ops: number; operator: string; reason: string; disagreement: boolean } | null
     applied: { ops: number; snapshot: number; created: string[] } | null
-    /** 停摆裁决的理由（#313 E24；仅在 state='idle' 且思路官给了停摆计划时在场）。 */
+    /** 停摆收束的理由（#320：回路以 draft_note 零操作收束时在场；state='idle'）。 */
     halt_reason?: string
-    /** 结构性重画建议（#319；计划携带时原样带出，去抖与入队归宿主）。 */
+    /** 结构性重画建议（#319/#320；draft_arc 声明时原样带出，去抖与入队归宿主）。 */
     repaint_suggest?: { reason_class: string; note?: string }
   }> {
     const c = await this.e.registry.resolve(courseKey)
@@ -953,146 +942,36 @@ export class GrowthSubsystem {
     }
     const today = opts.today ?? (await this.e.learningDay()).today
     const check = await this.coachCheckFor(c, today)
+    // 停机转译（#320）：就绪深度满足 + 非 force + 非注入 → 不拉回路直接停摆。
     if (check.ok && !opts.force && opts.inject === undefined) {
-      return { course: c.name, state: 'idle', check, segments: [], trajectory: [], proposal: null, applied: null }
+      return { course: c.name, state: 'idle', check, trajectory: [], proposal: null, applied: null }
     }
     // 回合进入（#253 / ADR-0080）：只记真正跑起来的回合——停摆短路（上一行）不算回合。
     const log = this.e.logger
     log.info('coach.round.enter', { course: c.name, today, trigger: opts.trigger ?? 'session_start' })
-    const { graph, state } = await this.e.loadView(c)
-    const endpoints = endpointNames(anchors)
-    const view = renderGrowthGraphView(graph, state, endpoints, { today, conceptEntries: await this.e.concepts.load(c.root) })
-    // 首裁口径（#310 / ADR-0092 §修订）：就绪前沿排除终点锚后为空 = 这次裁决铺的是坡道
-    // 第一级。同一判据两用——coachContextPack 内注首级判据块，此处定档位（下行）。
-    const frontierEmpty = this.frontierEmptyOf(this.coachFrontier(graph, state), endpoints)
-    const segments: CoachGrowthSegment[] = []
-    const assertAlive = (): void => {
-      if (opts.isCancelled?.() === true) {
-        throw new Error(`[coach-growth] 「${c.name}」生长批任务已取消——回合中止（已产计划丢弃）。`)
-      }
-    }
-
-    // —— ① 思路官：两族模板 + 常驻材料 + 注入/上次裁决摘要，单发产交接计划 ——
-    // 首裁不是重裁（#310）：重裁族的叙述（沿用/推翻上次裁决）与它引用的「上次裁决摘要」
-    // 块是一体的——空课取不到该块，模型只能自己绕过（实测 reason 里写「无从沿袭上次裁决」）。
-    // 故族选择从「只看触发点」改为「触发点 + 材料在场」：**上次裁决摘要取不到就走常规族**
-    // （其叙述与「从零决定第一级台阶」同构），取得到才按触发点折叠。判据是引擎一步可判的
-    // 事实（ADR-0092 自己的论据，此前只用来判「注不注判据块」）；判据与结果都在日志里
-    // （`coach.plan.enter` 带 family、`coach.plan.summary_miss` 带缺席原因），不静默。
-    const lastSummaryOfHistory = await this.lastGrowthSummaryOf(c)
-    const family = lastSummaryOfHistory === undefined ? 'routine' : coachPromptFamily(opts.trigger ?? 'session_start')
-    const template = await this.e.content.loadPrompt(COACH_PLAN_PROMPT_KEYS[family])
-    const pack = await this.coachContextPack(c.name, { today })
-    const lastSummary = family === 'recheck' ? lastSummaryOfHistory : undefined
-    const planPrompt = withContractLast(template, [
-      pack,
-      opts.inject !== undefined ? render(COACH_INJECT_BLOCK, { inject: opts.inject.trimEnd() }) : undefined,
-      lastSummary,
-      view,
-    ].filter((b): b is string => Boolean(b?.trim())).map(b => b.trim()).join('\n\n---\n\n'))
-    type PlanVerdict = { plan: GrowthPlanHandover; yaml: string; _schemaErrors?: string[] }
-    const parsePlan = (raw: string): PlanVerdict => {
-      const yaml = stripWrappingFence(raw)
-      const errors = validatePlanHandover(YAML.parseModel(yaml), c.name)
-      if (errors.length) return { plan: { operator: '停摆', reason: '', target_endpoints: [], steps: [] }, yaml, _schemaErrors: errors }
-      const doc = YAML.parseModel(yaml) as GrowthPlanHandover & { course: string }
-      return { plan: doc, yaml }
-    }
-    // 档位随语义浓度（#310）：首裁是「从零决定往哪儿长」，而两站拆分（#273）后算子、朝向、
-    // 台阶意图全压在思路官侧——它错的代价由恒 deep 的执行官成倍 token 支付。故首裁抬 deep，
-    // 其余回合维持 fast（边界见 ADR-0092 §修订：插入算子的高语义同样值得 deep，但算子是
-    // 模型输出、调用前无从派发，不在此处假装能判）。
-    const planEffort = frontierEmpty ? 'deep' : 'fast'
-    const runPlan = (mode: 'complete' | 'repair', feedbackYaml?: string, schemaErrors?: readonly string[]): Promise<PlanVerdict> =>
-      // 本段任何抛出（取消传导 / 缝故障 / 解析器故障）都算「思路官站失败」——宿主失败补标
-      // 据此落站（#301 缺陷③）
-      stationTagged(COACH_PLAN_STATION, async () => {
-        assertAlive()
-        // #296：首轮 schema 错误清单进回灌块（修复轮不再盲修——此前 feedbackYaml 同时充
-        // 当 feedback 与 previousYaml，清单只活在拒绝事件里，模型只能对着原文猜）
-        const prompt = feedbackYaml === undefined ? planPrompt : planPrompt + '\n\n---\n\n'
-          + render(COACH_PLAN_FEEDBACK_BLOCK, {
-            feedback: feedbackYaml ?? '', previousYaml: feedbackYaml ?? '',
-            schemaErrors: (schemaErrors ?? []).map(e => `- ${e}`).join('\n') || '（无清单，按模板逐项自查）',
-          })
-        if (mode === 'repair') {
-          log.debug('coach.plan.reinject', { course: c.name, family, schema_errors: (schemaErrors ?? []).length })
-        }
-        log.info('coach.plan.enter', { course: c.name, family, mode })
-        const raw = mode === 'complete'
-          ? await agent.complete(COACH_PLAN_STATION, prompt, { effort: planEffort })
-          : await agent.repair(COACH_PLAN_STATION, prompt, { effort: planEffort })
-        const verdict = parsePlan(raw)
-        log.info('coach.plan.exit', {
-          course: c.name, family, mode,
-          operator: verdict._schemaErrors ? undefined : verdict.plan.operator,
-          ...(verdict._schemaErrors ? { schema: 'reject', detail: verdict._schemaErrors } : { schema: 'ok' }),
-        })
-        return verdict
-      })
-    let planVerdict = await runPlan('complete')
-    segments.push({
-      tier: 'plan', effort: planEffort, operator: planVerdict._schemaErrors ? '' : planVerdict.plan.operator,
-      disagreement: planVerdict._schemaErrors ? false : planVerdict.plan.operator === '插入' && Boolean(planVerdict.plan.recheck),
-    })
-    if (planVerdict._schemaErrors) {
-      // 计划门拒收 → 回灌重裁恰一次（两轮死因 fail loud，零写盘）。留痕事件是
-      // `coach.gate.reject`（#313 B6：族里此前发的是 `coach.plan.recheck`，而排查手册
-      // 与门册点名的主验收物是 `coach.gate.reject`——「按文档 grep 会得到假否定」）。
-      log.warn('coach.gate.reject', {
-        course: c.name, station: COACH_PLAN_STATION, gate: 'plan_schema', round: 1,
-        errors: planVerdict._schemaErrors.length, detail: planVerdict._schemaErrors,
-      })
-      const repaired = await runPlan('repair', planVerdict.yaml, planVerdict._schemaErrors)
-      if (repaired._schemaErrors) {
-        log.warn('coach.gate.reject', {
-          course: c.name, station: COACH_PLAN_STATION, gate: 'plan_schema', round: 2, fatal: true,
-          errors: repaired._schemaErrors.length, detail: repaired._schemaErrors,
-        })
-        throw tagErrorWithStation(new Error(`[coach-growth] 思路官计划未过 schema 门（回灌重裁一轮仍未过——零写盘）。\n【首轮】${planVerdict._schemaErrors.join('\n')}\n【重裁】${repaired._schemaErrors.join('\n')}`), COACH_PLAN_STATION)
-      }
-      segments.push({ tier: 'plan_repair', effort: planEffort, operator: repaired.plan.operator, disagreement: false })
-      planVerdict = repaired
-    }
-    const plan = planVerdict.plan
-    // —— ①′ 软对齐对表 + 重画建议留痕（建议与对齐都随行带出，宿主侧去抖入队）——
-    const repaint_suggest = await this.arcSoftAlign(courseKey, c.name, plan)
-    if (plan.operator === '停摆' || !plan.steps.length) {
-      log.info('coach.round.result', { course: c.name, operator: plan.operator, halt: true, reason: plan.reason })
-      // 停摆理由随结果带出（#313 E24）：面板此前只显示固定文案「教练判断暂不需长新内容」——
-      // 用户既不知为何也不知下一步（reason 只活在语料的 LLM 交换里）。
-      return { course: c.name, state: 'idle', check, segments, trajectory: [], proposal: null, applied: null, halt_reason: plan.reason, ...(repaint_suggest ? { repaint_suggest } : {}) }
-    }
-
-    // —— ② 执行官：#271 草稿回路原样，计划作交接块注入（advisory——门不放松） ——
-    log.info('coach.draft.handover', { course: c.name, operator: plan.operator, steps: plan.steps.length })
-    // 草稿段任何抛出（回路预算耗尽 / 形状与门拒收 / 禁止空手结束）都算「执行官站失败」——
-    // 宿主失败补标据此落站（#301 缺陷③）
+    // —— 单站只读工具回路（#271 草稿内核承担「方向裁决 + 落地」）——
+    // 回路段任何抛出（取消传导 / 回路预算耗尽 / 形状与门拒收 / 禁止空手结束）都算本站失败——
+    // 宿主失败补标据此落站（#301 缺陷③）。
     const draft = await stationTagged(GROWTH_DRAFT_STATION, () => this.coachDraft(courseKey, agent, {
       today,
+      ...(opts.inject !== undefined ? { inject: opts.inject } : {}),
       ...(opts.isCancelled ? { isCancelled: opts.isCancelled } : {}),
       ...(opts.onTolerated ? { onTolerated: opts.onTolerated } : {}),
-      plan: {
-        operator: plan.operator, reason: plan.reason,
-        target_endpoints: plan.target_endpoints, steps: plan.steps,
-        ...(plan.recheck ? { recheck: plan.recheck } : {}),
-      },
     }))
+    // —— 软对齐对表 + 重画建议留痕（回路声明走 draft_arc；建议与对齐随行带出，宿主侧去抖入队）——
+    const repaint_suggest = await this.arcSoftAlign(courseKey, c.name, {
+      ...(draft.serves_arc !== undefined ? { serves_arc: draft.serves_arc } : {}),
+      ...(draft.repaint_suggest !== undefined ? { repaint_suggest: draft.repaint_suggest } : {}),
+    })
     const lastFinish = draft.finishes.at(-1)
-    if (lastFinish) {
-      segments.push({ tier: 'executor', effort: 'deep', operator: lastFinish.operator, disagreement: false })
-    }
     log.info('coach.round.result', {
       course: c.name,
-      segments: segments.map(s => s.tier).join(','),
-      repaired: segments.some(s => s.tier === 'plan_repair'),
-      ...(lastFinish ? { proposal: lastFinish.proposal_id, ops: lastFinish.ops } : { halt: true }),
+      ...(lastFinish ? { proposal: lastFinish.proposal_id, ops: lastFinish.ops } : { halt: true, reason: draft.halt_reason }),
     })
     return {
       course: c.name,
       state: lastFinish ? 'applied' : 'idle',
       check,
-      segments,
       trajectory: draft.trajectory,
       proposal: lastFinish ? {
         id: lastFinish.proposal_id, ops: lastFinish.ops,
@@ -1103,50 +982,18 @@ export class GrowthSubsystem {
         ops: lastFinish.ops, snapshot: lastFinish.snapshot,
         created: lastFinish.created,
       } : null,
+      ...(draft.halt_reason !== undefined ? { halt_reason: draft.halt_reason } : {}),
       ...(repaint_suggest ? { repaint_suggest } : {}),
     }
   }
 
-  /** 上次裁决摘要（#273 显式重裁族材料）：读本课程最近一次生长批 outcome 留痕，
-   * 折叠为「上次裁决摘要」块；无留痕返回 undefined（块整体省略，不硬造）。 */
-  private async lastGrowthSummaryOf(c: CourseEntry): Promise<string | undefined> {
-    try {
-      const props = await this.e.graphProposals('applied', 'edit')
-      const mine = props.filter(p => p.course === c.name)
-      const last = mine.at(-1)
-      if (!last) {
-        this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
-        return undefined
-      }
-      // #303 顺带修正：`ProposalRec.artifact` 是**落盘路径**（proposals 子系统按它 loadArtifact），
-      // 不是产物原文——旧实现直接 `YAML.parseModel(last.artifact)` 拿到的是路径字符串，
-      // `note` 恒 undefined，于是重裁族的摘要块**从来没注入过**（`coach.plan.summary_miss`
-      // 一路 DEBUG 静默）。这里按路径读盘。
-      const note = (this.e.fs.exists(last.artifact)
-        ? YAML.parse(await this.e.fs.readFile(last.artifact)) as { note?: { operator?: string; reason?: string } }
-        : undefined)?.note
-      if (!note?.operator) {
-        this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
-        return undefined
-      }
-      return [
-        render(PLAN_SUMMARY_HEADING, {}), '',
-        render(PLAN_SUMMARY_OPERATOR, { operator: note.operator }),
-        render(PLAN_SUMMARY_REASON, { reason: note.reason ?? render(PLAN_SUMMARY_REASON_EMPTY, {}) }),
-        render(PLAN_SUMMARY_PROPOSAL, { id: last.id }),
-      ].join('\n')
-    } catch {
-      this.e.logger.debug('coach.plan.summary_miss', { course: c.name })
-      return undefined
-    }
-  }
+  // ---- 生长草稿·教练执行站（#271 / ADR-0088：草稿内核 + 批量补丁 + 按批 finish）----
 
-  // ---- 生长草稿·执行官站（#271 / ADR-0088：草稿内核 + 批量补丁 + 按批 finish）----
-
-  /** 执行官站的只读工具面（读件五件，#271）：复用 coach-tools 渲染函数（同源不漂移）、
-   * 新建注册面——description 面向补丁语境；旧 coachToolset 八件与 compassPaint 不动
-   * （coachToolsetFor 仅 2 消费方）。写件三工具 draft_patch / draft_audit / draft_finish
-   * 的规格也在此登记（产物以工具调用承载的站，OutputFormat='tool-calls'）。 */
+  /** 单站回路的工具面（#320 / ADR-0101）：读件**八件**（#320 还回 behavior_digest /
+   * bank_overview / compass_read 三件——此前桩成空串被静默砍掉）+ 写件六具（draft_patch /
+   * draft_audit / draft_finish / draft_revert / draft_note / draft_arc）。复用 coach-tools 渲染函数
+   * （同源不漂移）；旧 coachToolset 八件与 compassPaint 不动。产物以工具调用承载
+   * （OutputFormat='tool-calls'）。 */
   static draftToolSpecs(): LlmToolSpec[] {
     const obj = (properties: Record<string, unknown>, required: string[] = []): Record<string, unknown> => ({
       type: 'object', properties, required, additionalProperties: false,
@@ -1172,6 +1019,9 @@ export class GrowthSubsystem {
       { name: 'graph_view', description: render(TOOL_GRAPH_VIEW_DESC_DRAFT, {}), parameters: obj({}) },
       { name: 'node_card', description: render(TOOL_NODE_CARD_DESC_DRAFT, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC, {}) } }, ['node']) },
       { name: 'concept_footprint', description: render(TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT, {}), parameters: obj({ query: { type: 'string', description: render(TOOL_PARAM_QUERY_DESC_DRAFT, {}) } }) },
+      { name: 'behavior_digest', description: render(TOOL_BEHAVIOR_DIGEST_DESC, {}), parameters: obj({}) },
+      { name: 'bank_overview', description: render(TOOL_BANK_OVERVIEW_DESC, {}), parameters: obj({}) },
+      { name: 'compass_read', description: render(TOOL_COMPASS_READ_DESC, {}), parameters: obj({}) },
       { name: 'upstream_dag', description: render(TOOL_UPSTREAM_DAG_DESC_DRAFT, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC_BARE, {}) } }, ['node']) },
       { name: 'endpoint_anchor', description: render(TOOL_ENDPOINT_ANCHOR_DESC_DRAFT, {}), parameters: obj({}) },
       {
@@ -1202,6 +1052,25 @@ export class GrowthSubsystem {
         name: 'draft_finish', description: render(EXEC_TOOL_DRAFT_FINISH_DESC, {}), parameters: obj({}),
       },
       {
+        name: 'draft_note', description: render(EXEC_TOOL_DRAFT_NOTE_DESC, {}), parameters: obj({
+          halt_reason: { type: 'string', description: render(EXEC_PARAM_HALT_REASON_DESC, {}) },
+        }, ['halt_reason']),
+      },
+      {
+        name: 'draft_arc', description: render(EXEC_TOOL_DRAFT_ARC_DESC, {}), parameters: obj({
+          serves_arc: { type: 'string', description: render(EXEC_PARAM_SERVES_ARC_DESC, {}) },
+          repaint_suggest: {
+            type: 'object',
+            description: render(EXEC_PARAM_REPAINT_DESC, { reasons: REPAINT_REASONS.join(' / ') }),
+            properties: {
+              reason_class: { type: 'string', description: render(EXEC_PARAM_REPAINT_DESC, { reasons: REPAINT_REASONS.join(' / ') }) },
+              note: { type: 'string', description: render(EXEC_PARAM_REPAINT_NOTE_DESC, {}) },
+            },
+            required: ['reason_class'],
+          },
+        }),
+      },
+      {
         name: 'draft_revert', description: render(EXEC_TOOL_DRAFT_REVERT_DESC, {}), parameters: obj({
           count: { type: 'number', description: render(EXEC_TOOL_DRAFT_REVERT_COUNT_DESC, {}) },
         }),
@@ -1209,17 +1078,20 @@ export class GrowthSubsystem {
     ]
   }
 
-  /** 生长草稿·执行官最小回路（#271 / ADR-0088）：输入自足（coachContextPack + 图面 +
-   * 草稿状态），三段式外壳保留、note.disagreement 语义不动（route 归 #273）；站登记
-   * growthDraft='教练执行' + OutputFormat 'tool-calls' + 模板键「执行官回合」+
-   * REPAIR_MECHANISMS.draftAuditRepair（finish 拒收错误原文回灌 loop 继续修、不进
+  /** 生长草稿·单站回路（#271 / ADR-0088；#320 / ADR-0101 两站退场后为**唯一**教练站）：
+   * 输入自足（coachContextPack + 图面 + 草稿状态 + 外部注入块），一站到底——既做方向裁决
+   * （算子与朝向在站内定），又以批量补丁把结构写进草稿并按批发布；不长结构则用 draft_note
+   * 零操作收束。站登记 growthDraft='教练执行' + OutputFormat 'tool-calls' + 模板键「教练执行」+
+   * REPAIR_MECHANISMS.draftAuditRepair（写件拒收错误原文回灌 loop 继续修、不进
    * gateRepairRound——门错修复轮保留为旧路径的最后兜底）。禁止空手结束：回路自然收束
-   * 且未成功 finish 且草稿仍有未发布增量 → fail loud（草稿保留可续建）。会话在途草稿
-   * 默认续建（注入轮次日志恢复认知）；预算常量单源 engine/infra/params.ts。 */
+   * 且未成功 finish 且草稿仍有未发布增量、又没声明停摆 → fail loud（草稿保留可续建）。
+   * 会话在途草稿默认续建（注入轮次日志恢复认知）；预算常量单源 engine/infra/params.ts。 */
   async coachDraft(
     courseKey: string, agent: AgentSeam,
     opts: {
-      today?: string; isCancelled?: () => boolean; plan?: GrowthPlanHandover
+      today?: string; isCancelled?: () => boolean
+      /** 外部注入块（待裁决的请求材料；#149/#248 同通道）：非空即随包进回路提示词。 */
+      inject?: string
       /** 形状容忍回调（#301 缺陷①）：见 coachGrowthBatch 同名字段——补丁形状被归一时
        * 随当次工具调用同步通知（此刻「最近一条捕获」正是命中那一轮）。 */
       onTolerated?: (code: string) => void
@@ -1233,8 +1105,14 @@ export class GrowthSubsystem {
     unpublished_ops: number
     trajectory: string[]
     rounds: Array<{ kind: string; summary: string }>
-    /** 成功 finish 批读数（#273 两站编排）：coachGrowthBatch 取最后一批折算 proposal/applied。 */
+    /** 成功 finish 批读数：coachGrowthBatch 取最后一批折算 proposal/applied。 */
     finishes: Array<{ proposal_id: number; ops: number; snapshot: number; operator: string; reason: string; target_endpoints: string[]; created: string[] }>
+    /** 停摆收束理由（#320：本轮以 draft_note 零操作声明时在场）。 */
+    halt_reason?: string
+    /** 本批服务弧的阶段标题（#320：draft_arc 声明，供软对齐对表）。 */
+    serves_arc?: string
+    /** 本批结构性重画建议（#320：draft_arc 声明，供宿主去抖入队罗盘站）。 */
+    repaint_suggest?: { reason_class: string; note?: string }
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const root = c.root
@@ -1266,11 +1144,6 @@ export class GrowthSubsystem {
         unpublished: doc.ops.length - doc.published,
       })
     }
-    // 计划换代即清上一批的 note（#313 C11）：新计划进场时，草稿里残留的 doc.note 只可能属于
-    // **上一批**（本批的 note 由本轮 draft_patch 声明）——不清掉它，续建会话会带着上一批的
-    // 算子/理由/朝向把本批发出去（提案记账与三率 tally 记的是错的算子），而思路官这一轮的
-    // 方向只活在提示词里。清掉即强制本批显式声明；插入批的复诊预注册由计划兜底（不丢）。
-    if (opts.plan && doc.note) doc.note = undefined
     const draftPath = draftPathOf(this.e.paths, root, doc.session_id)
     const persist = async (): Promise<void> => {
       doc.updated_at = nowIsoOf(this.e.clock.nowMs())
@@ -1298,29 +1171,47 @@ export class GrowthSubsystem {
     const unpublishedOf = (): EditOp[] => doc.ops.slice(doc.published)
 
     // —— 读件执行器：复用 coachToolset 的通用执行器（deps 结构化注入），白名单由本站
-    //    规格表收紧为读件五件 + 写件三具；白名单外调用照旧 fail loud。 ——
+    //    规格表收紧为读件八件 + 写件六具；白名单外调用照旧 fail loud。 ——
+    //    behavior_digest 的取材口径（invokes 解析/掌握度折叠）是本子系统私有折叠（#320 还回
+    //    三件之一），经 providers 注入复用单一出处——此前桩成空串，读件三件被静默砍掉。
     const readExecutor = coachToolExecutor(this.e, c, {
-      behaviorDigestText: async () => '',
+      behaviorDigestText: async () => {
+        const { cutoff } = await this.e.learningDay()
+        const { graph, state } = await this.e.loadView(c)
+        return renderBehaviorDigest(await this.behaviorDigestOf(c, graph, state, today, cutoff))
+      },
       conceptInvokes: () => this.conceptInvokesOf(c),
     })
     const entriesOf = async (): Promise<ConceptEntry[]> => this.e.concepts.load(root)
 
-    /** 本批生效的复诊预注册（#312 B2）：草稿 note 里显式写的优先；没写且本批是插入批
-     * （operator=插入 且有 add_node——受理门要求携带它的正是这一形态）时，用思路官交接
-     * 计划里的那一枚兜底（交接块已把它明写给执行官）。计划是 advisory，故只兜底、不覆盖。
-     * 两个来源都过同一道 `recheckPreregOf`（取值域/clamp 单源，不因来路不同而放宽）。 */
-    const recheckOf = (noteLite: EditProposalNoteLite | undefined, ops: EditOp[]): RecheckPrereg | undefined => {
-      if (noteLite?.recheck) {
-        const v = recheckPreregOf(noteLite.recheck)
-        if (!v.prereg) {
-          // 显式值非法只可能来自手改的草稿文件（draft_patch 侧同门拦在前面）：不静默改用
-          // 计划那一枚（那会悄悄换掉判据），让它以「缺预注册」的形态在门里炸出来。
-          return undefined
-        }
-        return v.prereg
+    /** 本批生效的复诊预注册（#312 B2；#320 单一来源）：草稿 note 里显式写的那一枚（draft_patch
+     * 的 note_recheck）。插入批（operator=插入 且有 add_node——受理门要求携带它的正是这一形态）
+     * 缺预注册时由门拒收并在回灌里说清，不再有「思路官计划兜底」这一来源。取值域/clamp 走
+     * `recheckPreregOf` 单源（不因来路不同而放宽）。 */
+    const recheckOf = (noteLite: EditProposalNoteLite | undefined): RecheckPrereg | undefined => {
+      if (!noteLite?.recheck) return undefined
+      const v = recheckPreregOf(noteLite.recheck)
+      if (!v.prereg) {
+        // 显式值非法只可能来自手改的草稿文件（draft_patch 侧同门拦在前面）：不静默兜底
+        //（那会悄悄换掉判据），让它以「缺预注册」的形态在门里炸出来。
+        return undefined
       }
-      const insertBatch = noteLite?.operator === '插入' && ops.some(op => op.op === 'add_node')
-      return insertBatch && opts.plan?.recheck ? recheckPreregOf(opts.plan.recheck).prereg : undefined
+      return v.prereg
+    }
+    /** 结构性重画建议的形状门（#320；draft_arc 专用）：reason_class 枚举收窄为
+     * 结构性事由——读数信号不构成重画战略的理由。 */
+    const repaintSuggestionOf = (raw: unknown): { reason_class: string; note?: string } => {
+      const rs = (raw ?? {}) as Record<string, unknown>
+      if (!REPAINT_REASONS.includes(String(rs.reason_class))) {
+        throw new Error(render(ERR_REPAINT_REASON, { value: String(rs.reason_class), reasons: REPAINT_REASONS.join('/') }))
+      }
+      if (rs.note !== undefined && (typeof rs.note !== 'string' || !rs.note.trim())) {
+        throw new Error(render(ERR_REPAINT_NOTE, {}))
+      }
+      return {
+        reason_class: String(rs.reason_class),
+        ...(typeof rs.note === 'string' && rs.note.trim() ? { note: rs.note.trim() } : {}),
+      }
     }
     /** 本批硬化后的**提案形态**（#309 缺陷①）：`draft_patch` 试算 / `draft_audit` /
      * `draft_finish` **三处同一份**——「草稿通过 = 门通过」要求三处喂给门的是同一个对象，
@@ -1333,7 +1224,7 @@ export class GrowthSubsystem {
     ): EditProposalSpec => {
       const noteLite = over.note === undefined ? doc.note : over.note
       const concepts = over.concepts ?? doc.concepts
-      const recheck = recheckOf(noteLite, ops)
+      const recheck = recheckOf(noteLite)
       return {
         course: c.name,
         reason: noteLite?.reason ?? '',
@@ -1405,7 +1296,13 @@ export class GrowthSubsystem {
       }),
     ].join('\n')
 
-    // —— 写件三工具 ——
+    // —— 回路的零操作声明（#320）：停摆走 draft_note（halt_reason）、弧建议走 draft_arc
+    //    （serves_arc / repaint_suggest）；回路收束后随 coachDraft 返回——消费口不变。 ——
+    let declaredHaltReason: string | undefined
+    let declaredServesArc: string | undefined
+    let declaredRepaint: { reason_class: string; note?: string } | undefined
+
+    // —— 写件工具 ——
     const writeTool = async (call: LlmToolCall): Promise<string> => {
       const args = JSON.parse(call.arguments.trim() || '{}') as Record<string, unknown>
       if (call.name === 'draft_patch') {
@@ -1479,12 +1376,7 @@ export class GrowthSubsystem {
         // 此前试算只跑 replayDraft（门的结构子集），`move` 这类非法 op 与 `初识` 这类非法档位
         // 一路落进草稿、直到 finish 才在 propose 的 schema 门炸，而那时 op 已无法清除（缺陷②）。
         const trial = [...unpublishedOf(), ...expanded]
-        // 插入批的预注册若草稿侧没写，就地**落进 doc.note**（来源见 recheckOf：本轮的交接计划）：
-        // 只靠 finish 时读当时的计划兜底，会让跨轮续建的批次被**后一轮**的计划换掉判据（甚至
-        // 换没）。把它在补丁期固化，这一批的判据从此只由本批 note 决定。
-        const planRecheck = declared && !declared.recheck ? recheckOf(declared, trial) : undefined
-        const nextNote: EditProposalNoteLite | undefined = planRecheck && declared ? { ...declared, recheck: planRecheck } : declared
-        const trialSpec = batchSpecOf(trial, { note: nextNote, concepts: nextMints })
+        const trialSpec = batchSpecOf(trial, { note: declared, concepts: nextMints })
         const { ctx: trialCtx } = await gateCtxOf({ nodes, graph }, nextMints)
         const trialErrors = (await editProposalGateErrors(trialSpec, trialCtx)).errors
         if (trialErrors.length) {
@@ -1497,7 +1389,7 @@ export class GrowthSubsystem {
         doc.ops.push(...expanded)
         if (mints.length) doc.concepts.push(...mints)
         if (suggestions.length) doc.confusables = [...(doc.confusables ?? []), ...suggestions]
-        if (nextNote !== doc.note) doc.note = nextNote
+        if (declared !== doc.note) doc.note = declared
         await logRound('patch', render(EXEC_ROUND_PATCH_OK, {
           count: expanded.length, unpublished: doc.ops.length - doc.published,
           norm: shape.normalized.length ? render(EXEC_ROUND_PATCH_OK_NORM, { count: shape.normalized.length }) : '',
@@ -1515,6 +1407,35 @@ export class GrowthSubsystem {
           count: expanded.length, unpublished: doc.ops.length - doc.published,
           published: doc.published, total: doc.ops.length, norm: normLines,
         })
+      }
+      if (call.name === 'draft_note') {
+        // 停摆收束（#320 / ADR-0101）：本回合不长结构的唯一合法出口——零操作 + 给理由，草稿形状
+        // 不变（不产 op、不改水位）。弧建议不在本工具上（#320：提成 draft_arc 独立一具）。
+        const reason = typeof args.halt_reason === 'string' ? args.halt_reason.trim() : ''
+        if (!reason) throw new Error(render(ERR_NOTE_NO_REASON, {}))
+        declaredHaltReason = reason
+        await logRound('note', render(EXEC_ROUND_NOTE, { reason }))
+        return render(RECEIPT_NOTE, { reason })
+      }
+      if (call.name === 'draft_arc') {
+        // 弧建议（#320 / ADR-0101）：serves_arc（弧对齐指认）与 repaint_suggest（结构性重画建议）
+        // 提成独立写件——零操作，只把声明交给回路收束后的 arcSoftAlign（对表留痕 + 原样带出）。
+        if (args.serves_arc === undefined && args.repaint_suggest === undefined) {
+          throw new Error(render(ERR_ARC_EMPTY, {}))
+        }
+        if (args.serves_arc !== undefined) {
+          if (typeof args.serves_arc !== 'string' || !args.serves_arc.trim()) {
+            throw new Error(render(ERR_SERVES_ARC_SHAPE, {}))
+          }
+          declaredServesArc = args.serves_arc.trim()
+        }
+        if (args.repaint_suggest !== undefined) declaredRepaint = repaintSuggestionOf(args.repaint_suggest)
+        const summary = [
+          declaredServesArc !== undefined ? render(EXEC_ROUND_ARC_SERVES, { value: declaredServesArc }) : '',
+          declaredRepaint !== undefined ? render(EXEC_ROUND_ARC_REPAINT, { value: declaredRepaint.reason_class }) : '',
+        ].filter(Boolean).join('；')
+        await logRound('arc', render(EXEC_ROUND_ARC, { summary }))
+        return render(RECEIPT_ARC, { summary })
       }
       if (call.name === 'draft_audit') {
         // 空草稿 audit（#315 B4）：零未发布增量 = 本会话无事可做，不跑门、不报门错误——
@@ -1719,8 +1640,8 @@ export class GrowthSubsystem {
     const { graph, state } = await this.e.loadView(c)
     const anchors = await readAnchors(this.e.paths.anchorPath(root), this.e.fs)
     const view = renderGrowthGraphView(graph, state, endpointNames(anchors), { today, conceptEntries: await entriesOf() })
-    const template = await this.e.content.loadPrompt('执行官回合')
-    const pack = await this.coachContextPack(c.name, { today, packLabel: '执行官——草稿会话上下文' })
+    const template = await this.e.content.loadPrompt(GROWTH_DRAFT_STATION)
+    const pack = await this.coachContextPack(c.name, { today, packLabel: '教练执行——草稿会话上下文' })
     const draftStatus = [
       render(EXEC_STATUS_HEADING, {
         session: doc.session_id,
@@ -1741,29 +1662,11 @@ export class GrowthSubsystem {
         })),
       ] : []),
     ].join('\n')
-    // 思路官交接块（#273）：方向裁决 advisory 随包——补丁纪律与门序列不因计划放松；
-    // 零名字契约与计划同构：执行官仍须对草稿图逐字对表后才落 op。
-    const handover = opts.plan ? [
-      render(EXEC_HANDOVER_HEADING, {}), '',
-      render(EXEC_HANDOVER_OPERATOR, {
-        operator: opts.plan.operator,
-        endpoints: opts.plan.target_endpoints.join('、') || render(EXEC_HANDOVER_ENDPOINTS_EMPTY, {}),
-      }),
-      render(EXEC_HANDOVER_REASON, { reason: opts.plan.reason }),
-      ...opts.plan.steps.map((s, i) => render(EXEC_HANDOVER_STEP, {
-        index: i + 1,
-        intent: s.intent,
-        concept: s.teaches_concept ? render(EXEC_HANDOVER_STEP_CONCEPT, { concept: s.teaches_concept }) : '',
-        est: s.est_hint ? render(EXEC_HANDOVER_STEP_EST, { est: s.est_hint }) : '',
-      })),
-      ...(opts.plan.recheck ? [render(EXEC_HANDOVER_RECHECK, {
-        metric: opts.plan.recheck.metric, days: opts.plan.recheck.days ?? RECHECK_DAYS_DEFAULT,
-      })] : []),
-      // #316 / ADR-0099：罗盘写权归罗盘站——思路官计划不再携带 route，交接块不再提弧。
-      '',
-      render(EXEC_HANDOVER_FOOTER, {}),
-    ].join('\n') : undefined
-    const prompt = withContractLast(template, [pack, view, draftStatus, handover]
+    // 外部注入块（#149/#248 同通道）：显式重新裁决的请求材料随包进回路提示词（#320 单站）。
+    const inject = opts.inject !== undefined
+      ? render(COACH_INJECT_BLOCK, { inject: opts.inject.trimEnd() })
+      : undefined
+    const prompt = withContractLast(template, [pack, view, draftStatus, inject]
       .map(b => b?.trim()).filter((b): b is string => Boolean(b)).join('\n\n---\n\n'))
     const runTool = async (call: LlmToolCall): Promise<string> => {
       // 写件崩溃补轮志（#302 ②）：三件写工具此前只有**被受理门拒绝**的那几条路径写轮志，
@@ -1844,6 +1747,9 @@ export class GrowthSubsystem {
       trajectory: loop.trajectory,
       rounds: doc.rounds.map(r => ({ kind: r.kind, summary: r.summary })),
       finishes,
+      ...(declaredHaltReason !== undefined ? { halt_reason: declaredHaltReason } : {}),
+      ...(declaredServesArc !== undefined ? { serves_arc: declaredServesArc } : {}),
+      ...(declaredRepaint !== undefined ? { repaint_suggest: declaredRepaint } : {}),
     }
   }
 
