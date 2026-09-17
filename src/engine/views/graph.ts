@@ -19,11 +19,10 @@ export interface GraphApplyEditResult {
   /** rename 联动：旧名 → 新名。 */
   renames: Record<string, string>
   deleted: string[]
-  /** 生长批字段（#145 note 区在场时随行）：算子标签 + 理由 + 分歧声明 + 罗盘随批写入单元重写。 */
+  /** 生长批字段（#145 note 区在场时随行）：算子标签 + 理由 + 分歧声明。 */
   operator?: GrowthOperator
   coach_reason?: string
   disagreement?: boolean
-  compass_rewritten?: boolean
   findings: string[]
 }
 

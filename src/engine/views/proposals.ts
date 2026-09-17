@@ -11,7 +11,6 @@ export interface GraphEditProposalResult {
   ops: number
   operator?: GrowthOperator
   disagreement?: boolean
-  compass_rewrite?: boolean
   warns?: string[]
 }
 

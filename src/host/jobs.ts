@@ -646,7 +646,8 @@ async function generateGraphJob(rt: HostRuntime, _ctx: Context, job: GenJob): Pr
         isCancelled: () => (job.status as GenJobStatus) === 'cancelling',
       })
       job.status = 'done'
-      job.message = `罗盘已重画：${r.route_lines} 条路线${r.annotations_preserved ? '（学习者批注原样保留）' : ''}`
+      // #316：初画/重画随引擎折族结果区分（repainted = 路线段本已画过）
+      job.message = `罗盘已${r.repainted ? '重画（重估）' : '初画'}：${r.route_lines} 条路线${r.annotations_preserved ? '（学习者批注原样保留）' : ''}`
       // 回路轨迹（#163）：重画前查了哪些只读视图，生成页逐条可查
       if (r.trajectory?.length) job.message += `｜回路轨迹：${r.trajectory.join('；')}`
     } else if (job.phase === 'decompile' && job.decompilePayload) {

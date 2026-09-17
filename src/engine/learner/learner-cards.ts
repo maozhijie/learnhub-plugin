@@ -53,7 +53,7 @@ import { normalizeGoalIntention } from './goals.ts'
 import { JOL_SAMPLE_RATE } from '../sched/jol.ts'
 import type { KataAnswer, KataQuestion } from './kata.ts'
 import { kataMonday, weekEndOf, prevWeekStartOf } from './kata.ts'
-import { KATA_KIND, KATA_EMPTY, KATA_LEARNER_QUESTIONS, buildKataReality, renderKataReality, assembleKataDoc, parseKataBody, kataAnswered, kataEtaSummary, kataRouteReconcile } from './kata.ts'
+import { KATA_KIND, KATA_EMPTY, KATA_LEARNER_QUESTIONS, buildKataReality, renderKataReality, assembleKataDoc, parseKataBody, kataAnswered, kataEtaSummary, kataRouteReview } from './kata.ts'
 import type { LlmComplete } from '../infra/llm.ts'
 import { FSRS_DIFFICULTY_MID } from '../infra/params.ts'
 import type { ReceiptKind, ReceiptLogRec, ReceiptSubmitResult } from '../practice/receipts.ts'
@@ -70,7 +70,7 @@ import type { LearnerArchiveResult, LearnerForgetResult, LearnerRateResult } fro
 import { assertNoBrokenNotes, withinStruggleWindow, STRUGGLE_WINDOW_DAYS } from '../sched/sessions.ts'
 import type { NodeStat, WindowStat } from '../sched/sessions.ts'
 import type { SedimentKind } from '../sched/sediment.ts'
-import type { CompassEta, RouteReconcile } from '../coach/compass.ts'
+import type { CompassEta, RouteWeeklyReview } from '../coach/compass.ts'
 import { readDayCutoff, xpForAnswer } from '../sched/xp.ts'
 
 // LearnerCardKind / LEARNER_CARD_KINDS 住 types.ts（中立层，#152 刀 4）；
@@ -340,7 +340,7 @@ export interface LearnerDeps {
   nodeNote(c: CourseEntry, graph: Graph, node: string): Promise<{ path: string; fm: Fm | null; body: string }>
   saveNodeNote(path: string, fm: Fm, body: string): Promise<void>
   sedimentSettle(): Promise<{ week: string | null; wrote: SedimentKind[]; skipped: Array<{ kind: SedimentKind; reason: string }>; profile: string }>
-  compassEtaRefresh(courseKey?: string, opts?: { today?: string; force?: boolean }): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; reconcile?: RouteReconcile }>>
+  compassEtaRefresh(courseKey?: string, opts?: { today?: string; force?: boolean }): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; review?: RouteWeeklyReview[] }>>
   experimentPropose(templateId: string, course?: string): Promise<{ proposal: number; template: string; title: string; pool: number; scope_course: string | null }>
   /** 回执评审模式当日成立（#203 / ADR-0057；lab 解析：配置默认 ← 实验当日臂覆盖）。 */
   receiptReviewEffect(input: { today: string; course: string | null }): Promise<{
@@ -626,16 +626,14 @@ export class LearnerSubsystem {
     }
     // 罗盘每周挂载（#143）：ETA 段每周一刷（标记周判重），透明度装置失败不挡复盘；
     // 折叠结果随行携带 eta——现状区旁挂沙盘 ETA 摘要（#150）取同一份数据，不二次蒙特卡洛。
-    // 同一挂载点顺带做路线对账（#231）：reconcile 随行 → 现状区「罗盘对账」小节（非权威读数）
+    // 同一挂载点顺带做周检讨读数（#316 §修订四）：review 随行 → 现状区「罗盘周检讨」小节（非权威读数）
     const etaMounts = await this.e.compassEtaRefresh(undefined, { today }).catch(() => [])
     const etas = etaMounts
       .filter(m => m.eta !== undefined)
       .map(m => kataEtaSummary(m.course, m.eta!))
-    const reconciles = etaMounts
-      .filter(m => m.reconcile !== undefined)
-      .map(m => kataRouteReconcile(m.course, m.reconcile!))
+    const reviews = etaMounts.flatMap(m => (m.review ?? []).map(r => kataRouteReview(m.course, r)))
     const weekEnd = weekEndOf(target)!
-    const reality = renderKataReality(await this.kataRealityFor(target, weekEnd, cutoff), etas, reconciles)
+    const reality = renderKataReality(await this.kataRealityFor(target, weekEnd, cutoff), etas, reviews)
     const path = this.kataPath(target)
     let sections: Record<KataQuestion, string>
     let created: boolean

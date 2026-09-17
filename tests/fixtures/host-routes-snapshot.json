@@ -5054,8 +5054,8 @@
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"排队等待生成队列…\"}])",
    "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"running\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘路线绘制中（deep 档工具回路）…\"}])",
    "growth2.compassPaint(\"1\",{\"ports\":{\"logger\":{}},\"clock\":{},\"callSeq\":{}},{})",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\"}])",
-   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已重画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\"}])",
+   "saveGenJobs([{\"course\":\"1\",\"node\":\"罗盘\",\"startedAt\":\"«ts»\",\"status\":\"done\",\"phase\":\"compass\",\"model\":\"deepseek-v4-flash\",\"message\":\"罗盘已初画：undefined 条路线\",\"finishedAt\":\"«ts»\"}])",
    "growth2.coachCheckpoint(\"queue_idle\",undefined)"
   ]
  },

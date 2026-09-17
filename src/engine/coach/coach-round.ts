@@ -23,7 +23,6 @@
  */
 import { dayOfTs, parseDay, daysBetween } from '../infra/dates.ts'
 import { pctOf } from '../infra/grading.ts'
-import { stripWrappingFence, validateRouteBody } from './compass.ts'
 import { dueReviewFirstPushes, trueRetention } from '../sched/memory.ts'
 import { SEDIMENT_KINDS } from '../sched/sediment.ts'
 import type { SedimentFold } from '../sched/sediment.ts'
@@ -326,19 +325,14 @@ export const COACH_PLAN_PROMPT_KEYS = {
 
 /** 思路官交接契约（#273）：零节点名、零图上引用——意图句台阶 + 概念名（逐字在册）+
  * est 提示；recheck 仅指插入批的预注册复诊（与生长批 note.recheck 同形状），不引入
- * 新回路。
- *
- * `route`（#310 / ADR-0097）：罗盘「剩余路线」段的新正文，由思路官随方向裁决产出。
- * **缺省 = 不改写、保留旧稿**（apply 只在 route 在场时写本段）——绝不是清空。 */
+ * 新回路。#316 / ADR-0099 起**无 route 字段**：罗盘「剩余路线」写权归罗盘站独占，
+ * 思路官对弧只有建议权（理由写进 reason）。 */
 export interface GrowthPlanHandover {
   operator: string
   reason: string
   target_endpoints: string[]
   steps: Array<{ intent: string; teaches_concept?: string; est_hint?: number }>
   recheck?: { metric: string; days?: number }
-  /** 罗盘「剩余路线」段新正文（按终点分节、每节 3–7 条阶段条目、非承诺措辞）。
-   * **缺省 = 不改写、保留旧稿**（apply 只在 `spec.route !== undefined` 时写）。 */
-  route?: string
 }
 
 /** 思路官计划的 schema 门（纯函数，错误作数据）：operator 枚举（含停摆）、reason 必填、
@@ -406,18 +400,10 @@ export function validatePlanHandover(doc: unknown, courseName: string): string[]
       }
     })
   }
-  // 罗盘「剩余路线」新正文（#310 / ADR-0092 §修订）：门与 apply 侧**同源**——同一个
-  // `validateRouteBody`（#309 的教训是「计划门过、apply 门拒」等于开了一条静默丢弃
-  // 通道，同源校验把那类洞在计划门就堵掉）。义务：前进/换向必写（方向批本就该重画
-  // 路线）；停摆/插入/巩固可不写——缺省 = 不改写、保留旧稿，绝不是清空。
-  const route = d.route
-  if (route !== undefined && typeof route !== 'string') {
-    errors.push('[coach-plan] route 必须是字符串（罗盘「剩余路线」段的块标量正文）。')
-  } else if (typeof route === 'string') {
-    errors.push(...validateRouteBody(stripWrappingFence(route)).map(e => `[coach-plan] route: ${e}`))
-  }
-  if ((d.operator === '前进' || d.operator === '换向') && !(typeof route === 'string' && route.trim())) {
-    errors.push('[coach-plan] 前进/换向计划必须携带 route（罗盘「剩余路线」段新正文：按终点分节、每节 3–7 条阶段条目、非承诺措辞）。')
+  // #316 / ADR-0099：route 已退役——写权归罗盘站（learnhub_compass_paint），思路官计划
+  // 携带 route 一律拒收（与零节点名契约同纪律：越权写弧在计划门就掉，不给静默丢弃通道）。
+  if (d.route !== undefined) {
+    errors.push('[coach-plan] route 已退役（#316 / ADR-0099）：罗盘「剩余路线」写权归罗盘站（learnhub_compass_paint），思路官对弧只有建议权——删掉本字段，建议写进 reason。')
   }
   if (d.recheck !== undefined) {
     if (d.operator !== '插入') {

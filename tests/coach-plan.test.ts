@@ -41,12 +41,7 @@ function goldPlan(): GrowthPlanHandover {
     reason: '前沿缺下一台阶，沿终点推进',
     target_endpoints: ['用导数解决优化问题'],
     steps: [{ intent: '从日常速度建立「变化多快」的直觉', teaches_concept: '变化率', est_hint: 15 }],
-    // 前进必写 route（#310）：罗盘「剩余路线」段新正文，门与 apply 侧同源校验。
-    route: [
-      '- **用导数解决优化问题**：',
-      '  - **变化率直觉**：从日常速度体会「变化多快」',
-      '  - **平均变化率**：算出一次平均变化率（候选）',
-    ].join('\n'),
+    // #316 / ADR-0099：计划契约无 route——罗盘写权归罗盘站，思路官对弧只有建议权。
   }
 }
 
@@ -63,7 +58,6 @@ const yamlOf = (p: Record<string, unknown>): string => [
     ...(s.name ? [`    name: ${String(s.name)}`] : []),
   ])] : ['steps: []']),
   ...(p.recheck === undefined ? [] : [`recheck:`, `  metric: ${String((p.recheck as Record<string, unknown>).metric)}`, `  days: ${String((p.recheck as Record<string, unknown>).days)}`]),
-  ...(p.route === undefined ? [] : ['route: |', ...String(p.route).split('\n').map(l => (l ? `  ${l}` : ''))]),
 ].join('\n')
 
 test('validatePlanHandover：金计划零错误；枚举/朝向/零名字/recheck 各负例逐类拦截', () => {
@@ -91,20 +85,16 @@ test('validatePlanHandover：金计划零错误；枚举/朝向/零名字/rechec
   assert.ok(validatePlanHandover({ ...goldPlan(), course: '物理' } as unknown as GrowthPlanHandover, '数学').some(e => e.includes('course')))
 })
 
-test('#310 计划契约的 route：门与 apply 侧同源校验（同一个 validateRouteBody）；前进/换向必写、其余算子可省', () => {
-  // 非法 route：空 / 带 `## ` 标题（会劫持罗盘段落）——两条都由同一个路线门给出
-  assert.ok(validatePlanHandover({ ...goldPlan(), route: '   ' }, '数学').some(e => e.includes('route')))
-  assert.ok(validatePlanHandover({ ...goldPlan(), route: '- ok\n## 劫持\n' }, '数学').some(e => e.includes('route') && e.includes('标题')))
-  assert.ok(validatePlanHandover({ ...goldPlan(), route: 123 as unknown as string }, '数学').some(e => e.includes('route')))
-  // 前进/换向必写（方向批本就该重画路线）
-  assert.ok(validatePlanHandover({ ...goldPlan(), route: undefined }, '数学').some(e => e.includes('必须携带 route')))
+test('#316 / ADR-0099 计划契约无 route：携带即拒收（写权归罗盘站），建议写进 reason', () => {
+  // 前进带 route → 计划门拒收，死因点名退役
   assert.ok(
-    validatePlanHandover({ ...goldPlan(), operator: '换向', route: undefined, target_endpoints: ['用导数解决优化问题'] }, '数学')
-      .some(e => e.includes('必须携带 route')),
+    validatePlanHandover({ ...goldPlan(), route: '- **用导数解决优化问题**：\n  - **某面**：推进广度' } as unknown as GrowthPlanHandover, '数学')
+      .some(e => e.includes('route') && e.includes('已退役')),
   )
-  // 停摆/插入/巩固可不写——缺省 = 不改写、保留旧稿（不是清空）
-  assert.deepEqual(validatePlanHandover({ ...goldPlan(), operator: '巩固', route: undefined, target_endpoints: [] }, '数学'), [])
-  assert.deepEqual(validatePlanHandover({ ...goldPlan(), operator: '插入', route: undefined, recheck: { metric: '前进恢复', days: 10 } }, '数学'), [])
+  // 金计划（无 route）零错误；前进不再必写 route
+  assert.deepEqual(validatePlanHandover(goldPlan(), '数学'), [])
+  // 停摆/插入/巩固照旧过门
+  assert.deepEqual(validatePlanHandover({ ...goldPlan(), operator: '停摆', target_endpoints: [], steps: [] }, '数学'), [])
 })
 
 // ---- 两站假 agent：思路官走 complete（单发零工具），执行官走 stream 回路（脚本化） ----
@@ -390,59 +380,36 @@ test('#303 两族共享首级判据：前沿为空时回合/重裁两族提示�
   })
 })
 
-// ---- #310：罗盘「剩余路线」恢复生产者（计划携带 → 引擎透传 → apply 批内重写）----
+// ---- #316 / ADR-0099：罗盘写权反转（计划不携带 route；罗盘不随生长批动）----
 
-test('#310 route 随前进批写盘：「剩余路线」段换成计划正文，批注区/ETA 段字节保留', async () => {
+test('#316 计划携带 route 被计划门拒 → 回灌重裁恰一次（死因点名 route 退役）', async () => {
+  await withVault(SEED, async h => {
+    await draftCourse(h.engine, CAPABILITY_DRAFT)
+    // 前进 + 带 route 的旧契约计划——计划门判它越权写弧，当场拒收
+    const legacy = goldPlanYaml() + '\nroute: |\n  - **某面**：推进广度'
+    const agent = twoStationFake({ plans: [legacy, goldPlanYaml()], sessions: [executorTurns()] })
+    const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
+    assert.equal(r.state, 'applied')
+    assert.equal(agent.completeCalls.length, 2, '计划门拒收 → 回灌重裁恰一次')
+    assert.equal(agent.completeCalls[1]!.mode, 'repair')
+    assert.match(agent.completeCalls[1]!.prompt, /route/, '死因点名 route')
+    assert.match(agent.completeCalls[1]!.prompt, /已退役/, '错误行点名退役与写权归属')
+  })
+})
+
+test('#316 前进批不动罗盘：「剩余路线」段原样保留（写权归罗盘站）', async () => {
   await withVault(SEED, async h => {
     await draftCourse(h.engine, CAPABILITY_DRAFT)
     const p = h.engine.paths.compassPath('数学')
-    // 罗盘初始是脚手架（「剩余路线」= ROUTE_PENDING 占位）；先把批注区写成手编内容——
-    // 重写路线时必须原样存活（段级替换语义，批注区是学习者的软输入）
-    await writeFile(p, withSectionText(await readFile(p, 'utf8'), SECTION_ANNOTATIONS, '想先补概率。'))
-    const etaBefore = sectionBody(parseCompass(await readFile(p, 'utf8')), SECTION_ETA)
+    // 先写一份已画路线——前进批不得碰它（弧只在罗盘站初画/重估时变）
+    const R0 = '- **用导数解决优化问题**：\n  - **旧稿台阶**：罗盘站初画的路线（候选）'
+    await writeFile(p, withSectionText(await readFile(p, 'utf8'), SECTION_ROUTE, R0))
 
     const agent = twoStationFake({ plans: [goldPlanYaml()], sessions: [executorTurns()] })
     const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
     assert.equal(r.state, 'applied')
 
     const doc = parseCompass(await readFile(p, 'utf8'))
-    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), goldPlan().route, '计划携带的路线落到「剩余路线」段')
-    assert.equal(sectionBody(doc, SECTION_ANNOTATIONS)?.trim(), '想先补概率。', '批注区字节保留')
-    assert.equal(sectionBody(doc, SECTION_ETA), etaBefore, 'ETA 段字节保留（只换目标段，段外不碰）')
-    // 路线也进执行官交接块（可见，但写权归引擎——执行官零 op）
-    assert.match(agent.completeCalls[0]!.prompt, /罗盘路线/)
-  })
-})
-
-test('#310 非法 route 被计划门拒 → 回灌重裁恰一次（与 apply 侧同源的那个路线门）', async () => {
-  await withVault(SEED, async h => {
-    await draftCourse(h.engine, CAPABILITY_DRAFT)
-    // 前进 + 带 `## ` 标题的 route——路线门判它劫持罗盘段落，计划门当场拒收
-    const badRoute = goldPlanYaml().replace('route: |', 'route: |\n  ## 劫持段')
-    const agent = twoStationFake({ plans: [badRoute, goldPlanYaml()], sessions: [executorTurns()] })
-    const r = await h.engine.growth2.coachGrowthBatch('数学', agent)
-    assert.equal(r.state, 'applied')
-    assert.equal(agent.completeCalls.length, 2, '计划门拒收 → 回灌重裁恰一次')
-    assert.equal(agent.completeCalls[1]!.mode, 'repair')
-    assert.match(agent.completeCalls[1]!.prompt, /schema 门错误清单/)
-    assert.match(agent.completeCalls[1]!.prompt, /route/, '死因点名 route（同一扇路线门给出的错误行）')
-  })
-})
-
-test('#310 停摆批不改写旧稿：「剩余路线」段原样保留', async () => {
-  await withVault(SEED, async h => {
-    await draftCourse(h.engine, CAPABILITY_DRAFT)
-    const p = h.engine.paths.compassPath('数学')
-    // 先写一份「上一次方向批的产物」当旧稿
-    const R0 = '- **用导数解决优化问题**：\n  - **旧稿台阶**：上一批写下的路线'
-    await writeFile(p, withSectionText(await readFile(p, 'utf8'), SECTION_ROUTE, R0))
-
-    const stopPlan = yamlOf({ operator: '停摆', reason: '就绪缺口由内容生成跟上', target_endpoints: [], steps: [] })
-    const agent = twoStationFake({ plans: [stopPlan], sessions: [] })
-    const r = await h.engine.growth2.coachGrowthBatch('数学', agent, { force: true })
-    assert.equal(r.state, 'idle', '停摆：零提案零写盘')
-
-    const doc = parseCompass(await readFile(p, 'utf8'))
-    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), R0, '缺省 = 不改写、保留旧稿（绝不是清空）')
+    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), R0, '罗盘不随生长批动（写权归罗盘站）')
   })
 })

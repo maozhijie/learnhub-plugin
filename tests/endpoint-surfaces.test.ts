@@ -254,13 +254,12 @@ test('#239 零终点（空锚）：读侧一切面不炸，教练回合与罗盘
     assert.equal(check.cold_start, false, '零终点不判冷启动')
     assert.equal(check.exhausted, false, '零终点不算课程尾段')
     assert.deepEqual(await engine.courseCompletion({ name: '数学', root: 'math' }), [])
-    // 教练回合 / 罗盘初画 / 罗盘重写：明确失败（不是「未播种」也不是静默空转）
+    // 教练回合 / 罗盘初画：明确失败（不是「未播种」也不是静默空转）
     await assert.rejects(
       () => engine.growth2.coachGrowthBatch('数学', {} as never, { force: true }),
       /零终点（空锚是合法空态）——教练回合要有一个方向才能裁决/,
     )
     await assert.rejects(() => engine.growth2.compassPaint('数学', {} as never), /零终点（空锚是合法空态）——罗盘初画锚在终点上/)
-    await assert.rejects(() => engine.growth2.compassRewrite('数学', '- 条目'), /零终点（空锚是合法空态）——罗盘重写锚在终点上/)
     // 空锚课程的罗盘读数：零终点（合法空态）
     const compass = await engine.growth2.compassRead('数学')
     assert.deepEqual(compass.anchors, [])

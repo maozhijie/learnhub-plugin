@@ -82,7 +82,7 @@ export type {
 
 /** 变更提案受理（proposeEdit）。warns = 受理门非阻提示（概念字段组窄节点等）。
  * operator/disagreement = 生长批受理时随行（#145 note 区算子标签；disagreement=带分歧声明）。
- * compass_rewrite（受理=意图）与 apply 侧 compass_rewritten（已落盘=事实）分相位命名。 */
+ */
 // ---- 内容管线（queueItemsAll / lesson / coursesTree）----
 
 

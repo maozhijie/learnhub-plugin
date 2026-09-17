@@ -13,7 +13,7 @@ import { weekStartOf } from '../src/engine/learner/kata.ts'
 import {
   SECTION_ROUTE, SECTION_ANNOTATIONS, SECTION_ETA, ROUTE_PENDING, ANNOTATION_GUIDE, ETA_PENDING,
   ETA_MARKER_PREFIX, parseCompass, sectionBody, withSectionText, validateRouteBody, etaMarkerOf,
-  reconcileRoute, hasPaintedRoute,
+  hasPaintedRoute, parseRouteSections, routeBodyWarns, routeWeeklyReview, repaintDueOf, withRepaintMarker,
 } from '../src/engine/coach/compass.ts'
 import { AgentSeam } from '../src/engine/infra/agent.ts'
 
@@ -22,7 +22,8 @@ import { AgentSeam } from '../src/engine/infra/agent.ts'
 //   过金样本回放闸（首过无修复轮、调用数恒 1、同种子回放字节一致）。
 // - 学习者批注区 = 教练软输入（提议非指令），跨重写/初画/ETA 挂载字节保留；
 //   手编路线不产生权威变更——下次重写被覆盖，完成判据折叠零读罗盘。
-// - 「剩余路线」唯一写权接口 = engine.compassRewrite（调用方是生长批受理票 #145）。
+// - 「剩余路线」唯一写权接口 = 罗盘站 learnhub_compass_paint（#316 / ADR-0099：教练只建议
+//   不执笔；重估触发置重画待办标记，进度不触发重画）。
 // - 沙盘 ETA 每周随周复盘挂载（标记周幂等），措辞锁死「模型推演，非承诺」。
 
 const SEED_VAULT = { registry: null, graph: null }
@@ -243,8 +244,8 @@ test('AC2 批注区是软输入：初画附进上下文；写权重写保批注�
     assert.match(tail, /提议非指令/)
     assert.match(tail, /跳过证明类的块/)
 
-    // 写权接口：批注区、ETA、自留段字节保留，只换路线
-    await engine.growth2.compassRewrite('数学', GOLD_ROUTE)
+    // 写权接口（罗盘站初画/重画同一条路线门）：批注区、ETA、自留段字节保留，只换路线
+    await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
     const afterRewrite = await readFile(p, 'utf8')
     const doc2 = parseCompass(afterRewrite)
     assert.equal(sectionBody(doc2, SECTION_ROUTE)?.trim(), GOLD_ROUTE)
@@ -276,11 +277,13 @@ test('换终点（ADR-0076 §三）：removeEndpoint + addEndpoint——锚册�
     assert.deepEqual(removed.unhooked, [], '零 pre 终点被摘时无台阶被勾')
     await engine.graph.addEndpoint('数学', '证明微积分基本定理', '能独立证明微积分基本定理')
 
-    // 批注区跨换终点字节保留；罗盘不自动重置——路线重写是教练的写权，机器不越权
+    // 批注区跨换终点字节保留；罗盘不自动重置——路线重写是罗盘站的写权，机器不越权；
+    // 但写侧事件（终点增删）会置「重画待办」标记（#316：只标记不触发）
     const text = await readFile(p, 'utf8')
     const doc = parseCompass(text)
     assert.equal(sectionBody(doc, SECTION_ANNOTATIONS)?.trim(), '多来点应用题。', '批注区跨换终点字节保留')
-    assert.equal(sectionBody(doc, SECTION_ROUTE)?.trim(), GOLD_ROUTE, '罗盘不自动重置（旧路线由教练下轮重写）')
+    assert.ok(sectionBody(doc, SECTION_ROUTE)?.trim().startsWith(GOLD_ROUTE), '罗盘不自动重置（弧本体不变）')
+    assert.match(repaintDueOf(sectionBody(doc, SECTION_ROUTE))!, /删除终点/, '写侧事件置重画待办标记（幂等取首因）')
 
     // 锚册逐终点：换后两条锚 = 起草锚 + 新锚
     const anchorBook = JSON.parse(await readFile(paths.anchorPath('数学'), 'utf8')) as { anchors: Array<{ endpoint: string }> }
@@ -367,101 +370,116 @@ test('罗盘缺席的读侧：compassRead/compassTail 合法空态；零终点�
   })
 })
 
-// ---- #231 罗盘路线对账：条目 vs 图面节点名的粗 diff（零模型、零写侧、非权威） ----
+// ---- #316 弧条目解析 + 周检讨读数 + 重画待办标记（零模型、零写侧、非权威） ----
 
-test('#231 对账三态：有锚（引用到图面节点名）/ 标候选（模板允许的未落图台阶）/ 无锚（漂移）', () => {
-  const names = ['认识变化率', '用导数解决优化问题']
-  const r = reconcileRoute([
-    '- **认识变化率**：把变化率说成本质。',
-    '- **补割线过渡台阶**（候选）：落图由生长批裁决。',
-    '- **合成优化视角**：把导数接到极值判断，通向终点「用导数解决优化问题」。',
-  ].join('\n'), names)
-  assert.equal(r.entries, 3)
-  assert.equal(r.anchored, 2, '引用起点名与终点名都算有锚（终点也是图面节点）')
-  assert.equal(r.proposed, 1)
-  assert.deepEqual(r.unmoored, [], '三条都有落法 = 零漂移')
+const REVIEW_BODY = [
+  '- **用导数解决优化问题**：',
+  '- **认识变化率**（深度：会用）：推进深度——从日常速度建立「变化多快」的直觉。',
+  '- **几何补面**：推进广度。',
+].join('\n')
 
-  const drifted = reconcileRoute('- **合成优化视角**：把导数接到极值判断。', names)
-  assert.deepEqual(drifted.unmoored, ['合成优化视角'], '既无引用也无候选标注 = 漂移，按条目名报出')
-  assert.equal(drifted.anchored, 0)
-  assert.equal(reconcileRoute('', names).entries, 0, '空路线 = 零条目')
-  assert.equal(reconcileRoute('- 某条路线', []).unmoored.length, 1, '空图面 = 无从核对（全无锚）')
+test('#316 弧条目解析：节头（冒号后无正文）与面条目（有半句）可区分；深度档与候选随行', () => {
+  const sections = parseRouteSections(REVIEW_BODY)
+  assert.equal(sections.length, 1)
+  assert.equal(sections[0]!.endpoint, '用导数解决优化问题')
+  assert.deepEqual(sections[0]!.faces.map(f => f.name), ['认识变化率', '几何补面'])
+  assert.equal(sections[0]!.faces[0]!.tier, '会用')
+  assert.equal(sections[0]!.faces[1]!.tier, null, '未声明 = 不推定')
+  // 无节头时条目归 endpoint=''（宽容解析，不硬拒）
+  const bare = parseRouteSections('- **某面**：推进深度。')
+  assert.equal(bare.length, 1)
+  assert.equal(bare[0]!.endpoint, '')
 })
 
-test('#240 罗盘多终点分节零假漂移：节头行（- **终点名**：）锚在图内终点上，不装成漂移条目', () => {
-  const names = ['认识变化率', '用导数解决优化问题', '证明微积分基本定理']
-  const r = reconcileRoute([
+test('#316 周检讨读数：覆盖缺口 / 深度差（需求 vs teaches 最高档）/ 配比（粗）；缺席不推定', () => {
+  const section = parseRouteSections(REVIEW_BODY)[0]!
+  const graphNames = ['认识变化率', '用导数解决优化问题']
+  const tierOfNode = (n: string) => (n === '认识变化率' ? '知道' as const : null)
+  const r = routeWeeklyReview(section, graphNames, tierOfNode)
+  assert.deepEqual(r.gaps, ['几何补面'], '图上零节点的面 = 覆盖缺口')
+  assert.deepEqual(r.depth_gaps, [{ name: '认识变化率', required: '会用', actual: '知道' }], '需求 会用 / 现状 知道')
+  assert.deepEqual(r.shares.map(s => s.name), ['认识变化率', '几何补面'])
+  assert.equal(r.shares[1]!.nodes, 0)
+  // 未声明需求档的面不判深度差（缺席不推定）
+  const r2 = routeWeeklyReview(parseRouteSections('- **E**：\n- **面A**：推进广度。')[0]!, ['面A'], () => '知道')
+  assert.deepEqual(r2.depth_gaps, [])
+})
+
+test('#316 重画待办标记：置标幂等取首因；paint 落盘新正文自然清除', () => {
+  const marked = withRepaintMarker(REVIEW_BODY, '新增终点「证明微积分基本定理」')
+  assert.equal(repaintDueOf(marked), '新增终点「证明微积分基本定理」')
+  assert.equal(repaintDueOf(withRepaintMarker(marked, '另一个原因')), '新增终点「证明微积分基本定理」', '幂等不叠加')
+  assert.equal(repaintDueOf(REVIEW_BODY), null, '未标记 = null')
+  assert.equal(repaintDueOf(ROUTE_PENDING), null, '待初画占位无标记')
+  assert.equal(repaintDueOf(null), null)
+})
+
+test('#316 路线 WARN 倾向性：说不出程度指向逐条提示；整节零深度档提示一次；不硬拒', () => {
+  const warns = routeBodyWarns([
     '- **用导数解决优化问题**：',
-    '- **认识变化率**：先立直觉。',
-    '- **证明微积分基本定理**：',
-    '- **平均变化率台阶**（候选）：落图由生长批裁决。',
-  ].join('\n'), names)
-  assert.equal(r.entries, 4, '对账口径逐行不变：两个分节节头也计条目')
-  assert.equal(r.anchored, 3, '两个节头（终点名在图内）+ 引用起点的条目都有锚')
-  assert.equal(r.proposed, 1, '标注（候选）的未落图台阶照旧走标候选')
-  assert.deepEqual(r.unmoored, [], '零假漂移：分节节头不产生假漂移证据行')
+    '- **极值应用面**：把导数接到极值判断。',
+  ].join('\n'))
+  assert.ok(warns.some(w => w.includes('极值应用面')), '无档且无程度维度词 → WARN①')
+  assert.ok(warns.some(w => w.includes('一整节零深度档')), '整节零声明 → WARN②')
+  // 有档或带程度维度词 = 零 WARN
+  assert.deepEqual(routeBodyWarns([
+    '- **用导数解决优化问题**：',
+    '- **面A**（深度：能教）：推进综合运用。',
+    '- **面B**：推进广度的另一面。',
+  ].join('\n')), [])
+  // WARN 不是门：validateRouteBody 对同样的正文照旧零错误
+  assert.deepEqual(validateRouteBody(REVIEW_BODY), [])
 })
 
-test('#231 条目名提取：粗体段优先，无粗体退回行首标记后的短名，再退回整行', () => {
-  const r = reconcileRoute([
-    '- **粗体名**：说明',
-    '- 无粗体但很长的条目：说明在后面',
-    '1. 编号条目（候选）注记',
-    '**只有粗体**',
-  ].join('\n'), [])
-  assert.equal(r.proposed, 1, '第三条带「候选」→ 标候选（不进无锚）')
-  assert.deepEqual(r.unmoored, ['粗体名', '无粗体但很长的条目', '只有粗体'])
-})
-
-test('#231 已画路线判据：待初画占位/空白 = 无对账对象（占位文案不得装成漂移条目）', () => {
+test('#316 已画路线判据：待初画占位/空白 = 无周检讨对象（占位文案不是条目）', () => {
   assert.equal(hasPaintedRoute(ROUTE_PENDING), false)
   assert.equal(hasPaintedRoute(''), false)
   assert.equal(hasPaintedRoute('   \n  '), false)
   assert.equal(hasPaintedRoute('- 一条路线'), true)
-  // 反向证据：占位文案直接进对账会被当成一条巨大的「漂移条目」——所以调用方必须先挡
-  assert.equal(reconcileRoute(ROUTE_PENDING, ['x']).unmoored.length, 1)
 })
 
-test('#231 挂载点顺带对账：compassEtaRefresh 随行携带 reconcile；未画路线无对账对象', async () => {
+test('#316 挂载点顺带周检讨：compassEtaRefresh 随行携带 review；未画路线无检讨对象', async () => {
   await withVault(SEED_VAULT, async ({ engine, paths }) => {
     await seedApplied(engine)
     const r0 = await engine.growth2.compassEtaRefresh('数学')
-    assert.equal(r0[0]!.reconcile, undefined, '待初画 = 无对账对象（占位不是条目）')
+    assert.equal(r0[0]!.review, undefined, '待初画 = 无检讨对象')
 
     await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
     const routeBefore = sectionBody(parseCompass(await readFile(paths.compassPath('数学'), 'utf8')), SECTION_ROUTE)
     const r1 = await engine.growth2.compassEtaRefresh('数学')
-    const rec = r1[0]!.reconcile!
-    assert.equal(rec.entries, 3, '金样本三条条目')
-    assert.equal(rec.anchored, 1, '第三条引用终点名')
-    assert.equal(rec.proposed, 1, '第二条标（候选）')
-    assert.deepEqual(rec.unmoored, ['把变化率说成本质'], '第一条被当成确定路标写出、图面却无从核对')
-    // 非权威：对账只在读侧算，路线段字节不动（写侧仍唯教练随批重写）
+    const review = r1[0]!.review!
+    assert.equal(review.length, 1, '金样本无节头 = 单节（endpoint 空）')
+    assert.equal(review[0]!.shares.length, 3, '金样本三条面')
+    assert.ok(review[0]!.gaps.includes('把变化率说成本质'), '图上无对应节点的面出覆盖缺口')
+    // 非权威：检讨只在读侧算，路线段字节不动（写权归罗盘站）
     assert.equal(sectionBody(parseCompass(await readFile(paths.compassPath('数学'), 'utf8')), SECTION_ROUTE), routeBefore)
 
-    // 标记周幂等早退（current）也不丢对账读数
+    // 标记周幂等早退（current）也不丢检讨读数
     const r2 = await engine.growth2.compassEtaRefresh('数学')
     assert.equal(r2[0]!.state, 'current')
-    assert.equal(r2[0]!.reconcile?.entries, 3)
+    assert.equal(r2[0]!.review?.length, 1)
   })
 })
 
-test('#231 周复盘现状区含对账结论：未画路线零小节；画了即出结论（漂移带证据条目名）', async () => {
+test('#316 周复盘现状区含周检讨读数：未画路线零小节；画了即出覆盖缺口/配比行（不触发重画）', async () => {
   await withVault(SEED_VAULT, async ({ engine }) => {
     await seedApplied(engine)
     const bare = await engine.learner.kataOpen()
-    assert.doesNotMatch(bare.reality, /### 罗盘对账/, '未画路线 = 零小节（零漂移零噪音）')
+    assert.doesNotMatch(bare.reality, /### 罗盘周检讨/, '未画路线 = 零小节')
 
-    await engine.growth2.compassPaint('数学', replayFake(GOLD_ROUTE))
+    await engine.growth2.compassPaint('数学', replayFake([
+      '- **用导数解决优化问题**：',
+      '- **认识变化率**（深度：会用）：推进深度——先立直觉。',
+      '- **几何补面**：推进广度。',
+    ].join('\n')))
     const doc = await engine.learner.kataOpen()
-    assert.match(doc.reality, /### 罗盘对账/, '周复盘现状区含对账结论')
-    assert.match(doc.reality, /- 数学：路线漂移 1 条——「把变化率说成本质」在图面无对应节点、也未标「（候选）」。/)
-    assert.match(doc.reality, /不改罗盘、不触发重画/, '措辞沿罗盘非权威纪律')
+    assert.match(doc.reality, /### 罗盘周检讨/, '周复盘现状区含周检讨读数')
+    assert.match(doc.reality, /覆盖缺口/, '覆盖缺口读数在场（几何补面零节点）')
+    assert.match(doc.reality, /跨面配比/, '配比读数在场（认识变化率有节点命中）')
+    assert.match(doc.reality, /不触发重画/, '措辞沿罗盘非权威纪律')
 
-    // 零漂移的路线：只剩一行结论、不出现告警行（零噪音）
-    await engine.growth2.compassRewrite('数学', '- **认识变化率**：先立直觉。\n- **用导数解决优化问题**：接到终点。')
+    // 空图面（无节点命中）不出配比行：零节点总数 = 只剩覆盖缺口
     const clean = await engine.learner.kataOpen()
-    assert.match(clean.reality, /- 数学：路线 2 条条目与图面一致（2 条有锚）。/)
-    assert.doesNotMatch(clean.reality, /路线漂移/)
+    assert.match(clean.reality, /覆盖缺口/)
   })
 })

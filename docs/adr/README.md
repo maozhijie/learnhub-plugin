@@ -79,7 +79,7 @@
 | [0071](./0071-vault-prior-bm25-and-audit.md) | ADR-0071: Vault 先验检索换核——BM25 式打分、登记表查询扩展与检索审计 |
 | [0072](./0072-prompt-changelog-discipline.md) | ADR-0072: 提示词变更纪律——登记四件套、提交级登记门与「过门」双检 |
 | [0073](./0073-corpus-tool-call-payload.md) | ADR-0073: 生成语料补齐工具调用载荷（回路站的产物在语料里可见） |
-| [0074](./0074-compass-route-reconcile.md) | ADR-0074: 罗盘路线对账（周复盘现状区的非权威读数） |
+| [0074](./0074-compass-route-reconcile.md) | ADR-0074: 罗盘路线对账（周复盘现状区的非权威读数；对账口径已被 #316 周检讨读数取代） |
 | [0075](./0075-prompt-text-lazy-templates.md) | ADR-0075: 提示词文本的单源与惰性模板——`prompts/` 落点、`{{var}}` 严格渲染、模板面清单 |
 | [0076](./0076-name-only-creation-and-plural-endpoints.md) | 名称建课、手动多终点与生长停摆判据 |
 | [0077](./0077-stuck-report-direct-evidence.md) | 卡点自报直接成立插入症状，错归因由复诊兜底 |
@@ -102,6 +102,6 @@
 | [0094](./0094-renderer-menu-placeholder-only.md) | 渲染能力清单只认占位符：删有占位符就注入、没占位符就追加的运行期兜底 |
 | [0095](./0095-growth-draft-lifecycle-closure.md) | 生长草稿的生命周期收口：门同源兑现到 schema 面、未发布段逃生口、水位重放修正 |
 | [0096](./0096-blocking-audit-closures-criterion-dimension-and-real-exits.md) | 生长链路四个阻断收口：判据与动作同量纲、插入批预注册写入面、取消与预算的真出口 |
-| [0097](./0097-compass-route-back-to-plan-contract.md) | 罗盘「剩余路线」恢复生产者：route 回到思路官的计划契约 |
+| [0097](./0097-compass-route-back-to-plan-contract.md) | 罗盘「剩余路线」恢复生产者：route 回到思路官的计划契约（route 归属已被 ADR-0099/#316 取代） |
 | [0098](./0098-growth-chain-silent-loss-and-diagnosability.md) | 生长链路的静默丢弃与可诊断面收口（#313 第三次审计 A/B/C/D/E 五组） |
 | [0099](./0099-compass-master-station.md) | 罗盘升格为大师站：战略分解、写权反转与终点锚程度语义 |

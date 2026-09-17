@@ -21,7 +21,7 @@ import { obsidianLink } from './output.ts'
 import { execRatingScore } from '../practice/project-exec.ts'
 import type { ProjectExecRec } from '../practice/project-exec.ts'
 import { crossingText, etaHorizonOf } from '../coach/compass.ts'
-import type { CompassEta, RouteReconcile } from '../coach/compass.ts'
+import type { CompassEta, RouteWeeklyReview } from '../coach/compass.ts'
 import { dueReviewFirstPushes, trueRetention } from '../sched/memory.ts'
 import type { PracticeRec, JournalRec, ReviewRec } from '../types.ts'
 import type { HabitRepeatRec } from '../practice/habits.ts'
@@ -214,24 +214,25 @@ export function kataEtaSummary(course: string, eta: CompassEta): KataEtaSummary 
   }
 }
 
-/** 罗盘路线对账摘要（#231 / ADR-0074）：周复盘挂 ETA 的**同一挂载点**顺带算的结构对账
- * （路线条目 vs 图面节点，零模型粗 diff）。旁挂而非权威：不改罗盘、不进门禁、不触发
- * 重画，「剩余路线」的写权仍唯教练随批重写。 */
-export interface KataRouteReconcile extends RouteReconcile {
+/** 罗盘周检讨读数摘要（#316 §修订四；取代 ADR-0074「无锚即漂移」对账——对账方向从
+ * 「地图追进度」反转为「给地图叠进度」）：周复盘挂 ETA 的**同一挂载点**顺带算的零模型
+ * 读数（覆盖缺口/深度差/配比差）。旁挂而非权威：不改罗盘、不进门禁、不触发重画，
+ * 「剩余路线」的写权归罗盘站（ADR-0099）。 */
+export interface KataRouteReview extends RouteWeeklyReview {
   course: string
 }
 
-/** RouteReconcile → 摘要的唯一映射（kataOpen 消费；字段名与读数同源，不做二次加工）。 */
-export function kataRouteReconcile(course: string, r: RouteReconcile): KataRouteReconcile {
+/** RouteWeeklyReview → 摘要的唯一映射（kataOpen 消费；字段名与读数同源，不做二次加工）。 */
+export function kataRouteReview(course: string, r: RouteWeeklyReview): KataRouteReview {
   return { course, ...r }
 }
 
 /** 现状段渲染（markdown 行；空态诚实留痕，不造假数据）。etas = 罗盘周 ETA 旁挂
  * （#150）：非空时在「有界 · 课程」后附「沙盘 ETA」小节——每周随罗盘挂载刷新，
- * 分位带参照、非承诺措辞照旧（ADR-0025 纪律不动）。reconciles = 罗盘路线对账
- * （#231）：只在有已画路线的课程上出现，零漂移只留一行结论（不列证据 = 零噪音），
- * 漂移才给告警 + 证据条目名；措辞沿罗盘非承诺纪律。 */
-export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = [], reconciles: KataRouteReconcile[] = []): string {
+ * 分位带参照、非承诺措辞照旧（ADR-0025 纪律不动）。reviews = 罗盘周检讨读数
+ * （#316）：只在有已画路线的课程上出现——覆盖缺口/深度差/配比差三类读数，只摆
+ * 读数不判错不触发重画（ADR-0099：弧的写权在罗盘站）；措辞沿罗盘非承诺纪律。 */
+export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = [], reviews: KataRouteReview[] = []): string {
   const lines: string[] = ['### 总览', '']
   const overview = [`学习 ${r.days} 天`, `XP +${r.xp}`, `作答 ${r.answers} 次${r.accuracy !== null ? `（作答正确率 ${pctOf(r.accuracy)}）` : ''}`]
   if (r.due_reviews > 0) {
@@ -250,13 +251,25 @@ export function renderKataReality(r: KataReality, etas: KataEtaSummary[] = [], r
     lines.push('')
   }
 
-  // 罗盘路线对账（#231）：只以结论进现状区——一致留一行（不列条目 = 零漂移零噪音），
-  // 漂移才点名证据条目；措辞沿罗盘非承诺纪律（草图非权威、只告警不动图）
-  if (reconciles.length) {
-    lines.push('### 罗盘对账', '')
-    lines.push(...reconciles.map(x => x.unmoored.length
-      ? `- ${x.course}：路线漂移 ${x.unmoored.length} 条——${x.unmoored.map(n => `「${n}」`).join('')}在图面无对应节点、也未标「（候选）」。路线是草图非权威：此处只告警，不改罗盘、不触发重画。`
-      : `- ${x.course}：路线 ${x.entries} 条条目与图面一致（${x.anchored} 条有锚${x.proposed ? ` · ${x.proposed} 条标「（候选）」` : ''}）。`))
+  // 罗盘周检讨（#316 §修订四）：覆盖缺口 + 深度差 + 配比差三类零模型读数——只摆读数
+  // 不判错、不触发重画（读数高频免费，改弧低频留痕；写权归罗盘站）
+  if (reviews.length) {
+    lines.push('### 罗盘周检讨', '')
+    for (const x of reviews) {
+      const label = x.endpoint ? `终点「${x.endpoint}」` : '（未分节路线）'
+      if (x.gaps.length) {
+        lines.push(`- ${x.course} · ${label}：覆盖缺口——${x.gaps.map(n => `「${n}」`).join('')}在图上还没有节点。地图是路的属性，不是脚步的属性：只摆读数，不触发重画。`)
+      }
+      for (const d of x.depth_gaps) {
+        lines.push(`- ${x.course} · ${label}：深度差——「${d.name}」需求 ${d.required} / 现状 ${d.actual}。档位只作感知面，不进门禁不进调度。`)
+      }
+      if (x.shares.length) {
+        const total = x.shares.reduce((s, f) => s + f.nodes, 0)
+        if (total > 0) {
+          lines.push(`- ${x.course} · ${label}：跨面配比（粗）——${x.shares.map(f => `「${f.name}」${f.nodes} 节点`).join('、')}。只作提示不判错。`)
+        }
+      }
+    }
     lines.push('')
   }
 

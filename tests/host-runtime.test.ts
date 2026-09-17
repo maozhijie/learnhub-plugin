@@ -772,7 +772,7 @@ test('生长批任务消息带回路轨迹（#163）：生成页可查裁决前�
       segments: [{ tier: 'light', effort: 'fast', operator: '前进', disagreement: false }],
       trajectory: ['[轻量段] graph_view(2 字符参数) → 412 字符', '[轻量段] concept_registry(15 字符参数) → 88 字符'],
       proposal: { id: 9, ops: 1, operator: '前进', reason: '前沿缺下一台阶', disagreement: false },
-      applied: { ops: 1, snapshot: 3, compass_rewritten: true, created: [] },
+      applied: { ops: 1, snapshot: 3, created: [] },
     }),
     'registry.get': async () => ({ name: '数学' }),
     loadView: async () => ({ graph: { nset: new Set(['生长批']) } }),
@@ -1670,7 +1670,7 @@ test('种子 apply 不自动入队正文（ADR-0078）：提案过门只落结�
 test('非种子 apply 同样不入队正文（ADR-0078：apply 出口只清扫悬空任务）', async () => {
   const rt = makeRuntime()
   stub(rt, {
-    'graph.proposalApply': async () => ({ kind: 'edit', course: '数学', ops: 1, snapshot: 2, compass_rewritten: true }),
+    'graph.proposalApply': async () => ({ kind: 'edit', course: '数学', ops: 1, snapshot: 2 }),
     'registry.get': async () => ({ name: '数学' }),
     loadView: async () => ({ graph: { nset: new Set(['起点A']) }, state: { 起点A: {} } }),
     saveGenJobs: async () => undefined,

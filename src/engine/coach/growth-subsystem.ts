@@ -25,7 +25,7 @@ import type { BrokenNote } from '../vault/notes.ts'
 import type { Fm, CourseEntry, GNode, ProposalRec, StuckReportFolded, StuckReportRec } from '../types.ts'
 import type { FSRS } from 'ts-fsrs'
 import type { CoachCheck } from './coach-round.ts'
-import type { CompassEta, CompassEtaRow, RouteReconcile } from './compass.ts'
+import type { CompassEta, CompassEtaRow, RouteWeeklyReview } from './compass.ts'
 import type { GraphApplyResult } from '../views/graph.ts'
 import type { GraphProposeResult } from '../views/proposals.ts'
 import type { SedimentFold } from '../sched/sediment.ts'
@@ -77,7 +77,7 @@ import { COACH_PLAN_PROMPT_KEYS, behaviorDigest, coachPromptFamily, readyDepthCh
 import { coachToolExecutor, coachToolset, renderGrowthGraphView } from './coach-tools.ts'
 import type { CoachToolDeps } from './coach-tools.ts'
 import type { CompassEtaProbe } from './compass.ts'
-import { COMPASS_ETA_PROBE_WEEKS, COMPASS_STATION, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, reconcileRoute, renderEtaBody, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
+import { COMPASS_ETA_PROBE_WEEKS, COMPASS_STATION, ETA_PENDING, ROUTE_PENDING, SECTION_ANNOTATIONS, SECTION_ETA, SECTION_ROUTE, compassPaintContext, compassScaffold, etaMarkerOf, hasLearnerAnnotations, hasPaintedRoute, parseCompass, parseRouteSections, renderEtaBody, repaintDueOf, routeBodyWarns, routeWeeklyReview, sectionBody, stripWrappingFence, validateRouteBody, withSectionText } from './compass.ts'
 import { activeEntries, deprecatedNames, resolveConcept } from '../concepts/concepts.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
 import { dayOfTs, nowIsoOf, weekStartOf } from '../infra/dates.ts'
@@ -215,14 +215,17 @@ export class GrowthSubsystem {
   }
 
   /** 罗盘尾段（#144 教练回合上下文包「罗盘+沉淀折叠」区块的罗盘半区消费缝；本票只
-   * 就位读侧）：剩余路线 + 批注区（软输入、提议非指令标注）。Missing = ''（合法空态，
-   * 整段省略由组装方裁决）。 */
+   * 就位读侧）：剩余路线 + 批注区（软输入、提议非指令标注）+ 重画待办提示（#316：
+   * 教练对弧只有建议权——把「弧该重估了」的信号措辞留在建议位）。Missing = ''。 */
   async compassTail(courseKey: string): Promise<string> {
     const v = await this.compassRead(courseKey)
     if (v.missing) return ''
     const lines: string[] = []
     if (v.route?.trim() && v.route.trim() !== ROUTE_PENDING) {
-      lines.push('### 罗盘 · 剩余路线（非承诺草图——方向感，不是承诺）', '', v.route.trim())
+      const due = repaintDueOf(v.route)
+      lines.push('### 罗盘 · 剩余路线（非承诺草图——方向感，不是承诺）', '',
+        ...(due ? [`（重画待办：${due}——弧的写权在罗盘站；如你认为该重估，在 reason 里建议，勿自行改写。）`] : []),
+        v.route.trim())
     }
     if (hasLearnerAnnotations(v.annotations)) {
       lines.push('### 罗盘 · 学习者批注（软输入——提议非指令）', '', v.annotations!.trim())
@@ -231,13 +234,13 @@ export class GrowthSubsystem {
   }
 
 
-  /** 罗盘初画/重画（learnhub_compass_paint；「罗盘初画」模板 v1，deep 档工具回路）：
-   * 终点锚缺失 fail loud（初画锚在终点上）；路线门（非空/无标题/限长）首过即落盘——
-   * 只重写「剩余路线」段，批注区字节保留，ETA 重置待刷新（旧带是旧结构的推演）。
-   * 金样本回放闸：回路会话数恒 1、无修复轮（首过率对照在测试锚定）。调用经统一
-   * agent 缝（#162：剥围栏/语义档/调用日志在缝里内建）；#163 起经只读工具回路——
-   * 教练重画路线前可查图自证节点名、对表登记表（既有门零放松：路线门照旧首过即落）。
-   * isCancelled（#163 任务取消传导）：队列任务的取消旗标沿缝传入回路。 */
+  /** 罗盘初画/重画（learnhub_compass_paint；「罗盘初画/罗盘重画」两族，deep 档工具回路）：
+   * 终点锚缺失 fail loud（初画锚在终点上）；族按「路线段是否已画」折（未画 = 初画族、
+   * 已画 = 重画族——重估语境，ADR-0099 罗盘站两族）。路线门（非空/无标题/限长）首过即
+   * 落盘——只重写「剩余路线」段，批注区字节保留，ETA 重置待刷新，重画待办标记随新正文
+   * 自然清除；WARN 级倾向性提示（routeBodyWarns）落日志不拒收（人审兜底）。
+   * 金样本回放闸：回路会话数恒 1、无修复轮。调用经统一 agent 缝；#163 起经只读工具
+   * 回路。isCancelled：队列任务的取消旗标沿缝传入回路。 */
   async compassPaint(courseKey: string | undefined, agent: AgentSeam, opts: { isCancelled?: () => boolean } = {}): Promise<{
     course: string; path: string; route_lines: number; annotations_preserved: boolean; repainted: boolean; trajectory: string[]
   }> {
@@ -251,10 +254,12 @@ export class GrowthSubsystem {
     const path = this.e.paths.compassPath(root)
     const existing = this.e.fs.exists(path) ? await this.e.fs.readFile(path) : null
     const doc = existing ? parseCompass(existing) : null
+    const priorBody = doc ? sectionBody(doc, SECTION_ROUTE) : null
+    const repainted = hasPaintedRoute(priorBody)
     const annotations = hasLearnerAnnotations(doc ? sectionBody(doc, SECTION_ANNOTATIONS) : null)
       ? sectionBody(doc!, SECTION_ANNOTATIONS)
       : null
-    const template = await this.e.content.loadPrompt('罗盘初画')
+    const template = await this.e.content.loadPrompt(repainted ? '罗盘重画' : '罗盘初画')
     const endpoints = endpointNames(anchors)
     const prompt = withContractLast(template, compassPaintContext({
       courseName: c.name,
@@ -277,48 +282,26 @@ export class GrowthSubsystem {
     if (errors.length) {
       throw new Error(`[compass] 初画产物未过路线门（原样落盘会破坏罗盘结构），罗盘未改动：\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
+    // WARN 级倾向性提示（#316：深度档/程度指向）——只落日志不拒收，人审兜底
+    const warns = routeBodyWarns(body)
+    if (warns.length) this.e.logger.warn('compass.route.warns', { course: c.name, warns })
     const next = withSectionText(
       withSectionText(existing ?? compassScaffold(c.name), SECTION_ROUTE, body),
       SECTION_ETA, ETA_PENDING,
     )
     await atomicWrite(path, next, this.e.fs)
-    // repainted = 罗盘上曾有已画路线（占位/缺席不算）；重写不覆盖的语义由段级合并保证
-    const priorRoute = doc ? sectionBody(doc, SECTION_ROUTE)?.trim() ?? '' : ''
     const routeLines = body.split('\n').filter(l => l.trim()).length
     await this.e.store.appendJournal({
       course: c.name, node: '*', rating: null, kind: 'compass_paint', elapsed_days: 0,
-      detail: `罗盘初画/重画：路线 ${routeLines} 行${annotations ? '（批注区软输入已附）' : ''}`,
+      detail: `${repainted ? '罗盘重画（重估）' : '罗盘初画'}：路线 ${routeLines} 行${annotations ? '（批注区软输入已附）' : ''}${warns.length ? `；WARN ${warns.length} 条` : ''}`,
     })
     return {
       course: c.name, path,
       route_lines: routeLines,
       annotations_preserved: Boolean(annotations),
-      repainted: Boolean(priorRoute) && priorRoute !== ROUTE_PENDING,
+      repainted,
       trajectory: loop.trajectory,
     }
-  }
-
-
-  /** 罗盘重写——「剩余路线」的唯一写权接口（词条「罗盘」；调用方 = 生长批受理票 #145，
-   * 在图 apply 的写入单元内、journal 由调用方挂提案 id，此处零 journal）：批注区与 ETA 字节
-   * 保留；学习者手编的路线在下一次重写处被覆盖——手编不产生权威变更。路线门同初画。 */
-  async compassRewrite(
-    courseKey: string, routeMd: string,
-  ): Promise<{ course: string; path: string; route_lines: number }> {
-    const c = await this.e.registry.resolve(courseKey)
-    const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
-    if (!anchors.length) {
-      throw new Error(`[compass] 课程「${c.name}」零终点（空锚是合法空态）——罗盘重写锚在终点上，先加一个终点。`)
-    }
-    const body = stripWrappingFence(routeMd)
-    const errors = validateRouteBody(body)
-    if (errors.length) {
-      throw new Error(`[compass] 重写产物未过路线门，罗盘未改动：\n${errors.map(e => `  ✗ ${e}`).join('\n')}`)
-    }
-    const path = this.e.paths.compassPath(c.root)
-    const base = this.e.fs.exists(path) ? await this.e.fs.readFile(path) : compassScaffold(c.name)
-    await atomicWrite(path, withSectionText(base, SECTION_ROUTE, body), this.e.fs)
-    return { course: c.name, path, route_lines: body.split('\n').filter(l => l.trim()).length }
   }
 
 
@@ -331,19 +314,19 @@ export class GrowthSubsystem {
    * 折叠后重写「沙盘 ETA」段（措辞锁死「模型推演，非承诺」）。透明度装置：单课失败
    * 不挡其他课，更不挡周复盘。折叠每课都算（周频成本，同周进程内走备忘）：结果随行
    * 携带 eta——周复盘现状区的 ETA 旁挂（#150）取同一份数据，不二次蒙特卡洛。
-   * 顺带做**路线对账**（#231 / ADR-0074）：同一挂载点、同一份已读的罗盘文本，把
-   * 「剩余路线」条目与图面节点名做零模型粗 diff，结果随行携带 reconcile——周复盘现状区
-   * 只以结论呈现。**非权威**：不改罗盘（写权仍唯一，见 #313 D18）、不进门禁、不触发重画；
-   * 未画路线（待初画占位）没有对账对象，不出结论。 */
+   * 顺带做**周检讨读数**（#316 §修订四；取代 ADR-0074「无锚即漂移」对账——对账方向
+   * 从「地图追进度」反转为「给地图叠进度」）：覆盖缺口/深度差/配比差三类零模型读数，
+   * 结果随行携带 review——周复盘现状区只以读数呈现。**非权威**：不改罗盘（写权归
+   * 罗盘站）、不进门禁、不触发重画；未画路线（待初画占位）没有检讨对象，不出读数。 */
   async compassEtaRefresh(
     courseKey?: string, opts: { today?: string; force?: boolean } = {},
-  ): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; reconcile?: RouteReconcile }>> {
+  ): Promise<Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; review?: RouteWeeklyReview[] }>> {
     const { today: learningToday } = await this.e.learningDay()
     const today = opts.today ?? learningToday
     const weekStart = weekStartOf(today)
     if (!weekStart) throw new Error(`[compass] today 不是合法日期：${String(today)}`)
     const courses = courseKey ? [await this.e.registry.resolve(courseKey)] : await this.e.enabledCourses()
-    const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; reconcile?: RouteReconcile }> = []
+    const out: Array<{ course: string; state: 'refreshed' | 'current' | 'skipped'; detail?: string; eta?: CompassEta; review?: RouteWeeklyReview[] }> = []
     for (const c of courses) {
       try {
         const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
@@ -354,25 +337,30 @@ export class GrowthSubsystem {
         const path = this.e.paths.compassPath(c.root)
         const existing = this.e.fs.exists(path) ? await this.e.fs.readFile(path) : compassScaffold(c.name)
         const doc = parseCompass(existing)
-        // 对账在 ETA 早退之前算（与标记周无关——路线什么时候漂移都要看得见）；
+        // 周检讨在 ETA 早退之前算（与标记周无关——偏差什么时候都要看得见）；
         // 只按名字粗比、只读图面，图面加载失败由外层 catch 归 skipped（不挡 ETA）。
-        // #310 起路线随方向批（前进/换向）重写，本对账才真正看到「本批之后的路线」——
-        // 此前该段长期冻结在最后一次初画，漂移读数恒定失真。
         const routeBody = sectionBody(doc, SECTION_ROUTE)
-        const reconcile = hasPaintedRoute(routeBody)
-          ? reconcileRoute(routeBody!, [...(await this.e.loadView(c)).graph.nset])
-          : undefined
+        let review: RouteWeeklyReview[] | undefined
+        if (hasPaintedRoute(routeBody)) {
+          const { graph } = await this.e.loadView(c)
+          // 现状档：节点 teaches 概念折叠取最高档（与教练包登记表档位同款口径；无 teaches = null，不推定）
+          const tierOfNode = (n: string): ConceptTier | null => {
+            const tiers = Object.values(graph.teachesOf[n] ?? {})
+            return tiers.length ? CONCEPT_TIERS[Math.max(...tiers.map(t => CONCEPT_TIERS.indexOf(t)))]! : null
+          }
+          review = parseRouteSections(routeBody!).map(s => routeWeeklyReview(s, graph.names, tierOfNode))
+        }
         const memoed = this.etaMemo.get(c.name)
         const eta = !opts.force && memoed?.week === weekStart
           ? memoed.eta
           : await this.compassEtaFold(c, anchors, today, weekStart)
         this.etaMemo.set(c.name, { week: weekStart, eta })
         if (!opts.force && etaMarkerOf(sectionBody(doc, SECTION_ETA)) === weekStart) {
-          out.push({ course: c.name, state: 'current', eta, ...(reconcile ? { reconcile } : {}) })
+          out.push({ course: c.name, state: 'current', eta, ...(review ? { review } : {}) })
           continue
         }
         await atomicWrite(path, withSectionText(existing, SECTION_ETA, renderEtaBody(eta)), this.e.fs)
-        out.push({ course: c.name, state: 'refreshed', eta, ...(reconcile ? { reconcile } : {}) })
+        out.push({ course: c.name, state: 'refreshed', eta, ...(review ? { review } : {}) })
       } catch (err) {
         // ETA 挂载跳过原因留痕（#291 / ADR-0091）：单课失败不挡其他课，WARN 指针随行
         const detail = err instanceof Error ? err.message : String(err)
@@ -943,9 +931,6 @@ export class GrowthSubsystem {
         operator: plan.operator, reason: plan.reason,
         target_endpoints: plan.target_endpoints, steps: plan.steps,
         ...(plan.recheck ? { recheck: plan.recheck } : {}),
-        // 罗盘「剩余路线」（#310）：随计划进执行官站的批规格，不落草稿字段（避免续建把
-        // 旧稿当本批产物带回来）；缺省 = 不改写、保留旧稿。
-        ...(plan.route !== undefined ? { route: plan.route } : {}),
       },
     }))
     const lastFinish = draft.finishes.at(-1)
@@ -1205,10 +1190,6 @@ export class GrowthSubsystem {
         reason: noteLite?.reason ?? '',
         ops,
         ...(concepts.length ? { concepts } : {}),
-        // 罗盘批内重写（#310）：路线随计划来，且只在**生长批**（note 区在场）上携带——
-        // 受理门的 route 规则如此（普通 edit 提案携带即拒收）。正文由受理与 apply 两侧
-        // 的路线门验（与计划门同一个 validateRouteBody）；缺省 = 不带该字段 = 不改写旧稿。
-        ...(noteLite && opts.plan?.route !== undefined ? { route: opts.plan.route } : {}),
         ...(noteLite
           ? {
               note: {
@@ -1543,9 +1524,7 @@ export class GrowthSubsystem {
       `- 理由：${opts.plan.reason}`,
       ...opts.plan.steps.map((s, i) => `- 台阶 ${i + 1}：${s.intent}${s.teaches_concept ? `（概念面：${s.teaches_concept}）` : ''}${s.est_hint ? `（约 ${s.est_hint} 分钟）` : ''}`),
       ...(opts.plan.recheck ? [`- 预注册复诊：${opts.plan.recheck.metric}（${opts.plan.recheck.days ?? RECHECK_DAYS_DEFAULT} 学习日）——插入批随批携带：用 draft_patch 的 note_recheck 写这一枚（metrics 取值域见该参数说明；草稿侧缺席时按本计划兜底）。`] : []),
-      // 罗盘路线（#310）：让执行官看得见「本批还会改写罗盘」，但不给它活干——写入由引擎
-      // 从本计划取（batchSpecOf），执行官零 op。缺省（route 未携带）= 不改写、保留旧稿。
-      ...(opts.plan.route !== undefined ? ['- 罗盘路线：「剩余路线」段本次随批重画（正文由引擎从本计划携带写入，你无需为它写任何 op）；路线是草图不是承诺。'] : []),
+      // #316 / ADR-0099：罗盘写权归罗盘站——思路官计划不再携带 route，交接块不再提弧。
       '',
       '计划是方向不是操作：节点名与补丁仍须你对草稿图逐字对表后用 draft_patch 落地；与图面事实冲突时以图面为准，偏离计划时在 note_reason 里说一句。',
     ].join('\n') : undefined

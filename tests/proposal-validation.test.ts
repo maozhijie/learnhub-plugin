@@ -96,15 +96,13 @@ test('#145 零操作：生长批（note 在场）ops 空列表合法；普通提
   assert.ok(plainAbsent.errors!.some(e => e.startsWith('ops: 必须是列表')))
 })
 
-test('#145 route：唯一写权属生长批——普通提案携带拒收；生长批合法携带', () => {
-  const routeBody = 'route: |\n  - **阶段一**：朝终点推进。\n'
+test('#316 / ADR-0099 route 退役：提案携带即拒收（写权归罗盘站），专用文案点名退役', () => {
+  const routeBody = 'route: |\n  - **阶段一**：推进广度。\n'
   const plainWithRoute = validateEditProposal(YAML.parse(`course: 校验课\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n`))
-  assert.ok(plainWithRoute.errors!.some(e => e.includes('route: 普通 edit 提案不得携带')))
+  assert.ok(plainWithRoute.errors!.some(e => e.includes('route: 已退役') && e.includes('learnhub_compass_paint')))
+  // 生长批同理：写权反转后 note 区也不再豁免 route
   const growthWithRoute = validateEditProposal(YAML.parse(`course: 校验课\nnote:\n  operator: 前进\n  reason: 理由\n${routeBody}ops:\n  - op: add_node\n    name: 新节点\n    pre: []\n`))
-  assert.equal(growthWithRoute.errors, undefined)
-  assert.ok(growthWithRoute.spec!.route!.includes('阶段一'))
-  const emptyRoute = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  operator: 前进\n  reason: 理由\nroute: "  "\nops:\n  - op: add_node\n    name: 新节点\n    pre: []\n'))
-  assert.ok(emptyRoute.errors!.some(e => e.includes('route: 必须是非空字符串')))
+  assert.ok(growthWithRoute.errors!.some(e => e.includes('route: 已退役')))
 })
 
 test('#127 边轻纪律在提案侧：op 携带 origin/status/probation 一律拒收（不走复诊的结构保证）', () => {

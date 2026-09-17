@@ -1,11 +1,12 @@
 /**
- * 罗盘（#143 / ADR-0033 透明度装置）：课程根常驻的非承诺路线草图（罗盘.md）。
+ * 罗盘（#143 / ADR-0033 透明度装置；#316 / ADR-0099 写权反转）：课程根常驻的非承诺路线
+ * 草图（罗盘.md）。
  *
  * 文件三段式（`## ` 标题切分，机器合并按段替换、段外字节保留——手编批注跨重写存活）：
- * - 剩余路线：教练唯一写权（生长批受理票 #145 是调用方；**#310 起正文由思路官计划**
- *   携带、随方向批重写——#273 把 route 划出执行官后这条通道断过一段，该段一度冻结在
- *   最后一次初画），罗盘初画（LLM 模板「罗盘初画」）产出初稿；学习者手编本段不产生
- *   权威变更——下次重写即被覆盖。
+ * - 剩余路线：**罗盘站唯一写权**（ADR-0099：教练是局部最优求解器，不得直接改弧——
+ *   #310/ADR-0097 的「思路官随方向批携带 route」随 #316 退役）。`learnhub_compass_paint`
+ *   经「罗盘初画/罗盘重画」两族模板产出正文；重估触发（终点增删/目标描述修订）置重画
+ *   待办标记，进度不触发重画。学习者手编本段不产生权威变更——下次重写即被覆盖。
  * - 学习者批注区：学习者的软输入（提议非指令），初画与教练上下文（#144 罗盘尾段）都读它。
  * - 沙盘 ETA：引擎每周随周复盘挂载的蒙特卡洛分位带（措辞锁死「模型推演，非承诺」）。
  *
@@ -13,6 +14,7 @@
  * 是合法空态。解析刻意宽容：学习者手删 `## ` 标题时该段内容并入 preamble 残留（可见、
  * 非权威），机器段按需追加末尾——权威覆盖语义不受手编破坏影响，不做 fail loud。
  */
+import { CONCEPT_TIERS, type ConceptTier } from '../types.ts'
 import { SANDBOX_WORDING } from '../sched/sandbox.ts'
 import { pctOf } from '../infra/grading.ts'
 import type { EndpointAnchor } from './seed.ts'
@@ -28,7 +30,7 @@ export const SECTION_ETA = '沙盘 ETA'
 export const COMPASS_SECTIONS = [SECTION_ROUTE, SECTION_ANNOTATIONS, SECTION_ETA] as const
 
 export const ROUTE_PENDING
-  = '（待初画：运行 learnhub_compass_paint 按锚定终点画出路线初稿——一节一个终点；此后教练随生长批重写本节。）'
+  = '（待初画：运行 learnhub_compass_paint 按锚定终点画出路线初稿——一节一个终点；此后由罗盘站低频重估重画。）'
 export const ANNOTATION_GUIDE
   = '（把你的路线期望、想补的重点、想跳过的块写在这里；教练每次重画都会读——它是提议非指令，不会自动改图。）'
 export const ETA_PENDING = '（待刷新：每周随周复盘挂载沙盘 ETA——模型推演，非承诺。）'
@@ -88,7 +90,7 @@ export function compassScaffold(courseName: string): string {
   return [
     `# 罗盘 · ${courseName}`,
     '',
-    `> 常驻的非承诺路线草图（ADR-0033 罗盘）：「${SECTION_ROUTE}」由教练随生长批重写（唯一写权），罗盘初画产出初稿。`,
+    `> 常驻的非承诺路线草图（ADR-0033 罗盘）：「${SECTION_ROUTE}」由罗盘站写（learnhub_compass_paint 初画；低频重估重画，写权归罗盘站——教练只建议不执笔）。`,
     `> 「${SECTION_ANNOTATIONS}」是你的批注本——教练把它当软输入（提议非指令）；手编本页不产生任何权威变更，也永不进完成判据。`,
     `> 「${SECTION_ETA}」每周随周复盘刷新：${SANDBOX_WORDING}。`,
     '',
@@ -114,7 +116,7 @@ export function stripWrappingFence(text: string): string {
   return (m ? m[1]! : t).trim()
 }
 
-/** 路线正文门（初画与教练重写共用的首过闸；返回错误行，空 = 通过）：
+/** 路线正文门（罗盘站写盘共用的首过闸；返回错误行，空 = 通过）：
  * 非空、不携带 `## ` 标题（会劫持段落结构）、不超 ROUTE_MAX_CHARS。 */
 export function validateRouteBody(body: string): string[] {
   const errors: string[] = []
@@ -128,25 +130,136 @@ export function validateRouteBody(body: string): string[] {
   return errors
 }
 
-/** 路线条目的候选标注（初画/重写模板的硬约束②：未落图的台阶「一律标注（候选）」）。 */
+/** 路线条目的候选标注（罗盘站模板硬约束：未落图的台阶「一律标注（候选）」）。 */
 export const ROUTE_CANDIDATE_MARKER = '候选'
 
-/** 路线对账读数（#231 / ADR-0074）：零模型、零写侧的**结构对账**——「剩余路线」条目
- * 与图面节点名集合的粗 diff。诚实边界：只按名字粗比（不做语义解析），故三态里「有锚」
- * 与「标候选」都算合法，唯独**无锚**是漂移——被当作确定路标写出来、图面却无从核对。 */
-export interface RouteReconcile {
-  /** 条目数（非空行）。 */
-  entries: number
-  /** 有锚条目数：正文引用了图面在册节点名（模板硬约束②的「确定路标」）。 */
-  anchored: number
-  /** 标候选条目数：自带「候选」标注——未落图台阶的合法形态。 */
-  proposed: number
-  /** 无锚条目名（漂移证据行原料；空 = 与图面一致）。 */
-  unmoored: string[]
+/** 重画待办标记（#316 触发接线）：写侧事件（终点增删/目标描述修订）在「剩余路线」段尾
+ * 追加一行机器注释（段级合并下跨罗盘站其他写盘存活；compass_paint 落盘新正文时自然清除）。
+ * 只标记不触发——重画仍由人/教练显式拉起罗盘站。 */
+export const REPAINT_MARKER_PREFIX = '<!-- learnhub:repaint-due'
+export const REPAINT_MARKER = `${REPAINT_MARKER_PREFIX} -->`
+
+/** 路线段是否带重画待办标记（返回触发原因，无标记 = null）。 */
+export function repaintDueOf(routeBody: string | null): string | null {
+  const line = routeBody?.split('\n').find(l => l.startsWith(REPAINT_MARKER_PREFIX))
+  if (!line) return null
+  const m = new RegExp(`^${REPAINT_MARKER_PREFIX}(?:=(.*))? -->$`).exec(line.trim())
+  return (m?.[1] ?? '').trim() || '方向声明变更'
 }
 
-/** 条目名提取：模板行是 `- **阶段名**：一句话` ——取粗体段；无粗体时退回「行首标记后、
- * 第一个分隔符前」的一段，再退回整行（对账只要一个可读的证据名，不做语义解析）。 */
+/** 给路线段正文追加重画待办标记（已标记 = 幂等不叠加；原样返回）。 */
+export function withRepaintMarker(routeBody: string, reason: string): string {
+  if (repaintDueOf(routeBody)) return routeBody
+  const trimmed = routeBody.replace(/\n*$/, '\n')
+  return `${trimmed}<!-- learnhub:repaint-due=${reason} -->\n`
+}
+
+/** 深度档行内声明（弧格式可选字段，#316 §修订四）：`（会用）` / `（深度：能教）`。 */
+const TIER_DECL_RE = /[（(](?:深度[:：])?(知道|会用|能教)[)）]/
+
+/** 程度指向的粗词面（WARN① 倾向性检查的词表）：条目行含任一词即视为「说得出推进
+ * 程度声明的哪个维度」。纯词面粗查、零语义解析——WARN 只提示不拒收，人审兜底。 */
+const DEPTH_HINT_WORDS = ['程度', '深度', '广度', '综合运用', ...['知道', '会用', '能教']] as const
+
+/** 罗盘「剩余路线」的终点节结构（弧条目解析，#316 周检讨与 WARN 共用）：节头 =
+ * `- **终点名**：`（模板输出契约），节下条目 = `- **阶段名**：一句话` 行。 */
+export interface RouteEndpointSection {
+  endpoint: string
+  /** 面条目：名字（粗体段，无粗体退回整行粗提）+ 深度档声明（缺省 null）+ 是否标候选 + 原行。 */
+  faces: Array<{ name: string; tier: ConceptTier | null; candidate: boolean; text: string }>
+}
+
+/** 解析路线正文为逐终点节（不硬拒任何形态）。节头判据：`- **终点名**：` 且冒号后
+ * 无正文（面条目同名形态但冒号后必有半句，二者可区分）；无节头时条目归 endpoint=''。 */
+export function parseRouteSections(body: string): RouteEndpointSection[] {
+  const out: RouteEndpointSection[] = []
+  let cur: RouteEndpointSection | null = null
+  for (const raw of body.split('\n')) {
+    const line = raw.trim()
+    if (!line || line.startsWith('<!--')) continue
+    const head = /^- \*\*(.+?)\*\*[:：]\s*$/.exec(line)
+    if (head) {
+      cur = { endpoint: head[1]!.trim(), faces: [] }
+      out.push(cur)
+      continue
+    }
+    const tier = TIER_DECL_RE.exec(line)?.[1] as ConceptTier | undefined ?? null
+    const face: RouteEndpointSection['faces'][number] = {
+      name: routeEntryName(line),
+      tier,
+      candidate: line.includes(ROUTE_CANDIDATE_MARKER),
+      text: line,
+    }
+    if (cur) cur.faces.push(face)
+    else out.push(cur = { endpoint: '', faces: [face] })
+  }
+  return out
+}
+
+/** 路线正文倾向性检查（#316：返回 WARN 行，空 = 无提示——**不拒收**，人审兜底）：
+ * ① 条目说不出程度指向（无深度档声明且无任何程度维度词）；② 一整节零深度档声明。 */
+export function routeBodyWarns(body: string): string[] {
+  const warns: string[] = []
+  const sections = parseRouteSections(body)
+  for (const sec of sections) {
+    let declared = 0
+    for (const face of sec.faces) {
+      if (face.tier) declared++
+      else if (!DEPTH_HINT_WORDS.some(w => face.text.includes(w))) {
+        warns.push(`「${face.name}」未声明深度档、也说不出程度指向——补半句它推进目标描述的哪个维度（深度/广度/综合运用），或标（深度：知道/会用/能教）。`)
+      }
+    }
+    if (sec.faces.length && !declared) {
+      const label = sec.endpoint ? `终点「${sec.endpoint}」` : '未分节路线'
+      warns.push(`${label}一整节零深度档声明——每条面可选标（深度：知道/会用/能教），供周检讨算「需求 vs 现状」深度差。`)
+    }
+  }
+  return warns
+}
+
+/** 周检讨读数（#316 §修订四；取代 ADR-0074「无锚即漂移」对账——对账方向从「地图追进度」
+ * 反转为「给地图叠进度」）：零模型、零写侧、只读图面。**非权威**：不改罗盘、不进门禁、
+ * 不触发重画；只把不该被忽略的偏差摆进周复盘现状区。覆盖口径本期 = 图上有节点
+ * （「覆盖 = 组合运用过一次」的重算随 #318 切换，切换点在门册与 #317 B2 留痕）。 */
+export interface RouteWeeklyReview {
+  endpoint: string
+  /** 覆盖缺口：图上零节点的面（名字粗匹配：互相包含即命中）。 */
+  gaps: string[]
+  /** 深度差：需求档（弧声明）> 现状档（面节点 teaches 概念折叠取最高档）的面。
+   * 任一侧未声明不判（缺席不推定——现状无 teaches 档时不出行）。 */
+  depth_gaps: Array<{ name: string; required: ConceptTier; actual: ConceptTier }>
+  /** 跨面配比（粗）：逐面已落节点数（只作提示不判错，无权重语义）。 */
+  shares: Array<{ name: string; nodes: number }>
+}
+
+/** 单终点节的周检讨读数。graphNames = 全图节点名；tierOfNode = 节点 → teaches 概念档
+ * 折叠后的最高档（调用方用 foldTiers 同款口径组装；无 teaches = null，不推定）。 */
+export function routeWeeklyReview(
+  section: RouteEndpointSection,
+  graphNames: readonly string[],
+  tierOfNode: (node: string) => ConceptTier | null,
+): RouteWeeklyReview {
+  const gaps: string[] = []
+  const depth_gaps: RouteWeeklyReview['depth_gaps'] = []
+  const shares: RouteWeeklyReview['shares'] = []
+  for (const face of section.faces) {
+    const hit = graphNames.filter(n => n.includes(face.name) || face.name.includes(n))
+    if (!hit.length) gaps.push(face.name)
+    shares.push({ name: face.name, nodes: hit.length })
+    if (face.tier) {
+      const actuals = hit.map(tierOfNode).filter((t): t is ConceptTier => t !== null)
+      if (!actuals.length) continue // 现状侧未声明（无 teaches 档）不推定、不判差
+      const actual = CONCEPT_TIERS[Math.max(...actuals.map(t => CONCEPT_TIERS.indexOf(t)))]!
+      if (CONCEPT_TIERS.indexOf(face.tier) > CONCEPT_TIERS.indexOf(actual)) {
+        depth_gaps.push({ name: face.name, required: face.tier, actual })
+      }
+    }
+  }
+  return { endpoint: section.endpoint, gaps, depth_gaps, shares }
+}
+
+/** 弧条目名提取：模板行是 `- **阶段名**：一句话` ——取粗体段；无粗体时退回「行首标记后、
+ * 第一个分隔符前」的一段，再退回整行（周检讨匹配与 WARN 点名只要一个可读名，不做语义解析）。 */
 function routeEntryName(line: string): string {
   const bold = /\*\*(.+?)\*\*/.exec(line)
   if (bold) return bold[1]!.trim()
@@ -155,23 +268,7 @@ function routeEntryName(line: string): string {
   return ((cut > 0 ? body.slice(0, cut) : body).trim() || body || line)
 }
 
-/** 「剩余路线」条目 vs 图面节点名的粗 diff（#231）：逐条判三态——有锚 / 标候选 / 无锚
- * （= 漂移）。纯函数：不读 fs、不改罗盘、不进门禁、不触发重画（词条「罗盘」的非权威
- * 纪律——对账是读数，不是新的权威面）。输入须是**已画的路线正文**：待初画占位由调用方
- * 用 hasPaintedRoute 挡在门外（占位文案不是条目，进来会装成一个巨大的「漂移条目」）。 */
-export function reconcileRoute(routeBody: string, graphNames: readonly string[]): RouteReconcile {
-  const names = graphNames.map(n => n.trim()).filter(n => n.length > 0)
-  const lines = routeBody.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-  const out: RouteReconcile = { entries: lines.length, anchored: 0, proposed: 0, unmoored: [] }
-  for (const line of lines) {
-    if (names.some(n => line.includes(n))) out.anchored++
-    else if (line.includes(ROUTE_CANDIDATE_MARKER)) out.proposed++
-    else out.unmoored.push(routeEntryName(line))
-  }
-  return out
-}
-
-/** 路线段是否已画（占位/空白 = 未画 → 无对账对象；判据与 ROUTE_PENDING 同源，
+/** 路线段是否已画（占位/空白 = 未画 → 无周检讨对象；判据与 ROUTE_PENDING 同源，
  * 与 hasLearnerAnnotations 同族）。 */
 export function hasPaintedRoute(body: string | null): boolean {
   const t = body?.trim() ?? ''
@@ -260,11 +357,7 @@ export function compassPaintContext(input: {
       `- 终点节点：${anchor.endpoint}`,
       `  - 目标类型：${anchor.goal_type === 'coverage' ? 'coverage 覆盖锚定（完成=块工作表+终点）' : 'capability 能力锚定（完成=终点掌握）'}`,
       `  - 声明日期：${anchor.declared}`)
-    if (anchor.goal_note) lines.push(`  - 目标描述：${anchor.goal_note}`)
-    if (anchor.worksheet.length) {
-      lines.push('  - 块工作表（路线按块组织）：')
-      for (const w of anchor.worksheet) lines.push(`    - [${w.done ? 'x' : ' '}] ${w.block}${w.note ? `——${w.note}` : ''}`)
-    }
+    if (anchor.goal_note) lines.push(`  - 目标描述：${anchor.goal_note}（这是程度声明——弧要答「推进它的哪个维度」）`)
   }
   lines.push('', '## 起草起点与当前图', '')
   // 起点定位按锚顺序首个命中（同一名字出现在多条锚的起草批次里时取先声明的那条）

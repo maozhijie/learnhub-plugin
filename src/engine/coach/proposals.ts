@@ -20,7 +20,7 @@ import { endpointNames, readAnchors, writeAnchors, isSeedGraph, structureReading
 import type { EndpointAnchor } from './seed.ts'
 import type { Fm } from '../types.ts'
 import {
-  SECTION_ROUTE, compassScaffold, withSectionText, validateRouteBody, stripWrappingFence,
+  SECTION_ROUTE, compassScaffold, withSectionText, hasPaintedRoute, parseCompass, sectionBody, withRepaintMarker,
 } from './compass.ts'
 import { todayStr } from '../infra/dates.ts'
 import type { Clock } from '../infra/clock.ts'
@@ -94,7 +94,11 @@ const RETIRED_OP_KEYS = ['origin', 'status', 'probation', 'region', 'block'] as 
 /** edit 提案的合法顶层键（#313 A4）。此前顶层零白名单：模型写 `pres:` / `blooom:` 这类
  * 错键时字段无声蒸发，回执/审计/finish 全绿。同仓 parseNode/parseEnc/误解条目都是未知键
  * fail loud，这里对齐。 */
-export const EDIT_TOP_KEYS = ['course', 'reason', 'concepts', 'ops', 'note', 'route'] as const
+export const EDIT_TOP_KEYS = ['course', 'reason', 'concepts', 'ops', 'note'] as const
+
+/** #316 / ADR-0099 退役键：罗盘「剩余路线」写权反转为罗盘站独占（learnhub_compass_paint），
+ * 提案携带 route 一律拒收——专用文案点名退役，避免落进泛「未知字段」清单里看不出根因。 */
+const RETIRED_TOP_ROUTE = 'route'
 
 /** 单条 op 的合法键（#313 A4；糖算子自己的键——into/with/chain——在补丁入口展开成原子 op
  * 后就不在权威门里出现，故不在本表）。 */
@@ -110,11 +114,9 @@ export interface EditProposalSpec {
    * 提案被拒则登记不落盘。省略 = 本批零铸名。 */
   concepts?: ConceptEntry[]
   ops: EditOp[]
-  /** 生长批 note 区（#145）：在场 = 生长批（教练回合裁决产物）；缺席 = 普通 edit 提案。 */
+  /** 生长批 note 区（#145）：在场 = 生长批（教练回合裁决产物）；缺席 = 普通 edit 提案。
+   * #316 / ADR-0099 起**无 route 字段**：罗盘「剩余路线」写权归罗盘站独占。 */
   note?: GrowthNote
-  /** 罗盘批内重写（#145）：「剩余路线」段新正文，随图 apply 的写入单元落盘——提案被拒
-   * 罗盘不落盘。唯一写权属生长批（note 在场）；普通 edit 提案携带即拒收。 */
-  route?: string
 }
 
 /** 合法 op 词汇（schema 门与取值域回灌的单一出处；糖算子不在其中——它们在补丁入口展开成
@@ -222,23 +224,14 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       }
     }
   }
-  // 罗盘批内重写（#145；#310 恢复生产者）：route 只随生长批携带——「剩余路线」写权属
-  // 生长批，普通 edit 提案携带即拒收（罗盘唯一写权，见 compass.ts 头注）。正文的来源是
-  // **思路官计划**（`GrowthPlanHandover.route`），由引擎在批规格里携带；缺省 = 不改写、
-  // 保留旧稿（绝不是清空）。
-  let route: string | undefined
-  if (d.route !== undefined) {
-    if (!note) {
-      errors.push('route: 普通 edit 提案不得携带（「剩余路线」唯一写权属生长批——带 note 区的生长批才随批重写罗盘）')
-    } else if (typeof d.route !== 'string' || !d.route.trim()) {
-      errors.push('route: 必须是非空字符串（「剩余路线」段新正文；不重写罗盘就省略本字段）')
-    } else {
-      route = d.route
-    }
+  // #316 / ADR-0099：route 已退役——写权归罗盘站（learnhub_compass_paint），提案携带
+  // 一律拒收；专用文案点名退役，避免落进泛「未知字段」清单里看不出根因。
+  if (d[RETIRED_TOP_ROUTE] !== undefined) {
+    errors.push(`route: 已退役（#316 / ADR-0099）——罗盘「剩余路线」写权归罗盘站（learnhub_compass_paint），教练对弧只有建议权（理由写进 note.reason）。`)
   }
   const ops: EditOp[] = []
   if (d.ops === undefined && note) {
-    // 生长批允许零操作（裁决=暂不产结构；罗盘重写与批留痕照走写入单元）
+    // 生长批允许零操作（裁决=暂不产结构；批留痕照走写入单元）
   } else if (!Array.isArray(d.ops)) {
     errors.push('ops: 必须是列表（普通提案至少一条操作；生长批裁决不产结构时写空列表 ops: []）')
   } else if (!d.ops.length && !note) {
@@ -375,7 +368,6 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       ...(concepts !== undefined ? { concepts } : {}),
       ops,
       ...(note ? { note } : {}),
-      ...(route !== undefined ? { route } : {}),
     },
   }
 }
@@ -852,14 +844,6 @@ export class GraphProposals {
     if (gateErrors.length) {
       throw new Error(`[propose-edit] 提案未受理（修正后重提）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
-    // 罗盘重写预检（#145 写入单元门：提案被拒罗盘不落盘——route 门在受理时就走一遍，
-    // 不给坏路线落 pending 的机会）
-    if (spec.route !== undefined) {
-      const routeErrors = await this.routeGate(course.root, spec.route)
-      if (routeErrors.length) {
-        throw new Error(`[propose-edit] 罗盘重写未过路线门，提案未受理。\n${routeErrors.map(e => `  ✗ ${e}`).join('\n')}`)
-      }
-    }
     const { pid } = await this.saveArtifact('edit', spec.course, YAML.parseModel(yamlText))
     await this.store.updateProposal(pid, {
       summary: spec.note
@@ -869,30 +853,20 @@ export class GraphProposals {
     return {
       id: pid, kind: 'edit', course: spec.course, ops: spec.ops.length,
       ...(spec.note ? { operator: spec.note.operator, ...(spec.note.disagreement ? { disagreement: true } : {}) } : {}),
-      ...(spec.route !== undefined ? { compass_rewrite: true } : {}),
       ...(warns.length ? { warns } : {}),
     }
   }
 
-  /** 罗盘重写预检（propose 与 apply 双门共用；返回错误行，空 = 通过）：锚在终点上
-   * （零终点 fail loud）+ 路线门（非空/无标题/限长）。 compass.ts 的写权机械不变。 */
-  private async routeGate(root: string, routeMd: string): Promise<string[]> {
-    const anchors = await readAnchors(this.paths.anchorPath(root), this.fs)
-    if (!anchors.length) return ['课程零终点（空锚是合法空态）——罗盘重写锚在终点上，先加一个终点。']
-    return validateRouteBody(stripWrappingFence(routeMd))
-  }
-
   /** 终点守卫的 IO 薄壳（纯判定住模块层 endpointGuardErrorsOf；propose/apply 双门经
-   * editGateErrors 同调消费，本方法保留给 route 门外的独立调用点）。 */
+   * editGateErrors 同调消费）。 */
   private async endpointGuardErrors(root: string, spec: EditProposalSpec): Promise<string[]> {
     return endpointGuardErrorsOf(spec, await readAnchors(this.paths.anchorPath(root), this.fs))
   }
 
 
   /** graph apply-edit：概念对表复验 → 铸名与图随写入单元落盘 + 改名/移动/删除联动课程
-   * 笔记 + 罗盘批内重写（#145：route 在场时随图 apply 的写入单元——路线门/巩固门全过
-   * 才开始任何写盘，提案被拒罗盘不落盘）+ 快照。登记表先写（孤儿条目合法、悬空引用
-   * 违约），graph 落盘在后。 */
+   * 笔记 + 快照。登记表先写（孤儿条目合法、悬空引用违约），graph 落盘在后。
+   * #316 起无罗盘批内重写：弧的写权归罗盘站（learnhub_compass_paint）。 */
   async applyEdit(pid?: number, audit: ApplyAudit = { ok: true, warns: [], health: 0 }): Promise<GraphApplyEditResult> {
     if (!audit.ok) throw new Error(`[apply-edit] 审计门存在 ERROR，拒绝写入（明细随行附上；报告人也读得到：课程根/审计报告.md）。`
       + (audit.errors?.length ? `\n${audit.errors.map(e => `  ✗ ${e}`).join('\n')}` : ''))
@@ -924,17 +898,7 @@ export class GraphProposals {
     if (gateErrors.length) {
       throw new Error(`[apply-edit] 门复验拒绝写入（提案已不适用当前图或门状态已变，被拒绝可重提）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
-    // 罗盘重写预检（#145 写入单元最后一道门）：路线门与锚复验不过 = 零写盘。
-    let compassRoute: string | null = null
-    if (spec.route !== undefined) {
-      const routeErrors = await this.routeGate(root, spec.route)
-      if (routeErrors.length) {
-        throw new Error(`[apply-edit] 罗盘重写未过路线门，提案不落盘。\n${routeErrors.map(e => `  ✗ ${e}`).join('\n')}`)
-      }
-      compassRoute = stripWrappingFence(spec.route)
-    }
-    // 生长闸门复验（#146）已并入上方 editGateErrors（门同源）——空门合并保留这段位以锚住
-    // “route 门在生长闸之后”的写序不变。
+    // 生长闸门复验（#146）已并入上方 editGateErrors（门同源）。
 
     const renames: Record<string, string> = {}
     const dels: string[] = []
@@ -959,11 +923,11 @@ export class GraphProposals {
     const graphAfter = new Graph(nodes)
 
     // 写入单元（#176）：写序照今天的声明——「铸名 → 图重写 → 终点锚 sealed 维护
-    // （#202）→ 笔记联动 → 罗盘批内重写 → 边实验账本 → 快照 → 笔记骨架 → journal(graph_edit)
-    // → 提案 applied」。铸名孤儿条目合法、悬空引用违约（登记表先写、图在后）；路线门/
-    // 巩固门/生长闸全过才进写序（罗盘被拒不落盘）。失败上抛中止，不回滚不续跑，失败不写
+    // （#202）→ 笔记联动 → 边实验账本 → 快照 → 笔记骨架 → journal(graph_edit)
+    // → 提案 applied」。铸名孤儿条目合法、悬空引用违约（登记表先写、图在后）；
+    // 巩固门/生长闸全过才进写序。失败上抛中止，不回滚不续跑，失败不写
     // journal；重放被 takePending/simulateOps 门拦住（重放不保证收敛，靠门不靠续段）。
-    let compassRewritten = false
+    // （#316：原「罗盘批内重写」步退场——弧的写权归罗盘站 learnhub_compass_paint。）
     const probationRegistered: string[] = []
     let nodes2: Awaited<ReturnType<GraphStore['load']>> = []
     let version = 0
@@ -1027,18 +991,6 @@ export class GraphProposals {
             },
           },
           {
-            // 3.5 罗盘批内重写（#145）：路线门已过、只换「剩余路线」段，批注区/ETA
-            //     字节保留；罗盘缺席落脚手架打底（与 compassRewrite 同语义）。
-            name: '罗盘批内重写',
-            run: async () => {
-              if (compassRoute === null) return
-              const compassPath = this.paths.compassPath(root)
-              const base = this.fs.exists(compassPath) ? await this.fs.readFile(compassPath) : compassScaffold(course.name)
-              await atomicWrite(compassPath, withSectionText(base, SECTION_ROUTE, compassRoute), this.fs)
-              compassRewritten = true
-            },
-          },
-          {
             // 3.6 边实验账本登记（#146）：插入批的每个 add_node 登记一条在途复诊
             //     （node/pre = 登记快照、proposal = 本批提案 id、due = 预注册学习日数）——
             //     到期结算钩子据此自动裁决（proven｜自动剪除），零人审。
@@ -1075,7 +1027,7 @@ export class GraphProposals {
             run: async () => {
               const opList = spec.ops.map(o => `${o.op}(${o.op === 'add_node' ? o.name : o.node})`).join('；')
               const mintList = spec.concepts?.length ? `；铸名 ${spec.concepts.map(c => c.canonical).join('、')}` : ''
-              const detail = (opList || `（零操作${spec.route !== undefined ? '，罗盘重写' : '，裁决留痕'}）`)
+              const detail = (opList || '（零操作，裁决留痕）')
                 + mintList
                 + (spec.note ? `；生长批（${spec.note.operator}）：${spec.note.reason}` : '')
               await this.store.appendJournal({
@@ -1121,7 +1073,6 @@ export class GraphProposals {
             recheck: { metric: spec.note!.recheck!.metric, due: spec.note!.recheck!.days ?? RECHECK_DAYS_DEFAULT },
           }
         : {}),
-      ...(compassRewritten ? { compass_rewritten: true } : {}),
       findings: applyFindings(audit, seedPhase),
     }
   }
@@ -1224,6 +1175,20 @@ export class GraphProposals {
             await writeAnchors(anchorPath, [...anchors, anchor], this.fs)
           },
         },
+        {
+          // #316 触发接线：方向声明变更 = 重估事件——罗盘置「重画待办」标记（只标记
+          // 不触发；compass_paint 重画落盘新正文时自然清除）。罗盘缺席则无对象，跳过。
+          name: '罗盘重画待办标记',
+          run: async () => {
+            const compassPath = this.paths.compassPath(root)
+            if (!this.fs.exists(compassPath)) return
+            const base = await this.fs.readFile(compassPath)
+            const body = sectionBody(parseCompass(base), SECTION_ROUTE)
+            if (!hasPaintedRoute(body)) return
+            await atomicWrite(compassPath,
+              withSectionText(base, SECTION_ROUTE, withRepaintMarker(body ?? '', `新增终点「${name}」`)), this.fs)
+          },
+        },
       ],
     })
     return { course: course.name, endpoint: name }
@@ -1271,6 +1236,20 @@ export class GraphProposals {
           name: '锚记录移除',
           run: async () => {
             await writeAnchors(anchorPath, anchorsNext, this.fs)
+          },
+        },
+        {
+          // #316 触发接线：终点删除 = 目的地重估——罗盘置「重画待办」标记（幂等；
+          // 罗盘缺席或未画则无对象，跳过）。
+          name: '罗盘重画待办标记',
+          run: async () => {
+            const compassPath = this.paths.compassPath(root)
+            if (!this.fs.exists(compassPath)) return
+            const base = await this.fs.readFile(compassPath)
+            const body = sectionBody(parseCompass(base), SECTION_ROUTE)
+            if (!hasPaintedRoute(body)) return
+            await atomicWrite(compassPath,
+              withSectionText(base, SECTION_ROUTE, withRepaintMarker(body ?? '', `删除终点「${name}」`)), this.fs)
           },
         },
       ],

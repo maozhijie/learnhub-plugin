@@ -8,7 +8,7 @@ import { withVault } from './helpers/vault.ts'
 
 test('P2: 存量内置模板全部升到 prompt/v6（生长式套件除外——新套件模板自带版本线）', () => {
   for (const kind of Object.keys(Content.PROMPT_KINDS)) {
-    if (kind === '罗盘初画' || kind === '思路官回合' || kind === '思路官重裁' || kind === '执行官回合') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
+    if (kind === '罗盘初画' || kind === '罗盘重画' || kind === '思路官回合' || kind === '思路官重裁' || kind === '执行官回合') continue // 生长式套件的独立版本线（v1 起），不背 v6 存量约定
     const text = Content.PROMPT_KINDS[kind]!
     assert.ok(Content.promptVersionOf(text) >= 6, `${kind} 应升到 v6+`)
   }
@@ -146,9 +146,9 @@ test('C3: 错误对比卡模板——三选一、mine 忠实错法、候选照�
 
 // ---- v1 罗盘初画契约（#143 / ADR-0033 透明度装置）：非承诺草图 + 批注软输入 ----
 
-test('#143: 罗盘初画模板 v1——非承诺措辞、批注软输入、路线条目输出契约', () => {
+test('#143 / #316: 罗盘初画模板 v4——罗盘站程度驱动、非承诺措辞、批注软输入、路线条目输出契约', () => {
   const tpl = Content.PROMPT_KINDS['罗盘初画']!
-  assert.ok(Content.promptVersionOf(tpl) >= 1, '罗盘初画 应带版本标记 v1+')
+  assert.ok(Content.promptVersionOf(tpl) >= 4, '罗盘初画 应带版本标记 v4+（#316 升格）')
   assert.match(tpl, /不是承诺/, '路线是草图不是承诺')
   assert.match(tpl, /软输入/, '批注区是教练软输入')
   assert.match(tpl, /提议非指令/, '批注提议非指令锚点')
@@ -157,7 +157,18 @@ test('#143: 罗盘初画模板 v1——非承诺措辞、批注软输入、路�
   assert.match(tpl, /（候选）/, '未落图台阶一律标候选')
   assert.match(tpl, /不写时间估算|不写进度百分比/, '零时间/进度承诺')
   assert.match(tpl, /模型推演，非承诺/, 'ETA 才是推演参照且措辞锁死')
-  assert.match(tpl, /块工作表/, '覆盖锚定课程按工作表块组织')
+  // #316 / ADR-0099 罗盘站升格：程度驱动口径取代节点名钉扎与工作表/目录规训
+  assert.match(tpl, /程度驱动/, '每条阶段说得出推进程度声明的哪个维度')
+  assert.match(tpl, /深度档/, '可选深度档字段（知道/会用/能教）')
+  assert.doesNotMatch(tpl, /块工作表/, '块工作表约束已退役（C4 裁决）')
+  assert.doesNotMatch(tpl, /当确定路标/, '节点名钉扎已退役（回声病的规则侧根因）')
+  assert.doesNotMatch(tpl, /不罗列教科书目录/, '规训式禁令已退役（改为程度驱动口径）')
+  // 罗盘重画族：重估语境与初画分键（#316 / ADR-0099 两族）
+  const repaint = Content.PROMPT_KINDS['罗盘重画']!
+  assert.ok(Content.promptVersionOf(repaint) >= 1)
+  assert.match(repaint, /重估重画/, '重估不是例行刷新')
+  assert.match(repaint, /进度推进本身不构成重画理由/, '进度不触发重画')
+  assert.match(repaint, /不改写已学事实/, '改弧不回滚图、不重置掌握度')
 })
 
 // ---- v1 思路官回合契约（#273 两站编排）：算子集 + 停摆转译 + 零名字交接契约 ----
@@ -272,7 +283,7 @@ const RENDERER_PLACEHOLDER_KINDS = ['课程节生成', '课程节生成-苏格�
 
 test('#302: 无占位符的 13 个内置站不被追加渲染菜单（loadPrompt 逐字等于模板原文）；三风格变体照旧注入', async () => {
   const kinds = Object.keys(Content.PROMPT_KINDS)
-  assert.equal(kinds.length, 16, '内置站总数（13 无占位符 + 3 风格变体）')
+  assert.equal(kinds.length, 17, '内置站总数（14 无占位符 + 3 风格变体；#316 增罗盘重画族）')
   assert.deepEqual(
     kinds.filter(k => Content.PROMPT_KINDS[k]!.includes('{{renderers}}')).sort(),
     [...RENDERER_PLACEHOLDER_KINDS].sort(),
