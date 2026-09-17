@@ -2,13 +2,14 @@
  * 图提案受理结果类型（#142/#140 提案通道；#152 刀 6 自 views.ts/proposals.ts
  * 归位为叶子视图文件——窄面直引它，不经 views barrel 环回提案域）。
  */
+import type { GrowthOperator } from '../types.ts'
 export interface GraphEditProposalResult {
   id: number
   kind: 'edit'
   course: string
   ops: number
   /** 生长批的去重算子列表（#327 逐条目化：批内 add_node 的 operator 去重，条目出现序）。 */
-  operators?: string[]
+  operators?: GrowthOperator[]
   disagreement?: boolean
   warns?: string[]
 }

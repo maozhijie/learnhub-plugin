@@ -138,9 +138,7 @@ test('执行官站：split_node 补丁过重放；draft_audit 回合携带 findi
       { text: '', toolCalls: [{ id: 'c3', name: 'draft_finish', arguments: '{}' }] },
       { text: '拆分批已发布，收束。' },
     ])
-    let r
-    try { r = await h.engine.growth2.coachDraft('数学', agent) } catch (e) { (await import('node:fs')).writeFileSync('probe-out.txt', 'REJ: ' + (e as Error).message.slice(0, 500)); throw e }
-    ;(await import('node:fs')).writeFileSync('probe-out.txt', 'rounds=' + JSON.stringify(r.rounds).slice(0, 600))
+    const r = await h.engine.growth2.coachDraft('数学', agent)
     assert.equal(r.finished, true)
     const audit = r.rounds.find(x => x.kind === 'audit')
     assert.ok(audit, '审计回合在列')
@@ -162,7 +160,6 @@ test('执行官站：suggest_confusable 在 finish 发布成功后展开为混�
             { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
           ],
           concepts: [{ canonical: '导数' }],
-          
           note_reason: '前沿缺下一台阶',
           note_target_endpoints: ['用导数解决优化问题'],
         }),

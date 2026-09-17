@@ -1,7 +1,7 @@
 /**
  * graph 域视图类型（#152 刀归档；叶子文件，只引类型层）。
  */
-import type { ContentStatus, EncEdge, Stage } from '../types.ts'
+import type { ContentStatus, EncEdge, GrowthOperator, Stage } from '../types.ts'
 import type { GroupAxis } from '../graph/graph.ts'
 import type { ConceptFootprintCore } from '../concepts/concepts.ts'
 import type { GraphProposeResult } from './proposals.ts'
@@ -20,7 +20,7 @@ export interface GraphApplyEditResult {
   renames: Record<string, string>
   deleted: string[]
   /** 生长批字段（#145 note 区在场时随行；#327 逐条目化：去重算子列表，条目出现序）+ 理由 + 分歧声明。 */
-  operators?: string[]
+  operators?: GrowthOperator[]
   coach_reason?: string
   disagreement?: boolean
   findings: string[]

@@ -1,1 +1,0 @@
-rounds=[{"kind":"patch","summary":"补丁 4 条（未发布 4）"},{"kind":"audit","summary":"审计：通过（1 条 findings）"},{"kind":"finish","summary":"发布成功：提案 #1，快照 v1，ops 4；sealed：用导数解决优化问题=reopen"}]

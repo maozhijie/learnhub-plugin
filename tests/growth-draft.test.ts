@@ -9,6 +9,7 @@ import { GrowthSubsystem } from '../src/engine/coach/growth-subsystem.ts'
 import { normalizePatchShape, replayDraft, sealedDecisionOf, editGateErrors, simulateOps } from '../src/engine/index.ts'
 import { GROWTH_DRAFT_MARKER, draftPathOf, loadDraft } from '../src/engine/coach/growth-draft.ts'
 import { GROWTH_DRAFT_MAX_ROUNDS } from '../src/engine/infra/params.ts'
+import { readProbationLedger } from '../src/engine/coach/probation.ts'
 import type { EditGateCtx } from '../src/engine/index.ts'
 import type { EditOp, EditProposalSpec } from '../src/engine/coach/proposals.ts'
 import type { GNode } from '../src/engine/types.ts'
@@ -137,6 +138,40 @@ const SEED = { registry: null, graph: null }
 async function seeded(h: Awaited<ReturnType<typeof withVault>>): Promise<void> {
   await draftCourse(h.engine, CAPABILITY_DRAFT)
 }
+
+test('#327 混算子批端到端：前进+插入+旁支同批发布，插入条目落账本，operators 按条目序折叠', async () => {
+  await withVault(SEED, async h => {
+    await seeded(h)
+    const agent = scriptFake([[
+      { text: '', toolCalls: [{
+        id: 'c1', name: 'draft_patch',
+        arguments: JSON.stringify({
+          ops: [
+            // 前进条目：新前沿，接终点（接线义务只跟前进条目）
+            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '前进', teaches: { 变化率: '会用' } },
+            // 插入条目：补过渡台阶，随条目带复诊预注册
+            { op: 'add_node', name: '极限初步', pre: ['认识变化率'], est: 20, operator: '插入', recheck: { metric: '卡点集中度降幅', days: 5 } },
+            // 旁支条目：免接线
+            { op: 'add_node', name: '导数几何意义', pre: ['认识变化率'], est: 10, operator: '旁支' },
+            { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
+          ],
+          note_reason: '主线推进同时补过渡与支线',
+          note_target_endpoints: ['用导数解决优化问题'],
+        }),
+      }] },
+      { text: '', toolCalls: [{ id: 'c2', name: 'draft_audit', arguments: '{}' }] },
+      { text: '', toolCalls: [{ id: 'c3', name: 'draft_finish', arguments: '{}' }] },
+      { text: '混算子批已发布，收束。' },
+    ]])
+    const r = await h.engine.growth2.coachDraft('数学', agent)
+    assert.equal(r.finished, true, '混算子批可经单站回路发布（票面验收）')
+    assert.deepEqual(r.finishes[0]!.operators, ['前进', '插入', '旁支'], 'operators 按条目出现序去重折叠')
+    // 插入条目的复诊预注册随条目落账本（其余条目不登记）
+    const ledger = await readProbationLedger(h.paths, '数学', h.engine.fs)
+    assert.deepEqual(ledger.map(x => x.node), ['极限初步'])
+    assert.equal(ledger[0]!.due, 5)
+  })
+})
 
 // ---- #309：门同源 / 逃生口 / 水位重放（判据落在「模型看到了什么」上，故要摘回执） ----
 

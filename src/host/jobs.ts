@@ -835,7 +835,9 @@ async function generateGrowthJob(rt: HostRuntime, ctx: Context, job: GenJob): Pr
       const a = r.applied!
       job.growthOutcome = a.ops > 0 ? 'applied' : 'no_structure'
       job.status = 'done'
-      job.message = `生长批（${p.operators.join('、')}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
+      // 收尾批（纯 set_pre）无算子条目：标签兜底「接线收束」，避免渲染成空括号
+      const opLabel = p.operators.join('、') || '接线收束'
+      job.message = `生长批（${opLabel}）提案 #${p.id}${a.ops > 0 ? `：${a.ops} 条操作，快照 v${a.snapshot}` : '：零操作，裁决留痕'}`
         // 新建节点名随行（#313 E23）：引擎已返回 created，旧回执只给条数——用户长完一批后
         // 没有面告诉他「这几个节点要生成正文」，接在后面的节点在推荐流里根本不出现。
         + (a.created.length ? `｜新建：${a.created.join('、')}` : '')

@@ -148,11 +148,12 @@ export function operatorFoldOf(ops: Array<{ op?: unknown; operator?: unknown }>)
 }
 
 /** 批内出现的去重算子列表（条目出现序；结果类型与宿主消息的「operators」口径）。 */
-export function growthOperatorsOf(ops: Array<{ op?: unknown; operator?: unknown }>): string[] {
-  const out: string[] = []
+export function growthOperatorsOf(ops: Array<{ op?: unknown; operator?: unknown }>): GrowthOperator[] {
+  const out: GrowthOperator[] = []
   for (const o of ops ?? []) {
     if (o.op !== 'add_node' || typeof o.operator !== 'string') continue
-    if (!out.includes(o.operator)) out.push(o.operator)
+    const op = o.operator as GrowthOperator
+    if (!out.includes(op)) out.push(op)
   }
   return out
 }
@@ -211,7 +212,7 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       const noteErrors: string[] = []
       const unknown = Object.keys(n).filter(k => !['reason', 'target_endpoints', 'disagreement'].includes(k))
       if (unknown.length) {
-        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 reason/target_endpoints/disagreement；算子写在每条 add_node 的 operator——取值域 ${GROWTH_OPERATORS.join('/')}（#327 逐条目化），复诊预注册写在插入条目的 recheck，朝向声明写在 target_endpoints，分歧声明写在 disagreement）`)
+        noteErrors.push(`note 含未知字段 ${JSON.stringify(unknown)}（只允许 reason/target_endpoints/disagreement；算子写在每条 add_node 的 operator——取值域 ${GROWTH_OPERATORS.join('/')}，复诊预注册写在插入条目的 recheck，朝向声明写在 target_endpoints，分歧声明写在 disagreement）`)
       }
       if (typeof n.reason !== 'string' || !n.reason.trim()) {
         noteErrors.push('note.reason 不能为空（每步生长都带理由——可解释、可追问）')
@@ -907,7 +908,7 @@ export class GraphProposals {
     const { pid } = await this.saveArtifact('edit', spec.course, YAML.parseModel(yamlText))
     await this.store.updateProposal(pid, {
       summary: spec.note
-        ? `生长批（${operatorFoldOf(spec.ops)}）：${spec.note.reason}｜${spec.ops.length} 条操作`
+        ? `生长批（${operatorFoldOf(spec.ops) || (spec.ops.length ? '接线收束' : '裁决留痕')}）：${spec.note.reason}｜${spec.ops.length} 条操作`
         : `${spec.ops.length} 条操作${spec.concepts?.length ? `；铸名 ${spec.concepts.length} 条` : ''}：${spec.ops.map(o => o.op).join('、')}`,
     })
     return {
