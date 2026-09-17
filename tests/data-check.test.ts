@@ -317,7 +317,9 @@ test('删终点体检无 Broken（#240/ADR-0076）：锚与节点一并移除、
   await withVault({
     graph: ENDPOINT_GRAPH,
     files: [{ path: '学习中心/math/state/终点锚.json', content: ANCHORS }],
-    notes: { 入门: {}, 中间台阶: {}, 终点: {} },
+    // #315 B2：收尾前置「闭包真已学」——闭包含未学节点时收尾批降级不落 sealed；
+    // 本用例焦点是「删终点体检」，故闭包（入门、中间台阶）已学（skipped 计入）让收尾照常落。
+    notes: { 入门: { stage: 'skipped' }, 中间台阶: { stage: 'skipped' }, 终点: {} },
   }, async ({ engine }) => {
     // 手加第二个终点（零 pre 节点 + 锚追加），收尾接线批接线（apply 写 sealed）
     await engine.graph.addEndpoint('数学', '手工终点', '一句目标描述')

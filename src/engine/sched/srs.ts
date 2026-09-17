@@ -194,6 +194,15 @@ export function masteryOfFm(fm: Fm | null | undefined): number {
 
 // 节点阶段判定（#152 刀 6 自 audit.ts 归位：题库域消费它，经 audit 会绕进
 // vault-links→note-source 的低层链成环）。
+/** 「已学」单一出处（#315 B1）：已进入在学/复习/已掌握计入；skipped（用户已有基础
+ * 跳过、调度视同已通过）经人裁计入；unseen/ready（就绪未开始、常无正文）不计——
+ * coach-tools 的 STARTED_STAGES（⚠ 弱掌握标记用，skipped 不标）与本集合同源分叉，
+ * 语义注释互指，改动一处先查另一处。 */
+export const LEARNED_STAGES: ReadonlySet<Fm['stage']> = new Set(['learning', 'review', 'mastered', 'skipped'])
+export function isLearnedStage(stage: Fm['stage']): boolean {
+  return LEARNED_STAGES.has(stage)
+}
+
 export function effectiveStage(state: Record<string, Fm>, n: string): Fm['stage'] {
   const fm = state[n]
   if (!fm) return 'unseen'

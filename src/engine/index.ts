@@ -269,7 +269,10 @@ export class LearnhubEngine {
     // 看见「课程存在审计 ERROR」——否则同一帧里可以「受理通过」而 apply 每轮拒。
     this.proposals = new GraphProposals(this.paths, this.store, this.registry, centerRoot,
       spec => this.growth2.growthGateErrors(spec),
-      course => this.auditGateErrors(course), this.clock, this.fs, this.logger)
+      course => this.auditGateErrors(course), this.clock, this.fs,
+      // #315 B2：收尾前置「闭包真已学」要读调度状态——注入状态读取口（读侧口径同 loadView）
+      async root => (await stateMap(this.paths.courseDir(root), this.fs)).state,
+      this.logger)
     this.projects = new Projects(this.paths, this.store, this.clock, this.fs)
     this.sessions = new Sessions(this.paths, async course => this.loadView(course), this.fs, this.logger)
     this.lab = new LabSubsystem({

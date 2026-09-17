@@ -17,7 +17,7 @@
 import type { VaultFs } from '../infra/io.ts'
 import { atomicWrite } from '../infra/io.ts'
 import type { Fm } from '../types.ts'
-import { effectiveStage, masteryOfFm } from '../sched/srs.ts'
+import { effectiveStage, isLearnedStage, masteryOfFm } from '../sched/srs.ts'
 import type { Graph } from '../graph/graph.ts'
 
 /** 目标类型二分（#136）：能力锚定默认；覆盖锚定显式选择且必须带块工作表。 */
@@ -282,7 +282,8 @@ export interface CompletionFold {
     worksheet?: { total: number; done: number; complete: boolean }
   }
   /** 闭包学习进度（终点前置闭包**剔终点自身**——方向标记不被学习，计入会让读数永不可达
-   * M/M）：已学 N / 共 M（已学 = 已进入在学/复习/已掌握）。 */
+   * M/M）：已学 N / 共 M（已学 = LEARNED_STAGES（#315 B1）：在学/复习/已掌握 + skipped；
+   * ready/unseen 是就绪未开始，不计——否则「已学 3/3」与图面「未开始·待生成」自相矛盾）。 */
   closure: { learned: number; total: number }
 }
 
@@ -366,7 +367,7 @@ export function foldCompletion(
       complete = complete && criteria.worksheet.complete
     }
     const steps = [...closureOf(graph, anchor.endpoint)].filter(n => n !== anchor.endpoint)
-    const learned = steps.filter(n => effectiveStage(state, n) !== 'unseen').length
+    const learned = steps.filter(n => isLearnedStage(effectiveStage(state, n))).length
     // 三档阶梯（ADR-0076）：未接线 → 已铺通（锚上 sealed 是**接线批落盘的结构事实**）
     // → 已达成（已铺通且最后台阶全达标）。悬空锚（终点不在图内）恒未接线——它连图上
     // 位置都没有，谈不上铺通。判据只看 sealed 与最后台阶：显式宣告的铺通不因 pre 集
@@ -404,5 +405,41 @@ export function junctionServes(graph: Graph, anchors: EndpointAnchor[]): Map<str
     }
   }
   return new Map([...serves].filter(([, list]) => list.length >= 2))
+}
+
+/** 结构读数（#315 B5）：逐终点「结构是否已铺完」的显式判定——sealed（收尾宣告在锚）∧
+ * 闭包真已学（LEARNED_STAGES 口径，同 foldCompletion.closure）。思路官计划门与执行官
+ * 收束判据引用**同一份函数**（两站共用的 coachContextPack 都渲染它）——不再各站各猜。
+ * 闭包剔终点自身（与 foldCompletion 同口径）；悬空锚不入算（返回列表不含它）。 */
+export interface StructureReading {
+  endpoint: string
+  /** 收尾宣告在锚上。 */
+  sealed: boolean
+  learned: number
+  total: number
+  /** 闭包内未学节点名（LEARNED_STAGES 之外），升序。 */
+  unlearned: string[]
+  /** 结构已铺完 = sealed ∧ 闭包全部真已学。 */
+  complete: boolean
+}
+
+export function structureReadingsOf(
+  graph: Graph, state: Record<string, Fm>, anchors: EndpointAnchor[],
+): StructureReading[] {
+  const readings: StructureReading[] = []
+  for (const anchor of anchors) {
+    if (!graph.nset.has(anchor.endpoint)) continue
+    const steps = [...closureOf(graph, anchor.endpoint)].filter(n => n !== anchor.endpoint)
+    const unlearned = steps.filter(n => !isLearnedStage(effectiveStage(state, n))).sort()
+    readings.push({
+      endpoint: anchor.endpoint,
+      sealed: anchor.sealed != null,
+      learned: steps.length - unlearned.length,
+      total: steps.length,
+      unlearned,
+      complete: anchor.sealed != null && unlearned.length === 0,
+    })
+  }
+  return readings
 }
 

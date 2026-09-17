@@ -265,7 +265,14 @@ ops:
     assert.equal(afterReopen.status, 'unwired', '清 sealed 后回到未铺通')
     assert.equal(afterReopen.complete, false, '清 sealed 后不判达成')
 
-    // 旁支批（不含终点 set_pre）apply 不动 sealed：先收尾再长旁支
+    // 旁支批（不含终点 set_pre）apply 不动 sealed：先收尾再长旁支。
+    // #315 B2：收尾前置「闭包真已学」——新最后台阶「更高台阶」须已学（skipped 计入），
+    // 否则同类收尾批会被降级为普通接线批、锚上不落 sealed。
+    const { noteText } = await import('./helpers/vault.ts')
+    await engine.fs.writeFile(
+      paths.courseNotePath('math', '更高台阶'),
+      noteText('更高台阶', { stage: 'skipped' }),
+    )
     const reseal = await engine.graph.graphPropose('edit', `course: 数学
 note:
   operator: 前进

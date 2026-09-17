@@ -11,13 +11,14 @@ import { withVault } from './helpers/vault.ts'
 //   病二：「按顺序综述从文字到答案的每一步动作」节点以终点为 pre（长过目标）；
 //   病三：终点已被生成正文而真实坡道未成（坡道节点零正文零练习）。
 // 演练步骤（提案 id / 各门行为 / 终局图态的自动化留痕，本文件即可重放命令序列）：
-//   1. 收尾接线批（set_pre 终点 = 真实前沿一线）过 #198 新受理门，apply 落 sealed（#202）；
+//   1. 收尾接线批（set_pre 终点 = 真实前沿一线）过 #198 新受理门；#315 B2 起收尾前置
+//      「闭包真已学」——本夹具坡道 11 节点未学，apply **不落 sealed**（降级为普通接线批）；
 //   2. 复发预防对照：add_node 以终点为 pre 被受理门拒（禁长过目标）；
 //   3. 「综述」节点处置走 del_node 提案快照语义（正文归档、快照留痕、journal 留痕）；
 //   4. 生成门对终点恒拒（ADR-0056 修订：票面原 step3「未就绪拒收、就绪后放行」已随
 //      终点纯标记化被取代——未就绪/就绪两形态都拒，不看就绪）；
 //   5. 异常态 → 合法态读数：终点深度 1→7、主线深度 6→7、last_steps 随接线改扎、
-//      收尾 + 最后台阶达标判完成；存量终点正文保留（不追溯清档边界）。
+//      结构未铺完（B2：闭包含未学节点）→ 未达成、状态停在「已铺通」；存量终点正文保留。
 
 /** 异常态夹具图（单文件 data/图.yaml，#284 存储塌缩：原 00_基础/01_生长 两区并成一个节点列表）：
  * 三起点 + 终点（陈旧粗边）+ 12 生长节点（真实坡道 6 + 支线 5 + 综述 1）。 */
@@ -126,8 +127,8 @@ ops:
     assert.equal(wiringApplied.ops, 1)
     assert.equal(wiringApplied.snapshot, 1, '接线批 apply 留快照 v1（收尾接线批后图态）')
     const anchorAfterWiring = (await readAnchors(paths.anchorPath('math'), (await import('../src/host/vault-fs.ts')).nodeVaultFs))[0]!
-    assert.match(anchorAfterWiring.sealed!, /^\d{4}-\d{2}-\d{2}$/, '纯 set_pre 接线批 apply 落 sealed 收尾宣告（#202）')
-    trace.push(`提案 #${wiring.id}（收尾接线批 set_pre 终点 = 合成求解路径、答案检验）：受理门过 → apply 落快照 v1 + sealed`)
+    assert.equal(anchorAfterWiring.sealed, undefined, '#315 B2：闭包含未学节点（坡道 11 节点）——收尾批降级，不落 sealed（接线照做）')
+    trace.push(`提案 #${wiring.id}（收尾接线批 set_pre 终点 = 合成求解路径、答案检验）：受理门过 → apply 落快照 v1；B2 收尾前置不满足 → 降级为普通接线批、不落 sealed`)
 
     // ---- 第 2 步：复发预防对照——add_node 以终点为 pre 被受理门拒（#198① 禁长过目标）----
     await assert.rejects(
@@ -188,16 +189,16 @@ ops:
     const completion1 = (await engine.courseCompletion({ name: '数学', root: 'math' }))[0]!
     assert.deepEqual(completion1.criteria.last_steps.map(s => s.node), ['合成求解路径', '答案检验'], '完成判据随接线改扎到最后台阶')
     assert.equal(completion1.criteria.mastery_met, true, '最后台阶（已练到位）全部达标')
-    assert.equal(completion1.criteria.sealed, anchorAfterWiring.sealed, '收尾宣告在锚上')
-    assert.equal(completion1.status, 'reached')
-    assert.equal(completion1.complete, true, '已收尾 + 最后台阶掌握 → 达成读数成立（无需教练再出手）')
+    assert.equal(completion1.criteria.sealed, null, 'B2：闭包含未学节点——无收尾宣告')
+    assert.equal(completion1.status, 'unwired', 'ADR-0076 三档阶梯只读 sealed：未收尾 = 未接线档（B2 降级的读数面；结构性接线改扎归 #316 状态型判据）')
+    assert.equal(completion1.complete, false, 'B2 收尾前置不满足 → 未达成；完整状态型判据归 #316')
     // 学习者账：终点达标也不进就绪/推荐（#199 回归确认）
     const status = await engine.statusJson()
     const course = status.courses.find(c => c.name === '数学')!
     assert.ok(!course.ready.some(r => r.node === ENDPOINT), '就绪清单剔终点')
     // 不追溯清档边界：存量终点正文原样保留
     assert.equal(await engine.content2.contentVersion('数学', ENDPOINT), 1, '存量终点正文保留（ADR-0055 边界）')
-    trace.push('终局图态：终点 pre=最后台阶、深度 7、主线深度 7、leaves=2；last_steps 改扎、sealed 在锚、完成成立；终点不进就绪；存量正文保留')
+    trace.push('终局图态：终点 pre=最后台阶、深度 7、主线深度 7、leaves=2；last_steps 改扎、B2 降级不落 sealed；终点不进就绪；存量正文保留')
 
     // 演练留痕随测试输出（--test-reporter spec 可见；票面回填引用此轨迹）
     for (const line of trace) console.log(`  ↳ #201 演练：${line}`)

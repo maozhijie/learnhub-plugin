@@ -216,6 +216,19 @@ function normalizeConceptFieldsOf(
     if (v !== undefined) next[field] = v
   }
   if (rec.misconceptions !== undefined) {
+    // #315 B3：op 的 teaches 恰一个概念时，裸字符串误解列表确定性归属到它——「这条误解
+    // 属于它教的那个概念」是可推断的（节点只教一个概念），不再强制模型重写一遍；
+    // 混合列表/多概念仍交 misconceptionsFieldOf 拒收（那才是真拆不出）。
+    const teachesMap = next.teaches
+    const single = teachesMap !== undefined && typeof teachesMap === 'object' && !Array.isArray(teachesMap)
+      ? Object.entries(teachesMap as Record<string, unknown>).filter(([k]) => k.trim()).map(([k]) => k.trim())
+      : []
+    const rawMis = rec.misconceptions
+    if (single.length === 1 && Array.isArray(rawMis) && rawMis.length > 0 && rawMis.every(x => typeof x === 'string' && String(x).trim())) {
+      next.misconceptions = (rawMis as string[]).map(t => ({ concept: single[0]!, model: t.trim() }))
+      out.normalized.push(`${where}.misconceptions 裸字符串列表 → 归属本节点唯一 teaches 概念「${single[0]}」（${rawMis.length} 条）`)
+      return next
+    }
     const v = misconceptionsFieldOf(rec.misconceptions, `${where}.misconceptions`, out)
     if (v !== undefined) next.misconceptions = v
   }

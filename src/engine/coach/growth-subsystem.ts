@@ -104,7 +104,7 @@ import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS, RECHECK_DAYS_D
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from '../sched/sandbox.ts'
 import { appendSedimentEvent } from '../sched/sediment.ts'
 import { runWriteUnit } from '../infra/write-unit.ts'
-import { COMPLETION_MASTERY_THRESHOLD, endpointNames, foldCompletion, junctionServes, readAnchors } from './seed.ts'
+import { COMPLETION_MASTERY_THRESHOLD, endpointNames, foldCompletion, junctionServes, readAnchors, structureReadingsOf } from './seed.ts'
 import { doneSet, learningSet, readySet } from '../sched/sessions.ts'
 import { masteryOfFm } from '../sched/srs.ts'
 import type { ConceptTier } from '../types.ts'
@@ -571,8 +571,11 @@ export class GrowthSubsystem {
     // 的字面判断会漏掉后者）。判据看的是**未开始的就绪存量**，不是图的历史规模。
     const endpoints = endpointNames(anchors)
     const frontierEmpty = this.frontierEmptyOf(this.coachFrontier(graph, state), endpoints)
-    // 逐终点状态（ADR-0076：未接线/已铺通/已达成 + 闭包进度）与交汇读侧派生
+    // 逐终点状态（ADR-0076：未接线/已铺通/已达成 + 闭包进度）与交汇读侧派生；
+    // #315 B5：结构读数（sealed ∧ 闭包真已学）与逐终点状态**同一份函数**折叠——
+    // 思路官计划门与执行官收束判据引的都是这一行读数，不再各站各猜「还需不需要生长」。
     const folds = anchors.length ? foldCompletion(graph, state, anchors) : []
+    const structureOf = new Map(structureReadingsOf(graph, state, anchors).map(r => [r.endpoint, r]))
     const foldOf = new Map(folds.map(f => [f.endpoint, f]))
     const serves = junctionServes(graph, anchors)
 
@@ -617,6 +620,12 @@ export class GrowthSubsystem {
           )
           if (f) {
             lines.push(`  - 闭包学习进度：已学 ${f.closure.learned} / 共 ${f.closure.total}`)
+            const st = structureOf.get(anchor.endpoint)
+            if (st) {
+              lines.push(`  - 结构读数：${st.sealed ? '已收尾' : '未收尾'}｜闭包真已学 ${st.learned}/${st.total}`
+                + (st.unlearned.length ? `（未学：${st.unlearned.join('、')}）` : '')
+                + `｜${st.complete ? '结构已铺完（该终点不再需要生长——计划门与收束判据同用本读数）' : '结构未铺完'}`)
+            }
             const lastSteps = f.criteria.last_steps.map(s => {
               const other = serves.get(s.node)?.filter(e => e !== anchor.endpoint) ?? []
               return other.length ? `${s.node}（同时服务：${other.join('、')}——交汇）` : s.node
@@ -1036,7 +1045,7 @@ export class GrowthSubsystem {
       { name: 'endpoint_anchor', description: '终点锚集合：逐终点的目标类型/声明日/收尾宣告。set_pre 接线的靶在这里对表（终点只可被 set_pre 接线，禁出现在 add_node 的 pre）。', parameters: obj({}) },
       {
         name: 'draft_patch', description: '批量补丁（写件）：把一组 EditOp 原子操作追加进生长草稿（每批 ≤24 条未发布增量；失败整批回滚并回灌 errors + 合法取值域）。糖算子——insert_prereq_chain：chain 按序展开成线性 add_node 链；split_node：把既有节点拆成 into 多个（轮廓继承 + 消费方 set_pre 重排 + 删原节点；终点不可拆）；suggest_confusable：给随批铸名的新概念顺手登记易混指向（不是图 op；finish 发布成功后展开为混淆对候选提案，人审后才入册）。op 词汇不含 move 与 region/block（已退役 #275）。', parameters: obj({
-          ops: { type: 'array', description: '补丁操作列表', items: { type: 'object', properties: { ...opFields(), chain: { type: 'array', description: 'insert_prereq_chain 的链条目（按序线性串联）' } } } },
+          ops: { type: 'array', description: `补丁操作列表。${PATCH_SHAPE_CHEATSHEET}（第一次调用前即可见——形状不合法整批拒收，别拿调用去试。）`, items: { type: 'object', properties: { ...opFields(), chain: { type: 'array', description: 'insert_prereq_chain 的链条目（按序线性串联）' } } } },
           concepts: { type: 'array', description: '随批铸名（本批新引入的概念；已能用就不铸）' },
           note_operator: { type: 'string', description: '本批生长算子（前进/插入/巩固/旁支/换向；下次 finish 硬化为 note）' },
           note_reason: { type: 'string', description: '本批理由一句话' },
@@ -1346,6 +1355,12 @@ export class GrowthSubsystem {
         return `已入草稿：本补丁 ${expanded.length} 条；未发布增量 ${doc.ops.length - doc.published} 条（水位 ${doc.published}/${doc.ops.length}）。${normLines}\n先 draft_audit 再 draft_finish。`
       }
       if (call.name === 'draft_audit') {
+        // 空草稿 audit（#315 B4）：零未发布增量 = 本会话无事可做，不跑门、不报门错误——
+        // 此前空草稿会吃到「ops: 提案没有操作条目」的门错误，模型要烧几十轮才明白该停。
+        if (!unpublishedOf().length) {
+          await logRound('audit', '审计：空草稿（零未发布增量）——无事可做')
+          return '没有未发布增量——本会话无事可做（可直接收束：已发布段无需 audit/finish；要长新内容就 draft_patch 开新批）。'
+        }
         // 审计 = **把 finish 要提交的那一份**喂给受理门的完整序列（#309 缺陷①：此前只跑
         // replayDraft——门的结构子集，schema 门缺席，于是「审计通过」与「finish 被拒」可以同帧
         // 共存，模型据此以为可以发布）。试算走同一个 batchSpecOf / editProposalGateErrors。
@@ -1467,7 +1482,15 @@ export class GrowthSubsystem {
         }
         // sealed 谓词要的是**现行锚**（本批 set_pre 接线是否构成收尾宣告）——只读锚文件，
         // 不为它再装载一遍图与登记表（门复验刚刚跑过，那两次装载在 gateCtxOf 里）。
-        const sealed = sealedDecisionOf(unpublished, await readAnchors(this.e.paths.anchorPath(root), this.e.fs))
+        // #315 B2：闭包真已学读数看**本批接线后**的闭包（apply 已成功，重读真实基图即含本批）；
+        // 与 apply 侧同一判据（门同调），降级只影响本站回执文案（锚写入在 apply 侧执法）。
+        const { nodes: postNodes } = await draftNodesOf()
+        const postReadings = structureReadingsOf(new Graph(postNodes), state, anchors)
+        const sealed = sealedDecisionOf(unpublished, await readAnchors(this.e.paths.anchorPath(root), this.e.fs),
+          (ep: string) => {
+            const r = postReadings.find(x => x.endpoint === ep)
+            return { total: r?.total ?? 0, unlearned: r?.unlearned ?? [ep] }
+          })
         doc.published = doc.ops.length
         doc.note = undefined
         doc.concepts = []
@@ -1581,6 +1604,13 @@ export class GrowthSubsystem {
         : `[coach-draft] 回路收束但草稿仍有 ${doc.ops.length - doc.published} 条未发布增量且未成功 finish（禁止空手结束）——草稿已保留（会话 ${doc.session_id}），续建或显式取消（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。`)
     }
     if (doc.published === doc.ops.length && finished) await deleteDraft(this.e.fs, draftPath)
+    else if (doc.ops.length === 0 && !doc.rounds.some(r => r.kind === 'patch' || r.kind === 'finish')) {
+      // 僵尸草稿清场（#315 B6）：从未装载过任何内容（零增量、零 patch/finish 轮——只剩
+      // 空审计）却收场的草稿即删，不留给下次生长续建。draft_revert 清空后的草稿不算
+      //（它装载过内容，模型可能回炉重开一批，保留可续建是既有语义）。
+      this.e.logger.warn('growth.draft.empty_cleared', { course: c.name, session: doc.session_id, rounds: doc.rounds.length })
+      await deleteDraft(this.e.fs, draftPath)
+    }
     log.info('coach.draft.exit', { course: c.name, session: doc.session_id, finished })
     return {
       course: c.name,

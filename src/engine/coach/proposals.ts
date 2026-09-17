@@ -16,8 +16,9 @@ import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitude
 import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from '../concepts/concepts.ts'
 import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from '../concepts/concepts.ts'
 import { saveNote, defaultFrontmatter } from '../vault/notes.ts'
-import { endpointNames, readAnchors, writeAnchors, isSeedGraph } from './seed.ts'
+import { endpointNames, readAnchors, writeAnchors, isSeedGraph, structureReadingsOf } from './seed.ts'
 import type { EndpointAnchor } from './seed.ts'
+import type { Fm } from '../types.ts'
 import {
   SECTION_ROUTE, compassScaffold, withSectionText, validateRouteBody, stripWrappingFence,
 } from './compass.ts'
@@ -448,16 +449,26 @@ export function applyFindings(audit: ApplyAudit, seedPhase = false): string[] {
 /** sealed 谓词（#271 / ADR-0088 抽出共享：apply 写单元与草稿内核两处同调，不复刻）：
  * 收尾接线批 = 零 add_node 的纯 set_pre 批 → 被接线终点落 sealed；被含 add_node 的
  * 主线批接线 → reopen。夹带其他 op 的零新增批不构成收尾宣告、也不动 sealed。
- * effects 为空 = 本批不触碰任何终点锚。 */
+ * effects 为空 = 本批不触碰任何终点锚。
+ *
+ * #315 B2 收尾前置：传入了 `closureLearnedOf`（终点 → 闭包真已学读数）时，闭包未全部
+ * 真已学的终点**不落 sealed**——收尾批就地降级为普通接线批（接线照做、不 sealed、
+ * 不进停摆判据），被降级的终点记入 `downgraded`；完整的状态型完成判据（mastery 阈值
+ * + 闭包健康）归 #316。未传时保持纯结构判据（存量测试与旧调用方不受影响）。 */
 export interface SealedDecision {
   /** 被本批 set_pre 接线的终点节点（图上在册锚的子集）。 */
   wired: string[]
   /** 是否构成收尾宣告（零 add_node 纯 set_pre 批）。 */
   sealing: boolean
   effects: Array<{ endpoint: string; action: 'seal' | 'reopen' }>
+  /** 因闭包未真已学被降级的终点（#315 B2；仅在传入 closureLearnedOf 时出现）。 */
+  downgraded?: string[]
 }
 
-export function sealedDecisionOf(ops: EditOp[], anchors: EndpointAnchor[]): SealedDecision {
+/** 闭包真已学读数（终点 → 闭包剔除终点自身后的未学名单；#315 B2）。 */
+export type ClosureLearnedOf = (endpoint: string) => { total: number; unlearned: string[] }
+
+export function sealedDecisionOf(ops: EditOp[], anchors: EndpointAnchor[], closureLearnedOf?: ClosureLearnedOf): SealedDecision {
   // 接线必须**非空**（#313 C10）：`set_pre {node: 终点, pre: []}` 是把终点的前置清空，
   // 不构成收尾接线——旧谓词只看 op 形态，于是「pre 空 = 未接线」的终点会被标成 sealed
   // （与上下文包里读出的「未接线」自相矛盾，而 sealed 一旦落锚会一直留着）。
@@ -467,11 +478,46 @@ export function sealedDecisionOf(ops: EditOp[], anchors: EndpointAnchor[]): Seal
   const adds = addNodeCountOf(ops)
   const sealing = adds === 0 && ops.every(o => o.op === 'set_pre' && (o.pre ?? []).length > 0)
   if (!sealing && adds === 0) return { wired: touched.map(a => a.endpoint), sealing: false, effects: [] }
+  // #315 B2：闭包未真已学的终点不落 sealed——降级为普通接线批（接线照做），其余终点照常。
+  const downgradeable = sealing && closureLearnedOf !== undefined
+  const downgraded = downgradeable
+    ? touched.map(a => a.endpoint).filter(ep => (closureLearnedOf!(ep).unlearned.length > 0))
+    : []
+  const sealTargets = touched.filter(a => !downgraded.includes(a.endpoint))
+  const effects: SealedDecision['effects'] = []
+  if (sealing && sealTargets.length) {
+    effects.push(...sealTargets.map(a => ({ endpoint: a.endpoint, action: 'seal' as const })))
+  }
+  if (adds > 0) {
+    effects.push(...touched.map(a => ({ endpoint: a.endpoint, action: 'reopen' as const })))
+  }
   return {
     wired: touched.map(a => a.endpoint),
-    sealing,
-    effects: touched.map(a => ({ endpoint: a.endpoint, action: sealing ? 'seal' as const : 'reopen' as const })),
+    sealing: sealing && sealTargets.length > 0,
+    effects,
+    ...(downgraded.length ? { downgraded } : {}),
   }
+}
+
+/** 节点概念自相矛盾门（#315 B7，人裁口径 = 门拒）：同一节点 teaches 与 assumes 同一概念
+ * （canonical 归一后比对，#313 C12 同款）= 教自己假设已会的东西，拒收该批。合法的
+ * 「螺旋升档」编码写法（只 teaches 高档、不 assumes）不需要门另眼：assume 同概念
+ * 无论档位一律拒。 */
+export function selfContradictionErrors(
+  ops: EditOp[], entries: ReadonlyArray<ConceptEntry>,
+): string[] {
+  const canon = canonicalizerOf(entries)
+  const errors: string[] = []
+  for (const [i, op] of ops.entries()) {
+    if (op.op !== 'add_node') continue
+    const where = `ops.${i}(add_node ${op.name})`
+    for (const concept of Object.keys(op.teaches ?? {})) {
+      if (op.assumes && Object.keys(op.assumes).some(a => canon(a) === canon(concept))) {
+        errors.push(`${where}: 同一节点 teaches 与 assumes 同一概念「${concept}」（教自己假设已会的东西）——若意图是螺旋升档，只写 teaches 高档、不要 assumes 同概念`)
+      }
+    }
+  }
+  return errors
 }
 
 /** 概念名归一的判决面（#313 C12）：图上与 op 里的概念名允许写别名（对表门按在册
@@ -528,6 +574,7 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
     ...conceptReferenceErrors(conceptRefsOfOps(spec.ops), namesOf([...ctx.entries, ...mints])),
     ...endpointGuardErrorsOf(spec, ctx.anchors),
     ...consolidationGateErrors(spec.note?.operator, spec.ops, ctx.graph, ctx.entries),
+    ...selfContradictionErrors(spec.ops, [...ctx.entries, ...mints]),
   ]
   // 误解封顶（#313 C9/C12）：增量判据 + canonical 归一，落在登记表现行条目（+ 本批铸名）上。
   // 结构面先过才跑（与旧序一致——重放已有错时叠一条派生错误只会盖住真死因）
@@ -741,6 +788,9 @@ export class GraphProposals {
     /** 时钟端口（#175 阶段①）：decided/now 戳与学习日缺省都经它取时。 */
     private clock: Clock,
     private fs: VaultFs,
+    /** 调度状态读取口（#315 B2）：收尾前置「闭包真已学」要在 apply 侧读掌握状态；
+     * 缺省 = 收尾降级门不执法（存量构造点/测试零改动）。 */
+    private stateOf: ((root: string) => Promise<Record<string, Fm>>) | undefined,
     logger: Logger = noopLogger,
   ) {
     this.logger = logger
@@ -903,6 +953,10 @@ export class GraphProposals {
 
     // 2. data/图.yaml 重写（内存侧应用 ops；落盘动作进下方写入单元）
     applyOpsToNodes(nodes, spec.ops)
+    // 应用后的图（#315 B2）：sealed 维护步的「闭包真已学」读数必须看**本批接线后**的
+    // 闭包——收尾批的语义就是把终点接到最终台阶，用接线前的旧图会让新接入的未学子树
+    // 逃出判定，降级门在主形态下失效。旧 `graph`（接线前快照）仍供笔记联动定位旧位置。
+    const graphAfter = new Graph(nodes)
 
     // 写入单元（#176）：写序照今天的声明——「铸名 → 图重写 → 终点锚 sealed 维护
     // （#202）→ 笔记联动 → 罗盘批内重写 → 边实验账本 → 快照 → 笔记骨架 → journal(graph_edit)
@@ -941,13 +995,21 @@ export class GraphProposals {
             //     读-改-写在一步内完成；零终点静默跳过；sealed 缺省不落盘（形状不变）。
             name: '终点锚 sealed 维护',
             run: async () => {
-              // sealed 谓词单一出处 sealedDecisionOf（#271 / ADR-0088：apply 与草稿内核同调）
-              const decision = sealedDecisionOf(spec.ops, await readAnchors(this.paths.anchorPath(root), this.fs))
+              // sealed 谓词单一出处 sealedDecisionOf（#271 / ADR-0088：apply 与草稿内核同调）；
+              // #315 B2 收尾前置：传入闭包真已学读数——未学完的终点降级为普通接线批
+              // （接线照做、不落 sealed），零降级时与旧纯结构判据逐字等价。
+              const anchorsNow = await readAnchors(this.paths.anchorPath(root), this.fs)
+              const state = this.stateOf ? await this.stateOf(root) : undefined
+              const readings = state ? structureReadingsOf(graphAfter, state, anchorsNow) : undefined
+              const decision = sealedDecisionOf(spec.ops, anchorsNow,
+                readings ? ep => {
+                  const r = readings.find(x => x.endpoint === ep)
+                  return { total: r?.total ?? 0, unlearned: r?.unlearned ?? [ep] }
+                } : undefined)
               if (!decision.effects.length) return
               const today = todayStr(new Date(this.clock.nowMs()))
               const anchorPath = this.paths.anchorPath(root)
-              const anchors = await readAnchors(anchorPath, this.fs)
-              const next: EndpointAnchor[] = anchors.map(a => {
+              const next: EndpointAnchor[] = anchorsNow.map(a => {
                 const eff = decision.effects.find(e => e.endpoint === a.endpoint)
                 if (!eff) return a
                 return eff.action === 'seal' ? { ...a, sealed: today } : { ...a, sealed: undefined }
