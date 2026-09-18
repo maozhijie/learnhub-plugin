@@ -1032,7 +1032,7 @@ export class GrowthSubsystem {
     return [
       { name: 'graph_view', description: render(TOOL_GRAPH_VIEW_DESC_DRAFT, {}), parameters: obj({}) },
       { name: 'node_card', description: render(TOOL_NODE_CARD_DESC_DRAFT, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC, {}) } }, ['node']) },
-      { name: 'concept_footprint', description: render(TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT, {}), parameters: obj({ query: { type: 'string', description: render(TOOL_PARAM_QUERY_DESC_DRAFT, {}) } }) },
+      { name: 'concept_footprint', description: render(TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT, {}), parameters: obj({ query: { description: render(TOOL_PARAM_QUERY_DESC_DRAFT, {}), oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] } }) },
       { name: 'behavior_digest', description: render(TOOL_BEHAVIOR_DIGEST_DESC, {}), parameters: obj({}) },
       { name: 'bank_overview', description: render(TOOL_BANK_OVERVIEW_DESC, {}), parameters: obj({}) },
       { name: 'compass_read', description: render(TOOL_COMPASS_READ_DESC, {}), parameters: obj({}) },

@@ -590,7 +590,7 @@ export class GraphSubsystem {
    * 三类（孤儿/悬空/单向，恒全表派生）。query = 子串发现非存在性判定。与教练
    * concept_footprint 同数据源（登记表 + 反向映射 + conceptInvokesOf），漂移面是
    * 面板独有增量；教练侧渲染仍走自己的文本折叠（含插入挂点判读），未消费本核。 */
-  async conceptFootprint(courseKey?: string, query?: string): Promise<ConceptFootprintDoc> {
+  async conceptFootprint(courseKey?: string, query?: string | string[]): Promise<ConceptFootprintDoc> {
     const c = await this.e.registry.resolve(courseKey)
     const entries = await this.e.concepts.load()
     const { graph } = await this.e.loadView(c)

@@ -12,7 +12,8 @@ import { Store } from '../store.ts'
 import { atomicWrite } from '../infra/io.ts'
 import { runWriteUnit } from '../infra/write-unit.ts'
 import { Graph, GraphStore, parseConceptFields, parseEnc, parseOverrides, mergeTierMap, mergeNodeOverrides, effectiveConceptFieldsOf, misconceptionCapErrorsOfCounts, snapshotDoc } from '../graph/graph.ts'
-import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from '../concepts/concepts.ts'
+import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry, MERGE_TEXT_THRESHOLD } from '../concepts/concepts.ts'
+import { trigramSimilarity } from '../content/question-dedup.ts'
 import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from '../concepts/concepts.ts'
 import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from '../concepts/concepts.ts'
 import { saveNote, defaultFrontmatter } from '../vault/notes.ts'
@@ -29,6 +30,7 @@ import { noopLogger } from '../infra/logger.ts'
 import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
 import { RECHECK_DAYS_DEFAULT } from '../infra/params.ts'
+import { round2 } from '../infra/grading.ts'
 import type { GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator, NodeOverrides } from '../types.ts'
 import { BLOOM_LEVELS, CONCEPT_TIERS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from '../types.ts'
 import type { Paths } from '../infra/paths.ts'
@@ -858,6 +860,63 @@ export function crossCourseFirstRefWarnings(
   return out
 }
 
+/** add_node 前查足迹（#340 三）：纯读侧派生，零落盘、零阻塞。对每个 add_node 的
+ * teaches/assumes 概念查现有足迹，产出两类非阻 findings：
+ * ① 疑似重复教学：该概念的 teaches 节点已有其他节点（复用 #274 名面 trigram 信号
+ *    作为补充——新节点 teaches 的概念名与已有概念名 trigram 相似也报）；
+ * ② 疑似漏连 pre：该节点 assumes 的概念在闭包外有 teaches 节点，暗示应补 set_pre。
+ * 纪律：findings 是建议不是自动连边；回连仍过「删掉这条边后可达性是否改变」判据。 */
+export function addNodeFootprintFindings(
+  ops: EditOp[], graph: Graph, entries: ConceptEntry[],
+): string[] {
+  const canon = (raw: string): string | null => resolveConcept(entries, raw)?.canonical ?? null
+  const findings: string[] = []
+  for (const op of ops) {
+    if (op.op !== 'add_node') continue
+    const nodeName = op.name ?? ''
+    // ① 疑似重复教学：teaches 概念在现有图上已有 teaches 节点
+    for (const rawConcept of Object.keys(op.teaches ?? {})) {
+      const owner = canon(rawConcept)
+      if (!owner) continue
+      const existingTeachers = graph.taughtByOf[owner] ?? []
+      // 排除本批新增节点（它们还没有足迹）
+      const otherTeachers = existingTeachers.filter(n => n !== nodeName)
+      if (otherTeachers.length) {
+        findings.push(`疑似重复教学（非阻，无需改批）：节点「${nodeName}」teaches「${owner}」，但现有节点 ${otherTeachers.join('、')} 也 teaches 该概念——请确认不是重复教学；若确实是不同切入面，无需改动`)
+      }
+      // #274 名面信号复用：新节点 teaches 的概念名与已有概念名 trigram 相似
+      for (const e of entries) {
+        if (isDeprecated(e) || e.canonical === owner) continue
+        const sim = trigramSimilarity(owner, e.canonical)
+        if (sim >= MERGE_TEXT_THRESHOLD) {
+          const existingTeachersOfSimilar = graph.taughtByOf[e.canonical] ?? []
+          if (existingTeachersOfSimilar.length) {
+            findings.push(`疑似重复教学（名面信号，非阻）：节点「${nodeName}」teaches「${owner}」与在册概念「${e.canonical}」名面近似（相似度 ${round2(sim)}），后者由 ${existingTeachersOfSimilar.join('、')} teaches——请确认是否指称同一物`)
+          }
+        }
+      }
+    }
+    // ② 疑似漏连 pre：assumes 概念在闭包外有 teaches 节点
+    const preNodes = op.pre ?? []
+    // 计算新节点的前置闭包（沿 pre 节点 upstream；走 Graph.upstreamClosure 单一出处，G10）
+    const closure = new Set<string>()
+    for (const p of preNodes) {
+      for (const anc of graph.upstreamClosure(p)) closure.add(anc)
+    }
+    for (const rawConcept of Object.keys(op.assumes ?? {})) {
+      const owner = canon(rawConcept)
+      if (!owner) continue
+      const teachers = graph.taughtByOf[owner] ?? []
+      // 在闭包外有 teaches 节点 = 疑似漏连 pre
+      const outsideTeachers = teachers.filter(t => !closure.has(t))
+      if (outsideTeachers.length && teachers.length > 0) {
+        findings.push(`疑似漏连 pre（非阻，无需改批）：节点「${nodeName}」assumes「${owner}」，但该概念在闭包外由 ${outsideTeachers.join('、')} teaches——若本节点确实依赖它，考虑补 set_pre 连向其中一个`)
+      }
+    }
+  }
+  return findings
+}
+
 /** edit 受理门全序列收拢（#271 / ADR-0088 中心裁决「门同源」）：结构重放 / 概念对表 /
  * 终点锚保护 / 巩固门 / 生长闸门——proposeEdit / applyEdit / 草稿内核**三处同调**，
  * 草稿通过 = 门通过按构造成立。上下文由调用方装载（entries = 登记现行条目，需铸名
@@ -1163,6 +1222,8 @@ export class GraphProposals {
     // 不得混入 errors）；错误面统一走 editGateErrors（门同源，ADR-0088）
     warns.push(...nearNameWarnings(nearNameCandidates(spec.concepts ?? [], entries)))
     warns.push(...crossCourseFirstRefWarnings(entries, graph, conceptRefsOfOps(spec.ops)))
+    // #340 三：add_node 前查足迹（疑似重复教学 + 疑似漏连 pre）——非阻 findings
+    warns.push(...addNodeFootprintFindings(spec.ops, graph, entries))
     if (spec.concepts?.length) warns.push(...conceptMagnitudeWarnings(applyConceptMints(entries, spec.concepts).entries))
     const anchors = await readAnchors(this.paths.anchorPath(course.root), this.fs)
     // 门序列 = editProposalGateErrors 的内部两步（validateEditProposal → editGateErrors）；此处

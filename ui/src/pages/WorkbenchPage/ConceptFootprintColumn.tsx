@@ -123,7 +123,7 @@ export default function ConceptFootprintColumn({ course }: { course: string }) {
             <DriftBlock label='单向 confusable（对方未回指）' rows={doc.drift.oneWay.map(d => `${d.from} → ${d.to}`)} />
           </div>
           <Text type='secondary' className='lh-t-12 lh-block lh-mb-8'>
-            {doc.matched}/{doc.total} 条{doc.query ? `，query=「${doc.query}」` : '（全表）'}
+            {doc.matched}/{doc.total} 条{doc.queries.length ? `，query=「${doc.queries.join('、')}」` : '（全表）'}
           </Text>
           {doc.matched === 0
             ? <Empty description={doc.total ? '无命中条目——空 ≠ 不存在：换宽词，或清空关键词读全表' : '登记表为空（合法空态：概念铸名随生长批提案落盘）'} />

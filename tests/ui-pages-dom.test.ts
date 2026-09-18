@@ -491,7 +491,7 @@ test('文案语义锁·休眠题：列名「未调度」词条明文许可，Avo
 // ---- WorkbenchPage 概念足迹分栏（#268）：词条档三面 + 漂移面三类 + 「空 ≠ 不存在」 ----
 
 const FOOTPRINT_FIXTURE = {
-  course: '数学', total: 2, matched: 2, query: null,
+  course: '数学', total: 2, matched: 2, queries: [],
   rows: [
     {
       canonical: '导数', aliases: ['derivative'], definition: '变化率', deprecated: false,
@@ -529,7 +529,7 @@ test('概念足迹分栏：词条档/教学面/题目面/漂移面三类如实�
 
 test('概念足迹分栏：子串发现「空 ≠ 不存在」话术显式在场（#268 / ADR-0077）', async () => {
   const { default: Column } = await importUi('pages/WorkbenchPage/ConceptFootprintColumn.tsx')
-  routes({ 'GET /concepts/footprint': { ...FOOTPRINT_FIXTURE, matched: 0, rows: [], query: '极限' } })
+  routes({ 'GET /concepts/footprint': { ...FOOTPRINT_FIXTURE, matched: 0, rows: [], queries: ['极限'] } })
   render(React.createElement(Column, { course: '数学' }))
   assert.ok(await screen.findByText(/空 ≠ 不存在/), '空命中显式声明「换宽词或读全表」，不伪装成不存在')
 })

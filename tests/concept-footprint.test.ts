@@ -1,7 +1,8 @@
 /**
- * 概念足迹取材核（#268）：conceptFootprintCore 的纯派生回归——词条档诚实（缺失如实）、
+ * 概念足迹取材核（#268 + #340 多名字查询）：conceptFootprintCore 的纯派生回归——词条档诚实（缺失如实）、
  * 教学面/题目面取材（#270 反向映射 canonical 归并、invokes 排序）、漂移面三类
- * （孤儿/悬空/单向）恒全表派生不随 query 收窄、子串发现非存在性判定。零 IO。
+ * （孤儿/悬空/单向）恒全表派生不随 query 收窄、子串发现非存在性判定、多名字查询
+ * （query: string | string[]）。零 IO。
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -12,7 +13,7 @@ function core(entries: ConceptEntry[], opts: {
   taughtByOf?: Record<string, string[]>
   assumedByOf?: Record<string, string[]>
   invokes?: Map<string, Map<string, number>>
-  query?: string
+  query?: string | string[]
 } = {}) {
   return conceptFootprintCore({
     entries,
@@ -88,4 +89,36 @@ test('#268 子串发现命中 canonical 或别名；空命中 matched=0 但 tota
   const none = core(ENTRIES, { query: '不存在的关键词' })
   assert.equal(none.matched, 0)
   assert.equal(none.total, ENTRIES.length, 'total 仍报全表规模——空命中 ≠ 不存在')
+})
+
+// ---- #340 多名字查询 ----
+
+test('#340 queries 字段：无 query 时返回空数组，有 query 时返回归一化后的词列表', () => {
+  assert.deepEqual(core(ENTRIES).queries, [], '无 query → 空数组')
+  assert.deepEqual(core(ENTRIES, { query: '导' }).queries, ['导'], '单词 string → 单元素数组')
+  assert.deepEqual(core(ENTRIES, { query: '  ' }).queries, [], '空白 string → 空数组')
+  assert.deepEqual(core(ENTRIES, { query: ['导', '积'] }).queries, ['导', '积'], '数组透传')
+  assert.deepEqual(core(ENTRIES, { query: ['  ', '积', ''] }).queries, ['积'], '数组去空词')
+})
+
+test('#340 多名字查询：任一词命中即入选，结果去重', () => {
+  const r = core(ENTRIES, { query: ['deriv', 'integr'] })
+  assert.deepEqual(r.rows.map(x => x.canonical), ['导数', '积分'],
+    'deriv → 导数（别名 derivative）、integr → 积分（别名 integration）')
+  assert.equal(r.matched, 2)
+})
+
+test('#340 多名字查询：部分命中不报错，未命中词不影响已命中结果', () => {
+  const r = core(ENTRIES, { query: ['导', '不存在的词'] })
+  assert.deepEqual(r.rows.map(x => x.canonical), ['导数'])
+  assert.equal(r.matched, 1)
+  assert.equal(r.total, ENTRIES.length)
+})
+
+test('#340 多名字查询：漂移面恒全表，不受多词查询收窄', () => {
+  const r = core(ENTRIES, { assumedByOf: { 积分: ['丁'] } })
+  const filtered = core(ENTRIES, { assumedByOf: { 积分: ['丁'] }, query: ['导', '积'] })
+  assert.deepEqual(filtered.drift.orphans, r.drift.orphans, '漂移面恒全表')
+  assert.deepEqual(filtered.drift.dangling, r.drift.dangling)
+  assert.deepEqual(filtered.drift.oneWay, r.drift.oneWay)
 })

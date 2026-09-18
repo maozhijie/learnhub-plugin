@@ -338,12 +338,16 @@ export function renderNodeCard(
  * 足迹取材全经 providers 注入（题目的 invokes 折叠口径住 growth-subsystem——S60 契约：
  * 子系统私有折叠经 providers 复用，本文件不自己扫库；图侧反查读 `deps.loadView`）。 */
 export async function renderConceptFootprint(
-  deps: CoachToolDeps, c: CourseEntry, providers: CoachToolProviders, query?: string,
+  deps: CoachToolDeps, c: CourseEntry, providers: CoachToolProviders, query?: string | string[],
 ): Promise<string> {
   const entries = await deps.concepts.load()
-  const q = query?.trim()
-  const hit = q
-    ? entries.filter(e => e.canonical.includes(q) || (e.aliases ?? []).some(a => a.includes(q)))
+  // 多名字查询（#340）：string | string[] 统一归一为去空词数组
+  const queries = Array.isArray(query)
+    ? query.map(q => q.trim()).filter(Boolean)
+    : (query?.trim() ? [query.trim()] : [])
+  const hasQuery = queries.length > 0
+  const hit = hasQuery
+    ? entries.filter(e => queries.some(q => e.canonical.includes(q) || (e.aliases ?? []).some(a => a.includes(q))))
     : entries
   const { graph } = await deps.loadView(c)
   // 概念反向映射单一出处 Graph.taughtByOf/assumedByOf（#270）：names 全扫折叠退役——
@@ -351,17 +355,19 @@ export async function renderConceptFootprint(
   const teachers = graph.taughtByOf
   const assumers = graph.assumedByOf
   const invokes = await providers.conceptInvokes()
+  // 显示用：多词用逗号拼接，单词直接显示（与旧行为一致）
+  const queryDisplay = queries.join('、')
   const lines = [render(CF_HEADING, {
     course: c.name, hit: hit.length, total: entries.length,
-    queryPart: q ? render(CF_QUERY_PART, { query: q }) : render(CF_QUERY_FULL, {}),
+    queryPart: hasQuery ? render(CF_QUERY_PART, { query: queryDisplay }) : render(CF_QUERY_FULL, {}),
   }), '']
   if (!hit.length) {
     lines.push(entries.length
-      ? render(CF_NO_HIT_WITH_QUERY, { query: q ?? '' })
+      ? render(CF_NO_HIT_WITH_QUERY, { query: queryDisplay })
       : render(CF_NO_HIT_MISSING, {}))
     return lines.join('\n') + '\n'
   }
-  if (q) lines.push(render(CF_QUERY_HINT, {}), '')
+  if (hasQuery) lines.push(render(CF_QUERY_HINT, {}), '')
   for (const e of hit.slice(0, LIST_CAP)) {
     lines.push(render(CF_ENTRY_HEADING, { canonical: e.canonical, deprecated: isDeprecated(e) ? render(CF_DEPRECATED_SUFFIX, {}) : '' }))
     lines.push(render(CF_ENTRY_DEF, {
@@ -620,7 +626,7 @@ export function coachToolSpecs(): LlmToolSpec[] {
   return [
     { name: 'graph_view', description: render(TOOL_GRAPH_VIEW_DESC_LIVE, {}), parameters: obj({}) },
     { name: 'node_card', description: render(TOOL_NODE_CARD_DESC_LIVE, {}), parameters: obj({ node: { type: 'string', description: render(TOOL_PARAM_NODE_DESC, {}) } }, ['node']) },
-    { name: 'concept_footprint', description: render(TOOL_CONCEPT_FOOTPRINT_DESC_LIVE, {}), parameters: obj({ query: { type: 'string', description: render(TOOL_PARAM_QUERY_DESC_LIVE, {}) } }) },
+    { name: 'concept_footprint', description: render(TOOL_CONCEPT_FOOTPRINT_DESC_LIVE, {}), parameters: obj({ query: { description: render(TOOL_PARAM_QUERY_DESC_LIVE, {}), oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] } }) },
     { name: 'behavior_digest', description: render(TOOL_BEHAVIOR_DIGEST_DESC, {}), parameters: obj({}) },
     { name: 'bank_overview', description: render(TOOL_BANK_OVERVIEW_DESC, {}), parameters: obj({}) },
     { name: 'compass_read', description: render(TOOL_COMPASS_READ_DESC, {}), parameters: obj({}) },
@@ -662,8 +668,12 @@ export function coachToolExecutor(
         return renderNodeCard(graph, state, node.trim(), await endpointsOf(), await deps.concepts.load())
       }
       case 'concept_footprint': {
-        const q = argsOf(call).query
-        return renderConceptFootprint(deps, c, providers, typeof q === 'string' ? q : undefined)
+        const raw = argsOf(call).query
+        // 多名字查询（#340）：string | string[] 都接受
+        const q = Array.isArray(raw)
+          ? raw.filter((x): x is string => typeof x === 'string')
+          : (typeof raw === 'string' ? raw : undefined)
+        return renderConceptFootprint(deps, c, providers, q)
       }
       case 'behavior_digest':
         return providers.behaviorDigestText()

@@ -829,8 +829,9 @@ export interface ConceptFootprintDrift {
 export interface ConceptFootprintCore {
   total: number
   matched: number
-  /** 归一后的子串（null = 无 query 全表）；命中为空 ≠ 不存在，由呈现层带话术。 */
-  query: string | null
+  /** 归一化后的查询词列表（null-ish 输入 → 空数组 = 无 query 全表）；每个词至少 1 字符。
+   * 命中为空 ≠ 不存在，由呈现层带话术。 */
+  queries: string[]
   rows: ConceptFootprintRow[]
   drift: ConceptFootprintDrift
 }
@@ -845,10 +846,14 @@ export function conceptFootprintCore(args: {
   taughtByOf: Record<string, string[]>
   assumedByOf: Record<string, string[]>
   invokes: Map<string, Map<string, number>>
-  query?: string
+  query?: string | string[]
 }): ConceptFootprintCore {
   const { entries, taughtByOf, assumedByOf, invokes } = args
-  const q = args.query?.trim() || null
+  // 多名字查询（#340）：string | string[] 统一归一为去空词数组；空数组 = 全表
+  const rawQueries = Array.isArray(args.query)
+    ? args.query.map(q => q.trim()).filter(Boolean)
+    : (args.query?.trim() ? [args.query.trim()] : [])
+  const queries = rawQueries
   // 反向映射按 canonical 归并（保 names 序：同一 canonical 的多个原始键按映射键序拼）
   const mergeRaw = (raw: Record<string, string[]>): Map<string, string[]> => {
     const out = new Map<string, string[]>()
@@ -904,12 +909,13 @@ export function conceptFootprintCore(args: {
     }
   }
   const all = entries.map(rowOf)
-  const rows = q ? all.filter(r =>
-    r.canonical.includes(q) || r.aliases.some(a => a.includes(q))) : all
+  const rows = queries.length
+    ? all.filter(r => queries.some(q => r.canonical.includes(q) || r.aliases.some(a => a.includes(q))))
+    : all
   return {
     total: entries.length,
     matched: rows.length,
-    query: q,
+    queries,
     rows,
     drift: {
       orphans: all.filter(r => r.orphan).map(r => r.canonical),
