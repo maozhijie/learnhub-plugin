@@ -318,7 +318,7 @@ export function renderNodeCard(
 export async function renderConceptFootprint(
   deps: CoachToolDeps, c: CourseEntry, providers: CoachToolProviders, query?: string,
 ): Promise<string> {
-  const entries = await deps.concepts.load(c.root)
+  const entries = await deps.concepts.load()
   const q = query?.trim()
   const hit = q
     ? entries.filter(e => e.canonical.includes(q) || (e.aliases ?? []).some(a => a.includes(q)))
@@ -631,7 +631,7 @@ export function coachToolExecutor(
       case 'graph_view': {
         const { graph, state } = await deps.loadView(c)
         const { today } = await deps.learningDay()
-        return renderGrowthGraphView(graph, state, await endpointsOf(), { today, conceptEntries: await deps.concepts.load(c.root) })
+        return renderGrowthGraphView(graph, state, await endpointsOf(), { today, conceptEntries: await deps.concepts.load() })
       }
       case 'node_card': {
         const node = argsOf(call).node

@@ -116,7 +116,7 @@ test('断裂宣告：v3 库拒载文案点名存储塌缩与自删重建路径�
       assert.match(message, /一课程一文件 data\/图\.yaml/, '新存储形态写进文案')
       assert.match(message, /零迁移脚本/)
       assert.match(message, /旧课程库不再支持、由用户自删：删除旧课程目录（或整个学习中心数据目录）后重建/)
-      assert.match(message, /跨断裂存活的档案（概念登记表等）随重建课程重新落盘/)
+      assert.match(message, /跨断裂存活的档案（概念登记表等）不受重建影响（v0.4 起中心级一份，ADR-0089）/)
       assert.doesNotMatch(message, /migrate/, '不再存在任何迁移脚本指路')
       return true
     })

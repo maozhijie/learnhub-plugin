@@ -59,7 +59,7 @@ test('content.pack.registry_broken：概念登记表 Broken 降级留痕（INFO�
   await withVault({}, async ({ engine, logger, paths }) => {
     const { writeFile, mkdir } = await import('node:fs/promises')
     await mkdir(paths.courseRoot('math'), { recursive: true })
-    await writeFile(paths.conceptRegistryPath('math'), '{oops', 'utf8')
+    await writeFile(paths.conceptRegistryPath, '{oops', 'utf8')
     await engine.content2.contentPack('数学', '入门')
     assert.equal(logger.count('content.pack.registry_broken'), 1)
     assert.equal(logger.nth('content.pack.registry_broken')!.level, 'info')
@@ -152,7 +152,7 @@ test('bank.gate.registry_broken：错误卡候选面登记表降级留痕（WARN
     }
     const { writeFile, mkdir } = await import('node:fs/promises')
     await mkdir(engine.paths.courseRoot('math'), { recursive: true })
-    await writeFile(engine.paths.conceptRegistryPath('math'), '{oops', 'utf8')
+    await writeFile(engine.paths.conceptRegistryPath, '{oops', 'utf8')
     await assert.rejects(() => engine.bank2.errorCardGenerate('数学', {}, async () => {
       throw new Error('脚本化端口：不该走到模型调用')
     }), /没有可挖|全部缺失|脚本化端口/)

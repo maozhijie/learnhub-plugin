@@ -890,7 +890,7 @@ export class GraphProposals {
     if (!course) throw new Error(`[propose-edit] 注册表中没有课程「${spec.course}」。`)
     const nodes = await new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs).load()
     const graph = new Graph(nodes)
-    const entries = await this.concepts.load(course.root) // 登记表 Broken 在此抛错，apply 不落盘
+    const entries = await this.concepts.load() // 登记表 Broken 在此抛错，apply 不落盘
     // 非阻提示照旧（#264 近似名预检与量级告警）；错误面统一走 editGateErrors（门同源，ADR-0088）
     warns.push(...nearNameWarnings(nearNameCandidates(spec.concepts ?? [], entries)))
     if (spec.concepts?.length) warns.push(...conceptMagnitudeWarnings(applyConceptMints(entries, spec.concepts).entries))
@@ -941,7 +941,7 @@ export class GraphProposals {
     const store = new GraphStore(this.paths, this.paths.courseRoot(root), this.fs)
     // 概念对表复验（#141）：受理与 apply 之间登记表可能被并入/手改；铸名侧幂等
     // （已属同一条目跳过），撞上其他条目即拒绝，两门全过才开始任何写盘。
-    const existing = await this.concepts.load(root)
+    const existing = await this.concepts.load()
     const { errors: mintErrors, entries: mergedEntries } = applyConceptMints(existing, spec.concepts ?? [])
     const conceptErrors = [...mintErrors, ...conceptReferenceErrors(conceptRefsOfOps(spec.ops), namesOf(mergedEntries))]
     if (conceptErrors.length) {
@@ -1002,7 +1002,7 @@ export class GraphProposals {
             // 反过来图先写会让引用悬空；铸名幂等已在上方 applyConceptMints 门内
             name: '铸名落概念登记表',
             run: async () => {
-              if (spec.concepts?.length) await this.concepts.save(root, mergedEntries)
+              if (spec.concepts?.length) await this.concepts.save(mergedEntries)
             },
           },
           {
@@ -1145,8 +1145,9 @@ export class GraphProposals {
   /** 名称建课（ADR-0076 §一：建课 = 名称即空图）：面板只收一个课程名，一个写入单元
    * 落全部脚手架——注册表条目（enabled）+ 课程根目录（data/课程/state）+
    * `data/图.yaml`（{ nodes: [] }，空图的合法载体：GraphStore.load 正常读取，#284）+
-   * 空 `概念登记表.yaml`（concepts: []）+ `state/终点锚.json`（空锚，合法空态）+
-   * `罗盘.md` 脚手架。**不自动初始化生成**：零节点图不入任何自动触发点（零节点闸），
+   * `state/终点锚.json`（空锚，合法空态）+
+   * `罗盘.md` 脚手架。概念登记表不再随建课落盘（v0.4 / ADR-0089 跨课程化：登记表是
+   * 中心级一份，缺失即合法空态，随首次铸名出现）。**不自动初始化生成**：零节点图不入任何自动触发点（零节点闸），
    * 第一次生长由学习者在教练台显式下发（加终点是**纯声明**、不触发任何生成，ADR-0076 §三
    * / #313 D21——此处旧注释写「或加终点触发」与实现相反）。写序 = 脚手架在先、注册表条目在后：
    * 半途失败最多留孤儿目录（无注册表条目，建课可重试），不会留下不能加载的死课。 */
@@ -1167,11 +1168,10 @@ export class GraphProposals {
       journal: rec => this.store.appendJournal(rec),
       steps: [
         {
-          name: '课程脚手架（目录/空图/概念登记表/终点锚/罗盘）',
+          name: '课程脚手架（目录/空图/终点锚/罗盘）',
           run: async () => {
             for (const sub of ['data', '课程', 'state']) await this.fs.mkdir(`${this.centerRoot}/${root}/${sub}`)
             await store.writeGraphDoc([])
-            await this.concepts.save(root, [])
             await writeAnchors(anchorPath, [], this.fs)
             await atomicWrite(compassPath, compassScaffold(trimmed), this.fs)
           },
@@ -1465,7 +1465,7 @@ export class GraphProposals {
   ): Promise<{ id: number; kind: 'concept_merge'; course: string; from: string; into: string; names: string[]; irreversible: true; warns: string[] }> {
     const course = await this.registry.get(courseKey.trim())
     if (!course) throw new Error(`[concept-merge-propose] 注册表中没有课程「${courseKey.trim()}」。`)
-    const entries = await this.concepts.load(course.root)
+    const entries = await this.concepts.load()
     const gate = mergeConceptEntries(entries, from.trim(), into.trim())
     if (gate.errors.length) {
       throw new Error(`[concept-merge-propose] 合并提案未受理。\n${gate.errors.map(e => `  ✗ ${e}`).join('\n')}`)
@@ -1513,13 +1513,13 @@ export class GraphProposals {
     const course = await this.registry.get(v.spec.course)
     if (!course) throw new Error(`[concept-merge-apply] 注册表中没有课程「${v.spec.course}」。`)
     const root = course.root
-    const entries = await this.concepts.load(root)
+    const entries = await this.concepts.load()
     const merged = mergeConceptEntries(entries, v.spec.from, v.spec.into)
     if (merged.errors.length) {
       throw new Error(`[concept-merge-apply] 合并未执行（登记表保持原样——受理后登记表已变，reject 本提案重提）。\n${merged.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     const src = resolveConcept(entries, v.spec.from)!
-    await this.concepts.save(root, merged.entries)
+    await this.concepts.save(merged.entries)
     const dst = resolveConcept(merged.entries, v.spec.into)!
     const names = [dst.canonical, ...(dst.aliases ?? [])]
     await this.store.appendJournal({
@@ -1542,7 +1542,7 @@ export class GraphProposals {
   ): Promise<{ id: number; kind: 'confusable_pair'; course: string; a: string; b: string; weight: number }> {
     const course = await this.registry.get(courseKey.trim())
     if (!course) throw new Error(`[concept-confusable-propose] 注册表中没有课程「${courseKey.trim()}」。`)
-    const entries = await this.concepts.load(course.root)
+    const entries = await this.concepts.load()
     const ea = resolveConcept(entries, pair.a)
     const eb = resolveConcept(entries, pair.b)
     if (!ea || !eb) {
@@ -1597,14 +1597,14 @@ export class GraphProposals {
     const course = await this.registry.get(v.spec.course)
     if (!course) throw new Error(`[concept-confusable-apply] 注册表中没有课程「${v.spec.course}」。`)
     const root = course.root
-    const entries = await this.concepts.load(root)
+    const entries = await this.concepts.load()
     const ea = resolveConcept(entries, v.spec.a)
     const eb = resolveConcept(entries, v.spec.b)
     if (!ea || !eb) throw new Error(`[concept-confusable-apply] 候选两端（「${v.spec.a}」「${v.spec.b}」）已不在登记表在册——reject 本提案重提。`)
     if (isDeprecated(ea) || isDeprecated(eb)) {
       throw new Error(`[concept-confusable-apply] 「${ea.canonical}」↔「${eb.canonical}」含废弃条目——废弃条目退出候选面。`)
     }
-    const r = await this.concepts.addConfusable(root, ea.canonical, eb.canonical)
+    const r = await this.concepts.addConfusable(ea.canonical, eb.canonical)
     await this.store.appendJournal({
       course: course.name, node: '*', rating: null, kind: 'concept_confusable', elapsed_days: 0,
       session: String(prop.id),

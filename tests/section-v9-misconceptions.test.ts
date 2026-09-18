@@ -232,7 +232,7 @@ const GOLD_BANK = [
 ].join('\n')
 
 /** 出生打标（#148）：invokes 在册校验需要登记表在册（MISC_GRAPH 的 teaches 概念）。 */
-const REGISTRY = [{ path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: 鸽巢原理\n' }]
+const REGISTRY = [{ path: '学习中心/概念登记表.yaml', content: 'concepts:\n  - canonical: 鸽巢原理\n' }]
 
 test('questionGenerate：提示词附「误解先验（干扰项材料）」段（有误解才附）', async () => {
   await withVault({

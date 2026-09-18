@@ -128,7 +128,7 @@ export async function draftCourse(engine: LearnhubEngine, spec: DraftSpec = {}):
   await writeAnchors(paths.anchorPath(root), anchors, fs)
 
   // ④ 概念登记表（随批铸名）
-  await engine.concepts.save(root, spec.concepts ?? [])
+  await engine.concepts.save(spec.concepts ?? [])
 
   // ⑤ 罗盘脚手架（createCourse 的等价物）
   await atomicWrite(paths.compassPath(root), compassScaffold(course), fs)

@@ -58,7 +58,7 @@ test('graph.mine.bank_skip：挖矿面题库 Broken 排除留痕（WARN）', asy
 test('graph.proposal.scan_skip：去重扫描遇产物损坏的旧提案留痕（DEBUG）', async () => {
   await withVault(SEED, async h => {
     await draftCourse(h.engine, CAPABILITY_DRAFT)
-    await h.engine.concepts.save('数学', [
+    await h.engine.concepts.save([
       { canonical: '变化率' }, { canonical: '导数' },
     ])
     const pair = { a: '变化率', b: '导数', evidence: ['共现'] }

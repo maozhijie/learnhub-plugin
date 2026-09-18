@@ -157,10 +157,11 @@ export class Paths {
   /** 中心目录相对 vault 根的 posix 路径（「排除学习中心」的消费面用：vault 先验检索、
    * 笔记源扫描一类）；三处检索入口原先各写一遍 `centerRoot.slice(vaultRoot.length + 1)`。 */
   centerRelOf(vaultRoot: string): string { return this.centerRoot.slice(vaultRoot.length + 1) }
-  /** 概念登记表（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml——每课程一份受控
-   * 词表，沉淀层档案坐标系。跨宣告式断裂存活：不在 cutover 归档清单（课程根整树
+  /** 概念登记表（#141 / #122 契约 v0.1；v0.4 / ADR-0089 跨课程化）：中心级一份受控
+   * 词表（学习中心/概念登记表.yaml）——概念身份不再按课程分域，全部名字全库联合唯一，
+   * 课程只是概念的引用方集合。跨宣告式断裂存活：不在 cutover 归档清单（课程根整树
    * 移入存档时豁免，迁移脚本同款约定）。 */
-  conceptRegistryPath(root: string): string { return `${this.courseRoot(root)}/概念登记表.yaml` }
+  get conceptRegistryPath(): string { return `${this.centerRoot}/概念登记表.yaml` }
   /** 题库目录（question-bank 的 <课程根>/题库/<节点>.yaml）。 */
   bankDir(root: string): string { return `${this.courseRoot(root)}/题库` }
   dataDir(root: string): string { return `${this.courseRoot(root)}/data` }

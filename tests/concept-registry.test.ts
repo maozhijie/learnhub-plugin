@@ -23,8 +23,8 @@ import { validateEditProposal } from '../src/engine/coach/proposals.ts'
 import { withVault } from './helpers/vault.ts'
 import type { Paths } from '../src/engine/infra/paths.ts'
 
-// 概念登记表（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml，每课程一份受控词表。
-// 条目 = canonical 名 + 别名[] + 选填定义；全部名字联合唯一（违约 Broken、缺失 Missing
+// 概念登记表（#141 / #122 契约 v0.1；v0.4 / ADR-0089 跨课程化）：学习中心/概念登记表.yaml，
+// 中心级一份受控词表。条目 = canonical 名 + 别名[] + 选填定义；全部名字全库联合唯一（违约 Broken、缺失 Missing
 // 合法空态）；引用解析 = 精确匹配在册名字；条目禁删只并入（合并 = 名字并集，旧地址经
 // 别名续解析）；铸名随生长批提案与图 apply 同事务落盘；受理门对 teaches/assumes/误解/
 // invokes 的概念引用做在册校验。
@@ -38,26 +38,26 @@ const REGISTRY_YAML = [
 ].join('\n')
 
 const registryVault = (files: Array<{ path: string; content: string }> = []) => ({
-  files: [{ path: '学习中心/math/概念登记表.yaml', content: `${REGISTRY_YAML}\n` }, ...files],
+  files: [{ path: '学习中心/概念登记表.yaml', content: `${REGISTRY_YAML}\n` }, ...files],
 })
 
-const registryPath = (root: string) => join(root, '学习中心', 'math', '概念登记表.yaml')
+const registryPath = (root: string) => join(root, '学习中心', '概念登记表.yaml')
 
 // ---- 契约：联合唯一违约 Broken、文件缺失 Missing 合法空态 ----
 
 test('#141 文件缺失 = Missing 合法空态：load 返回空表不抛错', async () => {
   await withVault({ graph: null }, async ({ engine, root }) => {
     assert.equal(existsSync(registryPath(root)), false)
-    assert.deepEqual(await engine.concepts.load('math'), [])
+    assert.deepEqual(await engine.concepts.load(), [])
   })
 })
 
 test('#141 YAML 无法解析 = Broken 抛错（不静默当空表）', async () => {
   await withVault({
     graph: null,
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: "因式分解\n' }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: 'concepts:\n  - canonical: "因式分解\n' }],
   }, async ({ engine }) => {
-    await assert.rejects(() => engine.concepts.load('math'), /概念登记表 Broken.*YAML 无法解析/s)
+    await assert.rejects(() => engine.concepts.load(), /概念登记表 Broken.*YAML 无法解析/s)
   })
 })
 
@@ -92,7 +92,7 @@ test('#141 条目契约：canonical 空、aliases 非列表、definition 非字�
 
 test('#141 合法登记表加载：trim 保真、空 concepts 合法', async () => {
   await withVault(registryVault(), async ({ engine }) => {
-    const entries = await engine.concepts.load('math')
+    const entries = await engine.concepts.load()
     assert.deepEqual(entries, [
       { canonical: '因式分解', aliases: ['十字相乘法'], definition: '把多项式化为几个整式的乘积' },
       { canonical: '配方法' },
@@ -105,7 +105,7 @@ test('#141 合法登记表加载：trim 保真、空 concepts 合法', async () 
 
 test('#141 引用解析：canonical 与别名精确命中 → 条目；未命中 null；永不模糊匹配', async () => {
   await withVault(registryVault(), async ({ engine }) => {
-    const entries = await engine.concepts.load('math')
+    const entries = await engine.concepts.load()
     assert.equal(resolveConcept(entries, '因式分解')?.canonical, '因式分解')
     assert.equal(resolveConcept(entries, '十字相乘法')?.canonical, '因式分解', '别名解析到同一身份')
     assert.equal(resolveConcept(entries, '因式分'), null, '模糊前缀不命中')
@@ -379,7 +379,7 @@ test('#141 data-check：登记表缺席 = 合法空态零 finding（选填域，
     const report = await engine.dataCheck()
     assert.ok(!report.findings.some(f => f.area === 'concept_registry'), '缺席不报 finding')
     assert.deepEqual(report.byArea.concept_registry, { missing: 0, broken: 0, archived: 0, hint: 0 })
-    assert.equal(report.inventory.conceptRegistries.present, 0)
+    assert.equal(report.inventory.conceptRegistries.present, false)
     assert.equal(report.inventory.conceptRegistries.entries, 0)
   })
 })
@@ -389,7 +389,7 @@ test('#141 data-check：联合唯一违约 = broken（concept_registry_schema）
     graph: null,
     tag: 'learnhub-dcbroken-',
     files: [{
-      path: '学习中心/math/概念登记表.yaml',
+      path: '学习中心/概念登记表.yaml',
       content: 'concepts:\n  - { canonical: 甲 }\n  - { canonical: 乙, aliases: [甲] }\n',
     }],
   }, async ({ engine }) => {
@@ -406,7 +406,7 @@ test('#141 data-check：合法登记表盘点条目数', async () => {
   await withVault({ ...registryVault(), graph: null, tag: 'learnhub-dcok-' }, async ({ engine }) => {
     const report = await engine.dataCheck()
     assert.deepEqual(report.byArea.concept_registry, { missing: 0, broken: 0, archived: 0, hint: 0 })
-    assert.equal(report.inventory.conceptRegistries.present, 1)
+    assert.equal(report.inventory.conceptRegistries.present, true)
     assert.equal(report.inventory.conceptRegistries.entries, 2)
   })
 })
@@ -426,14 +426,14 @@ test('#141 conceptReferenceErrors：逐名可执行错误行', () => {
   assert.deepEqual(conceptReferenceErrors([{ where: 'teaches[x]', concept: '甲' }], known), [])
 })
 
-// ---- 类型面：Paths 提供登记表路径（课程根下） ----
+// ---- 类型面：Paths 提供登记表路径（中心级） ----
 
-test('#141 登记表路径在课程根下（跨断裂存活的坐标位）', async () => {
+test('#141 登记表路径在中心级（跨断裂存活的坐标位；v0.4 / ADR-0089）', async () => {
   await withVault({ graph: null }, async ({ paths }: { paths: Paths }) => {
-    assert.equal(paths.conceptRegistryPath('math'), `${paths.courseRoot('math')}/概念登记表.yaml`)
+    assert.equal(paths.conceptRegistryPath, `${paths.centerRoot}/概念登记表.yaml`)
     const reg = new ConceptRegistry(paths, nodeVaultFs)
-    await reg.save('math', [{ canonical: '甲' }])
-    assert.deepEqual(await reg.load('math'), [{ canonical: '甲' }])
+    await reg.save([{ canonical: '甲' }])
+    assert.deepEqual(await reg.load(), [{ canonical: '甲' }])
   })
 })
 
@@ -558,20 +558,20 @@ test('#262 易混对候选退出：任一端废弃的对不产出（地址仍解
 
 test('#262 登记表门面：setDeprecated 落盘 + 废弃地址仍解析 + 清标记完全恢复 + 失败不改盘', async () => {
   await withVault(registryVault(), async ({ engine, root }) => {
-    const original = await engine.concepts.load('math')
-    const r = await engine.concepts.setDeprecated('math', '十字相乘法', true)
+    const original = await engine.concepts.load()
+    const r = await engine.concepts.setDeprecated('十字相乘法', true)
     assert.equal(r.canonical, '因式分解', '按别名定位到身份条目')
     assert.equal(r.deprecated, true)
-    const entries = await engine.concepts.load('math')
+    const entries = await engine.concepts.load()
     assert.equal(resolveConcept(entries, '因式分解')?.deprecated, true)
     assert.equal(resolveConcept(entries, '十字相乘法')?.canonical, '因式分解', '废弃后别名地址仍解析')
     assert.match(readFileSync(registryPath(root), 'utf8'), /deprecated: true/)
     // 清标记完全恢复（读回与原始条目 deep-equal）
-    await engine.concepts.setDeprecated('math', '因式分解', false)
-    assert.deepEqual(await engine.concepts.load('math'), original, '清标记无残留')
+    await engine.concepts.setDeprecated('因式分解', false)
+    assert.deepEqual(await engine.concepts.load(), original, '清标记无残留')
     // 未在册名字 → 抛错不改盘
-    await assert.rejects(() => engine.concepts.setDeprecated('math', '不存在', true), /不在登记表/)
-    assert.deepEqual(await engine.concepts.load('math'), original)
+    await assert.rejects(() => engine.concepts.setDeprecated('不存在', true), /不在登记表/)
+    assert.deepEqual(await engine.concepts.load(), original)
   })
 })
 
@@ -586,7 +586,7 @@ test('#262 生成注入面退出：废弃概念不出现在概念清单与易混
     notes: { 入门: { body: QUIZ_BODY.split('\n') } },
     tag: 'learnhub-depinject-',
     files: [{
-      path: '学习中心/math/概念登记表.yaml',
+      path: '学习中心/概念登记表.yaml',
       content: [
         'concepts:',
         '  - canonical: 因式分解',
@@ -635,7 +635,7 @@ test('#262 内容包注入面退出：§12 误解坑位与 §13 前置概念档�
     notes: { 入门: { body: ['# 入门', '', '入门正文。'] } },
     tag: 'learnhub-deppack-',
     files: [{
-      path: '学习中心/math/概念登记表.yaml',
+      path: '学习中心/概念登记表.yaml',
       content: ['concepts:', '  - canonical: 因式分解', '    deprecated: true', '  - canonical: 配方法'].join('\n') + '\n',
     }],
   }, async ({ engine }) => {

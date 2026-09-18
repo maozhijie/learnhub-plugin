@@ -682,3 +682,13 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 受控量 | **G3/G5 同提交迁移**：`GrowthDeps 22→21`（删 `graphProposals` 声明与装配；四向装配仍全 0，facade 14→13）；文件规模八件（coach-round 554→397、growth-subsystem 2227→2134、output-contracts 891→740、quality-rubrics 371→381、index.ts 890→885、corpus.ts 354→353、jobs.ts 1426→1421、log-file.ts 347→345）；工具面快照 `learnhub_growth_batch` 描述同提交迁移（117 工具不变）；typeErrors 仍 0/0 | `scripts/arch-baseline.json`（`--update`）、`tests/fixtures/host-tools-snapshot.json` | `tests/arch-guards.test.ts` G3/G5 绿、`tests/host-runtime.test.ts`（工具面快照）、`tests/commands.test.ts`（门⑧） |
 | 文档 | ADR-0101（裁决本体）；`CONTEXT.md` 无改动（词条「教练回合」已是规范词、定义本即单站）；`REPLAY_OUT_OF_SCOPE` 增 `教练执行`（工具调用承载无独立解析面）并补登 `种子起草`（#256 退役站的缺登补登） | `docs/adr/0101-coach-single-station-loop.md`、`scripts/prompt-bump.mts` | `node --experimental-transform-types scripts/prompt-bump.mts replay --corpus tests/fixtures/quality-corpus` ✓ |
 
+
+## 概念身份跨课程化·刀A 中心化（#286 / ADR-0089 / 契约 v0.4，2026-09-18）：行为变更登记
+
+| 类别 | 变更 | 代码 | 测试 |
+|---|---|---|---|
+| 行为 | **概念登记表中心级一份**（学习中心/概念登记表.yaml，契约 v0.3→v0.4）：ConceptRegistry.load/save/setDeprecated/addConfusable 去 course root 参数；全库联合唯一（同文件内联合唯一的取值域自然全局化）；canonical 语义明确为地址锚点 + 默认显示名（非「本体」特权位）；无存量迁移（宣告式直改形状，零兼容代码） | `src/engine/concepts/concepts.ts`、`src/engine/infra/paths.ts`（conceptRegistryPath 改中心级 getter） | `tests/concept-registry.test.ts`（路径类型面改中心级；全量签名迁移） |
+| 行为 | **建课脚手架停建空登记表**：createCourse 不再落 `concepts: []`（缺失即合法空态，随首次铸名出现）；data-check 概念登记表体检移出逐课程循环（中心级一份，inventory present 改布尔） | `src/engine/coach/proposals.ts::createCourse`、`src/engine/data-check.ts::scanConceptRegistry` | `tests/concept-registry.test.ts`（缺席零 finding + present 布尔）、`tests/coach-round.test.ts` |
+| 行为 | **消费面签名迁移（行为零改动）**：graph-subsystem / growth-subsystem / content-subsystem / question-bank / coach-tools / proposals / vault-prior（queryEntriesFor 去 root；PriorSearchRequest.courseRoot 仅作「无课程不扩词」门，扩词行为不变）/ spike 夹具 / helpers/drafted | 上列 src 文件 | 全量既有测试绿；`tests/vault-prior.test.ts`、`tests/obs-t2-content-bank.test.ts`、`tests/obs-t3-graph-coach.test.ts` |
+| 模型面 | **工具描述与存储形状对齐**：growth_batch / concept_merge / concept_merge_candidates / quiz / course-create 五条 description 去「课程根/课程级」措辞 | `src/commands/图谱.ts`、`学习.ts`、`题库.ts` | `tests/fixtures/host-tools-snapshot.json`（同提交迁移）、`tests/host-runtime.test.ts`、`tests/commands.test.ts` |
+| 受控面 | **G5 同提交迁移**：concepts.ts 953→955、paths.ts 201→202、data-check.ts 992→990；typeErrors 0/0 | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |

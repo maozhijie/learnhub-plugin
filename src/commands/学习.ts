@@ -537,7 +537,7 @@ export const 学习域 = {
   }),
   'course-create': command({
     id: "course-create",
-    summary: "Create a course from its name only (name = empty graph): one write unit lands the registry entry, the course root with data/图.yaml ({ nodes: [] } — the legal carrier of an empty graph), an empty concept registry, an empty endpoint-anchor book and the compass scaffold. NO generation is started: a zero-node graph never enters automatic coach triggers, and adding endpoints declares directions only; the first growth comes from the learner dispatching a coach round explicitly (coach-growth).",
+    summary: "Create a course from its name only (name = empty graph): one write unit lands the registry entry, the course root with data/图.yaml ({ nodes: [] } — the legal carrier of an empty graph), an empty endpoint-anchor book and the compass scaffold. NO generation is started: a zero-node graph never enters automatic coach triggers, and adding endpoints declares directions only; the first growth comes from the learner dispatching a coach round explicitly (coach-growth).",
     args: {
       name: { type: "string", description: "Course name (the registry primary key; duplicates are rejected)", required: true }
     },

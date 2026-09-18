@@ -33,10 +33,10 @@ const REGISTRY_YAML = [
 ].join('\n')
 
 const registryVault = (files: Array<{ path: string; content: string }> = []) => ({
-  files: [{ path: '学习中心/math/概念登记表.yaml', content: `${REGISTRY_YAML}\n` }, ...files],
+  files: [{ path: '学习中心/概念登记表.yaml', content: `${REGISTRY_YAML}\n` }, ...files],
 })
 
-const registryPath = (root: string) => join(root, '学习中心', 'math', '概念登记表.yaml')
+const registryPath = (root: string) => join(root, '学习中心', '概念登记表.yaml')
 
 /** 铸名一批 + 挂在一个新节点上（生长批提案的最小形态）。 */
 const mintYaml = (canonical: string) => `course: 数学
@@ -101,7 +101,7 @@ test('#264 data-check：超量别名/混淆对 = hint（不 broken——地址�
   await withVault({
     tag: 'learnhub-magnitude-',
     files: [{
-      path: '学习中心/math/概念登记表.yaml',
+      path: '学习中心/概念登记表.yaml',
       content: [
         'concepts:',
         '  - canonical: 甲',
@@ -241,7 +241,7 @@ test('#265 合并 apply 复核声明：产物被改写不可逆声明 → 拒绝
     const { writeFileSync } = await import('node:fs')
     writeFileSync(p.artifact, YAML.stringify(tampered))
     await assert.rejects(() => engine.graph.proposalApply('concept_merge', r.proposal), /篡改/)
-    assert.deepEqual(await engine.concepts.load('math').then(es => es.map(e => e.canonical)), ['因式分解', '配方法'], '登记表一字未动')
+    assert.deepEqual(await engine.concepts.load().then(es => es.map(e => e.canonical)), ['因式分解', '配方法'], '登记表一字未动')
   })
 })
 
@@ -250,7 +250,7 @@ test('#265 合并确认（面板 apply）：名字并集落盘、旧地址续解
     const r = await engine.graph.conceptMerge('数学', '配方法', '因式分解')
     const out = await engine.graph.proposalApply('concept_merge', r.proposal)
     assert.deepEqual(out, { kind: 'concept_merge', course: '数学', from: '配方法', into: '因式分解', names: ['因式分解', '十字相乘法', '配方法'] })
-    const entries = await engine.concepts.load('math')
+    const entries = await engine.concepts.load()
     assert.equal(entries.length, 1)
     assert.equal(entries[0]!.canonical, '因式分解')
     assert.deepEqual(entries[0]!.aliases, ['十字相乘法', '配方法'], 'from canonical 降级为别名')
@@ -281,9 +281,9 @@ test('#265 合并提案门：并入自身 / 未在册名字拒收不改盘；别
 test('#265 合并 apply 双门：受理后登记表被并发改写 → 拒绝且保持原样', async () => {
   await withVault(registryVault(), async ({ engine, root }) => {
     const r = await engine.graph.conceptMerge('数学', '配方法', '因式分解')
-    await engine.concepts.save('math', [{ canonical: '因式分解', aliases: ['十字相乘法'] }])
+    await engine.concepts.save([{ canonical: '因式分解', aliases: ['十字相乘法'] }])
     await assert.rejects(() => engine.graph.proposalApply('concept_merge', r.proposal), /保持原样|已变/)
-    assert.deepEqual(await engine.concepts.load('math'), [{ canonical: '因式分解', aliases: ['十字相乘法'] }])
+    assert.deepEqual(await engine.concepts.load(), [{ canonical: '因式分解', aliases: ['十字相乘法'] }])
     const p = (await engine.store.loadProposals()).find(x => x.id === r.proposal)!
     assert.equal(p.status, 'pending', 'apply 失败提案仍待审（reject 留给人）')
   })
@@ -311,14 +311,14 @@ test('#265 候选提案：pending 不入册、重复提名不堆提案；apply �
     const p0 = (await engine.store.loadProposals()).find(x => x.id === r.id)!
     assert.ok(p0.summary.includes('证据：'), 'summary 带首条共现证据（人审列表即可读）')
     assert.ok(p0.summary.includes(evidence[0]!.slice(0, 12)))
-    let entries = await engine.concepts.load('math')
+    let entries = await engine.concepts.load()
     assert.equal(entries[0]!.confusable, undefined, '不自动入册')
     const again = await engine.proposals.proposeConfusableCandidate('数学', { a: '配方法', b: '因式分解', evidence: ['另一条证据'] })
     assert.equal(again.id, r.id, '同一候选已在待审队列 → 返回原提案，不堆第二条')
 
     const out = await engine.graph.proposalApply('confusable_pair', r.id)
     assert.deepEqual(out, { kind: 'confusable_pair', course: '数学', a: '因式分解', b: '配方法', changed: true })
-    entries = await engine.concepts.load('math')
+    entries = await engine.concepts.load()
     assert.deepEqual(entries[0]!.confusable, ['配方法'], '只写提案声明的方向')
     assert.equal(entries[1]!.confusable, undefined, '不自动补双向（单向是待复核态，ADR-0084 ③）')
     const p = (await engine.store.loadProposals()).find(x => x.id === r.id)!
@@ -337,7 +337,7 @@ test('#265 候选提案：pending 不入册、重复提名不堆提案；apply �
 test('#265 候选提案门：无证据 / 未在册 / 废弃条目都不受理；pending 期间被废弃 → apply 拦', async () => {
   await withVault({
     ...registryVault(),
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: `${REGISTRY_YAML}\n  - canonical: 新丙\n` }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: `${REGISTRY_YAML}\n  - canonical: 新丙\n` }],
   }, async ({ engine }) => {
     await assert.rejects(
       () => engine.proposals.proposeConfusableCandidate('数学', { a: '因式分解', b: '配方法', evidence: [] }),
@@ -347,14 +347,14 @@ test('#265 候选提案门：无证据 / 未在册 / 废弃条目都不受理；
       () => engine.proposals.proposeConfusableCandidate('数学', { a: '因式分解', b: '没登记', evidence: ['x'] }),
       /不在登记表在册/,
     )
-    await engine.concepts.setDeprecated('math', '配方法', true)
+    await engine.concepts.setDeprecated('配方法', true)
     await assert.rejects(
       () => engine.proposals.proposeConfusableCandidate('数学', { a: '因式分解', b: '配方法', evidence: ['x'] }),
       /废弃/,
       '候选面尊重废弃态（不提名已废弃条目）',
     )
     const r = await engine.proposals.proposeConfusableCandidate('数学', { a: '因式分解', b: '新丙', evidence: ['x'] })
-    await engine.concepts.setDeprecated('math', '新丙', true)
+    await engine.concepts.setDeprecated('新丙', true)
     await assert.rejects(() => engine.graph.proposalApply('confusable_pair', r.id), /废弃/)
   })
 })
@@ -393,7 +393,7 @@ const CAND_BANKS = {
 test('#265 conceptConfusableCandidates：共现 → 待审提案；重跑幂等不堆；max 封顶', async () => {
   await withVault({
     tag: 'learnhub-candrun-',
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: `${CAND_REGISTRY}\n` }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: `${CAND_REGISTRY}\n` }],
     banks: CAND_BANKS,
   }, async ({ engine }) => {
     const r1 = await engine.graph.conceptConfusableCandidates('数学')
@@ -411,7 +411,7 @@ test('#265 conceptConfusableCandidates：共现 → 待审提案；重跑幂等�
   })
   await withVault({
     tag: 'learnhub-candmax-',
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: `${CAND_REGISTRY}\n` }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: `${CAND_REGISTRY}\n` }],
     banks: CAND_BANKS,
   }, async ({ engine }) => {
     const r = await engine.graph.conceptConfusableCandidates('数学', 1)
@@ -455,7 +455,7 @@ test('#264 错误卡在册对照：不在册先验被拦并报告，生成照常
     tag: 'learnhub-ecgate-',
     graph: EC_GRAPH,
     banks: { 入门: EC_BANK },
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: 勾股定理\n' }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: 'concepts:\n  - canonical: 勾股定理\n' }],
   }, async ({ engine, store }) => {
     await store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: 'B', correct: false, judge: 'single_choice', qid: 'q1', ts: '2026-09-07T10:00:00' })
     await store.appendPractice({ course: '数学', node: '入门', ex: 2, answer: 'C', correct: false, judge: 'single_choice', qid: 'q1', ts: '2026-09-08T10:00:00' })
@@ -467,7 +467,7 @@ test('#264 错误卡在册对照：不在册先验被拦并报告，生成照常
     tag: 'learnhub-ecbroken-',
     graph: EC_GRAPH,
     banks: { 入门: EC_BANK },
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: 甲\n  - canonical: 甲\n' }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: 'concepts:\n  - canonical: 甲\n  - canonical: 甲\n' }],
   }, async ({ engine, store }) => {
     await store.appendPractice({ course: '数学', node: '入门', ex: 1, answer: 'B', correct: false, judge: 'single_choice', qid: 'q1', ts: '2026-09-07T10:00:00' })
     await store.appendPractice({ course: '数学', node: '入门', ex: 2, answer: 'C', correct: false, judge: 'single_choice', qid: 'q1', ts: '2026-09-08T10:00:00' })

@@ -51,7 +51,7 @@ const NOTE_乙 = {
 const VAULT = {
   graph: GRAPH,
   notes: { 乙: NOTE_乙 },
-  files: [{ path: '学习中心/math/概念登记表.yaml', content: REGISTRY }],
+  files: [{ path: '学习中心/概念登记表.yaml', content: REGISTRY }],
 }
 
 /** 金样本：两题各带一枚 invokes（自然数=前置甲教、质数=本节自教）。 */
@@ -175,7 +175,7 @@ const REGISTRY_CONFUSABLE = 'concepts:\n  - canonical: 自然数\n    confusable
 test('#232 出题提示词附易混对段（登记表在册）；登记表缺席时该段静默降级不报错', async () => {
   await withVault({
     ...VAULT,
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: REGISTRY_CONFUSABLE }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: REGISTRY_CONFUSABLE }],
   }, async ({ engine }) => {
     const fake = replayFake(GOLD)
     const r = await engine.bank2.questionGenerate('数学', '乙', undefined, fake)

@@ -178,7 +178,7 @@ export class LearnhubEngine {
   readonly proposals: GraphProposals
   readonly projects: Projects
   readonly bank: QuestionBank
-  /** 概念登记表（#141）：每课程受控词表，沉淀层档案坐标系与概念引用校准基底。 */
+  /** 概念登记表（#141；v0.4 / ADR-0089 中心级一份）：全库受控词表，沉淀层档案坐标系与概念引用校准基底。 */
   readonly concepts: ConceptRegistry
   readonly learnerCards: LearnerCards
   readonly errorCards: ErrorCards

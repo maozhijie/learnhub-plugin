@@ -324,7 +324,7 @@ function buildTemplate(): string {
   mkdirSync(`${center}/spike/题库`, { recursive: true })
   mkdirSync(`${center}/state`, { recursive: true })
   writeFileSync(`${center}/课程注册表.yaml`, REGISTRY, 'utf8')
-  writeFileSync(`${center}/spike/概念登记表.yaml`, CONCEPTS, 'utf8')
+  writeFileSync(`${center}/概念登记表.yaml`, CONCEPTS, 'utf8')
   writeFileSync(`${center}/spike/data/图.yaml`, GRAPH, 'utf8')
   writeFileSync(`${center}/spike/课程/${NODE}.md`, NOTE, 'utf8')
   writeFileSync(`${center}/state/learnhub.json`,

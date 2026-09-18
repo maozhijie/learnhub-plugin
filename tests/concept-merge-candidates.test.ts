@@ -104,7 +104,7 @@ test('#274 conceptMergeCandidates：信号 → 待审合并提案（不可逆声
   await withVault({
     tag: 'learnhub-mergecand-',
     graph: MC_GRAPH,
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: `${MC_REGISTRY}\n` }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: `${MC_REGISTRY}\n` }],
     banks: MC_BANKS,
   }, async ({ engine }) => {
     const r1 = await engine.graph.conceptMergeCandidates('数学')
@@ -137,7 +137,7 @@ test('#274 conceptMergeCandidates：信号 → 待审合并提案（不可逆声
   await withVault({
     tag: 'learnhub-mergecap-',
     graph: MC_GRAPH,
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: `${MC_REGISTRY}\n` }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: `${MC_REGISTRY}\n` }],
     banks: MC_BANKS,
   }, async ({ engine }) => {
     const r1 = await engine.graph.conceptMergeCandidates('数学', 1)
@@ -151,7 +151,7 @@ test('#274 信任边界：apply 只在面板人审后生效——登记表并入
   await withVault({
     tag: 'learnhub-mergeapply-',
     graph: MC_GRAPH,
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: `${MC_REGISTRY}\n` }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: `${MC_REGISTRY}\n` }],
     banks: MC_BANKS,
   }, async ({ engine, root }) => {
     const r = await engine.graph.conceptMergeCandidates('数学')
@@ -161,7 +161,7 @@ test('#274 信任边界：apply 只在面板人审后生效——登记表并入
     assert.equal(applied.from, '庚')
     assert.equal(applied.into, '丙')
     // 登记表并入：庚消失，名字并集挂在丙上（条目只并入、不删除）
-    const yaml = readFileSync(join(root, '学习中心', 'math', '概念登记表.yaml'), 'utf8')
+    const yaml = readFileSync(join(root, '学习中心', '概念登记表.yaml'), 'utf8')
     const entries = YAML.parse(yaml) as { concepts: Array<{ canonical: string; aliases?: string[] }> }
     assert.deepEqual(entries.concepts.map(c => c.canonical).sort(), ['丙', '因式分解', '因式分解法'])
     const bing = entries.concepts.find(c => c.canonical === '丙')!

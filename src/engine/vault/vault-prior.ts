@@ -156,10 +156,10 @@ export function priorQueryTerms(raw: string[], entries: ConceptEntry[] = []): Pr
  * 裁决理由：Broken 的登记表已由 data-check 与概念消费面（出题对表）报出，检索面再拦
  * 一道会把「可选增益」变成「生成前置」，代价与收益不成比例。 */
 export async function queryEntriesFor(
-  registry: Pick<ConceptRegistry, 'load'>, root: string,
+  registry: Pick<ConceptRegistry, 'load'>,
 ): Promise<{ entries: ConceptEntry[]; error?: string }> {
   try {
-    return { entries: await registry.load(root) }
+    return { entries: await registry.load() }
   } catch (err) {
     return { entries: [], error: err instanceof Error ? err.message : String(err) }
   }
@@ -167,11 +167,11 @@ export async function queryEntriesFor(
 
 /** 一次检索的完整请求（三个入口共用同一实现）。 */
 export interface PriorSearchRequest {
-  /** 概念登记表读侧（查询扩展用；课程根，Missing 合法空表）。 */
+  /** 概念登记表读侧（查询扩展用；中心级一份，Missing 合法空表，v0.4 / ADR-0089）。 */
   registry: Pick<ConceptRegistry, 'load'>
-  /** 课程根（登记表所在课程的**目录名**，即 CourseEntry.root）；无课程（未指定目标
-   * 课程）传 null——此时不做扩展（没有登记表可读），与「登记表 Broken」是两件事，
-   * 后者要留痕。 */
+  /** 课程根（目标课程的**目录名**，即 CourseEntry.root）；无课程（未指定目标
+   * 课程）传 null——此时不做扩展（维持既有行为：扩词跟随有目标的生成入口），与
+   * 「登记表 Broken」是两件事，后者要留痕。 */
   courseRoot: string | null
   vaultRoot: string
   /** 中心相对路径（`centerRoot` 相对 vault 根；调用方算好，本函数不碰 Paths）。 */
@@ -189,7 +189,7 @@ export interface PriorSearchRequest {
 export async function runPriorSearch(req: PriorSearchRequest): Promise<VaultPriorSearch> {
   const { entries, error } = req.courseRoot === null
     ? { entries: [] as ConceptEntry[], error: undefined as string | undefined }
-    : await queryEntriesFor(req.registry, req.courseRoot)
+    : await queryEntriesFor(req.registry)
   const found = await searchVaultPrior(req.vaultRoot, req.centerRel, priorQueryTerms(req.raw, entries), req.opts ?? {}, req.fs)
   return error ? { hits: found.hits, audit: { ...found.audit, expansionError: error } } : found
 }

@@ -300,12 +300,12 @@ test('查询扩展：扩展词低权重——规范词命中排在别名命中�
 
 test('queryEntriesFor：登记表 Missing = 空表合法；Broken = 扩展跳过但错误带出（不静默）', async () => {
   await withVault({}, async ({ engine }) => {
-    assert.deepEqual(await queryEntriesFor(engine.concepts, 'math'), { entries: [] }, '缺失合法空态')
+    assert.deepEqual(await queryEntriesFor(engine.concepts), { entries: [] }, '缺失合法空态')
   })
   await withVault({
-    files: [{ path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: "缺引号\n' }],
+    files: [{ path: '学习中心/概念登记表.yaml', content: 'concepts:\n  - canonical: "缺引号\n' }],
   }, async ({ engine }) => {
-    const r = await queryEntriesFor(engine.concepts, 'math')
+    const r = await queryEntriesFor(engine.concepts)
     assert.deepEqual(r.entries, [], '扩展面降级为空表')
     assert.match(r.error ?? '', /概念登记表 Broken/, '降级绝不静默：错误随审计带出')
   })
@@ -371,7 +371,7 @@ test('V-2 注入：登记表别名扩展在生成入口生效（规范词 → �
   await withVault({
     files: [
       // 登记表：入门 的别名是「起步」（学习者可能用别名写笔记）
-      { path: '学习中心/math/概念登记表.yaml', content: 'concepts:\n  - canonical: 入门\n    aliases: [起步]\n' },
+      { path: '学习中心/概念登记表.yaml', content: 'concepts:\n  - canonical: 入门\n    aliases: [起步]\n' },
       { path: '乐理/我的一步.md', content: '# 起步随记\n\n起步那会儿我只知道「三比」这个说法。' },
     ],
   }, async ({ engine }) => {

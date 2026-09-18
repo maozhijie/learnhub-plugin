@@ -1,11 +1,14 @@
 /**
- * 概念登记表（#141 / #122 契约 v0.1；v0.2 增可选 confusable 字段，#232——可选字段
- * 子格式演进，非主版本断裂）：课程根/概念登记表.yaml，每课程一份受控词表。
+ * 概念登记表（#141 / #122 契约 v0.1；v0.2 增可选 confusable 字段 #232；v0.3 增废弃
+ * 标记 #262 / ADR-0084；v0.4 跨课程化 ADR-0089）：学习中心/概念登记表.yaml，中心级
+ * 一份受控词表。
  *
  * 条目 = canonical 名 + 别名[] + 选填定义 + 选填易混对；全部名字（canonical ∪ 别名）
- * 课程内联合唯一——一个名字至多属一条目，违约 Broken；文件缺失 Missing 合法空态。
+ * 全库联合唯一——一个名字至多属一条目，违约 Broken；文件缺失 Missing 合法空态。
  * 身份=条目、名字=地址：引用解析 = 精确匹配在册名字（canonical 或别名），永不模糊匹配。
- * 条目禁删只并入：合并 = 名字并集，被并入条目的 canonical 降级为别名，旧地址经别名
+ * canonical 只是地址锚点与默认显示名，不是「本体」特权位——别名与主名同层同解析，
+ * 条目的内涵由全部名字与定义共同承载。条目禁删只并入：合并 = 名字并集，被并入条目的
+ * canonical 降级为别名，旧地址经别名
  * 续解析——沉淀层档案坐标系（ADR-0034）的语义底座，登记表跨宣告式断裂存活。
  *
  * 地址生命周期（v0.3，#262 / ADR-0084）：条目可被标记**废弃**（可逆、不删除）——废弃地址
@@ -33,8 +36,7 @@ import { trigramSimilarity } from '../content/question-dedup.ts'
 import { round2 } from '../infra/grading.ts'
 
 /** 登记表条目：canonical 主名；别名可选（名字并集后历史地址都在这）；定义选填
- * （同形异义与螺旋升档判断的依据，随注入切片给出）；易混对选填（#232：同课程在册
- * 概念名，出题时随概念清单注入作跨概念对比题候选；名字经精确解析归一，悬空引用
+ * （同形异义与螺旋升档判断的依据，随注入切片给出）；易混对选填（#232：在册概念名，出题时随概念清单注入作跨概念对比题候选；名字经精确解析归一，悬空引用
  * 消费侧静默降级）；废弃标记选填（#262：true = 该条目退役——地址仍解析、仅从生成
  * 注入面与候选面退出；缺席 = 在册活跃。写侧只落 true，false 等同缺席）。 */
 export interface ConceptEntry {
@@ -896,56 +898,56 @@ export class ConceptRegistry {
   }
 
   /** 读登记表 → 条目列表（保序）。文件缺失返回 []（合法 Missing）；Broken 抛错。 */
-  async load(root: string): Promise<ConceptEntry[]> {
+  async load(): Promise<ConceptEntry[]> {
     let raw: string
     try {
-      raw = await this.fs.readFile(this.paths.conceptRegistryPath(root))
+      raw = await this.fs.readFile(this.paths.conceptRegistryPath)
     } catch (err) {
       if ((err as { code?: unknown }).code === 'ENOENT') return []
       const message = err instanceof Error ? err.message : String(err)
-      throw new Error(`[concept-registry] 概念登记表 Broken（无法读取）: ${this.paths.conceptRegistryPath(root)}\n  ✗ ${message}`)
+      throw new Error(`[concept-registry] 概念登记表 Broken（无法读取）: ${this.paths.conceptRegistryPath}\n  ✗ ${message}`)
     }
     let doc: unknown
     try {
       doc = YAML.parse(raw)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      throw new Error(`[concept-registry] 概念登记表 Broken（YAML 无法解析）: ${this.paths.conceptRegistryPath(root)}\n  ✗ ${message}`)
+      throw new Error(`[concept-registry] 概念登记表 Broken（YAML 无法解析）: ${this.paths.conceptRegistryPath}\n  ✗ ${message}`)
     }
     const checked = validateConceptRegistry(doc)
     if (checked.errors.length) {
-      throw new Error(`[concept-registry] 概念登记表 Broken（契约校验失败）: ${this.paths.conceptRegistryPath(root)}\n${checked.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+      throw new Error(`[concept-registry] 概念登记表 Broken（契约校验失败）: ${this.paths.conceptRegistryPath}\n${checked.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     return checked.entries
   }
 
   /** 全量写登记表（原子写）。 */
-  async save(root: string, entries: ConceptEntry[]): Promise<void> {
-    await atomicWrite(this.paths.conceptRegistryPath(root), YAML.stringify({ concepts: entries }), this.fs)
+  async save(entries: ConceptEntry[]): Promise<void> {
+    await atomicWrite(this.paths.conceptRegistryPath, YAML.stringify({ concepts: entries }), this.fs)
   }
 
   /** 废弃标记翻转（human 决策执行面）：按名字（canonical 或别名）置/清 deprecated，
    * 清标记 = 字段删除完全恢复。失败抛错不改盘（登记表保持原样）。 */
-  async setDeprecated(root: string, name: string, deprecated: boolean): Promise<{ canonical: string; deprecated: boolean }> {
-    const entries = await this.load(root)
+  async setDeprecated(name: string, deprecated: boolean): Promise<{ canonical: string; deprecated: boolean }> {
+    const entries = await this.load()
     const toggled = setConceptDeprecated(entries, name, deprecated)
     if (toggled.errors.length) {
       throw new Error(`[concept-deprecate] 废弃标记未执行（登记表保持原样）。\n${toggled.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
-    await this.save(root, toggled.entries)
+    await this.save(toggled.entries)
     const hit = resolveConcept(toggled.entries, name)!
     return { canonical: hit.canonical, deprecated: isDeprecated(hit) }
   }
 
   /** 混淆对入册（human 确认的执行面，#265）：把 b 写进 a 的 confusable（只写一个方向，
    * 单向是待复核态，ADR-0084 ③）。已在册的对幂等成功。失败抛错不改盘。 */
-  async addConfusable(root: string, a: string, b: string): Promise<{ a: string; b: string; changed: boolean }> {
-    const entries = await this.load(root)
+  async addConfusable(a: string, b: string): Promise<{ a: string; b: string; changed: boolean }> {
+    const entries = await this.load()
     const added = addConfusablePair(entries, a, b)
     if (added.errors.length) {
       throw new Error(`[concept-confusable] 易混对未入册（登记表保持原样）。\n${added.errors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
-    if (added.changed) await this.save(root, added.entries)
+    if (added.changed) await this.save(added.entries)
     const ea = resolveConcept(added.entries, a)!
     const eb = resolveConcept(added.entries, b)!
     return { a: ea.canonical, b: eb.canonical, changed: added.changed }

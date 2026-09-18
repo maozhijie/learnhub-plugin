@@ -612,7 +612,7 @@ export class BankSubsystem {
     // 洗成「先验」。
     let conceptNames: Set<string> | null = null
     try {
-      conceptNames = namesOf(await this.e.concepts.load(c.root))
+      conceptNames = namesOf(await this.e.concepts.load())
     } catch {
       // 登记表降级不静默（#290）：照旧出卡只是本门不生效，WARN 指针留痕
       this.e.logger.warn('bank.gate.registry_broken', { course: c.name })
@@ -1237,7 +1237,7 @@ export class BankSubsystem {
     this.e.assertNoteOk(c, graph, broken, node, 'quiz')
     // invokes 概念引用对表基线（#141）：登记表在册名字集，出题受理门逐题对照；
     // 登记表条目同时供易混对候选提取（#232，随概念清单注入）
-    const conceptEntries = await this.e.concepts.load(c.root)
+    const conceptEntries = await this.e.concepts.load()
     const conceptNames = namesOf(conceptEntries)
     const retiredConcepts = deprecatedNames(conceptEntries)
     const note = await loadNote(this.e.paths.courseNotePath(c.root, node), this.e.fs)
@@ -1418,7 +1418,7 @@ export class BankSubsystem {
     if (!manifest?.length) throw new Error(`[quiz] 「${node}」没有节清单——先运行大纲。`)
     // invokes 概念引用对表基线（#141）：与 questionGenerate 同一受理门；
     // 登记表条目同时供易混对候选提取（#232）
-    const conceptEntries = await this.e.concepts.load(c.root)
+    const conceptEntries = await this.e.concepts.load()
     const conceptNames = namesOf(conceptEntries)
     const retiredConcepts = deprecatedNames(conceptEntries)
     const { body } = await loadNote(this.e.paths.courseNotePath(c.root, node), this.e.fs)

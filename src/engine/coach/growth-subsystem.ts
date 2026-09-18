@@ -614,7 +614,7 @@ export class GrowthSubsystem {
   /** 题目 id → invokes 概念（登记表 canonical 解析后；未标注返回 null）。行为摘要
    * （卡点集中度聚合）与复诊结算共用同一取数口径——聚合不因消费方分叉。 */
   private async invokesResolver(c: CourseEntry): Promise<(qid: string) => string | null> {
-    const entries = await this.e.concepts.load(c.root)
+    const entries = await this.e.concepts.load()
     const map = new Map<string, string>()
     await this.e.scanCourseBanks(c, async (_node, bank) => {
       for (const q of bank.questions) {
@@ -782,7 +782,7 @@ export class GrowthSubsystem {
     if (!lightweight) {
       // ③ 登记表档位（前沿视野 = 可学 ∪ 在学节点的概念档位折叠；同概念取最高档）
       // 废弃条目从生成注入面退出（#262）：在册计数只算活跃条目，前沿档位折叠剔除废弃概念
-      const entries = await this.e.concepts.load(c.root)
+      const entries = await this.e.concepts.load()
       const retired = deprecatedNames(entries)
       const live = activeEntries(entries)
       const tierRank = (t: ConceptTier): number => CONCEPT_TIERS.indexOf(t)
@@ -866,7 +866,7 @@ export class GrowthSubsystem {
    * invokesResolver 服务行为摘要的窗口聚合，归档与否由下游窗口按 practice 流水过滤，
    * 故它不在这里排除。 */
   async conceptInvokesOf(c: CourseEntry): Promise<Map<string, Map<string, number>>> {
-    const entries = await this.e.concepts.load(c.root)
+    const entries = await this.e.concepts.load()
     const out = new Map<string, Map<string, number>>()
     await this.e.scanCourseBanks(c, async (node, bank) => {
       for (const q of bank.questions) {
@@ -1180,7 +1180,7 @@ export class GrowthSubsystem {
       },
       conceptInvokes: () => this.conceptInvokesOf(c),
     })
-    const entriesOf = async (): Promise<ConceptEntry[]> => this.e.concepts.load(root)
+    const entriesOf = async (): Promise<ConceptEntry[]> => this.e.concepts.load()
 
     /** 结构性重画建议的形状门（#320；draft_arc 专用）：reason_class 枚举收窄为
      * 结构性事由——读数信号不构成重画战略的理由。 */
@@ -2068,7 +2068,7 @@ export class GrowthSubsystem {
     const taught = graph.nset.has(entry.node)
       ? Object.keys(graph.teachesOf[entry.node] ?? {})
       : []
-    const entries = await this.e.concepts.load(c.root)
+    const entries = await this.e.concepts.load()
     const canonicalOf = (name: string): string => resolveConcept(entries, name)?.canonical ?? name
     const payload: Record<string, unknown> = {
       course: c.name, node: entry.node, outcome: entry.outcome,

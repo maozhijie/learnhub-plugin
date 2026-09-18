@@ -51,7 +51,7 @@ function providersOf(engine: LearnhubEngine, c: CourseEntry): { behaviorDigestTe
   return {
     behaviorDigestText: async () => '摘要',
     conceptInvokes: async () => {
-      const entries = await engine.concepts.load(c.root)
+      const entries = await engine.concepts.load()
       const out = new Map<string, Map<string, number>>()
       await engine.learner.scanCourseBanks(c, async (node, bank) => {
         for (const q of bank.questions) {

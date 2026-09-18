@@ -99,7 +99,7 @@ export class GraphSubsystem {
     // 节点载荷标 isEndpoint、leaves/空降建议/健康分口径剔终点，UI 图面据此渲染终点
     // 样式并关终点生成入口
     const doc = await analyzeGraph(c.name, graph, state, this.e.store, (await this.e.learningDay()).today, vaultLinks, seedPhase, endpoints, {
-      conceptEntries: await this.e.concepts.load(c.root),
+      conceptEntries: await this.e.concepts.load(),
       conceptInvokes: await this.e.conceptInvokesOf(c),
       stuckByNode: await this.stuckByNode(c.name),
     })
@@ -322,7 +322,7 @@ export class GraphSubsystem {
     // 轴合法性由 groupView 顶部统一 fail loud（单一出处）
     const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
     const groups = groupView(graph, axis, {
-      conceptEntries: await this.e.concepts.load(c.root),
+      conceptEntries: await this.e.concepts.load(),
       endpoints: [...endpointNames(anchors)],
     })
     if (group && !groups.some(g => g.label === group)) {
@@ -472,7 +472,7 @@ export class GraphSubsystem {
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph } = await this.e.loadView(c)
-    const entries = await this.e.concepts.load(c.root)
+    const entries = await this.e.concepts.load()
     const decl = declaredPairKeys(entries)
     const nodes: CooccurrenceNode[] = []
     for (const node of graph.order) {
@@ -520,7 +520,7 @@ export class GraphSubsystem {
   }> {
     const c = await this.e.registry.resolve(courseKey)
     const { graph } = await this.e.loadView(c)
-    const entries = await this.e.concepts.load(c.root)
+    const entries = await this.e.concepts.load()
     // ③ invokes 分布：概念 → invokes 它的节点集（题库 Broken/缺席不拦派生，其余节点照常挖；ADR-0071 宽容读取）
     const invokesNodesOf: Record<string, string[]> = {}
     let scanned = 0
@@ -589,7 +589,7 @@ export class GraphSubsystem {
    * 面板独有增量；教练侧渲染仍走自己的文本折叠（含插入挂点判读），未消费本核。 */
   async conceptFootprint(courseKey?: string, query?: string): Promise<ConceptFootprintDoc> {
     const c = await this.e.registry.resolve(courseKey)
-    const entries = await this.e.concepts.load(c.root)
+    const entries = await this.e.concepts.load()
     const { graph } = await this.e.loadView(c)
     const invokes = await this.e.conceptInvokesOf(c)
     return {

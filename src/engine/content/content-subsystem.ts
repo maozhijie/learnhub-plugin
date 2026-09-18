@@ -147,7 +147,7 @@ export class ContentSubsystem {
     opts?.onPrior?.(prior.audit)
     // 废弃条目从生成注入面退出（#262 / ADR-0084）：内容包 §12 误解坑位 / §13 前置概念档位
     // 按 retired 剔除。登记表 Broken 不拦生成（降级为不过滤，与 vault 先验检索同款，ADR-0071）。
-    const { entries, error } = await queryEntriesFor(this.e.concepts, c.root)
+    const { entries, error } = await queryEntriesFor(this.e.concepts)
     // 登记表 Broken 降级不静默（#290）：读侧照旧不过滤，INFO 指针留痕
     if (error) this.e.logger.info('content.pack.registry_broken', { course: c.name })
     const retiredConcepts = deprecatedNames(entries)
@@ -444,7 +444,7 @@ export class ContentSubsystem {
       const { graph, state } = await this.e.loadView(c)
       const anchors = await readAnchors(this.e.paths.anchorPath(c.root), this.e.fs)
       const groups = groupView(graph, axis, {
-        conceptEntries: await this.e.concepts.load(c.root),
+        conceptEntries: await this.e.concepts.load(),
         endpoints: [...endpointNames(anchors)],
       })
       const nodeOf = (n: string) => ({

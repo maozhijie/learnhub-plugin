@@ -398,7 +398,7 @@ test('#262 废弃条目退出登记表档位注入面：在册计数只算活跃
     ].join('\n'),
     notes: { 起点: { stage: 'ready', content: { sections: READY_SECTIONS } } },
     files: [{
-      path: '学习中心/math/概念登记表.yaml',
+      path: '学习中心/概念登记表.yaml',
       content: [
         'concepts:',
         '  - canonical: 因式分解',

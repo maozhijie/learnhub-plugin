@@ -115,9 +115,9 @@ export interface DataCheckReport {
     /** 断裂存档区盘点（#138 / ADR-0034）：present = 存档区在盘；files = 区内文件总数
      *（不校验内容——存档只增不删、引擎读侧永不读取，数文件即盘点）。 */
     archive: { present: boolean; files: number }
-    /** 概念登记表盘点（#141）：present = 在盘课程数；entries = 条目总数（跨断裂
-     * 存活的档案坐标系，与存档区互斥——登记表永不入存档清单）。 */
-    conceptRegistries: { present: number; entries: number }
+    /** 概念登记表盘点（#141；v0.4 / ADR-0089 中心级一份）：present = 在盘；entries =
+     * 条目总数（跨断裂存活的档案坐标系，与存档区互斥——登记表永不入存档清单）。 */
+    conceptRegistries: { present: boolean; entries: number }
     /** 终点锚盘点（#142）：present = 有锚文件的课程数（缺席 = 零终点合法空态）。 */
     endpointAnchors: { present: number }
     /** 边实验账本盘点（#146）：present = 在册课程数；entries/inFlight/overdue = 账本
@@ -540,15 +540,15 @@ async function scanErrorCards(
   }
 }
 
-/** 概念登记表体检（#141 / #122 契约 v0.1）：课程根/概念登记表.yaml——文件缺失 =
+/** 概念登记表体检（#141 / #122 契约 v0.1；v0.4 / ADR-0089 中心级一份）：学习中心/
+ * 概念登记表.yaml——文件缺失 =
  * 合法空态（选填域，与我的卡/错误卡同款：缺席零 finding，inventory 计数即盘点可见）；
  * 存在但不可读/YAML 坏/契约违约（名字联合唯一等）= Broken。登记表跨宣告式断裂存活，
  * 永不入存档清单。 */
 async function scanConceptRegistry(
   findings: DataCheckFinding[],
-  courseName: string,
   path: string, fs: VaultFs): Promise<{ present: boolean; entries: number }> {
-  const where = `课程「${courseName}」概念登记表 ${path}`
+  const where = `概念登记表 ${path}`
   let text: string
   try {
     text = await fs.readFile(path)
@@ -851,7 +851,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     registryPresent: false, courses: 0, graphFiles: 0, notes: 0, questionBanks: 0, noteSourceBanks: 0,
     noteSourceFiles: { total: 0, ok: 0, missing: 0, drifted: 0, inconsistent: 0 },
     archive: { present: false, files: 0 },
-    conceptRegistries: { present: 0, entries: 0 },
+    conceptRegistries: { present: false, entries: 0 },
     endpointAnchors: { present: 0 },
     probationLedgers: { present: 0, entries: 0, inFlight: 0, overdue: 0 },
     evidenceStreams: [],
@@ -909,12 +909,6 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     inventory.graphFiles += result.graphFiles
     inventory.notes += result.notes
     inventory.questionBanks += result.banks
-    // 概念登记表（#141）：缺席 = 合法空态零 finding（inventory 计数即盘点可见）；在盘 = 盘点条目数
-    const regScan = await scanConceptRegistry(findings, courseName, paths.conceptRegistryPath(String(course.root)), fs)
-    if (regScan.present) {
-      inventory.conceptRegistries.present++
-      inventory.conceptRegistries.entries += regScan.entries
-    }
     // 终点锚（#142）：缺席 = 零终点合法空态零 finding；在盘 = 校验形状与悬空
     const anchorScan = await scanEndpointAnchor(
       findings,
@@ -936,6 +930,10 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
       inventory.probationLedgers.overdue += probationScan.overdue
     }
   }
+
+  // 概念登记表（#141；v0.4 中心级一份）：缺席 = 合法空态零 finding（inventory 计数即盘点可见）；在盘 = 盘点条目数
+  const regScan = await scanConceptRegistry(findings, paths.conceptRegistryPath, fs)
+  inventory.conceptRegistries = { present: regScan.present, entries: regScan.entries }
 
   const noteSourceScan = await scanNoteSources(findings, paths, noteSources, fs)
   inventory.noteSourceBanks = noteSourceScan.banks
