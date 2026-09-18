@@ -765,19 +765,18 @@ export function conceptSufficiencyGateErrors(
       let closureSufficient = false
       let taughtInCourse = false
 
-      // 闭包内：逐祖先检查 teaches（经 canonical 归一）
+      // 闭包内：逐祖先检查 teaches（经 canonical 归一），取最高档位
       for (const ancestorName of closure) {
         const ancestorTeaches = simGraph.teachesOf[ancestorName]
         if (!ancestorTeaches) continue
         for (const [tc, tt] of Object.entries(ancestorTeaches)) {
           if (canon(tc) !== canonical) continue
           taughtInClosure = true
-          // 档位比较：任一侧缺档不判
+          // 档位比较：任一侧缺档不判；取闭包内最高档位
           const ancRank = tierRank(tt)
           const reqRank = tierRank(requiredTier)
           if (ancRank < 0 || reqRank < 0) { closureSufficient = true; break }
           if (ancRank >= reqRank) closureSufficient = true
-          break
         }
         if (closureSufficient) break
       }

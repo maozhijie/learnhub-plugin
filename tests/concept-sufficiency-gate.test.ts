@@ -230,6 +230,24 @@ test('conceptSufficiencyGateErrors：多条 assumes 各自独立裁决', () => {
   assert.match(errs[0]!, /档位不足/)
 })
 
+// ---- 多祖先教同一概念不同档位 → 取最高档 ----
+
+test('conceptSufficiencyGateErrors：多祖先教同一概念不同档 → 取最高档放行', () => {
+  // 甲 teaches 分数:知道，乙 pre=[甲] teaches 分数:能教
+  // 丁 pre=[乙]，闭包 = {乙, 甲}；分数最高档 = 能教 ≥ 会用 → 放行
+  const nodes: GNode[] = [
+    { name: '甲', pre: [], opt: false, note: '', enc: [], teaches: { 分数: '知道' } },
+    { name: '乙', pre: ['甲'], opt: false, note: '', enc: [], teaches: { 分数: '能教' } },
+    { name: '终点甲', pre: [], opt: false, note: '', enc: [] },
+  ]
+  const graph = new Graph(nodes)
+  const entries: ConceptEntry[] = [{ canonical: '分数' }]
+  const ops: EditOp[] = [
+    { op: 'add_node', name: '丁', pre: ['乙'], assumes: { 分数: '会用' }, operator: '新增' },
+  ]
+  assert.deepEqual(conceptSufficiencyGateErrors(ops, nodes, graph, entries, anchors), [])
+})
+
 // ---- 无前置节点 ----
 
 test('conceptSufficiencyGateErrors：无前置节点 + assumes 图内没人教 → 放行', () => {
