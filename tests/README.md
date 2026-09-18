@@ -702,3 +702,15 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 行为 | **正名（裁决 9，人审直动作）**：recanonicalizeConceptEntries 纯函数 + ConceptRegistry.recanonicalize 执行面——canonical 降为别名（排首位）、新名升主，旧地址照旧解析、联合唯一不破（撞名错误不落盘）、幂等（已是主名）；不立提案 kind、AI 经 note.reason 一句话提议（零新机制） | `src/engine/concepts/concepts.ts` | `tests/concept-governance.test.ts`（换主名/别名升主/联合唯一/幂等/未在册） |
 | 行为 | **近似名提示判据化**：软提示改判据措辞（「指称的是不是同一物」），不枚举差异类型（视角/尺度等仅为例示） | `src/engine/concepts/concepts.ts::nearNameWarnings` | 既有近似名测试绿（非阻语义不变） |
 | 受控面 | **G5 同提交迁移**：concepts.ts 955→1000、proposals.ts 1951→2010、growth-subsystem.ts 2116→2118；typeErrors 0/0；零提示词模板变更（prompt-bump 不涉） | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |
+
+## 版本标记退出模型面：TEMPLATE_VERSIONS 代码表接管（用户令，2026-09-18）：机制变更登记
+
+用户令：机制文本（`<!-- learnhub:prompt/vN -->` 标记与「用户可编辑；…」头注行）不随模板散文进模型面——散文冻结期内经用户逐字授权执行。裁决：版本号搬家不废门——两道登记门的判据（逐键版本差 / 版本对齐）不变，只换锚。
+
+| 类别 | 变更 | 代码 | 测试 |
+|---|---|---|---|
+| 机制 | **版本住代码表**：15 条模板串内的标记行与头注行全部撤出（信息并入模板上方注释）；新增 `TEMPLATE_VERSIONS` 表（行尾 `// learnhub:prompt/vN` 注释 = 提交级登记门的新扫描锚），经 `Content.PROMPT_VERSIONS` 出面 | `src/engine/prompts/templates.ts`、`src/engine/content/content.ts` | `tests/output-contract.test.ts::runChangelogGate`（改读代码表）、`tests/prompt-contract.test.ts`/`tests/project-domain.test.ts`（版本断言改读表） |
+| 行为 | **vault 快照升级判据两支**：① 快照版本 < 代码表现行（旧行为）；② 快照仍带串内旧标记（LEGACY_MARKER_RE）→ 一律刷新（.bak 留档），否则机制文本永远随旧快照回灌模型；与内置逐字相同/版本对齐的快照不动 | `src/engine/content/content.ts::loadPrompt` | `tests/receipts.test.ts`（锚句改正文）、`tests/compass.test.ts` AC1（prompt 锚改站定位句） |
+| 受控面 | **G5 同提交迁移**：content.ts 1557→1575、output-contracts.ts 753→754；templates.ts 在白名单（净减 21 行不卡基线）；typeErrors 0/0 | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |
+| 已知边界 | **quality-review 的 templateVersion 语义收窄**：新调用记录的拼装 prompt 不再带标记 → `templateVersionOf` 归 null（历史语料照旧可认）；版本对照视图对新记录单列「无版本标记」 | `src/engine/content/quality-review.ts`（未改，语义自然收窄） | `tests/quality-review.test.ts` 既有用例绿（合成串锚不变） |
+| 过门 | 全量 npm test 1387 pass / 0 fail；`prompt-bump check` 真历史 45 提交 / 14 bump 无违规；replay/compare 未跑（本次模板散文语义零变化，标记与头注非生成指令面） | — | `.scratch/fulltest-marker.log` |

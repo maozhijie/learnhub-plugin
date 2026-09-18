@@ -110,7 +110,7 @@ test('项目域两模板进 PROMPT_KINDS：v6 标记 + 四块/三档/不出题�
   for (const kind of ['项目里程碑计划', '项目里程碑产物'] as const) {
     const tpl = Content.PROMPT_KINDS[kind]
     assert.ok(tpl, `${kind} 应为内置模板`)
-    assert.match(Content.promptVersionOf(tpl).toString(), /^[6-9]$/, `${kind} 应带 v6+ 版本标记`)
+    assert.match(String(Content.PROMPT_VERSIONS[kind] ?? 0), /^[6-9]$/, `${kind} 版本线应 v6+`)
   }
   const plan = Content.PROMPT_KINDS['项目里程碑计划']!
   assert.match(plan, /3–8 个里程碑/)

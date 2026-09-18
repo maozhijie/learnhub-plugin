@@ -14,6 +14,7 @@ import { existsSync } from 'node:fs'
 import { wantsFullReview, receiptsUntilNextFull, parseReceiptReview, RECEIPT_KIND_LABEL } from '../src/engine/practice/receipts.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 import { withVault } from './helpers/vault.ts'
+import { Content } from '../src/engine/content/content.ts'
 
 const GRAPH_PRACTICE = [
   'nodes:',
@@ -168,8 +169,9 @@ test('提示词模板：回执评审入 PROMPT_KINDS（可编辑、带版本标�
   await withVault({ tag: 'receipt-prompt', registry: null, graph: null }, async h => {
     assert.ok((await h.engine.content2.promptKinds()).includes('回执评审'))
     const tpl = await h.engine.content2.loadPrompt('回执评审')
-    assert.ok(tpl.includes('回执评审'))
-    assert.ok(tpl.includes('learnhub:prompt/v6'))
+    // 版本住代码表（标记已退出模板散文）；正文锚用评审立场句
+    assert.ok((Content.PROMPT_VERSIONS['回执评审'] ?? 0) >= 6)
+    assert.ok(tpl.includes('练习评审教练'))
     assert.ok(Object.keys(RECEIPT_KIND_LABEL).length === 4)
   })
 })

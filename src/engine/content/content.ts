@@ -18,7 +18,7 @@ import { endpointNames, readAnchors } from '../coach/seed.ts'
 import { round2 } from '../infra/grading.ts'
 import { CONFUSABLE_INJECT_CAP, capConfusablePairs, invokesTagged } from '../concepts/concepts.ts'
 import { withContractLast } from '../infra/prompt-assembly.ts'
-import { TEMPLATES } from '../prompts/templates.ts'
+import { TEMPLATES, TEMPLATE_VERSIONS } from '../prompts/templates.ts'
 import { RENDERERS, PLAIN_CODE_LANGS, SECTION_TYPES, INTERACTIVE_TYPES, parseSectionTitle, rendererCapabilityBlock, predictBlockRe, parsePredictBlock } from '../../../shared/content-renderers.ts'
 import type { InteractiveType } from '../../../shared/content-renderers.ts'
 import type { GNode, SectionManifest, EncEdge } from '../types.ts'
@@ -337,8 +337,12 @@ export class Content {
    * 契约注册表 `OUTPUT_CONTRACTS`、登记表 `PROMPT_CHANGELOG` 三面对账（tests/output-contract.test.ts）。 */
   static readonly PROMPT_KINDS: Record<string, string> = TEMPLATES
 
-  /** 读提示词模板；内置模板带版本标记，vault 快照缺标记或版本更低时覆盖升级（旧文件存 .bak 供 diff 恢复），
-   * 非内置类型要求用户已自建同名文件。
+  /** 生成站 → 模板版本（单源在 `prompts/templates.ts::TEMPLATE_VERSIONS`）。版本不进模板
+   * 散文——机制文本不进模型面；登记门（runChangelogGate）与 vault 升级判读都从这里取。 */
+  static readonly PROMPT_VERSIONS: Record<string, number> = TEMPLATE_VERSIONS
+
+  /** 读提示词模板；vault 快照版本低于内置版本（或仍是带串内机制标记的旧形态）时覆盖升级
+   * （旧文件存 .bak 供 diff 恢复），非内置类型要求用户已自建同名文件。
    * `{{renderers}}` 占位符注入渲染能力清单（#237 / ADR-0075 §1），**只认占位符**：模板里没有它
    * 就不注入（#302 ① 删掉旧兜底——旧行为把面板渲染菜单无条件追加到无占位符模板末尾，13 个内置
    * 站因此被判「只能使用下列格式」，与教练站「只输出 YAML」的输出契约直接矛盾）。 */
@@ -350,21 +354,35 @@ export class Content {
       throw new Error(`[prompt] 未知提示词类型: ${kind}（内置：${Object.keys(Content.PROMPT_KINDS).join('、')}；或在 state/提示词/ 自建 ${kind}.md）`)
     }
     if (builtin) {
-      const vaultVer = this.fs.exists(p) ? Content.promptVersionOf(await this.fs.readFile(p)) : 0
-      if (vaultVer < Content.promptVersionOf(builtin)) {
-        if (this.fs.exists(p)) await this.fs.writeFile(`${p}.bak`, await this.fs.readFile(p))
+      if (!this.fs.exists(p)) {
         await this.fs.writeFile(p, builtin)
+      } else {
+        const vaultText = await this.fs.readFile(p)
+        const cur = Content.PROMPT_VERSIONS[kind] ?? Content.promptVersionOf(builtin)
+        // 升级判据两支：① 快照版本低于现行（版本住代码表，不在文本里）；② 快照仍是旧形态
+        // （串内机制标记）——标记已从内置模板退场，带着它的快照一律刷新（.bak 留档），
+        // 否则机制文本会永远随旧快照回灌给模型。与内置逐字相同的快照不动（用户改过散文的
+        // 同版本快照也不动——版本对齐即视为用户面）。
+        if (vaultText !== builtin && (Content.promptVersionOf(vaultText) < cur || Content.LEGACY_MARKER_RE.test(vaultText))) {
+          await this.fs.writeFile(`${p}.bak`, vaultText)
+          await this.fs.writeFile(p, builtin)
+        }
       }
     }
     const text = await this.fs.readFile(p)
     return text.includes('{{renderers}}') ? text.replaceAll('{{renderers}}', rendererCapabilityBlock()) : text
   }
 
-  /** 内置模板首行版本标记 → 数字；无标记（历史快照）= 0，下次 loadPrompt 即升级。 */
+  /** 历史快照首行版本标记 → 数字；无标记（现役内置形态）= 0。现役内置模板已不带串内
+   * 标记（版本住 `PROMPT_VERSIONS`），本函数只服务旧快照的升级判读。 */
   static promptVersionOf(text: string): number {
     const m = /^<!-- learnhub:prompt\/v(\d+) -->/.exec(text)
     return m ? Number(m[1]) : 0
   }
+
+  /** 旧形态串内机制标记（任意位置）：曾随模板文本进提示词，已退场；vault 快照里还带它的
+   * 一律视为旧形态、下次 loadPrompt 刷掉（见 loadPrompt 升级判据②）。 */
+  static readonly LEGACY_MARKER_RE = /<!-- learnhub:prompt\/v(\d+) -->/
 
   /** 契约后置拼装（#218）：宿主经门面走这里（R1：宿主只见门面，`src/host/jobs.ts` 是
    * 唯一消费者）；引擎内部直接引 prompt-assembly.ts 的叶子函数——叶子零依赖、谁都能引，

@@ -450,11 +450,11 @@ test('自检：直接插值模板变量的旧形态会被抓；换名的新站�
 // ---- 变更登记门（#220 字段格式手工落位，#218 的版本 bump 首次登记）----
 
 /** 登记门本体：覆盖完备（键 = PROMPT_KINDS 全集）+ 字段齐备 + 无幽灵键 + 最高登记版本
- * 与模板头版本标记一致（bump 了模板却没补条目 = 红）。 */
+ * 与现行版本一致（版本住 `Content.PROMPT_VERSIONS` 代码表；bump 了表却没补条目 = 红）。 */
 function runChangelogGate(
   kinds: Record<string, string>,
   changelog: Readonly<Record<string, readonly PromptBump[]>>,
-  versionOf: (text: string) => number,
+  versionOf: (kind: string) => number,
 ): void {
   assert.deepEqual(
     Object.keys(changelog).sort(), Object.keys(kinds).sort(),
@@ -471,17 +471,17 @@ function runChangelogGate(
         e.date.trim() && e.changeType.trim() && e.expectedDelta.trim(),
         `「${kind}」v${e.version} 登记字段不齐（date/changeType/expectedDelta）`,
       )
-      assert.ok(e.version <= versionOf(kinds[kind]!), `「${kind}」登记版本 v${e.version} 超过模板现行版本`)
+      assert.ok(e.version <= versionOf(kind), `「${kind}」登记版本 v${e.version} 超过模板现行版本`)
     }
     assert.equal(
-      Math.max(...versions), versionOf(kinds[kind]!),
+      Math.max(...versions), versionOf(kind),
       `「${kind}」最高登记版本与模板现行版本不一致——bump 模板必须同提交补登记条目（#220/#218）`,
     )
   }
 }
 
 test('#218/#220 变更登记：键覆盖 PROMPT_KINDS 全集，最高登记版本 == 模板现行版本', () => {
-  runChangelogGate(Content.PROMPT_KINDS, PROMPT_CHANGELOG, Content.promptVersionOf)
+  runChangelogGate(Content.PROMPT_KINDS, PROMPT_CHANGELOG, kind => Content.PROMPT_VERSIONS[kind] ?? 0)
 })
 
 test('自检：bump 模板不补条目 / 登记超版本 / 幽灵键 / 缺键，门都必须变红', () => {
@@ -493,8 +493,8 @@ test('自检：bump 模板不补条目 / 登记超版本 / 幽灵键 / 缺键，
     ...PROMPT_CHANGELOG,
     幽灵模板: [{ version: 1, date: 'x', changeType: 'y', expectedDelta: 'z' }],
   }
-  assert.throws(() => runChangelogGate(Content.PROMPT_KINDS, ghosts, Content.promptVersionOf), /一一对应/)
+  assert.throws(() => runChangelogGate(Content.PROMPT_KINDS, ghosts, kind => Content.PROMPT_VERSIONS[kind] ?? 0), /一一对应/)
   const short: Record<string, readonly PromptBump[]> = { ...PROMPT_CHANGELOG }
   delete short['罗盘初画']
-  assert.throws(() => runChangelogGate(Content.PROMPT_KINDS, short, Content.promptVersionOf), /一一对应/)
+  assert.throws(() => runChangelogGate(Content.PROMPT_KINDS, short, kind => Content.PROMPT_VERSIONS[kind] ?? 0), /一一对应/)
 })

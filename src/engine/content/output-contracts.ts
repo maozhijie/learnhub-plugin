@@ -522,8 +522,9 @@ export interface PromptBump {
  * 对账）。**本表自 #218 起计**：#218 之前的历史版本线未回填（那时没有登记面，编不出一份
  * 诚实的表）；#220 落地后按同字段格式接管完整纪律，本表随之并入。
  *
- * 不变式（门在执法，不是注释）：每个模板键的**最高**登记版本 == 模板头
- * `<!-- learnhub:prompt/vN -->` 的现行版本——**bump 了模板却没补登记条目 = 红**。同一
+ * 不变式（门在执法，不是注释）：每个模板键的**最高**登记版本 == 现行版本——版本住
+ * `TEMPLATE_VERSIONS` 代码表（prompts/templates.ts；标记已退出模板散文，不进模型面）
+ * ——**bump 了表却没补登记条目 = 红**。同一
  * 版本号下允许第二条登记：模板文本没动、但最终 prompt 变了（拼装侧重排、上下文包变更）
  * 也是「预期输出增量」要覆盖的变更，记在同一版本号下并写明变更面，不冒充版本 bump。 */
 export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> = {

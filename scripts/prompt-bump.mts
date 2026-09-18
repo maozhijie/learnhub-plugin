@@ -47,8 +47,12 @@ import { validateRouteBody } from '../src/engine/coach/compass.ts'
 import { parseReceiptReview } from '../src/engine/practice/receipts.ts'
 import { corpusLayoutOf, parseCorpusFile, readCallRecords } from '../src/host/corpus-read.ts'
 
-/** 模板版本标记（每条模板头；与 PROMPT_CHANGELOG 的版本号同源）。 */
-export const MARKER_RE = /<!-- learnhub:prompt\/v(\d+) -->/g
+/** 模板版本标记（两种锚）：① 串内标记 `<!-- learnhub:prompt/vN -->`——历史提交的模板文本形
+ * 态，git 历史扫描靠它；② 代码表行尾注释 `// learnhub:prompt/vN`（TEMPLATE_VERSIONS）——
+ * 现役形态（标记已退出版模板散文，不进模型面），新 bump 改表行即被看见。 */
+export const MARKER_RE = /(?:<!--|\/\/)\s*learnhub:prompt\/v(\d+)/g
+/** 代码表条目行：`键: N, // learnhub:prompt/vN`（版本号可归属到键的现役形态）。 */
+const TABLE_ENTRY_RE = /^\s+(?:'([^']+)'|([^\s:'`]+)):\s*\d+,\s*\/\/\s*learnhub:prompt\/v(\d+)\s*$/
 
 /**
  * **模板面**（提交级门的受控路径集；路径相对仓库根）。是清单不是单文件：#237 / ADR-0075 把
@@ -140,6 +144,13 @@ export function templateVersionsOf(templateText: string): { keys: Map<string, nu
   const unkeyed = new Set<number>()
   let lastKey: string | null = null
   for (const line of templateText.split('\n')) {
+    // 现役形态：TEMPLATE_VERSIONS 表条目行（版本号直接带在行尾注释里，自归属，不吃撞车）
+    const table = TABLE_ENTRY_RE.exec(line)
+    if (table) {
+      keys.set(table[1] ?? table[2]!, Number(table[3]))
+      lastKey = null
+      continue
+    }
     // 模板值的开行：`    键: \`` 或 `    '键': \``（Markdown/纯文本键都可能带引号）
     const open = /^\s+(?:'([^']+)'|([^\s:'`]+)):\s*`/.exec(line)
     if (open) lastKey = open[1] ?? open[2]!
