@@ -30,7 +30,7 @@ import type { CourseEntry, PracticeRec, PracticeStreamRow, ProposalRec, ReviewRe
 import { safeFilename } from './infra/paths.ts'
 import type { Paths } from './infra/paths.ts'
 
-export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'endpoint_anchor' | 'archive' | 'probation_ledger' | 'proposals' | 'gen_jobs' | 'evidence_streams'
+export type DataCheckArea = 'registry' | 'graph' | 'note' | 'question_bank' | 'note_source' | 'learner_cards' | 'error_cards' | 'concept_registry' | 'concept_layer' | 'endpoint_anchor' | 'archive' | 'probation_ledger' | 'proposals' | 'gen_jobs' | 'evidence_streams'
 
 export type DataCheckFindingLevel = 'missing' | 'broken' | 'archived' | 'hint'
 
@@ -68,6 +68,9 @@ export type DataCheckReason =
   | 'concept_registry_yaml_parse'
   | 'concept_registry_schema'
   | 'concept_registry_magnitude'
+  | 'question_invokes_absent'
+  | 'concept_orphan_registry'
+  | 'concept_definition_missing'
   | 'endpoint_anchor_unreadable'
   | 'endpoint_anchor_json_parse'
   | 'endpoint_anchor_schema'
@@ -133,6 +136,8 @@ export interface DataCheckReport {
 
 interface GraphNodeLike {
   name: string
+  /** 本节点 teaches/assumes 的概念名（概念层体检读数的图面原料；缺省 = 无概念字段）。 */
+  conceptKeys?: string[]
 }
 
 function errorText(err: unknown): string {
@@ -253,10 +258,13 @@ async function scanBanks(
   findings: DataCheckFinding[],
   courseName: string,
   bankDir: string,
-  nodes: GraphNodeLike[], fs: VaultFs): Promise<number> {
+  nodes: GraphNodeLike[], fs: VaultFs): Promise<{ files: number; questions: number; invoked: number; invokedNames: Set<string> }> {
   const files = await listFiles(bankDir, '.yaml', fs)
   const byPath = new Map(files.map(path => [resolve(path).toLowerCase(), path]))
   const checked = new Set<string>()
+  let questions = 0
+  let invoked = 0
+  const invokedNames = new Set<string>()
 
   const validateOne = async (path: string, expectedNode?: string): Promise<void> => {
     const where = `课程「${courseName}」题库 ${path}`
@@ -272,6 +280,15 @@ async function scanBanks(
     const result2 = validateBank(result.doc, expectedNode)
     if (result2.errors) {
       push(findings, 'question_bank', 'broken', 'question_bank_schema', where, result2.errors.join('；'))
+    }
+    // 概念层读数原料：非归档题数与带 invokes 的题数（缺席恒合法 Missing，只盘点不判损坏）
+    for (const q of result2.spec?.questions ?? []) {
+      if (q.archived) continue
+      questions++
+      if (typeof q.invokes === 'string' && q.invokes.trim()) {
+        invoked++
+        invokedNames.add(q.invokes.trim())
+      }
     }
   }
 
@@ -295,7 +312,7 @@ async function scanBanks(
   for (const [key, path] of byPath) {
     if (!checked.has(key)) await validateOne(path)
   }
-  return files.length
+  return { files: files.length, questions, invoked, invokedNames }
 }
 
 async function scanCourse(
@@ -304,7 +321,7 @@ async function scanCourse(
   _courseRoot: string,
   dataDir: string,
   courseDir: string,
-  bankDir: string, fs: VaultFs): Promise<{ graphFiles: number; notes: number; banks: number; nodes: GraphNodeLike[] }> {
+  bankDir: string, fs: VaultFs): Promise<{ graphFiles: number; notes: number; banks: number; bankDir: string; nodes: GraphNodeLike[]; conceptKeys: Set<string>; questions: { total: number; invoked: number } }> {
   // #284 存储塌缩：一课程一文件（data/图.yaml），目录里其余 .yaml 都是旧库残留
   const graphFiles = await listFiles(dataDir, '.yaml', fs)
   const nodes: GraphNodeLike[] = []
@@ -337,7 +354,12 @@ async function scanCourse(
             push(findings, 'graph', 'broken', 'graph_schema', where, `节点「${node.name}」重复。`)
           } else {
             nodeNames.add(node.name)
-            nodes.push({ name: node.name })
+            nodes.push({
+              name: node.name,
+              ...(node.teaches !== undefined || node.assumes !== undefined
+                ? { conceptKeys: [...Object.keys(node.teaches ?? {}), ...Object.keys(node.assumes ?? {})] }
+                : {}),
+            })
           }
         }
       } catch (err) {
@@ -362,8 +384,16 @@ async function scanCourse(
   }
 
   const noteFilesList = await scanNotes(findings, courseName, courseDir, nodeNames, fs)
-  const bankCount = await scanBanks(findings, courseName, bankDir, nodes, fs)
-  return { graphFiles: graphFiles.length, notes: noteFilesList.length, banks: bankCount, nodes }
+  const bankScan = await scanBanks(findings, courseName, bankDir, nodes, fs)
+  const conceptKeys = new Set<string>()
+  for (const node of nodes) {
+    for (const k of node.conceptKeys ?? []) conceptKeys.add(k)
+  }
+  for (const k of bankScan.invokedNames) conceptKeys.add(k)
+  return {
+    graphFiles: graphFiles.length, notes: noteFilesList.length, banks: bankScan.files, bankDir, nodes,
+    conceptKeys, questions: { total: bankScan.questions, invoked: bankScan.invoked },
+  }
 }
 
 /** 笔记源体检（C1 #59 / ADR-0010）：镜像区契约文件（源清单/题库）按 Missing/Broken
@@ -540,6 +570,20 @@ async function scanErrorCards(
   }
 }
 
+/** 登记表扫描结果（概念层读数的原料面）：损坏各态返回零值空扫描（损坏本身已报 Broken）。 */
+interface RegistryScan {
+  present: boolean
+  entries: number
+  canonicals: string[]
+  aliasToCanonical: Map<string, string>
+  withoutDefinition: number
+}
+
+/** 登记表扫描空态（损坏各态共用同一形状，新增字段只改这里）。 */
+function emptyRegistryScan(present: boolean): RegistryScan {
+  return { present, entries: 0, canonicals: [], aliasToCanonical: new Map(), withoutDefinition: 0 }
+}
+
 /** 概念登记表体检（#141 / #122 契约 v0.1；v0.4 / ADR-0089 中心级一份）：学习中心/
  * 概念登记表.yaml——文件缺失 =
  * 合法空态（选填域，与我的卡/错误卡同款：缺席零 finding，inventory 计数即盘点可见）；
@@ -547,28 +591,28 @@ async function scanErrorCards(
  * 永不入存档清单。 */
 async function scanConceptRegistry(
   findings: DataCheckFinding[],
-  path: string, fs: VaultFs): Promise<{ present: boolean; entries: number }> {
+  path: string, fs: VaultFs): Promise<RegistryScan> {
   const where = `概念登记表 ${path}`
   let text: string
   try {
     text = await fs.readFile(path)
   } catch (err) {
     const code = (err as { code?: unknown }).code
-    if (code === 'ENOENT') return { present: false, entries: 0 } // 合法空态：跟随生长批铸名后出现
+    if (code === 'ENOENT') return emptyRegistryScan(false) // 合法空态：跟随生长批铸名后出现
     push(findings, 'concept_registry', 'broken', 'concept_registry_unreadable', where, errorText(err))
-    return { present: true, entries: 0 }
+    return emptyRegistryScan(true)
   }
   let doc: unknown
   try {
     doc = YAML.parse(text)
   } catch (err) {
     push(findings, 'concept_registry', 'broken', 'concept_registry_yaml_parse', where, errorText(err))
-    return { present: true, entries: 0 }
+    return emptyRegistryScan(true)
   }
   const checked = validateConceptRegistry(doc)
   if (checked.errors.length) {
     push(findings, 'concept_registry', 'broken', 'concept_registry_schema', where, checked.errors.join('；'))
-    return { present: true, entries: 0 }
+    return emptyRegistryScan(true)
   }
   // 量级纪律（#264 / 父 #260）：超量别名 / 混淆对的条目报 hint（WARN/ERROR 带写进 detail）。
   // **只报不拦**——别名是历史地址（断读才是违约，ADR-0084 ②），量级是「该收敛了」的信号；
@@ -577,7 +621,64 @@ async function scanConceptRegistry(
     push(findings, 'concept_registry', 'hint', 'concept_registry_magnitude', where,
       `${f.band === 'error' ? 'ERROR' : 'WARN'} 带：${f.message}`)
   }
-  return { present: true, entries: checked.entries.length }
+  return {
+    present: true,
+    entries: checked.entries.length,
+    canonicals: checked.entries.map(e => e.canonical),
+    aliasToCanonical: new Map(checked.entries.flatMap(e => (e.aliases ?? []).map(a => [a, e.canonical]))),
+    withoutDefinition: checked.entries.filter(e => !e.definition || !e.definition.trim()).length,
+  }
+}
+
+/** 概念层读数的逐课原料：图面概念键（teaches/assumes/invokes 并集）+ 题库 invokes 盘点。 */
+interface ConceptLayerCourse {
+  name: string
+  bankDir: string
+  conceptKeys: Set<string>
+  questions: { total: number; invoked: number }
+}
+
+/** 概念层体检读数（对账仪器；全部 hint 带——advisor-only 读数，不进 status，
+ * #335 读数分带先例同款）：
+ * 1. 出题清单缺席可见读数：课程题库非空但全部题目无 invokes——出生打标门以概念
+ *    清单在场为激活条件，清单缺席时门不激活、题目合法无 invokes，本读数把这件事
+ *    从静默合法升为可见（待决问题②取 hint 起版，不拒收）。
+ * 2. 孤儿概念全中心存量扫描：在册概念全库零 teaches/assumes 键、零 invokes 标注
+ *    （与出生期 FIND_ORPHAN_MINT 同判据换时态——存量面在册概念不再随批出生，只能
+ *    由体检盘点）。别名地址按归一对照，别名命中不算孤儿。
+ * 3. 定义覆盖率：终身词表无定义条目占比。 */
+function scanConceptLayer(
+  findings: DataCheckFinding[],
+  registryPath: string,
+  registry: RegistryScan,
+  courses: ConceptLayerCourse[],
+): void {
+  for (const course of courses) {
+    if (course.questions.total > 0 && course.questions.invoked === 0) {
+      push(findings, 'concept_layer', 'hint', 'question_invokes_absent',
+        `课程「${course.name}」题库 ${join(course.bankDir)}`,
+        `本课 ${course.questions.total} 题全部无 invokes——概念清单缺席时出生打标门不激活（题目合法无概念标注；成分技能投影与足迹盘点随之空转）。给节点补 teaches 后新出题即恢复打标；存量题不回填。`)
+    }
+  }
+  if (!registry.present) return
+  // 图上允许写别名：按「别名→canonical」归一对照，任一地址命中即算有足迹
+  const touched = new Set<string>()
+  for (const course of courses) {
+    for (const raw of course.conceptKeys) {
+      touched.add(registry.aliasToCanonical.get(raw) ?? raw)
+    }
+  }
+  const orphans = registry.canonicals.filter(c => !touched.has(c))
+  if (orphans.length) {
+    push(findings, 'concept_layer', 'hint', 'concept_orphan_registry',
+      `概念登记表（全中心存量扫描）${registryPath}`,
+      `${orphans.length} 枚在册概念全库零足迹（无节点 teaches/assumes 它、无题目 invokes 它）：${orphans.slice(0, 10).join('、')}${orphans.length > 10 ? ' 等' : ''}——登记表条目合法（孤儿条目不违约），读数只盘点可见；确认无引用后可随概念工作台处置。`)
+  }
+  if (registry.entries > 0 && registry.withoutDefinition > 0) {
+    push(findings, 'concept_layer', 'hint', 'concept_definition_missing',
+      `概念登记表（全中心存量扫描）${registryPath}`,
+      `${registry.withoutDefinition}/${registry.entries} 枚在册概念无定义——定义是跨课引用复核与首引提示的判据面；可在概念工作台逐条补。`)
+  }
 }
 
 /** 终点锚集合体检（#142 / ADR-0033；#239 / ADR-0076 多终点化）：课程根/state/终点锚.json
@@ -878,6 +979,8 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
 
   let courses: CourseEntry[] = []
   let noteSources: Array<{ id: string; path: string }> = []
+  // 概念层读数的逐课原料（图面概念键 + 题库 invokes 盘点；读数在课程循环后统一出）
+  const conceptLayerCourses: ConceptLayerCourse[] = []
   if (inventory.registryPresent && registryRaw !== undefined) {
     const checked = validateRegistry(registryRaw)
     if (checked.errors.length) {
@@ -909,6 +1012,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     inventory.graphFiles += result.graphFiles
     inventory.notes += result.notes
     inventory.questionBanks += result.banks
+    conceptLayerCourses.push({ name: courseName, bankDir: paths.bankDir(String(course.root)), conceptKeys: result.conceptKeys, questions: result.questions })
     // 终点锚（#142）：缺席 = 零终点合法空态零 finding；在盘 = 校验形状与悬空
     const anchorScan = await scanEndpointAnchor(
       findings,
@@ -934,6 +1038,8 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
   // 概念登记表（#141；v0.4 中心级一份）：缺席 = 合法空态零 finding（inventory 计数即盘点可见）；在盘 = 盘点条目数
   const regScan = await scanConceptRegistry(findings, paths.conceptRegistryPath, fs)
   inventory.conceptRegistries = { present: regScan.present, entries: regScan.entries }
+  // 概念层体检读数（对账仪器；全 hint 带，不进 status）
+  scanConceptLayer(findings, join(paths.conceptRegistryPath), regScan, conceptLayerCourses)
 
   const noteSourceScan = await scanNoteSources(findings, paths, noteSources, fs)
   inventory.noteSourceBanks = noteSourceScan.banks
@@ -965,6 +1071,7 @@ export async function dataCheck(paths: Paths, nowMs: number, fs: VaultFs): Promi
     learner_cards: emptyArea(),
     error_cards: emptyArea(),
     concept_registry: emptyArea(),
+    concept_layer: emptyArea(),
     endpoint_anchor: emptyArea(),
     archive: emptyArea(),
     probation_ledger: emptyArea(),

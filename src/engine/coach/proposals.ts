@@ -503,6 +503,26 @@ export function difficultyStepGateErrors(ops: EditOp[], graph: Graph): string[] 
   return errors
 }
 
+/** teaches 出生强制门（概念层供水主坝）：非 practice、非终点的 add_node 至少
+ * teaches 一枚概念——teaches 是教学节点的定义本身；零 teaches 的教学节点产不出概念
+ * 清单，出题打标门不激活、成分技能投影空转，概念层全链静默干涸。终点是方向标记
+ * 不是可教课程节点（零正文零题库本就不被学），豁免；practice 沿「practice 合法空
+ * enc」同款口径豁免。只约束新出生——本门住在受理门序列，存量图加载不经过它，
+ * 不回填不破。插入位置与难度步进门同档（条目级形状门），在审计门之前（生长闸门
+ * 与审计门都在 editGateErrors 错误面之后才跑）。 */
+export function teachesGateErrors(ops: EditOp[], anchors: EndpointAnchor[]): string[] {
+  const endpoints = endpointNames(anchors)
+  const errors: string[] = []
+  for (const [i, op] of ops.entries()) {
+    if (op.op !== 'add_node' || op.type === 'practice') continue
+    if (op.name !== undefined && endpoints.has(op.name)) continue
+    if (Object.keys(op.teaches ?? {}).length === 0) {
+      errors.push(`ops.${i}(add_node ${op.name}): 教学节点未 teaches 任何概念（至少 1 条）——teaches 是教学节点的定义：不声明教什么，出题打标与成分技能投影就没有输入，节点会合法空转；把本节点真正教的概念写进 teaches（1–2 条是窄节点常态，8 条封顶）`)
+    }
+  }
+  return errors
+}
+
 /** 收束门（#145 受理门校验；#327 逐条目化；#335 刀①收编）：consolidate: true 的**新增条目**
  * 是综合收束——该 add_node 的概念引用（teaches/assumes/误解）只许引已教概念（既有图
  * teaches 并集），不产新概念；不走复诊由边轻纪律键拒收与 #146 结算语义共同保证（收束条目
@@ -727,6 +747,7 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
     ...endpointGuardErrorsOf(spec, ctx.anchors),
     ...consolidationGateErrors(spec.ops, ctx.graph, ctx.entries),
     ...difficultyStepGateErrors(spec.ops, ctx.graph),
+    ...teachesGateErrors(spec.ops, ctx.anchors),
     ...selfContradictionErrors(spec.ops, [...ctx.entries, ...mints]),
   ]
   // 误解封顶（#313 C9/C12）：增量判据 + canonical 归一，落在登记表现行条目（+ 本批铸名）上。

@@ -145,12 +145,15 @@ test('#198③ 主线批接线合规受理 + 收尾接线批（零 add_node 纯 s
 note:
   reason: 前沿缺下一台阶
   target_endpoints: [终点]
+concepts:
+  - canonical: 新台阶概念
 ops:
   - op: add_node
     name: 新台阶
     pre: [入门]
     operator: 新增
     est: 15
+    teaches: { 新台阶概念: 会用 }
   - op: set_pre
     node: 终点
     pre: [新台阶]
@@ -178,12 +181,15 @@ test('#198 豁免与既有语义：插入批免接线可受理；del/rename 终�
     const side = await engine.graph.graphPropose('edit', `course: 数学
 note:
   reason: 卡点指向的过渡台阶
+concepts:
+  - canonical: 支线台阶概念
 ops:
   - op: add_node
     name: 支线台阶
     pre: [入门]
     operator: 插入
     est: 10
+    teaches: { 支线台阶概念: 会用 }
     recheck:
       metric: 卡点集中度降幅
 `) as { id: number }
@@ -248,12 +254,15 @@ ops:
 note:
   reason: 目标扩了一级，重开主线
   target_endpoints: [终点]
+concepts:
+  - canonical: 更高台阶概念
 ops:
   - op: add_node
     name: 更高台阶
     pre: [中间台阶]
     operator: 新增
     est: 15
+    teaches: { 更高台阶概念: 会用 }
   - op: set_pre
     node: 终点
     pre: [更高台阶]
@@ -285,12 +294,15 @@ ops:
     const side = await engine.graph.graphPropose('edit', `course: 数学
 note:
   reason: 卡点指向的过渡台阶
+concepts:
+  - canonical: 支线台阶概念
 ops:
   - op: add_node
     name: 支线台阶
     pre: [入门]
     operator: 插入
     est: 10
+    teaches: { 支线台阶概念: 会用 }
     recheck:
       metric: 卡点集中度降幅
 `) as { id: number }
@@ -545,12 +557,15 @@ ops:
 note:
   reason: 甲方向再进一级
   target_endpoints: [终点甲]
+concepts:
+  - canonical: 甲更高台阶概念
 ops:
   - op: add_node
     name: 甲更高台阶
     pre: [起点甲]
     operator: 新增
     est: 15
+    teaches: { 甲更高台阶概念: 会用 }
   - op: set_pre
     node: 终点甲
     pre: [甲更高台阶]
@@ -570,12 +585,15 @@ test('#239 接线门多终点化（ADR-0076）：声明朝向逐终点接线受�
 note:
   reason: 只朝甲方向长
   target_endpoints: [终点甲]
+concepts:
+  - canonical: 甲新台阶概念
 ops:
   - op: add_node
     name: 甲新台阶
     pre: [起点甲]
     operator: 新增
     est: 15
+    teaches: { 甲新台阶概念: 会用 }
   - op: set_pre
     node: 终点甲
     pre: [甲新台阶]
@@ -595,12 +613,15 @@ ops:
 note:
   reason: 一级台阶同时服务两个方向（交汇）
   target_endpoints: [终点甲, 终点乙]
+concepts:
+  - canonical: 交汇台阶概念
 ops:
   - op: add_node
     name: 交汇台阶
     pre: [起点甲, 起点乙]
     operator: 新增
     est: 15
+    teaches: { 交汇台阶概念: 会用 }
   - op: set_pre
     node: 终点甲
     pre: [交汇台阶]

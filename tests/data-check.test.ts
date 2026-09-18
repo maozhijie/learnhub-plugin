@@ -122,7 +122,7 @@ test('Data Check 孤儿笔记（#255：doctor 的 unknown 格并入）：节点�
 
     // 契约只增不改：既有 missing 判定与 status 口径不动（hint 不进 status）
     assert.deepEqual(report.byArea.note, { missing: 1, broken: 0, archived: 0, hint: 1 })
-    assert.equal(report.counts.hint, 1)
+    assert.equal(report.counts.hint, 2, 'note_orphan + 概念层读数 question_invokes_absent（夹具题库无 invokes）各一条 hint')
     assert.equal(report.status, 'missing')
   })
 })
@@ -241,7 +241,7 @@ test('Data Check evidence_streams area：撕裂尾行 → hint finding（不进 
     assert.match(hits[0]!.location, /practice\.jsonl/)
     assert.match(hits[0]!.detail ?? '', /第 2 行/)
     assert.equal(report.byArea.evidence_streams.hint, 1)
-    assert.equal(report.counts.hint, 1)
+    assert.equal(report.counts.hint, 2, '撕裂尾行 + 概念层读数 question_invokes_absent（夹具题库无 invokes）各一条 hint')
     assert.equal(report.status, 'ok', 'hint 不进 status：只剩撕裂尾行时体检整体仍 ok')
     const row = report.inventory.evidenceStreams.find(s => s.stream === 'practice')!
     assert.equal(row.present, true)
@@ -348,5 +348,42 @@ ops:
       anchors: Array<Record<string, unknown>>
     }
     assert.deepEqual(after.anchors.map(a => a.endpoint), ['终点'], '锚册恰剩起草终点')
+  })
+})
+
+// ---- 概念层体检读数（对账仪器；全 hint 带不进 status）----
+
+test('概念层体检读数：invokes 全缺可见 + 孤儿概念存量扫描 + 定义覆盖率', async () => {
+  const GRAPH_TAUGHT = [
+    'nodes:',
+    '  - name: 入门',
+    '    pre: []',
+    '    opt: false',
+    '    note: ""',
+    '    est: 20',
+    '    teaches: {有主概念: 会用}',
+  ].join('\n')
+  await withVault({
+    graph: GRAPH_TAUGHT,
+    notes: { 入门: NOTE },
+    banks: { 入门: BANK },
+    files: [{
+      path: '学习中心/概念登记表.yaml',
+      content: 'concepts:\n  - canonical: 孤儿概念\n  - canonical: 有主概念\n    definition: 一句话定义\n',
+    }],
+  }, async ({ engine }) => {
+    const report = await engine.dataCheck()
+    const layer = report.findings.filter(f => f.area === 'concept_layer')
+    const reasons = new Set(layer.map(f => f.reason))
+    assert.ok(reasons.has('question_invokes_absent'), '题库非空但全题无 invokes → 可见读数')
+    assert.ok(reasons.has('concept_orphan_registry'), '在册概念全库零足迹 → 存量扫描读数')
+    assert.ok(reasons.has('concept_definition_missing'), '无定义条目占比 → 定义覆盖率读数')
+    assert.ok(layer.every(f => f.level === 'hint'), '读数全 hint 带：advisor-only，不进 status')
+    assert.equal(report.status, 'ok', 'hint 不进 status')
+    const orphan = layer.find(f => f.reason === 'concept_orphan_registry')!
+    assert.match(orphan.detail ?? '', /孤儿概念/)
+    assert.doesNotMatch(orphan.detail ?? '', /有主概念/, '图上有 teaches 足迹的概念不入孤儿读数')
+    const absent = layer.find(f => f.reason === 'question_invokes_absent')!
+    assert.match(absent.detail ?? '', /1 题全部无 invokes/)
   })
 })

@@ -62,8 +62,10 @@ ops:
 test('#11 add_node 无坐标落图（直接进单文件节点列表）；零建块产物随 #284 退役', async () => {
   await vaultWithCourse(async engine => {
     const add = await engine.graph.graphPropose('edit', `course: 数学
+concepts:
+  - canonical: 新块起点概念
 ops:
-  - { op: add_node, name: 新块起点, pre: [入门], est: 15 }
+  - { op: add_node, name: 新块起点, pre: [入门], est: 15, teaches: { 新块起点概念: 会用 } }
 `) as { id: number }
     const applied = await engine.graph.graphApply('edit', add.id) as { ops: number }
     assert.equal(applied.ops, 1, 'add_node 直接入节点列表，不新建块（#275）')

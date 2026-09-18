@@ -159,6 +159,7 @@ ops:
   - op: add_node
     name: 新误解节点
     pre: [误解节点]
+    teaches: { 概念甲: 会用 }
     misconceptions:
       - { concept: 概念甲, model: 错法四 }
 `

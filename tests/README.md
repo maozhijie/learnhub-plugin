@@ -114,6 +114,8 @@ hub 已降级为纯容器：公开面从扁平 `engine.<方法>` 改为 **`engin
 
 - S77 `src/engine/graph/health.ts::widthNote` + `src/engine/graph/analysis.ts`（health 块透出 `width_note`）—— 图宽度读数（#335 刀③，advisor-only）：同层并行度 + 最长单链深度占比双读数，与 estSpreadNote 同族不改健康分；节点 <12 不判；`tests/health.test.ts`（单链提示/分叉放行/小图不判）
 - S78 `src/engine/coach/proposals.ts::difficultyStepGateErrors`（难度步进硬门，editGateErrors 门序列收拢）+ `consolidationGateErrors`（consolidate 字段化判据）+ `growth-subsystem.ts` draft_arc 必答门（draft_note/draft_finish 收束前 serves_arc 必答；「（无）」须附 note 理由）+ `growth-draft.ts::draftFindings`（est 失配 + 单链批 finding）—— 图形态质量硬门群（#335 刀①④）：算子收缩为新增/插入二值后的四道执法面；`tests/growth-draft.test.ts`、`tests/proposal-validation.test.ts`、`tests/health.test.ts`
+- S79 `src/engine/coach/proposals.ts::teachesGateErrors`（teaches 出生强制门，editGateErrors 门序列收拢，与难度步进门同档、审计门之前）—— 概念层供水主坝（#297 第一节）：非 practice、非终点的 add_node 零 teaches 从静默合法升为受理拒收；存量图加载不经本门，不回填不破；终点豁免（零正文零题库本就不被学）、practice 沿「practice 合法空 enc」同款口径豁免。`tests/teaches-gate.test.ts`（零 teaches 拒收/三类豁免/非 add_node 不执法）、`tests/data-check.test.ts` 等 10 文件夹具随门更新（金样本全带 teaches 的旧貌如实记录）
+- S80 `src/engine/data-check.ts::scanConceptLayer`（新 area `concept_layer`，全 hint 带不进 status）—— 概念层体检读数（#297 第三节 hint 起版）：① 出题清单缺席可见读数（`question_invokes_absent`：课程题库非空但全题无 invokes——出生打标门以概念清单在场为激活条件，缺席不激活这件事从静默合法升为可见）；② 孤儿概念全中心存量扫描（`concept_orphan_registry`：在册概念全库零 teaches/assumes 键、零 invokes 标注，别名经 alias→canonical 归一对照，与出生期提示同判据换时态）；③ 定义覆盖率（`concept_definition_missing`：无定义条目占比）。`tests/data-check.test.ts`（三读数各自触发、全 hint 带、有足迹概念不入孤儿）
 
 A3 门面行为（建议项出现/消退、软闸不拦人、reviewQueue node 过滤直达、struggle 事件与静默）走引擎门面黑盒：`tests/a3-remediation.test.ts`。
 

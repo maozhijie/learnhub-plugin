@@ -124,7 +124,7 @@ async function ghostNote(h: Awaited<ReturnType<typeof withVault>>): Promise<void
   await writeFile(h.paths.courseNotePath('数学', '幽灵节点'), noteText('幽灵节点') + '\n', 'utf8')
 }
 
-const SIDE_BATCH = 'course: 数学\nnote:\n  reason: 教学消费支线\nops:\n  - op: add_node\n    name: 支线台阶\n    pre: [认识变化率]\n    operator: 插入\n    recheck:\n      metric: 前进恢复\n'
+const SIDE_BATCH = 'course: 数学\nnote:\n  reason: 教学消费支线\nops:\n  - op: add_node\n    name: 支线台阶\n    pre: [认识变化率]\n    operator: 插入\n    teaches: { 变化率: 会用 }\n    recheck:\n      metric: 前进恢复\n'
 
 test('#313 B5：审计 ERROR 的明细随错随行（apply 拒收不再只指一份模型读不到的报告）', async () => {
   await withVault({ registry: null, graph: null }, async h => {
@@ -190,7 +190,7 @@ const finishCall = (id: string): LoopTurn => ({ text: '', toolCalls: [{ id, name
 
 /** 一条插入批的最小合法 ops：起点「认识变化率」与终点「用导数解决优化问题」之间插一级台阶。 */
 const INSERT_OPS = [
-  { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '插入' },
+  { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '插入', teaches: { 变化率: '会用' } },
   { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
 ]
 

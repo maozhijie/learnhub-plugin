@@ -32,10 +32,11 @@ function routingCtx(outlineYaml: string, calls: string[]): Context {
       const tag = perSection ? `定向${perSection}` : '综合'
       return [
         `node: 冒烟课起点`, 'questions:',
+        // 出生打标门（#148）：起点 teaches 概念在场 → 逐题必须带恰一枚 invokes（在册名字）
         '  - kind: true_false', `    q: 冒烟${tag}题一：冒烟链路的题干。`, '    answer: true',
-        `    difficulty: 1`, `    section: ${section}`,
+        `    difficulty: 1`, `    section: ${section}`, '    invokes: 冒烟课起点概念',
         '  - kind: true_false', `    q: 冒烟${tag}题二：冒烟链路的另一题干。`, '    answer: false',
-        `    difficulty: 1`, `    section: ${section}`,
+        `    difficulty: 1`, `    section: ${section}`, '    invokes: 冒烟课起点概念',
       ].join('\n')
     }
     return outlineYaml  // 其余（大纲）走调用方给定的应答

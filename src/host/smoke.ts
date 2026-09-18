@@ -309,8 +309,10 @@ export async function runGenerationSmoke(ctx: Context, req: SmokeRequest = {}): 
       const proposal = await runner.engine.graph.graphPropose('edit', [
         `course: ${course}`,
         'reason: 冒烟起点（种子退役后结构站改用手写 edit 提案）',
+        // teaches 出生强制门（#297）：教学节点必须至少 teaches 一枚概念——同批铸名供对表
+        `concepts:\n  - canonical: ${startName}概念`,
         'ops:',
-        `  - { op: add_node, name: ${startName}, pre: [] }`,
+        `  - { op: add_node, name: ${startName}, pre: [], teaches: { ${startName}概念: 会用 } }`,
         `  - { op: set_pre, node: ${endpoint}, pre: [${startName}] }`,
       ].join('\n'))
       pipeline.proposalId = proposal.id

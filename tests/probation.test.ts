@@ -39,6 +39,8 @@ function insertionYaml(opts: {
   recheck?: boolean
   operator?: string
   withConcept?: boolean
+  /** 铸名与否（缺省随 withConcept 铸名；同 vault 二次引用在册概念时置 false 只引不铸）。 */
+  mint?: boolean
   name?: string
   pre?: string
 } = {}): string {
@@ -63,7 +65,7 @@ function insertionYaml(opts: {
     '  - op: set_pre',
     '    node: 进阶',
     `    pre: [${name}]`,
-    ...(opts.withConcept ? ['concepts:', '  - canonical: 过渡概念'] : []),
+    ...(opts.withConcept && opts.mint !== false ? ['concepts:', '  - canonical: 过渡概念', '    definition: 插入过渡台阶教学的过渡概念（夹具铸名）'] : []),
   ].join('\n') + '\n'
 }
 
@@ -517,9 +519,9 @@ test('AC4 data-check 到期未决：hint 提示类（不进 status）+ inventory
     graph: TWO_NODE_GRAPH,
     notes: { 入门: {}, 进阶: {} },
     banks: { 入门: [tfQuestion('q0')], 进阶: [tfQuestion('q9')] },
-    files: [{ path: '学习中心/math/题库/过渡.yaml', content: ['node: 过渡', 'questions:', ...tfQuestion('q8')].join('\n') + '\n' }],
+    files: [{ path: '学习中心/math/题库/过渡.yaml', content: ['node: 过渡', 'questions:', ...tfQuestion('q8'), '    invokes: 过渡概念'].join('\n') + '\n' }],
   }, async ({ engine }) => {
-    await applyInsertion(engine, insertionYaml({ metric: '前进恢复', days: '5' }))
+    await applyInsertion(engine, insertionYaml({ metric: '前进恢复', days: '5', withConcept: true }))
     // 登记日挪到 6 学习日前 + 复诊窗推满（未结算）→ 该决未决
     const proposals = await engine.store.loadProposals()
     await engine.store.saveProposals(proposals.map(p =>
@@ -536,13 +538,16 @@ test('AC4 data-check 到期未决：hint 提示类（不进 status）+ inventory
     assert.match(hint.location, /过渡/)
     assert.equal(hint.level, 'hint')
 
-    // 对照：复诊窗未推满则不提示
+    // 对照：复诊窗未推满则不提示（题库题带 invokes，免得 concept 层盘点另报 invokes 缺席 hint）
     await withVault({
       graph: TWO_NODE_GRAPH,
       notes: { 入门: {}, 进阶: {} },
-      banks: { 入门: [tfQuestion('q0')], 进阶: [tfQuestion('q9')] },
+      banks: {
+        入门: [...tfQuestion('q0'), '    invokes: 过渡概念'],
+        进阶: [...tfQuestion('q9'), '    invokes: 过渡概念'],
+      },
     }, async ({ engine: e2 }) => {
-      await applyInsertion(e2, insertionYaml({ metric: '前进恢复', days: '5' }))
+      await applyInsertion(e2, insertionYaml({ metric: '前进恢复', days: '5', withConcept: true }))
       const report2 = await e2.dataCheck()
       assert.equal(report2.counts.hint, 0, '未到期未决不算 hint（登记日=今天，复诊期未满）')
     })
@@ -564,7 +569,7 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
     // 学习日底座（窗内取材）
     for (let d = -10; d <= 0; d++) await engine.store.appendPractice(pRec(d, '入门'))
     // 真实插入批 1：登记 1 节
-    await applyInsertion(engine, insertionYaml({ metric: '前进恢复', days: '5' }))
+    await applyInsertion(engine, insertionYaml({ metric: '前进恢复', days: '5', withConcept: true }))
     // 手工补 3 个已决复诊 + 3 个生长批出材（2 节插入 ×3），decided 在窗内：
     // coach_added = 1+6 = 7、inserted = 4、decided = 3（1 proven 2 剪除 → 通过率 1/3）
     for (let i = 0; i < 3; i++) {
@@ -589,14 +594,14 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
     await assert.rejects(
       () => engine.graph.graphPropose('edit', [
         'course: 数学', 'note:', '  reason: 再插一节', 'ops:',
-        '  - op: add_node', '    name: 过渡二号', '    pre: [入门]', '    operator: 插入', '    recheck:', '      metric: 前进恢复', '      days: 5',
+        '  - op: add_node', '    name: 过渡二号', '    pre: [入门]', '    operator: 插入', '    teaches: {过渡概念: 会用}', '    recheck:', '      metric: 前进恢复', '      days: 5',
       ].join('\n') + '\n'),
       /生长闸门拒绝受理[\s\S]*复诊通过率/,
       '超速插入批在受理门就被拒收（构造超限场景验证调速）')
     // 前进批不受闸（ADR-0076 主线批必接线：声明终点 + set_pre 汇入批内新前沿；route 不携带——本批不重写罗盘）
     const fwd = await engine.graph.graphPropose('edit', [
-      'course: 数学', 'note:', '  reason: 主线推进', '  target_endpoints: [终点]', 'ops:',
-      '  - op: add_node', '    name: 前进节点', '    pre: [入门]', '    operator: 新增',
+      'course: 数学', 'note:', '  reason: 主线推进', '  target_endpoints: [终点]', 'concepts:', '  - canonical: 前进概念', 'ops:',
+      '  - op: add_node', '    name: 前进节点', '    pre: [入门]', '    operator: 新增', '    teaches: {前进概念: 会用}',
       '  - op: set_pre', '    node: 终点', '    pre: [前进节点]',
     ].join('\n') + '\n') as { id: number }
     assert.ok(fwd.id > 0)
@@ -616,7 +621,7 @@ test('结算只遍历折叠后的在途条目：已决 (proposal,node) 的裁决
     // 插入 B（过渡乙，卡点集中度降幅 days 5）：窗内错误持平 → 不达标剪除；
     // B 的 set_pre 把进阶前置从 过渡 换成 过渡乙（A 的插入边转由 过渡乙 承接）
     await applyInsertion(engine, insertionYaml({
-      metric: '卡点集中度降幅', days: '5', name: '过渡乙', pre: '过渡',
+      metric: '卡点集中度降幅', days: '5', name: '过渡乙', pre: '过渡', withConcept: true, mint: false,
     }))
     const err = (d: number): PracticeRec => pRec(d, '入门', { qid: 'qE', correct: false })
     await engine.store.appendPractice(err(1))

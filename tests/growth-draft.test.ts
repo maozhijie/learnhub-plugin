@@ -203,9 +203,9 @@ test('#327 混算子批端到端：前进+插入+旁支同批发布，插入条�
             // 前进条目：新前沿，接终点（接线义务只跟前进条目）
             { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增', teaches: { 变化率: '会用' } },
             // 插入条目：补过渡台阶，随条目带复诊预注册（免接线；#335 刀①旁支退役）
-            { op: 'add_node', name: '极限初步', pre: ['认识变化率'], est: 20, operator: '插入', recheck: { metric: '卡点集中度降幅', days: 5 } },
+            { op: 'add_node', name: '极限初步', pre: ['认识变化率'], est: 20, operator: '插入', teaches: { 变化率: '会用' }, recheck: { metric: '卡点集中度降幅', days: 5 } },
             // 插入条目：免接线
-            { op: 'add_node', name: '导数几何意义', pre: ['认识变化率'], est: 10, operator: '插入', recheck: { metric: '前进恢复', days: 8 } },
+            { op: 'add_node', name: '导数几何意义', pre: ['认识变化率'], est: 10, operator: '插入', teaches: { 变化率: '会用' }, recheck: { metric: '前进恢复', days: 8 } },
             { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
           ],
           note_reason: '主线推进同时补过渡与支线',
@@ -355,7 +355,7 @@ test('执行官站：patch→finish 走真实提案管线并落 sealed；草稿�
         id: 'c1', name: 'draft_patch',
         arguments: JSON.stringify({
           ops: [
-            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增' },
+            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增', teaches: { 变化率: '会用' } },
             { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
           ],
           
@@ -810,8 +810,8 @@ test('#309 ② draft_revert 的部分撤销与边界：count 只丢尾部 N 条�
     await seeded(h)
     const { seam, receipts } = receiptFake([[
       patchCall('p1', [
-        { op: 'add_node', name: '甲台阶', pre: ['认识变化率'],  operator: '新增', },
-        { op: 'add_node', name: '乙台阶', pre: ['甲台阶'],  operator: '新增', },
+        { op: 'add_node', name: '甲台阶', pre: ['认识变化率'], operator: '新增', teaches: { 变化率: '会用' } },
+        { op: 'add_node', name: '乙台阶', pre: ['甲台阶'], operator: '新增', teaches: { 变化率: '会用' } },
         { op: 'set_pre', node: '用导数解决优化问题', pre: ['乙台阶'] },
       ], {  note_reason: 'r', note_target_endpoints: ['用导数解决优化问题'] }),
       toolCall('v1', 'draft_revert', { count: 1 }),
@@ -848,12 +848,12 @@ test('#309 水位：一批发布成功后同会话再开一批照常（基图已
     await seeded(h)
     const { seam } = receiptFake([[
       patchCall('p1', [
-        { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增', },
+        { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增', teaches: { 变化率: '会用' } },
         { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
       ], {  note_reason: '第一级台阶', note_target_endpoints: ['用导数解决优化问题'] }),
       toolCall('f1', 'draft_finish'),
       patchCall('p2', [
-        { op: 'add_node', name: '瞬时速度', pre: ['平均变化率'], est: 15, operator: '新增', },
+        { op: 'add_node', name: '瞬时速度', pre: ['平均变化率'], est: 15, operator: '新增', teaches: { 变化率: '会用' } },
         { op: 'set_pre', node: '用导数解决优化问题', pre: ['瞬时速度'] },
       ], {  note_reason: '第二级台阶', note_target_endpoints: ['用导数解决优化问题'] }),
       toolCall('f2', 'draft_finish'),
