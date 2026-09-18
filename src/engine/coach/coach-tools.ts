@@ -274,9 +274,12 @@ export function renderGrowthGraphView(
 
 /** 节点卡（node_card）：单节点的结构档与内容态——深度、阶段、pre/teaches/assumes、
  * est、下游消费、误解先验。未知节点 fail loud（graph_view 取逐字名单），不静默编空卡。
- * endpoints：终点卡恒标（#200）——下游消费与调度措辞按方向标记口径。 */
+ * endpoints：终点卡恒标（#200）——下游消费与调度措辞按方向标记口径。
+ * conceptEntries：#336 读侧归一——传入时 teaches/assumes 展示 canonical + 别名，
+ * 判据与展示同源（写侧门也走同一 resolveConcept）。 */
 export function renderNodeCard(
   graph: Graph, state: Record<string, Fm>, node: string, endpoints: ReadonlySet<string> = new Set<string>(),
+  conceptEntries?: ReadonlyArray<ConceptEntry>,
 ): string {
   if (!graph.nset.has(node)) {
     throw new Error(render(NODE_NOT_ON_GRAPH_ERR, { node }))
@@ -288,6 +291,14 @@ export function renderNodeCard(
   const consumers = graph.succ[node] ?? []
   const isEndpoint = endpoints.has(node)
   const est = graph.estOf[node]
+  // #336 读侧归一：teaches/assumes 展示 canonical + 别名（entries 传入时）
+  const fmtConcept = (raw: string, tier: string): string => {
+    if (!conceptEntries?.length) return `${raw} ${tier}`
+    const hit = resolveConcept([...conceptEntries], raw)
+    if (!hit || hit.canonical === raw) return `${raw} ${tier}`
+    const aliases = hit.aliases?.filter(a => a !== raw) ?? []
+    return aliases.length ? `${hit.canonical}（${aliases.join('、')}） ${tier}` : `${hit.canonical} ${tier}`
+  }
   // 难度行缺席照出（未标注占位，不省略整行）；pre 条目内联前置难度——#335 难度步进门
   // 判的是「本节点 vs 直接前置最大难度」，只给自身难度模型算不出步进（活图与草稿口径
   // 共用本函数，改一处两口径同时生效）。
@@ -308,8 +319,8 @@ export function renderNodeCard(
     }) + (est ? render(NODE_CARD_STAGE_EST, { est }) : ''),
     render(NODE_CARD_DIFFICULTY, { difficulty: diffText(node) }),
     render(NODE_CARD_PRE, { pres: presText }),
-    render(NODE_CARD_TEACHES, { teaches: teaches.length ? teaches.map(([c, t]) => `${c} ${t}`).join('、') : render(NODE_CARD_EMPTY, {}) }),
-    render(NODE_CARD_ASSUMES, { assumes: assumes.length ? assumes.map(([c, t]) => `${c} ${t}`).join('、') : render(NODE_CARD_EMPTY, {}) }),
+    render(NODE_CARD_TEACHES, { teaches: teaches.length ? teaches.map(([c, t]) => fmtConcept(c, t)).join('、') : render(NODE_CARD_EMPTY, {}) }),
+    render(NODE_CARD_ASSUMES, { assumes: assumes.length ? assumes.map(([c, t]) => fmtConcept(c, t)).join('、') : render(NODE_CARD_EMPTY, {}) }),
     render(NODE_CARD_CONSUMERS, { consumers: consumers.length ? consumers.join('、') : isEndpoint ? render(NODE_CARD_CONSUMERS_ENDPOINT, {}) : render(NODE_CARD_CONSUMERS_LEAF, {}) }),
     render(NODE_CARD_MISCONCEPTIONS, { mis: mis.length ? mis.map(m => `${m.concept}：${m.model}`).join('；') : render(NODE_CARD_EMPTY, {}) }),
   ].join('\n') + '\n'
@@ -648,7 +659,7 @@ export function coachToolExecutor(
         const node = argsOf(call).node
         if (typeof node !== 'string' || !node.trim()) throw new Error(render(TOOL_EXEC_NODE_REQUIRED, { tool: 'node_card' }))
         const { graph, state } = await deps.loadView(c)
-        return renderNodeCard(graph, state, node.trim(), await endpointsOf())
+        return renderNodeCard(graph, state, node.trim(), await endpointsOf(), await deps.concepts.load())
       }
       case 'concept_footprint': {
         const q = argsOf(call).query

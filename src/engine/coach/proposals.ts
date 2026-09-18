@@ -30,7 +30,7 @@ import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
 import { RECHECK_DAYS_DEFAULT } from '../infra/params.ts'
 import type { GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator, NodeOverrides } from '../types.ts'
-import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from '../types.ts'
+import { BLOOM_LEVELS, CONCEPT_TIERS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from '../types.ts'
 import type { Paths } from '../infra/paths.ts'
 import type { CourseEntry, ProposalKind, ProposalRec } from '../types.ts'
 import type { GraphEditProposalResult, GraphEnrichProposalResult } from '../views/proposals.ts'
@@ -726,6 +726,87 @@ export function misconceptionGateErrors(
   return misconceptionCapErrorsOfCounts(counts(nodes), counts(base))
 }
 
+/** 概念充分性门（#336）：add_node 声明的每条 assumes{概念: 档}，该概念必须出现在
+ * 本节点 pre 祖先闭包（去自身）内某节点的 teaches 并集里、且档位不低于所假定。
+ * 三条出口：① 闭包内被教 → 过；② 本课图内被教但不在闭包 → 拒（漏连 pre，提示 set_pre）；
+ * ③ 本课图内没人教 → 放行（跨课首引，非阻提示）。增量判据：只裁本批 add_node 新增的
+ * assumes，不追溯存量。归一走 canonicalizerOf（别名命中即命中）；任一侧缺档不判
+ * （沿 #335「缺席不判」口径）。位于审计门之前，与难度门同档。 */
+export function conceptSufficiencyGateErrors(
+  ops: EditOp[], baseNodes: GNode[], graph: Graph,
+  entries: ReadonlyArray<ConceptEntry>, anchors: EndpointAnchor[],
+): string[] {
+  const canon = canonicalizerOf(entries)
+  const tierRank = (t: ConceptTier): number => (CONCEPT_TIERS as readonly string[]).indexOf(t)
+
+  // 模拟图（含批内新增节点）：批内兄弟 teaches 的概念也算在闭包内。
+  // 毒形状（#301 缺陷②）：simulatedNodes 可能抛错（如 misconceptions 字典形），此时
+  // 结构重放已经报错，门序列不需要本门再叠一条——跳过。
+  let simGraph: Graph
+  try {
+    simGraph = new Graph(simulatedNodes(baseNodes, ops))
+  } catch { return [] }
+
+  const errors: string[] = []
+  for (const [i, op] of ops.entries()) {
+    if (op.op !== 'add_node' || !op.assumes) continue
+    const nodeName = op.name!
+    const where = `ops.${i}(add_node ${nodeName})`
+
+    // 祖先闭包（含自身 → 剔除自身）
+    const closure = simGraph.upstreamClosure(nodeName)
+    closure.delete(nodeName)
+
+    for (const [rawConcept, requiredTier] of Object.entries(op.assumes)) {
+      const canonical = canon(rawConcept)
+
+      // 出口判定：先查闭包内，再查全图
+      let taughtInClosure = false
+      let closureSufficient = false
+      let taughtInCourse = false
+
+      // 闭包内：逐祖先检查 teaches（经 canonical 归一）
+      for (const ancestorName of closure) {
+        const ancestorTeaches = simGraph.teachesOf[ancestorName]
+        if (!ancestorTeaches) continue
+        for (const [tc, tt] of Object.entries(ancestorTeaches)) {
+          if (canon(tc) !== canonical) continue
+          taughtInClosure = true
+          // 档位比较：任一侧缺档不判
+          const ancRank = tierRank(tt)
+          const reqRank = tierRank(requiredTier)
+          if (ancRank < 0 || reqRank < 0) { closureSufficient = true; break }
+          if (ancRank >= reqRank) closureSufficient = true
+          break
+        }
+        if (closureSufficient) break
+      }
+
+      if (closureSufficient) continue
+
+      // 全图检查（经 canonical 归一）
+      for (const n of simGraph.names) {
+        const nTeaches = simGraph.teachesOf[n]
+        if (!nTeaches) continue
+        for (const tc of Object.keys(nTeaches)) {
+          if (canon(tc) === canonical) { taughtInCourse = true; break }
+        }
+        if (taughtInCourse) break
+      }
+
+      if (taughtInClosure) {
+        // 闭包内被教但档位不足
+        errors.push(`${where}: assumes「${rawConcept}」档位不足——祖先闭包内已教该概念但最高档位低于所需「${requiredTier}」（祖先教到的最高档位不够）——若确实需要更高档位，补一个教该概念高挡的台阶节点`)
+      } else if (taughtInCourse) {
+        // 图内被教但不在闭包 → 漏连 pre
+        errors.push(`${where}: assumes「${rawConcept}」在本课程图内被教但不在本节点前置闭包内——漏连 pre（该概念已有节点教过，但本节点没有通过 pre 连到上游）——用 set_pre 回连教该概念的节点，或补台阶节点`)
+      }
+      // else: 本课图内没人教 → 放行（跨课首引，非阻提示由 crossCourseFirstRefWarnings 覆盖）
+    }
+  }
+  return errors
+}
+
 /** 在册条目底细工厂（裁决 7 / ADR-0089 修订）：撞名现场把条目底细摆到模型面前——
  * canonical + 定义（缺席显式「（无定义）」并注明判据不足）+ teaches/assumes 足迹摘要
  * （图内哪些节点教/假设它，经别名精确解析归一）。零 IO：图与登记表由调用方装载。
@@ -810,6 +891,7 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
     ...difficultyStepGateErrors(spec.ops, ctx.graph),
     ...teachesGateErrors(spec.ops, ctx.anchors, ctx.graph),
     ...selfContradictionErrors(spec.ops, [...ctx.entries, ...mints], ctx.graph),
+    ...conceptSufficiencyGateErrors(spec.ops, ctx.nodes, ctx.graph, [...ctx.entries, ...mints], ctx.anchors),
   ]
   // 误解封顶（#313 C9/C12）：增量判据 + canonical 归一，落在登记表现行条目（+ 本批铸名）上。
   // 结构面先过才跑（与旧序一致——重放已有错时叠一条派生错误只会盖住真死因）

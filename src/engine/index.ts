@@ -109,7 +109,7 @@ export { GROWTH_DRAFT_STATION, expandPatchOps, draftFindings, normalizePatchShap
 export type { PatchSuggestion, PatchShapeNormalization } from './coach/growth-draft.ts'
 /** 生长失败站标签的读侧（#301 缺陷③）：宿主按真实失败站补标语料，读法经门面走（不 cast 字段）。 */
 export { stationOfError } from './coach/growth-subsystem.ts'
-export { editGateErrors, replayDraft, sealedDecisionOf, simulateOps } from './coach/proposals.ts'
+export { editGateErrors, replayDraft, sealedDecisionOf, simulateOps, conceptSufficiencyGateErrors } from './coach/proposals.ts'
 export type { DraftDiff, DraftReplay, SealedDecision, EditGateCtx } from './coach/proposals.ts'
 export type { SecondOpinionReport, SecondOpinionOptions } from './content/question-audit.ts'
 /** 出题多样性仪表（#230 / ADR-0064）：报告类型随门面出（宿主任务消息、工具面、基线脚本消费）。 */

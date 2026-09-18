@@ -111,7 +111,7 @@
     "src/commands/项目.ts": 399,
     "src/commands/题库.ts": 361,
     "src/engine/coach/coach-round.ts": 397,
-    "src/engine/coach/coach-tools.ts": 690,
+    "src/engine/coach/coach-tools.ts": 701,
     "src/engine/coach/compass.ts": 410,
     "src/engine/coach/growth-draft.ts": 577,
     "src/engine/coach/growth-subsystem.ts": 2126,
