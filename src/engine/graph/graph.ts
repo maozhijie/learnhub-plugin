@@ -14,12 +14,12 @@ import { atomicWrite } from '../infra/io.ts'
 import { safeFilename } from '../infra/paths.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
 import { resolveConcept } from '../concepts/concepts.ts'
-import type { GNode, EncEdge, ConceptTier, Misconception } from '../types.ts'
+import type { GNode, EncEdge, ConceptTier, Misconception, NodeOverrides } from '../types.ts'
 import { BLOOM_LEVELS, CONCEPT_TIERS } from '../types.ts'
 import type { Paths } from '../infra/paths.ts'
 
 const NODE_KEYS = new Set(['name', 'pre', 'opt', 'note', 'enc', 'est', 'type', 'bloom', 'difficulty',
-  'teaches', 'assumes', 'misconceptions'])
+  'teaches', 'assumes', 'misconceptions', 'overrides'])
 const NODE_TYPES = new Set(['practice'])
 
 /** 边轻纪律（#127）：这些键是生长机制的边元数据，图 YAML 永不存储——给出指向性拒收文案。 */
@@ -88,6 +88,36 @@ function readTierMap(
   return tiers
 }
 
+/** 误解条目列表解析（图 YAML / 提案 / 覆盖层共用同一契约）：条目恰 {concept, model} 两键、
+ * 都非空；label = 错误行前缀（如 `节点[名] misconceptions`）。 */
+function parseMisconceptionItems(raw: unknown, path: string, label: string): Misconception[] {
+  if (!Array.isArray(raw)) fail(path, `${label} 必须是列表`)
+  const items: Misconception[] = []
+  for (const item of raw) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      fail(path, `${label} 条目必须是映射（{concept, model}）`)
+    }
+    const m = item as Record<string, unknown>
+    const unknown = Object.keys(m).filter(k => !['concept', 'model'].includes(k))
+    if (unknown.length) {
+      fail(path, `${label} 条目含未知字段 ${JSON.stringify(unknown)}（判据签名不设机器字段，典型错答写进 model 文字；只允许 concept/model）`)
+    }
+    if (typeof m.concept !== 'string' || !m.concept.trim()) fail(path, `${label} 条目缺 concept（登记表在册概念名）`)
+    if (typeof m.model !== 'string' || !m.model.trim()) fail(path, `${label}[${m.concept}] 缺 model（错误模型文字：典型错答、坑位用途）`)
+    items.push({ concept: m.concept.trim(), model: m.model })
+  }
+  return items
+}
+
+/** 同一概念误解封顶（≤3 条）单点判据（图 YAML / 提案 / 覆盖层共用）：label = 错误行前缀。 */
+function capMisconceptions(items: Misconception[], path: string, label: string): void {
+  const byConcept = new Map<string, number>()
+  for (const m of items) byConcept.set(m.concept, (byConcept.get(m.concept) ?? 0) + 1)
+  for (const [concept, n] of byConcept) {
+    if (n > 3) fail(path, `${label}[${concept}] 有 ${n} 条（同一概念全课程封顶 3 条）`)
+  }
+}
+
 /** 概念字段组解析（schema v2 #127 §1/§7）：teaches/assumes 为概念名→档位映射，
  * misconceptions 为 {concept, model} 列表。尺寸带：teaches 在场 1–8（1–2 条 WARN 窄节点
  * 提示）、assumes 缺席合法在场 3–10（1–2 条 WARN）、越界 ERROR；误解每概念封顶 3 条。
@@ -111,27 +141,142 @@ export function parseConceptFields(
     out.assumes = tiers
   }
   if (r.misconceptions !== undefined) {
-    if (!Array.isArray(r.misconceptions)) fail(path, `${where}[${name}] misconceptions 必须是列表`)
-    const items: Misconception[] = []
-    for (const raw of r.misconceptions) {
-      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-        fail(path, `${where}[${name}] misconceptions 条目必须是映射（{concept, model}）`)
-      }
-      const m = raw as Record<string, unknown>
-      const unknown = Object.keys(m).filter(k => !['concept', 'model'].includes(k))
-      if (unknown.length) {
-        fail(path, `${where}[${name}] misconceptions 条目含未知字段 ${JSON.stringify(unknown)}（判据签名不设机器字段，典型错答写进 model 文字；只允许 concept/model）`)
-      }
-      if (typeof m.concept !== 'string' || !m.concept.trim()) fail(path, `${where}[${name}] misconceptions 条目缺 concept（登记表在册概念名）`)
-      if (typeof m.model !== 'string' || !m.model.trim()) fail(path, `${where}[${name}] misconceptions[${m.concept}] 缺 model（错误模型文字：典型错答、坑位用途）`)
-      items.push({ concept: m.concept.trim(), model: m.model })
-    }
-    const byConcept = new Map<string, number>()
-    for (const m of items) byConcept.set(m.concept, (byConcept.get(m.concept) ?? 0) + 1)
-    for (const [concept, n] of byConcept) {
-      if (n > 3) fail(path, `${where}[${name}] misconceptions[${concept}] 有 ${n} 条（同一概念全课程封顶 3 条）`)
-    }
+    const label = `${where}[${name}] misconceptions`
+    const items = parseMisconceptionItems(r.misconceptions, path, label)
+    capMisconceptions(items, path, label)
     out.misconceptions = items
+  }
+  return out
+}
+
+/** 覆盖层块解析（#299 / ADR-0106）：节点 overrides 与 set_concepts op 载荷共用同一契约。
+ * teaches/assumes 为 {概念: 档位|null}；misconceptions 为 {概念: 条目列表|null}（列表内每条
+ * 的 concept 必须等于键名——该键整体替换的就是这个概念一族）。null = 删除该概念。 */
+export function parseOverrides(raw: unknown, path: string, where: string, name: string): NodeOverrides {
+  const label = `${where}[${name}] overrides`
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    fail(path, `${label} 必须是映射（{teaches?, assumes?, misconceptions?}）`)
+  }
+  const r = raw as Record<string, unknown>
+  const unknown = Object.keys(r).filter(k => !['teaches', 'assumes', 'misconceptions'].includes(k))
+  if (unknown.length) fail(path, `${label} 含未知字段 ${JSON.stringify(unknown)}（只允许 teaches/assumes/misconceptions）`)
+  const out: NodeOverrides = {}
+  for (const field of ['teaches', 'assumes'] as const) {
+    const m = r[field]
+    if (m === undefined) continue
+    if (typeof m !== 'object' || m === null || Array.isArray(m)) {
+      fail(path, `${label}.${field} 必须是映射（概念名 → 档位 或 null）`)
+    }
+    const tiers: Record<string, ConceptTier | null> = {}
+    for (const [concept, tier] of Object.entries(m as Record<string, unknown>)) {
+      if (typeof concept !== 'string' || !concept.trim()) fail(path, `${label}.${field} 概念名不能为空`)
+      if (tier === null) { tiers[concept.trim()] = null; continue }
+      if (!(CONCEPT_TIERS as readonly string[]).includes(String(tier))) {
+        fail(path, `${label}.${field}[${concept}] 档位非法 ${JSON.stringify(String(tier))}（允许 ${CONCEPT_TIERS.join('/')} 或 null）`)
+      }
+      tiers[concept.trim()] = tier as ConceptTier
+    }
+    if (Object.keys(tiers).length) out[field] = tiers
+  }
+  const mm = r.misconceptions
+  if (mm !== undefined) {
+    if (typeof mm !== 'object' || mm === null || Array.isArray(mm)) {
+      fail(path, `${label}.misconceptions 必须是映射（概念名 → 条目列表 或 null）`)
+    }
+    const res: Record<string, Misconception[] | null> = {}
+    for (const [concept, list] of Object.entries(mm as Record<string, unknown>)) {
+      if (typeof concept !== 'string' || !concept.trim()) fail(path, `${label}.misconceptions 概念名不能为空`)
+      const key = concept.trim()
+      if (list === null) { res[key] = null; continue }
+      if (!Array.isArray(list)) {
+        fail(path, `${label}.misconceptions[${key}] 必须是条目列表 或 null（该概念一族的误解条目列表；null = 删除该概念全部误解）`)
+      }
+      const items = parseMisconceptionItems(list, path, `${label}.misconceptions[${key}]`)
+      for (const it of items) {
+        if (it.concept !== key) fail(path, `${label}.misconceptions[${key}] 条目 concept「${it.concept}」必须等于键名（该键整体替换的就是这个概念一族的误解）`)
+      }
+      capMisconceptions(items, path, `${label}.misconceptions`)
+      res[key] = items
+    }
+    if (Object.keys(res).length) out.misconceptions = res
+  }
+  return out
+}
+
+/** 概念字段叠加（出生 → 有效值的唯一出口，#299 / ADR-0106）：birth 上逐概念叠 ov，
+ * ov 值 null = 删除该概念。传 undefined birth 即得纯覆盖层。 */
+export function mergeTierMap(
+  birth: Record<string, ConceptTier> | undefined,
+  ov: Record<string, ConceptTier | null> | undefined,
+): Record<string, ConceptTier> {
+  const out: Record<string, ConceptTier> = { ...(birth ?? {}) }
+  if (ov) for (const [c, v] of Object.entries(ov)) { if (v === null) delete out[c]; else out[c] = v }
+  return out
+}
+
+/** 误解列表叠加（出生 → 有效值）：逐概念整体替换（ov[概念] = 该概念的条目列表，null = 删除）。
+ * 概念出现序 = 出生序优先、覆盖层新增概念随后（确定性，便于落盘/快照逐字稳定）。 */
+function mergeMisconceptions(
+  birth: Misconception[] | undefined,
+  ov: Record<string, Misconception[] | null> | undefined,
+): Misconception[] {
+  const base = birth ?? []
+  if (!ov || !Object.keys(ov).length) return base.map(m => ({ ...m }))
+  const order: string[] = []
+  const birthBy = new Map<string, Misconception[]>()
+  for (const m of base) {
+    if (!birthBy.has(m.concept)) order.push(m.concept)
+    ;(birthBy.get(m.concept) ?? birthBy.set(m.concept, []).get(m.concept)!).push({ ...m })
+  }
+  for (const c of Object.keys(ov)) if (!birthBy.has(c)) order.push(c)
+  const out: Misconception[] = []
+  for (const c of order) {
+    if (Object.prototype.hasOwnProperty.call(ov, c)) {
+      const list = ov[c]
+      if (list === null) continue
+      out.push(...list.map(m => ({ ...m })))
+    } else {
+      out.push(...(birthBy.get(c) ?? []))
+    }
+  }
+  return out
+}
+
+/** 节点的有效概念字段组（出生叠覆盖层，#299 / ADR-0106）：Graph 构造与诸门共用同一合并出口
+ * ——判据与展示按构造成立同源（两处旁路收编亦读这里）。 */
+export function effectiveConceptFieldsOf(n: GNode): {
+  teaches: Record<string, ConceptTier>
+  assumes: Record<string, ConceptTier>
+  misconceptions: Misconception[]
+} {
+  return {
+    teaches: mergeTierMap(n.teaches, n.overrides?.teaches),
+    assumes: mergeTierMap(n.assumes, n.overrides?.assumes),
+    misconceptions: mergeMisconceptions(n.misconceptions, n.overrides?.misconceptions),
+  }
+}
+
+/** 覆盖层叠加（set_concepts 落层用，#299）：delta 的逐概念键并入 base（同键后写覆盖；
+ * 值与键语义同 parseOverrides，null = 删除）。 */
+export function mergeNodeOverrides(base: NodeOverrides | undefined, delta: NodeOverrides): NodeOverrides {
+  const out: NodeOverrides = {}
+  const teaches: Record<string, ConceptTier | null> = { ...(base?.teaches ?? {}), ...(delta.teaches ?? {}) }
+  if (Object.keys(teaches).length) out.teaches = teaches
+  const assumes: Record<string, ConceptTier | null> = { ...(base?.assumes ?? {}), ...(delta.assumes ?? {}) }
+  if (Object.keys(assumes).length) out.assumes = assumes
+  const misconceptions: Record<string, Misconception[] | null> = { ...(base?.misconceptions ?? {}), ...(delta.misconceptions ?? {}) }
+  if (Object.keys(misconceptions).length) out.misconceptions = misconceptions
+  return out
+}
+
+/** 覆盖层落盘序列化（graphDoc 用）：深拷贝，省空值。 */
+function serializeOverrides(ov: NodeOverrides): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (ov.teaches && Object.keys(ov.teaches).length) out.teaches = { ...ov.teaches }
+  if (ov.assumes && Object.keys(ov.assumes).length) out.assumes = { ...ov.assumes }
+  if (ov.misconceptions && Object.keys(ov.misconceptions).length) {
+    out.misconceptions = Object.fromEntries(Object.entries(ov.misconceptions)
+      .map(([c, list]) => [c, list === null ? null : list.map(m => ({ ...m }))]))
   }
   return out
 }
@@ -181,6 +326,7 @@ export function parseNode(raw: unknown, path: string, where: string, warns?: str
     node.difficulty = difficulty as GNode['difficulty']
   }
   Object.assign(node, parseConceptFields(r, path, where, node.name, warns))
+  if (r.overrides !== undefined) node.overrides = parseOverrides(r.overrides, path, where, node.name)
   return node
 }
 
@@ -240,6 +386,7 @@ export class GraphStore {
         if (n.teaches && Object.keys(n.teaches).length) doc.teaches = { ...n.teaches }
         if (n.assumes && Object.keys(n.assumes).length) doc.assumes = { ...n.assumes }
         if (n.misconceptions?.length) doc.misconceptions = n.misconceptions.map(m => ({ ...m }))
+        if (n.overrides && Object.keys(n.overrides).length) doc.overrides = serializeOverrides(n.overrides)
         if (n.enc.length) doc.enc = n.enc.map(e => {
           const edge: Record<string, unknown> = { node: e.node, w: e.w }
           if (e.note) edge.note = e.note
@@ -315,17 +462,20 @@ export class Graph {
       if (n.type) this.typeOf[name] = n.type
       if (n.bloom) this.bloomOf[name] = n.bloom
       if (n.difficulty !== undefined) this.difficultyOf[name] = n.difficulty
-      if (n.teaches && Object.keys(n.teaches).length) {
-        this.teachesOf[name] = n.teaches
+      // 概念字段组 = 出生字段叠出生后修正层（#299 / ADR-0106）：读侧唯一合并点——五访问器
+      // 与两处旁路收编者都读这里，判据与展示按构造成立同源。
+      const eff = effectiveConceptFieldsOf(n)
+      if (Object.keys(eff.teaches).length) {
+        this.teachesOf[name] = eff.teaches
         // 反向映射与正向同一趟折出（#270）：本趟遍历序 = names 序，故 taughtByOf[c]
         // 的节点序与「names 序扫折叠」逐字一致。
-        for (const c of Object.keys(n.teaches)) (this.taughtByOf[c] ??= []).push(name)
+        for (const c of Object.keys(eff.teaches)) (this.taughtByOf[c] ??= []).push(name)
       }
-      if (n.assumes && Object.keys(n.assumes).length) {
-        this.assumesOf[name] = n.assumes
-        for (const c of Object.keys(n.assumes)) (this.assumedByOf[c] ??= []).push(name)
+      if (Object.keys(eff.assumes).length) {
+        this.assumesOf[name] = eff.assumes
+        for (const c of Object.keys(eff.assumes)) (this.assumedByOf[c] ??= []).push(name)
       }
-      if (n.misconceptions?.length) this.misconceptionsOf[name] = n.misconceptions
+      if (eff.misconceptions.length) this.misconceptionsOf[name] = eff.misconceptions
     }
     this.nset = new Set(this.names)
     for (const n of this.names) {

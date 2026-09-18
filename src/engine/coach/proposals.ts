@@ -11,7 +11,7 @@ import { YAML } from '../infra/yaml.ts'
 import { Store } from '../store.ts'
 import { atomicWrite } from '../infra/io.ts'
 import { runWriteUnit } from '../infra/write-unit.ts'
-import { Graph, GraphStore, parseConceptFields, parseEnc, misconceptionCapErrorsOfCounts, snapshotDoc } from '../graph/graph.ts'
+import { Graph, GraphStore, parseConceptFields, parseEnc, parseOverrides, mergeTierMap, mergeNodeOverrides, effectiveConceptFieldsOf, misconceptionCapErrorsOfCounts, snapshotDoc } from '../graph/graph.ts'
 import { ConceptRegistry, addConfusablePair, applyConceptMints, conceptMagnitudeWarnings, conceptPairKey, conceptReferenceErrors, isDeprecated, mergeConceptEntries, mintConflicts, namesOf, nearNameCandidates, nearNameWarnings, resolveConcept, validateConceptEntry } from '../concepts/concepts.ts'
 import { CONCEPT_MERGE_IRREVERSIBLE, validateConceptMergeProposal, validateConfusableCandidateProposal } from '../concepts/concepts.ts'
 import type { ConceptEntry, ConceptRef, ConfusableCandidateProposalSpec } from '../concepts/concepts.ts'
@@ -29,7 +29,7 @@ import { noopLogger } from '../infra/logger.ts'
 import { appendProbationEntry, recheckPreregOf } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
 import { RECHECK_DAYS_DEFAULT } from '../infra/params.ts'
-import type { GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator } from '../types.ts'
+import type { GNode, BloomLevel, EncEdge, ConceptTier, Misconception, GrowthOperator, NodeOverrides } from '../types.ts'
 import { BLOOM_LEVELS, PROPOSAL_KINDS, PROPOSAL_STATUSES, GROWTH_OPERATORS } from '../types.ts'
 import type { Paths } from '../infra/paths.ts'
 import type { CourseEntry, ProposalKind, ProposalRec } from '../types.ts'
@@ -44,7 +44,7 @@ import type { GraphApplyEditResult, GraphApplyEnrichResult } from '../views/grap
 export interface ApplyAudit { ok: boolean; warns: string[]; health: number; errors?: string[] }
 
 export interface EditOp {
-  op: 'add_node' | 'del_node' | 'set_pre' | 'set_enc' | 'rename' | 'set_note'
+  op: 'add_node' | 'del_node' | 'set_pre' | 'set_enc' | 'rename' | 'set_note' | 'set_concepts'
   node?: string
   /** add_node 的节点键（#131 §7 键名统一：与图 YAML/parseNode 同名，旧 `node` 键退役）。 */
   name?: string
@@ -74,6 +74,9 @@ export interface EditOp {
    * metric + 复诊期缺省 10 学习日 clamp [5,20]）——apply 随写入单元按条目登记边实验
    * 账本（复诊账本本就逐边，批级一枚是旧简化）。 */
   recheck?: RecheckPrereg
+  /** 概念字段覆盖层载荷（#299 / ADR-0106：只随 set_concepts 携带）——出生后修正写覆盖层，
+   * 出生字段一字不动；逐概念叠加，`null` = 删除该概念。 */
+  overrides?: NodeOverrides
 }
 
 /** 生长批 note 区（#145 裁决产物面）：理由 + 朝向 + 分歧声明（可选）。生长批仍是
@@ -114,6 +117,7 @@ const RETIRED_TOP_ROUTE = 'route'
 export const EDIT_OP_KEYS = [
   'op', 'node', 'name', 'new', 'pre', 'enc', 'opt', 'note', 'est', 'type',
   'bloom', 'difficulty', 'teaches', 'assumes', 'misconceptions', 'operator', 'recheck', 'consolidate',
+  'overrides',
 ] as const
 
 export interface EditProposalSpec {
@@ -129,8 +133,9 @@ export interface EditProposalSpec {
 }
 
 /** 合法 op 词汇（schema 门与取值域回灌的单一出处；糖算子不在其中——它们在补丁入口展开成
- * 这些原子 op 之后才进权威门）。 */
-export const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'set_note'] as const
+ * 这些原子 op 之后才进权威门）。`set_concepts` = 出生后概念字段修正通道（#299 / ADR-0106，
+ * 写节点覆盖层而非出生字段）。 */
+export const EDIT_OPS = ['add_node', 'del_node', 'set_pre', 'set_enc', 'rename', 'set_note', 'set_concepts'] as const
 
 /** 批内 add_node 数（插入登记/调速闸门的「本批新增」口径单点；解析前 doc.ops 与
  * EditOp[] 同形消费）。 */
@@ -347,6 +352,25 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
           errors.push((e as Error).message)
         }
       }
+      // 出生后修正的覆盖层载荷（#299 / ADR-0106）：set_concepts 写覆盖层而非出生字段；其他
+      // op 携带 = 提案方误解语义（覆盖层只走 set_concepts），静默丢弃会丢字段——fail loud。
+      let opOverrides: NodeOverrides | undefined
+      if (op === 'set_concepts') {
+        if (o.overrides === undefined) {
+          errors.push(`${where}: op=set_concepts 需要 overrides（{teaches?/assumes?/misconceptions?}：概念名 → 档位/null，null = 删除该概念）`)
+        } else {
+          try {
+            const parsed = parseOverrides(o.overrides, where, op, String(o.node ?? ''))
+            if (!parsed.teaches && !parsed.assumes && !parsed.misconceptions) {
+              errors.push(`${where}.overrides: 空覆盖——至少给一条 teaches/assumes/misconceptions（空覆盖不落地）`)
+            } else opOverrides = parsed
+          } catch (e) {
+            errors.push((e as Error).message)
+          }
+        }
+      } else if (o.overrides !== undefined) {
+        errors.push(`${where}: op=${op} 不接受 overrides（概念字段覆盖层只随 set_concepts 携带；出生写 teaches/assumes/misconceptions 随 add_node）`)
+      }
       // 逐条目算子与复诊预注册（#327）：schema 门在此（取值域/形态），跨字段规则在 ops
       // 就位后统一裁（见下方 perEntryGate）。预注册走 recheckPreregOf 同一门（取值域/
       // 未知键/clamp 单源），clamp 产生的 warn 收集给受理回执。
@@ -392,6 +416,7 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
         ...([1, 2, 3, 4, 5].includes(Number(o.difficulty))
           ? { difficulty: Number(o.difficulty) as 1 | 2 | 3 | 4 | 5 } : {}),
         ...conceptFields,
+        ...(opOverrides !== undefined ? { overrides: opOverrides } : {}),
         ...(opOperator !== undefined ? { operator: opOperator } : {}),
         ...(opConsolidate !== undefined ? { consolidate: opConsolidate } : {}),
         ...(opRecheck !== undefined ? { recheck: opRecheck } : {}),
@@ -472,6 +497,16 @@ function conceptRefsOfOps(ops: EditOp[]): ConceptRef[] {
         refs.push({ where: `misconceptions[${where}]`, concept })
       }
     }
+    // 覆盖层载荷（#299 / ADR-0106）：set_concepts 的概念引用同样受概念对表执法。
+    if (op.op === 'set_concepts' && op.overrides) {
+      for (const field of ['teaches', 'assumes'] as const) {
+        const map = op.overrides[field]
+        if (map) for (const concept of Object.keys(map)) refs.push({ where: `${field}[${where}]`, concept })
+      }
+      for (const concept of Object.keys(op.overrides.misconceptions ?? {})) {
+        refs.push({ where: `misconceptions[${where}]`, concept })
+      }
+    }
   }
   return refs
 }
@@ -510,14 +545,27 @@ export function difficultyStepGateErrors(ops: EditOp[], graph: Graph): string[] 
  * enc」同款口径豁免。只约束新出生——本门住在受理门序列，存量图加载不经过它，
  * 不回填不破。插入位置与难度步进门同档（条目级形状门），在审计门之前（生长闸门
  * 与审计门都在 editGateErrors 错误面之后才跑）。 */
-export function teachesGateErrors(ops: EditOp[], anchors: EndpointAnchor[]): string[] {
+export function teachesGateErrors(ops: EditOp[], anchors: EndpointAnchor[], graph?: Graph): string[] {
   const endpoints = endpointNames(anchors)
   const errors: string[] = []
   for (const [i, op] of ops.entries()) {
-    if (op.op !== 'add_node' || op.type === 'practice') continue
-    if (op.name !== undefined && endpoints.has(op.name)) continue
-    if (Object.keys(op.teaches ?? {}).length === 0) {
-      errors.push(`ops.${i}(add_node ${op.name}): 教学节点未 teaches 任何概念（至少 1 条）——teaches 是教学节点的定义：不声明教什么，出题打标与成分技能投影就没有输入，节点会合法空转；把本节点真正教的概念写进 teaches（1–2 条是窄节点常态，8 条封顶）`)
+    if (op.op === 'add_node') {
+      if (op.type === 'practice') continue
+      if (op.name !== undefined && endpoints.has(op.name)) continue
+      if (Object.keys(op.teaches ?? {}).length === 0) {
+        errors.push(`ops.${i}(add_node ${op.name}): 教学节点未 teaches 任何概念（至少 1 条）——teaches 是教学节点的定义：不声明教什么，出题打标与成分技能投影就没有输入，节点会合法空转；把本节点真正教的概念写进 teaches（1–2 条是窄节点常态，8 条封顶）`)
+      }
+      continue
+    }
+    // 修正通道（#299 / ADR-0106）：按**合并后有效值**判——修正不得使非 practice、非终点
+    // 节点的有效 teaches 归零（删概念时至少留一枚；整体清空改走 del_node + add_node 重建）。
+    if (op.op === 'set_concepts' && graph && op.node) {
+      if (endpoints.has(op.node)) continue
+      if (graph.typeOf[op.node] === 'practice') continue
+      const eff = mergeTierMap(graph.teachesOf[op.node], op.overrides?.teaches)
+      if (Object.keys(eff).length === 0) {
+        errors.push(`ops.${i}(set_concepts ${op.node}): 修正后有效 teaches 归零——教学节点（非 practice、非终点）至少 1 条 teaches；删概念时至少保留一枚，或整体清空改走 del_node + add_node 同名重建`)
+      }
     }
   }
   return errors
@@ -621,16 +669,29 @@ export function sealedDecisionOf(ops: EditOp[], anchors: EndpointAnchor[], closu
  * 「螺旋升档」编码写法（只 teaches 高档、不 assumes）不需要门另眼：assume 同概念
  * 无论档位一律拒。 */
 export function selfContradictionErrors(
-  ops: EditOp[], entries: ReadonlyArray<ConceptEntry>,
+  ops: EditOp[], entries: ReadonlyArray<ConceptEntry>, graph?: Graph,
 ): string[] {
   const canon = canonicalizerOf(entries)
   const errors: string[] = []
   for (const [i, op] of ops.entries()) {
-    if (op.op !== 'add_node') continue
-    const where = `ops.${i}(add_node ${op.name})`
-    for (const concept of Object.keys(op.teaches ?? {})) {
-      if (op.assumes && Object.keys(op.assumes).some(a => canon(a) === canon(concept))) {
-        errors.push(`${where}: 同一节点 teaches 与 assumes 同一概念「${concept}」（教自己假设已会的东西）——若意图是螺旋升档，只写 teaches 高档、不要 assumes 同概念`)
+    if (op.op === 'add_node') {
+      const where = `ops.${i}(add_node ${op.name})`
+      for (const concept of Object.keys(op.teaches ?? {})) {
+        if (op.assumes && Object.keys(op.assumes).some(a => canon(a) === canon(concept))) {
+          errors.push(`${where}: 同一节点 teaches 与 assumes 同一概念「${concept}」（教自己假设已会的东西）——若意图是螺旋升档，只写 teaches 高档、不要 assumes 同概念`)
+        }
+      }
+      continue
+    }
+    // 修正通道（#299 / ADR-0106）：按合并后有效值判同节点 teaches∩assumes（canonical 归一后比对）。
+    if (op.op === 'set_concepts' && graph && op.node) {
+      const effT = mergeTierMap(graph.teachesOf[op.node], op.overrides?.teaches)
+      const effA = mergeTierMap(graph.assumesOf[op.node], op.overrides?.assumes)
+      const assumed = new Set(Object.keys(effA).map(canon))
+      for (const concept of Object.keys(effT)) {
+        if (assumed.has(canon(concept))) {
+          errors.push(`ops.${i}(set_concepts ${op.node}): 修正后同一节点 teaches 与 assumes 同一概念「${concept}」（教自己假设已会的东西）——螺旋升档只写 teaches 高档、不要 assumes 同概念`)
+        }
       }
     }
   }
@@ -655,7 +716,7 @@ export function misconceptionGateErrors(
   const counts = (ns: GNode[]): Map<string, number> => {
     const m = new Map<string, number>()
     for (const n of ns) {
-      for (const mi of n.misconceptions ?? []) {
+      for (const mi of effectiveConceptFieldsOf(n).misconceptions) {
         const k = canon(mi.concept)
         m.set(k, (m.get(k) ?? 0) + 1)
       }
@@ -747,8 +808,8 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
     ...endpointGuardErrorsOf(spec, ctx.anchors),
     ...consolidationGateErrors(spec.ops, ctx.graph, ctx.entries),
     ...difficultyStepGateErrors(spec.ops, ctx.graph),
-    ...teachesGateErrors(spec.ops, ctx.anchors),
-    ...selfContradictionErrors(spec.ops, [...ctx.entries, ...mints]),
+    ...teachesGateErrors(spec.ops, ctx.anchors, ctx.graph),
+    ...selfContradictionErrors(spec.ops, [...ctx.entries, ...mints], ctx.graph),
   ]
   // 误解封顶（#313 C9/C12）：增量判据 + canonical 归一，落在登记表现行条目（+ 本批铸名）上。
   // 结构面先过才跑（与旧序一致——重放已有错时叠一条派生错误只会盖住真死因）
@@ -867,6 +928,10 @@ export function validateEnrichProposal(doc: unknown): { errors?: string[]; spec?
 function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex')
 }
+
+/** 覆盖层留痕的发起方标识（#299 / ADR-0106）：phase 1 只有提案事务通道——#300 的人类直发
+ * 入口将落不同值。 */
+const OVERLAY_ACTOR_PROPOSAL = 'proposal'
 
 /** 富化提案的目标节点缺席清单（受理与 apply 双门共用）。 */
 function enrichMissingTargets(fields: EnrichFieldEntry[], graph: Graph): string[] {
@@ -1073,6 +1138,9 @@ export class GraphProposals {
       throw new Error(`[apply-edit] 概念引用对表失败，提案不落盘。\n${conceptErrors.map(e => `  ✗ ${e}`).join('\n')}`)
     }
     const nodes = await store.load()
+    // 概念修正的内容指纹（#299 / ADR-0106）：edit 提案不带指纹（enrich 才有），就地取修正前
+    // 正典的 sha256——与「提案所基于的版本」同义，只是 edit 侧在 apply 时取。
+    const baseHash = sha256(await this.fs.readFile(store.graphPath()))
     const graph = new Graph(nodes)
     // 门复验统一走 editGateErrors（门同源，ADR-0088）：结构重放/概念对表（铸名合并集）/锚
     // 保护/巩固门/生长闸门一次跑全——受理与 apply 之间图/登记表/锚可能变化，双门全过才写盘。
@@ -1101,6 +1169,17 @@ export class GraphProposals {
       ...Object.values(renames),
     ])
     const archived = dels.filter(n => !readded.has(n))
+
+    // 概念修正的留痕行（#299 / ADR-0106）：逐 set_concepts op 逐字段——provenance 落
+    // state/覆盖层.jsonl（只增），正典只放事实（原值由未动的出生字段派生，不冗余落盘）。
+    const overlayRows: Array<{ target: string; field: 'teaches' | 'assumes' | 'misconceptions'; value: unknown }> = []
+    for (const op of spec.ops) {
+      if (op.op !== 'set_concepts' || !op.node || !op.overrides) continue
+      for (const field of ['teaches', 'assumes', 'misconceptions'] as const) {
+        const v = (op.overrides as Record<string, unknown>)[field]
+        if (v !== undefined) overlayRows.push({ target: op.node, field, value: v })
+      }
+    }
 
     // 2. data/图.yaml 重写（内存侧应用 ops；落盘动作进下方写入单元）
     applyOpsToNodes(nodes, spec.ops)
@@ -1135,6 +1214,23 @@ export class GraphProposals {
             name: '图重写',
             run: async () => {
               await store.writeGraphDoc(nodes)
+            },
+          },
+          {
+            // 覆盖层留痕（#299 / ADR-0106）：出生后修正的 provenance 追加流水——只增，
+            // 读侧只读正典（graphDoc 的 overrides 键）。行形状 = enc 富化同款 + reason/actor。
+            name: '覆盖层留痕',
+            run: async () => {
+              if (!overlayRows.length) return
+              const now = new Date(this.clock.nowMs()).toISOString()
+              const lines = overlayRows.map(r => JSON.stringify({
+                target: r.target, field: r.field, value: r.value,
+                content_hash: baseHash, applied_at: now,
+                reason: spec.reason || spec.note?.reason || '',
+                actor: OVERLAY_ACTOR_PROPOSAL,
+              }))
+              await this.fs.mkdir(this.paths.courseStateDir(root))
+              await this.fs.appendFile(this.paths.overlayPath(root), lines.join('\n') + '\n')
             },
           },
           {
@@ -1971,6 +2067,15 @@ export function replayDraft(nodes: GNode[], graph: Graph, ops: EditOp[]): DraftR
       for (const n of sim) {
         if (n.name === op.node && !removed.has(n)) n.note = op.note ?? ''
       }
+    } else if (op.op === 'set_concepts') {
+      // 出生后修正（#299 / ADR-0106）：写覆盖层（逐概念叠加到节点现势 overrides）——出生
+      // 字段不动；形状/取值域归 schema 门，这里只管落层。
+      if (!names.has(op.node!)) { errors.push(`set_concepts 节点不存在: ${op.node}`); continue }
+      for (const n of sim) {
+        if (n.name === op.node && !removed.has(n) && op.overrides) {
+          n.overrides = mergeNodeOverrides(n.overrides, op.overrides)
+        }
+      }
     }
   }
 
@@ -2052,6 +2157,10 @@ export function applyOpsToNodes(nodes: GNode[], ops: EditOp[]): void {
     } else if (op.op === 'set_note') {
       const hit = findNode(op.node!)
       if (hit) hit.note = op.note ?? ''
+    } else if (op.op === 'set_concepts') {
+      // 出生后修正（#299 / ADR-0106）：与 replayDraft 同一套落层（门同源，ADR-0088）。
+      const hit = findNode(op.node!)
+      if (hit && op.overrides) hit.overrides = mergeNodeOverrides(hit.overrides, op.overrides)
     }
   }
 

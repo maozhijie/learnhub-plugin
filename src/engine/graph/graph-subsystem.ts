@@ -19,7 +19,7 @@ import type { Projects, ProjectApplyResult } from '../practice/projects.ts'
 import type { GraphProposals, ApplyAudit } from '../coach/proposals.ts'
 import type { ConceptRegistry } from '../concepts/concepts.ts'
 import { CONFUSABLE_CANDIDATE_MAX, conceptFootprintCore, conceptPairKey, confusableCandidates, declaredPairKeys, isDeprecated, mergeCandidates, resolveConcept } from '../concepts/concepts.ts'
-import { groupView, type GroupAxis } from './graph.ts'
+import { groupView, effectiveConceptFieldsOf, type GroupAxis } from './graph.ts'
 import type { CooccurrenceNode } from '../concepts/concepts.ts'
 import type { Registry } from '../vault/registry.ts'
 import type { QuestionBank } from '../content/question-bank.ts'
@@ -285,6 +285,9 @@ export class GraphSubsystem {
     if (!graph.nset.has(node)) throw new Error(`[graph-node] 节点「${node}」不在课程「${c.name}」的图内。`)
     this.e.assertNoteOk(c, graph, broken, node, 'graph-node')
     const gnode = graph.nodes.find(n => n.name === node)
+    // 概念字段按**合并后有效值**（#299 / ADR-0106）：出生叠覆盖层——node_card 与
+    // concept_footprint / 内容注入同源（读侧只走同一合并出口）。
+    const eff = gnode ? effectiveConceptFieldsOf(gnode) : undefined
     // 前置传递闭包（Graph.upstreamClosure 单一出处；不含自身），按深度降序=先学在前
     const closure = [...graph.upstreamClosure(node)].filter(n => n !== node)
       .sort((a, b) => (graph.depth[b] ?? 0) - (graph.depth[a] ?? 0))
@@ -301,9 +304,9 @@ export class GraphSubsystem {
       type: graph.typeOf[node],
       bloom: graph.bloomOf[node],
       difficulty: graph.difficultyOf[node],
-      ...(gnode?.teaches ? { teaches: gnode.teaches } : {}),
-      ...(gnode?.assumes ? { assumes: gnode.assumes } : {}),
-      ...(gnode?.misconceptions?.length ? { misconceptions: gnode.misconceptions } : {}),
+      ...(eff && Object.keys(eff.teaches).length ? { teaches: eff.teaches } : {}),
+      ...(eff && Object.keys(eff.assumes).length ? { assumes: eff.assumes } : {}),
+      ...(eff && eff.misconceptions.length ? { misconceptions: eff.misconceptions } : {}),
       note: graph.noteOf[node],
       stage: effectiveStage(state, node),
       mastery: masteryOfFm(fm),

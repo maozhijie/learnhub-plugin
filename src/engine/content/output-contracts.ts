@@ -737,6 +737,13 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // 终点锚块共用同一词表出处（endpointStatusText），退役包头简版两常量。
     version: 8, date: '2026-09-18', changeType: '终点状态读数统一（#338；模板文本未动，包头状态行取值变）',
     expectedDelta: '教练包包头终点行与终点锚块状态行改用同一判据同一词表：pre 非空且未收尾时两处同读「未铺通（pre 非空、未收尾宣告）」（此前包头读「未接线」，与锚块同屏打架）；pre 空 + 未收尾两处同读「未接线（pre 空）」；已达成两处同读锚块详版「已达成（已铺通且最后台阶全掌握）」；已铺通（未达成）与悬空锚不变。status 枚举值未动（面板 statusJson 消费面零波及）。过门记录：check ✓（同提交登记）；replay ✓（0 件回归）；compare 未做真模型对照（同先例）',
+  }, {
+    // #299（同版本号第三条登记，模板文本未动）：**注入面增删**——写件门拒收时回灌的取值域
+    // 提示（domainsHint 的 EXEC_DOMAIN_OPS）现多一枚合法 op `set_concepts`（#299 / ADR-0106：
+    // 出生后概念字段修正通道，写节点覆盖层而非出生字段）。提交级门判据是版本号集合差、
+    // 状态级门判据是版本号对齐，注入面增删两门都不执法（ADR-0072 §已知边界 ④），靠人审 + 本登记兜。
+    version: 8, date: '2026-09-18', changeType: '取值域回灌注入面 +1（#299 / ADR-0106；模板文本未动，注入面增删）',
+    expectedDelta: '写件门（draft_patch/draft_audit/draft_finish）错误回灌的「op 词汇」取值域行多出 `set_concepts` 一枚——模型在撞门回灌后可见「出生后概念字段修正」这一合法 op（写节点覆盖层、不改出生字段；teaches/assumes 用 {概念: 档位|null}、null=删除；misconceptions 用 {概念: 条目列表|null}）。预期增量：模型需要修正出生打标时知道该走 set_concepts 而非直改出生字段（或另开 add_node 重建）；正常生成路径无变化（该行只在门拒收回灌时出现）。过门记录：check ✓（同版本号下的注入面登记不被提交级门执法——ADR-0072 §已知边界 ④，靠人审）；replay 未做——教练执行 tool-calls 不在回放面（同本站 v1–v7 先例如实登记）；compare 未做真模型对照（同先例）',
   }],
 }
 

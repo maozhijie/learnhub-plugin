@@ -9,7 +9,7 @@
  */
 import type { VaultFs } from './infra/io.ts'
 import { join, resolve } from 'node:path'
-import { SchemaError, loadGraphDoc } from './graph/graph.ts'
+import { SchemaError, loadGraphDoc, effectiveConceptFieldsOf } from './graph/graph.ts'
 import { validateBank } from './content/question-bank.ts'
 import { validateRegistry } from './vault/registry.ts'
 import { conceptMagnitudeFindings, validateConceptRegistry } from './concepts/concepts.ts'
@@ -354,10 +354,13 @@ async function scanCourse(
             push(findings, 'graph', 'broken', 'graph_schema', where, `节点「${node.name}」重复。`)
           } else {
             nodeNames.add(node.name)
+            // 概念字段读数按**合并后有效值**（#299 / ADR-0106）：出生叠覆盖层——与 Graph 访问器
+            // 同一合并出口，使体检判据与展示同源（旁路收编）。
+            const eff = effectiveConceptFieldsOf(node)
             nodes.push({
               name: node.name,
-              ...(node.teaches !== undefined || node.assumes !== undefined
-                ? { conceptKeys: [...Object.keys(node.teaches ?? {}), ...Object.keys(node.assumes ?? {})] }
+              ...(Object.keys(eff.teaches).length || Object.keys(eff.assumes).length
+                ? { conceptKeys: [...Object.keys(eff.teaches), ...Object.keys(eff.assumes)] }
                 : {}),
             })
           }

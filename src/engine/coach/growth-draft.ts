@@ -15,6 +15,7 @@ import type { EditOp } from './proposals.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
 import { nearNameCandidates, resolveConcept, validateConceptEntry } from '../concepts/concepts.ts'
 import type { Graph } from '../graph/graph.ts'
+import { effectiveConceptFieldsOf } from '../graph/graph.ts'
 import type { GNode, Misconception } from '../types.ts'
 import type { EndpointAnchor } from './seed.ts'
 import { render } from '../infra/prompt-render.ts'
@@ -387,6 +388,10 @@ export function expandPatchOps(
       const pres = [...(graph.preOf[node] ?? [])]
       // 拆分件的算子/复诊预注册随 raw 声明、逐件继承（#327 逐条目化：生长批的每条
       // add_node 都要 operator——拆分不改变「以什么方式长」，一件声明全体继承）。
+      // 概念字段组按**合并后有效值**继承（#299 / ADR-0106）：出生叠覆盖层——add_node
+      // 不接受 overrides（另走 set_concepts），故把修正就地物化成新出生（否则「拆已修正
+      // 的节点」会静默丢修正）；无覆盖时与旧「轮廓继承」逐字等价。
+      const eff = effectiveConceptFieldsOf(src)
       for (const name of into) {
         expanded.push({
           op: 'add_node', name,
@@ -397,9 +402,9 @@ export function expandPatchOps(
           ...(src.est !== undefined ? { est: src.est } : {}),
           ...(src.bloom ? { bloom: src.bloom } : {}),
           ...(src.difficulty !== undefined ? { difficulty: src.difficulty } : {}),
-          ...(src.teaches ? { teaches: { ...src.teaches } } : {}),
-          ...(src.assumes ? { assumes: { ...src.assumes } } : {}),
-          ...(src.misconceptions?.length ? { misconceptions: src.misconceptions.map(m => ({ ...m })) } : {}),
+          ...(Object.keys(eff.teaches).length ? { teaches: { ...eff.teaches } } : {}),
+          ...(Object.keys(eff.assumes).length ? { assumes: { ...eff.assumes } } : {}),
+          ...(eff.misconceptions.length ? { misconceptions: eff.misconceptions.map(m => ({ ...m })) } : {}),
         })
       }
       for (const consumer of graph.order) {

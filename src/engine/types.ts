@@ -78,10 +78,20 @@ export type ConceptTier = (typeof CONCEPT_TIERS)[number]
  * 判据签名不设机器字段（#124 裁决）。同一概念全课程跨节点封顶 2–3 条（受理门计数）。 */
 export interface Misconception { concept: string; model: string }
 
+/** 节点概念字段覆盖层（出生后修正通道，ADR-0106）：出生字段一字不动，修正逐概念叠在
+ * 本键上，读侧经 Graph 访问器合并出有效值。`null` = 删除该概念（从出生字段抹去）；
+ * misconceptions 的值为该概念一族的误解列表（逐概念整体替换）、`null` = 删除该概念全部误解。
+ * 缺席 = 无修正（旧库无此键，天然兼容）。 */
+export interface NodeOverrides {
+  teaches?: Record<string, ConceptTier | null>
+  assumes?: Record<string, ConceptTier | null>
+  misconceptions?: Record<string, Misconception[] | null>
+}
+
 /** 图节点（graphstore.Node）。est = 标称学习时长（分钟，XP 内容定价）；type = practice 交互实践节点；
  * bloom/difficulty = 认知维度（可选，渐进采纳；认知跨步检测 R13 消费）；
  * teaches/assumes/misconceptions = 概念字段组（schema v2 #127，出生层随内容生长批写入，
- * 概念名 = 登记表在册名字；缺席全合法）。 */
+ * 概念名 = 登记表在册名字；缺席全合法）；overrides = 出生后修正层（可选，读侧合并）。 */
 export interface GNode {
   name: string
   pre: string[]
@@ -98,6 +108,8 @@ export interface GNode {
   assumes?: Record<string, ConceptTier>
   /** 本节点的误解先验（缺席合法；每概念全课程封顶 3 条，越界 ERROR）。 */
   misconceptions?: Misconception[]
+  /** 概念字段的出生后修正层（可选；缺席 = 无修正）。读侧经 Graph 访问器与出生字段合并。 */
+  overrides?: NodeOverrides
 }
 
 /** 课程注册表条目（registry.load 同构）。 */
