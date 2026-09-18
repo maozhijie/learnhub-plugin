@@ -709,6 +709,11 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // #335 刀①④提示词人工修订（散文冻结令：用户亲手落笔，AI 只补登记与过门）。
     version: 5, date: '2026-09-18', changeType: '生长算子收缩 + 朝向必答（#335 刀①④）：五值算子收二值 + consolidate 字段化；serves_arc 升格必答后经用户裁决回归可选',
     expectedDelta: '【生长算子集】从「前进/插入/巩固/旁支/换向」收缩为「新增/插入」二值：巩固降为新增条目的 consolidate: true 字段（收束批改由该字段声明），方向语义归 note.target_endpoints（旁支/换向退役，旧语义并入新增）；新增条目朝向必答升格为硬门（未声明 target_endpoints 拒收）。【弧建议】serves_arc 保持可选（曾一度升格每回合必答，用户裁决「罗盘是大视角，不必每批对表」后回归：确知才给、不硬凑；draft_note/draft_finish 收束前不再要求已声明；draft_arc 回到「至少给一件」），软对齐对「（无）」声明留痕不计连击。预期增量：批内节点只有新增/插入两种生长形态（形态质量可控），收束批显式字段化（不再靠算子值义旁带）。过门记录：check ✓（同提交登记）；replay ✓（0 件回归；教练执行 tool-calls 不在回放面，如实登记）；compare 未做真模型对照（同先例）',
+  }, {
+    // #297 刀①配套提示词人工修订（用户亲手改教学纪律句 + 批准工具面描述由 AI 落笔）：
+    // teaches 出生强制从静默升为受理硬门（proposals.ts::teachesGateErrors），模型面两侧同步。
+    version: 6, date: '2026-09-18', changeType: '教学纪律（#297 刀①）：新增教学节点必带 teaches ≥1——模板教学纪律句 + 写件工具 teaches 参数说明同步',
+    expectedDelta: '【教学纪律】增「每个新增教学节点必须声明 teaches（至少 1 条它真正教的概念）；practice 与终点节点等特殊节点除外」；同波工具面：draft_patch 的 teaches 参数说明补「非 practice、非终点的 add_node 必带至少 1 条，缺席受理门拒收」。预期增量：零 teaches 的教学节点从静默合法变为受理拒收（概念层供水主坝——不声明教什么则出题打标与成分技能投影无输入），模型在草案阶段即补 teaches 而非烧到 finish 才撞门。过门记录：check ✓（同提交登记）；replay ✓（0 件回归；教练执行 tool-calls 不在回放面，如实登记）；compare 未做真模型对照（同先例）',
   }],
 }
 
