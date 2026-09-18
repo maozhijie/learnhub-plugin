@@ -700,6 +700,10 @@ export const PROMPT_CHANGELOG: Readonly<Record<string, readonly PromptBump[]>> =
     // op.operator / op.recheck 逐条目声明；生长批 note 区只载理由/朝向/分歧。
     version: 3, date: '2026-09-17', changeType: '批次形状（#327）：算子与复诊预注册降为逐条目属性——混算子批合法',
     expectedDelta: '【生长算子集】补「算子是逐条目属性」段：每条 add_node 用 operator 声明自己的算子，同批可混算子（前进铺主线 + 插入补台阶 + 旁支挂支线一次长出）；【补丁纪律】改「每条 add_node 用 operator 声明算子；插入条目用 recheck 写预注册」。同波模型面：draft_patch 去 note_operator / note_recheck 两参（opFields 增 operator / recheck），批级状态块与收束/拒收文案随行改口径。预期增量：一轮/一批可跨算子出各色节点而不必拆批重投；接线义务与复诊结算分别收窄到前进/换向、插入条目；停摆与零操作收束不变。过门记录：check ✓（同提交登记）；replay 未做——本机无生成语料目录（同 v1/v2 先例如实登记）；compare 未做真模型对照（同先例）',
+  }, {
+    // #335 前置提示词人工修订（散文冻结令：用户亲手落笔，AI 只补登记与过门）。
+    version: 4, date: '2026-09-18', changeType: '构建准则（#335 前置）：难度步进锚 + 罗盘指导朝向 + 增量回连判据 + 单元网络完整性 + 单元命名标准',
+    expectedDelta: '【构建准则】改「难度渐进」条：相邻前后置节点 difficulty 步进不超过 1、不连续铺两个 ≥3 节点、硬节点 est 按真实体量（45–60 分钟）不为凑短链砍内容；「方向由终点携带」增「由罗盘指导」；新增「增量回连」条（闭包差集判据：删边不改可达性就不连）；新增「学习单元网络要完整、宁愿节点过多不要过少、无环复杂网络」条；新增【单元命名】节（name 大多数为动作句 + 动词枚举）。预期增量：图形态横向分叉增多、difficulty 断层受控、单链加深受抑；节点时长上限放宽至 60 分钟。过门记录：check ✓（同提交登记）；replay 未做——本机无生成语料目录（同 v1–v3 先例如实登记）；compare 未做真模型对照（同先例）',
   }],
 }
 
