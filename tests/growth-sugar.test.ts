@@ -132,8 +132,9 @@ test('执行官站：split_node 补丁过重放；draft_audit 回合携带 findi
     const agent = scriptFake([
       { text: '', toolCalls: [{
         id: 'c1', name: 'draft_patch',
-        arguments: JSON.stringify({ ops: [{ op: 'split_node', node: '认识变化率', into: ['认识变化率上', '认识变化率下'], operator: '旁支' }],  note_reason: '粒度过粗拆两半' }),
+        arguments: JSON.stringify({ ops: [{ op: 'split_node', node: '认识变化率', into: ['认识变化率上', '认识变化率下'], operator: '插入', recheck: { metric: '前进恢复', days: 8 } }],  note_reason: '粒度过粗拆两半' }),
       }] },
+      { text: '', toolCalls: [{ id: 'c0', name: 'draft_arc', arguments: JSON.stringify({ serves_arc: '阶段一' }) }] },
       { text: '', toolCalls: [{ id: 'c2', name: 'draft_audit', arguments: '{}' }] },
       { text: '', toolCalls: [{ id: 'c3', name: 'draft_finish', arguments: '{}' }] },
       { text: '拆分批已发布，收束。' },
@@ -155,7 +156,7 @@ test('执行官站：suggest_confusable 在 finish 发布成功后展开为混�
         id: 'c1', name: 'draft_patch',
         arguments: JSON.stringify({
           ops: [
-            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '前进', teaches: { 导数: '会用' } },
+            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增', teaches: { 导数: '会用' } },
             { op: 'suggest_confusable', name: '导数', with: '变化率' },
             { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
           ],
@@ -164,6 +165,7 @@ test('执行官站：suggest_confusable 在 finish 发布成功后展开为混�
           note_target_endpoints: ['用导数解决优化问题'],
         }),
       }] },
+      { text: '', toolCalls: [{ id: 'c0', name: 'draft_arc', arguments: JSON.stringify({ serves_arc: '阶段一' }) }] },
       { text: '', toolCalls: [{ id: 'c2', name: 'draft_finish', arguments: '{}' }] },
       { text: '发布完成，收束。' },
     ])

@@ -42,7 +42,7 @@ test('#313 A1：同批 del_node X + add_node X（先删后建改写）不再吞�
   const { nodes, graph } = fixture()
   const ops: EditOp[] = [
     { op: 'del_node', node: '乙' },
-    { op: 'add_node', name: '乙', pre: ['甲'], teaches: { 变化率: '会用' }, operator: '前进' },
+    { op: 'add_node', name: '乙', pre: ['甲'], teaches: { 变化率: '会用' }, operator: '新增' },
   ]
   const r = replayDraft(nodes, graph, ops)
   // 零错误：丙 的 pre 在批末重新落到同名新节点上（不是断边，也不该被静默摘掉）
@@ -124,7 +124,7 @@ async function ghostNote(h: Awaited<ReturnType<typeof withVault>>): Promise<void
   await writeFile(h.paths.courseNotePath('数学', '幽灵节点'), noteText('幽灵节点') + '\n', 'utf8')
 }
 
-const SIDE_BATCH = 'course: 数学\nnote:\n  reason: 教学消费支线\nops:\n  - op: add_node\n    name: 支线台阶\n    pre: [认识变化率]\n    operator: 旁支\n'
+const SIDE_BATCH = 'course: 数学\nnote:\n  reason: 教学消费支线\nops:\n  - op: add_node\n    name: 支线台阶\n    pre: [认识变化率]\n    operator: 插入\n    recheck:\n      metric: 前进恢复\n'
 
 test('#313 B5：审计 ERROR 的明细随错随行（apply 拒收不再只指一份模型读不到的报告）', async () => {
   await withVault({ registry: null, graph: null }, async h => {
@@ -159,7 +159,7 @@ test('#313 B5：审计 ERROR 也进受理门（propose 当场拒，不再「受�
 test('#313 B2 跨字段门（#327 逐条目化后）：插入条目缺预注册拒收、非插入条目携带拒收', () => {
   const missing = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  reason: r\nops:\n  - { op: add_node, name: 新节点, pre: [], operator: 插入 }\n'))
   assert.ok(missing.errors!.some(e => e.includes('插入条目必须预注册复诊')), missing.errors!.join('\n'))
-  const surplus = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  reason: r\nops:\n  - { op: add_node, name: 新节点, pre: [], operator: 前进, recheck: { metric: 前进恢复 } }\n'))
+  const surplus = validateEditProposal(YAML.parse('course: 校验课\nnote:\n  reason: r\nops:\n  - { op: add_node, name: 新节点, pre: [], operator: 新增, recheck: { metric: 前进恢复 } }\n'))
   assert.ok(surplus.errors!.some(e => e.includes('复诊预注册只随插入条目携带')), surplus.errors!.join('\n'))
 })
 
@@ -201,6 +201,7 @@ test('#313 B2：draft_patch 的 note_recheck 是真实写入面——插入批�
       patchCall('c1', [{ ...INSERT_OPS[0], recheck: { metric: '卡点集中度降幅', days: 5 } }, INSERT_OPS[1]], {
         note_reason: '卡点集中在变化率到导数的跨步',
       }),
+      { text: '', toolCalls: [{ id: 'c0', name: 'draft_arc', arguments: JSON.stringify({ serves_arc: '阶段一' }) }] },
       finishCall('c2'),
       { text: '本批已发布。' },
     ])

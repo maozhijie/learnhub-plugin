@@ -334,6 +334,12 @@ export class GrowthSubsystem {
       return repaint_suggest
     }
     const serves = decl.serves_arc.trim()
+    if (serves === '（无）') {
+      // #335 刀④：「（无）」是合法声明（本批不服务任何阶段的正式建议），不计连击、不清零——
+      // 它不证明对齐恢复，只表示教练明示了本批与弧无对应。
+      log.info('coach.arc.align_none', { course: courseName })
+      return repaint_suggest
+    }
     if (anchors.stages.some(s => s.stage === serves)) {
       this.arcMissStreak.delete(courseName)
       log.info('coach.arc.align', { course: courseName, serves_arc: serves })
@@ -1381,8 +1387,10 @@ export class GrowthSubsystem {
         return render(RECEIPT_NOTE, { reason })
       }
       if (call.name === 'draft_arc') {
-        // 弧建议（#320 / ADR-0101）：serves_arc（弧对齐指认）与 repaint_suggest（结构性重画建议）
-        // 提成独立写件——零操作，只把声明交给回路收束后的 arcSoftAlign（对表留痕 + 原样带出）。
+        // 弧建议（#320 / ADR-0101）：serves_arc 是教练向罗盘站提交的批级建议（罗盘周检讨/
+        // 重画对表消费）——可选，确知才给、不硬凑（弧是大视角，不必每批对表）；「（无）」
+        // 是一条有效声明（本批不对应任何弧阶段），软对齐对它留痕不计连击。
+        // repaint_suggest（结构性重画建议）可选；宿主去抖入队罗盘站。
         if (args.serves_arc === undefined && args.repaint_suggest === undefined) {
           throw new Error(render(ERR_ARC_EMPTY, {}))
         }
@@ -1424,6 +1432,7 @@ export class GrowthSubsystem {
             mints: doc.concepts, entries: await entriesOf(), graph: new Graph(sim),
             invokes: await this.conceptInvokesOf(c),
             confusables: doc.confusables ?? [], anchors,
+            batchAdds: unpublishedOf().filter(o => o.op === 'add_node'),
           })
         }
         await logRound('audit', errors.length
@@ -1725,15 +1734,16 @@ export class GrowthSubsystem {
     return { cancelled: true }
   }
 
-  /** 生长闸门（注入 GraphProposals 的回调，propose/apply 双门消费）：只对生长批的
-   * 插入/旁支**条目**生效（#327 逐条目化——按 op.operator 分组计数，混算子批各裁各的），
-   * 三率超限或复诊通过率触底时闸停（低数据静默），普通 edit 提案与结算自动提案
-   * （无 note）恒放行。插入积极性调速器，参数唯一出处 params.ts。 */
+  /** 生长闸门（注入 GraphProposals 的回调，propose/apply 双门消费）：只对生长批的插入
+   * **条目**生效（#327 逐条目化——按 op.operator 分组计数，混算子批各裁各的；#335 刀①
+   * 算子收缩后旁支退役，调速面只乘插入条目），三率超限或复诊通过率触底时闸停（低数据
+   * 静默），普通 edit 提案与结算自动提案（无 note）恒放行。插入积极性调速器，参数唯一
+   * 出处 params.ts。 */
   async growthGateErrors(spec: EditProposalSpec): Promise<string[]> {
     if (!spec.note) return []
     const addsByOperator = new Map<string, number>()
     for (const op of spec.ops) {
-      if (op.op !== 'add_node' || (op.operator !== '插入' && op.operator !== '旁支')) continue
+      if (op.op !== 'add_node' || op.operator !== '插入') continue
       addsByOperator.set(op.operator, (addsByOperator.get(op.operator) ?? 0) + 1)
     }
     if (!addsByOperator.size) return []

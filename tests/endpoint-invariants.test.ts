@@ -13,9 +13,9 @@ import { withVault, noteText, tfQuestion } from './helpers/vault.ts'
 // 终点性不变式（#198/#199/#202 / ADR-0055+0056；#239 / ADR-0076 多终点化：一律按
 // 锚集合读——生成门/就绪剔除/审计豁免/图面标记/收尾宣告逐终点判定）：
 // - #198 受理门（#239 / ADR-0076 多终点化）：① 任何 add_node 以终点为 pre 拒（禁长过
-//   目标）；② 主线批（前进/换向）含新节点必须声明 note.target_endpoints 且对每个声明
+//   目标）；② 主线批（新增）含新节点必须声明 note.target_endpoints 且对每个声明
 //   终点 set_pre 接线（替换语义，新前沿全部汇入终点闭包；同一新节点可进多个终点的
-//   pre——交汇）；③ 收尾接线批（零 add_node 纯 set_pre）合法；旁支/巩固/插入豁免接线；
+//   pre——交汇）；③ 收尾接线批（零 add_node 纯 set_pre）合法；插入/收束豁免接线；
 //   锚保护既有范围不变。
 // - #199 生成门：终点 generate 恒拒（不看就绪）、contextPack 不为终点组装、T1/T2 不
 //   登记终点、学习者就绪清单与推荐面剔终点。
@@ -98,7 +98,7 @@ ops:
   - op: add_node
     name: 新台阶
     pre: [入门]
-    operator: 前进
+    operator: 新增
     est: 15
 `),
       /未声明朝向.*target_endpoints 必填/s,
@@ -113,7 +113,7 @@ ops:
   - op: add_node
     name: 新台阶
     pre: [入门]
-    operator: 前进
+    operator: 新增
     est: 15
   - op: set_pre
     node: 终点
@@ -121,7 +121,7 @@ ops:
 `),
       /未覆盖批内新前沿：新台阶/s,
     )
-    // 换向批同受朝向声明义务约束
+    // 主线批同受朝向声明义务约束（#335 刀①：换向退役并入新增）
     await assert.rejects(
       () => engine.graph.graphPropose('edit', `course: 数学
 note:
@@ -130,7 +130,7 @@ ops:
   - op: add_node
     name: 新方向
     pre: [入门]
-    operator: 换向
+    operator: 新增
     est: 15
 `),
       /未声明朝向/s,
@@ -149,7 +149,7 @@ ops:
   - op: add_node
     name: 新台阶
     pre: [入门]
-    operator: 前进
+    operator: 新增
     est: 15
   - op: set_pre
     node: 终点
@@ -172,18 +172,20 @@ ops:
   })
 })
 
-test('#198 豁免与既有语义：旁支批免接线可受理；del/rename 终点照拦；普通 edit 接线不设门', async () => {
+test('#198 豁免与既有语义：插入批免接线可受理；del/rename 终点照拦；普通 edit 接线不设门', async () => {
   await withVault(SEALED_VAULT, async ({ engine }) => {
-    // 旁支批（症状/教学消费）豁免接线义务
+    // 插入批（症状/教学消费）豁免接线义务（#335 刀①：旁支退役，豁免面由插入承接）
     const side = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  reason: 讲清主线必须先教的支线
+  reason: 卡点指向的过渡台阶
 ops:
   - op: add_node
     name: 支线台阶
     pre: [入门]
-    operator: 旁支
+    operator: 插入
     est: 10
+    recheck:
+      metric: 卡点集中度降幅
 `) as { id: number }
     assert.ok(side.id > 0)
     await engine.graph.graphReject(side.id)
@@ -250,7 +252,7 @@ ops:
   - op: add_node
     name: 更高台阶
     pre: [中间台阶]
-    operator: 前进
+    operator: 新增
     est: 15
   - op: set_pre
     node: 终点
@@ -282,16 +284,18 @@ ops:
     await engine.graph.graphApply('edit', reseal.id)
     const side = await engine.graph.graphPropose('edit', `course: 数学
 note:
-  reason: 支线补台阶
+  reason: 卡点指向的过渡台阶
 ops:
   - op: add_node
     name: 支线台阶
     pre: [入门]
-    operator: 旁支
+    operator: 插入
     est: 10
+    recheck:
+      metric: 卡点集中度降幅
 `) as { id: number }
     await engine.graph.graphApply('edit', side.id)
-    assert.ok(await readSealed(), '旁支批不动 sealed')
+    assert.ok(await readSealed(), '插入批不动 sealed')
   })
 })
 
@@ -545,7 +549,7 @@ ops:
   - op: add_node
     name: 甲更高台阶
     pre: [起点甲]
-    operator: 前进
+    operator: 新增
     est: 15
   - op: set_pre
     node: 终点甲
@@ -570,7 +574,7 @@ ops:
   - op: add_node
     name: 甲新台阶
     pre: [起点甲]
-    operator: 前进
+    operator: 新增
     est: 15
   - op: set_pre
     node: 终点甲
@@ -595,7 +599,7 @@ ops:
   - op: add_node
     name: 交汇台阶
     pre: [起点甲, 起点乙]
-    operator: 前进
+    operator: 新增
     est: 15
   - op: set_pre
     node: 终点甲
@@ -620,7 +624,7 @@ ops:
   - op: add_node
     name: 又一台阶
     pre: [起点甲]
-    operator: 前进
+    operator: 新增
     est: 10
 `),
       /不是在册终点/,
@@ -635,7 +639,7 @@ ops:
   - op: add_node
     name: 又一台阶
     pre: [起点甲]
-    operator: 前进
+    operator: 新增
     est: 10
 `),
       /未声明朝向.*target_endpoints 必填/s,

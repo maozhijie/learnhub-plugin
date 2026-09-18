@@ -62,11 +62,14 @@ export interface EditOp {
   teaches?: Record<string, ConceptTier>
   assumes?: Record<string, ConceptTier>
   misconceptions?: Misconception[]
-  /** 生长算子（#327 逐条目化：add_node 出生层）——这一条以什么方式长（前进/插入/巩固/
-   * 旁支/换向）。生长批（note 在场）的每条 add_node 必带，批内可跨算子混合；其他 op
-   * 与普通提案（note 缺席）携带即拒收。接线义务（前进/换向）、巩固门（巩固）、插入
-   * 调速与复诊结算（插入）都按本字段的**逐条目**取值裁。 */
+  /** 生长算子（#327 逐条目化：add_node 出生层）——这一条以什么方式长（新增/插入）。生长批
+   * （note 在场）的每条 add_node 必带，批内可跨算子混合；其他 op 与普通提案（note 缺席）
+   * 携带即拒收。接线义务（新增）、收束门（consolidate）、插入调速与复诊结算（插入）都按
+   * 本字段的**逐条目**取值裁——算子不再携带方向语义，方向归 note.target_endpoints。 */
   operator?: GrowthOperator
+  /** 收束声明（#335 刀①：巩固从算子值收编为新增条目的专用字段）——consolidate: true 的
+   * 新增条目是综合收束：概念引用只许引已教概念、不产新概念（收束门裁）；只随新增条目携带。 */
+  consolidate?: true
   /** 复诊预注册（#327 随条目走：只随 operator=插入 的 add_node 携带，恰一枚可机判
    * metric + 复诊期缺省 10 学习日 clamp [5,20]）——apply 随写入单元按条目登记边实验
    * 账本（复诊账本本就逐边，批级一枚是旧简化）。 */
@@ -110,7 +113,7 @@ const RETIRED_TOP_ROUTE = 'route'
  * 后就不在权威门里出现，故不在本表）。 */
 export const EDIT_OP_KEYS = [
   'op', 'node', 'name', 'new', 'pre', 'enc', 'opt', 'note', 'est', 'type',
-  'bloom', 'difficulty', 'teaches', 'assumes', 'misconceptions', 'operator', 'recheck',
+  'bloom', 'difficulty', 'teaches', 'assumes', 'misconceptions', 'operator', 'recheck', 'consolidate',
 ] as const
 
 export interface EditProposalSpec {
@@ -355,6 +358,17 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
           opOperator = String(o.operator) as GrowthOperator
         }
       }
+      // 收束声明（#335 刀①）：consolidate: true 随新增条目携带；其他 op / 非布尔值拒收
+      let opConsolidate: true | undefined
+      if (o.consolidate !== undefined) {
+        if (op !== 'add_node') {
+          errors.push(`${where}: consolidate 只随 add_node 携带（收束声明的是「这一条新增是综合收束」——其他 op 没有这个语义）`)
+        } else if (o.consolidate !== true) {
+          errors.push(`${where}.consolidate: 只接受 true（收束条目写 consolidate: true；非收束条目省略本字段）`)
+        } else {
+          opConsolidate = true
+        }
+      }
       let opRecheck: RecheckPrereg | undefined
       if (o.recheck !== undefined) {
         const v = recheckPreregOf(o.recheck, `${where}.recheck`)
@@ -379,6 +393,7 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
           ? { difficulty: Number(o.difficulty) as 1 | 2 | 3 | 4 | 5 } : {}),
         ...conceptFields,
         ...(opOperator !== undefined ? { operator: opOperator } : {}),
+        ...(opConsolidate !== undefined ? { consolidate: opConsolidate } : {}),
         ...(opRecheck !== undefined ? { recheck: opRecheck } : {}),
       })
     })
@@ -393,13 +408,13 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
     ops.forEach((op, i) => {
       const where = `ops.${i}`
       if (op.op !== 'add_node') {
-        if (op.operator !== undefined || op.recheck !== undefined) {
-          errors.push(`${where}: operator/recheck 只随 add_node 携带（算子声明的是「这一条以什么方式长」——其他 op 没有这个语义）`)
+        if (op.operator !== undefined || op.recheck !== undefined || op.consolidate !== undefined) {
+          errors.push(`${where}: operator/recheck/consolidate 只随 add_node 携带（算子声明的是「这一条以什么方式长」——其他 op 没有这个语义）`)
         }
         return
       }
       if (!op.operator) {
-        errors.push(`${where}: 生长批的 add_node 必须声明算子 operator（${GROWTH_OPERATORS.join('/')}，批内可跨算子混合；note 不再有批级 operator——#327 逐条目化）`)
+        errors.push(`${where}: 生长批的 add_node 必须声明算子 operator（${GROWTH_OPERATORS.join('/')}，批内可跨算子混合；note 不再有批级 operator，算子逐条目声明）`)
       }
       if (op.operator === '插入' && !op.recheck) {
         errors.push(`${where}: 插入条目必须预注册复诊 recheck（metric: 前进恢复|卡点集中度降幅|保留率恢复；days 缺省 10 学习日）——插入边的到期结算零人审，没有预注册就没有结算判据`)
@@ -407,15 +422,18 @@ export function validateEditProposal(doc: unknown, warns?: string[]): { errors?:
       if (op.recheck && op.operator !== '插入') {
         errors.push(`${where}: 复诊预注册只随插入条目携带（本条 operator=${op.operator ?? '（未声明）'}——没有可登记的插入边就无需预注册）`)
       }
+      if (op.consolidate && op.operator !== '新增') {
+        errors.push(`${where}: 收束声明 consolidate 只随新增条目携带（本条 operator=${op.operator ?? '（未声明）'}）`)
+      }
     })
-    const mainlineAdds = ops.filter(o => o.op === 'add_node' && (o.operator === '前进' || o.operator === '换向')).length
+    const mainlineAdds = ops.filter(o => o.op === 'add_node' && o.operator === '新增').length
     if (mainlineAdds > 0 && !(note.target_endpoints?.length)) {
-      errors.push(`生长批含 ${mainlineAdds} 条前进/换向新节点但未声明朝向——note.target_endpoints 必填（本批朝哪些终点长；交汇优先，可声明多个）`)
+      errors.push(`生长批含 ${mainlineAdds} 条新增节点但未声明朝向——note.target_endpoints 必填（本批朝哪些终点长；交汇优先，可声明多个）`)
     }
   } else {
     ops.forEach((op, i) => {
-      if (op.operator !== undefined || op.recheck !== undefined) {
-        errors.push(`ops.${i}: operator/recheck 只随生长批的 add_node 携带（普通提案没有生长算子语义；#327 逐条目化）`)
+      if (op.operator !== undefined || op.recheck !== undefined || op.consolidate !== undefined) {
+        errors.push(`ops.${i}: operator/recheck/consolidate 只随生长批的 add_node 携带（普通提案没有生长算子语义）`)
       }
     })
   }
@@ -485,10 +503,10 @@ export function difficultyStepGateErrors(ops: EditOp[], graph: Graph): string[] 
   return errors
 }
 
-/** 巩固门（#145 受理门校验；#327 逐条目化）：operator=巩固 的**条目**是综合收束——
- * 该 add_node 的概念引用（teaches/assumes/误解）只许引已教概念（既有图 teaches 并集），
- * 不产新概念；不走复诊由边轻纪律键拒收与 #146 结算语义共同保证（巩固条目没有复诊
- * 通道——预注册只随插入条目）。混算子批里只裁巩固条目，其余条目不受影响。 */
+/** 收束门（#145 受理门校验；#327 逐条目化；#335 刀①收编）：consolidate: true 的**新增条目**
+ * 是综合收束——该 add_node 的概念引用（teaches/assumes/误解）只许引已教概念（既有图
+ * teaches 并集），不产新概念；不走复诊由边轻纪律键拒收与 #146 结算语义共同保证（收束条目
+ * 没有复诊通道——预注册只随插入条目）。混算子批里只裁收束条目，其余条目不受影响。 */
 export function consolidationGateErrors(
   ops: EditOp[], graph: Graph,
   entries: ReadonlyArray<ConceptEntry>,
@@ -500,18 +518,18 @@ export function consolidationGateErrors(
   const taught = new Set(Object.keys(graph.taughtByOf).map(canon))
   const errors: string[] = []
   for (const [i, op] of ops.entries()) {
-    if (op.op !== 'add_node' || op.operator !== '巩固') continue
+    if (op.op !== 'add_node' || !op.consolidate) continue
     const where = `ops.${i}(add_node ${op.name})`
     for (const concept of Object.keys(op.teaches ?? {})) {
-      if (!taught.has(canon(concept))) errors.push(`${where}: 巩固节点 teaches「${concept}」不是已教概念——巩固只引已教概念做综合收束；新概念走 前进/插入/旁支 产出`)
+      if (!taught.has(canon(concept))) errors.push(`${where}: 收束条目 teaches「${concept}」不是已教概念——收束只引已教概念做综合收束；新概念由非收束新增条目产出`)
     }
     for (const concept of Object.keys(op.assumes ?? {})) {
-      if (!taught.has(canon(concept))) errors.push(`${where}: 巩固节点 assumes「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
+      if (!taught.has(canon(concept))) errors.push(`${where}: 收束条目 assumes「${concept}」不是已教概念——收束只引已教概念做综合收束`)
     }
     for (const m of Array.isArray(op.misconceptions) ? op.misconceptions : []) {
       const concept = (m as { concept?: unknown } | null)?.concept
       if (typeof concept !== 'string' || !concept.trim()) continue // 形状错误由重放侧给出（#301）
-      if (!taught.has(canon(concept))) errors.push(`${where}: 巩固节点误解条目「${concept}」不是已教概念——巩固只引已教概念做综合收束`)
+      if (!taught.has(canon(concept))) errors.push(`${where}: 收束条目误解条目「${concept}」不是已教概念——收束只引已教概念做综合收束`)
     }
   }
   return errors
@@ -837,10 +855,10 @@ function enrichMissingTargets(fields: EnrichFieldEntry[], graph: Graph): string[
 /** 终点锚保护 + 生长方向不变式（#142/#198 / ADR-0055；#239 / ADR-0076 多终点化：**每个**终点
  * 各跑同一套检查）：edit 提案不得 del/rename 锚定的终点节点——那是绕开显式终点动作的锚直改。
  * 方向不变式三句：① 任何 add_node 以终点为 pre 直接拒——目标之后不是本课程的生长域；
- * ② 主线批（前进/换向）含新节点时必须声明 target_endpoints，接线覆盖检查对每个声明的终点
+ * ② 主线批（含新增条目）含新节点时必须声明 target_endpoints，接线覆盖检查对每个声明的终点
  * 各跑一遍——零终点课程同样不豁免；③ 收尾接线批（零 add_node 的纯 set_pre）合法。
  * 接线核查取「覆盖」而非「相等」：最后台阶可与既有台阶合流（交汇），新前沿全部在 wire 里
- * 就守住不变式。旁支/巩固/插入豁免接线义务。（#271 抽出纯函数形态：editGateErrors 三处同调） */
+ * 就守住不变式。插入/收束条目豁免接线义务。（#271 抽出纯函数形态：editGateErrors 三处同调） */
 export function endpointGuardErrorsOf(spec: EditProposalSpec, anchors: EndpointAnchor[]): string[] {
   const endpoints = endpointNames(anchors)
   const label = (name: string): string => {
@@ -870,17 +888,17 @@ export function endpointGuardErrorsOf(spec: EditProposalSpec, anchors: EndpointA
       errors.push(`ops.${i}: set_pre(${op.node}) 把终点「${hit.join('、')}」写进了前置——终点是方向锚不是台阶；接线写 set_pre { node: ${hit[0]}, pre: [<台阶>] }（终点当 node）`)
     }
   }
-  // ② 主线批必接线（ADR-0076 教练回合多终点化；#327 逐条目化）：批内含**前进/换向
-  //    条目**（op.operator 声明）且其 add_node 非空时必须声明 note.target_endpoints
-  //    （本批朝哪些终点长），接线覆盖检查对**每个**声明的终点各跑一遍——新前沿只数
-  //    前进/换向条目（插入/旁支/巩固条目没有接线义务，混算子批各裁各的）；
+  // ② 主线批必接线（ADR-0076 教练回合多终点化；#327 逐条目化；#335 刀①：算子收缩后
+  //    主线条目 = operator=新增）：批内含**新增条目**且其 add_node 非空时必须声明
+  //    note.target_endpoints（本批朝哪些终点长），接线覆盖检查对**每个**声明的终点各跑
+  //    一遍——新前沿只数新增条目（插入/收束条目没有接线义务，混算子批各裁各的）；
   //    声明终点必须是在册锚（锚由人手增删，提案不得凭空捏造方向）。
   //    同一个新节点同时进多个终点的 pre 是合法形态（交汇节点，同一门下天然放行）。
-  const mainline = spec.ops.filter(o => o.op === 'add_node' && (o.operator === '前进' || o.operator === '换向'))
+  const mainline = spec.ops.filter(o => o.op === 'add_node' && o.operator === '新增')
   if (spec.note && mainline.length > 0) {
     const targets = spec.note.target_endpoints ?? []
     if (!targets.length) {
-      errors.push(`生长批含 ${mainline.length} 条前进/换向新节点但未声明朝向——note.target_endpoints 必填（本批朝哪些终点长；交汇优先，可声明多个）`)
+      errors.push(`生长批含 ${mainline.length} 条新增节点但未声明朝向——note.target_endpoints 必填（本批朝哪些终点长；交汇优先，可声明多个）`)
     }
     const consumed = new Set(spec.ops.flatMap(o => o.op === 'add_node' ? (o.pre ?? []) : []))
     const frontier = mainline.map(o => o.name!).filter(n => !consumed.has(n))

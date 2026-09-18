@@ -299,12 +299,12 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
         id: '方向纪律', name: '方向纪律（算子与朝向）',
         criteria: [
           {
-            id: '算子逐条目', criterion: '批内每条 add_node 以 operator 声明自己的生长算子（前进/插入/巩固/旁支/换向，批内可跨算子混合）并与该条目内容一致，插入条目携带复诊预注册；本回合不长结构则以 draft_note 零操作收束，不用空批冒充停摆',
+            id: '算子逐条目', criterion: '批内每条 add_node 以 operator 声明自己的生长算子（新增/插入，批内可跨算子混合）并与该条目内容一致，插入条目携带复诊预注册；本回合不长结构则以 draft_note 零操作收束，不用空批冒充停摆',
             evidence: '引草稿批的逐条目 operator 与理由、批内 ops 对照；条目算子与内容错位（名为插入实为前进等）或以空批冒充停摆的点名',
             source: '模板:教练执行', anchor: 'operator 声明自己的生长算子',
           },
           {
-            id: '朝向由终点携带', criterion: '朝学习者已声明的终点推进：前进/换向必声明 target_endpoints（可多个，交汇优先），不为一次性规划铺满全图',
+            id: '朝向由终点携带', criterion: '朝学习者已声明的终点推进：新增必声明 target_endpoints（可多个，交汇优先），不为一次性规划铺满全图',
             evidence: '引算子与朝向声明、图面终点对照；缺朝向声明或一次铺满的点名',
             source: '模板:教练执行', anchor: '方向由终点携带',
           },

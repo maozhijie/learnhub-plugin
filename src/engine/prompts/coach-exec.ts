@@ -27,7 +27,7 @@ export const EXEC_OP_FIELD_DIFFICULTY = '难度 1–5（add_node）'
 export const EXEC_OP_FIELD_TEACHES = '概念→档（add_node 出生层；概念必须逐字在册或随批铸名。**档位取值域：{{tiers}}**）'
 export const EXEC_OP_FIELD_ASSUMES = '概念→档（add_node 出生层。**档位取值域：{{tiers}}**）'
 export const EXEC_OP_FIELD_MISCONCEPTIONS = '误解条目（add_node 出生层）'
-export const EXEC_OP_FIELD_OPERATOR = '生长算子（add_node 必填；**取值域：{{ops}}**；批内可跨算子混合——它声明这一条以什么方式长，接线义务归前进/换向条目、复诊结算归插入条目）'
+export const EXEC_OP_FIELD_OPERATOR = '生长算子（add_node 必填；**取值域：{{ops}}**；批内可跨算子混合——它声明这一条以什么方式长：接线义务归新增条目、复诊结算归插入条目、收束声明归 consolidate）'
 export const EXEC_OP_FIELD_RECHECK = '复诊预注册 {metric, days?}（**operator=插入 的条目必填**，其余算子不得携带）——插入边的到期结算零人审，没有预注册就没有结算判据。'
 
 // ---------------------------------------------------------------- 写件工具 description

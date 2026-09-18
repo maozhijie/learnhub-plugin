@@ -49,7 +49,7 @@ function haltTurn(id: string, reason: string): Turn {
 test('force 豁免：就绪深度已满足也不短路——回路被拉起，draft_note 零操作收束落地停摆理由', async () => {
   await withVault(SEED, async h => {
     await draftCourse(h.engine, CAPABILITY_DRAFT)
-    const { seam } = loopFake([[haltTurn('c1', '结构暂无需变化：缺口由内容生成跟上'), { text: '收束。' }]])
+    const { seam } = loopFake([[{ text: '', toolCalls: [{ id: 'a1', name: 'draft_arc', arguments: JSON.stringify({ serves_arc: '（无）', note: '本回合零操作停摆，不对应任何弧阶段' }) }] }, haltTurn('c1', '结构暂无需变化：缺口由内容生成跟上'), { text: '收束。' }]])
     const r = await h.engine.growth2.coachGrowthBatch('数学', seam, { force: true })
     assert.equal(r.state, 'idle')
     assert.equal(r.halt_reason, '结构暂无需变化：缺口由内容生成跟上', '停摆理由随 draft_note 带出')

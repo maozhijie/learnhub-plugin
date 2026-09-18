@@ -327,7 +327,7 @@ export function growthRates(
   const coachAdded = tallies.filter(t => inWin(t.day))
   const coach_added = coachAdded.reduce((s, t) => s + t.added, 0)
   const inserted = registrations.filter(r => inWin(r.day)).length
-  const sidebranch = coachAdded.filter(t => t.operator === '旁支').reduce((s, t) => s + t.added, 0)
+  const sidebranch = coachAdded.filter(t => t.operator === '旁支').reduce((s, t) => s + t.added, 0) // #335 刀①旁支退役后恒 0：字段与历史账面保留（快照形状不变），新批不再产生该算子
   const winDecisions = decisions.filter(d => inWin(d.day))
   const proven = winDecisions.filter(d => d.entry.outcome === 'proven').length
   const pruned = winDecisions.filter(d => d.entry.outcome === '剪除').length
@@ -374,13 +374,13 @@ export interface GrowthGateVerdict {
   resilient: boolean | null
   /** 本次生效的旁支占比上限（韧性高放宽 GROWTH_SIDEBRANCH_CAP → RESILIENT）。 */
   sidebranch_cap: number
-  /** 拒收行（空 = 放行）；只对 插入/旁支 批生效，其余算子恒放行。 */
+  /** 拒收行（空 = 放行）；只对 插入 批生效（#335 刀①旁支退役），其余算子恒放行。 */
   blocks: string[]
 }
 
 /** 生长闸门（受理门/apply 双门共用纯函数）：batch = 本批算子与 add_node 数——占比
  * 按「窗内累计 + 本批」计，防贴线连批绕闸。低数据静默（已决样本 < MIN 或窗内无生长），
- * 插入/旁支之外的生长算子永不拦。 */
+ * 插入之外的生长算子永不拦。 */
 export function growthGate(
   rates: GrowthRates, batch: { operator: string; adds: number },
 ): GrowthGateVerdict {
@@ -389,29 +389,20 @@ export function growthGate(
   const cap = resilient ? GROWTH_SIDEBRANCH_CAP_RESILIENT : GROWTH_SIDEBRANCH_CAP
   const verdict: GrowthGateVerdict = { resilient, sidebranch_cap: cap, blocks: [] }
   if (!batch.adds) return verdict
-  if (batch.operator !== '插入' && batch.operator !== '旁支') return verdict
+  if (batch.operator !== '插入') return verdict
 
   const coachAfter = rates.coach_added + batch.adds
-  if (batch.operator === '插入') {
-    if (rates.recheck_pass_rate !== null && rates.decided >= GROWTH_RATE_MIN_SAMPLE
-      && rates.recheck_pass_rate < GROWTH_RECHECK_PASS_FLOOR) {
-      verdict.blocks.push(
-        `插入闸停：复诊通过率 ${pctOf(rates.recheck_pass_rate)} 低于闸门 ${pctOf(GROWTH_RECHECK_PASS_FLOOR)}`
-        + `（近 ${rates.window_days} 学习日已决 ${rates.decided} 条，剪除 ${rates.pruned} 条）——先等在途复诊结算或窗口滑动，本轮生长改裁 前进/巩固`)
-    }
-    const share = (rates.inserted + batch.adds) / coachAfter
-    if (rates.insert_rate !== null && share > GROWTH_INSERT_RATE_CAP) {
-      verdict.blocks.push(
-        `插入率超限：本批后插入占生长新增 ${pctOf(share)} > 上限 ${pctOf(GROWTH_INSERT_RATE_CAP)}`
-        + `（近 ${rates.window_days} 学习日生长新增 ${coachAfter} 节、插入 ${rates.inserted + batch.adds} 节）——先消化在途插入，本轮改裁 前进/巩固`)
-    }
-  } else {
-    const share = (rates.sidebranch + batch.adds) / coachAfter
-    if (rates.sidebranch_share !== null && share > cap) {
-      verdict.blocks.push(
-        `旁支超限：本批后旁支占生长新增 ${pctOf(share)} > 上限 ${pctOf(cap)}`
-        + `（韧性${resilient === null ? '样本不足' : resilient ? '高·已放宽' : '低'}，近 ${rates.window_days} 学习日生长新增 ${coachAfter} 节）——主线优先，本轮改裁 前进/插入`)
-    }
+  if (rates.recheck_pass_rate !== null && rates.decided >= GROWTH_RATE_MIN_SAMPLE
+    && rates.recheck_pass_rate < GROWTH_RECHECK_PASS_FLOOR) {
+    verdict.blocks.push(
+      `插入闸停：复诊通过率 ${pctOf(rates.recheck_pass_rate)} 低于闸门 ${pctOf(GROWTH_RECHECK_PASS_FLOOR)}`
+      + `（近 ${rates.window_days} 学习日已决 ${rates.decided} 条，剪除 ${rates.pruned} 条）——先等在途复诊结算或窗口滑动，本轮生长改裁 新增`)
+  }
+  const share = (rates.inserted + batch.adds) / coachAfter
+  if (rates.insert_rate !== null && share > GROWTH_INSERT_RATE_CAP) {
+    verdict.blocks.push(
+      `插入率超限：本批后插入占生长新增 ${pctOf(share)} > 上限 ${pctOf(GROWTH_INSERT_RATE_CAP)}`
+      + `（近 ${rates.window_days} 学习日生长新增 ${coachAfter} 节、插入 ${rates.inserted + batch.adds} 节）——先消化在途插入，本轮改裁 新增`)
   }
   return verdict
 }

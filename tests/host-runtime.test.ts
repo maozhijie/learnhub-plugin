@@ -814,9 +814,9 @@ test('生长批任务消息带回路轨迹（#163）：生成页可查裁决前�
     'growth2.coachGrowthBatch': async () => ({
       course: '数学', state: 'applied',
       check: { course: '数学', ready: 0, unstarted: 0, depth: 3, required: 3, cold_start: false, ok: false, exhausted: false, warnings: [] },
-      segments: [{ tier: 'light', effort: 'fast', operator: '前进', disagreement: false }],
+      segments: [{ tier: 'light', effort: 'fast', operator: '新增', disagreement: false }],
       trajectory: ['[轻量段] graph_view(2 字符参数) → 412 字符', '[轻量段] concept_registry(15 字符参数) → 88 字符'],
-      proposal: { id: 9, ops: 1, operators: ['前进'], reason: '前沿缺下一台阶', disagreement: false },
+      proposal: { id: 9, ops: 1, operators: ['新增'], reason: '前沿缺下一台阶', disagreement: false },
       applied: { ops: 1, snapshot: 3, created: [] },
     }),
     'registry.get': async () => ({ name: '数学' }),
@@ -1052,9 +1052,9 @@ test('#313 E23：生长批成功回执点名新建节点（「哪几个节点要
     'growth2.coachGrowthBatch': async () => ({
       course: '数学', state: 'applied',
       check: { course: '数学', ready: 0, depth: 3, required: 3, cold_start: false, ok: false, exhausted: false, warnings: [] },
-      segments: [{ tier: 'plan', effort: 'fast', operator: '前进', disagreement: false }],
+      segments: [{ tier: 'plan', effort: 'fast', operator: '新增', disagreement: false }],
       trajectory: [],
-      proposal: { id: 7, ops: 2, operators: ['前进'], reason: '前沿缺下一台阶', disagreement: false },
+      proposal: { id: 7, ops: 2, operators: ['新增'], reason: '前沿缺下一台阶', disagreement: false },
       applied: { ops: 2, snapshot: 3, created: ['平均变化率', '瞬时速度'] },
     }),
     saveGenJobs: async () => undefined,

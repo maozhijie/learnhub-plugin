@@ -279,7 +279,7 @@ export function nodeKeyOf(course: string, node: string): string {
 /** 生长算子集（#145 / ADR-0033 滚动教练）：停机规则转译进算子语义——前进=目标消费，
  * 插入=症状当场补过渡（复诊随边实验账本结算），巩固=足迹末端综合只引已教概念、
  * 旁支=教学消费支线（两者不走复诊），换向=批注/目标变化下重定路线（换终点走重新种子）。 */
-export const GROWTH_OPERATORS = ['前进', '插入', '巩固', '旁支', '换向'] as const
+export const GROWTH_OPERATORS = ['新增', '插入'] as const
 export type GrowthOperator = (typeof GROWTH_OPERATORS)[number]
 
 /** 提案记录（db.proposals 行同构；产物 YAML 另存 state/proposals/）。

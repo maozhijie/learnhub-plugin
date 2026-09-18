@@ -294,7 +294,7 @@ test('三率：滚动 30 学习日取材（窗外不计）、插入率/剪枝率
   assert.ok(Math.abs(rates.prune_rate! - 2 / 3) < 1e-3)
 })
 
-test('韧性闸门：复诊通过率触底/插入率超限 → 插入批闸停；旁支上限 20%（韧性高放宽 30%）；低数据静默', () => {
+test('韧性闸门：复诊通过率触底/插入率超限 → 插入批闸停；旁支闸随 #335 刀①退役（sidebranch_cap 字段保留）；低数据静默', () => {
   // 通过率 1/3 < 0.5 → 插入闸停（韧性低：旁支 cap 0.2）
   const brittle = ratesFixture(1)
   const insertGate = growthGate(brittle, { operator: '插入', adds: 1 })
@@ -302,15 +302,16 @@ test('韧性闸门：复诊通过率触底/插入率超限 → 插入批闸停�
   assert.equal(insertGate.sidebranch_cap, 0.2)
   assert.match(insertGate.blocks.join(''), /复诊通过率/)
 
+  // 旁支闸退役：growthGate 对旁支批恒放行（不再产超限块；#335 刀①）
   const sideGate = growthGate(brittle, { operator: '旁支', adds: 1 })
-  assert.match(sideGate.blocks.join(''), /旁支超限/, '旁支占比 (2+1)/11 > 20% → 拒收')
+  assert.deepEqual(sideGate.blocks, [])
 
-  // 韧性高（通过率 3/3 ≥ 0.8）：旁支上限放宽 20%→30%，同批量放行
+  // 韧性高（通过率 3/3 ≥ 0.8）：sidebranch_cap 字段保留放宽读数，同批量放行
   const resilient = ratesFixture(3)
   const resilientGate = growthGate(resilient, { operator: '旁支', adds: 1 })
   assert.equal(resilientGate.resilient, true)
   assert.equal(resilientGate.sidebranch_cap, 0.3)
-  assert.equal(resilientGate.blocks.length, 0, '(2+1)/11=27% ≤ 30% → 放行')
+  assert.equal(resilientGate.blocks.length, 0)
 
   // 插入率超限与批内 adds 合并计（防贴线连批绕闸）
   const insertHeavy = growthRates(
@@ -369,7 +370,7 @@ test('预注册负路径：插入批缺预注册/非插入批携带/非法 metri
       /ops\.0: 插入条目必须预注册复诊/,
       '插入批（有 add_node）必须预注册——零人审结算的判据前提')
     await assert.rejects(
-      () => engine.graph.graphPropose('edit', insertionYaml({ operator: '前进' })),
+      () => engine.graph.graphPropose('edit', insertionYaml({ operator: '新增' })),
       /ops\.0: 复诊预注册只随插入条目携带/,
       '前进批没有可登记的插入边')
     await assert.rejects(
@@ -580,7 +581,7 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
         outcome: i === 0 ? 'proven' : '剪除', decided_at: ts(-4 + i),
       }, nodeVaultFs)
     }
-    // 调速现势：通过率 1/3 < 0.5、插入率 4/7 > 0.5 → 插入批闸停；旁支 1 节（1/8=12.5%）放行
+    // 调速现势：通过率 1/3 < 0.5、插入率 4/7 > 0.5 → 插入批闸停（#335 刀①旁支闸退役，调速只乘插入）
     const view = await engine.growth2.probationStatus('数学')
     assert.equal(view.courses[0]!.gate.insert_blocked, true)
     assert.match(view.courses[0]!.gate.insert_blocks.join(''), /复诊通过率/)
@@ -595,19 +596,11 @@ test('AC3 调速闸门按 params 生效：复诊通过率触底/插入率超限�
     // 前进批不受闸（ADR-0076 主线批必接线：声明终点 + set_pre 汇入批内新前沿；route 不携带——本批不重写罗盘）
     const fwd = await engine.graph.graphPropose('edit', [
       'course: 数学', 'note:', '  reason: 主线推进', '  target_endpoints: [终点]', 'ops:',
-      '  - op: add_node', '    name: 前进节点', '    pre: [入门]', '    operator: 前进',
+      '  - op: add_node', '    name: 前进节点', '    pre: [入门]', '    operator: 新增',
       '  - op: set_pre', '    node: 终点', '    pre: [前进节点]',
     ].join('\n') + '\n') as { id: number }
     assert.ok(fwd.id > 0)
     await engine.graph.graphReject(fwd.id)
-    // 旁支 1 节：占比 1/8 = 12.5% ≤ 20% → 放行
-    const side = await engine.graph.graphPropose('edit', [
-      'course: 数学', 'note:', '  reason: 教学消费支线', 'ops:',
-      '  - op: add_node', '    name: 旁支节点', '    pre: [入门]',
-      '    operator: 旁支',
-    ].join('\n') + '\n') as { id: number }
-    assert.ok(side.id > 0)
-    await engine.graph.graphReject(side.id)
   })
 })
 

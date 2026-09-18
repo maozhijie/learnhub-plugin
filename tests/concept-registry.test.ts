@@ -248,13 +248,13 @@ test('#141 concepts 块条目契约：canonical 缺失、未知键 → schema �
   const noCanonical = validateEditProposal({
     course: '数学',
     concepts: [{ definition: '没有 canonical' }],
-    ops: [{ op: 'add_node', name: '甲', operator: '前进' }]
+    ops: [{ op: 'add_node', name: '甲', operator: '新增' }]
   })
   assert.ok(noCanonical.errors?.some(e => e.includes('canonical')))
   const unknownKey = validateEditProposal({
     course: '数学',
     concepts: [{ canonical: '甲', tier: '知道' }],
-    ops: [{ op: 'add_node', name: '甲', operator: '前进' }]
+    ops: [{ op: 'add_node', name: '甲', operator: '新增' }]
   })
   assert.ok(unknownKey.errors?.some(e => e.includes('含未知字段')))
 })

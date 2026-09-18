@@ -31,6 +31,7 @@ import {
   SHAPE_NORM_MIS_BARE, SHAPE_NORM_MIS_DICT, SHAPE_NORM_TIER_PAIR,
   SHAPE_WORD_BOOLEAN, SHAPE_WORD_LIST, SHAPE_WORD_MAP, SHAPE_WORD_NULL, SHAPE_WORD_NUMBER,
   SHAPE_WORD_STRING, SHAPE_WORD_STRING_LIST,
+  FIND_EST_DIFFICULTY_MISMATCH, FIND_SINGLE_CHAIN_BATCH,
 } from '../prompts/coach-draft.ts'
 
 /** 教练执行站的语料站标签（host STATIONS.growthDraft 引门面常量对齐；站名是受控词表）。 */
@@ -448,7 +449,9 @@ export function expandPatchOps(
  * - 孤立新铸概念：零 teaches / 零 assumes / 零 invokes（「概念表不只是名词堆」）；
  * - confusable 悬空指向：建议目标不在册（提案通道只收在册概念）；
  * - 近似名撞车：与在册 canonical/别名过近（复用 nearNameCandidates 同一阈值）；
- * - 收尾提示：终点已接线（pre 非空）且未收尾宣告——收尾须纯 set_pre 独立批发布。 */
+ * - 收尾提示：终点已接线（pre 非空）且未收尾宣告——收尾须纯 set_pre 独立批发布；
+ * - est 失配（#335 刀②）：difficulty ≥4 配 est ≤30 的本批新增节点；
+ * - 单链批（#335 刀③）：本批全部 add_node 构成单链（逐条只接上一条、无分叉）。 */
 export function draftFindings(args: {
   mints: ReadonlyArray<ConceptEntry>
   entries: ReadonlyArray<ConceptEntry>
@@ -456,6 +459,8 @@ export function draftFindings(args: {
   invokes: ReadonlyMap<string, ReadonlyMap<string, number>>
   confusables: ReadonlyArray<PatchSuggestion>
   anchors: ReadonlyArray<EndpointAnchor>
+  /** 本批新增条目（未发布段的 add_node）：est 失配与单链批判据的取材面。 */
+  batchAdds?: ReadonlyArray<EditOp>
 }): string[] {
   const out: string[] = []
   for (const s of args.confusables) {
@@ -479,6 +484,29 @@ export function draftFindings(args: {
     if (a.sealed) continue
     if ((args.graph.preOf[a.endpoint] ?? []).length > 0) {
       out.push(render(FIND_SEAL_TODO, { endpoint: a.endpoint }))
+    }
+  }
+  // est 失配（#335 刀②）：硬节点配短时长——est 被压平的读侧信号（非阻提示）
+  for (const op of args.batchAdds ?? []) {
+    if ((op.difficulty ?? 0) >= 4 && (op.est ?? Infinity) <= 30) {
+      out.push(render(FIND_EST_DIFFICULTY_MISMATCH, { node: op.name ?? '', difficulty: op.difficulty ?? 0, est: op.est ?? 0 }))
+    }
+  }
+  // 单链批（#335 刀③）：批内全部新增构成单链——逐条（除首条）恰接上一条、无分叉、无回连
+  const adds = (args.batchAdds ?? []).filter(o => o.name)
+  if (adds.length >= 2) {
+    const batchNames = new Set(adds.map(o => o.name!))
+    let chain = true
+    for (const [k, op] of adds.entries()) {
+      const batchPres = (op.pre ?? []).filter(p => batchNames.has(p))
+      if (k === 0) {
+        if (batchPres.length) { chain = false; break }
+      } else if (batchPres.length !== 1 || batchPres[0] !== adds[k - 1]!.name) {
+        chain = false; break
+      }
+    }
+    if (chain) {
+      out.push(render(FIND_SINGLE_CHAIN_BATCH, { count: adds.length }))
     }
   }
   return out

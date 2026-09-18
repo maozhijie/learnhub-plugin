@@ -7,7 +7,7 @@ import { Graph, GraphStore } from '../src/engine/graph/graph.ts'
 import { YAML } from '../src/engine/infra/yaml.ts'
 import { GrowthSubsystem } from '../src/engine/coach/growth-subsystem.ts'
 import { normalizePatchShape, replayDraft, sealedDecisionOf, editGateErrors, simulateOps } from '../src/engine/index.ts'
-import { GROWTH_DRAFT_MARKER, draftPathOf, loadDraft } from '../src/engine/coach/growth-draft.ts'
+import { GROWTH_DRAFT_MARKER, draftPathOf, loadDraft, draftFindings } from '../src/engine/coach/growth-draft.ts'
 import { GROWTH_DRAFT_MAX_ROUNDS } from '../src/engine/infra/params.ts'
 import { readProbationLedger } from '../src/engine/coach/probation.ts'
 import type { EditGateCtx } from '../src/engine/index.ts'
@@ -42,7 +42,7 @@ function fixture(): { nodes: GNode[]; graph: Graph } {
 test('replayDraft：草稿差异（新增/接线改写/新增边）与错误累积，simulateOps 同源', () => {
   const { nodes, graph } = fixture()
   const ops: EditOp[] = [
-    { op: 'add_node', name: '丁', pre: ['丙'], operator: '前进' },
+    { op: 'add_node', name: '丁', pre: ['丙'], operator: '新增' },
     { op: 'set_pre', node: '丙', pre: ['乙', '丁'] },
     { op: 'del_node', node: '不存在' }, // 错误累积不中断
   ]
@@ -66,7 +66,7 @@ test('sealedDecisionOf：零 add_node 纯 set_pre 批 = seal；含 add_node 接�
   assert.equal(seal.sealing, true)
   assert.deepEqual(seal.effects, [{ endpoint: '终点甲', action: 'seal' }])
   const reopen = sealedDecisionOf([
-    { op: 'add_node', name: '丁', pre: [], operator: '前进' },
+    { op: 'add_node', name: '丁', pre: [], operator: '新增' },
     { op: 'set_pre', node: '终点甲', pre: ['丁'] },
   ], anchors)
   assert.deepEqual(reopen.effects, [{ endpoint: '终点甲', action: 'reopen' }])
@@ -88,14 +88,14 @@ test('editGateErrors：概念未铸名/终点接线义务被拦；全过则空',
   const base = { nodes, graph, entries, anchors }
   const bad: EditProposalSpec = {
     course: '数学',
-    ops: [{ op: 'add_node', name: '丁', pre: [], operator: '旁支', teaches: { 未铸名: '会用' } }],
+    ops: [{ op: 'add_node', name: '丁', pre: [], operator: '新增', teaches: { 未铸名: '会用' } }],
     note: { reason: 'r' },
   }
   const errors = await editGateErrors(bad, base satisfies EditGateCtx)
   assert.ok(errors.some(e => e.includes('未铸名') || e.includes('在册')), errors.join('\n'))
   const noWire: EditProposalSpec = {
     course: '数学',
-    ops: [{ op: 'add_node', name: '丁', pre: [], operator: '前进' }],
+    ops: [{ op: 'add_node', name: '丁', pre: [], operator: '新增' }],
     note: { reason: 'r', target_endpoints: ['终点甲'] },
   }
   const errors2 = await editGateErrors(noWire, base satisfies EditGateCtx)
@@ -103,7 +103,7 @@ test('editGateErrors：概念未铸名/终点接线义务被拦；全过则空',
   const good: EditProposalSpec = {
     course: '数学',
     ops: [
-      { op: 'add_node', name: '丁', pre: [], operator: '前进', teaches: { 新概念: '会用' } },
+      { op: 'add_node', name: '丁', pre: [], operator: '新增', teaches: { 新概念: '会用' } },
       { op: 'set_pre', node: '终点甲', pre: ['丁'] },
     ],
     note: { reason: 'r', target_endpoints: ['终点甲'] },
@@ -120,18 +120,18 @@ test('difficultyStepGateErrors：步进 >1 拒收；批内链/缺席侧不判；
   nodes[0]!.difficulty = 2
   const withDiff = new Graph(nodes)
   // 基图难度 2 → 新节点难度 4 = 越档
-  const jump: EditOp[] = [{ op: 'add_node', name: '丁', pre: ['甲'], operator: '前进', difficulty: 4 }]
+  const jump: EditOp[] = [{ op: 'add_node', name: '丁', pre: ['甲'], operator: '新增', difficulty: 4 }]
   const errs = difficultyStepGateErrors(jump, withDiff)
   assert.equal(errs.length, 1)
   assert.match(errs[0]!, /步进越档/)
   // 步进 =1 合法
-  assert.deepEqual(difficultyStepGateErrors([{ op: 'add_node', name: '丁', pre: ['甲'], operator: '前进', difficulty: 3 }], withDiff), [])
+  assert.deepEqual(difficultyStepGateErrors([{ op: 'add_node', name: '丁', pre: ['甲'], operator: '新增', difficulty: 3 }], withDiff), [])
   // 前置难度缺席不判
-  assert.deepEqual(difficultyStepGateErrors([{ op: 'add_node', name: '丁', pre: ['乙'], operator: '前进', difficulty: 5 }], withDiff), [])
+  assert.deepEqual(difficultyStepGateErrors([{ op: 'add_node', name: '丁', pre: ['乙'], operator: '新增', difficulty: 5 }], withDiff), [])
   // 批内链：新节点戊接在批内丁（难度 3）上、跳到 5 = 越档（丁未落图也可解析）
   const batchChain: EditOp[] = [
-    { op: 'add_node', name: '丁', pre: ['甲'], operator: '前进', difficulty: 3 },
-    { op: 'add_node', name: '戊', pre: ['丁'], operator: '前进', difficulty: 5 },
+    { op: 'add_node', name: '丁', pre: ['甲'], operator: '新增', difficulty: 3 },
+    { op: 'add_node', name: '戊', pre: ['丁'], operator: '新增', difficulty: 5 },
   ]
   const chainErrs = difficultyStepGateErrors(batchChain, withDiff)
   assert.equal(chainErrs.length, 1)
@@ -150,8 +150,25 @@ test('difficultyStepGateErrors：步进 >1 拒收；批内链/缺席侧不判；
 
 // ---- 站级：脚本化假 agent ----
 type LoopTurn = { text: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }
-function scriptFake(sessions: Array<string | LoopTurn[]>) {
-  const queue = sessions.map(s => [...(typeof s === 'string' ? [{ text: s }] : s)] as LoopTurn[])
+
+/** #335 刀④退场注记：serves_arc 曾一度升格必答，已随「回归可选」裁决退回——draft_arc
+ * 恢复可选（确知才给）。夹具仍带一次合法 draft_arc 声明，覆盖 arcSoftAlign 对表消费路径。 */
+function withAutoArc(turns: LoopTurn[]): LoopTurn[] {
+  if (turns.some(c => c.toolCalls?.some(t => t.name === 'draft_arc'))) return turns
+  const out: LoopTurn[] = []
+  let injected = false
+  for (const turn of turns) {
+    if (!injected && turn.toolCalls?.some(t => t.name === 'draft_finish' || t.name === 'draft_note')) {
+      out.push({ text: '', toolCalls: [{ id: `arc-${out.length}`, name: 'draft_arc', arguments: JSON.stringify({ serves_arc: '阶段一' }) }] })
+      injected = true
+    }
+    out.push(turn)
+  }
+  return out
+}
+
+function scriptFake(sessions: Array<string | LoopTurn[]>, autoArc = true) {
+  const queue = sessions.map(s => (autoArc ? withAutoArc([...(typeof s === 'string' ? [{ text: s }] : s)] as LoopTurn[]) : (typeof s === 'string' ? [{ text: s }] : s)))
   let current: LoopTurn[] = []
   const seam = new AgentSeam({
     logger: memLogger(),
@@ -184,11 +201,11 @@ test('#327 混算子批端到端：前进+插入+旁支同批发布，插入条�
         arguments: JSON.stringify({
           ops: [
             // 前进条目：新前沿，接终点（接线义务只跟前进条目）
-            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '前进', teaches: { 变化率: '会用' } },
-            // 插入条目：补过渡台阶，随条目带复诊预注册
+            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增', teaches: { 变化率: '会用' } },
+            // 插入条目：补过渡台阶，随条目带复诊预注册（免接线；#335 刀①旁支退役）
             { op: 'add_node', name: '极限初步', pre: ['认识变化率'], est: 20, operator: '插入', recheck: { metric: '卡点集中度降幅', days: 5 } },
-            // 旁支条目：免接线
-            { op: 'add_node', name: '导数几何意义', pre: ['认识变化率'], est: 10, operator: '旁支' },
+            // 插入条目：免接线
+            { op: 'add_node', name: '导数几何意义', pre: ['认识变化率'], est: 10, operator: '插入', recheck: { metric: '前进恢复', days: 8 } },
             { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
           ],
           note_reason: '主线推进同时补过渡与支线',
@@ -201,18 +218,20 @@ test('#327 混算子批端到端：前进+插入+旁支同批发布，插入条�
     ]])
     const r = await h.engine.growth2.coachDraft('数学', agent)
     assert.equal(r.finished, true, '混算子批可经单站回路发布（票面验收）')
-    assert.deepEqual(r.finishes[0]!.operators, ['前进', '插入', '旁支'], 'operators 按条目出现序去重折叠')
-    // 插入条目的复诊预注册随条目落账本（其余条目不登记）
+    assert.deepEqual(r.finishes[0]!.operators, ['新增', '插入'], 'operators 按条目出现序去重折叠')
+    // 插入条目的复诊预注册随条目落账本（其余条目不登记；#335 刀①后免接线面全走插入）
     const ledger = await readProbationLedger(h.paths, '数学', h.engine.fs)
-    assert.deepEqual(ledger.map(x => x.node), ['极限初步'])
+    assert.deepEqual(ledger.map(x => x.node), ['极限初步', '导数几何意义'])
     assert.equal(ledger[0]!.due, 5)
+    assert.equal(ledger[1]!.due, 8)
   })
 })
 
 // ---- #309：门同源 / 逃生口 / 水位重放（判据落在「模型看到了什么」上，故要摘回执） ----
 
 /** 摘每轮工具回执（`req.messages` 末条 tool 消息）的脚本化假 agent（先例：#301 端到端用例）。 */
-function receiptFake(queue: LoopTurn[][]): { seam: AgentSeam; receipts: string[] } {
+function receiptFake(queue0: LoopTurn[][], autoArc = true): { seam: AgentSeam; receipts: string[] } {
+  const queue = queue0.map(s => (autoArc ? withAutoArc(s) : s))
   const receipts: string[] = []
   let current: LoopTurn[] = []
   const seam = new AgentSeam({
@@ -278,7 +297,7 @@ test('#312 B4：轮次预算耗尽不再砖化——入口照进站，追加补�
     await seedDraft(h, {
       session_id: 'draft-budget',
       ops: [
-        { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' }, operator: '前进' },
+        { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' }, operator: '新增' },
         { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
       ],
       rounds: Array.from({ length: GROWTH_DRAFT_MAX_ROUNDS }, (_, i) => ({
@@ -287,7 +306,7 @@ test('#312 B4：轮次预算耗尽不再砖化——入口照进站，追加补�
       note: { reason: '前沿缺下一台阶', target_endpoints: ['用导数解决优化问题'] },
     })
     const { seam, receipts } = receiptFake([[
-      patchCall('c1', [{ op: 'add_node', name: '多余台阶', pre: ['认识变化率'],  operator: '前进', }], {  note_reason: 'r' }),
+      patchCall('c1', [{ op: 'add_node', name: '多余台阶', pre: ['认识变化率'],  operator: '新增', }], {  note_reason: 'r' }),
       toolCall('c2', 'draft_finish'),
       { text: '已发布备好的那批。' },
     ]])
@@ -309,7 +328,7 @@ test('#312 B4：预算耗尽只收紧「追加」——收束动作照放行（d
     await seeded(h)
     await seedDraft(h, {
       session_id: 'draft-budget-revert',
-      ops: [{ op: 'add_node', name: '多余台阶', pre: ['认识变化率'], est: 12, operator: '前进' }],
+      ops: [{ op: 'add_node', name: '多余台阶', pre: ['认识变化率'], est: 12, operator: '新增' }],
       rounds: Array.from({ length: GROWTH_DRAFT_MAX_ROUNDS }, (_, i) => ({
         at: '2026-09-16T00:00:00.000Z', kind: 'patch', summary: `历史轮 ${i + 1}`,
       })),
@@ -336,7 +355,7 @@ test('执行官站：patch→finish 走真实提案管线并落 sealed；草稿�
         id: 'c1', name: 'draft_patch',
         arguments: JSON.stringify({
           ops: [
-            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '前进' },
+            { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增' },
             { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
           ],
           
@@ -366,11 +385,11 @@ test('执行官站：拒收回灌 loop（坏补丁回滚）+ 禁止空手结束�
     const agent = scriptFake([[
       { text: '', toolCalls: [{
         id: 'c1', name: 'draft_patch',
-        arguments: JSON.stringify({ ops: [{ op: 'add_node', name: '平均变化率', pre: ['不存在的节点'], operator: '巩固' }],  note_reason: 'r' }),
+        arguments: JSON.stringify({ ops: [{ op: 'add_node', name: '平均变化率', pre: ['不存在的节点'], operator: '新增' }],  note_reason: 'r', note_target_endpoints: ['用导数解决优化问题'] }),
       }] },
       { text: '', toolCalls: [{
         id: 'c2', name: 'draft_patch',
-        arguments: JSON.stringify({ ops: [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '巩固', teaches: { 变化率: '会用' } }],  note_reason: '综合收束' }),
+        arguments: JSON.stringify({ ops: [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增', consolidate: true, teaches: { 变化率: '会用' } }, { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] }],  note_reason: '综合收束', note_target_endpoints: ['用导数解决优化问题'] }),
       }] },
       { text: '收束（故意不 finish）。' },
     ]])
@@ -473,12 +492,12 @@ test('#301 形状归一：裸值/非法形态逐类（铸名裸字典、非文�
   assert.ok(bare.normalized.some(n => /concepts 不是列表（字典）/.test(n)))
 
   // 误解字典的值不是文本/文本列表 → 拒收（不猜内容）
-  const badDict = normalizePatchShape([{ op: 'add_node', name: '丁', misconceptions: { 甲: { 深: 'x' } }, operator: '前进' }], [])
+  const badDict = normalizePatchShape([{ op: 'add_node', name: '丁', misconceptions: { 甲: { 深: 'x' } }, operator: '新增' }], [])
   assert.equal(badDict.errors.length, 1)
   assert.match(badDict.errors[0]!, /字典形的值必须是文本或文本列表/)
 
   // 误解条目不是映射（字符串列表之外的垃圾项）→ 拒收并指出第几项
-  const badItems = normalizePatchShape([{ op: 'add_node', name: '丁', misconceptions: [42], operator: '前进' }], [])
+  const badItems = normalizePatchShape([{ op: 'add_node', name: '丁', misconceptions: [42], operator: '新增' }], [])
   assert.equal(badItems.errors.length, 1)
   assert.match(badItems.errors[0]!, /第 1 项必须是映射/)
 
@@ -499,7 +518,7 @@ test('#301 形状门端到端：字典形误解归一收下（回执注明归一
         id: 'c1', name: 'draft_patch',
         arguments: JSON.stringify({
           ops: [{
-            op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '前进',
+            op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增',
             teaches: { 变化率: '会用' },
             misconceptions: { 变化率: ['把平均变化率当成瞬时变化率'] },
           },
@@ -553,9 +572,9 @@ test('#301 缺陷②：毒形状不再击穿门序列——finish 记轮次 + �
   const anchors: EndpointAnchor[] = []
   const base: EditGateCtx = { nodes, graph, entries: [], anchors, mints: [] }
   // 单元级：非列表误解（字典/字符串列表）产出可执行门错误行，不抛异常
-  const dictOp = { op: 'add_node', name: '丁', pre: [], misconceptions: { 甲: ['文字'] }, operator: '前进' } as unknown as EditOp
+  const dictOp = { op: 'add_node', name: '丁', pre: [], misconceptions: { 甲: ['文字'] }, operator: '新增' } as unknown as EditOp
   assert.ok((await editGateErrors({ course: '数学', ops: [dictOp] }, base))[0]?.includes('misconceptions 形状非法'))
-  const strOp = { op: 'add_node', name: '戊', pre: [], misconceptions: ['文字'], operator: '前进' } as unknown as EditOp
+  const strOp = { op: 'add_node', name: '戊', pre: [], misconceptions: ['文字'], operator: '新增' } as unknown as EditOp
   assert.match((await editGateErrors({ course: '数学', ops: [strOp] }, base))[0] ?? '', /不是合法条目/)
   // 鬼错误不复活：字符串条目不再摊成 {concept: undefined}（那会报成「概念"undefined"已有 N 条」）
   assert.doesNotMatch((await editGateErrors({ course: '数学', ops: [strOp] }, base)).join('\n'), /undefined/)
@@ -563,7 +582,7 @@ test('#301 缺陷②：毒形状不再击穿门序列——finish 记轮次 + �
   const noteOp = { op: 'set_note', node: '甲', note: 'x', misconceptions: { 甲: ['文字'] } } as unknown as EditOp
   await assert.doesNotReject(() => editGateErrors({ course: '数学', ops: [noteOp] }, base))
   // teaches/assumes 非映射（配对列表漏过归一时）同样 fail loud——不再摊成 {0:[…]} 再报「引用「0」未在册」
-  const pairOp = { op: 'add_node', name: '己', pre: [], teaches: [['概念A', '会用']], operator: '前进' } as unknown as EditOp
+  const pairOp = { op: 'add_node', name: '己', pre: [], teaches: [['概念A', '会用']], operator: '新增' } as unknown as EditOp
   const pairErrors = await editGateErrors({ course: '数学', ops: [pairOp] }, base)
   assert.match(pairErrors[0] ?? '', /\.teaches 形状非法/)
   assert.doesNotMatch(pairErrors.join('\n'), /引用「0」/)
@@ -612,8 +631,9 @@ test('#301 缺陷②保险丝：门复验抛异常也折叠成门错误行（草
     await h.engine.fs.writeFile(join(dir, 'draft-legacy.json'), JSON.stringify({
       marker: GROWTH_DRAFT_MARKER, version: 1, course: '数学', session_id: 'draft-legacy',
       // 铸名块整块是字典（非列表）——mintConflicts 的 for...of 不可迭代，门复验在抵达
-      // 任何 per-op 判定前就抛；保险丝要把它变成可读的门错误行而不是裸异常
-      ops: [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], operator: '巩固' }],
+      // 任何 per-op 判定前就抛；保险丝要把它变成可读的门错误行而不是裸异常。
+      // op 取插入条目（schema 干净：不触发朝向/接线义务，#335 刀①后收束/插入均豁免）
+      ops: [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], operator: '插入', recheck: { metric: '前进恢复', days: 5 } }],
       concepts: { 平均变化率: '平均变化率' }, published: 0, rounds: [],
       note: { reason: '试探：门异常能否折叠成门错误' },
       created_at: '2026-09-16T00:00:00.000Z', updated_at: '2026-09-16T00:00:00.000Z',
@@ -665,12 +685,12 @@ test('#309 ① 补丁期就拒非法取值：档位「初识」/ 退役 op move 
     const { seam, receipts } = receiptFake([[
       // 事故原形：模型自造档位「初识」（合法只有 知道/会用/能教）——此前一路落进草稿，
       // 直到 finish 才被 propose 的 schema 门拒，而那时 op 已清不掉（缺陷②叠缺陷①）
-      patchCall('p1', [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' }, operator: '前进' }],
+      patchCall('p1', [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' }, operator: '新增' }],
         {  note_reason: 'r' }),
       // 退役 op（事故里 ops[11] 的另一个永久毒点）
       patchCall('p2', [{ op: 'move', node: '认识变化率', to: '别处' }], {  note_reason: 'r' }),
-      patchCall('p3', [{ op: 'add_node', name: '甲台阶', pre: ['认识变化率'], bloom: '领悟', operator: '旁支', }], {  note_reason: 'r' }),
-      patchCall('p4', [{ op: 'add_node', name: '乙台阶', pre: ['认识变化率'], difficulty: 9, operator: '旁支', }], {  note_reason: 'r' }),
+      patchCall('p3', [{ op: 'add_node', name: '甲台阶', pre: ['认识变化率'], bloom: '领悟', operator: '新增', }], {  note_reason: 'r' }),
+      patchCall('p4', [{ op: 'add_node', name: '乙台阶', pre: ['认识变化率'], difficulty: 9, operator: '新增', }], {  note_reason: 'r' }),
       { text: '四批都被拒，收束。' },
     ]])
     const r = await h.engine.growth2.coachDraft('数学', seam)
@@ -694,7 +714,7 @@ test('#309 ①③ 审计 = 同批 propose 的受理结论（同一批 ops 两侧
     // 存量毒草稿（读侧不自愈）：绕过补丁期门的那一类只能在草稿里预置
     const dir = `${h.paths.courseStateDir('数学')}/草稿`
     await h.engine.fs.mkdir(dir)
-    const ops = [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' }, operator: '前进' }]
+    const ops = [{ op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' }, operator: '新增' }]
     await h.engine.fs.writeFile(join(dir, 'draft-poison.json'), JSON.stringify({
       marker: GROWTH_DRAFT_MARKER, version: 1, course: '数学', session_id: 'draft-poison',
       ops, published: 0, concepts: [], rounds: [],
@@ -725,7 +745,7 @@ test('#309 ①③ 审计 = 同批 propose 的受理结论（同一批 ops 两侧
     const cleanDir = `${h.paths.courseStateDir('数学')}/草稿`
     await h.engine.fs.unlink(join(cleanDir, 'draft-poison.json')).catch(() => undefined)
     const goodOps = [
-      { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' }, operator: '前进' },
+      { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' }, operator: '新增' },
       { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
     ]
     await h.engine.fs.writeFile(join(cleanDir, 'draft-clean.json'), JSON.stringify({
@@ -753,9 +773,9 @@ test('#309 ② 逃生口：draft_revert 清掉已入草稿的坏 op，finish 随
     // 事故草稿的等价物：坏 op 已在水位之上的未发布段（补丁期门落地前入的草稿）
     const dir = `${h.paths.courseStateDir('数学')}/草稿`
     await h.engine.fs.mkdir(dir)
-    const poison = { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' }, operator: '前进' }
+    const poison = { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], teaches: { 变化率: '初识' }, operator: '新增' }
     const good = [
-      { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' }, operator: '前进' },
+      { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, teaches: { 变化率: '会用' }, operator: '新增' },
       { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
     ]
     await h.engine.fs.writeFile(join(dir, 'draft-stuck.json'), JSON.stringify({
@@ -790,9 +810,10 @@ test('#309 ② draft_revert 的部分撤销与边界：count 只丢尾部 N 条�
     await seeded(h)
     const { seam, receipts } = receiptFake([[
       patchCall('p1', [
-        { op: 'add_node', name: '甲台阶', pre: ['认识变化率'],  operator: '旁支', },
-        { op: 'add_node', name: '乙台阶', pre: ['甲台阶'],  operator: '旁支', },
-      ], {  note_reason: 'r' }),
+        { op: 'add_node', name: '甲台阶', pre: ['认识变化率'],  operator: '新增', },
+        { op: 'add_node', name: '乙台阶', pre: ['甲台阶'],  operator: '新增', },
+        { op: 'set_pre', node: '用导数解决优化问题', pre: ['乙台阶'] },
+      ], {  note_reason: 'r', note_target_endpoints: ['用导数解决优化问题'] }),
       toolCall('v1', 'draft_revert', { count: 1 }),
       toolCall('v2', 'draft_revert', { count: 5 }), // 越界
       toolCall('v3', 'draft_revert', { count: 0 }), // 非正整数
@@ -801,10 +822,10 @@ test('#309 ② draft_revert 的部分撤销与边界：count 只丢尾部 N 条�
     ]])
     const r = await h.engine.growth2.coachDraft('数学', seam)
     const all = receipts.join('\n---\n')
-    assert.match(all, /已撤销 1 条未发布增量：add_node\(乙台阶\)。\n水位 0\/1；未发布增量 1 条/, 'count 只丢尾部 N 条')
-    assert.match(all, /count=5 超过未发布增量 1 条/, '越界可读拒收')
+    assert.match(all, /已撤销 1 条未发布增量：set_pre\(用导数解决优化问题\)。\n水位 0\/2；未发布增量 2 条/, 'count 只丢尾部 N 条')
+    assert.match(all, /count=5 超过未发布增量 2 条/, '越界可读拒收')
     assert.match(all, /count 必须是正整数/, '非正整数拒收')
-    assert.match(all, /已撤销 1 条未发布增量：add_node\(甲台阶\)。\n水位 0\/0；未发布增量 0 条/, '省略 count = 回到水位')
+    assert.match(all, /已撤销 2 条未发布增量：add_node\(甲台阶\)、add_node\(乙台阶\)。\n水位 0\/0；未发布增量 0 条/, '省略 count = 回到水位')
     assert.equal(r.unpublished_ops, 0)
     assert.equal(draftDocIn(h).ops.length, 0)
     assert.equal(draftDocIn(h).note, undefined, '回到水位 = 本批作废，note 一并清')
@@ -827,12 +848,12 @@ test('#309 水位：一批发布成功后同会话再开一批照常（基图已
     await seeded(h)
     const { seam } = receiptFake([[
       patchCall('p1', [
-        { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '前进', },
+        { op: 'add_node', name: '平均变化率', pre: ['认识变化率'], est: 15, operator: '新增', },
         { op: 'set_pre', node: '用导数解决优化问题', pre: ['平均变化率'] },
       ], {  note_reason: '第一级台阶', note_target_endpoints: ['用导数解决优化问题'] }),
       toolCall('f1', 'draft_finish'),
       patchCall('p2', [
-        { op: 'add_node', name: '瞬时速度', pre: ['平均变化率'], est: 15, operator: '前进', },
+        { op: 'add_node', name: '瞬时速度', pre: ['平均变化率'], est: 15, operator: '新增', },
         { op: 'set_pre', node: '用导数解决优化问题', pre: ['瞬时速度'] },
       ], {  note_reason: '第二级台阶', note_target_endpoints: ['用导数解决优化问题'] }),
       toolCall('f2', 'draft_finish'),
@@ -886,6 +907,26 @@ test('#320 单站写件面：弧建议走 draft_arc，draft_patch/draft_note 不
     'draft_patch 不再带弧建议参数（#320：提成 draft_arc）')
   assert.ok(!propsOf('draft_note').includes('serves_arc') && !propsOf('draft_note').includes('repaint_suggest'),
     'draft_note 不再带弧建议参数')
-  assert.deepEqual(propsOf('draft_arc').sort(), ['repaint_suggest', 'serves_arc'], 'draft_arc 只带弧建议两参（serves_arc / repaint_suggest）')
+  assert.deepEqual(propsOf('draft_arc').sort(), ['repaint_suggest', 'serves_arc'], 'draft_arc 带弧建议两参（可选，确知才给）')
 })
 
+// ---- #335 刀②③：findings（刀④必答门已随「回归可选」裁决退场，draft_arc 回归可选）----
+
+test('#335 刀②③：draftFindings 的 est 失配与单链批 finding（触发/不触发两态）', () => {
+  const { nodes, graph } = fixture()
+  const base = { mints: [], entries: [], graph, invokes: new Map(), confusables: [], anchors: [] }
+  // 单链批（丁→戊 逐条恰接上一条、无分叉）+ est 失配（difficulty 4 配 est 20）
+  const chain = draftFindings({ ...base, batchAdds: [
+    { op: 'add_node', name: '丁', pre: ['丙'], operator: '新增', difficulty: 4, est: 20 },
+    { op: 'add_node', name: '戊', pre: ['丁'], operator: '新增', est: 15 },
+  ] })
+  assert.ok(chain.some(s => s.includes('丁')), 'est 失配 finding 触发：' + chain.join('|'))
+  assert.ok(chain.some(s => s.includes('单链')), '单链批 finding 触发')
+  // 分叉批不触发单链；difficulty/est 匹配不触发失配
+  const fork = draftFindings({ ...base, batchAdds: [
+    { op: 'add_node', name: '丁', pre: ['丙'], operator: '新增', difficulty: 2, est: 40 },
+    { op: 'add_node', name: '戊', pre: ['丙'], operator: '新增' },
+  ] })
+  assert.ok(!fork.some(s => s.includes('单链')), '分叉批不报单链')
+  assert.ok(!fork.some(s => s.includes('丁')), '难度与 est 匹配不报失配')
+})
