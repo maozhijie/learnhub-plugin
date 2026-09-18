@@ -458,6 +458,33 @@ function conceptRefsOfOps(ops: EditOp[]): ConceptRef[] {
   return refs
 }
 
+/** 难度步进门（#335 刀②）：add_node 声明了 difficulty 且其直接前置的难度可解析时，
+ * 与前置最大难度步进 >1 拒收——「难度渐进」从提示词软约束升为受理硬门（学习曲线
+ * 2→4 两连跳的实证根因）。前置难度取「基图 difficultyOf + 本批已声明」的并集：
+ * 批内链条（insert_prereq_chain 展开后）的中间节点经批内声明解析，不需先落图。
+ * 任一侧难度缺席（未标注）不参与判定——门只执法两端都可解析的边。 */
+export function difficultyStepGateErrors(ops: EditOp[], graph: Graph): string[] {
+  const diffOf = new Map<string, number>()
+  for (const n of graph.names) {
+    const d = graph.difficultyOf[n]
+    if (d !== undefined) diffOf.set(n, d)
+  }
+  const errors: string[] = []
+  for (const [i, op] of ops.entries()) {
+    if (op.op === 'add_node' && op.difficulty !== undefined && op.name) diffOf.set(op.name, op.difficulty)
+  }
+  for (const [i, op] of ops.entries()) {
+    if (op.op !== 'add_node' || op.difficulty === undefined) continue
+    const pres = (op.pre ?? []).map(p => diffOf.get(p)).filter((d): d is number => d !== undefined)
+    if (!pres.length) continue
+    const maxPre = Math.max(...pres)
+    if (op.difficulty - maxPre > 1) {
+      errors.push(`ops.${i}(add_node ${op.name}): 难度步进越档（前置最大难度 ${maxPre} → 本节点 ${op.difficulty}，步进 >1）——相邻节点 difficulty 每步至多 +1（学习曲线门）；内容确实需要陡升时拆中间台阶分批长`)
+    }
+  }
+  return errors
+}
+
 /** 巩固门（#145 受理门校验；#327 逐条目化）：operator=巩固 的**条目**是综合收束——
  * 该 add_node 的概念引用（teaches/assumes/误解）只许引已教概念（既有图 teaches 并集），
  * 不产新概念；不走复诊由边轻纪律键拒收与 #146 结算语义共同保证（巩固条目没有复诊
@@ -681,6 +708,7 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
     ...conceptReferenceErrors(conceptRefsOfOps(spec.ops), namesOf([...ctx.entries, ...mints])),
     ...endpointGuardErrorsOf(spec, ctx.anchors),
     ...consolidationGateErrors(spec.ops, ctx.graph, ctx.entries),
+    ...difficultyStepGateErrors(spec.ops, ctx.graph),
     ...selfContradictionErrors(spec.ops, [...ctx.entries, ...mints]),
   ]
   // 误解封顶（#313 C9/C12）：增量判据 + canonical 归一，落在登记表现行条目（+ 本批铸名）上。

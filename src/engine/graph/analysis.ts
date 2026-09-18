@@ -9,7 +9,7 @@ import type { Store } from '../store.ts'
 import type { ConceptEntry } from '../concepts/concepts.ts'
 import { resolveConcept } from '../concepts/concepts.ts'
 import { effectiveStage } from './audit.ts'
-import { graphHealthScore, estSpreadNote } from './health.ts'
+import { graphHealthScore, estSpreadNote, widthNote } from './health.ts'
 import { jumpCandidates } from './quality.ts'
 import type { JumpCandidate } from './quality.ts'
 import { parseDay, daysBetween } from '../infra/dates.ts'
@@ -302,7 +302,7 @@ export async function analyzeGraph(
     unreachable,
     bottlenecks,
     lapse_hotspots: lapseHotspots,
-    health: { ...graphHealthScore(graph, { endpoints }), est_note: estSpreadNote(graph) },
+    health: { ...graphHealthScore(graph, { endpoints }), est_note: estSpreadNote(graph), width_note: widthNote(graph) },
     suggestions: {
       concept_growth: rankedGrowth,
       missing_pre: missingPre,

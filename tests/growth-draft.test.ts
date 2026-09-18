@@ -112,6 +112,42 @@ test('editGateErrors：概念未铸名/终点接线义务被拦；全过则空',
   assert.deepEqual(ok, [])
 })
 
+// ---- 难度步进门（#335 刀②）：difficulty 与直接前置最大难度步进 >1 拒收 ----
+
+test('difficultyStepGateErrors：步进 >1 拒收；批内链/缺席侧不判；门序列同拦', async () => {
+  const { difficultyStepGateErrors } = await import('../src/engine/coach/proposals.ts')
+  const { nodes, graph } = fixture()
+  nodes[0]!.difficulty = 2
+  const withDiff = new Graph(nodes)
+  // 基图难度 2 → 新节点难度 4 = 越档
+  const jump: EditOp[] = [{ op: 'add_node', name: '丁', pre: ['甲'], operator: '前进', difficulty: 4 }]
+  const errs = difficultyStepGateErrors(jump, withDiff)
+  assert.equal(errs.length, 1)
+  assert.match(errs[0]!, /步进越档/)
+  // 步进 =1 合法
+  assert.deepEqual(difficultyStepGateErrors([{ op: 'add_node', name: '丁', pre: ['甲'], operator: '前进', difficulty: 3 }], withDiff), [])
+  // 前置难度缺席不判
+  assert.deepEqual(difficultyStepGateErrors([{ op: 'add_node', name: '丁', pre: ['乙'], operator: '前进', difficulty: 5 }], withDiff), [])
+  // 批内链：新节点戊接在批内丁（难度 3）上、跳到 5 = 越档（丁未落图也可解析）
+  const batchChain: EditOp[] = [
+    { op: 'add_node', name: '丁', pre: ['甲'], operator: '前进', difficulty: 3 },
+    { op: 'add_node', name: '戊', pre: ['丁'], operator: '前进', difficulty: 5 },
+  ]
+  const chainErrs = difficultyStepGateErrors(batchChain, withDiff)
+  assert.equal(chainErrs.length, 1)
+  assert.match(chainErrs[0]!, /戊/)
+  // 门序列同拦：editGateErrors 序列含难度门
+  const anchors: EndpointAnchor[] = [{
+    endpoint: '终点甲', goal_type: 'capability', declared: '2026-09-16',
+    worksheet: [], seed_nodes: [], start_basis: {},
+  }]
+  const gateErrs = await editGateErrors(
+    { course: '数学', ops: jump, note: { reason: 'r', target_endpoints: ['终点甲'] } },
+    { nodes, graph: withDiff, entries: [], anchors },
+  )
+  assert.ok(gateErrs.some(e => e.includes('步进越档')), gateErrs.join('\n'))
+})
+
 // ---- 站级：脚本化假 agent ----
 type LoopTurn = { text: string; toolCalls?: Array<{ id: string; name: string; arguments: string }> }
 function scriptFake(sessions: Array<string | LoopTurn[]>) {

@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { Graph } from '../src/engine/graph/graph.ts'
-import { graphHealthScore, estSpreadNote } from '../src/engine/graph/health.ts'
+import { graphHealthScore, estSpreadNote, widthNote } from '../src/engine/graph/health.ts'
 import type { GNode } from '../src/engine/types.ts'
 
 /** 最小 GNode 工厂：必填字段补默认值（存储塌缩后图 = GNode 声明序数组）。 */
@@ -46,6 +46,38 @@ test('S3.5: est 分布拉开（p10-p90 宽）→ 无提示', () => {
   const estOf: Record<string, number> = {}
   for (let i = 0; i < 300; i++) { names.push(`n${i}`); estOf[`n${i}`] = 5 + Math.floor(i / 6) } // 5..54 均匀铺开
   assert.equal(estSpreadNote(spreadGraph(names, estOf)), null)
+})
+
+// ---- S77 图宽度读数（#335 刀③；advisor-only，与 estSpreadNote 同族） ----
+
+function widthGraph(names: string[], depth: Record<string, number>): Parameters<typeof widthNote>[0] {
+  return { names, depth } as never
+}
+
+function chainGraph(total: number, depthOf: (i: number) => number): Parameters<typeof widthNote>[0] {
+  const names: string[] = []
+  const depth: Record<string, number> = {}
+  for (let i = 0; i < total; i++) { names.push(`n${i}`); depth[`n${i}`] = depthOf(i) }
+  return { names, depth } as never
+}
+
+test('S77: 单链图（同层并行度 ≤2 且深度占比 ≥0.8）→ 提示宽度不足', () => {
+  // 15 节点纯单链：maxWidth=1，depth 占比 100%
+  const note = widthNote(chainGraph(15, i => i))
+  assert.ok(note, '单链图应返回提示')
+  assert.match(note!, /宽度不足/)
+})
+
+test('S77: 有并行分叉（同层 ≥3 且深度占比 <0.8）→ 无提示', () => {
+  // 15 节点分 5 层、每层 3 节点：maxWidth=3，占比 33%
+  const note = widthNote(chainGraph(15, i => Math.floor(i / 3)))
+  assert.equal(widthNote(widthGraph([], {})), null)
+  assert.equal(note, null)
+})
+
+test('S77: 节点过少不判（小图天然窄）', () => {
+  const note = widthNote(chainGraph(6, i => i))
+  assert.equal(note, null)
 })
 
 test('S3.5: est 覆盖率过低或无 est 不提示（欠标注 ≠ 压缩）', () => {

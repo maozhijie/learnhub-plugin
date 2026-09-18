@@ -46,6 +46,33 @@ export function estSpreadNote(g: EstSpreadSource): string | null {
   return `⚠ est 分布压缩（p10-p90 = ${p10}-${p90} 分钟，仅差 ${p90 - p10} 分钟）：est 已成"档位感常数"，对内容规模无区分度——下次图标注让 est 跨更宽取值`
 }
 
+/** 图宽度读数输入最小形状（Graph 兼容）。 */
+export interface WidthSource {
+  names: string[]
+  depth: Record<string, number>
+}
+
+/**
+ * 图宽度读数（#335 刀③）：图退化成直线的读侧信号——同层并行度（同一 depth 层的
+ * 最多节点数）与最长单链深度占比（max depth ÷ 节点数）。与 `estSpreadNote` 同族：
+ * 仅提示不改健康分。节点过少（< 12）不判——小图天然窄，提示是噪声。返回 null = 无提示。
+ */
+export function widthNote(g: WidthSource): string | null {
+  const total = g.names.length
+  if (total < 12) return null
+  const byDepth = new Map<number, number>()
+  let maxDepth = 0
+  for (const n of g.names) {
+    const d = g.depth[n] ?? 0
+    byDepth.set(d, (byDepth.get(d) ?? 0) + 1)
+    if (d > maxDepth) maxDepth = d
+  }
+  const maxWidth = Math.max(0, ...byDepth.values())
+  const chainRatio = maxDepth > 0 ? maxDepth / total : 1
+  if (maxWidth >= 3 && chainRatio < 0.8) return null
+  return `⚠ 图宽度不足（同层并行度 = ${maxWidth}，最长单链深度占比 ${Math.round(chainRatio * 100)}%）：图在沿单链生长、缺少并行分叉——下一批生长让多条前置已就绪的分支同时推进`
+}
+
 /** 图谱健康分：score ∈ [0,100]；breakdown 各项均为 0-20 的原始得分。
  * endpoints：终点节点名集（ADR-0055 口径豁免，#239 多终点化）——终点是方向标记不是
  * 课程节点，前置完备项的空降清单与其分母都不计它们（终点 pre 接线与否是方向不变式的事，

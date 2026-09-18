@@ -714,3 +714,11 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 受控面 | **G5 同提交迁移**：content.ts 1557→1575、output-contracts.ts 753→754；templates.ts 在白名单（净减 21 行不卡基线）；typeErrors 0/0 | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |
 | 已知边界 | **quality-review 的 templateVersion 语义收窄**：新调用记录的拼装 prompt 不再带标记 → `templateVersionOf` 归 null（历史语料照旧可认）；版本对照视图对新记录单列「无版本标记」 | `src/engine/content/quality-review.ts`（未改，语义自然收窄） | `tests/quality-review.test.ts` 既有用例绿（合成串锚不变） |
 | 过门 | 全量 npm test 1387 pass / 0 fail；`prompt-bump check` 真历史 45 提交 / 14 bump 无违规；replay/compare 未跑（本次模板散文语义零变化，标记与头注非生成指令面） | — | `.scratch/fulltest-marker.log` |
+
+## 学习图形态质量治理·刀②③先行（#335，2026-09-18，散文冻结期内）：行为变更登记
+
+| 类别 | 变更 | 代码 | 测试 |
+|---|---|---|---|
+| 行为 | **难度步进门（刀②，硬门）**：add_node 声明 difficulty 且直接前置难度可解析时步进 >1 拒收（前置难度取基图 + 本批已声明并集，缺席侧不判）；editGateErrors 门序列收拢（propose/apply/草稿三处同调）。est 失配 findings 与刀①④等提示词散文修订完成后同刀落地 | `src/engine/coach/proposals.ts::difficultyStepGateErrors` | `tests/growth-draft.test.ts`（越档拒收/步进1放行/缺席不判/批内链/门序列同拦） |
+| 行为 | **图宽度读数（刀③，advisor-only）**：`widthNote` 同层并行度 + 最长单链深度占比双读数，与 estSpreadNote 同族不改健康分；随 analyzeGraph 的 health 块透出（`width_note` 字段）；教练上下文包注入与 draftFindings 单链批 finding 等提示词散文修订完成后同刀落地 | `src/engine/graph/health.ts`、`src/engine/graph/analysis.ts` | `tests/health.test.ts`（单链提示/分叉放行/小图不判） |
+| 受控面 | **G5 同提交迁移**：proposals.ts 2010→2038、health.ts 105→132；typeErrors 基线同提交重写 | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |

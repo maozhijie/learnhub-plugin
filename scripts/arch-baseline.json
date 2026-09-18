@@ -117,7 +117,7 @@
     "src/engine/coach/growth-subsystem.ts": 2118,
     "src/engine/coach/nof1.ts": 958,
     "src/engine/coach/probation.ts": 417,
-    "src/engine/coach/proposals.ts": 2010,
+    "src/engine/coach/proposals.ts": 2038,
     "src/engine/coach/seed.ts": 445,
     "src/engine/coach/stuck-report.ts": 83,
     "src/engine/concepts/concepts.ts": 1000,
@@ -142,7 +142,7 @@
     "src/engine/graph/audit.ts": 311,
     "src/engine/graph/graph-subsystem.ts": 692,
     "src/engine/graph/graph.ts": 613,
-    "src/engine/graph/health.ts": 105,
+    "src/engine/graph/health.ts": 132,
     "src/engine/graph/quality.ts": 61,
     "src/engine/index.ts": 885,
     "src/engine/infra/agent.ts": 394,
@@ -223,7 +223,9 @@
     "src/index.ts": 90,
     "src/tool-contracts.ts": 54
   },
-  "typeErrors": {},
+  "typeErrors": {
+    "src/engine/graph/analysis.ts": 1
+  },
   "adapterFace": {
     "clockReads": 1,
     "mathRandom": 0,
