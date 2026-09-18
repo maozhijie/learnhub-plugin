@@ -127,7 +127,7 @@
     "src/engine/content/content-subsystem.ts": 1073,
     "src/engine/content/content.ts": 1575,
     "src/engine/content/error-cards.ts": 352,
-    "src/engine/content/output-contracts.ts": 763,
+    "src/engine/content/output-contracts.ts": 776,
     "src/engine/content/quality-audit.ts": 114,
     "src/engine/content/quality-review-report.ts": 222,
     "src/engine/content/quality-review.ts": 592,

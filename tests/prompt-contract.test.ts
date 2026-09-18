@@ -149,29 +149,33 @@ test('C3: 错误对比卡模板——三选一、mine 忠实错法、候选照�
 
 // ---- v1 罗盘初画契约（#143 / ADR-0033 透明度装置）：非承诺草图 + 批注软输入 ----
 
-test('#143 / #316: 罗盘初画模板 v4——罗盘站程度驱动、非承诺措辞、批注软输入、路线条目输出契约', () => {
+test('#143 / #316: 罗盘初画模板 v5——统筹规划者人设、能力面完整覆盖、深度档必标、候选标注退场', () => {
   const tpl = Content.PROMPT_KINDS['罗盘初画']!
-  assert.ok(verOf('罗盘初画') >= 4, '罗盘初画 应带版本线 v4+（#316 升格）')
+  assert.ok(verOf('罗盘初画') >= 5, '罗盘初画 应带版本线 v5+（用户 v5 人工修订）')
   assert.match(tpl, /非承诺/, '非承诺措辞在册（罗盘透明度装置；手工版未再写「不是承诺」一句）')
-  assert.match(tpl, /软输入/, '批注区是教练软输入')
-  assert.match(tpl, /提议非指令/, '批注提议非指令锚点')
+  assert.match(tpl, /统筹规划者/, '人设句（用户 v5：领域大师→统筹规划者）')
+  assert.match(tpl, /宁多勿少/, '能力面完整覆盖硬要求（用户 v5）')
+  assert.doesNotMatch(tpl, /软输入/, '批注软输入条款已随用户 v5 从初画退场（归重画正文）')
   assert.match(tpl, /不带 "## " 标题/, '输出不得携带段级标题（段落结构保护）')
   assert.match(tpl, /n 个阶段条目/, '路线条目数量锚（手工版：不再钉死 3–7）')
-  assert.match(tpl, /（候选）/, '未落图台阶一律标候选')
+  assert.doesNotMatch(tpl, /（候选）/, '（候选）标注已随用户 v5 退场（未落图即候选）')
   assert.match(tpl, /不写时间估算|不写进度百分比/, '零时间/进度承诺')
   assert.match(tpl, /模型推演，非承诺/, 'ETA 才是推演参照且措辞锁死')
   // #316 / ADR-0099 罗盘站升格：程度驱动口径取代节点名钉扎与工作表/目录规训
   assert.match(tpl, /程度驱动/, '每条阶段说得出推进程度声明的哪个维度')
-  assert.match(tpl, /深度档/, '可选深度档字段（知道/会用/能教）')
+  assert.match(tpl, /深度档/, '深度档字段（用户 v5 起必标）')
   assert.doesNotMatch(tpl, /块工作表/, '块工作表约束已退役（C4 裁决）')
   assert.doesNotMatch(tpl, /当确定路标/, '节点名钉扎已退役（回声病的规则侧根因）')
   assert.doesNotMatch(tpl, /不罗列教科书目录/, '规训式禁令已退役（改为程度驱动口径）')
   // 罗盘重画族：重估语境与初画分键（#316 / ADR-0099 两族）
   const repaint = Content.PROMPT_KINDS['罗盘重画']!
-  assert.ok(verOf('罗盘重画') >= 1)
+  assert.ok(verOf('罗盘重画') >= 2, '罗盘重画 应带版本线 v2+（用户 v2 人工修订）')
   assert.match(repaint, /重估重画/, '重估不是例行刷新')
   assert.match(repaint, /进度推进本身不构成重画理由/, '进度不触发重画')
   assert.match(repaint, /不改写已学事实/, '改弧不回滚图、不重置掌握度')
+  assert.match(repaint, /软输入/, '批注软输入条款（用户 v2：从初画移入重画正文）')
+  assert.match(repaint, /提议非指令/, '批注提议非指令锚点')
+  assert.match(repaint, /宁多勿少/, '能力面完整覆盖硬要求（与初画 v5 同批）')
 })
 
 // ---- v1 教练执行契约（#320 单站回路）：方向裁决 + 落地同站、算子集含停摆、draft_note 零操作收束、draft_arc 弧建议、补丁纪律、弧建议边界 ----

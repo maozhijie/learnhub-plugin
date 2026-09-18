@@ -2,7 +2,7 @@
 
 架构决策记录（Architecture Decision Record）。**每条只记决策与理由，不是施工日志**——写作规范（该写什么、不该写什么、尺寸纪律）见 [`docs/agents/domain.md`](../agents/domain.md) 的「ADR 写作规范」段。
 
-**当前最高号：0104。**编号是顺序号，取号前 `git fetch origin` + `ls docs/adr/`，取最大号 + 1，并在**同一次提交**里把新条目加进本表。并行会话撞号时**后落地者改号**并留取号说明（先例见 [ADR-0093](./0093-engine-domain-folders.md)）。
+**当前最高号：0105。**编号是顺序号，取号前 `git fetch origin` + `ls docs/adr/`，取最大号 + 1，并在**同一次提交**里把新条目加进本表。并行会话撞号时**后落地者改号**并留取号说明（先例见 [ADR-0093](./0093-engine-domain-folders.md)）。
 
 | 编号 | 标题 |
 |---|---|
@@ -110,3 +110,4 @@
 | [0102](./0102-audit-action-list-mandatory.md) | 审计由非阻建议升为强制行动清单：生成/修复两档思考 |
 | [0103](./0103-call-record-task-grouped.md) | LLM 调用记录：生成语料升级为按任务成组的完整请求/响应存档 |
 | [0104](./0104-growth-shape-contraction.md) | 学习图形态收缩：算子二值化、收束字段化与弧建议节奏 |
+| [0105](./0105-concept-fields-as-gate-input.md) | 概念字段升格为门禁输入：概念充分性门（取代 ADR-0084 §④⑤） |

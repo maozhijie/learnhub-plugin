@@ -136,7 +136,7 @@ test('AC1 起草落罗盘脚手架；金样本初画全链：单次 deep 调用�
     const painted = await engine.growth2.compassPaint('数学', fake)
     assert.equal(fake.calls.length, 1, '调用数基线：初画恒一次调用（无修复轮）')
     assert.equal(fake.calls[0]!.effort, 'deep')
-    assert.match(fake.calls[0]!.prompt, /你是 learnhub 学习系统的领域大师/)
+    assert.match(fake.calls[0]!.prompt, /你是 learnhub 学习系统的统筹规划者/, '罗盘初画人设句（用户 v5 改写）')
     assert.match(fake.calls[0]!.prompt, /用导数解决优化问题/)
     assert.match(fake.calls[0]!.prompt, /认识变化率/)
     assert.equal(painted.route_lines, GOLD_ROUTE.split('\n').length)

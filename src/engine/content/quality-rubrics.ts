@@ -306,7 +306,7 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
           {
             id: '朝向由终点携带', criterion: '朝学习者已声明的终点推进：新增必声明 target_endpoints（可多个，交汇优先），不为一次性规划铺满全图',
             evidence: '引算子与朝向声明、图面终点对照；缺朝向声明或一次铺满的点名',
-            source: '模板:教练执行', anchor: '方向由终点携带',
+            source: '模板:教练执行', anchor: '根据罗盘作为对终点的专业说明指导',
           },
           {
             id: '台阶粒度', criterion: '每个节点是一次独立学习行为单元、30 分钟量级，est 诚实申报；节点名与 intent 用动作句',
