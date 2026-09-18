@@ -600,6 +600,58 @@ export function misconceptionGateErrors(
   return misconceptionCapErrorsOfCounts(counts(nodes), counts(base))
 }
 
+/** 在册条目底细工厂（裁决 7 / ADR-0089 修订）：撞名现场把条目底细摆到模型面前——
+ * canonical + 定义（缺席显式「（无定义）」并注明判据不足）+ teaches/assumes 足迹摘要
+ * （图内哪些节点教/假设它，经别名精确解析归一）。零 IO：图与登记表由调用方装载。
+ * invokes 分布未入底细（门零 IO 约束，待有消费证据再接，票面勘误已如实登记）。 */
+export function conceptEntryDetailOf(
+  entries: ConceptEntry[], graph: Graph,
+): (owner: string) => string {
+  const canon = (raw: string): string | null => resolveConcept(entries, raw)?.canonical ?? null
+  const footprint = (owner: string): string[] => {
+    const out: string[] = []
+    for (const [concept, nodes] of [...Object.entries(graph.taughtByOf), ...Object.entries(graph.assumedByOf)]) {
+      if (canon(concept) !== owner) continue
+      for (const n of nodes) if (!out.includes(n)) out.push(n)
+    }
+    return out
+  }
+  return owner => {
+    const e = resolveConcept(entries, owner)
+    const def = e?.definition ?? '（无定义——判据不足，缺省动作：不得引用，改铸消歧名）'
+    const fp = owner ? footprint(owner) : []
+    return `canonical「${owner}」·定义：${def}·足迹：${fp.length ? `teaches/assumes 节点 [${fp.join('、')}]` : '本课程图内暂无（teaches/assumes 均无）'}`
+  }
+}
+
+/** 跨课首引复核提示（裁决 8 / ADR-0089 修订，纯读侧派生）：本批 ops 引用（teaches/
+ * assumes/误解）的在册概念在本课程图内足迹为空（本课程首次引入）→ 非阻提示，随
+ * 受理回执 warns 带出。零落盘、天然去重（落盘后足迹非空自消）；**不得混入 errors**
+ * ——混入即被读成拒收并触发重裁。文案三段：语义现状 + 豁免句 + 仅语义不同时的出口。 */
+export function crossCourseFirstRefWarnings(
+  entries: ConceptEntry[], graph: Graph, refs: ConceptRef[],
+): string[] {
+  const canon = (raw: string): string | null => resolveConcept(entries, raw)?.canonical ?? null
+  const footprintEmpty = (owner: string): boolean => {
+    for (const [concept] of [...Object.entries(graph.taughtByOf), ...Object.entries(graph.assumedByOf)]) {
+      if (canon(concept) === owner) return false
+    }
+    return true
+  }
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const ref of refs) {
+    const owner = canon(ref.concept)
+    if (!owner || seen.has(owner)) continue
+    if (!footprintEmpty(owner)) continue
+    seen.add(owner)
+    const e = resolveConcept(entries, owner)
+    const def = e?.definition ?? '（无定义）'
+    out.push(`跨课首引复核（非阻，无需改批）：「${owner}」·定义：${def} 在本课程图内暂无足迹（无节点 teaches/assumes 它，本课程首次引入）——若本批内容真实调用的就是它，无需任何改动，本条只是可见性留痕；仅当语义确实不同时，按「基名（限定语）」规范改铸消歧名`)
+  }
+  return out
+}
+
 /** edit 受理门全序列收拢（#271 / ADR-0088 中心裁决「门同源」）：结构重放 / 概念对表 /
  * 终点锚保护 / 巩固门 / 生长闸门——proposeEdit / applyEdit / 草稿内核**三处同调**，
  * 草稿通过 = 门通过按构造成立。上下文由调用方装载（entries = 登记现行条目，需铸名
@@ -611,6 +663,9 @@ export interface EditGateCtx {
   anchors: EndpointAnchor[]
   /** 本批铸名块（对表用；与 entries 撞名由 mintConflicts 硬拒）。 */
   mints?: ConceptEntry[]
+  /** 撞名底细工厂（裁决 7）：调用方提供时拒收行附在册条目底细（canonical/定义/足迹）。
+   * 门零 IO——由有图的调用方用 conceptEntryDetailOf 装载；缺席 = 旧形拒收行。 */
+  entryDetailOf?: (owner: string) => string
   growthGate?: (spec: EditProposalSpec) => Promise<string[]>
   /** apply 侧审计门（#313 B5）：返回审计 ERROR 行，空 = 放行。propose 与草稿试算都接它，
    * 使「审计存在 ERROR」这件事在**第一次提案/第一次补丁**就可见——否则模型要烧到
@@ -622,7 +677,7 @@ export async function editGateErrors(spec: EditProposalSpec, ctx: EditGateCtx): 
   const mints = ctx.mints ?? []
   const errors = [
     ...simulateOps(ctx.nodes, ctx.graph, spec.ops),
-    ...mintConflicts(mints, ctx.entries),
+    ...mintConflicts(mints, ctx.entries, ctx.entryDetailOf),
     ...conceptReferenceErrors(conceptRefsOfOps(spec.ops), namesOf([...ctx.entries, ...mints])),
     ...endpointGuardErrorsOf(spec, ctx.anchors),
     ...consolidationGateErrors(spec.ops, ctx.graph, ctx.entries),
@@ -891,8 +946,10 @@ export class GraphProposals {
     const nodes = await new GraphStore(this.paths, this.paths.courseRoot(course.root), this.fs).load()
     const graph = new Graph(nodes)
     const entries = await this.concepts.load() // 登记表 Broken 在此抛错，apply 不落盘
-    // 非阻提示照旧（#264 近似名预检与量级告警）；错误面统一走 editGateErrors（门同源，ADR-0088）
+    // 非阻提示照旧（#264 近似名预检与量级告警）+ 跨课首引复核（裁决 8，非阻 findings，
+    // 不得混入 errors）；错误面统一走 editGateErrors（门同源，ADR-0088）
     warns.push(...nearNameWarnings(nearNameCandidates(spec.concepts ?? [], entries)))
+    warns.push(...crossCourseFirstRefWarnings(entries, graph, conceptRefsOfOps(spec.ops)))
     if (spec.concepts?.length) warns.push(...conceptMagnitudeWarnings(applyConceptMints(entries, spec.concepts).entries))
     const anchors = await readAnchors(this.paths.anchorPath(course.root), this.fs)
     // 门序列 = editProposalGateErrors 的内部两步（validateEditProposal → editGateErrors）；此处
@@ -900,6 +957,7 @@ export class GraphProposals {
     const gateErrors = await editGateErrors(spec, {
       nodes, graph, entries, anchors,
       mints: spec.concepts ?? [], growthGate: this.growthGate,
+      entryDetailOf: conceptEntryDetailOf(entries, graph),
       ...(this.auditGate ? { auditGate: () => this.auditGate!(course.name) } : {}),
     })
     if (gateErrors.length) {
@@ -955,6 +1013,7 @@ export class GraphProposals {
       nodes, graph, entries: mergedEntries,
       anchors: await readAnchors(this.paths.anchorPath(root), this.fs),
       growthGate: this.growthGate,
+      entryDetailOf: conceptEntryDetailOf(mergedEntries, graph),
     })
     if (gateErrors.length) {
       throw new Error(`[apply-edit] 门复验拒绝写入（提案已不适用当前图或门状态已变，被拒绝可重提）。\n${gateErrors.map(e => `  ✗ ${e}`).join('\n')}`)

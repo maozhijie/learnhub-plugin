@@ -153,7 +153,7 @@ import type { LlmToolCall, LlmToolSpec } from '../infra/llm.ts'
 import { hasReadyContent } from '../vault/notes.ts'
 import { appendProbationEntry, foldProbation, growthGate, growthRates, learningDaysOf, readProbationLedger, recheckDue, recheckVerdict, RECHECK_METRICS } from './probation.ts'
 import type { RecheckPrereg } from './probation.ts'
-import { addNodeCountOf, applyOpsToNodes, editGateErrors, editProposalGateErrors, EDIT_OPS, growthOperatorsOf, operatorFoldOf, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
+import { addNodeCountOf, applyOpsToNodes, conceptEntryDetailOf, editGateErrors, editProposalGateErrors, EDIT_OPS, growthOperatorsOf, operatorFoldOf, replayDraft, sealedDecisionOf, validateEditProposal } from './proposals.ts'
 import type { DraftDiff, EditGateCtx, EditOp, EditProposalSpec, GrowthNote } from './proposals.ts'
 import {
   GROWTH_DRAFT_MARKER, deleteDraft, draftDirOf, draftFindings, draftPathOf, expandPatchOps, findActiveDraft, saveDraft,
@@ -1233,12 +1233,14 @@ export class GrowthSubsystem {
       mints: ConceptEntry[] = doc.concepts,
     ): Promise<{ nodes: Awaited<ReturnType<GraphStore['load']>>; graph: Graph; ctx: EditGateCtx }> => {
       const { nodes, graph } = pre ?? await draftNodesOf()
+      const gateEntries = await entriesOf()
       return {
         nodes, graph,
         ctx: {
-          nodes, graph, entries: await entriesOf(),
+          nodes, graph, entries: gateEntries,
           anchors: await readAnchors(this.e.paths.anchorPath(root), this.e.fs),
           mints,
+          entryDetailOf: conceptEntryDetailOf(gateEntries, graph),
           growthGate: async s => this.growthGateErrors(s),
           auditGate: () => this.e.auditGateErrors(c.name),
         },

@@ -692,3 +692,13 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 行为 | **消费面签名迁移（行为零改动）**：graph-subsystem / growth-subsystem / content-subsystem / question-bank / coach-tools / proposals / vault-prior（queryEntriesFor 去 root；PriorSearchRequest.courseRoot 仅作「无课程不扩词」门，扩词行为不变）/ spike 夹具 / helpers/drafted | 上列 src 文件 | 全量既有测试绿；`tests/vault-prior.test.ts`、`tests/obs-t2-content-bank.test.ts`、`tests/obs-t3-graph-coach.test.ts` |
 | 模型面 | **工具描述与存储形状对齐**：growth_batch / concept_merge / concept_merge_candidates / quiz / course-create 五条 description 去「课程根/课程级」措辞 | `src/commands/图谱.ts`、`学习.ts`、`题库.ts` | `tests/fixtures/host-tools-snapshot.json`（同提交迁移）、`tests/host-runtime.test.ts`、`tests/commands.test.ts` |
 | 受控面 | **G5 同提交迁移**：concepts.ts 953→955、paths.ts 201→202、data-check.ts 992→990；typeErrors 0/0 | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |
+
+## 概念身份跨课程化·刀B 呈现层与正名（#286 / ADR-0089 修订裁决 7–10，2026-09-18）：行为变更登记
+
+| 类别 | 变更 | 代码 | 测试 |
+|---|---|---|---|
+| 行为 | **撞名回执带底细（裁决 7）**：mintConflicts 增可选 detailOf，拒收行附在册条目底细（canonical + 定义〔缺席显式「（无定义）」并注明判据不足〕+ teaches/assumes 足迹摘要）；随行附出口三选一 + 消歧名命名规范（裁决 10，只进回灌文案，零提示词变更）；propose/apply/草稿三处门同调装载（conceptEntryDetailOf，零 IO）；invokes 分布未入底细（门零 IO 约束，待有消费证据再接） | `src/engine/concepts/concepts.ts`、`src/engine/coach/proposals.ts`、`src/engine/coach/growth-subsystem.ts::gateCtxOf` | `tests/concept-governance.test.ts`（#286 三例：底细/出口/判据） |
+| 行为 | **跨课首引复核提示（裁决 8，非阻）**：proposeEdit 受理回执 warns 增 crossCourseFirstRefWarnings——本批 ops 引用的在册概念在本课程图内足迹为空（首引）即提示；纯读侧派生、零落盘、天然去重；不进 errors 不触发修复轮；文案三段（现状 + 豁免句 + 仅语义不同时的出口） | `src/engine/coach/proposals.ts` | `tests/concept-governance.test.ts`（非阻受理 + 落盘后自消） |
+| 行为 | **正名（裁决 9，人审直动作）**：recanonicalizeConceptEntries 纯函数 + ConceptRegistry.recanonicalize 执行面——canonical 降为别名（排首位）、新名升主，旧地址照旧解析、联合唯一不破（撞名错误不落盘）、幂等（已是主名）；不立提案 kind、AI 经 note.reason 一句话提议（零新机制） | `src/engine/concepts/concepts.ts` | `tests/concept-governance.test.ts`（换主名/别名升主/联合唯一/幂等/未在册） |
+| 行为 | **近似名提示判据化**：软提示改判据措辞（「指称的是不是同一物」），不枚举差异类型（视角/尺度等仅为例示） | `src/engine/concepts/concepts.ts::nearNameWarnings` | 既有近似名测试绿（非阻语义不变） |
+| 受控面 | **G5 同提交迁移**：concepts.ts 955→1000、proposals.ts 1951→2010、growth-subsystem.ts 2116→2118；typeErrors 0/0；零提示词模板变更（prompt-bump 不涉） | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |

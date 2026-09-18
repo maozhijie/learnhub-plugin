@@ -386,10 +386,11 @@ export function nearNameCandidates(
   return out.sort((a, b) => b.similarity - a.similarity || a.name.localeCompare(b.name) || a.existing.localeCompare(b.existing))
 }
 
-/** 近似名候选 → 可执行提示行（非阻；随受理回执回报，供提交方改名或说明）。 */
+/** 近似名候选 → 可执行提示行（非阻；随受理回执回报，供提交方改名或说明）。判据化两出口：
+ * 指称同一物（叫法差异本身不是障碍）就引用/收编；确实另一物就分立——不枚举差异类型。 */
 export function nearNameWarnings(candidates: NearNameCandidate[]): string[] {
   return candidates.map(c =>
-    `近似名提示（非阻）：铸名「${c.name}」与在册名字「${c.existing}」写法近似（相似度 ${c.similarity}）——同一个概念就引用既有名字，确实是另一个概念就在提案 reason 里写明区别；精确撞名照样硬拒`)
+    `近似名提示（非阻）：铸名「${c.name}」与在册名字「${c.existing}」写法近似（相似度 ${c.similarity}）——判据只有一条：指称的是不是同一物。是：引用既有名字（叫法不同可提请收编为别名）；不是：铸消歧名分立。精确撞名照样硬拒`)
 }
 
 // ---- 量级纪律（#264：与节点侧同规格的 WARN/ERROR 带）----
@@ -526,6 +527,27 @@ export function setConceptDeprecated(
   return { errors: [], entries: out }
 }
 
+/** 正名（裁决 9 / ADR-0089 修订，纯函数，人审决策的执行核，与 mergeConceptEntries 同层）：
+ * 在册条目 canonical 降为别名、newName 升主名——追加别名与换主名两种用法同一动作。
+ * 旧地址（原 canonical 与全部别名）照旧解析、名字联合唯一不破、旧裸名仍占名位不可再铸；
+ * 可逆（再一次正名即可反向）。newName 在册 = 错误不落盘（联合唯一硬门）；newName 与原
+ * canonical 相同 = 幂等成功。 */
+export function recanonicalizeConceptEntries(
+  entries: ConceptEntry[], name: string, newName: string,
+): { errors: string[]; entries: ConceptEntry[] } {
+  const idx = entries.findIndex(e => e.canonical === name || (e.aliases ?? []).includes(name))
+  if (idx < 0) return { errors: [`「${name}」不在登记表在册（canonical/别名精确匹配）——正名只对在册条目生效`], entries }
+  const target = entries[idx]!
+  if (newName === target.canonical) return { errors: [], entries } // 幂等：已是主名
+  if (namesOf(entries).has(newName)) {
+    return { errors: [`「${newName}」已在登记表在册（全部名字全库联合唯一）——正名的新主名不得撞名`], entries }
+  }
+  const rest = (target.aliases ?? []).filter(a => a !== newName)
+  const renamed: ConceptEntry = { ...target, canonical: newName, aliases: [target.canonical, ...rest] }
+  const out = entries.map((e, i) => (i === idx ? renamed : e))
+  return { errors: [], entries: out }
+}
+
 /** 概念引用对表（受理门）：未在册的名字逐个给出可执行错误行。known = 在册名字 ∪
  * 同批铸名。 */
 export function conceptReferenceErrors(
@@ -551,10 +573,20 @@ export function invokesTagged(q: { invokes?: unknown }): boolean {
   return typeof q.invokes === 'string' && !!q.invokes.trim()
 }
 
+/** 撞名出口提示（裁决 7/10 / ADR-0089 修订，静态文案随每条冲突行附送）：三选一 +
+ * 消歧名命名规范。判据驱动不枚举差异类型——指称同一物（看问题的角度、深浅、行文
+ * 习惯等，不一而足）就引用/收编；不指称同一物（哪怕共用同一名词）就分立。 */
+export const MINT_CONFLICT_EXITS = '出口三选一：① 同指一物就删掉铸名直接引用既有条目（叫法差异不是障碍，可经 note.reason 提请收编为别名）；② 不指称同一物就铸消歧名（规范：基名（限定语），全角括号、限定语取语义领域词不用课程名、禁嵌套超一级）；③ 确需换主名或收编别名，经 note.reason 一句话提请人审正名（AI 不得自行改在册名）'
+
 /** 铸名冲突校验（propose 受理门，从严）：铸名的任何名字撞上既有登记表（含撞自己
  * 的 canonical）或批内其他铸名都是冲突——引用既有名字直接用，吞并既有条目走人审
- * 合并；同条目幂等重写不是铸名的语义（那是 apply 侧 applyConceptMints 的事）。 */
-export function mintConflicts(mints: ConceptEntry[], existing: ConceptEntry[]): string[] {
+ * 合并；同条目幂等重写不是铸名的语义（那是 apply 侧 applyConceptMints 的事）。
+ * detailOf（选）= 撞名现场把在册条目底细摆到模型面前（裁决 7 成败点）：拒收行附
+ * canonical + 定义（缺席显式「（无定义）」并注明判据不足）与足迹摘要。 */
+export function mintConflicts(
+  mints: ConceptEntry[], existing: ConceptEntry[],
+  detailOf?: (owner: string) => string,
+): string[] {
   const ownerOf = ownerMapOf(existing)
   const errors: string[] = []
   const seenCanonical = new Set<string>()
@@ -566,7 +598,8 @@ export function mintConflicts(mints: ConceptEntry[], existing: ConceptEntry[]): 
     for (const name of [mint.canonical, ...(mint.aliases ?? [])]) {
       const owner = ownerOf.get(name)
       if (owner !== undefined) {
-        errors.push(`铸名冲突: 名字「${name}」已在登记表条目「${owner}」在册——引用既有名字即可，或对人审合并走 concept-merge`)
+        const detail = detailOf ? `\n    在册条目底细｜${detailOf(owner)}` : ''
+        errors.push(`铸名冲突: 名字「${name}」已在登记表条目「${owner}」在册——引用既有名字即可，或对人审合并走 concept-merge${detail}\n    ${MINT_CONFLICT_EXITS}`)
       } else {
         ownerOf.set(name, mint.canonical)
       }
@@ -937,6 +970,18 @@ export class ConceptRegistry {
     await this.save(toggled.entries)
     const hit = resolveConcept(toggled.entries, name)!
     return { canonical: hit.canonical, deprecated: isDeprecated(hit) }
+  }
+
+  /** 正名（human 决策执行面，裁决 9 / ADR-0089 修订）：在册条目 canonical 降为别名、
+   * newName 升主名，旧地址照旧解析。失败抛错不改盘（登记表保持原样）。 */
+  async recanonicalize(name: string, newName: string): Promise<{ from: string; to: string }> {
+    const entries = await this.load()
+    const renamed = recanonicalizeConceptEntries(entries, name, newName)
+    if (renamed.errors.length) {
+      throw new Error(`[concept-recanonicalize] 正名未执行（登记表保持原样）。\n${renamed.errors.map(e => `  ✗ ${e}`).join('\n')}`)
+    }
+    await this.save(renamed.entries)
+    return { from: name, to: newName }
   }
 
   /** 混淆对入册（human 确认的执行面，#265）：把 b 写进 a 的 confusable（只写一个方向，

@@ -476,3 +476,77 @@ test('#264 错误卡在册对照：不在册先验被拦并报告，生成照常
     assert.equal(result.unregistered_concepts, undefined)
   })
 })
+
+// ---- #286 刀B：撞名回执带底细（裁决 7/10）+ 跨课首引复核（裁决 8）+ 正名（裁决 9）----
+
+test('#286 撞名拒收带在册条目底细 + 出口三选一（裁决 7/10）', async () => {
+  await withVault(registryVault(), async ({ engine }) => {
+    try {
+      await engine.graph.graphPropose('edit', mintYaml('配方法'))
+      assert.fail('精确撞名必须硬拒')
+    } catch (err) {
+      const msg = String((err as Error).message)
+      assert.match(msg, /铸名冲突/, '硬拒语义不变')
+      assert.match(msg, /在册条目底细/, '拒收行附底细（裁决 7）')
+      assert.match(msg, /（无定义——判据不足，缺省动作：不得引用，改铸消歧名）/, '定义缺席显式声明判据不足')
+      assert.match(msg, /出口三选一/, '出口三选一随行')
+      assert.match(msg, /基名（限定语）/, '消歧名命名规范只在回灌文案（裁决 10，零提示词变更）')
+      assert.match(msg, /提请人审正名/, '正名是出口之一且需人审')
+    }
+  })
+})
+
+test('#286 跨课首引复核提示：非阻 findings 出现在受理回执，不拒收；落盘后不再出现（裁决 8）', async () => {
+  await withVault(registryVault(), async ({ engine }) => {
+    // 本课程图内无任何节点 teaches/assumes「因式分解」→ 首引提示（非阻）
+    const yaml1 = `course: 数学
+reason: 首引
+ops:
+  - op: add_node
+    name: 引用节点
+    pre: [入门]
+    est: 10
+    teaches: { 因式分解: 知道 }
+`
+    const r = await engine.graph.graphPropose('edit', yaml1) as { id: number; warns?: string[] }
+    assert.ok(r.id, '非阻：提示不拒收（不进 errors，不触发修复轮）')
+    const hit = r.warns?.find(w => w.includes('跨课首引复核'))
+    assert.ok(hit, '受理回执 warns 带首引复核')
+    assert.ok(hit!.includes('无需任何改动'), '文案含豁免句')
+    // 落盘后足迹非空 → 天然去重，第二次引用不再提示
+    await engine.graph.graphApply('edit', r.id)
+    const yaml2 = `course: 数学
+reason: 再引
+ops:
+  - op: add_node
+    name: 引用节点二
+    pre: [引用节点]
+    est: 10
+    teaches: { 因式分解: 会用 }
+`
+    const r2 = await engine.graph.graphPropose('edit', yaml2) as { id: number; warns?: string[] }
+    assert.ok(r2.id)
+    assert.ok(!r2.warns?.some(w => w.includes('跨课首引复核')), '落盘后足迹非空自消（读侧派生零落盘去重）')
+  })
+})
+
+test('#286 正名（裁决 9）：旧地址仍解析、联合唯一不破、别名升主；AI 侧零新机制（人审直动作）', async () => {
+  await withVault(registryVault(), async ({ engine }) => {
+    // 换主名：新名不在册 → canonical 降为别名（排在别名首位）、新名升主
+    await engine.concepts.recanonicalize('因式分解', '多项式因式分解')
+    const entries = await engine.concepts.load()
+    const hit = entries.find(e => e.canonical === '多项式因式分解')
+    assert.ok(hit, '新名升主')
+    assert.deepEqual(hit!.aliases, ['因式分解', '十字相乘法'], '旧主名降为别名且排在别名首位')
+    // 别名升主（收编用法同一动作）
+    await engine.concepts.recanonicalize('十字相乘法', '十字相乘')
+    const hit2 = (await engine.concepts.load()).find(e => e.canonical === '十字相乘')
+    assert.ok(hit2, '别名升主成功')
+    // 联合唯一硬门：撞在册名 = 错误不落盘
+    await assert.rejects(() => engine.concepts.recanonicalize('十字相乘', '因式分解'), /联合唯一|在册/)
+    // 幂等：已是主名
+    await engine.concepts.recanonicalize('十字相乘', '十字相乘')
+    // 未在册名字 = 抛错
+    await assert.rejects(() => engine.concepts.recanonicalize('不存在', '任意'), /不在登记表在册/)
+  })
+})
