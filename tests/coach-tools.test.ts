@@ -160,6 +160,8 @@ test('视图内容：图面带节点取值域、节点卡带结构档、概念�
     const card = await runTool({ id: '2', name: 'node_card', arguments: '{"node":"用导数解决优化问题"}' })
     assert.match(card, /节点卡：用导数解决优化问题/)
     assert.match(card, /深度：1（读侧派生，地基在 0）/)
+    assert.match(card, /难度：未标注（1–5；未标注 = 未声明，不推定）/, '难度缺席整行照出（不省略——模型要能分辨「未声明」与「不显示」）')
+    assert.match(card, /pre：认识变化率/, 'pre 条目照出（夹具节点未声明难度 → 裸名字档；内联难度断言见 endpoint-surfaces）')
     assert.doesNotMatch(card, /区·块/)
     assert.match(card, /teaches：变化率 会用/)
 

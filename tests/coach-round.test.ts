@@ -352,6 +352,11 @@ test('门面：全量包六区块定序稳定；轻量包恰两件（行为摘�
       'V-2 接缝（先验上下文注入——预留）',
     ])
     assert.ok(pack.includes('用导数解决优化问题'), '终点锚区块应携带终点节点')
+    // #338 终点状态词表单一出处：pre 非空且未收尾时，包头与锚块同读「未铺通」——
+    // 不再「未接线」（包头取 status 枚举）与「未铺通」（锚块取 last_steps）同屏打架
+    assert.equal(pack.split('未铺通（pre 非空、未收尾宣告）').length - 1, 2,
+      '包头与锚块两处同词表（同一判据）')
+    assert.ok(!pack.includes('状态：未接线'), 'unwired ⟺ 未收尾；pre 非空细分为未铺通（V-2 接缝占位行的「未接线」不计）')
     assert.ok(pack.includes('沉淀正典空'), '沉淀 Missing 折叠合法空态')
     assert.ok(pack.includes('罗盘缺席或尚无已画路线'), '罗盘未初画 = 合法空态')
     assert.ok(pack.includes('轻量段') === false)

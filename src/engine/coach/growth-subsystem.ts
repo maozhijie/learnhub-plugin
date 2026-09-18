@@ -37,8 +37,8 @@ import {
   PACK_MISCONCEPTION_LINE, PACK_MISCONCEPTIONS_EMPTY, PACK_REGISTRY_ACTIVE, PACK_REGISTRY_ASSUMES,
   PACK_REGISTRY_ASSUMES_EMPTY, PACK_REGISTRY_LINE, PACK_REGISTRY_MISSING, PACK_REGISTRY_RETIRED,
   PACK_REGISTRY_TEACHES, PACK_REGISTRY_TEACHES_EMPTY, PACK_REGISTRY_TIERS,
-  PACK_SEDIMENT_HEADING, PACK_STATUS_DANGLING, PACK_STATUS_REACHED, PACK_STATUS_SEALED,
-  PACK_STATUS_UNWIRED, PACK_STRUCT_COMPLETE, PACK_STRUCT_INCOMPLETE, PACK_STRUCT_SEALED,
+  PACK_SEDIMENT_HEADING, PACK_STATUS_DANGLING, PACK_STATUS_SEALED,
+  PACK_STRUCT_COMPLETE, PACK_STRUCT_INCOMPLETE, PACK_STRUCT_SEALED,
   PACK_STRUCT_UNSEALED, PACK_TAIL_ANNOTATIONS_HEADING, PACK_TAIL_REPAINT_DUE, PACK_TAIL_ROUTE_HEADING,
   PACK_V2_BODY, PACK_ZERO_ENDPOINTS,
 } from '../prompts/coach-pack.ts'
@@ -699,19 +699,23 @@ export class GrowthSubsystem {
     ]
     // 终点恒标（#200 / ADR-0055 裁决 3；#239 多终点化：逐终点一行；#240 逐终点状态）：
     // 轻量段不注入终点锚区块，但每行终点名的 token 代价换裁决不盲——轻量/全量都在
-    // 包头带终点行（状态三档内联）；终点标记的完整语义随图面进每段。
-    const statusLabel = (f: (typeof folds)[number] | undefined): string =>
-      f === undefined ? render(PACK_STATUS_DANGLING, {})
-        : f.status === 'unwired' ? render(PACK_STATUS_UNWIRED, {})
-        : f.status === 'reached' ? render(PACK_STATUS_REACHED, {})
-        : render(PACK_STATUS_SEALED, {})
+    // 包头带终点行（状态内联）；终点标记的完整语义随图面进每段。
+    // #338：包头与锚块共用同一个 endpointStatusText（词表单一出处）——此前包头取
+    // status 枚举（unwired ⟺ 未收尾）、锚块另取 last_steps 细分，pre 非空且未收尾时
+    // 同屏出现「未接线」与「未铺通」两套词表打架。
+    const endpointStatusText = (f: (typeof folds)[number] | undefined): string =>
+      f === undefined || !f.criteria.endpoint_in_graph ? render(PACK_STATUS_DANGLING, {})
+        : f.status === 'reached' ? render(PACK_ANCHOR_STATUS_REACHED, {})
+        : f.status === 'sealed' ? render(PACK_STATUS_SEALED, {})
+        : f.criteria.last_steps.length > 0 ? render(PACK_ANCHOR_STATUS_UNSEALED, {})
+        : render(PACK_ANCHOR_STATUS_UNWIRED, {})
     out.push('', ...(anchors.length
       ? anchors.map(a => {
           const f = foldOf.get(a.endpoint)
           return render(PACK_ENDPOINT_LINE, {
             endpoint: a.endpoint,
             note: a.goal_note ? render(PACK_ENDPOINT_NOTE, { note: a.goal_note }) : '',
-            status: statusLabel(f),
+            status: endpointStatusText(f),
             closure: f ? render(PACK_ENDPOINT_CLOSURE, { learned: f.closure.learned, total: f.closure.total }) : '',
           })
         })
@@ -730,13 +734,7 @@ export class GrowthSubsystem {
             render(PACK_ANCHOR_NODE, { endpoint: anchor.endpoint }),
             render(PACK_ANCHOR_GOAL_TYPE, { type: anchor.goal_type === 'coverage' ? render(EA_GOAL_COVERAGE, {}) : render(EA_GOAL_CAPABILITY, {}) }),
             render(PACK_ANCHOR_DECLARED, { declared: anchor.declared }),
-            render(PACK_ANCHOR_STATUS, {
-              status: f === undefined ? render(PACK_STATUS_DANGLING, {})
-                : f.status === 'reached' ? render(PACK_ANCHOR_STATUS_REACHED, {})
-                : f.status === 'sealed' ? render(PACK_STATUS_SEALED, {})
-                : f.criteria.last_steps.length > 0 ? render(PACK_ANCHOR_STATUS_UNSEALED, {})
-                : render(PACK_ANCHOR_STATUS_UNWIRED, {}),
-            }),
+            render(PACK_ANCHOR_STATUS, { status: endpointStatusText(f) }),
           )
           if (f) {
             lines.push(render(PACK_ANCHOR_CLOSURE, { learned: f.closure.learned, total: f.closure.total }))

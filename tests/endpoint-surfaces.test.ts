@@ -5,6 +5,7 @@ import { runAudit } from '../src/engine/graph/audit.ts'
 import { graphHealthScore } from '../src/engine/graph/health.ts'
 import { renderGrowthGraphView, renderNodeCard } from '../src/engine/coach/coach-tools.ts'
 import type { LearnhubEngine } from '../src/engine/index.ts'
+import type { GNode } from '../src/engine/types.ts'
 import { withVault } from './helpers/vault.ts'
 import { nodeVaultFs } from '../src/host/vault-fs.ts'
 
@@ -136,6 +137,21 @@ test('#200 教练图面与节点卡恒标终点（facade 取图）：头部终�
     const plain = renderNodeCard(graph, {}, '旁支叶子', new Set(['终点']))
     assert.ok(!plain.includes('方向标记'), '普通节点卡不带终点标记')
   })
+})
+
+test('#338① 节点卡带难度：本节点行 + pre 条目内联前置难度；缺席给未标注占位不省略行', () => {
+  const nodes: GNode[] = [
+    { name: '基础', pre: [], opt: false, note: '', enc: [], difficulty: 1 },
+    { name: '进阶', pre: ['基础'], opt: false, note: '', enc: [], difficulty: 2 },
+    { name: '无标', pre: ['进阶'], opt: false, note: '', enc: [] },
+  ]
+  const graph = new Graph(nodes)
+  const mid = renderNodeCard(graph, {}, '进阶')
+  assert.ok(mid.includes('- 难度：2（1–5；未标注 = 未声明，不推定）'))
+  assert.ok(mid.includes('- pre：基础（难度 1）'), 'pre 条目内联前置难度——#335 难度步进门在卡上可算')
+  const leaf = renderNodeCard(graph, {}, '无标')
+  assert.ok(leaf.includes('- 难度：未标注（1–5；未标注 = 未声明，不推定）'), '缺席不省略整行——「未声明」与「不显示」要能分辨')
+  assert.ok(leaf.includes('- pre：进阶（难度 2）'))
 })
 
 test('#200 教练上下文包：轻量段恒带一行终点；全量包终点锚区块带方向标记', async () => {

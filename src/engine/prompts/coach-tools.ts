@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------- 只读工具 description（活图口径）
 
 export const TOOL_GRAPH_VIEW_DESC_LIVE = '当前课程图面：全部节点名单 + 前沿/在学节点细节行（深度/pre/teaches/est/正文态）与概念组读数表。裁决 ops 的节点名与 pre 引用的取值域——产出裁决前先来这里对表。'
-export const TOOL_NODE_CARD_DESC_LIVE = '单节点结构档：深度、阶段、pre/teaches/assumes、est、下游消费、误解先验。'
+export const TOOL_NODE_CARD_DESC_LIVE = '单节点结构档：深度、阶段、难度（本节点与各前置）、pre/teaches/assumes、est、下游消费、误解先验。'
 export const TOOL_CONCEPT_FOOTPRINT_DESC_LIVE = '概念足迹（双职责）：① 词条档 canonical/别名/定义/confusable（teaches/assumes/concepts 铸名对表的唯一权威）；② 足迹——哪些节点 teaches/assumes 它、题目 invokes 分布、confusable 指向，以及插入挂点判读（足迹非空 = 天然挂点）。query 是**子串发现**不是存在性判定：无命中时**空 ≠ 不存在**——换宽词再试，或不带 query 读全表逐条对照；写侧提案的概念引用仍须逐字命中在册名字。'
 export const TOOL_BEHAVIOR_DIGEST_DESC = '行为摘要五件套（窗口=最近 7 学习日或 10 节取大）：掌握轨迹/卡点集中度/速度校准/误解活跃度/保留率。'
 export const TOOL_BANK_OVERVIEW_DESC = '题库概况：逐节点在库/归档/invokes 标注题数。巩固批与出题现势参照。'
@@ -28,7 +28,7 @@ export const TOOL_SUBGRAPH_DESC_LIVE = '下游子图：给定节点的**下游�
 // ---------------------------------------------------------------- 只读工具 description（草稿口径）
 
 export const TOOL_GRAPH_VIEW_DESC_DRAFT = '当前草稿图面（基图 + 草稿增量已叠加）：全部节点名单 + 细节行。patch 的节点名与 pre 引用的取值域——出补丁前先来这里对表。'
-export const TOOL_NODE_CARD_DESC_DRAFT = '单节点结构档（草稿图口径）：阶段、pre/teaches/assumes、下游消费、误解先验。'
+export const TOOL_NODE_CARD_DESC_DRAFT = '单节点结构档（草稿图口径）：阶段、难度（本节点与各前置）、pre/teaches/assumes、下游消费、误解先验。'
 export const TOOL_CONCEPT_FOOTPRINT_DESC_DRAFT = '概念足迹：teaches/assumes/误解 引用对表的唯一权威（写侧恒精确——引用必须逐字命中在册名字或随批 concepts 铸名）。query 是子串发现不是存在性判定：空 ≠ 不存在。'
 export const TOOL_UPSTREAM_DAG_DESC_DRAFT = '上游图摘要：给定节点的前置传递闭包全拓扑 + 闭包内 pre 邻接。接线定位与深链诊断用。'
 export const TOOL_SUBGRAPH_DESC_DRAFT = '下游子图：给定节点的下游传递闭包全拓扑 + 子图内 pre 邻接。插入/旁支挂点与下游影响面自查用——别把新台阶插到会挡别人路的地方。'
@@ -100,6 +100,12 @@ export const NODE_CARD_STAGE = '- 阶段：{{stage}}{{suffix}}'
 export const NODE_CARD_STAGE_ENDPOINT = '（终点——零正文零题库不被学习调度）'
 export const NODE_CARD_STAGE_PRACTICE = '（交互实践节点）'
 export const NODE_CARD_STAGE_EST = '｜est {{est}}′'
+export const NODE_CARD_DIFFICULTY = '- 难度：{{difficulty}}（1–5；未标注 = 未声明，不推定）'
+/** 难度缺席的占位值：整行照出，不省略——模型要能分辨「字段未声明」与「卡片不显示」（#335 难度步进门在卡上可算）。 */
+export const NODE_CARD_DIFFICULTY_UNDECLARED = '未标注'
+/** pre 条目内联难度（#335 难度步进门：本节点 vs 直接前置最大难度，只给自身难度算不出步进）。 */
+export const NODE_CARD_PRE_ITEM = '{{node}}（难度 {{difficulty}}）'
+export const NODE_CARD_PRE_ITEM_NO_DIFFICULTY = '{{node}}'
 export const NODE_CARD_PRE = '- pre：{{pres}}'
 export const NODE_CARD_TEACHES = '- teaches：{{teaches}}'
 export const NODE_CARD_ASSUMES = '- assumes：{{assumes}}'

@@ -28,10 +28,10 @@ export const PACK_ENDPOINT_LINE = '- ⚑ 终点：{{endpoint}}（方向标记—
 export const PACK_ENDPOINT_NOTE = '｜目标描述：{{note}}'
 export const PACK_ENDPOINT_CLOSURE = '｜闭包已学 {{learned}}/{{total}}'
 export const PACK_ZERO_ENDPOINTS = '- （零终点——空锚是合法空态，先加一个终点：教练回合无从裁决方向）'
-/** 包头终点行的状态三档。 */
+/** 包头与终点锚块共用的状态词表（#338 单一出处；消费在 growth-subsystem::endpointStatusText）。
+ * 注：状态枚举 unwired 的语义 = 未收尾（sealed 为 null，含 pre 空与非空）——展示层按
+ * pre 是否非空细分为 未接线/未铺通，两档都取锚块常量，不再另设包头简版词表。 */
 export const PACK_STATUS_DANGLING = '悬空锚（终点不在图内）'
-export const PACK_STATUS_UNWIRED = '未接线'
-export const PACK_STATUS_REACHED = '已达成'
 export const PACK_STATUS_SEALED = '已铺通（未达成）'
 
 // ---------------------------------------------------------------- 终点锚区块

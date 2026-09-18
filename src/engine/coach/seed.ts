@@ -248,8 +248,9 @@ export function endpointNames(anchors: EndpointAnchor[]): Set<string> {
 
 // ---- 完成读数 = 逐终点折叠（雾区条款上半；#239 多终点化） ----
 
-/** 逐终点状态三档（ADR-0076 生长停摆的输入）：未接线 → 已铺通（锚上 sealed）→
- * 已达成（已铺通且该终点最后台阶全部 ≥ 掌握阈值）。 */
+/** 逐终点状态三档（ADR-0076 生长停摆的输入）：未接线（**未收尾**——sealed 为 null，含
+ * pre 空、pre 非空与锚悬空三种；#338：展示层再按 pre 是否非空细分为 未接线/未铺通）→
+ * 已铺通（锚上 sealed）→ 已达成（已铺通且该终点最后台阶全部 ≥ 掌握阈值）。 */
 export type EndpointStatus = 'unwired' | 'sealed' | 'reached'
 
 export interface CompletionFold {
@@ -257,7 +258,7 @@ export interface CompletionFold {
   goal_type: GoalType
   goal_note?: string
   declared: string
-  /** 该终点的收尾宣告（null = 未铺通）。 */
+  /** 该终点的收尾宣告（null = 未收尾；unwired ⟺ sealed 为 null，见 status 注释）。 */
   sealed: string | null
   /** 逐终点三档状态（读数；UI 展示见「逐终点状态与课程完成态退役」票）。 */
   status: EndpointStatus
@@ -270,7 +271,7 @@ export interface CompletionFold {
      * 标记不是课程节点，自身零 mastery 零调度；每条最后台阶 = {节点, 掌握度, 达标}。 */
     last_steps: Array<{ node: string; mastery: number; met: boolean }>
     mastery_threshold: number
-    /** 全部最后台阶达标（pre 集为空 = 悬空/未接线，不达标）。 */
+    /** 全部最后台阶达标（pre 集为空 = 无台阶，不达标）。 */
     mastery_met: boolean
     /** 收尾宣告（ADR-0056）：该锚上的 sealed 日期；null = 未收尾——两种 goal_type 都
      * 要求已收尾才判完成。 */
@@ -334,7 +335,9 @@ export function isSeedGraph(anchors: EndpointAnchor[], graph: Graph): boolean {
  * （终点.pre 集，全部 ≥ 阈值）——终点自身不再被读 mastery（它是方向标记不是可教可考的
  * 课程节点）；两种 goal_type 都要求该终点已收尾（锚 sealed）。能力锚定另要求闭包健康
  * （不动）；覆盖锚定另要求工作表全部核销（不动）。锚悬空（终点不在图内）或 pre 集为空
- * （未接线）→ mastery_met=false、status='unwired' 可见。 */
+ * （未收尾）→ mastery_met=false、status='unwired' 可见；unwired 的语义是**未收尾**
+ * （sealed 为 null，含 pre 空、pre 非空与锚悬空三种），不是 pre 空——锚悬空或 pre 空
+ * 只影响 mastery_met 的取值，不改状态档（#338：文档/代码不一致的修正）。 */
 export function foldCompletion(
   graph: Graph, state: Record<string, Fm>, anchors: EndpointAnchor[],
 ): CompletionFold[] {

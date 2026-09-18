@@ -49,8 +49,8 @@ import {
   GRAPH_VIEW_FULL_HEADING, GRAPH_VIEW_HEADING, GRAPH_VIEW_STATS, GRAPH_VIEW_UNTAGGED_LINE,
   GRAPH_VIEW_WEAK_EMPTY, GRAPH_VIEW_WEAK_HEADING, GRAPH_VIEW_ZERO_CONCEPT, GRAPH_VIEW_ZERO_ENDPOINTS,
   NODE_CARD_ASSUMES, NODE_CARD_CONSUMERS, NODE_CARD_CONSUMERS_ENDPOINT, NODE_CARD_CONSUMERS_LEAF,
-  NODE_CARD_DEPTH, NODE_CARD_EMPTY, NODE_CARD_ENDPOINT_FLAG, NODE_CARD_HEADING, NODE_CARD_MISCONCEPTIONS,
-  NODE_CARD_PRE, NODE_CARD_STAGE, NODE_CARD_STAGE_ENDPOINT, NODE_CARD_STAGE_EST, NODE_CARD_STAGE_PRACTICE,
+  NODE_CARD_DEPTH, NODE_CARD_DIFFICULTY, NODE_CARD_DIFFICULTY_UNDECLARED, NODE_CARD_EMPTY, NODE_CARD_ENDPOINT_FLAG, NODE_CARD_HEADING, NODE_CARD_MISCONCEPTIONS,
+  NODE_CARD_PRE, NODE_CARD_PRE_ITEM, NODE_CARD_PRE_ITEM_NO_DIFFICULTY, NODE_CARD_STAGE, NODE_CARD_STAGE_ENDPOINT, NODE_CARD_STAGE_EST, NODE_CARD_STAGE_PRACTICE,
   NODE_CARD_TEACHES, NODE_NOT_ON_GRAPH_ERR, NODE_ROW_BODY, NODE_ROW_COLUMNS, NODE_ROW_DUE,
   NODE_ROW_ENDPOINT_FLAG, NODE_ROW_EST, NODE_ROW_ITEM, NODE_ROW_PRE, NODE_ROW_ROOT, NODE_ROW_TEACHES,
   NODE_ROW_WEAK_FLAG,
@@ -288,6 +288,16 @@ export function renderNodeCard(
   const consumers = graph.succ[node] ?? []
   const isEndpoint = endpoints.has(node)
   const est = graph.estOf[node]
+  // 难度行缺席照出（未标注占位，不省略整行）；pre 条目内联前置难度——#335 难度步进门
+  // 判的是「本节点 vs 直接前置最大难度」，只给自身难度模型算不出步进（活图与草稿口径
+  // 共用本函数，改一处两口径同时生效）。
+  const diffText = (n: string): string =>
+    graph.difficultyOf[n] !== undefined ? String(graph.difficultyOf[n]) : render(NODE_CARD_DIFFICULTY_UNDECLARED, {})
+  const presText = pres.length
+    ? pres.map(p => graph.difficultyOf[p] !== undefined
+      ? render(NODE_CARD_PRE_ITEM, { node: p, difficulty: diffText(p) })
+      : render(NODE_CARD_PRE_ITEM_NO_DIFFICULTY, { node: p })).join('、')
+    : render(NODE_ROW_ROOT, {})
   return [
     render(NODE_CARD_HEADING, { node, flag: isEndpoint ? render(NODE_CARD_ENDPOINT_FLAG, {}) : '' }), '',
     render(NODE_CARD_DEPTH, { depth: graph.depth[node] ?? 0 }),
@@ -296,7 +306,8 @@ export function renderNodeCard(
       suffix: isEndpoint ? render(NODE_CARD_STAGE_ENDPOINT, {})
         : graph.typeOf[node] === 'practice' ? render(NODE_CARD_STAGE_PRACTICE, {}) : '',
     }) + (est ? render(NODE_CARD_STAGE_EST, { est }) : ''),
-    render(NODE_CARD_PRE, { pres: pres.length ? pres.join('、') : render(NODE_ROW_ROOT, {}) }),
+    render(NODE_CARD_DIFFICULTY, { difficulty: diffText(node) }),
+    render(NODE_CARD_PRE, { pres: presText }),
     render(NODE_CARD_TEACHES, { teaches: teaches.length ? teaches.map(([c, t]) => `${c} ${t}`).join('、') : render(NODE_CARD_EMPTY, {}) }),
     render(NODE_CARD_ASSUMES, { assumes: assumes.length ? assumes.map(([c, t]) => `${c} ${t}`).join('、') : render(NODE_CARD_EMPTY, {}) }),
     render(NODE_CARD_CONSUMERS, { consumers: consumers.length ? consumers.join('、') : isEndpoint ? render(NODE_CARD_CONSUMERS_ENDPOINT, {}) : render(NODE_CARD_CONSUMERS_LEAF, {}) }),

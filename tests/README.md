@@ -739,3 +739,10 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 行为 | **findings 扩展（刀③④配套）**：draftFindings 增 est 失配（difficulty≥4 且 est≤30）与单链批（逐条恰接上一条、无分叉）两条 finding | src/engine/coach/growth-draft.ts、src/engine/prompts/coach-draft.ts（FIND_EST_DIFFICULTY_MISMATCH / FIND_SINGLE_CHAIN_BATCH） | tests/growth-draft.test.ts（两 finding 触发/不触发） |
 | 受控面 | **G5 同提交迁移（刀①④）**：proposals.ts 2038→2056、growth-subsystem.ts 2118→2128、growth-draft.ts 544→574、probation.ts 417→410（收缩下调）；typeErrors 0/0 | scripts/arch-baseline.json | tests/arch-guards.test.ts G5 绿 |
 | 登记表 | **PROMPT_CHANGELOG 教练执行 v4→v5**：算子收缩 + consolidate 字段化 + serves_arc 升格（用户按建议文档亲手修订散文，AI 只补登记与过门）；prompt-bump check ✓ / replay ✓（教练执行 tool-calls 不在回放面，如实） | src/engine/content/output-contracts.ts、src/engine/prompts/templates.ts | npm run prompt-bump -- check / replay |
+
+## 概念充分性门提示词对齐与终点状态读数统一（#337/#338，2026-09-18）：行为变更登记
+
+| 类别 | 变更 | 代码 | 测试 |
+|---|---|---|---|
+| 提示词 | **依赖契约充分性升格硬校验（#337，用户亲笔）**：删自我豁免句，替换为「概念反查（受理门硬校验，必做）」条；同波工具面 node_card 难度行 + pre 条目内联前置难度 + 两条工具描述补难度（#338① 并入，AI 经用户授权落笔）。教练执行 v7→v8，PROMPT_CHANGELOG 同提交登记 | src/engine/prompts/templates.ts、src/engine/prompts/coach-tools.ts、src/engine/coach/coach-tools.ts::renderNodeCard、output-contracts.ts（登记） | tests/coach-tools.test.ts（难度行/未标注占位/pre 照出）、tests/endpoint-surfaces.test.ts（内联难度正负两态）；prompt-bump check ✓ / replay ✓（0 件回归） |
+| 行为 | **终点状态读数统一（#338）**：coachContextPack 包头与终点锚块共用 `endpointStatusText`（键序 = 悬空 → reached → sealed → pre 非空细分 未铺通/未接线）；包头简版词表两常量退役；`unwired` 注释修正为「未收尾（sealed 为 null，含 pre 空与非空与悬空）」——枚举值未动，面板 statusJson 零波及。已学 0/N 回归断言 #315 B1 已在册（i315-growth-fixes），不重复补 | src/engine/coach/growth-subsystem.ts、src/engine/coach/seed.ts（注释）、src/engine/prompts/coach-pack.ts | tests/coach-round.test.ts（包头与锚块同词表、状态行无「未接线」档） |
