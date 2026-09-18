@@ -53,8 +53,9 @@ export interface GraphAnalysis {
   bottlenecks: Array<{ node: string; successors: number; unlocks: number }>
   lapse_hotspots: Array<{ node: string; lapses: number }>
   /** 图谱健康分（0-100；结束条件锚点，公式与语义见 health.ts）。
-   * est_note：est 分布压缩的 advisor 提示（null = 无；不改分，est 重标注属图生成专题）。 */
-  health: { score: number; breakdown: Record<string, number>; est_note: string | null; topology_void?: string[] }
+   * est_note：est 分布压缩的 advisor 提示（null = 无；不改分，est 重标注属图生成专题）。
+   * width_note：图宽度不足的 advisor 提示（null = 无；不改分，同族纪律）。 */
+  health: { score: number; breakdown: Record<string, number>; est_note: string | null; width_note: string | null; topology_void?: string[] }
   /** 分批构建建议（图谱 designer 逐批展开时规划下一批的输入，全部可行动）。
    * concept_growth（#281，grill 定稿 2026-09-15）：失衡排序表——零机械阈值，排序
    * 暴露相对严重度，判读归教练。悬空依赖（supply 空）恒在最前；其余按行为证据

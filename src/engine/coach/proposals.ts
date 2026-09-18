@@ -470,7 +470,7 @@ export function difficultyStepGateErrors(ops: EditOp[], graph: Graph): string[] 
     if (d !== undefined) diffOf.set(n, d)
   }
   const errors: string[] = []
-  for (const [i, op] of ops.entries()) {
+  for (const op of ops) {
     if (op.op === 'add_node' && op.difficulty !== undefined && op.name) diffOf.set(op.name, op.difficulty)
   }
   for (const [i, op] of ops.entries()) {

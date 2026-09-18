@@ -717,8 +717,10 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 
 ## 学习图形态质量治理·刀②③先行（#335，2026-09-18，散文冻结期内）：行为变更登记
 
+> ADR 豁免依据：票面明文裁定「difficulty 步进门与宽度读数登记归门册」——ADR（枚举收缩/巩固门去向/serves_arc 升格）归刀①④同刀落地时一条写齐。
+
 | 类别 | 变更 | 代码 | 测试 |
 |---|---|---|---|
 | 行为 | **难度步进门（刀②，硬门）**：add_node 声明 difficulty 且直接前置难度可解析时步进 >1 拒收（前置难度取基图 + 本批已声明并集，缺席侧不判）；editGateErrors 门序列收拢（propose/apply/草稿三处同调）。est 失配 findings 与刀①④等提示词散文修订完成后同刀落地 | `src/engine/coach/proposals.ts::difficultyStepGateErrors` | `tests/growth-draft.test.ts`（越档拒收/步进1放行/缺席不判/批内链/门序列同拦） |
 | 行为 | **图宽度读数（刀③，advisor-only）**：`widthNote` 同层并行度 + 最长单链深度占比双读数，与 estSpreadNote 同族不改健康分；随 analyzeGraph 的 health 块透出（`width_note` 字段）；教练上下文包注入与 draftFindings 单链批 finding 等提示词散文修订完成后同刀落地 | `src/engine/graph/health.ts`、`src/engine/graph/analysis.ts` | `tests/health.test.ts`（单链提示/分叉放行/小图不判） |
-| 受控面 | **G5 同提交迁移**：proposals.ts 2010→2038、health.ts 105→132；typeErrors 基线同提交重写 | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |
+| 受控面 | **G5 同提交迁移**：proposals.ts 2010→2038、health.ts 105→132、analysis.ts 332→333；typeErrors 0/0（width_note 已补进 analyzeGraph health 声明类型，不登记错误） | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |
