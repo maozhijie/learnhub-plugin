@@ -761,3 +761,13 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 模型面 | **`EDIT_OPS` 增 `set_concepts` → `EXEC_DOMAIN_OPS` 取值域回灌渲染面随动**（写件门拒收回灌的 op 词汇多一枚）；**模板文本未改、版本未 bump**——两道机械门判据只看版本号，注入面增删两门都不执法（ADR-0072 §已知边界 ④），按章程 §8 在 `PROMPT_CHANGELOG` 补同一版本号（v8）下第三条登记（变更面 = 注入面增删） | `src/engine/coach/proposals.ts::EDIT_OPS`、`growth-subsystem.ts::domainsHint`、`src/engine/content/output-contracts.ts::PROMPT_CHANGELOG` | `npm run prompt-bump -- check`（同版本号登记不执法，如实）；人工复核（见收尾点名） |
 | 受控量 | **G5 同提交迁移**：`proposals.ts 2077→2186`、`graph.ts 613→763`、`data-check.ts 1097→1100`、`growth-draft.ts 572→577`、`graph-subsystem.ts 692→695`、`output-contracts.ts 776→793`；typeErrors 0/0 | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |
 | 文档 | ADR-0106、`docs/adr/README.md` 索引（最高号 0105→0106）、`CONTEXT.md`「富化覆盖层」词条改写（补概念字段修正层 + `_Avoid_` 与 #288 覆盖计数显式区分；词头与 canonical 未动，文案锁不受影响） | `docs/adr/0106-node-concept-overlay-write-path.md`、`docs/adr/README.md`、`CONTEXT.md` | 人工审 |
+
+## main 自带门红修复（2026-09-19 巡检）：受控量与夹具登记
+
+症状：全量门两处红，均非当次任务引入——① G5 棘轮报 `proposals.ts 基线 2219 → 实测 2328`（逐提交对账：#336 `fcaef13` +82 行首次漏同步、#340 `75f656d` 改基线只补 33，累计拖欠 109）；② `tests/endpoint-invariants.test.ts` #199 断言 `gated = ['中间台阶']` 实际空。逐条登记：
+
+| 类别 | 变更 | 代码 | 测试 |
+|---|---|---|---|
+| 受控量 | **G5 基线追认**：`proposals.ts 2219→2328`（不放大门槛——追认的是 #336/#340 两个已合入成果的既成行数；#336 漏同步在先、#340 半补在后，纯机械追平） | `scripts/arch-baseline.json` | 棘轮精确匹配；`tests/arch-guards.test.ts` G5 绿 |
+| 夹具 | **SEALED_VAULT 固定时钟（#175 纪律）**：入门夹具 `last_review=2026-09-13` 的 R 随运行日衰减，`gated` 判据（前置 R ≥ 0.85）在真实时钟下 2026-09-19 起翻红——间隔 6 天 R≈0.846 跌破门槛，#199 软闸清单变空、断言退化。钉 2026-09-17（间隔 4 天 R≈0.879，过门槛的绿态）；生产代码零改动，11 处用点全绿 | `tests/endpoint-invariants.test.ts`（SEALED_VAULT 加 `clock` 注入） | `tests/endpoint-invariants.test.ts` 15/15 绿；同一输入同一输出 |
+| 行为 | **未改**：#199 断言与 gated 语义（`readySet` 带 rGate = 过 R 门槛的就绪清单）均为正确现状，翻红纯属夹具不确定性，修夹具不修行为 | — | — |

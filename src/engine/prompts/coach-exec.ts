@@ -44,7 +44,7 @@ export const EXEC_TOOL_DRAFT_ARC_DESC = '弧建议（写件，零操作）：声
 
 export const EXEC_PARAM_OPS_DESC = '补丁操作列表。{{cheatsheet}}（第一次调用前即可见——形状不合法整批拒收，别拿调用去试。）'
 export const EXEC_PARAM_CHAIN_DESC = 'insert_prereq_chain 的链条目（按序线性串联）'
-export const EXEC_PARAM_CONCEPTS_DESC = '随批铸名（本批新引入的概念；已能用就不铸）'
+export const EXEC_PARAM_CONCEPTS_DESC = '随批铸名（本批新引入的概念；已能用就不铸；铸名须原子，一名只指一个可独立教学的对象）'
 export const EXEC_PARAM_NOTE_REASON_DESC = '本批理由一句话（下次 finish 硬化为 note.reason）'
 export const EXEC_PARAM_NOTE_TARGET_ENDPOINTS_DESC = '批含前进/换向条目时的朝向声明（朝哪些终点长；与接线义务配套）'
 export const EXEC_PARAM_METRIC_DESC = '可机判结局指标：{{metrics}}'
