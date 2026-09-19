@@ -771,3 +771,18 @@ ${pack}`（#218 要消灭的旧形态），测的是生产已不发的 prompt | 
 | 受控量 | **G5 基线追认**：`proposals.ts 2219→2328`（不放大门槛——追认的是 #336/#340 两个已合入成果的既成行数；#336 漏同步在先、#340 半补在后，纯机械追平） | `scripts/arch-baseline.json` | 棘轮精确匹配；`tests/arch-guards.test.ts` G5 绿 |
 | 夹具 | **SEALED_VAULT 固定时钟（#175 纪律）**：入门夹具 `last_review=2026-09-13` 的 R 随运行日衰减，`gated` 判据（前置 R ≥ 0.85）在真实时钟下 2026-09-19 起翻红——间隔 6 天 R≈0.846 跌破门槛，#199 软闸清单变空、断言退化。钉 2026-09-17（间隔 4 天 R≈0.879，过门槛的绿态）；生产代码零改动，11 处用点全绿 | `tests/endpoint-invariants.test.ts`（SEALED_VAULT 加 `clock` 注入） | `tests/endpoint-invariants.test.ts` 15/15 绿；同一输入同一输出 |
 | 行为 | **未改**：#199 断言与 gated 语义（`readySet` 带 rGate = 过 R 门槛的就绪清单）均为正确现状，翻红纯属夹具不确定性，修夹具不修行为 | — | — |
+
+## 教学编排纪律修订与一步硬闸（2026-09-20）：受控量与行为登记
+
+背景：第三轮测试库（数学基础，33 节点）归因——跳步（隐性前提打包进入口）、单面生长（几何缺席）、终点接线误读、一步产量失控（一次点击铺 33 节点）。提示词三族修订（罗盘初画 v6 / 罗盘重画 v3 / 教练执行 v10，登记见 `output-contracts.ts::PROMPT_CHANGELOG` 同批条目）+ 引擎侧四处同批落地。逐条登记：
+
+| 类别 | 变更 | 代码 | 测试 |
+|---|---|---|---|
+| 行为 | **生长一步硬闸**（新预算）：`GROWTH_STEP_NODE_CAP = 12`——force（面板下发）会话累计 `add_node` 达上限即拒追加（受理门执法，回灌出路=先 finish 发布已备内容、剩余下回合再来）；自动触点不受限。此前「一步」无引擎约束，实测一次点击单会话 18 次调用 / 单批 17 条操作铺出 33 节点 | `src/engine/infra/params.ts`、`growth-subsystem.ts`（draft_patch 门段 + `force` 透传）、`prompts/coach-exec.ts`（`ERR_STEP_NODE_CAP`） | `tests/coach-growth.test.ts` 等站级回路用例；全量门 1438/1438 |
+| 行为 | **audit 铸名时序修复**：`draftFindings` 的 confusable 悬空校验把「本批铸名」并入在册集（`resolveConcept([...mints, ...entries], …)`）——同批铸名的混淆对不再被误报悬空（实测两轮假警报） | `src/engine/coach/growth-draft.ts`、`prompts/coach-draft.ts`（文案同步） | `tests/growth-sugar.test.ts`（draftFindings 用例） |
+| 行为 | **收尾 finding 文案中性化**：`FIND_SEAL_TODO` 从「已铺通待收尾——收尾须纯 set_pre 独立批发布」改为「已有接线（ep.pre 非空）……本条仅提示收尾通道——确已铺通时才收尾，未铺通则忽略本条继续当回合计划」。旧文案后半是行动指令，在零思考档下被逐轮照办（一步失控的引信）；触发条件不变（接线非空即提示） | `prompts/coach-draft.ts` | `tests/growth-sugar.test.ts`（断言同步「已有接线」） |
+| 行为 | **活跃线视图**（graph_view 与上下文包新增段）：终点接线线头经 `upstreamClosure` 滤出真前沿（被更深线消费的旧头滤除），逐行「线头｜深度｜首环 pre」。终点.pre 线头堆积（随生长累积是常态）从字面长度变为可视读数——并拢（consolidate）与补弱的判读面。读侧派生零落盘 | `prompts/coach-tools.ts`（四条文案常量）、`coach/coach-tools.ts`（`renderGrowthGraphView` 组装） | `tests/coach-tools.test.ts` 全图摘要用例；全量门绿 |
+| 受控量 | **G5 同提交迁移**：`coach-tools.ts 711→736`（活跃线段 + 注释）、`growth-subsystem.ts 2126→2139`（一步硬闸 + force 透传）、`params.ts 66→67`（新常量）；typeErrors 0/0 | `scripts/arch-baseline.json` | `tests/arch-guards.test.ts` G5 绿 |
+| 锚点 | **量规锚点同步**：`quality-rubrics.ts`「朝向由终点携带」的 anchor 从『根据罗盘作为对终点的专业说明指导』改为『罗盘是对终点的专业说明』——用户落笔罗盘读法条（教练执行 v10）改写了原句，旧锚失配由 `tests/quality-rubrics.test.ts` 锚门抓出后同步 | `src/engine/content/quality-rubrics.ts` | `tests/quality-rubrics.test.ts` 锚门绿 |
+| 提示面 | **审计材料扩展**：`draft_audit` 描述的隐性前提对照取材面从「节点名与 note」扩为「节点名、note 与铸名概念 definition」——概念定义内打包（如「整数」定义含「负整数」）是全字面匹配与 teaches/assumes 对照的共同盲区，改由审计模型对照（域内自洽、零词表） | `prompts/coach-exec.ts` | 人工审（描述面，同 v8/v10 注入面先例） |
+| 行为 | **未改**：受理门的「批内新前沿全部汇入终点」检查与 `set_pre` 整体替换语义照旧（提示词侧改的是读法教导：逐批接线是机械分类、终点.pre 随生长累积是常态）；终点.pre 不做读侧过滤（活跃线视图是派生段，不动权威字段） | — | — |

@@ -48,7 +48,7 @@ import {
   ERR_FINISH_GATE, ERR_FINISH_NO_NOTE, ERR_FINISH_PROPOSE, ERR_NOTE_NO_REASON, ERR_PATCH_BUDGET,
   ERR_PATCH_EMPTY_OPS, ERR_PATCH_GATE, ERR_PATCH_MAX_OPS,
   ERR_PATCH_SHAPE, ERR_REPAINT_NOTE, ERR_REPAINT_REASON, ERR_REVERT_COUNT_INT, ERR_REVERT_COUNT_MAX,
-  ERR_REVERT_NOTHING, ERR_SERVES_ARC_SHAPE,
+  ERR_REVERT_NOTHING, ERR_SERVES_ARC_SHAPE, ERR_STEP_NODE_CAP,
   EXEC_CONFUSABLE_CANDIDATE, EXEC_CONFUSABLE_FAIL, EXEC_CRASH_ARC, EXEC_CRASH_AUDIT, EXEC_CRASH_FINISH, EXEC_CRASH_NOTE,
   EXEC_CRASH_PATCH, EXEC_CRASH_REVERT, EXEC_CRASH_SUMMARY, EXEC_DIFF_ADDED_EDGES, EXEC_DIFF_ADDED_EDGE_ITEM,
   EXEC_DIFF_ADDED_NODES, EXEC_DIFF_EMPTY_SET, EXEC_DIFF_NONE, EXEC_DIFF_REMOVED_NODES, EXEC_DIFF_RENAMED,
@@ -160,7 +160,7 @@ import {
   GROWTH_DRAFT_STATION, PATCH_SHAPE_CHEATSHEET, normalizePatchShape,
 } from './growth-draft.ts'
 import type { EditProposalNoteLite, GrowthDraftDoc, GrowthDraftRound } from './growth-draft.ts'
-import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS, RECHECK_DAYS_DEFAULT, RECHECK_DAYS_MAX, RECHECK_DAYS_MIN } from '../infra/params.ts'
+import { GROWTH_DRAFT_MAX_OPS_PER_BATCH, GROWTH_DRAFT_MAX_ROUNDS, GROWTH_STEP_NODE_CAP, RECHECK_DAYS_DEFAULT, RECHECK_DAYS_MAX, RECHECK_DAYS_MIN } from '../infra/params.ts'
 import { SANDBOX_DEFAULT_WEEKS, SANDBOX_WORDING } from '../sched/sandbox.ts'
 import { appendSedimentEvent } from '../sched/sediment.ts'
 import { runWriteUnit } from '../infra/write-unit.ts'
@@ -958,6 +958,7 @@ export class GrowthSubsystem {
     // 宿主失败补标据此落站（#301 缺陷③）。
     const draft = await stationTagged(GROWTH_DRAFT_STATION, () => this.coachDraft(courseKey, agent, {
       today,
+      ...(opts.force === true ? { force: true } : {}),
       ...(opts.inject !== undefined ? { inject: opts.inject } : {}),
       ...(opts.isCancelled ? { isCancelled: opts.isCancelled } : {}),
       ...(opts.onTolerated ? { onTolerated: opts.onTolerated } : {}),
@@ -1092,6 +1093,8 @@ export class GrowthSubsystem {
     courseKey: string, agent: AgentSeam,
     opts: {
       today?: string; isCancelled?: () => boolean
+      /** 「生长一步」硬闸：force（面板下发）会话累计 add_node 卡 GROWTH_STEP_NODE_CAP。 */
+      force?: boolean
       /** 外部注入块（待裁决的请求材料；#149/#248 同通道）：非空即随包进回路提示词。 */
       inject?: string
       /** 形状容忍回调（#301 缺陷①）：见 coachGrowthBatch 同名字段——补丁形状被归一时
@@ -1322,6 +1325,16 @@ export class GrowthSubsystem {
         const unpublishedCount = doc.ops.length - doc.published + expanded.length
         if (unpublishedCount > GROWTH_DRAFT_MAX_OPS_PER_BATCH) {
           throw new Error(render(ERR_PATCH_MAX_OPS, { max: GROWTH_DRAFT_MAX_OPS_PER_BATCH, count: unpublishedCount }))
+        }
+        // 「生长一步」硬闸（force 会话）：面板下发的「一步」= 一小批——会话累计新增节点
+        // （已发布 + 未发布 + 本批）达上限即拒追加。零思考/罗盘条目多时模型会把「铺全构成项」
+        // 当成一步的正确动作，一次点击铺出 30+ 节点（实测事故）——上限由门执法，不由模型自觉。
+        if (opts.force === true) {
+          const addsSoFar = doc.ops.filter(o => o.op === 'add_node').length
+          const batchAdds = expanded.filter(o => o.op === 'add_node').length
+          if (addsSoFar + batchAdds > GROWTH_STEP_NODE_CAP) {
+            throw new Error(render(ERR_STEP_NODE_CAP, { cap: GROWTH_STEP_NODE_CAP, count: addsSoFar, batch: batchAdds }))
+          }
         }
         const mints = shape.concepts
         // 本补丁**将要**声明的 note 与铸名：试算必须按「补丁生效后的本批形态」跑——拿旧 note

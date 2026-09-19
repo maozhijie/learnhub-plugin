@@ -452,9 +452,9 @@ export function expandPatchOps(
 /** 草稿审计 findings（#272）：与门错误分列——findings 只把结构信号显式给教练，
  * 不拦 finish。范围限**本会话新铸概念**（全表健康归概念治理线）+ 收尾提示：
  * - 孤立新铸概念：零 teaches / 零 assumes / 零 invokes（「概念表不只是名词堆」）；
- * - confusable 悬空指向：建议目标不在册（提案通道只收在册概念）；
+ * - confusable 悬空指向：目标既不在册也非本批铸名（提案通道只收在册概念）；
  * - 近似名撞车：与在册 canonical/别名过近（复用 nearNameCandidates 同一阈值）；
- * - 收尾提示：终点已接线（pre 非空）且未收尾宣告——收尾须纯 set_pre 独立批发布；
+ * - 收尾提示：终点已接线（pre 非空）且未收尾宣告——接线随生长累积是常态，确已铺通才收尾宣告；
  * - est 失配（#335 刀②）：difficulty ≥4 配 est ≤30 的本批新增节点；
  * - 单链批（#335 刀③）：本批全部 add_node 构成单链（逐条只接上一条、无分叉）。 */
 export function draftFindings(args: {
@@ -469,7 +469,7 @@ export function draftFindings(args: {
 }): string[] {
   const out: string[] = []
   for (const s of args.confusables) {
-    if (!resolveConcept([...args.entries], s.with)) {
+    if (!resolveConcept([...args.mints, ...args.entries], s.with)) {
       out.push(render(FIND_CONFUSABLE_DANGLING, { concept: s.concept, with: s.with }))
     }
   }

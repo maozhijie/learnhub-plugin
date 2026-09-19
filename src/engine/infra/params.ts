@@ -64,3 +64,4 @@ export const STUCK_REPORT_DAILY_COURSE_CAP = 5 // 全课程每日自报总量上
 // ---- 生长草稿预算（#271 / ADR-0088；教练执行站预算，常量单源——host-params 覆盖留后票）----
 export const GROWTH_DRAFT_MAX_OPS_PER_BATCH = 24 // 每批（两次 finish 之间）累积未发布 ops 上限
 export const GROWTH_DRAFT_MAX_ROUNDS = 16        // 每会话轮次上限（一轮 = 一次 agentLoop 收束）
+export const GROWTH_STEP_NODE_CAP = 12           // 「生长一步」（force 会话）累计 add_node 上限——一步=一小批，超出即拒追加（防一次点击铺满全图）

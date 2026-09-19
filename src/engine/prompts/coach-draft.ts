@@ -75,9 +75,9 @@ export const OP_ERR_CHAIN_PRE_LIST = '{{where}}: insert_prereq_chain 的 pre 必
 
 // ---------------------------------------------------------------- 草稿审计 findings（draftFindings）
 
-export const FIND_CONFUSABLE_DANGLING = 'confusable 悬空指向：建议「{{concept}}」↔「{{with}}」的目标不在册——候选提案只收在册概念，先补登记或改指向'
+export const FIND_CONFUSABLE_DANGLING = 'confusable 悬空指向：建议「{{concept}}」↔「{{with}}」的目标既不在册也非本批铸名——候选提案只收在册概念，先补登记或改指向'
 export const FIND_ORPHAN_MINT = '孤立新铸概念：「{{concept}}」零 teaches / 零 assumes / 零 invokes——概念表不只是名词堆，铸名须有节点真的教它或假设它'
 export const FIND_NEAR_NAME = '近似名撞车：铸名「{{name}}」与在册名字「{{existing}}」过近（相似度 {{similarity}}）——同一个概念就引用既有名字，确实是另一个概念请在 note.reason 里写明区别'
-export const FIND_SEAL_TODO = '终点 {{endpoint}} 已铺通待收尾——收尾须纯 set_pre 独立批发布'
+export const FIND_SEAL_TODO = '终点 {{endpoint}} 已有接线（ep.pre 非空）且未收尾宣告——接线随生长累积是常态，本条仅提示收尾通道：确已铺通时才用纯 set_pre 独立批 finish，未铺通则忽略本条继续当回合计划'
 export const FIND_EST_DIFFICULTY_MISMATCH = '⚠ 节点「{{node}}」difficulty={{difficulty}} 但 est 仅 {{est}} 分钟——硬节点配短时长，多半是 est 被压平而不是内容真轻；按真实体量重报 est（45–60 分钟），或补前置台阶降 difficulty'
 export const FIND_SINGLE_CHAIN_BATCH = '⚠ 本批 {{count}} 条新增节点构成单链（逐条只接上一条）——图在沿单链生长,请注意是否符合标准'

@@ -33,12 +33,12 @@ export const EXEC_OP_FIELD_RECHECK = '复诊预注册 {metric, days?}（**operat
 // ---------------------------------------------------------------- 写件工具 description
 
 export const EXEC_TOOL_DRAFT_PATCH_DESC = '批量补丁（写件）：把一组 EditOp 原子操作追加进生长草稿（每批 ≤24 条未发布增量；失败整批回滚并回灌 errors + 合法取值域）。糖算子——insert_prereq_chain：chain 按序展开成线性 add_node 链；split_node：把既有节点拆成 into 多个（轮廓继承 + 消费方 set_pre 重排 + 删原节点；终点不可拆）；suggest_confusable：给随批铸名的新概念顺手登记易混指向（不是图 op；finish 发布成功后展开为混淆对候选提案，人审后才入册）。op 词汇不含 move 与 region/block（已退役 ）。'
-export const EXEC_TOOL_DRAFT_AUDIT_DESC = '审计（写件，只读效果）：对草稿图 + 未发布增量跑与受理门同一套校验（草稿通过 = 门通过），返回门错误与草稿差异；另附非阻 findings（限本会话新铸概念的孤立/悬空/近似名撞车 + 终点收尾提示——不拦 finish，但该修的照修）。finish 前先 audit。'
+export const EXEC_TOOL_DRAFT_AUDIT_DESC = '审计（写件，只读效果）：对草稿图 + 未发布增量跑与受理门同一套校验（草稿通过 = 门通过），返回门错误与草稿差异；另附非阻 findings（限本会话新铸概念的孤立/悬空/近似名撞车 + 终点收尾提示 + 隐性前提对照：本批节点名、note 与铸名概念 definition 中出现、却既不在任何 teaches/assumes 也未随批铸名的领域术语，逐个列入 findings，落实动作是补前置台阶接线、回连在册概念或显式声明首引——不拦 finish，但该修的照修）。finish 前先 audit。'
 export const EXEC_TOOL_DRAFT_FINISH_DESC = '按批发布（写件）：把自上次发布以来的未发布增量硬化为生长批提案 → 受理门 → apply。基图漂移（外部改了图）或门复验未过 = 拒收零落盘、错误回灌继续修。收尾（终点坡道铺通）须以零 add_node 的纯 set_pre 独立批 finish。'
 export const EXEC_TOOL_DRAFT_REVERT_DESC = '撤销（写件）：丢弃最近 N 条未发布增量（省略 count = 丢弃本批全部未发布增量，回到水位）。给「草稿里卡着修不掉的坏增量」留一条路——追加式草稿删不掉已入草稿的 op，del_node 重铸也改不动它；撤销后本批作废（连本批 note / 铸名 / confusable 建议一并清），已发布段（水位以下）不可动。'
 export const EXEC_TOOL_DRAFT_REVERT_COUNT_DESC = '丢弃最近多少条未发布增量（正整数；省略 = 全部丢弃）'
 export const EXEC_TOOL_DRAFT_NOTE_DESC = '停摆收束（写件，零操作）：本回合不长结构时用它声明理由——零操作 + 给理由，草稿形状不变。弧建议（serves_arc / repaint_suggest）不在本工具上，改走 draft_arc。'
-export const EXEC_TOOL_DRAFT_ARC_DESC = '弧建议（写件，零操作）：声明本回合对罗盘弧的两类建议——serves_arc（本批服务弧的哪一阶段）与 repaint_suggest（结构性重画建议）。二者都只有建议权（弧的写权在罗盘站），确知才给、不硬凑；至少给一件。'
+export const EXEC_TOOL_DRAFT_ARC_DESC = '弧建议（写件，零操作）：声明本回合对罗盘弧的建议——serves_arc（本批服务弧的哪一阶段，只是给罗盘站的参考信息，拿不准归属就不写）与 repaint_suggest（结构性重画建议，只允许结构性事由）。只有建议权（弧的写权在罗盘站）；完全可选且应当少用——只在确有结构性建议时才调，拿不准就不调，不要为凑建议而调。'
 
 // ---------------------------------------------------------------- draft_patch 参数说明
 
@@ -127,6 +127,7 @@ export const EXEC_FINDING_ITEM = '  ⚠ {{finding}}'
 export const EXEC_NORM_ITEM = '  · {{norm}}'
 
 export const ERR_PATCH_BUDGET = '[draft_patch] 本会话轮次预算耗尽（{{rounds}}/{{max}} 轮）——不再接受追加；本批已有 {{unpublished}} 条未发布增量：可 draft_audit 后 draft_finish 发布它们、draft_revert 撤掉卡住的增量，或取消本会话草稿重开一批（agent 工具 learnhub_coach_draft_cancel / 宿主 API POST /coach/draft/cancel）。'
+export const ERR_STEP_NODE_CAP = '[draft_patch] 「生长一步」会话累计新增节点已达上限（已 {{count}} + 本批 {{batch}} > {{cap}}）——一步是一步：先 draft_finish 发布已备内容，剩余缺口下回合再来。'
 export const ERR_PATCH_EMPTY_OPS = '[draft_patch] ops 不能为空——不产结构就不要调本工具。'
 export const ERR_PATCH_SHAPE = '[draft_patch] 形状未过（整批回滚，零落草稿）：\n{{errors}}\n{{cheatsheet}}'
 export const ERR_PATCH_MAX_OPS = '[draft_patch] 每批未发布增量 ≤{{max}} 条（本补丁后将为 {{count}}）——先 draft_finish 发布再开新批。'

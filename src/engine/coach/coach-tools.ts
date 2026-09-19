@@ -46,8 +46,10 @@ import {
   GRAPH_VIEW_ACTIVE_EMPTY, GRAPH_VIEW_ACTIVE_HEADING, GRAPH_VIEW_CONCEPT_HEADING, GRAPH_VIEW_CONCEPT_LINE,
   GRAPH_VIEW_CONCEPT_SKIPPED_SUFFIX, GRAPH_VIEW_DEGRADED_SUFFIX, GRAPH_VIEW_DEPTH_BUCKET,
   GRAPH_VIEW_DEPTH_HEADING, GRAPH_VIEW_ENDPOINT_HEADING, GRAPH_VIEW_ENDPOINT_LINE, GRAPH_VIEW_FOOTER,
-  GRAPH_VIEW_FULL_HEADING, GRAPH_VIEW_HEADING, GRAPH_VIEW_STATS, GRAPH_VIEW_UNTAGGED_LINE,
+  GRAPH_VIEW_FULL_HEADING, GRAPH_VIEW_HEADING, GRAPH_VIEW_LINE_PRES, GRAPH_VIEW_LINE_ROW, GRAPH_VIEW_LINES_HEADING,
+  GRAPH_VIEW_STATS, GRAPH_VIEW_UNTAGGED_LINE,
   GRAPH_VIEW_WEAK_EMPTY, GRAPH_VIEW_WEAK_HEADING, GRAPH_VIEW_ZERO_CONCEPT, GRAPH_VIEW_ZERO_ENDPOINTS,
+  GRAPH_VIEW_ZERO_LINES,
   NODE_CARD_ASSUMES, NODE_CARD_CONSUMERS, NODE_CARD_CONSUMERS_ENDPOINT, NODE_CARD_CONSUMERS_LEAF,
   NODE_CARD_DEPTH, NODE_CARD_DIFFICULTY, NODE_CARD_DIFFICULTY_UNDECLARED, NODE_CARD_EMPTY, NODE_CARD_ENDPOINT_FLAG, NODE_CARD_HEADING, NODE_CARD_MISCONCEPTIONS,
   NODE_CARD_PRE, NODE_CARD_PRE_ITEM, NODE_CARD_PRE_ITEM_NO_DIFFICULTY, NODE_CARD_STAGE, NODE_CARD_STAGE_ENDPOINT, NODE_CARD_STAGE_EST, NODE_CARD_STAGE_PRACTICE,
@@ -241,6 +243,29 @@ export function renderGrowthGraphView(
     if (untagged.length) lines.push(render(GRAPH_VIEW_UNTAGGED_LINE, { count: untagged.length }))
   } else {
     lines.push(render(GRAPH_VIEW_ZERO_CONCEPT, {}))
+  }
+  // 活跃线视图（终点.pre 派生，读侧零落盘）：线头 = 终点直接接线；被其他线头上游闭包
+  // 包含的是已被更深线消费的旧头，滤出后的真线头才是「各在长线的当前最深节点」。
+  // 线头深度差距与同族堆积是并拢（consolidate）与补弱（补前置台阶）的读数，判读归教练。
+  if (endpoints.size) {
+    lines.push('', render(GRAPH_VIEW_LINES_HEADING, {}), '')
+    let anyLine = false
+    for (const ep of endpoints) {
+      const heads = graph.preOf[ep] ?? []
+      const trueHeads = heads.filter(h => !heads.some(o => o !== h && graph.upstreamClosure(o).has(h)))
+      for (const h of trueHeads) {
+        const pres = graph.preOf[h] ?? []
+        anyLine = true
+        lines.push(render(GRAPH_VIEW_LINE_ROW, {
+          head: h,
+          depth: graph.depth[h] ?? 0,
+          pres: pres.length
+            ? ' ' + render(GRAPH_VIEW_LINE_PRES, { names: pres.slice(0, 3).join(' / ') + (pres.length > 3 ? ' / …' : '') })
+            : '',
+        }))
+      }
+    }
+    if (!anyLine) lines.push(render(GRAPH_VIEW_ZERO_LINES, {}))
   }
   const nodeLine = (n: string): string => nodeRow(graph, state, n, { today, endpoints })
   if (!degraded) {

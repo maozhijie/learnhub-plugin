@@ -306,7 +306,7 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
           {
             id: '朝向由终点携带', criterion: '朝学习者已声明的终点推进：新增必声明 target_endpoints（可多个，交汇优先），不为一次性规划铺满全图',
             evidence: '引算子与朝向声明、图面终点对照；缺朝向声明或一次铺满的点名',
-            source: '模板:教练执行', anchor: '根据罗盘作为对终点的专业说明指导',
+            source: '模板:教练执行', anchor: '罗盘是对终点的专业说明',
           },
           {
             id: '台阶粒度', criterion: '每个节点是一次独立学习行为单元、30 分钟量级，est 诚实申报；节点名与 intent 用动作句',
@@ -329,9 +329,9 @@ export const QUALITY_RUBRICS: readonly QualityRubric[] = [
             source: '模板:教练执行', anchor: '每批未发布增量 ≤24 条',
           },
           {
-            id: '整体替换语义', criterion: 'set_pre / set_enc 是整体替换：终点.pre 恒指向当前认定的最后台阶；收尾以零 add_node 的纯 set_pre 独立批完成',
+            id: '整体替换语义', criterion: 'set_pre / set_enc 是整体替换：终点.pre = 各在长线当前最深的节点（逐批接线是机械分类）；收尾以零 add_node 的纯 set_pre 独立批完成',
             evidence: '引 set_pre 批次与图面接线对照；终点接线漂移或收尾夹带 add_node 的点名',
-            source: '模板:教练执行', anchor: '终点.pre 恒指向你当前认定的最后台阶',
+            source: '模板:教练执行', anchor: '终点.pre = 各条在长的线当前最深的节点',
           },
           {
             id: '插入复诊', criterion: '插入条目必须携带复诊预注册（recheck），metric 与卡点症状同源',

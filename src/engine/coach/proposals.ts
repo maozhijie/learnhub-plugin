@@ -1135,13 +1135,13 @@ export function endpointGuardErrorsOf(spec: EditProposalSpec, anchors: EndpointA
       }
       const wirings = spec.ops.filter(o => o.op === 'set_pre' && o.node === target)
       if (!wirings.length) {
-        errors.push(`生长批声明朝「${target}」长但未接线——主线批必须携带 set_pre { node: ${target}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre 恒指向教练当前认定的最后台阶，真实坡道取代起草粗边）`)
+        errors.push(`生长批声明朝「${target}」长但未接线——主线批必须携带 set_pre { node: ${target}, pre: [批内新前沿${frontier.length ? `（本批：${frontier.join('、')}）` : ''}] }（替换语义：终点.pre = 各在长线当前最深的节点，真实坡道取代起草粗边）`)
       } else {
         // apply 取最后一条 set_pre（整体替换语义后者生效）——接线核查同口径
         const wired = new Set(wirings[wirings.length - 1]!.pre ?? [])
         const missing = frontier.filter(n => !wired.has(n))
         if (missing.length) {
-          errors.push(`set_pre(${target}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 当前认定的最后台阶）`)
+          errors.push(`set_pre(${target}) 未覆盖批内新前沿：${missing.join('、')}——主线批接线必须把本批新前沿全部汇入终点闭包（set_pre 整体替换，终点.pre = 各在长线当前最深的节点）`)
         }
       }
     }

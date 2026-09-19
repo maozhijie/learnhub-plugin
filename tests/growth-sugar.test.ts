@@ -104,7 +104,7 @@ test('draftFindings：孤立新铸 / 悬空指向 / 近似名撞车 / 收尾提�
   assert.ok(findings.some(f => f.includes('孤立新铸概念') && f.includes('孤立概念')), findings.join('\n'))
   assert.ok(findings.some(f => f.includes('悬空指向') && f.includes('不在册的概念')), findings.join('\n'))
   assert.ok(findings.some(f => f.includes('近似名撞车') && f.includes('偏导数的链式法则')), findings.join('\n'))
-  assert.ok(findings.some(f => f.includes('终点 终点甲 已铺通待收尾')), findings.join('\n'))
+  assert.ok(findings.some(f => f.includes('终点 终点甲 已有接线')), findings.join('\n'))
   assert.ok(!findings.some(f => f.includes('已收尾终点')), '已收尾终点不提示')
   assert.ok(!findings.some(f => f.includes('变化率')), '被引用的在册概念不误报')
 })
