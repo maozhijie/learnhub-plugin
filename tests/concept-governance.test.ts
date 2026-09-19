@@ -479,7 +479,7 @@ test('#264 错误卡在册对照：不在册先验被拦并报告，生成照常
 
 // ---- #286 刀B：撞名回执带底细（裁决 7/10）+ 跨课首引复核（裁决 8）+ 正名（裁决 9）----
 
-test('#286 撞名拒收带在册条目底细 + 出口三选一（裁决 7/10）', async () => {
+test('#286 撞名拒收带在册条目底细 + 出口三选一（裁决 7/10）+ 同实/异实分辨引导（#341 B）', async () => {
   await withVault(registryVault(), async ({ engine }) => {
     try {
       await engine.graph.graphPropose('edit', mintYaml('配方法'))
@@ -489,7 +489,11 @@ test('#286 撞名拒收带在册条目底细 + 出口三选一（裁决 7/10）'
       assert.match(msg, /铸名冲突/, '硬拒语义不变')
       assert.match(msg, /在册条目底细/, '拒收行附底细（裁决 7）')
       assert.match(msg, /（无定义——判据不足，缺省动作：不得引用，改铸消歧名）/, '定义缺席显式声明判据不足')
-      assert.match(msg, /出口三选一/, '出口三选一随行')
+      assert.match(msg, /先分辨铸的名与在册条目是否同指一物/, '拒收行主体是分辨引导，两路判据先行（#341 B）')
+      assert.match(msg, /同指一物才谈引用\/收编\/合并/, '同实路出口在场（#341 B）')
+      assert.match(msg, /不指称同一物就铸消歧名/, '异实路出口在场（#341 B）')
+      assert.doesNotMatch(msg, /引用既有名字即可，或对人审合并走 concept-merge/, '旧无分辨错路文案不回归（异实场景下两条错路摆在最前）')
+      assert.match(msg, /出口三选一/, '出口三选一随行，出路细节只此一处不重复分辨')
       assert.match(msg, /基名（限定语）/, '消歧名命名规范只在回灌文案（裁决 10，零提示词变更）')
       assert.match(msg, /提请人审正名/, '正名是出口之一且需人审')
     }

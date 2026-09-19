@@ -112,3 +112,4 @@
 | [0104](./0104-growth-shape-contraction.md) | 学习图形态收缩：算子二值化、收束字段化与弧建议节奏 |
 | [0105](./0105-concept-fields-as-gate-input.md) | 概念字段升格为门禁输入：概念充分性门（取代 ADR-0084 §④⑤） |
 | [0106](./0106-node-concept-overlay-write-path.md) | 出生后概念打标修正通道：节点覆盖层与 set_concepts 写路径 |
+| [0107](./0107-concept-definition-revision.md) | 概念 definition 跨课程修订权：人审直动作，提请挂首引、能力通用 |

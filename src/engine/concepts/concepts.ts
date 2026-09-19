@@ -579,8 +579,9 @@ export function invokesTagged(q: { invokes?: unknown }): boolean {
 export const MINT_CONFLICT_EXITS = '出口三选一：① 同指一物就删掉铸名直接引用既有条目（叫法差异不是障碍，可经 note.reason 提请收编为别名）；② 不指称同一物就铸消歧名（规范：基名（限定语），全角括号、限定语取语义领域词不用课程名、禁嵌套超一级）；③ 确需换主名或收编别名，经 note.reason 一句话提请人审正名（AI 不得自行改在册名）'
 
 /** 铸名冲突校验（propose 受理门，从严）：铸名的任何名字撞上既有登记表（含撞自己
- * 的 canonical）或批内其他铸名都是冲突——引用既有名字直接用，吞并既有条目走人审
- * 合并；同条目幂等重写不是铸名的语义（那是 apply 侧 applyConceptMints 的事）。
+ * 的 canonical）或批内其他铸名都是冲突——撞名行只做分辨引导（同实才谈引用/收编/
+ * 合并、异实铸消歧名），出路细节随 MINT_CONFLICT_EXITS 单源附送；同条目幂等重写
+ * 不是铸名的语义（那是 apply 侧 applyConceptMints 的事）。
  * detailOf（选）= 撞名现场把在册条目底细摆到模型面前（裁决 7 成败点）：拒收行附
  * canonical + 定义（缺席显式「（无定义）」并注明判据不足）与足迹摘要。 */
 export function mintConflicts(
@@ -599,7 +600,7 @@ export function mintConflicts(
       const owner = ownerOf.get(name)
       if (owner !== undefined) {
         const detail = detailOf ? `\n    在册条目底细｜${detailOf(owner)}` : ''
-        errors.push(`铸名冲突: 名字「${name}」已在登记表条目「${owner}」在册——引用既有名字即可，或对人审合并走 concept-merge${detail}\n    ${MINT_CONFLICT_EXITS}`)
+        errors.push(`铸名冲突: 名字「${name}」已在登记表条目「${owner}」在册——先分辨铸的名与在册条目是否同指一物：同指一物才谈引用/收编/合并，不指称同一物就铸消歧名（出路详下）${detail}\n    ${MINT_CONFLICT_EXITS}`)
       } else {
         ownerOf.set(name, mint.canonical)
       }
